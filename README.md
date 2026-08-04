@@ -36,6 +36,10 @@ Spring Boot(백엔드) + Vue3(프론트엔드), JPA + QueryDSL, PostgreSQL, Prim
 
 - **rules에는 spec 재진술을 넣지 않는다.** 에이전트가 spec을 읽으면 알 수 있는 내용은 토큰만 쓰고 신호를 주지 못한다. `.claude/rules/`에는 "이 영역에서 실수하기 쉬운 지점"과 그 판단의 인과관계만 남긴다.
 
+- **판단이 개입하는 규칙에는 이유를 함께 적는다.** 자율판단 하네스의 실패 모드는 규정되지 않은 상황에서 표면만 비슷한 다른 판단을 내리는 것이다. 이유를 알면 같은 의도로 새 상황을 판단할 수 있다. Anthropic이 2026년 1월 Claude의 constitution을 개정하며 채택한 원리와 같다 — *"models... need to understand why we want them to behave in certain ways, and we need to explain this to them rather than merely specify what we want them to do. If we want models to exercise good judgment across a wide range of novel situations, they need to be able to generalize—to apply broad principles rather than mechanically following specific rules."* ([Claude's new constitution](https://anthropic.com/news/claude-new-constitution), 2023년판의 "list of standalone principles"에서 의도적으로 전환한 것이다.)
+
+  다만 근거의 강도를 정확히 밝혀둔다. 이는 **벤더가 자사 모델 설계에 채택한 원리이자 실사용 경험과 부합하는 것**이지, 통제 실험으로 증명된 것이 아니다. 규칙 집합을 고정하고 이유 문장만 넣고 뺀 비교 연구는 찾지 못했다. 반대로 지시가 길어질수록 준수율이 떨어진다는 결과들이 있으나, 그 실험들은 서로 다른 새 제약을 추가한 것이지 기존 규칙에 설명을 덧붙인 것이 아니어서 그대로 전이되지는 않는다. 이 불확실성 때문에 이유는 **판단이 갈리는 지점에만** 붙이고, 빌드 명령·형식 명세·열거에는 붙이지 않는다.
+
 - **되돌리기 어려운 결정은 자율성의 대가로 기록한다.** 아키텍처 자율을 주는 대신, 새 의존성·저장 구조·외부 연동처럼 되돌리기 어려운 판단은 `docs/adr/`에 남긴다. 허가를 구하지 않고 결정한 뒤 기록하는 방식이다.
 
 - **CLAUDE.md 자체는 [공식 작성 가이드](https://code.claude.com/docs/en/best-practices)를 따른다.** 공식 권장 분량은 200줄 미만이며, 각 줄에 "이걸 지우면 에이전트가 실수하는가?"를 적용해 아니면 잘라낸다. 강조는 `IMPORTANT:` 접두사로 정말 위험한 항목에만 붙인다.

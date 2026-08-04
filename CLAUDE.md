@@ -20,12 +20,12 @@ Spring Boot 4.1 / Java 21 / Gradle 골격만 있다. JPA·QueryDSL·PostgreSQL·
 ## ADR
 
 - MUST: 되돌리기 어려운 결정(새 의존성, 저장 구조, 외부 연동, 인프라 구성)은 `docs/adr/`에 `0000-template.md` 형식으로 기록한다. frontmatter의 `applies_to`와 `## 검증` 절을 채운다.
-- MUST NOT: 클래스 분리·메서드 시그니처처럼 쉽게 되돌릴 수 있는 것은 기록하지 않는다.
-- 허가를 구하지 말고 결정하고 기록하라.
+- MUST NOT: 클래스 분리·메서드 시그니처처럼 쉽게 되돌릴 수 있는 것은 기록하지 않는다. 사소한 결정까지 남기면 기록이 많아져 정작 중요한 결정이 묻힌다.
+- 허가를 구하지 말고 결정하고 기록하라. 아키텍처 자율을 주는 대신 근거를 남기는 교환이다.
 
 ## 금지
 
 - MUST NOT: 시크릿·API 키를 코드·커밋·로그에 포함하지 않는다. IMPORTANT — 이 항목은 위반 시 복구가 불가능하다. `.env.example`에 플레이스홀더로만 문서화한다.
 - MUST NOT: `docs/stock-screener-project-spec.md`를 수정하지 않는다. 변경이 필요하면 제안한다.
-- MUST NOT: 확인 없이 파일·디렉토리를 삭제하지 않는다.
-- MUST NOT: force push를 실행하지 않는다.
+- MUST NOT: 확인 없이 파일·디렉토리를 삭제하지 않는다. 삭제는 되돌릴 수 없고, 무엇이 사라졌는지조차 나중에 알기 어렵다.
+- MUST NOT: force push를 실행하지 않는다. 공유 히스토리가 재작성되면 다른 클론과 어긋난다.
