@@ -48,20 +48,18 @@ if [ -d docs/adr ]; then
   if [ -n "$incomplete" ]; then
     add "필수 항목이 빠진 ADR이 있다: ${incomplete}— applies_to 없이는 관련 작업에서 로드되지 않고, 검증 절 없이는 준수 여부를 확인할 수 없다."
   fi
-
-  # 기록 목록을 수동으로 유지하는 흔적이 남아 있으면 낡는다.
-  if [ -f docs/adr/README.md ] && grep -q '아직 없음' docs/adr/README.md; then
-    adr_count=$(find docs/adr -maxdepth 1 -name 'ADR-[0-9][0-9][0-9][0-9]-*.md' \
-                  2>/dev/null | wc -l | tr -d ' ')
-    [ "$adr_count" -gt 0 ] && add "ADR이 ${adr_count}건 있으나 docs/adr/README.md는 '(아직 없음)'이라고 적고 있다."
-  fi
 fi
 
-# 4. data-pipeline.md의 paths glob이 실제 패키지와 매칭되는가 (패키지가 생긴 뒤에만 검사)
+# 4. data-pipeline.md의 paths glob이 실제 패키지와 매칭되는가
+# 부트스트랩 클래스만 있는 골격 단계에서는 검사하지 않는다. 매 세션 같은 경고가 뜨면 신호가 무뎌진다.
+# 패키지 깊이로 게이트하지 않는 이유: 패키지 구조는 프로젝트마다 달라 깊이 가정이 쉽게 어긋난다.
 rules="./.claude/rules/data-pipeline.md"
 if [ -f "$rules" ] && [ -d src/main/java ]; then
-  pkg_count=$(find src/main/java -mindepth 3 -type d 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$pkg_count" -gt 0 ]; then
+  domain_src=$(find src/main/java -name '*.java' \
+                 -not -name '*Application.java' \
+                 -not -name '*ApplicationTests.java' \
+                 -print -quit 2>/dev/null)
+  if [ -n "$domain_src" ]; then
     matched=false
     while IFS= read -r seg; do
       [ -z "$seg" ] && continue
