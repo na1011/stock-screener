@@ -11,11 +11,15 @@ cd "$root" 2>/dev/null || exit 0
 findings=""
 add() { findings="${findings}- $1"$'\n'; }
 
-# 1. progress.md가 "골격만 있다"고 주장하는데 실제로 의존성·도메인 코드가 생겼는가
-# 문구 하나에 매달리지 않고 여러 표현을 받는다. 게이트가 특정 표현에 묶이면
-# 문장을 자연스럽게 고치는 것만으로 검사가 조용히 꺼져, 정작 잡으려던 낡음을 놓친다.
+# 1. progress.md가 "Phase 1 미착수/골격만"이라고 주장하는데 실제로 의존성·도메인 코드가 생겼는가
+#
+# Phase 1 행만 본다. "미착수"를 문서 전체에서 찾으면 아직 시작하지 않은 뒤 phase들이
+# 매번 걸려 오탐이 된다. 매 세션 같은 경고가 뜨면 신호가 무뎌져, 정작 진짜 불일치가
+# 생겼을 때 무시하게 된다 — 이 검사가 막으려던 실패 모드 그 자체다.
 if [ -f docs/progress.md ]; then
-  if grep -qE '골격만|미착수|도메인 코드 없음' docs/progress.md; then
+  phase1_line=$(grep -E '^\|\s*1\.' docs/progress.md 2>/dev/null | head -1)
+  if printf '%s' "$phase1_line" | grep -qE '미착수' \
+     || grep -qE '골격만 있다|도메인 코드 없음' docs/progress.md; then
     present=""
     if [ -f build.gradle ]; then
       grep -qiE '\bjpa\b|spring-boot-starter-data-jpa' build.gradle && present="${present}JPA "
