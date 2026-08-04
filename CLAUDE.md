@@ -1,7 +1,14 @@
 # 프로젝트 개요
 
-- 코스피·코스닥·S&P500 종목 스크리너 프로젝트. 상세 기획서는 `docs/stock-screener-project-spec.md` 참고.
-- Spring Boot 4.1 / Java 21 / Gradle / Vue3.
+코스피200·코스닥150·S&P500 종목을 기술적·재무적 조건으로 필터링하는 개인용 웹 스크리너. 본인과 소수 지인만 사용하므로 트래픽은 작고, 데이터는 장 마감 후 종가 기준으로 충분하다.
+
+기술 선택은 실용성과 학습 가치를 함께 고려한다. 한국 백엔드 채용시장에서 통용되는 스택 경험을 쌓는 것이 이 프로젝트의 목적 중 하나다. 인프라 운영 비용은 최소로 유지한다.
+
+- MUST: 요구사항·수용 기준·범위 판단이 필요하면 `docs/stock-screener-project-spec.md`를 읽는다. 이 문서가 기획 정본이다.
+
+## 현재 상태
+
+Spring Boot 4.1 / Java 21 / Gradle 골격만 있다. JPA·QueryDSL·PostgreSQL·OAuth·Sentry 의존성은 아직 `build.gradle`에 없고, 프론트엔드 디렉터리도 아직 없다. 이미 구성되어 있다고 가정하지 않는다.
 
 ## 명령어
 
@@ -12,11 +19,13 @@
 
 ## ADR
 
-되돌리기 어려운 결정(새 의존성, 저장 구조, 외부 연동, 인프라 구성)은 `docs/adr/`에 `0000-template.md` 형식으로 기록한다. 허가를 구하지 말고 결정하고 기록하라. 클래스 분리·메서드 시그니처는 기록 대상이 아니다.
+- MUST: 되돌리기 어려운 결정(새 의존성, 저장 구조, 외부 연동, 인프라 구성)은 `docs/adr/`에 `0000-template.md` 형식으로 기록한다. frontmatter의 `applies_to`와 `## 검증` 절을 채운다.
+- MUST NOT: 클래스 분리·메서드 시그니처처럼 쉽게 되돌릴 수 있는 것은 기록하지 않는다.
+- 허가를 구하지 말고 결정하고 기록하라.
 
 ## 금지
 
-- IMPORTANT: 시크릿·API 키를 코드·커밋·로그에 포함하지 않는다. `.env.example`에 플레이스홀더로만.
-- `docs/stock-screener-project-spec.md`를 수정하지 않는다. 변경이 필요하면 제안하라.
-- 확인 없이 파일·디렉토리를 삭제하지 않는다.
-- force push를 실행하지 않는다.
+- MUST NOT: 시크릿·API 키를 코드·커밋·로그에 포함하지 않는다. IMPORTANT — 이 항목은 위반 시 복구가 불가능하다. `.env.example`에 플레이스홀더로만 문서화한다.
+- MUST NOT: `docs/stock-screener-project-spec.md`를 수정하지 않는다. 변경이 필요하면 제안한다.
+- MUST NOT: 확인 없이 파일·디렉토리를 삭제하지 않는다.
+- MUST NOT: force push를 실행하지 않는다.
