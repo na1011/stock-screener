@@ -11,17 +11,26 @@ cd "$root" 2>/dev/null || exit 0
 findings=""
 add() { findings="${findings}- $1"$'\n'; }
 
-# 1. CLAUDE.md가 "의존성이 아직 없다"고 주장하는데 실제로 추가되었는가
-if [ -f CLAUDE.md ] && [ -f build.gradle ]; then
-  if grep -qE '아직 .*(없|불필요)' CLAUDE.md; then
+# 1. progress.md가 "골격만 있다"고 주장하는데 실제로 의존성·도메인 코드가 생겼는가
+# 문구 하나에 매달리지 않고 여러 표현을 받는다. 게이트가 특정 표현에 묶이면
+# 문장을 자연스럽게 고치는 것만으로 검사가 조용히 꺼져, 정작 잡으려던 낡음을 놓친다.
+if [ -f docs/progress.md ]; then
+  if grep -qE '골격만|미착수|도메인 코드 없음' docs/progress.md; then
     present=""
-    grep -qiE '\bjpa\b|spring-boot-starter-data-jpa' build.gradle && present="${present}JPA "
-    grep -qi 'querydsl'   build.gradle && present="${present}QueryDSL "
-    grep -qi 'postgresql' build.gradle && present="${present}PostgreSQL "
-    grep -qiE 'oauth2|spring-boot-starter-security' build.gradle && present="${present}OAuth "
-    grep -qi 'sentry'     build.gradle && present="${present}Sentry "
+    if [ -f build.gradle ]; then
+      grep -qiE '\bjpa\b|spring-boot-starter-data-jpa' build.gradle && present="${present}JPA "
+      grep -qi 'querydsl'   build.gradle && present="${present}QueryDSL "
+      grep -qi 'postgresql' build.gradle && present="${present}PostgreSQL "
+      grep -qiE 'oauth2|spring-boot-starter-security' build.gradle && present="${present}OAuth "
+      grep -qi 'sentry'     build.gradle && present="${present}Sentry "
+    fi
+    domain=$(find src/main/java -name '*.java' \
+               -not -name '*Application.java' \
+               -not -name '*ApplicationTests.java' \
+               -print -quit 2>/dev/null)
+    [ -n "$domain" ] && present="${present}도메인클래스 "
     if [ -n "$present" ]; then
-      add "CLAUDE.md의 '현재 상태' 절이 의존성 부재를 주장하지만 build.gradle에 이미 있다: ${present}"
+      add "docs/progress.md가 골격/미착수 상태를 주장하지만 실제로는 이미 있다: ${present}— 진행 상태를 갱신하라. 낡은 진행 상태는 다음 세션을 잘못 인도한다."
     fi
   fi
 fi
@@ -29,8 +38,8 @@ fi
 # 2. 프론트엔드 부재 주장 vs 실제
 if [ -d frontend ] || [ -d src/main/frontend ] || [ -d src/main/resources/static/src ] \
    || [ -n "$(find . -name '*.vue' -not -path './.git/*' -not -path './build/*' -print -quit 2>/dev/null)" ]; then
-  if grep -qsE '프론트엔드 (디렉터리|디렉토리)?.*아직' CLAUDE.md README.md; then
-    add "CLAUDE.md/README.md가 프론트엔드 부재를 주장하지만 실제 프론트엔드 파일·디렉터리가 있다."
+  if grep -qsE '프론트엔드 (디렉터리|디렉토리)?( 없|.*아직)' docs/progress.md README.md; then
+    add "진행 상태/README가 프론트엔드 부재를 주장하지만 실제 프론트엔드 파일·디렉터리가 있다."
   fi
 fi
 

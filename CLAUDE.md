@@ -8,7 +8,11 @@
 
 ## 현재 상태
 
-Spring Boot 4.1 / Java 21 / Gradle 골격만 있다. JPA·QueryDSL·PostgreSQL·OAuth·Sentry 의존성은 아직 `build.gradle`에 없고, 프론트엔드 디렉터리도 아직 없다. 이미 구성되어 있다고 가정하지 않는다.
+진행 상태는 `docs/progress.md`에 있다. 세션 시작 시 훅이 주입하므로 대개 이미 컨텍스트에 있다.
+
+- MUST NOT: 구현이 어디까지 되어 있는지를 이 파일에 적지 않는다. 상태를 두 곳에 두면 반드시 어긋나고, 낡은 쪽을 그대로 믿게 된다.
+- MUST: 다음 세션이 알아야 할 것이 생기면 `docs/progress.md`를 갱신한다 — phase 상태 변화, ADR로 남기기엔 사소하지만 모르면 다시 만들게 될 결정, 미뤄둔 것.
+- 설계 방향은 `docs/design/`에 있다. 착수 전에 해당 phase의 문서를 읽는다.
 
 ## 명령어
 
