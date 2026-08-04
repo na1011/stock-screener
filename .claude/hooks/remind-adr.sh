@@ -30,20 +30,19 @@ esac
 
 [ -z "$category" ] && exit 0
 
-root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-
-# 이 세션에 이미 새 ADR이 작성되었다면 상기시킬 필요가 없다.
-adr_count=$(find "$root/docs/adr" -maxdepth 1 -name 'ADR-[0-9][0-9][0-9][0-9]-*.md' \
-              2>/dev/null | wc -l | tr -d ' ')
-[ "${adr_count:-0}" -gt 0 ] && exit 0
-
-# 세션 단위 중복 억제 — 같은 파일에 대해 한 세션에 한 번만 발화한다.
+# 세션 단위 중복 억제 — 같은 파일·카테고리에 대해 한 세션에 한 번만 발화한다.
+# 저장소 전역 ADR 개수로 억제하지 않는다: 그렇게 하면 첫 ADR이 생긴 뒤 영구히 침묵해,
+# 정작 기록할 결정이 쌓이기 시작하는 시점부터 리마인더가 죽는다.
 # 저장소를 오염시키지 않도록 프로젝트 밖 임시 경로를 쓴다.
 marker_dir="${TMPDIR:-/tmp}/claude-adr-reminder/${session}"
-marker="${marker_dir}/$(echo "$path" | shasum | cut -d' ' -f1)"
-mkdir -p "$marker_dir" 2>/dev/null || exit 0
-[ -f "$marker" ] && exit 0
-touch "$marker" 2>/dev/null || true
+# shasum이 없으면 중복 억제만 포기하고 알림은 계속한다 (순수 알림이므로 발화가 우선).
+key=$(echo "${path}|${category}" | shasum 2>/dev/null | cut -d' ' -f1 || echo "")
+if [ -n "$key" ]; then
+  marker="${marker_dir}/${key}"
+  mkdir -p "$marker_dir" 2>/dev/null || exit 0
+  [ -f "$marker" ] && exit 0
+  touch "$marker" 2>/dev/null || true
+fi
 
 jq -n --arg ctx "\`${base}\` 가 변경되었다 (${category}). 이 변경이 되돌리기 어려운 결정을 담고 있다면 \`docs/adr/\`에 \`0000-template.md\` 형식으로 기록하라. 단순 버전 조정이나 포맷 변경이면 기록하지 않아도 된다. 판단은 직접 하라 — 허가를 구하지 말고 결정한 뒤 기록하라." \
   '{
