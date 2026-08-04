@@ -40,7 +40,9 @@ dependencies {
     annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
     annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
 
-    implementation 'org.flywaydb:flyway-core'
+    // Boot 4는 Flyway 자동설정을 별도 모듈로 분리했다. flyway-core만 넣으면
+    // 클래스패스에는 있지만 자동설정이 없어 마이그레이션이 조용히 실행되지 않는다.
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
     // flyway-core는 PostgreSQL 지원을 번들하지 않는다. 이것이 없으면 인식하지 못한다.
     implementation 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'

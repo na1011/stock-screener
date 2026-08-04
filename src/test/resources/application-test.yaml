@@ -1,20 +1,29 @@
 spring:
   datasource:
     # 전용 테스트 DB. 운영·개발 DB와 절대 공유하지 않는다.
-    # 이름이 _test로 끝나는지 TestDatabaseGuard가 기동 시 단언한다.
+    # 이름이 _test를 포함하는지 TestDatabaseGuard가 기동 시 단언한다.
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/stock_screener_test}
     username: ${TEST_DB_USER:na1011}
     password: ${TEST_DB_PASSWORD:}
+
   jpa:
     hibernate:
-      # 프로브 단계에서는 마이그레이션 없이 스키마를 만든다.
-      # Flyway 도입(Step 3) 이후 validate로 바꾼다.
-      ddl-auto: create-drop
-    properties:
-      hibernate:
-        format_sql: true
+      # 스키마의 정본은 Flyway다. 테스트도 같은 마이그레이션을 실행해
+      # 엔티티와 스키마의 어긋남이 기동 시점에 드러나게 한다.
+      ddl-auto: validate
+    open-in-view: false
+
   flyway:
-    enabled: false
+    enabled: true
+    # 테스트 전용 마이그레이션을 함께 적용한다. QueryDSL 프로브 테이블은 도메인이 아니므로
+    # 운영 스키마에 넣지 않지만, ddl-auto: validate 아래에서는 테이블이 존재해야 한다.
+    locations: classpath:db/migration,classpath:db/testmigration
+    clean-disabled: false
+    # Phase 1 동안은 마이그레이션을 자유롭게 수정한다(데이터가 없으므로 안전하다).
+    # 체크섬이 바뀌어도 테스트가 막히지 않도록 검증 실패 시 스키마를 비우고 다시 적용한다.
+    # 대상은 이름에 _test가 들어간 DB뿐이다(TestDatabaseGuard가 기동 시 단언).
+    # MUST: Phase 2에서 초기 적재를 실행한 이후에는 이 설정을 제거한다.
+    clean-on-validation-error: true
 
 logging:
   level:

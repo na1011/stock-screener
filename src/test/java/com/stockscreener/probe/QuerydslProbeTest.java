@@ -2,17 +2,13 @@ package com.stockscreener.probe;
 
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import com.stockscreener.support.TestDatabaseGuard;
+import com.stockscreener.support.JpaSliceTest;
 
 import jakarta.persistence.EntityManager;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
 
@@ -34,13 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>쿼리를 조립만 하고 실행하지 않는 테스트는 아무것도 증명하지 못한다 —
  * 컴파일·Q클래스 생성·컨텍스트 기동은 깨진 조합에서도 모두 성공하기 때문이다.
  */
-@DataJpaTest
-// 임베디드 DB로 교체하지 않는다. EAV 설계가 PostgreSQL 고유 기능(INCLUDE 인덱스,
-// PERCENT_RANK, ON CONFLICT)에 의존하므로 실제 PostgreSQL에서 검증해야 한다.
-// 임베디드로 테스트하면 초록불인 채로 실제 쿼리 플랜을 검증하지 못한다.
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@ActiveProfiles("test")
-@Import(TestDatabaseGuard.class)
+@JpaSliceTest
 class QuerydslProbeTest {
 
     @Autowired
