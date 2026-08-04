@@ -3,6 +3,9 @@
 # 매칭되지 않으면 반드시 exit 0으로 조용히 통과시킨다 (안전망 전용, 워크플로우를 막지 않는다).
 set -euo pipefail
 
+# jq가 없으면 판정할 수 없다. 안전망이 워크플로우를 막지 않도록 조용히 통과시킨다.
+command -v jq >/dev/null 2>&1 || exit 0
+
 input=$(cat)
 path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
 
