@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    # 전용 테스트 DB. 운영·개발 DB와 절대 공유하지 않는다.
+    # 이름이 _test로 끝나는지 TestDatabaseGuard가 기동 시 단언한다.
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/stock_screener_test}
+    username: ${TEST_DB_USER:na1011}
+    password: ${TEST_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      # 프로브 단계에서는 마이그레이션 없이 스키마를 만든다.
+      # Flyway 도입(Step 3) 이후 validate로 바꾼다.
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: false
+
+logging:
+  level:
+    org.hibernate.SQL: debug

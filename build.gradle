@@ -18,12 +18,41 @@ repositories {
     mavenCentral()
 }
 
+// QueryDSL mainline(com.querydsl)은 이 스택에서 런타임에 깨진다.
+// mainline 5.1.0의 AbstractHibernateQuery가 Hibernate 7에서 제거된
+// Query.setFlushMode(org.hibernate.FlushMode)를 호출해 NoSuchMethodError가 난다.
+// 컴파일·Q클래스 생성·컨텍스트 기동은 모두 성공하고 쿼리 실행 시점에만 드러난다.
+// Boot 4.1의 BOM이 아직 querydsl.version=5.1.0을 고정하고 있어 무심코 쓰면 걸린다.
+// 여기서 group 자체를 차단해 런타임 지뢰를 빌드 타임 에러로 바꾼다. ADR-0001 참조.
+configurations.all {
+    exclude group: 'com.querydsl'
+}
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // QueryDSL — OpenFeign 포크. classifier 규칙이 7.x에서 역전되었다:
+    // querydsl-jpa는 classifier를 떼고(:jakarta는 404), querydsl-apt는 붙인다.
+    implementation 'io.github.openfeign.querydsl:querydsl-jpa:7.5'
+    annotationProcessor 'io.github.openfeign.querydsl:querydsl-apt:7.5:jakarta'
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+
+    implementation 'org.flywaydb:flyway-core'
+    // flyway-core는 PostgreSQL 지원을 번들하지 않는다. 이것이 없으면 인식하지 못한다.
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    runtimeOnly 'org.postgresql:postgresql'
+
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    // Boot 4는 테스트 슬라이스를 모듈별 스타터로 분리했다.
+    // @DataJpaTest는 spring-boot-starter-test에 없고 여기에 있다.
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testCompileOnly 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
