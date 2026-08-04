@@ -1,13 +1,24 @@
 # ADR (Architecture Decision Record)
 
-이 디렉터리는 `docs/stock-screener-project-spec.md` 확정 **이후**에 내려지는, 되돌리기 어려운 기술 결정을 기록한다.
+이 디렉터리는 기획 정본(`docs/stock-screener-project-spec.md`) 확정 **이후**에 내려지는, 되돌리기 어려운 기술 결정을 기록한다.
 
-- spec 6장에 이미 근거와 함께 기록된 결정(Spring Boot+Vue3, JPA+QueryDSL, PostgreSQL, PrimeVue, 온프레미스 호스팅, Cloudflare Tunnel, Google OAuth, Sentry)은 여기 옮겨 적지 않는다. 정본은 spec이다.
-- 새 의존성 추가, 데이터 저장 구조, 외부 연동 방식, 배포·인프라 구성, spec의 결정을 뒤집는 판단 등을 기록 대상으로 삼는다.
-- 클래스 분리, 메서드 시그니처, 테스트 작성 방식처럼 쉽게 되돌릴 수 있는 것은 기록하지 않는다.
-- 형식은 [`0000-template.md`](./0000-template.md)를 따른다. 한 페이지를 넘기지 않는다.
-- 파일명은 `NNNN-짧은-제목.md` (4자리 순번, kebab-case).
+에이전트에게 아키텍처 자율을 위임한 대가로 남기는 기록이다. 근거가 남지 않으면 이후 세션의 에이전트가 그 결정을 이유도 모른 채 되돌린다.
+
+## 기록 대상
+
+- MUST: 새 의존성 추가, 데이터 저장 구조, 외부 연동 방식, 배포·인프라 구성, 기획 정본의 결정을 뒤집는 판단을 기록한다.
+- MUST NOT: 클래스 분리, 메서드 시그니처, 테스트 작성 방식처럼 쉽게 되돌릴 수 있는 것은 기록하지 않는다.
+- MUST NOT: 기획 정본에 이미 근거와 함께 기록된 채택 기술(Spring Boot+Vue3, JPA+QueryDSL, PostgreSQL, PrimeVue, 온프레미스 호스팅, Cloudflare Tunnel, Google OAuth, Sentry)은 여기 옮겨 적지 않는다. 정본은 기획 문서다.
+
+## 작성 규칙
+
+- MUST: [`0000-template.md`](./0000-template.md) 형식을 따른다. frontmatter의 `applies_to`와 `## 검증` 절을 채운다.
+- `applies_to`는 이 결정이 지배하는 파일만 좁게 잡는다. 넓게 잡으면 관련 없는 작업에서 컨텍스트를 낭비한다.
+- `## 검증`에는 실행 가능한 명령을 넣는다. 확인할 수단이 없는 결정은 시간이 지나면 지켜지지 않는다.
+- 파일명은 `ADR-NNNN-짧은-제목.md` (4자리 순번, kebab-case). frontmatter의 `id`, 문서 제목, 파일명이 모두 같은 `ADR-NNNN` 표기를 쓴다. 커밋 메시지나 코드 주석에서 `ADR-0001`로 참조했을 때 그 자체로 무엇을 가리키는지 드러나야 한다.
+- 한 페이지를 넘기지 않는다.
+- 허가를 구하지 말고 결정한 뒤 기록한다.
 
 ## 기록 목록
 
-(아직 없음)
+`ls docs/adr/`로 확인한다. 수동 목록은 반드시 낡으므로 두지 않는다.
