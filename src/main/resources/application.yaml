@@ -24,3 +24,23 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            # MUST NOT: 실제 클라이언트 ID·시크릿을 이 파일에 넣지 않는다. 환경변수로만 주입한다.
+            #
+            # 기본값이 빈 문자열이 아니라 자리표시자인 이유: Spring Security의
+            # OAuth2ClientWebMvcSecurityConfiguration이 @EnableWebSecurity 시점에 생성되며
+            # ClientRegistration을 요구한다. 빈 값이면 등록이 만들어지지 않아 컨텍스트 기동이
+            # 실패하고, 필터 체인에서 조건부로 우회할 수도 없다(그 시점보다 먼저 생성된다).
+            # 자리표시자를 두면 자격증명 발급 전에도 애플리케이션이 정상 기동해
+            # 인가 로직·API·배치를 개발·검증할 수 있다. 실제 로그인만 동작하지 않는다.
+            client-id: ${GOOGLE_CLIENT_ID:not-configured}
+            client-secret: ${GOOGLE_CLIENT_SECRET:not-configured}
+            scope:
+              - openid
+              - email
+              - profile
