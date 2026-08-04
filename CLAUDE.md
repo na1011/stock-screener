@@ -28,4 +28,4 @@ Spring Boot 4.1 / Java 21 / Gradle 골격만 있다. JPA·QueryDSL·PostgreSQL·
 - MUST NOT: 시크릿·API 키를 코드·커밋·로그에 포함하지 않는다. IMPORTANT — 이 항목은 위반 시 복구가 불가능하다. `.env.example`에 플레이스홀더로만 문서화한다.
 - MUST NOT: `docs/stock-screener-project-spec.md`를 수정하지 않는다. 변경이 필요하면 제안한다.
 - MUST NOT: 확인 없이 파일·디렉토리를 삭제하지 않는다. 삭제는 되돌릴 수 없고, 무엇이 사라졌는지조차 나중에 알기 어렵다.
-- MUST NOT: force push를 실행하지 않는다. 공유 히스토리가 재작성되면 다른 클론과 어긋난다.
+- MUST NOT: force push를 실행하지 않는다. 공유 히스토리가 재작성되면 다른 클론과 어긋난다. `--force-with-lease`는 예외로 허용한다 — 다른 사람이 push했으면 스스로 실패하므로 같은 위험을 오히려 막는다.
