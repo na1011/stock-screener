@@ -1,0 +1,21 @@
+# S&P 500 구성종목 시드
+#
+# MUST: 실제 구성종목으로 채워야 한다. 아래는 형식을 보이기 위한 표본이며 전체 목록이 아니다.
+#
+# 받는 곳: Wikipedia "List of S&P 500 companies" 또는 DataHub의 공개 CSV
+# 갱신 시점: 분기 리밸런싱과 수시 교체. 국내 지수보다 변경이 잦다.
+#
+# 형식: ticker,name
+# 주의: 미국 티커는 상장폐지 후 재사용된다(FB가 META로 바뀌며 FB를 풀어줬다).
+#       그래서 다른 테이블은 티커가 아니라 stock.id로 참조한다.
+ticker,name
+AAPL,Apple Inc.
+MSFT,Microsoft Corporation
+NVDA,NVIDIA Corporation
+AMZN,Amazon.com Inc.
+GOOGL,Alphabet Inc. Class A
+META,Meta Platforms Inc.
+BRK.B,Berkshire Hathaway Inc. Class B
+LLY,Eli Lilly and Company
+AVGO,Broadcom Inc.
+JPM,JPMorgan Chase & Co.

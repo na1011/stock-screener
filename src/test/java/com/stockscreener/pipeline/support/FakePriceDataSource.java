@@ -49,6 +49,20 @@ public class FakePriceDataSource implements PriceDataSource {
         return this;
     }
 
+    /** 실패를 해제한다. 재실행이 이번엔 성공하는 상황을 만들 때 쓴다. */
+    public FakePriceDataSource clearFailure(long stockId) {
+        failures.remove(stockId);
+        return this;
+    }
+
+    /** 상태를 초기화한다. 컨텍스트가 캐시되므로 테스트마다 필요하다. */
+    public void reset() {
+        barsByStock.clear();
+        actionsByStock.clear();
+        failures.clear();
+        fetchedStockIds.clear();
+    }
+
     @Override
     public Set<String> supportedMarketCodes() {
         return markets;

@@ -1,0 +1,169 @@
+package com.stockscreener.pipeline.batch;
+
+import com.stockscreener.notification.AlertEvent;
+import com.stockscreener.notification.AlertPort;
+import com.stockscreener.notification.AlertSeverity;
+import com.stockscreener.pipeline.collector.StockRegistrar;
+import com.stockscreener.pipeline.collector.UniverseReconciler;
+import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.DataSourceRegistry;
+import com.stockscreener.pipeline.datasource.UniverseDataSource;
+import com.stockscreener.pipeline.datasource.UniverseSnapshot;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 지수 구성종목 리밸런싱.
+ *
+ * <p>{@code data-pipeline.md}가 "수동 개입 없이 자동 반영"을 요구한다. 시드 소스만 있으면
+ * 사람이 CSV를 갱신해야 하므로, 스크래핑 어댑터가 붙는 시점에 이 요구가 완전히 충족된다.
+ * 그때까지도 배치 자체는 자동으로 돌며 시드의 변경을 반영한다.
+ *
+ * <p>MUST NOT: 스크래핑 실패 시 시드로 <b>조용히</b> 폴백하지 않는다. 폴백은 반드시 알림을
+ * 동반한다 — 조용한 폴백은 "6개월 전 유니버스로 스크리닝하고 있었다"는 결과를 만들고,
+ * 그 상태는 아무 에러도 내지 않아 발견되지 않는다.
+ *
+ * <p>이 배치만 종목 단위 실패 격리를 쓰지 않는다. 유니버스는 전체가 하나의 정합적
+ * 스냅샷이라 부분 적용이 의미 없고, "제외만 되고 편입이 안 된" 중간 상태가 스크리닝에
+ * 노출되면 안 되기 때문이다.
+ */
+@Component
+public class UniverseRebalanceJob {
+
+    public static final String JOB_NAME = "universe-rebalance";
+
+    private static final Logger log = LoggerFactory.getLogger(UniverseRebalanceJob.class);
+
+    private final DataSourceRegistry registry;
+    private final UniverseReconciler reconciler;
+    private final StockRegistrar stockRegistrar;
+    private final BatchExecutions batchExecutions;
+    private final AlertPort alertPort;
+    private final JdbcTemplate jdbcTemplate;
+
+    public UniverseRebalanceJob(DataSourceRegistry registry, UniverseReconciler reconciler,
+                                StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
+                                AlertPort alertPort, JdbcTemplate jdbcTemplate) {
+        this.registry = registry;
+        this.reconciler = reconciler;
+        this.stockRegistrar = stockRegistrar;
+        this.batchExecutions = batchExecutions;
+        this.alertPort = alertPort;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /**
+     * 활성 지수 전체를 리밸런싱한다.
+     *
+     * <p>한 지수의 실패가 다른 지수를 막지 않는다. 지수는 서로 독립이며, 코스피200 소스가
+     * 깨졌다고 S&amp;P500까지 갱신하지 않을 이유가 없다.
+     */
+    public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        List<UniverseTarget> targets = activeUniverses();
+        BatchExecutionContext execution =
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+
+        int succeeded = 0;
+        int failed = 0;
+        long changedRows = 0;
+        try {
+            for (UniverseTarget target : targets) {
+                try {
+                    UniverseReconciler.Result result = rebalanceOne(target, asOf);
+                    changedRows += result.addedCount() + result.removedCount();
+                    succeeded++;
+                    if (result.changed()) {
+                        alertPort.send(AlertEvent.toOperator(
+                                AlertSeverity.INFO,
+                                target.universeCode() + " 구성종목 변경",
+                                "편입 %d, 제외 %d (기준일 %s)"
+                                        .formatted(result.addedCount(), result.removedCount(), asOf),
+                                JOB_NAME + ':' + target.universeCode() + ':' + asOf));
+                    }
+                } catch (DataSourceException e) {
+                    failed++;
+                    log.error("유니버스 갱신 실패. universe={} kind={} source={}",
+                            target.universeCode(), e.kind(), e.sourceName(), e);
+                    alertPort.send(AlertEvent.toOperator(
+                            AlertSeverity.ERROR,
+                            target.universeCode() + " 구성종목 갱신 실패",
+                            "소스 조회에 실패했다: %s (%s). 이전 구성으로 스크리닝이 계속된다."
+                                    .formatted(e.getMessage(), e.sourceName()),
+                            JOB_NAME + ':' + target.universeCode() + ':' + asOf));
+                } catch (RuntimeException e) {
+                    // 안전장치(제외 비율 초과)에 걸린 경우가 여기 온다. 조용히 넘기지 않는다.
+                    failed++;
+                    log.error("유니버스 갱신이 거부되었다. universe={}", target.universeCode(), e);
+                    alertPort.send(AlertEvent.toOperator(
+                            AlertSeverity.ERROR,
+                            target.universeCode() + " 구성종목 갱신 거부",
+                            e.getMessage(),
+                            JOB_NAME + ':' + target.universeCode() + ':' + asOf));
+                }
+            }
+        } catch (RuntimeException e) {
+            execution.failUnexpectedly(e);
+            throw e;
+        }
+
+        return finish(execution, succeeded, failed, changedRows);
+    }
+
+    private UniverseReconciler.Result rebalanceOne(UniverseTarget target, LocalDate asOf)
+            throws DataSourceException {
+        UniverseDataSource source = registry.universeSource(target.universeCode());
+        UniverseSnapshot snapshot = source.fetchConstituents(target.universeCode(), asOf);
+
+        // 티커 해석이 먼저다. universe_membership이 stock_id를 FK로 참조한다.
+        List<Long> stockIds =
+                stockRegistrar.resolveOrCreate(target.marketCode(), snapshot.tickers());
+        return reconciler.reconcile(snapshot, stockIds);
+    }
+
+    /**
+     * 실행을 마감한다.
+     *
+     * <p>{@link BatchExecutionContext}의 집계를 쓰지 않는 이유는, 이 배치의 처리 단위가
+     * 종목이 아니라 지수이기 때문이다. 종목 단위 격리를 쓰지 않으므로 카운터도 직접 넣는다.
+     */
+    private BatchStatus finish(BatchExecutionContext execution, int succeeded, int failed,
+                               long changedRows) {
+        BatchStatus status = batchExecutions.recorder()
+                .finish(execution.executionId(), succeeded, failed, changedRows);
+        if (status == BatchStatus.PARTIAL_SUCCESS) {
+            log.warn("유니버스 리밸런싱 부분 실패. 성공={} 실패={}", succeeded, failed);
+        }
+        return status;
+    }
+
+    /** 활성 지수와 그 지수가 속한 시장. 새 지수를 추가해도 코드를 고치지 않는다. */
+    private List<UniverseTarget> activeUniverses() {
+        return jdbcTemplate.query("""
+                SELECT code, market_code FROM universe WHERE is_active ORDER BY code
+                """,
+                (rs, rowNum) -> new UniverseTarget(
+                        rs.getString("code"), rs.getString("market_code")));
+    }
+
+    private record UniverseTarget(String universeCode, String marketCode) {
+    }
+
+    /** 관리자 화면이 쓸 요약. 어느 지수에 몇 종목이 편입되어 있는가. */
+    public Map<String, Integer> currentSizes() {
+        Map<String, Integer> sizes = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT universe_code, count(*) AS member_count FROM universe_membership
+                WHERE effective_to IS NULL GROUP BY universe_code ORDER BY universe_code
+                """, rs -> {
+            sizes.put(rs.getString("universe_code"), rs.getInt("member_count"));
+        });
+        return sizes;
+    }
+}
