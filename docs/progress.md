@@ -41,6 +41,8 @@
 
 **Phase 2 — 수집 파이프라인.** 착수 전에 [`design/v1-architecture.md`](./design/v1-architecture.md) §4의 Phase 2 항목과 `.claude/rules/data-pipeline.md`를 읽는다.
 
+IMPORTANT — **API 키 3개(공공데이터포털·DART·Finnhub)가 아직 발급되지 않았다.** [`external-credentials.md`](./external-credentials.md) 참조. 실제 데이터 수집은 이것 없이 불가능하므로, 키를 기다리는 동안은 어댑터 인터페이스·배치 구조·실패 격리처럼 키가 필요 없는 부분을 먼저 만들고 통합은 나중에 한다. 공공데이터포털은 활용신청 후 승인까지 시간이 걸릴 수 있어 미리 신청해두는 편이 낫다.
+
 다룰 것: 공공데이터포털·DART·Finnhub 어댑터, 초기 적재(시세 2년·재무 3년), 일일 갱신 배치, 유니버스 리밸런싱 배치.
 
 Phase 2에서 특히 걸리는 것:
@@ -73,7 +75,7 @@ Phase 2에서 특히 걸리는 것:
 
 ## 미룬 것 / 알려진 미완성
 
-- **Google Cloud Console에서 OAuth 클라이언트 발급** (~10분, 사용자 수동 작업). Phase 1은 인가 로직(허용목록 판정·권한 분리)까지만 하고 실제 핸드쉐이크는 하지 않는다. 설계문서 §5의 기준이 "허가되지 않은 이메일이 차단된다"이지 "브라우저 로그인이 된다"가 아니기 때문이다. 실제 마감은 Phase 6(Cloudflare Tunnel + 고정 도메인)이다.
+- **외부 서비스 발급 8건 — 전부 미진행.** [`external-credentials.md`](./external-credentials.md)에 모아뒀다. 사용자가 직접 해야 하는 작업이며 나중에 한 번에 진행한다. **Phase 2를 시작하려면 공공데이터포털·DART·Finnhub 키 3개가 먼저 필요하다** — 이것 없이는 실제 데이터를 가져올 수 없다. Google OAuth·도메인·Cloudflare·Sentry·알림 채널은 Phase 5~6까지 여유가 있다.
 - **지표 값 보존 정책**: 결정하지 않았다. 데이터가 없어 판단 근거가 없다. `indicator_value`가 날짜 기준으로 분할 가능한 형태이므로 Phase 3에서 마이그레이션으로 도입할 수 있다.
 - **백분위(`_PCTL`) 계산**: Phase 3. 저장 구조는 이미 수용 가능함을 확인했다(파생 지표 코드로 평범한 행이 되며 `indicator_value`의 컬럼은 5개 그대로다).
 - **지표 간 의존(MACD-V 등)**: 인터페이스(`DataRequirement.dependsOn`)와 레지스트리의 위상 정렬·워밍업 유도는 구현·테스트되어 있으나, 실제로 의존을 쓰는 지표는 아직 없다.
