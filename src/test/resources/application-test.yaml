@@ -5,6 +5,17 @@ spring:
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/stock_screener_test}
     username: ${TEST_DB_USER:na1011}
     password: ${TEST_DB_PASSWORD:}
+    hikari:
+      # IMPORTANT — 테스트 컨텍스트마다 별도의 커넥션 풀이 생기고, Spring TestContext는
+      # 컨텍스트를 캐시하며 닫지 않는다. 기본값 10으로 두면 서로 다른 설정의 테스트 클래스가
+      # 늘어날수록 풀이 누적되어 PostgreSQL의 max_connections(기본 100)를 넘고,
+      # "sorry, too many clients already"로 무관한 테스트가 실패하기 시작한다.
+      # 그 실패는 원인이 드러나지 않아 방금 만든 코드의 결함으로 오해하기 쉽다.
+      # 테스트는 단일 스레드로 돌므로 커넥션이 여러 개일 이유가 없다.
+      maximum-pool-size: 2
+      minimum-idle: 0
+      # 유휴 커넥션을 빨리 반납해 캐시된 컨텍스트가 자리를 붙잡고 있지 않게 한다.
+      idle-timeout: 10000
 
   jpa:
     hibernate:
