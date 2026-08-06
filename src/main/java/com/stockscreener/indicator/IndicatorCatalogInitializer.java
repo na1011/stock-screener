@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,8 +20,13 @@ import org.springframework.stereotype.Component;
  *
  * <p>실패하면 기동을 막는다. 카탈로그가 어긋난 채로 뜨면 지표 계산이 조용히 실패하는데,
  * 그것은 새벽 배치에서야 드러난다.
+ *
+ * <p>IMPORTANT — {@code @Order}로 프리셋 시더보다 먼저 돈다. {@code ApplicationRunner}의
+ * 실행 순서는 지정하지 않으면 <b>미정의</b>이고, {@code screen_condition.indicator_code}가
+ * {@code indicator}를 FK로 참조하므로 순서가 뒤집히면 깨끗한 DB에서 기동이 FK 위반으로 실패한다.
  */
 @Component
+@Order(0)
 public class IndicatorCatalogInitializer implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(IndicatorCatalogInitializer.class);
