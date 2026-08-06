@@ -64,18 +64,23 @@ public final class BatchExecutionContext {
     /**
      * 종목 하나를 격리해 처리하고 집계에 반영한다.
      *
+     * <p>성공 여부를 <b>반환한다.</b> 집계만 하고 버리면 호출부가 "이 종목이 방금 성공했는가"를
+     * 알 수 없고, 부분 재실행이 실패한 종목까지 해결로 표시하게 된다.
+     *
+     * @return 이 종목이 성공했으면 {@code true}
      * @throws DataSourceException 복구 불가능한 실패({@code AUTH})일 때만. 호출부는 이것을
      *                             잡아 {@link #failFatally(DataSourceException)}로 마감해야 한다.
      */
-    public void process(SecurityRef security, CollectionPhase phase, StockTask task)
+    public boolean process(SecurityRef security, CollectionPhase phase, StockTask task)
             throws DataSourceException {
         StockTaskExecutor.Outcome outcome = executor.execute(executionId, security, phase, task);
         if (outcome.succeeded()) {
             successCount.incrementAndGet();
             writtenRowCount.addAndGet(outcome.writtenRows());
-        } else {
-            failureCount.incrementAndGet();
+            return true;
         }
+        failureCount.incrementAndGet();
+        return false;
     }
 
     /** 응답을 해석할 수 없었던 실패를 별도로 센다. 소스 스펙 변경 판단의 근거다. */

@@ -21,10 +21,14 @@ import java.util.List;
 public class IndicatorCatalogSynchronizer {
 
     private final IndicatorRegistry registry;
+    private final List<PercentileSpec> percentileSpecs;
     private final JdbcTemplate jdbcTemplate;
 
-    public IndicatorCatalogSynchronizer(IndicatorRegistry registry, JdbcTemplate jdbcTemplate) {
+    public IndicatorCatalogSynchronizer(IndicatorRegistry registry,
+                                        List<PercentileSpec> percentileSpecs,
+                                        JdbcTemplate jdbcTemplate) {
         this.registry = registry;
+        this.percentileSpecs = List.copyOf(percentileSpecs);
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -48,8 +52,46 @@ public class IndicatorCatalogSynchronizer {
             activeCodes.add(calculator.code());
         }
 
+        // 백분위 지표는 계산기가 없다(유니버스 횡단 집계라 IndicatorCalculator가 될 수 없다).
+        // 그래도 카탈로그 행은 있어야 한다 — indicator_value의 FK가 이 행을 요구하고,
+        // 여기 빠지면 아래 deactivateMissing이 방금 만든 행을 곧바로 비활성으로 돌린다.
+        for (PercentileSpec spec : percentileSpecs) {
+            if (!registry.isRegistered(spec.sourceCode())) {
+                throw new IllegalStateException(
+                        "백분위의 원본 지표가 등록되어 있지 않다: " + spec.sourceCode()
+                                + " — 계산기가 사라졌거나 코드를 잘못 적었다.");
+            }
+            upsertPercentile(spec);
+            activeCodes.add(spec.code());
+        }
+
         deactivateMissing(activeCodes);
         return activeCodes.size();
+    }
+
+    /**
+     * 백분위 지표의 카탈로그 행.
+     *
+     * <p>값이 항상 0~1의 비율이고 큰 쪽이 "원본 값이 크다"를 뜻하므로, 표시 속성은 원본과
+     * 무관하게 고정이다. 유불리 방향을 {@code NEUTRAL}로 두는 이유는 원본 지표마다 다르고
+     * ({@code PER_PCTL}은 낮은 쪽이, {@code ROE_PCTL}은 높은 쪽이 좋다) 그 판단은 원본
+     * 지표의 {@code higher_is_better}가 이미 들고 있기 때문이다.
+     */
+    private void upsertPercentile(PercentileSpec spec) {
+        jdbcTemplate.update("""
+                INSERT INTO indicator (code, name, description, interpretation, category, value_type,
+                                       unit, decimal_scale, higher_is_better, is_active, sort_order,
+                                       created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'DERIVED', 'RATIO', NULL, 4, NULL, true, 900, now(), now())
+                ON CONFLICT (code) DO UPDATE SET
+                    name           = EXCLUDED.name,
+                    description    = EXCLUDED.description,
+                    interpretation = EXCLUDED.interpretation,
+                    is_active      = true,
+                    updated_at     = now()
+                """,
+                spec.code(), spec.name(),
+                emptyToNull(spec.description()), emptyToNull(spec.interpretation()));
     }
 
     private void upsert(String code, IndicatorMeta meta) {

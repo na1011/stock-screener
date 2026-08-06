@@ -238,6 +238,35 @@ class PipelineEndToEndTest {
                 """, Integer.class, executionId)).isZero();
     }
 
+    @Test
+    @DisplayName("재실행에서 또 실패하면 해결로 표시하지 않는다 — 실패가 조용히 사라지면 안 된다")
+    void keepsFailureUnresolvedWhenRetryFailsAgain() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        List<Long> members = reconciler.currentMembers("KOSPI200");
+        long failing = members.get(0);
+        for (Long member : members) {
+            fakePriceSource.withBars(member, List.of(bar("2026-08-05", "1000")));
+        }
+        fakePriceSource.failingWith(failing, new DataSourceException(
+                DataSourceException.Kind.TRANSIENT, "fake-price", "일시적 오류"));
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        long executionId = jdbcTemplate.queryForObject("""
+                SELECT id FROM batch_execution WHERE job_name = ? ORDER BY id DESC LIMIT 1
+                """, Long.class, DailyUpdateJob.JOB_NAME);
+
+        // 이번에도 실패하게 둔다 — 소스가 계속 죽어 있는 상황이다.
+        dailyUpdateJob.retryFailures(executionId, AS_OF);
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM batch_execution_failure
+                WHERE execution_id = ? AND stock_id = ? AND NOT resolved
+                """, Integer.class, executionId, failing))
+                .as("두 번 실패한 종목은 미해결로 남아야 한다. 해결로 표시하면 관리자의 "
+                        + "실패 목록에서 사라져 다시는 재실행 대상이 되지 않는다")
+                .isEqualTo(1);
+    }
+
     private int countStocks() {
         return jdbcTemplate.queryForObject("SELECT count(*) FROM stock", Integer.class);
     }

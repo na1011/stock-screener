@@ -1,5 +1,8 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.indicator.IndicatorRetentionPolicy;
+import com.stockscreener.indicator.IndicatorRunner;
+import com.stockscreener.indicator.PercentileCalculator;
 import com.stockscreener.pipeline.collector.MarketCalendar;
 import com.stockscreener.pipeline.collector.PriceCollector;
 import com.stockscreener.pipeline.collector.StockRegistrar;
@@ -15,7 +18,11 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 일일 갱신. 장 마감 후 전일 종가를 수집한다.
+ * 일일 갱신. 장 마감 후 전일 종가를 수집하고 그것으로 지표를 계산한다.
+ *
+ * <p>수집과 계산을 한 잡에 둔 이유는 <b>순서가 강제되어야 하기 때문</b>이다. 지표는 그날의
+ * 시세가 저장된 뒤에만 계산할 수 있다. 둘을 별도 잡으로 나누면 스케줄 간격이 곧 그 전제가
+ * 되고, 수집이 늦어진 날 지표가 어제 값으로 계산되는데 그것은 조용히 그럴듯하다.
  *
  * <p>MUST NOT: 초기 적재 분기를 여기 섞지 않는다({@code data-pipeline.md}). 초기 적재는
  * 조회 기간(2년 vs 1일)과 쓰기 패턴이 다른 1회성 작업이므로 {@link InitialLoadJob}에 있다.
@@ -37,15 +44,23 @@ public class DailyUpdateJob {
     private final StockRegistrar stockRegistrar;
     private final MarketCalendar marketCalendar;
     private final BatchExecutions batchExecutions;
+    private final IndicatorRunner indicatorRunner;
+    private final PercentileCalculator percentileCalculator;
+    private final IndicatorRetentionPolicy retentionPolicy;
     private final JdbcTemplate jdbcTemplate;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
                           MarketCalendar marketCalendar, BatchExecutions batchExecutions,
+                          IndicatorRunner indicatorRunner, PercentileCalculator percentileCalculator,
+                          IndicatorRetentionPolicy retentionPolicy,
                           JdbcTemplate jdbcTemplate) {
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
         this.marketCalendar = marketCalendar;
         this.batchExecutions = batchExecutions;
+        this.indicatorRunner = indicatorRunner;
+        this.percentileCalculator = percentileCalculator;
+        this.retentionPolicy = retentionPolicy;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -85,22 +100,40 @@ public class DailyUpdateJob {
         BatchExecutionContext execution = batchExecutions.startRetry(
                 JOB_NAME, targetDate, targets.size(), previousExecutionId);
 
-        BatchStatus status = collect(execution, targets, targetDate, targetDate);
-
-        // 성공한 것을 해결로 표시한다. 이것이 없으면 "미해결 건수"가 영원히 줄지 않는다.
-        for (SecurityRef target : targets) {
-            batchExecutions.recorder().resolveFailure(
-                    previousExecutionId, target.stockId(), CollectionPhase.PRICE);
-        }
-        return status;
+        return collect(execution, targets, targetDate, targetDate, previousExecutionId);
     }
 
     private BatchStatus collect(BatchExecutionContext execution, List<SecurityRef> targets,
                                 LocalDate from, LocalDate to) {
+        return collect(execution, targets, from, to, null);
+    }
+
+    /**
+     * 대상 종목의 시세를 수집하고, 이어서 지표를 계산한다.
+     *
+     * <p>{@code resolvingExecutionId}가 있으면 부분 재실행이다. 이때
+     * <b>실제로 성공한 종목만</b> 해결로 표시한다. 대상 전체를 무조건 해결로 표시하면 두 번
+     * 연속 실패한 종목이 미해결 목록에서 사라져, 실패를 조용히 삼키지 않겠다는 파이프라인
+     * 전체의 전제가 바로 이 지점에서 깨진다.
+     */
+    private BatchStatus collect(BatchExecutionContext execution, List<SecurityRef> targets,
+                                LocalDate from, LocalDate to, Long resolvingExecutionId) {
         try {
             for (SecurityRef target : targets) {
-                execution.process(target, CollectionPhase.PRICE,
+                boolean collected = execution.process(target, CollectionPhase.PRICE,
                         security -> priceCollector.collect(security, from, to));
+
+                if (collected && resolvingExecutionId != null) {
+                    batchExecutions.recorder().resolveFailure(
+                            resolvingExecutionId, target.stockId(), CollectionPhase.PRICE);
+                }
+
+                // 시세가 들어온 종목만 지표를 계산한다. 수집에 실패한 종목은 계산할 새 원자료가
+                // 없으므로, 굳이 돌려서 실패를 하나 더 만들 이유가 없다.
+                if (collected) {
+                    execution.process(target, CollectionPhase.INDICATOR,
+                            security -> indicatorRunner.run(security.stockId(), to));
+                }
             }
         } catch (DataSourceException e) {
             // AUTH처럼 복구 불가능한 실패다. 850종목을 마저 시도할 이유가 없다.
@@ -110,6 +143,20 @@ public class DailyUpdateJob {
             execution.failUnexpectedly(e);
             throw e;
         }
+
+        // 백분위는 전 종목의 값이 저장된 뒤에야 계산할 수 있다. 종목 루프 안에서는 원리적으로
+        // 불가능하므로 루프가 끝난 뒤 하루치를 한 번에 처리한다.
+        percentileCalculator.calculate(to);
+
+        // 보존 정리(ADR-0011)는 마감 전에 하되 실패해도 배치를 죽이지 않는다. 오래된 행이
+        // 하루 더 남는 것은 저장 공간 문제일 뿐이지만, 여기서 예외가 올라가면 그날의 수집과
+        // 계산이 통째로 실패한 것처럼 기록된다.
+        try {
+            retentionPolicy.purge();
+        } catch (RuntimeException e) {
+            log.warn("지표 보존 정리에 실패했다. 수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
+        }
+
         return execution.finish();
     }
 

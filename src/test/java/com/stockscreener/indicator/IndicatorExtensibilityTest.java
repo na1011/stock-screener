@@ -61,7 +61,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("메타데이터가 카탈로그 테이블로 투영되어 UI가 평범한 쿼리로 읽는다")
     void metadataIsProjectedIntoCatalog() {
-        new IndicatorCatalogSynchronizer(registry, jdbcTemplate).synchronize();
+        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate).synchronize();
 
         List<String> codes = jdbcTemplate.queryForList(
                 "SELECT code FROM indicator WHERE is_active ORDER BY code", String.class);
@@ -81,7 +81,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("새 지표의 값을 저장하는 데 스키마 변경이 필요 없다 — EAV의 핵심 성질")
     void storingNewIndicatorNeedsNoSchemaChange() {
-        new IndicatorCatalogSynchronizer(registry, jdbcTemplate).synchronize();
+        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate).synchronize();
 
         jdbcTemplate.update(
                 "INSERT INTO market (code, country_code, currency_code, timezone) "
@@ -109,7 +109,7 @@ class IndicatorExtensibilityTest {
     void percentileNeedsNoSchemaChange() {
         // 설계 문서 §3이 "수용 가능한지 확인하라"고 한 지점. 실제로 확인한다:
         // 백분위는 indicator_value에 평범한 행으로 들어가고 조건도 스칼라 비교가 된다.
-        new IndicatorCatalogSynchronizer(registry, jdbcTemplate).synchronize();
+        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate).synchronize();
 
         Integer columnCount = jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM information_schema.columns

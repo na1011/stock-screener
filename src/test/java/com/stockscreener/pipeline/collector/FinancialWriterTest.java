@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 있던 값"이 영구히 파괴되어 어떤 마이그레이션으로도 복구할 수 없다.
  */
 @JpaSliceTest
-@Import(FinancialWriter.class)
+@Import({FinancialWriter.class, NoOpIndicatorInvalidationPort.DefaultInvalidationPortConfig.class})
 class FinancialWriterTest {
 
     @Autowired

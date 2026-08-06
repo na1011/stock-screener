@@ -27,9 +27,11 @@ public class FinancialWriter {
     private static final Logger log = LoggerFactory.getLogger(FinancialWriter.class);
 
     private final JdbcTemplate jdbcTemplate;
+    private final IndicatorInvalidationPort invalidationPort;
 
-    public FinancialWriter(JdbcTemplate jdbcTemplate) {
+    public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort) {
         this.jdbcTemplate = jdbcTemplate;
+        this.invalidationPort = invalidationPort;
     }
 
     /**
@@ -63,6 +65,13 @@ public class FinancialWriter {
                     UPDATE financial_statement SET is_latest = false
                     WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND is_latest
                     """, stockId, report.fiscalYear(), report.fiscalPeriod());
+
+            // 이 기간의 수치로 계산된 PER·ROE 등이 전부 틀린 값이 되었다. 지우지 않으면
+            // 낡은 값이 남는데, 그것은 그럴듯해 보여서 아무도 눈치채지 못한다.
+            // 기준일이 공시일이 아니라 회계기간 시작일인 이유: 틀린 수치가 영향을 준 구간은
+            // 정정이 공시된 날이 아니라 그 수치가 쓰이기 시작한 날부터다.
+            invalidationPort.invalidate(stockId, report.periodStart(),
+                    IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
         }
 
         int revisionNo = existing == null ? 0 : existing.revisionNo() + 1;

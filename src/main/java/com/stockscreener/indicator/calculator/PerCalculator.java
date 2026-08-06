@@ -61,7 +61,11 @@ public class PerCalculator implements IndicatorCalculator {
     @Override
     public DataRequirement dataRequirement() {
         // 시세는 계산 시점의 종가만 필요하지만, 성장률 계산 등과 창을 맞추기 위해 1봉을 선언한다.
-        // 재무는 TTM(4분기)에 여유를 두어 1년치를 요구한다.
+        //
+        // 재무 1년은 분기로 정확히 4개이고 TTM이 요구하는 수와 같다 — 여유가 0이다.
+        // 그 여유는 IndicatorDataReader가 분기를 읽을 때 한 해치를 더 얹어 확보한다.
+        // 여기서 2년을 선언하지 않는 이유는 이 숫자가 "이 지표가 의미상 필요로 하는 기간"이고,
+        // 소스 누락에 대비한 여유는 읽는 쪽의 책임이기 때문이다.
         return DataRequirement.priceAndFinancial(1, 1);
     }
 

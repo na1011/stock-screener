@@ -104,21 +104,15 @@ class PerCalculatorTest {
         LocalDate end = LocalDate.of(2025, 12, 31);
         for (int i = 0; i < count; i++) {
             LocalDate periodEnd = end.minusMonths(3L * i);
-            list.add(new FinancialFigures(
-                    periodEnd.getYear(),
-                    FinancialFigures.FiscalPeriod.Q4,
-                    periodEnd.minusMonths(3),
-                    periodEnd,
-                    periodEnd.plusMonths(2),
-                    null, null, netIncome, null, null, shares));
+            list.add(FinancialFiguresFixture.quarter(periodEnd)
+                    .netIncome(netIncome)
+                    .sharesOutstanding(shares)
+                    .build());
         }
         return list;
     }
 
     private static FinancialFigures withNetIncome(FinancialFigures source, BigDecimal netIncome) {
-        return new FinancialFigures(
-                source.fiscalYear(), source.fiscalPeriod(), source.periodStart(), source.periodEnd(),
-                source.publishedAt(), source.revenue(), source.operatingIncome(), netIncome,
-                source.totalAssets(), source.totalEquity(), source.sharesOutstanding());
+        return FinancialFiguresFixture.from(source).netIncome(netIncome).build();
     }
 }

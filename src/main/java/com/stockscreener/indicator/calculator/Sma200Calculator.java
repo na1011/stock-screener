@@ -11,9 +11,6 @@ import com.stockscreener.indicator.PriceBar;
 
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -51,25 +48,8 @@ public class Sma200Calculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        List<PriceBar> bars = context.priceBars();
-        if (bars.size() < PERIOD) {
-            // 이력이 부족하면 아무 값도 내지 않는다. 부정확한 값을 채우는 대신 행을 만들지 않으면
-            // 조건 판정에서 이 종목이 자연히 제외된다.
-            return List.of();
-        }
-
-        List<IndicatorPoint> points = new ArrayList<>(bars.size() - PERIOD + 1);
-        BigDecimal window = BigDecimal.ZERO;
-        for (int i = 0; i < bars.size(); i++) {
-            window = window.add(bars.get(i).adjClose());
-            if (i >= PERIOD) {
-                window = window.subtract(bars.get(i - PERIOD).adjClose());
-            }
-            if (i >= PERIOD - 1) {
-                BigDecimal average = window.divide(BigDecimal.valueOf(PERIOD), 8, RoundingMode.HALF_UP);
-                points.add(new IndicatorPoint(bars.get(i).tradeDate(), average));
-            }
-        }
-        return points;
+        // 이력이 부족하면 아무 값도 내지 않는다. 부정확한 값을 채우는 대신 행을 만들지 않으면
+        // 조건 판정에서 이 종목이 자연히 제외된다.
+        return MovingAverages.sma(context.priceBars(), PERIOD);
     }
 }
