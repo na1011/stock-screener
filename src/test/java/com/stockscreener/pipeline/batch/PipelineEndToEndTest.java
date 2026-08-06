@@ -149,6 +149,42 @@ class PipelineEndToEndTest {
     }
 
     @Test
+    @DisplayName("기간을 늘려 재적재하면 이미 적재된 종목도 다시 받는다")
+    void reloadsExistingStocksWhenRangeExpands() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        long stockId = stockIdOf(SEEDED_TICKER);
+        fakePriceSource.withBars(stockId, List.of(bar("2026-08-03", "70000")));
+
+        initialLoadJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        fakePriceSource.fetchedStockIds.clear();
+
+        // 2년치를 받아둔 상태에서 7년으로 넓힌다. 기본 경로(NOT EXISTS)로는 대상이 0건이 되어
+        // "적재할 종목이 없다"며 성공으로 끝나는데, 기간을 늘렸는데 아무 일도 일어나지 않고
+        // 성공으로 보이는 것이 그 결함의 성질이다.
+        initialLoadJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                new InitialLoadJob.LoadRange(7, 7, true));
+
+        assertThat(fakePriceSource.fetchedStockIds)
+                .as("확장 적재는 이미 이력이 있는 종목도 대상에 넣어야 한다")
+                .contains(stockId);
+    }
+
+    @Test
+    @DisplayName("확장 적재가 더 긴 기간을 요청한다")
+    void expandedLoadRequestsLongerRange() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        long stockId = stockIdOf(SEEDED_TICKER);
+        fakePriceSource.withBars(stockId, List.of(bar("2026-08-03", "70000")));
+
+        initialLoadJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                new InitialLoadJob.LoadRange(7, 7, true));
+
+        assertThat(fakePriceSource.lastFrom)
+                .as("7년을 요청하면 조회 시작일이 그만큼 앞이어야 한다")
+                .isEqualTo(AS_OF.minusYears(7));
+    }
+
+    @Test
     @DisplayName("일일 갱신이 편입 종목만 수집한다")
     void dailyUpdateCollectsCurrentMembers() {
         universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);

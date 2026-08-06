@@ -59,12 +59,26 @@ public class InitialLoadJob {
     }
 
     /**
-     * 아직 적재되지 않은 종목의 이력을 받아온다.
+     * 아직 적재되지 않은 종목의 이력을 spec 기본값(시세 2년·재무 3년)으로 받아온다.
      *
      * @param asOf 적재 기준일. 여기서 2년·3년을 거슬러 올라간다.
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(stocksNeedingHistory());
+        return run(asOf, triggeredBy,
+                new LoadRange(PRICE_HISTORY_YEARS, FINANCIAL_HISTORY_YEARS, false));
+    }
+
+    /**
+     * 기간과 대상 범위를 지정해 적재한다.
+     *
+     * <p>기간을 인자로 받는 이유는 <b>단계적 적재</b> 때문이다. 소수 종목 2년으로 검증한 뒤
+     * 전 기간으로 넓히는 순서를 밟으려면, 상수로 박힌 기간을 바꿔 재배포할 수는 없다.
+     * 기본값은 spec §7의 2년·3년으로 두어 스케줄러 경로의 의미는 그대로다.
+     */
+    public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                           LoadRange range) {
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(
+                range.reloadExisting() ? allUniverseMembers() : stocksNeedingHistory());
         if (targets.isEmpty()) {
             log.info("초기 적재가 필요한 종목이 없다. 모든 편입 종목에 이력이 있다.");
             BatchExecutionContext empty =
@@ -72,14 +86,15 @@ public class InitialLoadJob {
             return empty.finish();
         }
 
-        log.info("초기 적재를 시작한다. 대상 {}종목, 시세 {}년·재무 {}년",
-                targets.size(), PRICE_HISTORY_YEARS, FINANCIAL_HISTORY_YEARS);
+        log.info("초기 적재를 시작한다. 대상 {}종목, 시세 {}년·재무 {}년 (이미 적재된 종목 {})",
+                targets.size(), range.priceYears(), range.financialYears(),
+                range.reloadExisting() ? "포함" : "제외");
 
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
 
-        LocalDate priceFrom = asOf.minusYears(PRICE_HISTORY_YEARS);
-        int fromFiscalYear = asOf.getYear() - FINANCIAL_HISTORY_YEARS;
+        LocalDate priceFrom = asOf.minusYears(range.priceYears());
+        int fromFiscalYear = asOf.getYear() - range.financialYears();
 
         try {
             for (SecurityRef target : targets) {
@@ -118,5 +133,46 @@ public class InitialLoadJob {
                   AND NOT EXISTS (SELECT 1 FROM price_daily p WHERE p.stock_id = m.stock_id)
                 ORDER BY m.stock_id
                 """, Long.class);
+    }
+
+    /**
+     * 편입 중인 전 종목. 이미 시세가 있어도 포함한다.
+     *
+     * <p>기간을 늘려 다시 적재할 때 쓴다. {@link #stocksNeedingHistory()}는 봉이 하나라도
+     * 있으면 건너뛰므로, 2년치를 받아둔 상태에서 7년으로 넓히면 <b>대상이 0건이 되고 잡이
+     * "적재할 종목이 없다"며 성공으로 끝난다.</b> 기간을 늘렸는데 아무 일도 일어나지 않고
+     * 성공으로 보이는 것이 그 결함의 성질이라 별도 경로를 둔다.
+     *
+     * <p>중복 적재는 안전하다 — {@code price_daily}가 {@code ON CONFLICT}로 갱신한다.
+     */
+    private List<Long> allUniverseMembers() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                WHERE m.effective_to IS NULL AND s.is_active
+                ORDER BY m.stock_id
+                """, Long.class);
+    }
+
+    /**
+     * 적재 기간과 대상 범위.
+     *
+     * @param priceYears     시세를 몇 년 거슬러 받을지
+     * @param financialYears 재무를 몇 년 거슬러 받을지
+     * @param reloadExisting 이미 시세가 있는 종목도 다시 받을지. 기간 확장 시 참이다.
+     */
+    public record LoadRange(int priceYears, int financialYears, boolean reloadExisting) {
+
+        public LoadRange {
+            if (priceYears < 0 || financialYears < 0) {
+                throw new IllegalArgumentException(
+                        "적재 연수는 음수일 수 없다: 시세=" + priceYears + " 재무=" + financialYears);
+            }
+        }
+
+        /** spec §7의 기본값 — 시세 2년·재무 3년, 미적재 종목만. */
+        public static LoadRange defaults() {
+            return new LoadRange(PRICE_HISTORY_YEARS, FINANCIAL_HISTORY_YEARS, false);
+        }
     }
 }

@@ -30,6 +30,9 @@ public class FakePriceDataSource implements PriceDataSource {
     /** 호출된 종목을 기록한다. "재실행이 성공 종목을 다시 호출하지 않는지" 검증에 쓴다. */
     public final List<Long> fetchedStockIds = new ArrayList<>();
 
+    /** 마지막으로 요청된 조회 시작일. 적재 기간이 실제로 넓어졌는지 확인할 때 쓴다. */
+    public LocalDate lastFrom;
+
     public FakePriceDataSource(String... markets) {
         this.markets = Set.of(markets);
     }
@@ -61,6 +64,7 @@ public class FakePriceDataSource implements PriceDataSource {
         actionsByStock.clear();
         failures.clear();
         fetchedStockIds.clear();
+        lastFrom = null;
     }
 
     @Override
@@ -77,6 +81,7 @@ public class FakePriceDataSource implements PriceDataSource {
     public List<RawPriceBar> fetchDailyBars(SecurityRef security, LocalDate from, LocalDate to)
             throws DataSourceException {
         fetchedStockIds.add(security.stockId());
+        lastFrom = from;
         DataSourceException failure = failures.get(security.stockId());
         if (failure != null) {
             throw failure;
