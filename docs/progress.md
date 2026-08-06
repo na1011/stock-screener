@@ -91,6 +91,8 @@
 
 ## ADR 대상은 아니지만 알아야 하는 결정
 
+- **phase별 브랜치를 만들지 않는다.** `main`에 직접 쌓는다(2026-08-06 결정). Phase 2 브랜치가 `main`을 phase 1에 4개월 묶어둔 전례가 근거다 — 병렬 작업이 없어 격리할 대상이 없었고(병합 시 `main`이 앞선 커밋 0개, fast-forward), 되돌리기 단위는 이미 커밋이 담당한다. 브랜치는 **버릴 수 있는 탐색**에만 쓴다(예: 접근이 될지 모르는 실험, 스택이 다른 Phase 5).
+
 되돌리기는 쉽지만, 모르면 다시 만들거나 어긋나게 되는 것들.
 
 - **테스트 커넥션 풀은 2로 제한한다.** 컨텍스트마다 별도 풀이 생기고 TestContext는 캐시하며 닫지 않아, 기본값 10이면 `max_connections`(100)를 넘어 **무관한 테스트가** "too many clients"로 실패한다. 실제로 Phase 1 테스트 14건이 이 이유로 실패했고, 새 코드의 결함으로 오해하기 쉬웠다.
@@ -101,7 +103,7 @@
 - **재무 지표의 유량/저량 구분이 계산의 핵심이다.** 매출·이익·현금흐름은 4분기 합(TTM), 자산·부채·자본은 최근 분기 잔액이다. 저량을 합산하면 4배가 되는데 값이 그럴듯해서 드러나지 않는다. `FinancialMath.sumTrailingFourQuarters`는 유량 전용이다.
 - **백분위는 항상 오름차순 기준이다.** `PER_PCTL`이 0에 가까우면 PER이 낮다는 뜻이고, "상위 20%"는 지표에 따라 `<= 0.2`이거나 `>= 0.8`이다. 지표마다 방향을 뒤집어 저장하지 않는 이유는 조건을 읽는 사람이 매번 그 지표의 방향을 확인해야 하기 때문이다.
 - **`IndicatorDataReader`가 분기 재무에 한 해치 여유를 얹어 읽는다.** PER의 TTM은 정확히 4분기라 여유가 0인데, 공시가 실제로 빠지는 일이 있어 경계에서 값이 조용히 사라진다. 계산기의 `financialYearsNeeded`는 "의미상 필요한 기간"이고 누락 대비 여유는 읽는 쪽 책임이다.
-- **테스트는 로컬 PostgreSQL을 쓴다**(H2는 EAV가 의존하는 PG 고유 기능을 못 쓴다). **Zonky는 재검토 불필요**(조사 완료). 격리는 `@Transactional` 롤백이 기본이지만 실패 격리·배치 테스트는 커밋된 트랜잭션을 요구해 `@AfterEach` 정리를 쓴다. `JobRestartTest`는 `@BeforeEach`에서도 정리한다 — 남은 잡 인스턴스가 `JobInstanceAlreadyCompleteException`을 일으키고 그것이 재시작성 결함처럼 보인다.
+- **테스트는 로컬 PostgreSQL을 쓴다**(H2는 EAV가 의존하는 PG 고유 기능을 못 쓴다). **Zonky는 재검토 불필요.** 격리는 `@Transactional` 롤백이 기본이지만 실패 격리·배치 테스트는 커밋된 트랜잭션을 요구해 `@AfterEach` 정리를 쓴다. `JobRestartTest`는 `@BeforeEach`에서도 정리한다 — 남은 잡 인스턴스가 `JobInstanceAlreadyCompleteException`을 일으켜 재시작성 결함처럼 보인다.
 - **패키지 구조**: `indicator`, `screening`(+`.query`), `stock`, `auth`, `notification`, `pipeline`(`.datasource`/`.collector`/`.batch`/`.scheduler`), `probe`. `pipeline` 하위 이름은 `.claude/rules/data-pipeline.md`의 path glob에 **의도적으로 맞춘 것**이다 — 그래야 규칙이 자동 로드된다.
 
 ---
