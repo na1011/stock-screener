@@ -95,5 +95,22 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
 
 1. `.env.example`에 새 환경변수 이름이 있는지 확인하고, 없으면 플레이스홀더로 추가한다.
 2. 실제 값은 `.env`에 넣는다. **이 파일은 gitignore 대상이며 커밋되지 않는다.**
-3. 이 문서의 현황 표에서 해당 항목을 `완료 (YYYY-MM-DD)`로 바꾼다.
-4. `docs/progress.md`의 "미룬 것" 절에서 해당 항목을 지운다.
+3. `./gradlew checkEnv`로 실렸는지 확인한다. 값은 출력되지 않고 키 이름과 설정 여부만 나온다.
+4. 이 문서의 현황 표에서 해당 항목을 `완료 (YYYY-MM-DD)`로 바꾼다.
+5. `docs/progress.md`의 "미룬 것" 절에서 해당 항목을 지운다.
+
+## `.env`는 어떻게 애플리케이션에 실리는가
+
+**Spring Boot는 `.env`를 읽지 않는다.** 이 프로젝트에도 dotenv 의존성이 없다. `build.gradle`이
+직접 읽어 `bootRun`과 `liveTest`에 주입한다(`loadDotEnv`/`applyDotEnv`).
+
+- **실제 셸 환경변수가 `.env`를 이긴다.** 일회성 오버라이드를 파일 수정 없이 하기 위해서다.
+- **MUST NOT: `test` 태스크에 주입하지 않는다.** 실제 키가 있으면 `@ConditionalOnApiKey` 어댑터가
+  등록되어 단위 테스트의 빈 구성 자체가 바뀐다. 단위 테스트는 외부 호출 0건이 전제다.
+- IMPORTANT — **주입 실패는 조용하다.** `application.yaml`의 자리표시자 기본값(`not-configured`)
+  때문에 값이 없어도 애플리케이션은 정상 기동하고 브라우저 로그인만 안 된다. 그래서 "값을 안 적었나"와
+  "값이 안 실렸나"가 증상으로 구분되지 않는다. `./gradlew checkEnv`가 그 구분을 담당한다 —
+  `.env.example`의 자리표시자를 그대로 둔 경우도 "채워지지 않음"으로 잡는다.
+
+IDE에서 직접 실행하면 이 주입이 걸리지 않는다. `./gradlew bootRun`을 쓰거나 IDE 실행 구성에
+환경변수를 따로 넣어야 한다.

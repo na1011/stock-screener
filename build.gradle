@@ -87,6 +87,100 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+// .env(gitignore 대상)를 읽어 실행 태스크에 주입한다. 이것이 없으면 .env에 값을 적어도
+// 아무 데도 도달하지 않는다 — Spring Boot는 .env를 읽지 않고, 이 빌드에 dotenv 의존성도 없다.
+// 그런데 실패가 조용하다: application.yaml의 자리표시자 기본값(not-configured) 때문에
+// 애플리케이션은 정상 기동하고 브라우저 로그인만 안 되므로, 원인이 "값을 안 적었나"인지
+// "값이 안 실렸나"인지 구분되지 않는다. 그래서 매번 `source .env`를 기억하는 대신 빌드가 싣는다.
+//
+// MUST NOT: test 태스크에 주입하지 않는다. 실제 키가 있으면 @ConditionalOnApiKey 어댑터가
+// 등록되어 단위 테스트의 빈 구성 자체가 바뀐다. 단위 테스트는 외부 호출 0건이 전제이고,
+// 키 유무로 결과가 달라지면 CI와 로컬이 어긋난다. 키가 필요한 것은 bootRun과 liveTest뿐이다.
+ext.loadDotEnvFrom = { File envFile ->
+    if (envFile == null || !envFile.exists()) {
+        return [:]
+    }
+    def loaded = [:]
+    envFile.eachLine('UTF-8') { rawLine ->
+        def line = rawLine.trim()
+        if (line.isEmpty() || line.startsWith('#')) {
+            return
+        }
+        if (line.startsWith('export ')) {
+            line = line.substring('export '.length()).trim()
+        }
+        def sep = line.indexOf('=')
+        if (sep <= 0) {
+            return
+        }
+        def key = line.substring(0, sep).trim()
+        def value = line.substring(sep + 1).trim()
+        // 값을 감싼 따옴표는 셸이 벗겨주는 부분이라 여기서도 벗긴다.
+        if (value.length() >= 2 && (
+                (value.startsWith('"') && value.endsWith('"')) ||
+                (value.startsWith("'") && value.endsWith("'")))) {
+            value = value.substring(1, value.length() - 1)
+        }
+        loaded[key] = value
+    }
+    return loaded
+}
+
+ext.loadDotEnv = { loadDotEnvFrom(rootProject.file('.env')) }
+
+// 실제 셸 환경변수가 .env를 이긴다. 일회성 오버라이드를 파일 수정 없이 하기 위해서다.
+ext.applyDotEnv = { Task task ->
+    def loaded = loadDotEnv()
+    if (loaded.isEmpty()) {
+        return
+    }
+    def applied = loaded.findAll { k, v -> System.getenv(k) == null }
+    applied.each { k, v -> task.environment(k, v) }
+    // MUST NOT: 값을 로그에 남기지 않는다. 키 이름만으로 "실렸는가"는 판정된다.
+    task.doFirst {
+        logger.lifecycle(".env에서 ${applied.size()}개 주입: ${applied.keySet().sort().join(', ')}")
+    }
+}
+
+tasks.named('bootRun') {
+    applyDotEnv(it)
+}
+
+// "값을 안 적었나, 값이 안 실렸나"를 앱 기동 없이 가른다. 이 구분이 안 되는 것이
+// .env 주입 실패의 진짜 비용이었다. 값은 절대 출력하지 않는다 — 이름과 설정 여부만 본다.
+tasks.register('checkEnv') {
+    group = 'verification'
+    description = '.env가 실렸는지 키 이름으로만 확인한다. 값은 출력하지 않는다.'
+    doLast {
+        def loaded = loadDotEnv()
+        if (loaded.isEmpty()) {
+            println '.env가 없거나 비어 있다.'
+            return
+        }
+        // 자리표시자를 실제 값으로 착각하는 것이 가장 흔한 실패다. .env.example의
+        // 값과 같으면 "복사만 하고 안 채웠다"는 뜻이므로 미설정으로 취급한다.
+        def placeholders = [:]
+        def exampleFile = rootProject.file('.env.example')
+        if (exampleFile.exists()) {
+            placeholders = loadDotEnvFrom(exampleFile)
+        }
+        println '.env 키 상태 (값은 표시하지 않음):'
+        loaded.keySet().sort().each { key ->
+            def value = loaded[key]
+            def status
+            if (value == null || value.isEmpty()) {
+                status = '빈 값'
+            } else if (placeholders[key] != null && placeholders[key] == value) {
+                status = '자리표시자 그대로 — 채워지지 않음'
+            } else {
+                status = "설정됨 (${value.length()}자)"
+            }
+            def overridden = System.getenv(key) != null ? ' [셸 환경변수가 우선함]' : ''
+            println "  ${key}: ${status}${overridden}"
+        }
+    }
+}
+
 // 관통테스트(@Tag("live"))는 실제 외부 API를 호출한다. 기본 test에서 제외하는 이유가 둘이다.
 // 네트워크가 없거나 벤더가 점검 중이면 무관한 테스트까지 빨간불이 되고, 매 실행이
 // 일일 쿼터를 태운다. 초기 적재에 쓸 쿼터를 테스트가 소진하면 안 된다.
@@ -98,6 +192,8 @@ tasks.register('liveTest', Test) {
     useJUnitPlatform {
         includeTags 'live'
     }
+    // 관통테스트는 실제 키를 쓰는 것이 목적이므로 주입한다(단위 test와 정반대다).
+    applyDotEnv(it)
     // 실패해도 나머지를 계속 돌려 어느 소스가 깨졌는지 한 번에 본다.
     ignoreFailures = false
     testLogging {
