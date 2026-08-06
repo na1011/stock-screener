@@ -37,6 +37,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>{@code @Transactional}을 쓰지 않는다. 종목 단위 격리가 커밋된 트랜잭션을 요구한다.
  */
+/*
+ * 실제 벤더 어댑터를 제외하고 돈다. 이 테스트의 관심사는 Fake 소스로 파이프라인 전체가
+ * 도는지이며, 실제 어댑터가 함께 등록되면 DataSourceRegistry가 같은 시장에 두 소스가
+ * 있다고 보고 기동에 실패한다 — 그 실패 자체는 레지스트리가 의도대로 동작한다는 증거다.
+ * 제외는 아래 FakeSourceConfig의 @ComponentScan 필터가 담당한다.
+ */
 @SpringBootTest
 @ActiveProfiles("test")
 @Import({TestDatabaseGuard.class, PipelineEndToEndTest.FakeSourceConfig.class})

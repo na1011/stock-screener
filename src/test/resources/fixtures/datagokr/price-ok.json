@@ -1,0 +1,68 @@
+{
+  "response": {
+    "header": {
+      "resultCode": "00",
+      "resultMsg": "NORMAL SERVICE."
+    },
+    "body": {
+      "numOfRows": 3,
+      "pageNo": 1,
+      "totalCount": 3,
+      "items": {
+        "item": [
+          {
+            "basDt": "20260805",
+            "srtnCd": "005930",
+            "isinCd": "KR7005930003",
+            "itmsNm": "삼성전자",
+            "mrktCtg": "KOSPI",
+            "clpr": "246000",
+            "vs": "6000",
+            "fltRt": "2.5",
+            "mkp": "254000",
+            "hipr": "254500",
+            "lopr": "244000",
+            "trqu": "22577128",
+            "trPrc": "5610076087593",
+            "lstgStCnt": "5846278608",
+            "mrktTotAmt": "1438184537568000"
+          },
+          {
+            "basDt": "20260804",
+            "srtnCd": "005930",
+            "isinCd": "KR7005930003",
+            "itmsNm": "삼성전자",
+            "mrktCtg": "KOSPI",
+            "clpr": "240000",
+            "vs": "500",
+            "fltRt": ".21",
+            "mkp": "244500",
+            "hipr": "244500",
+            "lopr": "228000",
+            "trqu": "29433821",
+            "trPrc": "6922844531100",
+            "lstgStCnt": "5846278608",
+            "mrktTotAmt": "1403106865920000"
+          },
+          {
+            "basDt": "20260803",
+            "srtnCd": "005930",
+            "isinCd": "KR7005930003",
+            "itmsNm": "삼성전자",
+            "mrktCtg": "KOSPI",
+            "clpr": "239500",
+            "vs": "-23000",
+            "fltRt": "-8.76",
+            "mkp": "248000",
+            "hipr": "249500",
+            "lopr": "238000",
+            "trqu": "27825493",
+            "trPrc": "6736160892310",
+            "lstgStCnt": "5846278608",
+            "mrktTotAmt": "1400183726616000"
+          }
+        ]
+      }
+    }
+  }
+}
