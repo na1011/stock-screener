@@ -4,6 +4,8 @@ import com.stockscreener.support.TestDatabaseGuard;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -62,5 +64,15 @@ class SecurityConfigTest {
     @DisplayName("미인증 사용자도 관리자 영역에서는 401이다 — 존재 여부를 드러내지 않는다")
     void anonymousGetsUnauthorizedOnAdmin() throws Exception {
         mockMvc.perform(get("/api/admin/batches")).andExpect(status().isUnauthorized());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/indicators", "/api/universes", "/api/screens", "/api/stocks/1"})
+    @WithAnonymousUser
+    @DisplayName("Phase 4에서 추가된 엔드포인트도 전부 인증을 요구한다")
+    void newEndpointsRequireAuthentication(String path) throws Exception {
+        // 새 엔드포인트를 만들 때마다 이 목록에 한 줄을 더한다. permitAll이 실수로 넓어지면
+        // 여기가 깨진다 — 그 실수는 배포 후에는 눈으로 확인할 방법이 없다.
+        mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
     }
 }

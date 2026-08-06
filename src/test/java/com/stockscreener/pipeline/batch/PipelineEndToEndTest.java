@@ -86,6 +86,14 @@ class PipelineEndToEndTest {
     void cleanUp() {
         jdbcTemplate.update("DELETE FROM batch_execution_failure");
         jdbcTemplate.update("DELETE FROM batch_execution");
+        // IMPORTANT — stock보다 먼저 지운다. 일일 갱신이 지표까지 계산하므로(DailyUpdateJob의
+        // INDICATOR 단계) 여기 행이 남고, 그러면 DELETE FROM stock이 FK 위반으로 실패한다.
+        // 정리가 중단되면 종목이 커밋된 채 남아 KOSPI/005930을 넣는 다른 테스트가 전부 깨지는데,
+        // 그 증상은 이 테스트와 무관해 보인다.
+        //
+        // 오랫동안 드러나지 않았던 이유: 픽스처의 봉이 몇 개뿐이라 계산 가능한 지표가 없었다.
+        // ADJ_CLOSE가 봉 하나로 값을 내는 첫 지표라 그때 비로소 이 구멍이 열렸다.
+        jdbcTemplate.update("DELETE FROM indicator_value");
         jdbcTemplate.update("DELETE FROM price_daily");
         jdbcTemplate.update("DELETE FROM universe_membership");
         jdbcTemplate.update("DELETE FROM stock");
