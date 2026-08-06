@@ -60,9 +60,7 @@
 
 호출량: 유니버스 3콜 + 시세 **350콜**(전 기간이어도 종목당 1콜 — `numOfRows=2000`) + 재무 7년 9,800콜(DART 한도 18,000). 하루면 끝난다.
 
-**그 다음**: Phase 4(스크리닝 엔진). 조건 모델·번역기·백분위가 모두 준비되어 있고 HTTP 진입점이 없다.
-
-**환경**: JDK 21.0.8, PostgreSQL 16.14, `stock_screener`·`stock_screener_test` DB 생성됨. Docker 없음.
+**환경**: JDK 21.0.8, PostgreSQL 16.14, DB 2개 생성됨. Docker 없음.
 
 ---
 
