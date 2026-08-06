@@ -24,7 +24,7 @@
 
 **2·3·4번은 발급 완료됐다** (2026-08-06). 국내 두 소스는 실제 호출로 검증했고 어댑터가 구현되어 있다(`./gradlew liveTest`). 나머지는 Phase 5~6까지 여유가 있다.
 
-IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/stock/candle` → HTTP 403, 실측). 재무(`/stock/financials-reported`)는 정상이다. 이 때문에 미국 시장은 v1.1로 미뤘다([ADR-0010](./adr/ADR-0010-defer-us-market.md), [spec 수정 제안](./spec-change-proposal.md)).
+IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/stock/candle` → HTTP 403, 실측). 재무(`/stock/financials-reported`)는 정상이다. 이 때문에 미국 시장은 v1.1로 미뤘고 spec에 반영됐다([ADR-0010](./adr/ADR-0010-defer-us-market.md), [경위](./spec-change-proposal.md)). Finnhub 키는 발급되어 있으므로 v1.1에서 재무에 바로 쓸 수 있다.
 
 ---
 
