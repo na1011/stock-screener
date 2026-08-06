@@ -113,3 +113,28 @@ tasks.named('test') {
         excludeTags 'live'
     }
 }
+
+// macOS Finder가 병합 시 만드는 "이름 2.java" 복제본을 잡는다. javac는 파일명이 아니라
+// **/*.java 패턴으로 소스를 모으므로 복제본을 그대로 컴파일해 duplicate class를 낸다.
+// 실제로 복제본 42개가 커밋되어 빌드가 멈춘 적이 있고(1873cf3), 에러가 duplicate class
+// 27건으로 흩어져 나와 원인이 파일명이라는 것을 알아내기까지 시간이 걸렸다.
+// fileTree 대신 traverse를 쓰는 이유는 빈 디렉토리도 잡기 위해서다 —
+// 같은 사고에서 "collector 2" 같은 빈 디렉토리 10개가 함께 생겼다.
+tasks.register('checkDuplicateFiles') {
+    group = 'verification'
+    description = '복제 파일·디렉토리("이름 2.java")를 검출해 duplicate class 전에 멈춘다.'
+    doLast {
+        def dupes = []
+        file('src').traverse { f ->
+            if (f.name ==~ /.* \d+(\..+)?$/) {
+                dupes << relativePath(f)
+            }
+        }
+        if (dupes) {
+            throw new GradleException(
+                    "복제 파일이 있다. 삭제하고 다시 빌드하라:\n" +
+                    dupes.sort().collect { "  ${it}" }.join('\n'))
+        }
+    }
+}
+tasks.named('check') { dependsOn 'checkDuplicateFiles' }
