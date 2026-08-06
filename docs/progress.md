@@ -91,6 +91,7 @@ psql -d stock_screener -c "UPDATE universe SET is_active=true WHERE code IN ('KO
 - **시세 이력은 2020-01-02부터다**(약 6.5년, 이분 탐색으로 경계 확인). 과거는 언제든 소급되므로 "천천히 쌓을" 필요가 없다.
 - **IMPORTANT — `totalCount`를 보지 않으면 조용히 잘린다.** 6.5년 요청 시 `totalCount=1618`인데 `numOfRows=1000`이면 1,000행만 오고 앞의 618일이 **경고 없이** 사라진다. `numOfRows`는 2,000까지 허용되지만 문서화된 상한이 아니라 페이징으로 방어한다(ADR-0009 보완).
 - **시총 상위 200에 우선주 5·리츠/스팩 2가 섞인다.** 보통주(종목코드 끝자리 `0`)만 걸러야 같은 회사가 두 번 편입되지 않는다.
+- **IMPORTANT — DART 주요계정은 발행주식수를 주지 않는다.** 실측상 `shares_outstanding`이 전부 NULL이라 PER·PBR이 하나도 계산되지 않았다. 시세 응답의 `lstgStCnt`를 쓴다(추가 호출 0, 날짜별, 우선주가 별도 종목이라 보통주 수)(ADR-0013).
 
 ---
 
@@ -138,5 +139,6 @@ psql -d stock_screener -c "UPDATE universe SET is_active=true WHERE code IN ('KO
 - ADR-0008 — 시드 유니버스 구현 유지, **조용한 폴백 금지.**
 - ADR-0009 — data.go.kr **요청 전 파라미터 검증 유지**(빈 결과와 구별 불가), DART **status 파싱 유지**(인증 실패도 200), `@ConditionalOnApiKey` 유지(빈 문자열도 "속성 있음"이라 `@ConditionalOnProperty`로는 안 된다).
 - ADR-0010 — 미국 포트·`SP500` 유니버스 행·시드 CSV를 **지우지 않는다.** 어댑터만 없을 뿐 구조는 그대로 두어 v1.1에서 어댑터 하나로 붙인다.
+- ADR-0013 — **발행주식수는 시세 쪽(`price_daily.listed_shares`)을 우선한다.** 재무 쪽은 폴백으로 남긴다. PER·PBR이 주식수를 **봉마다** 읽는 것도 유지한다 — 하나로 고정하면 증자·분할 구간의 값이 통째로 틀리는데 그 값은 그럴듯하다.
 - ADR-0012 — **시드 유니버스(`KOSPI200` 등)를 비활성으로 내리지 않는다.** 시총 어댑터가 `@ConditionalOnApiKey`라 키 없는 환경에서 등록되지 않아, 시드까지 내리면 활성 유니버스가 하나도 남지 않는다(실제로 테스트 7건이 이 이유로 깨졌다). 반대로 **새 유니버스는 비활성으로 시작**한다 — 활성이면 키 없는 개발·CI에서 매번 실패 알림이 쌓인다. 유니버스 코드에 **지수명을 차용하지 않는다.**
 - ADR-0011 — **원자료는 지우지 않는다.** 지표는 원자료에서 재생성되지만 그 역은 불가능하고, 외부 API가 과거 구간을 계속 준다는 보장도 없다(Finnhub가 실제로 그렇게 바뀌었다). `IndicatorRetentionPolicy`가 `indicator_value`만 건드리는 것이 그 비대칭의 이행이다.
