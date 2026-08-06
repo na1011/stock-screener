@@ -45,8 +45,23 @@ public class DataGoKrPriceAdapter implements PriceDataSource {
     private static final DateTimeFormatter BAS_DT = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final Pattern TICKER = Pattern.compile("\\d{6}");
 
-    /** 2년치가 약 500행이므로 한 번에 받는다. 페이징이 필요하면 로그로 드러난다. */
-    private static final int PAGE_SIZE = 1000;
+    /**
+     * 한 페이지에 요청할 행 수.
+     *
+     * <p>실측상 2,000까지 받아준다(6.5년 1,618행이 1콜). 상한이 문서화되어 있지 않아 벤더가
+     * 언제든 조일 수 있으므로 <b>이 값에 기대지 않고 페이징을 함께 구현한다</b> — 조여지는
+     * 순간 다시 조용히 잘리기 때문이다. 이 상수는 콜 수를 줄이는 최적화일 뿐이고,
+     * 정확성의 근거는 {@code totalCount} 기반 루프다.
+     */
+    private static final int PAGE_SIZE = 2000;
+
+    /**
+     * 페이지 수 상한. 정상적으로는 도달하지 않는다.
+     *
+     * <p>{@code totalCount}가 실제 응답과 어긋나면(벤더 버그·스펙 변경) 종료 조건이 영영
+     * 참이 되지 않는다. 배치가 무한히 도는 것보다 실패하는 편이 낫다.
+     */
+    private static final int MAX_PAGES = 50;
 
     private final RestClient client;
     private final RateLimiter rateLimiter;
@@ -81,26 +96,61 @@ public class DataGoKrPriceAdapter implements PriceDataSource {
         validateRequest(security, from, to);
 
         String context = "ticker=" + security.ticker() + " " + from + "~" + to;
-        JsonNode items = call(uri -> uri
-                .path("/getStockPriceInfo")
-                .queryParam("serviceKey", serviceKey)
-                .queryParam("resultType", "json")
-                .queryParam("numOfRows", PAGE_SIZE)
-                .queryParam("pageNo", 1)
-                .queryParam("likeSrtnCd", security.ticker())
-                .queryParam("beginBasDt", from.format(BAS_DT))
-                // endBasDt는 "미만"이므로 to를 포함시키려면 하루 더한다.
-                .queryParam("endBasDt", to.plusDays(1).format(BAS_DT))
-                .build(), context);
 
         List<RawPriceBar> bars = new ArrayList<>();
-        for (JsonNode item : items) {
-            // likeSrtnCd는 부분 일치라 다른 종목이 섞일 수 있다. 정확히 일치하는 것만 취한다.
-            if (!security.ticker().equals(item.path("srtnCd").asText())) {
-                continue;
+        int received = 0;
+        int totalCount = Integer.MAX_VALUE;
+
+        for (int pageNo = 1; received < totalCount; pageNo++) {
+            if (pageNo > MAX_PAGES) {
+                throw new DataSourceException(DataSourceException.Kind.MALFORMED,
+                        DataGoKrResponse.SOURCE_NAME,
+                        "페이지 수가 상한을 넘었다(" + MAX_PAGES + "). totalCount=" + totalCount
+                                + " 수신=" + received + " — 응답의 totalCount가 실제와 어긋난다. " + context);
             }
-            bars.add(toBar(item, context));
+
+            final int page = pageNo;
+            JsonNode body = callBody(uri -> uri
+                    .path("/getStockPriceInfo")
+                    .queryParam("serviceKey", serviceKey)
+                    .queryParam("resultType", "json")
+                    .queryParam("numOfRows", PAGE_SIZE)
+                    .queryParam("pageNo", page)
+                    .queryParam("likeSrtnCd", security.ticker())
+                    .queryParam("beginBasDt", from.format(BAS_DT))
+                    // endBasDt는 "미만"이므로 to를 포함시키려면 하루 더한다.
+                    .queryParam("endBasDt", to.plusDays(1).format(BAS_DT))
+                    .build(), context + " page=" + page);
+
+            totalCount = body.path("totalCount").asInt(0);
+            JsonNode items = body.path("items").path("item");
+
+            int itemsInPage = 0;
+            for (JsonNode item : items) {
+                itemsInPage++;
+                // likeSrtnCd는 부분 일치라 다른 종목이 섞일 수 있다. 정확히 일치하는 것만 취한다.
+                if (!security.ticker().equals(item.path("srtnCd").asText())) {
+                    continue;
+                }
+                bars.add(toBar(item, context));
+            }
+
+            // IMPORTANT — 진행도는 필터 전 행 수로 센다. 걸러낸 뒤의 수로 세면 다른 종목이
+            // 섞인 페이지에서 진행이 멈춘 것처럼 보여 같은 페이지를 무한히 다시 읽는다.
+            received += itemsInPage;
+
+            if (itemsInPage == 0) {
+                // totalCount는 남았다는데 빈 페이지가 왔다. 더 돌아도 진전이 없다.
+                if (received < totalCount) {
+                    throw new DataSourceException(DataSourceException.Kind.MALFORMED,
+                            DataGoKrResponse.SOURCE_NAME,
+                            "totalCount=" + totalCount + "인데 " + received
+                                    + "행에서 빈 페이지가 왔다 — 부분 결과를 반환하지 않는다. " + context);
+                }
+                break;
+            }
         }
+
         // 포트 계약: 날짜 오름차순
         bars.sort(Comparator.comparing(RawPriceBar::tradeDate));
         return bars;
@@ -137,9 +187,13 @@ public class DataGoKrPriceAdapter implements PriceDataSource {
     }
 
     /**
-     * 공통 호출. 레이트리밋을 적용하고 봉투를 판별한다.
+     * 공통 호출. 레이트리밋을 적용하고 봉투를 판별한 뒤 {@code response.body}를 돌려준다.
+     *
+     * <p>항목이 아니라 body를 주는 이유는 {@code totalCount}가 페이징의 유일한 근거이기
+     * 때문이다. 페이지마다 이 메서드를 부르므로 permit도 페이지마다 쓴다 — 중간에 쿼터가
+     * 마르면 {@code RATE_LIMITED}가 나가고 <b>부분 결과는 반환되지 않는다.</b>
      */
-    private JsonNode call(java.util.function.Function<org.springframework.web.util.UriBuilder,
+    private JsonNode callBody(java.util.function.Function<org.springframework.web.util.UriBuilder,
             java.net.URI> uriSpec, String context) throws DataSourceException {
         if (!rateLimiter.hasDailyQuota()) {
             throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED,
@@ -163,7 +217,7 @@ public class DataGoKrPriceAdapter implements PriceDataSource {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
                     DataGoKrResponse.SOURCE_NAME, "호출에 실패했다. " + context, e);
         }
-        return DataGoKrResponse.requireItems(response.getStatusCode(), response.getBody(), context);
+        return DataGoKrResponse.requireBody(response.getStatusCode(), response.getBody(), context);
     }
 
     private void requireKey() throws DataSourceException {

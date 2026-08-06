@@ -200,6 +200,90 @@ class DataGoKrPriceAdapterTest {
         assertThat(bars.get(0).close()).isEqualByComparingTo("246000");
     }
 
+    @Test
+    @DisplayName("totalCount가 한 페이지를 넘으면 다음 페이지를 이어 받는다 — 조용한 잘림을 막는다")
+    void followsPagination() throws Exception {
+        // 실측 근거: 6.5년을 요청하면 totalCount=1618인데 한 페이지만 읽던 옛 코드는
+        // 1,000행만 저장하고 앞의 618일을 경고 없이 버렸다.
+        enqueue(200, page(3, "20260803", "20260804"));
+        enqueue(200, page(3, "20260805"));
+
+        List<RawPriceBar> bars = adapter.fetchDailyBars(
+                SAMSUNG, LocalDate.of(2026, 8, 3), LocalDate.of(2026, 8, 5));
+
+        assertThat(bars)
+                .as("두 페이지가 모두 누적되어야 한다")
+                .hasSize(3);
+        assertThat(bars).extracting(RawPriceBar::tradeDate).isSorted();
+        assertThat(server.getRequestCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("두 번째 페이지 요청에 pageNo가 증가한다")
+    void incrementsPageNo() throws Exception {
+        enqueue(200, page(3, "20260803", "20260804"));
+        enqueue(200, page(3, "20260805"));
+
+        adapter.fetchDailyBars(SAMSUNG, LocalDate.of(2026, 8, 3), LocalDate.of(2026, 8, 5));
+
+        server.takeRequest();
+        String second = URLDecoder.decode(server.takeRequest().getPath(), StandardCharsets.UTF_8);
+        assertThat(second).contains("pageNo=2");
+    }
+
+    @Test
+    @DisplayName("totalCount를 못 채운 채 빈 페이지가 오면 부분 결과를 내지 않고 실패한다")
+    void failsInsteadOfReturningPartialResult() {
+        enqueue(200, page(10, "20260803"));
+        enqueue(200, page(10));
+
+        assertThatThrownBy(() -> adapter.fetchDailyBars(
+                SAMSUNG, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 5)))
+                .isInstanceOf(DataSourceException.class)
+                .hasMessageContaining("부분 결과를 반환하지 않는다");
+    }
+
+    @Test
+    @DisplayName("걸러낸 종목도 진행도에 센다 — 아니면 같은 페이지를 무한히 다시 읽는다")
+    void countsFilteredItemsAsProgress() throws Exception {
+        // totalCount=2인데 우리 종목은 1건뿐이다. 필터 후 건수로 진행을 세면 영원히 끝나지 않는다.
+        enqueue(200, """
+                {"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},
+                 "body":{"numOfRows":2,"pageNo":1,"totalCount":2,"items":{"item":[
+                  {"basDt":"20260805","srtnCd":"005930","itmsNm":"삼성전자","mrktCtg":"KOSPI",
+                   "clpr":"246000","mkp":"254000","hipr":"254500","lopr":"244000",
+                   "trqu":"100","trPrc":"200"},
+                  {"basDt":"20260805","srtnCd":"0059301","itmsNm":"다른종목","mrktCtg":"KOSPI",
+                   "clpr":"1000","mkp":"1000","hipr":"1000","lopr":"1000",
+                   "trqu":"10","trPrc":"20"}]}}}}""");
+
+        List<RawPriceBar> bars = adapter.fetchDailyBars(
+                SAMSUNG, LocalDate.of(2026, 8, 5), LocalDate.of(2026, 8, 5));
+
+        assertThat(bars).hasSize(1);
+        assertThat(server.getRequestCount())
+                .as("2건을 받았으므로 한 번으로 끝난다")
+                .isEqualTo(1);
+    }
+
+    /** {@code totalCount}가 {@code total}이고 주어진 날짜만큼의 삼성전자 봉을 담은 한 페이지. */
+    private static String page(int total, String... dates) {
+        StringBuilder items = new StringBuilder();
+        for (int i = 0; i < dates.length; i++) {
+            if (i > 0) {
+                items.append(',');
+            }
+            items.append("""
+                    {"basDt":"%s","srtnCd":"005930","itmsNm":"삼성전자","mrktCtg":"KOSPI",
+                     "clpr":"246000","mkp":"246000","hipr":"246000","lopr":"246000",
+                     "trqu":"100","trPrc":"200"}""".formatted(dates[i]));
+        }
+        return """
+                {"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},
+                 "body":{"numOfRows":2000,"pageNo":1,"totalCount":%d,"items":{"item":[%s]}}}}"""
+                .formatted(total, items);
+    }
+
     private DataGoKrPriceAdapter newAdapter(String apiKey) {
         DataSourceProperties properties = new DataSourceProperties();
         DataSourceProperties.Source source = properties.getDataGoKr();

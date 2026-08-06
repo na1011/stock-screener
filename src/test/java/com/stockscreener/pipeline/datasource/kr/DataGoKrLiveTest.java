@@ -99,10 +99,12 @@ class DataGoKrLiveTest {
     }
 
     private DataGoKrSecurityMasterAdapter masterAdapter() {
+        // 빈 캐시를 준다 — 이 테스트의 목적이 실제 API 응답 확인이므로 캐시가 가로채면 안 된다.
         return new DataGoKrSecurityMasterAdapter(
                 new ExternalApiClientFactory(),
                 propertiesWith(System.getenv("DATA_GO_KR_SERVICE_KEY")),
-                new TokenBucketRateLimiter("data-go-kr", 120, 0));
+                new TokenBucketRateLimiter("data-go-kr", 120, 0),
+                new SecurityNameCache());
     }
 
     private static DataSourceProperties propertiesWith(String apiKey) {

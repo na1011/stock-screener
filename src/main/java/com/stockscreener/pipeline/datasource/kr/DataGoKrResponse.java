@@ -29,6 +29,21 @@ final class DataGoKrResponse {
      */
     static JsonNode requireItems(HttpStatusCode status, JsonNode root, String context)
             throws DataSourceException {
+        return requireBody(status, root, context).path("items").path("item");
+    }
+
+    /**
+     * {@link #requireItems}와 같은 검사를 하되 {@code response.body} 전체를 준다.
+     *
+     * <p>{@code totalCount}·{@code numOfRows}·{@code pageNo}가 {@code items}의 <b>형제</b>라
+     * 항목만 꺼내면 페이징 판단 근거가 사라진다. 실제로 그것이 시세 어댑터가 한 페이지만 읽고
+     * 나머지를 조용히 버리던 원인이었다 — 6.5년을 요청하면 {@code totalCount=1618}인데
+     * 1,000행만 저장되고 <b>아무 경고도 나지 않았다</b>.
+     *
+     * @return {@code response.body} 노드
+     */
+    static JsonNode requireBody(HttpStatusCode status, JsonNode root, String context)
+            throws DataSourceException {
         if (root == null || root.isMissingNode()) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                     "응답 본문이 비어 있다. " + context + " status=" + status);
@@ -64,7 +79,7 @@ final class DataGoKrResponse {
                     "HTTP 오류이나 resultCode는 00이다. " + context + " status=" + status);
         }
 
-        return root.path("response").path("body").path("items").path("item");
+        return root.path("response").path("body");
     }
 
     /**

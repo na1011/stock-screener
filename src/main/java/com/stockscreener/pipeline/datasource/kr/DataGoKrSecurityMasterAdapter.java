@@ -48,14 +48,17 @@ public class DataGoKrSecurityMasterAdapter implements SecurityMasterDataSource {
     private final RestClient client;
     private final RateLimiter rateLimiter;
     private final String serviceKey;
+    private final SecurityNameCache nameCache;
 
     public DataGoKrSecurityMasterAdapter(ExternalApiClientFactory clientFactory,
                                          DataSourceProperties properties,
-                                         @Qualifier("dataGoKrRateLimiter") RateLimiter rateLimiter) {
+                                         @Qualifier("dataGoKrRateLimiter") RateLimiter rateLimiter,
+                                         SecurityNameCache nameCache) {
         DataSourceProperties.Source source = properties.getDataGoKr();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
         this.serviceKey = ExternalApiClientFactory.normalizeServiceKey(source.getApiKey());
+        this.nameCache = nameCache;
     }
 
     @Override
@@ -78,6 +81,14 @@ public class DataGoKrSecurityMasterAdapter implements SecurityMasterDataSource {
         if (!TICKER.matcher(ticker).matches()) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED,
                     DataGoKrResponse.SOURCE_NAME, "국내 티커는 6자리 숫자여야 한다: '" + ticker + "'");
+        }
+
+        // 유니버스 조회가 방금 받아온 전종목 응답에 이미 이름과 시장이 들어 있다.
+        // 캐시가 없으면 350종목 등록에 350콜이 같은 정보를 다시 받으러 나간다.
+        // 검증 뒤에 보는 이유는 잘못된 티커가 캐시를 우회해 조용히 통과하지 않게 하기 위해서다.
+        Optional<SecurityDescriptor> cached = nameCache.find(marketCode, ticker);
+        if (cached.isPresent()) {
+            return cached;
         }
 
         if (!rateLimiter.hasDailyQuota()) {
