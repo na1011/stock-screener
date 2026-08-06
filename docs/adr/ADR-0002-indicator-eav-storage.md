@@ -22,7 +22,7 @@ applies_to:
 - MUST: `indicator_value`의 PK 순서를 `(trade_date, indicator_code, stock_id)`로 유지한다.
 - MUST: `idx_iv_screen`(커버링 인덱스)을 유지한다. 스크리닝 성능이 여기에 달려 있다.
 - MUST NOT: 폐기된 지표를 삭제하지 않는다. `is_active=false`로 둔다.
-- MUST NOT: `screen_condition.indicator_code`에 FK를 걸지 않는다.
+- MUST: `screen_condition.indicator_code`에 FK를 유지한다. **(2026-08-06 정정 — 원문은 "FK를 걸지 않는다"였다.)** 실제 V3 스키마는 처음부터 FK를 걸었고, 그 근거가 V3 주석에 남아 있다 — jsonb 단일 컬럼 대안을 버린 이유가 "indicator FK를 잃어 '이 지표를 비활성화하면 어떤 화면이 깨지는가'를 물을 수 없게 된다"는 것이었다. 폐기 지표를 삭제하지 않고 `is_active=false`로 두는 위 규칙이 있어 FK가 화면을 깨뜨리지도 않는다. 두 문장이 공존할 수 없으므로 스키마와 일치하는 쪽으로 정정한다.
 
 ## 검증
 

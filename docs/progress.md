@@ -15,18 +15,22 @@
 |---|---|---|
 | 1. 기반 | **완료** | `./gradlew build` 성공 + QueryDSL 쿼리를 실제 실행하는 테스트 통과 + ADR-0001~0004 기록됨 |
 | 2. 수집 파이프라인 | **국내 완료 / 초기 적재 미실행** | 아래 "Phase 2 판정" 참조 |
-| 3. 지표 계산 | 미착수 | — |
+| 3. 지표 계산 | **엔진 완료 / 실데이터 미검증** | 아래 "Phase 3 판정" 참조 |
 | 4. 스크리닝 엔진 | 미착수 | — |
 | 5. 프론트엔드 | 미착수 | — |
 | 6. 워치리스트·관리자·운영 | 미착수 | — |
 
-**현재 코드 상태**: 테스트 **177개** 통과(`./gradlew test`, 외부 호출 0건) + **관통테스트 9개** 통과(`./gradlew liveTest`, 실제 API). 있는 것 — 스키마(V1~V6), 지표 3개, 조건 모델, 인가, 수집 포트 4종·실패 격리·Spring Batch·collector/writer·배치 잡 3종·유니버스 시드, **국내 시세(data.go.kr)·재무(DART) 어댑터**. 없는 것 — **미국 어댑터(v1.1로 연기, ADR-0010)**, 지표 계산 배치(Phase 3), API 컨트롤러·프론트엔드(Phase 4~5).
+**현재 코드 상태**: 테스트 **201개** 통과(`./gradlew test`, 외부 호출 0건) + **관통테스트 9개** 통과(`./gradlew liveTest`, 실제 API). 있는 것 — 스키마(V1~V7), **지표 16개 + 백분위 6개**, 조건 모델, 인가, 수집 포트 4종·실패 격리·Spring Batch·collector/writer·배치 잡 4종·유니버스 시드, **국내 시세(data.go.kr)·재무(DART) 어댑터**, **지표 계산 엔진(리더·러너·writer·무효화·보존)**. 없는 것 — **미국 어댑터(v1.1로 연기, ADR-0010)**, API 컨트롤러·프론트엔드(Phase 4~5).
 
 **Phase 2 판정** (설계문서에 기준이 없어 새로 작성했다). 전부 통과 — 소스 교체 국소성(상위 계층 벤더 이름 0건), 종목 단위 실패 격리와 실패 식별, 실패한 부분만 재실행, 실패 시 요약 알림 1건, 초기 적재/일일 갱신 분리, 중단 후 이어서 재시작, 멱등성, EXCLUDE 준수, **국내 두 소스 실제 호출 검증**, ADR-0005~0010 기록.
 
 **미달 항목 1개**: **초기 적재 미실행** — 시드 CSV가 15종목 표본이라 실제 구성종목으로 교체해야 의미가 있다(사용자 작업).
 
 **미국 시장은 v1.1로 연기가 승인되어 spec에 반영됐다**(2026-08-06, §1·§3·§7·§9·§10·§11). 따라서 v1 수용 기준은 국내 두 지수뿐이며 더 이상 미달 항목이 아니다.
+
+**Phase 3 판정** (설계문서에 기준이 없어 Phase 2와 같은 방식으로 새로 작성했다). 합성 데이터 통합테스트로 전부 통과 — 지표 추가 비용 1파일(`IndicatorExtensibilityTest`), 파생 지표가 부모 시계열을 받아 계산(MACD-V), 워밍업 구간에 행 없음, 기술적 지표 `adj_close`/PER·PBR `close`, 멱등성, 종목 단위 실패 격리, 무효화 2종(`PRICE_ADJUSTED`·`FINANCIAL_REVISED`), 백분위가 유니버스 한정 오름차순, 보존 정리가 원자료를 건드리지 않음, `indicator_value` 컬럼 5개 유지, ADR-0011 기록.
+
+**미달 항목 1개**: **실데이터 미검증** — 초기 적재가 안 됐으므로 실제 종목의 지표 분포(계산 불가 비율, 이상값)는 아직 못 봤다. 적재 후 `IndicatorBackfillJob`을 돌려 확인해야 한다.
 
 ---
 
@@ -41,7 +45,9 @@
 
 호출량 추정: 시세 350콜(종목당 1콜, 기간조회 가능) + 재무 4,200콜(종목당 12콜). 각각 일 한도 안에 들어간다.
 
-**그 다음**: Phase 3(지표 계산). `IndicatorInvalidationPort`가 이미 호출되고 있으므로 구현만 채우면 된다.
+5. **적재 후 `IndicatorBackfillJob.run(from, to, MANUAL)`을 돌려 과거 구간 지표를 채운다.** 외부 호출이 없으므로 쿼터와 무관하며, 실패해도 다시 돌리면 된다. 그다음 실제 분포를 본다 — 계산 불가 종목 비율, PER·ROE의 이상값, 워밍업 때문에 값이 없는 구간.
+
+**그 다음**: Phase 4(스크리닝 엔진). 조건 모델·번역기·백분위가 모두 준비되어 있고 HTTP 진입점이 없다.
 
 **환경**: JDK 21.0.8, PostgreSQL 16.14, `stock_screener`·`stock_screener_test` DB 생성됨. Docker 없음.
 
@@ -74,7 +80,10 @@
 - **테스트 프로파일에 `out-of-order: true`가 필요하다.** 테스트 전용 V900이 항상 운영 마이그레이션보다 위에 있어 새 운영 버전이 뒤늦게 들어온다. 운영에는 적용하지 않는다.
 - **마이그레이션 체크섬이 어긋나면** `clean-on-validation-error`가 항상 구해주지 않는다. 테스트 DB에서 해당 `flyway_schema_history` 행과 객체를 지우고 재적용한다. **초기 적재 이후에는 쓸 수 없다.**
 - **`spring.batch.job.enabled=false`, `pipeline.scheduler.enabled` 기본 꺼짐을 유지한다.** 전자를 켜면 재시작마다 초기 적재가 시작되고, 후자를 어댑터 없이 켜면 매일 실패 알림만 쌓인다.
-- **`FinancialFigures`(지표 계층)에 `totalLiabilities`·`operatingCashFlow`·`eps`·`bps`·`currencyCode`가 없다.** 스키마와 `RawFinancialReport`에는 있어 수집은 되지만, Phase 3에서 부채비율·ROE를 만들 때 확장해야 한다.
+- **`FinancialFigures`에 `eps`·`bps`가 있지만 지표 계산에 쓰면 안 된다.** 소스가 준 값이며, 지표는 언제나 자체 계산이다(spec §7). 두 필드는 수집값과 자체 계산값을 대조할 때만 쓴다.
+- **재무 지표의 유량/저량 구분이 계산의 핵심이다.** 매출·이익·현금흐름은 4분기 합(TTM), 자산·부채·자본은 최근 분기 잔액이다. 저량을 합산하면 4배가 되는데 값이 그럴듯해서 드러나지 않는다. `FinancialMath.sumTrailingFourQuarters`는 유량 전용이다.
+- **백분위는 항상 오름차순 기준이다.** `PER_PCTL`이 0에 가까우면 PER이 낮다는 뜻이고, "상위 20%"는 지표에 따라 `<= 0.2`이거나 `>= 0.8`이다. 지표마다 방향을 뒤집어 저장하지 않는 이유는 조건을 읽는 사람이 매번 그 지표의 방향을 확인해야 하기 때문이다.
+- **`IndicatorDataReader`가 분기 재무에 한 해치 여유를 얹어 읽는다.** PER의 TTM은 정확히 4분기라 여유가 0인데, 공시가 실제로 빠지는 일이 있어 경계에서 값이 조용히 사라진다. 계산기의 `financialYearsNeeded`는 "의미상 필요한 기간"이고 누락 대비 여유는 읽는 쪽 책임이다.
 - **테스트는 로컬 PostgreSQL을 쓴다**(H2는 EAV가 의존하는 PG 고유 기능을 못 쓴다). **Zonky는 재검토 불필요**(조사 완료). 격리는 `@Transactional` 롤백이 기본이지만 실패 격리·배치 테스트는 커밋된 트랜잭션을 요구해 `@AfterEach` 정리를 쓴다. `JobRestartTest`는 `@BeforeEach`에서도 정리한다 — 남은 잡 인스턴스가 `JobInstanceAlreadyCompleteException`을 일으키고 그것이 재시작성 결함처럼 보인다.
 - **패키지 구조**: `indicator`, `screening`(+`.query`), `stock`, `auth`, `notification`, `pipeline`(`.datasource`/`.collector`/`.batch`/`.scheduler`), `probe`. `pipeline` 하위 이름은 `.claude/rules/data-pipeline.md`의 path glob에 **의도적으로 맞춘 것**이다 — 그래야 규칙이 자동 로드된다.
 
@@ -82,10 +91,10 @@
 
 ## 미룬 것 / 알려진 미완성
 
-- **외부 서비스 발급 8건 — 전부 미진행.** [`external-credentials.md`](./external-credentials.md). **키 3개가 어댑터 작업의 전제다.**
+- **외부 서비스 발급 8건 중 3건(데이터 소스) 완료, 5건 미진행.** [`external-credentials.md`](./external-credentials.md)가 정본이다. 남은 것은 Google OAuth·도메인·Cloudflare·Sentry·알림 채널이며 전부 Phase 5~6에 필요하다.
 - **재무 수집이 일일 배치에 없다.** 분기 공시라 매일 850종목을 조회하면 쿼터만 태운다. 초기 적재에만 있고 공시 시즌 갱신은 수동 실행 전제 — 자동화는 공시 일정을 아는 것이 전제이고 그것 자체가 또 하나의 수집 대상이다.
 - **워치리스트 조건 판정이 일일 배치에 없다.** 워치리스트 기능 자체가 Phase 6이다. `AlertPort`가 사용자 대상 알림(`recipientUserId`)을 지원하므로 이음매는 준비되어 있다.
-- **지표 보존 정책·백분위(`_PCTL`)·지표 간 의존 사용**: Phase 3.
+- **배치 잡 4종 모두 HTTP·CLI 진입점이 없다.** 테스트에서만 호출된다. 초기 적재를 실행하려면 일회성 러너든 관리자 API든 진입점이 먼저 필요하다.
 - **API 컨트롤러 없음**: Phase 4. 부분 재실행은 `DailyUpdateJob.retryFailures()`까지 있고 HTTP 진입점만 없다.
 - **actuator 미도입**: Phase 6. `/actuator/health`가 열려 있지만 404다.
 
@@ -107,3 +116,4 @@
 - ADR-0008 — 시드 유니버스 구현 유지, **조용한 폴백 금지.**
 - ADR-0009 — data.go.kr **요청 전 파라미터 검증 유지**(빈 결과와 구별 불가), DART **status 파싱 유지**(인증 실패도 200), `@ConditionalOnApiKey` 유지(빈 문자열도 "속성 있음"이라 `@ConditionalOnProperty`로는 안 된다).
 - ADR-0010 — 미국 포트·`SP500` 유니버스 행·시드 CSV를 **지우지 않는다.** 어댑터만 없을 뿐 구조는 그대로 두어 v1.1에서 어댑터 하나로 붙인다.
+- ADR-0011 — **원자료는 지우지 않는다.** 지표는 원자료에서 재생성되지만 그 역은 불가능하고, 외부 API가 과거 구간을 계속 준다는 보장도 없다(Finnhub가 실제로 그렇게 바뀌었다). `IndicatorRetentionPolicy`가 `indicator_value`만 건드리는 것이 그 비대칭의 이행이다.
