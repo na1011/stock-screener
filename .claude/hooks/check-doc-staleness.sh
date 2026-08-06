@@ -11,30 +11,25 @@ cd "$root" 2>/dev/null || exit 0
 findings=""
 add() { findings="${findings}- $1"$'\n'; }
 
-# 1. progress.md가 "Phase 1 미착수/골격만"이라고 주장하는데 실제로 의존성·도메인 코드가 생겼는가
+# 1. progress.md가 주입 상한을 넘겨 세션 시작 주입이 잘리는가
 #
-# Phase 1 행만 본다. "미착수"를 문서 전체에서 찾으면 아직 시작하지 않은 뒤 phase들이
-# 매번 걸려 오탐이 된다. 매 세션 같은 경고가 뜨면 신호가 무뎌져, 정작 진짜 불일치가
-# 생겼을 때 무시하게 된다 — 이 검사가 막으려던 실패 모드 그 자체다.
-if [ -f docs/progress.md ]; then
-  phase1_line=$(grep -E '^\|\s*1\.' docs/progress.md 2>/dev/null | head -1)
-  if printf '%s' "$phase1_line" | grep -qE '미착수' \
-     || grep -qE '골격만 있다|도메인 코드 없음' docs/progress.md; then
-    present=""
-    if [ -f build.gradle ]; then
-      grep -qiE '\bjpa\b|spring-boot-starter-data-jpa' build.gradle && present="${present}JPA "
-      grep -qi 'querydsl'   build.gradle && present="${present}QueryDSL "
-      grep -qi 'postgresql' build.gradle && present="${present}PostgreSQL "
-      grep -qiE 'oauth2|spring-boot-starter-security' build.gradle && present="${present}OAuth "
-      grep -qi 'sentry'     build.gradle && present="${present}Sentry "
-    fi
-    domain=$(find src/main/java -name '*.java' \
-               -not -name '*Application.java' \
-               -not -name '*ApplicationTests.java' \
-               -print -quit 2>/dev/null)
-    [ -n "$domain" ] && present="${present}도메인클래스 "
-    if [ -n "$present" ]; then
-      add "docs/progress.md가 골격/미착수 상태를 주장하지만 실제로는 이미 있다: ${present}— 진행 상태를 갱신하라. 낡은 진행 상태는 다음 세션을 잘못 인도한다."
+# 이 검사가 없던 동안 실제로 잘렸다. inject-progress.sh는 잘렸다는 사실을 주입문 끝에
+# 덧붙이지만, 그 문구 자체가 잘린 문서 뒤에 있어 사람 눈에 잘 띄지 않는다. 결과는
+# "뒷부분이 다음 세션에 전달되지 않는데 아무도 모르는" 상태다 — 이 저장소가 가장 경계하는
+# 조용한 실패다. 세션 시작에 한 줄로 보고해 그것을 깬다.
+#
+# 문자 수로 센다. inject-progress.sh가 ${#content}로 자르는데 그것이 바이트가 아니라
+# 문자임을 실측 확인했다(8,000자 지점에서 정확히 끊겼다). 바이트로 세면 한글 문서에서
+# 상한이 3배 엄격해져 매 세션 오탐이 되고, 오탐이 반복되면 이 검사도 무시된다.
+inject_hook=".claude/hooks/inject-progress.sh"
+if [ -f docs/progress.md ] && [ -f "$inject_hook" ]; then
+  # 상한을 이 파일에 복제하지 않고 주입 훅에서 읽는다. 두 곳에 적으면 한쪽만 바뀌고,
+  # 그때 이 검사는 통과하는데 주입은 잘리는 최악의 조합이 된다.
+  inject_limit=$(grep -oE '^limit=[0-9]+' "$inject_hook" 2>/dev/null | head -1 | cut -d= -f2)
+  if [ -n "${inject_limit:-}" ]; then
+    len=$(wc -m < docs/progress.md 2>/dev/null | tr -d ' ')
+    if [ -n "$len" ] && [ "$len" -gt "$inject_limit" ]; then
+      add "docs/progress.md가 ${len}자로 주입 상한(${inject_limit}자)을 넘는다. 세션 시작 주입이 잘려 뒷부분이 다음 세션에 전달되지 않는다. 정본이 다른 곳(adr/·api-spec/·design/)에 있는 내용을 포인터로 바꿔 줄여라."
     fi
   fi
 fi
