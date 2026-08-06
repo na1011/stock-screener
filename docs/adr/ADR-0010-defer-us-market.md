@@ -1,0 +1,68 @@
+---
+id: ADR-0010
+status: 채택됨
+date: 2026-08-06
+applies_to:
+  - "src/main/java/com/stockscreener/pipeline/datasource/**"
+  - "src/main/resources/universe/sp500.csv"
+  - "docs/stock-screener-project-spec.md"
+---
+
+# ADR-0010. 미국 시장을 v1.1로 미룬다
+
+## 결정
+
+Phase 2를 **코스피200·코스닥150만으로 완성**하고, S&P500은 v1.1로 미룬다. spec §7이 지정한 미국 시세 소스가 실제로 막혀 있고, 대안이 전부 무료 티어 제약이나 ToS 문제를 갖기 때문이다.
+
+> IMPORTANT — 이것은 spec §7·§9의 전제를 뒤집는 판단이다. spec은 에이전트가 수정하지 않으므로(CLAUDE.md) 이 ADR이 근거를 남기고, 수정 제안은 `docs/spec-change-proposal.md`에 있다.
+
+## 규칙
+
+- MUST: 미국 관련 포트(`PriceDataSource`·`FinancialDataSource`)를 **지우지 않는다.** 어댑터만 없을 뿐 구조는 그대로 두며, v1.1에서 어댑터 하나를 추가하면 된다.
+- MUST: `universe.code = 'SP500'` 행과 `sp500.csv` 시드를 유지한다. 스키마와 유니버스 구조는 미국을 이미 수용한다.
+- MUST NOT: 미국 종목을 유니버스에 편입하지 않는다. 시세 소스가 없어 수집이 전량 실패한다.
+- MUST NOT: Finnhub `/stock/candle`을 다시 시도하지 않는다. 무료 티어에서 403이다.
+
+## 검증
+
+```bash
+grep -rn "supportedMarketCodes" src/main/java/com/stockscreener/pipeline/datasource/kr/
+```
+`KOSPI`·`KOSDAQ`만 나와야 한다. `US`를 담당하는 어댑터가 없다는 것이 이 결정의 코드상 표현이다.
+
+```bash
+psql -d stock_screener -c "SELECT code FROM universe ORDER BY code"
+```
+`SP500` 행이 남아 있어야 한다 — 구조는 유지하고 데이터만 넣지 않는다.
+
+```bash
+./gradlew test --tests "*DataSourceRegistryTest*"
+```
+담당 어댑터가 없는 시장을 조회하면 명확한 예외가 나는지 확인한다. 조용히 건너뛰면 그 시장이 통째로 누락된 채 배치가 성공으로 끝난다.
+
+## 배경
+
+2026-08-06 실측으로 확인한 것들이다.
+
+- **Finnhub `/stock/candle` → HTTP 403** (`{"error":"You don't have access to this resource."}`). 무료 티어에서 과거 OHLC가 막혔다. spec §7의 "미국 시세 및 재무 데이터는 Finnhub를 통해 확보한다" 중 **시세 부분이 성립하지 않는다.**
+- **Finnhub `/stock/financials-reported` → HTTP 200.** 재무는 무료로 살아 있고 `bs`/`ic`/`cf`가 `{concept, unit, label, value}` 배열로 온다. 즉 **재무만으로는 진행할 수 있으나 시세가 없다.**
+- **Stooq → JS proof-of-work 챌린지.** 다수 자료가 여전히 추천하지만 스크립트로 접근할 수 없다.
+- **SEC EDGAR → 정상**(키 불필요, 10,398종목). 미국 재무의 최선이지만 **OHLC는 제공하지 않는다.**
+
+시세 대안은 전부 문제가 있었다. Alpha Vantage는 무료 25 req/day로 500종목에 20일이 걸리고, EODHD는 20 req/day다. Tiingo는 수치상 맞지만 ToS가 "Internal Use Only"라 spec §2의 "본인과 소수 지인" 공유와 충돌한다. massive(구 Polygon) 유료는 ToS가 깨끗하나 spec §2의 "인프라 운영 비용 최소화"와 충돌한다.
+
+**국내만으로도 v1의 핵심 가치는 성립한다.** 스크리닝 엔진·지표 계산·워치리스트는 시장에 무관하고, 국내 두 소스는 실측으로 검증됐다. 미국을 위해 ToS를 위반하거나 비용을 들이는 것보다, 국내를 완성해 파이프라인 전체를 실증한 뒤 미국을 붙이는 편이 낫다. 포트가 있으므로 그 비용은 어댑터 하나다.
+
+## 버린 대안
+
+- **Tiingo 무료 채택** — 수치는 맞으나 "Internal Use Only" ToS가 지인 공유와 충돌한다. 개인 프로젝트라도 명시된 금지를 우회할 이유가 없다.
+- **massive 유료 전환** — 가장 깔끔하지만 spec §2의 비용 최소화와 충돌한다. 국내가 완성된 뒤 사용자가 판단할 문제다.
+- **Yahoo Finance 비공식 API** — 첫 요청부터 HTTP 429. 비공식이라 안정성 근거도 없다.
+- **재무만 수집하고 기술적 지표는 국내만** — PER·PBR도 주가가 필요하다. `/quote`는 현재가만 주어 과거 이력이 없으므로 반쪽짜리다.
+- **미국을 유니버스에 두고 실패를 감수** — 500종목이 매일 실패로 기록되어 부분 실패 알림이 상시화되고, 그러면 진짜 장애가 묻힌다.
+
+## 결과
+
+- 쉬워지는 것: Phase 2를 실측 검증된 국내 소스만으로 완주할 수 있다. 추가 키 발급도, ToS 판단도 필요 없다.
+- 어려워지는 것: spec §9의 수용 기준("S&P500 편입 종목 대상 스크리닝") 미달 상태로 v1이 끝난다. 사용자가 spec 수정을 승인해야 한다.
+- 되돌리려면: US 시세 소스를 정하고 `PriceDataSource` 구현 하나를 추가한 뒤, `sp500.csv`를 실제 구성종목으로 채우면 된다. **포트 밖에서 고칠 파일은 없어야 한다** — 그것이 ADR-0006이 만든 구조의 실증이 된다.
