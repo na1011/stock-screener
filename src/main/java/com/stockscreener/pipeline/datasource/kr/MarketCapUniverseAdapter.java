@@ -11,6 +11,7 @@ import com.stockscreener.pipeline.datasource.http.RateLimiter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -101,6 +102,12 @@ public class MarketCapUniverseAdapter implements UniverseDataSource {
     private final SecurityNameCache nameCache;
     private final Map<String, Target> targets;
 
+    /**
+     * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
+     * 못해 기본 생성자를 찾다가 {@code NoSuchMethodException}으로 <b>기동에 실패한다.</b>
+     * 단위 테스트는 생성자를 직접 부르므로 이 결함을 잡지 못한다 — 실제로 기동해서야 드러났다.
+     */
+    @Autowired
     public MarketCapUniverseAdapter(ExternalApiClientFactory clientFactory,
                                     DataSourceProperties properties,
                                     @Qualifier("dataGoKrRateLimiter") RateLimiter rateLimiter,

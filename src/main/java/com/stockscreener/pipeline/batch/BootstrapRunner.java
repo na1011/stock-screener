@@ -3,7 +3,9 @@ package com.stockscreener.pipeline.batch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -45,13 +47,16 @@ public class BootstrapRunner implements ApplicationRunner {
     private final UniverseRebalanceJob universeRebalanceJob;
     private final InitialLoadJob initialLoadJob;
     private final IndicatorBackfillJob indicatorBackfillJob;
+    private final ConfigurableApplicationContext context;
 
     public BootstrapRunner(UniverseRebalanceJob universeRebalanceJob,
                            InitialLoadJob initialLoadJob,
-                           IndicatorBackfillJob indicatorBackfillJob) {
+                           IndicatorBackfillJob indicatorBackfillJob,
+                           ConfigurableApplicationContext context) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.initialLoadJob = initialLoadJob;
         this.indicatorBackfillJob = indicatorBackfillJob;
+        this.context = context;
     }
 
     @Override
@@ -72,12 +77,16 @@ public class BootstrapRunner implements ApplicationRunner {
                     "알 수 없는 잡이다: '" + job + "' — universe | initial-load | backfill");
         };
 
-        // 상태를 로그로만 남기지 않고 종료 코드로도 드러낸다. 스크립트로 이어 돌릴 때
-        // 성공 여부를 파싱하지 않아도 되게 하기 위해서다.
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);
         if (status == BatchStatus.FAILED) {
             throw new IllegalStateException(job + " 잡이 실패했다. 로그와 batch_execution을 확인하라.");
         }
+
+        // IMPORTANT — 잡이 끝나면 애플리케이션을 내린다. 웹 스타터가 있어 그냥 두면 서버가
+        // 계속 떠 있고, 스크립트로 여러 잡을 이어 돌릴 때 다음 명령으로 넘어가지 못한다.
+        // 종료 코드는 0이다 — 실패는 위에서 예외로 이미 드러냈다.
+        int exitCode = SpringApplication.exit(context, () -> 0);
+        System.exit(exitCode);
     }
 
     private InitialLoadJob.LoadRange loadRange(ApplicationArguments args) {
