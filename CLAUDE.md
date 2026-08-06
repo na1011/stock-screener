@@ -12,13 +12,14 @@
 
 - MUST NOT: 구현이 어디까지 되어 있는지를 이 파일에 적지 않는다. 상태를 두 곳에 두면 반드시 어긋나고, 낡은 쪽을 그대로 믿게 된다.
 - MUST: 다음 세션이 알아야 할 것이 생기면 `docs/progress.md`를 갱신한다 — phase 상태 변화, ADR로 남기기엔 사소하지만 모르면 다시 만들게 될 결정, 미뤄둔 것.
-- 설계 방향은 `docs/design/`에 있다. 착수 전에 해당 phase의 문서를 읽는다.
+- 설계 방향과 phase 완료 판정 기준은 `docs/design/v1-architecture.md`에 있다(§4가 phase 구성, §5가 완료 판정). 착수 전에 읽고, **새 phase는 완료 판정을 먼저 §5에 적고 시작한다.**
 
 ## 명령어
 
 - 빌드: `./gradlew build`
 - 테스트: `./gradlew test`
 - 단일 테스트: `./gradlew test --tests "패턴"`
+- 관통테스트: `./gradlew liveTest` — 실제 외부 API를 호출한다(`@Tag("live")`). 일일 쿼터를 태우므로 필요할 때만 돌린다.
 - 실행: `./gradlew bootRun`
 
 ## ADR
