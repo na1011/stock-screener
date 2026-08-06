@@ -48,6 +48,11 @@ dependencies {
     // 메타데이터 스키마는 Boot의 자동 초기화가 아니라 Flyway가 관리한다(V6).
     implementation 'org.springframework.boot:spring-boot-starter-batch'
 
+    // 재시도 백오프(RATE_LIMITED·TRANSIENT). spring-batch-core가 전이로 끌어오지만
+    // 직접 선언한다 — 전이 의존에 기대면 Batch 업그레이드가 조용히 걷어갈 수 있고,
+    // 그때 깨지는 것은 컴파일이 아니라 새벽 배치의 재시도 동작이다.
+    implementation 'org.springframework.retry:spring-retry'
+
     // Boot 4는 Flyway 자동설정을 별도 모듈로 분리했다. flyway-core만 넣으면
     // 클래스패스에는 있지만 자동설정이 없어 마이그레이션이 조용히 실행되지 않는다.
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
@@ -66,6 +71,12 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
     // JobLauncherTestUtils. 재시작성은 실제 JobRepository로만 검증할 수 있다.
     testImplementation 'org.springframework.batch:spring-batch-test'
+    // 실제 소켓을 열어 RestClient를 통과시킨다. Mockito로 RestClient를 목킹하면
+    // 타임아웃·상태코드·봉투 파싱 같은 에러 매핑이 전혀 검증되지 않는다.
+    // WireMock은 Jetty 전체를 끌어와 무겁고, Docker가 없어 컨테이너 기반은 배제된다.
+    // 버전을 명시하는 이유는 Boot 4.1 BOM이 okhttp3를 관리하지 않기 때문이다(해결 실패).
+    // 5.x는 패키지 구조가 바뀌었으므로 고전 API를 쓰는 4.12.0에 고정한다.
+    testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
     // QueryDSL 프로브 엔티티가 테스트 소스에 있으므로 Q클래스도 테스트 컴파일에서 생성한다.
     // 프로브는 도메인이 아니라 검증 도구이므로 운영 소스·스키마에 두지 않는다.
     testAnnotationProcessor 'io.github.openfeign.querydsl:querydsl-apt:7.5:jakarta'
@@ -76,6 +87,29 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+// 관통테스트(@Tag("live"))는 실제 외부 API를 호출한다. 기본 test에서 제외하는 이유가 둘이다.
+// 네트워크가 없거나 벤더가 점검 중이면 무관한 테스트까지 빨간불이 되고, 매 실행이
+// 일일 쿼터를 태운다. 초기 적재에 쓸 쿼터를 테스트가 소진하면 안 된다.
+tasks.register('liveTest', Test) {
+    group = 'verification'
+    description = '실제 외부 API를 호출하는 관통테스트. 키가 없으면 각 테스트가 스스로 스킵한다.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'live'
+    }
+    // 실패해도 나머지를 계속 돌려 어느 소스가 깨졌는지 한 번에 본다.
+    ignoreFailures = false
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        showStandardStreams = true
+    }
+    // 캐시된 성공 결과를 재사용하면 "지금도 살아 있는가"를 확인할 수 없다.
+    outputs.upToDateWhen { false }
+}
+
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'live'
+    }
 }

@@ -57,3 +57,27 @@ spring:
               - openid
               - email
               - profile
+
+# ── 외부 데이터 소스 ────────────────────────────────────────────
+# MUST NOT: 실제 키를 여기 넣지 않는다. 환경변수 참조만 둔다.
+# 키가 비어 있어도 애플리케이션은 기동하며, 어댑터가 조회 시점에 AUTH로 실패한다 —
+# 키 없이도 나머지 파이프라인을 개발·검증할 수 있어야 하기 때문이다.
+stockscreener:
+  datasource:
+    data-go-kr:
+      base-url: https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService
+      api-key: ${DATA_GO_KR_SERVICE_KEY:}
+      # 공식 가이드 기준 초당 최대 30 TPS. 배치는 급할 이유가 없으므로 훨씬 낮게 잡는다.
+      # 경계에서 차단당하는 것보다 조금 느린 편이 낫다.
+      permits-per-minute: 300
+      # 활용신청 계정마다 다르다. 실측 후 조정한다.
+      daily-quota: 9000
+    dart:
+      base-url: https://opendart.fss.or.kr/api
+      api-key: ${DART_API_KEY:}
+      # 분당 제한이 공식 문서에 없어 보수적으로 잡는다.
+      permits-per-minute: 600
+      # 일 20,000건(2차 출처). 여유를 두고 잡는다.
+      daily-quota: 18000
+      # corpCode.xml은 3.5MB ZIP이라 기본 읽기 타임아웃으로는 부족할 수 있다.
+      read-timeout: 60s
