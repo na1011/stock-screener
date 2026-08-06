@@ -79,6 +79,38 @@ class IndicatorExtensibilityTest {
     }
 
     @Test
+    @DisplayName("결과 표의 기본 컬럼 여부가 계산 클래스에서 카탈로그로 흘러간다")
+    void defaultColumnFlagIsProjected() {
+        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate).synchronize();
+
+        // 화면이 어느 컬럼을 기본으로 보일지를 계산 코드 옆에서 정한다는 것의 실질 검증이다.
+        // 이 투영이 없으면 화면 코드에 지표 목록을 다시 적게 되고, 지표 추가 비용이 2파일이 된다.
+        Boolean perIsDefault = jdbcTemplate.queryForObject(
+                "SELECT default_column FROM indicator WHERE code = 'PER'", Boolean.class);
+        assertThat(perIsDefault).isTrue();
+
+        Boolean dummyIsDefault = jdbcTemplate.queryForObject(
+                "SELECT default_column FROM indicator WHERE code = ?", Boolean.class, DUMMY_CODE);
+        assertThat(dummyIsDefault).isFalse();
+    }
+
+    @Test
+    @DisplayName("백분위 행이 원본 지표를 가리킨다 — 부등호 방향 판단이 여기 의존한다")
+    void percentileRowLinksBackToItsSource() {
+        new IndicatorCatalogSynchronizer(
+                registry,
+                List.of(new PercentileSpec("PER", "PER 백분위", "설명", "해석")),
+                jdbcTemplate).synchronize();
+
+        String source = jdbcTemplate.queryForObject(
+                "SELECT source_indicator_code FROM indicator WHERE code = 'PER_PCTL'", String.class);
+
+        // 코드에서 '_PCTL'을 문자열로 떼어내는 대신 링크를 저장한다. 접미사 규칙이 바뀌어도
+        // 화면이 "PER은 낮은 쪽이 좋으므로 상위 20%는 <= 0.2"라는 판단을 잃지 않는다.
+        assertThat(source).isEqualTo("PER");
+    }
+
+    @Test
     @DisplayName("새 지표의 값을 저장하는 데 스키마 변경이 필요 없다 — EAV의 핵심 성질")
     void storingNewIndicatorNeedsNoSchemaChange() {
         new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate).synchronize();

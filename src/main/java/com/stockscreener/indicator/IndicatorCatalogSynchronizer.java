@@ -81,25 +81,29 @@ public class IndicatorCatalogSynchronizer {
         jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
-                                       created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'DERIVED', 'RATIO', NULL, 4, NULL, true, 900, now(), now())
+                                       default_column, source_indicator_code, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'DERIVED', 'RATIO', NULL, 4, NULL, true, 900, false, ?, now(), now())
                 ON CONFLICT (code) DO UPDATE SET
-                    name           = EXCLUDED.name,
-                    description    = EXCLUDED.description,
-                    interpretation = EXCLUDED.interpretation,
-                    is_active      = true,
-                    updated_at     = now()
+                    name                  = EXCLUDED.name,
+                    description           = EXCLUDED.description,
+                    interpretation        = EXCLUDED.interpretation,
+                    is_active             = true,
+                    source_indicator_code = EXCLUDED.source_indicator_code,
+                    updated_at            = now()
                 """,
                 spec.code(), spec.name(),
-                emptyToNull(spec.description()), emptyToNull(spec.interpretation()));
+                emptyToNull(spec.description()), emptyToNull(spec.interpretation()),
+                // 부등호 방향 판단이 이 링크에 걸린다 — 화면은 원본의 higher_is_better를 보고
+                // "상위 20%"가 >= 0.8인지 <= 0.2인지 정한다.
+                spec.sourceCode());
     }
 
     private void upsert(String code, IndicatorMeta meta) {
         jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
-                                       created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, now(), now())
+                                       default_column, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, now(), now())
                 ON CONFLICT (code) DO UPDATE SET
                     name             = EXCLUDED.name,
                     description      = EXCLUDED.description,
@@ -111,6 +115,7 @@ public class IndicatorCatalogSynchronizer {
                     higher_is_better = EXCLUDED.higher_is_better,
                     is_active        = true,
                     sort_order       = EXCLUDED.sort_order,
+                    default_column   = EXCLUDED.default_column,
                     updated_at       = now()
                 """,
                 code,
@@ -122,7 +127,8 @@ public class IndicatorCatalogSynchronizer {
                 emptyToNull(meta.unit()),
                 meta.decimalScale(),
                 meta.direction().toHigherIsBetter(),
-                meta.sortOrder());
+                meta.sortOrder(),
+                meta.defaultColumn());
     }
 
     private void deactivateMissing(List<String> activeCodes) {
