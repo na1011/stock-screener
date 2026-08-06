@@ -14,9 +14,6 @@
       "Edit(./.env.*.local)",
       "Read(./**/secrets/**)",
       "Edit(./**/secrets/**)"
-    ],
-    "ask": [
-      "Bash(git push *)"
     ]
   },
   "hooks": {
