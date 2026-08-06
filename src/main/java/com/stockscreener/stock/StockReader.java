@@ -1,0 +1,166 @@
+package com.stockscreener.stock;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+/**
+ * 화면이 필요로 하는 종목 정보를 읽는다.
+ *
+ * <p>{@link StockEntity}를 늘리지 않고 JdbcTemplate을 쓰는 이유: 엔티티는 스크리닝 쿼리의
+ * 구동 테이블이라 QueryDSL Q클래스가 필요해서 존재하는 것이고, 거기에 {@code sector}·
+ * {@code name_en} 같은 표시용 컬럼을 더하면 Q클래스가 함께 바뀌는데 얻는 것이 없다.
+ * {@code ddl-auto: validate} 아래에서는 컬럼을 하나 더할 때마다 매핑을 정확히 맞춰야 한다.
+ *
+ * <p>종목 정보와 그날 시세를 <b>한 쿼리로</b> 가져온다. 표에 350행이 오는데 행마다 시세를
+ * 따로 물으면 그것이 N+1이다.
+ */
+@Component
+public class StockReader {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public StockReader(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /**
+     * 결과 표에 필요한 종목 정보 + 기준일 종가.
+     *
+     * <p>시세가 없는 종목도 행을 준다({@code close}가 null). {@code LEFT JOIN}인 이유는
+     * 지표는 계산됐는데 그날 시세만 없는 경우에 종목이 표에서 통째로 사라지면
+     * "왜 결과 수가 다르지"를 추적할 수 없기 때문이다.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, StockRow> findRows(Collection<Long> stockIds, LocalDate asOf) {
+        if (stockIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", stockIds.stream().map(id -> "?").toList());
+
+        Object[] args = new Object[stockIds.size() + 1];
+        args[0] = asOf;
+        int i = 1;
+        for (Long id : stockIds) {
+            args[i++] = id;
+        }
+
+        List<StockRow> rows = jdbcTemplate.query("""
+                SELECT s.id, s.ticker, s.name, s.market_code, s.sector, p.close
+                FROM stock s
+                LEFT JOIN price_daily p ON p.stock_id = s.id AND p.trade_date = ?
+                WHERE s.id IN (%s)
+                """.formatted(placeholders), ROW_MAPPER, args);
+
+        return rows.stream().collect(Collectors.toMap(
+                StockRow::id, r -> r, (a, b) -> a, LinkedHashMap::new));
+    }
+
+    /** 종목 상세의 기본 정보. */
+    @Transactional(readOnly = true)
+    public Optional<StockRow> findById(long stockId, LocalDate asOf) {
+        return findRows(List.of(stockId), asOf).values().stream().findFirst();
+    }
+
+    /**
+     * 종목 상세의 기준일 시세 전체.
+     *
+     * <p>{@code trade_value}는 소스가 주지 않으면 NULL이고 {@code listed_shares}는 V9에서
+     * 추가되어 옛 행에는 없다. 둘 다 그대로 null로 내보낸다 — 0으로 채우면 화면이
+     * "거래대금 0원"을 사실로 표시한다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<PriceRow> priceOn(long stockId, LocalDate tradeDate) {
+        List<PriceRow> rows = jdbcTemplate.query("""
+                SELECT trade_date, open, high, low, close, volume, trade_value, listed_shares
+                FROM price_daily WHERE stock_id = ? AND trade_date = ?
+                """, (rs, n) -> new PriceRow(
+                        rs.getObject("trade_date", LocalDate.class),
+                        rs.getBigDecimal("open"), rs.getBigDecimal("high"),
+                        rs.getBigDecimal("low"), rs.getBigDecimal("close"),
+                        rs.getObject("volume", Long.class),
+                        rs.getBigDecimal("trade_value"),
+                        rs.getBigDecimal("listed_shares")),
+                stockId, tradeDate);
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    /** 이 종목이 현재 편입되어 있는 유니버스들. 상세 화면이 "어느 지수 종목인가"를 보여준다. */
+    @Transactional(readOnly = true)
+    public List<StockUniverse> currentUniversesOf(long stockId) {
+        return jdbcTemplate.query("""
+                SELECT u.code, u.name, m.effective_from
+                FROM universe_membership m
+                JOIN universe u ON u.code = m.universe_code
+                WHERE m.stock_id = ? AND m.effective_to IS NULL
+                ORDER BY u.code
+                """, (rs, n) -> new StockUniverse(
+                        rs.getString("code"),
+                        rs.getString("name"),
+                        rs.getObject("effective_from", LocalDate.class)),
+                stockId);
+    }
+
+    /**
+     * 스크리닝 대상이 될 수 있는 유니버스 목록.
+     *
+     * <p>{@code JOIN}(≠ {@code LEFT JOIN})이 의도다 — <b>편입 종목이 하나도 없는 유니버스는
+     * 내보내지 않는다.</b> 지금 DB에는 시드 유니버스({@code KOSPI200} 등)가 비활성·0건으로
+     * 남아 있고, 미국({@code SP500})은 데이터가 없다. 그것들을 선택지로 제시하면 사용자는
+     * 고르고 나서야 결과가 비어 있는 이유를 묻게 된다. 미국이 v1.1에서 붙으면 자동으로 나타난다.
+     */
+    @Transactional(readOnly = true)
+    public List<UniverseRow> selectableUniverses() {
+        return jdbcTemplate.query("""
+                SELECT u.code, u.name, u.market_code, count(m.stock_id) AS member_count
+                FROM universe u
+                JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL
+                WHERE u.is_active
+                GROUP BY u.code, u.name, u.market_code
+                ORDER BY u.code
+                """, (rs, n) -> new UniverseRow(
+                rs.getString("code"), rs.getString("name"),
+                rs.getString("market_code"), rs.getInt("member_count")));
+    }
+
+    /** 주어진 유니버스가 스크리닝 대상으로 유효한가. */
+    @Transactional(readOnly = true)
+    public boolean isSelectableUniverse(String universeCode) {
+        return selectableUniverses().stream().anyMatch(u -> u.code().equals(universeCode));
+    }
+
+    private static final RowMapper<StockRow> ROW_MAPPER = (rs, rowNum) -> new StockRow(
+            rs.getLong("id"),
+            rs.getString("ticker"),
+            rs.getString("name"),
+            rs.getString("market_code"),
+            rs.getString("sector"),
+            rs.getBigDecimal("close"));
+
+    /** @param close 기준일 <b>원주가</b> 종가. 사용자가 실제로 지불하는 가격이다(수정종가가 아니다). */
+    public record StockRow(long id, String ticker, String name, String marketCode,
+                           String sector, BigDecimal close) {
+    }
+
+    public record StockUniverse(String code, String name, LocalDate since) {
+    }
+
+    /** @param tradeValue·listedShares 소스가 주지 않으면 null이다. */
+    public record PriceRow(LocalDate tradeDate, BigDecimal open, BigDecimal high, BigDecimal low,
+                           BigDecimal close, Long volume, BigDecimal tradeValue,
+                           BigDecimal listedShares) {
+    }
+
+    public record UniverseRow(String code, String name, String marketCode, int memberCount) {
+    }
+}
