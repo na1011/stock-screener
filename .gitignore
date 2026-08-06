@@ -39,3 +39,21 @@ out/
 ### Claude Code (personal/local) ###
 CLAUDE.local.md
 .claude/settings.local.json
+
+### 시크릿 ###
+# IMPORTANT — 이 절이 없어서 .env가 실제로는 무시되지 않고 있었다. .env.example은
+# "이 파일은 gitignore 대상이며 커밋되지 않는다"고 적고 있었으나 사실이 아니었다.
+# 문서의 주장과 실제 설정이 어긋나면, 어긋난 쪽을 아무도 확인하지 않는다.
+.env
+.env.*
+!.env.example
+# 키를 임시로 옮겨 적는 파일. 실제로 한 번 git add된 적이 있다.
+apiKey*
+*.key
+*.pem
+*.p12
+*.jks
+
+### 외부 API 원본 문서 ###
+# 배포처의 저작물이라 저장소에 넣지 않는다. 필요한 내용은 docs/api-spec/에 옮겨 적었다.
+docs/api-document/
