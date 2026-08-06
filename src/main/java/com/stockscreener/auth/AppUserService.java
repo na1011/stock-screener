@@ -4,6 +4,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Optional;
+
 /**
  * 로그인한 사용자를 저장·갱신한다.
  *
@@ -49,5 +52,25 @@ public class AppUserService {
                     updated_at    = now()
                 RETURNING id
                 """, Long.class, normalized, name, pictureUrl, providerUserId, admin);
+    }
+
+    /**
+     * Google {@code sub}로 사용자 id를 찾는다.
+     *
+     * <p>운영 경로에서는 로그인 시점에 {@link AppUserPrincipal}이 id를 이미 들고 있으므로
+     * 이 조회가 필요 없다. 이것은 주체가 {@code AppUserPrincipal}이 아닌 경우의 폴백이다 —
+     * 세션이 남아 있는 채로 배포가 일어났거나, 테스트가 합성 주체를 심었을 때다.
+     *
+     * <p>폴백이 없으면 그 경우들이 조용히 소유자 없는 상태로 흘러가거나, 테스트마다
+     * 커스텀 인증 애너테이션을 만들어야 한다. {@code uq_user_provider} 인덱스를 직격한다.
+     *
+     * @return 없으면 비어 있음. 호출자가 그것을 오류로 다룬다 — 0이나 null을 소유자로 쓰지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Long> findIdByProviderUserId(String providerUserId) {
+        List<Long> ids = jdbcTemplate.queryForList(
+                "SELECT id FROM app_user WHERE provider = 'GOOGLE' AND provider_user_id = ?",
+                Long.class, providerUserId);
+        return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(0));
     }
 }

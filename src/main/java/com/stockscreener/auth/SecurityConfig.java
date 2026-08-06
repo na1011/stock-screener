@@ -7,6 +7,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 /**
  * 접근 제어. 관리자 영역을 별도 애플리케이션이 아니라 <b>권한으로</b> 분리한다
@@ -45,8 +47,14 @@ public class SecurityConfig {
                 // 상태 변경 요청을 보낼 수 있게 되고, 조건 저장·워치리스트·관리자 기능이
                 // 모두 그 대상이 된다.
                 // 토큰을 쿠키로 내보내 SPA가 읽어 헤더에 실을 수 있게 한다(Vue 기본 동작과 맞는다).
-                .csrf(csrf -> csrf.csrfTokenRepository(
-                        org.springframework.security.web.csrf.CookieCsrfTokenRepository.withHttpOnlyFalse()));
+                //
+                // IMPORTANT — 핸들러의 지연 로딩을 끈다(setCsrfRequestAttributeName(null)).
+                // 기본 동작은 요청 처리 중 아무도 토큰을 건드리지 않으면 쿠키를 내려보내지 않는데,
+                // 우리 API는 대부분 토큰을 읽을 일이 없는 조회다. 그러면 SPA가 처음 띄운 뒤
+                // 보내는 첫 POST가 토큰이 없어 403으로 실패하고, 그 증상은 인증 버그처럼 보인다.
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRequestHandler(eagerCsrfTokenHandler()));
 
         // 허용목록 판정을 OAuth 로그인 흐름에 끼워 넣는다. 자격증명이 발급되지 않았어도
         // 등록 자체는 자리표시자로 존재하므로(application.yaml 참조) 여기서 분기하지 않는다.
@@ -54,5 +62,17 @@ public class SecurityConfig {
                 .userInfoEndpoint(userInfo -> userInfo.oidcUserService(oidcUserService)));
 
         return http.build();
+    }
+
+    /**
+     * 매 요청마다 CSRF 토큰을 실제로 만들어 쿠키가 항상 내려가게 한다.
+     *
+     * <p>{@code setCsrfRequestAttributeName(null)}이 지연 로딩을 끄는 스위치다. 이름이
+     * 동작을 전혀 설명하지 않아 지우기 쉬우므로 별도 메서드로 빼 두고 이유를 남긴다.
+     */
+    private static CsrfTokenRequestAttributeHandler eagerCsrfTokenHandler() {
+        CsrfTokenRequestAttributeHandler handler = new CsrfTokenRequestAttributeHandler();
+        handler.setCsrfRequestAttributeName(null);
+        return handler;
     }
 }

@@ -6,7 +6,6 @@ import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
-import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 
@@ -64,7 +63,7 @@ public class AllowlistOidcUserService extends OidcUserService {
                     "허용목록에 없는 이메일: " + AllowedEmailService.normalize(email));
         }
 
-        appUserService.loginOrRegister(
+        long userId = appUserService.loginOrRegister(
                 oidcUser.getSubject(),
                 email,
                 oidcUser.getFullName(),
@@ -77,6 +76,8 @@ public class AllowlistOidcUserService extends OidcUserService {
             authorities.add(new SimpleGrantedAuthority(ROLE_ADMIN));
         }
 
-        return new DefaultOidcUser(authorities, oidcUser.getIdToken(), oidcUser.getUserInfo(), "sub");
+        // 반환된 id를 버리지 않고 주체에 실어 보낸다. 화면 저장 경로가 매 요청마다
+        // app_user를 다시 조회하지 않아도 되고, 조회를 빠뜨려 소유자를 잘못 넣는 일이 없다.
+        return new AppUserPrincipal(authorities, oidcUser.getIdToken(), oidcUser.getUserInfo(), userId);
     }
 }

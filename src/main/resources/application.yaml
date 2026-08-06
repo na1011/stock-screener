@@ -8,6 +8,13 @@ spring:
     username: ${DB_USERNAME:na1011}
     password: ${DB_PASSWORD:}
 
+  mvc:
+    problemdetails:
+      # MUST: 켠 채로 둔다. Boot 4 기본값은 false이고, 끄면 프레임워크가 던지는 예외
+      # (잘못된 JSON, 지원하지 않는 메서드)만 다른 형식으로 나간다. 프론트가 오류 응답을
+      # 두 가지 모양으로 다뤄야 하고, 그 사실은 흔치 않은 경로에서만 드러난다.
+      enabled: true
+
   jpa:
     hibernate:
       # 스키마의 정본은 Flyway 마이그레이션이다. Hibernate는 검증만 한다.
