@@ -1,6 +1,8 @@
 package com.stockscreener.screening.query;
 
 import com.querydsl.core.Tuple;
+import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.stockscreener.screening.ConditionEvaluator;
 import com.stockscreener.screening.ConditionGroup;
@@ -8,6 +10,7 @@ import com.stockscreener.screening.EvaluationMode;
 import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.stock.QIndicatorValueEntity;
 import com.stockscreener.stock.QStockEntity;
+import com.stockscreener.stock.QUniverseMembershipEntity;
 
 import jakarta.persistence.EntityManager;
 
@@ -55,7 +58,7 @@ public class ScreeningRepository {
     }
 
     /**
-     * 조건을 실행한다.
+     * 조건을 실행한다. 대상은 활성 종목 전체다.
      *
      * @param group 조건 그룹
      * @param mode  판정 방식
@@ -64,7 +67,18 @@ public class ScreeningRepository {
      */
     @Transactional(readOnly = true)
     public List<ScreeningResult> screen(ConditionGroup group, EvaluationMode mode, LocalDate asOf) {
-        List<Long> stockIds = selectStockIds(group, mode, asOf);
+        return screen(group, mode, asOf, null);
+    }
+
+    /**
+     * 유니버스를 한정해 조건을 실행한다.
+     *
+     * @param universeCode 현재 이 유니버스에 편입된 종목만 대상으로 한다. {@code null}이면 전체.
+     */
+    @Transactional(readOnly = true)
+    public List<ScreeningResult> screen(ConditionGroup group, EvaluationMode mode, LocalDate asOf,
+                                        String universeCode) {
+        List<Long> stockIds = selectStockIds(group, mode, asOf, universeCode);
         if (stockIds.isEmpty()) {
             return List.of();
         }
@@ -93,11 +107,19 @@ public class ScreeningRepository {
      *
      * <p>FILTER는 조건을 EXISTS 술어로 번역해 DB에서 좁힌다.
      * SCORING은 좁히지 않는다 — 일부 조건만 만족한 종목도 순위에 남아야 하기 때문이다.
+     *
+     * <p>유니버스 한정은 조건 트리와 무관한 <b>바깥 술어</b>다. 조건 개수에 비례하지 않으므로
+     * "쿼리는 항상 2개"가 유지되고, SCORING에서도 적용된다 — 코스피 화면에 코스닥 종목이
+     * 0점으로 섞여 나오면 순위의 의미가 무너진다.
      */
-    private List<Long> selectStockIds(ConditionGroup group, EvaluationMode mode, LocalDate asOf) {
+    private List<Long> selectStockIds(ConditionGroup group, EvaluationMode mode, LocalDate asOf,
+                                      String universeCode) {
         QStockEntity stock = QStockEntity.stockEntity;
 
         var query = queryFactory.select(stock.id).from(stock).where(stock.active.isTrue());
+        if (universeCode != null) {
+            query.where(currentlyIn(universeCode, stock));
+        }
         if (mode == EvaluationMode.FILTER) {
             query.where(translator.toPredicate(group, stock, asOf));
         }
@@ -105,13 +127,39 @@ public class ScreeningRepository {
     }
 
     /**
+     * 현재 이 유니버스에 편입되어 있는가.
+     *
+     * <p>{@code effective_to IS NULL}이 "현재 편입 중"이다(V1의 반열림 구간 설계).
+     * 기준 일자가 아니라 <b>지금</b>을 보는 이유는 스크리닝이 언제나 최신 일자 한 장을 읽고,
+     * 과거 시점의 지수 구성으로 되돌아가 조회하는 화면이 v1에 없기 때문이다. 그런 화면이
+     * 생기면 여기에 {@code asOf}를 넣어 {@code [from, to)} 포함 여부로 바꾼다.
+     */
+    private static BooleanExpression currentlyIn(String universeCode, QStockEntity stock) {
+        QUniverseMembershipEntity membership = QUniverseMembershipEntity.universeMembershipEntity;
+        return JPAExpressions.selectOne()
+                .from(membership)
+                .where(membership.stockId.eq(stock.id)
+                        .and(membership.universeCode.eq(universeCode))
+                        .and(membership.effectiveTo.isNull()))
+                .exists();
+    }
+
+    /**
      * 2번 쿼리 — 필요한 지표 값을 한 번에.
      *
      * <p>계산되지 않은 지표는 행이 없으므로 결과 맵에 키가 없다. 그것이 판정에서
      * "판정 불가"가 되는 경로다.
+     *
+     * <p>{@code public}인 이유는 결과 표가 <b>조건에 쓰이지 않은 지표</b>(기본 컬럼)도 보여주기
+     * 때문이다. 표시용으로 별도 조회 코드를 만들면 같은 EAV 접근이 두 벌이 되고, 한쪽만
+     * {@code trade_date} 조건을 놓치면 화면의 값과 판정에 쓴 값이 다른 날짜가 된다.
      */
-    private Map<Long, Map<String, BigDecimal>> loadIndicatorValues(
+    @Transactional(readOnly = true)
+    public Map<Long, Map<String, BigDecimal>> loadIndicatorValues(
             List<Long> stockIds, Set<String> indicatorCodes, LocalDate asOf) {
+        if (stockIds.isEmpty() || indicatorCodes.isEmpty()) {
+            return Map.of();
+        }
         QIndicatorValueEntity iv = QIndicatorValueEntity.indicatorValueEntity;
 
         List<Tuple> rows = queryFactory

@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ScreeningRepositoryTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 8, 4);
+    private static final String TEST_UNIVERSE = "TESTUNIV";
 
     @Autowired
     private ScreeningRepository repository;
@@ -62,6 +63,10 @@ class ScreeningRepositoryTest {
                        ('CLOSE','종가','PRICE','PRICE'), ('SMA_200','SMA200','TECHNICAL','PRICE')
                 ON CONFLICT DO NOTHING
                 """);
+        jdbcTemplate.update("""
+                INSERT INTO universe (code, name, market_code)
+                VALUES (?, '테스트 유니버스', 'TESTMKT') ON CONFLICT DO NOTHING
+                """, TEST_UNIVERSE);
 
         cheapStock = insertStock("000001", "저평가주");
         expensiveStock = insertStock("000002", "고평가주");
@@ -196,6 +201,63 @@ class ScreeningRepositoryTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 유니버스를 지정하면 편입 종목만 남는다. 조건을 충족해도 비편입이면 빠진다")
+    void universeFilterExcludesNonMembers() {
+        joinUniverse(cheapStock);
+        // partialStock은 PER 조건을 충족하지만 편입되어 있지 않다.
+
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "10"));
+
+        List<ScreeningResult> unrestricted = repository.screen(group, EvaluationMode.FILTER, AS_OF);
+        List<ScreeningResult> restricted =
+                repository.screen(group, EvaluationMode.FILTER, AS_OF, TEST_UNIVERSE);
+
+        assertThat(unrestricted).extracting(ScreeningResult::stockId)
+                .containsExactlyInAnyOrder(cheapStock, partialStock);
+        assertThat(restricted).extracting(ScreeningResult::stockId).containsExactly(cheapStock);
+    }
+
+    @Test
+    @DisplayName("SCORING에서도 유니버스가 적용된다 — 비편입 종목이 0점으로 섞이면 순위가 무의미해진다")
+    void universeFilterAppliesToScoringToo() {
+        joinUniverse(cheapStock);
+
+        ConditionGroup group = ConditionGroup.and(
+                condition("PER", ComparisonOperator.LT, "10").withWeight(new BigDecimal("1")));
+
+        List<ScreeningResult> results =
+                repository.screen(group, EvaluationMode.SCORING, AS_OF, TEST_UNIVERSE);
+
+        assertThat(results).extracting(ScreeningResult::stockId).containsExactly(cheapStock);
+    }
+
+    @Test
+    @DisplayName("편입이 끝난 종목은 제외된다 — effective_to가 채워지면 현재 구성원이 아니다")
+    void excludesStocksWhoseMembershipEnded() {
+        joinUniverse(cheapStock);
+        jdbcTemplate.update("""
+                UPDATE universe_membership SET effective_to = ?
+                WHERE universe_code = ? AND stock_id = ?
+                """, AS_OF.minusDays(1), TEST_UNIVERSE, cheapStock);
+
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "10"));
+
+        assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, TEST_UNIVERSE)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("유니버스를 지정하지 않으면 전체가 대상이다")
+    void nullUniverseMeansEveryActiveStock() {
+        joinUniverse(cheapStock);
+
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "10"));
+
+        assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, null))
+                .extracting(ScreeningResult::stockId)
+                .containsExactlyInAnyOrder(cheapStock, partialStock);
+    }
+
+    @Test
     @DisplayName("조건이 없어도 빈 그룹은 만들 수 없다 — 잘못된 상태를 표현 불가하게 한다")
     void emptyGroupIsRejected() {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> ConditionGroup.and(List.of()))
@@ -210,6 +272,14 @@ class ScreeningRepositoryTest {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO stock (market_code, ticker, name) VALUES ('TESTMKT', ?, ?) RETURNING id
                 """, Long.class, ticker, name);
+    }
+
+    /** 테스트 유니버스에 편입시킨다. {@code effective_to}가 NULL이면 현재 구성원이다. */
+    private void joinUniverse(long stockId) {
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+                """, TEST_UNIVERSE, stockId, AS_OF.minusYears(1));
     }
 
     private void insertIndicator(long stockId, String code, String value) {
