@@ -126,6 +126,6 @@ class PriceWriterTest {
                 LocalDate.parse(date),
                 new BigDecimal(open), new BigDecimal(high),
                 new BigDecimal(low), new BigDecimal(close),
-                1_000_000L, null, false);
+                1_000_000L, null, null, false);
     }
 }

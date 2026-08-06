@@ -74,12 +74,12 @@ class Sma200CalculatorTest {
             bars.add(new PriceBar(date.plusDays(i),
                     BigDecimal.valueOf(2_500_000), BigDecimal.valueOf(2_500_000),
                     BigDecimal.valueOf(2_500_000), BigDecimal.valueOf(2_500_000),
-                    BigDecimal.valueOf(50_000), 1000L));
+                    BigDecimal.valueOf(50_000), 1000L, null));
         }
         bars.add(new PriceBar(date.plusDays(199),
                 BigDecimal.valueOf(50_000), BigDecimal.valueOf(50_000),
                 BigDecimal.valueOf(50_000), BigDecimal.valueOf(50_000),
-                BigDecimal.valueOf(50_000), 1000L));
+                BigDecimal.valueOf(50_000), 1000L, null));
 
         List<IndicatorPoint> points = calculator.calculate(contextOf(bars));
 
@@ -102,6 +102,6 @@ class Sma200CalculatorTest {
     }
 
     private static PriceBar bar(LocalDate date, BigDecimal price) {
-        return new PriceBar(date, price, price, price, price, price, 1000L);
+        return new PriceBar(date, price, price, price, price, price, 1000L, null);
     }
 }

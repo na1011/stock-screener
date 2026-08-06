@@ -167,6 +167,9 @@ public class DataGoKrPriceAdapter implements PriceDataSource {
                     Long.parseLong(item.path("trqu").asText("0")),
                     // KRX는 거래대금을 실제로 제공한다 — 합성이 아니라 실측값이다.
                     decimal(item, "trPrc"),
+                    // 상장주식수. PER·PBR의 분모이며, 날짜별 값이라 시세와 함께 와야 맞다.
+                    // 우선주는 별도 종목으로 세므로 이것이 보통주 수다.
+                    decimal(item, "lstgStCnt"),
                     // 원주가를 준다. 수정주가는 우리가 adj_factor로 만든다.
                     false);
         } catch (RuntimeException e) {

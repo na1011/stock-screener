@@ -69,6 +69,31 @@ final class FinancialMath {
     }
 
     /**
+     * 그 시점의 주식수. <b>시세 쪽을 우선하고 재무를 폴백으로 쓴다.</b>
+     *
+     * <p>시세가 우선인 이유는 날짜별 값이기 때문이다 — 유상증자·분할로 주식수가 바뀌면 그날부터
+     * 반영되는 반면, 분기 재무는 다음 공시까지 낡은 수를 들고 있다. 그 차이가 분할 당일의
+     * PER을 튀게 만들고 그 값은 그럴듯해서 눈치채기 어렵다.
+     *
+     * <p>재무를 폴백으로 남기는 이유는 소스마다 다르기 때문이다. 국내 시세 API는
+     * {@code lstgStCnt}를 주지만, 그것을 주지 않는 소스에서는 재무 쪽만 채워질 수 있다.
+     *
+     * @return 양수인 주식수. 양쪽 모두 없거나 0 이하면 null이다.
+     */
+    static BigDecimal sharesOf(PriceBar bar, List<FinancialFigures> quarters) {
+        if (bar != null && bar.listedShares() != null && bar.listedShares().signum() > 0) {
+            return bar.listedShares();
+        }
+        if (!quarters.isEmpty()) {
+            BigDecimal fromFinancials = quarters.get(0).sharesOutstanding();
+            if (fromFinancials != null && fromFinancials.signum() > 0) {
+                return fromFinancials;
+            }
+        }
+        return null;
+    }
+
+    /**
      * 백분율로 나눈다. 분모가 0이거나 어느 쪽이든 null이면 null이다.
      *
      * <p>분모가 음수인 경우는 <b>거르지 않는다.</b> 자본잠식 기업의 ROE처럼 음수 분모가

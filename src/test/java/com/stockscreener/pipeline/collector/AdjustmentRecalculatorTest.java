@@ -172,6 +172,6 @@ class AdjustmentRecalculatorTest {
     /** OHLC를 종가 기준으로 만든 봉. 분할 계산은 종가만 쓰므로 나머지는 종가에 맞춘다. */
     private static RawPriceBar bar(String date, String close) {
         BigDecimal c = new BigDecimal(close);
-        return new RawPriceBar(LocalDate.parse(date), c, c, c, c, 1_000_000L, null, false);
+        return new RawPriceBar(LocalDate.parse(date), c, c, c, c, 1_000_000L, null, null, false);
     }
 }

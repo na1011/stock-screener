@@ -18,6 +18,13 @@ import java.time.LocalDate;
  *                               MUST NOT: 없을 때 {@code close × volume}으로 합성하지 않는다.
  *                               다른 값이며, 실측과 합성이 섞이면 파생 지표가 시장마다 미묘하게
  *                               달라진다. 없으면 null로 두고 그 지표를 계산하지 않는다.
+ * @param listedShares           그 시점의 상장주식수. PER·PBR·ROE의 분모다.
+ *                               <p>재무제표가 아니라 시세와 함께 오는 이유는 그것이 <b>날짜별
+ *                               값</b>이기 때문이다. 유상증자·분할로 주식수가 바뀌면 그날부터
+ *                               다른 값이어야 하는데, 분기 재무에 묶어두면 다음 공시까지 낡은
+ *                               수로 나누게 된다. 국내 소스는 우선주를 별도 종목으로 세므로
+ *                               이 값이 보통주 수이며, PER의 분모로 정확하다.
+ *                               <p>주지 않는 소스도 있으므로 nullable이다.
  * @param splitAdjustedBySource  소스가 이미 분할을 반영한 값을 주는지. 이것을 모르면
  *                               분할 계수를 두 번 적용하게 된다.
  */
@@ -29,6 +36,7 @@ public record RawPriceBar(
         BigDecimal close,
         long volume,
         BigDecimal tradeValue,
+        BigDecimal listedShares,
         boolean splitAdjustedBySource
 ) {
 

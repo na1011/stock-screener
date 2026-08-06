@@ -82,7 +82,7 @@ class PerCalculatorTest {
         // close 150, adjClose 30 (분할 반영). PER은 close 기준이어야 15가 나온다.
         PriceBar bar = new PriceBar(LocalDate.of(2026, 1, 2),
                 BigDecimal.valueOf(150), BigDecimal.valueOf(150), BigDecimal.valueOf(150),
-                BigDecimal.valueOf(150), BigDecimal.valueOf(30), 1000L);
+                BigDecimal.valueOf(150), BigDecimal.valueOf(30), 1000L, null);
 
         IndicatorContext context = new IndicatorContext(
                 1L, List.of(bar), List.of(),
@@ -95,8 +95,35 @@ class PerCalculatorTest {
         assertThat(points.get(0).value()).isEqualByComparingTo("15");
     }
 
+    @Test
+    @DisplayName("시세의 상장주식수를 재무보다 우선한다 — 날짜별 값이라 증자·분할이 바로 반영된다")
+    void prefersListedSharesFromPriceBar() {
+        // 재무는 주식수 100(EPS 10 → PER 15)이라 하고, 시세는 200을 준다(EPS 5 → PER 30).
+        PriceBar bar = new PriceBar(LocalDate.of(2026, 1, 2),
+                BigDecimal.valueOf(150), BigDecimal.valueOf(150), BigDecimal.valueOf(150),
+                BigDecimal.valueOf(150), BigDecimal.valueOf(150), 1000L, BigDecimal.valueOf(200));
+
+        IndicatorContext context = new IndicatorContext(
+                1L, List.of(bar), List.of(),
+                quarters(4, BigDecimal.valueOf(250), BigDecimal.valueOf(100)), null);
+
+        assertThat(calculator.calculate(context).get(0).value())
+                .as("시세 쪽 200주로 계산해야 30이다. 재무 쪽 100주를 쓰면 15가 나온다")
+                .isEqualByComparingTo("30");
+    }
+
+    @Test
+    @DisplayName("시세에 주식수가 없으면 재무로 폴백한다 — 소스마다 주는 쪽이 다르다")
+    void fallsBackToFinancialShares() {
+        IndicatorContext context = new IndicatorContext(
+                1L, List.of(priceBar(BigDecimal.valueOf(150))), List.of(),
+                quarters(4, BigDecimal.valueOf(250), BigDecimal.valueOf(100)), null);
+
+        assertThat(calculator.calculate(context).get(0).value()).isEqualByComparingTo("15");
+    }
+
     private static PriceBar priceBar(BigDecimal close) {
-        return new PriceBar(LocalDate.of(2026, 1, 2), close, close, close, close, close, 1000L);
+        return new PriceBar(LocalDate.of(2026, 1, 2), close, close, close, close, close, 1000L, null);
     }
 
     private static List<FinancialFigures> quarters(int count, BigDecimal netIncome, BigDecimal shares) {

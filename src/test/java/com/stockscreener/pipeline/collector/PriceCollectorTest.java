@@ -128,6 +128,6 @@ class PriceCollectorTest {
 
     private static RawPriceBar bar(String date, String close) {
         BigDecimal c = new BigDecimal(close);
-        return new RawPriceBar(LocalDate.parse(date), c, c, c, c, 1_000_000L, null, false);
+        return new RawPriceBar(LocalDate.parse(date), c, c, c, c, 1_000_000L, null, null, false);
     }
 }

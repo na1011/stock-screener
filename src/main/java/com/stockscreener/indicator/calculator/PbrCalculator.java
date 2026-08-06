@@ -58,17 +58,23 @@ public class PbrCalculator implements IndicatorCalculator {
             return List.of();
         }
 
-        FinancialFigures latest = quarters.get(0);
-        BigDecimal equity = latest.totalEquity();
-        BigDecimal shares = latest.sharesOutstanding();
-        if (equity == null || equity.signum() <= 0 || shares == null || shares.signum() <= 0) {
+        BigDecimal equity = quarters.get(0).totalEquity();
+        if (equity == null || equity.signum() <= 0) {
+            // 자본잠식이면 음수 PBR이 나와 "저평가"로 보인다. 값을 내지 않는다.
             return List.of();
         }
 
-        BigDecimal bookValuePerShare = equity.divide(shares, SCALE, RoundingMode.HALF_UP);
-
+        // 주식수를 봉마다 읽는다 — 유상증자·분할 구간에서 BPS가 달라져야 한다.
         List<IndicatorPoint> points = new ArrayList<>(context.priceBars().size());
         for (PriceBar bar : context.priceBars()) {
+            BigDecimal shares = FinancialMath.sharesOf(bar, quarters);
+            if (shares == null) {
+                continue;
+            }
+            BigDecimal bookValuePerShare = equity.divide(shares, SCALE, RoundingMode.HALF_UP);
+            if (bookValuePerShare.signum() <= 0) {
+                continue;
+            }
             points.add(new IndicatorPoint(
                     bar.tradeDate(),
                     bar.close().divide(bookValuePerShare, SCALE, RoundingMode.HALF_UP)));

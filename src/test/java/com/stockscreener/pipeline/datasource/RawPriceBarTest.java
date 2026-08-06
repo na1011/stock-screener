@@ -59,7 +59,7 @@ class RawPriceBarTest {
                 LocalDate.of(2026, 8, 5),
                 new BigDecimal("100"), new BigDecimal("110"),
                 new BigDecimal("95"), new BigDecimal("105"),
-                1000, null, false);
+                1000, null, null, false);
 
         assertThat(priceBar.tradeValue()).isNull();
         assertThat(priceBar.isValid()).isTrue();
@@ -70,6 +70,6 @@ class RawPriceBarTest {
                 LocalDate.of(2026, 8, 5),
                 new BigDecimal(open), new BigDecimal(high),
                 new BigDecimal(low), new BigDecimal(close),
-                volume, null, false);
+                volume, null, null, false);
     }
 }

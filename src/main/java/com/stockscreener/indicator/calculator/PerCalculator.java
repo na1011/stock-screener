@@ -71,46 +71,30 @@ public class PerCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        BigDecimal eps = trailingTwelveMonthEps(context);
-        if (eps == null || eps.signum() <= 0) {
-            // 적자이거나 재무가 부족하면 계산하지 않는다.
+        List<FinancialFigures> quarters = context.quarterlyFigures();
+        BigDecimal netIncome =
+                FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::netIncome);
+        if (netIncome == null || netIncome.signum() <= 0) {
+            // 적자이거나 재무가 부족하면 계산하지 않는다. 음수 PER을 저장하면
+            // "PER이 낮은 종목" 조건에 적자 기업이 최상위로 올라온다.
             return List.of();
         }
 
+        // IMPORTANT — 주식수를 봉마다 읽는다. 유상증자·분할로 주식수가 바뀌면 그날부터
+        // EPS가 달라져야 하는데, 하나로 고정하면 그 구간의 PER이 통째로 틀린다.
         List<IndicatorPoint> points = new ArrayList<>(context.priceBars().size());
         for (PriceBar bar : context.priceBars()) {
-            BigDecimal per = bar.close().divide(eps, SCALE, RoundingMode.HALF_UP);
-            points.add(new IndicatorPoint(bar.tradeDate(), per));
+            BigDecimal shares = FinancialMath.sharesOf(bar, quarters);
+            if (shares == null) {
+                continue;
+            }
+            BigDecimal eps = netIncome.divide(shares, SCALE, RoundingMode.HALF_UP);
+            if (eps.signum() <= 0) {
+                continue;
+            }
+            points.add(new IndicatorPoint(
+                    bar.tradeDate(), bar.close().divide(eps, SCALE, RoundingMode.HALF_UP)));
         }
         return points;
-    }
-
-    /**
-     * 최근 4개 분기 순이익 합을 발행주식수로 나눈 주당순이익.
-     *
-     * <p>분기가 4개 미만이거나 필요한 항목이 비어 있으면 null을 반환한다.
-     */
-    private BigDecimal trailingTwelveMonthEps(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
-        if (quarters.size() < TTM_QUARTERS) {
-            return null;
-        }
-
-        BigDecimal netIncomeSum = BigDecimal.ZERO;
-        for (int i = 0; i < TTM_QUARTERS; i++) {
-            BigDecimal netIncome = quarters.get(i).netIncome();
-            if (netIncome == null) {
-                return null;
-            }
-            netIncomeSum = netIncomeSum.add(netIncome);
-        }
-
-        // 발행주식수는 가장 최근 분기 값을 쓴다. 기간 중 변동이 있어도 최신 상태가
-        // 현재 주가와 짝이 맞기 때문이다.
-        BigDecimal shares = quarters.get(0).sharesOutstanding();
-        if (shares == null || shares.signum() <= 0) {
-            return null;
-        }
-        return netIncomeSum.divide(shares, SCALE, RoundingMode.HALF_UP);
     }
 }

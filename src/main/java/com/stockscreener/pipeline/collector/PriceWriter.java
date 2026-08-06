@@ -37,18 +37,19 @@ public class PriceWriter {
     private static final String UPSERT = """
             INSERT INTO price_daily
                 (stock_id, trade_date, open, high, low, close, adj_close, adj_factor,
-                 volume, trade_value, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())
+                 volume, trade_value, listed_shares, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())
             ON CONFLICT (stock_id, trade_date) DO UPDATE SET
-                open        = EXCLUDED.open,
-                high        = EXCLUDED.high,
-                low         = EXCLUDED.low,
-                close       = EXCLUDED.close,
-                adj_close   = EXCLUDED.adj_close,
-                adj_factor  = EXCLUDED.adj_factor,
-                volume      = EXCLUDED.volume,
-                trade_value = EXCLUDED.trade_value,
-                updated_at  = now()
+                open          = EXCLUDED.open,
+                high          = EXCLUDED.high,
+                low           = EXCLUDED.low,
+                close         = EXCLUDED.close,
+                adj_close     = EXCLUDED.adj_close,
+                adj_factor    = EXCLUDED.adj_factor,
+                volume        = EXCLUDED.volume,
+                trade_value   = EXCLUDED.trade_value,
+                listed_shares = EXCLUDED.listed_shares,
+                updated_at    = now()
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -104,6 +105,11 @@ public class PriceWriter {
                 ps.setNull(10, Types.NUMERIC);
             } else {
                 ps.setBigDecimal(10, bar.tradeValue());
+            }
+            if (bar.listedShares() == null) {
+                ps.setNull(11, Types.NUMERIC);
+            } else {
+                ps.setBigDecimal(11, bar.listedShares());
             }
         });
 
