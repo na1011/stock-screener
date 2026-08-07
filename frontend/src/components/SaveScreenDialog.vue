@@ -10,6 +10,7 @@ import { computed, ref, watch } from 'vue'
 
 import { ApiError, ProblemType } from '@/api/http'
 import type { ScreenRequest } from '@/api/types'
+import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
 
@@ -138,7 +139,7 @@ async function save(): Promise<void> {
 
       <p class="save-dialog__summary">
         조건 {{ draft.completeConditions.length }}개 ·
-        {{ draft.evaluationMode === 'SCORING' ? '가중치 점수' : '조건 충족' }}
+        {{ evaluationModeLabels(draft.evaluationMode).noun }}
       </p>
 
       <Message v-if="otherError" severity="error" :closable="false">{{ otherError }}</Message>

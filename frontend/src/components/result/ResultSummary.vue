@@ -4,6 +4,7 @@ import { computed } from 'vue'
 
 import { PERCENTILE_POPULATION_ALL } from '@/api/types'
 import type { ScreeningResponse } from '@/api/types'
+import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { formatDate } from '@/lib/format'
 
 /**
@@ -81,7 +82,7 @@ const knownPopulation = computed(
       </div>
       <div class="summary__fact">
         <dt>판정</dt>
-        <dd>{{ result.evaluationMode === 'SCORING' ? '가중치 점수' : '조건 충족' }}</dd>
+        <dd>{{ evaluationModeLabels(result.evaluationMode).noun }}</dd>
       </div>
     </dl>
 

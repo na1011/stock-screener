@@ -7,9 +7,9 @@ import SelectButton from 'primevue/selectbutton'
 import Tag from 'primevue/tag'
 import { computed, onMounted } from 'vue'
 
-import type { EvaluationMode } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import ConditionRow from '@/components/condition/ConditionRow.vue'
+import { evaluationModeOptions } from '@/lib/evaluationMode'
 import { parseIsoDate, toIsoDate } from '@/lib/format'
 import { useCatalogStore } from '@/stores/catalog'
 import { MAX_CONDITIONS, useScreenDraftStore } from '@/stores/screenDraft'
@@ -33,11 +33,6 @@ const catalog = useCatalogStore()
 const draft = useScreenDraftStore()
 
 const readonly = computed(() => draft.readOnly)
-
-const modeOptions: { label: string; value: EvaluationMode }[] = [
-  { label: '조건 충족으로 거르기', value: 'FILTER' },
-  { label: '가중치 점수로 줄 세우기', value: 'SCORING' },
-]
 
 const universeOptions = computed(() => [
   { code: null as string | null, name: '전체 (코스피200 + 코스닥150)' },
@@ -87,7 +82,7 @@ onMounted(() => {
         <label class="builder__label">판정 방식</label>
         <SelectButton
           :model-value="draft.evaluationMode"
-          :options="modeOptions"
+          :options="evaluationModeOptions"
           option-label="label"
           option-value="value"
           :allow-empty="false"

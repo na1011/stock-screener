@@ -9,8 +9,20 @@
 /** ISO-8601 날짜(yyyy-MM-dd). Jackson이 LocalDate를 이 형식으로 직렬화한다. */
 export type IsoDate = string
 
-export type EvaluationMode = 'FILTER' | 'SCORING'
-export type ScreenType = 'PRESET' | 'CUSTOM'
+/**
+ * 서버 enum을 배열에서 파생시키는 이유.
+ *
+ * 유니온만 있으면 컴파일 시점 밖에서는 아무것도 할 수 없다. 배열로 두면 선택지를 손으로 적지
+ * 않아도 되고(적으면 값이 늘 때 배열만 낡는다), `wire-contract.json`과 실제로 대조할 수 있다.
+ *
+ * `ComparisonOperatorName`은 일부러 배열로 만들지 않는다 — 연산자 목록의 정본은 서버이고
+ * (`/api/indicators`가 라벨과 함께 준다) 배열이 있으면 프론트가 그것을 나열하고 싶어진다.
+ */
+export const EVALUATION_MODES = ['FILTER', 'SCORING'] as const
+export type EvaluationMode = (typeof EVALUATION_MODES)[number]
+
+export const SCREEN_TYPES = ['PRESET', 'CUSTOM'] as const
+export type ScreenType = (typeof SCREEN_TYPES)[number]
 
 /** 조건별 판정. boolean으로 접으면 "판정 불가"가 "불충족"과 같아진다(ADR-0003). */
 export type OutcomeStatus = 'MATCHED' | 'NOT_MATCHED' | 'NOT_EVALUABLE'

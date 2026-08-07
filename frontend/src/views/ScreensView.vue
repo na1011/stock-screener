@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import { useApiToast } from '@/composables/useApiToast'
+import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
 
@@ -99,7 +100,7 @@ async function remove(id: number, name: string): Promise<void> {
                 <strong>{{ screen.name }}</strong>
                 <Tag value="프리셋" severity="info" />
                 <Tag
-                  :value="screen.evaluationMode === 'SCORING' ? '점수' : '필터'"
+                  :value="evaluationModeLabels(screen.evaluationMode).short"
                   severity="secondary"
                 />
               </div>
@@ -130,7 +131,7 @@ async function remove(id: number, name: string): Promise<void> {
               <div class="screen-item__title">
                 <strong>{{ screen.name }}</strong>
                 <Tag
-                  :value="screen.evaluationMode === 'SCORING' ? '점수' : '필터'"
+                  :value="evaluationModeLabels(screen.evaluationMode).short"
                   severity="secondary"
                 />
               </div>
