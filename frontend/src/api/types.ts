@@ -401,3 +401,40 @@ export interface PriceReference {
   lastClose: number | null
   zones: PriceReferenceZone[]
 }
+
+// ── 워치리스트 ────────────────────────────────────────────────────
+
+/**
+ * 관심종목 한 줄.
+ *
+ * IMPORTANT — `satisfied`는 **세 값**이다. `null`은 "아직 판정한 적 없음"(담은 직후,
+ * 또는 알림 조건을 방금 바꿈)이고 `false`는 "판정했고 조건에 안 맞음"이다. 둘을 접으면
+ * 사용자는 배치가 돌았는지조차 알 수 없다 — 판정 3상태를 화면이 접지 않는 것과 같은 규칙이다.
+ *
+ * `screenId`가 null이면 알림 없이 추적만 한다. 그때 `screenName`·`screenType`도 null이다.
+ */
+export interface WatchlistItem {
+  id: number
+  stockId: number
+  ticker: string
+  stockName: string
+  marketCode: string
+  screenId: number | null
+  screenName: string | null
+  screenType: ScreenType | null
+  memo: string | null
+  /** null = 아직 판정 전. false = 판정했고 불충족. */
+  satisfied: boolean | null
+  /** 마지막으로 알림이 나간 시각(ISO). 아직 없으면 null. */
+  notifiedAt: string | null
+  createdAt: string
+}
+
+export interface WatchlistRequest {
+  stockId: number
+  screenId?: number | null
+  memo?: string | null
+}
+
+/** 서버의 `@Size(max = 500)`을 거울로 든다(ADR-0020, wire-contract의 watchlistMemoMaxLength). */
+export const WATCHLIST_MEMO_MAX_LENGTH = 500

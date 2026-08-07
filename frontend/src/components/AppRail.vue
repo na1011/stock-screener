@@ -15,6 +15,7 @@ import { screenTypeLabel } from '@/lib/screen'
 import { useAuthStore } from '@/stores/auth'
 import { FRESH_DRAFT_TITLE, useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
+import { useWatchlistStore } from '@/stores/watchlist'
 
 /**
  * 좌측 레일.
@@ -28,6 +29,7 @@ import { useScreensStore } from '@/stores/screens'
  */
 const auth = useAuthStore()
 const screens = useScreensStore()
+const watchlist = useWatchlistStore()
 const draft = useScreenDraftStore()
 const route = useRoute()
 const router = useRouter()
@@ -60,6 +62,9 @@ const userMenuItems = computed<MenuItem[]>(() => {
 
 onMounted(() => {
   void screens.ensureLoaded()
+  // 배지가 처음부터 맞으려면 여기서 한 번 읽어야 한다. 워치리스트 화면에 들어가야 채워지면
+  // "충족된 것이 있다"를 알려주는 자리가 아니게 된다.
+  void watchlist.ensureLoaded()
 })
 
 const sections = computed(() => [
@@ -120,6 +125,22 @@ async function startFresh(): Promise<void> {
       >
         <i class="pi pi-bookmark rail__icon" aria-hidden="true" />
         <span>화면 관리</span>
+      </RouterLink>
+      <RouterLink
+        to="/watchlist"
+        class="app-list-button rail__item"
+        :class="{ 'rail__item--active': route.path.startsWith('/watchlist') }"
+        @click="emit('navigate')"
+      >
+        <i class="pi pi-star rail__icon" aria-hidden="true" />
+        <span>관심종목</span>
+        <!--
+          충족 중인 항목 수. 0이면 배지를 그리지 않는다 — 늘 0이 붙어 있으면 그 자리는
+          곧 배경이 되고, 실제로 무언가 충족된 날에도 눈에 띄지 않는다.
+        -->
+        <span v-if="watchlist.satisfiedCount > 0" class="rail__badge tabular">
+          {{ watchlist.satisfiedCount }}
+        </span>
       </RouterLink>
     </nav>
 
@@ -307,6 +328,18 @@ async function startFresh(): Promise<void> {
 
 .rail__count {
   color: var(--p-text-subtle-color);
+}
+
+/* 충족 중인 관심종목 수. 항목 오른쪽 끝으로 민다. */
+.rail__badge {
+  margin-left: auto;
+  padding: 0 0.375rem;
+  border-radius: 999px;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--p-primary-contrast-color);
+  background: var(--p-primary-color);
 }
 
 .rail__list {

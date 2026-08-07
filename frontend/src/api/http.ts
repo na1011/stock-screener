@@ -32,6 +32,8 @@ export const ProblemType = {
   PRESET_READ_ONLY: 'urn:stockscreener:preset-is-read-only',
   DUPLICATE_SCREEN_NAME: 'urn:stockscreener:duplicate-screen-name',
   SCREEN_IN_USE: 'urn:stockscreener:screen-in-use',
+  WATCHLIST_ITEM_NOT_FOUND: 'urn:stockscreener:watchlist-item-not-found',
+  ALREADY_WATCHED: 'urn:stockscreener:already-watched',
   CONFLICT: 'urn:stockscreener:conflict',
 } as const
 

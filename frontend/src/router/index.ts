@@ -24,6 +24,11 @@ export const router = createRouter({
         { path: '', name: 'screener', component: () => import('@/views/ScreenerView.vue') },
         { path: 'screens', name: 'screens', component: () => import('@/views/ScreensView.vue') },
         {
+          path: 'watchlist',
+          name: 'watchlist',
+          component: () => import('@/views/WatchlistView.vue'),
+        },
+        {
           path: 'stocks/:stockId(\\d+)',
           name: 'stock',
           component: () => import('@/views/StockDetailView.vue'),

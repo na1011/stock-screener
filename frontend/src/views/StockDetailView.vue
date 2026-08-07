@@ -8,6 +8,7 @@ import type { StockIndicatorValue } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import PriceReferencePanel from '@/components/stock/PriceReferencePanel.vue'
+import WatchButton from '@/components/watchlist/WatchButton.vue'
 import BandMeter from '@/components/ui/BandMeter.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useAsync } from '@/composables/useAsync'
@@ -123,10 +124,20 @@ onMounted(() => {
           screens·stock)이라 부모-자식 관계가 없고, 유일한 이동 수단인 레일은 좁은 폭에서
           햄버거 서랍 안으로 들어간다. 결과는 스토어에 살아 있으므로 돌아가면 그대로다.
         -->
-        <RouterLink :to="{ name: 'screener' }" class="stock-detail__back">
-          <i class="pi pi-angle-left" aria-hidden="true" />
-          <span>스크리너</span>
-        </RouterLink>
+        <div class="stock-detail__topbar">
+          <RouterLink :to="{ name: 'screener' }" class="stock-detail__back">
+            <i class="pi pi-angle-left" aria-hidden="true" />
+            <span>스크리너</span>
+          </RouterLink>
+          <!--
+            담기를 여기 두는 이유는 spec §5의 흐름이다 — 종목을 깊이 들여다본 그 자리에서
+            추적을 시작할 수 있어야 한다. 별도 화면으로 빼면 흐름이 여기서 끊긴다.
+          -->
+          <WatchButton
+            :stock-id="detail.data.value.stock.id"
+            :stock-name="detail.data.value.stock.name"
+          />
+        </div>
 
         <header class="stock-detail__header">
           <div class="stock-detail__identity">
@@ -263,12 +274,21 @@ onMounted(() => {
 }
 
 /* 종목명 위에 붙는 한 줄. 제목보다 작고 흐려야 "여기가 어디인가"를 먼저 읽지 않는다. */
+/* 돌아가는 길과 담기 버튼이 같은 줄에 선다. 좁아지면 담기 버튼이 아래로 내려간다. */
+.stock-detail__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: -0.5rem;
+}
+
 .stock-detail__back {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 0.125rem;
-  margin-bottom: -0.5rem;
   padding: 0.125rem 0.375rem 0.125rem 0.125rem;
   border-radius: var(--p-border-radius-md);
   color: var(--p-text-muted-color);

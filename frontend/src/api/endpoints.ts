@@ -11,6 +11,8 @@ import type {
   StockDetailResponse,
   StockSearchResult,
   UniverseResponse,
+  WatchlistItem,
+  WatchlistRequest,
 } from './types'
 
 /**
@@ -66,4 +68,20 @@ export const api = {
   /** 지지·저항. 종목 상세와 **별도 요청**이다 — 한쪽이 실패해도 다른 쪽은 산다(ADR-0014). */
   priceReference: (stockId: number, asOf?: IsoDate | null, signal?: AbortSignal) =>
     apiFetch<PriceReference>(`/api/stocks/${stockId}/price-reference`, { query: { asOf }, signal }),
+
+  watchlist: (signal?: AbortSignal) => apiFetch<WatchlistItem[]>('/api/watchlist', { signal }),
+
+  /**
+   * 담기·수정·해제는 자동 재시도하지 않는다.
+   *
+   * 생성을 재시도하면 응답만 유실된 경우 같은 항목을 두 번 만들려 하고, 그때 서버는
+   * 409(ALREADY_WATCHED)를 준다 — 사용자는 담기지 않은 줄 알게 된다.
+   */
+  addToWatchlist: (body: WatchlistRequest) =>
+    apiFetch<WatchlistItem>('/api/watchlist', { method: 'POST', body }),
+
+  updateWatchlistItem: (id: number, body: WatchlistRequest) =>
+    apiFetch<WatchlistItem>(`/api/watchlist/${id}`, { method: 'PUT', body }),
+
+  removeFromWatchlist: (id: number) => apiFetch<void>(`/api/watchlist/${id}`, { method: 'DELETE' }),
 }
