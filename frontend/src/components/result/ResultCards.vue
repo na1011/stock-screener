@@ -117,21 +117,25 @@ function toggle(stockId: number): void {
 
 <template>
   <div class="cards">
+    <!--
+      검색과 정렬을 한 줄에 둔다. 세로로 쌓으면 둘이 66px을 먹는데, 모바일에서는 그 높이가
+      그대로 카드 하나 분량이다. 좁으면 알아서 줄바꿈한다.
+    -->
     <div class="cards__controls">
       <IconField class="cards__search">
         <InputIcon class="pi pi-search" />
-        <InputText v-model="query" :placeholder="RESULT_LABELS.search" />
+        <InputText v-model="query" :placeholder="RESULT_LABELS.search" size="small" />
       </IconField>
       <Select
         v-model="sortBy"
         :options="sortOptions"
         option-label="label"
         option-value="value"
-        fluid
+        size="small"
+        class="cards__sort"
       />
+      <span class="cards__count tabular">{{ formatCount(visibleRows.length) }}종목</span>
     </div>
-
-    <p class="cards__count">{{ formatCount(visibleRows.length) }}종목</p>
 
     <p v-if="visibleRows.length === 0" class="cards__empty">{{ RESULT_LABELS.empty }}</p>
 
@@ -198,23 +202,32 @@ function toggle(stockId: number): void {
 .cards {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .cards__controls {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
 }
 
+/* 검색이 남는 폭을 먹되 정렬이 잘리지 않을 만큼은 남긴다. */
 .cards__search {
-  width: 100%;
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.cards__sort {
+  flex: 0 1 9.5rem;
+  min-width: 0;
 }
 
 .cards__count {
-  margin: 0;
-  font-size: var(--app-text-sm);
-  color: var(--p-text-muted-color);
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  font-size: var(--app-text-2xs);
+  color: var(--p-surface-500);
 }
 
 .cards__empty {
@@ -227,10 +240,10 @@ function toggle(stockId: number): void {
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
   background: var(--p-content-background);
-  padding: 0.75rem;
+  padding: 0.5rem 0.625rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .card__header {
@@ -250,6 +263,7 @@ function toggle(stockId: number): void {
 /* 긴 종목명이 오른쪽 가격을 밀어내지 않게 한다. min-width: 0만으로는 줄지 않는다 —
    줄일 수 있다는 것과 잘라 그린다는 것은 다르다. */
 .card__name {
+  font-size: var(--app-text-sm);
   font-weight: 600;
   color: inherit;
   overflow: hidden;
@@ -257,12 +271,15 @@ function toggle(stockId: number): void {
   white-space: nowrap;
 }
 
+/* 표의 종목 셀과 같은 위계다 — 티커는 3순위. 카드와 표가 같은 것을 다르게 그리면
+   폭만 바뀌었는데 다른 화면으로 읽힌다. */
 .card__ticker {
-  font-size: var(--app-text-xs);
-  color: var(--p-text-muted-color);
+  font-size: var(--app-text-2xs);
+  color: var(--p-surface-500);
 }
 
 .card__price {
+  font-size: var(--app-text-sm);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -270,19 +287,19 @@ function toggle(stockId: number): void {
 .card__metrics {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
+  gap: 0.25rem 0.875rem;
 }
 
 .card__metric {
   display: flex;
   align-items: baseline;
   gap: 0.25rem;
-  font-size: var(--app-text-md);
+  font-size: var(--app-text-xs);
 }
 
 .card__metric-label,
 .card__metric-sub {
-  font-size: var(--app-text-xs);
+  font-size: var(--app-text-2xs);
   color: var(--p-text-muted-color);
 }
 

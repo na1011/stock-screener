@@ -154,13 +154,21 @@ const items = computed(() =>
   color: var(--p-text-muted-color);
 }
 
+/*
+ * 모바일에서는 조건이 두 줄이 된다 — 첫 줄에 판정과 조건문, 둘째 줄에 실제값과 점수.
+ *
+ * 첫 칸을 `auto`가 아니라 **고정 폭**으로 두는 것이 요점이다. `auto`면 각 `<li>`가 자기만의
+ * 그리드라 첫 칸이 그 행의 `실제 …` 길이에 맞춰지고, 값의 자릿수가 다르면 조건문이 행마다
+ * 다른 자리에서 시작한다. 세로로 읽어 내려가는 목록에서 그 들쭉날쭉함이 가장 먼저 보인다.
+ */
 @media (max-width: 767px) {
   .outcomes__item {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: 4.5rem 1fr auto;
     grid-template-areas:
-      'status text'
-      'actual score';
+      'status text   text'
+      'actual actual score';
     row-gap: 0.125rem;
+    column-gap: 0.5rem;
   }
 
   .outcomes__status {
