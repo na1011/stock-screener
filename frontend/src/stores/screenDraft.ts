@@ -39,6 +39,15 @@ export type DraftOrigin =
   | { kind: 'preset'; code: string; name: string }
   | { kind: 'screen'; id: number; name: string }
 
+/**
+ * 아무 화면도 열지 않은 상태를 부르는 말.
+ *
+ * 여기가 정본인 이유는 {@link useScreenDraftStore}의 `title`이 이미 이 말을 쓰고 있기
+ * 때문이다. 그런데 레일과 칩 바가 **같은 상태로 되돌리는 버튼**에 각자 문구를 적어 두어,
+ * 버튼과 그 버튼이 만드는 제목이 어긋날 수 있었다.
+ */
+export const FRESH_DRAFT_TITLE = '새 조건'
+
 let nextKey = 1
 
 function emptyCondition(indicatorCode: string | null = null): DraftCondition {
@@ -94,7 +103,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
    */
   const editable = ref(true)
 
-  const title = computed(() => (origin.value.kind === 'custom' ? '새 조건' : origin.value.name))
+  const title = computed(() => (origin.value.kind === 'custom' ? FRESH_DRAFT_TITLE : origin.value.name))
   /** 출처가 프리셋인가. **표시용**이다 — 권한 판단은 {@link editable}이 한다. */
   const isPreset = computed(() => origin.value.kind === 'preset')
   /** 편집기를 잠글 것인가. 손을 대면(dirty) 복제본을 만드는 중이므로 잠금이 풀린다. */

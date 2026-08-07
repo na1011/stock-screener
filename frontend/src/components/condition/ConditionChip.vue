@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { summarizeDraftCondition } from '@/lib/conditionText'
+import { PICK_INDICATOR, summarizeDraftCondition } from '@/lib/conditionText'
 import { directionStyle, indicatorDirection } from '@/lib/direction'
 import { useCatalogStore } from '@/stores/catalog'
 import type { DraftCondition } from '@/stores/screenDraft'
@@ -87,7 +87,7 @@ const direction = computed(() =>
       direction.marker
     }}</span>
 
-    <span class="chip__label">{{ label ?? '지표 선택' }}</span>
+    <span class="chip__label">{{ label ?? PICK_INDICATOR }}</span>
 
     <!--
       미완성을 말로 적는다. 점선 테두리만으로는 "아직 덜 됐다"와 "비활성"이 구별되지 않고,

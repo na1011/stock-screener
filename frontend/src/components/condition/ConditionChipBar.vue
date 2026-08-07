@@ -11,10 +11,11 @@ import ConditionChip from '@/components/condition/ConditionChip.vue'
 import ConditionEditor from '@/components/condition/ConditionEditor.vue'
 import IndicatorPicker from '@/components/condition/IndicatorPicker.vue'
 import ScreenSettingsPopover from '@/components/condition/ScreenSettingsPopover.vue'
+import { incompleteConditionNotice } from '@/lib/conditionText'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { ALL_UNIVERSES_LABEL } from '@/lib/universe'
 import { useCatalogStore } from '@/stores/catalog'
-import { useScreenDraftStore } from '@/stores/screenDraft'
+import { FRESH_DRAFT_TITLE, useScreenDraftStore } from '@/stores/screenDraft'
 
 /**
  * 조건 전부를 한 줄(넘치면 두 줄)로.
@@ -59,6 +60,9 @@ const readonly = computed(() => draft.readOnly)
 const incompleteCount = computed(
   () => draft.conditions.length - draft.completeConditions.length,
 )
+
+/** 실행 버튼 툴팁과 짝이다(ADR-0024). 문구의 정본은 `lib/conditionText`에 있다. */
+const incompleteNotice = computed(() => incompleteConditionNotice(incompleteCount.value))
 
 /**
  * 설정 칩의 라벨. 접어 둔 것이 무엇으로 설정되어 있는지 여기서 답한다.
@@ -263,16 +267,16 @@ function startFresh(): void {
           size="small"
           text
           icon="pi pi-eraser"
-          label="새 조건"
+          :label="FRESH_DRAFT_TITLE"
           @click="startFresh"
         />
       </div>
     </div>
 
     <!-- 미완성이 있으면 말로 알린다. 조용히 버리지 않는 것이 이 줄의 존재 이유다. -->
-    <p v-if="incompleteCount > 0 && !readonly" class="bar__incomplete">
+    <p v-if="incompleteNotice && !readonly" class="bar__incomplete">
       <i class="pi pi-info-circle" aria-hidden="true" />
-      값을 채우지 않은 조건 {{ incompleteCount }}개는 실행에서 제외됩니다.
+      {{ incompleteNotice }}
     </p>
 
     <!-- 닫힌 뒤에야 다음 칩을 연다. 이유는 `openEditor` 주석에 있다. -->

@@ -39,6 +39,15 @@ export const ProblemType = {
 export const NETWORK_ERROR_STATUS = 0
 
 /**
+ * 그때 사용자에게 보이는 말. **여기가 정본이다.**
+ *
+ * `LoginView`가 같은 문장을 따로 적어 두고 그 아래에 `error.userMessage`를 detail로 깔고
+ * 있었다 — 네트워크 오류에서는 **같은 문장이 두 줄로** 나왔다. 거울을 없애고, 아래 줄은
+ * 이것과 다를 때만 쓰게 한다.
+ */
+export const NETWORK_ERROR_MESSAGE = '서버에 연결하지 못했습니다.'
+
+/**
  * 보존 기간 밖 오류가 함께 싣는 구간.
  *
  * IMPORTANT — 이 두 필드 이름은 **양쪽 컴파일러 모두에게 보이지 않는다.** 서버에서는
@@ -234,7 +243,7 @@ async function send<T>(url: string, method: HttpMethod, request: ApiRequest): Pr
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw error
     }
-    throw new ApiError(NETWORK_ERROR_STATUS, null, '서버에 연결하지 못했습니다.')
+    throw new ApiError(NETWORK_ERROR_STATUS, null, NETWORK_ERROR_MESSAGE)
   }
 
   if (!response.ok) {

@@ -5,6 +5,7 @@ import InputText from 'primevue/inputtext'
 import { computed, nextTick, ref } from 'vue'
 
 import type { IndicatorResponse } from '@/api/types'
+import { SEARCH_INDICATOR } from '@/lib/conditionText'
 import { directionStyle, indicatorDirection } from '@/lib/direction'
 import { BUILDER_CATEGORY_RANK, categoryLabel, groupByCategory } from '@/lib/indicatorCategory'
 import { useCatalogStore } from '@/stores/catalog'
@@ -80,8 +81,8 @@ defineExpose({ focusSearch })
       <InputText
         ref="searchInput"
         v-model="query"
-        placeholder="지표 검색"
-        aria-label="지표 검색"
+        :placeholder="SEARCH_INDICATOR"
+        :aria-label="SEARCH_INDICATOR"
         fluid
         @keydown.esc.stop="query = ''"
       />

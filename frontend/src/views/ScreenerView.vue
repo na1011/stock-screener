@@ -11,6 +11,7 @@ import ResultCards from '@/components/result/ResultCards.vue'
 import ResultSummary from '@/components/result/ResultSummary.vue'
 import ResultTable from '@/components/result/ResultTable.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { incompleteConditionNotice } from '@/lib/conditionText'
 import { screenTypeLabel } from '@/lib/screen'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreeningStore } from '@/stores/screening'
@@ -49,11 +50,7 @@ const runLabel = computed(() => (stale.value ? '변경 반영' : '스크리닝 �
  */
 const incompleteCount = computed(() => draft.conditions.length - draft.completeConditions.length)
 
-const runHint = computed(() =>
-  incompleteCount.value > 0
-    ? `값을 채우지 않은 조건 ${incompleteCount.value}개는 제외하고 실행합니다.`
-    : null,
-)
+const runHint = computed(() => incompleteConditionNotice(incompleteCount.value))
 
 async function run(): Promise<void> {
   const request = draft.toRequest()

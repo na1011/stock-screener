@@ -21,10 +21,20 @@ export function screenKey(screen: ScreenResponse): number | string {
 }
 
 /**
+ * 불러오기 실패 알림의 제목.
+ *
+ * 세 곳(`AppRail`·`ScreenPicker`·`ScreensView`)이 같은 문구를 각자 적고 있었다. 문구가
+ * 흩어지면 한쪽만 고쳐지고, 사용자는 **같은 실패를 화면마다 다른 말로** 듣게 된다.
+ */
+const OPEN_FAILED = '불러오지 못했습니다'
+
+/**
  * 저장된 화면·프리셋을 편집기로 불러오는 동작.
  *
- * 레일(`AppRail`)과 좁은 폭의 Select(`ScreenPicker`)가 같은 것을 한다. 각자 구현하면
- * 한쪽만 고쳐지고, 그 차이는 "어느 쪽으로 골랐느냐"에 따라 다르게 동작하는 형태로 나타난다.
+ * 레일(`AppRail`)·좁은 폭의 Select(`ScreenPicker`)·목록 화면(`ScreensView`) 셋이 같은 것을
+ * 한다. 각자 구현하면 한쪽만 고쳐지고, 그 차이는 "어느 쪽으로 골랐느냐"에 따라 다르게
+ * 동작하는 형태로 나타난다 — 실제로 `ScreenPicker`가 키 유도부터 실패 문구까지 통째로
+ * 복제하고 있었다.
  */
 export function useScreenOpener() {
   const screens = useScreensStore()
@@ -33,26 +43,33 @@ export function useScreenOpener() {
 
   const loading = ref(false)
 
-  async function openByKey(key: number | string | null): Promise<void> {
+  /**
+   * @return 실제로 불러왔으면 `true`. 실패는 여기서 알림까지 끝내므로 호출부가 다시 잡을
+   *   것은 없지만, **성공에만 이어지는 동작**(목록 화면의 스크리너 이동)이 있어 결과가
+   *   필요하다. `void`로 두면 실패 토스트를 띄운 채로 화면까지 넘어간다.
+   */
+  async function openByKey(key: number | string | null): Promise<boolean> {
     if (key === null) {
       // 비운 경우다. 편집 중인 조건은 그대로 둔다.
-      return
+      return false
     }
     const found = screens.all.find((it) => screenKey(it) === key)
     if (found === undefined || found.id === null) {
       // 여기 오면 목록과 선택이 어긋난 것이다. 조용히 넘기면 사용자는 클릭이 먹지 않는
       // 화면을 보게 되고, 무엇이 잘못됐는지 알 방법이 없다.
       notifyFailure(
-        '불러오지 못했습니다',
+        OPEN_FAILED,
         new ApiError(0, null, '고른 화면을 목록에서 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.'),
       )
-      return
+      return false
     }
     loading.value = true
     try {
       draft.loadFrom(await screens.open(found.id))
+      return true
     } catch (caught) {
-      notifyFailure('불러오지 못했습니다', caught)
+      notifyFailure(OPEN_FAILED, caught)
+      return false
     } finally {
       loading.value = false
     }

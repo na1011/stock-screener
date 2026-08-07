@@ -86,6 +86,31 @@ export function summarizeDraftCondition(
   return `${indicator.name} ${formatEnteredNumber(condition.value, scale)}${unit}${tail}`
 }
 
+/**
+ * 지표를 아직 고르지 않았을 때 그 자리에 적는 말.
+ *
+ * 칩의 라벨 폴백({@link summarizeDraftCondition}이 null을 낼 때)과 편집기의 지표 Select
+ * placeholder가 **같은 상태를 가리킨다.** 두 곳에 따로 적혀 있어서, 한쪽만 고치면 같은
+ * "아직 안 골랐다"가 화면 안에서 두 가지 말로 나온다.
+ */
+export const PICK_INDICATOR = '지표 선택'
+
+/** 지표 검색 입력의 안내. 편집기의 Select 필터와 지표 피커가 같은 것을 한다. */
+export const SEARCH_INDICATOR = '지표 검색'
+
+/**
+ * 값을 채우지 않은 조건이 실행에서 빠진다는 안내.
+ *
+ * IMPORTANT — 칩 바 아래 한 줄과 실행 버튼 툴팁이 짝이다(ADR-0024). 짝인데 문구가 두 곳에
+ * 따로 적혀 있었고 **이미 어긋나 있었다** — "실행에서 제외됩니다"와 "제외하고 실행합니다".
+ * 변형을 두지 않고 한 문장으로 합친다. 두 자리가 요구하는 것이 같기 때문이다.
+ *
+ * @return 빠질 것이 없으면 null. 호출부가 그대로 `v-if`·툴팁 바인딩에 쓴다.
+ */
+export function incompleteConditionNotice(count: number): string | null {
+  return count > 0 ? `값을 채우지 않은 조건 ${count}개는 실행에서 제외됩니다.` : null
+}
+
 function describeOperand(
   operand: OperandPayload,
   decimalScale: number,

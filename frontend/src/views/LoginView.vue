@@ -4,12 +4,24 @@ import Message from 'primevue/message'
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { NETWORK_ERROR_MESSAGE } from '@/api/http'
 import BrandMark from '@/components/BrandMark.vue'
 import { APP_NAME } from '@/lib/appInfo'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const route = useRoute()
+
+/**
+ * 머리글 아래 덧붙일 상세.
+ *
+ * 네트워크 오류면 `userMessage`가 머리글과 **같은 문장**이라 두 줄이 겹쳐 보였다. 다를 때만
+ * 낸다 — 5xx나 타임아웃이면 서버가 준 말이 붙는다.
+ */
+const unavailableDetail = computed(() => {
+  const message = auth.error?.userMessage ?? null
+  return message === NETWORK_ERROR_MESSAGE ? null : message
+})
 
 /**
  * OAuth 실패는 `/login?error`로 돌아온다.
@@ -52,8 +64,8 @@ async function retryProbe(): Promise<void> {
         <!-- 서버가 답하지 않은 것과 로그인하지 않은 것은 다르다. 여기서 로그인 버튼만
              보여주면 사용자는 자기 계정 문제로 읽고 로그인을 반복한다. -->
         <Message severity="warn" :closable="false" class="login__message">
-          <div>서버에 연결하지 못했습니다.</div>
-          <div class="login__detail">{{ auth.error?.userMessage }}</div>
+          <div>{{ NETWORK_ERROR_MESSAGE }}</div>
+          <div v-if="unavailableDetail" class="login__detail">{{ unavailableDetail }}</div>
         </Message>
         <Button
           label="다시 시도"

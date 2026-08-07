@@ -10,9 +10,9 @@ import AsyncPanel from '@/components/AsyncPanel.vue'
 import { panelSubject } from '@/components/asyncPanel'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useApiToast } from '@/composables/useApiToast'
+import { screenKey, useScreenOpener } from '@/composables/useScreenOpener'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { screenTypeLabel } from '@/lib/screen'
-import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
 
 /**
@@ -23,10 +23,10 @@ import { useScreensStore } from '@/stores/screens'
  * 없으므로(`conditions`가 null) 이 한 번의 추가 요청이 필요하다.
  */
 const screens = useScreensStore()
-const draft = useScreenDraftStore()
 const router = useRouter()
 const confirm = useConfirm()
 const { notifyFailure, notifySuccess } = useApiToast()
+const { openByKey } = useScreenOpener()
 
 const busyId = ref<number | null>(null)
 
@@ -34,16 +34,19 @@ onMounted(() => {
   void screens.ensureLoaded()
 })
 
+/**
+ * 불러오기는 `useScreenOpener`가 한다. 여기가 더하는 것은 **성공했을 때 스크리너로 보내는
+ * 것**뿐이다 — 실패 문구와 오류 처리를 다시 적으면 레일로 고를 때와 다른 말이 나온다.
+ */
 async function load(screen: ScreenResponse): Promise<void> {
   if (screen.id === null) {
     return
   }
   busyId.value = screen.id
   try {
-    draft.loadFrom(await screens.open(screen.id))
-    await router.push({ name: 'screener' })
-  } catch (caught) {
-    notifyFailure('불러오지 못했습니다', caught)
+    if (await openByKey(screenKey(screen))) {
+      await router.push({ name: 'screener' })
+    }
   } finally {
     busyId.value = null
   }

@@ -8,6 +8,7 @@ import { OPERAND_TYPES } from '@/api/types'
 import type { ComparisonOperatorName, IndicatorBand, OperandType } from '@/api/types'
 import FormField from '@/components/ui/FormField.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import { PICK_INDICATOR, SEARCH_INDICATOR } from '@/lib/conditionText'
 import { formatEnteredNumber } from '@/lib/format'
 import { topQuintileCondition } from '@/lib/direction'
 import { useCatalogStore } from '@/stores/catalog'
@@ -286,9 +287,9 @@ function onOperandTypeChange(value: OperandType | null): void {
               option-group-children="items"
               option-label="label"
               option-value="value"
-              placeholder="지표 선택"
+              :placeholder="PICK_INDICATOR"
               filter
-              filter-placeholder="지표 검색"
+              :filter-placeholder="SEARCH_INDICATOR"
               size="small"
               fluid
               @update:model-value="

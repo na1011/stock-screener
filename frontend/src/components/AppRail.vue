@@ -13,7 +13,7 @@ import { useScreenOpener, screenKey } from '@/composables/useScreenOpener'
 import { APP_NAME } from '@/lib/appInfo'
 import { screenTypeLabel } from '@/lib/screen'
 import { useAuthStore } from '@/stores/auth'
-import { useScreenDraftStore } from '@/stores/screenDraft'
+import { FRESH_DRAFT_TITLE, useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
 
 /**
@@ -70,9 +70,11 @@ const sections = computed(() => [
 const isFresh = computed(() => draft.origin.kind === 'custom')
 
 async function pick(screen: ScreenResponse): Promise<void> {
-  await openByKey(screenKey(screen))
-  // 좁은 폭에서는 레일이 서랍이다. 고르고 나면 닫혀야 결과가 보인다.
-  emit('navigate')
+  if (await openByKey(screenKey(screen))) {
+    // 좁은 폭에서는 레일이 서랍이다. 고르고 나면 닫혀야 결과가 보인다. 실패했으면 열어 둔다 —
+    // 닫아 버리면 토스트만 남고 다시 고르려면 서랍부터 열어야 한다.
+    emit('navigate')
+  }
 }
 
 function startFresh(): void {
@@ -152,7 +154,7 @@ function startFresh(): void {
         @click="startFresh"
       >
         <i class="pi pi-plus rail__icon" aria-hidden="true" />
-        <span>새 조건</span>
+        <span>{{ FRESH_DRAFT_TITLE }}</span>
       </button>
 
       <Button
