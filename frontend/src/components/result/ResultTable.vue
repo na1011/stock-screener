@@ -5,7 +5,7 @@ import DataTable from 'primevue/datatable'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import InputText from 'primevue/inputtext'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import type { IndicatorBrief, ScreeningResponse, ScreeningRow } from '@/api/types'
@@ -32,6 +32,44 @@ const props = defineProps<{ result: ScreeningResponse; asOf: string }>()
 const SCROLL_HEIGHT = 'var(--app-result-scroll-height)'
 
 const catalog = useCatalogStore()
+
+/**
+ * 스크롤 컨테이너의 **보이는 폭**을 재서 `--result-viewport`로 내려보낸다.
+ *
+ * IMPORTANT — 이것이 없으면 확장 영역(선정 이유)이 가로 스크롤 밖으로 밀려난다. 실제로 두
+ * 번 밀려났다: `59da89c`가 `calc(100vw - 2*gutter - 1.25rem)`으로 고쳤는데, 그 커밋의 주석이
+ * *"표가 풀 폭이 아니게 되는 순간(사이드바 추가 등) 이 계산은 조용히 틀린다"*고 예고했고
+ * 다음 날 `16366f7`이 좌측 레일(240px)을 세웠다. 1440px에서 확장 영역 1372px vs 실제
+ * 스크롤포트 1141px — 획득 점수가 225px 밖에 있었다.
+ *
+ * 그래서 **유도하지 않고 잰다.** 레일이 있든 없든, 서랍이든 아니든, 세로 스크롤바가 있든
+ * 없든 정확하다. 레일 폭을 미디어 쿼리로 빼는 안은 다음 레이아웃 변경에서 같은 회귀가
+ * 나므로 버렸다. `--result-viewport`는 디자인 토큰이 아니라 **런타임 측정값**이라
+ * `main.css`가 아니라 여기서 이 컴포넌트 루트에만 쓴다.
+ */
+const tableRoot = ref<{ $el?: HTMLElement } | null>(null)
+let viewportObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  const root = tableRoot.value?.$el
+  if (!root) {
+    // 여기 오면 DataTable이 루트 엘리먼트를 내주지 않은 것이다. 조용히 넘기면 확장 영역이
+    // 다시 표 전체 폭(2,000px+)을 따라가고, 그 사실은 행을 펼쳐 봐야만 드러난다.
+    throw new Error('결과 표의 루트 엘리먼트를 찾지 못했다 — 확장 영역 폭을 잴 수 없다')
+  }
+  // 스크롤은 컨테이너가 한다. 못 찾으면 루트로 대신한다 — 폭이 거의 같고, 값이 없는 것보다
+  // 낫다(그때는 세로 스크롤바 폭만큼 넉넉해진다).
+  const port = root.querySelector<HTMLElement>('.p-datatable-table-container') ?? root
+  viewportObserver = new ResizeObserver(() => {
+    root.style.setProperty('--result-viewport', `${port.clientWidth}px`)
+  })
+  viewportObserver.observe(port)
+})
+
+onBeforeUnmount(() => {
+  viewportObserver?.disconnect()
+  viewportObserver = null
+})
 
 const expandedRows = ref<Record<string, boolean>>({})
 const filters = ref({ global: { value: null as string | null, matchMode: FilterMatchMode.CONTAINS } })
@@ -108,6 +146,7 @@ function barWidth(row: ScreeningRow, code: string): number | null {
 
 <template>
   <DataTable
+    ref="tableRoot"
     v-model:expanded-rows="expandedRows"
     v-model:filters="filters"
     :value="result.rows"
@@ -349,18 +388,20 @@ function barWidth(row: ScreeningRow, code: string): number | null {
  * IMPORTANT — 확장 영역을 스크롤 컨테이너 왼쪽에 고정한다.
  *
  * 확장 행의 `<td>`는 표 **전체 폭**(컬럼 min-width 합, 지표가 여섯이면 2,400px를 넘는다)을
- * 갖는다. 그대로 두면 `.outcomes__item`의 `1fr`이 그 폭을 다 먹어 조건별 **획득 점수가 가로
- * 스크롤 밖으로** 밀려난다. 총점만 보이고 내역이 안 보이는 상태이고, 그것은 "선정 이유를
+ * 갖는다. 그대로 두면 `.outcomes__item`이 그 폭을 다 먹어 조건별 **획득 점수가 가로 스크롤
+ * 밖으로** 밀려난다. 총점만 보이고 내역이 안 보이는 상태이고, 그것은 "선정 이유를
  * 노출한다"(frontend.md, design §5)를 만족하지 못한다 — 사용자가 가로로 스크롤해야
  * 발견되는 것은 보이지 않는 것과 같다.
  *
- * 폭을 뷰포트 기준으로 잡는 이유는 스크롤 컨테이너의 보이는 폭을 CSS로 직접 참조할 방법이
- * 없기 때문이다. 표는 좌우 `--app-gutter`만 두고 풀 폭이라 그 값이 곧 보이는 폭이다.
+ * 폭은 스크립트가 `ResizeObserver`로 **재서** `--result-viewport`에 넣는다. 뷰포트에서
+ * 유도하던 이전 방식(`calc(100vw - …)`)은 좌측 레일이 생긴 날 조용히 틀렸다 — 자세한 경위는
+ * 위 스크립트의 주석에 있다. 폴백 `100%`는 표 전체 폭이라 옛 결함과 같은 상태이므로,
+ * 측정이 실패하면 스크립트가 던지게 해 두었다.
  */
 .result-table__expansion {
   position: sticky;
   left: 0;
-  width: calc(100vw - 2 * var(--app-gutter) - 1.25rem);
+  width: var(--result-viewport, 100%);
   max-width: 100%;
   padding: 0.75rem 1rem;
   background: var(--p-surface-950);
