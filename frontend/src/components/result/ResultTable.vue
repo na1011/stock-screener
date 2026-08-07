@@ -11,6 +11,7 @@ import { RouterLink } from 'vue-router'
 import type { IndicatorBrief, ScreeningResponse, ScreeningRow } from '@/api/types'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import ConditionOutcomes from '@/components/result/ConditionOutcomes.vue'
+import RatioBar from '@/components/ui/RatioBar.vue'
 import { MISSING, formatIndicatorValue, formatNumber, formatPrice, formatRatioAsPercent } from '@/lib/format'
 import { RESULT_LABELS, SCORE_DECIMAL_SCALE, indicatorBriefOf, valueOf } from '@/lib/resultRow'
 import { useCatalogStore } from '@/stores/catalog'
@@ -126,21 +127,22 @@ const columnRanges = computed(() => {
 })
 
 /**
- * 막대의 폭(%). 값이 없거나 컬럼이 상수면 그리지 않는다.
+ * 컬럼 안에서의 상대 크기(0..1). 값이 없거나 컬럼이 상수면 그리지 않는다.
  *
  * 색을 유불리로 칠하지 않는 이유가 있다. 값 옆에는 이미 방향 마커(▲▼)가 있어 어느 쪽이
  * 유리한지 말하고 있고, 막대까지 색으로 판단을 얹으면 **PER이 큰 종목의 긴 막대가 붉게**
  * 나오는 식이 되어 크기와 유불리 두 가지를 한 그래픽이 뒤섞어 말하게 된다. 막대는 크기만
- * 말한다.
+ * 말한다(ADR-0021의 채널 분리와 같은 이유다).
+ *
+ * 최솟값에도 흔적을 남기는 바닥값은 `RatioBar`가 갖는다 — 선정 이유의 점수 막대와 같아야 한다.
  */
-function barWidth(row: ScreeningRow, code: string): number | null {
+function barRatio(row: ScreeningRow, code: string): number | null {
   const value = valueOf(row, code)
   const range = columnRanges.value.get(code)
   if (value === null || range === undefined || range.max === range.min) {
     return null
   }
-  // 최솟값도 흔적은 남긴다. 0%면 "값이 없다"와 구별되지 않는다.
-  return 4 + ((value - range.min) / (range.max - range.min)) * 96
+  return (value - range.min) / (range.max - range.min)
 }
 </script>
 
@@ -292,14 +294,9 @@ function barWidth(row: ScreeningRow, code: string): number | null {
           >
             {{ formatIndicatorValue(valueOf(data, indicator.code), indicator.unit, indicator.decimalScale) }}
           </span>
-          <!-- 값이 없는 칸에는 막대가 없다. 있으면 0인 것으로 읽힌다. -->
-          <span
-            v-if="barWidth(data, indicator.code) !== null"
-            class="result-table__bar"
-            aria-hidden="true"
-          >
-            <span class="result-table__bar-fill" :style="{ width: `${barWidth(data, indicator.code)}%` }" />
-          </span>
+          <!-- 값이 없는 칸에는 막대가 없다(`RatioBar`가 null을 받으면 그리지 않는다).
+               있으면 0인 것으로 읽힌다. 숫자가 바로 위에 있으므로 낭독기에는 감춘다. -->
+          <RatioBar :value="barRatio(data, indicator.code)" class="result-table__bar" />
         </span>
       </template>
     </Column>
@@ -340,24 +337,9 @@ function barWidth(row: ScreeningRow, code: string): number | null {
   text-align: right;
 }
 
-/*
- * 2px에 55% 투명도로는 다크 배경에서 사실상 보이지 않았다 — "배경에 가깝다"와 "없다"는
- * 다르다. 트랙을 한 단계 올리고(800 → 700) 채움을 진하게 해 눈에 걸리게 한다. 그래도
- * 3px이라 숫자를 읽는 것을 방해하지는 않는다.
- */
+/* 두께·색·바닥값은 `RatioBar`가 갖는다. 여기서 정하는 것은 숫자와의 간격뿐이다. */
 .result-table__bar {
-  display: block;
-  height: 3px;
   margin-top: 3px;
-  border-radius: 2px;
-  background: var(--p-surface-700);
-}
-
-.result-table__bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: color-mix(in srgb, var(--p-primary-color) 80%, transparent);
 }
 
 /*
@@ -398,6 +380,16 @@ function barWidth(row: ScreeningRow, code: string): number | null {
  * 위 스크립트의 주석에 있다. 폴백 `100%`는 표 전체 폭이라 옛 결함과 같은 상태이므로,
  * 측정이 실패하면 스크립트가 던지게 해 두었다.
  */
+/*
+ * 확장 행의 `<td>`에서 좌우 패딩을 걷는다. 그것을 남겨 두면 안쪽 상자가 스크롤포트 폭을
+ * 그대로 받되 10px 안에서 시작해 **딱 그만큼 넘친다.** 여백은 아래 상자가 자기 것으로 갖는다.
+ */
+.result-table :deep(.p-datatable-tbody > tr.p-datatable-row-expansion > td) {
+  /* 선택자가 길어야 하는 이유가 있다 — PrimeVue의 `.p-datatable.p-datatable-sm
+     .p-datatable-tbody > tr > td`가 (0,3,2)라 이보다 짧으면 진다. */
+  padding: 0;
+}
+
 .result-table__expansion {
   position: sticky;
   left: 0;

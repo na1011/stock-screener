@@ -38,6 +38,7 @@ applies_to:
 - MUST: 판정은 **`Tag` 알약**(배경 있는 필, 아이콘 포함)으로만 그린다. 매핑의 정본은 `lib/outcome.ts`다.
 - MUST: 값 구간은 **미터 막대 + 숫자 색조**로만 그린다. 매핑의 정본은 `lib/band.ts`이고 그리는 것은 `components/ui/BandMeter.vue`다. 알약을 쓰지 않는다.
 - MUST NOT: **결과 화면(`ResultTable`·`ResultCards`·`ConditionOutcomes`)의 지표 값에 색조를 넣지 않는다.** 거기에는 판정 `Tag`가 함께 있어 두 채널이 한 줄에 섞인다. 값 색조는 판정 `Tag`가 없는 **종목 상세**에만 둔다 — 그 화면에서는 초록·빨강이 뜻하는 것이 하나뿐이다.
+  - 등급의 **낱말**("양호", "상위 16%")은 결과 화면에도 둔다. 색이 아니라 글자이므로 채널이 겹치지 않고, 오히려 `frontend.md`가 요구하는 "값이 좋은 쪽인지 말한다"를 판정과 함께 만족시킨다. `ConditionOutcomes`가 `readBand`를 부르되 `label`만 쓰고 `tone`을 버리는 것이 그 구현이다.
 - MUST NOT: 유불리 방향 표식(`▲`/`▼`)에 색을 주지 않는다. 그것은 **지표의 성질**이지 이 종목 값의 좋고 나쁨이 아니다. 색을 주면 미터가 말하는 것과 뜻이 겹쳐 어긋난다.
 - 색조의 값은 `preset.ts`의 `semantic.tone`이 정한다(`--p-tone-*`). 소비처는 그것을 쓰기만 한다.
 
@@ -62,8 +63,11 @@ rg -ln -- '--p-tone-' frontend/src
 
 # 3-2. 값 색조 매핑의 정본이 하나인가 (부르는 곳만 센다 — 주석의 언급은 세지 않는다)
 rg -ln 'readBand\(|toneForPosition\(|matchBandIndex\(' frontend/src
-#    → lib/band.ts, lib/band.spec.ts, views/StockDetailView.vue 뿐이어야 한다.
+#    → lib/band.ts, lib/band.spec.ts, views/StockDetailView.vue,
+#      components/result/ConditionOutcomes.vue 뿐이어야 한다.
 #      BandMeter는 읽은 결과를 받기만 한다 — 두 곳이 계산하면 초록 숫자 아래 빨간 막대가 나온다.
+#      ConditionOutcomes는 같은 함수를 부르되 **라벨만** 쓰고 tone은 버린다. 그래서 위 3-1에
+#      나타나지 않는 것이 이 결정이 지켜졌다는 증거다.
 
 # 4. 글자 크기가 토큰 밖에 적혀 있지 않은가
 #    (캐럿·마커의 0.625rem 예외 둘은 2026-08-08에 `--app-text-2xs`로 흡수됐다. 예외는 없다)

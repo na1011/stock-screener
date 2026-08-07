@@ -139,27 +139,47 @@ describe('readBand — 미터와 숫자 색조가 같은 것을 본다', () => {
     expect(readBand(per, 24)?.tone).toBe('UNFAVORABLE')
   })
 
-  it('백분위는 값 자체가 위치다 — 구간 라벨은 붙이지 않는다', () => {
-    const pctl = {
+  function percentileSource(favorableEnd: 'HIGH' | 'LOW' | 'UNKNOWN') {
+    return {
       bands: [],
       higherIsBetter: null,
       percentile: {
         ascending: true,
-        favorableEnd: 'HIGH' as const,
+        favorableEnd,
         topQuintileOperator: null,
         topQuintileThreshold: null,
         label: '',
       },
     }
-    expect(readBand(pctl, 0.6568)).toEqual({
+  }
+
+  it('백분위는 값 자체가 위치이고 라벨은 순위다', () => {
+    expect(readBand(percentileSource('HIGH'), 0.6568)).toEqual({
       position: 0.6568,
       tone: 'NEUTRAL',
-      label: null,
+      // 높은 쪽이 유리하므로 0.6568은 위에서 34% 지점이다.
+      label: '상위 34%',
       segments: 0,
       activeSegment: null,
     })
-    expect(readBand(pctl, 0.9)?.tone).toBe('FAVORABLE')
-    expect(readBand(pctl, 0.1)?.tone).toBe('UNFAVORABLE')
+    expect(readBand(percentileSource('HIGH'), 0.9)?.tone).toBe('FAVORABLE')
+    expect(readBand(percentileSource('HIGH'), 0.1)?.tone).toBe('UNFAVORABLE')
+  })
+
+  it('낮은 쪽이 유리하면 값이 곧 순위다', () => {
+    // PER 백분위 0.1648 = 싼 쪽에서 16% 지점. 뒤집어 쓰면 가장 비싼 종목이 "상위 16%"가
+    // 되는데 백분율이 그럴듯해 눈으로는 드러나지 않는다.
+    expect(readBand(percentileSource('LOW'), 0.1648)?.label).toBe('상위 16%')
+    expect(readBand(percentileSource('HIGH'), 0.1648)?.label).toBe('상위 84%')
+  })
+
+  it('유리한 방향이 없으면 순위도 말하지 않는다', () => {
+    expect(readBand(percentileSource('UNKNOWN'), 0.5)?.label).toBeNull()
+  })
+
+  it('가장 좋은 값도 상위 0%로 적지 않는다', () => {
+    // 0%는 "순위가 없다"로 읽힌다.
+    expect(readBand(percentileSource('LOW'), 0)?.label).toBe('상위 1%')
   })
 
   it('구간도 백분위도 없으면 그리지 않는다 — 주가 스케일 지표다', () => {

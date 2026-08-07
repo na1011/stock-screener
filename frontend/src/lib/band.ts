@@ -1,6 +1,7 @@
 import type { IndicatorBand, PercentileGuide } from '@/api/types'
 
 import { indicatorDirection, type Direction } from './direction'
+import { formatRatioAsPercent } from './format'
 
 /**
  * "이 값이 어느 구간인가"와 "그 구간이 유리한 쪽인가".
@@ -168,13 +169,35 @@ export function readBand(source: BandSource, value: number | null | undefined): 
     return {
       position,
       tone: toneForPosition(position, direction),
-      label: null,
+      label: percentileRankLabel(position, direction),
       segments: 0,
       activeSegment: null,
     }
   }
 
   return null
+}
+
+/**
+ * 백분위 값을 "상위 16%"로.
+ *
+ * IMPORTANT — ADR-0023이 백분위에 금지한 것은 **구간 라벨**("20% 이상 = 매우 높음")이고,
+ * 이유는 `PercentileGuide`와 두 체계가 되기 때문이다. 순위 표현은 그 체계를 **그대로 쓰는
+ * 것**이라 걸리지 않는다 — 서버가 "상위 20%" 버튼을 `<= 0.2`(낮은 쪽 유리)나 `>= 0.8`(높은
+ * 쪽 유리)로 만드는 규칙과 같은 식이다.
+ *
+ * 방향은 `lib/direction`이 서버의 `favorableEnd`에서 이미 뽑아 둔 것을 쓴다. 유불리 방향을
+ * 판단하는 자리가 둘이 되면 어긋나는데, 어긋나도 백분율이 그럴듯해 드러나지 않는다.
+ *
+ * 유리한 방향이 없으면(RSI 백분위 같은 것) 순위도 뜻이 없으므로 말하지 않는다.
+ */
+function percentileRankLabel(position: number, direction: Direction): string | null {
+  if (direction === 'NEUTRAL') {
+    return null
+  }
+  const rank = direction === 'LOWER_IS_BETTER' ? position : 1 - position
+  // 0%는 "순위가 없다"로 읽힌다. 가장 좋은 값도 최소 상위 1%로 적는다.
+  return `상위 ${formatRatioAsPercent(Math.max(rank, 0.01), 0)}`
 }
 
 function assertNever(value: never): never {

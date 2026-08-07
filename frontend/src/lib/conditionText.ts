@@ -1,7 +1,7 @@
 import type { ConditionInfo, IndicatorResponse, OperandPayload } from '@/api/types'
 import type { DraftCondition } from '@/stores/screenDraft'
 
-import { formatEnteredNumber, formatNumber } from './format'
+import { formatEnteredNumber, formatIndicatorValue, formatNumber } from './format'
 
 /**
  * 조건 하나를 사람이 읽는 문장으로.
@@ -10,6 +10,11 @@ import { formatEnteredNumber, formatNumber } from './format'
  * 추가될 때 두 곳을 고쳐야 하고, 한쪽을 잊으면 조건은 만들 수 있는데 설명이 비어 있게 된다.
  *
  * 이 문장이 결과의 "왜 선정되었는가"를 이루므로, 판정에 쓰인 값과 다른 것을 적으면 안 된다.
+ *
+ * IMPORTANT — 상수에는 **단위를 붙인다.** 붙이지 않으면 선정 이유가 "ROE 8.00 이상 / 실제
+ * 11.34%"로 좌우 단위가 어긋나 기준과 실제값이 같은 척도인지 알 수 없다. 칩용
+ * {@link summarizeDraftCondition}은 처음부터 붙이고 있었고 이쪽만 빠져 있었다.
+ * 지표 참조에는 붙이지 않는다 — "200일 이동평균 × 0.90원"은 뜻이 없다.
  */
 export function describeCondition(
   condition: ConditionInfo,
@@ -17,15 +22,17 @@ export function describeCondition(
 ): string {
   const left = condition.indicator.name
   const scale = condition.indicator.decimalScale
+  const unit = condition.indicator.unit
   const operand = condition.operand
 
   if (condition.operator === 'BETWEEN') {
+    // 단위는 뒤에 한 번만. "45.00% ~ 70.00%"는 같은 말을 두 번 한다.
     const lower = formatNumber(operand.value ?? null, scale)
-    const upper = formatNumber(operand.upperBound ?? null, scale)
+    const upper = formatIndicatorValue(operand.upperBound ?? null, unit, scale)
     return `${left} ${lower} ~ ${upper} ${condition.operatorLabel}`
   }
 
-  return `${left} ${describeOperand(operand, scale, indicatorName)} ${condition.operatorLabel}`
+  return `${left} ${describeOperand(operand, scale, unit, indicatorName)} ${condition.operatorLabel}`
 }
 
 /**
@@ -114,6 +121,7 @@ export function incompleteConditionNotice(count: number): string | null {
 function describeOperand(
   operand: OperandPayload,
   decimalScale: number,
+  unit: string | null,
   indicatorName: (code: string) => string,
 ): string {
   if (operand.type === 'INDICATOR') {
@@ -126,5 +134,6 @@ function describeOperand(
     }
     return `${name} × ${formatNumber(multiplier, 2)}`
   }
-  return formatNumber(operand.value ?? null, decimalScale)
+  // 값이 없으면 단위도 붙지 않는다 — "—%"는 없는 값에 단위를 붙인 것이라 거짓이다.
+  return formatIndicatorValue(operand.value ?? null, unit, decimalScale)
 }

@@ -31,12 +31,42 @@ function condition(
 const name = (code: string): string => NAMES[code] ?? code
 
 describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다', () => {
-  it('상수 비교', () => {
+  it('상수에는 단위를 붙인다 — 실제값과 척도가 같은지 알 수 있어야 한다', () => {
     const text = describeCondition(
       condition({ operator: 'LT', operand: { type: 'LITERAL', value: 10 } }),
       name,
     )
-    expect(text).toBe('PER 10.00 미만')
+    expect(text).toBe('PER 10.00배 미만')
+  })
+
+  it('지표 참조에는 단위를 붙이지 않는다', () => {
+    // "200일 이동평균 × 0.90원"은 뜻이 없다.
+    const text = describeCondition(
+      condition({
+        operator: 'GTE',
+        operatorLabel: '이상',
+        indicator: {
+          code: 'ADJ_CLOSE',
+          name: '수정종가',
+          unit: '원',
+          decimalScale: 2,
+          higherIsBetter: null,
+          interpretation: '',
+        },
+        operand: { type: 'INDICATOR', indicatorCode: 'SMA_200', multiplier: 0.9 },
+      }),
+      name,
+    )
+    expect(text).toBe('수정종가 200일 이동평균 × 0.90 이상')
+  })
+
+  it('값이 없으면 단위도 붙지 않는다', () => {
+    // "—배"는 없는 값에 단위를 붙인 것이라 거짓이다.
+    const text = describeCondition(
+      condition({ operator: 'LT', operand: { type: 'LITERAL', value: null } }),
+      name,
+    )
+    expect(text).toBe('PER — 미만')
   })
 
   it('BETWEEN은 상·하한을 함께 적는다', () => {
@@ -48,7 +78,8 @@ describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다'
       }),
       name,
     )
-    expect(text).toBe('PER 45.00 ~ 70.00 사이')
+    // 단위는 뒤에 한 번만. "45.00배 ~ 70.00배"는 같은 말을 두 번 한다.
+    expect(text).toBe('PER 45.00 ~ 70.00배 사이')
   })
 
   it('지표 참조는 코드가 아니라 이름으로 적는다', () => {
