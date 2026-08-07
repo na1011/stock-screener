@@ -41,6 +41,13 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
   `redirect_uri=http://localhost:8080/login/oauth2/code/google`였다.
 - **도메인(5번)이 정해지면 리디렉션 URI를 추가해야 한다.** 지금은 localhost만 등록되어 있어
   외부 주소로는 로그인이 `redirect_uri_mismatch`로 실패한다.
+- **IMPORTANT — 프론트 개발 서버(:5173)로 로그인하려면 URI를 하나 더 등록해야 한다**(2026-08-07).
+  `http://localhost:5173/login/oauth2/code/google`이다. Vite 프록시가 Host를 바꾸지 않으므로
+  (`changeOrigin: false`, ADR-0018) Spring이 요청 Host로 `redirect_uri`를 만든다 — 실측으로
+  :5173에서는 `redirect_uri=http://localhost:5173/...`, :8080에서는 `.../8080/...`이 나갔다.
+  등록하지 않으면 개발 서버에서만 `redirect_uri_mismatch`가 난다.
+  **빌드된 번들을 `./gradlew bootRun`으로 띄워 `http://localhost:8080`에서 쓰는 경로는
+  지금 그대로 동작한다** — Console 작업 없이 로그인을 확인하려면 이쪽을 쓴다.
 
 ## 2. 공공데이터포털 API 키
 
