@@ -66,8 +66,8 @@ rg -ln 'readBand\(|toneForPosition\(|matchBandIndex\(' frontend/src
 #      BandMeter는 읽은 결과를 받기만 한다 — 두 곳이 계산하면 초록 숫자 아래 빨간 막대가 나온다.
 
 # 4. 글자 크기가 토큰 밖에 적혀 있지 않은가
-#    (0.625rem은 캐럿·마커용 10px로 토큰이 없다. 그 하나만 예외다)
-rg -n 'font-size: [0-9]' frontend/src --glob '*.vue' | rg -v '0.625rem'
+#    (캐럿·마커의 0.625rem 예외 둘은 2026-08-08에 `--app-text-2xs`로 흡수됐다. 예외는 없다)
+rg -n 'font-size: [0-9]' frontend/src --glob '*.vue'
 #    → 아무것도 나오지 않아야 한다
 
 # 5. PrimeVue 주입 CSS를 이기는 접두어가 살아 있는가

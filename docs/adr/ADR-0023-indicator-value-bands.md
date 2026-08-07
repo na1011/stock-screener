@@ -46,8 +46,9 @@ rg -l 'bands = \{' src/main/java/com/stockscreener/indicator/calculator/ \
 부등호를 프론트가 정하지 않는지 — `IndicatorBand`의 `operator`를 화면이 다시 계산하면 안 된다:
 
 ```bash
-# 결과가 없어야 한다
-rg -n 'band\.(from|to)\b' frontend/src
+# 결과가 없어야 한다. 주석의 언급까지 잡히던 것을 코드만 보도록 좁혔다(2026-08-08) —
+# "이렇게 하지 않는다"고 적어 둔 주석이 매번 걸리면 검증이 읽히지 않게 된다.
+rg -n --glob '!*.md' 'band\.(from|to)\b' frontend/src | rg -v '^\s*\S+:\d+:\s*[*/]'
 ```
 
 구간의 순서·겹침은 `IndicatorCatalogSynchronizer.bandsOf`가 기동 시 던진다. 애플리케이션이 뜨는 것
