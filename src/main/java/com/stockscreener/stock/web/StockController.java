@@ -51,6 +51,44 @@ public class StockController {
         this.asOfResolver = asOfResolver;
     }
 
+    /** 한 번에 돌려주는 최대 건수. 검색은 고르기 위한 것이지 훑어보기 위한 것이 아니다. */
+    private static final int DEFAULT_SEARCH_LIMIT = 20;
+    private static final int MAX_SEARCH_LIMIT = 50;
+    private static final int MAX_QUERY_LENGTH = 50;
+
+    /**
+     * 종목명·티커 검색.
+     *
+     * <p>일치가 없으면 404가 아니라 빈 배열이다 — "검색 결과 없음"은 오류가 아니고, 404로
+     * 주면 프론트가 그것을 재시도 불가 오류로 다루게 된다.
+     *
+     * <p>검증 실패를 스프링 기본 예외로 흘리지 않고 {@code INVALID_REQUEST}로 던지는 이유는
+     * ADR-0015에 있다 — 프론트는 {@code type}(URN)으로 분기하는데, 기본 예외는 그 값이
+     * {@code about:blank}라 분기가 성립하지 않는다.
+     */
+    @GetMapping
+    public List<StockSearchResponse> search(
+            @RequestParam(name = "q") String query,
+            @RequestParam(required = false) Integer limit) {
+
+        String trimmed = query == null ? "" : query.trim();
+        if (trimmed.isEmpty()) {
+            throw ApiExceptions.invalidField("q", "검색어가 필요하다");
+        }
+        if (trimmed.length() > MAX_QUERY_LENGTH) {
+            throw ApiExceptions.invalidField("q", "검색어는 " + MAX_QUERY_LENGTH + "자를 넘을 수 없다");
+        }
+
+        int effectiveLimit = limit == null ? DEFAULT_SEARCH_LIMIT : limit;
+        if (effectiveLimit < 1 || effectiveLimit > MAX_SEARCH_LIMIT) {
+            throw ApiExceptions.invalidField("limit", "1 이상 " + MAX_SEARCH_LIMIT + " 이하여야 한다");
+        }
+
+        return stockReader.search(trimmed, effectiveLimit).stream()
+                .map(StockSearchResponse::of)
+                .toList();
+    }
+
     @GetMapping("/{stockId}")
     public StockDetailResponse detail(
             @PathVariable long stockId,

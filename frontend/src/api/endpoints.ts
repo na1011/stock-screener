@@ -9,6 +9,7 @@ import type {
   ScreeningRequest,
   ScreeningResponse,
   StockDetailResponse,
+  StockSearchResult,
   UniverseResponse,
 } from './types'
 
@@ -54,6 +55,10 @@ export const api = {
       signal,
       retryDelaysMs: READ_RETRY_DELAYS_MS,
     }),
+
+  /** 종목명·티커 검색. 일치가 없으면 빈 배열이다(404가 아니다). */
+  searchStocks: (query: string, signal?: AbortSignal) =>
+    apiFetch<StockSearchResult[]>('/api/stocks', { query: { q: query }, signal }),
 
   stock: (stockId: number, asOf?: IsoDate | null, signal?: AbortSignal) =>
     apiFetch<StockDetailResponse>(`/api/stocks/${stockId}`, { query: { asOf }, signal }),

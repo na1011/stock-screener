@@ -248,6 +248,15 @@ export const PERCENTILE_POPULATION_ALL = 'ALL_CURRENT_MEMBERS'
 
 // ── 종목 상세 ─────────────────────────────────────────────────────
 
+/** 검색 결과 한 건. 지표 값은 싣지 않는다 — 값이 필요하면 상세로 간다. */
+export interface StockSearchResult {
+  id: number
+  ticker: string
+  name: string
+  marketCode: string
+  universeCodes: string[]
+}
+
 export interface StockUniverseRef {
   code: string
   name: string

@@ -5,6 +5,7 @@ import type { MenuItem } from 'primevue/menuitem'
 import { computed, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
+import StockSearch from '@/components/StockSearch.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -59,6 +60,8 @@ function isActive(to: string): boolean {
         <span>{{ item.label }}</span>
       </RouterLink>
     </nav>
+
+    <StockSearch class="app-header__search" />
 
     <div class="app-header__user">
       <Button

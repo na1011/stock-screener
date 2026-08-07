@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -133,6 +134,55 @@ public class StockReader {
                 rs.getString("market_code"), rs.getInt("member_count")));
     }
 
+    /**
+     * 종목명·티커로 검색한다.
+     *
+     * <p><b>현재 활성 유니버스에 편입된 종목만</b> 대상이다. 편입되지 않은 종목은 시세도
+     * 지표도 없어서, 검색 결과로 들어가면 값이 하나도 없는 상세 화면을 보게 된다.
+     * {@link #selectableUniverses()}가 같은 판단을 하고 있으므로 기준을 맞춘다.
+     *
+     * <p>정렬을 티커 완전일치 → 티커 접두 → 종목명 접두 → 종목명 포함 순으로 두는 이유는
+     * "005930"이나 "삼성전자"를 그대로 친 사용자가 그 종목을 첫 줄에서 보게 하기 위해서다.
+     * 이름 포함 검색만 하면 "삼성"에 삼성전자가 여섯 번째로 나온다.
+     */
+    @Transactional(readOnly = true)
+    public List<SearchRow> search(String query, int limit) {
+        String normalized = query.trim().toLowerCase(Locale.ROOT);
+        String prefix = normalized + "%";
+        String contains = "%" + normalized + "%";
+
+        return jdbcTemplate.query("""
+                SELECT s.id, s.ticker, s.name, s.market_code,
+                       (SELECT string_agg(m.universe_code, ',' ORDER BY m.universe_code)
+                          FROM universe_membership m
+                         WHERE m.stock_id = s.id AND m.effective_to IS NULL) AS universe_codes
+                FROM stock s
+                WHERE EXISTS (
+                        SELECT 1 FROM universe_membership m
+                        JOIN universe u ON u.code = m.universe_code
+                        WHERE m.stock_id = s.id AND m.effective_to IS NULL AND u.is_active)
+                  AND (lower(s.ticker) LIKE ? OR lower(s.name) LIKE ?)
+                ORDER BY CASE
+                           WHEN lower(s.ticker) = ?     THEN 0
+                           WHEN lower(s.ticker) LIKE ?  THEN 1
+                           WHEN lower(s.name)   LIKE ?  THEN 2
+                           ELSE 3
+                         END,
+                         s.name
+                LIMIT ?
+                """, (rs, n) -> new SearchRow(
+                        rs.getLong("id"),
+                        rs.getString("ticker"),
+                        rs.getString("name"),
+                        rs.getString("market_code"),
+                        splitCodes(rs.getString("universe_codes"))),
+                contains, contains, normalized, prefix, prefix, limit);
+    }
+
+    private static List<String> splitCodes(String aggregated) {
+        return aggregated == null || aggregated.isBlank() ? List.of() : List.of(aggregated.split(","));
+    }
+
     /** 주어진 유니버스가 스크리닝 대상으로 유효한가. */
     @Transactional(readOnly = true)
     public boolean isSelectableUniverse(String universeCode) {
@@ -162,5 +212,10 @@ public class StockReader {
     }
 
     public record UniverseRow(String code, String name, String marketCode, int memberCount) {
+    }
+
+    /** @param universeCodes 현재 편입되어 있는 유니버스. 화면이 어느 지수 종목인지 보인다. */
+    public record SearchRow(long id, String ticker, String name, String marketCode,
+                            List<String> universeCodes) {
     }
 }

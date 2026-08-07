@@ -157,6 +157,20 @@ public final class ApiExceptions {
         }
     }
 
+    /**
+     * 쿼리 파라미터 검증 실패.
+     *
+     * <p>{@code @Valid} 본문 검증과 <b>같은 형태</b>({@code errors: [{field, message}]})로 낸다.
+     * 스프링 기본 예외를 그대로 흘리면 {@code type}이 {@code about:blank}가 되어 프론트의
+     * URN 분기가 성립하지 않는다(ADR-0015). 두 경로의 모양이 다르면 프론트가 오류 형식을
+     * 두 가지로 다뤄야 하고, 그 사실은 흔치 않은 경로에서만 드러난다.
+     */
+    public static ApiException invalidField(String field, String message) {
+        ApiException exception = of(HttpStatus.BAD_REQUEST, ApiProblemType.INVALID_REQUEST, message);
+        exception.with("errors", List.of(Map.of("field", field, "message", message)));
+        return exception;
+    }
+
     /** 편의 — 응답 속성이 없는 단순 매핑용. */
     public static ApiException of(HttpStatus status, ApiProblemType type, String detail) {
         return new ApiException(status, type, detail) {
