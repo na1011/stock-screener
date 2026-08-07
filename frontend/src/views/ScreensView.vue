@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import { panelSubject } from '@/components/asyncPanel'
+import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useApiToast } from '@/composables/useApiToast'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { screenTypeLabel } from '@/lib/screen'
@@ -91,7 +92,7 @@ async function remove(id: number, name: string): Promise<void> {
       :skeleton-rows="4"
     >
       <section class="screens__group">
-        <h2 class="screens__group-title">{{ screenTypeLabel('PRESET') }}</h2>
+        <SectionHeading :title="screenTypeLabel('PRESET')" :count="screens.presets.length" />
         <p class="screens__group-note">
           미리 정의된 전략입니다. 고칠 수는 없지만 불러온 뒤 복제해 내 화면으로 저장할 수 있습니다.
         </p>
@@ -123,7 +124,7 @@ async function remove(id: number, name: string): Promise<void> {
       </section>
 
       <section class="screens__group">
-        <h2 class="screens__group-title">{{ screenTypeLabel('CUSTOM') }}</h2>
+        <SectionHeading :title="screenTypeLabel('CUSTOM')" :count="screens.mine.length" />
         <p v-if="screens.mine.length === 0" class="screens__empty">
           저장한 화면이 없습니다. 스크리너에서 조건을 만든 뒤 저장해 보세요.
         </p>
@@ -183,12 +184,9 @@ async function remove(id: number, name: string): Promise<void> {
   margin-bottom: 2rem;
 }
 
-.screens__group-title {
-  font-size: var(--app-text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--p-text-muted-color);
-  margin: 0 0 0.25rem;
+/* 첫 구획은 화면 제목 바로 아래다. 제목의 기본 윗여백을 여기서만 지운다. */
+.screens__group:first-of-type :deep(.section-heading) {
+  margin-top: 0;
 }
 
 .screens__group-note,
@@ -215,8 +213,9 @@ async function remove(id: number, name: string): Promise<void> {
   padding: 0.75rem 0.875rem;
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
-  background: var(--p-content-background);
-  transition: border-color 0.15s;
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-edge-highlight);
+  transition: border-color var(--app-motion-fast) var(--app-ease);
 }
 
 .screen-item:hover {

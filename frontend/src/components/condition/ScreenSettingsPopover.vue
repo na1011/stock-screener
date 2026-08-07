@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import DatePicker from 'primevue/datepicker'
 import Select from 'primevue/select'
-import SelectButton from 'primevue/selectbutton'
 import { computed, onMounted } from 'vue'
 
 import type { EvaluationMode } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
+import FormField from '@/components/ui/FormField.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { evaluationModeOptions } from '@/lib/evaluationMode'
 import { parseIsoDate, toIsoDate } from '@/lib/format'
 import { ALL_UNIVERSES_LABEL, universeLabel } from '@/lib/universe'
@@ -65,21 +66,16 @@ const maxDate = computed(() => parseIsoDate(props.retention?.to ?? null) ?? new 
 
 <template>
   <div class="settings">
-    <div class="settings__field">
-      <span class="settings__label">판정 방식</span>
-      <SelectButton
+    <FormField label="판정 방식">
+      <SegmentedControl
         :model-value="draft.evaluationMode"
         :options="evaluationModeOptions"
-        option-label="label"
-        option-value="value"
-        :allow-empty="false"
-        size="small"
+        aria-label="판정 방식"
         @update:model-value="(mode: EvaluationMode) => draft.setEvaluationMode(mode)"
       />
-    </div>
+    </FormField>
 
-    <div class="settings__field">
-      <span class="settings__label">대상 유니버스</span>
+    <FormField label="대상 유니버스">
       <AsyncPanel
         :state="catalog.universeState"
         :error="catalog.universeError"
@@ -96,10 +92,17 @@ const maxDate = computed(() => parseIsoDate(props.retention?.to ?? null) ?? new 
           fluid
         />
       </AsyncPanel>
-    </div>
+    </FormField>
 
-    <div class="settings__field">
-      <span class="settings__label">기준일</span>
+    <!-- 보존 구간은 서버가 오류로 알려준 것이다. 있을 때만 적는다 — 지어내지 않는다. -->
+    <FormField
+      label="기준일"
+      :hint="
+        props.retention
+          ? `${props.retention.from} ~ ${props.retention.to} 사이만 조회할 수 있습니다.`
+          : null
+      "
+    >
       <DatePicker
         v-model="asOfDate"
         date-format="yy-mm-dd"
@@ -111,11 +114,7 @@ const maxDate = computed(() => parseIsoDate(props.retention?.to ?? null) ?? new 
         size="small"
         fluid
       />
-      <!-- 보존 구간은 서버가 오류로 알려준 것이다. 있을 때만 적는다 — 지어내지 않는다. -->
-      <span v-if="props.retention" class="settings__hint">
-        {{ props.retention.from }} ~ {{ props.retention.to }} 사이만 조회할 수 있습니다.
-      </span>
-    </div>
+    </FormField>
   </div>
 </template>
 
@@ -124,23 +123,7 @@ const maxDate = computed(() => parseIsoDate(props.retention?.to ?? null) ?? new 
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
-  width: 16rem;
+  width: var(--app-overlay-sm);
   max-width: 100%;
-}
-
-.settings__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1875rem;
-}
-
-.settings__label {
-  font-size: var(--app-text-2xs);
-  color: var(--p-text-muted-color);
-}
-
-.settings__hint {
-  font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
 }
 </style>

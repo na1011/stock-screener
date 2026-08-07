@@ -2,11 +2,12 @@
 import Button from 'primevue/button'
 import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
-import SelectButton from 'primevue/selectbutton'
 import { computed, ref, watch } from 'vue'
 
 import { OPERAND_TYPES } from '@/api/types'
 import type { ComparisonOperatorName, IndicatorBand, OperandType } from '@/api/types'
+import FormField from '@/components/ui/FormField.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { formatEnteredNumber } from '@/lib/format'
 import { topQuintileCondition } from '@/lib/direction'
 import { useCatalogStore } from '@/stores/catalog'
@@ -187,7 +188,7 @@ function onOperandTypeChange(value: OperandType | null): void {
           v-for="band in bands"
           :key="band.label"
           type="button"
-          class="editor__band"
+          class="app-list-button editor__band"
           @click="applyBand(band)"
         >
           <span class="editor__band-range tabular">{{ bandLabel(band) }}</span>
@@ -208,7 +209,7 @@ function onOperandTypeChange(value: OperandType | null): void {
       <button
         v-if="bands.length > 0"
         type="button"
-        class="editor__manual-toggle"
+        class="app-list-button editor__manual-toggle"
         :aria-expanded="manualOpen"
         @click="manualOpen = !manualOpen"
       >
@@ -217,21 +218,16 @@ function onOperandTypeChange(value: OperandType | null): void {
       </button>
 
       <div v-show="manualOpen" class="editor__manual">
-        <label class="editor__field">
-          <span class="editor__label">비교 대상</span>
-          <SelectButton
+        <FormField label="비교 대상">
+          <SegmentedControl
             :model-value="condition.operandType"
             :options="operandTypeOptions"
-            option-label="label"
-            option-value="value"
-            :allow-empty="false"
-            size="small"
+            aria-label="비교 대상"
             @update:model-value="onOperandTypeChange"
           />
-        </label>
+        </FormField>
 
-        <label class="editor__field">
-          <span class="editor__label">조건</span>
+        <FormField label="조건">
           <Select
             :model-value="condition.operator"
             :options="operatorOptions"
@@ -246,11 +242,10 @@ function onOperandTypeChange(value: OperandType | null): void {
               }
             "
           />
-        </label>
+        </FormField>
 
         <template v-if="condition.operandType === 'LITERAL'">
-          <label class="editor__field">
-            <span class="editor__label">{{ requiresUpperBound ? '하한' : '값' }}</span>
+          <FormField :label="requiresUpperBound ? '하한' : '값'">
             <InputNumber
               :model-value="condition.value"
               :max-fraction-digits="4"
@@ -264,9 +259,8 @@ function onOperandTypeChange(value: OperandType | null): void {
                 }
               "
             />
-          </label>
-          <label v-if="requiresUpperBound" class="editor__field">
-            <span class="editor__label">상한</span>
+          </FormField>
+          <FormField v-if="requiresUpperBound" label="상한">
             <InputNumber
               :model-value="condition.upperBound"
               :max-fraction-digits="4"
@@ -280,12 +274,11 @@ function onOperandTypeChange(value: OperandType | null): void {
                 }
               "
             />
-          </label>
+          </FormField>
         </template>
 
         <template v-else>
-          <label class="editor__field">
-            <span class="editor__label">비교할 지표</span>
+          <FormField label="비교할 지표">
             <Select
               :model-value="condition.operandIndicatorCode"
               :options="indicatorOptions"
@@ -305,9 +298,8 @@ function onOperandTypeChange(value: OperandType | null): void {
                 }
               "
             />
-          </label>
-          <label class="editor__field">
-            <span class="editor__label">배수</span>
+          </FormField>
+          <FormField label="배수">
             <InputNumber
               :model-value="condition.multiplier"
               :max-fraction-digits="4"
@@ -321,12 +313,11 @@ function onOperandTypeChange(value: OperandType | null): void {
                 }
               "
             />
-          </label>
+          </FormField>
         </template>
 
         <!-- 가중치는 점수 방식에서만 뜻이 있다. 거르기에서는 자리를 차지할 이유가 없다. -->
-        <label v-if="draft.evaluationMode === 'SCORING'" class="editor__field">
-          <span class="editor__label">가중치</span>
+        <FormField v-if="draft.evaluationMode === 'SCORING'" label="가중치">
           <InputNumber
             :model-value="condition.weight"
             :min="0"
@@ -341,7 +332,7 @@ function onOperandTypeChange(value: OperandType | null): void {
               }
             "
           />
-        </label>
+        </FormField>
       </div>
     </template>
 
@@ -405,19 +396,7 @@ function onOperandTypeChange(value: OperandType | null): void {
   gap: 0.5rem;
   width: 100%;
   padding: 0.3125rem 0.375rem;
-  border: 0;
-  border-radius: var(--p-border-radius-md);
-  background: transparent;
-  color: inherit;
-  font: inherit;
   font-size: var(--app-text-xs);
-  text-align: start;
-  cursor: pointer;
-}
-
-.editor__band:hover,
-.editor__band:focus-visible {
-  background: var(--p-surface-800);
 }
 
 .editor__band-range {
@@ -434,6 +413,7 @@ function onOperandTypeChange(value: OperandType | null): void {
   margin-top: 0.25rem;
 }
 
+/* 구획을 가르는 선이라 hover 배경 대신 글자 색만 밝아진다. `.app-list-button`의 배경을 덮는다. */
 .editor__manual-toggle {
   display: flex;
   align-items: center;
@@ -441,18 +421,16 @@ function onOperandTypeChange(value: OperandType | null): void {
   width: 100%;
   margin-top: 0.375rem;
   padding: 0.3125rem 0.375rem;
-  border: 0;
   border-top: 1px solid var(--p-content-border-color);
   border-radius: 0;
-  background: transparent;
   color: var(--p-text-muted-color);
-  font: inherit;
   font-size: var(--app-text-2xs);
   font-weight: 600;
-  cursor: pointer;
 }
 
-.editor__manual-toggle:hover {
+.editor__manual-toggle:hover,
+.editor__manual-toggle:focus-visible {
+  background: transparent;
   color: var(--p-text-color);
 }
 
@@ -461,17 +439,6 @@ function onOperandTypeChange(value: OperandType | null): void {
   flex-direction: column;
   gap: 0.375rem;
   margin-top: 0.25rem;
-}
-
-.editor__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1875rem;
-}
-
-.editor__label {
-  font-size: var(--app-text-2xs);
-  color: var(--p-text-muted-color);
 }
 
 .editor__readonly {

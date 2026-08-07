@@ -97,7 +97,7 @@ defineExpose({ focusSearch })
           v-for="indicator in group.items"
           :key="indicator.code"
           type="button"
-          class="picker__item"
+          class="app-list-button picker__item"
           @click="emit('pick', indicator.code)"
         >
           <span class="picker__item-head">
@@ -123,7 +123,7 @@ defineExpose({ focusSearch })
 .picker {
   display: flex;
   flex-direction: column;
-  width: 20rem;
+  width: var(--app-overlay-md);
   max-width: 100%;
 }
 
@@ -167,18 +167,6 @@ defineExpose({ focusSearch })
   display: block;
   width: 100%;
   padding: 0.3125rem 0.375rem;
-  border: 0;
-  border-radius: var(--p-border-radius-md);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.picker__item:hover,
-.picker__item:focus-visible {
-  background: var(--p-surface-800);
 }
 
 .picker__item-head {

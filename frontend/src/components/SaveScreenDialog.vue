@@ -3,7 +3,6 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import SelectButton from 'primevue/selectbutton'
 import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 import { computed, ref, watch } from 'vue'
@@ -11,6 +10,8 @@ import { computed, ref, watch } from 'vue'
 import { ApiError, ProblemType } from '@/api/http'
 import { SCREEN_DESCRIPTION_MAX_LENGTH, SCREEN_NAME_MAX_LENGTH } from '@/api/limits'
 import type { ScreenRequest } from '@/api/types'
+import FormField from '@/components/ui/FormField.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { BREAKPOINTS } from '@/lib/breakpoints'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { useScreenDraftStore } from '@/stores/screenDraft'
@@ -114,41 +115,38 @@ async function save(): Promise<void> {
     v-model:visible="visible"
     modal
     header="조건 저장"
-    :style="{ width: '28rem' }"
+    :style="{ width: 'var(--app-overlay-lg)' }"
     :breakpoints="{ [`${BREAKPOINTS.COMPACT}px`]: '95vw' }"
   >
     <div class="save-dialog">
-      <SelectButton
+      <SegmentedControl
         v-if="existingId !== null"
         v-model="mode"
         :options="modeOptions"
-        option-label="label"
-        option-value="value"
-        :allow-empty="false"
-        size="small"
+        aria-label="저장 방식"
       />
 
-      <div class="save-dialog__field">
-        <label for="screen-name">화면 이름</label>
+      <FormField label="화면 이름" control-id="screen-name">
         <InputText
           id="screen-name"
           v-model="name"
           :maxlength="SCREEN_NAME_MAX_LENGTH"
           :invalid="nameError !== null"
+          fluid
         />
         <small v-if="nameError" class="save-dialog__error">{{ nameError }}</small>
-      </div>
+      </FormField>
 
-      <div class="save-dialog__field">
-        <label for="screen-description">설명 (선택)</label>
+      <FormField label="설명 (선택)" control-id="screen-description">
         <Textarea
           id="screen-description"
           v-model="description"
           rows="3"
           :maxlength="SCREEN_DESCRIPTION_MAX_LENGTH"
           auto-resize
+          fluid
         />
-      </div>
+      </FormField>
 
       <p class="save-dialog__summary">
         조건 {{ draft.completeConditions.length }}개 ·
@@ -170,17 +168,6 @@ async function save(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-}
-
-.save-dialog__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.save-dialog__field label {
-  font-size: var(--app-text-sm);
-  color: var(--p-text-muted-color);
 }
 
 .save-dialog__error {

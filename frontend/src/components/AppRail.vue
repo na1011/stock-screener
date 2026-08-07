@@ -95,7 +95,7 @@ function startFresh(): void {
     <nav class="rail__nav" aria-label="주요 화면">
       <RouterLink
         to="/"
-        class="rail__item"
+        class="app-list-button rail__item"
         :class="{ 'rail__item--active': route.path === '/' && !isFresh }"
         @click="emit('navigate')"
       >
@@ -104,7 +104,7 @@ function startFresh(): void {
       </RouterLink>
       <RouterLink
         to="/screens"
-        class="rail__item"
+        class="app-list-button rail__item"
         :class="{ 'rail__item--active': route.path.startsWith('/screens') }"
         @click="emit('navigate')"
       >
@@ -130,7 +130,7 @@ function startFresh(): void {
             <li v-for="screen in section.items" :key="screenKey(screen)">
               <button
                 type="button"
-                class="rail__item rail__item--screen"
+                class="app-list-button rail__item rail__item--screen"
                 :class="{ 'rail__item--active': isOpen(screen) }"
                 @click="pick(screen)"
               >
@@ -147,7 +147,7 @@ function startFresh(): void {
     <div class="rail__foot">
       <button
         type="button"
-        class="rail__item rail__item--fresh"
+        class="app-list-button rail__item rail__item--fresh"
         :class="{ 'rail__item--active': isFresh }"
         @click="startFresh"
       >
@@ -210,8 +210,8 @@ function startFresh(): void {
 }
 
 /*
- * 항목 하나의 생김새. 링크(`RouterLink`)와 버튼이 같은 클래스를 쓰므로 button의 기본
- * 스타일을 여기서 지운다 — 둘이 다르게 보이면 "누를 수 있는 것"이 두 종류로 읽힌다.
+ * 항목 하나의 생김새. 링크(`RouterLink`)와 버튼이 같은 클래스를 쓴다 — 둘이 다르게 보이면
+ * "누를 수 있는 것"이 두 종류로 읽힌다. 리셋은 `.app-list-button`이 맡고 여기는 배치만 정한다.
  */
 .rail__item {
   display: flex;
@@ -220,18 +220,11 @@ function startFresh(): void {
   width: 100%;
   min-height: 1.875rem;
   padding: 0 0.5rem;
-  border: 0;
-  border-radius: var(--p-border-radius-md);
-  background: transparent;
   color: var(--p-text-muted-color);
-  font: inherit;
   font-size: var(--app-text-sm);
-  text-align: start;
-  cursor: pointer;
 }
 
 .rail__item:hover {
-  background: var(--p-surface-800);
   color: var(--p-text-color);
   text-decoration: none;
 }

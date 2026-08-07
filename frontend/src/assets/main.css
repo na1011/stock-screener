@@ -171,6 +171,36 @@ a:hover {
   color: var(--p-surface-500);
 }
 
+/*
+ * 목록 항목으로 쓰는 native `<button>`.
+ *
+ * `border: 0; background: transparent; font: inherit; …` 여섯 줄이 다섯 곳에 그대로 반복돼
+ * 있었다(`.editor__band`·`.editor__manual-toggle`·`.picker__item`·`.bar__settings`·`.rail__item`).
+ * 리셋만 모으고 **배치는 각자 한다** — 다섯 곳의 방향·간격·폭이 전부 달라 컴포넌트로 묶으면
+ * 변형 prop이 배치 CSS보다 길어진다.
+ *
+ * 특정도가 낮으므로 `<style scoped>`(속성 선택자가 붙어 0,2,0)가 언제나 이긴다. 자리마다
+ * 다른 hover가 필요하면 그냥 덮어 쓰면 된다.
+ */
+.app-list-button {
+  border: 0;
+  border-radius: var(--p-border-radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background var(--app-motion-fast) var(--app-ease),
+    color var(--app-motion-fast) var(--app-ease),
+    border-color var(--app-motion-fast) var(--app-ease);
+}
+
+.app-list-button:hover,
+.app-list-button:focus-visible {
+  background: var(--p-surface-800);
+}
+
 /* ------------------------------------------------------------------------
  * 폼 컨트롤이 컨테이너를 넘지 않게 한다.
  *
