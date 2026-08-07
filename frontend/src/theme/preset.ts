@@ -55,7 +55,10 @@ const cobalt = {
 export const ScreenerPreset = definePreset(Aura, {
   primitive: {
     // 데이터 화면이라 모서리를 낮춘다. 둥글수록 셀 경계가 흐려지고 표가 물러 보인다.
-    borderRadius: { none: '0', xs: '2px', sm: '3px', md: '5px', lg: '7px', xl: '10px' },
+    //
+    // 컨트롤 높이를 32px로 조이면서 한 단계 더 내렸다. 반경은 절대값이 아니라 높이 대비
+    // 비율로 읽힌다 — 35px 높이에 5px과 32px 높이에 5px은 다르게 보인다.
+    borderRadius: { none: '0', xs: '2px', sm: '3px', md: '4px', lg: '6px', xl: '8px' },
   },
 
   semantic: {
@@ -64,18 +67,21 @@ export const ScreenerPreset = definePreset(Aura, {
     // 다크 배경에서 1px 링은 보이지 않는다. 키보드 이동이 어디 있는지 알 수 있어야 한다.
     focusRing: { width: '2px', style: 'solid', color: '{primary.color}', offset: '1px', shadow: 'none' },
 
-    // 폼 필드를 한 단계 조인다. 조건 한 줄에 컨트롤이 여섯 개까지 들어가는 화면이다.
+    // 폼 필드를 한 단계 더 조인다. 기본 컨트롤 높이가 32px이 되도록 맞춘 값이다
+    // (13px × 1.45 ≈ 19px + 상하 패딩 10px + 테두리 2px). 참고 사이트의 select가 40px인데
+    // 그쪽은 필터가 세로로 서너 개뿐이고, 여기는 칩 바에 스무 개까지 들어간다.
     formField: {
-      paddingX: '0.625rem',
-      paddingY: '0.4375rem',
-      sm: { fontSize: '0.8125rem', paddingX: '0.5rem', paddingY: '0.3125rem' },
-      lg: { fontSize: '1.0625rem', paddingX: '0.75rem', paddingY: '0.5625rem' },
+      paddingX: '0.5rem',
+      paddingY: '0.3125rem',
+      fontSize: '0.8125rem',
+      sm: { fontSize: '0.75rem', paddingX: '0.4375rem', paddingY: '0.1875rem' },
+      lg: { fontSize: '0.9375rem', paddingX: '0.6875rem', paddingY: '0.4375rem' },
     },
 
     list: {
       padding: '0.25rem',
-      option: { padding: '0.4375rem 0.625rem' },
-      optionGroup: { padding: '0.4375rem 0.625rem', fontWeight: '600' },
+      option: { padding: '0.375rem 0.5rem' },
+      optionGroup: { padding: '0.5rem 0.5rem 0.25rem', fontWeight: '600' },
     },
 
     colorScheme: {
@@ -83,6 +89,10 @@ export const ScreenerPreset = definePreset(Aura, {
         surface: ink,
 
         // 순백은 다크에서 눈이 아프다. 본문은 한 단계 내리고 muted는 확실히 떨어뜨린다.
+        //
+        // 본문/muted 두 단계뿐이라 위계가 안 섰다. 티커·시장코드·메타처럼 "있어야 하지만
+        // 읽을 차례는 마지막"인 텍스트가 muted와 같은 밝기로 나와 표가 평평해 보였다.
+        // 3순위는 `surface.500`이고 쓰는 쪽은 `main.css`의 `.text-tertiary` 유틸리티다.
         text: {
           color: '#dce3ed',
           hoverColor: '#f2f5f9',
@@ -147,10 +157,12 @@ export const ScreenerPreset = definePreset(Aura, {
         background: '{surface.800}',
         borderColor: '{surface.700}',
         color: '{text.muted.color}',
-        sm: { padding: '0.5rem 0.75rem' },
+        sm: { padding: '0.375rem 0.625rem' },
       },
+      // 컬럼 머리글은 읽는 것이 아니라 짚는 것이다. 본문보다 작고 어두워야 값이 먼저 보인다.
+      // 참고 사이트가 11px/500/50% 투명도로 두는 자리다.
       columnTitle: { fontWeight: '600' },
-      bodyCell: { borderColor: '{surface.700}', sm: { padding: '0.4375rem 0.75rem' } },
+      bodyCell: { borderColor: '{surface.700}', sm: { padding: '0.25rem 0.625rem' } },
       row: { hoverBackground: '{surface.800}', stripedBackground: '{surface.900}' },
       footerCell: { background: '{surface.800}', borderColor: '{surface.700}' },
       header: { background: 'transparent', borderColor: '{surface.700}', borderWidth: '0 0 1px 0' },
@@ -163,8 +175,11 @@ export const ScreenerPreset = definePreset(Aura, {
     button: {
       root: {
         label: { fontWeight: '600' },
-        // 아이콘 버튼이 조건 행마다 붙는다. 기본 2.5rem이면 행 높이를 이것이 정하게 된다.
-        sm: { iconOnlyWidth: '1.875rem' },
+        // IMPORTANT — 이 항목이 없으면 Aura 기본값 1rem이 그대로 나온다. 버튼 라벨이 본문보다
+        // 큰 상태였고("16px 버튼 / 15px 본문"), 그것이 화면이 커 보이던 원인 하나였다.
+        fontSize: '0.8125rem',
+        // 아이콘 버튼이 칩 바와 표 머리글에 붙는다. 기본 2.5rem이면 줄 높이를 이것이 정하게 된다.
+        sm: { fontSize: '0.75rem', iconOnlyWidth: '1.75rem' },
       },
     },
 
