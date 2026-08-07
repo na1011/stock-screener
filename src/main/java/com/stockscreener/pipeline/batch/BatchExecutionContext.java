@@ -83,6 +83,22 @@ public final class BatchExecutionContext {
         return false;
     }
 
+    /**
+     * 실행을 마감하지 않은 채 운영자에게 알린다.
+     *
+     * <p>마감({@link #finish()})에 실리지 않는 사건이 있다. 워치리스트 판정 실패가 그렇다 —
+     * 수집·계산은 끝났으므로 배치는 성공이지만, 그 실패를 아무도 모르면 사용자는 알림이
+     * 없는 것을 "조건에 안 맞았나 보다"로 읽는다.
+     *
+     * <p>{@code alertPort}를 잡에 직접 주입하지 않고 여기를 지나게 하는 이유는 <b>실행
+     * 컨텍스트가 함께 실리기 때문</b>이다. executionId 없는 알림은 관리자 화면에서 그 실행을
+     * 찾을 수 없다. dedupeKey도 같은 규칙을 따라야 억제가 일관된다.
+     */
+    public void alertOperator(AlertSeverity severity, String title, String body) {
+        alertPort.send(AlertEvent.toOperator(
+                severity, jobName + " — " + title, body, dedupeKey() + ':' + title, context()));
+    }
+
     /** 응답을 해석할 수 없었던 실패를 별도로 센다. 소스 스펙 변경 판단의 근거다. */
     public void countMalformed() {
         malformedCount.incrementAndGet();

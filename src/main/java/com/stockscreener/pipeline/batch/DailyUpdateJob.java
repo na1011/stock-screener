@@ -3,11 +3,13 @@ package com.stockscreener.pipeline.batch;
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
 import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.PercentileCalculator;
+import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.collector.MarketCalendar;
 import com.stockscreener.pipeline.collector.PriceCollector;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.watchlist.WatchlistAlertRunner;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,12 +49,14 @@ public class DailyUpdateJob {
     private final IndicatorRunner indicatorRunner;
     private final PercentileCalculator percentileCalculator;
     private final IndicatorRetentionPolicy retentionPolicy;
+    private final WatchlistAlertRunner watchlistAlertRunner;
     private final JdbcTemplate jdbcTemplate;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
                           MarketCalendar marketCalendar, BatchExecutions batchExecutions,
                           IndicatorRunner indicatorRunner, PercentileCalculator percentileCalculator,
                           IndicatorRetentionPolicy retentionPolicy,
+                          WatchlistAlertRunner watchlistAlertRunner,
                           JdbcTemplate jdbcTemplate) {
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
@@ -61,6 +65,7 @@ public class DailyUpdateJob {
         this.indicatorRunner = indicatorRunner;
         this.percentileCalculator = percentileCalculator;
         this.retentionPolicy = retentionPolicy;
+        this.watchlistAlertRunner = watchlistAlertRunner;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -148,6 +153,10 @@ public class DailyUpdateJob {
         // 불가능하므로 루프가 끝난 뒤 하루치를 한 번에 처리한다.
         percentileCalculator.calculate(to);
 
+        // 워치리스트 판정은 백분위 뒤여야 한다. 백분위 조건("PER 하위 20%")을 건 화면이
+        // 그 앞에서 판정되면 어제 백분위로 오늘을 판정하게 되고, 그것은 조용히 그럴듯하다.
+        evaluateWatchlist(execution, to);
+
         // 보존 정리(ADR-0011)는 마감 전에 하되 실패해도 배치를 죽이지 않는다. 오래된 행이
         // 하루 더 남는 것은 저장 공간 문제일 뿐이지만, 여기서 예외가 올라가면 그날의 수집과
         // 계산이 통째로 실패한 것처럼 기록된다.
@@ -158,6 +167,32 @@ public class DailyUpdateJob {
         }
 
         return execution.finish();
+    }
+
+    /**
+     * 워치리스트 조건을 판정해 새로 충족된 것을 사용자에게 알린다(spec §7).
+     *
+     * <p>실패가 그날의 수집·계산을 무효로 만들지 않게 격리한다 — 그 둘은 이미 끝났고,
+     * 여기서 예외가 올라가면 배치 전체가 실패한 것으로 기록된다. 보존 정리와 같은 판단이다.
+     *
+     * <p>다만 보존 정리와 달리 <b>운영자에게 알린다.</b> 오래된 지표 행이 하루 더 남는 것은
+     * 저장 공간 문제일 뿐이지만, 워치리스트 판정이 며칠 조용히 안 돌면 사용자는 알림이
+     * 없는 것을 "조건에 안 맞았나 보다"로 읽는다 — 기능이 죽은 채로 정상처럼 보인다.
+     */
+    private void evaluateWatchlist(BatchExecutionContext execution, LocalDate asOf) {
+        try {
+            WatchlistAlertRunner.Result result = watchlistAlertRunner.run(asOf);
+            if (result.hasFailure()) {
+                execution.alertOperator(AlertSeverity.WARNING, "워치리스트 판정 부분 실패",
+                        "화면 %d개의 조건을 판정하지 못했다. 판정 %d건, 통지 %d명."
+                                .formatted(result.failedScreens(), result.evaluated(),
+                                        result.notifiedUsers()));
+            }
+        } catch (RuntimeException e) {
+            log.error("워치리스트 판정에 실패했다. 수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
+            execution.alertOperator(AlertSeverity.ERROR, "워치리스트 판정 실패",
+                    "수집·계산은 정상이다. 다음 실행에서 다시 시도한다: " + e);
+        }
     }
 
     /**
