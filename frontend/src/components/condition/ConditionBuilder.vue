@@ -7,12 +7,13 @@ import SelectButton from 'primevue/selectbutton'
 import Tag from 'primevue/tag'
 import { computed, onMounted } from 'vue'
 
+import { MAX_CONDITIONS } from '@/api/limits'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import ConditionRow from '@/components/condition/ConditionRow.vue'
 import { evaluationModeOptions } from '@/lib/evaluationMode'
 import { parseIsoDate, toIsoDate } from '@/lib/format'
 import { useCatalogStore } from '@/stores/catalog'
-import { MAX_CONDITIONS, useScreenDraftStore } from '@/stores/screenDraft'
+import { useScreenDraftStore } from '@/stores/screenDraft'
 
 /**
  * 조건 빌더.

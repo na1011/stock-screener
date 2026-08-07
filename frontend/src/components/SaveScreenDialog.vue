@@ -9,6 +9,7 @@ import { useToast } from 'primevue/usetoast'
 import { computed, ref, watch } from 'vue'
 
 import { ApiError, ProblemType } from '@/api/http'
+import { SCREEN_DESCRIPTION_MAX_LENGTH, SCREEN_NAME_MAX_LENGTH } from '@/api/limits'
 import type { ScreenRequest } from '@/api/types'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { useScreenDraftStore } from '@/stores/screenDraft'
@@ -128,13 +129,24 @@ async function save(): Promise<void> {
 
       <div class="save-dialog__field">
         <label for="screen-name">화면 이름</label>
-        <InputText id="screen-name" v-model="name" maxlength="100" :invalid="nameError !== null" />
+        <InputText
+          id="screen-name"
+          v-model="name"
+          :maxlength="SCREEN_NAME_MAX_LENGTH"
+          :invalid="nameError !== null"
+        />
         <small v-if="nameError" class="save-dialog__error">{{ nameError }}</small>
       </div>
 
       <div class="save-dialog__field">
         <label for="screen-description">설명 (선택)</label>
-        <Textarea id="screen-description" v-model="description" rows="3" maxlength="2000" auto-resize />
+        <Textarea
+          id="screen-description"
+          v-model="description"
+          rows="3"
+          :maxlength="SCREEN_DESCRIPTION_MAX_LENGTH"
+          auto-resize
+        />
       </div>
 
       <p class="save-dialog__summary">

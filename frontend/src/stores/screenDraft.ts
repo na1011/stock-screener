@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
+import { MAX_CONDITIONS } from '@/api/limits'
 import type {
   ComparisonOperatorName,
   ConditionGroupPayload,
@@ -11,9 +12,6 @@ import type {
   ScreenResponse,
   ScreeningRequest,
 } from '@/api/types'
-
-/** 서버의 `ScreenDefinitionValidator.MAX_CONDITIONS`와 같은 값이다. */
-export const MAX_CONDITIONS = 20
 
 /**
  * 편집 중인 조건 하나.
