@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ApiError } from '@/api/http'
 import type { ScreenResponse } from '@/api/types'
 import { useApiToast } from '@/composables/useApiToast'
+import { matchesOrigin } from '@/lib/screen'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
 
@@ -92,16 +93,12 @@ export function useScreenOpener() {
    *
    * `draft.origin`을 보는 이유는 그것이 "무엇을 불러왔는가"의 정본이기 때문이다. 별도의
    * 선택 상태를 두면 복제·초기화 같은 경로에서 둘이 어긋난다.
+   *
+   * 대조 규칙 자체는 `lib/screen`의 {@link matchesOrigin}이 갖는다 — 결과가 낡았는지
+   * 판정하는 쪽이 같은 규칙을 쓴다.
    */
   function isOpen(screen: ScreenResponse): boolean {
-    const origin = draft.origin
-    if (origin.kind === 'preset') {
-      return screen.type === 'PRESET' && screen.code === origin.code
-    }
-    if (origin.kind === 'screen') {
-      return screen.type === 'CUSTOM' && screen.id === origin.id
-    }
-    return false
+    return matchesOrigin(screen, draft.origin)
   }
 
   return { loading, openByKey, isOpen }

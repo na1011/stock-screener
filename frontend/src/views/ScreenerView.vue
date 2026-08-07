@@ -12,7 +12,7 @@ import ResultSummary from '@/components/result/ResultSummary.vue'
 import ResultTable from '@/components/result/ResultTable.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { incompleteConditionNotice } from '@/lib/conditionText'
-import { screenTypeLabel } from '@/lib/screen'
+import { matchesOrigin, screenTypeLabel, type StaleReason } from '@/lib/screen'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreeningStore } from '@/stores/screening'
 
@@ -30,14 +30,35 @@ const saveVisible = ref(false)
 const canSave = computed(() => draft.editable && draft.completeConditions.length > 0)
 
 /**
- * 결과가 지금 조건과 어긋나 있는가.
+ * 결과가 지금 조건과 어긋나 있는가. 그리고 왜.
  *
  * IMPORTANT — 자동 실행을 하지 않는 대신 **화면이 어긋남을 자백한다.** `/api/screening`은
  * 최대 2000행을 통째로 주는 POST라 타이핑마다 부를 수 없고, 그래서 결과는 언제나 "마지막으로
  * 실행한 것"이다. 그 사실을 말하지 않으면 사용자는 눈앞의 목록이 방금 고친 조건의 결과라고
  * 읽는다. 버튼 라벨이 바뀌는 것이 그 자백이다.
+ *
+ * IMPORTANT — 어긋나는 길이 **둘**이다. 조건을 손으로 고친 것(`dirty`)과 **화면을 통째로
+ * 갈아탄 것**이다. 뒤엣것은 `loadFrom`이 `dirty`를 false로 내리므로 예전에는 자백이
+ * 꺼졌다 — 제목·조건칩은 새 화면인데 표는 옛 화면의 결과였고 경고가 하나도 없었다.
+ *
+ * 화면이 같은지는 **서버가 준 `result.screen`**과 대조한다. "무엇을 실행했는가"를 클라이언트가
+ * 따로 기억하면 그 거울이 어긋나고, 어긋나도 값이 그럴듯해 드러나지 않는다.
  */
-const stale = computed(() => screening.hasResult && draft.dirty)
+const staleReason = computed<StaleReason>(() => {
+  if (!screening.hasResult || result.value === null) {
+    return null
+  }
+  // 손댄 것이 먼저다. 프리셋을 복제하면(`forkAsCustom`) origin은 즉석으로 바뀌지만 조건은
+  // 그대로이고 `dirty`만 올라간다 — 그때 "다른 화면"이라고 말하면 사실이 아니다.
+  if (draft.dirty) {
+    return 'EDITED'
+  }
+  // "새 조건"(reset)도 여기 걸린다. 즉석 조건은 어느 화면과도 같지 않으므로 조건 칩이
+  // 비었는데 옛 결과가 남아 있는 상태도 자백된다.
+  return matchesOrigin(result.value.screen, draft.origin) ? null : 'SCREEN'
+})
+
+const stale = computed(() => staleReason.value !== null)
 
 const runLabel = computed(() => (stale.value ? '변경 반영' : '스크리닝 실행'))
 
@@ -134,7 +155,7 @@ async function run(): Promise<void> {
         </template>
 
         <template v-if="result">
-          <ResultSummary :result="result" :stale="stale" />
+          <ResultSummary :result="result" :stale-reason="staleReason" />
           <!-- 모바일은 표를 좁힌 것이 아니라 카드 목록이다. 자세한 이유는 useBreakpoint에 있다. -->
           <ResultCards v-if="isMobile" :result="result" :as-of="result.asOf" class="screener__rows" />
           <ResultTable v-else :result="result" :as-of="result.asOf" class="screener__rows" />

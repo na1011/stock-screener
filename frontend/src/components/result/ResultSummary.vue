@@ -5,6 +5,7 @@ import { computed } from 'vue'
 import { PERCENTILE_POPULATION_ALL } from '@/api/types'
 import type { ScreeningResponse } from '@/api/types'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
+import { screenTypeLabel, staleNotice, type StaleReason } from '@/lib/screen'
 import { ALL_UNIVERSES_LABEL, universeLabel } from '@/lib/universe'
 import { formatCount, formatDate } from '@/lib/format'
 
@@ -20,14 +21,19 @@ import { formatCount, formatDate } from '@/lib/format'
 const props = defineProps<{
   result: ScreeningResponse
   /**
-   * 조건을 고친 뒤 아직 실행하지 않았는가.
+   * 눈앞의 결과가 지금 조건과 어긋난 이유. 어긋나지 않았으면 null.
    *
    * IMPORTANT — 자동 실행을 하지 않으므로 결과는 언제나 "마지막으로 실행한 것"이다. 그 사실을
    * 말하지 않으면 사용자는 눈앞의 목록을 방금 고친 조건의 결과로 읽는다. 위의 세 가지와
    * 같은 종류의 위험이다 — 화면이 사실과 다른 것을 주장하게 된다.
+   *
+   * 참/거짓이 아니라 **이유**를 받는다. 어긋나는 길이 둘(조건 편집·화면 전환)이고 무엇을
+   * 되돌리면 되는지가 다르다. 문구의 정본은 `lib/screen.staleNotice`다.
    */
-  stale?: boolean
+  staleReason?: StaleReason
 }>()
+
+const staleText = computed(() => staleNotice(props.staleReason ?? null))
 
 /** 서버가 일자를 정했는가. `asOfRequested`가 null이면 그렇다. */
 const serverChoseDate = computed(() => props.result.asOfRequested === null)
@@ -71,6 +77,16 @@ const knownPopulation = computed(
       그대로 남는다.
     -->
     <dl class="summary__facts">
+      <!--
+        결과가 **어느 화면 것인지**. 이것이 없으면 제목은 새 화면인데 표는 옛 화면인 상태를
+        대조할 단서가 없다. 아래 경고가 그 사실을 말하지만, 무엇의 결과인지는 여기가 답한다.
+      -->
+      <div class="summary__fact">
+        <dt>{{ screenTypeLabel(result.screen.type) }}</dt>
+        <dd>
+          <strong>{{ result.screen.name }}</strong>
+        </dd>
+      </div>
       <div class="summary__fact">
         <dt>기준일</dt>
         <dd>
@@ -98,9 +114,9 @@ const knownPopulation = computed(
         <dt>판정</dt>
         <dd>{{ evaluationModeLabels(result.evaluationMode).noun }}</dd>
       </div>
-      <div v-if="stale" class="summary__fact summary__fact--stale">
+      <div v-if="staleText" class="summary__fact summary__fact--stale">
         <i class="pi pi-exclamation-triangle" aria-hidden="true" />
-        <span>조건을 고쳤습니다. 아래는 <strong>이전 실행</strong> 결과입니다.</span>
+        <span>{{ staleText }}</span>
       </div>
     </dl>
 
