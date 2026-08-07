@@ -28,3 +28,38 @@ paths:
 - MUST: 워치리스트 조건 충족 여부를 일일 배치에서 함께 확인하고, 충족 시 알림 체계로 통지한다. 사용자가 추적 중인 종목의 변화를 알게 되는 유일한 경로이므로, 빠지면 워치리스트 기능 자체가 성립하지 않는다.
 
 - MUST NOT: 외부 API 키·인증 정보를 코드·커밋·로그에 넣지 않는다. IMPORTANT — 환경변수로만 다룬다.
+
+---
+
+## 실측된 함정
+
+위가 설계 원칙이라면 아래는 **실제로 겪은 것**이다(2026-08, `docs/progress.md`에서 옮겨 왔다 — 주입 상한을 넘겨 조건부 로드로 돌렸다). 공통점은 **아무 에러 없이 틀린 데이터가 남는다**는 것이다. 어댑터와 러너의 방어를 지우지 마라.
+
+### 외부 소스
+
+정본은 [`docs/api-spec/`](../../docs/api-spec/)이고, 아래 둘만 여기 옮긴 이유는 api-spec이 자동 로드되지 않기 때문이다.
+
+- **IMPORTANT — 공공데이터포털은 없는 종목·휴장일·파라미터 오타의 응답이 동일하다**(`resultCode "00"` + `totalCount 0` + HTTP 200). 날짜 형식 오타가 "그날 데이터 없음"으로 저장된다. **요청 전 파라미터 검증이 유일한 방어**다.
+- **IMPORTANT — `totalCount`를 보지 않으면 조용히 잘린다.** `totalCount=1618`인데 `numOfRows=1000`이면 618일이 **경고 없이** 사라진다.
+
+### 지표·재무 계산
+
+- **`FinancialFigures`의 `eps`·`bps`를 지표 계산에 쓰면 안 된다.** 지표는 언제나 자체 계산이다(spec §7). 두 필드는 대조용이다.
+- **재무 지표의 유량/저량 구분이 핵심이다.** 매출·이익·현금흐름은 4분기 합(TTM), 자산·부채·자본은 최근 분기 잔액이다. 저량을 합산하면 4배가 되는데 **값이 그럴듯해 드러나지 않는다.**
+- **백분위는 항상 오름차순이다.** `PER_PCTL`이 0에 가까우면 PER이 낮다는 뜻이고, "상위 20%"는 지표에 따라 `<= 0.2`이거나 `>= 0.8`이다. 방향의 정본은 원본의 `higher_is_better`이고 카탈로그 API가 `favorableEnd`로 내려준다.
+- **`IndicatorDataReader`가 분기 재무에 한 해치 여유를 얹어 읽는다.** PER의 TTM은 여유가 0이라 공시가 빠지면 경계에서 값이 조용히 사라진다.
+- **`ADJ_CLOSE`는 봉 하나로 값이 나오는 첫 지표다.** 정리 코드에서 `DELETE FROM stock` 앞에 `indicator_value` 정리가 없으면 FK로 중단된다.
+
+### 배치 실행 (`BootstrapRunner`, `bootstrap` 프로파일 전용)
+
+```bash
+# 공통 접두: ./gradlew bootRun --args='--spring.profiles.active=bootstrap <아래>'
+--job=universe
+--job=initial-load --price-years=7 --financial-years=7 --reload-existing=true
+--job=backfill --from=2025-11-11 --as-of=2026-08-05   # 구간 전체를 돈다
+```
+
+- **`--reload-existing=true`가 없으면 기간을 늘려도 아무 일도 일어나지 않는다.** 대상 선정이 `NOT EXISTS (price_daily)`라 봉이 하나라도 있으면 건너뛰고, 잡은 **성공으로 끝난다.**
+- **적재 중 코드를 재컴파일하지 않는다.** devtools가 실행 중 프로세스에 새 클래스를 끼워넣어 카탈로그·스키마와 어긋난다(실제 2회 발생).
+- **백필 한 번은 워밍업이 긴 지표를 다 채우지 못한다.** 러너가 `maxEffectiveLookback` 봉만 읽어 SMA_200은 실행당 ~25거래일치만 나온다. 구간 전체를 돌아야 한다(180일=1시간 51분).
+- 적재 검증: `ck_price_ohlc` 위반 0, 편입 종목 중 시세 없는 종목 0, `min(trade_date)`가 요청 구간 시작과 일치, `listed_shares` 빈값 0.
