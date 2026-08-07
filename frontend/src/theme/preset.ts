@@ -21,7 +21,13 @@ import Aura from '@primeuix/themes/aura'
  *    같은 색이 되고, 그러면 "판정하지 못했다"와 "매매 신호가 아니다"가 같은 색으로 보인다.
  */
 
-/** 잉크블루 램프. 900이 패널, 950이 캔버스와 입력 배경, 700이 hairline이다. */
+/**
+ * 잉크블루 램프. 950이 캔버스와 입력 배경, 900이 패널, 850이 떠 있는 것, 700이 hairline이다.
+ *
+ * 850은 표준 단계가 아니다. 오버레이 배경이 `#161d2b` 리터럴로 램프 **밖에** 있었고, 그래서
+ * "떠 있는 것은 패널보다 밝다"는 규칙이 램프를 읽어서는 보이지 않았다. 값은 그대로 두고
+ * 이름만 램프 안으로 들여왔다 — `--p-surface-850`이 생기고 `.vue`도 그것을 쓸 수 있다.
+ */
 const ink = {
   0: '#ffffff',
   50: '#eef1f6',
@@ -33,6 +39,7 @@ const ink = {
   600: '#3e4a5e',
   700: '#2a3444',
   800: '#1a2130',
+  850: '#161d2b',
   900: '#121722',
   950: '#0a0d13',
 } as const
@@ -125,9 +132,9 @@ export const ScreenerPreset = definePreset(Aura, {
 
         // 떠 있는 것은 패널보다 밝고 그림자가 깊다. 다크에서 그림자만으로는 층이 안 보인다.
         overlay: {
-          select: { background: '#161d2b', borderColor: '{surface.600}', shadow: '0 12px 28px -8px rgba(0,0,0,0.75)' },
-          popover: { background: '#161d2b', borderColor: '{surface.600}', shadow: '0 12px 28px -8px rgba(0,0,0,0.75)' },
-          modal: { background: '#161d2b', borderColor: '{surface.600}', shadow: '0 24px 56px -12px rgba(0,0,0,0.8)' },
+          select: { background: '{surface.850}', borderColor: '{surface.600}', shadow: '0 12px 28px -8px rgba(0,0,0,0.75)' },
+          popover: { background: '{surface.850}', borderColor: '{surface.600}', shadow: '0 12px 28px -8px rgba(0,0,0,0.75)' },
+          modal: { background: '{surface.850}', borderColor: '{surface.600}', shadow: '0 24px 56px -12px rgba(0,0,0,0.8)' },
         },
 
         list: {
