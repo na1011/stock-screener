@@ -1,10 +1,6 @@
 ---
 paths:
-  - "**/*.vue"
-  - "**/*.ts"
-  - "**/*.js"
-  - "**/*.css"
-  - "**/*.scss"
+  - "frontend/src/**"
 ---
 
 # 프론트엔드 판단 기준
@@ -55,9 +51,4 @@ paths:
 - MUST: 화면 폭 경계값은 `lib/breakpoints.ts`에만 적는다. CSS는 리터럴 px을 유지하되(미디어 쿼리는 `var()`를 받지 않는다) `breakpoints.spec.ts`가 토큰 밖의 값을 잡는다. **표↔카드 경계는 JS와 CSS 양쪽에 걸쳐 있어** 어긋나면 좁은 폭 구간에서만 레이아웃이 깨진다.
 - MUST: 자동 재시도는 GET에만 붙인다. 생성 요청을 재시도하면 응답만 유실된 경우 같은 화면이 두 개 만들어진다. 조회인데 POST인 `/api/screening`은 호출부가 명시적으로 켠다.
 
-## 빌드·의존성 (실측)
-
-2026-08에 `docs/progress.md`에서 옮겨 왔다 — 주입 상한을 넘겨 조건부 로드로 돌렸다.
-
-- **`./gradlew build`가 `frontend/`를 함께 빌드한다.** `processResources`가 `frontend/dist`를 `static/`으로 싣고 `check`가 Vitest를 돈다. Node가 없으면 `-PskipFrontend`(번들이 빠져 `SpaFallbackTest`가 실패한다). `npm` 경로는 빌드가 직접 해석한다 — Homebrew 경로가 `/etc/paths`에 없어 IDE 데몬에서 조용히 깨지기 때문이다.
-- **MUST: `primevue`는 4.x에 고정한다**(ADR-0019). 5.0.0은 MIT가 아니라 라이선스 키를 요구하고, 없거나 만료되면 화면에 고지가 뜬다.
+**빌드·의존성 함정은 `.claude/rules/config.md`에 있다** — `./gradlew build`의 프론트 결합과 primevue 4.x 고정(ADR-0019)이 거기로 갔다. 트리거가 `frontend/src/**`가 아니라 `build.gradle`·`package.json`이기 때문이다.

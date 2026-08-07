@@ -42,13 +42,11 @@
 - **phase별 브랜치를 만들지 않는다.** `main`에 직접 쌓는다(2026-08-06). Phase 2 브랜치가 `main`을 4개월 묶어둔 전례가 근거다. 브랜치는 **버릴 수 있는 탐색**에만 쓴다.
 - **`git add -A`를 쓰지 않는다.** `1873cf3`이 macOS 복제본 42개를 담아 컴파일이 멈췄다.
 - **IMPORTANT — iCloud가 `build/` 산출물도 복제한다.** 증상은 테스트의 `Could not execute test class 'X 2' (wrong name: X)`와 **수 분간의 멈춤**(Gradle이 파일 해싱에서 대기한다). 처방은 `./gradlew clean`이고, `checkDuplicateFiles`가 `src`(삭제)와 `build`(clean)를 나눠 먼저 잡는다. **원격 편집 파일이 즉시 안 보이는 것도 같은 원인이다 — 없다고 단정하기 전에 몇 분 뒤 다시 본다.**
-- **`.env`는 `build.gradle`이 읽어 `bootRun`·`liveTest`에만 주입한다.** `test`에는 넣지 않는다 — 실키가 있으면 `@ConditionalOnApiKey` 어댑터가 등록돼 빈 구성이 바뀐다. 주입 실패는 조용하므로 `./gradlew checkEnv`로 가른다.
 
 ---
 
 ## 미룬 것 / 알려진 미완성
 
-- **`clean-on-validation-error: true`가 `application-test.yaml`에 남아 있다**(제거 대상).
 - **외부 서비스 발급 8건 중 4건 완료.** 정본은 [`external-credentials.md`](./external-credentials.md). 도메인은 **`na1011.net`, 앱 주소는 `screener.na1011.net`으로 확정**됐고 구매만 남았다(2026-08-08).
 - **재무 수집이 일일 배치에 없다.** 분기 공시라 매일 조회하면 쿼터만 태운다. 공시 시즌 갱신은 수동 실행 전제다.
 - **워치리스트가 통째로 Phase 6이다.** 이음매는 이미 있다.
