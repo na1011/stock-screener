@@ -2,13 +2,12 @@
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import { useConfirm } from 'primevue/useconfirm'
-import { useToast } from 'primevue/usetoast'
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { ApiError } from '@/api/http'
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
+import { useApiToast } from '@/composables/useApiToast'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
 
@@ -23,7 +22,7 @@ const screens = useScreensStore()
 const draft = useScreenDraftStore()
 const router = useRouter()
 const confirm = useConfirm()
-const toast = useToast()
+const { notifyFailure, notifySuccess } = useApiToast()
 
 const busyId = ref<number | null>(null)
 
@@ -40,15 +39,7 @@ async function load(screen: ScreenResponse): Promise<void> {
     draft.loadFrom(await screens.open(screen.id))
     await router.push({ name: 'screener' })
   } catch (caught) {
-    if (!(caught instanceof ApiError)) {
-      throw caught
-    }
-    toast.add({
-      severity: 'error',
-      summary: '불러오지 못했습니다',
-      detail: caught.userMessage,
-      life: 5000,
-    })
+    notifyFailure('불러오지 못했습니다', caught)
   } finally {
     busyId.value = null
   }
@@ -74,19 +65,11 @@ async function remove(id: number, name: string): Promise<void> {
   busyId.value = id
   try {
     await screens.remove(id)
-    toast.add({ severity: 'success', summary: '삭제했습니다', detail: name, life: 3000 })
+    notifySuccess('삭제했습니다', name)
   } catch (caught) {
-    if (!(caught instanceof ApiError)) {
-      throw caught
-    }
     // 워치리스트가 참조 중이면 서버가 409를 준다(SCREEN_IN_USE). 조용히 넘기면 사용자는
     // 삭제된 줄 알고 목록에 그대로 남은 것을 보게 된다.
-    toast.add({
-      severity: 'error',
-      summary: '삭제하지 못했습니다',
-      detail: caught.userMessage,
-      life: 5000,
-    })
+    notifyFailure('삭제하지 못했습니다', caught)
   } finally {
     busyId.value = null
   }

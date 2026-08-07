@@ -11,14 +11,19 @@ import type { StockSearchResult } from '@/api/types'
 /**
  * 종목 검색.
  *
- * 실패해도 조용히 빈 목록만 남긴다 — 헤더에 오류 배너를 띄우면 화면 전체가 흔들리는데,
- * 검색은 부가 기능이라 그만한 자리를 차지할 이유가 없다. 다만 **삼키지는 않는다**:
- * 콘솔에 남겨 Phase 6의 Sentry가 붙었을 때 그대로 잡히게 한다.
+ * 실패해도 헤더에 오류 배너를 띄우지 않는다 — 화면 전체가 흔들리는데 검색은 부가 기능이라
+ * 그만한 자리를 차지할 이유가 없다. 콘솔에도 남겨 Phase 6의 Sentry가 붙었을 때 잡히게 한다.
+ *
+ * IMPORTANT — 그렇다고 **빈 목록만 남기지도 않는다.** 빈 드롭다운은 "일치하는 종목이 없다"와
+ * 구별되지 않아서, 사용자는 자기가 친 이름이 없는 종목이라고 믿고 검색을 그만둔다. 실패한
+ * 것과 결과가 없는 것은 문구로 갈라야 한다(frontend.md의 재시도 요구가 겨냥하는 지점이다).
  */
 const router = useRouter()
 
 const selected = ref<StockSearchResult | null>(null)
 const suggestions = ref<StockSearchResult[]>([])
+/** 마지막 조회가 실패했는가. 빈 결과와 실패를 문구로 가르는 데만 쓴다. */
+const failed = ref(false)
 
 let controller: AbortController | null = null
 
@@ -37,6 +42,7 @@ async function complete(event: AutoCompleteCompleteEvent): Promise<void> {
 
   try {
     suggestions.value = await api.searchStocks(query, current.signal)
+    failed.value = false
   } catch (caught) {
     if (current.signal.aborted) {
       return
@@ -45,6 +51,7 @@ async function complete(event: AutoCompleteCompleteEvent): Promise<void> {
       throw caught
     }
     suggestions.value = []
+    failed.value = true
     console.error('종목 검색 실패', caught)
   }
 }
@@ -78,7 +85,10 @@ async function go(): Promise<void> {
       </div>
     </template>
     <template #empty>
-      <div class="stock-search__empty">일치하는 종목이 없습니다.</div>
+      <div v-if="failed" class="stock-search__empty stock-search__empty--failed">
+        검색에 실패했습니다. 잠시 뒤 다시 입력해 주세요.
+      </div>
+      <div v-else class="stock-search__empty">일치하는 종목이 없습니다.</div>
     </template>
   </AutoComplete>
 </template>
@@ -107,6 +117,11 @@ async function go(): Promise<void> {
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   color: var(--p-text-muted-color);
+}
+
+/* 실패는 "결과 없음"과 색으로도 갈린다. 문구만으로는 훑어보는 눈에 같아 보인다. */
+.stock-search__empty--failed {
+  color: var(--p-red-500);
 }
 
 @media (max-width: 640px) {
