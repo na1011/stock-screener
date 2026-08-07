@@ -94,11 +94,15 @@ async function go(): Promise<void> {
 </template>
 
 <style scoped>
-/* 안쪽 input을 폭에 맞추는 규칙은 main.css의 전역 규칙으로 옮겼다. 여기만 겪던 문제가
-   아니라 PrimeVue 폼 래퍼 전반의 문제였다(래퍼는 inline-flex인데 input의 width: 1%가
-   fluid 클래스에만 붙는다). */
+/*
+ * 폭은 **호출부가 정한다.** 여기서 고정하면 헤더가 좁아질 때 줄일 수 없다.
+ *
+ * 안쪽 input을 래퍼 폭에 맞추는 규칙은 `main.css`의 전역 규칙으로 옮겼다 — 여기만 겪던
+ * 문제가 아니라 PrimeVue 폼 래퍼 전반의 문제였다(래퍼가 inline-flex인데 input의
+ * `width: 1%`가 fluid 클래스에만 붙는다).
+ */
 .stock-search {
-  width: 14rem;
+  width: 100%;
 }
 
 .stock-search__option {
@@ -118,14 +122,9 @@ async function go(): Promise<void> {
   color: var(--p-text-muted-color);
 }
 
-/* 실패는 "결과 없음"과 색으로도 갈린다. 문구만으로는 훑어보는 눈에 같아 보인다. */
+/* 실패는 "결과 없음"과 색으로도 갈린다. 문구만으로는 훑어보는 눈에 같아 보인다.
+   다크에서는 500이 어두워 읽히지 않으므로 400을 쓴다. */
 .stock-search__empty--failed {
-  color: var(--p-red-500);
-}
-
-@media (max-width: 640px) {
-  .stock-search {
-    width: 8rem;
-  }
+  color: var(--p-red-400);
 }
 </style>

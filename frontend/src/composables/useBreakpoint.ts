@@ -31,11 +31,21 @@ function useMediaQuery(query: string): Ref<boolean> {
 }
 
 /**
- * 모바일 경계. 이 폭 아래는 표를 그릴 수 없다.
+ * 화면 폭 경계 둘.
  *
  * 경계값을 여기 적지 않는 이유는 CSS도 같은 값을 써야 하기 때문이다 — 정본은
  * `lib/breakpoints`이고, 어긋나면 `breakpoints.spec.ts`가 빌드를 멈춘다.
+ *
+ * `isMobile`은 **컴포넌트를 갈아 끼우는** 경계이고, `isCompact`는 같은 컴포넌트가 라벨을
+ * 접는 경계다. 둘을 하나로 합치지 않는 이유는 서로 다른 질문이기 때문이다 —
+ * `lib/breakpoints`의 주석이 그 구분을 이미 적어 두었다.
  */
-export function useBreakpoint(): { isMobile: Readonly<Ref<boolean>> } {
-  return { isMobile: readonly(useMediaQuery(maxWidthQuery(BREAKPOINTS.MOBILE))) }
+export function useBreakpoint(): {
+  isMobile: Readonly<Ref<boolean>>
+  isCompact: Readonly<Ref<boolean>>
+} {
+  return {
+    isMobile: readonly(useMediaQuery(maxWidthQuery(BREAKPOINTS.MOBILE))),
+    isCompact: readonly(useMediaQuery(maxWidthQuery(BREAKPOINTS.COMPACT))),
+  }
 }
