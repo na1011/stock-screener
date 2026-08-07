@@ -75,17 +75,22 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
 
 ## 5. 개인 도메인
 
-- **어디서**: 도메인 등록업체(가비아, Cloudflare Registrar 등)
+- **어디서**: **Cloudflare Registrar**([domains.cloudflare.com](https://domains.cloudflare.com/)) — 2026-08-07 결정
 - **무엇을**: 도메인 하나
-- **소요**: 구매 즉시~수 시간(DNS 전파)
-- **주의**: spec §6이 "개인 도메인을 보유·구매할 의향이 있다"고 기록했다. 6번(Cloudflare)과 같은 곳에서 사면 연동이 단순해진다. 1번(OAuth 리디렉션 URI)이 이 도메인에 의존하므로 **1번보다 먼저** 정하는 것이 낫다.
+- **소요**: 구매 즉시
+- **결정 근거**: 6번(Cloudflare Tunnel)이 spec §6에서 이미 확정된 외부 접속 경로다. 같은 곳에서 등록하면 zone이 자동 생성되고 네임서버가 처음부터 Cloudflare라 **네임서버 변경과 전파 대기(수 시간~48시간)가 사라진다.** 등록 대행 마진도 없다(도매 원가 판매).
+- **주의**: **`.kr`·`.co.kr`은 Cloudflare Registrar가 지원하지 않는다.** `.kr`을 고르면 다른 등록업체에서 사고 네임서버만 옮기는 경로가 되어 위 실익이 없어진다.
+- **주의**: 등록 직후 오는 **ICANN 이메일 인증을 15일 안에** 처리해야 한다. 방치하면 도메인이 정지되고 사이트 전체가 죽는다.
+- 1번(OAuth 리디렉션 URI)이 이 도메인에 의존하므로 도메인이 먼저다.
 
 ## 6. Cloudflare 계정 + Tunnel
 
-- **어디서**: [Cloudflare](https://dash.cloudflare.com/) → 회원가입 → Zero Trust → Tunnels
-- **무엇을**: 계정, 도메인 등록(네임서버 변경), Tunnel 생성 후 토큰
+- **어디서**: [Cloudflare](https://dash.cloudflare.com/) → Zero Trust(Cloudflare One) → **Networking → Tunnels** (구 UI는 `Access → Tunnels`)
+- **무엇을**: 계정, Tunnel 생성 후 커넥터 토큰. 5번을 Cloudflare Registrar에서 사면 **네임서버 변경 단계는 없다.**
 - **환경변수**: `CLOUDFLARE_TUNNEL_TOKEN`
-- **주의**: 도메인(5번)의 네임서버를 Cloudflare로 바꿔야 한다. spec §6이 포트포워딩 없이 외부 접속하기 위해 채택한 방식이다.
+- **주의**: spec §6이 포트포워딩 없이 외부 접속하기 위해 채택한 방식이다. 절차는 [`TODO.md`](../TODO.md) §3 ②에 단계별로 있다.
+- **IMPORTANT — `CLOUDFLARE_TUNNEL_TOKEN`을 Spring 애플리케이션은 읽지 않는다.** `sudo cloudflared service install <TOKEN>`이 `launchd` 데몬에 직접 주입하며, 토큰을 쓰는 주체는 그 프로세스다. `.env`에 적는 것은 재설치·재발급 때 다시 찾지 않기 위한 기록이다.
+- **IMPORTANT — 도메인을 붙이면 `server.forward-headers-strategy`가 필요해진다.** `application.yaml`에 `server:` 블록이 아예 없어 기본값 `NONE`이고, cloudflared는 로컬 앱에 **평문 HTTP**로 붙는다. 그 상태에서는 Spring이 `redirect_uri`를 `http://{도메인}/...`으로 만들어 Google이 `redirect_uri_mismatch`를 낸다 — 호스트는 맞고 스킴만 달라서 화면만 봐서는 원인을 못 찾는다. Spring이 요청 Host로 `redirect_uri`를 만든다는 것은 :5173/:8080에서 실측된 동작이다(1번 항목, ADR-0018).
 
 ## 7. Sentry 프로젝트
 

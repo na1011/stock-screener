@@ -66,39 +66,154 @@ Phase 5는 구현과 자동 검증이 끝났고 **수동 관통만 남았다.** 
 
 ## 3. Phase 6 진입 전에 발급받을 것
 
-Phase 6(워치리스트·관리자·운영)은 **네 가지 외부 자격증명이 전부 필요하다.** 상세 절차와 주의사항은 [`docs/external-credentials.md`](docs/external-credentials.md)에 있다. `.env.example`에 환경변수 자리는 이미 만들어져 있으므로 값만 `.env`에 넣으면 된다.
+Phase 6(워치리스트·관리자·운영)은 **네 가지 외부 자격증명이 전부 필요하다.** 항목별 배경은 [`docs/external-credentials.md`](docs/external-credentials.md) 5~8번에 있고, 여기는 **순서대로 따라 하는 절차**다.
 
-**순서가 있다 — 도메인이 나머지 셋의 앞이다.**
+**도메인은 Cloudflare Registrar에서 산다**(결정 2026-08-07). 등록과 동시에 Cloudflare에 zone이 생기고 네임서버가 Cloudflare로 잡히므로, 다른 등록업체에서 살 때 필요한 **네임서버 변경과 전파 대기(수 시간~48시간)가 통째로 없어진다.** ①과 ②가 한 자리에서 이어진다는 것이 이 선택의 실익이다.
 
-- [ ] **① 개인 도메인** (`docs/external-credentials.md` 5번)
-  도메인 등록업체(가비아, Cloudflare Registrar 등). Cloudflare에서 사면 ②의 네임서버 변경이 없어진다.
-  **없으면 막히는 것**: 고정 HTTPS 주소 — 외부 접속과 OAuth 리디렉션이 모두 여기 의존한다.
+**의존 순서**: ① 도메인 → ② Tunnel → ③ OAuth·앱 설정. 이 셋은 사슬이라 앞을 건너뛸 수 없다. **④ Sentry와 ⑤ 알림은 이 사슬과 무관하므로 아무 때나 먼저 해도 된다.**
 
-- [ ] **② Cloudflare 계정 + Tunnel** (6번) → `CLOUDFLARE_TUNNEL_TOKEN`
-  Cloudflare → Zero Trust → Tunnels. ①의 네임서버를 Cloudflare로 바꿔야 한다.
-  **없으면 막히는 것**: 홈 네트워크 밖에서의 접속 전부.
+**돈이 드는 것은 도메인 하나뿐이다.** Cloudflare Registrar는 도매 원가로 팔고 마진·갱신 인상이 없다(`.com` 기준 연 $10 안팎). Tunnel·Sentry 무료 티어·Slack/Discord 웹훅·Gmail SMTP는 이 규모에서 전부 0원이다.
 
-- [ ] **③ 도메인이 정해지면 Google Console에 리디렉션 URI를 추가한다.**
+---
+
+### ① Cloudflare 계정 + 도메인 등록 → (환경변수 없음)
+
+- [ ] **1-1. 계정 생성** — [dash.cloudflare.com](https://dash.cloudflare.com/) 회원가입. 이메일 인증까지 마친다.
+- [ ] **1-2. 도메인 검색·구매** — [domains.cloudflare.com](https://domains.cloudflare.com/) 또는 대시보드 좌측 `Domain Registration` → `Register Domains`. 이름을 검색해 결제한다.
+- [ ] **1-3. ICANN 이메일 인증 메일을 반드시 연다.** 등록 직후 오는 확인 메일을 **15일 안에** 클릭하지 않으면 도메인이 정지되고 사이트 전체가 죽는다. 스팸함까지 확인한다.
+- [ ] **1-4. 자동 갱신이 켜져 있는지 확인한다.** 만료되면 OAuth 리디렉션까지 한꺼번에 끊긴다.
+- [ ] **1-5. 네임서버 확인** — 터미널에서:
+  ```bash
+  dig NS {도메인} +short     # *.ns.cloudflare.com 두 개가 나오면 완료
+  ```
+
+**TLD 선택 주의**
+
+- **`.kr`·`.co.kr`은 Cloudflare Registrar에서 살 수 없다.** 한국 ccTLD는 지원 목록에 없다. 굳이 `.kr`을 원하면 가비아에서 사고 네임서버만 Cloudflare로 돌리는 경로가 되는데, 그러면 이 결정의 실익이 사라진다. `.com` / `.dev` / `.app` / `.xyz` 중에서 고르는 편이 낫다.
+- `.dev`·`.app`은 브라우저에 HSTS가 미리 박혀 있어 **HTTP 접속이 아예 불가능하다.** Tunnel이 어차피 HTTPS만 주므로 이 프로젝트에는 문제가 없다. 다만 나중에 평문으로 뭔가 확인하려 할 때 "왜 안 되지"로 헤맬 수 있다.
+- WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 항목이 아니다.
+
+**없으면 막히는 것**: 고정 HTTPS 주소 — 외부 접속과 OAuth 리디렉션이 모두 여기 의존한다.
+
+---
+
+### ② Cloudflare Tunnel → `CLOUDFLARE_TUNNEL_TOKEN`
+
+포트포워딩 없이 맥북의 `:8080`을 외부 HTTPS 주소에 붙이는 경로다(spec §6).
+
+- [ ] **2-1. 커넥터 설치**
+  ```bash
+  brew install cloudflared
+  ```
+- [ ] **2-2. 대시보드에서 터널 생성** — Cloudflare 대시보드 → **Zero Trust**(현재 이름은 Cloudflare One) → **Networking → Tunnels** → `Create a tunnel` → 커넥터로 **Cloudflared** 선택 → 이름 입력(예: `stock-screener-macbook`) → `Save`.
+  구버전 UI에서는 `Access → Tunnels`에 있다. 둘 다 같은 화면이다.
+- [ ] **2-3. 토큰으로 서비스 설치** — 생성 직후 화면에 OS별 설치 명령이 나온다. macOS 탭의 명령을 그대로 붙여넣으면 되고, 형태는 이렇다:
+  ```bash
+  sudo cloudflared service install <TOKEN>
+  ```
+  `launchd` 데몬(`/Library/LaunchDaemons/com.cloudflare.cloudflared.plist`)으로 등록되어 **재부팅 후에도 자동 기동**한다.
+  **MUST — 실행 후 셸 히스토리에서 이 줄을 지운다.** 명령줄에 토큰 원문이 그대로 들어가고 `~/.zsh_history`는 평문이다. `history -d <번호>` 또는 파일에서 직접 제거한다.
+- [ ] **2-4. 대시보드에서 `Connected` 상태를 확인한다.** 몇 초 내에 커넥터가 초록으로 바뀐다.
+- [ ] **2-5. 공개 호스트명 연결** — 터널 상세 → `Routes`(또는 `Public Hostname`) 탭 → `Add route` / `Published application`:
+
+  | 항목 | 값 |
+  |---|---|
+  | Subdomain | 비워 두거나 `screener` |
+  | Domain | ①에서 산 도메인 |
+  | Type | `HTTP` |
+  | URL | `localhost:8080` |
+
+  **Type은 `HTTPS`가 아니라 `HTTP`다.** cloudflared가 로컬 앱에 붙는 구간은 평문이고, 인증서는 Cloudflare 가장자리에서 끝난다. `HTTPS`로 잡으면 502가 난다.
+- [ ] **2-6. 확인** — `./gradlew bootRun`을 띄운 상태에서:
+  ```bash
+  curl -I https://{도메인}/          # 200 + 로그인 셸 HTML
+  curl -I https://{도메인}/api/screens  # 401 (익명이므로 정상)
+  ```
+
+**알아둘 것**
+
+- **`CLOUDFLARE_TUNNEL_TOKEN`은 Spring 애플리케이션이 읽지 않는다.** 토큰을 쓰는 주체는 `launchd`에 등록된 `cloudflared` 프로세스이고, 2-3에서 이미 주입이 끝난다. `.env`에 적는 것은 **재설치·재발급 때 다시 찾지 않기 위한 기록**이다. `./gradlew checkEnv`도 키가 채워졌는지만 본다.
+- **맥북이 잠자면 터널도 끊긴다.** 상시 접속을 원하면 절전 설정을 바꾸거나 `caffeinate`가 필요하다. Phase 6의 "자동 기동" 과제에 포함된다.
+- 터널을 지우고 다시 만들면 토큰이 바뀐다. 그때는 `sudo cloudflared service uninstall` 후 2-3을 다시 한다.
+
+**없으면 막히는 것**: 홈 네트워크 밖에서의 접속 전부.
+
+---
+
+### ③ 도메인이 붙은 뒤 OAuth·애플리케이션 설정 → (환경변수 없음)
+
+발급이 아니라 **설정 작업 두 가지**다. 둘 중 하나만 하면 로그인이 안 된다.
+
+- [ ] **3-1. Google Console에 리디렉션 URI 추가**
+  [Google Cloud Console](https://console.cloud.google.com/) → API 및 서비스 → 사용자 인증 정보 → 해당 OAuth 클라이언트 → 승인된 리디렉션 URI:
   ```
   https://{도메인}/login/oauth2/code/google
   ```
-  지금은 localhost만 등록되어 있어 외부 주소로는 `redirect_uri_mismatch`로 실패한다.
+  기존 `http://localhost:8080/...`은 **지우지 않는다.** 로컬 개발이 그걸로 돈다.
+  OAuth 동의 화면의 `승인된 도메인`에도 ①의 도메인을 넣는다.
 
-- [ ] **④ Sentry 프로젝트** (7번) → `SENTRY_DSN`
-  Sentry → 프로젝트 생성. spec §8이 **프론트엔드 에러도** 수집하라고 요구하므로 백엔드·프론트 프로젝트를 나눌지 하나로 할지는 착수 시점에 판단한다.
-  **없으면 막히는 것**: 에러 수집·통지. 현재 프론트 오류는 `console.error`에만 남는다.
+- [ ] **3-2. IMPORTANT — 프록시 헤더 신뢰 설정을 켠다(코드 변경).**
+  `src/main/resources/application.yaml`에 지금 `server:` 블록 자체가 없다. 즉 `forward-headers-strategy`가 기본값(`NONE`)이라 **Spring이 `X-Forwarded-Proto`를 무시한다.** cloudflared가 로컬에 평문 HTTP로 붙기 때문에, 그 상태로 도메인에서 로그인하면 Spring이 만드는 `redirect_uri`가 이렇게 나간다:
+  ```
+  http://{도메인}/login/oauth2/code/google     ← 스킴이 http
+  ```
+  등록한 것은 `https://…`이므로 Google은 `redirect_uri_mismatch`를 낸다. **호스트는 맞고 스킴만 다르기 때문에 화면만 봐서는 원인을 못 찾는다.** Spring이 요청 Host로 `redirect_uri`를 만든다는 것은 :5173/:8080에서 이미 실측된 동작이다(ADR-0018).
+  ```yaml
+  server:
+    forward-headers-strategy: framework
+  ```
+  이 한 줄은 에이전트가 할 수 있다. 다만 **Tunnel이 실제로 붙기 전에는 검증이 불가능하므로** Phase 6 착수 시 ②와 함께 처리한다. 세션 쿠키에 `Secure` 플래그가 붙는지도 그때 같이 확인한다.
 
-- [ ] **⑤ 알림 채널** (8번) → `ALERT_WEBHOOK_URL`
-  Slack Incoming Webhook 또는 Discord 채널 웹훅.
-  **추가로 이메일도 필요하다** — spec §8이 "이메일과 메신저 **두 채널 모두**"를 요구한다. Gmail 앱 비밀번호 등 SMTP 자격증명이 별도로 있어야 하고 `MAIL_USERNAME`·`MAIL_PASSWORD`로 들어간다.
-  **없으면 막히는 것**: 배치 실패 알림과 워치리스트 알림 — spec §9 수용 기준 두 개가 여기 걸린다.
+**없으면 막히는 것**: 외부 주소에서의 로그인 전부. 화면은 뜨는데 로그인만 실패한다.
 
-### 발급한 뒤
+---
 
-```bash
-./gradlew checkEnv   # 값은 출력되지 않고 키 이름과 설정 여부만 나온다
-```
+### ④ Sentry 프로젝트 → `SENTRY_DSN` (+ 프론트용 변수 신설 필요)
 
-그리고 [`docs/external-credentials.md`](docs/external-credentials.md)의 현황 표를 `완료 (YYYY-MM-DD)`로 바꾸고, [`docs/progress.md`](docs/progress.md)의 "미룬 것" 절에서 해당 항목을 지운다.
+- [ ] **4-1.** [sentry.io](https://sentry.io/) 가입 → 조직 생성.
+- [ ] **4-2. 프로젝트를 둘 만든다** — 플랫폼 `Java / Spring Boot` 하나, `JavaScript / Vue` 하나.
+  **하나로 합치지 않는 이유**: 이슈 그룹핑·릴리스·소스맵 처리가 플랫폼별로 갈려서, 섞으면 프론트 스택트레이스가 minify된 채로 남는다. 무료 티어의 제약은 프로젝트 수가 아니라 **월 이벤트 총량**이라 나눠도 비용이 늘지 않는다.
+- [ ] **4-3.** 각 프로젝트의 DSN을 복사한다. 백엔드 것이 `SENTRY_DSN`이다.
+- [ ] **4-4. 프론트 DSN을 담을 환경변수가 아직 없다.** `.env.example`에는 `SENTRY_DSN` 하나뿐이다. Vite는 **`VITE_` 접두어가 붙은 변수만** 번들에 노출하므로 `VITE_SENTRY_DSN`을 새로 만들어야 하고, 이건 Phase 6 착수 시 `.env.example`과 빌드 설정에 함께 추가한다.
+  프론트 DSN이 번들에 그대로 박혀 공개되는 것은 **정상이다** — Sentry DSN은 쓰기 전용 공개 식별자다. 시크릿으로 착각해 숨기려다 빌드를 꼬지 않는다.
+
+**없으면 막히는 것**: 에러 수집·통지. 현재 프론트 오류는 `console.error`에만 남는다.
+
+---
+
+### ⑤ 알림 채널 → `ALERT_WEBHOOK_URL` + `MAIL_USERNAME`·`MAIL_PASSWORD`
+
+spec §8이 **"이메일과 메신저 두 채널 모두"**를 요구한다. 하나만 만들면 수용 기준을 못 채운다.
+
+**5-A. 메신저 웹훅**
+
+- [ ] **Discord로 한다면**(가장 빠르다): 서버 생성 → 채널 설정 → `연동` → `웹후크` → `새 웹후크` → URL 복사.
+- [ ] **Slack으로 한다면**: [api.slack.com/apps](https://api.slack.com/apps) → `Create New App` → `Incoming Webhooks` 활성화 → `Add New Webhook to Workspace` → 채널 선택 → URL 복사.
+- **페이로드 형식이 다르다** — Slack은 `{"text": …}`, Discord는 `{"content": …}`다. **Discord 웹훅 URL 끝에 `/slack`을 붙이면 Slack 형식을 그대로 받아준다.** 이걸 쓰면 어느 쪽을 고르든 `AlertPort` 구현이 하나로 끝난다. 어느 채널로 갈지 아직 안 정했다면 이 방식을 전제로 만드는 편이 낫다.
+- **MUST NOT — 웹훅 URL을 커밋하지 않는다.** URL 자체가 자격증명이라 아는 사람은 누구나 그 채널에 글을 쓸 수 있다.
+
+**5-B. 이메일(SMTP)**
+
+- [ ] Google 계정에 **2단계 인증을 먼저 켠다.** 켜지 않으면 앱 비밀번호 메뉴 자체가 나타나지 않는다.
+- [ ] [myaccount.google.com](https://myaccount.google.com/) → 보안 → 2단계 인증 → **앱 비밀번호** → 이름 입력 → 생성.
+- [ ] 나오는 16자를 **공백 없이** `MAIL_PASSWORD`에, 계정 주소를 `MAIL_USERNAME`에 넣는다. 이 값은 그 화면을 닫으면 다시 볼 수 없다.
+- 서버 설정은 `smtp.gmail.com:587` STARTTLS다. 일반 Gmail 계정의 발신 한도는 하루 500통 수준이라 이 프로젝트 규모에는 충분하다.
+
+**없으면 막히는 것**: 배치 실패 알림과 워치리스트 알림 — spec §9 수용 기준 두 개가 여기 걸린다.
+
+---
+
+### 발급한 뒤 (공통 마무리)
+
+1. 값을 `.env`에 넣는다. **`.env.example`에는 절대 넣지 않는다** — 그 파일은 커밋된다.
+2. 실렸는지 확인한다:
+   ```bash
+   ./gradlew checkEnv   # 값은 출력되지 않고 키 이름과 설정 여부만 나온다
+   ```
+   **`자리표시자 그대로 — 채워지지 않음`이 뜨면 복사만 하고 안 채운 것이다.** 애플리케이션은 그 상태로도 조용히 기동하므로 이 명령이 유일한 구분 수단이다.
+   IMPORTANT — `~/Desktop`이 iCloud 동기화 대상이라 **다른 기기에서 편집한 `.env`가 즉시 안 보인다.** 값을 넣었는데 미설정으로 나오면 몇 분 뒤 다시 돌려본다(실제로 약 10분 걸린 적이 있다).
+3. [`docs/external-credentials.md`](docs/external-credentials.md)의 현황 표를 `완료 (YYYY-MM-DD)`로 바꾼다.
+4. [`docs/progress.md`](docs/progress.md)의 "미룬 것" 절에서 해당 항목을 지운다.
+5. 끝난 항목은 이 파일에서 지운다.
 
 **MUST NOT** — 실제 키를 `.env.example`이나 커밋·로그에 넣지 않는다. `.env`만 쓴다(gitignore 대상이다).
