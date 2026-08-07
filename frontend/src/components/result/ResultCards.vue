@@ -122,7 +122,13 @@ function toggle(stockId: number): void {
         <InputIcon class="pi pi-search" />
         <InputText v-model="query" :placeholder="RESULT_LABELS.search" />
       </IconField>
-      <Select v-model="sortBy" :options="sortOptions" option-label="label" option-value="value" />
+      <Select
+        v-model="sortBy"
+        :options="sortOptions"
+        option-label="label"
+        option-value="value"
+        fluid
+      />
     </div>
 
     <p class="cards__count">{{ formatCount(visibleRows.length) }}종목</p>
@@ -240,9 +246,14 @@ function toggle(stockId: number): void {
   min-width: 0;
 }
 
+/* 긴 종목명이 오른쪽 가격을 밀어내지 않게 한다. min-width: 0만으로는 줄지 않는다 —
+   줄일 수 있다는 것과 잘라 그린다는 것은 다르다. */
 .card__name {
   font-weight: 600;
   color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card__ticker {

@@ -109,7 +109,7 @@ onMounted(() => {
             :options="universeOptions"
             option-label="name"
             option-value="code"
-            class="builder__select"
+            fluid
           />
         </AsyncPanel>
       </div>
@@ -122,9 +122,9 @@ onMounted(() => {
           date-format="yy-mm-dd"
           placeholder="최신 (서버가 정함)"
           show-button-bar
+          fluid
           :min-date="minDate"
           :max-date="maxDate"
-          class="builder__select"
         />
       </div>
     </div>
@@ -223,16 +223,15 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
-  min-width: 14rem;
+  /* flex-basis로 폭을 주고 하한을 0으로 내린다. min-width로 주면 좁은 폭에서 줄바꿈
+     대신 넘쳐 나간다 — flex 아이템의 자동 최소 크기는 내용 기반이라 그 아래로 안 줄어든다. */
+  flex: 1 1 14rem;
+  min-width: 0;
 }
 
 .builder__label {
   font-size: 0.75rem;
   color: var(--p-text-muted-color);
-}
-
-.builder__select {
-  width: 100%;
 }
 
 .builder__conditions {
@@ -260,8 +259,7 @@ onMounted(() => {
 
 @media (max-width: 900px) {
   .builder__control {
-    min-width: 0;
-    width: 100%;
+    flex-basis: 100%;
   }
 }
 </style>

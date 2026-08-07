@@ -103,6 +103,7 @@ function applyTopQuintile(): void {
         placeholder="지표 선택"
         filter
         filter-placeholder="지표 검색"
+        fluid
         :disabled="readonly"
         class="condition-row__control"
         @change="onIndicatorChange"
@@ -133,6 +134,7 @@ function applyTopQuintile(): void {
         :options="operatorOptions"
         option-label="label"
         option-value="name"
+        fluid
         :disabled="readonly"
         class="condition-row__control"
         @change="draft.markDirty()"
@@ -156,6 +158,7 @@ function applyTopQuintile(): void {
         <template v-if="condition.operandType === 'LITERAL'">
           <InputNumber
             v-model="condition.value"
+            fluid
             :max-fraction-digits="4"
             :disabled="readonly"
             :placeholder="requiresUpperBound ? '하한' : '값'"
@@ -166,6 +169,7 @@ function applyTopQuintile(): void {
             <span class="condition-row__tilde">~</span>
             <InputNumber
               v-model="condition.upperBound"
+              fluid
               :max-fraction-digits="4"
               :disabled="readonly"
               placeholder="상한"
@@ -185,13 +189,15 @@ function applyTopQuintile(): void {
             option-value="code"
             placeholder="지표 선택"
             filter
+            fluid
             :disabled="readonly"
-            class="condition-row__control"
+            class="condition-row__operand-indicator"
             @change="draft.markDirty()"
           />
           <span class="condition-row__times">×</span>
           <InputNumber
             v-model="condition.multiplier"
+            fluid
             :max-fraction-digits="4"
             :disabled="readonly"
             placeholder="1"
@@ -207,11 +213,11 @@ function applyTopQuintile(): void {
       <InputNumber
         :id="`weight-${condition.key}`"
         v-model="condition.weight"
+        fluid
         :min="0"
         :max-fraction-digits="2"
         placeholder="1"
         :disabled="readonly"
-        class="condition-row__number condition-row__number--narrow"
         @update:model-value="draft.markDirty()"
       />
     </div>
@@ -231,26 +237,39 @@ function applyTopQuintile(): void {
 </template>
 
 <style scoped>
+/*
+ * 열 하한의 합이 컨테이너 폭을 넘으면 그리드는 넘긴 채로 그린다 — `minmax()`의 하한은
+ * 축소되지 않는다. 예전 값(12+7+16rem + auto 둘 + gap)은 합이 약 47.5rem(760px)이라
+ * 한 열로 무너지는 900px 바로 위 구간에서 실제로 터졌다.
+ *
+ * 지금 합은 10+6+12rem + 4.5rem(가중치) + 1.875rem(삭제) + gap 3rem + padding 1.5rem
+ * ≈ 38.9rem(622px)이다. 무너지는 경계(900px)보다 넉넉히 아래에 둔다.
+ */
 .condition-row {
   display: grid;
-  grid-template-columns: minmax(12rem, 1.2fr) minmax(7rem, 0.6fr) minmax(16rem, 2fr) auto auto;
+  grid-template-columns:
+    minmax(10rem, 1.4fr) minmax(6rem, 0.6fr) minmax(12rem, 1.8fr) auto auto;
   gap: 0.75rem;
   align-items: start;
   padding: 0.75rem;
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
+  background: var(--p-content-background);
 }
 
 .condition-row__field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  /* 그리드 아이템의 자동 최소 크기는 내용 기반이다. 0으로 내리지 않으면 안쪽 셀렉트의
+     긴 지표 이름이 열 하한을 무시하고 밀어낸다. */
   min-width: 0;
 }
 
 .condition-row__label {
   font-size: 0.75rem;
   color: var(--p-text-muted-color);
+  white-space: nowrap;
 }
 
 .condition-row__control {
@@ -264,12 +283,24 @@ function applyTopQuintile(): void {
   flex-wrap: wrap;
 }
 
+/* flex-basis로 폭을 주고 min-width를 0으로 내린다. `width`만 주면 안쪽 input의 자동
+   최소 크기(≈12rem)가 남아 줄바꿈 대신 넘쳐 나간다 — `fluid`가 그것을 푸는 전제다. */
 .condition-row__number {
-  width: 8rem;
+  flex: 1 1 5rem;
+  min-width: 0;
 }
 
 .condition-row__number--narrow {
-  width: 5.5rem;
+  flex: 0 1 4.5rem;
+}
+
+.condition-row__operand-indicator {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.condition-row__field--weight {
+  width: 4.5rem;
 }
 
 .condition-row__hint {
@@ -288,6 +319,8 @@ function applyTopQuintile(): void {
 
 .condition-row__field--remove {
   justify-content: center;
+  align-items: center;
+  width: 1.875rem;
   padding-top: 1.1rem;
 }
 
@@ -303,12 +336,20 @@ function applyTopQuintile(): void {
     position: absolute;
     top: 0.25rem;
     right: 0.25rem;
+    width: auto;
     padding-top: 0;
   }
 
-  .condition-row__number,
-  .condition-row__number--narrow {
+  /* 삭제 버튼이 절대 배치로 빠지므로 지표 라벨이 그 아래를 지나지 않게 자리를 비운다. */
+  .condition-row__field--indicator {
+    padding-right: 2rem;
+  }
+
+  .condition-row__field--weight {
     width: 100%;
+  }
+
+  .condition-row__number--narrow {
     flex: 1 1 6rem;
   }
 }

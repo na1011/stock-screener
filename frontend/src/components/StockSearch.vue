@@ -94,12 +94,11 @@ async function go(): Promise<void> {
 </template>
 
 <style scoped>
+/* 안쪽 input을 폭에 맞추는 규칙은 main.css의 전역 규칙으로 옮겼다. 여기만 겪던 문제가
+   아니라 PrimeVue 폼 래퍼 전반의 문제였다(래퍼는 inline-flex인데 input의 width: 1%가
+   fluid 클래스에만 붙는다). */
 .stock-search {
   width: 14rem;
-}
-
-.stock-search :deep(input) {
-  width: 100%;
 }
 
 .stock-search__option {

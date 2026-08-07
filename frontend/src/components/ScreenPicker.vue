@@ -95,6 +95,7 @@ async function pick(key: number | string | null): Promise<void> {
       option-value="key"
       placeholder="프리셋·저장된 화면 불러오기"
       show-clear
+      fluid
       :loading="loading"
       class="screen-picker"
       @update:model-value="pick"
@@ -103,8 +104,8 @@ async function pick(key: number | string | null): Promise<void> {
 </template>
 
 <style scoped>
+/* fluid가 width: 100%를 주므로 여기서는 상한만 정한다. 좁아지면 그대로 줄어든다. */
 .screen-picker {
-  width: 20rem;
-  max-width: 100%;
+  max-width: 22rem;
 }
 </style>

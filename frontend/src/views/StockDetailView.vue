@@ -89,7 +89,7 @@ onMounted(() => {
     >
       <template v-if="detail.data.value">
         <header class="stock-detail__header">
-          <div>
+          <div class="stock-detail__identity">
             <h1 class="stock-detail__name">{{ detail.data.value.stock.name }}</h1>
             <p class="stock-detail__meta">
               {{ detail.data.value.stock.ticker }} · {{ detail.data.value.stock.marketCode }}
@@ -195,9 +195,15 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
+.stock-detail__identity {
+  /* 긴 종목명이 오른쪽 가격 블록을 밀어내지 않게 한다. */
+  min-width: 0;
+}
+
 .stock-detail__name {
   font-size: 1.5rem;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .stock-detail__meta {

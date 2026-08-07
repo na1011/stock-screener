@@ -213,11 +213,17 @@ async function remove(id: number, name: string): Promise<void> {
   border-radius: var(--p-border-radius-md);
 }
 
+.screen-item__body {
+  /* flex 아이템의 자동 최소 크기는 내용 기반이다. 긴 화면 이름이 버튼을 밀어내지 않게 한다. */
+  min-width: 0;
+}
+
 .screen-item__title {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  overflow-wrap: anywhere;
 }
 
 .screen-item__description {

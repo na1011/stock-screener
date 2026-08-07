@@ -64,6 +64,16 @@ function dismiss(): void {
 
 .app-layout__body {
   flex: 1;
+  min-width: 0;
+  /*
+   * 마지막 방어선이다. 어느 화면이 실수로 뷰포트보다 넓어져도 문서 전체가 가로로 밀리지는
+   * 않게 한다. `hidden`이 아니라 `clip`인 이유는 hidden이 스크롤 컨테이너를 만들어
+   * 헤더의 `position: sticky`가 이 상자를 기준으로 붙어 버리기 때문이다.
+   *
+   * IMPORTANT — 여기에 기대어 원인을 덮지 않는다. 헤더는 이 상자 **밖**이라 여기 걸리지도
+   * 않는다. 넘치는 곳이 보이면 그 컴포넌트의 min-width를 고친다.
+   */
+  overflow-x: clip;
 }
 
 .app-layout__error {
