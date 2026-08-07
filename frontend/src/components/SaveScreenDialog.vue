@@ -11,6 +11,7 @@ import { computed, ref, watch } from 'vue'
 import { ApiError, ProblemType } from '@/api/http'
 import { SCREEN_DESCRIPTION_MAX_LENGTH, SCREEN_NAME_MAX_LENGTH } from '@/api/limits'
 import type { ScreenRequest } from '@/api/types'
+import { BREAKPOINTS } from '@/lib/breakpoints'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
@@ -114,7 +115,7 @@ async function save(): Promise<void> {
     modal
     header="조건 저장"
     :style="{ width: '28rem' }"
-    :breakpoints="{ '640px': '95vw' }"
+    :breakpoints="{ [`${BREAKPOINTS.COMPACT}px`]: '95vw' }"
   >
     <div class="save-dialog">
       <SelectButton

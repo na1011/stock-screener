@@ -1,6 +1,8 @@
 import { onScopeDispose, readonly, ref } from 'vue'
 import type { Ref } from 'vue'
 
+import { BREAKPOINTS, maxWidthQuery } from '@/lib/breakpoints'
+
 /**
  * 화면 폭.
  *
@@ -28,7 +30,12 @@ function useMediaQuery(query: string): Ref<boolean> {
   return matches
 }
 
-/** 모바일 경계. 768px 미만은 표를 그릴 수 없는 폭이다. */
+/**
+ * 모바일 경계. 이 폭 아래는 표를 그릴 수 없다.
+ *
+ * 경계값을 여기 적지 않는 이유는 CSS도 같은 값을 써야 하기 때문이다 — 정본은
+ * `lib/breakpoints`이고, 어긋나면 `breakpoints.spec.ts`가 빌드를 멈춘다.
+ */
 export function useBreakpoint(): { isMobile: Readonly<Ref<boolean>> } {
-  return { isMobile: readonly(useMediaQuery('(max-width: 767px)')) }
+  return { isMobile: readonly(useMediaQuery(maxWidthQuery(BREAKPOINTS.MOBILE))) }
 }
