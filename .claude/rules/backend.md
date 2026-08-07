@@ -27,11 +27,11 @@ paths:
 
 ## 실측된 함정
 
-위가 설계 원칙이라면 아래는 **실제로 겪은 것**이다(2026-08, `docs/progress.md`에서 옮겨 왔다 — 주입 상한을 넘겨 조건부 로드로 돌렸다).
+위가 설계 원칙이라면 아래는 **실제로 겪은 것**이다.
 
 - **Jackson은 3.x이고 패키지가 `tools.jackson.databind`다.** Boot 3 예제를 복사하면 컴파일이 안 된다.
 - **CSRF 토큰의 지연 로딩을 껐다**(`setCsrfRequestAttributeName(null)`). 켜두면 SPA의 첫 POST가 403이 되고 **인증 버그처럼 보인다.**
 - **보안 매처의 마지막이 `permitAll`이다**(ADR-0018). 정적 셸을 익명에게 열어야 로그인 화면이 뜬다. **새 보호 대상은 반드시 그 앞에 명시해야 한다** — 뒤에 두면 조용히 열린다.
 - **SPA 폴백은 `api/`·`actuator/`·`/assets/**`에 적용하지 않는다.** 적용하면 없는 경로가 404 대신 HTML 200을 주고 프론트가 JSON 파싱에서 죽는다.
 
-**`application.yaml` 쪽 함정은 `.claude/rules/config.md`에 있다** — 배치·스케줄러 기본 꺼짐이 거기로 갔다. 트리거가 "Java를 고친다"가 아니라 "설정을 고친다"이기 때문이다.
+**`application.yaml` 쪽 함정은 `.claude/rules/config.md`에 있다** — 배치·스케줄러 기본 꺼짐이 거기 있다.
