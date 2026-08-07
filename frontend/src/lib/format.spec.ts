@@ -8,6 +8,8 @@ import {
   formatNumber,
   formatPrice,
   formatRatioAsPercent,
+  parseIsoDate,
+  toIsoDate,
 } from './format'
 
 describe('formatNumber — 서버가 정한 소수 자릿수를 그대로 쓴다', () => {
@@ -70,6 +72,29 @@ describe('formatRatioAsPercent', () => {
   it('0..1을 백분율로 옮긴다', () => {
     expect(formatRatioAsPercent(0.2)).toBe('20.0%')
     expect(formatRatioAsPercent(0.8333, 1)).toBe('83.3%')
+  })
+})
+
+describe('parseIsoDate / toIsoDate — UTC로 밀리지 않는다', () => {
+  it('왕복해도 같은 날짜다', () => {
+    // new Date('2026-08-05')는 UTC 자정이라 KST에서는 같은 날 09시가 된다. 그 값을
+    // toISOString()으로 되돌리면 날짜가 하루 밀리는 조합이 생긴다.
+    expect(toIsoDate(parseIsoDate('2026-08-05'))).toBe('2026-08-05')
+    expect(toIsoDate(parseIsoDate('2026-01-01'))).toBe('2026-01-01')
+    expect(toIsoDate(parseIsoDate('2025-12-31'))).toBe('2025-12-31')
+  })
+
+  it('지역 시간의 연·월·일로 만든다', () => {
+    const date = parseIsoDate('2026-08-05')
+    expect(date?.getFullYear()).toBe(2026)
+    expect(date?.getMonth()).toBe(7)
+    expect(date?.getDate()).toBe(5)
+  })
+
+  it('형식이 다르거나 없으면 null이다', () => {
+    expect(parseIsoDate('2026/08/05')).toBeNull()
+    expect(parseIsoDate(null)).toBeNull()
+    expect(toIsoDate(null)).toBeNull()
   })
 })
 

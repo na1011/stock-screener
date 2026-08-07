@@ -1,4 +1,5 @@
 import { onScopeDispose, ref, shallowRef } from 'vue'
+import type { Ref, ShallowRef } from 'vue'
 
 import { ApiError } from '@/api/http'
 
@@ -15,9 +16,9 @@ import { ApiError } from '@/api/http'
 export type AsyncState = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface Async<T> {
-  state: ReturnType<typeof ref<AsyncState>>
-  data: ReturnType<typeof shallowRef<T | null>>
-  error: ReturnType<typeof shallowRef<ApiError | null>>
+  state: Ref<AsyncState>
+  data: ShallowRef<T | null>
+  error: ShallowRef<ApiError | null>
   /** 실행한다. 이전 실행이 진행 중이면 취소한다. */
   run: () => Promise<void>
   /** 사용자가 누르는 재시도. `run`과 같지만 호출부에서 의도가 드러난다. */

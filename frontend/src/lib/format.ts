@@ -61,6 +61,35 @@ export function formatDate(iso: string | null | undefined): string {
   return `${match[1]}. ${match[2]}. ${match[3]}.`
 }
 
+/**
+ * ISO 날짜 문자열 → Date.
+ *
+ * IMPORTANT — `new Date('2026-08-05')`를 쓰지 않는다. 그 형식은 **UTC 자정**으로 파싱되어
+ * KST에서는 같은 날 09시가 되고, 날짜 선택기가 다른 날을 표시하는 경우가 생긴다. 부품을
+ * 쪼개 지역 시간으로 만들면 그 어긋남이 없다.
+ */
+export function parseIsoDate(iso: string | null | undefined): Date | null {
+  if (!iso) {
+    return null
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!match) {
+    return null
+  }
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+}
+
+/** Date → ISO 날짜 문자열. 지역 시간 기준이라 `toISOString()`의 UTC 밀림이 없다. */
+export function toIsoDate(date: Date | null | undefined): string | null {
+  if (!date) {
+    return null
+  }
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 /** 큰 정수(거래량·발행주식수)를 천 단위로. */
 export function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
