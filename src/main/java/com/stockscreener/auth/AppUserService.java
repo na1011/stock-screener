@@ -73,4 +73,28 @@ public class AppUserService {
                 Long.class, providerUserId);
         return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(0));
     }
+
+    /**
+     * 화면 머리말에 표시할 사용자 정보.
+     *
+     * <p>주체({@code AppUserPrincipal})에서 꺼내지 않고 테이블에서 읽는다. 주체는 로그인
+     * 시점의 스냅샷이라 이름·이메일이 그 뒤에 바뀌면 세션이 끝날 때까지 옛 값을 보여준다.
+     *
+     * <p>IMPORTANT — 여기에 {@code is_admin}을 싣지 않는다. 그 컬럼은 로그인 시점에 허용목록에서
+     * 복사한 사본이고, 실제로 요청을 통과시키는 것은 <b>세션의 권한</b>이다. 둘이 어긋나면
+     * (권한 회수 후 재로그인 전) 화면은 관리자 메뉴를 그리는데 요청은 403이 된다.
+     * 관리자 여부의 정본은 {@code Authentication}이다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<UserProfile> findProfileById(long userId) {
+        List<UserProfile> rows = jdbcTemplate.query(
+                "SELECT id, email, name FROM app_user WHERE id = ?",
+                (rs, n) -> new UserProfile(rs.getLong("id"), rs.getString("email"), rs.getString("name")),
+                userId);
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    /** @param name Google이 이름을 주지 않으면 null이다. 화면이 이메일로 대체한다. */
+    public record UserProfile(long id, String email, String name) {
+    }
 }
