@@ -31,11 +31,11 @@
 
 ## 다음에 할 일
 
-**Phase 5의 수동 관통이 남았다.** 구현·자동 검증은 끝났지만 design §5 Phase 5의 12개 판정은 대부분 UX 수준이라 **브라우저와 실제 Google 로그인이 있어야 판정된다.** 헤드리스로 확인된 것은 서버 쪽뿐이다 — 익명 셸 200, 딥링크, `/api/**` 401, SPA 폴백 제외 경로 404, `XSRF-TOKEN` 하강, OAuth 302(`SpaFallbackTest`·`SecurityConfigTest`가 단언한다).
+**Phase 5의 수동 관통이 남았다.** 구현·자동 검증은 끝났지만 design §5 Phase 5의 12개 판정은 대부분 UX 수준이라 **브라우저와 실제 Google 로그인이 있어야 판정된다.** 헤드리스로 확인된 것은 서버 쪽뿐이다(`SpaFallbackTest`·`SecurityConfigTest`가 단언한다).
 
-관통 순서: `./gradlew bootRun` → `http://localhost:8080` → 로그인 → 프리셋 실행 → 3상태 구분·조건별 점수 확인 → 커스텀 조건 저장·재실행 → 종목 상세·지지저항 → 375px 폭 → 패널 하나만 실패시켜 재시도.
+관통 절차는 [`TODO.md`](../TODO.md) §1의 체크리스트 13개에 있다.
 
-- **개발 서버(:5173) 로그인은 Google Console에 `http://localhost:5173/login/oauth2/code/google`을 더 넣어야 된다.** Vite 프록시가 Host를 바꾸지 않아 Spring이 요청 Host로 `redirect_uri`를 만든다(실측). **:8080은 그대로 된다.**
+- **개발 서버(:5173) 로그인은 Console에 URI를 하나 더 등록해야 된다**(절차는 `TODO.md` §2). Vite 프록시가 Host를 바꾸지 않아 Spring이 요청 Host로 `redirect_uri`를 만든다(실측). **:8080은 그대로 된다.**
 
 ### 배치 실행 방법 (`BootstrapRunner`, `bootstrap` 프로파일 전용)
 
@@ -100,12 +100,14 @@
 ## 미룬 것 / 알려진 미완성
 
 - **`clean-on-validation-error: true`가 `application-test.yaml`에 남아 있다**(제거 대상).
-- **외부 서비스 발급 8건 중 4건 완료.** 정본은 [`external-credentials.md`](./external-credentials.md). 남은 도메인·Cloudflare·Sentry·알림 채널은 전부 Phase 6에 필요하다.
+- **외부 서비스 발급 8건 중 4건 완료.** 정본은 [`external-credentials.md`](./external-credentials.md). 도메인은 **`na1011.net`, 앱 주소는 `screener.na1011.net`으로 확정**됐고 구매만 남았다(2026-08-08).
 - **재무 수집이 일일 배치에 없다.** 분기 공시라 매일 조회하면 쿼터만 태운다. 공시 시즌 갱신은 수동 실행 전제다.
 - **워치리스트가 통째로 Phase 6이다.** `AlertPort`의 `recipientUserId`와 `ComparisonOperator.test()`로 이음매는 준비되어 있다.
 - **배치 잡의 HTTP 진입점이 없다 — Phase 6.** `SecurityConfigTest`가 `/api/admin/batches`의 404를 단언하므로 그때 함께 고친다.
 - **actuator 미도입**: Phase 6. 매처는 이미 `ROLE_ADMIN`으로 잠가 두었다.
-- **프론트 에러의 Sentry 수집이 없다**(Phase 6). 지금은 `console.error`에만 남는다.
+- **IMPORTANT — Phase 6의 에이전트 코드 작업 둘.** 사람이 하는 발급 절차에 섞여 있어 놓치기 쉽다.
+  1. **도메인을 붙이면 `server.forward-headers-strategy: framework`가 필요하다.** `server:` 블록이 아예 없고 cloudflared는 평문 HTTP로 붙는다. 없으면 `redirect_uri`가 `http://`로 나가 로그인이 깨지는데 **호스트는 맞아서 원인이 안 보인다.**
+  2. **프론트 Sentry용 `VITE_SENTRY_DSN`을 신설해야 한다.** Vite는 `VITE_` 접두어만 번들에 노출한다. 지금 프론트 오류는 `console.error`에만 남는다.
 - **`formatPrice`가 `'원'`을 고정한다.** `market`에 `currency`(KRW/USD)가 있지만 어떤 DTO도 싣지 않는다. ADR-0010의 미국 시장은 응답 계약부터 고쳐야 열린다.
 - **프리셋에 `editable: true`를 줘도 저장까지 되지는 않는다.** 빌더 잠금만 풀리고 `SaveScreenDialog`는 `origin.kind === 'screen'`만 갱신한다.
 
