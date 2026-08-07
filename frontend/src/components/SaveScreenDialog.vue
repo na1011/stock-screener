@@ -184,7 +184,8 @@ async function save(): Promise<void> {
 }
 
 .save-dialog__error {
-  color: var(--p-red-500);
+  /* 다크에서는 500이 어두워 읽히지 않는다. StockSearch의 실패 문구와 같은 단계를 쓴다. */
+  color: var(--p-red-400);
 }
 
 .save-dialog__summary {

@@ -6,6 +6,7 @@ import Popover from 'primevue/popover'
 import { computed, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
+import BrandMark from '@/components/BrandMark.vue'
 import StockSearch from '@/components/StockSearch.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { APP_NAME } from '@/lib/appInfo'
@@ -52,12 +53,7 @@ function isActive(to: string): boolean {
 <template>
   <header class="app-header">
     <RouterLink to="/" class="app-header__brand" :aria-label="APP_NAME">
-      <!-- 값이 다른 막대 셋. 이 화면이 다루는 것이 시세라는 것을 글자보다 먼저 알린다. -->
-      <svg class="app-header__mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-        <rect x="0" y="9" width="4" height="7" rx="1" />
-        <rect x="6" y="5" width="4" height="11" rx="1" />
-        <rect x="12" y="0" width="4" height="16" rx="1" />
-      </svg>
+      <BrandMark />
       <span class="app-header__wordmark">{{ APP_NAME }}</span>
     </RouterLink>
 
@@ -149,13 +145,6 @@ function isActive(to: string): boolean {
 
 .app-header__brand:hover {
   text-decoration: none;
-}
-
-.app-header__mark {
-  width: 1rem;
-  height: 1rem;
-  fill: var(--p-primary-color);
-  flex: 0 0 auto;
 }
 
 .app-header__nav {

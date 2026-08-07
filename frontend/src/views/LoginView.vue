@@ -4,6 +4,7 @@ import Message from 'primevue/message'
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
+import BrandMark from '@/components/BrandMark.vue'
 import { APP_NAME } from '@/lib/appInfo'
 import { useAuthStore } from '@/stores/auth'
 
@@ -39,6 +40,7 @@ async function retryProbe(): Promise<void> {
 <template>
   <main class="login">
     <section class="login__card">
+      <BrandMark size="1.75rem" class="login__mark" />
       <h1 class="login__title">{{ APP_NAME }}</h1>
       <p class="login__subtitle">코스피200·코스닥150 종목을 기술적·재무적 조건으로 걸러 봅니다.</p>
 
@@ -78,28 +80,56 @@ async function retryProbe(): Promise<void> {
 
 <style scoped>
 .login {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100dvh;
   padding: 1.5rem;
+  overflow: hidden;
+}
+
+/* 이 화면은 카드 하나뿐이라 여백이 그대로 허전함이 된다. 위에서 내려오는 옅은 광원
+   하나로 공간에 방향을 준다. 장식이 아니라 시선을 카드로 모으는 장치다. */
+.login::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    60rem 34rem at 50% -8%,
+    color-mix(in srgb, var(--p-primary-color) 14%, transparent),
+    transparent 68%
+  );
 }
 
 .login__card {
+  position: relative;
   width: 100%;
-  max-width: 26rem;
+  max-width: 24rem;
+  padding: 2.25rem 2rem;
   text-align: center;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-border-radius-lg);
+  background: var(--p-content-background);
+  box-shadow: 0 24px 56px -24px rgb(0 0 0 / 70%);
+}
+
+.login__mark {
+  margin: 0 auto 0.875rem;
 }
 
 .login__title {
-  font-size: 1.5rem;
+  font-size: 1.375rem;
+  letter-spacing: -0.01em;
   margin: 0 0 0.5rem;
 }
 
 .login__subtitle {
   color: var(--p-text-muted-color);
-  font-size: 0.9375rem;
-  margin: 0 0 2rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 0 0 1.75rem;
 }
 
 .login__message {

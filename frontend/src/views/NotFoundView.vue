@@ -14,12 +14,13 @@ import { RouterLink } from 'vue-router'
 .not-found {
   max-width: 32rem;
   margin: 0 auto;
-  padding: 4rem 1.5rem;
+  padding: 6rem var(--app-gutter);
   text-align: center;
 }
 
 h1 {
   font-size: 1.25rem;
+  letter-spacing: -0.01em;
   margin-bottom: 0.5rem;
 }
 

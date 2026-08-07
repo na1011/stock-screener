@@ -168,13 +168,14 @@ async function remove(id: number, name: string): Promise<void> {
 
 <style scoped>
 .screens {
-  max-width: 60rem;
+  max-width: 64rem;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 1.5rem var(--app-gutter) 3rem;
 }
 
 .screens__title {
   font-size: 1.25rem;
+  letter-spacing: -0.01em;
   margin: 0 0 1.5rem;
 }
 
@@ -183,7 +184,10 @@ async function remove(id: number, name: string): Promise<void> {
 }
 
 .screens__group-title {
-  font-size: 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--p-text-muted-color);
   margin: 0 0 0.25rem;
 }
 
@@ -208,9 +212,15 @@ async function remove(id: number, name: string): Promise<void> {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.75rem;
+  padding: 0.75rem 0.875rem;
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
+  background: var(--p-content-background);
+  transition: border-color 0.15s;
+}
+
+.screen-item:hover {
+  border-color: var(--p-surface-600);
 }
 
 .screen-item__body {

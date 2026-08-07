@@ -226,6 +226,7 @@ function toggle(stockId: number): void {
 .card {
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
+  background: var(--p-content-background);
   padding: 0.75rem;
   display: flex;
   flex-direction: column;

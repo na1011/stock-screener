@@ -82,12 +82,25 @@ const zones = computed(() =>
 </template>
 
 <style scoped>
-/* 지표 목록과 같은 자리에 있지 않다는 것이 색과 테두리로 먼저 보여야 한다. */
+/*
+ * 지표 목록과 같은 자리에 있지 않다는 것이 색과 테두리로 먼저 보여야 한다.
+ *
+ * IMPORTANT — 주황은 이 패널 전용이다. 판정 3상태가 초록·빨강·노랑을 쓰므로(`lib/outcome`),
+ * 여기까지 노랑으로 가면 "판정하지 못했다"와 "확정된 매매 신호가 아니다"가 같은 색이 된다.
+ * `theme/preset.ts`가 Tag의 warn을 amber로 밀어 둔 것이 그 짝이다(ADR-0021).
+ *
+ * 파선을 실선으로 바꾸지 않는다. 다크 배경에서 색만으로는 옆의 지표 카드와 층이 같아
+ * 보이는데, 파선은 색과 무관하게 "여기는 다른 종류"라고 읽힌다.
+ */
 .price-reference {
   border: 2px dashed var(--p-orange-400, #fb923c);
   border-radius: var(--p-border-radius-md);
   padding: 1rem;
-  background: color-mix(in srgb, var(--p-orange-400, #fb923c) 6%, transparent);
+  background: color-mix(in srgb, var(--p-orange-400, #fb923c) 9%, transparent);
+}
+
+.price-reference__title i {
+  color: var(--p-orange-400, #fb923c);
 }
 
 .price-reference__header {
