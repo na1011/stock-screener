@@ -178,13 +178,15 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* 90rem(`--app-reading-width`)을 쓰지 않는다. 여기는 훑는 표가 아니라 읽는 화면이라
+   줄 길이가 길어지면 오히려 안 읽힌다. */
 .stock-detail {
-  max-width: 60rem;
+  max-width: 64rem;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 1.5rem var(--app-gutter) 3rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 
 .stock-detail__header {
@@ -193,6 +195,8 @@ onMounted(() => {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--p-content-border-color);
 }
 
 .stock-detail__identity {
@@ -225,8 +229,10 @@ onMounted(() => {
 }
 
 .stock-detail__price-value {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
 }
 
 .stock-detail__price-label {
@@ -234,14 +240,36 @@ onMounted(() => {
   color: var(--p-text-muted-color);
 }
 
+/* 시가·고가·저가·거래량은 값의 나열이라 칸으로 나눈다. 나누지 않으면 어디까지가 한
+   항목인지 눈으로 끊기지 않는다. */
 .stock-detail__ohlc {
   display: flex;
-  gap: 1.25rem;
   flex-wrap: wrap;
   font-size: 0.8125rem;
   color: var(--p-text-muted-color);
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--p-content-border-color);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-border-radius-md);
+  background: var(--p-content-background);
+}
+
+.stock-detail__ohlc > span {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.875rem;
+  border-inline-start: 1px solid var(--p-content-border-color);
+  white-space: nowrap;
+}
+
+.stock-detail__ohlc > span:first-child {
+  border-inline-start: 0;
+}
+
+.stock-detail__ohlc .tabular {
+  color: var(--p-text-color);
+  font-weight: 600;
 }
 
 .stock-detail__no-price,
@@ -252,7 +280,10 @@ onMounted(() => {
 }
 
 .indicator-group__title {
-  font-size: 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--p-text-muted-color);
   margin: 0 0 0.5rem;
 }
 
@@ -261,22 +292,26 @@ onMounted(() => {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.5rem;
 }
 
 .indicator {
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
+  background: var(--p-content-background);
   padding: 0.625rem 0.75rem;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.25rem 0.5rem;
+  align-items: baseline;
 }
 
 .indicator__value {
-  font-weight: 600;
+  font-size: 1.0625rem;
+  font-weight: 700;
   justify-self: end;
+  white-space: nowrap;
 }
 
 .indicator__interpretation {

@@ -108,27 +108,41 @@ const knownPopulation = computed(
   gap: 0.75rem;
 }
 
+/* 세로로 쌓인 목록이 아니라 가로 스트립이다. 결과 표 바로 위에서 한 눈에 읽히고 높이를
+   덜 먹어야 한다 — 여기서 먹는 높이는 그대로 표에서 빠진다. */
 .summary__facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
   margin: 0;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-border-radius-md);
+  background: var(--p-content-background);
 }
 
 .summary__fact {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 1rem;
+  border-inline-start: 1px solid var(--p-content-border-color);
+}
+
+.summary__fact:first-child {
+  border-inline-start: 0;
 }
 
 .summary__fact dt {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
   color: var(--p-text-muted-color);
 }
 
 .summary__fact dd {
   margin: 0;
   font-size: 0.9375rem;
+  font-weight: 600;
   display: flex;
   align-items: baseline;
   gap: 0.375rem;
@@ -137,6 +151,7 @@ const knownPopulation = computed(
 
 .summary__hint {
   font-size: 0.75rem;
+  font-weight: 400;
   color: var(--p-text-muted-color);
 }
 

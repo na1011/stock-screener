@@ -27,6 +27,14 @@
   --app-gutter: clamp(0.75rem, 2vw, 1.5rem);
   /* 본문 폭 상한. 읽는 것(빌더·상세)에만 쓴다. 결과 표는 여기 묶지 않는다. */
   --app-reading-width: 90rem;
+  /*
+   * 결과 표의 스크롤 높이. 위쪽 크롬(헤더 3rem + 조건바 ≈ 3.5rem + 여백·요약 스트립 ≈ 7rem)과
+   * 아래 페이지네이터 ≈ 3rem을 뺀 값이다. `max()`로 바닥을 두는 이유는 짧은 화면에서
+   * 계산이 음수가 되면 표가 통째로 사라지기 때문이다.
+   *
+   * 결과 표(`ResultTable`)가 이 변수를 `scroll-height`로 그대로 받는다.
+   */
+  --app-result-scroll-height: max(18rem, calc(100dvh - 21rem));
 }
 
 *,

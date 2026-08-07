@@ -24,6 +24,13 @@ import { useCatalogStore } from '@/stores/catalog'
  */
 const props = defineProps<{ result: ScreeningResponse; asOf: string }>()
 
+/**
+ * 표가 화면의 남은 높이를 채운다. 값은 CSS 변수에 있다 — 위쪽 크롬(헤더·조건바·요약
+ * 스트립)의 높이를 CSS가 알고 있으므로, 그 계산을 여기 숫자로 옮기면 두 곳이 어긋난다.
+ * DataTable은 이 문자열을 `max-height`에 그대로 넣으므로 `var()`가 통한다.
+ */
+const SCROLL_HEIGHT = 'var(--app-result-scroll-height)'
+
 const catalog = useCatalogStore()
 
 const expandedRows = ref<Record<string, boolean>>({})
@@ -64,11 +71,11 @@ function percentileOf(code: string) {
     :rows="25"
     :rows-per-page-options="[25, 50, 100]"
     scrollable
-    scroll-height="60vh"
+    :scroll-height="SCROLL_HEIGHT"
     size="small"
-    striped-rows
     current-page-report-template="{first}–{last} / 전체 {totalRecords}종목"
     :paginator-template="'FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport'"
+    class="result-table"
   >
     <template #header>
       <IconField class="result-table__search">
@@ -92,26 +99,54 @@ function percentileOf(code: string) {
       </template>
     </Column>
 
-    <Column field="close" header="종가" sortable style="min-width: 7rem">
+    <Column
+      field="close"
+      header="종가"
+      sortable
+      style="min-width: 7rem"
+      body-class="result-table__num"
+      header-class="result-table__num"
+    >
       <template #body="{ data }: { data: ScreeningRow }">
         <span class="tabular">{{ formatPrice(data.close) }}</span>
       </template>
     </Column>
 
     <template v-if="isScoring">
-      <Column field="score" :header="RESULT_LABELS.score" sortable style="min-width: 6rem">
+      <Column
+        field="score"
+        :header="RESULT_LABELS.score"
+        sortable
+        style="min-width: 6rem"
+        body-class="result-table__num"
+        header-class="result-table__num"
+      >
         <template #body="{ data }: { data: ScreeningRow }">
           <span class="tabular">{{ formatNumber(data.score, SCORE_DECIMAL_SCALE) }}</span>
         </template>
       </Column>
-      <Column field="scoreRatio" :header="RESULT_LABELS.scoreRatio" sortable style="min-width: 6rem">
+      <Column
+        field="scoreRatio"
+        :header="RESULT_LABELS.scoreRatio"
+        sortable
+        style="min-width: 6rem"
+        body-class="result-table__num"
+        header-class="result-table__num"
+      >
         <template #body="{ data }: { data: ScreeningRow }">
           <span class="tabular">{{ formatRatioAsPercent(data.scoreRatio) }}</span>
         </template>
       </Column>
     </template>
 
-    <Column field="matchedCount" :header="RESULT_LABELS.matched" sortable style="min-width: 6rem">
+    <Column
+      field="matchedCount"
+      :header="RESULT_LABELS.matched"
+      sortable
+      style="min-width: 6rem"
+      body-class="result-table__num"
+      header-class="result-table__num"
+    >
       <template #body="{ data }: { data: ScreeningRow }">
         <span class="tabular">{{ data.matchedCount }} / {{ result.conditions.length }}</span>
       </template>
@@ -123,6 +158,8 @@ function percentileOf(code: string) {
       :header="RESULT_LABELS.notEvaluable"
       sortable
       style="min-width: 7rem"
+      body-class="result-table__num"
+      header-class="result-table__num"
     >
       <template #body="{ data }: { data: ScreeningRow }">
         <span class="tabular result-table__not-evaluable">
@@ -137,6 +174,8 @@ function percentileOf(code: string) {
       :field="`values.${indicator.code}`"
       sortable
       style="min-width: 8rem"
+      body-class="result-table__num"
+      header-class="result-table__num"
     >
       <template #header>
         <IndicatorLabel
@@ -192,11 +231,31 @@ function percentileOf(code: string) {
 
 .result-table__expansion {
   padding: 0.75rem 1rem;
+  background: var(--p-surface-950);
 }
 
 .result-table__empty {
   padding: 1.5rem;
   text-align: center;
   color: var(--p-text-muted-color);
+}
+
+/* 숫자는 오른쪽에 모여야 자릿수가 눈으로 비교된다. `.tabular`가 폭을 고정하고 이것이
+   기준선을 맞춘다 — 둘 중 하나만 있으면 열이 여전히 흔들린다. */
+.result-table :deep(td.result-table__num),
+.result-table :deep(th.result-table__num) {
+  text-align: right;
+}
+
+.result-table :deep(th.result-table__num .p-datatable-column-header-content) {
+  justify-content: flex-end;
+}
+
+/*
+ * 고정 컬럼(종목)은 자기 배경을 갖는다 — 없으면 가로 스크롤에서 뒤 내용이 비쳐 보인다.
+ * 그런데 그 배경이 행 hover를 따라가지 않으면 커서를 올린 줄만 첫 칸이 다른 색이 된다.
+ */
+.result-table :deep(.p-datatable-tbody > tr:hover > .p-datatable-frozen-column) {
+  background: var(--p-surface-800);
 }
 </style>
