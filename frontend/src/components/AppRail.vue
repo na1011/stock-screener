@@ -294,11 +294,11 @@ function startFresh(): void {
   font-size: var(--app-text-2xs);
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 .rail__count {
-  color: var(--p-surface-600);
+  color: var(--p-text-subtle-color);
 }
 
 .rail__list {
@@ -311,7 +311,7 @@ function startFresh(): void {
   margin: 0;
   padding: 0 0.5rem;
   font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 .rail__foot {

@@ -152,7 +152,7 @@ const knownPopulation = computed(
 .summary__fact dt {
   font-size: var(--app-text-2xs);
   letter-spacing: 0.03em;
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 .summary__fact dd {

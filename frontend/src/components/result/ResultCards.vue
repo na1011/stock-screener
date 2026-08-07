@@ -227,7 +227,7 @@ function toggle(stockId: number): void {
   flex: 0 0 auto;
   margin-inline-start: auto;
   font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 .cards__empty {
@@ -275,7 +275,7 @@ function toggle(stockId: number): void {
    폭만 바뀌었는데 다른 화면으로 읽힌다. */
 .card__ticker {
   font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 .card__price {

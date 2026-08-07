@@ -94,7 +94,7 @@ const hasHelp = computed(() => Boolean(props.description) || Boolean(props.inter
  */
 .indicator-label__marker {
   font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
   cursor: help;
 }
 

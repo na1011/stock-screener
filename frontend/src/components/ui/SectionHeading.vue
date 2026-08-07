@@ -61,7 +61,7 @@ defineProps<{
 .section-heading__count {
   font-size: var(--app-text-2xs);
   font-weight: 600;
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 /* 남는 폭을 hairline이 채운다. 제목이 어디까지 다스리는지가 선으로 보인다. */

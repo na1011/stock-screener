@@ -157,11 +157,11 @@ defineExpose({ focusSearch })
   font-size: var(--app-text-2xs);
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 .picker__count {
-  color: var(--p-surface-600);
+  color: var(--p-text-subtle-color);
 }
 
 .picker__item {
@@ -196,7 +196,7 @@ defineExpose({ focusSearch })
   margin-top: 0.0625rem;
   font-size: var(--app-text-2xs);
   line-height: 1.4;
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 .picker__empty {

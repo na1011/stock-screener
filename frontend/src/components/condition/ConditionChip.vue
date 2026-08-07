@@ -184,7 +184,7 @@ const direction = computed(() =>
 .chip__invalid-icon {
   flex: 0 0 auto;
   font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 /* 열린 칩의 캐럿은 팝오버가 어디 붙어 있는지 가리킨다. 테두리와 같은 색으로 올린다. */

@@ -278,7 +278,7 @@ onMounted(() => {
 /* 티커·시장은 있어야 하지만 읽을 차례가 마지막이다. 14px muted면 종목명과 거의 붙어 보인다. */
 .stock-detail__meta {
   margin: 0.125rem 0 0.5rem;
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
   font-size: var(--app-text-xs);
 }
 
@@ -313,7 +313,7 @@ onMounted(() => {
 
 .stock-detail__price-label {
   font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 /* 시가·고가·저가·거래량은 값의 나열이라 칸으로 나눈다. 나누지 않으면 어디까지가 한
@@ -346,7 +346,7 @@ onMounted(() => {
 /* 라벨은 짚는 것이고 값은 읽는 것이다. 둘이 같은 크기면 다섯 칸이 열 개의 낱말로 보인다. */
 .stock-detail__ohlc-label {
   font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 .stock-detail__ohlc .tabular {
@@ -445,7 +445,7 @@ onMounted(() => {
   overflow: hidden;
   margin: 0;
   font-size: var(--app-text-xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
   line-height: 1.5;
 }
 

@@ -105,6 +105,15 @@ export const ScreenerPreset = definePreset(Aura, {
           hoverColor: '#f2f5f9',
           mutedColor: '{surface.400}',
           hoverMutedColor: '{surface.300}',
+          /**
+           * 3순위. `surface.500`을 텍스트로 쓰던 것을 대체한다.
+           *
+           * IMPORTANT — `surface.500`(#616d82)은 카드 배경 위에서 **3.43:1**이라 본문 대비
+           * 기준(4.5:1)에 못 미쳤다. 표면 램프의 한 칸을 글자에 빌려 쓴 것이 원인이다 —
+           * 면과 글자는 필요한 밝기가 다르다. 이 값은 카드에서 4.8:1, 캔버스에서 5.2:1이고
+           * muted(#8792a6, 5.7:1)보다는 확실히 어두워 3단계가 유지된다.
+           */
+          subtleColor: '#78859a',
         },
 
         content: {

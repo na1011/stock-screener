@@ -287,7 +287,7 @@ function barWidth(row: ScreeningRow, code: string): number | null {
 /* 티커·시장은 3순위다. 종목명과 같은 밝기면 무엇을 먼저 읽어야 하는지 알 수 없다. */
 .result-table__sub {
   font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 
 /*

@@ -44,6 +44,6 @@ defineProps<{
 /* 라벨보다 한 단계 더 뒤. 있으면 좋지만 읽을 차례는 컨트롤 다음이다. */
 .form-field__hint {
   font-size: var(--app-text-2xs);
-  color: var(--p-surface-500);
+  color: var(--p-text-subtle-color);
 }
 </style>
