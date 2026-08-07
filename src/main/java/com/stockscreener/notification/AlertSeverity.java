@@ -27,5 +27,16 @@ public enum AlertSeverity {
     /**
      * 즉시 대응이 필요하다. 인증 실패처럼 방치하면 데이터가 계속 갱신되지 않는 상태다.
      */
-    CRITICAL
+    CRITICAL;
+
+    /**
+     * 이 심각도가 임계 이상인가. 채널별 임계 판정이 이것 하나를 쓴다.
+     *
+     * <p>선언 순서가 곧 강도 순서라는 사실에 기대는 비교다. 그래서 <b>값을 중간에 끼워 넣으면
+     * 모든 임계가 조용히 밀린다</b> — 새 값은 성격에 맞는 자리에 넣되, 넣는 순간 채널 임계
+     * 기본값({@code AlertProperties})이 여전히 맞는지 함께 본다.
+     */
+    public boolean atLeast(AlertSeverity threshold) {
+        return compareTo(threshold) >= 0;
+    }
 }

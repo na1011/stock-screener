@@ -35,6 +35,12 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
 
+    // 이메일 알림. spec §8이 "이메일과 메신저 두 채널 모두"를 요구하므로 메신저 웹훅만으로는
+    // 수용 기준을 못 채운다. 메신저는 RestClient로 충분하지만 SMTP는 스타터가 필요하다.
+    // spring.mail.host가 없으면 JavaMailSender 빈이 만들어지지 않으므로, 자격증명 없이도
+    // 기동해야 하는 전제는 AlertConfig가 ObjectProvider로 받아 지킨다. ADR-0025 참조.
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
     // QueryDSL — OpenFeign 포크. classifier 규칙이 7.x에서 역전되었다:
     // querydsl-jpa는 classifier를 떼고(:jakarta는 404), querydsl-apt는 붙인다.
     implementation 'io.github.openfeign.querydsl:querydsl-jpa:7.5'

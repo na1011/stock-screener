@@ -45,6 +45,28 @@ spring:
       # 재시작할 때마다 850종목 수집이 시작된다.
       enabled: false
 
+  mail:
+    # MUST NOT: 실제 계정·앱 비밀번호를 여기 넣지 않는다. 환경변수 참조만 둔다.
+    #
+    # host를 비워두지 않고 기본값을 적는 이유는, 비어 있으면 Boot가 JavaMailSender 자체를
+    # 만들지 않아 "메일 채널이 왜 비활성인가"의 원인이 자격증명 미설정인지 자동설정 미동작인지
+    # 구분되지 않기 때문이다. 채널 활성 판정은 stockscreener.alert.mail.from 하나로만 한다.
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          # 기본값은 무한대다. 응답하지 않는 SMTP 하나가 배치 스레드를 영원히 붙잡으면
+          # 그날 밤 배치가 통째로 사라지고, 실패로도 기록되지 않는다.
+          connectiontimeout: 5000
+          timeout: 10000
+          writetimeout: 10000
+
   security:
     oauth2:
       client:
@@ -75,11 +97,40 @@ server:
   # localhost 직접 접속에는 이 헤더가 없으므로 로컬 개발 동작은 그대로다.
   forward-headers-strategy: framework
 
-# ── 외부 데이터 소스 ────────────────────────────────────────────
-# MUST NOT: 실제 키를 여기 넣지 않는다. 환경변수 참조만 둔다.
-# 키가 비어 있어도 애플리케이션은 기동하며, 어댑터가 조회 시점에 AUTH로 실패한다 —
-# 키 없이도 나머지 파이프라인을 개발·검증할 수 있어야 하기 때문이다.
+# ── 애플리케이션 설정 ───────────────────────────────────────────
+# MUST NOT: 이 블록을 둘로 나누지 않는다. 루트 키가 같은 매핑이 두 번 나오면 YAML은
+# 뒤엣것으로 덮으므로, 앞 블록의 설정이 전부 조용히 사라진다.
 stockscreener:
+
+  # ── 알림 ──────────────────────────────────────────────────
+  # spec §8이 "이메일과 메신저 두 채널 모두"를 요구한다. 값이 없으면 채널이 비활성이고
+  # 알림은 로그로 떨어진다 — 애플리케이션은 그대로 기동한다(AlertConfig).
+  #
+  # MUST NOT: 실제 웹훅 URL을 여기 넣지 않는다. URL 자체가 자격증명이며,
+  # 아는 사람은 누구나 그 채널에 글을 쓸 수 있다.
+  alert:
+    webhook:
+      # Slack 형식으로 보낸다. Discord를 쓴다면 URL 끝에 /slack을 붙여야 한다 —
+      # 붙이지 않으면 Discord가 400을 내고, 그 실패는 "채널에 아무것도 안 뜬다"로만 보인다.
+      url: ${ALERT_WEBHOOK_URL:}
+      # INFO는 정상 완료 통지다. 매일 성공 알림이 오면 곧 채널을 음소거하게 되고,
+      # 그때부터 실패 알림도 함께 묻힌다.
+      min-severity: WARNING
+    mail:
+      from: ${MAIL_USERNAME:}
+      # 비우면 from을 그대로 쓴다. 발신 계정과 수신 계정이 다를 때만 채운다.
+      operator-address: ${ALERT_OPERATOR_EMAIL:}
+      # 운영자 알림에만 걸린다. 워치리스트(사용자 대상)는 심각도와 무관하게 나간다 —
+      # 여기 걸면 INFO인 워치리스트 알림이 통째로 사라진다.
+      min-severity: ERROR
+    # 짧은 간격의 재실행이 같은 알림을 반복해 채널을 덮는 것을 막는다.
+    # 일일 배치는 하루 한 번이라 이 창에 걸리지 않는다.
+    suppression-window: 10m
+
+  # ── 외부 데이터 소스 ────────────────────────────────────────
+  # MUST NOT: 실제 키를 여기 넣지 않는다. 환경변수 참조만 둔다.
+  # 키가 비어 있어도 애플리케이션은 기동하며, 어댑터가 조회 시점에 AUTH로 실패한다 —
+  # 키 없이도 나머지 파이프라인을 개발·검증할 수 있어야 하기 때문이다.
   datasource:
     data-go-kr:
       base-url: https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService
