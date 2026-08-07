@@ -82,6 +82,9 @@ public class ScreeningResponseAssembler {
                         : ScreeningResponse.SORTED_BY_STOCK,
                 universeInfo(universeCode),
                 ScreeningResponse.PERCENTILE_POPULATION,
+                // 백분위를 쓰는지는 서버가 판단해서 준다. 화면이 카탈로그를 따로 받아
+                // 판단하면 그 요청만 실패해도 모집단 주의 문구가 조용히 사라진다.
+                descriptors.values().stream().anyMatch(IndicatorDescriptor::isPercentile),
                 new ScreeningResponse.ScreenInfo(
                         source.id(), source.code(), source.name(), source.type()),
                 conditionInfos,

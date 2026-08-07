@@ -5,7 +5,6 @@ import { computed } from 'vue'
 import { PERCENTILE_POPULATION_ALL } from '@/api/types'
 import type { ScreeningResponse } from '@/api/types'
 import { formatDate } from '@/lib/format'
-import { useCatalogStore } from '@/stores/catalog'
 
 /**
  * 결과의 전제를 드러내는 머리말.
@@ -17,8 +16,6 @@ import { useCatalogStore } from '@/stores/catalog'
  *   화면이 "코스피 상위 20%"라고 말하게 되는데 사실이 아니다.
  */
 const props = defineProps<{ result: ScreeningResponse }>()
-
-const catalog = useCatalogStore()
 
 /** 서버가 일자를 정했는가. `asOfRequested`가 null이면 그렇다. */
 const serverChoseDate = computed(() => props.result.asOfRequested === null)
@@ -37,23 +34,24 @@ const universeText = computed(() =>
 )
 
 /**
- * 백분위 지표가 쓰였는가.
+ * 백분위 모집단 주의 문구를 보여야 하는가.
  *
- * 지표 코드의 접미사(`_PCTL`)로 판단하지 않는다 — 그것이 프론트로 옮겨온 하드코딩이다.
- * 카탈로그의 `percentileOf`가 서버가 주는 사실이다.
+ * 예전에는 카탈로그(`byCode.percentileOf`)로 판단했다. 그런데 이 컴포넌트는 카탈로그에
+ * `AsyncPanel`을 걸지 않아서, **스크리닝은 성공하고 카탈로그 요청만 실패하면** 판단이
+ * 조용히 false가 되고 문구가 사라졌다. 그러면 화면이 "코스피 상위 20%"라고 말하게 되는데
+ * 서버는 그것이 사실이 아니라고 명시하고 있다. 지금은 응답의 `usesPercentile`을 쓴다.
  */
-const usesPercentile = computed(() => {
-  const codes = new Set<string>([
-    ...props.result.columns,
-    ...props.result.conditions.map((it) => it.indicator.code),
-  ])
-  for (const code of codes) {
-    if (catalog.byCode.get(code)?.percentileOf != null) {
-      return true
-    }
-  }
-  return false
-})
+const showPercentileNote = computed(() => props.result.usesPercentile)
+
+/**
+ * 모집단이 알려진 값과 다른가.
+ *
+ * 다르다고 해서 문구를 **지우지 않는다.** 주의 문구의 부재가 위험한 상태이지, 조금 어긋난
+ * 문구가 위험한 것이 아니다. 모르는 모집단이면 모집단 이름을 그대로 밝힌다.
+ */
+const knownPopulation = computed(
+  () => props.result.percentilePopulation === PERCENTILE_POPULATION_ALL,
+)
 </script>
 
 <template>
@@ -92,10 +90,16 @@ const usesPercentile = computed(() => {
       다시 실행해 주세요.
     </Message>
 
-    <p v-if="usesPercentile && result.percentilePopulation === PERCENTILE_POPULATION_ALL" class="summary__note">
-      백분위는 <strong>현재 편입된 코스피·코스닥 종목 전체</strong>를 기준으로 계산됩니다. 특정
-      유니버스를 골라 조회해도 순위는 그 안에서 매긴 것이 아닙니다.
-    </p>
+    <template v-if="showPercentileNote">
+      <p v-if="knownPopulation" class="summary__note">
+        백분위는 <strong>현재 편입된 코스피·코스닥 종목 전체</strong>를 기준으로 계산됩니다. 특정
+        유니버스를 골라 조회해도 순위는 그 안에서 매긴 것이 아닙니다.
+      </p>
+      <p v-else class="summary__note">
+        백분위는 <strong>{{ result.percentilePopulation }}</strong> 모집단을 기준으로 계산됩니다.
+        특정 유니버스를 골라 조회해도 순위는 그 안에서 매긴 것이 아닐 수 있습니다.
+      </p>
+    </template>
   </div>
 </template>
 

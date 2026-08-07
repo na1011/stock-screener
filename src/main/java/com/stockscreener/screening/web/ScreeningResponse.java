@@ -28,6 +28,10 @@ import java.util.Map;
  * @param asOfRequested 요청이 지정한 일자. null이면 서버가 정했다는 뜻이다.
  * @param columns       결과 표의 기본 컬럼 — 카탈로그의 기본 컬럼 ∪ 조건이 참조한 지표
  * @param truncated     상한에 걸려 잘렸는가. <b>조용히 자르지 않는다.</b>
+ * @param usesPercentile 이 결과가 백분위 지표를 하나라도 쓰는가. 서버가 판단해서 주는 이유는
+ *                      아래 {@link #PERCENTILE_POPULATION} 주의 문구를 <b>언제 보여야 하는지</b>가
+ *                      이 값에 달려 있기 때문이다. 화면이 카탈로그를 따로 받아 판단하면 그 요청이
+ *                      실패했을 때 문구가 조용히 사라지고, 화면은 사실이 아닌 말을 하게 된다.
  */
 public record ScreeningResponse(
         LocalDate asOf,
@@ -36,6 +40,7 @@ public record ScreeningResponse(
         String sortedBy,
         UniverseInfo universe,
         String percentilePopulation,
+        boolean usesPercentile,
         ScreenInfo screen,
         List<ConditionInfo> conditions,
         List<String> columns,

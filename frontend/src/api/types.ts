@@ -232,6 +232,13 @@ export interface ScreeningResponse {
    * (코스피+코스닥)에 대해 계산된다 — 유니버스를 골라도 그 안의 순위가 아니다.
    */
   percentilePopulation: string
+  /**
+   * 이 결과가 백분위 지표를 하나라도 쓰는가.
+   *
+   * 서버가 판단해서 준다. 화면이 카탈로그를 따로 받아 판단하면 그 요청만 실패했을 때
+   * 위 모집단 주의 문구가 조용히 사라지고, 화면은 사실이 아닌 말을 하게 된다.
+   */
+  usesPercentile: boolean
   screen: ScreeningScreenInfo
   conditions: ConditionInfo[]
   /** 결과 표의 기본 컬럼 — 카탈로그 기본 컬럼 ∪ 조건이 참조한 지표. */

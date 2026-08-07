@@ -334,6 +334,25 @@ class ScreeningApiContractTest {
         assertThat(response.get("percentilePopulation").asText()).isEqualTo("ALL_CURRENT_MEMBERS");
     }
 
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("백분위를 쓰는지 서버가 판단해서 준다 — 모집단 주의 문구를 언제 보일지가 여기 달렸다")
+    void declaresWhetherPercentileIsUsed() throws Exception {
+        // 화면이 카탈로그를 따로 받아 판단하면, 그 요청만 실패해도 주의 문구가 조용히
+        // 사라지고 화면은 "코스피 상위 20%"라고 말하게 된다 — 사실이 아니다.
+        JsonNode plain = run("""
+                {"conditions": {"conditions":[
+                   {"indicatorCode":"PER","operator":"LT","operand":{"type":"LITERAL","value":10}}]}}
+                """);
+        assertThat(plain.get("usesPercentile").asBoolean()).isFalse();
+
+        JsonNode percentile = run("""
+                {"conditions": {"conditions":[
+                   {"indicatorCode":"PER_PCTL","operator":"LTE","operand":{"type":"LITERAL","value":0.2}}]}}
+                """);
+        assertThat(percentile.get("usesPercentile").asBoolean()).isTrue();
+    }
+
     private JsonNode run(String body) throws Exception {
         String json = mockMvc.perform(post("/api/screening").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
