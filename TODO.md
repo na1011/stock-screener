@@ -159,7 +159,13 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
   | Type / Service | `HTTP` |
   | URL | `localhost:8080` |
 
-  **Type은 `HTTPS`가 아니라 `HTTP`다.** cloudflared가 로컬 앱에 붙는 구간은 평문이고, 인증서는 Cloudflare 가장자리에서 끝난다. `HTTPS`로 잡으면 502가 난다.
+  **Type은 `HTTPS`가 아니라 `HTTP`다.** 헷갈리는 지점이라 구간을 그려 둔다:
+  ```
+  브라우저 ──HTTPS──▶ Cloudflare 엣지 ──암호화 터널──▶ cloudflared ──HTTP──▶ Spring :8080
+                      ↑ 인증서는 여기서 끝남                          ↑ 이 칸이 가리키는 구간
+  ```
+  여기 적는 값은 **맥북 안에서 cloudflared가 Spring에 붙는 방법**이다. 브라우저가 보는 주소가 `https://`인 것과 모순이 아니다 — 다른 구간이다. `HTTPS`로 잡으면 cloudflared가 `https://localhost:8080`에 TLS 핸드셰이크를 시도하는데 Spring은 평문으로만 듣고 인증서도 없어 502가 난다.
+  같은 이유로 Spring은 자기가 평문 HTTP를 받았다고 보고, 원래 스킴은 `X-Forwarded-Proto`에만 남는다. ③ 3-2가 그것을 믿게 하는 설정이다.
 
   **DNS는 따로 만들 것이 없다.** 저장하면 Cloudflare가 `screener` CNAME(`<터널UUID>.cfargotunnel.com`)을 자동으로 넣는다. DNS 화면에서 손으로 만들면 오히려 충돌한다.
 - [x] **2-6. 확인** — `./gradlew bootRun`을 띄운 상태에서 **2026-08-07 `200` 실측 완료**:
@@ -234,8 +240,10 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
 - [ ] **4-1.** [sentry.io](https://sentry.io/) 가입 → 조직 생성.
 - [ ] **4-2. 프로젝트를 둘 만든다** — 플랫폼 `Java / Spring Boot` 하나, `JavaScript / Vue` 하나.
   **하나로 합치지 않는 이유**: 이슈 그룹핑·릴리스·소스맵 처리가 플랫폼별로 갈려서, 섞으면 프론트 스택트레이스가 minify된 채로 남는다. 무료 티어의 제약은 프로젝트 수가 아니라 **월 이벤트 총량**이라 나눠도 비용이 늘지 않는다.
-- [ ] **4-3.** 각 프로젝트의 DSN을 복사한다. 백엔드 것이 `SENTRY_DSN`이다.
-- [ ] **4-4. 프론트 DSN을 담을 환경변수가 아직 없다.** `.env.example`에는 `SENTRY_DSN` 하나뿐이다. Vite는 **`VITE_` 접두어가 붙은 변수만** 번들에 노출하므로 `VITE_SENTRY_DSN`을 새로 만들어야 하고, 이건 Phase 6 착수 시 `.env.example`과 빌드 설정에 함께 추가한다.
+- [ ] **4-3. 생성 중 나오는 `Set your alert frequency`는 기본값(`Alert me on high priority issues` + `Notify via email`)으로 둔다.** ⑤에서 알림을 직접 구현하지만 **잡는 대상이 다르다** — 자체 알림은 배치 실패·워치리스트처럼 **코드가 예상한 사건**이고, Sentry는 예상 못 한 예외·프론트 JS 오류, 그리고 **알림 코드 자체가 죽은 경우**를 잡는다. 마지막 것 때문에 꺼서는 안 된다. 자체 알림만 두면 그게 고장 난 사실을 알려줄 경로가 없다.
+  `Connect to messaging`은 **지금 누르지 않는다.** ⑤에서 채널을 정한 뒤 붙이는 편이 순서에 맞고, Sentry 설정에서 나중에 언제든 추가된다.
+- [ ] **4-4.** 각 프로젝트의 DSN을 복사한다. 백엔드 것이 `SENTRY_DSN`이다.
+- [ ] **4-5. 프론트 DSN을 담을 환경변수가 아직 없다.** `.env.example`에는 `SENTRY_DSN` 하나뿐이다. Vite는 **`VITE_` 접두어가 붙은 변수만** 번들에 노출하므로 `VITE_SENTRY_DSN`을 새로 만들어야 하고, 이건 Phase 6 착수 시 `.env.example`과 빌드 설정에 함께 추가한다.
   프론트 DSN이 번들에 그대로 박혀 공개되는 것은 **정상이다** — Sentry DSN은 쓰기 전용 공개 식별자다. 시크릿으로 착각해 숨기려다 빌드를 꼬지 않는다.
 
 **없으면 막히는 것**: 에러 수집·통지. 현재 프론트 오류는 `console.error`에만 남는다.
