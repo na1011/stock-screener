@@ -3,7 +3,16 @@
 # 차단하지 않는다. 불일치가 없으면 아무것도 출력하지 않고 조용히 통과한다.
 set -euo pipefail
 
-command -v jq >/dev/null 2>&1 || exit 0
+# jq가 없으면 이 검사만 죽는 게 아니라 guard-secrets.sh의 시크릿 판정도 함께 죽는다.
+# 그 사실을 먼저 알린다.
+#
+# 여기서 평문 stdout을 쓰는 이유는 하나뿐이다 — jq에 의존하는 경로로는 jq 부재를 알릴 수 없다.
+# SessionStart의 평문 stdout은 그대로 컨텍스트로 들어가므로 jq가 필요 없다.
+# 아래 findings 보고가 jq -n을 쓰는 것과 달라 보이지만, 그쪽은 jq가 있을 때만 도달한다.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq가 없다. guard-secrets.sh의 시크릿 차단과 이 문서 검사가 모두 무력화된 상태다. .env.production·*.key·credentials.json 같은 경로는 permissions가 덮지 않으므로 지금은 아무것도 막지 않는다. jq를 설치하면 복구된다."
+  exit 0
+fi
 
 root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 cd "$root" 2>/dev/null || exit 0

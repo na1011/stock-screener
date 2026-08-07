@@ -34,6 +34,16 @@ paths:
 - **MUST: skill은 지시가 아니라 참조다.** 따라야 할 순서가 아니라 알아야 할 사실과 함정을 적는다. 순서로 적으면 에이전트가 대본으로 읽고 판단을 멈추는데, 그것이 기획형 하네스가 무너지는 방식이다.
 - **MUST NOT: permissions·hook이 이미 강제하는 것을 지시문에 중복 적지 않는다.** 시크릿 규칙이 한때 지시문 4곳 + 강제 3계층에 있었다. 중복은 예산을 먹으면서 신뢰도를 올리지 않고, 한쪽만 바뀌면 어느 쪽이 참인지 알 수 없게 된다.
 - **MUST NOT: 하네스 결정을 `docs/adr/`에 넣지 않는다.** 그곳은 제품 기술 결정 전용이다. 하네스 근거는 이 파일에, 그 결정이 나온 경위는 `README.md`에 둔다.
+- **MUST NOT: 판정하지 못한 훅을 `exit 0`으로 내보내지 않는다.** `exit 0`은 "판정했고 문제없다"와 같은 신호라, 가드가 죽은 것이 성공과 구분되지 않는다. 통과가 맞는 상황이라도 `exit 1`을 쓴다 — 도구 호출은 그대로 진행되고 stderr만 트랜스크립트에 남는다. `exit 0`의 stderr는 디버그 로그로만 가서 아무도 보지 못한다. 차단(`exit 2`)으로 올리기 전에는 위의 "되돌릴 수 없나"를 먼저 답한다.
+- **MUST: 의존성 점검은 그 의존성을 쓰지 않는 경로로 한다.** jq에 의존하는 훅으로는 jq 부재를 알릴 수 없다. `check-doc-staleness.sh`가 그 한 줄만 평문 stdout으로 내보내는 이유다(`SessionStart`의 평문 stdout은 그대로 컨텍스트가 된다).
+
+### 시크릿 판정이 permissions가 아니라 훅에 있는 이유
+
+**permissions는 예외를 표현할 수 없다.** `deny`가 `allow`를 이기므로 `deny Edit(./x/.env.*)` + `allow Edit(./x/.env.example)`은 차단된다(2026-08-08 실측). 그런데 `.env.example`은 이 저장소가 자격증명을 문서화하라고 지정한 파일이라 예외가 필수다. 그래서 `guard-secrets.sh`가 **정본**이고, permissions의 `.env`·`secrets/**`는 겹치는 **거친 백스톱**이다.
+
+- **MUST NOT: 겹친다는 이유로 한쪽을 지우지 않는다.** 훅을 지우면 예외가 사라져 `.env.example`을 못 고치고, permissions를 지우면 훅이 죽었을 때 아무것도 안 남는다. 둘은 같은 정책의 중복이 아니라 **표현력이 다른 두 계층**이다.
+- **훅이 혼자 지키는 것**: `.env.<임의>`(`.env.production` 등), `*.key`, `*.pfx`, `id_rsa`, `credentials.json`, `service-account*.json`, `application-{local,secret,prod}.*`. permissions는 이 중 어느 것도 덮지 않는다.
+- 전역 `~/.claude/settings.json`은 커밋되지 않는다. **다른 클론에서 살아 있는 계층은 훅뿐이다.**
 
 ## `paths` glob을 더하거나 고쳤을 때
 
