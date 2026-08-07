@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -92,5 +93,25 @@ class SpaFallbackTest {
         // 번들 파일명에는 해시가 붙는다. 없는 자산을 요청했다는 것은 배포가 어긋났다는 뜻이고,
         // 그때 200 HTML을 주면 "Unexpected token '<'"만 남아 원인이 보이지 않는다.
         mockMvc.perform(get("/assets/index-없는해시.js")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @WithAnonymousUser
+    @DisplayName("본문 서체는 익명에게도 나가고 영구 캐시가 붙는다")
+    void fontIsServedImmutable() throws Exception {
+        // 로그인 화면부터 서체가 필요하므로 익명으로 확인한다. 캐시 헤더를 함께 단언하는
+        // 이유는 이것이 없으면 "/**" 핸들러의 no-cache에 걸려 2MB짜리 조건부 요청이 방문마다
+        // 오가기 때문이다 — 화면은 멀쩡해 보이고 느려지기만 한다(ADR-0022).
+        mockMvc.perform(get("/fonts/PretendardVariable-1.3.9.woff2"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control",
+                        org.hamcrest.Matchers.containsString("immutable")));
+    }
+
+    @Test
+    @WithAnonymousUser
+    @DisplayName("없는 서체는 404다 — index.html을 주면 브라우저가 HTML을 서체로 파싱한다")
+    void missingFontIsNotFound() throws Exception {
+        mockMvc.perform(get("/fonts/없는서체.woff2")).andExpect(status().isNotFound());
     }
 }

@@ -63,6 +63,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addResourceLocations("classpath:/static/assets/")
                 .setCacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable());
 
+        // 서체는 2MB짜리 한 덩어리다(ADR-0022). 아래 "/**"에 걸리면 no-cache가 붙어 방문마다
+        // 조건부 요청이 오간다. 파일명에 버전이 박혀 있으므로 immutable로 둘 수 있고, 버전을
+        // 올리면 이름이 바뀌어 캐시가 저절로 갈린다. 폴백을 걸지 않는 이유는 /assets/**와 같다 —
+        // 없는 서체에 index.html을 200으로 주면 브라우저는 HTML을 서체로 파싱하려다 조용히 만다.
+        registry.addResourceHandler("/fonts/**")
+                .addResourceLocations("classpath:/static/fonts/")
+                .setCacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable());
+
         // 이 등록이 Boot 자동 구성의 "/**" 등록을 대체한다(우리 설정이 나중에 적용된다).
         // index.html은 캐시하지 않는다 — 캐시되면 새 번들을 배포해도 옛 자산 해시를 가리킨다.
         registry.addResourceHandler("/**")
