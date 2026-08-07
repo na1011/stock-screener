@@ -412,8 +412,21 @@ function barRatio(row: ScreeningRow, code: string): number | null {
   text-align: right;
 }
 
+/*
+ * IMPORTANT — 정렬 아이콘을 **라벨 왼쪽**에 둔다. 오른쪽에 두면 머리글이 본문보다 22px
+ * 왼쪽에서 끝나 열이 미묘하게 틀어져 보인다.
+ *
+ * 아이콘은 활성·hover가 아닐 때 `opacity: 0`이지 `display: none`이 아니다(위 규칙). 자리를
+ * 유지해야 hover마다 라벨이 튀지 않기 때문인데, 오른쪽 끝에 두면 그 **보이지 않는 자리**가
+ * 라벨과 숫자 사이를 벌린다. 헤더 상자(`contentRight`)는 본문과 맞아 있었고 어긋난 것은
+ * 눈에 보이는 글자뿐이라, 원인이 잘 드러나지 않는 종류의 어긋남이었다.
+ *
+ * `row-reverse`에서 main-start는 오른쪽이므로 `flex-start`가 오른쪽으로 몬다. DOM 순서가
+ * [라벨][아이콘]이므로 라벨이 오른쪽 끝에 서고 아이콘은 왼쪽 여유 공간을 쓴다.
+ */
 .result-table :deep(th.result-table__num .p-datatable-column-header-content) {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 
 /*
