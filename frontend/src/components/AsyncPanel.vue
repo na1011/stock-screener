@@ -2,8 +2,11 @@
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Skeleton from 'primevue/skeleton'
+import { computed } from 'vue'
 
 import type { ApiError } from '@/api/http'
+import { ASYNC_PANELS } from '@/components/asyncPanel'
+import type { AsyncPanelName } from '@/components/asyncPanel'
 import type { AsyncState } from '@/composables/useAsync'
 
 /**
@@ -20,13 +23,19 @@ const props = defineProps<{
   state: AsyncState
   error: ApiError | null
   retry: () => void
-  /** 실패했을 때 무엇이 실패했는지 알리는 이름. "지표 카탈로그", "지지·저항" 같은 것. */
-  label: string
+  /**
+   * 무엇이 실패했는지 알리는 영역 이름. 자유 문자열이 아니라 `ASYNC_PANELS`의 키다 —
+   * 오타가 컴파일 오류가 되고, 조사가 문구 조립과 함께 정해진다.
+   */
+  panel: AsyncPanelName
   /** 로딩 자리를 채울 스켈레톤 줄 수. */
   skeletonRows?: number
 }>()
 
-const rows = props.skeletonRows ?? 3
+const subject = computed(() => ASYNC_PANELS[props.panel])
+// computed인 이유는 setup에서 한 번 읽으면 값이 바뀌어도 따라가지 않기 때문이다.
+// 지금 호출부가 전부 정적 리터럴이라 드러나지 않을 뿐, 다음 호출자를 위한 함정이다.
+const rows = computed(() => props.skeletonRows ?? 3)
 </script>
 
 <template>
@@ -35,7 +44,11 @@ const rows = props.skeletonRows ?? 3
       <slot />
     </template>
 
-    <div v-else-if="state === 'loading'" class="async-panel__loading" :aria-label="`${label} 불러오는 중`">
+    <div
+      v-else-if="state === 'loading'"
+      class="async-panel__loading"
+      :aria-label="`${subject.subject} 불러오는 중`"
+    >
       <slot name="loading">
         <Skeleton v-for="row in rows" :key="row" height="1.5rem" class="async-panel__skeleton" />
       </slot>
@@ -44,7 +57,7 @@ const rows = props.skeletonRows ?? 3
     <Message v-else-if="state === 'error'" severity="error" :closable="false">
       <div class="async-panel__error">
         <div>
-          <strong>{{ label }}을(를) 불러오지 못했습니다.</strong>
+          <strong>{{ subject.subject }}{{ subject.particle }} 불러오지 못했습니다.</strong>
           <p class="async-panel__detail">{{ error?.userMessage }}</p>
           <p v-if="error && !error.retryable" class="async-panel__hint">
             잠시 뒤 다시 시도해도 같은 결과가 나올 수 있습니다. 입력한 조건을 확인해 주세요.

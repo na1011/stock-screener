@@ -84,7 +84,7 @@ onMounted(() => {
       :state="detail.state.value"
       :error="detail.error.value"
       :retry="detail.retry"
-      label="종목 정보"
+      panel="stock"
       :skeleton-rows="5"
     >
       <template v-if="detail.data.value">
@@ -168,7 +168,7 @@ onMounted(() => {
         :state="priceReference.state.value"
         :error="priceReference.error.value"
         :retry="priceReference.retry"
-        label="지지·저항 참고정보"
+        panel="priceReference"
         :skeleton-rows="3"
       >
         <PriceReferencePanel v-if="priceReference.data.value" :reference="priceReference.data.value" />

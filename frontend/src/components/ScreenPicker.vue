@@ -83,7 +83,7 @@ async function pick(key: number | string | null): Promise<void> {
     :state="screens.state"
     :error="screens.error"
     :retry="screens.retry"
-    label="화면 목록"
+    panel="screens"
     :skeleton-rows="1"
   >
     <Select

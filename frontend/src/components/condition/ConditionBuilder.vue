@@ -100,7 +100,7 @@ onMounted(() => {
           :state="catalog.universeState"
           :error="catalog.universeError"
           :retry="catalog.retryUniverses"
-          label="유니버스 목록"
+          panel="universes"
           :skeleton-rows="1"
         >
           <Select
@@ -133,7 +133,7 @@ onMounted(() => {
       :state="catalog.catalogState"
       :error="catalog.catalogError"
       :retry="catalog.retryCatalog"
-      label="지표 카탈로그"
+      panel="catalog"
       :skeleton-rows="4"
     >
       <div class="builder__conditions">

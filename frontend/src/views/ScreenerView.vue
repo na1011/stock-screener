@@ -65,7 +65,7 @@ async function run(): Promise<void> {
         :state="screening.state"
         :error="screening.error"
         :retry="screening.retry"
-        label="스크리닝 결과"
+        panel="screening"
         :skeleton-rows="6"
       >
         <template #idle>

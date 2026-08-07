@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router'
 
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
+import { panelSubject } from '@/components/asyncPanel'
 import { useApiToast } from '@/composables/useApiToast'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { screenTypeLabel } from '@/lib/screen'
@@ -80,13 +81,13 @@ async function remove(id: number, name: string): Promise<void> {
 
 <template>
   <section class="screens">
-    <h1 class="screens__title">화면 목록</h1>
+    <h1 class="screens__title">{{ panelSubject('screens') }}</h1>
 
     <AsyncPanel
       :state="screens.state"
       :error="screens.error"
       :retry="screens.retry"
-      label="화면 목록"
+      panel="screens"
       :skeleton-rows="4"
     >
       <section class="screens__group">
