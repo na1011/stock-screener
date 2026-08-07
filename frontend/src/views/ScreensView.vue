@@ -3,7 +3,6 @@ import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import { useConfirm } from 'primevue/useconfirm'
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
@@ -23,7 +22,6 @@ import { useScreensStore } from '@/stores/screens'
  * 없으므로(`conditions`가 null) 이 한 번의 추가 요청이 필요하다.
  */
 const screens = useScreensStore()
-const router = useRouter()
 const confirm = useConfirm()
 const { notifyFailure, notifySuccess } = useApiToast()
 const { openByKey } = useScreenOpener()
@@ -35,8 +33,11 @@ onMounted(() => {
 })
 
 /**
- * 불러오기는 `useScreenOpener`가 한다. 여기가 더하는 것은 **성공했을 때 스크리너로 보내는
- * 것**뿐이다 — 실패 문구와 오류 처리를 다시 적으면 레일로 고를 때와 다른 말이 나온다.
+ * 불러오기도 스크리너로 보내는 것도 `useScreenOpener`가 한다. 여기가 더하는 것은 **어느 행이
+ * 도는 중인지 표시하는 것**뿐이다.
+ *
+ * 이동을 여기서 따로 하지 않는다. 예전에는 여기만 `router.push`를 갖고 레일은 갖지 않아,
+ * 같은 동작이 고른 자리에 따라 다르게 굴었다.
  */
 async function load(screen: ScreenResponse): Promise<void> {
   if (screen.id === null) {
@@ -44,9 +45,7 @@ async function load(screen: ScreenResponse): Promise<void> {
   }
   busyId.value = screen.id
   try {
-    if (await openByKey(screenKey(screen))) {
-      await router.push({ name: 'screener' })
-    }
+    await openByKey(screenKey(screen))
   } finally {
     busyId.value = null
   }

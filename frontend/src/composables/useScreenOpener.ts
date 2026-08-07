@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import { ApiError } from '@/api/http'
 import type { ScreenResponse } from '@/api/types'
@@ -39,14 +40,24 @@ const OPEN_FAILED = '불러오지 못했습니다'
 export function useScreenOpener() {
   const screens = useScreensStore()
   const draft = useScreenDraftStore()
+  const router = useRouter()
   const { notifyFailure } = useApiToast()
 
   const loading = ref(false)
 
   /**
+   * 화면 하나를 편집기에 올리고 **스크리너로 보낸다.**
+   *
+   * IMPORTANT — 이동이 여기 있는 것이 요점이다. 예전에는 호출부 셋 중 `ScreensView`만
+   * `router.push`를 갖고 있었고, 그래서 **레일에서 프리셋을 눌러도 아무 일이 일어나지
+   * 않았다** — 종목 상세를 보는 중이면 요청만 나가고 본문은 그대로였다. 좁은 폭에서는
+   * 서랍까지 닫혀 완전한 무반응으로 읽혔다. 위 주석이 예고한 "어느 쪽으로 골랐느냐에 따라
+   * 다르게 동작하는 형태"가 정확히 그것이었다.
+   *
+   * 이미 스크리너 위에 있으면 같은 라우트로의 push라 아무 일도 하지 않는다.
+   *
    * @return 실제로 불러왔으면 `true`. 실패는 여기서 알림까지 끝내므로 호출부가 다시 잡을
-   *   것은 없지만, **성공에만 이어지는 동작**(목록 화면의 스크리너 이동)이 있어 결과가
-   *   필요하다. `void`로 두면 실패 토스트를 띄운 채로 화면까지 넘어간다.
+   *   것은 없지만, **성공에만 이어지는 동작**(서랍 닫기 등)이 있어 결과가 필요하다.
    */
   async function openByKey(key: number | string | null): Promise<boolean> {
     if (key === null) {
@@ -66,6 +77,7 @@ export function useScreenOpener() {
     loading.value = true
     try {
       draft.loadFrom(await screens.open(found.id))
+      await router.push({ name: 'screener' })
       return true
     } catch (caught) {
       notifyFailure(OPEN_FAILED, caught)

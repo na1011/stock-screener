@@ -3,7 +3,7 @@ import Button from 'primevue/button'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
@@ -30,6 +30,7 @@ const auth = useAuthStore()
 const screens = useScreensStore()
 const draft = useScreenDraftStore()
 const route = useRoute()
+const router = useRouter()
 const { openByKey, isOpen } = useScreenOpener()
 
 const emit = defineEmits<{ navigate: [] }>()
@@ -77,8 +78,15 @@ async function pick(screen: ScreenResponse): Promise<void> {
   }
 }
 
-function startFresh(): void {
+/**
+ * 조건을 비우고 스크리너로 간다.
+ *
+ * 이동이 필요한 이유는 `openByKey`와 같다 — 종목 상세를 보는 중에 누르면 조건만 조용히
+ * 비워지고 본문은 그대로였다. 여기는 `openByKey`를 거치지 않으므로 이동을 직접 붙인다.
+ */
+async function startFresh(): Promise<void> {
   draft.reset()
+  await router.push({ name: 'screener' })
   emit('navigate')
 }
 </script>
