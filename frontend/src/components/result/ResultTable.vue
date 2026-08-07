@@ -170,7 +170,9 @@ function barWidth(row: ScreeningRow, code: string): number | null {
         header-class="result-table__num"
       >
         <template #body="{ data }: { data: ScreeningRow }">
-          <span class="tabular">{{ formatNumber(data.score, SCORE_DECIMAL_SCALE) }}</span>
+          <span class="tabular result-table__score">
+            {{ formatNumber(data.score, SCORE_DECIMAL_SCALE) }}
+          </span>
         </template>
       </Column>
       <Column
@@ -182,7 +184,9 @@ function barWidth(row: ScreeningRow, code: string): number | null {
         header-class="result-table__num"
       >
         <template #body="{ data }: { data: ScreeningRow }">
-          <span class="tabular">{{ formatRatioAsPercent(data.scoreRatio) }}</span>
+          <span class="tabular result-table__secondary">
+            {{ formatRatioAsPercent(data.scoreRatio) }}
+          </span>
         </template>
       </Column>
     </template>
@@ -196,7 +200,9 @@ function barWidth(row: ScreeningRow, code: string): number | null {
       header-class="result-table__num"
     >
       <template #body="{ data }: { data: ScreeningRow }">
-        <span class="tabular">{{ data.matchedCount }} / {{ result.conditions.length }}</span>
+        <span class="tabular result-table__secondary">
+          {{ data.matchedCount }} / {{ result.conditions.length }}
+        </span>
       </template>
     </Column>
 
@@ -295,19 +301,40 @@ function barWidth(row: ScreeningRow, code: string): number | null {
   text-align: right;
 }
 
+/*
+ * 2px에 55% 투명도로는 다크 배경에서 사실상 보이지 않았다 — "배경에 가깝다"와 "없다"는
+ * 다르다. 트랙을 한 단계 올리고(800 → 700) 채움을 진하게 해 눈에 걸리게 한다. 그래도
+ * 3px이라 숫자를 읽는 것을 방해하지는 않는다.
+ */
 .result-table__bar {
   display: block;
-  height: 2px;
+  height: 3px;
   margin-top: 3px;
-  border-radius: 1px;
-  background: var(--p-surface-800);
+  border-radius: 2px;
+  background: var(--p-surface-700);
 }
 
 .result-table__bar-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--p-primary-color) 55%, transparent);
+  background: color-mix(in srgb, var(--p-primary-color) 80%, transparent);
+}
+
+/*
+ * 점수·달성률·충족은 같은 것을 세 가지로 말한다. 셋이 같은 밝기면 어느 것을 기준으로
+ * 줄이 세워졌는지 알 수 없다. 정렬의 기준인 점수만 올리고 나머지는 내린다.
+ *
+ * IMPORTANT — 값에 초록·빨강 색조를 넣지 않는다. 이 표에는 판정 Tag가 함께 있어 두 채널이
+ * 한 줄에 섞인다(ADR-0021의 "형태로 가른다"). 위계는 밝기로만 만든다.
+ */
+.result-table__score {
+  color: var(--p-text-hover-color);
+  font-weight: 600;
+}
+
+.result-table__secondary {
+  color: var(--p-text-muted-color);
 }
 
 .result-table__missing {
@@ -376,6 +403,12 @@ function barWidth(row: ScreeningRow, code: string): number | null {
   font-size: var(--app-text-xs);
 }
 
+/* 139행을 훑을 때 커서가 어느 줄에 있는지가 즉시 갈아끼워지면 눈이 자리를 놓친다. */
+.result-table :deep(.p-datatable-tbody > tr),
+.result-table :deep(.p-datatable-tbody > tr > .p-datatable-frozen-column) {
+  transition: background var(--app-motion-fast) var(--app-ease);
+}
+
 .result-table :deep(.p-datatable-thead > tr > th) {
   font-size: var(--app-text-2xs);
 }
@@ -397,7 +430,7 @@ function barWidth(row: ScreeningRow, code: string): number | null {
  */
 .result-table :deep(th .p-datatable-sort-icon) {
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--app-motion-fast) var(--app-ease);
 }
 
 .result-table :deep(th:hover .p-datatable-sort-icon),

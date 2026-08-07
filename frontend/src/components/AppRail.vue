@@ -232,13 +232,28 @@ function startFresh(): void {
 }
 
 /*
- * 활성 표시는 면이다. 헤더가 쓰던 밑줄을 여기로 가져오지 않는 이유는 세로 목록에서 밑줄이
- * 구분선과 구별되지 않기 때문이다.
+ * 활성 표시는 면 + 왼쪽 표식이다. 헤더가 쓰던 밑줄을 가져오지 않는 이유는 세로 목록에서
+ * 밑줄이 구분선과 구별되지 않기 때문이다.
+ *
+ * 면만으로는 약했다 — hover 배경과 같은 `surface.800`이라 커서를 올린 항목과 지금 열린
+ * 항목이 같아 보였다. 코발트 막대가 그 둘을 가른다.
  */
 .rail__item--active {
+  position: relative;
   background: var(--p-surface-800);
   color: var(--p-text-color);
   font-weight: 600;
+}
+
+.rail__item--active::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--p-primary-color);
 }
 
 .rail__icon {
