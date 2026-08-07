@@ -7,6 +7,7 @@ import {
   apiFetch,
   isRetryable,
   readCookie,
+  retentionWindow,
   setUnauthorizedHandler,
 } from './http'
 
@@ -253,5 +254,28 @@ describe('apiFetch', () => {
 
     expect(error).toBeInstanceOf(DOMException)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('retentionWindow — 보존 구간 필드명이 여기 한 곳에만 있다', () => {
+  const problem = {
+    type: ProblemType.INDICATOR_HISTORY_UNAVAILABLE,
+    detail: '보존 구간 밖이다',
+    requestedAsOf: '2025-01-02',
+    retentionFrom: '2025-11-11',
+    retentionTo: '2026-08-05',
+  }
+
+  it('서버가 실은 구간을 꺼낸다', () => {
+    expect(retentionWindow(problem)).toEqual({ from: '2025-11-11', to: '2026-08-05' })
+  })
+
+  it('필드가 없으면 null이다 — 없는 범위를 지어내지 않는다', () => {
+    // 서버가 필드 이름을 바꾸면 여기로 온다. 그때 날짜 선택기는 좁혀지지 않을 뿐
+    // 잘못된 범위로 잠기지는 않는다. 이름이 어긋났다는 사실 자체는
+    // wire-contract 픽스처가 잡는다 — 이 함수만으로는 조용하다.
+    expect(retentionWindow({ type: ProblemType.INDICATOR_HISTORY_UNAVAILABLE })).toBeNull()
+    expect(retentionWindow({ ...problem, retentionTo: 42 })).toBeNull()
+    expect(retentionWindow(null)).toBeNull()
   })
 })

@@ -38,6 +38,32 @@ export const ProblemType = {
 /** 네트워크 자체가 실패해 상태 코드가 없는 경우. */
 export const NETWORK_ERROR_STATUS = 0
 
+/**
+ * 보존 기간 밖 오류가 함께 싣는 구간.
+ *
+ * IMPORTANT — 이 두 필드 이름은 **양쪽 컴파일러 모두에게 보이지 않는다.** 서버에서는
+ * `ApiExceptions.IndicatorHistoryUnavailableException`이 `with("retentionFrom", …)`으로 문자열
+ * 키를 얹고, 프론트에서는 `ApiProblem`의 인덱스 시그니처(`[key: string]: unknown`)로 꺼낸다.
+ * 한쪽에서 이름을 바꾸면 날짜 선택기의 범위가 **아무 오류 없이** 사라지고, 사용자는 같은
+ * 오류를 만나며 날짜를 하나씩 다시 찍는다 — 그 필드가 막으려던 바로 그 상황이다.
+ *
+ * 그래서 URN 옆, grep 되는 한 곳에 둔다. 이름의 정본은 서버이고 `wire-contract.json`이 둘을 묶는다.
+ */
+export interface RetentionWindow {
+  from: string
+  to: string
+}
+
+const RETENTION_FROM = 'retentionFrom'
+const RETENTION_TO = 'retentionTo'
+
+/** @return 구간을 알 수 없으면 null. 그때는 날짜 선택기를 좁히지 않는다. */
+export function retentionWindow(problem: ApiProblem | null): RetentionWindow | null {
+  const from = problem?.[RETENTION_FROM]
+  const to = problem?.[RETENTION_TO]
+  return typeof from === 'string' && typeof to === 'string' ? { from, to } : null
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly problem: ApiProblem | null

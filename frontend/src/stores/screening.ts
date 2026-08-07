@@ -2,15 +2,10 @@ import { defineStore } from 'pinia'
 import { computed, shallowRef } from 'vue'
 
 import { api } from '@/api/endpoints'
-import { ProblemType } from '@/api/http'
+import { ProblemType, retentionWindow } from '@/api/http'
+import type { RetentionWindow } from '@/api/http'
 import type { ScreeningRequest } from '@/api/types'
 import { useAsync } from '@/composables/useAsync'
-
-/** 지표 보존 구간. 서버가 오류로 알려줄 때만 알 수 있다(ADR-0011). */
-export interface RetentionWindow {
-  from: string
-  to: string
-}
 
 export const useScreeningStore = defineStore('screening', () => {
   const pending = shallowRef<ScreeningRequest | null>(null)
@@ -39,18 +34,17 @@ export const useScreeningStore = defineStore('screening', () => {
    * 보존 기간 밖 요청의 오류에서 허용 구간을 꺼내 둔다.
    *
    * 이 값이 없으면 사용자는 날짜를 하나씩 바꿔 가며 같은 오류를 반복해서 만난다. 서버는
-   * `retentionFrom`·`retentionTo`를 이미 응답에 담고 있으므로(ADR-0015) 날짜 선택기의
-   * 범위로 옮기면 같은 실수를 두 번 하지 않는다.
+   * 구간을 이미 응답에 담고 있으므로(ADR-0015) 날짜 선택기의 범위로 옮기면 같은 실수를 두
+   * 번 하지 않는다. 필드 이름을 여기서 직접 읽지 않는 이유는 `api/http`의 `retentionWindow`에 있다.
    */
   function captureRetention(): void {
     const error = request.error.value
     if (error === null || !error.is(ProblemType.INDICATOR_HISTORY_UNAVAILABLE)) {
       return
     }
-    const from = error.problem?.retentionFrom
-    const to = error.problem?.retentionTo
-    if (typeof from === 'string' && typeof to === 'string') {
-      retention.value = { from, to }
+    const window = retentionWindow(error.problem)
+    if (window !== null) {
+      retention.value = window
     }
   }
 
