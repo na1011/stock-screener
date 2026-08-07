@@ -12,6 +12,7 @@ import type { IndicatorBrief, ScreeningResponse, ScreeningRow } from '@/api/type
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import ConditionOutcomes from '@/components/result/ConditionOutcomes.vue'
 import { MISSING, formatIndicatorValue, formatNumber, formatPrice, formatRatioAsPercent } from '@/lib/format'
+import { RESULT_LABELS, SCORE_DECIMAL_SCALE, indicatorBriefOf, valueOf } from '@/lib/resultRow'
 import { useCatalogStore } from '@/stores/catalog'
 
 /**
@@ -34,33 +35,15 @@ const isScoring = computed(() => props.result.evaluationMode === 'SCORING')
  * 컬럼으로 그릴 지표.
  *
  * 서버가 준 `columns`(기본 컬럼 ∪ 조건이 참조한 지표)를 그대로 따른다. 프론트가 목록을
- * 정하면 조건에 쓴 지표가 표에 없는 일이 생긴다.
+ * 정하면 조건에 쓴 지표가 표에 없는 일이 생긴다. 컬럼 하나를 푸는 규칙은 `lib/resultRow`에
+ * 있다 — 모바일 카드와 같아야 폭만 줄였는데 이름이 달라지는 일이 없다.
  */
 const indicatorColumns = computed<IndicatorBrief[]>(() =>
-  props.result.columns.map((code) => {
-    const fromCondition = props.result.conditions.find((it) => it.indicator.code === code)
-    if (fromCondition) {
-      return fromCondition.indicator
-    }
-    const meta = catalog.byCode.get(code)
-    return {
-      code,
-      name: meta?.name ?? code,
-      unit: meta?.unit ?? null,
-      decimalScale: meta?.decimalScale ?? 2,
-      higherIsBetter: meta?.higherIsBetter ?? null,
-      interpretation: meta?.interpretation ?? '',
-    }
-  }),
+  props.result.columns.map((code) => indicatorBriefOf(code, props.result.conditions, catalog.byCode)),
 )
 
 function indicatorName(code: string): string {
   return catalog.byCode.get(code)?.name ?? code
-}
-
-/** 값이 없는 지표는 키 자체가 없다. `?? 0`을 쓰면 "계산되지 않았다"가 0으로 둔갑한다. */
-function valueOf(row: ScreeningRow, code: string): number | null {
-  return Object.hasOwn(row.values, code) ? (row.values[code] ?? null) : null
 }
 
 function percentileOf(code: string) {
@@ -90,12 +73,12 @@ function percentileOf(code: string) {
     <template #header>
       <IconField class="result-table__search">
         <InputIcon class="pi pi-search" />
-        <InputText v-model="filters.global.value" placeholder="종목명 · 티커 검색" />
+        <InputText v-model="filters.global.value" :placeholder="RESULT_LABELS.search" />
       </IconField>
     </template>
 
     <template #empty>
-      <p class="result-table__empty">조건에 맞는 종목이 없습니다.</p>
+      <p class="result-table__empty">{{ RESULT_LABELS.empty }}</p>
     </template>
 
     <Column expander style="width: 3rem" />
@@ -103,7 +86,7 @@ function percentileOf(code: string) {
     <Column field="name" header="종목" sortable frozen style="min-width: 12rem">
       <template #body="{ data }: { data: ScreeningRow }">
         <RouterLink :to="{ name: 'stock', params: { stockId: data.stockId }, query: { asOf } }">
-          {{ data.name ?? '이름 없음' }}
+          {{ data.name ?? RESULT_LABELS.unnamed }}
         </RouterLink>
         <div class="result-table__sub">{{ data.ticker }} · {{ data.marketCode }}</div>
       </template>
@@ -116,19 +99,19 @@ function percentileOf(code: string) {
     </Column>
 
     <template v-if="isScoring">
-      <Column field="score" header="점수" sortable style="min-width: 6rem">
+      <Column field="score" :header="RESULT_LABELS.score" sortable style="min-width: 6rem">
         <template #body="{ data }: { data: ScreeningRow }">
-          <span class="tabular">{{ formatNumber(data.score, 2) }}</span>
+          <span class="tabular">{{ formatNumber(data.score, SCORE_DECIMAL_SCALE) }}</span>
         </template>
       </Column>
-      <Column field="scoreRatio" header="달성률" sortable style="min-width: 6rem">
+      <Column field="scoreRatio" :header="RESULT_LABELS.scoreRatio" sortable style="min-width: 6rem">
         <template #body="{ data }: { data: ScreeningRow }">
           <span class="tabular">{{ formatRatioAsPercent(data.scoreRatio) }}</span>
         </template>
       </Column>
     </template>
 
-    <Column field="matchedCount" header="충족" sortable style="min-width: 6rem">
+    <Column field="matchedCount" :header="RESULT_LABELS.matched" sortable style="min-width: 6rem">
       <template #body="{ data }: { data: ScreeningRow }">
         <span class="tabular">{{ data.matchedCount }} / {{ result.conditions.length }}</span>
       </template>
@@ -137,7 +120,7 @@ function percentileOf(code: string) {
     <Column
       v-if="result.rows.some((row) => row.notEvaluableCount > 0)"
       field="notEvaluableCount"
-      header="데이터없음"
+      :header="RESULT_LABELS.notEvaluable"
       sortable
       style="min-width: 7rem"
     >
@@ -168,7 +151,7 @@ function percentileOf(code: string) {
         <span
           class="tabular"
           :class="{ 'result-table__missing': valueOf(data, indicator.code) === null }"
-          :title="valueOf(data, indicator.code) === null ? '계산되지 않음' : undefined"
+          :title="valueOf(data, indicator.code) === null ? RESULT_LABELS.notCalculated : undefined"
         >
           {{ formatIndicatorValue(valueOf(data, indicator.code), indicator.unit, indicator.decimalScale) }}
         </span>

@@ -9,12 +9,21 @@
 /** 값이 없음. 하이픈(-)이 아니라 em dash(—)인 이유는 음수 부호와 헷갈리지 않기 위해서다. */
 export const MISSING = '—'
 
+/**
+ * 숫자·정렬의 로케일.
+ *
+ * 다국어를 하려는 것이 아니다. 이 문자열이 서식에도 `localeCompare`에도 쓰이는데 화면마다
+ * 흩어져 있으면, 한 곳만 고쳤을 때 표는 새 규칙으로 그리고 정렬은 옛 규칙으로 도는 상태가
+ * 된다. 그 어긋남은 자릿수나 순서가 미묘하게 다른 형태로만 드러난다.
+ */
+export const LOCALE = 'ko-KR'
+
 /** 자릿수가 흔들리면 표에서 비교가 어렵다. 서버가 지표마다 정한 소수 자릿수를 그대로 쓴다. */
 export function formatNumber(value: number | null | undefined, decimalScale: number): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return MISSING
   }
-  return new Intl.NumberFormat('ko-KR', {
+  return new Intl.NumberFormat(LOCALE, {
     minimumFractionDigits: decimalScale,
     maximumFractionDigits: decimalScale,
   }).format(value)
@@ -38,7 +47,7 @@ export function formatPrice(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return MISSING
   }
-  return `${new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 }).format(value)}원`
+  return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(value)}원`
 }
 
 /** 0..1 비율을 백분율로. 백분위 값과 점수 비율에 쓴다. */
@@ -95,5 +104,5 @@ export function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return MISSING
   }
-  return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 }).format(value)
+  return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(value)
 }

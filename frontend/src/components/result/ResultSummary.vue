@@ -5,7 +5,7 @@ import { computed } from 'vue'
 import { PERCENTILE_POPULATION_ALL } from '@/api/types'
 import type { ScreeningResponse } from '@/api/types'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
-import { formatDate } from '@/lib/format'
+import { formatCount, formatDate } from '@/lib/format'
 
 /**
  * 결과의 전제를 드러내는 머리말.
@@ -75,9 +75,9 @@ const knownPopulation = computed(
       <div class="summary__fact">
         <dt>결과</dt>
         <dd>
-          <strong>{{ result.resultCount.toLocaleString('ko-KR') }}</strong
+          <strong>{{ formatCount(result.resultCount) }}</strong
           >종목
-          <span class="summary__hint">평가 {{ result.evaluatedCount.toLocaleString('ko-KR') }}종목</span>
+          <span class="summary__hint">평가 {{ formatCount(result.evaluatedCount) }}종목</span>
         </dd>
       </div>
       <div class="summary__fact">

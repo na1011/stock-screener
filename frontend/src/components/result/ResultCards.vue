@@ -10,7 +10,15 @@ import { RouterLink } from 'vue-router'
 
 import type { ScreeningResponse, ScreeningRow } from '@/api/types'
 import ConditionOutcomes from '@/components/result/ConditionOutcomes.vue'
-import { formatIndicatorValue, formatNumber, formatPrice, formatRatioAsPercent } from '@/lib/format'
+import {
+  LOCALE,
+  formatCount,
+  formatIndicatorValue,
+  formatNumber,
+  formatPrice,
+  formatRatioAsPercent,
+} from '@/lib/format'
+import { RESULT_LABELS, SCORE_DECIMAL_SCALE, indicatorBriefOf, valueOf } from '@/lib/resultRow'
 import { useCatalogStore } from '@/stores/catalog'
 
 /**
@@ -30,21 +38,20 @@ const expanded = ref<number | null>(null)
 
 const isScoring = computed(() => props.result.evaluationMode === 'SCORING')
 
-/** 카드에 미리 보일 지표. 서버가 준 컬럼 순서의 앞 둘이다. */
+/**
+ * 카드에 미리 보일 지표. 서버가 준 컬럼 순서의 앞 둘이다.
+ *
+ * 푸는 규칙은 데스크톱 표와 같은 `lib/resultRow`를 쓴다. 예전에는 카탈로그만 봤기 때문에
+ * 카탈로그 요청이 실패하면 데스크톱은 "PER"을, 모바일은 원본 코드를 보였다.
+ */
 const previewColumns = computed(() =>
-  props.result.columns.slice(0, 2).map((code) => {
-    const meta = catalog.byCode.get(code)
-    return {
-      code,
-      name: meta?.name ?? code,
-      unit: meta?.unit ?? null,
-      decimalScale: meta?.decimalScale ?? 2,
-    }
-  }),
+  props.result.columns
+    .slice(0, 2)
+    .map((code) => indicatorBriefOf(code, props.result.conditions, catalog.byCode)),
 )
 
 const sortOptions = computed(() => [
-  ...(isScoring.value ? [{ label: '점수 높은 순', value: 'score' }] : []),
+  ...(isScoring.value ? [{ label: `${RESULT_LABELS.score} 높은 순`, value: 'score' }] : []),
   { label: '충족 조건 많은 순', value: 'matched' },
   { label: '종목명 순', value: 'name' },
   { label: '종가 높은 순', value: 'close' },
@@ -68,18 +75,35 @@ const visibleRows = computed(() => {
 function comparator(a: ScreeningRow, b: ScreeningRow): number {
   switch (sortBy.value) {
     case 'score':
-      return (b.score ?? 0) - (a.score ?? 0)
+      return descendingWithMissingLast(a.score, b.score)
     case 'matched':
       return b.matchedCount - a.matchedCount
     case 'close':
-      return (b.close ?? 0) - (a.close ?? 0)
+      return descendingWithMissingLast(a.close, b.close)
     default:
-      return (a.name ?? '').localeCompare(b.name ?? '', 'ko-KR')
+      return (a.name ?? '').localeCompare(b.name ?? '', LOCALE)
   }
 }
 
-function valueOf(row: ScreeningRow, code: string): number | null {
-  return Object.hasOwn(row.values, code) ? (row.values[code] ?? null) : null
+/**
+ * 큰 값이 위로, 값이 없는 것은 언제나 아래로.
+ *
+ * `(b ?? 0) - (a ?? 0)`으로 쓰지 않는다. 내림차순에서는 결과가 같아 보이지만, 그것은 값이
+ * 없는 것을 0으로 **간주해서** 우연히 맞은 것이다. 이 프로젝트에서 `?? 0`은 "계산되지 않았다"를
+ * 0으로 둔갑시키는 금지된 관용구이고, 정렬이 오름차순으로 바뀌는 순간 값 없는 종목이
+ * 최상위로 올라온다.
+ */
+function descendingWithMissingLast(a: number | null, b: number | null): number {
+  if (a === null && b === null) {
+    return 0
+  }
+  if (a === null) {
+    return 1
+  }
+  if (b === null) {
+    return -1
+  }
+  return b - a
 }
 
 function indicatorName(code: string): string {
@@ -96,14 +120,14 @@ function toggle(stockId: number): void {
     <div class="cards__controls">
       <IconField class="cards__search">
         <InputIcon class="pi pi-search" />
-        <InputText v-model="query" placeholder="종목명 · 티커 검색" />
+        <InputText v-model="query" :placeholder="RESULT_LABELS.search" />
       </IconField>
       <Select v-model="sortBy" :options="sortOptions" option-label="label" option-value="value" />
     </div>
 
-    <p class="cards__count">{{ visibleRows.length.toLocaleString('ko-KR') }}종목</p>
+    <p class="cards__count">{{ formatCount(visibleRows.length) }}종목</p>
 
-    <p v-if="visibleRows.length === 0" class="cards__empty">조건에 맞는 종목이 없습니다.</p>
+    <p v-if="visibleRows.length === 0" class="cards__empty">{{ RESULT_LABELS.empty }}</p>
 
     <article v-for="row in visibleRows" :key="row.stockId" class="card">
       <header class="card__header">
@@ -112,7 +136,7 @@ function toggle(stockId: number): void {
             :to="{ name: 'stock', params: { stockId: row.stockId }, query: { asOf } }"
             class="card__name"
           >
-            {{ row.name ?? '이름 없음' }}
+            {{ row.name ?? RESULT_LABELS.unnamed }}
           </RouterLink>
           <span class="card__ticker">{{ row.ticker }}</span>
         </div>
@@ -121,12 +145,12 @@ function toggle(stockId: number): void {
 
       <div class="card__metrics">
         <span v-if="isScoring" class="card__metric">
-          <span class="card__metric-label">점수</span>
-          <strong class="tabular">{{ formatNumber(row.score, 2) }}</strong>
+          <span class="card__metric-label">{{ RESULT_LABELS.score }}</span>
+          <strong class="tabular">{{ formatNumber(row.score, SCORE_DECIMAL_SCALE) }}</strong>
           <span class="card__metric-sub">{{ formatRatioAsPercent(row.scoreRatio) }}</span>
         </span>
         <span class="card__metric">
-          <span class="card__metric-label">충족</span>
+          <span class="card__metric-label">{{ RESULT_LABELS.matched }}</span>
           <strong class="tabular">{{ row.matchedCount }} / {{ result.conditions.length }}</strong>
         </span>
         <span v-for="indicator in previewColumns" :key="indicator.code" class="card__metric">
@@ -140,7 +164,7 @@ function toggle(stockId: number): void {
       <div class="card__footer">
         <Tag
           v-if="row.notEvaluableCount > 0"
-          :value="`데이터 없음 ${row.notEvaluableCount}`"
+          :value="`${RESULT_LABELS.notEvaluable} ${row.notEvaluableCount}`"
           severity="warn"
         />
         <Button

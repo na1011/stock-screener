@@ -6,6 +6,7 @@ import type { ConditionInfo, EvaluationMode, ScreeningRow } from '@/api/types'
 import { describeCondition } from '@/lib/conditionText'
 import { MISSING, formatIndicatorValue, formatNumber, formatRatioAsPercent } from '@/lib/format'
 import { outcomeStyle } from '@/lib/outcome'
+import { SCORE_DECIMAL_SCALE } from '@/lib/resultRow'
 
 /**
  * 이 종목이 왜 이 결과에 있는가.
@@ -43,8 +44,8 @@ const items = computed(() =>
   <div class="outcomes">
     <div v-if="isScoring" class="outcomes__total">
       <span class="outcomes__total-label">총점</span>
-      <strong class="tabular">{{ formatNumber(row.score, 2) }}</strong>
-      <span class="outcomes__total-max tabular">/ {{ formatNumber(row.maxScore, 2) }}</span>
+      <strong class="tabular">{{ formatNumber(row.score, SCORE_DECIMAL_SCALE) }}</strong>
+      <span class="outcomes__total-max tabular">/ {{ formatNumber(row.maxScore, SCORE_DECIMAL_SCALE) }}</span>
       <span class="outcomes__total-ratio">({{ formatRatioAsPercent(row.scoreRatio) }})</span>
     </div>
 
@@ -76,8 +77,8 @@ const items = computed(() =>
         </span>
 
         <span v-if="isScoring" class="outcomes__score tabular">
-          {{ formatNumber(item.outcome?.earnedScore ?? null, 2) }} /
-          {{ formatNumber(item.condition.weight ?? 1, 2) }}점
+          {{ formatNumber(item.outcome?.earnedScore ?? null, SCORE_DECIMAL_SCALE) }} /
+          {{ formatNumber(item.condition.weight ?? 1, SCORE_DECIMAL_SCALE) }}점
         </span>
       </li>
     </ul>
