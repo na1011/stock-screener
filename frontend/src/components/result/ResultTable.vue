@@ -229,7 +229,23 @@ function percentileOf(code: string) {
   color: var(--p-text-muted-color);
 }
 
+/*
+ * IMPORTANT — 확장 영역을 스크롤 컨테이너 왼쪽에 고정한다.
+ *
+ * 확장 행의 `<td>`는 표 **전체 폭**(컬럼 min-width 합, 지표가 여섯이면 2,400px를 넘는다)을
+ * 갖는다. 그대로 두면 `.outcomes__item`의 `1fr`이 그 폭을 다 먹어 조건별 **획득 점수가 가로
+ * 스크롤 밖으로** 밀려난다. 총점만 보이고 내역이 안 보이는 상태이고, 그것은 "선정 이유를
+ * 노출한다"(frontend.md, design §5)를 만족하지 못한다 — 사용자가 가로로 스크롤해야
+ * 발견되는 것은 보이지 않는 것과 같다.
+ *
+ * 폭을 뷰포트 기준으로 잡는 이유는 스크롤 컨테이너의 보이는 폭을 CSS로 직접 참조할 방법이
+ * 없기 때문이다. 표는 좌우 `--app-gutter`만 두고 풀 폭이라 그 값이 곧 보이는 폭이다.
+ */
 .result-table__expansion {
+  position: sticky;
+  left: 0;
+  width: calc(100vw - 2 * var(--app-gutter) - 1.25rem);
+  max-width: 100%;
   padding: 0.75rem 1rem;
   background: var(--p-surface-950);
 }
