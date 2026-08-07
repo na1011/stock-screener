@@ -37,6 +37,7 @@ const catalogEntry: IndicatorResponse = {
   sortOrder: 1,
   percentileOf: null,
   percentile: null,
+  bands: [],
 }
 
 const conditionInfo: ConditionInfo = {

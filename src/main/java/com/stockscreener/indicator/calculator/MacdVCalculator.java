@@ -46,7 +46,16 @@ import java.util.NavigableMap;
         valueType = IndicatorValueType.COUNT,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
         decimalScale = 2,
-        sortOrder = 140
+        sortOrder = 140,
+        // ±150은 interpretation이 이미 적어 둔 경계다. MACD와 달리 종목 간 비교가 가능한
+        // 무차원 지표라서 구간을 붙일 수 있다 — MACD 본체에는 붙이지 않는 이유가 그것이다.
+        bands = {
+                @IndicatorMeta.Band(label = "과열", from = 150),
+                @IndicatorMeta.Band(label = "상승 모멘텀", from = 50, to = 150),
+                @IndicatorMeta.Band(label = "중립", from = -50, to = 50),
+                @IndicatorMeta.Band(label = "하락 모멘텀", from = -150, to = -50),
+                @IndicatorMeta.Band(label = "과매도", to = -150)
+        }
 )
 public class MacdVCalculator implements IndicatorCalculator {
 

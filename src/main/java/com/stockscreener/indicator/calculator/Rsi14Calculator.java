@@ -36,7 +36,14 @@ import java.util.List;
         valueType = IndicatorValueType.COUNT,
         direction = IndicatorMeta.Direction.NEUTRAL,
         decimalScale = 2,
-        sortOrder = 110
+        sortOrder = 110,
+        // 70·30은 interpretation이 이미 적어 둔 경계다. 여기서 새로 정하는 것이 아니다.
+        bands = {
+                @IndicatorMeta.Band(label = "과매수", from = 70),
+                @IndicatorMeta.Band(label = "상승 우위", from = 50, to = 70),
+                @IndicatorMeta.Band(label = "하락 우위", from = 30, to = 50),
+                @IndicatorMeta.Band(label = "과매도", to = 30)
+        }
 )
 public class Rsi14Calculator implements IndicatorCalculator {
 

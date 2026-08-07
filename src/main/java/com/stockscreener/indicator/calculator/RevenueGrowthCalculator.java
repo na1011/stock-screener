@@ -34,7 +34,14 @@ import java.util.List;
         unit = "%",
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
         decimalScale = 2,
-        sortOrder = 60
+        sortOrder = 60,
+        bands = {
+                @IndicatorMeta.Band(label = "고성장", from = 30),
+                @IndicatorMeta.Band(label = "성장", from = 15, to = 30),
+                @IndicatorMeta.Band(label = "완만", from = 5, to = 15),
+                @IndicatorMeta.Band(label = "정체", from = 0, to = 5),
+                @IndicatorMeta.Band(label = "역성장", to = 0)
+        }
 )
 public class RevenueGrowthCalculator implements IndicatorCalculator {
 

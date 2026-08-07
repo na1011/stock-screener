@@ -55,6 +55,39 @@ public @interface IndicatorMeta {
 
     int sortOrder() default 0;
 
+    /**
+     * 값 구간별 자연어 라벨. 조건 빌더가 "숫자를 모르는 사용자"에게 먼저 제시하는 선택지다.
+     *
+     * <p>기본값이 빈 배열인 것은 <b>대부분의 지표에 붙이면 안 되기 때문</b>이다 — 근거는
+     * {@link IndicatorBand}에 있다. 구간을 제시할 수 없으면 화면은 직접 입력만 보여준다.
+     * 없는 것을 지어내는 것보다 없다고 말하는 편이 낫다.
+     */
+    Band[] bands() default {};
+
+    /**
+     * {@link IndicatorMeta#bands()}의 한 칸.
+     *
+     * <p>애너테이션은 null을 담을 수 없어 무한대를 "열린 쪽"의 표식으로 쓴다. 둘 다 컴파일
+     * 상수라 애너테이션 기본값으로 쓸 수 있다. 투영 시 {@link IndicatorBand}의 null로 바뀐다.
+     *
+     * <p>{@code Target}이 비어 있는 것은 의도적이다 — 이 애너테이션은 멤버 값으로만 쓰이고
+     * 클래스에 직접 붙는 일이 없다.
+     */
+    @Documented
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({})
+    @interface Band {
+
+        /** 구간의 뜻. "매우 높음", "과매수" 등. */
+        String label();
+
+        /** 하한(포함). 생략하면 아래로 열린다. */
+        double from() default Double.NEGATIVE_INFINITY;
+
+        /** 상한(미포함). 생략하면 위로 열린다. */
+        double to() default Double.POSITIVE_INFINITY;
+    }
+
     enum Direction {
         HIGHER_IS_BETTER,
         LOWER_IS_BETTER,

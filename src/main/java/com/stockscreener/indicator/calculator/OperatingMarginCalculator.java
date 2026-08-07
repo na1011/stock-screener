@@ -35,7 +35,15 @@ import java.util.List;
         unit = "%",
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
         decimalScale = 2,
-        sortOrder = 50
+        sortOrder = 50,
+        bands = {
+                @IndicatorMeta.Band(label = "매우 높음", from = 20),
+                @IndicatorMeta.Band(label = "높음", from = 10, to = 20),
+                @IndicatorMeta.Band(label = "보통", from = 5, to = 10),
+                @IndicatorMeta.Band(label = "낮음", from = 0, to = 5),
+                // 0 미만은 "낮다"가 아니라 적자다. 정도의 문제가 아니라 종류가 다르다.
+                @IndicatorMeta.Band(label = "영업적자", to = 0)
+        }
 )
 public class OperatingMarginCalculator implements IndicatorCalculator {
 

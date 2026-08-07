@@ -38,7 +38,15 @@ import java.util.List;
         valueType = IndicatorValueType.RATIO,
         direction = IndicatorMeta.Direction.NEUTRAL,
         decimalScale = 4,
-        sortOrder = 150
+        sortOrder = 150,
+        // 0과 1은 밴드의 하단·상단 그 자체다. 이 지표에서는 경계가 관습이 아니라 정의다.
+        bands = {
+                @IndicatorMeta.Band(label = "밴드 상단 돌파", from = 1),
+                @IndicatorMeta.Band(label = "상단 부근", from = 0.8, to = 1),
+                @IndicatorMeta.Band(label = "밴드 중앙", from = 0.2, to = 0.8),
+                @IndicatorMeta.Band(label = "하단 부근", from = 0, to = 0.2),
+                @IndicatorMeta.Band(label = "밴드 하단 이탈", to = 0)
+        }
 )
 public class BollingerPercentBCalculator implements IndicatorCalculator {
 

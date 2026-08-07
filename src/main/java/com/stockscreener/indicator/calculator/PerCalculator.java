@@ -45,7 +45,14 @@ import java.util.List;
         direction = IndicatorMeta.Direction.LOWER_IS_BETTER,
         decimalScale = 2,
         defaultColumn = true,
-        sortOrder = 10
+        sortOrder = 10,
+        bands = {
+                @IndicatorMeta.Band(label = "매우 높음", from = 30),
+                @IndicatorMeta.Band(label = "높음", from = 20, to = 30),
+                @IndicatorMeta.Band(label = "보통", from = 10, to = 20),
+                @IndicatorMeta.Band(label = "낮음", from = 5, to = 10),
+                @IndicatorMeta.Band(label = "매우 낮음", to = 5)
+        }
 )
 public class PerCalculator implements IndicatorCalculator {
 

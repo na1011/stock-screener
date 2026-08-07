@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,13 +24,16 @@ public class IndicatorCatalogSynchronizer {
     private final IndicatorRegistry registry;
     private final List<PercentileSpec> percentileSpecs;
     private final JdbcTemplate jdbcTemplate;
+    private final IndicatorBandCodec bandCodec;
 
     public IndicatorCatalogSynchronizer(IndicatorRegistry registry,
                                         List<PercentileSpec> percentileSpecs,
-                                        JdbcTemplate jdbcTemplate) {
+                                        JdbcTemplate jdbcTemplate,
+                                        IndicatorBandCodec bandCodec) {
         this.registry = registry;
         this.percentileSpecs = List.copyOf(percentileSpecs);
         this.jdbcTemplate = jdbcTemplate;
+        this.bandCodec = bandCodec;
     }
 
     /**
@@ -102,8 +106,8 @@ public class IndicatorCatalogSynchronizer {
         jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
-                                       default_column, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, now(), now())
+                                       default_column, bands, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, CAST(? AS jsonb), now(), now())
                 ON CONFLICT (code) DO UPDATE SET
                     name             = EXCLUDED.name,
                     description      = EXCLUDED.description,
@@ -116,6 +120,7 @@ public class IndicatorCatalogSynchronizer {
                     is_active        = true,
                     sort_order       = EXCLUDED.sort_order,
                     default_column   = EXCLUDED.default_column,
+                    bands            = EXCLUDED.bands,
                     updated_at       = now()
                 """,
                 code,
@@ -128,7 +133,43 @@ public class IndicatorCatalogSynchronizer {
                 meta.decimalScale(),
                 meta.direction().toHigherIsBetter(),
                 meta.sortOrder(),
-                meta.defaultColumn());
+                meta.defaultColumn(),
+                bandCodec.toJson(bandsOf(code, meta)));
+    }
+
+    /**
+     * 애너테이션의 구간을 도메인 형태로 옮긴다.
+     *
+     * <p>애너테이션은 null을 담을 수 없어 무한대를 "열린 쪽"의 표식으로 쓴다. 여기서 null로
+     * 되돌리지 않으면 저장된 JSON에 {@code "Infinity"}가 들어가 파싱이 깨진다.
+     *
+     * <p>구간이 겹치거나 순서가 어긋나면 던진다. 화면은 구간을 순서대로 나열하고 사용자는 그것을
+     * 하나의 척도로 읽으므로, 겹친 구간은 <b>같은 값이 두 이름을 갖는 상태</b>다. 기동에 실패하는
+     * 편이 낫다 — 눈으로는 드러나지 않는다.
+     */
+    private static List<IndicatorBand> bandsOf(String code, IndicatorMeta meta) {
+        List<IndicatorBand> bands = new ArrayList<>();
+        for (IndicatorMeta.Band band : meta.bands()) {
+            bands.add(new IndicatorBand(band.label(), boundOf(band.from()), boundOf(band.to())));
+        }
+        for (int i = 1; i < bands.size(); i++) {
+            IndicatorBand previous = bands.get(i - 1);
+            IndicatorBand current = bands.get(i);
+            if (previous.from() == null || current.to() == null
+                    || previous.from().compareTo(current.to()) < 0) {
+                throw new IllegalStateException(
+                        code + "의 구간이 내림차순으로 이어지지 않는다: '" + previous.label()
+                                + "'(하한 " + previous.from() + ") 다음이 '" + current.label()
+                                + "'(상한 " + current.to() + ")이다. "
+                                + "구간은 큰 값에서 작은 값 순으로 적고 서로 겹치지 않아야 한다.");
+            }
+        }
+        return bands;
+    }
+
+    /** 무한대는 "그쪽으로 열려 있다"는 뜻이므로 경계가 없다. */
+    private static BigDecimal boundOf(double value) {
+        return Double.isInfinite(value) ? null : BigDecimal.valueOf(value);
     }
 
     private void deactivateMissing(List<String> activeCodes) {

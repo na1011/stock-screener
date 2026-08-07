@@ -28,20 +28,43 @@ public class IndicatorCatalog {
 
     private static final String SELECT = """
             SELECT code, name, description, interpretation, category, value_type, unit,
-                   decimal_scale, higher_is_better, default_column, sort_order, source_indicator_code
+                   decimal_scale, higher_is_better, default_column, sort_order, source_indicator_code,
+                   bands
             FROM indicator
             """;
 
     private final JdbcTemplate jdbcTemplate;
 
-    public IndicatorCatalog(JdbcTemplate jdbcTemplate) {
+    /**
+     * RowMapper가 static이 아닌 이유. 구간은 jsonb라 파싱이 필요하고, 파싱 형식을 아는 곳은
+     * {@link IndicatorBandCodec} 하나여야 한다(그 이유는 코덱 주석에 있다).
+     */
+    private final RowMapper<IndicatorDescriptor> mapper;
+
+    public IndicatorCatalog(JdbcTemplate jdbcTemplate, IndicatorBandCodec bandCodec) {
         this.jdbcTemplate = jdbcTemplate;
+        this.mapper = (rs, rowNum) -> new IndicatorDescriptor(
+                rs.getString("code"),
+                rs.getString("name"),
+                rs.getString("description"),
+                rs.getString("interpretation"),
+                IndicatorCategory.valueOf(rs.getString("category")),
+                IndicatorValueType.valueOf(rs.getString("value_type")),
+                rs.getString("unit"),
+                rs.getInt("decimal_scale"),
+                // getBoolean은 NULL을 false로 바꿔버린다. "방향 없음"과 "낮은 쪽이 좋음"이
+                // 같은 값이 되면 RSI가 PER처럼 다뤄진다.
+                rs.getObject("higher_is_better", Boolean.class),
+                rs.getBoolean("default_column"),
+                rs.getInt("sort_order"),
+                rs.getString("source_indicator_code"),
+                bandCodec.fromJson(rs.getString("bands")));
     }
 
     /** 조건 빌더가 제시할 수 있는 지표 전부. 표시 순서대로 정렬된다. */
     @Transactional(readOnly = true)
     public List<IndicatorDescriptor> activeIndicators() {
-        return jdbcTemplate.query(SELECT + " WHERE is_active ORDER BY sort_order, code", MAPPER);
+        return jdbcTemplate.query(SELECT + " WHERE is_active ORDER BY sort_order, code", mapper);
     }
 
     /** 활성 지표 코드. 조건 검증이 쓴다. */
@@ -65,7 +88,7 @@ public class IndicatorCatalog {
         }
         String placeholders = String.join(",", codes.stream().map(c -> "?").toList());
         List<IndicatorDescriptor> rows = jdbcTemplate.query(
-                SELECT + " WHERE code IN (" + placeholders + ")", MAPPER, codes.toArray());
+                SELECT + " WHERE code IN (" + placeholders + ")", mapper, codes.toArray());
 
         // LinkedHashMap으로 조회 순서를 유지한다. 응답의 컬럼 순서가 요청마다 달라지면
         // 프론트가 컬럼 위치를 기억할 수 없다.
@@ -75,23 +98,7 @@ public class IndicatorCatalog {
 
     @Transactional(readOnly = true)
     public Optional<IndicatorDescriptor> find(String code) {
-        List<IndicatorDescriptor> rows = jdbcTemplate.query(SELECT + " WHERE code = ?", MAPPER, code);
+        List<IndicatorDescriptor> rows = jdbcTemplate.query(SELECT + " WHERE code = ?", mapper, code);
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
-
-    private static final RowMapper<IndicatorDescriptor> MAPPER = (rs, rowNum) -> new IndicatorDescriptor(
-            rs.getString("code"),
-            rs.getString("name"),
-            rs.getString("description"),
-            rs.getString("interpretation"),
-            IndicatorCategory.valueOf(rs.getString("category")),
-            IndicatorValueType.valueOf(rs.getString("value_type")),
-            rs.getString("unit"),
-            rs.getInt("decimal_scale"),
-            // getBoolean은 NULL을 false로 바꿔버린다. "방향 없음"과 "낮은 쪽이 좋음"이
-            // 같은 값이 되면 RSI가 PER처럼 다뤄진다.
-            rs.getObject("higher_is_better", Boolean.class),
-            rs.getBoolean("default_column"),
-            rs.getInt("sort_order"),
-            rs.getString("source_indicator_code"));
 }

@@ -45,6 +45,9 @@ class IndicatorExtensibilityTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private IndicatorBandCodec bandCodec;
+
     @Test
     @DisplayName("계산기 클래스 하나를 추가하면 레지스트리가 자동으로 인식한다")
     void newCalculatorIsDiscoveredAutomatically() {
@@ -61,7 +64,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("메타데이터가 카탈로그 테이블로 투영되어 UI가 평범한 쿼리로 읽는다")
     void metadataIsProjectedIntoCatalog() {
-        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate).synchronize();
+        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
 
         List<String> codes = jdbcTemplate.queryForList(
                 "SELECT code FROM indicator WHERE is_active ORDER BY code", String.class);
@@ -81,7 +84,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("결과 표의 기본 컬럼 여부가 계산 클래스에서 카탈로그로 흘러간다")
     void defaultColumnFlagIsProjected() {
-        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate).synchronize();
+        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
 
         // 화면이 어느 컬럼을 기본으로 보일지를 계산 코드 옆에서 정한다는 것의 실질 검증이다.
         // 이 투영이 없으면 화면 코드에 지표 목록을 다시 적게 되고, 지표 추가 비용이 2파일이 된다.
@@ -100,7 +103,8 @@ class IndicatorExtensibilityTest {
         new IndicatorCatalogSynchronizer(
                 registry,
                 List.of(new PercentileSpec("PER", "PER 백분위", "설명", "해석")),
-                jdbcTemplate).synchronize();
+                jdbcTemplate,
+                bandCodec).synchronize();
 
         String source = jdbcTemplate.queryForObject(
                 "SELECT source_indicator_code FROM indicator WHERE code = 'PER_PCTL'", String.class);
@@ -113,7 +117,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("새 지표의 값을 저장하는 데 스키마 변경이 필요 없다 — EAV의 핵심 성질")
     void storingNewIndicatorNeedsNoSchemaChange() {
-        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate).synchronize();
+        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
 
         jdbcTemplate.update(
                 "INSERT INTO market (code, country_code, currency_code, timezone) "
@@ -141,7 +145,7 @@ class IndicatorExtensibilityTest {
     void percentileNeedsNoSchemaChange() {
         // 설계 문서 §3이 "수용 가능한지 확인하라"고 한 지점. 실제로 확인한다:
         // 백분위는 indicator_value에 평범한 행으로 들어가고 조건도 스칼라 비교가 된다.
-        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate).synchronize();
+        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
 
         Integer columnCount = jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM information_schema.columns

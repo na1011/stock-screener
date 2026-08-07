@@ -81,6 +81,22 @@ export interface PercentileGuide {
   label: string
 }
 
+/**
+ * 값 구간 프리셋. "ROE 20% 이상 = 매우 높음"의 한 줄이다.
+ *
+ * IMPORTANT — 부등호를 화면이 정하지 않는다. 서버가 구간을 **그대로 적용 가능한 조건**으로
+ * 번역해 내려준다(`PercentileGuide`와 같은 방식). `from`/`to`를 받아 화면이 연산자를
+ * 유도하면 그 유도 규칙이 두 곳에 생기고, 어긋나도 값이 그럴듯해 드러나지 않는다.
+ */
+export interface IndicatorBand {
+  label: string
+  operator: ComparisonOperatorName
+  /** BETWEEN이면 하한. */
+  value: number
+  /** BETWEEN일 때만 채워진다. */
+  upperBound: number | null
+}
+
 export interface IndicatorResponse {
   code: string
   name: string
@@ -99,6 +115,11 @@ export interface IndicatorResponse {
   percentileOf: string | null
   /** 백분위가 아니면 null. */
   percentile: PercentileGuide | null
+  /**
+   * 제시할 구간이 없으면 빈 배열이다. 주가 스케일 지표(SMA·ATR·MACD·종가)가 그렇다 —
+   * "3만원 이상 = 높음"은 종목마다 뜻이 달라 거짓말이 된다. 그때 화면은 직접 입력만 낸다.
+   */
+  bands: IndicatorBand[]
 }
 
 /** 연산자 한글 라벨의 정본은 서버다. 프론트가 목록을 복제하면 두 곳이 어긋난다. */

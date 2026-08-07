@@ -1,10 +1,13 @@
 package com.stockscreener.indicator.web;
 
+import com.stockscreener.indicator.IndicatorBand;
 import com.stockscreener.indicator.IndicatorCategory;
 import com.stockscreener.indicator.IndicatorDescriptor;
 import com.stockscreener.indicator.IndicatorValueType;
+import com.stockscreener.screening.ComparisonOperator;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * 조건 빌더가 지표 하나를 그리는 데 필요한 전부.
@@ -13,6 +16,7 @@ import java.math.BigDecimal;
  * "지표를 값만 나열하지 않는다"를 요구한다. 초보 사용자는 PER 8.1이 좋은 것인지 알 수 없다.
  *
  * @param percentile 백분위 지표일 때만 채워진다.
+ * @param bands      값 구간 프리셋. 제시할 수 없는 지표는 빈 목록이고, 그때 화면은 직접 입력만 낸다.
  */
 public record IndicatorResponse(
         String code,
@@ -27,7 +31,8 @@ public record IndicatorResponse(
         boolean defaultColumn,
         int sortOrder,
         String percentileOf,
-        PercentileGuide percentile
+        PercentileGuide percentile,
+        List<BandResponse> bands
 ) {
 
     public static IndicatorResponse of(IndicatorDescriptor descriptor, IndicatorDescriptor source) {
@@ -37,7 +42,43 @@ public record IndicatorResponse(
                 descriptor.unit(), descriptor.decimalScale(), descriptor.higherIsBetter(),
                 descriptor.defaultColumn(), descriptor.sortOrder(),
                 descriptor.sourceIndicatorCode(),
-                descriptor.isPercentile() ? PercentileGuide.of(source) : null);
+                descriptor.isPercentile() ? PercentileGuide.of(source) : null,
+                descriptor.bands().stream().map(BandResponse::of).toList());
+    }
+
+    /**
+     * 값 구간 하나를 <b>그대로 적용 가능한 조건</b>으로 내린다.
+     *
+     * <p>IMPORTANT — 부등호를 서버가 정한다. {@link PercentileGuide}가 "상위 20%"의 부등호를
+     * 서버에서 정하는 것과 같은 이유다({@code .claude/rules/frontend.md}: 지표 코드로 분기하지
+     * 않는다). 화면이 {@code from}/{@code to}에서 연산자를 유도하려 들면 그 유도 규칙이 두 곳에
+     * 생기고, 어긋나도 값이 그럴듯해 드러나지 않는다.
+     *
+     * <p>{@code BETWEEN}의 상한은 도메인에서 <b>미포함</b>인데 {@link ComparisonOperator#BETWEEN}은
+     * 양끝을 포함한다. 구간 경계에 정확히 걸리는 값은 두 구간 모두에 뽑히지만, 이것은 사용자가
+     * 고른 하나의 조건일 뿐 구간 분류가 아니므로 문제가 되지 않는다. 경계값을 놓치는 쪽이 나쁘다.
+     *
+     * @param label       화면에 나오는 구간 이름
+     * @param operator    이 구간을 표현하는 연산자
+     * @param value       비교값. BETWEEN이면 하한.
+     * @param upperBound  BETWEEN일 때만 채워진다.
+     */
+    public record BandResponse(
+            String label,
+            ComparisonOperator operator,
+            BigDecimal value,
+            BigDecimal upperBound
+    ) {
+
+        static BandResponse of(IndicatorBand band) {
+            if (band.isOpenAbove()) {
+                return new BandResponse(band.label(), ComparisonOperator.GTE, band.from(), null);
+            }
+            if (band.isOpenBelow()) {
+                return new BandResponse(band.label(), ComparisonOperator.LT, band.to(), null);
+            }
+            return new BandResponse(band.label(), ComparisonOperator.BETWEEN, band.from(), band.to());
+        }
     }
 
     /**

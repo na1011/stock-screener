@@ -1,6 +1,7 @@
 package com.stockscreener.indicator;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * {@code indicator} 카탈로그 한 행. 화면이 지표를 이해하는 데 필요한 전부다.
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
  * @param higherIsBetter        null이면 방향이 정해지지 않은 지표(RSI처럼 중간이 좋은 것)
  * @param defaultColumn         결과 표에 기본 노출할 컬럼인가
  * @param sourceIndicatorCode   백분위 지표의 원본. 백분위가 아니면 null.
+ * @param bands                 값 구간별 자연어 라벨. 제시할 수 없는 지표는 빈 목록이다.
  */
 public record IndicatorDescriptor(
         String code,
@@ -25,8 +27,15 @@ public record IndicatorDescriptor(
         Boolean higherIsBetter,
         boolean defaultColumn,
         int sortOrder,
-        String sourceIndicatorCode
+        String sourceIndicatorCode,
+        List<IndicatorBand> bands
 ) {
+
+    public IndicatorDescriptor {
+        // 빈 목록과 null을 가르지 않는다. "구간이 없다"는 한 가지 상태이고, 호출부마다
+        // null 검사를 반복하면 언젠가 한 곳이 빠진다.
+        bands = bands == null ? List.of() : List.copyOf(bands);
+    }
 
     /** 이 지표가 다른 지표의 백분위인가. */
     public boolean isPercentile() {

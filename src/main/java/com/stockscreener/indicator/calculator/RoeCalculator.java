@@ -37,7 +37,15 @@ import java.util.List;
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
         decimalScale = 2,
         defaultColumn = true,
-        sortOrder = 30
+        sortOrder = 30,
+        bands = {
+                @IndicatorMeta.Band(label = "매우 높음", from = 20),
+                // 15%는 interpretation이 이미 "수익성이 우수한 편"이라고 적어 둔 경계다.
+                @IndicatorMeta.Band(label = "우수", from = 15, to = 20),
+                @IndicatorMeta.Band(label = "양호", from = 10, to = 15),
+                @IndicatorMeta.Band(label = "낮음", from = 5, to = 10),
+                @IndicatorMeta.Band(label = "매우 낮음", to = 5)
+        }
 )
 public class RoeCalculator implements IndicatorCalculator {
 

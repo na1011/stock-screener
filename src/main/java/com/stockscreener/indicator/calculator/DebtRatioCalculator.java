@@ -35,7 +35,14 @@ import java.util.List;
         direction = IndicatorMeta.Direction.LOWER_IS_BETTER,
         decimalScale = 2,
         defaultColumn = true,
-        sortOrder = 40
+        sortOrder = 40,
+        bands = {
+                @IndicatorMeta.Band(label = "매우 높음", from = 200),
+                @IndicatorMeta.Band(label = "높음", from = 100, to = 200),
+                // 100%는 interpretation이 이미 "양호하게 보는" 경계로 적어 둔 값이다.
+                @IndicatorMeta.Band(label = "양호", from = 50, to = 100),
+                @IndicatorMeta.Band(label = "매우 낮음", to = 50)
+        }
 )
 public class DebtRatioCalculator implements IndicatorCalculator {
 

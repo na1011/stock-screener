@@ -34,7 +34,16 @@ import java.util.List;
         direction = IndicatorMeta.Direction.LOWER_IS_BETTER,
         decimalScale = 2,
         defaultColumn = true,
-        sortOrder = 20
+        sortOrder = 20,
+        bands = {
+                @IndicatorMeta.Band(label = "매우 높음", from = 3),
+                @IndicatorMeta.Band(label = "높음", from = 1.5, to = 3),
+                @IndicatorMeta.Band(label = "보통", from = 1, to = 1.5),
+                // 1배가 장부가다. 이 경계는 PBR을 처음 보는 사람에게 가장 먼저 필요한 사실이라
+                // 라벨에 넣는다 — interpretation의 같은 문장이 산문으로만 있었다.
+                @IndicatorMeta.Band(label = "낮음 (장부가 미만)", from = 0.5, to = 1),
+                @IndicatorMeta.Band(label = "매우 낮음", to = 0.5)
+        }
 )
 public class PbrCalculator implements IndicatorCalculator {
 
