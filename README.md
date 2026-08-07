@@ -1,6 +1,6 @@
 # stock-screener
 
-코스피·코스닥·S&P500 우량 종목을 기술적·재무적 조건으로 필터링·추천하는 개인용 웹 스크리너. 본인과 소수 지인이 사용하며, 실용성과 함께 한국 백엔드 채용시장 기준의 개인 학습을 겸한다.
+코스피·코스닥 우량 종목을 기술적·재무적 조건으로 필터링·추천하는 개인용 웹 스크리너. 본인과 소수 지인이 사용하며, 실용성과 함께 한국 백엔드 채용시장 기준의 개인 학습을 겸한다. 미국(S&P500)은 무료로 접근 가능한 일별 시세 소스가 확인되지 않아 v1.1로 미뤘다([ADR-0010](docs/adr/ADR-0010-defer-us-market.md)).
 
 전체 요구사항, 채택 기술 스택과 그 배경, 수용 기준은 [`docs/stock-screener-project-spec.md`](docs/stock-screener-project-spec.md)에 정리되어 있다. 이 문서는 기획 정본이며 함부로 수정하지 않는다.
 
@@ -8,7 +8,13 @@
 
 Spring Boot(백엔드) + Vue3(프론트엔드), JPA + QueryDSL, PostgreSQL, PrimeVue DataTable. 온프레미스(맥북) 호스팅 + Cloudflare Tunnel, Google OAuth, Sentry. 각 선택의 배경은 기획 정본의 채택 기술 스택 절에 기록되어 있다.
 
-현재 저장소에는 Spring Boot 골격만 있다. 위 스택의 의존성은 아직 `build.gradle`에 반영되지 않았다.
+백엔드는 `src/main/java`, 프론트엔드는 `frontend/`(Vite + Vue3 + TypeScript)에 있다. Gradle이 프론트 번들을 빌드해 classpath의 `static/`으로 실으므로 배포 산출물은 jar 하나다 — 인증이 세션 쿠키 기반이라 같은 오리진이어야 한다([ADR-0018](docs/adr/ADR-0018-single-origin-spa-serving.md)). 어디까지 구현되었는지는 [`docs/progress.md`](docs/progress.md)에 있다.
+
+```bash
+./gradlew build     # 백엔드 + 프론트 번들 + 양쪽 테스트
+./gradlew bootRun   # http://localhost:8080 — 빌드된 번들을 서빙한다
+cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로 프록시한다
+```
 
 ## 문서 지도
 

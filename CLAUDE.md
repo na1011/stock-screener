@@ -20,7 +20,10 @@
 - 테스트: `./gradlew test`
 - 단일 테스트: `./gradlew test --tests "패턴"`
 - 관통테스트: `./gradlew liveTest` — 실제 외부 API를 호출한다(`@Tag("live")`). 일일 쿼터를 태우므로 필요할 때만 돌린다.
-- 실행: `./gradlew bootRun`
+- 실행: `./gradlew bootRun` — 빌드된 프론트 번들을 함께 서빙한다(`http://localhost:8080`)
+- 프론트 개발: `cd frontend && npm run dev` — HMR. `/api`·`/oauth2`는 `:8080`으로 프록시한다. **`bootRun`이 함께 떠 있어야 한다.**
+- 프론트 단위 테스트: `./gradlew frontendTest` (또는 `cd frontend && npm run test:unit`)
+- 프론트 없이 빌드: `./gradlew build -PskipFrontend` — Node가 없는 환경용. 번들이 빠지므로 `SpaFallbackTest`가 실패한다.
 
 ## ADR
 

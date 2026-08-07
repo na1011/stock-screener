@@ -18,6 +18,10 @@ category=""
 case "$base" in
   build.gradle|build.gradle.kts|settings.gradle|settings.gradle.kts|libs.versions.toml)
     category="의존성" ;;
+  # 프론트 의존성도 같은 성격이다. 라이선스가 바뀌거나(PrimeVue 5) 메이저가 올라가면
+  # 되돌리기 비용이 build.gradle과 다르지 않은데, 여기 없어서 Phase 5 내내 발화하지 않았다.
+  package.json)
+    category="의존성(프론트)" ;;
   application.yaml|application.yml|application-*.yaml|application-*.yml)
     category="외부 연동·저장 구조" ;;
   Dockerfile|Dockerfile.*|compose.yaml|compose.yml|docker-compose.yaml|docker-compose.yml)
