@@ -77,8 +77,23 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
    */
   const dirty = ref(false)
 
+  /**
+   * 서버가 준 편집 가능 여부.
+   *
+   * IMPORTANT — 이것을 `origin.kind === 'preset'`으로 대신하지 않는다. `ScreenResponse.editable`은
+   * 서버가 인가를 알고 계산해 주는 값이고, 규칙이 바뀌면(예: 관리자는 프리셋을 고칠 수 있게)
+   * 서버만 고치면 되도록 만들어 둔 것이다. 프론트가 출처(`type`)로 권한을 다시 유도하면 그
+   * 설계가 무의미해지고, 두 판단이 갈리는 날 화면이 서버와 모순된 상태가 된다.
+   *
+   * 새로 만든 조건과 복제본은 언제나 내 것이므로 true다.
+   */
+  const editable = ref(true)
+
   const title = computed(() => (origin.value.kind === 'custom' ? '새 조건' : origin.value.name))
+  /** 출처가 프리셋인가. **표시용**이다 — 권한 판단은 {@link editable}이 한다. */
   const isPreset = computed(() => origin.value.kind === 'preset')
+  /** 편집기를 잠글 것인가. 손을 대면(dirty) 복제본을 만드는 중이므로 잠금이 풀린다. */
+  const readOnly = computed(() => !editable.value && !dirty.value)
   const canAddCondition = computed(() => conditions.value.length < MAX_CONDITIONS)
 
   /** 완성된 조건만 센다. 작성 중인 빈 행은 실행 대상이 아니다. */
@@ -129,16 +144,20 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     origin.value = { kind: 'custom' }
     conditions.value = [emptyCondition()]
     evaluationMode.value = 'FILTER'
+    editable.value = true
     dirty.value = false
   }
 
   /** 저장된 화면·프리셋을 편집기로 불러온다. 유니버스·기준일 선택은 유지한다. */
   function loadFrom(screen: ScreenResponse): void {
+    // `type`은 **실행 형태**를 정한다 — 프리셋이면 presetCode로, 내 화면이면 screenId로
+    // 보내야 서버가 저장된 정의를 그대로 실행한다. 편집 권한과는 다른 질문이다.
     origin.value =
       screen.type === 'PRESET' && screen.code !== null
         ? { kind: 'preset', code: screen.code, name: screen.name }
         : { kind: 'screen', id: screen.id ?? 0, name: screen.name }
 
+    editable.value = screen.editable
     evaluationMode.value = screen.evaluationMode
     universeCode.value = screen.universeCode
     conditions.value = (screen.conditions?.conditions ?? []).map(fromPayload)
@@ -156,6 +175,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
    */
   function forkAsCustom(): void {
     origin.value = { kind: 'custom' }
+    editable.value = true
     dirty.value = true
   }
 
@@ -195,8 +215,10 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     universeCode,
     asOf,
     dirty,
+    editable,
     title,
     isPreset,
+    readOnly,
     canAddCondition,
     completeConditions,
     canRun,

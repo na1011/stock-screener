@@ -17,9 +17,12 @@ import { MAX_CONDITIONS, useScreenDraftStore } from '@/stores/screenDraft'
 /**
  * 조건 빌더.
  *
- * 프리셋은 읽기 전용으로 보인다 — 서버가 프리셋 수정에 403을 주므로(ADR-0017) 편집할 수
- * 있는 것처럼 그려 놓고 저장할 때 실패하게 두지 않는다. 대신 "복제해서 편집"을 준다.
+ * 편집할 수 없는 화면은 읽기 전용으로 보인다 — 서버가 수정에 403을 주므로(ADR-0017) 편집할
+ * 수 있는 것처럼 그려 놓고 저장할 때 실패하게 두지 않는다. 대신 "복제해서 편집"을 준다.
  * 그것이 없으면 사용자는 프리셋 조건을 손으로 다시 옮겨 적게 된다.
+ *
+ * 잠금 여부의 정본은 서버의 `editable`이다(`stores/screenDraft`의 같은 이름 참조). "프리셋인가"로
+ * 판단하지 않는다 — 그것은 출처이지 권한이 아니다.
  */
 const props = defineProps<{
   /** 보존 기간 밖 요청이 오류로 돌아왔을 때 서버가 알려준 구간. 날짜 선택 범위를 좁힌다. */
@@ -29,7 +32,7 @@ const props = defineProps<{
 const catalog = useCatalogStore()
 const draft = useScreenDraftStore()
 
-const readonly = computed(() => draft.isPreset && !draft.dirty)
+const readonly = computed(() => draft.readOnly)
 
 const modeOptions: { label: string; value: EvaluationMode }[] = [
   { label: '조건 충족으로 거르기', value: 'FILTER' },

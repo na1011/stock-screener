@@ -20,8 +20,11 @@ const { isMobile } = useBreakpoint()
 const result = computed(() => screening.result ?? null)
 const saveVisible = ref(false)
 
-/** 프리셋은 서버가 수정을 막으므로(403) 저장 버튼을 주지 않는다. 복제한 뒤에는 저장할 수 있다. */
-const canSave = computed(() => !draft.isPreset && draft.completeConditions.length > 0)
+/**
+ * 서버가 수정을 막는 화면은 저장 버튼을 주지 않는다(403이 날 것을 알면서 버튼을 주지 않는다).
+ * 복제한 뒤에는 내 것이므로 저장할 수 있다. 판단의 정본은 서버의 `editable`이다.
+ */
+const canSave = computed(() => draft.editable && draft.completeConditions.length > 0)
 
 async function run(): Promise<void> {
   const request = draft.toRequest()
