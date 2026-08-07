@@ -1,0 +1,219 @@
+<script setup lang="ts">
+import { FilterMatchMode } from '@primevue/core/api'
+import Column from 'primevue/column'
+import DataTable from 'primevue/datatable'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
+import InputText from 'primevue/inputtext'
+import { computed, ref } from 'vue'
+import { RouterLink } from 'vue-router'
+
+import type { IndicatorBrief, ScreeningResponse, ScreeningRow } from '@/api/types'
+import IndicatorLabel from '@/components/IndicatorLabel.vue'
+import ConditionOutcomes from '@/components/result/ConditionOutcomes.vue'
+import { MISSING, formatIndicatorValue, formatNumber, formatPrice, formatRatioAsPercent } from '@/lib/format'
+import { useCatalogStore } from '@/stores/catalog'
+
+/**
+ * 데스크톱 결과 표.
+ *
+ * 서버가 전량을 주고 페이징하지 않으므로 정렬·필터·페이징은 전부 여기서 한다(ADR-0016).
+ * 행 확장에 조건별 판정을 넣는 이유는 "왜 선정되었는가"가 결과와 같은 자리에 있어야 하기
+ * 때문이다 — 다른 화면으로 옮기면 사용자는 대개 보지 않는다.
+ */
+const props = defineProps<{ result: ScreeningResponse; asOf: string }>()
+
+const catalog = useCatalogStore()
+
+const expandedRows = ref<Record<string, boolean>>({})
+const filters = ref({ global: { value: null as string | null, matchMode: FilterMatchMode.CONTAINS } })
+
+const isScoring = computed(() => props.result.evaluationMode === 'SCORING')
+
+/**
+ * 컬럼으로 그릴 지표.
+ *
+ * 서버가 준 `columns`(기본 컬럼 ∪ 조건이 참조한 지표)를 그대로 따른다. 프론트가 목록을
+ * 정하면 조건에 쓴 지표가 표에 없는 일이 생긴다.
+ */
+const indicatorColumns = computed<IndicatorBrief[]>(() =>
+  props.result.columns.map((code) => {
+    const fromCondition = props.result.conditions.find((it) => it.indicator.code === code)
+    if (fromCondition) {
+      return fromCondition.indicator
+    }
+    const meta = catalog.byCode.get(code)
+    return {
+      code,
+      name: meta?.name ?? code,
+      unit: meta?.unit ?? null,
+      decimalScale: meta?.decimalScale ?? 2,
+      higherIsBetter: meta?.higherIsBetter ?? null,
+      interpretation: meta?.interpretation ?? '',
+    }
+  }),
+)
+
+function indicatorName(code: string): string {
+  return catalog.byCode.get(code)?.name ?? code
+}
+
+/** 값이 없는 지표는 키 자체가 없다. `?? 0`을 쓰면 "계산되지 않았다"가 0으로 둔갑한다. */
+function valueOf(row: ScreeningRow, code: string): number | null {
+  return Object.hasOwn(row.values, code) ? (row.values[code] ?? null) : null
+}
+
+function percentileOf(code: string) {
+  return catalog.byCode.get(code)?.percentile ?? null
+}
+</script>
+
+<template>
+  <DataTable
+    v-model:expanded-rows="expandedRows"
+    v-model:filters="filters"
+    :value="result.rows"
+    data-key="stockId"
+    :global-filter-fields="['name', 'ticker']"
+    sort-mode="single"
+    :default-sort-order="-1"
+    paginator
+    :rows="25"
+    :rows-per-page-options="[25, 50, 100]"
+    scrollable
+    scroll-height="60vh"
+    size="small"
+    striped-rows
+    current-page-report-template="{first}–{last} / 전체 {totalRecords}종목"
+    :paginator-template="'FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport'"
+  >
+    <template #header>
+      <IconField class="result-table__search">
+        <InputIcon class="pi pi-search" />
+        <InputText v-model="filters.global.value" placeholder="종목명 · 티커 검색" />
+      </IconField>
+    </template>
+
+    <template #empty>
+      <p class="result-table__empty">조건에 맞는 종목이 없습니다.</p>
+    </template>
+
+    <Column expander style="width: 3rem" />
+
+    <Column field="name" header="종목" sortable frozen style="min-width: 12rem">
+      <template #body="{ data }: { data: ScreeningRow }">
+        <RouterLink :to="{ name: 'stock', params: { stockId: data.stockId }, query: { asOf } }">
+          {{ data.name ?? '이름 없음' }}
+        </RouterLink>
+        <div class="result-table__sub">{{ data.ticker }} · {{ data.marketCode }}</div>
+      </template>
+    </Column>
+
+    <Column field="close" header="종가" sortable style="min-width: 7rem">
+      <template #body="{ data }: { data: ScreeningRow }">
+        <span class="tabular">{{ formatPrice(data.close) }}</span>
+      </template>
+    </Column>
+
+    <template v-if="isScoring">
+      <Column field="score" header="점수" sortable style="min-width: 6rem">
+        <template #body="{ data }: { data: ScreeningRow }">
+          <span class="tabular">{{ formatNumber(data.score, 2) }}</span>
+        </template>
+      </Column>
+      <Column field="scoreRatio" header="달성률" sortable style="min-width: 6rem">
+        <template #body="{ data }: { data: ScreeningRow }">
+          <span class="tabular">{{ formatRatioAsPercent(data.scoreRatio) }}</span>
+        </template>
+      </Column>
+    </template>
+
+    <Column field="matchedCount" header="충족" sortable style="min-width: 6rem">
+      <template #body="{ data }: { data: ScreeningRow }">
+        <span class="tabular">{{ data.matchedCount }} / {{ result.conditions.length }}</span>
+      </template>
+    </Column>
+
+    <Column
+      v-if="result.rows.some((row) => row.notEvaluableCount > 0)"
+      field="notEvaluableCount"
+      header="데이터없음"
+      sortable
+      style="min-width: 7rem"
+    >
+      <template #body="{ data }: { data: ScreeningRow }">
+        <span class="tabular result-table__not-evaluable">
+          {{ data.notEvaluableCount > 0 ? data.notEvaluableCount : MISSING }}
+        </span>
+      </template>
+    </Column>
+
+    <Column
+      v-for="indicator in indicatorColumns"
+      :key="indicator.code"
+      :field="`values.${indicator.code}`"
+      sortable
+      style="min-width: 8rem"
+    >
+      <template #header>
+        <IndicatorLabel
+          :name="indicator.name"
+          :higher-is-better="indicator.higherIsBetter"
+          :percentile="percentileOf(indicator.code)"
+          :description="catalog.byCode.get(indicator.code)?.description"
+          :interpretation="indicator.interpretation"
+        />
+      </template>
+      <template #body="{ data }: { data: ScreeningRow }">
+        <span
+          class="tabular"
+          :class="{ 'result-table__missing': valueOf(data, indicator.code) === null }"
+          :title="valueOf(data, indicator.code) === null ? '계산되지 않음' : undefined"
+        >
+          {{ formatIndicatorValue(valueOf(data, indicator.code), indicator.unit, indicator.decimalScale) }}
+        </span>
+      </template>
+    </Column>
+
+    <template #expansion="{ data }: { data: ScreeningRow }">
+      <div class="result-table__expansion">
+        <ConditionOutcomes
+          :conditions="result.conditions"
+          :row="data"
+          :evaluation-mode="result.evaluationMode"
+          :indicator-name="indicatorName"
+        />
+      </div>
+    </template>
+  </DataTable>
+</template>
+
+<style scoped>
+.result-table__search {
+  width: 18rem;
+  max-width: 100%;
+}
+
+.result-table__sub {
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+}
+
+.result-table__missing {
+  color: var(--p-text-muted-color);
+}
+
+.result-table__not-evaluable {
+  color: var(--p-text-muted-color);
+}
+
+.result-table__expansion {
+  padding: 0.75rem 1rem;
+}
+
+.result-table__empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--p-text-muted-color);
+}
+</style>

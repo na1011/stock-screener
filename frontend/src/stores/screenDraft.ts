@@ -84,6 +84,16 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
   /** 완성된 조건만 센다. 작성 중인 빈 행은 실행 대상이 아니다. */
   const completeConditions = computed(() => conditions.value.filter(isComplete))
 
+  /**
+   * 실행할 수 있는가.
+   *
+   * 손대지 않은 프리셋·저장된 화면은 조건을 다시 보내지 않으므로(서버가 저장된 정의를 쓴다)
+   * 여기서 조건을 세지 않는다. 즉석 조건일 때만 완성된 행이 하나 이상 필요하다.
+   */
+  const canRun = computed(
+    () => (!dirty.value && origin.value.kind !== 'custom') || completeConditions.value.length > 0,
+  )
+
   function markDirty(): void {
     dirty.value = true
   }
@@ -189,6 +199,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     isPreset,
     canAddCondition,
     completeConditions,
+    canRun,
     markDirty,
     addCondition,
     removeCondition,

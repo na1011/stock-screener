@@ -22,14 +22,15 @@ export const api = {
   /** 세션 프로브. 익명이면 401이고 그것이 정상 경로이므로 전역 401 처리기를 부르지 않는다. */
   me: () => apiFetch<MeResponse>('/api/me', { notifyUnauthorized: false }),
 
-  catalog: () => apiFetch<CatalogResponse>('/api/indicators'),
+  catalog: (signal?: AbortSignal) => apiFetch<CatalogResponse>('/api/indicators', { signal }),
 
-  universes: () => apiFetch<UniverseResponse[]>('/api/universes'),
+  universes: (signal?: AbortSignal) => apiFetch<UniverseResponse[]>('/api/universes', { signal }),
 
   /** 목록의 `conditions`는 항상 null이다. 조건이 필요하면 {@link screen}을 부른다. */
-  screens: () => apiFetch<ScreenResponse[]>('/api/screens'),
+  screens: (signal?: AbortSignal) => apiFetch<ScreenResponse[]>('/api/screens', { signal }),
 
-  screen: (id: number) => apiFetch<ScreenResponse>(`/api/screens/${id}`),
+  screen: (id: number, signal?: AbortSignal) =>
+    apiFetch<ScreenResponse>(`/api/screens/${id}`, { signal }),
 
   createScreen: (body: ScreenRequest) =>
     apiFetch<ScreenResponse>('/api/screens', { method: 'POST', body }),
@@ -46,17 +47,18 @@ export const api = {
    * GET이 아니라 POST인 이유는 조건 트리를 쿼리스트링에 담을 수 없어서다 — 부수 효과가 없는
    * 조회이므로 자동 재시도를 켠다. CSRF 토큰은 {@code apiFetch}가 붙인다.
    */
-  screening: (body: ScreeningRequest) =>
+  screening: (body: ScreeningRequest, signal?: AbortSignal) =>
     apiFetch<ScreeningResponse>('/api/screening', {
       method: 'POST',
       body,
+      signal,
       retryDelaysMs: READ_RETRY_DELAYS_MS,
     }),
 
-  stock: (stockId: number, asOf?: IsoDate | null) =>
-    apiFetch<StockDetailResponse>(`/api/stocks/${stockId}`, { query: { asOf } }),
+  stock: (stockId: number, asOf?: IsoDate | null, signal?: AbortSignal) =>
+    apiFetch<StockDetailResponse>(`/api/stocks/${stockId}`, { query: { asOf }, signal }),
 
   /** 지지·저항. 종목 상세와 **별도 요청**이다 — 한쪽이 실패해도 다른 쪽은 산다(ADR-0014). */
-  priceReference: (stockId: number, asOf?: IsoDate | null) =>
-    apiFetch<PriceReference>(`/api/stocks/${stockId}/price-reference`, { query: { asOf } }),
+  priceReference: (stockId: number, asOf?: IsoDate | null, signal?: AbortSignal) =>
+    apiFetch<PriceReference>(`/api/stocks/${stockId}/price-reference`, { query: { asOf }, signal }),
 }

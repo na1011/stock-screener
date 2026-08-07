@@ -15,8 +15,8 @@ import { useAsync } from '@/composables/useAsync'
  * 카탈로그는 배포 사이에 바뀌지 않으므로 한 번만 받아 캐시한다.
  */
 export const useCatalogStore = defineStore('catalog', () => {
-  const catalogRequest = useAsync(() => api.catalog())
-  const universeRequest = useAsync(() => api.universes())
+  const catalogRequest = useAsync((signal) => api.catalog(signal))
+  const universeRequest = useAsync((signal) => api.universes(signal))
 
   const indicators = computed<IndicatorResponse[]>(() => catalogRequest.data.value?.indicators ?? [])
   const operators = computed<OperatorResponse[]>(() => catalogRequest.data.value?.operators ?? [])
