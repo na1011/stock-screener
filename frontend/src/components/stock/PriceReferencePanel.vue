@@ -2,8 +2,9 @@
 import Tag from 'primevue/tag'
 import { computed } from 'vue'
 
-import type { PriceReference, PriceReferenceZone, ZoneRole, ZoneStrength } from '@/api/types'
+import type { PriceReference } from '@/api/types'
 import { formatDate, formatPrice } from '@/lib/format'
+import { priceReferenceMethodLabel, zoneRoleStyle, zoneStrengthLabel } from '@/lib/priceReference'
 
 /**
  * 지지·저항 참고정보.
@@ -19,27 +20,17 @@ import { formatDate, formatPrice } from '@/lib/format'
  */
 const props = defineProps<{ reference: PriceReference }>()
 
-const ROLE_LABELS: Record<ZoneRole, { label: string; severity: 'info' | 'warn' | 'contrast' }> = {
-  SUPPORT: { label: '아래쪽 구간', severity: 'info' },
-  RESISTANCE: { label: '위쪽 구간', severity: 'warn' },
-  // 숨기지 않는다. "지금 그 구간 안에 있다"가 정보량이 가장 큰 상태다.
-  IN_RANGE: { label: '현재 구간 안', severity: 'contrast' },
-}
-
-const STRENGTH_LABELS: Record<ZoneStrength, string> = {
-  HIGH: '자주 머무름',
-  MEDIUM: '보통',
-  LOW: '드묾',
-}
-
-/** 위쪽 구간을 먼저 보인다. 가격 축과 같은 순서라야 읽는 방향이 어긋나지 않는다. */
+/**
+ * 위쪽 구간을 먼저 보인다. 가격 축과 같은 순서라야 읽는 방향이 어긋나지 않는다.
+ *
+ * 역할·강도·산출 방식의 표시는 `lib/priceReference`가 정한다. 모르는 값에 던지지 않는 이유가
+ * 거기 적혀 있다 — 이 패널이 사라지면 경고 문구까지 함께 사라진다.
+ */
 const zones = computed(() =>
-  [...props.reference.zones].sort((a, b) => b.upper - a.upper),
+  [...props.reference.zones]
+    .sort((a, b) => b.upper - a.upper)
+    .map((zone) => ({ ...zone, role: zoneRoleStyle(zone.role), strength: zoneStrengthLabel(zone.strength) })),
 )
-
-function roleOf(zone: PriceReferenceZone) {
-  return ROLE_LABELS[zone.role]
-}
 </script>
 
 <template>
@@ -69,12 +60,12 @@ function roleOf(zone: PriceReferenceZone) {
 
       <ul v-if="zones.length > 0" class="price-reference__zones">
         <li v-for="zone in zones" :key="`${zone.lower}-${zone.upper}`" class="zone">
-          <Tag :value="roleOf(zone).label" :severity="roleOf(zone).severity" />
+          <Tag :value="zone.role.label" :severity="zone.role.severity" />
           <span class="zone__range tabular">
             {{ formatPrice(zone.lower) }} ~ {{ formatPrice(zone.upper) }}
           </span>
           <span class="zone__meta">
-            {{ zone.touchCount }}회 · {{ STRENGTH_LABELS[zone.strength] }} · 마지막
+            {{ zone.touchCount }}회 · {{ zone.strength }} · 마지막
             {{ formatDate(zone.lastTouchedOn) }}
           </span>
         </li>
@@ -84,7 +75,7 @@ function roleOf(zone: PriceReferenceZone) {
       </p>
 
       <p class="price-reference__method">
-        산출 방식: {{ reference.method }} · 연속된 봉은 한 번으로 셉니다.
+        산출 방식: {{ priceReferenceMethodLabel(reference.method) }} · 연속된 봉은 한 번으로 셉니다.
       </p>
     </template>
   </section>
