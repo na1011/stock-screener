@@ -110,10 +110,13 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
 
 ## 7. Sentry 프로젝트
 
-- **어디서**: [Sentry](https://sentry.io/) → 회원가입 → 프로젝트 생성(Java/Spring Boot)
-- **무엇을**: DSN
-- **환경변수**: `SENTRY_DSN`
-- **주의**: 무료 티어 이벤트 한도가 있다. spec §6이 자체 호스팅 대신 클라우드 무료 티어를 고른 이유는 맥북에 인프라 부담을 더하지 않기 위해서였다. 프론트엔드 에러도 수집해야 하므로(spec §8) 프로젝트를 백엔드·프론트로 나눌지 하나로 할지는 Phase 6에서 판단한다.
+- **어디서**: [Sentry](https://sentry.io/) → 회원가입 → **프로젝트 둘**(Java/Spring Boot, JavaScript/Vue)
+- **무엇을**: DSN 두 개 + 소스맵 업로드용 org auth token
+- **환경변수**: `SENTRY_DSN`(백엔드) · `VITE_SENTRY_DSN`(프론트) · `SENTRY_AUTH_TOKEN`
+- **프로젝트를 나눈 근거**: 이슈 그룹핑·릴리스·소스맵 처리가 플랫폼별로 갈린다. 무료 티어의 제약은 프로젝트 수가 아니라 **월 이벤트 총량**이라 나눠도 비용이 같다.
+- **IMPORTANT — DSN과 auth token은 성격이 정반대다.** DSN은 이벤트를 보내는 **공개** 식별자라 번들에 박혀도 정상이고, auth token은 Sentry API에 쓰는 **시크릿**이다. **`VITE_` 접두어를 붙이면 번들에 실려 공개된다.**
+- **주의**: 무료 티어 이벤트 한도가 있다. spec §6이 자체 호스팅 대신 클라우드 무료 티어를 고른 이유는 맥북에 인프라 부담을 더하지 않기 위해서였다.
+- **아직 SDK가 없다.** `build.gradle`·`frontend/package.json` 어디에도 sentry 의존성이 없어, **DSN을 넣어도 이벤트는 한 건도 가지 않는다.** 통합은 Phase 6 코드 작업이다.
 
 ## 8. 알림 채널 (Slack 또는 Discord)
 
