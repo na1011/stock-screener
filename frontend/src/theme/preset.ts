@@ -182,6 +182,28 @@ export const ScreenerPreset = definePreset(Aura, {
       },
     },
 
+    /**
+     * `SelectButton`(판정 방식·비교 대상)의 바탕.
+     *
+     * Aura 다크 기본값은 컨테이너 배경이 `{surface.950}`인데 그것이 곧 캔버스 색이라, 고르지
+     * **않은** 항목이 경계 없는 맨 텍스트로 보였다. 두 항목 중 하나만 버튼처럼 보이면
+     * 나머지가 고를 수 있는 것인지 알 수 없다.
+     */
+    togglebutton: {
+      colorScheme: {
+        dark: {
+          root: {
+            background: '{surface.900}',
+            checkedBackground: '{surface.900}',
+            hoverBackground: '{surface.900}',
+            borderColor: '{surface.700}',
+            checkedBorderColor: '{surface.700}',
+          },
+          content: { checkedBackground: '{surface.700}' },
+        },
+      },
+    },
+
     message: {
       content: { padding: '0.625rem 0.875rem' },
       text: { fontSize: '0.8125rem', fontWeight: '400' },

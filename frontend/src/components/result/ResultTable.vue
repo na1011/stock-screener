@@ -157,7 +157,7 @@ function percentileOf(code: string) {
       field="notEvaluableCount"
       :header="RESULT_LABELS.notEvaluable"
       sortable
-      style="min-width: 7rem"
+      style="min-width: 8.5rem"
       body-class="result-table__num"
       header-class="result-table__num"
     >
@@ -173,7 +173,7 @@ function percentileOf(code: string) {
       :key="indicator.code"
       :field="`values.${indicator.code}`"
       sortable
-      style="min-width: 8rem"
+      style="min-width: 11rem"
       body-class="result-table__num"
       header-class="result-table__num"
     >

@@ -80,6 +80,12 @@ const hasHelp = computed(() => Boolean(props.description) || Boolean(props.inter
   gap: 0.25rem;
 }
 
+/* 표 머리글에서 "PER 백분위"가 "PER / 백분 / 위"로 끊기던 것을 막는다. 컬럼 하한이
+   넉넉해도 이것이 없으면 셀 폭이 아니라 단어 단위로 감긴다. */
+.indicator-label__name {
+  white-space: nowrap;
+}
+
 .indicator-label__marker {
   font-size: 0.75rem;
   color: var(--p-text-muted-color);

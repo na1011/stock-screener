@@ -36,10 +36,26 @@ const draft = useScreenDraftStore()
 
 const readonly = computed(() => draft.readOnly)
 
+/**
+ * "전체"를 나타내는 화면 전용 값.
+ *
+ * IMPORTANT — 서버가 원하는 값은 `null`이지만 `Select`는 modelValue가 `null`이면 **고른 것이
+ * 없다**고 보고 placeholder를 그린다. 그래서 `{ code: null }` 옵션은 골라도 칸이 비어 있었다.
+ * 화면에서만 센티넬을 쓰고 경계(아래 setter)에서 `null`로 되돌린다.
+ */
+const ALL_UNIVERSES = '__ALL__'
+
 const universeOptions = computed(() => [
-  { code: null as string | null, name: ALL_UNIVERSES_LABEL },
-  ...catalog.universes.map((u) => ({ code: u.code as string | null, name: universeLabel(u) })),
+  { code: ALL_UNIVERSES, name: ALL_UNIVERSES_LABEL },
+  ...catalog.universes.map((u) => ({ code: u.code, name: universeLabel(u) })),
 ])
+
+const universeSelection = computed<string>({
+  get: () => draft.universeCode ?? ALL_UNIVERSES,
+  set: (value) => {
+    draft.universeCode = value === ALL_UNIVERSES ? null : value
+  },
+})
 
 const asOfDate = computed<Date | null>({
   get: () => parseIsoDate(draft.asOf),
@@ -84,7 +100,7 @@ onMounted(() => {
         >
           <Select
             id="universe"
-            v-model="draft.universeCode"
+            v-model="universeSelection"
             :options="universeOptions"
             option-label="name"
             option-value="code"
@@ -101,6 +117,8 @@ onMounted(() => {
           date-format="yy-mm-dd"
           placeholder="최신 (서버가 정함)"
           show-button-bar
+          show-icon
+          icon-display="input"
           fluid
           :min-date="minDate"
           :max-date="maxDate"
