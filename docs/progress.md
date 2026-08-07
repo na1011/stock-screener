@@ -17,10 +17,10 @@
 | 2. 수집 파이프라인 | **완료 (실적재 검증됨)** | design §5 기준 통과 + ADR-0005~0010 |
 | 3. 지표 계산 | **완료 (실데이터 검증됨)** | design §5 기준 통과 + ADR-0011 |
 | 4. 스크리닝 엔진 | **완료 (실데이터 검증됨)** | design §5 기준 통과 + ADR-0014~0017 |
-| 5. 프론트엔드 | **구현 완료 · 수동 관통 미검증** | 아래 참조 + ADR-0018~0019 |
+| 5. 프론트엔드 | **구현 완료 · 구조 보강 완료 · 수동 관통 미검증** | 아래 참조 + ADR-0018~0020 |
 | 6. 워치리스트·관리자·운영 | 미착수 | 착수 전 design §5에 판정을 먼저 적는다 |
 
-**현재 코드 상태**: `./gradlew build` 성공 — 백엔드 **342개** + 프론트 Vitest **69개** 통과(외부 호출 0건), 관통테스트 9개(`./gradlew liveTest`). 있는 것 — 스키마 V1~V10, 지표 17개 + 백분위 6개, 조건 모델·번역기, 인가, 수집 파이프라인·배치 잡 4종·`BootstrapRunner`, 지표 계산 엔진, HTTP API 전체, 프리셋 3종, **Vue3 프론트엔드 전체**(로그인·조건 빌더·결과 표/카드·화면 저장·종목 상세·지지저항·종목 검색). 없는 것 — 미국 어댑터(v1.1, ADR-0010), 관리자 API·워치리스트(Phase 6).
+**현재 코드 상태**: `./gradlew build` 성공 — 백엔드 **348개** + 프론트 Vitest **144개** 통과(외부 호출 0건), 관통테스트 9개(`./gradlew liveTest`). 있는 것 — 스키마 V1~V10, 지표 17개 + 백분위 6개, 조건 모델·번역기, 인가, 수집 파이프라인·배치 잡 4종·`BootstrapRunner`, 지표 계산 엔진, HTTP API 전체, 프리셋 3종, **Vue3 프론트엔드 전체**(로그인·조건 빌더·결과 표/카드·화면 저장·종목 상세·지지저항·종목 검색). 없는 것 — 미국 어댑터(v1.1, ADR-0010), 관리자 API·워치리스트(Phase 6).
 
 **실데이터가 들어 있다** (2026-08-06). 유니버스 350종목, `indicator_value` **2.81M행**, 최신일 **2026-08-05**. 보존 구간 180거래일이 23종에서 180/180이라 과거 일자 스크리닝도 동작한다. 실측 `MOMENTUM_KR` 27종목.
 
@@ -31,11 +31,11 @@
 
 ## 다음에 할 일
 
-**Phase 5의 수동 관통이 남았다.** 구현·자동 검증은 끝났지만 design §5 Phase 5의 12개 판정은 대부분 UX 수준이라 **브라우저와 실제 Google 로그인이 있어야 판정된다.** 헤드리스로 확인된 것은 서버 쪽뿐이다 — 익명 `/` 200(셸), 딥링크 `/stocks/1`·`/screens` 200, `/api/**` 401, `/api/nope` 401→(인증 시)404, `/assets/없는파일` 404, `/actuator/env` 401, `XSRF-TOKEN` 쿠키 하강, OAuth 302→accounts.google.com.
+**Phase 5의 수동 관통이 남았다.** 구현·자동 검증은 끝났지만 design §5 Phase 5의 12개 판정은 대부분 UX 수준이라 **브라우저와 실제 Google 로그인이 있어야 판정된다.** 헤드리스로 확인된 것은 서버 쪽뿐이다 — 익명 셸 200, 딥링크, `/api/**` 401, SPA 폴백 제외 경로 404, `XSRF-TOKEN` 하강, OAuth 302(`SpaFallbackTest`·`SecurityConfigTest`가 단언한다).
 
 관통 순서: `./gradlew bootRun` → `http://localhost:8080` → 로그인 → 프리셋 실행 → 3상태 구분·조건별 점수 확인 → 커스텀 조건 저장·재실행 → 종목 상세·지지저항 → 375px 폭 → 패널 하나만 실패시켜 재시도.
 
-- **개발 서버(:5173)로 로그인하려면 Google Console에 리디렉션 URI를 하나 더 넣어야 한다** — `http://localhost:5173/login/oauth2/code/google`. Vite 프록시가 Host를 바꾸지 않아 Spring이 요청 Host로 `redirect_uri`를 만든다(실측 확인). **:8080은 지금 그대로 로그인된다.**
+- **개발 서버(:5173) 로그인은 Google Console에 `http://localhost:5173/login/oauth2/code/google`을 더 넣어야 된다.** Vite 프록시가 Host를 바꾸지 않아 Spring이 요청 Host로 `redirect_uri`를 만든다(실측). **:8080은 그대로 된다.**
 
 ### 배치 실행 방법 (`BootstrapRunner`, `bootstrap` 프로파일 전용)
 
@@ -79,13 +79,12 @@
 - **백분위는 항상 오름차순이다.** `PER_PCTL`이 0에 가까우면 PER이 낮다는 뜻이고, "상위 20%"는 지표에 따라 `<= 0.2`이거나 `>= 0.8`이다. 방향의 정본은 원본의 `higher_is_better`이고 카탈로그 API가 `favorableEnd`로 내려준다.
 - **`IndicatorDataReader`가 분기 재무에 한 해치 여유를 얹어 읽는다.** PER의 TTM은 여유가 0이라 공시가 빠지면 경계에서 값이 조용히 사라진다.
 - **테스트는 로컬 PostgreSQL을 쓴다**(H2는 EAV가 의존하는 PG 기능을 못 쓴다). **Zonky는 재검토 불필요.** 격리는 `@Transactional` 롤백이 기본이고, 커밋을 요구하는 테스트만 `@AfterEach` 정리를 쓴다.
-- **패키지 구조**: 컨트롤러는 도메인별 `…/web`, 최상위 `web`은 HTTP 인프라 전용. `pipeline` 하위 이름은 `.claude/rules/data-pipeline.md`의 glob에 **의도적으로 맞춘 것**이다.
 - **`.env`는 `build.gradle`이 읽어 `bootRun`·`liveTest`에만 주입한다.** `test`에는 넣지 않는다 — 실키가 있으면 `@ConditionalOnApiKey` 어댑터가 등록돼 빈 구성이 바뀐다. 주입 실패는 조용하므로 `./gradlew checkEnv`로 가른다.
 - **Jackson은 3.x이고 패키지가 `tools.jackson.databind`다.** Boot 3 예제를 복사하면 컴파일이 안 된다.
 - **CSRF 토큰의 지연 로딩을 껐다**(`setCsrfRequestAttributeName(null)`). 켜두면 SPA의 첫 POST가 403이 되고 인증 버그처럼 보인다. MockMvc도 `with(csrf())`가 없으면 403이다.
 - **테스트 DB와 운영 DB의 활성 유니버스가 정반대다.** 운영은 `KOSPI_TOP200`·`KOSDAQ_TOP150`이 활성이고 시드는 0건, 테스트 DB는 시드가 활성·전부 0건이다. 유니버스 테스트는 픽스처를 직접 심는다.
 - **`ADJ_CLOSE`는 봉 하나로 값이 나오는 첫 지표다.** `DELETE FROM stock` 앞에 `indicator_value` 정리가 없으면 FK로 정리가 중단되고 **무관해 보이는 다른 테스트**가 깨진다.
-- **백필 한 번은 워밍업이 긴 지표를 다 채우지 못한다.** 러너가 `maxEffectiveLookback` 봉만 읽어 SMA_200은 실행당 ~25거래일치만 나온다. 구간 전체를 돌아야 한다 — 180일에 1시간 51분.
+- **백필 한 번은 워밍업이 긴 지표를 다 채우지 못한다.** 러너가 `maxEffectiveLookback` 봉만 읽어 SMA_200은 실행당 ~25거래일치만 나온다. 구간 전체를 돌아야 한다(180일=1시간 51분).
 
 ### 프론트엔드 (Phase 5에서 생긴 것)
 
@@ -93,9 +92,8 @@
 - **보안 매처의 마지막이 `permitAll`이다**(ADR-0018). 정적 셸을 익명에게 열어야 로그인 화면이 뜬다. **새 보호 대상은 반드시 그 앞에 명시해야 한다.**
 - **SPA 폴백은 `api/`·`actuator/`·`/assets/**`에 적용하지 않는다.** 적용하면 없는 경로가 404 대신 HTML 200을 주고 프론트가 JSON 파싱에서 죽는다.
 - **`primevue`는 4.x에 고정한다**(ADR-0019). 5.0.0은 MIT가 아니라 라이선스 키를 요구하고, 없거나 만료되면 화면에 고지가 뜬다.
-- **프론트가 지표 코드로 분기하지 않는다.** 유불리 방향은 `lib/direction.ts`가 서버의 `higherIsBetter`/`favorableEnd`만 보고 판단하며, **함수가 지표 코드를 인자로 받지 않는 것**이 그 강제 수단이다.
-- **값 부재를 `?? 0`으로 메우지 않는다.** 서버는 계산되지 않은 지표의 키 자체를 보내지 않는다. `Object.hasOwn`으로 가르고 `—`로 그린다.
-- **자동 재시도는 GET에만 붙는다.** 생성 요청을 재시도하면 응답만 유실된 경우 화면이 두 개 만들어진다. 조회인데 POST인 `/api/screening`은 호출부가 명시적으로 켠다.
+- **코드 규칙은 `.claude/rules/frontend.md`에 있다**(`**/*.vue`·`**/*.ts` glob으로 자동 로드). 지표 코드 분기 금지, `?? 0` 금지, 모르는 값에 던질지 보일지, 문자열 배치 기준이 거기 있다. 여기 옮겨 적지 않는다.
+- **백엔드 enum·상수의 거울은 `wire-contract.json`이 지킨다**(ADR-0020). 값을 하나 더하면 픽스처에도 적어야 양쪽 테스트가 통과한다.
 
 ---
 
@@ -108,6 +106,8 @@
 - **배치 잡의 HTTP 진입점이 없다 — Phase 6.** `SecurityConfigTest`가 `/api/admin/batches`의 404를 단언하므로 그때 함께 고친다.
 - **actuator 미도입**: Phase 6. 매처는 이미 `ROLE_ADMIN`으로 잠가 두었다.
 - **프론트 에러의 Sentry 수집이 없다**(Phase 6). 지금은 `console.error`에만 남는다.
+- **`formatPrice`가 `'원'`을 고정한다.** `market`에 `currency`(KRW/USD)가 있지만 어떤 DTO도 싣지 않는다. ADR-0010의 미국 시장은 응답 계약부터 고쳐야 열린다.
+- **프리셋에 `editable: true`를 줘도 저장까지 되지는 않는다.** 빌더 잠금만 풀리고 `SaveScreenDialog`는 `origin.kind === 'screen'`만 갱신한다.
 
 ---
 

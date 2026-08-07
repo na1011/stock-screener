@@ -42,7 +42,14 @@ export function formatIndicatorValue(
   return unit ? `${formatted}${unit}` : formatted
 }
 
-/** 주가. **원주가**이므로 사용자가 실제로 지불하는 금액이고, 소수점을 보이지 않는다. */
+/**
+ * 주가. **원주가**이므로 사용자가 실제로 지불하는 금액이고, 소수점을 보이지 않는다.
+ *
+ * 통화가 원으로 고정되어 있다. `market`에 `currency`(KRW/USD)가 있지만 어떤 DTO도 싣지 않아
+ * 화면이 알 방법이 없다 — ADR-0010이 미국 시장을 v1.1로 미룬 상태이므로 지금은 문제가 되지
+ * 않지만, 그때는 여기가 아니라 **응답 계약부터** 고쳐야 한다. 고치지 않으면 $150이 아무
+ * 신호 없이 "150원"으로 그려진다.
+ */
 export function formatPrice(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return MISSING
