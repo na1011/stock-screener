@@ -27,9 +27,15 @@ if [ -f docs/progress.md ] && [ -f "$inject_hook" ]; then
   # 그때 이 검사는 통과하는데 주입은 잘리는 최악의 조합이 된다.
   inject_limit=$(grep -oE '^limit=[0-9]+' "$inject_hook" 2>/dev/null | head -1 | cut -d= -f2)
   if [ -n "${inject_limit:-}" ]; then
+    # 경고선을 절단선의 절반에 둔다. 둘이 같은 지점이면 이미 손상된 뒤에야 울린다 —
+    # 그때는 뒷부분이 이번 세션에 전달되지 않은 상태이고, 무엇이 잘렸는지도 모른다.
+    # 별도 상수를 두지 않고 절단선에서 계산해, 한쪽만 바뀌는 조합을 애초에 만들지 않는다.
+    warn_limit=$(( inject_limit / 2 ))
     len=$(wc -m < docs/progress.md 2>/dev/null | tr -d ' ')
     if [ -n "$len" ] && [ "$len" -gt "$inject_limit" ]; then
-      add "docs/progress.md가 ${len}자로 주입 상한(${inject_limit}자)을 넘는다. 세션 시작 주입이 잘려 뒷부분이 다음 세션에 전달되지 않는다. 정본이 다른 곳(adr/·api-spec/·design/)에 있는 내용을 포인터로 바꿔 줄여라."
+      add "docs/progress.md가 ${len}자로 주입 상한(${inject_limit}자)을 넘는다. 세션 시작 주입이 이미 잘렸고, 뒷부분은 이번 세션에 전달되지 않았다. 파일을 직접 읽고 줄여라."
+    elif [ -n "$len" ] && [ "$len" -gt "$warn_limit" ]; then
+      add "docs/progress.md가 ${len}자로 경고선(${warn_limit}자)을 넘었다. 절단은 ${inject_limit}자부터다. 줄을 더하기 전에 뺄 것을 먼저 정하라 — 고정 예산이지 로그가 아니다. 파일별 함정은 \`.claude/rules/\`로, 작업 절차는 skill로 내린다."
     fi
   fi
 fi
@@ -58,25 +64,47 @@ if [ -d docs/adr ]; then
   fi
 fi
 
-# 4. data-pipeline.md의 paths glob이 실제 패키지와 매칭되는가
-# 부트스트랩 클래스만 있는 골격 단계에서는 검사하지 않는다. 매 세션 같은 경고가 뜨면 신호가 무뎌진다.
-# 패키지 깊이로 게이트하지 않는 이유: 패키지 구조는 프로젝트마다 달라 깊이 가정이 쉽게 어긋난다.
-rules="./.claude/rules/data-pipeline.md"
-if [ -f "$rules" ] && [ -d src/main/java ]; then
-  domain_src=$(find src/main/java -name '*.java' \
-                 -not -name '*Application.java' \
-                 -not -name '*ApplicationTests.java' \
-                 -print -quit 2>/dev/null)
-  if [ -n "$domain_src" ]; then
-    matched=false
-    while IFS= read -r seg; do
-      [ -z "$seg" ] && continue
-      if find src/main/java -type d -name "$seg" -print -quit 2>/dev/null | grep -q .; then
-        matched=true; break
-      fi
-    done <<< "$(grep -oE '"\*\*/[a-z-]+/\*\*"' "$rules" | sed 's|"\*\*/||; s|/\*\*"||')"
-    if [ "$matched" = false ]; then
-      add "data-pipeline.md의 paths glob이 실제 패키지 구조와 하나도 매칭되지 않는다. 규칙이 로드되지 않는다."
+# 4. 각 규칙 파일의 paths glob이 실제 파일과 매칭되는가
+#
+# 매칭되지 않는 glob은 규칙을 **영원히 로드되지 않게** 만들고, 로드되지 않았다는 사실은
+# 어디에도 드러나지 않는다. 실제로 frontend.md의 `**/*.js`·`**/*.scss`가 그 상태였다.
+#
+# 파일 단위로 본다 — 어느 glob이든 하나 매칭되면 통과다. glob 단위로 가면
+# `application-*.yaml`처럼 오늘 0건이지만 내일 생길 선행 glob에서 첫날부터 오탐이 나고,
+# 오탐이 반복되면 이 검사 자체가 무시된다.
+#
+# `**`를 `*`로 접는다. bash `[[ ]]` 패턴에서 `*`는 `/`를 넘으므로 `src/main/java/**`가
+# 의도대로 동작한다.
+if [ -d .claude/rules ] && command -v git >/dev/null 2>&1; then
+  tracked=$(git ls-files 2>/dev/null || true)
+  if [ -n "$tracked" ]; then
+    orphan=""
+    for rule in .claude/rules/*.md; do
+      [ -f "$rule" ] || continue
+      globs=$(awk '
+        /^paths:[[:space:]]*$/ { f = 1; next }
+        f && /^[[:space:]]*-[[:space:]]*/ {
+          sub(/^[[:space:]]*-[[:space:]]*/, "")
+          gsub(/^["'"'"']|["'"'"']$/, "")
+          gsub(/\*\*/, "*")
+          print; next
+        }
+        f { exit }
+      ' "$rule" 2>/dev/null || true)
+      [ -z "$globs" ] && continue   # paths가 없으면 매 세션 로드되는 규칙이다 — 이 검사 대상이 아니다
+      matched=false
+      while IFS= read -r pat; do
+        [ -z "$pat" ] && continue
+        while IFS= read -r f; do
+          # shellcheck disable=SC2053  # 우변을 따옴표로 감싸면 glob이 아니라 리터럴이 된다
+          if [[ "$f" == $pat ]]; then matched=true; break; fi
+        done <<< "$tracked"
+        [ "$matched" = true ] && break
+      done <<< "$globs"
+      [ "$matched" = false ] && orphan="${orphan}$(basename "$rule") "
+    done
+    if [ -n "$orphan" ]; then
+      add "paths glob이 실제 파일과 하나도 매칭되지 않는 규칙이 있다: ${orphan}— 이 규칙은 영원히 로드되지 않는다. \`git ls-files | grep\`으로 glob을 맞춰라."
     fi
   fi
 fi
