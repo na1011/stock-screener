@@ -1,0 +1,38 @@
+/*
+ * 기본 스타일. 색·간격의 정본은 PrimeVue 테마 토큰(--p-*)이다. 여기서 색을 따로 정의하면
+ * 테마를 바꿀 때 두 곳이 어긋난다.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family:
+    'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Segoe UI', Roboto,
+    'Helvetica Neue', 'Noto Sans KR', sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--p-text-color);
+  background: var(--p-content-background);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 숫자는 자릿수가 흔들리면 표에서 비교가 어렵다. 지표 값·가격에 쓴다. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+#app {
+  min-height: 100%;
+}

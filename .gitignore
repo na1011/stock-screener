@@ -40,6 +40,19 @@ out/
 CLAUDE.local.md
 .claude/settings.local.json
 
+### 프론트엔드 ###
+# 번들은 Gradle이 빌드해 classpath의 static/으로 넣는다. 저장소에 담지 않는다 —
+# 담으면 소스와 번들이 어긋난 채 커밋되고, 어느 쪽이 정본인지 알 수 없게 된다.
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.local
+# IMPORTANT — 전역 gitignore(~/.gitignore_global)가 package-lock.json을 무시한다.
+# 이 빌드는 `npm ci`를 쓰고 npm ci는 잠금 파일이 없으면 실행 자체가 안 된다 —
+# 커밋되지 않으면 새로 클론한 곳에서 ./gradlew build가 프론트 단계에서 멈춘다.
+# 저장소 .gitignore가 전역보다 우선하므로 여기서 되돌린다.
+!frontend/package-lock.json
+
 ### 시크릿 ###
 # IMPORTANT — 이 절이 없어서 .env가 실제로는 무시되지 않고 있었다. .env.example은
 # "이 파일은 gitignore 대상이며 커밋되지 않는다"고 적고 있었으나 사실이 아니었다.

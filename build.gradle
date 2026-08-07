@@ -211,6 +211,88 @@ tasks.register('checkEnv') {
     }
 }
 
+// ── 프론트엔드 빌드 ──────────────────────────────────────────────
+// frontend/의 Vite 번들을 classpath의 static/으로 넣어 bootJar 하나로 배포한다.
+// 인증이 세션 쿠키 + XSRF-TOKEN 쿠키 기반이라 프론트와 API가 같은 오리진이어야 하고,
+// 분리 배포하면 CORS·SameSite·allowCredentials를 전부 떠안는다. ADR-0018 참조.
+def frontendDir = layout.projectDirectory.dir('frontend')
+
+// npm은 Homebrew 경로(/opt/homebrew/bin)에 있는데 그 경로는 /etc/paths에 없다.
+// 터미널에서 ./gradlew를 쓰면 셸 PATH가 따라오지만 IDE가 데몬을 띄우면 따라오지 않아
+// "npm을 찾을 수 없다"가 된다. 그 실패는 프론트 코드와 무관한 곳에서 나타나므로 미리 가른다.
+ext.resolveNpm = {
+    def candidates = []
+    def path = System.getenv('PATH')
+    if (path) {
+        path.split(File.pathSeparator).each { candidates << new File(it, 'npm') }
+    }
+    candidates << new File('/opt/homebrew/bin/npm')
+    candidates << new File('/usr/local/bin/npm')
+    def found = candidates.find { it.isFile() && it.canExecute() }
+    if (found == null) {
+        throw new GradleException('npm을 찾을 수 없다. Node 20 이상을 설치하거나 PATH에 npm을 넣어라.\n' +
+                '프론트엔드 빌드를 건너뛰려면 -PskipFrontend를 준다(번들 없이 API만 뜬다).')
+    }
+    return found.absolutePath
+}
+
+tasks.register('frontendInstall', Exec) {
+    group = 'frontend'
+    description = 'npm ci로 프론트엔드 의존성을 설치한다.'
+    workingDir = frontendDir
+    commandLine 'npm', 'ci'
+    doFirst { commandLine resolveNpm(), 'ci' }
+    onlyIf { !project.hasProperty('skipFrontend') }
+
+    inputs.file(frontendDir.file('package.json'))
+    inputs.file(frontendDir.file('package-lock.json'))
+    // node_modules 전체를 출력으로 잡으면 수천 개 파일을 스냅샷하느라 매 빌드가 느려진다.
+    // npm이 설치 후 갱신하는 이 파일 하나가 같은 판정을 싸게 해준다.
+    outputs.file(frontendDir.file('node_modules/.package-lock.json'))
+}
+
+tasks.register('frontendBuild', Exec) {
+    group = 'frontend'
+    description = '프론트엔드를 타입 검사하고 번들한다(frontend/dist).'
+    dependsOn 'frontendInstall'
+    workingDir = frontendDir
+    commandLine 'npm', 'run', 'build'
+    doFirst { commandLine resolveNpm(), 'run', 'build' }
+    onlyIf { !project.hasProperty('skipFrontend') }
+
+    inputs.dir(frontendDir.dir('src'))
+    inputs.file(frontendDir.file('index.html'))
+    inputs.file(frontendDir.file('vite.config.ts'))
+    inputs.file(frontendDir.file('tsconfig.json'))
+    inputs.file(frontendDir.file('env.d.ts'))
+    inputs.file(frontendDir.file('package-lock.json'))
+    outputs.dir(frontendDir.dir('dist'))
+}
+
+tasks.register('frontendTest', Exec) {
+    group = 'verification'
+    description = '프론트엔드 단위 테스트(Vitest).'
+    dependsOn 'frontendInstall'
+    workingDir = frontendDir
+    commandLine 'npm', 'run', 'test:unit'
+    doFirst { commandLine resolveNpm(), 'run', 'test:unit' }
+    onlyIf { !project.hasProperty('skipFrontend') }
+
+    inputs.dir(frontendDir.dir('src'))
+    inputs.file(frontendDir.file('vite.config.ts'))
+    inputs.file(frontendDir.file('package-lock.json'))
+}
+
+// 번들을 리소스로 실어야 bootRun·bootJar·build가 모두 같은 화면을 띄운다.
+// 여기에 걸지 않고 bootJar에만 걸면 bootRun이 낡은 번들을 서빙하고,
+// 그 차이는 "고쳤는데 왜 안 바뀌지"로만 드러난다.
+tasks.named('processResources') {
+    dependsOn 'frontendBuild'
+    from(frontendDir.dir('dist')) {
+        into 'static'
+    }
+}
+
 // 관통테스트(@Tag("live"))는 실제 외부 API를 호출한다. 기본 test에서 제외하는 이유가 둘이다.
 // 네트워크가 없거나 벤더가 점검 중이면 무관한 테스트까지 빨간불이 되고, 매 실행이
 // 일일 쿼터를 태운다. 초기 적재에 쓸 쿼터를 테스트가 소진하면 안 된다.
