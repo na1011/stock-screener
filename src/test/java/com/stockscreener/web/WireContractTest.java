@@ -12,6 +12,7 @@ import com.stockscreener.screening.web.ScreenRequest;
 import com.stockscreener.screening.web.ScreeningResponse;
 import com.stockscreener.screening.web.ScreeningResponseAssembler;
 import com.stockscreener.stock.PriceReference;
+import com.stockscreener.watchlist.web.WatchlistRequest;
 
 import jakarta.validation.constraints.Size;
 
@@ -152,6 +153,8 @@ class WireContractTest {
         assertThat(sizeMax("name")).isEqualTo(constants.get("screenNameMaxLength").asInt());
         assertThat(sizeMax("description"))
                 .isEqualTo(constants.get("screenDescriptionMaxLength").asInt());
+        assertThat(sizeMax(WatchlistRequest.class, "memo"))
+                .isEqualTo(constants.get("watchlistMemoMaxLength").asInt());
     }
 
     @Test
@@ -164,13 +167,19 @@ class WireContractTest {
     }
 
     private static int sizeMax(String component) {
+        return sizeMax(ScreenRequest.class, component);
+    }
+
+    private static int sizeMax(Class<?> requestType, String component) {
         try {
             // 레코드 컴포넌트의 @Size는 필드로 전파된다. 필드에서 읽는 편이 확실하다.
-            Size size = ScreenRequest.class.getDeclaredField(component).getAnnotation(Size.class);
-            assertThat(size).as("ScreenRequest.%s에 @Size가 없다", component).isNotNull();
+            Size size = requestType.getDeclaredField(component).getAnnotation(Size.class);
+            assertThat(size).as("%s.%s에 @Size가 없다", requestType.getSimpleName(), component)
+                    .isNotNull();
             return size.max();
         } catch (NoSuchFieldException e) {
-            throw new IllegalStateException("ScreenRequest에 " + component + " 컴포넌트가 없다", e);
+            throw new IllegalStateException(
+                    requestType.getSimpleName() + "에 " + component + " 컴포넌트가 없다", e);
         }
     }
 }

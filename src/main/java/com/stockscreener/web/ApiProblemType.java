@@ -49,6 +49,12 @@ public enum ApiProblemType {
     /** 워치리스트가 참조 중인 화면을 지우려 했다. */
     SCREEN_IN_USE("screen-in-use", "다른 곳에서 사용 중인 화면이다"),
 
+    /** 워치리스트 항목이 없다. 남의 항목에 접근했을 때도 이것이다 — 403은 존재를 알려준다. */
+    WATCHLIST_ITEM_NOT_FOUND("watchlist-item-not-found", "워치리스트 항목을 찾을 수 없다"),
+
+    /** 이미 담은 종목을 또 담으려 했다. 사용자 입력 문제이지 서버 버그가 아니다. */
+    ALREADY_WATCHED("already-watched", "이미 워치리스트에 있는 종목이다"),
+
     CONFLICT("conflict", "요청이 현재 상태와 충돌한다");
 
     private static final String PREFIX = "urn:stockscreener:";

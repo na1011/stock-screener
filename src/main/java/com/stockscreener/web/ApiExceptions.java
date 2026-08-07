@@ -148,12 +148,45 @@ public final class ApiExceptions {
         }
     }
 
-    /** 워치리스트가 참조 중인 화면을 지우려 했다. Phase 6에서 실제로 발생하기 시작한다. */
+    /**
+     * 워치리스트가 참조 중인 화면을 지우려 했다.
+     *
+     * <p>건수를 함께 싣는 이유는 사용자가 <b>다음에 무엇을 해야 하는지</b> 알아야 하기
+     * 때문이다. "삭제할 수 없다"만 주면 워치리스트를 하나씩 열어보게 된다.
+     */
     public static class ScreenInUseException extends ApiException {
-        public ScreenInUseException(long screenId, Throwable cause) {
+        public ScreenInUseException(long screenId, int watchlistCount, Throwable cause) {
             super(HttpStatus.CONFLICT, ApiProblemType.SCREEN_IN_USE,
-                    "이 화면을 참조하는 워치리스트가 있어 삭제할 수 없다.", cause);
+                    watchlistCount > 0
+                            ? "이 화면을 알림 조건으로 쓰는 워치리스트가 %d건 있어 삭제할 수 없다. 먼저 그 항목의 알림 조건을 바꾼다."
+                                    .formatted(watchlistCount)
+                            : "이 화면을 참조하는 곳이 있어 삭제할 수 없다.", cause);
             with("screenId", screenId);
+            with("watchlistCount", watchlistCount);
+        }
+    }
+
+    /**
+     * 워치리스트 항목을 찾을 수 없다.
+     *
+     * <p>IMPORTANT — 남의 항목에 접근했을 때도 이것을 쓴다. {@link ScreenNotFoundException}과
+     * 같은 논리다 — 403은 "있지만 네 것이 아니다"를 알려주어 다른 사용자의 관심종목 존재
+     * 여부를 탐색할 수 있게 한다.
+     */
+    public static class WatchlistItemNotFoundException extends ApiException {
+        public WatchlistItemNotFoundException(long id) {
+            super(HttpStatus.NOT_FOUND, ApiProblemType.WATCHLIST_ITEM_NOT_FOUND,
+                    "워치리스트 항목을 찾을 수 없다: " + id);
+            with("watchlistItemId", id);
+        }
+    }
+
+    /** 이미 담은 종목을 또 담으려 했다. 화면이 "이미 담겨 있다"로 안내한다. */
+    public static class AlreadyWatchedException extends ApiException {
+        public AlreadyWatchedException(long stockId, Throwable cause) {
+            super(HttpStatus.CONFLICT, ApiProblemType.ALREADY_WATCHED,
+                    "이미 워치리스트에 있는 종목이다.", cause);
+            with("stockId", stockId);
         }
     }
 

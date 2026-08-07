@@ -30,6 +30,8 @@
     "urn:stockscreener:preset-is-read-only",
     "urn:stockscreener:duplicate-screen-name",
     "urn:stockscreener:screen-in-use",
+    "urn:stockscreener:watchlist-item-not-found",
+    "urn:stockscreener:already-watched",
     "urn:stockscreener:conflict"
   ],
 
@@ -60,6 +62,7 @@
     "maxConditions": 20,
     "screenNameMaxLength": 100,
     "screenDescriptionMaxLength": 2000,
+    "watchlistMemoMaxLength": 500,
     "defaultDecimalScale": 2
   }
 }

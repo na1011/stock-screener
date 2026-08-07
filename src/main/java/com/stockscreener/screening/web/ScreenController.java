@@ -5,6 +5,7 @@ import com.stockscreener.screening.ConditionGroup;
 import com.stockscreener.screening.store.ScreenDefinition;
 import com.stockscreener.screening.store.ScreenDefinitionValidator;
 import com.stockscreener.screening.store.ScreenStore;
+import com.stockscreener.watchlist.WatchlistStore;
 import com.stockscreener.web.ApiExceptions;
 import com.stockscreener.web.CurrentUserId;
 
@@ -42,9 +43,14 @@ public class ScreenController {
     private final ScreenStore store;
     private final IndicatorCatalog indicatorCatalog;
 
-    public ScreenController(ScreenStore store, IndicatorCatalog indicatorCatalog) {
+    /** 삭제가 막혔을 때 <b>몇 건이 막고 있는지</b>를 세기 위해서만 쓴다. */
+    private final WatchlistStore watchlist;
+
+    public ScreenController(ScreenStore store, IndicatorCatalog indicatorCatalog,
+                            WatchlistStore watchlist) {
         this.store = store;
         this.indicatorCatalog = indicatorCatalog;
+        this.watchlist = watchlist;
     }
 
     @GetMapping
@@ -93,12 +99,25 @@ public class ScreenController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@CurrentUserId long userId, @PathVariable long id) {
         requireEditable(load(id, userId));
+        // watchlist_item.screen_id는 CASCADE도 SET NULL도 아니다(V3). SET NULL이었다면 화면을
+        // 지운 순간 워치리스트가 조용히 알림을 멈추고, 사용자는 그것을 "조건에 안 맞았나 보다"로
+        // 읽는다. 막고 이유를 말하는 편이 낫다.
+        //
+        // IMPORTANT — 건수를 삭제 **전에** 센다. 제약 위반이 난 뒤에 세면 그 트랜잭션은 이미
+        // 중단 상태(PostgreSQL 25P02)라 다음 쿼리가 "current transaction is aborted"로 실패한다.
+        // 이 함정은 바깥 트랜잭션이 있을 때만 나타나서, 운영은 멀쩡한데 테스트만 깨지거나
+        // 그 반대가 된다 — 실제로 여기서 한 번 걸렸다.
+        int watching = watchlist.countByScreen(id);
+        if (watching > 0) {
+            throw new ApiExceptions.ScreenInUseException(id, watching, null);
+        }
+
         try {
             store.delete(id);
         } catch (DataIntegrityViolationException e) {
-            // watchlist_item.screen_id는 CASCADE가 아니다. Phase 4에는 워치리스트 행이 없지만,
-            // 500으로 나가면 Phase 6에서 원인을 찾느라 시간을 쓴다.
-            throw new ApiExceptions.ScreenInUseException(id, e);
+            // 위 검사와 삭제 사이에 누가 담았다. 흔치 않지만 500으로 나가서는 안 된다.
+            // 건수를 다시 세지 않는 이유가 위 IMPORTANT에 있다.
+            throw new ApiExceptions.ScreenInUseException(id, 0, e);
         }
     }
 
