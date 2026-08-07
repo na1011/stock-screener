@@ -48,17 +48,39 @@ export function formatEnteredNumber(
   return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: decimalScale }).format(value)
 }
 
-/** 지표 값 + 단위. 단위는 서버가 준 문자열을 그대로 붙인다('%', '배', 없으면 빈 문자열). */
+/**
+ * 지표 값과 단위를 **나눠서**.
+ *
+ * 종목 상세의 카드가 숫자를 크게, 단위를 작고 흐리게 그린다. 붙여 놓으면 `11.34%`에서
+ * `%`가 숫자와 같은 무게로 읽혀, 카드 스무 장을 훑을 때 눈이 자릿수 대신 기호에 걸린다.
+ *
+ * 값이 없으면 `unit`은 빈 문자열이다 — `—%`는 없는 값에 단위를 붙인 것이라 거짓이다.
+ */
+export function splitIndicatorValue(
+  value: number | null | undefined,
+  unit: string | null | undefined,
+  decimalScale: number,
+): { number: string; unit: string } {
+  const formatted = formatNumber(value, decimalScale)
+  if (formatted === MISSING) {
+    return { number: MISSING, unit: '' }
+  }
+  return { number: formatted, unit: unit ?? '' }
+}
+
+/**
+ * 지표 값 + 단위. 단위는 서버가 준 문자열을 그대로 붙인다('%', '배', 없으면 빈 문자열).
+ *
+ * {@link splitIndicatorValue}를 조립한다 — 서식 규칙이 둘로 갈리면 표와 카드에서 같은 값이
+ * 다르게 보이기 시작한다.
+ */
 export function formatIndicatorValue(
   value: number | null | undefined,
   unit: string | null | undefined,
   decimalScale: number,
 ): string {
-  const formatted = formatNumber(value, decimalScale)
-  if (formatted === MISSING) {
-    return MISSING
-  }
-  return unit ? `${formatted}${unit}` : formatted
+  const parts = splitIndicatorValue(value, unit, decimalScale)
+  return `${parts.number}${parts.unit}`
 }
 
 /**

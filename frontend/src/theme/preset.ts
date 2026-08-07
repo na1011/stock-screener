@@ -130,6 +130,26 @@ export const ScreenerPreset = definePreset(Aura, {
           shadow: 'none',
         },
 
+        /**
+         * 값 구간의 색조. `lib/band.ts`의 세 tone이 그대로 대응한다.
+         *
+         * IMPORTANT — 판정 3상태와 **같은 색을 쓴다.** 색을 나누는 대신 형태를 나눈 것이고,
+         * 그 규칙은 ADR-0021의 "형태로 가른다" 절에 있다 — 판정은 `Tag` 알약, 값 구간은
+         * 미터 막대와 숫자 색조다. 그리고 값 색조는 판정 `Tag`가 없는 **종목 상세에만** 둔다.
+         *
+         * 글자는 300, 막대는 400이다. 다크에서 400은 큰 면적일 때 눈이 아프고, 300은
+         * 1~3px 막대로 쓰면 배경에 묻힌다.
+         */
+        tone: {
+          favorableText: '{emerald.300}',
+          favorableFill: '{emerald.400}',
+          unfavorableText: '{red.300}',
+          unfavorableFill: '{red.400}',
+          neutralText: '{text.color}',
+          neutralFill: '{surface.500}',
+          track: '{surface.700}',
+        },
+
         // 떠 있는 것은 패널보다 밝고 그림자가 깊다. 다크에서 그림자만으로는 층이 안 보인다.
         overlay: {
           select: { background: '{surface.850}', borderColor: '{surface.600}', shadow: '0 12px 28px -8px rgba(0,0,0,0.75)' },

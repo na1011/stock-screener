@@ -5,12 +5,15 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { api } from '@/api/endpoints'
+import type { StockIndicatorValue } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import PriceReferencePanel from '@/components/stock/PriceReferencePanel.vue'
+import BandMeter from '@/components/ui/BandMeter.vue'
 import { useAsync } from '@/composables/useAsync'
 import { useBreakpoint } from '@/composables/useBreakpoint'
-import { MISSING, formatCount, formatDate, formatIndicatorValue, formatPrice } from '@/lib/format'
+import { readBand } from '@/lib/band'
+import { MISSING, formatCount, formatDate, formatPrice, splitIndicatorValue } from '@/lib/format'
 import { DETAIL_CATEGORY_RANK, groupByCategory } from '@/lib/indicatorCategory'
 import { useCatalogStore } from '@/stores/catalog'
 
@@ -35,13 +38,40 @@ const priceReference = useAsync((signal) => api.priceReference(stockId.value, as
 /** 모바일은 접힌 채로 시작한다. 데스크톱은 자리가 있으므로 함께 보인다. */
 const referenceOpen = ref(false)
 
-/** 분류의 라벨·배치와 모르는 분류의 처리는 `lib/indicatorCategory`가 정한다. 빌더와 순서가 다른 것은 의도다. */
+/**
+ * 값이 어느 구간인지.
+ *
+ * 구간(`bands`)과 백분위 안내는 **카탈로그에만** 있고 종목 상세 응답에는 없다. 코드로 이어
+ * 붙이는 것은 `percentileOf`가 이미 하던 방식이며, 요청을 하나 더 만들지 않는다.
+ *
+ * 카탈로그가 실패하면 `byCode`가 비어 미터가 통째로 사라진다. 그것이 옳다 — 근거 없이
+ * "매우 낮음"을 그리는 것보다 말하지 않는 편이 낫고, 값과 설명은 그대로 남는다.
+ */
+function readingOf(indicator: StockIndicatorValue) {
+  const meta = catalog.byCode.get(indicator.code)
+  return meta === undefined ? null : readBand(meta, indicator.value)
+}
+
+/**
+ * 분류의 라벨·배치와 모르는 분류의 처리는 `lib/indicatorCategory`가 정한다. 빌더와 순서가
+ * 다른 것은 의도다.
+ *
+ * 카드가 쓸 것(값의 조각, 구간 읽기)을 여기서 한 번에 만든다. 템플릿에서 함수를 부르면
+ * 같은 계산이 카드마다 두세 번 돈다.
+ */
 const groups = computed(() =>
   groupByCategory(
     detail.data.value?.indicators ?? [],
     (indicator) => indicator.category,
     DETAIL_CATEGORY_RANK,
-  ),
+  ).map((group) => ({
+    ...group,
+    items: group.items.map((indicator) => ({
+      indicator,
+      reading: readingOf(indicator),
+      parts: splitIndicatorValue(indicator.value, indicator.unit, indicator.decimalScale),
+    })),
+  })),
 )
 
 /**
@@ -131,18 +161,33 @@ onMounted(() => {
         <section v-for="group in groups" :key="group.category" class="indicator-group">
           <h2 class="indicator-group__title">{{ group.label }}</h2>
           <ul class="indicator-group__list">
-            <li v-for="indicator in group.items" :key="indicator.code" class="indicator">
+            <li v-for="row in group.items" :key="row.indicator.code" class="indicator">
               <IndicatorLabel
-                :name="indicator.name"
-                :higher-is-better="indicator.higherIsBetter"
-                :percentile="percentileOf(indicator.code)"
-                :description="indicator.description"
-                :interpretation="indicator.interpretation"
+                :name="row.indicator.name"
+                :higher-is-better="row.indicator.higherIsBetter"
+                :percentile="percentileOf(row.indicator.code)"
+                :description="row.indicator.description"
+                :interpretation="row.indicator.interpretation"
               />
-              <span class="indicator__value tabular">
-                {{ formatIndicatorValue(indicator.value, indicator.unit, indicator.decimalScale) }}
+              <!--
+                숫자와 단위를 나눠 그린다. 붙여 놓으면 '%'가 숫자와 같은 무게로 읽혀,
+                카드 스무 장을 훑을 때 눈이 자릿수 대신 기호에 걸린다.
+              -->
+              <span
+                class="indicator__value tabular"
+                :class="row.reading ? `indicator__value--${row.reading.tone.toLowerCase()}` : null"
+              >
+                {{ row.parts.number
+                }}<span v-if="row.parts.unit" class="indicator__unit">{{ row.parts.unit }}</span>
               </span>
-              <p class="indicator__interpretation">{{ indicator.interpretation }}</p>
+              <!-- 구간을 아는 지표에만 붙는다. 없으면 지어내지 않는다(ADR-0023). -->
+              <BandMeter
+                v-if="row.reading"
+                class="indicator__meter"
+                :reading="row.reading"
+                :indicator-name="row.indicator.name"
+              />
+              <p class="indicator__interpretation">{{ row.indicator.interpretation }}</p>
             </li>
           </ul>
         </section>
@@ -312,6 +357,32 @@ onMounted(() => {
   font-weight: 700;
   justify-self: end;
   white-space: nowrap;
+  color: var(--p-tone-neutral-text);
+}
+
+/*
+ * 값의 색조. 판정 3상태와 같은 초록·빨강이되 **알약이 아니다** — 형태로 채널을 가른 것이고
+ * 그래서 판정 Tag가 함께 나오는 결과 화면에는 이 색조를 두지 않는다(ADR-0021).
+ */
+.indicator__value--favorable {
+  color: var(--p-tone-favorable-text);
+}
+
+.indicator__value--unfavorable {
+  color: var(--p-tone-unfavorable-text);
+}
+
+/* 단위는 숫자를 읽고 난 다음이다. 같은 무게면 자릿수 대신 기호에 눈이 걸린다. */
+.indicator__unit {
+  margin-inline-start: 0.0625rem;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  color: var(--p-text-muted-color);
+}
+
+.indicator__meter {
+  grid-column: 1 / -1;
+  margin-top: 0.125rem;
 }
 
 .indicator__interpretation {
