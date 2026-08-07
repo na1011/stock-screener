@@ -205,7 +205,7 @@ onMounted(() => {
 }
 
 .stock-detail__name {
-  font-size: 1.5rem;
+  font-size: var(--app-text-xl);
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -213,7 +213,7 @@ onMounted(() => {
 .stock-detail__meta {
   margin: 0.25rem 0 0.5rem;
   color: var(--p-text-muted-color);
-  font-size: 0.875rem;
+  font-size: var(--app-text-md);
 }
 
 .stock-detail__universes {
@@ -229,14 +229,14 @@ onMounted(() => {
 }
 
 .stock-detail__price-value {
-  font-size: 1.75rem;
+  font-size: var(--app-text-2xl);
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.01em;
 }
 
 .stock-detail__price-label {
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs);
   color: var(--p-text-muted-color);
 }
 
@@ -245,7 +245,7 @@ onMounted(() => {
 .stock-detail__ohlc {
   display: flex;
   flex-wrap: wrap;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
@@ -275,12 +275,12 @@ onMounted(() => {
 .stock-detail__no-price,
 .stock-detail__missing {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
 }
 
 .indicator-group__title {
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--p-text-muted-color);
@@ -308,7 +308,7 @@ onMounted(() => {
 }
 
 .indicator__value {
-  font-size: 1.0625rem;
+  font-size: var(--app-text-lg);
   font-weight: 700;
   justify-self: end;
   white-space: nowrap;
@@ -317,7 +317,7 @@ onMounted(() => {
 .indicator__interpretation {
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs);
   color: var(--p-text-muted-color);
   line-height: 1.5;
 }

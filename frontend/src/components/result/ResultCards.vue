@@ -213,7 +213,7 @@ function toggle(stockId: number): void {
 
 .cards__count {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
 }
 
@@ -258,7 +258,7 @@ function toggle(stockId: number): void {
 }
 
 .card__ticker {
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs);
   color: var(--p-text-muted-color);
 }
 
@@ -277,12 +277,12 @@ function toggle(stockId: number): void {
   display: flex;
   align-items: baseline;
   gap: 0.25rem;
-  font-size: 0.875rem;
+  font-size: var(--app-text-md);
 }
 
 .card__metric-label,
 .card__metric-sub {
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs);
   color: var(--p-text-muted-color);
 }
 

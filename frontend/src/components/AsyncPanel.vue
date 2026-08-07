@@ -88,12 +88,12 @@ const rows = computed(() => props.skeletonRows ?? 3)
 
 .async-panel__detail {
   margin: 0.25rem 0 0;
-  font-size: 0.875rem;
+  font-size: var(--app-text-md);
 }
 
 .async-panel__hint {
   margin: 0.25rem 0 0;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   opacity: 0.85;
 }
 </style>

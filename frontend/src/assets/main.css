@@ -38,6 +38,7 @@
   --app-text-md: 0.875rem; /* 14px — 강조 본문 */
   --app-text-lg: 1rem; /* 16px — 섹션 제목 */
   --app-text-xl: 1.25rem; /* 20px — 화면 제목 */
+  --app-text-2xl: 1.5rem; /* 24px — 종목 상세의 현재가처럼 한 화면에 하나뿐인 수치 */
 
   /* 헤더 높이. sticky 조건바가 이 값만큼 내려가야 하므로 CSS 한 곳에서만 정해야 한다. */
   --app-header-height: 2.75rem;

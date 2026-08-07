@@ -112,13 +112,13 @@ async function go(): Promise<void> {
 }
 
 .stock-search__meta {
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs);
   color: var(--p-text-muted-color);
 }
 
 .stock-search__empty {
   padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
+  font-size: var(--app-text-md);
   color: var(--p-text-muted-color);
 }
 

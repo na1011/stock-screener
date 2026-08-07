@@ -56,6 +56,54 @@ function indicatorName(code: string): string {
 function percentileOf(code: string) {
   return catalog.byCode.get(code)?.percentile ?? null
 }
+
+/**
+ * 지표 컬럼마다 이 결과 안에서의 최소·최대.
+ *
+ * 숫자 아래 막대의 기준이다. 139행을 눈으로 훑을 때 "어느 것이 큰가"가 숫자만으로는 읽히지
+ * 않는다 — 자릿수가 같으면 더 그렇다.
+ *
+ * IMPORTANT — 값이 없는 행은 **계산에서 뺀다.** `?? 0`으로 메우면 0이 최소가 되어 나머지
+ * 막대가 전부 짧아지고, 그것은 "부채비율 0%인 회사가 있다"고 그리는 것과 같은 잘못이다
+ * (frontend.md). `valueOf`가 `Object.hasOwn`으로 이미 갈라 준다.
+ */
+const columnRanges = computed(() => {
+  const ranges = new Map<string, { min: number; max: number }>()
+  for (const indicator of indicatorColumns.value) {
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+    for (const row of props.result.rows) {
+      const value = valueOf(row, indicator.code)
+      if (value === null) {
+        continue
+      }
+      min = Math.min(min, value)
+      max = Math.max(max, value)
+    }
+    if (Number.isFinite(min) && Number.isFinite(max)) {
+      ranges.set(indicator.code, { min, max })
+    }
+  }
+  return ranges
+})
+
+/**
+ * 막대의 폭(%). 값이 없거나 컬럼이 상수면 그리지 않는다.
+ *
+ * 색을 유불리로 칠하지 않는 이유가 있다. 값 옆에는 이미 방향 마커(▲▼)가 있어 어느 쪽이
+ * 유리한지 말하고 있고, 막대까지 색으로 판단을 얹으면 **PER이 큰 종목의 긴 막대가 붉게**
+ * 나오는 식이 되어 크기와 유불리 두 가지를 한 그래픽이 뒤섞어 말하게 된다. 막대는 크기만
+ * 말한다.
+ */
+function barWidth(row: ScreeningRow, code: string): number | null {
+  const value = valueOf(row, code)
+  const range = columnRanges.value.get(code)
+  if (value === null || range === undefined || range.max === range.min) {
+    return null
+  }
+  // 최솟값도 흔적은 남긴다. 0%면 "값이 없다"와 구별되지 않는다.
+  return 4 + ((value - range.min) / (range.max - range.min)) * 96
+}
 </script>
 
 <template>
@@ -186,13 +234,27 @@ function percentileOf(code: string) {
           :interpretation="indicator.interpretation"
         />
       </template>
+      <!--
+        값과 막대를 한 상자에 묶는다. 셀이 넓어(min-width 11rem) 막대를 셀 폭에 그대로 두면
+        오른쪽 끝의 숫자와 왼쪽 끝의 막대가 떨어져, 막대가 옆 컬럼 것처럼 보인다.
+      -->
       <template #body="{ data }: { data: ScreeningRow }">
-        <span
-          class="tabular"
-          :class="{ 'result-table__missing': valueOf(data, indicator.code) === null }"
-          :title="valueOf(data, indicator.code) === null ? RESULT_LABELS.notCalculated : undefined"
-        >
-          {{ formatIndicatorValue(valueOf(data, indicator.code), indicator.unit, indicator.decimalScale) }}
+        <span class="result-table__cell">
+          <span
+            class="tabular"
+            :class="{ 'result-table__missing': valueOf(data, indicator.code) === null }"
+            :title="valueOf(data, indicator.code) === null ? RESULT_LABELS.notCalculated : undefined"
+          >
+            {{ formatIndicatorValue(valueOf(data, indicator.code), indicator.unit, indicator.decimalScale) }}
+          </span>
+          <!-- 값이 없는 칸에는 막대가 없다. 있으면 0인 것으로 읽힌다. -->
+          <span
+            v-if="barWidth(data, indicator.code) !== null"
+            class="result-table__bar"
+            aria-hidden="true"
+          >
+            <span class="result-table__bar-fill" :style="{ width: `${barWidth(data, indicator.code)}%` }" />
+          </span>
         </span>
       </template>
     </Column>
@@ -212,13 +274,40 @@ function percentileOf(code: string) {
 
 <style scoped>
 .result-table__search {
-  width: 18rem;
+  width: 15rem;
   max-width: 100%;
 }
 
+/* 티커·시장은 3순위다. 종목명과 같은 밝기면 무엇을 먼저 읽어야 하는지 알 수 없다. */
 .result-table__sub {
-  font-size: 0.75rem;
-  color: var(--p-text-muted-color);
+  font-size: var(--app-text-2xs);
+  color: var(--p-surface-500);
+}
+
+/*
+ * 값의 상대 크기를 셀 안에서 말한다. 표 아래에 별도 차트를 두지 않는 이유는, 훑어보는
+ * 동안 눈이 표를 떠나면 안 되기 때문이다. 값 자체는 그대로 있고 막대는 배경에 가깝다 —
+ * 숫자를 읽는 것을 방해하면 안 된다.
+ */
+.result-table__cell {
+  display: inline-block;
+  min-width: 4.5rem;
+  text-align: right;
+}
+
+.result-table__bar {
+  display: block;
+  height: 2px;
+  margin-top: 3px;
+  border-radius: 1px;
+  background: var(--p-surface-800);
+}
+
+.result-table__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--p-primary-color) 55%, transparent);
 }
 
 .result-table__missing {
@@ -273,5 +362,53 @@ function percentileOf(code: string) {
  */
 .result-table :deep(.p-datatable-tbody > tr:hover > .p-datatable-frozen-column) {
   background: var(--p-surface-800);
+}
+
+/* ------------------------------------------------------------------------
+ * 밀도.
+ *
+ * 행 56px에 본문 15px이었다. 1000px 높이에 열 행이 들어갔고, 139종목을 훑는 데 열네 번을
+ * 스크롤해야 했다. 본문 12px·머리글 11px·행 `--app-row-height`로 내리면 스무 행이 넘는다.
+ * preset의 `datatable` 패딩과 짝이라 한쪽만 바꾸면 행 높이가 패딩에 붙들린다.
+ * ------------------------------------------------------------------------ */
+.result-table :deep(.p-datatable-tbody > tr > td) {
+  height: var(--app-row-height);
+  font-size: var(--app-text-xs);
+}
+
+.result-table :deep(.p-datatable-thead > tr > th) {
+  font-size: var(--app-text-2xs);
+}
+
+.result-table :deep(.p-datatable-column-title) {
+  font-size: var(--app-text-2xs);
+  letter-spacing: 0.02em;
+}
+
+/*
+ * 정렬 아이콘은 **활성 컬럼과 hover에서만** 보인다.
+ *
+ * 머리글 하나에 글리프가 넷이었다(라벨 + 방향 ▲▼ + 도움말 ⓘ + 정렬 ↑↓). 컬럼이 여덟이면
+ * 서른 개가 넘는 기호가 늘 떠 있어 정작 지표 이름이 안 읽혔다. 정렬은 누를 때 알면 되는
+ * 것이고, 지금 무엇으로 정렬됐는지만 상시로 보이면 된다.
+ *
+ * `visibility`가 아니라 `opacity`인 이유는 자리를 유지하기 위해서다 — 사라지면 hover마다
+ * 머리글 폭이 흔들린다.
+ */
+.result-table :deep(th .p-datatable-sort-icon) {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.result-table :deep(th:hover .p-datatable-sort-icon),
+.result-table :deep(th:focus-within .p-datatable-sort-icon),
+.result-table :deep(th[aria-sort]:not([aria-sort='none']) .p-datatable-sort-icon) {
+  opacity: 1;
+}
+
+/* 페이지네이터도 표의 일부다. 여기만 커지면 표가 작아 보이는 것이 아니라 어색해 보인다. */
+.result-table :deep(.p-paginator) {
+  font-size: var(--app-text-2xs);
+  padding: 0.25rem 0.5rem;
 }
 </style>

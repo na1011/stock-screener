@@ -87,28 +87,41 @@ const hasHelp = computed(() => Boolean(props.description) || Boolean(props.inter
 }
 
 .indicator-label__marker {
-  font-size: 0.75rem;
+  font-size: 0.625rem;
   color: var(--p-text-muted-color);
   cursor: help;
 }
 
+/*
+ * 표 머리글에 컬럼마다 하나씩 붙는다. 기본 크기로 두면 여덟 컬럼에서 도움말 버튼이 지표
+ * 이름보다 먼저 눈에 들어온다 — 늘 필요한 것이 아니라 한 번 읽고 마는 것이다.
+ */
 .indicator-label__help {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  opacity: 0.55;
+}
+
+.indicator-label__help:hover {
+  opacity: 1;
+}
+
+.indicator-label__help :deep(.p-button-icon) {
+  font-size: var(--app-text-2xs);
 }
 
 .indicator-help {
-  max-width: 22rem;
+  max-width: 20rem;
 }
 
 .indicator-help__title {
-  font-size: 0.9375rem;
-  margin: 0 0 0.5rem;
+  font-size: var(--app-text-md);
+  margin: 0 0 0.375rem;
 }
 
 .indicator-help__text {
-  margin: 0 0 0.5rem;
-  font-size: 0.875rem;
+  margin: 0 0 0.375rem;
+  font-size: var(--app-text-xs);
   line-height: 1.5;
 }
 
@@ -118,7 +131,7 @@ const hasHelp = computed(() => Boolean(props.description) || Boolean(props.inter
 
 .indicator-help__direction {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-2xs);
   font-weight: 600;
 }
 </style>

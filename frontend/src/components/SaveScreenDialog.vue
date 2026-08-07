@@ -179,7 +179,7 @@ async function save(): Promise<void> {
 }
 
 .save-dialog__field label {
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
 }
 
@@ -190,7 +190,7 @@ async function save(): Promise<void> {
 
 .save-dialog__summary {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
 }
 </style>

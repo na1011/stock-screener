@@ -120,14 +120,14 @@ async function retryProbe(): Promise<void> {
 }
 
 .login__title {
-  font-size: 1.375rem;
+  font-size: var(--app-text-xl);
   letter-spacing: -0.01em;
   margin: 0 0 0.5rem;
 }
 
 .login__subtitle {
   color: var(--p-text-muted-color);
-  font-size: 0.875rem;
+  font-size: var(--app-text-md);
   line-height: 1.6;
   margin: 0 0 1.75rem;
 }
@@ -138,7 +138,7 @@ async function retryProbe(): Promise<void> {
 }
 
 .login__detail {
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   opacity: 0.85;
   margin-top: 0.25rem;
 }
@@ -149,7 +149,7 @@ async function retryProbe(): Promise<void> {
 
 .login__note {
   color: var(--p-text-muted-color);
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   margin-top: 1.5rem;
 }
 </style>

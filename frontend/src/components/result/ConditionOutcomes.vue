@@ -101,18 +101,18 @@ const items = computed(() =>
   display: flex;
   align-items: baseline;
   gap: 0.375rem;
-  font-size: 0.9375rem;
+  font-size: var(--app-text-md);
 }
 
 .outcomes__total-label {
   color: var(--p-text-muted-color);
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
 }
 
 .outcomes__total-max,
 .outcomes__total-ratio {
   color: var(--p-text-muted-color);
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
 }
 
 .outcomes__list {
@@ -129,7 +129,7 @@ const items = computed(() =>
   grid-template-columns: 7.5rem 1fr auto auto;
   gap: 0.75rem;
   align-items: center;
-  font-size: 0.875rem;
+  font-size: var(--app-text-md);
 }
 
 .outcomes__status {
@@ -138,19 +138,19 @@ const items = computed(() =>
 
 .outcomes__status--absent {
   color: var(--p-text-muted-color);
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
 }
 
 .outcomes__actual,
 .outcomes__score {
   color: var(--p-text-muted-color);
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   white-space: nowrap;
 }
 
 .outcomes__note {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
 }
 

@@ -47,6 +47,9 @@ const settings = ref<InstanceType<typeof Popover> | null>(null)
 /** 지금 팝오버로 고치는 중인 조건의 key. 칩의 눌린 상태가 이 값을 본다. */
 const editingKey = ref<number | null>(null)
 
+/** 지표 목록이 닫히면 열어 줄 조건. `openPendingEditor`의 주석에 이유가 있다. */
+const pendingEditKey = ref<number | null>(null)
+
 const editing = computed(
   () => draft.conditions.find((it) => it.key === editingKey.value) ?? null,
 )
@@ -76,19 +79,42 @@ onMounted(() => {
   void catalog.ensureCatalog()
 })
 
+/**
+ * 칩을 눌렀을 때.
+ *
+ * IMPORTANT — 열려 있는 팝오버를 닫고 곧바로 다시 여는 것은 **하지 않는다.** Popover 하나를
+ * 여러 칩이 돌려 쓰는데, `hide()` 직후 같은 틱에 `show()`를 부르면 나가는 트랜지션이 컨테이너를
+ * 걷어내는 중이라 `offsetHeight`를 null에서 읽고 죽는다(실측). 대신 "다음에 열 칩"을 적어 두고
+ * 실제로 닫혔다는 신호(`@hide`)를 기다린다.
+ */
+// 읽기 전용 화면에서도 연다 — 조건의 뜻과 지표 해설은 볼 수 있어야 한다. 편집 컨트롤만 잠긴다.
 function openEditor(event: Event, key: number): void {
-  if (readonly.value && draft.conditions.length === 0) {
+  /**
+   * IMPORTANT — 기준 요소를 **지금** 붙잡는다. 브라우저는 디스패치가 끝나면
+   * `event.currentTarget`을 null로 되돌리므로, `nextTick` 뒤에 Popover가 그것을 읽으면
+   * null에서 `offsetHeight`를 읽고 죽는다. `.click()`으로 만든 합성 이벤트에서 특히 그렇다.
+   */
+  const anchor = (event.currentTarget ?? event.target) as HTMLElement | null
+
+  if (editingKey.value === key) {
+    closeEditor()
     return
   }
-  // 다른 칩이 열려 있으면 먼저 닫는다. Popover 하나를 돌려 쓰므로 위치가 갱신되어야 한다.
-  editor.value?.hide()
+  if (editingKey.value !== null) {
+    pendingEditKey.value = key
+    editor.value?.hide()
+    return
+  }
   editingKey.value = key
-  void nextTick(() => editor.value?.show(event))
+  void nextTick(() => {
+    if (anchor !== null) {
+      editor.value?.show(event, anchor)
+    }
+  })
 }
 
 function closeEditor(): void {
   editor.value?.hide()
-  editingKey.value = null
 }
 
 function openPicker(event: Event): void {
@@ -102,20 +128,47 @@ function openPicker(event: Event): void {
  * 고른 다음 다시 칩을 눌러야 값을 넣을 수 있으면 클릭이 하나 더 늘고, 그 사이에 "값 필요"
  * 상태의 칩만 남아 무엇을 해야 하는지 모르게 된다.
  */
-async function pickIndicator(code: string): Promise<void> {
-  picker.value?.hide()
+/**
+ * 지표를 고르면 조건이 생기고 목록이 닫힌다. 편집기는 **목록이 완전히 닫힌 뒤에** 연다.
+ *
+ * IMPORTANT — 둘을 같은 틱에 처리하면 편집기가 열리자마자 사라진다. PrimeVue의 Popover는
+ * 바깥 클릭을 document에서 듣는데, 목록을 닫은 그 클릭이 아직 전파 중이라 새로 열린 편집기가
+ * 자기 "바깥 클릭"으로 받는다. `nextTick`으로는 부족했고(실제로 그렇게 안 열렸다), 목록이
+ * 스스로 닫혔다고 알리는 `@hide`가 유일하게 확실한 시점이다.
+ */
+function pickIndicator(code: string): void {
   draft.addCondition(code)
   const added = draft.conditions[draft.conditions.length - 1]
-  if (added === undefined) {
+  pendingEditKey.value = added?.key ?? null
+  picker.value?.hide()
+}
+
+function onEditorHidden(): void {
+  editingKey.value = null
+  void openPendingEditor()
+}
+
+/**
+ * PrimeVue 오버레이가 완전히 걷힐 때까지.
+ *
+ * `@hide`는 트랜지션이 **시작될 때** 나오고, 바깥 클릭을 듣는 document 리스너는 그 뒤에
+ * 걷힌다. 그 사이에 새 팝오버를 열면 방금 그 클릭이 새 팝오버의 "바깥 클릭"으로 잡혀 곧바로
+ * 닫힌다. nextTick으로는 넘길 수 없는 구간이라(실측) 트랜지션보다 넉넉한 값을 둔다.
+ */
+const OVERLAY_TEARDOWN_MS = 160
+
+async function openPendingEditor(): Promise<void> {
+  const key = pendingEditKey.value
+  pendingEditKey.value = null
+  if (key === null) {
     return
   }
   await nextTick()
-  const chip = document.querySelector<HTMLElement>(`[data-chip-key="${added.key}"]`)
-  if (chip) {
-    editingKey.value = added.key
-    await nextTick()
-    editor.value?.show({ currentTarget: chip, target: chip } as unknown as Event)
-  }
+  // 칩을 **실제로 누른다.** 가짜 이벤트로 `show()`를 부르면 위치 기준이 없다(브라우저가
+  // 디스패치 후 currentTarget을 비운다). 사용자가 누른 것과 같은 경로가 확실하다.
+  setTimeout(() => {
+    document.querySelector<HTMLElement>(`[data-chip-key="${key}"]`)?.click()
+  }, OVERLAY_TEARDOWN_MS)
 }
 
 /**
@@ -222,7 +275,8 @@ function startFresh(): void {
       값을 채우지 않은 조건 {{ incompleteCount }}개는 실행에서 제외됩니다.
     </p>
 
-    <Popover ref="editor" @hide="editingKey = null">
+    <!-- 닫힌 뒤에야 다음 칩을 연다. 이유는 `openEditor` 주석에 있다. -->
+    <Popover ref="editor" @hide="onEditorHidden">
       <ConditionEditor
         v-if="editing"
         :key="editing.key"
@@ -233,7 +287,7 @@ function startFresh(): void {
       />
     </Popover>
 
-    <Popover ref="picker">
+    <Popover ref="picker" @hide="openPendingEditor">
       <IndicatorPicker ref="pickerBody" @pick="pickIndicator" />
     </Popover>
 

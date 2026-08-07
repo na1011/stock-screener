@@ -19,7 +19,7 @@ import { RouterLink } from 'vue-router'
 }
 
 h1 {
-  font-size: 1.25rem;
+  font-size: var(--app-text-xl);
   letter-spacing: -0.01em;
   margin-bottom: 0.5rem;
 }

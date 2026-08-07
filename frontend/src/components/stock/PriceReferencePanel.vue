@@ -116,26 +116,26 @@ const zones = computed(() =>
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  font-size: 0.9375rem;
+  font-size: var(--app-text-md);
   margin: 0;
 }
 
 .price-reference__window,
 .price-reference__note,
 .price-reference__method {
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs);
   color: var(--p-text-muted-color);
 }
 
 .price-reference__disclaimer {
   margin: 0 0 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   line-height: 1.6;
 }
 
 .price-reference__last-close {
   margin: 0 0 0.75rem;
-  font-size: 0.875rem;
+  font-size: var(--app-text-md);
   display: flex;
   align-items: baseline;
   gap: 0.375rem;
@@ -144,7 +144,7 @@ const zones = computed(() =>
 
 .price-reference__insufficient {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--app-text-md);
   color: var(--p-text-muted-color);
 }
 
@@ -169,7 +169,7 @@ const zones = computed(() =>
 }
 
 .zone__meta {
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs);
   color: var(--p-text-muted-color);
 }
 

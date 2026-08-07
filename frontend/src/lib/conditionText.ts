@@ -58,7 +58,10 @@ export function summarizeDraftCondition(
   const tail = operatorLabel === null ? '' : ` ${operatorLabel}`
 
   if (condition.operandType === 'INDICATOR') {
-    const name = operandIndicator?.name ?? condition.operandIndicatorCode ?? '?'
+    if (condition.operandIndicatorCode === null) {
+      return indicator.name
+    }
+    const name = operandIndicator?.name ?? condition.operandIndicatorCode
     const multiplier = condition.multiplier
     // 배수 1은 적지 않는다. "SMA_200 × 1"은 정보를 더하지 않고 칩만 길어진다.
     const right =
@@ -66,9 +69,17 @@ export function summarizeDraftCondition(
     return `${indicator.name} ${right}${tail}`
   }
 
+  // 값을 아직 안 넣었으면 **지표 이름만** 낸다. `MISSING`(—)을 그대로 끼우면
+  // "RSI(14) — 이상"이 되어 마치 조건이 다 갖춰진 문장처럼 읽힌다. 무엇이 비었는지는
+  // 칩의 "값 필요" 배지가 말한다.
+  if (condition.value === null) {
+    return indicator.name
+  }
+
   if (condition.operator === 'BETWEEN') {
     const lower = formatEnteredNumber(condition.value, scale)
-    const upper = formatEnteredNumber(condition.upperBound, scale)
+    // 상한만 비어 있으면 하한까지는 보인다. 어디까지 넣었는지가 드러나야 한다.
+    const upper = condition.upperBound === null ? '?' : formatEnteredNumber(condition.upperBound, scale)
     return `${indicator.name} ${lower}~${upper}${unit}${tail}`
   }
 

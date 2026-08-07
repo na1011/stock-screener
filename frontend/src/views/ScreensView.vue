@@ -174,7 +174,7 @@ async function remove(id: number, name: string): Promise<void> {
 }
 
 .screens__title {
-  font-size: 1.25rem;
+  font-size: var(--app-text-xl);
   letter-spacing: -0.01em;
   margin: 0 0 1.5rem;
 }
@@ -184,7 +184,7 @@ async function remove(id: number, name: string): Promise<void> {
 }
 
 .screens__group-title {
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--p-text-muted-color);
@@ -194,7 +194,7 @@ async function remove(id: number, name: string): Promise<void> {
 .screens__group-note,
 .screens__empty {
   margin: 0 0 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
 }
 
@@ -238,7 +238,7 @@ async function remove(id: number, name: string): Promise<void> {
 
 .screen-item__description {
   margin: 0.25rem 0 0;
-  font-size: 0.8125rem;
+  font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
 }
 
