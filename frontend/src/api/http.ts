@@ -64,6 +64,24 @@ export function retentionWindow(problem: ApiProblem | null): RetentionWindow | n
   return typeof from === 'string' && typeof to === 'string' ? { from, to } : null
 }
 
+/**
+ * 조건 검증 오류가 함께 싣는, **몇 번째 조건이 문제인가**.
+ *
+ * IMPORTANT — 위 `retentionFrom`/`retentionTo`와 같은 종류의 위험이다. 서버는
+ * `ApiExceptions.ConditionValidationException`이 `with("conditionIndex", …)`로 문자열 키를
+ * 얹고 여기서는 인덱스 시그니처로 꺼낸다. 어긋나면 오류는 그대로 나되 **어느 조건이 문제인지만
+ * 조용히 사라진다** — 사용자는 조건 스무 개 중 무엇을 고쳐야 하는지 알 수 없게 된다.
+ *
+ * 이름의 정본은 서버이고 `wire-contract.json`이 둘을 묶는다.
+ */
+const CONDITION_INDEX = 'conditionIndex'
+
+/** @return 인덱스를 알 수 없으면 null. 그때는 어떤 칩도 붉게 칠하지 않는다. */
+export function conditionIndex(problem: ApiProblem | null): number | null {
+  const index = problem?.[CONDITION_INDEX]
+  return typeof index === 'number' && Number.isInteger(index) && index >= 0 ? index : null
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly problem: ApiProblem | null

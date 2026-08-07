@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 
@@ -21,11 +22,21 @@ public class IndicatorBandCodec {
     private static final TypeReference<List<IndicatorBand>> LIST_TYPE = new TypeReference<>() {
     };
 
-    private final ObjectMapper objectMapper;
-
-    public IndicatorBandCodec(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-    }
+    /**
+     * 애플리케이션의 {@code ObjectMapper} 빈을 <b>주입받지 않는다.</b>
+     *
+     * <p>이유가 둘이고 둘 다 실제 비용이다.
+     *
+     * <p>첫째, 이것은 <b>저장 형식</b>이지 API 형식이 아니다. 웹 응답의 Jackson 설정을 누가
+     * 바꾸면(명명 전략, null 처리 등) 이미 저장된 행의 형식과 새로 쓰는 행의 형식이 갈린다.
+     * 그때 증상은 예외가 아니라 <b>구간이 조용히 사라지는 것</b>이고, 화면은 "이 지표엔 구간이
+     * 없다"로 읽는다.
+     *
+     * <p>둘째, {@link IndicatorCatalog}는 평범한 JDBC 리더다. 그것이 Jackson 빈에 의존하면
+     * {@code @DataJpaTest} 슬라이스마다 {@code ObjectMapper}를 끌고 들어와야 한다
+     * ({@code PresetSynchronizerTest}가 실제로 그렇게 깨졌다).
+     */
+    private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
     /** 저장용 JSON 배열 문자열. 구간이 없으면 {@code []}. */
     public String toJson(List<IndicatorBand> bands) {

@@ -41,10 +41,10 @@ export type DraftOrigin =
 
 let nextKey = 1
 
-function emptyCondition(): DraftCondition {
+function emptyCondition(indicatorCode: string | null = null): DraftCondition {
   return {
     key: nextKey++,
-    indicatorCode: null,
+    indicatorCode,
     operator: 'GTE',
     operandType: 'LITERAL',
     value: null,
@@ -57,7 +57,14 @@ function emptyCondition(): DraftCondition {
 
 export const useScreenDraftStore = defineStore('screenDraft', () => {
   const origin = ref<DraftOrigin>({ kind: 'custom' })
-  const conditions = ref<DraftCondition[]>([emptyCondition()])
+  /**
+   * 빈 목록으로 시작한다.
+   *
+   * 예전에는 빈 조건 하나를 미리 넣어 두었다. 세로 행 편집기에서는 "여기에 채우세요"라는
+   * 안내였지만, 칩 바에서는 지표조차 없는 칩이 하나 떠 있는 것이 되어 무엇을 눌러야 할지
+   * 오히려 헷갈린다. 비어 있으면 `+ 조건` 하나만 보이고 그것이 유일한 다음 동작이다.
+   */
+  const conditions = ref<DraftCondition[]>([])
   const evaluationMode = ref<EvaluationMode>('FILTER')
   const universeCode = ref<string | null>(null)
   const asOf = ref<IsoDate | null>(null)
@@ -111,19 +118,46 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     dirty.value = true
   }
 
-  function addCondition(): void {
+  /**
+   * @param indicatorCode 지표를 이미 고른 채로 추가한다. 칩 바는 지표 선택이 먼저이므로
+   *                      빈 조건을 만든 뒤 곧바로 지표를 넣는 왕복이 필요 없다.
+   */
+  function addCondition(indicatorCode: string | null = null): void {
     if (!canAddCondition.value) {
       return
     }
-    conditions.value.push(emptyCondition())
+    conditions.value.push(emptyCondition(indicatorCode))
     markDirty()
   }
 
+  /**
+   * 방금 지운 조건과 그것이 있던 자리.
+   *
+   * 삭제에 되돌리기가 없었다. 조건 하나를 잘못 지우면 지표부터 값까지 다시 넣어야 했고,
+   * 그것이 확인 대화상자를 매번 띄우는 것보다 나쁜 이유는 없다 — 그래서 묻지 않고
+   * 되돌릴 수 있게 한다. 자리(index)까지 기억하는 이유는 되돌린 조건이 맨 뒤로 가면
+   * 사용자가 만든 순서가 조용히 바뀌기 때문이다.
+   */
+  const lastRemoved = ref<{ condition: DraftCondition; index: number } | null>(null)
+
   function removeCondition(key: number): void {
-    conditions.value = conditions.value.filter((it) => it.key !== key)
-    if (conditions.value.length === 0) {
-      conditions.value.push(emptyCondition())
+    const index = conditions.value.findIndex((it) => it.key === key)
+    if (index < 0) {
+      return
     }
+    lastRemoved.value = { condition: conditions.value[index] as DraftCondition, index }
+    conditions.value.splice(index, 1)
+    markDirty()
+  }
+
+  /** 되돌릴 것이 없으면 아무 일도 하지 않는다. 버퍼는 한 번만 쓴다. */
+  function undoRemove(): void {
+    const removed = lastRemoved.value
+    if (removed === null) {
+      return
+    }
+    conditions.value.splice(Math.min(removed.index, conditions.value.length), 0, removed.condition)
+    lastRemoved.value = null
     markDirty()
   }
 
@@ -140,10 +174,13 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
   /** 처음부터 새로 만든다. */
   function reset(): void {
     origin.value = { kind: 'custom' }
-    conditions.value = [emptyCondition()]
+    conditions.value = []
     evaluationMode.value = 'FILTER'
     editable.value = true
     dirty.value = false
+    // 새로 시작하면 이전 화면에서 지운 조건을 되돌릴 수 있어서는 안 된다. 지금 편집 중인
+    // 것과 무관한 조건이 튀어나온다.
+    lastRemoved.value = null
   }
 
   /** 저장된 화면·프리셋을 편집기로 불러온다. 유니버스·기준일 선택은 유지한다. */
@@ -159,10 +196,8 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     evaluationMode.value = screen.evaluationMode
     universeCode.value = screen.universeCode
     conditions.value = (screen.conditions?.conditions ?? []).map(fromPayload)
-    if (conditions.value.length === 0) {
-      conditions.value = [emptyCondition()]
-    }
     dirty.value = false
+    lastRemoved.value = null
   }
 
   /**
@@ -220,9 +255,11 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     canAddCondition,
     completeConditions,
     canRun,
+    lastRemoved,
     markDirty,
     addCondition,
     removeCondition,
+    undoRemove,
     setEvaluationMode,
     reset,
     loadFrom,

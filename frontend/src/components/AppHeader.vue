@@ -1,131 +1,50 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
-import Menu from 'primevue/menu'
-import type { MenuItem } from 'primevue/menuitem'
-import Popover from 'primevue/popover'
-import { computed, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink } from 'vue-router'
 
 import BrandMark from '@/components/BrandMark.vue'
-import StockSearch from '@/components/StockSearch.vue'
-import { useBreakpoint } from '@/composables/useBreakpoint'
 import { APP_NAME } from '@/lib/appInfo'
-import { useAuthStore } from '@/stores/auth'
-
-const auth = useAuthStore()
-const route = useRoute()
-const { isCompact } = useBreakpoint()
-
-const userMenu = ref<InstanceType<typeof Menu> | null>(null)
-const searchPanel = ref<InstanceType<typeof Popover> | null>(null)
 
 /**
- * 관리자 항목은 권한이 있을 때만 목록에 들어간다.
+ * 좁은 폭(≤900px)에서만 나오는 상단 바.
  *
- * 비활성으로 보여주지 않는 이유는 frontend.md에 있다 — 관리 기능이 보이는 것만으로도
- * 운영 구조가 드러난다. 지인이 쓰는 서비스라도 계정별 권한 경계는 유지한다.
+ * 넓은 폭에서는 좌측 레일이 브랜드·검색·이동·사용자 메뉴를 전부 들고 있어 이 바가 없다.
+ * 세로 공간이 결과 행 수이기 때문이다.
+ *
+ * IMPORTANT — 여기에 검색을 두지 않는다. 레일(서랍)이 이미 갖고 있어서 두 벌이 함께 살아
+ * 있게 되고, `StockSearch`는 AbortController로 진행 중인 요청을 관리하는 컴포넌트다.
+ * 같은 것이 둘 떠 있으면 어느 쪽 결과가 보이는지가 포커스에 따라 갈린다.
  */
-const userMenuItems = computed<MenuItem[]>(() => {
-  const items: MenuItem[] = []
-  if (auth.isAdmin) {
-    items.push({
-      label: '관리자',
-      icon: 'pi pi-cog',
-      // Phase 6에서 화면이 붙는다. 지금은 항목이 권한에 따라만 나타나는지를 보이는 자리다.
-      disabled: true,
-    })
-    items.push({ separator: true })
-  }
-  items.push({ label: '로그아웃', icon: 'pi pi-sign-out', command: () => auth.signOut() })
-  return items
-})
-
-const navItems = [
-  { to: '/', label: '스크리너', icon: 'pi pi-filter' },
-  { to: '/screens', label: '내 화면', icon: 'pi pi-bookmark' },
-]
-
-function isActive(to: string): boolean {
-  return to === '/' ? route.path === '/' : route.path.startsWith(to)
-}
+defineEmits<{ open: [] }>()
 </script>
 
 <template>
   <header class="app-header">
+    <Button
+      type="button"
+      text
+      size="small"
+      icon="pi pi-bars"
+      aria-label="메뉴 열기"
+      @click="$emit('open')"
+    />
     <RouterLink to="/" class="app-header__brand" :aria-label="APP_NAME">
-      <BrandMark />
+      <BrandMark size="1rem" />
       <span class="app-header__wordmark">{{ APP_NAME }}</span>
     </RouterLink>
-
-    <nav class="app-header__nav" aria-label="주요 화면">
-      <RouterLink
-        v-for="item in navItems"
-        :key="item.to"
-        :to="item.to"
-        class="app-header__link"
-        :class="{ 'app-header__link--active': isActive(item.to) }"
-      >
-        <i :class="item.icon" aria-hidden="true" />
-        <span class="app-header__link-label">{{ item.label }}</span>
-      </RouterLink>
-    </nav>
-
-    <!--
-      좁은 폭에서는 검색창을 줄이지 않고 버튼 뒤로 접는다. 예전에는 8rem으로 눌러 두었는데
-      그 폭에서는 종목명이 두 글자도 보이지 않아 쓸 수 없었다. 컴포넌트를 갈아 끼우므로
-      CSS로 감추는 것과 달리 좁은 폭에서 두 벌이 함께 살아 있지 않다.
-    -->
-    <div class="app-header__search">
-      <template v-if="isCompact">
-        <Button
-          type="button"
-          text
-          icon="pi pi-search"
-          aria-label="종목 검색"
-          aria-haspopup="true"
-          @click="searchPanel?.toggle($event)"
-        />
-        <Popover ref="searchPanel" class="app-header__search-panel">
-          <StockSearch class="app-header__search-field" />
-        </Popover>
-      </template>
-      <StockSearch v-else class="app-header__search-field" />
-    </div>
-
-    <div class="app-header__user">
-      <Button
-        type="button"
-        text
-        size="small"
-        icon="pi pi-user"
-        :label="auth.displayName"
-        aria-haspopup="true"
-        aria-controls="user-menu"
-        class="app-header__user-button"
-        @click="userMenu?.toggle($event)"
-      />
-      <Menu id="user-menu" ref="userMenu" :model="userMenuItems" :popup="true" />
-    </div>
   </header>
 </template>
 
 <style scoped>
-/*
- * IMPORTANT — 이 줄의 자식은 전부 `flex: 0 0 auto`이거나 `min-width: 0`이어야 한다.
- * 예전에는 브랜드(nowrap)·nav(flex:1)·검색(14rem)·사용자 이름(12rem)이 전부 내용 기반
- * 최소 크기를 그대로 들고 있어서, 641~899px 구간에서 헤더가 뷰포트를 밀어내고 문서 전체에
- * 가로 스크롤이 생겼다. sticky 헤더는 그 스크롤을 따라가지 않아 오른쪽에서 잘려 나갔다.
- * 그 구간은 자동 검사가 하나도 덮지 않는다(TODO §1 ⑮).
- */
 .app-header {
   position: sticky;
   top: 0;
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
   height: var(--app-header-height);
-  padding: 0 var(--app-gutter);
+  padding: 0 0.5rem;
   border-bottom: 1px solid var(--p-content-border-color);
   background: color-mix(in srgb, var(--p-content-background) 86%, transparent);
   backdrop-filter: blur(12px);
@@ -134,103 +53,27 @@ function isActive(to: string): boolean {
 .app-header__brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  flex: 0 0 auto;
+  gap: 0.375rem;
+  min-width: 0;
   color: var(--p-text-color);
   font-weight: 700;
-  font-size: 0.9375rem;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
+  font-size: var(--app-text-sm);
 }
 
 .app-header__brand:hover {
   text-decoration: none;
 }
 
-.app-header__nav {
-  display: flex;
-  align-items: stretch;
-  align-self: stretch;
-  gap: 0.125rem;
-  flex: 0 0 auto;
-  margin-inline-start: 0.5rem;
-}
-
-/* 활성 표시가 배경이 아니라 밑줄인 이유는 표와 톤을 맞추기 위해서다. 이 화면의 구조는
-   면이 아니라 선으로 나뉜다. */
-.app-header__link {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0 0.625rem;
-  color: var(--p-text-muted-color);
-  font-size: 0.875rem;
-  white-space: nowrap;
-}
-
-.app-header__link:hover {
-  color: var(--p-text-color);
-  text-decoration: none;
-}
-
-.app-header__link--active {
-  color: var(--p-text-color);
-}
-
-.app-header__link--active::after {
-  content: '';
-  position: absolute;
-  inset-inline: 0.5rem;
-  bottom: 0;
-  height: 2px;
-  border-radius: 1px 1px 0 0;
-  background: var(--p-primary-color);
-}
-
-/* 남는 자리를 검색이 먹되, 좁아지면 먼저 줄어드는 것도 검색이다. */
-.app-header__search {
-  display: flex;
-  justify-content: flex-end;
-  flex: 1 1 auto;
-  min-width: 0;
-  margin-inline-start: auto;
-}
-
-.app-header__search-field {
-  width: 100%;
-  max-width: 18rem;
-}
-
-.app-header__search-panel .app-header__search-field {
-  max-width: none;
-  width: 16rem;
-}
-
-.app-header__user {
-  flex: 0 0 auto;
-}
-
-.app-header__user-button :deep(.p-button-label) {
-  max-width: 10rem;
+.app-header__wordmark {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 폭을 이름과 라벨이 먹으면 정작 이동이 좁아진다. 아이콘만 남긴다. */
+/* 아주 좁으면 워드마크를 접는다. 로고만으로도 홈으로 가는 길은 남는다. */
 @media (max-width: 640px) {
-  .app-header__wordmark,
-  .app-header__link-label {
+  .app-header__wordmark {
     display: none;
-  }
-
-  .app-header__user-button :deep(.p-button-label) {
-    display: none;
-  }
-
-  .app-header__nav {
-    margin-inline-start: 0.25rem;
   }
 }
 </style>

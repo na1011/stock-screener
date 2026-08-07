@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, shallowRef } from 'vue'
 
 import { api } from '@/api/endpoints'
-import { ProblemType, retentionWindow } from '@/api/http'
+import { ProblemType, conditionIndex, retentionWindow } from '@/api/http'
 import type { RetentionWindow } from '@/api/http'
 import type { ScreeningRequest } from '@/api/types'
 import { useAsync } from '@/composables/useAsync'
@@ -10,6 +10,14 @@ import { useAsync } from '@/composables/useAsync'
 export const useScreeningStore = defineStore('screening', () => {
   const pending = shallowRef<ScreeningRequest | null>(null)
   const retention = shallowRef<RetentionWindow | null>(null)
+  /**
+   * 서버가 거부한 조건의 자리.
+   *
+   * 서버는 이 값을 **처음부터 응답에 싣고 있었는데 화면이 쓰지 않았다.** 그래서 조건이 스무
+   * 개여도 오류 문구만 나오고 어느 것이 문제인지는 사용자가 찾아야 했다. 조건 편집기가
+   * 이 값으로 해당 칩을 표시한다.
+   */
+  const invalidIndex = shallowRef<number | null>(null)
 
   const request = useAsync((signal) => {
     const body = pending.value
@@ -26,8 +34,11 @@ export const useScreeningStore = defineStore('screening', () => {
 
   async function run(body: ScreeningRequest): Promise<void> {
     pending.value = body
+    // 이전 실행에서 문제였던 조건이 계속 붉게 남으면, 고친 뒤에도 잘못된 것으로 읽힌다.
+    invalidIndex.value = null
     await request.run()
     captureRetention()
+    captureInvalidIndex()
   }
 
   /**
@@ -48,6 +59,24 @@ export const useScreeningStore = defineStore('screening', () => {
     }
   }
 
+  /**
+   * 조건 오류에서 문제 조건의 자리를 꺼내 둔다.
+   *
+   * 두 종류를 함께 본다 — 조건 자체가 성립하지 않는 경우(`invalid-condition`)와 지표가 없는
+   * 경우(`unknown-indicator`)다. 둘 다 서버가 `conditionIndex`를 싣고, 사용자가 해야 할 일은
+   * 같다(그 조건을 고친다).
+   */
+  function captureInvalidIndex(): void {
+    const error = request.error.value
+    if (error === null) {
+      return
+    }
+    if (!error.is(ProblemType.INVALID_CONDITION) && !error.is(ProblemType.UNKNOWN_INDICATOR)) {
+      return
+    }
+    invalidIndex.value = conditionIndex(error.problem)
+  }
+
   return {
     state: request.state,
     error: request.error,
@@ -55,6 +84,7 @@ export const useScreeningStore = defineStore('screening', () => {
     result,
     hasResult,
     retention,
+    invalidIndex,
     run,
   }
 })

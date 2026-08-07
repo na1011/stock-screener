@@ -1,0 +1,321 @@
+<script setup lang="ts">
+import Button from 'primevue/button'
+import Popover from 'primevue/popover'
+import { useConfirm } from 'primevue/useconfirm'
+import { useToast } from 'primevue/usetoast'
+import { computed, nextTick, onMounted, ref } from 'vue'
+
+import { MAX_CONDITIONS } from '@/api/limits'
+import AsyncPanel from '@/components/AsyncPanel.vue'
+import ConditionChip from '@/components/condition/ConditionChip.vue'
+import ConditionEditor from '@/components/condition/ConditionEditor.vue'
+import IndicatorPicker from '@/components/condition/IndicatorPicker.vue'
+import ScreenSettingsPopover from '@/components/condition/ScreenSettingsPopover.vue'
+import { evaluationModeLabels } from '@/lib/evaluationMode'
+import { ALL_UNIVERSES_LABEL } from '@/lib/universe'
+import { useCatalogStore } from '@/stores/catalog'
+import { useScreenDraftStore } from '@/stores/screenDraft'
+
+/**
+ * 조건 전부를 한 줄(넘치면 두 줄)로.
+ *
+ * 예전 `ConditionBuilder` + `ConditionRow`를 대체한다. 그쪽은 조건 하나가 세로 90px에 컨트롤
+ * 여섯 개였고, 조건 다섯 개면 화면 절반이 편집기였다. 여기서는 **읽기가 칩, 고치기가 팝오버**다.
+ *
+ * 이 컴포넌트가 해소하는 배려 문제 넷(전부 예전 코드에 실재했다):
+ *   1. 미완성 조건이 조용히 버려졌다 → 칩이 점선 + "값 필요", 실행 버튼 툴팁이 개수를 말한다
+ *   2. 삭제에 되돌리기가 없었다 → 토스트의 `실행취소`
+ *   3. "새 조건"이 확인 없이 전부 날렸다 → 조건이 둘 이상이면 확인을 받는다
+ *   4. 서버가 준 `conditionIndex`를 쓰지 않았다 → 그 칩을 붉게 칠하고 팝오버를 연다
+ */
+const props = defineProps<{
+  retention?: { from: string; to: string } | null
+  /** 서버가 거부한 조건의 인덱스. `invalid-condition` 문제의 `conditionIndex`. */
+  invalidIndex?: number | null
+}>()
+
+const catalog = useCatalogStore()
+const draft = useScreenDraftStore()
+const confirm = useConfirm()
+const toast = useToast()
+
+const editor = ref<InstanceType<typeof Popover> | null>(null)
+const picker = ref<InstanceType<typeof Popover> | null>(null)
+const pickerBody = ref<InstanceType<typeof IndicatorPicker> | null>(null)
+const settings = ref<InstanceType<typeof Popover> | null>(null)
+
+/** 지금 팝오버로 고치는 중인 조건의 key. 칩의 눌린 상태가 이 값을 본다. */
+const editingKey = ref<number | null>(null)
+
+const editing = computed(
+  () => draft.conditions.find((it) => it.key === editingKey.value) ?? null,
+)
+
+const readonly = computed(() => draft.readOnly)
+
+const incompleteCount = computed(
+  () => draft.conditions.length - draft.completeConditions.length,
+)
+
+/**
+ * 설정 칩의 라벨. 접어 둔 것이 무엇으로 설정되어 있는지 여기서 답한다.
+ *
+ * 접기만 하고 요약을 남기지 않으면 사용자는 "이 결과가 코스피200만인지 전체인지"를 팝오버를
+ * 열어야 알 수 있다. 그러면 접은 이득이 사라진다.
+ */
+const settingsLabel = computed(() => {
+  const mode = evaluationModeLabels(draft.evaluationMode).short
+  const universe =
+    draft.universeCode === null
+      ? ALL_UNIVERSES_LABEL
+      : (catalog.universes.find((it) => it.code === draft.universeCode)?.name ?? draft.universeCode)
+  return draft.asOf === null ? `${universe} · ${mode}` : `${universe} · ${mode} · ${draft.asOf}`
+})
+
+onMounted(() => {
+  void catalog.ensureCatalog()
+})
+
+function openEditor(event: Event, key: number): void {
+  if (readonly.value && draft.conditions.length === 0) {
+    return
+  }
+  // 다른 칩이 열려 있으면 먼저 닫는다. Popover 하나를 돌려 쓰므로 위치가 갱신되어야 한다.
+  editor.value?.hide()
+  editingKey.value = key
+  void nextTick(() => editor.value?.show(event))
+}
+
+function closeEditor(): void {
+  editor.value?.hide()
+  editingKey.value = null
+}
+
+function openPicker(event: Event): void {
+  picker.value?.show(event)
+  void nextTick(() => void pickerBody.value?.focusSearch())
+}
+
+/**
+ * 지표를 고르면 조건이 생기고 **곧바로 편집기가 열린다.**
+ *
+ * 고른 다음 다시 칩을 눌러야 값을 넣을 수 있으면 클릭이 하나 더 늘고, 그 사이에 "값 필요"
+ * 상태의 칩만 남아 무엇을 해야 하는지 모르게 된다.
+ */
+async function pickIndicator(code: string): Promise<void> {
+  picker.value?.hide()
+  draft.addCondition(code)
+  const added = draft.conditions[draft.conditions.length - 1]
+  if (added === undefined) {
+    return
+  }
+  await nextTick()
+  const chip = document.querySelector<HTMLElement>(`[data-chip-key="${added.key}"]`)
+  if (chip) {
+    editingKey.value = added.key
+    await nextTick()
+    editor.value?.show({ currentTarget: chip, target: chip } as unknown as Event)
+  }
+}
+
+/**
+ * 삭제하고 되돌릴 기회를 남긴다.
+ *
+ * 조건 하나에 ConfirmDialog는 과하다 — 흔한 동작이고, 매번 막으면 확인 자체가 무의미해진다.
+ * 대신 되돌릴 수 있게 한다.
+ */
+function removeEditing(): void {
+  const target = editing.value
+  if (target === null) {
+    return
+  }
+  closeEditor()
+  draft.removeCondition(target.key)
+  toast.add({
+    severity: 'secondary',
+    summary: '조건을 삭제했습니다',
+    detail: '실행취소를 누르면 되돌아옵니다.',
+    group: 'undo-condition',
+    life: 6000,
+  })
+}
+
+/**
+ * 전부 지우는 것은 되돌리기로 감당할 수 없다. 여기서만 확인을 받는다.
+ *
+ * 조건이 하나뿐이면(=빈 조건 하나) 잃을 것이 없으므로 묻지 않는다. 의미 없는 확인이
+ * 쌓이면 사용자는 읽지 않고 누르게 된다.
+ */
+function startFresh(): void {
+  if (draft.conditions.length <= 1 && draft.completeConditions.length === 0) {
+    draft.reset()
+    return
+  }
+  confirm.require({
+    message: `조건 ${draft.conditions.length}개를 지우고 새로 시작합니다.`,
+    header: '새 조건으로 시작할까요?',
+    icon: 'pi pi-exclamation-triangle',
+    rejectProps: { label: '취소', severity: 'secondary', outlined: true, size: 'small' },
+    acceptProps: { label: '새로 시작', severity: 'danger', size: 'small' },
+    accept: () => draft.reset(),
+  })
+}
+</script>
+
+<template>
+  <AsyncPanel
+    :state="catalog.catalogState"
+    :error="catalog.catalogError"
+    :retry="catalog.retryCatalog"
+    panel="catalog"
+    :skeleton-rows="1"
+  >
+    <div class="bar">
+      <div class="bar__chips">
+        <ConditionChip
+          v-for="(condition, index) in draft.conditions"
+          :key="condition.key"
+          :data-chip-key="condition.key"
+          :condition="condition"
+          :active="editingKey === condition.key"
+          :invalid="props.invalidIndex === index"
+          :readonly="readonly"
+          @click="openEditor($event, condition.key)"
+        />
+
+        <Button
+          v-if="!readonly"
+          type="button"
+          size="small"
+          text
+          icon="pi pi-plus"
+          label="조건"
+          class="bar__add"
+          :disabled="!draft.canAddCondition"
+          :aria-label="`조건 추가 (${draft.conditions.length}/${MAX_CONDITIONS})`"
+          @click="openPicker"
+        />
+      </div>
+
+      <div class="bar__tail">
+        <!-- 설정은 조건이 아니다. 접어 두되 무엇으로 설정됐는지는 라벨이 말한다. -->
+        <button type="button" class="bar__settings" @click="settings?.toggle($event)">
+          <i class="pi pi-sliders-h" aria-hidden="true" />
+          <span class="bar__settings-label">{{ settingsLabel }}</span>
+        </button>
+
+        <Button
+          v-if="!readonly"
+          type="button"
+          size="small"
+          text
+          icon="pi pi-eraser"
+          label="새 조건"
+          @click="startFresh"
+        />
+      </div>
+    </div>
+
+    <!-- 미완성이 있으면 말로 알린다. 조용히 버리지 않는 것이 이 줄의 존재 이유다. -->
+    <p v-if="incompleteCount > 0 && !readonly" class="bar__incomplete">
+      <i class="pi pi-info-circle" aria-hidden="true" />
+      값을 채우지 않은 조건 {{ incompleteCount }}개는 실행에서 제외됩니다.
+    </p>
+
+    <Popover ref="editor" @hide="editingKey = null">
+      <ConditionEditor
+        v-if="editing"
+        :key="editing.key"
+        :condition="editing"
+        :readonly="readonly"
+        @remove="removeEditing"
+        @done="closeEditor"
+      />
+    </Popover>
+
+    <Popover ref="picker">
+      <IndicatorPicker ref="pickerBody" @pick="pickIndicator" />
+    </Popover>
+
+    <Popover ref="settings">
+      <ScreenSettingsPopover :retention="props.retention" />
+    </Popover>
+  </AsyncPanel>
+</template>
+
+<style scoped>
+.bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+/* 조건이 스무 개까지 늘어도 줄바꿈으로 흡수한다. 세로로 쌓이지 않는 것이 요점이다. */
+.bar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bar__add {
+  flex: 0 0 auto;
+}
+
+.bar__tail {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+
+.bar__settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 16rem;
+  min-height: 1.75rem;
+  padding: 0 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--p-border-radius-md);
+  background: transparent;
+  color: var(--p-text-muted-color);
+  font: inherit;
+  font-size: var(--app-text-2xs);
+  cursor: pointer;
+}
+
+.bar__settings:hover {
+  border-color: var(--p-content-border-color);
+  color: var(--p-text-color);
+}
+
+.bar__settings-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar__incomplete {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0.375rem 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--p-amber-300);
+}
+
+/* 좁아지면 설정·새 조건이 아래로 내려간다. 조건 자체가 먼저 자리를 갖는다. */
+@media (max-width: 900px) {
+  .bar {
+    flex-wrap: wrap;
+  }
+
+  .bar__tail {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+</style>

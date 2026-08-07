@@ -43,6 +43,14 @@
       "requestedAsOf",
       "retentionFrom",
       "retentionTo"
+    ],
+    "urn:stockscreener:invalid-condition": [
+      "indicatorCode",
+      "conditionIndex"
+    ],
+    "urn:stockscreener:unknown-indicator": [
+      "indicatorCode",
+      "conditionIndex"
     ]
   },
 

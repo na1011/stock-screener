@@ -29,6 +29,25 @@ export function formatNumber(value: number | null | undefined, decimalScale: num
   }).format(value)
 }
 
+/**
+ * 자릿수를 **채우지 않는** 서식. 사용자가 직접 넣은 값에 쓴다.
+ *
+ * {@link formatNumber}와 나누는 기준은 "누가 그 숫자를 정했는가"다. 표의 지표 값은 서버가
+ * 계산한 것이라 자릿수가 고정되어야 세로로 비교가 되지만, 조건 칩의 `10`은 사용자가 그렇게
+ * 넣은 것이다. `10.00`으로 채우면 자기가 넣지 않은 정밀도를 넣은 것처럼 읽힌다.
+ *
+ * `decimalScale`은 상한으로만 쓴다 — 서버가 정한 자릿수보다 더 자세히 보이지는 않는다.
+ */
+export function formatEnteredNumber(
+  value: number | null | undefined,
+  decimalScale: number,
+): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return MISSING
+  }
+  return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: decimalScale }).format(value)
+}
+
 /** 지표 값 + 단위. 단위는 서버가 준 문자열을 그대로 붙인다('%', '배', 없으면 빈 문자열). */
 export function formatIndicatorValue(
   value: number | null | undefined,

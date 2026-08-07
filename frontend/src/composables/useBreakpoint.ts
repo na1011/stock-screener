@@ -39,13 +39,19 @@ function useMediaQuery(query: string): Ref<boolean> {
  * `isMobile`은 **컴포넌트를 갈아 끼우는** 경계이고, `isCompact`는 같은 컴포넌트가 라벨을
  * 접는 경계다. 둘을 하나로 합치지 않는 이유는 서로 다른 질문이기 때문이다 —
  * `lib/breakpoints`의 주석이 그 구분을 이미 적어 두었다.
+ *
+ * `isBuilderNarrow`는 세 번째 질문이다 — **좌측 레일을 상시로 둘 만한 폭인가.** 레일 240px을
+ * 떼고 나면 작업 영역이 660px 아래로 내려가는 지점이고, 조건 편집기가 한 열로 무너지는
+ * 폭과 같아서 `BUILDER` 토큰을 그대로 쓴다.
  */
 export function useBreakpoint(): {
   isMobile: Readonly<Ref<boolean>>
   isCompact: Readonly<Ref<boolean>>
+  isBuilderNarrow: Readonly<Ref<boolean>>
 } {
   return {
     isMobile: readonly(useMediaQuery(maxWidthQuery(BREAKPOINTS.MOBILE))),
     isCompact: readonly(useMediaQuery(maxWidthQuery(BREAKPOINTS.COMPACT))),
+    isBuilderNarrow: readonly(useMediaQuery(maxWidthQuery(BREAKPOINTS.BUILDER))),
   }
 }

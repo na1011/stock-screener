@@ -1,5 +1,10 @@
 package com.stockscreener.indicator;
 
+// Jackson 3의 databind는 `tools.jackson.databind`이지만 **애너테이션만은 여전히
+// `com.fasterxml.jackson.annotation`이다**(jackson-annotations 2.21). 둘을 같은 것으로 보고
+// 옮겨 적으면 컴파일이 멈춘다.
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.math.BigDecimal;
 
 /**
@@ -39,12 +44,20 @@ public record IndicatorBand(String label, BigDecimal from, BigDecimal to) {
         }
     }
 
-    /** 위로 열린 구간인가. "20% 이상"처럼 최상단 구간이 그렇다. */
+    /**
+     * 위로 열린 구간인가. "20% 이상"처럼 최상단 구간이 그렇다.
+     *
+     * <p>{@code @JsonIgnore}인 이유는 저장 형식이 {@code label}·{@code from}·{@code to} 셋이기
+     * 때문이다. 빼면 Jackson이 이 파생값까지 jsonb에 적고, 그러면 같은 사실이 두 벌로 저장되어
+     * 나중에 어느 쪽이 정본인지 알 수 없게 된다.
+     */
+    @JsonIgnore
     public boolean isOpenAbove() {
         return to == null;
     }
 
     /** 아래로 열린 구간인가. "10% 미만"처럼 최하단 구간이 그렇다. */
+    @JsonIgnore
     public boolean isOpenBelow() {
         return from == null;
     }

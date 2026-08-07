@@ -175,11 +175,11 @@ export const ScreenerPreset = definePreset(Aura, {
     button: {
       root: {
         label: { fontWeight: '600' },
-        // IMPORTANT — 이 항목이 없으면 Aura 기본값 1rem이 그대로 나온다. 버튼 라벨이 본문보다
-        // 큰 상태였고("16px 버튼 / 15px 본문"), 그것이 화면이 커 보이던 원인 하나였다.
-        fontSize: '0.8125rem',
+        // IMPORTANT — 버튼의 기본 글자 크기는 **여기서 정할 수 없다.** Aura의 button 토큰에
+        // root.fontSize가 없고(타입이 거부한다) 컴포넌트 CSS가 1rem을 직접 적는다. 그래서
+        // `main.css`의 `:root .p-button` 규칙이 그 자리를 맡는다 — 지우면 16px로 돌아간다.
         // 아이콘 버튼이 칩 바와 표 머리글에 붙는다. 기본 2.5rem이면 줄 높이를 이것이 정하게 된다.
-        sm: { fontSize: '0.75rem', iconOnlyWidth: '1.75rem' },
+        sm: { iconOnlyWidth: '1.75rem' },
       },
     },
 

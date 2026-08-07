@@ -1,0 +1,340 @@
+<script setup lang="ts">
+import Button from 'primevue/button'
+import Menu from 'primevue/menu'
+import type { MenuItem } from 'primevue/menuitem'
+import { computed, onMounted, ref } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+
+import type { ScreenResponse } from '@/api/types'
+import AsyncPanel from '@/components/AsyncPanel.vue'
+import BrandMark from '@/components/BrandMark.vue'
+import StockSearch from '@/components/StockSearch.vue'
+import { useScreenOpener, screenKey } from '@/composables/useScreenOpener'
+import { APP_NAME } from '@/lib/appInfo'
+import { screenTypeLabel } from '@/lib/screen'
+import { useAuthStore } from '@/stores/auth'
+import { useScreenDraftStore } from '@/stores/screenDraft'
+import { useScreensStore } from '@/stores/screens'
+
+/**
+ * 좌측 레일.
+ *
+ * 화면 목록을 여기 **상주**시키는 것이 요점이다. 예전에는 조건을 바꾸려면 `/screens`로
+ * 나갔다 돌아오거나 상단 Select를 열어야 했다. 목록이 늘 보이면 "지금 무엇을 보고 있는가"와
+ * "무엇으로 바꿀 수 있는가"가 동시에 답해진다 — spec §5가 요구하는 하나로 이어지는 흐름이다.
+ *
+ * 로그인 후 셸의 브랜드·검색·사용자 메뉴도 여기로 옮겼다. 상단 가로 바에 그것들이 있으면
+ * 작업 영역의 세로 공간을 상시로 먹는데, 이 앱에서 세로는 결과 행 수다.
+ */
+const auth = useAuthStore()
+const screens = useScreensStore()
+const draft = useScreenDraftStore()
+const route = useRoute()
+const { openByKey, isOpen } = useScreenOpener()
+
+const emit = defineEmits<{ navigate: [] }>()
+
+const userMenu = ref<InstanceType<typeof Menu> | null>(null)
+
+/**
+ * 관리자 항목은 권한이 있을 때만 목록에 들어간다.
+ *
+ * 비활성으로 보여주지 않는 이유는 frontend.md에 있다 — 관리 기능이 보이는 것만으로도
+ * 운영 구조가 드러난다. 지인이 쓰는 서비스라도 계정별 권한 경계는 유지한다.
+ */
+const userMenuItems = computed<MenuItem[]>(() => {
+  const items: MenuItem[] = []
+  if (auth.isAdmin) {
+    items.push({
+      label: '관리자',
+      icon: 'pi pi-cog',
+      // Phase 6에서 화면이 붙는다. 지금은 항목이 권한에 따라만 나타나는지를 보이는 자리다.
+      disabled: true,
+    })
+    items.push({ separator: true })
+  }
+  items.push({ label: '로그아웃', icon: 'pi pi-sign-out', command: () => auth.signOut() })
+  return items
+})
+
+onMounted(() => {
+  void screens.ensureLoaded()
+})
+
+const sections = computed(() => [
+  { label: screenTypeLabel('PRESET'), items: screens.presets },
+  { label: screenTypeLabel('CUSTOM'), items: screens.mine },
+])
+
+/** 새 조건을 만드는 중인가. 어느 저장된 화면도 열려 있지 않은 상태다. */
+const isFresh = computed(() => draft.origin.kind === 'custom')
+
+async function pick(screen: ScreenResponse): Promise<void> {
+  await openByKey(screenKey(screen))
+  // 좁은 폭에서는 레일이 서랍이다. 고르고 나면 닫혀야 결과가 보인다.
+  emit('navigate')
+}
+
+function startFresh(): void {
+  draft.reset()
+  emit('navigate')
+}
+</script>
+
+<template>
+  <aside class="rail">
+    <RouterLink to="/" class="rail__brand" :aria-label="APP_NAME" @click="emit('navigate')">
+      <BrandMark />
+      <span class="rail__wordmark">{{ APP_NAME }}</span>
+    </RouterLink>
+
+    <div class="rail__search">
+      <StockSearch />
+    </div>
+
+    <nav class="rail__nav" aria-label="주요 화면">
+      <RouterLink
+        to="/"
+        class="rail__item"
+        :class="{ 'rail__item--active': route.path === '/' && !isFresh }"
+        @click="emit('navigate')"
+      >
+        <i class="pi pi-filter rail__icon" aria-hidden="true" />
+        <span>스크리너</span>
+      </RouterLink>
+      <RouterLink
+        to="/screens"
+        class="rail__item"
+        :class="{ 'rail__item--active': route.path.startsWith('/screens') }"
+        @click="emit('navigate')"
+      >
+        <i class="pi pi-bookmark rail__icon" aria-hidden="true" />
+        <span>화면 관리</span>
+      </RouterLink>
+    </nav>
+
+    <div class="rail__scroll">
+      <AsyncPanel
+        :state="screens.state"
+        :error="screens.error"
+        :retry="screens.retry"
+        panel="screens"
+        :skeleton-rows="4"
+      >
+        <section v-for="section in sections" :key="section.label" class="rail__section">
+          <h2 class="rail__section-title">
+            {{ section.label }}
+            <span class="rail__count tabular">{{ section.items.length }}</span>
+          </h2>
+          <ul v-if="section.items.length > 0" class="rail__list">
+            <li v-for="screen in section.items" :key="screenKey(screen)">
+              <button
+                type="button"
+                class="rail__item rail__item--screen"
+                :class="{ 'rail__item--active': isOpen(screen) }"
+                @click="pick(screen)"
+              >
+                <span class="rail__item-label">{{ screen.name }}</span>
+              </button>
+            </li>
+          </ul>
+          <!-- 비어 있다는 사실 자체가 안내다. 목록이 그냥 없으면 로딩 중인지 빈 것인지 모른다. -->
+          <p v-else class="rail__empty">아직 저장한 화면이 없습니다.</p>
+        </section>
+      </AsyncPanel>
+    </div>
+
+    <div class="rail__foot">
+      <button
+        type="button"
+        class="rail__item rail__item--fresh"
+        :class="{ 'rail__item--active': isFresh }"
+        @click="startFresh"
+      >
+        <i class="pi pi-plus rail__icon" aria-hidden="true" />
+        <span>새 조건</span>
+      </button>
+
+      <Button
+        type="button"
+        text
+        size="small"
+        icon="pi pi-user"
+        :label="auth.displayName"
+        aria-haspopup="true"
+        aria-controls="user-menu"
+        class="rail__user"
+        @click="userMenu?.toggle($event)"
+      />
+      <Menu id="user-menu" ref="userMenu" :model="userMenuItems" :popup="true" />
+    </div>
+  </aside>
+</template>
+
+<style scoped>
+.rail {
+  display: flex;
+  flex-direction: column;
+  width: var(--app-rail-width);
+  height: 100dvh;
+  padding: 0.625rem 0.5rem;
+  gap: 0.5rem;
+  border-inline-end: 1px solid var(--p-content-border-color);
+  background: var(--p-content-background);
+}
+
+.rail__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem 0.5rem;
+  color: var(--p-text-color);
+  font-weight: 700;
+  font-size: var(--app-text-md);
+  letter-spacing: -0.01em;
+}
+
+.rail__brand:hover {
+  text-decoration: none;
+}
+
+.rail__search,
+.rail__nav {
+  flex: 0 0 auto;
+}
+
+.rail__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/*
+ * 항목 하나의 생김새. 링크(`RouterLink`)와 버튼이 같은 클래스를 쓰므로 button의 기본
+ * 스타일을 여기서 지운다 — 둘이 다르게 보이면 "누를 수 있는 것"이 두 종류로 읽힌다.
+ */
+.rail__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 1.875rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--p-border-radius-md);
+  background: transparent;
+  color: var(--p-text-muted-color);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+.rail__item:hover {
+  background: var(--p-surface-800);
+  color: var(--p-text-color);
+  text-decoration: none;
+}
+
+/*
+ * 활성 표시는 면이다. 헤더가 쓰던 밑줄을 여기로 가져오지 않는 이유는 세로 목록에서 밑줄이
+ * 구분선과 구별되지 않기 때문이다.
+ */
+.rail__item--active {
+  background: var(--p-surface-800);
+  color: var(--p-text-color);
+  font-weight: 600;
+}
+
+.rail__icon {
+  flex: 0 0 auto;
+  font-size: var(--app-text-xs);
+  color: var(--p-text-muted-color);
+}
+
+.rail__item--active .rail__icon {
+  color: var(--p-primary-color);
+}
+
+.rail__item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 목록이 길어져도 브랜드·검색·하단은 제자리에 있어야 한다. */
+.rail__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--p-content-border-color);
+}
+
+.rail__section + .rail__section {
+  margin-top: 0.75rem;
+}
+
+.rail__section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 0.25rem;
+  padding: 0 0.5rem;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--p-surface-500);
+}
+
+.rail__count {
+  color: var(--p-surface-600);
+}
+
+.rail__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rail__empty {
+  margin: 0;
+  padding: 0 0.5rem;
+  font-size: var(--app-text-2xs);
+  color: var(--p-surface-500);
+}
+
+.rail__foot {
+  flex: 0 0 auto;
+  padding-top: 0.375rem;
+  border-top: 1px solid var(--p-content-border-color);
+}
+
+.rail__item--fresh {
+  color: var(--p-primary-color);
+}
+
+.rail__user {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.rail__user :deep(.p-button-label) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+
+/*
+ * 좁은 폭에서는 레일이 서랍으로 열린다(AppLayout이 위치를 정한다). 높이를 100%로 두어
+ * 서랍 안에서도 목록만 스크롤되게 한다.
+ */
+@media (max-width: 900px) {
+  .rail {
+    width: 100%;
+    height: 100%;
+    border-inline-end: 0;
+  }
+}
+</style>

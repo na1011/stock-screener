@@ -1,26 +1,23 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import SaveScreenDialog from '@/components/SaveScreenDialog.vue'
 import ScreenPicker from '@/components/ScreenPicker.vue'
-import ConditionBuilder from '@/components/condition/ConditionBuilder.vue'
+import ConditionChipBar from '@/components/condition/ConditionChipBar.vue'
 import ResultCards from '@/components/result/ResultCards.vue'
 import ResultSummary from '@/components/result/ResultSummary.vue'
 import ResultTable from '@/components/result/ResultTable.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
-import { describeCondition } from '@/lib/conditionText'
 import { screenTypeLabel } from '@/lib/screen'
-import { useCatalogStore } from '@/stores/catalog'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreeningStore } from '@/stores/screening'
 
-const catalog = useCatalogStore()
 const draft = useScreenDraftStore()
 const screening = useScreeningStore()
-const { isMobile } = useBreakpoint()
+const { isMobile, isBuilderNarrow } = useBreakpoint()
 
 const result = computed(() => screening.result ?? null)
 const saveVisible = ref(false)
@@ -32,55 +29,31 @@ const saveVisible = ref(false)
 const canSave = computed(() => draft.editable && draft.completeConditions.length > 0)
 
 /**
- * 조건 빌더를 펼쳐 두는가.
+ * 결과가 지금 조건과 어긋나 있는가.
  *
- * 실행하고 나면 사용자가 보려는 것은 결과다. 데스크톱에서만 자동으로 접는 이유는 모바일에서
- * 스크롤 한 번이면 지나가는 높이라 접을 이득이 없고, 접힘 상태가 하나 더 생기면 오히려
- * 무엇을 눌러야 하는지 알기 어려워지기 때문이다.
- *
- * IMPORTANT — 접혀도 **무엇으로 걸렀는지는 남는다**(아래 `digest`). 조건이 통째로 사라지면
- * 사용자는 눈앞의 목록이 무슨 기준으로 나온 것인지 알 수 없게 된다.
+ * IMPORTANT — 자동 실행을 하지 않는 대신 **화면이 어긋남을 자백한다.** `/api/screening`은
+ * 최대 2000행을 통째로 주는 POST라 타이핑마다 부를 수 없고, 그래서 결과는 언제나 "마지막으로
+ * 실행한 것"이다. 그 사실을 말하지 않으면 사용자는 눈앞의 목록이 방금 고친 조건의 결과라고
+ * 읽는다. 버튼 라벨이 바뀌는 것이 그 자백이다.
  */
-const builderOpen = ref(true)
+const stale = computed(() => screening.hasResult && draft.dirty)
 
-watch(
-  () => screening.state,
-  (state) => {
-    if (state === 'ready' && !isMobile.value) {
-      builderOpen.value = false
-    }
-  },
-)
-
-// 다른 화면을 불러오거나 새로 만들면 편집하려는 것이므로 다시 펼친다.
-watch(
-  () => draft.origin,
-  () => {
-    builderOpen.value = true
-  },
-  { deep: true },
-)
-
-function indicatorName(code: string): string {
-  return catalog.byCode.get(code)?.name ?? code
-}
+const runLabel = computed(() => (stale.value ? '변경 반영' : '스크리닝 실행'))
 
 /**
- * 접혔을 때 조건바에 남는 한 줄.
+ * 실행 버튼의 툴팁.
  *
- * 편집 중인 초안이 아니라 **응답의 조건**을 쓴다. 초안은 실행 뒤에도 고쳐질 수 있어서,
- * 초안으로 적으면 눈앞의 결과와 다른 조건을 설명하게 된다. 문장 조립은 결과 화면과 같은
- * `describeCondition`을 쓴다 — 두 곳이 각자 적으면 같은 조건이 다르게 읽힌다.
+ * 미완성 조건이 조용히 빠지던 것을 여기서도 말한다 — 칩의 점선을 놓친 사용자에게 마지막
+ * 기회다. 실행 자체는 막지 않는다. 완성된 조건이 하나라도 있으면 그것으로 거를 수 있고,
+ * 막아 버리면 "왜 눌리지 않는지"를 다시 설명해야 한다.
  */
-const digest = computed(() => {
-  const conditions = result.value?.conditions ?? []
-  if (conditions.length === 0) {
-    return null
-  }
-  const head = conditions.slice(0, 2).map((it) => describeCondition(it, indicatorName))
-  const rest = conditions.length - head.length
-  return rest > 0 ? `${head.join(' · ')} 외 ${rest}건` : head.join(' · ')
-})
+const incompleteCount = computed(() => draft.conditions.length - draft.completeConditions.length)
+
+const runHint = computed(() =>
+  incompleteCount.value > 0
+    ? `값을 채우지 않은 조건 ${incompleteCount.value}개는 제외하고 실행합니다.`
+    : null,
+)
 
 async function run(): Promise<void> {
   const request = draft.toRequest()
@@ -96,19 +69,7 @@ async function run(): Promise<void> {
        주 영역이 둘이 되어 스크린 리더의 랜드마크 이동이 어긋난다. -->
   <div class="screener">
     <div class="screener__bar">
-      <div class="screener__bar-row">
-        <Button
-          type="button"
-          text
-          size="small"
-          class="screener__toggle"
-          :icon="builderOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
-          :aria-expanded="builderOpen"
-          aria-controls="condition-builder"
-          :aria-label="builderOpen ? '조건 접기' : '조건 펼치기'"
-          @click="builderOpen = !builderOpen"
-        />
-
+      <div class="screener__row">
         <div class="screener__identity">
           <h1 class="screener__title">{{ draft.title }}</h1>
           <Tag v-if="draft.isPreset" :value="screenTypeLabel('PRESET')" severity="info" />
@@ -129,17 +90,22 @@ async function run(): Promise<void> {
         </div>
 
         <div class="screener__actions">
-          <ScreenPicker />
+          <!-- 넓은 폭에서는 좌측 레일이 화면 목록을 상주시킨다. 좁을 때만 Select가 그 자리를 맡는다. -->
+          <ScreenPicker v-if="isBuilderNarrow" />
           <Button
-            label="스크리닝 실행"
+            v-tooltip.bottom="runHint"
+            :label="runLabel"
             icon="pi pi-play"
+            size="small"
+            :severity="stale ? 'warn' : undefined"
             :loading="screening.state === 'loading'"
             :disabled="!draft.canRun"
             @click="run"
           />
           <Button
-            label="조건 저장"
+            label="저장"
             icon="pi pi-save"
+            size="small"
             outlined
             :disabled="!canSave"
             @click="saveVisible = true"
@@ -147,16 +113,12 @@ async function run(): Promise<void> {
         </div>
       </div>
 
-      <!-- 접혀도 무엇으로 걸렀는지는 남는다. 눈앞의 결과가 무슨 기준인지 알 수 없으면 안 된다. -->
-      <p v-if="!builderOpen && digest" class="screener__digest">
-        <i class="pi pi-filter" aria-hidden="true" />
-        <span>{{ digest }}</span>
-      </p>
+      <ConditionChipBar
+        class="screener__chips"
+        :retention="screening.retention"
+        :invalid-index="screening.invalidIndex"
+      />
     </div>
-
-    <section v-show="builderOpen" id="condition-builder" class="screener__builder">
-      <ConditionBuilder :retention="screening.retention" />
-    </section>
 
     <SaveScreenDialog v-model:visible="saveVisible" />
 
@@ -175,7 +137,7 @@ async function run(): Promise<void> {
         </template>
 
         <template v-if="result">
-          <ResultSummary :result="result" />
+          <ResultSummary :result="result" :stale="stale" />
           <!-- 모바일은 표를 좁힌 것이 아니라 카드 목록이다. 자세한 이유는 useBreakpoint에 있다. -->
           <ResultCards v-if="isMobile" :result="result" :as-of="result.asOf" class="screener__rows" />
           <ResultTable v-else :result="result" :as-of="result.asOf" class="screener__rows" />
@@ -194,13 +156,13 @@ async function run(): Promise<void> {
 .screener {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - var(--app-header-height));
+  min-height: 100dvh;
 }
 
-/* 헤더 바로 아래에 붙는다. 스크롤을 내려도 "무엇을 실행했는가"와 "다시 실행"이 남는다. */
+/* 스크롤을 내려도 "무엇을 실행했는가"와 "다시 실행"이 남는다. */
 .screener__bar {
   position: sticky;
-  top: var(--app-header-height);
+  top: 0;
   z-index: 15;
   padding: 0.5rem var(--app-gutter);
   border-bottom: 1px solid var(--p-content-border-color);
@@ -208,21 +170,18 @@ async function run(): Promise<void> {
   backdrop-filter: blur(12px);
 }
 
-.screener__bar-row {
+.screener__row {
   display: flex;
   align-items: center;
   gap: 0.5rem 0.75rem;
   flex-wrap: wrap;
-}
-
-.screener__toggle {
-  flex: 0 0 auto;
+  margin-bottom: 0.5rem;
 }
 
 .screener__identity {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
   flex-wrap: wrap;
   flex: 1 1 12rem;
   min-width: 0;
@@ -230,43 +189,24 @@ async function run(): Promise<void> {
 
 .screener__title {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: var(--app-text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 }
 
 .screener__actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
   flex-wrap: wrap;
   margin-inline-start: auto;
-}
-
-.screener__digest {
-  display: flex;
-  align-items: baseline;
-  gap: 0.375rem;
-  margin: 0.375rem 0 0 2.25rem;
-  font-size: 0.8125rem;
-  color: var(--p-text-muted-color);
-  overflow-wrap: anywhere;
-}
-
-.screener__builder {
-  padding: 1.25rem var(--app-gutter);
-  border-bottom: 1px solid var(--p-content-border-color);
-}
-
-.screener__builder > * {
-  max-width: var(--app-reading-width);
-  margin: 0 auto;
 }
 
 .screener__result {
   flex: 1;
   min-width: 0;
-  padding: 1rem var(--app-gutter) 2rem;
+  padding: 0.625rem var(--app-gutter) 1.5rem;
 }
 
 .screener__idle {
@@ -276,17 +216,14 @@ async function run(): Promise<void> {
 }
 
 .screener__rows {
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
 }
 
+/* 좁으면 제목과 동작이 한 줄에 들어가지 않는다. 동작을 아래로 내려 제목이 잘리지 않게 한다. */
 @media (max-width: 900px) {
   .screener__actions {
     margin-inline-start: 0;
     flex-basis: 100%;
-  }
-
-  .screener__digest {
-    margin-inline-start: 0;
   }
 }
 </style>

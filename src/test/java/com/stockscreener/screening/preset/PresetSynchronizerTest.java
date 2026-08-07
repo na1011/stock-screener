@@ -1,5 +1,6 @@
 package com.stockscreener.screening.preset;
 
+import com.stockscreener.indicator.IndicatorBandCodec;
 import com.stockscreener.indicator.IndicatorCatalog;
 import com.stockscreener.screening.ComparisonOperator;
 import com.stockscreener.screening.ConditionGroup;
@@ -29,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 검증 대상과 무관한 픽스처가 커진다. 선언 자체는 {@link PresetCatalogTest}가 본다.
  */
 @JpaSliceTest
-@Import({ScreenStore.class, IndicatorCatalog.class})
+@Import({ScreenStore.class, IndicatorCatalog.class, IndicatorBandCodec.class})
 class PresetSynchronizerTest {
 
     @Autowired
