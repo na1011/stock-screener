@@ -245,7 +245,15 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
 - [ ] **4-4.** 각 프로젝트의 DSN을 복사한다. 백엔드 것이 `SENTRY_DSN`이다.
 - [ ] **4-5. DSN 두 개를 `.env`에 넣는다.** 키 이름은 `.env.example`에 이미 있다(2026-08-07 추가) — 백엔드가 `SENTRY_DSN`, 프론트가 `VITE_SENTRY_DSN`이다. 넣은 뒤 `./gradlew checkEnv`가 두 키를 `설정됨`으로 내면 된다. **안 넣으면 "`.env.example`에 있으나 `.env`에 없는 키" 목록에 뜬다.**
   프론트 DSN이 번들에 그대로 박혀 공개되는 것은 **정상이다** — Sentry DSN은 쓰기 전용 공개 식별자다. 시크릿으로 착각해 숨기려다 빌드를 꼬지 않는다.
-- [ ] **4-6. 소스맵 업로드용 `SENTRY_AUTH_TOKEN`을 발급한다.** Sentry → `Settings` → `Auth Tokens` → `Create New Organization Token`(기본 권한이면 충분하다). 개인 토큰을 쓴다면 `Project: Read & Write` + `Release: Admin`이 필요하다.
+- [ ] **4-6. 소스맵 업로드용 `SENTRY_AUTH_TOKEN`을 발급한다 — 조직 전체에 하나만 만든다.**
+
+  `Settings` → **`Developer Settings`** → **`Organization Tokens`** → `Create New Token`
+  메뉴를 못 찾으면 주소로 바로 간다: `https://sentry.io/orgredirect/organizations/:orgslug/settings/auth-tokens/`
+  (`Settings` 바로 밑에는 없다. `Developer Settings` 안으로 한 단계 더 들어간다.)
+
+  **MUST: DSN처럼 프로젝트별로 만들지 않는다.** 조직 토큰은 **그 조직의 모든 프로젝트에 접근**하므로 Spring·Vue 구분 없이 하나면 된다. 업로드 대상은 토큰이 아니라 빌드 설정의 `org`·`project`가 정한다. **DSN은 프로젝트마다 다른데 이 토큰은 조직 하나** — 이 비대칭이 헷갈리는 지점이다.
+  스코프는 생성 시 소스맵 업로드·릴리스 생성에 맞춰 자동으로 붙는다. 개인 토큰(`계정 드롭다운` → `Personal Tokens`)을 쓴다면 `Project: Read & Write` + `Release: Admin`을 직접 골라야 한다.
+
   **DSN과 성격이 정반대다.** DSN은 이벤트를 보내는 **공개** 식별자고, 이 토큰은 Sentry API에 쓰는 **시크릿**이다. **MUST NOT: `VITE_` 접두어를 붙이지 않는다** — 붙이는 순간 번들에 실려 공개된다.
   **없으면 프론트 이슈가 `index-a3f9.js:1:28471`처럼만 남는다.** 프로젝트를 둘로 나눈 것(4-2)은 이슈가 섞이는 것을 막을 뿐, 소스맵을 올리지 않으면 스택트레이스는 여전히 못 읽는다. 백엔드는 이 토큰이 필요 없다 — 소스맵이라는 개념이 없고 바이트코드에 줄 번호가 들어 있다.
 - [ ] **4-7. IMPORTANT — 값을 넣어도 프론트 번들에는 아직 안 들어간다.** Vite의 `envDir`은 `frontend/`라 **루트 `.env`를 읽지 않는다.** `bootRun`에만 걸려 있는 `applyDotEnv`를 `frontendBuild` 태스크에도 걸어야 하고(`build.gradle`), 그때 `inputs.property`로 DSN을 넣어야 값이 바뀔 때 번들이 다시 만들어진다 — 안 그러면 Gradle이 캐시된 옛 번들을 그대로 쓴다.
