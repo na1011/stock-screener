@@ -22,6 +22,7 @@ paths:
 ## `src/main/resources/application.yaml`
 
 - **`spring.batch.job.enabled=false`와 `pipeline.scheduler.enabled` 기본 꺼짐을 유지한다.** 켜면 애플리케이션을 띄우는 것만으로 배치가 돌아 외부 API 쿼터를 태운다.
+- **MUST NOT: `server.forward-headers-strategy: framework`를 지우지 않는다.** cloudflared가 로컬에 평문 HTTP로 붙어 원래 스킴이 `X-Forwarded-Proto`에만 남는다. 지우면 `redirect_uri`가 `http://`로 나가 도메인 로그인만 깨지는데 **localhost 개발과 테스트는 멀쩡하다** — 헤더가 없어 분기 자체를 안 타기 때문이다.
 
 ## `src/test/resources/application-test.yaml`
 
