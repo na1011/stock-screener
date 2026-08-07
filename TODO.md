@@ -120,17 +120,28 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
   ```
   `launchd` 데몬(`/Library/LaunchDaemons/com.cloudflare.cloudflared.plist`)으로 등록되어 **재부팅 후에도 자동 기동**한다.
 
-  **지우는 대상은 데몬이 아니라 셸 히스토리의 그 한 줄이다.** 데몬은 남겨야 터널이 돈다. 위 명령은 **토큰 원문을 명령줄에 담고**, `~/.zsh_history`는 권한만 `600`일 뿐 평문이라 나중에 아무 도구나 그 줄을 읽는다. 남은 위험은 히스토리 파일 하나뿐이므로 그것만 지운다.
-  ```bash
-  grep -n "cloudflared service install" ~/.zsh_history   # 안 나오면 할 일 없음
-  ```
-  나오면 그 줄만 지운다(`history -d <번호>` 또는 편집기로 직접). **MUST NOT: 파일을 통째로 비우지 않는다** — 다른 히스토리까지 사라지고 되돌릴 수 없다.
+  **지우는 대상은 데몬이 아니라 셸 히스토리의 그 한 줄이다.** 데몬은 남겨야 터널이 돈다. 위 명령은 **토큰 원문을 명령줄에 담고**, `~/.zsh_history`는 권한만 `600`일 뿐 평문이라 나중에 아무 도구나 그 줄을 읽는다. 남은 위험은 히스토리 파일 하나뿐이므로 그것만 지운다. **처리 완료(2026-08-07)** — 아래는 재설치·재발급 때 다시 밟을 절차다.
 
-  **IMPORTANT — 지금 안 나와도 끝난 게 아니다.** zsh는 기본 설정에서 히스토리를 **셸이 끝날 때** 파일에 쓴다. 명령을 실행한 그 터미널이 아직 열려 있으면 파일에는 없고 메모리에만 있다(2026-08-07 실측: 설치 17:12, 파일 mtime 13:18). 그 터미널을 닫은 **뒤에** 위 `grep`을 한 번 더 돌린다.
+  ```bash
+  grep -an "cloudflared service install" ~/.zsh_history        # ① 남았는지
+  cp ~/.zsh_history ~/.zsh_history.bak                         # ② 백업
+  LC_ALL=C sed -i '' '/cloudflared service install/d' ~/.zsh_history   # ③ 그 줄만 제거
+  grep -ac "cloudflared service install" ~/.zsh_history        # ④ 0 이어야 한다
+  ```
+  확인이 끝나면 `~/.zsh_history.bak`도 지운다 — **거기에 토큰이 그대로 남아 있다.**
+
+  세 군데서 걸린다. 전부 실측으로 확인했다(2026-08-07):
+
+  - **MUST: `grep`에 `-a`를 붙인다.** `~/.zsh_history`에는 비ASCII 바이트가 섞여 있어 `grep`이 파일을 **바이너리로 판단하고 매치를 출력하지 않는다.** 실패가 아니라 침묵이라 **"안 남았다"로 잘못 읽힌다** — 실제로 이 세션에서 `-a` 없이 돌려 "없음"으로 오판했다.
+  - **`history -d <번호>`는 듣지 않는다.** `grep -n`이 주는 것은 **파일의 줄 번호**이고 `history -d`가 받는 것은 **히스토리 이벤트 번호**라 서로 다른 체계다. `fc: no such event` 가 그래서 난다. 게다가 다른 터미널에서 실행한 명령은 지금 셸의 메모리 히스토리에 아예 없다. 그래서 파일을 직접 고친다.
+  - **macOS `sed`에는 `LC_ALL=C`가 필요하다.** 없으면 위의 비ASCII 바이트에서 `RE error: illegal byte sequence`로 죽는다.
+  - **MUST NOT: 파일을 통째로 비우지 않는다.** 다른 히스토리까지 사라지고 되돌릴 수 없다.
+
+  **지금 안 나와도 끝난 게 아니다.** zsh는 기본 설정에서 히스토리를 **셸이 끝날 때** 파일에 쓴다. 명령을 실행한 터미널이 살아 있으면 파일에는 없고 메모리에만 있다. 그 창을 닫은 **뒤에** ①을 한 번 더 돌린다.
 
   **`ps`에는 토큰이 안 보인다.** cloudflared 2026.7 기준 설치 시 토큰이 `/Library/Application Support/com.cloudflare.cloudflared/token`(root 전용)에 저장되고 데몬은 `--token-file`로 읽는다. 예전 버전은 `--token <원문>`이 프로세스 목록에 그대로 떴다.
 - [x] **2-4. 대시보드에서 `Connected` 상태를 확인한다.** 몇 초 내에 커넥터가 초록으로 바뀐다. 새 UI는 터널 목록의 상태를 `Healthy`로 표시한다.
-- [ ] **2-5. 공개 호스트명 연결**
+- [x] **2-5. 공개 호스트명 연결** (2026-08-07 완료)
 
   **IMPORTANT — 좌측 메뉴의 `Networks`(또는 `Networking`) → `Routes`로 들어가면 안 된다.** 그 화면의 `Create route` / `Add a route`는 **CIDR 전용**이고, 입력란이 `10.0.0.0/8` 같은 사설 IP 대역을 요구한다. 화면 상단에 *"requires traffic to pass via Cloudflare Gateway. Users need the Cloudflare One Client"* 라고 쓰여 있는 것이 그 증거다 — **접속하는 쪽에 WARP 클라이언트를 깔아야 열리는 사내망 경로**이고, 우리가 원하는 "브라우저 주소창에 치면 열리는 공개 HTTPS 주소"와는 다른 물건이다. 여기서 만들면 지인은 아무도 못 들어온다.
 
@@ -151,16 +162,14 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
   **Type은 `HTTPS`가 아니라 `HTTP`다.** cloudflared가 로컬 앱에 붙는 구간은 평문이고, 인증서는 Cloudflare 가장자리에서 끝난다. `HTTPS`로 잡으면 502가 난다.
 
   **DNS는 따로 만들 것이 없다.** 저장하면 Cloudflare가 `screener` CNAME(`<터널UUID>.cfargotunnel.com`)을 자동으로 넣는다. DNS 화면에서 손으로 만들면 오히려 충돌한다.
-- [ ] **2-6. 확인** — 먼저 DNS부터. 라우트를 저장했는데 아래가 비면 `Published application`이 아니라 CIDR을 만든 것이다:
-  ```bash
-  dig screener.na1011.net +short    # <UUID>.cfargotunnel.com 이 나와야 한다
-  ```
-  그다음 `./gradlew bootRun`을 띄운 상태에서:
+- [x] **2-6. 확인** — `./gradlew bootRun`을 띄운 상태에서 **2026-08-07 `200` 실측 완료**:
   ```bash
   curl -I https://screener.na1011.net/             # 200 + 로그인 셸 HTML
   curl -I https://screener.na1011.net/api/screens  # 401 (익명이므로 정상)
   ```
   **502가 나면 앱이 안 떠 있거나 Type을 `HTTPS`로 잡은 것이다.** 502는 "터널은 붙었는데 로컬 서비스에 못 닿았다"는 뜻이라, 터널 상태가 `Healthy`인 것과 모순되지 않는다.
+
+  **MUST NOT: `dig`로 라우트 성공을 판정하지 않는다.** 프록시(주황 구름)가 켜져 있으면 CNAME이 flatten되어 **Cloudflare 대역 A 레코드**(`104.21.x` / `172.67.x`)가 나온다 — `cfargotunnel.com`은 보이지 않는다. 실측 결과가 그랬다. 판정은 위 `curl`로 한다.
 
 **알아둘 것**
 
@@ -176,13 +185,33 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
 
 발급이 아니라 **설정 작업 두 가지**다. 둘 중 하나만 하면 로그인이 안 된다.
 
-- [ ] **3-1. Google Console에 리디렉션 URI 추가**
-  [Google Cloud Console](https://console.cloud.google.com/) → API 및 서비스 → 사용자 인증 정보 → 해당 OAuth 클라이언트 → 승인된 리디렉션 URI:
+- [ ] **3-1. IMPORTANT — OAuth 클라이언트를 `웹 애플리케이션` 유형으로 다시 만든다.**
+
+  지금 있는 `screener-desktop-client`는 **`데스크톱` 유형이라 리디렉션 URI를 등록할 칸이 아예 없다**(2026-08-07 확인). 편집 화면에 이름과 저장 버튼만 나오는 것이 그 증상이고, **유형은 생성 후 변경할 수 없다.** Google은 데스크톱 유형에 loopback(`http://localhost:포트`)만 허용하고 커스텀 HTTPS 주소는 받지 않는다.
+
+  **이 함정이 지금까지 안 보였던 이유**: loopback은 등록 없이 통과하므로 `http://localhost:8080` 로그인은 **정상 동작한다**(실측). 도메인 주소에서만 깨진다. 실측한 두 결과가 이것이다:
+  ```
+  http://localhost:8080/login/oauth2/code/google      → Google 로그인 화면 (정상)
+  https://screener.na1011.net/login/oauth2/code/google → Error 400: redirect_uri_mismatch
+  ```
+
+  [Google Cloud Console](https://console.cloud.google.com/) → API 및 서비스 → 사용자 인증 정보 → `사용자 인증 정보 만들기` → `OAuth 클라이언트 ID` → **유형 `웹 애플리케이션`** → `승인된 리디렉션 URI`에 **세 개를 모두** 넣는다:
   ```
   https://screener.na1011.net/login/oauth2/code/google
+  http://localhost:8080/login/oauth2/code/google
+  http://localhost:5173/login/oauth2/code/google
   ```
-  기존 `http://localhost:8080/...`은 **지우지 않는다.** 로컬 개발이 그걸로 돈다.
+  localhost 둘을 함께 넣는 이유는 §2의 4번째 항목에 있다(Vite 프록시가 Host를 바꾸지 않아 포트별로 `redirect_uri`가 갈린다, ADR-0018).
+
   OAuth 동의 화면의 `승인된 도메인`에는 서브도메인이 아니라 **`na1011.net`**을 넣는다.
+
+  만든 뒤 **`.env`의 `GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`을 새 클라이언트 값으로 교체하고 앱을 재시작한다.** 값이 낡으면 증상이 `invalid_client`로 바뀌어 원인이 또 달라 보인다. 기존 데스크톱 클라이언트는 지워도 되고 두어도 된다(6개월 미사용 시 자동 삭제).
+
+  검증은 브라우저 없이도 된다 — 아래가 `redirect_uri_mismatch` 없이 로그인 화면(200)으로 끝나면 통과다:
+  ```bash
+  LOC=$(curl -s -D- -o /dev/null https://screener.na1011.net/oauth2/authorization/google | grep -i '^location:' | sed 's/^[Ll]ocation: //' | tr -d '\r')
+  curl -sL -o /tmp/g.html -w '%{url_effective}\n' "$LOC"    # signin/oauth/error 가 나오면 실패
+  ```
 
 - [x] **3-2. 프록시 헤더 신뢰 설정 — 적용됨(2026-08-07).**
   `application.yaml`에 `server.forward-headers-strategy: framework`가 들어갔다. 없었다면 Spring이 `X-Forwarded-Proto`를 무시해(기본값 `NONE`) `redirect_uri`가 이렇게 나갔을 것이다:

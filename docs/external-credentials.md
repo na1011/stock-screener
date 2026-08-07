@@ -1,6 +1,6 @@
 # 외부 서비스 발급 목록
 
-사용자가 직접 발급·인증해야 하는 것들. **5건(1~5)이 완료됐고, 6번은 마지막 한 단계(공개 호스트명)만 남았다.** 현황은 아래 표가 정본이다.
+사용자가 직접 발급·인증해야 하는 것들. **2~6번이 완료됐고, 1번은 유형을 잘못 골라 재발급이 필요하다.** 현황은 아래 표가 정본이다.
 
 에이전트가 대신 할 수 없는 작업만 모았다(계정 생성, 본인 인증, 콘솔에서 키 발급 등). 나중에 한 번에 진행하기 위한 목록이며, 각 항목에 **언제까지 필요한지**와 **없으면 무엇이 막히는지**를 적었다.
 
@@ -13,12 +13,12 @@
 
 | # | 항목 | 상태 | 필요 시점 | 없으면 막히는 것 |
 |---|---|---|---|---|
-| 1 | Google OAuth 클라이언트 | **완료 (2026-08-07)** | Phase 5~6 | 브라우저 로그인. 인가 로직은 이미 동작 |
+| 1 | Google OAuth 클라이언트 | **재발급 필요 — `데스크톱` 유형으로 발급됨** | Phase 5~6 | 도메인 로그인. localhost는 동작 |
 | 2 | 공공데이터포털 API 키 | **완료 (2026-08-06)** | Phase 2 | 코스피·코스닥 시세 수집 |
 | 3 | DART Open API 키 | **완료 (2026-08-06)** | Phase 2 | 국내 재무제표 수집 |
 | 4 | Finnhub API 키 | **완료 (2026-08-06)** | ~~Phase 2~~ → v1.1 | 미국 재무. **시세는 무료 불가(403 실측)** |
 | 5 | 개인 도메인 (`na1011.net`) | **완료 (2026-08-07 확인)** | Phase 6 | 고정 HTTPS 주소. OAuth 리다이렉트에도 필요 |
-| 6 | Cloudflare 계정 + Tunnel | **커넥터까지 완료 · 공개 호스트명 남음** | Phase 6 | 외부 접속 |
+| 6 | Cloudflare 계정 + Tunnel | **완료 (2026-08-07, `200` 실측)** | Phase 6 | 외부 접속 |
 | 7 | Sentry 프로젝트 | **미진행** | Phase 6 | 에러 수집·통지 |
 | 8 | 알림 채널(메신저) | **미진행** | Phase 6 | 배치 실패·워치리스트 알림의 메신저 채널 |
 
@@ -35,12 +35,22 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
 - **환경변수**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - **소요**: 약 10분
 - **주의**: 승인된 리디렉션 URI에 `https://screener.na1011.net/login/oauth2/code/google`을 등록해야 한다(5번에서 확정된 주소다). 로컬 테스트용 `http://localhost:8080/login/oauth2/code/google`은 지우지 않고 함께 둔다.
-- **현재 상태 (2026-08-07)**: 발급 완료. `.env`에 실려 있고 실제 기동으로 확인했다 —
-  `GET /oauth2/authorization/google`이 `302 → accounts.google.com`을 내리고 `client_id`가
-  자리표시자가 아닌 실제 값, `scope=openid email profile`,
+- **IMPORTANT — 발급된 클라이언트가 `데스크톱` 유형이라 다시 만들어야 한다** (2026-08-07 확인).
+  데스크톱 유형에는 **승인된 리디렉션 URI 입력란이 아예 없고, 유형은 생성 후 변경할 수 없다.**
+  Google이 이 유형에 허용하는 것은 loopback(`http://localhost:포트`)뿐이다.
+  **이 결함이 넉 달 가까이 안 보였던 이유는 loopback이 등록 없이 통과하기 때문이다** —
+  `http://localhost:8080` 로그인은 지금도 정상 동작한다(실측). 도메인에서만 깨진다:
+  ```
+  http://localhost:8080/login/oauth2/code/google       → Google 로그인 화면 (200)
+  https://screener.na1011.net/login/oauth2/code/google → Error 400: redirect_uri_mismatch
+  ```
+  `웹 애플리케이션` 유형으로 새로 만들고 `.env`의 `GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`을
+  교체한다. 절차와 검증 명령은 [`TODO.md`](../TODO.md) §3 ③ 3-1에 있다.
+- **아래는 이전 발급 시점(2026-08-07)의 확인 기록이다.** `GET /oauth2/authorization/google`이
+  `302 → accounts.google.com`을 내리고 `client_id`가 실제 값, `scope=openid email profile`,
   `redirect_uri=http://localhost:8080/login/oauth2/code/google`였다.
-- **도메인(5번)이 정해지면 리디렉션 URI를 추가해야 한다.** 지금은 localhost만 등록되어 있어
-  외부 주소로는 로그인이 `redirect_uri_mismatch`로 실패한다.
+  **이 확인은 Spring이 만드는 요청까지만 봤고 Google이 그 URI를 받아주는지는 보지 않았다** —
+  위 결함을 놓친 지점이 정확히 여기다. 리디렉션을 끝까지 따라가야 판정된다.
 - **IMPORTANT — 프론트 개발 서버(:5173)로 로그인하려면 URI를 하나 더 등록해야 한다**(2026-08-07).
   `http://localhost:5173/login/oauth2/code/google`이다. Vite 프록시가 Host를 바꾸지 않으므로
   (`changeOrigin: false`, ADR-0018) Spring이 요청 Host로 `redirect_uri`를 만든다 — 실측으로
@@ -93,7 +103,7 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
 - **어디서**: [Cloudflare](https://dash.cloudflare.com/) → Zero Trust(Cloudflare One) → **Networks → Tunnels** (구 UI는 `Access → Tunnels`)
 - **무엇을**: 계정, Tunnel 생성 후 커넥터 토큰. 5번을 Cloudflare Registrar에서 사면 **네임서버 변경 단계는 없다.**
 - **환경변수**: `CLOUDFLARE_TUNNEL_TOKEN`
-- **진행**: 터널 생성·`sudo cloudflared service install`·커넥터 `Healthy`까지 확인됐다(2026-08-07). **남은 것은 공개 호스트명 라우트 하나뿐이다.** 절차는 [`TODO.md`](../TODO.md) §3 ②에 단계별로 있다.
+- **완료 (2026-08-07)**: `curl -I https://screener.na1011.net/`가 `200`을 낸다. 절차와 함정은 [`TODO.md`](../TODO.md) §3 ②에 있다.
 - **IMPORTANT — 라우트를 좌측 메뉴 `Networks → Routes`에서 만들면 안 된다.** 그 화면은 **CIDR 전용**(사설망, 접속 측에 WARP 클라이언트 필요)이라 공개 주소가 생기지 않는데, 만들어도 오류 없이 저장된다. 공개 주소는 **터널 상세 → `Routes` 탭 → `Add route` → `Published application`**이다. 구분 신호는 입력란이다 — CIDR 칸이 보이면 잘못 들어온 것이고, `Subdomain`/`Domain`/`Service URL`이 보이면 맞다.
 - **IMPORTANT — `CLOUDFLARE_TUNNEL_TOKEN`을 Spring 애플리케이션은 읽지 않는다.** `sudo cloudflared service install <TOKEN>`이 `launchd` 데몬에 직접 주입하며, 토큰을 쓰는 주체는 그 프로세스다. `.env`에 적는 것은 재설치·재발급 때 다시 찾지 않기 위한 기록이다.
 - **`server.forward-headers-strategy: framework`는 이 터널 때문에 들어갔다**(2026-08-07 적용). cloudflared가 로컬에 평문 HTTP로 붙어 원래 스킴이 `X-Forwarded-Proto`에만 남는다. 기본값 `NONE`이면 Spring이 `redirect_uri`를 `http://screener.na1011.net/...`으로 만들어 Google이 `redirect_uri_mismatch`를 낸다 — 호스트는 맞고 스킴만 달라 화면만 봐서는 원인을 못 찾는다(ADR-0018). **터널을 걷어내지 않는 한 되돌리지 않는다.**

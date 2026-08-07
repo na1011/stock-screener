@@ -47,7 +47,8 @@
 
 ## 미룬 것 / 알려진 미완성
 
-- **외부 서비스 발급 8건 중 5건 완료.** 정본은 [`external-credentials.md`](./external-credentials.md). 도메인 `na1011.net`은 구매됐고(`dig NS`가 Cloudflare 네임서버를 답한다) Tunnel도 커넥터까지 붙었다. **남은 것은 공개 호스트명 라우트 하나** — 절차와 함정은 [`TODO.md`](../TODO.md) §3 ②에 있다.
+- **`https://screener.na1011.net`이 살아 있다** (2026-08-07, `curl -I` → 200). 도메인·Tunnel 완료. 정본은 [`external-credentials.md`](./external-credentials.md).
+- **IMPORTANT — 그런데 도메인 로그인은 안 된다. OAuth 클라이언트가 `데스크톱` 유형으로 발급됐다.** 그 유형에는 리디렉션 URI 칸이 없고 유형은 변경 불가라 **`웹 애플리케이션`으로 새로 만들어야 한다**([`TODO.md`](../TODO.md) §3 ③ 3-1). **loopback은 등록 없이 통과해 `localhost:8080` 로그인은 멀쩡하다** — 그래서 이 결함은 도메인을 붙이기 전까지 어떤 테스트에도 잡히지 않았다.
 - **재무 수집이 일일 배치에 없다.** 분기 공시라 매일 조회하면 쿼터만 태운다. 공시 시즌 갱신은 수동 실행 전제다.
 - **워치리스트가 통째로 Phase 6이다.** 이음매는 이미 있다.
 - **배치 잡의 HTTP 진입점이 없다 — Phase 6.** `SecurityConfigTest`가 그 404를 단언하고 있어 **함께** 고쳐야 한다.
