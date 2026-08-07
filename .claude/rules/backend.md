@@ -19,6 +19,8 @@ paths:
 
 - MUST: 배치 실패는 나중에 실패 단위를 식별할 수 있는 형태로 남긴다. 관리자가 실패한 부분만 골라 재실행하는 기능이 여기에 의존한다.
 
+- MUST: enum에 값을 더하거나 `@Size`·공개 상수를 바꾸면 `src/test/resources/contract/wire-contract.json`에도 함께 적는다(ADR-0020). 프론트가 그 값을 손으로 거울 삼아 들고 있고, 거울은 어긋나도 화면 어디에서도 티가 나지 않는다 — 실제로 `IndicatorCategory`에 값이 하나 늘면 그 분류의 지표 전체가 조건 빌더에서 **선택 불가능해진다.** `WireContractTest`가 잡아 주지만, 잡히는 시점이 커밋 뒤가 아니라 지금이어야 한다.
+
 - MUST: 컨트롤러는 도메인별 `…/web`에 두고, 최상위 `web`은 HTTP 인프라 전용으로 유지한다. `pipeline` 하위 패키지 이름은 `.claude/rules/data-pipeline.md`의 glob에 **의도적으로 맞춘 것**이므로 바꾸면 그 규칙이 로드되지 않는다 — 로드되지 않았다는 사실은 드러나지 않는다.
 
 ---
