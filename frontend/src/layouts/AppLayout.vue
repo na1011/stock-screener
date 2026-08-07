@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
+import ConfirmDialog from 'primevue/confirmdialog'
 import Message from 'primevue/message'
+import Toast from 'primevue/toast'
 import { onErrorCaptured, ref } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 
@@ -47,6 +49,9 @@ function dismiss(): void {
       <!-- key를 라우트 경로로 두어 종목을 옮길 때 상태가 남지 않게 한다. -->
       <RouterView :key="route.fullPath" />
     </main>
+
+    <Toast position="bottom-right" />
+    <ConfirmDialog />
   </div>
 </template>
 

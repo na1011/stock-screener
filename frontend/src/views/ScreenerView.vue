@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 import AsyncPanel from '@/components/AsyncPanel.vue'
+import SaveScreenDialog from '@/components/SaveScreenDialog.vue'
+import ScreenPicker from '@/components/ScreenPicker.vue'
 import ConditionBuilder from '@/components/condition/ConditionBuilder.vue'
 import ResultCards from '@/components/result/ResultCards.vue'
 import ResultSummary from '@/components/result/ResultSummary.vue'
@@ -16,6 +18,10 @@ const screening = useScreeningStore()
 const { isMobile } = useBreakpoint()
 
 const result = computed(() => screening.result ?? null)
+const saveVisible = ref(false)
+
+/** 프리셋은 서버가 수정을 막으므로(403) 저장 버튼을 주지 않는다. 복제한 뒤에는 저장할 수 있다. */
+const canSave = computed(() => !draft.isPreset && draft.completeConditions.length > 0)
 
 async function run(): Promise<void> {
   const request = draft.toRequest()
@@ -28,6 +34,8 @@ async function run(): Promise<void> {
 
 <template>
   <main class="screener">
+    <ScreenPicker />
+
     <ConditionBuilder :retention="screening.retention">
       <template #actions>
         <Button
@@ -37,8 +45,17 @@ async function run(): Promise<void> {
           :disabled="!draft.canRun"
           @click="run"
         />
+        <Button
+          label="조건 저장"
+          icon="pi pi-save"
+          outlined
+          :disabled="!canSave"
+          @click="saveVisible = true"
+        />
       </template>
     </ConditionBuilder>
+
+    <SaveScreenDialog v-model:visible="saveVisible" />
 
     <section class="screener__result">
       <AsyncPanel
