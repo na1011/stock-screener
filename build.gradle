@@ -332,17 +332,44 @@ tasks.register('checkDuplicateFiles') {
     group = 'verification'
     description = '복제 파일·디렉토리("이름 2.java")를 검출해 duplicate class 전에 멈춘다.'
     doLast {
-        def dupes = []
-        file('src').traverse { f ->
-            if (f.name ==~ /.* \d+(\..+)?$/) {
-                dupes << relativePath(f)
+        def collect = { File root ->
+            def found = []
+            if (root.exists()) {
+                root.traverse { f ->
+                    if (f.name ==~ /.* \d+(\..+)?$/) {
+                        found << relativePath(f)
+                    }
+                }
             }
+            return found.sort()
         }
-        if (dupes) {
+
+        def sourceDupes = collect(file('src'))
+        if (sourceDupes) {
             throw new GradleException(
                     "복제 파일이 있다. 삭제하고 다시 빌드하라:\n" +
-                    dupes.sort().collect { "  ${it}" }.join('\n'))
+                    sourceDupes.collect { "  ${it}" }.join('\n'))
+        }
+
+        // 빌드 산출물에도 같은 일이 생긴다(~/Desktop이 iCloud 동기화 대상이다). 그때의 증상은
+        // "Could not execute test class 'X 2' (wrong name: X)"인데, 그 문구만 보고 원인이
+        // 파일 복제라는 것을 알아내기까지 시간이 걸린다 — 실제로 걸렸다. 여기서 먼저 가른다.
+        // src와 처방이 다르다: 산출물은 지우는 게 아니라 clean으로 다시 만든다.
+        def buildDupes = collect(file('build/classes')) + collect(file('build/resources'))
+        if (buildDupes) {
+            throw new GradleException(
+                    "빌드 산출물에 복제본이 있다. `./gradlew clean` 후 다시 빌드하라.\n" +
+                    "그대로 두면 테스트가 'wrong name' 오류로 실패하고 원인이 드러나지 않는다:\n" +
+                    buildDupes.collect { "  ${it}" }.join('\n'))
         }
     }
 }
 tasks.named('check') { dependsOn 'checkDuplicateFiles' }
+// 산출물 검사가 의미를 가지려면 컴파일 뒤·테스트 앞에 와야 한다. 순서를 못박지 않으면
+// Gradle이 test를 먼저 돌릴 수 있고, 그러면 정작 막으려던 'wrong name' 오류가 먼저 난다.
+// 단독 실행(./gradlew checkDuplicateFiles) 시에는 testClasses가 그래프에 없어 무시된다.
+tasks.named('checkDuplicateFiles') { mustRunAfter 'testClasses' }
+tasks.named('test') { mustRunAfter 'checkDuplicateFiles' }
+// 프론트 단위 테스트를 check에 건다. 별도 명령으로 두면 ./gradlew build가 초록불인데
+// 재시도 판별·CSRF 헤더 같은 눈에 안 보이는 로직이 깨진 채로 남는다.
+tasks.named('check') { dependsOn 'frontendTest' }
