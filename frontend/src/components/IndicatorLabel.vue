@@ -86,9 +86,15 @@ const hasHelp = computed(() => Boolean(props.description) || Boolean(props.inter
   white-space: nowrap;
 }
 
+/*
+ * 유불리 방향. 10px 하드코딩이라 사실상 안 보였다 — 토큰 밖의 크기이기도 했다.
+ *
+ * IMPORTANT — **색을 주지 않는다.** 이것은 "지표의 성질"(높을수록 유리한가)이지 이 종목
+ * 값의 좋고 나쁨이 아니다. 색을 주면 바로 아래 미터가 말하는 것과 뜻이 겹쳐 어긋난다(ADR-0021).
+ */
 .indicator-label__marker {
-  font-size: 0.625rem;
-  color: var(--p-text-muted-color);
+  font-size: var(--app-text-2xs);
+  color: var(--p-surface-500);
   cursor: help;
 }
 

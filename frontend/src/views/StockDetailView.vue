@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
-import Tag from 'primevue/tag'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
@@ -10,6 +9,7 @@ import AsyncPanel from '@/components/AsyncPanel.vue'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import PriceReferencePanel from '@/components/stock/PriceReferencePanel.vue'
 import BandMeter from '@/components/ui/BandMeter.vue'
+import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useAsync } from '@/composables/useAsync'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { readBand } from '@/lib/band'
@@ -127,13 +127,19 @@ onMounted(() => {
                 · {{ detail.data.value.stock.sector }}
               </template>
             </p>
+            <!--
+              유니버스는 판정이 아니라 소속이다. `Tag`를 쓰지 않는 이유가 그것이다 — 이 화면의
+              `Tag`는 판정 3상태가 쓰는 형태이고(ADR-0021), 소속 배지가 같은 모양이면 "충족"과
+              한 종류로 읽힌다. accent를 옅게 깔아 머리글에 색을 하나 준다.
+            -->
             <div class="stock-detail__universes">
-              <Tag
+              <span
                 v-for="universe in detail.data.value.stock.universes"
                 :key="universe.code"
-                :value="universe.name"
-                severity="secondary"
-              />
+                class="stock-detail__universe"
+              >
+                {{ universe.name }}
+              </span>
             </div>
           </div>
           <div class="stock-detail__price">
@@ -147,19 +153,31 @@ onMounted(() => {
         </header>
 
         <section v-if="detail.data.value.price" class="stock-detail__ohlc">
-          <span>시가 <span class="tabular">{{ formatPrice(detail.data.value.price.open) }}</span></span>
-          <span>고가 <span class="tabular">{{ formatPrice(detail.data.value.price.high) }}</span></span>
-          <span>저가 <span class="tabular">{{ formatPrice(detail.data.value.price.low) }}</span></span>
-          <span>거래량 <span class="tabular">{{ formatCount(detail.data.value.price.volume) }}</span></span>
           <span>
-            상장주식수
+            <span class="stock-detail__ohlc-label">시가</span>
+            <span class="tabular">{{ formatPrice(detail.data.value.price.open) }}</span>
+          </span>
+          <span>
+            <span class="stock-detail__ohlc-label">고가</span>
+            <span class="tabular">{{ formatPrice(detail.data.value.price.high) }}</span>
+          </span>
+          <span>
+            <span class="stock-detail__ohlc-label">저가</span>
+            <span class="tabular">{{ formatPrice(detail.data.value.price.low) }}</span>
+          </span>
+          <span>
+            <span class="stock-detail__ohlc-label">거래량</span>
+            <span class="tabular">{{ formatCount(detail.data.value.price.volume) }}</span>
+          </span>
+          <span>
+            <span class="stock-detail__ohlc-label">상장주식수</span>
             <span class="tabular">{{ formatCount(detail.data.value.price.listedShares) }}</span>
           </span>
         </section>
         <p v-else class="stock-detail__no-price">이 날짜의 시세가 없습니다.</p>
 
         <section v-for="group in groups" :key="group.category" class="indicator-group">
-          <h2 class="indicator-group__title">{{ group.label }}</h2>
+          <SectionHeading :title="group.label" :count="group.items.length" />
           <ul class="indicator-group__list">
             <li v-for="row in group.items" :key="row.indicator.code" class="indicator">
               <IndicatorLabel
@@ -251,20 +269,32 @@ onMounted(() => {
 
 .stock-detail__name {
   font-size: var(--app-text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
   margin: 0;
   overflow-wrap: anywhere;
 }
 
+/* 티커·시장은 있어야 하지만 읽을 차례가 마지막이다. 14px muted면 종목명과 거의 붙어 보인다. */
 .stock-detail__meta {
-  margin: 0.25rem 0 0.5rem;
-  color: var(--p-text-muted-color);
-  font-size: var(--app-text-md);
+  margin: 0.125rem 0 0.5rem;
+  color: var(--p-surface-500);
+  font-size: var(--app-text-xs);
 }
 
 .stock-detail__universes {
   display: flex;
   gap: 0.375rem;
   flex-wrap: wrap;
+}
+
+.stock-detail__universe {
+  padding: 0.1875rem 0.4375rem;
+  border-radius: var(--p-border-radius-sm);
+  background: color-mix(in srgb, var(--p-primary-color) 14%, transparent);
+  color: var(--p-primary-300);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
 }
 
 .stock-detail__price {
@@ -277,12 +307,13 @@ onMounted(() => {
   font-size: var(--app-text-2xl);
   font-weight: 700;
   line-height: 1.15;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  color: var(--p-text-hover-color);
 }
 
 .stock-detail__price-label {
-  font-size: var(--app-text-xs);
-  color: var(--p-text-muted-color);
+  font-size: var(--app-text-2xs);
+  color: var(--p-surface-500);
 }
 
 /* 시가·고가·저가·거래량은 값의 나열이라 칸으로 나눈다. 나누지 않으면 어디까지가 한
@@ -291,10 +322,10 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   font-size: var(--app-text-sm);
-  color: var(--p-text-muted-color);
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
-  background: var(--p-content-background);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-edge-highlight);
 }
 
 .stock-detail__ohlc > span {
@@ -303,7 +334,7 @@ onMounted(() => {
   gap: 0.375rem;
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0.5rem 0.875rem;
+  padding: 0.4375rem 0.875rem;
   border-inline-start: 1px solid var(--p-content-border-color);
   white-space: nowrap;
 }
@@ -312,8 +343,14 @@ onMounted(() => {
   border-inline-start: 0;
 }
 
+/* 라벨은 짚는 것이고 값은 읽는 것이다. 둘이 같은 크기면 다섯 칸이 열 개의 낱말로 보인다. */
+.stock-detail__ohlc-label {
+  font-size: var(--app-text-2xs);
+  color: var(--p-surface-500);
+}
+
 .stock-detail__ohlc .tabular {
-  color: var(--p-text-color);
+  color: var(--p-text-hover-color);
   font-weight: 600;
 }
 
@@ -324,12 +361,9 @@ onMounted(() => {
   color: var(--p-text-muted-color);
 }
 
-.indicator-group__title {
-  font-size: var(--app-text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--p-text-muted-color);
-  margin: 0 0 0.5rem;
+/* 첫 구획은 시세 줄 바로 아래다. 제목의 기본 윗여백을 여기서만 줄인다. */
+.indicator-group:first-of-type :deep(.section-heading) {
+  margin-top: 0.25rem;
 }
 
 .indicator-group__list {
@@ -337,19 +371,29 @@ onMounted(() => {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.625rem;
 }
 
+/*
+ * 카드가 캔버스 위 평면 하나였다. 위쪽을 미세하게 들어 올리고 상단 1px에 빛을 걸어야
+ * 스물몇 장이 같은 깊이에 눕지 않는다 — 합성값의 정본은 `main.css`다.
+ */
 .indicator {
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
-  background: var(--p-content-background);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-edge-highlight);
   padding: 0.625rem 0.75rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.25rem 0.5rem;
   align-items: baseline;
+  transition: border-color var(--app-motion-fast) var(--app-ease);
+}
+
+.indicator:hover {
+  border-color: var(--p-surface-600);
 }
 
 .indicator__value {
@@ -385,11 +429,23 @@ onMounted(() => {
   margin-top: 0.125rem;
 }
 
+/*
+ * 설명은 두 줄까지만. 전문은 이름 옆 `ⓘ`가 **이미 같은 문장을 들고 있다**(`IndicatorLabel`).
+ *
+ * 자르는 이유는 자리 때문만이 아니다. 잘리지 않으면 문단이 카드 잉크의 절반을 넘어, 값을
+ * 훑으려는 눈이 카드마다 산문을 먼저 만난다. 높이가 들쭉날쭉해 그리드에 구멍이 생기는 것도
+ * 그 부작용이다.
+ */
 .indicator__interpretation {
   grid-column: 1 / -1;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
   margin: 0;
   font-size: var(--app-text-xs);
-  color: var(--p-text-muted-color);
+  color: var(--p-surface-500);
   line-height: 1.5;
 }
 
