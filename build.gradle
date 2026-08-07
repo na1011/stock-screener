@@ -178,6 +178,36 @@ tasks.register('checkEnv') {
             def overridden = System.getenv(key) != null ? ' [셸 환경변수가 우선함]' : ''
             println "  ${key}: ${status}${overridden}"
         }
+
+        // 구조 진단. "파일엔 적었는데 파서가 못 본다"를 가르는 용도다 — 주석 처리됐는지,
+        // '='가 빠졌는지, 키 이름에 오타가 있는지가 여기서만 드러난다.
+        // MUST NOT: 값을 출력하지 않는다. 줄 번호·분류·길이만 낸다.
+        println '\n.env 줄 구조 (값 미출력):'
+        def lineNo = 0
+        rootProject.file('.env').eachLine('UTF-8') { raw ->
+            lineNo++
+            def line = raw.trim()
+            if (line.isEmpty()) {
+                return
+            }
+            if (line.startsWith('#')) {
+                println "  ${lineNo}: 주석 — 무시됨"
+                return
+            }
+            def body = line.startsWith('export ') ? line.substring(7).trim() : line
+            // 어느 줄이 구글 자격증명인지만 표시한다. 부분 문자열 포함 여부라 값은 새지 않는다.
+            def marks = ['GOOGLE', 'CLIENT', 'SECRET', 'GOCSPX'].findAll {
+                body.toUpperCase().contains(it)
+            }
+            def hint = marks.isEmpty() ? '' : "  ⟵ ${marks.join('/')} 포함"
+            def sep = body.indexOf('=')
+            if (sep <= 0) {
+                println "  ${lineNo}: '='가 없어 무시됨 (${body.length()}자)${hint}"
+                return
+            }
+            println "  ${lineNo}: 키 '${body.substring(0, sep).trim()}' → 값 ${body.length() - sep - 1}자${hint}"
+        }
+        println "\n파일 크기: ${rootProject.file('.env').length()}바이트, 총 ${lineNo}줄"
     }
 }
 
