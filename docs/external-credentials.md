@@ -1,6 +1,6 @@
 # 외부 서비스 발급 목록
 
-사용자가 직접 발급·인증해야 하는 것들. **2~6번이 완료됐고, 1번은 유형을 잘못 골라 재발급이 필요하다.** 현황은 아래 표가 정본이다.
+사용자가 직접 발급·인증해야 하는 것들. **1~6번이 완료됐고 7·8번이 남았다.** 현황은 아래 표가 정본이다.
 
 에이전트가 대신 할 수 없는 작업만 모았다(계정 생성, 본인 인증, 콘솔에서 키 발급 등). 나중에 한 번에 진행하기 위한 목록이며, 각 항목에 **언제까지 필요한지**와 **없으면 무엇이 막히는지**를 적었다.
 
@@ -13,7 +13,7 @@
 
 | # | 항목 | 상태 | 필요 시점 | 없으면 막히는 것 |
 |---|---|---|---|---|
-| 1 | Google OAuth 클라이언트 | **재발급 필요 — `데스크톱` 유형으로 발급됨** | Phase 5~6 | 도메인 로그인. localhost는 동작 |
+| 1 | Google OAuth 클라이언트 | **완료 (2026-08-07 재발급, 도메인 실측)** | Phase 5~6 | 브라우저 로그인. 인가 로직은 이미 동작 |
 | 2 | 공공데이터포털 API 키 | **완료 (2026-08-06)** | Phase 2 | 코스피·코스닥 시세 수집 |
 | 3 | DART Open API 키 | **완료 (2026-08-06)** | Phase 2 | 국내 재무제표 수집 |
 | 4 | Finnhub API 키 | **완료 (2026-08-06)** | ~~Phase 2~~ → v1.1 | 미국 재무. **시세는 무료 불가(403 실측)** |
@@ -35,22 +35,22 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
 - **환경변수**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - **소요**: 약 10분
 - **주의**: 승인된 리디렉션 URI에 `https://screener.na1011.net/login/oauth2/code/google`을 등록해야 한다(5번에서 확정된 주소다). 로컬 테스트용 `http://localhost:8080/login/oauth2/code/google`은 지우지 않고 함께 둔다.
-- **IMPORTANT — 발급된 클라이언트가 `데스크톱` 유형이라 다시 만들어야 한다** (2026-08-07 확인).
+- **현재 상태 (2026-08-07)**: `웹 애플리케이션` 유형으로 재발급 완료. **도메인에서 실측 확인했다** —
+  `https://screener.na1011.net/oauth2/authorization/google`이 리디렉션 끝에
+  `accounts.google.com/v3/signin/identifier`(실제 로그인 화면)로 도착하고
+  `redirect_uri=https://screener.na1011.net/...`이 그대로 통과한다.
+- **IMPORTANT — 처음에는 `데스크톱` 유형으로 발급해 한 번 갈아엎었다. 재발급할 일이 생기면 유형부터 본다.**
   데스크톱 유형에는 **승인된 리디렉션 URI 입력란이 아예 없고, 유형은 생성 후 변경할 수 없다.**
-  Google이 이 유형에 허용하는 것은 loopback(`http://localhost:포트`)뿐이다.
-  **이 결함이 넉 달 가까이 안 보였던 이유는 loopback이 등록 없이 통과하기 때문이다** —
-  `http://localhost:8080` 로그인은 지금도 정상 동작한다(실측). 도메인에서만 깨진다:
+  Google이 그 유형에 허용하는 것은 loopback(`http://localhost:포트`)뿐이다.
+  **loopback은 등록 없이 통과하므로 localhost 로그인은 멀쩡했고, 도메인에서만 깨졌다:**
   ```
   http://localhost:8080/login/oauth2/code/google       → Google 로그인 화면 (200)
   https://screener.na1011.net/login/oauth2/code/google → Error 400: redirect_uri_mismatch
   ```
-  `웹 애플리케이션` 유형으로 새로 만들고 `.env`의 `GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`을
-  교체한다. 절차와 검증 명령은 [`TODO.md`](../TODO.md) §3 ③ 3-1에 있다.
-- **아래는 이전 발급 시점(2026-08-07)의 확인 기록이다.** `GET /oauth2/authorization/google`이
-  `302 → accounts.google.com`을 내리고 `client_id`가 실제 값, `scope=openid email profile`,
-  `redirect_uri=http://localhost:8080/login/oauth2/code/google`였다.
-  **이 확인은 Spring이 만드는 요청까지만 봤고 Google이 그 URI를 받아주는지는 보지 않았다** —
-  위 결함을 놓친 지점이 정확히 여기다. 리디렉션을 끝까지 따라가야 판정된다.
+- **IMPORTANT — 그래서 OAuth 확인은 리디렉션을 끝까지 따라가야 한다.** 처음 발급 때의 확인은
+  `302 → accounts.google.com`과 `redirect_uri` 값까지만 봤다. 그것은 **Spring이 만드는 요청**만
+  본 것이고 **Google이 그 요청을 받아주는지**는 보지 않은 것이라, 위 결함을 그대로 통과시켰다.
+  `curl -sL`로 최종 URL이 `signin/oauth/error`인지 `signin/identifier`인지 보면 갈린다.
 - **IMPORTANT — 프론트 개발 서버(:5173)로 로그인하려면 URI를 하나 더 등록해야 한다**(2026-08-07).
   `http://localhost:5173/login/oauth2/code/google`이다. Vite 프록시가 Host를 바꾸지 않으므로
   (`changeOrigin: false`, ADR-0018) Spring이 요청 Host로 `redirect_uri`를 만든다 — 실측으로
