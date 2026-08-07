@@ -50,16 +50,13 @@ paths:
 - **`IndicatorDataReader`가 분기 재무에 한 해치 여유를 얹어 읽는다.** PER의 TTM은 여유가 0이라 공시가 빠지면 경계에서 값이 조용히 사라진다.
 - **`ADJ_CLOSE`는 봉 하나로 값이 나오는 첫 지표다.** 정리 코드에서 `DELETE FROM stock` 앞에 `indicator_value` 정리가 없으면 FK로 중단된다.
 
-### 배치 실행 (`BootstrapRunner`, `bootstrap` 프로파일 전용)
+### 배치 실행
 
-```bash
-# 공통 접두: ./gradlew bootRun --args='--spring.profiles.active=bootstrap <아래>'
---job=universe
---job=initial-load --price-years=7 --financial-years=7 --reload-existing=true
---job=backfill --from=2025-11-11 --as-of=2026-08-05   # 구간 전체를 돈다
-```
+여기 없다. 실행 절차와 그 함정은 **`batch-load` skill**에 있다.
 
-- **`--reload-existing=true`가 없으면 기간을 늘려도 아무 일도 일어나지 않는다.** 대상 선정이 `NOT EXISTS (price_daily)`라 봉이 하나라도 있으면 건너뛰고, 잡은 **성공으로 끝난다.**
-- **적재 중 코드를 재컴파일하지 않는다.** devtools가 실행 중 프로세스에 새 클래스를 끼워넣어 카탈로그·스키마와 어긋난다(실제 2회 발생).
-- **백필 한 번은 워밍업이 긴 지표를 다 채우지 못한다.** 러너가 `maxEffectiveLookback` 봉만 읽어 SMA_200은 실행당 ~25거래일치만 나온다. 구간 전체를 돌아야 한다(180일=1시간 51분).
-- 적재 검증: `ck_price_ohlc` 위반 0, 편입 종목 중 시세 없는 종목 0, `min(trade_date)`가 요청 구간 시작과 일치, `listed_shares` 빈값 0.
+옮긴 이유: 적재는 어떤 파일도 열지 않는 Bash 작업이라 이 파일의 `paths` glob이 **발화하지
+않는다.** "적재해줘"로 시작하는 세션은 `**/batch/**` 아래를 한 번도 건드리지 않고 끝난다.
+여기 남은 것은 파이프라인 **코드**를 고칠 때의 제약뿐이고, 그것은 트리거가 파일이라 맞다.
+
+`--reload-existing`을 빠뜨린 실행은 `warn-bootstrap-args.sh`가 별도로 알린다 — 트리거가
+argv의 모양이라 glob으로는 표현할 수 없기 때문이다.

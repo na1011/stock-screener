@@ -36,7 +36,7 @@
 **Phase 5의 수동 관통이 남았다.** 구현·자동 검증은 끝났지만 design §5 Phase 5의 12개 판정은 대부분 UX 수준이라 **브라우저와 실제 Google 로그인이 있어야 판정된다.** 헤드리스로 확인된 것은 서버 쪽뿐이다(`SpaFallbackTest`·`SecurityConfigTest`가 단언한다). 관통 절차는 [`TODO.md`](../TODO.md) §1의 체크리스트 13개에 있다.
 
 - **개발 서버(:5173) 로그인은 Console에 URI를 하나 더 등록해야 된다**(절차는 `TODO.md` §2). Vite 프록시가 Host를 바꾸지 않아 Spring이 요청 Host로 `redirect_uri`를 만든다(실측). **:8080은 그대로 된다.**
-- 배치(`BootstrapRunner`) 실행 명령과 그 함정은 `.claude/rules/data-pipeline.md`에 있다.
+- 배치(`BootstrapRunner`) 실행은 `batch-load` skill이 스스로 라우팅한다. 여기서 가리킬 필요가 없다.
 
 ---
 

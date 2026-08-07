@@ -1,0 +1,65 @@
+---
+name: batch-load
+description: BootstrapRunner로 시세·재무를 적재하거나 백필할 때. --job=universe|initial-load|backfill의 명령 형태, 각 플래그가 실제로 하는 일, 적재 후 확인 항목.
+---
+
+# 적재 배치 (`BootstrapRunner`)
+
+`bootstrap` 프로파일 전용이다. 일반 기동에서는 실행되지 않는다.
+
+**이 문서는 따라야 할 순서가 아니라 알아야 할 사실이다.** 무엇을 어떤 범위로 적재할지는
+상황이 정한다 — 여기서는 각 명령이 실제로 무엇을 하고 무엇을 건너뛰는지만 적는다.
+
+```bash
+# 공통 접두
+./gradlew bootRun --args='--spring.profiles.active=bootstrap <아래>'
+
+--job=universe
+--job=initial-load --price-years=7 --financial-years=7 --reload-existing=true
+--job=backfill --from=2025-11-11 --as-of=2026-08-05
+```
+
+## 각 잡이 하는 일
+
+| `--job` | 대상 | 비고 |
+|---|---|---|
+| `universe` | 유니버스 편입 종목 갱신 | 시총 어댑터가 `@ConditionalOnApiKey`라 키가 없으면 시드만 남는다(ADR-0012) |
+| `initial-load` | 시세·재무 원자료 | **대상 선정이 `NOT EXISTS (price_daily)`다** — 아래 참조 |
+| `backfill` | 지표 계산 | 지정한 구간을 **날짜별로 반복**한다 |
+
+## 조용히 아무 일도 하지 않는 조합
+
+**`--reload-existing=true`가 없으면 기존에 봉이 하나라도 있는 종목은 건너뛴다.** 기간을
+`--price-years=2`에서 `7`로 늘려도 마찬가지다 — 대상 선정이 "봉이 있는가"만 보기 때문에
+늘어난 기간이 반영되지 않는다. 그리고 **잡은 성공으로 끝난다.** 로그에도 예외에도 흔적이
+없어서, 적재됐다고 믿게 되는 것이 이 함정의 실체다.
+
+`warn-bootstrap-args.sh`가 이 조합을 실행 직후 알리지만, 알림은 알림일 뿐이다 — 새로 적재한
+것이 맞는지는 아래 확인 항목으로 직접 본다.
+
+**백필 한 번은 워밍업이 긴 지표를 다 채우지 못한다.** 러너가 `maxEffectiveLookback` 봉만
+읽으므로 `SMA_200`은 실행당 ~25거래일치만 나온다. 구간 전체를 돌아야 채워지고, **180일이
+1시간 51분**이다. 이 소요가 작업 계획을 바꾸므로 착수 전에 알아야 한다.
+
+**적재 중에 코드를 재컴파일하지 않는다.** devtools가 실행 중 프로세스에 새 클래스를
+끼워넣어 카탈로그·스키마와 어긋난다. 실제로 2회 발생했고, 두 번 다 적재를 처음부터 다시
+돌렸다.
+
+## 적재 후 확인
+
+행 수만 보면 부분 적재와 정상 적재가 같아 보인다. 넷 다 본다.
+
+- `ck_price_ohlc` 제약 위반 0
+- 편입 종목 중 시세가 하나도 없는 종목 0
+- `min(trade_date)`가 요청한 구간 시작과 일치 — 어긋나면 `--reload-existing`을 빠뜨린 것이다
+- `listed_shares` 빈값 0 — PER·PBR이 여기 의존한다(ADR-0013)
+
+## 외부 소스의 함정
+
+원자료를 다시 긁는 잡이므로 어댑터의 방어가 걸려 있는지가 결과를 가른다. 정본은
+[`docs/api-spec/`](../../../docs/api-spec/)이고, 파이프라인 **코드**를 고칠 때의 제약은
+`.claude/rules/data-pipeline.md`가 자동으로 로드한다.
+
+IMPORTANT — 공공데이터포털은 **없는 종목·휴장일·파라미터 오타의 응답이 모두 같다**
+(`resultCode "00"` + `totalCount 0` + HTTP 200). 날짜 형식 오타가 "그날 데이터 없음"으로
+저장되므로, 적재 결과가 비어 있을 때 소스 탓으로 결론짓기 전에 요청 파라미터를 먼저 본다.
