@@ -1,0 +1,57 @@
+{
+  "_": [
+    "백엔드와 프론트가 각자 자기 쪽과 대조하는 트립와이어다. 값의 정본은 언제나 백엔드 코드이고,",
+    "이 파일은 세 번째 정본이 아니다 — 여기를 고치는 순간이 반대편도 봐야 한다는 신호다(ADR-0020).",
+    "읽는 쪽: src/test/java/.../WireContractTest.java, frontend/src/api/contract.spec.ts",
+    "enum은 집합으로 대조한다. 순서는 계약이 아니라 프론트의 표시 판단이다."
+  ],
+
+  "enums": {
+    "IndicatorCategory": ["TECHNICAL", "FUNDAMENTAL", "PRICE", "DERIVED"],
+    "EvaluationMode": ["FILTER", "SCORING"],
+    "ScreenType": ["PRESET", "CUSTOM"],
+    "OutcomeStatus": ["MATCHED", "NOT_MATCHED", "NOT_EVALUABLE"],
+    "FavorableEnd": ["HIGH", "LOW", "UNKNOWN"],
+    "OperandType": ["LITERAL", "INDICATOR"],
+    "ZoneRole": ["SUPPORT", "RESISTANCE", "IN_RANGE"],
+    "ZoneStrength": ["HIGH", "MEDIUM", "LOW"]
+  },
+
+  "problemTypes": [
+    "urn:stockscreener:invalid-condition",
+    "urn:stockscreener:unknown-indicator",
+    "urn:stockscreener:invalid-request",
+    "urn:stockscreener:ambiguous-screening-input",
+    "urn:stockscreener:indicator-history-unavailable",
+    "urn:stockscreener:indicator-data-not-ready",
+    "urn:stockscreener:screen-not-found",
+    "urn:stockscreener:stock-not-found",
+    "urn:stockscreener:universe-not-found",
+    "urn:stockscreener:preset-is-read-only",
+    "urn:stockscreener:duplicate-screen-name",
+    "urn:stockscreener:screen-in-use",
+    "urn:stockscreener:conflict"
+  ],
+
+  "problemProperties": {
+    "_": [
+      "problem+json 본문에 얹히는 추가 속성. 이 이름들은 양쪽 컴파일러 모두에게 보이지 않는다 —",
+      "서버는 with(\"retentionFrom\", …)로 문자열 키를 얹고 프론트는 인덱스 시그니처로 꺼낸다.",
+      "어긋나면 날짜 선택기의 범위가 아무 오류 없이 사라진다. 이 항목이 픽스처의 존재 이유다."
+    ],
+    "urn:stockscreener:indicator-history-unavailable": [
+      "requestedAsOf",
+      "retentionFrom",
+      "retentionTo"
+    ]
+  },
+
+  "constants": {
+    "percentilePopulation": "ALL_CURRENT_MEMBERS",
+    "priceReferenceMethod": "SWING_EXTREMA_CLUSTERING",
+    "maxConditions": 20,
+    "screenNameMaxLength": 100,
+    "screenDescriptionMaxLength": 2000,
+    "defaultDecimalScale": 2
+  }
+}

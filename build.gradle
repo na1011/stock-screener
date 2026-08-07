@@ -281,6 +281,16 @@ tasks.register('frontendTest', Exec) {
     inputs.dir(frontendDir.dir('src'))
     inputs.file(frontendDir.file('vite.config.ts'))
     inputs.file(frontendDir.file('package-lock.json'))
+    // 계약 픽스처는 frontend/ 밖이라 위 세 줄로는 잡히지 않는다(ADR-0020).
+    //
+    // 지금 이 줄은 실제로는 작동하지 않는다 — 이 태스크는 **출력을 선언하지 않아 Gradle이
+    // 항상 실행**하기 때문이다(`--info`가 "Task has not declared any outputs despite executing
+    // actions"로 알려준다). 그래서 위 inputs 세 줄도 마찬가지로 놀고 있다.
+    //
+    // 그래도 적어 두는 이유는, 나중에 outputs를 선언해 이 태스크를 UP-TO-DATE 대상으로 만드는
+    // 순간 이 줄이 없으면 픽스처만 고쳤을 때 프론트 쪽 대조가 조용히 건너뛰어지기 때문이다.
+    // 그때 이 줄이 없다는 것을 알아차릴 방법이 없다.
+    inputs.file(file('src/test/resources/contract/wire-contract.json'))
 }
 
 // 번들을 리소스로 실어야 bootRun·bootJar·build가 모두 같은 화면을 띄운다.

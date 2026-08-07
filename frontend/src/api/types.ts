@@ -25,13 +25,31 @@ export const SCREEN_TYPES = ['PRESET', 'CUSTOM'] as const
 export type ScreenType = (typeof SCREEN_TYPES)[number]
 
 /** 조건별 판정. boolean으로 접으면 "판정 불가"가 "불충족"과 같아진다(ADR-0003). */
-export type OutcomeStatus = 'MATCHED' | 'NOT_MATCHED' | 'NOT_EVALUABLE'
+export const OUTCOME_STATUSES = ['MATCHED', 'NOT_MATCHED', 'NOT_EVALUABLE'] as const
+export type OutcomeStatus = (typeof OUTCOME_STATUSES)[number]
 
-export type IndicatorCategory = 'TECHNICAL' | 'FUNDAMENTAL' | 'PRICE' | 'DERIVED'
+export const INDICATOR_CATEGORIES = ['TECHNICAL', 'FUNDAMENTAL', 'PRICE', 'DERIVED'] as const
+export type IndicatorCategory = (typeof INDICATOR_CATEGORIES)[number]
+
+export const FAVORABLE_ENDS = ['HIGH', 'LOW', 'UNKNOWN'] as const
+export type FavorableEnd = (typeof FAVORABLE_ENDS)[number]
+
+export const OPERAND_TYPES = ['LITERAL', 'INDICATOR'] as const
+export type OperandType = (typeof OPERAND_TYPES)[number]
+
+/** 응답에만 나오고 화면이 읽지 않는다. 대조 대상이 아니라 계약 문서로 남긴다. */
 export type IndicatorValueType = 'RATIO' | 'PERCENT' | 'CURRENCY' | 'COUNT' | 'PRICE'
-export type FavorableEnd = 'HIGH' | 'LOW' | 'UNKNOWN'
+
+/**
+ * 연산자 이름.
+ *
+ * IMPORTANT — 배열로 만들지 않는다. 목록의 정본은 서버이고 `/api/indicators`가 한글 라벨과
+ * 함께 내려준다. 배열이 있으면 프론트가 그것을 나열하고 싶어지고, 그 순간 연산자가 추가될 때
+ * 고칠 곳이 둘이 된다.
+ */
 export type ComparisonOperatorName = 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ' | 'NEQ' | 'BETWEEN'
-export type OperandType = 'LITERAL' | 'INDICATOR'
+
+/** v1은 항상 AND다. 구조만 트리라서 남겨 둔다(ADR-0003). */
 export type LogicalOperator = 'AND' | 'OR'
 
 // ── 인증 ──────────────────────────────────────────────────────────
@@ -326,8 +344,11 @@ export interface StockDetailResponse {
 
 // ── 지지·저항 참고정보 ─────────────────────────────────────────────
 
-export type ZoneRole = 'SUPPORT' | 'RESISTANCE' | 'IN_RANGE'
-export type ZoneStrength = 'HIGH' | 'MEDIUM' | 'LOW'
+export const ZONE_ROLES = ['SUPPORT', 'RESISTANCE', 'IN_RANGE'] as const
+export type ZoneRole = (typeof ZONE_ROLES)[number]
+
+export const ZONE_STRENGTHS = ['HIGH', 'MEDIUM', 'LOW'] as const
+export type ZoneStrength = (typeof ZONE_STRENGTHS)[number]
 
 export interface PriceReferenceWindow {
   from: IsoDate

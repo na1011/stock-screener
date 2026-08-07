@@ -30,6 +30,15 @@ import java.util.Set;
 @Component
 public class ScreeningResponseAssembler {
 
+    /**
+     * 카탈로그에 없는 지표의 소수 자릿수.
+     *
+     * <p>프론트도 같은 상황에 같은 값을 쓴다({@code frontend/src/api/limits.ts}). 어긋나면 같은
+     * 지표가 표와 서버 응답에서 다른 자릿수로 보인다. 상수로 뽑은 이유는 리터럴이면
+     * {@code wire-contract.json}이 지킬 수 없기 때문이다(ADR-0020).
+     */
+    public static final int FALLBACK_DECIMAL_SCALE = 2;
+
     private final IndicatorCatalog indicatorCatalog;
     private final StockReader stockReader;
     private final ScreeningRepository screeningRepository;
@@ -129,7 +138,7 @@ public class ScreeningResponseAssembler {
      */
     private static ScreeningResponse.IndicatorBrief brief(String code, IndicatorDescriptor descriptor) {
         if (descriptor == null) {
-            return new ScreeningResponse.IndicatorBrief(code, code, null, 2, null,
+            return new ScreeningResponse.IndicatorBrief(code, code, null, FALLBACK_DECIMAL_SCALE, null,
                     "더 이상 제공되지 않는 지표다.");
         }
         return new ScreeningResponse.IndicatorBrief(

@@ -5,6 +5,7 @@ import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import { computed } from 'vue'
 
+import { OPERAND_TYPES } from '@/api/types'
 import type { ComparisonOperatorName, OperandType } from '@/api/types'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import { topQuintileCondition } from '@/lib/direction'
@@ -35,10 +36,22 @@ const requiresUpperBound = computed(
   () => catalog.operators.find((op) => op.name === props.condition.operator)?.requiresUpperBound ?? false,
 )
 
-const operandTypeOptions: { label: string; value: OperandType }[] = [
-  { label: '값', value: 'LITERAL' },
-  { label: '지표', value: 'INDICATOR' },
-]
+/**
+ * 비교 대상의 종류.
+ *
+ * 유니온에서 파생시킨다 — 손으로 적은 배열은 서버가 종류를 늘려도 그대로 남아, 그 종류를
+ * 고를 수 없게 되고(만들 수 없는 조건이 생긴다) 저장된 화면이 그것을 쓰면 LITERAL 분기로
+ * 잘못 그려진다.
+ */
+const OPERAND_TYPE_LABELS: Record<OperandType, string> = {
+  LITERAL: '값',
+  INDICATOR: '지표',
+}
+
+const operandTypeOptions: { label: string; value: OperandType }[] = OPERAND_TYPES.map((value) => ({
+  label: OPERAND_TYPE_LABELS[value],
+  value,
+}))
 
 /** 백분위 지표일 때만 나온다. 부등호와 경계값은 서버가 준 것을 그대로 넣는다. */
 const topQuintile = computed(() => topQuintileCondition(indicator.value?.percentile))

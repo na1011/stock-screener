@@ -20,8 +20,8 @@ IMPORTANT — 이 파일은 **세 번째 정본이 아니라 트립와이어**�
 
 - MUST: 프론트가 서버 enum을 거울로 들 때는 `as const` 배열에서 타입을 파생시킨다(`export const X = [...] as const; export type X = typeof X[number]`). 유니온만 있으면 런타임에 대조할 것이 없다.
 - MUST: 서버 값을 프론트에 적을 때(`api/types.ts`의 유니온, `api/limits.ts`의 숫자, `api/http.ts`의 `ProblemType` URN) **같은 값을 픽스처에도 적는다.**
-- MUST: 픽스처는 `src/test/resources/contract/` 아래에 둔다. 그래야 Gradle `test`가 입력으로 인식해 픽스처만 고쳐도 재실행한다.
-- MUST: `frontendTest` 태스크의 `inputs`에 픽스처 파일을 명시한다. 빠뜨리면 픽스처를 고쳐도 Vitest 쪽이 `UP-TO-DATE`로 건너뛰어 **트립와이어의 절반이 조용히 사라진다.**
+- MUST: 픽스처는 `src/test/resources/contract/` 아래에 둔다. 그래야 Gradle `test`가 입력으로 인식해 픽스처만 고쳐도 재실행한다(실측 확인).
+- MUST: `frontendTest`에 `outputs`를 선언하지 않는다. **선언하지 않은 덕분에 Gradle이 이 태스크를 항상 실행하고**(`--info`가 "Task has not declared any outputs despite executing actions"로 알려준다), 그래서 프론트 쪽 대조가 건너뛰어지지 않는다. 캐시를 켜려고 `outputs`를 붙이는 순간 `inputs`가 비로소 load-bearing이 되므로, 그때는 픽스처가 `inputs`에 들어 있는지부터 확인한다 — 그 줄은 미리 넣어 두었다.
 - MUST: enum은 **집합으로** 단언한다. 순서는 계약이 아니라 프론트의 표시 판단이다(`lib/indicatorCategory`의 랭크가 그 예다).
 - MUST NOT: 픽스처를 실행 코드에서 import하지 않는다. 브라우저 번들로 나가서는 안 되고, 값의 정본이 되어서도 안 된다.
 - MUST NOT: 프론트가 나열하지 않는 enum을 픽스처에 넣지 않는다. `ComparisonOperator`가 그렇다 — 목록의 정본은 서버이고 `/api/indicators`가 라벨과 함께 내려준다. 픽스처에 넣으면 프론트가 그것을 나열하고 싶어진다.
@@ -43,7 +43,14 @@ IMPORTANT — 이 파일은 **세 번째 정본이 아니라 트립와이어**�
 #    api/types.ts의 OUTCOME_STATUSES에서 하나 제거 → contract.spec.ts 실패 → 되돌린다
 ```
 
-3번이 실패하지 **않으면** `frontendTest`의 `inputs` 설정이 빠진 것이다.
+셋 다 2026-08-07에 실제로 깨뜨려 실패하는 것을 확인했다.
+
+`frontendTest`가 정말 매번 도는지는 이렇게 확인한다 — 아래가 `UP-TO-DATE`를 출력하기 시작하면
+위 규칙이 깨진 것이고, 픽스처가 `inputs`에 들어 있는지 확인해야 한다.
+
+```bash
+./gradlew frontendTest --info | grep -A2 "Task ':frontendTest' is not up-to-date"
+```
 
 ## 배경
 
