@@ -68,7 +68,16 @@ Phase 5는 구현과 자동 검증이 끝났고 **수동 관통만 남았다.** 
 
 Phase 6(워치리스트·관리자·운영)은 **네 가지 외부 자격증명이 전부 필요하다.** 항목별 배경은 [`docs/external-credentials.md`](docs/external-credentials.md) 5~8번에 있고, 여기는 **순서대로 따라 하는 절차**다.
 
-**도메인은 Cloudflare Registrar에서 산다**(결정 2026-08-07). 등록과 동시에 Cloudflare에 zone이 생기고 네임서버가 Cloudflare로 잡히므로, 다른 등록업체에서 살 때 필요한 **네임서버 변경과 전파 대기(수 시간~48시간)가 통째로 없어진다.** ①과 ②가 한 자리에서 이어진다는 것이 이 선택의 실익이다.
+**도메인은 `na1011.net`, 이 앱의 주소는 `screener.na1011.net`이다**(결정 2026-08-08). Cloudflare Registrar에서 산다 — 등록과 동시에 Cloudflare에 zone이 생기고 네임서버가 Cloudflare로 잡히므로, 다른 등록업체에서 살 때 필요한 **네임서버 변경과 전파 대기(수 시간~48시간)가 통째로 없어진다.** ①과 ②가 한 자리에서 이어진다는 것이 이 선택의 실익이다.
+
+**프로젝트 이름이 아니라 우산 도메인을 사고 서브도메인에 얹는다.** 서브도메인은 개수 제한도 추가 비용도 없고 Tunnel이 호스트명별로 다른 로컬 포트에 붙일 수 있으므로, 다음 프로젝트는 `wcs.na1011.net`처럼 Public Hostname만 추가하면 된다. 갱신비가 프로젝트 수만큼 늘지 않고, **프로젝트 범위가 바뀌어도 주소가 죽지 않는다** — 이 스크리너만 해도 v1.1에 미국 시장이 붙어서 `jongmok`(종목) 같은 이름을 샀다면 이미 어긋났을 것이다. 루트(`na1011.net`)는 라우트를 걸지 않으면 아무것도 응답하지 않으므로 지금 만들 것이 없다.
+
+**이름과 TLD를 이렇게 고른 이유**(후보 조회는 2026-08-08 RDAP):
+
+- **`na1011`은 GitHub 사용자명과 철자가 같다.** 포트폴리오 주소와 저장소 주소가 어긋나지 않는다.
+- **`.com`은 못 쓴다.** `na1011.com`이 2026-04-27에 이미 등록됐다(A 레코드 없이 보유만 하고 있다). 등록업체가 대안으로 제시하는 `na-1011.com`은 **하이픈이 부채다** — 구두로 전달할 때마다 하이픈을 설명해야 하고, 빠뜨린 오타는 남의 도메인으로 간다.
+- **`.dev`를 버린 이유는 인상이다.** 용도 제한이 있는 TLD는 아니지만(Google Registry의 범용 gTLD다) 비개발자 지인에게 개발·테스트 사이트로 읽힌다. `.co`는 인상이 낫지만 연 $25 수준이라 그 차이를 지불할 만큼은 아니었다.
+- **`.net`은 범용이고 하이픈이 없으며 연 $11.86이다.** 예스러운 인상은 있으나 "테스트 사이트"로 읽히지는 않는다.
 
 **의존 순서**: ① 도메인 → ② Tunnel → ③ OAuth·앱 설정. 이 셋은 사슬이라 앞을 건너뛸 수 없다. **④ Sentry와 ⑤ 알림은 이 사슬과 무관하므로 아무 때나 먼저 해도 된다.**
 
@@ -79,19 +88,15 @@ Phase 6(워치리스트·관리자·운영)은 **네 가지 외부 자격증명�
 ### ① Cloudflare 계정 + 도메인 등록 → (환경변수 없음)
 
 - [ ] **1-1. 계정 생성** — [dash.cloudflare.com](https://dash.cloudflare.com/) 회원가입. 이메일 인증까지 마친다.
-- [ ] **1-2. 도메인 검색·구매** — [domains.cloudflare.com](https://domains.cloudflare.com/) 또는 대시보드 좌측 `Domain Registration` → `Register Domains`. 이름을 검색해 결제한다.
+- [ ] **1-2. `na1011.net` 구매** — [domains.cloudflare.com](https://domains.cloudflare.com/) 또는 대시보드 좌측 `Domain Registration` → `Register Domains`. 2026-08-08 기준 연 $11.86.
 - [ ] **1-3. ICANN 이메일 인증 메일을 반드시 연다.** 등록 직후 오는 확인 메일을 **15일 안에** 클릭하지 않으면 도메인이 정지되고 사이트 전체가 죽는다. 스팸함까지 확인한다.
 - [ ] **1-4. 자동 갱신이 켜져 있는지 확인한다.** 만료되면 OAuth 리디렉션까지 한꺼번에 끊긴다.
 - [ ] **1-5. 네임서버 확인** — 터미널에서:
   ```bash
-  dig NS {도메인} +short     # *.ns.cloudflare.com 두 개가 나오면 완료
+  dig NS na1011.net +short     # *.ns.cloudflare.com 두 개가 나오면 완료
   ```
 
-**TLD 선택 주의**
-
-- **`.kr`·`.co.kr`은 Cloudflare Registrar에서 살 수 없다.** 한국 ccTLD는 지원 목록에 없다. 굳이 `.kr`을 원하면 가비아에서 사고 네임서버만 Cloudflare로 돌리는 경로가 되는데, 그러면 이 결정의 실익이 사라진다. `.com` / `.dev` / `.app` / `.xyz` 중에서 고르는 편이 낫다.
-- `.dev`·`.app`은 브라우저에 HSTS가 미리 박혀 있어 **HTTP 접속이 아예 불가능하다.** Tunnel이 어차피 HTTPS만 주므로 이 프로젝트에는 문제가 없다. 다만 나중에 평문으로 뭔가 확인하려 할 때 "왜 안 되지"로 헤맬 수 있다.
-- WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 항목이 아니다.
+WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 항목이 아니다.
 
 **없으면 막히는 것**: 고정 HTTPS 주소 — 외부 접속과 OAuth 리디렉션이 모두 여기 의존한다.
 
@@ -118,16 +123,16 @@ Phase 6(워치리스트·관리자·운영)은 **네 가지 외부 자격증명�
 
   | 항목 | 값 |
   |---|---|
-  | Subdomain | 비워 두거나 `screener` |
-  | Domain | ①에서 산 도메인 |
+  | Subdomain | `screener` |
+  | Domain | `na1011.net` |
   | Type | `HTTP` |
   | URL | `localhost:8080` |
 
   **Type은 `HTTPS`가 아니라 `HTTP`다.** cloudflared가 로컬 앱에 붙는 구간은 평문이고, 인증서는 Cloudflare 가장자리에서 끝난다. `HTTPS`로 잡으면 502가 난다.
 - [ ] **2-6. 확인** — `./gradlew bootRun`을 띄운 상태에서:
   ```bash
-  curl -I https://{도메인}/          # 200 + 로그인 셸 HTML
-  curl -I https://{도메인}/api/screens  # 401 (익명이므로 정상)
+  curl -I https://screener.na1011.net/             # 200 + 로그인 셸 HTML
+  curl -I https://screener.na1011.net/api/screens  # 401 (익명이므로 정상)
   ```
 
 **알아둘 것**
@@ -147,15 +152,15 @@ Phase 6(워치리스트·관리자·운영)은 **네 가지 외부 자격증명�
 - [ ] **3-1. Google Console에 리디렉션 URI 추가**
   [Google Cloud Console](https://console.cloud.google.com/) → API 및 서비스 → 사용자 인증 정보 → 해당 OAuth 클라이언트 → 승인된 리디렉션 URI:
   ```
-  https://{도메인}/login/oauth2/code/google
+  https://screener.na1011.net/login/oauth2/code/google
   ```
   기존 `http://localhost:8080/...`은 **지우지 않는다.** 로컬 개발이 그걸로 돈다.
-  OAuth 동의 화면의 `승인된 도메인`에도 ①의 도메인을 넣는다.
+  OAuth 동의 화면의 `승인된 도메인`에는 서브도메인이 아니라 **`na1011.net`**을 넣는다.
 
 - [ ] **3-2. IMPORTANT — 프록시 헤더 신뢰 설정을 켠다(코드 변경).**
   `src/main/resources/application.yaml`에 지금 `server:` 블록 자체가 없다. 즉 `forward-headers-strategy`가 기본값(`NONE`)이라 **Spring이 `X-Forwarded-Proto`를 무시한다.** cloudflared가 로컬에 평문 HTTP로 붙기 때문에, 그 상태로 도메인에서 로그인하면 Spring이 만드는 `redirect_uri`가 이렇게 나간다:
   ```
-  http://{도메인}/login/oauth2/code/google     ← 스킴이 http
+  http://screener.na1011.net/login/oauth2/code/google     ← 스킴이 http
   ```
   등록한 것은 `https://…`이므로 Google은 `redirect_uri_mismatch`를 낸다. **호스트는 맞고 스킴만 다르기 때문에 화면만 봐서는 원인을 못 찾는다.** Spring이 요청 Host로 `redirect_uri`를 만든다는 것은 :5173/:8080에서 이미 실측된 동작이다(ADR-0018).
   ```yaml

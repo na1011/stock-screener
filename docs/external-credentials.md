@@ -17,7 +17,7 @@
 | 2 | 공공데이터포털 API 키 | **완료 (2026-08-06)** | Phase 2 | 코스피·코스닥 시세 수집 |
 | 3 | DART Open API 키 | **완료 (2026-08-06)** | Phase 2 | 국내 재무제표 수집 |
 | 4 | Finnhub API 키 | **완료 (2026-08-06)** | ~~Phase 2~~ → v1.1 | 미국 재무. **시세는 무료 불가(403 실측)** |
-| 5 | 개인 도메인 | **미진행** | Phase 6 | 고정 HTTPS 주소. OAuth 리다이렉트에도 필요 |
+| 5 | 개인 도메인 (`na1011.net`) | **이름 확정 · 구매 전** | Phase 6 | 고정 HTTPS 주소. OAuth 리다이렉트에도 필요 |
 | 6 | Cloudflare 계정 + Tunnel | **미진행** | Phase 6 | 외부 접속 |
 | 7 | Sentry 프로젝트 | **미진행** | Phase 6 | 에러 수집·통지 |
 | 8 | 알림 채널(메신저) | **미진행** | Phase 6 | 배치 실패·워치리스트 알림의 메신저 채널 |
@@ -34,7 +34,7 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
 - **무엇을**: OAuth 2.0 클라이언트 ID(웹 애플리케이션 유형)
 - **환경변수**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - **소요**: 약 10분
-- **주의**: 승인된 리디렉션 URI에 `{도메인}/login/oauth2/code/google`을 등록해야 한다. 로컬 테스트용으로 `http://localhost:8080/login/oauth2/code/google`도 함께 넣어둔다. 도메인(5번)이 정해진 뒤에 하면 한 번에 끝난다.
+- **주의**: 승인된 리디렉션 URI에 `https://screener.na1011.net/login/oauth2/code/google`을 등록해야 한다(5번에서 확정된 주소다). 로컬 테스트용 `http://localhost:8080/login/oauth2/code/google`은 지우지 않고 함께 둔다.
 - **현재 상태 (2026-08-07)**: 발급 완료. `.env`에 실려 있고 실제 기동으로 확인했다 —
   `GET /oauth2/authorization/google`이 `302 → accounts.google.com`을 내리고 `client_id`가
   자리표시자가 아닌 실제 값, `scope=openid email profile`,
@@ -75,12 +75,17 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
 
 ## 5. 개인 도메인
 
-- **어디서**: **Cloudflare Registrar**([domains.cloudflare.com](https://domains.cloudflare.com/)) — 2026-08-07 결정
-- **무엇을**: 도메인 하나
+- **무엇을**: **`na1011.net`** — 이 앱의 주소는 서브도메인 **`screener.na1011.net`**이다(2026-08-08 결정)
+- **어디서**: **Cloudflare Registrar**([domains.cloudflare.com](https://domains.cloudflare.com/)), 연 $11.86
 - **소요**: 구매 즉시
-- **결정 근거**: 6번(Cloudflare Tunnel)이 spec §6에서 이미 확정된 외부 접속 경로다. 같은 곳에서 등록하면 zone이 자동 생성되고 네임서버가 처음부터 Cloudflare라 **네임서버 변경과 전파 대기(수 시간~48시간)가 사라진다.** 등록 대행 마진도 없다(도매 원가 판매).
-- **주의**: **`.kr`·`.co.kr`은 Cloudflare Registrar가 지원하지 않는다.** `.kr`을 고르면 다른 등록업체에서 사고 네임서버만 옮기는 경로가 되어 위 실익이 없어진다.
+- **등록처를 Cloudflare로 정한 근거**: 6번(Cloudflare Tunnel)이 spec §6에서 이미 확정된 외부 접속 경로다. 같은 곳에서 등록하면 zone이 자동 생성되고 네임서버가 처음부터 Cloudflare라 **네임서버 변경과 전파 대기(수 시간~48시간)가 사라진다.** 등록 대행 마진도 없다(도매 원가 판매).
+- **프로젝트 도메인이 아니라 우산 도메인을 산 근거**: 서브도메인은 개수 제한도 추가 비용도 없고 Tunnel이 호스트명별로 다른 로컬 포트에 붙는다. 다음 프로젝트는 Public Hostname만 추가하면 되므로 갱신비가 프로젝트 수만큼 늘지 않는다. 무엇보다 **프로젝트 범위가 바뀌어도 주소가 죽지 않는다** — 이 스크리너는 v1.1에 미국 시장이 붙으므로 `jongmok`(종목) 같은 이름을 샀다면 이미 어긋났다.
+- **이름·TLD 근거** (후보 조회는 2026-08-08 RDAP):
+  - `na1011`은 **GitHub 사용자명과 철자가 같다.** 포트폴리오 주소와 저장소 주소가 어긋나지 않는다.
+  - **`.com`은 쓸 수 없다.** `na1011.com`이 2026-04-27에 등록됐다(A 레코드 없이 보유만 하고 있다). 등록업체가 제시하는 `na-1011.com`은 **하이픈이 부채다** — 구두 전달 때마다 설명이 필요하고 빠뜨린 오타가 남의 도메인으로 간다.
+  - **`.dev`를 버린 이유는 인상이다.** 용도 제한이 있는 TLD는 아니지만(Google Registry의 범용 gTLD) 비개발자에게 개발·테스트 사이트로 읽힌다. `.co`는 인상이 낫지만 연 $25 수준이라 차액만큼의 이득이 없었다.
 - **주의**: 등록 직후 오는 **ICANN 이메일 인증을 15일 안에** 처리해야 한다. 방치하면 도메인이 정지되고 사이트 전체가 죽는다.
+- **주의**: `.kr`·`.co.kr`은 Cloudflare Registrar가 지원하지 않는다. 나중에 한국 ccTLD를 원하게 되면 등록처를 나눠야 한다.
 - 1번(OAuth 리디렉션 URI)이 이 도메인에 의존하므로 도메인이 먼저다.
 
 ## 6. Cloudflare 계정 + Tunnel
@@ -90,7 +95,7 @@ IMPORTANT — **Finnhub 무료 티어는 과거 시세를 주지 않는다**(`/s
 - **환경변수**: `CLOUDFLARE_TUNNEL_TOKEN`
 - **주의**: spec §6이 포트포워딩 없이 외부 접속하기 위해 채택한 방식이다. 절차는 [`TODO.md`](../TODO.md) §3 ②에 단계별로 있다.
 - **IMPORTANT — `CLOUDFLARE_TUNNEL_TOKEN`을 Spring 애플리케이션은 읽지 않는다.** `sudo cloudflared service install <TOKEN>`이 `launchd` 데몬에 직접 주입하며, 토큰을 쓰는 주체는 그 프로세스다. `.env`에 적는 것은 재설치·재발급 때 다시 찾지 않기 위한 기록이다.
-- **IMPORTANT — 도메인을 붙이면 `server.forward-headers-strategy`가 필요해진다.** `application.yaml`에 `server:` 블록이 아예 없어 기본값 `NONE`이고, cloudflared는 로컬 앱에 **평문 HTTP**로 붙는다. 그 상태에서는 Spring이 `redirect_uri`를 `http://{도메인}/...`으로 만들어 Google이 `redirect_uri_mismatch`를 낸다 — 호스트는 맞고 스킴만 달라서 화면만 봐서는 원인을 못 찾는다. Spring이 요청 Host로 `redirect_uri`를 만든다는 것은 :5173/:8080에서 실측된 동작이다(1번 항목, ADR-0018).
+- **IMPORTANT — 도메인을 붙이면 `server.forward-headers-strategy`가 필요해진다.** `application.yaml`에 `server:` 블록이 아예 없어 기본값 `NONE`이고, cloudflared는 로컬 앱에 **평문 HTTP**로 붙는다. 그 상태에서는 Spring이 `redirect_uri`를 `http://screener.na1011.net/...`으로 만들어 Google이 `redirect_uri_mismatch`를 낸다 — 호스트는 맞고 스킴만 달라서 화면만 봐서는 원인을 못 찾는다. Spring이 요청 Host로 `redirect_uri`를 만든다는 것은 :5173/:8080에서 실측된 동작이다(1번 항목, ADR-0018).
 
 ## 7. Sentry 프로젝트
 
