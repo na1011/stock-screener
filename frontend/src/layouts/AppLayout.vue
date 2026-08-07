@@ -77,7 +77,7 @@ function dismiss(): void {
 }
 
 .app-layout__error {
-  margin: 1rem;
+  margin: 1rem var(--app-gutter);
 }
 
 .app-layout__error-body {

@@ -4,7 +4,6 @@ import DatePicker from 'primevue/datepicker'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
-import Tag from 'primevue/tag'
 import { computed, onMounted } from 'vue'
 
 import { MAX_CONDITIONS } from '@/api/limits'
@@ -12,20 +11,20 @@ import AsyncPanel from '@/components/AsyncPanel.vue'
 import ConditionRow from '@/components/condition/ConditionRow.vue'
 import { evaluationModeOptions } from '@/lib/evaluationMode'
 import { parseIsoDate, toIsoDate } from '@/lib/format'
-import { screenTypeLabel } from '@/lib/screen'
 import { ALL_UNIVERSES_LABEL, universeLabel } from '@/lib/universe'
 import { useCatalogStore } from '@/stores/catalog'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 
 /**
- * 조건 빌더.
+ * 조건 빌더의 **본문**. 화면 이름·배지·실행·저장은 위의 조건바(`ScreenerView`)가 갖는다.
+ *
+ * 나눈 이유는 빌더가 접히기 때문이다. 접힌 뒤에도 "무엇을 실행했는가"와 "다시 실행"은
+ * 남아 있어야 하는데, 그것이 접히는 상자 안에 있으면 함께 사라진다.
  *
  * 편집할 수 없는 화면은 읽기 전용으로 보인다 — 서버가 수정에 403을 주므로(ADR-0017) 편집할
- * 수 있는 것처럼 그려 놓고 저장할 때 실패하게 두지 않는다. 대신 "복제해서 편집"을 준다.
- * 그것이 없으면 사용자는 프리셋 조건을 손으로 다시 옮겨 적게 된다.
- *
- * 잠금 여부의 정본은 서버의 `editable`이다(`stores/screenDraft`의 같은 이름 참조). "프리셋인가"로
- * 판단하지 않는다 — 그것은 출처이지 권한이 아니다.
+ * 수 있는 것처럼 그려 놓고 저장할 때 실패하게 두지 않는다. 잠금 여부의 정본은 서버의
+ * `editable`이다(`stores/screenDraft`의 같은 이름 참조). "프리셋인가"로 판단하지 않는다 —
+ * 그것은 출처이지 권한이 아니다.
  */
 const props = defineProps<{
   /** 보존 기간 밖 요청이 오류로 돌아왔을 때 서버가 알려준 구간. 날짜 선택 범위를 좁힌다. */
@@ -60,26 +59,6 @@ onMounted(() => {
 
 <template>
   <section class="builder">
-    <header class="builder__header">
-      <div class="builder__title-row">
-        <h2 class="builder__title">{{ draft.title }}</h2>
-        <Tag v-if="draft.isPreset" :value="screenTypeLabel('PRESET')" severity="info" />
-        <Tag v-if="readonly" value="읽기 전용" severity="secondary" />
-        <Tag v-else-if="draft.dirty && draft.origin.kind !== 'custom'" value="수정됨" severity="warn" />
-      </div>
-      <div class="builder__header-actions">
-        <Button
-          v-if="readonly"
-          label="복제해서 편집"
-          icon="pi pi-copy"
-          size="small"
-          outlined
-          @click="draft.forkAsCustom()"
-        />
-        <Button label="새 조건" icon="pi pi-plus-circle" size="small" text @click="draft.reset()" />
-      </div>
-    </header>
-
     <div class="builder__controls">
       <div class="builder__control">
         <label class="builder__label">판정 방식</label>
@@ -156,7 +135,14 @@ onMounted(() => {
           @click="draft.addCondition()"
         />
         <span class="builder__count">{{ draft.conditions.length }} / {{ MAX_CONDITIONS }}</span>
-        <slot name="actions" />
+        <Button
+          label="새 조건"
+          icon="pi pi-plus-circle"
+          size="small"
+          text
+          class="builder__reset"
+          @click="draft.reset()"
+        />
       </div>
 
       <Message
@@ -186,31 +172,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-}
-
-.builder__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.builder__title-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.builder__title {
-  font-size: 1.125rem;
-  margin: 0;
-}
-
-.builder__header-actions {
-  display: flex;
-  gap: 0.5rem;
 }
 
 .builder__controls {
@@ -251,6 +212,10 @@ onMounted(() => {
 .builder__count {
   font-size: 0.8125rem;
   color: var(--p-text-muted-color);
+}
+
+.builder__reset {
+  margin-inline-start: auto;
 }
 
 .builder__notice {
