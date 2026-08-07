@@ -4,12 +4,12 @@ import PrimeVue from 'primevue/config'
 import ConfirmationService from 'primevue/confirmationservice'
 import ToastService from 'primevue/toastservice'
 import Tooltip from 'primevue/tooltip'
-import Aura from '@primeuix/themes/aura'
 import 'primeicons/primeicons.css'
 
 import App from './App.vue'
 import { router } from './router'
 import { installUnauthorizedHandler } from './stores/auth'
+import { ScreenerPreset } from './theme/preset'
 import './assets/main.css'
 
 const app = createApp(App)
@@ -21,10 +21,15 @@ app.use(router)
 app.directive('tooltip', Tooltip)
 app.use(PrimeVue, {
   theme: {
-    preset: Aura,
+    // 색·간격·반경의 정본은 `theme/preset.ts`다. Aura는 그 바탕일 뿐이다.
+    preset: ScreenerPreset,
     options: {
-      // 기본값은 'system'이라 OS 설정만으로 다크 모드가 켜진다. v1은 라이트 한 벌만
-      // 손보므로, 존재하지 않는 선택자를 지정해 의도치 않은 전환을 막는다.
+      /**
+       * 다크 한 벌만 만든다(ADR-0021). `index.html`의 `<html class="app-dark">`가 항상 켜 둔다.
+       *
+       * 기본값 `'system'`을 쓰지 않는 이유는 그러면 OS 설정에 따라 **손보지 않은 라이트
+       * 팔레트**로 떨어지기 때문이다. 선택자를 고정하면 OS가 무엇이든 화면은 하나다.
+       */
       darkModeSelector: '.app-dark',
     },
   },

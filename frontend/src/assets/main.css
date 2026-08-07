@@ -1,7 +1,19 @@
 /*
- * 기본 스타일. 색·간격의 정본은 PrimeVue 테마 토큰(--p-*)이다. 여기서 색을 따로 정의하면
- * 테마를 바꿀 때 두 곳이 어긋난다.
+ * 기본 스타일.
+ *
+ * 색·간격·반경의 정본은 `theme/preset.ts`가 만드는 PrimeVue 토큰(`--p-*`)이다. 여기서 색을
+ * 따로 정의하면 테마를 바꿀 때 두 곳이 어긋난다. 아래의 `--app-*`는 `--p-*`로 표현되지 않는
+ * **레이아웃 상수**뿐이며, 색은 하나도 없다.
  */
+
+:root {
+  /* 헤더 높이. sticky 조건바가 이 값만큼 내려가야 하므로 CSS 한 곳에서만 정해야 한다. */
+  --app-header-height: 3rem;
+  /* 화면 좌우 여백. 폭에 따라 늘고 줄되 상한이 있어야 넓은 화면에서 표가 가운데로 몰리지 않는다. */
+  --app-gutter: clamp(0.75rem, 2vw, 1.5rem);
+  /* 본문 폭 상한. 읽는 것(빌더·상세)에만 쓴다. 결과 표는 여기 묶지 않는다. */
+  --app-reading-width: 90rem;
+}
 
 *,
 *::before,
@@ -18,13 +30,31 @@ body {
 
 body {
   font-family:
-    'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Segoe UI', Roboto,
-    'Helvetica Neue', 'Noto Sans KR', sans-serif;
-  font-size: 15px;
+    'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
+    'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans KR', sans-serif;
+  font-size: 0.9375rem;
   line-height: 1.5;
   color: var(--p-text-color);
-  background: var(--p-content-background);
+  background: var(--p-surface-950);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  min-height: 100%;
+}
+
+a {
+  color: var(--p-primary-color);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--p-primary-color) 35%, transparent);
 }
 
 /* 숫자는 자릿수가 흔들리면 표에서 비교가 어렵다. 지표 값·가격에 쓴다. */
@@ -33,6 +63,71 @@ body {
   font-feature-settings: 'tnum';
 }
 
-#app {
-  min-height: 100%;
+/* ------------------------------------------------------------------------
+ * 폼 컨트롤이 컨테이너를 넘지 않게 한다.
+ *
+ * IMPORTANT — PrimeVue의 폼 래퍼(`.p-inputnumber`·`.p-autocomplete`·`.p-datepicker`)는
+ * `inline-flex`이고 안쪽 input은 `flex: 1 1 auto`만 갖는다. `width: 1%`는 `.p-*-fluid`에만
+ * 붙는다. 그래서 `fluid` 없이 래퍼에 폭을 주면 input의 **자동 최소 크기**(브라우저 기본
+ * `size=20` ≈ 12rem)가 flex-shrink를 막아 입력창이 래퍼를 뚫고 나온다. `.p-iconfield`는
+ * `display: block`이라 반대로 input이 래퍼를 **채우지 못한다.**
+ *
+ * 원칙은 컴포넌트에 `fluid` prop을 주는 것이다. 이 규칙은 fluid를 걸 수 없는 자리를 위한
+ * 그물망이며, 지우면 좁은 폭에서 조용히 다시 새기 시작한다 — 넓은 화면에서는 증상이 없다.
+ * ------------------------------------------------------------------------ */
+.p-inputnumber,
+.p-autocomplete,
+.p-datepicker,
+.p-iconfield,
+.p-select,
+.p-multiselect,
+.p-textarea,
+.p-inputgroup {
+  max-width: 100%;
+}
+
+.p-inputnumber > .p-inputnumber-input,
+.p-autocomplete > .p-autocomplete-input,
+.p-datepicker > .p-datepicker-input,
+.p-iconfield > .p-inputtext {
+  min-width: 0;
+  width: 100%;
+}
+
+/* 컴포넌트 CSS가 1rem으로 못 박아 둔 자리다. 조건 한 줄에 컨트롤이 여섯 개까지 들어가는
+   화면이라 본문(15px)보다 한 단계 작아야 한 줄에 들어간다. */
+.p-inputtext,
+.p-select-label,
+.p-autocomplete-input,
+.p-datepicker-input {
+  font-size: 0.875rem;
+}
+
+/* ------------------------------------------------------------------------
+ * 스크롤바. 밝은 기본 스크롤바 하나가 화면 전체를 밝아 보이게 만든다.
+ * ------------------------------------------------------------------------ */
+html {
+  scrollbar-color: var(--p-surface-700) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--p-surface-700);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--p-surface-600);
+  background-clip: content-box;
 }
