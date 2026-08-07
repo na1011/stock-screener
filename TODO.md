@@ -243,8 +243,10 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
 - [ ] **4-3. 생성 중 나오는 `Set your alert frequency`는 기본값(`Alert me on high priority issues` + `Notify via email`)으로 둔다.** ⑤에서 알림을 직접 구현하지만 **잡는 대상이 다르다** — 자체 알림은 배치 실패·워치리스트처럼 **코드가 예상한 사건**이고, Sentry는 예상 못 한 예외·프론트 JS 오류, 그리고 **알림 코드 자체가 죽은 경우**를 잡는다. 마지막 것 때문에 꺼서는 안 된다. 자체 알림만 두면 그게 고장 난 사실을 알려줄 경로가 없다.
   `Connect to messaging`은 **지금 누르지 않는다.** ⑤에서 채널을 정한 뒤 붙이는 편이 순서에 맞고, Sentry 설정에서 나중에 언제든 추가된다.
 - [ ] **4-4.** 각 프로젝트의 DSN을 복사한다. 백엔드 것이 `SENTRY_DSN`이다.
-- [ ] **4-5. 프론트 DSN을 담을 환경변수가 아직 없다.** `.env.example`에는 `SENTRY_DSN` 하나뿐이다. Vite는 **`VITE_` 접두어가 붙은 변수만** 번들에 노출하므로 `VITE_SENTRY_DSN`을 새로 만들어야 하고, 이건 Phase 6 착수 시 `.env.example`과 빌드 설정에 함께 추가한다.
+- [ ] **4-5. DSN 두 개를 `.env`에 넣는다.** 키 이름은 `.env.example`에 이미 있다(2026-08-07 추가) — 백엔드가 `SENTRY_DSN`, 프론트가 `VITE_SENTRY_DSN`이다. 넣은 뒤 `./gradlew checkEnv`가 두 키를 `설정됨`으로 내면 된다. **안 넣으면 "`.env.example`에 있으나 `.env`에 없는 키" 목록에 뜬다.**
   프론트 DSN이 번들에 그대로 박혀 공개되는 것은 **정상이다** — Sentry DSN은 쓰기 전용 공개 식별자다. 시크릿으로 착각해 숨기려다 빌드를 꼬지 않는다.
+- [ ] **4-6. IMPORTANT — 값을 넣어도 프론트 번들에는 아직 안 들어간다.** Vite의 `envDir`은 `frontend/`라 **루트 `.env`를 읽지 않는다.** `bootRun`에만 걸려 있는 `applyDotEnv`를 `frontendBuild` 태스크에도 걸어야 하고(`build.gradle`), 그때 `inputs.property`로 DSN을 넣어야 값이 바뀔 때 번들이 다시 만들어진다 — 안 그러면 Gradle이 캐시된 옛 번들을 그대로 쓴다.
+  **프론트 Sentry SDK를 붙일 때 함께 한다.** 지금 주입 코드만 넣으면 참조하는 곳이 없어 번들에 아무것도 안 남고, 그래서 **동작하는지 확인할 방법도 없다.**
 
 **없으면 막히는 것**: 에러 수집·통지. 현재 프론트 오류는 `console.error`에만 남는다.
 

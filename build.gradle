@@ -179,6 +179,18 @@ tasks.register('checkEnv') {
             println "  ${key}: ${status}${overridden}"
         }
 
+        // 키가 아예 없으면 위 루프는 아무 말도 하지 않는다. "안 적었다"가 침묵으로 나타나면
+        // "적었는데 안 실렸다"와 구분되지 않아 이 태스크의 목적 자체가 무너진다.
+        // 기대 키 목록의 정본은 .env.example 하나로 둔다 — build.gradle에 또 적으면 반드시 어긋난다.
+        def missing = placeholders.keySet().findAll { !loaded.containsKey(it) }.sort()
+        if (!missing.isEmpty()) {
+            println '\n.env.example에 있으나 .env에 없는 키 (기본값이 있거나 아직 미발급이면 정상):'
+            missing.each { key ->
+                def inShell = System.getenv(key) != null ? ' [셸 환경변수에는 있음]' : ''
+                println "  ${key}${inShell}"
+            }
+        }
+
         // 구조 진단. "파일엔 적었는데 파서가 못 본다"를 가르는 용도다 — 주석 처리됐는지,
         // '='가 빠졌는지, 키 이름에 오타가 있는지가 여기서만 드러난다.
         // MUST NOT: 값을 출력하지 않는다. 줄 번호·분류·길이만 낸다.

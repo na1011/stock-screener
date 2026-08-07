@@ -53,7 +53,7 @@
 - **워치리스트가 통째로 Phase 6이다.** 이음매는 이미 있다.
 - **배치 잡의 HTTP 진입점이 없다 — Phase 6.** `SecurityConfigTest`가 그 404를 단언하고 있어 **함께** 고쳐야 한다.
 - **actuator 미도입**: Phase 6.
-- **IMPORTANT — Phase 6의 에이전트 코드 작업 하나가 발급 절차에 섞여 있다.** 프론트 Sentry용 **`VITE_SENTRY_DSN`을 신설해야 한다** — Vite는 `VITE_` 접두어만 번들에 노출한다. 지금 프론트 오류는 `console.error`에만 남는다.
+- **IMPORTANT — 프론트 Sentry는 키 이름만 준비됐다.** `.env.example`에 `VITE_SENTRY_DSN`이 있고 `checkEnv`가 누락을 잡지만, **Vite의 `envDir`이 `frontend/`라 루트 `.env`를 읽지 않는다.** `applyDotEnv`를 `frontendBuild`에도 걸어야 값이 번들에 들어간다(TODO §3 ④ 4-6). 지금 프론트 오류는 `console.error`에만 남는다.
 
 ---
 
