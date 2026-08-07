@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { api } from '@/api/endpoints'
 import type { IndicatorResponse, OperatorResponse } from '@/api/types'
 import { useAsync } from '@/composables/useAsync'
+import { BUILDER_CATEGORY_RANK, groupByCategory } from '@/lib/indicatorCategory'
 
 /**
  * 지표 카탈로그와 유니버스 목록.
@@ -28,33 +29,17 @@ export const useCatalogStore = defineStore('catalog', () => {
   /**
    * 조건의 좌변으로 고를 수 있는 지표를 분류별로 묶는다.
    *
-   * 정렬은 서버의 `sortOrder`를 따른다 — 프론트가 자기 기준으로 정렬하면 지표가 추가될 때마다
-   * 순서 규칙을 다시 정해야 하고, 카탈로그가 의도한 배치가 사라진다.
+   * 묶음 안의 정렬은 서버의 `sortOrder`를 따른다 — 프론트가 자기 기준으로 정렬하면 지표가
+   * 추가될 때마다 순서 규칙을 다시 정해야 하고, 카탈로그가 의도한 배치가 사라진다.
+   * 분류 자체의 배치와 모르는 분류의 처리는 `lib/indicatorCategory`가 정한다.
    */
-  const grouped = computed(() => {
-    const labels: Record<string, string> = {
-      PRICE: '가격',
-      TECHNICAL: '기술적 지표',
-      FUNDAMENTAL: '재무 지표',
-      DERIVED: '파생·백분위',
-    }
-    const order = ['PRICE', 'TECHNICAL', 'FUNDAMENTAL', 'DERIVED']
-    const buckets = new Map<string, IndicatorResponse[]>()
-    for (const indicator of [...indicators.value].sort((a, b) => a.sortOrder - b.sortOrder)) {
-      const bucket = buckets.get(indicator.category)
-      if (bucket) {
-        bucket.push(indicator)
-      } else {
-        buckets.set(indicator.category, [indicator])
-      }
-    }
-    return order
-      .filter((category) => buckets.has(category))
-      .map((category) => ({
-        label: labels[category] ?? category,
-        items: buckets.get(category) ?? [],
-      }))
-  })
+  const grouped = computed(() =>
+    groupByCategory(
+      [...indicators.value].sort((a, b) => a.sortOrder - b.sortOrder),
+      (indicator) => indicator.category,
+      BUILDER_CATEGORY_RANK,
+    ),
+  )
 
   async function ensureCatalog(): Promise<void> {
     if (catalogRequest.state.value === 'idle' || catalogRequest.state.value === 'error') {

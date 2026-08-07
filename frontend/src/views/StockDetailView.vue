@@ -5,13 +5,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { api } from '@/api/endpoints'
-import type { IndicatorCategory, StockIndicatorValue } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import PriceReferencePanel from '@/components/stock/PriceReferencePanel.vue'
 import { useAsync } from '@/composables/useAsync'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { MISSING, formatCount, formatDate, formatIndicatorValue, formatPrice } from '@/lib/format'
+import { DETAIL_CATEGORY_RANK, groupByCategory } from '@/lib/indicatorCategory'
 import { useCatalogStore } from '@/stores/catalog'
 
 const props = defineProps<{ stockId: string }>()
@@ -35,31 +35,14 @@ const priceReference = useAsync((signal) => api.priceReference(stockId.value, as
 /** 모바일은 접힌 채로 시작한다. 데스크톱은 자리가 있으므로 함께 보인다. */
 const referenceOpen = ref(false)
 
-const CATEGORY_LABELS: Record<IndicatorCategory, string> = {
-  PRICE: '가격',
-  TECHNICAL: '기술적 지표',
-  FUNDAMENTAL: '재무 지표',
-  DERIVED: '파생·백분위',
-}
-const CATEGORY_ORDER: IndicatorCategory[] = ['FUNDAMENTAL', 'TECHNICAL', 'DERIVED', 'PRICE']
-
-const groups = computed(() => {
-  const values = detail.data.value?.indicators ?? []
-  const buckets = new Map<IndicatorCategory, StockIndicatorValue[]>()
-  for (const value of values) {
-    const bucket = buckets.get(value.category)
-    if (bucket) {
-      bucket.push(value)
-    } else {
-      buckets.set(value.category, [value])
-    }
-  }
-  return CATEGORY_ORDER.filter((category) => buckets.has(category)).map((category) => ({
-    category,
-    label: CATEGORY_LABELS[category],
-    items: buckets.get(category) ?? [],
-  }))
-})
+/** 분류의 라벨·배치와 모르는 분류의 처리는 `lib/indicatorCategory`가 정한다. 빌더와 순서가 다른 것은 의도다. */
+const groups = computed(() =>
+  groupByCategory(
+    detail.data.value?.indicators ?? [],
+    (indicator) => indicator.category,
+    DETAIL_CATEGORY_RANK,
+  ),
+)
 
 /**
  * 값이 없어 목록에 오르지 못한 지표 수.
