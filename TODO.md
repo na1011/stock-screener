@@ -89,11 +89,11 @@ Phase 6(워치리스트·관리자·운영)은 **네 가지 외부 자격증명�
 
 ### ① Cloudflare 계정 + 도메인 등록 → (환경변수 없음)
 
-- [ ] **1-1. 계정 생성** — [dash.cloudflare.com](https://dash.cloudflare.com/) 회원가입. 이메일 인증까지 마친다.
-- [ ] **1-2. `na1011.net` 구매** — [domains.cloudflare.com](https://domains.cloudflare.com/) 또는 대시보드 좌측 `Domain Registration` → `Register Domains`. 2026-08-08 기준 연 $11.86.
-- [ ] **1-3. ICANN 이메일 인증 메일을 반드시 연다.** 등록 직후 오는 확인 메일을 **15일 안에** 클릭하지 않으면 도메인이 정지되고 사이트 전체가 죽는다. 스팸함까지 확인한다.
+- [x] **1-1. 계정 생성** — [dash.cloudflare.com](https://dash.cloudflare.com/) 회원가입. 이메일 인증까지 마친다.
+- [x] **1-2. `na1011.net` 구매** — [domains.cloudflare.com](https://domains.cloudflare.com/) 또는 대시보드 좌측 `Domain Registration` → `Register Domains`. 2026-08-08 기준 연 $11.86.
+- [ ] **1-3. ICANN 이메일 인증 메일을 반드시 연다.** 등록 직후 오는 확인 메일을 **15일 안에** 클릭하지 않으면 도메인이 정지되고 사이트 전체가 죽는다. 스팸함까지 확인한다. **터미널로는 확인할 수 없다** — 인증 전에도 `dig`는 정상으로 보이고, 정지는 15일 뒤에 조용히 온다.
 - [ ] **1-4. 자동 갱신이 켜져 있는지 확인한다.** 만료되면 OAuth 리디렉션까지 한꺼번에 끊긴다.
-- [ ] **1-5. 네임서버 확인** — 터미널에서:
+- [x] **1-5. 네임서버 확인** — 2026-08-07 확인됨(`khalid`·`jillian.ns.cloudflare.com`). 재확인은:
   ```bash
   dig NS na1011.net +short     # *.ns.cloudflare.com 두 개가 나오면 완료
   ```
@@ -108,34 +108,59 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
 
 포트포워딩 없이 맥북의 `:8080`을 외부 HTTPS 주소에 붙이는 경로다(spec §6).
 
-- [ ] **2-1. 커넥터 설치**
+- [x] **2-1. 커넥터 설치**
   ```bash
   brew install cloudflared
   ```
-- [ ] **2-2. 대시보드에서 터널 생성** — Cloudflare 대시보드 → **Zero Trust**(현재 이름은 Cloudflare One) → **Networking → Tunnels** → `Create a tunnel` → 커넥터로 **Cloudflared** 선택 → 이름 입력(예: `stock-screener-macbook`) → `Save`.
-  구버전 UI에서는 `Access → Tunnels`에 있다. 둘 다 같은 화면이다.
-- [ ] **2-3. 토큰으로 서비스 설치** — 생성 직후 화면에 OS별 설치 명령이 나온다. macOS 탭의 명령을 그대로 붙여넣으면 되고, 형태는 이렇다:
+- [x] **2-2. 대시보드에서 터널 생성** — Cloudflare 대시보드 → **Zero Trust**(현재 이름은 Cloudflare One) → **Networks**(구 `Networking`) **→ Tunnels** → `Create a tunnel` → 커넥터로 **Cloudflared** 선택 → 이름 입력(예: `stock-screener-macbook`) → `Save`.
+  더 구버전 UI에서는 `Access → Tunnels`에 있다. 셋 다 같은 화면이다.
+- [x] **2-3. 토큰으로 서비스 설치** — 생성 직후 화면에 OS별 설치 명령이 나온다. macOS 탭의 명령을 그대로 붙여넣으면 되고, 형태는 이렇다:
   ```bash
   sudo cloudflared service install <TOKEN>
   ```
   `launchd` 데몬(`/Library/LaunchDaemons/com.cloudflare.cloudflared.plist`)으로 등록되어 **재부팅 후에도 자동 기동**한다.
-  **MUST — 실행 후 셸 히스토리에서 이 줄을 지운다.** 명령줄에 토큰 원문이 그대로 들어가고 `~/.zsh_history`는 평문이다. `history -d <번호>` 또는 파일에서 직접 제거한다.
-- [ ] **2-4. 대시보드에서 `Connected` 상태를 확인한다.** 몇 초 내에 커넥터가 초록으로 바뀐다.
-- [ ] **2-5. 공개 호스트명 연결** — 터널 상세 → `Routes`(또는 `Public Hostname`) 탭 → `Add route` / `Published application`:
+
+  **지우는 대상은 데몬이 아니라 셸 히스토리의 그 한 줄이다.** 데몬은 남겨야 터널이 돈다. 위 명령은 **토큰 원문을 명령줄에 담고**, `~/.zsh_history`는 권한만 `600`일 뿐 평문이라 나중에 아무 도구나 그 줄을 읽는다. 남은 위험은 히스토리 파일 하나뿐이므로 그것만 지운다.
+  ```bash
+  grep -n "cloudflared service install" ~/.zsh_history   # 안 나오면 할 일 없음
+  ```
+  나오면 그 줄만 지운다(`history -d <번호>` 또는 편집기로 직접). **MUST NOT: 파일을 통째로 비우지 않는다** — 다른 히스토리까지 사라지고 되돌릴 수 없다.
+
+  **IMPORTANT — 지금 안 나와도 끝난 게 아니다.** zsh는 기본 설정에서 히스토리를 **셸이 끝날 때** 파일에 쓴다. 명령을 실행한 그 터미널이 아직 열려 있으면 파일에는 없고 메모리에만 있다(2026-08-07 실측: 설치 17:12, 파일 mtime 13:18). 그 터미널을 닫은 **뒤에** 위 `grep`을 한 번 더 돌린다.
+
+  **`ps`에는 토큰이 안 보인다.** cloudflared 2026.7 기준 설치 시 토큰이 `/Library/Application Support/com.cloudflare.cloudflared/token`(root 전용)에 저장되고 데몬은 `--token-file`로 읽는다. 예전 버전은 `--token <원문>`이 프로세스 목록에 그대로 떴다.
+- [x] **2-4. 대시보드에서 `Connected` 상태를 확인한다.** 몇 초 내에 커넥터가 초록으로 바뀐다. 새 UI는 터널 목록의 상태를 `Healthy`로 표시한다.
+- [ ] **2-5. 공개 호스트명 연결**
+
+  **IMPORTANT — 좌측 메뉴의 `Networks`(또는 `Networking`) → `Routes`로 들어가면 안 된다.** 그 화면의 `Create route` / `Add a route`는 **CIDR 전용**이고, 입력란이 `10.0.0.0/8` 같은 사설 IP 대역을 요구한다. 화면 상단에 *"requires traffic to pass via Cloudflare Gateway. Users need the Cloudflare One Client"* 라고 쓰여 있는 것이 그 증거다 — **접속하는 쪽에 WARP 클라이언트를 깔아야 열리는 사내망 경로**이고, 우리가 원하는 "브라우저 주소창에 치면 열리는 공개 HTTPS 주소"와는 다른 물건이다. 여기서 만들면 지인은 아무도 못 들어온다.
+
+  들어갈 곳은 **터널 하나의 상세 화면**이다:
+
+  `Networks` → `Tunnels` → **터널 이름(`stock-screener-macbook`) 클릭** → `Routes` 탭 → `Add route` → 종류로 **`Published application`** 선택
+
+  종류를 고르는 단계가 핵심이다. 같은 `Add route` 버튼이 `Published application`과 `Private network(CIDR)` 둘 다로 갈라진다. `Published application`을 고르면 입력란이 아래처럼 바뀐다 — **CIDR 칸이 보이면 잘못 들어온 것이다.**
 
   | 항목 | 값 |
   |---|---|
   | Subdomain | `screener` |
-  | Domain | `na1011.net` |
-  | Type | `HTTP` |
+  | Domain | `na1011.net` (드롭다운에서 선택) |
+  | Path | 비워 둔다 |
+  | Type / Service | `HTTP` |
   | URL | `localhost:8080` |
 
   **Type은 `HTTPS`가 아니라 `HTTP`다.** cloudflared가 로컬 앱에 붙는 구간은 평문이고, 인증서는 Cloudflare 가장자리에서 끝난다. `HTTPS`로 잡으면 502가 난다.
-- [ ] **2-6. 확인** — `./gradlew bootRun`을 띄운 상태에서:
+
+  **DNS는 따로 만들 것이 없다.** 저장하면 Cloudflare가 `screener` CNAME(`<터널UUID>.cfargotunnel.com`)을 자동으로 넣는다. DNS 화면에서 손으로 만들면 오히려 충돌한다.
+- [ ] **2-6. 확인** — 먼저 DNS부터. 라우트를 저장했는데 아래가 비면 `Published application`이 아니라 CIDR을 만든 것이다:
+  ```bash
+  dig screener.na1011.net +short    # <UUID>.cfargotunnel.com 이 나와야 한다
+  ```
+  그다음 `./gradlew bootRun`을 띄운 상태에서:
   ```bash
   curl -I https://screener.na1011.net/             # 200 + 로그인 셸 HTML
   curl -I https://screener.na1011.net/api/screens  # 401 (익명이므로 정상)
   ```
+  **502가 나면 앱이 안 떠 있거나 Type을 `HTTPS`로 잡은 것이다.** 502는 "터널은 붙었는데 로컬 서비스에 못 닿았다"는 뜻이라, 터널 상태가 `Healthy`인 것과 모순되지 않는다.
 
 **알아둘 것**
 
@@ -159,17 +184,17 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
   기존 `http://localhost:8080/...`은 **지우지 않는다.** 로컬 개발이 그걸로 돈다.
   OAuth 동의 화면의 `승인된 도메인`에는 서브도메인이 아니라 **`na1011.net`**을 넣는다.
 
-- [ ] **3-2. IMPORTANT — 프록시 헤더 신뢰 설정을 켠다(코드 변경).**
-  `src/main/resources/application.yaml`에 지금 `server:` 블록 자체가 없다. 즉 `forward-headers-strategy`가 기본값(`NONE`)이라 **Spring이 `X-Forwarded-Proto`를 무시한다.** cloudflared가 로컬에 평문 HTTP로 붙기 때문에, 그 상태로 도메인에서 로그인하면 Spring이 만드는 `redirect_uri`가 이렇게 나간다:
+- [x] **3-2. 프록시 헤더 신뢰 설정 — 적용됨(2026-08-07).**
+  `application.yaml`에 `server.forward-headers-strategy: framework`가 들어갔다. 없었다면 Spring이 `X-Forwarded-Proto`를 무시해(기본값 `NONE`) `redirect_uri`가 이렇게 나갔을 것이다:
   ```
   http://screener.na1011.net/login/oauth2/code/google     ← 스킴이 http
   ```
-  등록한 것은 `https://…`이므로 Google은 `redirect_uri_mismatch`를 낸다. **호스트는 맞고 스킴만 다르기 때문에 화면만 봐서는 원인을 못 찾는다.** Spring이 요청 Host로 `redirect_uri`를 만든다는 것은 :5173/:8080에서 이미 실측된 동작이다(ADR-0018).
-  ```yaml
-  server:
-    forward-headers-strategy: framework
+  등록한 것은 `https://…`이므로 Google은 `redirect_uri_mismatch`를 낸다. **호스트는 맞고 스킴만 다르기 때문에 화면만 봐서는 원인을 못 찾는다**(ADR-0018).
+
+  **남은 검증은 2-6 이후다** — 헤더는 실제 터널을 타야 붙으므로 localhost 테스트로는 판정되지 않는다(`SecurityConfigTest`·`SpaFallbackTest`는 통과한다. 헤더가 없으면 분기 자체를 안 탄다). 도메인으로 로그인이 되면 그때 함께 볼 것:
+  ```bash
+  curl -sI https://screener.na1011.net/api/screens | grep -i set-cookie   # Secure 플래그 확인
   ```
-  이 한 줄은 에이전트가 할 수 있다. 다만 **Tunnel이 실제로 붙기 전에는 검증이 불가능하므로** Phase 6 착수 시 ②와 함께 처리한다. 세션 쿠키에 `Secure` 플래그가 붙는지도 그때 같이 확인한다.
 
 **없으면 막히는 것**: 외부 주소에서의 로그인 전부. 화면은 뜨는데 로그인만 실패한다.
 

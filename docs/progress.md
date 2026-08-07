@@ -47,14 +47,12 @@
 
 ## 미룬 것 / 알려진 미완성
 
-- **외부 서비스 발급 8건 중 4건 완료.** 정본은 [`external-credentials.md`](./external-credentials.md). 도메인은 **`na1011.net`, 앱 주소는 `screener.na1011.net`으로 확정**됐고 구매만 남았다(2026-08-08).
+- **외부 서비스 발급 8건 중 5건 완료.** 정본은 [`external-credentials.md`](./external-credentials.md). 도메인 `na1011.net`은 구매됐고(`dig NS`가 Cloudflare 네임서버를 답한다) Tunnel도 커넥터까지 붙었다. **남은 것은 공개 호스트명 라우트 하나** — 절차와 함정은 [`TODO.md`](../TODO.md) §3 ②에 있다.
 - **재무 수집이 일일 배치에 없다.** 분기 공시라 매일 조회하면 쿼터만 태운다. 공시 시즌 갱신은 수동 실행 전제다.
 - **워치리스트가 통째로 Phase 6이다.** 이음매는 이미 있다.
 - **배치 잡의 HTTP 진입점이 없다 — Phase 6.** `SecurityConfigTest`가 그 404를 단언하고 있어 **함께** 고쳐야 한다.
 - **actuator 미도입**: Phase 6.
-- **IMPORTANT — Phase 6의 에이전트 코드 작업 둘.** 사람이 하는 발급 절차에 섞여 있어 놓치기 쉽다.
-  1. **도메인을 붙이면 `server.forward-headers-strategy: framework`가 필요하다.** `server:` 블록이 아예 없고 cloudflared는 평문 HTTP로 붙는다. 없으면 `redirect_uri`가 `http://`로 나가 로그인이 깨지는데 **호스트는 맞아서 원인이 안 보인다.**
-  2. **프론트 Sentry용 `VITE_SENTRY_DSN`을 신설해야 한다.** Vite는 `VITE_` 접두어만 번들에 노출한다. 지금 프론트 오류는 `console.error`에만 남는다.
+- **IMPORTANT — Phase 6의 에이전트 코드 작업 하나가 발급 절차에 섞여 있다.** 프론트 Sentry용 **`VITE_SENTRY_DSN`을 신설해야 한다** — Vite는 `VITE_` 접두어만 번들에 노출한다. 지금 프론트 오류는 `console.error`에만 남는다.
 
 ---
 
