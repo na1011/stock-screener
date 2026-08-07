@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import StockSearch from '@/components/StockSearch.vue'
+import { APP_NAME } from '@/lib/appInfo'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -46,7 +47,7 @@ function isActive(to: string): boolean {
 
 <template>
   <header class="app-header">
-    <RouterLink to="/" class="app-header__brand">주식 스크리너</RouterLink>
+    <RouterLink to="/" class="app-header__brand">{{ APP_NAME }}</RouterLink>
 
     <nav class="app-header__nav" aria-label="주요 화면">
       <RouterLink

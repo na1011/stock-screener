@@ -9,6 +9,7 @@ import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import { useApiToast } from '@/composables/useApiToast'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
+import { screenTypeLabel } from '@/lib/screen'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
 
@@ -89,7 +90,7 @@ async function remove(id: number, name: string): Promise<void> {
       :skeleton-rows="4"
     >
       <section class="screens__group">
-        <h2 class="screens__group-title">프리셋</h2>
+        <h2 class="screens__group-title">{{ screenTypeLabel('PRESET') }}</h2>
         <p class="screens__group-note">
           미리 정의된 전략입니다. 고칠 수는 없지만 불러온 뒤 복제해 내 화면으로 저장할 수 있습니다.
         </p>
@@ -98,7 +99,7 @@ async function remove(id: number, name: string): Promise<void> {
             <div class="screen-item__body">
               <div class="screen-item__title">
                 <strong>{{ screen.name }}</strong>
-                <Tag value="프리셋" severity="info" />
+                <Tag :value="screenTypeLabel('PRESET')" severity="info" />
                 <Tag
                   :value="evaluationModeLabels(screen.evaluationMode).short"
                   severity="secondary"
@@ -121,7 +122,7 @@ async function remove(id: number, name: string): Promise<void> {
       </section>
 
       <section class="screens__group">
-        <h2 class="screens__group-title">내 화면</h2>
+        <h2 class="screens__group-title">{{ screenTypeLabel('CUSTOM') }}</h2>
         <p v-if="screens.mine.length === 0" class="screens__empty">
           저장한 화면이 없습니다. 스크리너에서 조건을 만든 뒤 저장해 보세요.
         </p>

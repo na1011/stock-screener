@@ -6,6 +6,7 @@ import { ApiError } from '@/api/http'
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import { useApiToast } from '@/composables/useApiToast'
+import { screenTypeLabel } from '@/lib/screen'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
 
@@ -38,11 +39,11 @@ function screenKey(screen: ScreenResponse): number | string {
 
 const options = computed(() => [
   {
-    label: '프리셋',
+    label: screenTypeLabel('PRESET'),
     items: screens.presets.map((it) => ({ key: screenKey(it), name: it.name })),
   },
   {
-    label: '내 화면',
+    label: screenTypeLabel('CUSTOM'),
     items: screens.mine.map((it) => ({ key: screenKey(it), name: it.name })),
   },
 ])

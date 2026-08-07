@@ -5,6 +5,7 @@ import { computed } from 'vue'
 import { PERCENTILE_POPULATION_ALL } from '@/api/types'
 import type { ScreeningResponse } from '@/api/types'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
+import { ALL_UNIVERSES_LABEL, universeLabel } from '@/lib/universe'
 import { formatCount, formatDate } from '@/lib/format'
 
 /**
@@ -27,11 +28,7 @@ const adjusted = computed(
 )
 
 const universeText = computed(() =>
-  props.result.universe === null
-    ? '전체 (코스피200 + 코스닥150)'
-    : `${props.result.universe.name}${
-        props.result.universe.memberCount === null ? '' : ` (${props.result.universe.memberCount}종목)`
-      }`,
+  props.result.universe === null ? ALL_UNIVERSES_LABEL : universeLabel(props.result.universe),
 )
 
 /**

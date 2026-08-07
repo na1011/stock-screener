@@ -12,6 +12,8 @@ import AsyncPanel from '@/components/AsyncPanel.vue'
 import ConditionRow from '@/components/condition/ConditionRow.vue'
 import { evaluationModeOptions } from '@/lib/evaluationMode'
 import { parseIsoDate, toIsoDate } from '@/lib/format'
+import { screenTypeLabel } from '@/lib/screen'
+import { ALL_UNIVERSES_LABEL, universeLabel } from '@/lib/universe'
 import { useCatalogStore } from '@/stores/catalog'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 
@@ -36,8 +38,8 @@ const draft = useScreenDraftStore()
 const readonly = computed(() => draft.readOnly)
 
 const universeOptions = computed(() => [
-  { code: null as string | null, name: '전체 (코스피200 + 코스닥150)' },
-  ...catalog.universes.map((u) => ({ code: u.code as string | null, name: `${u.name} (${u.memberCount}종목)` })),
+  { code: null as string | null, name: ALL_UNIVERSES_LABEL },
+  ...catalog.universes.map((u) => ({ code: u.code as string | null, name: universeLabel(u) })),
 ])
 
 const asOfDate = computed<Date | null>({
@@ -61,7 +63,7 @@ onMounted(() => {
     <header class="builder__header">
       <div class="builder__title-row">
         <h2 class="builder__title">{{ draft.title }}</h2>
-        <Tag v-if="draft.isPreset" value="프리셋" severity="info" />
+        <Tag v-if="draft.isPreset" :value="screenTypeLabel('PRESET')" severity="info" />
         <Tag v-if="readonly" value="읽기 전용" severity="secondary" />
         <Tag v-else-if="draft.dirty && draft.origin.kind !== 'custom'" value="수정됨" severity="warn" />
       </div>

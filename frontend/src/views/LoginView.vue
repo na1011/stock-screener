@@ -4,6 +4,7 @@ import Message from 'primevue/message'
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { APP_NAME } from '@/lib/appInfo'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -38,7 +39,7 @@ async function retryProbe(): Promise<void> {
 <template>
   <main class="login">
     <section class="login__card">
-      <h1 class="login__title">주식 스크리너</h1>
+      <h1 class="login__title">{{ APP_NAME }}</h1>
       <p class="login__subtitle">코스피200·코스닥150 종목을 기술적·재무적 조건으로 걸러 봅니다.</p>
 
       <Message v-if="loginFailed" severity="error" :closable="false" class="login__message">
