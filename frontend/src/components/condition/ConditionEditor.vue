@@ -184,6 +184,7 @@ function onOperandTypeChange(value: OperandType | null): void {
 
     <template v-if="!readonly">
       <!-- 구간 프리셋. 숫자를 모르는 사용자가 먼저 만나는 것. -->
+      <p v-if="bands.length > 0" class="editor__bands-title">구간에서 고르기</p>
       <div v-if="bands.length > 0" class="editor__bands">
         <button
           v-for="band in bands"
@@ -343,7 +344,7 @@ function onOperandTypeChange(value: OperandType | null): void {
 
 <style scoped>
 .editor {
-  width: 17rem;
+  width: var(--app-overlay-md);
   max-width: 100%;
 }
 
@@ -379,11 +380,22 @@ function onOperandTypeChange(value: OperandType | null): void {
   color: var(--p-text-muted-color);
 }
 
+/*
+ * 목록이 무엇인지 말한다. 없으면 설명문 바로 아래 다섯 줄이 근거 없이 떠 있고, "직접 입력"
+ * 토글만 이름을 가져 두 선택지가 대등해 보이지 않는다.
+ */
+.editor__bands-title {
+  margin: 0.625rem 0 0.125rem;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  color: var(--p-text-muted-color);
+}
+
 .editor__bands {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin: 0.5rem -0.25rem 0;
+  margin: 0 -0.25rem;
 }
 
 /*

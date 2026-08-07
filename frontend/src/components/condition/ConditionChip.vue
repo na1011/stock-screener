@@ -116,6 +116,9 @@ const direction = computed(() =>
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    background var(--app-motion-fast) var(--app-ease),
+    border-color var(--app-motion-fast) var(--app-ease);
 }
 
 .chip:hover {
@@ -180,8 +183,13 @@ const direction = computed(() =>
 .chip__caret,
 .chip__invalid-icon {
   flex: 0 0 auto;
-  font-size: 0.625rem;
-  color: var(--p-text-muted-color);
+  font-size: var(--app-text-2xs);
+  color: var(--p-surface-500);
+}
+
+/* 열린 칩의 캐럿은 팝오버가 어디 붙어 있는지 가리킨다. 테두리와 같은 색으로 올린다. */
+.chip--active .chip__caret {
+  color: var(--p-primary-color);
 }
 
 .chip--invalid .chip__invalid-icon {
