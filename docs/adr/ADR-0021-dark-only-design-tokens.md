@@ -19,6 +19,9 @@ applies_to:
 
 - MUST: 색·반경·폼 필드 치수는 `theme/preset.ts`에서만 정의한다. `.vue`와 `main.css`는 `--p-*`를 **소비만** 한다.
 - MUST NOT: `main.css`나 `<style scoped>`에 색 리터럴(hex·rgb·hsl)을 적지 않는다. 예외는 `PriceReferencePanel`의 `var(--p-orange-400, #fb923c)` 같은 **폴백**뿐이다.
+- MUST: **글자 크기는 `main.css`의 `--app-text-*`에서만 정의한다.** PrimeVue 프리셋에 글자 크기 축이 없기 때문이다 — `formField.fontSize`는 폼에만 닿고 `button.root.fontSize`는 아예 토큰이 아니다(타입이 거부한다). 색이 아니라 레이아웃 상수이므로 `--app-*`와 같은 자리에 둔다.
+- MUST NOT: `.vue`의 `<style scoped>`에 rem 리터럴로 글자 크기를 적지 않는다. 손으로 적힌 값 40여 개가 흩어져 있었고, 그래서 본문·버튼·제목이 전부 15~16px 한 옥타브에 몰려 위계가 사라졌다.
+- MUST: `main.css`의 `:root .p-inputtext`·`:root .p-button` 계열 규칙에서 **`:root` 접두어를 떼지 않는다.** PrimeVue는 자기 CSS를 런타임에 `<head>`로 주입해 `main.css`보다 항상 뒤에 오므로, 같은 특정도면 그쪽이 이긴다. 접두어 없이 적혀 있던 이전 규칙은 **한 번도 적용된 적이 없었고** 그 사실이 화면 어디에도 드러나지 않았다.
 - MUST: `index.html`의 `<html class="app-dark">`를 유지한다. 지우면 `darkModeSelector`가 걸리지 않아 **손보지 않은 Aura 라이트 팔레트**로 떨어진다. 컴파일도 되고 테스트도 통과한다.
 - MUST NOT: `darkModeSelector`를 기본값 `'system'`으로 되돌리지 않는다. OS 설정만으로 검증하지 않은 라이트 화면이 나온다.
 - MUST: `Tag`의 `warn`을 amber로 유지한다. Aura 기본값은 `{orange.*}`이고, 주황은 지지·저항 참고정보 **전용**이다(ADR-0014, `frontend.md`). 같은 색이 되면 "판정하지 못했다"와 "확정된 매매 신호가 아니다"가 화면에서 구별되지 않는다.
@@ -37,6 +40,14 @@ rg -n "darkModeSelector: '.app-dark'" frontend/src/main.ts
 
 # 3. Tag warn이 amber인가 (orange가 아닌가)
 rg -n 'warn: \{ background:.*amber' frontend/src/theme/preset.ts
+
+# 4. 글자 크기가 토큰 밖에 적혀 있지 않은가
+#    (0.625rem은 캐럿·마커용 10px로 토큰이 없다. 그 하나만 예외다)
+rg -n 'font-size: [0-9]' frontend/src --glob '*.vue' | rg -v '0.625rem'
+#    → 아무것도 나오지 않아야 한다
+
+# 5. PrimeVue 주입 CSS를 이기는 접두어가 살아 있는가
+rg -n ':root \.p-button' frontend/src/assets/main.css
 ```
 
 색이 실제로 읽히는지(대비비)는 자동 검증 대상이 아니다. 브라우저에서 본문 4.5:1, 큰 글자 3:1을 확인한다.
