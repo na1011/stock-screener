@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 
 import { api } from '@/api/endpoints'
 import type { StockIndicatorValue } from '@/api/types'
@@ -118,6 +118,16 @@ onMounted(() => {
       :skeleton-rows="5"
     >
       <template v-if="detail.data.value">
+        <!--
+          IMPORTANT — 이 화면에는 돌아갈 길이 하나도 없었다. 라우트가 형제 셋(screener·
+          screens·stock)이라 부모-자식 관계가 없고, 유일한 이동 수단인 레일은 좁은 폭에서
+          햄버거 서랍 안으로 들어간다. 결과는 스토어에 살아 있으므로 돌아가면 그대로다.
+        -->
+        <RouterLink :to="{ name: 'screener' }" class="stock-detail__back">
+          <i class="pi pi-angle-left" aria-hidden="true" />
+          <span>스크리너</span>
+        </RouterLink>
+
         <header class="stock-detail__header">
           <div class="stock-detail__identity">
             <h1 class="stock-detail__name">{{ detail.data.value.stock.name }}</h1>
@@ -250,6 +260,28 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+/* 종목명 위에 붙는 한 줄. 제목보다 작고 흐려야 "여기가 어디인가"를 먼저 읽지 않는다. */
+.stock-detail__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  margin-bottom: -0.5rem;
+  padding: 0.125rem 0.375rem 0.125rem 0.125rem;
+  border-radius: var(--p-border-radius-md);
+  color: var(--p-text-muted-color);
+  font-size: var(--app-text-xs);
+  transition:
+    background var(--app-motion-fast) var(--app-ease),
+    color var(--app-motion-fast) var(--app-ease);
+}
+
+.stock-detail__back:hover {
+  background: var(--p-surface-800);
+  color: var(--p-text-color);
+  text-decoration: none;
 }
 
 .stock-detail__header {

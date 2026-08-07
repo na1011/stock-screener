@@ -2,7 +2,7 @@
 import AutoComplete from 'primevue/autocomplete'
 import type { AutoCompleteCompleteEvent } from 'primevue/autocomplete'
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { api } from '@/api/endpoints'
 import { ApiError } from '@/api/http'
@@ -19,6 +19,7 @@ import type { StockSearchResult } from '@/api/types'
  * 것과 결과가 없는 것은 문구로 갈라야 한다(frontend.md의 재시도 요구가 겨냥하는 지점이다).
  */
 const router = useRouter()
+const route = useRoute()
 
 const selected = ref<StockSearchResult | null>(null)
 const suggestions = ref<StockSearchResult[]>([])
@@ -56,13 +57,27 @@ async function complete(event: AutoCompleteCompleteEvent): Promise<void> {
   }
 }
 
+/**
+ * 고른 종목의 상세로 간다.
+ *
+ * IMPORTANT — **보고 있던 기준일을 이어 간다.** 결과 표와 카드는 `query: { asOf }`를 싣는데
+ * 검색만 싣지 않아서, 종목 상세에서 이 검색으로 다른 종목으로 옮기는 순간 기준일이 서버
+ * 기본값으로 되돌아갔다. 같은 종목이 어느 길로 들어왔느냐에 따라 다른 날짜로 보인다.
+ *
+ * 없으면 싣지 않는다 — 지어내지 않고 서버가 정하게 둔다.
+ */
 async function go(): Promise<void> {
   const stock = selected.value
   if (stock === null) {
     return
   }
   selected.value = null
-  await router.push({ name: 'stock', params: { stockId: stock.id } })
+  const asOf = typeof route.query.asOf === 'string' ? route.query.asOf : null
+  await router.push({
+    name: 'stock',
+    params: { stockId: stock.id },
+    query: asOf === null ? {} : { asOf },
+  })
 }
 </script>
 
