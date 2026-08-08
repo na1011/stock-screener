@@ -9,13 +9,21 @@ set -euo pipefail
 # 여기서 평문 stdout을 쓰는 이유는 하나뿐이다 — jq에 의존하는 경로로는 jq 부재를 알릴 수 없다.
 # SessionStart의 평문 stdout은 그대로 컨텍스트로 들어가므로 jq가 필요 없다.
 # 아래 findings 보고가 jq -n을 쓰는 것과 달라 보이지만, 그쪽은 jq가 있을 때만 도달한다.
+#
+# MUST NOT: 죽는 훅을 이름으로 열거하지 않는다. 그 열거가 곧 낡는 목록이 되고, 낡은 목록은
+# "덮여 있다"고 믿게 만든다 — 이 검사가 잡으려는 병과 같은 병이다. 등록 목록의 정본은
+# `.claude/settings.json`이다.
 if ! command -v jq >/dev/null 2>&1; then
-  echo "jq가 없다. guard-secrets.sh의 시크릿 차단과 이 문서 검사가 모두 무력화된 상태다. .env.production·*.key·credentials.json 같은 경로는 permissions가 덮지 않으므로 지금은 아무것도 막지 않는다. jq를 설치하면 복구된다."
+  echo "jq가 없다. jq에 의존하는 훅이 전부 판정을 못 하는 상태다 — 차단 가드와 알림 계층 양쪽이고, 어느 것이 걸리는지는 .claude/settings.json의 등록 목록이 답한다. 특히 .env.production·*.key·credentials.json 같은 경로는 permissions가 덮지 않아 지금 아무것도 막지 않는다. jq를 설치하면 복구된다."
   exit 0
 fi
 
+# 이 훅이 중앙 보고자다. 자기 죽음을 알릴 수 있는 것은 자기밖에 없으므로 조용히 나가지 않는다.
 root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-cd "$root" 2>/dev/null || exit 0
+cd "$root" 2>/dev/null || {
+  echo "문서 낡음 검사를 돌리지 못했다: 프로젝트 루트($root)로 이동할 수 없다. 이 세션에서는 문서-코드 불일치가 보고되지 않는다."
+  exit 0
+}
 
 findings=""
 add() { findings="${findings}- $1"$'\n'; }
@@ -155,6 +163,45 @@ if command -v git >/dev/null 2>&1; then
         add "applies_to가 지금 어떤 파일과도 매칭되지 않는 ADR이 있다: ${orphan_adrs}— 그 코드가 생길 때까지 \`remind-adr.sh\`의 포인터는 이 ADR에 대해 침묵한다. 예정된 경로면 정상이고, 오타·이름 변경이면 지금 고쳐라. 영구히 매칭될 수 없는 glob이면 아무것도 하지 않으므로 지운다."
       fi
     fi
+  fi
+fi
+
+# 5. README의 hook 절이 실제 등록된 훅을 다 싣는가
+#
+# 이 저장소는 안전을 전부 훅에 걸었으므로(`README.md`의 준수율 감쇠) **무엇이 강제되는지를
+# 추측하게 두면 안 된다.** 부분 목록은 "덮여 있다"고 믿게 만든다. 완전성을 사람이 지키게
+# 하지 않는다 — 훅을 더하면 여기서 걸린다.
+if [ -f README.md ] && [ -f .claude/settings.json ]; then
+  missing=""
+  while IFS= read -r h; do
+    [ -z "$h" ] && continue
+    grep -qF "$h" README.md || missing="${missing}${h} "
+  done <<< "$(grep -oE '[a-z-]+\.sh' .claude/settings.json | sort -u)"
+  if [ -n "$missing" ]; then
+    add "settings.json에 등록됐는데 README에 없는 훅이 있다: ${missing}— README의 hook 절은 무엇이 강제되는지 알려주는 자리다. 빠진 훅은 없는 것으로 읽힌다."
+  fi
+fi
+
+# 6. 트리거가 서로 닿지 않아 이중화할 수밖에 없는 사실이 어긋났는가
+#
+# 공공데이터포털의 응답 모양은 **코드를 고치는 세션**(`data-pipeline.md`, paths glob)과
+# **적재를 도는 세션**(`batch-load` skill — 적재는 어떤 파일도 열지 않는다) 양쪽에 필요한데,
+# 어느 기제도 상대를 발화시키지 못한다. 사본을 없앨 수 없으면 어긋남을 잡는다 —
+# ADR-0020이 백엔드·프론트 거울에 쓴 것과 같은 형태다.
+mirror_rule=".claude/rules/data-pipeline.md"
+mirror_skill=".claude/skills/batch-load/SKILL.md"
+if [ -f "$mirror_rule" ] && [ -f "$mirror_skill" ]; then
+  # 두 파일의 줄바꿈 위치가 달라 줄 단위로는 비교할 수 없다. 개행을 접고 문장만 뽑는다.
+  extract_mirror() {
+    tr '\n' ' ' < "$1" | tr -s ' ' \
+      | sed -n 's/.*\(공공데이터포털은 없는 종목[^)]*)\).*/\1/p'
+  }
+  m_rule=$(extract_mirror "$mirror_rule")
+  m_skill=$(extract_mirror "$mirror_skill")
+  if [ -z "$m_rule" ] || [ -z "$m_skill" ]; then
+    add "공공데이터포털 응답 모양의 사본이 한쪽에서 사라졌다(rule=$([ -n "$m_rule" ] && echo 있음 || echo 없음), skill=$([ -n "$m_skill" ] && echo 있음 || echo 없음)) — 두 트리거가 서로 닿지 않아 한쪽만으로는 그 세션이 이 함정을 못 본다."
+  elif [ "$m_rule" != "$m_skill" ]; then
+    add "공공데이터포털 응답 모양이 rule과 skill에서 갈렸다 — 거울은 어긋나도 아무 데서도 티가 나지 않는다. 두 문장을 다시 같게 맞춰라."
   fi
 fi
 
