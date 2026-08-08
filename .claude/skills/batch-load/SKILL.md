@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: BootstrapRunner로 시세·재무를 적재하거나 백필할 때. --job=universe|initial-load|backfill의 명령 형태, 각 플래그가 실제로 하는 일, 적재 후 확인 항목.
+description: 시세·재무를 적재·백필하거나 일일 갱신을 돌릴 때. BootstrapRunner의 --job=universe|initial-load|backfill 명령 형태와 각 플래그가 실제로 하는 일, 관리자 화면에서 배치를 띄운 경우까지 포함한 적재 결과 확인 항목, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)

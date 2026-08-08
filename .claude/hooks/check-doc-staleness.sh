@@ -73,47 +73,77 @@ if [ -d docs/adr ]; then
   fi
 fi
 
-# 4. 각 규칙 파일의 paths glob이 실제 파일과 매칭되는가
+# 4. 규칙의 paths와 ADR의 applies_to glob이 실제 파일과 매칭되는가
 #
 # 매칭되지 않는 glob은 규칙을 **영원히 로드되지 않게** 만들고, 로드되지 않았다는 사실은
 # 어디에도 드러나지 않는다. 실제로 frontend.md의 `**/*.js`·`**/*.scss`가 그 상태였다.
+#
+# **ADR도 같은 성질이다.** `applies_to`가 아무것도 매칭하지 않으면 `remind-adr.sh`의 참조
+# 방향이 그 ADR에 대해 영구히 침묵한다 — 위 3번은 필드의 **존재**만 보므로 통과한다.
+# 근거 계층이 그 ADR에 대해 죽는 것이고, 죽었다는 신호가 없다.
 #
 # 파일 단위로 본다 — 어느 glob이든 하나 매칭되면 통과다. glob 단위로 가면
 # `application-*.yaml`처럼 오늘 0건이지만 내일 생길 선행 glob에서 첫날부터 오탐이 나고,
 # 오탐이 반복되면 이 검사 자체가 무시된다.
 #
 # `**`를 `*`로 접는다. bash `[[ ]]` 패턴에서 `*`는 `/`를 넘으므로 `src/main/java/**`가
-# 의도대로 동작한다.
-if [ -d .claude/rules ] && command -v git >/dev/null 2>&1; then
+# 의도대로 동작한다. IMPORTANT — **이 접기는 bash 전용이다.** 같은 대조를 zsh에서 손으로
+# 흉내내면 `*`가 `/`를 넘지 않아 0건이 나온다(2026-08-09 실측: bash 47건 / zsh 0건). 그 결과를
+# 믿고 멀쩡한 glob을 "고치러" 갈 수 있다. 손으로 확인할 때는 `git ls-files '<glob>'`을 쓴다.
+if command -v git >/dev/null 2>&1; then
   tracked=$(git ls-files 2>/dev/null || true)
   if [ -n "$tracked" ]; then
-    orphan=""
-    for rule in .claude/rules/*.md; do
-      [ -f "$rule" ] || continue
-      globs=$(awk '
-        /^paths:[[:space:]]*$/ { f = 1; next }
-        f && /^[[:space:]]*-[[:space:]]*/ {
-          sub(/^[[:space:]]*-[[:space:]]*/, "")
-          gsub(/^["'"'"']|["'"'"']$/, "")
-          gsub(/\*\*/, "*")
-          print; next
-        }
-        f { exit }
-      ' "$rule" 2>/dev/null || true)
-      [ -z "$globs" ] && continue   # paths가 없으면 매 세션 로드되는 규칙이다 — 이 검사 대상이 아니다
-      matched=false
-      while IFS= read -r pat; do
-        [ -z "$pat" ] && continue
-        while IFS= read -r f; do
-          # shellcheck disable=SC2053  # 우변을 따옴표로 감싸면 glob이 아니라 리터럴이 된다
-          if [[ "$f" == $pat ]]; then matched=true; break; fi
-        done <<< "$tracked"
-        [ "$matched" = true ] && break
-      done <<< "$globs"
-      [ "$matched" = false ] && orphan="${orphan}$(basename "$rule") "
-    done
-    if [ -n "$orphan" ]; then
-      add "paths glob이 실제 파일과 하나도 매칭되지 않는 규칙이 있다: ${orphan}— 이 규칙은 영원히 로드되지 않는다. \`git ls-files | grep\`으로 glob을 맞춰라."
+    # 첫 인자는 목록 키(`paths:` 또는 `applies_to:`), 나머지는 검사할 파일들.
+    # 매칭 실패한 파일 이름을 공백으로 이어 stdout에 낸다.
+    collect_orphans() {
+      local key="$1"; shift
+      local doc globs matched pat f out=""
+      for doc in "$@"; do
+        [ -f "$doc" ] || continue
+        globs=$(awk -v k="^${key}:[[:space:]]*$" '
+          $0 ~ k { f = 1; next }
+          f && /^[[:space:]]*-[[:space:]]*/ {
+            sub(/^[[:space:]]*-[[:space:]]*/, "")
+            gsub(/^["'"'"']|["'"'"']$/, "")
+            gsub(/\*\*/, "*")
+            # frontmatter 종료선 `---`도 목록 항목처럼 보인다. 접힌 뒤 `--`가 되는데
+            # 어느 파일과도 매칭되지 않아 무해하지만, 세어서 헷갈릴 이유가 없다.
+            if ($0 != "" && $0 != "-" && $0 != "--") print
+            next
+          }
+          f { exit }
+        ' "$doc" 2>/dev/null || true)
+        # 목록이 없으면 이 검사 대상이 아니다 — 규칙은 매 세션 로드되고,
+        # ADR의 필드 부재는 위 3번이 이미 보고한다.
+        [ -z "$globs" ] && continue
+        matched=false
+        while IFS= read -r pat; do
+          [ -z "$pat" ] && continue
+          while IFS= read -r f; do
+            # shellcheck disable=SC2053  # 우변을 따옴표로 감싸면 glob이 아니라 리터럴이 된다
+            if [[ "$f" == $pat ]]; then matched=true; break; fi
+          done <<< "$tracked"
+          [ "$matched" = true ] && break
+        done <<< "$globs"
+        [ "$matched" = false ] && out="${out}$(basename "$doc") "
+      done
+      printf '%s' "$out"
+    }
+
+    if [ -d .claude/rules ]; then
+      orphan_rules=$(collect_orphans paths .claude/rules/*.md)
+      if [ -n "$orphan_rules" ]; then
+        add "paths glob이 실제 파일과 하나도 매칭되지 않는 규칙이 있다: ${orphan_rules}— 이 규칙은 영원히 로드되지 않는다. \`git ls-files '<glob>'\`으로 glob을 맞춰라."
+      fi
+    fi
+
+    if [ -d docs/adr ]; then
+      orphan_adrs=$(collect_orphans applies_to docs/adr/ADR-[0-9][0-9][0-9][0-9]-*.md)
+      if [ -n "$orphan_adrs" ]; then
+        # "깨졌다"고 단정하지 않는다. 아직 만들지 않은 패키지를 가리키는 것은 정상일 수 있다
+        # (ADR-0010처럼 미룬 결정). 다만 그동안 포인터가 침묵한다는 사실은 알아야 한다.
+        add "applies_to가 지금 어떤 파일과도 매칭되지 않는 ADR이 있다: ${orphan_adrs}— 그 코드가 생길 때까지 \`remind-adr.sh\`의 포인터는 이 ADR에 대해 침묵한다. 예정된 경로면 정상이고, 오타·이름 변경이면 지금 고쳐라. 영구히 매칭될 수 없는 glob이면 아무것도 하지 않으므로 지운다."
+      fi
     fi
   fi
 fi
