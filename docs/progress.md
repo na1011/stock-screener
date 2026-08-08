@@ -30,7 +30,7 @@
 
 **v1 구현은 끝났다. 남은 것은 사람이 값을 채우는 일과 그 뒤의 확인뿐이다** — 목록은 [`TODO.md`](../TODO.md)에 있다(알림 채널 자격증명, Sentry org·project 슬러그, ICANN 인증). 발급 상태는 문서가 아니라 `./gradlew checkEnv`에 묻는다 — 발급은 문서 밖에서 일어나 문서가 먼저 낡는다.
 
-- **앱은 launchd로 돌고 있다.** 지금 도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`다(`~/Desktop`이 TCC 보호 경로라 launchd가 못 읽는다). **코드를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다** — `./gradlew build`만 하면 도는 것은 계속 옛것이고, 화면에는 아무 단서가 없다.
+- **앱이 지금 내려가 있다**(2026-08-09, `launchctl bootout`). 밖에서는 502이고 **평일 20시 배치도 돌지 않는다** — 올리려면 `ops/install-agent.sh`다. 도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이므로(`~/Desktop`이 TCC 보호 경로다) **코드를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다** — `./gradlew build`만 하면 옛것이 돌고 화면에는 아무 단서가 없다.
 - **20시 배치가 실제로 당일 종가를 받아오는지는 아직 못 봤다.** data.go.kr의 공개 시각을 실측하지 않았다. 이르면 수집이 0건으로 끝나고 그 경우 알림이 온다 — **거래일마다 오면 시각을 늦춘다**(ADR-0033).
 
 ---
