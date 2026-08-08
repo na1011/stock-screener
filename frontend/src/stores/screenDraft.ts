@@ -40,13 +40,17 @@ export type DraftOrigin =
   | { kind: 'screen'; id: number; name: string }
 
 /**
- * 아무 화면도 열지 않은 상태를 부르는 말.
+ * 아무 전략도 열지 않은 상태를 부르는 말.
  *
  * 여기가 정본인 이유는 {@link useScreenDraftStore}의 `title`이 이미 이 말을 쓰고 있기
  * 때문이다. 그런데 레일과 칩 바가 **같은 상태로 되돌리는 버튼**에 각자 문구를 적어 두어,
  * 버튼과 그 버튼이 만드는 제목이 어긋날 수 있었다.
+ *
+ * IMPORTANT — "새 조건"이었던 것을 "새 전략"으로 바꿨다(ADR-0027). **"조건"은 칩 하나를
+ * 가리키는 말로 이미 쓰이고 있어서**(칩 바의 `＋ 조건`, `MAX_CONDITIONS`) 같은 낱말이 두
+ * 층위를 가리켰고, 사용자가 이 버튼을 "프리셋을 추가하는 것"으로 읽었다. 되돌리지 않는다.
  */
-export const FRESH_DRAFT_TITLE = '새 조건'
+export const FRESH_DRAFT_TITLE = '새 전략'
 
 let nextKey = 1
 
@@ -116,7 +120,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
   /**
    * 실행할 수 있는가.
    *
-   * 손대지 않은 프리셋·저장된 화면은 조건을 다시 보내지 않으므로(서버가 저장된 정의를 쓴다)
+   * 손대지 않은 프리셋·저장된 전략은 조건을 다시 보내지 않으므로(서버가 저장된 정의를 쓴다)
    * 여기서 조건을 세지 않는다. 즉석 조건일 때만 완성된 행이 하나 이상 필요하다.
    */
   const canRun = computed(
@@ -187,14 +191,14 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     evaluationMode.value = 'FILTER'
     editable.value = true
     dirty.value = false
-    // 새로 시작하면 이전 화면에서 지운 조건을 되돌릴 수 있어서는 안 된다. 지금 편집 중인
+    // 새로 시작하면 이전 전략에서 지운 조건을 되돌릴 수 있어서는 안 된다. 지금 편집 중인
     // 것과 무관한 조건이 튀어나온다.
     lastRemoved.value = null
   }
 
-  /** 저장된 화면·프리셋을 편집기로 불러온다. 유니버스·기준일 선택은 유지한다. */
+  /** 저장된 전략·프리셋을 편집기로 불러온다. 유니버스·기준일 선택은 유지한다. */
   function loadFrom(screen: ScreenResponse): void {
-    // `type`은 **실행 형태**를 정한다 — 프리셋이면 presetCode로, 내 화면이면 screenId로
+    // `type`은 **실행 형태**를 정한다 — 프리셋이면 presetCode로, 내 전략이면 screenId로
     // 보내야 서버가 저장된 정의를 그대로 실행한다. 편집 권한과는 다른 질문이다.
     origin.value =
       screen.type === 'PRESET' && screen.code !== null
@@ -213,7 +217,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
    * 프리셋을 내 것으로 복제한다.
    *
    * 프리셋은 읽기 전용이라 고칠 수 없다(서버가 403을 준다). 복제하면 같은 조건에서 출발해
-   * 자기 화면으로 저장할 수 있다 — 그렇지 않으면 사용자는 프리셋을 손으로 다시 옮겨 적는다.
+   * 자기 전략으로 저장할 수 있다 — 그렇지 않으면 사용자는 프리셋을 손으로 다시 옮겨 적는다.
    */
   function forkAsCustom(): void {
     origin.value = { kind: 'custom' }

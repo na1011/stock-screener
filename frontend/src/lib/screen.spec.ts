@@ -8,7 +8,7 @@ const preset: ScreenRef = { id: 7, code: 'UNDERVALUED', type: 'PRESET' }
 const mine: ScreenRef = { id: 42, code: null, type: 'CUSTOM' }
 
 const presetOrigin: DraftOrigin = { kind: 'preset', code: 'UNDERVALUED', name: '저평가 가치주' }
-const mineOrigin: DraftOrigin = { kind: 'screen', id: 42, name: '내 화면' }
+const mineOrigin: DraftOrigin = { kind: 'screen', id: 42, name: '내 전략' }
 const freshOrigin: DraftOrigin = { kind: 'custom' }
 
 describe('matchesOrigin — 레일 표시와 결과 신선도가 같은 규칙을 쓴다', () => {
@@ -17,13 +17,13 @@ describe('matchesOrigin — 레일 표시와 결과 신선도가 같은 규칙�
     expect(matchesOrigin(preset, { kind: 'preset', code: 'MOMENTUM', name: '추세 상승' })).toBe(false)
   })
 
-  it('내 화면은 id로 대조한다', () => {
+  it('내 전략은 id로 대조한다', () => {
     expect(matchesOrigin(mine, mineOrigin)).toBe(true)
-    expect(matchesOrigin(mine, { kind: 'screen', id: 43, name: '다른 화면' })).toBe(false)
+    expect(matchesOrigin(mine, { kind: 'screen', id: 43, name: '다른 전략' })).toBe(false)
   })
 
-  it('종류가 다르면 id·code가 같아도 다른 화면이다', () => {
-    // 프리셋 id 7과 내 화면 id 7은 서로 다른 것이다. type을 보지 않으면 레일이 엉뚱한
+  it('종류가 다르면 id·code가 같아도 다른 전략이다', () => {
+    // 프리셋 id 7과 내 전략 id 7은 서로 다른 것이다. type을 보지 않으면 레일이 엉뚱한
     // 항목을 활성으로 표시하고, 결과가 낡았는데 낡지 않았다고 말하게 된다.
     expect(matchesOrigin({ id: 42, code: null, type: 'PRESET' }, mineOrigin)).toBe(false)
     expect(matchesOrigin({ id: 7, code: 'UNDERVALUED', type: 'CUSTOM' }, presetOrigin)).toBe(false)
@@ -37,7 +37,7 @@ describe('matchesOrigin — 레일 표시와 결과 신선도가 같은 규칙�
 })
 
 describe('staleNotice — 어긋난 이유를 접지 않는다', () => {
-  it('조건 편집과 화면 전환이 서로 다른 말을 한다', () => {
+  it('조건 편집과 전략 전환이 서로 다른 말을 한다', () => {
     const edited = staleNotice('EDITED')
     const screen = staleNotice('SCREEN')
     expect(edited).not.toBeNull()

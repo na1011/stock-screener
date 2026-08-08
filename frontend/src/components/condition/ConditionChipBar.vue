@@ -210,7 +210,7 @@ function startFresh(): void {
   }
   confirm.require({
     message: `조건 ${draft.conditions.length}개를 지우고 새로 시작합니다.`,
-    header: '새 조건으로 시작할까요?',
+    header: '새 전략으로 시작할까요?',
     icon: 'pi pi-exclamation-triangle',
     rejectProps: { label: '취소', severity: 'secondary', outlined: true, size: 'small' },
     acceptProps: { label: '새로 시작', severity: 'danger', size: 'small' },

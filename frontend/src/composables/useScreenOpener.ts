@@ -9,9 +9,9 @@ import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreensStore } from '@/stores/screens'
 
 /**
- * 목록에서 화면 하나를 가리키는 키.
+ * 목록에서 전략 하나를 가리키는 키.
  *
- * 프리셋은 code, 내 화면은 id로 식별한다 — 둘을 한 목록에 담으려면 키가 하나여야 한다.
+ * 프리셋은 code, 내 전략은 id로 식별한다 — 둘을 한 목록에 담으려면 키가 하나여야 한다.
  *
  * IMPORTANT — 옵션을 만들 때와 고른 것을 되찾을 때가 **반드시 같은 식**이어야 한다. 예전에
  * 두 곳이 각자 유도했고, 어긋나면 `find`가 실패해 사용자가 골라도 아무 일이 일어나지 않았다.
@@ -31,7 +31,7 @@ export function screenKey(screen: ScreenResponse): number | string {
 const OPEN_FAILED = '불러오지 못했습니다'
 
 /**
- * 저장된 화면·프리셋을 편집기로 불러오는 동작.
+ * 저장된 전략·프리셋을 편집기로 불러오는 동작.
  *
  * 레일(`AppRail`)·좁은 폭의 Select(`ScreenPicker`)·목록 화면(`ScreensView`) 셋이 같은 것을
  * 한다. 각자 구현하면 한쪽만 고쳐지고, 그 차이는 "어느 쪽으로 골랐느냐"에 따라 다르게
@@ -47,7 +47,7 @@ export function useScreenOpener() {
   const loading = ref(false)
 
   /**
-   * 화면 하나를 편집기에 올리고 **스크리너로 보낸다.**
+   * 전략 하나를 편집기에 올리고 **스크리너로 보낸다.**
    *
    * IMPORTANT — 이동이 여기 있는 것이 요점이다. 예전에는 호출부 셋 중 `ScreensView`만
    * `router.push`를 갖고 있었고, 그래서 **레일에서 프리셋을 눌러도 아무 일이 일어나지
@@ -68,10 +68,10 @@ export function useScreenOpener() {
     const found = screens.all.find((it) => screenKey(it) === key)
     if (found === undefined || found.id === null) {
       // 여기 오면 목록과 선택이 어긋난 것이다. 조용히 넘기면 사용자는 클릭이 먹지 않는
-      // 화면을 보게 되고, 무엇이 잘못됐는지 알 방법이 없다.
+      // 전략을 보게 되고, 무엇이 잘못됐는지 알 방법이 없다.
       notifyFailure(
         OPEN_FAILED,
-        new ApiError(0, null, '고른 화면을 목록에서 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.'),
+        new ApiError(0, null, '고른 전략을 목록에서 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.'),
       )
       return false
     }
@@ -89,7 +89,7 @@ export function useScreenOpener() {
   }
 
   /**
-   * 지금 편집 중인 것이 이 화면인가. 레일에서 활성 항목을 표시하는 데 쓴다.
+   * 지금 편집 중인 것이 이 전략인가. 레일에서 활성 항목을 표시하는 데 쓴다.
    *
    * `draft.origin`을 보는 이유는 그것이 "무엇을 불러왔는가"의 정본이기 때문이다. 별도의
    * 선택 상태를 두면 복제·초기화 같은 경로에서 둘이 어긋난다.

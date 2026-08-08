@@ -38,13 +38,13 @@ const saving = ref(false)
 const nameError = ref<string | null>(null)
 const otherError = ref<string | null>(null)
 
-/** 저장된 내 화면을 편집 중일 때만 덮어쓰기를 고를 수 있다. */
+/** 저장된 내 전략을 편집 중일 때만 덮어쓰기를 고를 수 있다. */
 const existingId = computed(() => (draft.origin.kind === 'screen' ? draft.origin.id : null))
 const mode = ref<'create' | 'update'>('create')
 
 const modeOptions = computed(() => [
-  { label: '새 화면으로 저장', value: 'create' },
-  { label: '이 화면 덮어쓰기', value: 'update' },
+  { label: '새 전략으로 저장', value: 'create' },
+  { label: '이 전략 덮어쓰기', value: 'update' },
 ])
 
 watch(visible, (open) => {
@@ -74,7 +74,7 @@ async function save(): Promise<void> {
   otherError.value = null
 
   if (name.value.trim() === '') {
-    nameError.value = '화면 이름이 필요합니다.'
+    nameError.value = '전략 이름이 필요합니다.'
     return
   }
   if (draft.completeConditions.length === 0) {
@@ -100,7 +100,7 @@ async function save(): Promise<void> {
       throw caught
     }
     if (caught.is(ProblemType.DUPLICATE_SCREEN_NAME)) {
-      nameError.value = '같은 이름의 화면이 이미 있습니다.'
+      nameError.value = '같은 이름의 전략이 이미 있습니다.'
       return
     }
     otherError.value = caught.userMessage
@@ -126,7 +126,7 @@ async function save(): Promise<void> {
         aria-label="저장 방식"
       />
 
-      <FormField label="화면 이름" control-id="screen-name">
+      <FormField label="전략 이름" control-id="screen-name">
         <InputText
           id="screen-name"
           v-model="name"

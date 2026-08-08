@@ -16,7 +16,7 @@ function screen(overrides: Partial<ScreenResponse> = {}): ScreenResponse {
   return {
     id: 7,
     code: null,
-    name: '내 화면',
+    name: '내 전략',
     description: null,
     type: 'CUSTOM',
     evaluationMode: 'FILTER',
@@ -59,7 +59,7 @@ beforeEach(() => {
 })
 
 describe('편집 가능 여부는 서버 판단을 그대로 쓴다', () => {
-  it('서버가 편집 불가라고 한 화면은 잠긴다', () => {
+  it('서버가 편집 불가라고 한 전략은 잠긴다', () => {
     const draft = useScreenDraftStore()
 
     draft.loadFrom(readOnlyPreset())
@@ -116,7 +116,7 @@ describe('실행 요청의 형태는 출처와 dirty가 정한다', () => {
     expect(request?.conditions).toBeUndefined()
   })
 
-  it('손대지 않은 내 화면은 screenId로 보낸다', () => {
+  it('손대지 않은 내 전략은 screenId로 보낸다', () => {
     const draft = useScreenDraftStore()
     draft.loadFrom(screen())
 

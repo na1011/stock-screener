@@ -184,7 +184,7 @@ public class DailyUpdateJob {
             WatchlistAlertRunner.Result result = watchlistAlertRunner.run(asOf);
             if (result.hasFailure()) {
                 execution.alertOperator(AlertSeverity.WARNING, "워치리스트 판정 부분 실패",
-                        "화면 %d개의 조건을 판정하지 못했다. 판정 %d건, 통지 %d명."
+                        "전략 %d개의 조건을 판정하지 못했다. 판정 %d건, 통지 %d명."
                                 .formatted(result.failedScreens(), result.evaluated(),
                                         result.notifiedUsers()));
             }

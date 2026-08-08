@@ -15,9 +15,9 @@ import { screenTypeLabel } from '@/lib/screen'
 import { useScreensStore } from '@/stores/screens'
 
 /**
- * 저장된 화면과 프리셋 목록.
+ * 저장된 전략과 프리셋 목록.
  *
- * 프리셋은 읽기 전용으로 보이고 남의 화면은 애초에 목록에 오지 않는다(서버가 담지 않는다).
+ * 프리셋은 읽기 전용으로 보이고 남의 전략은 애초에 목록에 오지 않는다(서버가 담지 않는다).
  * "불러오기"는 조건까지 받아 편집기에 올린 뒤 스크리너로 보낸다 — 목록 응답에는 조건이
  * 없으므로(`conditions`가 null) 이 한 번의 추가 요청이 필요하다.
  */
@@ -57,7 +57,7 @@ function confirmRemove(screen: ScreenResponse): void {
   }
   const id = screen.id
   confirm.require({
-    header: '화면 삭제',
+    header: '전략 삭제',
     message: `"${screen.name}"을(를) 삭제합니다. 되돌릴 수 없습니다.`,
     icon: 'pi pi-exclamation-triangle',
     acceptLabel: '삭제',
@@ -84,7 +84,9 @@ async function remove(id: number, name: string): Promise<void> {
 
 <template>
   <section class="screens">
-    <h1 class="screens__title">{{ panelSubject('screens') }}</h1>
+    <!-- 레일의 진입점이 "전략 관리"라 제목도 같은 말이어야 한다. `panelSubject`는 오류
+         문구("전략 목록을 불러오지 못했습니다")에 쓰이는 말이라 여기와 역할이 다르다. -->
+    <h1 class="screens__title">전략 관리</h1>
 
     <AsyncPanel
       :state="screens.state"
@@ -96,7 +98,7 @@ async function remove(id: number, name: string): Promise<void> {
       <section class="screens__group">
         <SectionHeading :title="screenTypeLabel('PRESET')" :count="screens.presets.length" />
         <p class="screens__group-note">
-          미리 정의된 전략입니다. 고칠 수는 없지만 불러온 뒤 복제해 내 화면으로 저장할 수 있습니다.
+          미리 정의된 전략입니다. 고칠 수는 없지만 불러온 뒤 복제해 내 전략으로 저장할 수 있습니다.
         </p>
         <ul class="screens__list">
           <li v-for="screen in screens.presets" :key="screen.code ?? screen.name" class="screen-item">
@@ -128,7 +130,7 @@ async function remove(id: number, name: string): Promise<void> {
       <section class="screens__group">
         <SectionHeading :title="screenTypeLabel('CUSTOM')" :count="screens.mine.length" />
         <p v-if="screens.mine.length === 0" class="screens__empty">
-          저장한 화면이 없습니다. 스크리너에서 조건을 만든 뒤 저장해 보세요.
+          저장한 전략이 없습니다. 스크리너에서 조건을 만든 뒤 저장해 보세요.
         </p>
         <ul v-else class="screens__list">
           <li v-for="screen in screens.mine" :key="screen.id ?? screen.name" class="screen-item">
@@ -225,7 +227,7 @@ async function remove(id: number, name: string): Promise<void> {
 }
 
 .screen-item__body {
-  /* flex 아이템의 자동 최소 크기는 내용 기반이다. 긴 화면 이름이 버튼을 밀어내지 않게 한다. */
+  /* flex 아이템의 자동 최소 크기는 내용 기반이다. 긴 전략 이름이 버튼을 밀어내지 않게 한다. */
   min-width: 0;
 }
 

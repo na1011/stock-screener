@@ -43,7 +43,7 @@ const presentation = computed(() =>
 /**
  * 알림 조건 후보.
  *
- * 서버가 프리셋과 내 화면만 목록에 담으므로 여기서 걸러낼 것이 없다. **조건이 없는 화면은
+ * 서버가 프리셋과 내 전략만 목록에 담으므로 여기서 걸러낼 것이 없다. **조건이 없는 전략은
  * 서버가 거절한다** — 목록 응답에는 조건이 없어(`conditions`가 null) 여기서 미리 가릴 수 없다.
  */
 const screenOptions = computed(() => [
@@ -153,7 +153,7 @@ async function unwatch(): Promise<void> {
             option-group-children="items"
             option-label="name"
             option-value="id"
-            placeholder="화면 선택"
+            placeholder="전략 선택"
             show-clear
             fluid
           />

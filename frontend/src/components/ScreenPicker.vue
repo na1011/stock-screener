@@ -8,7 +8,7 @@ import { screenTypeLabel } from '@/lib/screen'
 import { useScreensStore } from '@/stores/screens'
 
 /**
- * 스크리너 안에서 프리셋·저장된 화면을 바로 고른다.
+ * 스크리너 안에서 프리셋·저장된 전략을 바로 고른다.
  *
  * 목록 화면으로 나갔다 오게 하지 않는 이유는 spec §5가 "스크리닝 실행 → 조건 설정·저장 →
  * 개별 종목 심층 확인"을 하나로 이어지는 흐름으로 요구하기 때문이다. 화면을 바꿔야 조건을
@@ -55,7 +55,7 @@ onMounted(() => {
       option-group-children="items"
       option-label="name"
       option-value="key"
-      placeholder="프리셋·저장된 화면 불러오기"
+      placeholder="프리셋·저장된 전략 불러오기"
       show-clear
       fluid
       :loading="loading"

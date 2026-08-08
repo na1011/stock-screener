@@ -67,7 +67,7 @@ function dismiss(): void {
       <Message v-if="renderError" severity="error" :closable="false" class="app-layout__error">
         <div class="app-layout__error-body">
           <div>
-            <strong>이 화면을 그리는 중 문제가 발생했습니다.</strong>
+            <strong>이 페이지를 그리는 중 문제가 발생했습니다.</strong>
             <p class="app-layout__error-detail">{{ renderError.message }}</p>
           </div>
           <Button label="닫기" size="small" outlined @click="dismiss" />
@@ -122,7 +122,7 @@ function dismiss(): void {
   grid-template-rows: var(--app-header-height) minmax(0, 1fr);
 }
 
-/* 레일은 스크롤과 무관하게 제자리에 있어야 한다. 목록에서 화면을 고르는 것이 이 앱의
+/* 레일은 스크롤과 무관하게 제자리에 있어야 한다. 목록에서 전략을 고르는 것이 이 앱의
    주된 이동 수단이라, 아래로 내려가면 이동 자체가 불가능해진다. */
 .app-layout__rail {
   position: sticky;

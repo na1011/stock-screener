@@ -14,7 +14,7 @@ export const ASYNC_PANELS = {
   catalog: { subject: '지표 카탈로그', particle: '를' },
   universes: { subject: '유니버스 목록', particle: '을' },
   screening: { subject: '스크리닝 결과', particle: '를' },
-  screens: { subject: '화면 목록', particle: '을' },
+  screens: { subject: '전략 목록', particle: '을' },
   stock: { subject: '종목 정보', particle: '를' },
   priceReference: { subject: '지지·저항 참고정보', particle: '를' },
   watchlist: { subject: '관심종목', particle: '을' },

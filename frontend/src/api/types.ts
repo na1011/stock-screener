@@ -172,7 +172,7 @@ export interface ConditionGroupPayload {
   childGroups?: ConditionGroupPayload[]
 }
 
-// ── 저장된 화면 ────────────────────────────────────────────────────
+// ── 저장된 전략 ────────────────────────────────────────────────────
 
 export interface ScreenResponse {
   id: number | null

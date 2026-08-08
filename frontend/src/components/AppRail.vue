@@ -20,7 +20,7 @@ import { useWatchlistStore } from '@/stores/watchlist'
 /**
  * 좌측 레일.
  *
- * 화면 목록을 여기 **상주**시키는 것이 요점이다. 예전에는 조건을 바꾸려면 `/screens`로
+ * 전략 목록을 여기 **상주**시키는 것이 요점이다. 예전에는 조건을 바꾸려면 `/screens`로
  * 나갔다 돌아오거나 상단 Select를 열어야 했다. 목록이 늘 보이면 "지금 무엇을 보고 있는가"와
  * "무엇으로 바꿀 수 있는가"가 동시에 답해진다 — spec §5가 요구하는 하나로 이어지는 흐름이다.
  *
@@ -72,7 +72,7 @@ const sections = computed(() => [
   { label: screenTypeLabel('CUSTOM'), items: screens.mine },
 ])
 
-/** 새 조건을 만드는 중인가. 어느 저장된 화면도 열려 있지 않은 상태다. */
+/** 새 조건을 만드는 중인가. 어느 저장된 전략도 열려 있지 않은 상태다. */
 const isFresh = computed(() => draft.origin.kind === 'custom')
 
 async function pick(screen: ScreenResponse): Promise<void> {
@@ -107,7 +107,7 @@ async function startFresh(): Promise<void> {
       <StockSearch />
     </div>
 
-    <nav class="rail__nav" aria-label="주요 화면">
+    <nav class="rail__nav" aria-label="주요 메뉴">
       <RouterLink
         to="/"
         class="app-list-button rail__item"
@@ -124,7 +124,7 @@ async function startFresh(): Promise<void> {
         @click="emit('navigate')"
       >
         <i class="pi pi-bookmark rail__icon" aria-hidden="true" />
-        <span>화면 관리</span>
+        <span>전략 관리</span>
       </RouterLink>
       <RouterLink
         to="/watchlist"
@@ -170,7 +170,7 @@ async function startFresh(): Promise<void> {
             </li>
           </ul>
           <!-- 비어 있다는 사실 자체가 안내다. 목록이 그냥 없으면 로딩 중인지 빈 것인지 모른다. -->
-          <p v-else class="rail__empty">아직 저장한 화면이 없습니다.</p>
+          <p v-else class="rail__empty">아직 저장한 전략이 없습니다.</p>
         </section>
       </AsyncPanel>
     </div>

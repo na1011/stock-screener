@@ -87,7 +87,7 @@ describe('indicatorBriefOf', () => {
   })
 
   it('둘 다 없으면 코드를 이름으로 쓰고 기본 자릿수를 쓴다', () => {
-    // 저장된 화면이 폐기된 지표를 참조하는 경우다. 서버도 같은 상황에 코드만 돌려준다.
+    // 저장된 전략이 폐기된 지표를 참조하는 경우다. 서버도 같은 상황에 코드만 돌려준다.
     const brief = indicatorBriefOf('GONE', [], byCode)
 
     expect(brief.name).toBe('GONE')

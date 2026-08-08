@@ -13,7 +13,7 @@ import { useAsync } from '@/composables/useAsync'
  * 목록에서 해제한 종목의 버튼이 여전히 "담김"으로 남는다.
  *
  * `stores/screens`와 같은 모양이다. 쓰기 뒤에 목록을 다시 읽어 두 화면이 함께 따라온다 —
- * 응답 하나로 로컬 배열을 손보면 목록의 정렬·조인 결과(종목명·화면명)를 프론트가 다시
+ * 응답 하나로 로컬 배열을 손보면 목록의 정렬·조인 결과(종목명·전략명)를 프론트가 다시
  * 만들어야 하고, 그 재구성이 서버와 어긋나기 시작한다.
  */
 export const useWatchlistStore = defineStore('watchlist', () => {

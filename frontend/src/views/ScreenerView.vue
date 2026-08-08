@@ -24,7 +24,7 @@ const result = computed(() => screening.result ?? null)
 const saveVisible = ref(false)
 
 /**
- * 서버가 수정을 막는 화면은 저장 버튼을 주지 않는다(403이 날 것을 알면서 버튼을 주지 않는다).
+ * 서버가 수정을 막는 전략은 저장 버튼을 주지 않는다(403이 날 것을 알면서 버튼을 주지 않는다).
  * 복제한 뒤에는 내 것이므로 저장할 수 있다. 판단의 정본은 서버의 `editable`이다.
  */
 const canSave = computed(() => draft.editable && draft.completeConditions.length > 0)
@@ -37,11 +37,11 @@ const canSave = computed(() => draft.editable && draft.completeConditions.length
  * 실행한 것"이다. 그 사실을 말하지 않으면 사용자는 눈앞의 목록이 방금 고친 조건의 결과라고
  * 읽는다. 버튼 라벨이 바뀌는 것이 그 자백이다.
  *
- * IMPORTANT — 어긋나는 길이 **둘**이다. 조건을 손으로 고친 것(`dirty`)과 **화면을 통째로
+ * IMPORTANT — 어긋나는 길이 **둘**이다. 조건을 손으로 고친 것(`dirty`)과 **전략을 통째로
  * 갈아탄 것**이다. 뒤엣것은 `loadFrom`이 `dirty`를 false로 내리므로 예전에는 자백이
- * 꺼졌다 — 제목·조건칩은 새 화면인데 표는 옛 화면의 결과였고 경고가 하나도 없었다.
+ * 꺼졌다 — 제목·조건칩은 새 전략인데 표는 옛 전략의 결과였고 경고가 하나도 없었다.
  *
- * 화면이 같은지는 **서버가 준 `result.screen`**과 대조한다. "무엇을 실행했는가"를 클라이언트가
+ * 전략이 같은지는 **서버가 준 `result.screen`**과 대조한다. "무엇을 실행했는가"를 클라이언트가
  * 따로 기억하면 그 거울이 어긋나고, 어긋나도 값이 그럴듯해 드러나지 않는다.
  */
 const staleReason = computed<StaleReason>(() => {
@@ -49,11 +49,11 @@ const staleReason = computed<StaleReason>(() => {
     return null
   }
   // 손댄 것이 먼저다. 프리셋을 복제하면(`forkAsCustom`) origin은 즉석으로 바뀌지만 조건은
-  // 그대로이고 `dirty`만 올라간다 — 그때 "다른 화면"이라고 말하면 사실이 아니다.
+  // 그대로이고 `dirty`만 올라간다 — 그때 "다른 전략"이라고 말하면 사실이 아니다.
   if (draft.dirty) {
     return 'EDITED'
   }
-  // "새 조건"(reset)도 여기 걸린다. 즉석 조건은 어느 화면과도 같지 않으므로 조건 칩이
+  // "새 조건"(reset)도 여기 걸린다. 즉석 조건은 어느 전략과도 같지 않으므로 조건 칩이
   // 비었는데 옛 결과가 남아 있는 상태도 자백된다.
   return matchesOrigin(result.value.screen, draft.origin) ? null : 'SCREEN'
 })
@@ -108,7 +108,7 @@ async function run(): Promise<void> {
         </div>
 
         <div class="screener__actions">
-          <!-- 넓은 폭에서는 좌측 레일이 화면 목록을 상주시킨다. 좁을 때만 Select가 그 자리를 맡는다. -->
+          <!-- 넓은 폭에서는 좌측 레일이 전략 목록을 상주시킨다. 좁을 때만 Select가 그 자리를 맡는다. -->
           <ScreenPicker v-if="isBuilderNarrow" />
           <Button
             v-tooltip.bottom="runHint"

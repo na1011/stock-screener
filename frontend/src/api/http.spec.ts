@@ -184,7 +184,7 @@ describe('apiFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('기본값은 GET만 재시도한다 — 생성 요청을 자동 재시도하면 화면이 두 개 만들어진다', async () => {
+  it('기본값은 GET만 재시도한다 — 생성 요청을 자동 재시도하면 전략이 두 개 만들어진다', async () => {
     fetchMock.mockResolvedValue(jsonResponse(503, null))
 
     await expect(apiFetch('/api/screens', { method: 'POST', body: {} })).rejects.toBeInstanceOf(ApiError)

@@ -166,7 +166,7 @@ export interface ApiRequest {
    * 재시도 간격(ms). 길이가 곧 재시도 횟수다.
    *
    * IMPORTANT — 기본값이 GET에만 붙는다. 생성·수정 요청을 자동 재시도하면 서버가 이미 처리한
-   * 뒤 응답만 유실된 경우 같은 화면이 두 개 만들어진다. 조회인데 POST인 요청
+   * 뒤 응답만 유실된 경우 같은 전략이 두 개 만들어진다. 조회인데 POST인 요청
    * (`/api/screening`)은 호출부가 명시적으로 켠다.
    */
   retryDelaysMs?: number[]

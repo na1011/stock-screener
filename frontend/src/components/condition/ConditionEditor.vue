@@ -78,7 +78,7 @@ const requiresUpperBound = computed(
  * 비교 대상의 종류.
  *
  * 유니온에서 파생시킨다 — 손으로 적은 배열은 서버가 종류를 늘려도 그대로 남아, 그 종류를
- * 고를 수 없게 되고(만들 수 없는 조건이 생긴다) 저장된 화면이 그것을 쓰면 LITERAL 분기로
+ * 고를 수 없게 되고(만들 수 없는 조건이 생긴다) 저장된 전략이 그것을 쓰면 LITERAL 분기로
  * 잘못 그려진다.
  */
 const OPERAND_TYPE_LABELS: Record<OperandType, string> = {
@@ -338,7 +338,7 @@ function onOperandTypeChange(value: OperandType | null): void {
       </div>
     </template>
 
-    <p v-else class="editor__readonly">읽기 전용 화면입니다. 복제하면 고칠 수 있습니다.</p>
+    <p v-else class="editor__readonly">읽기 전용 전략입니다. 복제하면 고칠 수 있습니다.</p>
   </div>
 </template>
 
