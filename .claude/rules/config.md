@@ -17,6 +17,7 @@ paths:
 ## `build.gradle`
 
 - **MUST NOT: `.env`를 `test` 태스크에 주입하지 않는다.** 실키가 있으면 `@ConditionalOnApiKey` 어댑터가 등록돼 **빈 구성 자체가 바뀐다.** 단위 테스트는 외부 호출 0건이 전제다. `.env`는 `bootRun`·`liveTest`에만 들어가고, 실제 외부 호출은 `@Tag("live")` + `./gradlew liveTest`에만 둔다. 주입 실패는 조용하므로 `./gradlew checkEnv`로 가른다.
+- **프론트 번들에 환경변수를 실으려면 `applyDotEnv`를 `frontendBuild`에도 걸어야 한다.** 지금은 `bootRun`·`liveTest`에만 걸려 있고, Vite의 `envDir`이 `frontend/`라 **루트 `.env`를 읽지 않는다** — `VITE_SENTRY_DSN`을 채워도 번들에는 아무것도 안 들어간다. 걸 때 **`inputs.property`로 그 값을 함께 선언한다**: 안 하면 값만 바뀐 재빌드에서 Gradle이 UP-TO-DATE로 판정해 **캐시된 옛 번들을 그대로 싣는다.**
 - **`./gradlew build`가 `frontend/`를 함께 빌드한다.** `processResources`가 `frontend/dist`를 `static/`으로 싣고 `check`가 Vitest를 돈다. Node가 없으면 `-PskipFrontend`(번들이 빠져 `SpaFallbackTest`가 실패한다). `npm` 경로는 빌드가 직접 해석한다 — Homebrew 경로가 `/etc/paths`에 없어 IDE 데몬에서 조용히 깨지기 때문이다.
 
 ## `src/main/resources/application.yaml`
