@@ -149,6 +149,8 @@ public class DailyUpdateJob {
             throw e;
         }
 
+        alertIfNothingArrived(execution, targets.size(), to);
+
         // 백분위는 전 종목의 값이 저장된 뒤에야 계산할 수 있다. 종목 루프 안에서는 원리적으로
         // 불가능하므로 루프가 끝난 뒤 하루치를 한 번에 처리한다.
         percentileCalculator.calculate(to);
@@ -167,6 +169,29 @@ public class DailyUpdateJob {
         }
 
         return execution.finish();
+    }
+
+    /**
+     * 한 종목도 새 시세를 받지 못했으면 알린다.
+     *
+     * <p>IMPORTANT — 이 경로가 없으면 그 상황이 <b>완전한 성공으로 기록된다.</b> 빈 응답은
+     * 예외가 아니라 0행이라 {@code process}가 성공을 세고, 마감은 850종목 성공·0행으로
+     * {@code SUCCESS}가 된다. 관리자 화면도 초록이고 알림도 없다. 그래서 "배치는 잘 도는데
+     * 데이터가 안 늘어난다"를 며칠 뒤 화면의 기준 일자를 보고서야 알게 된다.
+     *
+     * <p>원인이 둘이고 여기서는 구분할 수 없다 — <b>휴장</b>이거나, <b>소스가 아직 그날치를
+     * 내지 않은 것</b>이다. 구분하지 못한 채로 알리는 편이 맞다: 공휴일은 연 15일 남짓이라
+     * 그만큼의 WARNING은 감당할 수 있고, 반대로 배치 시각이 너무 이르면 <b>거래일마다</b>
+     * 오므로 하루 만에 드러난다. 후자를 놓치는 비용이 전자의 소음보다 훨씬 크다.
+     */
+    private void alertIfNothingArrived(BatchExecutionContext execution, int targetCount, LocalDate to) {
+        if (targetCount == 0 || execution.writtenRowCount() > 0) {
+            return;
+        }
+        execution.alertOperator(AlertSeverity.WARNING, "새 시세가 한 건도 들어오지 않았다",
+                "%d종목을 조회했으나 저장된 행이 0이다 (대상일 %s). 휴장이거나, 소스가 아직 그날치를 내지 않았다. "
+                        .formatted(targetCount, to)
+                        + "거래일마다 이 알림이 오면 배치 시각이 소스의 공개 시각보다 이르다는 뜻이다.");
     }
 
     /**

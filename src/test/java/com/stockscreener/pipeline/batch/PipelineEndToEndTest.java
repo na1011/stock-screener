@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.notification.AlertEvent;
 import com.stockscreener.notification.AlertPort;
+import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.collector.UniverseReconciler;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.PriceDataSource;
@@ -223,6 +224,26 @@ class PipelineEndToEndTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM batch_execution WHERE job_name = ? AND target_date = ?",
                 Integer.class, DailyUpdateJob.JOB_NAME, saturday)).isZero();
+    }
+
+    @Test
+    @DisplayName("한 종목도 안 들어오면 성공으로 끝나되 알린다 — 배치 시각이 소스보다 이르면 이것만 드러난다")
+    void dailyUpdateAlertsWhenNothingArrived() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        // 봉을 하나도 등록하지 않는다. 빈 응답은 예외가 아니라 0행이다.
+        alertPort.events.clear();
+
+        BatchStatus status = dailyUpdateJob.run(
+                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        // IMPORTANT — 상태가 SUCCESS인 것이 요점이다. 빈 응답은 실패로 세지 않으므로
+        // 관리자 화면도 초록이고, 이 알림이 없으면 아무 데도 흔적이 남지 않는다.
+        assertThat(status).isEqualTo(BatchStatus.SUCCESS);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM price_daily WHERE trade_date = ?", Integer.class, AS_OF))
+                .isZero();
+        assertThat(alertPort.events).hasSize(1);
+        assertThat(alertPort.events.get(0).severity()).isEqualTo(AlertSeverity.WARNING);
     }
 
     @Test
