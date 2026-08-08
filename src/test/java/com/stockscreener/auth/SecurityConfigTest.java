@@ -102,8 +102,18 @@ class SecurityConfigTest {
     @WithAnonymousUser
     @DisplayName("actuator는 health만 열려 있다 — 나머지는 관리자만이다")
     void actuatorIsLockedDown() throws Exception {
-        // actuator는 아직 클래스패스에 없다(Phase 6). 도입 시점에 anyRequest().permitAll()이
-        // 조용히 구멍이 되지 않게 매처를 미리 걸어 두고, 그것이 살아 있는지 여기서 본다.
+        // 매처의 마지막이 anyRequest().permitAll()이라(ADR-0018) 보호 대상은 그 앞에
+        // 명시해야만 지켜진다. 여기서 보는 것은 그 명시가 살아 있는가다.
         mockMvc.perform(get("/actuator/env")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithAnonymousUser
+    @DisplayName("/actuator/health는 익명에게 열려 있다 — 재부팅 뒤 밖에서 물을 곳이 이것뿐이다")
+    void healthIsPubliclyReadable() throws Exception {
+        // 이 200이 없으면 launchd 워치독과 재부팅 검증이 판정할 수단을 잃는다(ADR-0031).
+        // 인가 규칙과 노출 설정 둘 다 성립해야 200이 나온다 —
+        // management.endpoints.web.exposure.include에서 health가 빠지면 404가 된다.
+        mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
     }
 }

@@ -80,6 +80,11 @@ dependencies {
     // Boot BOM이 io.sentry를 관리하지 않으므로 버전을 명시한다.
     implementation 'io.sentry:sentry-spring-boot-4-starter:8.52.0'
 
+    // actuator — /actuator/health 하나를 위해 넣는다. launchd가 "앱이 떴는가"를 물을 곳이
+    // 필요하고, 지금은 포트가 열렸는지밖에 볼 수 없어 DB가 죽은 채 뜬 앱과 구분되지 않는다.
+    // 노출은 health만이고 나머지는 SecurityConfig가 관리자로 잠근다. ADR-0031 참조.
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     annotationProcessor 'org.projectlombok:lombok'

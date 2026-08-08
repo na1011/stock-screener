@@ -123,6 +123,31 @@ sentry:
   # MUST NOT: traces-sample-rate를 켜지 않는다. 트레이싱은 무료 티어의 월 이벤트 총량을
   # 태우는데, 여기서 필요한 것은 예상 못 한 예외이지 성능 프로파일이 아니다.
 
+# ── 운영 엔드포인트 ─────────────────────────────────────────────
+# 존재 이유는 하나다 — 재부팅 뒤 밖에서 curl 한 번으로 "앱과 터널이 살아 있는가"를 묻는 것.
+# 포트가 열렸는지만 보면 DB가 죽은 채 뜬 앱과 구분되지 않는다(ADR-0031).
+management:
+  endpoints:
+    web:
+      exposure:
+        # health 하나만 연다. 나머지는 SecurityConfig가 관리자로 잠그지만, 노출 자체를
+        # 좁혀 두면 그 매처가 잘못돼도 새어 나갈 것이 없다.
+        include: health
+  endpoint:
+    health:
+      # /actuator/health는 익명에게 열려 있다(SecurityConfig). 상세를 숨겨 {"status":"UP"}만
+      # 나가게 한다 — 밖에서 살아 있는지 묻는 데는 그것으로 충분하고, DB 주소나 디스크
+      # 용량까지 함께 나갈 이유는 없다.
+      show-details: never
+  health:
+    mail:
+      # MUST: 꺼 둔 채로 둔다. spring-boot-mail이 MailHealthContributorAutoConfiguration을
+      # 함께 싣고, 그 인디케이터는 SMTP에 실제로 접속을 시도한다. 알림 자격증명이 없는 지금
+      # 상태에서는 그것이 실패해 health가 통째로 503이 되고, launchd 워치독과 재부팅 검증이
+      # 그 503을 "앱이 안 떴다"로 읽는다. 자격증명이 채워진 뒤에도 켜지 않는다 — 메일 서버가
+      # 잠깐 느린 것과 앱이 죽은 것은 다른 사건이고, 여기서 섞으면 후자를 놓친다.
+      enabled: false
+
 # ── 애플리케이션 설정 ───────────────────────────────────────────
 # MUST NOT: 이 블록을 둘로 나누지 않는다. 루트 키가 같은 매핑이 두 번 나오면 YAML은
 # 뒤엣것으로 덮으므로, 앞 블록의 설정이 전부 조용히 사라진다.
