@@ -41,7 +41,8 @@ class InteractionRecorderTest {
     @BeforeEach
     void setUp() {
         jdbcTemplate = mock(JdbcTemplate.class);
-        recorder = new InteractionRecorder(jdbcTemplate);
+        // 코덱은 가짜로 바꾸지 않는다. 저장 형식이 실제로 만들어지는지가 이 경로의 일부다.
+        recorder = new InteractionRecorder(jdbcTemplate, new InteractionDetailCodec());
 
         logs = new ListAppender<>();
         logs.start();

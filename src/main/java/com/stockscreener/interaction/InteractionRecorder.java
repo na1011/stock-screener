@@ -6,9 +6,6 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
-
 import java.util.Map;
 
 /**
@@ -30,19 +27,12 @@ public class InteractionRecorder {
     /** {@code path} 컬럼 상한. 넘치면 잘라 넣는다 — 기록 자체가 실패하는 편이 더 나쁘다. */
     private static final int MAX_PATH_LENGTH = 200;
 
-    /**
-     * 애플리케이션의 {@code ObjectMapper} 빈을 주입받지 않는다.
-     *
-     * <p>{@code IndicatorBandCodec}과 같은 이유다 — 이것은 <b>저장 형식</b>이지 API 형식이
-     * 아니다. 웹 응답의 Jackson 설정을 누가 바꾸면 이미 저장된 행과 새로 쓰는 행의 형식이
-     * 갈리는데, 그 어긋남은 로그를 조회할 때에야 드러난다.
-     */
-    private final ObjectMapper objectMapper = JsonMapper.builder().build();
-
     private final JdbcTemplate jdbcTemplate;
+    private final InteractionDetailCodec detailCodec;
 
-    public InteractionRecorder(JdbcTemplate jdbcTemplate) {
+    public InteractionRecorder(JdbcTemplate jdbcTemplate, InteractionDetailCodec detailCodec) {
         this.jdbcTemplate = jdbcTemplate;
+        this.detailCodec = detailCodec;
     }
 
     /**
@@ -61,7 +51,7 @@ public class InteractionRecorder {
                     VALUES (?, ?, ?, ?, ?, ?, CAST(? AS jsonb), now())
                     """,
                     userId, action.name(), httpMethod, truncate(path),
-                    statusCode, durationMs, detailJson(detail));
+                    statusCode, durationMs, detailCodec.toJson(detail));
 
         } catch (DataAccessException e) {
             // 삼키지 않는다. 이 한 줄이 "기록이 되고 있다"와 "조용히 안 되고 있다"를 가르는
@@ -69,13 +59,6 @@ public class InteractionRecorder {
             log.error("인터랙션 기록에 실패했다. action={} userId={} path={} — 요청 자체는 정상 처리됐다.",
                     action, userId, path, e);
         }
-    }
-
-    private String detailJson(Map<String, String> detail) {
-        if (detail == null || detail.isEmpty()) {
-            return null;
-        }
-        return objectMapper.writeValueAsString(detail);
     }
 
     private static String truncate(String path) {
