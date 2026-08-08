@@ -7,12 +7,21 @@ import Tooltip from 'primevue/tooltip'
 import 'primeicons/primeicons.css'
 
 import App from './App.vue'
+import { initMonitoring } from './lib/monitoring'
 import { router } from './router'
 import { installUnauthorizedHandler } from './stores/auth'
 import { ScreenerPreset } from './theme/preset'
 import './assets/main.css'
 
 const app = createApp(App)
+
+// 라우터·플러그인보다 먼저 건다. 초기화 중에 던진 오류도 잡아야 하고, Sentry의 Vue
+// 통합은 app의 errorHandler를 감싸는 방식이라 나중에 걸면 그 사이에 등록된 것을 놓친다.
+if (!initMonitoring(app)) {
+  // 조용히 안 켜지는 것이 이 배선의 유일한 실패 방식이다. 한 줄 남겨 "DSN을 채웠는데
+  // 이슈가 안 뜬다"와 "애초에 안 켜졌다"를 콘솔에서 가를 수 있게 한다.
+  console.info('[monitoring] VITE_SENTRY_DSN이 없어 오류 수집을 켜지 않았다.')
+}
 
 app.use(createPinia())
 // 라우터보다 먼저 등록한다. 첫 이동에서 이미 401이 날 수 있다.
