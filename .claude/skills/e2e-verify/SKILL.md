@@ -73,6 +73,28 @@ data.go.kr 일일 한도 9,000의 4%다. 사용자가 이미 허락한 조작이
 **초기 적재는 화면에 버튼이 없다.** DART 9,800콜을 한 번에 태우기 때문이다(ADR-0029).
 필요하면 `batch-load` skill의 `--job=initial-load`를 쓴다.
 
+## 프론트 Sentry — 번들에 문자열이 있는 것과 도는 것은 다르다
+
+`window.Sentry`는 없다(모듈 임포트라 전역에 안 붙는다). 클라이언트는 캐리어에서 꺼낸다:
+
+```js
+const carrier = window.__SENTRY__[window.__SENTRY__.version]
+const client = carrier.defaultCurrentScope.getClient()
+client.getOptions().dsn          // 비어 있으면 initMonitoring이 건너뛴 것이다
+```
+
+전송 여부는 `performance.getEntriesByType('resource')`에서 `sentry.io`를 세면 된다 —
+**`read_network_requests`는 이 도메인에서 권한 거부가 난다.** 실측 확인(2026-08-09):
+명시 호출과 잡히지 않은 오류 양쪽 다 `envelope/`로 200이 나갔다.
+
+**MUST: 잡히지 않은 오류는 `<script>` 태그로 넣어 던진다.** `javascript_tool`에서 바로
+`setTimeout(() => { throw … })`을 하면 **전송이 일어나지 않는다**(실측). 그것을 보고
+"전역 핸들러가 안 붙었다"로 오판하기 쉽다.
+
+**소스맵이 올라간 뒤에는 그때 확인할 것이 하나 더 있다** — 이슈의 스택트레이스가
+`index-a3f9.js:1:28471`이 아니라 `.vue`/`.ts` 줄을 가리키는가. 그것은 Sentry 대시보드를
+봐야 갈리고, 지금은 슬러그가 없어 확인 대상이 아니다.
+
 ## 재현되지 않는 것
 
 - **결과 잘림(`truncated`)** — 상한이 2,000행인데 유니버스가 350종목이라 걸리지 않는다.
