@@ -46,7 +46,7 @@ paths:
 - **재무 지표의 유량/저량 구분이 핵심이다.** 매출·이익·현금흐름은 4분기 합(TTM), 자산·부채·자본은 최근 분기 잔액이다. 저량을 합산하면 4배가 되는데 **값이 그럴듯해 드러나지 않는다.**
 - **백분위는 항상 오름차순이다.** `PER_PCTL`이 0에 가까우면 PER이 낮다는 뜻이고, "상위 20%"는 지표에 따라 `<= 0.2`이거나 `>= 0.8`이다. 방향의 정본은 원본의 `higher_is_better`이고 카탈로그 API가 `favorableEnd`로 내려준다.
 - **`IndicatorDataReader`가 분기 재무에 한 해치 여유를 얹어 읽는다.** PER의 TTM은 여유가 0이라 공시가 빠지면 경계에서 값이 조용히 사라진다.
-- **`ADJ_CLOSE`는 봉 하나로 값이 나오는 첫 지표다.** 정리 코드에서 `DELETE FROM stock` 앞에 `indicator_value` 정리가 없으면 FK로 중단된다.
+- **`ADJ_CLOSE`는 봉 하나로 값이 나오는 첫 지표다. `DELETE FROM stock` 앞에 `indicator_value` 정리가 없으면 FK로 정리가 중단된다.** 정리 코드를 쓸 때 그 순서를 지킨다. 앞 두 문장은 `.claude/rules/test.md`와 일부러 같은 사본이고, 어긋나면 `check-doc-staleness.sh`가 잡는다.
 
 ### 배치 실행
 

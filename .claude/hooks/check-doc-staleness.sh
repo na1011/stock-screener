@@ -1,5 +1,6 @@
 #!/bin/bash
-# SessionStart guard: 문서의 시점 의존적 주장과 실제 코드 상태를 대조해 불일치만 보고한다.
+# SessionStart guard: 문서의 시점 의존적 주장과 실제 상태(코드 또는 다른 정본)를 대조해
+# 불일치만 보고한다. 루트의 사람용 문서는 대조 대상이 아니다(`.claude/rules/harness.md`).
 # 차단하지 않는다. 불일치가 없으면 아무것도 출력하지 않고 조용히 통과한다.
 set -euo pipefail
 
@@ -70,8 +71,9 @@ fi
 # 2. 프론트엔드 부재 주장 vs 실제
 if [ -d frontend ] || [ -d src/main/frontend ] || [ -d src/main/resources/static/src ] \
    || [ -n "$(find . -name '*.vue' -not -path './.git/*' -not -path './build/*' -print -quit 2>/dev/null)" ]; then
-  if grep -qsE '프론트엔드 (디렉터리|디렉토리)?( 없|.*아직)' docs/progress.md README.md; then
-    add "진행 상태/README가 프론트엔드 부재를 주장하지만 실제 프론트엔드 파일·디렉터리가 있다."
+  # 루트의 사람용 문서는 보지 않는다 — 이 훅의 대조 대상이 아니다(`harness.md`).
+  if grep -qsE '프론트엔드 (디렉터리|디렉토리)?( 없|.*아직)' docs/progress.md; then
+    add "진행 상태가 프론트엔드 부재를 주장하지만 실제 프론트엔드 파일·디렉터리가 있다."
   fi
 fi
 
@@ -166,44 +168,31 @@ if command -v git >/dev/null 2>&1; then
   fi
 fi
 
-# 5. README의 hook 절이 실제 등록된 훅을 다 싣는가
+# 5. 트리거가 서로 닿지 않아 이중화할 수밖에 없는 사실이 어긋났는가
 #
-# 이 저장소는 안전을 전부 훅에 걸었으므로(`README.md`의 준수율 감쇠) **무엇이 강제되는지를
-# 추측하게 두면 안 된다.** 부분 목록은 "덮여 있다"고 믿게 만든다. 완전성을 사람이 지키게
-# 하지 않는다 — 훅을 더하면 여기서 걸린다.
-if [ -f README.md ] && [ -f .claude/settings.json ]; then
-  missing=""
-  while IFS= read -r h; do
-    [ -z "$h" ] && continue
-    grep -qF "$h" README.md || missing="${missing}${h} "
-  done <<< "$(grep -oE '[a-z-]+\.sh' .claude/settings.json | sort -u)"
-  if [ -n "$missing" ]; then
-    add "settings.json에 등록됐는데 README에 없는 훅이 있다: ${missing}— README의 hook 절은 무엇이 강제되는지 알려주는 자리다. 빠진 훅은 없는 것으로 읽힌다."
-  fi
-fi
+# 두 기제가 서로를 발화시키지 못하면 사본을 없앨 수 없다 — 없애면 한쪽 세션이 그 함정을
+# 영영 못 본다. 없앨 수 없으면 어긋남을 잡는다(ADR-0020이 백엔드·프론트 거울에 쓴 형태).
+#
+# 표에 `추출정규식|파일A|파일B|이름` 한 줄을 더하면 등록된다. 줄바꿈 위치가 파일마다 달라
+# 줄 단위로는 못 비교하므로 개행을 접고 문장만 뽑아 대조한다.
+# 정규식에 역따옴표를 쓰지 않는다 — 큰따옴표 안에서 명령 치환으로 읽힌다. `.`로 대신한다.
+mirrors="공공데이터포털은 없는 종목[^)]*)|.claude/rules/data-pipeline.md|.claude/skills/batch-load/SKILL.md|공공데이터포털 응답 모양
+ADJ_CLOSE.는 봉 하나로.*FK로 정리가 중단된다\.|.claude/rules/data-pipeline.md|.claude/rules/test.md|ADJ_CLOSE FK 함정"
 
-# 6. 트리거가 서로 닿지 않아 이중화할 수밖에 없는 사실이 어긋났는가
-#
-# 공공데이터포털의 응답 모양은 **코드를 고치는 세션**(`data-pipeline.md`, paths glob)과
-# **적재를 도는 세션**(`batch-load` skill — 적재는 어떤 파일도 열지 않는다) 양쪽에 필요한데,
-# 어느 기제도 상대를 발화시키지 못한다. 사본을 없앨 수 없으면 어긋남을 잡는다 —
-# ADR-0020이 백엔드·프론트 거울에 쓴 것과 같은 형태다.
-mirror_rule=".claude/rules/data-pipeline.md"
-mirror_skill=".claude/skills/batch-load/SKILL.md"
-if [ -f "$mirror_rule" ] && [ -f "$mirror_skill" ]; then
-  # 두 파일의 줄바꿈 위치가 달라 줄 단위로는 비교할 수 없다. 개행을 접고 문장만 뽑는다.
-  extract_mirror() {
-    tr '\n' ' ' < "$1" | tr -s ' ' \
-      | sed -n 's/.*\(공공데이터포털은 없는 종목[^)]*)\).*/\1/p'
-  }
-  m_rule=$(extract_mirror "$mirror_rule")
-  m_skill=$(extract_mirror "$mirror_skill")
-  if [ -z "$m_rule" ] || [ -z "$m_skill" ]; then
-    add "공공데이터포털 응답 모양의 사본이 한쪽에서 사라졌다(rule=$([ -n "$m_rule" ] && echo 있음 || echo 없음), skill=$([ -n "$m_skill" ] && echo 있음 || echo 없음)) — 두 트리거가 서로 닿지 않아 한쪽만으로는 그 세션이 이 함정을 못 본다."
-  elif [ "$m_rule" != "$m_skill" ]; then
-    add "공공데이터포털 응답 모양이 rule과 skill에서 갈렸다 — 거울은 어긋나도 아무 데서도 티가 나지 않는다. 두 문장을 다시 같게 맞춰라."
+extract_mirror() {  # $1=파일 $2=정규식
+  tr '\n' ' ' < "$1" | tr -s ' ' | sed -n "s/.*\($2\).*/\1/p"
+}
+while IFS='|' read -r pat fa fb label; do
+  [ -z "$pat" ] && continue
+  [ -f "$fa" ] && [ -f "$fb" ] || continue
+  ma=$(extract_mirror "$fa" "$pat")
+  mb=$(extract_mirror "$fb" "$pat")
+  if [ -z "$ma" ] || [ -z "$mb" ]; then
+    add "${label}의 사본이 한쪽에서 사라졌다(${fa}=$([ -n "$ma" ] && echo 있음 || echo 없음), ${fb}=$([ -n "$mb" ] && echo 있음 || echo 없음)) — 두 트리거가 서로 닿지 않아 한쪽만으로는 그 세션이 이 함정을 못 본다."
+  elif [ "$ma" != "$mb" ]; then
+    add "${label}이 ${fa}와 ${fb}에서 갈렸다 — 거울은 어긋나도 아무 데서도 티가 나지 않는다. 두 문장을 다시 같게 맞춰라."
   fi
-fi
+done <<< "$mirrors"
 
 [ -z "$findings" ] && exit 0
 
