@@ -17,6 +17,12 @@ paths:
 ## `build.gradle`
 
 - **MUST NOT: `.env`를 `test` 태스크에 주입하지 않는다.** 실키가 있으면 `@ConditionalOnApiKey` 어댑터가 등록돼 **빈 구성 자체가 바뀐다.** 단위 테스트는 외부 호출 0건이 전제다. `.env`는 `bootRun`·`liveTest`에만 들어가고, 실제 외부 호출은 `@Tag("live")` + `./gradlew liveTest`에만 둔다. 주입 실패는 조용하므로 `./gradlew checkEnv`로 가른다.
+- **IMPORTANT — Sentry의 Spring Boot 스타터는 Boot 4에서 애플리케이션을 죽인다** (2026-08-08 실측, `sentry-spring-boot-starter-jakarta:8.52.0`). 그 스타터는 Boot **3.5.0** 기준으로 빌드돼 있고, DSN이 실린 채 기동하면 자기 `SentrySpringVersionChecker`가 `!Incompatible Spring Boot Version detected!`를 찍은 뒤 `SentryAutoConfiguration$HubConfiguration$SentryPerformanceAspectsConfiguration` 조건 평가에서 **`ClassNotFoundException: org.springframework.boot.web.client.RestClientCustomizer`** 로 컨텍스트가 죽는다.
+
+  **가장 나쁜 부분은 `./gradlew build`가 초록으로 통과한다는 것이다.** 435건이 전부 지나갔는데 앱은 못 떴다 — `.env`를 `test`에 주입하지 않는다는 바로 위 규칙 때문에 테스트에는 `SENTRY_DSN`이 없고, 그러면 그 자동설정 가지가 **평가되지 않는다.** 즉 **이 결함은 빌드로 판정되지 않는다. `./gradlew bootRun`으로 실제 기동을 봐야 드러난다.**
+
+  autoconfiguration을 타지 않는 경로(코어 SDK)는 같은 날 실측에서 정상 기동했고 `.env`의 DSN으로 SDK 초기화까지 확인됐다 — **Boot 4에서 Sentry가 불가능한 것이 아니라 스타터만 못 쓴다.** 어떤 방식으로 붙일지는 도입하는 쪽이 정한다.
+
 - **프론트 번들에 환경변수를 실으려면 `applyDotEnv`를 `frontendBuild`에도 걸어야 한다.** 지금은 `bootRun`·`liveTest`에만 걸려 있고, Vite의 `envDir`이 `frontend/`라 **루트 `.env`를 읽지 않는다** — `VITE_SENTRY_DSN`을 채워도 번들에는 아무것도 안 들어간다. 걸 때 **`inputs.property`로 그 값을 함께 선언한다**: 안 하면 값만 바뀐 재빌드에서 Gradle이 UP-TO-DATE로 판정해 **캐시된 옛 번들을 그대로 싣는다.**
 - **`./gradlew build`가 `frontend/`를 함께 빌드한다.** `processResources`가 `frontend/dist`를 `static/`으로 싣고 `check`가 Vitest를 돈다. Node가 없으면 `-PskipFrontend`(번들이 빠져 `SpaFallbackTest`가 실패한다). `npm` 경로는 빌드가 직접 해석한다 — Homebrew 경로가 `/etc/paths`에 없어 IDE 데몬에서 조용히 깨지기 때문이다.
 
