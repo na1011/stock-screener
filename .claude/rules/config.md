@@ -36,7 +36,7 @@ paths:
 
 - **커넥션 풀은 2로 제한한다.** 기본값 10이면 무관한 테스트가 "too many clients"로 깨진다(실제 14건).
 - **`out-of-order: true`가 필요하다.** 테스트 전용 V900이 운영 마이그레이션보다 위에 있다.
-- `clean-on-validation-error: true`가 아직 남아 있다 — 제거 대상이다.
+- **`clean-on-validation-error: true`에 기대지 않는다.** 체크섬이 어긋나면 테스트 DB를 통째로 밀고 다시 적용해 **원인을 덮는다** — 무엇이 어긋났는지 모른 채 초록이 된다. 아래 마이그레이션 절의 처방(해당 `flyway_schema_history` 행과 객체를 지우고 재적용)이 정본이다.
 
 ## `src/main/resources/db/migration/**`
 
