@@ -10,14 +10,17 @@ import {
   SCREEN_NAME_MAX_LENGTH,
 } from './limits'
 import {
+  BATCH_STATUSES,
   EVALUATION_MODES,
   FAVORABLE_ENDS,
   INDICATOR_CATEGORIES,
   INTERACTION_ACTIONS,
+  JOB_PARAMETERS,
   OPERAND_TYPES,
   OUTCOME_STATUSES,
   PERCENTILE_POPULATION_ALL,
   SCREEN_TYPES,
+  TRIGGERED_BY,
   ZONE_ROLES,
   ZONE_STRENGTHS,
 } from './types'
@@ -63,6 +66,9 @@ describe('서버 enum의 거울', () => {
     ['ZoneRole', ZONE_ROLES],
     ['ZoneStrength', ZONE_STRENGTHS],
     ['InteractionAction', INTERACTION_ACTIONS],
+    ['BatchStatus', BATCH_STATUSES],
+    ['TriggeredBy', TRIGGERED_BY],
+    ['JobParameters', JOB_PARAMETERS],
   ]
 
   it.each(pairs)('%s이 픽스처와 같은 값 집합이다', (name, values) => {

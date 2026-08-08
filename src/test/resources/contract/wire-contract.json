@@ -29,7 +29,10 @@
       "ADMIN_ALLOWLIST_ADD",
       "ADMIN_ALLOWLIST_UPDATE",
       "ADMIN_ALLOWLIST_REMOVE"
-    ]
+    ],
+    "BatchStatus": ["RUNNING", "SUCCESS", "PARTIAL_SUCCESS", "FAILED", "ABORTED"],
+    "TriggeredBy": ["SCHEDULER", "ADMIN", "MANUAL"],
+    "JobParameters": ["TARGET_DATE", "DATE_RANGE"]
   },
 
   "problemTypes": [

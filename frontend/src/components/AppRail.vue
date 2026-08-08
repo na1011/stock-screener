@@ -3,7 +3,7 @@ import Button from 'primevue/button'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { SCREEN_TYPES } from '@/api/types'
 import type { ScreenResponse } from '@/api/types'
@@ -34,6 +34,7 @@ const screens = useScreensStore()
 const watchlist = useWatchlistStore()
 const draft = useScreenDraftStore()
 const route = useRoute()
+const router = useRouter()
 const { openByKey, isOpen } = useScreenOpener()
 const { startFresh } = useFreshDraft()
 
@@ -53,8 +54,10 @@ const userMenuItems = computed<MenuItem[]>(() => {
     items.push({
       label: '관리자',
       icon: 'pi pi-cog',
-      // Phase 6에서 화면이 붙는다. 지금은 항목이 권한에 따라만 나타나는지를 보이는 자리다.
-      disabled: true,
+      command: () => {
+        void router.push({ name: 'admin' })
+        emit('navigate')
+      },
     })
     items.push({ separator: true })
   }

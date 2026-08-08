@@ -34,6 +34,25 @@ export const router = createRouter({
           component: () => import('@/views/StockDetailView.vue'),
           props: true,
         },
+        // 관리자 영역. `meta.admin`이 아래 가드의 축이고, 권한이 없으면 조용히 되돌린다.
+        {
+          path: 'admin',
+          name: 'admin',
+          component: () => import('@/views/AdminOverviewView.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'admin/logs',
+          name: 'admin-logs',
+          component: () => import('@/views/AdminInteractionsView.vue'),
+          meta: { admin: true },
+        },
+        {
+          path: 'admin/accounts',
+          name: 'admin-accounts',
+          component: () => import('@/views/AdminAccountsView.vue'),
+          meta: { admin: true },
+        },
       ],
     },
     {
@@ -72,6 +91,20 @@ router.beforeEach(async (to) => {
 
   if (!auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  /*
+   * IMPORTANT — 권한 없는 사용자를 403 화면이나 404로 보내지 않고 **조용히 되돌린다.**
+   *
+   * spec §4와 frontend.md가 요구하는 것은 "권한이 없는 사용자에게 노출되지 않는다"이고,
+   * 거절 화면은 그 자체로 "여기 무언가 있다"를 알려준다. 레일에서 항목을 감추는 것과 같은
+   * 이유이며, 주소를 직접 쳐 보는 경로에서 그 노력이 무의미해지면 안 된다.
+   *
+   * 인가의 실제 강제는 서버다(`/api/admin/**`는 ROLE_ADMIN). 여기서 하는 것은 존재를
+   * 드러내지 않는 것뿐이고, 이 가드를 지워도 데이터는 새지 않는다.
+   */
+  if (to.meta.admin === true && !auth.isAdmin) {
+    return { name: 'screener', replace: true }
   }
 
   // OAuth를 마치면 서버가 항상 '/'로 돌려보낸다. 원래 가려던 곳은 그때만 되살린다 —

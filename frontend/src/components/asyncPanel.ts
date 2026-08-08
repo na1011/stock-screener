@@ -18,6 +18,11 @@ export const ASYNC_PANELS = {
   stock: { subject: '종목 정보', particle: '를' },
   priceReference: { subject: '지지·저항 참고정보', particle: '를' },
   watchlist: { subject: '관심종목', particle: '을' },
+  batchSummary: { subject: '운영 현황', particle: '을' },
+  batches: { subject: '배치 실행 이력', particle: '을' },
+  batchDetail: { subject: '실패 종목 목록', particle: '을' },
+  accounts: { subject: '계정 목록', particle: '을' },
+  interactions: { subject: '인터랙션 기록', particle: '을' },
 } as const
 
 export type AsyncPanelName = keyof typeof ASYNC_PANELS

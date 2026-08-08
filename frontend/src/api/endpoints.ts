@@ -1,7 +1,20 @@
 import { apiFetch, READ_RETRY_DELAYS_MS } from './http'
 import type {
+  AdminJob,
+  AllowedEmail,
+  AllowedEmailRequest,
+  AllowedEmailUpdateRequest,
+  BatchExecution,
+  BatchExecutionDetail,
+  BatchStatus,
+  BatchSummary,
   CatalogResponse,
+  InteractionAction,
+  InteractionActor,
+  InteractionLogEntry,
   IsoDate,
+  JobLaunchResponse,
+  JobRunRequest,
   MeResponse,
   PriceReference,
   ScreenRequest,
@@ -84,4 +97,57 @@ export const api = {
     apiFetch<WatchlistItem>(`/api/watchlist/${id}`, { method: 'PUT', body }),
 
   removeFromWatchlist: (id: number) => apiFetch<void>(`/api/watchlist/${id}`, { method: 'DELETE' }),
+
+  // ── 관리자 ──────────────────────────────────────────────────────
+  //
+  // 권한은 서버가 강제한다(`/api/admin/**`는 ROLE_ADMIN). 화면이 항목을 감추는 것은 존재를
+  // 드러내지 않기 위해서이지 그것이 인가 수단이어서가 아니다.
+
+  adminBatches: (
+    query: { from?: IsoDate | null; to?: IsoDate | null; jobName?: string | null; status?: BatchStatus | null },
+    signal?: AbortSignal,
+  ) => apiFetch<BatchExecution[]>('/api/admin/batches', { query, signal }),
+
+  adminBatchSummary: (signal?: AbortSignal) =>
+    apiFetch<BatchSummary>('/api/admin/batches/summary', { signal }),
+
+  adminBatch: (id: number, signal?: AbortSignal) =>
+    apiFetch<BatchExecutionDetail>(`/api/admin/batches/${id}`, { signal }),
+
+  /**
+   * 실패분 재실행. 자동 재시도를 켜지 않는다 — 응답만 유실된 경우 같은 재실행이 두 번 뜬다.
+   */
+  retryBatch: (id: number) =>
+    apiFetch<JobLaunchResponse>(`/api/admin/batches/${id}/retry`, { method: 'POST' }),
+
+  adminJobs: (signal?: AbortSignal) => apiFetch<AdminJob[]>('/api/admin/jobs', { signal }),
+
+  /** 202로 즉시 돌아온다. 새 실행은 목록을 새로 고쳐 확인한다(ADR-0029). */
+  runJob: (jobName: string, body: JobRunRequest) =>
+    apiFetch<JobLaunchResponse>(`/api/admin/jobs/${jobName}/run`, { method: 'POST', body }),
+
+  allowedEmails: (signal?: AbortSignal) =>
+    apiFetch<AllowedEmail[]>('/api/admin/allowed-emails', { signal }),
+
+  addAllowedEmail: (body: AllowedEmailRequest) =>
+    apiFetch<AllowedEmail>('/api/admin/allowed-emails', { method: 'POST', body }),
+
+  updateAllowedEmail: (id: number, body: AllowedEmailUpdateRequest) =>
+    apiFetch<AllowedEmail>(`/api/admin/allowed-emails/${id}`, { method: 'PUT', body }),
+
+  removeAllowedEmail: (id: number) =>
+    apiFetch<void>(`/api/admin/allowed-emails/${id}`, { method: 'DELETE' }),
+
+  adminInteractions: (
+    query: {
+      from?: IsoDate | null
+      to?: IsoDate | null
+      userId?: number | null
+      action?: InteractionAction | null
+    },
+    signal?: AbortSignal,
+  ) => apiFetch<InteractionLogEntry[]>('/api/admin/interactions', { query, signal }),
+
+  adminInteractionActors: (signal?: AbortSignal) =>
+    apiFetch<InteractionActor[]>('/api/admin/interactions/actors', { signal }),
 }

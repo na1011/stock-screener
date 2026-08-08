@@ -4,6 +4,9 @@ import com.stockscreener.auth.web.AllowedEmailRequest;
 import com.stockscreener.indicator.IndicatorCategory;
 import com.stockscreener.indicator.IndicatorDescriptor;
 import com.stockscreener.interaction.InteractionAction;
+import com.stockscreener.pipeline.batch.AdminJobLauncher;
+import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
+import com.stockscreener.pipeline.batch.BatchStatus;
 import com.stockscreener.screening.ComparisonOperator;
 import com.stockscreener.screening.ConditionOutcome;
 import com.stockscreener.screening.EvaluationMode;
@@ -99,6 +102,13 @@ class WireContractTest {
         // 관리자 화면의 행위 필터가 이 목록을 거울로 든다. 어긋나면 새로 더한 행위가
         // 필터 선택지에서 조용히 빠지고, 그 행위의 로그는 조회할 방법이 없어진다.
         assertThat(names(InteractionAction.class)).isEqualTo(expected("enums", "InteractionAction"));
+        // 관리자 화면이 상태별로 색과 문구를 갈라 그린다. 새 상태가 프론트에 없으면 그 실행이
+        // "알 수 없음"으로 떨어지고, PARTIAL_SUCCESS를 실패로 읽는 것과 같은 오해가 생긴다.
+        assertThat(names(BatchStatus.class)).isEqualTo(expected("enums", "BatchStatus"));
+        assertThat(names(BatchExecutionRecorder.TriggeredBy.class))
+                .isEqualTo(expected("enums", "TriggeredBy"));
+        assertThat(names(AdminJobLauncher.Parameters.class))
+                .isEqualTo(expected("enums", "JobParameters"));
     }
 
     @Test

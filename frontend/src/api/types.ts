@@ -461,3 +461,170 @@ export interface WatchlistRequest {
 
 /** 서버의 `@Size(max = 500)`을 거울로 든다(ADR-0020, wire-contract의 watchlistMemoMaxLength). */
 export const WATCHLIST_MEMO_MAX_LENGTH = 500
+
+// ── 관리자 ────────────────────────────────────────────────────────
+
+/**
+ * 배치 실행 상태.
+ *
+ * `PARTIAL_SUCCESS`가 별도인 것이 핵심이다 — 848종목 성공에 2종목 실패한 배치를 "실패"로
+ * 접으면 매일 빨간불이 뜨고, 곧 아무도 그 불을 보지 않게 된다(spec §4).
+ */
+export const BATCH_STATUSES = [
+  'RUNNING',
+  'SUCCESS',
+  'PARTIAL_SUCCESS',
+  'FAILED',
+  'ABORTED',
+] as const
+export type BatchStatus = (typeof BATCH_STATUSES)[number]
+
+/** 누가 띄웠는가. 쿼터를 태우는 실행이라 출처가 남아야 한다. */
+export const TRIGGERED_BY = ['SCHEDULER', 'ADMIN', 'MANUAL'] as const
+export type TriggeredBy = (typeof TRIGGERED_BY)[number]
+
+/** 잡이 받는 입력. 화면이 날짜 칸을 몇 개 그릴지 정한다. */
+export const JOB_PARAMETERS = ['TARGET_DATE', 'DATE_RANGE'] as const
+export type JobParameters = (typeof JOB_PARAMETERS)[number]
+
+/**
+ * 배치 실행 한 건.
+ *
+ * `targetDate`와 `startedAt`이 둘 다 있는 것이 의도다. 새벽에 도는 배치의 대상은 전일이고,
+ * 재실행하면 실행 시각은 바뀌지만 대상 일자는 그대로다.
+ */
+export interface BatchExecution {
+  id: number
+  jobName: string
+  targetDate: IsoDate
+  status: BatchStatus
+  startedAt: string
+  finishedAt: string | null
+  targetCount: number
+  successCount: number
+  failureCount: number
+  writtenRowCount: number
+  /** 어느 실행을 다시 돌린 것인가. null이면 최초 실행이다. */
+  retriedFromId: number | null
+  triggeredBy: TriggeredBy
+  note: string | null
+  /** 0이면 재실행 버튼을 켜지 않는다. */
+  unresolvedFailureCount: number
+}
+
+/**
+ * 실패한 종목 하나.
+ *
+ * `stackTrace`가 없는 것이 의도다 — 깊은 진단은 Sentry가 전담한다(spec §4). 여기 필요한 것은
+ * 재실행할지 판단할 근거뿐이다.
+ *
+ * `failedPhase`·`failureKind`를 유니온으로 좁히지 않는다. 서버가 값을 늘렸을 때 목록이
+ * 통째로 죽는 것보다 낯선 이름을 그대로 보이는 편이 낫다(frontend.md).
+ */
+export interface BatchFailure {
+  id: number
+  stockId: number
+  ticker: string
+  stockName: string
+  failedPhase: string
+  sourceName: string | null
+  failureKind: string
+  message: string
+  resolved: boolean
+  occurredAt: string
+}
+
+export interface BatchExecutionDetail {
+  execution: BatchExecution
+  failures: BatchFailure[]
+  /** 이 잡이 부분 재실행을 지원하는가. 화면이 잡 이름으로 판단하지 않는다. */
+  retrySupported: boolean
+}
+
+export interface BatchSummary {
+  /** 잡별 가장 최근 실행 한 건씩. 전체 목록의 앞부분이 아니다. */
+  latestByJob: BatchExecution[]
+  unresolvedFailureCount: number
+  runningJobs: string[]
+}
+
+/**
+ * 화면에서 띄울 수 있는 잡.
+ *
+ * 목록을 서버가 주므로 프론트는 잡 이름을 하드코딩하지 않는다. 초기 적재가 여기 없는 것은
+ * 의도다 — 버튼 하나가 DART 일일 한도의 절반을 태운다(ADR-0029).
+ */
+export interface AdminJob {
+  name: string
+  label: string
+  description: string
+  parameters: JobParameters
+  /** 이 버튼이 태우는 외부 API 콜의 어림값. 누르기 전에 보여야 한다. */
+  externalCallEstimate: number
+  running: boolean
+}
+
+export interface JobRunRequest {
+  targetDate?: IsoDate | null
+  from?: IsoDate | null
+  to?: IsoDate | null
+}
+
+export interface JobLaunchResponse {
+  jobName: string
+  targetDate: IsoDate | null
+}
+
+/**
+ * 허용목록 한 줄.
+ *
+ * `lastLoginAt`이 null이면 **아직 로그인하지 않은 사람**이고 그것이 정상 상태다(ADR-0004).
+ * 화면이 그 둘을 구분해야 초대장을 다시 보낼 대상을 알 수 있다.
+ */
+export interface AllowedEmail {
+  id: number
+  email: string
+  admin: boolean
+  note: string | null
+  createdAt: string
+  updatedAt: string
+  lastLoginAt: string | null
+}
+
+export interface AllowedEmailRequest {
+  email: string
+  admin: boolean
+  note?: string | null
+}
+
+export interface AllowedEmailUpdateRequest {
+  admin: boolean
+  note?: string | null
+}
+
+/**
+ * 인터랙션 기록 한 줄.
+ *
+ * `userId`가 null인 기록이 있을 수 있다 — 사용자를 특정하지 못해도 행위 자체는 남는다.
+ * `statusCode`는 실패한 시도도 남기기 때문에 필요하다.
+ */
+export interface InteractionLogEntry {
+  id: number
+  userId: number | null
+  userEmail: string | null
+  userName: string | null
+  action: InteractionAction
+  httpMethod: string | null
+  path: string | null
+  statusCode: number | null
+  durationMs: number | null
+  /** URI 경로 변수와 지정한 쿼리 파라미터. 요청 본문은 담기지 않는다(ADR-0028). */
+  detail: Record<string, string>
+  occurredAt: string
+}
+
+export interface InteractionActor {
+  userId: number
+  email: string
+  name: string | null
+}
