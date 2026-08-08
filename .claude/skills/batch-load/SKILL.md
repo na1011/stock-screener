@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무를 적재·백필하거나 일일 갱신을 돌릴 때. BootstrapRunner의 --job=universe|initial-load|backfill 명령 형태와 각 플래그가 실제로 하는 일, 관리자 화면에서 배치를 띄운 경우까지 포함한 적재 결과 확인 항목, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무를 적재·백필하거나 일일 갱신을 돌릴 때. BootstrapRunner의 --job=universe|initial-load|backfill 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 적재 후 확인 항목, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -60,9 +60,13 @@ description: 시세·재무를 적재·백필하거나 일일 갱신을 돌릴 �
 [`docs/api-spec/`](../../../docs/api-spec/)이고, 파이프라인 **코드**를 고칠 때의 제약은
 `.claude/rules/data-pipeline.md`가 자동으로 로드한다.
 
-IMPORTANT — 공공데이터포털은 **없는 종목·휴장일·파라미터 오타의 응답이 모두 같다**
+IMPORTANT — 공공데이터포털은 없는 종목·휴장일·파라미터 오타의 응답이 동일하다
 (`resultCode "00"` + `totalCount 0` + HTTP 200). 날짜 형식 오타가 "그날 데이터 없음"으로
-저장되므로, 적재 결과가 비어 있을 때 소스 탓으로 결론짓기 전에 요청 파라미터를 먼저 본다.
+저장된다.
+
+**적재 결과가 비어 있을 때 소스 탓으로 결론짓기 전에 요청 파라미터를 먼저 본다.** 위 문장은
+`.claude/rules/data-pipeline.md`와 **일부러 같은 사본**이다 — 적재는 어떤 파일도 열지 않아
+그 규칙이 발화하지 않으므로 없앨 수 없고, 어긋나면 `check-doc-staleness.sh`가 잡는다.
 
 **소스가 전 거래일을 아직 안 내놓을 수 있다.** 2026-08-08(토) 저녁에 08-07(금)은
 `totalCount 0`이고 08-06(목)은 정상이었다. 일일 갱신의 기본 대상이 `today-1`이라 **그 날짜를
