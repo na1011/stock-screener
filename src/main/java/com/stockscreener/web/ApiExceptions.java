@@ -190,6 +190,39 @@ public final class ApiExceptions {
         }
     }
 
+    /** 관리자가 목록 밖의 잡을 띄우려 했다. 초기 적재가 목록 밖인 것이 의도다. */
+    public static class JobNotFoundException extends ApiException {
+        public JobNotFoundException(String jobName) {
+            super(HttpStatus.NOT_FOUND, ApiProblemType.JOB_NOT_FOUND,
+                    "화면에서 띄울 수 있는 잡이 아니다: " + jobName);
+            with("jobName", jobName);
+        }
+    }
+
+    /**
+     * 같은 잡이 이미 도는 중이다.
+     *
+     * <p>{@code retryable}을 켜지 않는다. 자동 재시도는 <b>이 상황을 악화시킨다</b> —
+     * 도는 중이라 거절당한 요청을 곧바로 다시 보내면 같은 거절이 반복될 뿐이고, 그 사이
+     * 사용자는 아무 안내도 받지 못한다. 화면이 "도는 중"으로 그리고 목록을 새로 고치는 것이
+     * 옳은 대응이다.
+     */
+    public static class JobAlreadyRunningException extends ApiException {
+        public JobAlreadyRunningException(String jobName) {
+            super(HttpStatus.CONFLICT, ApiProblemType.JOB_ALREADY_RUNNING,
+                    "같은 잡이 이미 실행 중이다: " + jobName);
+            with("jobName", jobName);
+        }
+    }
+
+    public static class BatchExecutionNotFoundException extends ApiException {
+        public BatchExecutionNotFoundException(long executionId) {
+            super(HttpStatus.NOT_FOUND, ApiProblemType.BATCH_EXECUTION_NOT_FOUND,
+                    "배치 실행 이력을 찾을 수 없다: " + executionId);
+            with("executionId", executionId);
+        }
+    }
+
     /**
      * 쿼리 파라미터 검증 실패.
      *

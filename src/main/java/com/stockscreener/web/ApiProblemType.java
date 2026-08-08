@@ -55,6 +55,19 @@ public enum ApiProblemType {
     /** 이미 담은 종목을 또 담으려 했다. 사용자 입력 문제이지 서버 버그가 아니다. */
     ALREADY_WATCHED("already-watched", "이미 워치리스트에 있는 종목이다"),
 
+    /** 관리자가 띄우려는 잡이 목록에 없다. 초기 적재는 의도적으로 목록 밖이다. */
+    JOB_NOT_FOUND("job-not-found", "실행할 수 있는 잡이 아니다"),
+
+    /**
+     * 같은 잡이 이미 도는 중이다.
+     *
+     * <p>프론트가 이것만 따로 분기한다 — 실패가 아니라 "기다리면 된다"이므로 버튼을 잠근
+     * 채로 목록만 새로 고치면 되고, 일반 오류 토스트로 강등하면 사용자가 계속 다시 누른다.
+     */
+    JOB_ALREADY_RUNNING("job-already-running", "같은 잡이 이미 실행 중이다"),
+
+    BATCH_EXECUTION_NOT_FOUND("batch-execution-not-found", "배치 실행 이력을 찾을 수 없다"),
+
     CONFLICT("conflict", "요청이 현재 상태와 충돌한다");
 
     private static final String PREFIX = "urn:stockscreener:";

@@ -34,6 +34,9 @@ export const ProblemType = {
   SCREEN_IN_USE: 'urn:stockscreener:screen-in-use',
   WATCHLIST_ITEM_NOT_FOUND: 'urn:stockscreener:watchlist-item-not-found',
   ALREADY_WATCHED: 'urn:stockscreener:already-watched',
+  JOB_NOT_FOUND: 'urn:stockscreener:job-not-found',
+  JOB_ALREADY_RUNNING: 'urn:stockscreener:job-already-running',
+  BATCH_EXECUTION_NOT_FOUND: 'urn:stockscreener:batch-execution-not-found',
   CONFLICT: 'urn:stockscreener:conflict',
 } as const
 

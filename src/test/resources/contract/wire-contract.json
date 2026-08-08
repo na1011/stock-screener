@@ -47,6 +47,9 @@
     "urn:stockscreener:screen-in-use",
     "urn:stockscreener:watchlist-item-not-found",
     "urn:stockscreener:already-watched",
+    "urn:stockscreener:job-not-found",
+    "urn:stockscreener:job-already-running",
+    "urn:stockscreener:batch-execution-not-found",
     "urn:stockscreener:conflict"
   ],
 
