@@ -1,5 +1,7 @@
 package com.stockscreener.screening.web;
 
+import com.stockscreener.interaction.InteractionAction;
+import com.stockscreener.interaction.RecordInteraction;
 import com.stockscreener.web.CurrentUserId;
 
 import jakarta.validation.Valid;
@@ -30,6 +32,7 @@ public class ScreeningController {
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    @RecordInteraction(InteractionAction.SCREENING_RUN)
     public ScreeningResponse run(@CurrentUserId long userId,
                                  @Valid @RequestBody ScreeningRequest request) {
         return screeningService.run(request, userId);

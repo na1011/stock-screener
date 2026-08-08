@@ -12,6 +12,7 @@ import {
   EVALUATION_MODES,
   FAVORABLE_ENDS,
   INDICATOR_CATEGORIES,
+  INTERACTION_ACTIONS,
   OPERAND_TYPES,
   OUTCOME_STATUSES,
   PERCENTILE_POPULATION_ALL,
@@ -60,6 +61,7 @@ describe('서버 enum의 거울', () => {
     ['OperandType', OPERAND_TYPES],
     ['ZoneRole', ZONE_ROLES],
     ['ZoneStrength', ZONE_STRENGTHS],
+    ['InteractionAction', INTERACTION_ACTIONS],
   ]
 
   it.each(pairs)('%s이 픽스처와 같은 값 집합이다', (name, values) => {

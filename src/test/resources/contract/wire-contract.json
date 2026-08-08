@@ -14,7 +14,22 @@
     "FavorableEnd": ["HIGH", "LOW", "UNKNOWN"],
     "OperandType": ["LITERAL", "INDICATOR"],
     "ZoneRole": ["SUPPORT", "RESISTANCE", "IN_RANGE"],
-    "ZoneStrength": ["HIGH", "MEDIUM", "LOW"]
+    "ZoneStrength": ["HIGH", "MEDIUM", "LOW"],
+    "InteractionAction": [
+      "LOGIN",
+      "SCREENING_RUN",
+      "SCREEN_CREATE",
+      "SCREEN_UPDATE",
+      "SCREEN_DELETE",
+      "WATCHLIST_ADD",
+      "WATCHLIST_UPDATE",
+      "WATCHLIST_REMOVE",
+      "ADMIN_JOB_RUN",
+      "ADMIN_BATCH_RETRY",
+      "ADMIN_ALLOWLIST_ADD",
+      "ADMIN_ALLOWLIST_UPDATE",
+      "ADMIN_ALLOWLIST_REMOVE"
+    ]
   },
 
   "problemTypes": [

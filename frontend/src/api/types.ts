@@ -37,6 +37,29 @@ export type FavorableEnd = (typeof FAVORABLE_ENDS)[number]
 export const OPERAND_TYPES = ['LITERAL', 'INDICATOR'] as const
 export type OperandType = (typeof OPERAND_TYPES)[number]
 
+/**
+ * 기록되는 사용자 행위. 관리자 로그 화면의 필터 선택지가 여기서 파생된다.
+ *
+ * 서버가 값을 더했는데 여기가 낡으면 새 행위가 **필터에서 조용히 빠지고**, 그 행위의 로그는
+ * 조회할 방법이 없어진다. `contract.spec.ts`가 그것을 잡는다.
+ */
+export const INTERACTION_ACTIONS = [
+  'LOGIN',
+  'SCREENING_RUN',
+  'SCREEN_CREATE',
+  'SCREEN_UPDATE',
+  'SCREEN_DELETE',
+  'WATCHLIST_ADD',
+  'WATCHLIST_UPDATE',
+  'WATCHLIST_REMOVE',
+  'ADMIN_JOB_RUN',
+  'ADMIN_BATCH_RETRY',
+  'ADMIN_ALLOWLIST_ADD',
+  'ADMIN_ALLOWLIST_UPDATE',
+  'ADMIN_ALLOWLIST_REMOVE',
+] as const
+export type InteractionAction = (typeof INTERACTION_ACTIONS)[number]
+
 /** 응답에만 나오고 화면이 읽지 않는다. 대조 대상이 아니라 계약 문서로 남긴다. */
 export type IndicatorValueType = 'RATIO' | 'PERCENT' | 'CURRENCY' | 'COUNT' | 'PRICE'
 

@@ -1,6 +1,8 @@
 package com.stockscreener.screening.web;
 
 import com.stockscreener.indicator.IndicatorCatalog;
+import com.stockscreener.interaction.InteractionAction;
+import com.stockscreener.interaction.RecordInteraction;
 import com.stockscreener.screening.ConditionGroup;
 import com.stockscreener.screening.store.ScreenDefinition;
 import com.stockscreener.screening.store.ScreenDefinitionValidator;
@@ -65,6 +67,7 @@ public class ScreenController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @RecordInteraction(InteractionAction.SCREEN_CREATE)
     public ScreenResponse create(@CurrentUserId long userId, @Valid @RequestBody ScreenRequest request) {
         ConditionGroup conditions = validated(request);
 
@@ -78,6 +81,7 @@ public class ScreenController {
     }
 
     @PutMapping("/{id}")
+    @RecordInteraction(InteractionAction.SCREEN_UPDATE)
     public ScreenResponse update(@CurrentUserId long userId, @PathVariable long id,
                                  @Valid @RequestBody ScreenRequest request) {
         ScreenDefinition existing = load(id, userId);
@@ -97,6 +101,7 @@ public class ScreenController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @RecordInteraction(InteractionAction.SCREEN_DELETE)
     public void delete(@CurrentUserId long userId, @PathVariable long id) {
         requireEditable(load(id, userId));
         // watchlist_item.screen_id는 CASCADE도 SET NULL도 아니다(V3). SET NULL이었다면 화면을

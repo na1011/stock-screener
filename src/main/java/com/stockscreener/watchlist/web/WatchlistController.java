@@ -1,5 +1,7 @@
 package com.stockscreener.watchlist.web;
 
+import com.stockscreener.interaction.InteractionAction;
+import com.stockscreener.interaction.RecordInteraction;
 import com.stockscreener.screening.store.ScreenDefinition;
 import com.stockscreener.screening.store.ScreenStore;
 import com.stockscreener.stock.StockReader;
@@ -55,6 +57,7 @@ public class WatchlistController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @RecordInteraction(InteractionAction.WATCHLIST_ADD)
     public WatchlistResponse create(@CurrentUserId long userId,
                                     @Valid @RequestBody WatchlistRequest request) {
         requireStock(request.stockId());
@@ -76,6 +79,7 @@ public class WatchlistController {
      * 바꿀 수 있게 하면 {@code uq_watchlist_user_stock}와 부딪히는 경로가 하나 더 생긴다.
      */
     @PutMapping("/{id}")
+    @RecordInteraction(InteractionAction.WATCHLIST_UPDATE)
     public WatchlistResponse update(@CurrentUserId long userId, @PathVariable long id,
                                     @Valid @RequestBody WatchlistRequest request) {
         requireUsableScreen(request.screenId(), userId);
@@ -88,6 +92,7 @@ public class WatchlistController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @RecordInteraction(InteractionAction.WATCHLIST_REMOVE)
     public void delete(@CurrentUserId long userId, @PathVariable long id) {
         if (!store.delete(id, userId)) {
             throw new ApiExceptions.WatchlistItemNotFoundException(id);

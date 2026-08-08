@@ -5,6 +5,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.resource.PathResourceResolver;
@@ -35,14 +36,29 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private static final List<String> BACKEND_PREFIXES = List.of("api/", "actuator/");
 
     private final CurrentUserIdArgumentResolver currentUserIdArgumentResolver;
+    private final InteractionInterceptor interactionInterceptor;
 
-    public WebMvcConfig(CurrentUserIdArgumentResolver currentUserIdArgumentResolver) {
+    public WebMvcConfig(CurrentUserIdArgumentResolver currentUserIdArgumentResolver,
+                        InteractionInterceptor interactionInterceptor) {
         this.currentUserIdArgumentResolver = currentUserIdArgumentResolver;
+        this.interactionInterceptor = interactionInterceptor;
     }
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(currentUserIdArgumentResolver);
+    }
+
+    /**
+     * 인터랙션 수집을 건다.
+     *
+     * <p>경로 패턴을 좁히지 않는 이유는 <b>판정 기준이 경로가 아니라 애너테이션</b>이기
+     * 때문이다({@code @RecordInteraction}). 여기서 {@code /api/**}로 좁히면 기준이 두 곳에
+     * 생기고, 나중에 다른 경로에 애너테이션을 붙인 사람은 그것이 왜 안 남는지 알 방법이 없다.
+     */
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(interactionInterceptor);
     }
 
     /**
