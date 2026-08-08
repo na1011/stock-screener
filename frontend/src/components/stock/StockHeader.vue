@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useId } from 'vue'
+
 import type { IsoDate, StockPrice, StockSummary } from '@/api/types'
 import WatchButton from '@/components/watchlist/WatchButton.vue'
 import { formatCount, formatDate, formatPrice } from '@/lib/format'
@@ -24,6 +26,29 @@ defineProps<{
   price: StockPrice | null
   asOf: IsoDate
 }>()
+
+/**
+ * 이 값이 원주가라는 사실.
+ *
+ * IMPORTANT — 실재하는 구분이다. 백엔드가 **기술적 지표를 예외 없이 수정종가로 계산**하는데
+ * (`PriceBar`) 여기 보이는 것은 사용자가 실제로 지불하는 원주가다(`StockReader`). 액면분할이
+ * 있었던 종목이면 두 값이 갈리고, 그때 "차트와 숫자가 다르다"가 된다.
+ *
+ * 예전에는 라벨에 "종가(원주가)"로 붙어 있었다. 그 괄호가 라벨 폭을 155px로 늘려 카드가
+ * 접히는 시점을 앞당기고 있어서 뺐고, 사실 자체는 여기로 옮긴다 — 없애는 것이 아니다.
+ * 지지·저항 패널의 "(수정종가 — 실제 매매 가격과 다를 수 있습니다)"가 반대쪽 짝이다.
+ */
+const UNADJUSTED_PRICE_NOTICE =
+  '실제로 지불하는 원주가입니다. 지표는 수정종가로 계산하므로 액면분할이 있었다면 두 값이 다를 수 있습니다.'
+
+/**
+ * 위 문구를 낭독기에 연결하는 id.
+ *
+ * IMPORTANT — **PrimeVue 툴팁은 `aria-describedby`를 달지 않는다.** 실측으로 확인했다.
+ * 그래서 툴팁만 붙이면 초점은 닿는데 읽히는 것은 숫자뿐이고, `tabindex`가 얻는 것 없이 탭
+ * 정지만 하나 늘린다. 숨은 문단을 두고 직접 잇는다.
+ */
+const noticeId = useId()
 </script>
 
 <template>
@@ -45,9 +70,26 @@ defineProps<{
         {{ stock.ticker }} · {{ stock.marketCode }}
         <template v-if="stock.sector"> · {{ stock.sector }}</template>
       </p>
-      <span class="stock-header__price-value tabular">
+      <!--
+        수식자 셋이 각각 필요하다.
+        - `bottom` — 카드 안에서 아래로 편다. 위로 펴면 뒤로가기 줄을 덮는다.
+        - `focus` — **PrimeVue는 이 수식자가 있을 때만 `focus` 이벤트를 바인딩한다**(소스 확인).
+          없으면 `mouseenter`만 듣는 마우스 전용이 되어 `tabindex`가 헛돈다.
+        - `tabindex="0"` — 다른 툴팁은 전부 버튼·링크에 붙어 초점이 저절로 오지만 여기는
+          숫자를 담은 `<span>`이다.
+
+        그래도 툴팁은 **눈**에만 닿는다. 낭독기 몫은 아래 `aria-describedby`가 맡는다.
+      -->
+      <span
+        v-tooltip.bottom.focus="UNADJUSTED_PRICE_NOTICE"
+        class="stock-header__price-value tabular"
+        tabindex="0"
+        :aria-describedby="noticeId"
+      >
         {{ formatPrice(price?.close ?? null) }}
       </span>
+      <!-- 툴팁은 눈으로만 읽힌다. 같은 문구를 낭독기 몫으로 한 벌 더 둔다. -->
+      <span :id="noticeId" class="stock-header__sr-only">{{ UNADJUSTED_PRICE_NOTICE }}</span>
       <span class="stock-header__price-label">기준일 {{ formatDate(asOf) }} 종가</span>
     </div>
 
@@ -178,6 +220,43 @@ defineProps<{
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--p-text-hover-color);
+  /*
+   * 툴팁이 있다는 것을 알려야 한다. 아무 표시가 없으면 우연히 마우스를 올린 사람만 읽는다.
+   *
+   * 점선 밑줄은 "설명이 붙어 있다"의 오래된 관용이고, 실선과 달리 링크로 오해되지 않는다.
+   * 값 자체는 건드리지 않으므로 숫자 읽기를 방해하지 않는다 — `text-underline-offset`으로
+   * 자릿수에서 떨어뜨린다.
+   */
+  cursor: help;
+  text-decoration: underline dotted var(--p-text-subtle-color);
+  text-underline-offset: 0.3em;
+  text-decoration-thickness: 1px;
+}
+
+/*
+ * 낭독기에만 보이는 문단. `display: none`이나 `visibility: hidden`은 낭독기에서도 사라지므로
+ * 쓸 수 없다 — 1px로 잘라 화면에서만 지운다.
+ *
+ * 전역 유틸리티로 올리지 않는다. 지금 소비처가 여기 하나뿐이고, 이 저장소는 둘 이상이
+ * 같은 것을 그릴 때만 밖으로 뺀다(`.claude/rules/frontend.md`).
+ */
+.stock-header__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 초점은 반드시 보여야 한다 — `tabindex`로 닿을 수 있게 만든 요소이므로 더욱 그렇다. */
+.stock-header__price-value:focus-visible {
+  outline: var(--p-focus-ring-width) var(--p-focus-ring-style) var(--p-focus-ring-color);
+  outline-offset: 2px;
+  border-radius: var(--p-border-radius-sm);
 }
 
 .stock-header__price-label {
