@@ -6,7 +6,6 @@ import { onMounted, ref } from 'vue'
 
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
-import { panelSubject } from '@/components/asyncPanel'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useApiToast } from '@/composables/useApiToast'
 import { screenKey, useScreenOpener } from '@/composables/useScreenOpener'

@@ -3,12 +3,13 @@ import Button from 'primevue/button'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import StockSearch from '@/components/StockSearch.vue'
+import { useFreshDraft } from '@/composables/useFreshDraft'
 import { useScreenOpener, screenKey } from '@/composables/useScreenOpener'
 import { APP_NAME } from '@/lib/appInfo'
 import { screenTypeLabel } from '@/lib/screen'
@@ -32,8 +33,8 @@ const screens = useScreensStore()
 const watchlist = useWatchlistStore()
 const draft = useScreenDraftStore()
 const route = useRoute()
-const router = useRouter()
 const { openByKey, isOpen } = useScreenOpener()
+const { startFresh } = useFreshDraft()
 
 const emit = defineEmits<{ navigate: [] }>()
 
@@ -83,17 +84,12 @@ async function pick(screen: ScreenResponse): Promise<void> {
   }
 }
 
-/**
- * 조건을 비우고 스크리너로 간다.
+/*
+ * 조건을 비우고 스크리너로 간다. 확인 절차와 이동은 `useFreshDraft`가 갖는다.
  *
- * 이동이 필요한 이유는 `openByKey`와 같다 — 종목 상세를 보는 중에 누르면 조건만 조용히
- * 비워지고 본문은 그대로였다. 여기는 `openByKey`를 거치지 않으므로 이동을 직접 붙인다.
+ * 여기가 확인 없이 즉시 날리던 것이 이 추출의 계기다. 버튼이 목록 위로 올라와 눈에 띄는
+ * 자리가 되었으므로, 잘못 누르는 대가가 "조건 스무 개가 말없이 사라지는 것"이면 안 된다.
  */
-async function startFresh(): Promise<void> {
-  draft.reset()
-  await router.push({ name: 'screener' })
-  emit('navigate')
-}
 </script>
 
 <template>
@@ -180,7 +176,7 @@ async function startFresh(): Promise<void> {
         type="button"
         class="app-list-button rail__item rail__item--fresh"
         :class="{ 'rail__item--active': isFresh }"
-        @click="startFresh"
+        @click="startFresh(() => emit('navigate'))"
       >
         <i class="pi pi-plus rail__icon" aria-hidden="true" />
         <span>{{ FRESH_DRAFT_TITLE }}</span>

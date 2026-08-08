@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import Popover from 'primevue/popover'
-import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import { computed, nextTick, onMounted, ref } from 'vue'
 
@@ -11,6 +10,7 @@ import ConditionChip from '@/components/condition/ConditionChip.vue'
 import ConditionEditor from '@/components/condition/ConditionEditor.vue'
 import IndicatorPicker from '@/components/condition/IndicatorPicker.vue'
 import ScreenSettingsPopover from '@/components/condition/ScreenSettingsPopover.vue'
+import { useFreshDraft } from '@/composables/useFreshDraft'
 import { incompleteConditionNotice } from '@/lib/conditionText'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { ALL_UNIVERSES_LABEL } from '@/lib/universe'
@@ -37,7 +37,7 @@ const props = defineProps<{
 
 const catalog = useCatalogStore()
 const draft = useScreenDraftStore()
-const confirm = useConfirm()
+const { startFresh } = useFreshDraft()
 const toast = useToast()
 
 const editor = ref<InstanceType<typeof Popover> | null>(null)
@@ -197,26 +197,10 @@ function removeEditing(): void {
   })
 }
 
-/**
- * 전부 지우는 것은 되돌리기로 감당할 수 없다. 여기서만 확인을 받는다.
- *
- * 조건이 하나뿐이면(=빈 조건 하나) 잃을 것이 없으므로 묻지 않는다. 의미 없는 확인이
- * 쌓이면 사용자는 읽지 않고 누르게 된다.
+/*
+ * 전부 지우는 것은 되돌리기로 감당할 수 없다. 확인 절차와 이동은 `useFreshDraft`가 갖는다 —
+ * 레일도 같은 버튼을 갖는데, 여기는 확인만 있고 이동이 없었으며 레일은 그 반대였다.
  */
-function startFresh(): void {
-  if (draft.conditions.length <= 1 && draft.completeConditions.length === 0) {
-    draft.reset()
-    return
-  }
-  confirm.require({
-    message: `조건 ${draft.conditions.length}개를 지우고 새로 시작합니다.`,
-    header: '새 전략으로 시작할까요?',
-    icon: 'pi pi-exclamation-triangle',
-    rejectProps: { label: '취소', severity: 'secondary', outlined: true, size: 'small' },
-    acceptProps: { label: '새로 시작', severity: 'danger', size: 'small' },
-    accept: () => draft.reset(),
-  })
-}
 </script>
 
 <template>
@@ -268,7 +252,7 @@ function startFresh(): void {
           text
           icon="pi pi-eraser"
           :label="FRESH_DRAFT_TITLE"
-          @click="startFresh"
+          @click="startFresh()"
         />
       </div>
     </div>
