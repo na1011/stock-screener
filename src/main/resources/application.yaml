@@ -97,6 +97,32 @@ server:
   # localhost 직접 접속에는 이 헤더가 없으므로 로컬 개발 동작은 그대로다.
   forward-headers-strategy: framework
 
+# ── 에러 트래킹 ─────────────────────────────────────────────────
+# MUST NOT: 실제 DSN을 여기 넣지 않는다. 환경변수 참조만 둔다.
+#
+# SentryAutoConfiguration은 @ConditionalOnProperty(name = "sentry.dsn")이다. 아래처럼
+# 기본값을 빈 문자열로 두면 키가 없어도 프로퍼티는 "존재"해 자동설정이 켜지고, SDK가
+# 빈 DSN을 비활성으로 다뤄 수집만 꺼진다. 애플리케이션은 그대로 뜬다.
+#
+# 자체 알림(배치 실패·워치리스트)과 역할이 다르다. 자체 알림은 코드가 예상한 사건을,
+# Sentry는 예상 못 한 예외와 **알림 코드 자체가 죽은 경우**를 잡는다. 후자 때문에
+# 아래 logging 설정을 끄지 않는다 — CompositeAlertPort의 채널 실패는 log.error로만 남고,
+# 그 로그가 Sentry에 닿지 않으면 "알림이 갔다고 생각했는데 아무 데도 가지 않은" 상태를
+# 알려줄 경로가 하나도 없다.
+sentry:
+  dsn: ${SENTRY_DSN:}
+  # 로컬 bootRun과 launchd 운영 인스턴스의 이슈가 섞이지 않게 한다.
+  # 운영 값은 ops/run-app.sh가 production으로 덮는다.
+  environment: ${SENTRY_ENVIRONMENT:local}
+  # MUST: false로 둔다. 켜면 요청 헤더·쿠키와 함께 로그인 이메일이 Sentry로 나간다.
+  # 기본값이지만 명시한다 — 기본값에 기대면 SDK 업그레이드가 조용히 뒤집을 수 있다.
+  send-default-pii: false
+  logging:
+    # ERROR 로그를 이벤트로 올린다. 위에 적은 "알림 코드가 죽은 경우"의 유일한 경로다.
+    minimum-event-level: error
+  # MUST NOT: traces-sample-rate를 켜지 않는다. 트레이싱은 무료 티어의 월 이벤트 총량을
+  # 태우는데, 여기서 필요한 것은 예상 못 한 예외이지 성능 프로파일이 아니다.
+
 # ── 애플리케이션 설정 ───────────────────────────────────────────
 # MUST NOT: 이 블록을 둘로 나누지 않는다. 루트 키가 같은 매핑이 두 번 나오면 YAML은
 # 뒤엣것으로 덮으므로, 앞 블록의 설정이 전부 조용히 사라진다.

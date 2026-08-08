@@ -66,6 +66,20 @@ dependencies {
     implementation 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
 
+    // Sentry — MUST: Boot 4 전용 아티팩트다. 이름이 비슷한 것이 넷 있고 고르는 순간 갈린다.
+    //   sentry-spring-boot-starter          → Boot 2 (javax)
+    //   sentry-spring-boot-starter-jakarta  → Boot 3   ← 2026-08-08에 이것을 골라 앱이 죽었다
+    //   sentry-spring-boot-4-starter        → Boot 4   ← 이것
+    // Boot 3판은 spring-boot-starter 3.5.0에 컴파일돼 있어, DSN이 실린 채 기동하면
+    // SentrySpringVersionChecker가 !Incompatible Spring Boot Version detected!를 찍은 뒤
+    // ClassNotFoundException: org.springframework.boot.web.client.RestClientCustomizer로
+    // 컨텍스트가 죽는다. Boot 4판은 그 자리에 org.springframework.boot.restclient.
+    // RestClientCustomizer(Boot 4 패키지)를 쓰고, 이 POM은 spring-boot-starter 4.1.0을
+    // 직접 의존한다. ADR-0030 참조.
+    //
+    // Boot BOM이 io.sentry를 관리하지 않으므로 버전을 명시한다.
+    implementation 'io.sentry:sentry-spring-boot-4-starter:8.52.0'
+
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     annotationProcessor 'org.projectlombok:lombok'
