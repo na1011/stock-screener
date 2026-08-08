@@ -19,7 +19,7 @@ applies_to:
 - **MUST NOT: `/bin/bash`에 전체 디스크 접근 권한을 주어 우회하지 않는다.** TCC 권한은 바이너리 단위라, 그렇게 하면 bash로 실행되는 **모든 것**이 보호 경로를 읽게 된다.
 - **MUST NOT: plist에 시크릿을 적지 않는다.** plist는 평문이고 백업·동기화·화면 공유를 그대로 따라다닌다. `.env`를 읽는 주체는 `run-app.sh`다.
 - **MUST: `ops/stage.sh`를 거쳐 배포한다.** jar를 제자리에 덮어쓰지 않고 임시 이름으로 쓴 뒤 `mv`한다 — 큰 파일을 덮어쓰는 도중 재시작이 걸리면 반쯤 쓰인 jar를 실행하게 된다.
-- **MUST: 살아 있는지는 밖에서 묻는다.** `curl https://screener.na1011.net/actuator/health`. 로컬만 보면 cloudflared가 죽어 있어도 초록이다.
+- **MUST: 살아 있는지는 밖에서 묻는다.** `curl https://screener.na1011.net/actuator/health`. 로컬만 보면 cloudflared가 죽어 있어도 초록이다. **밖에서 502면 터널은 살아 있고 앱이 죽은 것이고, 응답이 아예 없으면 터널이 죽은 것이다** — 둘을 가른 뒤 `~/Library/Logs/stock-screener/{stdout,stderr}.log`를 본다.
 - **MUST NOT: `AdminJobLauncher`의 `@Qualifier`를 지우지 않는다.** 아래 배경 참조.
 - **MUST: `SchedulerEnabledContextTest`를 유지한다.** 운영 구성(`pipeline.scheduler.enabled=true`)을 빌드가 밟는 유일한 지점이다.
 

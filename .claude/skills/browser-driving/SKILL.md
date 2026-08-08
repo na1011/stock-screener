@@ -25,7 +25,7 @@ launchctl bootout gui/$(id -u)/com.stockscreener.app
 **`kill`은 소용없다** — `KeepAlive`가 30초 안에 되살린다.
 
 **끝나면 되돌린다.** 안 되돌리면 사이트가 내려간 채로 세션이 끝난다. 변경을 살릴 것이면
-`ops/deploy.sh`, 아니면 `ops/install-agent.sh`다 — 절차의 정본은 `ops/README.md`.
+`ops/deploy.sh`(빌드→스테이징→재기동), 아니면 `ops/install-agent.sh`(등록만)다.
 
 ## 역할
 

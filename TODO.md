@@ -32,7 +32,7 @@
   ```bash
   curl -s https://screener.na1011.net/actuator/health     # {"status":"UP"}
   ```
-  계획된 재부팅을 암호 없이 넘기려면 `sudo fdesetup authrestart`를 쓴다. 자세한 것은 [`ops/README.md`](ops/README.md)에 있다.
+  계획된 재부팅을 암호 없이 넘기려면 `sudo fdesetup authrestart`를 쓴다.
 
 ---
 
