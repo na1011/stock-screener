@@ -20,6 +20,16 @@ cd "$root" 2>/dev/null || exit 0
 findings=""
 add() { findings="${findings}- $1"$'\n'; }
 
+# 0. Bash 훅 공용 파일이 있는가
+#
+# `guard-destructive.sh`·`warn-bootstrap-args.sh`·`remind-rule-on-shell.sh`가 이 파일을
+# source한다. 없으면 `set -e`에서 셋 다 죽는다 — 죽은 훅은 Bash 호출마다 stderr를 내므로
+# 침묵은 아니지만, **파괴적 명령 차단이 사라진 상태**라 세션 시작에 한 번 못 박아 둔다.
+# jq 부재를 위에서 중앙 경보로 다루는 것과 같은 이유다.
+if [ ! -r .claude/hooks/lib/bash-text.sh ]; then
+  add "\`.claude/hooks/lib/bash-text.sh\`가 없다. Bash 훅 셋이 이것을 source하므로 지금 파괴적 명령 차단(rm -rf·force push·DROP TABLE)과 시크릿 읽기 확인이 모두 죽어 있다. 복구 전에는 그 명령들을 직접 검토해라."
+fi
+
 # 1. progress.md가 주입 상한을 넘겨 세션 시작 주입이 잘리는가
 #
 # 이 검사가 없던 동안 실제로 잘렸다. inject-progress.sh는 잘렸다는 사실을 주입문 끝에

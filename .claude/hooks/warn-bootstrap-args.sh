@@ -14,9 +14,17 @@ set -euo pipefail
 
 command -v jq >/dev/null 2>&1 || exit 0
 
+# shellcheck source=lib/bash-text.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bash-text.sh"
+
 input=$(cat)
 cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
 [ -z "$cmd" ] && exit 0
+
+# heredoc 본문을 걷어낸다. 아래 판정이 따옴표 안을 일부러 보기 때문에, **적재 절차를
+# 문서화한 커밋 메시지**가 실제 실행과 구분되지 않았다(2026-08-09 실측). 이 저장소의
+# TODO.md·batch-load skill이 바로 그 명령을 문서로 싣는다.
+cmd=$(strip_heredoc_bodies "$cmd")
 
 # 인자가 `--args='...'` 따옴표 안에 있으므로 따옴표를 걷어내지 않는다.
 # 대신 실제로 gradle을 실행하는 경우로 한정해 단순 언급(`echo "--job=initial-load"`)을 거른다.

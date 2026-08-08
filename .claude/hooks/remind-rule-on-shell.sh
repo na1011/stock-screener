@@ -26,6 +26,9 @@ set -euo pipefail
 # 알림 훅마다 stderr를 내면 그 중앙 경보가 묻힌다.
 command -v jq >/dev/null 2>&1 || exit 0
 
+# shellcheck source=lib/bash-text.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bash-text.sh"
+
 input=$(cat)
 cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
 session=$(echo "$input" | jq -r '.session_id // "nosession"')
@@ -57,9 +60,10 @@ already_fired() {
 # 되어 git 제외를 그대로 빠져나간다(2026-08-09 테스트에서 실제로 발생). 본문은 명령이 아니라
 # 데이터이므로 애초에 훑을 대상이 아니다.
 #
-# 첫 `<<`부터 끝까지 버린다. 종료 표시 뒤에 다른 명령이 이어지는 경우는 놓치지만, 그 방향의
-# 실패는 **침묵**이고 반대 방향은 반복되는 오탐이다 — 오탐이 반복되면 알림 자체가 무시된다.
-cmd=$(printf '%s\n' "$cmd" | awk '{ i = index($0, "<<"); if (i > 0) { if (i > 1) print substr($0, 1, i - 1); exit } print }')
+# 처음에는 첫 `<<`부터 끝까지 버리고 "놓침을 택한다"고 적었는데, 그 타협은 불필요했다 —
+# 공용 함수가 **본문만** 비우고 종료 표시 뒤를 살리므로 `git commit <<MSG … MSG ; grep x
+# build.gradle`을 놓치지 않는다(회귀표가 그 줄을 지킨다).
+cmd=$(strip_heredoc_bodies "$cmd")
 [ -z "$cmd" ] && exit 0
 
 # ── 명령을 세그먼트로 쪼갠다 ────────────────────────────────────────────────

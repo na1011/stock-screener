@@ -10,6 +10,13 @@ set -euo pipefail
 # jq가 없으면 판정할 수 없다. 안전망이 워크플로우를 막지 않도록 조용히 통과시킨다.
 command -v jq >/dev/null 2>&1 || exit 0
 
+# 공용 텍스트 정리 — heredoc 본문과 여러 줄 따옴표를 명령에서 걷어낸다.
+# 이것이 없으면 **커밋 메시지에 파괴 명령을 문서로 적기만 해도 deny가 났다**(2026-08-09 실측).
+# 기존 헬퍼들은 옮기지 않고 여기 남겼다 — 도는 것을 건드릴 이유가 없고, 이 파일의 판정 로직이
+# 가장 위험한 코드다. 공용으로 뺀 것은 새로 만든 두 함수뿐이다.
+# shellcheck source=lib/bash-text.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bash-text.sh"
+
 input=$(cat)
 cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
 
@@ -88,9 +95,15 @@ has_long_flag() {
 
 # --- 1. 파괴적 명령: deny ---
 
-clean=$(strip_quotes "$(strip_comment "$cmd")")
+# 실행될 텍스트만 남긴다. 판정 로직은 아래 그대로이고 **입력만** 바뀐다.
+#
+# `strip_quotes_global`을 쓰는 이유: 기존 `strip_quotes`는 sed라 줄 단위여서 여러 줄 `-m`
+# 메시지의 따옴표를 걷어내지 못했고, 그 안의 파괴 명령 줄이 명령으로 읽혔다.
+# 아래 SQL 판정은 따옴표 **안**을 봐야 하므로 거기서는 계속 줄 단위 `strip_quotes`를 쓴다.
+executable=$(strip_heredoc_bodies "$cmd")
+clean=$(strip_quotes_global "$(strip_comment "$executable")")
 is_destructive=false
-raw_segments=$(split_segments "$cmd")
+raw_segments=$(split_segments "$executable")
 clean_segments=$(split_segments "$clean")
 
 while IFS= read -r seg; do
@@ -131,18 +144,32 @@ done <<< "$clean_segments"
 
 # SQL 은 반대로 따옴표 안을 봐야 한다 — 파괴적 구문은 대개 -c "..." 인자로 전달된다.
 # 대신 DB 클라이언트를 실행하는 경우로 한정해 `grep 'drop table'` 같은 언급을 걸러낸다.
+db_clients='psql|mysql|mariadb|sqlite3|mongosh|mongo|clickhouse-client'
+destructive_sql='\b(drop[[:space:]]+(table|database|schema)|truncate[[:space:]]+table)\b'
+
 if [ "$is_destructive" = false ]; then
   while IFS= read -r seg; do
     [ -z "${seg// /}" ] && continue
     prog=$(argv0_of "$(strip_quotes "$seg")")
     case "$prog" in
       psql|mysql|mariadb|sqlite3|mongosh|mongo|clickhouse-client)
-        if echo "$seg" | grep -qiE '\b(drop[[:space:]]+(table|database|schema)|truncate[[:space:]]+table)\b'; then
+        if echo "$seg" | grep -qiE "$destructive_sql"; then
           is_destructive=true; break
         fi
         ;;
     esac
   done <<< "$raw_segments"
+fi
+
+# `psql -d x <<SQL / drop table y; / SQL` 형태. 위 루프는 잡지 못한다 — 세그먼트 분해가 본문을
+# 별도 줄로 쪼개면 그 줄의 argv0은 `drop`이라 DB 클라이언트가 아니게 된다. 그래서 소비자가
+# DB 클라이언트인 heredoc의 본문만 따로 뽑아 같은 정규식으로 본다.
+# 커밋 메시지에 SQL을 **문서로** 적는 경우는 소비자가 `git`이라 여기 걸리지 않는다.
+if [ "$is_destructive" = false ]; then
+  db_heredoc=$(heredoc_bodies_of_consumers "$cmd" "$db_clients")
+  if [ -n "$db_heredoc" ] && echo "$db_heredoc" | grep -qiE "$destructive_sql"; then
+    is_destructive=true
+  fi
 fi
 
 if [ "$is_destructive" = true ]; then
@@ -152,13 +179,31 @@ fi
 # --- 2. Bash 경유 시크릿 읽기: ask ---
 # 파일 접근 hook은 Read/Edit/Write만 검사하므로 `cat .env` 같은 우회 경로가 남는다.
 # 정상적인 조회일 수 있으므로 차단(deny)이 아닌 확인(ask)으로 둔다.
-if echo "$cmd" | grep -qE '(^|[[:space:];|&])(cat|less|more|head|tail|bat|strings|xxd|od|nl|grep|rg|awk|sed|cp|mv|scp|base64)([[:space:]]|$)'; then
-  if echo "$cmd" | grep -qE '(\.env([[:space:]]|$|[^.a-zA-Z])|\.env\.[a-zA-Z]|\.pem|\.p12|\.pfx|\.jks|\.keystore|/secrets?/|/credentials/|id_rsa|id_ed25519|\.ssh/)'; then
-    # 템플릿·예시 파일만 대상이면 통과시킨다.
-    if ! echo "$cmd" | grep -qE '\.env\.(example|sample|template|dist)'; then
-      emit "ask" "시크릿 파일을 읽거나 복사하려는 명령으로 보입니다. 실제 시크릿 값이 대화·로그에 남지 않도록 확인 후 진행하세요."
-    fi
-  fi
-fi
+#
+# §1과 **같은 방식으로** 판정한다. 이 파일 머리 주석이 "원시 텍스트 정규식은 argv[0]인지
+# 따옴표 안인지 구분할 수 없어 단순 언급까지 차단한다"고 적어 두고도, 이 절만 정확히 그
+# 정규식이었다. 그 결과 `.env`를 **언급**한 커밋 메시지 + 아무 곳의 `| tail`이면 확인을
+# 요구했다(2026-08-09 실측). 실제로 다른 세션이 문서 커밋에서 그것을 맞았다.
+#
+# 따옴표는 걷어내지 않고 본다 — `cat ".env"`처럼 인용된 경로가 진짜 읽기일 수 있고,
+# 시크릿 판정에서는 **놓치는 쪽이 한 번 더 묻는 쪽보다 나쁘다.**
+secret_paths='(\.env([[:space:]]|$|[^.a-zA-Z])|\.env\.[a-zA-Z]|\.pem|\.p12|\.pfx|\.jks|\.keystore|(^|[[:space:]/])secrets?/|/credentials/|id_rsa|id_ed25519|\.ssh/)'
+
+while IFS= read -r seg; do
+  [ -z "${seg// /}" ] && continue
+  prog=$(argv0_of "$(strip_quotes "$seg")")
+  case "$prog" in
+    cat|less|more|head|tail|bat|strings|xxd|od|nl|grep|rg|awk|sed|cp|mv|scp|base64) ;;
+    *) continue ;;
+  esac
+
+  # 시크릿 경로가 **같은 세그먼트**에 있어야 한다. `git push | tail -3`의 tail은
+  # 시크릿과 한 세그먼트에 있지 않다.
+  echo "$seg" | grep -qE "$secret_paths" || continue
+  # 템플릿·예시 파일만 대상이면 통과시킨다.
+  echo "$seg" | grep -qE '\.env\.(example|sample|template|dist)' && continue
+
+  emit "ask" "시크릿 파일을 읽거나 복사하려는 명령으로 보입니다. 실제 시크릿 값이 대화·로그에 남지 않도록 확인 후 진행하세요."
+done <<< "$raw_segments"
 
 exit 0
