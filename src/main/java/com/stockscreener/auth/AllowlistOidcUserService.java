@@ -1,5 +1,7 @@
 package com.stockscreener.auth;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
@@ -24,6 +26,8 @@ import java.util.Set;
  */
 @Service
 public class AllowlistOidcUserService extends OidcUserService {
+
+    private static final Logger log = LoggerFactory.getLogger(AllowlistOidcUserService.class);
 
     public static final String ROLE_USER = "ROLE_USER";
     public static final String ROLE_ADMIN = "ROLE_ADMIN";
@@ -56,6 +60,20 @@ public class AllowlistOidcUserService extends OidcUserService {
         AccessDecision decision = allowedEmailService.decide(email);
 
         if (!decision.allowed()) {
+            /*
+             * 거절을 서버가 남긴다. 사용자에게 사유를 감추는 것과 운영자가 사실을 아는 것은
+             * 다른 문제다 — 이것이 없으면 지인이 "안 들어가진다"고 할 때 대조할 근거가
+             * 아무 데도 없다. 실측으로 확인했다(2026-08-08): 거절은 app_user·
+             * interaction_log에 흔적을 남기지 않고, Spring Security는 인증 실패를
+             * DEBUG로만 찍으므로 기본 레벨에서는 **어디에도 없다.**
+             *
+             * 시도한 주소를 함께 남기는 것이 요점이다. 오타 하나로 막힌 것인지 정말 등록이
+             * 안 된 것인지는 그 값을 봐야 갈린다. 아래 예외 description에도 같은 값이
+             * 들어가지만 그것은 DEBUG에서만 보인다.
+             */
+            log.warn("허용목록에 없는 계정의 로그인을 거절했다. email={}",
+                    AllowedEmailService.normalize(email));
+
             // 구체적인 사유를 사용자에게 노출하지 않는다. 허용목록의 존재 자체가
             // 운영 정보이고, 지인이 쓰는 서비스라도 경계는 유지한다.
             throw new OAuth2AuthenticationException(
