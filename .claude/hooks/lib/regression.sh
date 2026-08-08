@@ -98,6 +98,40 @@ check 침묵 "git add 로 이름만 부름"            "git add docs/progress.md
 check 침묵 "커밋 메시지가 경로를 언급"          "$(hd 'git commit -F - <<MSG' 'fix: x' '' 'CLAUDE.md 금지 절에 적었다' 'MSG')" rule
 check 발화 "heredoc 뒤의 실제 셸 읽기"          "$(hd 'git commit -F - <<MSG' 'msg' 'MSG' 'grep -n x build.gradle')" rule
 
+echo "── 거울 드리프트 (check-doc-staleness §5) ──"
+#
+# 저장소를 건드리지 않는다. 거울 파일만 임시 트리에 복사해 거기서 비튼다 — 손으로 비틀고
+# 되돌리는 검증은 되돌리기를 잊고, 그러면 다음 세션이 갈라진 사본을 정본으로 믿는다.
+# $1 기대(발화/침묵), $2 설명, $3 비틀 파일(없으면 원본 그대로), $4 perl 치환식
+check_mirror() {
+  local want="$1" desc="$2" target="${3:-}" expr="${4:-}" tmp f got
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  for f in .claude/rules/data-pipeline.md .claude/rules/test.md .claude/skills/batch-load/SKILL.md; do
+    mkdir -p "$tmp/$(dirname "$f")" && cp "$f" "$tmp/$f"
+  done
+  [ -n "$target" ] && perl -i -pe "$expr" "$tmp/$target"
+  if CLAUDE_PROJECT_DIR="$tmp" "$HOOKS/check-doc-staleness.sh" </dev/null 2>/dev/null \
+     | jq -r '.hookSpecificOutput.additionalContext // empty' | grep -q '거울\|사본이 한쪽'; then
+    got="발화"
+  else
+    got="침묵"
+  fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+check_mirror 침묵 "사본이 서로 같으면 조용하다"
+check_mirror 발화 "공공데이터포털 사본이 갈리면 잡는다" \
+  ".claude/rules/data-pipeline.md" 's/응답이 동일하다/응답이 모두 같다/'
+check_mirror 발화 "ADJ_CLOSE 사본이 갈리면 잡는다" \
+  ".claude/rules/test.md" 's/봉 하나로 값이 나오는 첫 지표다/봉 하나로 값이 나오는 최초 지표다/'
+check_mirror 발화 "사본이 한쪽에서 사라지면 잡는다" \
+  ".claude/skills/batch-load/SKILL.md" 's/공공데이터포털은 없는 종목/공공데이터포털은 어떤 종목/'
+
 echo
 printf '통과 %d / 실패 %d\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
