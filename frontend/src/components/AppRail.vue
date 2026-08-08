@@ -305,11 +305,12 @@ async function pick(screen: ScreenResponse): Promise<void> {
   min-height: 1.875rem;
   padding: 0 0.5rem;
   /*
-   * IMPORTANT — muted(#8792a6)였던 것을 본문 색(#dce3ed)으로 올린다. 이 한 줄이 레일이
-   * 평평해 보이던 진짜 원인이었다. 항목과 구획 제목(subtle #78859a)이 램프에서 두 칸
-   * 떨어져 있어 **눈에는 같은 회색**이었고, 그래서 제목을 작게·굵게 해도 위계가 서지 않았다.
-   * 본문 색으로 올리면 간격이 다섯 칸으로 벌어져 제목이 저절로 물러난다. 되돌리면
-   * 구획 제목의 크기·굵기를 아무리 만져도 다시 평평해진다.
+   * 기본은 본문 색이다. 예전에는 muted(#8792a6)여서 레일의 **모든 글자**가 muted와
+   * subtle(#78859a) 사이 두 칸에 몰려 있었고, 그 둘은 눈에 같은 회색이라 무엇을 크게 하거나
+   * 굵게 해도 위계가 서지 않았다.
+   *
+   * 목록 항목만 아래 `--screen`에서 다시 muted로 내린다 — 그쪽은 구획 제목의 자식이라
+   * 물러나야 한다. nav 항목과 "새 전략"은 아무에게도 속하지 않으므로 여기 본문 색을 쓴다.
    */
   color: var(--p-text-color);
   font-size: var(--app-text-sm);
@@ -446,21 +447,38 @@ async function pick(screen: ScreenResponse): Promise<void> {
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  margin: 0 0 0.125rem;
+  margin: 0 0 0.25rem;
   padding: 0.25rem 0.5rem;
-  font-size: var(--app-text-2xs);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--p-text-subtle-color);
+  /*
+   * IMPORTANT — 11px·subtle이던 것을 본문 크기·본문 색·700으로 올린다.
+   *
+   * 처음에는 반대로 갔다. "캡션은 물러나고 항목이 나선다"는 통상적인 처방을 따랐는데, 그러면
+   * 제목이 **분류로 읽히지 않는다** — 항목 위에 붙은 흐린 꼬리표가 될 뿐이다. 이 목록에서
+   * "프리셋인가 내 것인가"는 훑을 때 가장 먼저 답해져야 하는 질문이라 제목이 제목이어야 한다.
+   *
+   * 대신 항목을 들여쓰기와 톤으로 자식으로 내린다(아래 `--screen`). 위계를 **제목을 낮춰서**가
+   * 아니라 **항목을 낮춰서** 만드는 것이 이 목록의 답이다.
+   */
+  font-size: var(--app-text-sm);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--p-text-color);
   background: var(--p-content-background);
 }
 
-/* 제목 오른쪽으로 흐르는 선. 항목과 다른 범주라는 것을 색이 아니라 구조로 말한다. */
+/* 제목 오른쪽으로 흐르는 선. 개수·관리 아이콘을 오른쪽 끝으로 밀면서 구획의 폭을 그린다. */
 .rail__rule {
   flex: 1 1 auto;
   min-width: 0;
   height: 1px;
   background: linear-gradient(90deg, var(--p-content-border-color), transparent);
+}
+
+.rail__count {
+  flex: 0 0 auto;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  color: var(--p-text-subtle-color);
 }
 
 /*
@@ -494,10 +512,6 @@ async function pick(screen: ScreenResponse): Promise<void> {
   color: var(--p-primary-color);
 }
 
-.rail__count {
-  color: var(--p-text-subtle-color);
-}
-
 /* 충족 중인 관심종목 수. 항목 오른쪽 끝으로 민다. */
 .rail__badge {
   margin-left: auto;
@@ -516,9 +530,32 @@ async function pick(screen: ScreenResponse): Promise<void> {
   list-style: none;
 }
 
+/*
+ * 목록 항목은 구획 제목의 **자식**이다. 들여쓰기와 톤 둘로 그것을 말한다.
+ *
+ * 들여쓰기가 핵심이다 — 색·굵기와 달리 다크에서도, 대비를 못 올리는 자리에서도, 한국어에
+ * 대문자가 없어도 언제나 성립하는 유일한 위계 신호다. 왼쪽 모서리가 한 칸 들어가 있으면
+ * 그것이 무엇에 속하는지 글자를 읽기 전에 보인다.
+ *
+ * 그래서 nav 항목(`스크리너`·`관심종목`)은 들여쓰지 않는다. 그쪽은 아무에게도 속하지 않는다.
+ */
+.rail__item--screen {
+  padding-inline-start: 1.375rem;
+  color: var(--p-text-muted-color);
+}
+
+.rail__item--screen:hover {
+  color: var(--p-text-color);
+}
+
+/* 열려 있는 것은 자식이어도 본문 색으로 올라온다. "지금 이것"이 톤에 묻히면 안 된다. */
+.rail__item--screen.rail__item--open {
+  color: var(--p-text-color);
+}
+
 .rail__empty {
   margin: 0;
-  padding: 0 0.5rem;
+  padding: 0 0.5rem 0 1.375rem;
   font-size: var(--app-text-2xs);
   color: var(--p-text-subtle-color);
 }
