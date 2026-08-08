@@ -4,7 +4,7 @@
 
 **브라우저 조작은 여기 없다.** 에이전트가 크롬을 원격 제어하고, `./gradlew bootRun`도 에이전트가 띄운다. Google 로그인만 당신이 해 주면 나머지는 이어서 돌아간다.
 
-진행 상태의 정본은 [`docs/progress.md`](docs/progress.md), 외부 자격증명의 정본은 [`docs/external-credentials.md`](docs/external-credentials.md), 관통 검증에서 무엇을 보는지는 **`e2e-verify` skill**이다. 여기는 **지금 당신이 손을 대야 하는 것만** 뽑아 온 목록이다. 끝낸 항목은 정본 문서를 갱신하고 여기서 지운다.
+진행 상태의 정본은 [`docs/progress.md`](docs/progress.md), 외부 자격증명의 정본은 [`docs/external-credentials.md`](docs/external-credentials.md)다. 여기는 **지금 당신이 손을 대야 하는 것만** 뽑아 온 목록이다. 끝낸 항목은 정본 문서를 갱신하고 여기서 지운다.
 
 ---
 
