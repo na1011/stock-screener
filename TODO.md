@@ -19,13 +19,26 @@
 
   Vite 프록시가 Host를 바꾸지 않아 Spring이 요청 Host로 `redirect_uri`를 만든다(ADR-0018, 실측 확인). 등록하지 않으면 `npm run dev`에서만 `redirect_uri_mismatch`가 난다. **`./gradlew bootRun`으로 `:8080`에서 쓰는 경로는 실측으로 동작하므로**(2026-08-09 관통 검증), 이 작업은 `npm run dev`를 쓸 때만 필요하다.
 
-- [ ] **(권장) macOS iCloud 동기화에서 이 폴더를 빼거나, 저장소를 `~/Desktop` 밖으로 옮긴다.** `build/`의 클래스 파일이 `X 2.class`로 복제되면 테스트가 `wrong name` 오류로 실패하고 Gradle이 파일 해싱에서 수 분간 멈춘다. 이번 세션에도 두 번 발생했다. `./gradlew clean`이 처방이고 `checkDuplicateFiles`가 먼저 잡아 주지만, 원인을 없애는 편이 낫다.
+- [ ] **(권장) 저장소를 `~/Desktop` 밖으로 옮긴다.** 이유가 둘로 늘었다.
+  - `build/`의 클래스 파일이 iCloud 때문에 `X 2.class`로 복제되면 테스트가 `wrong name` 오류로 실패하고 Gradle이 파일 해싱에서 수 분간 멈춘다. `./gradlew clean`이 처방이고 `checkDuplicateFiles`가 먼저 잡아 주지만, 원인을 없애는 편이 낫다.
+  - **`~/Desktop`은 macOS가 TCC로 보호해 launchd가 띄운 프로세스가 읽지 못한다.** 그래서 지금은 실행 산출물과 `.env` **사본**을 `~/Library/Application Support/stock-screener`로 내보내 돌린다(ADR-0033). 저장소를 옮기면 그 `.env` 사본을 없앨 수 있다.
+
+- [ ] **(권장) 뚜껑을 닫아 둔 채 쓰려면 절전을 끈다.** `run-app.sh`가 `caffeinate -s`로 감싸지만 그것은 **전원 연결 시 유휴 절전**만 막는다. 뚜껑을 닫으면 그대로 잠들고 사이트도 함께 내려간다.
+  ```bash
+  sudo pmset -a disablesleep 1     # 되돌리기: sudo pmset -a disablesleep 0
+  ```
+
+- [ ] **재부팅 후 앱과 터널이 돌아오는지 한 번 본다.** FileVault가 켜져 있어 **콜드 부팅에는 암호가 한 번 필요하다**(에이전트가 대신할 수 없다). 암호를 넣은 뒤 다른 기기에서:
+  ```bash
+  curl -s https://screener.na1011.net/actuator/health     # {"status":"UP"}
+  ```
+  계획된 재부팅을 암호 없이 넘기려면 `sudo fdesetup authrestart`를 쓴다. 자세한 것은 [`ops/README.md`](ops/README.md)에 있다.
 
 ---
 
 ## 2. 외부 서비스 발급
 
-**남은 것은 ①의 미완 두 줄과 ⑤ 알림 채널뿐이다.** ①②③(도메인·Tunnel·OAuth)과 **④ Sentry**는 끝났다 — ④는 2026-08-08 `./gradlew checkEnv`로 세 키가 `.env`에 실린 것을 실측했다. 아래 완료 표시된 절차는 **재발급 때 다시 밟을 기록**이다. 도메인·TLD 근거는 [`docs/external-credentials.md`](docs/external-credentials.md)에 있다 — 여기 옮겨 적지 않는다.
+**남은 것은 ①의 미완 두 줄, ④의 슬러그 두 개, ⑤ 알림 채널이다.** ①②③(도메인·Tunnel·OAuth)은 끝났고 ④ Sentry는 키와 SDK가 모두 붙었다. 아래 완료 표시된 절차는 **재발급 때 다시 밟을 기록**이다. 도메인·TLD 근거는 [`docs/external-credentials.md`](docs/external-credentials.md)에 있다 — 여기 옮겨 적지 않는다.
 
 > **상태를 문서에서 읽지 말고 `./gradlew checkEnv`로 확인한다.** 이 파일이 ④를 "미진행"으로 달고 있는 동안 실제로는 값이 다 들어 있었다. 발급은 문서 밖에서 일어나므로 문서가 먼저 낡는다.
 
@@ -192,11 +205,16 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
 
   **DSN과 성격이 정반대다.** DSN은 이벤트를 보내는 **공개** 식별자고, 이 토큰은 Sentry API에 쓰는 **시크릿**이다. **MUST NOT: `VITE_` 접두어를 붙이지 않는다** — 붙이는 순간 번들에 실려 공개된다.
   **없으면 프론트 이슈가 `index-a3f9.js:1:28471`처럼만 남는다.** 프로젝트를 둘로 나눈 것(4-2)은 이슈가 섞이는 것을 막을 뿐, 소스맵을 올리지 않으면 스택트레이스는 여전히 못 읽는다. 백엔드는 이 토큰이 필요 없다 — 소스맵이라는 개념이 없고 바이트코드에 줄 번호가 들어 있다.
-**아직 막혀 있는 것**: 키는 있으나 **SDK가 없어 이벤트가 한 건도 가지 않는다.** 프론트 오류는 `console.error`에만 남는다.
+**SDK는 붙었다 (2026-08-09).** 백엔드·프론트 모두 이벤트를 보내고, DSN이 번들에 실린 것까지 확인했다. 남은 것은 아래 둘뿐이다.
 
-- [ ] **프론트 소스맵을 올리려면 Sentry의 org·project **슬러그**가 더 필요하다.** DSN에는 숫자 ID만 들어 있어 슬러그를 유도할 수 없고 `.env`에도 없다(2026-08-08 확인). Sentry 대시보드 주소에 보이는 그 문자열이며, **`.env`에 넣는 것은 당신만 할 수 있다.** 백엔드 수집은 이것 없이도 된다 — 소스맵만 걸린다.
+- [ ] **백엔드 이벤트가 실제로 대시보드에 뜨는지 본다.** `./gradlew liveTest --tests "*SentryLiveTest*"`가 이벤트 1건을 보내고 "거부되지 않았다"까지 확인한다. **그 이벤트가 정말 당신 프로젝트에 도착했는가는 대시보드를 봐야만 갈린다.** 메시지는 `[live] stock-screener 관통테스트…`이고 환경은 `live-test`다.
 
-프론트 번들에 DSN을 싣는 배선은 **에이전트 작업**이라 여기 체크박스로 두지 않는다 — 함정은 `.claude/rules/config.md`가 `build.gradle`을 열 때 알린다. SDK를 붙일 때 함께 해야 한다: 주입만 먼저 넣으면 참조하는 곳이 없어 번들에 아무것도 안 남고, **동작하는지 확인할 방법도 없다.**
+- [ ] **프론트 소스맵을 올리려면 Sentry의 org·project **슬러그**가 필요하다.** DSN에는 숫자 ID만 들어 있어 유도할 수 없다. Sentry 대시보드 주소에 보이는 문자열이며 **시크릿이 아니라 조회값**이다. `.env`에 넣는 것은 당신만 할 수 있다:
+  ```
+  SENTRY_ORG=<대시보드 주소의 조직 슬러그>
+  SENTRY_PROJECT_FRONTEND=<Vue 프로젝트 슬러그>
+  ```
+  넣으면 다음 `./gradlew build`부터 자동으로 올라간다. 그 전까지는 빌드 로그에 `[sentry] … 소스맵을 올리지 않는다`가 뜨고 스택트레이스가 `index-a3f9.js:1:28471`처럼 남는다. **틀린 값을 넣으면 빌드가 실패한다** — 조용히 안 올라가는 것보다 낫다고 판단했다(ADR-0032).
 
 ---
 

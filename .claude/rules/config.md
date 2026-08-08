@@ -17,18 +17,19 @@ paths:
 ## `build.gradle`
 
 - **MUST NOT: `.env`를 `test` 태스크에 주입하지 않는다.** 실키가 있으면 `@ConditionalOnApiKey` 어댑터가 등록돼 **빈 구성 자체가 바뀐다.** 단위 테스트는 외부 호출 0건이 전제다. `.env`는 `bootRun`·`liveTest`에만 들어가고, 실제 외부 호출은 `@Tag("live")` + `./gradlew liveTest`에만 둔다. 주입 실패는 조용하므로 `./gradlew checkEnv`로 가른다.
-- **IMPORTANT — Sentry의 Spring Boot 스타터는 Boot 4에서 애플리케이션을 죽인다** (2026-08-08 실측, `sentry-spring-boot-starter-jakarta:8.52.0`). 그 스타터는 Boot **3.5.0** 기준으로 빌드돼 있고, DSN이 실린 채 기동하면 자기 `SentrySpringVersionChecker`가 `!Incompatible Spring Boot Version detected!`를 찍은 뒤 `SentryAutoConfiguration$HubConfiguration$SentryPerformanceAspectsConfiguration` 조건 평가에서 **`ClassNotFoundException: org.springframework.boot.web.client.RestClientCustomizer`** 로 컨텍스트가 죽는다.
+- **IMPORTANT — Sentry 아티팩트는 이름이 넷이고 고르는 순간 갈린다.** Boot 4용은 **`io.sentry:sentry-spring-boot-4-starter`** 하나다(`-jakarta`는 Boot **3**용, 접미사 없는 것은 Boot 2용). Boot 3용을 고르면 DSN이 실린 채 기동할 때 `SentrySpringVersionChecker`가 `!Incompatible Spring Boot Version detected!`를 찍은 뒤 `ClassNotFoundException: org.springframework.boot.web.client.RestClientCustomizer`로 컨텍스트가 죽는다(2026-08-08 실측). **Boot 4에서 Sentry가 안 되는 것이 아니라 아티팩트를 잘못 고른 것이었다** — Boot 4판은 실 DSN으로 정상 기동한다(2026-08-09 실측). 근거는 ADR-0030.
 
-  **가장 나쁜 부분은 `./gradlew build`가 초록으로 통과한다는 것이다.** 435건이 전부 지나갔는데 앱은 못 떴다 — `.env`를 `test`에 주입하지 않는다는 바로 위 규칙 때문에 테스트에는 `SENTRY_DSN`이 없고, 그러면 그 자동설정 가지가 **평가되지 않는다.** 즉 **이 결함은 빌드로 판정되지 않는다. `./gradlew bootRun`으로 실제 기동을 봐야 드러난다.**
+- **MUST NOT: `.env`가 `test`에 없다는 이유로 "프로퍼티가 있어야 켜지는 자동설정"을 검증 없이 두지 않는다.** 이것이 위 사고의 진짜 원인이다. `@ConditionalOnProperty`가 걸린 가지는 그 값이 없는 테스트에서 **평가조차 되지 않아**, 435건이 전부 초록인데 앱이 못 뜬다. 처방은 `.env` 주입이 아니라 **형식만 유효한 가짜 값을 `@SpringBootTest(properties = …)`로 주는 것**이다. `SentryAutoConfigurationSmokeTest`(`sentry.dsn`)와 `SchedulerEnabledContextTest`(`pipeline.scheduler.enabled`)가 그 형태다. **둘 다 실제로 결함을 하나씩 잡았다.**
 
-  autoconfiguration을 타지 않는 경로(코어 SDK)는 같은 날 실측에서 정상 기동했고 `.env`의 DSN으로 SDK 초기화까지 확인됐다 — **Boot 4에서 Sentry가 불가능한 것이 아니라 스타터만 못 쓴다.** 어떤 방식으로 붙일지는 도입하는 쪽이 정한다.
+- **`frontendBuild`의 `inputs.property`를 지우지 않는다.** 없으면 값만 바뀐 재빌드를 Gradle이 UP-TO-DATE로 판정해 **캐시된 옛 번들을 그대로 싣는다** — DSN을 채웠는데 번들에 아무것도 안 들어가고, 원인이 캐시라는 것은 드러나지 않는다. **MUST NOT: 시크릿을 값으로 선언하지 않는다.** Gradle은 입력 프로퍼티 값을 `.gradle/` 아래 태스크 이력에 평문으로 직렬화한다. `SENTRY_AUTH_TOKEN`은 존재 여부(boolean)만 넣는다.
 
-- **프론트 번들에 환경변수를 실으려면 `applyDotEnv`를 `frontendBuild`에도 걸어야 한다.** 지금은 `bootRun`·`liveTest`에만 걸려 있고, Vite의 `envDir`이 `frontend/`라 **루트 `.env`를 읽지 않는다** — `VITE_SENTRY_DSN`을 채워도 번들에는 아무것도 안 들어간다. 걸 때 **`inputs.property`로 그 값을 함께 선언한다**: 안 하면 값만 바뀐 재빌드에서 Gradle이 UP-TO-DATE로 판정해 **캐시된 옛 번들을 그대로 싣는다.**
+- **`processResources`의 `exclude '**/*.map'`을 지우지 않는다.** 지우면 소스맵이 배포 jar에 실려 프론트 소스가 통째로 공개된다. Vite 플러그인의 "업로드 후 삭제"는 **업로드가 켜져 있을 때만** 돌고 지금은 꺼져 있다(ADR-0032).
 - **`./gradlew build`가 `frontend/`를 함께 빌드한다.** `processResources`가 `frontend/dist`를 `static/`으로 싣고 `check`가 Vitest를 돈다. Node가 없으면 `-PskipFrontend`(번들이 빠져 `SpaFallbackTest`가 실패한다). `npm` 경로는 빌드가 직접 해석한다 — Homebrew 경로가 `/etc/paths`에 없어 IDE 데몬에서 조용히 깨지기 때문이다.
 
 ## `src/main/resources/application.yaml`
 
-- **`spring.batch.job.enabled=false`와 `pipeline.scheduler.enabled` 기본 꺼짐을 유지한다.** 켜면 애플리케이션을 띄우는 것만으로 배치가 돌아 외부 API 쿼터를 태운다.
+- **`spring.batch.job.enabled=false`와 `pipeline.scheduler.enabled` 기본 꺼짐을 유지한다.** 켜면 애플리케이션을 띄우는 것만으로 배치가 돌아 외부 API 쿼터를 태운다. 운영 인스턴스는 `ops/run-app.sh`가 실행 인자로 켠다 — **`application-prod.yaml`을 만들지 않는다**(`guard-secrets.sh`가 그 이름을 막고, 실은 "이 프로세스가 운영인가"는 파일이 아니라 실행 방식이 정할 일이다).
+- **`management.health.mail.enabled: false`를 지우지 않는다.** `spring-boot-mail`이 SMTP에 실제로 접속하는 인디케이터를 함께 싣는다. 알림 자격증명이 없는 동안 `/actuator/health`가 통째로 503이 되고, 그 503을 배포 스크립트와 재부팅 검증이 "앱이 안 떴다"로 읽는다(ADR-0031).
 - **MUST NOT: `server.forward-headers-strategy: framework`를 지우지 않는다.** cloudflared가 로컬에 평문 HTTP로 붙어 원래 스킴이 `X-Forwarded-Proto`에만 남는다. 지우면 `redirect_uri`가 `http://`로 나가 도메인 로그인만 깨지는데 **localhost 개발과 테스트는 멀쩡하다** — 헤더가 없어 분기 자체를 안 타기 때문이다.
 
 ## `src/test/resources/application-test.yaml`
