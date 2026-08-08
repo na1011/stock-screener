@@ -109,7 +109,7 @@ async function run(): Promise<void> {
 
         <div class="screener__actions">
           <!-- 넓은 폭에서는 좌측 레일이 전략 목록을 상주시킨다. 좁을 때만 Select가 그 자리를 맡는다. -->
-          <ScreenPicker v-if="isBuilderNarrow" />
+          <ScreenPicker v-if="isBuilderNarrow" class="screener__picker" />
           <Button
             v-tooltip.bottom="runHint"
             :label="runLabel"
@@ -239,9 +239,39 @@ async function run(): Promise<void> {
 
 /* 좁으면 제목과 동작이 한 줄에 들어가지 않는다. 동작을 아래로 내려 제목이 잘리지 않게 한다. */
 @media (max-width: 900px) {
+  /*
+   * 동작들이 제목 아래 자기 줄로 내려온다. `margin-inline-start: auto`(넓은 폭에서 오른쪽으로
+   * 미는 것)를 여기서 풀어야 줄 전체를 쓸 수 있다.
+   */
   .screener__actions {
     margin-inline-start: 0;
     flex-basis: 100%;
+  }
+
+  /*
+   * IMPORTANT — 셀렉트가 남는 폭을 **마진으로** 먹어 버튼 둘을 오른쪽 끝으로 민다.
+   *
+   * 이 한 줄이 없으면 셋이 전부 왼쪽에 몰리고 오른쪽이 빈다 — 넓은 폭에서는 버튼이 오른쪽
+   * 끝에 있는데 좁아지는 순간 왼쪽으로 옮겨가, 같은 버튼이 폭에 따라 다른 자리에 있게 된다.
+   *
+   * `flex-grow`가 아니라 `margin`인 이유는 셀렉트에 `max-width`(`--app-overlay-md`)가 있어서다.
+   * 늘리면 그 상한에서 멈추고 남는 공간이 셀렉트와 버튼 **사이**가 아니라 버튼 **오른쪽**에
+   * 남는다. 마진은 상한과 무관하게 빈 공간을 전부 가운데로 몬다.
+   */
+  .screener__picker {
+    margin-inline-end: auto;
+  }
+
+  /*
+   * 손가락으로 누르는 폭이므로 터치 타깃을 키운다.
+   *
+   * `size="small"`이 23px을 만드는데 WCAG 2.2의 최소 타깃(24×24)에도 못 미친다. 데스크톱은
+   * 커서라 그대로 두고 여기서만 올린다 — 프리셋의 `sm` 치수를 건드리면 칩 바와 결과 표
+   * 머리글의 밀도가 함께 무너진다(그쪽은 스무 개가 한 줄에 서는 자리다).
+   */
+  .screener__actions :deep(.p-button) {
+    min-height: 2rem;
+    font-size: var(--app-text-sm);
   }
 }
 

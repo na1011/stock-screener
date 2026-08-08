@@ -209,6 +209,29 @@ export const ScreenerPreset = definePreset(Aura, {
     },
 
     button: {
+      /**
+       * IMPORTANT — 윤곽 버튼의 테두리를 밝힌다.
+       *
+       * Aura 다크가 `{primary.700}`을 쓰는데 이 팔레트에서 그것은 `#0b4cbd`다. 캔버스·바
+       * 배경(`#121722`)과 명도가 거의 같아 **버튼이 배경에 녹아 사라졌다** — "저장"이
+       * 눈에 띄지 않는다는 제보의 원인이 이것이고, 채움이 없는 버튼이라 테두리가 사라지면
+       * 남는 단서가 글자뿐이다.
+       *
+       * 밝기를 올리는 대신 투명도를 섞는다. `{primary.400}`을 그대로 쓰면 채운 버튼의
+       * 테두리와 같아져 둘의 위계가 사라진다.
+       *
+       * 여기가 정본인 이유는 ADR-0021이다. 윤곽 버튼은 여덟 곳(다시 시도·관심종목·불러오기·
+       * 저장·복제해서 편집·닫기·취소)에 있고, 소비처마다 고치면 그중 하나는 반드시 어긋난다.
+       */
+      colorScheme: {
+        dark: {
+          outlined: {
+            primary: { borderColor: 'color-mix(in srgb, {primary.400}, transparent 55%)' },
+            secondary: { borderColor: '{surface.600}' },
+            danger: { borderColor: 'color-mix(in srgb, {red.400}, transparent 55%)' },
+          },
+        },
+      },
       root: {
         label: { fontWeight: '600' },
         // IMPORTANT — 버튼의 기본 글자 크기는 **여기서 정할 수 없다.** Aura의 button 토큰에
