@@ -8,13 +8,13 @@ import type { StockIndicatorValue } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import PriceReferencePanel from '@/components/stock/PriceReferencePanel.vue'
-import WatchButton from '@/components/watchlist/WatchButton.vue'
+import StockHeader from '@/components/stock/StockHeader.vue'
 import BandMeter from '@/components/ui/BandMeter.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useAsync } from '@/composables/useAsync'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { readBand } from '@/lib/band'
-import { MISSING, formatCount, formatDate, formatPrice, splitIndicatorValue } from '@/lib/format'
+import { MISSING, splitIndicatorValue } from '@/lib/format'
 import { DETAIL_CATEGORY_RANK, groupByCategory } from '@/lib/indicatorCategory'
 import { useCatalogStore } from '@/stores/catalog'
 
@@ -124,78 +124,16 @@ onMounted(() => {
           screens·stock)이라 부모-자식 관계가 없고, 유일한 이동 수단인 레일은 좁은 폭에서
           햄버거 서랍 안으로 들어간다. 결과는 스토어에 살아 있으므로 돌아가면 그대로다.
         -->
-        <div class="stock-detail__topbar">
-          <RouterLink :to="{ name: 'screener' }" class="stock-detail__back">
-            <i class="pi pi-angle-left" aria-hidden="true" />
-            <span>스크리너</span>
-          </RouterLink>
-          <!--
-            담기를 여기 두는 이유는 spec §5의 흐름이다 — 종목을 깊이 들여다본 그 자리에서
-            추적을 시작할 수 있어야 한다. 별도 화면으로 빼면 흐름이 여기서 끊긴다.
-          -->
-          <WatchButton
-            :stock-id="detail.data.value.stock.id"
-            :stock-name="detail.data.value.stock.name"
-          />
-        </div>
+        <RouterLink :to="{ name: 'screener' }" class="stock-detail__back">
+          <i class="pi pi-angle-left" aria-hidden="true" />
+          <span>스크리너</span>
+        </RouterLink>
 
-        <header class="stock-detail__header">
-          <div class="stock-detail__identity">
-            <h1 class="stock-detail__name">{{ detail.data.value.stock.name }}</h1>
-            <p class="stock-detail__meta">
-              {{ detail.data.value.stock.ticker }} · {{ detail.data.value.stock.marketCode }}
-              <template v-if="detail.data.value.stock.sector">
-                · {{ detail.data.value.stock.sector }}
-              </template>
-            </p>
-            <!--
-              유니버스는 판정이 아니라 소속이다. `Tag`를 쓰지 않는 이유가 그것이다 — 이 화면의
-              `Tag`는 판정 3상태가 쓰는 형태이고(ADR-0021), 소속 배지가 같은 모양이면 "충족"과
-              한 종류로 읽힌다. accent를 옅게 깔아 머리글에 색을 하나 준다.
-            -->
-            <div class="stock-detail__universes">
-              <span
-                v-for="universe in detail.data.value.stock.universes"
-                :key="universe.code"
-                class="stock-detail__universe"
-              >
-                {{ universe.name }}
-              </span>
-            </div>
-          </div>
-          <div class="stock-detail__price">
-            <span class="stock-detail__price-value tabular">
-              {{ formatPrice(detail.data.value.price?.close ?? null) }}
-            </span>
-            <span class="stock-detail__price-label">
-              기준일 {{ formatDate(detail.data.value.asOf) }} 종가(원주가)
-            </span>
-          </div>
-        </header>
-
-        <section v-if="detail.data.value.price" class="stock-detail__ohlc">
-          <span>
-            <span class="stock-detail__ohlc-label">시가</span>
-            <span class="tabular">{{ formatPrice(detail.data.value.price.open) }}</span>
-          </span>
-          <span>
-            <span class="stock-detail__ohlc-label">고가</span>
-            <span class="tabular">{{ formatPrice(detail.data.value.price.high) }}</span>
-          </span>
-          <span>
-            <span class="stock-detail__ohlc-label">저가</span>
-            <span class="tabular">{{ formatPrice(detail.data.value.price.low) }}</span>
-          </span>
-          <span>
-            <span class="stock-detail__ohlc-label">거래량</span>
-            <span class="tabular">{{ formatCount(detail.data.value.price.volume) }}</span>
-          </span>
-          <span>
-            <span class="stock-detail__ohlc-label">상장주식수</span>
-            <span class="tabular">{{ formatCount(detail.data.value.price.listedShares) }}</span>
-          </span>
-        </section>
-        <p v-else class="stock-detail__no-price">이 날짜의 시세가 없습니다.</p>
+        <StockHeader
+          :stock="detail.data.value.stock"
+          :price="detail.data.value.price"
+          :as-of="detail.data.value.asOf"
+        />
 
         <section v-for="group in groups" :key="group.category" class="indicator-group">
           <SectionHeading :title="group.label" :count="group.items.length" />
@@ -274,27 +212,16 @@ onMounted(() => {
 }
 
 /*
- * 돌아가는 길과 담기 버튼이 같은 줄에 선다. 좁아지면 담기 버튼이 아래로 내려간다.
+ * 돌아가는 길. 요약 카드 위에 얇게 선다.
  *
- * IMPORTANT — 여기 `margin-bottom: -0.5rem`이 있었고 그것이 관심종목 버튼을 가격 위에
- * 올려놓았다. **상쇄할 간격이 없었기 때문**이다 — `.stock-detail`의 `gap: 1.25rem`은 이
- * 형제들에게 닿지 않는다. 사이에 `AsyncPanel`의 래퍼 `div.async-panel`이 끼어 있고 그것이
- * 블록이라, 안쪽은 그냥 블록 흐름이다(`AsyncPanel.vue` 주석 참조).
- *
- * 그래서 간격을 아래 `.stock-detail__header`의 **양수 마진으로 명시**한다. 음수 마진으로
- * 되돌리지 않는다 — topbar와 header 둘 다 우측 정렬이라(space-between / flex-end) 조금만
- * 끌어올려도 버튼과 가격이 정확히 겹친다.
+ * IMPORTANT — 마진이 **양수**여야 한다. 예전에 `margin-bottom: -0.5rem`이 있었고 그것이
+ * 관심종목 버튼을 가격 위에 올려놓았다. 상쇄할 간격이 없었기 때문이다 — `.stock-detail`의
+ * `gap`은 여기 닿지 않는다. 사이에 `AsyncPanel`의 래퍼가 끼어 있고 그것이 블록이라 안쪽은
+ * 그냥 블록 흐름이다(`AsyncPanel.vue` 주석 참조). 음수로 되돌리지 않는다.
  */
-.stock-detail__topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
 .stock-detail__back {
   display: inline-flex;
+  margin-bottom: 0.625rem;
   align-items: center;
   gap: 0.125rem;
   padding: 0.125rem 0.375rem 0.125rem 0.125rem;
@@ -312,111 +239,6 @@ onMounted(() => {
   text-decoration: none;
 }
 
-.stock-detail__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-  /* 위 topbar와의 간격. 부모의 gap이 여기 닿지 않으므로 직접 적는다(topbar 주석 참조). */
-  margin-top: 0.75rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--p-content-border-color);
-}
-
-.stock-detail__identity {
-  /* 긴 종목명이 오른쪽 가격 블록을 밀어내지 않게 한다. */
-  min-width: 0;
-}
-
-.stock-detail__name {
-  font-size: var(--app-text-xl);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-/* 티커·시장은 있어야 하지만 읽을 차례가 마지막이다. 14px muted면 종목명과 거의 붙어 보인다. */
-.stock-detail__meta {
-  margin: 0.125rem 0 0.5rem;
-  color: var(--p-text-subtle-color);
-  font-size: var(--app-text-xs);
-}
-
-.stock-detail__universes {
-  display: flex;
-  gap: 0.375rem;
-  flex-wrap: wrap;
-}
-
-.stock-detail__universe {
-  padding: 0.1875rem 0.4375rem;
-  border-radius: var(--p-border-radius-sm);
-  background: color-mix(in srgb, var(--p-primary-color) 14%, transparent);
-  color: var(--p-primary-300);
-  font-size: var(--app-text-2xs);
-  font-weight: 600;
-}
-
-.stock-detail__price {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.stock-detail__price-value {
-  font-size: var(--app-text-2xl);
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  color: var(--p-text-hover-color);
-}
-
-.stock-detail__price-label {
-  font-size: var(--app-text-2xs);
-  color: var(--p-text-subtle-color);
-}
-
-/* 시가·고가·저가·거래량은 값의 나열이라 칸으로 나눈다. 나누지 않으면 어디까지가 한
-   항목인지 눈으로 끊기지 않는다. */
-.stock-detail__ohlc {
-  display: flex;
-  flex-wrap: wrap;
-  font-size: var(--app-text-sm);
-  border: 1px solid var(--p-content-border-color);
-  border-radius: var(--p-border-radius-md);
-  background: var(--app-surface-raised);
-  box-shadow: var(--app-edge-highlight);
-}
-
-.stock-detail__ohlc > span {
-  display: flex;
-  align-items: baseline;
-  gap: 0.375rem;
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 0.4375rem 0.875rem;
-  border-inline-start: 1px solid var(--p-content-border-color);
-  white-space: nowrap;
-}
-
-.stock-detail__ohlc > span:first-child {
-  border-inline-start: 0;
-}
-
-/* 라벨은 짚는 것이고 값은 읽는 것이다. 둘이 같은 크기면 다섯 칸이 열 개의 낱말로 보인다. */
-.stock-detail__ohlc-label {
-  font-size: var(--app-text-2xs);
-  color: var(--p-text-subtle-color);
-}
-
-.stock-detail__ohlc .tabular {
-  color: var(--p-text-hover-color);
-  font-weight: 600;
-}
-
-.stock-detail__no-price,
 .stock-detail__missing {
   margin: 0;
   font-size: var(--app-text-sm);
@@ -515,10 +337,6 @@ onMounted(() => {
   .stock-detail {
     padding: 1rem;
     gap: 1rem;
-  }
-
-  .stock-detail__price {
-    align-items: flex-start;
   }
 
   /* 모바일은 지표를 한 줄씩 훑는다. 두 열로 만들면 설명이 잘려 의미가 사라진다. */
