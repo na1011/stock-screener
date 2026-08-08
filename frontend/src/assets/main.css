@@ -109,6 +109,19 @@
   --app-accent-border: color-mix(in srgb, var(--p-primary-400) 32%, transparent);
 
   /* ----------------------------------------------------------------------
+   * 토널 버튼의 **쉬는 면**.
+   *
+   * 여기 있는 이유는 하나다 — Aura의 `outlined` 토큰에 `background`가 없어서(투명이 설계
+   * 전제) `preset.ts`에서 줄 수 없다. hover·active·테두리·글자는 전부 preset이 정하고,
+   * 이 세 값만 아래 `:root .p-button-outlined` 규칙이 맡는다.
+   *
+   * `--p-*`를 섞은 합성값이라 `--app-surface-raised`와 같은 성격이다. 색 리터럴은 없다.
+   * ---------------------------------------------------------------------- */
+  --app-tonal-surface: color-mix(in srgb, var(--p-primary-400) 12%, transparent);
+  --app-tonal-surface-neutral: color-mix(in srgb, var(--p-surface-0) 6%, transparent);
+  --app-tonal-surface-danger: color-mix(in srgb, var(--p-red-400) 12%, transparent);
+
+  /* ----------------------------------------------------------------------
    * 모션.
    *
    * 이 앱에는 전환 애니메이션이 하나도 없었다. 상태가 즉시 갈아끼워지면 **무엇이 바뀌었는지**
@@ -292,6 +305,31 @@ a:hover {
 :root .p-togglebutton-content,
 :root .p-togglebutton-label {
   font-size: var(--app-text-sm);
+}
+
+/* ------------------------------------------------------------------------
+ * 토널 버튼의 쉬는 면.
+ *
+ * IMPORTANT — 윤곽 버튼의 배경이 `transparent`라 **페이지 배경 그대로**였다. 다크에서 면 없는
+ * 버튼은 글자만 남고 그것은 링크와 구별되지 않는다("저장 버튼이 배경과 똑같아 안 보인다").
+ * 강조 3단(채움 > 토널 > 고스트)의 가운데 단이 여기서 생긴다.
+ *
+ * `:root` 접두어는 위 규칙들과 같은 이유다 — PrimeVue가 CSS를 런타임에 주입해 `main.css`보다
+ * 뒤에 오므로, 접두어가 없으면 한 번도 적용되지 않는다.
+ *
+ * 나머지(hover·active·테두리·글자)는 전부 `preset.ts`가 정한다. 여기 있는 것은 Aura 토큰에
+ * 자리가 없는 **쉬는 면 하나뿐**이다.
+ * ------------------------------------------------------------------------ */
+:root .p-button-outlined {
+  background: var(--app-tonal-surface);
+}
+
+:root .p-button-outlined.p-button-secondary {
+  background: var(--app-tonal-surface-neutral);
+}
+
+:root .p-button-outlined.p-button-danger {
+  background: var(--app-tonal-surface-danger);
 }
 
 /* `size="small"`은 한 단계 더 내려간다. preset의 `sm` 토큰과 같은 값이어야 한다. */

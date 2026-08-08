@@ -28,7 +28,7 @@ import Aura from '@primeuix/themes/aura'
  * "떠 있는 것은 패널보다 밝다"는 규칙이 램프를 읽어서는 보이지 않았다. 값은 그대로 두고
  * 이름만 램프 안으로 들여왔다 — `--p-surface-850`이 생기고 `.vue`도 그것을 쓸 수 있다.
  */
-const ink = {
+export const ink = {
   0: '#ffffff',
   50: '#eef1f6',
   100: '#dde3ec',
@@ -44,8 +44,13 @@ const ink = {
   950: '#0a0d13',
 } as const
 
-/** 코발트. 다크에서 실제로 쓰이는 것은 400(기본)·300(hover)·200(active)이다. */
-const cobalt = {
+/**
+ * 코발트. 다크에서 실제로 쓰이는 것은 400(글자·테두리)·500(토널 테두리)·600(채운 버튼)이다.
+ *
+ * `export`인 이유는 `contrast.spec.ts`가 이 값으로 대비비를 계산하기 때문이다 — 램프를 옮겨
+ * 적으면 검사가 실제 화면이 아니라 사본을 검사하게 된다.
+ */
+export const cobalt = {
   50: '#ebf3ff',
   100: '#d6e6ff',
   200: '#adccff',
@@ -210,25 +215,114 @@ export const ScreenerPreset = definePreset(Aura, {
 
     button: {
       /**
-       * IMPORTANT — 윤곽 버튼의 테두리를 밝힌다.
+       * 버튼 강조 **3단**: 채움 > 토널 > 고스트. 화면당 채움은 하나다(ADR-0021).
        *
-       * Aura 다크가 `{primary.700}`을 쓰는데 이 팔레트에서 그것은 `#0b4cbd`다. 캔버스·바
-       * 배경(`#121722`)과 명도가 거의 같아 **버튼이 배경에 녹아 사라졌다** — "저장"이
-       * 눈에 띄지 않는다는 제보의 원인이 이것이고, 채움이 없는 버튼이라 테두리가 사라지면
-       * 남는 단서가 글자뿐이다.
+       * 예전에는 단이 **둘**이었다 — 채움과 "아무것도 없음". 윤곽·텍스트 버튼의 배경이 전부
+       * `transparent`라 페이지 배경 그대로였고, 그래서 저장·불러오기 같은 부차 액션이 화면에서
+       * 통째로 사라졌다. 다크에서 면 없는 버튼은 링크와 구별되지 않는다.
        *
-       * 밝기를 올리는 대신 투명도를 섞는다. `{primary.400}`을 그대로 쓰면 채운 버튼의
-       * 테두리와 같아져 둘의 위계가 사라진다.
+       * IMPORTANT — `root.primary.color`를 반드시 명시한다. **Aura 다크 기본값이
+       * `contrastColor: {surface.900}`인데 이 앱에서 그것은 `#121722`, 곧 카드·레일·바의
+       * 배경색과 완전히 같은 hex다.** 라이트 스킴은 `#ffffff`를 하드코딩하고 다크만 참조로
+       * 두기 때문에, `surface`를 커스텀 램프로 덮은 이 앱에서는 **다크만 조용히 깨진다.**
+       * 지우면 채운 버튼의 글자가 다시 패널 배경색이 되는데 컴파일도 테스트도 통과한다.
        *
-       * 여기가 정본인 이유는 ADR-0021이다. 윤곽 버튼은 여덟 곳(다시 시도·관심종목·불러오기·
-       * 저장·복제해서 편집·닫기·취소)에 있고, 소비처마다 고치면 그중 하나는 반드시 어긋난다.
+       * 배경을 `{primary.400}`에서 600으로 내리는 이유는 흰 글자를 얹기 위해서다 — 400 위의
+       * 흰 글자는 2.99:1로 AA에 미달한다. 600 + 흰색은 5.33:1이고, 버튼 자체도 다섯 배경
+       * 모두에서 3.13~3.65:1로 비텍스트 기준을 넘는다.
+       *
+       * `{surface.0}`가 흰색이다. 리터럴 `#fff`를 쓰지 않는 이유는 ADR-0021의 색 리터럴 금지다.
        */
       colorScheme: {
         dark: {
+          root: {
+            primary: {
+              background: '{primary.600}',
+              hoverBackground: '{primary.500}',
+              activeBackground: '{primary.400}',
+              borderColor: '{primary.600}',
+              hoverBorderColor: '{primary.500}',
+              activeBorderColor: '{primary.400}',
+              color: '{surface.0}',
+              hoverColor: '{surface.0}',
+              activeColor: '{surface.0}',
+            },
+            /**
+             * IMPORTANT — Aura 기본값은 orange다. ADR-0021이 주황을 지지·저항 참고정보
+             * **전용**으로 못 박았고 `Tag`는 이미 amber로 이격시켰는데 `Button`만 따라가지
+             * 않아, 결과가 낡으면(`ScreenerView`의 실행 버튼) 지지·저항과 같은 주황이 떴다.
+             */
+            warn: {
+              background: '{amber.400}',
+              hoverBackground: '{amber.300}',
+              activeBackground: '{amber.200}',
+              borderColor: '{amber.400}',
+              hoverBorderColor: '{amber.300}',
+              activeBorderColor: '{amber.200}',
+              color: '{amber.950}',
+              hoverColor: '{amber.950}',
+              activeColor: '{amber.950}',
+            },
+          },
+
+          /**
+           * 토널 — filled와 outlined 사이의 중간 강조(M3의 `filled tonal`).
+           *
+           * 면을 주는 것이 요점이다. 테두리만 밝혀서는 안 된다 — 실제로 그렇게 고쳤다가
+           * 측정 대비가 2.44에서 2.19로 **내려갔다.** 채도 높은 진파랑을 배경 쪽으로 섞으면
+           * 명도 차가 줄기 때문이다. 지금은 테두리 `{primary.500}`이 배경 대비 4.27~4.98:1로
+           * WCAG 1.4.11의 3:1을 넘는다.
+           *
+           * IMPORTANT — **쉬는 상태의 면은 여기서 줄 수 없다.** Aura의 `outlined` 토큰에
+           * `background`가 없다(투명이 설계 전제라 타입이 거부한다). 그 한 줄만 `main.css`의
+           * `:root .p-button-outlined` 규칙이 맡는다 — `--app-surface-raised`와 같이 `--p-*`를
+           * 섞은 합성값이므로 ADR-0021의 "색은 preset에서만"을 어기지 않는다.
+           */
           outlined: {
-            primary: { borderColor: 'color-mix(in srgb, {primary.400}, transparent 55%)' },
-            secondary: { borderColor: '{surface.600}' },
-            danger: { borderColor: 'color-mix(in srgb, {red.400}, transparent 55%)' },
+            primary: {
+              hoverBackground: 'color-mix(in srgb, {primary.400}, transparent 80%)',
+              activeBackground: 'color-mix(in srgb, {primary.400}, transparent 72%)',
+              borderColor: '{primary.500}',
+              color: '{primary.400}',
+            },
+            secondary: {
+              hoverBackground: 'color-mix(in srgb, {surface.0}, transparent 90%)',
+              activeBackground: 'color-mix(in srgb, {surface.0}, transparent 86%)',
+              borderColor: '{surface.600}',
+              color: '{surface.300}',
+            },
+            danger: {
+              hoverBackground: 'color-mix(in srgb, {red.400}, transparent 80%)',
+              activeBackground: 'color-mix(in srgb, {red.400}, transparent 72%)',
+              borderColor: 'color-mix(in srgb, {red.400}, transparent 30%)',
+              color: '{red.400}',
+            },
+          },
+
+          /**
+           * 고스트 — 쉬는 동안은 면이 없되 **hover는 반드시 보여야 한다.**
+           *
+           * IMPORTANT — Aura 기본값이 4% 틴트라 대비가 1.04~1.06, 즉 마우스를 올려도 아무
+           * 일도 일어나지 않았다. 레일의 네이티브 `.app-list-button`이 hover를 더 잘 보여주는
+           * 역전 상태였다.
+           *
+           * **불투명 표면 색(`{surface.800}`)을 쓰지 않는다.** 팝오버(`{surface.850}`)와 들린
+           * 카드가 이미 그 값에 가까워 그 면들에서 hover가 사라진다(대비 1.04~1.05). 반투명
+           * 오버레이만 다섯 배경 모두에서 일정하게 1.3배 안팎을 들어 올린다.
+           */
+          text: {
+            primary: {
+              hoverBackground: 'color-mix(in srgb, {primary.400}, transparent 84%)',
+              activeBackground: 'color-mix(in srgb, {primary.400}, transparent 76%)',
+            },
+            secondary: {
+              hoverBackground: 'color-mix(in srgb, {surface.0}, transparent 92%)',
+              activeBackground: 'color-mix(in srgb, {surface.0}, transparent 88%)',
+            },
+            danger: {
+              hoverBackground: 'color-mix(in srgb, {red.400}, transparent 84%)',
+              activeBackground: 'color-mix(in srgb, {red.400}, transparent 76%)',
+            },
           },
         },
       },
