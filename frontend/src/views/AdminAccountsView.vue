@@ -37,6 +37,21 @@ const newNote = ref('')
 const adding = ref(false)
 const busyId = ref<number | null>(null)
 
+/**
+ * 거절된 토글을 되돌리기 위한 리마운트 카운터.
+ *
+ * IMPORTANT — **목록을 다시 읽는 것만으로는 스위치가 돌아오지 않는다.** PrimeVue의
+ * `ToggleSwitch`는 내부 `d_value`를 들고 `modelValue`의 **변화**만 watch한다
+ * (`@primevue/core` `BaseEditableHolder`). 서버가 거절했으므로 `account.admin`은 `true`에서
+ * `true`로 그대로고, watcher가 뛰지 않아 스위치는 꺼진 채 남는다 — 옆의 `관리자` 태그는
+ * 켜져 있는데 스위치만 꺼진 자기모순 상태가 된다(2026-08-08 실측).
+ *
+ * 그래서 값이 아니라 **키를 바꿔** 컴포넌트를 새로 만든다. `AsyncPanel`이 로딩 중 슬롯을
+ * 파괴하므로 재조회만으로도 지금은 되돌아가지만, 그 우연에 기대지 않는다 — 깜빡임을 없애려고
+ * `AsyncPanel`을 고치는 날 이 되돌리기가 조용히 사라진다.
+ */
+const revertCount = ref(0)
+
 onMounted(() => {
   void admin.ensureAccountsLoaded()
 })
@@ -69,10 +84,13 @@ async function toggleAdmin(account: AllowedEmail, next: boolean): Promise<void> 
     await admin.updateAccount(account.id, { admin: next, note: account.note })
     notifySuccess(next ? '관리자 권한을 주었습니다' : '관리자 권한을 회수했습니다', account.email)
   } catch (caught) {
-    // 마지막 관리자면 서버가 409(LAST_ADMIN)를 준다. 목록을 되돌려 화면과 서버를 맞춘다 —
-    // 안 되돌리면 스위치만 바뀐 채로 남아 권한이 바뀐 것처럼 보인다.
-    await admin.ensureAccountsLoaded()
+    // 사유를 먼저 알린다. 이어지는 재조회가 또 실패해도 사용자는 왜 거절됐는지 본다.
     notifyFailure('권한을 바꾸지 못했습니다', caught)
+    // 마지막 관리자면 서버가 409(LAST_ADMIN)를 준다. 스위치를 되돌리고(위 revertCount) 목록도
+    // 다시 읽어 화면과 서버를 맞춘다 — 안 되돌리면 스위치만 바뀐 채로 남아 권한이 바뀐 것처럼
+    // 보이고, 관리자는 권한이 회수된 줄 알고 나간다.
+    revertCount.value += 1
+    await admin.reloadAccounts()
   } finally {
     busyId.value = null
   }
@@ -187,6 +205,7 @@ function formatDate(value: string | null): string {
           <div class="account__actions">
             <div class="account__admin-toggle">
               <ToggleSwitch
+                :key="`admin-${account.id}-${revertCount}`"
                 :model-value="account.admin"
                 :input-id="`admin-${account.id}`"
                 :disabled="busyId === account.id"

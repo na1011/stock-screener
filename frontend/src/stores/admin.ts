@@ -74,9 +74,20 @@ export const useAdminStore = defineStore('admin', () => {
   const accountsRequest = useAsync((signal) => api.allowedEmails(signal))
   const accounts = computed<AllowedEmail[]>(() => accountsRequest.data.value ?? [])
 
+  /**
+   * 목록을 다시 읽는다.
+   *
+   * `ensureAccountsLoaded`와 나눠 둔 이유는 **쓰기가 거절됐을 때 화면과 서버를 맞추는 것**이
+   * "아직 안 읽었으면 읽어라"와 다른 요구이기 때문이다. 그 자리에 `ensure`를 부르면 이미
+   * 성공 상태라 아무것도 하지 않고, 되돌리기가 조용히 빠진다(2026-08-08 실측).
+   */
+  async function reloadAccounts(): Promise<void> {
+    await accountsRequest.run()
+  }
+
   async function ensureAccountsLoaded(): Promise<void> {
     if (accountsRequest.state.value === 'idle' || accountsRequest.state.value === 'error') {
-      await accountsRequest.run()
+      await reloadAccounts()
     }
   }
 
@@ -144,6 +155,7 @@ export const useAdminStore = defineStore('admin', () => {
     accountsError: accountsRequest.error,
     retryAccounts: accountsRequest.retry,
     ensureAccountsLoaded,
+    reloadAccounts,
     addAccount,
     updateAccount,
     removeAccount,
