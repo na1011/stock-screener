@@ -102,14 +102,27 @@ const hasHelp = computed(() => Boolean(props.description) || Boolean(props.inter
  * 표 머리글에 컬럼마다 하나씩 붙는다. 기본 크기로 두면 여덟 컬럼에서 도움말 버튼이 지표
  * 이름보다 먼저 눈에 들어온다 — 늘 필요한 것이 아니라 한 번 읽고 마는 것이다.
  */
+/*
+ * IMPORTANT — 물러나게 하되 `opacity`로 하지 않는다.
+ *
+ * 0.55였을 때 실제 대비가 **2.59:1**로 WCAG 1.4.11(비텍스트 3:1)에 미달했다. 지표 설명을
+ * 여는 유일한 입구인데 잘 보이지 않았다. 투명도는 **깔린 배경에 따라 결과가 달라져** 카드
+ * 위와 표 위가 서로 다른 대비가 되지만, 색 토큰은 어디서나 같은 값을 낸다.
+ *
+ * muted는 본문보다 물러나면서도 기준을 넘는 단계다 — 여기 필요한 것이 정확히 그것이다.
+ */
 .indicator-label__help {
   width: 1.125rem;
   height: 1.125rem;
-  opacity: 0.55;
 }
 
-.indicator-label__help:hover {
-  opacity: 1;
+.indicator-label__help :deep(.p-button-icon) {
+  color: var(--p-text-muted-color);
+  transition: color var(--app-motion-fast) var(--app-ease);
+}
+
+.indicator-label__help:hover :deep(.p-button-icon) {
+  color: var(--p-primary-color);
 }
 
 .indicator-label__help :deep(.p-button-icon) {
