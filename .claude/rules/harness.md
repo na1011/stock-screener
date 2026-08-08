@@ -41,6 +41,8 @@ paths:
 
 **permissions는 예외를 표현할 수 없다.** `deny`가 `allow`를 이기므로 `deny Edit(./x/.env.*)` + `allow Edit(./x/.env.example)`은 차단된다(2026-08-08 실측). 그런데 `.env.example`은 이 저장소가 자격증명을 문서화하라고 지정한 파일이라 예외가 필수다. 그래서 `guard-secrets.sh`가 **정본**이고, permissions의 `.env`·`secrets/**`는 겹치는 **거친 백스톱**이다.
 
+**확인·차단의 실효 계층은 훅이다.** 훅이 낸 `ask`는 실제로 프롬프트가 떴는데(2026-08-09, 다른 세션의 커밋), 전역 `settings.json`의 `permissions.ask`에 있는 항목(`git push --force*`·`npm publish *`)은 같은 날 두 번 다 **프롬프트 없이 지나갔다.** 그래서 settings의 `ask`에 무언가를 넣어 게이트를 만들었다고 가정하지 않는다 — 게이트가 필요하면 훅에 둔다. **다만 관측의 한계가 있다**: 세션의 권한 모드를 에이전트가 볼 수 없어, 그 통과가 `defaultMode: auto` 때문인지 사용자가 고른 모드 때문인지 가르지 못했다.
+
 - **MUST NOT: 겹친다는 이유로 한쪽을 지우지 않는다.** 훅을 지우면 예외가 사라져 `.env.example`을 못 고치고, permissions를 지우면 훅이 죽었을 때 아무것도 안 남는다. 둘은 같은 정책의 중복이 아니라 **표현력이 다른 두 계층**이다.
 - **훅이 혼자 지키는 것**: `.env.<임의>`(`.env.production` 등), `*.key`, `*.pfx`, `id_rsa`, `credentials.json`, `service-account*.json`, `application-{local,secret,prod}.*`. permissions는 이 중 어느 것도 덮지 않는다.
 - 전역 `~/.claude/settings.json`은 커밋되지 않는다. **다른 클론에서 살아 있는 계층은 훅뿐이다.**
