@@ -245,10 +245,16 @@ onMounted(() => {
   color: var(--p-text-muted-color);
 }
 
-/* 첫 구획은 시세 줄 바로 아래다. 제목의 기본 윗여백을 여기서만 줄인다. */
-.indicator-group:first-of-type :deep(.section-heading) {
-  margin-top: 0.25rem;
-}
+/*
+ * 첫 구획 제목의 윗여백을 줄이지 않는다.
+ *
+ * 예전에는 `:first-of-type`에 `margin-top: 0.25rem`을 걸었다. 그때 바로 위가 얇은 시세
+ * **줄**이라 28px이 과했기 때문이다. 지금 위에 있는 것은 요약 **카드**라 전제가 뒤집혔다 —
+ * 4px면 제목이 카드에 들러붙어 카드의 일부처럼 읽힌다.
+ *
+ * `SectionHeading`의 기본값(1.75rem)을 그대로 쓴다. 구획 사이 간격이 한 값으로 통일되어
+ * 첫 구획만 리듬이 다르지 않다.
+ */
 
 .indicator-group__list {
   list-style: none;

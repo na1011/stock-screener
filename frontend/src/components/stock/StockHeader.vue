@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { StockPrice, StockSummary } from '@/api/types'
+import type { IsoDate, StockPrice, StockSummary } from '@/api/types'
 import WatchButton from '@/components/watchlist/WatchButton.vue'
 import { formatCount, formatDate, formatPrice } from '@/lib/format'
 
@@ -22,7 +22,7 @@ defineProps<{
   stock: StockSummary
   /** 기준일에 시세 행이 없으면 null. 그때는 OHLC 띠를 통째로 그리지 않는다. */
   price: StockPrice | null
-  asOf: string
+  asOf: IsoDate
 }>()
 </script>
 
@@ -105,7 +105,12 @@ defineProps<{
 
 .stock-header__top {
   display: flex;
-  align-items: flex-start;
+  /*
+   * `flex-start`가 아니라 `baseline`이다. 앞의 것은 두 덩어리의 **윗변**을 맞추는데, 28px
+   * 이름과 24px 가격은 글자 크기가 달라 윗변이 같아도 글자가 6px 어긋나 앉는다. 크기가
+   * 다른 두 글자를 나란히 두는 자리에서는 baseline이 유일하게 맞는 기준선이다.
+   */
+  align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
@@ -120,13 +125,21 @@ defineProps<{
 /*
  * 이 화면의 **주어**다. 예전에는 20px이라 24px 가격보다 작았고, 그래서 무엇에 관한
  * 페이지인지보다 얼마인지가 먼저 읽혔다. 주어가 값보다 커야 한다.
+ *
+ * IMPORTANT — 크기만 키우면 절반만 고쳐진다. **밝기도 가격보다 위여야 한다.** 이름이
+ * `--p-text-color`(#dce3ed), 가격이 `--p-text-hover-color`(#f2f5f9)였을 때는 크기를
+ * 뒤집어도 눈은 여전히 가격을 먼저 봤다. 램프의 가장 밝은 칸은 주어가 가져간다.
+ *
+ * 굵기 800은 이 앱에서 여기뿐이다(나머지는 600·700). h1이 하나뿐인 화면이라 정당하고,
+ * Pretendard Variable이 45~920이라 별도 파일을 받지 않는다(ADR-0022).
  */
 .stock-header__name {
   margin: 0;
   font-size: var(--app-text-3xl);
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.02em;
+  color: var(--p-text-hover-color);
   overflow-wrap: anywhere;
 }
 
@@ -178,10 +191,20 @@ defineProps<{
   min-width: 0;
 }
 
+/*
+ * IMPORTANT — **윤곽형이다. 채우지 않는다.**
+ *
+ * 소속 배지와 판정 `Tag`가 이제 같은 줄에 선다(위 `__base`). 예전에는 다른 줄이라 둘 다
+ * 채워진 알약이어도 헷갈리지 않았지만, 나란히 놓이는 순간 ADR-0021이 막은 상태가 된다 —
+ * "소속 배지가 판정과 한 종류로 읽히면 안 된다".
+ *
+ * 색으로 가르지 않고 **형태로** 가른다. 판정은 채워진 알약, 소속은 윤곽. ADR-0021이
+ * 초록·빨강의 두 뜻을 가를 때 쓴 것과 같은 수법이고, 새 색을 쓰지 않는다.
+ */
 .stock-header__universe {
   padding: 0.1875rem 0.4375rem;
+  border: 1px solid var(--app-accent-border);
   border-radius: var(--p-border-radius-sm);
-  background: color-mix(in srgb, var(--p-primary-color) 14%, transparent);
   color: var(--p-primary-300);
   font-size: var(--app-text-2xs);
   font-weight: 600;
@@ -239,6 +262,19 @@ defineProps<{
   /* 가격이 종목명 아래로 내려오면 우측 정렬이 어색하다 — 왼쪽 기준선에 맞춘다. */
   .stock-header__price {
     align-items: flex-start;
+  }
+
+  /*
+   * 좁은 폭에서는 한 단계씩 내린다. 28px 이름은 360px 폭에서 두 줄이 되기 쉽고, 그러면
+   * 카드 절반이 제목이 된다. **내려도 이름 > 가격 관계는 유지한다** — 그것이 이 화면의
+   * 주어이기 때문이고, 순서가 뒤집히면 좁은 폭에서만 주어가 달라진다.
+   */
+  .stock-header__name {
+    font-size: var(--app-text-2xl);
+  }
+
+  .stock-header__price-value {
+    font-size: var(--app-text-xl);
   }
 }
 </style>
