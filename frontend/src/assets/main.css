@@ -87,6 +87,20 @@
   --app-edge-highlight: inset 0 1px 0 color-mix(in srgb, var(--p-surface-0) 6%, transparent);
 
   /* ----------------------------------------------------------------------
+   * 골라져 있는 것의 면.
+   *
+   * 값은 preset의 `select.overlay.option.selectedBackground`(`primary.400` 18%)와 **같다.**
+   * 새 언어가 아니라 이미 쓰는 언어의 확장이다 — Select 드롭다운에서 고른 항목과 레일에서
+   * 열려 있는 전략이 같은 색이어야 "지금 이것"이 한 가지 뜻으로 읽힌다.
+   *
+   * 여기 두는 이유는 `--app-surface-raised`와 같다. 합성값이라 소비처마다 조립하면 어긋난다.
+   * 색 리터럴은 없다 — `--p-*`만 섞는다(ADR-0021).
+   * ---------------------------------------------------------------------- */
+  --app-accent-surface: color-mix(in srgb, var(--p-primary-400) 18%, transparent);
+  /* 주 액션의 윤곽. 채워진 버튼은 `.app-list-button` 계열 안에서 혼자 다른 종류로 읽힌다. */
+  --app-accent-border: color-mix(in srgb, var(--p-primary-400) 32%, transparent);
+
+  /* ----------------------------------------------------------------------
    * 모션.
    *
    * 이 앱에는 전환 애니메이션이 하나도 없었다. 상태가 즉시 갈아끼워지면 **무엇이 바뀌었는지**
@@ -203,6 +217,18 @@ a:hover {
 .app-list-button:hover,
 .app-list-button:focus-visible {
   background: var(--p-surface-800);
+}
+
+/*
+ * IMPORTANT — 포커스가 hover와 같아서는 안 된다. 배경만 바꾸던 동안 키보드 사용자는 자기가
+ * 어디에 있는지 알 수 없었고, 마우스로 훑을 때는 증상이 전혀 드러나지 않았다.
+ *
+ * `outline-offset`이 음수인 이유는 이것들이 전폭 행이기 때문이다. preset의 `+1px`을 그대로
+ * 쓰면 링이 컨테이너 밖으로 나가 레일·팝오버 가장자리에서 잘린다.
+ */
+.app-list-button:focus-visible {
+  outline: var(--p-focus-ring-width) var(--p-focus-ring-style) var(--p-focus-ring-color);
+  outline-offset: -2px;
 }
 
 /* ------------------------------------------------------------------------

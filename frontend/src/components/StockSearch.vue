@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import AutoComplete from 'primevue/autocomplete'
 import type { AutoCompleteCompleteEvent } from 'primevue/autocomplete'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -82,30 +84,33 @@ async function go(): Promise<void> {
 </script>
 
 <template>
-  <AutoComplete
-    v-model="selected"
-    :suggestions="suggestions"
-    option-label="name"
-    placeholder="종목 검색"
-    :delay="250"
-    complete-on-focus
-    class="stock-search"
-    @complete="complete"
-    @option-select="go"
-  >
-    <template #option="{ option }: { option: StockSearchResult }">
-      <div class="stock-search__option">
-        <span class="stock-search__name">{{ option.name }}</span>
-        <span class="stock-search__meta">{{ option.ticker }} · {{ option.marketCode }}</span>
-      </div>
-    </template>
-    <template #empty>
-      <div v-if="failed" class="stock-search__empty stock-search__empty--failed">
-        검색에 실패했습니다. 잠시 뒤 다시 입력해 주세요.
-      </div>
-      <div v-else class="stock-search__empty">일치하는 종목이 없습니다.</div>
-    </template>
-  </AutoComplete>
+  <IconField class="stock-search">
+    <InputIcon class="pi pi-search" />
+    <AutoComplete
+      v-model="selected"
+      :suggestions="suggestions"
+      option-label="name"
+      placeholder="종목 검색"
+      :delay="250"
+      complete-on-focus
+      class="stock-search__field"
+      @complete="complete"
+      @option-select="go"
+    >
+      <template #option="{ option }: { option: StockSearchResult }">
+        <div class="stock-search__option">
+          <span class="stock-search__name">{{ option.name }}</span>
+          <span class="stock-search__meta">{{ option.ticker }} · {{ option.marketCode }}</span>
+        </div>
+      </template>
+      <template #empty>
+        <div v-if="failed" class="stock-search__empty stock-search__empty--failed">
+          검색에 실패했습니다. 잠시 뒤 다시 입력해 주세요.
+        </div>
+        <div v-else class="stock-search__empty">일치하는 종목이 없습니다.</div>
+      </template>
+    </AutoComplete>
+  </IconField>
 </template>
 
 <style scoped>
@@ -118,6 +123,34 @@ async function go(): Promise<void> {
  */
 .stock-search {
   width: 100%;
+}
+
+.stock-search__field {
+  width: 100%;
+}
+
+/*
+ * IMPORTANT — PrimeVue의 `.p-iconfield .p-inputtext:not(:first-child)` 패딩 규칙이 이 조합에는
+ * 걸리지 않는다. `AutoComplete`가 input을 `.p-autocomplete`로 한 번 더 감싸서, input이 자기
+ * 부모의 `:first-child`가 되기 때문이다. 그래서 아이콘 자리를 직접 비운다 — 이 줄이 없으면
+ * 입력한 글자가 돋보기를 뚫고 지나간다.
+ *
+ * 그리고 검색이 레일에서 묻히던 원인은 면이었다. 레일 배경(`content.background` = surface.900)
+ * 위에 같은 밝기의 입력칸이 놓여 "여기 칠 수 있다"가 읽히지 않았다. 캔버스(950)로 내려 홈처럼 판다.
+ */
+.stock-search :deep(.p-autocomplete-input) {
+  padding-inline-start: calc(var(--p-form-field-padding-x) * 2 + var(--p-icon-size));
+  background: var(--p-surface-950);
+}
+
+/* 항목 글자가 밝아진 옆에서 기본 placeholder는 사라져 보인다. 이 자리만 한 단계 올린다. */
+.stock-search :deep(.p-autocomplete-input)::placeholder {
+  color: var(--p-text-subtle-color);
+}
+
+/* 포커스가 어디 있는지 아이콘으로도 보인다. */
+.stock-search:focus-within :deep(.p-inputicon) {
+  color: var(--p-primary-color);
 }
 
 .stock-search__option {

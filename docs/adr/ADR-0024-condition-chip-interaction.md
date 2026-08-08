@@ -38,6 +38,27 @@ applies_to:
 - MUST: 화면 폭 경계는 `lib/breakpoints`의 셋(640/767/900)만 쓴다. 레일이 서랍으로 바뀌는 경계는
   `BUILDER`(900)를 재사용한다 — 레일 240px을 뗀 뒤 작업 영역이 좁아지는 지점과 같다.
 
+### 레일의 층위 (2026-08-08 추가)
+
+레일에 목록을 상주시킨 것만으로는 부족했다. **nav와 목록이 같은 것을 가리키고 같은 표시를 써서
+전체가 평평하게 읽혔다.** 아래 셋이 그 상태로 되돌아가는 것을 막는다.
+
+- MUST NOT: 주 nav에 `/screens` 행을 다시 넣지 않는다. 바로 아래 목록에서 모든 항목에 도달할 수
+  있어 **인접한 두 레벨이 같은 것을 가리키게 된다.** `/screens`로 가는 길은 "내 전략" 구획
+  제목의 관리 링크 하나이고, 그 링크는 `/screens`에서 활성으로 켜져야 한다 — 안 켜지면 그
+  페이지에서 레일에 활성이 하나도 없다.
+- MUST: 활성 표시를 두 층으로 가른다. **장소**(주 nav)는 `--current`(면만), **내용**(전략
+  목록·새 전략)은 `--open`(accent 면 + 코발트 막대)이다. 같은 표시를 두 층에 쓰면 위 MUST NOT을
+  지켜도 다시 평평해진다.
+- MUST: 활성 배경을 `:hover`·`:focus-visible`에도 **명시적으로 다시 적는다.** `main.css`의
+  `.app-list-button:hover`와 scoped 규칙은 특정도가 같아(둘 다 0,2,0) 승자가 주입 순서로 정해진다.
+  빠뜨리면 열린 항목에 마우스를 올리는 순간 틴트가 회색으로 되돌아간다.
+- MUST NOT: 열려 있는 전략 행을 다시 눌러 스크리너로 돌아오게 만들지 않는다. `openByKey`가 서버에서
+  정의를 다시 받아 **저장하지 않은 편집을 조용히 날린다.** 편집을 보존한 채 결과로 돌아가는 길은
+  주 nav의 스크리너 행뿐이라, 그 행을 지우면 안 된다.
+- MUST: 전체를 지우는 동작은 `composables/useFreshDraft`를 쓴다. 레일과 칩 바가 각자 구현했을 때
+  한쪽은 확인만, 다른 쪽은 이동만 갖고 있었다.
+
 ## 검증
 
 ```bash
@@ -51,6 +72,14 @@ rg -n 'incompleteCount' frontend/src/components/condition/ConditionChipBar.vue f
 
 # 3. 서버가 준 조건 인덱스를 쓰는가
 rg -n 'invalidIndex' frontend/src/stores/screening.ts frontend/src/views/ScreenerView.vue
+
+# 4. 레일 주 nav에 /screens가 없는가 (2026-08-08)
+rg -n 'to="/screens"' frontend/src/components/AppRail.vue
+#    → 구획 제목의 관리 링크(rail__manage) 한 줄만 나와야 한다. rail__nav 안에 있으면 위반이다.
+
+# 5. 전체 지우기가 한 곳에서만 나오는가
+rg -n 'draft.reset\(\)' frontend/src/components frontend/src/composables
+#    → useFreshDraft.ts만 나와야 한다
 ```
 
 `screenDraft.spec.ts` 11건이 그대로 통과하는 것이 "모델을 건드리지 않았다"의 검증이다. 하나라도
