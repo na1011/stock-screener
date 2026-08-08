@@ -37,6 +37,9 @@ export const ProblemType = {
   JOB_NOT_FOUND: 'urn:stockscreener:job-not-found',
   JOB_ALREADY_RUNNING: 'urn:stockscreener:job-already-running',
   BATCH_EXECUTION_NOT_FOUND: 'urn:stockscreener:batch-execution-not-found',
+  ALLOWED_EMAIL_NOT_FOUND: 'urn:stockscreener:allowed-email-not-found',
+  DUPLICATE_ALLOWED_EMAIL: 'urn:stockscreener:duplicate-allowed-email',
+  LAST_ADMIN: 'urn:stockscreener:last-admin',
   CONFLICT: 'urn:stockscreener:conflict',
 } as const
 

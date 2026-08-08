@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { ProblemType } from './http'
 import {
+  ALLOWED_EMAIL_NOTE_MAX_LENGTH,
   DEFAULT_DECIMAL_SCALE,
   MAX_CONDITIONS,
   SCREEN_DESCRIPTION_MAX_LENGTH,
@@ -91,6 +92,7 @@ describe('서버 상수의 거울', () => {
     expect(MAX_CONDITIONS).toBe(CONTRACT.constants.maxConditions)
     expect(SCREEN_NAME_MAX_LENGTH).toBe(CONTRACT.constants.screenNameMaxLength)
     expect(SCREEN_DESCRIPTION_MAX_LENGTH).toBe(CONTRACT.constants.screenDescriptionMaxLength)
+    expect(ALLOWED_EMAIL_NOTE_MAX_LENGTH).toBe(CONTRACT.constants.allowedEmailNoteMaxLength)
     expect(DEFAULT_DECIMAL_SCALE).toBe(CONTRACT.constants.defaultDecimalScale)
   })
 

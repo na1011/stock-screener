@@ -18,6 +18,9 @@ export const SCREEN_NAME_MAX_LENGTH = 100
 /** `ScreenRequest.description`의 `@Size(max)`. */
 export const SCREEN_DESCRIPTION_MAX_LENGTH = 2000
 
+/** `AllowedEmailRequest.note`의 `@Size(max)`. `allowed_email.note` 컬럼 폭과 같다. */
+export const ALLOWED_EMAIL_NOTE_MAX_LENGTH = 200
+
 /**
  * 소수 자릿수를 모를 때의 기본값.
  *

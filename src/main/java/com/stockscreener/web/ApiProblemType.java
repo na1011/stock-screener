@@ -68,6 +68,17 @@ public enum ApiProblemType {
 
     BATCH_EXECUTION_NOT_FOUND("batch-execution-not-found", "배치 실행 이력을 찾을 수 없다"),
 
+    ALLOWED_EMAIL_NOT_FOUND("allowed-email-not-found", "허용목록 항목을 찾을 수 없다"),
+    DUPLICATE_ALLOWED_EMAIL("duplicate-allowed-email", "이미 허용목록에 있는 이메일이다"),
+
+    /**
+     * 마지막 관리자의 권한을 회수하려 했다.
+     *
+     * <p>이 상태가 되면 아무도 관리자 화면에 들어갈 수 없고 복구 수단이 SQL뿐이다.
+     * 프론트가 따로 분기해 "왜 안 되는지"를 말해야 하는 몇 안 되는 경우다.
+     */
+    LAST_ADMIN("last-admin", "마지막 관리자의 권한은 회수할 수 없다"),
+
     CONFLICT("conflict", "요청이 현재 상태와 충돌한다");
 
     private static final String PREFIX = "urn:stockscreener:";

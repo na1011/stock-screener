@@ -50,6 +50,9 @@
     "urn:stockscreener:job-not-found",
     "urn:stockscreener:job-already-running",
     "urn:stockscreener:batch-execution-not-found",
+    "urn:stockscreener:allowed-email-not-found",
+    "urn:stockscreener:duplicate-allowed-email",
+    "urn:stockscreener:last-admin",
     "urn:stockscreener:conflict"
   ],
 
@@ -81,6 +84,7 @@
     "screenNameMaxLength": 100,
     "screenDescriptionMaxLength": 2000,
     "watchlistMemoMaxLength": 500,
+    "allowedEmailNoteMaxLength": 200,
     "defaultDecimalScale": 2
   }
 }

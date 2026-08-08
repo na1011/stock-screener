@@ -223,6 +223,35 @@ public final class ApiExceptions {
         }
     }
 
+    public static class AllowedEmailNotFoundException extends ApiException {
+        public AllowedEmailNotFoundException(long id, Throwable cause) {
+            super(HttpStatus.NOT_FOUND, ApiProblemType.ALLOWED_EMAIL_NOT_FOUND,
+                    "허용목록 항목을 찾을 수 없다: " + id, cause);
+            with("allowedEmailId", id);
+        }
+    }
+
+    public static class DuplicateAllowedEmailException extends ApiException {
+        public DuplicateAllowedEmailException(String email, Throwable cause) {
+            super(HttpStatus.CONFLICT, ApiProblemType.DUPLICATE_ALLOWED_EMAIL,
+                    "이미 허용목록에 있는 이메일이다: " + email, cause);
+            with("email", email);
+        }
+    }
+
+    /**
+     * 마지막 관리자의 권한을 회수하려 했다.
+     *
+     * <p>사유를 그대로 말한다. 다른 인가 오류와 달리 <b>숨길 운영 정보가 없고</b>, 숨기면
+     * 관리자는 자기 조작이 왜 실패했는지 알 수 없어 같은 시도를 반복한다.
+     */
+    public static class LastAdminException extends ApiException {
+        public LastAdminException(Throwable cause) {
+            super(HttpStatus.CONFLICT, ApiProblemType.LAST_ADMIN,
+                    "관리자가 한 명도 남지 않게 된다. 다른 계정에 관리자 권한을 먼저 준다.", cause);
+        }
+    }
+
     /**
      * 쿼리 파라미터 검증 실패.
      *

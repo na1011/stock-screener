@@ -23,13 +23,15 @@ applies_to:
 - MUST NOT: `app_user.email`과 `allowed_email.email` 사이에 FK를 걸지 않는다.
 - MUST NOT: 관리자 기능을 별도 애플리케이션으로 분리하지 않는다. 같은 앱에서 `ROLE_ADMIN`으로 분리한다.
 - MUST NOT: 실제 클라이언트 ID·시크릿을 설정 파일에 넣지 않는다. 환경변수로만 주입한다.
+- MUST: 관리자 화면이 부르는 경로(`add`·`update`·`remove`)는 **마지막 관리자를 없애는 변경을 거부한다.** 관리자가 0명이 되면 아무도 관리자 화면에 들어갈 수 없고 복구 수단이 SQL뿐이다(2026-08-08 추가).
+- MUST NOT: 그 검사를 저수준 `allow`·`revoke`에까지 걸지 않는다. **그 둘이 잠긴 상태의 복구 경로**이고, 관리자 강등이 정당한 호출이다. 검사가 막는 것은 "관리자가 0명인 상태"가 아니라 *이 변경이 0명으로 만든 것*이다 — 애초에 0명이던 상태에서 첫 관리자를 넣지 못하게 되면 안 된다.
 
 ## 검증
 
 ```bash
-./gradlew test --tests "*AllowedEmailServiceTest*" --tests "*AllowlistOidcUserServiceTest*" --tests "*SecurityConfigTest*"
+./gradlew test --tests "*AllowedEmailServiceTest*" --tests "*AllowlistOidcUserServiceTest*" --tests "*SecurityConfigTest*" --tests "*AdminAllowlistApiTest*"
 ```
-미허용 이메일 차단, 대소문자·공백 무시, 권한 회수의 로그인 시 반영, 비관리자의 관리자 엔드포인트 403을 확인한다.
+미허용 이메일 차단, 대소문자·공백 무시, 권한 회수의 로그인 시 반영, 비관리자의 관리자 엔드포인트 403, 그리고 **마지막 관리자 잠금 방지와 그 거절이 값을 되돌리는 것**까지 확인한다.
 
 ```bash
 grep -rn 'client-id:\|client-secret:' src/main/resources/ | grep -v '\${'

@@ -1,5 +1,6 @@
 package com.stockscreener.web;
 
+import com.stockscreener.auth.web.AllowedEmailRequest;
 import com.stockscreener.indicator.IndicatorCategory;
 import com.stockscreener.indicator.IndicatorDescriptor;
 import com.stockscreener.interaction.InteractionAction;
@@ -159,6 +160,8 @@ class WireContractTest {
                 .isEqualTo(constants.get("screenDescriptionMaxLength").asInt());
         assertThat(sizeMax(WatchlistRequest.class, "memo"))
                 .isEqualTo(constants.get("watchlistMemoMaxLength").asInt());
+        assertThat(sizeMax(AllowedEmailRequest.class, "note"))
+                .isEqualTo(constants.get("allowedEmailNoteMaxLength").asInt());
     }
 
     @Test
