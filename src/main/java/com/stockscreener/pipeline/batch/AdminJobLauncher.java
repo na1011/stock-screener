@@ -2,6 +2,8 @@ package com.stockscreener.pipeline.batch;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Component;
 
@@ -47,7 +49,20 @@ public class AdminJobLauncher {
     private final Map<String, JobRunner> jobs;
     private final List<Descriptor> catalog;
 
-    public AdminJobLauncher(AsyncTaskExecutor taskExecutor,
+    /**
+     * IMPORTANT — {@code @Qualifier}를 지우지 않는다. 스케줄러를 켜면
+     * ({@code pipeline.scheduler.enabled=true}) Boot이 {@code taskScheduler} 빈을 만드는데,
+     * 그것도 {@link AsyncTaskExecutor}를 구현해 후보가 둘이 된다. 이름으로 고르지 않으면
+     * <b>컨텍스트 기동이 실패한다.</b>
+     *
+     * <p>이 결함이 늦게 드러난 이유는 스케줄러가 기본 꺼짐이라 <b>운영 구성만 이 가지를
+     * 밟기 때문</b>이다. {@code ./gradlew build}도 평소 {@code bootRun}도 초록이었고,
+     * launchd로 실제 운영 인자를 준 첫 기동에서야 죽었다.
+     * {@code SchedulerEnabledContextTest}가 이제 그 구성을 빌드에서 밟는다.
+     */
+    public AdminJobLauncher(
+                            @Qualifier(TaskExecutionAutoConfiguration.APPLICATION_TASK_EXECUTOR_BEAN_NAME)
+                            AsyncTaskExecutor taskExecutor,
                             DailyUpdateJob dailyUpdateJob,
                             UniverseRebalanceJob universeRebalanceJob,
                             IndicatorBackfillJob indicatorBackfillJob) {
