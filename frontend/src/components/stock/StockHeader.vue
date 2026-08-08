@@ -28,22 +28,27 @@ defineProps<{
 
 <template>
   <header class="stock-header">
+    <!--
+      IMPORTANT — 네 요소가 **grid의 직계 자식**이다. 좌우를 각각 상자로 묶지 않는다.
+
+      묶으면 두 번째 줄(티커 / 기준일)이 어긋난다. flex의 `align-items: baseline`은 각
+      flex 아이템의 **첫** 베이스라인만 맞추기 때문이다 — 그 안의 둘째 줄은 각 상자의
+      line-height가 정하고, 28px 이름과 24px 가격은 그 값이 달라 5.5px 어긋났다.
+      grid는 **행마다** 베이스라인 그룹을 만들어 두 줄이 각각 맞는다.
+
+      DOM 순서는 화면 배치와 무관하다(`grid-area`가 정한다). 그래서 낭독 순서를
+      "이름 → 티커 → 가격 → 기준일"로 두어 정체와 값이 섞이지 않게 한다.
+    -->
     <div class="stock-header__top">
-      <div class="stock-header__identity">
-        <h1 class="stock-header__name">{{ stock.name }}</h1>
-        <p class="stock-header__meta">
-          {{ stock.ticker }} · {{ stock.marketCode }}
-          <template v-if="stock.sector"> · {{ stock.sector }}</template>
-        </p>
-      </div>
-      <div class="stock-header__price">
-        <span class="stock-header__price-value tabular">
-          {{ formatPrice(price?.close ?? null) }}
-        </span>
-        <span class="stock-header__price-label">
-          기준일 {{ formatDate(asOf) }} 종가(원주가)
-        </span>
-      </div>
+      <h1 class="stock-header__name">{{ stock.name }}</h1>
+      <p class="stock-header__meta">
+        {{ stock.ticker }} · {{ stock.marketCode }}
+        <template v-if="stock.sector"> · {{ stock.sector }}</template>
+      </p>
+      <span class="stock-header__price-value tabular">
+        {{ formatPrice(price?.close ?? null) }}
+      </span>
+      <span class="stock-header__price-label">기준일 {{ formatDate(asOf) }} 종가</span>
     </div>
 
     <div class="stock-header__base">
@@ -96,30 +101,43 @@ defineProps<{
 </template>
 
 <style scoped>
+/*
+ * IMPORTANT — 이 카드가 자기 **컨테이너 질의 기준**이다. 아래 `@container`가 이것을 잰다.
+ *
+ * 뷰포트 미디어 쿼리로는 이 판단을 표현할 수 없다. 900px에서 좌측 레일(15rem)이 서랍으로
+ * 바뀌므로 **카드 폭이 뷰포트에 단조증가하지 않는다** — 실측으로 뷰포트 890px일 때 카드가
+ * 842px이고 950px일 때 662px이다. "화면이 좁은가"와 "카드가 좁은가"가 다른 질문이라,
+ * 뷰포트로 접으면 넓은 카드를 좁은 것으로 오인해 이르게 쌓는다(767px에서 그랬다).
+ *
+ * 그래서 이 경계는 `lib/breakpoints.ts`에 넣지 않는다. 거기 있는 셋은 **뷰포트** 경계이고
+ * JS(`useBreakpoint`)와 CSS 양쪽에 걸쳐 있어 어긋날 수 있어서 한 곳에 모은 것인데,
+ * 컨테이너 질의는 JS 짝이 없어 어긋날 대상 자체가 없다.
+ */
 .stock-header {
+  container-type: inline-size;
+  container-name: stock-header;
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
   background: var(--app-surface-raised);
   box-shadow: var(--app-edge-highlight);
 }
 
+/*
+ * 2행 × 2열 grid. flex가 아닌 이유는 위 템플릿 주석에 있다 — **두 줄을 각각 맞춰야 한다.**
+ *
+ * `minmax(0, 1fr)`의 0이 핵심이다. grid 트랙의 기본 최소값은 `auto`(=내용 크기)라, 긴
+ * 종목명이 트랙을 밀어 가격을 카드 밖으로 내보낸다. 0으로 내려야 이름이 줄어든다.
+ */
 .stock-header__top {
-  display: flex;
-  /*
-   * `flex-start`가 아니라 `baseline`이다. 앞의 것은 두 덩어리의 **윗변**을 맞추는데, 28px
-   * 이름과 24px 가격은 글자 크기가 달라 윗변이 같아도 글자가 6px 어긋나 앉는다. 크기가
-   * 다른 두 글자를 나란히 두는 자리에서는 baseline이 유일하게 맞는 기준선이다.
-   */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name  price'
+    'meta  asof';
   align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+  column-gap: 1rem;
+  row-gap: 0.25rem;
   padding: 0.875rem 1rem 0;
-}
-
-.stock-header__identity {
-  /* 긴 종목명이 오른쪽 가격 블록을 밀어내지 않게 한다. */
-  min-width: 0;
 }
 
 /*
@@ -134,6 +152,7 @@ defineProps<{
  * Pretendard Variable이 45~920이라 별도 파일을 받지 않는다(ADR-0022).
  */
 .stock-header__name {
+  grid-area: name;
   margin: 0;
   font-size: var(--app-text-3xl);
   font-weight: 800;
@@ -143,22 +162,17 @@ defineProps<{
   overflow-wrap: anywhere;
 }
 
-/* 티커·시장은 있어야 하지만 읽을 차례가 마지막이다. */
+/* 티커·시장은 있어야 하지만 읽을 차례가 마지막이다. 간격은 grid의 row-gap이 준다. */
 .stock-header__meta {
-  margin: 0.25rem 0 0;
+  grid-area: meta;
+  margin: 0;
   color: var(--p-text-subtle-color);
   font-size: var(--app-text-xs);
 }
 
-.stock-header__price {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  /* 가격은 줄바꿈되면 자릿수가 끊겨 읽히지 않는다. */
-  flex: 0 0 auto;
-}
-
 .stock-header__price-value {
+  grid-area: price;
+  justify-self: end;
   font-size: var(--app-text-2xl);
   font-weight: 700;
   line-height: 1.15;
@@ -167,6 +181,8 @@ defineProps<{
 }
 
 .stock-header__price-label {
+  grid-area: asof;
+  justify-self: end;
   font-size: var(--app-text-2xs);
   color: var(--p-text-subtle-color);
 }
@@ -258,16 +274,34 @@ defineProps<{
   color: var(--p-text-muted-color);
 }
 
-@media (max-width: 767px) {
-  /* 가격이 종목명 아래로 내려오면 우측 정렬이 어색하다 — 왼쪽 기준선에 맞춘다. */
-  .stock-header__price {
-    align-items: flex-start;
+/*
+ * **카드가** 좁을 때만 한 열로 쌓는다. 뷰포트가 아니라 카드를 재는 이유는 위 `.stock-header`
+ * 주석에 있다.
+ *
+ * 24rem(384px)인 근거: 오른쪽 열이 실제로 차지하는 폭이 "기준일 …" 라벨의 ~130px이고,
+ * 열 간격 1rem을 빼면 이름에 ~240px이 남는다. 그 아래로 내려가야 28px 이름이 서너 줄이
+ * 되기 시작한다. 실측으로 카드 486px일 때 이름 트랙이 283px였다 — 767px 뷰포트에서
+ * 쌓던 예전 규칙은 그 여유를 버리고 있었다.
+ */
+@container stock-header (max-width: 24rem) {
+  .stock-header__top {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'name'
+      'meta'
+      'price'
+      'asof';
+  }
+
+  /* 쌓이면 우측 정렬이 어색하다 — 전부 왼쪽 기준선에 맞춘다. */
+  .stock-header__price-value,
+  .stock-header__price-label {
+    justify-self: start;
   }
 
   /*
-   * 좁은 폭에서는 한 단계씩 내린다. 28px 이름은 360px 폭에서 두 줄이 되기 쉽고, 그러면
-   * 카드 절반이 제목이 된다. **내려도 이름 > 가격 관계는 유지한다** — 그것이 이 화면의
-   * 주어이기 때문이고, 순서가 뒤집히면 좁은 폭에서만 주어가 달라진다.
+   * 한 단계씩 내린다. **내려도 이름 > 가격 관계는 유지한다** — 그것이 이 화면의 주어이고,
+   * 순서가 뒤집히면 좁은 카드에서만 주어가 달라진다.
    */
   .stock-header__name {
     font-size: var(--app-text-2xl);
