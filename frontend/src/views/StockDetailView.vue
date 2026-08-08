@@ -273,19 +273,27 @@ onMounted(() => {
   gap: 1.25rem;
 }
 
-/* 종목명 위에 붙는 한 줄. 제목보다 작고 흐려야 "여기가 어디인가"를 먼저 읽지 않는다. */
-/* 돌아가는 길과 담기 버튼이 같은 줄에 선다. 좁아지면 담기 버튼이 아래로 내려간다. */
+/*
+ * 돌아가는 길과 담기 버튼이 같은 줄에 선다. 좁아지면 담기 버튼이 아래로 내려간다.
+ *
+ * IMPORTANT — 여기 `margin-bottom: -0.5rem`이 있었고 그것이 관심종목 버튼을 가격 위에
+ * 올려놓았다. **상쇄할 간격이 없었기 때문**이다 — `.stock-detail`의 `gap: 1.25rem`은 이
+ * 형제들에게 닿지 않는다. 사이에 `AsyncPanel`의 래퍼 `div.async-panel`이 끼어 있고 그것이
+ * 블록이라, 안쪽은 그냥 블록 흐름이다(`AsyncPanel.vue` 주석 참조).
+ *
+ * 그래서 간격을 아래 `.stock-detail__header`의 **양수 마진으로 명시**한다. 음수 마진으로
+ * 되돌리지 않는다 — topbar와 header 둘 다 우측 정렬이라(space-between / flex-end) 조금만
+ * 끌어올려도 버튼과 가격이 정확히 겹친다.
+ */
 .stock-detail__topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   flex-wrap: wrap;
-  margin-bottom: -0.5rem;
 }
 
 .stock-detail__back {
-  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 0.125rem;
@@ -310,6 +318,8 @@ onMounted(() => {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
+  /* 위 topbar와의 간격. 부모의 gap이 여기 닿지 않으므로 직접 적는다(topbar 주석 참조). */
+  margin-top: 0.75rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--p-content-border-color);
 }

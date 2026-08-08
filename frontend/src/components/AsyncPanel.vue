@@ -39,6 +39,17 @@ const rows = computed(() => props.skeletonRows ?? 3)
 </script>
 
 <template>
+  <!--
+    IMPORTANT — 이 래퍼는 블록이다. 그래서 **부모의 `gap`이 슬롯 내용에 닿지 않는다.**
+    `<div style="display:flex; gap:1.25rem">` 안에 이 패널을 넣으면 그 gap은 패널 하나에만
+    적용되고, 슬롯에 넣은 형제들 사이는 0이 된다.
+
+    간격은 슬롯 안에서 마진으로 만든다. 실제로 이 사실을 모른 채 음수 마진으로 간격을
+    조절하던 곳에서 관심종목 버튼이 가격 위에 얹혔다(`StockDetailView`).
+
+    `display: contents`로 고치지 않는다 — 소비처가 열 곳이 넘고 전부 지금 요소별 마진으로
+    간격을 맞추고 있어, 한 줄로 모든 화면의 간격이 조용히 바뀐다.
+  -->
   <div class="async-panel">
     <template v-if="state === 'ready'">
       <slot />
