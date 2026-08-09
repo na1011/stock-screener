@@ -16,6 +16,7 @@ applies_to:
 
 - MUST: 다음 프로젝트도 새 도메인이 아니라 이 도메인의 **서브도메인**을 쓴다. Tunnel이 호스트명별로 다른 로컬 포트에 붙으므로 Public Hostname만 추가하면 된다. 서브도메인은 개수 제한도 추가 비용도 없다.
 - MUST: 자동 갱신을 켜 둔 상태로 유지한다. 만료되면 사이트뿐 아니라 **OAuth 리디렉션까지 한꺼번에 끊긴다.**
+- MUST: 엣지의 `Always Use HTTPS`를 켠 채로 유지한다(`SSL/TLS → Edge Certificates`). 끄면 평문 요청이 터널을 타고 그대로 들어오고, Spring이 `X-Forwarded-Proto: http`를 신뢰해 `redirect_uri`를 `http://`로 만들어 Google이 `redirect_uri_mismatch`를 낸다. **화면은 200으로 멀쩡히 뜨고 로그인만 깨진다.** 2026-08-10에 실제로 이 상태였다 — `forward-headers-strategy`가 옳게 들어 있어도 **클라이언트가 http로 말하면 소용이 없다.** 그 설정은 스킴을 헤더에서 읽으라는 것이지 https를 강제하는 것이 아니다.
 - MUST NOT: `.kr`·`.co.kr`을 Cloudflare Registrar에서 사려 하지 않는다 — **지원하지 않는다.** 한국 ccTLD가 필요해지면 등록처를 나눠야 하고, 그때는 네임서버 변경과 전파 대기가 다시 생긴다.
 - MUST NOT: 등록처를 다른 곳으로 옮기지 않는다. 옮기는 순간 아래 "전파 대기가 없다"는 이점이 사라진다.
 
@@ -30,6 +31,19 @@ dig NS na1011.net +short
 curl -I https://screener.na1011.net/
 ```
 `200`이어야 한다. `502`면 앱이 안 떠 있거나 Tunnel의 Service Type을 `HTTPS`로 잡은 것이지 도메인 문제가 아니다.
+
+**MUST NOT: 위 `https` 확인만으로 로그인이 산다고 판정하지 않는다.** https만 재면 평문 진입점이 열려 있어도 통과한다 — 2026-08-10의 고장이 정확히 그렇게 통과했다. 아래 전제가 그 나머지 절반이다.
+
+```premise 엣지가 평문 http를 https로 올린다
+R=$(curl -sS -o /dev/null -m 5 -w '%{http_code} %{redirect_url}' http://screener.na1011.net/) || exit 1
+case "$R" in
+  30[178]" "https://*) echo "OK $R" ;;
+  30[178]" "*)         echo "리다이렉트는 하는데 대상이 https가 아니다: $R" ;;
+  *)                   echo "평문 http가 그대로 응답한다($R) — Always Use HTTPS가 꺼졌다. 도메인 로그인이 redirect_uri_mismatch로 깨진다" ;;
+esac
+```
+
+네트워크가 없으면 `curl`이 비정상 종료해 **판정 불가**로 잡힌다. 거짓 `OK`가 나오지 않는 쪽으로 기울여 둔 것이다.
 
 ## 배경
 
