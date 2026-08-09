@@ -200,3 +200,24 @@ stockscreener:
       daily-quota: 18000
       # corpCode.xml은 3.5MB ZIP이라 기본 읽기 타임아웃으로는 부족할 수 있다.
       read-timeout: 60s
+
+# ── 적재 프로파일 ───────────────────────────────────────────────
+# MUST: devtools 재기동을 꺼 둔다. 적재는 몇 시간을 도는데 devtools는 classpath가 바뀌면
+# 프로세스를 재기동하고, 그러면 BootstrapRunner가 **처음부터 다시** 간다. 트리거는 "의도한
+# 재컴파일"이 아니라 build/classes·build/resources/main을 건드리는 아무 gradle 태스크다 —
+# processResources가 frontendBuild에 걸려 있어 프론트 경유 태스크까지 포함된다. 적재가
+# 도는 동안 그것을 하나라도 돌리면 조용히 처음으로 돌아가고, 화면에는 단서가 없다.
+#
+# 이 프로파일에서만 끄므로 평소 개발 bootRun의 핫리로드는 그대로다.
+#
+# 참고 — yaml로 끄면 재기동은 사라지지만 restart 클래스로더 초기화 자체는 남는다(Spring
+# 문서). 없애려는 것이 재기동이므로 충분하다. "덜 껐다"고 보고 시스템 프로퍼티로 옮기지
+# 않는다 — 그러면 bootRun 인자에 섞여 프로파일과 따로 놀게 된다.
+---
+spring:
+  config:
+    activate:
+      on-profile: bootstrap
+  devtools:
+    restart:
+      enabled: false
