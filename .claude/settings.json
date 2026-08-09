@@ -85,8 +85,7 @@
     "SessionEnd": [
       {
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/remind-progress.sh" },
-          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/warn-load-at-session-end.sh" }
+          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/remind-progress.sh" }
         ]
       }
     ]
