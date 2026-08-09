@@ -50,7 +50,6 @@ public class DailyUpdateJob {
     private final PercentileCalculator percentileCalculator;
     private final IndicatorRetentionPolicy retentionPolicy;
     private final WatchlistAlertRunner watchlistAlertRunner;
-    private final BatchExecutionSweeper executionSweeper;
     private final JdbcTemplate jdbcTemplate;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
@@ -58,7 +57,6 @@ public class DailyUpdateJob {
                           IndicatorRunner indicatorRunner, PercentileCalculator percentileCalculator,
                           IndicatorRetentionPolicy retentionPolicy,
                           WatchlistAlertRunner watchlistAlertRunner,
-                          BatchExecutionSweeper executionSweeper,
                           JdbcTemplate jdbcTemplate) {
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
@@ -68,7 +66,6 @@ public class DailyUpdateJob {
         this.percentileCalculator = percentileCalculator;
         this.retentionPolicy = retentionPolicy;
         this.watchlistAlertRunner = watchlistAlertRunner;
-        this.executionSweeper = executionSweeper;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -151,6 +148,16 @@ public class DailyUpdateJob {
                             security -> indicatorRunner.run(security.stockId(), to));
                 }
             }
+
+            alertIfNothingArrived(execution, targets.size(), to);
+
+            // 백분위는 전 종목의 값이 저장된 뒤에야 계산할 수 있다. 종목 루프 안에서는 원리적으로
+            // 불가능하므로 루프가 끝난 뒤 하루치를 한 번에 처리한다.
+            percentileCalculator.calculate(to);
+
+            // 워치리스트 판정은 백분위 뒤여야 한다. 백분위 조건("PER 하위 20%")을 건 화면이
+            // 그 앞에서 판정되면 어제 백분위로 오늘을 판정하게 되고, 그것은 조용히 그럴듯하다.
+            evaluateWatchlist(execution, to);
         } catch (DataSourceException e) {
             // AUTH처럼 복구 불가능한 실패다. 850종목을 마저 시도할 이유가 없다.
             execution.failFatally(e);
@@ -159,16 +166,10 @@ public class DailyUpdateJob {
             execution.failUnexpectedly(e);
             throw e;
         }
-
-        alertIfNothingArrived(execution, targets.size(), to);
-
-        // 백분위는 전 종목의 값이 저장된 뒤에야 계산할 수 있다. 종목 루프 안에서는 원리적으로
-        // 불가능하므로 루프가 끝난 뒤 하루치를 한 번에 처리한다.
-        percentileCalculator.calculate(to);
-
-        // 워치리스트 판정은 백분위 뒤여야 한다. 백분위 조건("PER 하위 20%")을 건 화면이
-        // 그 앞에서 판정되면 어제 백분위로 오늘을 판정하게 되고, 그것은 조용히 그럴듯하다.
-        evaluateWatchlist(execution, to);
+        // MUST: 루프 뒤의 단계들을 try 밖으로 빼지 않는다. 밖에 있으면 여기서 던진 예외가
+        // finish()·failUnexpectedly() 어느 쪽에도 닿지 않아 **행이 RUNNING으로 남는다** —
+        // 프로세스는 멀쩡한데 마감만 안 된 상태이고, 그 행에 스위퍼가 나중에 붙이는
+        // "프로세스가 사라져"는 거짓이 된다. 실제로 percentileCalculator가 그 자리에 있었다.
 
         // 보존 정리(ADR-0011)는 마감 전에 하되 실패해도 배치를 죽이지 않는다. 오래된 행이
         // 하루 더 남는 것은 저장 공간 문제일 뿐이지만, 여기서 예외가 올라가면 그날의 수집과
@@ -177,15 +178,6 @@ public class DailyUpdateJob {
             retentionPolicy.purge();
         } catch (RuntimeException e) {
             log.warn("지표 보존 정리에 실패했다. 수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
-        }
-
-        // 마감되지 못한 실행 정리도 같은 이유로 실패를 삼킨다 — 이력 표시 문제일 뿐이고,
-        // 여기서 예외가 올라가면 그날의 수집과 계산이 실패한 것처럼 기록된다.
-        // 기동 시에도 한 번 도므로 이 호출은 **오래 떠 있는 인스턴스**를 위한 것이다.
-        try {
-            executionSweeper.sweepStale();
-        } catch (RuntimeException e) {
-            log.warn("마감되지 못한 배치 실행 정리에 실패했다. 다음 실행에서 다시 시도한다.", e);
         }
 
         return execution.finish();

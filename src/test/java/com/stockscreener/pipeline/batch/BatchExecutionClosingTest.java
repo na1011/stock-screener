@@ -12,7 +12,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,6 +24,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>IMPORTANT — {@code @Transactional}을 <b>쓰지 않는다.</b> 기록이 {@code REQUIRES_NEW}로
  * 커밋되는 것이 전제라, 바깥 트랜잭션으로 감싸면 검증하려는 성질이 사라진다
  * ({@code StockFailureIsolationTest}와 같은 이유).
+ *
+ * <p>종료 훅이 <b>실제 컨텍스트 종료 경로에서</b> 도는지는 여기서 검증하지 않는다 —
+ * {@link BatchExecutionShutdownHookTest}가 컨텍스트를 따로 띄워 답한다. 이 클래스가 보는
+ * 것은 마감 로직 자체다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -58,7 +61,7 @@ class BatchExecutionClosingTest {
         batchExecutions.closeOpenExecutions();
 
         assertThat(statusOf(execution.executionId())).isEqualTo("ABORTED");
-        assertThat(finishedAtIsNull(execution.executionId())).isFalse();
+        assertThat(noteOf(execution.executionId())).contains("프로세스가 종료돼 중단됐다");
     }
 
     @Test
@@ -67,7 +70,6 @@ class BatchExecutionClosingTest {
         BatchExecutionContext execution = batchExecutions.start(
                 JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
         execution.finish();
-        assertThat(statusOf(execution.executionId())).isEqualTo("SUCCESS");
 
         batchExecutions.closeOpenExecutions();
 
@@ -76,26 +78,59 @@ class BatchExecutionClosingTest {
     }
 
     @Test
-    @DisplayName("종료 훅조차 돌지 못한 오래된 RUNNING 행은 스위퍼가 마감한다")
-    void sweepsStaleRunningRows() {
-        long stale = insertRunningStartedHoursAgo(BatchExecutionSweeper.STALE_AFTER_HOURS + 1);
-        long fresh = insertRunningStartedHoursAgo(0);
+    @DisplayName("마감은 남아 있던 사유를 지운다 — SUCCESS인데 중단 사유가 붙어 있으면 안 된다")
+    void finishClearsStaleNote() {
+        BatchExecutionContext execution = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+        // 다른 기제(스위퍼 등)가 사유를 써 둔 상태를 만든다.
+        jdbcTemplate.update("UPDATE batch_execution SET note = ? WHERE id = ?",
+                "프로세스가 사라져 마감되지 못한 실행을 정리했다.", execution.executionId());
 
-        sweeper.sweepStale();
+        execution.finish();
 
-        assertThat(statusOf(stale)).isEqualTo("ABORTED");
-        // 도는 중일 수 있는 실행은 건드리지 않는다. 잘못 마감해도 finish()가 덮어 스스로
-        // 교정되지만, 임계값 안쪽까지 닫으면 화면이 매번 거짓을 말한다.
+        assertThat(statusOf(execution.executionId())).isEqualTo("SUCCESS");
+        assertThat(noteOf(execution.executionId()))
+                .as("성공으로 마감했는데 '프로세스가 사라졌다'가 남아 있으면 화면이 거짓을 말한다")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("웹 기동 스윕은 이전 인스턴스의 ADMIN·SCHEDULER 행만 닫는다")
+    void startupSweepClosesOnlyWebOwnedRows() {
+        long admin = insertRunning("ADMIN", "now() - interval '1 hour'");
+        long scheduler = insertRunning("SCHEDULER", "now() - interval '1 hour'");
+        long manual = insertRunning("MANUAL", "now() - interval '1 hour'");
+        long fresh = insertRunning("ADMIN", "now()");
+
+        sweeper.sweepOnStartup();
+
+        assertThat(statusOf(admin)).isEqualTo("ABORTED");
+        assertThat(statusOf(scheduler)).isEqualTo("ABORTED");
+        // 부트스트랩 JVM의 적재는 몇 시간을 돌 수 있다. 종류가 다르므로 애초에 대상이 아니다.
+        assertThat(statusOf(manual)).isEqualTo("RUNNING");
+        // 이 JVM이 뜬 뒤에 시작된 행은 살아 있는 잡의 것이다.
         assertThat(statusOf(fresh)).isEqualTo("RUNNING");
     }
 
-    private long insertRunningStartedHoursAgo(int hours) {
+    @Test
+    @DisplayName("부트스트랩 스윕은 MANUAL 행만 닫는다")
+    void bootstrapSweepClosesOnlyManualRows() {
+        long manual = insertRunning("MANUAL", "now() - interval '1 hour'");
+        long admin = insertRunning("ADMIN", "now() - interval '1 hour'");
+
+        sweeper.sweepBootstrapOrphans();
+
+        assertThat(statusOf(manual)).isEqualTo("ABORTED");
+        assertThat(statusOf(admin)).isEqualTo("RUNNING");
+    }
+
+    private long insertRunning(String triggeredBy, String startedAtExpr) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO batch_execution
                     (job_name, target_date, status, triggered_by, target_count, started_at)
-                VALUES (?, ?, 'RUNNING', 'MANUAL', 1, now() - make_interval(hours => ?))
+                VALUES (?, ?, 'RUNNING', ?, 1, %s)
                 RETURNING id
-                """, Long.class, JOB_NAME, TARGET_DATE, hours);
+                """.formatted(startedAtExpr), Long.class, JOB_NAME, TARGET_DATE, triggeredBy);
     }
 
     private String statusOf(long executionId) {
@@ -103,10 +138,8 @@ class BatchExecutionClosingTest {
                 "SELECT status FROM batch_execution WHERE id = ?", String.class, executionId);
     }
 
-    private boolean finishedAtIsNull(long executionId) {
-        List<Long> rows = jdbcTemplate.queryForList(
-                "SELECT id FROM batch_execution WHERE id = ? AND finished_at IS NULL",
-                Long.class, executionId);
-        return !rows.isEmpty();
+    private String noteOf(long executionId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT note FROM batch_execution WHERE id = ?", String.class, executionId);
     }
 }

@@ -47,20 +47,32 @@ public class BootstrapRunner implements ApplicationRunner {
     private final UniverseRebalanceJob universeRebalanceJob;
     private final InitialLoadJob initialLoadJob;
     private final IndicatorBackfillJob indicatorBackfillJob;
+    private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
     public BootstrapRunner(UniverseRebalanceJob universeRebalanceJob,
                            InitialLoadJob initialLoadJob,
                            IndicatorBackfillJob indicatorBackfillJob,
+                           BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.initialLoadJob = initialLoadJob;
         this.indicatorBackfillJob = indicatorBackfillJob;
+        this.executionSweeper = executionSweeper;
         this.context = context;
     }
 
     @Override
     public void run(ApplicationArguments args) {
+        // 이전 부트스트랩 실행이 SIGKILL 등으로 남긴 행을 여기서 닫는다.
+        //
+        // IMPORTANT — 스위퍼의 `ApplicationReadyEvent` 리스너는 **이 프로파일에서 돌지 않는다.**
+        // `SpringApplication.run()`이 `callRunners()`를 그 이벤트 발행보다 먼저 부르고, 아래에서
+        // `System.exit()`으로 내려가기 때문이다. 그래서 직접 부른다.
+        //
+        // 내 잡의 행은 아래에서 만들어지므로 이 시점의 정리 대상이 아니다(스위퍼가 기동 시각으로 가른다).
+        executionSweeper.sweepBootstrapOrphans();
+
         String job = required(args, "job");
         LocalDate asOf = date(args, "as-of", LocalDate.now());
 

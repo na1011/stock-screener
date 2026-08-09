@@ -151,6 +151,14 @@ public class BatchExecutionRecorder {
                 writtenRowCount, note);
     }
 
+    /**
+     * 종단 상태로 마감한다.
+     *
+     * <p>MUST: {@code note}를 <b>덮어쓴다.</b> 예전에는 {@code COALESCE(?, note)}라 null이 오면
+     * 기존 값을 보존했는데, 그러면 {@link #finish()}가 성공으로 마감해도 다른 기제가 써 둔
+     * 사유가 남는다 — {@code SUCCESS}인데 "프로세스가 사라져 마감되지 못했다"고 적힌 행이
+     * 만들어지고, 그것은 이 계층이 없애려던 모순과 같은 종류다. 마감한 쪽이 사유의 주인이다.
+     */
     private void updateTerminalState(long executionId, BatchStatus status, int successCount,
                                      int failureCount, long writtenRowCount, String note) {
         jdbcTemplate.update("""
@@ -159,7 +167,7 @@ public class BatchExecutionRecorder {
                     success_count     = ?,
                     failure_count     = ?,
                     written_row_count = ?,
-                    note              = COALESCE(?, note),
+                    note              = ?,
                     finished_at       = now()
                 WHERE id = ?
                 """, status.name(), successCount, failureCount, writtenRowCount, note, executionId);
