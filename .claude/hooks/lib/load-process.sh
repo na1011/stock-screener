@@ -54,3 +54,25 @@ stray_load_pids() {
   printf '%s\n' "${out% }"
   return 0
 }
+
+# PID가 뜬 지 몇 초 됐는지 낸다. 못 재면 1을 반환한다.
+#
+# "방금 내가 띄운 적재"와 "이미 돌고 있던 적재"를 가르는 데 쓴다. 둘을 구분하지 못하면
+# 적재를 띄울 때마다 "이미 돌고 있다"가 뜬다.
+#
+# macOS ps에는 `etimes`(초)가 없고 `etime`(`[[dd-]hh:]mm:ss`)만 있어서 직접 푼다.
+# `10#`을 붙이는 이유는 `08` 같은 값이 8진수로 읽혀 산술이 죽기 때문이다.
+load_process_age_seconds() {
+  local e d h m s
+  e=$(ps -o etime= -p "$1" 2>/dev/null | tr -d ' ')
+  [ -z "$e" ] && return 1
+  d=0
+  case "$e" in *-*) d=${e%%-*}; e=${e#*-} ;; esac
+  case "$e" in
+    *:*:*) h=${e%%:*}; m=$(printf '%s' "$e" | cut -d: -f2); s=${e##*:} ;;
+    *:*)   h=0;        m=${e%%:*};                          s=${e##*:} ;;
+    *)     return 1 ;;
+  esac
+  printf '%s\n' "$(( 10#$d * 86400 + 10#$h * 3600 + 10#$m * 60 + 10#$s ))"
+  return 0
+}

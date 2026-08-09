@@ -120,6 +120,19 @@ fi
 # 적재 기동 알림은 살아 있는 프로세스와 무관하다 — 명령의 모양만 본다.
 check 발화 "적재를 띄우면 창이 열렸다고 알린다"  "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill'" load
 check 침묵 "gradle 이 아닌 명령"                 "psql -d stock_screener -c 'select 1'" load
+# 기동 판정을 **명령 전문**에서 하면 이 줄이 "적재를 띄웠다"로 나온다. 실제로 그랬다.
+# 적재가 없을 때는 침묵이 정답이고, 기동으로 오독하는지는 아래 fake JVM 그룹에서 메시지로 가른다.
+check 침묵 "커밋 메시지의 --job= 은 기동이 아니다" \
+  './gradlew build && git commit -m "chore: bootRun --job=universe 문서화"' load
+#
+# 프로세스 나이로 "방금 띄운 것"과 "이미 돌던 것"을 가른다. 그 판정이 없으면 적재를 띄울
+# 때마다 중복 경고가 뜬다. 나이 자체는 여기서 재고, 90초 경계를 넘는 중복 기동 시나리오는
+# 표에 넣지 않는다 — 픽스처 하나가 95초를 먹기 때문이다. **그 경로는 표가 보증하지 않는다.**
+if [ "$(. "$HOOKS/lib/load-process.sh"; load_process_age_seconds 1 2>/dev/null || echo 0)" -gt 3600 ]; then
+  pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "확정" "오래된 PID의 나이를 잰다"
+else
+  fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s\n' "실패" "오래된 PID의 나이를 잰다"
+fi
 
 # 진짜 JVM을 띄워 분기 B를 확인한다. `comm`이 java여야 하므로 셸 프로세스로는 대신할 수 없다.
 if command -v java >/dev/null 2>&1; then
@@ -142,6 +155,30 @@ if command -v java >/dev/null 2>&1; then
     check 발화 "예외와 컴파일 태스크를 함께 부르면" "./gradlew checkDuplicateFiles build" load
     check 침묵 "적재 중 커밋 메시지 속 gradle"     "$(hd 'git commit -F - <<MSG' 'docs: 절차' '' './gradlew build 를 먼저 돌린다' 'MSG')" load
     check 침묵 "적재 중 인용만 한 gradle"          'echo "./gradlew build"' load
+    check 침묵 "적재 중 grep 이 이름만 부름"        'grep -rn "gradlew build" docs/' load
+    #
+    # 한 겹 감싼 형태. **전부 거짓 침묵이었다** — 세그먼트의 첫 토큰만 보던 시절에는
+    # 인터프리터·xargs가 인용 안쪽을 가렸고, 래퍼 벗기기 루프는 옵션 토큰에서 멈췄다
+    # (`caffeinate`는 목록에 있었는데도 `-s` 때문에 못 잡았다).
+    check 발화 "sh -c 로 감싼 gradle"               "sh -c './gradlew build'" load
+    check 발화 "bash -lc 로 감싼 gradle"            'bash -lc "./gradlew build"' load
+    check 발화 "xargs 로 넘긴 gradle"               "xargs -I{} ./gradlew {}" load
+    check 발화 "옵션 붙은 caffeinate"               "caffeinate -s ./gradlew build" load
+    check 발화 "옵션 붙은 time"                     "time -p ./gradlew build" load
+    check 발화 "옵션 붙은 env"                      "env -i ./gradlew build" load
+    check 발화 "값을 받는 옵션이 붙은 sudo"          "sudo -u x ./gradlew build" load
+    #
+    # 발화/침묵만으로는 **분기 A가 분기 B를 가로챈 것**을 못 가른다. 메시지를 본다.
+    hijack=$(jq -n --arg c './gradlew build && git commit -m "chore: bootRun --job=universe 문서화"' \
+                   --arg s "sess-$RANDOM$RANDOM" '{session_id:$s,tool_input:{command:$c}}' \
+             | "$HOOKS/warn-load-running.sh" 2>/dev/null \
+             | jq -r '.hookSpecificOutput.additionalContext // ""')
+    case "$hijack" in
+      *"적재 배치가 돌고 있다"*)
+        pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "경고" "커밋 메시지를 기동으로 오독하지 않는다" ;;
+      *)
+        fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s\n' "오독" "커밋 메시지를 기동으로 오독하지 않는다" ;;
+    esac
   else
     skipped=$((skipped+1))
     echo "  건너뜀 — 가짜 적재 JVM이 뜨지 않아 분기 B를 재현하지 못했다."
