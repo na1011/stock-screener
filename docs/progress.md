@@ -31,7 +31,6 @@
 **v1 구현은 끝났다. 남은 것은 사람이 값을 채우는 일과 그 뒤의 확인뿐이다** — 목록은 [`TODO.md`](../TODO.md)에 있다(알림 채널 자격증명, Sentry org·project 슬러그, ICANN 인증). 발급 상태는 문서가 아니라 `./gradlew checkEnv`에 묻는다 — 발급은 문서 밖에서 일어나 문서가 먼저 낡는다.
 
 - **앱은 떠 있다**(2026-08-09 11:46 재등록, 밖에서 `UP` 실측). 도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이므로 **코드나 `.env`를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다** — `./gradlew build`만 하면 옛것이 돌고 화면에는 아무 단서가 없다(ADR-0034). 등록이 풀린 상태에서는 `deploy.sh`가 거부하므로 그때만 `ops/install-agent.sh`다.
-- **옛 경로 키의 Claude 상태를 지운다**(`~/.claude/projects/-Users-na1011-Desktop-Study-stock-screener`, 167MB). 저장소 이동 때 새 키로 전수 복사했다. **지우기 전에 `diff -rq`로 새 키(`-Users-na1011-dev-…`)에 `memory/`가 다 있는지 확인하고**, 확인되면 지운 뒤 이 줄도 지운다.
 - **20시 배치가 실제로 당일 종가를 받아오는지는 아직 못 봤다.** data.go.kr의 공개 시각을 실측하지 않았다. 이르면 수집이 0건으로 끝나고 그 경우 알림이 온다 — **거래일마다 오면 시각을 늦춘다**(ADR-0033).
 
 ---
