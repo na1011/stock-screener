@@ -32,6 +32,7 @@
 
 - **앱은 떠 있다**(2026-08-09 11:46 재등록, 밖에서 `UP` 실측). 도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이므로 **코드나 `.env`를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다** — `./gradlew build`만 하면 옛것이 돌고 화면에는 아무 단서가 없다(ADR-0034). 등록이 풀린 상태에서는 `deploy.sh`가 거부하므로 그때만 `ops/install-agent.sh`다.
 - **20시 배치가 실제로 당일 종가를 받아오는지는 아직 못 봤다.** data.go.kr의 공개 시각을 실측하지 않았다. 이르면 수집이 0건으로 끝나고 그 경우 알림이 온다 — **거래일마다 오면 시각을 늦춘다**(ADR-0033).
+- **`harness-*.md` 넷의 발화 확인이 2단계 중 1단계만 끝났다**(glob 매칭은 확인, `/clear` 후 발화는 미확인). `core`의 `paths`가 나머지 셋의 합집합이라 단독으로 뜨는 파일이 없다 — **`/clear` 후 Read 3회**로 넷을 다 본다: `docs/progress.md`(core+docs) → `.claude/hooks/guard-spec.sh`(hooks) → `.claude/rules/test.md`(rules). 이미 뜬 규칙은 다시 안 뜨므로 순서를 지킨다.
 
 ---
 
