@@ -1,8 +1,8 @@
 #!/bin/bash
 # PostToolUse: 셸로 파일을 다뤘을 때 그 파일을 지배하는 `.claude/rules/` 규칙을 알린다.
 #
-# 왜 필요한가 — `paths` 규칙은 **Read·Edit 도구에만** 발화한다. `grep`·`sed`·`cat`으로 같은
-# 파일을 보면 규칙 계층이 통째로 우회되고, **우회됐다는 사실은 어디에도 드러나지 않는다.**
+# 왜 필요한가 — `paths` 규칙은 매칭 파일을 **Read**할 때 뜬다. `grep`·`sed`·`cat`으로 같은
+# 파일을 보거나 고치면 규칙 계층이 통째로 우회되고, **우회됐다는 사실은 어디에도 드러나지 않는다.**
 # 2026-08-09 실측: 한 세션에서 `build.gradle`을 4회, `application.yaml`을 2회 셸로 읽었는데
 # `config.md`가 한 번도 로드되지 않았다. 그 파일에는 "스케줄러 기본 꺼짐" 같은, 앱을 몇 시간
 # 띄워 두는 판단에 직접 걸리는 항목이 있었다.
@@ -63,8 +63,21 @@ already_fired() {
 # 처음에는 첫 `<<`부터 끝까지 버리고 "놓침을 택한다"고 적었는데, 그 타협은 불필요했다 —
 # 공용 함수가 **본문만** 비우고 종료 표시 뒤를 살리므로 `git commit <<MSG … MSG ; grep x
 # build.gradle`을 놓치지 않는다(회귀표가 그 줄을 지킨다).
+script_heredocs=$(heredoc_bodies_of_consumers "$cmd" 'python|python3|node|ruby|perl|sh|bash|zsh' 2>/dev/null || true)
 cmd=$(strip_heredoc_bodies "$cmd")
-[ -z "$cmd" ] && exit 0
+[ -z "$cmd" ] && [ -z "$script_heredocs" ] && exit 0
+
+# 인터프리터가 소비하는 heredoc **본문은 명령이다.** `python3 <<PY … open(path,'w') … PY`가
+# 하네스를 고치는 실제 경로이므로 되살려 함께 훑는다. 커밋 메시지 heredoc은 소비자가 `git`이라
+# 여기 걸리지 않는다 — 오탐의 주범이던 그 경로는 그대로 제외된다.
+#
+# 본문에서는 **따옴표 리터럴만** 토큰으로 뽑는다. 스크립트의 경로는 `open(".claude/x","w")`처럼
+# 괄호·쉼표에 붙어 있어 공백 분리로는 토큰이 되지 않는다. 경로는 사실상 언제나 따옴표 안이다.
+if [ -n "$script_heredocs" ]; then
+  script_tokens=$(printf '%s' "$script_heredocs" \
+    | grep -oE "'[^']*'|\"[^\"]*\"" 2>/dev/null | tr -d "\"'" | tr '\n' ' ' || true)
+  [ -n "$script_tokens" ] && cmd="${cmd}"$'\n'"${script_tokens}"
+fi
 
 # ── 명령을 세그먼트로 쪼갠다 ────────────────────────────────────────────────
 # `git log -- build.gradle && grep x application.yaml` 처럼 잡음 세그먼트와 실제 읽기가
@@ -102,9 +115,12 @@ while IFS= read -r seg; do
   # shellcheck disable=SC2086  # 단어 분리가 의도다
   set -- $seg
   [ $# -eq 0 ] && continue
+  # MUST NOT: 파일을 **쓰는** 부속 명령을 여기 넣지 않는다. `checkout`·`restore`·`apply`·
+  # `rm`·`mv`는 이름만 부르는 것이 아니라 작업 트리를 고친다 — 되돌리기와 패치 적용은
+  # 하네스를 고치는 가장 흔한 형태이고, 제외하면 그 경로가 통째로 침묵한다.
   if [ "$(basename "${1}")" = "git" ] && [ $# -ge 2 ]; then
     case "$2" in
-      add|commit|diff|log|show|checkout|restore|status|rm|mv|stash|blame|apply)
+      add|commit|diff|log|show|status|blame)
         continue ;;
     esac
   fi
@@ -115,12 +131,22 @@ while IFS= read -r seg; do
     tok="${tok%\"}"; tok="${tok#\"}"
     tok="${tok%\'}"; tok="${tok#\'}"
     tok="${tok#"${root}/"}"
+    # `./` 접두어를 벗긴다. glob은 `./` 없이 쓰여 있어 이 한 글자로 매칭이 어긋난다.
+    tok="${tok#./}"
+    # 전역 사본을 저장소 사본과 같은 glob으로 판정한다. `harness.md`가 차단 가드를 고치면
+    # `~/.claude/hooks/`의 사본도 함께 고치라고 요구하므로 같은 규칙이 걸려야 한다.
+    case "$tok" in
+      "$HOME"/.claude/*) tok=".claude/${tok#"$HOME"/.claude/}" ;;
+      '~/.claude/'*)     tok=".claude/${tok#'~/.claude/'}" ;;
+    esac
     case "$tok" in -*|"") continue ;; esac
 
     while IFS=$'\t' read -r rname rglob; do
       [ -z "$rglob" ] && continue
+      # 두 번째 대조는 **디렉터리 토큰**을 위한 것이다. `find .claude/hooks -exec sed …`는
+      # 그 트리의 파일을 고치는데 토큰은 디렉터리 하나뿐이라 파일 glob과 매칭되지 않는다.
       # shellcheck disable=SC2053  # 우변을 따옴표로 감싸면 glob이 아니라 리터럴이 된다
-      if [[ "$tok" == $rglob ]]; then
+      if [[ "$tok" == $rglob ]] || [[ "$rglob" == "$tok"/* ]]; then
         case "$matched" in
           *"|${rname}|"*) ;;
           *) matched="${matched}|${rname}|" ;;
@@ -138,7 +164,7 @@ while IFS= read -r rname; do
   [ -z "$rname" ] && continue
   already_fired "${rname}|shell-touch" && continue
   [ -n "$msg" ] && msg="${msg}"$'\n'
-  msg="${msg}셸로 다룬 파일을 \`.claude/rules/${rname}\`가 지배한다. \`paths\` 규칙은 Read·Edit에만 발화하므로 이 명령으로는 로드되지 않았다 — 그 파일의 함정이 이번 작업에 걸리면 Read로 열어라."
+  msg="${msg}셸로 다룬 파일을 \`.claude/rules/${rname}\`가 지배한다. \`paths\` 규칙은 파일을 Read할 때 뜨므로 이 명령으로는 로드되지 않았다 — 그 파일의 함정이 이번 작업에 걸리면 Read로 열어라."
 done <<< "$(printf '%s' "$matched" | tr '|' '\n' | grep -v '^$' | sort -u || true)"
 
 [ -z "$msg" ] && exit 0

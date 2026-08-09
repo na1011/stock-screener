@@ -97,6 +97,16 @@ check 침묵 "경로 없는 명령"                    "./gradlew build" rule
 check 침묵 "git add 로 이름만 부름"            "git add docs/progress.md" rule
 check 침묵 "커밋 메시지가 경로를 언급"          "$(hd 'git commit -F - <<MSG' 'fix: x' '' 'CLAUDE.md 금지 절에 적었다' 'MSG')" rule
 check 발화 "heredoc 뒤의 실제 셸 읽기"          "$(hd 'git commit -F - <<MSG' 'msg' 'MSG' 'grep -n x build.gradle')" rule
+#
+# 아래는 **셸로 하네스를 고치는** 경로다. 전부 `paths` 규칙이 원리적으로 못 잡는 형태이고,
+# 하나라도 침묵으로 돌아가면 그 경로는 규칙 없이 편집된다.
+check 발화 "./ 접두어로 하네스 편집"            "sed -i '' 's/a/b/' ./.claude/hooks/guard-secrets.sh" rule
+check 발화 "git checkout 으로 되돌리기"          "git checkout HEAD~1 -- .claude/hooks/guard-secrets.sh" rule
+check 발화 "git apply 로 패치"                  "git apply /tmp/p.patch .claude/rules/harness.md" rule
+check 발화 "전역 사본 편집"                     "sed -i '' 's/a/b/' ~/.claude/hooks/guard-secrets.sh" rule
+check 발화 "find -exec 로 트리 일괄 편집"        "find .claude/hooks -name '*.sh' -exec sed -i '' 's/a/b/' {} +" rule
+check 발화 "인터프리터 heredoc 이 파일을 씀"     "$(hd 'python3 - <<PY' "open('.claude/hooks/x.sh','w').write('x')" 'PY')" rule
+check 침묵 "git diff 로 조회"                   "git diff .claude/rules/harness.md" rule
 
 echo "── 거울 드리프트 (check-doc-staleness §5) ──"
 #
