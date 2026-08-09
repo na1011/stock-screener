@@ -55,7 +55,7 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 
 이 저장소의 `CLAUDE.md`와 `.claude/rules/`는 **기획형 하네스**로 설계했다. 아키텍처, 패키지 구조, 레이어 분리, 구현 순서 등 "어떻게 만들 것인가"는 하네스에 규정하지 않는다. 작업 시점의 에이전트가 그때그때 판단하도록 맡긴다. 하네스가 고정하는 것은 "무엇을 향해 가는가" — 판단 기준, 범위의 경계, 반드시 지켜야 할 제약뿐이다.
 
-> **규칙 자체는 [`.claude/rules/harness.md`](.claude/rules/harness.md)에 있고 그 파일이 정본이다.** 이 절은 사람을 위한 **근거와 출처**만 담는다 — 지켜야 할 문장을 여기 적지 않는다. 두 곳에 적으면 반드시 한쪽이 낡는다.
+> **규칙 자체는 [`.claude/rules/harness-core.md`](.claude/rules/harness-core.md)에 있고 그 파일이 정본이다.** 이 절은 사람을 위한 **근거와 출처**만 담는다 — 지켜야 할 문장을 여기 적지 않는다. 두 곳에 적으면 반드시 한쪽이 낡는다.
 
 근거는 아래와 같다.
 
@@ -67,11 +67,11 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 
 - **판단이 개입하는 규칙에는 이유를 함께 적는다.** 자율판단 하네스의 실패 모드는 규정되지 않은 상황에서 표면만 비슷한 다른 판단을 내리는 것이다. 이유를 알면 같은 의도로 새 상황을 판단할 수 있다. Anthropic이 2026년 1월 Claude의 constitution을 개정하며 채택한 원리와 같다 — *"models... need to understand why we want them to behave in certain ways, and we need to explain this to them rather than merely specify what we want them to do. If we want models to exercise good judgment across a wide range of novel situations, they need to be able to generalize—to apply broad principles rather than mechanically following specific rules."* ([Claude's new constitution](https://anthropic.com/news/claude-new-constitution), 2023년판의 "list of standalone principles"에서 의도적으로 전환한 것이다.)
 
-  다만 근거의 강도를 정확히 밝혀둔다. 이는 **벤더가 자사 모델 설계에 채택한 원리이자 실사용 경험과 부합하는 것**이지, 통제 실험으로 증명된 것이 아니다. 규칙 집합을 고정하고 이유 문장만 넣고 뺀 비교 연구는 찾지 못했다. 반대로 지시가 길어질수록 준수율이 떨어진다는 결과들이 있으나, 그 실험들은 서로 다른 새 제약을 추가한 것이지 기존 규칙에 설명을 덧붙인 것이 아니어서 그대로 전이되지는 않는다. 이 불확실성이 `harness.md`가 이유의 사용 범위를 좁힌 까닭이다.
+  다만 근거의 강도를 정확히 밝혀둔다. 이는 **벤더가 자사 모델 설계에 채택한 원리이자 실사용 경험과 부합하는 것**이지, 통제 실험으로 증명된 것이 아니다. 규칙 집합을 고정하고 이유 문장만 넣고 뺀 비교 연구는 찾지 못했다. 반대로 지시가 길어질수록 준수율이 떨어진다는 결과들이 있으나, 그 실험들은 서로 다른 새 제약을 추가한 것이지 기존 규칙에 설명을 덧붙인 것이 아니어서 그대로 전이되지는 않는다. 이 불확실성이 `harness-core.md`가 이유의 사용 범위를 좁힌 까닭이다.
 
 - **되돌리기 어려운 결정은 자율성의 대가로 기록한다.** 아키텍처 자율을 주는 대신, 새 의존성·저장 구조·외부 연동처럼 되돌리기 어려운 판단은 `docs/adr/`에 남긴다. 허가를 구하지 않고 결정한 뒤 기록하는 방식이다.
 
-- **`CLAUDE.md` 작성 기준의 출처는 [공식 작성 가이드](https://code.claude.com/docs/en/best-practices)다.** 분량·선별·강조 규칙은 `harness.md`에 있다.
+- **`CLAUDE.md` 작성 기준의 출처는 [공식 작성 가이드](https://code.claude.com/docs/en/best-practices)다.** 선별·강조 규칙은 `harness-core.md`, 분량 상한은 `harness-docs.md`에 있다.
 
 phase 분할·구체적 아키텍처 설계는 이 하네스의 범위가 아니며, 별도의 설계 세션에서 다룬다.
 
@@ -85,7 +85,7 @@ phase 분할·구체적 아키텍처 설계는 이 하네스의 범위가 아니
 
 ## 무엇을 어디에 둘 것인가 — 기제는 트리거로 고른다
 
-**규칙 자체는 [`.claude/rules/harness.md`](.claude/rules/harness.md)에 있다** — 배치표, 강제, 확인 절차 전부. 하네스 파일을 열면 자동으로 뜨므로 여기 옮겨 적지 않는다. 이 절에는 그 규칙이 **어떻게 나왔는지**만 남긴다. 결론을 바꾸려는 게 아니면 읽을 필요 없다.
+**규칙 자체는 `.claude/rules/`의 `harness-*.md` 넷에 있다** — 배치표는 [`harness-core.md`](.claude/rules/harness-core.md), 훅의 강제 수단은 [`harness-hooks.md`](.claude/rules/harness-hooks.md), `paths` 확인 절차는 [`harness-rules.md`](.claude/rules/harness-rules.md), 지시문·상태 문서 기준은 [`harness-docs.md`](.claude/rules/harness-docs.md)다. 하네스 파일을 열면 자동으로 뜨므로 여기 옮겨 적지 않는다. 이 절에는 그 규칙이 **어떻게 나왔는지**만 남긴다. 결론을 바꾸려는 게 아니면 읽을 필요 없다.
 
 주입 상한을 반복해서 넘긴 끝에 내용을 glob 규칙으로 내렸고, 그때 "이럴 바엔 skill이 낫지 않은가"라는 질문이 나왔다. 전수 감사 결과는 반대였다 — glob이 비용(매칭 안 되면 0토큰)과 신뢰도(모델 판단이 아니라 기계적 조건에 발화) 양쪽에서 이겼다. 문제는 기제가 아니라 glob이 *주제*로 쓰인 것이었다: `application.yaml`을 지키는 규칙이 `src/main/java/**`에, `build.gradle`을 지키는 규칙이 `src/test/**`에 붙어 있었다. 고칠 파일이 아니라 안 고칠 파일에 규칙이 있었다.
 
@@ -93,23 +93,23 @@ phase 분할·구체적 아키텍처 설계는 이 하네스의 범위가 아니
 
 ### 실측 — 규칙 집합은 세션 시작에 확정되고, 그 경계는 `/clear`다
 
-셋을 카나리로 확인했다. 셋 다 절차 형태로는 `harness.md`에 있고, 여기에는 어떻게 알아냈는지만 남긴다.
+셋을 카나리로 확인했다. 셋 다 절차 형태로는 `harness-rules.md`에 있고, 여기에는 어떻게 알아냈는지만 남긴다.
 
 **첫째, 세션 중간에 만든 규칙 파일은 매칭 파일을 열어도 그 세션에서 발화하지 않는다.** 한 세션에서 만들어진 `test.md`가 같은 세션 내내 로드되지 않았고 아무도 몰랐다.
 
 **둘째, 갱신 경계는 새 프로세스가 아니라 `/clear`다**(2026-08-07). 직전 세션이 만든 카나리 규칙 두 개(`**/*.sql`·`src/main/java/**`)가 `/clear` 직후 매칭 파일을 Read하자 즉시 발화했고, `settings.json`에 아무것도 등록하지 않았는데 인식됐다. `SessionStart` matcher가 `startup|resume|clear`인 것과 일치한다. **둘째가 첫째의 대가를 없앤다** — 규칙을 고친 세션이 `/clear` 한 번으로 스스로 검증할 수 있고, 확인이 다음 세션까지 미뤄지지 않는다.
 
-**셋째, 재주입 여부는 관측이 갈렸다.** 2026-08-07에는 `config.md`가 `build.gradle`에서 뜬 뒤 같은 `paths`의 `frontend/vite.config.ts`에서 다시 뜨지 않아 "세션당 1회"로 읽혔다. 그런데 2026-08-09에는 `harness.md`가 한 세션에 **두 번** 떴다(`docs/progress.md`·`.claude/rules/test.md`). 무엇이 둘을 가르는지 모른다.
+**셋째, 재주입 여부는 관측이 갈렸다.** 2026-08-07에는 `config.md`가 `build.gradle`에서 뜬 뒤 같은 `paths`의 `frontend/vite.config.ts`에서 다시 뜨지 않아 "세션당 1회"로 읽혔다. 그런데 2026-08-09에는 당시 단일 파일이던 하네스 규칙이 한 세션에 **두 번** 떴다(`docs/progress.md`·`.claude/rules/test.md`). 무엇이 둘을 가르는지 모른다.
 
 셋 다 관측이 얕다. `/clear`보다 얕은 경계(턴 단위 지연 로드 등)가 있는지는 확인하지 않았다. **확인을 밟지 않았으면 "적었으니 걸린다"고 가정하지 않는다.**
 
 ### 규칙에는 규칙만 둔다 (2026-08-07)
 
-정본을 `harness.md`로 옮긴 것이 이 감사의 결과다. 그전까지는 근거가 이 문서에, 강제가 `harness.md`에 있었다.
+정본을 규칙 파일로 옮긴 것이 이 감사의 결과다(당시에는 단일 파일이었고, 뒤에 트리거 단위로 `harness-*.md` 넷으로 갈렸다). 그전까지는 근거가 이 문서에, 강제가 규칙 파일에 있었다.
 
-그 배치는 **`harness.md`가 제약에 대해 금지한 것과 같은 형태**였다. README는 자동 로드되지 않아 에이전트가 스스로 "읽어야겠다"고 판단해야 도달하는데, MUST를 뒤집으려는 세션은 자기가 근거를 모른다는 것을 모른다 — 제약을 skill에 두면 안 되는 이유와 정확히 같다. 게다가 근거의 발화 조건("뒤집으려 할 때만")은 `harness.md`의 `paths`(`CLAUDE.md`·`README.md`·`.claude/**`·`docs/progress.md`)와 **이미 일치하고 있었다.** 문서만 둘로 갈려 있었고, 그 결과 두 문서가 약 3,000자를 서로 복사하고 있었다.
+그 배치는 **규칙 파일이 제약에 대해 금지한 것과 같은 형태**였다. README는 자동 로드되지 않아 에이전트가 스스로 "읽어야겠다"고 판단해야 도달하는데, MUST를 뒤집으려는 세션은 자기가 근거를 모른다는 것을 모른다 — 제약을 skill에 두면 안 되는 이유와 정확히 같다(`harness-core.md`). 게다가 근거의 발화 조건("뒤집으려 할 때만")은 그 규칙의 `paths`와 **이미 일치하고 있었다** — 지금 `harness-core.md`가 `CLAUDE.md`·`README.md`·`.claude/rules/**`·`.claude/hooks/**`·`.claude/skills/**`·`.claude/settings.json`·`docs/progress.md`를 덮는 것이 그것이다. 문서만 둘로 갈려 있었고, 그 결과 두 문서가 약 3,000자를 서로 복사하고 있었다.
 
-대가는 규칙 파일로도 샜다. 감사해 보니 `.claude/rules/` 5개 파일 10군데에 "어디서 옮겨 왔다", "트리거가 X라서 여기 뒀다" 같은 이력이 붙어 있었다 — 같은 문장이 세 파일에 한 글자도 다르지 않게 반복되기도 했다. **근거를 밖으로 내보내니 규칙마다 조금씩 새어 들어온 것이다.** 증상을 걷고, 재발을 막는 금지를 `harness.md`에 명시했다.
+대가는 규칙 파일로도 샜다. 감사해 보니 `.claude/rules/` 5개 파일 10군데에 "어디서 옮겨 왔다", "트리거가 X라서 여기 뒀다" 같은 이력이 붙어 있었다 — 같은 문장이 세 파일에 한 글자도 다르지 않게 반복되기도 했다. **근거를 밖으로 내보내니 규칙마다 조금씩 새어 들어온 것이다.** 증상을 걷고, 재발을 막는 금지를 `harness-core.md`에 명시했다.
 
 ## hook — 차단과 알림
 
@@ -143,7 +143,7 @@ phase 분할·구체적 아키텍처 설계는 이 하네스의 범위가 아니
 
 `warn-bootstrap-args.sh`만 트리거가 파일이 아니라 **argv의 모양**이다. 적재는 어떤 파일도 열지 않는 Bash 작업이라 `paths` glob으로는 원리적으로 표현할 수 없고, 그래서 이 함정만 hook에 있다. 나머지 절차는 `batch-load` skill에 있다.
 
-알림 계층을 차단이 아닌 상기로 둔 이유는, 기록 여부와 시점의 판단까지 에이전트에게 남기기 위해서다. 어느 이벤트가 차단할 수 있고 없는지는 `harness.md`에 있다.
+알림 계층을 차단이 아닌 상기로 둔 이유는, 기록 여부와 시점의 판단까지 에이전트에게 남기기 위해서다. 어느 이벤트가 차단할 수 있고 없는지는 `harness-hooks.md`에 있다.
 
 ## 세션 간 핸드오프
 
@@ -166,8 +166,8 @@ phase마다 세션이 나뉘면 새 세션은 이전 세션이 무엇을 했는�
 
 모든 스크립트는 매칭되지 않으면 통과시킨다. hook이 워크플로우를 막지 않는다는 것이 설계 원칙이고, `jq`가 없는 환경에서도 차단 대신 통과를 선택한다.
 
-**다만 "통과"가 "침묵"은 아니다.** 매칭되지 않은 것은 판정 결과이므로 조용히 통과하지만, **판정 자체를 못 한 것**(의존성 부재 등)은 드러낸다 — 그러지 않으면 가드가 죽은 것이 성공과 구분되지 않고, 안전을 전부 훅에 건 이 설계가 소리 없이 무너진다. 드러내는 수단은 이벤트가 정한다(`SessionStart`는 평문 stdout, 도구 호출 훅은 stderr + `exit 1`). 매 호출 훅은 의존성 부재를 `check-doc-staleness.sh`에 위임해 조용히 통과하되, **위임은 보고자가 그것을 실제로 세고 있을 때만 성립한다.** 규칙 전문과 경계는 [`.claude/rules/harness.md`](.claude/rules/harness.md)에 있다.
+**다만 "통과"가 "침묵"은 아니다.** 매칭되지 않은 것은 판정 결과이므로 조용히 통과하지만, **판정 자체를 못 한 것**(의존성 부재 등)은 드러낸다 — 그러지 않으면 가드가 죽은 것이 성공과 구분되지 않고, 안전을 전부 훅에 건 이 설계가 소리 없이 무너진다. 드러내는 수단은 이벤트가 정한다(`SessionStart`는 평문 stdout, 도구 호출 훅은 stderr + `exit 1`). 매 호출 훅은 의존성 부재를 `check-doc-staleness.sh`에 위임해 조용히 통과하되, **위임은 보고자가 그것을 실제로 세고 있을 때만 성립한다.** 규칙 전문과 경계는 [`.claude/rules/harness-hooks.md`](.claude/rules/harness-hooks.md)에 있다.
 
 ## 지시문 작성 스타일
 
-규칙 문장에 `MUST:` / `MUST NOT:` 접두어를 붙여 강도를 명시한다. 모호한 산문 대신 검증 가능한 단정을 주면 에이전트가 요약하지 않고 문자 그대로 따른다. **지켜야 할 규칙 자체는 [`.claude/rules/harness.md`](.claude/rules/harness.md)에 있다.**
+규칙 문장에 `MUST:` / `MUST NOT:` 접두어를 붙여 강도를 명시한다. 모호한 산문 대신 검증 가능한 단정을 주면 에이전트가 요약하지 않고 문자 그대로 따른다. **지켜야 할 규칙 자체는 [`.claude/rules/harness-core.md`](.claude/rules/harness-core.md)에 있다.**

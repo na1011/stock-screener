@@ -1,6 +1,6 @@
 #!/bin/bash
 # SessionStart guard: 문서의 시점 의존적 주장과 실제 상태(코드 또는 다른 정본)를 대조해
-# 불일치만 보고한다. 루트의 사람용 문서는 대조 대상이 아니다(`.claude/rules/harness.md`).
+# 불일치만 보고한다. 루트의 사람용 문서는 대조 대상이 아니다(`.claude/rules/harness-docs.md`).
 # 차단하지 않는다. 불일치가 없으면 아무것도 출력하지 않고 조용히 통과한다.
 set -euo pipefail
 
@@ -29,15 +29,21 @@ cd "$root" 2>/dev/null || {
 findings=""
 add() { findings="${findings}- $1"$'\n'; }
 
-# 0. Bash 훅 공용 파일이 있는가
+# 0. 훅이 source하는 공용 파일이 전부 있는가
 #
-# `guard-destructive.sh`·`warn-bootstrap-args.sh`·`remind-rule-on-shell.sh`가 이 파일을
-# source한다. 없으면 `set -e`에서 셋 다 죽는다 — 죽은 훅은 Bash 호출마다 stderr를 내므로
-# 침묵은 아니지만, **파괴적 명령 차단이 사라진 상태**라 세션 시작에 한 번 못 박아 둔다.
+# 없으면 그것을 source하는 훅이 `set -e`에서 죽는다. 죽은 훅은 Bash 호출마다 stderr를 내므로
+# 침묵은 아니지만, **파괴적 명령 차단이 사라진 상태**일 수 있어 세션 시작에 한 번 못 박는다.
 # jq 부재를 위에서 중앙 경보로 다루는 것과 같은 이유다.
-if [ ! -r .claude/hooks/lib/bash-text.sh ]; then
-  add "\`.claude/hooks/lib/bash-text.sh\`가 없다. Bash 훅 셋이 이것을 source하므로 지금 파괴적 명령 차단(rm -rf·force push·DROP TABLE)과 시크릿 읽기 확인이 모두 죽어 있다. 복구 전에는 그 명령들을 직접 검토해라."
-fi
+#
+# 이름을 하드코딩하지 않고 실제 `source` 줄에서 읽는다. 목록으로 두면 lib이 늘 때마다
+# 따라가야 하고, 따라가지 못한 목록은 "덮여 있다"고 믿게 만든다. 죽는 훅을 **이름으로**
+# 세지 않고 개수만 세는 것도 같은 이유다.
+while IFS= read -r libname; do
+  [ -z "$libname" ] && continue
+  [ -r ".claude/hooks/lib/${libname}" ] && continue
+  users=$(grep -rlE "(^|[[:space:]])(\.|source)[[:space:]]+\"[^\"]*/lib/${libname}\"" .claude/hooks --include='*.sh' 2>/dev/null | grep -c . || true)
+  add "\`.claude/hooks/lib/${libname}\`가 없다. 훅 ${users}개가 이것을 source하므로 지금 그만큼이 죽어 있다 — 어느 것인지는 \`.claude/settings.json\`의 등록 목록과 대조해라. 파괴적 명령 차단이나 시크릿 확인이 섞여 있으면 복구 전에는 그 명령들을 직접 검토해야 한다."
+done <<< "$(grep -rhoE '(^|[[:space:]])(\.|source)[[:space:]]+"[^"]*/lib/[A-Za-z0-9_.-]+\.sh"' .claude/hooks --include='*.sh' 2>/dev/null | grep -oE '[A-Za-z0-9_-]+\.sh' | sort -u || true)"
 
 # 1. progress.md가 주입 상한을 넘겨 세션 시작 주입이 잘리는가
 #
@@ -88,8 +94,8 @@ fi
 #
 # 절대 예산선을 쓰지 않는다 — 규칙 주입의 크기 상한이 측정된 적이 없어 어떤 숫자도 근거가
 # 없고, 근거 없는 경고선은 오탐이 되며 오탐이 반복되면 이 검사 자체가 무시된다.
-# 대신 실제로 일어난 병의 형태를 그대로 잡는다: `harness.md`는 11커밋 내내 순증가였고
-# 감소 커밋이 0회였다. 그동안 아무도 그것을 알리지 않았다.
+# 대신 실제로 일어난 병의 형태를 그대로 잡는다: 넷으로 갈리기 전의 단일 하네스 규칙 파일이
+# 11커밋 내내 순증가였고 감소 커밋이 0회였다. 그동안 아무도 그것을 알리지 않았다.
 #
 # 줄이 아니라 **문자**로 센다. 한글 산문은 줄 수가 유지된 채 문장만 줄어드는 편집이 흔해
 # `--numstat`의 줄 기준으로는 감소가 보이지 않는다(§1이 `wc -m`을 쓰는 것과 같은 이유).
@@ -146,7 +152,7 @@ fi
 # 2. 프론트엔드 부재 주장 vs 실제
 if [ -d frontend ] || [ -d src/main/frontend ] || [ -d src/main/resources/static/src ] \
    || [ -n "$(find . -name '*.vue' -not -path './.git/*' -not -path './build/*' -print -quit 2>/dev/null)" ]; then
-  # 루트의 사람용 문서는 보지 않는다 — 이 훅의 대조 대상이 아니다(`harness.md`).
+  # 루트의 사람용 문서는 보지 않는다 — 이 훅의 대조 대상이 아니다(`harness-docs.md`).
   if grep -qsE '프론트엔드 (디렉터리|디렉토리)?( 없|.*아직)' docs/progress.md; then
     add "진행 상태가 프론트엔드 부재를 주장하지만 실제 프론트엔드 파일·디렉터리가 있다."
   fi
@@ -269,6 +275,58 @@ while IFS='|' read -r pat fa fb label; do
     add "${label}이 ${fa}와 ${fb}에서 갈렸다 — 거울은 어긋나도 아무 데서도 티가 나지 않는다. 두 문장을 다시 같게 맞춰라."
   fi
 done <<< "$mirrors"
+
+# 6. 산문이 가리키는 하네스 파일이 실제로 있는가
+#
+# §4와 방향이 반대다. §4는 frontmatter의 glob이 파일을 잡는지 보고(그 파서는 리스트가
+# 끝나면 즉시 멈춰 본문을 한 줄도 읽지 않는다), 여기는 **본문이 부르는 이름이 실재하는지**
+# 본다. 규칙 파일 하나가 넷으로 갈렸을 때 참조 21곳이 따라가지 못한 채 남았고, 어떤 검사도
+# 그것을 보지 않았다.
+#
+# **완전 경로만 보면 안 된다.** 그 21곳 중 11곳이 역따옴표로 감싼 파일명 단독이었다. 절반만
+# 보는 검사는 나머지 절반을 "덮여 있다"고 믿게 만든다 — 이 훅이 잡으려는 병과 같은 병이다.
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  # 외부 패키지의 표준 파일명. 저장소에 없는 것이 정상이라 이름으로 거른다. 늘어나면
+  # 여기 더한다 — 이 목록이 낡으면 오탐이 늘어 눈에 띄므로 조용히 무너지지 않는다.
+  external='LICENSE.md|LICENCE.md|CHANGELOG.md|NOTICE.md|CONTRIBUTING.md'
+
+  resolve_name() {  # 파일명 단독 참조가 어디엔가 있는가
+    local d
+    for d in .claude/rules .claude/hooks .claude/hooks/lib .claude/skills ops docs docs/adr .; do
+      [ -e "$d/$1" ] && return 0
+    done
+    return 1
+  }
+
+  dead_refs=""
+  note_dead() {
+    case " $dead_refs " in *" $1 "*) ;; *) dead_refs="${dead_refs}$1 " ;; esac
+  }
+
+  # 회귀표는 제외한다. 픽스처가 new-rule.md 처럼 **존재하지 않는 것이 의미인** 이름을
+  # 일부러 쓴다. 알려진 사각이고, 그래서 그 파일의 참조는 이 검사가 보증하지 않는다.
+  #
+  # 이 검사는 "이름을 부르는 것"과 "예시로 인용하는 것"을 가르지 못한다. 실재하지 않는
+  # 이름을 예로 들 때는 **역따옴표를 씌우지 않는다** — 씌우면 여기 걸린다(이 주석이 그렇게
+  # 걸렸다). 가짜 이름에 강조가 필요할 만큼 중요하면 그것은 대개 진짜 참조다.
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    [ -f "$f" ] || continue
+    while IFS= read -r ref; do
+      [ -z "$ref" ] && continue
+      [ -e "$ref" ] || note_dead "${ref}"
+    done <<< "$(grep -ohE '(\.claude/[A-Za-z0-9_./-]+\.(md|sh)|docs/adr/[A-Za-z0-9_.-]+\.md|ops/[A-Za-z0-9_.-]+\.sh)' "$f" 2>/dev/null | sort -u || true)"
+    while IFS= read -r base; do
+      [ -z "$base" ] && continue
+      printf '%s' "$base" | grep -qE "^(${external})$" && continue
+      resolve_name "$base" || note_dead "${base}"
+    done <<< "$(grep -ohE '`[A-Za-z0-9_.-]+\.(md|sh)`' "$f" 2>/dev/null | tr -d '`' | sort -u || true)"
+  done <<< "$(git ls-files '*.md' '*.sh' 2>/dev/null | grep -v '^\.claude/hooks/lib/regression\.sh$' || true)"
+
+  if [ -n "$dead_refs" ]; then
+    add "산문이 가리키는데 실재하지 않는 파일이 있다: ${dead_refs}— 이름이 바뀌거나 갈렸는데 참조가 안 따라간 것이다. \`grep -rn\`으로 부르는 곳을 전부 찾아 지금 파일로 바꿔라. 죽은 포인터는 다음 세션이 \"그 파일에 있다\"고 믿게 만든다."
+  fi
+fi
 
 [ -z "$findings" ] && exit 0
 

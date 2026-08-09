@@ -178,11 +178,11 @@ check 발화 "heredoc 뒤의 실제 셸 읽기"          "$(hd 'git commit -F - 
 # 하나라도 침묵으로 돌아가면 그 경로는 규칙 없이 편집된다.
 check 발화 "./ 접두어로 하네스 편집"            "sed -i '' 's/a/b/' ./.claude/hooks/guard-secrets.sh" rule
 check 발화 "git checkout 으로 되돌리기"          "git checkout HEAD~1 -- .claude/hooks/guard-secrets.sh" rule
-check 발화 "git apply 로 패치"                  "git apply /tmp/p.patch .claude/rules/harness.md" rule
+check 발화 "git apply 로 패치"                  "git apply /tmp/p.patch .claude/rules/harness-core.md" rule
 check 발화 "전역 사본 편집"                     "sed -i '' 's/a/b/' ~/.claude/hooks/guard-secrets.sh" rule
 check 발화 "find -exec 로 트리 일괄 편집"        "find .claude/hooks -name '*.sh' -exec sed -i '' 's/a/b/' {} +" rule
 check 발화 "인터프리터 heredoc 이 파일을 씀"     "$(hd 'python3 - <<PY' "open('.claude/hooks/x.sh','w').write('x')" 'PY')" rule
-check 침묵 "git diff 로 조회"                   "git diff .claude/rules/harness.md" rule
+check 침묵 "git diff 로 조회"                   "git diff .claude/rules/harness-core.md" rule
 
 echo "── 읽지 않고 편집한 경로 (Write 구멍) ──"
 #
@@ -232,6 +232,40 @@ check_mirror 발화 "사본이 한쪽에서 사라지면 잡는다" \
 # 바뀌면 적재 창 안에서 무엇을 돌려도 되는지에 대한 답이 둘로 갈린다.
 check_mirror 발화 "적재 창의 gradle 예외가 갈리면 잡는다" \
   ".claude/skills/batch-load/SKILL.md" 's/gradlew checkDuplicateFiles/gradlew checkDupes/'
+
+echo "── 죽은 하네스 참조 (check-doc-staleness §6) ──"
+#
+# 최소 git 트리를 만들어 거기서 돌린다. 저장소 자체를 비틀면 되돌리기를 잊고, 그러면 다음
+# 세션이 깨진 참조를 정상으로 믿는다(거울 픽스처와 같은 이유).
+# $1 기대(발화/침묵), $2 설명, $3 CLAUDE.md에 넣을 참조 문장
+check_deadref() {
+  local want="$1" desc="$2" line="$3" tmp got
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/rules" "$tmp/.claude/hooks/lib" "$tmp/docs"
+  printf 'x\n' > "$tmp/.claude/hooks/lib/bash-text.sh"
+  printf '# rules\n' > "$tmp/.claude/rules/harness-core.md"
+  printf '# progress\n' > "$tmp/docs/progress.md"
+  printf '%s\n' "$line" > "$tmp/CLAUDE.md"
+  ( cd "$tmp" && git init -q . && git add -A >/dev/null 2>&1 )
+  if CLAUDE_PROJECT_DIR="$tmp" "$HOOKS/check-doc-staleness.sh" </dev/null 2>/dev/null \
+     | jq -r '.hookSpecificOutput.additionalContext // empty' | grep -q '산문이 가리키는데'; then
+    got="발화"
+  else
+    got="침묵"
+  fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+check_deadref 발화 "죽은 완전 경로를 잡는다"        '규칙은 `.claude/rules/harness.md`에 있다.'
+# 21곳 중 11곳이 이 형태였다. 완전 경로만 보면 절반이 초록으로 덮인다.
+check_deadref 발화 "역따옴표 안 파일명 단독도 잡는다" '분량 규칙은 `harness.md`에 있다.'
+check_deadref 침묵 "실재하는 참조는 조용하다"       '규칙은 `.claude/rules/harness-core.md`에 있다.'
+check_deadref 침묵 "외부 패키지 표준 파일명은 거른다" 'PrimeVue의 `LICENSE.md`를 본다.'
 
 echo
 printf '통과 %d / 실패 %d / 건너뜀 %d\n' "$pass" "$fail" "$skipped"

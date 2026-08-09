@@ -8,7 +8,7 @@
 # 차단하지 않는다. 다만 **조용히 실패하지도 않는다** — 주입이 죽으면 다음 세션이 눈먼 채
 # 시작하는데, 그것이 이 훅이 막으려던 바로 그 상태다. 실패는 평문 stdout으로 알린다
 # (`SessionStart`의 평문 stdout은 그대로 컨텍스트가 되고 jq가 필요 없다).
-# 수단을 이벤트별로 가르는 근거는 `.claude/rules/harness.md`에 있다.
+# 수단을 이벤트별로 가르는 근거는 `.claude/rules/harness-hooks.md`에 있다.
 set -euo pipefail
 
 # 실패를 알리고 나간다. 종료코드가 아니라 이 문구가 신호다.

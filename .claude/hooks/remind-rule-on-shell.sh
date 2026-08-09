@@ -133,7 +133,7 @@ while IFS= read -r seg; do
     tok="${tok#"${root}/"}"
     # `./` 접두어를 벗긴다. glob은 `./` 없이 쓰여 있어 이 한 글자로 매칭이 어긋난다.
     tok="${tok#./}"
-    # 전역 사본을 저장소 사본과 같은 glob으로 판정한다. `harness.md`가 차단 가드를 고치면
+    # 전역 사본을 저장소 사본과 같은 glob으로 판정한다. `harness-hooks.md`가 차단 가드를 고치면
     # `~/.claude/hooks/`의 사본도 함께 고치라고 요구하므로 같은 규칙이 걸려야 한다.
     case "$tok" in
       "$HOME"/.claude/*) tok=".claude/${tok#"$HOME"/.claude/}" ;;
