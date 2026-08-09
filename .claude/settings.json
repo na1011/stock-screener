@@ -10,6 +10,17 @@
       "Edit(./**/secrets/**)"
     ]
   },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "이 저장소의 Gradle 태스크 중 clean, build, test, check, frontendTest, checkDuplicateFiles, checkEnv, dependencies, bootRun 을 허용한다. bootRun --args 로 넘기는 배치 잡 실행도 포함하되, datasource가 localhost를 가리키고 프로파일이 bootstrap 또는 test 일 때에 한한다"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "./gradlew liveTest 를 사용자 지시 없이 실행하지 않는다. 실제 외부 API를 호출해 일일 쿼터를 태우고, 그 쿼터는 그날 안에 회복되지 않는다. 무엇이 깨졌는지 확인하려면 먼저 ./gradlew test 와 로그를 본다",
+      "ops/ 의 배포·설치 스크립트를 사용자 지시 없이 실행하지 않는다. 도는 앱의 산출물을 교체하는 동작이라 되돌리려면 다시 배포해야 하고, 그 사이 외부에서 접속하는 사람에게 보이는 것이 바뀐다"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
