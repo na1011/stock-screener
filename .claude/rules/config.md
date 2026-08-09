@@ -17,6 +17,10 @@ paths:
 ## `build.gradle`
 
 - **MUST NOT: `.env`를 `test` 태스크에 주입하지 않는다.** 실키가 있으면 `@ConditionalOnApiKey` 어댑터가 등록돼 **빈 구성 자체가 바뀐다.** 단위 테스트는 외부 호출 0건이 전제다. `.env`는 `bootRun`·`liveTest`에만 들어가고, 실제 외부 호출은 `@Tag("live")` + `./gradlew liveTest`에만 둔다. 주입 실패는 조용하므로 `./gradlew checkEnv`로 가른다.
+
+- **`.env`를 애플리케이션에 싣는 것은 이 파일이다.** Spring Boot는 `.env`를 읽지 않고 dotenv 의존성도 없다 — `loadDotEnv`/`applyDotEnv`가 직접 읽어 주입한다. **MUST NOT: dotenv 의존성을 추가하지 않는다.** 두 경로가 생기면 어느 쪽이 이겼는지 증상으로 구분되지 않는다.
+  - **실제 셸 환경변수가 `.env`를 이긴다.** 일회성 오버라이드를 파일 수정 없이 하기 위해서다.
+  - **IDE에서 직접 실행하면 이 주입이 걸리지 않는다.** `./gradlew bootRun`을 쓰거나 IDE 실행 구성에 환경변수를 따로 넣어야 한다. 안 넣어도 애플리케이션은 정상 기동하고 브라우저 로그인만 안 되므로, 증상이 "코드 버그"처럼 보인다.
 - **IMPORTANT — Sentry 아티팩트는 이름이 넷이고 고르는 순간 갈린다.** Boot 4용은 **`io.sentry:sentry-spring-boot-4-starter`** 하나다(`-jakarta`는 Boot **3**용, 접미사 없는 것은 Boot 2용). Boot 3용을 고르면 DSN이 실린 채 기동할 때 `SentrySpringVersionChecker`가 `!Incompatible Spring Boot Version detected!`를 찍은 뒤 `ClassNotFoundException: org.springframework.boot.web.client.RestClientCustomizer`로 컨텍스트가 죽는다(2026-08-08 실측). **Boot 4에서 Sentry가 안 되는 것이 아니라 아티팩트를 잘못 고른 것이었다** — Boot 4판은 실 DSN으로 정상 기동한다(2026-08-09 실측). 근거는 ADR-0030.
 
 - **MUST NOT: `.env`가 `test`에 없다는 이유로 "프로퍼티가 있어야 켜지는 자동설정"을 검증 없이 두지 않는다.** 이것이 위 사고의 진짜 원인이다. `@ConditionalOnProperty`가 걸린 가지는 그 값이 없는 테스트에서 **평가조차 되지 않아**, 435건이 전부 초록인데 앱이 못 뜬다. 처방은 `.env` 주입이 아니라 **형식만 유효한 가짜 값을 `@SpringBootTest(properties = …)`로 주는 것**이다. `SentryAutoConfigurationSmokeTest`(`sentry.dsn`)와 `SchedulerEnabledContextTest`(`pipeline.scheduler.enabled`)가 그 형태다. **둘 다 실제로 결함을 하나씩 잡았다.**

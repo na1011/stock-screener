@@ -24,7 +24,6 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 | [`docs/phase-criteria.md`](docs/phase-criteria.md) | phase 완료 판정 — 착수 전에 먼저 적는다 | 오래감 | 사람 + 에이전트 |
 | [`docs/adr/`](docs/adr/) | spec 확정 이후의 새 기술 결정 기록 | 오래감 | 사람 + 에이전트 |
 | [`docs/progress.md`](docs/progress.md) | 진행 상태 — 어디까지 왔는가 | 매 세션 변함 | 사람 + 에이전트 |
-| [`docs/external-credentials.md`](docs/external-credentials.md) | 사용자가 직접 발급해야 하는 외부 키·계정 목록 | 발급 시 갱신 | 사람 |
 | [`TODO.md`](TODO.md) | 에이전트가 대신할 수 없는 작업 — 수동 검증·외부 발급·계정 권한 | 끝내면 지움 | 사람 |
 | [`CLAUDE.md`](CLAUDE.md) | 에이전트 지시문 — 명령어·설계 제약·금지 사항 | 오래감 | 에이전트 전용 |
 | [`.claude/rules/`](.claude/rules/) | 영역별(백엔드/프론트/데이터) 판단 기준 — `paths` glob으로 그 파일을 다룰 때만 로드 | 오래감 | 에이전트 전용 |

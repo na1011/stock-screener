@@ -14,7 +14,7 @@ applies_to:
 
 Phase 2를 **코스피200·코스닥150만으로 완성**하고, S&P500은 v1.1로 미룬다. spec §7이 지정한 미국 시세 소스가 실제로 막혀 있고, 대안이 전부 무료 티어 제약이나 ToS 문제를 갖기 때문이다.
 
-> 이것은 spec §7·§9의 전제를 뒤집는 판단이었다. **사용자가 2026-08-06에 승인해 spec §1·§3·§7·§9·§10·§11이 수정되었다.** 경위는 `docs/spec-change-proposal.md`에 남아 있다.
+> 이것은 spec §7·§9의 전제를 뒤집는 판단이었다. **사용자가 2026-08-06에 승인해 spec §1·§3·§7·§9·§10·§11이 수정되었다.**
 
 ## 규칙
 
@@ -45,7 +45,7 @@ psql -d stock_screener -c "SELECT code FROM universe ORDER BY code"
 2026-08-06 실측으로 확인한 것들이다.
 
 - **Finnhub `/stock/candle` → HTTP 403** (`{"error":"You don't have access to this resource."}`). 무료 티어에서 과거 OHLC가 막혔다. spec §7의 "미국 시세 및 재무 데이터는 Finnhub를 통해 확보한다" 중 **시세 부분이 성립하지 않는다.**
-- **Finnhub `/stock/financials-reported` → HTTP 200.** 재무는 무료로 살아 있고 `bs`/`ic`/`cf`가 `{concept, unit, label, value}` 배열로 온다. 즉 **재무만으로는 진행할 수 있으나 시세가 없다.**
+- **Finnhub `/stock/financials-reported` → HTTP 200.** 재무는 무료로 살아 있고 `bs`/`ic`/`cf`가 `{concept, unit, label, value}` 배열로 온다. 즉 **재무만으로는 진행할 수 있으나 시세가 없다.** 무료 티어의 호출 한도는 **분당 60회 수준**이라, v1.1에서 500종목 재무를 적재하려면 그 전제 위에 배치를 설계해야 한다.
 - **Stooq → JS proof-of-work 챌린지.** 다수 자료가 여전히 추천하지만 스크립트로 접근할 수 없다.
 - **SEC EDGAR → 정상**(키 불필요, 10,398종목). 미국 재무의 최선이지만 **OHLC는 제공하지 않는다.**
 

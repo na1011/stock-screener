@@ -4,7 +4,7 @@
 
 **브라우저 조작은 여기 없다.** 에이전트가 크롬을 원격 제어하고, `./gradlew bootRun`도 에이전트가 띄운다. Google 로그인만 당신이 해 주면 나머지는 이어서 돌아간다.
 
-진행 상태의 정본은 [`docs/progress.md`](docs/progress.md), 외부 자격증명의 정본은 [`docs/external-credentials.md`](docs/external-credentials.md)다. 여기는 **지금 당신이 손을 대야 하는 것만** 뽑아 온 목록이다. 끝낸 항목은 정본 문서를 갱신하고 여기서 지운다.
+진행 상태의 정본은 [`docs/progress.md`](docs/progress.md)이고, **발급 여부의 정본은 문서가 아니라 `./gradlew checkEnv`다.** 여기는 **지금 당신이 손을 대야 하는 것만** 뽑아 온 목록이다. 끝낸 항목은 여기서 지운다.
 
 ---
 
@@ -34,7 +34,7 @@
 
 ## 2. 외부 서비스 발급
 
-**남은 것은 ①의 미완 두 줄, ④의 슬러그 두 개, ⑤ 알림 채널이다.** ①②③(도메인·Tunnel·OAuth)은 끝났고 ④ Sentry는 키와 SDK가 모두 붙었다. 아래 완료 표시된 절차는 **재발급 때 다시 밟을 기록**이다. 도메인·TLD 근거는 [`docs/external-credentials.md`](docs/external-credentials.md)에 있다 — 여기 옮겨 적지 않는다.
+**남은 것은 ①의 미완 두 줄, ④의 슬러그 두 개, ⑤ 알림 채널이다.** ①②③(도메인·Tunnel·OAuth)은 끝났고 ④ Sentry는 키와 SDK가 모두 붙었다. 아래 완료 표시된 절차는 **재발급 때 다시 밟을 기록**이다. 도메인·등록처·TLD를 그렇게 고른 근거는 [ADR-0035](docs/adr/ADR-0035-umbrella-domain-at-cloudflare.md)에 있다 — 여기 옮겨 적지 않는다.
 
 > **상태를 문서에서 읽지 말고 `./gradlew checkEnv`로 확인한다.** 이 파일이 ④를 "미진행"으로 달고 있는 동안 실제로는 값이 다 들어 있었다. 발급은 문서 밖에서 일어나므로 문서가 먼저 낡는다.
 
@@ -158,7 +158,11 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
   curl -sL -o /dev/null -w '%{url_effective}\n' "$LOC"
   # → accounts.google.com/v3/signin/identifier … redirect_uri=https://screener.na1011.net/...
   ```
-  `signin/oauth/error`가 아니라 **실제 로그인 화면**으로 끝나고 `redirect_uri`가 https로 통과한다. 경위와 함정(데스크톱 유형에는 리디렉션 URI 칸이 없고 유형은 변경 불가, loopback은 등록 없이 통과해 localhost에서만 멀쩡했던 것)은 [`external-credentials.md`](docs/external-credentials.md) 1번에 있다.
+  `signin/oauth/error`가 아니라 **실제 로그인 화면**으로 끝나고 `redirect_uri`가 https로 통과한다.
+
+  **IMPORTANT — 재발급할 일이 생기면 클라이언트 *유형*부터 본다.** 처음에 `데스크톱` 유형으로 발급해 한 번 갈아엎었다. 데스크톱 유형에는 **승인된 리디렉션 URI 입력란이 아예 없고, 유형은 생성 후 변경할 수 없다.** 그 유형에 Google이 허용하는 것은 loopback(`http://localhost:포트`)뿐인데 **loopback은 등록 없이 통과하므로 localhost 로그인은 멀쩡했고 도메인에서만 깨졌다.**
+
+  **IMPORTANT — 그래서 확인은 리디렉션을 끝까지 따라가야 한다.** 처음 확인은 `302 → accounts.google.com`과 `redirect_uri` 값까지만 봤다. 그것은 **Spring이 만드는 요청**만 본 것이고 **Google이 그 요청을 받아주는지**는 보지 않은 것이라 위 결함을 그대로 통과시켰다. 위 `curl -sL`의 최종 URL이 `signin/oauth/error`인지 `signin/identifier`인지가 그 둘을 가른다.
 
 - [x] **3-2. 프록시 헤더 신뢰 설정 — 적용됨(2026-08-07).**
   `application.yaml`에 `server.forward-headers-strategy: framework`가 들어갔다. 없었다면 Spring이 `X-Forwarded-Proto`를 무시해(기본값 `NONE`) `redirect_uri`가 이렇게 나갔을 것이다:
@@ -251,8 +255,7 @@ spec §8이 **"이메일과 메신저 두 채널 모두"**를 요구한다. 하�
    ./gradlew checkEnv   # 값은 출력되지 않고 키 이름과 설정 여부만 나온다
    ```
    **`자리표시자 그대로 — 채워지지 않음`이 뜨면 복사만 하고 안 채운 것이다.** 애플리케이션은 그 상태로도 조용히 기동하므로 이 명령이 유일한 구분 수단이다.
-3. [`docs/external-credentials.md`](docs/external-credentials.md)의 현황 표를 `완료 (YYYY-MM-DD)`로 바꾼다.
-4. [`docs/progress.md`](docs/progress.md)의 "미룬 것" 절에서 해당 항목을 지운다.
-5. 끝난 항목은 이 파일에서 지운다.
+3. [`docs/progress.md`](docs/progress.md)의 "미룬 것" 절에서 해당 항목을 지운다.
+4. 끝난 항목은 이 파일에서 지운다.
 
 **MUST NOT** — 실제 키를 `.env.example`이나 커밋·로그에 넣지 않는다. `.env`만 쓴다(gitignore 대상이다).
