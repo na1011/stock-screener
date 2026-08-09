@@ -247,6 +247,42 @@ class PipelineEndToEndTest {
     }
 
     @Test
+    @DisplayName("이력이 이미 쌓인 뒤에도 0건 알림이 뜬다 — 지표 행이 시세 0행을 덮으면 안 된다")
+    void dailyUpdateAlertsWhenNothingArrivedEvenAfterHistoryExists() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        long stockId = stockIdOf(SEEDED_TICKER);
+        fakePriceSource.withBars(stockId, List.of(
+                bar("2026-08-03", "70000"), bar("2026-08-04", "71000")));
+        initialLoadJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+
+        // 소스가 대상일치를 아직 안 내놓은 상황. 이력은 DB에 그대로 있다.
+        fakePriceSource.reset();
+        alertPort.events.clear();
+
+        BatchStatus status = dailyUpdateJob.run(
+                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        assertThat(status).isEqualTo(BatchStatus.SUCCESS);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM price_daily WHERE trade_date = ?", Integer.class, AS_OF))
+                .as("대상일의 시세는 한 건도 들어오지 않았다")
+                .isZero();
+
+        // IMPORTANT — 이 단언이 이 테스트의 존재 이유다. 지표 단계가 이력을 재계산해 행을
+        // 남기므로 합계는 0이 아니다. 합계로 판정하면 아래 알림이 오지 않는데, 그 상태가
+        // 실제로 2026-08-07 종가 결손을 조용히 넘겼다.
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT written_row_count FROM batch_execution
+                WHERE job_name = ? AND target_date = ? ORDER BY id DESC LIMIT 1
+                """, Long.class, DailyUpdateJob.JOB_NAME, AS_OF))
+                .as("지표 행이 쌓여 합계는 0이 아니다 — 그래서 합계로 판정하면 안 된다")
+                .isPositive();
+
+        assertThat(alertPort.events).hasSize(1);
+        assertThat(alertPort.events.get(0).severity()).isEqualTo(AlertSeverity.WARNING);
+    }
+
+    @Test
     @DisplayName("일부 종목이 실패해도 나머지가 수집되고 요약 알림 한 건이 간다")
     void dailyUpdateIsolatesFailures() {
         universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);

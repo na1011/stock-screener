@@ -7,6 +7,7 @@ import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 
 import java.time.LocalDate;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,6 +47,18 @@ public final class BatchExecutionContext {
     private final AtomicInteger malformedCount = new AtomicInteger();
     private final AtomicLong writtenRowCount = new AtomicLong();
 
+    /**
+     * 단계별 저장 행 수. 합계와 <b>별도로</b> 센다.
+     *
+     * <p>합계만으로는 "시세가 한 건도 안 들어왔다"를 판정할 수 없다. 시세가 0행이어도 지표
+     * 단계가 기존 시계열을 다시 써서 종목당 수천 행을 남기기 때문이다({@code IndicatorRunner}는
+     * {@code asOf} 이전 구간을 통째로 재계산한다). 실제로 그 상황이 979,541행짜리 성공으로
+     * 기록되어 금요일 종가 결손이 아무에게도 알려지지 않았다.
+     *
+     * <p>모든 값을 미리 채워 둔다. 늦게 넣으면 이 클래스가 약속한 스레드 안전성이 깨진다.
+     */
+    private final Map<CollectionPhase, AtomicLong> writtenRowsByPhase = initPhaseCounters();
+
     public BatchExecutionContext(long executionId, String jobName, LocalDate targetDate,
                                  StockTaskExecutor executor, BatchExecutionRecorder recorder,
                                  AlertPort alertPort) {
@@ -77,6 +90,7 @@ public final class BatchExecutionContext {
         if (outcome.succeeded()) {
             successCount.incrementAndGet();
             writtenRowCount.addAndGet(outcome.writtenRows());
+            writtenRowsByPhase.get(phase).addAndGet(outcome.writtenRows());
             return true;
         }
         failureCount.incrementAndGet();
@@ -114,6 +128,16 @@ public final class BatchExecutionContext {
 
     public long writtenRowCount() {
         return writtenRowCount.get();
+    }
+
+    /**
+     * 한 단계가 저장한 행 수.
+     *
+     * <p>MUST: "그 단계가 실제로 무언가를 받아왔는가"는 이쪽으로 묻는다. 합계로 물으면 다른
+     * 단계가 쓴 행이 0을 덮는다 — {@code writtenRowsByPhase}의 주석에 그 사고가 적혀 있다.
+     */
+    public long writtenRowCount(CollectionPhase phase) {
+        return writtenRowsByPhase.get(phase).get();
     }
 
     /**
@@ -210,6 +234,14 @@ public final class BatchExecutionContext {
     /** 같은 잡·같은 대상일의 알림은 하나로 묶인다. Phase 6의 억제 정책이 이 키를 쓴다. */
     private String dedupeKey() {
         return jobName + ':' + targetDate;
+    }
+
+    private static Map<CollectionPhase, AtomicLong> initPhaseCounters() {
+        Map<CollectionPhase, AtomicLong> counters = new EnumMap<>(CollectionPhase.class);
+        for (CollectionPhase phase : CollectionPhase.values()) {
+            counters.put(phase, new AtomicLong());
+        }
+        return counters;
     }
 
     private Map<String, String> context() {

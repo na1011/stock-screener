@@ -183,9 +183,16 @@ public class DailyUpdateJob {
      * 내지 않은 것</b>이다. 구분하지 못한 채로 알리는 편이 맞다: 공휴일은 연 15일 남짓이라
      * 그만큼의 WARNING은 감당할 수 있고, 반대로 배치 시각이 너무 이르면 <b>거래일마다</b>
      * 오므로 하루 만에 드러난다. 후자를 놓치는 비용이 전자의 소음보다 훨씬 크다.
+     *
+     * <p>MUST: 판정 기준이 <b>{@code PRICE} 단계의 행 수</b>다. 합계로 물으면 이 경로가
+     * 통째로 죽는다 — 시세가 0행이면 {@code collected}는 그래도 {@code true}라(예외가 안 났으므로)
+     * 지표 단계가 돌고, {@code IndicatorRunner}가 {@code asOf} 이전 시계열을 재계산해 종목당
+     * 수천 행을 남긴다. 실제로 2026-08-07 대상 실행이 <b>시세 0행·총 979,541행</b>으로 끝나
+     * 금요일 종가 결손이 아무에게도 알려지지 않았다. 단위 테스트가 이것을 놓쳤던 이유는
+     * 픽스처에 시세 이력이 없어 지표도 0행이었기 때문이다 — 프로덕션의 조건과 달랐다.
      */
     private void alertIfNothingArrived(BatchExecutionContext execution, int targetCount, LocalDate to) {
-        if (targetCount == 0 || execution.writtenRowCount() > 0) {
+        if (targetCount == 0 || execution.writtenRowCount(CollectionPhase.PRICE) > 0) {
             return;
         }
         execution.alertOperator(AlertSeverity.WARNING, "새 시세가 한 건도 들어오지 않았다",
