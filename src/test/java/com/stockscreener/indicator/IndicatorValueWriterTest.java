@@ -24,9 +24,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 지표 쓰기가 <b>바뀐 것만</b> 쓰는지 검증한다.
  *
  * <p>이 성질이 없으면 조용히 비싸진다. 러너가 매일 lookback 창 전체를 재계산해 거의 같은 값을
- * 다시 쓰는데, {@code idx_iv_screen}이 {@code value}를 INCLUDE해 HOT 갱신이 불가능하므로
- * 갱신 하나가 인덱스 3개에 새 엔트리를 만든다. 실제로 1.39M행짜리 테이블에 누적 갱신 2억
- * 3천만 건이 쌓여 인덱스만 1,987MB가 됐고, 그동안 어떤 테스트도 깨지지 않았다.
+ * 다시 쓰고, 그중 새 버전이 같은 페이지에 못 들어간 것들이 인덱스 3개에 새 엔트리를 만든다
+ * (이 테이블은 fillfactor가 기본값 100이라 여유가 없다). 실제로 1.39M행짜리 테이블에 누적
+ * 갱신 2억 3천만 건이 쌓여 인덱스만 1,987MB가 됐고, 그동안 어떤 테스트도 깨지지 않았다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
