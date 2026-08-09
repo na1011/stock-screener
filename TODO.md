@@ -10,14 +10,27 @@
 
 ## 1. 시스템·콘솔 설정
 
-- [ ] **(선택) 프론트 개발 서버로 로그인하려면 리디렉션 URI를 하나 더 등록한다.**
-  [Google Cloud Console](https://console.cloud.google.com/) → API 및 서비스 → 사용자 인증 정보 → 해당 OAuth 클라이언트 → 승인된 리디렉션 URI에 추가:
+- [x] **프론트 개발 서버용 리디렉션 URI — 이미 등록돼 있다**(2026-08-10 실측).
 
   ```
-  http://localhost:5173/login/oauth2/code/google
+  http://localhost:5173/login/oauth2/code/google      ← 등록됨
+  http://localhost:8080/login/oauth2/code/google      ← 등록됨
+  https://screener.na1011.net/login/oauth2/code/google ← 등록됨
   ```
 
-  Vite 프록시가 Host를 바꾸지 않아 Spring이 요청 Host로 `redirect_uri`를 만든다(ADR-0018, 실측 확인). 등록하지 않으면 `npm run dev`에서만 `redirect_uri_mismatch`가 난다. **`./gradlew bootRun`으로 `:8080`에서 쓰는 경로는 실측으로 동작하므로**(2026-08-09 관통 검증), 이 작업은 `npm run dev`를 쓸 때만 필요하다.
+  Vite 프록시가 Host를 바꾸지 않아 Spring이 요청 Host로 `redirect_uri`를 만든다(ADR-0018). 셋 다 등록돼 있으므로 `npm run dev`·`bootRun`·도메인 어느 쪽으로도 로그인이 된다.
+
+  **어떤 URI가 등록됐는지는 콘솔을 열지 않고도 잰다.** 미등록 URI를 하나 섞어 대조군으로 쓰는 것이 요령이다 — 대조군 없이는 "통과했다"가 등록 때문인지 Google이 원래 안 보는 것인지 갈리지 않는다:
+
+  ```bash
+  CID=$(grep '^GOOGLE_CLIENT_ID=' .env | cut -d= -f2-)
+  for U in http://localhost:5173/login/oauth2/code/google http://localhost:9999/cb; do
+    E=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$U")
+    curl -sL -o /dev/null -w "$U -> %{url_effective}\n" \
+      "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=$CID&scope=openid%20email%20profile&redirect_uri=$E&state=probe"
+  done
+  # 등록된 것은 …/signin/identifier, 미등록(:9999)은 …/signin/oauth/error 로 끝난다.
+  ```
 
 - [ ] **(권장) 뚜껑을 닫아 둔 채 쓰려면 절전을 끈다.** `run-app.sh`가 `caffeinate -s`로 감싸지만 그것은 **전원 연결 시 유휴 절전**만 막는다. 뚜껑을 닫으면 그대로 잠들고 사이트도 함께 내려간다.
   ```bash
@@ -159,6 +172,14 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
   # → accounts.google.com/v3/signin/identifier … redirect_uri=https://screener.na1011.net/...
   ```
   `signin/oauth/error`가 아니라 **실제 로그인 화면**으로 끝나고 `redirect_uri`가 https로 통과한다.
+
+  **IMPORTANT — 이 레시피는 `https`로만 물어서 절반만 본다.** 평문 진입점이 열려 있어도 통과하고, 2026-08-10에 실제로 그 상태로 통과했다(엣지의 `Always Use HTTPS`가 꺼져 있었다). 나머지 절반은 이것이다:
+
+  ```bash
+  curl -sL -o /dev/null -w '%{url_effective}\n' http://screener.na1011.net/oauth2/authorization/google
+  # http 로 시작해도 …/signin/identifier 로 끝나야 한다.
+  # …/signin/oauth/error 면 엣지가 http를 올리지 않아 redirect_uri가 http://로 나간 것이다(ADR-0035).
+  ```
 
   **IMPORTANT — 재발급할 일이 생기면 클라이언트 *유형*부터 본다.** 처음에 `데스크톱` 유형으로 발급해 한 번 갈아엎었다. 데스크톱 유형에는 **승인된 리디렉션 URI 입력란이 아예 없고, 유형은 생성 후 변경할 수 없다.** 그 유형에 Google이 허용하는 것은 loopback(`http://localhost:포트`)뿐인데 **loopback은 등록 없이 통과하므로 localhost 로그인은 멀쩡했고 도메인에서만 깨졌다.**
 
