@@ -55,6 +55,11 @@ public final class BatchExecutionContext {
      * {@code asOf} 이전 구간을 통째로 재계산한다). 실제로 그 상황이 979,541행짜리 성공으로
      * 기록되어 금요일 종가 결손이 아무에게도 알려지지 않았다.
      *
+     * <p>단계마다 세는 것의 의미가 다르다는 점에 주의한다. {@code PRICE}는 <b>저장한 행</b>이고
+     * {@code INDICATOR}는 <b>값이 달라진 행</b>이다 — 지표 쓰기가 같은 값을 다시 쓰지 않기
+     * 때문이다({@code IndicatorValueWriter}). 그래서 재계산만 한 실행은 지표 0행으로 끝나는
+     * 것이 정상이고, 그것은 "계산하지 않았다"가 아니라 "바뀐 것이 없다"는 뜻이다.
+     *
      * <p>모든 값을 미리 채워 둔다. 늦게 넣으면 이 클래스가 약속한 스레드 안전성이 깨진다.
      */
     private final Map<CollectionPhase, AtomicLong> writtenRowsByPhase = initPhaseCounters();

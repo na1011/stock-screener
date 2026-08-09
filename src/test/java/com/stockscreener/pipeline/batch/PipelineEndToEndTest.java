@@ -283,6 +283,26 @@ class PipelineEndToEndTest {
     }
 
     @Test
+    @DisplayName("이미 수집한 날짜를 다시 돌려도 0건 알림이 오지 않는다")
+    void dailyUpdateDoesNotFalselyAlertOnRerun() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        long stockId = stockIdOf(SEEDED_TICKER);
+        fakePriceSource.withBars(stockId, List.of(bar("2026-08-05", "72000")));
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        alertPort.events.clear();
+
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.ADMIN);
+
+        // MUST NOT: PriceWriter를 "값이 같으면 0행"으로 바꾸지 않는다. 0건 판정이 PRICE 단계의
+        // 행 수를 보므로, 그렇게 바꾸는 순간 재실행마다 "새 시세가 한 건도 들어오지 않았다"가
+        // 뜬다 — 지표 쓰기에 같은 최적화를 넣었으니 시세에도 넣고 싶어지는 것이 발생점이다.
+        // 재실행은 관리자의 정상 경로이므로(ADR-0029) 그 오탐은 알림 전체의 신뢰를 깎는다.
+        assertThat(alertPort.events)
+                .as("같은 날짜를 다시 수집한 것은 결측이 아니다")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("일부 종목이 실패해도 나머지가 수집되고 요약 알림 한 건이 간다")
     void dailyUpdateIsolatesFailures() {
         universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);

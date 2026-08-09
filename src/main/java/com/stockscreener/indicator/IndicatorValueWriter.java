@@ -25,6 +25,16 @@ public class IndicatorValueWriter {
      * IMPORTANT — {@code ON CONFLICT}의 컬럼 순서는 PK 순서
      * {@code (trade_date, indicator_code, stock_id)}와 같아야 한다(ADR-0002 MUST).
      * 순서를 바꾸면 PostgreSQL이 이 인덱스를 충돌 판정에 쓰지 못한다.
+     *
+     * <p>IMPORTANT — {@code WHERE ... IS DISTINCT FROM}을 지우지 않는다. 값이 같은데도 갱신하면
+     * MVCC가 행 버전을 새로 만들고, {@code idx_iv_screen}이 {@code value}를 INCLUDE해
+     * <b>HOT 갱신이 불가능</b>하므로 인덱스 3개에도 새 엔트리가 생긴다. 러너가 매일
+     * lookback 창 전체를 재계산해 거의 같은 값을 다시 쓰기 때문에 이 낭비가 그대로 쌓인다 —
+     * 실제로 <b>1.39M행짜리 테이블에 누적 갱신 2억 3천만 건</b>, 인덱스만 1,987MB가 됐다.
+     * 있어도 컴파일되고 테스트도 통과하며, 느려지는 것은 몇 달 뒤다.
+     *
+     * <p>{@code IS DISTINCT FROM}인 이유는 {@code <>}가 NULL에서 NULL을 내기 때문이다. 지금은
+     * {@code value}가 NOT NULL이지만 그 전제에 기대지 않는다.
      */
     private static final String UPSERT = """
             INSERT INTO indicator_value
@@ -33,6 +43,7 @@ public class IndicatorValueWriter {
             ON CONFLICT (trade_date, indicator_code, stock_id) DO UPDATE SET
                 value      = EXCLUDED.value,
                 updated_at = now()
+            WHERE indicator_value.value IS DISTINCT FROM EXCLUDED.value
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -44,7 +55,9 @@ public class IndicatorValueWriter {
     /**
      * 한 종목·한 지표의 계산 결과를 저장한다.
      *
-     * @return 실제로 저장한 행 수
+     * @return <b>값이 실제로 달라진</b> 행 수. 이미 같은 값이 있던 행은 세지 않는다 —
+     *         재계산이 대부분 같은 값을 다시 내므로, 같은 날을 두 번 돌리면 0에 가깝다.
+     *         "몇 행을 조회했나"가 아니라 "무엇이 바뀌었나"를 답하는 수다.
      */
     public long write(long stockId, String indicatorCode, List<IndicatorPoint> points) {
         if (points.isEmpty()) {
