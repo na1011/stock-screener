@@ -49,6 +49,23 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 | 잠자기 → 깨어남 | 자동 (프로세스가 그대로 살아 있다) |
 | **콜드 부팅** | **사람이 FileVault 암호를 넣어야 한다** — 볼륨이 잠긴 동안에는 LaunchAgent도 LaunchDaemon도 뜨지 못한다 |
 
+### 터미널에서 직접 — 켜기, 끄기, 배포
+
+```bash
+# 켜기
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.stockscreener.app.plist
+
+# 끄기
+launchctl bootout gui/$(id -u)/com.stockscreener.app
+
+# 코드나 .env를 고쳐 반영 (빌드 → 복사 → 재기동)
+ops/deploy.sh
+```
+
+- **`kill`·`pkill`로는 안 꺼진다.** `KeepAlive`가 30초 뒤 되살린다. 끄려면 `bootout`이어야 한다.
+- **`./gradlew build`만으로는 아무것도 반영되지 않는다.** 도는 것은 저장소가 아니라 `~/Library/Application Support/stock-screener/`의 사본이라, 옛 빌드가 계속 돌고 화면에는 아무 단서가 없다([ADR-0034](docs/adr/ADR-0034-repo-out-of-tcc-path.md)). `deploy.sh`가 그 순서를 대신한다.
+- 위 `bootstrap`이 plist가 없다고 하면 `ops/install-agent.sh`로 다시 등록한다(`--uninstall`이 반대). 기동 실패 원인은 `~/Library/Logs/stock-screener/stderr.log`에 있다.
+
 **맥북이 자면 사이트도 함께 내려간다.** 온프레미스를 택한 대가이고(spec §6), 배치를 사람이 기기를 쓰는 시각(평일 20시)에 둔 이유다. 절전·재부팅으로 당신이 할 일은 [`TODO.md`](TODO.md)에 있다.
 
 ## 하네스 설계 — 기획형 하네스
