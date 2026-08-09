@@ -94,7 +94,9 @@ fi
 # 줄이 아니라 **문자**로 센다. 한글 산문은 줄 수가 유지된 채 문장만 줄어드는 편집이 흔해
 # `--numstat`의 줄 기준으로는 감소가 보이지 않는다(§1이 `wc -m`을 쓰는 것과 같은 이유).
 # 파일이 생긴 커밋은 제외한다 — 안 하면 새 규칙 파일이 첫날부터 울린다.
-if command -v git >/dev/null 2>&1 && [ -d .claude/rules ]; then
+if command -v git >/dev/null 2>&1 \
+   && git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+   && [ -d .claude/rules ]; then
   window=12
   min_points=4      # 이보다 이력이 짧으면 추세라고 부를 수 없다
   min_growth=800
@@ -102,9 +104,14 @@ if command -v git >/dev/null 2>&1 && [ -d .claude/rules ]; then
   for rule in .claude/rules/*.md; do
     [ -f "$rule" ] || continue
     # 오래된 순으로 뒤집는다. `tac`·`tail -r`은 플랫폼마다 갈리므로 sed로 한다.
-    revs=$(git log --format=%H -n "$window" -- "$rule" 2>/dev/null | sed '1!G;h;$!d')
+    # MUST NOT: `set -e` 아래에서 `[ 조건 ] && continue`를 쓰지 않는다. 조건이 거짓이면
+    # compound가 1을 반환해 **스크립트가 그 자리에서 죽고**, 뒤에 있는 검사들이 통째로
+    # 사라진다. 침묵으로 죽으므로 회귀표를 돌리기 전에는 드러나지 않는다.
+    # MUST: git 호출의 실패를 `|| true`로 흡수한다. `set -e` 아래에서 `x=$(실패)`는 그대로
+    # 스크립트를 죽이고, 죽은 훅은 **출력이 없어 "문제없음"과 구분되지 않는다.**
+    revs=$(git log --format=%H -n "$window" -- "$rule" 2>/dev/null | sed '1!G;h;$!d' || true)
     n=$(printf '%s\n' "$revs" | grep -c . || true)
-    [ "${n:-0}" -eq 0 ] && continue
+    if [ "${n:-0}" -eq 0 ]; then continue; fi
     # 파일이 이 창 안에서 생겼으면 **생성 커밋만** 뺀다. 창을 다 채울 때까지 기다리면,
     # 11커밋 동안 한 번도 줄지 않은 채 2.8배가 된 파일이 끝내 발화하지 않는다.
     total=$(git log --format=%H -- "$rule" 2>/dev/null | grep -c . || true)
@@ -112,23 +119,23 @@ if command -v git >/dev/null 2>&1 && [ -d .claude/rules ]; then
       revs=$(printf '%s\n' "$revs" | tail -n +2)
       n=$((n - 1))
     fi
-    [ "$n" -lt "$min_points" ] && continue
+    if [ "$n" -lt "$min_points" ]; then continue; fi
 
     shrank=0; prev=""; first=""; last=""
     while IFS= read -r rev; do
-      [ -z "$rev" ] && continue
-      cur=$(git show "${rev}:${rule}" 2>/dev/null | wc -m | tr -d ' ')
-      [ -z "$cur" ] || [ "$cur" -eq 0 ] && continue
-      [ -z "$first" ] && first="$cur"
+      if [ -z "$rev" ]; then continue; fi
+      cur=$(git show "${rev}:${rule}" 2>/dev/null | wc -m | tr -d ' ' || true)
+      if [ -z "$cur" ] || [ "$cur" -eq 0 ]; then continue; fi
+      if [ -z "$first" ]; then first="$cur"; fi
       last="$cur"
       # 감소한 커밋이 한 번이라도 있으면 조용하다. 늘었다 줄었다 하는 것은 정상이다.
-      [ -n "$prev" ] && [ "$cur" -lt "$prev" ] && shrank=1
+      if [ -n "$prev" ] && [ "$cur" -lt "$prev" ]; then shrank=1; fi
       prev="$cur"
     done <<< "$revs"
 
-    [ -z "$first" ] || [ -z "$last" ] && continue
-    [ "$shrank" -eq 1 ] && continue
-    [ $((last - first)) -lt "$min_growth" ] && continue
+    if [ -z "$first" ] || [ -z "$last" ]; then continue; fi
+    if [ "$shrank" -eq 1 ]; then continue; fi
+    if [ $((last - first)) -lt "$min_growth" ]; then continue; fi
     growing="${growing}$(basename "$rule")(+$((last - first))자) "
   done
   if [ -n "$growing" ]; then
