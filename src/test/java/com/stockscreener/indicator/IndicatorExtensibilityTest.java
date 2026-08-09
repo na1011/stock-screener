@@ -22,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * spec §7의 "스키마 변경 없이 새 지표를 추가할 수 있어야 한다"에 대한 실질 검증.
  *
- * <p>설계 문서 §5의 완료 기준 2는 "더미 지표를 추가할 때 다른 파일을 몇 개 고쳐야 하는가,
- * 1개면 성공"이다. 이 테스트가 그 성질을 직접 단언한다 — 아래 {@code DummyIndicatorCalculator}는
+ * <p>{@code docs/phase-criteria.md}의 Phase 1 판정 두 번째는 "더미 지표를 추가할 때 다른 파일을
+ * 몇 개 고쳐야 하는가, 1개면 성공"이다. 이 테스트가 그 성질을 직접 단언한다 — 아래 {@code DummyIndicatorCalculator}는
  * 파일 하나에 정의된 {@code @Component}이고, 그것을 컨텍스트에 넣는 것 외에
  * <b>레지스트리·enum·스키마·번역기 어디도 고치지 않았다.</b>
  *
@@ -143,7 +143,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("백분위도 파생 지표 코드일 뿐이라 스키마 변경이 없다")
     void percentileNeedsNoSchemaChange() {
-        // 설계 문서 §3이 "수용 가능한지 확인하라"고 한 지점. 실제로 확인한다:
+        // 상대 조건(백분위)을 저장 구조가 수용하는지가 설계 단계의 미결 논점이었다. 실제로 확인한다:
         // 백분위는 indicator_value에 평범한 행으로 들어가고 조건도 스칼라 비교가 된다.
         new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
 

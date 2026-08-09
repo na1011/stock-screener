@@ -60,7 +60,7 @@ public class AllowedEmailService {
      *
      * <p>IMPORTANT — <b>마지막 관리자 검사를 걸지 않는다.</b> 이것은 목록 상태를 그대로 쓰는
      * 저수준 API이고, 관리자를 강등하는 것이 정당한 호출이다(권한 회수 시나리오). 검사가 붙는
-     * 곳은 화면이 부르는 {@link #add}·{@link #update}·{@link #remove}다 — 설계 §5가 막으려는
+     * 곳은 화면이 부르는 {@link #add}·{@link #update}·{@link #remove}다 — 완료 판정이 막으려는
      * 것은 "관리자가 <b>화면에서</b> 스스로 잠기는 것"이고, 그 상태의 복구 수단이 이 저수준
      * 경로(와 SQL)이기 때문이다. 여기까지 잠그면 복구 수단이 사라진다.
      */

@@ -32,8 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 허용목록을 화면에서 다룰 수 있고, <b>마지막 관리자가 스스로 잠기지 않는가</b> (spec §4).
  *
  * <p>이 화면이 생기기 전까지 지인을 초대하는 유일한 방법이 psql이었다. 그리고 자기 권한을
- * 회수해 아무도 들어갈 수 없게 되면, 복구 수단도 다시 psql뿐이다 — 설계 §5가 이 한 줄을
- * 판정 항목으로 적어 둔 이유다.
+ * 회수해 아무도 들어갈 수 없게 되면, 복구 수단도 다시 psql뿐이다 — {@code docs/phase-criteria.md}가
+ * 이 한 줄을 판정 항목으로 적어 둔 이유다.
  *
  * <p>IMPORTANT — {@code @Transactional}을 <b>일부러 붙이지 않고</b> {@code @AfterEach}로
  * 정리한다. 거절이 값을 되돌리는지 확인하려면 서비스의 트랜잭션 경계가 진짜여야 하는데,

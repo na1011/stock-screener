@@ -372,7 +372,7 @@ function barRatio(row: ScreeningRow, code: string): number | null {
  * 확장 행의 `<td>`는 표 **전체 폭**(컬럼 min-width 합, 지표가 여섯이면 2,400px를 넘는다)을
  * 갖는다. 그대로 두면 `.outcomes__item`이 그 폭을 다 먹어 조건별 **획득 점수가 가로 스크롤
  * 밖으로** 밀려난다. 총점만 보이고 내역이 안 보이는 상태이고, 그것은 "선정 이유를
- * 노출한다"(frontend.md, design §5)를 만족하지 못한다 — 사용자가 가로로 스크롤해야
+ * 노출한다"(frontend.md, docs/phase-criteria.md)를 만족하지 못한다 — 사용자가 가로로 스크롤해야
  * 발견되는 것은 보이지 않는 것과 같다.
  *
  * 폭은 스크립트가 `ResizeObserver`로 **재서** `--result-viewport`에 넣는다. 뷰포트에서

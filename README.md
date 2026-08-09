@@ -21,7 +21,7 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 | 문서 | 성격 | 수명 | 대상 독자 |
 |---|---|---|---|
 | [`docs/stock-screener-project-spec.md`](docs/stock-screener-project-spec.md) | 기획 정본 — 요구사항·수용 기준·범위 | 불변 | 사람 + 에이전트 |
-| [`docs/design/`](docs/design/) | phase별 설계 방향 — 검증된 사실과 판단 논점 | 오래감 | 사람 + 에이전트 |
+| [`docs/phase-criteria.md`](docs/phase-criteria.md) | phase 완료 판정 — 착수 전에 먼저 적는다 | 오래감 | 사람 + 에이전트 |
 | [`docs/adr/`](docs/adr/) | spec 확정 이후의 새 기술 결정 기록 | 오래감 | 사람 + 에이전트 |
 | [`docs/progress.md`](docs/progress.md) | 진행 상태 — 어디까지 왔는가 | 매 세션 변함 | 사람 + 에이전트 |
 | [`docs/external-credentials.md`](docs/external-credentials.md) | 사용자가 직접 발급해야 하는 외부 키·계정 목록 | 발급 시 갱신 | 사람 |
@@ -149,7 +149,9 @@ phase마다 세션이 나뉘면 새 세션은 이전 세션이 무엇을 했는�
 - **주장은 반증 가능한 형태로 쓴다.** "Phase 1 완료"가 아니라 "완료 판정: `./gradlew build` 성공 + ADR 존재"처럼 쓴다. 사람은 낡은 문서를 보면 낡았다고 의심하지만 에이전트는 그대로 믿는다. `check-doc-staleness.sh`가 이 주장을 실제 코드와 대조한다.
 - **쓰기 측이 있어야 한다.** 갱신되지 않는 진행 상태는 다음 세션을 돕는 대신 잘못 인도한다. `remind-progress.sh`가 소스만 바뀌고 진행 상태가 그대로인 채 세션이 끝나는 것을 상기시킨다.
 
-설계 문서(`docs/design/`)를 저장소에 두는 이유도 같다. 플랜 모드 산출물은 `~/.claude/plans/`에 쌓이는데 그곳은 git 밖이고 자동 로드되지 않아, 다음 세션이 찾을 수 없다. 저장소에 있어야 grep되고, 코드와 함께 diff되고, 틀렸으면 revert된다.
+완료 판정(`docs/phase-criteria.md`)을 저장소에 두는 이유도 같다. 플랜 모드 산출물은 `~/.claude/plans/`에 쌓이는데 그곳은 git 밖이고 자동 로드되지 않아, 다음 세션이 찾을 수 없다. 저장소에 있어야 grep되고, 코드와 함께 diff되고, 틀렸으면 revert된다.
+
+**`progress.md`에 합치지 않은 이유는 예산이다.** 그 파일은 매 세션 전량 주입되고 절단선이 8,000자인데, 판정 블록은 phase 하나가 450~2,746자다. 합치면 경고선(4,000자)이 상시로 켜지고, 그러면 주입이 실제로 잘렸을 때 그 신호가 상시 경보에 묻힌다 — 이 저장소가 가장 경계하는 조용한 실패다. 판정은 그 phase를 하는 세션만 필요로 하므로 조건부 로드가 맞다.
 
 이 구조는 spec-kit·Kiro·task-master 같은 도구들이 독립적으로 수렴한 형태와 같다 — 오래 가는 것은 좁게 조건부로 로드하고, 변하는 상태만 항상 주입한다.
 

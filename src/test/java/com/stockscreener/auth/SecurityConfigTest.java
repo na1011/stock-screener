@@ -57,8 +57,8 @@ class SecurityConfigTest {
     @DisplayName("관리자는 관리자 영역을 통과한다")
     void adminPassesAuthorization() throws Exception {
         // Phase 6에서 핸들러가 붙기 전까지 이 단언은 404였다("인가는 통과했으나 핸들러가 없다").
-        // 그 상태를 그대로 두면 기능을 붙인 쪽이 깨지므로 함께 옮겼다 — 설계 §5가 이 갱신을
-        // 판정 항목으로 적어 둔 이유다.
+        // 그 상태를 그대로 두면 기능을 붙인 쪽이 깨지므로 함께 옮겼다 — docs/phase-criteria.md가
+        // 이 갱신을 판정 항목으로 적어 둔 이유다.
         mockMvc.perform(get("/api/admin/batches")).andExpect(status().isOk());
     }
 

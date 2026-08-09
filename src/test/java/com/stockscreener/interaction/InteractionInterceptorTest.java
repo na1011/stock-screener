@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 기록이 <b>선언적</b>인가 — 표시가 붙은 것만 남고, 붙지 않은 것은 남지 않는가.
  *
- * <p>설계 §5의 "새 엔드포인트에 기록을 붙이는 비용이 표시 한 줄이고, 컨트롤러 본문에 로깅
+ * <p>{@code docs/phase-criteria.md}의 "새 엔드포인트에 기록을 붙이는 비용이 표시 한 줄이고, 컨트롤러 본문에 로깅
  * 코드가 없다"에 대응한다. 여기서 검증하는 것은 컨트롤러가 아니라 <b>수집 계층 하나가 실제로
  * 그 표시를 보고 있는가</b>이므로, 진짜 요청을 태워야 한다.
  *

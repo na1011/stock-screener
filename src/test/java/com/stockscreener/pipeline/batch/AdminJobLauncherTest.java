@@ -25,7 +25,7 @@ import static org.mockito.Mockito.when;
 /**
  * 같은 잡이 겹쳐 돌지 않는가, 그리고 기동이 잡을 기다리지 않는가.
  *
- * <p>설계 §5의 "잡을 화면에서 띄울 수 있고, 같은 잡이 겹쳐 돌지 않는다"에 대응한다. 판정의
+ * <p>{@code docs/phase-criteria.md}의 "잡을 화면에서 띄울 수 있고, 같은 잡이 겹쳐 돌지 않는다"에 대응한다. 판정의
  * 정본이 인프로세스 가드이므로(ADR-0029) DB 없이 여기서 전부 확인된다.
  */
 class AdminJobLauncherTest {

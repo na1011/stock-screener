@@ -53,7 +53,7 @@ cd frontend && npx vitest run src/lib/terminology.spec.ts
 
 기획 정본(`docs/stock-screener-project-spec.md`)은 "화면"을 **오직 UI 뷰 뜻으로만** 쓴다. 저장된 스크리닝 정의를 spec이 부르는 말은 "커스텀 스크리닝"·"조건 조합"·"사전 정의된 투자 전략"이다.
 
-지금의 오역은 `V3__condition.sql`(Phase 1, `eb6a4c1`)이 `CREATE TABLE screen`을 만들면서 시작됐다. **그 테이블의 정의 주석은 자기를 "스크리닝 정의"라고 부르는데**, 같은 파일 아래쪽에서 이미 `screen`을 "화면"으로 옮기고 있었다 — 더 나은 역어가 같은 파일 안에 있었는데 채택되지 않았다. 그 역어가 ADR-0003 → ADR-0017 → `design/v1-architecture.md` → ADR-0024/0026 → `.claude/rules/frontend.md` → 사용자 노출 문구까지 검증 없이 전파됐다.
+지금의 오역은 `V3__condition.sql`(Phase 1, `eb6a4c1`)이 `CREATE TABLE screen`을 만들면서 시작됐다. **그 테이블의 정의 주석은 자기를 "스크리닝 정의"라고 부르는데**, 같은 파일 아래쪽에서 이미 `screen`을 "화면"으로 옮기고 있었다 — 더 나은 역어가 같은 파일 안에 있었는데 채택되지 않았다. 그 역어가 ADR-0003 → ADR-0017 → 설계 문서 → ADR-0024/0026 → `.claude/rules/frontend.md` → 사용자 노출 문구까지 검증 없이 전파됐다.
 
 결과는 동음이의어다. `AppRail.vue`에는 `aria-label="주요 화면"`(UI 뜻) 바로 아래에 `<span>화면 관리</span>`(엔티티 뜻)가 있었다. 대상 사용자가 초보~중급 투자자인데(`frontend.md`) "화면을 저장한다"는 말은 기획 어디에도 근거가 없다.
 
