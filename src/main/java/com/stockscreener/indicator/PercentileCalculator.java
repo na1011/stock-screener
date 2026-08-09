@@ -33,11 +33,22 @@ public class PercentileCalculator {
     /**
      * 같은 날짜·같은 지표의 값들에 순위를 매겨 {@code <원본코드>_PCTL}로 저장한다.
      *
-     * <p>대상은 <b>현재 편입 중인 종목</b>으로 한정한다. 지수에서 빠진 종목이 모집단에 남으면
-     * "코스피200 내 상위 20%"가 실제로는 다른 모집단에 대한 순위가 된다.
+     * <p>순위는 <b>유니버스 안에서</b> 매긴다(ADR-0036). 코스피200과 코스닥150을 한 모집단으로
+     * 합치면 "코스피200 내 상위 20%"가 실제로는 다른 모집단에 대한 순위가 되고, 스크리닝이
+     * {@code universeCode}로 대상을 좁히는 것과 어긋난다 — <b>거르는 모집단과 순위를 매기는
+     * 모집단이 달라진다.</b> 미국이 붙으면(v1.1) 한국 종목이 미국 종목과 섞여 매겨진다.
      *
-     * <p>{@code PERCENT_RANK()}는 최솟값에 0, 최댓값에 1을 준다. 종목이 하나뿐이면 0이 되는데,
-     * 그 경우 순위 자체가 무의미하므로 아래 {@code HAVING}으로 걸러낸다.
+     * <p>IMPORTANT — 이 쿼리는 <b>한 종목이 최대 하나의 활성 유니버스에 속한다</b>는 전제 위에
+     * 선다. {@code indicator_value}에 유니버스 축이 없어 종목당 값이 하나뿐이기 때문이다.
+     * 전제가 깨지면 JOIN이 행을 늘려 {@code ON CONFLICT DO UPDATE}가 같은 행을 두 번 건드리고,
+     * PostgreSQL이 cardinality violation으로 배치를 죽인다. <b>조용히 틀리지 않는다는 것이
+     * 요점</b>이므로 그 동작을 살려 둔다 — 유니버스 축을 더하기 전에는 다른 답이 없다.
+     *
+     * <p>{@code PERCENT_RANK()}는 최솟값에 0, 최댓값에 1을 준다. 모집단이 하나뿐이면 0이 되는데
+     * 그것은 "가장 싸다"로 읽혀 조건을 충족시킨다 — 순위가 무의미한 값을 근거로 종목이
+     * 선정되는 것이라 {@code population >= 2}로 거른다.
+     *
+     * <p>{@code WHERE ... IS DISTINCT FROM}의 이유는 {@code IndicatorValueWriter}와 같다.
      */
     private static final String UPSERT_PERCENTILES = """
             INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value, updated_at)
@@ -45,18 +56,20 @@ public class PercentileCalculator {
             FROM (
                 SELECT iv.stock_id,
                        iv.trade_date,
-                       PERCENT_RANK() OVER (ORDER BY iv.value) AS pct
+                       PERCENT_RANK() OVER (
+                           PARTITION BY m.universe_code ORDER BY iv.value) AS pct,
+                       count(*) OVER (PARTITION BY m.universe_code)         AS population
                 FROM indicator_value iv
+                JOIN universe_membership m
+                  ON m.stock_id = iv.stock_id AND m.effective_to IS NULL
                 WHERE iv.indicator_code = ?
                   AND iv.trade_date = ?
-                  AND EXISTS (
-                      SELECT 1 FROM universe_membership m
-                      WHERE m.stock_id = iv.stock_id AND m.effective_to IS NULL
-                  )
             ) ranked
+            WHERE ranked.population >= 2
             ON CONFLICT (trade_date, indicator_code, stock_id) DO UPDATE SET
                 value      = EXCLUDED.value,
                 updated_at = now()
+            WHERE indicator_value.value IS DISTINCT FROM EXCLUDED.value
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -70,12 +83,11 @@ public class PercentileCalculator {
     /**
      * 해당 날짜의 모든 백분위 지표를 계산해 저장한다.
      *
-     * @return 저장한 행 수
+     * @return <b>값이 실제로 달라진</b> 행 수. 같은 날을 다시 돌리면 0에 가깝다.
      */
     public long calculate(LocalDate tradeDate) {
         long written = 0;
         for (PercentileSpec spec : specs) {
-            // 모집단이 2종목 미만이면 순위가 의미 없다. 그런 날은 자연히 0행이 된다.
             int rows = jdbcTemplate.update(
                     UPSERT_PERCENTILES, spec.code(), spec.sourceCode(), tradeDate);
             if (rows > 0) {

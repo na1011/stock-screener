@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 백분위 산출을 검증한다.
@@ -110,6 +112,74 @@ class PercentileCalculatorTest {
     }
 
     @Test
+    @DisplayName("유니버스마다 따로 매긴다 — 합치면 코스피 최고값이 1이 되지 못한다")
+    void ranksWithinEachUniverse() {
+        // 코스피200은 PER 10~50이다. 그보다 전부 높은 코스닥 모집단을 따로 만든다.
+        List<Long> kosdaq = new ArrayList<>();
+        for (int i = 1; i <= 3; i++) {
+            kosdaq.add(memberWithPer("KOSDAQ", "KOSDAQ150", "10%04d".formatted(i),
+                    new BigDecimal(i * 100)));
+        }
+
+        calculator.calculate(AS_OF);
+
+        // 한 모집단으로 합치면 최고값은 PER 300(코스닥)뿐이라 아래 둘이 동시에 성립할 수 없다.
+        assertThat(percentileOf(stockIds.get(4)))
+                .as("PER 50은 코스피200 안에서 최고값이다")
+                .isEqualByComparingTo("1");
+        assertThat(percentileOf(kosdaq.get(0)))
+                .as("PER 100은 코스닥150 안에서 최저값이다 — 합쳤다면 0이 아니다")
+                .isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("한 종목이 두 유니버스에 걸리면 조용히 한쪽을 버리지 않고 깨진다")
+    void refusesToRankStockBelongingToTwoUniverses() {
+        // indicator_value에는 유니버스 축이 없어 종목당 값이 하나뿐이다. 둘 중 어느 순위를
+        // 남길지 고를 근거가 없으므로, 고르지 않고 깨지는 것이 옳다.
+        for (int i = 1; i <= 2; i++) {
+            memberWithPer("KOSDAQ", "KOSDAQ150", "10%04d".formatted(i), new BigDecimal(i * 100));
+        }
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('KOSDAQ150', ?, ?)
+                """, stockIds.get(0), AS_OF);
+
+        // IMPORTANT — 올라오는 것이 BadSqlGrammarException이다. PostgreSQL이 내는 것은
+        // cardinality_violation(SQLState 21000)인데 Spring이 21 계열을 문법 오류로 번역한다.
+        // 로그에서 이 이름만 보면 SQL 오타를 찾으러 가게 되므로, 진짜 원인은 root cause에 있다.
+        assertThatThrownBy(() -> calculator.calculate(AS_OF))
+                .isInstanceOf(DataAccessException.class)
+                .rootCause()
+                .hasMessageContaining("cannot affect row a second time");
+    }
+
+    @Test
+    @DisplayName("모집단이 하나면 백분위를 만들지 않는다 — 0은 '가장 싸다'로 읽힌다")
+    void skipsSingleMemberPopulation() {
+        long lonely = memberWithPer("KOSDAQ", "KOSDAQ150", "100001", new BigDecimal("7"));
+
+        calculator.calculate(AS_OF);
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT value FROM indicator_value
+                WHERE stock_id = ? AND indicator_code = ?
+                """, BigDecimal.class, lonely, PerCalculator.CODE + PercentileSpec.SUFFIX))
+                .as("순위가 무의미한 값으로 종목이 선정되면 안 된다")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("값이 그대로면 다시 쓰지 않는다 — 재계산이 인덱스를 부풀리지 않는 근거다")
+    void secondRunWritesNothingWhenValuesAreUnchanged() {
+        assertThat(calculator.calculate(AS_OF)).isPositive();
+
+        assertThat(calculator.calculate(AS_OF))
+                .as("같은 값을 다시 쓰면 MVCC가 행 버전과 인덱스 엔트리를 새로 만든다")
+                .isZero();
+    }
+
+    @Test
     @DisplayName("두 번 실행해도 행이 늘지 않는다")
     void isIdempotent() {
         calculator.calculate(AS_OF);
@@ -117,6 +187,23 @@ class PercentileCalculatorTest {
         calculator.calculate(AS_OF);
 
         assertThat(countPercentiles()).isEqualTo(afterFirst);
+    }
+
+    /** 지정한 유니버스에 편입된 종목 하나를 PER 값과 함께 만든다. */
+    private long memberWithPer(String marketCode, String universeCode, String ticker,
+                               BigDecimal per) {
+        long id = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES (?, ?, ?) RETURNING id
+                """, Long.class, marketCode, ticker, "종목" + ticker);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES (?, ?, ?)
+                """, universeCode, id, AS_OF);
+        jdbcTemplate.update("""
+                INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)
+                VALUES (?, ?, ?, ?)
+                """, id, AS_OF, PerCalculator.CODE, per);
+        return id;
     }
 
     private BigDecimal percentileOf(long stockId) {
