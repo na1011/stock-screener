@@ -90,7 +90,10 @@ emit() {
 
 if [ "$launched" = true ]; then
   # 띄운 그 호출에서 B까지 함께 내지 않는다. 방금 뜬 프로세스를 "네가 방해했다"고 말하게 된다.
-  already_fired launched || emit "적재 배치를 띄웠다. **이것이 사는 동안 gradle 태스크를 돌리지 않는다** — 컴파일 산출물이 도는 JVM의 classpath를 덮고, \`clean\`은 그것을 지우며, \`--stop\`은 포크된 적재 JVM을 함께 끈다. 예외는 \`./gradlew checkDuplicateFiles\` 하나다(단독 실행 시 아무것도 컴파일하지 않는다). 끝나면 러너가 스스로 내려간다 — 끊고 싶으면 \`pgrep\`으로 PID를 특정해 끈다. **MUST NOT: \`pkill -f java\`류를 쓰지 않는다** — 운영 앱이 함께 죽고 어떤 가드도 그것을 막지 않는다."
+  # 작은따옴표로 쓴다. 아래 한 문장이 `batch-load/SKILL.md`와 **일부러 같은 사본**이고
+  # (거울 표에 등록돼 있다), 큰따옴표 안에서 역따옴표를 escape하면 바이트가 달라져
+  # 거울 대조가 성립하지 않는다.
+  already_fired launched || emit '적재 배치를 띄웠다. **이것이 사는 동안 gradle 태스크를 돌리지 않는다** — 컴파일 산출물이 도는 JVM의 classpath를 덮고, `clean`은 그것을 지우며, `--stop`은 포크된 적재 JVM을 함께 끈다. 예외는 `./gradlew checkDuplicateFiles` 하나다(단독 실행 시 아무것도 컴파일하지 않는다). 끝나면 러너가 스스로 내려간다 — 끊고 싶으면 PID를 특정해 끈다. **MUST NOT: `pkill -f java`류를 쓰지 않는다** — 운영 앱이 함께 죽고 어떤 가드도 그것을 막지 않는다.'
   exit 0
 fi
 

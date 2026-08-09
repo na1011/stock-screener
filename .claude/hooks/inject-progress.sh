@@ -40,7 +40,7 @@ if [ -r "${hooks_dir}/lib/load-process.sh" ]; then
   load_rc=$?
   set -e
   if [ "$load_rc" -eq 0 ]; then
-    load_note="**적재 배치가 지금 돌고 있다(PID ${load_pids}).** 이 세션에서 gradle 태스크를 돌리면 그 프로세스의 classpath를 건드려 러너가 처음부터 다시 갈 수 있다(\`checkDuplicateFiles\` 단독 실행은 예외다). 끝났어야 할 프로세스라면 지금 끈다 — 남아 있는 커넥션 풀이 \`check-premises.sh\`를 무판정으로 만들고, 그 무판정은 부하로 오진되기 쉽다. **PID를 특정해서 끈다. \`pkill -f java\`는 운영 앱을 함께 죽인다.**
+    load_note="**적재 배치가 지금 돌고 있다(PID ${load_pids}).** 이 세션에서 gradle 태스크를 돌리면 그 프로세스의 classpath를 건드려 러너가 처음부터 다시 갈 수 있다 — 무엇이 예외인지는 실제로 돌렸을 때 \`warn-load-running.sh\`가 답한다. 끝났어야 할 프로세스라면 지금 끈다 — 남아 있는 커넥션 풀이 \`check-premises.sh\`를 무판정으로 만들고, 그 무판정은 부하로 오진되기 쉽다. **PID를 특정해서 끈다. \`pkill -f java\`는 운영 앱을 함께 죽인다.**
 
 "
   elif [ "$load_rc" -eq 2 ]; then

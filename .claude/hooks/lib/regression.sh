@@ -202,7 +202,8 @@ echo "── 거울 드리프트 (check-doc-staleness §5) ──"
 check_mirror() {
   local want="$1" desc="$2" target="${3:-}" expr="${4:-}" tmp f got
   tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
-  for f in .claude/rules/data-pipeline.md .claude/rules/test.md .claude/skills/batch-load/SKILL.md; do
+  for f in .claude/rules/data-pipeline.md .claude/rules/test.md .claude/skills/batch-load/SKILL.md \
+           .claude/hooks/warn-load-running.sh; do
     mkdir -p "$tmp/$(dirname "$f")" && cp "$f" "$tmp/$f"
   done
   [ -n "$target" ] && perl -i -pe "$expr" "$tmp/$target"
@@ -227,6 +228,10 @@ check_mirror 발화 "ADJ_CLOSE 사본이 갈리면 잡는다" \
   ".claude/rules/test.md" 's/봉 하나로 값이 나오는 첫 지표다/봉 하나로 값이 나오는 최초 지표다/'
 check_mirror 발화 "사본이 한쪽에서 사라지면 잡는다" \
   ".claude/skills/batch-load/SKILL.md" 's/공공데이터포털은 없는 종목/공공데이터포털은 어떤 종목/'
+# skill(착수 전)과 훅(실행 후)은 서로를 발화시키지 못한다. 예외 태스크가 한쪽에서만
+# 바뀌면 적재 창 안에서 무엇을 돌려도 되는지에 대한 답이 둘로 갈린다.
+check_mirror 발화 "적재 창의 gradle 예외가 갈리면 잡는다" \
+  ".claude/skills/batch-load/SKILL.md" 's/gradlew checkDuplicateFiles/gradlew checkDupes/'
 
 echo
 printf '통과 %d / 실패 %d / 건너뜀 %d\n' "$pass" "$fail" "$skipped"

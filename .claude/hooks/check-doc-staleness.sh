@@ -252,7 +252,8 @@ fi
 # 줄 단위로는 못 비교하므로 개행을 접고 문장만 뽑아 대조한다.
 # 정규식에 역따옴표를 쓰지 않는다 — 큰따옴표 안에서 명령 치환으로 읽힌다. `.`로 대신한다.
 mirrors="공공데이터포털은 없는 종목[^)]*)|.claude/rules/data-pipeline.md|.claude/skills/batch-load/SKILL.md|공공데이터포털 응답 모양
-ADJ_CLOSE.는 봉 하나로.*FK로 정리가 중단된다\.|.claude/rules/data-pipeline.md|.claude/rules/test.md|ADJ_CLOSE FK 함정"
+ADJ_CLOSE.는 봉 하나로.*FK로 정리가 중단된다\.|.claude/rules/data-pipeline.md|.claude/rules/test.md|ADJ_CLOSE FK 함정
+예외는 ...gradlew checkDuplicateFiles. 하나다(단독 실행 시 아무것도 컴파일하지 않는다)|.claude/skills/batch-load/SKILL.md|.claude/hooks/warn-load-running.sh|적재 창의 gradle 예외"
 
 extract_mirror() {  # $1=파일 $2=정규식
   tr '\n' ' ' < "$1" | tr -s ' ' | sed -n "s/.*\($2\).*/\1/p"
