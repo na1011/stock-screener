@@ -60,6 +60,7 @@ paths:
 - **MUST NOT: 겹친다는 이유로 한쪽을 지우지 않는다.** 훅을 지우면 예외가 사라져 `.env.example`을 못 고치고, permissions를 지우면 훅이 죽었을 때 아무것도 안 남는다. 둘은 같은 정책의 중복이 아니라 **표현력이 다른 두 계층**이다.
 - **훅이 혼자 지키는 것**: `.env.<임의>`(`.env.production` 등), `*.key`, `*.pfx`, `id_rsa`, `credentials.json`, `service-account*.json`, `application-{local,secret,prod}.*`. permissions는 이 중 어느 것도 덮지 않는다.
 - 전역 `~/.claude/settings.json`은 커밋되지 않는다. **다른 클론에서 살아 있는 계층은 훅뿐이다.**
+- **MUST: 차단 가드(`guard-secrets.sh`·`guard-destructive.sh`·`lib/`)를 고치면 `~/.claude/hooks/`의 사본도 함께 고친다.** 같은 파일이 전역에도 등록돼 있다 — 저장소 사본은 클론에서 살아남고, 전역 사본은 이 하네스가 없는 프로젝트와 저장소 밖 세션을 덮는다. 갈리면 **저장소 안에서 막히는 것이 밖에서는 통과한다.** 전역 `SessionStart` 훅이 해시를 대조하지만 그건 다음 세션이다.
 
 ## 무엇을 적고 무엇을 자르는가
 
