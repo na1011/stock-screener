@@ -133,6 +133,30 @@ class PercentileCalculatorTest {
     }
 
     @Test
+    @DisplayName("비활성 유니버스는 모집단이 아니다 — 폐기된 지수의 편입 이력이 순위를 만들면 안 된다")
+    void excludesInactiveUniverses() {
+        // 이 저장소에서 KOSPI_TOP200은 테스트 DB에서 비활성이다(운영과 정반대다 — test.md).
+        // 제외는 삭제가 아니므로 폐기된 지수에 편입 이력이 남아 있는 것 자체는 정상이다.
+        //
+        // MUST: 둘 이상 넣는다. 하나면 population >= 2가 먼저 걸러내 이 테스트가 is_active를
+        // 지워도 통과한다 — 실제로 그렇게 써서 결함을 놓쳤다.
+        long retired = memberWithPer("KOSPI", "KOSPI_TOP200", "100001", BigDecimal.ONE);
+        memberWithPer("KOSPI", "KOSPI_TOP200", "100002", new BigDecimal("2"));
+
+        calculator.calculate(AS_OF);
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT value FROM indicator_value
+                WHERE stock_id = ? AND indicator_code = ?
+                """, BigDecimal.class, retired, PerCalculator.CODE + PercentileSpec.SUFFIX))
+                .as("아무도 보지 않는 모집단의 순위를 만들지 않는다")
+                .isEmpty();
+        assertThat(percentileOf(stockIds.get(0)))
+                .as("PER 1인 비활성 편입 종목이 활성 모집단에 섞였다면 최저값이 바뀌었을 것이다")
+                .isEqualByComparingTo("0");
+    }
+
+    @Test
     @DisplayName("한 종목이 두 유니버스에 걸리면 조용히 한쪽을 버리지 않고 깨진다")
     void refusesToRankStockBelongingToTwoUniverses() {
         // indicator_value에는 유니버스 축이 없어 종목당 값이 하나뿐이다. 둘 중 어느 순위를

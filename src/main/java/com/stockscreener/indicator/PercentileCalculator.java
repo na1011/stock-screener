@@ -38,6 +38,10 @@ public class PercentileCalculator {
      * {@code universeCode}로 대상을 좁히는 것과 어긋난다 — <b>거르는 모집단과 순위를 매기는
      * 모집단이 달라진다.</b> 미국이 붙으면(v1.1) 한국 종목이 미국 종목과 섞여 매겨진다.
      *
+     * <p>모집단은 <b>활성</b> 유니버스로 한정한다. 폐기된 지수의 편입 이력이 남아 있는 것은
+     * 정상이고(제외는 삭제가 아니다), 그것으로 순위를 매기면 아무도 보지 않는 모집단이 생긴다.
+     * 게다가 그 종목은 활성 유니버스에도 속해 있어 아래 겹침 조건에 그대로 걸린다.
+     *
      * <p>IMPORTANT — 이 쿼리는 <b>한 종목이 최대 하나의 활성 유니버스에 속한다</b>는 전제 위에
      * 선다. {@code indicator_value}에 유니버스 축이 없어 종목당 값이 하나뿐이기 때문이다.
      * 전제가 깨지면 JOIN이 행을 늘려 {@code ON CONFLICT DO UPDATE}가 같은 행을 두 번 건드리고,
@@ -62,6 +66,8 @@ public class PercentileCalculator {
                 FROM indicator_value iv
                 JOIN universe_membership m
                   ON m.stock_id = iv.stock_id AND m.effective_to IS NULL
+                JOIN universe u
+                  ON u.code = m.universe_code AND u.is_active
                 WHERE iv.indicator_code = ?
                   AND iv.trade_date = ?
             ) ranked
