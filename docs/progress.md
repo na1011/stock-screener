@@ -30,7 +30,7 @@
 
 **v1 구현은 끝났다. 남은 것은 사람이 값을 채우는 일과 그 뒤의 확인뿐이다** — 목록은 [`TODO.md`](../TODO.md)에 있다(알림 채널 자격증명, Sentry org·project 슬러그, ICANN 인증). 발급 상태는 문서가 아니라 `./gradlew checkEnv`에 묻는다 — 발급은 문서 밖에서 일어나 문서가 먼저 낡는다.
 
-- **앱이 지금 내려가 있다**(2026-08-09, `launchctl bootout`). 밖에서는 502이고 **평일 20시 배치도 돌지 않는다** — 올리려면 `ops/install-agent.sh`다. 도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이므로(`~/Desktop`이 TCC 보호 경로다) **코드를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다** — `./gradlew build`만 하면 옛것이 돌고 화면에는 아무 단서가 없다.
+- **앱은 떠 있다**(2026-08-09 11:46 재등록, 밖에서 `UP` 실측). 도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이므로 **코드나 `.env`를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다** — `./gradlew build`만 하면 옛것이 돌고 화면에는 아무 단서가 없다(ADR-0034). 등록이 풀린 상태에서는 `deploy.sh`가 거부하므로 그때만 `ops/install-agent.sh`다.
 - **20시 배치가 실제로 당일 종가를 받아오는지는 아직 못 봤다.** data.go.kr의 공개 시각을 실측하지 않았다. 이르면 수집이 0건으로 끝나고 그 경우 알림이 온다 — **거래일마다 오면 시각을 늦춘다**(ADR-0033).
 
 ---
@@ -40,7 +40,7 @@
 파일별 함정은 `.claude/rules/*.md`가 glob으로, 작업별 절차는 skill이 스스로 로드한다. **무엇이 어디 있는지 여기 옮겨 적지 않는다** — 목록은 반드시 낡고, 낡은 목록은 "로드됐다"고 믿게 만든다.
 
 - **phase별 브랜치를 만들지 않는다.** `main`에 직접 쌓는다(2026-08-06). Phase 2 브랜치가 `main`을 4개월 묶어둔 전례가 근거다 — CLAUDE.md가 이 줄을 가리킨다. 브랜치는 **버릴 수 있는 탐색**에만 쓴다.
-- **IMPORTANT — iCloud가 `build/` 산출물도 복제한다.** 증상은 테스트의 `Could not execute test class 'X 2' (wrong name: X)`와 **수 분간의 멈춤**(Gradle이 파일 해싱에서 대기한다). 처방은 `./gradlew clean`이고, `checkDuplicateFiles`가 `src`(삭제)와 `build`(clean)를 나눠 먼저 잡는다. **원격 편집 파일이 즉시 안 보이는 것도 같은 원인이다 — 없다고 단정하기 전에 몇 분 뒤 다시 본다.**
+- **저장소는 `/Users/na1011/dev/stock-screener`에 있다**(2026-08-09에 `~/Desktop`에서 옮겼다, ADR-0034). iCloud 복제와 TCC 차단이 둘 다 원인 단에서 사라졌다.
 
 ---
 

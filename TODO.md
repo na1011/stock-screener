@@ -19,10 +19,6 @@
 
   Vite 프록시가 Host를 바꾸지 않아 Spring이 요청 Host로 `redirect_uri`를 만든다(ADR-0018, 실측 확인). 등록하지 않으면 `npm run dev`에서만 `redirect_uri_mismatch`가 난다. **`./gradlew bootRun`으로 `:8080`에서 쓰는 경로는 실측으로 동작하므로**(2026-08-09 관통 검증), 이 작업은 `npm run dev`를 쓸 때만 필요하다.
 
-- [ ] **(권장) 저장소를 `~/Desktop` 밖으로 옮긴다.** 이유가 둘로 늘었다.
-  - `build/`의 클래스 파일이 iCloud 때문에 `X 2.class`로 복제되면 테스트가 `wrong name` 오류로 실패하고 Gradle이 파일 해싱에서 수 분간 멈춘다. `./gradlew clean`이 처방이고 `checkDuplicateFiles`가 먼저 잡아 주지만, 원인을 없애는 편이 낫다.
-  - **`~/Desktop`은 macOS가 TCC로 보호해 launchd가 띄운 프로세스가 읽지 못한다.** 그래서 지금은 실행 산출물과 `.env` **사본**을 `~/Library/Application Support/stock-screener`로 내보내 돌린다(ADR-0033). 저장소를 옮기면 그 `.env` 사본을 없앨 수 있다.
-
 - [ ] **(권장) 뚜껑을 닫아 둔 채 쓰려면 절전을 끈다.** `run-app.sh`가 `caffeinate -s`로 감싸지만 그것은 **전원 연결 시 유휴 절전**만 막는다. 뚜껑을 닫으면 그대로 잠들고 사이트도 함께 내려간다.
   ```bash
   sudo pmset -a disablesleep 1     # 되돌리기: sudo pmset -a disablesleep 0
@@ -255,7 +251,6 @@ spec §8이 **"이메일과 메신저 두 채널 모두"**를 요구한다. 하�
    ./gradlew checkEnv   # 값은 출력되지 않고 키 이름과 설정 여부만 나온다
    ```
    **`자리표시자 그대로 — 채워지지 않음`이 뜨면 복사만 하고 안 채운 것이다.** 애플리케이션은 그 상태로도 조용히 기동하므로 이 명령이 유일한 구분 수단이다.
-   IMPORTANT — `~/Desktop`이 iCloud 동기화 대상이라 **다른 기기에서 편집한 `.env`가 즉시 안 보인다.** 값을 넣었는데 미설정으로 나오면 몇 분 뒤 다시 돌려본다(실제로 약 10분 걸린 적이 있다).
 3. [`docs/external-credentials.md`](docs/external-credentials.md)의 현황 표를 `완료 (YYYY-MM-DD)`로 바꾼다.
 4. [`docs/progress.md`](docs/progress.md)의 "미룬 것" 절에서 해당 항목을 지운다.
 5. 끝난 항목은 이 파일에서 지운다.

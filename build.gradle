@@ -425,7 +425,7 @@ tasks.register('checkDuplicateFiles') {
                     sourceDupes.collect { "  ${it}" }.join('\n'))
         }
 
-        // 빌드 산출물에도 같은 일이 생긴다(~/Desktop이 iCloud 동기화 대상이다). 그때의 증상은
+        // 빌드 산출물에도 같은 일이 생긴다. 그때의 증상은
         // "Could not execute test class 'X 2' (wrong name: X)"인데, 그 문구만 보고 원인이
         // 파일 복제라는 것을 알아내기까지 시간이 걸린다 — 실제로 걸렸다. 여기서 먼저 가른다.
         // src와 처방이 다르다: 산출물은 지우는 게 아니라 clean으로 다시 만든다.

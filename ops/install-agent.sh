@@ -34,7 +34,7 @@ fi
 
 mkdir -p "$HOME/Library/LaunchAgents" "$LOG_DIR"
 
-# 실행 산출물을 TCC 밖으로 먼저 내보낸다. 이유는 ops/stage.sh 머리에 있다.
+# 실행 산출물을 저장소 밖으로 먼저 내보낸다. 이유는 ops/stage.sh 머리에 있다.
 "$ROOT/ops/stage.sh"
 
 cat > "$PLIST" <<PLIST_EOF
@@ -45,8 +45,8 @@ cat > "$PLIST" <<PLIST_EOF
   <key>Label</key>
   <string>$LABEL</string>
 
-  <!-- 저장소가 아니라 스테이징 사본을 가리킨다. ~/Desktop은 TCC 보호 경로라
-       launchd가 띄운 프로세스는 그 아래를 읽지 못한다(ops/stage.sh 참조).
+  <!-- 저장소가 아니라 스테이징 사본을 가리킨다. 도는 것이 작업 트리를 가리키면
+       빌드가 곧 배포가 되기 때문이다(ops/stage.sh 머리, ADR-0034).
        시크릿은 여기 적지 않는다 — run-app.sh가 .env를 읽는다. 이 파일은 평문이고
        백업·동기화·화면 공유를 그대로 따라다닌다. -->
   <key>ProgramArguments</key>

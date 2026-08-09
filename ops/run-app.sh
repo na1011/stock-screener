@@ -2,7 +2,7 @@
 #
 # launchd가 실행하는 진입점. **스테이징된 사본이 실행된다** — 저장소 안의 이 파일이 아니라
 # ~/Library/Application Support/stock-screener/run-app.sh 다(ops/stage.sh가 복사한다).
-# 이유는 그 파일 머리에 있다: ~/Desktop은 TCC 보호 경로라 launchd가 접근하지 못한다.
+# 이유는 그 파일 머리에 있다: 도는 것이 작업 트리를 가리키면 빌드가 곧 배포가 된다.
 #
 # 그래서 여기서는 저장소를 참조하지 않는다. 자기가 놓인 디렉터리 안의 것만 쓴다.
 #
