@@ -44,6 +44,12 @@ check() {
       out=$(jq -n --arg c "$cmd" --arg s "sess-$RANDOM$RANDOM" '{session_id:$s,tool_input:{command:$c}}' \
             | "$HOOKS/remind-rule-on-shell.sh" 2>/dev/null)
       if [ -z "$out" ]; then got="침묵"; else got="발화"; fi ;;
+    # 이 분기만 `command`가 아니라 `file_path`를 먹인다 — Edit·Write 경로의 훅이라 입력
+    # 모양이 다르다. `$cmd` 자리에 경로를 넘긴다.
+    write)
+      out=$(jq -n --arg p "$cmd" --arg s "sess-$RANDOM$RANDOM" '{session_id:$s,tool_input:{file_path:$p}}' \
+            | "$HOOKS/remind-rule-on-write.sh" 2>/dev/null)
+      if [ -z "$out" ]; then got="침묵"; else got="발화"; fi ;;
   esac
   [ -z "$got" ] && got="(빈응답)"
   if [ "$got" = "$want" ]; then
@@ -107,6 +113,16 @@ check 발화 "전역 사본 편집"                     "sed -i '' 's/a/b/' ~/.c
 check 발화 "find -exec 로 트리 일괄 편집"        "find .claude/hooks -name '*.sh' -exec sed -i '' 's/a/b/' {} +" rule
 check 발화 "인터프리터 heredoc 이 파일을 씀"     "$(hd 'python3 - <<PY' "open('.claude/hooks/x.sh','w').write('x')" 'PY')" rule
 check 침묵 "git diff 로 조회"                   "git diff .claude/rules/harness.md" rule
+
+echo "── 읽지 않고 편집한 경로 (Write 구멍) ──"
+#
+# `paths` 규칙은 파일을 Read할 때 뜬다. 새 파일 Write는 사전 Read를 요구하지 않으므로
+# 그 경로로 만들면 규칙이 원리적으로 오지 않는다. 침묵으로 돌아가면 그 구멍이 다시 열린다.
+check 발화 "새 훅을 Write 로 만듦"               ".claude/hooks/new-hook.sh" write
+check 발화 "새 규칙 파일을 Write 로 만듦"         ".claude/rules/new-rule.md" write
+check 발화 "CLAUDE.md 편집"                     "CLAUDE.md" write
+check 발화 "전역 가드 사본 편집"                  "$HOME/.claude/hooks/guard-secrets.sh" write
+check 침묵 "규칙이 없는 경로"                     "docs/adr/README.md" write
 
 echo "── 거울 드리프트 (check-doc-staleness §5) ──"
 #
