@@ -30,15 +30,13 @@ applies_to:
 
 `유니버스마다 따로 매긴다`가 파티션을, `한 종목이 두 유니버스에 걸리면`이 겹침 거부를, `모집단이 하나면`이 단일 원소 배제를 각각 고정한다. 첫 번째는 `PARTITION BY`를 빼면 실제로 깨지는 것을 확인했다.
 
-저장된 값으로도 물을 수 있다 — 유니버스별로 매겼다면 **모든 활성 유니버스에서** 최소 0·최대 1이 나온다:
+저장된 값으로도 묻는다 — 유니버스별로 매겼다면 **모든 활성 유니버스에서** 최소 0·최대 1이 나온다.
 
-```sql
-SELECT m.universe_code, min(iv.value), max(iv.value)
-FROM indicator_value iv
-JOIN universe_membership m ON m.stock_id = iv.stock_id AND m.effective_to IS NULL
-WHERE iv.indicator_code = 'PER_PCTL' AND iv.trade_date = (SELECT max(trade_date) FROM indicator_value)
-GROUP BY 1;
+```premise 백분위가 활성 유니버스 안에서만 매겨진다
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'PER_PCTL'), g AS (SELECT u.code, min(iv.value) mn, max(iv.value) mx FROM indicator_value iv JOIN universe_membership m ON m.stock_id = iv.stock_id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE iv.indicator_code = 'PER_PCTL' AND iv.trade_date = (SELECT t FROM d) GROUP BY 1) SELECT CASE WHEN (SELECT t FROM d) IS NULL THEN 'PER_PCTL이 한 행도 없다 — 잴 것이 없었다' WHEN count(*) = 0 THEN 'PER_PCTL은 있는데 활성 유니버스 편입 종목이 하나도 없다' WHEN count(*) FILTER (WHERE mn <> 0 OR mx <> 1) > 0 THEN string_agg(code || ' ' || mn || '~' || mx, ', ') FILTER (WHERE mn <> 0 OR mx <> 1) || ' — 유니버스별로 매겨지지 않았다' ELSE 'OK ' || count(*) || '개 유니버스 전부 0~1' END FROM g"
 ```
+
+**기준 일자를 `PER_PCTL` 자신의 최댓값으로 잡는다.** 전체 지표의 `max(trade_date)`로 잡으면 백분위 계산만 하루 뒤처졌을 때 조회가 0행이 되고, 그 침묵이 "전제가 참"으로 읽힌다.
 
 ## 배경
 
