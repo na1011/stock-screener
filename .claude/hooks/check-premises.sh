@@ -34,15 +34,31 @@ guard="$root/.claude/hooks/guard-destructive.sh"
 
 # 전제 하나당 상한(초)과 전체 예산(초).
 # macOS 기본에 timeout·gtimeout이 둘 다 없다. perl의 alarm이 유일하게 있는 수단이다.
-per_limit=5
+#
+# MUST: `per_limit > PGCONNECT_TIMEOUT + statement_timeout`을 유지한다(8 > 4 + 3).
+# 부등호가 뒤집히면 psql이 자기 오류 문자열을 내기 전에 alarm이 먼저 프로세스를 죽여,
+# "왜 못 쟀는가"가 "5초 안에 끝나지 않았다"로 뭉개진다 — 접속 실패와 질의 지연과 DB
+# 다운이 한 문장으로 합쳐진다.
+#
+# MUST: `total_budget + per_limit < settings.json의 훅 timeout`을 유지한다(20 + 8 < 30).
+# 예산은 새 전제를 **시작할 때** 검사하므로 최악은 total_budget을 다 쓴 뒤 마지막 하나가
+# per_limit을 다 쓰는 경우다. 훅이 timeout에 걸리면 **출력이 통째로 사라지고**, 이 훅에게
+# 침묵은 가장 나쁜 결과다.
+per_limit=8
 total_budget=20
 
 # psql이 읽기 전용으로 붙게 한다. 러너가 도메인을 아는 유일한 지점이고, 무엇을 재는지
 # 해석하는 것이 아니라 **되돌릴 수 없는 일을 못 하게** 하는 방어다. psql이 아닌 전제에는
 # 그냥 무시되는 환경변수다.
 export PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=3s'
-# 2초로 잡았더니 백필이 도는 동안 접속이 못 붙어 무판정이 났다. 상한(per_limit) 안에는
-# 들어가되 부하 중에도 붙을 여유를 준다.
+# 2초로는 적재가 도는 동안 접속이 못 붙어 무판정이 났다. 슬롯 고갈이 아니라 CPU 포화다 —
+# 적재 JVM과 빌드가 함께 돌면 SCRAM 인증과 프로세스 fork가 실제로 느려진다. 그래서 값을
+# 올리는 것이 맞는 처방이고, 위 per_limit 부등식이 그 여유를 감당한다.
+#
+# **다만 무판정의 원인이 언제나 이것은 아니다.** 끝났어야 할 적재 프로세스가 살아 있어도
+# 같은 증상이 나오고, 그때는 값을 아무리 올려도 낫지 않는다 — 실제로 그 상황에서 이 값을
+# 올린 적이 있다. 그래서 아래 보고가 "적재가 돌고 있다"를 원인 후보로 함께 낸다.
+# MUST: 이 값을 다시 올리기 전에 그 줄이 떴는지부터 본다.
 export PGCONNECT_TIMEOUT=4
 
 findings=""

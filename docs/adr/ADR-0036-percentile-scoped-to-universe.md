@@ -33,10 +33,12 @@ applies_to:
 저장된 값으로도 묻는다 — 유니버스별로 매겼다면 **모든 활성 유니버스에서** 최소 0·최대 1이 나온다.
 
 ```premise 백분위가 활성 유니버스 안에서만 매겨진다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'PER_PCTL'), g AS (SELECT u.code, min(iv.value) mn, max(iv.value) mx FROM indicator_value iv JOIN universe_membership m ON m.stock_id = iv.stock_id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE iv.indicator_code = 'PER_PCTL' AND iv.trade_date = (SELECT t FROM d) GROUP BY 1) SELECT CASE WHEN (SELECT t FROM d) IS NULL THEN 'PER_PCTL이 한 행도 없다 — 잴 것이 없었다' WHEN count(*) = 0 THEN 'PER_PCTL은 있는데 활성 유니버스 편입 종목이 하나도 없다' WHEN count(*) FILTER (WHERE mn <> 0 OR mx <> 1) > 0 THEN string_agg(code || ' ' || mn || '~' || mx, ', ') FILTER (WHERE mn <> 0 OR mx <> 1) || ' — 유니버스별로 매겨지지 않았다' ELSE 'OK ' || count(*) || '개 유니버스 전부 0~1' END FROM g"
+psql -d stock_screener -At -c "WITH g AS (SELECT iv.trade_date d, u.code, min(iv.value) mn, max(iv.value) mx FROM indicator_value iv JOIN universe_membership m ON m.stock_id = iv.stock_id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE iv.indicator_code = 'PER_PCTL' GROUP BY 1,2), bad AS (SELECT * FROM g WHERE mn <> 0 OR mx <> 1) SELECT CASE WHEN (SELECT count(*) FROM g) = 0 THEN 'PER_PCTL이 한 행도 없다 — 잴 것이 없었다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK ' || (SELECT count(DISTINCT d) FROM g) || '거래일 전부 유니버스별 0~1' ELSE (SELECT count(DISTINCT d) FROM bad) || '거래일이 유니버스 안에서 매겨지지 않았다(' || (SELECT min(d)||' ~ '||max(d) FROM bad) || ') — 그 구간의 백분위가 옛 기준이다' END"
 ```
 
-**기준 일자를 `PER_PCTL` 자신의 최댓값으로 잡는다.** 전체 지표의 `max(trade_date)`로 잡으면 백분위 계산만 하루 뒤처졌을 때 조회가 0행이 되고, 그 침묵이 "전제가 참"으로 읽힌다.
+**보존된 전 구간을 본다. 최신 일자 한 장만 보면 안 된다** — 백필이 중간에 끊기면 최신일과 오래된 쪽은 맞고 **가운데만** 옛 기준으로 남는데, 화면이 최신일만 읽으므로 증상이 없다. 실제로 그 상태가 이 전제 검사를 통과했고, 과거 일자를 손으로 조회해서야 드러났다. 표본 한 장은 어느 장을 고르든 이것을 못 잡는다.
+
+전 구간이라 비쌀 것 같지만 `PER_PCTL` 행만 훑어 실측 0.57초다. 편입은 **현재** 시점(`effective_to IS NULL`)으로 본다 — 유니버스 교체가 쌓이면 과거 일자가 거짓으로 걸릴 수 있는 자리이고, 그때는 이 전제가 아니라 편입 이력을 시점으로 조인하도록 고쳐야 한다. 지금은 2025-08-28까지 거짓 양성이 없다(실측).
 
 ## 배경
 

@@ -32,6 +32,8 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '지표가 한
 ```
 운영 적재 이후, 남은 거래일이 180 이내여야 한다. **`count(*) = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다.
 
+전수 `count(DISTINCT trade_date)`라 `statement_timeout`(3초)에 대한 여유가 크지 않다 — 269만 행에서 1.7초다. **`ORDER BY trade_date DESC LIMIT 181`로 묶어도 빨라지지 않는다**(실측 1.57초). PostgreSQL에 index skip scan이 없어 `DISTINCT`가 어차피 전수를 훑기 때문이다. 다시 시도하지 않는다. 정말 걸리면 재귀 CTE로 loose index scan을 흉내내는 것이 유일한 길이고, 그 복잡도를 감수할 만큼 실패한 적은 아직 없다.
+
 ## 배경
 
 보존 기간을 둘지는 판단 사항으로 남아 있던 항목이다. 850종목 × 150지표 × 500일 ≈ 64M행 / 6.7GB로 추정되며, 이 프로젝트는 맥북 온프레미스에서 돌아 디스크가 곧 비용이다(spec §2 "인프라 운영 비용 최소화").
