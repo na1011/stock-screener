@@ -23,7 +23,7 @@ HOOKS=.claude/hooks
 
 command -v jq >/dev/null 2>&1 || { echo "jq가 없어 회귀표를 돌릴 수 없다."; exit 1; }
 
-pass=0; fail=0
+pass=0; fail=0; skipped=0
 
 # $1 기대값, $2 설명, $3 명령, $4 훅
 #
@@ -49,6 +49,10 @@ check() {
     write)
       out=$(jq -n --arg p "$cmd" --arg s "sess-$RANDOM$RANDOM" '{session_id:$s,tool_input:{file_path:$p}}' \
             | "$HOOKS/remind-rule-on-write.sh" 2>/dev/null)
+      if [ -z "$out" ]; then got="침묵"; else got="발화"; fi ;;
+    load)
+      out=$(jq -n --arg c "$cmd" --arg s "sess-$RANDOM$RANDOM" '{session_id:$s,tool_input:{command:$c}}' \
+            | "$HOOKS/warn-load-running.sh" 2>/dev/null)
       if [ -z "$out" ]; then got="침묵"; else got="발화"; fi ;;
   esac
   [ -z "$got" ] && got="(빈응답)"
@@ -96,6 +100,72 @@ echo "── 적재 인자 알림 ──"
 check 침묵 "적재 명령을 문서화한 커밋 메시지"  "$(hd 'git commit -F - <<MSG' 'docs: 절차' '' "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'" 'MSG')" bootstrap
 check 발화 "실제 적재 실행(플래그 없음)"        "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'" bootstrap
 check 침묵 "실제 적재 실행(플래그 있음)"        "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load --reload-existing=true'" bootstrap
+
+echo "── 적재 중 gradle 알림 ──"
+#
+# 이 그룹만 신호가 **살아 있는 프로세스**다. 명령 문자열만으로는 재현되지 않으므로 진짜
+# JVM을 띄운다. 판정이 틀리는 방향이 둘이고 둘 다 위험하다 — 못 잡으면 적재가 조용히
+# 처음부터 다시 가고, 잘못 잡으면 첫 발화가 거짓이라 그 뒤의 참 발화도 무시된다.
+. "$HOOKS/lib/load-process.sh"
+
+if stray_load_pids >/dev/null 2>&1; then
+  # MUST: 건너뛴 사실을 출력한다. 건너뛴 것이 통과로 읽히면 이 표가 잡으려는 병에 이 표가 걸린다.
+  skipped=$((skipped+1))
+  echo "  건너뜀 — 진짜 적재가 도는 중이라 '적재 없음' 기대가 성립하지 않는다."
+else
+  check 침묵 "적재가 없으면 build 는 조용하다"    "./gradlew build" load
+  check 침묵 "적재가 없으면 clean 도 조용하다"    "./gradlew clean" load
+fi
+
+# 적재 기동 알림은 살아 있는 프로세스와 무관하다 — 명령의 모양만 본다.
+check 발화 "적재를 띄우면 창이 열렸다고 알린다"  "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill'" load
+check 침묵 "gradle 이 아닌 명령"                 "psql -d stock_screener -c 'select 1'" load
+
+# 진짜 JVM을 띄워 분기 B를 확인한다. `comm`이 java여야 하므로 셸 프로세스로는 대신할 수 없다.
+if command -v java >/dev/null 2>&1; then
+  fake_dir=$(mktemp -d)
+  printf 'public class Sleeper { public static void main(String[] a) throws Exception { Thread.sleep(20000); } }\n' > "$fake_dir/Sleeper.java"
+  java "$fake_dir/Sleeper.java" --job=backfill >/dev/null 2>&1 &
+  fake_pid=$!
+  # 단일 파일 실행은 메모리 안에서 컴파일하므로 뜨는 데 시간이 걸린다. 보일 때까지 기다린다.
+  fake_seen=false
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if stray_load_pids 2>/dev/null | grep -qw "${fake_pid}"; then fake_seen=true; break; fi
+    sleep 1
+  done
+  if [ "$fake_seen" = true ]; then
+    check 발화 "적재 중 build 는 알린다"           "./gradlew build" load
+    check 발화 "적재 중 clean 은 알린다"           "./gradlew clean" load
+    check 침묵 "적재 중에도 checkDuplicateFiles"   "./gradlew checkDuplicateFiles" load
+    # 리다이렉션이 태스크 이름으로 읽히면 예외가 무너진다. 실제로 그렇게 오발화했다.
+    check 침묵 "예외에 리다이렉션이 붙어도"        "./gradlew checkDuplicateFiles -q 2>&1 | tail -3" load
+    check 발화 "예외와 컴파일 태스크를 함께 부르면" "./gradlew checkDuplicateFiles build" load
+    check 침묵 "적재 중 커밋 메시지 속 gradle"     "$(hd 'git commit -F - <<MSG' 'docs: 절차' '' './gradlew build 를 먼저 돌린다' 'MSG')" load
+    check 침묵 "적재 중 인용만 한 gradle"          'echo "./gradlew build"' load
+  else
+    skipped=$((skipped+1))
+    echo "  건너뜀 — 가짜 적재 JVM이 뜨지 않아 분기 B를 재현하지 못했다."
+  fi
+  kill "$fake_pid" 2>/dev/null || true
+  wait "$fake_pid" 2>/dev/null || true
+  rm -rf "$fake_dir"
+else
+  skipped=$((skipped+1))
+  echo "  건너뜀 — java가 없어 가짜 적재 JVM을 띄우지 못했다."
+fi
+
+# **비java 프로세스를 적재로 읽지 않는가.** Bash 도구의 셸은 명령 전문을 자기 argv에 싣기
+# 때문에, 이 필터가 없으면 패턴을 언급하기만 한 도구 호출이 전부 적재로 잡힌다.
+bash -c 'sleep 6; :' pad --job=backfill >/dev/null 2>&1 &
+nonjava_pid=$!
+sleep 1
+if stray_load_pids 2>/dev/null | grep -qw "${nonjava_pid}"; then
+  fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s\n' "발화" "비java 프로세스를 적재로 읽지 않는다"
+else
+  pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "침묵" "비java 프로세스를 적재로 읽지 않는다"
+fi
+kill "$nonjava_pid" 2>/dev/null || true
+wait "$nonjava_pid" 2>/dev/null || true
 
 echo "── 규칙 포인터 알림 ──"
 check 발화 "셸로 build.gradle 읽기"            "grep -n bootRun build.gradle" rule
@@ -159,5 +229,7 @@ check_mirror 발화 "사본이 한쪽에서 사라지면 잡는다" \
   ".claude/skills/batch-load/SKILL.md" 's/공공데이터포털은 없는 종목/공공데이터포털은 어떤 종목/'
 
 echo
-printf '통과 %d / 실패 %d\n' "$pass" "$fail"
+printf '통과 %d / 실패 %d / 건너뜀 %d\n' "$pass" "$fail" "$skipped"
+# MUST: 건너뛴 수를 함께 낸다. 건너뛴 것이 통과로 읽히면 "덮여 있다"고 믿게 된다 —
+# 이 표가 잡으려는 병과 같은 병이다.
 [ "$fail" -eq 0 ] || exit 1

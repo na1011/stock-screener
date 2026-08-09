@@ -30,7 +30,7 @@ test -f "$HOME/Library/Application Support/stock-screener/.env" \
   && ! test -L "$HOME/Library/Application Support/stock-screener/.env" && echo OK
 
 # 3. 새 경로에서 훅 계층이 온전하다
-bash .claude/hooks/lib/regression.sh          # 통과 33 / 실패 0
+bash .claude/hooks/lib/regression.sh          # 실패 0 · 건너뜀 0 (통과 수는 표가 자라므로 적지 않는다)
 
 # 4. 이동이 배포 경로를 깨지 않았다 — 밖에서 물어야 갈린다
 curl -s https://screener.na1011.net/actuator/health     # {"status":"UP"}

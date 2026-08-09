@@ -210,6 +210,20 @@ if [ "$n_unknowns" -gt 0 ] && command -v pg_isready >/dev/null 2>&1; then
   pg_isready -q >/dev/null 2>&1 || db_note="PostgreSQL이 응답하지 않는다 — 아래 판정 불가는 대부분 그 때문이다."$'\n'
 fi
 
+# 적재가 도는 중이면 접속·질의가 느려져 판정 불가가 난다. 그 원인을 **여기서** 말하는 이유는,
+# 원인을 모르면 타임아웃 값을 올리는 쪽으로 손이 가기 때문이다. 실제로 그렇게 한 적이 있고
+# 진짜 원인은 꺼야 할 프로세스가 살아 있던 것이었다. 값을 올려도 그 프로세스는 안 죽는다.
+#
+# 판정 불가가 있을 때만 붙인다 — 이 훅은 ADR 전제 검증기이지 세션 상태 보고자가 아니다.
+# "적재가 돌고 있다" 자체를 알리는 것은 `inject-progress.sh`의 몫이다.
+if [ "$n_unknowns" -gt 0 ] && [ -r "$root/.claude/hooks/lib/load-process.sh" ]; then
+  # shellcheck source=lib/load-process.sh
+  . "$root/.claude/hooks/lib/load-process.sh"
+  if load_pids=$(stray_load_pids); then
+    db_note="${db_note}적재 배치가 돌고 있다(PID ${load_pids}) — 아래 판정 불가는 그 부하 때문일 수 있다. **타임아웃을 올리기 전에 그 프로세스가 아직 돌아야 하는 것인지 먼저 답한다.**"$'\n'
+  fi
+fi
+
 ctx="ADR이 선언한 전제를 확인했다. 결정이 아직 옳은지에 대한 재료이며, 무엇을 할지는 정하지 않는다.
 (참 ${n_ok} · 발견 ${n_findings} · 판정 불가 ${n_unknowns})
 
