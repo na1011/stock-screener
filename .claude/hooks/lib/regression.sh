@@ -25,6 +25,12 @@ command -v jq >/dev/null 2>&1 || { echo "jq가 없어 회귀표를 돌릴 수 �
 
 pass=0; fail=0; skipped=0
 
+# 부작용이 있는 외부 명령을 가릴 자리. 지금은 osascript 하나다.
+NOOP_BIN=$(mktemp -d)
+printf '#!/bin/sh\nexit 0\n' > "$NOOP_BIN/osascript"
+chmod +x "$NOOP_BIN/osascript"
+trap 'rm -rf "$NOOP_BIN"' EXIT
+
 # $1 기대값, $2 설명, $3 명령, $4 훅
 #
 # MUST: 훅이 **아무것도 출력하지 않는 것**이 정상 통과다. 그 빈 출력을 jq에 넣으면 jq도 빈
@@ -53,6 +59,13 @@ check() {
     load)
       out=$(jq -n --arg c "$cmd" --arg s "sess-$RANDOM$RANDOM" '{session_id:$s,tool_input:{command:$c}}' \
             | "$HOOKS/warn-load-running.sh" 2>/dev/null)
+      if [ -z "$out" ]; then got="침묵"; else got="발화"; fi ;;
+    # 세션 종료 훅은 입력을 보지 않고 **살아 있는 프로세스만** 본다. `$cmd`는 쓰이지 않는다.
+    # osascript를 가린 PATH로 돌린다 — 표를 돌릴 때마다 데스크톱 알림이 뜨면 안 된다.
+    # 훅에 테스트용 분기를 넣는 대신 환경을 바꾼다(프로덕션 경로에 이음매를 만들지 않는다).
+    endload)
+      out=$(PATH="$NOOP_BIN:$PATH" "$HOOKS/warn-load-at-session-end.sh" \
+            <<< '{"hook_event_name":"SessionEnd"}' 2>/dev/null)
       if [ -z "$out" ]; then got="침묵"; else got="발화"; fi ;;
   esac
   [ -z "$got" ] && got="(빈응답)"
@@ -115,6 +128,7 @@ if stray_load_pids >/dev/null 2>&1; then
 else
   check 침묵 "적재가 없으면 build 는 조용하다"    "./gradlew build" load
   check 침묵 "적재가 없으면 clean 도 조용하다"    "./gradlew clean" load
+  check 침묵 "적재가 없으면 세션 종료도 조용하다" "" endload
 fi
 
 # 적재 기동 알림은 살아 있는 프로세스와 무관하다 — 명령의 모양만 본다.
@@ -142,6 +156,9 @@ if command -v java >/dev/null 2>&1; then
     check 발화 "예외와 컴파일 태스크를 함께 부르면" "./gradlew checkDuplicateFiles build" load
     check 침묵 "적재 중 커밋 메시지 속 gradle"     "$(hd 'git commit -F - <<MSG' 'docs: 절차' '' './gradlew build 를 먼저 돌린다' 'MSG')" load
     check 침묵 "적재 중 인용만 한 gradle"          'echo "./gradlew build"' load
+    # 세션이 끝나는 순간이 "켜 두고 잊는" 실패가 걸리는 유일한 자리다. 침묵으로 돌아가면
+    # 그 실패는 다음 세션 시작까지 아무 데서도 드러나지 않는다.
+    check 발화 "적재를 켜 둔 채 세션이 끝나면 알린다" "" endload
   else
     skipped=$((skipped+1))
     echo "  건너뜀 — 가짜 적재 JVM이 뜨지 않아 분기 B를 재현하지 못했다."
