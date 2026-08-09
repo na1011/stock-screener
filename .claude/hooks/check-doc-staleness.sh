@@ -38,12 +38,19 @@ add() { findings="${findings}- $1"$'\n'; }
 # 이름을 하드코딩하지 않고 실제 `source` 줄에서 읽는다. 목록으로 두면 lib이 늘 때마다
 # 따라가야 하고, 따라가지 못한 목록은 "덮여 있다"고 믿게 만든다. 죽는 훅을 **이름으로**
 # 세지 않고 개수만 세는 것도 같은 이유다.
+#
+# MUST NOT: 경로 전체를 한 쌍의 따옴표 안에서 찾지 않는다. `. "$(dirname "${BASH_SOURCE[0]}")/lib/x.sh"`는
+# 안쪽에 따옴표가 또 있어서 `"[^"]*/lib/…"` 같은 패턴이 통째로 빗나간다. 실제로 그 형태로
+# source하는 훅 셋(**그중 하나가 파괴 명령 차단기다**)을 못 봐서, 사용처를 4가 아니라 1로
+# 셌다. 그 형태로만 쓰이는 lib이 생기면 부재가 아예 보고되지 않는다.
+# 그래서 **source 줄인지**와 **어떤 lib을 가리키는지**를 따로 본다.
 while IFS= read -r libname; do
   [ -z "$libname" ] && continue
   [ -r ".claude/hooks/lib/${libname}" ] && continue
-  users=$(grep -rlE "(^|[[:space:]])(\.|source)[[:space:]]+\"[^\"]*/lib/${libname}\"" .claude/hooks --include='*.sh' 2>/dev/null | grep -c . || true)
+  users=$(grep -rlE "(^|[[:space:]])(\.|source)[[:space:]].*/lib/${libname//./\\.}" \
+          .claude/hooks --include='*.sh' 2>/dev/null | grep -c . || true)
   add "\`.claude/hooks/lib/${libname}\`가 없다. 훅 ${users}개가 이것을 source하므로 지금 그만큼이 죽어 있다 — 어느 것인지는 \`.claude/settings.json\`의 등록 목록과 대조해라. 파괴적 명령 차단이나 시크릿 확인이 섞여 있으면 복구 전에는 그 명령들을 직접 검토해야 한다."
-done <<< "$(grep -rhoE '(^|[[:space:]])(\.|source)[[:space:]]+"[^"]*/lib/[A-Za-z0-9_.-]+\.sh"' .claude/hooks --include='*.sh' 2>/dev/null | grep -oE '[A-Za-z0-9_-]+\.sh' | sort -u || true)"
+done <<< "$(grep -rhE '(^|[[:space:]])(\.|source)[[:space:]]' .claude/hooks --include='*.sh' 2>/dev/null | grep -oE '/lib/[A-Za-z0-9_-]+\.sh' | sed 's|^/lib/||' | sort -u || true)"
 
 # 1. progress.md가 주입 상한을 넘겨 세션 시작 주입이 잘리는가
 #

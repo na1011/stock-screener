@@ -233,7 +233,6 @@ check_mirror 발화 "사본이 한쪽에서 사라지면 잡는다" \
 check_mirror 발화 "적재 창의 gradle 예외가 갈리면 잡는다" \
   ".claude/skills/batch-load/SKILL.md" 's/gradlew checkDuplicateFiles/gradlew checkDupes/'
 
-echo "── 죽은 하네스 참조 (check-doc-staleness §6) ──"
 #
 # 최소 git 트리를 만들어 거기서 돌린다. 저장소 자체를 비틀면 되돌리기를 잊고, 그러면 다음
 # 세션이 깨진 참조를 정상으로 믿는다(거울 픽스처와 같은 이유).
@@ -261,6 +260,41 @@ check_deadref() {
   fi
 }
 
+echo "── 없는 공용 파일 (check-doc-staleness §0) ──"
+#
+# `$(dirname "${BASH_SOURCE[0]}")/lib/x.sh` 형태를 못 보면 그 lib의 부재가 **통째로 무보고**다.
+# 실제로 그 형태로 source하는 훅 셋을 못 봐서 사용처를 4가 아니라 1로 셌고, 그중 하나가
+# 파괴 명령 차단기였다.
+# $1 기대(발화/침묵), $2 설명, $3 lib을 실제로 만들 것인가(yes/no)
+check_missinglib() {
+  local want="$1" desc="$2" create="$3" tmp got
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/hooks/lib" "$tmp/.claude/rules" "$tmp/docs"
+  printf '# rules\n' > "$tmp/.claude/rules/harness-core.md"
+  printf '# progress\n' > "$tmp/docs/progress.md"
+  printf 'x\n' > "$tmp/.claude/hooks/lib/bash-text.sh"
+  # 안쪽에 따옴표가 또 있는 형태. 이것이 이 픽스처의 요점이다.
+  printf '#!/bin/bash\n. "$(dirname "${BASH_SOURCE[0]}")/lib/ghost.sh"\n' > "$tmp/.claude/hooks/x.sh"
+  [ "$create" = yes ] && printf 'x\n' > "$tmp/.claude/hooks/lib/ghost.sh"
+  ( cd "$tmp" && git init -q . && git add -A >/dev/null 2>&1 )
+  if CLAUDE_PROJECT_DIR="$tmp" "$HOOKS/check-doc-staleness.sh" </dev/null 2>/dev/null \
+     | jq -r '.hookSpecificOutput.additionalContext // empty' | grep -q 'ghost.sh'; then
+    got="발화"
+  else
+    got="침묵"
+  fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+check_missinglib 발화 "안쪽 따옴표가 있는 source 형태의 부재를 잡는다" no
+check_missinglib 침묵 "그 형태라도 파일이 있으면 조용하다"            yes
+
+echo "── 죽은 하네스 참조 (check-doc-staleness §6) ──"
 check_deadref 발화 "죽은 완전 경로를 잡는다"        '규칙은 `.claude/rules/harness.md`에 있다.'
 # 21곳 중 11곳이 이 형태였다. 완전 경로만 보면 절반이 초록으로 덮인다.
 check_deadref 발화 "역따옴표 안 파일명 단독도 잡는다" '분량 규칙은 `harness.md`에 있다.'

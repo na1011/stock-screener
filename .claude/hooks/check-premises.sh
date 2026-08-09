@@ -232,11 +232,22 @@ fi
 #
 # 판정 불가가 있을 때만 붙인다 — 이 훅은 ADR 전제 검증기이지 세션 상태 보고자가 아니다.
 # "적재가 돌고 있다" 자체를 알리는 것은 `inject-progress.sh`의 몫이다.
+#
+# MUST: `stray_load_pids`의 rc=2(판정 불가)를 "없다"로 읽지 않는다. lib이 그 계약을 명시하고
+# 있고, 여기서 삼키면 **"적재가 안 돈다"와 "적재가 도는지 모른다"가 같은 침묵이 된다** —
+# 바로 아래 주석이 "그 줄이 떴는지부터 본다"고 지시하는데 그 줄의 부재가 두 가지를 뜻하게 된다.
+# 침묵이 절대 건강을 뜻하지 않게 하는 것이 이 훅의 존재 이유다.
 if [ "$n_unknowns" -gt 0 ] && [ -r "$root/.claude/hooks/lib/load-process.sh" ]; then
   # shellcheck source=lib/load-process.sh
   . "$root/.claude/hooks/lib/load-process.sh"
-  if load_pids=$(stray_load_pids); then
+  set +e
+  load_pids=$(stray_load_pids)
+  load_rc=$?
+  set -e
+  if [ "$load_rc" -eq 0 ]; then
     db_note="${db_note}적재 배치가 돌고 있다(PID ${load_pids}) — 아래 판정 불가는 그 부하 때문일 수 있다. **타임아웃을 올리기 전에 그 프로세스가 아직 돌아야 하는 것인지 먼저 답한다.**"$'\n'
+  elif [ "$load_rc" -eq 2 ]; then
+    db_note="${db_note}적재가 도는 중인지는 판정하지 못했다(pgrep 또는 ps가 없다) — 아래 판정 불가의 원인 후보에서 그것을 지우지 마라."$'\n'
   fi
 fi
 
