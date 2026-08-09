@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongConsumer;
 
 /**
  * 배치 실행 하나의 진행 상태를 들고 마감까지 책임진다.
@@ -64,15 +65,25 @@ public final class BatchExecutionContext {
      */
     private final Map<CollectionPhase, AtomicLong> writtenRowsByPhase = initPhaseCounters();
 
+    /**
+     * 마감됐음을 알리는 콜백.
+     *
+     * <p>{@link BatchExecutions}가 <b>아직 마감되지 않은</b> 실행을 들고 있다가 프로세스가
+     * 내려갈 때 닫는다. 그러려면 정상 마감된 것을 그 목록에서 빼야 하고, 그 신호가 이것이다.
+     * 콜백으로 두는 이유는 컨텍스트가 자기를 만든 쪽을 알지 않게 하기 위해서다.
+     */
+    private final LongConsumer onTerminal;
+
     public BatchExecutionContext(long executionId, String jobName, LocalDate targetDate,
                                  StockTaskExecutor executor, BatchExecutionRecorder recorder,
-                                 AlertPort alertPort) {
+                                 AlertPort alertPort, LongConsumer onTerminal) {
         this.executionId = executionId;
         this.jobName = jobName;
         this.targetDate = targetDate;
         this.executor = executor;
         this.recorder = recorder;
         this.alertPort = alertPort;
+        this.onTerminal = onTerminal;
     }
 
     public long executionId() {
@@ -154,6 +165,7 @@ public final class BatchExecutionContext {
     public BatchStatus finish() {
         BatchStatus status = recorder.finish(
                 executionId, successCount.get(), failureCount.get(), writtenRowCount.get());
+        onTerminal.accept(executionId);
 
         if (status == BatchStatus.PARTIAL_SUCCESS) {
             alertPort.send(AlertEvent.toOperator(
@@ -177,6 +189,7 @@ public final class BatchExecutionContext {
     public void failFatally(DataSourceException cause) {
         recorder.fail(executionId, successCount.get(), failureCount.get(), writtenRowCount.get(),
                 cause.kind() + ": " + cause.getMessage());
+        onTerminal.accept(executionId);
         alertPort.send(AlertEvent.toOperator(
                 AlertSeverity.CRITICAL,
                 jobName + " 실패",
@@ -190,6 +203,7 @@ public final class BatchExecutionContext {
     public void failUnexpectedly(Throwable cause) {
         recorder.fail(executionId, successCount.get(), failureCount.get(), writtenRowCount.get(),
                 cause.getClass().getSimpleName() + ": " + cause.getMessage());
+        onTerminal.accept(executionId);
         alertPort.send(AlertEvent.toOperator(
                 AlertSeverity.ERROR,
                 jobName + " 실패",
@@ -207,6 +221,7 @@ public final class BatchExecutionContext {
     public void abort(String reason) {
         recorder.abort(executionId, successCount.get(), failureCount.get(), writtenRowCount.get(),
                 reason);
+        onTerminal.accept(executionId);
         alertPort.send(AlertEvent.toOperator(
                 AlertSeverity.WARNING,
                 jobName + " 중단",
@@ -234,6 +249,23 @@ public final class BatchExecutionContext {
                     dedupeKey() + ":malformed",
                     context()));
         }
+    }
+
+    /**
+     * 프로세스가 내려가서 중단됐음을 기록한다. <b>알리지 않는다.</b>
+     *
+     * <p>{@link BatchExecutions}의 종료 훅 전용이다. 알림을 보내지 않는 이유는 그 시점에
+     * 알림 채널의 빈이 이미 파괴됐을 수 있고, 종료 경로에서 나는 예외는 마감 자체를
+     * 통째로 잃게 만들기 때문이다. 기록은 남고 로그도 남는다.
+     */
+    void abortOnShutdown(String reason) {
+        recorder.abort(executionId, successCount.get(), failureCount.get(), writtenRowCount.get(),
+                reason);
+        onTerminal.accept(executionId);
+    }
+
+    String jobName() {
+        return jobName;
     }
 
     /** 같은 잡·같은 대상일의 알림은 하나로 묶인다. Phase 6의 억제 정책이 이 키를 쓴다. */

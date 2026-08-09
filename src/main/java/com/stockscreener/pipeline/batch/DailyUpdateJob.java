@@ -50,6 +50,7 @@ public class DailyUpdateJob {
     private final PercentileCalculator percentileCalculator;
     private final IndicatorRetentionPolicy retentionPolicy;
     private final WatchlistAlertRunner watchlistAlertRunner;
+    private final BatchExecutionSweeper executionSweeper;
     private final JdbcTemplate jdbcTemplate;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
@@ -57,6 +58,7 @@ public class DailyUpdateJob {
                           IndicatorRunner indicatorRunner, PercentileCalculator percentileCalculator,
                           IndicatorRetentionPolicy retentionPolicy,
                           WatchlistAlertRunner watchlistAlertRunner,
+                          BatchExecutionSweeper executionSweeper,
                           JdbcTemplate jdbcTemplate) {
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
@@ -66,6 +68,7 @@ public class DailyUpdateJob {
         this.percentileCalculator = percentileCalculator;
         this.retentionPolicy = retentionPolicy;
         this.watchlistAlertRunner = watchlistAlertRunner;
+        this.executionSweeper = executionSweeper;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -174,6 +177,15 @@ public class DailyUpdateJob {
             retentionPolicy.purge();
         } catch (RuntimeException e) {
             log.warn("지표 보존 정리에 실패했다. 수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
+        }
+
+        // 마감되지 못한 실행 정리도 같은 이유로 실패를 삼킨다 — 이력 표시 문제일 뿐이고,
+        // 여기서 예외가 올라가면 그날의 수집과 계산이 실패한 것처럼 기록된다.
+        // 기동 시에도 한 번 도므로 이 호출은 **오래 떠 있는 인스턴스**를 위한 것이다.
+        try {
+            executionSweeper.sweepStale();
+        } catch (RuntimeException e) {
+            log.warn("마감되지 못한 배치 실행 정리에 실패했다. 다음 실행에서 다시 시도한다.", e);
         }
 
         return execution.finish();

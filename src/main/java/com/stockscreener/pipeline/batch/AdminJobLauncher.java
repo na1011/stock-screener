@@ -38,9 +38,17 @@ public class AdminJobLauncher {
      * 지금 도는 중인 잡 이름.
      *
      * <p>IMPORTANT — 단일 실행 판정의 <b>정본이 이것이고 DB의 RUNNING 행이 아니다.</b>
-     * 애플리케이션이 잡 도중에 죽으면 그 행은 영원히 RUNNING으로 남는데, DB를 근거로 삼으면
-     * 그 잡을 다시는 띄울 수 없게 된다. 화면이 손쓸 방법이 SQL뿐인 상태가 되는 것이 그
-     * 선택의 대가다. 인스턴스가 하나라는 전제 위에 서 있고, 그 전제는 ADR-0025가 이미 명시했다.
+     * 애플리케이션이 잡 도중에 죽으면 그 행은 RUNNING으로 남는데, DB를 근거로 삼으면 그 잡을
+     * 다시는 띄울 수 없게 된다. 인스턴스가 하나라는 전제 위에 서 있고, 그 전제는 ADR-0025가
+     * 이미 명시했다.
+     *
+     * <p>남는 RUNNING 행 자체는 이제 {@link BatchExecutions}의 종료 훅과
+     * {@link BatchExecutionSweeper}가 닫는다 — <b>다만 그 둘도 이 판정의 근거는 아니다.</b>
+     * 행을 닫는 것과 "지금 도는가"를 답하는 것은 다른 질문이고, 둘을 겸하게 하면 위 문단의
+     * 이유로 되돌아간다.
+     *
+     * <p>MUST NOT: 이것으로 <b>다른 JVM</b>의 잡을 막을 수 있다고 가정하지 않는다.
+     * {@code BootstrapRunner}는 별도 프로세스로 뜨고 이 집합을 아예 거치지 않는다.
      */
     private final Set<String> running = ConcurrentHashMap.newKeySet();
 
