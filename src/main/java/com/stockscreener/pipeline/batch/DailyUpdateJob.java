@@ -133,8 +133,16 @@ public class DailyUpdateJob {
                             resolvingExecutionId, target.stockId(), CollectionPhase.PRICE);
                 }
 
-                // 시세가 들어온 종목만 지표를 계산한다. 수집에 실패한 종목은 계산할 새 원자료가
+                // 수집이 예외 없이 끝난 종목만 지표를 계산한다. 실패한 종목은 계산할 새 원자료가
                 // 없으므로, 굳이 돌려서 실패를 하나 더 만들 이유가 없다.
+                //
+                // MUST: collected를 "봉이 들어왔다"로 읽지 않는다. 빈 응답은 예외가 아니라 0행이라
+                // 여기서도 성공이고(BatchExecutionContext.process), 그래서 한 봉도 못 받은 종목도
+                // 지표 계산에 들어간다. 휴장일에 전 종목이 통째로 재계산되는 것이 그 결과다.
+                // 그 행들이 시세 0건을 덮어 alertIfNothingArrived를 죽여 놓았던 것이 실제 사고다.
+                //
+                // 조건을 "행을 썼는가"로 좁히지 않는 이유는 위 resolveFailure가 같은 값을 쓰기
+                // 때문이다. 거래정지처럼 정상적으로 빈 종목이 영원히 미해결로 남게 된다.
                 if (collected) {
                     execution.process(target, CollectionPhase.INDICATOR,
                             security -> indicatorRunner.run(security.stockId(), to));
