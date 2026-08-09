@@ -62,6 +62,20 @@ launchctl bootout gui/$(id -u)/com.stockscreener.app
 ops/deploy.sh
 ```
 
+**`bootstrap`은 성공해도 아무것도 출력하지 않는다.** 그리고 그것은 launchd가 등록을 받았다는 뜻이지 앱이 떴다는 뜻이 아니다 — 기동에 20~30초 걸린다. 실제로 떴는지는 아래로 확인한다.
+
+```bash
+# 켜졌는지 — 둘 다 {"status":"UP"}이어야 한다
+curl -s http://localhost:8080/actuator/health
+curl -s https://screener.na1011.net/actuator/health
+
+# 꺼졌는지 — "Could not find service"가 뜨고 pgrep이 아무것도 안 내면 내려간 것
+launchctl print gui/$(id -u)/com.stockscreener.app
+pgrep -fl app.jar
+```
+
+**외부까지 물어보는 이유는 로컬만 보면 `cloudflared`가 죽어도 초록이기 때문이다.** 로컬은 `UP`인데 밖이 502면 앱이 아니라 터널이 문제다.
+
 - **`kill`·`pkill`로는 안 꺼진다.** `KeepAlive`가 30초 뒤 되살린다. 끄려면 `bootout`이어야 한다.
 - **`./gradlew build`만으로는 아무것도 반영되지 않는다.** 도는 것은 저장소가 아니라 `~/Library/Application Support/stock-screener/`의 사본이라, 옛 빌드가 계속 돌고 화면에는 아무 단서가 없다([ADR-0034](docs/adr/ADR-0034-repo-out-of-tcc-path.md)). `deploy.sh`가 그 순서를 대신한다.
 - 위 `bootstrap`이 plist가 없다고 하면 `ops/install-agent.sh`로 다시 등록한다(`--uninstall`이 반대). 기동 실패 원인은 `~/Library/Logs/stock-screener/stderr.log`에 있다.
