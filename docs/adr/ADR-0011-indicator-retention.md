@@ -32,7 +32,9 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '지표가 한
 ```
 운영 적재 이후, 남은 거래일이 180 이내여야 한다. **`count(*) = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다.
 
-전수 `count(DISTINCT trade_date)`라 `statement_timeout`(3초)에 대한 여유가 크지 않다 — 269만 행에서 1.7초다. **`ORDER BY trade_date DESC LIMIT 181`로 묶어도 빨라지지 않는다**(실측 1.57초). PostgreSQL에 index skip scan이 없어 `DISTINCT`가 어차피 전수를 훑기 때문이다. 다시 시도하지 않는다. 정말 걸리면 재귀 CTE로 loose index scan을 흉내내는 것이 유일한 길이고, 그 복잡도를 감수할 만큼 실패한 적은 아직 없다.
+전수 `count(DISTINCT trade_date)`지만 269만 행에서 **0.15초**다(`statement_timeout` 3초의 20배). 묶을 필요가 없다.
+
+**초 단위로 재어졌다면 테이블이 큰 것이 아니라 VACUUM 전 상태를 재고 있는 것이다.** 백필이 `ON CONFLICT DO UPDATE`로 dead tuple을 쌓으면 visibility map이 무효화되고 Index Only Scan이 힙을 랜덤으로 읽는다 — 백필 직후에 1.7초로 재어 그 값을 이 자리에 적었던 적이 있고, autovacuum이 돈 뒤 같은 쿼리가 0.15초였다. 느리면 최적화하기 전에 `pg_stat_user_tables.last_autovacuum`을 먼저 본다.
 
 ## 배경
 
