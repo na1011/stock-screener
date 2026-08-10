@@ -26,13 +26,13 @@
 
 **v1 구현은 끝났다. 사람이 값을 채우는 일이 남았고** 목록은 [`TODO.md`](../TODO.md)에 있다. 발급 상태는 문서가 아니라 `./gradlew checkEnv`에 묻는다 — 발급은 문서 밖에서 일어나 문서가 먼저 낡는다.
 
-- **도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이다.** 코드나 `.env`를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다 — `./gradlew build`만 하면 옛것이 돌고 화면에는 아무 단서가 없다(ADR-0034).
-- **`indicator_value` 세 인덱스에 `REINDEX INDEX CONCURRENTLY`가 남았다**(인덱스가 힙의 2.4배). **오늘 20시 배치의 purge 뒤**에 한다 — 뒤집으면 곧 지워질 행까지 인덱싱한다. purge는 `DailyUpdateJob`에만 있어 따로 못 돌린다. 그때까지 ADR-0011 전제가 깨진 채 뜨는 것은 정상이다.
+- **도는 것은 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이다.** 코드나 `.env`를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다 — `build`만 하면 옛것이 돌고 화면에 단서가 없다(ADR-0034).
+- **`indicator_value` 세 인덱스에 `REINDEX INDEX CONCURRENTLY`가 남았다**(인덱스가 힙의 2.4배). **20시 배치의 purge가 한 번 돈 뒤** 한다 — 뒤집으면 곧 지워질 행까지 인덱싱한다. purge는 `DailyUpdateJob`에만 있어 따로 못 돌린다. **돌았는지는 세션 시작의 ADR-0011 전제가 답한다**(깨져 있으면 아직이다).
 - **MUST NOT: 결손이 생길 때마다 조건을 빼서 해결하지 않는다**(2026-08-10 사용자 판단). 개별 판단이 전부 정당해도 **누적은 원본과 다른 물건**이 된다. 막히면 **원자료를 여는 길을 먼저 본다** — `ALTMAN_Z` 0건이 실제로 그렇게 풀렸다(ADR-0040). 총량 판정과 남은 결손의 단계별 분류는 ADR-0039에 있다.
 - **다음 phase 후보 넷은 ADR-0039 §남은 결손을 여는 길에 있다** — P8 업종 축 · P9 수정주가 정상화 · P10 전체 재무제표 전환 · P11 모듈 B 플래그. **착수 전 완료 판정을 `phase-criteria.md`에 먼저 적는다.**
-- **사용자에게 물어야 답이 나오는 것**: DART의 기업개황(업종)·주식분할·합병 엔드포인트 실명과 파라미터, 공공데이터포털의 지수시세 서비스명. 그것이 P8·P9·P10의 착수 조건이다.
+- **사용자 답을 기다리는 것**: DART·공공데이터포털 엔드포인트 실명. **질문 전문과 답을 받은 뒤 할 일은 [`TODO.md`](../TODO.md) §1에 있다** — P8·P9·P10의 착수 조건이다.
 - **훅이 조용히 안 도는 자리 셋**(2026-08-10 확인). ① `/compact` 뒤 `SessionStart` 셋이 안 뜬다(matcher). ② `SessionEnd` 배달 0건. ③ `guard-destructive.sh`에 `kill` 판정이 없어 `pkill -f java`가 운영 앱을 죽여도 안 막힌다.
-- **20시 배치가 당일 종가를 받아오는지는 오늘(2026-08-10) 20시 실행이 답한다** — 소급 조회로는 알 수 없다. 0건 WARNING은 `stdout.log`로만 간다. **거래일마다 오면 시각을 늦춘다**(ADR-0033).
+- **20시 배치가 당일 종가를 받아오는가**(2026-08-10 첫 관측) — `SELECT max(trade_date) FROM price_daily`가 그날이면 그렇다. 아니면 시각을 늦춘다(ADR-0033). 0건 WARNING은 `stdout.log`로만 간다.
 - **남은 재무 결손 셋**: 오리온·오리온홀딩스·에스티큐브의 이익잉여금 — DART 주요계정이 그 회사에 **행 자체를 주지 않는다.** 계정명 보강으로도 CFS/OFS 폴백으로도 안 열리며 P10이 연다(api-spec §8).
 
 ---
