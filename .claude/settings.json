@@ -81,13 +81,6 @@
           { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-premises.sh", "timeout": 30 }
         ]
       }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/remind-progress.sh" }
-        ]
-      }
     ]
   }
 }
