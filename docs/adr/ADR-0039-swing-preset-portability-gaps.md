@@ -12,7 +12,8 @@ applies_to:
 
 ## 결정
 
-외부 명세(`screenerspecmidtermswing.md` v1.0, 미국시장 기준 26개 조건)를 `SWING_MIDTERM_KR`
+외부 명세([`docs/external/screener-spec-midterm-swing.md`](../external/screener-spec-midterm-swing.md)
+v1.0, 미국시장 기준 26개 조건)를 `SWING_MIDTERM_KR`
 프리셋으로 옮기되, **원자료가 없는 조건은 근사하지 않고 버린다.** 치환한 것은 근거와 함께
 아래 표에 남기고, 버린 것은 **프리셋 설명에 명시해 화면에서도 보이게 한다.**
 
@@ -46,6 +47,64 @@ psql -d stock_screener -At -c "WITH c AS (SELECT c.indicator_code i, c.operator 
 
 **`count(*) = 0`을 따로 답하는 것이 요점이다.** 프리셋이 아직 투영되지 않은 상태와
 "백분위를 쓰지 않는다"가 둘 다 조용히 참이 되기 때문이다.
+
+### 깔때기 — 어느 조건이 몇 종목을 떨어뜨렸는지 재는 법
+
+SCORING은 탈락 종목의 판정을 응답에 남기지 않으므로(ADR-0038 §결과) 화면으로는 알 수 없다.
+**`phase-criteria.md` Phase 7이 요구하는 "재는 방법"이 이것이다** — 숫자만 옮겨 두면 다음
+세션이 재현하지 못해 0건의 원인을 조건·데이터·국면으로 가를 근거가 사라진다.
+
+```bash
+psql -d stock_screener -F'|' -c "
+WITH d AS (SELECT max(trade_date) td FROM indicator_value),
+p AS (SELECT stock_id,
+    max(value) FILTER (WHERE indicator_code='MARKET_CAP')        mc,
+    max(value) FILTER (WHERE indicator_code='TURNOVER_60')       tv,
+    max(value) FILTER (WHERE indicator_code='ADJ_CLOSE')         ac,
+    max(value) FILTER (WHERE indicator_code='SMA_200')           s200,
+    max(value) FILTER (WHERE indicator_code='SMA_60')            s60,
+    max(value) FILTER (WHERE indicator_code='SMA_200_MOM_21')    mom,
+    max(value) FILTER (WHERE indicator_code='SMA_200_SLOPE_60')  slp,
+    max(value) FILTER (WHERE indicator_code='PCT_FROM_52W_LOW')  plo,
+    max(value) FILTER (WHERE indicator_code='PCT_FROM_52W_HIGH') phi,
+    max(value) FILTER (WHERE indicator_code='ATR_PCT_14')        atr,
+    max(value) FILTER (WHERE indicator_code='PROFITABLE_QUARTERS_4') pq,
+    max(value) FILTER (WHERE indicator_code='DEBT_RATIO')        dr,
+    max(value) FILTER (WHERE indicator_code='SHARES_GROWTH_3Y')  sg,
+    max(value) FILTER (WHERE indicator_code='ALTMAN_Z')          az
+  FROM indicator_value, d WHERE trade_date = d.td GROUP BY stock_id)
+SELECT count(*) AS s0_base,
+ count(*) FILTER (WHERE mc>=1e12) AS s1_mcap,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10) AS s2_turnover,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0) AS s3_trend,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+                    AND ac<=s200*1.25) AS s4_disparity,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+                    AND ac<=s200*1.25 AND plo>=30 AND phi>=-25) AS s5_52w,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+                    AND ac<=s200*1.25 AND plo>=30 AND phi>=-25 AND atr<=6) AS s6_atr,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+                    AND ac<=s200*1.25 AND plo>=30 AND phi>=-25 AND atr<=6
+                    AND pq>=3 AND dr<=150 AND sg<=5) AS s7_survival,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+                    AND ac<=s200*1.25 AND plo>=30 AND phi>=-25 AND atr<=6
+                    AND pq>=3 AND dr<=150 AND sg<=5 AND az>=2.6) AS s8_altman
+FROM p"
+```
+
+**MUST: 임계값을 고치면 이 SQL도 함께 고친다.** 정본은 `PresetCatalog.swingMidtermKr()`이고
+이것은 사본이다 — 어긋나면 깔때기가 프리셋과 다른 것을 재면서 그럴듯한 숫자를 낸다.
+
+**단계 값이 0이면 조건이 아니라 지표 부재를 먼저 의심한다.** 값이 없는 종목은 SQL에서도
+비교가 NULL이 되어 조용히 빠지므로, 조건이 자른 것과 구분되지 않는다. 필수 지표별 종목 수를
+먼저 센다:
+
+```bash
+psql -d stock_screener -At -F'|' -c "SELECT indicator_code, count(DISTINCT stock_id) FROM indicator_value WHERE trade_date=(SELECT max(trade_date) FROM indicator_value) AND indicator_code IN ('MARKET_CAP','TURNOVER_60','ADJ_CLOSE','SMA_200','SMA_60','SMA_200_MOM_21','SMA_200_SLOPE_60','PCT_FROM_52W_LOW','PCT_FROM_52W_HIGH','ATR_PCT_14','PROFITABLE_QUARTERS_4','DEBT_RATIO','SHARES_GROWTH_3Y','ALTMAN_Z') GROUP BY 1 ORDER BY 2"
+```
+
+**14개가 다 나와야 한다.** 하나라도 빠지면 그 지표가 원자료 결손으로 계산되지 않은 것이고,
+필수 조건이면 그것만으로 결과가 0건이 된다 — 2026-08-10에 `ALTMAN_Z`가 실제로 그랬다(ADR-0040).
 
 ## 배경
 
@@ -151,8 +210,45 @@ ATR을 4%로 두면 1종목, 무제한이면 6종목이 상한이다.
 것은 둘이다 — T-06(52주 고점, 52 → 16)과 T-07(ATR, 16 → 1). 앞은 국내 표본의 고점 대비
 중앙값이 −34.6%라서고, 뒤는 일간 변동성 자체가 미국 대형주보다 크기 때문이다. **둘 다 시장
 구조의 차이이지 조건이 잘못된 것이 아니다.** T-07은 위 표대로 재보정했고, **T-06은 손대지
-않았다** — 한 번에 두 손잡이를 풀면 무엇이 결과를 바꿨는지 귀속시킬 수 없다. 다음 캘리브레이션
-1순위는 T-06이다.
+않았다** — 한 번에 두 손잡이를 풀면 무엇이 결과를 바꿨는지 귀속시킬 수 없다.
+
+### 재측정(2026-08-10) — **위 문단의 "다음 1순위는 T-06"은 꼬리에서 성립하지 않는다**
+
+`ALTMAN_Z` 결손을 고치기 전에 나머지 13개 필수 조건으로 다시 쟀다(2026-08-06 종가 기준).
+위 §깔때기의 SQL이 그대로 재현한다.
+
+- **T-06을 −25 → −35로 풀면 3 → 4, 통째로 없애도(−100) 4에서 멈춘다.** 게이트 중간 구간에서는
+  가장 크게 자르지만(53 → 16) **꼬리에서는 상한이 4다.** "1순위 손잡이"로 다루면 크게 풀고도
+  결과가 거의 그대로인 채 게이트만 헐거워진다.
+- **꼬리에서 실제로 자르는 것은 `DEBT_RATIO ≤ 150`이다(11 → 3).** `PROFITABLE_QUARTERS_4`와
+  `SHARES_GROWTH_3Y`는 11개를 전부 통과시킨다.
+- **MUST NOT: 그 사실을 `DEBT_RATIO`를 풀 근거로 읽지 않는다.** 이유가 둘이다.
+  - **잘린 8개 중 6개가 금융지주·보험이다**(신한·KB·하나·우리·iM·삼성화재). `ALTMAN_Z`가
+    복구되면 그 종목들은 유동자산 부재로 **어차피 판정불가가 되어 빠진다**(§부작용).
+    순수하게 `DEBT_RATIO`만으로 잘리는 것은 BGF리테일·대한항공 둘이다.
+  - **150은 손잡이가 아니다.** 통과한 것 중 최고가 57.59, 잘린 것 중 최저가 176.36이라
+    **임계를 58~176 어디로 옮겨도 결과가 같다.** 100·150·180·200을 다 쓸어 봤고 3 또는 4였다.
+
+**즉 이 프리셋의 결과 수는 임계값이 아니라 유니버스 규모와 시장 국면이 정한다.** 다음
+캘리브레이션을 할 때는 손잡이를 고르기 전에 위 깔때기를 다시 재고 **어느 단계가 실제로
+지배적인지부터 확인한다** — 그 순위는 국면에 따라 바뀐다.
+
+### H-07 Altman Z의 국내 분포 (2026-08-10, 306종목)
+
+원본 임계값을 분포와 대조하지 않고 넘어가지 않는다는 위 `MUST NOT`의 이행이다.
+
+| p10 | p25 | p50 | p75 | 2.6 이상 |
+|---|---|---|---|---|
+| 1.24 | 1.87 | **3.57** | 7.90 | **191종목 (62%)** |
+
+**2.6은 국내에서 느슨한 편이다** — 중앙값(3.57)보다 낮고 p25(1.87)보다 높아, 하위 38%를 자른다.
+원본이 "회색지대 하단"으로 놓은 상대 위치와 크게 어긋나지 않으므로 **재보정하지 않는다.**
+시총·거래대금·ATR과 달리 이 임계값은 국내 분포에서 그대로 쓸 수 있다.
+
+**최종 깔때기(2026-08-06 종가, ALTMAN_Z 복구 후):**
+`348 → 275 → 222 → 75 → 53 → 16 → 11 → 재무 셋 3 → **Altman 2**`
+(씨젠 6.22 · KT&G 4.00 통과, 오리온은 **임계 미달이 아니라 값이 계산되지 않아** 빠졌다 —
+이익잉여금을 소스가 주지 않는다. `docs/api-spec/dart-open-api.md` §8)
 
 ## 총량 판정 — 이 프리셋은 원본의 얼마인가
 
@@ -170,8 +266,15 @@ ATR을 4%로 두면 1종목, 무제한이면 6종목이 상한이다.
 **IMPORTANT — 가장 많이 깎인 것이 원본이 설계의 축으로 삼은 축이다.** 원본 §1-1 ③은
 "상방보다 생존을 먼저 본다. 후보가 부족해지는 것보다 부실 종목이 통과하는 것이 훨씬 비싼
 실수다"를 네 제약 중 하나로 두고 Layer 1에 7개를 배치했다. 우리에게 실제로 작동하는 것은
-**H-01(흑자 분기)·H-02(절대 부채비율, 업종 상대에서 약화)·H-06(희석)뿐이고, H-07은 데이터를
-기다리는 중**이다. 반대로 가장 온전히 옮겨진 것은 Layer 2 추세다.
+**H-01(흑자 분기)·H-02(절대 부채비율, 업종 상대에서 약화)·H-06(희석)·H-07(Altman Z) 넷**이다.
+반대로 가장 온전히 옮겨진 것은 Layer 2 추세(8개 중 7개)다.
+
+> **2026-08-10 갱신 — H-07이 셋에서 넷으로 늘었다.** 이 문단은 원래 "작동하는 것은 셋뿐이고
+> H-07은 데이터를 기다리는 중"이었다. `financial_statement`의 유동자산·유동부채·이익잉여금이
+> **10,882행 전부 NULL**이라 `ALTMAN_Z`가 한 종목도 계산되지 않았고, 그것이 필수 조건이라
+> 프리셋이 통째로 0건이었다. 원인은 조건도 임계값도 아닌 **수집 경로의 결손**이었으며
+> ADR-0040이 그것을 고쳤다. **막힌 조건을 빼지 않고 원자료를 여는 쪽을 먼저 본다는 아래
+> `MUST NOT`이 실제로 값을 한 이 사례를 여기 남긴다.**
 
 즉 **이 프리셋은 원본보다 "추세는 그대로, 생존은 얇은" 쪽으로 기울어 있다.** 그것이 의도가
 아니라 데이터 제약의 결과라는 사실이 이 문서의 존재 이유다.
@@ -215,3 +318,45 @@ ATR을 4%로 두면 1종목, 무제한이면 6종목이 상한이다.
 - **되돌리려면**: `PresetCatalog.swingMidtermKr()` 한 블록이다. 지표는 남아도 무해하다.
 - **이 표를 다시 쓰게 만드는 사건 셋**: ① 업종 소스가 붙으면 H-02·S-01·S-02가 원본으로
   돌아간다 ② 전체 재무제표로 옮기면 H-05가 살아난다 ③ 시장 지수 시세가 생기면 T-08이 살아난다.
+
+## 남은 결손을 여는 길 — 무엇이 있어야 무엇이 살아나는가
+
+**"원자료가 없다"의 근거가 한 종류가 아니다.** 지난 세션이 부른 DART 엔드포인트는
+`fnlttSinglAcnt`·`fnlttSinglAcntAll` **둘뿐**이고 공시·기업정보 계열은 한 번도 부르지 않았다
+(`docs/api-spec/dart-open-api.md`의 목차가 그 사실을 드러낸다). 아래 다섯으로 갈린다.
+
+| 단계 | 뜻 | 해당 |
+|---|---|---|
+| **A** | **추가 수집이 0이다.** 원자료가 이미 있고 계산기만 없다 | S-03을 TTM EPS YoY로(분기 순이익 + `price_daily.listed_shares`) · S-01의 자체 5년 P/E 중앙값(원자료는 전량 보관이다 — ADR-0011이 자르는 것은 *지표*뿐) |
+| **B** | 실측으로 이미 열려 있는데 안 쓴다 | H-05(영업활동현금흐름 4/4) · S-02의 EV(현금성자산 4/4, 총차입금은 합성) · S-04 매출총이익(`CostOfSales` **미측정**) |
+| **C** | DART의 **다른 엔드포인트**가 필요하다 | 업종 분류 → H-02·S-01·S-02 + §부작용 해소 · 주식분할 이력 → 수정주가·H-06 · 합병/주식교환 → U-06 · 상장일 → U-05 |
+| **D** | DART 밖의 소스가 필요하다 | 시장 지수 일별 시계열 → T-08 · 외국인·기관 수급 → 모듈 B의 F 계열 |
+| **E** | 실측이 닫았다 | H-03(감가상각비) · H-04(이자비용) — **단 표본이 4개사다.** 같은 문서가 "계정명 일관성은 4개사에서만 확인"을 미검증 항목으로 스스로 적으므로, "비금융 3사에 없다"까지가 실측이고 "350종목에 없다"는 외삽이다 |
+
+**MUST: 단계 A를 단계 E로 오분류하지 않는다.** 실제로 S-01을 "지표 보존 180거래일이 막는다"로
+잘못 적어 두었었다. ADR-0011은 **원자료를 전량 보관**하며 막는 것은 계산기 부재다 — 그 오분류
+하나가 열려 있는 길을 영구 폐쇄로 만든다.
+
+**단계 C·D는 스키마가 이미 비어 있는 채로 준비되어 있다.** `stock.sector`·`stock.listed_on`이
+활성 종목 전부 NULL이고, `CorporateAction.Type`에 `SPLIT`/`REVERSE_SPLIT`이 있으며
+`PriceDataSource.fetchCorporateActions`의 default가 `List.of()`다. **소스만 붙이면 되는 자리다.**
+
+### 별도 phase로 갈라야 하는 것
+
+여기 적는 이유는 `progress.md`가 고정 예산이기 때문이다 — 그쪽에는 이름 한 줄만 둔다.
+착수 시 완료 판정을 `phase-criteria.md`에 **먼저** 적는다.
+
+- **P8 업종 축** — `stock.sector` 채우기 → 업종 백분위 계산기 → `PercentileConfig`·`PercentileSpec`
+  확장 → 프리셋 조건 3건 교체 → `wire-contract.json`. **모집단이 유니버스에서 업종으로 바뀌므로
+  ADR-0036을 다시 여는 결정이다.**
+- **P9 수정주가 정상화** — `fetchCorporateActions` 구현 + `AdjustmentRecalculator.apply()`의
+  사람 승인 경로(UI·엔드포인트가 없다) + 전 구간 `adj_close` 재계산 + 지표 무효화.
+  **저장된 시세를 소급해 다시 쓰는 일이라 되돌리기 어렵다.** 지금 `adj_factor`가 전량 1이고
+  **추세 게이트 6개가 전부 `adj_close`를 쓴다** — 조건 하나가 아니라 추세 전체의 신뢰도 문제다.
+- **P10 전체 재무제표 전환** — `account_id` 우선 매칭 재작성 + `IS`/`CIS` 분기(표본 넷 중 셋이
+  `CIS`뿐이다) + 재무 5년 적재. T-08 베타는 지표 하나라 여기 얹는다.
+  **근거가 하나 늘었다**: 주요계정은 회사에 따라 **계정 행 자체를 주지 않는다**(오리온·오리온홀딩스에
+  이익잉여금이 CFS·OFS 양쪽에 없다). 계정명 후보군 보강으로도 CFS/OFS 폴백으로도 안 열리고,
+  전체 재무제표의 자본변동표가 남은 길이다(`docs/api-spec/dart-open-api.md` §8).
+- **P11 모듈 B 플래그 도메인** — 40개짜리 새 도메인. 계산 가능 비율이 낮으면 "있는 것처럼
+  보이는데 대부분 비어 있는" 물건이 된다(위 §모듈 B가 v1에서 뺀 이유와 같다).
