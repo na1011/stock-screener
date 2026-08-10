@@ -34,6 +34,10 @@ import java.util.List;
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load \
  *     --price-years=7 --financial-years=7 --reload-existing=true'
  *
+ * # 특정 종목만 적재 — 신규 편입 종목이 1~2봉만 있어 건너뛰어질 때. 종목당 시세 1콜 + 재무 16콜
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load \
+ *     --tickers=082640,121600 --price-years=7'
+ *
  * # 재무 결손 보정 — 스키마에 컬럼이 늘어 NULL로 남은 자리만 채운다(ADR-0040)
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=financial-refill \
  *     --financial-years=3 --tickers=005930,035420'
@@ -75,6 +79,9 @@ public class BootstrapRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        // 오타는 아무것도 하기 전에 막는다. 태운 외부 호출은 되돌릴 수 없다.
+        rejectUnknownOptions(args);
+
         // 이전 부트스트랩 실행이 SIGKILL 등으로 남긴 행을 여기서 닫는다.
         //
         // IMPORTANT — 스위퍼의 `ApplicationReadyEvent` 리스너는 **이 프로파일에서 돌지 않는다.**
@@ -121,7 +128,44 @@ public class BootstrapRunner implements ApplicationRunner {
         return new InitialLoadJob.LoadRange(
                 integer(args, "price-years", defaults.priceYears()),
                 integer(args, "financial-years", defaults.financialYears()),
-                Boolean.parseBoolean(value(args, "reload-existing", "false")));
+                Boolean.parseBoolean(value(args, "reload-existing", "false")),
+                csv(args, "tickers"));
+    }
+
+    /**
+     * 이 러너가 아는 인자. 모르는 이름이 오면 즉시 실패시킨다.
+     *
+     * <p>IMPORTANT — 이것이 없으면 <b>오타 하나가 쿼터를 태운다.</b> {@code --ticker=…}처럼
+     * s를 빠뜨리면 {@link #csv}가 빈 목록을 내고 대상이 "전 종목"으로 넓어지는데,
+     * {@code --reload-existing=true}가 함께 있으면 {@code warn-bootstrap-args.sh}도 조용히
+     * 통과시킨다. 태운 호출은 되돌릴 수 없으므로 실행 전에 막는 것이 유일한 방어다.
+     */
+    private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
+            "job", "as-of", "price-years", "financial-years", "reload-existing", "tickers", "from");
+
+    /**
+     * Spring 자신의 인자는 통과시킨다.
+     *
+     * <p>{@code --spring.profiles.active}·{@code --server.port}가 그것이고, 전부 점을 포함한다.
+     * 우리 인자는 전부 점이 없는 kebab-case이므로 <b>점 없는 미지의 이름은 오타로 본다.</b>
+     * 점이 없는 Spring 플래그({@code --debug}·{@code --trace})만 예외로 적어 둔다.
+     */
+    private static final java.util.Set<String> SPRING_FLAGS = java.util.Set.of("debug", "trace");
+
+    /** 패키지 공개인 이유는 컨텍스트 없이 검사만 테스트하기 위해서다 — {@code run()}은 끝에서 JVM을 내린다. */
+    static void rejectUnknownOptions(ApplicationArguments args) {
+        List<String> unknown = args.getOptionNames().stream()
+                .filter(name -> !name.contains("."))
+                .filter(name -> !KNOWN_OPTIONS.contains(name))
+                .filter(name -> !SPRING_FLAGS.contains(name))
+                .sorted()
+                .toList();
+        if (!unknown.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "모르는 인자다: " + unknown + " — 오타이면 그대로 두었을 때 대상이 전 종목으로"
+                            + " 넓어져 쿼터를 태운다. 아는 인자: "
+                            + KNOWN_OPTIONS.stream().sorted().toList());
+        }
     }
 
     private static String required(ApplicationArguments args, String name) {

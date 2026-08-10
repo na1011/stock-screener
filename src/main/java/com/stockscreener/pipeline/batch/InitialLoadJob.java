@@ -77,10 +77,7 @@ public class InitialLoadJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LoadRange range) {
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(
-                range.reloadExisting()
-                        ? stockRegistrar.activeUniverseMemberIds()
-                        : stocksNeedingHistory());
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(range));
         if (targets.isEmpty()) {
             log.info("초기 적재가 필요한 종목이 없다. 모든 편입 종목에 이력이 있다.");
             BatchExecutionContext empty =
@@ -88,9 +85,10 @@ public class InitialLoadJob {
             return empty.finish();
         }
 
-        log.info("초기 적재를 시작한다. 대상 {}종목, 시세 {}년·재무 {}년 (이미 적재된 종목 {})",
+        log.info("초기 적재를 시작한다. 대상 {}종목, 시세 {}년·재무 {}년 (대상 선정: {})",
                 targets.size(), range.priceYears(), range.financialYears(),
-                range.reloadExisting() ? "포함" : "제외");
+                range.hasTickers() ? "지정한 티커 " + range.tickers().size() + "개"
+                        : range.reloadExisting() ? "편입 전 종목" : "이력이 없는 종목만");
 
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
@@ -119,6 +117,38 @@ public class InitialLoadJob {
             throw e;
         }
         return execution.finish();
+    }
+
+    /**
+     * 대상 종목을 정한다.
+     *
+     * <p>IMPORTANT — <b>티커를 주면 {@link #stocksNeedingHistory()}의 {@code NOT EXISTS}를
+     * 적용하지 않는다.</b> 교집합으로 만들면 봉이 한 개라도 있는 종목을 지정했을 때 대상이
+     * 0건이 되고, 아래 호출부가 "적재가 필요한 종목이 없다"며 <b>성공으로 끝난다</b> —
+     * 그것은 이 경로가 고치려는 결함(신규 편입 종목이 1~2봉만 있어 영원히 건너뛰어지는 것)과
+     * 정확히 같은 모양이다. 티커를 손으로 적은 것 자체가 "이 종목을 다시 받아라"는 뜻이므로
+     * {@code reloadExisting}도 함께 무시한다.
+     *
+     * <p>매칭이 하나도 없으면 <b>예외로 즉시 실패시킨다.</b> 오타 하나가 조용한 0건으로
+     * 끝나면 안 된다({@link FinancialRefillJob}과 같은 기준이다).
+     */
+    private List<Long> resolveTargets(LoadRange range) {
+        if (!range.hasTickers()) {
+            return range.reloadExisting()
+                    ? stockRegistrar.activeUniverseMemberIds()
+                    : stocksNeedingHistory();
+        }
+        List<Long> matched = stockRegistrar.activeUniverseMemberIdsByTicker(range.tickers());
+        if (matched.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "준 티커 중 편입 중인 활성 종목이 하나도 없다: " + range.tickers()
+                            + " — 종목코드를 확인하라. 대상 0건으로 성공시키지 않는다.");
+        }
+        if (matched.size() < range.tickers().size()) {
+            log.warn("티커 {}개 중 {}개만 편입 중인 활성 종목이다. 나머지는 건너뛴다: {}",
+                    range.tickers().size(), matched.size(), range.tickers());
+        }
+        return matched;
     }
 
     /**
@@ -152,19 +182,31 @@ public class InitialLoadJob {
      * @param priceYears     시세를 몇 년 거슬러 받을지
      * @param financialYears 재무를 몇 년 거슬러 받을지
      * @param reloadExisting 이미 시세가 있는 종목도 다시 받을지. 기간 확장 시 참이다.
+     * @param tickers        비면 위 두 규칙대로 전 종목. 값이 있으면 <b>그 종목만</b>이고
+     *                       {@code reloadExisting}은 무시된다 — 아래 참조.
      */
-    public record LoadRange(int priceYears, int financialYears, boolean reloadExisting) {
+    public record LoadRange(int priceYears, int financialYears, boolean reloadExisting,
+                            List<String> tickers) {
 
         public LoadRange {
             if (priceYears < 0 || financialYears < 0) {
                 throw new IllegalArgumentException(
                         "적재 연수는 음수일 수 없다: 시세=" + priceYears + " 재무=" + financialYears);
             }
+            tickers = tickers == null ? List.of() : List.copyOf(tickers);
+        }
+
+        public LoadRange(int priceYears, int financialYears, boolean reloadExisting) {
+            this(priceYears, financialYears, reloadExisting, List.of());
         }
 
         /** spec §7의 기본값 — 시세 2년·재무 3년, 미적재 종목만. */
         public static LoadRange defaults() {
             return new LoadRange(PRICE_HISTORY_YEARS, FINANCIAL_HISTORY_YEARS, false);
+        }
+
+        public boolean hasTickers() {
+            return !tickers.isEmpty();
         }
     }
 }
