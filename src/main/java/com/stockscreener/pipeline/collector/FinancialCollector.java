@@ -33,8 +33,21 @@ public class FinancialCollector {
      * @return 저장한 행 수. 이미 있는 보고서는 세지 않으므로 재수집 시 0이 정상이다.
      */
     public long collect(SecurityRef security, int fromFiscalYear) throws DataSourceException {
+        return collect(security, fromFiscalYear, FinancialWriter.WriteMode.APPEND_ONLY);
+    }
+
+    /**
+     * 쓰기 방식을 지정해 수집한다.
+     *
+     * <p>{@link FinancialWriter.WriteMode#FILL_MISSING}은 <b>결손 보정 잡 전용</b>이다
+     * (ADR-0040). 일일·초기 적재는 위 2-인자 경로를 쓰며 그 뜻은 도입 전과 같다.
+     *
+     * @return <b>실제로 바뀐</b> 행 수 — 신규 + 정정 + 채움
+     */
+    public long collect(SecurityRef security, int fromFiscalYear,
+                        FinancialWriter.WriteMode mode) throws DataSourceException {
         FinancialDataSource source = registry.financialSource(security.marketCode());
         List<RawFinancialReport> reports = source.fetchReports(security, fromFiscalYear);
-        return writer.write(security.stockId(), reports);
+        return writer.write(security.stockId(), reports, mode);
     }
 }

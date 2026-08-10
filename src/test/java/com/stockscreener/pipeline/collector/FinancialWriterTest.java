@@ -1,11 +1,19 @@
 package com.stockscreener.pipeline.collector;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+
+import com.stockscreener.pipeline.collector.FinancialWriter.WriteMode;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.support.JpaSliceTest;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,6 +30,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>핵심은 <b>덮어쓰지 않는다</b>는 것이다. 하나의 가변 행으로 두면 "그 시점에 공개되어
  * 있던 값"이 영구히 파괴되어 어떤 마이그레이션으로도 복구할 수 없다.
+ *
+ * <p>바깥의 여섯은 {@link WriteMode#APPEND_ONLY}의 계약이며 {@code FILL_MISSING} 도입으로
+ * 하나도 바뀌지 않아야 한다 — 그것이 이 테스트들을 남겨 두는 이유다.
  */
 @JpaSliceTest
 @Import({FinancialWriter.class, NoOpIndicatorInvalidationPort.DefaultInvalidationPortConfig.class})
@@ -127,6 +138,144 @@ class FinancialWriterTest {
         assertThat(rowCount()).isEqualTo(3);
     }
 
+    /**
+     * {@link WriteMode#FILL_MISSING} — 스키마에 컬럼이 늘어 NULL로 남은 자리를 채우는 경로(ADR-0040).
+     *
+     * <p>이 모드의 위험은 "채운다"가 "덮는다"로 번지는 것이다. 아래 일곱이 그 경계를 고정한다.
+     */
+    @Nested
+    @DisplayName("결손 채움")
+    class FillMissing {
+
+        private ListAppender<ILoggingEvent> appender;
+        private ch.qos.logback.classic.Logger logger;
+
+        @BeforeEach
+        void attachAppender() {
+            logger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(FinancialWriter.class);
+            appender = new ListAppender<>();
+            appender.start();
+            logger.addAppender(appender);
+        }
+
+        @AfterEach
+        void detachAppender() {
+            logger.detachAppender(appender);
+        }
+
+        @Test
+        @DisplayName("같은 공시일의 재수집이 NULL 컬럼만 채운다 — 행이 늘지 않는다")
+        void fillsOnlyNullColumns() {
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
+
+            long changed = writer.write(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")), WriteMode.FILL_MISSING);
+
+            assertThat(changed).isEqualTo(1);
+            assertThat(rowCount()).isEqualTo(1);
+            Map<String, Object> row = latestRow();
+            assertThat((BigDecimal) row.get("current_assets")).isEqualByComparingTo("9000");
+            assertThat((BigDecimal) row.get("current_liabilities")).isEqualByComparingTo("4000");
+            assertThat((BigDecimal) row.get("retained_earnings")).isEqualByComparingTo("6000");
+            // 원래 값이 있던 컬럼은 그대로다.
+            assertThat((BigDecimal) row.get("net_income")).isEqualByComparingTo("1000");
+            assertThat(row.get("revision_no")).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("값이 있는 컬럼은 덮지 않고 경고로 남긴다 — 조용히 넘기면 소스 오류인지 파싱 오류인지 알 수 없다")
+        void doesNotOverwriteAndWarnsOnMismatch() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+
+            long changed = writer.write(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "950")), WriteMode.FILL_MISSING);
+
+            assertThat(changed).isZero();
+            assertThat((BigDecimal) latestRow().get("net_income")).isEqualByComparingTo("1000");
+            assertThat(warnings()).hasSize(1);
+            assertThat(warnings().get(0)).contains("net_income").contains("덮지 않는다");
+        }
+
+        @Test
+        @DisplayName("scale만 다른 같은 값은 불일치가 아니다 — equals로 비교하면 전 컬럼이 매번 경고가 된다")
+        void treatsSameValueWithDifferentScaleAsEqual() {
+            // 저장은 numeric(24,2)라 1000.00으로 돌아오고, 소스 파싱값은 scale 0이다.
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+
+            long changed = writer.write(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")), WriteMode.FILL_MISSING);
+
+            assertThat(changed).isZero();
+            assertThat(warnings()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("더 이른 공시본으로는 채우지 않는다 — 한 행이 두 공시의 혼합이 되면 안 된다")
+        void doesNotFillFromOlderPublication() {
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-04-20", "950")));
+
+            long changed = writer.write(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")), WriteMode.FILL_MISSING);
+
+            assertThat(changed).isZero();
+            assertThat(latestRow().get("current_assets")).isNull();
+            assertThat(rowCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("소스가 값을 잃어도 저장된 값을 지우지 않는다")
+        void neverClearsStoredValueWhenSourceIsNull() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+
+            long changed = writer.write(stockId,
+                    List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")),
+                    WriteMode.FILL_MISSING);
+
+            assertThat(changed).isZero();
+            assertThat((BigDecimal) latestRow().get("current_assets")).isEqualByComparingTo("9000");
+            assertThat(warnings()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("더 늦은 공시일은 모드와 무관하게 새 개정본을 쌓는다")
+        void stillAppendsRevision() {
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
+
+            long changed = writer.write(stockId,
+                    List.of(report(2025, "FY", "2026-04-20", "950")), WriteMode.FILL_MISSING);
+
+            assertThat(changed).isEqualTo(1);
+            assertThat(rowCount()).isEqualTo(2);
+            Map<String, Object> latest = latestRow();
+            assertThat(latest.get("revision_no")).isEqualTo(1);
+            assertThat((BigDecimal) latest.get("net_income")).isEqualByComparingTo("950");
+            assertThat((BigDecimal) latest.get("current_assets")).isEqualByComparingTo("9000");
+        }
+
+        @Test
+        @DisplayName("기존 행이 없으면 모드와 무관하게 새로 쓴다 — 재무를 한 번도 받지 못한 종목이 이 경로로 온다")
+        void insertsWhenNothingStored() {
+            long changed = writer.write(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")), WriteMode.FILL_MISSING);
+
+            assertThat(changed).isEqualTo(1);
+            assertThat(rowCount()).isEqualTo(1);
+            assertThat((BigDecimal) latestRow().get("current_assets")).isEqualByComparingTo("9000");
+        }
+
+        private List<String> warnings() {
+            return appender.list.stream()
+                    .filter(event -> event.getLevel() == Level.WARN)
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .toList();
+        }
+    }
+
+    private Map<String, Object> latestRow() {
+        return jdbcTemplate.queryForMap(
+                "SELECT * FROM financial_statement WHERE stock_id = ? AND is_latest", stockId);
+    }
+
     private int rowCount() {
         return jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM financial_statement WHERE stock_id = ?", Integer.class, stockId);
@@ -134,6 +283,21 @@ class FinancialWriterTest {
 
     private static RawFinancialReport report(int fiscalYear, String period,
                                              String publishedAt, String netIncome) {
+        return report(fiscalYear, period, publishedAt, netIncome, true);
+    }
+
+    /**
+     * 유동자산·유동부채·이익잉여금이 비어 있는 보고서.
+     *
+     * <p>V16이 컬럼을 더하기 전에 저장된 10,882행을 재현한다 — 그 결손이 ADR-0040의 출발점이다.
+     */
+    private static RawFinancialReport withoutBalanceDetail(int fiscalYear, String period,
+                                                           String publishedAt, String netIncome) {
+        return report(fiscalYear, period, publishedAt, netIncome, false);
+    }
+
+    private static RawFinancialReport report(int fiscalYear, String period, String publishedAt,
+                                             String netIncome, boolean withBalanceDetail) {
         return new RawFinancialReport(
                 fiscalYear, period,
                 LocalDate.of(fiscalYear, 1, 1), LocalDate.of(fiscalYear, 12, 31),
@@ -141,7 +305,9 @@ class FinancialWriterTest {
                 "11011", "KRW",
                 new BigDecimal("5000"), new BigDecimal("1200"), new BigDecimal(netIncome),
                 new BigDecimal("20000"), new BigDecimal("12000"), new BigDecimal("8000"),
-                new BigDecimal("9000"), new BigDecimal("4000"), new BigDecimal("6000"),
+                withBalanceDetail ? new BigDecimal("9000") : null,
+                withBalanceDetail ? new BigDecimal("4000") : null,
+                withBalanceDetail ? new BigDecimal("6000") : null,
                 new BigDecimal("1500"), new BigDecimal("100"),
                 new BigDecimal("10"), new BigDecimal("120"));
     }
