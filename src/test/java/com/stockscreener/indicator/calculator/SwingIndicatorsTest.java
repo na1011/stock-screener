@@ -376,6 +376,56 @@ class SwingIndicatorsTest {
         }
     }
 
+    @Nested
+    @DisplayName("거래일 수 — 세는 것이 상장 경과가 아니라 저장된 봉이다")
+    class TradingDays {
+
+        private final TradingDays750Calculator calculator = new TradingDays750Calculator();
+
+        @Test
+        @DisplayName("IMPORTANT — 봉이 751개여도 750이다. 읽기 창이 그 이상을 주지 않으므로 큰 값은 거짓이 된다")
+        void saturatesAtThreshold() {
+            List<IndicatorPoint> points = calculator.calculate(contextOf(flat(751, 1_000)));
+
+            assertThat(points).hasSize(1);
+            assertThat(points.get(0).value()).isEqualByComparingTo("750");
+        }
+
+        @Test
+        @DisplayName("이력이 모자라면 그 수를 그대로 낸다 — 값을 내지 않으면 왜 빠졌는지가 판정불가로 뭉개진다")
+        void reportsShortHistoryAsIs() {
+            List<IndicatorPoint> points = calculator.calculate(contextOf(flat(749, 1_000)));
+
+            assertThat(points).hasSize(1);
+            assertThat(points.get(0).value()).isEqualByComparingTo("749");
+        }
+
+        @Test
+        @DisplayName("봉이 둘뿐인 종목도 2를 낸다 — 수집 결손이 화면에 숫자로 드러나는 유일한 경로다")
+        void countsEvenTwoBars() {
+            List<IndicatorPoint> points = calculator.calculate(contextOf(flat(2, 1_000)));
+
+            assertThat(points.get(0).value()).isEqualByComparingTo("2");
+        }
+
+        @Test
+        @DisplayName("값은 마지막 봉 하루뿐이다 — 창 앞쪽에도 세면 창 밖 이력을 무시한 값이 된다")
+        void writesOnlyTheLastBar() {
+            List<PriceBar> bars = flat(300, 1_000);
+
+            List<IndicatorPoint> points = calculator.calculate(contextOf(bars));
+
+            assertThat(points).hasSize(1);
+            assertThat(points.get(0).tradeDate()).isEqualTo(bars.getLast().tradeDate());
+        }
+
+        @Test
+        @DisplayName("봉이 없으면 값을 내지 않는다")
+        void skipsWhenNoBars() {
+            assertThat(calculator.calculate(contextOf(List.of()))).isEmpty();
+        }
+    }
+
     // ── 픽스처 ────────────────────────────────────────────────────────────
 
     /** 영업이익만 다른 분기 넷(최신 우선). 나머지 항목은 비어 있다. */
