@@ -1,19 +1,22 @@
 #!/bin/bash
-# PostToolUse: 계획 파일을 처음 기록할 때 **착수 전에** 해야 하는 두 가지를 알린다.
+# PostToolUse: 계획 파일을 기록할 때, 착수 전에 해야 하는 것들을 알린다.
 #
-# 왜 필요한가 — `CLAUDE.md`가 "새 phase는 완료 판정을 **먼저** 적고 시작한다"를 MUST로
-# 두는데, 그 **먼저**를 강제하는 것이 아무것도 없다. `docs/phase-criteria.md`가 스스로
-# "끝난 뒤에 세운 기준은 이미 한 일을 정당화하는 쪽으로 기운다"고 적고 있다.
+# 왜 여기인가 — 계획 파일은 저장소 밖(`~/.claude/plans/`)이라 `paths` glob이 원리적으로
+# 닿지 않는다. 훅은 경로를 입력으로 받으므로 계획 시점에 걸 수 있는 유일한 기제다.
 #
-# 되돌리기 어려운 결정도 시점이 어긋난다. `remind-adr.sh`는 **파일을 고친 뒤** 발화하는데,
-# 기획 세션에서 그 결정은 **계획서에서** 내려진다 — 코드를 아직 안 건드렸으니 그 훅은 조용하다.
+# `ExitPlanMode`에 걸지 않는 이유는 **배달 시점**이다. `PreToolUse`의 `additionalContext`도
+# tool result 자리에 꽂히므로(`harness-hooks.md`), 알림은 **사용자가 계획을 이미 승인한 뒤**
+# 읽힌다. 실제 게이트가 되려면 `deny`뿐인데 검증을 건너뛴 계획은 구현 전이라 되돌릴 수 있고,
+# 그러면 "차단은 되돌릴 수 없는 것에만"에 걸린다.
 #
-# 기획 단계는 이 저장소 하네스에서 유일하게 기계적 트리거가 없던 구간이다. 계획 파일 기록이
-# 그 트리거다. `ExitPlanMode`가 matcher로 잡히면 더 정확하지만 확인되지 않았고, 계획서 기록은
-# 확실히 일어나며 **더 이르다**(마지막이 아니라 첫 기록에서 발화한다).
+# MUST NOT: 마커 키를 세션만으로 만들지 않는다. 서브에이전트는 부모와 session_id가 같아
+# 한쪽이 태우면 다른 쪽이 영영 못 받는다. **이 훅에서 그 경로가 특히 잘 열린다** — 훅이
+# 시키는 일이 바로 에이전트를 띄우는 것이고, 그 에이전트가 계획 파일을 배정받는다.
 #
-# 계획 파일이 저장소 밖(`~/.claude/plans/`)이라 `paths` glob으로는 덮을 수 없다. 훅은 경로를
-# 입력으로 받으므로 가능하다.
+# 계획 파일 단위로 1회다. 세션당 1회로 두면 한 세션이 계획을 여러 번 올릴 때(절반이 넘는다)
+# 두 번째부터 침묵한다.
+#
+# jq가 없으면 조용히 통과한다. 부재 경보는 `check-doc-staleness.sh`가 세션 시작에 한 번 낸다.
 #
 set -euo pipefail
 
@@ -22,23 +25,35 @@ command -v jq >/dev/null 2>&1 || exit 0
 input=$(cat)
 path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
 session=$(echo "$input" | jq -r '.session_id // "nosession"')
+agent=$(echo "$input" | jq -r '.agent_id // "main"')
 [ -z "$path" ] && exit 0
+
+# 읽기 전용 탐색 에이전트에게 "반증 에이전트를 띄워라"를 주는 것은 재귀 압력일 뿐이고,
+# 부모가 받아야 할 알림을 대신 태운다.
+[ "$agent" = "main" ] || exit 0
 
 case "$path" in
   */plans/*.md) ;;
   *) exit 0 ;;
 esac
 
-marker_dir="${TMPDIR:-/tmp}/claude-harness-hooks/${session}/remind-plan-obligations"
-if mkdir -p "$marker_dir" 2>/dev/null; then
-  [ -f "${marker_dir}/fired" ] && exit 0
-  touch "${marker_dir}/fired" 2>/dev/null || true
+# 마커를 만들 수 없으면 중복 억제를 포기하고 알린다 — 알림 훅은 침묵이 아니라 발화 쪽으로
+# 실패한다.
+marker_dir="${TMPDIR:-/tmp}/claude-harness-hooks/${session}-${agent}/remind-plan-obligations"
+key=$(echo "$path" | shasum 2>/dev/null | cut -d' ' -f1 || echo "")
+if [ -n "$key" ] && mkdir -p "$marker_dir" 2>/dev/null; then
+  [ -f "${marker_dir}/${key}" ] && exit 0
+  touch "${marker_dir}/${key}" 2>/dev/null || true
 fi
 
-jq -n --arg ctx "계획을 기록했다. 착수 전에 두 가지를 본다 — 둘 다 나중에 하면 늦는다.
+jq -n --arg ctx "계획을 기록했다. 착수 전에 볼 것 — 전부 나중에 하면 늦는다.
+- **\`ExitPlanMode\` 전에 독립 에이전트로 이 계획을 반증받는다. 예외를 두지 않는다.** 자가검증은 내 전제를 그대로 물려받아 내 사실 오류를 못 잡는다. 파일 셋에 ADR도 없는 변경에서 **계획대로 갔으면 깨지는 결함이 넷** 나온 적이 있다 — 규모로 면제 조건을 만들면 정확히 그때 건너뛴다.
+  - **적대적 역할 하나면 된다.** \`사실 주장을 대조하라\`를 따로 돌리면 대개 **내가 이미 잰 것의 재확인**이 된다. 숫자·경로·존재 여부는 \`psql\`·\`grep\`으로 **내가 직접** 잰다 — 특히 **탐색 에이전트가 보고한 숫자를 계획서에 그대로 옮기지 않는다.**
+  - **각도를 좁히지 않고, 마지막은 \`여기 없는 것\`으로 연다.** 목적 문장을 뒤집은 결함이 두 번 다 **지정하지 않은 각도**에서 나왔다. 그 마지막 각도가 \`빠진 것을 찾는\` 역할을 겸한다.
+  - **받은 것을 계획서에 남긴다.** 무엇을 공격받아 무엇을 고쳤는지. 없으면 검증했는지 자체가 드러나지 않는다.
 - **새 phase라면** 완료 판정을 \`docs/phase-criteria.md\`에 **먼저** 적는다. 끝난 뒤에 세운 기준은 이미 한 일을 정당화하는 쪽으로 기운다.
-- **새 의존성·저장 구조·외부 연동·인프라 구성**이 계획에 있으면 ADR을 남길 지점을 계획에 포함한다. \`remind-adr.sh\`는 파일을 고친 뒤에야 발화하므로 지금은 조용하다.
-- **실측이 결정의 근거라면** 그 측정을 ADR \`## 검증\`의 \`premise\` 펜스로 남긴다. 다음 세션이 같은 것을 다시 재지 않고, 값이 변하면 세션 시작에 알려 준다. 형식은 \`docs/adr/0000-template.md\`에 있다." \
+- **실측이 결정의 근거라면** 그 측정을 ADR \`## 검증\`의 \`premise\` 펜스로 남긴다. 다음 세션이 같은 것을 다시 재지 않고, 값이 변하면 세션 시작에 알려 준다. 형식은 \`docs/adr/0000-template.md\`에 있다.
+- **되돌리기 어려운 결정**(새 의존성·저장 구조·외부 연동·인프라)이 있으면 ADR을 남길 지점을 계획에 포함한다." \
   '{
     hookSpecificOutput: {
       hookEventName: "PostToolUse",

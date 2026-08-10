@@ -277,7 +277,7 @@ phase 분할·구체적 아키텍처 설계는 이 하네스의 범위가 아니
 | `warn-load-running.sh` | Bash 실행 직후 | 적재가 도는 동안 gradle을 건드리면 알림. 컴파일 산출물이 도는 JVM 밑에 깔려 있어 `clean`·`--stop`이 적재를 죽인다 |
 | `remind-rule-on-shell.sh` | Bash 실행 직후 | 셸로 다룬 파일을 지배하는 `paths` 규칙을 알림. `paths`는 Read·Edit에만 발화해 셸 경유는 구멍이 된다 |
 | `remind-skill-on-channel.sh` | MCP 채널 진입 직후 | 그 채널의 skill을 알림. 파일도 argv도 아닌 트리거라 glob·Bash 훅으로는 표현할 수 없다 |
-| `remind-plan-obligations.sh` | 계획 기록 직후 | 새 phase의 완료 판정과 ADR 기록 지점을 착수 **전에** 정하도록 상기 |
+| `remind-plan-obligations.sh` | 계획 기록 직후 (계획 파일마다 1회) | 착수 전 의무를 상기 — **`ExitPlanMode` 전 독립 에이전트 반증**·완료 판정·`premise`·ADR 지점. 계획 파일이 저장소 밖이라 `paths` 규칙이 원리적으로 닿지 않는 자리다 |
 
 **등록의 정본은 [`.claude/settings.json`](.claude/settings.json)이다.** 위 표는 각 훅이 왜 있는지를 사람에게 설명하는 자리이고, 무엇이 실제로 도는지는 그 파일이 답한다.
 
