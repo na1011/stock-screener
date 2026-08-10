@@ -1,0 +1,1166 @@
+// ============================================================================
+// Ichimoku SP Screener — Tier 1·2·3 (정밀 구현, Pine Script v6)
+// ----------------------------------------------------------------------------
+// 산출 영역: 13 수식자 단계 의존 매트릭스 + decision_tree leaf + 외부 시그널
+// 점수 합산 → 9등급 결론·신뢰도 → Tier 분류 (1·2·3 통과, 4 제외)
+// ============================================================================
+//
+// ----------------------------------------------------------------------------
+// 컬럼 정의 (Pine Screener Data Window 표시 컬럼 + 의미)
+// ----------------------------------------------------------------------------
+//
+// === [핵심 출력 컬럼] ===
+//
+// Tier (1최우선/2적격/3관찰/4제외)
+//   1 = bull_dominant 강한 / 신생 (SP 적격 최우선 단독 셀)
+//   2 = bull_dominant 강한 / {진행, 중기} + bull_dominant 중간 / {신생, 진행}
+//   3 = bull_dominant 약한 / 신생 + bull_dominant 중간 / 중기 (SP보다 살짝 넓은 추가 채택)
+//   4 = 그 외 (bear_dominant 전량, genuine_neutral 전량, 추세 부재·성숙기)
+//
+// Tier 통과 신호 (1통과/0제외)
+//   1 = Tier ≤ 3 (SP 분석 의뢰 후보)
+//   0 = Tier = 4 (제외)
+//
+// === [같은 Tier 내 우선순위 판단 컬럼] ===
+//
+// 신호 강도 (강세-약세)
+//   Bull 점수 - Bear 점수. 양극단 약 ±43.
+//   같은 Tier 내 우선순위 1차 기준. 큰 값일수록 강한 강세 신호.
+//   예: Tier 1 종목 다수 시 신호 강도 21 > 17 → 21 우선 의뢰.
+//
+// 추세 신선도 (0~26 주, 작을수록 신선)
+//   t_3yeok 발생 후 경과 주수. Hosoda Tenkan 9주 임계.
+//   같은 Tier 내 우선순위 2차 기준. 작을수록 추세 시작 직후 = 신선한 신호.
+//   예: 신호 강도 동일 시 신선도 3주 > 7주 → 3주 우선 의뢰.
+//   -1 = 해당 없음 (3역호전 미성립 또는 추세 성숙기)
+//
+// 외부 시그널 합 (-6 ~ +6)
+//   D2 거래량 점수 + D5 26주 초과 수익률 점수.
+//   Ichimoku 큰 기둥 외 외부 정합도 신호.
+//   같은 Tier 내 우선순위 3차 기준. 큰 값일수록 외부 정합 강.
+//
+// Ichimoku 큰 기둥 (-35 ~ +35)
+//   13 수식자 양수 점수 - 13 수식자 음수 점수.
+//   외부 시그널 제외한 Ichimoku 자체 신호 강도.
+//   같은 Tier 내 우선순위 4차 기준. 외부 시그널 영향 배제 시 활용.
+//
+// === [기준선·보조 표시] ===
+//
+// 강세-약세 균형선 (0)
+//   신호 강도 차트의 0 기준선 (점선).
+//   신호 강도가 0 위 = 강세 우세, 0 아래 = 약세 우세.
+//
+// === [9등급 산출 진단 컬럼] ===
+//
+// 강세 점수 합 (0 ~ 약 +43)
+//   13 수식자 양수 + leaf 양수 + D2 양수 + D5 양수 합산.
+//
+// 약세 점수 합 (0 ~ 약 +43)
+//   13 수식자 음수 + leaf 음수 + D2 음수 + D5 음수 절대값 합산.
+//
+// 추세 단계 (1신생/2진행/3중기/4성숙/5부재/6성숙기)
+//   1 = 신생 (DRV-51 0~8주, 추세 시작 직후)
+//   2 = 진행 (DRV-51 9~16주, 추세 본격 진행)
+//   3 = 중기 (DRV-51 17~25주, 추세 후반 진행)
+//   4 = 성숙 (DRV-51 ≥26주, 추세 성숙 영역)
+//   5 = 추세 부재 (3역호전 미성립 또는 130주 데이터 부족)
+//   6 = 추세 성숙기 (130주 내내 3역호전 True)
+//
+// 방향 결론 (1강세/-1약세/0중립)
+//   1 = bull_dominant (강세 점수 > 약세 점수, |차| ≥ 임계)
+//   -1 = bear_dominant (약세 점수 > 강세 점수)
+//   0 = genuine_neutral (|차| < 임계)
+//
+// 신뢰도 (1강한/2중간/3약한)
+//   1 = 강한 (|신호 강도| ≥ 강한 임계, 기본 15)
+//   2 = 중간 (|신호 강도| ≥ 중간 임계, 기본 8)
+//   3 = 약한 (그 외)
+//
+// === [호전 분류 진단 컬럼] ===
+//
+// 주봉 호전 분류 (0~3)
+//   3 = 3역호전 (Kumo 상방 + TK 골든 + Chikou 26주 전 종가 상회 모두 충족)
+//   2 = 2역호전 (3 조건 중 2 충족)
+//   1 = 1역호전 (1 충족)
+//   0 = 호전 미성립 (0 충족)
+//
+// 일봉 호전 분류 (0~3)
+//   주봉 호전 분류와 동일 분류, 일봉 차원.
+//
+// 일봉 호전 합치 (-1·0·1·2)
+//   2 = 강한 합치 (주봉 ≥2역호전 + 일봉 ≥2역호전)
+//   1 = 약한 합치 (주봉 ≥2역호전 + 일봉 = 1역호전)
+//   0 = 합치 부재 (주봉 ≥2역호전 + 일봉 = 호전 미성립)
+//   -1 = 비활성 (주봉 < 2역호전)
+//
+// === [t_3yeok 시점 진단] ===
+//
+// t_3yeok 시점 (-2 / -1 / 0~129)
+//   0~129 = 3역호전 첫 발생 주 인덱스 (현재 = 0, 과거로 갈수록 큰 수)
+//   -1 = 3역호전 미성립 (130주 내 발생 부재)
+//   -2 = 추세 성숙기 (130주 내내 3역호전 True, 시점 식별 부재)
+//
+// t_3yeok 경과 주수 (-1 / 0~128)
+//   추세 신선도와 동일 의미. -1 = 해당 없음.
+//
+// === [13 수식자 진단 컬럼] ===
+//
+// 현재 Kumo 색상 (1녹색/-1적색)
+// 미래 Kumo 색상 (1녹색/-1적색)
+// Kumo 두께 (1두꺼움/0얇음)  — 130주 중앙값 대비
+// Chikou 26주 조망 (1확보/0미확보)
+// 시간론 변화일 (1도래/0미도래/-1해당없음)
+// Tenkan 기울기 (1상승/0평탄/-1하락)
+// Kijun 기울기 (1상승/0평탄/-1하락)
+// TK 위치 (1강/0중/-1약/-2미발생)
+//   강 = TK 모두 Kumo 상단 위 (호전 3요건 충족)
+//   중 = TK 중 하나만 Kumo 상단 위 (호전 부분 충족)
+//   약 = TK 모두 Kumo 상단 이하 + TK 발생 (Tenkan > Kijun)
+//   미발생 = TK 골든크로스 자체 부재 (Tenkan ≤ Kijun)
+// 일봉 호전 합치 (-1·0·1·2)  — 위 진단 컬럼과 동일
+// Senkou B 평탄 (1평탄/0약변화/-1강변화)
+// Kumo 내부 체류 (0없음/1단기/2장기)
+// Senkou A 기울기 (1상승/0평탄/-1하락)
+// 미래 Kumo 트위스트 (-1부재 / 1~26주 후 임박)
+//
+// === [외부 시그널 진단 컬럼] ===
+//
+// OBV t-통계량 (실수)
+//   13주 OLS slope의 t-통계량. ±1.96 임계로 유의성 판정.
+//
+// OBV-가격 다이버전스 (-1·0·1·2)
+//   1 = 강세 다이버전스 (가격↓ OBV↑)
+//   -1 = 약세 다이버전스 (가격↑ OBV↓)
+//   2 = 정합 (부호 동일)
+//   0 = 판정 불가 (한쪽 이상 중립)
+//
+// 26주 초과 수익률 % (-100 ~ +∞)
+//   종목 26주 수익률 - 시장 지수 26주 수익률.
+//   ±5% 임계로 점수화 (B-8 패치).
+//
+// === [decision_tree leaf 진단] ===
+//
+// 파동 leaf (1~9)
+//   1 = 파동 진행 중 (정상 파동, N 목표 미도달)
+//   2 = 파동 실패 (피벗 정렬 위반, A < C < B 부정합)
+//   3 = A 대용 (130주 내내 Kumo 상방, 폴백 경로)
+//   4 = C 미성숙 (C 시점 Tenkan 미돌파)
+//   5 = 첫 목표 도달 (PX-01 ≥ N 목표)
+//   6 = A 이탈 (현재가 < 피벗 A, 파동 구조 훼손)
+//   7 = 데이터 부족
+//   8 = 파동 유보 (피벗 식별 데이터 부족, drop_trend 케이스 포함)
+//   9 = 초기 단계 - §valuewidth 적용 부재
+//       (DRV-50 = 정수 + DRV-51 < 9주, 호소다 값폭관측론 적용 가능 단계 외 — 신생 단계 자연 상태)
+//
+// === [매트릭스 점수 진단 컬럼] ===
+//
+// 13 수식자 각 점수 (점수 a ~ 점수 m, ±3 영역)
+//   각 수식자별 단계 의존적 점수. SP DDS-Matrix-01 본문 참조.
+//
+// leaf 점수 (-3 ~ +2)
+//   leaf 단계 의존적 점수. SP P-9 본문 참조.
+//
+// D2 점수 (-3 ~ +3)
+//   거래량 + 다이버전스 결합 점수 (C-1 패치 — DRV-26 + DRV-41 결합).
+//
+// D5 점수 (-3 ~ +3)
+//   26주 초과 수익률 점수 (B-8 패치 — ±5% 임계).
+//
+// ============================================================================
+//
+// Pine v6 주의사항 적용:
+//   CE10013 — 모든 조건 단일 줄 표현식 (and/or 줄바꿈 회피)
+//   CW10003 — for 루프 내 동적 history reference 회피, 시리즈 array dump
+//   CE10097 — 모든 na 초기화 명시 타입 선언
+//
+// 패치 영역 (외부 세션 SP 정정 12건 + 핸드오버 식별 결함 + SP §valuewidth 단계 의존적 환원):
+//   D-1: kumo_pos 경계 < (등호 제거)
+//   D-7+O-1: 130주 미만 종목 자동 제외
+//   D-8: close_arr 156 확장 + idx_26ago 가드
+//   D-10: idx_b = 26 - n_54 (외부 세션 정정 채택)
+//   D-11: drop_trend → leaf 8 (파동 유보) 환원
+//   D-13·D-14: VW2 tie_handling (`<` → `<=`)
+//   D-20: VW4 search_range 피벗 B 이후 (자체 포함 부재)
+//   B-3: score_i 진행·중기·성숙 부재 -3 통일
+//   B-4: score_m 성숙 분기 임박 거리 차등
+//   B-8: score_d5 임계 ±5%
+//   C-1: DRV-41 활용 + score_d2 산식 재구성
+//   A-3: VW3 미래 가용 주수 < 5 거부
+//   B-7 옵션 B: SP P-9 본문 정정 (사용자 직접) + 코드 차등 유지
+//   Q 영역: 가독성 + 컬럼명 자연어 환원 + 우선순위 보조 컬럼 추가
+//
+//   SP Patch C-1 (Step VW1 단계 분기):
+//     DRV-50 = 정수 + DRV-51 < 9주 → §valuewidth 적용 부재 (case_A)
+//     case_B에서 t_break = DRV-50 (호소다 강한 정의 — 호전 3요건 충족 시점)
+//   SP Patch C-2B (피벗 A 검색 범위):
+//     case_B 검색 범위 = [DRV-50 - 13주, t_B]
+//     [C1 파생: Tenkan 9주 단기 균형 시간 척도 → 풀백 직전 저점 식별 영역]
+//   SP Patch C-4 (decision_tree Step 0 + leaf 9 추가):
+//     Step 0: DRV-30 = "초기 단계 - §valuewidth 적용 부재"? YES → leaf = 9
+//   SP Patch C-5B (P-9 매트릭스 leaf 9 의미):
+//     신생 단계 자연 상태 (leaf_score = 0)
+//
+// ============================================================================
+
+
+//@version=6
+indicator("Ichimoku SP Screener", overlay=false, max_bars_back=300, max_labels_count=500)
+
+// ============================================================================
+// 입력 변수
+// ============================================================================
+threshold_conclusion = input.int(5,  "결론 단어 임계 |점수 차|", minval=1, maxval=30, group="임계값")
+threshold_strong     = input.int(15, "강한 신뢰도 임계 |점수 차|", minval=1, maxval=50, group="임계값")
+threshold_medium     = input.int(8,  "중간 신뢰도 임계 |점수 차|", minval=1, maxval=50, group="임계값")
+market_idx_mode      = input.string("AUTO", "시장 지수 모드", options=["AUTO","KOSPI","SPX"], group="시장 지수")
+manual_idx_kospi     = input.symbol("KRX:KOSPI", "KOSPI 지수 ticker", group="시장 지수")
+manual_idx_spx       = input.symbol("SP:SPX",    "SPX 지수 ticker",   group="시장 지수")
+
+// ============================================================================
+// 시장 지수 자동 분기 (currency 기반)
+// ============================================================================
+string market_idx_ticker = market_idx_mode == "KOSPI" ? manual_idx_kospi : market_idx_mode == "SPX" ? manual_idx_spx : (syminfo.currency == "KRW" ? manual_idx_kospi : manual_idx_spx)
+
+// ============================================================================
+// 일봉 Block A 산출 (메인 컨텍스트)
+// ============================================================================
+
+// PX
+float px_01 = close
+float px_02 = ta.highest(high, 252)
+float px_03 = ta.lowest(low, 252)
+float px_range = px_02 - px_03
+float px_04 = px_range > 0 ? (close - px_03) / px_range * 100 : 50.0
+
+// ICH_D (일봉 Ichimoku)
+float ich_d_01 = (ta.highest(high, 9)  + ta.lowest(low, 9))  / 2
+float ich_d_02 = (ta.highest(high, 26) + ta.lowest(low, 26)) / 2
+float ich_d_03 = (ich_d_01[26] + ich_d_02[26]) / 2
+float ich_d_04 = (ta.highest(high[26], 52) + ta.lowest(low[26], 52)) / 2
+float ich_d_05 = close
+int   ich_d_06 = ich_d_03 > ich_d_04 ? 1 : -1
+float ich_d_kumo_top_d = math.max(ich_d_03, ich_d_04)
+float ich_d_kumo_bot_d = math.min(ich_d_03, ich_d_04)
+// D-1 패치: 경계 등호 제거 (close < bot 로 환원, close == bot 케이스 변동성 영역)
+int   ich_d_07 = close > ich_d_kumo_top_d ? 1 : close < ich_d_kumo_bot_d ? -1 : 0
+float ich_d_08 = math.abs(ich_d_03 - ich_d_04)
+
+// ATR (일봉)
+float atr_01 = ta.atr(14)
+float atr_02 = ta.atr(26)
+
+// VOL (일봉)
+float vol_01 = volume
+float vol_02 = ta.sma(volume, 20)
+float vol_05 = ta.obv
+
+// DRV-43 일봉 호전 분류
+bool drv_43_r1 = ich_d_07 == 1
+bool drv_43_r2 = ich_d_01 > ich_d_02
+bool drv_43_r3 = close > nz(close[26])
+int  drv_43 = (drv_43_r1 ? 1 : 0) + (drv_43_r2 ? 1 : 0) + (drv_43_r3 ? 1 : 0)
+
+// DRV-48 일봉 Tenkan 거리
+float drv_48 = atr_01 != 0 ? (close - ich_d_01) / atr_01 : 0.0
+
+// ============================================================================
+// 주봉 분석 함수 (request.security 컨텍스트, 단일 함수 인라인)
+// ============================================================================
+weekly_analysis() =>
+
+    // ----- 주봉 기본 시리즈 -----
+    float tenkan_w   = (ta.highest(high, 9)  + ta.lowest(low, 9))  / 2
+    float kijun_w    = (ta.highest(high, 26) + ta.lowest(low, 26)) / 2
+    float span_a_w   = (tenkan_w[26] + kijun_w[26]) / 2
+    float span_b_w   = (ta.highest(high[26], 52) + ta.lowest(low[26], 52)) / 2
+    float chikou_w   = close
+    float kumo_top_w = math.max(span_a_w, span_b_w)
+    float kumo_bot_w = math.min(span_a_w, span_b_w)
+    float kumo_thick_w = math.abs(span_a_w - span_b_w)
+    int   kumo_color_w = span_a_w > span_b_w ? 1 : -1
+    // D-1 패치: 경계 등호 제거 (close == bot 케이스 변동성 영역)
+    int   kumo_pos_w   = close > kumo_top_w ? 1 : close < kumo_bot_w ? -1 : 0
+
+    // ----- ATR -----
+    float atr_14_w = ta.atr(14)
+    float atr_26_w = ta.atr(26)
+
+    // ----- VOL -----
+    float obv_w     = ta.obv
+    float vol_sma_w = ta.sma(volume, 20)
+
+    // ----- 미래 Kumo 가장 먼 끝점 (DRV-08, 09, 10, 트랩 T2) -----
+    float drv_08 = (tenkan_w + kijun_w) / 2
+    float drv_09 = (ta.highest(high, 52) + ta.lowest(low, 52)) / 2
+    int   drv_10 = drv_08 > drv_09 ? 1 : -1
+
+    // ----- 정규화 거리 -----
+    float drv_02 = atr_26_w != 0 ? kumo_thick_w / atr_26_w : 0.0
+    float drv_04 = atr_14_w != 0 ? (close - kijun_w) / atr_14_w : 0.0
+    float drv_49 = atr_14_w != 0 ? (close - tenkan_w) / atr_14_w : 0.0
+
+    // ----- 미래 Kumo 산출용 시리즈 (DRV-54용) -----
+    float h52_series = ta.highest(high, 52)
+    float l52_series = ta.lowest(low, 52)
+
+    // ----------------------------------------------------------------
+    // 시리즈 → array dump (CW10003 회피, 156주 시계열)
+    // D-8 패치: close_arr 156 확장 — DRV-50 idx_26ago = i_50 + 26 (최대 155)
+    //         일반 130주 영역 + 26주 추가 = 156주
+    // ----------------------------------------------------------------
+    int ARR_SIZE = 156
+    float[] close_arr   = array.new_float(ARR_SIZE)
+    float[] high_arr    = array.new_float(ARR_SIZE)
+    float[] low_arr     = array.new_float(ARR_SIZE)
+    float[] tenkan_arr  = array.new_float(ARR_SIZE)
+    float[] kijun_arr   = array.new_float(ARR_SIZE)
+    float[] span_a_arr  = array.new_float(ARR_SIZE)
+    float[] span_b_arr  = array.new_float(ARR_SIZE)
+    int[]   kumo_pos_arr = array.new_int(ARR_SIZE)
+    float[] atr26_arr   = array.new_float(ARR_SIZE)
+    float[] h52_arr     = array.new_float(ARR_SIZE)
+    float[] l52_arr     = array.new_float(ARR_SIZE)
+
+    for i_dump = 0 to ARR_SIZE - 1
+        array.set(close_arr,   i_dump, nz(close[i_dump]))
+        array.set(high_arr,    i_dump, nz(high[i_dump]))
+        array.set(low_arr,     i_dump, nz(low[i_dump]))
+        array.set(tenkan_arr,  i_dump, nz(tenkan_w[i_dump]))
+        array.set(kijun_arr,   i_dump, nz(kijun_w[i_dump]))
+        array.set(span_a_arr,  i_dump, nz(span_a_w[i_dump]))
+        array.set(span_b_arr,  i_dump, nz(span_b_w[i_dump]))
+        array.set(kumo_pos_arr, i_dump, nz(kumo_pos_w[i_dump]))
+        array.set(atr26_arr,   i_dump, nz(atr_26_w[i_dump]))
+        array.set(h52_arr,     i_dump, nz(h52_series[i_dump]))
+        array.set(l52_arr,     i_dump, nz(l52_series[i_dump]))
+
+    // OBV는 13주 회귀에만 사용 — 13개 dump
+    float[] obv_arr = array.new_float(13)
+    for i_o = 0 to 12
+        array.set(obv_arr, i_o, nz(obv_w[i_o]))
+
+    // ----------------------------------------------------------------
+    // O-1+D-7 패치: 130주 미만 종목 자동 제외 가드
+    //   close_arr 130 영역 모두 nz → 0 환원 시 → 신규 상장 종목
+    //   weekly_analysis 결과를 무효 환원 (모든 산출 0)
+    // ----------------------------------------------------------------
+    bool sufficient_data = true
+    int zero_count = 0
+    for i_chk = 0 to 129
+        if array.get(close_arr, i_chk) == 0
+            zero_count := zero_count + 1
+    if zero_count > 13
+        sufficient_data := false
+
+    // ----------------------------------------------------------------
+    // DRV-22 130주 정규화 두께 시계열 중앙값 (130 영역 활용)
+    // ----------------------------------------------------------------
+    float[] arr_22 = array.new_float(130)
+    for i_22 = 0 to 129
+        float a_i = array.get(span_a_arr, i_22)
+        float b_i = array.get(span_b_arr, i_22)
+        float at_i = array.get(atr26_arr, i_22)
+        float th_i = math.abs(a_i - b_i)
+        float n_i  = at_i != 0 ? th_i / at_i : 0.0
+        array.set(arr_22, i_22, n_i)
+    float drv_22 = array.median(arr_22)
+
+    // ----------------------------------------------------------------
+    // DRV-24 Chikou open space (27주 overlap, idx 13~39)
+    // ----------------------------------------------------------------
+    int overlap_count = 0
+    for i_24 = 13 to 39
+        float lo_i = array.get(low_arr,    i_24)
+        float hi_i = array.get(high_arr,   i_24)
+        float a_i  = array.get(span_a_arr, i_24)
+        float b_i  = array.get(span_b_arr, i_24)
+        float top_i = math.max(a_i, b_i)
+        float bot_i = math.min(a_i, b_i)
+        bool ohlc_ol = lo_i <= close and close <= hi_i
+        bool kumo_ol = bot_i <= close and close <= top_i
+        if ohlc_ol or kumo_ol
+            overlap_count := overlap_count + 1
+    int drv_24 = overlap_count == 0 ? 1 : 0
+
+    // ----------------------------------------------------------------
+    // DRV-26 OBV 13주 OLS slope + SE → t-통계량
+    //   t축 [0..12] 정방향, y축 obv_arr[12 - i] (가장 오래 → 현재)
+    //   sum((i-6)^2 for i=0..12) = 182 (상수)
+    // ----------------------------------------------------------------
+    float mean_t_const = 6.0
+    float den_const    = 182.0
+    float sum_y_obv = 0.0
+    for j_obv1 = 0 to 12
+        sum_y_obv := sum_y_obv + array.get(obv_arr, 12 - j_obv1)
+    float mean_y_obv = sum_y_obv / 13.0
+    float num_obv = 0.0
+    for j_obv2 = 0 to 12
+        float t_j = j_obv2
+        float y_j = array.get(obv_arr, 12 - j_obv2)
+        num_obv := num_obv + (t_j - mean_t_const) * (y_j - mean_y_obv)
+    float slope_obv = den_const != 0 ? num_obv / den_const : 0.0
+    float intc_obv = mean_y_obv - slope_obv * mean_t_const
+    float rss_obv = 0.0
+    for k_obv = 0 to 12
+        float y_k = array.get(obv_arr, 12 - k_obv)
+        float pred_k = slope_obv * k_obv + intc_obv
+        rss_obv := rss_obv + (y_k - pred_k) * (y_k - pred_k)
+    float se_obv = (rss_obv > 0 and den_const > 0) ? math.sqrt(rss_obv / 11.0) / math.sqrt(den_const) : 0.0
+    float drv_26 = se_obv != 0 ? slope_obv / se_obv : 0.0
+
+    // ----------------------------------------------------------------
+    // DRV-41 OBV-가격 다이버전스 (close 13주 t-통계량 대조)
+    //   1 = 강세 다이버전스 (가격↓ OBV↑)
+    //  -1 = 약세 다이버전스 (가격↑ OBV↓)
+    //   2 = 정합 (부호 동일)
+    //   0 = 판정 불가 (한쪽 이상 중립)
+    // ----------------------------------------------------------------
+    float sum_y_pr = 0.0
+    for j_pr1 = 0 to 12
+        sum_y_pr := sum_y_pr + array.get(close_arr, 12 - j_pr1)
+    float mean_y_pr = sum_y_pr / 13.0
+    float num_pr = 0.0
+    for j_pr2 = 0 to 12
+        float t_j = j_pr2
+        float y_j = array.get(close_arr, 12 - j_pr2)
+        num_pr := num_pr + (t_j - mean_t_const) * (y_j - mean_y_pr)
+    float slope_pr = den_const != 0 ? num_pr / den_const : 0.0
+    float intc_pr = mean_y_pr - slope_pr * mean_t_const
+    float rss_pr = 0.0
+    for k_pr = 0 to 12
+        float y_k = array.get(close_arr, 12 - k_pr)
+        float pred_k = slope_pr * k_pr + intc_pr
+        rss_pr := rss_pr + (y_k - pred_k) * (y_k - pred_k)
+    float se_pr = (rss_pr > 0 and den_const > 0) ? math.sqrt(rss_pr / 11.0) / math.sqrt(den_const) : 0.0
+    float t_pr  = se_pr != 0 ? slope_pr / se_pr : 0.0
+    int sign_obv = drv_26 >= 1.96 ? 1 : drv_26 <= -1.96 ? -1 : 0
+    int sign_pr  = t_pr   >= 1.96 ? 1 : t_pr   <= -1.96 ? -1 : 0
+    int drv_41 = sign_obv == 1 and sign_pr == -1 ? 1 : sign_obv == -1 and sign_pr == 1 ? -1 : sign_obv == sign_pr and sign_obv != 0 ? 2 : 0
+
+    // ----------------------------------------------------------------
+    // DRV-39 Tenkan 13주 OLS slope 분류 (임계 0.5 × ATR-03)
+    // ----------------------------------------------------------------
+    float sum_y_tk = 0.0
+    for j_tk1 = 0 to 12
+        sum_y_tk := sum_y_tk + array.get(tenkan_arr, 12 - j_tk1)
+    float mean_y_tk = sum_y_tk / 13.0
+    float num_tk = 0.0
+    for j_tk2 = 0 to 12
+        float t_j = j_tk2
+        float y_j = array.get(tenkan_arr, 12 - j_tk2)
+        num_tk := num_tk + (t_j - mean_t_const) * (y_j - mean_y_tk)
+    float slope_tk = den_const != 0 ? num_tk / den_const : 0.0
+    float change_tk = slope_tk * 12
+    int drv_39 = change_tk >=  0.5 * atr_14_w ? 1 : change_tk <= -0.5 * atr_14_w ? -1 : 0
+
+    // ----------------------------------------------------------------
+    // DRV-40 Kijun 13주 OLS slope 분류 (임계 0.5 × ATR-03)
+    // ----------------------------------------------------------------
+    float sum_y_kj = 0.0
+    for j_kj1 = 0 to 12
+        sum_y_kj := sum_y_kj + array.get(kijun_arr, 12 - j_kj1)
+    float mean_y_kj = sum_y_kj / 13.0
+    float num_kj = 0.0
+    for j_kj2 = 0 to 12
+        float t_j = j_kj2
+        float y_j = array.get(kijun_arr, 12 - j_kj2)
+        num_kj := num_kj + (t_j - mean_t_const) * (y_j - mean_y_kj)
+    float slope_kj = den_const != 0 ? num_kj / den_const : 0.0
+    float change_kj = slope_kj * 12
+    int drv_40 = change_kj >=  0.5 * atr_14_w ? 1 : change_kj <= -0.5 * atr_14_w ? -1 : 0
+
+    // ----------------------------------------------------------------
+    // DRV-53 Senkou A 13주 OLS slope 분류 (임계 0.25 × ATR-03)
+    // ----------------------------------------------------------------
+    float sum_y_sa = 0.0
+    for j_sa1 = 0 to 12
+        sum_y_sa := sum_y_sa + array.get(span_a_arr, 12 - j_sa1)
+    float mean_y_sa = sum_y_sa / 13.0
+    float num_sa = 0.0
+    for j_sa2 = 0 to 12
+        float t_j = j_sa2
+        float y_j = array.get(span_a_arr, 12 - j_sa2)
+        num_sa := num_sa + (t_j - mean_t_const) * (y_j - mean_y_sa)
+    float slope_sa = den_const != 0 ? num_sa / den_const : 0.0
+    float change_sa = slope_sa * 12
+    int drv_53 = change_sa >=  0.25 * atr_14_w ? 1 : change_sa <= -0.25 * atr_14_w ? -1 : 0
+
+    // ----------------------------------------------------------------
+    // DRV-42 TK 위치 분류 (1=강, 0=중, -1=약, -2=미발생)
+    // ----------------------------------------------------------------
+    int drv_42 = tenkan_w > kijun_w ? (tenkan_w > kumo_top_w and kijun_w > kumo_top_w ? 1 : ((tenkan_w > kumo_top_w) != (kijun_w > kumo_top_w) ? 0 : -1)) : -2
+
+    // ----------------------------------------------------------------
+    // DRV-44 주봉 호전 분류
+    // ----------------------------------------------------------------
+    bool drv_44_r1 = kumo_pos_w == 1
+    bool drv_44_r2 = tenkan_w > kijun_w
+    bool drv_44_r3 = close > array.get(close_arr, 26)
+    int  drv_44 = (drv_44_r1 ? 1 : 0) + (drv_44_r2 ? 1 : 0) + (drv_44_r3 ? 1 : 0)
+
+    // ----------------------------------------------------------------
+    // DRV-46 Senkou B 26주 평탄
+    // ----------------------------------------------------------------
+    float sb_max = ta.highest(span_b_w, 26)
+    float sb_min = ta.lowest(span_b_w, 26)
+    float sb_range = sb_max - sb_min
+    int drv_46 = sb_range < 0.25 * atr_26_w ? 1 : sb_range < 0.5 * atr_26_w ? 0 : -1
+
+    // ----------------------------------------------------------------
+    // DRV-47 Kumo 내부 체류 (체류 없음 0, 단기 1, 장기 2)
+    //   Q-1 패치: still_47 false 시 break
+    // ----------------------------------------------------------------
+    int residence = 0
+    if kumo_pos_w == 0
+        int cnt_47 = 1
+        bool still_47 = true
+        for i_47 = 1 to 129
+            if not still_47
+                break
+            int p_i = array.get(kumo_pos_arr, i_47)
+            bool curr_in = p_i == 0
+            if still_47 and curr_in
+                cnt_47 := cnt_47 + 1
+            if not curr_in
+                still_47 := false
+        residence := cnt_47
+    int drv_47 = residence == 0 ? 0 : residence < 9 ? 1 : 2
+
+    // ----------------------------------------------------------------
+    // DRV-50, 51 t_3yeok 식별
+    //   D-8 패치: idx_26ago 데이터 가용성 확보 (close_arr 156 확장)
+    //   Q-4 패치: t_3yeok_idx 식별 후 break
+    // ----------------------------------------------------------------
+    bool[] arr_3yeok = array.new_bool(130)
+    for i_50 = 0 to 129
+        float c_i = array.get(close_arr,  i_50)
+        float a_i = array.get(span_a_arr, i_50)
+        float b_i = array.get(span_b_arr, i_50)
+        float top_i = math.max(a_i, b_i)
+        float t_i = array.get(tenkan_arr, i_50)
+        float k_i = array.get(kijun_arr,  i_50)
+        // D-8 패치: idx_26ago 항상 array 내부 (156 확장)
+        int idx_26ago = i_50 + 26
+        float c_26 = array.get(close_arr, idx_26ago)
+        bool cond1 = c_i > top_i
+        bool cond2 = t_i > k_i
+        bool cond3 = c_i > c_26
+        array.set(arr_3yeok, i_50, cond1 and cond2 and cond3)
+
+    bool all_true_3y = true
+    bool all_false_3y = true
+    for i_at = 0 to 129
+        bool s_i = array.get(arr_3yeok, i_at)
+        if not s_i
+            all_true_3y := false
+        if s_i
+            all_false_3y := false
+
+    int t_3yeok_idx = -1
+    for i_search = 0 to 128
+        if t_3yeok_idx != -1
+            break
+        bool cur_s  = array.get(arr_3yeok, i_search)
+        bool prev_s = array.get(arr_3yeok, i_search + 1)
+        if cur_s and not prev_s
+            t_3yeok_idx := i_search
+    int drv_50 = all_true_3y ? -2 : (all_false_3y or t_3yeok_idx == -1) ? -1 : t_3yeok_idx
+    int drv_51 = drv_50 >= 0 ? drv_50 : -1
+
+    // ----------------------------------------------------------------
+    // DRV-52 시간론 ±1주 매칭 (Hosoda 12 anchor points)
+    //   A-1 패치: 200·257 두 anchor만 (200~257 연속 영역 부재)
+    // ----------------------------------------------------------------
+    int[] hosoda_arr = array.from(9, 17, 26, 33, 42, 52, 65, 76, 129, 172, 200, 257)
+    int drv_52 = -1
+    if drv_51 >= 0
+        bool matched = false
+        for i_52 = 0 to 11
+            if matched
+                break
+            int n_v = array.get(hosoda_arr, i_52)
+            if math.abs(drv_51 - n_v) <= 1
+                matched := true
+        drv_52 := matched ? 1 : 0
+
+    // ----------------------------------------------------------------
+    // DRV-54 미래 Kumo Twist (n=1~26)
+    //   D-10 패치 (외부 세션 SP 정정 채택):
+    //     SP §kumo_twist_algorithm Step 1 본문 정정 — t* = t + n − 26
+    //     idx_a = 26 - n, idx_b = 26 - n (1주 어긋남 결함 정정)
+    //   Q-3 패치: twist_n 식별 후 break
+    // ----------------------------------------------------------------
+    int twist_n = -1
+    bool current_color_b = drv_10 == 1
+    for n_54 = 1 to 26
+        if twist_n != -1
+            break
+        int idx_a = 26 - n_54
+        int idx_b = 26 - n_54
+        float fa_n = (array.get(tenkan_arr, idx_a) + array.get(kijun_arr, idx_a)) / 2
+        float fb_n = (array.get(h52_arr, idx_b) + array.get(l52_arr, idx_b)) / 2
+        bool color_n_b = fa_n > fb_n
+        if color_n_b != current_color_b
+            twist_n := n_54
+    int drv_54 = twist_n
+
+    // ----------------------------------------------------------------
+    // 값폭관측론 prejudgment (drop_trend 식별)
+    // ----------------------------------------------------------------
+    bool above_count_zero_pj = true
+    for i_pj = 0 to 25
+        if array.get(kumo_pos_arr, i_pj) == 1
+            above_count_zero_pj := false
+    bool drop_trend = kumo_pos_w == -1 and above_count_zero_pj
+
+    // ----------------------------------------------------------------
+    // SP Patch C-1: §valuewidth Step VW1 단계 분기
+    //   case_A: 신생 단계 (drv_50 ≥ 0 + drv_51 < 9) → §valuewidth 적용 부재
+    //   case_B: 진행·중기·성숙 (drv_50 ≥ 0 + drv_51 ≥ 9) → t_break = drv_50
+    //   case_C: 추세 성숙기 (drv_50 = -2) → 기존 Kumo 돌파 식별 (130주 거시 파동)
+    //   case_D: 추세 부재 (drv_50 = -1) → 기존 식별 + 폴백 경로
+    // ----------------------------------------------------------------
+    bool is_shinsaeng = drv_50 >= 0 and drv_51 < 9
+    bool is_jin_jung_seong = drv_50 >= 0 and drv_51 >= 9
+
+    // ----------------------------------------------------------------
+    // VW1: t_break 식별
+    //   case_A (신생): 본 영역 진입 부재 — t_break_idx = -1 환원
+    //   case_B (진행·중기·성숙): t_break_idx = drv_50 (호소다 강한 정의)
+    //   case_C (추세 성숙기) + case_D (추세 부재): 기존 Kumo 돌파 식별
+    //   130주 내내 above → t_break_idx = 129, is_fallback = true
+    // ----------------------------------------------------------------
+    bool[] above_arr = array.new_bool(130)
+    for i_v1a = 0 to 129
+        float c_i = array.get(close_arr, i_v1a)
+        float a_i = array.get(span_a_arr, i_v1a)
+        float b_i = array.get(span_b_arr, i_v1a)
+        array.set(above_arr, i_v1a, c_i > math.max(a_i, b_i))
+
+    int t_break_idx = -1
+    int below_streak = 0
+    bool first_iter = true
+    bool is_fallback = true
+    if not is_shinsaeng
+        // SP Patch C-1 case_B: t_break = drv_50 (호소다 강한 정의)
+        if is_jin_jung_seong
+            t_break_idx := drv_50
+            is_fallback := false
+        // case_C·D: 기존 Kumo 돌파 식별 (130주 거시 파동 또는 폴백)
+        if not is_jin_jung_seong
+            for i_v1b = 0 to 129
+                int idx = 129 - i_v1b
+                bool cur_above = array.get(above_arr, idx)
+                if cur_above
+                    if first_iter or below_streak >= 13
+                        t_break_idx := idx
+                        if below_streak >= 13
+                            is_fallback := false
+                    below_streak := 0
+                if not cur_above
+                    below_streak := below_streak + 1
+                first_iter := false
+
+    // ----------------------------------------------------------------
+    // VW2: 피벗 A (1차 — fallback·추세 성숙기 케이스)
+    //   case_A 신생: 본 영역 진입 부재 (pivot_a = na 보전)
+    //   is_fallback: 130주 전체 low 최소값
+    //   case_C 추세 성숙기 (drv_50 = -2): 기존 t_break_idx 직후 26주
+    //   case_B 진행·중기·성숙: 본 1차 산출 후 VW3 (피벗 B 식별) 이후 재산출
+    //                          → SP Patch C-2B [DRV-50 - 13주, t_B] 본문 정합
+    //   D-13·D-14 패치: tie_handling (`<` → `<=`, 동점 시 더 이른 채택)
+    // ----------------------------------------------------------------
+    float pivot_a = na
+    if not drop_trend and not is_shinsaeng
+        if is_fallback
+            float min_low_a = na
+            for i_pa = 0 to 129
+                float l_i = array.get(low_arr, i_pa)
+                if na(min_low_a) or l_i <= min_low_a
+                    min_low_a := l_i
+            pivot_a := min_low_a
+        // case_C 추세 성숙기: 기존 본문 (t_break_idx 직후 26주)
+        if not is_fallback and t_break_idx >= 0 and not is_jin_jung_seong
+            float min_low_a2 = na
+            for i_pa2 = 1 to 26
+                int target_idx = t_break_idx + i_pa2
+                bool valid_pa = target_idx <= 129 and target_idx >= 0
+                float l_i_pa = valid_pa ? array.get(low_arr, target_idx) : na
+                if valid_pa and (na(min_low_a2) or l_i_pa <= min_low_a2)
+                    min_low_a2 := l_i_pa
+            pivot_a := min_low_a2
+        // case_B 진행·중기·성숙: 임시 산출 (VW3 이후 재산출 의무 — t_B 식별 의존)
+        //   본 임시 산출 본문은 VW3에서 t_B 식별 부재 시 fallback 영역으로 작동
+        if not is_fallback and t_break_idx >= 0 and is_jin_jung_seong
+            float min_low_a3 = na
+            // SP Patch C-2B: 1차 임시 검색 범위 [drv_50 - 13주 + 1, drv_50 + 13]
+            //   (현재 시점 13주 이전부터 drv_50 + 13주까지 영역)
+            //   t_B 식별 후 VW3 이후 재산출에서 [drv_50 - 13주, t_B] 영역 정확 환원
+            int start_pa3 = math.max(0, drv_50 - 13)
+            int end_pa3 = math.min(129, drv_50 + 13)
+            for i_pa3 = start_pa3 to end_pa3
+                float l_i = array.get(low_arr, i_pa3)
+                if na(min_low_a3) or l_i <= min_low_a3
+                    min_low_a3 := l_i
+            pivot_a := min_low_a3
+
+    // ----------------------------------------------------------------
+    // VW3: 피벗 B (옵션 ⓑ 정밀 구현 — 동적 양측 윈도우)
+    //   A-3 패치: n_forward < 5 시 swing 자격 거부 (외부 세션 SP 정정 채택)
+    //   Q-6 패치: 비대칭 처리 의도 주석 명시
+    //
+    //   윈도우 본문:
+    //     candidate (idx_pb) 시점의 18주 양측 윈도우
+    //     - 과거 (n_back 9주): t_break_idx 방향 (idx 큰 쪽)
+    //     - 미래 (n_forward 9주): 현재 방향 (idx 작은 쪽)
+    //   swing 자격: candidate_high가 18주 윈도우 내 단독 최고값
+    //   tie 발생 시 swing 자격 거부 (== 발견 시 false)
+    //
+    //   비대칭 처리:
+    //     - n_back: 가용 주수 < 9 시 가용 주수 N_past로 환원 (후보 유지)
+    //     - n_forward: 가용 주수 < 5 시 swing 자격 거부 (외부 세션 정정)
+    //     [C3: Tenkan 9주 / 2 = 4.5 → 5주 환원, 미래 검증 최소 임계]
+    //   Q-8 패치: swing 자격 false 발견 시 break
+    // ----------------------------------------------------------------
+    float pivot_b = na
+    int   pivot_b_idx = -1
+    if not drop_trend and not is_shinsaeng and not is_fallback and t_break_idx >= 0
+        for i_pb = 0 to 129
+            if pivot_b_idx != -1
+                break
+            int idx_pb = t_break_idx - i_pb
+            bool in_range_pb = idx_pb >= 0 and idx_pb <= t_break_idx
+            if in_range_pb
+                int n_back_avail = 129 - idx_pb
+                int n_forward_avail = idx_pb
+                // A-3 패치: 미래 가용 주수 < 5 swing 자격 거부
+                if n_forward_avail >= 5
+                    int n_back = math.min(9, n_back_avail)
+                    int n_forward = math.min(9, n_forward_avail)
+                    float candidate_high = array.get(high_arr, idx_pb)
+                    bool is_swing = true
+                    // 과거 방향 점검 (t_break_idx 방향)
+                    for i_chk_b = 1 to 9
+                        if not is_swing
+                            break
+                        int chk_idx_b = idx_pb + i_chk_b
+                        bool valid_b = i_chk_b <= n_back and chk_idx_b <= 129 and chk_idx_b >= 0
+                        float h_b = valid_b ? array.get(high_arr, chk_idx_b) : 0.0
+                        if valid_b and h_b >= candidate_high
+                            is_swing := false
+                    // 미래(=더 최근) 방향 점검 (현재 방향)
+                    for i_chk_f = 1 to 9
+                        if not is_swing
+                            break
+                        int chk_idx_f = idx_pb - i_chk_f
+                        bool valid_f = i_chk_f <= n_forward and chk_idx_f >= 0
+                        float h_f = valid_f ? array.get(high_arr, chk_idx_f) : 0.0
+                        if valid_f and h_f > candidate_high
+                            is_swing := false
+                    if is_swing
+                        pivot_b_idx := idx_pb
+                        pivot_b := candidate_high
+
+    // ----------------------------------------------------------------
+    // SP Patch C-2B: case_B 한정 pivot_a 재산출
+    //   조건: is_jin_jung_seong + pivot_b_idx 식별 부재 외
+    //   검색 범위: [drv_50 - 13주, pivot_b_idx]
+    //   [C1 직접: 호소다 값폭관측론 A = 추세 시작 직전 풀백 저점]
+    //   [C1 파생: Tenkan 9주 단기 균형 시간 척도 → 풀백 직전 저점 식별 영역
+    //    (DRV-50 - 13주 = Tenkan 9주의 약 1.5배 영역)]
+    // ----------------------------------------------------------------
+    if is_jin_jung_seong and pivot_b_idx >= 0
+        float min_low_a_recalc = na
+        // 검색 범위: idx pivot_b_idx 부터 drv_50 + 13까지 (idx 큰 쪽 = 과거)
+        // = 시간 영역으로 [drv_50 - 13주, pivot_b 시점]
+        int start_pa_recalc = pivot_b_idx
+        int end_pa_recalc = math.min(129, drv_50 + 13)
+        for i_pa_recalc = start_pa_recalc to end_pa_recalc
+            float l_i = array.get(low_arr, i_pa_recalc)
+            if na(min_low_a_recalc) or l_i <= min_low_a_recalc
+                min_low_a_recalc := l_i
+        pivot_a := min_low_a_recalc
+
+    // ----------------------------------------------------------------
+    // VW4: 피벗 C (B 이후 ~ 현재의 low 최소값, 동점 시 더 이른 채택)
+    //   D-20 패치: search_range 피벗 B 자체 포함 부재 (idx_pc < pivot_b_idx)
+    // ----------------------------------------------------------------
+    float pivot_c = na
+    int pivot_c_idx = -1
+    if pivot_b_idx >= 0
+        float min_low_c = na
+        int   min_idx_c = -1
+        for i_pc = 0 to 129
+            int idx_pc = pivot_b_idx - 1 - i_pc
+            // D-20 패치: 피벗 B 이후 (idx_pc < pivot_b_idx)
+            bool in_range_c = idx_pc >= 0 and idx_pc < pivot_b_idx
+            float l_i_c = in_range_c ? array.get(low_arr, idx_pc) : na
+            if in_range_c and (na(min_low_c) or l_i_c < min_low_c)
+                min_low_c := l_i_c
+                min_idx_c := idx_pc
+        pivot_c := min_low_c
+        pivot_c_idx := min_idx_c
+
+    // ----------------------------------------------------------------
+    // VW5: C 성숙 판정 (C 이후 어느 주 high가 C 시점 Tenkan 상향 돌파?)
+    //   Q-7 패치: matured 발견 시 break
+    // ----------------------------------------------------------------
+    int c_maturity = -1
+    if pivot_c_idx >= 0
+        float tenkan_at_c = array.get(tenkan_arr, pivot_c_idx)
+        bool matured = false
+        for i_pm = 0 to 128
+            if matured
+                break
+            int idx_pm = pivot_c_idx - 1 - i_pm
+            bool valid_pm = idx_pm >= 0 and i_pm < pivot_c_idx
+            float h_pm = valid_pm ? array.get(high_arr, idx_pm) : na
+            if valid_pm and h_pm > tenkan_at_c
+                matured := true
+        c_maturity := matured ? 1 : 0
+
+    // ----------------------------------------------------------------
+    // VW6: 유효성 검증 + VW7: N/V/E/NT 산출 (DRV-35~38)
+    // ----------------------------------------------------------------
+    bool drv_34_pass = not na(pivot_a) and not na(pivot_b) and not na(pivot_c) and c_maturity == 1 and pivot_a < pivot_c and pivot_c < pivot_b
+    float drv_35 = drv_34_pass ? pivot_c + (pivot_b - pivot_a) : na
+    float drv_36 = drv_34_pass ? pivot_b + (pivot_b - pivot_c) : na
+    float drv_37 = drv_34_pass ? pivot_b + (pivot_b - pivot_a) : na
+    float drv_38 = drv_34_pass ? pivot_c + (pivot_c - pivot_a) : na
+
+    // ----------------------------------------------------------------
+    // decision_tree leaf
+    //   1=파동 진행 중, 2=파동 실패, 3=A 대용, 4=C 미성숙, 5=첫 목표 도달,
+    //   6=A 이탈, 7=데이터 부족, 8=파동 유보, 9=초기 단계 - §valuewidth 적용 부재
+    //   D-11 패치: drop_trend → leaf 8 (파동 유보) 환원
+    //   SP Patch C-4 Step 0: is_shinsaeng → leaf 9 (case_A 정합)
+    //   D-1 (D-26) 권고안 본문 정합: Step 4 분기 자연 정합 (c_maturity 가드)
+    // ----------------------------------------------------------------
+    int leaf = 7
+    if is_shinsaeng
+        leaf := 9
+    if not is_shinsaeng and drop_trend
+        leaf := 8
+    if not is_shinsaeng and not drop_trend and is_fallback
+        leaf := 3
+    if not is_shinsaeng and not drop_trend and not is_fallback
+        if not drv_34_pass
+            if na(pivot_a) or na(pivot_b) or na(pivot_c)
+                leaf := 8
+            if not na(pivot_a) and not na(pivot_b) and not na(pivot_c) and not (pivot_a < pivot_c and pivot_c < pivot_b)
+                leaf := 2
+            if not na(pivot_a) and not na(pivot_b) and not na(pivot_c) and pivot_a < pivot_c and pivot_c < pivot_b and c_maturity == 0
+                leaf := 4
+        if drv_34_pass
+            if close < pivot_a
+                leaf := 6
+            if close >= pivot_a and close >= drv_35
+                leaf := 5
+            if close >= pivot_a and close < drv_35
+                leaf := 1
+
+    // ----------------------------------------------------------------
+    // 13 수식자 a~m 산출
+    // ----------------------------------------------------------------
+    int mod_a = kumo_color_w
+    int mod_b = drv_10
+    int mod_c = drv_02 > drv_22 ? 1 : 0
+    int mod_d = drv_24
+    int mod_e = drv_52
+    int mod_f = drv_39
+    int mod_g = drv_40
+    int mod_h = drv_42
+    int mod_j = drv_46
+    int mod_k = drv_47
+    int mod_l = drv_53
+    int mod_m = drv_54
+
+    // ----------------------------------------------------------------
+    // Turn 1-B 6 라벨 분류
+    //   1=신생  (0  ≤ DRV-51 < 9)
+    //   2=진행  (9  ≤ DRV-51 < 17)
+    //   3=중기  (17 ≤ DRV-51 < 26)
+    //   4=성숙  (DRV-51 ≥ 26)
+    //   5=추세 부재 (DRV-50 = -1)
+    //   6=추세 성숙기 (DRV-50 = -2)
+    // ----------------------------------------------------------------
+    int stage_label = drv_50 == -2 ? 6 : (drv_50 == -1 or drv_51 < 0) ? 5 : drv_51 < 9 ? 1 : drv_51 < 17 ? 2 : drv_51 < 26 ? 3 : 4
+
+    // ----------------------------------------------------------------
+    // O-1+D-7 패치: sufficient_data = false 시 stage_label 강제 5 (추세 부재)
+    //   → 매트릭스 점수화 가드 (stage_apply false) → tier = 4 자연 환원
+    // ----------------------------------------------------------------
+    int stage_label_final = sufficient_data ? stage_label : 5
+
+    // ----------------------------------------------------------------
+    // 반환 튜플 (24개 항목, drv_41 추가됨)
+    // ----------------------------------------------------------------
+    [stage_label_final, drv_44, drv_26, drv_41, mod_a, mod_b, mod_c, mod_d, mod_e, mod_f, mod_g, mod_h, mod_j, mod_k, mod_l, mod_m, leaf, drop_trend, drv_50, drv_51, pivot_a, pivot_b, pivot_c, drv_34_pass]
+
+// ============================================================================
+// request.security 호출
+// ============================================================================
+[w_stage, w_drv44, w_drv26, w_drv41, w_a, w_b, w_c, w_d, w_e, w_f, w_g, w_h, w_j, w_k, w_l, w_m, w_leaf, w_drop, w_drv50, w_drv51, w_pa, w_pb, w_pc, w_pass34] = request.security(syminfo.tickerid, "W", weekly_analysis())
+
+float idx_close = request.security(market_idx_ticker, "D", close)
+
+// ============================================================================
+// DRV-55 26주 초과 수익률 (130 거래일 ≈ 26주)
+// ============================================================================
+float stock_ret_26w = nz(close[130]) != 0 ? (close / nz(close[130]) - 1) * 100 : 0.0
+float idx_ret_26w   = nz(idx_close[130]) != 0 ? (idx_close / nz(idx_close[130]) - 1) * 100 : 0.0
+float drv_55 = stock_ret_26w - idx_ret_26w
+
+// DRV-45 일봉 호전 합치 (메인 컨텍스트)
+//   2=강한, 1=약한, 0=합치 부재, -1=비활성
+int drv_45 = w_drv44 >= 2 ? (drv_43 >= 2 ? 2 : drv_43 == 1 ? 1 : 0) : -1
+int w_i = drv_45
+
+// ============================================================================
+// 13 수식자 단계 의존 매트릭스 점수화 (52셀)
+//   stage_apply 가드: stage 5/6 시 모든 점수 0
+// ============================================================================
+bool stage_apply = w_stage >= 1 and w_stage <= 4
+
+// 수식자 a (Kumo 색상): 단계 무관 일관 ±3
+int score_a = stage_apply ? (w_a == 1 ? 3 : -3) : 0
+
+// 수식자 b (미래 Kumo 색상): 신생·진행 ±3, 중기·성숙 ±2
+int score_b = stage_apply ? ((w_stage == 1 or w_stage == 2) ? (w_b == 1 ? 3 : -3) : (w_b == 1 ? 2 : -2)) : 0
+
+// 수식자 c (Kumo 두께 vs 중앙값):
+//   신생: 얇음 +2, 두꺼움 -2
+//   진행: 얇음 +1, 두꺼움 0
+//   중기: 두꺼움 +2, 얇음 -2
+//   성숙: 두꺼움 +3, 얇음 -3
+int score_c = stage_apply ? (w_stage == 1 ? (w_c == 0 ? 2 : -2) : w_stage == 2 ? (w_c == 0 ? 1 : 0) : w_stage == 3 ? (w_c == 1 ? 2 : -2) : (w_c == 1 ? 3 : -3)) : 0
+
+// 수식자 d (Chikou open space): 단계 무관 일관 ±3
+int score_d = stage_apply ? (w_d == 1 ? 3 : -3) : 0
+
+// 수식자 e (시간론 변화일):
+//   해당 없음 (-1) → 0
+//   신생: 미도래 +1, 도래 -1
+//   진행: 미도래 +2, 도래 -2
+//   중기: 미도래 +2, 도래 -2
+//   성숙: 미도래 +3, 도래 -3
+int score_e = (not stage_apply or w_e == -1) ? 0 : w_stage == 1 ? (w_e == 0 ? 1 : -1) : w_stage == 2 ? (w_e == 0 ? 2 : -2) : w_stage == 3 ? (w_e == 0 ? 2 : -2) : (w_e == 0 ? 3 : -3)
+
+// 수식자 f (Tenkan 기울기, B-1 SP 정정 본문 정합):
+//   신생·진행: 상승 +3, 평탄 -1 (변곡 약한 약세), 하락 -3
+//   중기·성숙: 상승 +2, 평탄 -1 (변곡 약한 약세), 하락 -2
+int score_f_base = (w_stage == 1 or w_stage == 2) ? 3 : 2
+int score_f = stage_apply ? (w_f == 1 ? score_f_base : w_f == 0 ? -1 : -score_f_base) : 0
+
+// 수식자 g (Kijun 기울기, B-1 SP 정정 본문 정합 + 신생 g 예외 보전):
+//   신생: 상승 +2, 평탄 0 (자연 상태 — B-1 예외 보전), 하락 -2
+//   진행·중기·성숙: 상승 +3, 평탄 -1 (변곡), 하락 -3
+int score_g = stage_apply ? (w_stage == 1 ? (w_g == 1 ? 2 : w_g == 0 ? 0 : -2) : (w_g == 1 ? 3 : w_g == 0 ? -1 : -3)) : 0
+
+// 수식자 h (TK 위치, B-2 SP 정정 본문 정합):
+//   강 +3, 중 0, 약 -2, 미발생 -3
+int score_h = stage_apply ? (w_h == 1 ? 3 : w_h == 0 ? 0 : w_h == -1 ? -2 : -3) : 0
+
+// 수식자 i (일봉 호전 합치, B-3 패치):
+//   신생: 강한 +2, 약한 +1, 합치 부재 -1, 비활성 -2 (비중 중)
+//   진행·중기·성숙: 강한 +3, 약한 +1, 합치 부재 -3, 비활성 -3 (비중 강 통일)
+int score_i = stage_apply ? (w_stage == 1 ? (w_i == 2 ? 2 : w_i == 1 ? 1 : w_i == 0 ? -1 : -2) : (w_i == 2 ? 3 : w_i == 1 ? 1 : w_i == 0 ? -3 : -3)) : 0
+
+// 수식자 j (Senkou B 평탄):
+//   신생: 강한 변화 +1, 약한 변화 +1, 평탄 -1
+//   진행: 약한 변화 +1, 평탄 0, 강한 변화 0
+//   중기: 평탄 +2, 약한 변화 +1, 강한 변화 -2
+//   성숙: 평탄 +3, 약한 변화 0, 강한 변화 -3
+int score_j = stage_apply ? (w_stage == 1 ? (w_j == 1 ? -1 : 1) : w_stage == 2 ? (w_j == 0 ? 1 : 0) : w_stage == 3 ? (w_j == 1 ? 2 : w_j == 0 ? 1 : -2) : (w_j == 1 ? 3 : w_j == 0 ? 0 : -3)) : 0
+
+// 수식자 k (Kumo 내부 체류): 단계 무관 일관
+//   체류 없음 +3, 단기 -2, 장기 -3
+int score_k = stage_apply ? (w_k == 0 ? 3 : w_k == 1 ? -2 : -3) : 0
+
+// 수식자 l (Senkou A 기울기, B-1 SP 정정 본문 정합 + 신생 l 예외 보전):
+//   신생: 상승 +2, 평탄 +1 (자연 상태 — B-1 예외 보전), 하락 -2
+//   진행·중기·성숙: 상승 +3, 평탄 -1 (변곡), 하락 -3
+int score_l = stage_apply ? (w_stage == 1 ? (w_l == 1 ? 2 : w_l == 0 ? 1 : -2) : (w_l == 1 ? 3 : w_l == 0 ? -1 : -3)) : 0
+
+// 수식자 m (미래 Kumo 트위스트, B-4 패치 — 단계별 본문 재설계):
+//   신생: 부재 +2, 임박 ≥20주 +1, 10~19주 0, <10주 -2 (비중 중)
+//   진행: 부재 +2, 임박 ≥10주 -1, <10주 -2 (비중 중)
+//   중기: 부재 +3, 임박 ≥10주 -2, <10주 -3 (비중 강)
+//   성숙: 부재 +3, 임박 ≥10주 -2, <10주 -3 (비중 강)
+int score_m = stage_apply ? (w_stage == 1 ? (w_m == -1 ? 2 : w_m >= 20 ? 1 : w_m >= 10 ? 0 : -2) : w_stage == 2 ? (w_m == -1 ? 2 : w_m >= 10 ? -1 : -2) : w_stage == 3 ? (w_m == -1 ? 3 : w_m >= 10 ? -2 : -3) : (w_m == -1 ? 3 : w_m >= 10 ? -2 : -3)) : 0
+
+// ============================================================================
+// 13 수식자 매트릭스 점수 합산 (양수/음수 분리)
+// ============================================================================
+int total_pos = math.max(0, score_a) + math.max(0, score_b) + math.max(0, score_c) + math.max(0, score_d) + math.max(0, score_e) + math.max(0, score_f) + math.max(0, score_g) + math.max(0, score_h) + math.max(0, score_i) + math.max(0, score_j) + math.max(0, score_k) + math.max(0, score_l) + math.max(0, score_m)
+int total_neg = math.max(0, -score_a) + math.max(0, -score_b) + math.max(0, -score_c) + math.max(0, -score_d) + math.max(0, -score_e) + math.max(0, -score_f) + math.max(0, -score_g) + math.max(0, -score_h) + math.max(0, -score_i) + math.max(0, -score_j) + math.max(0, -score_k) + math.max(0, -score_l) + math.max(0, -score_m)
+
+// ============================================================================
+// leaf 단계 의존 매트릭스 점수화 (32셀 + leaf 9 신규)
+//   B-7 옵션 B 채택 — SP P-9 본문 정정 + 코드 차등 유지 (-2 vs -3)
+//   SP Patch C-5B (P-9 leaf 9 단계 의존적 의미):
+//     leaf 9 = 신생 단계 자연 상태 (점수 0 — 13 수식자 매트릭스가 강세 정합 본문 별도 처리)
+//     진행/중기/성숙: 발현 케이스 외 (DRV-51 < 9 조건이므로 본 단계 산출 부재)
+// ============================================================================
+int leaf_score = stage_apply ? (w_leaf == 1 ? 2 : w_leaf == 2 ? -2 : w_leaf == 3 ? (w_stage == 4 ? 1 : 0) : w_leaf == 4 ? (w_stage == 3 ? -1 : w_stage == 4 ? -2 : 0) : w_leaf == 5 ? ((w_stage == 1 or w_stage == 2) ? 2 : 0) : w_leaf == 6 ? -3 : w_leaf == 9 ? 0 : 0) : 0
+int leaf_pos = math.max(0, leaf_score)
+int leaf_neg = math.max(0, -leaf_score)
+
+// ============================================================================
+// 외부 시그널 단계 의존 가중 (D2·D5)
+//   신생·진행: ±3, 중기: ±2, 성숙: ±1
+// ============================================================================
+int ext_base = stage_apply ? ((w_stage == 1 or w_stage == 2) ? 3 : w_stage == 3 ? 2 : 1) : 0
+
+// D2 도메인 산출 (C-1 패치 — 외부 세션 SP 정정 채택)
+//   drv_41 매핑: 1=강세 다이버전스, -1=약세 다이버전스, 2=정합, 0=판정 불가
+int drv26_sign = w_drv26 >= 1.96 ? 1 : w_drv26 <= -1.96 ? -1 : 0
+int score_d2 = stage_apply ? (w_drv41 == 2 ? drv26_sign * ext_base : w_drv41 == 1 ? ext_base : w_drv41 == -1 ? -ext_base : math.round(drv26_sign * ext_base * 0.5)) : 0
+int d2_pos = math.max(0, score_d2)
+int d2_neg = math.max(0, -score_d2)
+
+// D5 도메인 산출 (B-8 패치 — 외부 세션 SP 정정 채택)
+//   |DRV-55| < 5% → 점수 0 (노이즈 영역, 단일 결정)
+int score_d5 = drv_55 >= 5 ? ext_base : drv_55 <= -5 ? -ext_base : 0
+int d5_pos = math.max(0, score_d5)
+int d5_neg = math.max(0, -score_d5)
+
+// ============================================================================
+// 강세 점수 / 약세 점수 / 신호 강도
+// ============================================================================
+int bull_score = total_pos + leaf_pos + d2_pos + d5_pos
+int bear_score = total_neg + leaf_neg + d2_neg + d5_neg
+int score_diff = bull_score - bear_score
+int abs_diff   = math.abs(score_diff)
+
+// ============================================================================
+// 9등급 분류
+// ============================================================================
+int conclusion = abs_diff < threshold_conclusion ? 0 : score_diff > 0 ? 1 : -1
+int confidence = abs_diff >= threshold_strong ? 1 : abs_diff >= threshold_medium ? 2 : 3
+
+// ============================================================================
+// Tier 분류 (54셀 결합 매트릭스)
+// ============================================================================
+bool bull_pass    = conclusion == 1
+bool t1_pass      = bull_pass and confidence == 1 and w_stage == 1
+bool t2_pass      = bull_pass and ((confidence == 1 and (w_stage == 2 or w_stage == 3)) or (confidence == 2 and (w_stage == 1 or w_stage == 2)))
+bool t3_pass      = bull_pass and ((confidence == 3 and w_stage == 1) or (confidence == 2 and w_stage == 3))
+int  tier         = t1_pass ? 1 : t2_pass ? 2 : t3_pass ? 3 : 4
+
+// ============================================================================
+// 우선순위 보조 컬럼 산출 (같은 Tier 내 SP 분석 의뢰 우선순위)
+//   1차 기준: 신호 강도 (score_diff, ±43 영역, 큰 값일수록 우선)
+//   2차 기준: 추세 신선도 (w_drv51, 0~26 영역, 작은 값일수록 우선)
+//   3차 기준: 외부 시그널 합 (score_d2 + score_d5, ±6 영역)
+//   4차 기준: Ichimoku 큰 기둥 (total_pos - total_neg, ±35 영역)
+// ============================================================================
+int external_signal_sum = score_d2 + score_d5
+int ichimoku_pillar_score = total_pos - total_neg
+
+// ============================================================================
+// 출력 — 차트 plot
+// ============================================================================
+
+string stage_text = w_stage == 1 ? "신생" : w_stage == 2 ? "진행" : w_stage == 3 ? "중기" : w_stage == 4 ? "성숙" : w_stage == 5 ? "추세 부재" : "추세 성숙기"
+string concl_text = conclusion == 1 ? "bull_dominant" : conclusion == -1 ? "bear_dominant" : "genuine_neutral"
+string conf_text  = confidence == 1 ? "강한" : confidence == 2 ? "중간" : "약한"
+
+// 마지막 봉 정보 라벨
+var label tier_lbl = na
+if barstate.islast
+    if not na(tier_lbl)
+        label.delete(tier_lbl)
+    string lbl_text = "Tier " + str.tostring(tier) + "\n추세 단계: " + stage_text + "\n방향: " + concl_text + " " + conf_text + "\n신호 강도: " + str.tostring(score_diff) + "  (강세 " + str.tostring(bull_score) + " / 약세 " + str.tostring(bear_score) + ")\n신선도: " + str.tostring(w_drv51) + "주"
+    color lbl_color = tier == 1 ? color.new(color.green, 0) : tier == 2 ? color.new(color.lime, 20) : tier == 3 ? color.new(color.yellow, 30) : color.new(color.gray, 50)
+    tier_lbl := label.new(bar_index, high, lbl_text, color=lbl_color, textcolor=color.white, style=label.style_label_left, size=size.normal)
+
+// 차트 plot — Tier 표시
+plot(tier, "Tier (1최우선/2적격/3관찰/4제외)", color=tier == 1 ? color.green : tier == 2 ? color.lime : tier == 3 ? color.yellow : color.gray, linewidth=2)
+plot(score_diff, "신호 강도 (강세-약세)", color=color.blue, linewidth=1)
+hline(0, "", color=color.gray, linestyle=hline.style_dotted)
+
+// 차트 plot — Pine Screener 기본 고정 컬럼 (투명 색상으로 차트 시각 부재)
+//   사용자 요청 본문: 기본 고정 컬럼 [Tier, 신호강도, 추세단계, 추세신선도, 신뢰도]
+//   color.new(color.white, 100) = 100% 투명 = 차트 가시 부재 + Pine Screener 컬럼 등록
+plot(w_stage,    "추세 단계 (1신생/2진행/3중기/4성숙/5부재/6성숙기)", color=color.new(color.white, 100))
+plot(w_drv51,    "추세 신선도 (주, 작을수록 신선)",                     color=color.new(color.white, 100))
+plot(confidence, "신뢰도 (1강한/2중간/3약한)",                         color=color.new(color.white, 100))
+
+// 차트 plotchar — 통과 표시
+plotchar(tier <= 3 ? 1 : 0, "통과 표시 (• = Tier 1·2·3 통과)", "•", location.top, color=tier <= 3 ? color.green : color.red, size=size.small)
+
+// ============================================================================
+// 출력 — Pine Screener Filter 컬럼 (Data Window)
+//   사용자는 다음 컬럼들을 Pine Screener에서 정렬·필터링하여 SP 분석 의뢰
+//   우선순위 결정 가능.
+// ============================================================================
+
+// === [핵심 출력 — 차트 plot이 자동으로 Filter 컬럼 등록 (Tier·신호 강도)] ===
+//   Tier·신호 강도는 위 차트 plot이 Pine Screener Filter 컬럼 자동 등록.
+//   data_window 중복 부재.
+
+// === [Tier 통과 신호] ===
+plot(tier <= 3 ? 1 : 0,      "Tier 통과 신호 (1통과/0제외)",      display=display.data_window)
+
+// === [같은 Tier 내 우선순위 판단 보조 컬럼] ===
+//   추세 신선도는 위 차트 plot이 Pine Screener 기본 컬럼 등록.
+plot(external_signal_sum,    "외부 시그널 합 (D2+D5)",             display=display.data_window)
+plot(ichimoku_pillar_score,  "Ichimoku 큰 기둥 점수",              display=display.data_window)
+
+// === [9등급 산출 진단] ===
+//   추세 단계·신뢰도는 위 차트 plot이 Pine Screener 기본 컬럼 등록.
+plot(bull_score,             "강세 점수 합",                       display=display.data_window)
+plot(bear_score,             "약세 점수 합",                       display=display.data_window)
+plot(conclusion,             "방향 결론 (1강세/-1약세/0중립)",     display=display.data_window)
+
+// === [호전 분류 진단] ===
+plot(w_drv44,                "주봉 호전 분류 (0~3)",               display=display.data_window)
+plot(drv_43,                 "일봉 호전 분류 (0~3)",               display=display.data_window)
+plot(drv_45,                 "일봉 호전 합치 (-1·0·1·2)",          display=display.data_window)
+
+// === [t_3yeok 시점 진단 — 경과 주수는 위 추세 신선도 컬럼과 동일 변수] ===
+plot(w_drv50,                "t_3yeok 시점 (-2/-1/0~129)",         display=display.data_window)
+
+// === [decision_tree leaf 진단] ===
+plot(w_leaf,                 "파동 leaf (1~9)",                    display=display.data_window)
+
+// === [13 수식자 진단] ===
+plot(w_a, "현재 Kumo 색상 (1녹/-1적)",         display=display.data_window)
+plot(w_b, "미래 Kumo 색상 (1녹/-1적)",         display=display.data_window)
+plot(w_c, "Kumo 두께 (1두꺼움/0얇음)",          display=display.data_window)
+plot(w_d, "Chikou 26주 조망 (1확보/0미확보)",   display=display.data_window)
+plot(w_e, "시간론 변화일 (1도래/0미도래/-1없음)", display=display.data_window)
+plot(w_f, "Tenkan 기울기 (1상/0평/-1하)",       display=display.data_window)
+plot(w_g, "Kijun 기울기 (1상/0평/-1하)",        display=display.data_window)
+plot(w_h, "TK 위치 (1강/0중/-1약/-2미발생)",     display=display.data_window)
+plot(w_j, "Senkou B 평탄 (1평/0약변/-1강변)",   display=display.data_window)
+plot(w_k, "Kumo 내부 체류 (0없음/1단기/2장기)",  display=display.data_window)
+plot(w_l, "Senkou A 기울기 (1상/0평/-1하)",     display=display.data_window)
+plot(w_m, "미래 Kumo 트위스트 (-1부재/1~26주)",  display=display.data_window)
+
+// === [외부 시그널 진단] ===
+plot(w_drv26,                "OBV t-통계량",                       display=display.data_window)
+plot(w_drv41,                "OBV-가격 다이버전스 (1강세/-1약세/2정합/0불가)", display=display.data_window)
+plot(drv_55,                 "26주 초과 수익률 %",                 display=display.data_window)
+
+// === [매트릭스 점수 진단] ===
+plot(score_a, "점수 a (Kumo 색상)",        display=display.data_window)
+plot(score_b, "점수 b (미래 Kumo 색상)",   display=display.data_window)
+plot(score_c, "점수 c (Kumo 두께)",        display=display.data_window)
+plot(score_d, "점수 d (Chikou)",           display=display.data_window)
+plot(score_e, "점수 e (시간론)",           display=display.data_window)
+plot(score_f, "점수 f (Tenkan 기울기)",    display=display.data_window)
+plot(score_g, "점수 g (Kijun 기울기)",     display=display.data_window)
+plot(score_h, "점수 h (TK 위치)",          display=display.data_window)
+plot(score_i, "점수 i (호전 합치)",        display=display.data_window)
+plot(score_j, "점수 j (Senkou B 평탄)",    display=display.data_window)
+plot(score_k, "점수 k (Kumo 체류)",        display=display.data_window)
+plot(score_l, "점수 l (Senkou A 기울기)",  display=display.data_window)
+plot(score_m, "점수 m (미래 트위스트)",     display=display.data_window)
+plot(leaf_score, "점수 leaf",              display=display.data_window)
+plot(score_d2,   "점수 D2 (거래량+다이버전스)", display=display.data_window)
+plot(score_d5,   "점수 D5 (26주 초과 수익률)", display=display.data_window)
+
+// 배경색 (Tier 표시)
+bgcolor(tier == 1 ? color.new(color.green, 90) : tier == 2 ? color.new(color.lime, 92) : tier == 3 ? color.new(color.yellow, 94) : na, title="Tier 배경")
