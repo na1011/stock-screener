@@ -6,9 +6,16 @@ import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+
+import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -28,6 +35,8 @@ import java.util.function.LongConsumer;
  */
 public final class BatchExecutionContext {
 
+    private static final Logger log = LoggerFactory.getLogger(BatchExecutionContext.class);
+
     /**
      * 소스 스펙 변경을 의심할 실패 비율. 이 비율을 넘는 MALFORMED가 나오면 별도로 알린다.
      *
@@ -35,6 +44,15 @@ public final class BatchExecutionContext {
      * 바꿨다는 신호이며 spec §7이 우려한 바로 그 사건이다.
      */
     private static final double MALFORMED_ALERT_RATIO = 0.2;
+
+    /**
+     * 진척을 DB에 남기는 간격.
+     *
+     * <p>건수가 아니라 <b>시간</b> 기준인 것이 요점이다. 작업 단위 하나의 소요가 잡마다
+     * 두 자릿수 배로 다르다 — 지표 백필은 계산만이라 수십 ms이고, 초기 적재는 외부 호출이라
+     * 수 초다. 건수로 정하면 한쪽은 초당 수십 번 쓰고 다른 쪽은 몇 분에 한 번 쓴다.
+     */
+    private static final long FLUSH_INTERVAL_NANOS = Duration.ofSeconds(3).toNanos();
 
     private final long executionId;
     private final String jobName;
@@ -49,21 +67,27 @@ public final class BatchExecutionContext {
     private final AtomicLong writtenRowCount = new AtomicLong();
 
     /**
-     * 단계별 저장 행 수. 합계와 <b>별도로</b> 센다.
+     * 단계별 집계. 합계와 <b>별도로</b> 센다.
      *
      * <p>합계만으로는 "시세가 한 건도 안 들어왔다"를 판정할 수 없다. 시세가 0행이어도 지표
      * 단계가 기존 시계열을 다시 써서 종목당 수천 행을 남기기 때문이다({@code IndicatorRunner}는
      * {@code asOf} 이전 구간을 통째로 재계산한다). 실제로 그 상황이 979,541행짜리 성공으로
      * 기록되어 금요일 종가 결손이 아무에게도 알려지지 않았다.
      *
-     * <p>단계마다 세는 것의 의미가 다르다는 점에 주의한다. {@code PRICE}는 <b>저장한 행</b>이고
-     * {@code INDICATOR}는 <b>값이 달라진 행</b>이다 — 지표 쓰기가 같은 값을 다시 쓰지 않기
-     * 때문이다({@code IndicatorValueWriter}). 그래서 재계산만 한 실행은 지표 0행으로 끝나는
-     * 것이 정상이고, 그것은 "계산하지 않았다"가 아니라 "바뀐 것이 없다"는 뜻이다.
-     *
      * <p>모든 값을 미리 채워 둔다. 늦게 넣으면 이 클래스가 약속한 스레드 안전성이 깨진다.
      */
-    private final Map<CollectionPhase, AtomicLong> writtenRowsByPhase = initPhaseCounters();
+    private final Map<CollectionPhase, PhaseCounters> byPhase = initPhaseCounters();
+
+    /**
+     * 지금 어느 구간인가. 잡이 신고하지 않으면 {@code null}이고 화면은 그 줄을 그리지 않는다.
+     *
+     * <p>{@code volatile}인 이유는 신고하는 스레드와 진척을 쓰는 스레드가 다를 수 있기
+     * 때문이다. 정확성보다 <b>보이는가</b>가 중요한 값이라 락을 걸지 않는다.
+     */
+    private volatile String stageLabel;
+
+    /** 마지막으로 진척을 쓴 시각. 벽시계가 아니라 단조 시계다 — 시각 보정에 흔들리면 안 된다. */
+    private final AtomicLong lastFlushNanos = new AtomicLong(System.nanoTime());
 
     /**
      * 마감됐음을 알리는 콜백.
@@ -103,14 +127,69 @@ public final class BatchExecutionContext {
     public boolean process(SecurityRef security, CollectionPhase phase, StockTask task)
             throws DataSourceException {
         StockTaskExecutor.Outcome outcome = executor.execute(executionId, security, phase, task);
-        if (outcome.succeeded()) {
+        PhaseCounters counters = byPhase.get(phase);
+
+        boolean succeeded = outcome.succeeded();
+        if (succeeded) {
             successCount.incrementAndGet();
             writtenRowCount.addAndGet(outcome.writtenRows());
-            writtenRowsByPhase.get(phase).addAndGet(outcome.writtenRows());
-            return true;
+            counters.success.incrementAndGet();
+            counters.writtenRows.addAndGet(outcome.writtenRows());
+        } else {
+            failureCount.incrementAndGet();
+            counters.failure.incrementAndGet();
         }
-        failureCount.incrementAndGet();
-        return false;
+        flushIfDue();
+        return succeeded;
+    }
+
+    /**
+     * 이 단계에서 돌 예정인 작업 단위 수를 신고한다. 루프에 들어가기 전에 부른다.
+     *
+     * <p>IMPORTANT — 이것이 화면의 <b>분모</b>다. 신고하지 않으면 분모가 {@code —}로 뜬다.
+     * 대상 <b>종목</b> 수를 분모로 쓰던 시절에 지표 백필이 {@code 43400/350}으로 보였다 —
+     * 350종목을 124거래일 돌아 43,400번 처리한 것을 종목 수로 나눈 값이었다. 그러니
+     * <b>실제로 {@link #process}를 몇 번 부를 것인가</b>를 신고해야 한다.
+     *
+     * <p>계획보다 적게 처리하고 끝나는 것은 정상이며 그 자체가 정보다. 일일 갱신은 시세가
+     * 실패한 종목의 지표를 건너뛰므로 100%에 못 닿는데, 그 차이가 곧 건너뛴 종목 수다.
+     */
+    public void plan(CollectionPhase phase, int tasks) {
+        PhaseCounters counters = byPhase.get(phase);
+        counters.planned.set(tasks);
+        counters.declared = true;
+        // 곧바로 남긴다. 여기서 안 쓰면 첫 하트비트까지 화면의 분모가 비어 있고, 그 몇 초가
+        // 하필 "지금 뭐가 도는지" 보려고 화면을 여는 시점이다.
+        flushNow();
+    }
+
+    /**
+     * 지금 어느 구간인지 신고한다. 형식은 잡이 정하고 아무도 해석하지 않는다.
+     *
+     * <p>진행률만으로는 부족하기 때문에 있다 — 백필이 40%라는 것보다 "지금 2026-05-12를
+     * 돌고 있다"가 실제로 알고 싶은 것이고, 그것을 알아야 남은 시간을 가늠할 수 있다.
+     */
+    public void stage(String label) {
+        this.stageLabel = label;
+    }
+
+    /**
+     * 종목 격리를 거치지 않고 집계된 결과를 반영한다.
+     *
+     * <p>{@link UniverseRebalanceJob}이 유일한 사용처다. 그 잡의 처리 단위는 종목이 아니라
+     * 지수여서 {@link #process}를 쓰지 않고 스스로 센다. 그래도 여기를 지나게 하는 이유는
+     * <b>단계별 집계와 진행률이 잡 종류와 무관하게 성립해야</b> 하기 때문이다 — 이 경로가
+     * 없으면 그 잡만 화면에서 분모도 단계도 없이 뜬다.
+     */
+    public void countExternally(CollectionPhase phase, int succeeded, int failed, long writtenRows) {
+        successCount.addAndGet(succeeded);
+        failureCount.addAndGet(failed);
+        writtenRowCount.addAndGet(writtenRows);
+
+        PhaseCounters counters = byPhase.get(phase);
+        counters.success.addAndGet(succeeded);
+        counters.failure.addAndGet(failed);
+        counters.writtenRows.addAndGet(writtenRows);
     }
 
     /**
@@ -150,10 +229,10 @@ public final class BatchExecutionContext {
      * 한 단계가 저장한 행 수.
      *
      * <p>MUST: "그 단계가 실제로 무언가를 받아왔는가"는 이쪽으로 묻는다. 합계로 물으면 다른
-     * 단계가 쓴 행이 0을 덮는다 — {@code writtenRowsByPhase}의 주석에 그 사고가 적혀 있다.
+     * 단계가 쓴 행이 0을 덮는다 — {@link PhaseProgress}의 주석에 그 사고가 적혀 있다.
      */
     public long writtenRowCount(CollectionPhase phase) {
-        return writtenRowsByPhase.get(phase).get();
+        return byPhase.get(phase).writtenRows.get();
     }
 
     /**
@@ -163,20 +242,38 @@ public final class BatchExecutionContext {
      * 알리지 않은 경로가 생기고, 그 배치의 실패는 아무도 모르게 된다.
      */
     public BatchStatus finish() {
-        BatchStatus status = recorder.finish(
-                executionId, successCount.get(), failureCount.get(), writtenRowCount.get());
+        BatchStatus status = recorder.finish(executionId, snapshot());
         onTerminal.accept(executionId);
 
         if (status == BatchStatus.PARTIAL_SUCCESS) {
             alertPort.send(AlertEvent.toOperator(
                     AlertSeverity.WARNING,
                     jobName + " 부분 실패",
-                    "%d종목 성공, %d종목 실패 (대상일 %s)"
+                    // MUST NOT: 단위를 "종목"이라 쓰지 않는다. 한 종목이 여러 단계·여러 날짜로
+                    // 처리되므로 이 수는 종목 수보다 크다. 실제로 350종목짜리 유니버스에서
+                    // "84716종목 실패"라고 나간 알림이 있었다.
+                    "%d건 성공, %d건 실패 (대상일 %s)"
                             .formatted(successCount.get(), failureCount.get(), targetDate),
                     dedupeKey(),
                     context()));
         }
         alertOnSuspectedSpecChange();
+        return status;
+    }
+
+    /**
+     * 마감하되 요약 알림을 보내지 않는다.
+     *
+     * <p>{@link UniverseRebalanceJob} 전용이다. 그 잡은 이미 <b>지수마다</b> 실패를 알렸으므로
+     * 요약을 한 건 더 보내면 같은 사실이 두 번 온다.
+     *
+     * <p>MUST: 그래도 여기를 지나야 한다. {@code recorder}를 직접 부르면 {@code onTerminal}이
+     * 불리지 않아 이 컨텍스트가 {@link BatchExecutions}의 열린 목록에 남고, <b>종료 훅이
+     * 성공한 실행을 ABORTED로 덮는다.</b> 실제로 그 경로에 있었다.
+     */
+    public BatchStatus finishQuietly() {
+        BatchStatus status = recorder.finish(executionId, snapshot());
+        onTerminal.accept(executionId);
         return status;
     }
 
@@ -187,8 +284,7 @@ public final class BatchExecutionContext {
      * 부분 실패와 달리 다음 실행이 스스로 회복하지 못한다.
      */
     public void failFatally(DataSourceException cause) {
-        recorder.fail(executionId, successCount.get(), failureCount.get(), writtenRowCount.get(),
-                cause.kind() + ": " + cause.getMessage());
+        recorder.fail(executionId, snapshot(), cause.kind() + ": " + cause.getMessage());
         onTerminal.accept(executionId);
         alertPort.send(AlertEvent.toOperator(
                 AlertSeverity.CRITICAL,
@@ -201,7 +297,7 @@ public final class BatchExecutionContext {
 
     /** 예상하지 못한 오류로 마감한다. 우리 코드의 버그일 가능성이 높다. */
     public void failUnexpectedly(Throwable cause) {
-        recorder.fail(executionId, successCount.get(), failureCount.get(), writtenRowCount.get(),
+        recorder.fail(executionId, snapshot(),
                 cause.getClass().getSimpleName() + ": " + cause.getMessage());
         onTerminal.accept(executionId);
         alertPort.send(AlertEvent.toOperator(
@@ -219,13 +315,13 @@ public final class BatchExecutionContext {
      * 처리한다는 사실을 본문에 남긴다.
      */
     public void abort(String reason) {
-        recorder.abort(executionId, successCount.get(), failureCount.get(), writtenRowCount.get(),
-                reason);
+        recorder.abort(executionId, snapshot(), reason);
         onTerminal.accept(executionId);
         alertPort.send(AlertEvent.toOperator(
                 AlertSeverity.WARNING,
                 jobName + " 중단",
-                "%s — %d종목 처리 후 중단했다. 다음 실행이 이어서 처리한다."
+                // 단위가 종목이 아니라 작업 단위다 — finish()의 알림과 같은 이유로 "건"이다.
+                "%s — %d건 처리 후 중단했다. 다음 실행이 이어서 처리한다."
                         .formatted(reason, successCount.get()),
                 dedupeKey(),
                 context()));
@@ -259,8 +355,7 @@ public final class BatchExecutionContext {
      * 통째로 잃게 만들기 때문이다. 기록은 남고 로그도 남는다.
      */
     void abortOnShutdown(String reason) {
-        recorder.abort(executionId, successCount.get(), failureCount.get(), writtenRowCount.get(),
-                reason);
+        recorder.abort(executionId, snapshot(), reason);
         onTerminal.accept(executionId);
     }
 
@@ -273,12 +368,92 @@ public final class BatchExecutionContext {
         return jobName + ':' + targetDate;
     }
 
-    private static Map<CollectionPhase, AtomicLong> initPhaseCounters() {
-        Map<CollectionPhase, AtomicLong> counters = new EnumMap<>(CollectionPhase.class);
+    /**
+     * 지금까지의 집계. 진척 기록과 마감이 <b>같은 것</b>을 넘긴다.
+     *
+     * <p>둘이 다른 것을 넘기면 마감 직후의 화면이 마감 직전과 어긋나고, 그 어긋남은 배치가
+     * 끝난 뒤에야 보여서 원인을 되짚기 어렵다.
+     *
+     * <p>계획을 신고하지 않은 단계는 <b>뺀다.</b> 안 도는 단계까지 0으로 채우면 화면의 단계별
+     * 표에 시세·재무·유니버스가 전부 0으로 늘어서고, 그러면 "이 잡은 이 단계를 돌지 않는다"와
+     * "돌았는데 아무것도 못 받았다"가 같은 모양이 된다.
+     */
+    private BatchProgress snapshot() {
+        List<PhaseProgress> phases = new ArrayList<>();
+        for (Map.Entry<CollectionPhase, PhaseCounters> entry : byPhase.entrySet()) {
+            PhaseCounters counters = entry.getValue();
+            if (counters.isUntouched()) {
+                continue;
+            }
+            phases.add(new PhaseProgress(entry.getKey(), counters.planned.get(),
+                    counters.success.get(), counters.failure.get(), counters.writtenRows.get()));
+        }
+        return new BatchProgress(successCount.get(), failureCount.get(), writtenRowCount.get(),
+                stageLabel, List.copyOf(phases));
+    }
+
+    /**
+     * 마지막 기록으로부터 {@link #FLUSH_INTERVAL_NANOS}가 지났으면 진척을 남긴다.
+     *
+     * <p>CAS로 자리를 차지한 스레드만 쓴다. 락 없이 병렬 처리를 견디기 위한 것이고, 진 쪽이
+     * 그냥 건너뛰어도 되는 이유는 <b>다음 작업 단위에서 다시 기회가 오기 때문</b>이다.
+     */
+    private void flushIfDue() {
+        long now = System.nanoTime();
+        long last = lastFlushNanos.get();
+        if (now - last < FLUSH_INTERVAL_NANOS || !lastFlushNanos.compareAndSet(last, now)) {
+            return;
+        }
+        flushNow();
+    }
+
+    /**
+     * 진척을 지금 남긴다.
+     *
+     * <p>MUST NOT: 실패를 삼키지 않되, <b>배치를 죽이지도 않는다.</b> 진척 기록은 화면을 위한
+     * 부수적인 쓰기이고, 여기서 예외가 올라가면 수집·계산이 통째로 실패한 것으로 기록된다 —
+     * 보존 정리를 격리한 것과 같은 판단이다({@code DailyUpdateJob}). {@link DataAccessException}만
+     * 잡는 이유는 그 밖의 예외는 우리 코드의 버그이고, 버그는 드러나야 하기 때문이다.
+     */
+    private void flushNow() {
+        lastFlushNanos.set(System.nanoTime());
+        try {
+            recorder.progress(executionId, snapshot());
+        } catch (DataAccessException e) {
+            log.warn("배치 진척을 기록하지 못했다. 집계는 메모리에 남아 있고 마감 때 다시 쓴다. id={}",
+                    executionId, e);
+        }
+    }
+
+    private static Map<CollectionPhase, PhaseCounters> initPhaseCounters() {
+        Map<CollectionPhase, PhaseCounters> counters = new EnumMap<>(CollectionPhase.class);
         for (CollectionPhase phase : CollectionPhase.values()) {
-            counters.put(phase, new AtomicLong());
+            counters.put(phase, new PhaseCounters());
         }
         return counters;
+    }
+
+    /** 한 단계의 카운터. 모든 값을 미리 만들어 두므로 늦은 삽입으로 경합할 일이 없다. */
+    private static final class PhaseCounters {
+        private final AtomicInteger planned = new AtomicInteger();
+        private final AtomicInteger success = new AtomicInteger();
+        private final AtomicInteger failure = new AtomicInteger();
+        private final AtomicLong writtenRows = new AtomicLong();
+
+        /**
+         * 계획을 신고받았는가.
+         *
+         * <p>{@code planned == 0}으로 대신하지 않는 이유는 <b>0건 계획이 실재하기 때문</b>이다 —
+         * 재실행할 실패가 하나도 없는 부분 재실행이 그렇다. 그것을 "신고 안 함"과 묶으면
+         * 화면이 분모를 {@code —}로 그려, 계획대로 0건 처리하고 끝난 실행이 계량이 없는
+         * 옛 실행과 같은 모양이 된다.
+         */
+        private volatile boolean declared;
+
+        /** 이 잡이 이 단계를 아예 쓰지 않았는가. */
+        private boolean isUntouched() {
+            return !declared && success.get() == 0 && failure.get() == 0 && writtenRows.get() == 0;
+        }
     }
 
     private Map<String, String> context() {

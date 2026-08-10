@@ -2,6 +2,8 @@ package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -22,6 +24,8 @@ import java.util.List;
  */
 @Service
 public class BatchExecutionRecorder {
+
+    private static final Logger log = LoggerFactory.getLogger(BatchExecutionRecorder.class);
 
     /** 스택트레이스 저장 상한. 이보다 길면 잘라낸다 — 원인 파악에 앞부분이면 충분하다. */
     private static final int MAX_STACK_TRACE_LENGTH = 8000;
@@ -117,25 +121,54 @@ public class BatchExecutionRecorder {
     }
 
     /**
+     * 아직 도는 중인 실행의 진척을 남긴다.
+     *
+     * <p>IMPORTANT — 이것이 없으면 카운터가 <b>마감할 때 한 번만</b> 기록되어, 56분짜리 백필이
+     * 내내 {@code 0/43400}으로 보이다가 끝나는 순간 튄다. 그 화면으로는 "돌고 있다"와
+     * "멎었다"를 구분할 수 없다.
+     *
+     * <p>MUST: {@code status = 'RUNNING'}인 행만 갱신한다. 이미 마감된 행에 늦은 진척이 닿으면
+     * {@code finished_at}이 있는 채로 카운터만 되살아나는데, 그 조합은 아무 데서도 검증되지
+     * 않는다. 스위퍼가 고아 행을 닫아 둔 뒤 원래 프로세스가 살아 있는 경로가 실재한다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void progress(long executionId, BatchProgress progress) {
+        int updated = jdbcTemplate.update("""
+                UPDATE batch_execution SET
+                    success_count      = ?,
+                    failure_count      = ?,
+                    written_row_count  = ?,
+                    planned_task_count = ?,
+                    stage_label        = ?,
+                    progress_at        = now()
+                WHERE id = ? AND status = 'RUNNING'
+                """, progress.successCount(), progress.failureCount(), progress.writtenRowCount(),
+                progress.plannedTaskCount(), progress.stageLabel(), executionId);
+
+        // 마감된 행에는 단계 집계도 쓰지 않는다. 위 UPDATE와 갈라지면 합계와 단계별이 어긋난다.
+        if (updated > 0) {
+            savePhases(executionId, progress.phases());
+        }
+    }
+
+    /**
      * 실행을 마감한다. 실패 건수에 따라 상태가 갈린다.
      *
      * <p>상태를 호출부가 정하지 않고 여기서 유도하는 이유는, 판단이 여러 잡에 흩어지면
      * 어떤 잡은 부분 실패를 SUCCESS로 마감하게 되기 때문이다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public BatchStatus finish(long executionId, int successCount, int failureCount,
-                              long writtenRowCount) {
-        BatchStatus status = failureCount == 0 ? BatchStatus.SUCCESS : BatchStatus.PARTIAL_SUCCESS;
-        updateTerminalState(executionId, status, successCount, failureCount, writtenRowCount, null);
+    public BatchStatus finish(long executionId, BatchProgress progress) {
+        BatchStatus status =
+                progress.failureCount() == 0 ? BatchStatus.SUCCESS : BatchStatus.PARTIAL_SUCCESS;
+        updateTerminalState(executionId, status, progress, null);
         return status;
     }
 
     /** 배치 자체가 실패했을 때 마감한다. 여기까지 처리된 건수는 그대로 남긴다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void fail(long executionId, int successCount, int failureCount,
-                     long writtenRowCount, String note) {
-        updateTerminalState(executionId, BatchStatus.FAILED, successCount, failureCount,
-                writtenRowCount, note);
+    public void fail(long executionId, BatchProgress progress, String note) {
+        updateTerminalState(executionId, BatchStatus.FAILED, progress, note);
     }
 
     /**
@@ -145,32 +178,72 @@ public class BatchExecutionRecorder {
      * 다음 실행이 이어서 처리한다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void abort(long executionId, int successCount, int failureCount,
-                      long writtenRowCount, String note) {
-        updateTerminalState(executionId, BatchStatus.ABORTED, successCount, failureCount,
-                writtenRowCount, note);
+    public void abort(long executionId, BatchProgress progress, String note) {
+        updateTerminalState(executionId, BatchStatus.ABORTED, progress, note);
     }
 
     /**
      * 종단 상태로 마감한다.
      *
      * <p>MUST: {@code note}를 <b>덮어쓴다.</b> 예전에는 {@code COALESCE(?, note)}라 null이 오면
-     * 기존 값을 보존했는데, 그러면 {@link #finish()}가 성공으로 마감해도 다른 기제가 써 둔
+     * 기존 값을 보존했는데, 그러면 {@link #finish}가 성공으로 마감해도 다른 기제가 써 둔
      * 사유가 남는다 — {@code SUCCESS}인데 "프로세스가 사라져 마감되지 못했다"고 적힌 행이
      * 만들어지고, 그것은 이 계층이 없애려던 모순과 같은 종류다. 마감한 쪽이 사유의 주인이다.
+     *
+     * <p>{@code stage_label}은 <b>비운다.</b> "2026-05-12 · 62/124거래일"이 끝난 실행에 남아
+     * 있으면 거기서 멈춘 것처럼 읽힌다 — 어디까지 갔는지는 카운터가 답한다.
+     *
+     * <p>MUST: {@code RUNNING}인 행만 마감한다. 이미 마감된 행을 다시 마감하면 <b>먼저 쓴
+     * 결과가 조용히 덮인다</b> — 성공으로 끝난 실행이 종료 훅에 의해 ABORTED가 되는 형태로
+     * 실제 경로가 있었다. 되돌리기 어려운 종류라 제자리에서 막고, 어긋난 사실은 로그로 남긴다.
      */
-    private void updateTerminalState(long executionId, BatchStatus status, int successCount,
-                                     int failureCount, long writtenRowCount, String note) {
-        jdbcTemplate.update("""
+    private void updateTerminalState(long executionId, BatchStatus status, BatchProgress progress,
+                                     String note) {
+        int updated = jdbcTemplate.update("""
                 UPDATE batch_execution SET
-                    status            = ?,
-                    success_count     = ?,
-                    failure_count     = ?,
-                    written_row_count = ?,
-                    note              = ?,
-                    finished_at       = now()
-                WHERE id = ?
-                """, status.name(), successCount, failureCount, writtenRowCount, note, executionId);
+                    status             = ?,
+                    success_count      = ?,
+                    failure_count      = ?,
+                    written_row_count  = ?,
+                    planned_task_count = ?,
+                    stage_label        = NULL,
+                    progress_at        = now(),
+                    note               = ?,
+                    finished_at        = now()
+                WHERE id = ? AND status = 'RUNNING'
+                """, status.name(), progress.successCount(), progress.failureCount(),
+                progress.writtenRowCount(), progress.plannedTaskCount(), note, executionId);
+
+        if (updated == 0) {
+            log.warn("이미 마감된 배치 실행을 다시 마감하려 했다. 기존 기록을 유지한다. id={} 시도한 상태={}",
+                    executionId, status);
+            return;
+        }
+        savePhases(executionId, progress.phases());
+    }
+
+    /**
+     * 단계별 집계를 갱신한다.
+     *
+     * <p>{@code ON CONFLICT}인 이유는 진척 기록이 같은 실행에 대해 몇 초마다 다시 오기
+     * 때문이다. 누적이 아니라 <b>덮어쓰기</b>다 — 넘어오는 값이 이미 그 시점까지의 합계다.
+     */
+    private void savePhases(long executionId, List<PhaseProgress> phases) {
+        for (PhaseProgress phase : phases) {
+            jdbcTemplate.update("""
+                    INSERT INTO batch_execution_phase
+                        (execution_id, phase, planned_count, success_count, failure_count,
+                         written_row_count)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (execution_id, phase) DO UPDATE SET
+                        planned_count     = EXCLUDED.planned_count,
+                        success_count     = EXCLUDED.success_count,
+                        failure_count     = EXCLUDED.failure_count,
+                        written_row_count = EXCLUDED.written_row_count
+                    """,
+                    executionId, phase.phase().name(), phase.plannedCount(), phase.successCount(),
+                    phase.failureCount(), phase.writtenRowCount());
+        }
     }
 
     /**

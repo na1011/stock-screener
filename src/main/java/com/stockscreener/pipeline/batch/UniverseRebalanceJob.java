@@ -70,6 +70,10 @@ public class UniverseRebalanceJob {
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
 
+        // 이 잡의 작업 단위는 지수다. 종목 격리를 쓰지 않으므로 process()를 부르지 않지만,
+        // 계획은 똑같이 신고한다 — 안 하면 이 잡만 화면에서 분모 없이 뜬다.
+        execution.plan(CollectionPhase.UNIVERSE, targets.size());
+
         int succeeded = 0;
         int failed = 0;
         long changedRows = 0;
@@ -130,13 +134,18 @@ public class UniverseRebalanceJob {
     /**
      * 실행을 마감한다.
      *
-     * <p>{@link BatchExecutionContext}의 집계를 쓰지 않는 이유는, 이 배치의 처리 단위가
-     * 종목이 아니라 지수이기 때문이다. 종목 단위 격리를 쓰지 않으므로 카운터도 직접 넣는다.
+     * <p>이 배치의 처리 단위가 종목이 아니라 지수여서 {@code process()}를 쓰지 않고 스스로
+     * 센다. 그래서 집계를 {@link BatchExecutionContext#countExternally}로 넘겨준 뒤 마감한다 —
+     * 그러지 않으면 이 잡만 화면에서 단계별 집계 없이 뜬다.
+     *
+     * <p>MUST NOT: {@code execution.finish()}를 쓰지 않는다. 그쪽은 부분 실패에 요약 알림을
+     * 한 건 보내는데, 이 잡은 이미 <b>지수마다</b> 실패를 알렸다. 둘 다 나가면 지수 하나가
+     * 깨진 날 같은 사실이 두 번 온다. 카운터만 넘기고 마감은 직접 하는 이유가 그것이다.
      */
     private BatchStatus finish(BatchExecutionContext execution, int succeeded, int failed,
                                long changedRows) {
-        BatchStatus status = batchExecutions.recorder()
-                .finish(execution.executionId(), succeeded, failed, changedRows);
+        execution.countExternally(CollectionPhase.UNIVERSE, succeeded, failed, changedRows);
+        BatchStatus status = execution.finishQuietly();
         if (status == BatchStatus.PARTIAL_SUCCESS) {
             log.warn("유니버스 리밸런싱 부분 실패. 성공={} 실패={}", succeeded, failed);
         }

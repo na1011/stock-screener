@@ -95,6 +95,55 @@ class BatchExecutionClosingTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 마감된 실행은 두 번 마감되지 않는다. 먼저 쓴 결과가 이긴다")
+    void refusesToReopenFinishedExecution() {
+        BatchExecutionContext execution = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+        execution.finish();
+
+        // 열린 목록에서 이미 빠졌지만, 다른 경로가 같은 id로 마감을 시도할 수 있다.
+        // 막지 않으면 성공한 실행이 중단으로 덮이고, 화면에는 아무 단서도 남지 않는다.
+        execution.abort("나중에 온 마감");
+
+        assertThat(statusOf(execution.executionId())).isEqualTo("SUCCESS");
+        assertThat(noteOf(execution.executionId())).isNull();
+    }
+
+    @Test
+    @DisplayName("도는 중에도 진척이 보인다 — 마감 때만 쓰면 56분짜리 배치가 내내 0으로 보인다")
+    void writesProgressWhileRunning() {
+        BatchExecutionContext execution = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 2);
+
+        execution.plan(CollectionPhase.PRICE, 2);
+
+        assertThat(statusOf(execution.executionId())).isEqualTo("RUNNING");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT planned_task_count FROM batch_execution WHERE id = ?",
+                Integer.class, execution.executionId()))
+                .as("분모는 마감을 기다리지 않는다 — 기다리면 도는 동안 분모가 비어 있다")
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("마감된 행에는 늦은 진척이 닿지 않는다 — 스위퍼가 닫은 뒤 원 프로세스가 살아 있는 경로가 있다")
+    void ignoresProgressOnFinishedExecution() {
+        long executionId = insertRunning("MANUAL", "now()");
+        jdbcTemplate.update(
+                "UPDATE batch_execution SET status = 'ABORTED', finished_at = now() WHERE id = ?",
+                executionId);
+
+        batchExecutions.recorder().progress(executionId,
+                new BatchProgress(99, 0, 999L, "늦게 온 구간", java.util.List.of()));
+
+        assertThat(statusOf(executionId)).isEqualTo("ABORTED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT success_count FROM batch_execution WHERE id = ?", Integer.class, executionId))
+                .as("마감된 행의 카운터가 되살아나면 finished_at이 있는데 진행 중인 모순이 생긴다")
+                .isZero();
+    }
+
+    @Test
     @DisplayName("웹 기동 스윕은 이전 인스턴스의 ADMIN·SCHEDULER 행만 닫는다")
     void startupSweepClosesOnlyWebOwnedRows() {
         long admin = insertRunning("ADMIN", "now() - interval '1 hour'");

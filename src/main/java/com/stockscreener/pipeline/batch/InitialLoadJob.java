@@ -93,6 +93,10 @@ public class InitialLoadJob {
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
 
+        // 종목당 시세·재무 두 단계를 돌므로 작업 단위는 종목 수의 두 배다.
+        execution.plan(CollectionPhase.PRICE, targets.size());
+        execution.plan(CollectionPhase.FINANCIAL, targets.size());
+
         LocalDate priceFrom = asOf.minusYears(range.priceYears());
         int fromFiscalYear = asOf.getYear() - range.financialYears();
 

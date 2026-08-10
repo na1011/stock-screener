@@ -123,6 +123,16 @@ public class DailyUpdateJob {
      */
     private BatchStatus collect(BatchExecutionContext execution, List<SecurityRef> targets,
                                 LocalDate from, LocalDate to, Long resolvingExecutionId) {
+        // 종목당 두 단계를 돌므로 작업 단위는 종목 수의 두 배다. 종목 수만 신고하면 화면이
+        // 700/350으로 뜬다 — 지표 백필이 43400/350으로 뜨던 것과 같은 어긋남이다.
+        //
+        // 지표 쪽은 **상한**이다. 시세가 실패한 종목은 계산할 새 원자료가 없어 건너뛰므로(아래)
+        // 처리 수가 계획에 못 미칠 수 있고, 그 차이가 곧 건너뛴 종목 수다. 실측으로 덮어쓰지
+        // 않는 이유가 그것이다 — 덮어쓰면 그 신호가 사라진다.
+        execution.plan(CollectionPhase.PRICE, targets.size());
+        execution.plan(CollectionPhase.INDICATOR, targets.size());
+        execution.stage("종목별 수집·계산");
+
         try {
             for (SecurityRef target : targets) {
                 boolean collected = execution.process(target, CollectionPhase.PRICE,
@@ -151,10 +161,14 @@ public class DailyUpdateJob {
 
             alertIfNothingArrived(execution, targets.size(), to);
 
+            // 루프가 끝난 뒤에도 할 일이 남아 있다. 구간을 신고하지 않으면 이 몇 분이 화면에
+            // "100%인데 안 끝남"으로 보이고, 그것은 멎은 것과 구분되지 않는다.
+            execution.stage("백분위 계산");
             // 백분위는 전 종목의 값이 저장된 뒤에야 계산할 수 있다. 종목 루프 안에서는 원리적으로
             // 불가능하므로 루프가 끝난 뒤 하루치를 한 번에 처리한다.
             percentileCalculator.calculate(to);
 
+            execution.stage("워치리스트 판정");
             // 워치리스트 판정은 백분위 뒤여야 한다. 백분위 조건("PER 하위 20%")을 건 화면이
             // 그 앞에서 판정되면 어제 백분위로 오늘을 판정하게 되고, 그것은 조용히 그럴듯하다.
             evaluateWatchlist(execution, to);
@@ -175,6 +189,7 @@ public class DailyUpdateJob {
         // 하루 더 남는 것은 저장 공간 문제일 뿐이지만, 여기서 예외가 올라가면 그날의 수집과
         // 계산이 통째로 실패한 것처럼 기록된다.
         try {
+            execution.stage("지표 보존 정리");
             retentionPolicy.purge();
         } catch (RuntimeException e) {
             log.warn("지표 보존 정리에 실패했다. 수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);

@@ -181,8 +181,32 @@ class StockFailureIsolationTest {
         assertThat(alertPort.events).hasSize(1);
         AlertEvent event = alertPort.events.get(0);
         assertThat(event.severity()).isEqualTo(AlertSeverity.WARNING);
-        assertThat(event.body()).contains("3종목 실패");
+        assertThat(event.body()).contains("3건 실패");
         assertThat(event.context()).containsEntry("executionId", String.valueOf(execution.executionId()));
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 알림의 단위는 종목이 아니라 건이다. 한 종목이 여러 번 세어진다")
+    void countsTasksNotStocks() throws Exception {
+        // 종목 하나를 두 단계로 처리한다. 실제로는 일일 갱신이 시세·지표를, 지표 백필이
+        // 같은 종목을 거래일마다 처리하는 형태다. 단위를 "종목"이라 부르면 350종목짜리
+        // 유니버스에서 "84716종목 실패"라는 알림이 나간다 — 실제로 나갔다.
+        SecurityRef security = insertStock("000033", "두 단계");
+
+        BatchExecutionContext execution = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1);
+        for (CollectionPhase phase : List.of(CollectionPhase.PRICE, CollectionPhase.FINANCIAL)) {
+            execution.process(security, phase, s -> {
+                throw new DataSourceException(
+                        DataSourceException.Kind.TRANSIENT, "stub-source", "실패");
+            });
+        }
+        execution.finish();
+
+        assertThat(execution.failureCount()).isEqualTo(2);
+        assertThat(alertPort.events.get(0).body())
+                .contains("2건 실패")
+                .doesNotContain("종목");
     }
 
     @Test

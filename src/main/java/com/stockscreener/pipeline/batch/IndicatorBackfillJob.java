@@ -70,12 +70,22 @@ public class IndicatorBackfillJob {
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, to, triggeredBy, targets.size());
 
+        // MUST: 거래일 수를 곱한다. 이 잡은 종목 하나를 거래일마다 다시 처리하므로 작업 단위가
+        // 종목 수가 아니다. 종목 수만 신고하던 시절에 화면이 43400/350으로 떴다 —
+        // 350종목 × 124거래일을 350으로 나눈 값이었고, 데이터가 부풀어 보였다.
+        execution.plan(CollectionPhase.INDICATOR, tradeDates.size() * targets.size());
+
         log.info("지표 백필을 시작한다. 거래일={}일 종목={}개", tradeDates.size(), targets.size());
 
         try {
             // 날짜가 바깥 루프인 이유는 백분위 때문이다. 백분위는 "그날 전 종목의 값"을
             // 요구하므로, 한 날짜를 전 종목에 대해 끝낸 뒤에야 그날의 순위를 낼 수 있다.
-            for (LocalDate tradeDate : tradeDates) {
+            for (int i = 0; i < tradeDates.size(); i++) {
+                LocalDate tradeDate = tradeDates.get(i);
+                // 진행률만으로는 남은 시간을 가늠할 수 없다. 어느 날짜를 돌고 있는지가
+                // 이 잡에서 실제로 알고 싶은 것이다.
+                execution.stage("%s · %d/%d거래일".formatted(tradeDate, i + 1, tradeDates.size()));
+
                 for (SecurityRef target : targets) {
                     execution.process(target, CollectionPhase.INDICATOR,
                             security -> indicatorRunner.run(security.stockId(), tradeDate));

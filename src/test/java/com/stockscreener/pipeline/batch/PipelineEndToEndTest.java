@@ -27,6 +27,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -62,6 +63,12 @@ class PipelineEndToEndTest {
 
     @Autowired
     private DailyUpdateJob dailyUpdateJob;
+
+    @Autowired
+    private IndicatorBackfillJob indicatorBackfillJob;
+
+    @Autowired
+    private BatchExecutions batchExecutions;
 
     @Autowired
     private UniverseReconciler reconciler;
@@ -386,6 +393,108 @@ class PipelineEndToEndTest {
                 .as("두 번 실패한 종목은 미해결로 남아야 한다. 해결로 표시하면 관리자의 "
                         + "실패 목록에서 사라져 다시는 재실행 대상이 되지 않는다")
                 .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 백필의 분모는 종목 수가 아니라 거래일 × 종목이다")
+    void backfillPlansOneTaskPerTradeDateAndStock() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        // 잡의 대상은 지수 하나가 아니라 편입 중인 전 지수다. KOSPI200만 세면 분모가 달라진다.
+        List<Long> members = activeUniverseMembers();
+        List<String> tradeDates = List.of("2026-08-03", "2026-08-04", "2026-08-05");
+        for (Long member : members) {
+            fakePriceSource.withBars(member, tradeDates.stream()
+                    .map(date -> bar(date, "1000")).toList());
+        }
+        initialLoadJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+
+        indicatorBackfillJob.run(LocalDate.parse("2026-08-03"), LocalDate.parse("2026-08-05"),
+                BatchExecutionRecorder.TriggeredBy.MANUAL);
+
+        Map<String, Object> row = latestExecution(IndicatorBackfillJob.JOB_NAME);
+        int expected = tradeDates.size() * members.size();
+
+        // 이 단언이 이 테스트의 존재 이유다. 분모가 종목 수였을 때 화면에 43400/350이 떴다 —
+        // 350종목 × 124거래일을 종목 수로 나눈 값이라 데이터가 부풀어 보였다.
+        assertThat(row.get("planned_task_count"))
+                .as("계획은 실제로 process()를 부를 횟수여야 한다")
+                .isEqualTo(expected);
+        assertThat(row.get("success_count"))
+                .as("분자와 분모가 같은 단위라야 진행률이 성립한다")
+                .isEqualTo(expected);
+        assertThat(row.get("target_count"))
+                .as("대상 종목 수는 그대로 남는다 — 뜻을 갈아타면 과거 행이 다른 것을 의미하게 된다")
+                .isEqualTo(members.size());
+    }
+
+    @Test
+    @DisplayName("단계별 집계가 남는다 — 합계만으로는 어느 단계가 비었는지 알 수 없다")
+    void recordsPerPhaseTally() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        List<Long> members = activeUniverseMembers();
+        for (Long member : members) {
+            fakePriceSource.withBars(member, List.of(bar("2026-08-05", "72000")));
+        }
+
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        long executionId = ((Number) latestExecution(DailyUpdateJob.JOB_NAME).get("id")).longValue();
+        List<Map<String, Object>> phases = jdbcTemplate.queryForList("""
+                SELECT phase, planned_count, success_count, written_row_count
+                FROM batch_execution_phase WHERE execution_id = ? ORDER BY phase
+                """, executionId);
+
+        assertThat(phases).extracting(phase -> phase.get("phase"))
+                .as("일일 갱신은 시세와 지표 두 단계를 돈다")
+                .containsExactlyInAnyOrder("INDICATOR", "PRICE");
+        Map<String, Object> price = phases.stream()
+                .filter(phase -> "PRICE".equals(phase.get("phase"))).findFirst().orElseThrow();
+        assertThat(price.get("planned_count")).isEqualTo(members.size());
+        assertThat(((Number) price.get("written_row_count")).longValue())
+                .as("시세 단계가 실제로 행을 썼는지는 이쪽으로만 물을 수 있다")
+                .isEqualTo(members.size());
+    }
+
+    @Test
+    @DisplayName("돌지 않은 단계는 집계에 없다 — 0으로 채우면 '안 돈다'와 '못 받았다'가 같아진다")
+    void omitsPhasesTheJobNeverRuns() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+
+        long executionId =
+                ((Number) latestExecution(UniverseRebalanceJob.JOB_NAME).get("id")).longValue();
+
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT phase FROM batch_execution_phase WHERE execution_id = ?",
+                String.class, executionId))
+                .containsExactly("UNIVERSE");
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 마감된 실행은 종료 훅이 덮지 못한다")
+    void keepsFinishedExecutionFromBeingReopened() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+
+        // 유니버스 리밸런싱은 process()를 쓰지 않아 오랫동안 마감 신호를 보내지 않았고,
+        // 그래서 열린 실행 목록에 남아 종료 훅이 성공한 행을 ABORTED로 덮을 수 있었다.
+        batchExecutions.closeOpenExecutions();
+
+        assertThat(latestExecution(UniverseRebalanceJob.JOB_NAME).get("status"))
+                .isEqualTo(BatchStatus.SUCCESS.name());
+    }
+
+    /** 잡들이 대상으로 삼는 모집단. 지수 하나가 아니라 편입 중인 전 지수다. */
+    private List<Long> activeUniverseMembers() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                WHERE m.effective_to IS NULL AND s.is_active
+                """, Long.class);
+    }
+
+    private Map<String, Object> latestExecution(String jobName) {
+        return jdbcTemplate.queryForMap("""
+                SELECT * FROM batch_execution WHERE job_name = ? ORDER BY id DESC LIMIT 1
+                """, jobName);
     }
 
     private int countStocks() {
