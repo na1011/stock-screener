@@ -3,9 +3,9 @@
 # 실행에 필요한 것만 저장소 밖으로 복사한다.
 #
 # IMPORTANT — 이 맥북은 개발 기기이면서 동시에 운영 기기다. 도는 것이 작업 트리를
-# 가리키면 빌드가 곧 배포가 된다: `./gradlew clean`이 도는 앱의 jar를 지우고, 30초 뒤
-# KeepAlive가 되살리려 할 때 띄울 것이 없다. 빌드의 부수 효과로 사이트가 내려가는데
-# 밖에서 502로만 보인다. 그래서 도는 것을 저장소 밖에 둔다(ADR-0034).
+# 가리키면 빌드가 곧 배포가 된다: `./gradlew clean`이 도는 앱의 jar를 지운다. 도는
+# 프로세스는 그대로 멀쩡해 보이므로 증상은 **다음에 켤 때** 나오고, 그때는 빌드가 원인이라는
+# 단서가 아무 데도 없다. 그래서 도는 것을 저장소 밖에 둔다(ADR-0034).
 #
 # MUST NOT: 아래 .env 복사를 심볼릭 링크로 바꾸지 않는다. 링크는 저장소 경로를 이 트리에
 # 다시 박아, "run-app.sh는 저장소를 참조하지 않는다"는 성질을 깬다. 그러면 저장소를
@@ -42,6 +42,18 @@ chmod 600 "$DEPLOY/.env"
 
 cp "$ROOT/ops/run-app.sh" "$DEPLOY/run-app.sh"
 chmod 700 "$DEPLOY/run-app.sh"
+
+# 터널 토큰을 파일로 내보낸다. cloudflared를 부팅 데몬에서 걷어 사용자 권한으로 띄우게
+# 되면서(ADR-0043) root 소유 토큰을 못 읽기 때문이다. `--token <값>`으로 넘기지 않는
+# 이유는 그것이 ps에 그대로 뜨기 때문이고, 그래서 600 파일로 건넨다.
+TOKEN="$(grep -m1 '^CLOUDFLARE_TUNNEL_TOKEN=' "$ROOT/.env" | cut -d= -f2- || true)"
+if [[ -z "$TOKEN" || "$TOKEN" == "your-tunnel-token" ]]; then
+  # 앱은 이것 없이도 돈다. 밖에서 안 보일 뿐이라 실패로 다루지 않고, 대신 조용히 넘기지도 않는다.
+  echo "[stage] .env에 CLOUDFLARE_TUNNEL_TOKEN이 없다(또는 자리표시자 그대로다) — 터널은 뜨지 않는다." >&2
+else
+  # umask를 서브셸에 가둔다. 밖으로 새면 뒤따르는 jar 복사의 권한까지 조용히 바꾼다.
+  ( umask 077; printf '%s' "$TOKEN" >"$DEPLOY/tunnel-token" )
+fi
 
 # 새 이름으로 쓴 뒤 옮긴다. 큰 파일을 제자리에 덮어쓰면 그 순간 재시작이 걸렸을 때
 # 반쯤 쓰인 jar를 실행하게 된다.
