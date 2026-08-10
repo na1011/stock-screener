@@ -181,4 +181,54 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
   **없으면 프론트 이슈가 `index-a3f9.js:1:28471`처럼만 남는다.** 프로젝트를 둘로 나눈 것(4-2)은 이슈가 섞이는 것을 막을 뿐, 소스맵을 올리지 않으면 스택트레이스는 여전히 못 읽는다. 백엔드는 이 토큰이 필요 없다 — 소스맵이라는 개념이 없고 바이트코드에 줄 번호가 들어 있다.
 **SDK는 붙었다 (2026-08-09).** 백엔드·프론트 모두 이벤트를 보내고, DSN이 번들에 실린 것까지 확인했다.
 
-> **남은 둘(대시보드 도착 확인·프론트 슬러그)은 [`TODO.md`](../TODO.md)에 있다.**
+- [x] **4-7. 슬러그 둘 → `SENTRY_ORG` · `SENTRY_PROJECT_FRONTEND`** (2026-08-10 `checkEnv` 실측).
+
+  **슬러그는 "발급"되는 것이 아니다.** 조직·프로젝트를 만들 때 이름에서 자동으로 만들어져
+  **이미 존재하며**, 찾아서 적기만 하면 된다. 시크릿이 아니라 조회값이다.
+  **이름과 슬러그는 다르다** — `My Org` → `my-org`처럼 바뀌고, 같은 이름이 있으면 뒤에 숫자가
+  붙는다(`my-org-2`). **눈으로 옮겨 적지 말고 주소창을 복사한다.**
+
+  **가장 빠른 길은 주소창이다.** 메뉴 이름은 Sentry가 자주 바꾸지만 주소 형태는 안 바뀐다:
+
+  ```
+  https://<조직슬러그>.sentry.io/projects/<프로젝트슬러그>/
+  https://sentry.io/organizations/<조직슬러그>/projects/<프로젝트슬러그>/
+  ```
+
+  **MUST NOT: API·CLI로 조회하려 하지 않는다.** 4-6의 토큰은 **소스맵 업로드 전용 스코프**라
+  읽기 엔드포인트가 전부 403이다(2026-08-10 실측 — `sentry-cli organizations list`,
+  `/api/0/projects/`, `/api/0/organizations/<ID>/projects/`, `/api/0/organizations/<ID>/`).
+  읽기 스코프(`org:read`·`project:read`) 토큰을 새로 발급하면 되지만 **주소창을 읽는 것보다
+  오래 걸린다.**
+
+  **어느 프로젝트가 프론트인지 헷갈릴 때**: DSN은 **숫자 ID만** 담아 슬러그를 유도할 수 없다
+  (`https://<공개키>@o<조직ID>.ingest.<지역>.sentry.io/<프로젝트ID>`). `VITE_SENTRY_DSN` 끝의
+  숫자와 프로젝트 목록의 `id`를 대조한다. **`SENTRY_PROJECT_FRONTEND`는 Vue 쪽이지 백엔드가
+  아니다** — 백엔드는 소스맵이라는 개념이 없다.
+
+> **남은 것(대시보드 도착 확인)은 [`TODO.md`](../TODO.md)에 있다.** 값을 넣는 일은 끝났고
+> **눈으로 봐야 갈리는 것만** 남았다.
+
+---
+
+### ⑤ 메신저 웹훅 → `ALERT_WEBHOOK_URL`
+
+**완료 (2026-08-10 `./gradlew checkEnv` 실측).** 아래는 채널을 바꾸거나 URL을 회전할 때
+다시 밟을 기록이다. **이메일(SMTP) 쪽은 아직 발급 전이라 [`TODO.md`](../TODO.md)에 있다.**
+
+- [x] **5-1. 웹훅 URL을 만든다.** 둘 중 하나면 된다.
+  - **Discord**(가장 빠르다): 서버 생성 → 채널 설정 → `연동` → `웹후크` → `새 웹후크` → URL 복사.
+  - **Slack**: [api.slack.com/apps](https://api.slack.com/apps) → `Create New App` →
+    `Incoming Webhooks` 활성화 → `Add New Webhook to Workspace` → 채널 선택 → URL 복사.
+- [x] **5-2. `.env`의 `ALERT_WEBHOOK_URL`에 넣는다.**
+
+**IMPORTANT — 구현이 Slack 형식을 전제한다**(ADR-0025). Slack은 `{"text": …}`,
+Discord는 `{"content": …}`인데 **Discord 웹훅 URL 끝에 `/slack`을 붙이면 Slack 형식을 그대로
+받아준다.** Discord를 골랐다면 **`.env`에 넣는 URL 끝에 `/slack`을 붙인다** — 안 붙이면
+Discord가 400을 내고, 그 실패는 **"채널에 아무것도 안 뜬다"로만 보인다.**
+
+**MUST NOT: 웹훅 URL을 커밋하지 않는다.** URL 자체가 자격증명이다.
+
+**넣은 뒤 반영은 자동이 아니다.** 도는 것은 `~/Library/Application Support/stock-screener/app.jar`
+이므로 `ops/deploy.sh`를 돌려야 새 값이 실린다(ADR-0034). 기동 로그의
+`알림 채널이 하나도 구성되지 않아…`가 사라지고 `알림 채널 N개를 구성했다`가 뜨면 실린 것이다.
