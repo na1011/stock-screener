@@ -80,7 +80,7 @@ pgrep -fl app.jar
 - **`./gradlew build`만으로는 아무것도 반영되지 않는다.** 도는 것은 저장소가 아니라 `~/Library/Application Support/stock-screener/`의 사본이라, 옛 빌드가 계속 돌고 화면에는 아무 단서가 없다([ADR-0034](docs/adr/ADR-0034-repo-out-of-tcc-path.md)). `deploy.sh`가 그 순서를 대신한다.
 - 위 `bootstrap`이 plist가 없다고 하면 `ops/install-agent.sh`로 다시 등록한다(`--uninstall`이 반대). 기동 실패 원인은 `~/Library/Logs/stock-screener/stderr.log`에 있다.
 
-**맥북이 자면 사이트도 함께 내려간다.** 온프레미스를 택한 대가이고(spec §6), 배치를 사람이 기기를 쓰는 시각(평일 20시)에 둔 이유다. 절전·재부팅으로 당신이 할 일은 [`TODO.md`](TODO.md)에 있다.
+**맥북이 자면 사이트도 함께 내려간다.** 온프레미스를 택한 대가다(spec §6). 배치는 평일 15시에 도는데, 소스가 종가를 하루 뒤 오후에야 내주기 때문이다. 그 시각에 기기가 자 있어 실행이 통째로 빠져도 다음 실행이 메운다. 절전·재부팅으로 당신이 할 일은 [`TODO.md`](TODO.md)에 있다.
 
 ## 하네스 설계 — 기획형 하네스
 

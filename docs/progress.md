@@ -29,8 +29,8 @@
 **사람이 값을 채우는 일이 남았다** — 목록은 [`TODO.md`](../TODO.md), 발급 여부는 `./gradlew checkEnv`가 답한다(문서가 먼저 낡는다).
 
 - **도는 것은 `build/libs`가 아니다.** 코드·`.env`를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다 — `build`만 하면 옛것이 돌고 화면에 단서가 없다(ADR-0034).
-- **🔴 2026-08-11(화) 20시 배치 뒤에 잰다** — `SELECT max(trade_date) FROM price_daily`. 판정은 **그 값이 조회 시점의 전 영업일인가**다. 맞으면 **D+1 확정** → 대상 일자를 전 영업일로 바꾸고 ADR-0033을 개정한다. `2026-08-07`에 멈춰 있으면 D+2 이상이라 다시 잰다. **그 전에 상수를 박지 않는다.** **08-10이 정상 개장일임은 사람이 확인했다** — 응답으로는 못 가르는 사실이라 코드·DB 어디에도 없다. **휴장 분기가 사라져 이 관측은 D+1/D+2만 가른다.** 자정 직후의 0건은 근거가 안 된다(`api-spec/data-go-kr-stock-price.md` §공개 지연).
-- **시세 결손은 물어야 보인다.** 0건이어도 배치는 SUCCESS고 이력도 초록이다. 평일인데 빈 날을 찾는다 — `SELECT d::date FROM generate_series(current_date-30,current_date-1,'1d') d WHERE extract(isodow FROM d)<6 AND NOT EXISTS(SELECT 1 FROM price_daily WHERE trade_date=d::date)`. **나온 날은 후보일 뿐이다**(휴장·미공개와 가르는 법은 `api-sources` skill). 메우는 길은 **`/admin` 일일 갱신에 대상 일자를 넣는 것뿐**이고 `ROLE_ADMIN` 세션 인증이라 **사람이 한 번 로그인해야 한다.**
+- **🔴 2026-08-11(화) 15시 배치 뒤에 한 번 본다** — 배치 시각·대상 일자를 ADR-0042로 바꿨고 **아직 실제로 돈 적이 없다.** `SELECT max(trade_date) FROM price_daily`가 `2026-08-10`으로 올라오면 참이다. 이후로는 그 ADR의 premise가 세션 시작에 잰다.
+- **시세 결손은 물어야 보인다.** 0건이어도 배치는 SUCCESS고 이력도 초록이다. 평일인데 빈 날을 찾는다 — `SELECT d::date FROM generate_series(current_date-30,current_date-1,'1d') d WHERE extract(isodow FROM d)<6 AND NOT EXISTS(SELECT 1 FROM price_daily WHERE trade_date=d::date)`. **나온 날은 후보일 뿐이다**(휴장·미공개와 가르는 법은 `api-sources` skill). **15일 창 안은 다음 실행이 스스로 메우므로 손이 필요한 것은 창 밖뿐**이고, 그 길은 `/admin` 일일 갱신에 대상 일자를 넣는 것 하나다(`ROLE_ADMIN` 세션 인증이라 **사람이 한 번 로그인해야 한다**).
 - **MUST NOT: 결손이 생길 때마다 조건을 빼서 해결하지 않는다**(2026-08-10 사용자 판단). 개별 판단이 정당해도 **누적은 원본과 다른 물건**이 된다. 막히면 **원자료를 여는 길을 먼저 본다** — `ALTMAN_Z` 0건이 그렇게 풀렸다(ADR-0040).
 - **위 관측을 기다리는 동안 할 것은 phase 착수다. 가장 싼 것이 바뀌었다.** 판정표는 **`api-sources` skill**이 답한다.
   1. **U-05(상장 3년) — 수집이 0이다.** `price_daily`에 2020-01-02부터 1,620거래일이 있고 **320종목이 750봉을 넘는다.** 지표 하나면 끝난다(ADR-0039 §단계 C의 정정).
