@@ -56,6 +56,36 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  /** 지금 도는 중인 실행이 목록에 있는가. 자동 갱신을 켤지가 여기 달려 있다. */
+  const hasRunningBatch = computed(() => batches.value.some((batch) => batch.status === 'RUNNING'))
+
+  /**
+   * 배경 자동 갱신이 연속으로 실패한 횟수.
+   *
+   * 실패를 삼키지 않되 **5초마다 토스트를 띄우지도 않는다.** 그 토스트는 곧 화면을 덮고,
+   * 덮이는 것은 마침 지켜보려던 진행률이다. 대신 세어서 화면이 한 번만 말하게 한다.
+   */
+  const backgroundFailures = ref(0)
+
+  /**
+   * 목록과 요약을 조용히 다시 읽는다. 배치가 도는 동안 진행률을 따라가는 경로다.
+   *
+   * `reloadBatches`와 나눈 이유는 `useAsync.run()`이 매번 `loading`으로 떨어져 `AsyncPanel`이
+   * 슬롯을 파괴하기 때문이다 — 그러면 펼쳐 둔 상세가 5초마다 접힌다.
+   *
+   * 잡 목록(`jobsRequest`)도 함께 읽는다. 거기 `running` 플래그가 있어, 빼면 배치가 끝난 뒤에도
+   * 실행 버튼이 계속 잠겨 있다.
+   */
+  async function refreshBatchesQuietly(): Promise<void> {
+    try {
+      await Promise.all([summaryRequest.refresh(), batchesRequest.refresh(), jobsRequest.refresh()])
+      backgroundFailures.value = 0
+    } catch (caught) {
+      backgroundFailures.value += 1
+      throw caught
+    }
+  }
+
   async function openBatch(id: number): Promise<BatchExecutionDetail> {
     return api.adminBatch(id)
   }
@@ -145,6 +175,9 @@ export const useAdminStore = defineStore('admin', () => {
     retrySummary: summaryRequest.retry,
     ensureBatchesLoaded,
     reloadBatches,
+    refreshBatchesQuietly,
+    hasRunningBatch,
+    backgroundFailures,
     openBatch,
     retryBatch,
     runJob,

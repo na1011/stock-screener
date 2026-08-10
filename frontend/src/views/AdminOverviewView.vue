@@ -7,15 +7,19 @@ import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { useConfirm } from 'primevue/useconfirm'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
+import { ApiError } from '@/api/http'
 import { BATCH_STATUSES } from '@/api/types'
 import type { AdminJob, BatchExecution, BatchExecutionDetail, IsoDate } from '@/api/types'
 import AdminNav from '@/components/admin/AdminNav.vue'
 import AsyncPanel from '@/components/AsyncPanel.vue'
+import BatchDetailSheet from '@/components/admin/BatchDetailSheet.vue'
+import RatioBar from '@/components/ui/RatioBar.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useApiToast } from '@/composables/useApiToast'
-import { batchStatusStyle, canRetry, elapsedSeconds, triggeredByLabel } from '@/lib/admin'
+import { batchStatusStyle, elapsedSeconds, triggeredByLabel } from '@/lib/admin'
+import { formatCount, isStalled, processedTasks, progressRatio } from '@/lib/batchProgress'
 import { useAdminStore } from '@/stores/admin'
 
 /**
@@ -29,10 +33,28 @@ const admin = useAdminStore()
 const confirm = useConfirm()
 const { notifyFailure, notifySuccess } = useApiToast()
 
-/** 어느 실행의 상세를 펼쳤는가. 상세는 목록과 별도 요청이라 여기서 들고 있는다. */
-const openDetail = ref<BatchExecutionDetail | null>(null)
-const detailBusyId = ref<number | null>(null)
+/**
+ * 어느 행을 펼쳤는가. PrimeVue의 행 확장이 이 객체를 소유한다(`ResultTable.vue`와 같은 패턴).
+ *
+ * 화면 아래 단일 슬롯이 아니라 행 확장인 이유는, 표 밖 어딘가에 열린 상세를 사용자가 켜졌는지
+ * 확인하기 어려웠기 때문이다. 여러 행을 동시에 펼칠 수 있는 것은 부수적인 이득이 아니라
+ * 필요한 것이다 — 어제와 오늘의 같은 잡을 나란히 놓고 보는 것이 이 화면의 주 용도다.
+ */
+const expandedRows = ref<Record<string, boolean>>({})
+
+/** 펼친 행의 상세. 목록과 별도 요청이라 행마다 따로 든다. */
+const details = ref<Record<number, BatchExecutionDetail>>({})
+const detailBusy = ref<Record<number, boolean>>({})
+const detailError = ref<Record<number, string>>({})
 const runningJobName = ref<string | null>(null)
+
+/**
+ * 진행률·경과·정체 판정이 쓰는 "지금".
+ *
+ * 컴포넌트가 하나로 들고 자동 갱신마다 민다. 행마다 `Date.now()`를 부르면 같은 표 안에서
+ * 기준 시각이 어긋나고, 무엇보다 값이 반응형이 아니라 화면이 갱신되지 않는다.
+ */
+const now = ref(Date.now())
 
 /** 잡별 실행 파라미터. 비우면 서버가 잡마다 정한 기본값을 쓴다. */
 const jobDates = ref<Record<string, { targetDate: Date | null; from: Date | null; to: Date | null }>>(
@@ -109,19 +131,36 @@ async function run(job: AdminJob): Promise<void> {
   }
 }
 
-async function toggleDetail(execution: BatchExecution): Promise<void> {
-  if (openDetail.value?.execution.id === execution.id) {
-    openDetail.value = null
-    return
-  }
-  detailBusyId.value = execution.id
+/**
+ * 펼친 행의 상세를 읽는다.
+ *
+ * 실패를 토스트가 아니라 시트 안에 둔다. 여러 행을 펼칠 수 있으므로, 토스트로만 알리면
+ * 어느 행이 실패했는지가 사라진다.
+ */
+async function loadDetail(id: number): Promise<void> {
+  detailBusy.value[id] = true
+  delete detailError.value[id]
   try {
-    openDetail.value = await admin.openBatch(execution.id)
+    details.value[id] = await admin.openBatch(id)
   } catch (caught) {
-    notifyFailure('상세를 불러오지 못했습니다', caught)
+    if (!(caught instanceof ApiError)) {
+      throw caught
+    }
+    detailError.value[id] = caught.userMessage
   } finally {
-    detailBusyId.value = null
+    delete detailBusy.value[id]
   }
+}
+
+function onRowExpand(event: { data: BatchExecution }): void {
+  void loadDetail(event.data.id)
+}
+
+function onRowCollapse(event: { data: BatchExecution }): void {
+  // 접으면 버린다. 들고 있으면 다시 펼쳤을 때 옛 진행률이 잠깐 보이는데, 그 몇 백 ms가
+  // 하필 "지금 얼마나 갔나"를 확인하려던 순간이다.
+  delete details.value[event.data.id]
+  delete detailError.value[event.data.id]
 }
 
 function confirmRetry(detail: BatchExecutionDetail): void {
@@ -136,21 +175,76 @@ function confirmRetry(detail: BatchExecutionDetail): void {
 }
 
 async function retry(id: number): Promise<void> {
-  detailBusyId.value = id
+  detailBusy.value[id] = true
   try {
     await admin.retryBatch(id)
-    openDetail.value = null
     notifySuccess('재실행을 시작했습니다', '완료되면 목록의 상태가 바뀝니다.')
   } catch (caught) {
     notifyFailure('재실행하지 못했습니다', caught)
   } finally {
-    detailBusyId.value = null
+    delete detailBusy.value[id]
   }
 }
+
+/**
+ * 도는 배치가 있는 동안만 자동 갱신한다.
+ *
+ * `reloadBatches`가 아니라 조용한 경로를 쓴다 — `useAsync.run()`은 매번 `loading`으로 떨어지고
+ * `AsyncPanel`이 그때 슬롯을 파괴하므로, 5초마다 펼쳐 둔 행이 접힌다. 지켜보려고 켠 갱신이
+ * 보려던 것을 닫는 셈이 된다.
+ */
+const POLL_INTERVAL_MS = 5_000
+
+/** 이만큼 연속 실패하면 멈춘다. 5초마다 실패하는 요청을 무한히 보내지 않는다. */
+const MAX_BACKGROUND_FAILURES = 3
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const autoRefreshStopped = computed(
+  () => admin.hasRunningBatch && admin.backgroundFailures >= MAX_BACKGROUND_FAILURES,
+)
+
+async function pollOnce(): Promise<void> {
+  // 탭이 뒤에 있으면 건너뛴다. 안 보는 화면 때문에 계속 요청할 이유가 없다.
+  if (document.hidden || admin.backgroundFailures >= MAX_BACKGROUND_FAILURES) {
+    return
+  }
+  try {
+    await admin.refreshBatchesQuietly()
+    now.value = Date.now()
+    await Promise.all(Object.keys(details.value).map((id) => loadDetail(Number(id))))
+  } catch (caught) {
+    // 삼키지 않는다. 다만 5초마다 토스트를 띄우지도 않는다 — 그 토스트가 곧 진행률을 덮는다.
+    if (!(caught instanceof ApiError)) {
+      throw caught
+    }
+  }
+}
+
+function syncPolling(running: boolean): void {
+  if (running && pollTimer === null) {
+    pollTimer = setInterval(() => void pollOnce(), POLL_INTERVAL_MS)
+    return
+  }
+  if (!running && pollTimer !== null) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+async function resumeAutoRefresh(): Promise<void> {
+  admin.backgroundFailures = 0
+  await pollOnce()
+}
+
+watch(() => admin.hasRunningBatch, syncPolling, { immediate: true })
+
+onUnmounted(() => syncPolling(false))
 
 function applyFilter(): void {
   admin.batchFilter.from = toIsoDate(filterFrom.value)
   admin.batchFilter.to = toIsoDate(filterTo.value)
+  now.value = Date.now()
   void admin.reloadBatches()
 }
 
@@ -309,11 +403,33 @@ function formatTime(value: string | null): string {
         <Button label="새로 고침" icon="pi pi-refresh" size="small" outlined @click="applyFilter" />
       </div>
 
-      <DataTable :value="admin.batches" size="small" data-key="id" class="admin__table">
+      <!--
+        배경 갱신이 연속으로 실패하면 한 번만 말하고 멈춘다. 5초마다 토스트를 띄우면 그것이
+        곧 화면을 덮고, 덮이는 것은 마침 지켜보려던 진행률이다.
+      -->
+      <Message v-if="autoRefreshStopped" severity="warn" :closable="false" class="admin__stopped">
+        자동 갱신이 멈췄습니다. 서버에 연결하지 못했습니다.
+        <Button label="다시 시작" size="small" text @click="void resumeAutoRefresh()" />
+      </Message>
+
+      <DataTable
+        v-model:expanded-rows="expandedRows"
+        :value="admin.batches"
+        size="small"
+        data-key="id"
+        class="admin__table"
+        @row-expand="onRowExpand"
+        @row-collapse="onRowCollapse"
+      >
         <template #empty>
           <p class="admin__empty">조건에 맞는 실행 이력이 없습니다.</p>
         </template>
 
+        <!--
+          화면 아래 단일 슬롯이 아니라 행 확장이다. 표 밖에서 열리면 켜졌는지 확인하기 어렵고,
+          두 실행을 나란히 비교할 수도 없다.
+        -->
+        <Column expander style="width: 3rem" />
         <Column field="targetDate" header="대상 일자" />
         <Column field="jobName" header="잡" />
         <Column header="상태">
@@ -323,18 +439,48 @@ function formatTime(value: string | null): string {
               :severity="batchStatusStyle(data.status).severity"
               v-tooltip.bottom="batchStatusStyle(data.status).tooltip"
             />
+            <!-- RUNNING만으로는 도는 것과 죽어서 행만 남은 것이 구분되지 않는다. -->
+            <Tag
+              v-if="isStalled(data, now)"
+              value="정체"
+              severity="warn"
+              v-tooltip.bottom="'1분 넘게 진척이 없다. 프로세스가 내려갔을 수 있다.'"
+              class="admin__stalled"
+            />
             <!-- 재실행은 원래 실행과 연결되어 남는다. 없으면 "또 실패"가 안 보인다. -->
             <span v-if="data.retriedFromId !== null" class="admin__retry-of">
               #{{ data.retriedFromId }} 재실행
             </span>
           </template>
         </Column>
-        <Column header="처리">
+        <Column header="진행">
           <template #body="{ data }: { data: BatchExecution }">
-            <span class="tabular">{{ data.successCount }}/{{ data.targetCount }}</span>
-            <span v-if="data.failureCount > 0" class="admin__failed tabular">
-              실패 {{ data.failureCount }}
+            <!--
+              분모는 대상 종목 수가 아니라 계획된 작업 단위 수다. 종목 수로 나누던 시절에
+              지표 백필이 43400/350으로 보였다(ADR-0037).
+            -->
+            <span class="tabular">
+              {{ formatCount(processedTasks(data)) }}
+              <template v-if="data.plannedTaskCount !== null">
+                / {{ formatCount(data.plannedTaskCount) }}
+              </template>
             </span>
+            <span
+              v-if="data.plannedTaskCount === null"
+              class="admin__unmeasured"
+              v-tooltip.bottom="'계획 수가 기록되기 전의 실행이다'"
+            >
+              계획 미기록
+            </span>
+            <span v-if="data.failureCount > 0" class="admin__failed tabular">
+              실패 {{ formatCount(data.failureCount) }}
+            </span>
+            <RatioBar
+              :value="progressRatio(data)"
+              :aria-label="`진행 ${formatCount(processedTasks(data))}건`"
+              class="admin__progress"
+            />
+            <span v-if="data.stageLabel !== null" class="admin__stage">{{ data.stageLabel }}</span>
           </template>
         </Column>
         <Column header="시작">
@@ -355,78 +501,18 @@ function formatTime(value: string | null): string {
             {{ triggeredByLabel(data.triggeredBy) }}
           </template>
         </Column>
-        <Column header="">
-          <template #body="{ data }: { data: BatchExecution }">
-            <Button
-              :label="openDetail?.execution.id === data.id ? '닫기' : '상세'"
-              size="small"
-              text
-              :loading="detailBusyId === data.id"
-              @click="toggleDetail(data)"
-            />
-          </template>
-        </Column>
-      </DataTable>
 
-      <!-- 상세: 실패 종목과 재실행 -->
-      <section v-if="openDetail" class="detail">
-        <SectionHeading
-          :title="`#${openDetail.execution.id} 실패 종목`"
-          :count="openDetail.failures.length"
-        />
-
-        <Message
-          v-if="!openDetail.retrySupported"
-          severity="secondary"
-          :closable="false"
-          class="detail__note"
-        >
-          이 잡은 부분 재실행을 지원하지 않습니다. 실패 단위가 종목이 아니기 때문입니다.
-        </Message>
-
-        <div v-else class="detail__actions">
-          <Button
-            label="실패분만 재실행"
-            icon="pi pi-replay"
-            size="small"
-            :disabled="!canRetry(openDetail.execution, openDetail.retrySupported)"
-            :loading="detailBusyId === openDetail.execution.id"
-            @click="confirmRetry(openDetail)"
+        <template #expansion="{ data }: { data: BatchExecution }">
+          <BatchDetailSheet
+            :detail="details[data.id] ?? null"
+            :loading="detailBusy[data.id] === true"
+            :error-message="detailError[data.id] ?? null"
+            :now="now"
+            @retry="confirmRetry(details[data.id]!)"
+            @reload="void loadDetail(data.id)"
           />
-          <span v-if="openDetail.execution.unresolvedFailureCount === 0" class="detail__hint">
-            미해결 실패가 없습니다.
-          </span>
-        </div>
-
-        <DataTable :value="openDetail.failures" size="small" data-key="id" scrollable
-          scroll-height="20rem">
-          <template #empty>
-            <p class="admin__empty">기록된 실패가 없습니다.</p>
-          </template>
-          <Column header="종목">
-            <template #body="{ data }">
-              <span class="tabular">{{ data.ticker }}</span>
-              <span class="detail__stock-name">{{ data.stockName }}</span>
-            </template>
-          </Column>
-          <!--
-            단계·종류는 유니온으로 좁히지 않고 그대로 보인다. 서버가 값을 늘렸을 때 목록이
-            통째로 죽는 것보다 낯선 이름이 섞이는 편이 낫다(frontend.md).
-          -->
-          <Column field="failedPhase" header="단계" />
-          <Column field="failureKind" header="종류" />
-          <Column field="sourceName" header="소스" />
-          <Column field="message" header="사유" />
-          <Column header="해결">
-            <template #body="{ data }">
-              <Tag
-                :value="data.resolved ? '해결됨' : '미해결'"
-                :severity="data.resolved ? 'success' : 'warn'"
-              />
-            </template>
-          </Column>
-        </DataTable>
-      </section>
+        </template>
+      </DataTable>
     </AsyncPanel>
   </section>
 </template>
@@ -555,7 +641,8 @@ function formatTime(value: string | null): string {
 }
 
 .admin__retry-of,
-.admin__failed {
+.admin__failed,
+.admin__unmeasured {
   margin-inline-start: 0.5rem;
   font-size: var(--app-text-xs);
   color: var(--p-text-subtle-color);
@@ -565,29 +652,25 @@ function formatTime(value: string | null): string {
   color: var(--p-red-400);
 }
 
-.detail {
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--p-content-border-color);
+.admin__stalled {
+  margin-inline-start: 0.375rem;
 }
 
-.detail__note,
-.detail__actions {
+.admin__stopped {
   margin-bottom: 0.75rem;
 }
 
-.detail__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+/* 진행 막대는 숫자 아래 얇게 깐다. 숫자가 정본이고 막대는 크기 감각만 준다. */
+.admin__progress {
+  margin-top: 0.25rem;
+  max-width: 9rem;
 }
 
-.detail__hint {
-  font-size: var(--app-text-sm);
-  color: var(--p-text-muted-color);
-}
-
-.detail__stock-name {
-  margin-inline-start: 0.5rem;
+/* 서버가 준 구간 문자열. 길어질 수 있어 줄바꿈을 막지 않는다. */
+.admin__stage {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: var(--app-text-xs);
   color: var(--p-text-muted-color);
 }
 

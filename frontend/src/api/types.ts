@@ -500,10 +500,25 @@ export interface BatchExecution {
   status: BatchStatus
   startedAt: string
   finishedAt: string | null
+  /** 대상 **종목** 수. 진행률의 분모가 아니다 — 그건 `plannedTaskCount`다(ADR-0037). */
   targetCount: number
   successCount: number
   failureCount: number
   writtenRowCount: number
+  /**
+   * 계획된 **작업 단위** 수. 진행률의 분모다.
+   *
+   * 한 종목이 여러 단계·여러 날짜로 처리되므로 종목 수와 배수만큼 다르다. 분모를 종목 수로
+   * 쓰던 시절에 지표 백필이 `43400/350`으로 보였다.
+   *
+   * 계량이 없는 실행은 `null`이다. **`?? 0`으로 메우지 않는다** — 0으로 그리면 분모 0의
+   * 진행률이 되고, "안 재봤다"가 "0건 계획"으로 읽힌다.
+   */
+  plannedTaskCount: number | null
+  /** 마지막 진척 반영 시각. `RUNNING`인데 오래됐으면 멎은 것이다. */
+  progressAt: string | null
+  /** 지금 어느 구간인가. 서버가 준 문자열을 해석 없이 보인다. 마감하면 null이다. */
+  stageLabel: string | null
   /** 어느 실행을 다시 돌린 것인가. null이면 최초 실행이다. */
   retriedFromId: number | null
   triggeredBy: TriggeredBy
@@ -534,8 +549,42 @@ export interface BatchFailure {
   occurredAt: string
 }
 
+/**
+ * 한 단계의 집계.
+ *
+ * `phase`를 유니온으로 좁히지 않는 것은 `failedPhase`와 같은 판단이다 — 서버가 단계를 하나
+ * 더했을 때 표가 통째로 죽는 것보다 낯선 이름 한 줄이 섞이는 편이 낫다.
+ */
+export interface BatchPhase {
+  phase: string
+  plannedCount: number
+  successCount: number
+  failureCount: number
+  /**
+   * 저장한 행 수. **단계마다 뜻이 다르다** — 시세는 저장한 행이고 지표는 값이 달라진 행이다.
+   * 재계산만 한 실행의 지표 0행은 결손이 아니라 "바뀐 것이 없다"는 뜻이다.
+   */
+  writtenRowCount: number
+}
+
+/** 같은 종류·같은 소스의 실패를 묶은 것. 350행을 눈으로 세지 않고 "무엇이 깨졌나"에 답한다. */
+export interface BatchFailureGroup {
+  failureKind: string
+  sourceName: string | null
+  totalCount: number
+  unresolvedCount: number
+}
+
+/**
+ * 실행 하나의 상세.
+ *
+ * 화면은 여기 실린 것만 그리고 잡 이름으로 분기하지 않는다 — `phases`가 비면 단계별 표를,
+ * `failureSummary`가 비면 요약을 안 그린다. 그래야 잡이 늘어도 화면을 고치지 않는다.
+ */
 export interface BatchExecutionDetail {
   execution: BatchExecution
+  phases: BatchPhase[]
+  failureSummary: BatchFailureGroup[]
   failures: BatchFailure[]
   /** 이 잡이 부분 재실행을 지원하는가. 화면이 잡 이름으로 판단하지 않는다. */
   retrySupported: boolean

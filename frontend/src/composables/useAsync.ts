@@ -23,6 +23,17 @@ export interface Async<T> {
   run: () => Promise<void>
   /** 사용자가 누르는 재시도. `run`과 같지만 호출부에서 의도가 드러난다. */
   retry: () => Promise<void>
+  /**
+   * 배경에서 다시 읽는다. **이미 데이터가 있으면 `loading`으로 떨어뜨리지 않는다.**
+   *
+   * 주기적 갱신 전용이다. `run`을 쓰면 매번 `AsyncPanel`이 슬롯을 파괴해 **펼쳐 둔 행이
+   * 접히고 화면이 주기마다 깜빡인다** — 배치가 도는 동안 진행률을 보려고 켜 둔 갱신이
+   * 정작 보려던 것을 닫아 버린다.
+   *
+   * 실패를 삼키지 않는다. 상태를 건드리지 않으므로 **호출부가 반드시 잡아야** 하며, 화면이
+   * 5초마다 토스트를 띄우지 않도록 연속 실패를 세어 갱신을 멈추는 것도 호출부의 몫이다.
+   */
+  refresh: () => Promise<void>
   reset: () => void
 }
 
@@ -68,6 +79,28 @@ export function useAsync<T>(
     }
   }
 
+  async function refresh(): Promise<void> {
+    // 아직 보여줄 것이 없으면 배경 갱신이 아니라 첫 로딩이다. 그때는 상태를 바꿔야
+    // 화면이 스켈레톤을 그린다.
+    if (data.value === null) {
+      await run()
+      return
+    }
+
+    controller?.abort()
+    const current = new AbortController()
+    controller = current
+
+    const result = await loader(current.signal)
+    if (current.signal.aborted) {
+      return
+    }
+    data.value = result
+    // MUST NOT: 여기서 state를 손대지 않는다. 'loading'으로 떨어뜨리면 AsyncPanel이 슬롯을
+    // 파괴해 펼쳐 둔 행이 접히고, 'error'로 떨어뜨리면 일시적 실패 한 번이 이미 그린
+    // 목록을 통째로 지운다. 실패는 던져서 호출부가 정하게 한다.
+  }
+
   function reset(): void {
     controller?.abort()
     controller = null
@@ -84,7 +117,7 @@ export function useAsync<T>(
     void run()
   }
 
-  return { state, data, error, run, retry: run, reset }
+  return { state, data, error, run, retry: run, refresh, reset }
 }
 
 function isAbort(error: unknown): boolean {
