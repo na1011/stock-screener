@@ -203,7 +203,14 @@ public class MarketCapUniverseAdapter implements UniverseDataSource {
     }
 
     /**
-     * 기준일의 전종목을 받아 후보로 거른다. 휴장일이면 직전 거래일로 거슬러 올라간다.
+     * 기준일의 전종목을 받아 후보로 거른다. 응답이 비면 직전 날짜로 거슬러 올라간다.
+     *
+     * <p>MUST NOT: 빈 응답을 <b>휴장으로 단정하는 문구</b>를 남기지 않는다. 이 소스는 휴장·
+     * 미공개·없는 종목·파라미터 오타에 <b>전부 같은 응답</b>을 주므로 어댑터는 그것을 구분할
+     * 수 없다({@code MarketCalendar}의 javadoc이 같은 사실을 적는다). 소급하는 <b>동작</b>은
+     * 어느 쪽이든 옳지만, 단정하는 <b>로그</b>는 읽는 쪽을 틀리게 만든다 — 실제로 이 줄이
+     * "2026-08-07은 휴장이다"의 근거로 인용되어 종가 결손이 사흘간 방치됐다
+     * ({@code docs/api-spec/data-go-kr-stock-price.md} §공개 지연).
      */
     private List<Candidate> fetchCandidates(String marketCode, LocalDate asOf)
             throws DataSourceException {
@@ -212,7 +219,9 @@ public class MarketCapUniverseAdapter implements UniverseDataSource {
             List<Candidate> candidates = fetchOneDay(marketCode, basDt);
             if (!candidates.isEmpty()) {
                 if (back > 0) {
-                    log.info("{}이 휴장일이라 {}의 시세로 유니버스를 만든다.", asOf, basDt);
+                    log.info("{}에 시세가 없어 {}의 시세로 유니버스를 만든다. "
+                            + "휴장인지 아직 공개되지 않은 것인지는 응답으로 구분할 수 없다.",
+                            asOf, basDt);
                 }
                 return candidates;
             }
