@@ -339,7 +339,13 @@ ATR을 4%로 두면 1종목, 무제한이면 6종목이 상한이다.
 
 **단계 C·D는 스키마가 이미 비어 있는 채로 준비되어 있다.** `stock.sector`·`stock.listed_on`이
 활성 종목 전부 NULL이고, `CorporateAction.Type`에 `SPLIT`/`REVERSE_SPLIT`이 있으며
-`PriceDataSource.fetchCorporateActions`의 default가 `List.of()`다. **소스만 붙이면 되는 자리다.**
+`PriceDataSource.fetchCorporateActions`의 default가 `List.of()`다.
+
+**정정(2026-08-10) — "소스만 붙이면 된다"는 업종·합병에는 맞고 분할에는 틀렸다.** DART
+엔드포인트 카탈로그를 받아 보니 주요사항보고서 36종에 유상·무상·유무상증자와 감자 결정은
+있는데 **주식분할이 없다**(`docs/api-spec/dart-open-api.md` §9). 즉 `adj_factor`를 만들 원자료를
+엔드포인트 하나로 받을 수 없고, 남는 길은 「증자(감자) 현황」에 사유가 오는지에 달렸거나
+공시 원문 파싱이다. **P9의 크기가 그만큼 커진다** — 착수 전에 그 하나를 먼저 확인한다.
 
 ### 별도 phase로 갈라야 하는 것
 
