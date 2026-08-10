@@ -32,10 +32,11 @@
 - **🔴 2026-08-11(화) 15시 배치 뒤에 한 번 본다** — 배치 시각·대상 일자를 ADR-0042로 바꿨고 **아직 실제로 돈 적이 없다.** `SELECT max(trade_date) FROM price_daily`가 `2026-08-10`으로 올라오면 참이다. 이후로는 그 ADR의 premise가 세션 시작에 잰다.
 - **시세 결손은 물어야 보인다.** 0건이어도 배치는 SUCCESS고 이력도 초록이다. 평일인데 빈 날을 찾는다 — `SELECT d::date FROM generate_series(current_date-30,current_date-1,'1d') d WHERE extract(isodow FROM d)<6 AND NOT EXISTS(SELECT 1 FROM price_daily WHERE trade_date=d::date)`. **나온 날은 후보일 뿐이다**(휴장·미공개와 가르는 법은 `api-sources` skill). **15일 창 안은 다음 실행이 스스로 메우므로 손이 필요한 것은 창 밖뿐**이고, 그 길은 `/admin` 일일 갱신에 대상 일자를 넣는 것 하나다(`ROLE_ADMIN` 세션 인증이라 **사람이 한 번 로그인해야 한다**).
 - **MUST NOT: 결손이 생길 때마다 조건을 빼서 해결하지 않는다**(2026-08-10 사용자 판단). 개별 판단이 정당해도 **누적은 원본과 다른 물건**이 된다. 막히면 **원자료를 여는 길을 먼저 본다** — `ALTMAN_Z` 0건이 그렇게 풀렸다(ADR-0040).
-- **위 관측을 기다리는 동안 할 것은 phase 착수다. 가장 싼 것이 바뀌었다.** 판정표는 **`api-sources` skill**이 답한다.
+- **다음은 phase 착수다. 가장 싼 것이 바뀌었다.** 판정표는 **`api-sources` skill**이 답한다.
   1. **U-05(상장 3년) — 수집이 0이다.** `price_daily`에 2020-01-02부터 1,620거래일이 있고 **320종목이 750봉을 넘는다.** 지표 하나면 끝난다(ADR-0039 §단계 C의 정정).
   2. **T-08(2년 주간 베타)** — 지수시세가 승인됐고 **원자료가 지수 2콜**로 끝난다(`api-spec/data-go-kr-market-index.md`).
   3. **P8(업종)은 350콜**이라 그 뒤다. 착수 전 **업종당 종목 수부터 잰다** — 그 분포가 성립을 정한다.
+- **ADR-0011의 premise가 간헐적으로 판정 불가다.** `indicator_value` 198만 행 전수 집계가 훅의 `statement_timeout=3s`를 콜드에서 넘긴다(웜 0.69초). **사실은 참이고**(손으로 재면 180거래일) 고칠 것은 쿼리 비용이다.
 - **훅의 빈자리 셋**(2026-08-10). ① `/compact` 뒤 `SessionStart` 미발화(matcher) ② `guard-destructive.sh`에 `kill` 판정이 없어 `pkill -f java`가 운영 앱을 죽여도 안 막힌다 ③ `progress.md` 갱신 상기 계층이 없다. 후보 `Stop`은 **배달이 미검정이다 — 재기 전에 세우지 않는다.**
 
 ---
