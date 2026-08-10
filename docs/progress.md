@@ -26,10 +26,11 @@
 
 **v1 구현은 끝났다. 남은 것은 사람이 값을 채우는 일과 그 뒤의 확인뿐이다** — 목록은 [`TODO.md`](../TODO.md)에 있다(알림 채널 자격증명, Sentry org·project 슬러그, ICANN 인증). 발급 상태는 문서가 아니라 `./gradlew checkEnv`에 묻는다 — 발급은 문서 밖에서 일어나 문서가 먼저 낡는다.
 
-- **앱은 떠 있다**(2026-08-09 23:47 배포, 밖에서 `UP` 실측). 도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이므로 **코드나 `.env`를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다** — `./gradlew build`만 하면 옛것이 돌고 화면에는 아무 단서가 없다(ADR-0034). 등록이 풀린 상태에서는 `deploy.sh`가 거부하므로 그때만 `ops/install-agent.sh`다.
+- **도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이다.** 코드나 `.env`를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다 — `./gradlew build`만 하면 옛것이 돌고 화면에는 아무 단서가 없다(ADR-0034).
 - **`indicator_value`의 세 인덱스에 `REINDEX INDEX CONCURRENTLY`가 남았다**(인덱스가 힙의 2.4배). **2026-08-10(월) 20시 배치의 purge가 보존 밖 날짜를 지운 뒤**에 한다 — 순서를 뒤집으면 곧 지워질 행까지 인덱싱한다. purge는 `DailyUpdateJob`에만 있어 따로 돌릴 수 없다(돌리면 쿼터를 태운다). **그때까지 ADR-0011 전제(445 > 보존 180)가 세션 시작에 깨진 채로 뜨는 것은 정상이다** — 재진단하지 않는다.
 - **훅이 조용히 안 도는 자리 셋을 확인했다**(2026-08-10, 트랜스크립트 1,018개 전수). ① `/compact` 뒤에는 이 저장소 `SessionStart` 훅 셋이 전부 안 뜬다 — matcher가 `startup|resume|clear`다. ② `SessionEnd` 배달이 0건이라 `remind-progress.sh`가 2026-08-05 등록 이후 죽어 있었을 수 있다(존치 여부를 정해야 한다). ③ `guard-destructive.sh`에 `kill`·`pkill` 판정이 없어 `pkill -f java`가 운영 앱을 죽여도 아무것도 안 막는다.
 - **20시 배치가 당일 종가를 받아오는지는 다음 거래일(2026-08-10 월) 20시 실행이 답한다.** 공개 시각은 소급 조회로 알 수 없다. 0건이면 WARNING이 뜨는데 채널이 비어 있어 `~/Library/Logs/stock-screener/stdout.log`로만 간다 — **거래일마다 오면 시각을 늦춘다**(ADR-0033). **2026-08-07이 비어 있는 것은 결손이 아니라 휴장이다**(실측, `api-spec/`) — 백필해도 받을 것이 없다.
+- **`HEAD /`에만 Spring Security 응답 헤더가 빠진다**(2026-08-10 실측). 앱 쪽이다 — localhost 직접 조회도 같고 `GET /`과 다른 경로는 HEAD·GET 모두 멀쩡하다. 브라우저는 루트를 GET하므로 영향은 HEAD로 찌르는 감시 도구뿐. **정하면 이 줄을 지운다.**
 
 ---
 
