@@ -22,8 +22,9 @@ applies_to:
 ## 검증
 
 ```bash
-# 1. plist가 저장소를 가리키지 않는다 (아무것도 나오지 않아야 한다)
-grep -c 'dev/stock-screener' ~/Library/LaunchAgents/com.stockscreener.app.plist
+# 1. 도는 것이 저장소를 가리키지 않는다 (아무것도 나오지 않아야 한다)
+#    plist를 보던 자리다. ADR-0043으로 plist가 없어져 실행 스크립트를 직접 본다.
+grep -c 'dev/stock-screener' "$HOME/Library/Application Support/stock-screener/run-app.sh"
 
 # 2. 스테이징 사본이 저장소를 참조하지 않는다 (심볼릭 링크가 아니어야 한다)
 test -f "$HOME/Library/Application Support/stock-screener/.env" \
@@ -42,7 +43,7 @@ curl -s https://screener.na1011.net/actuator/health     # {"status":"UP"}
 
 **이동을 권한 사유는 둘이었는데, 착수 시점에 하나는 이미 사라져 있었다.** `TODO.md`가 든 첫 사유는 iCloud가 `build/` 산출물을 `X 2.class`로 복제해 테스트가 `wrong name`으로 깨진다는 것이었다. 그런데 Desktop & Documents 동기화는 이미 꺼져 있었고(`~/Library/Mobile Documents/com~apple~CloudDocs/Desktop`이 `.DS_Store`만 남은 빈 껍데기, 실제 `~/Desktop`과 inode가 다름), 저장소 안에 복제본도 `.icloud` 자리표시자도 없었다. **문서 대여섯 곳이 그 사유를 현재형으로 적고 있던 것이 실제 부채였다.** 남은 사유는 TCC 하나였고 그것이 이 이동의 근거다.
 
-**그래서 "스테이징을 없앨 수 있는가"를 다시 물어야 했다.** ADR-0033은 스테이징을 TCC 때문에 만들었고, 이득이 하나 더 있다고 적으면서도(재빌드가 도는 인스턴스를 건드리지 않는다) 사본을 없앨 수 있다고 예고했다. **다시 재면 그 "부수 이득"이 사실은 주된 이유다.** 없애면 `./gradlew clean`이 도는 앱의 jar를 지우고, 30초 뒤 KeepAlive가 띄울 것을 못 찾는다 — **빌드의 부수 효과로 사이트가 내려가고 밖에서 502로만 보인다.** `stage.sh`의 `.tmp` → `mv` 원자적 교체도 함께 사라지고, `ls -t build/libs/*.jar | head -1`이 실험용 빌드를 골라 운영에 올릴 수 있게 된다.
+**그래서 "스테이징을 없앨 수 있는가"를 다시 물어야 했다.** ADR-0033은 스테이징을 TCC 때문에 만들었고, 이득이 하나 더 있다고 적으면서도(재빌드가 도는 인스턴스를 건드리지 않는다) 사본을 없앨 수 있다고 예고했다. **다시 재면 그 "부수 이득"이 사실은 주된 이유다.** 없애면 `./gradlew clean`이 도는 앱의 jar를 지운다 — 당시에는 30초 뒤 KeepAlive가 띄울 것을 못 찾아 **빌드의 부수 효과로 사이트가 내려가고 밖에서 502로만 보였다.** **ADR-0043으로 KeepAlive가 없어져 증상이 더 늦어졌을 뿐 근거는 그대로다** — 도는 프로세스는 멀쩡해 보이고, 다음에 켤 때 뜨지 않는다. `stage.sh`의 `.tmp` → `mv` 원자적 교체도 함께 사라지고, `ls -t build/libs/*.jar | head -1`이 실험용 빌드를 골라 운영에 올릴 수 있게 된다.
 
 **`.env` 사본이 남는 비용은 다시 재 보니 거의 0이다.** 두 파일은 md5까지 동일하고 둘 다 같은 사용자의 `600`(디렉터리 `700`)이다. 오히려 역전이 있다 — **`~/Desktop`을 떠나면 저장소 `.env`에서 TCC 보호가 벗겨진다.** 이제 더 잘 보호되는 쪽이 스테이징 사본이다. 배포해야 반영된다는 규칙이 jar와 시크릿에 똑같이 적용되는 일관성도 남는다.
 
@@ -57,6 +58,6 @@ curl -s https://screener.na1011.net/actuator/health     # {"status":"UP"}
 ## 결과
 
 - **쉬워지는 것**: TCC 회피가 더 이상 설계 제약이 아니다. `~/Desktop`에 있어서 생기던 함정(동기화 복제, launchd 접근 거부)이 원인 단에서 사라진다.
-- **어려워지는 것**: 없다. `ops/` 스크립트는 전부 `$(dirname "${BASH_SOURCE[0]}")` 상대 유도라 한 줄도 바뀌지 않는다. plist도 `$HOME` 기준이라 재작성이 필요 없다.
+- **어려워지는 것**: 없다. `ops/` 스크립트는 전부 `$(dirname "${BASH_SOURCE[0]}")` 상대 유도라 한 줄도 바뀌지 않는다.
 - **따라오지 않는 것**: Claude Code의 프로젝트 상태는 경로를 키로 쓰므로 `~/.claude/projects/-Users-na1011-dev-stock-screener`로 복사해야 한다. Gradle의 `executionHistory.bin`에는 옛 절대경로가 박혀 있어 `.gradle/`을 비우고 다시 빌드해야 한다.
-- **되돌리려면**: `mv` 한 번과 `ops/install-agent.sh`. plist가 저장소를 참조하지 않으므로 그게 전부다.
+- **되돌리려면**: `mv` 한 번과 `ops/stage.sh`. 도는 것이 저장소를 참조하지 않으므로 그게 전부다.

@@ -34,53 +34,37 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 
 ## 운영
 
-맥북 한 대 위에서 앱과 터널을 살려 둔다. 결정과 규칙은 [ADR-0033](docs/adr/ADR-0033-launchd-user-agent.md)에, 실행은 [`ops/`](ops/)의 스크립트에 있다(각 스크립트 머리에 용법이 있다).
+맥북 한 대 위에서 앱과 터널을 돌린다. **자동으로 뜨는 것은 아무것도 없다** — 당신이 켤 때만 뜨고, 껐으면 꺼진 채로 있다([ADR-0043](docs/adr/ADR-0043-explicit-start-over-autostart.md)). 실행은 [`ops/`](ops/)의 스크립트에 있다(각 스크립트 머리에 용법이 있다).
 
 ```
 브라우저 ──HTTPS──▶ Cloudflare 엣지 ──터널──▶ cloudflared ──HTTP──▶ Spring :8080
-                                            (LaunchDaemon,          (LaunchAgent,
-                                             sudo로 설치됨)          ops/install-agent.sh)
+                                          (ops/start.sh --tunnel)   (ops/start.sh --app)
 ```
 
-| 상황 | 복구 |
+| 상황 | 무슨 일이 일어나는가 |
 |---|---|
-| 앱 프로세스가 죽음 | 자동 (`KeepAlive`, 30초 간격) |
-| 로그아웃 → 로그인 | 자동 (`RunAtLoad`) |
-| 잠자기 → 깨어남 | 자동 (프로세스가 그대로 살아 있다) |
-| **콜드 부팅** | **사람이 FileVault 암호를 넣어야 한다** — 볼륨이 잠긴 동안에는 LaunchAgent도 LaunchDaemon도 뜨지 못한다 |
+| 앱 프로세스가 죽음 | **내려간 채로 있다.** 다시 `ops/start.sh` |
+| 로그아웃 → 로그인 | **안 뜬다.** 다시 `ops/start.sh` |
+| 재부팅 | **안 뜬다.** FileVault 암호를 넣고 로그인한 뒤 `ops/start.sh` |
+| 잠자기 → 깨어남 | 프로세스가 그대로 살아 있다 (유일하게 저절로 돌아오는 것) |
 
 ### 터미널에서 직접 — 켜기, 끄기, 배포
 
 ```bash
-# 켜기
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.stockscreener.app.plist
-
-# 끄기
-launchctl bootout gui/$(id -u)/com.stockscreener.app
-
-# 코드나 .env를 고쳐 반영 (빌드 → 복사 → 재기동)
-ops/deploy.sh
+ops/start.sh          # 앱 + 터널 (--app / --tunnel 로 하나만)
+ops/stop.sh           # 끈다. 되살아나지 않는다
+ops/status.sh         # 뭐가 도는지, 밖에서 보이는지, 자동 기동이 되살아났는지
+ops/deploy.sh         # 코드나 .env를 고쳐 반영 (빌드 → 복사 → 앱만 재기동)
 ```
 
-**`bootstrap`은 성공해도 아무것도 출력하지 않는다.** 그리고 그것은 launchd가 등록을 받았다는 뜻이지 앱이 떴다는 뜻이 아니다 — 기동에 20~30초 걸린다. 실제로 떴는지는 아래로 확인한다.
+`start.sh`는 기동에 20~30초 걸리고 로컬·외부 health를 직접 확인한 뒤에야 끝난다. **외부까지 물어보는 이유는 로컬만 보면 `cloudflared`가 죽어도 초록이기 때문이다** — 로컬은 `UP`인데 밖이 502면 앱이 아니라 터널이 문제다.
 
-```bash
-# 켜졌는지 — 둘 다 {"status":"UP"}이어야 한다
-curl -s http://localhost:8080/actuator/health
-curl -s https://screener.na1011.net/actuator/health
-
-# 꺼졌는지 — "Could not find service"가 뜨고 pgrep이 아무것도 안 내면 내려간 것
-launchctl print gui/$(id -u)/com.stockscreener.app
-pgrep -fl app.jar
-```
-
-**외부까지 물어보는 이유는 로컬만 보면 `cloudflared`가 죽어도 초록이기 때문이다.** 로컬은 `UP`인데 밖이 502면 앱이 아니라 터널이 문제다.
-
-- **`kill`·`pkill`로는 안 꺼진다.** `KeepAlive`가 30초 뒤 되살린다. 끄려면 `bootout`이어야 한다.
+- **`kill`이 그대로 듣는다.** 되살리는 것이 아무것도 없기 때문이다. 다만 `stop.sh`를 쓰는 편이 낫다 — PID 파일을 정리하고 포트가 풀렸는지까지 본다.
+- **`pkill -f java`는 쓰지 않는 편이 좋다.** 이 저장소와 무관한 JVM까지 함께 죽고, 어떤 가드도 그것을 막지 않는다.
 - **`./gradlew build`만으로는 아무것도 반영되지 않는다.** 도는 것은 저장소가 아니라 `~/Library/Application Support/stock-screener/`의 사본이라, 옛 빌드가 계속 돌고 화면에는 아무 단서가 없다([ADR-0034](docs/adr/ADR-0034-repo-out-of-tcc-path.md)). `deploy.sh`가 그 순서를 대신한다.
-- 위 `bootstrap`이 plist가 없다고 하면 `ops/install-agent.sh`로 다시 등록한다(`--uninstall`이 반대). 기동 실패 원인은 `~/Library/Logs/stock-screener/stderr.log`에 있다.
+- 기동 실패 원인은 `~/Library/Logs/stock-screener/stderr.log`에, 터널 쪽은 같은 디렉터리의 `tunnel.log`에 있다.
 
-**맥북이 자면 사이트도 함께 내려간다.** 온프레미스를 택한 대가다(spec §6). 배치는 평일 15시에 도는데, 소스가 종가를 하루 뒤 오후에야 내주기 때문이다. 그 시각에 기기가 자 있어 실행이 통째로 빠져도 다음 실행이 메운다. 절전·재부팅으로 당신이 할 일은 [`TODO.md`](TODO.md)에 있다.
+**IMPORTANT — 배치는 앱 안에서 돈다.** 평일 15시에 앱이 꺼져 있으면 그날 수집이 통째로 빠지고 **아무 알림도 나가지 않는다**(0건이어도 배치는 SUCCESS다). 다음 실행이 15일 창으로 메우므로([ADR-0042](docs/adr/ADR-0042-batch-schedule-and-target-date.md)) 매일 켤 필요는 없지만, **15일에 한 번은 15시에 켜 두어야 한다.** 맥북이 자면 사이트도 함께 내려간다 — 온프레미스를 택한 대가다(spec §6). 절전으로 당신이 할 일은 [`TODO.md`](TODO.md)에 있다.
 
 ## 하네스 설계 — 기획형 하네스
 

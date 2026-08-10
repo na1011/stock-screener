@@ -71,4 +71,4 @@ found=""
 - **쉬워지는 것**: 켜고 끄는 것이 `ops/start.sh`·`ops/stop.sh`다. `kill`이 그대로 듣는다. 무엇이 자동으로 뜨는지 `ops/status.sh` 한 줄이 답한다. 배포가 터널을 건드리지 않아 재배포 중 밖에서 보이는 시간이 짧다.
 - **어려워지는 것**: 재부팅하면 사람이 다시 띄워야 한다. 크래시하면 내려간 채로 있다. **가용성이 사람의 기억에 달렸다** — 온프레미스의 대가를 갚지 않기로 한 것이고, 그 판단은 spec §6에 적혀 있다.
 - **IMPORTANT — 배치가 앱 프로세스 안에 있다.** `run-app.sh`가 `--pipeline.scheduler.enabled=true`로 켜므로, **평일 15시에 앱이 꺼져 있으면 그날 실행이 통째로 빠진다**(ADR-0042). 증상은 즉시 나오지 않는다 — 0건이어도 배치는 SUCCESS고 이력도 초록이다. 완화는 이미 있다: ADR-0042의 **15일 창**이 뒤늦게 켠 실행에서 결손을 메운다. **즉 15일에 한 번은 15시에 켜져 있어야 한다.**
-- **되돌리려면**: plist 둘을 다시 만들고(`git show 5a403da^:ops/install-agent.sh`가 앱 쪽 원본이다) `sudo cloudflared service install <TOKEN>`. 그리고 spec §6과 `phase-criteria.md`의 Phase 6 운영 판정을 되돌린다.
+- **되돌리려면**: 앱 쪽 plist 생성 스크립트는 커밋 `5a403da`가 지운 것이 원본이다(`git show 5a403da^ --stat`이 경로를 낸다). 터널은 `sudo cloudflared service install <TOKEN>`. 그리고 spec §6과 `phase-criteria.md`의 Phase 6 운영 판정을 되돌린다.

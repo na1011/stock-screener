@@ -45,9 +45,11 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
   ```bash
   sudo cloudflared service install <TOKEN>
   ```
-  `launchd` 데몬(`/Library/LaunchDaemons/com.cloudflare.cloudflared.plist`)으로 등록되어 **재부팅 후에도 자동 기동**한다.
+  `launchd` 데몬(`/Library/LaunchDaemons/com.cloudflare.cloudflared.plist`)으로 등록되어 재부팅 후에도 자동 기동한다.
 
-  **지우는 대상은 데몬이 아니라 셸 히스토리의 그 한 줄이다.** 데몬은 남겨야 터널이 돈다. 위 명령은 **토큰 원문을 명령줄에 담고**, `~/.zsh_history`는 권한만 `600`일 뿐 평문이라 나중에 아무 도구나 그 줄을 읽는다. 남은 위험은 히스토리 파일 하나뿐이므로 그것만 지운다. **처리 완료(2026-08-07)** — 아래는 재설치·재발급 때 다시 밟을 절차다.
+  **이 데몬은 2026-08-11에 해제했다**(`sudo cloudflared service uninstall`). 자동 기동을 전부 걷기로 했기 때문이다(ADR-0043). 터널은 이제 `ops/start.sh --tunnel`이 사용자 권한으로 띄우고, 토큰은 `.env` → `ops/stage.sh` → `~/Library/Application Support/stock-screener/tunnel-token`(600)으로 전달된다. **위 `service install`을 다시 밟으면 자동 기동이 되살아난다** — ADR-0043의 `premise`가 세션 시작에 그것을 알린다.
+
+  **지우는 대상은 셸 히스토리의 그 한 줄이다.** 위 명령은 **토큰 원문을 명령줄에 담고**, `~/.zsh_history`는 권한만 `600`일 뿐 평문이라 나중에 아무 도구나 그 줄을 읽는다. 남은 위험은 히스토리 파일 하나뿐이므로 그것만 지운다. **처리 완료(2026-08-07)** — 아래는 재설치·재발급 때 다시 밟을 절차다.
 
   ```bash
   grep -an "cloudflared service install" ~/.zsh_history        # ① 남았는지
@@ -106,9 +108,9 @@ WHOIS 개인정보 대행은 Cloudflare가 기본 제공한다. 별도 결제 �
 
 **알아둘 것**
 
-- **`CLOUDFLARE_TUNNEL_TOKEN`은 Spring 애플리케이션이 읽지 않는다.** 토큰을 쓰는 주체는 `launchd`에 등록된 `cloudflared` 프로세스이고, 2-3에서 이미 주입이 끝난다. `.env`에 적는 것은 **재설치·재발급 때 다시 찾지 않기 위한 기록**이다. `./gradlew checkEnv`도 키가 채워졌는지만 본다.
-- **맥북이 잠자면 터널도 끊긴다.** 상시 접속을 원하면 절전 설정을 바꾸거나 `caffeinate`가 필요하다. Phase 6의 "자동 기동" 과제에 포함된다.
-- 터널을 지우고 다시 만들면 토큰이 바뀐다. 그때는 `sudo cloudflared service uninstall` 후 2-3을 다시 한다.
+- **`CLOUDFLARE_TUNNEL_TOKEN`은 Spring 애플리케이션이 읽지 않는다.** 토큰을 쓰는 주체는 `cloudflared` 프로세스다. **데몬을 걷은 뒤로 `.env`가 그 값의 정본이 됐다**(ADR-0043) — 전에는 `service install`이 주입해 두어 `.env` 사본이 기록일 뿐이었지만, 지금은 `ops/stage.sh`가 여기서 뽑아 `tunnel-token`(600)으로 내보내고 `ops/start.sh`가 그것을 쓴다. **비어 있으면 터널이 안 뜬다.** `./gradlew checkEnv`는 키가 채워졌는지만 본다.
+- **맥북이 잠자면 터널도 끊긴다.** `ops/start.sh`가 앱이 도는 동안 `caffeinate -s`를 걸지만 그것은 전원 연결 시 유휴 절전만 막는다. 뚜껑을 닫는 경우는 `TODO.md`에 있다.
+- 터널을 지우고 다시 만들면 토큰이 바뀐다. 그때는 **`.env`의 값을 갈고 `ops/stage.sh`를 다시 돌린다.** 2-3의 `service install`은 다시 밟지 않는다 — 자동 기동이 되살아난다.
 
 **없으면 막히는 것**: 홈 네트워크 밖에서의 접속 전부.
 

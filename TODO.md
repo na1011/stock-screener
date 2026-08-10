@@ -103,12 +103,24 @@ DART 개발가이드 13종과 공공데이터포털 두 서비스는 끝났다. 
   ```bash
   sudo pmset -a disablesleep 1     # 되돌리기: sudo pmset -a disablesleep 0
   ```
-- [ ] **재부팅 후 앱과 터널이 돌아오는지 한 번 본다.** FileVault가 켜져 있어 **콜드 부팅에는
-      암호가 한 번 필요하다**(에이전트가 대신할 수 없다). 암호를 넣은 뒤 다른 기기에서:
+- [ ] **cloudflared 데몬을 해제한다 — sudo가 필요해 에이전트가 대신할 수 없다.**
+      부팅 시 root로 뜨는 유일한 것이고, 남아 있으면 앱을 켜는 순간 곧바로 공개된다(ADR-0043).
+  ```bash
+  sudo cloudflared service uninstall
+  ops/start.sh --tunnel      # 이후로는 이것으로 띄운다 (sudo 없음)
+  ```
+  **한 번만 필요하다.** 토큰은 `.env` → `ops/stage.sh` → `tunnel-token`(600)으로 넘어간다.
+  해제될 때까지 ADR-0043의 `premise`가 세션 시작마다 알린다.
+
+- [ ] **재부팅 뒤에는 직접 띄운다. 아무것도 대신 띄워 주지 않는다**(ADR-0043).
+      FileVault가 켜져 있어 콜드 부팅에는 암호가 한 번 필요하고(이것도 에이전트가 못 한다),
+      로그인한 뒤에 `ops/start.sh`다. 다른 기기에서 확인:
   ```bash
   curl -s https://screener.na1011.net/actuator/health     # {"status":"UP"}
   ```
-  계획된 재부팅을 암호 없이 넘기려면 `sudo fdesetup authrestart`를 쓴다.
+  **IMPORTANT — 15일에 한 번은 평일 15시에 켜 두어야 한다.** 배치가 앱 프로세스 안에서
+  돌아서, 꺼져 있으면 그날 수집이 빠지고 아무 알림도 안 나간다. 다음 실행의 15일 창이
+  메우므로 매일은 아니지만, 창을 넘기면 결손이 남는다(ADR-0042).
 
 ---
 
