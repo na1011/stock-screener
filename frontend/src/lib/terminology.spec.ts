@@ -26,6 +26,28 @@ const SRC = fileURLToPath(new URL('..', import.meta.url))
 const SCANNED = (name: string): boolean =>
   (name.endsWith('.vue') || name.endsWith('.ts')) && !name.endsWith('.spec.ts')
 
+/**
+ * "유니버스"가 사용자 문구로 돌아오는 것을 막는다.
+ *
+ * 영문 식별자는 `universe`이고 한국어 표시어는 **"조회 대상"**이다. 직역이 세계관처럼 읽히는
+ * 데다, 그 값이 실제로 정하는 것은 스크리닝이 훑을 종목의 범위뿐이다. "대상 시장"도 아니다 —
+ * 선택지가 `코스피200`이라 시장이라 부르면 코스피 전체(~800종목)로 읽히는데, 이 앱에서
+ * 200이냐 800이냐는 곧 결과의 차이다.
+ *
+ * 낱말 자체를 막지 않고 연어만 막는다. `lib/universe.ts`가 왜 그 말을 쓰지 않는지를 설명하려면
+ * 그 말을 적어야 하고, 전부 막으면 그 설명이 먼저 걸린다.
+ */
+const FORBIDDEN_UNIVERSE = [
+  '대상 유니버스',
+  '유니버스 목록',
+  '유니버스 선택',
+  '유니버스를 골라',
+  '유니버스를 고르',
+  '특정 유니버스',
+  '전체 유니버스',
+  '유니버스 리밸런싱',
+] as const
+
 /** 엔티티 뜻으로만 쓰이는 연어. UI 뷰 뜻으로는 읽힐 수 없는 조합만 넣는다. */
 const FORBIDDEN = [
   '내 화면',
@@ -58,24 +80,26 @@ interface Hit {
   phrase: string
 }
 
-function collectHits(): { files: number; hits: Hit[] } {
+function collectHits(phrases: readonly string[]): { files: number; hits: Hit[] } {
   const files = walk(SRC)
   const hits = files.flatMap((file) =>
     readFileSync(file, 'utf8')
       .split('\n')
       .flatMap((text, index) =>
-        FORBIDDEN.filter((phrase) => text.includes(phrase)).map((phrase) => ({
-          file: file.slice(SRC.length),
-          line: index + 1,
-          phrase,
-        })),
+        phrases
+          .filter((phrase) => text.includes(phrase))
+          .map((phrase) => ({
+            file: file.slice(SRC.length),
+            line: index + 1,
+            phrase,
+          })),
       ),
   )
   return { files: files.length, hits }
 }
 
 describe('용어 — 저장된 스크리닝 정의는 "전략"이다', () => {
-  const { files, hits } = collectHits()
+  const { files, hits } = collectHits(FORBIDDEN)
 
   it('스캐너가 실제로 파일을 읽는다', () => {
     // 경로가 어긋나 0건을 훑으면 아래 검사가 통과해 버린다 — 통과가 곧 "검사하지 않음"이
@@ -87,6 +111,17 @@ describe('용어 — 저장된 스크리닝 정의는 "전략"이다', () => {
     expect(
       hits.map((it) => `${it.file}:${it.line} — "${it.phrase}"`),
       '저장된 스크리닝 정의는 한국어로 "전략"이다(ADR-0027). "화면"은 UI 뷰만 가리킨다.',
+    ).toEqual([])
+  })
+})
+
+describe('용어 — 조회할 종목의 범위는 "조회 대상"이다', () => {
+  const { hits } = collectHits(FORBIDDEN_UNIVERSE)
+
+  it('"유니버스"가 사용자 문구로 남지 않았다', () => {
+    expect(
+      hits.map((it) => `${it.file}:${it.line} — "${it.phrase}"`),
+      '영문 식별자는 universe이고 한국어 표시어는 "조회 대상"이다. 근거는 lib/universe.ts에 있다.',
     ).toEqual([])
   })
 })

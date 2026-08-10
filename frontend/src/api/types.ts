@@ -157,7 +157,7 @@ export interface CatalogResponse {
   operators: OperatorResponse[]
 }
 
-// ── 유니버스 ──────────────────────────────────────────────────────
+// ── 조회 대상 ──────────────────────────────────────────────────────
 
 export interface UniverseResponse {
   code: string
@@ -280,7 +280,7 @@ export interface ScreeningRow {
 export interface ScreeningUniverseInfo {
   code: string
   name: string
-  /** 전체 유니버스면 null. */
+  /** 대상을 좁히지 않았으면 null. */
   memberCount: number | null
 }
 
@@ -299,11 +299,11 @@ export interface ScreeningResponse {
   asOfRequested: IsoDate | null
   evaluationMode: EvaluationMode
   sortedBy: string
-  /** 전체 유니버스면 null. */
+  /** 대상을 좁히지 않았으면 null. */
   universe: ScreeningUniverseInfo | null
   /**
-   * 항상 `ALL_CURRENT_MEMBERS`. 백분위는 현재 어느 유니버스든 편입된 종목 전체
-   * (코스피+코스닥)에 대해 계산된다 — 유니버스를 골라도 그 안의 순위가 아니다.
+   * 항상 `ALL_CURRENT_MEMBERS`. 백분위는 현재 어느 지수든 편입된 종목 전체
+   * (코스피+코스닥)에 대해 계산된다 — 조회 대상을 좁혀도 그 안의 순위가 아니다.
    */
   percentilePopulation: string
   /**

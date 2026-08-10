@@ -97,7 +97,9 @@ public class AdminJobLauncher {
                 new Descriptor(DailyUpdateJob.JOB_NAME, "일일 갱신",
                         "대상 일자의 시세를 모으고 지표를 계산한 뒤 워치리스트를 판정한다.",
                         Parameters.TARGET_DATE, 350),
-                new Descriptor(UniverseRebalanceJob.JOB_NAME, "유니버스 리밸런싱",
+                // 라벨은 화면에 그대로 뜬다. 한국어 표시어는 "유니버스"가 아니다 —
+                // `frontend/src/lib/universe.ts`가 그 판단의 정본이다.
+                new Descriptor(UniverseRebalanceJob.JOB_NAME, "지수 구성종목 갱신",
                         "시가총액 상위 N을 다시 계산해 편입·편출을 반영한다.",
                         Parameters.TARGET_DATE, 1),
                 new Descriptor(IndicatorBackfillJob.JOB_NAME, "지표 백필",

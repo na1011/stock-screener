@@ -15,7 +15,7 @@ import { formatCount, formatDate } from '@/lib/format'
  * 세 가지가 반드시 보여야 한다.
  * - **기준일** — 감추면 배치가 하루 밀렸을 때 사용자가 어제 데이터를 오늘 것으로 읽는다.
  * - **잘림** — `truncated`가 참인데 표시하지 않으면 그 목록을 "조건에 맞는 전부"로 읽는다.
- * - **백분위 모집단** — 유니버스를 골라도 순위는 그 안에서 매긴 것이 아니다. 이것을 적지 않으면
+ * - **백분위 모집단** — 조회 대상을 좁혀도 순위는 그 안에서 매긴 것이 아니다. 이것을 적지 않으면
  *   화면이 "코스피 상위 20%"라고 말하게 되는데 사실이 아니다.
  */
 const props = defineProps<{
@@ -127,12 +127,12 @@ const knownPopulation = computed(
 
     <template v-if="showPercentileNote">
       <p v-if="knownPopulation" class="summary__note">
-        백분위는 <strong>현재 편입된 코스피·코스닥 종목 전체</strong>를 기준으로 계산됩니다. 특정
-        유니버스를 골라 조회해도 순위는 그 안에서 매긴 것이 아닙니다.
+        백분위는 <strong>현재 편입된 코스피·코스닥 종목 전체</strong>를 기준으로 계산됩니다.
+        조회 대상을 좁혀도 순위는 그 안에서 매긴 것이 아닙니다.
       </p>
       <p v-else class="summary__note">
         백분위는 <strong>{{ result.percentilePopulation }}</strong> 모집단을 기준으로 계산됩니다.
-        특정 유니버스를 골라 조회해도 순위는 그 안에서 매긴 것이 아닐 수 있습니다.
+        조회 대상을 좁혀도 순위는 그 안에서 매긴 것이 아닐 수 있습니다.
       </p>
     </template>
   </div>

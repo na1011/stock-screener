@@ -14,7 +14,7 @@ import { useCatalogStore } from '@/stores/catalog'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 
 /**
- * 판정 방식·대상 유니버스·기준일.
+ * 판정 방식·조회 대상·기준일.
  *
  * 조건이 아니라 **실행 설정**이다. 예전에는 조건과 같은 시각적 무게로 한 줄을 통째로
  * 차지했는데, 한 번 정하고 잘 바꾸지 않는 값 셋이 매번 화면 폭을 다 먹었다. 접어 두고
@@ -75,7 +75,7 @@ const maxDate = computed(() => parseIsoDate(props.retention?.to ?? null) ?? new 
       />
     </FormField>
 
-    <FormField label="대상 유니버스">
+    <FormField label="조회 대상">
       <AsyncPanel
         :state="catalog.universeState"
         :error="catalog.universeError"

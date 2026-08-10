@@ -90,7 +90,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
    * 실행했는지"를 안다), 손댔으면 `conditions`를 즉석 조건으로 보낸다. 셋 중 정확히 하나만
    * 보낼 수 있으므로 둘을 함께 보낼 수는 없다.
    *
-   * 유니버스와 기준일은 dirty에 넣지 않는다. 저장된 정의를 고치는 것이 아니라 실행 시점의
+   * 조회 대상과 기준일은 dirty에 넣지 않는다. 저장된 정의를 고치는 것이 아니라 실행 시점의
    * 덮어쓰기라서 서버가 별도 필드로 받는다.
    */
   const dirty = ref(false)
@@ -196,7 +196,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     lastRemoved.value = null
   }
 
-  /** 저장된 전략·프리셋을 편집기로 불러온다. 유니버스·기준일 선택은 유지한다. */
+  /** 저장된 전략·프리셋을 편집기로 불러온다. 조회 대상·기준일 선택은 유지한다. */
   function loadFrom(screen: ScreenResponse): void {
     // `type`은 **실행 형태**를 정한다 — 프리셋이면 presetCode로, 내 전략이면 screenId로
     // 보내야 서버가 저장된 정의를 그대로 실행한다. 편집 권한과는 다른 질문이다.
