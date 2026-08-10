@@ -54,36 +54,29 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 
 ### 켜기
 
-**사전 체크 — 지금 뭐가 도는지부터 본다.**
-
 ```bash
-ops/status.sh
+ops/start.sh
 ```
 
-| status.sh가 이렇게 말하면 | 하는 일 |
-|---|---|
-| 앱·터널 둘 다 `안 돈다` | 아래 켜기로 간다 |
-| 하나만 `돈다` | 없는 쪽만 켠다 (`--app` / `--tunnel`) |
-| `이 스크립트가 띄운 것이 아니다` | 데몬이 되살아났거나 손으로 띄운 것이 있다. 아래 **문제 해결** |
-| `자동기동: 되살아났다` | 등록이 다시 생겼다. 아래 **문제 해결** |
-| DB가 필요하다 | `pg_isready` — `accepting connections`가 아니면 `brew services start postgresql@16` |
+**이것 하나다. 지금 뭐가 도는지 먼저 확인할 필요가 없다.** 이미 도는 것은 건드리지 않고 없는 것만 띄운다 — 앱만 떠 있으면 터널만, 아무것도 없으면 둘 다, 이미 둘 다 돌면 아무것도 안 한다. **몇 번을 쳐도 결과가 같다.**
 
-**켠다.**
+```
+[start] 앱 기동 중 (PID 7233) — 20~30초 걸린다.
+[start] 앱 OK — {"groups":["liveness","readiness"],"status":"UP"}
+[start] 터널은 이미 돌고 있다 (PID 7226).      ← 도는 것은 그대로 둔다
+[start] 외부: {"groups":["liveness","readiness"],"status":"UP"}
+```
+
+기동에 **20~30초** 걸린다. `start.sh`는 그동안 기다렸다가 **로컬 health가 `UP`이 된 뒤에야** 끝나고, 앱과 터널이 모두 서게 되면 **외부 health까지 확인**한다. 즉 프롬프트가 돌아왔을 때 이미 확인이 끝나 있다.
+
+**한쪽만 띄우고 싶을 때만** 플래그를 쓴다. 평소에는 쓸 일이 없다.
 
 ```bash
-ops/start.sh              # 앱 + 터널 — 평소 이것 하나면 된다
-ops/start.sh --app        # 앱만. 밖에서는 안 보인다 (로컬 확인용)
+ops/start.sh --app        # 앱만. 밖에서는 안 보인다 (로컬에서 확인만 할 때)
 ops/start.sh --tunnel     # 터널만
 ```
 
-기동에 **20~30초** 걸린다. `start.sh`는 그동안 기다렸다가 **로컬 health가 `UP`이 된 뒤에야** 끝나고, 앱과 터널을 함께 켰으면 **외부 health까지 확인**한다. 즉 프롬프트가 돌아왔을 때 이미 확인이 끝나 있다.
-
-```
-[start] 앱 기동 중 (PID 32744) — 20~30초 걸린다.
-[start] 앱 OK — {"groups":["liveness","readiness"],"status":"UP"}
-[start] 터널 기동 (PID 39778).
-[start] 외부: {"groups":["liveness","readiness"],"status":"UP"}
-```
+**안 뜨면** — 대개 DB다. `pg_isready`가 `accepting connections`가 아니면 `brew services start postgresql@16`. 그 밖의 원인은 아래 **문제 해결**.
 
 **절전 방지는 자동으로 걸린다.** `start.sh`가 `caffeinate -s -w <JVM PID>`를 함께 띄운다. `-s`는 **전원이 연결된 동안만** 유휴 절전을 막으므로 배터리로 도는 동안에는 평소대로 잠들고, `-w`로 앱에 묶여 있어 **앱이 끝나면 caffeinate도 함께 사라진다** — 따로 끌 것이 없다. 다만 **뚜껑을 닫으면 이것으로도 잠든다**(`sudo pmset -a disablesleep 1`이 필요하다, [`TODO.md`](TODO.md)).
 
@@ -91,28 +84,33 @@ ops/start.sh --tunnel     # 터널만
 
 ### 끄기
 
-**사전 체크 — 배치 시각을 밟고 있지 않은지 본다.**
+**사전 체크 — 배치 시각만 본다.**
 
 ```bash
 date '+%F %H:%M (%a)'
 ```
 
-**평일 15시 직전이면 그때까지 켜 둔다.** 배치가 앱 프로세스 안에서 돌기 때문이다(아래 주의).
-
-**끈다.**
+**평일 15시 직전이면 그때까지 켜 둔다.** 배치가 앱 프로세스 안에서 돌기 때문이다(맨 아래 주의).
 
 ```bash
-ops/stop.sh              # 앱 + 터널
-ops/stop.sh --app        # 앱만 (터널은 남겨 502를 내게 한다)
-ops/stop.sh --tunnel     # 터널만 (앱은 로컬로 계속 쓴다)
+ops/stop.sh
 ```
 
+**켜기와 대칭이다.** 도는 것만 끄고, 안 도는 것은 "돌고 있지 않다"고만 말한다. 몇 번을 쳐도 결과가 같고 `exit 0`이다.
+
 앱에는 SIGTERM을 보내고 **최대 30초** 종료를 기다린다. 끝나면 PID 파일을 지우고 **`:8080`이 실제로 풀렸는지까지** 확인한다.
+
+**한쪽만 끄고 싶을 때만** 플래그를 쓴다.
+
+```bash
+ops/stop.sh --app        # 앱만 (터널은 남아 밖에서 502가 난다)
+ops/stop.sh --tunnel     # 터널만 (앱은 로컬로 계속 쓴다)
+```
 
 `kill <PID>`로도 꺼진다 — 되살리는 것이 아무것도 없기 때문이다. 그래도 `stop.sh`를 쓰는 편이 낫다. PID 파일 정리와 포트 확인이 붙어 있고, **PID 재사용을 검증**해 남은 PID 파일이 무관한 프로세스를 죽이는 일을 막는다.
 
 - **`pkill -f java`는 쓰지 않는다.** 이 저장소와 무관한 JVM(IDE 컴파일 서버 등)까지 함께 죽고, 어떤 가드도 그것을 막지 않는다.
-- 빌드가 남긴 Gradle 데몬은 별개다. 메모리를 물고 있으면 `./gradlew --stop`.
+- **Gradle 데몬은 `stop.sh`가 끄지 않는다.** 앱이 아니라 `./gradlew`가 띄우는 빌드 도구라 범위가 다르고, 여기서 함께 죽이면 다른 프로젝트 빌드까지 끊긴다. 몇 개 떠 있는지는 `ops/status.sh`의 **빌드데몬** 줄이 답하고, 메모리가 아까우면 `./gradlew --stop`.
 
 ---
 
@@ -143,10 +141,20 @@ ops/deploy.sh
 
 ### 문제가 생겼을 때
 
-**언제나 여기서 시작한다.** 무엇이 도는지, 밖에서 보이는지, 자동 기동이 다시 생기지 않았는지를 한 번에 낸다.
+**언제나 여기서 시작한다.** 무엇이 도는지, 밖에서 보이는지, 빌드 찌꺼기가 남았는지, 자동 기동이 다시 생기지 않았는지를 한 번에 낸다. **"지금 뭐가 돌고 있나"를 묻는 곳은 여기 하나다.**
 
 ```bash
 ops/status.sh
+```
+
+```
+앱      : 돈다 (PID 7845)
+터널    : 돈다 (PID 7881)
+:8080   : java (PID 7845)
+로컬    : {"groups":["liveness","readiness"],"status":"UP"}
+외부    : {"groups":["liveness","readiness"],"status":"UP"}
+빌드데몬: 없다                                    ← 있으면 ./gradlew --stop (운영과 무관)
+자동기동: 없다 (정상 — 부팅·로그인에 뜨는 등록이 하나도 없다)
 ```
 
 **로컬만 보고 판단하지 않는다** — `cloudflared`가 죽어도 로컬은 초록이다. **밖에서 무엇이 오는가가 앱과 터널을 가른다.**
@@ -154,8 +162,8 @@ ops/status.sh
 | 밖에서(`https://screener.na1011.net/actuator/health`) | 무엇이 문제인가 | 하는 일 |
 |---|---|---|
 | `{"status":"UP"}` | 정상 | — |
-| **502** | 터널은 살아 있고 **앱이 죽었다** | `ops/start.sh --app` · 원인은 `stderr.log` |
-| **`error code: 1033` / 응답 없음** | **터널이 죽었다** (앱은 모른다) | `ops/start.sh --tunnel` · 원인은 `tunnel.log` |
+| **502** | 터널은 살아 있고 **앱이 죽었다** | `ops/start.sh` (없는 쪽만 뜬다) · 원인은 `stderr.log` |
+| **`error code: 1033` / 응답 없음** | **터널이 죽었다** (앱은 모른다) | `ops/start.sh` · 원인은 `tunnel.log` |
 | **DNS·인증서 오류** | Cloudflare 쪽 설정 | [`docs/external-services-setup.md`](docs/external-services-setup.md) §2 |
 
 ```bash

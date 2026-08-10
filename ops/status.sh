@@ -37,6 +37,16 @@ echo -n "외부    : "
 curl -s --max-time 10 "$HEALTH_PUBLIC" || echo "응답 없음"
 echo
 
+# 빌드가 남긴 Gradle 데몬. **운영과는 범위가 다르다** — 앱이 아니라 ./gradlew가 띄우는
+# 것이고, 그래서 stop.sh가 건드리지 않는다(건드리면 다른 프로젝트 빌드까지 죽는다).
+# 그래도 여기서 세는 이유는 "뭐가 돌고 있나"를 묻는 곳이 여기 하나여야 하기 때문이다.
+gradle_n="$(pgrep -f 'GradleDaemon|GradleWorkerMain' 2>/dev/null | grep -c . || true)"
+if [[ "${gradle_n:-0}" -gt 0 ]]; then
+  echo "빌드데몬: ${gradle_n}개 — 운영과 무관하다. 메모리가 아까우면: ./gradlew --stop"
+else
+  echo "빌드데몬: 없다"
+fi
+
 # 자동 기동이 되살아나 있으면 여기서 보여야 한다. ADR-0043의 premise와 같은 것을 본다.
 found=""
 [[ -f "$HOME/Library/LaunchAgents/com.stockscreener.app.plist" ]] && found="$found app-LaunchAgent"
