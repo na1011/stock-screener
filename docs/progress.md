@@ -27,10 +27,11 @@
 **v1 구현은 끝났다. 남은 것은 사람이 값을 채우는 일과 그 뒤의 확인뿐이다** — 목록은 [`TODO.md`](../TODO.md)에 있다(알림 채널 자격증명, Sentry org·project 슬러그, ICANN 인증). 발급 상태는 문서가 아니라 `./gradlew checkEnv`에 묻는다 — 발급은 문서 밖에서 일어나 문서가 먼저 낡는다.
 
 - **도는 것은 저장소의 `build/libs`가 아니라 `~/Library/Application Support/stock-screener/app.jar`이다.** 코드나 `.env`를 고쳤으면 `ops/deploy.sh`를 돌려야 반영된다 — `./gradlew build`만 하면 옛것이 돌고 화면에는 아무 단서가 없다(ADR-0034).
-- **`indicator_value`의 세 인덱스에 `REINDEX INDEX CONCURRENTLY`가 남았다**(인덱스가 힙의 2.4배). **2026-08-10(월) 20시 배치의 purge가 보존 밖 날짜를 지운 뒤**에 한다 — 순서를 뒤집으면 곧 지워질 행까지 인덱싱한다. purge는 `DailyUpdateJob`에만 있어 따로 돌릴 수 없다(돌리면 쿼터를 태운다). **그때까지 ADR-0011 전제(445 > 보존 180)가 세션 시작에 깨진 채로 뜨는 것은 정상이다** — 재진단하지 않는다.
-- **훅이 조용히 안 도는 자리 셋을 확인했다**(2026-08-10, 트랜스크립트 1,018개 전수). ① `/compact` 뒤에는 이 저장소 `SessionStart` 훅 셋이 전부 안 뜬다 — matcher가 `startup|resume|clear`다. ② `SessionEnd` 배달이 0건이라 `remind-progress.sh`가 2026-08-05 등록 이후 죽어 있었을 수 있다(존치 여부를 정해야 한다). ③ `guard-destructive.sh`에 `kill`·`pkill` 판정이 없어 `pkill -f java`가 운영 앱을 죽여도 아무것도 안 막는다.
-- **20시 배치가 당일 종가를 받아오는지는 다음 거래일(2026-08-10 월) 20시 실행이 답한다.** 공개 시각은 소급 조회로 알 수 없다. 0건이면 WARNING이 뜨는데 채널이 비어 있어 `~/Library/Logs/stock-screener/stdout.log`로만 간다 — **거래일마다 오면 시각을 늦춘다**(ADR-0033). **2026-08-07이 비어 있는 것은 결손이 아니라 휴장이다**(실측, `api-spec/`) — 백필해도 받을 것이 없다.
-- **`HEAD /`에만 Spring Security 응답 헤더가 빠진다**(2026-08-10 실측). 앱 쪽이다 — localhost 직접 조회도 같고 `GET /`과 다른 경로는 HEAD·GET 모두 멀쩡하다. 브라우저는 루트를 GET하므로 영향은 HEAD로 찌르는 감시 도구뿐. **정하면 이 줄을 지운다.**
+- **`indicator_value` 세 인덱스에 `REINDEX INDEX CONCURRENTLY`가 남았다**(인덱스가 힙의 2.4배). **2026-08-10 20시 배치의 purge 뒤**에 한다 — 뒤집으면 곧 지워질 행까지 인덱싱한다. purge는 `DailyUpdateJob`에만 있어 따로 못 돌린다(돌리면 쿼터를 태운다). **그때까지 ADR-0011 전제(445 > 180)가 깨진 채 뜨는 것은 정상이다** — 재진단하지 않는다.
+- **훅이 조용히 안 도는 자리 셋**(2026-08-10 전수 확인). ① `/compact` 뒤에는 `SessionStart` 훅 셋이 전부 안 뜬다(matcher가 `startup|resume|clear`). ② `SessionEnd` 배달이 0건이라 `remind-progress.sh`가 죽어 있었을 수 있다(존치 여부를 정한다). ③ `guard-destructive.sh`에 `kill`·`pkill` 판정이 없어 `pkill -f java`가 운영 앱을 죽여도 안 막힌다.
+- **20시 배치가 당일 종가를 받아오는지는 오늘(2026-08-10) 20시 실행이 답한다.** 공개 시각은 소급 조회로 알 수 없다. 0건이면 WARNING이 뜨는데 채널이 비어 `stdout.log`로만 간다 — **거래일마다 오면 시각을 늦춘다**(ADR-0033). **2026-08-07이 빈 것은 결손이 아니라 휴장이다**(실측, `api-spec/`).
+- **`HEAD /`에만 Spring Security 응답 헤더가 빠진다**(앱 쪽이다). `GET /`과 다른 경로는 멀쩡해 영향은 HEAD로 찌르는 감시 도구뿐. **정하면 이 줄을 지운다.**
+- **V14(배치 진행 계량)가 아직 운영 DB에 없다** — `ops/deploy.sh`가 안 돌았다. 그때까지 ADR-0037 전제가 "판정 불가(컬럼 없음)"로 뜬다. **돌린 뒤 이 줄을 지운다.**
 
 ---
 
@@ -49,6 +50,7 @@
 - **알림이 아직 로그로만 나간다.** 채널 구현은 붙어 있고 자격증명이 없어 비활성이다 — 기동 로그의 `알림 채널이 하나도 구성되지 않아…`가 그 상태의 표시다(ADR-0025).
 - **인터랙션 로그에 리텐션이 없다.** 지인 몇 명 규모에서 수년간 문제가 없어 미뤘다. 필요해지면 `DailyUpdateJob`의 정리 단계에 붙인다.
 - **프론트 스택트레이스가 아직 minify된 채다.** SDK와 업로드 배선은 다 되어 있고 org·project 슬러그만 비어 있다(`TODO.md`). 값을 채우면 코드 변경 없이 올라간다.
+- **Spring Batch를 쓰는 잡이 없다.** `Job`·`Step`이 없어 `BATCH_*`가 0행이고 `linkJobExecution()`은 호출부가 0개다 — ADR-0005의 재시작성을 아무도 안 쓴다. **걷을지 쓸지 정한다.**
 
 ---
 
