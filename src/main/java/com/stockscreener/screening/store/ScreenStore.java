@@ -146,7 +146,7 @@ public class ScreenStore {
     private ConditionGroup loadConditions(long groupId, ConditionGroup.LogicalOperator operator) {
         List<IndicatorCondition> conditions = jdbcTemplate.query("""
                 SELECT indicator_code, operator, operand_type, literal_value, literal_value_2,
-                       operand_indicator_code, operand_multiplier, weight
+                       operand_indicator_code, operand_multiplier, weight, is_required
                 FROM screen_condition
                 WHERE group_id = ?
                 ORDER BY sort_order, id
@@ -268,14 +268,14 @@ public class ScreenStore {
 
             batch.add(new Object[]{
                     groupId, condition.indicatorCode(), condition.operator().name(), operandType,
-                    literal, literal2, refCode, multiplier, condition.weight(), i});
+                    literal, literal2, refCode, multiplier, condition.weight(), condition.required(), i});
         }
 
         jdbcTemplate.batchUpdate("""
                 INSERT INTO screen_condition (group_id, indicator_code, operator, operand_type,
                                               literal_value, literal_value_2, operand_indicator_code,
-                                              operand_multiplier, weight, sort_order, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
+                                              operand_multiplier, weight, is_required, sort_order, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
                 """, batch);
     }
 
@@ -293,7 +293,10 @@ public class ScreenStore {
                 : new ConditionOperand.IndicatorRef(
                         rs.getString("operand_indicator_code"), rs.getBigDecimal("operand_multiplier"));
 
-        return new IndicatorCondition(indicatorCode, operator, operand, rs.getBigDecimal("weight"));
+        // 컴파일러가 잡아주지 않는 자리다. 위 switch와 달리 여기는 문자열 비교라, 컬럼을 더하고
+        // 이 매퍼를 잊으면 저장은 되는데 읽을 때 조용히 기본값이 된다.
+        return new IndicatorCondition(indicatorCode, operator, operand,
+                rs.getBigDecimal("weight"), rs.getBoolean("is_required"));
     };
 
     private static final RowMapper<ScreenSummary> SUMMARY_MAPPER =

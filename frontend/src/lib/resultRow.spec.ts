@@ -54,6 +54,7 @@ const conditionInfo: ConditionInfo = {
   operatorLabel: '미만',
   operand: { type: 'LITERAL', value: 10 },
   weight: null,
+  required: false,
 }
 
 describe('valueOf', () => {

@@ -86,10 +86,10 @@ public class PresetCatalog {
                         // 부채로 부풀린 ROE 배제. 부채비율은 낮은 쪽이 좋으므로 <=
                         weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "150", "2"),
                         // 추세가 완전히 무너지지는 않았을 것 — 200일선 10% 아래까지 허용
-                        new IndicatorCondition(
+                        IndicatorCondition.of(
                                 AdjCloseCalculator.CODE, ComparisonOperator.GTE,
-                                ConditionOperand.IndicatorRef.of(Sma200Calculator.CODE, "0.90"),
-                                new BigDecimal("1")))));
+                                ConditionOperand.IndicatorRef.of(Sma200Calculator.CODE, "0.90"))
+                                .withWeight(new BigDecimal("1")))));
     }
 
     /**

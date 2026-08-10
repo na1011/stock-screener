@@ -75,6 +75,10 @@ public record ScreeningResponse(
      *
      * @param indicator     지표의 의미·단위·유리한 방향. spec §5가 요구하는 "값만 나열하지 않는다".
      * @param operatorLabel 한글 라벨. 정본은 {@code ComparisonOperator.displayName()}이다.
+     * @param required      필수 조건인가. 화면이 필수와 점수 조건을 갈라 보여주려면 이것이 필요하다 —
+     *                      {@code weight}가 null인 것으로 유도하면 안 된다. FILTER 전략은 둘 다 null이라
+     *                      구분이 서지 않고, 그것이 {@code frontend.md}가 금지한 "서버가 준 값을
+     *                      다른 필드로 다시 유도하는 것"이다.
      */
     public record ConditionInfo(
             int index,
@@ -82,7 +86,8 @@ public record ScreeningResponse(
             String operator,
             String operatorLabel,
             ConditionGroupPayload.OperandPayload operand,
-            BigDecimal weight
+            BigDecimal weight,
+            boolean required
     ) {
     }
 

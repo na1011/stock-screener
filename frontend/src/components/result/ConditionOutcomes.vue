@@ -5,7 +5,7 @@ import { computed } from 'vue'
 import type { ConditionInfo, EvaluationMode, ScreeningRow } from '@/api/types'
 import RatioBar from '@/components/ui/RatioBar.vue'
 import { readBand } from '@/lib/band'
-import { describeCondition } from '@/lib/conditionText'
+import { conditionRoleLabels, describeCondition } from '@/lib/conditionText'
 import { MISSING, formatIndicatorValue, formatNumber, formatRatioAsPercent } from '@/lib/format'
 import { outcomeStyle } from '@/lib/outcome'
 import { SCORE_DECIMAL_SCALE } from '@/lib/resultRow'
@@ -55,6 +55,36 @@ const items = computed(() =>
 )
 
 /**
+ * 필수와 점수를 갈라 보인다.
+ *
+ * 두 종류는 **묻는 것이 다르다.** 필수는 "이 종목이 여기 있어도 되는가"이고 점수는 "얼마나
+ * 좋은가"다. 한 목록에 섞으면 필수 조건이 점수 0점짜리 조건처럼 보여, 총점이 낮은 이유를
+ * 필수 조건에서 찾게 된다 — 필수는 애초에 점수에 참여하지 않는다.
+ *
+ * 필수 조건이 하나도 없으면 나누지 않는다. 기존 전략의 화면이 제목 하나 때문에 달라지지
+ * 않게 하는 것이고, 구획이 하나뿐인 목록에 제목을 붙여 봐야 말해 주는 것이 없다.
+ */
+const sections = computed(() => {
+  const required = items.value.filter((item) => item.condition.required)
+  if (required.length === 0) {
+    return [{ key: 'all', title: null, hint: null, items: items.value }]
+  }
+
+  const scored = items.value.filter((item) => !item.condition.required)
+  return [
+    {
+      key: 'required',
+      title: conditionRoleLabels.REQUIRED,
+      hint: '하나라도 충족하지 못하면 결과에서 빠집니다.',
+      items: required,
+    },
+    ...(scored.length > 0
+      ? [{ key: 'scored', title: conditionRoleLabels.SCORED, hint: null, items: scored }]
+      : []),
+  ]
+})
+
+/**
  * 이 조건이 **총점에서 차지한 몫**(0..1).
  *
  * 획득/가중치가 아니다. 서버의 `earnedScore`는 충족이면 가중치 전액, 아니면 0인 **이진값**이라
@@ -95,52 +125,64 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
       <span class="outcomes__total-ratio">({{ formatRatioAsPercent(row.scoreRatio) }})</span>
     </div>
 
-    <ul class="outcomes__list">
-      <li v-for="item in items" :key="item.condition.index" class="outcomes__item">
-        <Tag
-          v-if="item.style"
-          v-tooltip.top="item.style.tooltip"
-          :value="item.style.label"
-          :severity="item.style.severity"
-          :icon="item.style.icon"
-          class="outcomes__status"
-        />
-        <span v-else class="outcomes__status outcomes__status--absent">판정 없음</span>
+    <section v-for="section in sections" :key="section.key" class="outcomes__group">
+      <h4 v-if="section.title" class="outcomes__group-title">
+        {{ section.title }}
+        <span v-if="section.hint" class="outcomes__group-hint">{{ section.hint }}</span>
+      </h4>
 
-        <span class="outcomes__text">{{ item.text }}</span>
-
-        <span class="outcomes__actual tabular">
-          {{
-            item.outcome === null || item.outcome.actualValue === null
-              ? MISSING
-              : formatIndicatorValue(
-                  item.outcome.actualValue,
-                  item.condition.indicator.unit,
-                  item.condition.indicator.decimalScale,
-                )
-          }}
-        </span>
-
-        <!--
-          등급. 색을 주지 않는다 — 이 줄에서 색을 갖는 것은 판정 Tag 하나뿐이다(ADR-0021).
-          서버가 구간을 모르는 지표(주가 스케일)는 빈칸이다. 지어내지 않는다(ADR-0023).
-        -->
-        <span class="outcomes__grade">{{ item.grade }}</span>
-
-        <template v-if="isScoring">
-          <!-- 총점에서 차지한 몫. 다섯 막대를 합치면 달성률이 된다. -->
-          <RatioBar
-            :value="item.earnedRatio"
-            class="outcomes__bar"
-            :aria-label="`총점 기여 ${formatRatioAsPercent(item.earnedRatio)}`"
+      <ul class="outcomes__list">
+        <li v-for="item in section.items" :key="item.condition.index" class="outcomes__item">
+          <Tag
+            v-if="item.style"
+            v-tooltip.top="item.style.tooltip"
+            :value="item.style.label"
+            :severity="item.style.severity"
+            :icon="item.style.icon"
+            class="outcomes__status"
           />
-          <span class="outcomes__score tabular">
-            {{ formatNumber(item.outcome?.earnedScore ?? null, SCORE_DECIMAL_SCALE) }} /
-            {{ formatNumber(item.weight, SCORE_DECIMAL_SCALE) }}
+          <span v-else class="outcomes__status outcomes__status--absent">판정 없음</span>
+
+          <span class="outcomes__text">{{ item.text }}</span>
+
+          <span class="outcomes__actual tabular">
+            {{
+              item.outcome === null || item.outcome.actualValue === null
+                ? MISSING
+                : formatIndicatorValue(
+                    item.outcome.actualValue,
+                    item.condition.indicator.unit,
+                    item.condition.indicator.decimalScale,
+                  )
+            }}
           </span>
-        </template>
-      </li>
-    </ul>
+
+          <!--
+            등급. 색을 주지 않는다 — 이 줄에서 색을 갖는 것은 판정 Tag 하나뿐이다(ADR-0021).
+            서버가 구간을 모르는 지표(주가 스케일)는 빈칸이다. 지어내지 않는다(ADR-0023).
+          -->
+          <span class="outcomes__grade">{{ item.grade }}</span>
+
+          <!--
+            필수 조건에는 점수 칸이 없다. 서버가 총점에서 뺐으므로 "0 / 1"을 그리면 못 받은
+            점수처럼 읽힌다 — 받을 점수가 애초에 없다. 빈 칸으로 두면 그리드 트랙이 유지되어
+            아래위 행의 실제값·등급이 계속 같은 자리에 선다.
+          -->
+          <template v-if="isScoring && !item.condition.required">
+            <!-- 총점에서 차지한 몫. 막대를 전부 합치면 달성률이 된다. -->
+            <RatioBar
+              :value="item.earnedRatio"
+              class="outcomes__bar"
+              :aria-label="`총점 기여 ${formatRatioAsPercent(item.earnedRatio)}`"
+            />
+            <span class="outcomes__score tabular">
+              {{ formatNumber(item.outcome?.earnedScore ?? null, SCORE_DECIMAL_SCALE) }} /
+              {{ formatNumber(item.weight, SCORE_DECIMAL_SCALE) }}
+            </span>
+          </template>
+        </li>
+      </ul>
+    </section>
 
     <p v-if="row.notEvaluableCount > 0" class="outcomes__note">
       {{ row.notEvaluableCount }}개 조건은 지표 값이 없어 판정하지 못했습니다. 조건에 맞지 않았다는
@@ -175,6 +217,33 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
 .outcomes__total-ratio {
   color: var(--p-text-muted-color);
   font-size: var(--app-text-sm);
+}
+
+.outcomes__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/*
+ * 구획 제목. 판정 Tag보다 약하게 둔다 — 이 목록에서 눈이 먼저 가야 하는 것은 줄마다의
+ * 충족·불충족이고, 제목은 그 줄들이 무엇을 묻는지만 말한다.
+ */
+.outcomes__group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0 0.375rem;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--p-text-muted-color);
+}
+
+.outcomes__group-hint {
+  font-weight: 400;
+  color: var(--p-text-subtle-color);
 }
 
 .outcomes__list {

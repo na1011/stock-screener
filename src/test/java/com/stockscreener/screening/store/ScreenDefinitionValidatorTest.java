@@ -106,9 +106,8 @@ class ScreenDefinitionValidatorTest {
     void rejectsBetweenWithIndicatorReference() {
         // 번역기가 이 조합에 IllegalArgumentException을 던진다. 여기서 막지 않으면
         // 저장은 성공하고 실행 버튼을 누를 때 500이 난다.
-        ConditionGroup group = ConditionGroup.and(new IndicatorCondition(
-                "PER", ComparisonOperator.BETWEEN,
-                ConditionOperand.IndicatorRef.of("PBR"), null));
+        ConditionGroup group = ConditionGroup.and(IndicatorCondition.of(
+                "PER", ComparisonOperator.BETWEEN, ConditionOperand.IndicatorRef.of("PBR")));
 
         assertThatThrownBy(() -> ScreenDefinitionValidator.validate(group, KNOWN))
                 .isInstanceOf(ScreenValidationException.class)

@@ -222,4 +222,99 @@ class ConditionEvaluatorTest {
             assertThat(result.outcomes()).hasSize(3);
         }
     }
+
+    @Nested
+    @DisplayName("필수 조건 — SCORING이 좁히지 않는다는 규칙의 유일한 예외")
+    class RequiredConditions {
+
+        /** 게이트. 가중치를 가질 수 없으므로 {@code asRequired()}가 그것을 강제한다. */
+        private static final IndicatorCondition ROE_OVER_8_REQUIRED =
+                IndicatorCondition.of("ROE", ComparisonOperator.GT, ConditionOperand.Literal.of("8"))
+                        .asRequired();
+
+        @Test
+        @DisplayName("SCORING에서 필수 조건을 못 채우면 결과에서 빠진다")
+        void requiredGatesScoring() {
+            ConditionGroup group = ConditionGroup.and(ROE_OVER_8_REQUIRED, PER_UNDER_10);
+
+            ScreeningResult passes = evaluator.evaluate(1L, group, EvaluationMode.SCORING,
+                    Map.of("ROE", new BigDecimal("12"), "PER", new BigDecimal("8")));
+            ScreeningResult gated = evaluator.evaluate(2L, group, EvaluationMode.SCORING,
+                    Map.of("ROE", new BigDecimal("3"), "PER", new BigDecimal("8")));
+
+            assertThat(passes.included()).isTrue();
+            // 점수 조건은 충족했지만 게이트에 걸렸다. 이것이 없으면 T-04류 조건이 무의미해진다.
+            assertThat(gated.included()).isFalse();
+        }
+
+        @Test
+        @DisplayName("IMPORTANT — 판정불가는 충족이 아니다. 지표가 없을수록 잘 통과하면 게이트가 뒤집힌다")
+        void notEvaluableDoesNotSatisfyRequired() {
+            ConditionGroup group = ConditionGroup.and(ROE_OVER_8_REQUIRED, PER_UNDER_10);
+
+            ScreeningResult missingRoe = evaluator.evaluate(1L, group, EvaluationMode.SCORING,
+                    Map.of("PER", new BigDecimal("8")));
+
+            assertThat(missingRoe.included()).isFalse();
+            assertThat(missingRoe.notEvaluableCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("필수 조건은 점수와 만점에 섞이지 않는다 — 섞이면 달성률이 언제나 높게 나온다")
+        void requiredStaysOutOfScore() {
+            ConditionGroup group = ConditionGroup.and(ROE_OVER_8_REQUIRED, PER_UNDER_10, PBR_UNDER_1);
+
+            ScreeningResult result = evaluator.evaluate(1L, group, EvaluationMode.SCORING,
+                    Map.of("ROE", new BigDecimal("12"),
+                           "PER", new BigDecimal("8"),
+                           "PBR", new BigDecimal("5")));
+
+            // 만점은 점수 조건 둘의 가중치 합(3 + 2)이다. 필수 조건의 암묵 가중치 1이 섞이면 6이 된다.
+            assertThat(result.maxScore()).isEqualByComparingTo("5");
+            assertThat(result.score()).isEqualByComparingTo("3");
+            assertThat(result.scoreRatio()).isEqualByComparingTo("0.6000");
+            // 그럼에도 판정 내역에는 남는다 — 화면이 왜 통과했는지를 보여야 한다.
+            assertThat(result.outcomes()).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("FILTER에서는 required가 결과를 바꾸지 않는다 — 모든 조건이 이미 필수다")
+        void filterIsUnaffected() {
+            ConditionGroup withRequired = ConditionGroup.and(ROE_OVER_8_REQUIRED, PER_UNDER_10);
+            ConditionGroup plain = ConditionGroup.and(
+                    IndicatorCondition.of("ROE", ComparisonOperator.GT, ConditionOperand.Literal.of("8")),
+                    PER_UNDER_10);
+
+            Map<String, BigDecimal> gated = Map.of("ROE", new BigDecimal("3"), "PER", new BigDecimal("8"));
+            Map<String, BigDecimal> passing = Map.of("ROE", new BigDecimal("12"), "PER", new BigDecimal("8"));
+
+            assertThat(evaluator.evaluate(1L, withRequired, EvaluationMode.FILTER, gated).included())
+                    .isEqualTo(evaluator.evaluate(1L, plain, EvaluationMode.FILTER, gated).included())
+                    .isFalse();
+            assertThat(evaluator.evaluate(2L, withRequired, EvaluationMode.FILTER, passing).included())
+                    .isEqualTo(evaluator.evaluate(2L, plain, EvaluationMode.FILTER, passing).included())
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("필수 조건이 없으면 SCORING은 종전대로 아무도 빼지 않는다")
+        void noRequiredMeansNoGate() {
+            ConditionGroup group = ConditionGroup.and(PER_UNDER_10, PBR_UNDER_1);
+
+            ScreeningResult noneMatched = evaluator.evaluate(1L, group, EvaluationMode.SCORING,
+                    Map.of("PER", new BigDecimal("50"), "PBR", new BigDecimal("5")));
+
+            assertThat(noneMatched.included()).isTrue();
+        }
+
+        @Test
+        @DisplayName("필수 조건에 가중치를 함께 줄 수 없다 — DB의 ck_cond_required_weight와 같은 불변식")
+        void requiredCannotCarryWeight() {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> new IndicatorCondition(
+                            "ROE", ComparisonOperator.GT, ConditionOperand.Literal.of("8"),
+                            new BigDecimal("2"), true))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("가중치");
+        }
+    }
 }

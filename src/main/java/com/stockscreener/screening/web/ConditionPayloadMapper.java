@@ -69,7 +69,8 @@ public final class ConditionPayloadMapper {
     private static IndicatorCondition toCondition(ConditionGroupPayload.ConditionPayload payload, int index) {
         try {
             return new IndicatorCondition(
-                    payload.indicatorCode(), payload.operator(), toOperand(payload), payload.weight());
+                    payload.indicatorCode(), payload.operator(), toOperand(payload),
+                    payload.weight(), payload.requiredOrFalse());
         } catch (IllegalArgumentException e) {
             throw new ConditionValidationException(index, payload.indicatorCode(), e);
         }
@@ -106,6 +107,7 @@ public final class ConditionPayloadMapper {
                     null, null, ref.indicatorCode(), ref.multiplier());
         };
         return new ConditionGroupPayload.ConditionPayload(
-                condition.indicatorCode(), condition.operator(), operand, condition.weight());
+                condition.indicatorCode(), condition.operator(), operand,
+                condition.weight(), condition.required());
     }
 }

@@ -24,6 +24,7 @@ function condition(
     },
     operatorLabel: '미만',
     weight: null,
+    required: false,
     ...overrides,
   }
 }

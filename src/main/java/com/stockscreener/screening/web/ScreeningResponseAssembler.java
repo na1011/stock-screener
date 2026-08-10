@@ -127,7 +127,8 @@ public class ScreeningResponseAssembler {
                 // 연산자가 추가될 때 두 곳을 고쳐야 한다.
                 condition.operator().displayName(),
                 ConditionPayloadMapper.toPayload(condition).operand(),
-                condition.weight());
+                condition.weight(),
+                condition.required());
     }
 
     /**

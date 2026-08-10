@@ -50,6 +50,7 @@ function condition(overrides: Partial<DraftCondition> = {}): DraftCondition {
     operandIndicatorCode: null,
     multiplier: null,
     weight: null,
+    required: false,
     ...overrides,
   }
 }

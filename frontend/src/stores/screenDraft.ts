@@ -31,6 +31,13 @@ export interface DraftCondition {
   operandIndicatorCode: string | null
   multiplier: number | null
   weight: number | null
+  /**
+   * SCORING에서 미충족 종목을 결과에서 뺀다.
+   *
+   * `weight`와 배타다 — 서버의 `ck_cond_required_weight`가 같은 불변식을 강제하므로,
+   * 한쪽을 켜면 다른 쪽을 비워야 400을 맞지 않는다. 그 처리는 편집기가 한다.
+   */
+  required: boolean
 }
 
 /** 지금 편집 중인 것이 어디서 왔는가. 실행 요청의 형태가 여기서 갈린다. */
@@ -65,6 +72,7 @@ function emptyCondition(indicatorCode: string | null = null): DraftCondition {
     operandIndicatorCode: null,
     multiplier: null,
     weight: null,
+    required: false,
   }
 }
 
@@ -315,7 +323,9 @@ function toPayload(condition: DraftCondition): ConditionPayload {
     indicatorCode: condition.indicatorCode as string,
     operator: condition.operator,
     operand,
-    weight: condition.weight,
+    // 필수면 가중치를 보내지 않는다. 둘을 함께 보내면 서버가 400으로 거절한다.
+    weight: condition.required ? null : condition.weight,
+    required: condition.required,
   }
 }
 
@@ -330,5 +340,6 @@ function fromPayload(payload: ConditionPayload): DraftCondition {
     operandIndicatorCode: payload.operand.indicatorCode ?? null,
     multiplier: payload.operand.multiplier ?? null,
     weight: payload.weight ?? null,
+    required: payload.required ?? false,
   }
 }

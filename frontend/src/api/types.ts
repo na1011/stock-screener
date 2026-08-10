@@ -186,6 +186,11 @@ export interface ConditionPayload {
   operand: OperandPayload
   /** SCORING에서만 쓴다. null이면 1로 취급된다. */
   weight?: number | null
+  /**
+   * SCORING에서 미충족 종목을 결과에서 뺀다. `weight`와 함께 보낼 수 없다 — 서버가 400으로 거절한다.
+   * 생략하면 거짓이다.
+   */
+  required?: boolean | null
 }
 
 /** v1은 `childGroups`를 항상 비워 보낸다. 구조만 트리다(ADR-0003). */
@@ -250,6 +255,11 @@ export interface ConditionInfo {
   operatorLabel: string
   operand: OperandPayload
   weight: number | null
+  /**
+   * 필수 조건인가. **`weight === null`로 유도하지 않는다** — FILTER 전략은 둘 다 null이라
+   * 구분이 서지 않는다. 서버가 판단해서 주는 값을 다른 필드로 되짚는 것은 금지다.
+   */
+  required: boolean
 }
 
 export interface Outcome {

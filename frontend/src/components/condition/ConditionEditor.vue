@@ -8,7 +8,14 @@ import { OPERAND_TYPES } from '@/api/types'
 import type { ComparisonOperatorName, IndicatorBand, OperandType } from '@/api/types'
 import FormField from '@/components/ui/FormField.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
-import { PICK_INDICATOR, SEARCH_INDICATOR } from '@/lib/conditionText'
+import {
+  CONDITION_ROLES,
+  PICK_INDICATOR,
+  SEARCH_INDICATOR,
+  conditionRoleHints,
+  conditionRoleOf,
+} from '@/lib/conditionText'
+import type { ConditionRole } from '@/lib/conditionText'
 import { formatEnteredNumber } from '@/lib/format'
 import { topQuintileCondition } from '@/lib/direction'
 import { useCatalogStore } from '@/stores/catalog'
@@ -39,6 +46,21 @@ const indicator = computed(() =>
 )
 
 const bands = computed<IndicatorBand[]>(() => indicator.value?.bands ?? [])
+
+const conditionRole = computed(() => conditionRoleOf(props.condition.required))
+
+/**
+ * 역할을 바꾼다. 필수로 바꾸면 가중치를 함께 비운다 — 둘은 배타이고, 남겨 두면 저장·실행이
+ * 400으로 거절된다. 되돌릴 때 옛 가중치를 복원하지 않는 것은 의도다: 복원하면 화면에 없던
+ * 값이 되살아나 사용자가 넣은 적 없는 가중치로 점수가 매겨진다.
+ */
+function setRole(role: ConditionRole) {
+  props.condition.required = role === 'REQUIRED'
+  if (props.condition.required) {
+    props.condition.weight = null
+  }
+  draft.markDirty()
+}
 
 /** 백분위 지표일 때만 나온다. 부등호와 경계값은 서버가 준 것을 그대로 넣는다. */
 const topQuintile = computed(() => topQuintileCondition(indicator.value?.percentile))
@@ -318,23 +340,40 @@ function onOperandTypeChange(value: OperandType | null): void {
           </FormField>
         </template>
 
-        <!-- 가중치는 점수 방식에서만 뜻이 있다. 거르기에서는 자리를 차지할 이유가 없다. -->
-        <FormField v-if="draft.evaluationMode === 'SCORING'" label="가중치">
-          <InputNumber
-            :model-value="condition.weight"
-            :min="0"
-            :max-fraction-digits="2"
-            placeholder="1"
-            size="small"
-            fluid
-            @update:model-value="
-              (value) => {
-                condition.weight = value
-                draft.markDirty()
-              }
-            "
-          />
-        </FormField>
+        <!--
+          역할과 가중치는 점수 방식에서만 뜻이 있다. 거르기에서는 모든 조건이 이미 필수이고
+          점수도 매기지 않으므로 자리를 차지할 이유가 없다.
+
+          토글로 두는 것이 요점이다 — 필수와 가중치는 배타이고(서버의 ck_cond_required_weight),
+          체크박스 + 별도 입력칸으로 두면 둘 다 채워 놓고 400을 맞는 조합이 만들어진다.
+        -->
+        <template v-if="draft.evaluationMode === 'SCORING'">
+          <FormField label="역할" :hint="conditionRoleHints[conditionRole]">
+            <SegmentedControl
+              :model-value="conditionRole"
+              :options="CONDITION_ROLES"
+              aria-label="조건의 역할"
+              @update:model-value="setRole"
+            />
+          </FormField>
+
+          <FormField v-if="conditionRole === 'SCORED'" label="가중치">
+            <InputNumber
+              :model-value="condition.weight"
+              :min="0"
+              :max-fraction-digits="2"
+              placeholder="1"
+              size="small"
+              fluid
+              @update:model-value="
+                (value) => {
+                  condition.weight = value
+                  draft.markDirty()
+                }
+              "
+            />
+          </FormField>
+        </template>
       </div>
     </template>
 

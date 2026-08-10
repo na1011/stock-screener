@@ -106,6 +106,37 @@ export const PICK_INDICATOR = '지표 선택'
 export const SEARCH_INDICATOR = '지표 검색'
 
 /**
+ * 조건이 전략 안에서 하는 일. **점수 방식에서만 갈린다** — 거르기에서는 모든 조건이 이미 필수다.
+ *
+ * 서버의 `required` 불리언을 화면에서는 두 값의 선택으로 다룬다. 필수와 가중치가 배타이기
+ * 때문이다(`ck_cond_required_weight`) — 체크박스와 가중치 입력칸을 나란히 두면 사용자가 둘 다
+ * 채워 놓고 400을 맞는 조합을 만들 수 있고, 그 오류는 저장 버튼을 누를 때에야 나온다.
+ *
+ * 편집기·칩·결과의 조건 내역이 같은 말을 그리므로 여기 모은다(frontend.md의 (b) 조건).
+ */
+export type ConditionRole = 'SCORED' | 'REQUIRED'
+
+export const conditionRoleLabels: Record<ConditionRole, string> = {
+  SCORED: '점수',
+  REQUIRED: '필수',
+}
+
+export const conditionRoleHints: Record<ConditionRole, string> = {
+  SCORED: '충족하면 가중치만큼 점수를 얻습니다. 못 채워도 결과에는 남습니다.',
+  REQUIRED: '충족하지 못한 종목은 결과에서 빠집니다. 점수에는 참여하지 않습니다.',
+}
+
+/** 고르는 순서. 손으로 적은 배열은 값을 하나 빠뜨려도 드러나지 않는다(frontend.md). */
+export const CONDITION_ROLES: { label: string; value: ConditionRole }[] = (
+  ['SCORED', 'REQUIRED'] as const
+).map((value) => ({ label: conditionRoleLabels[value], value }))
+
+/** 서버가 준 `required`를 화면의 두 값으로 옮긴다. 반대 방향은 `role === 'REQUIRED'`다. */
+export function conditionRoleOf(required: boolean): ConditionRole {
+  return required ? 'REQUIRED' : 'SCORED'
+}
+
+/**
  * 값을 채우지 않은 조건이 실행에서 빠진다는 안내.
  *
  * IMPORTANT — 칩 바 아래 한 줄과 실행 버튼 툴팁이 짝이다(ADR-0024). 짝인데 문구가 두 곳에

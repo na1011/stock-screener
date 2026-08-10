@@ -34,14 +34,22 @@ public record ConditionGroupPayload(
     /**
      * 조건 하나.
      *
-     * @param weight SCORING에서만 쓴다. null이면 1로 취급된다.
+     * @param weight   SCORING에서만 쓴다. null이면 1로 취급된다.
+     * @param required SCORING에서 미충족 종목을 결과에서 뺀다. {@code weight}와 함께 쓸 수 없다.
+     *                 생략하면 거짓이라, 이 필드를 모르는 옛 클라이언트의 요청이 종전과 같이 동작한다.
      */
     public record ConditionPayload(
             @NotNull(message = "지표 코드가 필요하다") String indicatorCode,
             @NotNull(message = "연산자가 필요하다") ComparisonOperator operator,
             @Valid @NotNull(message = "피연산자가 필요하다") OperandPayload operand,
-            BigDecimal weight
+            BigDecimal weight,
+            Boolean required
     ) {
+
+        /** 생략된 {@code required}를 거짓으로 읽는다. Jackson이 null을 넣는 자리다. */
+        public boolean requiredOrFalse() {
+            return Boolean.TRUE.equals(required);
+        }
     }
 
     /**

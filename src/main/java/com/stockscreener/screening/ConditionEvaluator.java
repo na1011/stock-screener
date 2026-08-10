@@ -36,16 +36,24 @@ public class ConditionEvaluator {
         List<ConditionOutcome> outcomes = new ArrayList<>();
         boolean passes = evaluateGroup(group, values, outcomes);
 
+        // 필수 조건은 점수에 참여하지 않는다. 통과한 종목은 정의상 그것을 전부 충족하므로
+        // 같은 몫을 받고, 그러면 달성률이 언제나 높게 나와 변별이 사라진다.
         BigDecimal score = outcomes.stream()
+                .filter(o -> !o.condition().required())
                 .map(ConditionOutcome::earnedScore)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal maxScore = outcomes.stream()
+                .filter(o -> !o.condition().required())
                 .map(o -> o.condition().effectiveWeight())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // SCORING은 좁히지 않는다. 일부 조건만 만족한 종목도 그만큼의 점수로 남아야
-        // 순위를 매길 수 있다.
-        boolean included = mode == EvaluationMode.SCORING || passes;
+        // 순위를 매길 수 있다. 필수 조건이 그 유일한 예외다 — 게이트로 거른 뒤 남은 것에
+        // 점수를 매기는 전략은 이것 없이 표현할 수 없고, 가중치로 흉내내면 미충족 종목이
+        // 낮은 점수로 결과에 남는다.
+        boolean included = mode == EvaluationMode.SCORING
+                ? satisfiesRequired(outcomes)
+                : passes;
 
         return new ScreeningResult(stockId, included, score, maxScore, outcomes);
     }
@@ -73,6 +81,21 @@ public class ConditionEvaluator {
         }
 
         return result;
+    }
+
+    /**
+     * 필수 조건을 전부 충족했는가.
+     *
+     * <p>IMPORTANT — 판정불가({@code NOT_EVALUABLE})는 충족이 아니다. {@code passesFilter()}가
+     * 그 의미를 이미 갖고 있으므로 여기서 다시 정의하지 않는다. 통과로 접으면 <b>데이터가 없는
+     * 종목일수록 게이트를 잘 통과하게 되는데</b>, 그것은 게이트의 목적과 정확히 반대다.
+     *
+     * <p>필수 조건이 하나도 없으면 참이다 — 기존 SCORING 전략의 동작이 그대로 유지된다.
+     */
+    private static boolean satisfiesRequired(List<ConditionOutcome> outcomes) {
+        return outcomes.stream()
+                .filter(o -> o.condition().required())
+                .allMatch(ConditionOutcome::passesFilter);
     }
 
     private static boolean combine(ConditionGroup.LogicalOperator operator, boolean accumulated, boolean next) {
