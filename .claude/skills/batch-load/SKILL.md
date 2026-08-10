@@ -16,16 +16,20 @@ description: 시세·재무를 적재·백필하거나 일일 갱신을 돌릴 �
 
 --job=universe
 --job=initial-load --price-years=7 --financial-years=7 --reload-existing=true
+--job=initial-load --tickers=082640,121600 --price-years=7
 --job=financial-refill --financial-years=3 [--tickers=005930,035420]
 --job=backfill --from=2025-11-11 --as-of=2026-08-05
 ```
+
+**모르는 인자는 실행 전에 거부된다** — `--ticker=` 오타가 예전에는 무시돼 대상을 전 종목으로
+넓혔다. 점을 포함한 이름(`--server.port=0`)은 Spring 몫이라 통과한다.
 
 ## 각 잡이 하는 일
 
 | `--job` | 대상 | 비고 |
 |---|---|---|
 | `universe` | 유니버스 편입 종목 갱신 | 시총 어댑터가 `@ConditionalOnApiKey`라 키가 없으면 시드만 남는다(ADR-0012) |
-| `initial-load` | 시세·재무 원자료 | **대상 선정이 `NOT EXISTS (price_daily)`다** — 아래 참조 |
+| `initial-load` | 시세·재무 원자료 | **대상 선정이 `NOT EXISTS (price_daily)`다** — 아래 참조. 종목당 시세 1콜 + **재무 16콜**(재무 단계를 빼는 플래그가 없다) |
 | `financial-refill` | 재무의 **결손 컬럼만** | 편입 전 종목. 종목당 **16콜**(4개년 × 보고서 4종), 350종목이면 **약 5,600콜** = DART 일일 한도의 31%. ADR-0040 |
 | `backfill` | 지표 계산 | 지정한 구간을 **날짜별로 반복**한다 |
 
@@ -43,11 +47,14 @@ description: 시세·재무를 적재·백필하거나 일일 갱신을 돌릴 �
 `warn-bootstrap-args.sh`가 이 조합을 실행 직후 알리지만, 알림은 알림일 뿐이다 — 새로 적재한
 것이 맞는지는 아래 확인 항목으로 직접 본다.
 
-**운영 앱이 도는 중에 띄우면 포트 8080 충돌로 죽는데 `BUILD SUCCESSFUL`이 뜬다.** `bootRun`은
-프로파일과 무관하게 웹 서버를 올리므로 `Web server failed to start. Port 8080 was already in use.`로
-컨텍스트가 죽고, 그 뒤 gradle은 태스크가 끝났다며 성공을 낸다 — **로그를 열지 않으면 적재된
-것으로 읽힌다.** `--server.port=0`을 함께 준다. 적재가 끝난 뒤 저장된 행 수를 세는 것이
-이 함정에 걸리지 않는 유일한 확인이다.
+**`--tickers`는 그 필터를 아예 타지 않는다**(`--reload-existing`도 무시하고 위 경고도 안 뜬다).
+**리밸런싱 신규 편입 종목이 이 경로를 필요로 한다** — 일일 갱신이 1~2봉을 남기는 순간
+`NOT EXISTS`가 영원히 걸러내므로, `--job=universe` 뒤에는 **새 종목의 봉 수를 세고 `--tickers`로
+따로 적재한다.** 매칭 0건은 예외라 오타가 조용한 성공이 되지는 않는다.
+
+**운영 앱이 도는 중에 띄우면 포트 8080 충돌로 컨텍스트가 죽는데 gradle은 `BUILD SUCCESSFUL`을
+낸다.** `bootRun`은 프로파일과 무관하게 웹 서버를 올린다. `--server.port=0`을 함께 주고,
+적재 뒤 **저장된 행 수를 센다** — 로그를 열지 않으면 적재된 것으로 읽히고, 행 수만이 그것을 가른다.
 
 **재수집으로는 결손 컬럼이 안 채워진다.** 스키마에 금액 컬럼이 늘면 이미 저장된 행은 그
 자리가 NULL로 남는데, `initial-load`는 `--reload-existing=true`를 줘도 **한 행도 바꾸지 않는다**
@@ -97,12 +104,16 @@ JVM을 함께 끈다. 예외는 `./gradlew checkDuplicateFiles` 하나다(단독
 
 ## 적재 후 확인
 
-행 수만 보면 부분 적재와 정상 적재가 같아 보인다. 넷 다 본다.
+행 수만 보면 부분 적재와 정상 적재가 같아 보인다. 다섯을 다 본다.
 
 - `ck_price_ohlc` 제약 위반 0
 - 편입 종목 중 시세가 하나도 없는 종목 0
-- `min(trade_date)`가 요청한 구간 시작과 일치 — 어긋나면 `--reload-existing`을 빠뜨린 것이다
+- **`min(trade_date)`가 `2020-01-02`다 — 요청한 구간 시작과 비교하지 않는다.** 소스 이력이 거기서
+  시작하므로 `--price-years=7`은 정상 적재도 어긋나 보이고, 그러면 **성공을 실패로 읽고**
+  `--reload-existing`으로 전 종목을 다시 받게 된다. 2020-01-02보다 늦을 때만 신호다.
 - `listed_shares` 빈값 0 — PER·PBR이 여기 의존한다(ADR-0013)
+- **종목별 최신 봉** — `SELECT max(trade_date) FROM price_daily GROUP BY stock_id`. 합계로는 안
+  보이고, 뒤처진 종목은 대개 거래정지라 **그것이 정상이다**(`data-go-kr-stock-price.md` §거래정지).
 
 ## 외부 소스의 함정
 
