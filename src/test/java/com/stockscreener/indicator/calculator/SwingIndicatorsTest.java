@@ -1,5 +1,6 @@
 package com.stockscreener.indicator.calculator;
 
+import com.stockscreener.indicator.FinancialFigures;
 import com.stockscreener.indicator.IndicatorContext;
 import com.stockscreener.indicator.IndicatorPoint;
 import com.stockscreener.indicator.PriceBar;
@@ -295,7 +296,134 @@ class SwingIndicatorsTest {
         }
     }
 
+    @Nested
+    @DisplayName("흑자 분기 수")
+    class ProfitableQuarters {
+
+        private final ProfitableQuarters4Calculator calculator = new ProfitableQuarters4Calculator();
+
+        @Test
+        @DisplayName("영업이익이 0보다 큰 분기를 센다")
+        void countsPositiveOperatingIncome() {
+            List<IndicatorPoint> points = calculator.calculate(financialContext(
+                    quarters(300, -50, 200, 100), List.of()));
+
+            assertThat(points).isNotEmpty();
+            assertThat(points.getFirst().value()).isEqualByComparingTo("3");
+        }
+
+        @Test
+        @DisplayName("IMPORTANT — 분기가 4개에 못 미치면 값을 내지 않는다. 있는 것만 세면 이력이 짧을수록 잘 통과한다")
+        void needsFourQuarters() {
+            assertThat(calculator.calculate(financialContext(quarters(100, 100), List.of()))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("공시가 빠진 분기가 있으면 값을 내지 않는다 — 없는 것을 흑자로도 적자로도 읽을 수 없다")
+        void refusesWhenAQuarterIsMissing() {
+            List<FinancialFigures> withHole = new ArrayList<>(quarters(300, 200, 100, 50));
+            withHole.set(2, FinancialFiguresFixture.from(withHole.get(2)).operatingIncome(null).build());
+
+            assertThat(calculator.calculate(financialContext(withHole, List.of()))).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Altman Z-Score")
+    class AltmanZ {
+
+        private final AltmanZCalculator calculator = new AltmanZCalculator();
+
+        @Test
+        @DisplayName("다섯 항을 가중합한다 — 시가총액 항 때문에 날짜마다 값이 다르다")
+        void combinesFiveTerms() {
+            // 총자산 1,000 / 총부채 400 / 운전자본 200(유동 500−300) / 이익잉여금 300
+            // EBIT 100(25×4) / 매출 800(200×4) / 시가총액 800
+            // Z = 1.2·0.2 + 1.4·0.3 + 3.3·0.1 + 0.6·2.0 + 1.0·0.8 = 0.24+0.42+0.33+1.2+0.8 = 2.99
+            List<IndicatorPoint> points = calculator.calculate(
+                    balanceSheetContext(bd(800)));
+
+            assertThat(points).hasSize(1);
+            assertThat(points.getFirst().value()).isEqualByComparingTo("2.99");
+        }
+
+        @Test
+        @DisplayName("유동항목이 없으면 값을 내지 않는다 — 금융업이 대개 여기서 빠진다")
+        void yieldsNothingWithoutCurrentItems() {
+            List<FinancialFigures> quarters = new ArrayList<>();
+            for (FinancialFigures q : balanceSheetQuarters()) {
+                quarters.add(FinancialFiguresFixture.from(q)
+                        .currentAssets(null).currentLiabilities(null).build());
+            }
+
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
+            cap.put(START, bd(800));
+
+            assertThat(calculator.calculate(new IndicatorContext(
+                    1L, List.of(bar), List.of(), quarters,
+                    Map.of(MarketCapCalculator.CODE, cap)))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("시가총액이 없는 날은 건너뛴다 — 그 항이 0이면 Z가 낮게 나와 멀쩡한 기업이 부실로 읽힌다")
+        void skipsDatesWithoutMarketCap() {
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, null);
+
+            assertThat(calculator.calculate(new IndicatorContext(
+                    1L, List.of(bar), List.of(), balanceSheetQuarters(),
+                    Map.of(MarketCapCalculator.CODE, new TreeMap<>())))).isEmpty();
+        }
+    }
+
     // ── 픽스처 ────────────────────────────────────────────────────────────
+
+    /** 영업이익만 다른 분기 넷(최신 우선). 나머지 항목은 비어 있다. */
+    private static List<FinancialFigures> quarters(int... operatingIncomes) {
+        List<FinancialFigures> quarters = new ArrayList<>(operatingIncomes.length);
+        LocalDate periodEnd = LocalDate.of(2025, 12, 31);
+        for (int income : operatingIncomes) {
+            quarters.add(FinancialFiguresFixture.quarter(periodEnd)
+                    .operatingIncome(bd(income))
+                    .build());
+            periodEnd = periodEnd.minusMonths(3);
+        }
+        return quarters;
+    }
+
+    /** Altman Z의 다섯 항을 모두 채운 분기 넷. 저량은 매 분기 같은 잔액이다. */
+    private static List<FinancialFigures> balanceSheetQuarters() {
+        List<FinancialFigures> quarters = new ArrayList<>(4);
+        LocalDate periodEnd = LocalDate.of(2025, 12, 31);
+        for (int i = 0; i < 4; i++) {
+            quarters.add(FinancialFiguresFixture.quarter(periodEnd)
+                    .totalAssets(bd(1_000))
+                    .totalLiabilities(bd(400))
+                    .currentAssets(bd(500))
+                    .currentLiabilities(bd(300))
+                    .retainedEarnings(bd(300))
+                    .operatingIncome(bd(25))   // TTM 100
+                    .revenue(bd(200))          // TTM 800
+                    .build());
+            periodEnd = periodEnd.minusMonths(3);
+        }
+        return quarters;
+    }
+
+    private static IndicatorContext balanceSheetContext(BigDecimal marketCap) {
+        PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+        NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
+        cap.put(START, marketCap);
+        return new IndicatorContext(1L, List.of(bar), List.of(), balanceSheetQuarters(),
+                Map.of(MarketCapCalculator.CODE, cap));
+    }
+
+    private static IndicatorContext financialContext(List<FinancialFigures> quarterly,
+                                                     List<FinancialFigures> annual) {
+        PriceBar bar = new PriceBar(START, bd(100), bd(100), bd(100), bd(100), bd(100), 10L, null, null);
+        return new IndicatorContext(1L, List.of(bar), annual, quarterly, Map.of());
+    }
+
 
     private static BigDecimal bd(double value) {
         return BigDecimal.valueOf(value);
