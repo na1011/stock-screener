@@ -78,7 +78,9 @@ public class InitialLoadJob {
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LoadRange range) {
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(
-                range.reloadExisting() ? allUniverseMembers() : stocksNeedingHistory());
+                range.reloadExisting()
+                        ? stockRegistrar.activeUniverseMemberIds()
+                        : stocksNeedingHistory());
         if (targets.isEmpty()) {
             log.info("초기 적재가 필요한 종목이 없다. 모든 편입 종목에 이력이 있다.");
             BatchExecutionContext empty =
@@ -128,6 +130,11 @@ public class InitialLoadJob {
      * <p>{@code NOT EXISTS}로 판정하는 이유는 "한 봉이라도 있으면 적재된 것으로 본다"가
      * 이 시점에 충분하기 때문이다. 부분 적재의 정밀한 판정은 시세 이력의 실제 시작일을
      * 봐야 하는데, 상장일이 2년 이내인 종목과 구분할 수 없어 오히려 틀린다.
+     *
+     * <p>IMPORTANT — 그 대가로 <b>기간을 늘려도 대상이 0건이 된다.</b> 2년치를 받아둔 상태에서
+     * 7년으로 넓히면 봉이 이미 있어 전 종목이 걸러지고, 잡은 "적재할 종목이 없다"며 성공으로
+     * 끝난다. 기간을 늘렸는데 아무 일도 일어나지 않고 성공으로 보이는 것이 그 결함의 성질이며,
+     * {@code reloadExisting}이 존재하는 이유가 그것이다.
      */
     private List<Long> stocksNeedingHistory() {
         return jdbcTemplate.queryForList("""
@@ -135,25 +142,6 @@ public class InitialLoadJob {
                 JOIN stock s ON s.id = m.stock_id
                 WHERE m.effective_to IS NULL AND s.is_active
                   AND NOT EXISTS (SELECT 1 FROM price_daily p WHERE p.stock_id = m.stock_id)
-                ORDER BY m.stock_id
-                """, Long.class);
-    }
-
-    /**
-     * 편입 중인 전 종목. 이미 시세가 있어도 포함한다.
-     *
-     * <p>기간을 늘려 다시 적재할 때 쓴다. {@link #stocksNeedingHistory()}는 봉이 하나라도
-     * 있으면 건너뛰므로, 2년치를 받아둔 상태에서 7년으로 넓히면 <b>대상이 0건이 되고 잡이
-     * "적재할 종목이 없다"며 성공으로 끝난다.</b> 기간을 늘렸는데 아무 일도 일어나지 않고
-     * 성공으로 보이는 것이 그 결함의 성질이라 별도 경로를 둔다.
-     *
-     * <p>중복 적재는 안전하다 — {@code price_daily}가 {@code ON CONFLICT}로 갱신한다.
-     */
-    private List<Long> allUniverseMembers() {
-        return jdbcTemplate.queryForList("""
-                SELECT DISTINCT m.stock_id FROM universe_membership m
-                JOIN stock s ON s.id = m.stock_id
-                WHERE m.effective_to IS NULL AND s.is_active
                 ORDER BY m.stock_id
                 """, Long.class);
     }

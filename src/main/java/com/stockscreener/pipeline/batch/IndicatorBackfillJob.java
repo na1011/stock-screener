@@ -66,7 +66,8 @@ public class IndicatorBackfillJob {
             return BatchStatus.SUCCESS;
         }
 
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(currentUniverseMembers());
+        List<SecurityRef> targets =
+                stockRegistrar.toSecurityRefs(stockRegistrar.activeUniverseMemberIds());
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, to, triggeredBy, targets.size());
 
@@ -112,12 +113,4 @@ public class IndicatorBackfillJob {
                 """, LocalDate.class, from, to);
     }
 
-    private List<Long> currentUniverseMembers() {
-        return jdbcTemplate.queryForList("""
-                SELECT DISTINCT m.stock_id FROM universe_membership m
-                JOIN stock s ON s.id = m.stock_id
-                WHERE m.effective_to IS NULL AND s.is_active
-                ORDER BY m.stock_id
-                """, Long.class);
-    }
 }

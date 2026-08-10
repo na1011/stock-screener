@@ -13,7 +13,6 @@ import com.stockscreener.watchlist.WatchlistAlertRunner;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -50,14 +49,12 @@ public class DailyUpdateJob {
     private final PercentileCalculator percentileCalculator;
     private final IndicatorRetentionPolicy retentionPolicy;
     private final WatchlistAlertRunner watchlistAlertRunner;
-    private final JdbcTemplate jdbcTemplate;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
                           MarketCalendar marketCalendar, BatchExecutions batchExecutions,
                           IndicatorRunner indicatorRunner, PercentileCalculator percentileCalculator,
                           IndicatorRetentionPolicy retentionPolicy,
-                          WatchlistAlertRunner watchlistAlertRunner,
-                          JdbcTemplate jdbcTemplate) {
+                          WatchlistAlertRunner watchlistAlertRunner) {
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
         this.marketCalendar = marketCalendar;
@@ -66,7 +63,6 @@ public class DailyUpdateJob {
         this.percentileCalculator = percentileCalculator;
         this.retentionPolicy = retentionPolicy;
         this.watchlistAlertRunner = watchlistAlertRunner;
-        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -80,7 +76,8 @@ public class DailyUpdateJob {
             return BatchStatus.SUCCESS;
         }
 
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(currentUniverseMembers());
+        List<SecurityRef> targets =
+                stockRegistrar.toSecurityRefs(stockRegistrar.activeUniverseMemberIds());
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, targetDate, triggeredBy, targets.size());
 
@@ -254,18 +251,4 @@ public class DailyUpdateJob {
         }
     }
 
-    /**
-     * 현재 편입 중인 전 지수의 종목.
-     *
-     * <p>{@code DISTINCT}인 이유는 한 종목이 여러 지수에 동시에 편입될 수 있기 때문이다.
-     * 중복을 걸러내지 않으면 같은 종목을 두 번 수집해 쿼터를 낭비한다.
-     */
-    private List<Long> currentUniverseMembers() {
-        return jdbcTemplate.queryForList("""
-                SELECT DISTINCT m.stock_id FROM universe_membership m
-                JOIN stock s ON s.id = m.stock_id
-                WHERE m.effective_to IS NULL AND s.is_active
-                ORDER BY m.stock_id
-                """, Long.class);
-    }
 }

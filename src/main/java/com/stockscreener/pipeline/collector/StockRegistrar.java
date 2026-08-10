@@ -104,6 +104,49 @@ public class StockRegistrar {
     }
 
     /**
+     * 지금 편입 중인 활성 종목.
+     *
+     * <p>배치가 "전 종목"을 말할 때의 정본이다. {@code DISTINCT}인 이유는 한 종목이 여러 지수에
+     * 동시에 편입될 수 있기 때문이며, 중복을 두면 같은 종목을 두 번 처리해 쿼터를 낭비한다.
+     *
+     * <p>MUST NOT: 이 질의를 잡마다 다시 적지 않는다. 실제로 사본이 둘이었고, 하나만 고치면
+     * 두 잡이 서로 다른 "전 종목"을 처리하는데 <b>어느 쪽도 에러를 내지 않는다.</b>
+     */
+    public List<Long> activeUniverseMemberIds() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                WHERE m.effective_to IS NULL AND s.is_active
+                ORDER BY m.stock_id
+                """, Long.class);
+    }
+
+    /**
+     * 티커로 편입 종목을 골라낸다. <b>없는 종목을 만들지 않는다.</b>
+     *
+     * <p>{@link #resolveOrCreate}와 갈라놓은 이유가 그것이다 — 저쪽은 유니버스 편입이 근거라
+     * 모르는 티커를 최소 정보로 등록하는 것이 옳지만, <b>손으로 준 인자에 그 동작을 붙이면
+     * 오타 하나가 가짜 {@code stock} 행을 만들고 마스터 소스까지 호출한다.</b>
+     *
+     * <p>시장 코드를 요구하지 않는다. 국내 티커는 6자리 숫자로 시장 간에 겹치지 않으며,
+     * 손으로 고르는 경로에서 시장까지 적게 하면 실수만 는다.
+     *
+     * @return 편입 중인 활성 종목과의 <b>교집합</b>. 호출부가 개수 차이로 오타를 판별한다.
+     */
+    public List<Long> activeUniverseMemberIdsByTicker(List<String> tickers) {
+        if (tickers.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(tickers.size(), "?"));
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                WHERE m.effective_to IS NULL AND s.is_active AND s.ticker IN (%s)
+                ORDER BY m.stock_id
+                """.formatted(placeholders), Long.class, tickers.toArray());
+    }
+
+    /**
      * 배치가 처리할 종목의 참조를 만든다.
      *
      * <p>{@code IN} 절을 문자열로 조립하는 이유는 {@code setArray}가 드라이버별 타입 이름에

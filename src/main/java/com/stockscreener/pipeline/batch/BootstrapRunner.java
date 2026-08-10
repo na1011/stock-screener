@@ -34,9 +34,17 @@ import java.util.List;
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load \
  *     --price-years=7 --financial-years=7 --reload-existing=true'
  *
+ * # 재무 결손 보정 — 스키마에 컬럼이 늘어 NULL로 남은 자리만 채운다(ADR-0040)
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=financial-refill \
+ *     --financial-years=3 --tickers=005930,035420'
+ *
  * # 지표 백필
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill --from=2020-01-02'
  * </pre>
+ *
+ * <p>IMPORTANT — 운영 앱이 도는 중이면 {@code --server.port=0}을 함께 준다. 포트 8080 충돌로
+ * 컨텍스트가 죽는데 gradle은 {@code BUILD SUCCESSFUL}을 내므로, 로그를 열지 않으면 적재된
+ * 것으로 읽힌다.
  */
 @Profile("bootstrap")
 @Component
@@ -46,17 +54,20 @@ public class BootstrapRunner implements ApplicationRunner {
 
     private final UniverseRebalanceJob universeRebalanceJob;
     private final InitialLoadJob initialLoadJob;
+    private final FinancialRefillJob financialRefillJob;
     private final IndicatorBackfillJob indicatorBackfillJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
     public BootstrapRunner(UniverseRebalanceJob universeRebalanceJob,
                            InitialLoadJob initialLoadJob,
+                           FinancialRefillJob financialRefillJob,
                            IndicatorBackfillJob indicatorBackfillJob,
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.initialLoadJob = initialLoadJob;
+        this.financialRefillJob = financialRefillJob;
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
@@ -82,11 +93,15 @@ public class BootstrapRunner implements ApplicationRunner {
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
             case "initial-load" -> initialLoadJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, loadRange(args));
+            case "financial-refill" -> financialRefillJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    optionalInteger(args, "financial-years"), csv(args, "tickers"));
             case "backfill" -> indicatorBackfillJob.run(
                     date(args, "from", asOf.minusYears(2)), asOf,
                     BatchExecutionRecorder.TriggeredBy.MANUAL);
             default -> throw new IllegalArgumentException(
-                    "알 수 없는 잡이다: '" + job + "' — universe | initial-load | backfill");
+                    "알 수 없는 잡이다: '" + job
+                            + "' — universe | initial-load | financial-refill | backfill");
         };
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);
@@ -131,5 +146,23 @@ public class BootstrapRunner implements ApplicationRunner {
     private static int integer(ApplicationArguments args, String name, int fallback) {
         String raw = value(args, name, null);
         return raw == null ? fallback : Integer.parseInt(raw);
+    }
+
+    /** 안 주면 null. 잡이 자기 기본값을 아는 편이 낫다 — 러너가 두 번째 정본이 되지 않는다. */
+    private static Integer optionalInteger(ApplicationArguments args, String name) {
+        String raw = value(args, name, null);
+        return raw == null ? null : Integer.valueOf(raw);
+    }
+
+    /** 쉼표로 구분한 목록. 빈 조각은 버린다 — 후행 쉼표가 빈 티커가 되면 안 된다. */
+    private static List<String> csv(ApplicationArguments args, String name) {
+        String raw = value(args, name, null);
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(raw.split(","))
+                .map(String::strip)
+                .filter(part -> !part.isEmpty())
+                .toList();
     }
 }
