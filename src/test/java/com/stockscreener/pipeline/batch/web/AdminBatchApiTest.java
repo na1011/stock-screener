@@ -150,6 +150,48 @@ class AdminBatchApiTest {
     }
 
     @Test
+    @DisplayName("상세가 단계별 집계와 실패 요약을 함께 준다 — 화면이 잡 이름으로 분기하지 않는다")
+    void detailCarriesPhasesAndFailureSummary() throws Exception {
+        long executionId = insertExecution(DailyUpdateJob.JOB_NAME, "PARTIAL_SUCCESS", 1);
+        insertFailure(executionId, "PRICE", false);
+        jdbcTemplate.update("""
+                UPDATE batch_execution
+                   SET planned_task_count = 20, success_count = 19, stage_label = '백분위 계산'
+                 WHERE id = ?
+                """, executionId);
+        insertPhase(executionId, "PRICE", 10, 9, 1, 900L);
+        insertPhase(executionId, "INDICATOR", 10, 10, 0, 0L);
+
+        mockMvc.perform(get("/api/admin/batches/" + executionId))
+                .andExpect(status().isOk())
+                // 진행률의 분모다. 대상 종목 수(targetCount=10)와 다른 값이라는 것이 요점이다.
+                .andExpect(jsonPath("$.execution.plannedTaskCount").value(20))
+                .andExpect(jsonPath("$.execution.targetCount").value(10))
+                .andExpect(jsonPath("$.execution.stageLabel").value("백분위 계산"))
+                .andExpect(jsonPath("$.phases.length()").value(2))
+                .andExpect(jsonPath("$.phases[1].phase").value("PRICE"))
+                .andExpect(jsonPath("$.phases[1].writtenRowCount").value(900))
+                // 지표 0행은 결손이 아니라 "바뀐 값이 없다"다. 단계별로 봐야 그 구분이 선다.
+                .andExpect(jsonPath("$.phases[0].phase").value("INDICATOR"))
+                .andExpect(jsonPath("$.phases[0].writtenRowCount").value(0))
+                .andExpect(jsonPath("$.failureSummary[0].failureKind").value("TRANSIENT"))
+                .andExpect(jsonPath("$.failureSummary[0].sourceName").value("data-go-kr"))
+                .andExpect(jsonPath("$.failureSummary[0].unresolvedCount").value(1));
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 계량이 없는 옛 실행은 분모가 null이다. 0이면 분모 0의 진행률이 된다")
+    void detailKeepsMissingPlanAsNull() throws Exception {
+        long executionId = insertExecution(IndicatorBackfillJob.JOB_NAME, "SUCCESS", 0);
+
+        mockMvc.perform(get("/api/admin/batches/" + executionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.execution.plannedTaskCount").doesNotExist())
+                .andExpect(jsonPath("$.phases").isEmpty())
+                .andExpect(jsonPath("$.failureSummary").isEmpty());
+    }
+
+    @Test
     @DisplayName("없는 실행 id는 404다")
     void unknownExecutionIsNotFound() throws Exception {
         mockMvc.perform(get("/api/admin/batches/9999999"))
@@ -238,6 +280,16 @@ class AdminBatchApiTest {
                 VALUES (?, ?, ?, 'SCHEDULER', 10, ?)
                 RETURNING id
                 """, Long.class, jobName, TARGET, status, failureCount);
+    }
+
+    private void insertPhase(long executionId, String phase, int planned, int success, int failure,
+                             long writtenRows) {
+        jdbcTemplate.update("""
+                INSERT INTO batch_execution_phase
+                    (execution_id, phase, planned_count, success_count, failure_count,
+                     written_row_count)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, executionId, phase, planned, success, failure, writtenRows);
     }
 
     private void insertFailure(long executionId, String phase, boolean resolved) {

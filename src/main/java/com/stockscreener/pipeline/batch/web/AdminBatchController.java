@@ -74,6 +74,8 @@ public class AdminBatchController {
 
         return new BatchExecutionDetailResponse(
                 BatchExecutionResponse.of(execution),
+                reader.phasesOf(id).stream().map(BatchPhaseResponse::of).toList(),
+                reader.failureBreakdown(id).stream().map(BatchFailureGroupResponse::of).toList(),
                 reader.failuresOf(id).stream().map(BatchFailureResponse::of).toList(),
                 AdminJobLauncher.supportsRetry(execution.jobName()));
     }
