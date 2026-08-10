@@ -32,6 +32,14 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '지표가 한
 ```
 운영 적재 이후, 남은 거래일이 180 이내여야 한다. **`count(*) = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다.
 
+**이 전제가 `statement timeout`으로 판정 불가가 되면 인덱스 블로트를 의심한다.** 2026-08-10 세션 시작에 실제로 그랬고, 원인은 지표 부재가 아니라 `indicator_value`의 인덱스가 힙의 2.8배(2,348MB vs 840MB)로 부푼 것이었다. `REINDEX INDEX CONCURRENTLY` 셋을 돌리자 199MB가 되고 **같은 쿼리가 0.15초에 답했다.** 판정 불가는 침묵이 아니라 무판정이므로, 그 상태를 "전제가 깨졌다"로도 "지켜진다"로도 읽지 않는다.
+
+```bash
+psql -d stock_screener -At -F'|' -c "SELECT indexrelname, pg_size_pretty(pg_relation_size(indexrelid)) FROM pg_stat_user_indexes WHERE relname='indicator_value' ORDER BY pg_relation_size(indexrelid) DESC"
+```
+
+**정리(purge) 직후가 블로트 최대 시점이다** — 삭제된 행의 자리는 인덱스에서 바로 회수되지 않는다. 대량 삭제가 있었다면 REINDEX를 그 뒤에 붙인다.
+
 전수 `count(DISTINCT trade_date)`지만 269만 행에서 **0.15초**다(`statement_timeout` 3초의 20배). 묶을 필요가 없다.
 
 **초 단위로 재어졌다면 테이블이 큰 것이 아니라 VACUUM 전 상태를 재고 있는 것이다.** 백필이 `ON CONFLICT DO UPDATE`로 dead tuple을 쌓으면 visibility map이 무효화되고 Index Only Scan이 힙을 랜덤으로 읽는다 — 백필 직후에 1.7초로 재어 그 값을 이 자리에 적었던 적이 있고, autovacuum이 돈 뒤 같은 쿼리가 0.15초였다. 느리면 최적화하기 전에 `pg_stat_user_tables.last_autovacuum`을 먼저 본다.
