@@ -2,7 +2,6 @@ package com.stockscreener.pipeline.datasource.kr;
 
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
-import com.stockscreener.pipeline.datasource.http.TokenBucketRateLimiter;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -173,14 +172,10 @@ class DartFullStatementProbeLiveTest {
     }
 
     private DartCorpCodeCache corpCodeCache() {
-        return new DartCorpCodeCache(new ExternalApiClientFactory(), properties(),
-                new TokenBucketRateLimiter("dart", 300, 0));
+        return DartProbeSupport.corpCodeCache();
     }
 
     private static DataSourceProperties properties() {
-        DataSourceProperties properties = new DataSourceProperties();
-        String key = System.getenv("DART_API_KEY");
-        properties.getDart().setApiKey(key == null ? "" : key);
-        return properties;
+        return DartProbeSupport.properties();
     }
 }
