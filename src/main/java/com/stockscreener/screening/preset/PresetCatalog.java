@@ -23,6 +23,7 @@ import com.stockscreener.indicator.calculator.Sma200Momentum21Calculator;
 import com.stockscreener.indicator.calculator.Sma200Slope60Calculator;
 import com.stockscreener.indicator.calculator.Sma20Calculator;
 import com.stockscreener.indicator.calculator.Sma60Calculator;
+import com.stockscreener.indicator.calculator.TradingDays750Calculator;
 import com.stockscreener.indicator.calculator.Turnover60Calculator;
 import com.stockscreener.screening.ComparisonOperator;
 import com.stockscreener.screening.ConditionGroup;
@@ -220,6 +221,12 @@ public class PresetCatalog {
                         required(MarketCapCalculator.CODE, ComparisonOperator.GTE, "1000000000000"),
                         // 실측 분포에서 하위 4분위 언저리. 체결이 아니라 관심도 필터다.
                         required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
+                        // 지표 대부분이 장기 시계열을 요구해, 이력이 짧으면 값은 나오되 뜻이 없다.
+                        // 지금까지는 SHARES_GROWTH_3Y가 750봉을 요구하는 부작용으로 같은 종목이
+                        // 빠졌는데, 그것은 주식수 증가율이지 이력 길이가 아니다 — 그 지표를 손대면
+                        // 이 게이트가 아무 증상 없이 사라진다. 값이 상장 경과가 아니라 수집한 봉
+                        // 수라는 한계는 TradingDays750Calculator가 적는다.
+                        required(TradingDays750Calculator.CODE, ComparisonOperator.GTE, "750"),
 
                         // ── 추세 국면 ──
                         IndicatorCondition.of(AdjCloseCalculator.CODE, ComparisonOperator.GT,

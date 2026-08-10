@@ -48,6 +48,19 @@ psql -d stock_screener -At -c "WITH c AS (SELECT c.indicator_code i, c.operator 
 **`count(*) = 0`을 따로 답하는 것이 요점이다.** 프리셋이 아직 투영되지 않은 상태와
 "백분위를 쓰지 않는다"가 둘 다 조용히 참이 되기 때문이다.
 
+**U-05의 이식이 근사인 것은 아래 포함 관계가 참인 동안만이다.** `TRADING_DAYS_750`은 러너의
+읽기 창(751봉)에 값이 묶여 있고, 그 창을 정하는 것은 `SharesGrowth3yCalculator.LOOKBACK`이다.
+둘 중 하나가 바뀌면 **U-05가 기존 게이트보다 강하게 자르기 시작하는데, 결과 종목 수는 그대로일
+수 있어 화면에서 드러나지 않는다.**
+
+```premise U-05가 SHARES_GROWTH_3Y보다 강하게 자르지 않는다
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) td FROM indicator_value), x AS (SELECT stock_id, max(value) FILTER (WHERE indicator_code='SHARES_GROWTH_3Y') sg, max(value) FILTER (WHERE indicator_code='TRADING_DAYS_750') days FROM indicator_value, d WHERE trade_date = d.td AND indicator_code IN ('SHARES_GROWTH_3Y','TRADING_DAYS_750') GROUP BY 1) SELECT CASE WHEN count(*) FILTER (WHERE days IS NOT NULL) = 0 THEN 'TRADING_DAYS_750이 최신 지표 일자에 하나도 없다 — 지표가 배포되지 않았거나 그날 백필이 돌지 않았다' WHEN count(*) FILTER (WHERE sg IS NOT NULL) = 0 THEN 'SHARES_GROWTH_3Y가 최신 지표 일자에 하나도 없다 — 포함 관계를 잴 대상이 없다' WHEN count(*) FILTER (WHERE sg IS NOT NULL AND (days IS NULL OR days < 750)) = 0 THEN 'OK SHARES_GROWTH_3Y 보유(' || count(*) FILTER (WHERE sg IS NOT NULL) || '종목)가 U-05 통과(' || count(*) FILTER (WHERE days >= 750) || '종목)의 부분집합이다' ELSE 'U-05가 SHARES_GROWTH_3Y보다 강하게 자른다: ' || count(*) FILTER (WHERE sg IS NOT NULL AND (days IS NULL OR days < 750)) || '종목 — 읽기 창이나 LOOKBACK이 바뀌었는지 본다' END FROM x"
+```
+
+**모집단이 비는 경우를 둘로 가르는 이유**는 "지표가 배포되지 않았다"와 "그날 백필이 안 돌았다"가
+둘 다 흔하기 때문이다. 이 둘은 **실행당 1일치만 채워지는** 지표라(위 §깔때기) 백필을 건너뛴
+날짜에는 정상적으로 비어 있다.
+
 ### 아래 둘은 지금 **일부러 거짓인** 전제다
 
 §단계 C에서 업종·분할 소스가 열렸다고 적었지만 **아직 붙이지 않았다.** 그 간극이
@@ -76,6 +89,7 @@ WITH d AS (SELECT max(trade_date) td FROM indicator_value),
 p AS (SELECT stock_id,
     max(value) FILTER (WHERE indicator_code='MARKET_CAP')        mc,
     max(value) FILTER (WHERE indicator_code='TURNOVER_60')       tv,
+    max(value) FILTER (WHERE indicator_code='TRADING_DAYS_750')  td,
     max(value) FILTER (WHERE indicator_code='ADJ_CLOSE')         ac,
     max(value) FILTER (WHERE indicator_code='SMA_200')           s200,
     max(value) FILTER (WHERE indicator_code='SMA_60')            s60,
@@ -92,21 +106,28 @@ p AS (SELECT stock_id,
 SELECT count(*) AS s0_base,
  count(*) FILTER (WHERE mc>=1e12) AS s1_mcap,
  count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10) AS s2_turnover,
- count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0) AS s3_trend,
- count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
-                    AND ac<=s200*1.25) AS s4_disparity,
- count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
-                    AND ac<=s200*1.25 AND plo>=30 AND phi>=-25) AS s5_52w,
- count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
-                    AND ac<=s200*1.25 AND plo>=30 AND phi>=-25 AND atr<=6) AS s6_atr,
- count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND td>=750) AS s3_history,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND td>=750
+                    AND ac>s200 AND s60>s200 AND mom>0 AND slp>0) AS s4_trend,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND td>=750 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+                    AND ac<=s200*1.25) AS s5_disparity,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND td>=750 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+                    AND ac<=s200*1.25 AND plo>=30 AND phi>=-25) AS s6_52w,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND td>=750 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+                    AND ac<=s200*1.25 AND plo>=30 AND phi>=-25 AND atr<=6) AS s7_atr,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND td>=750 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
                     AND ac<=s200*1.25 AND plo>=30 AND phi>=-25 AND atr<=6
-                    AND pq>=3 AND dr<=150 AND sg<=5) AS s7_survival,
- count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
+                    AND pq>=3 AND dr<=150 AND sg<=5) AS s8_survival,
+ count(*) FILTER (WHERE mc>=1e12 AND tv>=1e10 AND td>=750 AND ac>s200 AND s60>s200 AND mom>0 AND slp>0
                     AND ac<=s200*1.25 AND plo>=30 AND phi>=-25 AND atr<=6
-                    AND pq>=3 AND dr<=150 AND sg<=5 AND az>=2.6) AS s8_altman
+                    AND pq>=3 AND dr<=150 AND sg<=5 AND az>=2.6) AS s9_altman
 FROM p"
 ```
+
+**`s3_history`가 크게 깎는 것은 정상이다.** 2026-08-07 실측에서 221 → 206으로 15종목이 여기서
+빠지는데, 그들은 **이 단계가 없을 때 뒤에서 걸리던 종목**이다(최종 수가 같다). 이 단계가
+자기 몫보다 많이 자르는 것처럼 보이면 그것은 U-05가 아니라 **수집 결손**이다 — 아래 §단계 값이
+0이면… 절과 `TradingDays750Calculator`의 javadoc을 함께 본다.
 
 **MUST: 임계값을 고치면 이 SQL도 함께 고친다.** 정본은 `PresetCatalog.swingMidtermKr()`이고
 이것은 사본이다 — 어긋나면 깔때기가 프리셋과 다른 것을 재면서 그럴듯한 숫자를 낸다.
@@ -116,11 +137,15 @@ FROM p"
 먼저 센다:
 
 ```bash
-psql -d stock_screener -At -F'|' -c "SELECT indicator_code, count(DISTINCT stock_id) FROM indicator_value WHERE trade_date=(SELECT max(trade_date) FROM indicator_value) AND indicator_code IN ('MARKET_CAP','TURNOVER_60','ADJ_CLOSE','SMA_200','SMA_60','SMA_200_MOM_21','SMA_200_SLOPE_60','PCT_FROM_52W_LOW','PCT_FROM_52W_HIGH','ATR_PCT_14','PROFITABLE_QUARTERS_4','DEBT_RATIO','SHARES_GROWTH_3Y','ALTMAN_Z') GROUP BY 1 ORDER BY 2"
+psql -d stock_screener -At -F'|' -c "SELECT indicator_code, count(DISTINCT stock_id) FROM indicator_value WHERE trade_date=(SELECT max(trade_date) FROM indicator_value) AND indicator_code IN ('MARKET_CAP','TURNOVER_60','TRADING_DAYS_750','ADJ_CLOSE','SMA_200','SMA_60','SMA_200_MOM_21','SMA_200_SLOPE_60','PCT_FROM_52W_LOW','PCT_FROM_52W_HIGH','ATR_PCT_14','PROFITABLE_QUARTERS_4','DEBT_RATIO','SHARES_GROWTH_3Y','ALTMAN_Z') GROUP BY 1 ORDER BY 2"
 ```
 
-**14개가 다 나와야 한다.** 하나라도 빠지면 그 지표가 원자료 결손으로 계산되지 않은 것이고,
+**15개가 다 나와야 한다.** 하나라도 빠지면 그 지표가 원자료 결손으로 계산되지 않은 것이고,
 필수 조건이면 그것만으로 결과가 0건이 된다 — 2026-08-10에 `ALTMAN_Z`가 실제로 그랬다(ADR-0040).
+
+**`SHARES_GROWTH_3Y`와 `TRADING_DAYS_750`은 실행당 1일치만 채워진다** — 유효 워밍업이 읽기 창과
+같아 창의 마지막 봉에서만 값이 나온다. 그래서 **날짜별 백필을 돌리지 않은 날짜는 이 둘이 없고,
+필수 조건이라 그날 결과가 통째로 0건이 된다.** 0건을 국면 탓으로 읽기 전에 그 둘을 먼저 센다.
 
 ## 배경
 
@@ -145,7 +170,7 @@ psql -d stock_screener -At -F'|' -c "SELECT indicator_code, count(DISTINCT stock
 | U-02 보통주만(SPAC·우선주·ETF 제외) | ADR-0012가 종목코드 끝자리 0, 스팩·리츠·ETF 제외 | 구조가 이미 충족 |
 | U-03 시총 ≥ $5B | `MARKET_CAP >= 1조원` | **치환** — 아래 §임계값 |
 | U-04 60일 평균 거래대금 ≥ $30M | `TURNOVER_60 >= 100억원` | **치환** — 아래 §임계값 |
-| U-05 상장 ≥ 3년(750거래일) | 조건 없음 | `SMA_200`·`SHARES_GROWTH_3Y`가 없으면 판정불가가 되어 자동으로 빠진다 |
+| U-05 상장 ≥ 3년(750거래일) | `TRADING_DAYS_750 >= 750` | **근사.** 세는 것이 상장 경과가 아니라 **저장된 봉의 수**다 — 신규 편입 종목의 수집 결손과 거래정지 구간이 똑같이 이 값을 줄이며, 이 값만으로 셋을 가를 수 없다. 값은 750에서 포화한다(읽기 창이 751봉이라 그 이상을 모른다) |
 | U-06 피인수 진행 제외 | — | **버림.** 코퍼레이트 액션 소스가 없다 |
 
 ### Layer 1 — 생존 게이트 (7)
@@ -283,7 +308,7 @@ ATR을 4%로 두면 1종목, 무제한이면 6종목이 상한이다.
 
 | 층 | 원본 | 그대로 | 치환 | 버림 | 구조가 흡수 |
 |---|---|---|---|---|---|
-| Layer 0 유니버스 | 6 | — | 2 | 1 | 3 |
+| Layer 0 유니버스 | 6 | 1 | 2 | 1 | 2 |
 | Layer 1 생존 | 7 | 3 | 1 | 3 | — |
 | Layer 2 추세 | 8 | 5 | 2 | 1 | — |
 | Layer 3 Soft | 5 | 1 | 2 | 1 | 1 |
@@ -355,7 +380,7 @@ ATR을 4%로 두면 1종목, 무제한이면 6종목이 상한이다.
 
 | 단계 | 뜻 | 해당 |
 |---|---|---|
-| **A** | **추가 수집이 0이다.** 원자료가 이미 있고 계산기만 없다 | S-03을 TTM EPS YoY로(분기 순이익 + `price_daily.listed_shares`) · S-01의 자체 5년 P/E 중앙값(원자료는 전량 보관이다 — ADR-0011이 자르는 것은 *지표*뿐) · **U-05**(거래일 수 ≥ 750. `price_daily`에 2020-01-02부터 1,620거래일이 있고 320종목이 750봉을 넘는다 — 2026-08-10 실측) |
+| **A** | **추가 수집이 0이다.** 원자료가 이미 있고 계산기만 없다 | S-03을 TTM EPS YoY로(분기 순이익 + `price_daily.listed_shares`) · S-01의 자체 5년 P/E 중앙값(원자료는 전량 보관이다 — ADR-0011이 자르는 것은 *지표*뿐) |
 | **B** | 실측으로 이미 열려 있는데 안 쓴다 | H-05(영업활동현금흐름 4/4) · S-02의 EV(현금성자산 4/4, 총차입금은 합성) · S-04 매출총이익(`CostOfSales` **미측정**) |
 | **C** | DART의 **다른 엔드포인트**가 필요하다 | 업종 분류 → H-02·S-01·S-02 + §부작용 해소 · 주식분할 이력 → 수정주가·H-06 · 합병/주식교환 → U-06 |
 | **D** | DART 밖의 소스가 필요하다 | 시장 지수 일별 시계열 → T-08 · 외국인·기관 수급 → 모듈 B의 F 계열 |
