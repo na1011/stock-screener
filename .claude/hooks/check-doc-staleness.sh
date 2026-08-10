@@ -97,12 +97,17 @@ if command -v bash >/dev/null 2>&1; then
   fi
 fi
 
-# 1c. 규칙 파일이 줄기만 하고 준 적이 없는가
+# 1c. 문서가 줄기만 하고 준 적이 없는가
 #
 # 절대 예산선을 쓰지 않는다 — 규칙 주입의 크기 상한이 측정된 적이 없어 어떤 숫자도 근거가
 # 없고, 근거 없는 경고선은 오탐이 되며 오탐이 반복되면 이 검사 자체가 무시된다.
 # 대신 실제로 일어난 병의 형태를 그대로 잡는다: 넷으로 갈리기 전의 단일 하네스 규칙 파일이
 # 11커밋 내내 순증가였고 감소 커밋이 0회였다. 그동안 아무도 그것을 알리지 않았다.
+#
+# 대상이 규칙 파일만이 아닌 이유는 그 병이 규칙 파일 고유가 아니기 때문이다. ADR·api-spec은
+# `paths` 규칙이 하나도 덮지 않아 작성 규율이 도달하지 않았고, 정정 층이 실제로 거기 가장
+# 두껍게 쌓였다. **낱말("정정"·"틀렸다")을 세는 쪽으로 가지 않는다** — `정정`은 이 도메인의
+# 용어이고(정정공시), 남겨야 할 함정 문장이 같은 낱말을 쓴다. 추세는 그 둘을 가르지 않아도 된다.
 #
 # 줄이 아니라 **문자**로 센다. 한글 산문은 줄 수가 유지된 채 문장만 줄어드는 편집이 흔해
 # `--numstat`의 줄 기준으로는 감소가 보이지 않는다(§1이 `wc -m`을 쓰는 것과 같은 이유).
@@ -112,9 +117,18 @@ if command -v git >/dev/null 2>&1 \
    && [ -d .claude/rules ]; then
   window=12
   min_points=4      # 이보다 이력이 짧으면 추세라고 부를 수 없다
+  # 임계가 둘인 이유는 두 부류의 정상이 다르기 때문이다. 규칙 파일은 **고정 예산이 설계**라
+  # 순증가 자체가 이상 신호다. ADR·api-spec·skill은 알아낸 것이 늘면 커지는 것이 정상이라
+  # 같은 선을 쓰면 정상 성장이 매 세션 울리고, 그러면 이 검사가 통째로 무시된다.
+  #
+  # 3,000은 유도한 값이 아니라 지금 이력에 맞춘 값이다. 이 창의 분포에서 "지식이 늘어난 것"
+  # (830~2,994자)과 "층이 쌓인 것"(4,167·13,412·25,631자) 사이가 거기서 갈렸다.
+  # **다시 재지 않고 옮기지 않는다** — 근거가 분포뿐이라 분포가 바뀌면 근거도 바뀐다.
   min_growth=800
+  min_growth_doc=3000
   growing=""
-  for rule in .claude/rules/*.md; do
+  for rule in .claude/rules/*.md .claude/skills/*/SKILL.md \
+              docs/adr/ADR-*.md docs/api-spec/*.md; do
     [ -f "$rule" ] || continue
     # 오래된 순으로 뒤집는다. `tac`·`tail -r`은 플랫폼마다 갈리므로 sed로 한다.
     # MUST NOT: `set -e` 아래에서 `[ 조건 ] && continue`를 쓰지 않는다. 조건이 거짓이면
@@ -148,11 +162,20 @@ if command -v git >/dev/null 2>&1 \
 
     if [ -z "$first" ] || [ -z "$last" ]; then continue; fi
     if [ "$shrank" -eq 1 ]; then continue; fi
-    if [ $((last - first)) -lt "$min_growth" ]; then continue; fi
-    growing="${growing}$(basename "$rule")(+$((last - first))자) "
+    case "$rule" in
+      .claude/rules/*) threshold=$min_growth ;;
+      *)               threshold=$min_growth_doc ;;
+    esac
+    if [ $((last - first)) -lt "$threshold" ]; then continue; fi
+    # skill은 파일명이 전부 SKILL.md라 basename만으로는 어느 것인지 알 수 없다.
+    label=$(basename "$rule")
+    case "$rule" in
+      .claude/skills/*) label="$(basename "$(dirname "$rule")")/${label}" ;;
+    esac
+    growing="${growing}${label}(+$((last - first))자) "
   done
   if [ -n "$growing" ]; then
-    add "지난 ${window}커밋 동안 줄어든 적이 없는 규칙 파일이 있다: ${growing}— 규칙 파일은 고정 예산이지 로그가 아니다. 다음에 더할 때 뺄 것을 함께 정하고, 규칙이 아니라 그것을 알게 된 경위가 쌓인 것은 아닌지 본다."
+    add "지난 ${window}커밋 동안 줄어든 적이 없는 문서가 있다: ${growing}— 고정 예산이지 로그가 아니다. 다음에 더할 때 뺄 것을 함께 정하고, **사실이 아니라 그것을 알게 된 경위가 쌓인 것은 아닌지** 본다(\`.claude/rules/doc-facts.md\`)."
   fi
 fi
 

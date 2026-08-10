@@ -22,7 +22,7 @@ paths:
 | `harness-rules.md` | 규칙 파일과 `paths`를 어떻게 쓰는가 | `.claude/rules/**` |
 | `harness-docs.md` | 지시문·상태 문서에 무엇을 적는가 | `CLAUDE.md` · `README.md` · `docs/progress.md` · `.claude/skills/**` |
 
-**MUST NOT: 규칙을 알게 된 경위를 규칙 파일에 적지 않는다.** 날짜·커밋 해시·실험 서사·"무엇을 재 봤다"는 `git log`가 답한다. 규칙 파일에는 **규칙과 그 규칙이 존재하는 이유**만 둔다. 둘의 구분이 흐려지면 하네스를 집중적으로 다룬 며칠이 그대로 파일 부피가 된다.
+**사실과 정정 이력을 어떤 형태로 적는가는 `doc-facts.md`가 답한다** — 하네스 문서만이 아니라 `docs/` 전부에 걸리므로 `harness-*` 계열에 두지 않았다.
 
 ## 배치 — 기제는 트리거로 고른다
 
