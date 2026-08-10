@@ -113,15 +113,83 @@ ADR-0039의 "버림" 판정을 한 건씩 재판정. **수집 확장 자체는 �
 
 ### ④ Sentry — 슬러그 둘
 
-- [ ] **프론트 소스맵 업로드용 org·project 슬러그.** DSN에는 숫자 ID만 있어 유도할 수 없다.
-      대시보드 주소에 보이는 문자열이며 **시크릿이 아니라 조회값**이다.
-  ```
-  SENTRY_ORG=<대시보드 주소의 조직 슬러그>
-  SENTRY_PROJECT_FRONTEND=<Vue 프로젝트 슬러그>
-  ```
-  넣으면 다음 `./gradlew build`부터 자동으로 올라간다. 그 전까지 프론트 스택트레이스는
-  `index-a3f9.js:1:28471`처럼 남는다. **틀린 값을 넣으면 빌드가 실패한다** — 조용히 안
-  올라가는 것보다 낫다고 판단했다(ADR-0032).
+> **먼저: 슬러그는 "발급"되는 것이 아니다.** 조직·프로젝트를 만들 때 이름에서 자동으로 만들어져
+> **이미 존재한다.** 새로 만들 것도, 어딘가에서 생성 버튼을 누를 것도 없고 **찾아서 적기만**
+> 하면 된다. 시크릿이 아니라 조회값이라 노출돼도 상관없다.
+>
+> **이름과 슬러그는 다르다.** `My Org` → `my-org`처럼 소문자·하이픈으로 바뀌고, 같은 이름이
+> 이미 있으면 뒤에 숫자가 붙는다(`my-org-2`). **눈으로 옮겨 적지 말고 아래처럼 출력을 복사한다.**
+
+#### 방법 A — `sentry-cli`로 조회한다 (가장 빠르다. 이미 깔려 있다)
+
+`@sentry/vite-plugin`이 `@sentry/cli` 2.58.6을 함께 설치해 둬서 **추가 설치가 없다.**
+토큰(`SENTRY_AUTH_TOKEN`)은 이미 `.env`에 있으므로 대시보드를 뒤질 필요도 없다.
+
+```bash
+cd frontend                                   # ← npx가 여기서만 sentry-cli를 찾는다
+export SENTRY_AUTH_TOKEN=$(grep '^SENTRY_AUTH_TOKEN=' ../.env | cut -d= -f2-)
+
+npx --no-install sentry-cli info              # ① 토큰이 살아 있는지 먼저 본다
+npx --no-install sentry-cli organizations list        # ② → SENTRY_ORG
+npx --no-install sentry-cli projects list -o <위에서 나온 org>   # ③ → SENTRY_PROJECT_FRONTEND
+```
+
+- **②가 하나만 나오는 것이 정상이다.** 조직 토큰(`sntrys_`로 시작)은 그 조직에만 접근한다.
+  0개면 토큰이 만료됐거나 개인 토큰인데 스코프가 모자란 것이다 — ①이 먼저 그것을 말해 준다.
+- **③에서 고를 것은 Vue 쪽이다.** 프로젝트를 둘 만들었고(`Java/Spring Boot`, `JavaScript/Vue`)
+  **백엔드 슬러그는 필요 없다** — 백엔드는 소스맵이라는 개념이 없고 바이트코드에 줄 번호가 있다.
+- 어느 쪽이 Vue인지 이름만으로 애매하면 **DSN의 숫자로 대조한다**(아래 방법 C).
+
+#### 방법 B — 주소창에서 읽는다 (CLI가 막히면)
+
+메뉴 이름은 Sentry가 자주 바꾸지만 **주소 형태는 안 바뀐다.** 로그인한 뒤 프로젝트를 하나 열면
+주소가 둘 중 하나다:
+
+```
+https://<조직슬러그>.sentry.io/projects/<프로젝트슬러그>/
+https://sentry.io/organizations/<조직슬러그>/projects/<프로젝트슬러그>/
+```
+
+굵게 표시된 두 조각이 그대로 답이다. `Settings → General Settings`의 `Name`/`Short name`
+칸에도 같은 값이 있다.
+
+#### 방법 C — 어느 프로젝트가 프론트인지 확정해야 할 때
+
+DSN은 **숫자 ID만** 담는다. `.env`의 `VITE_SENTRY_DSN`이 이 형태다:
+
+```
+https://<공개키>@o<조직숫자ID>.ingest.<지역>.sentry.io/<프로젝트숫자ID>
+                 └───────────┘                          └────────────┘
+```
+
+즉 **DSN에서 슬러그는 유도할 수 없다.** 대신 그 숫자로 목록을 대조하면 확정된다:
+
+```bash
+export SENTRY_AUTH_TOKEN=$(grep '^SENTRY_AUTH_TOKEN=' .env | cut -d= -f2-)
+curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+     "https://sentry.io/api/0/organizations/<org슬러그>/projects/" \
+  | python3 -m json.tool | grep -E '"id"|"slug"|"platform"'
+```
+
+`VITE_SENTRY_DSN` 끝의 숫자와 `id`가 같은 항목의 `slug`가 `SENTRY_PROJECT_FRONTEND`다.
+(이 REST 경로는 **실측하지 않았다** — 방법 A·B가 막혔을 때만 쓴다.)
+
+#### 넣고 확인하기
+
+```
+SENTRY_ORG=<②의 슬러그>
+SENTRY_PROJECT_FRONTEND=<③의 Vue 프로젝트 슬러그>
+```
+
+- [ ] `.env`에 위 두 줄을 넣는다 → `./gradlew checkEnv`로 `설정됨`을 확인한다.
+- [ ] `./gradlew build`를 돌린다. **`-PskipFrontend`를 붙이면 안 된다** — 업로드가 프론트 빌드에 붙어 있다.
+  - 빌드 로그에서 **`[sentry] … 소스맵을 올리지 않는다`가 사라지면 켜진 것이다.** 그 한 줄이 유일한 표시다.
+  - **틀린 값이면 빌드가 실패한다.** 조용히 안 올라가는 것보다 낫다고 판단했다(ADR-0032).
+  - 값만 바꿔도 재빌드가 강제된다(`build.gradle`이 두 값을 태스크 입력으로 선언해 둬서,
+    없으면 Gradle이 `UP-TO-DATE`로 판정해 **캐시된 옛 번들을 그대로 싣는다**).
+- [ ] **프론트에서 일부러 오류를 하나 내고 대시보드의 스택트레이스가 읽히는지 본다.**
+      `index-a3f9.js:1:28471`이 아니라 `.vue` 파일명과 줄 번호가 나와야 끝난 것이다.
+
 - [ ] **백엔드 이벤트가 대시보드에 실제로 떴는지 본다.**
       `./gradlew liveTest --tests "*SentryLiveTest*"`는 "거부되지 않았다"까지만 확인한다.
       **당신 프로젝트에 도착했는가는 대시보드를 봐야 갈린다** — 메시지는
