@@ -79,7 +79,7 @@ start_tunnel() {
     return 1
   fi
   if [[ ! -f "$TUNNEL_TOKEN_FILE" ]]; then
-    echo "[start] $TUNNEL_TOKEN_FILE이 없다. .env에 CLOUDFLARE_TUNNEL_TOKEN을 넣고 ops/stage.sh를 돌려라." >&2
+    echo "[start] ${TUNNEL_TOKEN_FILE}이 없다. .env에 CLOUDFLARE_TUNNEL_TOKEN을 넣고 ops/stage.sh를 돌려라." >&2
     return 1
   fi
 
