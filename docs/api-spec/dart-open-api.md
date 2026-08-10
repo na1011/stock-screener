@@ -271,15 +271,16 @@ Q4(손익) = 사업보고서 금액 − 3분기보고서의 thstrm_add_amount(�
 
 ## 9. 엔드포인트 카탈로그 — 무엇이 있고 무엇이 없는가 (2026-08-10)
 
-원문은 [`dart-api-카탈로그.txt`](./dart-api-카탈로그.txt)(사용자가 DART 개발가이드 목록에서 옮겨 온 것)다.
-**이름과 상세기능만 있고 경로·파라미터·응답 필드는 없다** — 그것은 각 API의 개발가이드 페이지에
-있고, **13종을 2026-08-10에 받아 [`dart-api-개발가이드.txt`](./dart-api-개발가이드.txt)에 두었다**(§10).
-이 절은 **"무엇이 있고 무엇이 없는가"의 정본**이고, "어떻게 부르는가"는 §10이 답한다.
+이 절은 **"무엇이 있고 무엇이 없는가"의 정본**이고, "어떻게 부르는가"는 §10이, "어떤 필드가
+오는가"는 §11이 답한다.
 
-> **MUST NOT: 카탈로그 파일을 개발가이드로 덮어쓰지 않는다.** 실제로 한 번 덮어써서 이 절의
-> 근거가 git 히스토리에만 남았다(2026-08-10, 복원함). 아래 "액면분할 전용 API가 없다"와
-> "다중회사 주요계정 복수조회 가능"의 **유일한 근거가 그 101줄**이고, 개발가이드는 이미 있는
-> API의 사용법이라 **없는 API를 증명하지 못한다.** 두 파일은 답하는 질문이 다르다.
+> **근거는 사용자가 DART 개발가이드 목록에서 옮겨 온 카탈로그 101줄이다.** 그 파일과 개발가이드
+> 13종 원문은 **저장소에서 지웠고 git 이력에 있다**(§11 머리에 복구 명령). 아래 "액면분할 전용
+> API가 없다"와 "다중회사 주요계정 복수조회 가능"의 근거가 그 101줄이며, **개발가이드는 이미
+> 있는 API의 사용법이라 없는 API를 증명하지 못한다** — 두 자료는 답하는 질문이 다르다.
+>
+> **MUST NOT: 목록에 없다는 것을 얻을 수 없다로 읽지 않는다.** 이 절이 실제로 그렇게 한 번
+> 틀렸다(액면분할 → §10-B가 뒤집었다).
 
 | 우리가 막혀 있던 것 | 대응 API | 판정 |
 |---|---|---|
@@ -338,8 +339,7 @@ Q4(손익) = 사업보고서 금액 − 3분기보고서의 thstrm_add_amount(�
 
 ## 10. 확장 엔드포인트 실측 (2026-08-10)
 
-개발가이드 13종을 받아 [`dart-api-개발가이드.txt`](./dart-api-개발가이드.txt)에 두고, 그중
-넷을 탐침으로 실제 호출했다.
+개발가이드 13종을 받아 그중 넷을 탐침으로 실제 호출했다. **요청·응답 필드 표는 §11**에 있다.
 
 **§9가 "있다/없다"의 정본이라면 여기는 "어떻게 부르고 무엇이 오는가"의 정본이다.**
 스펙에 필드가 있는 것과 그 값이 실제로 오는 것은 다르며, 아래 넷 중 셋에서 실제로 갈렸다.
@@ -484,6 +484,105 @@ Q4(손익) = 사업보고서 금액 − 3분기보고서의 thstrm_add_amount(�
   **`SHARES_GROWTH_3Y`(H-06)의 교란 요인**으로 기록만 해 둔다.
 - **공시검색**(`list.json`) — 개발가이드에 **요청 인자만 있고 응답 결과 표가 빠져 있다.**
   10-B가 열려 필요가 줄었다.
+
+## 11. 요청·응답 필드 (개발가이드 갈무리)
+
+**받은 개발가이드 원문 13종과 카탈로그는 저장소에서 지웠다.** 관리되지 않는 임시 txt가
+포인터로 남는 비용이 보관 이득보다 컸다. **필요하면 git 이력에서 꺼낸다:**
+
+```bash
+git show 6bc3d09:docs/api-spec/dart-api-개발가이드.txt   # 13종 원문
+git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 목록 (§9의 근거)
+```
+
+아래는 **ADR-0039 §단계 C가 길로 지목한 넷**만 옮긴 것이다. `fnlttSinglAcnt`는 §1,
+`fnlttSinglAcntAll`은 §7, `fnlttMultiAcnt`·`xbrlTaxonomy`는 §10-C가 이미 덮는다.
+
+**공통 요청 인자**: `crtfc_key`(STRING(40), 필수). 아래 표는 그 외의 것만 적는다.
+**응답 공통**: `status`·`message`(§4). 목록형은 `list` 배열로 온다 — **`company.json`만 평면
+객체다**(§10-A).
+
+### 11-A. 기업개황 — `company.json`
+
+- 요청: `corp_code`(STRING(8), 필수). **종목당 1콜.**
+- 응답: `corp_name` `corp_name_eng` `stock_name` `stock_code` `ceo_nm` `corp_cls`
+  `jurir_no` `bizr_no` `adres` `hm_url` `ir_url` `phn_no` `fax_no` **`induty_code`**
+  **`est_dt`** **`acc_mt`**
+
+| 필드 | 뜻 | 함정 |
+|---|---|---|
+| `corp_cls` | 법인구분 | `Y`(유가) `K`(코스닥) `N`(코넥스) `E`(기타) |
+| `induty_code` | 업종코드(KSIC) | **자릿수가 3·5로 섞인다. 금융업 판정은 앞 2자리**(§10-A) |
+| `est_dt` | **설립일**(YYYYMMDD) | **상장일이 아니다.** U-05는 이것으로 안 열린다 |
+| `acc_mt` | 결산월(MM) | 비12월 결산의 표기는 미확인 |
+
+**상장일 필드는 응답에 없다.**
+
+### 11-B. 증자(감자) 현황 — `irdsSttus.json`
+
+- 요청: `corp_code`(필수) · `bsns_year`(STRING(4), 필수, **2015년 이후만**) ·
+  `reprt_code`(필수 — `11013` 1분기 / `11012` 반기 / `11014` 3분기 / `11011` 사업보고서)
+- 응답: `rcept_no` `corp_cls` `corp_code` `corp_name` **`isu_dcrs_de`** **`isu_dcrs_stle`**
+  `isu_dcrs_stock_knd` `isu_dcrs_qy` **`isu_dcrs_mstvdv_fval_amount`**
+  `isu_dcrs_mstvdv_amount` `stlm_dt`
+
+| 필드 | 뜻 | 함정 |
+|---|---|---|
+| `isu_dcrs_de` | 주식발행 감소일자 | **매매개시일이 아니다.** 이후 첫 거래일로 보정(§10-B) |
+| `isu_dcrs_stle` | 발행 감소 형태 | 액면분할은 **`주식분할`**. 낱말이 틀리면 0건이 된다 |
+| `isu_dcrs_mstvdv_fval_amount` | 주당 액면가액 | **분할 *후* 값**이다. 비율은 이전 액면가와의 비 |
+| `isu_dcrs_qy` | 발행 감소 수량 | — |
+
+**사업보고서 1콜이 약 5년 이력을 준다** — 종목당 1콜, 350콜(§10-B).
+
+### 11-C. 회사합병 결정 — `cmpMgDecsn.json`
+
+- 요청: `corp_code`(필수) · `bgn_de` · `end_de`(둘 다 필수, YYYYMMDD, **2015년 이후만**).
+  기간이 필수라 **종목별로 돌아야 한다 — 350콜.**
+- 응답(주요): `rcept_no` `corp_cls` `corp_code` `corp_name` **`mg_mth`**(합병방법)
+  **`mg_stn`**(합병형태) `mg_pp` `mg_rt` `mg_rt_bs` · 상대회사 `mgptncmp_cmpnm`
+  `mgptncmp_mbsn` `mgptncmp_rl_cmpn` · 상대회사 재무 `rbsnfdtl_{tast,tdbt,teqt,cpt,sl,nic}` ·
+  외부감사 `eadtat_intn` `eadtat_op` · 신설회사 `nmgcmp_*` `ffdtl_*` ·
+  일정 `mgsc_*`(그중 **`mgsc_mgdt`** 합병기일 · `mgsc_mgctrd` 계약일 ·
+  `mgsc_trspprpd_{bgd,edd}` 거래정지 예정 · `mgsc_nstklstprd` 신주 상장예정) ·
+  **`bddd`**(이사회결의일) · 신주 `mgnstk_{ostk,cstk}_cnt` · 외부평가 `exevl_*` ·
+  매수청구권 `aprskh_*` · `bdlst_atn` `otcpr_bdlst_sf_atn` `od_a_at_{t,b}` `adt_a_atn`
+  `popt_ctr_{atn,cn}` `rs_sm_atn` `ex_sm_r`
+
+**U-06에 실제로 쓰이는 것은 `bddd`·`mgsc_mgdt`(진행 구간)와 `mg_mth`다.**
+**`mg_stn`이 `해당사항없음`으로 와서 존속/소멸을 가르지 못하고, 그 정보는 `mg_mth`에 자유
+텍스트로만 있다**(§10-D). 날짜가 `YYYY년 MM월 DD일` 한국어 문자열인 것도 여기다.
+
+### 11-D. 주식교환·이전 결정 — `stkExtrDecsn.json`
+
+- 요청: `cmpMgDecsn.json`과 동일(`corp_code` · `bgn_de` · `end_de`). **350콜.**
+- 응답(주요): `rcept_no` `corp_cls` `corp_code` `corp_name` `extr_sen`(구분)
+  **`extr_stn`**(교환·이전 형태) · 대상법인 `extr_tgcmp_{cmpnm,rp,mbsn,rl_cmpn}`
+  `extr_tgcmp_tisstk_{ostk,cstk}` · 대상법인 재무 `rbsnfdtl_{tast,tdbt,teqt,cpt}` ·
+  `extr_rt` `extr_rt_bs` `extr_pp` · 일정 `extrsc_*`(그중 **`extrsc_extrdt`** 교환·이전일자 ·
+  `extrsc_extrctrd` 계약일 · `extrsc_trspprpd_{bgd,edd}` 거래정지 예정 ·
+  `extrsc_nstklstprd` 신주 상장예정) · **`atextr_cpcmpnm`**(교환·이전 후 완전모회사명) ·
+  **`bddd`** · 외부평가 `exevl_*` · 매수청구권 `aprskh_*` · `bdlst_atn`
+  `otcpr_bdlst_sf_atn` `od_a_at_{t,b}` `adt_a_atn` `popt_ctr_{atn,cn}` `rs_sm_atn` `ex_sm_r`
+
+**`atextr_cpcmpnm`(완전모회사명)이 `cmpMgDecsn`에 없는 것이다** — 교환·이전은 이 필드로
+"우리가 자회사가 되는가"를 자유 텍스트 파싱 없이 가를 여지가 있다. **미검증이다**(탐침
+표본이 합병뿐이었다).
+
+> `extrsc_trspprpd`(단일 필드)는 2019-12-08까지만 쓰였고 그 뒤로 `_bgd`/`_edd`로 갈렸다.
+> 2015~2019 구간을 읽으면 옛 필드가 나온다.
+
+### 11-E. 받았지만 아직 안 쓰는 넷
+
+**필드 표는 옮기지 않았다** — P11이 가장 먼 phase이고, 쓸 때 위 `git show`로 꺼내면 된다.
+요청 인자만 적어 둔다(비용 판단에 그것이면 충분하다).
+
+| 엔드포인트 | 요청 인자 | 쓸 곳 |
+|---|---|---|
+| `elestock.json` (임원·주요주주 소유보고) | `corp_code`. **기간 파라미터가 없다** | 모듈 B의 S-F3·S-F4 |
+| `majorstock.json` (대량보유 상황보고) | `corp_code`. **기간 파라미터가 없다** | 모듈 B의 S 계열 |
+| `tesstkAcqsDspsSttus.json` (자기주식 취득·처분) | `corp_code` · `bsns_year` · `reprt_code` | H-06의 교란 요인(소각) |
+| `list.json` (공시검색) | `corp_code` · `bgn_de` · `end_de` 등 | **응답 결과 표가 원문에 빠져 있었다.** 10-B가 열려 필요가 줄었다 |
 
 ## 미검증 항목
 
