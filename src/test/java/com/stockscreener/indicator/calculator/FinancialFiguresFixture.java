@@ -29,6 +29,9 @@ final class FinancialFiguresFixture {
     private BigDecimal totalAssets;
     private BigDecimal totalEquity;
     private BigDecimal totalLiabilities;
+    private BigDecimal currentAssets;
+    private BigDecimal currentLiabilities;
+    private BigDecimal retainedEarnings;
     private BigDecimal operatingCashFlow;
     private BigDecimal sharesOutstanding;
     private BigDecimal eps;
@@ -70,6 +73,9 @@ final class FinancialFiguresFixture {
         fixture.totalAssets = source.totalAssets();
         fixture.totalEquity = source.totalEquity();
         fixture.totalLiabilities = source.totalLiabilities();
+        fixture.currentAssets = source.currentAssets();
+        fixture.currentLiabilities = source.currentLiabilities();
+        fixture.retainedEarnings = source.retainedEarnings();
         fixture.operatingCashFlow = source.operatingCashFlow();
         fixture.sharesOutstanding = source.sharesOutstanding();
         fixture.eps = source.eps();
@@ -107,6 +113,21 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    FinancialFiguresFixture currentAssets(BigDecimal value) {
+        this.currentAssets = value;
+        return this;
+    }
+
+    FinancialFiguresFixture currentLiabilities(BigDecimal value) {
+        this.currentLiabilities = value;
+        return this;
+    }
+
+    FinancialFiguresFixture retainedEarnings(BigDecimal value) {
+        this.retainedEarnings = value;
+        return this;
+    }
+
     FinancialFiguresFixture sharesOutstanding(BigDecimal value) {
         this.sharesOutstanding = value;
         return this;
@@ -116,6 +137,7 @@ final class FinancialFiguresFixture {
         return new FinancialFigures(
                 fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
                 revenue, operatingIncome, netIncome, totalAssets, totalEquity, totalLiabilities,
+                currentAssets, currentLiabilities, retainedEarnings,
                 operatingCashFlow, sharesOutstanding, eps, bps);
     }
 }

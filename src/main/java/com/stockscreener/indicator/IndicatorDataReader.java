@@ -56,7 +56,8 @@ public class IndicatorDataReader {
     private static final String SELECT_FINANCIALS = """
             SELECT fiscal_year, fiscal_period, period_start, period_end, published_at,
                    currency_code, revenue, operating_income, net_income, total_assets,
-                   total_equity, total_liabilities, operating_cash_flow, shares_outstanding,
+                   total_equity, total_liabilities, current_assets, current_liabilities,
+                   retained_earnings, operating_cash_flow, shares_outstanding,
                    eps, bps
             FROM financial_statement
             WHERE stock_id = ? AND is_latest AND period_end <= ?
@@ -138,6 +139,9 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("total_assets"),
                 rs.getBigDecimal("total_equity"),
                 rs.getBigDecimal("total_liabilities"),
+                rs.getBigDecimal("current_assets"),
+                rs.getBigDecimal("current_liabilities"),
+                rs.getBigDecimal("retained_earnings"),
                 rs.getBigDecimal("operating_cash_flow"),
                 rs.getBigDecimal("shares_outstanding"),
                 rs.getBigDecimal("eps"),

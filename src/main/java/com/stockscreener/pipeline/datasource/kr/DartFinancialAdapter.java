@@ -194,6 +194,9 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 DartAccountMapper.find(balance, DartAccountMapper.TOTAL_ASSETS, false),
                 DartAccountMapper.find(balance, DartAccountMapper.TOTAL_EQUITY, false),
                 DartAccountMapper.find(balance, DartAccountMapper.TOTAL_LIABILITIES, false),
+                DartAccountMapper.find(balance, DartAccountMapper.CURRENT_ASSETS, false),
+                DartAccountMapper.find(balance, DartAccountMapper.CURRENT_LIABILITIES, false),
+                DartAccountMapper.find(balance, DartAccountMapper.RETAINED_EARNINGS, false),
                 // 주요계정에는 영업활동현금흐름이 없다. 전체 재무제표 API에만 있으며,
                 // 종목당 호출을 배로 늘릴 만큼 v1에 필요하지 않다.
                 null,
@@ -236,6 +239,9 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_ASSETS, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_EQUITY, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_LIABILITIES, false),
+                DartAccountMapper.find(annualBalance, DartAccountMapper.CURRENT_ASSETS, false),
+                DartAccountMapper.find(annualBalance, DartAccountMapper.CURRENT_LIABILITIES, false),
+                DartAccountMapper.find(annualBalance, DartAccountMapper.RETAINED_EARNINGS, false),
                 null, null, null, null));
     }
 

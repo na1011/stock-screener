@@ -37,6 +37,16 @@ final class DartAccountMapper {
     static final Set<String> TOTAL_LIABILITIES = ordered("부채총계");
     static final Set<String> TOTAL_EQUITY = ordered("자본총계");
 
+    // 주요계정 응답에 원래 들어 있던 것들이다(api-spec §1의 실측표). 총계만 뽑고 버리고 있었을 뿐이라
+    // 호출 수도 응답 크기도 늘지 않는다.
+    //
+    // 금융업은 유동/비유동을 구분하지 않는 재무상태표를 내므로 이 셋이 비는 것이 정상이다.
+    // null로 두면 그 종목에서 운전자본 기반 지표가 계산되지 않고, 그것이 옳다 — Altman Z는
+    // 애초에 금융업에 적용할 수 없는 지표다.
+    static final Set<String> CURRENT_ASSETS = ordered("유동자산");
+    static final Set<String> CURRENT_LIABILITIES = ordered("유동부채");
+    static final Set<String> RETAINED_EARNINGS = ordered("이익잉여금", "이익잉여금(결손금)");
+
     private DartAccountMapper() {
     }
 

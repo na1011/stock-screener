@@ -23,6 +23,9 @@ import java.time.LocalDate;
  * @param publishedAt   공시일. 정정공시 판별과 "그 시점에 공개되어 있던 값" 질의의 근거다.
  * @param currencyCode  행 단위 사실이다. 시세와 달리 재무제표는 상장 시장과 다른 통화로
  *                      보고될 수 있다.
+ * @param currentAssets      유동자산. {@code currentLiabilities}와 짝을 이뤄 운전자본이 된다.
+ * @param currentLiabilities 유동부채.
+ * @param retainedEarnings   이익잉여금. <b>자본총계와 다르다</b> — 자본금·자본잉여금을 포함하지 않는다.
  */
 public record RawFinancialReport(
         int fiscalYear,
@@ -38,6 +41,9 @@ public record RawFinancialReport(
         BigDecimal totalAssets,
         BigDecimal totalEquity,
         BigDecimal totalLiabilities,
+        BigDecimal currentAssets,
+        BigDecimal currentLiabilities,
+        BigDecimal retainedEarnings,
         BigDecimal operatingCashFlow,
         BigDecimal sharesOutstanding,
         BigDecimal eps,

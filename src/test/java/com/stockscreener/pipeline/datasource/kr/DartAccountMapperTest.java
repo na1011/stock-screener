@@ -105,6 +105,41 @@ class DartAccountMapperTest {
                 .isEqualByComparingTo("333605938000000");
     }
 
+    @Test
+    @DisplayName("재무상태표의 유동항목과 이익잉여금을 매핑한다 — 총계와 함께 이미 오던 것들이다")
+    void mapsBalanceSheetDetail() {
+        List<JsonNode> rows = List.of(
+                row("유동자산", "218,470,581,000,000", "1"),
+                row("비유동자산", "348,471,529,000,000", "2"),
+                row("자산총계", "566,942,110,000,000", "3"),
+                row("유동부채", "88,117,133,000,000", "4"),
+                row("부채총계", "130,621,773,000,000", "6"),
+                row("자본금", "897,514,000,000", "7"),
+                row("이익잉여금", "400,161,077,000,000", "8"),
+                row("자본총계", "436,320,337,000,000", "9"));
+
+        assertThat(DartAccountMapper.find(rows, DartAccountMapper.CURRENT_ASSETS, false))
+                .isEqualByComparingTo("218470581000000");
+        assertThat(DartAccountMapper.find(rows, DartAccountMapper.CURRENT_LIABILITIES, false))
+                .isEqualByComparingTo("88117133000000");
+        // 이익잉여금은 자본총계가 아니다 — 자본금·자본잉여금을 포함하지 않는다.
+        assertThat(DartAccountMapper.find(rows, DartAccountMapper.RETAINED_EARNINGS, false))
+                .isEqualByComparingTo("400161077000000");
+    }
+
+    @Test
+    @DisplayName("유동/비유동을 구분하지 않는 재무상태표에서는 null이다 — 금융업이 그렇다")
+    void returnsNullWhenNoCurrentSplit() {
+        List<JsonNode> rows = List.of(
+                row("자산총계", "700,000,000,000", "1"),
+                row("부채총계", "600,000,000,000", "2"),
+                row("자본총계", "100,000,000,000", "3"));
+
+        // 0으로 대체하면 운전자본이 0인 회사가 되어 Altman Z가 그럴듯하게 틀린 값을 낸다.
+        assertThat(DartAccountMapper.find(rows, DartAccountMapper.CURRENT_ASSETS, false)).isNull();
+        assertThat(DartAccountMapper.find(rows, DartAccountMapper.CURRENT_LIABILITIES, false)).isNull();
+    }
+
     private static JsonNode row(String accountName, String amount, String ord) {
         return MAPPER.readTree("""
                 {"account_nm":"%s","thstrm_amount":"%s","ord":"%s"}"""
