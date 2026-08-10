@@ -34,7 +34,7 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 
 ## 운영
 
-맥북 한 대 위에서 앱과 터널을 돌린다. **자동으로 뜨는 것은 아무것도 없다** — 당신이 켤 때만 뜨고, 껐으면 꺼진 채로 있다([ADR-0043](docs/adr/ADR-0043-explicit-start-over-autostart.md)). 실행은 [`ops/`](ops/)의 스크립트에 있다(각 스크립트 머리에 용법이 있다).
+맥북 한 대 위에서 앱과 터널을 돌린다. **자동으로 뜨는 것은 아무것도 없다** — 당신이 켤 때만 뜨고, 껐으면 꺼진 채로 있다([ADR-0043](docs/adr/ADR-0043-explicit-start-over-autostart.md)).
 
 ```
 브라우저 ──HTTPS──▶ Cloudflare 엣지 ──터널──▶ cloudflared ──HTTP──▶ Spring :8080
@@ -48,23 +48,127 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 | 재부팅 | **안 뜬다.** FileVault 암호를 넣고 로그인한 뒤 `ops/start.sh` |
 | 잠자기 → 깨어남 | 프로세스가 그대로 살아 있다 (유일하게 저절로 돌아오는 것) |
 
-### 터미널에서 직접 — 켜기, 끄기, 배포
+**PostgreSQL은 예외다.** Homebrew가 LaunchAgent로 등록해 두어 로그인하면 뜬다(`homebrew.mxcl.postgresql@16`). 이 앱이 아니라 DB이고, 그것까지 수동으로 만들지는 않았다. 끄려면 `brew services stop postgresql@16`.
+
+---
+
+### 켜기
+
+**사전 체크 — 지금 뭐가 도는지부터 본다.**
 
 ```bash
-ops/start.sh          # 앱 + 터널 (--app / --tunnel 로 하나만)
-ops/stop.sh           # 끈다. 되살아나지 않는다
-ops/status.sh         # 뭐가 도는지, 밖에서 보이는지, 자동 기동이 되살아났는지
-ops/deploy.sh         # 코드나 .env를 고쳐 반영 (빌드 → 복사 → 앱만 재기동)
+ops/status.sh
 ```
 
-`start.sh`는 기동에 20~30초 걸리고 로컬·외부 health를 직접 확인한 뒤에야 끝난다. **외부까지 물어보는 이유는 로컬만 보면 `cloudflared`가 죽어도 초록이기 때문이다** — 로컬은 `UP`인데 밖이 502면 앱이 아니라 터널이 문제다.
+| status.sh가 이렇게 말하면 | 하는 일 |
+|---|---|
+| 앱·터널 둘 다 `안 돈다` | 아래 켜기로 간다 |
+| 하나만 `돈다` | 없는 쪽만 켠다 (`--app` / `--tunnel`) |
+| `이 스크립트가 띄운 것이 아니다` | 데몬이 되살아났거나 손으로 띄운 것이 있다. 아래 **문제 해결** |
+| `자동기동: 되살아났다` | 등록이 다시 생겼다. 아래 **문제 해결** |
+| DB가 필요하다 | `pg_isready` — `accepting connections`가 아니면 `brew services start postgresql@16` |
 
-- **`kill`이 그대로 듣는다.** 되살리는 것이 아무것도 없기 때문이다. 다만 `stop.sh`를 쓰는 편이 낫다 — PID 파일을 정리하고 포트가 풀렸는지까지 본다.
-- **`pkill -f java`는 쓰지 않는 편이 좋다.** 이 저장소와 무관한 JVM까지 함께 죽고, 어떤 가드도 그것을 막지 않는다.
-- **`./gradlew build`만으로는 아무것도 반영되지 않는다.** 도는 것은 저장소가 아니라 `~/Library/Application Support/stock-screener/`의 사본이라, 옛 빌드가 계속 돌고 화면에는 아무 단서가 없다([ADR-0034](docs/adr/ADR-0034-repo-out-of-tcc-path.md)). `deploy.sh`가 그 순서를 대신한다.
-- 기동 실패 원인은 `~/Library/Logs/stock-screener/stderr.log`에, 터널 쪽은 같은 디렉터리의 `tunnel.log`에 있다.
+**켠다.**
 
-**IMPORTANT — 배치는 앱 안에서 돈다.** 평일 15시에 앱이 꺼져 있으면 그날 수집이 통째로 빠지고 **아무 알림도 나가지 않는다**(0건이어도 배치는 SUCCESS다). 다음 실행이 15일 창으로 메우므로([ADR-0042](docs/adr/ADR-0042-batch-schedule-and-target-date.md)) 매일 켤 필요는 없지만, **15일에 한 번은 15시에 켜 두어야 한다.** 맥북이 자면 사이트도 함께 내려간다 — 온프레미스를 택한 대가다(spec §6). 절전으로 당신이 할 일은 [`TODO.md`](TODO.md)에 있다.
+```bash
+ops/start.sh              # 앱 + 터널 — 평소 이것 하나면 된다
+ops/start.sh --app        # 앱만. 밖에서는 안 보인다 (로컬 확인용)
+ops/start.sh --tunnel     # 터널만
+```
+
+기동에 **20~30초** 걸린다. `start.sh`는 그동안 기다렸다가 **로컬 health가 `UP`이 된 뒤에야** 끝나고, 앱과 터널을 함께 켰으면 **외부 health까지 확인**한다. 즉 프롬프트가 돌아왔을 때 이미 확인이 끝나 있다.
+
+```
+[start] 앱 기동 중 (PID 32744) — 20~30초 걸린다.
+[start] 앱 OK — {"groups":["liveness","readiness"],"status":"UP"}
+[start] 터널 기동 (PID 39778).
+[start] 외부: {"groups":["liveness","readiness"],"status":"UP"}
+```
+
+**절전 방지는 자동으로 걸린다.** `start.sh`가 `caffeinate -s -w <JVM PID>`를 함께 띄운다. `-s`는 **전원이 연결된 동안만** 유휴 절전을 막으므로 배터리로 도는 동안에는 평소대로 잠들고, `-w`로 앱에 묶여 있어 **앱이 끝나면 caffeinate도 함께 사라진다** — 따로 끌 것이 없다. 다만 **뚜껑을 닫으면 이것으로도 잠든다**(`sudo pmset -a disablesleep 1`이 필요하다, [`TODO.md`](TODO.md)).
+
+---
+
+### 끄기
+
+**사전 체크 — 배치 시각을 밟고 있지 않은지 본다.**
+
+```bash
+date '+%F %H:%M (%a)'
+```
+
+**평일 15시 직전이면 그때까지 켜 둔다.** 배치가 앱 프로세스 안에서 돌기 때문이다(아래 주의).
+
+**끈다.**
+
+```bash
+ops/stop.sh              # 앱 + 터널
+ops/stop.sh --app        # 앱만 (터널은 남겨 502를 내게 한다)
+ops/stop.sh --tunnel     # 터널만 (앱은 로컬로 계속 쓴다)
+```
+
+앱에는 SIGTERM을 보내고 **최대 30초** 종료를 기다린다. 끝나면 PID 파일을 지우고 **`:8080`이 실제로 풀렸는지까지** 확인한다.
+
+`kill <PID>`로도 꺼진다 — 되살리는 것이 아무것도 없기 때문이다. 그래도 `stop.sh`를 쓰는 편이 낫다. PID 파일 정리와 포트 확인이 붙어 있고, **PID 재사용을 검증**해 남은 PID 파일이 무관한 프로세스를 죽이는 일을 막는다.
+
+- **`pkill -f java`는 쓰지 않는다.** 이 저장소와 무관한 JVM(IDE 컴파일 서버 등)까지 함께 죽고, 어떤 가드도 그것을 막지 않는다.
+- 빌드가 남긴 Gradle 데몬은 별개다. 메모리를 물고 있으면 `./gradlew --stop`.
+
+---
+
+### 배포 (코드나 `.env`를 고친 뒤)
+
+```bash
+ops/deploy.sh
+```
+
+빌드 → 스테이징 → **앱만** 재기동 → 로컬·외부 확인. 터널은 건드리지 않는다(바뀐 것이 jar뿐이라, 함께 내리면 밖에서 안 보이는 시간만 길어진다).
+
+**`./gradlew build`만으로는 아무것도 반영되지 않는다.** 도는 것은 저장소가 아니라 `~/Library/Application Support/stock-screener/`의 사본이라, 옛 빌드가 계속 돌고 **화면에는 아무 단서가 없다**([ADR-0034](docs/adr/ADR-0034-repo-out-of-tcc-path.md)). 앱이 꺼져 있어도 `deploy.sh`를 쓰면 된다 — 새것으로 켜 준다.
+
+---
+
+### 문제가 생겼을 때
+
+**언제나 여기서 시작한다.** 무엇이 도는지, 밖에서 보이는지, 자동 기동이 다시 생기지 않았는지를 한 번에 낸다.
+
+```bash
+ops/status.sh
+```
+
+**로컬만 보고 판단하지 않는다** — `cloudflared`가 죽어도 로컬은 초록이다. **밖에서 무엇이 오는가가 앱과 터널을 가른다.**
+
+| 밖에서(`https://screener.na1011.net/actuator/health`) | 무엇이 문제인가 | 하는 일 |
+|---|---|---|
+| `{"status":"UP"}` | 정상 | — |
+| **502** | 터널은 살아 있고 **앱이 죽었다** | `ops/start.sh --app` · 원인은 `stderr.log` |
+| **`error code: 1033` / 응답 없음** | **터널이 죽었다** (앱은 모른다) | `ops/start.sh --tunnel` · 원인은 `tunnel.log` |
+| **DNS·인증서 오류** | Cloudflare 쪽 설정 | [`docs/external-services-setup.md`](docs/external-services-setup.md) §2 |
+
+```bash
+tail -50 ~/Library/Logs/stock-screener/stderr.log    # 앱 기동 실패
+tail -50 ~/Library/Logs/stock-screener/stdout.log    # 앱 로그
+tail -50 ~/Library/Logs/stock-screener/tunnel.log    # 터널
+```
+
+**증상별로:**
+
+| 증상 | 원인과 처방 |
+|---|---|
+| `start.sh`가 **60초 안에 응답이 없다** | 기동 실패다. `stderr.log`를 본다. DB부터 의심한다 — `pg_isready` |
+| `stop.sh`가 **30초 안에 종료되지 않았다** | 종료 훅에서 멈춰 있다. 스크립트가 강제 종료하지 않는 것은 의도다(원인이 안 남는다). 원인을 본 뒤 안내대로 `kill -9 <PID>` |
+| `cloudflared가 이미 돌고 있다` | 우리가 띄운 것이 아니다. `ops/status.sh`의 **자동기동** 줄을 본다. `cloudflared-LaunchDaemon`이 뜨면 `sudo cloudflared service uninstall` |
+| `:8080을 아직 무언가 잡고 있다` | 대개 개발용 `./gradlew bootRun`이다. `lsof -nP -iTCP:8080 -sTCP:LISTEN` |
+| `tunnel-token이 없다` | `.env`의 `CLOUDFLARE_TUNNEL_TOKEN`이 비었거나 스테이징 전이다. 채우고 `ops/stage.sh` |
+| **고친 것이 화면에 안 나온다** | `deploy.sh`를 안 돌렸다. 위 **배포** |
+| **`자동기동: 되살아났다`** | 부팅 시 뜨는 등록이 다시 생겼다. 세션 시작에 ADR-0043의 `premise`도 같은 것을 알린다. 무엇이 생겼는지 보고 해제한다 |
+| **앱은 도는데 데이터가 안 늘었다** | 배치는 평일 15시에만 돈다. 결손 판정은 [`docs/progress.md`](docs/progress.md)의 SQL이 답한다 |
+
+**개발할 때는 `bootRun`과 배포본이 `:8080`을 다툰다.** 자기 코드를 보려면 `ops/stop.sh --app` 후 `./gradlew bootRun`, 끝나면 `ops/start.sh --app`(또는 변경을 살릴 것이면 `ops/deploy.sh`)로 되돌린다.
+
+---
+
+**IMPORTANT — 배치는 앱 프로세스 안에서 돈다.** 평일 15시에 앱이 꺼져 있으면 그날 수집이 통째로 빠지고 **아무 알림도 나가지 않는다**(0건이어도 배치는 SUCCESS다). 다음 실행이 15일 창으로 메우므로([ADR-0042](docs/adr/ADR-0042-batch-schedule-and-target-date.md)) 매일 켤 필요는 없지만, **15일에 한 번은 평일 15시에 켜 두어야 한다.** 맥북이 자면 사이트도 함께 내려간다 — 온프레미스를 택한 대가다(spec §6).
 
 ## 하네스 설계 — 기획형 하네스
 

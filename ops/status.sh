@@ -45,5 +45,5 @@ found=""
 if [[ -n "$found" ]]; then
   echo "자동기동: 되살아났다 —$found  (ADR-0043은 0건을 전제한다)"
 else
-  echo "자동기동: 없다"
+  echo "자동기동: 없다 (정상 — 부팅·로그인에 뜨는 등록이 하나도 없다)"
 fi
