@@ -17,6 +17,11 @@ import java.time.LocalDate;
  * <p>{@code listedShares}는 그 시점의 상장주식수다. PER·PBR의 분모가 재무가 아니라 여기 있는
  * 이유는 <b>날짜별 값</b>이기 때문이다 — 유상증자·분할로 바뀌면 그날부터 다른 값이어야 하는데,
  * 분기 재무에 묶으면 다음 공시까지 낡은 수로 나눈다. 소스가 주지 않으면 null이다.
+ *
+ * <p>IMPORTANT — {@code tradeValue}는 소스가 준 <b>실측 거래대금</b>이다.
+ * MUST NOT: {@code close × volume}으로 합성해 채우지 않는다(V1 스키마의 같은 규칙). 다른 값이며,
+ * 실측과 합성이 섞이면 파생 지표가 시장마다 미묘하게 달라지고 그 차이는 시장이 늘 때에야 드러난다.
+ * 없으면 null이고, 그때는 거래대금 기반 지표를 계산하지 않는다.
  */
 public record PriceBar(
         LocalDate tradeDate,
@@ -26,6 +31,7 @@ public record PriceBar(
         BigDecimal close,
         BigDecimal adjClose,
         long volume,
+        BigDecimal tradeValue,
         BigDecimal listedShares
 ) {
 }

@@ -40,13 +40,24 @@ applies_to:
 
 ## 검증
 
-구간이 붙은 지표가 무차원인지 — 주가 스케일 지표에 `bands`가 있으면 안 된다:
+구간이 붙은 지표가 무차원인지 — 주가·통화 스케일 지표에 `bands`가 있으면 안 된다:
 
 ```bash
-# 결과가 없어야 한다
-rg -l 'bands = \{' src/main/java/com/stockscreener/indicator/calculator/ \
-  | rg 'Sma|Atr|Macd(?!V)Calculator|AdjClose'
+./gradlew test --tests "*IndicatorExtensibilityTest*"
 ```
+
+`축척에 의존하는 지표에는 구간이 붙지 않는다`가 `value_type IN ('PRICE','CURRENCY')`인 지표 중
+구간을 가진 것이 없음을 단언한다.
+
+**파일명으로 재던 것을 값 타입으로 바꿨다**(2026-08-10). 원래 검증은
+`rg -l 'bands = \{' … | rg 'Sma|Atr|Macd(?!V)Calculator|AdjClose'`였는데, 이름에 `Sma`·`Atr`가
+들어가면서도 **정규화되어 무차원인** 파생 지표(`ATR_PCT_14`, `SMA_200_SLOPE_60`,
+`SMA_200_MOM_21`)를 전부 거짓 양성으로 잡았다. `MacdVCalculator`를 `(?!V)`로 예외 처리하고
+있던 것이 이미 그 신호였다 — 예외를 이름마다 덧붙이는 방식은 지표가 늘수록 반드시 어긋난다.
+**무차원 여부를 정하는 것은 이름이 아니라 `value_type`이고**, 그것은 이미 애너테이션에 있다.
+
+거짓 양성인 검증은 침묵보다 나쁘다. 다음 세션이 멀쩡한 코드를 고치러 가거나, 몇 번 겪은 뒤로는
+검증 자체를 읽지 않게 된다.
 
 부등호를 프론트가 정하지 않는지 — `IndicatorBand`의 `operator`를 화면이 다시 계산하면 안 된다:
 

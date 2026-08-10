@@ -21,8 +21,8 @@ import java.util.List;
  *
  * <p>IMPORTANT — 고가·저가에 <b>수정계수를 적용해서</b> 쓴다. {@code PriceBar}의 고가·저가는
  * 원주가인 반면 {@code adjClose}만 수정되어 있어, 둘을 그대로 섞으면 액면분할 구간에서
- * "고가 − 종가"가 분할비율만큼 튄다. 같은 봉의 {@code adjClose / close} 비율을 곱해
- * 축척을 맞춘다.
+ * "고가 − 종가"가 분할비율만큼 튄다. 그 변환은 {@link PriceScaling}에 있다 — 52주 고저도
+ * 같은 것을 필요로 하며, 각자 구현하면 반올림이 어긋나기 시작한다.
  *
  * <p>ATR은 값의 크기가 주가에 비례해 <b>종목 간 비교가 불가능하다</b>. 그래서 이 지표 자체를
  * 조건으로 쓰기보다 MACD-V처럼 다른 지표를 정규화하는 분모로 쓴다.
@@ -92,28 +92,13 @@ public class Atr14Calculator implements IndicatorCalculator {
 
     /** max(고가−저가, |고가−전일종가|, |저가−전일종가|). 셋 다 수정 축척으로 맞춘 뒤 계산한다. */
     private static BigDecimal trueRange(PriceBar current, PriceBar previous) {
-        BigDecimal high = adjusted(current, current.high());
-        BigDecimal low = adjusted(current, current.low());
+        BigDecimal high = PriceScaling.adjustedHigh(current);
+        BigDecimal low = PriceScaling.adjustedLow(current);
         BigDecimal previousClose = previous.adjClose();
 
         BigDecimal range = high.subtract(low);
         BigDecimal highGap = high.subtract(previousClose).abs();
         BigDecimal lowGap = low.subtract(previousClose).abs();
         return range.max(highGap).max(lowGap);
-    }
-
-    /**
-     * 원주가 항목을 그 봉의 수정 축척으로 옮긴다.
-     *
-     * <p>{@code close}가 0이면 나눌 수 없다. 실제로는 발생하지 않지만
-     * ({@code price_daily}에 0 종가가 들어오면 그것 자체가 수집 결함이다) 배치를
-     * 죽이지 않도록 원값을 그대로 쓴다.
-     */
-    private static BigDecimal adjusted(PriceBar bar, BigDecimal rawValue) {
-        if (bar.close().signum() == 0) {
-            return rawValue;
-        }
-        return rawValue.multiply(bar.adjClose())
-                .divide(bar.close(), MovingAverages.SCALE, RoundingMode.HALF_UP);
     }
 }

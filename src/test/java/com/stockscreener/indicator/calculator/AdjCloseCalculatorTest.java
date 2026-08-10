@@ -44,11 +44,11 @@ class AdjCloseCalculatorTest {
                 new PriceBar(START,
                         BigDecimal.valueOf(2_500_000), BigDecimal.valueOf(2_500_000),
                         BigDecimal.valueOf(2_500_000), BigDecimal.valueOf(2_500_000),
-                        BigDecimal.valueOf(50_000), 1000L, null),
+                        BigDecimal.valueOf(50_000), 1000L, null, null),
                 new PriceBar(START.plusDays(1),
                         BigDecimal.valueOf(50_000), BigDecimal.valueOf(50_000),
                         BigDecimal.valueOf(50_000), BigDecimal.valueOf(50_000),
-                        BigDecimal.valueOf(50_000), 1000L, null));
+                        BigDecimal.valueOf(50_000), 1000L, null, null));
 
         List<IndicatorPoint> points = calculator.calculate(contextOf(bars));
 
@@ -66,7 +66,7 @@ class AdjCloseCalculatorTest {
         bars.set(1, new PriceBar(START.plusDays(1),
                 BigDecimal.valueOf(1000), BigDecimal.valueOf(1000),
                 BigDecimal.valueOf(1000), BigDecimal.valueOf(1000),
-                null, 1000L, null));
+                null, 1000L, null, null));
 
         List<IndicatorPoint> points = calculator.calculate(contextOf(bars));
 
@@ -91,7 +91,7 @@ class AdjCloseCalculatorTest {
         List<PriceBar> bars = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             BigDecimal price = BigDecimal.valueOf(1000 + i);
-            bars.add(new PriceBar(START.plusDays(i), price, price, price, price, price, 1000L, null));
+            bars.add(new PriceBar(START.plusDays(i), price, price, price, price, price, 1000L, null, null));
         }
         return bars;
     }

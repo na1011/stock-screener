@@ -82,7 +82,7 @@ class PerCalculatorTest {
         // close 150, adjClose 30 (분할 반영). PER은 close 기준이어야 15가 나온다.
         PriceBar bar = new PriceBar(LocalDate.of(2026, 1, 2),
                 BigDecimal.valueOf(150), BigDecimal.valueOf(150), BigDecimal.valueOf(150),
-                BigDecimal.valueOf(150), BigDecimal.valueOf(30), 1000L, null);
+                BigDecimal.valueOf(150), BigDecimal.valueOf(30), 1000L, null, null);
 
         IndicatorContext context = new IndicatorContext(
                 1L, List.of(bar), List.of(),
@@ -101,7 +101,7 @@ class PerCalculatorTest {
         // 재무는 주식수 100(EPS 10 → PER 15)이라 하고, 시세는 200을 준다(EPS 5 → PER 30).
         PriceBar bar = new PriceBar(LocalDate.of(2026, 1, 2),
                 BigDecimal.valueOf(150), BigDecimal.valueOf(150), BigDecimal.valueOf(150),
-                BigDecimal.valueOf(150), BigDecimal.valueOf(150), 1000L, BigDecimal.valueOf(200));
+                BigDecimal.valueOf(150), BigDecimal.valueOf(150), 1000L, null, BigDecimal.valueOf(200));
 
         IndicatorContext context = new IndicatorContext(
                 1L, List.of(bar), List.of(),
@@ -123,7 +123,7 @@ class PerCalculatorTest {
     }
 
     private static PriceBar priceBar(BigDecimal close) {
-        return new PriceBar(LocalDate.of(2026, 1, 2), close, close, close, close, close, 1000L, null);
+        return new PriceBar(LocalDate.of(2026, 1, 2), close, close, close, close, close, 1000L, null, null);
     }
 
     private static List<FinancialFigures> quarters(int count, BigDecimal netIncome, BigDecimal shares) {

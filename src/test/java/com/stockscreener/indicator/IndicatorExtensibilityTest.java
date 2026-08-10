@@ -98,6 +98,26 @@ class IndicatorExtensibilityTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 축척에 의존하는 지표에는 구간이 붙지 않는다(ADR-0023)")
+    void scaleDependentIndicatorsHaveNoBands() {
+        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
+
+        // "3만원 이상 = 높음"은 종목마다 뜻이 달라 거짓이 된다. 시장이 늘면 통화까지 갈린다.
+        // 이 성질을 파일명(Sma·Atr…)으로 재려던 검증은 정규화된 파생 지표(ATR_PCT_14 등)를
+        // 거짓 양성으로 잡았다. 무차원 여부를 정하는 것은 이름이 아니라 value_type이다.
+        List<String> banded = jdbcTemplate.queryForList("""
+                SELECT code FROM indicator
+                WHERE value_type IN ('PRICE', 'CURRENCY')
+                  AND bands IS NOT NULL AND jsonb_array_length(bands) > 0
+                ORDER BY code
+                """, String.class);
+
+        assertThat(banded)
+                .as("주가·통화 스케일 지표에 구간이 붙었다 — 종목마다 뜻이 달라진다")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("백분위 행이 원본 지표를 가리킨다 — 부등호 방향 판단이 여기 의존한다")
     void percentileRowLinksBackToItsSource() {
         new IndicatorCatalogSynchronizer(

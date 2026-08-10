@@ -85,7 +85,7 @@ class PbrCalculatorTest {
         PriceBar bar = new PriceBar(
                 LocalDate.of(2026, 1, 2),
                 new BigDecimal("2000"), new BigDecimal("2000"), new BigDecimal("2000"),
-                new BigDecimal("2000"), new BigDecimal("1000"), 1000L, null);
+                new BigDecimal("2000"), new BigDecimal("1000"), 1000L, null, null);
         IndicatorContext context = new IndicatorContext(
                 1L, List.of(bar), List.of(),
                 List.of(figures(new BigDecimal("1000000"), new BigDecimal("1000"))), Map.of());
@@ -103,7 +103,7 @@ class PbrCalculatorTest {
     }
 
     private static PriceBar priceBar(BigDecimal close) {
-        return new PriceBar(LocalDate.of(2026, 1, 2), close, close, close, close, close, 1000L, null);
+        return new PriceBar(LocalDate.of(2026, 1, 2), close, close, close, close, close, 1000L, null, null);
     }
 
     private static FinancialFigures figures(BigDecimal equity, BigDecimal shares) {

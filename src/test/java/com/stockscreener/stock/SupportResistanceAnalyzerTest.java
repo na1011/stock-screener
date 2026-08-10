@@ -157,7 +157,7 @@ class SupportResistanceAnalyzerTest {
             int price = (i / 10) % 2 == 0 ? 9_000 : 11_000;
             bars.add(i == 30
                     ? new PriceBar(START.plusDays(i), null, null, null,
-                            BigDecimal.valueOf(price), null, 1000L, null)
+                            BigDecimal.valueOf(price), null, 1000L, null, null)
                     : bar(START.plusDays(i), price));
         }
 
@@ -177,7 +177,7 @@ class SupportResistanceAnalyzerTest {
         BigDecimal c = BigDecimal.valueOf(close);
         BigDecimal high = c.multiply(new BigDecimal("1.01"));
         BigDecimal low = c.multiply(new BigDecimal("0.99"));
-        return new PriceBar(date, c, high, low, c, c, 1000L, null);
+        return new PriceBar(date, c, high, low, c, c, 1000L, null, null);
     }
 
     /** 원주가와 수정종가가 다른 봉(분할 구간). */
@@ -185,6 +185,6 @@ class SupportResistanceAnalyzerTest {
         BigDecimal raw = BigDecimal.valueOf(rawClose);
         return new PriceBar(date, raw,
                 raw.multiply(new BigDecimal("1.01")), raw.multiply(new BigDecimal("0.99")),
-                raw, BigDecimal.valueOf(adjClose), 1000L, null);
+                raw, BigDecimal.valueOf(adjClose), 1000L, null, null);
     }
 }

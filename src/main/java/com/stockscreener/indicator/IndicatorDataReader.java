@@ -32,9 +32,9 @@ public class IndicatorDataReader {
      * "값이 안 나온다"가 아니라 "옛날 값이 나온다"로 드러나 알아채기 어렵다.
      */
     private static final String SELECT_PRICE_BARS = """
-            SELECT trade_date, open, high, low, close, adj_close, volume, listed_shares
+            SELECT trade_date, open, high, low, close, adj_close, volume, trade_value, listed_shares
             FROM (
-                SELECT trade_date, open, high, low, close, adj_close, volume, listed_shares
+                SELECT trade_date, open, high, low, close, adj_close, volume, trade_value, listed_shares
                 FROM price_daily
                 WHERE stock_id = ? AND trade_date <= ?
                 ORDER BY trade_date DESC
@@ -74,6 +74,7 @@ public class IndicatorDataReader {
             rs.getBigDecimal("close"),
             rs.getBigDecimal("adj_close"),
             rs.getLong("volume"),
+            rs.getBigDecimal("trade_value"),
             rs.getBigDecimal("listed_shares"));
 
     private final JdbcTemplate jdbcTemplate;
