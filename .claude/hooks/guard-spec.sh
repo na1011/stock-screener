@@ -14,9 +14,13 @@ if [ -z "$path" ]; then
   exit 0
 fi
 
-if [[ "$path" == *"docs/stock-screener-project-spec.md" ]]; then
+# 사람이 쓴 정본은 둘이다. 층은 다르지만(충돌 시 spec이 이긴다 — ADR-0041) 에이전트가
+# 임의로 고치면 안 된다는 점에서는 같으므로 같은 게이트를 건다. 둘째 것을 뺐다가 실제로
+# 사본이 하나 더 생긴 적이 있다.
+if [[ "$path" == *"docs/stock-screener-project-spec.md" \
+   || "$path" == *"docs/external/screener-spec-midterm-swing.md" ]]; then
   jq -n \
-    --arg reason "기획 정본 문서(stock-screener-project-spec.md)입니다. 임의 수정 대신 변경을 제안하세요. 정말 갱신이 필요하면 승인 후 진행하세요." \
+    --arg reason "사람이 쓴 정본 문서($(basename "$path"))입니다. 임의 수정 대신 변경을 제안하세요. 정말 갱신이 필요하면 승인 후 진행하고, 그 경위를 ADR에 남기세요." \
     '{
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
