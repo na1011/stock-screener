@@ -430,6 +430,16 @@ function formatTime(value: string | null): string {
           두 실행을 나란히 비교할 수도 없다.
         -->
         <Column expander style="width: 3rem" />
+        <!--
+          실행 id다. 화면에 붙이는 순번이 아닌 이유는 그것이 답해야 할 질문이 "위에서 몇
+          번째인가"가 아니라 "이게 #26인가"이기 때문이다 — 순번은 필터를 바꾸면 같은 실행이
+          다른 번호가 되고, 알림·로그·DB가 부르는 이름과도 어긋난다. `#26 재실행` 표기와 같은 값이다.
+        -->
+        <Column header="실행" style="width: 5rem">
+          <template #body="{ data }: { data: BatchExecution }">
+            <span class="tabular admin__id">#{{ data.id }}</span>
+          </template>
+        </Column>
         <Column field="targetDate" header="대상 일자" />
         <Column field="jobName" header="잡" />
         <Column header="상태">
@@ -654,6 +664,11 @@ function formatTime(value: string | null): string {
 
 .admin__stalled {
   margin-inline-start: 0.375rem;
+}
+
+/* 식별자이지 읽을 값이 아니다. 눈에 먼저 들어오면 옆의 일자·상태를 가린다. */
+.admin__id {
+  color: var(--p-text-muted-color);
 }
 
 .admin__stopped {
