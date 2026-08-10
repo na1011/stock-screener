@@ -193,3 +193,82 @@ describe('useAsync', () => {
     expect(async.data.value).toBeNull()
   })
 })
+
+/**
+ * 배경 갱신.
+ *
+ * `run`이 보장하는 것은 상태가 <b>바뀌는</b> 것이고 `refresh`가 보장하는 것은 상태가
+ * <b>안 바뀌는</b> 것이다. 뒤엣것은 깨져도 티가 안 난다 — 자동 갱신마다 화면이 한 번
+ * 깜빡이고 펼쳐 둔 행이 접히는데, 그것을 회귀로 알아채기 어렵다.
+ */
+describe('refresh', () => {
+  it('IMPORTANT — 이미 데이터가 있으면 loading으로 떨어지지 않는다', async () => {
+    // AsyncPanel이 loading에서 슬롯을 파괴한다. 여기서 상태를 건드리면 5초마다 배치 상세가
+    // 접히고, 진행률을 지켜보려고 켠 갱신이 정작 보려던 것을 닫는다.
+    const pending = deferred<string>()
+    const calls = [deferred<string>(), pending]
+    let index = 0
+    const { result: async, dispose } = withScope(() =>
+      useAsync(() => (calls[index++] ?? pending).promise),
+    )
+
+    calls[0]!.resolve('처음')
+    await async.run()
+
+    const refreshing = async.refresh()
+    expect(async.state.value).toBe('ready')
+    expect(async.data.value).toBe('처음')
+
+    pending.resolve('다음')
+    await refreshing
+    expect(async.state.value).toBe('ready')
+    expect(async.data.value).toBe('다음')
+    dispose()
+  })
+
+  it('보여줄 것이 아직 없으면 첫 로딩이다 — 그때는 스켈레톤이 떠야 한다', async () => {
+    const pending = deferred<string>()
+    const { result: async, dispose } = withScope(() => useAsync(() => pending.promise))
+
+    const refreshing = async.refresh()
+    expect(async.state.value).toBe('loading')
+
+    pending.resolve('값')
+    await refreshing
+    expect(async.state.value).toBe('ready')
+    dispose()
+  })
+
+  it('IMPORTANT — 실패를 삼키지 않고 던진다. 조용히 넘기면 갱신이 멈춘 줄 모른다', async () => {
+    let shouldFail = false
+    const { result: async, dispose } = withScope(() =>
+      useAsync(() =>
+        shouldFail ? Promise.reject(new ApiError(503, null, '일시적 오류')) : Promise.resolve('처음'),
+      ),
+    )
+
+    await async.run()
+    shouldFail = true
+
+    await expect(async.refresh()).rejects.toBeInstanceOf(ApiError)
+    dispose()
+  })
+
+  it('실패해도 이미 그린 것을 지우지 않는다 — 일시적 실패 한 번이 목록을 비우면 안 된다', async () => {
+    let shouldFail = false
+    const { result: async, dispose } = withScope(() =>
+      useAsync(() =>
+        shouldFail ? Promise.reject(new ApiError(503, null, '일시적 오류')) : Promise.resolve('처음'),
+      ),
+    )
+
+    await async.run()
+    shouldFail = true
+    await async.refresh().catch(() => undefined)
+
+    expect(async.data.value).toBe('처음')
+    expect(async.state.value).toBe('ready')
+    expect(async.error.value).toBeNull()
+    dispose()
+  })
+})
