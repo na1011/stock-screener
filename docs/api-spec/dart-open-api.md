@@ -134,8 +134,9 @@ Q4(손익) = 사업보고서 금액 − 3분기보고서의 thstrm_add_amount(�
 주요계정에 발행주식수가 없으므로 PER·PBR에 필요하면 별도 호출한다.
 
 - 요청: `crtfc_key`, `corp_code`, `bsns_year`, `reprt_code`
-- 주요 필드: `se`(구분: 보통주/우선주/합계), `istc_totqy`(발행주식의 총수), `tesstk_co`(자기주식수), `distb_stock_co`(유통주식수)
+- **필드 계약은 §11-H**다. 자주 쓰는 것만: `se`(구분), `istc_totqy`(발행주식의 총수), `tesstk_co`(자기주식수), `distb_stock_co`(유통주식수)
 - `se`가 보통주/우선주/합계로 나뉘므로 **행 선택 로직이 필요**하다. 값에 콤마가 포함된다.
+- **감소 내역 넷(`redc`·`profit_incnr`·`rdmstk_repy`·`etc`)이 자사주 소각을 분해해 준다** — 발행주식수 배수로 분할 비율을 유도할 때 조용히 틀리는 자리다(§11-H·§10-B).
 
 > v1 범위 판단: 초기 적재에서는 호출하지 않는다. 종목당 12콜이 이미 필요하고, 발행주식수는 `price_daily`가 아니라 `financial_statement.shares_outstanding`에 들어가므로 Phase 3에서 PER·PBR을 실제로 계산할 때 붙여도 늦지 않다.
 
@@ -193,6 +194,9 @@ Q4(손익) = 사업보고서 금액 − 3분기보고서의 thstrm_add_amount(�
 **요청**: 주요계정과 같되 **`fs_div`가 추가로 필수**다(`CFS` | `OFS`). 주요계정과 달리
 **응답 행에 `fs_div` 필드가 없다** — 어느 쪽을 받았는지는 요청이 정하므로, CFS가 비면 OFS로
 다시 부르는 폴백이 필요하고 그때만 호출이 2배가 된다.
+
+**필드 계약은 §11-E다.** 특히 **`thstrm_amount`가 분/반기 (포괄)손익계산서에서는 [3개월]
+금액**이라는 것 — TTM을 4분기 합으로 만들기 전에 그 절을 읽는다.
 
 **응답 규모**: 229~349행(주요계정은 7~15행). `sj_div`가 다섯이다.
 
@@ -495,8 +499,32 @@ git show 6bc3d09:docs/api-spec/dart-api-개발가이드.txt   # 13종 원문
 git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 목록 (§9의 근거)
 ```
 
-아래는 **ADR-0039 §단계 C가 길로 지목한 넷**만 옮긴 것이다. `fnlttSinglAcnt`는 §1,
-`fnlttSinglAcntAll`은 §7, `fnlttMultiAcnt`·`xbrlTaxonomy`는 §10-C가 이미 덮는다.
+> **이 절은 두 번에 걸쳐 채워졌고, 1차가 불완전했다.** 처음에는 ADR-0039 §단계 C가 이름을
+> 부른 넷만 옮기고 *"§10-C가 이미 덮는다"*며 P10 계열 셋(`fnlttSinglAcntAll`·`fnlttMultiAcnt`·
+> `xbrlTaxonomy`)을 건너뛰었다. **§10-C는 실측 발견을 적은 것이지 필드 계약이 아니었다** —
+> 그 결과 전체 재무제표의 **"분/반기 손익은 [3개월] 금액"**과 택사노미의 **`sj_div` 26코드표**가
+> 사라졌다. **MUST NOT: "다른 절이 덮는다"를 확인 없이 쓰지 않는다.** 덮는지는 그 절을 열어
+> 필드 표가 있는지로 판정한다.
+
+### 엔드포인트 색인 — 무엇을 어디까지 믿을 수 있나
+
+**지위가 곧 신뢰도다.** "사용 중"은 코드가 매일 부르는 것이고, "미착수"는 스펙만 읽은 것이다.
+
+| 엔드포인트 | 지위 | 필드 계약 | 콜 수 |
+|---|---|---|---|
+| `getStockPriceInfo` (공공데이터포털) | **사용 중** | [`docs/api-spec/data-go-kr-stock-price.md`](./data-go-kr-stock-price.md) | 종목당 1(기간조회) |
+| `corpCode.xml` | **사용 중** | §2 | 전체 1 |
+| `fnlttSinglAcnt.json` | **사용 중** | §1 | 종목·연도당 4 |
+| `stockTotqySttus.json` | 결정·미구현 | §11-H | 종목·연도당 4 |
+| `company.json` | 결정 (P8) | §11-A | 종목당 1 = 350 |
+| `irdsSttus.json` | 결정 (P9) | §11-B | 종목당 1 = 350 |
+| `cmpMgDecsn.json` | 결정 (U-06) | §11-C | 종목당 1 = 350 |
+| `stkExtrDecsn.json` | 결정 (U-06) | §11-D | 종목당 1 = 350 |
+| `fnlttSinglAcntAll.json` | 결정 (P10 대상) | §11-E | 종목·연도당 4(폴백 시 8) |
+| `fnlttMultiAcnt.json` | 결정 (P10 비용) | §11-F | **100종목 묶음** = 64 |
+| `xbrlTaxonomy.json` | 결정 (P10 사전) | §11-G | `sj_div`당 1 |
+| `accnutAdtorNmNdAdtOpinion.json` | **후보**(채택 미정) | §11-I | 종목당 1 = 350 |
+| `elestock`·`majorstock`·`tesstkAcqsDspsSttus`·`list` | **미착수** (P11) | §11-J (이름·인자만) | — |
 
 **공통 요청 인자**: `crtfc_key`(STRING(40), 필수). 아래 표는 그 외의 것만 적는다.
 **응답 공통**: `status`·`message`(§4). 목록형은 `list` 배열로 온다 — **`company.json`만 평면
@@ -539,15 +567,23 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 
 - 요청: `corp_code`(필수) · `bgn_de` · `end_de`(둘 다 필수, YYYYMMDD, **2015년 이후만**).
   기간이 필수라 **종목별로 돌아야 한다 — 350콜.**
-- 응답(주요): `rcept_no` `corp_cls` `corp_code` `corp_name` **`mg_mth`**(합병방법)
-  **`mg_stn`**(합병형태) `mg_pp` `mg_rt` `mg_rt_bs` · 상대회사 `mgptncmp_cmpnm`
-  `mgptncmp_mbsn` `mgptncmp_rl_cmpn` · 상대회사 재무 `rbsnfdtl_{tast,tdbt,teqt,cpt,sl,nic}` ·
-  외부감사 `eadtat_intn` `eadtat_op` · 신설회사 `nmgcmp_*` `ffdtl_*` ·
-  일정 `mgsc_*`(그중 **`mgsc_mgdt`** 합병기일 · `mgsc_mgctrd` 계약일 ·
-  `mgsc_trspprpd_{bgd,edd}` 거래정지 예정 · `mgsc_nstklstprd` 신주 상장예정) ·
-  **`bddd`**(이사회결의일) · 신주 `mgnstk_{ostk,cstk}_cnt` · 외부평가 `exevl_*` ·
-  매수청구권 `aprskh_*` · `bdlst_atn` `otcpr_bdlst_sf_atn` `od_a_at_{t,b}` `adt_a_atn`
-  `popt_ctr_{atn,cn}` `rs_sm_atn` `ex_sm_r`
+- 응답 — **식별·판정**: `rcept_no` `corp_cls` `corp_code` `corp_name` **`mg_mth`**(합병방법)
+  **`mg_stn`**(합병형태) `mg_pp`(목적) `mg_rt`(비율) `mg_rt_bs`(비율 산출근거) **`bddd`**(이사회결의일)
+- **일정**: **`mgsc_mgdt`**(합병기일) `mgsc_mgctrd`(계약일) `mgsc_shddstd`(주주확정기준일)
+  `mgsc_shclspd_bgd` `mgsc_shclspd_edd`(주주명부 폐쇄) `mgsc_mgop_rcpd_bgd` `mgsc_mgop_rcpd_edd`(반대의사 접수)
+  `mgsc_gmtsck_prd`(주주총회) `mgsc_aprskh_expd_bgd` `mgsc_aprskh_expd_edd`(매수청구 행사)
+  `mgsc_osprpd_bgd` `mgsc_osprpd_edd`(구주권 제출) `mgsc_trspprpd_bgd` `mgsc_trspprpd_edd`(거래정지 예정)
+  `mgsc_cdobprpd_bgd` `mgsc_cdobprpd_edd`(채권자이의) `mgsc_ergmd`(종료보고 총회일)
+  `mgsc_mgrgsprd`(합병등기 예정) `mgsc_nstkdlprd`(신주권 교부) `mgsc_nstklstprd`(신주 상장예정)
+- **상대회사**: `mgptncmp_cmpnm` `mgptncmp_mbsn` `mgptncmp_rl_cmpn` ·
+  재무 `rbsnfdtl_tast` `rbsnfdtl_tdbt` `rbsnfdtl_teqt` `rbsnfdtl_cpt` `rbsnfdtl_sl` `rbsnfdtl_nic` ·
+  외부감사 `eadtat_intn` `eadtat_op`
+- **신설합병회사**: `nmgcmp_cmpnm` `nmgcmp_mbsn` `nmgcmp_nbsn_rsl` `nmgcmp_rlst_atn` ·
+  설립시 재무 `ffdtl_tast` `ffdtl_tdbt` `ffdtl_teqt` `ffdtl_cpt` `ffdtl_std`
+- **그 밖**: 신주 `mgnstk_ostk_cnt` `mgnstk_cstk_cnt` · 외부평가 `exevl_atn` `exevl_bs_rs`
+  `exevl_intn` `exevl_pd` `exevl_op` · 매수청구권 `aprskh_plnprc` `aprskh_pym_plpd_mth`
+  `aprskh_ctref` · `bdlst_atn` `otcpr_bdlst_sf_atn` `od_a_at_t` `od_a_at_b` `adt_a_atn`
+  `popt_ctr_atn` `popt_ctr_cn` `rs_sm_atn` `ex_sm_r`
 
 **U-06에 실제로 쓰이는 것은 `bddd`·`mgsc_mgdt`(진행 구간)와 `mg_mth`다.**
 **`mg_stn`이 `해당사항없음`으로 와서 존속/소멸을 가르지 못하고, 그 정보는 `mg_mth`에 자유
@@ -556,14 +592,22 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 ### 11-D. 주식교환·이전 결정 — `stkExtrDecsn.json`
 
 - 요청: `cmpMgDecsn.json`과 동일(`corp_code` · `bgn_de` · `end_de`). **350콜.**
-- 응답(주요): `rcept_no` `corp_cls` `corp_code` `corp_name` `extr_sen`(구분)
-  **`extr_stn`**(교환·이전 형태) · 대상법인 `extr_tgcmp_{cmpnm,rp,mbsn,rl_cmpn}`
-  `extr_tgcmp_tisstk_{ostk,cstk}` · 대상법인 재무 `rbsnfdtl_{tast,tdbt,teqt,cpt}` ·
-  `extr_rt` `extr_rt_bs` `extr_pp` · 일정 `extrsc_*`(그중 **`extrsc_extrdt`** 교환·이전일자 ·
-  `extrsc_extrctrd` 계약일 · `extrsc_trspprpd_{bgd,edd}` 거래정지 예정 ·
-  `extrsc_nstklstprd` 신주 상장예정) · **`atextr_cpcmpnm`**(교환·이전 후 완전모회사명) ·
-  **`bddd`** · 외부평가 `exevl_*` · 매수청구권 `aprskh_*` · `bdlst_atn`
-  `otcpr_bdlst_sf_atn` `od_a_at_{t,b}` `adt_a_atn` `popt_ctr_{atn,cn}` `rs_sm_atn` `ex_sm_r`
+- 응답 — **식별·판정**: `rcept_no` `corp_cls` `corp_code` `corp_name` `extr_sen`(구분)
+  **`extr_stn`**(교환·이전 형태) `extr_rt`(비율) `extr_rt_bs`(산출근거) `extr_pp`(목적)
+  **`atextr_cpcmpnm`**(교환·이전 후 완전모회사명) **`bddd`**(이사회결의일)
+- **일정**: **`extrsc_extrdt`**(교환·이전일자) `extrsc_extrctrd`(계약일) `extrsc_shddstd`(주주확정기준일)
+  `extrsc_shclspd_bgd` `extrsc_shclspd_edd`(주주명부 폐쇄) `extrsc_extrop_rcpd_bgd`
+  `extrsc_extrop_rcpd_edd`(반대의사 접수) `extrsc_gmtsck_prd`(주주총회)
+  `extrsc_aprskh_expd_bgd` `extrsc_aprskh_expd_edd`(매수청구 행사) `extrsc_osprpd_bgd`
+  `extrsc_osprpd_edd`(구주권 제출) `extrsc_trspprpd_bgd` `extrsc_trspprpd_edd`(거래정지 예정)
+  `extrsc_nstkdlprd`(신주권 교부) `extrsc_nstklstprd`(신주 상장예정)
+- **대상법인**: `extr_tgcmp_cmpnm` `extr_tgcmp_rp`(대표자) `extr_tgcmp_mbsn`(주요사업)
+  `extr_tgcmp_rl_cmpn`(회사와의 관계) `extr_tgcmp_tisstk_ostk` `extr_tgcmp_tisstk_cstk`(발행주식총수) ·
+  재무 `rbsnfdtl_tast` `rbsnfdtl_tdbt` `rbsnfdtl_teqt` `rbsnfdtl_cpt`
+- **그 밖**: 외부평가 `exevl_atn` `exevl_bs_rs` `exevl_intn` `exevl_pd` `exevl_op` ·
+  매수청구권 `aprskh_plnprc` `aprskh_pym_plpd_mth` **`aprskh_lmt`**(제한 내용 — 합병에 없다)
+  `aprskh_ctref` · `bdlst_atn` `otcpr_bdlst_sf_atn` `od_a_at_t` `od_a_at_b` `adt_a_atn`
+  `popt_ctr_atn` `popt_ctr_cn` `rs_sm_atn` `ex_sm_r`
 
 **`atextr_cpcmpnm`(완전모회사명)이 `cmpMgDecsn`에 없는 것이다** — 교환·이전은 이 필드로
 "우리가 자회사가 되는가"를 자유 텍스트 파싱 없이 가를 여지가 있다. **미검증이다**(탐침
@@ -572,7 +616,119 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 > `extrsc_trspprpd`(단일 필드)는 2019-12-08까지만 쓰였고 그 뒤로 `_bgd`/`_edd`로 갈렸다.
 > 2015~2019 구간을 읽으면 옛 필드가 나온다.
 
-### 11-E. 받았지만 아직 안 쓰는 넷
+### 11-E. 전체 재무제표 — `fnlttSinglAcntAll.json`
+
+**P10의 전환 대상이다.** 실측(행 수·`account_id` 거동·무엇이 열리고 닫히는가)은 §7에 있고,
+여기는 필드 계약만 둔다.
+
+- 요청: `corp_code` · `bsns_year`(2015~) · `reprt_code` · **`fs_div`(필수, `CFS`|`OFS`)**.
+  **`fs_div`가 필수인 것이 주요계정과의 차이**이고, 응답 행에는 그 필드가 없어 어느 쪽을 받았는지
+  요청만이 안다(§7).
+- 응답: `rcept_no` `reprt_code` `bsns_year` `corp_code` **`sj_div`** `sj_nm` **`account_id`**
+  `account_nm` `account_detail` `thstrm_nm` **`thstrm_amount`** `thstrm_add_amount`
+  `frmtrm_nm` `frmtrm_amount` **`frmtrm_q_nm`** **`frmtrm_q_amount`** `frmtrm_add_amount`
+  `bfefrmtrm_nm` `bfefrmtrm_amount` `ord` `currency`
+
+**IMPORTANT — `thstrm_amount`가 언제나 같은 기간이 아니다.** 원문 주석 그대로:
+**"분/반기 보고서이면서 (포괄)손익계산서일 경우 [3개월] 금액"**이다. `frmtrm_q_amount`도 같다.
+이 저장소는 매출·이익·현금흐름을 **4분기 합(TTM)**으로 만드므로(`data-pipeline.md`의 유량/저량
+구분), **누적으로 오는 줄 알고 더하면 값이 조용히 틀린다.** 주요계정(§1)이 `thstrm_amount`를
+분기 단독, `thstrm_add_amount`를 누적으로 주던 것과 **규칙이 같지 않다** — 여기서는 재무제표
+구분까지 함께 봐야 한다.
+
+| 필드 | 뜻 | 함정 |
+|---|---|---|
+| `sj_div` | 재무제표구분 | **다섯이다** — `BS` `IS` `CIS` `CF` `SCE`. 주요계정은 `BS`/`IS` 둘뿐(§7) |
+| `account_id` | XBRL 표준계정ID | 표준이 아니면 **`-표준계정코드 미사용-` 문자열**로 온다. null이 아니다 |
+| `account_detail` | 계정상세 | **자본변동표(SCE)에만** 나온다. `자본 [member]\|지배기업 소유주지분` 형태 |
+| `frmtrm_q_nm`·`frmtrm_q_amount` | 전기(분/반기) | **주요계정에 없는 필드다.** 분/반기 비교는 `frmtrm_amount`가 아니라 이쪽 |
+| `bfefrmtrm_*` | 전전기 | **사업보고서에만** 나온다 |
+
+### 11-F. 다중회사 주요계정 — `fnlttMultiAcnt.json`
+
+**P10의 비용을 87분의 1로 만드는 경로다**(5,600콜 → 64콜). 상한 100은 실측으로 확정했다(§10-C).
+
+- 요청: **`corp_code`(콤마 구분, 최대 100)** · `bsns_year`(2015~) · `reprt_code`
+- 응답: `rcept_no` `bsns_year` **`stock_code`** `reprt_code` `account_nm` `fs_div` `fs_nm`
+  `sj_div` `sj_nm` `thstrm_nm` `thstrm_dt` `thstrm_amount` `thstrm_add_amount`
+  `frmtrm_nm` `frmtrm_dt` `frmtrm_amount` `frmtrm_add_amount`
+  `bfefrmtrm_nm` `bfefrmtrm_dt` `bfefrmtrm_amount` `ord` `currency`
+
+- **`sj_div`는 `BS`/`IS` 둘뿐이다** — 주요계정(§1)과 같고 전체 재무제표(§11-E)의 다섯과 다르다.
+- **IMPORTANT — 응답 스펙에 `corp_code`가 없다.** 회사 식별은 **`stock_code`(6자리)**로 한다.
+  실제 응답에는 `corp_code`도 채워져 오지만 **표에 없는 필드에 의존하지 않는다**(§10-C).
+- `bfefrmtrm_*`는 사업보고서에만 온다.
+
+### 11-G. XBRL택사노미 재무제표양식 — `xbrlTaxonomy.json`
+
+**표준계정 사전이다. 회사별 진단에는 쓸 수 없다**(`corp_code`를 받지 않는다 — §10-C).
+쓸 데는 `account_id` ↔ `label_kor` 사전을 만들어 P10의 계정 매칭 후보군을 생성하는 것이다.
+
+- 요청: **`sj_div`(필수)** 하나뿐. **`sj_div`당 1콜**이다.
+- 응답: `sj_div` `account_id` `account_nm` `bsns_de`(기준일) **`label_kor`** `label_eng`
+  `data_tp` `ifrs_ref`
+
+**`sj_div` 코드 26개** — 이것이 없으면 `BS1` 말고는 부를 수가 없다.
+
+| 코드 | 재무제표 | 개별/연결 | 표시방법 | 세전/세후 |
+|---|---|---|---|---|
+| `BS1` · `BS2` | 재무상태표 | 연결 · 개별 | 유동/비유동법 | — |
+| `BS3` · `BS4` | 재무상태표 | 연결 · 개별 | 유동성배열법 | — |
+| `IS1` · `IS2` | 별개의 손익계산서 | 연결 · 개별 | 기능별분류 | — |
+| `IS3` · `IS4` | 별개의 손익계산서 | 연결 · 개별 | 성격별분류 | — |
+| `CIS1` · `CIS2` | 포괄손익계산서 | 연결 · 개별 | — | 세후 |
+| `CIS3` · `CIS4` | 포괄손익계산서 | 연결 · 개별 | — | 세전 |
+| `DCIS1` · `DCIS2` | 단일 포괄손익계산서 | 연결 · 개별 | 기능별분류 | 세후포괄손익 |
+| `DCIS3` · `DCIS4` | 단일 포괄손익계산서 | 연결 · 개별 | 기능별분류 | 세전 |
+| `DCIS5` · `DCIS6` | 단일 포괄손익계산서 | 연결 · 개별 | 성격별분류 | 세후포괄손익 |
+| `DCIS7` · `DCIS8` | 단일 포괄손익계산서 | 연결 · 개별 | 성격별분류 | 세전 |
+| `CF1` · `CF2` | 현금흐름표 | 연결 · 개별 | 직접법 | — |
+| `CF3` · `CF4` | 현금흐름표 | 연결 · 개별 | 간접법 | — |
+| `SCE1` · `SCE2` | 자본변동표 | 연결 · 개별 | — | — |
+
+**`data_tp`(데이터 유형)**: `text block`=제목 · `Text`=문자 · `yyyy-mm-dd`=날짜 ·
+**`X`=금액** · **`(X)`=금액(음수 표기)** · `X.XX`=소수 · **`Shares`=주식 수** ·
+`For each`=반복 공시 항목 · 공란=입력 불요.
+
+### 11-H. 주식의 총수 현황 — `stockTotqySttus.json`
+
+- 요청: `corp_code` · `bsns_year`(2015~) · `reprt_code`
+- 응답: `rcept_no` `corp_cls` `corp_code` `corp_name` **`se`** `isu_stock_totqy`
+  `now_to_isu_stock_totqy` `now_to_dcrs_stock_totqy` **`redc`** **`profit_incnr`**
+  **`rdmstk_repy`** **`etc`** **`istc_totqy`** `tesstk_co` `distb_stock_co` `stlm_dt`
+
+| 필드 | 뜻 | 비고 |
+|---|---|---|
+| `se` | 구분 | `보통주`/`우선주`/`합계`/`비고`. **`비고` 행은 전 필드가 `-`**(§10-B) |
+| `isu_stock_totqy` | Ⅰ. 발행할 주식의 총수 | 수권주식수 |
+| `now_to_isu_stock_totqy` | Ⅱ. 현재까지 발행한 총수 | — |
+| `now_to_dcrs_stock_totqy` | Ⅲ. 현재까지 감소한 총수 | 아래 넷의 합 |
+| `redc` / `profit_incnr` / `rdmstk_repy` / `etc` | Ⅲ의 내역 — 감자 / **이익소각** / 상환주식 상환 / 기타 | **아래 참조** |
+| `istc_totqy` | Ⅳ. 발행주식의 총수 (Ⅱ−Ⅲ) | 우리가 쓰는 발행주식수 |
+| `tesstk_co` | Ⅴ. 자기주식수 | — |
+| `distb_stock_co` | Ⅵ. 유통주식수 (Ⅳ−Ⅴ) | — |
+
+**IMPORTANT — 감소 내역 넷이 이 엔드포인트의 값어치다.** §10-B에서 삼성전자 2018 발행주식수가
+액면분할 50배가 **아니었던** 원인이 자사주 소각이고, 그것이 여기 `profit_incnr`·`redc`로
+분해되어 온다. **이 필드들을 보지 않고 발행주식수 배수로 분할 비율을 유도하면 조용히 틀린다.**
+같은 이유로 `SHARES_GROWTH_3Y`(H-06)의 교란 요인도 여기서 갈린다.
+
+값에 **콤마가 포함**되고, `se`가 셋 이상으로 나뉘므로 **행 선택 로직이 필요**하다(§3).
+
+### 11-I. 회계감사인의 명칭 및 감사의견 — `accnutAdtorNmNdAdtOpinion.json`
+
+**후보다. 채택하려면 원본 명세 개정이 먼저이며 그것은 사용자 결정이다**(ADR-0039 §결과).
+실측(`적정의견` 문자열 · `bsns_year`가 기수 · 행이 2배)은 §10-D에 있다.
+
+- 요청: `corp_code` · `bsns_year` · `reprt_code`. **1콜에 당기·전기·전전기 3개년**이 온다.
+- 응답: `rcept_no` `corp_cls` `corp_code` `corp_name` **`bsns_year`** `adtor`
+  **`adt_opinion`** `adt_reprt_spcmnt_matter` `emphs_matter` `core_adt_matter` `stlm_dt`
+
+**IMPORTANT — 2019-12-09에 필드가 갈렸다.** `adt_reprt_spcmnt_matter`(감사보고서 특기사항)는
+**2019-12-08까지만** 쓰였고, 그 뒤로 `emphs_matter`(강조사항 등)·`core_adt_matter`(핵심감사사항)
+둘로 나뉜다. **한쪽만 읽으면 그 구간이 통째로 빈다** — §11-D의 `extrsc_trspprpd`와 같은 형태다.
+
+### 11-J. 받았지만 아직 안 쓰는 넷
 
 **필드 표는 옮기지 않았다** — P11이 가장 먼 phase이고, 쓸 때 위 `git show`로 꺼내면 된다.
 요청 인자만 적어 둔다(비용 판단에 그것이면 충분하다).
