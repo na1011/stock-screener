@@ -84,6 +84,35 @@ class PriceWriterTest {
     }
 
     @Test
+    @DisplayName("재수집이 수정계수를 1로 되돌리지 않는다 — 창이 매일 과거를 다시 쓴다")
+    void preservesAdjustmentFactorOnReload() {
+        writer.write(stockId, List.of(bar("2026-08-03", "100", "110", "95", "105")));
+        // 분할이 발견돼 AdjustmentRecalculator가 과거 구간을 소급한 상태를 만든다.
+        jdbcTemplate.update("""
+                UPDATE price_daily SET adj_factor = 0.5, adj_close = close * 0.5
+                WHERE stock_id = ? AND trade_date = ?
+                """, stockId, LocalDate.parse("2026-08-03"));
+
+        // 일일 갱신의 조회 창이 같은 날짜를 다시 긁는다. 수집이 내는 계수는 언제나 1이다.
+        writer.write(stockId, List.of(bar("2026-08-03", "100", "110", "95", "105")));
+
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT * FROM price_daily WHERE stock_id = ? AND trade_date = ?",
+                stockId, LocalDate.parse("2026-08-03"));
+        // IMPORTANT — 이것이 깨지면 분할 기준일이 창 안에 있는 며칠 동안 계수가 매일
+        // 리셋되는데, 값이 그럴듯해 차트를 직접 보기 전까지 드러나지 않는다.
+        assertThat((BigDecimal) row.get("adj_factor"))
+                .as("수정계수는 봉의 속성이 아니라 이후 기업 행위의 함수다")
+                .isEqualByComparingTo("0.5");
+        assertThat((BigDecimal) row.get("adj_close"))
+                .as("계수를 지켰으면 수정종가도 그 계수로 다시 계산돼야 한다")
+                .isEqualByComparingTo("52.5");
+        assertThat((BigDecimal) row.get("close"))
+                .as("원본 종가는 재수집 값으로 갱신된다")
+                .isEqualByComparingTo("105");
+    }
+
+    @Test
     @DisplayName("OHLC가 깨진 봉은 건너뛰고 나머지는 저장한다 — 한 봉 때문에 전체를 잃지 않는다")
     void skipsCorruptedBarsButKeepsTheRest() {
         long written = writer.write(stockId, List.of(

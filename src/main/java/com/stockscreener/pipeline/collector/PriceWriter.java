@@ -44,11 +44,17 @@ public class PriceWriter {
                 high          = EXCLUDED.high,
                 low           = EXCLUDED.low,
                 close         = EXCLUDED.close,
-                adj_close     = EXCLUDED.adj_close,
-                adj_factor    = EXCLUDED.adj_factor,
                 volume        = EXCLUDED.volume,
                 trade_value   = EXCLUDED.trade_value,
                 listed_shares = EXCLUDED.listed_shares,
+                -- MUST NOT: 재적재가 adj_factor를 EXCLUDED로 덮지 않는다. 수집이 낸 값은
+                -- 언제나 1이므로(수집 시점에는 미래의 분할을 알 수 없다) 덮으면 그 날짜의
+                -- 수정계수가 1로 **되돌아간다**. 일일 갱신이 창으로 돌아 매일 과거 열흘치를
+                -- 다시 쓰는 이상(ADR-0042), 분할 기준일이 창 안에 있는 며칠 동안 계수가
+                -- 매일 리셋된다. 수정계수는 봉의 속성이 아니라 **이후 기업 행위의 함수**이고
+                -- AdjustmentRecalculator가 그 정본이다.
+                adj_factor    = price_daily.adj_factor,
+                adj_close     = round(EXCLUDED.close * price_daily.adj_factor, 6),
                 updated_at    = now()
             """;
 
@@ -64,6 +70,9 @@ public class PriceWriter {
      * <p>{@code adj_factor}는 신규 저장 시 1이다. 분할이 발견되면
      * {@link AdjustmentRecalculator}가 과거 구간을 소급해 다시 쓴다 — 수집 시점에는
      * 미래의 분할을 알 수 없으므로 이것이 유일하게 옳은 초기값이다.
+     *
+     * <p><b>재적재는 그 계수를 보존한다</b>(위 UPSERT의 주석). 초기값이 옳다는 것과 그것으로
+     * 기존 값을 덮어도 된다는 것은 다르다.
      *
      * <p>손상된 봉({@link RawPriceBar#isValid()} 실패)은 건너뛰고 <b>로그를 남긴다.</b>
      * DB 제약에 맡기면 손상된 봉 하나가 그 종목의 정상 봉까지 트랜잭션과 함께 날린다.
