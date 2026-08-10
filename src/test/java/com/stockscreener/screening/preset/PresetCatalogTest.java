@@ -144,13 +144,28 @@ class PresetCatalogTest {
     }
 
     @Test
-    @DisplayName("점수형 프리셋의 모든 조건에 가중치가 있다 — 없으면 1로 취급되어 균형이 조용히 어긋난다")
-    void scoringPresetsWeightEveryCondition() {
+    @DisplayName("점수형 프리셋의 점수 조건에 가중치가 있다 — 없으면 1로 취급되어 균형이 조용히 어긋난다")
+    void scoringPresetsWeightEveryScoredCondition() {
+        // 필수 조건은 점수에 참여하지 않으므로 가중치를 가질 수 없다(ADR-0038). 여기서
+        // 함께 요구하면 게이트를 둔 프리셋이 통과할 수 없는 검사가 된다 — 그러나 이 검사의
+        // 취지("가중치를 빼먹으면 균형이 조용히 어긋난다")는 점수 조건에 그대로 살아 있다.
         presets.stream()
                 .filter(p -> p.mode() == com.stockscreener.screening.EvaluationMode.SCORING)
                 .forEach(preset -> assertThat(preset.conditions().conditions())
-                        .as("%s에 가중치 없는 조건이 있다", preset.code())
+                        .filteredOn(c -> !c.required())
+                        .as("%s에 가중치 없는 점수 조건이 있다", preset.code())
                         .allSatisfy(c -> assertThat(c.weight()).isNotNull()));
+    }
+
+    @Test
+    @DisplayName("게이트를 가진 프리셋은 점수 조건도 함께 갖는다 — 전부 필수면 점수가 0점 만점이 된다")
+    void gatedPresetsKeepScoredConditions() {
+        presets.stream()
+                .filter(p -> p.mode() == com.stockscreener.screening.EvaluationMode.SCORING)
+                .filter(p -> p.conditions().conditions().stream().anyMatch(c -> c.required()))
+                .forEach(preset -> assertThat(preset.conditions().conditions())
+                        .as("%s가 전부 필수라 줄 세울 근거가 없다", preset.code())
+                        .anySatisfy(c -> assertThat(c.required()).isFalse()));
     }
 
     @Test

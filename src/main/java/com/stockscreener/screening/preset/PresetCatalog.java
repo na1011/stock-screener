@@ -2,18 +2,28 @@ package com.stockscreener.screening.preset;
 
 import com.stockscreener.indicator.PercentileSpec;
 import com.stockscreener.indicator.calculator.AdjCloseCalculator;
+import com.stockscreener.indicator.calculator.AltmanZCalculator;
+import com.stockscreener.indicator.calculator.AtrPct14Calculator;
 import com.stockscreener.indicator.calculator.DebtRatioCalculator;
 import com.stockscreener.indicator.calculator.MacdVCalculator;
+import com.stockscreener.indicator.calculator.MarketCapCalculator;
 import com.stockscreener.indicator.calculator.OperatingIncomeGrowthCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginCalculator;
 import com.stockscreener.indicator.calculator.PbrCalculator;
+import com.stockscreener.indicator.calculator.PctFrom52wHighCalculator;
+import com.stockscreener.indicator.calculator.PctFrom52wLowCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.indicator.calculator.ProfitableQuarters4Calculator;
 import com.stockscreener.indicator.calculator.RevenueGrowthCalculator;
 import com.stockscreener.indicator.calculator.RoeCalculator;
 import com.stockscreener.indicator.calculator.Rsi14Calculator;
+import com.stockscreener.indicator.calculator.SharesGrowth3yCalculator;
 import com.stockscreener.indicator.calculator.Sma200Calculator;
+import com.stockscreener.indicator.calculator.Sma200Momentum21Calculator;
+import com.stockscreener.indicator.calculator.Sma200Slope60Calculator;
 import com.stockscreener.indicator.calculator.Sma20Calculator;
 import com.stockscreener.indicator.calculator.Sma60Calculator;
+import com.stockscreener.indicator.calculator.Turnover60Calculator;
 import com.stockscreener.screening.ComparisonOperator;
 import com.stockscreener.screening.ConditionGroup;
 import com.stockscreener.screening.ConditionOperand;
@@ -55,7 +65,7 @@ public class PresetCatalog {
 
     @Bean
     public List<ScreenPreset> screenPresets() {
-        return List.of(valueKr(), qvgKr(), momentumKr());
+        return List.of(valueKr(), qvgKr(), momentumKr(), swingMidtermKr());
     }
 
     /**
@@ -156,6 +166,104 @@ public class PresetCatalog {
                                         new BigDecimal("45"), new BigDecimal("70"))),
                         // 적자 기업 배제
                         literal(RoeCalculator.CODE, ComparisonOperator.GT, "0"))));
+    }
+
+    /**
+     * 중장기 스윙 — 게이트로 거른 뒤 남은 것만 점수로 줄 세우는 유일한 프리셋.
+     *
+     * <p>다른 셋과 성격이 다르다. {@code VALUE_KR}·{@code QVG_KR}은 전 종목에 점수를 매겨
+     * 순위를 보는 것이고, 이것은 <b>보이면 안 되는 종목을 화면에서 지우는 것</b>이 목적이다.
+     * 특히 이격도 상한(200일선 대비 +25% 이내)은 이미 과열된 종목을 아예 띄우지 않으려는 것이라,
+     * 낮은 점수로 결과에 남으면 그 조건의 존재 이유가 사라진다. 필수 조건이 그것을 가능하게 한다
+     * (ADR-0038).
+     *
+     * <p>추세 조건이 여섯인 이유는 "우상향"의 정의가 하나로는 서지 않기 때문이다. 1개월 변화율만
+     * 쓰면 횡보가 노이즈로 통과하고, 60일 회귀만 쓰면 최근의 꺾임을 놓친다. 둘을 함께 걸어야
+     * 양쪽 오류가 상쇄된다.
+     *
+     * <p>IMPORTANT — <b>원본 명세에서 옮기지 못한 것이 여럿이고 그것이 이 프리셋의 가장 큰
+     * 위험이다.</b> 없는 안전장치를 있다고 믿게 되기 때문에 설명에 전부 적는다. 옮기지 못한 것:
+     * <ul>
+     *   <li>업종 상대 비교 — {@code stock.sector}가 전 종목 비어 있어 부채비율을 절대 기준으로 건다.
+     *   <li>순부채/EBITDA·이자보상배율 — 감가상각비와 이자비용이 비금융 기업에 표준계정코드로
+     *       오지 않는다(2026-08-10 실측, {@code docs/api-spec/dart-open-api.md} §7).
+     *   <li>5년 누적 영업현금흐름 — 위와 같은 이유로 보류.
+     *   <li>베타 — 시장 지수 시계열이 없다.
+     *   <li>피인수 진행 종목 제외 — 코퍼레이트 액션 소스가 없다.
+     *   <li>해자 프록시 — 매출총이익과 ROIC를 계산할 수 없다.
+     * </ul>
+     *
+     * <p>그리고 <b>Altman Z는 금융업에 적용할 수 없는데 그 종목을 가려낼 업종 데이터가 없다.</b>
+     * 금융업은 유동/비유동을 구분하지 않는 재무상태표를 내 대개 값이 계산되지 않고, 그러면 필수
+     * 조건이 판정불가가 되어 결과에서 빠진다. 결과적으로 금융 종목 대부분이 이 프리셋에 나오지
+     * 않으며, 그것은 의도한 방어가 아니라 부작용이다.
+     */
+    private static ScreenPreset swingMidtermKr() {
+        return new ScreenPreset(
+                "SWING_MIDTERM_KR",
+                "중장기 스윙",
+                "3~6개월 보유를 전제로, 장기 추세가 살아 있으면서 아직 과열되지 않은 종목만 남긴 뒤 "
+                        + "저평가·수익성·성장으로 줄 세운다. 필수 조건을 하나라도 채우지 못하면 결과에서 빠진다. "
+                        + "옮기지 못한 조건이 있다 — 업종 상대 비교(부채비율을 절대 기준으로 대체), "
+                        + "순부채/EBITDA와 이자보상배율(감가상각비·이자비용을 소스가 주지 않는다), "
+                        + "베타(시장 지수 시계열이 없다), 피인수 종목 제외(공시 소스가 없다), "
+                        + "해자 지표(매출총이익·ROIC를 계산할 수 없다). "
+                        + "Altman Z는 금융업에 적용할 수 없는데 업종 데이터가 없어 가려내지 못하며, "
+                        + "그 종목은 값이 계산되지 않아 대개 결과에서 빠진다.",
+                EvaluationMode.SCORING,
+                null,
+                ConditionGroup.and(List.of(
+                        // ── 규모와 유동성 ──
+                        // 유니버스가 이미 시총 상위 350이지만 그 안에서도 시총이 한 자릿수 배 차이가 난다.
+                        // 백분위로 걸지 않는 이유는 유니버스 안에서 매겨져(ADR-0036) "코스닥150 상위 30%"가
+                        // 통과하기 때문이다 — 규모로 거르려는 의도와 정반대다.
+                        required(MarketCapCalculator.CODE, ComparisonOperator.GTE, "1000000000000"),
+                        // 실측 분포에서 하위 4분위 언저리. 체결이 아니라 관심도 필터다.
+                        required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
+
+                        // ── 추세 국면 ──
+                        IndicatorCondition.of(AdjCloseCalculator.CODE, ComparisonOperator.GT,
+                                ConditionOperand.IndicatorRef.of(Sma200Calculator.CODE)).asRequired(),
+                        required(Sma200Momentum21Calculator.CODE, ComparisonOperator.GT, "0"),
+                        required(Sma200Slope60Calculator.CODE, ComparisonOperator.GT, "0"),
+                        // 원본은 50일선을 쓰지만 우리에게는 60일선이 있다. 굳이 50일선 계산기를
+                        // 새로 만들지 않는다 — 정배열의 뜻이 달라지지 않는다.
+                        IndicatorCondition.of(Sma60Calculator.CODE, ComparisonOperator.GT,
+                                ConditionOperand.IndicatorRef.of(Sma200Calculator.CODE)).asRequired(),
+                        // 추격매수 차단. 이 한 줄이 이 프리셋의 성격을 정한다.
+                        IndicatorCondition.of(AdjCloseCalculator.CODE, ComparisonOperator.LTE,
+                                ConditionOperand.IndicatorRef.of(Sma200Calculator.CODE, "1.25")).asRequired(),
+                        // 하락 추세 중의 일시 반등 배제
+                        required(PctFrom52wLowCalculator.CODE, ComparisonOperator.GTE, "30"),
+                        // 이미 훼손된 종목 배제. 위 이격도 상한과 함께 진입 구간을 만든다.
+                        required(PctFrom52wHighCalculator.CODE, ComparisonOperator.GTE, "-25"),
+                        // 보유 지속력. 수익률이 아니라 견딜 수 있는가를 묻는다.
+                        required(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "4"),
+
+                        // ── 생존 ──
+                        // 계절성 있는 업종이 한 분기 적자를 내는 것은 정상이라 4가 아니라 3이다.
+                        required(ProfitableQuarters4Calculator.CODE, ComparisonOperator.GTE, "3"),
+                        // 원본은 업종 중앙값 대비이지만 업종 데이터가 없어 절대 기준으로 대체한다.
+                        required(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "150"),
+                        // 3년 누적 5%는 연 1.6% 수준이다. 주식보상 희석은 통과하고 반복 증자는 걸린다.
+                        required(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "5"),
+                        // 회색지대 하단까지 허용하되 위험구간(1.8 이하)은 확실히 배제한다.
+                        required(AltmanZCalculator.CODE, ComparisonOperator.GTE, "2.6"),
+
+                        // ── 점수 ──
+                        // 원본의 "자체 5년 중앙값 또는 업종 대비"를 유니버스 내 상대 순위로 치환했다.
+                        // 뜻이 다르다 — 모집단이 업종이 아니라 유니버스다(ADR-0036).
+                        weighted(pctl(PerCalculator.CODE), ComparisonOperator.LTE, "0.50", "1"),
+                        // 원본은 EBIT/EV이지만 EV를 만들 수 없어 영업이익률 순위로 대체한다.
+                        weighted(pctl(OperatingMarginCalculator.CODE), ComparisonOperator.GTE, "0.50", "1"),
+                        // 원본의 누적 배점을 조건 둘로 옮긴다 — 15% 이상 +1, 25% 이상 +1 추가.
+                        weighted(OperatingIncomeGrowthCalculator.CODE, ComparisonOperator.GTE, "15", "1"),
+                        weighted(OperatingIncomeGrowthCalculator.CODE, ComparisonOperator.GTE, "25", "1"))));
+    }
+
+    /** 게이트 조건. 가중치를 가질 수 없으므로 {@code asRequired()}가 그것을 강제한다. */
+    private static IndicatorCondition required(String code, ComparisonOperator operator, String value) {
+        return literal(code, operator, value).asRequired();
     }
 
     private static IndicatorCondition literal(String code, ComparisonOperator operator, String value) {
