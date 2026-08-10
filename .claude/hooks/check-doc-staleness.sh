@@ -298,9 +298,12 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   # 여기 더한다 — 이 목록이 낡으면 오탐이 늘어 눈에 띄므로 조용히 무너지지 않는다.
   external='LICENSE.md|LICENCE.md|CHANGELOG.md|NOTICE.md|CONTRIBUTING.md'
 
+  # 참조가 실재하는지 찾는 디렉터리. **문서를 담는 디렉터리가 늘면 여기 더한다** —
+  # 빠뜨리면 멀쩡한 참조가 죽은 포인터로 보고되고, 그 오탐이 반복되면 이 검사 자체가 무시된다.
+  # `docs/api-spec`이 실제로 그 상태였다(세 번 연속 오탐).
   resolve_name() {  # 파일명 단독 참조가 어디엔가 있는가
     local d
-    for d in .claude/rules .claude/hooks .claude/hooks/lib .claude/skills ops docs docs/adr .; do
+    for d in .claude/rules .claude/hooks .claude/hooks/lib .claude/skills ops docs docs/adr docs/api-spec docs/external .; do
       [ -e "$d/$1" ] && return 0
     done
     return 1
