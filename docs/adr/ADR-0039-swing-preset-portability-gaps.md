@@ -437,14 +437,37 @@ ATR을 4%로 두면 1종목, 무제한이면 6종목이 상한이다.
 - **P8 업종 축** — `stock.sector` 채우기 → 업종 백분위 계산기 → `PercentileConfig`·`PercentileSpec`
   확장 → 프리셋 조건 3건 교체 → `wire-contract.json`. **모집단이 유니버스에서 업종으로 바뀌므로
   ADR-0036을 다시 여는 결정이다.**
+  - **착수 판정과 첫 구현이 같은 350콜이다** — `company.json`으로 `induty_code`를 모으는 행위가
+    곧 분포 측정이다. 그래서 "재고 나서 착수"가 아니라 **"1단계를 돌린 뒤 갈래를 정한다"**로 계획한다.
+  - **분포가 부족해도 버리지 않는다.** Altman Z의 금융업 제외는 코드 범위 판정이라 상대 비교와
+    무관하게 성립한다 — 지금 프리셋이 은행·보험에 부도예측 점수를 매기고 있는 것을 그것만으로 끊는다.
 - **P9 수정주가 정상화** — `fetchCorporateActions` 구현 + `AdjustmentRecalculator.apply()`의
   사람 승인 경로(UI·엔드포인트가 없다) + 전 구간 `adj_close` 재계산 + 지표 무효화.
   **저장된 시세를 소급해 다시 쓰는 일이라 되돌리기 어렵다.** 지금 `adj_factor`가 전량 1이고
   **추세 게이트 6개가 전부 `adj_close`를 쓴다** — 조건 하나가 아니라 추세 전체의 신뢰도 문제다.
 - **P10 전체 재무제표 전환** — `account_id` 우선 매칭 재작성 + `IS`/`CIS` 분기(표본 넷 중 셋이
-  `CIS`뿐이다) + 재무 5년 적재. T-08 베타는 지표 하나라 여기 얹는다.
+  `CIS`뿐이다) + 재무 5년 적재.
   **근거가 하나 늘었다**: 주요계정은 회사에 따라 **계정 행 자체를 주지 않는다**(오리온·오리온홀딩스에
   이익잉여금이 CFS·OFS 양쪽에 없다). 계정명 후보군 보강으로도 CFS/OFS 폴백으로도 안 열리고,
   전체 재무제표의 자본변동표가 남은 길이다(`docs/api-spec/dart-open-api.md` §8).
+  - **여는 것은 H-05와 그 3종목뿐이다.** `financial_statement`의 `eps`·`bps`·`shares_outstanding`도
+    전 행 NULL이지만 **그것은 결손이 아니다** — 앞 둘은 `src/main`에 읽는 코드가 0개고(대조용이다,
+    `.claude/rules/data-pipeline.md`), 셋째는 `price_daily.listed_shares`가 없을 때만 타는 폴백인데
+    그 컬럼의 NULL이 0행이다(ADR-0013). **NULL 컬럼을 세어 phase 크기를 잡으면 절반이 헛것이다.**
+  - **MUST: 어댑터 전환을 적재보다 먼저 한다.** `FinancialWriter.fillMissing()`은 어댑터가 준 값이
+    `null`이면 그 컬럼을 후보에서 뺀다. 순서가 뒤집히면 수천 콜을 태우고 OCF가 한 칸도 안 채워진
+    채 **잡이 SUCCESS로 끝나고**, 고쳐서 다시 돌리면 누적이 일 한도에 닿는다.
+  - **MUST: 적재 뒤 백필을 함께 계획한다.** 이 잡은 `indicator_value`를 건드리지 않으므로,
+    백필이 없으면 `financial_statement`가 다 차도 **화면과 프리셋이 한 글자도 안 바뀌고 H-05도
+    안 나온다.** 에러도 경고도 없다. 무효화를 생략해도 되는지는 ADR-0040이 "그때 다시 답하라"고
+    표시해 둔 자리다.
+- **T-08 시장 지수 — P10에 얹을 수 없다.** 원자료는 지수 2콜로 끝나지만(`data-go-kr-market-index.md`)
+  **지표 계층에 시장 지수를 받을 자리가 없다**: `DataRequirement`의 필드가 `priceBarsNeeded`·
+  `financialYearsNeeded`·`dependsOn` 셋뿐이고 `dependsOn`은 **같은 종목의 다른 지표** 시계열이다.
+  즉 새 테이블·어댑터 위에 `DataRequirement`·`IndicatorContext`·`IndicatorDataReader`·`IndicatorRunner`
+  **코어 넷을 고쳐야 한다.** 이것은 저장 구조가 아니라 **지표 계약**을 바꾸는 일이고, Phase 1·3·7이
+  공유하는 *"지표 추가 비용이 1파일"* 기준(`IndicatorExtensibilityTest`가 단언한다)을 다시 여는
+  결정이다. **외부 콜 수로 우선순위를 매기면 이 phase가 가장 싸 보인다 — 실제로는 가장 크다.**
+  기준지수 선택도 미결이다(같은 문서가 "phase의 결정"으로 열어 두었다).
 - **P11 모듈 B 플래그 도메인** — 40개짜리 새 도메인. 계산 가능 비율이 낮으면 "있는 것처럼
   보이는데 대부분 비어 있는" 물건이 된다(위 §모듈 B가 v1에서 뺀 이유와 같다).
