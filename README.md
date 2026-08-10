@@ -26,7 +26,7 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 | [`docs/progress.md`](docs/progress.md) | 진행 상태 — 어디까지 왔는가 | 매 세션 변함 | 사람 + 에이전트 |
 | [`TODO.md`](TODO.md) | 에이전트가 대신할 수 없는 작업 — 수동 검증·외부 발급·계정 권한 | 끝내면 지움 | 사람 |
 | [`CLAUDE.md`](CLAUDE.md) | 에이전트 지시문 — 명령어·설계 제약·금지 사항 | 오래감 | 에이전트 전용 |
-| [`.claude/rules/`](.claude/rules/) | 영역별(백엔드/프론트/데이터) 판단 기준 — `paths` glob으로 그 파일을 다룰 때만 로드 | 오래감 | 에이전트 전용 |
+| [`.claude/rules/`](.claude/rules/) | 판단 기준 — 영역별(백엔드/프론트/데이터/테스트·설정)과 하네스 자체(`harness-*.md`) 둘로 갈린다. `paths` glob으로 그 파일을 다룰 때만 로드 | 오래감 | 에이전트 전용 |
 | [`.claude/skills/`](.claude/skills/) | 작업별 절차 — 그 작업을 하기로 정했을 때만 로드 | 오래감 | 에이전트 전용 |
 | [`.claude/hooks/`](.claude/hooks/) | 결정론적 계층 — 차단(안전망) + 알림(상태·문서·ADR 유지) | — | 사람 |
 
@@ -106,9 +106,9 @@ pgrep -fl app.jar
 
 phase 분할·구체적 아키텍처 설계는 이 하네스의 범위가 아니며, 별도의 설계 세션에서 다룬다.
 
-### 사람이 쓰는 문서는 한 장뿐이다
+### 사람이 쓰는 문서는 두 장뿐이다
 
-이 저장소에서 사람이 저작하는 문서는 [`기획 정본`](docs/stock-screener-project-spec.md) 하나다. phase 완료 판정도, 결정의 근거도, 진행 상태도, 커밋 로그도 전부 **실행 시점의 에이전트가 판단해서 쌓은 것**이다. 사람이 하는 일은 정본을 쓰는 것과, 정본을 바꿀지 승인하는 것과, 에이전트가 원리적으로 못 하는 일([`TODO.md`](TODO.md))뿐이다.
+이 저장소에서 사람이 저작하는 문서는 [`기획 정본`](docs/stock-screener-project-spec.md)과 [`스윙 프리셋 조건셋`](docs/external/screener-spec-midterm-swing.md) 둘이고, **층이 다르다 — 충돌하면 기획 정본이 이긴다**(ADR-0041). phase 완료 판정도, 결정의 근거도, 진행 상태도, 커밋 로그도 전부 **실행 시점의 에이전트가 판단해서 쌓은 것**이다. 사람이 하는 일은 정본을 쓰는 것과, 정본을 바꿀지 승인하는 것과, 에이전트가 원리적으로 못 하는 일([`TODO.md`](TODO.md))뿐이다.
 
 그래서 이 구조는 프로젝트에 종속되지 않는다. 슬롯의 이름과 각 슬롯이 답하는 질문만 옮기면 다른 저장소에서도 같은 방식이 성립한다 — 그 절차는 전역 skill로 빼 두었고, 이 저장소가 그 참조 구현이다. **여기에 스킬 이름을 적지 않는다** — 루트 README는 훅의 검증 대상이 아니라(위 배치 원칙) 이름이 바뀌어도 아무도 알려주지 않는다. `.claude/skills/`와 전역 skill 목록이 정본이다.
 
@@ -160,9 +160,12 @@ phase 분할·구체적 아키텍처 설계는 이 하네스의 범위가 아니
 |---|---|---|
 | `inject-progress.sh` | 세션 시작 | `docs/progress.md`를 컨텍스트에 주입 |
 | `check-doc-staleness.sh` | 세션 시작 | 문서의 주장과 실제 상태(코드 또는 다른 정본)의 불일치를 보고 |
+| `check-premises.sh` | 세션 시작 | ADR `## 검증`의 `premise` 펜스를 실제로 돌려, 결정의 **전제가 아직 참인지**를 잰다 |
 | `remind-adr.sh` | 파일 편집 직후 | 두 방향 — ADR **기록** 대상인지 상기(의존성·인프라·설정), 그리고 그 파일을 **지배하는** ADR이 있으면 포인터로 알림(`applies_to` 매칭) |
 | `echo-adr-citation.sh` | 파일 편집 직후 | 방금 인용한 ADR 번호의 **정본 제목**을 되돌려 준다. 번호만 맞춘 인용을 다음 세션이 근거로 믿는 것을 막는다 |
+| `remind-rule-on-write.sh` | 파일 편집 직후 | 편집한 파일을 지배하는 `paths` 규칙을 포인터로 알림. 새 파일 `Write`는 사전 Read를 요구하지 않아 규칙 없이 고치게 되는 구멍을 메운다 |
 | `warn-bootstrap-args.sh` | 적재 배치 실행 직후 | `--reload-existing` 없는 `initial-load`가 아무 일도 안 하고 성공으로 끝나는 조합을 알림 |
+| `warn-load-running.sh` | Bash 실행 직후 | 적재가 도는 동안 gradle을 건드리면 알림. 컴파일 산출물이 도는 JVM 밑에 깔려 있어 `clean`·`--stop`이 적재를 죽인다 |
 | `remind-rule-on-shell.sh` | Bash 실행 직후 | 셸로 다룬 파일을 지배하는 `paths` 규칙을 알림. `paths`는 Read·Edit에만 발화해 셸 경유는 구멍이 된다 |
 | `remind-skill-on-channel.sh` | MCP 채널 진입 직후 | 그 채널의 skill을 알림. 파일도 argv도 아닌 트리거라 glob·Bash 훅으로는 표현할 수 없다 |
 | `remind-plan-obligations.sh` | 계획 기록 직후 | 새 phase의 완료 판정과 ADR 기록 지점을 착수 **전에** 정하도록 상기 |
