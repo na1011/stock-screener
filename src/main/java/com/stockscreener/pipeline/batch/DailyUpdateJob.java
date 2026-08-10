@@ -5,6 +5,7 @@ import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.PercentileCalculator;
 import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.collector.MarketCalendar;
+import com.stockscreener.pipeline.collector.PriceCalendar;
 import com.stockscreener.pipeline.collector.PriceCollector;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
@@ -19,7 +20,11 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 일일 갱신. 장 마감 후 전일 종가를 수집하고 그것으로 지표를 계산한다.
+ * 일일 갱신. 소스가 공개한 최근 거래일들의 종가를 수집하고 그것으로 지표를 계산한다.
+ *
+ * <p>대상은 <b>당일이 아니다.</b> 소스는 거래일 T의 종가를 T의 다음 <b>영업일</b> 13시 이후에
+ * 내므로(ADR-0042), 실행일보다 앞선 날짜를 받는다. 그리고 하루가 아니라 {@link #PRICE_LOOKBACK_DAYS}일
+ * 창으로 받는다 — 그 이유는 그 상수의 주석에 있다.
  *
  * <p>수집과 계산을 한 잡에 둔 이유는 <b>순서가 강제되어야 하기 때문</b>이다. 지표는 그날의
  * 시세가 저장된 뒤에만 계산할 수 있다. 둘을 별도 잡으로 나누면 스케줄 간격이 곧 그 전제가
@@ -39,11 +44,26 @@ public class DailyUpdateJob {
 
     public static final String JOB_NAME = "daily-update";
 
+    /**
+     * 시세 조회 창의 폭(일). 대상일 하나가 아니라 이만큼 거슬러 올라가 함께 받는다.
+     *
+     * <p>소스가 기간조회를 <b>1콜</b>로 주므로(`likeSrtnCd` + `beginBasDt`/`endBasDt`)
+     * 창을 넓혀도 API 콜 수가 늘지 않는다. 늘어나는 것은 upsert 행 수뿐이다.
+     *
+     * <p>폭이 이 값이어야 하는 이유는 <b>대상 일자가 공휴일을 모르기 때문</b>이다(ADR-0042).
+     * 거래일 T는 T의 다음 <b>영업일</b> 13시에 공개되는데, 대상 일자는 직전 <i>평일</i>만
+     * 낼 수 있어 연휴를 건너뛰지 못한다. 창이 그 어긋남을 흡수한다 — 그리고 창은 곧
+     * <b>재시도 기제</b>다. 한 번 놓친 날짜를 이후 실행이 계속 다시 시도하므로 별도의 만회
+     * 배치가 필요 없다.
+     */
+    public static final int PRICE_LOOKBACK_DAYS = 15;
+
     private static final Logger log = LoggerFactory.getLogger(DailyUpdateJob.class);
 
     private final PriceCollector priceCollector;
     private final StockRegistrar stockRegistrar;
     private final MarketCalendar marketCalendar;
+    private final PriceCalendar priceCalendar;
     private final BatchExecutions batchExecutions;
     private final IndicatorRunner indicatorRunner;
     private final PercentileCalculator percentileCalculator;
@@ -51,13 +71,15 @@ public class DailyUpdateJob {
     private final WatchlistAlertRunner watchlistAlertRunner;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
-                          MarketCalendar marketCalendar, BatchExecutions batchExecutions,
+                          MarketCalendar marketCalendar, PriceCalendar priceCalendar,
+                          BatchExecutions batchExecutions,
                           IndicatorRunner indicatorRunner, PercentileCalculator percentileCalculator,
                           IndicatorRetentionPolicy retentionPolicy,
                           WatchlistAlertRunner watchlistAlertRunner) {
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
         this.marketCalendar = marketCalendar;
+        this.priceCalendar = priceCalendar;
         this.batchExecutions = batchExecutions;
         this.indicatorRunner = indicatorRunner;
         this.percentileCalculator = percentileCalculator;
@@ -66,9 +88,29 @@ public class DailyUpdateJob {
     }
 
     /**
+     * 조회 창의 시작일.
+     *
+     * <p>{@code public static}인 이유는 {@code PipelineSchedulerTest}가 <b>크론·대상 일자
+     * 규칙·창 셋을 합쳐</b> "모든 거래일이 어느 실행엔가 덮이는가"를 검사하기 때문이다.
+     * 테스트에 창 폭을 복사해 적으면 그 상수와 실제 창이 갈리고, 그러면 그 테스트는
+     * 자기 자신을 검사하게 된다.
+     */
+    public static LocalDate priceWindowStart(LocalDate to) {
+        return to.minusDays(PRICE_LOOKBACK_DAYS);
+    }
+
+    /**
      * 대상 일자의 시세를 수집한다.
      *
-     * @param targetDate 수집 대상 거래일. 실행 시각이 아니다 — 새벽에 도는 배치의 대상은 전일이다.
+     * <p>실제 조회는 {@link #priceWindowStart}부터 대상일까지의 <b>창</b>이다. 대상일은
+     * 그 창의 끝이자 결손 판정·지표 계산의 기준이지, 조회 범위 전체가 아니다.
+     *
+     * <p>{@code isWeekend} 조기 반환은 스케줄러 경로에서는 발화하지 않는다 — 대상 일자가
+     * 언제나 평일이기 때문이다(ADR-0042). <b>죽은 코드가 아니다</b>: 관리자가 {@code /admin}에서
+     * 주말 일자를 직접 넣는 경로가 남아 있고, 그때 850종목을 헛돌리지 않게 막는다.
+     *
+     * @param targetDate 수집 대상 거래일. 실행 시각이 아니다 — 소스가 거래일 T를 T의 다음
+     *                   영업일에 내므로 대상은 언제나 실행일보다 앞이다.
      */
     public BatchStatus run(LocalDate targetDate, BatchExecutionRecorder.TriggeredBy triggeredBy) {
         if (marketCalendar.isWeekend(targetDate)) {
@@ -81,7 +123,7 @@ public class DailyUpdateJob {
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, targetDate, triggeredBy, targets.size());
 
-        return collect(execution, targets, targetDate, targetDate);
+        return collect(execution, targets, priceWindowStart(targetDate), targetDate);
     }
 
     /**
@@ -102,7 +144,8 @@ public class DailyUpdateJob {
         BatchExecutionContext execution = batchExecutions.startRetry(
                 JOB_NAME, targetDate, targets.size(), previousExecutionId);
 
-        return collect(execution, targets, targetDate, targetDate, previousExecutionId);
+        return collect(execution, targets, priceWindowStart(targetDate), targetDate,
+                previousExecutionId);
     }
 
     private BatchStatus collect(BatchExecutionContext execution, List<SecurityRef> targets,
@@ -158,17 +201,28 @@ public class DailyUpdateJob {
 
             alertIfNothingArrived(execution, targets.size(), to);
 
+            // MUST: 여기부터의 기준일은 대상일이 아니라 **실제로 봉이 적재된** 최신 거래일이다.
+            //
+            // IndicatorRunner는 봉의 날짜로 저장하지만(IndicatorPoint.tradeDate) PercentileCalculator는
+            // `iv.trade_date = ?`로 정확히 일치시킨다. 대상일이 공휴일이면 그 비대칭이 드러난다 —
+            // 지표는 직전 거래일 날짜로 쓰이는데 백분위만 0행이 되고, 화면의 기준 일자는
+            // IndicatorCalendar가 지표 쪽으로 잡는다. 그러면 백분위 조건이 전부 판정 불가가 된 채
+            // **결과가 비는 것이 아니라 그럴듯하게 좁아진다.**
+            //
+            // 루프 뒤여야 한다 — 봉이 커밋된 뒤에만 옳은 값이 나온다.
+            LocalDate asOf = priceCalendar.latestTradeDateOnOrBefore(to).orElse(to);
+
             // 루프가 끝난 뒤에도 할 일이 남아 있다. 구간을 신고하지 않으면 이 몇 분이 화면에
             // "100%인데 안 끝남"으로 보이고, 그것은 멎은 것과 구분되지 않는다.
             execution.stage("백분위 계산");
             // 백분위는 전 종목의 값이 저장된 뒤에야 계산할 수 있다. 종목 루프 안에서는 원리적으로
             // 불가능하므로 루프가 끝난 뒤 하루치를 한 번에 처리한다.
-            percentileCalculator.calculate(to);
+            percentileCalculator.calculate(asOf);
 
             execution.stage("워치리스트 판정");
             // 워치리스트 판정은 백분위 뒤여야 한다. 백분위 조건("PER 하위 20%")을 건 화면이
             // 그 앞에서 판정되면 어제 백분위로 오늘을 판정하게 되고, 그것은 조용히 그럴듯하다.
-            evaluateWatchlist(execution, to);
+            evaluateWatchlist(execution, asOf);
         } catch (DataSourceException e) {
             // AUTH처럼 복구 불가능한 실패다. 850종목을 마저 시도할 이유가 없다.
             execution.failFatally(e);
@@ -208,19 +262,33 @@ public class DailyUpdateJob {
      * 그만큼의 WARNING은 감당할 수 있고, 반대로 배치 시각이 너무 이르면 <b>거래일마다</b>
      * 오므로 하루 만에 드러난다. 후자를 놓치는 비용이 전자의 소음보다 훨씬 크다.
      *
-     * <p>MUST: 판정 기준이 <b>{@code PRICE} 단계의 행 수</b>다. 합계로 물으면 이 경로가
-     * 통째로 죽는다 — 시세가 0행이면 {@code collected}는 그래도 {@code true}라(예외가 안 났으므로)
-     * 지표 단계가 돌고, {@code IndicatorRunner}가 {@code asOf} 이전 시계열을 재계산해 종목당
-     * 수천 행을 남긴다. 실제로 2026-08-07 대상 실행이 <b>시세 0행·총 979,541행</b>으로 끝나
-     * 금요일 종가 결손이 아무에게도 알려지지 않았다. 단위 테스트가 이것을 놓쳤던 이유는
-     * 픽스처에 시세 이력이 없어 지표도 0행이었기 때문이다 — 프로덕션의 조건과 달랐다.
+     * <p>MUST: 판정을 <b>이 실행이 쓴 행 수</b>로 하지 않는다. 물어야 하는 것은 "이 실행이
+     * 무언가를 받았는가"가 아니라 <b>"대상일에 데이터가 있는가"</b>이고, 둘은 다른 질문이다.
+     * 쓰기 행 수로 물으면 이 경로가 두 가지 방식으로 죽는다.
+     *
+     * <ul>
+     *   <li><b>합계로 물으면</b> 지표가 덮는다 — 시세가 0행이어도 {@code collected}는
+     *       {@code true}라(예외가 안 났으므로) 지표 단계가 돌고 종목당 수천 행을 남긴다.
+     *       실제로 2026-08-07 대상 실행이 <b>시세 0행·총 979,541행</b>으로 끝나 금요일 종가
+     *       결손이 아무에게도 알려지지 않았다.</li>
+     *   <li><b>{@code PRICE} 단계만 세도 죽는다</b> — 수집이 하루가 아니라 창으로 돌기
+     *       때문이다(ADR-0042). 대상일이 비어 있어도 창 안의 과거 날짜 재적재가 수천 행을
+     *       채우므로 <b>알림이 원리적으로 발화하지 않는다.</b> 이번에는 {@code PRICE} 단계가
+     *       스스로를 덮는다.</li>
+     * </ul>
+     *
+     * <p>그래서 {@link PriceCalendar#countOn}에 묻는다. 창을 넓혀도, 재실행해도, 쓰기가
+     * 멱등이어도 같은 답을 낸다.
+     *
+     * <p>창이 생긴 뒤로는 공휴일마다 최대 2회 온다 — 공휴일 당일(직전 거래일이 아직 미공개)과
+     * 다음 거래일(대상일이 공휴일). 위 교환은 그대로 유효하다.
      */
     private void alertIfNothingArrived(BatchExecutionContext execution, int targetCount, LocalDate to) {
-        if (targetCount == 0 || execution.writtenRowCount(CollectionPhase.PRICE) > 0) {
+        if (targetCount == 0 || priceCalendar.countOn(to) > 0) {
             return;
         }
-        execution.alertOperator(AlertSeverity.WARNING, "새 시세가 한 건도 들어오지 않았다",
-                "%d종목을 조회했으나 저장된 행이 0이다 (대상일 %s). 휴장이거나, 소스가 아직 그날치를 내지 않았다. "
+        execution.alertOperator(AlertSeverity.WARNING, "대상일 시세가 한 건도 없다",
+                "%d종목을 조회했으나 대상일 %s에 저장된 행이 0이다. 휴장이거나, 소스가 아직 그날치를 내지 않았다. "
                         .formatted(targetCount, to)
                         + "거래일마다 이 알림이 오면 배치 시각이 소스의 공개 시각보다 이르다는 뜻이다.");
     }

@@ -300,13 +300,87 @@ class PipelineEndToEndTest {
 
         dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.ADMIN);
 
-        // MUST NOT: PriceWriter를 "값이 같으면 0행"으로 바꾸지 않는다. 0건 판정이 PRICE 단계의
-        // 행 수를 보므로, 그렇게 바꾸는 순간 재실행마다 "새 시세가 한 건도 들어오지 않았다"가
-        // 뜬다 — 지표 쓰기에 같은 최적화를 넣었으니 시세에도 넣고 싶어지는 것이 발생점이다.
-        // 재실행은 관리자의 정상 경로이므로(ADR-0029) 그 오탐은 알림 전체의 신뢰를 깎는다.
+        // 여기에 "PriceWriter를 값이 같으면 0행으로 바꾸지 마라"는 MUST NOT이 있었다.
+        // **풀렸다** — 0건 판정이 더 이상 이 실행이 쓴 행 수를 보지 않고 대상일에 행이 있는지를
+        // DB에 묻기 때문이다(ADR-0042). 쓰기가 멱등이어도 판정은 같은 답을 낸다.
+        // 재실행은 관리자의 정상 경로이므로(ADR-0029) 그때 오탐이 없어야 한다는 것만 남는다.
         assertThat(alertPort.events)
                 .as("같은 날짜를 다시 수집한 것은 결측이 아니다")
                 .isEmpty();
+    }
+
+    @Test
+    @DisplayName("창이 과거 날짜를 채워도 대상일이 비면 알린다 — 이번엔 PRICE 단계가 스스로를 덮는다")
+    void dailyUpdateAlertsWhenOnlyOlderDaysArrived() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        long stockId = stockIdOf(SEEDED_TICKER);
+        // 창 안에 있지만 대상일은 아닌 날짜만 준다. 이 실행이 이 봉들을 **실제로 적재한다** —
+        // 그래서 PRICE 단계의 쓰기 행 수가 0이 아니다.
+        fakePriceSource.withBars(stockId, List.of(
+                bar("2026-08-03", "70000"), bar("2026-08-04", "71000")));
+        alertPort.events.clear();
+
+        BatchStatus status = dailyUpdateJob.run(
+                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        assertThat(status).isEqualTo(BatchStatus.SUCCESS);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM price_daily WHERE trade_date = ?", Integer.class, AS_OF))
+                .as("대상일은 비어 있다")
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM price_daily WHERE trade_date < ?", Integer.class, AS_OF))
+                .as("창 안의 과거 날짜는 적재됐다 — 이것이 판정을 덮을 수 있는 것이다")
+                .isPositive();
+
+        // IMPORTANT — 이 단언이 이 테스트의 존재 이유다. 판정을 PRICE 단계의 쓰기 행 수로 하면
+        // 이 값이 0이 아니므로 아래 알림이 오지 않는다. 앞선 테스트가 막는 것은 INDICATOR가
+        // 덮는 경우이고, 여기서 막는 것은 **PRICE가 스스로를 덮는 경우**다.
+        assertThat(alertPort.events)
+                .as("대상일이 비었는데 과거 재적재가 알림을 죽이면 결손이 조용히 지나간다")
+                .hasSize(1);
+        assertThat(alertPort.events.get(0).severity()).isEqualTo(AlertSeverity.WARNING);
+    }
+
+    @Test
+    @DisplayName("대상일에 봉이 없으면 백분위는 실제로 적재된 최신 거래일로 돈다")
+    void percentilesUseTheLatestActuallyLoadedTradeDate() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        List<Long> members = reconciler.currentMembers("KOSPI200");
+        // 백분위는 population >= 2라 두 종목 이상이어야 값이 난다. 하나만 심으면 0행이 나오고
+        // 이 테스트가 조용히 아무것도 검사하지 않게 된다.
+        assertThat(members).hasSizeGreaterThan(1);
+
+        LocalDate loaded = LocalDate.of(2026, 8, 4);
+        int price = 70000;
+        for (Long member : members) {
+            fakePriceSource.withBars(member, List.of(bar(loaded.toString(), String.valueOf(price))));
+            price += 1000;
+        }
+
+        // 백분위 원본(PER·PBR·ROE·…)은 전부 재무나 긴 시계열을 요구해 봉 하나로는 나지 않는다.
+        // 검사 대상은 "어느 날짜로 백분위를 도느냐"이므로 원본을 직접 심어 그 축만 남긴다.
+        int per = 10;
+        for (Long member : members) {
+            jdbcTemplate.update("""
+                    INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value, updated_at)
+                    VALUES (?, ?, 'PER', ?, now())
+                    """, member, loaded, new BigDecimal(per));
+            per += 1;
+        }
+        alertPort.events.clear();
+
+        // 대상일(AS_OF)은 비어 있다. 공휴일에 도는 배치와 같은 상황이다.
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        List<LocalDate> percentileDates = jdbcTemplate.queryForList(
+                "SELECT DISTINCT trade_date FROM indicator_value WHERE indicator_code = 'PER_PCTL'",
+                LocalDate.class);
+
+        assertThat(percentileDates)
+                .as("대상일로 계산하면 그날 원본이 없어 0행이 된다 — 지표는 있는데 백분위만 "
+                        + "없는 날이 화면의 기준 일자가 되고, 백분위 조건이 전부 판정 불가가 된다")
+                .containsExactly(loaded);
     }
 
     @Test

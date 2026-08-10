@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.scheduler;
 
+import com.stockscreener.pipeline.batch.DailyUpdateJob;
+import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
 import com.stockscreener.support.TestDatabaseGuard;
 
 import org.junit.jupiter.api.DisplayName;
@@ -9,6 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,13 +32,29 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 다시 "실제로 배포해 보기"로만 가능해지는데, 그것을 아무도 알려주지 않는다.
  *
  * <p>스케줄이 <b>언제</b> 도는가는 {@code PipelineSchedulerTest}가 본다. 여기서는
- * 켠 채로 뜨는가만 본다 — 이 테스트에서 잡이 실제로 돌면 안 된다(쿼터를 태운다).
- * 크론이 평일 20시·토요일 20시라 테스트가 도는 동안 발화하지 않는다.
+ * 켠 채로 뜨는가만 본다.
  */
 @SpringBootTest(properties = "pipeline.scheduler.enabled=true")
 @ActiveProfiles("test")
 @Import(TestDatabaseGuard.class)
 class SchedulerEnabledContextTest {
+
+    // MUST: 두 잡을 목으로 둔다. 여기가 스케줄러가 켜진 **유일한** 컨텍스트이고, Spring
+    // TestContext 캐시는 그것을 JVM이 끝날 때까지 닫지 않는다 — 즉 노출 창은 이 클래스의
+    // 실행 시간이 아니라 `./gradlew test` 전체다. 배치가 평일 15시로 옮겨진 뒤로 그 시각에
+    // 테스트를 돌릴 확률은 낮지 않다.
+    //
+    // 발화해도 쿼터는 안 탄다(테스트 유니버스 편입이 0건이고 어댑터도 없다). 문제는
+    // batch_execution·indicator_value에 행이 생겨 **그 테이블을 세는 다른 테스트가 시각에
+    // 따라 깨지는 것**이다 — 증상이 원인과 전혀 안 닮은 플래키가 된다.
+    //
+    // 목으로 바꿔도 이 테스트의 가치는 줄지 않는다. 잡아낸 결함은 taskScheduler 빈이 생기면서
+    // AsyncTaskExecutor 주입 후보가 둘이 되는 것이고, 그 경로는 잡을 목으로 바꿔도 그대로 밟힌다.
+    @MockitoBean
+    private DailyUpdateJob dailyUpdateJob;
+
+    @MockitoBean
+    private UniverseRebalanceJob universeRebalanceJob;
 
     @Autowired
     private ApplicationContext context;

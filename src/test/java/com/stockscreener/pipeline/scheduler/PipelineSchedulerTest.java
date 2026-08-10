@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.scheduler;
 
+import com.stockscreener.pipeline.batch.DailyUpdateJob;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -9,21 +11,28 @@ import java.lang.reflect.Method;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 스케줄이 <b>다섯 거래일을 모두</b> 덮는지 본다.
+ * 스케줄이 <b>거래일을 모두</b> 덮는지 본다.
  *
  * <p>이 테스트가 있는 이유는 실제로 하나가 새고 있었기 때문이다. 예전 구성은 평일 새벽 4시에
  * <b>전일</b>을 대상으로 돌았는데, 그러면 금요일 종가를 받는 실행이 어느 요일에도 없다 —
  * 월요일 새벽 실행의 대상은 일요일이라 주말로 걸러지고, 토요일에는 실행이 없다.
  * 컴파일도 되고 테스트도 통과하며, 알림도 오지 않는다. 매주 하루치가 조용히 빈다.
  *
- * <p>크론 문자열을 애너테이션에서 <b>직접 읽는다.</b> 테스트에 상수로 옮겨 적으면 그 상수와
- * 실제 스케줄이 갈릴 수 있고, 그러면 이 테스트는 자기 자신을 검사하는 것이 된다.
+ * <p>IMPORTANT — 이제 요소가 <b>셋</b>이다: 크론 · {@code targetDateFor} · 조회 창. 어느 거래일이
+ * 덮이는가는 셋을 합쳐야 나오고, 둘만 보면 공휴일 앞 거래일이 새는 것을 놓친다(ADR-0042).
+ *
+ * <p>크론 문자열을 애너테이션에서, 창 폭을 {@link DailyUpdateJob}에서 <b>직접 읽는다.</b>
+ * 테스트에 상수로 옮겨 적으면 그 상수와 실제 구성이 갈릴 수 있고, 그러면 이 테스트는 자기
+ * 자신을 검사하는 것이 된다.
  */
 class PipelineSchedulerTest {
 
@@ -60,14 +69,76 @@ class PipelineSchedulerTest {
     }
 
     @Test
-    @DisplayName("일일 갱신은 국내 장 마감(15:30) 이후에 돈다")
-    void dailyUpdateRunsAfterMarketClose() {
+    @DisplayName("일일 갱신은 소스 공개 시각(13시) 이후에 돌고, 대상은 실행일보다 앞이다")
+    void dailyUpdateRunsAfterSourcePublication() {
         LocalDateTime next = cronOf("runDailyUpdate").next(LocalDate.of(2026, 8, 10).atStartOfDay());
 
         assertThat(next).isNotNull();
+        // 소스는 거래일 T의 종가를 T의 다음 영업일 **13시 이후**에 낸다. "이후"는 하한만
+        // 보증하므로 붙여 두지 않는다.
         assertThat(next.toLocalTime())
-                .as("당일 종가를 대상으로 하므로 마감 전에 돌면 그날 데이터가 없다")
-                .isAfter(java.time.LocalTime.of(15, 30));
+                .as("13시 전에 돌면 그날 아직 나오지 않은 것을 긁는다")
+                .isAfterOrEqualTo(LocalTime.of(14, 0));
+
+        // IMPORTANT — 시각 단언만으로는 부족하다. **옛 구성(20시 + 당일 대상)도 이 단언은
+        // 통과하면서** 매일 0건으로 끝났다. 대상이 실행일보다 앞이라는 것이 D+1을 실제로
+        // 인코딩하는 단언이다.
+        assertThat(PipelineScheduler.targetDateFor(next.toLocalDate()))
+                .as("당일을 대상으로 하면 그날 종가는 자정까지도 소스에 없다")
+                .isBefore(next.toLocalDate());
+    }
+
+    @Test
+    @DisplayName("공휴일이 낀 주에도 모든 거래일이 어느 실행엔가 덮인다 — 공휴일 앞 거래일이 새던 자리다")
+    void noTradingDayIsMissedAroundHolidays() {
+        // 합성 휴장일. 실제 공휴일 달력이 아니라 "휴장이 낀 주"를 만드는 것이 요점이라
+        // 역사적 사실에 기대지 않는다. 화요일 하나, 그리고 수~목 이틀 연속.
+        Set<LocalDate> closed = Set.of(
+                LocalDate.of(2026, 8, 11),                                  // 화
+                LocalDate.of(2026, 8, 26), LocalDate.of(2026, 8, 27));      // 수·목
+
+        LocalDate from = LocalDate.of(2026, 8, 3);
+        LocalDate tradingUntil = LocalDate.of(2026, 9, 4);
+        // 실행은 대상 구간보다 뒤까지 본다. 구간 끝의 거래일도 그 뒤 실행이 받기 때문이다.
+        LocalDate runsUntil = LocalDate.of(2026, 9, 30);
+
+        List<LocalDate> runs = weekdaysBetween(from, runsUntil);
+
+        for (LocalDate tradingDay : openDaysBetween(from, tradingUntil, closed)) {
+            // 소스는 거래일 T를 T의 다음 **영업일**에 낸다 — 휴장을 건너뛴다. 이 한 줄이
+            // 결손의 발생 기제 자체이므로 테스트가 스스로 모형을 갖는다.
+            LocalDate publishedOn = nextOpenDay(tradingDay, closed);
+
+            boolean covered = runs.stream().anyMatch(run -> {
+                if (run.isBefore(publishedOn)) {
+                    return false;                       // 그 실행 시점엔 아직 안 나왔다
+                }
+                LocalDate to = PipelineScheduler.targetDateFor(run);
+                return !tradingDay.isBefore(DailyUpdateJob.priceWindowStart(to))
+                        && !tradingDay.isAfter(to);
+            });
+
+            assertThat(covered)
+                    .as("%s(%s) 종가를 받을 수 있는 실행이 하나도 없다", tradingDay,
+                            tradingDay.getDayOfWeek())
+                    .isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("조회 창이 장기 연휴를 건너뛴다 — 좁으면 연휴 앞 거래일이 영구히 샌다")
+    void priceWindowCoversLongClosure() {
+        // 11일 연속 휴장(9/12 토 ~ 9/22 화)을 합성한다. 앞 거래일은 9/11(금), 그것을 받을 수
+        // 있는 첫 실행은 9/23(수)이고 그날의 대상일은 9/22(화)다. 창이 9/11에 못 닿으면
+        // 첫 기회를 놓치는 것이 아니라 **기회 자체가 없다** — 이후 실행은 대상일만 더 멀어진다.
+        LocalDate lastBeforeClosure = LocalDate.of(2026, 9, 11);
+        LocalDate firstRunAfter = LocalDate.of(2026, 9, 23);
+
+        LocalDate to = PipelineScheduler.targetDateFor(firstRunAfter);
+
+        assertThat(DailyUpdateJob.priceWindowStart(to))
+                .as("창이 연휴를 건너뛰지 못하면 %s 종가를 받을 실행이 없다", lastBeforeClosure)
+                .isBeforeOrEqualTo(lastBeforeClosure);
     }
 
     @Test
@@ -78,6 +149,41 @@ class PipelineSchedulerTest {
         assertThat(next).isNotNull();
         assertThat(next.getDayOfWeek()).isEqualTo(DayOfWeek.SATURDAY);
         assertThat(TRADING_DAYS).doesNotContain(next.getDayOfWeek());
+    }
+
+    /** 주어진 일자 다음의 첫 개장일 — 주말도 휴장일도 아닌 날. */
+    private static LocalDate nextOpenDay(LocalDate date, Set<LocalDate> closed) {
+        LocalDate next = date.plusDays(1);
+        while (!isOpen(next, closed)) {
+            next = next.plusDays(1);
+        }
+        return next;
+    }
+
+    private static boolean isOpen(LocalDate date, Set<LocalDate> closed) {
+        return TRADING_DAYS.contains(date.getDayOfWeek()) && !closed.contains(date);
+    }
+
+    /** 크론이 {@code MON-FRI}라 실행은 휴장일에도 있다 — 그날 대상이 비어 있을 뿐이다. */
+    private static List<LocalDate> weekdaysBetween(LocalDate from, LocalDate to) {
+        List<LocalDate> days = new ArrayList<>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            if (TRADING_DAYS.contains(d.getDayOfWeek())) {
+                days.add(d);
+            }
+        }
+        return days;
+    }
+
+    private static List<LocalDate> openDaysBetween(LocalDate from, LocalDate to,
+                                                   Set<LocalDate> closed) {
+        List<LocalDate> days = new ArrayList<>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            if (isOpen(d, closed)) {
+                days.add(d);
+            }
+        }
+        return days;
     }
 
     private static CronExpression cronOf(String methodName) {
