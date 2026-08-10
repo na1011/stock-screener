@@ -238,7 +238,12 @@ public class PresetCatalog {
                         // 이미 훼손된 종목 배제. 위 이격도 상한과 함께 진입 구간을 만든다.
                         required(PctFrom52wHighCalculator.CODE, ComparisonOperator.GTE, "-25"),
                         // 보유 지속력. 수익률이 아니라 견딜 수 있는가를 묻는다.
-                        required(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "4"),
+                        // 원본의 4%는 미국 대형주 기준이다. 국내 유니버스의 ATR 비율 중앙값이
+                        // 7.91%(p10=4.64)라 4%를 그대로 쓰면 상위 10%만 남아 게이트가 아니라
+                        // 저변동성 스크리너가 된다 — 실측으로 16종목이 1종목이 됐다.
+                        // 6%는 유니버스 p25(5.88) 언저리이며, 원본이 미국 표본에서 4%를 놓은
+                        // 상대 위치에 대응한다. 근거와 재보정 이력은 ADR-0039에 있다.
+                        required(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "6"),
 
                         // ── 생존 ──
                         // 계절성 있는 업종이 한 분기 적자를 내는 것은 정상이라 4가 아니라 3이다.
