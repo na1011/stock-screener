@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,7 +64,7 @@ class IndicatorRunnerTest {
     void computesAndStoresTechnicalIndicators() {
         insertPriceHistory(300);
 
-        long written = runner.run(stockId, AS_OF);
+        long written = runner.run(stockId, AS_OF, Optional.empty());
 
         assertThat(written).isPositive();
         assertThat(storedCodes()).contains(
@@ -77,7 +78,7 @@ class IndicatorRunnerTest {
         // 20일선은 되지만 200일선은 안 되는 길이다.
         insertPriceHistory(30);
 
-        runner.run(stockId, AS_OF);
+        runner.run(stockId, AS_OF, Optional.empty());
 
         assertThat(storedCodes())
                 .contains(Sma20Calculator.CODE)
@@ -89,7 +90,7 @@ class IndicatorRunnerTest {
     void derivedIndicatorConsumesParentSeries() {
         insertPriceHistory(300);
 
-        runner.run(stockId, AS_OF);
+        runner.run(stockId, AS_OF, Optional.empty());
 
         assertThat(registry.find(MacdVCalculator.CODE)).isPresent();
         assertThat(registry.executionOrder().stream().map(IndicatorCalculator::code).toList())
@@ -110,9 +111,9 @@ class IndicatorRunnerTest {
     void isIdempotent() {
         insertPriceHistory(300);
 
-        runner.run(stockId, AS_OF);
+        runner.run(stockId, AS_OF, Optional.empty());
         int afterFirst = countIndicatorValues();
-        runner.run(stockId, AS_OF);
+        runner.run(stockId, AS_OF, Optional.empty());
 
         assertThat(countIndicatorValues()).isEqualTo(afterFirst);
     }
@@ -122,7 +123,7 @@ class IndicatorRunnerTest {
     void skipsFundamentalsWithoutFinancials() {
         insertPriceHistory(300);
 
-        runner.run(stockId, AS_OF);
+        runner.run(stockId, AS_OF, Optional.empty());
 
         assertThat(storedCodes())
                 .contains(Sma200Calculator.CODE)
@@ -132,7 +133,7 @@ class IndicatorRunnerTest {
     @Test
     @DisplayName("시세가 없으면 아무것도 저장하지 않는다")
     void storesNothingWithoutPrices() {
-        assertThat(runner.run(stockId, AS_OF)).isZero();
+        assertThat(runner.run(stockId, AS_OF, Optional.empty())).isZero();
         assertThat(countIndicatorValues()).isZero();
     }
 
@@ -146,7 +147,7 @@ class IndicatorRunnerTest {
             insertBar(date, new BigDecimal("2000"), new BigDecimal("1000"));
         }
 
-        runner.run(stockId, AS_OF);
+        runner.run(stockId, AS_OF, Optional.empty());
 
         BigDecimal sma = jdbcTemplate.queryForObject("""
                 SELECT value FROM indicator_value
@@ -154,6 +155,52 @@ class IndicatorRunnerTest {
                 """, BigDecimal.class, stockId, Sma20Calculator.CODE, AS_OF.minusDays(1));
 
         assertThat(sma).isEqualByComparingTo("1000");
+    }
+
+    @Test
+    @DisplayName("보존 경계 이하는 저장하지 않는다 — 경계일 자신도 뺀다(purge와 같은 부등호)")
+    void storesNothingAtOrBeforeRetentionCutoff() {
+        insertPriceHistory(300);
+        LocalDate cutoff = AS_OF.minusDays(100);
+
+        runner.run(stockId, AS_OF, Optional.of(cutoff));
+
+        assertThat(storedTradeDates())
+                .isNotEmpty()
+                .allSatisfy(date -> assertThat(date)
+                        .as("경계일 이하가 남으면 purge가 매 실행 그것을 다시 지운다")
+                        .isAfter(cutoff));
+    }
+
+    @Test
+    @DisplayName("경계를 걸어도 남는 값은 창 전체로 계산한 값과 같다 — 자르는 것은 저장뿐이다")
+    void retentionCutoffDoesNotChangeComputedValues() {
+        insertPriceHistory(300);
+        LocalDate lastBar = AS_OF.minusDays(1);
+
+        runner.run(stockId, AS_OF, Optional.empty());
+        BigDecimal withoutCutoff = storedValue(Atr14Calculator.CODE, lastBar);
+
+        jdbcTemplate.update("DELETE FROM indicator_value WHERE stock_id = ?", stockId);
+        runner.run(stockId, AS_OF, Optional.of(AS_OF.minusDays(100)));
+
+        // ATR은 앞 구간이 뒤로 이어지는 재귀 지표다. 경계로 계산 입력까지 잘랐다면
+        // 워밍업이 짧아져 이 값이 달라지는데, 값이 그럴듯해 화면으로는 드러나지 않는다.
+        assertThat(storedValue(Atr14Calculator.CODE, lastBar))
+                .isEqualByComparingTo(withoutCutoff);
+    }
+
+    private List<LocalDate> storedTradeDates() {
+        return jdbcTemplate.queryForList(
+                "SELECT DISTINCT trade_date FROM indicator_value WHERE stock_id = ?",
+                LocalDate.class, stockId);
+    }
+
+    private BigDecimal storedValue(String indicatorCode, LocalDate tradeDate) {
+        return jdbcTemplate.queryForObject("""
+                SELECT value FROM indicator_value
+                WHERE stock_id = ? AND indicator_code = ? AND trade_date = ?
+                """, BigDecimal.class, stockId, indicatorCode, tradeDate);
     }
 
     private void insertPriceHistory(int days) {

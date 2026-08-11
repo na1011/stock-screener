@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.TreeMap;
 
 /**
@@ -52,9 +53,17 @@ public class IndicatorRunner {
      * <p>원자료는 <b>종목당 한 번만</b> 읽는다. 지표마다 읽으면 지표를 추가할 때마다 조회가
      * 늘어 850종목 × N지표의 N+1이 된다.
      *
+     * <p>IMPORTANT — 계산은 창 전체로 하고 <b>저장만</b> 보존 경계로 자른다. 재귀 지표
+     * ({@code ATR_14}·{@code RSI_14}·{@code MACD}·{@code MACD_V})는 창의 앞쪽부터 이어져야
+     * 마지막 값이 맞으므로, 입력을 줄이면 값 자체가 달라진다. 여기서 거르는 것은
+     * {@link IndicatorValueWriter}에 넘길 목록뿐이다.
+     *
+     * @param retentionCutoff 이 날짜 <b>이하</b>는 저장하지 않는다
+     *                        ({@link IndicatorRetentionPolicy#writeCutoff()}).
+     *                        비어 있으면 거르지 않는다 — 시세가 보존 기간보다 적게 쌓인 초기 상태다
      * @return 저장한 행 수
      */
-    public long run(long stockId, LocalDate asOf) {
+    public long run(long stockId, LocalDate asOf, Optional<LocalDate> retentionCutoff) {
         IndicatorContext base = readRawData(stockId, asOf);
         if (base.priceBars().isEmpty()) {
             // 시세가 없으면 계산할 것이 없다. 신규 편입 직후나 거래정지 종목에서 정상적으로 생긴다.
@@ -74,10 +83,28 @@ public class IndicatorRunner {
                 continue;
             }
 
+            // 파생 지표에는 창 전체를 넘긴다. 저장만 자르는 것이므로 여기는 자르기 전 값이다.
             computed.put(calculator.code(), toSeries(points));
-            written += writer.write(stockId, calculator.code(), points);
+            written += writer.write(stockId, calculator.code(), retain(points, retentionCutoff));
         }
         return written;
+    }
+
+    /**
+     * 보존 경계보다 오래된 포인트를 뺀다.
+     *
+     * <p>부등호가 {@link IndicatorRetentionPolicy#purge()}의 {@code trade_date <= cutoff}와
+     * 같은 방향이어야 한다. 어긋나면 경계일 하루가 <b>매 실행 쓰였다가 매 정리에 지워지며</b>,
+     * 그 왕복은 어떤 값도 바꾸지 않아 화면으로는 드러나지 않는다.
+     */
+    private List<IndicatorPoint> retain(List<IndicatorPoint> points, Optional<LocalDate> cutoff) {
+        if (cutoff.isEmpty()) {
+            return points;
+        }
+        LocalDate boundary = cutoff.get();
+        return points.stream()
+                .filter(point -> point.tradeDate().isAfter(boundary))
+                .toList();
     }
 
     private IndicatorContext readRawData(long stockId, LocalDate asOf) {

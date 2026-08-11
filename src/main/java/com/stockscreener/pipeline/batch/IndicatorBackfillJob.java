@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.indicator.IndicatorRetentionPolicy;
 import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.PercentileCalculator;
 import com.stockscreener.indicator.SectorRelativeCalculator;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 이미 적재된 원자료로 지표를 소급 계산한다.
@@ -40,18 +42,21 @@ public class IndicatorBackfillJob {
     private final IndicatorRunner indicatorRunner;
     private final PercentileCalculator percentileCalculator;
     private final SectorRelativeCalculator sectorRelativeCalculator;
+    private final IndicatorRetentionPolicy retentionPolicy;
     private final JdbcTemplate jdbcTemplate;
 
     public IndicatorBackfillJob(StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
                                 IndicatorRunner indicatorRunner,
                                 PercentileCalculator percentileCalculator,
                                 SectorRelativeCalculator sectorRelativeCalculator,
+                                IndicatorRetentionPolicy retentionPolicy,
                                 JdbcTemplate jdbcTemplate) {
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.indicatorRunner = indicatorRunner;
         this.percentileCalculator = percentileCalculator;
         this.sectorRelativeCalculator = sectorRelativeCalculator;
+        this.retentionPolicy = retentionPolicy;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -68,6 +73,24 @@ public class IndicatorBackfillJob {
         if (tradeDates.isEmpty()) {
             log.info("해당 구간에 시세가 없어 백필할 것이 없다. from={} to={}", from, to);
             return BatchStatus.SUCCESS;
+        }
+
+        // 보존 경계 밖은 계산해도 저장되지 않는다(ADR-0011). 그 사실을 여기서 말하지 않으면
+        // 몇 시간을 돌고 0행으로 끝나는데 잡은 SUCCESS다 — 원인을 데이터나 계산기에서 찾게 된다.
+        Optional<LocalDate> retentionCutoff = retentionPolicy.writeCutoff();
+        long outsideRetention = retentionCutoff
+                .map(cutoff -> tradeDates.stream().filter(date -> !date.isAfter(cutoff)).count())
+                .orElse(0L);
+        if (outsideRetention == tradeDates.size()) {
+            log.warn("요청 구간이 전부 보존 경계({}) 밖이라 저장될 값이 없다. 돌지 않는다."
+                    + " from={} to={} 거래일={}일", retentionCutoff.orElseThrow(),
+                    from, to, tradeDates.size());
+            return BatchStatus.SUCCESS;
+        }
+        if (outsideRetention > 0) {
+            log.warn("요청 구간의 {}/{}거래일이 보존 경계({}) 밖이라 계산해도 저장되지 않는다."
+                    + " 남은 {}거래일만 반영된다.", outsideRetention, tradeDates.size(),
+                    retentionCutoff.orElseThrow(), tradeDates.size() - outsideRetention);
         }
 
         List<SecurityRef> targets =
@@ -93,7 +116,8 @@ public class IndicatorBackfillJob {
 
                 for (SecurityRef target : targets) {
                     execution.process(target, CollectionPhase.INDICATOR,
-                            security -> indicatorRunner.run(security.stockId(), tradeDate));
+                            security -> indicatorRunner.run(
+                                    security.stockId(), tradeDate, retentionCutoff));
                 }
                 percentileCalculator.calculate(tradeDate);
                 // 업종 상대값도 같은 자리다 — 그날 전 종목의 값이 있어야 정해진다.

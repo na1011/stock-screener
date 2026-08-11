@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 일일 갱신. 소스가 공개한 최근 거래일들의 종가를 수집하고 그것으로 지표를 계산한다.
@@ -177,6 +178,10 @@ public class DailyUpdateJob {
         execution.plan(CollectionPhase.INDICATOR, targets.size());
         execution.stage("종목별 수집·계산");
 
+        // 종목마다 묻지 않는다 — 350번 같은 답을 받는다. 이 루프 안에서 오늘치 시세가 들어와
+        // 경계가 하루 밀리지만, 그 하루는 아래 purge가 정상 회전으로 걷어 간다.
+        Optional<LocalDate> retentionCutoff = retentionPolicy.writeCutoff();
+
         try {
             for (SecurityRef target : targets) {
                 boolean collected = execution.process(target, CollectionPhase.PRICE,
@@ -199,7 +204,8 @@ public class DailyUpdateJob {
                 // 때문이다. 거래정지처럼 정상적으로 빈 종목이 영원히 미해결로 남게 된다.
                 if (collected) {
                     execution.process(target, CollectionPhase.INDICATOR,
-                            security -> indicatorRunner.run(security.stockId(), to));
+                            security -> indicatorRunner.run(
+                                    security.stockId(), to, retentionCutoff));
                 }
             }
 

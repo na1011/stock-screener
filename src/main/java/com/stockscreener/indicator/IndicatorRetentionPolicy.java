@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 보존 기간을 넘긴 지표 값을 지운다(ADR-0011).
@@ -36,6 +37,32 @@ public class IndicatorRetentionPolicy {
 
     public IndicatorRetentionPolicy(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /**
+     * 앞으로 쓸 지표의 보존 경계. 이 날짜 <b>이하</b>는 애초에 쓰지 않는다.
+     *
+     * <p>{@link #purge()}가 이미 쌓인 것을 지운다면 이쪽은 쌓이지 않게 한다. 둘 다 필요한
+     * 이유는 러너가 <b>읽기 창 전체</b>에 대해 값을 내기 때문이다 — 전역 최대가 751봉이라
+     * 이 경계가 없으면 매 실행이 570거래일치를 보존 밖에 쓰고 다음 정리가 그것을 지운다.
+     * 값은 언제나 옳고 화면도 정상이라 드러나는 것은 몇 달 뒤 인덱스 크기뿐이다.
+     *
+     * <p>경계를 {@code price_daily}에서 세는 것이 {@link #purge()}와 다른 점이다. 지표 날짜는
+     * 시세 날짜의 부분집합이므로 이쪽 경계가 언제나 같거나 더 최근이고, 따라서 <b>이 필터를
+     * 통과한 값은 정리 대상이 되지 않는다.</b> 반대로 {@code indicator_value}를 기준으로 삼으면
+     * 지표가 아직 보존 기간만큼 쌓이지 않은 동안 경계가 비어, 초기 적재가 전 구간을 쓴다.
+     *
+     * @return 경계 거래일. 시세가 보존 기간보다 적게 쌓여 있으면 비어 있고, 그때는 거를 것이 없다
+     */
+    public Optional<LocalDate> writeCutoff() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT trade_date FROM price_daily
+                ORDER BY trade_date DESC
+                OFFSET ?
+                LIMIT 1
+                """, LocalDate.class, RETAINED_TRADING_DAYS)
+                .stream()
+                .findFirst();
     }
 
     /**
