@@ -344,6 +344,22 @@ class ScreeningApiContractTest {
 
     @Test
     @WithMockUser(username = SUB)
+    @DisplayName("IMPORTANT — 업종 조건을 쓰면 그 표본 수가 결과 표 컬럼으로 함께 온다")
+    void addsPeerCountColumnAlongsideSectorMetrics() throws Exception {
+        // 임계 5는 5 미만만 막는다. 5와 40의 차이가 값에 남지 않으므로, 이 컬럼이 없으면
+        // 사용자가 "업종 상위 50%"를 다섯 중 셋이라는 뜻으로도 읽는다.
+        JsonNode response = run("""
+                {"conditions": {"conditions":[
+                   {"indicatorCode":"PER_SECTOR_PCTL","operator":"LTE","operand":{"type":"LITERAL","value":0.5}}]}}
+                """);
+
+        List<String> columns = new ArrayList<>();
+        response.get("columns").forEach(node -> columns.add(node.asText()));
+        assertThat(columns).contains("PER_SECTOR_PCTL", "PER_SECTOR_N");
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
     @DisplayName("IMPORTANT — 모집단이 둘이면 둘 다 밝힌다. 하나로 접으면 조건마다 뜻이 달라진 것이 감춰진다")
     void declaresBothPopulationsWhenMixed() throws Exception {
         JsonNode mixed = run("""

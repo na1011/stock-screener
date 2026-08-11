@@ -2,6 +2,7 @@ package com.stockscreener.screening.web;
 
 import com.stockscreener.indicator.IndicatorCatalog;
 import com.stockscreener.indicator.IndicatorDescriptor;
+import com.stockscreener.indicator.SectorMetricSpec;
 import com.stockscreener.screening.ConditionOutcome;
 import com.stockscreener.screening.EvaluationMode;
 import com.stockscreener.screening.IndicatorCondition;
@@ -43,11 +44,23 @@ public class ScreeningResponseAssembler {
     private final StockReader stockReader;
     private final ScreeningRepository screeningRepository;
 
+    /**
+     * 업종 상대값 → 그 표본 수 지표.
+     *
+     * <p>선언을 그대로 받는 이유는 <b>짝을 아는 곳이 거기뿐</b>이기 때문이다. 코드에 접미사
+     * 규칙을 적으면 규칙이 두 곳에 생기고, 카탈로그의 {@code source_indicator_code}로는 찾을 수
+     * 없다 — 표본 수에는 그 링크를 일부러 걸지 않았다(백분위 안내가 붙어 버린다).
+     */
+    private final Map<String, String> peerCountByMetric;
+
     public ScreeningResponseAssembler(IndicatorCatalog indicatorCatalog, StockReader stockReader,
-                                      ScreeningRepository screeningRepository) {
+                                      ScreeningRepository screeningRepository,
+                                      List<SectorMetricSpec> sectorMetricSpecs) {
         this.indicatorCatalog = indicatorCatalog;
         this.stockReader = stockReader;
         this.screeningRepository = screeningRepository;
+        this.peerCountByMetric = sectorMetricSpecs.stream().collect(java.util.stream.Collectors
+                .toMap(SectorMetricSpec::code, SectorMetricSpec::peerCountCode));
     }
 
     ScreeningResponse assemble(ScreeningService.Source source, EvaluationMode mode,
@@ -59,6 +72,16 @@ public class ScreeningResponseAssembler {
         // 표에 보일 컬럼 — 카탈로그의 기본 컬럼 ∪ 조건이 참조한 지표.
         // 조건에 쓰인 지표를 반드시 포함하는 이유는 "왜 걸렸는지"를 보려면 그 값이 보여야 하기 때문이다.
         Set<String> columnCodes = new LinkedHashSet<>(source.conditions().referencedIndicatorCodes());
+        // 업종 상대값을 조건으로 썼으면 **그 값을 낼 때 비교한 표본 수도 함께** 보인다.
+        // 임계(5)는 5 미만만 막으므로 5와 40의 차이가 값에는 남지 않는다 — 그 수가 없으면
+        // 사용자가 "업종 상위 50%"를 두 종목 중 하나라는 뜻으로도 읽게 된다(ADR-0044).
+        // 기본 컬럼으로 두지 않는 이유는 업종 조건을 쓰지 않는 화면까지 시끄러워지기 때문이다.
+        List.copyOf(columnCodes).forEach(code -> {
+            String peerCount = peerCountByMetric.get(code);
+            if (peerCount != null) {
+                columnCodes.add(peerCount);
+            }
+        });
         List<IndicatorDescriptor> catalog = indicatorCatalog.activeIndicators();
         catalog.stream().filter(IndicatorDescriptor::defaultColumn)
                 .map(IndicatorDescriptor::code).forEach(columnCodes::add);
