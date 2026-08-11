@@ -80,6 +80,14 @@ export const useScreeningStore = defineStore('screening', () => {
   return {
     state: request.state,
     error: request.error,
+    /**
+     * 알려진 구멍 — 이 재시도는 위 {@link run}을 **우회한다.**
+     *
+     * `AsyncPanel`이 이것을 직접 부르므로 `invalidIndex`를 비우지도 다시 잡지도 않는다.
+     * 서버가 거부한 조건을 고치지 않은 채 "다시 시도"를 누르면 같은 오류가 오는데 붉은
+     * 칩은 이전 판정 그대로다. 고치려면 `run`이 마지막 요청을 스스로 다시 보내게 하고
+     * 여기서는 그것을 내보내야 한다 — `useAsync.run`이 `pending`을 읽으므로 어렵지 않다.
+     */
     retry: request.retry,
     result,
     hasResult,
