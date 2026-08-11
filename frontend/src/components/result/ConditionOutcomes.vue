@@ -351,16 +351,23 @@ const LANE_HINT =
     max-content max-content minmax(4rem, 1fr) max-content;
 }
 
-/* 레인이 없으면(배점이 전부 같다) 남는 폭은 기준이 쓴다. 우측에 새 공백을 만들지 않는다. */
+/*
+ * 레인이 없으면(배점이 전부 같거나 FILTER다) **신축 트랙을 두지 않는다.**
+ *
+ * 남는 폭을 어느 글자 칸엔가 주면 그 칸이 늘어나며 뒤따르는 숫자를 오른쪽 끝으로 밀어낸다 —
+ * 브라우저에서 재 보니 FILTER의 기준↔실제 사이가 780px 벌어졌다. 이 개편이 없애려던 바로
+ * 그 공백이다. 표는 자기 내용만큼만 넓으면 되고, 남는 폭은 표 **밖**에 두면 된다.
+ * 신축이 없으므로 그리드는 저절로 왼쪽으로 몰린다.
+ */
 .outcomes__list--cols-6 {
   grid-template-columns:
-    max-content minmax(0, max-content) minmax(0, 1fr)
+    max-content minmax(0, max-content) minmax(0, max-content)
     max-content max-content max-content;
 }
 
 .outcomes__list--cols-5 {
   grid-template-columns:
-    max-content minmax(0, max-content) minmax(0, 1fr)
+    max-content minmax(0, max-content) minmax(0, max-content)
     max-content max-content;
 }
 
@@ -377,11 +384,15 @@ const LANE_HINT =
   font-size: var(--app-text-sm);
 }
 
+/*
+ * 머리글은 sticky가 아니다. `position: sticky; top: 0`을 붙여 봤는데 **아무 효과가 없었다** —
+ * 스크롤포트가 `top: 240`인 지점에서 머리글이 `top: -424`로 그냥 흘러 나갔다(브라우저 실측).
+ * 확장 영역이 표의 `<td>` 안에 있고 그 상자 자신이 `position: sticky`라 붙을 자리가 없다.
+ *
+ * 그래서 **머리글에 뜻을 기대지 않는다.** 스크롤하면 사라지는 것을 전제로, 각 칸의 뜻은
+ * 셀 자신이 진다 — 점수 칸의 감춘 문장과 총점 줄의 범례가 그 몫이다.
+ */
 .outcomes__head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--p-surface-950);
   color: var(--p-text-subtle-color);
   font-size: var(--app-text-2xs);
   letter-spacing: 0.02em;
@@ -507,6 +518,11 @@ const LANE_HINT =
     display: none;
   }
 
+  /* 막대가 없으면 막대를 설명하는 문장도 없어야 한다. 아래에서 레인을 감춘다. */
+  .outcomes__legend {
+    display: none;
+  }
+
   .outcomes__list--cols-7,
   .outcomes__list--cols-6,
   .outcomes__list--cols-5 {
@@ -553,11 +569,18 @@ const LANE_HINT =
     justify-self: end;
   }
 
-  /* 레인은 죽이지 않는다. 세 줄째를 통째로 쓰되 두께가 3px이라 값싸고, 배점이 다를 때만
-     애초에 존재한다 — 조건이 스무 개인 전략에서는 이 줄이 생기지 않는다. */
+  /*
+   * 레인은 접힌 폭에서 그리지 않는다.
+   *
+   * 세 줄째에 전폭으로 깔아 봤는데(브라우저 실측), 조건 하나가 세 줄이 되면서 그 막대가
+   * **조건 사이의 구분선으로 읽혔다.** 길이가 배점이라 줄마다 길이가 다른데, 구분선으로
+   * 읽히는 순간 그 차이가 뜻이 아니라 흠으로 보인다. 넓은 폭에서는 좌우를 잇는 리더 라인이라
+   * 같은 그래픽이 정반대로 작동한다.
+   *
+   * 잃는 정보는 없다 — 옆의 `획득 / 배점`이 같은 것을 숫자로 말한다.
+   */
   .outcomes__lane {
-    grid-row: 3;
-    grid-column: 1 / -1;
+    display: none;
   }
 }
 </style>
