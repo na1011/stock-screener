@@ -191,18 +191,35 @@ function onOperandTypeChange(value: OperandType | null): void {
         <h3 class="editor__name">{{ indicator?.name ?? '지표' }}</h3>
         <span v-if="unitSuffix" class="editor__unit">{{ unitSuffix }}</span>
       </div>
-      <Button
-        v-if="!readonly"
-        type="button"
-        text
-        rounded
-        size="small"
-        severity="danger"
-        icon="pi pi-trash"
-        aria-label="이 조건 삭제"
-        v-tooltip.top="'이 조건 삭제'"
-        @click="emit('remove')"
-      />
+      <div class="editor__head-actions">
+        <!--
+          `v-if="!readonly"` 밖에 있다. 제외는 전략을 고치는 것이 아니라 이번 실행에서
+          빼는 것이고, "프리셋에서 조건 하나 빼고 돌려보기"가 이 기능이 있는 이유다.
+        -->
+        <Button
+          type="button"
+          text
+          rounded
+          size="small"
+          :severity="condition.enabled ? 'secondary' : undefined"
+          :icon="condition.enabled ? 'pi pi-eye' : 'pi pi-eye-slash'"
+          :aria-label="condition.enabled ? '이 조건을 실행에서 빼기' : '이 조건을 다시 넣기'"
+          v-tooltip.top="condition.enabled ? '실행에서 빼기' : '다시 넣기'"
+          @click="draft.setEnabled(condition.key, !condition.enabled)"
+        />
+        <Button
+          v-if="!readonly"
+          type="button"
+          text
+          rounded
+          size="small"
+          severity="danger"
+          icon="pi pi-trash"
+          aria-label="이 조건 삭제"
+          v-tooltip.top="'이 조건 삭제'"
+          @click="emit('remove')"
+        />
+      </div>
     </header>
 
     <!-- 무엇을 뜻하는 지표인지. 이름만으로는 값을 정할 수 없다. -->
@@ -441,6 +458,13 @@ function onOperandTypeChange(value: OperandType | null): void {
   align-items: baseline;
   gap: 0.25rem;
   min-width: 0;
+}
+
+.editor__head-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.125rem;
 }
 
 .editor__name {

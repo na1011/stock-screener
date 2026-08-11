@@ -51,6 +51,7 @@ function condition(overrides: Partial<DraftCondition> = {}): DraftCondition {
     multiplier: null,
     weight: null,
     required: false,
+    enabled: true,
     ...overrides,
   }
 }
@@ -214,6 +215,104 @@ describe('보낸 것을 기록한다', () => {
     expect(draft.toRequest()).toBeNull()
     expect(draft.lastSent).toBe(sent)
     expect(draft.matchesLastSent).toBe(false)
+  })
+})
+
+describe('조건을 실행에서 뺀다', () => {
+  /** 완성된 조건 둘을 가진 즉석 초안. */
+  function twoConditions() {
+    const draft = useScreenDraftStore()
+    draft.addCondition('PER')
+    draft.addCondition('ROE')
+    const per = draft.conditions[0] as DraftCondition
+    const roe = draft.conditions[1] as DraftCondition
+    per.value = 10
+    roe.value = 15
+    return { draft, per, roe }
+  }
+
+  it('뺀 조건은 실행에서 빠지고 저장에는 남는다', () => {
+    // 실행에서 빼는 것과 전략에서 지우는 것은 다른 일이다. 후자는 휴지통이 한다.
+    const { draft, per } = twoConditions()
+
+    draft.setEnabled(per.key, false)
+
+    expect(draft.runnableConditions).toHaveLength(1)
+    expect(draft.completeConditions).toHaveLength(2)
+    expect(draft.toConditionGroup().conditions).toHaveLength(2)
+    expect(draft.toRequest()?.conditions?.conditions).toHaveLength(1)
+  })
+
+  it('프리셋에서 조건을 빼도 읽기 전용이 유지된다', () => {
+    // IMPORTANT — 여기가 이 기능의 함정이다. setEnabled가 markDirty를 부르면
+    // readOnly(= !editable && !dirty)가 풀려 칩 바 잠금이 열리고 "복제해서 편집" 버튼이
+    // 사라지는데, canSave는 editable을 보므로 여전히 false다. 고칠 수는 있는데 저장할
+    // 길이 없는 상태가 된다.
+    const draft = useScreenDraftStore()
+    draft.loadFrom(readOnlyPreset())
+
+    draft.setEnabled((draft.conditions[0] as DraftCondition).key, false)
+
+    expect(draft.dirty).toBe(false)
+    expect(draft.readOnly).toBe(true)
+    expect(draft.hasDisabledCondition).toBe(true)
+  })
+
+  it('뺀 것이 있으면 저장된 정의가 아니라 즉석 조건으로 보낸다', () => {
+    // presetCode로 보내면 서버는 제외를 모르므로 꺼 둔 조건까지 평가한다 —
+    // 껐는데 결과가 그대로다.
+    const draft = useScreenDraftStore()
+    draft.loadFrom(readOnlyPreset())
+    expect(draft.toRequest()?.presetCode).toBe('VALUE_KR')
+
+    draft.setEnabled((draft.conditions[0] as DraftCondition).key, false)
+
+    const request = draft.toRequest()
+    expect(request).toBeNull() // 하나뿐인 조건을 뺐으니 보낼 것이 없다
+    expect(draft.canRun).toBe(false)
+  })
+
+  it('전부 빼면 실행할 수 없다', () => {
+    const { draft, per, roe } = twoConditions()
+
+    draft.setEnabled(per.key, false)
+    draft.setEnabled(roe.key, false)
+
+    expect(draft.canRun).toBe(false)
+    expect(draft.toRequest()).toBeNull()
+  })
+
+  it('실행에서 뺀 것도 "보낸 것과 다르다"로 잡힌다', () => {
+    const { draft, per } = twoConditions()
+    draft.toRequest()
+    expect(draft.matchesLastSent).toBe(true)
+
+    draft.setEnabled(per.key, false)
+
+    expect(draft.matchesLastSent).toBe(false)
+  })
+
+  it('저장한 뒤 다시 열면 전부 켜져 있다', () => {
+    // 제외는 세션 한정 상태다. 서버는 이 개념을 모르므로 불러오면 초기화된다(ADR-0048).
+    const { draft, per } = twoConditions()
+    draft.setEnabled(per.key, false)
+
+    draft.loadFrom(screen())
+
+    expect(draft.hasDisabledCondition).toBe(false)
+    expect(draft.conditions.every((it) => it.enabled)).toBe(true)
+  })
+
+  it('초기화는 제외 상태를 건드리지 않는다', () => {
+    // conditionDefaults에 enabled가 들어가면 Object.assign이 그것을 덮어써,
+    // 값을 비우는 동작이 제외까지 조용히 풀어 버린다.
+    const { draft, per } = twoConditions()
+    draft.setEnabled(per.key, false)
+
+    draft.resetCondition(per.key)
+
+    expect(per.enabled).toBe(false)
+    expect(per.value).toBeNull()
   })
 })
 

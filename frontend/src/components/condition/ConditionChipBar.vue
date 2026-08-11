@@ -11,7 +11,7 @@ import ConditionEditor from '@/components/condition/ConditionEditor.vue'
 import IndicatorPicker from '@/components/condition/IndicatorPicker.vue'
 import ScreenSettingsPopover from '@/components/condition/ScreenSettingsPopover.vue'
 import { useFreshDraft } from '@/composables/useFreshDraft'
-import { incompleteConditionNotice } from '@/lib/conditionText'
+import { disabledConditionNotice, incompleteConditionNotice } from '@/lib/conditionText'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { ALL_UNIVERSES_LABEL } from '@/lib/universe'
 import { useCatalogStore } from '@/stores/catalog'
@@ -69,6 +69,14 @@ const incompleteCount = computed(
 
 /** 실행 버튼 툴팁과 짝이다(ADR-0024). 문구의 정본은 `lib/conditionText`에 있다. */
 const incompleteNotice = computed(() => incompleteConditionNotice(incompleteCount.value))
+
+/**
+ * 일부러 뺀 조건의 안내. 미완성 안내와 **개수를 합치지 않는다** — 실수와 의도가 같은 숫자에
+ * 섞이면 사용자는 무엇을 해야 하는지 알 수 없다.
+ */
+const disabledNotice = computed(() =>
+  disabledConditionNotice(draft.completeConditions.length - draft.runnableConditions.length),
+)
 
 /**
  * 설정 칩의 라벨. 접어 둔 것이 무엇으로 설정되어 있는지 여기서 답한다.
@@ -228,6 +236,7 @@ function removeEditing(): void {
           :invalid="props.invalidKey === condition.key"
           :readonly="readonly"
           @click="openEditor($event, condition.key)"
+          @toggle="draft.setEnabled(condition.key, !condition.enabled)"
         />
 
         <Button
@@ -267,6 +276,16 @@ function removeEditing(): void {
     <p v-if="incompleteNotice && !readonly" class="bar__incomplete">
       <i class="pi pi-info-circle" aria-hidden="true" />
       {{ incompleteNotice }}
+    </p>
+
+    <!--
+      일부러 뺀 것은 앰버가 아니다 — 손볼 것이 없다. 그래도 말하는 이유는 제외가 저장되지
+      않아, 말하지 않으면 결과가 왜 달라졌는지 알 수 없는 순간이 오기 때문이다.
+      읽기 전용에서도 낸다: 잠긴 프리셋에서도 조건을 뺄 수 있다(ADR-0048).
+    -->
+    <p v-if="disabledNotice" class="bar__disabled">
+      <i class="pi pi-eye-slash" aria-hidden="true" />
+      {{ disabledNotice }}
     </p>
 
     <!-- 닫힌 뒤에야 다음 칩을 연다. 이유는 `openEditor` 주석에 있다. -->
@@ -353,6 +372,16 @@ function removeEditing(): void {
   margin: 0.375rem 0 0;
   font-size: var(--app-text-2xs);
   color: var(--p-amber-300);
+}
+
+/* 같은 자리, 다른 무게. 이쪽은 사용자가 의도한 상태라 경고색을 쓰지 않는다. */
+.bar__disabled {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0.375rem 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--p-text-muted-color);
 }
 
 /* 좁아지면 설정·새 조건이 아래로 내려간다. 조건 자체가 먼저 자리를 갖는다. */

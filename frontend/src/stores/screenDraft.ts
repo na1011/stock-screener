@@ -38,6 +38,17 @@ export interface DraftCondition {
    * 한쪽을 켜면 다른 쪽을 비워야 400을 맞지 않는다. 그 처리는 편집기가 한다.
    */
   required: boolean
+  /**
+   * 이번 실행에 쓸 것인가. **화면에서만 아는 상태다**(ADR-0048).
+   *
+   * "이 조건 하나만 빼고 돌려보기"를 위한 것이다. 지우고 다시 만들면 값을 전부 다시 넣어야
+   * 하고, `undoRemove`는 마지막 하나만 되살린다.
+   *
+   * IMPORTANT — 서버는 이 개념을 모른다. 저장할 때는 **꺼진 조건도 함께 보낸다** — 실행에서
+   * 빼는 것과 전략에서 지우는 것은 다른 일이고, 후자는 휴지통이 한다. 그래서 저장한 뒤 다시
+   * 열면 전부 켜져 있다(`fromPayload`). 그것이 "세션 한정"의 뜻이다.
+   */
+  enabled: boolean
 }
 
 /** 지금 편집 중인 것이 어디서 왔는가. 실행 요청의 형태가 여기서 갈린다. */
@@ -85,15 +96,17 @@ export const FRESH_DRAFT_TITLE = '새 전략'
 let nextKey = 1
 
 /**
- * 조건 하나의 **내용** 기본값. 신원(`key`)은 여기 없다.
+ * 조건 하나의 **내용** 기본값. 신원(`key`)과 표시 상태(`enabled`)는 여기 없다.
  *
- * IMPORTANT — 신원에 속하는 필드를 여기 넣지 않는다. 이 객체는 편집기의 [초기화]가
+ * IMPORTANT — 반환 타입의 `Omit`이 장식이 아니다. 이 객체는 편집기의 [초기화]가
  * `Object.assign`으로 기존 조건에 **덮어쓰는** 데 쓰이므로, 여기 들어간 것은 무엇이든
- * 초기화 때 함께 되돌아간다. `key`가 그래서 빠져 있고 — 바뀌면 v-for가 재마운트되어
- * 팝오버가 앵커를 잃는다 — 같은 이유로 조건을 실행에서 제외했는지 같은 **표시 상태**도
- * 여기 두면 안 된다. "값을 비우기"이지 "표시를 푸는 것"이 아니다.
+ * 초기화 때 함께 되돌아간다. `key`가 바뀌면 v-for가 재마운트되어 팝오버가 앵커를 잃고,
+ * `enabled`가 딸려 오면 값을 비우는 동작이 **제외까지 조용히 풀어 버린다.** "값을 비우기"이지
+ * 신원을 바꾸거나 표시를 되돌리는 것이 아니다 — 둘을 여기 더하면 컴파일이 막는다.
  */
-function conditionDefaults(indicatorCode: string | null = null): Omit<DraftCondition, 'key'> {
+function conditionDefaults(
+  indicatorCode: string | null = null,
+): Omit<DraftCondition, 'key' | 'enabled'> {
   return {
     indicatorCode,
     operator: 'GTE',
@@ -107,8 +120,13 @@ function conditionDefaults(indicatorCode: string | null = null): Omit<DraftCondi
   }
 }
 
+/**
+ * `key`와 `enabled`가 `conditionDefaults` **밖**에 있는 것은 의도다. 편집기의 [초기화]가
+ * defaults를 `Object.assign`으로 덮어쓰므로, 여기 있는 둘은 초기화가 건드리지 않는다 —
+ * "값을 비우기"이지 신원을 바꾸거나 제외를 푸는 것이 아니다.
+ */
 function emptyCondition(indicatorCode: string | null = null): DraftCondition {
-  return { key: nextKey++, ...conditionDefaults(indicatorCode) }
+  return { key: nextKey++, enabled: true, ...conditionDefaults(indicatorCode) }
 }
 
 export const useScreenDraftStore = defineStore('screenDraft', () => {
@@ -157,18 +175,55 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
   const readOnly = computed(() => !editable.value && !dirty.value)
   const canAddCondition = computed(() => conditions.value.length < MAX_CONDITIONS)
 
-  /** 완성된 조건만 센다. 작성 중인 빈 행은 실행 대상이 아니다. */
+  /**
+   * 완성된 조건만 센다. 작성 중인 빈 행은 실행 대상이 아니다.
+   *
+   * **제외한 조건도 여기 들어간다.** 이것이 저장의 단위이기 때문이다 — 제외는 이번 실행에서만
+   * 빼는 것이지 전략에서 지우는 것이 아니다.
+   */
   const completeConditions = computed(() => conditions.value.filter(isComplete))
+
+  /** 실제로 서버에 보낼 조건. 완성됐고 **켜져 있는** 것. */
+  const runnableConditions = computed(() => completeConditions.value.filter((it) => it.enabled))
+
+  /**
+   * 실행에서 뺀 조건이 있는가.
+   *
+   * IMPORTANT — 이것이 `dirty`와 **별개**인 것이 이 기능의 핵심이다. 제외에 `markDirty()`를
+   * 부르면 `readOnly = !editable && !dirty`가 풀려 프리셋의 칩 바 잠금이 열리고 "복제해서
+   * 편집" 버튼이 사라지는데, `canSave`는 `editable`을 보므로 여전히 false다 — **고칠 수는
+   * 있는데 저장할 길이 없는 상태**가 된다. 그리고 "이 조건 빼고 돌려보기"는 프리셋에서 가장
+   * 쓰고 싶은 기능이다.
+   *
+   * 실제로 필요한 것은 dirty가 아니라 **즉석 조건 경로를 타는 것**이다. 그것만 여기서 연다.
+   */
+  const hasDisabledCondition = computed(
+    () => completeConditions.value.length !== runnableConditions.value.length,
+  )
 
   /**
    * 실행할 수 있는가.
    *
    * 손대지 않은 프리셋·저장된 전략은 조건을 다시 보내지 않으므로(서버가 저장된 정의를 쓴다)
-   * 여기서 조건을 세지 않는다. 즉석 조건일 때만 완성된 행이 하나 이상 필요하다.
+   * 여기서 조건을 세지 않는다. 즉석 조건일 때만 켜진 행이 하나 이상 필요하다.
    */
   const canRun = computed(
-    () => (!dirty.value && origin.value.kind !== 'custom') || completeConditions.value.length > 0,
+    () =>
+      (!dirty.value && !hasDisabledCondition.value && origin.value.kind !== 'custom') ||
+      runnableConditions.value.length > 0,
   )
+
+  /**
+   * 조건 하나를 실행에서 빼거나 되돌린다.
+   *
+   * `markDirty()`를 **부르지 않는다** — 이유는 {@link hasDisabledCondition}에 있다.
+   */
+  function setEnabled(key: number, enabled: boolean): void {
+    const target = conditions.value.find((it) => it.key === key)
+    if (target !== undefined) {
+      target.enabled = enabled
+    }
+  }
 
   function markDirty(): void {
     dirty.value = true
@@ -309,13 +364,16 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
   function buildRequest(): SentSnapshot | null {
     const base = { universeCode: universeCode.value, asOf: asOf.value }
 
-    if (!dirty.value && origin.value.kind === 'preset') {
+    // 저장된 정의를 그대로 실행하려면 **뺀 조건이 없어야 한다.** 서버는 제외를 모르므로
+    // presetCode·screenId로 보내면 꺼 둔 조건까지 함께 평가된다 — 껐는데 결과가 그대로다.
+    const savedAsIs = !dirty.value && !hasDisabledCondition.value
+    if (savedAsIs && origin.value.kind === 'preset') {
       return { request: { ...base, presetCode: origin.value.code }, keys: allKeys() }
     }
-    if (!dirty.value && origin.value.kind === 'screen') {
+    if (savedAsIs && origin.value.kind === 'screen') {
       return { request: { ...base, screenId: origin.value.id }, keys: allKeys() }
     }
-    const sending = completeConditions.value
+    const sending = runnableConditions.value
     if (sending.length === 0) {
       return null
     }
@@ -377,6 +435,8 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     readOnly,
     canAddCondition,
     completeConditions,
+    runnableConditions,
+    hasDisabledCondition,
     canRun,
     lastRemoved,
     lastSent,
@@ -385,6 +445,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     addCondition,
     removeCondition,
     resetCondition,
+    setEnabled,
     undoRemove,
     setEvaluationMode,
     reset,
@@ -437,6 +498,8 @@ function toPayload(condition: DraftCondition): ConditionPayload {
 function fromPayload(payload: ConditionPayload): DraftCondition {
   return {
     key: nextKey++,
+    // 서버는 제외를 모른다. 불러오면 언제나 전부 켜진 상태에서 시작한다(ADR-0048).
+    enabled: true,
     indicatorCode: payload.indicatorCode,
     operator: payload.operator,
     operandType: payload.operand.type,

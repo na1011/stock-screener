@@ -11,7 +11,7 @@ import ResultCards from '@/components/result/ResultCards.vue'
 import ResultSummary from '@/components/result/ResultSummary.vue'
 import ResultTable from '@/components/result/ResultTable.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
-import { incompleteConditionNotice } from '@/lib/conditionText'
+import { disabledConditionNotice, incompleteConditionNotice } from '@/lib/conditionText'
 import { screenTypeLabel, staleReasonOf } from '@/lib/screen'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreeningStore } from '@/stores/screening'
@@ -82,7 +82,19 @@ const runLabel = computed(() => (stale.value ? '변경 반영' : '스크리닝 �
  */
 const incompleteCount = computed(() => draft.conditions.length - draft.completeConditions.length)
 
-const runHint = computed(() => incompleteConditionNotice(incompleteCount.value))
+/**
+ * 실행에서 빠지는 것이 있으면 여기서도 말한다. 칩 바의 안내 줄과 짝이다(ADR-0024).
+ *
+ * 두 문장을 개수로 합치지 않고 나란히 잇는다 — 덜 만든 것과 일부러 뺀 것은 사용자가 해야
+ * 할 일이 정반대라, 합친 숫자는 무엇을 하라는 말인지 알려주지 못한다.
+ */
+const runHint = computed(() => {
+  const notices = [
+    incompleteConditionNotice(incompleteCount.value),
+    disabledConditionNotice(draft.completeConditions.length - draft.runnableConditions.length),
+  ].filter((it): it is string => it !== null)
+  return notices.length === 0 ? null : notices.join(' ')
+})
 
 async function run(): Promise<void> {
   const request = draft.toRequest()

@@ -149,6 +149,23 @@ export function incompleteConditionNotice(count: number): string | null {
   return count > 0 ? `값을 채우지 않은 조건 ${count}개는 실행에서 제외됩니다.` : null
 }
 
+/**
+ * 사용자가 **일부러** 뺀 조건이 있다는 안내.
+ *
+ * {@link incompleteConditionNotice}와 짝을 이루지만 합치지 않는다. 저쪽은 "덜 만든 것"이고
+ * 이쪽은 "일부러 뺀 것"이라 사용자가 해야 할 일이 정반대다 — 하나는 채우는 것, 하나는
+ * 아무것도 안 해도 되는 것. 개수를 합쳐 세면 실수와 의도가 같은 숫자에 섞인다.
+ *
+ * 그래도 말하기는 해야 한다. 제외 상태는 저장되지 않고 화면을 새로 고치면 사라지므로,
+ * 말하지 않으면 결과가 왜 달라졌는지 알 수 없는 순간이 온다(ADR-0024가 미완성 조건을
+ * 조용히 버리지 않기로 한 것과 같은 이유다).
+ *
+ * @return 뺀 것이 없으면 null. 호출부가 그대로 `v-if`·툴팁 바인딩에 쓴다.
+ */
+export function disabledConditionNotice(count: number): string | null {
+  return count > 0 ? `실행에서 뺀 조건이 ${count}개 있습니다.` : null
+}
+
 function describeOperand(
   operand: OperandPayload,
   decimalScale: number,

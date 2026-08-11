@@ -153,6 +153,14 @@ async function save(): Promise<void> {
         {{ evaluationModeLabels(draft.evaluationMode).noun }}
       </p>
 
+      <!--
+        제외는 이번 실행에서만 빼는 것이라 저장에는 전부 들어간다(ADR-0048). 말하지 않으면
+        사용자는 "뺐으니 안 저장되겠지"로 읽고, 다시 열었을 때 전부 켜져 있는 것에 놀란다.
+      -->
+      <p v-if="draft.hasDisabledCondition" class="save-dialog__note">
+        실행에서 뺀 조건도 함께 저장됩니다. 다시 열면 모두 켜진 상태로 시작합니다.
+      </p>
+
       <Message v-if="otherError" severity="error" :closable="false">{{ otherError }}</Message>
     </div>
 
@@ -179,5 +187,11 @@ async function save(): Promise<void> {
   margin: 0;
   font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
+}
+
+.save-dialog__note {
+  margin: 0.25rem 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--p-text-subtle-color);
 }
 </style>

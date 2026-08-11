@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import type { ConditionInfo, ComparisonOperatorName, OperandPayload } from '@/api/types'
 
-import { describeCondition } from './conditionText'
+import {
+  describeCondition,
+  disabledConditionNotice,
+  incompleteConditionNotice,
+} from './conditionText'
 
 const NAMES: Record<string, string> = {
   SMA_200: '200일 이동평균',
@@ -117,5 +121,21 @@ describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다'
       name,
     )
     expect(text).toBe('PER 200일 이동평균 초과')
+  })
+})
+
+describe('실행에서 빠지는 이유 둘을 갈라 말한다', () => {
+  it('없으면 아무 말도 하지 않는다', () => {
+    expect(incompleteConditionNotice(0)).toBeNull()
+    expect(disabledConditionNotice(0)).toBeNull()
+  })
+
+  it('개수를 말한다', () => {
+    expect(disabledConditionNotice(2)).toContain('2')
+  })
+
+  it('덜 만든 것과 일부러 뺀 것이 서로 다른 말을 한다', () => {
+    // 합치면 실수와 의도가 같은 숫자에 섞인다 — 하나는 채워야 하고 하나는 그대로 두면 된다.
+    expect(disabledConditionNotice(1)).not.toBe(incompleteConditionNotice(1))
   })
 })
