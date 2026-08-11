@@ -1,0 +1,208 @@
+package com.stockscreener.indicator;
+
+import com.stockscreener.support.JpaSliceTest;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * 업종 상대값. 이 테스트가 지키는 것은 <b>모집단이 뜻을 갖는가</b>다.
+ *
+ * <p>임계 미달·업종 없음·층 폴백은 전부 <b>값이 그럴듯하게 나오는</b> 실패라 화면으로는
+ * 드러나지 않는다(ADR-0044). 여기서 잡지 못하면 "업종 대비 저평가"라는 문구만 남고 실제로는
+ * 그 종목이 자기 자신과 비교된다.
+ */
+@JpaSliceTest
+class SectorRelativeCalculatorTest {
+
+    private static final LocalDate AS_OF = LocalDate.of(2026, 8, 7);
+    private static final String SOURCE = "DEBT_RATIO";
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private int nextTicker = 100000;
+
+    @BeforeEach
+    void seedCatalog() {
+        jdbcTemplate.update("""
+                INSERT INTO indicator (code, name, category, value_type)
+                VALUES ('DEBT_RATIO', '부채비율', 'FUNDAMENTAL', 'RATIO')
+                ON CONFLICT (code) DO NOTHING
+                """);
+        for (String code : List.of("DEBT_RATIO_SECTOR_REL", "DEBT_RATIO_SECTOR_N",
+                "DEBT_RATIO_SECTOR_PCTL")) {
+            jdbcTemplate.update("""
+                    INSERT INTO indicator (code, name, category, value_type)
+                    VALUES (?, ?, 'DERIVED', 'RATIO') ON CONFLICT (code) DO NOTHING
+                    """, code, code);
+        }
+    }
+
+    @Test
+    @DisplayName("표본 5 이상인 소분류에서 중앙값 배수를 낸다")
+    void computesMedianRatioWhenFineGroupIsBigEnough() {
+        // 소분류 261에 다섯. 중앙값은 30이고 60인 종목은 배수 2.0이다.
+        long target = member("26111", "10");
+        member("26112", "20");
+        member("26113", "30");
+        member("26114", "40");
+        long high = member("26115", "60");
+
+        calculate(medianRatio());
+
+        assertThat(value(target, "DEBT_RATIO_SECTOR_REL")).isEqualByComparingTo("0.33333333");
+        assertThat(value(high, "DEBT_RATIO_SECTOR_REL")).isEqualByComparingTo("2.0");
+        assertThat(value(target, "DEBT_RATIO_SECTOR_N")).isEqualByComparingTo("5");
+    }
+
+    @Test
+    @DisplayName("소분류 표본이 모자라면 중분류로 올라가고, 표본 수가 그 사실을 드러낸다")
+    void fallsBackToBroadDivision() {
+        // 소분류 261에 둘뿐이지만 중분류 26에는 다섯이다.
+        long target = member("26111", "10");
+        member("26112", "20");
+        member("26201", "30");
+        member("26202", "40");
+        member("26203", "50");
+
+        calculate(medianRatio());
+
+        // 중분류 다섯의 중앙값은 30이다. 소분류 둘로 쟀다면 중앙값이 15여서 배수가 달랐다.
+        assertThat(value(target, "DEBT_RATIO_SECTOR_REL")).isEqualByComparingTo("0.33333333");
+        assertThat(value(target, "DEBT_RATIO_SECTOR_N"))
+                .as("표본 수가 5여야 중분류로 올라간 것이 드러난다")
+                .isEqualByComparingTo("5");
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 폴백한 종목은 중분류 전체와 비교된다. 두 층이 한 파티션에 섞이지 않는다")
+    void fallbackUsesTheWholeBroadDivision() {
+        // 소분류 261은 다섯(자기 층을 쓴다), 262는 하나(중분류로 올라간다).
+        long inFine = member("26101", "10");
+        member("26102", "20");
+        member("26103", "30");
+        member("26104", "40");
+        member("26105", "50");
+        long lonely = member("26201", "60");
+
+        calculate(percentile());
+
+        // 261 종목은 소분류 5명 안에서 매겨진다 — 최솟값이므로 0.
+        assertThat(value(inFine, "DEBT_RATIO_SECTOR_PCTL")).isEqualByComparingTo("0.00000000");
+        assertThat(value(inFine, "DEBT_RATIO_SECTOR_N")).isEqualByComparingTo("5");
+        // 262 종목은 중분류 6명 안에서 매겨진다 — 최댓값이므로 1. 자기 자신과 비교되지 않는다.
+        assertThat(value(lonely, "DEBT_RATIO_SECTOR_PCTL")).isEqualByComparingTo("1.00000000");
+        assertThat(value(lonely, "DEBT_RATIO_SECTOR_N")).isEqualByComparingTo("6");
+    }
+
+    @Test
+    @DisplayName("중분류까지 5 미만이면 행을 쓰지 않는다 — 0을 쓰면 업종 최하위로 읽힌다")
+    void writesNothingWhenEvenBroadDivisionIsTooSmall() {
+        long lonely = member("12000", "10");
+        member("12001", "20");
+
+        calculate(medianRatio());
+
+        assertThat(value(lonely, "DEBT_RATIO_SECTOR_REL")).isNull();
+        assertThat(value(lonely, "DEBT_RATIO_SECTOR_N")).isNull();
+    }
+
+    @Test
+    @DisplayName("업종이 비어 있는 종목은 모집단에서 빠진다 — NULL끼리 순위가 매겨지면 안 된다")
+    void excludesStocksWithoutIndustry() {
+        long unknown = member(null, "10");
+        member(null, "20");
+        member(null, "30");
+        member(null, "40");
+        member(null, "50");
+
+        calculate(medianRatio());
+
+        assertThat(value(unknown, "DEBT_RATIO_SECTOR_REL")).isNull();
+    }
+
+    @Test
+    @DisplayName("중앙값이 0 이하면 배수를 내지 않는다 — 음수 분모 가드")
+    void skipsNonPositiveMedian() {
+        long target = member("26111", "-10");
+        member("26112", "-20");
+        member("26113", "0");
+        member("26114", "-40");
+        member("26115", "-50");
+
+        calculate(medianRatio());
+
+        assertThat(value(target, "DEBT_RATIO_SECTOR_REL")).isNull();
+        assertThat(value(target, "DEBT_RATIO_SECTOR_N"))
+                .as("배수를 못 내도 표본 수는 사실이므로 남는다")
+                .isEqualByComparingTo("5");
+    }
+
+    @Test
+    @DisplayName("같은 날을 다시 돌리면 0행이다")
+    void isIdempotent() {
+        member("26111", "10");
+        member("26112", "20");
+        member("26113", "30");
+        member("26114", "40");
+        member("26115", "50");
+
+        SectorMetricSpec spec = medianRatio();
+        assertThat(calculate(spec)).isPositive();
+        assertThat(calculate(spec)).isZero();
+    }
+
+    private long calculate(SectorMetricSpec spec) {
+        return new SectorRelativeCalculator(jdbcTemplate, List.of(spec)).calculate(AS_OF);
+    }
+
+    private static SectorMetricSpec medianRatio() {
+        return new SectorMetricSpec(SOURCE, SectorMetricSpec.Kind.MEDIAN_RATIO, "배수", "설명", "해석");
+    }
+
+    private static SectorMetricSpec percentile() {
+        return new SectorMetricSpec(SOURCE, SectorMetricSpec.Kind.PERCENTILE, "백분위", "설명", "해석");
+    }
+
+    /** 활성 유니버스에 편입된 종목 하나와 그날의 원본 지표 값. */
+    private long member(String industryCode, String value) {
+        String ticker = String.valueOf(nextTicker++);
+        Long stockId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, industry_code)
+                VALUES ('KOSPI', ?, ?, ?) RETURNING id
+                """, Long.class, ticker, ticker, industryCode);
+
+        // 테스트 DB는 시드 유니버스가 활성이다(.claude/rules/test.md). 그것을 그대로 쓴다.
+        String universe = jdbcTemplate.queryForObject(
+                "SELECT code FROM universe WHERE is_active AND market_code = 'KOSPI' LIMIT 1",
+                String.class);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES (?, ?, ?)
+                """, universe, stockId, AS_OF.minusYears(1));
+
+        jdbcTemplate.update("""
+                INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)
+                VALUES (?, ?, ?, ?)
+                """, stockId, AS_OF, SOURCE, new BigDecimal(value));
+        return stockId;
+    }
+
+    private BigDecimal value(long stockId, String code) {
+        List<BigDecimal> found = jdbcTemplate.queryForList("""
+                SELECT value FROM indicator_value
+                WHERE stock_id = ? AND trade_date = ? AND indicator_code = ?
+                """, BigDecimal.class, stockId, AS_OF, code);
+        return found.isEmpty() ? null : found.get(0);
+    }
+}

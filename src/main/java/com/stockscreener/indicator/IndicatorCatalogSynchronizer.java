@@ -23,15 +23,18 @@ public class IndicatorCatalogSynchronizer {
 
     private final IndicatorRegistry registry;
     private final List<PercentileSpec> percentileSpecs;
+    private final List<SectorMetricSpec> sectorMetricSpecs;
     private final JdbcTemplate jdbcTemplate;
     private final IndicatorBandCodec bandCodec;
 
     public IndicatorCatalogSynchronizer(IndicatorRegistry registry,
                                         List<PercentileSpec> percentileSpecs,
+                                        List<SectorMetricSpec> sectorMetricSpecs,
                                         JdbcTemplate jdbcTemplate,
                                         IndicatorBandCodec bandCodec) {
         this.registry = registry;
         this.percentileSpecs = List.copyOf(percentileSpecs);
+        this.sectorMetricSpecs = List.copyOf(sectorMetricSpecs);
         this.jdbcTemplate = jdbcTemplate;
         this.bandCodec = bandCodec;
     }
@@ -69,8 +72,86 @@ public class IndicatorCatalogSynchronizer {
             activeCodes.add(spec.code());
         }
 
+        // 업종 상대값도 계산기가 없다(같은 이유 — 여러 종목을 봐야 정해진다).
+        // 선언 하나가 지표 둘을 만든다: 상대값과 그 값을 낼 때 비교한 표본 수.
+        for (SectorMetricSpec spec : sectorMetricSpecs) {
+            if (!registry.isRegistered(spec.sourceCode())) {
+                throw new IllegalStateException(
+                        "업종 상대값의 원본 지표가 등록되어 있지 않다: " + spec.sourceCode()
+                                + " — 계산기가 사라졌거나 코드를 잘못 적었다.");
+            }
+            upsertSectorMetric(spec);
+            upsertSectorPeerCount(spec);
+            activeCodes.add(spec.code());
+            activeCodes.add(spec.peerCountCode());
+        }
+
         deactivateMissing(activeCodes);
         return activeCodes.size();
+    }
+
+    /**
+     * 업종 상대값의 카탈로그 행.
+     *
+     * <p>{@code source_indicator_code}를 <b>백분위에만</b> 건다. 그 링크가 화면에
+     * "상위 20% = 0.2 이하" 안내를 만드는 근거인데, 중앙값 배수는 1.0이 중앙이라 그 안내가
+     * 뜻을 잃는다(ADR-0044). 대신 배수는 스스로 유불리 방향을 갖는다 — 부채가 업종 대비
+     * 가벼운 쪽이 좋으므로 낮은 쪽이 유리하다.
+     */
+    private void upsertSectorMetric(SectorMetricSpec spec) {
+        boolean percentile = spec.kind() == SectorMetricSpec.Kind.PERCENTILE;
+        upsertDerived(spec.code(), spec.name(), spec.description(), spec.interpretation(),
+                IndicatorValueType.RATIO, percentile ? 4 : 2,
+                // 백분위는 방향이 원본에 있고, 배수는 자기 자신이 들고 있다.
+                percentile ? null : Boolean.FALSE,
+                910, percentile ? spec.sourceCode() : null);
+    }
+
+    /**
+     * 표본 수의 카탈로그 행.
+     *
+     * <p>결과 표 기본 컬럼이 <b>아니다.</b> 값이 아니라 값의 신뢰도를 말하는 수라 늘 보이면
+     * 표가 시끄러워진다. 다만 카탈로그에 있으므로 사용자가 컬럼으로 켜거나 조건으로 걸 수 있고,
+     * 그것이 "업종당 둘뿐인데 값은 나온다"를 스스로 확인할 수단이다.
+     */
+    private void upsertSectorPeerCount(SectorMetricSpec spec) {
+        upsertDerived(spec.peerCountCode(),
+                spec.name() + " 표본 수",
+                "이 종목의 " + spec.name() + "을(를) 낼 때 실제로 비교한 같은 업종 종목 수. "
+                        + "소분류 표본이 5 미만이면 중분류로 올라가며, 그 경우 이 수가 그 사실을 드러낸다.",
+                "클수록 업종 비교가 통계적으로 든든하다. 5는 값을 낼 수 있는 최소치일 뿐이므로, "
+                        + "5에 가까운 값은 업종 대비 순위를 느슨하게 읽어야 한다.",
+                IndicatorValueType.COUNT, 0, Boolean.TRUE, 911, null);
+    }
+
+    /**
+     * 계산기가 없는 파생 지표 행 하나.
+     *
+     * <p>{@link #upsertPercentile}과 컬럼 집합이 같아 한 자리로 모았다. 구간({@code bands})은
+     * 넣지 않는다 — 여기 오는 값은 백분위·배수·개수라 자연어 구간이 붙을 자리가 아니다.
+     */
+    private void upsertDerived(String code, String name, String description, String interpretation,
+                               IndicatorValueType valueType, int decimalScale,
+                               Boolean higherIsBetter, int sortOrder, String sourceIndicatorCode) {
+        jdbcTemplate.update("""
+                INSERT INTO indicator (code, name, description, interpretation, category, value_type,
+                                       unit, decimal_scale, higher_is_better, is_active, sort_order,
+                                       default_column, source_indicator_code, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'DERIVED', ?, NULL, ?, ?, true, ?, false, ?, now(), now())
+                ON CONFLICT (code) DO UPDATE SET
+                    name                  = EXCLUDED.name,
+                    description           = EXCLUDED.description,
+                    interpretation        = EXCLUDED.interpretation,
+                    value_type            = EXCLUDED.value_type,
+                    decimal_scale         = EXCLUDED.decimal_scale,
+                    higher_is_better      = EXCLUDED.higher_is_better,
+                    is_active             = true,
+                    sort_order            = EXCLUDED.sort_order,
+                    source_indicator_code = EXCLUDED.source_indicator_code,
+                    updated_at            = now()
+                """,
+                code, name, emptyToNull(description), emptyToNull(interpretation),
+                valueType.name(), decimalScale, higherIsBetter, sortOrder, sourceIndicatorCode);
     }
 
     /**

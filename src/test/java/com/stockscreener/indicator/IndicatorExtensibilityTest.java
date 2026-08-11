@@ -48,6 +48,18 @@ class IndicatorExtensibilityTest {
     @Autowired
     private IndicatorBandCodec bandCodec;
 
+    /**
+     * 동기화기를 만든다. 업종 상대값 선언은 비운다.
+     *
+     * <p>호출부를 여기 모은 이유는 <b>이 테스트가 재는 것이 확장 비용</b>이기 때문이다.
+     * 계산기가 아닌 축(백분위·업종 상대값)이 늘 때마다 생성자가 바뀌는데, 그것을 여섯 곳에
+     * 흩어 두면 축을 하나 더할 때 이 테스트가 <b>축 추가 비용의 일부</b>가 된다.
+     */
+    private IndicatorCatalogSynchronizer synchronizer(List<PercentileSpec> percentiles) {
+        return new IndicatorCatalogSynchronizer(
+                registry, percentiles, List.of(), jdbcTemplate, bandCodec);
+    }
+
     @Test
     @DisplayName("계산기 클래스 하나를 추가하면 레지스트리가 자동으로 인식한다")
     void newCalculatorIsDiscoveredAutomatically() {
@@ -64,7 +76,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("메타데이터가 카탈로그 테이블로 투영되어 UI가 평범한 쿼리로 읽는다")
     void metadataIsProjectedIntoCatalog() {
-        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
+        synchronizer(List.of()).synchronize();
 
         List<String> codes = jdbcTemplate.queryForList(
                 "SELECT code FROM indicator WHERE is_active ORDER BY code", String.class);
@@ -84,7 +96,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("결과 표의 기본 컬럼 여부가 계산 클래스에서 카탈로그로 흘러간다")
     void defaultColumnFlagIsProjected() {
-        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
+        synchronizer(List.of()).synchronize();
 
         // 화면이 어느 컬럼을 기본으로 보일지를 계산 코드 옆에서 정한다는 것의 실질 검증이다.
         // 이 투영이 없으면 화면 코드에 지표 목록을 다시 적게 되고, 지표 추가 비용이 2파일이 된다.
@@ -100,7 +112,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("IMPORTANT — 축척에 의존하는 지표에는 구간이 붙지 않는다(ADR-0023)")
     void scaleDependentIndicatorsHaveNoBands() {
-        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
+        synchronizer(List.of()).synchronize();
 
         // "3만원 이상 = 높음"은 종목마다 뜻이 달라 거짓이 된다. 시장이 늘면 통화까지 갈린다.
         // 이 성질을 파일명(Sma·Atr…)으로 재려던 검증은 정규화된 파생 지표(ATR_PCT_14 등)를
@@ -120,11 +132,8 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("백분위 행이 원본 지표를 가리킨다 — 부등호 방향 판단이 여기 의존한다")
     void percentileRowLinksBackToItsSource() {
-        new IndicatorCatalogSynchronizer(
-                registry,
-                List.of(new PercentileSpec("PER", "PER 백분위", "설명", "해석")),
-                jdbcTemplate,
-                bandCodec).synchronize();
+        synchronizer(List.of(new PercentileSpec("PER", "PER 백분위", "설명", "해석")))
+                .synchronize();
 
         String source = jdbcTemplate.queryForObject(
                 "SELECT source_indicator_code FROM indicator WHERE code = 'PER_PCTL'", String.class);
@@ -137,7 +146,7 @@ class IndicatorExtensibilityTest {
     @Test
     @DisplayName("새 지표의 값을 저장하는 데 스키마 변경이 필요 없다 — EAV의 핵심 성질")
     void storingNewIndicatorNeedsNoSchemaChange() {
-        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
+        synchronizer(List.of()).synchronize();
 
         jdbcTemplate.update(
                 "INSERT INTO market (code, country_code, currency_code, timezone) "
@@ -165,7 +174,7 @@ class IndicatorExtensibilityTest {
     void percentileNeedsNoSchemaChange() {
         // 상대 조건(백분위)을 저장 구조가 수용하는지가 설계 단계의 미결 논점이었다. 실제로 확인한다:
         // 백분위는 indicator_value에 평범한 행으로 들어가고 조건도 스칼라 비교가 된다.
-        new IndicatorCatalogSynchronizer(registry, List.of(), jdbcTemplate, bandCodec).synchronize();
+        synchronizer(List.of()).synchronize();
 
         Integer columnCount = jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM information_schema.columns

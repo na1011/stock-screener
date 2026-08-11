@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.PercentileCalculator;
+import com.stockscreener.indicator.SectorRelativeCalculator;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
@@ -38,16 +39,19 @@ public class IndicatorBackfillJob {
     private final BatchExecutions batchExecutions;
     private final IndicatorRunner indicatorRunner;
     private final PercentileCalculator percentileCalculator;
+    private final SectorRelativeCalculator sectorRelativeCalculator;
     private final JdbcTemplate jdbcTemplate;
 
     public IndicatorBackfillJob(StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
                                 IndicatorRunner indicatorRunner,
                                 PercentileCalculator percentileCalculator,
+                                SectorRelativeCalculator sectorRelativeCalculator,
                                 JdbcTemplate jdbcTemplate) {
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.indicatorRunner = indicatorRunner;
         this.percentileCalculator = percentileCalculator;
+        this.sectorRelativeCalculator = sectorRelativeCalculator;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -92,6 +96,9 @@ public class IndicatorBackfillJob {
                             security -> indicatorRunner.run(security.stockId(), tradeDate));
                 }
                 percentileCalculator.calculate(tradeDate);
+                // 업종 상대값도 같은 자리다 — 그날 전 종목의 값이 있어야 정해진다.
+                // 백분위와 순서를 가릴 이유는 없다. 둘 다 원본 지표만 읽고 서로를 읽지 않는다.
+                sectorRelativeCalculator.calculate(tradeDate);
             }
         } catch (DataSourceException e) {
             // 외부 호출이 없으므로 정상적으로는 도달하지 않는다. StockTask의 시그니처가

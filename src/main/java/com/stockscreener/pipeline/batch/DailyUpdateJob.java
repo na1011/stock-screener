@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.batch;
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
 import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.PercentileCalculator;
+import com.stockscreener.indicator.SectorRelativeCalculator;
 import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.collector.MarketCalendar;
 import com.stockscreener.pipeline.collector.PriceCalendar;
@@ -67,6 +68,7 @@ public class DailyUpdateJob {
     private final BatchExecutions batchExecutions;
     private final IndicatorRunner indicatorRunner;
     private final PercentileCalculator percentileCalculator;
+    private final SectorRelativeCalculator sectorRelativeCalculator;
     private final IndicatorRetentionPolicy retentionPolicy;
     private final WatchlistAlertRunner watchlistAlertRunner;
 
@@ -74,6 +76,7 @@ public class DailyUpdateJob {
                           MarketCalendar marketCalendar, PriceCalendar priceCalendar,
                           BatchExecutions batchExecutions,
                           IndicatorRunner indicatorRunner, PercentileCalculator percentileCalculator,
+                          SectorRelativeCalculator sectorRelativeCalculator,
                           IndicatorRetentionPolicy retentionPolicy,
                           WatchlistAlertRunner watchlistAlertRunner) {
         this.priceCollector = priceCollector;
@@ -83,6 +86,7 @@ public class DailyUpdateJob {
         this.batchExecutions = batchExecutions;
         this.indicatorRunner = indicatorRunner;
         this.percentileCalculator = percentileCalculator;
+        this.sectorRelativeCalculator = sectorRelativeCalculator;
         this.retentionPolicy = retentionPolicy;
         this.watchlistAlertRunner = watchlistAlertRunner;
     }
@@ -218,6 +222,9 @@ public class DailyUpdateJob {
             // 백분위는 전 종목의 값이 저장된 뒤에야 계산할 수 있다. 종목 루프 안에서는 원리적으로
             // 불가능하므로 루프가 끝난 뒤 하루치를 한 번에 처리한다.
             percentileCalculator.calculate(asOf);
+            // 업종 상대값도 같은 이유로 루프 뒤다. 워치리스트보다 앞이어야 하는 것도 같다 —
+            // 업종 조건을 건 화면이 그 앞에서 판정되면 어제 값으로 오늘을 판정한다.
+            sectorRelativeCalculator.calculate(asOf);
 
             execution.stage("워치리스트 판정");
             // 워치리스트 판정은 백분위 뒤여야 한다. 백분위 조건("PER 하위 20%")을 건 화면이
