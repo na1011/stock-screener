@@ -115,11 +115,20 @@ async function pick(screen: ScreenResponse): Promise<void> {
       같은 곳으로 가서, 같은 목적지 둘이 나란히 선 목록의 첫 줄로 보였다. 띠로 갈라야 로고가
       로고로 보인다.
     -->
-    <div class="rail__head">
+    <!--
+      브랜드 띠. 이 아래 선이 오른쪽 화면 제목 띠의 선과 **같은 높이에서 만난다**
+      (`--app-shell-header-height`). 검색을 같은 상자에 두었던 동안에는 상자 전체가 87px이라
+      오른쪽(77px)과 어긋났고, 레일의 좌우 패딩 때문에 선이 테두리에 닿지도 않았다.
+    -->
+    <div class="rail__brand-band">
       <RouterLink to="/" class="rail__brand" :aria-label="APP_NAME" @click="emit('navigate')">
-        <BrandMark size="1.25rem" />
+        <BrandMark size="1.5rem" />
         <span class="rail__wordmark">{{ APP_NAME }}</span>
       </RouterLink>
+    </div>
+
+    <!-- 검색 띠에는 선이 없다. 이유는 `AppViewHeader`의 머리말에 있다. -->
+    <div class="rail__search">
       <StockSearch />
     </div>
 
@@ -252,36 +261,57 @@ async function pick(screen: ScreenResponse): Promise<void> {
 </template>
 
 <style scoped>
+/*
+ * IMPORTANT — 레일에 좌우 패딩을 주지 않는다. 자식이 각자 갖는다.
+ *
+ * 여기 `padding: … 0.5rem`이 있던 동안 `.rail__brand-band`의 아래 선이 레일 오른쪽 테두리보다
+ * **8px 안쪽에서 끝났다.** 오른쪽 화면 띠와 y좌표를 맞춰도 그 틈 때문에 한 줄로 읽히지 않는다.
+ * 음수 마진으로 늘리는 것은 금지되어 있고(frontend.md), 그럴 이유도 없다 — 전폭이어야 하는
+ * 것은 선과 면뿐이고 안쪽 여백은 자식이 정하면 된다.
+ *
+ * `.rail__scroll`이 패딩을 갖지 않는 것도 같은 이유다. 거기 주면 스크롤바가 8px 안으로
+ * 들어와 레일 테두리에서 떨어진다.
+ */
 .rail {
   display: flex;
   flex-direction: column;
   width: var(--app-rail-width);
   height: 100dvh;
-  padding: 0.625rem 0.5rem;
-  gap: 0.5rem;
+  padding: 0;
   border-inline-end: 1px solid var(--p-content-border-color);
   background: var(--p-content-background);
 }
 
-/* 머리 띠. 아래 선이 "여기까지가 서비스, 아래부터가 내용"을 가른다. */
-.rail__head {
+/*
+ * 브랜드 띠. 아래 선이 "여기까지가 서비스, 아래부터가 내용"을 가르고, **오른쪽 화면 제목
+ * 띠의 선과 같은 높이에서 만난다.** 높이를 여기서만 고치면 그 만남이 깨진다 —
+ * `--app-shell-header-height`가 두 곳의 유일한 접점이다.
+ */
+.rail__brand-band {
   flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-bottom: 0.625rem;
+  align-items: center;
+  min-height: var(--app-shell-header-height);
+  padding-inline: 0.75rem;
   border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.rail__search {
+  flex: 0 0 auto;
+  padding: 0.5rem;
 }
 
 .rail__brand {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.25rem 0.5rem 0;
   color: var(--p-text-color);
   font-weight: 700;
-  /* 14px이던 것을 올린다. 아래 항목(13px)과 한 칸 차이라 이름이 라벨처럼 읽혔다. */
-  font-size: var(--app-text-lg);
+  /*
+   * 오른쪽 화면 제목과 **같은 크기**다. 둘이 같은 높이에서 같은 크기로 마주 보아야 하나의
+   * 화면으로 읽힌다. 16px이던 동안에는 브랜드가 제목보다 작지도 크지도 않은 애매한 자리였다.
+   */
+  font-size: var(--app-text-xl);
   letter-spacing: -0.02em;
 }
 
@@ -289,11 +319,16 @@ async function pick(screen: ScreenResponse): Promise<void> {
   text-decoration: none;
 }
 
+/*
+ * 좌우 여백은 여기서부터 자식 몫이다(`.rail`의 주석 참조). 세로 간격도 마찬가지 —
+ * `.rail`의 `gap`을 걷었으므로 각 띠가 자기 여백을 갖는다.
+ */
 .rail__nav {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 1px;
+  padding-inline: 0.5rem;
 }
 
 /*
@@ -395,8 +430,11 @@ async function pick(screen: ScreenResponse): Promise<void> {
  * 본문 색·400인 목록에서 첫 번째로 읽힌다. 윤곽을 `border`가 아니라 inset 그림자로 주는 것은
  * 행 높이가 다른 행과 1px씩 어긋나지 않게 하기 위해서다.
  */
+/* 직계 자식이라 마진으로 자기 자리를 만든다. 윤곽(box-shadow)이 레일 테두리에 닿으면 안 된다. */
 .rail__fresh {
   flex: 0 0 auto;
+  width: auto;
+  margin: 0.5rem;
   min-height: 2rem;
   color: var(--p-primary-color);
   font-weight: 600;
@@ -429,7 +467,8 @@ async function pick(screen: ScreenResponse): Promise<void> {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding-top: 0.25rem;
+  /* 좌우 패딩이 여기 있어야 스크롤바가 레일 테두리에 붙지 않는다. */
+  padding: 0.25rem 0.5rem 0;
 }
 
 .rail__section + .rail__section {
@@ -563,9 +602,10 @@ async function pick(screen: ScreenResponse): Promise<void> {
   color: var(--p-text-subtle-color);
 }
 
+/* 위 선은 전폭이고 안쪽 여백만 갖는다 — 브랜드 띠의 아래 선과 같은 방식이다. */
 .rail__foot {
   flex: 0 0 auto;
-  padding-top: 0.375rem;
+  padding: 0.375rem 0.5rem 0.5rem;
   border-top: 1px solid var(--p-content-border-color);
 }
 

@@ -43,7 +43,7 @@ defineEmits<{ open: [] }>()
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  height: var(--app-header-height);
+  height: var(--app-topbar-height);
   padding: 0 0.5rem;
   border-bottom: 1px solid var(--p-content-border-color);
   background: color-mix(in srgb, var(--p-content-background) 86%, transparent);

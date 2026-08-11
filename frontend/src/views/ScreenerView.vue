@@ -10,6 +10,7 @@ import ConditionChipBar from '@/components/condition/ConditionChipBar.vue'
 import ResultCards from '@/components/result/ResultCards.vue'
 import ResultSummary from '@/components/result/ResultSummary.vue'
 import ResultTable from '@/components/result/ResultTable.vue'
+import AppViewHeader from '@/components/ui/AppViewHeader.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { disabledConditionNotice, incompleteConditionNotice } from '@/lib/conditionText'
 import { screenTypeLabel, staleReasonOf } from '@/lib/screen'
@@ -109,56 +110,50 @@ async function run(): Promise<void> {
   <!-- 루트가 <main>이 아닌 이유: AppLayout이 이미 <main>을 두고 있다. 중첩하면 문서에
        주 영역이 둘이 되어 스크린 리더의 랜드마크 이동이 어긋난다. -->
   <div class="screener">
-    <div class="screener__bar">
-      <div class="screener__row">
-        <div class="screener__identity">
-          <h1 class="screener__title">{{ draft.title }}</h1>
-          <Tag v-if="draft.isPreset" :value="screenTypeLabel('PRESET')" severity="info" />
-          <Tag v-if="draft.readOnly" value="읽기 전용" severity="secondary" />
-          <Tag
-            v-else-if="draft.dirty && draft.origin.kind !== 'custom'"
-            value="수정됨"
-            severity="warn"
-          />
-          <Button
-            v-if="draft.readOnly"
-            label="복제해서 편집"
-            icon="pi pi-copy"
-            size="small"
-            text
-            @click="draft.forkAsCustom()"
-          />
-        </div>
+    <AppViewHeader>
+      <template #title>
+        <h1 class="screener__title">{{ draft.title }}</h1>
+        <Tag v-if="draft.isPreset" :value="screenTypeLabel('PRESET')" severity="info" />
+        <Tag v-if="draft.readOnly" value="읽기 전용" severity="secondary" />
+        <Tag
+          v-else-if="draft.dirty && draft.origin.kind !== 'custom'"
+          value="수정됨"
+          severity="warn"
+        />
+        <Button
+          v-if="draft.readOnly"
+          label="복제해서 편집"
+          icon="pi pi-copy"
+          size="small"
+          text
+          @click="draft.forkAsCustom()"
+        />
+      </template>
 
-        <div class="screener__actions">
-          <!-- 넓은 폭에서는 좌측 레일이 전략 목록을 상주시킨다. 좁을 때만 Select가 그 자리를 맡는다. -->
-          <ScreenPicker v-if="isBuilderNarrow" class="screener__picker" />
-          <!-- 화면의 주 액션 둘이다. `size="small"`을 주지 않아 기본 높이(36px)로 선다. -->
-          <Button
-            v-tooltip.bottom="runHint"
-            :label="runLabel"
-            icon="pi pi-play"
-            :severity="stale ? 'warn' : undefined"
-            :loading="screening.state === 'loading'"
-            :disabled="!draft.canRun"
-            @click="run"
-          />
-          <Button
-            label="저장"
-            icon="pi pi-save"
-            outlined
-            :disabled="!canSave"
-            @click="saveVisible = true"
-          />
-        </div>
-      </div>
+      <template #actions>
+        <!-- 넓은 폭에서는 좌측 레일이 전략 목록을 상주시킨다. 좁을 때만 Select가 그 자리를 맡는다. -->
+        <ScreenPicker v-if="isBuilderNarrow" class="screener__picker" />
+        <!-- 화면의 주 액션 둘이다. `size="small"`을 주지 않아 기본 높이(36px)로 선다. -->
+        <Button
+          v-tooltip.bottom="runHint"
+          :label="runLabel"
+          icon="pi pi-play"
+          :severity="stale ? 'warn' : undefined"
+          :loading="screening.state === 'loading'"
+          :disabled="!draft.canRun"
+          @click="run"
+        />
+        <Button
+          label="저장"
+          icon="pi pi-save"
+          outlined
+          :disabled="!canSave"
+          @click="saveVisible = true"
+        />
+      </template>
 
-      <ConditionChipBar
-        class="screener__chips"
-        :retention="screening.retention"
-        :invalid-key="invalidKey"
-      />
-    </div>
+      <ConditionChipBar :retention="screening.retention" :invalid-key="invalidKey" />
+    </AppViewHeader>
 
     <SaveScreenDialog v-model:visible="saveVisible" />
 
@@ -207,48 +202,18 @@ async function run(): Promise<void> {
   min-height: 100%;
 }
 
-/* 스크롤을 내려도 "무엇을 실행했는가"와 "다시 실행"이 남는다. */
-.screener__bar {
-  position: sticky;
-  top: 0;
-  z-index: 15;
-  padding: 0.5rem var(--app-gutter);
-  border-bottom: 1px solid var(--p-content-border-color);
-  background: color-mix(in srgb, var(--p-content-background) 92%, transparent);
-  backdrop-filter: blur(12px);
-}
-
-.screener__row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.5rem;
-}
-
-.screener__identity {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex-wrap: wrap;
-  flex: 1 1 12rem;
-  min-width: 0;
-}
-
+/*
+ * 띠·선·sticky·폭은 전부 `AppViewHeader`가 갖는다. 여기 남은 것은 이 화면 고유의 것뿐이다.
+ * 나눠 놓지 않으면 화면마다 머리 띠가 조금씩 달라지고, 그 차이가 좌측 레일의 선과 만나는
+ * 자리에서 어긋남으로 드러난다.
+ */
 .screener__title {
   margin: 0;
-  font-size: var(--app-text-lg);
+  /* 레일의 브랜드와 같은 크기다. 두 낱말이 같은 높이·같은 크기로 마주 보아야 한 화면이 된다. */
+  font-size: var(--app-text-xl);
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
-}
-
-.screener__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex-wrap: wrap;
-  margin-inline-start: auto;
 }
 
 .screener__result {
@@ -267,17 +232,7 @@ async function run(): Promise<void> {
   margin-top: 0.5rem;
 }
 
-/* 좁으면 제목과 동작이 한 줄에 들어가지 않는다. 동작을 아래로 내려 제목이 잘리지 않게 한다. */
 @media (max-width: 900px) {
-  /*
-   * 동작들이 제목 아래 자기 줄로 내려온다. `margin-inline-start: auto`(넓은 폭에서 오른쪽으로
-   * 미는 것)를 여기서 풀어야 줄 전체를 쓸 수 있다.
-   */
-  .screener__actions {
-    margin-inline-start: 0;
-    flex-basis: 100%;
-  }
-
   /*
    * IMPORTANT — 셀렉트가 남는 폭을 **마진으로** 먹어 버튼 둘을 오른쪽 끝으로 민다.
    *
@@ -287,35 +242,11 @@ async function run(): Promise<void> {
    * `flex-grow`가 아니라 `margin`인 이유는 셀렉트에 `max-width`(`--app-overlay-md`)가 있어서다.
    * 늘리면 그 상한에서 멈추고 남는 공간이 셀렉트와 버튼 **사이**가 아니라 버튼 **오른쪽**에
    * 남는다. 마진은 상한과 무관하게 빈 공간을 전부 가운데로 몬다.
+   *
+   * 슬롯 안에 있어도 이 규칙이 닿는다 — Vue의 scoped 속성은 슬롯 **내용을 넘긴 쪽**에 붙는다.
    */
   .screener__picker {
     margin-inline-end: auto;
-  }
-
-  /*
-   * 여기 있던 터치 타깃 보정을 걷었다. `size="small"`이 23px을 만들어 WCAG 2.2의 최소
-   * 타깃(24×24)에도 못 미치던 것을 좁은 폭에서만 덮고 있었는데, 이제 `sm`이 29px이라
-   * 스스로 넘긴다. 되살리면 같은 버튼이 폭에 따라 다른 높이가 된다.
-   */
-}
-
-/*
- * 좁은 폭에서는 조건바가 따라다니지 않는다.
- *
- * 제목·동작·칩이 줄바꿈으로 쌓여 183px가 되는데, 720px 화면에서 그것이 상시로 붙어 있으면
- * 카드가 세 장밖에 안 남는다. 데스크톱에서 이 바를 sticky로 두는 이유("무엇을 실행했는가"와
- * "다시 실행"이 스크롤 밖으로 나가지 않게)는 여기서 값을 못 한다 — 모바일은 훑어보는
- * 화면이고(frontend.md), 조건을 고치려면 어차피 위로 올라온다.
- *
- * IMPORTANT — 경계가 767px이 아니라 900px인 것은 **오버레이 때문**이다(ADR-0047). 넓은 폭은
- * 앱 셸이라 문서가 스크롤하지 않지만 900px 이하는 여전히 문서가 스크롤하고, 그 구간에서
- * 이 바가 sticky면 조건 팝오버가 칩에서 떨어져 흘러간다. 768~900px는 이미 동작들이 자기
- * 줄로 내려가(`flex-basis: 100%`) 바가 세 줄이라 sticky의 이득도 없다. 900은
- * `BREAKPOINTS.BUILDER`이고, 그 값이 곧 "레일이 서랍이 되는 폭"이다.
- */
-@media (max-width: 900px) {
-  .screener__bar {
-    position: static;
   }
 }
 </style>

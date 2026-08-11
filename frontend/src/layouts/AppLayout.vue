@@ -182,7 +182,7 @@ function dismiss(): void {
 
 .app-layout--narrow {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: var(--app-header-height) minmax(0, 1fr);
+  grid-template-rows: var(--app-topbar-height) minmax(0, 1fr);
 }
 
 /* ------------------------------------------------------------------------
