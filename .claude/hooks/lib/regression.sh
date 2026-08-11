@@ -229,7 +229,10 @@ check 발화 "새 훅을 Write 로 만듦"               ".claude/hooks/new-hook
 check 발화 "새 규칙 파일을 Write 로 만듦"         ".claude/rules/new-rule.md" write
 check 발화 "CLAUDE.md 편집"                     "CLAUDE.md" write
 check 발화 "전역 가드 사본 편집"                  "$HOME/.claude/hooks/guard-secrets.sh" write
-check 침묵 "규칙이 없는 경로"                     "docs/adr/README.md" write
+# 규칙 글롭 어디에도 안 걸리는 경로여야 이 케이스가 무언가를 잰다. 루트 마크다운 중
+# `CLAUDE.md`·`README.md`만 규칙이 있으므로 `TODO.md`가 그 자리다.
+# **`docs/` 아래를 쓰지 않는다** — `doc-facts.md`가 `docs/**/*.md`를 덮어 전부 발화한다.
+check 침묵 "규칙이 없는 경로"                     "TODO.md" write
 
 echo "── 거울 드리프트 (check-doc-staleness §5) ──"
 #
