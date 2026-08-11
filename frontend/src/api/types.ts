@@ -31,6 +31,15 @@ export type OutcomeStatus = (typeof OUTCOME_STATUSES)[number]
 export const INDICATOR_CATEGORIES = ['TECHNICAL', 'FUNDAMENTAL', 'PRICE', 'DERIVED'] as const
 export type IndicatorCategory = (typeof INDICATOR_CATEGORIES)[number]
 
+/**
+ * 상대 비교 지표가 무엇과 견주어 나온 값인가.
+ *
+ * MUST NOT: 지표 코드 접미사로 유추하지 않는다. 서버가 카탈로그와 스크리닝 응답 양쪽에
+ * 실어 주며, 코드로 분기하는 순간 지표가 추가될 때마다 화면을 고쳐야 한다.
+ */
+export const INDICATOR_POPULATIONS = ['UNIVERSE', 'SECTOR'] as const
+export type IndicatorPopulation = (typeof INDICATOR_POPULATIONS)[number]
+
 export const FAVORABLE_ENDS = ['HIGH', 'LOW', 'UNKNOWN'] as const
 export type FavorableEnd = (typeof FAVORABLE_ENDS)[number]
 
@@ -138,6 +147,13 @@ export interface IndicatorResponse {
   percentileOf: string | null
   /** 백분위가 아니면 null. */
   percentile: PercentileGuide | null
+  /**
+   * 무엇과 견주어 나온 값인가. 상대 지표가 아니면 null.
+   *
+   * `percentile`이 있는 것과 **다르다** — 업종 중앙값 배수는 모집단이 있지만 백분위가
+   * 아니라 "상위 20%" 안내가 붙지 않는다(1.0이 중앙이라 0.2가 뜻을 잃는다).
+   */
+  population: IndicatorPopulation | null
   /**
    * 제시할 구간이 없으면 빈 배열이다. 주가 스케일 지표(SMA·ATR·MACD·종가)가 그렇다 —
    * "3만원 이상 = 높음"은 종목마다 뜻이 달라 거짓말이 된다. 그때 화면은 직접 입력만 낸다.
@@ -312,17 +328,16 @@ export interface ScreeningResponse {
   /** 대상을 좁히지 않았으면 null. */
   universe: ScreeningUniverseInfo | null
   /**
-   * 항상 `ALL_CURRENT_MEMBERS`. 백분위는 현재 어느 지수든 편입된 종목 전체
-   * (코스피+코스닥)에 대해 계산된다 — 조회 대상을 좁혀도 그 안의 순위가 아니다.
-   */
-  percentilePopulation: string
-  /**
-   * 이 결과가 백분위 지표를 하나라도 쓰는가.
+   * 이 결과가 **실제로 쓴** 상대 비교의 모집단. 비면 상대 지표를 하나도 쓰지 않은 것이다.
    *
    * 서버가 판단해서 준다. 화면이 카탈로그를 따로 받아 판단하면 그 요청만 실패했을 때
-   * 위 모집단 주의 문구가 조용히 사라지고, 화면은 사실이 아닌 말을 하게 된다.
+   * 모집단 주의 문구가 조용히 사라지고, 화면은 모집단을 밝히지 않은 채 "상위 20%"라고
+   * 말하게 된다.
+   *
+   * 둘 이상이면 **둘 다 설명한다.** 하나로 접으면 조건마다 모집단이 다르다는 사실이
+   * 감춰지는데, 값은 둘 다 0~1이라 표에서는 구분되지 않는다.
    */
-  usesPercentile: boolean
+  relativePopulations: IndicatorPopulation[]
   screen: ScreeningScreenInfo
   conditions: ConditionInfo[]
   /** 결과 표의 기본 컬럼 — 카탈로그 기본 컬럼 ∪ 조건이 참조한 지표. */
@@ -335,7 +350,6 @@ export interface ScreeningResponse {
   rows: ScreeningRow[]
 }
 
-export const PERCENTILE_POPULATION_ALL = 'ALL_CURRENT_MEMBERS'
 
 // ── 종목 상세 ─────────────────────────────────────────────────────
 

@@ -1,5 +1,6 @@
 package com.stockscreener.screening.web;
 
+import com.stockscreener.indicator.IndicatorPopulation;
 import com.stockscreener.screening.ConditionOutcome;
 import com.stockscreener.screening.EvaluationMode;
 import com.stockscreener.screening.store.ScreenType;
@@ -28,10 +29,11 @@ import java.util.Map;
  * @param asOfRequested 요청이 지정한 일자. null이면 서버가 정했다는 뜻이다.
  * @param columns       결과 표의 기본 컬럼 — 카탈로그의 기본 컬럼 ∪ 조건이 참조한 지표
  * @param truncated     상한에 걸려 잘렸는가. <b>조용히 자르지 않는다.</b>
- * @param usesPercentile 이 결과가 백분위 지표를 하나라도 쓰는가. 서버가 판단해서 주는 이유는
- *                      아래 {@link #PERCENTILE_POPULATION} 주의 문구를 <b>언제 보여야 하는지</b>가
- *                      이 값에 달려 있기 때문이다. 화면이 카탈로그를 따로 받아 판단하면 그 요청이
- *                      실패했을 때 문구가 조용히 사라지고, 화면은 사실이 아닌 말을 하게 된다.
+ * @param relativePopulations 이 결과가 실제로 쓴 상대 비교의 모집단. 비어 있으면 상대 지표를
+ *                      하나도 쓰지 않았다는 뜻이다. 서버가 판단해서 주는 이유는 모집단 주의
+ *                      문구를 <b>언제 보여야 하는지</b>가 이 값에 달려 있기 때문이다. 화면이
+ *                      카탈로그를 따로 받아 판단하면 그 요청이 실패했을 때 문구가 조용히
+ *                      사라지고, 화면은 사실이 아닌 말을 하게 된다.
  */
 public record ScreeningResponse(
         LocalDate asOf,
@@ -39,8 +41,7 @@ public record ScreeningResponse(
         EvaluationMode evaluationMode,
         String sortedBy,
         UniverseInfo universe,
-        String percentilePopulation,
-        boolean usesPercentile,
+        List<IndicatorPopulation> relativePopulations,
         ScreenInfo screen,
         List<ConditionInfo> conditions,
         List<String> columns,
@@ -51,20 +52,16 @@ public record ScreeningResponse(
 ) {
 
     /**
-     * 백분위의 모집단이 무엇인지.
+     * 상대 비교의 모집단이 <b>둘</b>이 되었다.
      *
-     * <p>IMPORTANT — 순위는 <b>각 유니버스 안에서</b> 매겨진다(ADR-0036). 유니버스를 지정하지 않은
-     * 화면의 "PER 하위 20%"는 코스피·코스닥을 한 줄로 세운 하위 20%가 아니라
-     * <b>각 유니버스 하위 20%의 합집합</b>이다. 대상을 좁히는 축과 순위를 매기는 축이 다르며,
-     * 순위는 언제나 같은 시장 안에서 매겨지고 화면은 그중 무엇을 보여줄지만 정한다.
+     * <p>예전에는 백분위 하나뿐이라 모집단이 상수였고 문자열 하나로 실렸다. 업종 축이 생기면서
+     * <b>같은 응답 안에 모집단이 다른 조건이 함께 놓인다</b> — 사용자가 보는 "상위 50%"의 뜻이
+     * 조건마다 다른데 값은 둘 다 0~1이라 화면으로는 구분되지 않는다(ADR-0044). 그래서 상수가
+     * 아니라 <b>실제로 쓰인 모집단의 집합</b>을 낸다.
      *
-     * <p>상수 이름이 {@code ALL_CURRENT_MEMBERS}인 것은 <b>모집단이 아니라 대상</b>을 가리키기
-     * 때문이다 — 현재 어느 유니버스든 편입된 종목이 계산 대상이고, 그 안에서 유니버스별로 나뉜다.
-     * <b>(2026-08-10 정정 — 원문은 "순위는 그 유니버스 안에서 매겨진 것이 아니다"였다.</b>
-     * ADR-0036이 그것을 뒤집었는데 이 주석만 남아 있었다. 값과 동작은 바뀌지 않았다.)
+     * <p>각 모집단이 무엇인지는 {@link IndicatorPopulation}에 있다. 여기 열거하지 않는 이유는
+     * 그 뜻이 지표 계층의 사실이고, 두 곳에 적으면 갈리기 때문이다.
      */
-    public static final String PERCENTILE_POPULATION = "ALL_CURRENT_MEMBERS";
-
     public static final String SORTED_BY_SCORE = "SCORE_DESC";
     public static final String SORTED_BY_STOCK = "STOCK_ID_ASC";
 

@@ -29,7 +29,7 @@ public class IndicatorCatalog {
     private static final String SELECT = """
             SELECT code, name, description, interpretation, category, value_type, unit,
                    decimal_scale, higher_is_better, default_column, sort_order, source_indicator_code,
-                   bands
+                   population, bands
             FROM indicator
             """;
 
@@ -58,6 +58,9 @@ public class IndicatorCatalog {
                 rs.getBoolean("default_column"),
                 rs.getInt("sort_order"),
                 rs.getString("source_indicator_code"),
+                // NULL이 "상대 지표가 아니다"라는 뜻이므로 valueOf를 그대로 부르면 안 된다.
+                rs.getString("population") == null
+                        ? null : IndicatorPopulation.valueOf(rs.getString("population")),
                 bandCodec.fromJson(rs.getString("bands")));
     }
 

@@ -11,6 +11,7 @@
     "EvaluationMode": ["FILTER", "SCORING"],
     "ScreenType": ["PRESET", "CUSTOM"],
     "OutcomeStatus": ["MATCHED", "NOT_MATCHED", "NOT_EVALUABLE"],
+    "IndicatorPopulation": ["UNIVERSE", "SECTOR"],
     "FavorableEnd": ["HIGH", "LOW", "UNKNOWN"],
     "OperandType": ["LITERAL", "INDICATOR"],
     "ZoneRole": ["SUPPORT", "RESISTANCE", "IN_RANGE"],
@@ -81,7 +82,6 @@
   },
 
   "constants": {
-    "percentilePopulation": "ALL_CURRENT_MEMBERS",
     "priceReferenceMethod": "SWING_EXTREMA_CLUSTERING",
     "maxConditions": 20,
     "screenNameMaxLength": 100,

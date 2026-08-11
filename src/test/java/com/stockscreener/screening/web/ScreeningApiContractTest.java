@@ -28,6 +28,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -324,33 +325,41 @@ class ScreeningApiContractTest {
 
     @Test
     @WithMockUser(username = SUB)
-    @DisplayName("백분위 모집단을 응답에 밝힌다 — 유니버스별 순위가 아니다")
-    void declaresPercentilePopulation() throws Exception {
-        JsonNode response = run("""
-                {"conditions": {"conditions":[
-                   {"indicatorCode":"PER","operator":"LT","operand":{"type":"LITERAL","value":10}}]}}
-                """);
-
-        assertThat(response.get("percentilePopulation").asText()).isEqualTo("ALL_CURRENT_MEMBERS");
-    }
-
-    @Test
-    @WithMockUser(username = SUB)
-    @DisplayName("백분위를 쓰는지 서버가 판단해서 준다 — 모집단 주의 문구를 언제 보일지가 여기 달렸다")
-    void declaresWhetherPercentileIsUsed() throws Exception {
+    @DisplayName("어느 모집단을 썼는지 서버가 판단해서 준다 — 주의 문구를 언제 보일지가 여기 달렸다")
+    void declaresWhichPopulationsAreUsed() throws Exception {
         // 화면이 카탈로그를 따로 받아 판단하면, 그 요청만 실패해도 주의 문구가 조용히
-        // 사라지고 화면은 "코스피 상위 20%"라고 말하게 된다 — 사실이 아니다.
+        // 사라지고 화면은 모집단을 밝히지 않은 채 "상위 20%"라고 말하게 된다.
         JsonNode plain = run("""
                 {"conditions": {"conditions":[
                    {"indicatorCode":"PER","operator":"LT","operand":{"type":"LITERAL","value":10}}]}}
                 """);
-        assertThat(plain.get("usesPercentile").asBoolean()).isFalse();
+        assertThat(populations(plain)).isEmpty();
 
-        JsonNode percentile = run("""
+        JsonNode universe = run("""
                 {"conditions": {"conditions":[
                    {"indicatorCode":"PER_PCTL","operator":"LTE","operand":{"type":"LITERAL","value":0.2}}]}}
                 """);
-        assertThat(percentile.get("usesPercentile").asBoolean()).isTrue();
+        assertThat(populations(universe)).containsExactly("UNIVERSE");
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("IMPORTANT — 모집단이 둘이면 둘 다 밝힌다. 하나로 접으면 조건마다 뜻이 달라진 것이 감춰진다")
+    void declaresBothPopulationsWhenMixed() throws Exception {
+        JsonNode mixed = run("""
+                {"conditions": {"conditions":[
+                   {"indicatorCode":"PER_PCTL","operator":"LTE","operand":{"type":"LITERAL","value":0.2}},
+                   {"indicatorCode":"PER_SECTOR_PCTL","operator":"LTE","operand":{"type":"LITERAL","value":0.5}}]}}
+                """);
+
+        assertThat(populations(mixed)).containsExactly("UNIVERSE", "SECTOR");
+    }
+
+    /** 열거 순서로 정렬돼 오므로 조건 순서가 바뀌어도 화면의 문구 순서는 흔들리지 않는다. */
+    private static List<String> populations(JsonNode response) {
+        List<String> found = new ArrayList<>();
+        response.get("relativePopulations").forEach(node -> found.add(node.asText()));
+        return found;
     }
 
     private JsonNode run(String body) throws Exception {

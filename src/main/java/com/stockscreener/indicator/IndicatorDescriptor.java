@@ -13,6 +13,7 @@ import java.util.List;
  * @param higherIsBetter        null이면 방향이 정해지지 않은 지표(RSI처럼 중간이 좋은 것)
  * @param defaultColumn         결과 표에 기본 노출할 컬럼인가
  * @param sourceIndicatorCode   백분위 지표의 원본. 백분위가 아니면 null.
+ * @param population            상대 비교의 모집단. 상대 지표가 아니면 null.
  * @param bands                 값 구간별 자연어 라벨. 제시할 수 없는 지표는 빈 목록이다.
  */
 public record IndicatorDescriptor(
@@ -28,6 +29,7 @@ public record IndicatorDescriptor(
         boolean defaultColumn,
         int sortOrder,
         String sourceIndicatorCode,
+        IndicatorPopulation population,
         List<IndicatorBand> bands
 ) {
 
@@ -37,9 +39,20 @@ public record IndicatorDescriptor(
         bands = bands == null ? List.of() : List.copyOf(bands);
     }
 
-    /** 이 지표가 다른 지표의 백분위인가. */
+    /**
+     * 이 지표가 다른 지표의 <b>백분위</b>인가.
+     *
+     * <p>{@link #population}이 있는 것과 다르다. 업종 중앙값 배수도 모집단은 있지만 백분위가
+     * 아니다 — 1.0이 중앙이고 위로 열려 있어 "상위 20% = 0.2 이하" 같은 안내가 뜻을 잃는다.
+     * 그 안내를 만드는 근거가 이 판정이므로 <b>둘을 겸하게 두지 않는다</b>(ADR-0044).
+     */
     public boolean isPercentile() {
         return sourceIndicatorCode != null;
+    }
+
+    /** 이 지표가 무언가와 견주어 나온 값인가. 화면의 모집단 안내가 이 판정에 걸린다. */
+    public boolean isRelative() {
+        return population != null;
     }
 
     /**

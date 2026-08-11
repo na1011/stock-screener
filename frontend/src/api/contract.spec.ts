@@ -14,16 +14,17 @@ import {
   EVALUATION_MODES,
   FAVORABLE_ENDS,
   INDICATOR_CATEGORIES,
+  INDICATOR_POPULATIONS,
   INTERACTION_ACTIONS,
   JOB_PARAMETERS,
   OPERAND_TYPES,
   OUTCOME_STATUSES,
-  PERCENTILE_POPULATION_ALL,
   SCREEN_TYPES,
   TRIGGERED_BY,
   ZONE_ROLES,
   ZONE_STRENGTHS,
 } from './types'
+import { populationNote } from '@/lib/population'
 import { PRICE_REFERENCE_METHOD_SWING } from '@/lib/priceReference'
 
 /**
@@ -61,6 +62,7 @@ describe('서버 enum의 거울', () => {
     ['EvaluationMode', EVALUATION_MODES],
     ['ScreenType', SCREEN_TYPES],
     ['OutcomeStatus', OUTCOME_STATUSES],
+    ['IndicatorPopulation', INDICATOR_POPULATIONS],
     ['FavorableEnd', FAVORABLE_ENDS],
     ['OperandType', OPERAND_TYPES],
     ['ZoneRole', ZONE_ROLES],
@@ -103,9 +105,14 @@ describe('서버 상수의 거울', () => {
   })
 
   it('문자열 상수가 서버 값과 같다', () => {
-    // percentilePopulation이 어긋나면 백분위 모집단 주의 문구가 "모르는 모집단" 분기로
-    // 넘어간다 — 사라지지는 않지만 사용자가 읽는 문장이 바뀐다.
-    expect(PERCENTILE_POPULATION_ALL).toBe(CONTRACT.constants.percentilePopulation)
     expect(PRICE_REFERENCE_METHOD_SWING).toBe(CONTRACT.constants.priceReferenceMethod)
+  })
+
+  it('모집단 설명이 서버 enum을 빠짐없이 덮는다', () => {
+    // 빠지면 그 모집단만 "모르는 모집단" 문장으로 넘어간다 — 사라지지는 않지만 사용자가
+    // 읽는 문장이 일반론이 되고, 업종이면 표본 수를 보라는 안내를 잃는다.
+    for (const population of INDICATOR_POPULATIONS) {
+      expect(populationNote(population)).not.toContain('모집단을 기준으로 계산된 상대 지표')
+    }
   })
 })

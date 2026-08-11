@@ -104,7 +104,7 @@ public class IndicatorCatalogSynchronizer {
                 IndicatorValueType.RATIO, percentile ? 4 : 2,
                 // 백분위는 방향이 원본에 있고, 배수는 자기 자신이 들고 있다.
                 percentile ? null : Boolean.FALSE,
-                910, percentile ? spec.sourceCode() : null);
+                910, percentile ? spec.sourceCode() : null, IndicatorPopulation.SECTOR);
     }
 
     /**
@@ -121,7 +121,7 @@ public class IndicatorCatalogSynchronizer {
                         + "소분류 표본이 5 미만이면 중분류로 올라가며, 그 경우 이 수가 그 사실을 드러낸다.",
                 "클수록 업종 비교가 통계적으로 든든하다. 5는 값을 낼 수 있는 최소치일 뿐이므로, "
                         + "5에 가까운 값은 업종 대비 순위를 느슨하게 읽어야 한다.",
-                IndicatorValueType.COUNT, 0, Boolean.TRUE, 911, null);
+                IndicatorValueType.COUNT, 0, Boolean.TRUE, 911, null, IndicatorPopulation.SECTOR);
     }
 
     /**
@@ -132,12 +132,14 @@ public class IndicatorCatalogSynchronizer {
      */
     private void upsertDerived(String code, String name, String description, String interpretation,
                                IndicatorValueType valueType, int decimalScale,
-                               Boolean higherIsBetter, int sortOrder, String sourceIndicatorCode) {
+                               Boolean higherIsBetter, int sortOrder, String sourceIndicatorCode,
+                               IndicatorPopulation population) {
         jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
-                                       default_column, source_indicator_code, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'DERIVED', ?, NULL, ?, ?, true, ?, false, ?, now(), now())
+                                       default_column, source_indicator_code, population,
+                                       created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'DERIVED', ?, NULL, ?, ?, true, ?, false, ?, ?, now(), now())
                 ON CONFLICT (code) DO UPDATE SET
                     name                  = EXCLUDED.name,
                     description           = EXCLUDED.description,
@@ -148,10 +150,12 @@ public class IndicatorCatalogSynchronizer {
                     is_active             = true,
                     sort_order            = EXCLUDED.sort_order,
                     source_indicator_code = EXCLUDED.source_indicator_code,
+                    population            = EXCLUDED.population,
                     updated_at            = now()
                 """,
                 code, name, emptyToNull(description), emptyToNull(interpretation),
-                valueType.name(), decimalScale, higherIsBetter, sortOrder, sourceIndicatorCode);
+                valueType.name(), decimalScale, higherIsBetter, sortOrder, sourceIndicatorCode,
+                population == null ? null : population.name());
     }
 
     /**
@@ -163,24 +167,14 @@ public class IndicatorCatalogSynchronizer {
      * 지표의 {@code higher_is_better}가 이미 들고 있기 때문이다.
      */
     private void upsertPercentile(PercentileSpec spec) {
-        jdbcTemplate.update("""
-                INSERT INTO indicator (code, name, description, interpretation, category, value_type,
-                                       unit, decimal_scale, higher_is_better, is_active, sort_order,
-                                       default_column, source_indicator_code, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'DERIVED', 'RATIO', NULL, 4, NULL, true, 900, false, ?, now(), now())
-                ON CONFLICT (code) DO UPDATE SET
-                    name                  = EXCLUDED.name,
-                    description           = EXCLUDED.description,
-                    interpretation        = EXCLUDED.interpretation,
-                    is_active             = true,
-                    source_indicator_code = EXCLUDED.source_indicator_code,
-                    updated_at            = now()
-                """,
-                spec.code(), spec.name(),
-                emptyToNull(spec.description()), emptyToNull(spec.interpretation()),
+        upsertDerived(spec.code(), spec.name(), spec.description(), spec.interpretation(),
+                IndicatorValueType.RATIO, 4,
+                // 유불리 방향은 원본이 들고 있다. 여기서 정하면 두 곳이 갈린다.
+                null, 900,
                 // 부등호 방향 판단이 이 링크에 걸린다 — 화면은 원본의 higher_is_better를 보고
                 // "상위 20%"가 >= 0.8인지 <= 0.2인지 정한다.
-                spec.sourceCode());
+                spec.sourceCode(),
+                IndicatorPopulation.UNIVERSE);
     }
 
     private void upsert(String code, IndicatorMeta meta) {
@@ -202,6 +196,9 @@ public class IndicatorCatalogSynchronizer {
                     sort_order       = EXCLUDED.sort_order,
                     default_column   = EXCLUDED.default_column,
                     bands            = EXCLUDED.bands,
+                    -- 계산기가 내는 값은 상대 지표가 아니다. 코드가 파생에서 계산기로 옮겨간
+                    -- 경우에 옛 모집단이 남으면 화면이 없는 비교를 설명하게 된다.
+                    population       = NULL,
                     updated_at       = now()
                 """,
                 code,

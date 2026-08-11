@@ -3,6 +3,7 @@ package com.stockscreener.web;
 import com.stockscreener.auth.web.AllowedEmailRequest;
 import com.stockscreener.indicator.IndicatorCategory;
 import com.stockscreener.indicator.IndicatorDescriptor;
+import com.stockscreener.indicator.IndicatorPopulation;
 import com.stockscreener.interaction.InteractionAction;
 import com.stockscreener.pipeline.batch.AdminJobLauncher;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
@@ -93,6 +94,10 @@ class WireContractTest {
         assertThat(names(EvaluationMode.class)).isEqualTo(expected("enums", "EvaluationMode"));
         assertThat(names(ScreenType.class)).isEqualTo(expected("enums", "ScreenType"));
         assertThat(names(ConditionOutcome.Status.class)).isEqualTo(expected("enums", "OutcomeStatus"));
+        // 값이 늘면 화면이 설명하지 못하는 모집단이 생긴다 — 그 조건의 "상위 50%"가
+        // 무엇에 대한 것인지 사용자가 알 수 없게 된다.
+        assertThat(names(IndicatorPopulation.class))
+                .isEqualTo(expected("enums", "IndicatorPopulation"));
         assertThat(names(IndicatorDescriptor.FavorableEnd.class))
                 .isEqualTo(expected("enums", "FavorableEnd"));
         assertThat(names(ConditionGroupPayload.OperandType.class))
@@ -155,8 +160,6 @@ class WireContractTest {
     void constantsMatch() {
         JsonNode constants = CONTRACT.get("constants");
 
-        assertThat(ScreeningResponse.PERCENTILE_POPULATION)
-                .isEqualTo(constants.get("percentilePopulation").asString());
         assertThat(PriceReference.METHOD).isEqualTo(constants.get("priceReferenceMethod").asString());
         assertThat(ScreenDefinitionValidator.MAX_CONDITIONS)
                 .isEqualTo(constants.get("maxConditions").asInt());

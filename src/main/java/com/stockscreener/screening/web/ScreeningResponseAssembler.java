@@ -90,10 +90,17 @@ public class ScreeningResponseAssembler {
                         ? ScreeningResponse.SORTED_BY_SCORE
                         : ScreeningResponse.SORTED_BY_STOCK,
                 universeInfo(universeCode),
-                ScreeningResponse.PERCENTILE_POPULATION,
-                // 백분위를 쓰는지는 서버가 판단해서 준다. 화면이 카탈로그를 따로 받아
+                // 어느 모집단을 썼는지는 서버가 판단해서 준다. 화면이 카탈로그를 따로 받아
                 // 판단하면 그 요청만 실패해도 모집단 주의 문구가 조용히 사라진다.
-                descriptors.values().stream().anyMatch(IndicatorDescriptor::isPercentile),
+                //
+                // 열거 순서로 정렬한다 — 집합이라 순서에 뜻이 없는데 정렬하지 않으면
+                // 화면의 문구 순서가 조건 순서에 따라 흔들린다.
+                descriptors.values().stream()
+                        .map(IndicatorDescriptor::population)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .sorted()
+                        .toList(),
                 new ScreeningResponse.ScreenInfo(
                         source.id(), source.code(), source.name(), source.type()),
                 conditionInfos,

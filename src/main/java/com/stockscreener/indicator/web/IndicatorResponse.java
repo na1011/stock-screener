@@ -3,6 +3,7 @@ package com.stockscreener.indicator.web;
 import com.stockscreener.indicator.IndicatorBand;
 import com.stockscreener.indicator.IndicatorCategory;
 import com.stockscreener.indicator.IndicatorDescriptor;
+import com.stockscreener.indicator.IndicatorPopulation;
 import com.stockscreener.indicator.IndicatorValueType;
 import com.stockscreener.screening.ComparisonOperator;
 
@@ -16,6 +17,9 @@ import java.util.List;
  * "지표를 값만 나열하지 않는다"를 요구한다. 초보 사용자는 PER 8.1이 좋은 것인지 알 수 없다.
  *
  * @param percentile 백분위 지표일 때만 채워진다.
+ * @param population 무엇과 견주어 나온 값인가. 상대 지표가 아니면 null.
+ *                   <b>{@code percentile}이 있는 것과 다르다</b> — 업종 중앙값 배수는 모집단이
+ *                   있지만 백분위가 아니라 "상위 20%" 안내가 붙지 않는다(ADR-0044).
  * @param bands      값 구간 프리셋. 제시할 수 없는 지표는 빈 목록이고, 그때 화면은 직접 입력만 낸다.
  */
 public record IndicatorResponse(
@@ -32,6 +36,7 @@ public record IndicatorResponse(
         int sortOrder,
         String percentileOf,
         PercentileGuide percentile,
+        IndicatorPopulation population,
         List<BandResponse> bands
 ) {
 
@@ -43,6 +48,7 @@ public record IndicatorResponse(
                 descriptor.defaultColumn(), descriptor.sortOrder(),
                 descriptor.sourceIndicatorCode(),
                 descriptor.isPercentile() ? PercentileGuide.of(source) : null,
+                descriptor.population(),
                 descriptor.bands().stream().map(BandResponse::of).toList());
     }
 
