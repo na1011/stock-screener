@@ -1,6 +1,7 @@
 package com.stockscreener.screening.preset;
 
 import com.stockscreener.indicator.PercentileSpec;
+import com.stockscreener.indicator.SectorMetricSpec;
 import com.stockscreener.indicator.calculator.AdjCloseCalculator;
 import com.stockscreener.indicator.calculator.AltmanZCalculator;
 import com.stockscreener.indicator.calculator.AtrPct14Calculator;
@@ -62,6 +63,16 @@ public class PresetCatalog {
     /** 백분위 지표 코드. 원본 코드에 접미사를 붙이는 규칙은 {@link PercentileSpec}이 정본이다. */
     private static String pctl(String sourceCode) {
         return sourceCode + PercentileSpec.SUFFIX;
+    }
+
+    /** 업종 내 백분위. 모집단이 유니버스가 아니라 업종이다(ADR-0044). */
+    private static String sectorPctl(String sourceCode) {
+        return sourceCode + SectorMetricSpec.PERCENTILE_SUFFIX;
+    }
+
+    /** 업종 중앙값 배수. 1.0이 업종 중앙값이며 백분위가 아니다. */
+    private static String sectorRel(String sourceCode) {
+        return sourceCode + SectorMetricSpec.MEDIAN_RATIO_SUFFIX;
     }
 
     @Bean
@@ -185,19 +196,24 @@ public class PresetCatalog {
      * <p>IMPORTANT — <b>원본 명세에서 옮기지 못한 것이 여럿이고 그것이 이 프리셋의 가장 큰
      * 위험이다.</b> 없는 안전장치를 있다고 믿게 되기 때문에 설명에 전부 적는다. 옮기지 못한 것:
      * <ul>
-     *   <li>업종 상대 비교 — {@code stock.sector}가 전 종목 비어 있어 부채비율을 절대 기준으로 건다.
      *   <li>순부채/EBITDA·이자보상배율 — 감가상각비와 이자비용이 비금융 기업에 표준계정코드로
      *       오지 않는다(2026-08-10 실측, {@code docs/api-spec/dart-open-api.md} §7).
      *   <li>5년 누적 영업현금흐름 — 위와 같은 이유로 보류.
      *   <li>베타 — 시장 지수 시계열이 없다.
      *   <li>피인수 진행 종목 제외 — 코퍼레이트 액션 소스가 없다.
      *   <li>해자 프록시 — 매출총이익과 ROIC를 계산할 수 없다.
+     *   <li>업종 표본 부족 시의 절대 기준 폴백 — 원본은 플래그를 붙여 구분하는데 우리에게
+     *       플래그 도메인이 없다. 그 종목은 판정불가로 빠진다(ADR-0044).
      * </ul>
      *
-     * <p>그리고 <b>Altman Z는 금융업에 적용할 수 없는데 그 종목을 가려낼 업종 데이터가 없다.</b>
-     * 금융업은 유동/비유동을 구분하지 않는 재무상태표를 내 대개 값이 계산되지 않고, 그러면 필수
-     * 조건이 판정불가가 되어 결과에서 빠진다. 결과적으로 금융 종목 대부분이 이 프리셋에 나오지
-     * 않으며, 그것은 의도한 방어가 아니라 부작용이다.
+     * <p><b>업종 상대 비교는 이제 원본대로 돌아왔지만 모집단만 그렇다.</b> S-01은 원본의
+     * "자체 5년 P/E 중앙값 OR 업종 중앙값" 중 뒤엣것만이라 원본보다 좁고, S-02는 EV를 만들 수
+     * 없어 EBIT/EV가 아니라 영업이익률이며, 원본 D/E가 차입금 기준인 데 비해 우리 부채비율은
+     * 부채총계/자기자본이다. 대조표는 ADR-0039가 정본이다.
+     *
+     * <p><b>Altman Z는 보험·금융서비스(KSIC 65·66)에서 계산되지 않는다.</b> 64(금융업)는
+     * 지주회사를 함께 담아 코드로 가를 수 없어 제외하지 않았고, 그 종목들은 유동/비유동
+     * 미구분 재무제표 때문에 대개 값이 없어 자연히 빠진다 — <b>그쪽은 여전히 부작용이다.</b>
      */
     private static ScreenPreset swingMidtermKr() {
         return new ScreenPreset(
@@ -205,12 +221,17 @@ public class PresetCatalog {
                 "중장기 스윙",
                 "3~6개월 보유를 전제로, 장기 추세가 살아 있으면서 아직 과열되지 않은 종목만 남긴 뒤 "
                         + "저평가·수익성·성장으로 줄 세운다. 필수 조건을 하나라도 채우지 못하면 결과에서 빠진다. "
-                        + "옮기지 못한 조건이 있다 — 업종 상대 비교(부채비율을 절대 기준으로 대체), "
-                        + "순부채/EBITDA와 이자보상배율(감가상각비·이자비용을 소스가 주지 않는다), "
-                        + "베타(시장 지수 시계열이 없다), 피인수 종목 제외(공시 소스가 없다), "
-                        + "해자 지표(매출총이익·ROIC를 계산할 수 없다). "
-                        + "Altman Z는 금융업에 적용할 수 없는데 업종 데이터가 없어 가려내지 못하며, "
-                        + "그 종목은 값이 계산되지 않아 대개 결과에서 빠진다.",
+                        + "부채비율·저평가·수익성은 같은 업종 종목과 견준다 — 업종 표본이 5종목에 "
+                        + "못 미치면 판정할 수 없어 그 종목은 결과에서 빠진다. 원본이 그 경우에 쓰라고 한 "
+                        + "절대 기준 폴백과 표본부족 플래그는 플래그 체계가 없어 옮기지 않았다. "
+                        + "옮기지 못한 조건이 있다 — 순부채/EBITDA와 이자보상배율(감가상각비·이자비용을 "
+                        + "소스가 주지 않는다), 베타(시장 지수 시계열이 없다), 피인수 종목 제외(공시 소스가 없다), "
+                        + "해자 지표(매출총이익·ROIC를 계산할 수 없다). 저평가 판정은 업종 비교만 쓰고 "
+                        + "자체 5년 이력 비교가 없어 원본보다 좁으며, 이익수익률은 EV를 만들 수 없어 "
+                        + "영업이익률로 대신한다. "
+                        + "Altman Z는 보험·금융서비스 종목에서 계산하지 않는다 — 자본구조가 달라 "
+                        + "점수가 뜻을 잃기 때문이다. 다만 지주회사는 업종 코드가 금융업으로 오는 경우가 "
+                        + "있어 코드만으로는 가려지지 않는다.",
                 EvaluationMode.SCORING,
                 null,
                 ConditionGroup.and(List.of(
@@ -255,7 +276,15 @@ public class PresetCatalog {
                         // ── 생존 ──
                         // 계절성 있는 업종이 한 분기 적자를 내는 것은 정상이라 4가 아니라 3이다.
                         required(ProfitableQuarters4Calculator.CODE, ComparisonOperator.GTE, "3"),
-                        // 원본은 업종 중앙값 대비이지만 업종 데이터가 없어 절대 기준으로 대체한다.
+                        // 원본 H-02 그대로 — 같은 업종 중앙값의 1.5배 이내.
+                        // 업종 표본이 5종목에 못 미치면 값이 없어 판정불가가 되고, 그 종목은
+                        // 결과에서 빠진다. 원본이 그 자리에 둔 절대 폴백(+ 표본부족 플래그)은
+                        // 플래그 체계가 없어 옮기지 않았다(ADR-0044).
+                        required(sectorRel(DebtRatioCalculator.CODE), ComparisonOperator.LTE, "1.5"),
+                        // 절대 기준을 함께 남긴다. 원본은 H-02(상대)와 H-03(순부채/EBITDA, 절대)을
+                        // 짝으로 두고 "업종 전체가 과부채인 경우"를 후자가 잡는데, H-03은
+                        // 감가상각비가 없어 버렸다. 이것까지 빼면 레버리지 절대 게이트가
+                        // 하나도 남지 않는다.
                         required(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "150"),
                         // 3년 누적 5%는 연 1.6% 수준이다. 주식보상 희석은 통과하고 반복 증자는 걸린다.
                         required(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "5"),
@@ -263,11 +292,14 @@ public class PresetCatalog {
                         required(AltmanZCalculator.CODE, ComparisonOperator.GTE, "2.6"),
 
                         // ── 점수 ──
-                        // 원본의 "자체 5년 중앙값 또는 업종 대비"를 유니버스 내 상대 순위로 치환했다.
-                        // 뜻이 다르다 — 모집단이 업종이 아니라 유니버스다(ADR-0036).
-                        weighted(pctl(PerCalculator.CODE), ComparisonOperator.LTE, "0.50", "1"),
-                        // 원본은 EBIT/EV이지만 EV를 만들 수 없어 영업이익률 순위로 대체한다.
-                        weighted(pctl(OperatingMarginCalculator.CODE), ComparisonOperator.GTE, "0.50", "1"),
+                        // 원본 S-01의 조건 b(업종 중앙값 미만)를 옮겼다. 조건 a(자체 5년 P/E
+                        // 중앙값)는 여전히 없어 **원본보다 좁다** — 원본은 둘 중 하나만 맞아도
+                        // 1점이다.
+                        weighted(sectorPctl(PerCalculator.CODE), ComparisonOperator.LTE, "0.50", "1"),
+                        // 원본 S-02는 업종 내 이익수익률(EBIT/EV) 상위 50%다. 모집단은 업종으로
+                        // 맞췄지만 **재는 대상이 다르다** — EV를 만들 수 없어 영업이익률이다.
+                        weighted(sectorPctl(OperatingMarginCalculator.CODE),
+                                ComparisonOperator.GTE, "0.50", "1"),
                         // 원본의 누적 배점을 조건 둘로 옮긴다 — 15% 이상 +1, 25% 이상 +1 추가.
                         weighted(OperatingIncomeGrowthCalculator.CODE, ComparisonOperator.GTE, "15", "1"),
                         weighted(OperatingIncomeGrowthCalculator.CODE, ComparisonOperator.GTE, "25", "1"))));

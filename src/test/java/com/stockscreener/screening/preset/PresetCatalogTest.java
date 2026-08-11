@@ -3,10 +3,12 @@ package com.stockscreener.screening.preset;
 import com.stockscreener.indicator.IndicatorMeta;
 import com.stockscreener.indicator.IndicatorRegistry;
 import com.stockscreener.indicator.PercentileSpec;
+import com.stockscreener.indicator.SectorMetricSpec;
 import com.stockscreener.screening.ComparisonOperator;
 import com.stockscreener.screening.ConditionGroup;
 import com.stockscreener.screening.ConditionOperand;
 import com.stockscreener.screening.IndicatorCondition;
+import com.stockscreener.screening.store.ScreenDefinitionValidator;
 import com.stockscreener.support.TestDatabaseGuard;
 
 import org.junit.jupiter.api.DisplayName;
@@ -24,6 +26,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * 프리셋 선언의 무결성. DB를 쓰지 않고 <b>선언 자체</b>만 본다.
@@ -45,6 +48,9 @@ class PresetCatalogTest {
 
     @Autowired
     private List<PercentileSpec> percentileSpecs;
+
+    @Autowired
+    private List<SectorMetricSpec> sectorMetricSpecs;
 
     @Test
     @DisplayName("spec §3이 요구한 프리셋이 선언되어 있다")
@@ -86,17 +92,18 @@ class PresetCatalogTest {
     }
 
     @Test
-    @DisplayName("IMPORTANT — 백분위 조건의 부등호가 원본 지표의 유불리와 맞는다")
-    void percentileConditionsPointInTheFavorableDirection() {
+    @DisplayName("IMPORTANT — 상대 지표 조건의 부등호가 원본 지표의 유불리와 맞는다")
+    void relativeConditionsPointInTheFavorableDirection() {
         Map<String, Boolean> higherIsBetterBySource = higherIsBetterBySourceCode();
+        Map<String, String> sourceByRelativeCode = sourceByRelativeCode();
 
         for (ScreenPreset preset : presets) {
             for (IndicatorCondition condition : preset.conditions().conditions()) {
                 String code = condition.indicatorCode();
-                if (!code.endsWith(PercentileSpec.SUFFIX)) {
+                String sourceCode = sourceByRelativeCode.get(code);
+                if (sourceCode == null) {
                     continue;
                 }
-                String sourceCode = code.substring(0, code.length() - PercentileSpec.SUFFIX.length());
                 Boolean higherIsBetter = higherIsBetterBySource.get(sourceCode);
 
                 assertThat(higherIsBetter)
@@ -104,9 +111,10 @@ class PresetCatalogTest {
                                 code, sourceCode)
                         .isNotNull();
 
-                // 백분위는 예외 없이 오름차순이다. 따라서
-                //   높은 쪽이 좋은 지표(ROE)의 "상위 N%"  → >= (GT/GTE)
-                //   낮은 쪽이 좋은 지표(PER)의 "하위 N%"  → <= (LT/LTE)
+                // 백분위는 예외 없이 오름차순이고, 업종 중앙값 배수도 원본과 같은 방향으로
+                // 커진다. 그래서 둘에 같은 규칙이 걸린다.
+                //   높은 쪽이 좋은 지표(ROE)의 "상위 N%"        → >= (GT/GTE)
+                //   낮은 쪽이 좋은 지표(부채비율)의 "업종 이하"  → <= (LT/LTE)
                 // 이 대응이 깨지면 프리셋이 정반대 종목을 고른다.
                 ComparisonOperator operator = condition.operator();
                 boolean pointsUp = operator == ComparisonOperator.GT || operator == ComparisonOperator.GTE;
@@ -127,9 +135,13 @@ class PresetCatalogTest {
     @Test
     @DisplayName("백분위 조건의 경계값이 0~1 안에 있다")
     void percentileThresholdsAreWithinUnitRange() {
+        Set<String> percentileCodes = percentileCodes();
+
         for (ScreenPreset preset : presets) {
             for (IndicatorCondition condition : preset.conditions().conditions()) {
-                if (!condition.indicatorCode().endsWith(PercentileSpec.SUFFIX)) {
+                // 업종 중앙값 배수는 여기 걸리지 않는다 — 1.0이 중앙이고 위로 열려 있어
+                // 1.5가 정상값이다. 백분위와 같은 범위를 요구하면 그 조건을 못 쓴다.
+                if (!percentileCodes.contains(condition.indicatorCode())) {
                     continue;
                 }
                 // 0~1 비율인데 20(퍼센트)으로 적으면 모든 종목이 조건을 만족하거나
@@ -169,6 +181,41 @@ class PresetCatalogTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 선언한 프리셋이 시더의 검증을 실제로 통과한다")
+    void everyPresetPassesTheSeedValidator() {
+        // PresetSynchronizer가 ScreenDefinitionValidator를 그대로 쓰므로, 여기서 걸리는 것은
+        // **기동 실패**다. 지금까지 이 검증을 합성 프리셋으로만 돌려서, 진짜 프리셋이 상한을
+        // 넘거나 없는 지표를 참조해도 앱을 띄우기 전에는 알 수 없었다.
+        Set<String> known = knownIndicatorCodes();
+
+        for (ScreenPreset preset : presets) {
+            assertThatCode(() -> ScreenDefinitionValidator.validate(preset.conditions(), known))
+                    .as("%s가 시더 검증을 통과하지 못한다 — 기동이 실패한다", preset.code())
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    @Test
+    @DisplayName("조건 수가 상한에 얼마나 붙어 있는지 드러난다")
+    void reportsHeadroomAgainstTheConditionLimit() {
+        // 상한을 넘는 것은 위 검증이 잡는다. 여기서 보는 것은 **여유**다 — 스윙 프리셋이
+        // 정확히 상한에 닿아 있어, 조건을 하나만 더해도 기동이 실패한다. 그 사실이
+        // 코드 어디에도 드러나지 않으면 다음 세션이 조건을 더하다가 그때서야 만난다.
+        for (ScreenPreset preset : presets) {
+            assertThat(preset.conditions().conditions().size())
+                    .as("%s의 조건 수", preset.code())
+                    .isLessThanOrEqualTo(ScreenDefinitionValidator.MAX_CONDITIONS);
+        }
+
+        ScreenPreset swing = presets.stream()
+                .filter(p -> "SWING_MIDTERM_KR".equals(p.code())).findFirst().orElseThrow();
+        assertThat(swing.conditions().conditions())
+                .as("스윙 프리셋이 상한(%d)에 닿아 있다. 조건을 더하려면 상한을 함께 다시 본다",
+                        ScreenDefinitionValidator.MAX_CONDITIONS)
+                .hasSize(ScreenDefinitionValidator.MAX_CONDITIONS);
+    }
+
+    @Test
     @DisplayName("두 판정 방식이 모두 시딩된다 — 판정 방식은 조건이 아니라 실행의 속성이다")
     void seedsBothEvaluationModes() {
         assertThat(presets).extracting(ScreenPreset::mode)
@@ -179,6 +226,36 @@ class PresetCatalogTest {
     private Set<String> knownIndicatorCodes() {
         Set<String> codes = new java.util.HashSet<>(registry.codes());
         percentileSpecs.forEach(spec -> codes.add(spec.code()));
+        sectorMetricSpecs.forEach(spec -> {
+            codes.add(spec.code());
+            codes.add(spec.peerCountCode());
+        });
+        return codes;
+    }
+
+    /**
+     * 상대 지표 코드 → 원본 지표 코드.
+     *
+     * <p>IMPORTANT — <b>코드에서 접미사를 문자열로 떼지 않는다.</b> 그렇게 하면
+     * {@code PER_SECTOR_PCTL}에서 {@code _PCTL}만 떨어져 {@code PER_SECTOR}라는 없는 지표를
+     * 찾게 되고, 접미사가 하나 늘 때마다 이 검사가 조용히 헛돈다. 선언이 원본을 이미 알고 있다.
+     *
+     * <p>표본 수({@code _SECTOR_N})는 넣지 않는다. 개수라서 원본의 유불리와 방향이 무관하다.
+     */
+    private Map<String, String> sourceByRelativeCode() {
+        Map<String, String> byCode = new HashMap<>();
+        percentileSpecs.forEach(spec -> byCode.put(spec.code(), spec.sourceCode()));
+        sectorMetricSpecs.forEach(spec -> byCode.put(spec.code(), spec.sourceCode()));
+        return byCode;
+    }
+
+    /** 값이 0~1인 지표. 유니버스 백분위와 업종 백분위 둘 다이며 중앙값 배수는 아니다. */
+    private Set<String> percentileCodes() {
+        Set<String> codes = percentileSpecs.stream()
+                .map(PercentileSpec::code).collect(Collectors.toCollection(java.util.HashSet::new));
+        sectorMetricSpecs.stream()
+                .filter(spec -> spec.kind() == SectorMetricSpec.Kind.PERCENTILE)
+                .forEach(spec -> codes.add(spec.code()));
         return codes;
     }
 
@@ -197,18 +274,23 @@ class PresetCatalogTest {
     }
 
     @Test
-    @DisplayName("백분위를 조건으로 쓰는 지표는 실제로 백분위가 계산되는 지표다")
-    void percentileConditionsUseDeclaredPercentiles() {
-        Set<String> declared = percentileSpecs.stream()
-                .map(PercentileSpec::code).collect(Collectors.toSet());
+    @DisplayName("상대 지표를 조건으로 쓰면 그 값이 실제로 계산되는 지표여야 한다")
+    void relativeConditionsUseDeclaredMetrics() {
+        // 접미사로 후보를 고르지 않는다. 선언에 없는 코드는 knownIndicatorCodes()가 이미
+        // 잡으므로, 여기서는 **선언된 상대 지표만 골라** 그 원본까지 살아 있는지 본다 —
+        // 원본이 사라지면 값이 영원히 비고, 그 조건은 조용히 판정불가가 된다.
+        Set<String> sources = new java.util.HashSet<>(registry.codes());
 
         for (ScreenPreset preset : presets) {
-            preset.conditions().referencedIndicatorCodes().stream()
-                    .filter(code -> code.endsWith(PercentileSpec.SUFFIX))
-                    .forEach(code -> assertThat(declared)
-                            .as("%s가 선언되지 않은 백분위 %s를 쓴다 — 값이 영원히 없다",
-                                    preset.code(), code)
-                            .contains(code));
+            for (String code : preset.conditions().referencedIndicatorCodes()) {
+                String source = sourceByRelativeCode().get(code);
+                if (source == null) {
+                    continue;
+                }
+                assertThat(sources)
+                        .as("%s의 %s는 원본 %s에 기대는데 그 계산기가 없다", preset.code(), code, source)
+                        .contains(source);
+            }
         }
     }
 }
