@@ -84,11 +84,20 @@ class CompanyProfileCollectorTest {
     }
 
     @Test
-    @DisplayName("예상 밖 자릿수는 제약이 막는다 — 조용히 다른 업종으로 묶이지 않는다")
-    void rejectsUnexpectedCodeLength() {
-        // 4자리를 허용하면 left(_, 3)이 소분류가 아닌 것을 소분류라 부른다. 실패 격리 단위가
-        // 종목이므로 이 예외는 그 한 종목만 실패로 기록한다.
-        CompanyProfileCollector collector = collectorWith(new StubProfileSource(profile("2640", 12)));
+    @DisplayName("4자리(세분류)도 같은 규칙으로 갈린다 — 350종목 실측에서 52종목이 이 형태다")
+    void derivesKeysFromFourDigitCode() throws Exception {
+        // 문서의 "3자리와 5자리"는 6개사 표본의 과소추정이었다. SK하이닉스 2612가 그 예다.
+        collectorWith(new StubProfileSource(profile("2612", 12))).collect(security);
+
+        assertThat(column("industry_group")).isEqualTo("261");
+        assertThat(column("industry_division")).isEqualTo("26");
+    }
+
+    @Test
+    @DisplayName("2자리 이하는 제약이 막는다 — 중분류를 소분류라 부르게 된다")
+    void rejectsTooShortCode() {
+        // 실패 격리 단위가 종목이므로 이 예외는 그 한 종목만 실패로 기록한다.
+        CompanyProfileCollector collector = collectorWith(new StubProfileSource(profile("26", 12)));
 
         assertThatThrownBy(() -> collector.collect(security))
                 .hasMessageContaining("ck_stock_industry_code");
