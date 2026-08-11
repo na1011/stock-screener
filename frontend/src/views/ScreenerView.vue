@@ -133,11 +133,11 @@ async function run(): Promise<void> {
         <div class="screener__actions">
           <!-- 넓은 폭에서는 좌측 레일이 전략 목록을 상주시킨다. 좁을 때만 Select가 그 자리를 맡는다. -->
           <ScreenPicker v-if="isBuilderNarrow" class="screener__picker" />
+          <!-- 화면의 주 액션 둘이다. `size="small"`을 주지 않아 기본 높이(36px)로 선다. -->
           <Button
             v-tooltip.bottom="runHint"
             :label="runLabel"
             icon="pi pi-play"
-            size="small"
             :severity="stale ? 'warn' : undefined"
             :loading="screening.state === 'loading'"
             :disabled="!draft.canRun"
@@ -146,7 +146,6 @@ async function run(): Promise<void> {
           <Button
             label="저장"
             icon="pi pi-save"
-            size="small"
             outlined
             :disabled="!canSave"
             @click="saveVisible = true"
@@ -294,16 +293,10 @@ async function run(): Promise<void> {
   }
 
   /*
-   * 손가락으로 누르는 폭이므로 터치 타깃을 키운다.
-   *
-   * `size="small"`이 23px을 만드는데 WCAG 2.2의 최소 타깃(24×24)에도 못 미친다. 데스크톱은
-   * 커서라 그대로 두고 여기서만 올린다 — 프리셋의 `sm` 치수를 건드리면 칩 바와 결과 표
-   * 머리글의 밀도가 함께 무너진다(그쪽은 스무 개가 한 줄에 서는 자리다).
+   * 여기 있던 터치 타깃 보정을 걷었다. `size="small"`이 23px을 만들어 WCAG 2.2의 최소
+   * 타깃(24×24)에도 못 미치던 것을 좁은 폭에서만 덮고 있었는데, 이제 `sm`이 29px이라
+   * 스스로 넘긴다. 되살리면 같은 버튼이 폭에 따라 다른 높이가 된다.
    */
-  .screener__actions :deep(.p-button) {
-    min-height: 2rem;
-    font-size: var(--app-text-sm);
-  }
 }
 
 /*

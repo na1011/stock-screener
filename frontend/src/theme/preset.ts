@@ -79,20 +79,36 @@ export const ScreenerPreset = definePreset(Aura, {
     // 다크 배경에서 1px 링은 보이지 않는다. 키보드 이동이 어디 있는지 알 수 있어야 한다.
     focusRing: { width: '2px', style: 'solid', color: '{primary.color}', offset: '1px', shadow: 'none' },
 
-    // 폼 필드를 한 단계 더 조인다. 기본 컨트롤 높이가 32px이 되도록 맞춘 값이다
-    // (13px × 1.45 ≈ 19px + 상하 패딩 10px + 테두리 2px). 참고 사이트의 select가 40px인데
-    // 그쪽은 필터가 세로로 서너 개뿐이고, 여기는 칩 바에 스무 개까지 들어간다.
+    /**
+     * 컨트롤 높이. **기본 36px, `sm` 29px**을 목표로 맞춘 값이다.
+     *
+     * IMPORTANT — 이 계산은 `main.css`가 `:root .p-*`에 **`line-height`를 명시한다는 전제** 위에
+     * 선다. PrimeVue도 이 preset도 폼 컨트롤에 line-height를 걸지 않아서, `<input>`·`<button>`은
+     * UA의 `normal`을 쓰고 `.p-select-label`은 `<span>`이라 body의 1.45를 상속했다 — **같은
+     * 글자 크기인데 Select와 InputNumber의 높이가 서로 달랐다.** 그 둘은 조건 편집기에서
+     * 세로로 붙어 있는 자리다. 패딩만 만지면 그 어긋남이 그대로 확대된다.
+     *
+     * 실측(1440×900, Chrome): 이 값 이전의 기본 버튼은 32px이 아니라 **28px**이었다 — 예전
+     * 주석이 근거로 든 "13px × 1.45"가 input·button에는 적용된 적이 없기 때문이다. 지금
+     * 값으로는 기본 36px / `sm` 29px이고 아이콘 전용 버튼이 36×36 / 29×29로 정사각이다.
+     *
+     * 왜 36/29인가. 23px이던 `sm`은 WCAG 2.2의 최소 타깃 24×24에도 못 미쳤고(`ScreenerView`가
+     * 좁은 폭에서만 그것을 보정하고 있었다), 기본과 `sm`의 격차 9px은 같은 줄에 섞였을 때
+     * 눈에 띄게 어긋났다. 표 밀도는 이 토큰이 정하지 않는다 — `datatable`이 따로 갖는다.
+     */
     formField: {
       paddingX: '0.5rem',
-      paddingY: '0.3125rem',
+      paddingY: '0.5rem',
       fontSize: '0.8125rem',
-      sm: { fontSize: '0.75rem', paddingX: '0.4375rem', paddingY: '0.1875rem' },
-      lg: { fontSize: '0.9375rem', paddingX: '0.6875rem', paddingY: '0.4375rem' },
+      sm: { fontSize: '0.75rem', paddingX: '0.4375rem', paddingY: '0.3125rem' },
+      lg: { fontSize: '0.9375rem', paddingX: '0.6875rem', paddingY: '0.625rem' },
     },
 
     list: {
       padding: '0.25rem',
-      option: { padding: '0.375rem 0.5rem' },
+      // 옵션 높이는 입력 높이를 따라간다. 입력만 키우면 열었을 때 목록이 상대적으로
+      // 빽빽해 보이고, 손가락으로 고르는 자리에서 특히 좁다.
+      option: { padding: '0.4375rem 0.5rem' },
       optionGroup: { padding: '0.5rem 0.5rem 0.25rem', fontWeight: '600' },
     },
 
@@ -331,8 +347,12 @@ export const ScreenerPreset = definePreset(Aura, {
         // IMPORTANT — 버튼의 기본 글자 크기는 **여기서 정할 수 없다.** Aura의 button 토큰에
         // root.fontSize가 없고(타입이 거부한다) 컴포넌트 CSS가 1rem을 직접 적는다. 그래서
         // `main.css`의 `:root .p-button` 규칙이 그 자리를 맡는다 — 지우면 16px로 돌아간다.
-        // 아이콘 버튼이 칩 바와 표 머리글에 붙는다. 기본 2.5rem이면 줄 높이를 이것이 정하게 된다.
-        sm: { iconOnlyWidth: '1.75rem' },
+        //
+        // 아이콘 전용 버튼은 **정사각이어야 한다.** 폭을 높이와 같이 두지 않으면 칩 바와 표
+        // 머리글에서 혼자 납작하거나 길쭉해 보인다. 기본값(Aura 2.5rem)도 함께 적는 이유는
+        // 그 값이 새 기본 높이 36px과 4px 어긋나기 때문이다 — preset이 덮지 않아 그대로였다.
+        iconOnlyWidth: '2.25rem',
+        sm: { iconOnlyWidth: '1.8125rem' },
       },
     },
 

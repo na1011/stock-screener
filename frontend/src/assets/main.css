@@ -313,6 +313,19 @@ a:hover {
 :root .p-togglebutton-content,
 :root .p-togglebutton-label {
   font-size: var(--app-text-sm);
+  /*
+   * IMPORTANT — 이 한 줄이 컨트롤 높이를 **계산 가능하게** 만든다.
+   *
+   * PrimeVue도 preset도 폼 컨트롤에 line-height를 걸지 않는다. 그래서 `<input>`·`<button>`은
+   * UA 기본값 `normal`을 쓰고, `.p-select-label`은 `<span>`이라 body의 1.45를 상속했다 —
+   * **같은 글자 크기인데 Select가 InputNumber보다 높았다.** 그 둘은 조건 편집기에서 세로로
+   * 붙어 있는 자리다. 패딩만 조절하면 이 어긋남은 그대로 남고 오히려 커진다.
+   *
+   * 값이 1.4인 이유: 13px에서 18.2px이 되어 `formField.paddingY`(8px) + 테두리와 합쳐 36px,
+   * 12px에서 16.8px이 되어 `sm.paddingY`(5px)와 합쳐 29px이 된다. preset의 두 패딩과
+   * **짝이다** — 한쪽만 바꾸면 목표 높이가 어긋난다.
+   */
+  line-height: 1.4;
 }
 
 /* ------------------------------------------------------------------------

@@ -70,6 +70,15 @@ rg -n "darkModeSelector: '.app-dark'" frontend/src/main.ts
 # 3. Tag warn이 amber인가 (orange가 아닌가)
 rg -n 'warn: \{ background:.*amber' frontend/src/theme/preset.ts
 
+# 4. 컨트롤 높이의 짝이 살아 있는가
+#    preset의 formField 패딩과 main.css의 line-height는 **함께** 목표 높이를 만든다.
+#    한쪽만 바꾸면 계산이 어긋나고, 그 어긋남은 Select와 InputNumber가 세로로 붙는
+#    조건 편집기에서만 눈에 띈다.
+rg -n 'line-height: 1.4' frontend/src/assets/main.css
+rg -n "paddingY: '0.5rem'" frontend/src/theme/preset.ts
+#    → 기준선(1440×900, Chrome): 기본 컨트롤 36px, size="small" 29px,
+#      아이콘 전용 버튼 36×36 / 29×29
+
 # 3-1. 값 색조가 판정 Tag와 한 화면에 섞이지 않았는가 (채널 분리)
 rg -ln -- '--p-tone-' frontend/src
 #    → components/ui/BandMeter.vue 와 views/StockDetailView.vue 뿐이어야 한다.

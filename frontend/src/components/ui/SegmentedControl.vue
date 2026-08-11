@@ -99,11 +99,18 @@ const activeIndex = computed(() => {
  * preset이 `togglebutton.content.checkedBackground`로 켜진 칸을 칠한다(ADR-0021). 여기서는
  * 썸이 그 일을 하므로 벗긴다 — 두 겹으로 칠하면 썸이 움직이는 것이 보이지 않는다.
  */
+/*
+ * ToggleButton은 `formField` 토큰을 보지 않는다(Aura가 자기 값을 갖는다). 그래서 옆의
+ * Select·InputNumber와 높이를 맞추려면 여기서 직접 적어야 한다.
+ *
+ * 3px + 3px에 트랙의 패딩 2px·테두리 1px가 위아래로 더해져 `sm` 컨트롤(29px)과 나란해진다.
+ * preset의 `formField.sm.paddingY`를 바꾸면 이 값도 함께 봐야 한다.
+ */
 .segmented :deep(.p-togglebutton-content) {
   flex: 1 1 auto;
   justify-content: center;
   min-width: 0;
-  padding: 0.3125rem 0.5rem;
+  padding: 0.1875rem 0.5rem;
   background: transparent;
   transition: color var(--app-motion-fast) var(--app-ease);
 }

@@ -283,7 +283,6 @@ function onOperandTypeChange(value: OperandType | null): void {
             :options="operatorOptions"
             option-label="label"
             option-value="name"
-            size="small"
             fluid
             @update:model-value="
               (value) => {
@@ -300,7 +299,6 @@ function onOperandTypeChange(value: OperandType | null): void {
               :model-value="condition.value"
               :max-fraction-digits="4"
               :suffix="unitSuffix"
-              size="small"
               fluid
               @update:model-value="
                 (value) => {
@@ -315,7 +313,6 @@ function onOperandTypeChange(value: OperandType | null): void {
               :model-value="condition.upperBound"
               :max-fraction-digits="4"
               :suffix="unitSuffix"
-              size="small"
               fluid
               @update:model-value="
                 (value) => {
@@ -339,7 +336,6 @@ function onOperandTypeChange(value: OperandType | null): void {
               :placeholder="PICK_INDICATOR"
               filter
               :filter-placeholder="SEARCH_INDICATOR"
-              size="small"
               fluid
               @update:model-value="
                 (value) => {
@@ -354,7 +350,6 @@ function onOperandTypeChange(value: OperandType | null): void {
               :model-value="condition.multiplier"
               :max-fraction-digits="4"
               placeholder="1"
-              size="small"
               fluid
               @update:model-value="
                 (value) => {
@@ -389,7 +384,6 @@ function onOperandTypeChange(value: OperandType | null): void {
               :min="0"
               :max-fraction-digits="2"
               placeholder="1"
-              size="small"
               fluid
               @update:model-value="
                 (value) => {

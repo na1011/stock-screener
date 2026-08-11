@@ -343,7 +343,8 @@ function removeEditing(): void {
   align-items: center;
   gap: 0.375rem;
   max-width: 16rem;
-  min-height: 1.75rem;
+  /* 조건 칩과 같은 높이. 같은 줄에 서므로 하나만 낮으면 바닥이 어긋난다. */
+  min-height: 1.8125rem;
   padding: 0 0.5rem;
   border: 1px solid transparent;
   border-radius: var(--p-border-radius-md);

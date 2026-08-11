@@ -88,7 +88,6 @@ const maxDate = computed(() => parseIsoDate(props.retention?.to ?? null) ?? new 
           :options="universeOptions"
           option-label="name"
           option-value="code"
-          size="small"
           fluid
         />
       </AsyncPanel>
@@ -111,7 +110,6 @@ const maxDate = computed(() => parseIsoDate(props.retention?.to ?? null) ?? new 
         show-button-bar
         :min-date="minDate"
         :max-date="maxDate"
-        size="small"
         fluid
       />
     </FormField>

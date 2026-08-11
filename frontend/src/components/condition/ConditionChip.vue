@@ -148,7 +148,8 @@ const direction = computed(() =>
   display: inline-flex;
   align-items: stretch;
   max-width: 100%;
-  min-height: 1.75rem;
+  /* `size="small"` 컨트롤(29px)과 같은 줄에 선다. 어긋나면 칩 바가 들쭉날쭉해 보인다. */
+  min-height: 1.8125rem;
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-md);
   background: var(--p-surface-800);
