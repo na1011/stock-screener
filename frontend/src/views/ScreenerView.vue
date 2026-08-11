@@ -12,7 +12,7 @@ import ResultSummary from '@/components/result/ResultSummary.vue'
 import ResultTable from '@/components/result/ResultTable.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { incompleteConditionNotice } from '@/lib/conditionText'
-import { matchesOrigin, screenTypeLabel, type StaleReason } from '@/lib/screen'
+import { screenTypeLabel, staleReasonOf } from '@/lib/screen'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 import { useScreeningStore } from '@/stores/screening'
 
@@ -37,25 +37,36 @@ const canSave = computed(() => draft.editable && draft.completeConditions.length
  * 실행한 것"이다. 그 사실을 말하지 않으면 사용자는 눈앞의 목록이 방금 고친 조건의 결과라고
  * 읽는다. 버튼 라벨이 바뀌는 것이 그 자백이다.
  *
- * IMPORTANT — 어긋나는 길이 **둘**이다. 조건을 손으로 고친 것(`dirty`)과 **전략을 통째로
- * 갈아탄 것**이다. 뒤엣것은 `loadFrom`이 `dirty`를 false로 내리므로 예전에는 자백이
- * 꺼졌다 — 제목·조건칩은 새 전략인데 표는 옛 전략의 결과였고 경고가 하나도 없었다.
+ * 판정 규칙은 `lib/screen`의 {@link staleReasonOf}에 있다 — 이 저장소는 컴포넌트를
+ * 테스트하지 않으므로(`vite.config.ts`) 뷰에 두면 검증할 길이 없다. 그 함수의 주석이
+ * **왜 `dirty`가 아니라 "무엇을 보냈는가"를 보는지**를 설명한다.
  *
  * 전략이 같은지는 **서버가 준 `result.screen`**과 대조한다. "무엇을 실행했는가"를 클라이언트가
  * 따로 기억하면 그 거울이 어긋나고, 어긋나도 값이 그럴듯해 드러나지 않는다.
  */
-const staleReason = computed<StaleReason>(() => {
-  if (!screening.hasResult || result.value === null) {
+const staleReason = computed(() =>
+  staleReasonOf({
+    hasResult: screening.hasResult,
+    resultScreen: result.value?.screen ?? null,
+    origin: draft.origin,
+    matchesLastSent: draft.matchesLastSent,
+    canRun: draft.canRun,
+  }),
+)
+
+/**
+ * 서버가 거부한 조건의 **칩**. 자리가 아니라 key로 가리킨다.
+ *
+ * IMPORTANT — 자리로 되짚으면 밀린다. 보내는 것은 완성된 조건뿐인데(`toRequest`) 칩 바는
+ * 미완성까지 그리므로, 미완성 조건이 앞에 있으면 서버가 말한 자리와 화면의 자리가 어긋나
+ * **엉뚱한 칩이 붉어진다.** 무엇을 보냈는지는 `draft.lastSent.keys`가 안다.
+ */
+const invalidKey = computed(() => {
+  const index = screening.invalidIndex
+  if (index === null) {
     return null
   }
-  // 손댄 것이 먼저다. 프리셋을 복제하면(`forkAsCustom`) origin은 즉석으로 바뀌지만 조건은
-  // 그대로이고 `dirty`만 올라간다 — 그때 "다른 전략"이라고 말하면 사실이 아니다.
-  if (draft.dirty) {
-    return 'EDITED'
-  }
-  // "새 조건"(reset)도 여기 걸린다. 즉석 조건은 어느 전략과도 같지 않으므로 조건 칩이
-  // 비었는데 옛 결과가 남아 있는 상태도 자백된다.
-  return matchesOrigin(result.value.screen, draft.origin) ? null : 'SCREEN'
+  return draft.lastSent?.keys[index] ?? null
 })
 
 const stale = computed(() => staleReason.value !== null)
@@ -134,7 +145,7 @@ async function run(): Promise<void> {
       <ConditionChipBar
         class="screener__chips"
         :retention="screening.retention"
-        :invalid-index="screening.invalidIndex"
+        :invalid-key="invalidKey"
       />
     </div>
 

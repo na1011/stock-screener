@@ -47,6 +47,29 @@ export type DraftOrigin =
   | { kind: 'screen'; id: number; name: string }
 
 /**
+ * 서버에 **실제로 보낸 것**.
+ *
+ * IMPORTANT — 이것이 없어서 화면이 두 가지 거짓말을 하고 있었다.
+ *
+ * 1. `toConditionGroup()`이 미완성 조건을 걸러 보내는데 칩 바는 `draft.conditions`의 자리로
+ *    `conditionIndex`를 되짚었다. `[A(미완성), B, C]`에서 C가 거부되면 **B가 붉게** 칠해졌다.
+ * 2. `dirty`를 내리는 곳이 `reset`·`loadFrom`뿐이고 실행은 그것을 건드리지 않아, 즉석 조건으로
+ *    **성공한 직후에도** "아래는 이전 실행 결과입니다"가 방금 받은 결과 위에 떴다.
+ *
+ * 둘의 뿌리가 같다 — "무엇을 실행했는가"를 기록하지 않고 "지금 상태"로 되짚은 것이다.
+ */
+export interface SentSnapshot {
+  request: ScreeningRequest
+  /**
+   * 보낸 순서대로의 조건 `key`. 서버의 `conditionIndex`가 이 배열의 자리를 가리킨다.
+   *
+   * 저장된 정의를 실행할 때(`presetCode`·`screenId`)는 서버가 `ORDER BY sort_order, id`로
+   * 읽으므로 지금 편집기에 있는 순서와 같다 — 그때는 전부를 순서대로 담는다.
+   */
+  keys: number[]
+}
+
+/**
  * 아무 전략도 열지 않은 상태를 부르는 말.
  *
  * 여기가 정본인 이유는 {@link useScreenDraftStore}의 `title`이 이미 이 말을 쓰고 있기
@@ -233,33 +256,83 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     dirty.value = true
   }
 
-  function toConditionGroup(): ConditionGroupPayload {
+  /**
+   * @param list 무엇을 담을지. 기본은 완성된 조건 전부다 — 저장이 그 형태다.
+   *   인자를 받는 이유는 **보내는 것과 저장하는 것이 같지 않을 수 있어서**이고, 지금 그 차이는
+   *   {@link buildRequest}가 정한다. 두 곳이 각자 배열을 만들면 조건 자리가 어긋난다.
+   */
+  function toConditionGroup(
+    list: DraftCondition[] = completeConditions.value,
+  ): ConditionGroupPayload {
     return {
       logicalOperator: 'AND',
-      conditions: completeConditions.value.map(toPayload),
+      conditions: list.map(toPayload),
       childGroups: [],
     }
   }
 
   /**
-   * 실행 요청을 만든다.
+   * 지금 실행하면 **무엇을 보내는가**. 부작용이 없다 — 기록은 {@link toRequest}가 한다.
    *
-   * @return 조건이 하나도 완성되지 않은 즉석 조건이면 null. 그때는 실행하지 않는다 —
-   *         빈 조건을 보내면 서버가 400을 주고, 그 오류는 사용자 잘못이 아니다.
+   * 요청과 조건 자리를 **함께** 만드는 것이 요점이다. 둘을 따로 유도하면 한쪽만 필터가
+   * 바뀌었을 때 자리가 밀리고, 그 어긋남은 서버가 조건을 거부할 때에만 드러난다.
    */
-  function toRequest(): ScreeningRequest | null {
+  function buildRequest(): SentSnapshot | null {
     const base = { universeCode: universeCode.value, asOf: asOf.value }
 
     if (!dirty.value && origin.value.kind === 'preset') {
-      return { ...base, presetCode: origin.value.code }
+      return { request: { ...base, presetCode: origin.value.code }, keys: allKeys() }
     }
     if (!dirty.value && origin.value.kind === 'screen') {
-      return { ...base, screenId: origin.value.id }
+      return { request: { ...base, screenId: origin.value.id }, keys: allKeys() }
     }
-    if (completeConditions.value.length === 0) {
+    const sending = completeConditions.value
+    if (sending.length === 0) {
       return null
     }
-    return { ...base, conditions: toConditionGroup(), evaluationMode: evaluationMode.value }
+    return {
+      request: { ...base, conditions: toConditionGroup(sending), evaluationMode: evaluationMode.value },
+      keys: sending.map((it) => it.key),
+    }
+  }
+
+  function allKeys(): number[] {
+    return conditions.value.map((it) => it.key)
+  }
+
+  /** 마지막으로 실행한 것. 결과가 지금 조건과 어긋났는지 판정하는 기준이다. */
+  const lastSent = ref<SentSnapshot | null>(null)
+
+  /**
+   * 지금 실행하면 지난번과 **같은 것**을 보내는가. 같으면 눈앞의 결과는 낡지 않았다.
+   *
+   * IMPORTANT — 이 판정을 `dirty`로 하지 않는다. `dirty`는 "저장본과 다른가"이고 실행으로
+   * 내려가지 않으므로, 즉석 조건은 실행에 성공해도 영원히 true다. 두 질문을 한 깃발이
+   * 겸하던 동안 화면은 방금 받은 결과를 "이전 실행 결과"라고 불렀다.
+   */
+  const matchesLastSent = computed(() => {
+    const sent = lastSent.value
+    if (sent === null) {
+      return false
+    }
+    const now = buildRequest()
+    return now !== null && JSON.stringify(now.request) === JSON.stringify(sent.request)
+  })
+
+  /**
+   * 실행 요청을 만들고 **보낸 것으로 기록한다.**
+   *
+   * @return 조건이 하나도 완성되지 않은 즉석 조건이면 null. 그때는 실행하지 않는다 —
+   *         빈 조건을 보내면 서버가 400을 주고, 그 오류는 사용자 잘못이 아니다.
+   *         보내지 않았으므로 기록도 남기지 않는다 — 덮으면 낡은 결과 위의 자백이 사라진다.
+   */
+  function toRequest(): ScreeningRequest | null {
+    const snapshot = buildRequest()
+    if (snapshot === null) {
+      return null
+    }
+    lastSent.value = snapshot
+    return snapshot.request
   }
 
   return {
@@ -277,6 +350,8 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     completeConditions,
     canRun,
     lastRemoved,
+    lastSent,
+    matchesLastSent,
     markDirty,
     addCondition,
     removeCondition,

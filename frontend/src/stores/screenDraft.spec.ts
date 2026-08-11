@@ -144,6 +144,79 @@ describe('실행 요청의 형태는 출처와 dirty가 정한다', () => {
   })
 })
 
+describe('보낸 것을 기록한다', () => {
+  it('미완성 조건이 앞에 있어도 자리가 밀리지 않는다', () => {
+    // IMPORTANT — 이것이 이 스냅샷의 존재 이유다. 요청에는 완성된 조건만 실리는데
+    // (`toRequest`) 칩 바는 미완성까지 그리므로, 서버가 "두 번째 조건이 잘못됐다"고 하면
+    // 화면은 **미완성 칩을 포함한 두 번째**를 붉게 칠했다. 멀쩡한 조건을 고치라고 한 것이다.
+    const draft = useScreenDraftStore()
+    draft.addCondition('PER') // 미완성 — 값이 없다
+    draft.addCondition('ROE')
+    draft.addCondition('PBR')
+    const incomplete = draft.conditions[0] as DraftCondition
+    const roe = draft.conditions[1] as DraftCondition
+    const pbr = draft.conditions[2] as DraftCondition
+    roe.value = 10
+    pbr.value = 1
+
+    draft.toRequest()
+
+    // 보낸 것은 둘뿐이고, 서버가 말하는 자리 1은 PBR이다.
+    expect(draft.lastSent?.keys).toEqual([roe.key, pbr.key])
+    expect(draft.lastSent?.keys).not.toContain(incomplete.key)
+  })
+
+  it('저장된 정의를 그대로 실행하면 전부를 순서대로 담는다', () => {
+    // 서버가 `ORDER BY sort_order, id`로 읽으므로 자리는 편집기의 순서와 같다.
+    const draft = useScreenDraftStore()
+    draft.loadFrom(readOnlyPreset())
+
+    draft.toRequest()
+
+    expect(draft.lastSent?.request.presetCode).toBe('VALUE_KR')
+    expect(draft.lastSent?.keys).toEqual(draft.conditions.map((it) => it.key))
+  })
+
+  it('실행 직후에는 결과가 낡지 않았다', () => {
+    // `dirty`로 판정하던 동안 즉석 조건은 실행에 성공해도 영원히 "고쳐졌다"였다.
+    const draft = useScreenDraftStore()
+    draft.addCondition('PER')
+    ;(draft.conditions[0] as DraftCondition).value = 10
+
+    draft.toRequest()
+
+    expect(draft.matchesLastSent).toBe(true)
+  })
+
+  it('실행한 뒤 값을 고치면 어긋난 것으로 잡힌다', () => {
+    const draft = useScreenDraftStore()
+    draft.addCondition('PER')
+    const per = draft.conditions[0] as DraftCondition
+    per.value = 10
+    draft.toRequest()
+
+    per.value = 20
+
+    expect(draft.matchesLastSent).toBe(false)
+  })
+
+  it('보낼 것이 없으면 기록을 덮지 않는다', () => {
+    // 조건을 다 지웠다고 기록까지 지우면, 낡은 결과 위에 있어야 할 자백이 사라진다.
+    const draft = useScreenDraftStore()
+    draft.addCondition('PER')
+    const per = draft.conditions[0] as DraftCondition
+    per.value = 10
+    draft.toRequest()
+    const sent = draft.lastSent
+
+    draft.removeCondition(per.key)
+
+    expect(draft.toRequest()).toBeNull()
+    expect(draft.lastSent).toBe(sent)
+    expect(draft.matchesLastSent).toBe(false)
+  })
+})
+
 describe('isComplete', () => {
   it('지표를 고르지 않은 행은 실행 대상이 아니다', () => {
     expect(isComplete(condition({ indicatorCode: null }))).toBe(false)

@@ -31,8 +31,14 @@ import { FRESH_DRAFT_TITLE, useScreenDraftStore } from '@/stores/screenDraft'
  */
 const props = defineProps<{
   retention?: { from: string; to: string } | null
-  /** 서버가 거부한 조건의 인덱스. `invalid-condition` 문제의 `conditionIndex`. */
-  invalidIndex?: number | null
+  /**
+   * 서버가 거부한 조건의 `key`.
+   *
+   * 자리(`conditionIndex`)가 아니라 key인 이유는 **보내는 것과 그리는 것이 다르기 때문**이다 —
+   * 미완성 조건은 요청에서 빠지는데 칩 바는 그것도 그린다. 자리로 받으면 미완성 조건이 앞에
+   * 있을 때 엉뚱한 칩이 붉어진다. 되짚기는 `ScreenerView`가 `draft.lastSent.keys`로 한다.
+   */
+  invalidKey?: number | null
 }>()
 
 const catalog = useCatalogStore()
@@ -214,12 +220,12 @@ function removeEditing(): void {
     <div class="bar">
       <div class="bar__chips">
         <ConditionChip
-          v-for="(condition, index) in draft.conditions"
+          v-for="condition in draft.conditions"
           :key="condition.key"
           :data-chip-key="condition.key"
           :condition="condition"
           :active="editingKey === condition.key"
-          :invalid="props.invalidIndex === index"
+          :invalid="props.invalidKey === condition.key"
           :readonly="readonly"
           @click="openEditor($event, condition.key)"
         />

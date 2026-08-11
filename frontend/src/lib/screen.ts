@@ -73,6 +73,49 @@ export type StaleReason =
   | null
 
 /**
+ * 눈앞의 결과가 낡았는가, 낡았다면 왜.
+ *
+ * IMPORTANT — 판정의 축이 **`dirty`에서 "무엇을 보냈는가"로 옮겨졌다.** `dirty`는 "저장본과
+ * 다른가"이고 실행으로 내려가지 않아, 즉석 조건은 실행에 **성공한 직후에도** true였다.
+ * 그래서 화면이 방금 받은 결과를 "이전 실행 결과"라고 불렀다. 두 질문("저장본과 다른가",
+ * "실행한 것과 다른가")을 한 깃발이 겸하던 것이 원인이다.
+ *
+ * 판정 순서에 근거가 있다.
+ * 1. 보낸 것과 지금 보낼 것이 같으면 결과는 유효하다 — 다른 무엇도 볼 필요가 없다.
+ * 2. 실행할 것이 없으면(`canRun`) 조건을 비운 것이다. 그때는 열린 전략도 없으므로 `SCREEN`이
+ *    맞다("지금 조건과 다른 전략의 결과입니다").
+ * 3. 즉석 조건은 `SCREEN`이 될 수 없다 — {@link matchesOrigin}이 `custom`에 언제나 false를
+ *    주므로, 이 갈래가 없으면 **즉석 조건을 고칠 때마다 "다른 전략의 결과"라고 말하게 된다.**
+ *    복제 직후(`forkAsCustom`)도 여기 걸린다: 조건은 그대로인데 요청 형태만 바뀐 상태다.
+ *
+ * 컴포넌트가 아니라 여기 있는 이유는 이 저장소가 컴포넌트를 테스트하지 않기 때문이다
+ * (`vite.config.ts`의 `environment: 'node'`). 판정이 뷰에 있으면 검증할 길이 없다.
+ */
+export function staleReasonOf(args: {
+  /** 화면에 그릴 결과가 있는가. 없으면 낡고 자시고 할 것이 없다. */
+  hasResult: boolean
+  /** 그 결과를 만든 전략. 서버가 응답에 실어 준 것이다 — 클라이언트가 따로 기억하지 않는다. */
+  resultScreen: ScreenRef | null
+  origin: DraftOrigin
+  matchesLastSent: boolean
+  canRun: boolean
+}): StaleReason {
+  if (!args.hasResult || args.resultScreen === null) {
+    return null
+  }
+  if (args.matchesLastSent) {
+    return null
+  }
+  if (!args.canRun) {
+    return 'SCREEN'
+  }
+  if (args.origin.kind === 'custom') {
+    return 'EDITED'
+  }
+  return matchesOrigin(args.resultScreen, args.origin) ? 'EDITED' : 'SCREEN'
+}
+
+/**
  * 그 이유를 사용자에게 말하는 한 줄.
  *
  * 문구가 여기 있는 이유는 **판정하는 쪽(`ScreenerView`)과 그리는 쪽(`ResultSummary`)이
