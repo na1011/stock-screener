@@ -65,6 +65,23 @@ function revalidateSession(): void {
 onMounted(() => document.addEventListener('visibilitychange', revalidateSession))
 onUnmounted(() => document.removeEventListener('visibilitychange', revalidateSession))
 
+/**
+ * 넓은 폭에서는 **이 상자가 스크롤한다**(ADR-0047). 그래서 라우트가 바뀔 때 맨 위로
+ * 되돌리는 일도 여기 몫이다 — 라우터의 `scrollBehavior`는 window를 움직이는데 그것은
+ * 더 이상 스크롤하지 않는다.
+ *
+ * 라우터를 고치지 않는 이유는 둘이다. 좁은 폭에서는 여전히 window가 스크롤하므로 그쪽
+ * 설정이 유효하고, 라우터가 특정 CSS 클래스를 알게 되면 셸을 바꿀 때마다 함께 고쳐야 한다.
+ */
+const body = ref<HTMLElement | null>(null)
+
+watch(
+  () => route.fullPath,
+  () => body.value?.scrollTo({ top: 0 }),
+  // `RouterView`가 `:key`로 재마운트되므로 그 뒤에 움직여야 한다.
+  { flush: 'post' },
+)
+
 onErrorCaptured((error) => {
   renderError.value = error instanceof Error ? error : new Error(String(error))
   // false를 반환해 전파를 멈춘다. 콘솔에는 남겨야 하므로 여기서 다시 기록한다 —
@@ -94,7 +111,17 @@ function dismiss(): void {
       <!-- 좁은 폭에서는 레일이 서랍이다. 상단 바는 그것을 여는 손잡이와 브랜드만 갖는다. -->
       <AppHeader @open="drawerOpen = true" />
 
-      <Drawer v-model:visible="drawerOpen" class="app-layout__drawer" :show-close-icon="false">
+      <!--
+        `block-scroll`이 없으면 서랍 뒤의 문서가 스크롤된다. 서랍은 fixed인데 그 안의
+        종목 검색 드롭다운은 문서 좌표에 박히므로(ADR-0047), 뒤가 움직이면 드롭다운만
+        검색창에서 떨어져 나간다. 배경이 안 움직이는 것 자체가 옳기도 하다.
+      -->
+      <Drawer
+        v-model:visible="drawerOpen"
+        class="app-layout__drawer"
+        :show-close-icon="false"
+        block-scroll
+      >
         <AppRail @navigate="drawerOpen = false" />
       </Drawer>
     </template>
@@ -110,7 +137,7 @@ function dismiss(): void {
         </div>
       </Message>
 
-      <main class="app-layout__body">
+      <main ref="body" class="app-layout__body">
         <!-- key를 라우트 경로로 두어 종목을 옮길 때 상태가 남지 않게 한다. -->
         <RouterView :key="route.fullPath" />
       </main>
@@ -158,6 +185,50 @@ function dismiss(): void {
   grid-template-rows: var(--app-header-height) minmax(0, 1fr);
 }
 
+/* ------------------------------------------------------------------------
+ * 넓은 폭에서는 **문서가 스크롤하지 않는다.** 셸이 뷰포트를 채우고 본문만 스크롤한다.
+ *
+ * IMPORTANT — 취향이 아니라 오버레이 때문이다(ADR-0047). PrimeVue는 오버레이를 body에
+ * 붙이고 `getBoundingClientRect().top + pageYOffset`, 즉 **문서 좌표**에 `position: absolute`로
+ * 박는다. 그리고 스크롤을 듣는 `getScrollableParents`는 `nodeType !== 9`로 document를
+ * 배제하므로 **window 스크롤은 듣지도 못한다.** 그래서 sticky 앵커(레일 검색창, 조건 칩 바)에
+ * 붙은 오버레이가 스크롤과 함께 흘러가고 닫히지도 않았다.
+ *
+ * window가 움직이지 않으면 문서 좌표도 움직이지 않는다 — 드롭다운이 검색창에 붙어 있다.
+ * 덤으로 `.app-layout__body`가 scrollable parent가 되어 팝오버가 정상적으로 닫힌다
+ * (그 대가는 ADR-0047에 적혀 있다: 움직이지 않는 앵커의 팝오버도 함께 닫힌다).
+ *
+ * **좁은 폭은 제외한다.** `height: 100dvh`로 문서를 묶으면 모바일 주소창이 영영 접히지
+ * 않아 720px 화면에서 60px을 상시 잃는데, 애초에 그쪽에는 이 버그가 없다 — 900px 이하에서
+ * 조건 바는 `static`이고(`ScreenerView`) `AppHeader`에는 오버레이 앵커가 하나도 없다.
+ *
+ * 미디어 쿼리가 아니라 `--narrow` 클래스를 쓰는 이유는 폭 경계값을 CSS에 또 적지 않기
+ * 위해서다(frontend.md — 경계는 `lib/breakpoints.ts`에만 있다).
+ * ------------------------------------------------------------------------ */
+.app-layout:not(.app-layout--narrow) {
+  /*
+   * 행을 명시하지 않으면 암묵 행이 `auto`라 내용 높이로 자란다. 그러면 `height: 100dvh`를
+   * 넘긴 채 `overflow: hidden`에 잘려 **스크롤바 없이 아래가 사라진다.**
+   */
+  grid-template-rows: minmax(0, 1fr);
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.app-layout:not(.app-layout--narrow) .app-layout__main {
+  /* flex 자식의 자동 최소 크기를 풀어야 아래 상자가 실제로 스크롤한다. */
+  min-height: 0;
+}
+
+.app-layout:not(.app-layout--narrow) .app-layout__body {
+  /*
+   * `hidden auto`로 적는다. `clip auto`라고 써도 브라우저는 `hidden auto`로 계산하므로
+   * (CSS Overflow 3 — 한 축이 visible/clip이 아니면 다른 축의 clip은 hidden이 된다)
+   * clip이라 적어 두면 코드가 거짓말을 한다.
+   */
+  overflow: hidden auto;
+}
+
 /* 레일은 스크롤과 무관하게 제자리에 있어야 한다. 목록에서 전략을 고르는 것이 이 앱의
    주된 이동 수단이라, 아래로 내려가면 이동 자체가 불가능해진다. */
 .app-layout__rail {
@@ -177,8 +248,12 @@ function dismiss(): void {
   min-width: 0;
   /*
    * 마지막 방어선이다. 어느 화면이 실수로 뷰포트보다 넓어져도 문서 전체가 가로로 밀리지는
-   * 않게 한다. `hidden`이 아니라 `clip`인 이유는 hidden이 스크롤 컨테이너를 만들어
-   * 화면 안의 `position: sticky`가 이 상자를 기준으로 붙어 버리기 때문이다.
+   * 않게 한다.
+   *
+   * IMPORTANT — `clip`인 이유가 **뒤집혔다.** 예전에는 "hidden이 스크롤 컨테이너를 만들어
+   * 화면 안의 sticky가 이 상자를 기준으로 붙어 버리기 때문"에 clip을 골랐는데, 넓은 폭에서는
+   * 이제 그것이 **원하는 동작**이다(위 `--narrow` 아닌 규칙과 ADR-0047). 여기 남은 `clip`은
+   * 좁은 폭 전용이고, 그쪽은 문서가 스크롤해야 하므로 컨테이너를 만들면 안 된다.
    *
    * IMPORTANT — 여기에 기대어 원인을 덮지 않는다. 넘치는 곳이 보이면 그 컴포넌트의
    * min-width를 고친다.
