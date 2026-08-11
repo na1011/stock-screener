@@ -84,9 +84,17 @@ export const FRESH_DRAFT_TITLE = '새 전략'
 
 let nextKey = 1
 
-function emptyCondition(indicatorCode: string | null = null): DraftCondition {
+/**
+ * 조건 하나의 **내용** 기본값. 신원(`key`)은 여기 없다.
+ *
+ * IMPORTANT — 신원에 속하는 필드를 여기 넣지 않는다. 이 객체는 편집기의 [초기화]가
+ * `Object.assign`으로 기존 조건에 **덮어쓰는** 데 쓰이므로, 여기 들어간 것은 무엇이든
+ * 초기화 때 함께 되돌아간다. `key`가 그래서 빠져 있고 — 바뀌면 v-for가 재마운트되어
+ * 팝오버가 앵커를 잃는다 — 같은 이유로 조건을 실행에서 제외했는지 같은 **표시 상태**도
+ * 여기 두면 안 된다. "값을 비우기"이지 "표시를 푸는 것"이 아니다.
+ */
+function conditionDefaults(indicatorCode: string | null = null): Omit<DraftCondition, 'key'> {
   return {
-    key: nextKey++,
     indicatorCode,
     operator: 'GTE',
     operandType: 'LITERAL',
@@ -97,6 +105,10 @@ function emptyCondition(indicatorCode: string | null = null): DraftCondition {
     weight: null,
     required: false,
   }
+}
+
+function emptyCondition(indicatorCode: string | null = null): DraftCondition {
+  return { key: nextKey++, ...conditionDefaults(indicatorCode) }
 }
 
 export const useScreenDraftStore = defineStore('screenDraft', () => {
@@ -191,6 +203,23 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     }
     lastRemoved.value = { condition: conditions.value[index] as DraftCondition, index }
     conditions.value.splice(index, 1)
+    markDirty()
+  }
+
+  /**
+   * 지표만 남기고 값을 비운다. 편집기의 [초기화]다.
+   *
+   * `key`를 보존하는 것이 요점이다. 새 조건으로 갈아끼우면 v-for가 다시 그리고, 그러면
+   * **지금 열려 있는 팝오버가 자기 앵커를 잃는다** — 사용자는 초기화를 누른 순간 팝오버가
+   * 사라지는 것을 본다.
+   */
+  function resetCondition(key: number): void {
+    const target = conditions.value.find((it) => it.key === key)
+    if (target === undefined) {
+      return
+    }
+    Object.assign(target, conditionDefaults(target.indicatorCode))
+    // 없으면 `toRequest()`가 screenId·presetCode만 보내 초기화가 실행에 반영되지 않는다.
     markDirty()
   }
 
@@ -355,6 +384,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     markDirty,
     addCondition,
     removeCondition,
+    resetCondition,
     undoRemove,
     setEvaluationMode,
     reset,

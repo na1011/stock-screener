@@ -217,6 +217,50 @@ describe('보낸 것을 기록한다', () => {
   })
 })
 
+describe('resetCondition — 값만 비운다', () => {
+  it('지표는 남기고 나머지를 처음 상태로 되돌린다', () => {
+    const draft = useScreenDraftStore()
+    draft.addCondition('PER')
+    const per = draft.conditions[0] as DraftCondition
+    per.operator = 'BETWEEN'
+    per.value = 5
+    per.upperBound = 15
+    per.weight = 3
+
+    draft.resetCondition(per.key)
+
+    expect(per.indicatorCode).toBe('PER')
+    expect(per.operator).toBe('GTE')
+    expect(per.value).toBeNull()
+    expect(per.upperBound).toBeNull()
+    expect(per.weight).toBeNull()
+    expect(isComplete(per)).toBe(false)
+  })
+
+  it('key를 바꾸지 않는다', () => {
+    // 바꾸면 v-for가 다시 그리고, 그 순간 열려 있던 팝오버가 앵커를 잃는다 —
+    // 사용자는 초기화를 누르자마자 편집기가 사라지는 것을 본다.
+    const draft = useScreenDraftStore()
+    draft.addCondition('PER')
+    const key = (draft.conditions[0] as DraftCondition).key
+
+    draft.resetCondition(key)
+
+    expect((draft.conditions[0] as DraftCondition).key).toBe(key)
+  })
+
+  it('초기화도 실행에 반영되어야 하므로 손댄 것으로 친다', () => {
+    // dirty가 오르지 않으면 toRequest가 저장된 정의를 그대로 보내고, 비운 값이 무시된다.
+    const draft = useScreenDraftStore()
+    draft.loadFrom(screen())
+    expect(draft.dirty).toBe(false)
+
+    draft.resetCondition((draft.conditions[0] as DraftCondition).key)
+
+    expect(draft.dirty).toBe(true)
+  })
+})
+
 describe('isComplete', () => {
   it('지표를 고르지 않은 행은 실행 대상이 아니다', () => {
     expect(isComplete(condition({ indicatorCode: null }))).toBe(false)

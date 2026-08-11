@@ -73,13 +73,22 @@ const topQuintile = computed(() => topQuintileCondition(indicator.value?.percent
  */
 const manualOpen = ref(false)
 
-watch(
-  () => props.condition.key,
-  () => {
-    manualOpen.value = bands.value.length === 0 || props.condition.value !== null
-  },
-  { immediate: true },
-)
+/**
+ * 규칙을 함수로 둔 이유는 부르는 곳이 **둘**이기 때문이다. 칩을 새로 열 때와 [초기화]다.
+ * watch만 두면 초기화는 `key`를 바꾸지 않으므로(바꾸면 팝오버가 앵커를 잃는다) 재평가되지
+ * 않고, 값이 비워졌는데 입력칸이 펼쳐진 채 남는다.
+ */
+function syncManualOpen(): void {
+  manualOpen.value = bands.value.length === 0 || props.condition.value !== null
+}
+
+watch(() => props.condition.key, syncManualOpen, { immediate: true })
+
+/** 지표만 남기고 값을 비운다. 되돌리는 것이 아니라 처음 상태로 보내는 것이다. */
+function resetValues(): void {
+  draft.resetCondition(props.condition.key)
+  syncManualOpen()
+}
 
 /**
  * BETWEEN은 지표 참조를 우변으로 쓸 수 없다 — 서버가 거부한다("상·하한을 각각 조건으로
@@ -378,13 +387,46 @@ function onOperandTypeChange(value: OperandType | null): void {
     </template>
 
     <p v-else class="editor__readonly">읽기 전용 전략입니다. 복제하면 고칠 수 있습니다.</p>
+
+    <!--
+      footer가 `v-if="!readonly"` **바깥**에 있다. 읽기 전용 팝오버는 닫는 수단이 바깥
+      클릭뿐이었고, 그것이 닫을 수 있다는 사실 자체가 화면에 없었다.
+
+      [확인]이 값을 확정하는 것은 아니다 — 입력은 이미 반영되어 있다. 이 버튼이 하는 일은
+      "여기서 끝났다"를 말할 자리를 주는 것이다. 구간 프리셋을 고르면 저절로 닫히는 것과
+      달리 직접 입력에는 끝나는 지점이 없어, 사용자가 언제 확정됐는지 알 수 없었다.
+    -->
+    <footer class="editor__foot">
+      <Button
+        v-if="!readonly"
+        type="button"
+        label="초기화"
+        severity="secondary"
+        size="small"
+        text
+        @click="resetValues"
+      />
+      <Button type="button" label="확인" size="small" outlined @click="emit('done')" />
+    </footer>
   </div>
 </template>
 
 <style scoped>
+/*
+ * IMPORTANT — 높이 상한이 필요하다. PrimeVue의 `absolutePosition`은 아래가 모자라면 위로
+ * 뒤집고 그래도 넘치면 **위쪽만** 0으로 클램프한다. 아래는 클램프하지 않는다. 그래서 구간이
+ * 많은 지표를 SCORING에서 화면 하단의 칩으로 열면 아래쪽(가중치 입력·이 footer)이 뷰포트
+ * 밖으로 나간다. 문서가 스크롤하던 동안에는 내려서 볼 수라도 있었다.
+ *
+ * `IndicatorPicker`가 같은 이유로 이미 `max-height`를 갖고 있다 — `.p-popover` 자체에는 없다.
+ */
 .editor {
+  display: flex;
+  flex-direction: column;
   width: var(--app-overlay-md);
   max-width: 100%;
+  max-height: calc(100dvh - 6rem);
+  overflow-y: auto;
 }
 
 .editor__head {
@@ -497,5 +539,21 @@ function onOperandTypeChange(value: OperandType | null): void {
   margin: 0.5rem 0 0;
   font-size: var(--app-text-2xs);
   color: var(--p-text-muted-color);
+}
+
+/*
+ * 맺는 줄. 위 선이 "여기까지가 입력"을 가른다.
+ *
+ * `margin-top: auto`는 내용이 짧을 때 footer를 바닥에 붙이는 것이 아니라, `.editor`가
+ * flex column이 되면서 생긴 여백을 footer 위로 몰아 주는 역할이다.
+ */
+.editor__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--p-content-border-color);
 }
 </style>
