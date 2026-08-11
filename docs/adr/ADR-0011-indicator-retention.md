@@ -34,15 +34,13 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '지표가 한
 
 **이 전제가 `statement timeout`으로 판정 불가가 되면 인덱스 블로트를 의심한다.** 2026-08-10 세션 시작에 실제로 그랬고, 원인은 지표 부재가 아니라 `indicator_value`의 인덱스가 힙의 2.8배(2,348MB vs 840MB)로 부푼 것이었다. `REINDEX INDEX CONCURRENTLY` 셋을 돌리자 199MB가 되고 **같은 쿼리가 0.15초에 답했다.** 판정 불가는 침묵이 아니라 무판정이므로, 그 상태를 "전제가 깨졌다"로도 "지켜진다"로도 읽지 않는다.
 
-> **재관측(2026-08-10 후반) — 같은 날 다시 판정 불가가 됐는데 위 진단이 이번엔 안 맞는다.**
-> 손으로 돌리면 **3.1초에 `180`**이 나와 **전제 자체는 참**이고, 훅의 상한(전제당 8초) 안에서만
-> 걸린다. 인덱스도 **803MB 대 힙 840MB(0.96배)**라 2.8배 블로트가 아니다.
+> **"왜 REINDEX 하루 만에 199MB → 803MB로 돌아왔는가"는 답을 찾았다 — ADR-0045가 정본이다.**
+> 위 문단이 후보로 든 반복 갱신 쪽이 맞았다(실측 `n_tup_upd` 3.2억 대 `n_tup_ins` 1,690만).
+> 다만 그것을 만든 것은 백필이 아니라 **일일 갱신 자신**이다 — 러너가 읽기 창 전체에 값을
+> 내므로 매 실행이 570거래일치를 보존 밖에 쓰고 아래 `purge()`가 그것을 지웠다.
 >
-> **새로 답해야 하는 것은 "왜 REINDEX 하루 만에 199MB → 803MB로 돌아왔는가"다.** 블로트를
-> 다시 걷어내는 것은 증상만 지운다. 백필이 같은 행을 반복 갱신하면(`updated_at` 갱신마다 새
-> 튜플) 인덱스가 그만큼 다시 부푸는데, **재귀 지표 넷이 백필 멱등성을 이미 어기고 있다는
-> 관측**(`phase-criteria.md` Phase 7)이 그 후보다. **둘을 이어 보기 전에 REINDEX를 반복하지
-> 않는다** — 반복하면 원인이 영영 안 드러난다.
+> **그래서 REINDEX는 ADR-0045가 배포되어 한 거래일을 지난 뒤에 한다.** 먼저 돌리면 다음
+> 배치가 되돌려, 줄어든 것이 무엇 덕인지 귀속시킬 수 없다.
 
 ```bash
 psql -d stock_screener -At -F'|' -c "SELECT indexrelname, pg_size_pretty(pg_relation_size(indexrelid)) FROM pg_stat_user_indexes WHERE relname='indicator_value' ORDER BY pg_relation_size(indexrelid) DESC"
