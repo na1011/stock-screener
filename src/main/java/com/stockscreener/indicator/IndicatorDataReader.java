@@ -97,6 +97,22 @@ public class IndicatorDataReader {
         return jdbcTemplate.query(SELECT_PRICE_BARS, PRICE_BAR_MAPPER, stockId, asOf, bars);
     }
 
+    /**
+     * 종목의 KSIC 중분류(업종코드 앞 2자리). 업종을 모르면 null이다.
+     *
+     * <p>지표 계층이 처음으로 <b>종목 속성</b>을 읽는 자리다. 원자료(시세·재무)만 보던 계약이
+     * 한 칸 열린 것이며, 그 결정과 근거는 ADR-0044에 있다.
+     *
+     * <p>중분류만 내는 이유는 계산기가 필요로 하는 것이 그것뿐이기 때문이다. 소분류까지 주면
+     * 계산기가 업종 <b>비교</b>를 하기 시작하는데, 그것은 여러 종목을 봐야 하므로
+     * {@link SectorRelativeCalculator}의 몫이다.
+     */
+    public String readIndustryDivision(long stockId) {
+        List<String> found = jdbcTemplate.queryForList(
+                "SELECT industry_division FROM stock WHERE id = ?", String.class, stockId);
+        return found.isEmpty() ? null : found.get(0);
+    }
+
     /** 연간 재무를 최신 우선으로 읽는다. */
     public List<FinancialFigures> readAnnualFigures(long stockId, LocalDate asOf, int years) {
         if (years <= 0) {

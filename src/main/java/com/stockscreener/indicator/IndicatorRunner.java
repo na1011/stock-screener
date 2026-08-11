@@ -85,6 +85,8 @@ public class IndicatorRunner {
         int years = registry.maxFinancialYears();
         return new IndicatorContext(
                 stockId,
+                // 종목당 한 번만 읽는다. 지표마다 읽으면 850종목 × N지표의 N+1이 된다.
+                reader.readIndustryDivision(stockId),
                 reader.readPriceBars(stockId, asOf, bars),
                 reader.readAnnualFigures(stockId, asOf, years),
                 reader.readQuarterlyFigures(stockId, asOf, years),
@@ -113,12 +115,9 @@ public class IndicatorRunner {
             // 내지 못하며, 그것이 옳다 — 없는 부모로 계산한 파생 값은 틀린 값이다.
             dependencies.put(code, computed.getOrDefault(code, new TreeMap<>()));
         }
-        return new IndicatorContext(
-                base.stockId(),
-                base.priceBars(),
-                base.annualFigures(),
-                base.quarterlyFigures(),
-                dependencies);
+        // MUST: 생성자로 다시 조립하지 않는다. 필드가 늘 때마다 여기서 조용히 빠지고,
+        // 빠진 필드는 예외가 아니라 "값이 없는 지표"로 나타난다.
+        return base.withDependencies(dependencies);
     }
 
     private static NavigableMap<LocalDate, BigDecimal> toSeries(List<IndicatorPoint> points) {

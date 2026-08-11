@@ -31,11 +31,18 @@ import java.util.Set;
  * <p>개별 비율을 각각 통과하면서도 <b>전체적으로 위험한 조합</b>을 잡는 것이 존재 이유다.
  * 부채비율이 무난하고 흑자이면서도 운전자본이 마르고 이익잉여금이 얇은 기업이 그런 경우다.
  *
- * <p>IMPORTANT — <b>금융업·리츠에는 적용할 수 없다.</b> 자본구조가 근본적으로 달라 계수 자체가
- * 성립하지 않는다. 그런데 이 저장소에는 업종 코드가 없어({@code stock.sector}가 비어 있다)
- * 그 종목을 가려낼 수단이 없다. 다만 금융업은 유동/비유동을 구분하지 않는 재무상태표를 내므로
- * {@code currentAssets}가 비고, 그 결과 <b>대부분의 금융 종목에서 값이 계산되지 않는다</b> —
- * 의도한 방어는 아니지만 실질적으로 같은 효과를 낸다. 값이 나오는 금융 종목이 있을 수 있으므로
+ * <p>IMPORTANT — <b>금융업·보험업에는 적용할 수 없다.</b> 자본구조가 근본적으로 달라 계수
+ * 자체가 성립하지 않는다. KSIC 중분류 <b>65(보험)·66(금융서비스)</b>를 명시적으로 제외한다.
+ *
+ * <p><b>64(금융업)는 제외하지 않는다.</b> 이름과 달리 그 중분류는 <b>지주회사 버킷을 겸한다</b> —
+ * {@code 64992}에 신한지주·KB금융 같은 금융지주와 LG·SK·GS 같은 비금융 사업지주가 함께 있고,
+ * 3자리 {@code 649}에도 미래에셋벤처투자와 효성·HDC가 섞인다. <b>코드로는 가를 수 없다.</b>
+ * 350종목 실측에서 64·65·66의 51종목 중 값이 나온 22종목이 21개까지 비금융 사업지주였고,
+ * 진짜 금융사는 아래 유동자산 결손으로 이미 전부 빠졌다. 64를 통째로 자르면 <b>얻는 것은
+ * 미래 방어뿐이고 잃는 것은 적용 가능한 21종목</b>이다(ADR-0044).
+ *
+ * <p>그 유동자산 결손이 남은 방어다 — 금융업은 유동/비유동을 구분하지 않는 재무상태표를 내므로
+ * {@code currentAssets}가 비고 값이 계산되지 않는다. <b>의도한 방어가 아니라 부작용</b>이므로
  * 이 지표를 조건으로 쓰는 화면은 그 한계를 함께 알려야 한다.
  *
  * <p>유량과 저량을 섞지 않는다. 매출·EBIT는 4분기 합(TTM)이고, 자산·부채·운전자본·이익잉여금은
@@ -68,6 +75,19 @@ public class AltmanZCalculator implements IndicatorCalculator {
 
     public static final String CODE = "ALTMAN_Z";
 
+    /**
+     * 이 지표가 성립하지 않는 KSIC 중분류.
+     *
+     * <p>64(금융업)가 빠져 있는 것이 의도다 — 위 javadoc의 이유로 그 중분류는 지주회사를
+     * 함께 담아 코드로 가를 수 없다.
+     *
+     * <p>업종을 <b>모르는</b> 종목은 제외하지 않는다. 제외 집합이 좁고 특정적이라
+     * "모르면 뺀다"로 두면 <b>64인 것을 아는 종목은 넣으면서 아무것도 모르는 종목은 빼는</b>
+     * 비일관이 된다. 업종이 비어 있는 종목이 프리셋을 통과하지는 않는다 — 업종 상대 조건이
+     * 그 종목에 값을 내지 않아 판정불가로 먼저 걸린다(ADR-0044).
+     */
+    private static final Set<String> INAPPLICABLE_DIVISIONS = Set.of("65", "66");
+
     private static final BigDecimal W_WORKING_CAPITAL = new BigDecimal("1.2");
     private static final BigDecimal W_RETAINED_EARNINGS = new BigDecimal("1.4");
     private static final BigDecimal W_EBIT = new BigDecimal("3.3");
@@ -87,6 +107,15 @@ public class AltmanZCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        String division = context.industryDivision();
+        // null 검사를 밖에 두는 것이 의도다. Set.of(...)는 contains(null)에 NPE를 던지므로
+        // 업종 미상을 어떻게 다룰지가 여기서 반드시 드러난다 — 조용히 제외되지 않는다.
+        if (division != null && INAPPLICABLE_DIVISIONS.contains(division)) {
+            // 값을 낼 수 없는 것이 아니라 내면 안 되는 것이다. 보험사의 Z는 계산은 되지만
+            // 뜻이 없고, 뜻 없는 값이 필수 조건을 통과하는 것이 이 지표의 가장 큰 위험이다.
+            return List.of();
+        }
+
         List<FinancialFigures> quarters = context.quarterlyFigures();
         if (quarters.isEmpty()) {
             return List.of();

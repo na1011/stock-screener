@@ -374,6 +374,42 @@ class SwingIndicatorsTest {
                     1L, List.of(bar), List.of(), balanceSheetQuarters(),
                     Map.of(MarketCapCalculator.CODE, new TreeMap<>())))).isEmpty();
         }
+
+        @Test
+        @DisplayName("보험·금융서비스는 계산되더라도 값을 내지 않는다 — 뜻 없는 값이 필수 조건을 통과한다")
+        void refusesInsuranceAndFinancialServices() {
+            // 위 combinesFiveTerms와 재무가 같다. 즉 값이 안 나오는 이유는 데이터 결손이
+            // 아니라 정의역이며, 그것이 부작용과 명시 제외의 차이다.
+            for (String division : List.of("65", "66")) {
+                assertThat(calculator.calculate(inDivision(division, bd(800))))
+                        .as("중분류 %s는 Altman Z의 정의역 밖이다", division)
+                        .isEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("64(금융업)와 업종 미상은 제외하지 않는다 — 지주회사를 코드로 가를 수 없다")
+        void keepsHoldingCompaniesAndUnknownIndustry() {
+            // 64992에 금융지주와 사업지주가 함께 있어, 64를 자르면 적용 가능한 종목이 함께
+            // 사라진다(ADR-0044). 업종 미상도 같은 이유로 남긴다 — 아는 64는 넣으면서
+            // 모르는 것만 빼면 비일관이다.
+            assertThat(calculator.calculate(inDivision("64", bd(800)))).hasSize(1);
+            assertThat(calculator.calculate(inDivision(null, bd(800)))).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("IMPORTANT — 의존 지표를 거치는 재조립 경로에서도 업종이 전달된다")
+        void industrySurvivesDependencyReassembly() {
+            // AltmanZ는 MARKET_CAP에 의존하므로 러너가 컨텍스트를 반드시 다시 만든다.
+            // 거기서 업종이 빠지면 제외가 통째로 무효가 되는데 아무 에러도 나지 않는다.
+            NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
+            cap.put(START, bd(800));
+            IndicatorContext reassembled = inDivision("65", bd(800))
+                    .withDependencies(Map.of(MarketCapCalculator.CODE, cap));
+
+            assertThat(reassembled.industryDivision()).isEqualTo("65");
+            assertThat(calculator.calculate(reassembled)).isEmpty();
+        }
     }
 
     @Nested
@@ -461,11 +497,16 @@ class SwingIndicatorsTest {
     }
 
     private static IndicatorContext balanceSheetContext(BigDecimal marketCap) {
+        return inDivision(null, marketCap);
+    }
+
+    /** {@link #balanceSheetContext}와 재무가 같고 업종만 다르다. 값 차이의 원인을 업종으로 못박는다. */
+    private static IndicatorContext inDivision(String industryDivision, BigDecimal marketCap) {
         PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
         NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
         cap.put(START, marketCap);
-        return new IndicatorContext(1L, List.of(bar), List.of(), balanceSheetQuarters(),
-                Map.of(MarketCapCalculator.CODE, cap));
+        return new IndicatorContext(1L, industryDivision, List.of(bar), List.of(),
+                balanceSheetQuarters(), Map.of(MarketCapCalculator.CODE, cap));
     }
 
     private static IndicatorContext financialContext(List<FinancialFigures> quarterly,
