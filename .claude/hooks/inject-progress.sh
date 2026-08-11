@@ -50,6 +50,19 @@ if [ -r "${hooks_dir}/lib/load-process.sh" ]; then
   fi
 fi
 
+# --- 세션 간 배턴 -------------------------------------------------------------
+# `HANDOFF.md`는 `.git/info/exclude`에 있어 **`git status`에 나타나지 않는다.** 저장소에
+# 놓여 있는데 어느 도구도 그것을 보여주지 않으므로, 이 훅이 알리지 않으면 다음 세션은
+# 존재 자체를 모른 채 시작한다 — 배턴을 놓치는 유일한 실패 경로가 그것이다.
+#
+# 파일이 있을 때만 뜬다. 지우면 이 안내도 함께 사라지므로 **낡은 포인터가 남지 않는다.**
+handoff_note=""
+if [ -f "HANDOFF.md" ]; then
+  handoff_note="**루트에 \`HANDOFF.md\`가 있다 — 이전 세션이 남긴 배턴이다. 아래 진행 상태보다 먼저 읽어라.** \`git status\`에는 나타나지 않는다(로컬 exclude). **커밋하지 않는다.** 다 쓴 뒤 지우는 조건은 그 파일의 \"닫는 법\"에 있다.
+
+"
+fi
+
 progress="docs/progress.md"
 [ -f "$progress" ] || bail "$progress 파일이 없다."
 
@@ -61,6 +74,7 @@ content=$(cat "$progress" 2>/dev/null) || bail "$progress를 읽지 못했다."
 if ! command -v jq >/dev/null 2>&1; then
   echo "jq가 없어 구조화 주입을 건너뛴다. 아래가 docs/progress.md 원문이다."
   echo
+  [ -n "$handoff_note" ] && printf '%s' "$handoff_note"
   [ -n "$load_note" ] && printf '%s' "$load_note"
   echo "$content"
   exit 0
@@ -80,7 +94,7 @@ IMPORTANT: docs/progress.md가 길어 위 내용은 앞부분만 주입되었다
 그리고 이 파일을 한 페이지로 줄여라 — 길어지면 주입이 잘리고 신호가 묻힌다."
 fi
 
-jq -n --arg ctx "${load_note}다음은 이 프로젝트의 현재 진행 상태다 (\`docs/progress.md\`). 작업을 시작하기 전에 이것을 기준으로 삼아라.
+jq -n --arg ctx "${handoff_note}${load_note}다음은 이 프로젝트의 현재 진행 상태다 (\`docs/progress.md\`). 작업을 시작하기 전에 이것을 기준으로 삼아라.
 
 ${content}${truncated}" \
   '{
