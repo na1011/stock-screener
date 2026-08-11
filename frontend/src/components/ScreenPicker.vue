@@ -38,6 +38,18 @@ onMounted(() => {
   void screens.ensureLoaded()
 })
 
+/**
+ * IMPORTANT — 결과를 보고 **되돌린다.** `openByKey`를 `@update:model-value`에 바로 물리면
+ * 실패하거나 사용자가 확인을 취소했을 때 **셀렉트에는 새 이름이 뜨는데 실제로 열린 것은 옛
+ * 전략**이 된다. 화면이 사실과 다른 것을 말하는 상태이고, 되돌릴 단서도 없다.
+ */
+async function pick(key: number | string | null): Promise<void> {
+  const previous = selected.value
+  selected.value = key
+  if (!(await openByKey(key))) {
+    selected.value = previous
+  }
+}
 </script>
 
 <template>
@@ -48,8 +60,9 @@ onMounted(() => {
     panel="screens"
     :skeleton-rows="1"
   >
+    <!-- `v-model`이 아닌 이유: 그러면 셀렉트가 먼저 갱신되어 `pick`이 옛 값을 잡지 못한다. -->
     <Select
-      v-model="selected"
+      :model-value="selected"
       :options="options"
       option-group-label="label"
       option-group-children="items"
@@ -60,7 +73,7 @@ onMounted(() => {
       fluid
       :loading="loading"
       class="screen-picker"
-      @update:model-value="openByKey"
+      @update:model-value="pick"
     />
   </AsyncPanel>
 </template>

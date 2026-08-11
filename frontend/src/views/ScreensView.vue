@@ -23,8 +23,15 @@ import { useScreensStore } from '@/stores/screens'
 const screens = useScreensStore()
 const confirm = useConfirm()
 const { notifyFailure, notifySuccess } = useApiToast()
-const { openByKey } = useScreenOpener()
+const { openByKey, loading: opening } = useScreenOpener()
 
+/**
+ * 방금 누른 행. **진행 중**이라는 뜻이 아니다.
+ *
+ * 불러오기는 그 사이에 확인 대화상자가 낄 수 있어(`useScreenOpener`), 이것만으로 스피너를
+ * 돌리면 사용자가 답하기를 기다리는 내내 행이 도는 것으로 보인다. 그래서 불러오기 버튼은
+ * `opening`과 함께 본다 — 어느 행인지는 여기가, 실제로 도는지는 opener가 안다.
+ */
 const busyId = ref<number | null>(null)
 
 onMounted(() => {
@@ -118,7 +125,7 @@ async function remove(id: number, name: string): Promise<void> {
                 icon="pi pi-download"
                 size="small"
                 outlined
-                :loading="busyId === screen.id"
+                :loading="opening && busyId === screen.id"
                 @click="load(screen)"
               />
             </div>
@@ -149,7 +156,7 @@ async function remove(id: number, name: string): Promise<void> {
                 icon="pi pi-download"
                 size="small"
                 outlined
-                :loading="busyId === screen.id"
+                :loading="opening && busyId === screen.id"
                 @click="load(screen)"
               />
               <Button
