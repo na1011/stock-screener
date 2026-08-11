@@ -7,6 +7,7 @@ import { RouterLink } from 'vue-router'
 
 import type { WatchlistItem } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
+import AppViewHeader from '@/components/ui/AppViewHeader.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useApiToast } from '@/composables/useApiToast'
 import { useBreakpoint } from '@/composables/useBreakpoint'
@@ -68,121 +69,141 @@ async function remove(item: WatchlistItem): Promise<void> {
 </script>
 
 <template>
-  <section class="watchlist">
-    <h1 class="watchlist__title">관심종목</h1>
-    <p class="watchlist__notice">{{ EDGE_TRIGGER_NOTICE }}</p>
-
-    <AsyncPanel
-      :state="watchlist.state"
-      :error="watchlist.error"
-      :retry="watchlist.retry"
-      panel="watchlist"
-      :skeleton-rows="4"
-    >
-      <p v-if="rows.length === 0" class="watchlist__empty">
-        담아 둔 종목이 없습니다. 종목 상세에서 <strong>관심종목</strong>을 누르면 여기 쌓입니다.
-      </p>
-
-      <template v-else>
-        <SectionHeading title="추적 중" :count="rows.length" />
-
-        <!-- 좁은 화면: 카드. 한 종목씩 훑는 데 맞춘다. -->
-        <ul v-if="isMobile" class="watchlist__cards">
-          <li v-for="row in rows" :key="row.item.id" class="watch-card">
-            <div class="watch-card__head">
-              <RouterLink :to="`/stocks/${row.item.stockId}`" class="watch-card__name">
-                {{ row.item.stockName }}
-              </RouterLink>
-              <Tag
-                :value="row.presentation.label"
-                :severity="row.presentation.severity"
-                :icon="row.presentation.icon"
-              />
-            </div>
-            <p class="watch-card__meta">
-              {{ row.item.ticker }} · {{ row.item.marketCode }}
-            </p>
-            <p class="watch-card__condition">
-              알림 조건: {{ row.item.screenName ?? '없음' }}
-            </p>
-            <p v-if="row.item.memo" class="watch-card__memo">{{ row.item.memo }}</p>
-            <div class="watch-card__actions">
-              <Button
-                icon="pi pi-trash"
-                severity="danger"
-                text
-                size="small"
-                :aria-label="`${row.item.stockName} 관심종목 해제`"
-                :loading="busyId === row.item.id"
-                @click="confirmRemove(row.item)"
-              />
-            </div>
-          </li>
-        </ul>
-
-        <!-- 넓은 화면: 표. 여러 종목의 상태를 한눈에 견준다. -->
-        <div v-else class="watchlist__table-wrap">
-          <table class="watchlist__table">
-            <thead>
-              <tr>
-                <th scope="col">종목</th>
-                <th scope="col">알림 조건</th>
-                <th scope="col">상태</th>
-                <th scope="col">마지막 알림</th>
-                <th scope="col">메모</th>
-                <th scope="col"><span class="sr-only">동작</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in rows" :key="row.item.id">
-                <td>
-                  <RouterLink :to="`/stocks/${row.item.stockId}`" class="watchlist__link">
-                    {{ row.item.stockName }}
-                  </RouterLink>
-                  <span class="watchlist__ticker">{{ row.item.ticker }}</span>
-                </td>
-                <td>{{ row.item.screenName ?? '없음' }}</td>
-                <td>
-                  <Tag
-                    :value="row.presentation.label"
-                    :severity="row.presentation.severity"
-                    :icon="row.presentation.icon"
-                  />
-                </td>
-                <!-- 알린 적이 없으면 '—'다. 빈 칸으로 두면 값이 안 온 것과 구분되지 않는다. -->
-                <td>{{ row.item.notifiedAt ? formatDate(row.item.notifiedAt.slice(0, 10)) : '—' }}</td>
-                <td class="watchlist__memo">{{ row.item.memo ?? '' }}</td>
-                <td>
-                  <Button
-                    icon="pi pi-trash"
-                    severity="danger"
-                    text
-                    size="small"
-                    :aria-label="`${row.item.stockName} 관심종목 해제`"
-                    :loading="busyId === row.item.id"
-                    @click="confirmRemove(row.item)"
-                  />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+  <div class="watchlist">
+    <AppViewHeader>
+      <template #title>
+        <h1 class="watchlist__title">관심종목</h1>
       </template>
-    </AsyncPanel>
-  </section>
+    </AppViewHeader>
+
+    <div class="watchlist__body">
+      <!-- 공지는 크롬이 아니라 본문이다. 알림이 언제 오는지는 이 화면을 읽는 사람이
+           알아야 할 내용이지, 화면의 정체를 말하는 머리글이 아니다. -->
+      <p class="watchlist__notice">{{ EDGE_TRIGGER_NOTICE }}</p>
+
+      <AsyncPanel
+        :state="watchlist.state"
+        :error="watchlist.error"
+        :retry="watchlist.retry"
+        panel="watchlist"
+        :skeleton-rows="4"
+      >
+        <p v-if="rows.length === 0" class="watchlist__empty">
+          담아 둔 종목이 없습니다. 종목 상세에서 <strong>관심종목</strong>을 누르면 여기 쌓입니다.
+        </p>
+
+        <template v-else>
+          <SectionHeading title="추적 중" :count="rows.length" />
+
+          <!-- 좁은 화면: 카드. 한 종목씩 훑는 데 맞춘다. -->
+          <ul v-if="isMobile" class="watchlist__cards">
+            <li v-for="row in rows" :key="row.item.id" class="watch-card">
+              <div class="watch-card__head">
+                <RouterLink :to="`/stocks/${row.item.stockId}`" class="watch-card__name">
+                  {{ row.item.stockName }}
+                </RouterLink>
+                <Tag
+                  :value="row.presentation.label"
+                  :severity="row.presentation.severity"
+                  :icon="row.presentation.icon"
+                />
+              </div>
+              <p class="watch-card__meta">
+                {{ row.item.ticker }} · {{ row.item.marketCode }}
+              </p>
+              <p class="watch-card__condition">
+                알림 조건: {{ row.item.screenName ?? '없음' }}
+              </p>
+              <p v-if="row.item.memo" class="watch-card__memo">{{ row.item.memo }}</p>
+              <div class="watch-card__actions">
+                <Button
+                  icon="pi pi-trash"
+                  severity="danger"
+                  text
+                  size="small"
+                  :aria-label="`${row.item.stockName} 관심종목 해제`"
+                  :loading="busyId === row.item.id"
+                  @click="confirmRemove(row.item)"
+                />
+              </div>
+            </li>
+          </ul>
+
+          <!-- 넓은 화면: 표. 여러 종목의 상태를 한눈에 견준다. -->
+          <div v-else class="watchlist__table-wrap">
+            <table class="watchlist__table">
+              <thead>
+                <tr>
+                  <th scope="col">종목</th>
+                  <th scope="col">알림 조건</th>
+                  <th scope="col">상태</th>
+                  <th scope="col">마지막 알림</th>
+                  <th scope="col">메모</th>
+                  <th scope="col"><span class="sr-only">동작</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in rows" :key="row.item.id">
+                  <td>
+                    <RouterLink :to="`/stocks/${row.item.stockId}`" class="watchlist__link">
+                      {{ row.item.stockName }}
+                    </RouterLink>
+                    <span class="watchlist__ticker">{{ row.item.ticker }}</span>
+                  </td>
+                  <td>{{ row.item.screenName ?? '없음' }}</td>
+                  <td>
+                    <Tag
+                      :value="row.presentation.label"
+                      :severity="row.presentation.severity"
+                      :icon="row.presentation.icon"
+                    />
+                  </td>
+                  <!-- 알린 적이 없으면 '—'다. 빈 칸으로 두면 값이 안 온 것과 구분되지 않는다. -->
+                  <td>{{ row.item.notifiedAt ? formatDate(row.item.notifiedAt.slice(0, 10)) : '—' }}</td>
+                  <td class="watchlist__memo">{{ row.item.memo ?? '' }}</td>
+                  <td>
+                    <Button
+                      icon="pi pi-trash"
+                      severity="danger"
+                      text
+                      size="small"
+                      :aria-label="`${row.item.stockName} 관심종목 해제`"
+                      :loading="busyId === row.item.id"
+                      @click="confirmRemove(row.item)"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </AsyncPanel>
+    </div>
+  </div>
 </template>
 
 <style scoped>
+/*
+ * 루트는 전폭이다. 머리 띠가 좌측 레일의 선과 이어지려면 그 띠를 감싸는 것이
+ * 폭에 묶이면 안 된다. 폭은 여기서 **선언만** 하고, 그것을 받는 것은 띠 안쪽
+ * (`AppViewHeader`가 `--app-view-width`로 읽는다)과 아래 본문이다.
+ */
 .watchlist {
-  max-width: 72rem;
+  --app-view-width: 72rem;
+}
+
+.watchlist__body {
+  max-width: var(--app-view-width);
   margin: 0 auto;
   padding: 1.5rem var(--app-gutter) 3rem;
 }
 
+/* 레일의 브랜드·다른 화면 제목과 같은 크기다. 아래 여백은 띠가 갖는다. */
 .watchlist__title {
+  margin: 0;
   font-size: var(--app-text-xl);
-  letter-spacing: -0.01em;
-  margin: 0 0 0.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .watchlist__notice,

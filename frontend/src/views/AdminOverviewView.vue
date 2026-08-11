@@ -257,279 +257,289 @@ function formatTime(value: string | null): string {
 </script>
 
 <template>
-  <section class="admin">
+  <div class="admin">
     <AdminNav />
 
-    <!-- 운영 현황 요약 (spec §4의 첫 항목) -->
-    <AsyncPanel
-      :state="admin.summaryState"
-      :error="admin.summaryError"
-      :retry="admin.retrySummary"
-      panel="batchSummary"
-      :skeleton-rows="2"
-    >
-      <div v-if="admin.summary" class="admin__summary">
-        <!--
-          미해결 에러 건수를 가장 크게 둔다. 이 화면에서 조치가 필요한지를 한 눈에 답하는
-          숫자가 이것 하나이기 때문이다. 0이면 강조를 걷어 평상시 화면이 조용하게 만든다.
-        -->
-        <article class="stat" :class="{ 'stat--alert': admin.summary.unresolvedFailureCount > 0 }">
-          <span class="stat__label">미해결 실패</span>
-          <strong class="stat__value tabular">{{ admin.summary.unresolvedFailureCount }}</strong>
-          <span class="stat__unit">건</span>
-        </article>
-
-        <article
-          v-for="execution in admin.summary.latestByJob"
-          :key="execution.jobName"
-          class="stat stat--job"
-        >
-          <span class="stat__label">{{ execution.jobName }}</span>
-          <Tag
-            :value="batchStatusStyle(execution.status).label"
-            :severity="batchStatusStyle(execution.status).severity"
-            v-tooltip.bottom="batchStatusStyle(execution.status).tooltip"
-          />
-          <span class="stat__meta tabular">{{ execution.targetDate }}</span>
-        </article>
-
-        <p v-if="admin.summary.latestByJob.length === 0" class="admin__empty">
-          아직 실행된 배치가 없습니다.
-        </p>
-      </div>
-    </AsyncPanel>
-
-    <!-- 수동 기동 -->
-    <SectionHeading title="배치 실행" />
-    <AsyncPanel
-      :state="admin.batchesState"
-      :error="admin.batchesError"
-      :retry="admin.retryBatchList"
-      panel="batches"
-      :skeleton-rows="3"
-    >
-      <ul class="jobs">
-        <li v-for="job in admin.jobs" :key="job.name" class="job">
-          <div class="job__body">
-            <div class="job__title">
-              <strong>{{ job.label }}</strong>
-              <Tag v-if="job.running" value="실행 중" severity="info" />
-            </div>
-            <p class="job__description">{{ job.description }}</p>
-            <!--
-              누르면 쿼터가 나간다. 그 사실이 버튼 옆에 있어야 한다 — 값은 서버가 준다.
-            -->
-            <p class="job__cost">
-              {{
-                job.externalCallEstimate > 0
-                  ? `외부 API 약 ${job.externalCallEstimate}회`
-                  : '외부 API 호출 없음'
-              }}
-            </p>
-          </div>
-          <div class="job__controls">
-            <DatePicker
-              v-if="job.parameters === 'TARGET_DATE'"
-              v-model="dateState(job.name).targetDate"
-              date-format="yy-mm-dd"
-              placeholder="대상 일자(기본값)"
-              show-icon
-              icon-display="input"
-              size="small"
-            />
-            <template v-else>
-              <DatePicker
-                v-model="dateState(job.name).from"
-                date-format="yy-mm-dd"
-                placeholder="시작"
-                size="small"
-              />
-              <DatePicker
-                v-model="dateState(job.name).to"
-                date-format="yy-mm-dd"
-                placeholder="종료"
-                size="small"
-              />
-            </template>
-            <Button
-              label="실행"
-              icon="pi pi-play"
-              size="small"
-              :disabled="job.running"
-              :loading="runningJobName === job.name"
-              @click="confirmRun(job)"
-            />
-          </div>
-        </li>
-      </ul>
-
-      <!-- 실행 이력 -->
-      <SectionHeading title="실행 이력" :count="admin.batches.length" />
-      <div class="filters">
-        <DatePicker
-          v-model="filterFrom"
-          date-format="yy-mm-dd"
-          placeholder="시작 일자"
-          size="small"
-          @date-select="applyFilter"
-        />
-        <DatePicker
-          v-model="filterTo"
-          date-format="yy-mm-dd"
-          placeholder="종료 일자"
-          size="small"
-          @date-select="applyFilter"
-        />
-        <Select
-          v-model="admin.batchFilter.jobName"
-          :options="jobOptions"
-          option-label="label"
-          option-value="value"
-          placeholder="잡 전체"
-          show-clear
-          size="small"
-          @change="applyFilter"
-        />
-        <Select
-          v-model="admin.batchFilter.status"
-          :options="statusOptions"
-          option-label="label"
-          option-value="value"
-          placeholder="상태 전체"
-          show-clear
-          size="small"
-          @change="applyFilter"
-        />
-        <Button label="새로 고침" icon="pi pi-refresh" size="small" outlined @click="applyFilter" />
-      </div>
-
-      <!--
-        배경 갱신이 연속으로 실패하면 한 번만 말하고 멈춘다. 5초마다 토스트를 띄우면 그것이
-        곧 화면을 덮고, 덮이는 것은 마침 지켜보려던 진행률이다.
-      -->
-      <Message v-if="autoRefreshStopped" severity="warn" :closable="false" class="admin__stopped">
-        자동 갱신이 멈췄습니다. 서버에 연결하지 못했습니다.
-        <Button label="다시 시작" size="small" text @click="void resumeAutoRefresh()" />
-      </Message>
-
-      <DataTable
-        v-model:expanded-rows="expandedRows"
-        :value="admin.batches"
-        size="small"
-        data-key="id"
-        class="admin__table"
-        @row-expand="onRowExpand"
-        @row-collapse="onRowCollapse"
+    <div class="admin__body">
+      <!-- 운영 현황 요약 (spec §4의 첫 항목) -->
+      <AsyncPanel
+        :state="admin.summaryState"
+        :error="admin.summaryError"
+        :retry="admin.retrySummary"
+        panel="batchSummary"
+        :skeleton-rows="2"
       >
-        <template #empty>
-          <p class="admin__empty">조건에 맞는 실행 이력이 없습니다.</p>
-        </template>
+        <div v-if="admin.summary" class="admin__summary">
+          <!--
+            미해결 에러 건수를 가장 크게 둔다. 이 화면에서 조치가 필요한지를 한 눈에 답하는
+            숫자가 이것 하나이기 때문이다. 0이면 강조를 걷어 평상시 화면이 조용하게 만든다.
+          -->
+          <article class="stat" :class="{ 'stat--alert': admin.summary.unresolvedFailureCount > 0 }">
+            <span class="stat__label">미해결 실패</span>
+            <strong class="stat__value tabular">{{ admin.summary.unresolvedFailureCount }}</strong>
+            <span class="stat__unit">건</span>
+          </article>
 
-        <!--
-          화면 아래 단일 슬롯이 아니라 행 확장이다. 표 밖에서 열리면 켜졌는지 확인하기 어렵고,
-          두 실행을 나란히 비교할 수도 없다.
-        -->
-        <Column expander style="width: 3rem" />
-        <!--
-          실행 id다. 화면에 붙이는 순번이 아닌 이유는 그것이 답해야 할 질문이 "위에서 몇
-          번째인가"가 아니라 "이게 #26인가"이기 때문이다 — 순번은 필터를 바꾸면 같은 실행이
-          다른 번호가 되고, 알림·로그·DB가 부르는 이름과도 어긋난다. `#26 재실행` 표기와 같은 값이다.
-        -->
-        <Column header="실행" style="width: 5rem">
-          <template #body="{ data }: { data: BatchExecution }">
-            <span class="tabular admin__id">#{{ data.id }}</span>
-          </template>
-        </Column>
-        <Column field="targetDate" header="대상 일자" />
-        <Column field="jobName" header="잡" />
-        <Column header="상태">
-          <template #body="{ data }: { data: BatchExecution }">
+          <article
+            v-for="execution in admin.summary.latestByJob"
+            :key="execution.jobName"
+            class="stat stat--job"
+          >
+            <span class="stat__label">{{ execution.jobName }}</span>
             <Tag
-              :value="batchStatusStyle(data.status).label"
-              :severity="batchStatusStyle(data.status).severity"
-              v-tooltip.bottom="batchStatusStyle(data.status).tooltip"
+              :value="batchStatusStyle(execution.status).label"
+              :severity="batchStatusStyle(execution.status).severity"
+              v-tooltip.bottom="batchStatusStyle(execution.status).tooltip"
             />
-            <!-- RUNNING만으로는 도는 것과 죽어서 행만 남은 것이 구분되지 않는다. -->
-            <Tag
-              v-if="isStalled(data, now)"
-              value="정체"
-              severity="warn"
-              v-tooltip.bottom="'1분 넘게 진척이 없다. 프로세스가 내려갔을 수 있다.'"
-              class="admin__stalled"
-            />
-            <!-- 재실행은 원래 실행과 연결되어 남는다. 없으면 "또 실패"가 안 보인다. -->
-            <span v-if="data.retriedFromId !== null" class="admin__retry-of">
-              #{{ data.retriedFromId }} 재실행
-            </span>
-          </template>
-        </Column>
-        <Column header="진행">
-          <template #body="{ data }: { data: BatchExecution }">
-            <!--
-              분모는 대상 종목 수가 아니라 계획된 작업 단위 수다. 종목 수로 나누던 시절에
-              지표 백필이 43400/350으로 보였다(ADR-0037).
-            -->
-            <span class="tabular">
-              {{ formatCount(processedTasks(data)) }}
-              <template v-if="data.plannedTaskCount !== null">
-                / {{ formatCount(data.plannedTaskCount) }}
+            <span class="stat__meta tabular">{{ execution.targetDate }}</span>
+          </article>
+
+          <p v-if="admin.summary.latestByJob.length === 0" class="admin__empty">
+            아직 실행된 배치가 없습니다.
+          </p>
+        </div>
+      </AsyncPanel>
+
+      <!-- 수동 기동 -->
+      <SectionHeading title="배치 실행" />
+      <AsyncPanel
+        :state="admin.batchesState"
+        :error="admin.batchesError"
+        :retry="admin.retryBatchList"
+        panel="batches"
+        :skeleton-rows="3"
+      >
+        <ul class="jobs">
+          <li v-for="job in admin.jobs" :key="job.name" class="job">
+            <div class="job__body">
+              <div class="job__title">
+                <strong>{{ job.label }}</strong>
+                <Tag v-if="job.running" value="실행 중" severity="info" />
+              </div>
+              <p class="job__description">{{ job.description }}</p>
+              <!--
+                누르면 쿼터가 나간다. 그 사실이 버튼 옆에 있어야 한다 — 값은 서버가 준다.
+              -->
+              <p class="job__cost">
+                {{
+                  job.externalCallEstimate > 0
+                    ? `외부 API 약 ${job.externalCallEstimate}회`
+                    : '외부 API 호출 없음'
+                }}
+              </p>
+            </div>
+            <div class="job__controls">
+              <DatePicker
+                v-if="job.parameters === 'TARGET_DATE'"
+                v-model="dateState(job.name).targetDate"
+                date-format="yy-mm-dd"
+                placeholder="대상 일자(기본값)"
+                show-icon
+                icon-display="input"
+                size="small"
+              />
+              <template v-else>
+                <DatePicker
+                  v-model="dateState(job.name).from"
+                  date-format="yy-mm-dd"
+                  placeholder="시작"
+                  size="small"
+                />
+                <DatePicker
+                  v-model="dateState(job.name).to"
+                  date-format="yy-mm-dd"
+                  placeholder="종료"
+                  size="small"
+                />
               </template>
-            </span>
-            <span
-              v-if="data.plannedTaskCount === null"
-              class="admin__unmeasured"
-              v-tooltip.bottom="'계획 수가 기록되기 전의 실행이다'"
-            >
-              계획 미기록
-            </span>
-            <span v-if="data.failureCount > 0" class="admin__failed tabular">
-              실패 {{ formatCount(data.failureCount) }}
-            </span>
-            <RatioBar
-              :value="progressRatio(data)"
-              :aria-label="`진행 ${formatCount(processedTasks(data))}건`"
-              class="admin__progress"
-            />
-            <span v-if="data.stageLabel !== null" class="admin__stage">{{ data.stageLabel }}</span>
-          </template>
-        </Column>
-        <Column header="시작">
-          <template #body="{ data }: { data: BatchExecution }">
-            <span class="tabular">{{ formatTime(data.startedAt) }}</span>
-          </template>
-        </Column>
-        <Column header="소요">
-          <template #body="{ data }: { data: BatchExecution }">
-            <!-- 아직 안 끝났으면 —다. 0으로 그리면 즉시 끝난 것으로 읽힌다. -->
-            <span class="tabular">
-              {{ elapsedSeconds(data) === null ? '—' : `${elapsedSeconds(data)}초` }}
-            </span>
-          </template>
-        </Column>
-        <Column header="실행 주체">
-          <template #body="{ data }: { data: BatchExecution }">
-            {{ triggeredByLabel(data.triggeredBy) }}
-          </template>
-        </Column>
+              <Button
+                label="실행"
+                icon="pi pi-play"
+                size="small"
+                :disabled="job.running"
+                :loading="runningJobName === job.name"
+                @click="confirmRun(job)"
+              />
+            </div>
+          </li>
+        </ul>
 
-        <template #expansion="{ data }: { data: BatchExecution }">
-          <BatchDetailSheet
-            :detail="details[data.id] ?? null"
-            :loading="detailBusy[data.id] === true"
-            :error-message="detailError[data.id] ?? null"
-            :now="now"
-            @retry="confirmRetry(details[data.id]!)"
-            @reload="void loadDetail(data.id)"
+        <!-- 실행 이력 -->
+        <SectionHeading title="실행 이력" :count="admin.batches.length" />
+        <div class="filters">
+          <DatePicker
+            v-model="filterFrom"
+            date-format="yy-mm-dd"
+            placeholder="시작 일자"
+            size="small"
+            @date-select="applyFilter"
           />
-        </template>
-      </DataTable>
-    </AsyncPanel>
-  </section>
+          <DatePicker
+            v-model="filterTo"
+            date-format="yy-mm-dd"
+            placeholder="종료 일자"
+            size="small"
+            @date-select="applyFilter"
+          />
+          <Select
+            v-model="admin.batchFilter.jobName"
+            :options="jobOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="잡 전체"
+            show-clear
+            size="small"
+            @change="applyFilter"
+          />
+          <Select
+            v-model="admin.batchFilter.status"
+            :options="statusOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="상태 전체"
+            show-clear
+            size="small"
+            @change="applyFilter"
+          />
+          <Button label="새로 고침" icon="pi pi-refresh" size="small" outlined @click="applyFilter" />
+        </div>
+
+        <!--
+          배경 갱신이 연속으로 실패하면 한 번만 말하고 멈춘다. 5초마다 토스트를 띄우면 그것이
+          곧 화면을 덮고, 덮이는 것은 마침 지켜보려던 진행률이다.
+        -->
+        <Message v-if="autoRefreshStopped" severity="warn" :closable="false" class="admin__stopped">
+          자동 갱신이 멈췄습니다. 서버에 연결하지 못했습니다.
+          <Button label="다시 시작" size="small" text @click="void resumeAutoRefresh()" />
+        </Message>
+
+        <DataTable
+          v-model:expanded-rows="expandedRows"
+          :value="admin.batches"
+          size="small"
+          data-key="id"
+          class="admin__table"
+          @row-expand="onRowExpand"
+          @row-collapse="onRowCollapse"
+        >
+          <template #empty>
+            <p class="admin__empty">조건에 맞는 실행 이력이 없습니다.</p>
+          </template>
+
+          <!--
+            화면 아래 단일 슬롯이 아니라 행 확장이다. 표 밖에서 열리면 켜졌는지 확인하기 어렵고,
+            두 실행을 나란히 비교할 수도 없다.
+          -->
+          <Column expander style="width: 3rem" />
+          <!--
+            실행 id다. 화면에 붙이는 순번이 아닌 이유는 그것이 답해야 할 질문이 "위에서 몇
+            번째인가"가 아니라 "이게 #26인가"이기 때문이다 — 순번은 필터를 바꾸면 같은 실행이
+            다른 번호가 되고, 알림·로그·DB가 부르는 이름과도 어긋난다. `#26 재실행` 표기와 같은 값이다.
+          -->
+          <Column header="실행" style="width: 5rem">
+            <template #body="{ data }: { data: BatchExecution }">
+              <span class="tabular admin__id">#{{ data.id }}</span>
+            </template>
+          </Column>
+          <Column field="targetDate" header="대상 일자" />
+          <Column field="jobName" header="잡" />
+          <Column header="상태">
+            <template #body="{ data }: { data: BatchExecution }">
+              <Tag
+                :value="batchStatusStyle(data.status).label"
+                :severity="batchStatusStyle(data.status).severity"
+                v-tooltip.bottom="batchStatusStyle(data.status).tooltip"
+              />
+              <!-- RUNNING만으로는 도는 것과 죽어서 행만 남은 것이 구분되지 않는다. -->
+              <Tag
+                v-if="isStalled(data, now)"
+                value="정체"
+                severity="warn"
+                v-tooltip.bottom="'1분 넘게 진척이 없다. 프로세스가 내려갔을 수 있다.'"
+                class="admin__stalled"
+              />
+              <!-- 재실행은 원래 실행과 연결되어 남는다. 없으면 "또 실패"가 안 보인다. -->
+              <span v-if="data.retriedFromId !== null" class="admin__retry-of">
+                #{{ data.retriedFromId }} 재실행
+              </span>
+            </template>
+          </Column>
+          <Column header="진행">
+            <template #body="{ data }: { data: BatchExecution }">
+              <!--
+                분모는 대상 종목 수가 아니라 계획된 작업 단위 수다. 종목 수로 나누던 시절에
+                지표 백필이 43400/350으로 보였다(ADR-0037).
+              -->
+              <span class="tabular">
+                {{ formatCount(processedTasks(data)) }}
+                <template v-if="data.plannedTaskCount !== null">
+                  / {{ formatCount(data.plannedTaskCount) }}
+                </template>
+              </span>
+              <span
+                v-if="data.plannedTaskCount === null"
+                class="admin__unmeasured"
+                v-tooltip.bottom="'계획 수가 기록되기 전의 실행이다'"
+              >
+                계획 미기록
+              </span>
+              <span v-if="data.failureCount > 0" class="admin__failed tabular">
+                실패 {{ formatCount(data.failureCount) }}
+              </span>
+              <RatioBar
+                :value="progressRatio(data)"
+                :aria-label="`진행 ${formatCount(processedTasks(data))}건`"
+                class="admin__progress"
+              />
+              <span v-if="data.stageLabel !== null" class="admin__stage">{{ data.stageLabel }}</span>
+            </template>
+          </Column>
+          <Column header="시작">
+            <template #body="{ data }: { data: BatchExecution }">
+              <span class="tabular">{{ formatTime(data.startedAt) }}</span>
+            </template>
+          </Column>
+          <Column header="소요">
+            <template #body="{ data }: { data: BatchExecution }">
+              <!-- 아직 안 끝났으면 —다. 0으로 그리면 즉시 끝난 것으로 읽힌다. -->
+              <span class="tabular">
+                {{ elapsedSeconds(data) === null ? '—' : `${elapsedSeconds(data)}초` }}
+              </span>
+            </template>
+          </Column>
+          <Column header="실행 주체">
+            <template #body="{ data }: { data: BatchExecution }">
+              {{ triggeredByLabel(data.triggeredBy) }}
+            </template>
+          </Column>
+
+          <template #expansion="{ data }: { data: BatchExecution }">
+            <BatchDetailSheet
+              :detail="details[data.id] ?? null"
+              :loading="detailBusy[data.id] === true"
+              :error-message="detailError[data.id] ?? null"
+              :now="now"
+              @retry="confirmRetry(details[data.id]!)"
+              @reload="void loadDetail(data.id)"
+            />
+          </template>
+        </DataTable>
+      </AsyncPanel>
+    </div>
+  </div>
 </template>
 
 <style scoped>
+/*
+ * 루트는 전폭이다 — 머리 띠가 좌측 레일의 선과 이어지려면 그것을 감싸는 것이 폭에
+ * 묶이면 안 된다. 폭은 여기서 선언만 하고, 띠 안쪽과 아래 본문이 그것을 받는다.
+ */
 .admin {
-  max-width: var(--app-reading-width);
+  --app-view-width: var(--app-reading-width);
+}
+
+.admin__body {
+  max-width: var(--app-view-width);
   margin: 0 auto;
   padding: 1.5rem var(--app-gutter) 3rem;
 }

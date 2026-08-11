@@ -129,112 +129,122 @@ function formatDate(value: string | null): string {
 </script>
 
 <template>
-  <section class="accounts">
+  <div class="accounts">
     <AdminNav />
 
-    <!--
-      권한 회수가 즉시 반영되지 않는다는 사실을 화면이 말해야 한다. app_user.is_admin이
-      로그인 시점의 사본이기 때문이고(ADR-0004), 모르면 "왜 아직 그대로인가"를 버그로 읽는다.
-    -->
-    <Message severity="secondary" :closable="false" class="accounts__note">
-      권한 변경은 그 사람의 <strong>다음 로그인부터</strong> 적용됩니다. 이미 로그인한 세션은
-      그대로 유지됩니다.
-    </Message>
+    <div class="accounts__body">
+      <!--
+        권한 회수가 즉시 반영되지 않는다는 사실을 화면이 말해야 한다. app_user.is_admin이
+        로그인 시점의 사본이기 때문이고(ADR-0004), 모르면 "왜 아직 그대로인가"를 버그로 읽는다.
+      -->
+      <Message severity="secondary" :closable="false" class="accounts__note">
+        권한 변경은 그 사람의 <strong>다음 로그인부터</strong> 적용됩니다. 이미 로그인한 세션은
+        그대로 유지됩니다.
+      </Message>
 
-    <SectionHeading title="계정 추가" />
-    <form class="accounts__form" @submit.prevent="add">
-      <FormField label="이메일" control-id="new-email" hint="Google 계정 주소를 그대로 넣습니다.">
-        <InputText
-          id="new-email"
-          v-model="newEmail"
-          type="email"
-          placeholder="friend@example.com"
-          autocomplete="off"
+      <SectionHeading title="계정 추가" />
+      <form class="accounts__form" @submit.prevent="add">
+        <FormField label="이메일" control-id="new-email" hint="Google 계정 주소를 그대로 넣습니다.">
+          <InputText
+            id="new-email"
+            v-model="newEmail"
+            type="email"
+            placeholder="friend@example.com"
+            autocomplete="off"
+          />
+        </FormField>
+        <FormField label="메모" control-id="new-note" hint="누구인지 나중에 알아볼 수 있게.">
+          <InputText
+            id="new-note"
+            v-model="newNote"
+            :maxlength="ALLOWED_EMAIL_NOTE_MAX_LENGTH"
+            placeholder="지인"
+          />
+        </FormField>
+        <div class="accounts__admin-toggle">
+          <ToggleSwitch v-model="newAdmin" input-id="new-admin" />
+          <label for="new-admin">관리자 권한</label>
+        </div>
+        <Button
+          type="submit"
+          label="추가"
+          icon="pi pi-plus"
+          size="small"
+          :loading="adding"
+          :disabled="newEmail.trim() === ''"
         />
-      </FormField>
-      <FormField label="메모" control-id="new-note" hint="누구인지 나중에 알아볼 수 있게.">
-        <InputText
-          id="new-note"
-          v-model="newNote"
-          :maxlength="ALLOWED_EMAIL_NOTE_MAX_LENGTH"
-          placeholder="지인"
-        />
-      </FormField>
-      <div class="accounts__admin-toggle">
-        <ToggleSwitch v-model="newAdmin" input-id="new-admin" />
-        <label for="new-admin">관리자 권한</label>
-      </div>
-      <Button
-        type="submit"
-        label="추가"
-        icon="pi pi-plus"
-        size="small"
-        :loading="adding"
-        :disabled="newEmail.trim() === ''"
-      />
-    </form>
+      </form>
 
-    <SectionHeading title="허용된 계정" :count="admin.accounts.length" />
-    <AsyncPanel
-      :state="admin.accountsState"
-      :error="admin.accountsError"
-      :retry="admin.retryAccounts"
-      panel="accounts"
-      :skeleton-rows="3"
-    >
-      <ul class="accounts__list">
-        <li v-for="account in admin.accounts" :key="account.id" class="account">
-          <div class="account__body">
-            <div class="account__title">
-              <strong>{{ account.email }}</strong>
-              <Tag v-if="account.admin" value="관리자" severity="info" />
-              <Tag v-if="account.email === auth.me?.email" value="나" severity="secondary" />
+      <SectionHeading title="허용된 계정" :count="admin.accounts.length" />
+      <AsyncPanel
+        :state="admin.accountsState"
+        :error="admin.accountsError"
+        :retry="admin.retryAccounts"
+        panel="accounts"
+        :skeleton-rows="3"
+      >
+        <ul class="accounts__list">
+          <li v-for="account in admin.accounts" :key="account.id" class="account">
+            <div class="account__body">
+              <div class="account__title">
+                <strong>{{ account.email }}</strong>
+                <Tag v-if="account.admin" value="관리자" severity="info" />
+                <Tag v-if="account.email === auth.me?.email" value="나" severity="secondary" />
+              </div>
+              <p class="account__meta">
+                <span v-if="account.note">{{ account.note }} · </span>
+                <!--
+                  아직 로그인하지 않은 사람이 있는 것이 정상 상태다(ADR-0004). 그 둘을 구분해야
+                  초대장을 다시 보낼 대상을 알 수 있다.
+                -->
+                <span v-if="account.lastLoginAt === null" class="account__pending">
+                  아직 로그인한 적 없음
+                </span>
+                <span v-else>마지막 로그인 {{ formatDate(account.lastLoginAt) }}</span>
+              </p>
             </div>
-            <p class="account__meta">
-              <span v-if="account.note">{{ account.note }} · </span>
-              <!--
-                아직 로그인하지 않은 사람이 있는 것이 정상 상태다(ADR-0004). 그 둘을 구분해야
-                초대장을 다시 보낼 대상을 알 수 있다.
-              -->
-              <span v-if="account.lastLoginAt === null" class="account__pending">
-                아직 로그인한 적 없음
-              </span>
-              <span v-else>마지막 로그인 {{ formatDate(account.lastLoginAt) }}</span>
-            </p>
-          </div>
-          <div class="account__actions">
-            <div class="account__admin-toggle">
-              <ToggleSwitch
-                :key="`admin-${account.id}-${revertCount}`"
-                :model-value="account.admin"
-                :input-id="`admin-${account.id}`"
-                :disabled="busyId === account.id"
-                @update:model-value="(next: boolean) => toggleAdmin(account, next)"
+            <div class="account__actions">
+              <div class="account__admin-toggle">
+                <ToggleSwitch
+                  :key="`admin-${account.id}-${revertCount}`"
+                  :model-value="account.admin"
+                  :input-id="`admin-${account.id}`"
+                  :disabled="busyId === account.id"
+                  @update:model-value="(next: boolean) => toggleAdmin(account, next)"
+                />
+                <label :for="`admin-${account.id}`" class="account__toggle-label">관리자</label>
+              </div>
+              <Button
+                icon="pi pi-trash"
+                severity="danger"
+                text
+                size="small"
+                :aria-label="`${account.email} 삭제`"
+                :loading="busyId === account.id"
+                @click="confirmRemove(account)"
               />
-              <label :for="`admin-${account.id}`" class="account__toggle-label">관리자</label>
             </div>
-            <Button
-              icon="pi pi-trash"
-              severity="danger"
-              text
-              size="small"
-              :aria-label="`${account.email} 삭제`"
-              :loading="busyId === account.id"
-              @click="confirmRemove(account)"
-            />
-          </div>
-        </li>
-      </ul>
-      <p v-if="admin.accounts.length === 0" class="accounts__empty">
-        허용된 계정이 없습니다.
-      </p>
-    </AsyncPanel>
-  </section>
+          </li>
+        </ul>
+        <p v-if="admin.accounts.length === 0" class="accounts__empty">
+          허용된 계정이 없습니다.
+        </p>
+      </AsyncPanel>
+    </div>
+  </div>
 </template>
 
 <style scoped>
+/*
+ * 루트는 전폭이다 — 머리 띠가 좌측 레일의 선과 이어지려면 그것을 감싸는 것이 폭에
+ * 묶이면 안 된다. 폭은 여기서 선언만 하고, 띠 안쪽과 아래 본문이 그것을 받는다.
+ */
 .accounts {
-  max-width: 64rem;
+  --app-view-width: 64rem;
+}
+
+.accounts__body {
+  max-width: var(--app-view-width);
   margin: 0 auto;
   padding: 1.5rem var(--app-gutter) 3rem;
 }

@@ -16,6 +16,17 @@
  * `--app-view-width`를 선언하면 그 값이 여기로 캐스케이드된다 — prop을 두지 않는 이유이고,
  * 선언하지 않으면 전폭이다(스크리너가 그렇다).
  */
+defineProps<{
+  /**
+   * 둘째 줄의 위아래 여백을 없앤다.
+   *
+   * 밑줄 탭처럼 **띠의 선에 맞닿아야 하는 것**을 위한 것이다. 여백이 있으면 탭의 밑줄이
+   * 띠 선에서 떠 두 줄로 보인다. 그 밖에는 쓰지 않는다 — 칩 바처럼 자기 면을 갖는 것은
+   * 여백이 있어야 선에 붙지 않는다.
+   */
+  bandFlush?: boolean
+}>()
+
 defineSlots<{
   /** 제목 자리. `<h1>`을 여기 넣는다. */
   title?: () => unknown
@@ -37,7 +48,12 @@ defineSlots<{
     </div>
 
     <div v-if="$slots.default" class="view-header__band">
-      <div class="view-header__row view-header__row--band"><slot /></div>
+      <div
+        class="view-header__row view-header__row--band"
+        :class="{ 'view-header__row--flush': bandFlush }"
+      >
+        <slot />
+      </div>
     </div>
   </header>
 </template>
@@ -85,6 +101,10 @@ defineSlots<{
 /* 둘째 줄은 자기 내용만큼만 높다. 첫 줄의 고정 높이를 물려받으면 칩 한 줄이 52px을 먹는다. */
 .view-header__row--band {
   padding-block: 0.5rem;
+}
+
+.view-header__row--flush {
+  padding-block: 0;
 }
 
 .view-header__band {

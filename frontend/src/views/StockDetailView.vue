@@ -6,6 +6,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import { api } from '@/api/endpoints'
 import type { StockIndicatorValue } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
+import AppViewHeader from '@/components/ui/AppViewHeader.vue'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import PriceReferencePanel from '@/components/stock/PriceReferencePanel.vue'
 import StockHeader from '@/components/stock/StockHeader.vue'
@@ -110,100 +111,119 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="stock-detail">
-    <AsyncPanel
-      :state="detail.state.value"
-      :error="detail.error.value"
-      :retry="detail.retry"
-      panel="stock"
-      :skeleton-rows="5"
-    >
-      <template v-if="detail.data.value">
-        <!--
-          IMPORTANT — 이 화면에는 돌아갈 길이 하나도 없었다. 라우트가 형제 셋(screener·
-          screens·stock)이라 부모-자식 관계가 없고, 유일한 이동 수단인 레일은 좁은 폭에서
-          햄버거 서랍 안으로 들어간다. 결과는 스토어에 살아 있으므로 돌아가면 그대로다.
-        -->
+  <div class="stock-detail">
+    <!--
+      띠에 종목명을 넣지 않는다. 이 화면의 주어는 `StockHeader`의 `<h1>`이고, 여기 또 두면
+      한 문서에 h1이 둘이 된다. 대신 **돌아가는 길**이 여기 선다 — 로딩 중이나 오류일 때도
+      보여야 하는데, 결과 안에 있던 동안에는 그때 사라졌다.
+
+      IMPORTANT — 이 화면에는 돌아갈 길이 하나도 없었다. 라우트가 형제 셋(screener·
+      screens·stock)이라 부모-자식 관계가 없고, 유일한 이동 수단인 레일은 좁은 폭에서
+      햄버거 서랍 안으로 들어간다. 결과는 스토어에 살아 있으므로 돌아가면 그대로다.
+    -->
+    <AppViewHeader>
+      <template #title>
         <RouterLink :to="{ name: 'screener' }" class="stock-detail__back">
           <i class="pi pi-angle-left" aria-hidden="true" />
           <span>스크리너</span>
         </RouterLink>
-
-        <StockHeader
-          :stock="detail.data.value.stock"
-          :price="detail.data.value.price"
-          :as-of="detail.data.value.asOf"
-        />
-
-        <section v-for="group in groups" :key="group.category" class="indicator-group">
-          <SectionHeading :title="group.label" :count="group.items.length" />
-          <ul class="indicator-group__list">
-            <li v-for="row in group.items" :key="row.indicator.code" class="indicator">
-              <IndicatorLabel
-                :name="row.indicator.name"
-                :higher-is-better="row.indicator.higherIsBetter"
-                :percentile="percentileOf(row.indicator.code)"
-                :description="row.indicator.description"
-                :interpretation="row.indicator.interpretation"
-              />
-              <!--
-                숫자와 단위를 나눠 그린다. 붙여 놓으면 '%'가 숫자와 같은 무게로 읽혀,
-                카드 스무 장을 훑을 때 눈이 자릿수 대신 기호에 걸린다.
-              -->
-              <span
-                class="indicator__value tabular"
-                :class="row.reading ? `indicator__value--${row.reading.tone.toLowerCase()}` : null"
-              >
-                {{ row.parts.number
-                }}<span v-if="row.parts.unit" class="indicator__unit">{{ row.parts.unit }}</span>
-              </span>
-              <!-- 구간을 아는 지표에만 붙는다. 없으면 지어내지 않는다(ADR-0023). -->
-              <BandMeter
-                v-if="row.reading"
-                class="indicator__meter"
-                :reading="row.reading"
-                :indicator-name="row.indicator.name"
-              />
-              <p class="indicator__interpretation">{{ row.indicator.interpretation }}</p>
-            </li>
-          </ul>
-        </section>
-
-        <p v-if="missingCount > 0" class="stock-detail__missing">
-          값이 없어 표시하지 못한 지표가 {{ missingCount }}개 있습니다. 계산에 필요한 이력이나 공시가
-          아직 없다는 뜻이며, 값이 {{ MISSING }}이라는 뜻이 아닙니다.
-        </p>
       </template>
-    </AsyncPanel>
+    </AppViewHeader>
 
-    <!-- 지지·저항은 별도 패널이자 별도 요청이다. 위가 실패해도 여기는 살고, 반대도 마찬가지다. -->
-    <div class="stock-detail__reference">
-      <Button
-        v-if="!referenceOpen"
-        label="지지·저항 참고정보 보기"
-        icon="pi pi-chart-bar"
-        outlined
-        @click="openReference"
-      />
+    <div class="stock-detail__body">
       <AsyncPanel
-        v-else
-        :state="priceReference.state.value"
-        :error="priceReference.error.value"
-        :retry="priceReference.retry"
-        panel="priceReference"
-        :skeleton-rows="3"
+        :state="detail.state.value"
+        :error="detail.error.value"
+        :retry="detail.retry"
+        panel="stock"
+        :skeleton-rows="5"
       >
-        <PriceReferencePanel v-if="priceReference.data.value" :reference="priceReference.data.value" />
+        <template v-if="detail.data.value">
+          <StockHeader
+            :stock="detail.data.value.stock"
+            :price="detail.data.value.price"
+            :as-of="detail.data.value.asOf"
+          />
+
+          <section v-for="group in groups" :key="group.category" class="indicator-group">
+            <SectionHeading :title="group.label" :count="group.items.length" />
+            <ul class="indicator-group__list">
+              <li v-for="row in group.items" :key="row.indicator.code" class="indicator">
+                <IndicatorLabel
+                  :name="row.indicator.name"
+                  :higher-is-better="row.indicator.higherIsBetter"
+                  :percentile="percentileOf(row.indicator.code)"
+                  :description="row.indicator.description"
+                  :interpretation="row.indicator.interpretation"
+                />
+                <!--
+                  숫자와 단위를 나눠 그린다. 붙여 놓으면 '%'가 숫자와 같은 무게로 읽혀,
+                  카드 스무 장을 훑을 때 눈이 자릿수 대신 기호에 걸린다.
+                -->
+                <span
+                  class="indicator__value tabular"
+                  :class="row.reading ? `indicator__value--${row.reading.tone.toLowerCase()}` : null"
+                >
+                  {{ row.parts.number
+                  }}<span v-if="row.parts.unit" class="indicator__unit">{{ row.parts.unit }}</span>
+                </span>
+                <!-- 구간을 아는 지표에만 붙는다. 없으면 지어내지 않는다(ADR-0023). -->
+                <BandMeter
+                  v-if="row.reading"
+                  class="indicator__meter"
+                  :reading="row.reading"
+                  :indicator-name="row.indicator.name"
+                />
+                <p class="indicator__interpretation">{{ row.indicator.interpretation }}</p>
+              </li>
+            </ul>
+          </section>
+
+          <p v-if="missingCount > 0" class="stock-detail__missing">
+            값이 없어 표시하지 못한 지표가 {{ missingCount }}개 있습니다. 계산에 필요한 이력이나 공시가
+            아직 없다는 뜻이며, 값이 {{ MISSING }}이라는 뜻이 아닙니다.
+          </p>
+        </template>
       </AsyncPanel>
+
+      <!-- 지지·저항은 별도 패널이자 별도 요청이다. 위가 실패해도 여기는 살고, 반대도 마찬가지다. -->
+      <div class="stock-detail__reference">
+        <Button
+          v-if="!referenceOpen"
+          label="지지·저항 참고정보 보기"
+          icon="pi pi-chart-bar"
+          outlined
+          @click="openReference"
+        />
+        <AsyncPanel
+          v-else
+          :state="priceReference.state.value"
+          :error="priceReference.error.value"
+          :retry="priceReference.retry"
+          panel="priceReference"
+          :skeleton-rows="3"
+        >
+          <PriceReferencePanel v-if="priceReference.data.value" :reference="priceReference.data.value" />
+        </AsyncPanel>
+      </div>
     </div>
-  </section>
+  </div>
 </template>
 
 <style scoped>
-/* 90rem(`--app-reading-width`)을 쓰지 않는다. 여기는 훑는 표가 아니라 읽는 화면이라
-   줄 길이가 길어지면 오히려 안 읽힌다. */
+/*
+ * 루트는 전폭이다 — 머리 띠가 좌측 레일의 선과 이어지려면 그것을 감싸는 것이 폭에 묶이면
+ * 안 된다. 폭은 여기서 선언만 하고, 띠 안쪽과 아래 본문이 그것을 받는다.
+ *
+ * 90rem(`--app-reading-width`)을 쓰지 않는다. 여기는 훑는 표가 아니라 읽는 화면이라
+ * 줄 길이가 길어지면 오히려 안 읽힌다.
+ */
 .stock-detail {
-  max-width: 64rem;
+  --app-view-width: 64rem;
+}
+
+.stock-detail__body {
+  max-width: var(--app-view-width);
   margin: 0 auto;
   padding: 1.5rem var(--app-gutter) 3rem;
   display: flex;
@@ -212,22 +232,19 @@ onMounted(() => {
 }
 
 /*
- * 돌아가는 길. 요약 카드 위에 얇게 선다.
+ * 돌아가는 길. 머리 띠에 선다 — 여백은 띠가 갖는다.
  *
- * IMPORTANT — 마진이 **양수**여야 한다. 예전에 `margin-bottom: -0.5rem`이 있었고 그것이
- * 관심종목 버튼을 가격 위에 올려놓았다. 상쇄할 간격이 없었기 때문이다 — `.stock-detail`의
- * `gap`은 여기 닿지 않는다. 사이에 `AsyncPanel`의 래퍼가 끼어 있고 그것이 블록이라 안쪽은
- * 그냥 블록 흐름이다(`AsyncPanel.vue` 주석 참조). 음수로 되돌리지 않는다.
+ * 이 화면의 제목 자리를 이것이 대신하는 이유는 종목명이 아래 `StockHeader`의 `<h1>`이기
+ * 때문이다. 띠에 또 두면 한 문서에 h1이 둘이 된다.
  */
 .stock-detail__back {
   display: inline-flex;
-  margin-bottom: 0.625rem;
   align-items: center;
   gap: 0.125rem;
-  padding: 0.125rem 0.375rem 0.125rem 0.125rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.25rem;
   border-radius: var(--p-border-radius-md);
   color: var(--p-text-muted-color);
-  font-size: var(--app-text-xs);
+  font-size: var(--app-text-sm);
   transition:
     background var(--app-motion-fast) var(--app-ease),
     color var(--app-motion-fast) var(--app-ease);

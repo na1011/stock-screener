@@ -6,6 +6,7 @@ import { onMounted, ref } from 'vue'
 
 import type { ScreenResponse } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
+import AppViewHeader from '@/components/ui/AppViewHeader.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useApiToast } from '@/composables/useApiToast'
 import { screenKey, useScreenOpener } from '@/composables/useScreenOpener'
@@ -89,105 +90,122 @@ async function remove(id: number, name: string): Promise<void> {
 </script>
 
 <template>
-  <section class="screens">
-    <!-- 레일의 진입점이 "전략 관리"라 제목도 같은 말이어야 한다. `panelSubject`는 오류
-         문구("전략 목록을 불러오지 못했습니다")에 쓰이는 말이라 여기와 역할이 다르다. -->
-    <h1 class="screens__title">전략 관리</h1>
+  <div class="screens">
+    <AppViewHeader>
+      <template #title>
+        <!-- 레일의 진입점이 "전략 관리"라 제목도 같은 말이어야 한다. `panelSubject`는 오류
+             문구("전략 목록을 불러오지 못했습니다")에 쓰이는 말이라 여기와 역할이 다르다. -->
+        <h1 class="screens__title">전략 관리</h1>
+      </template>
+    </AppViewHeader>
 
-    <AsyncPanel
-      :state="screens.state"
-      :error="screens.error"
-      :retry="screens.retry"
-      panel="screens"
-      :skeleton-rows="4"
-    >
-      <section class="screens__group">
-        <SectionHeading :title="screenTypeLabel('PRESET')" :count="screens.presets.length" />
-        <p class="screens__group-note">
-          미리 정의된 전략입니다. 고칠 수는 없지만 불러온 뒤 복제해 내 전략으로 저장할 수 있습니다.
-        </p>
-        <ul class="screens__list">
-          <li v-for="screen in screens.presets" :key="screen.code ?? screen.name" class="screen-item">
-            <div class="screen-item__body">
-              <div class="screen-item__title">
-                <strong>{{ screen.name }}</strong>
-                <Tag :value="screenTypeLabel('PRESET')" severity="info" />
-                <Tag
-                  :value="evaluationModeLabels(screen.evaluationMode).short"
-                  severity="secondary"
+    <div class="screens__body">
+      <AsyncPanel
+        :state="screens.state"
+        :error="screens.error"
+        :retry="screens.retry"
+        panel="screens"
+        :skeleton-rows="4"
+      >
+        <section class="screens__group">
+          <SectionHeading :title="screenTypeLabel('PRESET')" :count="screens.presets.length" />
+          <p class="screens__group-note">
+            미리 정의된 전략입니다. 고칠 수는 없지만 불러온 뒤 복제해 내 전략으로 저장할 수 있습니다.
+          </p>
+          <ul class="screens__list">
+            <li v-for="screen in screens.presets" :key="screen.code ?? screen.name" class="screen-item">
+              <div class="screen-item__body">
+                <div class="screen-item__title">
+                  <strong>{{ screen.name }}</strong>
+                  <Tag :value="screenTypeLabel('PRESET')" severity="info" />
+                  <Tag
+                    :value="evaluationModeLabels(screen.evaluationMode).short"
+                    severity="secondary"
+                  />
+                </div>
+                <p v-if="screen.description" class="screen-item__description">{{ screen.description }}</p>
+              </div>
+              <div class="screen-item__actions">
+                <Button
+                  label="불러오기"
+                  icon="pi pi-download"
+                  size="small"
+                  outlined
+                  :loading="opening && busyId === screen.id"
+                  @click="load(screen)"
                 />
               </div>
-              <p v-if="screen.description" class="screen-item__description">{{ screen.description }}</p>
-            </div>
-            <div class="screen-item__actions">
-              <Button
-                label="불러오기"
-                icon="pi pi-download"
-                size="small"
-                outlined
-                :loading="opening && busyId === screen.id"
-                @click="load(screen)"
-              />
-            </div>
-          </li>
-        </ul>
-      </section>
+            </li>
+          </ul>
+        </section>
 
-      <section class="screens__group">
-        <SectionHeading :title="screenTypeLabel('CUSTOM')" :count="screens.mine.length" />
-        <p v-if="screens.mine.length === 0" class="screens__empty">
-          저장한 전략이 없습니다. 스크리너에서 조건을 만든 뒤 저장해 보세요.
-        </p>
-        <ul v-else class="screens__list">
-          <li v-for="screen in screens.mine" :key="screen.id ?? screen.name" class="screen-item">
-            <div class="screen-item__body">
-              <div class="screen-item__title">
-                <strong>{{ screen.name }}</strong>
-                <Tag
-                  :value="evaluationModeLabels(screen.evaluationMode).short"
-                  severity="secondary"
+        <section class="screens__group">
+          <SectionHeading :title="screenTypeLabel('CUSTOM')" :count="screens.mine.length" />
+          <p v-if="screens.mine.length === 0" class="screens__empty">
+            저장한 전략이 없습니다. 스크리너에서 조건을 만든 뒤 저장해 보세요.
+          </p>
+          <ul v-else class="screens__list">
+            <li v-for="screen in screens.mine" :key="screen.id ?? screen.name" class="screen-item">
+              <div class="screen-item__body">
+                <div class="screen-item__title">
+                  <strong>{{ screen.name }}</strong>
+                  <Tag
+                    :value="evaluationModeLabels(screen.evaluationMode).short"
+                    severity="secondary"
+                  />
+                </div>
+                <p v-if="screen.description" class="screen-item__description">{{ screen.description }}</p>
+              </div>
+              <div class="screen-item__actions">
+                <Button
+                  label="불러오기"
+                  icon="pi pi-download"
+                  size="small"
+                  outlined
+                  :loading="opening && busyId === screen.id"
+                  @click="load(screen)"
+                />
+                <Button
+                  v-if="screen.editable"
+                  icon="pi pi-trash"
+                  severity="danger"
+                  text
+                  size="small"
+                  :aria-label="`${screen.name} 삭제`"
+                  :loading="busyId === screen.id"
+                  @click="confirmRemove(screen)"
                 />
               </div>
-              <p v-if="screen.description" class="screen-item__description">{{ screen.description }}</p>
-            </div>
-            <div class="screen-item__actions">
-              <Button
-                label="불러오기"
-                icon="pi pi-download"
-                size="small"
-                outlined
-                :loading="opening && busyId === screen.id"
-                @click="load(screen)"
-              />
-              <Button
-                v-if="screen.editable"
-                icon="pi pi-trash"
-                severity="danger"
-                text
-                size="small"
-                :aria-label="`${screen.name} 삭제`"
-                :loading="busyId === screen.id"
-                @click="confirmRemove(screen)"
-              />
-            </div>
-          </li>
-        </ul>
-      </section>
-    </AsyncPanel>
-  </section>
+            </li>
+          </ul>
+        </section>
+      </AsyncPanel>
+    </div>
+  </div>
 </template>
 
 <style scoped>
+/*
+ * 루트는 전폭이다. 머리 띠가 좌측 레일의 선과 이어지려면 그 띠를 감싸는 것이
+ * 폭에 묶이면 안 된다. 폭은 여기서 **선언만** 하고, 그것을 받는 것은 띠 안쪽
+ * (`AppViewHeader`가 `--app-view-width`로 읽는다)과 아래 본문이다.
+ */
 .screens {
-  max-width: 64rem;
+  --app-view-width: 64rem;
+}
+
+.screens__body {
+  max-width: var(--app-view-width);
   margin: 0 auto;
   padding: 1.5rem var(--app-gutter) 3rem;
 }
 
+/* 레일의 브랜드·스크리너 제목과 같은 크기다. 아래 여백은 띠가 갖는다. */
 .screens__title {
+  margin: 0;
   font-size: var(--app-text-xl);
-  letter-spacing: -0.01em;
-  margin: 0 0 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .screens__group {

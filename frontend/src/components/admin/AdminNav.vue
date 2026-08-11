@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
 
+import AppViewHeader from '@/components/ui/AppViewHeader.vue'
+
 /**
  * 관리자 영역의 세 화면 사이 이동.
  *
@@ -21,8 +23,16 @@ const items = [
 </script>
 
 <template>
-  <header class="admin-nav">
-    <h1 class="admin-nav__title">관리자</h1>
+  <!--
+    탭이 둘째 줄에 있는 것은 스크리너의 조건 칩 바와 같은 층위이기 때문이다 — 첫 줄은
+    "여기가 어디인가", 둘째 줄은 "이 안에서 무엇을 하는가"다. `band-flush`를 주는 이유는
+    탭의 밑줄이 띠의 선과 맞닿아야 해서다(여백이 있으면 선이 둘로 보인다).
+  -->
+  <AppViewHeader band-flush>
+    <template #title>
+      <h1 class="admin-nav__title">관리자</h1>
+    </template>
+
     <nav class="admin-nav__tabs" aria-label="관리자 메뉴">
       <RouterLink
         v-for="item in items"
@@ -36,24 +46,22 @@ const items = [
         <span>{{ item.label }}</span>
       </RouterLink>
     </nav>
-  </header>
+  </AppViewHeader>
 </template>
 
 <style scoped>
-.admin-nav {
-  margin-bottom: 1.5rem;
-}
-
+/* 레일의 브랜드·다른 화면 제목과 같은 크기다. 여백은 띠가 갖는다. */
 .admin-nav__title {
+  margin: 0;
   font-size: var(--app-text-xl);
-  letter-spacing: -0.01em;
-  margin: 0 0 0.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
+/* 아래 선은 띠(`AppViewHeader`)가 긋는다. 여기서 또 그으면 두 줄이 된다. */
 .admin-nav__tabs {
   display: flex;
   gap: 0.25rem;
-  border-bottom: 1px solid var(--p-content-border-color);
 }
 
 /*
