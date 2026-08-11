@@ -3,24 +3,45 @@ import type { DraftCondition } from '@/stores/screenDraft'
 
 import { formatEnteredNumber, formatIndicatorValue, formatNumber } from './format'
 
+/** 조건 문장을 둘로 나눈 것. 결과의 조건 내역이 이 둘을 **다른 칸에** 그린다. */
+export interface ConditionParts {
+  /**
+   * 무엇을 재는가. **`condition.indicator.name`을 그대로 쓴다.**
+   *
+   * IMPORTANT — 완성된 문장을 공백으로 쪼개 얻지 않는다. 지표 이름에 공백이 있다
+   * ("200일 이동평균", "흑자 분기 수(최근 4분기)"). 쪼개면 그런 지표에서만 조용히 어긋난다.
+   */
+  subject: string
+  /**
+   * 무엇과 견주는가. 상수일 수도 있고("0.3000 이하") 다른 지표일 수도 있다
+   * ("200일 이동평균 × 0.90 이상"). **임계값이라고 부르지 않는 이유가 후자다.**
+   */
+  criterion: string
+}
+
 /**
- * 조건 하나를 사람이 읽는 문장으로.
+ * 조건 하나를 사람이 읽는 두 조각으로.
+ *
+ * 한 문장이 아니라 둘로 내는 이유는 화면이 **기준과 실제값을 나란히 놓기** 위해서다. 한
+ * 문장이면 "PER 백분위 0.3000 이하"와 실제값 `0.1313`이 세 칸 떨어져, 사용자가 둘을 눈으로
+ * 이어 붙여야 대조가 된다. `criterion`을 실제값 바로 옆 칸에 두면 그 대조가 즉시 된다.
+ * 이어 붙이면 원래 문장 그대로다 — `` `${subject} ${criterion}` ``.
  *
  * 서버가 준 `operatorLabel`(한글)을 그대로 쓴다. 프론트가 연산자별 문구를 따로 들면 연산자가
  * 추가될 때 두 곳을 고쳐야 하고, 한쪽을 잊으면 조건은 만들 수 있는데 설명이 비어 있게 된다.
  *
- * 이 문장이 결과의 "왜 선정되었는가"를 이루므로, 판정에 쓰인 값과 다른 것을 적으면 안 된다.
+ * 이 문구가 결과의 "왜 선정되었는가"를 이루므로, 판정에 쓰인 값과 다른 것을 적으면 안 된다.
  *
  * IMPORTANT — 상수에는 **단위를 붙인다.** 붙이지 않으면 선정 이유가 "ROE 8.00 이상 / 실제
  * 11.34%"로 좌우 단위가 어긋나 기준과 실제값이 같은 척도인지 알 수 없다. 칩용
  * {@link summarizeDraftCondition}은 처음부터 붙이고 있었고 이쪽만 빠져 있었다.
  * 지표 참조에는 붙이지 않는다 — "200일 이동평균 × 0.90원"은 뜻이 없다.
  */
-export function describeCondition(
+export function splitCondition(
   condition: ConditionInfo,
   indicatorName: (code: string) => string,
-): string {
-  const left = condition.indicator.name
+): ConditionParts {
+  const subject = condition.indicator.name
   const scale = condition.indicator.decimalScale
   const unit = condition.indicator.unit
   const operand = condition.operand
@@ -29,16 +50,19 @@ export function describeCondition(
     // 단위는 뒤에 한 번만. "45.00% ~ 70.00%"는 같은 말을 두 번 한다.
     const lower = formatNumber(operand.value ?? null, scale)
     const upper = formatIndicatorValue(operand.upperBound ?? null, unit, scale)
-    return `${left} ${lower} ~ ${upper} ${condition.operatorLabel}`
+    return { subject, criterion: `${lower} ~ ${upper} ${condition.operatorLabel}` }
   }
 
-  return `${left} ${describeOperand(operand, scale, unit, indicatorName)} ${condition.operatorLabel}`
+  return {
+    subject,
+    criterion: `${describeOperand(operand, scale, unit, indicatorName)} ${condition.operatorLabel}`,
+  }
 }
 
 /**
  * 편집 중인 조건 하나를 **칩에 들어갈 길이로**.
  *
- * {@link describeCondition}과 합치지 않는 이유는 입력이 다르기 때문이다 — 저쪽은 응답의
+ * {@link splitCondition}과 합치지 않는 이유는 입력이 다르기 때문이다 — 저쪽은 응답의
  * `ConditionInfo`(완성된 것)이고 이쪽은 초안(`DraftCondition`, 작성 중일 수 있는 것)이다.
  * 그리고 문장의 성격도 다르다. 결과의 "왜 선정되었는가"는 서버가 판정에 쓴 값을 그대로
  * 옮겨야 하고, 칩은 사용자가 방금 넣은 것을 되비춰야 한다. `evaluationModeLabels`가

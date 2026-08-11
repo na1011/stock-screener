@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest'
 import type { ConditionInfo, ComparisonOperatorName, OperandPayload } from '@/api/types'
 
 import {
-  describeCondition,
   disabledConditionNotice,
   incompleteConditionNotice,
+  splitCondition,
 } from './conditionText'
 
 const NAMES: Record<string, string> = {
@@ -35,9 +35,21 @@ function condition(
 
 const name = (code: string): string => NAMES[code] ?? code
 
-describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다', () => {
+/**
+ * 두 조각을 이어 붙인 문장.
+ *
+ * 아래 단정들이 조각이 아니라 이 문장을 보는 이유는, 화면이 둘을 **다른 칸에** 그려도
+ * 사용자가 읽는 말은 하나이기 때문이다. 조각의 경계가 어디든 이어 붙인 결과가 달라지면
+ * 그것은 문구가 바뀐 것이다.
+ */
+function sentence(...args: Parameters<typeof splitCondition>): string {
+  const parts = splitCondition(...args)
+  return `${parts.subject} ${parts.criterion}`
+}
+
+describe('splitCondition — 서버가 준 한글 라벨을 그대로 쓴다', () => {
   it('상수에는 단위를 붙인다 — 실제값과 척도가 같은지 알 수 있어야 한다', () => {
-    const text = describeCondition(
+    const text = sentence(
       condition({ operator: 'LT', operand: { type: 'LITERAL', value: 10 } }),
       name,
     )
@@ -46,7 +58,7 @@ describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다'
 
   it('지표 참조에는 단위를 붙이지 않는다', () => {
     // "200일 이동평균 × 0.90원"은 뜻이 없다.
-    const text = describeCondition(
+    const text = sentence(
       condition({
         operator: 'GTE',
         operatorLabel: '이상',
@@ -67,7 +79,7 @@ describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다'
 
   it('값이 없으면 단위도 붙지 않는다', () => {
     // "—배"는 없는 값에 단위를 붙인 것이라 거짓이다.
-    const text = describeCondition(
+    const text = sentence(
       condition({ operator: 'LT', operand: { type: 'LITERAL', value: null } }),
       name,
     )
@@ -75,7 +87,7 @@ describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다'
   })
 
   it('BETWEEN은 상·하한을 함께 적는다', () => {
-    const text = describeCondition(
+    const text = sentence(
       condition({
         operator: 'BETWEEN',
         operatorLabel: '사이',
@@ -88,7 +100,7 @@ describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다'
   })
 
   it('지표 참조는 코드가 아니라 이름으로 적는다', () => {
-    const text = describeCondition(
+    const text = sentence(
       condition({
         operator: 'GT',
         operatorLabel: '초과',
@@ -100,7 +112,7 @@ describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다'
   })
 
   it('배수가 1이 아니면 함께 적는다', () => {
-    const text = describeCondition(
+    const text = sentence(
       condition({
         operator: 'GTE',
         operatorLabel: '이상',
@@ -112,7 +124,7 @@ describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다'
   })
 
   it('배수 1은 적지 않는다 — 정보를 더하지 않고 문장만 길어진다', () => {
-    const text = describeCondition(
+    const text = sentence(
       condition({
         operator: 'GT',
         operatorLabel: '초과',
@@ -121,6 +133,44 @@ describe('describeCondition — 서버가 준 한글 라벨을 그대로 쓴다'
       name,
     )
     expect(text).toBe('PER 200일 이동평균 초과')
+  })
+})
+
+describe('splitCondition — 경계는 지표 이름 뒤다', () => {
+  it('이름에 공백이 있어도 subject가 통째로 남는다', () => {
+    // 문장을 공백으로 쪼개 얻으면 여기서만 어긋난다 — subject가 "200일"이 되고
+    // criterion이 "이동평균 …"이 된다. 화면은 그래도 그럴듯해 보인다.
+    const parts = splitCondition(
+      condition({
+        operator: 'GTE',
+        operatorLabel: '이상',
+        indicator: {
+          code: 'SMA_200',
+          name: '200일 이동평균',
+          unit: '원',
+          decimalScale: 2,
+          higherIsBetter: null,
+          interpretation: '',
+        },
+        operand: { type: 'LITERAL', value: 20100 },
+      }),
+      name,
+    )
+    expect(parts.subject).toBe('200일 이동평균')
+    expect(parts.criterion).toBe('20,100.00원 이상')
+  })
+
+  it('criterion은 임계값이 아니라 비교 대상이다 — 다른 지표가 올 수 있다', () => {
+    const parts = splitCondition(
+      condition({
+        operator: 'GTE',
+        operatorLabel: '이상',
+        operand: { type: 'INDICATOR', indicatorCode: 'SMA_200', multiplier: 1.25 },
+      }),
+      name,
+    )
+    expect(parts.subject).toBe('PER')
+    expect(parts.criterion).toBe('200일 이동평균 × 1.25 이상')
   })
 })
 

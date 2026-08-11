@@ -42,6 +42,29 @@ applies_to:
 - MUST NOT: 유불리 방향 표식(`▲`/`▼`)에 색을 주지 않는다. 그것은 **지표의 성질**이지 이 종목 값의 좋고 나쁨이 아니다. 색을 주면 미터가 말하는 것과 뜻이 겹쳐 어긋난다.
 - 색조의 값은 `preset.ts`의 `semantic.tone`이 정한다(`--p-tone-*`). 소비처는 그것을 쓰기만 한다.
 
+### 점수 레인 — 트랙 길이가 배점이고 채운 만큼이 획득이다
+
+선정 이유(`ConditionOutcomes`)의 막대는 **크기를 두 축으로** 말한다. 트랙의 길이가 그 조건의 배점이고, 채워진 만큼이 이 종목이 받은 점수다. 배점 3점 조건의 트랙은 1점 조건의 3배이고, 못 받았으면 그 긴 트랙이 빈 채로 남아 "큰 것을 놓쳤다"가 길이로 읽힌다. 그리는 것은 `components/ui/RatioBar.vue`이고 판단의 정본은 `lib/scoreLane.ts`다.
+
+- MUST: 레인은 **accent 단색**이다. 유불리 색조를 넣지 않는다 — 위 §검증 3-1이 지키는 것이 이 자리다. 못 받은 트랙을 빨갛게 칠하고 싶어지지만, 그 판단은 옆의 판정 `Tag`가 이미 하고 있다.
+- MUST: 정규화 기준은 **최대 배점**이고 총점이 아니다. 총점 대비로 재면 조건이 늘수록 모든 레인이 짧아져 배점 차이가 다시 안 보인다.
+- MUST: **배점이 전부 같으면 레인을 그리지 않는다.** 그때 트랙은 전부 같은 길이가 되고 채움은 0 아니면 1이라, 막대가 옆의 판정 `Tag`와 똑같은 말만 한다. 뜻이 없는 그래픽 대신 그 폭을 글자가 쓴다.
+- MUST NOT: 채움을 **획득/총점**으로 되돌리지 않는다. 그것이 버린 인코딩이다 — 만점을 받은 3점 조건을 30%만 채워 그렸고 바로 옆 숫자는 `3.00 / 3.00`(만점)이었다. 한 줄에 붙은 둘이 분모가 달라 **서로를 부정했다.**
+- MUST: `RatioBar`의 `floor`(값 0에 남기는 4% 흔적)를 레인에서는 **끈다.** 채움이 이진값이라 흔적이 남으면 못 받은 조건이 "조금은 받았다"로 읽힌다. `ResultTable`의 크기 막대는 켠다 — 두 자리의 판단이 갈린 것이지 한쪽이 틀린 것이 아니다.
+
+실측이 이 규칙들을 요구했다. 프리셋 넷의 점수 조건 배점은 `VALUE_KR` 3·2·2·2·1, `QVG_KR` 3·2·3·3·2·1, `MOMENTUM_KR` 없음, `SWING_MIDTERM_KR` 1·1·1·1(그리고 필수 16개)이다. **앞의 둘에서는 레인이 뜻을 갖고 스윙에서는 갖지 않는다.** 스윙 하나만 보고 설계했으면 "쓸모없는 막대"로, 밸류 하나만 보고 설계했으면 "스윙에서 판정 Tag를 복사하는 막대"로 끝났을 것이다. 값이 변할 수 있으므로 아래 §검증의 전제가 이것을 다시 잰다.
+
+### 조건 내역의 정렬은 subgrid가 맡는다
+
+`ConditionOutcomes`의 목록은 `<ul>` **하나**가 그리드이고 각 행(`<li>`)이 `grid-template-columns: subgrid`로 그 트랙을 공유한다.
+
+- MUST: 행이 **자기 그리드를 갖지 않게** 한다. 그러면 `max-content` 트랙이 행마다 따로 계산되어 실제값·점수의 좌측 경계가 행마다 어긋난다. 그것을 막으려 트랙을 전부 고정폭으로 두었던 것이 **조건문 트랙이 남는 폭을 전부 먹는** 원인이었다.
+- MUST: 필수·점수 두 구획이 **한 `<ul>`을 공유한다.** 나누면 두 구획의 컬럼이 서로 어긋난다. 구획 제목은 `grid-column: 1 / -1`인 항목으로 목록 안에 든다.
+- MUST NOT: `<table>` + `display: grid`로 만들지 않는다. 브라우저가 접근성 트리에서 table/row/cell 역할을 떼므로 **의미론을 얻으려는 변경이 의미론을 잃는다.** `colspan`도 표 레이아웃 알고리즘의 입력이라 그리드가 보지 않는다 — 폭을 덮으려면 `grid-column`이다.
+- MUST: 글자 칸(지표·기준)은 `minmax(0, …)`에 `min-width: 0`을 함께 준다. 그리드 아이템의 자동 최소 크기가 min-content라, 없으면 트랙이 줄어도 아이템이 버티며 옆 칸을 침범하고 말줄임도 걸리지 않는다.
+- MUST: 접힘은 **`@container`로 묻는다**(`@media`가 아니다). 이 패널은 데스크톱 표의 확장 행과 모바일 카드 양쪽에 들어가므로 접힘 경계가 표↔카드 교체 경계와 같지 않고, 확장 영역의 폭은 좌측 레일 때문에 뷰포트에 단조증가하지 않는다.
+- **subgrid는 이 저장소에서 여기가 처음이다.** `vite.config.ts`에 `build.target`이 없고 esbuild는 subgrid를 낮춰 주지 않으므로 **빌드는 통과하고 구형 브라우저에서만 조용히 깨진다.** 개인용 도구이고 최신 Chrome/Safari로 본다는 것이 전제다. 그 전제가 바뀌면 고정 트랙으로 되돌려야 하고, 그때 위의 공백 문제가 함께 돌아온다.
+
 ### 버튼 강조는 3단이다
 
 **채움과 "아무것도 없음" 둘만으로는 부차 액션이 화면에서 사라진다** — 윤곽·텍스트 버튼의 배경이 전부 `transparent`라 페이지 배경 그대로가 되기 때문이다. 가운데 단(M3의 `filled tonal`)을 두어 셋으로 가른다.
@@ -98,7 +121,26 @@ rg -n 'font-size: [0-9]' frontend/src --glob '*.vue'
 
 # 5. PrimeVue 주입 CSS를 이기는 접두어가 살아 있는가
 rg -n ':root \.p-button' frontend/src/assets/main.css
+
+# 6. RatioBar의 새 prop이 **기본값을 실제로 갖는가**
+#    타입 전용 `defineProps<…>()`는 기본값을 줄 수단이 없다. 이것이 빠지면 기존 소비처 셋에
+#    `undefined`가 흘러 `width: undefined%`가 나가고 **관리자 진행률 막대가 오류 없이 사라진다.**
+rg -n 'withDefaults' frontend/src/components/ui/RatioBar.vue
+#    → 잡혀야 한다
+
+# 7. 조건 내역이 행마다 자기 그리드를 갖지 않는가 (컬럼이 행마다 어긋나는 회귀)
+rg -n 'grid-template-columns: subgrid' frontend/src/components/result/ConditionOutcomes.vue
+#    → 잡혀야 한다. 사라졌다면 고정 트랙으로 되돌아간 것이고, 그때 오른쪽 공백이 함께 돌아온다
+
+# 8. 레인 규칙이 테스트로 덮여 있는가 (`.vue` 안으로 되돌아가면 어떤 테스트도 닿지 않는다)
+cd frontend && npx vitest run src/lib/scoreLane.spec.ts
 ```
+
+```premise 레인이 뜻을 갖는 전략이 실제로 있다
+psql -d stock_screener -At -c "SELECT string_agg(line, ' / ') FROM (SELECT s.code || ' 필수' || count(*) FILTER (WHERE sc.is_required) || ' 배점[' || coalesce(string_agg(DISTINCT trim(trailing '.' from trim(trailing '0' from sc.weight::text)), ',') FILTER (WHERE NOT sc.is_required), '없음') || ']' || CASE WHEN count(DISTINCT sc.weight) FILTER (WHERE NOT sc.is_required) >= 2 THEN '→레인' ELSE '→없음' END AS line FROM screen s JOIN condition_group g ON g.screen_id = s.id JOIN screen_condition sc ON sc.group_id = g.id GROUP BY s.code ORDER BY s.code) t"
+```
+
+전제가 묻는 것은 **배점이 갈리는 전략이 남아 있는가**다. 전부 `→없음`이 되면 레인은 어디에서도 그려지지 않고, 그때 이 결정의 절반은 죽은 코드가 된다. 기준선(2026-08-11): `MOMENTUM_KR →없음 / QVG_KR 배점[1,2,3] →레인 / SWING_MIDTERM_KR 필수16 배점[1] →없음 / VALUE_KR 배점[1,2,3] →레인`.
 
 ```bash
 # 버튼 강조 3단의 대비비

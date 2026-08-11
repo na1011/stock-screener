@@ -5,10 +5,11 @@ import { computed } from 'vue'
 import type { ConditionInfo, EvaluationMode, ScreeningRow } from '@/api/types'
 import RatioBar from '@/components/ui/RatioBar.vue'
 import { readBand } from '@/lib/band'
-import { conditionRoleLabels, describeCondition } from '@/lib/conditionText'
+import { conditionRoleLabels, splitCondition } from '@/lib/conditionText'
 import { MISSING, formatIndicatorValue, formatNumber, formatRatioAsPercent } from '@/lib/format'
 import { outcomeStyle } from '@/lib/outcome'
 import { SCORE_DECIMAL_SCALE } from '@/lib/resultRow'
+import { laneScale, scoreLane } from '@/lib/scoreLane'
 import { useCatalogStore } from '@/stores/catalog'
 
 /**
@@ -24,12 +25,16 @@ import { useCatalogStore } from '@/stores/catalog'
  * 색 없이 낱말로만 적는다. 여기는 판정과 값이 한 줄에 놓이는 자리라, 등급까지 초록·빨강을
  * 쓰면 `✓충족`(초록) 옆에 `높음`(빨강)이 나오는 줄이 생겨 훑는 눈에는 자기모순으로 보인다.
  * 형태로 채널을 가른다는 ADR-0021의 결정이 겨냥한 자리가 정확히 이곳이다.
+ *
+ * **조건 하나가 한 줄이고, 그 줄은 일곱 칸이다** — 판정·지표·기준·실제·평가·레인·획득/배점.
+ * 기준과 실제를 이웃 칸에 두는 것이 이 배치의 요점이다. 한 문장("PER 백분위 0.3000 이하")과
+ * 실제값이 세 칸 떨어져 있으면 사용자가 둘을 눈으로 이어 붙여야 대조가 된다.
  */
 const props = defineProps<{
   conditions: ConditionInfo[]
   row: ScreeningRow
   evaluationMode: EvaluationMode
-  /** 지표 코드 → 이름. 조건 문장이 코드 대신 이름을 쓰게 한다. */
+  /** 지표 코드 → 이름. 조건 문구가 코드 대신 이름을 쓰게 한다. */
   indicatorName: (code: string) => string
 }>()
 
@@ -37,19 +42,54 @@ const catalog = useCatalogStore()
 
 const isScoring = computed(() => props.evaluationMode === 'SCORING')
 
+/**
+ * 레인의 척도(= 최대 배점). null이면 레인을 그리지 않는다.
+ *
+ * 필수 조건을 빼고 넘긴다 — 총점에 참여하지 않으므로 최대 배점을 정할 자격도 없다.
+ * 거르는 기준은 `required`이고 `weight === null`이 아니다(`api/types.ts`가 금지한다).
+ */
+const laneMax = computed(() =>
+  laneScale(
+    props.conditions.filter((it) => !it.required).map((it) => it.weight ?? 1),
+  ),
+)
+
+/**
+ * 레인 칸을 두는가.
+ *
+ * 배점이 전부 같으면 두지 않는다 — 그때 트랙은 전부 같은 길이가 되고 채움은 0 아니면 1이라
+ * 옆의 판정 `Tag`와 똑같은 말만 한다. 판단의 정본은 `lib/scoreLane`이고 여기는 그 결과를
+ * 칸 개수로 옮기기만 한다.
+ */
+const showsLane = computed(() => isScoring.value && laneMax.value !== null)
+
+/**
+ * 그리드 트랙 수. **한 곳에서만 정한다.**
+ *
+ * FILTER인데 `required` 조건이 실려 오는 경로가 실재한다 — SCORING 전략을 불러와 판정 방식만
+ * 바꾸면 `required`가 그대로 서버로 가고, 서버는 요청의 `evaluationMode`를 우선한다. 칸 수를
+ * 판정 방식이나 구획 유무로 따로 유도하면 그때 머리글과 몸이 어긋난다.
+ */
+const columnCount = computed(() => 5 + (showsLane.value ? 1 : 0) + (isScoring.value ? 1 : 0))
+
 const items = computed(() =>
   props.conditions.map((condition) => {
     const outcome = props.row.outcomes.find((it) => it.conditionIndex === condition.index) ?? null
-    // 가중치는 null이면 1이다. 서버의 `effectiveWeight`와 같은 규칙이어야 획득/가중치가 맞는다.
+    // 가중치는 null이면 1이다. 서버의 `effectiveWeight`와 같은 규칙이어야 획득/배점이 맞는다.
     const weight = condition.weight ?? 1
+    const parts = splitCondition(condition, props.indicatorName)
     return {
       condition,
       outcome,
       style: outcome === null ? null : outcomeStyle(outcome.status),
-      text: describeCondition(condition, props.indicatorName),
+      subject: parts.subject,
+      criterion: parts.criterion,
       grade: gradeOf(condition, outcome?.actualValue ?? null),
       weight,
-      earnedRatio: contributionOf(outcome?.earnedScore ?? null),
+      lane:
+        laneMax.value === null || condition.required
+          ? null
+          : scoreLane(weight, outcome?.earnedScore ?? null, laneMax.value),
     }
   }),
 )
@@ -63,9 +103,20 @@ const items = computed(() =>
  *
  * 필수 조건이 하나도 없으면 나누지 않는다. 기존 전략의 화면이 제목 하나 때문에 달라지지
  * 않게 하는 것이고, 구획이 하나뿐인 목록에 제목을 붙여 봐야 말해 주는 것이 없다.
+ *
+ * IMPORTANT — 구획이 둘이어도 **`<ul>`은 하나다.** 나누면 `max-content` 트랙이 구획마다 따로
+ * 계산되어 위아래 구획의 컬럼이 어긋난다. 제목은 전 폭을 차지하는 항목으로 목록 안에 든다.
+ *
+ * IMPORTANT — **FILTER에서는 나누지 않는다.** 서버가 FILTER에서 `required`를 무시하기 때문이다
+ * (ADR-0038: 저장 시점에 거절하지 않고 무시할 뿐이다). 그래서 SCORING 전략을 불러와 판정
+ * 방식만 바꾸면 `required=true`인 조건이 그대로 실려 오는데, 그것을 "필수" 구획으로 그리면
+ * **화면이 서버와 다른 말을 한다** — FILTER에서는 모든 조건이 이미 결과를 좁히고 있고,
+ * 나머지를 "점수"라 부르면 있지도 않은 점수를 가리키게 된다.
  */
 const sections = computed(() => {
-  const required = items.value.filter((item) => item.condition.required)
+  const required = isScoring.value
+    ? items.value.filter((item) => item.condition.required)
+    : []
   if (required.length === 0) {
     return [{ key: 'all', title: null, hint: null, items: items.value }]
   }
@@ -85,24 +136,6 @@ const sections = computed(() => {
 })
 
 /**
- * 이 조건이 **총점에서 차지한 몫**(0..1).
- *
- * 획득/가중치가 아니다. 서버의 `earnedScore`는 충족이면 가중치 전액, 아니면 0인 **이진값**이라
- * 그것을 막대로 그리면 옆의 판정 `Tag`와 같은 말만 반복한다. 총점 기준으로 재면 가중치가
- * 다른 조건들의 막대 길이가 달라져 "무엇이 이 종목을 끌어올렸나"가 보인다 — 다섯 막대를
- * 합치면 달성률이 된다.
- *
- * @return 총점 상한이 없거나 0이면 null. 나눌 수 없고, 그때는 기여라는 개념도 없다.
- */
-function contributionOf(earnedScore: number | null): number | null {
-  const max = props.row.maxScore
-  if (earnedScore === null || max === null || max === 0) {
-    return null
-  }
-  return earnedScore / max
-}
-
-/**
  * 실제값이 어느 구간인가.
  *
  * 구간과 백분위 안내는 **카탈로그에만** 있고 스크리닝 응답의 `IndicatorBrief`에는 없다.
@@ -114,6 +147,14 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
   const meta = catalog.byCode.get(condition.indicator.code)
   return meta === undefined ? null : (readBand(meta, actualValue)?.label ?? null)
 }
+
+/** 낭독기와 툴팁이 읽을 문장. 숫자 두 개만으로는 무엇의 몇 점인지 알 수 없다. */
+function scoreSentence(earnedScore: number | null, weight: number): string {
+  return `배점 ${formatNumber(weight, SCORE_DECIMAL_SCALE)} 중 ${formatNumber(earnedScore, SCORE_DECIMAL_SCALE)} 획득`
+}
+
+const LANE_HINT =
+  '막대의 길이가 그 조건의 배점입니다. 배점이 큰 조건일수록 깁니다. 채워지지 않은 막대는 그 점수를 받지 못했다는 뜻입니다.'
 </script>
 
 <template>
@@ -123,15 +164,42 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
       <strong class="tabular">{{ formatNumber(row.score, SCORE_DECIMAL_SCALE) }}</strong>
       <span class="outcomes__total-max tabular">/ {{ formatNumber(row.maxScore, SCORE_DECIMAL_SCALE) }}</span>
       <span class="outcomes__total-ratio">({{ formatRatioAsPercent(row.scoreRatio) }})</span>
+      <!--
+        범례는 머리글과 겹치지 않는다. 머리글은 스크롤과 함께 사라지고 좁은 상자에서는 아예
+        접히므로, 인코딩의 설명을 그쪽 툴팁 하나에 걸어 두면 정작 필요한 순간에 없다.
+      -->
+      <span v-if="showsLane" class="outcomes__legend">막대는 길이가 배점, 채운 만큼이 획득입니다.</span>
     </div>
 
-    <section v-for="section in sections" :key="section.key" class="outcomes__group">
-      <h4 v-if="section.title" class="outcomes__group-title">
-        {{ section.title }}
-        <span v-if="section.hint" class="outcomes__group-hint">{{ section.hint }}</span>
-      </h4>
+    <ul class="outcomes__list" :class="`outcomes__list--cols-${columnCount}`">
+      <!--
+        머리글. 낭독기에는 감춘다 — 좁은 상자에서 접히고 스크롤하면 사라지므로 이것에 뜻을
+        기대게 하면 안 된다. 각 칸의 뜻은 셀 자신이 진다(점수 칸의 감춘 문장, 총점 줄의 범례).
+      -->
+      <li class="outcomes__head" aria-hidden="true">
+        <span>판정</span>
+        <span>지표</span>
+        <span>기준</span>
+        <span class="outcomes__head-num">실제</span>
+        <span>평가</span>
+        <span
+          v-if="isScoring"
+          class="outcomes__head-score"
+          :class="{ 'outcomes__head-score--wide': showsLane }"
+        >
+          획득 / 배점
+          <i v-if="showsLane" v-tooltip.top="LANE_HINT" class="pi pi-info-circle" />
+        </span>
+      </li>
 
-      <ul class="outcomes__list">
+      <template v-for="section in sections" :key="section.key">
+        <li v-if="section.title" class="outcomes__group-title">
+          <h4 class="outcomes__group-heading">
+            {{ section.title }}
+            <span v-if="section.hint" class="outcomes__group-hint">{{ section.hint }}</span>
+          </h4>
+        </li>
+
         <li v-for="item in section.items" :key="item.condition.index" class="outcomes__item">
           <Tag
             v-if="item.style"
@@ -143,7 +211,10 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
           />
           <span v-else class="outcomes__status outcomes__status--absent">판정 없음</span>
 
-          <span class="outcomes__text">{{ item.text }}</span>
+          <!-- 잘릴 수 있는 두 칸에는 `title`을 준다. 좁은 상자에서 말줄임이 되면 그 글자를
+               되찾을 방법이 달리 없다. -->
+          <span class="outcomes__subject" :title="item.subject">{{ item.subject }}</span>
+          <span class="outcomes__criterion" :title="item.criterion">{{ item.criterion }}</span>
 
           <span class="outcomes__actual tabular">
             {{
@@ -164,25 +235,40 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
           <span class="outcomes__grade">{{ item.grade }}</span>
 
           <!--
-            필수 조건에는 점수 칸이 없다. 서버가 총점에서 뺐으므로 "0 / 1"을 그리면 못 받은
-            점수처럼 읽힌다 — 받을 점수가 애초에 없다. 빈 칸으로 두면 그리드 트랙이 유지되어
-            아래위 행의 실제값·등급이 계속 같은 자리에 선다.
+            필수 조건에는 레인도 점수 칸도 없다. 서버가 총점에서 뺐으므로 "0 / 1"을 그리면 못
+            받은 점수처럼 읽힌다 — 받을 점수가 애초에 없다. 두 칸을 통째로 비우면 자동 배치가
+            앞의 다섯 칸만 채우므로 아래위 행의 실제값·평가가 계속 같은 자리에 선다.
           -->
           <template v-if="isScoring && !item.condition.required">
-            <!-- 총점에서 차지한 몫. 막대를 전부 합치면 달성률이 된다. -->
-            <RatioBar
-              :value="item.earnedRatio"
-              class="outcomes__bar"
-              :aria-label="`총점 기여 ${formatRatioAsPercent(item.earnedRatio)}`"
-            />
-            <span class="outcomes__score tabular">
-              {{ formatNumber(item.outcome?.earnedScore ?? null, SCORE_DECIMAL_SCALE) }} /
-              {{ formatNumber(item.weight, SCORE_DECIMAL_SCALE) }}
+            <!--
+              레인 자리는 값이 없어도 남긴다. `RatioBar`는 값이 없으면 아무것도 그리지 않는데,
+              칸까지 사라지면 뒤의 점수가 레인 트랙으로 밀려 들어간다.
+            -->
+            <span v-if="showsLane" class="outcomes__lane">
+              <RatioBar
+                v-if="item.lane"
+                :value="item.lane.fill"
+                :track-ratio="item.lane.trackRatio"
+                :floor="false"
+                aria-hidden="true"
+              />
+            </span>
+            <span
+              class="outcomes__score tabular"
+              :title="scoreSentence(item.outcome?.earnedScore ?? null, item.weight)"
+            >
+              <span class="outcomes__sr-only">
+                {{ scoreSentence(item.outcome?.earnedScore ?? null, item.weight) }}
+              </span>
+              <span aria-hidden="true">
+                {{ formatNumber(item.outcome?.earnedScore ?? null, SCORE_DECIMAL_SCALE) }} /
+                {{ formatNumber(item.weight, SCORE_DECIMAL_SCALE) }}
+              </span>
             </span>
           </template>
         </li>
-      </ul>
-    </section>
+      </template>
+    </ul>
 
     <p v-if="row.notEvaluableCount > 0" class="outcomes__note">
       {{ row.notEvaluableCount }}개 조건은 지표 값이 없어 판정하지 못했습니다. 조건에 맞지 않았다는
@@ -196,11 +282,22 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  /*
+   * IMPORTANT — "이 상자가 좁은가"를 뷰포트가 아니라 상자에게 묻는다(frontend.md).
+   *
+   * 이 패널은 데스크톱 표의 확장 행과 모바일 카드 **양쪽에** 들어가므로, 접힘 경계가
+   * 표↔카드 교체 경계와 같지 않다. 게다가 확장 영역의 폭은 좌측 레일 때문에 뷰포트에
+   * 단조증가하지 않는다 — 뷰포트 890px일 때가 950px일 때보다 넓다. 뷰포트로 물으면 넓은
+   * 상자를 좁은 것으로 오인한다.
+   */
+  container-type: inline-size;
+  container-name: outcomes;
 }
 
 /* 총점은 아래 목록의 합이다. hairline으로 머리와 몸을 가른다. */
 .outcomes__total {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 0.375rem;
   padding: 0 0.375rem 0.375rem;
@@ -219,56 +316,88 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
   font-size: var(--app-text-sm);
 }
 
-.outcomes__group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+/* 범례는 총점을 읽는 것을 방해하면 안 된다. 한 단 더 내리고 남는 폭으로 민다. */
+.outcomes__legend {
+  margin-inline-start: auto;
+  color: var(--p-text-subtle-color);
+  font-size: var(--app-text-2xs);
 }
 
 /*
- * 구획 제목. 판정 Tag보다 약하게 둔다 — 이 목록에서 눈이 먼저 가야 하는 것은 줄마다의
- * 충족·불충족이고, 제목은 그 줄들이 무엇을 묻는지만 말한다.
+ * 목록 전체가 하나의 그리드다. 행은 subgrid로 이 트랙을 **공유한다.**
+ *
+ * IMPORTANT — 행마다 자기 그리드를 두지 않는다. 그러면 `max-content` 트랙이 행마다 따로
+ * 계산되어 실제값·점수의 좌측 경계가 행마다 어긋나고, 세로로 읽어 내려가는 목록에서 그
+ * 들쭉날쭉함이 가장 먼저 보인다. 예전에는 그것을 막으려 트랙을 전부 고정폭으로 두었는데,
+ * 그 대가로 **조건문 트랙이 남는 폭을 전부 먹어** 오른쪽에 큰 공백이 생겼다. subgrid는
+ * 원인을 없앤다 — 내용에 맞는 폭을 쓰면서 행끼리 정렬된다.
+ *
+ * 신축을 갖는 것은 **레인 하나**다. 글자 두 칸은 `minmax(0, …)`이라 좁아지면 줄고, 숫자 칸은
+ * 내용 폭이 유계라 `max-content`로 두어도 넘치지 않는다. 그리드는 비신축 트랙을 먼저
+ * 채우고(§12.6) 신축 트랙을 나중에 펴므로(§12.7), 좁을 때 레인이 글자를 굶기지 않는다.
  */
-.outcomes__group-title {
-  display: flex;
-  align-items: baseline;
-  gap: 0.375rem;
-  margin: 0;
-  padding: 0 0.375rem;
-  font-size: var(--app-text-2xs);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--p-text-muted-color);
-}
-
-.outcomes__group-hint {
-  font-weight: 400;
-  color: var(--p-text-subtle-color);
-}
-
 .outcomes__list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
+  display: grid;
+  row-gap: 0.125rem;
+  column-gap: 0.625rem;
 }
 
-/*
- * IMPORTANT — 마지막 칸들을 `auto`로 두지 않는다. `<li>`마다 자기 그리드라 `auto`는 그 행의
- * 내용 폭이 되고, 자릿수가 다르면 실제값·점수의 **좌측 경계가 행마다 어긋난다.** 세로로 읽어
- * 내려가는 목록에서 그 들쭉날쭉함이 가장 먼저 보인다. 고정 트랙이면 저절로 맞는다.
- * (아래 모바일 주석이 첫 칸에 대해 같은 이야기를 하고 있었고, 나머지 칸이 빠져 있었다.)
- */
-.outcomes__item {
+.outcomes__list--cols-7 {
+  grid-template-columns:
+    max-content minmax(0, max-content) minmax(0, max-content)
+    max-content max-content minmax(4rem, 1fr) max-content;
+}
+
+/* 레인이 없으면(배점이 전부 같다) 남는 폭은 기준이 쓴다. 우측에 새 공백을 만들지 않는다. */
+.outcomes__list--cols-6 {
+  grid-template-columns:
+    max-content minmax(0, max-content) minmax(0, 1fr)
+    max-content max-content max-content;
+}
+
+.outcomes__list--cols-5 {
+  grid-template-columns:
+    max-content minmax(0, max-content) minmax(0, 1fr)
+    max-content max-content;
+}
+
+.outcomes__item,
+.outcomes__head {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 7rem minmax(0, 1fr) 7rem 5rem 4rem 6rem;
-  gap: 0.625rem;
+  grid-template-columns: subgrid;
   align-items: center;
+  /* 좌우 패딩은 머리글과 항목이 **같아야** 한다. subgrid의 양끝 트랙이 그만큼 줄어들므로,
+     한쪽만 주면 머리글과 몸의 컬럼이 어긋난다. */
   padding: 0.1875rem 0.375rem;
   border-radius: var(--p-border-radius-md);
   font-size: var(--app-text-sm);
+}
+
+.outcomes__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--p-surface-950);
+  color: var(--p-text-subtle-color);
+  font-size: var(--app-text-2xs);
+  letter-spacing: 0.02em;
+}
+
+.outcomes__head-num {
+  text-align: right;
+}
+
+.outcomes__head-score {
+  text-align: right;
+}
+
+/* 레인과 숫자는 한 이야기다. 머리글 하나가 두 칸을 함께 덮어 그것을 말한다. */
+.outcomes__head-score--wide {
+  grid-column: span 2;
 }
 
 .outcomes__item:hover {
@@ -284,13 +413,19 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
   font-size: var(--app-text-xs);
 }
 
-.outcomes__text {
+/*
+ * 잘릴 수 있는 두 칸. `min-width: 0`이 없으면 그리드 아이템의 자동 최소 크기가 min-content라
+ * 트랙이 줄어도 아이템이 버티며 **옆 칸을 침범한다.** 말줄임도 걸리지 않는다.
+ */
+.outcomes__subject,
+.outcomes__criterion {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 실제값은 조건과 대조하는 것이라 본문 밝기를 유지한다. 나머지 둘은 곁들이다. */
+/* 실제값은 기준과 대조하는 것이라 본문 밝기를 유지한다. 나머지 둘은 곁들이다. */
 .outcomes__actual {
   color: var(--p-text-color);
   text-align: right;
@@ -310,6 +445,47 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
   white-space: nowrap;
 }
 
+/* 트랙은 왼쪽 끝에서 자란다. 길이가 배점이므로 시작점이 같아야 서로 견줄 수 있다. */
+.outcomes__lane {
+  display: block;
+  min-width: 0;
+}
+
+.outcomes__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 구획 제목. 목록 안에 들지만 전 폭을 차지한다 — 트랙을 몸과 공유하기 위해서다. */
+.outcomes__group-title {
+  grid-column: 1 / -1;
+  padding: 0.375rem 0.375rem 0;
+}
+
+/*
+ * 판정 Tag보다 약하게 둔다 — 이 목록에서 눈이 먼저 가야 하는 것은 줄마다의 충족·불충족이고,
+ * 제목은 그 줄들이 무엇을 묻는지만 말한다.
+ */
+.outcomes__group-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--p-text-muted-color);
+}
+
+.outcomes__group-hint {
+  font-weight: 400;
+  color: var(--p-text-subtle-color);
+}
+
 .outcomes__note {
   margin: 0;
   font-size: var(--app-text-sm);
@@ -317,50 +493,71 @@ function gradeOf(condition: ConditionInfo, actualValue: number | null): string |
 }
 
 /*
- * 모바일에서는 조건이 두 줄이 된다 — 첫 줄에 판정과 조건문, 둘째 줄에 실제값과 점수.
+ * 좁은 상자에서는 조건이 세 줄이 된다 — 조건 한 줄, 값 한 줄, 레인 한 줄.
  *
- * 첫 칸을 `auto`가 아니라 **고정 폭**으로 두는 것이 요점이다. `auto`면 각 `<li>`가 자기만의
- * 그리드라 첫 칸이 그 행의 `실제 …` 길이에 맞춰지고, 값의 자릿수가 다르면 조건문이 행마다
- * 다른 자리에서 시작한다. 세로로 읽어 내려가는 목록에서 그 들쭉날쭉함이 가장 먼저 보인다.
+ * 48rem은 일곱 칸의 내용 폭 합(약 44rem)에 칸 사이 여백을 더한 값이다. 그 아래에서는 글자
+ * 두 칸이 말줄임에 기대기 시작하므로, 잘라 읽히느니 접는 편이 낫다.
+ *
+ * 첫 칸이 `minmax(4.5rem, max-content)`인 것이 요점이다. 판정 Tag와 실제값이 같은 칸을
+ * 위아래로 쓰므로 둘 중 넓은 쪽에 맞아야 하고, subgrid라 그 폭이 **모든 행에서 같다.**
+ * 행마다 자기 그리드였을 때는 값의 자릿수가 다르면 조건문이 행마다 다른 자리에서 시작했다.
  */
-@media (max-width: 767px) {
+@container outcomes (max-width: 48rem) {
+  .outcomes__head {
+    display: none;
+  }
+
+  .outcomes__list--cols-7,
+  .outcomes__list--cols-6,
+  .outcomes__list--cols-5 {
+    grid-template-columns: minmax(4.5rem, max-content) max-content minmax(0, 1fr);
+  }
+
   .outcomes__item {
-    grid-template-columns: 4.5rem minmax(0, 1fr) auto;
-    grid-template-areas:
-      'status text  text'
-      'actual grade score';
     row-gap: 0.125rem;
     column-gap: 0.5rem;
     padding: 0.25rem 0.375rem;
   }
 
   .outcomes__status {
-    grid-area: status;
+    grid-row: 1;
+    grid-column: 1;
   }
 
-  .outcomes__text {
-    grid-area: text;
-    /* 좁은 폭에서는 조건문이 두 줄이 되는 편이 잘리는 것보다 낫다. */
-    white-space: normal;
+  /* 지표와 기준은 붙어야 한 문장으로 읽힌다("PER 백분위 0.3000 이하"). */
+  .outcomes__subject {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .outcomes__criterion {
+    grid-row: 1;
+    grid-column: 3;
+    text-align: start;
   }
 
   .outcomes__actual {
-    grid-area: actual;
+    grid-row: 2;
+    grid-column: 1;
     text-align: start;
   }
 
   .outcomes__grade {
-    grid-area: grade;
+    grid-row: 2;
+    grid-column: 2;
   }
 
   .outcomes__score {
-    grid-area: score;
+    grid-row: 2;
+    grid-column: 3;
     justify-self: end;
   }
 
-  /* 막대는 자리를 얻지 못한다. 숫자가 같은 것을 말하므로 잃는 정보가 없다. */
-  .outcomes__bar {
-    display: none;
+  /* 레인은 죽이지 않는다. 세 줄째를 통째로 쓰되 두께가 3px이라 값싸고, 배점이 다를 때만
+     애초에 존재한다 — 조건이 스무 개인 전략에서는 이 줄이 생기지 않는다. */
+  .outcomes__lane {
+    grid-row: 3;
+    grid-column: 1 / -1;
   }
 }
 </style>
