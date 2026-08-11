@@ -34,9 +34,11 @@ KSIC 업종 코드(`company.json`의 `induty_code`)를 `stock.industry_code`에 
   임계 5는 n<5만 막고 **n=5와 n=40의 차이는 값에 아무 흔적을 남기지 않는다.**
 - MUST NOT: 표본이 부족할 때 유니버스 백분위나 절대 기준을 **같은 지표 코드로** 채우지
   않는다(ADR-0039 — 뜻이 다른 값을 같은 이름으로 부르지 않는다).
-- MUST NOT: 금융업 판정에 5자리를 전제하지 않는다. **앞 2자리**로 한다 — `induty_code`가
-  3자리와 5자리로 섞여 오므로 5자리 전제는 3자리 종목을 통째로 놓치고, 결과는
-  "그 종목만 조용히 안 걸린다"로 나타난다.
+- MUST NOT: 금융업 판정에 특정 자릿수를 전제하지 않는다. **앞 2자리**로 한다 —
+  `induty_code`가 3·4·5자리로 섞여 오므로 자릿수를 전제하면 그 종목만 조용히 안 걸린다.
+- MUST NOT: **중분류 64를 Altman Z 제외 대상에 넣지 않는다.** 이름은 금융업이지만 실질은
+  지주회사 버킷을 겸한다 — `64992`에 신한지주·KB금융과 LG·SK·GS가 함께 있고 3자리 `649`에도
+  미래에셋벤처투자와 효성·HDC가 섞여 **코드로 가를 수 없다.** 제외는 **65·66**뿐이다.
 - MUST NOT: `_SECTOR_REL`(중앙값 배수)에 `indicator.source_indicator_code`를 걸지 않는다.
   거는 순간 카탈로그가 백분위 안내를 내고 화면이 "상위 20% = `<= 0.2`" 버튼을 만드는데,
   **1.0이 중앙인 배수 값에 0.2는 뜻이 없다.**
@@ -71,13 +73,60 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 �
 **`count(*) = 0`과 "전량 비어 있음"을 따로 답하는 이유**는 둘 다 조용히 참이 되기 때문이다 —
 유니버스가 비어도, 잡을 한 번도 안 돌려도 업종 조건은 똑같이 전 종목 판정불가가 된다.
 
-```premise Altman Z가 금융업 종목에 값을 내지 않는다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) td FROM indicator_value), f AS (SELECT s.id, s.name FROM stock s JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL WHERE s.industry_division IN ('64','65','66')) SELECT CASE WHEN (SELECT count(*) FROM f) = 0 THEN '잴 것이 없었다 — 업종이 아직 없거나 금융 중분류 종목이 편입되어 있지 않다' WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — indicator_value가 비어 있다' WHEN (SELECT count(*) FROM indicator_value iv, d WHERE iv.trade_date = d.td AND iv.indicator_code = 'ALTMAN_Z' AND iv.stock_id IN (SELECT id FROM f)) = 0 THEN 'OK 금융 중분류 ' || (SELECT count(*) FROM f) || '종목에 ALTMAN_Z 행이 없다' ELSE '금융 중분류 종목에 ALTMAN_Z가 ' || (SELECT count(*) FROM indicator_value iv, d WHERE iv.trade_date = d.td AND iv.indicator_code = 'ALTMAN_Z' AND iv.stock_id IN (SELECT id FROM f)) || '건 남아 있다 — 계산기는 고쳤는데 기존 행을 지우지 않았다. 필수 조건이 옛 값으로 계속 통과한다' END"
+```premise Altman Z가 보험·금융서비스 종목에 값을 내지 않는다
+psql -d stock_screener -At -c "WITH f AS (SELECT s.id FROM stock s JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE s.industry_division IN ('65','66')), z AS (SELECT count(*) n FROM indicator_value iv WHERE iv.indicator_code = 'ALTMAN_Z' AND iv.stock_id IN (SELECT id FROM f)) SELECT CASE WHEN (SELECT count(*) FROM stock WHERE industry_code IS NOT NULL) = 0 THEN '잴 것이 없었다 — 업종이 하나도 적재되지 않았다' WHEN (SELECT count(*) FROM f) = 0 THEN '잴 것이 없었다 — 65·66 중분류 종목이 편입되어 있지 않다' WHEN (SELECT n FROM z) = 0 THEN 'OK 보험·금융서비스 ' || (SELECT count(*) FROM f) || '종목에 ALTMAN_Z 행이 없다' ELSE '보험·금융서비스 종목에 ALTMAN_Z가 ' || (SELECT n FROM z) || '행 남아 있다 — 계산기는 제외하는데 저장된 행이 지워지지 않았다. 필수 조건이 옛 값으로 계속 통과한다' END"
 ```
+
+**중분류 64를 빼고 재는 것이 요점이다.** 64에는 값이 있어야 정상인 비금융 사업지주가
+21종목 들어 있어, 그것까지 위반으로 세면 이 전제는 <b>영원히 거짓을 알린다.</b>
+
+**날짜를 고정하지 않는 것도 요점이다.** 최신 일자만 보면 그날 백필이 돌지 않은 상태에서
+과거 행이 남아 있어도 조용히 통과한다 — 지우는 것은 전 구간이다.
 
 **기존 행을 따로 묻는 것이 요점이다.** `IndicatorRunner`는 값을 못 내면 건너뛸 뿐이고
 `IndicatorValueWriter`는 UPSERT만 하므로, **계산기를 고쳐도 이미 저장된 행은 그대로 남는다** —
 에러도 경고도 없이 제외가 무효가 된다.
+
+## 실측 — 350콜이 답한 것 (2026-08-11, 지표 일자 2026-08-07)
+
+**착수 판정과 첫 구현이 같은 350콜이었다.** 아래가 그 측정이고, 위 결정들이 이 숫자를
+보기 전에 정해졌다는 것은 `docs/phase-criteria.md` P8이 증언한다.
+
+| 무엇 | 값 |
+|---|---|
+| 업종 커버리지 | **350 / 350.** NULL 0 |
+| 자릿수 | 3자리 105 · **4자리 52** · 5자리 193 (문서의 "3·5자리"는 6개사 표본의 과소추정이었다) |
+| 그룹 수 | 소분류 76개(표본 ≥5는 23개) · 중분류 43개(표본 ≥5는 20개) |
+| **표본 충족** | 소분류로 254 · 중분류 폴백으로 53 · **판정불가 43(12%)** |
+| 지표별 보유 | 부채비율 346 · 영업이익률 314 · **PER 269** |
+| 비12월 결산 | 1종목(신영증권 3월) |
+
+**표본 수를 지표마다 따로 세야 하는 근거가 여기 있다** — 표본 5 이상인 소분류 23개 중
+**6개에서 PER의 실제 표본이 5 미만**이다. 구조적 업종 크기 하나로 대신했다면 그 6개를
+"충분"이라 말하게 된다.
+
+### 프리셋 통과 집합 — 1종목에서 0종목이 됐다
+
+도입 전 통과는 **KT&G 하나**였고 도입 후 **0건**이다. 원인은 하나로 특정된다 —
+KT&G는 담배 제조업(`12000`)이고 소분류 `120`·중분류 `12` 양쪽 다 **유니버스 표본이 1**이라
+업종 조건이 판정불가가 된다. 위 §승인된 예외에 따라 이것을 받아들인다.
+
+부채비율 단계에 도달했던 11종목이 어떻게 갈렸는지가 이 이식의 검증이다:
+
+| 종목 | 업종 | 절대 부채비율 | 업종 배수(표본) | 결과 |
+|---|---|---|---|---|
+| KT&G | 12000 | 57.6 통과 | **판정불가(1)** | **탈락 — 유일한 통과 종목이었다** |
+| 한국타이어 | 221 | 87.8 통과 | 판정불가(2) | 탈락(원래도 Z 2.00으로 탈락) |
+| 오리온 | 108 | 19.7 통과 | 0.30 (5) 통과 | 탈락(Z 없음, 변화 없음) |
+| 삼성화재·현대해상·DB손보 | 65121 | 317~785 **탈락** | 0.59~1.45 (7) **통과** | 탈락(Altman Z 명시 제외) |
+| 금융지주 5 | 64992 | 1,228~1,539 탈락 | 8.89~11.14 (32) 탈락 | 탈락(Z 없음) |
+
+**보험 3사가 절대 기준으로는 탈락하다가 업종 기준으로는 통과하게 된 것**이 업종 축이 실제로
+무엇을 바꾸는지 보여준다. 그들이 최종적으로 빠지는 근거가 이제 **부작용이 아니라 명시
+제외**라는 것도 함께 드러난다 — 그 전까지는 유동자산 결손에 얹혀 있었다.
+
+**금융지주가 업종 안에서도 과부채로 걸리는 것은 `64992`에 사업지주가 섞여 중앙값이
+낮아지기 때문이다.** 코드로 금융/비금융 지주를 가를 수 없다는 위 규칙이 여기서도 보인다.
 
 ## 배경
 
