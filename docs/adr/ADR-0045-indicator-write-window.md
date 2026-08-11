@@ -70,8 +70,13 @@ psql -d stock_screener -At -c "WITH b AS (SELECT DISTINCT trade_date FROM price_
 코드였다면 같은 한 번이 **~570거래일을 되살렸다**(`readRawData`가 단일 날짜여도 751봉을
 읽는다). 전제도 `594거래일이 보존 경계 밖에 있다` → `OK`로 뒤집혔고 백필 뒤에도 `OK`다.
 
-**인덱스는 아직 안 줄었다** — 배포 직후 1,197MB(`idx_iv_screen` 732 · pkey 365 ·
-`idx_iv_stock_date` 100). REINDEX는 한 거래일 뒤에 한다(아래 §결과).
+**같은 잡의 배포 전후가 가장 선명한 짝이다** — `indicator-backfill` id 35(수정 전·purge 직후)
+**4,806,675행** 대 id 45(수정 후·purge 직후) **0행**.
+
+**MUST NOT: `written_row_count`를 배포 전후 판별에 쓰지 않는다.** 그 값도 상태 의존이다 —
+보존 밖 구간이 비어 있으면 전부 INSERT라 437만이 되고, 백필이 이미 채워 두었으면
+`IndicatorValueWriter`의 `IS DISTINCT FROM` 가드가 걸러 44만이 된다. 같은 코드가 열 배
+차이를 낸다(id 34 대 id 44). 상태에 안 휘둘리는 것은 **거래일 수**와 **잡 구조**뿐이다.
 
 **`count(DISTINCT indicator_value.trade_date)`의 테이블 한정을 지우지 않는다.** `b`에도 같은
 이름의 컬럼이 있어 `ambiguous` 오류가 나는데, **전제는 오류를 판정 불가로 삼키므로 이 자리는
@@ -135,7 +140,9 @@ psql -d stock_screener -At -c "WITH b AS (SELECT DISTINCT trade_date FROM price_
   거부하지 않고 경고한다** — 구간이 전부 경계 밖이면 돌지 않고, 일부면 몇 거래일이 저장되지
   않는지 말한다. 그 경고가 없으면 몇 시간을 돌고 0행으로 끝나는데 잡은 `SUCCESS`다.
 - **인덱스는 저절로 줄지 않는다.** 이 결정은 **더 부풀지 않게** 할 뿐이고, 이미 쌓인 블로트는
-  `REINDEX INDEX CONCURRENTLY`가 걷어야 한다. **그 실행은 이 변경이 배포되어 한 거래일을
-  지난 뒤에 한다** — 먼저 돌리면 다음 배치가 되돌려, 줄어든 것이 이 결정 덕인지 알 수 없다.
+  `REINDEX INDEX CONCURRENTLY`가 걷는다. 배포 당일 대량 삭제 직후에 돌려 **1,229MB →
+  202MB**가 됐다(2026-08-11). **MUST NOT: 그 축소를 이 결정의 성과로 읽지 않는다** — 줄인
+  것은 REINDEX이고, 이 결정이 하는 일은 **다음 배치가 그것을 되돌리지 않는 것**이다.
+  귀속은 그렇게 둘로 나눠야 성립한다.
 - **되돌리려면**: `IndicatorRunner.run()`의 세 번째 인자와 `retain()`, `writeCutoff()`,
   그리고 두 잡의 호출부. 되돌리는 순간 위 왕복이 다시 시작되고 **아무 증상도 나타나지 않는다.**

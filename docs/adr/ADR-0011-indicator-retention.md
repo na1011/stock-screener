@@ -39,8 +39,13 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '지표가 한
 > 다만 그것을 만든 것은 백필이 아니라 **일일 갱신 자신**이다 — 러너가 읽기 창 전체에 값을
 > 내므로 매 실행이 최대 571거래일치를 보존 밖에 쓰고 아래 `purge()`가 그것을 지웠다.
 >
-> **그래서 REINDEX는 ADR-0045가 배포되어 한 거래일을 지난 뒤에 한다.** 먼저 돌리면 다음
-> 배치가 되돌려, 줄어든 것이 무엇 덕인지 귀속시킬 수 없다.
+> **REINDEX는 ADR-0045 배포 당일, 그 배포의 대량 삭제 직후에 돌렸다**(2026-08-11,
+> `1,229MB → 202MB`). "먼저 돌리면 다음 배치가 되돌린다"는 걱정은 **되돌리는 기제 자체가
+> 그 배포로 닫혀** 성립하지 않게 됐고, 아래 "정리 직후가 블로트 최대 시점"이 오히려 그
+> 시점을 가리킨다.
+>
+> **귀속은 둘로 나눠 확보한다** — 이 축소는 REINDEX가 한 것이고, ADR-0045가 한 일은
+> **다음 배치가 그것을 되돌리지 않는 것**이다. 뒤엣것의 확인은 다음 거래일 배치 뒤에 한다.
 
 ```bash
 psql -d stock_screener -At -F'|' -c "SELECT indexrelname, pg_size_pretty(pg_relation_size(indexrelid)) FROM pg_stat_user_indexes WHERE relname='indicator_value' ORDER BY pg_relation_size(indexrelid) DESC"
