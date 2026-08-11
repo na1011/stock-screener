@@ -55,7 +55,17 @@ defineSlots<{
   background: var(--p-content-background);
 }
 
+/*
+ * IMPORTANT — 높이가 **여기** 있어야 한다. 안쪽 `__row`에 주면 그 값에 선 1px이 더해져
+ * 띠 전체가 53px이 되고, 선을 `min-height` 안에 갖는 레일(52px)과 **1px 어긋난다.**
+ * 1px이어도 선은 이어지지 않는다 — 실제로 그렇게 났다.
+ *
+ * 규칙은 하나다: **`--app-shell-header-height`는 선을 포함한 띠의 총 높이다.**
+ * `box-sizing: border-box`(main.css의 `*`)가 그것을 보장한다.
+ */
 .view-header__top {
+  display: flex;
+  min-height: var(--app-shell-header-height);
   border-bottom: 1px solid var(--p-content-border-color);
 }
 
@@ -64,8 +74,9 @@ defineSlots<{
   align-items: center;
   gap: 0.5rem 0.75rem;
   flex-wrap: wrap;
-  /* 좌측 브랜드 띠와 **같은 값**이어야 선이 만난다. 여기만 고치면 어긋난다. */
-  min-height: var(--app-shell-header-height);
+  /* 위 상자가 정한 높이를 채운다. 자기 높이를 따로 갖지 않는다. */
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: var(--app-view-width, none);
   margin-inline: auto;
   padding-inline: var(--app-gutter);
@@ -73,7 +84,6 @@ defineSlots<{
 
 /* 둘째 줄은 자기 내용만큼만 높다. 첫 줄의 고정 높이를 물려받으면 칩 한 줄이 52px을 먹는다. */
 .view-header__row--band {
-  min-height: 0;
   padding-block: 0.5rem;
 }
 
@@ -112,8 +122,11 @@ defineSlots<{
     position: static;
   }
 
-  .view-header__row {
+  .view-header__top {
     min-height: 0;
+  }
+
+  .view-header__row {
     padding-block: 0.5rem;
   }
 
