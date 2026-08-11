@@ -90,7 +90,7 @@ ops/start.sh --tunnel     # 터널만
 date '+%F %H:%M (%a)'
 ```
 
-**평일 15시 직전이면 그때까지 켜 둔다.** 배치가 앱 프로세스 안에서 돌기 때문이다(맨 아래 주의).
+**평일 13시 30분 직전이면 그때까지 켜 둔다.** 배치가 앱 프로세스 안에서 돌기 때문이다(맨 아래 주의).
 
 ```bash
 ops/stop.sh
@@ -183,13 +183,13 @@ tail -50 ~/Library/Logs/stock-screener/tunnel.log    # 터널
 | `tunnel-token이 없다` | `.env`의 `CLOUDFLARE_TUNNEL_TOKEN`이 비었거나 스테이징 전이다. 채우고 `ops/stage.sh` |
 | **고친 것이 화면에 안 나온다** | `deploy.sh`를 안 돌렸다. 위 **배포** |
 | **`자동기동: 되살아났다`** | 부팅 시 뜨는 등록이 다시 생겼다. 세션 시작에 ADR-0043의 `premise`도 같은 것을 알린다. 무엇이 생겼는지 보고 해제한다 |
-| **앱은 도는데 데이터가 안 늘었다** | 배치는 평일 15시에만 돈다. 결손 판정은 [`docs/progress.md`](docs/progress.md)의 SQL이 답한다 |
+| **앱은 도는데 데이터가 안 늘었다** | 배치는 평일 13시 30분에만 돈다. 결손 판정은 [`docs/progress.md`](docs/progress.md)의 SQL이 답한다 |
 
 **개발할 때는 `bootRun`과 배포본이 `:8080`을 다툰다.** 자기 코드를 보려면 `ops/stop.sh --app` 후 `./gradlew bootRun`, 끝나면 `ops/start.sh --app`(또는 변경을 살릴 것이면 `ops/deploy.sh`)로 되돌린다.
 
 ---
 
-**IMPORTANT — 배치는 앱 프로세스 안에서 돈다.** 평일 15시에 앱이 꺼져 있으면 그날 수집이 통째로 빠지고 **아무 알림도 나가지 않는다**(0건이어도 배치는 SUCCESS다). 다음 실행이 15일 창으로 메우므로([ADR-0042](docs/adr/ADR-0042-batch-schedule-and-target-date.md)) 매일 켤 필요는 없지만, **15일에 한 번은 평일 15시에 켜 두어야 한다.** 맥북이 자면 사이트도 함께 내려간다 — 온프레미스를 택한 대가다(spec §6).
+**IMPORTANT — 배치는 앱 프로세스 안에서 돈다.** 평일 13시 30분에 앱이 꺼져 있으면 그날 수집이 통째로 빠지고 **아무 알림도 나가지 않는다**(0건이어도 배치는 SUCCESS다). 다음 실행이 15일 창으로 메우므로([ADR-0042](docs/adr/ADR-0042-batch-schedule-and-target-date.md)) 매일 켤 필요는 없지만, **15일에 한 번은 평일 13시 30분에 켜 두어야 한다.** 맥북이 자면 사이트도 함께 내려간다 — 온프레미스를 택한 대가다(spec §6).
 
 ## 하네스 설계 — 기획형 하네스
 
