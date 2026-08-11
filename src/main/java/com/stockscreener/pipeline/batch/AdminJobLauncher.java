@@ -73,7 +73,8 @@ public class AdminJobLauncher {
                             AsyncTaskExecutor taskExecutor,
                             DailyUpdateJob dailyUpdateJob,
                             UniverseRebalanceJob universeRebalanceJob,
-                            IndicatorBackfillJob indicatorBackfillJob) {
+                            IndicatorBackfillJob indicatorBackfillJob,
+                            CompanyProfileJob companyProfileJob) {
         this.taskExecutor = taskExecutor;
         this.dailyUpdateJob = dailyUpdateJob;
         this.jobs = Map.of(
@@ -91,7 +92,15 @@ public class AdminJobLauncher {
                 request -> indicatorBackfillJob.run(
                         request.orDefault(request.from(), LocalDate.now().minusDays(7)),
                         request.orDefault(request.to(), LocalDate.now()),
-                        BatchExecutionRecorder.TriggeredBy.ADMIN));
+                        BatchExecutionRecorder.TriggeredBy.ADMIN),
+
+                // 화면에서 띄워도 되는 이유는 대상이 **업종이 비어 있는 종목뿐**이라
+                // 평소 0콜이고, 전량이어도 종목당 1콜(350)이기 때문이다.
+                // InitialLoadJob을 뺀 근거(한 번에 한도 절반)가 여기엔 없다.
+                CompanyProfileJob.JOB_NAME,
+                request -> companyProfileJob.run(
+                        request.orDefault(request.targetDate(), LocalDate.now()),
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()));
 
         this.catalog = List.of(
                 new Descriptor(DailyUpdateJob.JOB_NAME, "일일 갱신",
@@ -104,7 +113,10 @@ public class AdminJobLauncher {
                         Parameters.TARGET_DATE, 1),
                 new Descriptor(IndicatorBackfillJob.JOB_NAME, "지표 백필",
                         "이미 저장된 시세로 구간의 지표를 다시 계산한다. 외부 API를 부르지 않는다.",
-                        Parameters.DATE_RANGE, 0));
+                        Parameters.DATE_RANGE, 0),
+                new Descriptor(CompanyProfileJob.JOB_NAME, "업종 정보 수집",
+                        "업종이 비어 있는 편입 종목의 업종·결산월을 받는다. 종목당 1콜이다.",
+                        Parameters.TARGET_DATE, 0));
     }
 
     /** 화면이 나열할 잡 목록. 프론트가 이름을 하드코딩하지 않게 서버가 준다. */

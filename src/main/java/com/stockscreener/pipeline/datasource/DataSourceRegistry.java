@@ -30,16 +30,19 @@ public class DataSourceRegistry {
     private final Map<String, PriceDataSource> priceByMarket;
     private final Map<String, FinancialDataSource> financialByMarket;
     private final Map<String, SecurityMasterDataSource> masterByMarket;
+    private final Map<String, CompanyProfileDataSource> profileByMarket;
     private final Map<String, UniverseDataSource> universeByCode;
 
     public DataSourceRegistry(
             List<PriceDataSource> priceSources,
             List<FinancialDataSource> financialSources,
             List<SecurityMasterDataSource> masterSources,
+            List<CompanyProfileDataSource> profileSources,
             List<UniverseDataSource> universeSources) {
         this.priceByMarket = index(priceSources, PriceDataSource::supportedMarketCodes, "시세");
         this.financialByMarket = index(financialSources, FinancialDataSource::supportedMarketCodes, "재무");
         this.masterByMarket = index(masterSources, SecurityMasterDataSource::supportedMarketCodes, "종목마스터");
+        this.profileByMarket = index(profileSources, CompanyProfileDataSource::supportedMarketCodes, "기업개황");
         this.universeByCode = index(universeSources, UniverseDataSource::supportedUniverseCodes, "유니버스");
     }
 
@@ -82,6 +85,10 @@ public class DataSourceRegistry {
 
     public SecurityMasterDataSource securityMasterSource(String marketCode) throws DataSourceException {
         return require(masterByMarket, marketCode, "종목마스터");
+    }
+
+    public CompanyProfileDataSource companyProfileSource(String marketCode) throws DataSourceException {
+        return require(profileByMarket, marketCode, "기업개황");
     }
 
     public UniverseDataSource universeSource(String universeCode) throws DataSourceException {

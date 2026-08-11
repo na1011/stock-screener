@@ -33,9 +33,11 @@ class AdminJobLauncherTest {
     private final DailyUpdateJob dailyUpdateJob = mock(DailyUpdateJob.class);
     private final UniverseRebalanceJob universeRebalanceJob = mock(UniverseRebalanceJob.class);
     private final IndicatorBackfillJob indicatorBackfillJob = mock(IndicatorBackfillJob.class);
+    private final CompanyProfileJob companyProfileJob = mock(CompanyProfileJob.class);
 
     private final AdminJobLauncher launcher = new AdminJobLauncher(
-            new SimpleAsyncTaskExecutor(), dailyUpdateJob, universeRebalanceJob, indicatorBackfillJob);
+            new SimpleAsyncTaskExecutor(), dailyUpdateJob, universeRebalanceJob,
+            indicatorBackfillJob, companyProfileJob);
 
     @Test
     @DisplayName("도는 중인 잡은 새로 띄우지 않는다")
@@ -130,10 +132,14 @@ class AdminJobLauncherTest {
     void initialLoadIsNotLaunchable() {
         assertThat(launcher.isLaunchable(InitialLoadJob.JOB_NAME)).isFalse();
         assertThat(launcher.catalog()).extracting(AdminJobLauncher.Descriptor::name)
+                .as("목록에 잡을 더하는 것은 화면에 버튼을 하나 더하는 것이다. "
+                        + "쿼터를 얼마나 태우는지 먼저 답하고 여기 적는다")
                 .containsExactlyInAnyOrder(
                         DailyUpdateJob.JOB_NAME,
                         UniverseRebalanceJob.JOB_NAME,
-                        IndicatorBackfillJob.JOB_NAME);
+                        IndicatorBackfillJob.JOB_NAME,
+                        // 대상이 업종 결손 종목뿐이라 평소 0콜, 전량이어도 종목당 1콜(350).
+                        CompanyProfileJob.JOB_NAME);
 
         assertThatThrownBy(() ->
                 launcher.launch(InitialLoadJob.JOB_NAME, AdminJobLauncher.JobRequest.empty()))

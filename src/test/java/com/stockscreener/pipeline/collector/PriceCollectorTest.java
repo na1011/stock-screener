@@ -117,7 +117,7 @@ class PriceCollectorTest {
 
     private PriceCollector collectorWith(FakePriceDataSource source) {
         DataSourceRegistry registry = new DataSourceRegistry(
-                List.of(source), List.of(), List.of(), List.of());
+                List.of(source), List.of(), List.of(), List.of(), List.of());
         return new PriceCollector(registry, writer, recalculator);
     }
 

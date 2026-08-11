@@ -42,6 +42,13 @@ import java.util.List;
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=financial-refill \
  *     --financial-years=3 --tickers=005930,035420'
  *
+ * # 업종·결산월 수집 — 기본 대상은 업종이 비어 있는 편입 종목뿐이다. 종목당 1콜
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=company-profile'
+ *
+ * # 이미 있는 업종을 다시 받는다 — 티커를 주면 결손 여부와 무관하게 갱신한다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=company-profile \
+ *     --tickers=005930,035420'
+ *
  * # 지표 백필
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill --from=2020-01-02'
  * </pre>
@@ -59,6 +66,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final UniverseRebalanceJob universeRebalanceJob;
     private final InitialLoadJob initialLoadJob;
     private final FinancialRefillJob financialRefillJob;
+    private final CompanyProfileJob companyProfileJob;
     private final IndicatorBackfillJob indicatorBackfillJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
@@ -66,12 +74,14 @@ public class BootstrapRunner implements ApplicationRunner {
     public BootstrapRunner(UniverseRebalanceJob universeRebalanceJob,
                            InitialLoadJob initialLoadJob,
                            FinancialRefillJob financialRefillJob,
+                           CompanyProfileJob companyProfileJob,
                            IndicatorBackfillJob indicatorBackfillJob,
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.initialLoadJob = initialLoadJob;
         this.financialRefillJob = financialRefillJob;
+        this.companyProfileJob = companyProfileJob;
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
@@ -103,12 +113,15 @@ public class BootstrapRunner implements ApplicationRunner {
             case "financial-refill" -> financialRefillJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     optionalInteger(args, "financial-years"), csv(args, "tickers"));
+            case "company-profile" -> companyProfileJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
             case "backfill" -> indicatorBackfillJob.run(
                     date(args, "from", asOf.minusYears(2)), asOf,
                     BatchExecutionRecorder.TriggeredBy.MANUAL);
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
-                            + "' — universe | initial-load | financial-refill | backfill");
+                            + "' — universe | initial-load | financial-refill | company-profile"
+                            + " | backfill");
         };
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);

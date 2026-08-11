@@ -122,6 +122,22 @@ public class StockRegistrar {
     }
 
     /**
+     * 업종이 아직 비어 있는 편입 종목.
+     *
+     * <p>{@link #activeUniverseMemberIds()} 옆에 두는 이유는 그 javadoc이 적은 것과 같다 —
+     * "편입 중인 활성 종목"의 정의가 잡마다 갈리면 <b>어느 쪽도 에러를 내지 않는다.</b>
+     * 여기는 그 정의에 결손 조건 하나만 더한 것이며, 정의 자체는 위와 같은 자리에서 온다.
+     */
+    public List<Long> activeUniverseMemberIdsWithoutIndustry() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                WHERE m.effective_to IS NULL AND s.is_active AND s.industry_code IS NULL
+                ORDER BY m.stock_id
+                """, Long.class);
+    }
+
+    /**
      * 티커로 편입 종목을 골라낸다. <b>없는 종목을 만들지 않는다.</b>
      *
      * <p>{@link #resolveOrCreate}와 갈라놓은 이유가 그것이다 — 저쪽은 유니버스 편입이 근거라

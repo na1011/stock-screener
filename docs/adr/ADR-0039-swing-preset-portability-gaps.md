@@ -61,17 +61,15 @@ psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) td FROM indicat
 둘 다 흔하기 때문이다. 이 둘은 **실행당 1일치만 채워지는** 지표라(위 §깔때기) 백필을 건너뛴
 날짜에는 정상적으로 비어 있다.
 
-### 아래 둘은 지금 **일부러 거짓인** 전제다
+### 아래 하나는 지금 **일부러 거짓인** 전제다
 
-§단계 C에서 업종·분할 소스가 열렸다고 적었지만 **아직 붙이지 않았다.** 그 간극이
-이 문서의 가장 큰 위험이다 — "열렸다"를 읽고 "들어와 있다"로 넘어가면, 업종 없이 매긴
-백분위를 업종 순위라 부르고 `adj_factor`가 1인 채로 추세 게이트를 신뢰하게 된다.
-**두 전제는 소스를 붙이는 phase가 끝나는 순간 참이 되며, 그때까지 세션 시작마다 거짓을
+§단계 C에서 분할 소스가 열렸다고 적었지만 **아직 붙이지 않았다.** 그 간극이 이 문서의
+위험이다 — "열렸다"를 읽고 "들어와 있다"로 넘어가면 `adj_factor`가 1인 채로 추세 게이트를
+신뢰하게 된다. **이 전제는 P9가 끝나는 순간 참이 되며, 그때까지 세션 시작마다 거짓을
 알린다.** 그것이 이 펜스의 역할이다.
 
-```premise 업종이 아직 비어 있다(P8 미착수)
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 종목이 하나도 없다' WHEN count(*) FILTER (WHERE s.sector IS NOT NULL) = 0 THEN 'OK 업종이 전량 비어 있다(' || count(*) || '종목) — H-02·S-01·S-02는 절대 기준·유니버스 백분위 치환 상태이고 Altman Z의 금융업 제외도 없다' ELSE '업종이 ' || count(*) FILTER (WHERE s.sector IS NOT NULL) || '/' || count(*) || '종목에 들어왔다 — 이 ADR의 업종 관련 판정 넷을 다시 읽어라' END FROM stock s JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active"
-```
+**업종 쪽 펜스는 여기 없다** — P8이 착수해 `stock.industry_code`가 정본이 됐고, 판정은
+ADR-0044의 premise가 한다. 여기에 사본을 두면 두 곳이 갈린다.
 
 ```premise 수정계수가 아직 전량 1이다(P9 미착수)
 psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — price_daily가 비어 있다' WHEN count(*) FILTER (WHERE adj_factor <> 1) = 0 THEN 'OK adj_factor가 전량 1이다(' || count(*) || '행) — 추세 게이트 6개가 쓰는 adj_close는 미수정 종가와 같다' ELSE 'adj_factor가 ' || count(*) FILTER (WHERE adj_factor <> 1) || '행에서 1이 아니다 — 수정주가가 들어왔다. T-01~T-07의 신뢰도 서술을 다시 읽어라' END FROM price_daily"

@@ -27,6 +27,18 @@ final class DartResponse {
      *         "조회할 보고서가 없다"는 종목 단위 실패이며 호출부가 구분해 처리한다.
      */
     static JsonNode requireList(JsonNode root, String context) throws DataSourceException {
+        return requireSuccess(root, context).path("list");
+    }
+
+    /**
+     * status만 검사하고 <b>루트를 그대로</b> 준다.
+     *
+     * <p>IMPORTANT — 기업개황({@code company.json})은 응답이 {@code list} 배열이 아니라
+     * <b>평면 객체</b>다(§10-A). 그 엔드포인트에 {@link #requireList}를 쓰면 없는 {@code list}를
+     * 찾아 빈 결과가 되는데, 오류가 아니라 <b>"이 종목은 값이 없다"로 읽힌다.</b>
+     * status 판정을 두 곳에 복사하지 않으려고 이쪽을 정본으로 두고 저쪽이 부른다.
+     */
+    static JsonNode requireSuccess(JsonNode root, String context) throws DataSourceException {
         if (root == null || root.isMissingNode()) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                     "응답 본문이 비어 있다. " + context);
@@ -41,7 +53,7 @@ final class DartResponse {
                     "DART 오류 [" + status + "] " + root.path("message").asString("")
                             + " — " + context);
         }
-        return root.path("list");
+        return root;
     }
 
     /** ZIP이 아닌 본문(주로 인증 실패 JSON)에서 예외를 만든다. */
