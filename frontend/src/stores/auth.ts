@@ -31,6 +31,19 @@ export const useAuthStore = defineStore('auth', () => {
   const me = shallowRef<MeResponse | null>(null)
   const error = shallowRef<ApiError | null>(null)
 
+  /**
+   * **로그인해 있다가** 세션이 끊겼는가.
+   *
+   * IMPORTANT — `status === 'anonymous'`와 다른 질문이다. 그쪽은 "처음부터 로그인하지 않은
+   * 것"까지 포함하고, 그 경우 사용자는 로그인 화면을 보고 있으므로 알릴 것이 없다. 여기서
+   * 가리키는 것은 **쓰던 중에 끊긴 것**이고, 그때만 화면 위에 안내를 띄운다.
+   *
+   * 앱 부팅의 첫 프로브가 이 값을 세우지 않는 것은 `/api/me`가 `notifyUnauthorized: false`라
+   * {@link markSignedOut}을 거치지 않기 때문이다(`api/endpoints.ts`). 그 한 줄이 "처음부터
+   * 익명"과 "쓰다가 끊김"을 가른다.
+   */
+  const sessionExpired = ref(false)
+
   const isAuthenticated = computed(() => status.value === 'authenticated')
   const isAdmin = computed(() => me.value?.admin === true)
   /** 이름을 주지 않는 계정이 있다. 그때는 이메일이 곧 표시 이름이다. */
@@ -41,6 +54,9 @@ export const useAuthStore = defineStore('auth', () => {
       me.value = await api.me()
       error.value = null
       status.value = 'authenticated'
+      // 다른 탭에서 다시 로그인했을 수 있다. 안내를 띄운 채로 두면 이미 살아난 세션을
+      // 두고 사용자가 로그인을 반복한다.
+      sessionExpired.value = false
     } catch (caught) {
       if (!(caught instanceof ApiError)) {
         status.value = 'unavailable'
@@ -57,11 +73,37 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /** 어느 요청에서든 401이 나면 불린다. 상태만 바꾸고 이동은 라우터 가드가 한다. */
+  /**
+   * 어느 요청에서든 401이 나면 불린다.
+   *
+   * IMPORTANT — 예전에는 상태만 바꾸고 "이동은 라우터 가드가 한다"고 적어 두었는데, **그
+   * 가드를 부르는 주체가 없었다.** `router.beforeEach`는 라우트가 바뀔 때만 돌고, 세션이
+   * 끊기는 자리는 대개 같은 화면에서의 API 호출(실행·저장·관심종목)이다. 그래서 사용자는
+   * 로그인 화면 대신 "요청이 실패했습니다 (401)." 토스트만 반복해서 보았다.
+   *
+   * 이동을 여기서 하지 않는 이유는 편집 중인 조건을 예고 없이 잃기 때문이다. 대신
+   * {@link sessionExpired}를 세우고 `App.vue`가 안내를 띄운다 — 사용자가 준비되면 누른다.
+   */
   function markSignedOut(): void {
     me.value = null
     error.value = null
     status.value = 'anonymous'
+    sessionExpired.value = true
+  }
+
+  /**
+   * 세션이 아직 살아 있는지 다시 묻는다. 탭으로 돌아왔을 때 부른다.
+   *
+   * IMPORTANT — {@link probe}를 그대로 쓰지 않는 이유는 그것이 401을 "익명"으로만 기록하기
+   * 때문이다. 부팅 시에는 그것이 맞지만(로그인 화면으로 가면 된다) 쓰던 중이라면 만료다.
+   * 그 판정을 컴포넌트가 하게 두면 부르는 곳마다 규칙이 갈린다.
+   */
+  async function revalidate(): Promise<void> {
+    const wasSignedIn = isAuthenticated.value
+    await probe()
+    if (wasSignedIn && status.value === 'anonymous') {
+      markSignedOut()
+    }
   }
 
   /**
@@ -110,10 +152,12 @@ export const useAuthStore = defineStore('auth', () => {
     status,
     me,
     error,
+    sessionExpired,
     isAuthenticated,
     isAdmin,
     displayName,
     probe,
+    revalidate,
     markSignedOut,
     signIn,
     signOut,

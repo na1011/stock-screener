@@ -36,6 +36,18 @@ const subject = computed(() => ASYNC_PANELS[props.panel])
 // computed인 이유는 setup에서 한 번 읽으면 값이 바뀌어도 따라가지 않기 때문이다.
 // 지금 호출부가 전부 정적 리터럴이라 드러나지 않을 뿐, 다음 호출자를 위한 함정이다.
 const rows = computed(() => props.skeletonRows ?? 3)
+
+/**
+ * 세션이 끊겨서 실패한 것인가.
+ *
+ * IMPORTANT — 이 갈래가 없는 동안 401에서 나오던 문장이 **"잠시 뒤 다시 시도해도 같은 결과가
+ * 나올 수 있습니다. 입력한 조건을 확인해 주세요."**였다(`isRetryable`이 401에 false를 주므로).
+ * 세션이 만료된 사용자에게 조건을 확인하라고 한 것이다. 재시도 버튼도 함께 그려졌고, 눌러도
+ * 다시 401이었다.
+ *
+ * 무엇을 해야 하는지는 `App.vue`의 대화상자가 말한다. 여기서는 재시도를 권하지 않는 것으로 족하다.
+ */
+const signedOut = computed(() => props.error?.status === 401)
 </script>
 
 <template>
@@ -69,12 +81,25 @@ const rows = computed(() => props.skeletonRows ?? 3)
       <div class="async-panel__error">
         <div>
           <strong>{{ subject.subject }}{{ subject.particle }} 불러오지 못했습니다.</strong>
-          <p class="async-panel__detail">{{ error?.userMessage }}</p>
-          <p v-if="error && !error.retryable" class="async-panel__hint">
+          <!-- 401의 본문은 "요청이 실패했습니다 (401)."이다. 세션 얘기를 대신 한다. -->
+          <p v-if="signedOut" class="async-panel__detail">로그인이 만료되었습니다.</p>
+          <p v-else class="async-panel__detail">{{ error?.userMessage }}</p>
+          <p v-if="signedOut" class="async-panel__hint">
+            다시 로그인하면 이 영역도 함께 복구됩니다.
+          </p>
+          <p v-else-if="error && !error.retryable" class="async-panel__hint">
             잠시 뒤 다시 시도해도 같은 결과가 나올 수 있습니다. 입력한 조건을 확인해 주세요.
           </p>
         </div>
-        <Button label="다시 시도" icon="pi pi-refresh" size="small" outlined @click="retry()" />
+        <!-- 세션이 끊긴 것이면 눌러도 다시 401이다. 되지 않을 것을 권하지 않는다. -->
+        <Button
+          v-if="!signedOut"
+          label="다시 시도"
+          icon="pi pi-refresh"
+          size="small"
+          outlined
+          @click="retry()"
+        />
       </div>
     </Message>
 

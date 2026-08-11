@@ -4,12 +4,13 @@ import ConfirmDialog from 'primevue/confirmdialog'
 import Drawer from 'primevue/drawer'
 import Message from 'primevue/message'
 import Toast from 'primevue/toast'
-import { onErrorCaptured, ref, watch } from 'vue'
+import { onErrorCaptured, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 
 import AppHeader from '@/components/AppHeader.vue'
 import AppRail from '@/components/AppRail.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { useAuthStore } from '@/stores/auth'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 
 /**
@@ -24,10 +25,45 @@ import { useScreenDraftStore } from '@/stores/screenDraft'
  * 해제해 **빈 화면**을 남긴다. 레일 옆에서 잡으면 최소한 다른 화면으로 이동할 수 있다.
  */
 const route = useRoute()
+const auth = useAuthStore()
 const draft = useScreenDraftStore()
 const { isBuilderNarrow } = useBreakpoint()
 const renderError = ref<Error | null>(null)
 const drawerOpen = ref(false)
+
+/**
+ * 탭으로 돌아왔을 때 세션이 아직 살아 있는지 다시 묻는다.
+ *
+ * 사용자가 보고한 증상의 앞쪽 절반이 여기다 — "API를 호출하기 전까지는 인터랙션이 무리없이
+ * 됨." 세션은 서버에서 이미 끊겼는데 화면은 그것을 알 계기가 없어서, 사용자는 한참 조작한
+ * 뒤 첫 요청에서야 알게 된다. 자리를 비웠다 돌아오는 것이 만료의 가장 흔한 경로이므로
+ * 그 순간에 한 번 묻는다.
+ *
+ * 주기적 폴링은 하지 않는다. 개인용 서비스라 세션 만료를 몇 초 일찍 아는 값이 크지 않고,
+ * 상시 요청은 조용히 쿼터와 로그를 먹는다.
+ */
+const REVALIDATE_MIN_INTERVAL_MS = 30_000
+let lastRevalidatedAt = 0
+
+function revalidateSession(): void {
+  if (document.visibilityState !== 'visible') {
+    return
+  }
+  // 탭을 자주 오가는 사용자에게 요청이 붙어 나가지 않게 한다.
+  const now = Date.now()
+  if (now - lastRevalidatedAt < REVALIDATE_MIN_INTERVAL_MS) {
+    return
+  }
+  lastRevalidatedAt = now
+  // `probe`는 ApiError가 아닌 예외를 다시 던진다(프로그래밍 오류를 서버 오류로 둔갑시키지
+  // 않으려고). 여기서 받지 않으면 unhandled rejection이 되고 원인이 콘솔에서만 사라진다.
+  void auth.revalidate().catch((caught: unknown) => {
+    console.error('세션 재확인 실패', caught)
+  })
+}
+
+onMounted(() => document.addEventListener('visibilitychange', revalidateSession))
+onUnmounted(() => document.removeEventListener('visibilitychange', revalidateSession))
 
 onErrorCaptured((error) => {
   renderError.value = error instanceof Error ? error : new Error(String(error))

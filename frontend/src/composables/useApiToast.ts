@@ -1,6 +1,7 @@
 import { useToast } from 'primevue/usetoast'
 
 import { ApiError } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 
 /**
  * 결과를 알리는 토스트.
@@ -21,6 +22,11 @@ export interface ApiToast {
    *
    * IMPORTANT — `ApiError`가 아닌 예외는 **다시 던진다.** 삼키면 렌더 버그·타입 오류가
    * 서버 오류로 보이고, 그 순간 원인을 추적할 길이 사라진다.
+   *
+   * 세션이 만료된 상태에서는 토스트를 내지 않는다 — 그 사실은 `App.vue`의 대화상자가 이미
+   * 더 크게 말하고 있다. 조건은 {@link useAuthStore}의 `sessionExpired`이지 **`status === 401`이
+   * 아니다.** 상태 코드로 판정하면 대화상자가 없는 상황에서도 삼키게 되고, 그때는 아무도
+   * 말하지 않는 진짜 침묵이 된다.
    */
   notifyFailure: (summary: string, caught: unknown) => void
   notifySuccess: (summary: string, detail?: string) => void
@@ -28,10 +34,16 @@ export interface ApiToast {
 
 export function useApiToast(): ApiToast {
   const toast = useToast()
+  const auth = useAuthStore()
 
   function notifyFailure(summary: string, caught: unknown): void {
     if (!(caught instanceof ApiError)) {
       throw caught
+    }
+    // 만료 대화상자가 떠 있는 동안 실패 토스트가 겹치면, 사용자는 로그인해야 한다는 사실보다
+    // "요청이 실패했습니다 (401)."을 먼저 읽는다. 실제로 그것이 이 변경의 계기였다.
+    if (auth.sessionExpired) {
+      return
     }
     toast.add({ severity: 'error', summary, detail: caught.userMessage, life: FAILURE_LIFE_MS })
   }
