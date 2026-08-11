@@ -47,6 +47,14 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '시세가 한
 
 **임계 8의 근거**: 정상 최댓값은 월요일이 공휴일인 주의 수요일로, 그때 최신은 목요일치라 6일이다. 8은 거기 여유 이틀이다. **3일 이상 연휴 직후에는 정상적으로 발화한다** — 그래서 메시지가 그 갈래를 스스로 말한다. 침묵을 위해 임계를 최장 연휴까지 올리면 **정말로 멎은 파이프라인을 그만큼 못 본다.**
 
+```premise 13시 30분 크론이 스스로 발화한 적이 있다
+psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — batch_execution이 비어 있다' WHEN count(*) FILTER (WHERE triggered_by = 'SCHEDULER') = 0 THEN '스케줄러가 남긴 실행이 하나도 없다 — 이 결정의 크론이 아직 한 번도 발화하지 않았다' WHEN count(*) FILTER (WHERE triggered_by = 'SCHEDULER' AND extract(hour from started_at AT TIME ZONE 'Asia/Seoul') = 13) > 0 THEN 'OK 13시대 스케줄러 실행이 ' || count(*) FILTER (WHERE triggered_by = 'SCHEDULER' AND extract(hour from started_at AT TIME ZONE 'Asia/Seoul') = 13) || '건 있다' ELSE '스케줄러 실행은 ' || count(*) FILTER (WHERE triggered_by = 'SCHEDULER') || '건 있으나 전부 13시대가 아니다(최근 ' || max(started_at AT TIME ZONE 'Asia/Seoul') FILTER (WHERE triggered_by = 'SCHEDULER') || ') — 구 20시 크론의 잔재이고 이 결정의 크론은 아직 발화한 적이 없다. 배치가 앱 프로세스 안에서 도니 평일 13시 30분에 앱이 떠 있어야 한다' END FROM batch_execution"
+```
+
+**이 전제가 있는 이유는 이 결정이 아직 한 번도 실증되지 않았기 때문이다.** 크론 시각을 옮긴 뒤 그 시각에 앱이 떠 있었던 평일이 없어, 스케줄러가 남긴 유일한 행은 **구 20시 크론의 것**이다. 그 사실은 `batch_execution`에 `SCHEDULER` 행이 있다는 것만 보면 정확히 반대로 읽힌다 — 그래서 **시각으로 가른다.**
+
+**MUST NOT: 이것을 특정 `target_date`로 묻지 않는다.** 하루만 답할 수 있는 질문은 그날이 지나면 영영 거짓 발견이거나 영영 침묵이다. 시각으로 물으면 크론이 되돌려지는 회귀도 함께 잡힌다.
+
 ## 배경
 
 **소스의 공식 안내가 미결을 닫았다**(2026-08-11 확인). 공공데이터포털 금융위원회는 *"모든 서비스는 실시간이 아니며, 데이터 갱신은 기준일자로부터 **영업일 하루 뒤 오후 1시 이후**에 업데이트됩니다. 금요일 데이터는 차주 월요일에 제공됩니다. (**월요일이 공휴일인 경우, 다음 영업일**에 제공됩니다)"*라고 적는다. 즉 **D+1 영업일 13시 이후**다.

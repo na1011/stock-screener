@@ -82,6 +82,16 @@ psql -d stock_screener -At -c "WITH b AS (SELECT DISTINCT trade_date FROM price_
 이름의 컬럼이 있어 `ambiguous` 오류가 나는데, **전제는 오류를 판정 불가로 삼키므로 이 자리는
 침묵으로 보인다.**
 
+```premise 지표 인덱스에 블로트가 다시 쌓이지 않는다
+psql -d stock_screener -At -c "WITH i AS (SELECT sum(pg_relation_size(oid)) b FROM pg_class WHERE relname IN ('idx_iv_screen','indicator_value_pkey','idx_iv_stock_date')), r AS (SELECT count(*) n FROM indicator_value) SELECT CASE WHEN (SELECT n FROM r) = 0 THEN '잴 것이 없었다 — indicator_value가 비어 있다' WHEN (SELECT b FROM i) IS NULL THEN '잴 것이 없었다 — 세 인덱스가 조회되지 않는다' WHEN (SELECT b FROM i)/1048576.0 / ((SELECT n FROM r)/1000000.0) <= 250 THEN 'OK 인덱스 ' || round((SELECT b FROM i)/1048576.0) || 'MB / ' || (SELECT n FROM r) || '행 = 백만행당 ' || round((SELECT b FROM i)/1048576.0 / ((SELECT n FROM r)/1000000.0)) || 'MB' ELSE '인덱스가 백만행당 ' || round((SELECT b FROM i)/1048576.0 / ((SELECT n FROM r)/1000000.0)) || 'MB다(총 ' || round((SELECT b FROM i)/1048576.0) || 'MB / ' || (SELECT n FROM r) || '행). REINDEX 직후 기준선은 백만행당 101MB였다 — 블로트가 다시 쌓이고 있다. REINDEX 전에 매 실행 왕복이 되살아났는지 먼저 본다' END"
+```
+
+**MUST: 절대 크기가 아니라 행당 크기로 묻는다.** 이 결정 뒤에도 **지표는 계속 늘고**(ADR-0046이
+30개를 더한다), 그때 인덱스가 커지는 것은 블로트가 아니라 정상이다. 절대 MB로 물으면 그 순간부터
+거짓 발견이 상시화되고, 상시 발견은 곧 무시된다. **기준선은 2026-08-11 REINDEX 직후의
+202MB / 2,006,860행 = 백만행당 101MB이고, 임계 250은 거기 2.5배 여유다** — 직전 전례가
+하루 만에 199MB→803MB(4배)였으므로 그 크기의 재발은 임계 안에 못 숨는다.
+
 ## 배경
 
 **러너는 지표마다 필요한 봉 수를 따로 읽지 않고 전역 최대 하나로 읽는다**
