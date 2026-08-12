@@ -105,9 +105,15 @@ public class CorporateActionLedger {
         }
     }
 
-    /** 원장의 한 행. 재구축이 읽는 형태다. */
-    public record Entry(long id, LocalDate effectiveDate, CorporateAction.Type type,
-                        BigDecimal ratio) {
+    /**
+     * 원장의 한 행. 재구축과 지표 계층이 읽는 형태다.
+     *
+     * <p>{@code listingDate}는 재구축이 쓰지 않는다 — 계수는 <b>권리락</b>에서 점프하기 때문이다.
+     * 그것을 여기 싣는 이유는 지표 계층이 권리락과 신주상장 <b>사이</b>를 알아야 하기 때문이고
+     * (ADR-0051), 그 구간에서만 상장주식수가 종가와 짝이 안 맞는다. 모르면 null이다.
+     */
+    public record Entry(long id, LocalDate effectiveDate, LocalDate listingDate,
+                        CorporateAction.Type type, BigDecimal ratio) {
     }
 
     /**
@@ -125,9 +131,15 @@ public class CorporateActionLedger {
         }
     }
 
-    /** 판정이 고칠 수 있는 것과 참조하는 것. */
-    private record Row(long id, long stockId, LocalDate effectiveDate, LocalDate sourceDate,
-                       CorporateAction.Type type, BigDecimal ratio) {
+    /**
+     * 판정이 고칠 수 있는 것과 참조하는 것.
+     *
+     * <p>{@code status}·{@code listingDate}가 여기 있는 이유는 <b>판정이 값을 비워 올 수 있기</b>
+     * 때문이다. 비운 항목은 기존 행의 값이 남으므로, 합친 결과로 검증하려면 기존 값을 읽어야 한다.
+     */
+    private record Row(long id, long stockId, LocalDate effectiveDate, LocalDate listingDate,
+                       LocalDate sourceDate, CorporateAction.Type type, BigDecimal ratio,
+                       CorporateActionStatus status) {
     }
 
     private record ExistingRow(long id, LocalDate effectiveDate, String status,
@@ -316,13 +328,14 @@ public class CorporateActionLedger {
     @Transactional(readOnly = true)
     public List<Entry> findApplicable(long stockId) {
         return jdbcTemplate.query("""
-                SELECT id, effective_date, type, ratio FROM corporate_action
+                SELECT id, effective_date, listing_date, type, ratio FROM corporate_action
                 WHERE stock_id = ? AND status IN (?, ?) AND type <> ?
                 ORDER BY effective_date
                 """,
                 (rs, rowNum) -> new Entry(
                         rs.getLong("id"),
                         rs.getObject("effective_date", LocalDate.class),
+                        rs.getObject("listing_date", LocalDate.class),
                         CorporateAction.Type.valueOf(rs.getString("type")),
                         rs.getBigDecimal("ratio")),
                 stockId, CorporateActionStatus.APPROVED.name(),
@@ -372,8 +385,15 @@ public class CorporateActionLedger {
         BigDecimal ratio = mergedRatio(judgement, row);
         LocalDate effectiveDate =
                 judgement.effectiveDate() != null ? judgement.effectiveDate() : row.effectiveDate();
+        LocalDate listingDate =
+                judgement.listingDate() != null ? judgement.listingDate() : row.listingDate();
+        // MUST: 상태를 합쳐서 본다. 상태를 비운 채 값만 고치는 것이 정당한 경로이고 UPDATE도
+        // coalesce로 기존 상태를 남기므로, 판정값만 보면 이미 APPROVED인 행의 종류를 바꾸는
+        // 경로가 아래 게이트를 통째로 비껴간다.
+        CorporateActionStatus status =
+                judgement.status() != null ? judgement.status() : row.status();
 
-        if (judgement.status() == CorporateActionStatus.APPROVED
+        if (status == CorporateActionStatus.APPROVED
                 && type == CorporateAction.Type.UNKNOWN) {
             // findApplicable이 UNKNOWN을 거르므로 이 조합은 적용도 안 되면서 OBSERVED 대기열에서도
             // 사라진다. 어디에도 없는데 아무 에러도 나지 않는다.
@@ -381,8 +401,9 @@ public class CorporateActionLedger {
                     "종류를 모르는 행은 승인할 수 없다. 종류와 비율을 함께 정하거나"
                             + " UNSUPPORTED로 보내라.");
         }
+        requireListingDateForBonusIssue(status, type, effectiveDate, listingDate);
         // 컴팩트 생성자가 부호·양수를 함께 판정한다. V21의 ck_ca_ratio_sign과 같은 판정이다.
-        new CorporateAction(effectiveDate, judgement.listingDate(), row.sourceDate(), type, ratio,
+        new CorporateAction(effectiveDate, listingDate, row.sourceDate(), type, ratio,
                 CorporateAction.DetectionSource.HEURISTIC, null);
 
         if (!effectiveDate.equals(row.effectiveDate())) {
@@ -428,6 +449,45 @@ public class CorporateActionLedger {
         }
         // 저장 스케일로 먼저 접는다. 접기 전에 검증하면 저장된 값이 검증한 값과 달라진다.
         return judgement.ratio().setScale(PriceDiscontinuity.RATIO_SCALE, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * MUST: 무상증자를 승인하려면 <b>신주상장일이 있어야 하고 권리락보다 뒤여야 한다.</b>
+     *
+     * <p>무상증자는 권리락일에 가격을, 신주상장일에 상장주식수를 바꾼다. 신주상장일이 없으면
+     * 그 사이 14~16거래일이 <b>이미 희석된 가격 × 희석 전 주식수</b>로 남고, 시가총액·PER·PBR이
+     * 배수만큼 틀리는데 <b>결측이 아니라 그럴듯한 숫자라 화면에 그대로 나간다</b>(ADR-0051).
+     * 계수만 들어가고 그쪽은 안 고쳐지는데, <b>ADR-0049의 불변식은 그 어긋남을 보지 않는다</b> —
+     * {@code adj_close = close × adj_factor}는 주식수를 묻지 않기 때문이다.
+     *
+     * <p>날짜 역전을 함께 막는 이유는 그것이 <b>같은 실패의 조용한 판</b>이기 때문이다.
+     * 뒤집어 넣으면 구간이 공집합이 되어 보정이 아무 에러 없이 사라진다.
+     * V21이 이 순서를 {@code CHECK}로 걸지 않았으므로(선후를 잰 적이 없어서다) 여기가 유일한 문이다.
+     *
+     * <p>모르면 {@code UNSUPPORTED}가 그 자리다 — "있었는데 못 고친다"이고 {@code /summary}가 센다.
+     * {@code SPLIT}·{@code REVERSE_SPLIT}에는 걸지 않는다. 두 날짜가 실제로 같아 비어 있는 것이
+     * 정상이고, 그때는 리더가 효력일로 접어 구간을 공집합으로 만든다.
+     */
+    private static void requireListingDateForBonusIssue(CorporateActionStatus status,
+                                                        CorporateAction.Type type,
+                                                        LocalDate effectiveDate,
+                                                        LocalDate listingDate) {
+        if (status != CorporateActionStatus.APPROVED
+                || type != CorporateAction.Type.BONUS_ISSUE) {
+            return;
+        }
+        if (listingDate == null) {
+            throw new InvalidJudgementException("listingDate",
+                    "무상증자를 승인하려면 신주상장일이 있어야 한다. 그것이 없으면 권리락부터"
+                            + " 신주상장까지의 시가총액·PER·PBR이 배수만큼 틀린 채 남는다."
+                            + " 모르면 UNSUPPORTED로 보내라.");
+        }
+        if (listingDate.isBefore(effectiveDate)) {
+            throw new InvalidJudgementException("listingDate",
+                    "신주상장일이 권리락일보다 빠르다: 권리락=" + effectiveDate
+                            + " 신주상장=" + listingDate
+                            + " — 그대로 두면 보정 구간이 공집합이 되어 아무 에러 없이 사라진다.");
+        }
     }
 
     private static void requirePaired(Judgement judgement) {
@@ -500,16 +560,18 @@ public class CorporateActionLedger {
 
     private Optional<Row> findById(long id) {
         return jdbcTemplate.query("""
-                SELECT id, stock_id, effective_date, source_date, type, ratio
+                SELECT id, stock_id, effective_date, listing_date, source_date, type, ratio, status
                 FROM corporate_action WHERE id = ?
                 """,
                 (rs, rowNum) -> new Row(
                         rs.getLong("id"),
                         rs.getLong("stock_id"),
                         rs.getObject("effective_date", LocalDate.class),
+                        rs.getObject("listing_date", LocalDate.class),
                         rs.getObject("source_date", LocalDate.class),
                         CorporateAction.Type.valueOf(rs.getString("type")),
-                        rs.getBigDecimal("ratio")),
+                        rs.getBigDecimal("ratio"),
+                        CorporateActionStatus.valueOf(rs.getString("status"))),
                 id).stream().findFirst();
     }
 

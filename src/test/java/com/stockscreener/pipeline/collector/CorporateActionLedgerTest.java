@@ -407,6 +407,63 @@ class CorporateActionLedgerTest {
                 .isInstanceOf(CorporateActionLedger.CorporateActionNotFoundException.class);
     }
 
+    // ── 무상증자의 신주상장일 (ADR-0051) ──────────────────────────────────
+
+    @Test
+    @DisplayName("IMPORTANT — 신주상장일 없이 무상증자를 승인할 수 없다. 계수만 들어가고 시총은 틀린 채 남는다")
+    void rejectsApprovingBonusIssueWithoutListingDate() {
+        long id = ledger.record(stockId, unknown("2026-05-04", "1.9928",
+                CorporateAction.DetectionSource.HEURISTIC)).existingId();
+
+        assertThatThrownBy(() -> ledger.judge(id, new CorporateActionLedger.Judgement(
+                CorporateActionStatus.APPROVED, CorporateAction.Type.BONUS_ISSUE,
+                new BigDecimal("2.0"), null, null, "신주상장일을 모른다")))
+                .isInstanceOf(CorporateActionLedger.InvalidJudgementException.class)
+                .hasMessageContaining("신주상장일이 있어야 한다");
+    }
+
+    @Test
+    @DisplayName("신주상장일이 권리락보다 빠르면 거부한다 — 구간이 공집합이 되어 조용히 사라진다")
+    void rejectsListingDateBeforeExRights() {
+        long id = ledger.record(stockId, unknown("2026-05-04", "1.9928",
+                CorporateAction.DetectionSource.HEURISTIC)).existingId();
+
+        assertThatThrownBy(() -> ledger.judge(id, new CorporateActionLedger.Judgement(
+                CorporateActionStatus.APPROVED, CorporateAction.Type.BONUS_ISSUE,
+                new BigDecimal("2.0"), null, LocalDate.parse("2026-04-20"), null)))
+                .isInstanceOf(CorporateActionLedger.InvalidJudgementException.class)
+                .hasMessageContaining("권리락일보다 빠르다");
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 상태를 비운 채 종류만 무상증자로 바꾸는 우회로도 막힌다")
+    void gateSeesTheMergedStatusNotJustTheJudgement() {
+        // 상태를 비우면 기존 APPROVED가 그대로 남는다(UPDATE가 coalesce다). 판정값만 보는
+        // 게이트는 이 경로에서 발화하지 않고, 그 행은 승인된 채 신주상장일이 없다.
+        long id = ledger.record(stockId, disclosed("2026-05-04", "2.0")).existingId();
+        assertThat(status("2026-05-04")).isEqualTo(CorporateActionStatus.APPROVED.name());
+
+        assertThatThrownBy(() -> ledger.judge(id,
+                judgement(CorporateAction.Type.BONUS_ISSUE, new BigDecimal("2.0"))))
+                .isInstanceOf(CorporateActionLedger.InvalidJudgementException.class)
+                .hasMessageContaining("신주상장일이 있어야 한다");
+    }
+
+    @Test
+    @DisplayName("액면분할·병합에는 걸지 않는다 — 두 날짜가 같아 비어 있는 것이 정상이다")
+    void parValueChangesMayLeaveListingDateEmpty() {
+        long id = ledger.record(stockId, unknown("2023-05-16", "10.63",
+                CorporateAction.DetectionSource.HEURISTIC)).existingId();
+
+        ledger.judge(id, new CorporateActionLedger.Judgement(
+                CorporateActionStatus.APPROVED, CorporateAction.Type.REVERSE_SPLIT,
+                new BigDecimal("0.1"), null, null, "주식수 배수로 확인"));
+
+        assertThat(ledger.findApplicable(stockId))
+                .singleElement()
+                .satisfies(entry -> assertThat(entry.listingDate()).isNull());
+    }
+
     private static CorporateActionLedger.Judgement judgement(CorporateAction.Type type,
                                                              BigDecimal ratio) {
         return new CorporateActionLedger.Judgement(null, type, ratio, null, null, null);
