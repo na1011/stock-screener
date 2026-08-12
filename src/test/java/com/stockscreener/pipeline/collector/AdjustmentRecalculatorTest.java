@@ -16,6 +16,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import static com.stockscreener.pipeline.support.Judgements.approved;
+import static com.stockscreener.pipeline.support.Judgements.rejected;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.offset;
 
@@ -181,7 +183,7 @@ class AdjustmentRecalculatorTest {
         recalculator.rebuild(stockId);
         assertThat(adjFactor("2026-01-02")).isEqualByComparingTo("0.2");
 
-        ledger.updateStatus(id, "REJECTED", "하한가 연속이었다");
+        ledger.judge(id, rejected("하한가 연속이었다"));
         recalculator.rebuild(stockId);
 
         assertThat(adjFactor("2026-01-02")).isEqualByComparingTo("1");
@@ -319,7 +321,7 @@ class AdjustmentRecalculatorTest {
     /** 탐지가 낸 후보를 <b>값을 고치지 않고</b> 승인한다. 관리자 API가 할 일의 최소 형태다. */
     private void approve(CorporateAction candidate) {
         long id = ledger.record(stockId, candidate).existingId();
-        ledger.updateStatus(id, "APPROVED", "사람이 확인했다");
+        ledger.judge(id, approved("사람이 확인했다"));
     }
 
     private long approveDisclosed(String date, CorporateAction.Type type, String ratio) {

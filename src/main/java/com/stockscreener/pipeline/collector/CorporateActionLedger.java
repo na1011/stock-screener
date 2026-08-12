@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.CorporateAction;
+import com.stockscreener.pipeline.datasource.PriceDiscontinuity;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -52,6 +54,9 @@ public class CorporateActionLedger {
      */
     private static final int NEAR_DUPLICATE_CALENDAR_DAYS = 45;
 
+    /** {@code ratio numeric(18,10)}의 정수부 상한. 넘으면 DB가 알아보기 힘든 오류를 낸다. */
+    private static final BigDecimal RATIO_LIMIT = new BigDecimal("100000000");
+
     private final JdbcTemplate jdbcTemplate;
 
     public CorporateActionLedger(JdbcTemplate jdbcTemplate) {
@@ -90,13 +95,61 @@ public class CorporateActionLedger {
                         BigDecimal ratio) {
     }
 
+    /**
+     * 사람이 고치겠다는 것. <b>비어 있는 항목은 그대로 둔다.</b>
+     *
+     * @param status 비우면 판정을 미룬다. 값만 고치는 것이 정당한 경로다.
+     */
+    public record Judgement(CorporateActionStatus status, CorporateAction.Type type,
+                            BigDecimal ratio, LocalDate effectiveDate, LocalDate listingDate,
+                            String note) {
+
+        boolean isEmpty() {
+            return status == null && type == null && ratio == null
+                    && effectiveDate == null && listingDate == null && note == null;
+        }
+    }
+
+    /** 판정이 고칠 수 있는 것과 참조하는 것. */
+    private record Row(long id, long stockId, LocalDate effectiveDate, LocalDate sourceDate,
+                       CorporateAction.Type type, BigDecimal ratio) {
+    }
+
     private record ExistingRow(long id, LocalDate effectiveDate, String status,
                                String detectionSource) {
 
         /** 아직 사람이 보지 않은 휴리스틱 후보인가. 공시가 덮어도 되는 유일한 상태다. */
         boolean isUnreviewedCandidate() {
-            return "OBSERVED".equals(status)
+            return CorporateActionStatus.OBSERVED.name().equals(status)
                     && CorporateAction.DetectionSource.HEURISTIC.name().equals(detectionSource);
+        }
+    }
+
+    /** 원장에 그 행이 없다. 컨트롤러가 404로 옮긴다. */
+    public static class CorporateActionNotFoundException extends RuntimeException {
+        private final long id;
+
+        public CorporateActionNotFoundException(long id) {
+            super("원장에 그 행이 없다: " + id);
+            this.id = id;
+        }
+
+        public long id() {
+            return id;
+        }
+    }
+
+    /** 판정이 원장의 불변식을 깬다. 컨트롤러가 400으로 옮긴다. */
+    public static class InvalidJudgementException extends RuntimeException {
+        private final String field;
+
+        public InvalidJudgementException(String field, String message) {
+            super(message);
+            this.field = field;
+        }
+
+        public String field() {
+            return field;
         }
     }
 
@@ -111,22 +164,23 @@ public class CorporateActionLedger {
      * {@code APPROVED}로 올리지 않는다.</b> 공시가 보증하는 것은 <i>"그날 사건이 있었다"</i>이지
      * <i>"비율이 이것이다"</i>가 아니다. {@code APPROVED}로 넣으면 {@link #findApplicable}이
      * 종류로 걸러 적용되지 않으면서 <b>사람이 볼 후보 목록({@code OBSERVED})에서도 함께
-     * 사라지고</b>, {@link #updateStatus}는 {@code ratio}를 못 고치므로 그 행은 영영 살아나지
-     * 못한다. 어디에도 없는데 아무 에러도 나지 않는다.
+     * 사라진다</b> — 어디에도 없는데 아무 에러도 나지 않는다. {@link #judge}가 그 조합을 거절하는
+     * 것도 같은 이유다.
      *
      * <p>IMPORTANT — <b>근접중복 판정보다 신뢰도 판정이 먼저다.</b> 반대로 두면 원장이
      * <b>선착순</b>이 된다. 소스가 최대 넉 달 늦으므로(api-spec §10-B) 그 사각지대의 사건은
      * <b>구조적으로 휴리스틱이 먼저</b> 들어오고, 나중에 온 공시가 며칠 어긋났다는 이유로
-     * 버려진다 — 남는 것은 {@code UNKNOWN} 후보 하나인데 {@link #findApplicable}이 그것을
-     * 제외하고 {@link #updateStatus}는 {@code ratio}·{@code type}을 못 고치므로
-     * <b>사람도 되살릴 수 없다.</b>
+     * 버려진다 — 남는 것은 {@code UNKNOWN} 후보 하나이고 {@link #findApplicable}이 그것을
+     * 제외한다. {@link #judge}가 생긴 지금은 사람이 되살릴 수 있지만, <b>그러려면 사람이 그
+     * 사건의 종류와 비율을 직접 알아내야 한다</b> — 공시가 이미 답한 것을 버리고서.
      */
     @Transactional
     public RecordResult record(long stockId, CorporateAction action) {
         boolean disclosed = action.source() == CorporateAction.DetectionSource.SOURCE_DISCLOSURE;
         boolean typeKnown = action.type() != CorporateAction.Type.UNKNOWN;
         boolean trusted = disclosed && typeKnown;
-        String status = trusted ? "APPROVED" : "OBSERVED";
+        CorporateActionStatus status =
+                trusted ? CorporateActionStatus.APPROVED : CorporateActionStatus.OBSERVED;
 
         Optional<ExistingRow> near = findNearDuplicate(stockId, action.effectiveDate());
         if (near.isPresent()) {
@@ -156,7 +210,7 @@ public class CorporateActionLedger {
             // 대입하므로, 종류를 모르는 공시가 휴리스틱이 관측한 종류·배수를 **지운다** —
             // 사람이 뒤에 볼 것이 종류 미상 행 하나뿐이 된다. 공시가 종류를 확정했을 때만
             // 덮을 값이 더 낫다.
-            if (!"OBSERVED".equals(row.status()) || !trusted) {
+            if (!CorporateActionStatus.OBSERVED.name().equals(row.status()) || !trusted) {
                 return new RecordResult(Outcome.IGNORED, row.id(), action.effectiveDate());
             }
             // 휴리스틱 후보를 공시가 덮는다. 창이 매일 도므로 휴리스틱이 대개 먼저 들어오고,
@@ -168,7 +222,7 @@ public class CorporateActionLedger {
                     WHERE id = ?
                     """,
                     action.listingDate(), action.sourceDate(), action.type().name(),
-                    action.ratio(), action.source().name(), status, row.id());
+                    action.ratio(), action.source().name(), status.name(), row.id());
             log.info("휴리스틱 후보를 공시로 덮었다. stockId={} id={} {} type={} ratio={}",
                     stockId, row.id(), action.effectiveDate(), action.type(), action.ratio());
             return new RecordResult(Outcome.UPGRADED, row.id(), action.effectiveDate());
@@ -182,7 +236,7 @@ public class CorporateActionLedger {
                 RETURNING id
                 """, Long.class,
                 stockId, action.effectiveDate(), action.listingDate(), action.sourceDate(),
-                action.type().name(), action.ratio(), action.source().name(), status);
+                action.type().name(), action.ratio(), action.source().name(), status.name());
 
         log.info("기업 행위를 원장에 적었다. stockId={} id={} {} type={} ratio={} status={} source={}",
                 stockId, id, action.effectiveDate(), action.type(), action.ratio(),
@@ -201,7 +255,7 @@ public class CorporateActionLedger {
     public List<Entry> findApplicable(long stockId) {
         return jdbcTemplate.query("""
                 SELECT id, effective_date, type, ratio FROM corporate_action
-                WHERE stock_id = ? AND status IN ('APPROVED', 'APPLIED') AND type <> 'UNKNOWN'
+                WHERE stock_id = ? AND status IN (?, ?) AND type <> ?
                 ORDER BY effective_date
                 """,
                 (rs, rowNum) -> new Entry(
@@ -209,7 +263,8 @@ public class CorporateActionLedger {
                         rs.getObject("effective_date", LocalDate.class),
                         CorporateAction.Type.valueOf(rs.getString("type")),
                         rs.getBigDecimal("ratio")),
-                stockId);
+                stockId, CorporateActionStatus.APPROVED.name(),
+                CorporateActionStatus.APPLIED.name(), CorporateAction.Type.UNKNOWN.name());
     }
 
     /** 계수에 반영됐음을 표시한다. 호출자가 재구축과 <b>같은 트랜잭션</b>에서 부른다. */
@@ -217,26 +272,128 @@ public class CorporateActionLedger {
         if (ids.isEmpty()) {
             return;
         }
+        String applied = CorporateActionStatus.APPLIED.name();
         jdbcTemplate.batchUpdate("""
                 UPDATE corporate_action
-                SET status = 'APPLIED', applied_at = coalesce(applied_at, now()), updated_at = now()
-                WHERE id = ? AND status <> 'APPLIED'
-                """, ids.stream().map(id -> new Object[]{id}).toList());
+                SET status = ?, applied_at = coalesce(applied_at, now()), updated_at = now()
+                WHERE id = ? AND status <> ?
+                """, ids.stream().map(id -> new Object[]{applied, id, applied}).toList());
     }
 
     /**
-     * 사람의 판정을 적는다.
+     * 사람의 판정을 적는다. <b>상태만이 아니라 값까지 고친다</b>(ADR-0050).
+     *
+     * <p>비어 있는 항목은 그대로 둔다. {@code status}까지 비울 수 있는 것이 의도다 — 종류를 모르는
+     * 행에 {@code listing_date}만 채우고 판정은 미루는 것이 실제로 필요하다.
      *
      * <p>{@code applied_at}은 지우지 않는다 — "한때 적용됐었다"가 사라지면 왜 그 종목의 계수가
      * 한 번 바뀌었다가 돌아왔는지 답할 수 없게 된다.
+     *
+     * <p>MUST NOT: 여기서 부호 규칙을 다시 쓰지 않는다. 검증은 {@link CorporateAction}의 컴팩트
+     * 생성자를 <b>실제로 통과시켜</b> 한다 — {@code Type.allows}만 부르면 <b>부호만 보고 양수를
+     * 안 본다.</b> {@code ratio = -5}는 그것을 통과해 DB 제약에서 터지고, catch-all이 없으므로
+     * 500이 된다.
      */
     @Transactional
-    public void updateStatus(long id, String status, String note) {
-        int updated = jdbcTemplate.update("""
-                UPDATE corporate_action SET status = ?, note = ?, updated_at = now() WHERE id = ?
-                """, status, note, id);
-        if (updated == 0) {
-            throw new IllegalArgumentException("원장에 그 행이 없다. id=" + id);
+    public void judge(long id, Judgement judgement) {
+        Row row = findById(id).orElseThrow(() -> new CorporateActionNotFoundException(id));
+        if (judgement.isEmpty()) {
+            throw new InvalidJudgementException("judgement", "고칠 것이 하나도 없다.");
+        }
+        if (judgement.status() != null && !judgement.status().humanAssignable()) {
+            throw new InvalidJudgementException("status",
+                    "사람이 찍을 수 있는 상태가 아니다: " + judgement.status()
+                            + " — APPLIED는 재구축만이, OBSERVED는 수집만이 만든다.");
+        }
+
+        CorporateAction.Type type = merged(judgement, row);
+        BigDecimal ratio = mergedRatio(judgement, row);
+        LocalDate effectiveDate =
+                judgement.effectiveDate() != null ? judgement.effectiveDate() : row.effectiveDate();
+
+        if (judgement.status() == CorporateActionStatus.APPROVED
+                && type == CorporateAction.Type.UNKNOWN) {
+            // findApplicable이 UNKNOWN을 거르므로 이 조합은 적용도 안 되면서 OBSERVED 대기열에서도
+            // 사라진다. 어디에도 없는데 아무 에러도 나지 않는다.
+            throw new InvalidJudgementException("type",
+                    "종류를 모르는 행은 승인할 수 없다. 종류와 비율을 함께 정하거나"
+                            + " UNSUPPORTED로 보내라.");
+        }
+        // 컴팩트 생성자가 부호·양수를 함께 판정한다. V21의 ck_ca_ratio_sign과 같은 판정이다.
+        new CorporateAction(effectiveDate, judgement.listingDate(), row.sourceDate(), type, ratio,
+                CorporateAction.DetectionSource.HEURISTIC);
+
+        if (!effectiveDate.equals(row.effectiveDate())) {
+            requireFreeSlot(row, effectiveDate);
+        }
+
+        jdbcTemplate.update("""
+                UPDATE corporate_action SET
+                    status         = coalesce(?, status),
+                    type           = ?,
+                    ratio          = ?,
+                    effective_date = ?,
+                    listing_date   = coalesce(?, listing_date),
+                    note           = coalesce(?, note),
+                    updated_at     = now()
+                WHERE id = ?
+                """,
+                judgement.status() != null ? judgement.status().name() : null,
+                type.name(), ratio, effectiveDate, judgement.listingDate(), judgement.note(), id);
+
+        log.info("사람이 원장을 판정했다. id={} status={} type={} ratio={} 효력일={} 신주상장={}",
+                id, judgement.status(), type, ratio, effectiveDate, judgement.listingDate());
+    }
+
+    /**
+     * MUST: {@code type}과 {@code ratio}는 같이 오거나 같이 비운다. 하나만 고치면 <b>관측된 가격
+     * 배수에 종류 딱지가 붙거나</b> 그 반대가 되고, 그 행은 승인되는 순간 틀린 계수가 된다.
+     */
+    private static CorporateAction.Type merged(Judgement judgement, Row row) {
+        requirePaired(judgement);
+        return judgement.type() != null ? judgement.type() : row.type();
+    }
+
+    private static BigDecimal mergedRatio(Judgement judgement, Row row) {
+        requirePaired(judgement);
+        if (judgement.ratio() == null) {
+            return row.ratio();
+        }
+        if (judgement.ratio().compareTo(RATIO_LIMIT) >= 0) {
+            // numeric(18,10)의 정수부 상한. 넘으면 DB가 알아보기 힘든 오류를 낸다.
+            throw new InvalidJudgementException("ratio",
+                    "비율이 numeric(18,10)의 상한을 넘는다: " + judgement.ratio());
+        }
+        // 저장 스케일로 먼저 접는다. 접기 전에 검증하면 저장된 값이 검증한 값과 달라진다.
+        return judgement.ratio().setScale(PriceDiscontinuity.RATIO_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private static void requirePaired(Judgement judgement) {
+        if ((judgement.type() == null) != (judgement.ratio() == null)) {
+            throw new InvalidJudgementException("ratio",
+                    "종류와 비율은 함께 고쳐야 한다. 하나만 바꾸면 관측된 가격 배수에 종류 딱지가"
+                            + " 붙거나 그 반대가 된다.");
+        }
+    }
+
+    /**
+     * 효력일을 옮길 자리가 비었는가.
+     *
+     * <p>{@link #relocateCandidate}가 쓰는 두 판정을 그대로 재사용한다 — {@code UNIQUE}는 같은
+     * 날짜만 막고, 며칠 어긋난 두 행이 <b>둘 다 승인되면 재구축이 두 계수를 곱해 정확히 두 번
+     * 적용한다.</b> 손으로 옮기는 길에도 같은 가드가 있어야 한다.
+     */
+    private void requireFreeSlot(Row row, LocalDate effectiveDate) {
+        if (findByEffectiveDate(row.stockId(), effectiveDate).isPresent()) {
+            throw new InvalidJudgementException("effectiveDate",
+                    "그 날짜에 이미 다른 행이 있다: " + effectiveDate);
+        }
+        Optional<ExistingRow> near = findNearDuplicate(row.stockId(), effectiveDate);
+        if (near.isPresent() && near.get().id() != row.id()) {
+            throw new InvalidJudgementException("effectiveDate",
+                    "그 날짜가 기존 행(" + near.get().effectiveDate() + ")과 "
+                            + NEAR_DUPLICATE_TRADING_DAYS + "거래일 안이다 — 같은 사건이 두 행이 되면"
+                            + " 재구축이 두 계수를 곱한다.");
         }
     }
 
@@ -266,15 +423,31 @@ public class CorporateActionLedger {
         jdbcTemplate.update("""
                 UPDATE corporate_action SET
                     effective_date = ?, listing_date = ?, source_date = ?, type = ?, ratio = ?,
-                    detection_source = ?, status = 'APPROVED', updated_at = now()
+                    detection_source = ?, status = ?, updated_at = now()
                 WHERE id = ?
                 """,
                 action.effectiveDate(), action.listingDate(), action.sourceDate(),
-                action.type().name(), action.ratio(), action.source().name(), near.id());
+                action.type().name(), action.ratio(), action.source().name(),
+                CorporateActionStatus.APPROVED.name(), near.id());
         log.info("휴리스틱 후보를 공시로 덮으며 효력일을 옮겼다. stockId={} id={} {} → {} type={} ratio={}",
                 stockId, near.id(), near.effectiveDate(), action.effectiveDate(),
                 action.type(), action.ratio());
         return Optional.of(new RecordResult(Outcome.UPGRADED, near.id(), action.effectiveDate()));
+    }
+
+    private Optional<Row> findById(long id) {
+        return jdbcTemplate.query("""
+                SELECT id, stock_id, effective_date, source_date, type, ratio
+                FROM corporate_action WHERE id = ?
+                """,
+                (rs, rowNum) -> new Row(
+                        rs.getLong("id"),
+                        rs.getLong("stock_id"),
+                        rs.getObject("effective_date", LocalDate.class),
+                        rs.getObject("source_date", LocalDate.class),
+                        CorporateAction.Type.valueOf(rs.getString("type")),
+                        rs.getBigDecimal("ratio")),
+                id).stream().findFirst();
     }
 
     private Optional<ExistingRow> findByEffectiveDate(long stockId, LocalDate effectiveDate) {

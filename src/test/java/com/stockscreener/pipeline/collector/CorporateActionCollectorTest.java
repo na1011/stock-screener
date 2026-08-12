@@ -19,6 +19,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import static com.stockscreener.pipeline.support.Judgements.approved;
+import static com.stockscreener.pipeline.support.Judgements.rejected;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -132,7 +134,7 @@ class CorporateActionCollectorTest {
                 bar("2026-02-03", "1010", "1000000"), bar("2026-02-04", "1020", "1000000")));
         // 사람이 이미 판정한 행이 있어 공시가 옮기지도 덮지도 못한다.
         long judged = ledger.record(stockId, heuristic("2026-02-03", "0.1")).existingId();
-        ledger.updateStatus(judged, "REJECTED", "하한가 연속이었다");
+        ledger.judge(judged, rejected("하한가 연속이었다"));
         FakeCorporateActionDataSource source = new FakeCorporateActionDataSource("KOSPI")
                 .with(stockId, disclosed("2026-02-04", "0.1"));
 
