@@ -5,7 +5,9 @@ date: 2026-08-12
 applies_to:
   - "src/main/java/**/pipeline/collector/AdjustmentRecalculator.java"
   - "src/main/java/**/pipeline/collector/CorporateActionLedger.java"
+  - "src/main/java/**/pipeline/collector/CorporateActionCollector.java"
   - "src/main/java/**/pipeline/collector/PriceCollector.java"
+  - "src/main/java/**/pipeline/batch/CorporateActionJob.java"
   - "src/main/resources/db/migration/V21__corporate_action.sql"
   - "src/main/java/**/pipeline/datasource/CorporateAction.java"
   - "src/main/java/**/pipeline/datasource/CorporateActionDataSource.java"
@@ -54,8 +56,14 @@ adj_close(d)  = close(d) × adj_factor(d)
   거래재개·인적분할과 구별되지 않는다. 원장의 상태가 그 판정을 기록하며, **기록이 없으면 같은
   후보가 매 실행 다시 올라온다.**
 - **MUST: 어댑터가 `[from, to]`를 지킨다.** 사업보고서 1콜이 5년 이력을 주므로 거르지 않으면
-  창 밖 사건이 매번 다시 올라온다. 기존 `FakePriceDataSource`가 정확히 그 모양이다
-  (`fetchDailyBars`는 거르는데 `fetchCorporateActions`만 안 거른다).
+  창 밖 사건이 매번 다시 올라온다. **테스트 더블도 같은 계약을 지킨다** — 거르지 않는 더블은
+  계약보다 느슨해 창 위반을 통과시킨다. 거르는 기준은 **효력일**이다. 소스 원값으로 거르면
+  일자 보정 뒤 창 안으로 들어올 사건이 미리 잘린다.
+- **MUST: 공시가 며칠 어긋난 휴리스틱 후보를 *옮기며* 덮는다.** 근접중복 판정을 신뢰도 판정보다
+  먼저 두면 원장이 **선착순**이 된다 — 소스가 최대 넉 달 늦으므로 그 사각지대의 사건은
+  구조적으로 휴리스틱이 먼저 들어가고, 뒤늦게 온 공시가 버려진다. 그때 남는 `UNKNOWN` 행은
+  `findApplicable`이 제외하고 `updateStatus`가 `ratio`·`type`을 못 고쳐 **사람도 되살릴 수 없다.**
+  옮기기는 **미판정 휴리스틱 후보**에만 걸린다 — 사람이 판정한 행을 옮기면 그 판정이 되돌려진다.
 - **MUST: 날짜를 셋으로 나눠 적는다.** `source_date`(소스 원값) · `effective_date`(권리락, 가격이
   점프하는 날) · `listing_date`(신주상장, 주식수가 늘어나는 날). 액면분할은 뒤 둘이 같지만
   **무상증자는 14~15거래일 벌어진다.** 한 컬럼에 접으면 아래 상장주식수 규칙을 표현할 수 없고,
@@ -124,6 +132,30 @@ SELECT CASE
   ELSE 'OK ' || count(*) FILTER (WHERE abs(mult - round(mult)) > 1e-6) || '/' || count(*) || '건이 정수에서 벗어난다(최대 ' || round(max(abs(mult - round(mult))), 4) || '). 무상증자 비율은 스냅하지 않는다.'
   END FROM m"
 ```
+
+`corporate_action`이 없을 때를 셸로 가른다. **한 SQL로 못 접는다** — PostgreSQL은 `CASE`의
+도달하지 않는 분기까지 계획하므로 `to_regclass` 가드를 앞에 둬도 테이블 부재로 파싱에서 죽는다.
+
+```premise 원장에 무엇이 어떤 자격으로 들어왔는가
+if [ "$(psql -d stock_screener -At -c "SELECT to_regclass('public.corporate_action') IS NULL")" = t ]; then
+  echo "corporate_action 테이블이 없다 — V21이 아직 적용되지 않았다(앱을 한 번 띄우면 Flyway가 만든다)"
+else
+  psql -d stock_screener -At -c "SELECT CASE
+    WHEN count(*) = 0 THEN '원장이 비어 있다 — 수집 잡(--job=corporate-action)이 아직 안 돌았다'
+    WHEN count(*) FILTER (WHERE status IN ('APPROVED','APPLIED') AND type <> 'UNKNOWN') = 0
+      THEN count(*) || '행 전부가 사람 판정 대기다. 공시가 하나도 안 붙었다 — 어댑터의 일자 유도나 보고서 선택이 어긋났을 수 있다.'
+    ELSE 'OK 적용 가능 ' || count(*) FILTER (WHERE status IN ('APPROVED','APPLIED') AND type <> 'UNKNOWN')
+         || ' / 판정 대기 ' || count(*) FILTER (WHERE status = 'OBSERVED')
+         || ' / 전체 ' || count(*) || '행'
+    END FROM corporate_action"
+fi
+```
+
+**이 수가 이 phase의 성공을 가른다.** 원장 행 수가 아니라 **공시가 붙어 적용 가능해진 비율**이다 —
+휴리스틱만으로는 종류를 모르는 행(`UNKNOWN`)이 남고 그것은 `findApplicable`이 제외한다.
+착수 시점의 모집단은 가격제한폭을 넘는 불연속 **64건 / 62종목**이고, 그중 **39건은 권리락 당일
+주식수가 그대로**라 휴리스틱만으로는 `UNKNOWN`이 된다(2026-08-12 실측). 그 39건을 살리는 것이
+공시 경로이며, 살아나지 않으면 관리자 API 단계가 고칠 수 없는 행을 물려받는다.
 
 **스냅 규칙이 분할·병합에만 걸리는 근거가 이 측정이다.** 편차의 원인이 단수주가 아니라
 **자사주 미배정**이라 실체가 있다 — 씨젠 2021은 `52,225,994 = 2 × 26,234,020 − 242,046`이고
