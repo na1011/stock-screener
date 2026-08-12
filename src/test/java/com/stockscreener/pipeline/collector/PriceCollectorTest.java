@@ -29,7 +29,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 벤더를 검증하지 않기 때문이다.
  */
 @JpaSliceTest
-@Import({PriceWriter.class, CorporateActionLedger.class})
+@Import({PriceWriter.class, CorporateActionLedger.class, AdjustmentRecalculator.class,
+        PriceCalendar.class, NoOpIndicatorInvalidationPort.class})
 class PriceCollectorTest {
 
     private static final LocalDate FROM = LocalDate.of(2026, 8, 1);
@@ -40,6 +41,12 @@ class PriceCollectorTest {
 
     @Autowired
     private CorporateActionLedger ledger;
+
+    @Autowired
+    private AdjustmentRecalculator recalculator;
+
+    @Autowired
+    private PriceCalendar priceCalendar;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -152,7 +159,10 @@ class PriceCollectorTest {
     private PriceCollector collectorWith(FakePriceDataSource source) {
         DataSourceRegistry registry = new DataSourceRegistry(
                 List.of(source), List.of(), List.of(), List.of(), List.of(), List.of());
-        return new PriceCollector(registry, writer, ledger);
+        // 시세 경로는 원장 기록을 CorporateActionCollector에 위임한다. 그쪽의 공시·휴리스틱
+        // 수집은 여기서 안 쓰이므로 registry만 같은 것을 준다.
+        return new PriceCollector(registry, writer,
+                new CorporateActionCollector(registry, ledger, recalculator, priceCalendar));
     }
 
     private static CorporateAction split() {

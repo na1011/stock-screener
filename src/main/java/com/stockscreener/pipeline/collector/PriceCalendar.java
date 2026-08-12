@@ -20,7 +20,8 @@ import java.util.Optional;
  * 정하려고 지표에 묻지만, 여기서는 <b>방금 수집한 것</b>을 묻는다. 지표는 이 뒤에 계산되므로
  * 그쪽에 물으면 아직 없는 것을 보게 된다.
  *
- * <p>두 쿼리 모두 {@code idx_price_date}(V1)를 타므로 인덱스 끝을 한 번 훑는 것으로 끝난다.
+ * <p>거래일을 묻는 쿼리들은 {@code idx_price_date}(V1)를 타 인덱스 끝을 한 번 훑는 것으로
+ * 끝난다. {@link #hasBars}만 종목으로 물으므로 기본키 앞부분을 탄다.
  */
 @Component
 public class PriceCalendar {
@@ -49,6 +50,36 @@ public class PriceCalendar {
                 "SELECT max(trade_date) FROM price_daily WHERE trade_date <= ?",
                 LocalDate.class, date);
         return rows.isEmpty() ? Optional.empty() : Optional.ofNullable(rows.get(0));
+    }
+
+    /**
+     * 봉이 적재된 가장 이른 거래일. 전 종목 기준이며, 하나도 없으면 비어 있음.
+     *
+     * <p>기업 행위 조회 창의 기본 시작점이다. <b>상수로 박으면 안 되는 이유가 실측으로
+     * 있다</b> — {@code InitialLoadJob.PRICE_HISTORY_YEARS}는 2인데 실제 적재는 7년이라,
+     * 그 상수를 거울 삼으면 2020~2024의 기업 행위가 통째로 창 밖으로 나간다. 조정할 봉이
+     * 있는 구간이 곧 조회할 구간이므로 여기에 묻는 것이 정본이다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<LocalDate> earliestTradeDate() {
+        List<LocalDate> rows = jdbcTemplate.queryForList(
+                "SELECT min(trade_date) FROM price_daily", LocalDate.class);
+        return rows.isEmpty() ? Optional.empty() : Optional.ofNullable(rows.get(0));
+    }
+
+    /**
+     * 그 종목에 봉이 하나라도 있는가.
+     *
+     * <p>기업 행위 소스는 <b>우리가 저장한 시계열을 근거로 일자와 비율을 유도하므로</b>
+     * (`CorporateActionDataSource`) 봉이 없는 종목에 물으면 유도가 조용히 실패하고 로그 한
+     * 줄만 남는다. 신규 편입 직후에 정상적으로 생기는 상태이며, 미리 걸러 콜도 아낀다.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasBars(long stockId) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM (SELECT 1 FROM price_daily WHERE stock_id = ? LIMIT 1) t",
+                Long.class, stockId);
+        return count != null && count > 0;
     }
 
     /**

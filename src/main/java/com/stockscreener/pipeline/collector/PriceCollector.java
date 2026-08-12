@@ -1,6 +1,5 @@
 package com.stockscreener.pipeline.collector;
 
-import com.stockscreener.pipeline.datasource.CorporateAction;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
 import com.stockscreener.pipeline.datasource.PriceDataSource;
@@ -27,13 +26,13 @@ public class PriceCollector {
 
     private final DataSourceRegistry registry;
     private final PriceWriter writer;
-    private final CorporateActionLedger ledger;
+    private final CorporateActionCollector corporateActions;
 
     public PriceCollector(DataSourceRegistry registry, PriceWriter writer,
-                          CorporateActionLedger ledger) {
+                          CorporateActionCollector corporateActions) {
         this.registry = registry;
         this.writer = writer;
-        this.ledger = ledger;
+        this.corporateActions = corporateActions;
     }
 
     /**
@@ -60,14 +59,18 @@ public class PriceCollector {
 
         // 시세를 먼저 저장한 뒤 원장에 적는다. 원장의 근접일 검사가 그 종목의 봉을 세므로
         // 순서가 반대면 방금 들어온 거래일이 그 판정에서 빠진다.
-        for (CorporateAction action : source.fetchCorporateActions(security, from, to)) {
-            CorporateActionLedger.RecordResult result = ledger.record(security.stockId(), action);
-            if (result.outcome() == CorporateActionLedger.Outcome.NEAR_DUPLICATE) {
-                // 조용히 넘기지 않는다. 같은 사건의 일자가 어긋났거나 진짜 별개 사건인데
-                // 원장에 자리가 없는 것이며, 둘 다 사람이 갈라야 한다.
-                log.warn("기업 행위가 기존 원장 행과 겹쳐 적지 않았다. ticker={} 새 일자={} 기존 일자={}",
-                        security.ticker(), action.effectiveDate(), result.conflictingDate());
-            }
+        //
+        // MUST: 원장에 적는 것은 CorporateActionCollector를 지난다. 여기서 직접 적으면 원장을
+        // 만지는 곳이 둘이 되고, 두 곳의 NEAR_DUPLICATE 처리가 갈리면 **알림이 안 오는 형태로만**
+        // 드러난다. 국내는 이 목록이 언제나 비어 있고(DART는 시세 소스가 아니다), 채우는 것은
+        // 시세와 기업 행위를 함께 주는 v1.1의 미국 소스다(ADR-0049 §버린 대안).
+        for (CorporateActionCollector.NearDuplicate conflict
+                : corporateActions.recordAll(security,
+                        source.fetchCorporateActions(security, from, to)).nearDuplicates()) {
+            // 조용히 넘기지 않는다. 같은 사건의 일자가 어긋났거나 진짜 별개 사건인데
+            // 원장에 자리가 없는 것이며, 둘 다 사람이 갈라야 한다.
+            log.warn("기업 행위가 기존 원장 행과 겹쳐 적지 않았다. ticker={} 새 일자={} 기존 일자={}",
+                    conflict.ticker(), conflict.proposed(), conflict.existing());
         }
 
         if (bars.isEmpty()) {
