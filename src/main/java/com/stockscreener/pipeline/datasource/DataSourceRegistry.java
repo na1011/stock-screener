@@ -31,6 +31,7 @@ public class DataSourceRegistry {
     private final Map<String, FinancialDataSource> financialByMarket;
     private final Map<String, SecurityMasterDataSource> masterByMarket;
     private final Map<String, CompanyProfileDataSource> profileByMarket;
+    private final Map<String, CorporateActionDataSource> corporateActionByMarket;
     private final Map<String, UniverseDataSource> universeByCode;
 
     public DataSourceRegistry(
@@ -38,11 +39,14 @@ public class DataSourceRegistry {
             List<FinancialDataSource> financialSources,
             List<SecurityMasterDataSource> masterSources,
             List<CompanyProfileDataSource> profileSources,
+            List<CorporateActionDataSource> corporateActionSources,
             List<UniverseDataSource> universeSources) {
         this.priceByMarket = index(priceSources, PriceDataSource::supportedMarketCodes, "시세");
         this.financialByMarket = index(financialSources, FinancialDataSource::supportedMarketCodes, "재무");
         this.masterByMarket = index(masterSources, SecurityMasterDataSource::supportedMarketCodes, "종목마스터");
         this.profileByMarket = index(profileSources, CompanyProfileDataSource::supportedMarketCodes, "기업개황");
+        this.corporateActionByMarket =
+                index(corporateActionSources, CorporateActionDataSource::supportedMarketCodes, "기업행위");
         this.universeByCode = index(universeSources, UniverseDataSource::supportedUniverseCodes, "유니버스");
     }
 
@@ -89,6 +93,19 @@ public class DataSourceRegistry {
 
     public CompanyProfileDataSource companyProfileSource(String marketCode) throws DataSourceException {
         return require(profileByMarket, marketCode, "기업개황");
+    }
+
+    /**
+     * 해당 시장의 기업 행위 소스.
+     *
+     * <p>MUST NOT: 이것의 {@code Optional} 변형을 만들지 않는다. 국내 어댑터가
+     * {@code @ConditionalOnApiKey}라 키가 없으면 <b>빈으로 등록조차 되지 않으므로</b>,
+     * 비어 있음을 돌려주면 호출자가 0건을 처리하고 <b>성공으로 끝난다</b> — 수정계수가
+     * 영영 1로 남는데 로그도 알림도 없다. 위 {@link #priceSource}의 이유와 같다.
+     */
+    public CorporateActionDataSource corporateActionSource(String marketCode)
+            throws DataSourceException {
+        return require(corporateActionByMarket, marketCode, "기업행위");
     }
 
     public UniverseDataSource universeSource(String universeCode) throws DataSourceException {

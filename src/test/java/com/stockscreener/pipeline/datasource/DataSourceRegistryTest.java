@@ -73,7 +73,8 @@ class DataSourceRegistryTest {
     }
 
     private static DataSourceRegistry registryOf(List<PriceDataSource> priceSources) {
-        return new DataSourceRegistry(priceSources, List.of(), List.of(), List.of(), List.of());
+        return new DataSourceRegistry(
+                priceSources, List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     private record StubPriceSource(String name, Set<String> markets) implements PriceDataSource {
