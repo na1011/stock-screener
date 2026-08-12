@@ -40,6 +40,7 @@ export const ProblemType = {
   ALLOWED_EMAIL_NOT_FOUND: 'urn:stockscreener:allowed-email-not-found',
   DUPLICATE_ALLOWED_EMAIL: 'urn:stockscreener:duplicate-allowed-email',
   LAST_ADMIN: 'urn:stockscreener:last-admin',
+  CORPORATE_ACTION_NOT_FOUND: 'urn:stockscreener:corporate-action-not-found',
   CONFLICT: 'urn:stockscreener:conflict',
 } as const
 

@@ -223,6 +223,14 @@ public final class ApiExceptions {
         }
     }
 
+    public static class CorporateActionNotFoundException extends ApiException {
+        public CorporateActionNotFoundException(long id, Throwable cause) {
+            super(HttpStatus.NOT_FOUND, ApiProblemType.CORPORATE_ACTION_NOT_FOUND,
+                    "원장에 그 행이 없다: " + id, cause);
+            with("corporateActionId", id);
+        }
+    }
+
     public static class AllowedEmailNotFoundException extends ApiException {
         public AllowedEmailNotFoundException(long id, Throwable cause) {
             super(HttpStatus.NOT_FOUND, ApiProblemType.ALLOWED_EMAIL_NOT_FOUND,

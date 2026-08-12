@@ -29,7 +29,8 @@
       "ADMIN_BATCH_RETRY",
       "ADMIN_ALLOWLIST_ADD",
       "ADMIN_ALLOWLIST_UPDATE",
-      "ADMIN_ALLOWLIST_REMOVE"
+      "ADMIN_ALLOWLIST_REMOVE",
+      "ADMIN_CORPORATE_ACTION_JUDGE"
     ],
     "BatchStatus": ["RUNNING", "SUCCESS", "PARTIAL_SUCCESS", "FAILED", "ABORTED"],
     "TriggeredBy": ["SCHEDULER", "ADMIN", "MANUAL"],
@@ -57,6 +58,7 @@
     "urn:stockscreener:allowed-email-not-found",
     "urn:stockscreener:duplicate-allowed-email",
     "urn:stockscreener:last-admin",
+    "urn:stockscreener:corporate-action-not-found",
     "urn:stockscreener:conflict"
   ],
 

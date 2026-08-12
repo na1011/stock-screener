@@ -81,6 +81,7 @@ const ACTION_LABELS: Record<InteractionAction, string> = {
   ADMIN_ALLOWLIST_ADD: '계정 추가',
   ADMIN_ALLOWLIST_UPDATE: '계정 수정',
   ADMIN_ALLOWLIST_REMOVE: '계정 삭제',
+  ADMIN_CORPORATE_ACTION_JUDGE: '기업 행위 판정',
 }
 
 export function interactionActionLabel(action: InteractionAction): string {

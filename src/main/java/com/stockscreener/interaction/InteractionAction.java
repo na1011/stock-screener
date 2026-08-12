@@ -38,5 +38,14 @@ public enum InteractionAction {
 
     ADMIN_ALLOWLIST_ADD,
     ADMIN_ALLOWLIST_UPDATE,
-    ADMIN_ALLOWLIST_REMOVE
+    ADMIN_ALLOWLIST_REMOVE,
+
+    /**
+     * 관리자가 기업 행위 원장을 판정했다.
+     *
+     * <p>이 판정이 <b>저장된 시세 전 구간을 소급해 바꾸는 근거</b>가 된다(ADR-0049). 나중에
+     * 어느 종목의 과거 가격이 왜 달라졌는지 물을 때, 누가 언제 무엇을 승인했는지가 여기 없으면
+     * 답할 수 있는 것은 원장의 {@code updated_at}뿐이다.
+     */
+    ADMIN_CORPORATE_ACTION_JUDGE
 }

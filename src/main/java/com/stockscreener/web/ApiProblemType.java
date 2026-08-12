@@ -79,6 +79,8 @@ public enum ApiProblemType {
      */
     LAST_ADMIN("last-admin", "마지막 관리자의 권한은 회수할 수 없다"),
 
+    CORPORATE_ACTION_NOT_FOUND("corporate-action-not-found", "기업 행위 원장에 그 행이 없다"),
+
     CONFLICT("conflict", "요청이 현재 상태와 충돌한다");
 
     private static final String PREFIX = "urn:stockscreener:";

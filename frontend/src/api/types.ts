@@ -66,6 +66,7 @@ export const INTERACTION_ACTIONS = [
   'ADMIN_ALLOWLIST_ADD',
   'ADMIN_ALLOWLIST_UPDATE',
   'ADMIN_ALLOWLIST_REMOVE',
+  'ADMIN_CORPORATE_ACTION_JUDGE',
 ] as const
 export type InteractionAction = (typeof INTERACTION_ACTIONS)[number]
 
