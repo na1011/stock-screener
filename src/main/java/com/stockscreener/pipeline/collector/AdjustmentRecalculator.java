@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.CorporateAction;
+import com.stockscreener.pipeline.datasource.ShareRatioSnap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,10 +10,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 수정계수의 정본. <b>원장에서 매번 다시 짓고 누적하지 않는다</b>(ADR-0049).
@@ -63,6 +66,21 @@ public class AdjustmentRecalculator {
      */
     private static final BigDecimal UPPER_LIMIT = new BigDecimal("1.30");
     private static final BigDecimal LOWER_LIMIT = new BigDecimal("0.70");
+
+    /**
+     * 주식수에서 낸 비율을 가격이 뒷받침하는지 볼 때의 허용 폭.
+     *
+     * <p>IMPORTANT — <b>일일 가격제한폭(±30%)으로 잡으면 안 된다.</b> 변경상장·재상장일의
+     * 시초가는 그 폭 밖에서 정해질 수 있다. 실측 25건에서 이론 배수 대비 관측 배수의 비가
+     * 0.90~1.43이었고(아시아나항공 2021-01-15의 무상감자가 1.43이다), ±30%로 자르면 그것이
+     * 잘린다. 여기서 잡으려는 것은 <b>주식수 배수가 우연히 단순 유리수인데 가격과 아무 관계도
+     * 없는 경우</b>이므로 두 배 폭으로 넉넉히 둔다.
+     */
+    private static final BigDecimal CONSISTENCY_UPPER = new BigDecimal("2.0");
+    private static final BigDecimal CONSISTENCY_LOWER = new BigDecimal("0.5");
+
+    /** 주식수 배수는 정수 나눗셈이라 유효자릿수를 넉넉히 둔다. 스냅이 그 뒤를 맡는다. */
+    private static final MathContext SHARE_MATH = new MathContext(34);
 
     private final JdbcTemplate jdbcTemplate;
     private final CorporateActionLedger ledger;
@@ -132,20 +150,37 @@ public class AdjustmentRecalculator {
      * {@link CorporateAction.DetectionSource#HEURISTIC}이므로 원장에 {@code OBSERVED}로
      * 들어가고, 사람이 확인해야 적용 대상이 된다.
      *
-     * <p><b>종류는 가격 방향에서 나온 후보 딱지이고 확정이 아니다.</b> 무상증자 권리락도 여기서는
-     * {@code SPLIT}으로 보이고, 인적분할·거래재개도 마찬가지다. 무엇이 가격을 바꾸는 행위인가는
-     * 소스의 낱말이 답한다(§10-B). 여기가 답하는 것은 <i>"이 날 설명되지 않는 불연속이 있다"</i>뿐이다.
+     * <h2>가격은 "사건이 있었다"까지만 말한다</h2>
+     * <p><b>비율과 종류는 같은 날 {@code listed_shares}가 답한다</b>(ADR-0049 · api-spec
+     * §10-B-2). 종가 배수는 그날 시장이 움직인 만큼 흐려지기 때문이다 — 대한전선 2023은
+     * 종가로 재면 {@code 0.094073}인데 주식수로 재면 <b>정확히 0.1</b>이고, 그 6% 차이는
+     * 승인하는 순간 2020~2023 전 구간에 소급 적용된다. 값은 언제나 그럴듯하다.
      *
-     * <p>IMPORTANT — {@code type}과 {@code ratio}가 <b>같은 나눗셈 하나에서</b> 나온다.
-     * 둘을 따로 정하면 어긋날 수 있고, 실제로 병합에 역수를 실어 보내던 자리가 여기였다.
-     * 적용부가 {@code type}을 읽지 않아 무증상이었으며 오차는 113배였다(ADR-0049).
+     * <p>§10-B-2의 3분류를 그대로 옮긴다. 실측 25건이 전부 아래로 갈린다.
+     * <ul>
+     *   <li>주식수 배수가 <b>단순 유리수로 스냅되고</b> 가격 움직임과 어긋나지 않으면 →
+     *       {@code SPLIT}/{@code REVERSE_SPLIT} + 스냅된 비율 (11건 + 무상감자 1건)
+     *   <li>그 밖 → {@code UNKNOWN} + 관측된 가격 배수. 주식수가 그대로면 무상증자류
+     *       권리락이고(26건), 스냅되지 않으면 인적분할·복합이다(6건).
+     * </ul>
+     *
+     * <p>IMPORTANT — <b>{@code UNKNOWN}의 {@code ratio}는 계수가 아니라 관측값이다.</b>
+     * {@link CorporateActionLedger#findApplicable}이 그 종류를 제외하므로 사람이 종류를
+     * 확정하기 전에는 적용될 수 없다. 예전에는 무상증자 권리락이 여기서 {@code SPLIT}
+     * 딱지를 달고 나갔고, 그것을 승인하면 틀린 계수가 들어갔다.
+     *
+     * <p><b>남은 한계</b> — 인적분할의 분할비율이 우연히 단순 유리수면 여기서 분할·병합으로
+     * 읽힌다. 그것을 가르는 것은 소스의 낱말이고 국내에 그 경로가 아직 없다(§9의 「회사분할
+     * 결정」은 미착수). 후보가 {@code OBSERVED}에서 멈추는 것이 그 자리의 방어다.
      */
     public List<CorporateAction> detectCandidates(long stockId) {
         return jdbcTemplate.query("""
-                SELECT trade_date, close, prev_close FROM (
-                    SELECT trade_date, close,
-                           lag(close) OVER (ORDER BY trade_date) AS prev_close
+                SELECT trade_date, close, prev_close, listed_shares, prev_listed_shares FROM (
+                    SELECT trade_date, close, listed_shares,
+                           lag(close) OVER w AS prev_close,
+                           lag(listed_shares) OVER w AS prev_listed_shares
                     FROM price_daily WHERE stock_id = ?
+                    WINDOW w AS (ORDER BY trade_date)
                 ) t
                 WHERE prev_close IS NOT NULL AND close > 0 AND prev_close > 0
                   AND (close / prev_close > ? OR close / prev_close < ?)
@@ -156,17 +191,47 @@ public class AdjustmentRecalculator {
                     BigDecimal close = rs.getBigDecimal("close");
                     BigDecimal prevClose = rs.getBigDecimal("prev_close");
 
-                    // ratio는 "1주가 몇 주가 되었는가"다. 가격이 내렸으면 주식 수가 늘어난
-                    // 것이므로 >1, 올랐으면 <1이고, 그 부호가 나눗셈에서 저절로 나온다.
-                    // MUST NOT: 병합 쪽에 역수를 취하지 않는다.
-                    BigDecimal ratio = prevClose.divide(close, FACTOR_SCALE, RoundingMode.HALF_UP);
-                    CorporateAction.Type type = ratio.compareTo(BigDecimal.ONE) > 0
-                            ? CorporateAction.Type.SPLIT
-                            : CorporateAction.Type.REVERSE_SPLIT;
-                    return new CorporateAction(date, type, ratio,
+                    Optional<BigDecimal> fromShares = parValueRatio(
+                            rs.getBigDecimal("prev_listed_shares"), rs.getBigDecimal("listed_shares"),
+                            close, prevClose);
+                    if (fromShares.isPresent()) {
+                        BigDecimal ratio = fromShares.get();
+                        CorporateAction.Type type = ratio.compareTo(BigDecimal.ONE) > 0
+                                ? CorporateAction.Type.SPLIT
+                                : CorporateAction.Type.REVERSE_SPLIT;
+                        return new CorporateAction(date, type, ratio,
+                                CorporateAction.DetectionSource.HEURISTIC);
+                    }
+                    // 종류를 모른다. ratio는 관측된 가격 배수이며 계수가 아니다.
+                    return new CorporateAction(date, CorporateAction.Type.UNKNOWN,
+                            prevClose.divide(close, FACTOR_SCALE, RoundingMode.HALF_UP),
                             CorporateAction.DetectionSource.HEURISTIC);
                 },
                 stockId, UPPER_LIMIT, LOWER_LIMIT);
+    }
+
+    /**
+     * 같은 날 주식수 배수에서 액면 변경 비율을 낸다. 액면 변경이 아니면 비어 있음.
+     *
+     * <p>주식수가 없으면 <b>종류를 모르는 것으로 둔다.</b> 가격으로 대신 내면 이 메서드가
+     * 없애려는 바로 그 6% 오차가 돌아온다.
+     */
+    private static Optional<BigDecimal> parValueRatio(BigDecimal before, BigDecimal after,
+                                                      BigDecimal close, BigDecimal prevClose) {
+        if (before == null || after == null || before.signum() <= 0 || after.signum() <= 0
+                || before.compareTo(after) == 0) {
+            return Optional.empty();
+        }
+        Optional<BigDecimal> snapped = ShareRatioSnap.snap(after.divide(before, SHARE_MATH));
+        if (snapped.isEmpty() || snapped.get().compareTo(BigDecimal.ONE) == 0) {
+            return Optional.empty();
+        }
+        // 가격이 그 비율로 설명되는가. 이론 배수는 1/ratio이고, 관측이 그것의 몇 배인지 본다.
+        BigDecimal relative = close.multiply(snapped.get(), SHARE_MATH)
+                .divide(prevClose, SHARE_MATH);
+        boolean consistent = relative.compareTo(CONSISTENCY_LOWER) >= 0
+                && relative.compareTo(CONSISTENCY_UPPER) <= 0;
+        return consistent ? snapped : Optional.empty();
     }
 
     /**

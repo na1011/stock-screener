@@ -62,8 +62,11 @@ class AdjustmentRecalculatorTest {
     @Test
     @DisplayName("병합 왕복 — 탐지가 낸 비율을 그대로 승인해도 과거 가격이 올라간다")
     void reverseSplitRoundTripRaisesPastPrices() {
-        // 가격이 10배로 뛰었다 = 10주가 1주가 됐다. 정확 산술이 되도록 고른 값이다.
-        writer.write(stockId, List.of(bar("2026-01-02", "1000"), bar("2026-02-02", "10000")));
+        // 가격이 10배로 뛰었다 = 10주가 1주가 됐다. 비율은 주식수가 답하고 가격은 그것을
+        // 뒷받침하기만 한다 — 그래서 봉에 상장주식수가 함께 있어야 한다.
+        writer.write(stockId, List.of(
+                bar("2026-01-02", "1000", 1_000_000_000L),
+                bar("2026-02-02", "10000", 100_000_000L)));
 
         List<CorporateAction> candidates = recalculator.detectCandidates(stockId);
         assertThat(candidates).hasSize(1);
@@ -84,22 +87,34 @@ class AdjustmentRecalculatorTest {
     }
 
     @Test
-    @DisplayName("대한전선 2023-05-16 실측값으로도 같다 — 반올림 때문에 정확 일치로 재지 않는다")
+    @DisplayName("대한전선 2023-05-16 실측값 왕복 — 비율이 종가가 아니라 주식수에서 나온다")
     void reverseSplitRoundTripOnRealValues() {
-        writer.write(stockId, List.of(bar("2023-04-27", "1492"), bar("2023-05-16", "15860")));
+        // 종가 배수의 역수는 0.094073이고 주식수 배수는 정확히 0.1이다. 6% 차이가 승인하는
+        // 순간 전 구간에 소급 적용되는데, 값은 어느 쪽이든 그럴듯하다.
+        writer.write(stockId, List.of(
+                bar("2023-04-27", "1492", 1_244_473_009L),
+                bar("2023-05-16", "15860", 124_447_300L)));
 
-        approve(recalculator.detectCandidates(stockId).get(0));
+        CorporateAction merge = recalculator.detectCandidates(stockId).get(0);
+        assertThat(merge.ratio()).isEqualByComparingTo("0.1");
+
+        approve(merge);
         recalculator.rebuild(stockId);
 
-        // 계수가 numeric(18,10)에서 잘리므로 15,860에 정확히 떨어지지 않는다(실측 15859.999996).
-        // 뒤집혀 있으면 140.36이 나온다.
-        assertThat(adjClose("2023-04-27").doubleValue()).isCloseTo(15860.0, offset(0.01));
+        // 종가에서 냈으면 1492 / 0.094073 = 15,860이 나온다 — 정확해 보이지만 그것은
+        // 그날 시장이 움직인 만큼 흐려진 값이다. 주식수에서 내면 1492 × 10 = 14,920이다.
+        assertThat(adjClose("2023-04-27")).isEqualByComparingTo("14920");
+        assertThat(adjFactor("2023-04-27"))
+                .as("스냅이 없으면 10.0000000700이 되어 봉이 14,920.000104로 조정된다")
+                .isEqualByComparingTo("10");
     }
 
     @Test
     @DisplayName("분할 왕복 — 탐지가 내는 비율이 두 방향 모두 계약을 지킨다")
     void splitRoundTripLowersPastPrices() {
-        writer.write(stockId, List.of(bar("2026-01-02", "50000"), bar("2026-02-02", "1000")));
+        writer.write(stockId, List.of(
+                bar("2026-01-02", "50000", 10_000_000L),
+                bar("2026-02-02", "1000", 500_000_000L)));
 
         CorporateAction split = recalculator.detectCandidates(stockId).get(0);
         assertThat(split.type()).isEqualTo(CorporateAction.Type.SPLIT);
@@ -238,6 +253,53 @@ class AdjustmentRecalculatorTest {
     }
 
     @Test
+    @DisplayName("주식수가 그대로인 급락은 SPLIT이 아니라 UNKNOWN이다 — 무상증자 권리락이 그 모양이다")
+    void exRightsDayWithUnchangedShareCountIsUnknown() {
+        // 루닛 2023-11-09 실측. 예전에는 여기서 SPLIT + ratio 1.89가 나갔고, 승인하면
+        // 틀린 계수가 들어갔다. 무상증자의 비율은 신주상장일에야 나온다(§10-B-2).
+        writer.write(stockId, List.of(
+                bar("2023-11-08", "170500", 12_381_004L),
+                bar("2023-11-09", "90200", 12_381_004L)));
+
+        assertThat(recalculator.detectCandidates(stockId)).singleElement().satisfies(candidate -> {
+            assertThat(candidate.type()).isEqualTo(CorporateAction.Type.UNKNOWN);
+            assertThat(candidate.ratio())
+                    .as("관측된 가격 배수일 뿐 계수가 아니다")
+                    .isEqualByComparingTo("1.8902439024");
+        });
+        assertThat(ledgerAfterRecordingCandidates())
+                .as("UNKNOWN은 적용 대상에서 빠진다")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("주식수 배수가 단순 유리수가 아니면 UNKNOWN이다 — 인적분할이 그 모양이다")
+    void spinOffIsUnknown() {
+        // 삼성바이오로직스 2025-11-24 실측(직전 봉은 10-29다 — 그 사이가 거래정지다).
+        // 주식수 배수 0.65039…는 분모 50 안에서 단순 유리수로 떨어지지 않는다. 그것을
+        // REVERSE_SPLIT으로 읽으면 인적분할에 틀린 계수가 들어간다.
+        writer.write(stockId, List.of(
+                bar("2025-10-29", "1221000", 71_174_000L),
+                bar("2025-11-24", "1789000", 46_290_951L)));
+
+        assertThat(recalculator.detectCandidates(stockId))
+                .singleElement()
+                .extracting(CorporateAction::type)
+                .isEqualTo(CorporateAction.Type.UNKNOWN);
+    }
+
+    @Test
+    @DisplayName("주식수가 없으면 종류를 모르는 것으로 둔다 — 가격으로 대신 내면 오차가 돌아온다")
+    void missingShareCountYieldsUnknown() {
+        writer.write(stockId, List.of(bar("2023-04-27", "1492"), bar("2023-05-16", "15860")));
+
+        assertThat(recalculator.detectCandidates(stockId))
+                .singleElement()
+                .extracting(CorporateAction::type)
+                .isEqualTo(CorporateAction.Type.UNKNOWN);
+    }
+
+    @Test
     @DisplayName("탐지 결과는 전부 HEURISTIC이다 — 원장이 그것으로 승인 게이트를 건다")
     void candidatesAreAlwaysHeuristic() {
         writer.write(stockId, List.of(bar("2026-01-02", "100000"), bar("2026-01-05", "2000")));
@@ -247,6 +309,12 @@ class AdjustmentRecalculatorTest {
     }
 
     // ── 헬퍼 ──────────────────────────────────────────────────────────────────
+
+    /** 후보를 전부 원장에 적고 그중 실제로 적용될 것을 낸다. */
+    private List<CorporateActionLedger.Entry> ledgerAfterRecordingCandidates() {
+        recalculator.detectCandidates(stockId).forEach(a -> ledger.record(stockId, a));
+        return ledger.findApplicable(stockId);
+    }
 
     /** 탐지가 낸 후보를 <b>값을 고치지 않고</b> 승인한다. 관리자 API가 할 일의 최소 형태다. */
     private void approve(CorporateAction candidate) {
@@ -279,8 +347,14 @@ class AdjustmentRecalculatorTest {
     }
 
     /** OHLC를 종가 기준으로 만든 봉. 분할 계산은 종가만 쓰므로 나머지는 종가에 맞춘다. */
+    /** 상장주식수가 없는 봉. 탐지는 이런 봉에서 <b>종류를 모르는 것으로 둔다.</b> */
     private static RawPriceBar bar(String date, String close) {
+        return bar(date, close, null);
+    }
+
+    private static RawPriceBar bar(String date, String close, Long listedShares) {
         BigDecimal c = new BigDecimal(close);
-        return new RawPriceBar(LocalDate.parse(date), c, c, c, c, 1_000_000L, null, null, false);
+        return new RawPriceBar(LocalDate.parse(date), c, c, c, c, 1_000_000L, null,
+                listedShares == null ? null : BigDecimal.valueOf(listedShares), false);
     }
 }
