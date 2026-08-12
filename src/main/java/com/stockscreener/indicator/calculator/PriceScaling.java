@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 /**
- * 원주가 항목을 수정 축척으로 옮긴다.
+ * 봉의 원값을 수정 축척으로 옮긴다 — 가격은 그대로, <b>거래량은 반대 방향으로</b>.
  *
  * <p>IMPORTANT — {@code price_daily}는 <b>{@code adj_close}만</b> 수정해 저장한다(ADR-0002).
  * 고가·저가·시가는 원주가다. 둘을 그대로 섞으면 액면분할 구간에서 "고가 − 종가"나
@@ -43,5 +43,34 @@ final class PriceScaling {
 
     static BigDecimal adjustedLow(PriceBar bar) {
         return adjusted(bar, bar.low());
+    }
+
+    /**
+     * 그 봉의 거래량을 수정 축척으로 — {@code volume × close / adjClose}.
+     *
+     * <p>MUST: 가격과 <b>반대 방향</b>이다. {@link #adjusted}는 {@code adjClose/close}를 곱하고
+     * 여기는 그 역수를 곱한다 — 5:1 분할이면 분할 <b>전</b> 거래량이 5배가 되어야 분할 후와
+     * 같은 주식 수를 뜻한다. 항등식으로 검산하면 {@code volume ÷ adj_factor}다.
+     * 두 함수가 나란히 있어 부호를 베껴 쓰기 쉽고, <b>뒤집혀도 값은 그럴듯하다.</b>
+     *
+     * <p><b>IMPORTANT — 지금 이 값을 읽는 계산기가 하나도 없다.</b> 거래량을 쓰는 지표가 아직
+     * 없어서이며 경고가 아니라 사실이다({@code TURNOVER_60}조차 소스가 준 {@code tradeValue}를
+     * 쓴다). <b>첫 소비자는 P12의 주봉 OBV({@code obv_w})다</b> — 분할 후 거래량이 배수만큼
+     * 커지고 그것이 OBV <b>누적</b>에 영구히 남아 {@code drv_26 → drv_41 → score_d2}(±3)가
+     * 틀린다(ADR-0046 §결과). 그때 이것을 다시 만들지 않도록 P9에서 자리를 만들어 둔다.
+     *
+     * <p>{@code adj_volume} 컬럼도 {@link PriceBar}의 컴포넌트도 만들지 않는다 —
+     * {@code close}·{@code adjClose}로 유도되므로 저장하면 계수와 lockstep으로 지켜야 할
+     * 불변식이 하나 늘고, {@code PriceWriter}가 이미 정확히 그 형태의 버그를 냈다(ADR-0049).
+     */
+    static BigDecimal adjustedVolume(PriceBar bar) {
+        BigDecimal volume = BigDecimal.valueOf(bar.volume());
+        if (bar.adjClose() == null || bar.adjClose().signum() == 0) {
+            // adjClose = close × adj_factor이고 계수는 양수이므로 이 분기는 종가가 0일 때다.
+            // 그 자체가 수집 결함이며(adjusted와 같은 판단) 배치를 죽이지 않도록 원값을 쓴다.
+            return volume;
+        }
+        return volume.multiply(bar.close())
+                .divide(bar.adjClose(), MovingAverages.SCALE, RoundingMode.HALF_UP);
     }
 }
