@@ -218,30 +218,76 @@ public class CorporateActionLedger {
             jdbcTemplate.update("""
                     UPDATE corporate_action SET
                         listing_date = ?, source_date = ?, type = ?, ratio = ?,
-                        detection_source = ?, status = ?, updated_at = now()
+                        detection_source = ?, status = ?,
+                        source_form = coalesce(?, source_form), updated_at = now()
                     WHERE id = ?
                     """,
                     action.listingDate(), action.sourceDate(), action.type().name(),
-                    action.ratio(), action.source().name(), status.name(), row.id());
+                    action.ratio(), action.source().name(), status.name(), action.sourceForm(),
+                    row.id());
             log.info("휴리스틱 후보를 공시로 덮었다. stockId={} id={} {} type={} ratio={}",
                     stockId, row.id(), action.effectiveDate(), action.type(), action.ratio());
             return new RecordResult(Outcome.UPGRADED, row.id(), action.effectiveDate());
         }
 
-        long id = jdbcTemplate.queryForObject("""
-                INSERT INTO corporate_action
-                    (stock_id, effective_date, listing_date, source_date,
-                     type, ratio, detection_source, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                RETURNING id
-                """, Long.class,
-                stockId, action.effectiveDate(), action.listingDate(), action.sourceDate(),
-                action.type().name(), action.ratio(), action.source().name(), status.name());
+        long id = insert(stockId, action, status);
 
         log.info("기업 행위를 원장에 적었다. stockId={} id={} {} type={} ratio={} status={} source={}",
                 stockId, id, action.effectiveDate(), action.type(), action.ratio(),
                 status, action.source());
         return new RecordResult(Outcome.INSERTED, id, action.effectiveDate());
+    }
+
+    /**
+     * 소스가 <b>이름만</b> 알려준 사건을 원장에 붙인다. 값은 건드리지 않는다.
+     *
+     * <p>MUST NOT: 이것을 {@link #record}로 보내지 않는다. 종류를 모르는 공시는 {@code type}·
+     * {@code ratio}에 기여할 것이 없고, 그런데도 행을 만들면 <b>공시가 먼저 도는 계약</b>
+     * ({@code CorporateActionCollector}) 때문에 뒤에 온 휴리스틱의 확정된 종류·비율이
+     * {@code IGNORED}로 버려진다. 아시아나항공 2021-01-15이 정확히 그 모양이다 — 휴리스틱은
+     * {@code REVERSE_SPLIT 1/3}을 아는데 공시는 「무상감자」라는 낱말만 안다. 주석으로 붙이면
+     * <b>순서와 무관하게 둘 다 남는다.</b>
+     *
+     * <p>붙일 행이 없으면 만든다 — 그때 이 사건은 "가격이 뛴 것은 아는데 종류를 모르는" 후보이고,
+     * {@link #record}가 그 상태를 {@code OBSERVED}로 정한다.
+     */
+    @Transactional
+    public void annotate(long stockId, CorporateAction action) {
+        if (action.sourceForm() == null || action.sourceForm().isBlank()) {
+            throw new IllegalArgumentException("붙일 낱말이 없다. effectiveDate=" + action.effectiveDate());
+        }
+        Optional<ExistingRow> target = findByEffectiveDate(stockId, action.effectiveDate())
+                .or(() -> findNearDuplicate(stockId, action.effectiveDate()));
+        if (target.isEmpty()) {
+            long id = insert(stockId, action, CorporateActionStatus.OBSERVED);
+            log.info("소스가 이름만 아는 사건을 원장에 적었다. stockId={} id={} {} 형태='{}'"
+                            + " — 종류와 비율은 사람이 정해야 한다.",
+                    stockId, id, action.effectiveDate(), action.sourceForm());
+            return;
+        }
+        // MUST: 이미 있는 낱말을 덮지 않는다. 유도에 성공한 사건이 실은 더 정확한 낱말을 싣고
+        // 들어왔을 수 있고, 그때 근접중복으로 잡힌 이쪽이 그것을 지우면 안 된다.
+        int updated = jdbcTemplate.update("""
+                UPDATE corporate_action SET source_form = ?, updated_at = now()
+                WHERE id = ? AND source_form IS NULL
+                """, action.sourceForm(), target.get().id());
+        if (updated > 0) {
+            log.info("원장 행에 소스의 낱말을 붙였다. stockId={} id={} {} 형태='{}'",
+                    stockId, target.get().id(), target.get().effectiveDate(), action.sourceForm());
+        }
+    }
+
+    private long insert(long stockId, CorporateAction action, CorporateActionStatus status) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO corporate_action
+                    (stock_id, effective_date, listing_date, source_date,
+                     type, ratio, detection_source, status, source_form)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                RETURNING id
+                """, Long.class,
+                stockId, action.effectiveDate(), action.listingDate(), action.sourceDate(),
+                action.type().name(), action.ratio(), action.source().name(), status.name(),
+                action.sourceForm());
     }
 
     /**
@@ -321,7 +367,7 @@ public class CorporateActionLedger {
         }
         // 컴팩트 생성자가 부호·양수를 함께 판정한다. V21의 ck_ca_ratio_sign과 같은 판정이다.
         new CorporateAction(effectiveDate, judgement.listingDate(), row.sourceDate(), type, ratio,
-                CorporateAction.DetectionSource.HEURISTIC);
+                CorporateAction.DetectionSource.HEURISTIC, null);
 
         if (!effectiveDate.equals(row.effectiveDate())) {
             requireFreeSlot(row, effectiveDate);

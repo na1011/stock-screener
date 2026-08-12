@@ -94,7 +94,18 @@ public class CorporateActionCollector {
         }
 
         CorporateActionDataSource source = registry.corporateActionSource(security.marketCode());
-        Result disclosed = recordAll(security, source.fetchCorporateActions(security, from, to));
+        List<CorporateAction> fromSource = source.fetchCorporateActions(security, from, to);
+
+        // 소스가 종류를 확정하지 못한 사건은 값이 아니라 **이름만** 기여한다. 그것을 record로
+        // 보내면 공시가 먼저 도는 이 순서 때문에 뒤에 올 휴리스틱의 확정된 종류·비율이
+        // IGNORED로 버려진다(ADR-0050). 주석은 두 패스가 끝난 뒤에 붙인다.
+        Result disclosed = recordAll(security, fromSource.stream()
+                .filter(action -> action.type() != CorporateAction.Type.UNKNOWN)
+                .toList());
+        List<CorporateAction> nameOnly = fromSource.stream()
+                .filter(action -> action.type() == CorporateAction.Type.UNKNOWN
+                        && action.sourceForm() != null)
+                .toList();
 
         // 휴리스틱은 외부 호출이 없다. 창 밖 후보를 거르는 이유는 포트 계약과 같은 창을 쓰기
         // 위해서다 — 안 거르면 --from을 좁힌 실행이 창 밖 사건까지 매번 다시 올린다.
@@ -103,6 +114,10 @@ public class CorporateActionCollector {
                         && !action.effectiveDate().isAfter(to))
                 .toList();
         Result heuristic = recordAll(security, detected);
+
+        for (CorporateAction action : nameOnly) {
+            ledger.annotate(security.stockId(), action);
+        }
 
         List<NearDuplicate> conflicts = new ArrayList<>(disclosed.nearDuplicates());
         conflicts.addAll(heuristic.nearDuplicates());

@@ -199,15 +199,52 @@ class DartCorporateActionAdapterTest {
     }
 
     @Test
-    @DisplayName("범위 밖 낱말과 모르는 낱말은 행을 만들지 않는다")
-    void outOfScopeAndUnknownFormsProduceNothing() throws Exception {
-        respondWith(row("2021.04.14", "무상감자", "355,047,444", "100"));
-        assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
-                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"))).isEmpty();
+    @DisplayName("IMPORTANT — 범위 밖 낱말과 모르는 낱말도 이름은 남긴다. 로그로만 두면 판정하는 사람이 못 본다")
+    void outOfScopeAndUnknownFormsKeepTheirName() throws Exception {
+        // 아시아나항공 2021-01-15이 실측 표본이다. 낱말이 원장에 없으면 휴리스틱이 올린
+        // REVERSE_SPLIT 1/3을 사람이 깨끗한 병합으로 읽고 승인한다 — ADR-0049가 범위 밖으로
+        // 둔 사건에 계수가 들어간다.
+        for (String form : List.of("무상감자", "처음보는형태")) {
+            respondWith(row("2021.04.14", form, "355,047,444", "100"));
 
-        respondWith(row("2021.04.14", "처음보는형태", "355,047,444", "100"));
-        assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
+            assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
+                    LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")))
+                    .singleElement()
+                    .satisfies(action -> {
+                        assertThat(action.sourceForm()).isEqualTo(form);
+                        // 종류도 비율도 모른다. UNKNOWN이라 findApplicable이 제외한다.
+                        assertThat(action.type()).isEqualTo(CorporateAction.Type.UNKNOWN);
+                        // 효력일은 가격이 뛴 날이다 — 그것이 효력일의 정의다.
+                        assertThat(action.effectiveDate()).isEqualTo(LocalDate.parse("2021-04-15"));
+                        // 관측값은 계수와 같은 방향이다(558,000 / 120,500).
+                        assertThat(action.ratio()).isEqualByComparingTo("4.6307053942");
+                    });
+        }
+    }
+
+    @Test
+    @DisplayName("이름만 아는 사건도 불연속이 없으면 지어내지 않는다 — 그 사각지대는 로그로 남는다")
+    void nameOnlyEventsStillNeedAPriceGap() throws Exception {
+        respondWith(row("2021.04.14", "무상감자", "355,047,444", "100"));
+
+        StoredPriceSeries flat = (stockId, from, to) -> List.of(
+                bar("2021-04-13", "550000", 88_746_712L),
+                bar("2021-04-14", "548000", 88_746_712L),
+                bar("2021-04-15", "552000", 88_746_712L));
+
+        assertThat(adapterWith(flat).fetchCorporateActions(KAKAO,
                 LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("유도에 성공한 사건도 소스의 낱말을 함께 싣는다")
+    void derivedActionsCarryTheSourceWord() throws Exception {
+        respondWith(row("2021.04.14", "주식분할", "355,047,444", "100"));
+
+        assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
+                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")))
+                .singleElement()
+                .satisfies(action -> assertThat(action.sourceForm()).isEqualTo("주식분할"));
     }
 
     @Test

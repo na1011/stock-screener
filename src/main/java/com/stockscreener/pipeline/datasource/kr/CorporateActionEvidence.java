@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.datasource.kr;
 
+import com.stockscreener.pipeline.datasource.PriceDiscontinuity;
 import com.stockscreener.pipeline.datasource.ShareRatioSnap;
 import com.stockscreener.pipeline.datasource.StoredPriceSeries;
 
@@ -46,6 +47,33 @@ final class CorporateActionEvidence {
         BigDecimal ratio() {
             return after.divide(base, 10, java.math.RoundingMode.HALF_UP);
         }
+    }
+
+    /**
+     * 창 안에서 가격이 정상 매매로 설명되지 않게 뛴 <b>첫 거래일</b>.
+     *
+     * <p>MUST NOT: 여기서 비율을 함께 내지 않는다. {@code UNKNOWN}에 실을 관측값의 방향을 정하는
+     * 곳은 {@code PriceDiscontinuity.observedRatio} 하나이고, 이 클래스에는 이미 방향이 반대인
+     * {@link #closeMultipleOn}(교차확인용)이 있다. 둘이 섞이면 <b>어디에서도 안 걸린다</b> —
+     * {@code UNKNOWN}은 도메인의 부호 검사도 DB 제약도 통과한다.
+     *
+     * <p>효력일의 정의가 "가격이 뛴 날"이므로 이것이 옳은 앵커다. 소스가 낱말만 주고 종류를
+     * 확정해 주지 못하는 사건(무상감자·처음 보는 형태)에 쓴다.
+     */
+    Optional<LocalDate> firstPriceGap(LocalDate notBefore, LocalDate notAfter) {
+        for (int i = 1; i < bars.size(); i++) {
+            LocalDate date = bars.get(i).tradeDate();
+            if (date.isBefore(notBefore)) {
+                continue;
+            }
+            if (date.isAfter(notAfter)) {
+                return Optional.empty();
+            }
+            if (PriceDiscontinuity.isDiscontinuous(bars.get(i).close(), bars.get(i - 1).close())) {
+                return Optional.of(date);
+            }
+        }
+        return Optional.empty();
     }
 
     /**
@@ -133,6 +161,28 @@ final class CorporateActionEvidence {
      * <p>일자 보정이 맞았는지를 <b>가격으로 교차확인</b>하는 데 쓴다. 비율을 여기서 내지는
      * 않는다 — 종가 배수는 그날 시장이 움직인 만큼 흐려진다(대한전선 10.63 대 정확한 10).
      */
+    /**
+     * 그 거래일에 관측된 {@code ratio} 방향의 값. 종류를 모르는 사건에 실어 보낸다.
+     *
+     * <p>{@link #closeMultipleOn}과 <b>방향이 반대다</b>. 그래서 역수를 호출부에서 구하지 않고
+     * 여기서 {@code PriceDiscontinuity}에 넘긴다 — 방향을 정하는 곳이 둘이 되면 뒤집혀도
+     * {@code UNKNOWN}은 도메인·DB 어느 쪽에서도 안 걸린다.
+     */
+    Optional<BigDecimal> observedRatioOn(LocalDate tradeDate) {
+        for (int i = 1; i < bars.size(); i++) {
+            if (!bars.get(i).tradeDate().equals(tradeDate)) {
+                continue;
+            }
+            BigDecimal previous = bars.get(i - 1).close();
+            BigDecimal current = bars.get(i).close();
+            if (previous == null || current == null || current.signum() <= 0) {
+                return Optional.empty();
+            }
+            return Optional.of(PriceDiscontinuity.observedRatio(current, previous));
+        }
+        return Optional.empty();
+    }
+
     Optional<BigDecimal> closeMultipleOn(LocalDate tradeDate) {
         for (int i = 1; i < bars.size(); i++) {
             if (!bars.get(i).tradeDate().equals(tradeDate)) {

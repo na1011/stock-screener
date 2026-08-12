@@ -71,13 +71,6 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
             "유상증자(일반공모)", "유상증자(제3자배정)", "유상증자(주주배정)",
             "전환권행사", "주식매수선택권행사");
 
-    /**
-     * 가격을 바꾸지만 이 phase의 범위 밖이다(ADR-0049는 액면분할·병합·무상증자 셋을 다룬다).
-     * <b>조용히 버리지 않는다</b> — 아시아나항공 2021-01-15가 실제로 여기 해당하고, 버리면
-     * "그런 사건이 없다"와 구분되지 않는다.
-     */
-    private static final Set<String> FORMS_OUT_OF_SCOPE = Set.of("무상감자");
-
     /** 액면분할 원값은 매매개시일보다 <b>1~2일 이르다</b>. 뒤로 조금만 물러 잡는다. */
     private static final int PAR_CHANGE_LOOKBEHIND_DAYS = 3;
 
@@ -242,20 +235,49 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
                 if (FORMS_WITHOUT_PRICE_EFFECT.contains(row.form())) {
                     yield Optional.empty();
                 }
-                if (FORMS_OUT_OF_SCOPE.contains(row.form())) {
-                    log.warn("가격을 바꾸는 기업 행위지만 P9 범위 밖이라 적지 않는다."
-                                    + " ticker={} {} 형태='{}' — 수정계수가 그 구간에서 틀린 채로 남는다.",
-                            security.ticker(), row.sourceDate(), row.form());
-                    yield Optional.empty();
-                }
                 // MUST NOT: 조용히 버리지 않는다. 버리면 "그런 사건이 없다"와 "우리가 그 이름을
-                // 모른다"가 구분되지 않는다(§8의 이익잉여금 전례).
-                log.warn("처음 보는 발행 감소 형태다. ticker={} {} 형태='{}' 수량={}"
-                                + " — 가격을 바꾸는 행위인지 사람이 판정해야 한다.",
-                        security.ticker(), row.sourceDate(), row.form(), row.quantity());
-                yield Optional.empty();
+                // 모른다"가 구분되지 않는다(§8의 이익잉여금 전례). 로그로만 두는 것도 같다 —
+                // 판정하는 사람은 로그를 보지 않는다(ADR-0050).
+                yield nameOnly(row, evidence, security);
             }
         };
+    }
+
+    /**
+     * 종류도 비율도 못 내지만 <b>이름은 아는</b> 사건. 범위 밖 형태와 처음 보는 형태가 여기다.
+     *
+     * <p>「무상감자」가 실측 표본이다(아시아나항공 2021-01-15). ADR-0049가 다루는 것은
+     * 액면분할·병합·무상증자 셋뿐이라 그 계수를 우리가 내지 않는데, <b>휴리스틱은 주식수 배수가
+     * 1/3로 스냅돼 {@code REVERSE_SPLIT}으로 올린다.</b> 낱말이 원장에 없으면 사람은 그 행을
+     * 깨끗한 병합으로 읽고 승인한다.
+     *
+     * <p>효력일은 가격이 뛴 날이 정본이다 — 그것이 효력일의 정의다. 못 찾으면 로그로만 남는다.
+     * 지어내지 않는 이유는 {@code effective_date}가 원장의 축이라 틀린 날짜가 들어가면
+     * <b>그 봉만 조용히 틀리기</b> 때문이다.
+     *
+     * <p>이 값은 {@link CorporateActionCollector}가 {@code record}가 아니라 <b>주석</b>으로
+     * 보낸다 — 종류를 모르는 공시가 휴리스틱의 확정된 종류·비율을 밀어내면 안 되기 때문이다.
+     */
+    private Optional<CorporateAction> nameOnly(IrdsRow row, CorporateActionEvidence evidence,
+                                               SecurityRef security) {
+        Optional<LocalDate> gap = evidence.firstPriceGap(
+                row.sourceDate().minusDays(PAR_CHANGE_LOOKBEHIND_DAYS),
+                row.sourceDate().plusDays(PAR_CHANGE_LOOKAHEAD_DAYS));
+        if (gap.isEmpty()) {
+            log.warn("가격을 바꿨을 수 있는 형태인데 시계열에 불연속이 없다."
+                            + " ticker={} {} 형태='{}' 수량={} — 상장 이전 사건이거나 창 밖이다.",
+                    security.ticker(), row.sourceDate(), row.form(), row.quantity());
+            return Optional.empty();
+        }
+        Optional<BigDecimal> observed = evidence.observedRatioOn(gap.get());
+        if (observed.isEmpty()) {
+            return Optional.empty();
+        }
+        log.warn("종류를 확정하지 못한 기업 행위를 이름만 적는다. ticker={} {} 형태='{}' 효력일={}"
+                        + " — 수정계수는 사람이 종류와 비율을 정할 때까지 그 구간에서 틀린 채로 남는다.",
+                security.ticker(), row.sourceDate(), row.form(), gap.get());
+        return Optional.of(
+                CorporateAction.named(gap.get(), row.sourceDate(), observed.get(), row.form()));
     }
 
     /**
@@ -292,7 +314,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
         // 액면분할은 권리락과 신주상장이 같은 날이다. 벌어지는 것은 무상증자다.
         return Optional.of(new CorporateAction(
                 change.get().effectiveDate(), change.get().effectiveDate(), row.sourceDate(),
-                type, ratio, CorporateAction.DetectionSource.SOURCE_DISCLOSURE));
+                type, ratio, CorporateAction.DetectionSource.SOURCE_DISCLOSURE, row.form()));
     }
 
     /**
@@ -345,7 +367,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
         return Optional.of(new CorporateAction(
                 exRightsDate.get(), issue.get().listingDate(), row.sourceDate(),
                 CorporateAction.Type.BONUS_ISSUE, ratio,
-                CorporateAction.DetectionSource.SOURCE_DISCLOSURE));
+                CorporateAction.DetectionSource.SOURCE_DISCLOSURE, row.form()));
     }
 
     /** {@code BigDecimal.equals}는 스케일까지 보므로 {@code compareTo}로 견준다. */

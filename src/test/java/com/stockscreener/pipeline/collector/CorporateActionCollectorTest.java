@@ -187,6 +187,53 @@ class CorporateActionCollectorTest {
                 .hasMessageContaining("KOSPI");
     }
 
+    @Test
+    @DisplayName("IMPORTANT — 소스가 이름만 아는 사건은 휴리스틱이 확정한 종류·비율을 밀어내지 않는다")
+    void nameOnlyDisclosureKeepsTheHeuristicValues() throws Exception {
+        // 아시아나항공 2021-01-15 모양이다. 공시는 「무상감자」라는 낱말만 알고, 휴리스틱은
+        // 주식수 배수에서 REVERSE_SPLIT 1/3을 안다. 둘 다 남아야 사람이 판정할 수 있다.
+        writer.write(stockId, List.of(
+                bar("2020-12-23", "4210", "223235294"),
+                bar("2021-01-15", "18000", "74411764")));
+
+        collectorWith(new FakeCorporateActionDataSource("KOSPI")
+                .with(stockId, CorporateAction.named(LocalDate.parse("2021-01-15"),
+                        LocalDate.parse("2021-01-12"), new BigDecimal("0.2338888889"), "무상감자")))
+                .collect(security, FROM, TO);
+
+        // 공시가 먼저 도는데도 휴리스틱의 값이 남는다 — 주석은 값을 건드리지 않기 때문이다.
+        assertThat(type("2021-01-15")).isEqualTo("REVERSE_SPLIT");
+        assertThat(ratio("2021-01-15")).isEqualByComparingTo("0.3333333333");
+        assertThat(sourceForm("2021-01-15")).isEqualTo("무상감자");
+        assertThat(status("2021-01-15")).isEqualTo("OBSERVED");
+        assertThat(rowCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("붙일 행이 없으면 이름만으로 후보를 만든다 — 사건이 있었다는 사실이 사라지면 안 된다")
+    void nameOnlyDisclosureCreatesACandidateWhenNothingIsThere() throws Exception {
+        // 휴리스틱이 못 잡는 자리다(가격 불연속이 우리 창 밖이거나 폭 안이다).
+        writer.write(stockId, List.of(
+                bar("2021-01-14", "4210", "223235294"),
+                bar("2021-01-15", "4300", "223235294")));
+
+        collectorWith(new FakeCorporateActionDataSource("KOSPI")
+                .with(stockId, CorporateAction.named(LocalDate.parse("2021-01-15"),
+                        LocalDate.parse("2021-01-12"), new BigDecimal("0.9790697674"), "무상감자")))
+                .collect(security, FROM, TO);
+
+        assertThat(type("2021-01-15")).isEqualTo("UNKNOWN");
+        assertThat(sourceForm("2021-01-15")).isEqualTo("무상감자");
+        // UNKNOWN이라 적용 대상이 아니다. 사람이 종류와 비율을 정해야 한다.
+        assertThat(ledger.findApplicable(stockId)).isEmpty();
+    }
+
+    private String sourceForm(String date) {
+        return jdbcTemplate.queryForObject(
+                "SELECT source_form FROM corporate_action WHERE stock_id = ? AND effective_date = ?",
+                String.class, stockId, LocalDate.parse(date));
+    }
+
     private CorporateActionCollector collectorWith(FakeCorporateActionDataSource source) {
         DataSourceRegistry registry = new DataSourceRegistry(
                 List.of(), List.of(), List.of(), List.of(), List.of(source), List.of());

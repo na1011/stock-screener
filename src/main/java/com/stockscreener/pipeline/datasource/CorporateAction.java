@@ -26,6 +26,10 @@ import java.time.LocalDate;
  *                      틀렸을 때 <b>소스가 틀린 건지 우리가 틀린 건지</b> 가르는 데 쓴다.
  * @param source        이 사건을 무엇이 알려줬는가. 소스 공시와 휴리스틱 탐지를 구분해야
  *                      자동 적용 여부를 판단할 수 있다.
+ * @param sourceForm    소스가 이 사건을 부르는 낱말(DART {@code isu_dcrs_stle}). 모르면 null.
+ *                      {@link Type#UNKNOWN}인데 이 값이 있으면 <b>"이름은 아는데 계수를 못
+ *                      낸다"</b>는 뜻이고, 그 구분이 없으면 사람이 판정 화면에서 무상감자를
+ *                      액면병합과 구별할 수 없다(ADR-0050).
  */
 public record CorporateAction(
         LocalDate effectiveDate,
@@ -33,7 +37,8 @@ public record CorporateAction(
         LocalDate sourceDate,
         Type type,
         BigDecimal ratio,
-        DetectionSource source
+        DetectionSource source,
+        String sourceForm
 ) {
 
     public CorporateAction {
@@ -56,7 +61,19 @@ public record CorporateAction(
     /** 날짜를 하나만 아는 소스용. 미국 어댑터(v1.1)와 휴리스틱 탐지가 이 자리다. */
     public CorporateAction(LocalDate effectiveDate, Type type, BigDecimal ratio,
                            DetectionSource source) {
-        this(effectiveDate, null, null, type, ratio, source);
+        this(effectiveDate, null, null, type, ratio, source, null);
+    }
+
+    /**
+     * 소스가 <b>이름만</b> 알려준 사건. 종류와 비율은 모른다.
+     *
+     * <p>범위 밖 형태(무상감자)와 처음 보는 형태가 이 자리다. {@code ratio}는 관측된 가격
+     * 배수이며 계수가 아니다 — {@code findApplicable}이 {@link Type#UNKNOWN}을 제외한다.
+     */
+    public static CorporateAction named(LocalDate effectiveDate, LocalDate sourceDate,
+                                        BigDecimal observedRatio, String sourceForm) {
+        return new CorporateAction(effectiveDate, null, sourceDate, Type.UNKNOWN, observedRatio,
+                DetectionSource.SOURCE_DISCLOSURE, sourceForm);
     }
 
     public enum Type {
