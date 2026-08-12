@@ -27,6 +27,12 @@ import java.time.LocalDate;
  *                               <p>주지 않는 소스도 있으므로 nullable이다.
  * @param splitAdjustedBySource  소스가 이미 분할을 반영한 값을 주는지. 이것을 모르면
  *                               분할 계수를 두 번 적용하게 된다.
+ *                               <p><b>IMPORTANT — 지금 이 값을 읽는 코드가 하나도 없다.</b>
+ *                               국내 소스가 미조정 값을 주므로 무증상이고, 위 문장은 경고이지
+ *                               구현이 아니다. <b>미국 어댑터(v1.1, ADR-0010)를 붙이는 자리가
+ *                               이 값을 실제로 읽어야 하는 첫 자리다</b> — 조정된 시세에
+ *                               원장 계수를 다시 곱하면 분할비의 제곱만큼 틀리는데,
+ *                               그 값은 그럴듯하다(ADR-0049).
  */
 public record RawPriceBar(
         LocalDate tradeDate,

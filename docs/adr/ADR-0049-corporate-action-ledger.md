@@ -4,7 +4,9 @@ status: 채택됨
 date: 2026-08-12
 applies_to:
   - "src/main/java/**/pipeline/collector/AdjustmentRecalculator.java"
+  - "src/main/java/**/pipeline/collector/CorporateActionLedger.java"
   - "src/main/java/**/pipeline/collector/PriceCollector.java"
+  - "src/main/resources/db/migration/V21__corporate_action.sql"
   - "src/main/java/**/pipeline/datasource/CorporateAction.java"
   - "src/main/java/**/pipeline/datasource/CorporateActionDataSource.java"
   - "src/main/java/**/pipeline/datasource/kr/DartCorporateActionAdapter.java"
@@ -57,8 +59,15 @@ adj_close(d)  = close(d) × adj_factor(d)
 - **MUST: 분할·병합의 비율과 효력일을 `price_daily.listed_shares`에서 낸다.** DART의 낱말이
   아니라 이쪽이 정본이다 — 실측으로 **액면병합은 「증자(감자) 현황」에 실리지 않고**(대한전선
   2023, §10-B), 실리는 분할조차 종가 배수는 그날 시장이 움직인 만큼 흐려진다(대한전선 10.63 대
-  정확한 10). 주식수 배수는 5.0000·0.1000처럼 정확히 떨어지고 **효력일도 그 값이 바뀐 첫 거래일로
-  정확하다.**
+  정확한 10). **효력일은 그 값이 바뀐 첫 거래일로 정확하다.**
+  - **이 규칙은 분할·병합에만 걸린다.** 무상증자는 권리락 당일 주식수 배수가 **정확히 1.0000**이라
+    (§10-B-2의 26건) 여기서 비율이 나오지 않는다. 그쪽 정본은 §10-B의 `(기존 주식수 + isu_dcrs_qy)
+    / 기존 주식수`다. **"주식수가 정본"을 사건 전체로 넓혀 읽으면 가장 흔한 종류에서 비율이 1이 된다.**
+  - **MUST: 관측한 배수를 단순 유리수로 스냅한다.** 배수는 <b>정확히 떨어지지 않는다</b> — 단수주
+    처리 때문이다. 실측: 대한전선 `0.099999999277`(0.1이 아니다) · 휴림로봇 `0.399999997740` ·
+    아시아나항공 `0.333333330`(1/3은 원리적으로 불가능하다). `numeric(18,10)`으로 접으면 역수가
+    `10.0000000700`이 되어 **1,492원짜리 봉이 14,920이 아니라 14,920.000104로 조정된다.**
+    스케일을 낮춰 접는 것은 악화다 — 1/3을 6자리로 접으면 역수 오차가 40배 커진다.
 - **MUST NOT: 주식수가 바뀐 것만으로 기업 행위로 판정하지 않는다.** 유상증자·전환권행사·
   주식매수선택권행사가 상시 주식수를 조금씩 바꾼다. **무엇이 가격을 바꾸는 행위인가는 DART의
   낱말이, 얼마나 바꾸는가는 `listed_shares`가 답한다** — 둘 중 하나만으로는 되지 않는다.
