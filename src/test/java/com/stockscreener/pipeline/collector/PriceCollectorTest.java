@@ -29,8 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 벤더를 검증하지 않기 때문이다.
  */
 @JpaSliceTest
-@Import({PriceWriter.class, AdjustmentRecalculator.class,
-        NoOpIndicatorInvalidationPort.DefaultInvalidationPortConfig.class})
+@Import({PriceWriter.class, CorporateActionLedger.class})
 class PriceCollectorTest {
 
     private static final LocalDate FROM = LocalDate.of(2026, 8, 1);
@@ -40,7 +39,7 @@ class PriceCollectorTest {
     private PriceWriter writer;
 
     @Autowired
-    private AdjustmentRecalculator recalculator;
+    private CorporateActionLedger ledger;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -68,21 +67,38 @@ class PriceCollectorTest {
     }
 
     @Test
-    @DisplayName("소스가 공시한 분할은 자동 반영한다 — 휴리스틱과 달리 신뢰할 수 있다")
-    void appliesDisclosedCorporateAction() throws Exception {
+    @DisplayName("소스가 공시한 기업 행위는 원장에 적힌다 — 신뢰할 수 있으므로 승인 상태로 들어간다")
+    void recordsDisclosedCorporateActionToLedger() throws Exception {
         PriceCollector collector = collectorWith(new FakePriceDataSource("KOSPI")
                 .withBars(stockId, List.of(bar("2026-08-03", "50000"), bar("2026-08-10", "1000")))
-                .withCorporateAction(stockId, new CorporateAction(
-                        LocalDate.parse("2026-08-10"), CorporateAction.Type.SPLIT,
-                        new BigDecimal("50"), CorporateAction.DetectionSource.SOURCE_DISCLOSURE)));
+                .withCorporateAction(stockId, split()));
 
         collector.collect(security, FROM, TO);
 
-        // 분할 이전 봉이 조정된다.
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT status FROM corporate_action WHERE stock_id = ? AND effective_date = ?
+                """, String.class, stockId, LocalDate.parse("2026-08-10")))
+                .isEqualTo("APPROVED");
+    }
+
+    @Test
+    @DisplayName("수집은 계수를 건드리지 않는다 — 창이 같은 날짜를 매일 다시 보므로 그만큼 곱해진다")
+    void collectingNeverRewritesAdjustmentFactors() throws Exception {
+        PriceCollector collector = collectorWith(new FakePriceDataSource("KOSPI")
+                .withBars(stockId, List.of(bar("2026-08-03", "50000"), bar("2026-08-10", "1000")))
+                .withCorporateAction(stockId, split()));
+
+        collector.collect(security, FROM, TO);
+        collector.collect(security, FROM, TO);
+        collector.collect(security, FROM, TO);
+
+        // 원장에는 한 행만 쌓이고, 계수는 재구축이 부를 때까지 손대지 않는다.
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT adj_close FROM price_daily WHERE stock_id = ? AND trade_date = ?",
-                BigDecimal.class, stockId, LocalDate.parse("2026-08-03")))
-                .isEqualByComparingTo("1000");
+                "SELECT count(*) FROM corporate_action WHERE stock_id = ?", Integer.class, stockId))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM price_daily WHERE stock_id = ? AND adj_factor <> 1
+                """, Integer.class, stockId)).isZero();
     }
 
     @Test
@@ -118,7 +134,12 @@ class PriceCollectorTest {
     private PriceCollector collectorWith(FakePriceDataSource source) {
         DataSourceRegistry registry = new DataSourceRegistry(
                 List.of(source), List.of(), List.of(), List.of(), List.of());
-        return new PriceCollector(registry, writer, recalculator);
+        return new PriceCollector(registry, writer, ledger);
+    }
+
+    private static CorporateAction split() {
+        return new CorporateAction(LocalDate.parse("2026-08-10"), CorporateAction.Type.SPLIT,
+                new BigDecimal("50"), CorporateAction.DetectionSource.SOURCE_DISCLOSURE);
     }
 
     private int rowCount() {

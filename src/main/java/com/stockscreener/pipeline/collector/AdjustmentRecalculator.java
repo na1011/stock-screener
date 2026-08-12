@@ -11,16 +11,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 액면분할·병합에 따라 과거 수정주가를 다시 계산한다.
+ * 수정계수의 정본. <b>원장에서 매번 다시 짓고 누적하지 않는다</b>(ADR-0049).
  *
  * <h2>계산 모델</h2>
- * <p>{@code adj_factor}는 <b>해당 거래일 이후 발생한 모든 분할 비율의 누적곱의 역수</b>이며,
- * {@code adj_close = close × adj_factor}다. 분할이 없으면 1이고 최신 구간은 항상 1이다.
- *
  * <pre>
+ * adj_factor(d) = Π { 원장의 적용 대상 사건 e : e.effective_date &gt; d } (1 / ratio(e))
+ * adj_close(d)  = close(d) × adj_factor(d)
+ *
  * 50:1 분할이 2018-05-04에 발생한 경우
  *   2018-05-03 이전 행: adj_factor = 1/50 = 0.02  → adj_close = close × 0.02
  *   2018-05-04 이후 행: adj_factor = 1            → adj_close = close
@@ -28,6 +29,15 @@ import java.util.List;
  *
  * <p>이 방향을 뒤집으면 과거 시세가 50배로 부풀고, 그 오류는 분할 종목의 차트를 직접 보기
  * 전까지 드러나지 않는다.
+ *
+ * <h2>왜 곱하지 않고 다시 짓는가</h2>
+ * <p>예전에는 사건마다 {@code adj_factor *= 1/ratio}를 곱했다. 시세 수집이 15일 창으로 돌아
+ * 같은 날짜를 평일 11~12회 다시 보므로(ADR-0042) 소스가 사건을 주기 시작하는 순간 같은 분할이
+ * 그만큼 반복 적용되고, 5:1을 15회 곱하면 {@code numeric(18,10)}이 <b>정확히 0</b>이 되어
+ * {@code adj_close}가 전 구간 0이 되는데 <b>아무 에러도 나지 않는다.</b>
+ *
+ * <p>대입으로 바꾸면 몇 번을 돌려도 값이 같고, 원장에서 행 하나를 되돌리고 다시 짓는 것만으로
+ * 반영이 취소된다. 되돌리기 수단이 DB 덤프뿐이 아니게 되는 것이 이 설계의 목적이다.
  *
  * <h2>왜 종목 전체가 하나의 트랜잭션인가</h2>
  * <p>절반만 조정된 시계열은 조정되지 않은 시계열보다 나쁘다. 후자는 분할일에 명백한 점프가
@@ -41,72 +51,94 @@ public class AdjustmentRecalculator {
     /** {@code adj_factor numeric(18,10)}에 맞춘다. */
     private static final int FACTOR_SCALE = 10;
 
+    /** {@code numeric(18,10)}의 정수부 상한. 넘으면 DB가 알아보기 힘든 오류를 낸다. */
+    private static final BigDecimal FACTOR_LIMIT = new BigDecimal("100000000");
+
+    /**
+     * KRX 가격제한폭. 이 폭을 넘는 하루 변동은 정상 매매로 설명되지 않는다.
+     *
+     * <p>IMPORTANT — <b>비대칭이다.</b> 상한가는 {@code close/prev = 1.30}, 하한가는 {@code 0.70}이고
+     * 두 값은 서로 역수가 아니다. 한쪽 값을 양방향에 쓰면(예: 1/0.7 = 1.4286을 위쪽에도)
+     * +30~42.9% 구간이 통째로 그물을 빠져나간다.
+     */
+    private static final BigDecimal UPPER_LIMIT = new BigDecimal("1.30");
+    private static final BigDecimal LOWER_LIMIT = new BigDecimal("0.70");
+
     private final JdbcTemplate jdbcTemplate;
+    private final CorporateActionLedger ledger;
     private final IndicatorInvalidationPort invalidationPort;
 
     public AdjustmentRecalculator(JdbcTemplate jdbcTemplate,
+                                  CorporateActionLedger ledger,
                                   IndicatorInvalidationPort invalidationPort) {
         this.jdbcTemplate = jdbcTemplate;
+        this.ledger = ledger;
         this.invalidationPort = invalidationPort;
     }
 
     /**
-     * 기업 행위를 반영해 과거 시세의 수정주가를 다시 쓴다.
-     *
-     * <p>MUST: 휴리스틱으로 탐지한 후보는 여기 넘기지 않는다. 오탐(하한가 연속, 유상증자)으로
-     * 2년치를 잘못 재계산하면 되돌리기가 매우 비싸고, 무엇이 잘못됐는지 나중에 알기 어렵다.
-     * {@link CorporateAction.DetectionSource#HEURISTIC}인 사건은 거부한다.
-     *
-     * @return 갱신한 행 수
+     * @param changedRows 실제로 값이 바뀐 행 수. 0이면 이미 원장과 일치했다는 뜻이다.
+     * @param earliestChanged 바뀐 행 중 가장 이른 거래일. 바뀐 것이 없으면 null.
      */
-    @Transactional
-    public long apply(long stockId, CorporateAction action) {
-        if (action.source() == CorporateAction.DetectionSource.HEURISTIC) {
-            throw new IllegalArgumentException(
-                    "휴리스틱으로 탐지한 기업 행위는 자동 적용하지 않는다. stockId=" + stockId
-                            + " date=" + action.effectiveDate()
-                            + " — 사람이 확인한 뒤 SOURCE_DISCLOSURE로 다시 넘겨야 한다.");
-        }
-
-        // 분할 전 구간의 기존 계수에 1/ratio를 곱한다. 곱하는 이유는 이미 다른 분할이
-        // 반영되어 있을 수 있기 때문이다 — 덮어쓰면 앞선 분할이 사라진다.
-        BigDecimal inverseRatio = BigDecimal.ONE.divide(
-                action.ratio(), FACTOR_SCALE, RoundingMode.HALF_UP);
-
-        int updated = jdbcTemplate.update("""
-                UPDATE price_daily SET
-                    adj_factor = adj_factor * ?,
-                    adj_close  = close * (adj_factor * ?),
-                    updated_at = now()
-                WHERE stock_id = ? AND trade_date < ?
-                """, inverseRatio, inverseRatio, stockId, action.effectiveDate());
-
-        if (updated == 0) {
-            log.info("조정 대상 시세가 없다. stockId={} effectiveDate={} — 상장 이전이거나 이력이 아직 없다.",
-                    stockId, action.effectiveDate());
-            return 0L;
-        }
-
-        log.info("수정주가를 재계산했다. stockId={} type={} ratio={} effectiveDate={} 갱신행={}",
-                stockId, action.type(), action.ratio(), action.effectiveDate(), updated);
-
-        // IMPORTANT — 원자료가 소급 변경되었으므로 파생 지표도 무효화해야 한다.
-        // 이 호출이 빠지면 저장된 SMA200이 조정 전 가격으로 계산된 채 남는다.
-        invalidationPort.invalidate(stockId, earliestTradeDate(stockId),
-                IndicatorInvalidationPort.InvalidationReason.PRICE_ADJUSTED);
-
-        return updated;
+    public record RebuildResult(long changedRows, LocalDate earliestChanged, int appliedEvents) {
     }
 
     /**
-     * 시세 급변으로 분할 후보를 탐지한다.
+     * 원장 전체에서 그 종목의 수정계수와 수정종가를 다시 짓는다.
      *
-     * <p>MUST NOT: 결과를 그대로 {@link #apply}에 넘기지 않는다. 반환되는 사건은 모두
-     * {@link CorporateAction.DetectionSource#HEURISTIC}이며 사람의 확인을 전제로 한다.
+     * <p><b>이것이 저장된 시세를 소급해 다시 쓰는 유일한 지점이다.</b> 몇 번을 돌려도 결과가
+     * 같고, 원장에 적용 대상이 하나도 없으면 계수를 전량 1로 되돌린다 — 그것이 반영을
+     * 취소하는 방법이다.
      *
-     * <p>판정 기준은 전일 대비 종가 비율이 흔한 분할비 근처인 경우다. 거래량이 함께 급증하는
-     * 것을 조건에 넣지 않은 이유는, 분할 당일 거래량은 소스마다 조정 여부가 달라
-     * 오히려 오탐을 늘리기 때문이다.
+     * <p>MUST: {@link CorporateAction.Type} 별 부호를 여기서 다시 정하지 않는다.
+     * {@code ratio}의 계약이 <i>"1주가 몇 주가 되었는가"</i>이므로 종류와 무관하게
+     * {@code 1/ratio}가 옳다. 종류를 읽어 분기하면 부호를 정하는 곳이 둘이 되고,
+     * <b>두 번 뒤집힌 값은 원래 값과 같아 보인다.</b>
+     */
+    @Transactional
+    public RebuildResult rebuild(long stockId) {
+        List<CorporateActionLedger.Entry> events = ledger.findApplicable(stockId);
+        List<Segment> segments = segmentsOf(events);
+
+        RebuildResult result = assignFactors(stockId, segments, events.size());
+
+        if (result.changedRows() == 0) {
+            log.info("수정계수가 이미 원장과 일치한다. stockId={} 사건={}건 — 다시 쓸 것이 없다.",
+                    stockId, events.size());
+        } else {
+            log.info("수정계수를 원장에서 다시 지었다. stockId={} 사건={}건 갱신={}행 최초변경일={}",
+                    stockId, events.size(), result.changedRows(), result.earliestChanged());
+
+            // IMPORTANT — 원자료가 소급 변경되었으므로 파생 지표도 무효화해야 한다. 이 호출이
+            // 빠지면 저장된 SMA200이 조정 전 가격으로 계산된 채 남는다.
+            //
+            // MUST: 바뀐 행이 있을 때만 부른다. 무효화는 그 종목의 indicator_value를 전량
+            // 지우므로(30종목이면 16만 행), 가드가 없으면 멱등한 재구축이 매 실행 그만큼을
+            // 지우고 다음 백필까지 그 종목이 화면에서 통째로 사라진다.
+            invalidationPort.invalidate(stockId, result.earliestChanged(),
+                    IndicatorInvalidationPort.InvalidationReason.PRICE_ADJUSTED);
+        }
+
+        // 갱신 행이 0이어도 표시한다 — 상장 이전 사건은 조정할 봉이 없을 뿐 반영이 끝난 것이다.
+        // 표시하지 않으면 "아직 반영 대기"와 구분되지 않는다.
+        ledger.markApplied(events.stream().map(CorporateActionLedger.Entry::id).toList());
+        return result;
+    }
+
+    /**
+     * 시세 급변으로 기업 행위 후보를 탐지한다.
+     *
+     * <p>MUST NOT: 결과를 그대로 반영하지 않는다. 반환되는 사건은 모두
+     * {@link CorporateAction.DetectionSource#HEURISTIC}이므로 원장에 {@code OBSERVED}로
+     * 들어가고, 사람이 확인해야 적용 대상이 된다.
+     *
+     * <p><b>종류는 가격 방향에서 나온 후보 딱지이고 확정이 아니다.</b> 무상증자 권리락도 여기서는
+     * {@code SPLIT}으로 보이고, 인적분할·거래재개도 마찬가지다. 무엇이 가격을 바꾸는 행위인가는
+     * 소스의 낱말이 답한다(§10-B). 여기가 답하는 것은 <i>"이 날 설명되지 않는 불연속이 있다"</i>뿐이다.
+     *
+     * <p>IMPORTANT — {@code type}과 {@code ratio}가 <b>같은 나눗셈 하나에서</b> 나온다.
+     * 둘을 따로 정하면 어긋날 수 있고, 실제로 병합에 역수를 실어 보내던 자리가 여기였다.
+     * 적용부가 {@code type}을 읽지 않아 무증상이었으며 오차는 113배였다(ADR-0049).
      */
     public List<CorporateAction> detectCandidates(long stockId) {
         return jdbcTemplate.query("""
@@ -115,28 +147,114 @@ public class AdjustmentRecalculator {
                            lag(close) OVER (ORDER BY trade_date) AS prev_close
                     FROM price_daily WHERE stock_id = ?
                 ) t
-                WHERE prev_close IS NOT NULL AND close > 0
-                  AND (prev_close / close >= 1.8 OR close / prev_close >= 1.8)
+                WHERE prev_close IS NOT NULL AND close > 0 AND prev_close > 0
+                  AND (close / prev_close > ? OR close / prev_close < ?)
                 ORDER BY trade_date
                 """,
                 (rs, rowNum) -> {
                     LocalDate date = rs.getObject("trade_date", LocalDate.class);
                     BigDecimal close = rs.getBigDecimal("close");
                     BigDecimal prevClose = rs.getBigDecimal("prev_close");
+
+                    // ratio는 "1주가 몇 주가 되었는가"다. 가격이 내렸으면 주식 수가 늘어난
+                    // 것이므로 >1, 올랐으면 <1이고, 그 부호가 나눗셈에서 저절로 나온다.
+                    // MUST NOT: 병합 쪽에 역수를 취하지 않는다.
                     BigDecimal ratio = prevClose.divide(close, FACTOR_SCALE, RoundingMode.HALF_UP);
-                    boolean isSplit = ratio.compareTo(BigDecimal.ONE) > 0;
-                    return new CorporateAction(
-                            date,
-                            isSplit ? CorporateAction.Type.SPLIT : CorporateAction.Type.REVERSE_SPLIT,
-                            isSplit ? ratio : BigDecimal.ONE.divide(ratio, FACTOR_SCALE, RoundingMode.HALF_UP),
+                    CorporateAction.Type type = ratio.compareTo(BigDecimal.ONE) > 0
+                            ? CorporateAction.Type.SPLIT
+                            : CorporateAction.Type.REVERSE_SPLIT;
+                    return new CorporateAction(date, type, ratio,
                             CorporateAction.DetectionSource.HEURISTIC);
                 },
-                stockId);
+                stockId, UPPER_LIMIT, LOWER_LIMIT);
     }
 
-    private LocalDate earliestTradeDate(long stockId) {
-        return jdbcTemplate.queryForObject(
-                "SELECT min(trade_date) FROM price_daily WHERE stock_id = ?",
-                LocalDate.class, stockId);
+    /**
+     * 구간 하나 — {@code trade_date < boundary}인 행이 갖는 계수.
+     *
+     * <p>마지막 구간(모든 사건 이후)은 계수가 1이므로 목록에 담지 않는다. SQL의 {@code ELSE}가
+     * 그 자리다.
+     */
+    private record Segment(LocalDate boundary, BigDecimal factor) {
+    }
+
+    /**
+     * 사건 목록을 구간 계수로 바꾼다.
+     *
+     * <p>MUST: 비율의 곱을 먼저 정확히 구하고 나눗셈은 <b>구간마다 한 번</b>만 한다. 역수를
+     * 구해 곱해 나가면 반올림 오차가 사건 수만큼 누적되고, 그것이 이 클래스가 없앤 바로 그
+     * 병의 축소판이다. 5 × 2 = 10을 한 번 나눠 0.1을 얻는 것과 0.2 × 0.5를 곱하는 것은 다르다.
+     */
+    private List<Segment> segmentsOf(List<CorporateActionLedger.Entry> events) {
+        List<Segment> segments = new ArrayList<>(events.size());
+        // 뒤에서부터 누적하면 구간 k의 분모가 "k번째 이후 모든 비율의 곱"이 된다.
+        BigDecimal suffixProduct = BigDecimal.ONE;
+        for (int k = events.size() - 1; k >= 0; k--) {
+            suffixProduct = suffixProduct.multiply(events.get(k).ratio());
+            BigDecimal factor = BigDecimal.ONE.divide(suffixProduct, FACTOR_SCALE, RoundingMode.HALF_UP);
+            if (factor.abs().compareTo(FACTOR_LIMIT) >= 0) {
+                throw new IllegalStateException(
+                        "수정계수가 numeric(18,10)의 상한을 넘는다. factor=" + factor
+                                + " effectiveDate=" + events.get(k).effectiveDate()
+                                + " — 원장의 비율이 뒤집혔거나 같은 사건이 여러 행으로 들어와 있다.");
+            }
+            segments.add(0, new Segment(events.get(k).effectiveDate(), factor));
+        }
+        return segments;
+    }
+
+    /**
+     * 계수를 <b>대입한다.</b> 기존 값에 곱하지 않는다.
+     *
+     * <p>값이 실제로 달라지는 행만 건드리고, 바뀐 행의 수와 가장 이른 날짜를 함께 받는다 —
+     * 무효화 범위가 그 날짜에서 시작해야 하고, 0건이면 무효화 자체를 하면 안 되기 때문이다.
+     * {@code JdbcTemplate.update()}로는 둘을 못 얻으므로 CTE로 감싼다.
+     */
+    private RebuildResult assignFactors(long stockId, List<Segment> segments, int eventCount) {
+        // 파라미터 순서는 SQL 텍스트의 등장 순서다 — CASE가 두 stock_id보다 앞에 있다.
+        // 적용 대상이 하나도 없으면 CASE 자체가 없다(빈 CASE는 문법 오류다). 그때 계수는
+        // 전량 1이고, 그것이 곧 "반영을 되돌린 상태"다.
+        List<Object> params = new ArrayList<>();
+        StringBuilder factorExpr = new StringBuilder();
+        if (segments.isEmpty()) {
+            factorExpr.append("1");
+        } else {
+            factorExpr.append("CASE ");
+            for (Segment segment : segments) {
+                factorExpr.append("WHEN trade_date < ? THEN ?::numeric ");
+                params.add(segment.boundary());
+                params.add(segment.factor());
+            }
+            factorExpr.append("ELSE 1 END");
+        }
+        params.add(stockId);   // target CTE
+        params.add(stockId);   // upd CTE
+
+        // adj_factor와 adj_close에 같은 f를 쓴다. ADR-0049의 유일한 불변식
+        // (adj_close = round(close × adj_factor, 6))이 이것으로 원리적으로 성립한다.
+        String sql = """
+                WITH target AS (
+                    SELECT trade_date, close, (%s)::numeric(18,10) AS f
+                    FROM price_daily WHERE stock_id = ?
+                ), upd AS (
+                    UPDATE price_daily p SET
+                        adj_factor = t.f,
+                        adj_close  = round(p.close * t.f, 6),
+                        updated_at = now()
+                    FROM target t
+                    WHERE p.stock_id = ? AND p.trade_date = t.trade_date
+                      AND (p.adj_factor IS DISTINCT FROM t.f
+                           OR p.adj_close IS DISTINCT FROM round(p.close * t.f, 6))
+                    RETURNING p.trade_date
+                )
+                SELECT count(*) AS changed, min(trade_date) AS earliest FROM upd
+                """.formatted(factorExpr);
+
+        return jdbcTemplate.queryForObject(sql,
+                (rs, rowNum) -> new RebuildResult(
+                        rs.getLong("changed"),
+                        rs.getObject("earliest", LocalDate.class),
+                        eventCount),
+                params.toArray());
     }
 }

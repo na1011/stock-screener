@@ -27,21 +27,27 @@ public class PriceCollector {
 
     private final DataSourceRegistry registry;
     private final PriceWriter writer;
-    private final AdjustmentRecalculator adjustmentRecalculator;
+    private final CorporateActionLedger ledger;
 
     public PriceCollector(DataSourceRegistry registry, PriceWriter writer,
-                          AdjustmentRecalculator adjustmentRecalculator) {
+                          CorporateActionLedger ledger) {
         this.registry = registry;
         this.writer = writer;
-        this.adjustmentRecalculator = adjustmentRecalculator;
+        this.ledger = ledger;
     }
 
     /**
      * {@code [from, to]} 구간의 시세를 수집한다.
      *
-     * <p>기업 행위를 함께 조회해 수정주가를 갱신한다. 소스가 제공하지 않으면 빈 목록이므로
-     * 아무 일도 일어나지 않는다 — 그 경우의 탐지는
-     * {@link AdjustmentRecalculator#detectCandidates}가 담당하며 사람의 확인을 거친다.
+     * <p>기업 행위를 함께 조회해 <b>원장에 적기만 한다.</b> 계수를 실제로 다시 쓰는 것은
+     * {@link AdjustmentRecalculator#rebuild}이고, 그것을 부르는 것은 승인 경로다.
+     *
+     * <p>MUST NOT: 여기서 계수를 다시 쓰지 않는다. 수집은 15일 창으로 돌아 같은 날짜를 평일
+     * 11~12회 다시 보므로(ADR-0042), 저장된 시세를 소급해 다시 쓰는 일이 그 횟수만큼 일어나게
+     * 된다. <b>되돌릴 수 없는 쓰기의 진입점은 하나여야 한다.</b>
+     *
+     * <p>소스가 기업 행위를 제공하지 않으면 빈 목록이므로 아무 일도 일어나지 않는다 — 그
+     * 경우의 탐지는 {@link AdjustmentRecalculator#detectCandidates}가 담당한다.
      *
      * @return 저장한 행 수
      */
@@ -52,10 +58,15 @@ public class PriceCollector {
         List<RawPriceBar> bars = source.fetchDailyBars(security, from, to);
         long written = writer.write(security.stockId(), bars);
 
-        // 시세를 먼저 저장한 뒤 조정한다. 순서가 반대면 새로 들어온 봉이 조정되지 않은 채 남는다.
+        // 시세를 먼저 저장한 뒤 원장에 적는다. 원장의 근접일 검사가 그 종목의 봉을 세므로
+        // 순서가 반대면 방금 들어온 거래일이 그 판정에서 빠진다.
         for (CorporateAction action : source.fetchCorporateActions(security, from, to)) {
-            if (action.source() == CorporateAction.DetectionSource.SOURCE_DISCLOSURE) {
-                adjustmentRecalculator.apply(security.stockId(), action);
+            CorporateActionLedger.RecordResult result = ledger.record(security.stockId(), action);
+            if (result.outcome() == CorporateActionLedger.Outcome.NEAR_DUPLICATE) {
+                // 조용히 넘기지 않는다. 같은 사건의 일자가 어긋났거나 진짜 별개 사건인데
+                // 원장에 자리가 없는 것이며, 둘 다 사람이 갈라야 한다.
+                log.warn("기업 행위가 기존 원장 행과 겹쳐 적지 않았다. ticker={} 새 일자={} 기존 일자={}",
+                        security.ticker(), action.effectiveDate(), result.conflictingDate());
             }
         }
 
