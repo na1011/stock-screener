@@ -49,6 +49,15 @@ import java.util.List;
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=company-profile \
  *     --tickers=005930,035420'
  *
+ * # 기업 행위 수집 — 계수는 바꾸지 않고 원장에만 적는다. 창은 저장된 시세 전 구간이 기본이고
+ * # 종목당 콜 수는 창을 덮는 정기보고서 수가 정한다(2020~오늘이면 2콜)
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=corporate-action'
+ *
+ * # 종목·구간을 좁혀 관통 확인. MUST NOT: 최근 며칠짜리 창을 주지 않는다 — 소스가 정기보고서에만
+ * # 실려 원리적으로 0건이고, 그것이 "사건이 없다"로 읽힌다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=corporate-action \
+ *     --tickers=058470,086280'
+ *
  * # 지표 백필
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill --from=2020-01-02'
  * </pre>
@@ -67,6 +76,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final InitialLoadJob initialLoadJob;
     private final FinancialRefillJob financialRefillJob;
     private final CompanyProfileJob companyProfileJob;
+    private final CorporateActionJob corporateActionJob;
     private final IndicatorBackfillJob indicatorBackfillJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
@@ -75,6 +85,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            InitialLoadJob initialLoadJob,
                            FinancialRefillJob financialRefillJob,
                            CompanyProfileJob companyProfileJob,
+                           CorporateActionJob corporateActionJob,
                            IndicatorBackfillJob indicatorBackfillJob,
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
@@ -82,6 +93,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.initialLoadJob = initialLoadJob;
         this.financialRefillJob = financialRefillJob;
         this.companyProfileJob = companyProfileJob;
+        this.corporateActionJob = corporateActionJob;
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
@@ -115,13 +127,18 @@ public class BootstrapRunner implements ApplicationRunner {
                     optionalInteger(args, "financial-years"), csv(args, "tickers"));
             case "company-profile" -> companyProfileJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
+            // --from을 안 주면 잡이 저장된 시세의 첫 거래일을 쓴다. 러너가 기본값을 정하지
+            // 않는 이유는 backfill의 minusYears(2)와 같은 두 번째 정본을 만들지 않기 위해서다.
+            case "corporate-action" -> corporateActionJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    date(args, "from", null), csv(args, "tickers"));
             case "backfill" -> indicatorBackfillJob.run(
                     date(args, "from", asOf.minusYears(2)), asOf,
                     BatchExecutionRecorder.TriggeredBy.MANUAL);
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill | company-profile"
-                            + " | backfill");
+                            + " | corporate-action | backfill");
         };
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);

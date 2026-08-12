@@ -23,7 +23,13 @@ public enum CollectionPhase {
     /** 종목 마스터(이름·섹터·상장일) 수집. */
     SECURITY_MASTER,
 
-    /** 액면분할에 따른 수정주가 재계산. */
+    /**
+     * 기업 행위 수집과 원장 기록.
+     *
+     * <p>MUST NOT: 이 단계를 "수정주가 재계산"으로 읽지 않는다. 계수를 다시 쓰는 것은
+     * {@code AdjustmentRecalculator.rebuild} 하나뿐이고 <b>이 단계는 그것을 부르지 않는다</b>
+     * (ADR-0049). 이 단계가 성공했는데 {@code adj_factor}가 그대로인 것이 정상이다.
+     */
     ADJUSTMENT,
 
     /**
