@@ -82,6 +82,24 @@ class PriceCollectorTest {
     }
 
     @Test
+    @DisplayName("조회 창 밖의 기업 행위는 원장에 적히지 않는다 — 1콜이 5년 이력을 준다")
+    void corporateActionOutsideWindowIsNotRecorded() throws Exception {
+        // 소스가 창을 안 지키면 창 밖 사건이 매 실행 다시 올라와 근접중복 경고를 쌓거나
+        // 몇 년 전 사건을 오늘 승인 대기로 만든다(ADR-0049).
+        PriceCollector collector = collectorWith(new FakePriceDataSource("KOSPI")
+                .withBars(stockId, List.of(bar("2026-08-03", "50000")))
+                .withCorporateAction(stockId, splitOn("2021-04-15"))
+                .withCorporateAction(stockId, split()));
+
+        collector.collect(security, FROM, TO);
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT effective_date FROM corporate_action WHERE stock_id = ?
+                """, LocalDate.class, stockId))
+                .containsExactly(LocalDate.parse("2026-08-10"));
+    }
+
+    @Test
     @DisplayName("수집은 계수를 건드리지 않는다 — 창이 같은 날짜를 매일 다시 보므로 그만큼 곱해진다")
     void collectingNeverRewritesAdjustmentFactors() throws Exception {
         PriceCollector collector = collectorWith(new FakePriceDataSource("KOSPI")
@@ -138,7 +156,11 @@ class PriceCollectorTest {
     }
 
     private static CorporateAction split() {
-        return new CorporateAction(LocalDate.parse("2026-08-10"), CorporateAction.Type.SPLIT,
+        return splitOn("2026-08-10");
+    }
+
+    private static CorporateAction splitOn(String effectiveDate) {
+        return new CorporateAction(LocalDate.parse(effectiveDate), CorporateAction.Type.SPLIT,
                 new BigDecimal("50"), CorporateAction.DetectionSource.SOURCE_DISCLOSURE);
     }
 

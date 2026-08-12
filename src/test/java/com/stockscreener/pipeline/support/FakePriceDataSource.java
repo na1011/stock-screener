@@ -91,8 +91,17 @@ public class FakePriceDataSource implements PriceDataSource {
                 .toList();
     }
 
+    /**
+     * MUST: {@code [from, to]}를 <b>거른다.</b> 실제 소스는 한 번의 호출이 5년 이력을 주므로,
+     * 거르지 않는 더블은 <b>포트 계약보다 느슨해</b> 어댑터의 창 위반을 통과시킨다
+     * (ADR-0049가 이 자리를 지목했다). 기준은 {@code effectiveDate}다 — 계수가 걸리는
+     * 날짜가 그것이고, 소스 원값으로 거르면 보정 뒤 창 안으로 들어올 사건이 미리 잘린다.
+     */
     @Override
     public List<CorporateAction> fetchCorporateActions(SecurityRef security, LocalDate from, LocalDate to) {
-        return actionsByStock.getOrDefault(security.stockId(), List.of());
+        return actionsByStock.getOrDefault(security.stockId(), List.of()).stream()
+                .filter(action -> !action.effectiveDate().isBefore(from)
+                        && !action.effectiveDate().isAfter(to))
+                .toList();
     }
 }
