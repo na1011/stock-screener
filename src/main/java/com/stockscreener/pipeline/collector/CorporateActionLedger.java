@@ -5,6 +5,7 @@ import com.stockscreener.pipeline.datasource.CorporateAction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -89,7 +90,14 @@ public class CorporateActionLedger {
                         BigDecimal ratio) {
     }
 
-    private record ExistingRow(long id, String status) {
+    private record ExistingRow(long id, LocalDate effectiveDate, String status,
+                               String detectionSource) {
+
+        /** 아직 사람이 보지 않은 휴리스틱 후보인가. 공시가 덮어도 되는 유일한 상태다. */
+        boolean isUnreviewedCandidate() {
+            return "OBSERVED".equals(status)
+                    && CorporateAction.DetectionSource.HEURISTIC.name().equals(detectionSource);
+        }
     }
 
     /**
@@ -105,24 +113,34 @@ public class CorporateActionLedger {
      * 종류로 걸러 적용되지 않으면서 <b>사람이 볼 후보 목록({@code OBSERVED})에서도 함께
      * 사라지고</b>, {@link #updateStatus}는 {@code ratio}를 못 고치므로 그 행은 영영 살아나지
      * 못한다. 어디에도 없는데 아무 에러도 나지 않는다.
+     *
+     * <p>IMPORTANT — <b>근접중복 판정보다 신뢰도 판정이 먼저다.</b> 반대로 두면 원장이
+     * <b>선착순</b>이 된다. 소스가 최대 넉 달 늦으므로(api-spec §10-B) 그 사각지대의 사건은
+     * <b>구조적으로 휴리스틱이 먼저</b> 들어오고, 나중에 온 공시가 며칠 어긋났다는 이유로
+     * 버려진다 — 남는 것은 {@code UNKNOWN} 후보 하나인데 {@link #findApplicable}이 그것을
+     * 제외하고 {@link #updateStatus}는 {@code ratio}·{@code type}을 못 고치므로
+     * <b>사람도 되살릴 수 없다.</b>
      */
     @Transactional
     public RecordResult record(long stockId, CorporateAction action) {
-        Optional<Long> near = findNearDuplicate(stockId, action.effectiveDate());
-        if (near.isPresent()) {
-            LocalDate existing = jdbcTemplate.queryForObject(
-                    "SELECT effective_date FROM corporate_action WHERE id = ?",
-                    LocalDate.class, near.get());
-            log.warn("기업 행위가 기존 행과 {}거래일 안에 있어 적지 않았다. stockId={} 새 일자={} 기존 일자={} id={}"
-                            + " — 같은 사건의 일자 보정이 어긋났거나 진짜 별개 사건이다. 사람이 갈라야 한다.",
-                    NEAR_DUPLICATE_TRADING_DAYS, stockId, action.effectiveDate(), existing, near.get());
-            return new RecordResult(Outcome.NEAR_DUPLICATE, near.get(), existing);
-        }
-
         boolean disclosed = action.source() == CorporateAction.DetectionSource.SOURCE_DISCLOSURE;
         boolean typeKnown = action.type() != CorporateAction.Type.UNKNOWN;
         boolean trusted = disclosed && typeKnown;
         String status = trusted ? "APPROVED" : "OBSERVED";
+
+        Optional<ExistingRow> near = findNearDuplicate(stockId, action.effectiveDate());
+        if (near.isPresent()) {
+            Optional<RecordResult> moved = relocateCandidate(stockId, action, near.get(), trusted);
+            if (moved.isPresent()) {
+                return moved.get();
+            }
+            ExistingRow row = near.get();
+            log.warn("기업 행위가 기존 행과 {}거래일 안에 있어 적지 않았다. stockId={} 새 일자={} 기존 일자={} id={}"
+                            + " — 같은 사건의 일자 보정이 어긋났거나 진짜 별개 사건이다. 사람이 갈라야 한다.",
+                    NEAR_DUPLICATE_TRADING_DAYS, stockId, action.effectiveDate(),
+                    row.effectiveDate(), row.id());
+            return new RecordResult(Outcome.NEAR_DUPLICATE, row.id(), row.effectiveDate());
+        }
 
         // 같은 일자의 기존 행을 먼저 본다. INSERT와 UPDATE를 사후에 가를 수단이 없기
         // 때문이다 — created_at = updated_at은 **같은 트랜잭션 안에서 둘 다 now()라** 갱신을
@@ -223,21 +241,59 @@ public class CorporateActionLedger {
     }
 
     /**
+     * 며칠 어긋난 휴리스틱 후보를 공시가 <b>제자리로 옮기며</b> 덮는다. 덮지 못하면 비어 있음.
+     *
+     * <p>같은 일자의 {@code UPGRADED} 경로와 뜻이 같고 <b>{@code effective_date}까지 옮기는</b>
+     * 것만 다르다. 소스 원값이 사건 종류마다 반대쪽으로 ±1~2일 어긋나므로(api-spec §10-B)
+     * 두 경로가 같은 사건에 서로 다른 날짜를 낸다 — 날짜가 정확히 일치할 때만 덮으면
+     * <b>공시의 정확한 비율·일자가 흔치 않은 경로에서만 조용히 버려진다.</b>
+     *
+     * <p>MUST: 옮길 자리가 비었을 때만 옮긴다. {@code UNIQUE (stock_id, effective_date)}가
+     * 있어 차 있으면 제약 위반으로 그 종목이 통째로 롤백된다. <b>이 가드는 {@link #record}
+     * 경로만으로는 발화하지 않는다</b> — 근접중복 규칙 자체가 근접한 두 행의 공존을 막기
+     * 때문이다. 남겨 두는 이유는 <b>원장이 사람의 승인 경로이기도 해서</b>(ADR-0049) 손으로
+     * 넣은 행이 실재할 수 있고, 그때 터지는 자리가 종목 하나의 롤백이기 때문이다.
+     *
+     * <p>MUST NOT: 사람이 판정한 행이나 공시가 이미 채운 행을 옮기지 않는다
+     * ({@link ExistingRow#isUnreviewedCandidate()}). 판정을 되돌리면 같은 후보가 매번 다시 올라온다.
+     */
+    private Optional<RecordResult> relocateCandidate(long stockId, CorporateAction action,
+                                                     ExistingRow near, boolean trusted) {
+        if (!trusted || !near.isUnreviewedCandidate()
+                || findByEffectiveDate(stockId, action.effectiveDate()).isPresent()) {
+            return Optional.empty();
+        }
+        jdbcTemplate.update("""
+                UPDATE corporate_action SET
+                    effective_date = ?, listing_date = ?, source_date = ?, type = ?, ratio = ?,
+                    detection_source = ?, status = 'APPROVED', updated_at = now()
+                WHERE id = ?
+                """,
+                action.effectiveDate(), action.listingDate(), action.sourceDate(),
+                action.type().name(), action.ratio(), action.source().name(), near.id());
+        log.info("휴리스틱 후보를 공시로 덮으며 효력일을 옮겼다. stockId={} id={} {} → {} type={} ratio={}",
+                stockId, near.id(), near.effectiveDate(), action.effectiveDate(),
+                action.type(), action.ratio());
+        return Optional.of(new RecordResult(Outcome.UPGRADED, near.id(), action.effectiveDate()));
+    }
+
+    private Optional<ExistingRow> findByEffectiveDate(long stockId, LocalDate effectiveDate) {
+        return jdbcTemplate.query("""
+                SELECT id, effective_date, status, detection_source FROM corporate_action
+                WHERE stock_id = ? AND effective_date = ?
+                """, ROW_MAPPER, stockId, effectiveDate).stream().findFirst();
+    }
+
+    /**
      * {@code effectiveDate}에서 {@link #NEAR_DUPLICATE_TRADING_DAYS} 거래일 안에 있는 다른 행.
      *
      * <p>그 종목의 {@code price_daily}에 실제로 있는 봉을 세므로 거래정지 구간을 자연히 넘는다.
      * 공휴일 달력을 두지 않겠다는 결정이 여기서도 성립한다({@link PriceCalendar}와 같은 이유).
      */
-    private Optional<ExistingRow> findByEffectiveDate(long stockId, LocalDate effectiveDate) {
-        return jdbcTemplate.query(
-                "SELECT id, status FROM corporate_action WHERE stock_id = ? AND effective_date = ?",
-                (rs, rowNum) -> new ExistingRow(rs.getLong("id"), rs.getString("status")),
-                stockId, effectiveDate).stream().findFirst();
-    }
-
-    private Optional<Long> findNearDuplicate(long stockId, LocalDate effectiveDate) {
-        List<Long> ids = jdbcTemplate.queryForList("""
-                SELECT ca.id FROM corporate_action ca
+    private Optional<ExistingRow> findNearDuplicate(long stockId, LocalDate effectiveDate) {
+        return jdbcTemplate.query("""
+                SELECT ca.id, ca.effective_date, ca.status, ca.detection_source
+                FROM corporate_action ca
                 WHERE ca.stock_id = ? AND ca.effective_date <> ?
                   AND abs(ca.effective_date - ?) <= ?
                   AND (SELECT count(*) FROM price_daily p
@@ -246,9 +302,14 @@ public class CorporateActionLedger {
                          AND p.trade_date <= greatest(ca.effective_date, ?)) <= ?
                 ORDER BY ca.effective_date
                 LIMIT 1
-                """, Long.class,
+                """, ROW_MAPPER,
                 stockId, effectiveDate, effectiveDate, NEAR_DUPLICATE_CALENDAR_DAYS,
-                effectiveDate, effectiveDate, NEAR_DUPLICATE_TRADING_DAYS);
-        return ids.stream().findFirst();
+                effectiveDate, effectiveDate, NEAR_DUPLICATE_TRADING_DAYS).stream().findFirst();
     }
+
+    private static final RowMapper<ExistingRow> ROW_MAPPER = (rs, rowNum) -> new ExistingRow(
+            rs.getLong("id"),
+            rs.getObject("effective_date", LocalDate.class),
+            rs.getString("status"),
+            rs.getString("detection_source"));
 }

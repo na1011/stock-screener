@@ -97,8 +97,8 @@ class CorporateActionLedgerTest {
     }
 
     @Test
-    @DisplayName("하루 어긋난 같은 사건은 두 행이 되지 않는다 — 둘 다 승인되면 계수가 두 번 곱해진다")
-    void nearDuplicateIsRefused() {
+    @DisplayName("하루 어긋난 공시가 휴리스틱 후보를 제자리로 옮긴다 — 소스 원값은 종류마다 반대로 어긋난다")
+    void disclosureRelocatesTheCandidateItDisagreesWith() {
         writer.write(stockId, List.of(
                 bar("2026-02-02", "1000"), bar("2026-02-03", "1010"), bar("2026-02-04", "1020")));
         ledger.record(stockId, heuristic("2026-02-03", "0.1"));
@@ -106,9 +106,68 @@ class CorporateActionLedgerTest {
         CorporateActionLedger.RecordResult result =
                 ledger.record(stockId, disclosed("2026-02-04", "0.1"));
 
-        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.NEAR_DUPLICATE);
-        assertThat(result.conflictingDate()).isEqualTo(LocalDate.parse("2026-02-03"));
+        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.UPGRADED);
+        // 행이 둘이 되지 않는 것이 이 검사의 원래 목적이다 — 둘 다 승인되면 계수가 두 번 곱해진다.
         assertThat(rowCount()).isEqualTo(1);
+        assertThat(status("2026-02-04")).isEqualTo("APPROVED");
+        assertThat(rowCountOn("2026-02-03")).isZero();
+    }
+
+    @Test
+    @DisplayName("나중에 온 휴리스틱은 공시 행을 옮기지 못한다 — 신뢰도가 낮은 쪽이 정본을 흔들면 안 된다")
+    void heuristicCannotRelocateADisclosedRow() {
+        writer.write(stockId, List.of(
+                bar("2026-02-02", "1000"), bar("2026-02-03", "1010"), bar("2026-02-04", "1020")));
+        ledger.record(stockId, disclosed("2026-02-04", "0.1"));
+
+        CorporateActionLedger.RecordResult result =
+                ledger.record(stockId, heuristic("2026-02-03", "0.0940731400"));
+
+        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.NEAR_DUPLICATE);
+        assertThat(result.conflictingDate()).isEqualTo(LocalDate.parse("2026-02-04"));
+        assertThat(rowCount()).isEqualTo(1);
+        assertThat(ratio("2026-02-04")).isEqualByComparingTo("0.1");
+    }
+
+    @Test
+    @DisplayName("사람이 판정한 행은 공시도 옮기지 못한다 — 판정이 되돌려지면 같은 후보가 매번 다시 올라온다")
+    void judgedRowIsNeverRelocated() {
+        writer.write(stockId, List.of(
+                bar("2026-02-02", "1000"), bar("2026-02-03", "1010"), bar("2026-02-04", "1020")));
+        long id = ledger.record(stockId, heuristic("2026-02-03", "0.5")).existingId();
+        ledger.updateStatus(id, "REJECTED", "하한가 연속이었다");
+
+        CorporateActionLedger.RecordResult result =
+                ledger.record(stockId, disclosed("2026-02-04", "0.1"));
+
+        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.NEAR_DUPLICATE);
+        assertThat(status("2026-02-03")).isEqualTo("REJECTED");
+    }
+
+    @Test
+    @DisplayName("옮길 자리가 차 있으면 옮기지 않는다 — UNIQUE 위반이면 그 종목이 통째로 롤백된다")
+    void relocationStopsWhenTheTargetDateIsTaken() {
+        writer.write(stockId, List.of(
+                bar("2026-02-02", "1000"), bar("2026-02-03", "1010"), bar("2026-02-04", "1020")));
+        ledger.record(stockId, heuristic("2026-02-03", "0.1"));
+        // IMPORTANT — 이 행은 직접 넣어야 한다. record()로는 근접중복에 막혀 만들 수 없고,
+        // 그래서 **이 가드가 발화하는 유일한 경로가 사람이 원장을 직접 고친 경우**다.
+        // 원장은 사람의 승인 경로이므로(ADR-0049) 그 경우가 설계에 들어 있다.
+        jdbcTemplate.update("""
+                INSERT INTO corporate_action
+                    (stock_id, effective_date, type, ratio, detection_source, status)
+                VALUES (?, DATE '2026-02-04', 'REVERSE_SPLIT', 0.2, 'HEURISTIC', 'REJECTED')
+                """, stockId);
+
+        CorporateActionLedger.RecordResult result =
+                ledger.record(stockId, disclosed("2026-02-04", "0.1"));
+
+        // 근접중복 검사가 같은 일자 검사보다 먼저 돈다. 옮길 자리가 차 있어 옮기기가 멈추고,
+        // 사람이 이미 판정한 날짜에 공시가 왔다는 사실이 그대로 올라간다.
+        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.NEAR_DUPLICATE);
+        assertThat(rowCount()).isEqualTo(2);
+        assertThat(status("2026-02-03")).isEqualTo("OBSERVED");
+        assertThat(status("2026-02-04")).isEqualTo("REJECTED");
     }
 
     @Test
@@ -121,7 +180,9 @@ class CorporateActionLedgerTest {
         CorporateActionLedger.RecordResult result =
                 ledger.record(stockId, disclosed("2023-05-02", "0.1"));
 
-        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.NEAR_DUPLICATE);
+        // 같은 사건으로 인식했으므로 행이 늘지 않는다. 별개로 봤다면 INSERTED로 두 행이 됐다.
+        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.UPGRADED);
+        assertThat(rowCount()).isEqualTo(1);
     }
 
     @Test
@@ -265,6 +326,13 @@ class CorporateActionLedgerTest {
     private int rowCount() {
         return jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM corporate_action WHERE stock_id = ?", Integer.class, stockId);
+    }
+
+    /** 옮기기가 원래 자리를 비웠는지 본다. {@link #status}는 행이 없으면 예외라 못 쓴다. */
+    private int rowCountOn(String date) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM corporate_action WHERE stock_id = ? AND effective_date = ?",
+                Integer.class, stockId, LocalDate.parse(date));
     }
 
     private static RawPriceBar bar(String date, String close) {
