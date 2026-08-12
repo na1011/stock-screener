@@ -9,7 +9,11 @@ applies_to:
   - "src/main/resources/db/migration/V21__corporate_action.sql"
   - "src/main/java/**/pipeline/datasource/CorporateAction.java"
   - "src/main/java/**/pipeline/datasource/CorporateActionDataSource.java"
+  - "src/main/java/**/pipeline/datasource/ShareRatioSnap.java"
+  - "src/main/java/**/pipeline/datasource/StoredPriceSeries.java"
   - "src/main/java/**/pipeline/datasource/kr/DartCorporateActionAdapter.java"
+  - "src/main/java/**/pipeline/datasource/kr/DartIrdsReports.java"
+  - "src/main/java/**/pipeline/datasource/kr/CorporateActionEvidence.java"
   - "src/main/java/**/indicator/calculator/PriceScaling.java"
 ---
 
@@ -62,7 +66,9 @@ adj_close(d)  = close(d) × adj_factor(d)
   정확한 10). **효력일은 그 값이 바뀐 첫 거래일로 정확하다.**
   - **이 규칙은 분할·병합에만 걸린다.** 무상증자는 권리락 당일 주식수 배수가 **정확히 1.0000**이라
     (§10-B-2의 26건) 여기서 비율이 나오지 않는다. 그쪽 정본은 §10-B의 `(기존 주식수 + isu_dcrs_qy)
-    / 기존 주식수`다. **"주식수가 정본"을 사건 전체로 넓혀 읽으면 가장 흔한 종류에서 비율이 1이 된다.**
+    / 기존 주식수`이고, **`기존`은 신주상장 직전 거래일이다** — 권리락일로 읽으면 그 사이에 낀
+    전환권행사류 때문에 루닛이 2.15·2.27이 나온다(§10-B-2 실측).
+    **"주식수가 정본"을 사건 전체로 넓혀 읽으면 가장 흔한 종류에서 비율이 1이 된다.**
   - **MUST: 관측한 배수를 단순 유리수로 스냅한다.** 배수는 <b>정확히 떨어지지 않는다</b> — 단수주
     처리 때문이다. 실측: 대한전선 `0.099999999277`(0.1이 아니다) · 휴림로봇 `0.399999997740` ·
     아시아나항공 `0.333333330`(1/3은 원리적으로 불가능하다). `numeric(18,10)`으로 접으면 역수가
@@ -101,6 +107,28 @@ psql -d stock_screener -At -c "SELECT CASE
        || '행에서 adj_close가 close × adj_factor와 다르다. 계수만 고치고 종가를 안 고쳤거나 그 반대다 — 재구축을 다시 돌려라.'
   END FROM price_daily"
 ```
+
+```premise 무상증자 배수는 단순 유리수로 떨어지지 않는다
+psql -d stock_screener -At -c "WITH d AS (
+  SELECT p.listed_shares AS now_shares,
+         lag(p.listed_shares) OVER (PARTITION BY p.stock_id ORDER BY p.trade_date) AS prev
+  FROM price_daily p
+), m AS (
+  SELECT now_shares / prev AS mult FROM d
+  WHERE prev > 0 AND now_shares / prev BETWEEN 1.75 AND 6.5
+)
+SELECT CASE
+  WHEN count(*) = 0 THEN '잴 것이 없었다 — 주식수가 크게 는 날이 없다'
+  WHEN count(*) FILTER (WHERE abs(mult - round(mult)) > 1e-6) = 0
+    THEN '전제가 깨졌다: ' || count(*) || '건 전부 정수 배수다. 자사주 미배정이 사라졌다면 무상증자에도 스냅을 걸 수 있다 — 아래 스냅 규칙의 적용 범위를 다시 본다.'
+  ELSE 'OK ' || count(*) FILTER (WHERE abs(mult - round(mult)) > 1e-6) || '/' || count(*) || '건이 정수에서 벗어난다(최대 ' || round(max(abs(mult - round(mult))), 4) || '). 무상증자 비율은 스냅하지 않는다.'
+  END FROM m"
+```
+
+**스냅 규칙이 분할·병합에만 걸리는 근거가 이 측정이다.** 편차의 원인이 단수주가 아니라
+**자사주 미배정**이라 실체가 있다 — 씨젠 2021은 `52,225,994 = 2 × 26,234,020 − 242,046`이고
+그 242,046이 자기주식이다. 여기에 스냅을 걸면 실측 무상증자의 상당수가 거부되어 **계수가
+영영 1로 남는다.**
 
 **이것이 재구축 설계의 유일한 불변식이다.** 계수를 원장에서 다시 짓는 이상 두 컬럼은 언제나
 함께 쓰여야 하고, 어긋났다는 것은 곧 **원장을 거치지 않은 경로가 생겼다**는 뜻이다.
