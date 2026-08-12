@@ -137,6 +137,17 @@ public class CorporateActionCollector {
         for (CorporateAction action : actions) {
             CorporateActionLedger.RecordResult result = ledger.record(security.stockId(), action);
             if (result.outcome() == CorporateActionLedger.Outcome.NEAR_DUPLICATE) {
+                // MUST NOT: 사람이 이미 판정한 행과의 충돌을 알림으로 올리지 않는다. 그 행은
+                // 옮겨지지도 덮이지도 않으므로 충돌이 **영구적**이고, 매 실행 같은 알림이
+                // 나가면 며칠 안에 아무도 그 알림을 보지 않게 된다(Phase 6 기준). 사람이 이미
+                // 봤다는 사실이 원장에 남아 있는 것이 곧 "확인했다"이다.
+                if (result.conflictsWithJudgedRow()) {
+                    log.info("사람이 판정한 행과 겹쳐 적지 않았다. ticker={} 새 일자={} 기존 일자={}"
+                                    + " 기존 상태={} — 판정이 남아 있으므로 알리지 않는다.",
+                            security.ticker(), action.effectiveDate(), result.conflictingDate(),
+                            result.conflictingStatus());
+                    continue;
+                }
                 conflicts.add(new NearDuplicate(security.ticker(), action.effectiveDate(),
                         result.conflictingDate(), action.source()));
                 continue;

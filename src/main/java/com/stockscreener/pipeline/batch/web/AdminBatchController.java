@@ -129,6 +129,14 @@ public class AdminBatchController {
         if (!launcher.isLaunchable(jobName)) {
             throw new ApiExceptions.JobNotFoundException(jobName);
         }
+        // 뒤집힌 창은 잡마다 다르게 실패한다 — 지표 백필은 조용한 SUCCESS로, 기업 행위 수집은
+        // 예외로 끝난다. 여기서 거절하면 그 차이와 무관하게 사용자가 무엇이 잘못됐는지 안다.
+        // 잡 쪽 방어를 대신하지는 못한다 — to를 비우면 런처가 기본값을 채우므로 이 가드를 지나간다.
+        if (request != null && request.from() != null && request.to() != null
+                && request.from().isAfter(request.to())) {
+            throw ApiExceptions.invalidField("from",
+                    "조회 창의 시작이 끝보다 늦다: " + request.from() + " > " + request.to());
+        }
 
         AdminJobLauncher.JobRequest parameters = request == null
                 ? AdminJobLauncher.JobRequest.empty()

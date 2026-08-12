@@ -74,7 +74,8 @@ public class AdminJobLauncher {
                             DailyUpdateJob dailyUpdateJob,
                             UniverseRebalanceJob universeRebalanceJob,
                             IndicatorBackfillJob indicatorBackfillJob,
-                            CompanyProfileJob companyProfileJob) {
+                            CompanyProfileJob companyProfileJob,
+                            CorporateActionJob corporateActionJob) {
         this.taskExecutor = taskExecutor;
         this.dailyUpdateJob = dailyUpdateJob;
         this.jobs = Map.of(
@@ -100,7 +101,15 @@ public class AdminJobLauncher {
                 CompanyProfileJob.JOB_NAME,
                 request -> companyProfileJob.run(
                         request.orDefault(request.targetDate(), LocalDate.now()),
-                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()));
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()),
+
+                // MUST NOT: from에 기본값을 주지 않는다. 잡이 null을 "저장된 시세의 첫 거래일"로
+                // 읽고, 짧은 창은 소스가 정기보고서에만 실려 **원리적으로 0건**이 된다.
+                // IndicatorBackfillJob의 minusDays(7)을 복사하면 그 조용한 0건이 된다.
+                CorporateActionJob.JOB_NAME,
+                request -> corporateActionJob.run(
+                        request.orDefault(request.to(), LocalDate.now()),
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, request.from(), List.of()));
 
         this.catalog = List.of(
                 new Descriptor(DailyUpdateJob.JOB_NAME, "일일 갱신",
@@ -116,7 +125,13 @@ public class AdminJobLauncher {
                         Parameters.DATE_RANGE, 0),
                 new Descriptor(CompanyProfileJob.JOB_NAME, "업종 정보 수집",
                         "업종이 비어 있는 편입 종목의 업종·결산월을 받는다. 종목당 1콜이다.",
-                        Parameters.TARGET_DATE, 0));
+                        Parameters.TARGET_DATE, 0),
+                // 창을 받아야 하므로 DATE_RANGE다 — `to`가 곧 대상일이고, `from`을 비우면 잡이
+                // 저장된 시세의 첫 거래일부터 본다. 새 Parameters 값을 만들지 않는 이유는
+                // 그것이 wire-contract·types.ts·AdminOverviewView를 함께 끌고 오기 때문이다.
+                new Descriptor(CorporateActionJob.JOB_NAME, "기업 행위 수집",
+                        "액면분할·병합·무상증자를 모아 원장에 적는다. 수정계수는 건드리지 않는다.",
+                        Parameters.DATE_RANGE, 700));
     }
 
     /** 화면이 나열할 잡 목록. 프론트가 이름을 하드코딩하지 않게 서버가 준다. */

@@ -83,10 +83,6 @@ public class CorporateActionJob {
         }
 
         LocalDate windowStart = from != null ? from : earliest.get();
-        if (windowStart.isAfter(asOf)) {
-            throw new IllegalArgumentException(
-                    "조회 창의 시작이 대상일보다 늦다: " + windowStart + " > " + asOf);
-        }
 
         log.info("기업 행위 수집을 시작한다. 대상 {}종목, 창 {} ~ {}"
                         + " — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.",
@@ -97,6 +93,14 @@ public class CorporateActionJob {
         List<CorporateActionCollector.NearDuplicate> conflicts = new ArrayList<>();
 
         try {
+            // MUST: 창 검증을 실행 행을 연 **뒤에** 한다. 앞에서 던지면 batch_execution에 아무
+            // 흔적도 안 남고, 관리자 화면으로 띄운 경우 런처의 스레드 경계 로그만 남는다 —
+            // 화면에는 202 뒤 아무 일도 안 일어난 것으로 보인다(ADR-0050).
+            if (windowStart.isAfter(asOf)) {
+                throw new IllegalArgumentException(
+                        "조회 창의 시작이 대상일보다 늦다: " + windowStart + " > " + asOf);
+            }
+
             // MUST: 루프에 들어가기 전에 소스를 해석한다. 등록되지 않았을 때 나오는 NOT_FOUND는
             // fatal()이 아니라, 루프 안에 두면 **전 종목이 같은 이유로 실패하고 배치는 끝까지
             // 돈다.** 키가 없으면 수정계수가 영영 1로 남는데 그것이 부분 성공으로 기록된다.

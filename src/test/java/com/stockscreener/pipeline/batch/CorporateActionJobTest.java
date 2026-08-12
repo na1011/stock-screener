@@ -189,13 +189,23 @@ class CorporateActionJobTest {
     }
 
     @Test
-    @DisplayName("창의 시작이 대상일보다 늦으면 즉시 실패한다 — 조용히 빈 창을 돌면 0건이 정상으로 보인다")
+    @DisplayName("창의 시작이 대상일보다 늦으면 즉시 실패하고 그 실패가 기록된다")
     void rejectsAnInvertedWindow() {
         seedBars();
 
         assertThatThrownBy(() -> job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
                 AS_OF.plusDays(1), List.of()))
                 .isInstanceOf(IllegalArgumentException.class);
+
+        // IMPORTANT — 검증이 실행 행보다 앞에 있으면 batch_execution에 아무 흔적도 안 남는다.
+        // 관리자 화면으로 띄운 경우 던진 예외를 받을 호출부가 없어(런처가 비동기로 제출한다)
+        // 화면에는 202 뒤 아무 일도 안 일어난 것으로 보인다.
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT status FROM batch_execution WHERE job_name = ?
+                ORDER BY id DESC LIMIT 1
+                """, String.class, CorporateActionJob.JOB_NAME))
+                .as("나쁜 창으로 끝난 실행이 기록되지 않았다")
+                .isEqualTo("FAILED");
     }
 
     /** 불연속이 없는 봉 셋. 휴리스틱이 끼어들지 않아 공시 경로만 재게 된다. */

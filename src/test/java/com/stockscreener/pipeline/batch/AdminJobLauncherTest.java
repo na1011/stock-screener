@@ -34,10 +34,11 @@ class AdminJobLauncherTest {
     private final UniverseRebalanceJob universeRebalanceJob = mock(UniverseRebalanceJob.class);
     private final IndicatorBackfillJob indicatorBackfillJob = mock(IndicatorBackfillJob.class);
     private final CompanyProfileJob companyProfileJob = mock(CompanyProfileJob.class);
+    private final CorporateActionJob corporateActionJob = mock(CorporateActionJob.class);
 
     private final AdminJobLauncher launcher = new AdminJobLauncher(
             new SimpleAsyncTaskExecutor(), dailyUpdateJob, universeRebalanceJob,
-            indicatorBackfillJob, companyProfileJob);
+            indicatorBackfillJob, companyProfileJob, corporateActionJob);
 
     @Test
     @DisplayName("도는 중인 잡은 새로 띄우지 않는다")
@@ -139,7 +140,10 @@ class AdminJobLauncherTest {
                         UniverseRebalanceJob.JOB_NAME,
                         IndicatorBackfillJob.JOB_NAME,
                         // 대상이 업종 결손 종목뿐이라 평소 0콜, 전량이어도 종목당 1콜(350).
-                        CompanyProfileJob.JOB_NAME);
+                        CompanyProfileJob.JOB_NAME,
+                        // 전 구간이면 종목당 2콜(350종목 = 700). DART 일일 한도의 3.5%다 —
+                        // initial-load를 뺀 근거(한 번에 절반)가 여기엔 없다.
+                        CorporateActionJob.JOB_NAME);
 
         assertThatThrownBy(() ->
                 launcher.launch(InitialLoadJob.JOB_NAME, AdminJobLauncher.JobRequest.empty()))
@@ -152,6 +156,10 @@ class AdminJobLauncherTest {
         assertThat(AdminJobLauncher.supportsRetry(DailyUpdateJob.JOB_NAME)).isTrue();
         assertThat(AdminJobLauncher.supportsRetry(UniverseRebalanceJob.JOB_NAME)).isFalse();
         assertThat(AdminJobLauncher.supportsRetry(IndicatorBackfillJob.JOB_NAME)).isFalse();
+        // 기업 행위 수집의 실패 단위는 종목이지만 재실행 경로는 daily-update만 지원한다.
+        // 여기가 참으로 바뀌면 relaunchFailures가 엉뚱한 잡을 띄운다 — 그 메서드는 잡 이름을
+        // 안 보고 dailyUpdateJob을 부른다.
+        assertThat(AdminJobLauncher.supportsRetry(CorporateActionJob.JOB_NAME)).isFalse();
     }
 
     @Test

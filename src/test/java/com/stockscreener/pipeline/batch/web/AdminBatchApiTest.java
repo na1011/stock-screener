@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
@@ -249,6 +250,16 @@ class AdminBatchApiTest {
         mockMvc.perform(post("/api/admin/jobs/" + DailyUpdateJob.JOB_NAME + "/run").with(csrf()))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.jobName").value(DailyUpdateJob.JOB_NAME));
+    }
+
+    @Test
+    @DisplayName("뒤집힌 창은 400이다 — 잡마다 다르게(조용한 SUCCESS·예외) 끝나 원인이 안 보인다")
+    void invertedWindowIsRejected() throws Exception {
+        mockMvc.perform(post("/api/admin/jobs/" + DailyUpdateJob.JOB_NAME + "/run").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"from\":\"2026-08-10\",\"to\":\"2026-08-01\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("from"));
     }
 
     @Test

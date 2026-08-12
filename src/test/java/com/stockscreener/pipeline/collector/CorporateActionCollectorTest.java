@@ -130,9 +130,28 @@ class CorporateActionCollectorTest {
     @Test
     @DisplayName("근접중복은 결과에 실려 나온다 — 조용히 버리면 사람이 갈라야 할 것이 사라진다")
     void nearDuplicatesAreReportedNotDropped() throws Exception {
+        // 이틀 사이에 불연속이 둘이다(거래정지 후 재개가 이 모양이다). 둘 다 휴리스틱이라
+        // 뒤엣것이 앞엣것을 옮기지 못하고, 원장에 자리가 없어 반영되지 않는다.
+        writer.write(stockId, List.of(bar("2026-02-02", "1000", "1000000"),
+                bar("2026-02-03", "400", "1000000"), bar("2026-02-04", "1200", "1000000")));
+
+        CorporateActionCollector.Result result =
+                collectorWith(new FakeCorporateActionDataSource("KOSPI")).collect(security, FROM, TO);
+
+        assertThat(result.nearDuplicates()).singleElement().satisfies(conflict -> {
+            assertThat(conflict.ticker()).isEqualTo("001440");
+            assertThat(conflict.proposed()).isEqualTo(LocalDate.parse("2026-02-04"));
+            assertThat(conflict.existing()).isEqualTo(LocalDate.parse("2026-02-03"));
+        });
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 사람이 판정한 행과의 충돌은 알리지 않는다. 영구적이라 매 실행 같은 알림이 나간다")
+    void conflictsWithJudgedRowsAreNotAlerted() throws Exception {
         writer.write(stockId, List.of(bar("2026-02-02", "1000", "1000000"),
                 bar("2026-02-03", "1010", "1000000"), bar("2026-02-04", "1020", "1000000")));
-        // 사람이 이미 판정한 행이 있어 공시가 옮기지도 덮지도 못한다.
+        // 사람이 이미 판정한 행이라 공시가 옮기지도 덮지도 못한다 — 그 충돌은 판정을 되돌리는
+        // 것 말고는 없앨 방법이 없다. 알림으로 두면 며칠 안에 아무도 그 알림을 안 본다.
         long judged = ledger.record(stockId, heuristic("2026-02-03", "0.1")).existingId();
         ledger.judge(judged, rejected("하한가 연속이었다"));
         FakeCorporateActionDataSource source = new FakeCorporateActionDataSource("KOSPI")
@@ -140,11 +159,10 @@ class CorporateActionCollectorTest {
 
         CorporateActionCollector.Result result = collectorWith(source).collect(security, FROM, TO);
 
-        assertThat(result.nearDuplicates()).singleElement().satisfies(conflict -> {
-            assertThat(conflict.ticker()).isEqualTo("001440");
-            assertThat(conflict.proposed()).isEqualTo(LocalDate.parse("2026-02-04"));
-            assertThat(conflict.existing()).isEqualTo(LocalDate.parse("2026-02-03"));
-        });
+        assertThat(result.nearDuplicates()).isEmpty();
+        // 그래도 적지는 않는다 — 판정이 원장에 남아 있는 것이 곧 "사람이 봤다"이다.
+        assertThat(rowCount()).isEqualTo(1);
+        assertThat(status("2026-02-03")).isEqualTo("REJECTED");
     }
 
     @Test
