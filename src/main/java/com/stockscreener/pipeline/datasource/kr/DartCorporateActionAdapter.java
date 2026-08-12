@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.datasource.kr;
 import com.stockscreener.pipeline.datasource.CorporateAction;
 import com.stockscreener.pipeline.datasource.CorporateActionDataSource;
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.PriceDiscontinuity;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.StoredPriceSeries;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
@@ -95,10 +96,6 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
      * 창과 무관한 옛 사건까지 매번 시계열을 뒤진다. 일자 보정 폭보다 넉넉하다.
      */
     private static final int SOURCE_DATE_MARGIN_DAYS = 90;
-
-    /** KRX 일일 가격제한폭. 권리락 당일 봉이 기준가에서 이 폭 밖으로 나갈 수 없다. */
-    private static final BigDecimal DAILY_LIMIT_UPPER = new BigDecimal("1.35");
-    private static final BigDecimal DAILY_LIMIT_LOWER = new BigDecimal("0.65");
 
     /** 액면가 교차확인용. <b>게이트가 아니라 두 번째 증거다</b> — 아래 주석 참조. */
     private static final List<BigDecimal> STANDARD_PAR_VALUES = List.of(
@@ -335,7 +332,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
             return Optional.empty();
         }
         Optional<BigDecimal> observed = evidence.closeMultipleOn(exRightsDate.get());
-        if (observed.isEmpty() || !explainsPriceGap(observed.get(), ratio)) {
+        if (observed.isEmpty() || !PriceDiscontinuity.explainsPriceGap(observed.get(), ratio)) {
             // MUST NOT: 교차확인이 실패했는데 적지 않는다. 일자 보정이 어긋났다는 뜻이고,
             // 그대로 내면 엉뚱한 날짜가 APPROVED로 들어가 그 봉만 조용히 틀린다.
             log.warn("무상증자의 권리락 추정일에 가격 불연속이 없다. ticker={} 원값={} 추정 권리락={}"
@@ -354,18 +351,6 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
     /** {@code BigDecimal.equals}는 스케일까지 보므로 {@code compareTo}로 견준다. */
     private static boolean isStandardParValue(BigDecimal value) {
         return STANDARD_PAR_VALUES.stream().anyMatch(standard -> standard.compareTo(value) == 0);
-    }
-
-    /**
-     * 관측된 종가 배수가 그 비율의 권리락으로 설명되는가.
-     *
-     * <p>권리락 당일 봉은 기준가({@code 직전 종가 / ratio})에서 일일 가격제한폭 안에 있어야
-     * 한다. 이것으로 <b>비율의 정확도를 재지는 못한다</b> — 폭이 ±30%나 되기 때문이다.
-     * 여기서 잡는 것은 "그날 아무 일도 없었다"는 경우다.
-     */
-    private static boolean explainsPriceGap(BigDecimal observedMultiple, BigDecimal ratio) {
-        BigDecimal relative = observedMultiple.multiply(ratio, MC);
-        return relative.compareTo(DAILY_LIMIT_LOWER) >= 0 && relative.compareTo(DAILY_LIMIT_UPPER) <= 0;
     }
 
     /** 보고서 하나를 받아 쓸 만한 행으로 바꾼다. 데이터가 없으면 빈 목록이다. */

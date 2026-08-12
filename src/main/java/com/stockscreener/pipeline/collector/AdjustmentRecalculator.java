@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.CorporateAction;
+import com.stockscreener.pipeline.datasource.PriceDiscontinuity;
 import com.stockscreener.pipeline.datasource.ShareRatioSnap;
 
 import org.slf4j.Logger;
@@ -52,32 +53,10 @@ public class AdjustmentRecalculator {
     private static final Logger log = LoggerFactory.getLogger(AdjustmentRecalculator.class);
 
     /** {@code adj_factor numeric(18,10)}에 맞춘다. */
-    private static final int FACTOR_SCALE = 10;
+    private static final int FACTOR_SCALE = PriceDiscontinuity.RATIO_SCALE;
 
     /** {@code numeric(18,10)}의 정수부 상한. 넘으면 DB가 알아보기 힘든 오류를 낸다. */
     private static final BigDecimal FACTOR_LIMIT = new BigDecimal("100000000");
-
-    /**
-     * KRX 가격제한폭. 이 폭을 넘는 하루 변동은 정상 매매로 설명되지 않는다.
-     *
-     * <p>IMPORTANT — <b>비대칭이다.</b> 상한가는 {@code close/prev = 1.30}, 하한가는 {@code 0.70}이고
-     * 두 값은 서로 역수가 아니다. 한쪽 값을 양방향에 쓰면(예: 1/0.7 = 1.4286을 위쪽에도)
-     * +30~42.9% 구간이 통째로 그물을 빠져나간다.
-     */
-    private static final BigDecimal UPPER_LIMIT = new BigDecimal("1.30");
-    private static final BigDecimal LOWER_LIMIT = new BigDecimal("0.70");
-
-    /**
-     * 주식수에서 낸 비율을 가격이 뒷받침하는지 볼 때의 허용 폭.
-     *
-     * <p>IMPORTANT — <b>일일 가격제한폭(±30%)으로 잡으면 안 된다.</b> 변경상장·재상장일의
-     * 시초가는 그 폭 밖에서 정해질 수 있다. 실측 25건에서 이론 배수 대비 관측 배수의 비가
-     * 0.90~1.43이었고(아시아나항공 2021-01-15의 무상감자가 1.43이다), ±30%로 자르면 그것이
-     * 잘린다. 여기서 잡으려는 것은 <b>주식수 배수가 우연히 단순 유리수인데 가격과 아무 관계도
-     * 없는 경우</b>이므로 두 배 폭으로 넉넉히 둔다.
-     */
-    private static final BigDecimal CONSISTENCY_UPPER = new BigDecimal("2.0");
-    private static final BigDecimal CONSISTENCY_LOWER = new BigDecimal("0.5");
 
     /** 주식수 배수는 정수 나눗셈이라 유효자릿수를 넉넉히 둔다. 스냅이 그 뒤를 맡는다. */
     private static final MathContext SHARE_MATH = new MathContext(34);
@@ -203,11 +182,13 @@ public class AdjustmentRecalculator {
                                 CorporateAction.DetectionSource.HEURISTIC);
                     }
                     // 종류를 모른다. ratio는 관측된 가격 배수이며 계수가 아니다.
+                    // MUST: 방향의 정본은 PriceDiscontinuity 하나다 — UNKNOWN은 도메인도 DB도
+                    // 부호를 안 보므로 여기서 뒤집으면 어디에서도 안 걸린다.
                     return new CorporateAction(date, CorporateAction.Type.UNKNOWN,
-                            prevClose.divide(close, FACTOR_SCALE, RoundingMode.HALF_UP),
+                            PriceDiscontinuity.observedRatio(close, prevClose),
                             CorporateAction.DetectionSource.HEURISTIC);
                 },
-                stockId, UPPER_LIMIT, LOWER_LIMIT);
+                stockId, PriceDiscontinuity.LIMIT_UPPER, PriceDiscontinuity.LIMIT_LOWER);
     }
 
     /**
@@ -227,11 +208,9 @@ public class AdjustmentRecalculator {
             return Optional.empty();
         }
         // 가격이 그 비율로 설명되는가. 이론 배수는 1/ratio이고, 관측이 그것의 몇 배인지 본다.
-        BigDecimal relative = close.multiply(snapped.get(), SHARE_MATH)
-                .divide(prevClose, SHARE_MATH);
-        boolean consistent = relative.compareTo(CONSISTENCY_LOWER) >= 0
-                && relative.compareTo(CONSISTENCY_UPPER) <= 0;
-        return consistent ? snapped : Optional.empty();
+        return PriceDiscontinuity.supportsShareRatio(snapped.get(), close, prevClose)
+                ? snapped
+                : Optional.empty();
     }
 
     /**
