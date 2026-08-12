@@ -2,6 +2,7 @@ package com.stockscreener.indicator;
 
 import com.stockscreener.indicator.calculator.Atr14Calculator;
 import com.stockscreener.indicator.calculator.MacdCalculator;
+import com.stockscreener.indicator.calculator.MarketCapCalculator;
 import com.stockscreener.indicator.calculator.MacdVCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
 import com.stockscreener.indicator.calculator.Rsi14Calculator;
@@ -188,6 +189,68 @@ class IndicatorRunnerTest {
         // 워밍업이 짧아져 이 값이 달라지는데, 값이 그럴듯해 화면으로는 드러나지 않는다.
         assertThat(storedValue(Atr14Calculator.CODE, lastBar))
                 .isEqualByComparingTo(withoutCutoff);
+    }
+
+    @Test
+    @DisplayName("권리락 구간의 시가총액이 원장의 비율만큼 보정된다 — 러너가 원장을 함께 읽는다")
+    void marketCapInsideExRightsWindowIsScaledByTheLedger() {
+        LocalDate exRights = AS_OF.minusDays(20);
+        LocalDate newListing = AS_OF.minusDays(6);
+        insertExRightsHistory(exRights, newListing);
+        approvedAction("BONUS_ISSUE", "2", exRights, newListing);
+
+        runner.run(stockId, AS_OF, Optional.empty());
+
+        // 권리락 전날: 2,000 × 1,000,000. 권리락 당일은 가격이 반이고 주식수는 그대로라
+        // 보정이 없으면 절반으로 찍힌다. 러너가 readShareAdjustments를 빠뜨리면 여기서 깨진다.
+        assertThat(storedValue(MarketCapCalculator.CODE, exRights.minusDays(1)))
+                .isEqualByComparingTo("2000000000");
+        assertThat(storedValue(MarketCapCalculator.CODE, exRights))
+                .isEqualByComparingTo("2000000000");
+        assertThat(storedValue(MarketCapCalculator.CODE, newListing))
+                .isEqualByComparingTo("2000000000");
+    }
+
+    @Test
+    @DisplayName("신주상장일이 빈 행은 효력일로 접혀 구간이 공집합이 된다 — NPE도 보정도 없다")
+    void missingListingDateFoldsIntoAnEmptyWindow() {
+        LocalDate exRights = AS_OF.minusDays(20);
+        LocalDate newListing = AS_OF.minusDays(6);
+        insertExRightsHistory(exRights, newListing);
+        // 액면병합은 두 날짜가 같아 원장이 신주상장일을 비워 둔다. 지금 원장에 실제로
+        // 그 모양의 행이 승인 대기 중이다(대한전선·아시아나항공).
+        approvedAction("REVERSE_SPLIT", "0.5", exRights, null);
+
+        runner.run(stockId, AS_OF, Optional.empty());
+
+        assertThat(storedValue(MarketCapCalculator.CODE, exRights))
+                .as("접힌 구간은 비어 있으므로 원값 그대로여야 한다")
+                .isEqualByComparingTo("1000000000");
+    }
+
+    /** 권리락에서 가격이 반토막 나고 신주상장에서 주식수가 두 배가 되는 시세. */
+    private void insertExRightsHistory(LocalDate exRights, LocalDate newListing) {
+        for (int i = 0; i < 60; i++) {
+            LocalDate date = AS_OF.minusDays(60L - i);
+            BigDecimal close = new BigDecimal(date.isBefore(exRights) ? 2000 : 1000);
+            long shares = date.isBefore(newListing) ? 1_000_000L : 2_000_000L;
+            jdbcTemplate.update("""
+                    INSERT INTO price_daily
+                        (stock_id, trade_date, open, high, low, close, adj_close, adj_factor,
+                         volume, listed_shares)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1000, ?)
+                    """, stockId, date, close, close, close, close, close, shares);
+        }
+    }
+
+    private void approvedAction(String type, String ratio,
+                                LocalDate effectiveDate, LocalDate listingDate) {
+        jdbcTemplate.update("""
+                INSERT INTO corporate_action
+                    (stock_id, effective_date, listing_date, type, ratio,
+                     detection_source, status)
+                VALUES (?, ?, ?, ?, ?::numeric, 'SOURCE_DISCLOSURE', 'APPROVED')
+                """, stockId, effectiveDate, listingDate, type, ratio);
     }
 
     private List<LocalDate> storedTradeDates() {

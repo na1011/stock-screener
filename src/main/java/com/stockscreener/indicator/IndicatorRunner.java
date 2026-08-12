@@ -117,6 +117,9 @@ public class IndicatorRunner {
                 reader.readPriceBars(stockId, asOf, bars),
                 reader.readAnnualFigures(stockId, asOf, years),
                 reader.readQuarterlyFigures(stockId, asOf, years),
+                // 빠뜨려도 컴파일된다 — 전 종목이 빈 목록을 받아 권리락 구간 보정이 통째로
+                // 사라지고 값은 그럴듯하다. IndicatorRunnerTest가 이 자리를 지킨다.
+                reader.readShareAdjustments(stockId),
                 Map.of());
     }
 

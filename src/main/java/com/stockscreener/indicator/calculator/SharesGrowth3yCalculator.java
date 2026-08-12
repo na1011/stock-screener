@@ -26,11 +26,14 @@ import java.util.List;
  * 시점부터 곧바로 반영되고, 분기 재무에 묶으면 다음 공시까지 낡은 수를 보게 된다. 국내 소스는
  * 우선주를 별도 종목으로 세므로 이 값이 보통주 수다.
  *
- * <p>액면분할은 주식수를 늘리지만 희석이 아니다. 그러나 {@code listed_shares}는 분할을 그대로
- * 반영하므로 분할 종목이 이 지표에서 큰 값을 갖는다. <b>지금은 그것을 보정하지 않는다</b> —
- * 보정하려면 분할 이력이 필요한데 국내 소스에 그 경로가 없다({@code adj_factor}가 전량 1이다).
- * 그 상태에서 지어낸 보정은 조용히 틀린 값을 만든다. 분할 종목이 이 조건에 걸리는 것은
- * 거짓 양성이며, 결과에서 빠진 종목을 확인할 때 함께 본다.
+ * <p>액면분할·무상증자는 주식수를 늘리지만 <b>희석이 아니다.</b> {@code listed_shares}는 그것을
+ * 그대로 반영하므로 <b>원장의 배수를 나눠서 걷어낸다</b>({@link IndicatorContext#corporateActionMultiple},
+ * ADR-0051). 실측: 리노공업 5:1 분할이 걷어내기 전 400%, 현대글로비스 1:1 무상증자가 100%였고
+ * 둘 다 {@code SWING_MIDTERM_KR}의 필수 게이트({@code <= 5})를 그 값 때문에 못 넘고 있었다.
+ *
+ * <p>MUST: 걷어내는 것은 <b>원장에 있는 사건뿐이다.</b> 원장 커버리지가 곧 보정 커버리지이므로,
+ * 수집되지 않았거나 사람이 아직 판정하지 않은 분할은 여전히 거짓 양성으로 남는다 —
+ * <b>"보정한다"를 "전량 보정됐다"로 읽지 않는다.</b> 결과에서 빠진 종목을 확인할 때 함께 본다.
  *
  * <p>IMPORTANT — 이 지표가 <b>러너의 읽기 창을 751봉으로 끌어올린다.</b> 러너는 종목당 한 번
  * {@code maxEffectiveLookback}만큼 읽으므로 모든 지표가 그 창을 함께 쓴다. 그 부작용이 이
@@ -97,14 +100,21 @@ public class SharesGrowth3yCalculator implements IndicatorCalculator {
 
         List<IndicatorPoint> points = new ArrayList<>(bars.size() - LOOKBACK);
         for (int i = LOOKBACK; i < bars.size(); i++) {
-            BigDecimal past = bars.get(i - LOOKBACK).listedShares();
-            BigDecimal now = bars.get(i).listedShares();
+            PriceBar pastBar = bars.get(i - LOOKBACK);
+            PriceBar nowBar = bars.get(i);
+            // 양 끝을 같은 축척으로 옮긴다. 권리락 구간에 걸린 끝점은 종가와 짝이 맞는 수여야
+            // 아래 배수와 정확히 상쇄된다.
+            BigDecimal past = context.sharesOn(pastBar.tradeDate(), pastBar.listedShares());
+            BigDecimal now = context.sharesOn(nowBar.tradeDate(), nowBar.listedShares());
             // 어느 한쪽이라도 없으면 증가율을 지어내지 않는다. 상장 3년 미만 종목이 여기서 빠진다.
             if (past == null || now == null || past.signum() <= 0) {
                 continue;
             }
-            points.add(new IndicatorPoint(bars.get(i).tradeDate(),
-                    now.divide(past, MovingAverages.MC)
+            // 분할·무상증자가 만든 배수는 희석이 아니므로 나눠서 걷어낸다.
+            BigDecimal corporateAction =
+                    context.corporateActionMultiple(pastBar.tradeDate(), nowBar.tradeDate());
+            points.add(new IndicatorPoint(nowBar.tradeDate(),
+                    now.divide(past.multiply(corporateAction), MovingAverages.MC)
                             .subtract(BigDecimal.ONE)
                             .multiply(HUNDRED)
                             .setScale(MovingAverages.SCALE, RoundingMode.HALF_UP)));

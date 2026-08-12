@@ -22,6 +22,7 @@ public final class IndicatorContext {
     private final List<PriceBar> priceBars;
     private final List<FinancialFigures> annualFigures;
     private final List<FinancialFigures> quarterlyFigures;
+    private final List<ShareAdjustment> shareAdjustments;
     private final Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies;
 
     public IndicatorContext(
@@ -30,12 +31,15 @@ public final class IndicatorContext {
             List<PriceBar> priceBars,
             List<FinancialFigures> annualFigures,
             List<FinancialFigures> quarterlyFigures,
+            List<ShareAdjustment> shareAdjustments,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
         this.stockId = stockId;
         this.industryDivision = industryDivision;
         this.priceBars = priceBars == null ? List.of() : List.copyOf(priceBars);
         this.annualFigures = annualFigures == null ? List.of() : List.copyOf(annualFigures);
         this.quarterlyFigures = quarterlyFigures == null ? List.of() : List.copyOf(quarterlyFigures);
+        this.shareAdjustments =
+                shareAdjustments == null ? List.of() : List.copyOf(shareAdjustments);
         this.dependencies = dependencies == null ? Map.of() : Map.copyOf(dependencies);
     }
 
@@ -46,7 +50,7 @@ public final class IndicatorContext {
             List<FinancialFigures> annualFigures,
             List<FinancialFigures> quarterlyFigures,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
-        this(stockId, null, priceBars, annualFigures, quarterlyFigures, dependencies);
+        this(stockId, null, priceBars, annualFigures, quarterlyFigures, List.of(), dependencies);
     }
 
     /**
@@ -60,7 +64,7 @@ public final class IndicatorContext {
     public IndicatorContext withDependencies(
             Map<String, NavigableMap<LocalDate, BigDecimal>> newDependencies) {
         return new IndicatorContext(stockId, industryDivision,
-                priceBars, annualFigures, quarterlyFigures, newDependencies);
+                priceBars, annualFigures, quarterlyFigures, shareAdjustments, newDependencies);
     }
 
     public long stockId() {
@@ -91,6 +95,63 @@ public final class IndicatorContext {
     /** {@code periodEnd} 내림차순(최신 우선) 분기 재무. TTM 합산에 쓴다. */
     public List<FinancialFigures> quarterlyFigures() {
         return quarterlyFigures;
+    }
+
+    /** 이 종목에 반영할 기업 행위. 원장의 승인된 행에서 온다(ADR-0051). */
+    public List<ShareAdjustment> shareAdjustments() {
+        return shareAdjustments;
+    }
+
+    /**
+     * 그 거래일의 <b>종가와 짝이 맞는</b> 상장주식수.
+     *
+     * <p>IMPORTANT — {@code close}에 곱하거나 나누는 자리는 {@link PriceBar#listedShares()}를
+     * 직접 쓰지 않고 <b>반드시 이것을 거친다.</b> 무상증자는 권리락일에 가격을, 신주상장일에
+     * 주식수를 바꾸므로 그 사이 14~16거래일은 두 값의 축척이 다르다 — 시가총액·PER·PBR이
+     * 배수만큼 틀리는데 <b>어느 값도 결측이 아니라 화면에 그대로 나간다.</b>
+     *
+     * <p>원자료를 고치는 것이 아니다. {@code price_daily.listed_shares}는 그날의 사실이고
+     * 틀린 것은 그것을 이미 희석된 가격과 짝지은 쪽이므로, 고칠 자리도 그쪽이다(ADR-0049).
+     *
+     * <p>사건이 걸리지 않으면 <b>인자를 그대로 돌려준다</b> — 곱셈으로 스케일이 흔들리면
+     * 저장된 값이 이유 없이 다시 쓰인다.
+     *
+     * @return 보정된 주식수. 인자가 null이면 null이다(판단은 호출자 몫이다)
+     */
+    public BigDecimal sharesOn(LocalDate tradeDate, BigDecimal listedShares) {
+        if (listedShares == null || shareAdjustments.isEmpty()) {
+            return listedShares;
+        }
+        BigDecimal scaled = listedShares;
+        for (ShareAdjustment adjustment : shareAdjustments) {
+            if (adjustment.coversPriceButNotShares(tradeDate)) {
+                scaled = scaled.multiply(adjustment.ratio());
+            }
+        }
+        return scaled;
+    }
+
+    /**
+     * {@code from}(제외)부터 {@code to}(포함)까지 <b>기업 행위가 만든</b> 주식수 배수.
+     *
+     * <p>{@link #sharesOn}이 낸 두 시점의 주식수를 견줄 때 <b>나눠서</b> 쓴다 — 액면분할과
+     * 무상증자는 주식수를 늘리지만 <b>희석이 아니다.</b> 나누지 않으면 5:1 분할 종목이
+     * "3년간 400% 희석"으로 읽히고, 그것이 필수 게이트를 그대로 뒤집는다.
+     *
+     * <p>MUST: 기준일은 {@code effectiveDate}다. {@code listingDate}가 아닌 이유는
+     * {@link #sharesOn}이 <b>권리락일에 계단을 올리기</b> 때문이다 — 두 메서드가 서로 다른
+     * 날짜를 보면 권리락~신주상장 구간에서 배수가 한 번 더 붙거나 빠진다. 경계의 등호도
+     * 그래서 이 방향이다: {@code from} 당일 사건은 {@code sharesOn(from)}이 이미 곱했으므로
+     * 빼고, {@code to} 당일 사건은 {@code sharesOn(to)}가 곱했으므로 넣는다.
+     */
+    public BigDecimal corporateActionMultiple(LocalDate from, LocalDate to) {
+        BigDecimal multiple = BigDecimal.ONE;
+        for (ShareAdjustment adjustment : shareAdjustments) {
+            if (adjustment.tookEffectBy(to) && !adjustment.tookEffectBy(from)) {
+                multiple = multiple.multiply(adjustment.ratio());
+            }
+        }
+        return multiple;
     }
 
     /**

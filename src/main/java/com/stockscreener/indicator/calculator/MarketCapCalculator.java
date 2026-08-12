@@ -68,7 +68,12 @@ public class MarketCapCalculator implements IndicatorCalculator {
         List<IndicatorPoint> points = new ArrayList<>(bars.size());
 
         for (PriceBar bar : bars) {
-            BigDecimal shares = bar.listedShares();
+            // MUST: 원값이 아니라 종가와 짝이 맞는 주식수다. 무상증자 권리락~신주상장 구간은
+            // 이미 희석된 종가를 희석 전 주식수와 짝지어 시가총액이 배수만큼 작게 나온다
+            // (루닛 2026-05-04 1.21조 → 0.61조, ADR-0051).
+            // MUST NOT: FinancialMath.sharesOf로 갈아타지 않는다 — 그쪽 재무 폴백은 이 지표가
+            // 일부러 값을 내지 않는 봉에 값을 만든다.
+            BigDecimal shares = context.sharesOn(bar.tradeDate(), bar.listedShares());
             // 소스가 주식수를 주지 않은 봉은 건너뛴다. 0으로 두면 시가총액 0인 회사가 되어
             // 어떤 하한 조건에도 걸리지 않고 조용히 결과에서 빠진다.
             if (shares == null || shares.signum() <= 0) {

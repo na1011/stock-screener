@@ -1,5 +1,7 @@
 package com.stockscreener.indicator;
 
+import com.stockscreener.pipeline.collector.CorporateActionLedger;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
@@ -78,9 +80,11 @@ public class IndicatorDataReader {
             rs.getBigDecimal("listed_shares"));
 
     private final JdbcTemplate jdbcTemplate;
+    private final CorporateActionLedger corporateActions;
 
-    public IndicatorDataReader(JdbcTemplate jdbcTemplate) {
+    public IndicatorDataReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions) {
         this.jdbcTemplate = jdbcTemplate;
+        this.corporateActions = corporateActions;
     }
 
     /**
@@ -111,6 +115,29 @@ public class IndicatorDataReader {
         List<String> found = jdbcTemplate.queryForList(
                 "SELECT industry_division FROM stock WHERE id = ?", String.class, stockId);
         return found.isEmpty() ? null : found.get(0);
+    }
+
+    /**
+     * 계수에 반영할 기업 행위. 지표 계층이 <b>원자료 밖</b>을 읽는 두 번째 자리다(ADR-0051).
+     *
+     * <p>첫째는 업종이었고(ADR-0044) 그것은 종목 속성이었는데, 이쪽은 <b>다른 계층의 원장</b>이다.
+     * 그럼에도 여기서 읽는 이유는 <b>"적용 대상"의 정의를 하나로 두기 위해서다</b> —
+     * {@code status IN (APPROVED, APPLIED) AND type <> UNKNOWN}을 이 리더가 다시 쓰면 두 곳이
+     * 어긋나기 시작하는데, 그 어긋남은 계수와 주식수가 다른 사건 집합을 보게 만들고
+     * <b>어느 쪽도 에러를 내지 않는다.</b>
+     *
+     * <p>MUST: {@code listing_date}가 비었으면 <b>효력일로 접는다.</b> 원장은 그 값을 모를 수
+     * 있다 — 휴리스틱 후보에는 아예 없고 공시 경로와 사람의 판정에만 있다. 접으면 구간이
+     * 공집합이 되어 <b>보정하지 않는 쪽</b>으로 떨어지며, 그것이 "모르는 것을 추측하지 않는다"의
+     * 이 자리에서의 형태다. 액면분할·병합은 두 날짜가 실제로 같으므로 접어도 정확하다.
+     */
+    public List<ShareAdjustment> readShareAdjustments(long stockId) {
+        return corporateActions.findApplicable(stockId).stream()
+                .map(entry -> new ShareAdjustment(
+                        entry.effectiveDate(),
+                        entry.listingDate() != null ? entry.listingDate() : entry.effectiveDate(),
+                        entry.ratio()))
+                .toList();
     }
 
     /** 연간 재무를 최신 우선으로 읽는다. */

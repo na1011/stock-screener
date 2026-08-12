@@ -91,7 +91,7 @@ public class PerCalculator implements IndicatorCalculator {
         // EPS가 달라져야 하는데, 하나로 고정하면 그 구간의 PER이 통째로 틀린다.
         List<IndicatorPoint> points = new ArrayList<>(context.priceBars().size());
         for (PriceBar bar : context.priceBars()) {
-            BigDecimal shares = FinancialMath.sharesOf(bar, quarters);
+            BigDecimal shares = FinancialMath.sharesOf(context, bar, quarters);
             if (shares == null) {
                 continue;
             }

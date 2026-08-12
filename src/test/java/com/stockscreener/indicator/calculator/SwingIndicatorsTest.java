@@ -506,7 +506,7 @@ class SwingIndicatorsTest {
         NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
         cap.put(START, marketCap);
         return new IndicatorContext(1L, industryDivision, List.of(bar), List.of(),
-                balanceSheetQuarters(), Map.of(MarketCapCalculator.CODE, cap));
+                balanceSheetQuarters(), List.of(), Map.of(MarketCapCalculator.CODE, cap));
     }
 
     private static IndicatorContext financialContext(List<FinancialFigures> quarterly,

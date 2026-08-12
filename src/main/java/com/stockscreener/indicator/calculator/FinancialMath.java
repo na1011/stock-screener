@@ -1,6 +1,7 @@
 package com.stockscreener.indicator.calculator;
 
 import com.stockscreener.indicator.FinancialFigures;
+import com.stockscreener.indicator.IndicatorContext;
 import com.stockscreener.indicator.IndicatorPoint;
 import com.stockscreener.indicator.PriceBar;
 
@@ -78,11 +79,18 @@ final class FinancialMath {
      * <p>재무를 폴백으로 남기는 이유는 소스마다 다르기 때문이다. 국내 시세 API는
      * {@code lstgStCnt}를 주지만, 그것을 주지 않는 소스에서는 재무 쪽만 채워질 수 있다.
      *
+     * <p>IMPORTANT — 시세 쪽 값은 {@link IndicatorContext#sharesOn}을 <b>거쳐서</b> 나온다.
+     * 그래서 이 메서드가 컨텍스트를 받는다 — 인자로 받지 않으면 호출부마다 보정을 기억해야 하고,
+     * 하나만 빠뜨려도 그 지표만 권리락 구간에서 배수만큼 틀린 채 조용히 남는다(ADR-0051).
+     * <b>재무 폴백에는 걸지 않는다</b> — 분기 재무의 주식수는 공시 시점의 값이라 권리락 구간과
+     * 무관하고, 거기 곱하면 이미 신주가 반영된 수에 한 번 더 곱하게 된다.
+     *
      * @return 양수인 주식수. 양쪽 모두 없거나 0 이하면 null이다.
      */
-    static BigDecimal sharesOf(PriceBar bar, List<FinancialFigures> quarters) {
+    static BigDecimal sharesOf(IndicatorContext context, PriceBar bar,
+                               List<FinancialFigures> quarters) {
         if (bar != null && bar.listedShares() != null && bar.listedShares().signum() > 0) {
-            return bar.listedShares();
+            return context.sharesOn(bar.tradeDate(), bar.listedShares());
         }
         if (!quarters.isEmpty()) {
             BigDecimal fromFinancials = quarters.get(0).sharesOutstanding();

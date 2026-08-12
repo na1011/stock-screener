@@ -76,7 +76,7 @@ public class PbrCalculator implements IndicatorCalculator {
         // 주식수를 봉마다 읽는다 — 유상증자·분할 구간에서 BPS가 달라져야 한다.
         List<IndicatorPoint> points = new ArrayList<>(context.priceBars().size());
         for (PriceBar bar : context.priceBars()) {
-            BigDecimal shares = FinancialMath.sharesOf(bar, quarters);
+            BigDecimal shares = FinancialMath.sharesOf(context, bar, quarters);
             if (shares == null) {
                 continue;
             }
