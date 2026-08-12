@@ -16,7 +16,8 @@ applies_to:
 같은 잡이 겹쳐 도는 것은 `AdminJobLauncher`의 **인프로세스 집합**이 막는다 —
 `batch_execution`의 `RUNNING` 행은 **화면 표시용**이고 판정 근거가 아니다.
 
-화면에서 띄울 수 있는 잡은 셋이다: `daily-update`, `universe-rebalance`, `indicator-backfill`.
+화면에서 띄울 수 있는 잡의 정본은 `AdminJobLauncher`의 카탈로그이고 `AdminJobLauncherTest`가
+그 목록을 고정한다 — **여기에 세어 적지 않는다**(그 수가 실제로 두 번 낡았다).
 **`initial-load`는 목록 밖이고** 그 경로는 `BootstrapRunner`에 남는다.
 
 부분 재실행은 `daily-update`만 지원한다. 지원하지 않는 잡과 미해결 실패가 없는 실행은
