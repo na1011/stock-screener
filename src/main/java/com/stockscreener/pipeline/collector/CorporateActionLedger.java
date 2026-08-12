@@ -98,6 +98,13 @@ public class CorporateActionLedger {
      * <p>초기 상태는 탐지 경로가 정한다 — 공시는 {@code APPROVED}, 휴리스틱은 {@code OBSERVED}.
      * <b>이것이 "사람이 확인하지 않은 후보는 적용되지 않는다"를 지키는 유일한 지점이다</b>
      * (ADR-0049). 예전에는 적용부의 예외가 그 역할을 했고, 그 예외를 이 매핑이 대신한다.
+     *
+     * <p>IMPORTANT — <b>{@link CorporateAction.Type#UNKNOWN}은 공시가 알려줬어도
+     * {@code APPROVED}로 올리지 않는다.</b> 공시가 보증하는 것은 <i>"그날 사건이 있었다"</i>이지
+     * <i>"비율이 이것이다"</i>가 아니다. {@code APPROVED}로 넣으면 {@link #findApplicable}이
+     * 종류로 걸러 적용되지 않으면서 <b>사람이 볼 후보 목록({@code OBSERVED})에서도 함께
+     * 사라지고</b>, {@link #updateStatus}는 {@code ratio}를 못 고치므로 그 행은 영영 살아나지
+     * 못한다. 어디에도 없는데 아무 에러도 나지 않는다.
      */
     @Transactional
     public RecordResult record(long stockId, CorporateAction action) {
@@ -113,7 +120,9 @@ public class CorporateActionLedger {
         }
 
         boolean disclosed = action.source() == CorporateAction.DetectionSource.SOURCE_DISCLOSURE;
-        String status = disclosed ? "APPROVED" : "OBSERVED";
+        boolean typeKnown = action.type() != CorporateAction.Type.UNKNOWN;
+        boolean trusted = disclosed && typeKnown;
+        String status = trusted ? "APPROVED" : "OBSERVED";
 
         // 같은 일자의 기존 행을 먼저 본다. INSERT와 UPDATE를 사후에 가를 수단이 없기
         // 때문이다 — created_at = updated_at은 **같은 트랜잭션 안에서 둘 다 now()라** 갱신을
@@ -124,7 +133,12 @@ public class CorporateActionLedger {
             ExistingRow row = existing.get();
             // MUST NOT: 사람이 판정한 행을 덮지 않는다. 덮으면 승인·거부가 다음 수집에
             // 되돌려지고, 같은 후보가 매번 다시 올라온다.
-            if (!"OBSERVED".equals(row.status()) || !disclosed) {
+            //
+            // MUST NOT: UNKNOWN으로 덮지 않는다(trusted). 아래 UPDATE가 type과 ratio를 함께
+            // 대입하므로, 종류를 모르는 공시가 휴리스틱이 관측한 종류·배수를 **지운다** —
+            // 사람이 뒤에 볼 것이 종류 미상 행 하나뿐이 된다. 공시가 종류를 확정했을 때만
+            // 덮을 값이 더 낫다.
+            if (!"OBSERVED".equals(row.status()) || !trusted) {
                 return new RecordResult(Outcome.IGNORED, row.id(), action.effectiveDate());
             }
             // 휴리스틱 후보를 공시가 덮는다. 창이 매일 도므로 휴리스틱이 대개 먼저 들어오고,

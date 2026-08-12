@@ -137,14 +137,31 @@ class CorporateActionLedgerTest {
     }
 
     @Test
-    @DisplayName("UNKNOWN은 적용 대상에서 빠진다 — 그 ratio는 관측된 가격 배수일 뿐 계수가 아니다")
-    void unknownIsExcludedFromApplicable() {
-        ledger.record(stockId, new CorporateAction(
-                LocalDate.parse("2025-11-24"), CorporateAction.Type.UNKNOWN,
-                new BigDecimal("1.465"), CorporateAction.DetectionSource.SOURCE_DISCLOSURE));
+    @DisplayName("UNKNOWN은 공시가 알려줬어도 OBSERVED다 — APPROVED면 적용에도 검토 큐에도 안 뜬다")
+    void unknownStaysObservedEvenWhenDisclosed() {
+        // findApplicable이 종류로 걸러 적용되지 않는데 status가 APPROVED면 사람이 볼
+        // 후보 목록에서도 빠진다. updateStatus는 ratio를 못 고치므로 그 행은 영영 살아나지
+        // 못한다 — 어디에도 없는데 아무 에러도 나지 않는다.
+        ledger.record(stockId, unknown("2025-11-24", "1.465",
+                CorporateAction.DetectionSource.SOURCE_DISCLOSURE));
 
-        assertThat(status("2025-11-24")).isEqualTo("APPROVED");
+        assertThat(status("2025-11-24")).isEqualTo("OBSERVED");
         assertThat(ledger.findApplicable(stockId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("종류를 모르는 공시는 휴리스틱의 관측값을 덮지 않는다 — 덮으면 남는 것이 없다")
+    void unknownDisclosureDoesNotEraseHeuristicObservation() {
+        // 인적분할처럼 소스가 종류를 확정해 주지 못하는 자리다. 덮으면 휴리스틱이 관측한
+        // 종류(REVERSE_SPLIT)와 배수가 사라지고 사람이 볼 근거가 없어진다.
+        ledger.record(stockId, heuristic("2023-05-16", "0.0940731400"));
+
+        CorporateActionLedger.RecordResult result = ledger.record(stockId,
+                unknown("2023-05-16", "1.465", CorporateAction.DetectionSource.SOURCE_DISCLOSURE));
+
+        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.IGNORED);
+        assertThat(ratio("2023-05-16")).isEqualByComparingTo("0.0940731400");
+        assertThat(type("2023-05-16")).isEqualTo("REVERSE_SPLIT");
     }
 
     @Test
@@ -208,6 +225,12 @@ class CorporateActionLedgerTest {
         return action(date, ratio, CorporateAction.DetectionSource.SOURCE_DISCLOSURE);
     }
 
+    private static CorporateAction unknown(String date, String ratio,
+                                           CorporateAction.DetectionSource source) {
+        return new CorporateAction(LocalDate.parse(date), CorporateAction.Type.UNKNOWN,
+                new BigDecimal(ratio), source);
+    }
+
     private static CorporateAction action(String date, String ratio,
                                           CorporateAction.DetectionSource source) {
         BigDecimal r = new BigDecimal(ratio);
@@ -219,6 +242,12 @@ class CorporateActionLedgerTest {
     private String status(String date) {
         return jdbcTemplate.queryForObject(
                 "SELECT status FROM corporate_action WHERE stock_id = ? AND effective_date = ?",
+                String.class, stockId, LocalDate.parse(date));
+    }
+
+    private String type(String date) {
+        return jdbcTemplate.queryForObject(
+                "SELECT type FROM corporate_action WHERE stock_id = ? AND effective_date = ?",
                 String.class, stockId, LocalDate.parse(date));
     }
 
