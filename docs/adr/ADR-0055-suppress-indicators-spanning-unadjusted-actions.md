@@ -56,27 +56,37 @@ applies_to:
 
 ## 검증
 
+**MUST: 최신 거래일만 잰다.** 읽기 창은 산출 일자가 아니라 **그 실행의 `asOf`가 정한다** —
+러너가 `asOf` 기준 1,100봉을 한 번 읽어 창 전체의 값을 계산하므로, 창 앞쪽 산출 일자의 실제
+입력은 "그 날짜에서 1,100봉 뒤"가 아니라 **읽어온 가장 오래된 봉**이다. 그래서 옛 일자에는
+사건 이후 봉만으로 낸 정상 값이 남을 수 있고, 날짜 기준으로 재면 그것이 위반으로 보인다
+(실제로 017670의 128일자가 그 모양이다). 최신 거래일은 `asOf`와 일치해 창이 명확하고,
+**화면이 읽는 것도 그 한 장이다.**
+
 ```premise 미보정 기업행위 창 안에서 지표 값이 나오는 종목
 psql -d stock_screener -At -c "
 WITH lk(code,n) AS (VALUES
  ('SMA_200',200),('DISPARITY_200',200),('SMA_200_MOM_21',221),('PCT_FROM_52W_HIGH',252),
  ('PCT_FROM_52W_LOW',252),('SMA_200_SLOPE_60',260),('SHARES_GROWTH_3Y',751)),
 ca AS (SELECT stock_id, effective_date FROM corporate_action WHERE status IN ('UNSUPPORTED','OBSERVED')),
+latest AS (SELECT max(trade_date) d FROM indicator_value),
 bad AS (SELECT iv.stock_id, iv.indicator_code
         FROM indicator_value iv JOIN ca ON ca.stock_id=iv.stock_id
         JOIN lk ON lk.code=iv.indicator_code
-        WHERE iv.trade_date >= ca.effective_date
+        WHERE iv.trade_date = (SELECT d FROM latest)
+          AND iv.trade_date >= ca.effective_date
           AND (SELECT count(*) FROM price_daily p WHERE p.stock_id=iv.stock_id
                  AND p.trade_date >= ca.effective_date AND p.trade_date <= iv.trade_date) < lk.n)
 SELECT CASE
   WHEN (SELECT count(*) FROM ca) = 0 THEN '잴 것이 없었다 — 미보정 기업행위가 원장에 하나도 없다'
-  WHEN (SELECT count(*) FROM indicator_value) = 0 THEN '잴 것이 없었다 — indicator_value가 비어 있다'
-  WHEN count(*) = 0 THEN 'OK 보정 못 한 창에서 나온 지표 값 0행'
+  WHEN (SELECT d FROM latest) IS NULL THEN '잴 것이 없었다 — indicator_value가 비어 있다'
+  WHEN count(*) = 0 THEN 'OK 최신 거래일에 보정 못 한 창으로 낸 값 0행'
   ELSE '보정 안 된 계단을 넘는 창으로 낸 값이 ' || count(*) || '행 남아 있다'
   END FROM bad"
 ```
 
-착수 시점 실측(2026-08-13, `max(trade_date)=2026-08-12`, 보존창 180일자). 이 결정이 지우는 양이다.
+착수 시점 실측(2026-08-13, `max(trade_date)=2026-08-12`, 보존창 180일자). 이 결정이 지우는 양이며,
+반영 백필의 로그 합계가 **정확히 20,750행**으로 아래 표와 일치했다.
 
 | 종목 | 효력일 | 상태 | 억제 행 | 지표 | 일자 |
 |---|---|---|---|---|---|
@@ -90,9 +100,13 @@ SELECT CASE
 `020560 아시아나항공`(2021-01-15)·`036830 솔브레인홀딩스`(2020-08-06)는 저장된 모든 일자에서
 창 밖이라 0행이다.
 
-**IMPORTANT — 창 안/밖을 최신 일자 하나로 가르면 틀린다.** 017670은 최신 일자 기준 1,151봉이라
-1,100 창 밖으로 보이지만, 보존창에서 가장 오래된 저장 일자는 971봉이라 82일자가 대상이다.
-판정은 반드시 **(종목, 지표, 산출 일자)마다** 한다.
+**IMPORTANT — 어느 종목이 대상인지를 최신 일자 하나로 가르면 틀린다.** 017670은 최신 일자
+기준 1,151봉이라 1,100 창 밖으로 보이지만, 보존창에서 가장 오래된 저장 일자는 971봉이라
+82일자가 대상이었다. 판정은 **(종목, 지표, 산출 일자)마다** 한다.
+
+**반영 뒤 확인**: `ICHIMOKU_SP_KR` 통과가 **20 → 19**가 됐고 빠진 것은 007340 하나다
+(다른 종목은 들지도 나지도 않았다 — `ICHI_TIER <= 3`은 순위가 아니라 절대 임계다).
+`SWING_MIDTERM_KR`은 0건 그대로다.
 
 ## 배경
 
