@@ -52,7 +52,7 @@ applies_to:
 - MUST NOT: 채움을 **획득/총점**으로 되돌리지 않는다. 그것이 버린 인코딩이다 — 만점을 받은 3점 조건을 30%만 채워 그렸고 바로 옆 숫자는 `3.00 / 3.00`(만점)이었다. 한 줄에 붙은 둘이 분모가 달라 **서로를 부정했다.**
 - MUST: `RatioBar`의 `floor`(값 0에 남기는 4% 흔적)를 레인에서는 **끈다.** 채움이 이진값이라 흔적이 남으면 못 받은 조건이 "조금은 받았다"로 읽힌다. `ResultTable`의 크기 막대는 켠다 — 두 자리의 판단이 갈린 것이지 한쪽이 틀린 것이 아니다.
 
-실측이 이 규칙들을 요구했다. 프리셋 넷의 점수 조건 배점은 `VALUE_KR` 3·2·2·2·1, `QVG_KR` 3·2·3·3·2·1, `MOMENTUM_KR` 없음, `SWING_MIDTERM_KR` 1·1·1·1(그리고 필수 16개)이다. **앞의 둘에서는 레인이 뜻을 갖고 스윙에서는 갖지 않는다.** 스윙 하나만 보고 설계했으면 "쓸모없는 막대"로, 밸류 하나만 보고 설계했으면 "스윙에서 판정 Tag를 복사하는 막대"로 끝났을 것이다. 값이 변할 수 있으므로 아래 §검증의 전제가 이것을 다시 잰다.
+실측이 이 규칙들을 요구했다. 점수 조건 배점이 `VALUE_KR` 3·2·2·2·1, `QVG_KR` 3·2·3·3·2·1로 갈리는 반면 `SWING_MIDTERM_KR`은 1·1·1·1(그리고 필수 17개)이고 `MOMENTUM_KR`·`ICHIMOKU_SP_KR`은 배점 자체가 없다. **앞의 둘에서는 레인이 뜻을 갖고 나머지에서는 갖지 않는다 — 그 대비가 이 설계의 근거다.** 스윙 하나만 보고 설계했으면 "쓸모없는 막대"로, 밸류 하나만 보고 설계했으면 "스윙에서 판정 Tag를 복사하는 막대"로 끝났을 것이다. 값이 변할 수 있으므로 아래 §검증의 전제가 이것을 다시 잰다.
 
 ### 조건 내역의 정렬은 subgrid가 맡는다
 
@@ -137,10 +137,12 @@ cd frontend && npx vitest run src/lib/scoreLane.spec.ts
 ```
 
 ```premise 레인이 뜻을 갖는 전략이 실제로 있다
-psql -d stock_screener -At -c "SELECT string_agg(line, ' / ') FROM (SELECT s.code || ' 필수' || count(*) FILTER (WHERE sc.is_required) || ' 배점[' || coalesce(string_agg(DISTINCT trim(trailing '.' from trim(trailing '0' from sc.weight::text)), ',') FILTER (WHERE NOT sc.is_required), '없음') || ']' || CASE WHEN count(DISTINCT sc.weight) FILTER (WHERE NOT sc.is_required) >= 2 THEN '→레인' ELSE '→없음' END AS line FROM screen s JOIN condition_group g ON g.screen_id = s.id JOIN screen_condition sc ON sc.group_id = g.id GROUP BY s.code ORDER BY s.code) t"
+psql -d stock_screener -At -c "WITH t AS (SELECT s.code, count(DISTINCT sc.weight) FILTER (WHERE NOT sc.is_required) AS spreads, coalesce(string_agg(DISTINCT trim(trailing '.' from trim(trailing '0' from sc.weight::text)), ',') FILTER (WHERE NOT sc.is_required), '없음') AS lane FROM screen s JOIN condition_group g ON g.screen_id = s.id JOIN screen_condition sc ON sc.group_id = g.id GROUP BY s.code) SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — 조건을 가진 전략이 하나도 없다' WHEN count(*) FILTER (WHERE spreads >= 2) > 0 THEN 'OK 레인이 뜻을 갖는 전략 ' || count(*) FILTER (WHERE spreads >= 2) || '개 — ' || string_agg(code || ' 배점[' || lane || ']', ' / ') FILTER (WHERE spreads >= 2) ELSE '배점이 갈리는 전략이 하나도 없다 — 레인이 어디에서도 안 그려지고 이 결정의 절반이 죽은 코드다: ' || string_agg(code || ' 배점[' || lane || ']', ' / ') END FROM t"
 ```
 
-전제가 묻는 것은 **배점이 갈리는 전략이 남아 있는가**다. 전부 `→없음`이 되면 레인은 어디에서도 그려지지 않고, 그때 이 결정의 절반은 죽은 코드가 된다. 기준선(2026-08-11): `MOMENTUM_KR →없음 / QVG_KR 배점[1,2,3] →레인 / SWING_MIDTERM_KR 필수16 배점[1] →없음 / VALUE_KR 배점[1,2,3] →레인`.
+전제가 묻는 것은 **배점이 갈리는 전략이 남아 있는가**다. 전부 배점이 같아지면 레인은 어디에서도 그려지지 않고, 그때 이 결정의 절반은 죽은 코드가 된다.
+
+**MUST: 이 펜스가 참일 때 `OK`로 시작하게 유지한다.** 원래는 관측값만 뽑아 훅이 **참·거짓을 가리지 못했고**, 그래서 전제가 성립하는 동안에도 세션마다 발견으로 떴다. 그 상태는 잡음이 아니라 **탐지 실패**다 — 참이든 거짓이든 같은 화면이 나오므로 정작 배점이 평평해졌을 때 아무도 못 알아챈다. 계약은 `0000-template.md`에 있다.
 
 ```bash
 # 버튼 강조 3단의 대비비
