@@ -146,38 +146,56 @@ final class DartFullAccountMapper {
     }
 
     /**
-     * 자본변동표에서 이익잉여금으로 보이는 행을 진단용으로 뽑는다.
+     * 재무상태표에 이익잉여금이 없을 때 <b>자본변동표의 기말 잔액</b>으로 대신한다.
      *
-     * <p>§8의 세 종목(오리온·오리온홀딩스·에스티큐브)은 요약본에 <b>행 자체가 없어</b>
-     * 이익잉여금이 빈다. 전체 재무제표의 재무상태표가 그것을 주는지는 <b>실측되지 않았고</b>,
-     * 안 준다면 남는 자리가 자본변동표다.
+     * <p>§8의 세 종목(오리온·오리온홀딩스·에스티큐브)은 요약본에도 전체 재무제표의
+     * 재무상태표에도 <b>행 자체가 없다.</b> 이름이 다른 것이 아니므로 계정명 후보군을 늘려도
+     * 열리지 않는다. 남는 자리가 자본변동표다.
      *
-     * <p>MUST NOT: 이 결과를 값으로 쓰지 않는다. 자본변동표는 한 계정이 기초·증감·기말로
-     * 여러 행에 흩어지고 {@code account_detail}의 member 표기가 회사마다 갈려, <b>어느 행이
-     * 기말 잔액인지 실측 없이 정할 수 없다.</b> 추측으로 고르면 기초 잔액을 이익잉여금으로
-     * 저장하는데 값이 그럴듯해 드러나지 않는다. 지금은 <b>무엇이 있는지 로그로 남기는 것</b>이
-     * 이 메서드의 전부이고, 표본 실행이 답을 준 뒤에 값 경로를 연다.
+     * <p>규칙은 <b>대조군으로 확인했다.</b> 자본변동표에서 {@code account_id}가
+     * {@code ifrs-full_Equity}이고 {@code account_detail}이 이익잉여금 구성요소를 가리키는 행이
+     * 그 계정의 <b>기말 잔액</b>이다. 근거 둘:
+     * <ul>
+     *   <li><b>둘 다 가진 회사에서 두 값이 같다.</b> 삼성전자 2025 사업보고서의 재무상태표
+     *       {@code ifrs-full_RetainedEarnings}와 이 규칙이 고른 행이 402,135,600,000,000으로
+     *       일치했고, 매칭된 자본변동표 행은 하나였다.
+     *   <li><b>해가 이어진다.</b> 오리온 2024가 이 규칙으로 낸 값이 2025의 기초자본
+     *       ({@code dart_EquityAtBeginningOfPeriod})과 같았다.
+     * </ul>
+     *
+     * <p>MUST NOT: 기초 잔액이나 증감 행을 고르지 않는다. 자본변동표는 한 계정이 기초·증감·기말로
+     * 흩어져 있어 {@code account_id}를 안 보면 <b>기초 잔액을 이익잉여금으로 저장</b>하게 되는데,
+     * 그 값은 한 해 늦은 것일 뿐 그럴듯해서 드러나지 않는다.
+     *
+     * @return 찾지 못하면 null. 그때는 결손이 결손으로 남는 것이 옳다
      */
-    static void logEquityChangeCandidates(JsonNode list, String ticker, int year, String period) {
-        List<JsonNode> rows = sections(list, SJ_EQUITY_CHANGES);
-        List<String> found = new ArrayList<>();
-        for (JsonNode row : rows) {
-            String detail = row.path("account_detail").asString("");
-            String name = row.path("account_nm").asString("");
-            if (detail.contains("이익잉여금") || name.contains("이익잉여금")) {
-                found.add("ord=" + row.path("ord").asString("")
-                        + " id=" + row.path("account_id").asString("")
-                        + " nm=" + name
-                        + " detail=" + detail
-                        + " amt=" + row.path("thstrm_amount").asString(""));
+    static BigDecimal retainedEarningsFromEquityChanges(JsonNode list, String ticker,
+                                                        int year, String period) {
+        List<JsonNode> candidates = new ArrayList<>();
+        for (JsonNode row : sections(list, SJ_EQUITY_CHANGES)) {
+            if (!"ifrs-full_Equity".equals(row.path("account_id").asString(""))) {
+                continue;
+            }
+            if (row.path("account_detail").asString("").contains("이익잉여금")) {
+                candidates.add(row);
             }
         }
-        if (found.isEmpty()) {
-            log.warn("이익잉여금이 재무상태표에 없고 자본변동표에도 후보가 없다. "
-                    + "ticker={} {}/{} SCE={}행", ticker, year, period, rows.size());
-            return;
+        if (candidates.isEmpty()) {
+            log.warn("이익잉여금이 재무상태표에도 자본변동표에도 없다. 결손으로 남긴다. "
+                    + "ticker={} {}/{}", ticker, year, period);
+            return null;
         }
-        log.warn("이익잉여금이 재무상태표에 없다. 자본변동표 후보 {}건을 남긴다(값으로 쓰지 않는다). "
-                + "ticker={} {}/{} — {}", found.size(), ticker, year, period, found);
+        // 둘 이상이면 지배기업 소유주 귀속분을 고른다. 재무상태표의 이익잉여금이 가리키는
+        // 것이 그것이고(비지배지분은 별도 항목이다), 표본에서는 애초에 하나만 걸렸다.
+        JsonNode chosen = candidates.stream()
+                .filter(row -> row.path("account_detail").asString("").contains("지배기업"))
+                .findFirst()
+                .orElse(candidates.get(0));
+        if (candidates.size() > 1) {
+            log.warn("자본변동표의 이익잉여금 후보가 {}건이다 — '{}'를 쓴다. 매핑 규칙 재확인이 "
+                            + "필요하다. ticker={} {}/{}", candidates.size(),
+                    chosen.path("account_detail").asString(""), ticker, year, period);
+        }
+        return DartAccountMapper.parseAmount(chosen.path("thstrm_amount").asString(""));
     }
 }

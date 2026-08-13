@@ -220,8 +220,10 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         BigDecimal retainedEarnings = DartFullAccountMapper.find(
                 balance, DartFullAccountMapper.ID_RETAINED_EARNINGS, DartAccountMapper.RETAINED_EARNINGS);
         if (retainedEarnings == null) {
-            // §8의 세 종목이 여기 걸린다. 자본변동표에 무엇이 있는지만 남기고 값은 쓰지 않는다.
-            DartFullAccountMapper.logEquityChangeCandidates(list, security.ticker(), year, label);
+            // §8의 세 종목이 여기 걸린다. 재무상태표에 행 자체가 없으므로 자본변동표의
+            // 기말 잔액으로 대신한다 — 규칙의 근거는 그 메서드에 있다.
+            retainedEarnings = DartFullAccountMapper.retainedEarningsFromEquityChanges(
+                    list, security.ticker(), year, label);
         }
 
         return new RawFinancialReport(
