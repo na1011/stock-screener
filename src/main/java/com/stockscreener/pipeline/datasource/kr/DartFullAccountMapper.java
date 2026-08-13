@@ -72,12 +72,37 @@ final class DartFullAccountMapper {
             "ifrs-full_CashFlowsFromUsedInOperatingActivities",
             "ifrs_CashFlowsFromUsedInOperatingActivities");
 
-    /** 현금흐름표의 계정명 폴백. 요약본에는 이 항목이 없어 {@link DartAccountMapper}에도 없다. */
-    static final Set<String> NAME_OPERATING_CASH_FLOW = ordered(
-            "영업활동현금흐름",
-            "영업활동으로 인한 현금흐름",
-            "영업활동으로부터의 현금흐름",
-            "영업활동 현금흐름");
+    /**
+     * 영업활동현금흐름을 계정명으로 찾는다. 표준코드가 없을 때만 쓴다.
+     *
+     * <p>후보군을 열거하지 않고 패턴으로 거르는 이유는 실측이 그렇게 시켰기 때문이다 —
+     * 350종목을 돌려 보니 총계 행이 <b>표준코드 미사용</b>으로 오는 회사가 있고
+     * (삼성전기 {@code 영업활동순현금흐름 합계}, 현대글로비스 {@code 영업활동으로 인한 순현금흐름}),
+     * 표준코드를 쓰되 <b>다른 ID</b>를 쓰는 회사도 있다
+     * (코오롱인더 {@code ifrs-full_CashFlowsFromUsedInOperations} / {@code I. 영업활동으로인한현금흐름}).
+     * 이름을 하나씩 더하는 방식은 업종이 늘 때마다 새어 나간다.
+     *
+     * <p>IMPORTANT — <b>{@code 창출}을 반드시 뺀다.</b> {@code 영업활동에서 창출된 현금}은
+     * 이자·법인세를 빼기 <b>전</b> 소계이고 총계보다 20% 안팎 크다. 삼성전기 2022가 실제로
+     * 그 둘을 나란히 갖고 있었다(창출 1,882,897,371,147 / 총계 1,575,355,826,731).
+     * 이것을 안 빼면 값이 그럴듯하게 틀리고, H-05는 5년 합이라 오차가 누적된다.
+     */
+    static boolean looksLikeOperatingCashFlowTotal(String accountName) {
+        if (accountName == null) {
+            return false;
+        }
+        // 번호 매김("I.", "Ⅰ.", "1.")과 공백을 걷어낸다. 회사마다 다르고 뜻은 같다.
+        String normalized = accountName.replaceAll("[\\s.\\u2160-\\u217F0-9IVXivx]+", "");
+        // '현금흐름'만 보면 새어 나간다 — 이마트가 '영업활동으로부터의 순현금유입'이었다.
+        boolean namesTheFlow = normalized.contains("현금흐름") || normalized.contains("순현금");
+        return normalized.contains("영업활동")
+                && namesTheFlow
+                && !normalized.contains("창출")
+                && !normalized.contains("투자활동")
+                && !normalized.contains("재무활동")
+                && !normalized.contains("기초")
+                && !normalized.contains("기말");
+    }
 
     private DartFullAccountMapper() {
     }
@@ -139,6 +164,36 @@ final class DartFullAccountMapper {
             BigDecimal value = DartAccountMapper.parseAmount(
                     matches.get(0).path("thstrm_amount").asString(""));
             if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 영업활동현금흐름. 표준계정 ID를 먼저 보고, 없으면 계정명 패턴으로 찾는다.
+     *
+     * @return 찾지 못하면 null. 그때는 결손이 결손으로 남는 것이 옳다
+     */
+    static BigDecimal operatingCashFlow(List<JsonNode> cashFlowRows) {
+        BigDecimal byId = find(cashFlowRows, ID_OPERATING_CASH_FLOW, null);
+        if (byId != null) {
+            return byId;
+        }
+        List<JsonNode> matches = new ArrayList<>();
+        for (JsonNode row : cashFlowRows) {
+            if (looksLikeOperatingCashFlowTotal(row.path("account_nm").asString(""))) {
+                matches.add(row);
+            }
+        }
+        for (JsonNode match : matches) {
+            BigDecimal value = DartAccountMapper.parseAmount(
+                    match.path("thstrm_amount").asString(""));
+            if (value != null) {
+                if (matches.size() > 2) {
+                    log.warn("영업활동현금흐름 후보가 {}건이다 — '{}'를 쓴다. 매핑 규칙 재확인이 필요하다.",
+                            matches.size(), match.path("account_nm").asString(""));
+                }
                 return value;
             }
         }

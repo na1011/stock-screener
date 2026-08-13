@@ -269,9 +269,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         if (period != StatementPeriod.FY) {
             return null;
         }
-        return DartFullAccountMapper.find(cashFlow,
-                DartFullAccountMapper.ID_OPERATING_CASH_FLOW,
-                DartFullAccountMapper.NAME_OPERATING_CASH_FLOW);
+        return DartFullAccountMapper.operatingCashFlow(cashFlow);
     }
 
     /** 받은 행과 그것을 받는 데 든 호출 수. 연결이 비어 별도로 다시 부르면 2다. */
