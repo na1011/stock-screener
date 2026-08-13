@@ -1,6 +1,8 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.collector.FinancialCollector;
+import com.stockscreener.pipeline.collector.FinancialWriter;
 import com.stockscreener.pipeline.collector.PriceCollector;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 초기 적재. 시세 2년·재무 3년을 한 번 받아온다(spec §7).
@@ -100,14 +103,24 @@ public class InitialLoadJob {
         LocalDate priceFrom = asOf.minusYears(range.priceYears());
         int fromFiscalYear = asOf.getYear() - range.financialYears();
 
+        // 이 잡은 APPEND_ONLY지만 그것이 정정공시를 막지는 않는다 — 막는 것은
+        // FILL_WITHOUT_REVISION 하나뿐이다. --tickers로 이미 재무가 있는 종목을 다시 받으면
+        // 여기서도 개정본이 쌓이고 그 종목의 지표가 지워진다. 세지 않으면 그 사실이 로그에만
+        // 남는다.
+        AtomicInteger revised = new AtomicInteger();
+
         try {
             for (SecurityRef target : targets) {
                 // 시세와 재무를 각각 독립된 단계로 처리한다. 재무만 실패한 종목의 시세를
                 // 재실행에서 다시 받지 않으려면 실패 기록이 단계를 구분해야 한다.
                 execution.process(target, CollectionPhase.PRICE,
                         security -> priceCollector.collect(security, priceFrom, asOf));
-                execution.process(target, CollectionPhase.FINANCIAL,
-                        security -> financialCollector.collect(security, fromFiscalYear));
+                execution.process(target, CollectionPhase.FINANCIAL, security -> {
+                    FinancialWriter.Outcome outcome = financialCollector.collectDetailed(
+                            security, fromFiscalYear, FinancialWriter.WriteMode.APPEND_ONLY);
+                    revised.addAndGet(outcome.revised());
+                    return outcome.changed();
+                });
             }
         } catch (DataSourceException e) {
             execution.failFatally(e);
@@ -116,7 +129,17 @@ public class InitialLoadJob {
             execution.failUnexpectedly(e);
             throw e;
         }
-        return execution.finish();
+
+        if (revised.get() > 0) {
+            // 초기 적재에서 정정이 나오는 것은 --tickers로 기존 종목을 다시 받았을 때뿐이다.
+            // 드물지만 결과는 결손 보정과 같으므로 같은 무게로 알린다.
+            execution.alertOperator(AlertSeverity.WARNING, "정정공시 반영 — 백필이 남았다",
+                    ("초기 적재 중 정정공시 %d기간을 반영했다. **그 종목의 지표가 보존 창 전체에서 "
+                            + "지워졌다.** 백필이 따라오지 않으면 화면에서 통째로 사라지는데 에러도 "
+                            + "경고도 나지 않는다. 어느 종목인지는 로그의 '정정공시를 반영한다'가 답한다.")
+                            .formatted(revised.get()));
+        }
+        return execution.finish("정정=%d".formatted(revised.get()));
     }
 
     /**

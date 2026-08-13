@@ -101,11 +101,13 @@ public class FinancialWriter {
     /**
      * 한 종목의 쓰기 결과.
      *
-     * <p>{@code deferredRevisions}가 이 phase의 판정 근거다 — 정정공시라서 <b>채우지 못한</b>
-     * 기간의 수이며, 잡이 이것을 합산해 실행 기록에 남긴다. 0이 아니면 그만큼의 (종목, 기간)이
-     * 결손인 채로 남았다는 뜻이고, 어느 것인지는 같은 시점의 {@code WARN}이 답한다.
+     * <p>{@code revised}와 {@code deferredRevisions}가 <b>정반대의 사실</b>을 센다 —
+     * 전자는 정정공시를 반영해 개정본을 쌓은 수(그때 <b>그 종목의 지표가 지워졌다</b>),
+     * 후자는 정정공시라서 채우지 못하고 남긴 수다. 둘 다 {@code changed} 안에 뭉뚱그리면
+     * 잡이 "무효화가 일어났는가"를 물을 수 없고, 그 질문에 답하지 못하면 <b>백필이 남았다는
+     * 것을 아무도 모른다.</b>
      */
-    public record Outcome(long changed, int inserted, int filled,
+    public record Outcome(long changed, int inserted, int filled, int revised,
                           int deferredRevisions, int mismatched) {
     }
 
@@ -146,7 +148,7 @@ public class FinancialWriter {
                     stockId, mode, tally.inserted, tally.revised, tally.filled,
                     tally.deferredRevisions, tally.mismatched, tally.untouched);
         }
-        return new Outcome(tally.changed(), tally.inserted, tally.filled,
+        return new Outcome(tally.changed(), tally.inserted, tally.filled, tally.revised,
                 tally.deferredRevisions, tally.mismatched);
     }
 

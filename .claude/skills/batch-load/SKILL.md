@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|company-profile|corporate-action|adjustment-rebuild|market-index|backfill 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|adjustment-rebuild|market-index|backfill 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 정정공시가 지표를 지우는 자리와 그것을 36콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -15,6 +15,7 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 --job=initial-load --price-years=7 --financial-years=7 --reload-existing=true
 --job=initial-load --tickers=082640,121600 --price-years=7
 --job=financial-refill --financial-years=3 [--tickers=005930,035420]
+--job=full-statement-refill [--financial-years=5] [--tickers=…] [--quarters=true]
 --job=company-profile [--tickers=005930,035420]
 --job=corporate-action [--from=2020-01-02] [--tickers=058470,086280]
 --job=adjustment-rebuild [--tickers=058470]
@@ -32,6 +33,7 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 | `market-index` | 코스피·코스닥 지수 시계열 | **종목과 무관해 `--tickers`가 없다.** 기간조회 1콜이라 전 구간을 받아도 **지수당 1콜, 전부 2콜**이다. `--from`을 비우면 소스 이력의 시작(2020-01-02)부터다 |
 | `initial-load` | 시세·재무 원자료 | **대상 선정이 `NOT EXISTS (price_daily)`다** — 아래 참조. 종목당 시세 1콜 + **재무 16콜**(재무 단계를 빼는 플래그가 없다) |
 | `financial-refill` | 재무의 **결손 컬럼만** | 편입 전 종목. 종목당 **16콜**(4개년 × 보고서 4종), 350종목이면 **약 5,600콜** — `fnlttSinglAcnt` 보수 예산(10,000)의 56%다. **한도는 API별이라 다른 잡과 경쟁하지 않는다**(`api-sources` skill). ADR-0040 |
+| `full-statement-refill` | 전체 재무제표에서 **결손만** — 주로 영업활동현금흐름 | 종목당 **6콜**(연간만), 350종목이면 **2,100콜**. `fnlttSinglAcntAll`은 카운터가 별개다. **정정공시를 만나면 채우지 않고 남긴다**(`정정보류=`) — 그것을 여는 것은 `financial-refill`이다. `--quarters=true`는 **티커와 함께여야** 받아들인다. ADR-0056 |
 | `company-profile` | 업종(KSIC)·결산월 | **기본 대상이 `industry_code IS NULL`인 편입 종목뿐**이라 평소 0콜이다. 티커를 주면 결손 여부와 무관하게 다시 받는다. 종목당 1콜(전량 350). ADR-0044 |
 | `corporate-action` | 기업 행위 → `corporate_action` 원장 | **계수를 바꾸지 않는다**(`rebuild()` 미호출). 공시 + 시세 급변 휴리스틱 둘을 함께 적는다. `--from` 기본값은 **저장된 시세의 첫 거래일**이고 종목당 콜은 창이 정한다(2020~오늘이면 2콜, 350종목 700콜 = `irdsSttus` 보수 예산의 7%). ADR-0049 |
 | `adjustment-rebuild` | `adj_factor`·`adj_close`를 원장에서 다시 짓기 | **저장된 시세를 소급해 다시 쓰는 유일한 경로다.** 외부 호출 0. **첫 실행 전에 `ops/dump-db.sh`가 필요하고 훅이 그것을 막는다**(ADR-0049·0052). 값이 바뀐 종목의 지표가 **보존 창 전체에서 지워지므로 `backfill`이 짝이다** — 알림 본문이 이어서 돌릴 명령을 준다. 화면에는 없다(런처·스케줄러 양쪽에서 뺐다). 350종목 2초 |
@@ -69,6 +71,28 @@ DART 실패 하나가 지수 갱신 전체를 되돌린다. 인자 없이 돌리
 `불일치=` 가 0이 아니면 소스 값이 저장값과 달라진 것이며 **덮지 않고 경고만 남긴 상태**다.
 `--tickers`에 편입 종목이 하나도 없으면 **예외로 즉시 실패한다** — 이 잡만은 대상 0건으로
 조용히 성공하지 않는다.
+
+**IMPORTANT — 이 잡은 결손만 채우는 것이 아니다. 정정공시를 반영하고, 그때 지표를 지운다.**
+소스가 저장값보다 늦은 공시본을 주면 개정본을 쌓고 `trade_date >= 회계기간 시작일`인 그 종목의
+지표를 **전 코드에서** 지운다 — 사업보고서면 보존 창 전량이다. `adjustment-rebuild`와 결과가
+같으므로 **`backfill`이 짝이고**, 알림 본문이 이어서 돌릴 명령을 준다. **영업활동현금흐름은 이
+경로가 못 채운다**(주요계정에 현금흐름표가 없다) — 개정본이 그 자리를 NULL로 쌓으므로
+`full-statement-refill`을 **뒤이어** 돌린다. 순서를 뒤집으면 저장 공시일이 아직 옛것이라 또
+`정정보류`로 남는다.
+
+### 정정공시가 어디에 있는지 먼저 묻는다 — 36콜
+
+정기적으로 정정을 발견하는 경로는 **없다**(재무를 받는 잡 셋이 전부 수동 CLI다). 전 종목을
+`financial-refill`로 훑으면 8,400콜인데, **다중회사 주요계정이 회사별 `rcept_no`를 주므로**
+100종목 묶음으로 훨씬 싸게 물을 수 있다.
+
+```
+GET /api/fnlttMultiAcnt.json?corp_code=<쉼표로 100개>&bsns_year=<연도>&reprt_code=<코드>
+```
+
+응답의 `rcept_no` 앞 8자리가 저장된 `published_at`보다 크면 정정 후보다. **지표가 실제로 읽는
+범위**(FY 5개 + 최근 3분기 + 당해 1분기 = 9기간) × 4묶음 = **36콜**이면 350종목이 끝난다.
+2026-08-13 실측으로 2종목 9건이었다. **후보로 나온 종목만 `financial-refill`에 넘긴다.**
 
 **백필 한 번은 워밍업이 긴 지표를 다 채우지 못한다.** 러너가 `maxEffectiveLookback` 봉만
 읽으므로 워밍업이 긴 지표일수록 실행당 나오는 날짜가 적다. 구간 전체를 돌아야 채워지고,

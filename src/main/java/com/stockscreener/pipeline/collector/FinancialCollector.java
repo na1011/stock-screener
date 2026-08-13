@@ -46,8 +46,21 @@ public class FinancialCollector {
      */
     public long collect(SecurityRef security, int fromFiscalYear,
                         FinancialWriter.WriteMode mode) throws DataSourceException {
+        return collectDetailed(security, fromFiscalYear, mode).changed();
+    }
+
+    /**
+     * 위와 같되 내역을 함께 낸다.
+     *
+     * <p>행 수만으로는 <b>정정공시를 반영했는지</b>를 알 수 없다 — 신규·정정·채움이
+     * {@code changed} 하나에 뭉뚱그려지기 때문이다. 정정을 반영하면 그 종목의 지표가 보존 창
+     * 전체에서 지워지므로, 잡이 그 수를 알아야 <b>백필이 남았다</b>는 것을 알릴 수 있다.
+     */
+    public FinancialWriter.Outcome collectDetailed(SecurityRef security, int fromFiscalYear,
+                                                   FinancialWriter.WriteMode mode)
+            throws DataSourceException {
         FinancialDataSource source = registry.financialSource(security.marketCode());
         List<RawFinancialReport> reports = source.fetchReports(security, fromFiscalYear);
-        return writer.write(security.stockId(), reports, mode);
+        return writer.writeDetailed(security.stockId(), reports, mode);
     }
 }

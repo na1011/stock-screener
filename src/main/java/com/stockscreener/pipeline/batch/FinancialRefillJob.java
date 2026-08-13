@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.collector.FinancialCollector;
 import com.stockscreener.pipeline.collector.FinancialWriter;
 import com.stockscreener.pipeline.collector.StockRegistrar;
@@ -11,7 +12,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 이미 저장된 재무제표의 <b>결손 컬럼만</b> 다시 받아 채운다(ADR-0040).
@@ -85,11 +88,26 @@ public class FinancialRefillJob {
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 재무 결손 보정");
 
+        // 정정을 반영하면 그 종목의 지표가 보존 창 전체에서 지워진다. 그 수를 세지 않으면
+        // 백필이 남았다는 것을 알릴 수 없고, 그러면 그 종목이 화면에서 조용히 사라진다.
+        AtomicInteger revised = new AtomicInteger();
+        AtomicInteger filled = new AtomicInteger();
+        AtomicInteger mismatched = new AtomicInteger();
+        List<String> revisedTickers = new ArrayList<>();
+
         try {
             for (SecurityRef target : targets) {
-                execution.process(target, CollectionPhase.FINANCIAL,
-                        security -> financialCollector.collect(security, fromFiscalYear,
-                                FinancialWriter.WriteMode.FILL_MISSING));
+                execution.process(target, CollectionPhase.FINANCIAL, security -> {
+                    FinancialWriter.Outcome outcome = financialCollector.collectDetailed(
+                            security, fromFiscalYear, FinancialWriter.WriteMode.FILL_MISSING);
+                    if (outcome.revised() > 0) {
+                        revised.addAndGet(outcome.revised());
+                        revisedTickers.add(security.ticker() + "(" + outcome.revised() + "기간)");
+                    }
+                    filled.addAndGet(outcome.filled());
+                    mismatched.addAndGet(outcome.mismatched());
+                    return outcome.changed();
+                });
             }
         } catch (DataSourceException e) {
             execution.failFatally(e);
@@ -98,7 +116,43 @@ public class FinancialRefillJob {
             execution.failUnexpectedly(e);
             throw e;
         }
-        return execution.finish();
+
+        String note = "연도=%d~%d 대상=%d종목 정정=%d 채움=%d 불일치=%d"
+                .formatted(fromFiscalYear, asOf.getYear(), targets.size(),
+                        revised.get(), filled.get(), mismatched.get());
+        log.info("재무 결손 보정을 마쳤다. {}", note);
+        alertOnInvalidation(execution, revisedTickers, revised.get());
+        return execution.finish(note);
+    }
+
+    /**
+     * 정정을 반영했으면 <b>백필이 남았다는 것</b>을 알린다.
+     *
+     * <p>MUST NOT: 이것을 로그로만 두지 않는다. 정정 반영은 그 종목의 {@code indicator_value}를
+     * <b>회계기간 시작일 이후 전부</b> 지우는데, 사업보고서면 그것이 보존 창 전량이다. 백필이
+     * 따라오지 않으면 그 종목이 화면에서 통째로 사라지고 <b>에러도 경고도 나지 않는다.</b>
+     * 이 잡의 성공은 "정정을 반영했다"이고 그 상태는 아직 <b>일이 끝나지 않은</b> 상태다.
+     *
+     * <p>같은 이유로 {@link AdjustmentRebuildJob}이 이미 같은 형태의 알림을 낸다 — 두 잡이
+     * 같은 결과를 만드는데 한쪽만 말하면, 말하지 않는 쪽으로 사고가 몰린다.
+     */
+    private void alertOnInvalidation(BatchExecutionContext execution, List<String> revisedTickers,
+                                     int revisedPeriods) {
+        if (revisedTickers.isEmpty()) {
+            return;
+        }
+        String tickers = String.join(", ", revisedTickers);
+        execution.alertOperator(AlertSeverity.WARNING, "정정공시 반영 — 백필이 남았다",
+                ("""
+                %d종목의 정정공시를 반영했다(%d기간): %s
+                **그 종목의 지표가 보존 창 전체에서 지워졌다.** 백필이 따라오지 않으면 화면에서 \
+                통째로 사라지는데 에러도 경고도 나지 않는다. 영업활동현금흐름은 이 경로가 \
+                채우지 못하므로 전체 재무제표를 함께 돌린다:
+                  ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
+                --job=full-statement-refill --tickers=<위 종목>'
+                  ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
+                --job=backfill --from=<보존 창 첫 거래일> --tickers=<위 종목>'
+                """).formatted(revisedTickers.size(), revisedPeriods, tickers));
     }
 
     /**
