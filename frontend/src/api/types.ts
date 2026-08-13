@@ -28,7 +28,13 @@ export type ScreenType = (typeof SCREEN_TYPES)[number]
 export const OUTCOME_STATUSES = ['MATCHED', 'NOT_MATCHED', 'NOT_EVALUABLE'] as const
 export type OutcomeStatus = (typeof OUTCOME_STATUSES)[number]
 
-export const INDICATOR_CATEGORIES = ['TECHNICAL', 'FUNDAMENTAL', 'PRICE', 'DERIVED'] as const
+export const INDICATOR_CATEGORIES = [
+  'TECHNICAL',
+  'FUNDAMENTAL',
+  'PRICE',
+  'OSCILLATOR',
+  'DERIVED',
+] as const
 export type IndicatorCategory = (typeof INDICATOR_CATEGORIES)[number]
 
 /**

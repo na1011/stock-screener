@@ -21,7 +21,9 @@ const categoryOf = (it: Item) => it.category
 describe('categoryLabel', () => {
   it('알려진 분류는 한글 이름을 준다', () => {
     expect(categoryLabel('FUNDAMENTAL')).toBe('재무 지표')
-    expect(categoryLabel('DERIVED')).toBe('파생·백분위')
+    expect(categoryLabel('OSCILLATOR')).toBe('오실레이터')
+    // ADR-0057에서 뜻이 바뀌었다 — 백분위가 아니라 지표 둘 이상의 교차·위치 신호다.
+    expect(categoryLabel('DERIVED')).toBe('파생 지표')
   })
 
   it('모르는 분류는 코드를 그대로 보인다', () => {
@@ -32,17 +34,27 @@ describe('categoryLabel', () => {
 
 describe('groupByCategory', () => {
   it('랭크 순서대로 묶음을 낸다', () => {
-    const items = [item('PER', 'FUNDAMENTAL'), item('CLOSE', 'PRICE'), item('RSI', 'TECHNICAL')]
+    const items = [
+      item('PER', 'FUNDAMENTAL'),
+      item('CLOSE', 'PRICE'),
+      item('RSI', 'TECHNICAL'),
+      item('MACD', 'OSCILLATOR'),
+      item('GOLDEN_CROSS_AGE', 'DERIVED'),
+    ]
 
     expect(groupByCategory(items, categoryOf, BUILDER_CATEGORY_RANK).map((g) => g.category)).toEqual([
       'PRICE',
       'TECHNICAL',
+      'OSCILLATOR',
+      'DERIVED',
       'FUNDAMENTAL',
     ])
-    // 상세는 재무부터 읽는다. 같은 입력에서 배치가 달라야 한다.
+    // 상세는 재무부터 읽고 가격은 맨 뒤다. 같은 입력에서 배치가 달라야 한다.
     expect(groupByCategory(items, categoryOf, DETAIL_CATEGORY_RANK).map((g) => g.category)).toEqual([
       'FUNDAMENTAL',
       'TECHNICAL',
+      'OSCILLATOR',
+      'DERIVED',
       'PRICE',
     ])
   })
