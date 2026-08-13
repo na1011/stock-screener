@@ -13,7 +13,9 @@ import java.math.BigDecimal;
 @IndicatorMeta(
         name = "OBV·가격 다이버전스",
         description = "1 강세 다이버전스(가격↓ OBV↑) · −1 약세 다이버전스 · 2 정합 · 0 판정 불가.",
-        interpretation = "MUST NOT: 크기로 비교하지 않는다 — 2(정합)가 1(강세 다이버전스)보다 큰 값이지만 더 좋다는 뜻이 아니다. 분류다.",
+        interpretation = "1은 가격이 눌리는데 거래량은 쌓이는 상태로 반등의 실마리로 읽는다. "
+                + "−1은 그 반대다. 2는 둘이 같은 방향으로 뚜렷하다는 뜻이며, "
+                + "숫자는 분류일 뿐이라 2가 1보다 좋다는 뜻이 아니다.",
         category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

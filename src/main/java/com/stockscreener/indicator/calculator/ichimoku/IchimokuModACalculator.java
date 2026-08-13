@@ -13,7 +13,8 @@ import java.math.BigDecimal;
 @IndicatorMeta(
         name = "일목 현재 구름 색",
         description = "선행스팬 A가 B 위면 1(녹색), 아래면 −1(적색)이다.",
-        interpretation = "단계와 무관하게 ±3점으로 들어가는 수식자다. 녹색이 강세다.",
+        interpretation = "양운(1)은 구름이 지지대로, 음운(−1)은 저항대로 작동한다는 뜻이다. "
+                + "구름 색만으로 방향을 정하지는 않고 주가가 구름의 어디에 있는지와 함께 본다.",
         category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

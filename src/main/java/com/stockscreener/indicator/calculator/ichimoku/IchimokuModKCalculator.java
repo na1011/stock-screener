@@ -13,7 +13,8 @@ import java.math.BigDecimal;
 @IndicatorMeta(
         name = "일목 구름 내부 체류",
         description = "0 체류 없음 · 1 단기(9주 미만) · 2 장기.",
-        interpretation = "단계와 무관하게 체류 없음이 +3, 단기 −2, 장기 −3이다. 구름 안은 방향이 정해지지 않은 자리다.",
+        interpretation = "구름 안은 방향이 정해지지 않은 구간이다. 체류가 없는 것(0)이 가장 좋고, "
+                + "오래 머물수록 추세가 뚜렷하지 않다는 뜻이다.",
         category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.
