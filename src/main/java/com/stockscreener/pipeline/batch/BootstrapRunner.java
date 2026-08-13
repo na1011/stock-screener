@@ -134,7 +134,7 @@ public class BootstrapRunner implements ApplicationRunner {
                     date(args, "from", null), csv(args, "tickers"));
             case "backfill" -> indicatorBackfillJob.run(
                     date(args, "from", asOf.minusYears(2)), asOf,
-                    BatchExecutionRecorder.TriggeredBy.MANUAL);
+                    BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill | company-profile"

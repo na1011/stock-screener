@@ -29,6 +29,23 @@ import java.util.Optional;
  *
  * <p>외부 API를 호출하지 않는다. 원자료는 이미 DB에 있고 계산만 다시 한다 — 그래서 쿼터를
  * 신경 쓸 필요가 없고, 실패해도 다시 돌리는 비용이 낮다.
+ *
+ * <h2>{@code tickers}가 순위의 모집단을 좁히지 않는 이유</h2>
+ * <p>phase 기준이 <i>"재계산이 순위의 모집단을 좁히지 않는다"</i>를 명시한다(§P9 · ADR-0036과
+ * 같은 자리다) — 일부 종목만 다시 계산해도 백분위·업종 상대값은 전 종목에서 나와야 한다.
+ * 그것이 <b>구조로</b> 성립한다: {@link PercentileCalculator#calculate}와
+ * {@link SectorRelativeCalculator#calculate}는 <b>거래일만 받고</b> {@code indicator_value}를
+ * 활성 유니버스 전량과 조인하므로, 아래 종목 루프를 좁혀도 두 계산은 좁아지지 않는다.
+ *
+ * <p>MUST NOT: 두 호출을 {@code targets}로 좁히지 않는다. 좁히면 대상 밖 종목의 순위가
+ * 조용히 낡는데 <b>값이 그럴듯해 화면에서 드러나지 않는다.</b>
+ * {@code IndicatorBackfillTickerScopeTest}가 그것을 못박는다.
+ *
+ * <p>이 필터가 있어야 하는 이유는 <b>무효화가 낀 재백필의 복구 비용</b>이다.
+ * {@code AdjustmentRecalculator.rebuild}가 값을 바꾸면 그 종목의 {@code indicator_value}가
+ * <b>보존 창 전체</b>에서 지워진다({@code StoredIndicatorInvalidationPort}의 {@code >=}).
+ * 필터가 없으면 한 종목의 판정을 고칠 때마다 180거래일 × 350종목을 다시 돌아야 하고
+ * (실측 2.6~8시간), 그 비용이 <b>"판정을 한 번에 다 끝내야 한다"</b>는 제약을 만든다.
  */
 @Component
 public class IndicatorBackfillJob {
@@ -66,9 +83,13 @@ public class IndicatorBackfillJob {
      * <p>거래일 목록은 {@code price_daily}에서 얻는다. 달력으로 만들면 휴장일까지 돌게 되고,
      * 그날은 시세가 없어 아무 값도 나오지 않는 헛일이 된다. 실제로 시세가 있는 날이
      * 곧 거래일이라는 사실을 쓰는 편이 정확하고 싸다.
+     *
+     * @param tickers 비면 편입 중인 활성 종목 전체. <b>좁혀도 백분위·업종 상대값은 전 종목에서
+     *                나온다</b> — 클래스 javadoc의 근거를 참조한다.
      */
     public BatchStatus run(LocalDate from, LocalDate to,
-                           BatchExecutionRecorder.TriggeredBy triggeredBy) {
+                           BatchExecutionRecorder.TriggeredBy triggeredBy,
+                           List<String> tickers) {
         List<LocalDate> tradeDates = tradeDatesBetween(from, to);
         if (tradeDates.isEmpty()) {
             log.info("해당 구간에 시세가 없어 백필할 것이 없다. from={} to={}", from, to);
@@ -93,8 +114,7 @@ public class IndicatorBackfillJob {
                     retentionCutoff.orElseThrow(), tradeDates.size() - outsideRetention);
         }
 
-        List<SecurityRef> targets =
-                stockRegistrar.toSecurityRefs(stockRegistrar.activeUniverseMemberIds());
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, to, triggeredBy, targets.size());
 
@@ -103,11 +123,17 @@ public class IndicatorBackfillJob {
         // 350종목 × 124거래일을 350으로 나눈 값이었고, 데이터가 부풀어 보였다.
         execution.plan(CollectionPhase.INDICATOR, tradeDates.size() * targets.size());
 
-        log.info("지표 백필을 시작한다. 거래일={}일 종목={}개", tradeDates.size(), targets.size());
+        log.info("지표 백필을 시작한다. 거래일={}일 종목={}개{}", tradeDates.size(), targets.size(),
+                tickers == null || tickers.isEmpty()
+                        ? ""
+                        : " (티커로 좁혔다: " + tickers + " — 백분위·업종 상대값은 그래도 전 종목에서 낸다)");
 
         try {
             // 날짜가 바깥 루프인 이유는 백분위 때문이다. 백분위는 "그날 전 종목의 값"을
             // 요구하므로, 한 날짜를 전 종목에 대해 끝낸 뒤에야 그날의 순위를 낼 수 있다.
+            //
+            // MUST NOT: 아래 두 계산을 targets로 좁히지 않는다. 둘은 거래일만 받고 활성 유니버스
+            // 전량을 조인하므로, 종목 루프를 좁혀도 순위의 모집단은 그대로다(클래스 javadoc).
             for (int i = 0; i < tradeDates.size(); i++) {
                 LocalDate tradeDate = tradeDates.get(i);
                 // 진행률만으로는 남은 시간을 가늠할 수 없다. 어느 날짜를 돌고 있는지가
@@ -134,6 +160,31 @@ public class IndicatorBackfillJob {
             throw e;
         }
         return execution.finish();
+    }
+
+    /**
+     * 대상 종목을 정한다.
+     *
+     * <p>IMPORTANT — 티커를 줬는데 하나도 매칭되지 않으면 <b>예외로 즉시 실패시킨다.</b>
+     * {@link CorporateActionJob}과 같은 자리다 — 오타로 대상이 빈 것과 계산할 것이 없는 것이
+     * 로그에서 구분되지 않는다. 이 잡에서는 특히 나쁘다: 무효화 뒤 복구로 부르는 경우가 많고,
+     * 그때 <b>0종목 성공</b>은 "그 종목이 화면에서 사라진 채로 끝났다"와 같은 뜻이다.
+     */
+    private List<Long> resolveTargets(List<String> tickers) {
+        if (tickers == null || tickers.isEmpty()) {
+            return stockRegistrar.activeUniverseMemberIds();
+        }
+        List<Long> matched = stockRegistrar.activeUniverseMemberIdsByTicker(tickers);
+        if (matched.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "준 티커 중 편입 중인 활성 종목이 하나도 없다: " + tickers
+                            + " — 종목코드를 확인하라. 대상 0건으로 성공시키지 않는다.");
+        }
+        if (matched.size() < tickers.size()) {
+            log.warn("티커 {}개 중 {}개만 편입 중인 활성 종목이다. 나머지는 건너뛴다: {}",
+                    tickers.size(), matched.size(), tickers);
+        }
+        return matched;
     }
 
     private List<LocalDate> tradeDatesBetween(LocalDate from, LocalDate to) {

@@ -90,10 +90,12 @@ public class AdminJobLauncher {
                         BatchExecutionRecorder.TriggeredBy.ADMIN),
 
                 IndicatorBackfillJob.JOB_NAME,
+                // 티커를 비워 보낸다 — 화면에 그 입력이 없고, 만들지도 않는다. 종목을 좁힌
+                // 백필은 무효화 뒤 복구에 쓰는 경로이고 그 판단은 CLI에 남긴다.
                 request -> indicatorBackfillJob.run(
                         request.orDefault(request.from(), LocalDate.now().minusDays(7)),
                         request.orDefault(request.to(), LocalDate.now()),
-                        BatchExecutionRecorder.TriggeredBy.ADMIN),
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()),
 
                 // 화면에서 띄워도 되는 이유는 대상이 **업종이 비어 있는 종목뿐**이라
                 // 평소 0콜이고, 전량이어도 종목당 1콜(350)이기 때문이다.
