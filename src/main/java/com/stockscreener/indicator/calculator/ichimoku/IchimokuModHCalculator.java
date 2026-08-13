@@ -23,6 +23,8 @@ import java.math.BigDecimal;
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
         direction = IndicatorMeta.Direction.NEUTRAL,
+        // 원시 수식자다. 조건에 넣으면 「내 조건」 구획에 나온다(ADR-0058).
+        detailDefault = false,
         sortOrder = 315)
 public class IchimokuModHCalculator extends IchimokuIndicator {
 
