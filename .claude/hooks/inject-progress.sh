@@ -53,8 +53,8 @@ fi
 progress="docs/progress.md"
 [ -f "$progress" ] || bail "$progress 파일이 없다."
 
-content=$(cat "$progress" 2>/dev/null) || bail "$progress를 읽지 못했다."
-[ -n "$content" ] || bail "$progress가 비어 있다."
+content=$(cat "$progress" 2>/dev/null) || bail "${progress}를 읽지 못했다."
+[ -n "$content" ] || bail "${progress}가 비어 있다."
 
 # jq는 아래 출력에만 필요하다. 없으면 내용을 그대로 stdout으로 낸다 —
 # 잘려서라도 컨텍스트에 닿는 것이 아무것도 안 하는 것보다 낫다.
