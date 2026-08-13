@@ -91,8 +91,8 @@ SELECT CASE
 ```premise 정정공시라 채우지 못한 연간 결손
 psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) = 0 THEN '잴 것이 없었다 — 편입 활성 종목이 없다'
-  WHEN count(*) FILTER (WHERE miss > 0) <= 3 THEN 'OK 결손 ' || count(*) FILTER (WHERE miss > 0) || '종목'
-  ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '으로 늘었다(착수 시 3: 고려아연·SK가스·이마트 중 이마트는 해소) — 정정공시가 쌓이고 있다'
+  WHEN count(*) FILTER (WHERE miss > 0) = 0 THEN 'OK 결손 0종목'
+  ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '이다(2026-08-13에 0으로 만들었다) — 새 정정공시가 쌓였을 수 있다. batch-load skill의 36콜 스윕으로 어느 종목인지 먼저 묻는다'
   END FROM (SELECT s.id, count(*) FILTER (WHERE f.operating_cash_flow IS NULL) miss
     FROM stock s JOIN universe_membership m ON m.stock_id=s.id AND m.effective_to IS NULL
     JOIN financial_statement f ON f.stock_id=s.id AND f.is_latest AND f.fiscal_period='FY'
@@ -174,9 +174,24 @@ JIT 미가열)이고, `SCREENING_RUN` 107건의 중앙값은 49 ms다. 25조건�
 - **어려워지는 것**: 재무 포트가 둘이라 "재무를 어디서 받는가"에 답이 둘이다. 계정 매핑이
   회사마다 갈려 새 항목을 열 때마다 실측이 필요하다. `maxFinancialYears`가 2 → 5가 되어 분기
   읽기가 12 → 24행이 됐다(종목·일자당 1회라 쿼리 수는 그대로다).
-- **남은 결손**: 정정공시로 채우지 못한 5건은 이 경로로 영영 열리지 않는다. 열려면
-  `financial-refill`(주요계정)로 정정을 반영해야 하고, 그때는 무효화가 함께 터지므로 백필이
-  짝이다.
+- **정정보류 5건은 그날 안에 해소했다**(고려아연 · SK가스). `financial-refill`로 정정을 반영해
+  공시일을 맞춘 뒤 이 잡을 다시 돌리는 순서다 — **뒤집으면 또 보류로 남는다.** 그때 무효화가
+  22,586행을 지웠고 보존 창 전량 백필로 되채웠다. H-05 산출 가능 종목이 283 → **285**가 됐다.
+  - **그 정정은 결손이 아니라 오류였다.** 고려아연 2026 Q1의 자산총계·자본총계·이익잉여금이
+    재작성돼 `ALTMAN_Z`·`DEBT_RATIO`·`PBR`·`ROE`가 낡은 기준으로 계산돼 있었다. 백분위는
+    유니버스 전체에서 나오므로 그 오차가 **다른 종목의 순위에도 섞여 있었다.**
+- **정정공시를 정기적으로 발견하는 경로는 없다.** 재무를 받는 잡 셋이 전부 수동 CLI이고
+  스케줄러·화면 어디에도 없다. 위 정정이 걸린 것은 **P10 적재를 돌렸기 때문**이지 탐지가
+  작동해서가 아니다. 그 사이 고려아연의 지표는 틀린 채로 있었다.
+  - **찾는 값은 싸다.** 다중회사 주요계정(`fnlttMultiAcnt`)이 회사별 `rcept_no`를 주므로
+    100종목 묶음 × 9기간(지표가 읽는 범위) = **36콜**이면 350종목을 훑는다. 2026-08-13 실측으로
+    2종목 9건이었다. 레시피는 `batch-load` skill에 있다. **잡으로 만들지는 않았다** — 다른
+    엔드포인트라 어댑터·테스트가 붙고 그것은 phase 크기의 결정이다.
+- **이 무효화는 §P10의 "정정공시 분기로 떨어져 `indicator_value`가 지워지는 일이 없다"를
+  되돌리지 않는다.** 그 기준은 **P10이 새로 만든 쓰기 경로**에 걸린 것이고, 그래서 그 경로는
+  가지 자체를 없앴다. 정정 반영은 `FILL_MISSING`을 쓰는 결손 보정 잡의 **선언된 책임**이며
+  (`WriteMode` javadoc), 그 잡이 지운 것은 백필이 되채운다. 둘을 섞으면 다음 세션이 P10을
+  미충족으로 되돌린다.
 - **되돌리려면**: `FullStatementDataSource`와 그 어댑터·콜렉터·잡, `WriteMode`의 셋째 값과
   `writeOne`의 그 가지, `OCF_SUM_5Y` 계산기와 프리셋의 21번째 조건, 상한 넷을 함께 걷는다.
   적재된 `operating_cash_flow`는 남아도 무해하다 — 그것을 읽는 지표가 사라질 뿐이다.
