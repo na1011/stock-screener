@@ -88,8 +88,11 @@ final class WeeklyAnalyzer {
         double tenkan = w.tenkan(0);
         double kijun = w.kijun(0);
         double kumoTop = w.kumoTop(0);
+        // MUST: 이 부등호를 한 번만 쓴다. ICHI_TK_CROSS가 같은 판정을 지표로 내보내는데,
+        // 두 자리에 나란히 적으면 갈리고 갈려도 둘 다 정수라 어떤 테스트도 깨지지 않는다.
+        boolean tkAbove = tenkan > kijun;
         int drv42;
-        if (tenkan > kijun) {
+        if (tkAbove) {
             boolean tenkanAbove = tenkan > kumoTop;
             boolean kijunAbove = kijun > kumoTop;
             drv42 = tenkanAbove && kijunAbove ? 1 : (tenkanAbove != kijunAbove ? 0 : -1);
@@ -99,7 +102,7 @@ final class WeeklyAnalyzer {
 
         // ---- DRV-44 주봉 호전 분류 ----------------------------------------------------
         int drv44 = (w.kumoPosition(0) == 1 ? 1 : 0)
-                + (tenkan > kijun ? 1 : 0)
+                + (tkAbove ? 1 : 0)
                 + (close > w.close(26) ? 1 : 0);
 
         // ---- DRV-46 Senkou B 26주 평탄 -------------------------------------------------
@@ -200,6 +203,8 @@ final class WeeklyAnalyzer {
 
         return new WeeklyAnalysis(
                 stage,
+                tkAbove ? 1 : 0,                             // tk_cross 전환선이 기준선 위인가
+                w.kumoPosition(0),                           // price_vs_kumo 1위 0안 −1아래
                 drv44,
                 drv26,
                 drv41,

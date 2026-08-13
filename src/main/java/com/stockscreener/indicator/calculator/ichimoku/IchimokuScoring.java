@@ -165,6 +165,6 @@ final class IchimokuScoring {
                 w.modA(), w.modB(), w.modC(), w.modD(), w.modE(), w.modF(),
                 w.modG(), w.modH(), w.modJ(), w.modK(), w.modL(), w.modM(),
                 w.kaizenWeekly(), kaizenDaily, kaizenMatch, w.leaf(), w.t3yeok(),
-                w.obvT(), w.divergence(), excessReturn);
+                w.obvT(), w.divergence(), excessReturn, w.tkCross(), w.priceVsKumo());
     }
 }

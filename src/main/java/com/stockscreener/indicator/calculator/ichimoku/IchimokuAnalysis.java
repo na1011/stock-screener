@@ -22,6 +22,8 @@ package com.stockscreener.indicator.calculator.ichimoku;
  * @param obvT         {@code drv_26}. 유일한 실수 지표이고 ±1.96이 임계다
  * @param divergence   {@code drv_41}. 1강세 −1약세 2정합 0판정불가. <b>명목형이다</b>
  * @param excessReturn {@code drv_55}. 26주 초과 수익률(%)
+ * @param tkCross      전환선이 기준선 <b>위</b>면 1. {@code modH}와 달리 센티널이 없어 조건에 쓸 수 있다
+ * @param priceVsKumo  종가와 구름의 위치. 1위 0안 −1아래
  */
 public record IchimokuAnalysis(
         int tier,
@@ -53,6 +55,8 @@ public record IchimokuAnalysis(
         int t3yeok,
         double obvT,
         int divergence,
-        double excessReturn
+        double excessReturn,
+        int tkCross,
+        int priceVsKumo
 ) {
 }
