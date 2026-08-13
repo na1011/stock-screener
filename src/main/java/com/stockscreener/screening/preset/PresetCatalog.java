@@ -28,12 +28,14 @@ import com.stockscreener.indicator.calculator.Sma60Calculator;
 import com.stockscreener.indicator.calculator.TradingDays750Calculator;
 import com.stockscreener.indicator.calculator.Turnover60Calculator;
 import com.stockscreener.indicator.calculator.ExcessReturn26wCalculator;
-import com.stockscreener.indicator.calculator.ichimoku.IchimokuExternalSignalCalculator;
-import com.stockscreener.indicator.calculator.ichimoku.IchimokuFreshnessCalculator;
-import com.stockscreener.indicator.calculator.ichimoku.IchimokuPillarCalculator;
-import com.stockscreener.indicator.calculator.ichimoku.IchimokuSignalCalculator;
-import com.stockscreener.indicator.calculator.ichimoku.IchimokuStageCalculator;
-import com.stockscreener.indicator.calculator.ichimoku.IchimokuTierCalculator;
+import com.stockscreener.indicator.calculator.ichimoku.IchimokuDivergenceCalculator;
+import com.stockscreener.indicator.calculator.ichimoku.IchimokuModACalculator;
+import com.stockscreener.indicator.calculator.ichimoku.IchimokuModBCalculator;
+import com.stockscreener.indicator.calculator.ichimoku.IchimokuModCCalculator;
+import com.stockscreener.indicator.calculator.ichimoku.IchimokuModDCalculator;
+import com.stockscreener.indicator.calculator.ichimoku.IchimokuObvTCalculator;
+import com.stockscreener.indicator.calculator.ichimoku.IchimokuPriceVsKumoCalculator;
+import com.stockscreener.indicator.calculator.ichimoku.IchimokuTkCrossCalculator;
 import com.stockscreener.screening.ComparisonOperator;
 import com.stockscreener.screening.ConditionGroup;
 import com.stockscreener.screening.ConditionOperand;
@@ -101,12 +103,12 @@ public class PresetCatalog {
      */
     public static List<String> extraColumns(String presetCode) {
         if (ICHIMOKU_SP_KR.equals(presetCode)) {
-            // 원본의 4단 사전식 우선순위(신호강도 → 신선도 → 외부시그널 → 기둥) 그대로다.
-            // FILTER에는 서버 정렬이 없으므로(ADR-0016) 값을 보여 주는 것까지가 우리가 할 수 있는
-            // 전부이고, 정렬은 사용자가 화면에서 맞춘다. 그 결핍은 description에 적혀 있다.
-            return List.of(IchimokuSignalCalculator.CODE, IchimokuFreshnessCalculator.CODE,
-                    IchimokuExternalSignalCalculator.CODE, IchimokuPillarCalculator.CODE,
-                    IchimokuStageCalculator.CODE, ExcessReturn26wCalculator.CODE);
+            // 조건이 걸러 준 종목들 사이에서 **무엇이 더 나은가**를 가르는 값들이다. 조건 지표는
+            // ScreeningResponseAssembler가 이미 union하므로 여기 다시 넣지 않는다.
+            // FILTER에는 서버 정렬이 없으므로(ADR-0016) 값을 보여 주는 것까지가 전부이고,
+            // 정렬은 사용자가 화면에서 맞춘다. 그 결핍은 description에 적혀 있다.
+            return List.of(IchimokuModCCalculator.CODE, IchimokuObvTCalculator.CODE,
+                    IchimokuDivergenceCalculator.CODE, ExcessReturn26wCalculator.CODE);
         }
         return List.of();
     }
@@ -114,35 +116,38 @@ public class PresetCatalog {
     public static final String ICHIMOKU_SP_KR = "ICHIMOKU_SP_KR";
 
     /**
-     * 주봉 일목 — 원본 TradingView 스크리너의 이식(ADR-0046).
+     * 주봉 일목 — TradingView 스크리너의 일목 조건 묶음.
      *
-     * <p>조건이 하나뿐인 이유는 <b>판정이 이미 지표 안에서 끝났기 때문</b>이다. 13 수식자 52셀
-     * 매트릭스·9등급·Tier는 {@code screen_condition}이 표현할 수 없다 — 그것은
-     * {@code 지표 × 비교연산자 × {상수|지표×계수}}가 전부다.
+     * <p>원본 이식의 13 수식자 52셀 매트릭스·9등급·Tier는 걷어냈다(ADR-0046 개정). 그 점수화는
+     * {@code screen_condition}이 표현할 수 없어 지표 안에 통째로 숨어 있었고, 그래서 사용자가
+     * <b>왜 걸렸는지 볼 수 없었다.</b> 지금은 조건 다섯이 전부 화면에 보이고 하나씩 끌 수 있다.
      *
-     * <p>IMPORTANT — <b>옮기지 못한 것이 둘이고 그것이 이 프리셋의 가장 큰 위험이다.</b>
-     * 없는 안전장치를 있다고 믿게 되므로 설명에 전부 적는다.
+     * <p>MUST NOT: 센티널이 섞인 지표를 좌변에 두지 않는다. {@code ICHI_MOD_E}(−1)·
+     * {@code ICHI_MOD_H}(−2)·{@code ICHI_MOD_M}(−1)은 「해당 없음」이 <b>유리한 쪽 극단</b>에
+     * 앉아 있어 부등호를 걸면 정반대 집합이 걸린다.
      */
     private static ScreenPreset ichimokuSpKr() {
         return new ScreenPreset(
                 ICHIMOKU_SP_KR,
-                "주봉 일목 Tier",
-                "주봉 일목균형표 13 수식자와 호소다 값폭관측론 파동 판정, 거래량·시장 대비 "
-                        + "초과 수익률을 합산해 1~4 Tier를 내고 3 이하만 남긴다. "
+                "주봉 일목",
+                "주봉 일목균형표의 기본 조건 다섯을 모두 만족하는 종목. "
+                        + "전환선이 기준선 위에 있고(일목 골든크로스), 주가가 구름 위에 있으며, "
+                        + "현재와 미래 구름이 모두 양운이고, 후행스팬 앞이 트여 있는 상태다. "
                         + "점수가 아니라 충족/불충족으로 걸러낸다.\n\n"
-                        + "옮기지 못한 것 ① 원본의 4단 사전식 우선순위(신호 강도 → 신선도 → "
-                        + "외부 시그널 → 기둥)를 서버가 정렬해 주지 못한다. 네 값을 컬럼으로 "
-                        + "띄우므로 화면에서 직접 정렬해야 한다. "
-                        + "② 신선도·트위스트·시간론·TK 위치·호전 합치·3역호전 시점에는 "
-                        + "「해당 없음」을 뜻하는 −1·−2가 섞여 있고, 그것이 유리한 쪽 극단에 앉아 "
-                        + "있다. 이 값들을 조건의 좌변으로 쓰면 정반대 집합이 걸린다.\n\n"
-                        + "그리고 207 주봉(약 4년)을 못 채우는 종목과 그날 시장 지수가 없는 "
+                        + "화면에 함께 뜨는 구름 두께·OBV·다이버전스는 조건이 아니라 "
+                        + "걸러진 종목들 사이의 우열을 보는 값이다 — 서버가 정렬해 주지 못하므로 "
+                        + "표에서 직접 정렬해야 한다.\n\n"
+                        + "207 주봉(약 4년)을 못 채우는 종목과 그날 시장 지수가 없는 "
                         + "날짜에는 값이 아예 없다 — 결과가 0건이면 조건·데이터·국면 중 "
                         + "무엇 때문인지 그 둘을 먼저 확인한다.",
                 EvaluationMode.FILTER,
                 null,
                 ConditionGroup.and(List.of(
-                        literal(IchimokuTierCalculator.CODE, ComparisonOperator.LTE, "3"))));
+                        literal(IchimokuTkCrossCalculator.CODE, ComparisonOperator.GTE, "1"),
+                        literal(IchimokuPriceVsKumoCalculator.CODE, ComparisonOperator.GTE, "1"),
+                        literal(IchimokuModACalculator.CODE, ComparisonOperator.GTE, "1"),
+                        literal(IchimokuModBCalculator.CODE, ComparisonOperator.GTE, "1"),
+                        literal(IchimokuModDCalculator.CODE, ComparisonOperator.GTE, "1"))));
     }
 
     /**
