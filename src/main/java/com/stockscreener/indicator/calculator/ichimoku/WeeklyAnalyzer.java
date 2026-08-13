@@ -1,5 +1,7 @@
 package com.stockscreener.indicator.calculator.ichimoku;
 
+import com.stockscreener.indicator.calculator.SeriesMath;
+
 /**
  * 원본 {@code weekly_analysis()}의 이식. 주봉 창 하나를 받아 13 수식자·leaf·단계를 낸다.
  *
@@ -37,7 +39,7 @@ final class WeeklyAnalyzer {
             double a = w.atr26(i);
             normalized[i] = a != 0 ? thickness / a : 0.0;
         }
-        double drv22 = IchimokuMath.median(normalized);
+        double drv22 = SeriesMath.median(normalized);
 
         double kumoThickness = Math.abs(w.spanA(0) - w.spanB(0));
         double drv02 = atr26 != 0 ? kumoThickness / atr26 : 0.0;
@@ -69,8 +71,8 @@ final class WeeklyAnalyzer {
             kijunSeries[k] = w.kijun(i);
             spanASeries[k] = w.spanA(i);
         }
-        double drv26 = IchimokuMath.tStatistic(obvSeries);
-        double priceT = IchimokuMath.tStatistic(closeSeries);
+        double drv26 = SeriesMath.tStatistic(obvSeries);
+        double priceT = SeriesMath.tStatistic(closeSeries);
         int signObv = drv26 >= 1.96 ? 1 : drv26 <= -1.96 ? -1 : 0;
         int signPrice = priceT >= 1.96 ? 1 : priceT <= -1.96 ? -1 : 0;
         int drv41 = signObv == 1 && signPrice == -1 ? 1
@@ -78,9 +80,9 @@ final class WeeklyAnalyzer {
                 : signObv == signPrice && signObv != 0 ? 2 : 0;
 
         // ---- DRV-39·40·53 기울기 분류. 임계가 39·40은 0.5×ATR-14, 53은 0.25×ATR-14다 ----
-        int drv39 = slopeClass(IchimokuMath.slope(tenkanSeries) * 12, 0.5 * atr14);
-        int drv40 = slopeClass(IchimokuMath.slope(kijunSeries) * 12, 0.5 * atr14);
-        int drv53 = slopeClass(IchimokuMath.slope(spanASeries) * 12, 0.25 * atr14);
+        int drv39 = slopeClass(SeriesMath.slope(tenkanSeries) * 12, 0.5 * atr14);
+        int drv40 = slopeClass(SeriesMath.slope(kijunSeries) * 12, 0.5 * atr14);
+        int drv53 = slopeClass(SeriesMath.slope(spanASeries) * 12, 0.25 * atr14);
 
         // ---- DRV-42 TK 위치 (1강 0중 −1약 −2미발생) ------------------------------------
         double tenkan = w.tenkan(0);

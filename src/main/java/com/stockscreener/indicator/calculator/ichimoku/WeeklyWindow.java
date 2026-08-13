@@ -1,5 +1,7 @@
 package com.stockscreener.indicator.calculator.ichimoku;
 
+import com.stockscreener.indicator.calculator.SeriesMath;
+
 /**
  * 한 대상 일자에서 본 주봉 창. <b>인덱스 0이 진행 중인 주</b>이고 클수록 과거다 —
  * 원본의 {@code close_arr}·{@code span_b_arr} 등과 같은 방향이다.
@@ -62,7 +64,7 @@ final class WeeklyWindow {
         this.atr14_0 = (trueRange + 13 * series.atr14(current - 1)) / 14.0;
         this.atr26_0 = (trueRange + 25 * series.atr26(current - 1)) / 26.0;
         this.obv0 = series.obv(current - 1)
-                + IchimokuMath.sign(partial.close() - prevClose) * partial.volume();
+                + SeriesMath.sign(partial.close() - prevClose) * partial.volume();
     }
 
     private int at(int i) {

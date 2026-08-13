@@ -1,5 +1,7 @@
 package com.stockscreener.indicator.calculator.ichimoku;
 
+import com.stockscreener.indicator.calculator.SeriesMath;
+
 import java.util.List;
 
 /**
@@ -136,7 +138,7 @@ final class WeeklySeries {
         double[] obv = new double[n];
         for (int j = 1; j < n; j++) {
             obv[j] = obv[j - 1]
-                    + IchimokuMath.sign(weeks.get(j).close() - weeks.get(j - 1).close())
+                    + SeriesMath.sign(weeks.get(j).close() - weeks.get(j - 1).close())
                     * weeks.get(j).volume();
         }
         return obv;
