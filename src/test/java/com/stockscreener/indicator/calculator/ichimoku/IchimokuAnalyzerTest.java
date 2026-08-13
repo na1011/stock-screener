@@ -78,10 +78,12 @@ class IchimokuAnalyzerTest {
     }
 
     @Test
-    @DisplayName("분할은 수정 축척으로 흡수된다 — 26주 초과 수익률이 절벽을 갖지 않는다")
-    void splitDoesNotCreateACliffInTheExcessReturn() {
+    @DisplayName("분할은 수정 축척으로 흡수된다 — 가격이 구름 아래로 떨어지지 않는다")
+    void splitDoesNotPushThePriceBelowTheCloud() {
         // 마지막 60거래일에서 5:1 분할이 일어난다. 원주가는 1/5로 떨어지지만 adj_close는
-        // 이어진다 — 원주가를 쓰면 stock_ret_26w가 −80%가 되어 score_d5가 −ext_base로 붙는다.
+        // 이어진다. 원주가를 쓰면 종가만 20으로 꺾이고 구름은 과거의 100 근처에 남아
+        // ICHI_PRICE_VS_KUMO가 −1(구름 아래)이 된다 — 값이 정상 범위 안이라 그럴듯하고,
+        // 그 종목은 모든 일목 프리셋에서 조용히 탈락한다.
         int size = 212 * 5;
         List<PriceBar> bars = new ArrayList<>(size);
         LocalDate date = START;
@@ -96,9 +98,12 @@ class IchimokuAnalyzerTest {
 
         IchimokuAnalysis last = IchimokuAnalyzer.analyze(bars, index(bars)).lastEntry().getValue();
 
-        assertThat(last.excessReturn())
-                .as("수정 축척이면 가격이 평평하므로 초과 수익률이 0이다. 원주가를 쓰면 −80%다")
-                .isEqualTo(0.0);
+        assertThat(last.priceVsKumo())
+                .as("수정 축척이면 가격이 평평해 구름 안(0)이다. 원주가를 쓰면 −1이 된다")
+                .isZero();
+        assertThat(last.kaizenWeekly())
+                .as("호전 분류도 종가 비교를 품는다 — 26주 전보다 낮다고 읽히면 함께 깎인다")
+                .isEqualTo(0);
     }
 
     /** 종가가 평평한 일봉. 축척 검증 외에는 값 자체가 중요하지 않다. */

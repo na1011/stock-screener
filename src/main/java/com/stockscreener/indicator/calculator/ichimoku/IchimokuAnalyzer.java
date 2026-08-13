@@ -64,9 +64,9 @@ public final class IchimokuAnalyzer {
             if (current + 1 < WeeklySeries.MIN_WEEKS) {
                 continue;
             }
-            // MUST: 초과 수익률을 낼 수 없으면 그 일자를 통째로 건너뛴다(ADR-0046 §승인된 이탈 2).
-            // ICHI_TIER만 빼면 나머지 코드가 "절대 수익률" 뜻으로 화면에 나가는데, D5는
-            // bull/bear → conclusion·confidence → ext_signal까지 번진다.
+            // 지수 결손일을 건너뛴다(ADR-0046 §승인된 이탈 2). 이 게이트의 근거였던 D5 점수
+            // 사슬(bull/bear → conclusion·confidence → ext_signal)은 방금 사라졌다 —
+            // 남은 지표 중 시장 지수를 쓰는 것이 없으므로 다음 커밋에서 게이트째 걷는다.
             OptionalDouble excess = ExcessReturn.at(bars, marketIndex, i);
             if (excess.isEmpty()) {
                 continue;
@@ -74,8 +74,12 @@ public final class IchimokuAnalyzer {
 
             LocalDate date = bars.get(i).tradeDate();
             WeeklyWindow window = new WeeklyWindow(series, current, partials.get(i));
-            WeeklyAnalysis weekly = WeeklyAnalyzer.analyze(window);
-            result.put(date, IchimokuScoring.score(weekly, daily.kaizen(i), excess.getAsDouble()));
+            WeeklyAnalysis w = WeeklyAnalyzer.analyze(window);
+            result.put(date, new IchimokuAnalysis(
+                    w.modA(), w.modB(), w.modC(), w.modD(), w.modE(), w.modF(),
+                    w.modG(), w.modH(), w.modJ(), w.modK(), w.modL(), w.modM(),
+                    w.kaizenWeekly(), daily.kaizen(i), w.obvT(), w.divergence(),
+                    w.tkCross(), w.priceVsKumo()));
         }
         return result;
     }

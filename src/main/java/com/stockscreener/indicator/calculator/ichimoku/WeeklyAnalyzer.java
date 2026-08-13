@@ -3,7 +3,10 @@ package com.stockscreener.indicator.calculator.ichimoku;
 import com.stockscreener.indicator.calculator.SeriesMath;
 
 /**
- * 원본 {@code weekly_analysis()}의 이식. 주봉 창 하나를 받아 13 수식자·leaf·단계를 낸다.
+ * 원본 {@code weekly_analysis()}의 이식. 주봉 창 하나를 받아 13 수식자와 위치 판정을 낸다.
+ *
+ * <p>점수화·단계 라벨·값폭관측론 leaf는 걷어냈다(ADR-0046 개정). 남은 것은 전부 <b>관측</b>이며
+ * 그것을 어떻게 조합할지는 프리셋의 조건 목록이 정한다.
  *
  * <p>MUST: 부등호와 경계를 원본 그대로 옮긴다. 여기 나오는 값은 전부 <b>정수</b>라 하나가
  * 뒤집혀도 결과가 여전히 그럴듯하고 어떤 테스트도 깨지지 않는다({@code phase-criteria.md} §P12).
@@ -181,28 +184,7 @@ final class WeeklyAnalyzer {
             }
         }
 
-        // ---- 값폭관측론 prejudgment ------------------------------------------------------
-        boolean noneAbove = true;
-        for (int i = 0; i <= 25; i++) {
-            if (w.kumoPosition(i) == 1) {
-                noneAbove = false;
-                break;
-            }
-        }
-        boolean dropTrend = w.kumoPosition(0) == -1 && noneAbove;
-
-        boolean shinsaeng = drv50 >= 0 && drv51 < 9;
-        boolean progressed = drv50 >= 0 && drv51 >= 9;
-
-        ValueWidth vw = ValueWidth.identify(w, drv50, shinsaeng, progressed, dropTrend);
-
-        // ---- 단계 라벨 --------------------------------------------------------------------
-        int stage = drv50 == -2 ? 6
-                : (drv50 == -1 || drv51 < 0) ? 5
-                : drv51 < 9 ? 1 : drv51 < 17 ? 2 : drv51 < 26 ? 3 : 4;
-
         return new WeeklyAnalysis(
-                stage,
                 tkAbove ? 1 : 0,                             // tk_cross 전환선이 기준선 위인가
                 w.kumoPosition(0),                           // price_vs_kumo 1위 0안 −1아래
                 drv44,
@@ -219,10 +201,7 @@ final class WeeklyAnalyzer {
                 drv46,                                       // mod_j Senkou B 평탄
                 drv47,                                       // mod_k Kumo 체류
                 drv53,                                       // mod_l Senkou A 기울기
-                drv54,                                       // mod_m 미래 트위스트
-                vw.leaf(),
-                drv50,
-                drv51);
+                drv54);                                      // mod_m 미래 트위스트
     }
 
     /** {@code change >= +임계 ? 1 : change <= −임계 ? −1 : 0}. 세 자리가 같은 모양이다. */
