@@ -53,9 +53,11 @@ public final class PriceScaling {
      * 같은 주식 수를 뜻한다. 항등식으로 검산하면 {@code volume ÷ adj_factor}다.
      * 두 함수가 나란히 있어 부호를 베껴 쓰기 쉽고, <b>뒤집혀도 값은 그럴듯하다.</b>
      *
-     * <p>소비자는 <b>OBV 둘뿐</b>이다 — 주봉({@code ICHI_OBV_T})과 일봉({@code OBV_T_13}).
-     * 둘 다 누적을 하므로 보정을 빠뜨리면 분할 후 거래량이 배수만큼 커진 채 <b>누적에 영구히
-     * 남는다.</b> {@code TURNOVER_60}은 여기 오지 않는다 — 소스가 준 {@code tradeValue}를 쓴다.
+     * <p>소비자는 셋이다 — 주봉 OBV({@code ICHI_OBV_T}) · 일봉 OBV({@code OBV_T_13}) ·
+     * 자금흐름지수({@code MFI_14}). 앞의 둘은 누적을 하므로 보정을 빠뜨리면 분할 후 거래량이
+     * 배수만큼 커진 채 <b>누적에 영구히 남는다.</b> MFI는 누적하지 않지만 전형가격과 <b>함께</b>
+     * 보정해야 한다 — 한쪽만 하면 {@code 가격 × 거래량}이 보정에 불변이던 성질이 깨진다.
+     * {@code TURNOVER_60}은 여기 오지 않는다 — 소스가 준 {@code tradeValue}를 쓴다.
      *
      * <p>{@code adj_volume} 컬럼도 {@link PriceBar}의 컴포넌트도 만들지 않는다 —
      * {@code close}·{@code adjClose}로 유도되므로 저장하면 계수와 lockstep으로 지켜야 할
