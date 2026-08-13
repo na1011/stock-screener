@@ -53,11 +53,9 @@ public final class PriceScaling {
      * 같은 주식 수를 뜻한다. 항등식으로 검산하면 {@code volume ÷ adj_factor}다.
      * 두 함수가 나란히 있어 부호를 베껴 쓰기 쉽고, <b>뒤집혀도 값은 그럴듯하다.</b>
      *
-     * <p><b>IMPORTANT — 지금 이 값을 읽는 계산기가 하나도 없다.</b> 거래량을 쓰는 지표가 아직
-     * 없어서이며 경고가 아니라 사실이다({@code TURNOVER_60}조차 소스가 준 {@code tradeValue}를
-     * 쓴다). <b>첫 소비자는 P12의 주봉 OBV({@code obv_w})다</b> — 분할 후 거래량이 배수만큼
-     * 커지고 그것이 OBV <b>누적</b>에 영구히 남아 {@code drv_26 → drv_41 → score_d2}(±3)가
-     * 틀린다(ADR-0046 §결과). 그때 이것을 다시 만들지 않도록 P9에서 자리를 만들어 둔다.
+     * <p>소비자는 <b>OBV 둘뿐</b>이다 — 주봉({@code ICHI_OBV_T})과 일봉({@code OBV_T_13}).
+     * 둘 다 누적을 하므로 보정을 빠뜨리면 분할 후 거래량이 배수만큼 커진 채 <b>누적에 영구히
+     * 남는다.</b> {@code TURNOVER_60}은 여기 오지 않는다 — 소스가 준 {@code tradeValue}를 쓴다.
      *
      * <p>{@code adj_volume} 컬럼도 {@link PriceBar}의 컴포넌트도 만들지 않는다 —
      * {@code close}·{@code adjClose}로 유도되므로 저장하면 계수와 lockstep으로 지켜야 할
