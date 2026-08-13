@@ -58,8 +58,21 @@ import java.util.List;
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=corporate-action \
  *     --tickers=058470,086280'
  *
+ * # 수정계수 재구축 — 원장의 적용 대상으로 adj_factor·adj_close를 다시 짓는다.
+ * # MUST: 첫 실행 전에 ops/dump-db.sh를 돌린다(ADR-0049). 이것이 저장된 시세를 소급해 다시 쓰는
+ * # 유일한 경로이고, 보정된 종목의 지표가 보존 창 전체에서 지워지므로 **백필이 따라와야 끝난다.**
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=adjustment-rebuild'
+ *
+ * # 판정 하나를 고친 뒤 그 종목만 다시 짓는다. 백필도 같은 티커로 좁히면 몇 분에 끝난다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=adjustment-rebuild \
+ *     --tickers=058470'
+ *
  * # 지표 백필
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill --from=2020-01-02'
+ *
+ * # 무효화된 종목만 다시 채운다 — 백분위·업종 상대값은 그래도 전 종목에서 나온다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill \
+ *     --from=2025-11-17 --tickers=058470,086280'
  * </pre>
  *
  * <p>IMPORTANT — 운영 앱이 도는 중이면 {@code --server.port=0}을 함께 준다. 포트 8080 충돌로
@@ -77,6 +90,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final FinancialRefillJob financialRefillJob;
     private final CompanyProfileJob companyProfileJob;
     private final CorporateActionJob corporateActionJob;
+    private final AdjustmentRebuildJob adjustmentRebuildJob;
     private final IndicatorBackfillJob indicatorBackfillJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
@@ -86,6 +100,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            FinancialRefillJob financialRefillJob,
                            CompanyProfileJob companyProfileJob,
                            CorporateActionJob corporateActionJob,
+                           AdjustmentRebuildJob adjustmentRebuildJob,
                            IndicatorBackfillJob indicatorBackfillJob,
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
@@ -94,6 +109,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.financialRefillJob = financialRefillJob;
         this.companyProfileJob = companyProfileJob;
         this.corporateActionJob = corporateActionJob;
+        this.adjustmentRebuildJob = adjustmentRebuildJob;
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
@@ -132,13 +148,17 @@ public class BootstrapRunner implements ApplicationRunner {
             case "corporate-action" -> corporateActionJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     date(args, "from", null), csv(args, "tickers"));
+            // MUST: 이 잡의 첫 실행 앞에 ops/dump-db.sh가 있어야 한다(ADR-0049).
+            // guard-rebuild-without-dump.sh가 덤프가 하나도 없을 때 이 명령을 막는다.
+            case "adjustment-rebuild" -> adjustmentRebuildJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
             case "backfill" -> indicatorBackfillJob.run(
                     date(args, "from", asOf.minusYears(2)), asOf,
                     BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill | company-profile"
-                            + " | corporate-action | backfill");
+                            + " | corporate-action | adjustment-rebuild | backfill");
         };
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);

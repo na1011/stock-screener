@@ -32,7 +32,7 @@ stray_load_pids() {
   # MUST: `BootstrapRunner`의 `switch`에 잡을 더하면 여기도 함께 더한다. 빠지면 그 잡은
   # **어느 훅에도 안 잡힌다** — 몇 시간짜리 적재가 도는 중에 경고 없이 다른 적재를 띄우게 된다.
   # `financial-refill`이 실제로 그렇게 빠져 있었다.
-  pids=$(pgrep -f '(^|[[:space:]])--job=(universe|initial-load|financial-refill|company-profile|corporate-action|backfill)|spring\.profiles\.active=[^[:space:]]*bootstrap' 2>/dev/null) || true
+  pids=$(pgrep -f '(^|[[:space:]])--job=(universe|initial-load|financial-refill|company-profile|corporate-action|adjustment-rebuild|backfill)|spring\.profiles\.active=[^[:space:]]*bootstrap' 2>/dev/null) || true
   [ -z "$pids" ] && return 1
 
   # **실행파일이 java인 것만 남긴다. 이 필터가 없으면 훅이 자기 자신을 적재로 읽는다.**
