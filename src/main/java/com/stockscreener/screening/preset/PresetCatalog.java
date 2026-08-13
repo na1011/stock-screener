@@ -98,7 +98,7 @@ public class PresetCatalog {
      * 조회해 컬럼 목록에 union한다 — {@code columns}는 이미 동적 목록이라 스키마도
      * wire-contract도 건드리지 않는 <b>표현 계층 한정 예외</b>다.
      *
-     * <p>MUST NOT: 더미 조건({@code ICHI_SIGNAL >= -999})으로 대신하지 않는다. 조건 내역 화면에
+     * <p>MUST NOT: 더미 조건({@code ICHI_OBV_T >= -999})으로 대신하지 않는다. 조건 내역 화면에
      * 아무 뜻 없는 줄이 남고, 사용자는 그것을 걸러내는 기준으로 읽는다.
      */
     public static List<String> extraColumns(String presetCode) {

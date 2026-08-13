@@ -37,7 +37,7 @@ applies_to:
   다른 벤치마크를 쓴다.
 - **MUST NOT: `dependsOn`으로 일목 값을 나르려 하지 않는다.** 그 채널이 나르는 것은 부모가 자기
   코드로 낸 **스칼라 시계열 하나**다(`IndicatorRunner`의 `computed.put(code, series)`).
-  `ICHI_TIER`를 의존으로 받으면 Tier 값만 오고 거기서 수식자를 복원할 방법이 없으며,
+  `ICHI_MOD_A`를 의존으로 받으면 그 값 하나만 오고 거기서 나머지 수식자를 복원할 방법이 없으며,
   `code()`도 단수이고 레지스트리가 중복 코드를 기동 시 던진다.
 - **MUST NOT: 메모이저의 값을 "그 일자 하나"로 두지 않는다.** 창 안 **모든 산출 일자**의 분석을
   담아야 한다. 단수로 두면 실제 산출이 1일자가 되고, `batch-load` skill이 예고한 상태가 온다 —
@@ -58,13 +58,13 @@ applies_to:
 계약을 열었어도 지수를 쓰지 않는 새 지표는 여전히 파일 하나로 끝나야 한다. 아니면 ADR-0039가
 예고한 비용이 실현된 것이다.
 
-```premise 공유 분석 — ICHI_* 29개의 산출 일자가 서로 같은가
+```premise 공유 분석 — ICHI_* 18개의 산출 일자가 서로 같은가
 psql -d stock_screener -At -c "SELECT CASE
   WHEN (SELECT count(*) FROM indicator_value WHERE indicator_code LIKE 'ICHI\_%') = 0
     THEN '잴 것이 없었다 — ICHI_* 가 한 행도 없다'
   WHEN (SELECT count(DISTINCT n) FROM (SELECT indicator_code, count(*) n FROM indicator_value
         WHERE indicator_code LIKE 'ICHI\_%' GROUP BY 1) t) = 1
-    THEN 'OK 29개가 같은 일자·종목 집합에 값을 낸다 (' ||
+    THEN 'OK 18개가 같은 일자·종목 집합에 값을 낸다 (' ||
          (SELECT max(n)::text FROM (SELECT count(*) n FROM indicator_value
           WHERE indicator_code LIKE 'ICHI\_%' GROUP BY indicator_code) u) || '행씩)'
   ELSE '행 수가 코드마다 다르다 — 분석 하나를 나눠 쓰는 전제가 깨졌거나 일부 코드만 무효화됐다: ' ||
@@ -84,15 +84,15 @@ psql -d stock_screener -At -c "SELECT CASE
 업종)과 다른 계층의 원장(ADR-0051, 기업 행위). 이번이 세 번째이고 성격이 다르다:
 **종목과 아무 관계가 없는 시계열**이다.
 
-공유 분석 쪽은 성능이 이유다. 원본 일목 분석은 한 번에 30개 값을 내는데 계산기 계약은
-지표 하나당 하나다. 각자 분석하면 종목·일자마다 30번 재계산이고, 실행당 산출이 평균
+공유 분석 쪽은 성능이 이유다. 일목 분석 하나가 지표 18개의 값을 함께 내는데 계산기 계약은
+지표 하나당 하나다. 각자 분석하면 종목·일자마다 18번 재계산이고, 실행당 산출이 평균
 136.8일자이므로(실측) 그 비용이 곱해진다. `phase-criteria.md` §P12가 *"한 종목의 일목
 분석이 지표 개수만큼 반복되지 않는다"*를 완료 조건으로 적어 둔 이유다.
 
 ## 버린 대안
 
-- **`dependsOn`으로 `ICHI_TIER`를 부모 삼는다** — 스칼라 시계열 하나만 오므로 수식자를 복원할
-  수 없다. 위 규칙에 적었다.
+- **`dependsOn`으로 일목 지표 하나를 부모 삼는다** — 스칼라 시계열 하나만 오므로 나머지 수식자를
+  복원할 수 없다. 위 규칙에 적었다.
 - **계산기가 저장소를 직접 조회한다** — 계약이 무너지고 테스트가 DB를 요구하게 된다. 그리고
   종목마다 조회가 늘어 `readRawData`가 피하려던 N+1이 다른 문에서 들어온다.
 - **`IndicatorContext`에 시장 코드를 담고 계산기가 지수를 고른다** — 시장의 사실을 지표마다
@@ -112,5 +112,6 @@ psql -d stock_screener -At -c "SELECT CASE
     있고, 빠진 필드는 예외가 아니라 **값이 없는 지표**로 나타난다. `withDependencies`·
     `withMarketIndex`가 사본을 만드는 이유가 그것이다.
 - **되돌리려면**: `IndicatorContext.marketIndex()`, `IndicatorRunner`의 4번째 인자와
-  `marketIndexesFor`, 두 잡의 호출부, 그리고 `IchimokuAnalyses`. 되돌리면 `ICHI_*` 30개가
-  전부 값을 못 내므로 **무증상은 아니다.**
+  `marketIndexesFor`, 두 잡의 호출부, 그리고 `IchimokuAnalyses`. 되돌리면 `EXCESS_RETURN_26W`가
+  값을 못 내므로 **무증상은 아니다.** (`ICHI_*` 18개는 2026-08-14부터 지수를 쓰지 않는다 —
+  ADR-0046 §2026-08-14 개정.)

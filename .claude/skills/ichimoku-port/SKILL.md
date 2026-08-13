@@ -1,9 +1,14 @@
 ---
 name: ichimoku-port
-description: 주봉 일목 스크리너(ADR-0046)를 실제로 만들 때. 시장 지수 시계열을 적재하고 지표 계층에 태우는 법, 주봉 리샘플러·13 수식자·값폭관측론을 어디에 두는가, 읽기 창을 1,100으로 올릴 때 조용히 바뀌는 것, 지표 30개의 코드와 메타데이터를 채우는 법, TradingView 골든 픽스처를 언제 어떻게 받아 무엇을 대조하는가, 대조가 어긋나도 파면 안 되는 자리, 백필 시간·저장 규모의 실측 기준선.
+description: 주봉 일목 지표(ADR-0046)를 고치거나 늘릴 때. 시장 지수 시계열을 적재하고 지표 계층에 태우는 법, 주봉 리샘플러·13 수식자를 어디에 두는가, 읽기 창 1,100이 조용히 바꾸는 것, 지표 18개의 코드와 메타데이터 규칙, TradingView 골든 픽스처를 받아 무엇을 대조하는가, 대조가 어긋나도 파면 안 되는 자리, 백필 시간·저장 규모의 실측 기준선.
 ---
 
-# 주봉 일목 스크리너를 만들 때
+# 주봉 일목 지표를 고칠 때
+
+> **2026-08-14에 점수화 계층이 철회됐다**(ADR-0046 §2026-08-14 개정). Tier·9등급·값폭관측론
+> leaf와 그 근거 코드(`IchimokuScoring`·`ValueWidth`)가 사라지고 **관측 지표 18개**만 남았다.
+> 아래는 그 상태 기준으로 고쳐 적었다 — 점수 매트릭스를 다시 만들려는 것이 아니라면 원본
+> Pine의 `score_*` 절은 읽을 필요가 없다.
 
 **무엇을 하기로 했고 무엇을 원본과 다르게 옮기는가는 [ADR-0046](../../../docs/adr/ADR-0046-ichimoku-sp-screener-port.md)이,
 완료 판정은 `docs/phase-criteria.md` §P12가, 원본은
@@ -12,7 +17,7 @@ description: 주봉 일목 스크리너(ADR-0046)를 실제로 만들 때. 시�
 
 ## 착수 순서와 그 이유
 
-`P9(수정주가+거래량) → 시장 지수 → 순수 계산 코어 → 계산기 30개 → 프리셋 → 백필`.
+`P9(수정주가+거래량) → 시장 지수 → 순수 계산 코어 → 계산기 18개 → 프리셋 → 백필`.
 
 - **P9가 먼저인 이유는 정확도가 아니라 백필 횟수다.** P9는 `adj_close` 전 구간 재계산 + 지표 무효화를
   부르므로, 뒤에 두면 전량 백필을 두 번 돈다.
@@ -32,10 +37,10 @@ description: 주봉 일목 스크리너(ADR-0046)를 실제로 만들 때. 시�
 - `CollectionPhase`에 값을 더하는 것은 1줄이다 — `wire-contract.json`에 없고 `batch_execution_phase.phase`에
   CHECK도 없다. `ADJUSTMENT`는 P9용으로 이미 있다.
 
-## 계산기 30개를 한 번의 분석으로 나누는 법
+## 계산기 18개를 한 번의 분석으로 나누는 법
 
 **`dependsOn`으로는 안 된다.** 그 채널이 나르는 것은 부모가 **자기 코드로 낸 스칼라 시계열 하나**다
-(`IndicatorRunner`의 `computed.put(code, series)` → `dependencies.put(code, …)`). `ICHI_TIER`를 의존으로
+(`IndicatorRunner`의 `computed.put(code, series)` → `dependencies.put(code, …)`). `ICHI_MOD_A`를 의존으로
 받으면 Tier 값만 오고 거기서 수식자를 복원할 방법이 없다. `code()`도 단수이고 레지스트리가 중복 코드를
 기동 시 던진다.
 
@@ -63,42 +68,51 @@ description: 주봉 일목 스크리너(ADR-0046)를 실제로 만들 때. 시�
 
 ## 코드와 메타데이터
 
-30개의 선정 기준은 **"유도 가능성"이 아니라 "조건·정렬·진단 중 어디에 쓰이는가"**다.
+남은 것은 전부 **관측**이다. 조합은 프리셋의 조건 목록이 한다 — 지표 안에 판정을 접으면
+사용자가 왜 걸렸는지 볼 수 없고, 그것이 점수화를 철회한 이유다.
 
 | 쓰임 | 코드 |
 |---|---|
-| 필터 근거 | `ICHI_TIER` |
-| 우선순위(원본 1~4차) | `ICHI_SIGNAL` `ICHI_FRESHNESS` `ICHI_EXT_SIGNAL` `ICHI_PILLAR` |
-| 9등급 진단 | `ICHI_STAGE` `ICHI_CONFIDENCE` `ICHI_CONCLUSION` `ICHI_BULL` `ICHI_BEAR` |
-| 수식자 | `ICHI_MOD_A` `_B` `_C` `_D` `_E` `_F` `_G` `_H` `_J` `_K` `_L` `_M` |
-| 호전·파동 | `ICHI_KAIZEN_W` `ICHI_KAIZEN_D` `ICHI_KAIZEN_MATCH` `ICHI_LEAF` `ICHI_T3YEOK` |
-| 외부 시그널 | `ICHI_OBV_T` `ICHI_DIVERGENCE` `EXCESS_RETURN_26W` |
+| 구름 | `ICHI_MOD_A`(현재 색) `_B`(미래 색) `_C`(두께) `_K`(체류) `ICHI_PRICE_VS_KUMO`(가격 위치) |
+| 선의 기울기 | `ICHI_MOD_F`(전환선) `_G`(기준선) `_L`(선행스팬 A) `_J`(선행스팬 B 평탄) |
+| 선의 관계 | `ICHI_TK_CROSS`(전환>기준) `ICHI_MOD_H`(전환·기준과 구름, **센티널 −2**) |
+| 시간·조망 | `ICHI_MOD_D`(후행스팬) `_E`(시간론, **센티널 −1**) `_M`(트위스트, **센티널 −1**) |
+| 호전 | `ICHI_KAIZEN_W` `ICHI_KAIZEN_D` |
+| 거래량 | `ICHI_OBV_T` `ICHI_DIVERGENCE` |
+| 시장 대비 | `EXCESS_RETURN_26W` |
 
-- **수식자 i에 코드를 따로 만들지 않는다** — `mod_i = drv_45 = ICHI_KAIZEN_MATCH`로 **같은 값**이다.
-  원본이 두 이름으로 부르는 것을 그대로 옮기면 같은 숫자가 두 컬럼에 실린다.
 - `EXCESS_RETURN_26W`에 `ICHI_` 접두어를 붙이지 않는다 — **T-08(주간 베타)과 공유한다.**
-- `score_a`~`score_m`·leaf·D2·D5 점수 16개를 저장하지 않는다. 위 30개 + 임계 상수로 전부 복원된다 —
-  단 **수식자만으로는 안 된다**(`score_d2`의 입력은 `ICHI_DIVERGENCE`·`ICHI_OBV_T`·`ICHI_STAGE`다).
+  **`ICHI_*` 18개에 들지 않는 유일한 지표이며 시장 지수를 쓰는 것도 이것뿐이다.**
+- **`ICHI_TK_CROSS`의 부등호를 다시 계산하지 않는다.** 정본은 `WeeklyAnalyzer`의 `tkAbove`
+  하나이고 `drv_42`·`drv_44`가 그것을 공유한다. 나란히 적으면 갈리고, 전부 정수라 갈려도
+  값이 그럴듯하다.
 - **`valueType = COUNT` + `decimalScale = 0`으로 간다.** 새 enum 값을 만들면 enum + CHECK 마이그레이션 +
   `wire-contract.json` + 프론트 미러까지 번진다. **프론트는 `valueType`으로 포맷을 분기하지 않는다**
   (유일한 등장이 `frontend/src/api/types.ts`). "개수"가 아니라는 것은 `interpretation`이 말한다.
-- **`bands`는 단조 순서형에만.** `ICHI_TIER`·`ICHI_CONFIDENCE`가 그것이고,
-  **명목형(`ICHI_STAGE`는 5·6이 1~4의 연장이 아니다, `ICHI_LEAF`)과 센티널이 섞인 6개에는
-  `bands`도 `direction`도 붙이지 않는다**(센티널 목록은 ADR-0046).
+- **`bands`는 단조 순서형에만.** `ICHI_PRICE_VS_KUMO`(위/안/아래)가 그것이고,
+  **명목형(`ICHI_DIVERGENCE`)과 센티널이 섞인 셋(`_E`·`_H`·`_M`)에는 `bands`도 `direction`도
+  붙이지 않는다.** 센티널은 「해당 없음」이 유리한 쪽 극단에 앉아 조건의 좌변을 뒤집는다.
 - **`PriceScaling`과 `MovingAverages.SCALE`이 package-private이다.** 하위 패키지는 접근하지 못하므로
   **둘을 `public`으로 올리거나 하위 패키지를 만들지 않는다.** 다시 구현하는 선택지는 없다.
 
 ## 프리셋과 컬럼
 
-`ICHIMOKU_SP_KR`, FILTER 모드(`MOMENTUM_KR`이 선례), 조건 `ICHI_TIER <= 3` 하나.
+`ICHIMOKU_SP_KR`, FILTER 모드(`MOMENTUM_KR`이 선례). 조건 다섯 — `ICHI_TK_CROSS >= 1` ·
+`ICHI_PRICE_VS_KUMO >= 1` · `ICHI_MOD_A >= 1` · `ICHI_MOD_B >= 1` · `ICHI_MOD_D >= 1`.
 
-- **우선순위 컬럼은 `defaultColumn`으로 띄우지 않는다** — 그것은 전역이라 모든 화면이 시끄러워진다
+- **MUST NOT: 센티널이 섞인 셋(`_E`·`_H`·`_M`)을 좌변에 두지 않는다.** `IchimokuPresetTest`가
+  문구가 아니라 **조건 자체를 훑어** 확인한다 — 설명에 「쓰지 말 것」을 적는 것으로는 다음
+  사람이 쓰는 것을 막지 못한다.
+
+- **프리셋 전용 컬럼은 `defaultColumn`으로 띄우지 않는다** — 그것은 전역이라 모든 화면이 시끄러워진다
   (지금 넷뿐이다). **어셈블러가 `source.codeIfPreset()`으로 `PresetCatalog.extraColumns`를 조회해 union한다.**
   `columns`는 이미 동적 목록이라 스키마도 wire-contract도 안 건드린다. **표현 계층 한정 예외다.**
   - `ScreenDefinition`에 필드를 더하는 길은 `screen` 마이그레이션 + `ScreenStore` 4메서드 + CUSTOM 저장 API +
-    wire-contract까지 연다. 더미 조건(`ICHI_SIGNAL >= -999`)은 조건 내역 화면에 무의미한 줄을 남긴다.
-- **FILTER에는 서버 정렬이 없다**(`ScreeningRepository`가 SCORING만 `score DESC`). 원본의 4단 사전식
-  우선순위는 옮겨지지 않으므로 **`description`에 결핍으로 적는다**(ADR-0039의 기준을 승계).
+    wire-contract까지 연다. 더미 조건(`ICHI_OBV_T >= -999`)은 조건 내역 화면에 무의미한 줄을 남긴다.
+- **FILTER에는 서버 정렬이 없다**(`ScreeningRepository`가 SCORING만 `score DESC`). 걸러진 종목들
+  사이의 우열은 `extraColumns`가 값으로 보여 줄 뿐이므로 **`description`에 결핍으로 적는다**
+  (ADR-0039의 기준을 승계).
+- **조건 지표를 `extraColumns`에 다시 넣지 않는다.** 어셈블러가 이미 union한다(`:75`).
 - **`SWING_MIDTERM_KR`은 조건이 정확히 20개(상한)다.** 건드리지 않는다 — `PresetCatalogTest`가 단언한다.
 - **주중에 값이 바뀌는 첫 프리셋이 된다.** 워치리스트가 이것을 참조하면 같은 주에 알림이 여러 번 울릴 수
   있다 — edge-trigger(ADR-0026)가 어디까지 접는지 착수 시 확인한다.
@@ -116,13 +130,12 @@ description: 주봉 일목 스크리너(ADR-0046)를 실제로 만들 때. 시�
   영업일 13시에 내기 때문이다(ADR-0042). 성립하는 조합은 하나다: **주말(또는 금요일 장 마감
   후)에 픽스처를 뜨고, 금요일 종가가 DB에 들어온 다음 영업일에 `asOf = 그 금요일`과 견준다.**
   픽스처는 스냅샷이라 대조는 나중에 해도 된다.
-- **픽스처를 요청할 때 임계 3개가 기본값(5/15/8)인지 함께 묻는다.** 받은 뒤에는 확인할 방법이 없다.
-- 표본: 단계 1~4 각 1개 이상, leaf가 여러 갈래, `drop_trend` 1개, **207주 미만 밴드 1개**,
-  **분할 이력 종목 1개**. 픽스처는 **최신 일자**로 뜬다(ATR 시드가 과거로 갈수록 벌어진다).
-- 단위 테스트는 **VW3·VW4**에 건다. **VW2는 제외한다** — `pivot_a`가 인덱스를 쓰지 않아 동점 규칙이
-  출력에 흔적을 남기지 않고, 그 테스트는 항등식이 된다.
+- 표본: 구름 위·안·아래가 각 1개 이상, 전환선이 기준선을 넘은 것과 못 넘은 것, **207주 미만
+  밴드 1개**, **분할 이력 종목 1개**. 픽스처는 **최신 일자**로 뜬다(ATR 시드가 과거로 갈수록
+  벌어진다). **점수 임계(5/15/8)는 더 묻지 않는다** — 그 계층이 없다.
 - **테스트는 `market_index_daily`를 직접 시드한다.** 수집 어댑터는 `@ConditionalOnApiKey`라 키 없는
-  환경에 없는데 계산기가 읽는 것은 테이블이다. 시드가 없으면 `ICHI_TIER`가 통째로 비고 **에러는 안 난다.**
+  환경에 없는데 계산기가 읽는 것은 테이블이다. 시드가 없으면 `EXCESS_RETURN_26W`가 비고 **에러는
+  안 난다.** `ICHI_*` 18개는 2026-08-14부터 지수를 쓰지 않는다.
 
 ### 어긋나도 파면 안 되는 자리
 
