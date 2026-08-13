@@ -97,6 +97,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final UniverseRebalanceJob universeRebalanceJob;
     private final InitialLoadJob initialLoadJob;
     private final FinancialRefillJob financialRefillJob;
+    private final FullStatementRefillJob fullStatementRefillJob;
     private final CompanyProfileJob companyProfileJob;
     private final CorporateActionJob corporateActionJob;
     private final AdjustmentRebuildJob adjustmentRebuildJob;
@@ -108,6 +109,7 @@ public class BootstrapRunner implements ApplicationRunner {
     public BootstrapRunner(UniverseRebalanceJob universeRebalanceJob,
                            InitialLoadJob initialLoadJob,
                            FinancialRefillJob financialRefillJob,
+                           FullStatementRefillJob fullStatementRefillJob,
                            CompanyProfileJob companyProfileJob,
                            CorporateActionJob corporateActionJob,
                            AdjustmentRebuildJob adjustmentRebuildJob,
@@ -118,6 +120,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.universeRebalanceJob = universeRebalanceJob;
         this.initialLoadJob = initialLoadJob;
         this.financialRefillJob = financialRefillJob;
+        this.fullStatementRefillJob = fullStatementRefillJob;
         this.companyProfileJob = companyProfileJob;
         this.corporateActionJob = corporateActionJob;
         this.adjustmentRebuildJob = adjustmentRebuildJob;
@@ -153,6 +156,11 @@ public class BootstrapRunner implements ApplicationRunner {
             case "financial-refill" -> financialRefillJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     optionalInteger(args, "financial-years"), csv(args, "tickers"));
+            // --quarters는 티커와 함께여야 한다. 잡이 거절하며, 그 근거는 거기 있다.
+            case "full-statement-refill" -> fullStatementRefillJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    optionalInteger(args, "financial-years"), csv(args, "tickers"),
+                    Boolean.parseBoolean(value(args, "quarters", "false")));
             case "company-profile" -> companyProfileJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
             // --from을 안 주면 잡이 저장된 시세의 첫 거래일을 쓴다. 러너가 기본값을 정하지
@@ -173,8 +181,9 @@ public class BootstrapRunner implements ApplicationRunner {
                     BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
-                            + "' — universe | initial-load | financial-refill | company-profile"
-                            + " | corporate-action | adjustment-rebuild | market-index | backfill");
+                            + "' — universe | initial-load | financial-refill"
+                            + " | full-statement-refill | company-profile | corporate-action"
+                            + " | adjustment-rebuild | market-index | backfill");
         };
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);
@@ -207,7 +216,8 @@ public class BootstrapRunner implements ApplicationRunner {
      * 통과시킨다. 태운 호출은 되돌릴 수 없으므로 실행 전에 막는 것이 유일한 방어다.
      */
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
-            "job", "as-of", "price-years", "financial-years", "reload-existing", "tickers", "from");
+            "job", "as-of", "price-years", "financial-years", "reload-existing", "tickers", "from",
+            "quarters");
 
     /**
      * Spring 자신의 인자는 통과시킨다.

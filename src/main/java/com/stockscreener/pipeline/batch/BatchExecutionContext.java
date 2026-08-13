@@ -242,7 +242,17 @@ public final class BatchExecutionContext {
      * 알리지 않은 경로가 생기고, 그 배치의 실패는 아무도 모르게 된다.
      */
     public BatchStatus finish() {
-        BatchStatus status = recorder.finish(executionId, snapshot());
+        return finish(null);
+    }
+
+    /**
+     * 위와 같되 실행 기록에 한 줄을 남긴다.
+     *
+     * <p>성공한 실행이 무엇을 했는지 나중에 물어야 하는 잡이 쓴다 — 근거는
+     * {@link BatchExecutionRecorder#finish(long, BatchProgress, String)}에 있다.
+     */
+    public BatchStatus finish(String note) {
+        BatchStatus status = recorder.finish(executionId, snapshot(), note);
         onTerminal.accept(executionId);
 
         if (status == BatchStatus.PARTIAL_SUCCESS) {

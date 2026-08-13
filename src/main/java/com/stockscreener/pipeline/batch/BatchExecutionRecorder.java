@@ -159,9 +159,26 @@ public class BatchExecutionRecorder {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public BatchStatus finish(long executionId, BatchProgress progress) {
+        return finish(executionId, progress, null);
+    }
+
+    /**
+     * 성공 마감에도 기록을 남긴다.
+     *
+     * <p>{@code note}가 실패 전용이 아닌 이유는 <b>성공한 실행이 무엇을 했는지 물어야 하는
+     * 잡이 있기 때문</b>이다. 외부 호출 수가 그렇다 — 리미터의 일일 카운터는 인메모리라
+     * 프로세스가 끝나면 사라지고, 소량 검증 → 전량 → 재실행이 이어지면 실제 누적을 아무도
+     * 모른다. 로그에만 남기면 그 줄을 찾아야 알 수 있고, 로그는 지워진다.
+     *
+     * <p>MUST: 위 2-인자 쪽의 {@code @Transactional}을 "위임하니 중복"이라며 지우지 않는다.
+     * 자기 호출은 프록시를 거치지 않으므로(ADR-0007) 그것을 지우면 2-인자 경로만
+     * {@code REQUIRES_NEW} 없이 돌고, 그 차이는 배치가 롤백될 때에만 드러난다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public BatchStatus finish(long executionId, BatchProgress progress, String note) {
         BatchStatus status =
                 progress.failureCount() == 0 ? BatchStatus.SUCCESS : BatchStatus.PARTIAL_SUCCESS;
-        updateTerminalState(executionId, status, progress, null);
+        updateTerminalState(executionId, status, progress, note);
         return status;
     }
 
