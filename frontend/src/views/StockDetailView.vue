@@ -143,6 +143,7 @@ onMounted(() => {
             :stock="detail.data.value.stock"
             :price="detail.data.value.price"
             :as-of="detail.data.value.asOf"
+            :unadjusted-actions="detail.data.value.unadjustedActions"
           />
 
           <section v-for="group in groups" :key="group.category" class="indicator-group">

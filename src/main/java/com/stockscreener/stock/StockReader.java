@@ -1,5 +1,7 @@
 package com.stockscreener.stock;
 
+import com.stockscreener.pipeline.collector.CorporateActionLedger;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
@@ -30,9 +32,26 @@ import java.util.stream.Collectors;
 public class StockReader {
 
     private final JdbcTemplate jdbcTemplate;
+    private final CorporateActionLedger corporateActions;
 
-    public StockReader(JdbcTemplate jdbcTemplate) {
+    public StockReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions) {
         this.jdbcTemplate = jdbcTemplate;
+        this.corporateActions = corporateActions;
+    }
+
+    /**
+     * 계수에 반영되지 않은 기업 행위의 효력일. 오름차순이다(ADR-0055).
+     *
+     * <p>화면이 <b>"왜 이 종목의 지표가 없는가"</b>에 답할 수 있는 유일한 자리다. 억제된 종목은
+     * FILTER 프리셋 결과에 아예 없고, SCORING이라도 필수 조건이면 통째로 빠지므로 조건별
+     * "데이터 없음"이 그 이유를 말해 주지 못한다.
+     *
+     * <p>{@link CorporateActionLedger#findUnadjusted}를 그대로 부른다 — 여기서 SQL을 다시 쓰면
+     * 억제하는 쪽과 설명하는 쪽이 서로 다른 사건 집합을 보게 되고, 그 어긋남은
+     * <b>"지표는 없는데 이유는 안 보인다"</b>로만 나타난다.
+     */
+    public List<LocalDate> unadjustedActionsOf(long stockId) {
+        return corporateActions.findUnadjusted(stockId);
     }
 
     /**

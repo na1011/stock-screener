@@ -402,6 +402,18 @@ export interface StockIndicatorValue {
   interpretation: string
 }
 
+/**
+ * 수정계수를 확정하지 못한 기업 행위(ADR-0055).
+ *
+ * **`notice`는 서버가 소유하고 언제나 실린다** — 화면이 자기 문구를 들면 두 곳이 갈리는데,
+ * 갈린 쪽은 어디에서도 드러나지 않는다. `PriceReference.disclaimer`와 같은 형태다.
+ */
+export interface UnadjustedActions {
+  notice: string
+  /** 권리락일 오름차순. **비어 있으면 이 종목에는 그런 사건이 없다.** */
+  effectiveDates: IsoDate[]
+}
+
 export interface StockDetailResponse {
   asOf: IsoDate
   stock: StockSummary
@@ -409,6 +421,11 @@ export interface StockDetailResponse {
   price: StockPrice | null
   /** **값이 없는 지표는 목록에 없다.** */
   indicators: StockIndicatorValue[]
+  /**
+   * **지표가 왜 비었는지에 답하는 유일한 자리다.** 억제된 종목은 FILTER 프리셋 결과에 아예
+   * 없고, SCORING이라도 필수 조건이면 통째로 빠져 조건별 "데이터 없음"이 이유를 말하지 못한다.
+   */
+  unadjustedActions: UnadjustedActions
 }
 
 // ── 지지·저항 참고정보 ─────────────────────────────────────────────

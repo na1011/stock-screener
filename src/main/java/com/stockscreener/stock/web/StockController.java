@@ -127,7 +127,12 @@ public class StockController {
 
         return new StockDetailResponse(resolved,
                 StockDetailResponse.Stock.of(row, stockReader.currentUniversesOf(stockId)),
-                price, indicators);
+                price, indicators,
+                // 지표가 왜 비었는지는 여기서만 말할 수 있다(ADR-0055). 억제된 종목은 FILTER
+                // 결과에 아예 없고, SCORING이라도 필수 조건이면 통째로 빠져 조건별 "데이터
+                // 없음"이 이유를 말해 주지 못한다.
+                StockDetailResponse.UnadjustedActions.of(
+                        stockReader.unadjustedActionsOf(stockId)));
     }
 
     /**

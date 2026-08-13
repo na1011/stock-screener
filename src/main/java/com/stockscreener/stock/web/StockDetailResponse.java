@@ -24,8 +24,37 @@ public record StockDetailResponse(
         LocalDate asOf,
         Stock stock,
         Price price,
-        List<IndicatorValue> indicators
+        List<IndicatorValue> indicators,
+        UnadjustedActions unadjustedActions
 ) {
+
+    /**
+     * 계수에 반영되지 않은 기업 행위. <b>지표가 왜 없는지에 답하는 유일한 자리다</b>(ADR-0055).
+     *
+     * <p>{@code notice}는 {@code PriceReference#disclaimer}와 같은 형태다 — 서버가 문구를
+     * 소유하고 <b>항상 실린다.</b> 프론트가 자기 문구를 들면 두 곳이 갈리는데, 갈린 쪽은
+     * 화면에서 드러나지 않는다.
+     *
+     * <p>MUST NOT: {@code corporate_action.note}를 여기 싣지 않는다. 그것은 운영자가 판정하며
+     * 쓴 판단 기록이고 사용자 문구가 아니다 — ADR-0050이 소스 낱말({@code source_form})과
+     * 사람의 말({@code note})을 가른 것과 같은 이유다.
+     *
+     * <p>{@code OBSERVED}(판정 전)와 {@code UNSUPPORTED}(못 고친다)를 구분해 내지 않는다.
+     * 사용자에게 둘의 결과는 같고, 그 구분은 운영자의 것이라 관리자 API에 있다.
+     *
+     * @param effectiveDates 권리락일 오름차순. 없으면 빈 목록이다
+     */
+    public record UnadjustedActions(String notice, List<LocalDate> effectiveDates) {
+
+        public static final String NOTICE =
+                "이 종목에는 수정계수를 확정하지 못한 기업 행위가 있습니다. "
+                        + "해당 일자를 지나는 구간의 지표는 값을 내지 않으므로, "
+                        + "일부 지표가 비어 있고 이 종목이 프리셋 결과에서 빠질 수 있습니다.";
+
+        public static UnadjustedActions of(List<LocalDate> effectiveDates) {
+            return new UnadjustedActions(NOTICE, List.copyOf(effectiveDates));
+        }
+    }
 
     public record Stock(
             long id, String ticker, String name, String marketCode, String sector,

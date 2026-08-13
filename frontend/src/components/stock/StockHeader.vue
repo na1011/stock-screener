@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useId } from 'vue'
 
-import type { IsoDate, StockPrice, StockSummary } from '@/api/types'
+import type { IsoDate, StockPrice, StockSummary, UnadjustedActions } from '@/api/types'
 import WatchButton from '@/components/watchlist/WatchButton.vue'
 import { formatCount, formatDate, formatPrice } from '@/lib/format'
 
@@ -25,6 +25,8 @@ defineProps<{
   /** 기준일에 시세 행이 없으면 null. 그때는 OHLC 띠를 통째로 그리지 않는다. */
   price: StockPrice | null
   asOf: IsoDate
+  /** 수정계수를 확정하지 못한 기업 행위. `effectiveDates`가 비면 아무것도 그리지 않는다. */
+  unadjustedActions: UnadjustedActions
 }>()
 
 /**
@@ -139,6 +141,25 @@ const noticeId = useId()
       </span>
     </section>
     <p v-else class="stock-header__no-price">이 날짜의 시세가 없습니다.</p>
+
+    <!--
+      IMPORTANT — **툴팁이나 아코디언 뒤에 숨기지 않는다.** 이 문구는 "일부 지표가 왜
+      비었는가"의 유일한 답이다. 억제된 종목은 FILTER 프리셋 결과에 아예 없고 SCORING이라도
+      필수 조건이면 통째로 빠지므로, 조건별 "데이터 없음"이 그 이유를 말해 주지 못한다
+      (ADR-0055). 지지·저항 패널의 한계 문구와 같은 형태로 항상 펼쳐 둔다.
+
+      `Tag`를 쓰지 않는다 — 이 화면의 `Tag`는 판정 3상태가 쓰는 형태라(ADR-0021) 같은
+      모양이면 "불충족"과 한 종류로 읽힌다.
+
+      문구는 서버가 소유한다(`unadjustedActions.notice`). 여기서 다시 쓰면 두 곳이 갈리고,
+      갈린 쪽은 화면 어디에서도 드러나지 않는다.
+    -->
+    <p v-if="unadjustedActions.effectiveDates.length > 0" class="stock-header__unadjusted">
+      {{ unadjustedActions.notice }}
+      <span class="stock-header__unadjusted-dates">
+        해당 일자: {{ unadjustedActions.effectiveDates.map(formatDate).join(', ') }}
+      </span>
+    </p>
   </header>
 </template>
 
@@ -350,6 +371,25 @@ const noticeId = useId()
   padding: 0.5rem 1rem 0.75rem;
   border-top: 1px solid var(--p-content-border-color);
   font-size: var(--app-text-sm);
+  color: var(--p-text-muted-color);
+}
+
+/*
+ * 주의 문구. `--p-orange-*` 계열을 직접 쓰지 않고 경고 토큰을 쓴다 — 판정 3상태의 `warn`과
+ * 같은 뜻("값이 없다")이라 색이 갈리면 두 자리가 다른 사실을 말하는 것처럼 읽힌다.
+ */
+.stock-header__unadjusted {
+  margin: 0;
+  padding: 0.625rem 1rem 0.75rem;
+  border-top: 1px solid var(--p-content-border-color);
+  font-size: var(--app-text-sm);
+  line-height: 1.5;
+  color: var(--p-warn-color, var(--p-text-color));
+}
+
+.stock-header__unadjusted-dates {
+  display: block;
+  margin-top: 0.25rem;
   color: var(--p-text-muted-color);
 }
 

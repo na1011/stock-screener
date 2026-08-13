@@ -208,6 +208,46 @@ class ReadApiTest {
 
     @Test
     @WithMockUser(username = SUB)
+    @DisplayName("보정 못 한 기업 행위 자리가 항상 실린다 — 프론트가 문구를 스스로 들지 못한다")
+    void detailAlwaysCarriesTheUnadjustedActionSlot() throws Exception {
+        mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                // 사건이 없는 종목에서도 문구가 실린다. 선택 필드로 두면 프론트가 자기 문구를
+                // 들게 되고, 두 곳이 갈린 것은 화면에서 드러나지 않는다(PriceReference와 같은 형태).
+                .andExpect(jsonPath("$.unadjustedActions.notice").exists())
+                .andExpect(jsonPath("$.unadjustedActions.effectiveDates").isEmpty());
+
+        jdbcTemplate.update("""
+                INSERT INTO corporate_action
+                    (stock_id, effective_date, type, ratio, detection_source, status)
+                VALUES (?, DATE '2026-03-02', 'UNKNOWN', 5, 'HEURISTIC', 'UNSUPPORTED')
+                """, stockId);
+
+        mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unadjustedActions.effectiveDates[0]").value("2026-03-02"));
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("운영자의 판정 기록(note)은 사용자에게 나가지 않는다")
+    void detailDoesNotLeakTheOperatorsJudgementNote() throws Exception {
+        jdbcTemplate.update("""
+                INSERT INTO corporate_action
+                    (stock_id, effective_date, type, ratio, detection_source, status, note)
+                VALUES (?, DATE '2026-03-02', 'UNKNOWN', 5, 'HEURISTIC', 'UNSUPPORTED',
+                        '인적분할. 당일 주식수 배수가 스냅되지 않는다')
+                """, stockId);
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).doesNotContain("스냅되지 않는다");
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
     @DisplayName("없는 종목은 404다")
     void missingStockIsNotFound() throws Exception {
         mockMvc.perform(get("/api/stocks/999999999"))
