@@ -75,7 +75,8 @@ public class AdminJobLauncher {
                             UniverseRebalanceJob universeRebalanceJob,
                             IndicatorBackfillJob indicatorBackfillJob,
                             CompanyProfileJob companyProfileJob,
-                            CorporateActionJob corporateActionJob) {
+                            CorporateActionJob corporateActionJob,
+                            MarketIndexJob marketIndexJob) {
         this.taskExecutor = taskExecutor;
         this.dailyUpdateJob = dailyUpdateJob;
         this.jobs = Map.of(
@@ -111,7 +112,18 @@ public class AdminJobLauncher {
                 CorporateActionJob.JOB_NAME,
                 request -> corporateActionJob.run(
                         request.orDefault(request.to(), LocalDate.now()),
-                        BatchExecutionRecorder.TriggeredBy.ADMIN, request.from(), List.of()));
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, request.from(), List.of()),
+
+                // 화면에 두는 이유는 **결손이 전 종목을 멈추기 때문**이다. 지수 한 줄이 없으면
+                // 그날 ICHI_*가 통째로 안 써지고 알림이 나가는데, 다시 채울 길이 CLI뿐이면
+                // 운영 앱을 내리거나 포트를 비켜야 한다. 전 구간을 받아도 지수당 1~2콜이다.
+                //
+                // MUST NOT: from에 기본값을 주지 않는다. 잡이 null을 소스 이력의 시작으로 읽고,
+                // 여기서 짧은 창을 만들면 결손 구간을 못 덮은 채 성공한다.
+                MarketIndexJob.JOB_NAME,
+                request -> marketIndexJob.run(
+                        request.orDefault(request.to(), LocalDate.now()),
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, request.from()));
 
         this.catalog = List.of(
                 new Descriptor(DailyUpdateJob.JOB_NAME, "일일 갱신",
@@ -133,7 +145,10 @@ public class AdminJobLauncher {
                 // 그것이 wire-contract·types.ts·AdminOverviewView를 함께 끌고 오기 때문이다.
                 new Descriptor(CorporateActionJob.JOB_NAME, "기업 행위 수집",
                         "액면분할·병합·무상증자를 모아 원장에 적는다. 수정계수는 건드리지 않는다.",
-                        Parameters.DATE_RANGE, 700));
+                        Parameters.DATE_RANGE, 700),
+                new Descriptor(MarketIndexJob.JOB_NAME, "시장 지수 수집",
+                        "코스피·코스닥 지수의 일별 종가를 받는다. from을 비우면 2020-01-02부터다.",
+                        Parameters.DATE_RANGE, 2));
     }
 
     /** 화면이 나열할 잡 목록. 프론트가 이름을 하드코딩하지 않게 서버가 준다. */

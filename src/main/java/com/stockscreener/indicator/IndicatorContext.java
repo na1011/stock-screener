@@ -23,6 +23,7 @@ public final class IndicatorContext {
     private final List<FinancialFigures> annualFigures;
     private final List<FinancialFigures> quarterlyFigures;
     private final List<ShareAdjustment> shareAdjustments;
+    private final NavigableMap<LocalDate, BigDecimal> marketIndex;
     private final Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies;
 
     public IndicatorContext(
@@ -32,6 +33,7 @@ public final class IndicatorContext {
             List<FinancialFigures> annualFigures,
             List<FinancialFigures> quarterlyFigures,
             List<ShareAdjustment> shareAdjustments,
+            NavigableMap<LocalDate, BigDecimal> marketIndex,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
         this.stockId = stockId;
         this.industryDivision = industryDivision;
@@ -40,7 +42,21 @@ public final class IndicatorContext {
         this.quarterlyFigures = quarterlyFigures == null ? List.of() : List.copyOf(quarterlyFigures);
         this.shareAdjustments =
                 shareAdjustments == null ? List.of() : List.copyOf(shareAdjustments);
+        this.marketIndex = marketIndex == null ? new TreeMap<>() : new TreeMap<>(marketIndex);
         this.dependencies = dependencies == null ? Map.of() : Map.copyOf(dependencies);
+    }
+
+    /** 지수를 쓰지 않던 시절의 생성자. 기존 테스트가 그대로 컴파일되게 남긴다. */
+    public IndicatorContext(
+            long stockId,
+            String industryDivision,
+            List<PriceBar> priceBars,
+            List<FinancialFigures> annualFigures,
+            List<FinancialFigures> quarterlyFigures,
+            List<ShareAdjustment> shareAdjustments,
+            Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
+        this(stockId, industryDivision, priceBars, annualFigures, quarterlyFigures,
+                shareAdjustments, null, dependencies);
     }
 
     /** 업종을 모르는 컨텍스트. 업종을 쓰지 않는 계산기의 테스트가 쓴다. */
@@ -50,7 +66,8 @@ public final class IndicatorContext {
             List<FinancialFigures> annualFigures,
             List<FinancialFigures> quarterlyFigures,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
-        this(stockId, null, priceBars, annualFigures, quarterlyFigures, List.of(), dependencies);
+        this(stockId, null, priceBars, annualFigures, quarterlyFigures, List.of(), null,
+                dependencies);
     }
 
     /**
@@ -63,8 +80,8 @@ public final class IndicatorContext {
      */
     public IndicatorContext withDependencies(
             Map<String, NavigableMap<LocalDate, BigDecimal>> newDependencies) {
-        return new IndicatorContext(stockId, industryDivision,
-                priceBars, annualFigures, quarterlyFigures, shareAdjustments, newDependencies);
+        return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
+                quarterlyFigures, shareAdjustments, marketIndex, newDependencies);
     }
 
     public long stockId() {
@@ -100,6 +117,27 @@ public final class IndicatorContext {
     /** 이 종목에 반영할 기업 행위. 원장의 승인된 행에서 온다(ADR-0051). */
     public List<ShareAdjustment> shareAdjustments() {
         return shareAdjustments;
+    }
+
+    /**
+     * <b>이 종목이 속한 시장</b>의 지수 종가 시계열(ADR-0053·ADR-0054).
+     *
+     * <p>지표 계층이 <b>종목 밖 시계열</b>을 받는 첫 자리다. 업종(ADR-0044)은 종목 속성이었고
+     * 기업 행위(ADR-0051)는 다른 계층의 원장이었는데, 이것은 종목과 아무 관계가 없는 시계열이다.
+     *
+     * <p>MUST: 코스피 종목은 코스피, 코스닥 종목은 코스닥이다 — 그 판정은 <b>러너가 끝내서</b>
+     * 넘긴다. 계산기가 시장 코드를 보고 고르게 하면 "코스닥 종목의 지수는 코스닥"이라는 시장의
+     * 사실을 지표마다 다시 알아야 하고, 한 곳만 안 고쳐도 그 지표만 조용히 다른 벤치마크를 쓴다.
+     * 원본 Pine이 통화(`syminfo.currency`)로만 갈렸던 것은 판단이 아니라 한계이며, 우리가 그
+     * 폴백을 재현하지 않는 근거는 ADR-0046 §승인된 이탈 4에 있다.
+     *
+     * <p>MUST NOT: 비어 있는 것을 0으로 접지 않는다. 지수가 없으면 초과 수익률이 <b>절대
+     * 수익률로 뜻이 바뀌는데 에러도 화면 흔적도 없다</b>. 그날 값을 내지 않는 것이 옳다.
+     *
+     * @return 거래일 오름차순 종가. 시장을 모르거나 그 지수가 적재되지 않았으면 비어 있다
+     */
+    public NavigableMap<LocalDate, BigDecimal> marketIndex() {
+        return Collections.unmodifiableNavigableMap(marketIndex);
     }
 
     /**
@@ -177,5 +215,17 @@ public final class IndicatorContext {
     /** 빈 컨텍스트. 테스트와 원자료가 없는 종목에 쓴다. */
     public static IndicatorContext empty(long stockId) {
         return new IndicatorContext(stockId, List.of(), List.of(), List.of(), new TreeMap<>());
+    }
+
+    /**
+     * 시장 지수만 갈아끼운 사본. 테스트가 지수를 시드할 때 쓴다.
+     *
+     * <p>MUST: 테스트는 이것이나 {@code market_index_daily} 직접 시드로 지수를 넣는다.
+     * 수집 어댑터는 {@code @ConditionalOnApiKey}라 키 없는 환경에 아예 없는데 계산기가 읽는 것은
+     * 컨텍스트이므로, 시드가 없으면 {@code ICHI_*}가 통째로 비고 <b>에러는 안 난다.</b>
+     */
+    public IndicatorContext withMarketIndex(NavigableMap<LocalDate, BigDecimal> newMarketIndex) {
+        return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
+                quarterlyFigures, shareAdjustments, newMarketIndex, dependencies);
     }
 }

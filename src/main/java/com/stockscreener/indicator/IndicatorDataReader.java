@@ -6,10 +6,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 
 /**
  * 지표 계산의 입력이 되는 원자료를 저장소에서 읽는다.
@@ -102,19 +107,69 @@ public class IndicatorDataReader {
     }
 
     /**
-     * 종목의 KSIC 중분류(업종코드 앞 2자리). 업종을 모르면 null이다.
+     * 계산기가 쓰는 종목 속성.
      *
-     * <p>지표 계층이 처음으로 <b>종목 속성</b>을 읽는 자리다. 원자료(시세·재무)만 보던 계약이
-     * 한 칸 열린 것이며, 그 결정과 근거는 ADR-0044에 있다.
-     *
-     * <p>중분류만 내는 이유는 계산기가 필요로 하는 것이 그것뿐이기 때문이다. 소분류까지 주면
-     * 계산기가 업종 <b>비교</b>를 하기 시작하는데, 그것은 여러 종목을 봐야 하므로
-     * {@link SectorRelativeCalculator}의 몫이다.
+     * @param industryDivision KSIC 중분류(업종코드 앞 2자리). 모르면 null이다.
+     *                         <p>지표 계층이 처음으로 <b>종목 속성</b>을 읽은 자리이며 근거는
+     *                         ADR-0044다. 중분류만 내는 이유는 계산기가 필요로 하는 것이
+     *                         그것뿐이기 때문이다 — 소분류까지 주면 계산기가 업종 <b>비교</b>를
+     *                         하기 시작하는데 그것은 {@link SectorRelativeCalculator}의 몫이다.
+     * @param marketCode       {@code KOSPI}·{@code KOSDAQ}. 러너가 <b>이 종목의 시장 지수</b>를
+     *                         고르는 데 쓴다(ADR-0053·ADR-0054). 계산기에 넘기지 않는 이유는
+     *                         "코스닥 종목의 지수는 코스닥"이 지표의 규칙이 아니라 시장의 사실이라
+     *                         계산기마다 다시 알 이유가 없기 때문이다
      */
-    public String readIndustryDivision(long stockId) {
-        List<String> found = jdbcTemplate.queryForList(
-                "SELECT industry_division FROM stock WHERE id = ?", String.class, stockId);
-        return found.isEmpty() ? null : found.get(0);
+    public record StockAttributes(String industryDivision, String marketCode) {
+    }
+
+    /**
+     * 종목 속성을 한 번에 읽는다.
+     *
+     * <p>둘을 한 쿼리로 묶은 이유는 러너가 <b>종목당 한 번</b> 부르기 때문이다. 시장 코드만
+     * 따로 물으면 실행마다 350개의 추가 왕복이 생기는데, 그것이 정확히 {@code readRawData}가
+     * 피하려는 형태다.
+     */
+    public StockAttributes readStockAttributes(long stockId) {
+        List<StockAttributes> found = jdbcTemplate.query(
+                "SELECT industry_division, market_code FROM stock WHERE id = ?",
+                (rs, rowNum) -> new StockAttributes(
+                        rs.getString("industry_division"), rs.getString("market_code")),
+                stockId);
+        return found.isEmpty() ? new StockAttributes(null, null) : found.get(0);
+    }
+
+    /**
+     * {@code asOf} 이하의 최근 {@code bars}봉을 지수마다 읽는다. 날짜 오름차순이다.
+     *
+     * <p>MUST: <b>종목이 아니라 {@code asOf} 단위로</b> 한 번 부른다. {@code readRawData}는
+     * 종목마다 불리므로 거기서 읽으면 350번 같은 쿼리를 던진다 — 잡이 종목 루프 밖에서 한 번
+     * 읽어 러너에 넘긴다(ADR-0054).
+     *
+     * <p>폭이 시세 창과 같아야 한다. 대상일 근처만 읽으면 창 안의 오래된 산출 일자가 전부
+     * "지수 결손"으로 접혀 사라지는데, 백필은 몇 일자만 쓰고 <b>SUCCESS로 끝난다.</b>
+     *
+     * @return 지수 코드 → 거래일별 종가. 어떤 지수도 없으면 빈 맵이다
+     */
+    public Map<String, NavigableMap<LocalDate, BigDecimal>> readMarketIndexes(
+            LocalDate asOf, int bars) {
+        if (bars <= 0) {
+            return Map.of();
+        }
+        Map<String, NavigableMap<LocalDate, BigDecimal>> byCode = new HashMap<>();
+        jdbcTemplate.query("""
+                SELECT index_code, trade_date, close
+                FROM (
+                    SELECT index_code, trade_date, close,
+                           row_number() OVER (PARTITION BY index_code ORDER BY trade_date DESC) rn
+                    FROM market_index_daily
+                    WHERE trade_date <= ?
+                ) recent
+                WHERE rn <= ?
+                """, rs -> {
+            byCode.computeIfAbsent(rs.getString("index_code"), code -> new TreeMap<>())
+                    .put(rs.getObject("trade_date", LocalDate.class), rs.getBigDecimal("close"));
+        }, asOf, bars);
+        return byCode;
     }
 
     /**

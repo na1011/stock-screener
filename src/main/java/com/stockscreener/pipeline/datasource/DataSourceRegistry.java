@@ -33,6 +33,7 @@ public class DataSourceRegistry {
     private final Map<String, CompanyProfileDataSource> profileByMarket;
     private final Map<String, CorporateActionDataSource> corporateActionByMarket;
     private final Map<String, UniverseDataSource> universeByCode;
+    private final Map<String, MarketIndexDataSource> marketIndexByCode;
 
     public DataSourceRegistry(
             List<PriceDataSource> priceSources,
@@ -40,7 +41,8 @@ public class DataSourceRegistry {
             List<SecurityMasterDataSource> masterSources,
             List<CompanyProfileDataSource> profileSources,
             List<CorporateActionDataSource> corporateActionSources,
-            List<UniverseDataSource> universeSources) {
+            List<UniverseDataSource> universeSources,
+            List<MarketIndexDataSource> marketIndexSources) {
         this.priceByMarket = index(priceSources, PriceDataSource::supportedMarketCodes, "시세");
         this.financialByMarket = index(financialSources, FinancialDataSource::supportedMarketCodes, "재무");
         this.masterByMarket = index(masterSources, SecurityMasterDataSource::supportedMarketCodes, "종목마스터");
@@ -48,6 +50,8 @@ public class DataSourceRegistry {
         this.corporateActionByMarket =
                 index(corporateActionSources, CorporateActionDataSource::supportedMarketCodes, "기업행위");
         this.universeByCode = index(universeSources, UniverseDataSource::supportedUniverseCodes, "유니버스");
+        this.marketIndexByCode =
+                index(marketIndexSources, MarketIndexDataSource::supportedIndexCodes, "시장지수");
     }
 
     private static <T> Map<String, T> index(
@@ -110,6 +114,23 @@ public class DataSourceRegistry {
 
     public UniverseDataSource universeSource(String universeCode) throws DataSourceException {
         return require(universeByCode, universeCode, "유니버스");
+    }
+
+    /**
+     * 해당 지수의 소스.
+     *
+     * <p>{@link #corporateActionSource}와 같은 이유로 {@code Optional} 변형을 만들지 않는다.
+     * 국내 어댑터가 {@code @ConditionalOnApiKey}라 키가 없으면 <b>빈으로 등록조차 되지 않고</b>,
+     * 비어 있음을 돌려주면 호출자가 0건으로 성공한다 — 그러면 지수가 영영 안 들어오는데
+     * <b>전 종목의 {@code ICHI_*}가 통째로 비는 형태</b>로만 드러난다.
+     */
+    public MarketIndexDataSource marketIndexSource(String indexCode) throws DataSourceException {
+        return require(marketIndexByCode, indexCode, "시장지수");
+    }
+
+    /** 수집할 수 있는 지수 전체. 잡이 대상을 정할 때 쓴다. */
+    public Set<String> marketIndexCodes() {
+        return marketIndexByCode.keySet();
     }
 
     private static <T> T require(Map<String, T> map, String key, String label)

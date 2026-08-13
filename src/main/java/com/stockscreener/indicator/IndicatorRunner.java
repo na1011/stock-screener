@@ -61,10 +61,14 @@ public class IndicatorRunner {
      * @param retentionCutoff 이 날짜 <b>이하</b>는 저장하지 않는다
      *                        ({@link IndicatorRetentionPolicy#writeCutoff()}).
      *                        비어 있으면 거르지 않는다 — 시세가 보존 기간보다 적게 쌓인 초기 상태다
+     * @param marketIndexes   지수 코드 → 종가 시계열. 잡이 <b>종목 루프 밖에서 한 번</b> 읽어
+     *                        넘긴다({@link #marketIndexesFor}). 여기서 읽으면 350번 같은 쿼리를
+     *                        던진다. 이 종목의 시장에 해당하는 것만 골라 컨텍스트에 담는다
      * @return 저장한 행 수
      */
-    public long run(long stockId, LocalDate asOf, Optional<LocalDate> retentionCutoff) {
-        IndicatorContext base = readRawData(stockId, asOf);
+    public long run(long stockId, LocalDate asOf, Optional<LocalDate> retentionCutoff,
+                    Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes) {
+        IndicatorContext base = readRawData(stockId, asOf, marketIndexes);
         if (base.priceBars().isEmpty()) {
             // 시세가 없으면 계산할 것이 없다. 신규 편입 직후나 거래정지 종목에서 정상적으로 생긴다.
             log.debug("시세가 없어 지표 계산을 건너뛴다. stockId={} asOf={}", stockId, asOf);
@@ -107,19 +111,37 @@ public class IndicatorRunner {
                 .toList();
     }
 
-    private IndicatorContext readRawData(long stockId, LocalDate asOf) {
+    /**
+     * 지수 시계열을 {@code asOf} 단위로 한 번 읽는다. 잡이 <b>종목 루프 밖에서</b> 부른다.
+     *
+     * <p>폭이 시세 창과 같은 이유는, 계산기가 창 안의 <b>모든 산출 일자</b>에 대해 지수를
+     * 필요로 하기 때문이다. 대상일 근처만 읽으면 오래된 산출 일자가 전부 "지수 결손"으로 접혀
+     * 사라지고, 백필은 몇 일자만 쓰고 <b>SUCCESS로 끝난다.</b>
+     */
+    public Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexesFor(LocalDate asOf) {
+        return reader.readMarketIndexes(asOf, registry.maxEffectiveLookback());
+    }
+
+    private IndicatorContext readRawData(long stockId, LocalDate asOf,
+                                         Map<String, NavigableMap<LocalDate, BigDecimal>> indexes) {
         int bars = registry.maxEffectiveLookback();
         int years = registry.maxFinancialYears();
+        // 종목당 한 번만 읽는다. 지표마다 읽으면 850종목 × N지표의 N+1이 된다.
+        IndicatorDataReader.StockAttributes attributes = reader.readStockAttributes(stockId);
         return new IndicatorContext(
                 stockId,
-                // 종목당 한 번만 읽는다. 지표마다 읽으면 850종목 × N지표의 N+1이 된다.
-                reader.readIndustryDivision(stockId),
+                attributes.industryDivision(),
                 reader.readPriceBars(stockId, asOf, bars),
                 reader.readAnnualFigures(stockId, asOf, years),
                 reader.readQuarterlyFigures(stockId, asOf, years),
                 // 빠뜨려도 컴파일된다 — 전 종목이 빈 목록을 받아 권리락 구간 보정이 통째로
                 // 사라지고 값은 그럴듯하다. IndicatorRunnerTest가 이 자리를 지킨다.
                 reader.readShareAdjustments(stockId),
+                // MUST: 시장별로 고르는 것이 여기서 끝난다(ADR-0046 §승인된 이탈 4).
+                // 계산기에 지수 여럿을 넘기면 "코스닥 종목의 지수는 코스닥"이라는 시장의 사실을
+                // 지표마다 다시 알아야 하고, 한 곳만 안 고쳐도 그 지표만 조용히 다른 벤치마크를 쓴다.
+                // 시장을 모르거나 그 지수가 없으면 null이고, 그때 계산기가 값을 내지 않는다.
+                indexes == null ? null : indexes.get(attributes.marketCode()),
                 Map.of());
     }
 

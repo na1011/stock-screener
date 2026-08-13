@@ -20,8 +20,32 @@ public class DataSourceProperties {
             "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService");
     private final Source dart = new Source("https://opendart.fss.or.kr/api");
 
+    /**
+     * 지수시세정보 서비스의 base URL. 같은 제공기관(prefix {@code 1160100})의 <b>다른
+     * 오퍼레이션 셋</b>이라 경로만 갈린다.
+     *
+     * <p>IMPORTANT — 키·타임아웃·한도를 {@link #getDataGoKr()}와 <b>공유한다.</b> 별도
+     * {@code Source}로 두면 {@code api-key}를 두 벌 적게 되고, 한쪽만 비면
+     * {@code @ConditionalOnApiKey}가 지수 어댑터만 등록하지 않는다 — 그러면 지수가 영영 안 들어오고
+     * {@code ICHI_*}가 통째로 비는데 <b>에러도 알림도 없다.</b> 키가 하나이므로 설정도 하나다.
+     *
+     * <p>활용신청은 서비스마다 별개이므로 한도는 실제로 따로 세어질 수 있다. 그래도 같은
+     * 레이트리미터를 쓰는 이유는 지수 호출이 <b>하루 2콜</b>이라 어느 쪽으로 세든 차이가 없고,
+     * 공유하는 편이 언제나 보수적이기 때문이다.
+     */
+    private String dataGoKrMarketIndexBaseUrl =
+            "https://apis.data.go.kr/1160100/service/GetMarketIndexInfoService";
+
     public Source getDataGoKr() {
         return dataGoKr;
+    }
+
+    public String getDataGoKrMarketIndexBaseUrl() {
+        return dataGoKrMarketIndexBaseUrl;
+    }
+
+    public void setDataGoKrMarketIndexBaseUrl(String dataGoKrMarketIndexBaseUrl) {
+        this.dataGoKrMarketIndexBaseUrl = dataGoKrMarketIndexBaseUrl;
     }
 
     public Source getDart() {

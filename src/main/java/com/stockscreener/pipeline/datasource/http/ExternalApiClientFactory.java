@@ -23,6 +23,17 @@ import java.nio.charset.StandardCharsets;
 public class ExternalApiClientFactory {
 
     public RestClient create(DataSourceProperties.Source source) {
+        return create(source, source.getBaseUrl());
+    }
+
+    /**
+     * 타임아웃과 키는 {@code source}에서 가져오되 base URL만 갈아끼운다.
+     *
+     * <p>같은 발급 키로 <b>같은 제공기관의 다른 서비스</b>를 부를 때 쓴다 — 공공데이터포털은
+     * prefix가 같아도 오퍼레이션 셋마다 경로가 다르다. 키를 두 벌로 두지 않으려는 것이므로,
+     * 이 오버로드를 지우면 설정에 키가 하나 더 생긴다({@code DataSourceProperties} 참조).
+     */
+    public RestClient create(DataSourceProperties.Source source, String baseUrl) {
         // JDK HttpClient 기반 빌더 대신 단순 팩토리를 쓰는 이유는, 필요한 것이
         // 타임아웃 두 개뿐이고 이 API가 Spring 버전에 걸쳐 안정적이기 때문이다.
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -30,7 +41,7 @@ public class ExternalApiClientFactory {
         factory.setReadTimeout((int) source.getReadTimeout().toMillis());
 
         return RestClient.builder()
-                .baseUrl(source.getBaseUrl())
+                .baseUrl(baseUrl)
                 .requestFactory(factory)
                 // 4xx·5xx에 예외를 던지지 않게 한다. 어댑터가 본문까지 보고 Kind를 정한다.
                 .defaultStatusHandler(status -> true, (request, response) -> { })

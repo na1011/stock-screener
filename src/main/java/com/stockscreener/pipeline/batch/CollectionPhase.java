@@ -20,6 +20,20 @@ public enum CollectionPhase {
     /** 지수 구성종목 반영. 종목 단위가 아니라 지수 단위로 실패한다. */
     UNIVERSE,
 
+    /**
+     * 시장 지수 시계열 수집(ADR-0053).
+     *
+     * <p>MUST NOT: 이 단계를 {@link com.stockscreener.pipeline.batch.BatchExecutionContext#process}로
+     * 돌리지 않는다. {@code batch_execution_failure.stock_id}가 <b>NOT NULL + FK</b>라 종목 밖
+     * 실패에는 넣을 값이 없고, 시도하면 지수 수집 실패 하나가 <b>일일 갱신 전체를 죽인다.</b>
+     * {@code UNIVERSE}와 같은 자리이며 집계는 {@code countExternally}, 통지는
+     * {@code alertOperator}로 간다.
+     *
+     * <p>실패 격리의 단위가 종목이라는 원칙이 <b>원리적으로 성립하지 않는 첫 입력</b>이다 —
+     * 지수 한 줄이 없으면 그날 전 종목의 {@code ICHI_*}가 통째로 안 쓰인다.
+     */
+    MARKET_INDEX,
+
     /** 종목 마스터(이름·섹터·상장일) 수집. */
     SECURITY_MASTER,
 

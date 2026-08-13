@@ -35,10 +35,11 @@ class AdminJobLauncherTest {
     private final IndicatorBackfillJob indicatorBackfillJob = mock(IndicatorBackfillJob.class);
     private final CompanyProfileJob companyProfileJob = mock(CompanyProfileJob.class);
     private final CorporateActionJob corporateActionJob = mock(CorporateActionJob.class);
+    private final MarketIndexJob marketIndexJob = mock(MarketIndexJob.class);
 
     private final AdminJobLauncher launcher = new AdminJobLauncher(
             new SimpleAsyncTaskExecutor(), dailyUpdateJob, universeRebalanceJob,
-            indicatorBackfillJob, companyProfileJob, corporateActionJob);
+            indicatorBackfillJob, companyProfileJob, corporateActionJob, marketIndexJob);
 
     @Test
     @DisplayName("도는 중인 잡은 새로 띄우지 않는다")
@@ -143,7 +144,12 @@ class AdminJobLauncherTest {
                         CompanyProfileJob.JOB_NAME,
                         // 전 구간이면 종목당 2콜(350종목 = 700). DART 일일 한도의 3.5%다 —
                         // initial-load를 뺀 근거(한 번에 절반)가 여기엔 없다.
-                        CorporateActionJob.JOB_NAME);
+                        CorporateActionJob.JOB_NAME,
+                        // 기간조회가 1콜이라 **창과 무관하게 지수당 1콜, 전부 2콜**이다
+                        // (전 구간 1,620행이 PAGE_SIZE 2000 안에 들어온다). 공공데이터포털
+                        // 일일 한도 9,000의 0.02%이고, 결손이 전 종목의 ICHI_*를 멈추므로
+                        // 화면에서 다시 채울 수 있어야 한다.
+                        MarketIndexJob.JOB_NAME);
 
         assertThatThrownBy(() ->
                 launcher.launch(InitialLoadJob.JOB_NAME, AdminJobLauncher.JobRequest.empty()))

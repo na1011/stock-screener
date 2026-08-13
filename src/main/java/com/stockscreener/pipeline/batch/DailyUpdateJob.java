@@ -6,6 +6,7 @@ import com.stockscreener.indicator.PercentileCalculator;
 import com.stockscreener.indicator.SectorRelativeCalculator;
 import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.collector.MarketCalendar;
+import com.stockscreener.pipeline.collector.MarketIndexCalendar;
 import com.stockscreener.pipeline.collector.PriceCalendar;
 import com.stockscreener.pipeline.collector.PriceCollector;
 import com.stockscreener.pipeline.collector.StockRegistrar;
@@ -17,8 +18,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Optional;
 
 /**
@@ -66,6 +70,8 @@ public class DailyUpdateJob {
     private final StockRegistrar stockRegistrar;
     private final MarketCalendar marketCalendar;
     private final PriceCalendar priceCalendar;
+    private final MarketIndexCalendar marketIndexCalendar;
+    private final MarketIndexJob marketIndexJob;
     private final BatchExecutions batchExecutions;
     private final IndicatorRunner indicatorRunner;
     private final PercentileCalculator percentileCalculator;
@@ -75,6 +81,7 @@ public class DailyUpdateJob {
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
                           MarketCalendar marketCalendar, PriceCalendar priceCalendar,
+                          MarketIndexCalendar marketIndexCalendar, MarketIndexJob marketIndexJob,
                           BatchExecutions batchExecutions,
                           IndicatorRunner indicatorRunner, PercentileCalculator percentileCalculator,
                           SectorRelativeCalculator sectorRelativeCalculator,
@@ -84,6 +91,8 @@ public class DailyUpdateJob {
         this.stockRegistrar = stockRegistrar;
         this.marketCalendar = marketCalendar;
         this.priceCalendar = priceCalendar;
+        this.marketIndexCalendar = marketIndexCalendar;
+        this.marketIndexJob = marketIndexJob;
         this.batchExecutions = batchExecutions;
         this.indicatorRunner = indicatorRunner;
         this.percentileCalculator = percentileCalculator;
@@ -176,11 +185,22 @@ public class DailyUpdateJob {
         // 않는 이유가 그것이다 — 덮어쓰면 그 신호가 사라진다.
         execution.plan(CollectionPhase.PRICE, targets.size());
         execution.plan(CollectionPhase.INDICATOR, targets.size());
+
+        // MUST: 지수를 종목 루프 **앞에서** 받는다. 지표 계산이 그날 지수를 입력으로 쓰므로
+        // 뒤에 두면 그날 ICHI_*가 통째로 안 써지고, 그 사실은 화면에서 "조건에 안 맞았다"와
+        // 같아 보인다. 실패해도 여기서 예외를 올리지 않는다 — 지수 하나 때문에 시세 수집과
+        // 나머지 40여 지표를 함께 잃는 편이 손해가 크다(MarketIndexJob의 판단).
+        marketIndexJob.collectInto(execution, from, to);
+
         execution.stage("종목별 수집·계산");
 
         // 종목마다 묻지 않는다 — 350번 같은 답을 받는다. 이 루프 안에서 오늘치 시세가 들어와
         // 경계가 하루 밀리지만, 그 하루는 아래 purge가 정상 회전으로 걷어 간다.
         Optional<LocalDate> retentionCutoff = retentionPolicy.writeCutoff();
+        // 지수도 종목마다 묻지 않는다. asOf 단위로 한 번 읽어 러너에 넘긴다 — readRawData는
+        // 종목마다 불리므로 거기서 읽으면 350번 같은 쿼리를 던진다(ADR-0054).
+        Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes =
+                indicatorRunner.marketIndexesFor(to);
 
         try {
             for (SecurityRef target : targets) {
@@ -205,11 +225,12 @@ public class DailyUpdateJob {
                 if (collected) {
                     execution.process(target, CollectionPhase.INDICATOR,
                             security -> indicatorRunner.run(
-                                    security.stockId(), to, retentionCutoff));
+                                    security.stockId(), to, retentionCutoff, marketIndexes));
                 }
             }
 
             alertIfNothingArrived(execution, targets.size(), to);
+            alertIfIndexMissingWhilePricesArrived(execution, to);
 
             // MUST: 여기부터의 기준일은 대상일이 아니라 **실제로 봉이 적재된** 최신 거래일이다.
             //
@@ -304,6 +325,39 @@ public class DailyUpdateJob {
                 "%d종목을 조회했으나 대상일 %s에 저장된 행이 0이다. 휴장이거나, 소스가 아직 그날치를 내지 않았다. "
                         .formatted(targetCount, to)
                         + "거래일마다 이 알림이 오면 배치 시각이 소스의 공개 시각보다 이르다는 뜻이다.");
+    }
+
+    /**
+     * 시세는 들어왔는데 <b>그 일자의 지수만</b> 없으면 알린다.
+     *
+     * <p>IMPORTANT — 이 비대칭이 P12에서 가장 조용한 실패다. 시세와 기존 40여 지표는 대상일 T에
+     * 쓰이는데 지수만 없으면 그날 {@code ICHI_*}가 한 행도 안 써지고(ADR-0046 §승인된 이탈 2),
+     * {@code IndicatorCalendar}는 {@code max(trade_date)}로 T를 기준일로 고른다. 그러면
+     * {@code ICHIMOKU_SP_KR}이 <b>매일 전 종목 0건</b>인데 수집은 SUCCESS이고 화면에서는
+     * "조건에 맞는 종목이 없다"와 구별되지 않는다.
+     *
+     * <p>MUST: 판정을 <b>수집한 행 수</b>가 아니라 {@link MarketIndexCalendar#countOn}으로 한다.
+     * 수집이 15일 창으로 도는 이상 대상일이 비어 있어도 창 안 과거 날짜의 재적재가 쓰기 행 수를
+     * 채우므로, 행 수로 물으면 이 알림이 <b>원리적으로 발화하지 않는다.</b>
+     *
+     * <p>시세도 함께 없으면 알리지 않는다 — 그것은 휴장이거나 소스 미공개이고
+     * {@link #alertIfNothingArrived}가 이미 말한다. 여기서 물어야 하는 것은 <b>둘이 갈린 경우</b>뿐이다.
+     */
+    private void alertIfIndexMissingWhilePricesArrived(BatchExecutionContext execution, LocalDate to) {
+        if (priceCalendar.countOn(to) == 0) {
+            return;
+        }
+        List<String> missing = marketIndexJob.targetIndexCodes().stream()
+                .filter(code -> marketIndexCalendar.countOn(code, to) == 0)
+                .toList();
+        if (missing.isEmpty()) {
+            return;
+        }
+        execution.alertOperator(AlertSeverity.WARNING, "대상일 지수가 없다",
+                ("시세는 %s에 들어왔는데 지수 %s가 그날 없다. 그 지수를 쓰는 종목의 ICHI_* 는 "
+                        + "그날 한 행도 쓰이지 않으며, 화면에서는 조건에 안 맞은 것과 같아 보인다. "
+                        + "지수의 공개 지연이 시세보다 늦다는 뜻이면 이 알림이 거래일마다 온다.")
+                        .formatted(to, missing));
     }
 
     /**

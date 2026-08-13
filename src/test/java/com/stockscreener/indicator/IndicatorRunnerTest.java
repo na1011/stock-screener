@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,7 +66,7 @@ class IndicatorRunnerTest {
     void computesAndStoresTechnicalIndicators() {
         insertPriceHistory(300);
 
-        long written = runner.run(stockId, AS_OF, Optional.empty());
+        long written = runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         assertThat(written).isPositive();
         assertThat(storedCodes()).contains(
@@ -79,7 +80,7 @@ class IndicatorRunnerTest {
         // 20일선은 되지만 200일선은 안 되는 길이다.
         insertPriceHistory(30);
 
-        runner.run(stockId, AS_OF, Optional.empty());
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         assertThat(storedCodes())
                 .contains(Sma20Calculator.CODE)
@@ -91,7 +92,7 @@ class IndicatorRunnerTest {
     void derivedIndicatorConsumesParentSeries() {
         insertPriceHistory(300);
 
-        runner.run(stockId, AS_OF, Optional.empty());
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         assertThat(registry.find(MacdVCalculator.CODE)).isPresent();
         assertThat(registry.executionOrder().stream().map(IndicatorCalculator::code).toList())
@@ -112,9 +113,9 @@ class IndicatorRunnerTest {
     void isIdempotent() {
         insertPriceHistory(300);
 
-        runner.run(stockId, AS_OF, Optional.empty());
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
         int afterFirst = countIndicatorValues();
-        runner.run(stockId, AS_OF, Optional.empty());
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         assertThat(countIndicatorValues()).isEqualTo(afterFirst);
     }
@@ -124,7 +125,7 @@ class IndicatorRunnerTest {
     void skipsFundamentalsWithoutFinancials() {
         insertPriceHistory(300);
 
-        runner.run(stockId, AS_OF, Optional.empty());
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         assertThat(storedCodes())
                 .contains(Sma200Calculator.CODE)
@@ -134,7 +135,7 @@ class IndicatorRunnerTest {
     @Test
     @DisplayName("시세가 없으면 아무것도 저장하지 않는다")
     void storesNothingWithoutPrices() {
-        assertThat(runner.run(stockId, AS_OF, Optional.empty())).isZero();
+        assertThat(runner.run(stockId, AS_OF, Optional.empty(), Map.of())).isZero();
         assertThat(countIndicatorValues()).isZero();
     }
 
@@ -148,7 +149,7 @@ class IndicatorRunnerTest {
             insertBar(date, new BigDecimal("2000"), new BigDecimal("1000"));
         }
 
-        runner.run(stockId, AS_OF, Optional.empty());
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         BigDecimal sma = jdbcTemplate.queryForObject("""
                 SELECT value FROM indicator_value
@@ -164,7 +165,7 @@ class IndicatorRunnerTest {
         insertPriceHistory(300);
         LocalDate cutoff = AS_OF.minusDays(100);
 
-        runner.run(stockId, AS_OF, Optional.of(cutoff));
+        runner.run(stockId, AS_OF, Optional.of(cutoff), Map.of());
 
         assertThat(storedTradeDates())
                 .isNotEmpty()
@@ -179,11 +180,11 @@ class IndicatorRunnerTest {
         insertPriceHistory(300);
         LocalDate lastBar = AS_OF.minusDays(1);
 
-        runner.run(stockId, AS_OF, Optional.empty());
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
         BigDecimal withoutCutoff = storedValue(Atr14Calculator.CODE, lastBar);
 
         jdbcTemplate.update("DELETE FROM indicator_value WHERE stock_id = ?", stockId);
-        runner.run(stockId, AS_OF, Optional.of(AS_OF.minusDays(100)));
+        runner.run(stockId, AS_OF, Optional.of(AS_OF.minusDays(100)), Map.of());
 
         // ATR은 앞 구간이 뒤로 이어지는 재귀 지표다. 경계로 계산 입력까지 잘랐다면
         // 워밍업이 짧아져 이 값이 달라지는데, 값이 그럴듯해 화면으로는 드러나지 않는다.
@@ -199,7 +200,7 @@ class IndicatorRunnerTest {
         insertExRightsHistory(exRights, newListing);
         approvedAction("BONUS_ISSUE", "2", exRights, newListing);
 
-        runner.run(stockId, AS_OF, Optional.empty());
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         // 권리락 전날: 2,000 × 1,000,000. 권리락 당일은 가격이 반이고 주식수는 그대로라
         // 보정이 없으면 절반으로 찍힌다. 러너가 readShareAdjustments를 빠뜨리면 여기서 깨진다.
@@ -221,7 +222,7 @@ class IndicatorRunnerTest {
         // 그 모양의 행이 승인 대기 중이다(대한전선·아시아나항공).
         approvedAction("REVERSE_SPLIT", "0.5", exRights, null);
 
-        runner.run(stockId, AS_OF, Optional.empty());
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         assertThat(storedValue(MarketCapCalculator.CODE, exRights))
                 .as("접힌 구간은 비어 있으므로 원값 그대로여야 한다")

@@ -13,8 +13,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Optional;
 
 /**
@@ -140,10 +143,14 @@ public class IndicatorBackfillJob {
                 // 이 잡에서 실제로 알고 싶은 것이다.
                 execution.stage("%s · %d/%d거래일".formatted(tradeDate, i + 1, tradeDates.size()));
 
+                // 지수는 날짜마다 한 번이다. 종목 루프 안에서 읽으면 350번 같은 쿼리를 던진다.
+                Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes =
+                        indicatorRunner.marketIndexesFor(tradeDate);
+
                 for (SecurityRef target : targets) {
                     execution.process(target, CollectionPhase.INDICATOR,
                             security -> indicatorRunner.run(
-                                    security.stockId(), tradeDate, retentionCutoff));
+                                    security.stockId(), tradeDate, retentionCutoff, marketIndexes));
                 }
                 percentileCalculator.calculate(tradeDate);
                 // 업종 상대값도 같은 자리다 — 그날 전 종목의 값이 있어야 정해진다.

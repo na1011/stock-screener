@@ -67,8 +67,17 @@ import java.util.List;
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=adjustment-rebuild \
  *     --tickers=058470'
  *
+ * # 시장 지수 적재 — --from을 안 주면 소스 이력의 시작(2020-01-02)부터 받는다.
+ * # 기간조회 1콜이라 전 구간을 받아도 지수당 1~2콜이다. 종목과 무관하므로 티커를 받지 않는다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=market-index'
+ *
  * # 지표 백필
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill --from=2020-01-02'
+ *
+ * # ICHI_* 만 채운다 — 워밍업이 207주라 한 실행이 창 안 약 137일자를 낸다(실측).
+ * # 즉 단일 날짜 실행 하나가 보존 창 180일 중 대부분을 채운다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill \
+ *     --as-of=2026-08-11 --from=2026-08-11'
  *
  * # 무효화된 종목만 다시 채운다 — 백분위·업종 상대값은 그래도 전 종목에서 나온다
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill \
@@ -91,6 +100,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final CompanyProfileJob companyProfileJob;
     private final CorporateActionJob corporateActionJob;
     private final AdjustmentRebuildJob adjustmentRebuildJob;
+    private final MarketIndexJob marketIndexJob;
     private final IndicatorBackfillJob indicatorBackfillJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
@@ -101,6 +111,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            CompanyProfileJob companyProfileJob,
                            CorporateActionJob corporateActionJob,
                            AdjustmentRebuildJob adjustmentRebuildJob,
+                           MarketIndexJob marketIndexJob,
                            IndicatorBackfillJob indicatorBackfillJob,
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
@@ -110,6 +121,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.companyProfileJob = companyProfileJob;
         this.corporateActionJob = corporateActionJob;
         this.adjustmentRebuildJob = adjustmentRebuildJob;
+        this.marketIndexJob = marketIndexJob;
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
@@ -152,13 +164,17 @@ public class BootstrapRunner implements ApplicationRunner {
             // guard-rebuild-without-dump.sh가 덤프가 하나도 없을 때 이 명령을 막는다.
             case "adjustment-rebuild" -> adjustmentRebuildJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
+            // 지수는 종목과 무관하므로 --tickers를 받지 않는다. --from을 안 주면 잡이 소스
+            // 이력의 시작을 쓴다 — 러너가 기본값을 정하면 두 번째 정본이 생긴다.
+            case "market-index" -> marketIndexJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, date(args, "from", null));
             case "backfill" -> indicatorBackfillJob.run(
                     date(args, "from", asOf.minusYears(2)), asOf,
                     BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill | company-profile"
-                            + " | corporate-action | adjustment-rebuild | backfill");
+                            + " | corporate-action | adjustment-rebuild | market-index | backfill");
         };
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);
