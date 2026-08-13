@@ -12,16 +12,15 @@ import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
-import java.util.TreeMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * ADR-0046이 승인한 <b>이탈 1·2</b>와 수정 축척이 실제로 걸리는가.
+ * ADR-0046이 승인한 <b>이탈 1</b>과 수정 축척이 실제로 걸리는가.
  *
- * <p>셋 다 위반해도 값이 나오고 그럴듯하다는 것이 요점이다 — 207주 미만은 {@code nz()}가 0을
- * 채워 <b>강세 방향 거짓 양성</b>이 되고, 지수 결손은 D5를 절대 수익률로 바꾸며, 원주가는
- * 분할을 −80% 폭락으로 만든다. 어느 것도 에러를 내지 않는다.
+ * <p>둘 다 위반해도 값이 나오고 그럴듯하다는 것이 요점이다 — 207주 미만은 {@code nz()}가 0을
+ * 채워 <b>강세 방향 거짓 양성</b>이 되고, 원주가는 분할을 −80% 폭락으로 만들어 종가를 구름
+ * 아래로 밀어낸다. 어느 것도 에러를 내지 않는다.
  */
 class IchimokuAnalyzerTest {
 
@@ -34,7 +33,7 @@ class IchimokuAnalyzerTest {
         List<PriceBar> bars = dailyBars(206 * 5);
         assertThat(weeksOf(bars)).isEqualTo(206);
 
-        assertThat(IchimokuAnalyzer.analyze(bars, index(bars))).isEmpty();
+        assertThat(IchimokuAnalyzer.analyze(bars)).isEmpty();
     }
 
     @Test
@@ -42,7 +41,7 @@ class IchimokuAnalyzerTest {
     void startsExactlyAt207Weeks() {
         // 207주를 채운 뒤 5주를 더 둔다. 산출은 207주째가 시작되는 날부터다.
         List<PriceBar> bars = dailyBars(212 * 5);
-        NavigableMap<LocalDate, IchimokuAnalysis> result = IchimokuAnalyzer.analyze(bars, index(bars));
+        NavigableMap<LocalDate, IchimokuAnalysis> result = IchimokuAnalyzer.analyze(bars);
 
         assertThat(result).isNotEmpty();
         // 206주까지의 마지막 거래일 — 여기에는 값이 없어야 한다.
@@ -57,24 +56,17 @@ class IchimokuAnalyzerTest {
     }
 
     @Test
-    @DisplayName("이탈 2 — 지수가 없는 날짜에는 Tier도 나머지 29개도 내지 않는다")
-    void emitsNothingWhenTheMarketIndexIsMissing() {
+    @DisplayName("시장 지수 없이도 값이 나온다 — 남은 지표 중 지수를 쓰는 것이 없다")
+    void doesNotDependOnTheMarketIndex() {
         List<PriceBar> bars = dailyBars(212 * 5);
-        NavigableMap<LocalDate, BigDecimal> full = index(bars);
-        LocalDate hole = bars.getLast().tradeDate();
 
-        NavigableMap<LocalDate, BigDecimal> holed = new TreeMap<>(full);
-        holed.remove(hole);
-        // floorEntry가 직전 값을 집어 채우지 않는지 본다 — 채우면 D5가 조용히 어제 값이 된다.
-        holed.remove(bars.get(bars.size() - 2).tradeDate());
-
-        assertThat(IchimokuAnalyzer.analyze(bars, full)).containsKey(hole);
-        assertThat(IchimokuAnalyzer.analyze(bars, holed))
-                .as("지수가 없는 날짜는 통째로 빠진다")
-                .doesNotContainKey(hole);
-        assertThat(IchimokuAnalyzer.analyze(bars, new TreeMap<>()))
-                .as("지수가 아예 없으면 한 행도 없다")
-                .isEmpty();
+        // 예전에는 지수가 없는 일자를 통째로 건너뛰었다(ADR-0046 §승인된 이탈 2). 그 게이트의
+        // 근거는 D5 점수가 절대 수익률로 뜻이 바뀌면 conclusion·confidence까지 번진다는
+        // 것이었는데, 그 사슬이 전부 사라졌다. 지수에 기대는 EXCESS_RETURN_26W는 별도
+        // 계산기이고 스스로 결손일을 건너뛴다 — 그 계약은 ExcessReturn26wCalculatorTest가 잰다.
+        assertThat(IchimokuAnalyzer.analyze(bars))
+                .as("지수를 아예 받지 않는다")
+                .isNotEmpty();
     }
 
     @Test
@@ -96,7 +88,7 @@ class IchimokuAnalyzerTest {
             date = nextTradingDay(date);
         }
 
-        IchimokuAnalysis last = IchimokuAnalyzer.analyze(bars, index(bars)).lastEntry().getValue();
+        IchimokuAnalysis last = IchimokuAnalyzer.analyze(bars).lastEntry().getValue();
 
         assertThat(last.priceVsKumo())
                 .as("수정 축척이면 가격이 평평해 구름 안(0)이다. 원주가를 쓰면 −1이 된다")
@@ -131,13 +123,6 @@ class IchimokuAnalyzerTest {
         return next;
     }
 
-    private static NavigableMap<LocalDate, BigDecimal> index(List<PriceBar> bars) {
-        NavigableMap<LocalDate, BigDecimal> index = new TreeMap<>();
-        for (PriceBar bar : bars) {
-            index.put(bar.tradeDate(), new BigDecimal("2500"));
-        }
-        return index;
-    }
 
     private static int weeksOf(List<PriceBar> bars) {
         return (int) bars.stream()

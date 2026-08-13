@@ -1,16 +1,13 @@
 package com.stockscreener.indicator.calculator.ichimoku;
 
 import com.stockscreener.indicator.PriceBar;
-import com.stockscreener.indicator.calculator.ExcessReturn;
 import com.stockscreener.indicator.calculator.PriceScaling;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
-import java.util.OptionalDouble;
 import java.util.TreeMap;
 
 /**
@@ -31,18 +28,18 @@ public final class IchimokuAnalyzer {
     }
 
     /**
-     * @param marketIndex <b>이 종목이 속한 시장</b>의 지수 종가(ADR-0053 §이탈 4). 비었거나 그
-     *                    일자에 값이 없으면 <b>그 일자는 통째로 건너뛴다</b> — 0으로 접으면
-     *                    D5가 상대 수익률에서 절대 수익률로 뜻이 바뀌는데 에러도 화면 흔적도 없다
-     *                    (ADR-0046 §승인된 이탈 2). {@code ICHI_TIER}만 빼면 나머지 코드가
-     *                    "절대 수익률" 뜻으로 화면에 나가므로 <b>30개를 함께 건너뛴다.</b>
-     * @return 거래일 → 분석. 207 주봉을 못 채우는 구간과 지수 결손일은 담기지 않는다
+     * <p>시장 지수를 받지 않는다. 예전에는 받아서 <b>지수가 없는 일자를 통째로 건너뛰었는데</b>
+     * (ADR-0046 §승인된 이탈 2), 그 게이트의 근거는 D5 점수가 상대 수익률에서 절대 수익률로
+     * 뜻이 바뀌면 {@code bull/bear → conclusion·confidence → ext_signal}까지 번진다는 것이었다.
+     * 그 사슬이 전부 사라졌고 <b>남은 18개 중 시장 지수를 쓰는 것이 없다.</b> 지수에 기대는
+     * {@code EXCESS_RETURN_26W}는 별도 계산기이며 스스로 결손일을 건너뛴다.
+     *
+     * @return 거래일 → 분석. 207 주봉을 못 채우는 구간은 담기지 않는다
      */
-    public static NavigableMap<LocalDate, IchimokuAnalysis> analyze(
-            List<PriceBar> bars, NavigableMap<LocalDate, BigDecimal> marketIndex) {
+    public static NavigableMap<LocalDate, IchimokuAnalysis> analyze(List<PriceBar> bars) {
 
         NavigableMap<LocalDate, IchimokuAnalysis> result = new TreeMap<>();
-        if (bars.isEmpty() || marketIndex == null || marketIndex.isEmpty()) {
+        if (bars.isEmpty()) {
             return result;
         }
 
@@ -64,14 +61,6 @@ public final class IchimokuAnalyzer {
             if (current + 1 < WeeklySeries.MIN_WEEKS) {
                 continue;
             }
-            // 지수 결손일을 건너뛴다(ADR-0046 §승인된 이탈 2). 이 게이트의 근거였던 D5 점수
-            // 사슬(bull/bear → conclusion·confidence → ext_signal)은 방금 사라졌다 —
-            // 남은 지표 중 시장 지수를 쓰는 것이 없으므로 다음 커밋에서 게이트째 걷는다.
-            OptionalDouble excess = ExcessReturn.at(bars, marketIndex, i);
-            if (excess.isEmpty()) {
-                continue;
-            }
-
             LocalDate date = bars.get(i).tradeDate();
             WeeklyWindow window = new WeeklyWindow(series, current, partials.get(i));
             WeeklyAnalysis w = WeeklyAnalyzer.analyze(window);

@@ -114,9 +114,10 @@ public class AdminJobLauncher {
                         request.orDefault(request.to(), LocalDate.now()),
                         BatchExecutionRecorder.TriggeredBy.ADMIN, request.from(), List.of()),
 
-                // 화면에 두는 이유는 **결손이 전 종목을 멈추기 때문**이다. 지수 한 줄이 없으면
-                // 그날 ICHI_*가 통째로 안 써지고 알림이 나가는데, 다시 채울 길이 CLI뿐이면
-                // 운영 앱을 내리거나 포트를 비켜야 한다. 전 구간을 받아도 지수당 1~2콜이다.
+                // 화면에 두는 이유는 **결손이 전 종목에 걸리기 때문**이다. 지수 한 줄이 없으면
+                // 그날 EXCESS_RETURN_26W가 전 종목에서 안 써지고 알림이 나가는데, 다시 채울
+                // 길이 CLI뿐이면 운영 앱을 내리거나 포트를 비켜야 한다. 전 구간을 받아도
+                // 지수당 1~2콜이다.
                 //
                 // MUST NOT: from에 기본값을 주지 않는다. 잡이 null을 소스 이력의 시작으로 읽고,
                 // 여기서 짧은 창을 만들면 결손 구간을 못 덮은 채 성공한다.

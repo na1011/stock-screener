@@ -30,7 +30,7 @@ public enum CollectionPhase {
      * {@code alertOperator}로 간다.
      *
      * <p>실패 격리의 단위가 종목이라는 원칙이 <b>원리적으로 성립하지 않는 첫 입력</b>이다 —
-     * 지수 한 줄이 없으면 그날 전 종목의 {@code ICHI_*}가 통째로 안 쓰인다.
+     * 지수 한 줄이 없으면 그날 전 종목의 {@code EXCESS_RETURN_26W}가 안 쓰인다.
      */
     MARKET_INDEX,
 

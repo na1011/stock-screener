@@ -21,10 +21,10 @@ import java.util.List;
  * 부른다). 순서가 강제되어야 하기 때문에 별도 스케줄로 나누지 않았다 — 지표는 그날 지수가
  * 저장된 뒤에만 계산할 수 있고, 둘을 갈라 놓으면 스케줄 간격이 곧 그 전제가 된다.
  *
- * <p><b>실패가 시세 수집을 죽이지 않는다.</b> 지수가 없으면 그날 {@code ICHI_*}가 안 써질 뿐
- * 나머지 40여 개 지표는 정상이므로, 여기서 예외를 올려 일일 갱신을 통째로 실패시키는 것은
- * 손해가 더 크다. 대신 <b>반드시 알림으로 나간다</b> — 조용하면 그날 스크리너가 통째로 빈 것을
- * 아무도 모른다.
+ * <p><b>실패가 시세 수집을 죽이지 않는다.</b> 지수가 없으면 그날 {@code EXCESS_RETURN_26W}가
+ * 안 써질 뿐 나머지 지표는 정상이므로, 여기서 예외를 올려 일일 갱신을 통째로 실패시키는 것은
+ * 손해가 더 크다. 대신 <b>반드시 알림으로 나간다</b> — 조용하면 그 지표를 조건에 건 화면이
+ * 빈 것을 아무도 모른다.
  *
  * <p>MUST NOT: {@link BatchExecutionContext#process}를 쓰지 않는다. 처리 단위가 종목이 아니라
  * 지수이고 {@code batch_execution_failure.stock_id}는 NOT NULL + FK다
@@ -123,8 +123,9 @@ public class MarketIndexJob {
                 execution.countExternally(CollectionPhase.MARKET_INDEX, 0, 1, 0L);
                 log.error("지수 수집에 실패했다. index={} {}~{}", code, from, to, e);
                 execution.alertOperator(AlertSeverity.ERROR, "지수 수집 실패: " + code,
-                        ("%s를 %s~%s 구간으로 받지 못했다(%s). 이 지수를 쓰는 종목의 ICHI_* 는 "
-                                + "그날 한 행도 쓰이지 않는다 — 화면에서는 조건에 안 맞은 것과 같아 보인다.")
+                        ("%s를 %s~%s 구간으로 받지 못했다(%s). 이 지수를 쓰는 종목의 "
+                                + "26주 초과 수익률은 그날 한 행도 쓰이지 않는다 — "
+                                + "화면에서는 조건에 안 맞은 것과 같아 보인다.")
                                 .formatted(code, from, to, e.kind()));
             }
         }

@@ -590,7 +590,8 @@ class PipelineEndToEndTest {
      *
      * <p>MUST: 알림을 느슨하게 하는 대신 여기서 심는다. 운영에서 지수는 시세와 함께 들어오는
      * 것이 정상이고, <b>시세만 있고 지수가 없는 상태는 실제로 알려야 하는 사건</b>이다 —
-     * 그날 {@code ICHI_*}가 한 행도 안 써지는데 화면에서는 조건에 안 맞은 것과 같아 보인다.
+     * 그날 {@code EXCESS_RETURN_26W}가 한 행도 안 써지는데 화면에서는 조건에 안 맞은 것과
+     * 같아 보인다.
      * 단언을 넓히면 그 계약이 이 테스트에서 사라진다.
      */
     private void seedMarketIndexes(LocalDate date) {

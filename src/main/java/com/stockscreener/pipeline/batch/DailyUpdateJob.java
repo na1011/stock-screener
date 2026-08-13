@@ -187,10 +187,10 @@ public class DailyUpdateJob {
         execution.plan(CollectionPhase.PRICE, targets.size());
         execution.plan(CollectionPhase.INDICATOR, targets.size());
 
-        // MUST: 지수를 종목 루프 **앞에서** 받는다. 지표 계산이 그날 지수를 입력으로 쓰므로
-        // 뒤에 두면 그날 ICHI_*가 통째로 안 써지고, 그 사실은 화면에서 "조건에 안 맞았다"와
+        // MUST: 지수를 종목 루프 **앞에서** 받는다. EXCESS_RETURN_26W가 그날 지수를 입력으로
+        // 쓰므로 뒤에 두면 그날 그 지표가 안 써지고, 그 사실은 화면에서 "조건에 안 맞았다"와
         // 같아 보인다. 실패해도 여기서 예외를 올리지 않는다 — 지수 하나 때문에 시세 수집과
-        // 나머지 40여 지표를 함께 잃는 편이 손해가 크다(MarketIndexJob의 판단).
+        // 나머지 지표를 함께 잃는 편이 손해가 크다(MarketIndexJob의 판단).
         marketIndexJob.collectInto(execution, from, to);
 
         execution.stage("종목별 수집·계산");
@@ -331,10 +331,10 @@ public class DailyUpdateJob {
     /**
      * 시세는 들어왔는데 <b>그 일자의 지수만</b> 없으면 알린다.
      *
-     * <p>IMPORTANT — 이 비대칭이 P12에서 가장 조용한 실패다. 시세와 기존 40여 지표는 대상일 T에
-     * 쓰이는데 지수만 없으면 그날 {@code ICHI_*}가 한 행도 안 써지고(ADR-0046 §승인된 이탈 2),
-     * {@code IndicatorCalendar}는 {@code max(trade_date)}로 T를 기준일로 고른다. 그러면
-     * {@code ICHIMOKU_SP_KR}이 <b>매일 전 종목 0건</b>인데 수집은 SUCCESS이고 화면에서는
+     * <p>IMPORTANT — 이 비대칭이 조용한 실패를 만든다. 시세와 나머지 지표는 대상일 T에 쓰이는데
+     * 지수만 없으면 그날 {@code EXCESS_RETURN_26W}가 한 행도 안 써지고,
+     * {@code IndicatorCalendar}는 {@code max(trade_date)}로 T를 기준일로 고른다. 그러면 그
+     * 지표를 조건에 건 화면이 <b>매일 전 종목 0건</b>인데 수집은 SUCCESS이고 화면에서는
      * "조건에 맞는 종목이 없다"와 구별되지 않는다.
      *
      * <p>MUST: 판정을 <b>수집한 행 수</b>가 아니라 {@link MarketIndexCalendar#countOn}으로 한다.
@@ -366,8 +366,9 @@ public class DailyUpdateJob {
             return;
         }
         execution.alertOperator(AlertSeverity.WARNING, "대상일 지수가 없다",
-                ("시세는 %s에 들어왔는데 지수 %s가 그날 없다. 그 지수를 쓰는 종목의 ICHI_* 는 "
-                        + "그날 한 행도 쓰이지 않으며, 화면에서는 조건에 안 맞은 것과 같아 보인다. "
+                ("시세는 %s에 들어왔는데 지수 %s가 그날 없다. 그 지수를 쓰는 종목의 "
+                        + "26주 초과 수익률은 그날 한 행도 쓰이지 않으며, 화면에서는 조건에 "
+                        + "안 맞은 것과 같아 보인다. "
                         + "지수의 공개 지연이 시세보다 늦다는 뜻이면 이 알림이 거래일마다 온다.")
                         .formatted(to, missing));
     }

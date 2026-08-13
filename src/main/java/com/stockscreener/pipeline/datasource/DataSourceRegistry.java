@@ -138,7 +138,7 @@ public class DataSourceRegistry {
      * <p>{@link #corporateActionSource}와 같은 이유로 {@code Optional} 변형을 만들지 않는다.
      * 국내 어댑터가 {@code @ConditionalOnApiKey}라 키가 없으면 <b>빈으로 등록조차 되지 않고</b>,
      * 비어 있음을 돌려주면 호출자가 0건으로 성공한다 — 그러면 지수가 영영 안 들어오는데
-     * <b>전 종목의 {@code ICHI_*}가 통째로 비는 형태</b>로만 드러난다.
+     * <b>전 종목의 {@code EXCESS_RETURN_26W}가 비는 형태</b>로만 드러난다.
      */
     public MarketIndexDataSource marketIndexSource(String indexCode) throws DataSourceException {
         return require(marketIndexByCode, indexCode, "시장지수");

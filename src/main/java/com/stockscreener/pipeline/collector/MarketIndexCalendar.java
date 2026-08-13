@@ -17,9 +17,9 @@ import java.util.Optional;
  * 무언가를 받았는가"가 아니라 <b>"대상일에 지수가 있는가"</b>다.
  *
  * <p>그것을 놓치면 이렇게 된다 — 지수의 공개 지연이 시세보다 하루라도 늦으면 시세와 기존 지표는
- * 대상일 T에 쓰이는데 지수만 없어 그날 {@code ICHI_*}가 한 행도 안 써진다.
- * {@code IndicatorCalendar}는 {@code max(trade_date)}로 T를 기준일로 고르고,
- * {@code ICHIMOKU_SP_KR}은 <b>매일 전 종목 0건</b>이 된다. 수집은 SUCCESS이고 알림은 없다.
+ * 대상일 T에 쓰이는데 지수만 없어 그날 {@code EXCESS_RETURN_26W}가 한 행도 안 써진다.
+ * {@code IndicatorCalendar}는 {@code max(trade_date)}로 T를 기준일로 고르므로 그 지표를 조건에
+ * 건 화면은 <b>매일 전 종목 0건</b>이 된다. 수집은 SUCCESS이고 알림은 없다.
  */
 @Component
 public class MarketIndexCalendar {

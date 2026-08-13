@@ -9,7 +9,6 @@ import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.NavigableMap;
-import java.util.TreeMap;
 
 /**
  * 계산기 30개가 <b>분석 하나</b>를 나눠 쓰게 하는 메모이저(ADR-0054).
@@ -55,7 +54,7 @@ public class IchimokuAnalyses {
             return cachedValue;
         }
         NavigableMap<LocalDate, IchimokuAnalysis> value =
-                IchimokuAnalyzer.analyze(bars, new TreeMap<>(context.marketIndex()));
+                IchimokuAnalyzer.analyze(bars);
         cachedKey = key;
         cachedValue = value;
         return value;

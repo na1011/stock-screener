@@ -147,8 +147,8 @@ class AdminJobLauncherTest {
                         CorporateActionJob.JOB_NAME,
                         // 기간조회가 1콜이라 **창과 무관하게 지수당 1콜, 전부 2콜**이다
                         // (전 구간 1,620행이 PAGE_SIZE 2000 안에 들어온다). 공공데이터포털
-                        // 일일 한도 9,000의 0.02%이고, 결손이 전 종목의 ICHI_*를 멈추므로
-                        // 화면에서 다시 채울 수 있어야 한다.
+                        // 일일 한도 9,000의 0.02%이고, 결손이 전 종목의
+                        // EXCESS_RETURN_26W를 멈추므로 화면에서 다시 채울 수 있어야 한다.
                         MarketIndexJob.JOB_NAME);
 
         assertThatThrownBy(() ->

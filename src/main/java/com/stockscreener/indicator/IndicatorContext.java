@@ -244,7 +244,7 @@ public final class IndicatorContext {
      *
      * <p>MUST: 테스트는 이것이나 {@code market_index_daily} 직접 시드로 지수를 넣는다.
      * 수집 어댑터는 {@code @ConditionalOnApiKey}라 키 없는 환경에 아예 없는데 계산기가 읽는 것은
-     * 컨텍스트이므로, 시드가 없으면 {@code ICHI_*}가 통째로 비고 <b>에러는 안 난다.</b>
+     * 컨텍스트이므로, 시드가 없으면 {@code EXCESS_RETURN_26W}가 비고 <b>에러는 안 난다.</b>
      */
     public IndicatorContext withMarketIndex(NavigableMap<LocalDate, BigDecimal> newMarketIndex) {
         return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
