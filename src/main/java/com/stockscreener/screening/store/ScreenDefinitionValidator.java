@@ -33,8 +33,9 @@ public final class ScreenDefinitionValidator {
      *
      * <p>원래 값은 20이었고 근거가 <i>"실제 전략이 쓰는 조건 수(최대 6~8)보다 넉넉하다"</i>였다.
      * 그 전제는 스윙 프리셋이 20을 다 쓰면서 깨졌으므로, 25는 추정이 아니라 <b>측정</b> 위에
-     * 둔다 — 조건 25개 스크린이 운영 데이터(350종목)에서 실제로 얼마나 걸리는지는
-     * {@code docs/adr/ADR-0056}의 {@code premise}가 답한다. 늘릴 때는 그 수를 다시 잰다.
+     * 둔다 — 21조건 프리셋이 350종목에서 475 ms(재기동 직후 첫 실행)이고 {@code SCREENING_RUN}
+     * 107건의 중앙값이 49 ms다. 근거는 {@code docs/adr/ADR-0056} §배경이고, 늘릴 때는 그 수를
+     * 다시 잰다.
      */
     public static final int MAX_CONDITIONS = 25;
 
