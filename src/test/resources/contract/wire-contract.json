@@ -85,7 +85,7 @@
 
   "constants": {
     "priceReferenceMethod": "SWING_EXTREMA_CLUSTERING",
-    "maxConditions": 20,
+    "maxConditions": 25,
     "screenNameMaxLength": 100,
     "screenDescriptionMaxLength": 2000,
     "watchlistMemoMaxLength": 500,

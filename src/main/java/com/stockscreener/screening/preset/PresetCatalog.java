@@ -8,6 +8,7 @@ import com.stockscreener.indicator.calculator.AtrPct14Calculator;
 import com.stockscreener.indicator.calculator.DebtRatioCalculator;
 import com.stockscreener.indicator.calculator.MacdVCalculator;
 import com.stockscreener.indicator.calculator.MarketCapCalculator;
+import com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculator;
 import com.stockscreener.indicator.calculator.OperatingIncomeGrowthCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginCalculator;
 import com.stockscreener.indicator.calculator.PbrCalculator;
@@ -354,6 +355,12 @@ public class PresetCatalog {
                         required(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "5"),
                         // 회색지대 하단까지 허용하되 위험구간(1.8 이하)은 확실히 배제한다.
                         required(AltmanZCalculator.CODE, ComparisonOperator.GTE, "2.6"),
+                        // 원본 H-05 그대로 — 5년 누적 영업현금흐름이 양수여야 한다. 다섯 해가
+                        // 다 있어야 값이 나오므로 이력이 짧은 종목은 판정불가로 빠지는데,
+                        // 그것이 원본의 의도다(발생주의 이익만으로는 거르지 못하는 것을
+                        // 현금으로 확인한다). 지금 그 대가는 편입 종목 중 7종목이며 대부분
+                        // 2022~2023년 상장이다 — 근거와 목록은 ADR-0056에 있다.
+                        required(OperatingCashFlow5ySumCalculator.CODE, ComparisonOperator.GT, "0"),
 
                         // ── 점수 ──
                         // 원본 S-01의 조건 b(업종 중앙값 미만)를 옮겼다. 조건 a(자체 5년 P/E

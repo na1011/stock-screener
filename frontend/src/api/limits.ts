@@ -10,7 +10,7 @@
  */
 
 /** 조건 개수 상한. `ScreenDefinitionValidator.MAX_CONDITIONS`. */
-export const MAX_CONDITIONS = 20
+export const MAX_CONDITIONS = 25
 
 /** `ScreenRequest.name`의 `@Size(max)`. */
 export const SCREEN_NAME_MAX_LENGTH = 100

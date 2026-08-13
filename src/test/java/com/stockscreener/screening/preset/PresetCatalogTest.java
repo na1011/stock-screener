@@ -198,9 +198,9 @@ class PresetCatalogTest {
     @Test
     @DisplayName("조건 수가 상한에 얼마나 붙어 있는지 드러난다")
     void reportsHeadroomAgainstTheConditionLimit() {
-        // 상한을 넘는 것은 위 검증이 잡는다. 여기서 보는 것은 **여유**다 — 스윙 프리셋이
-        // 정확히 상한에 닿아 있어, 조건을 하나만 더해도 기동이 실패한다. 그 사실이
-        // 코드 어디에도 드러나지 않으면 다음 세션이 조건을 더하다가 그때서야 만난다.
+        // 상한을 넘는 것은 위 검증이 잡는다. 여기서 보는 것은 **여유**다 — 가장 큰 프리셋이
+        // 상한에 얼마나 붙어 있는지가 코드 어디에도 드러나지 않으면, 다음 세션이 조건을
+        // 더하다가 기동 실패로 그때서야 만난다.
         for (ScreenPreset preset : presets) {
             assertThat(preset.conditions().conditions().size())
                     .as("%s의 조건 수", preset.code())
@@ -209,10 +209,18 @@ class PresetCatalogTest {
 
         ScreenPreset swing = presets.stream()
                 .filter(p -> "SWING_MIDTERM_KR".equals(p.code())).findFirst().orElseThrow();
-        assertThat(swing.conditions().conditions())
-                .as("스윙 프리셋이 상한(%d)에 닿아 있다. 조건을 더하려면 상한을 함께 다시 본다",
-                        ScreenDefinitionValidator.MAX_CONDITIONS)
-                .hasSize(ScreenDefinitionValidator.MAX_CONDITIONS);
+        int used = swing.conditions().conditions().size();
+        // MUST NOT: 이 단언을 hasSize(MAX_CONDITIONS)로 되돌리지 않는다. 그렇게 두면
+        // 상한을 올릴 때마다 프리셋도 함께 키워야 하고, 조건을 **빼도** 깨진다.
+        // 여기서 고정하려는 것은 "정확히 상한"이 아니라 **지금 몇 개를 쓰는가**다.
+        assertThat(used)
+                .as("스윙 프리셋의 조건 수. 상한은 %d이고 여유는 %d다",
+                        ScreenDefinitionValidator.MAX_CONDITIONS,
+                        ScreenDefinitionValidator.MAX_CONDITIONS - used)
+                .isEqualTo(21);
+        assertThat(ScreenDefinitionValidator.MAX_CONDITIONS - used)
+                .as("상한에 여유가 없으면 다음 지표 하나에 네 파일을 다시 열게 된다")
+                .isGreaterThanOrEqualTo(1);
     }
 
     @Test

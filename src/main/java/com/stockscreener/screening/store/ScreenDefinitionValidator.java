@@ -24,9 +24,19 @@ public final class ScreenDefinitionValidator {
      *
      * <p>조건 하나가 상관 EXISTS 서브쿼리 하나이므로 개수가 곧 쿼리 복잡도다. 상한이 없으면
      * 요청 하나로 수백 개의 서브쿼리를 만들 수 있고, 응답 페이로드도 종목 수 × 조건 수로 늘어난다.
-     * 20은 실제 전략이 쓰는 조건 수(최대 6~8)보다 넉넉하다.
+     *
+     * <p>MUST: 이 값을 바꾸면 네 곳이 함께 간다 — 여기,
+     * {@code src/test/resources/contract/wire-contract.json}의 {@code constants.maxConditions},
+     * {@code frontend/src/api/limits.ts}, 그리고 {@code PresetCatalogTest}의 여유 단언이다.
+     * 앞의 셋은 픽스처를 허브로 삼는 테스트가 대조하지만(ADR-0020) <b>동시에 고치지 않으면
+     * 빌드가 깨지는 것으로만 드러난다.</b>
+     *
+     * <p>원래 값은 20이었고 근거가 <i>"실제 전략이 쓰는 조건 수(최대 6~8)보다 넉넉하다"</i>였다.
+     * 그 전제는 스윙 프리셋이 20을 다 쓰면서 깨졌으므로, 25는 추정이 아니라 <b>측정</b> 위에
+     * 둔다 — 조건 25개 스크린이 운영 데이터(350종목)에서 실제로 얼마나 걸리는지는
+     * {@code docs/adr/ADR-0056}의 {@code premise}가 답한다. 늘릴 때는 그 수를 다시 잰다.
      */
-    public static final int MAX_CONDITIONS = 20;
+    public static final int MAX_CONDITIONS = 25;
 
     private ScreenDefinitionValidator() {
     }
