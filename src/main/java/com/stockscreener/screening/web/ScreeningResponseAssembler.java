@@ -6,6 +6,7 @@ import com.stockscreener.indicator.SectorMetricSpec;
 import com.stockscreener.screening.ConditionOutcome;
 import com.stockscreener.screening.EvaluationMode;
 import com.stockscreener.screening.IndicatorCondition;
+import com.stockscreener.screening.preset.PresetCatalog;
 import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.screening.query.ScreeningRepository;
 import com.stockscreener.stock.StockReader;
@@ -82,6 +83,14 @@ public class ScreeningResponseAssembler {
                 columnCodes.add(peerCount);
             }
         });
+        // 프리셋이 자기 화면에서만 함께 보여야 할 지표를 더한다. defaultColumn으로 두면 그것은
+        // **전역**이라 모든 화면이 시끄러워진다(지금 넷뿐이다). 여기서 union하면 columns가 이미
+        // 동적 목록이라 스키마도 wire-contract도 안 건드린다 — 표현 계층 한정 예외다.
+        //
+        // MUST: 저장된 커스텀 화면에는 걸리지 않는다. codeIfPreset()이 프리셋 코드일 때만
+        // 값을 주므로, 사용자가 만든 화면이 프리셋 컬럼을 물려받지 않는다.
+        source.codeIfPreset().map(PresetCatalog::extraColumns).ifPresent(columnCodes::addAll);
+
         List<IndicatorDescriptor> catalog = indicatorCatalog.activeIndicators();
         catalog.stream().filter(IndicatorDescriptor::defaultColumn)
                 .map(IndicatorDescriptor::code).forEach(columnCodes::add);
