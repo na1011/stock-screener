@@ -48,6 +48,18 @@ import java.util.stream.Collectors;
  *       scale 2로 돌아오는데 소스 파싱값은 scale 0이다. {@code equals}로 비교하면 같은 값이
  *       전부 "달라졌다"로 잡혀 경고가 수만 줄 나온다.
  * </ul>
+ *
+ * <p><b>그 셋 중 첫째를 지키는 것은 {@link #fillMissing}이 아니라 {@link #writeOne}이다.</b>
+ * 채우는 메서드 자체에는 공시일 검사가 없다 — 호출자가 이미 걸렀다는 전제 위에 있다.
+ * 새 호출 경로를 만들 때 그 전제를 함께 옮기지 않으면 불변식이 조용히 사라진다.
+ *
+ * <h2>{@link WriteMode#FILL_WITHOUT_REVISION} — 개정본을 쌓지 않는 더 좁은 경로</h2>
+ *
+ * <p>결손을 메우러 온 소스가 <b>정정공시를 물고 올 수 있다.</b> 그때 개정본을 쌓으면 지표
+ * 무효화가 함께 터지는데, 이 경로의 목적은 결손 보충이지 정정 반영이 아니다. 게다가 새
+ * 어댑터가 파싱하지 못한 컬럼은 개정본에서 NULL로 다시 쌓이고 기존 값은 {@code is_latest=false}로
+ * 내려가 <b>읽기에서 통째로 사라진다</b> — 메우러 와서 지우고 가는 셈이다. 그래서 이 모드는
+ * 정정을 만나면 채우지 않고 센다.
  */
 @Component
 public class FinancialWriter {
@@ -67,7 +79,34 @@ public class FinancialWriter {
         /** 새 보고서와 정정공시만 쓴다. 일일·초기 적재의 기본이다. */
         APPEND_ONLY,
         /** 위에 더해, 같은 공시일의 재수집이면 <b>NULL인 컬럼만</b> 채운다. */
-        FILL_MISSING
+        FILL_MISSING,
+        /**
+         * {@link #FILL_MISSING}과 같되 <b>정정공시를 반영하지 않는다.</b> 소스가 더 늦은
+         * 공시본을 줘도 개정본을 쌓지 않고 기록만 남긴다.
+         *
+         * <p>IMPORTANT — 이 모드가 존재하는 이유는 편의가 아니라 <b>도달 불가</b>다.
+         * 정정 경로는 {@link IndicatorInvalidationPort#invalidate}를 부르고 그것은
+         * {@code trade_date >= periodStart}인 <b>그 종목의 전 지표</b>를 지운다. 사업보고서면
+         * 기준일이 회계연도 1월 1일이라 보존 창(180거래일) <b>전량</b>이다. 발화 조건은
+         * "소스의 공시일이 저장값보다 하루라도 늦다" 하나뿐이라, 표본 몇 종목의 공시일이
+         * 같더라는 확인으로는 안전을 말할 수 없다 — 표본 밖에서 어긋나면 그 종목만 조용히
+         * 그 경로를 탄다. 그래서 <b>가지 자체를 없앤다.</b>
+         *
+         * <p>MUST NOT: 이 모드로 정기 갱신을 돌리지 않는다. 정정공시가 영영 반영되지 않는다.
+         * 그 책임은 {@link #FILL_MISSING}을 쓰는 재무 결손 보정 잡에 그대로 남아 있다.
+         */
+        FILL_WITHOUT_REVISION
+    }
+
+    /**
+     * 한 종목의 쓰기 결과.
+     *
+     * <p>{@code deferredRevisions}가 이 phase의 판정 근거다 — 정정공시라서 <b>채우지 못한</b>
+     * 기간의 수이며, 잡이 이것을 합산해 실행 기록에 남긴다. 0이 아니면 그만큼의 (종목, 기간)이
+     * 결손인 채로 남았다는 뜻이고, 어느 것인지는 같은 시점의 {@code WARN}이 답한다.
+     */
+    public record Outcome(long changed, int inserted, int filled,
+                          int deferredRevisions, int mismatched) {
     }
 
     /**
@@ -86,17 +125,29 @@ public class FinancialWriter {
      *         세지 않으므로 {@code APPEND_ONLY}에서의 뜻은 도입 전과 같다.
      */
     public long write(long stockId, List<RawFinancialReport> reports, WriteMode mode) {
+        return writeDetailed(stockId, reports, mode).changed();
+    }
+
+    /**
+     * 위와 같되 내역을 함께 낸다.
+     *
+     * <p>{@link WriteMode#FILL_WITHOUT_REVISION}으로 도는 잡이 <b>무엇을 채우지 못했는지</b>를
+     * 세어야 하기 때문에 있다. 행 수만으로는 "채울 것이 없었다"와 "정정공시라 못 채웠다"가
+     * 구분되지 않는다.
+     */
+    public Outcome writeDetailed(long stockId, List<RawFinancialReport> reports, WriteMode mode) {
         Tally tally = new Tally();
         for (RawFinancialReport report : reports) {
             writeOne(stockId, report, mode, tally);
         }
-        if (mode == WriteMode.FILL_MISSING) {
+        if (mode != WriteMode.APPEND_ONLY) {
             // 종목 단위로 한 줄만 남긴다. 행마다 찍으면 350종목 × 16행이라 읽을 수 없다.
-            log.info("결손 보정. stockId={} 신규={} 정정={} 채움={} 불일치={} 무변경={}",
-                    stockId, tally.inserted, tally.revised, tally.filled,
-                    tally.mismatched, tally.untouched);
+            log.info("결손 보정. stockId={} 모드={} 신규={} 정정={} 채움={} 정정보류={} 불일치={} 무변경={}",
+                    stockId, mode, tally.inserted, tally.revised, tally.filled,
+                    tally.deferredRevisions, tally.mismatched, tally.untouched);
         }
-        return tally.changed();
+        return new Outcome(tally.changed(), tally.inserted, tally.filled,
+                tally.deferredRevisions, tally.mismatched);
     }
 
     private void writeOne(long stockId, RawFinancialReport report, WriteMode mode, Tally tally) {
@@ -133,7 +184,20 @@ public class FinancialWriter {
             return;
         }
 
-        // 정정공시다. 기존 최신본을 내리고 새 개정본을 쌓는다.
+        // 정정공시다.
+        if (mode == WriteMode.FILL_WITHOUT_REVISION) {
+            // MUST NOT: 여기서 fillMissing으로 흘려보내지 않는다. 더 늦은 판으로 채우는 것은
+            // 더 이른 판으로 채우는 것과 같은 혼합이다 — 행의 다른 컬럼은 옛 공시본의 값인데
+            // 한 컬럼만 새 공시본에서 오면, 그 행이 어느 시점의 값인지 물을 수 없게 된다.
+            // 채우지 못한 채로 남기고 그 사실을 드러내는 것이 옳다.
+            log.warn("정정공시라 채우지 않고 남긴다. stockId={} {}/{} 저장공시일={} 소스공시일={}",
+                    stockId, report.fiscalYear(), report.fiscalPeriod(),
+                    existing.publishedAt(), report.publishedAt());
+            tally.deferredRevisions++;
+            return;
+        }
+
+        // 기존 최신본을 내리고 새 개정본을 쌓는다.
         log.info("정정공시를 반영한다. stockId={} {}/{} 기존공시일={} 새공시일={}",
                 stockId, report.fiscalYear(), report.fiscalPeriod(),
                 existing.publishedAt(), report.publishedAt());
@@ -171,6 +235,19 @@ public class FinancialWriter {
      *
      * <p>이 판단은 <b>채우는 컬럼의 소비 지표에 저장된 값이 없을 때만</b> 성립한다.
      * 다음에 이 경로로 다른 컬럼을 채울 때 다시 답해야 한다(ADR-0040).
+     *
+     * <p><b>P10에서 다시 답했다 — 여전히 성립한다.</b> 이 경로로 새로 차는 컬럼은
+     * {@code operating_cash_flow}(전 행 NULL이었다)와 §8 세 종목의
+     * {@code retained_earnings}다.
+     * <ul>
+     *   <li>OCF를 소비하는 지표는 이 phase에서 <b>처음 생긴다.</b> 저장된 값이 있을 수 없다.
+     *   <li>이익잉여금을 소비하는 것은 {@code ALTMAN_Z} 하나이고 최근 분기 잔액
+     *       ({@code quarters.get(0)})을 읽는다. 세 종목은 보존 창이 덮는 전 분기에서 그 값이
+     *       NULL이라 <b>지표 행이 아예 없다</b>(창 시점 기준 실측). 즉 여기서도
+     *       "틀린 값 → 다른 틀린 값"이 아니라 "행 없음 → 행 생김"이다.
+     * </ul>
+     * 다만 <b>행이 생기는 것 자체가 스크리닝 결과를 바꾼다.</b> 무효화는 필요 없어도
+     * 백필은 필요하고, 그 변화는 H-05가 만드는 변화와 분리해서 세어야 한다.
      */
     private void fillMissing(long stockId, Existing existing, RawFinancialReport report,
                              Tally tally) {
@@ -317,6 +394,7 @@ public class FinancialWriter {
         private int inserted;
         private int revised;
         private int filled;
+        private int deferredRevisions;
         private int mismatched;
         private int untouched;
 

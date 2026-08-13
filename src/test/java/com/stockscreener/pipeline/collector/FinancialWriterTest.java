@@ -271,6 +271,112 @@ class FinancialWriterTest {
         }
     }
 
+    /**
+     * P10의 판정이 통째로 걸린 자리다.
+     *
+     * <p>§P10은 <b>"표본 몇 종목의 {@code rcept_no}가 같더라는 확인으로는 이 기준이 충족되지
+     * 않는다"</b>고 못 박는다. 판정할 (종목, 연도) 쌍이 2,100개라 표본으로 답할 수 없기
+     * 때문이다. 그래서 여기서 재는 것은 "이번에는 안 불렸다"가 아니라 <b>부를 가지가 없다</b>는
+     * 것이고, 그 증거로 <b>같은 입력에 {@code FILL_MISSING}은 부른다</b>는 대조군을 함께 둔다 —
+     * 대조군이 없으면 이 테스트는 항등식이라 초록이라는 사실로 거짓 안심만 준다.
+     */
+    @Nested
+    @DisplayName("FILL_WITHOUT_REVISION — 정정공시 가지에 도달하지 않는다")
+    class FillWithoutRevision {
+
+        private final RecordingInvalidationPort invalidations = new RecordingInvalidationPort();
+        private FinancialWriter fillOnlyWriter;
+
+        @BeforeEach
+        void useRecordingPort() {
+            fillOnlyWriter = new FinancialWriter(jdbcTemplate, invalidations);
+        }
+
+        @Test
+        @DisplayName("더 늦은 공시본을 만나도 무효화를 부르지 않고 개정본도 쌓지 않는다")
+        void neverInvalidatesOnLaterPublication() {
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
+
+            FinancialWriter.Outcome outcome = fillOnlyWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-04-20", "950")),
+                    WriteMode.FILL_WITHOUT_REVISION);
+
+            assertThat(invalidations.calls).isEmpty();
+            assertThat(outcome.deferredRevisions()).isEqualTo(1);
+            assertThat(outcome.changed()).isZero();
+            assertThat(rowCount()).isEqualTo(1);
+            // 채우지 않은 것이 요점이다. 결손은 결손인 채로 남고, 그 사실이 위 수로 드러난다.
+            assertThat(latestRow().get("current_assets")).isNull();
+            assertThat(latestRow().get("revision_no")).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("대조군 — 같은 입력에 FILL_MISSING은 무효화를 부른다")
+        void fillMissingStillInvalidatesOnTheSameInput() {
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
+
+            fillOnlyWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-04-20", "950")), WriteMode.FILL_MISSING);
+
+            assertThat(invalidations.calls)
+                    .as("이 한 줄이 위 테스트를 항등식이 아니게 만든다")
+                    .containsExactly(stockId + "@2025-01-01:FINANCIAL_REVISED");
+        }
+
+        @Test
+        @DisplayName("공시일이 같으면 NULL 컬럼을 채운다 — 결손 보충이라는 목적은 그대로다")
+        void fillsNullColumnsOnSamePublication() {
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
+
+            FinancialWriter.Outcome outcome = fillOnlyWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")),
+                    WriteMode.FILL_WITHOUT_REVISION);
+
+            assertThat(invalidations.calls).isEmpty();
+            assertThat(outcome.filled()).isEqualTo(1);
+            assertThat(rowCount()).isEqualTo(1);
+            assertThat((BigDecimal) latestRow().get("operating_cash_flow"))
+                    .isEqualByComparingTo("1500");
+        }
+
+        @Test
+        @DisplayName("행이 없으면 새로 쓴다 — 상장 이력은 있는데 그 해 재무가 없는 종목이 이 경로로 온다")
+        void insertsWhenNothingStored() {
+            FinancialWriter.Outcome outcome = fillOnlyWriter.writeDetailed(stockId,
+                    List.of(report(2021, "FY", "2022-03-15", "1000")),
+                    WriteMode.FILL_WITHOUT_REVISION);
+
+            assertThat(invalidations.calls).isEmpty();
+            assertThat(outcome.inserted()).isEqualTo(1);
+            assertThat(rowCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("더 이른 공시본으로는 채우지 않는다 — 한 행이 두 공시의 혼합이 되면 안 된다")
+        void doesNotFillFromOlderPublication() {
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-04-20", "950")));
+
+            FinancialWriter.Outcome outcome = fillOnlyWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")),
+                    WriteMode.FILL_WITHOUT_REVISION);
+
+            assertThat(invalidations.calls).isEmpty();
+            assertThat(outcome.changed()).isZero();
+            assertThat(latestRow().get("current_assets")).isNull();
+        }
+    }
+
+    /** 무효화 호출을 그대로 적는다. 이 슬라이스의 기본 포트는 아무것도 기록하지 않는다. */
+    private static final class RecordingInvalidationPort implements IndicatorInvalidationPort {
+
+        private final List<String> calls = new java.util.ArrayList<>();
+
+        @Override
+        public void invalidate(long stockId, LocalDate fromDate, InvalidationReason reason) {
+            calls.add(stockId + "@" + fromDate + ":" + reason);
+        }
+    }
+
     private Map<String, Object> latestRow() {
         return jdbcTemplate.queryForMap(
                 "SELECT * FROM financial_statement WHERE stock_id = ? AND is_latest", stockId);
