@@ -23,7 +23,7 @@ import java.util.List;
         valueType = IndicatorValueType.PRICE,
         direction = IndicatorMeta.Direction.NEUTRAL,
         decimalScale = 2,
-        sortOrder = 98
+        sortOrder = 101
 )
 public class Sma60Calculator implements IndicatorCalculator {
 

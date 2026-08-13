@@ -41,12 +41,12 @@ import java.util.NavigableMap;
                 + "4%면 한 달이면 일상적으로 ±15~20% 구간을 오간다는 뜻이라, "
                 + "장기 보유를 전제한다면 그 진폭을 견딜 수 있는지 먼저 본다. "
                 + "ATR과 달리 종목 간 비교가 가능하다.",
-        category = IndicatorCategory.DERIVED,
+        category = IndicatorCategory.TECHNICAL,
         valueType = IndicatorValueType.PERCENT,
         unit = "%",
         decimalScale = 2,
         direction = IndicatorMeta.Direction.LOWER_IS_BETTER,
-        sortOrder = 121,
+        sortOrder = 126,
         bands = {
                 @IndicatorMeta.Band(label = "매우 높음", from = 5),
                 @IndicatorMeta.Band(label = "높음", from = 3.5, to = 5),

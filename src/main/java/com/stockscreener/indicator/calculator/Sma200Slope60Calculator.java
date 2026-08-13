@@ -41,12 +41,12 @@ import java.util.NavigableMap;
         interpretation = "0보다 크면 장기 추세선이 우상향이라는 뜻이다. "
                 + "1개월 변화율과 달리 최근 며칠의 등락에 흔들리지 않지만, "
                 + "그만큼 갓 시작된 꺾임을 늦게 반영한다. 두 지표를 함께 본다.",
-        category = IndicatorCategory.DERIVED,
+        category = IndicatorCategory.TECHNICAL,
         valueType = IndicatorValueType.PERCENT,
         unit = "%",
         decimalScale = 2,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 103,
+        sortOrder = 112,
         bands = {
                 @IndicatorMeta.Band(label = "강한 상승 추세", from = 8),
                 @IndicatorMeta.Band(label = "상승 추세", from = 1, to = 8),

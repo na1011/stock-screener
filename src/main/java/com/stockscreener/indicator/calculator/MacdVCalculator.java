@@ -42,11 +42,11 @@ import java.util.NavigableMap;
         interpretation = "0보다 크면 상승 모멘텀이 우세하다는 뜻이다. "
                 + "일반적으로 +150 이상은 과열, -150 이하는 과매도 구간으로 본다. "
                 + "MACD와 달리 종목 간 크기 비교가 가능하다.",
-        category = IndicatorCategory.DERIVED,
+        category = IndicatorCategory.OSCILLATOR,
         valueType = IndicatorValueType.COUNT,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
         decimalScale = 2,
-        sortOrder = 140,
+        sortOrder = 201,
         // ±150은 interpretation이 이미 적어 둔 경계다. MACD와 달리 종목 간 비교가 가능한
         // 무차원 지표라서 구간을 붙일 수 있다 — MACD 본체에는 붙이지 않는 이유가 그것이다.
         bands = {

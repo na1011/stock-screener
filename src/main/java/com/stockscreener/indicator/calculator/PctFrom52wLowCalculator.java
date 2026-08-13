@@ -34,7 +34,7 @@ import java.util.List;
         unit = "%",
         decimalScale = 1,
         direction = IndicatorMeta.Direction.NEUTRAL,
-        sortOrder = 160,
+        sortOrder = 130,
         bands = {
                 @IndicatorMeta.Band(label = "저점에서 크게 상승", from = 80),
                 @IndicatorMeta.Band(label = "추세 전환 확인 구간", from = 30, to = 80),

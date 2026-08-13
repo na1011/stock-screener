@@ -14,14 +14,14 @@ import java.math.BigDecimal;
         name = "주봉 호전 분류",
         description = "구름 상방·전환선 골든크로스·26주 전 종가 상회 중 몇 개를 채웠는지. 0~3이다.",
         interpretation = "3이 3역호전이다. 이 값이 2 이상이어야 일봉 합치가 활성화된다.",
-        category = IndicatorCategory.TECHNICAL,
+        category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.
         valueType = IndicatorValueType.COUNT,
         unit = "개",
         decimalScale = 0,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 122)
+        sortOrder = 240)
 public class IchimokuKaizenWeeklyCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_KAIZEN_W";

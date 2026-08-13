@@ -14,13 +14,13 @@ import java.math.BigDecimal;
         name = "일목 현재 구름 색",
         description = "선행스팬 A가 B 위면 1(녹색), 아래면 −1(적색)이다.",
         interpretation = "단계와 무관하게 ±3점으로 들어가는 수식자다. 녹색이 강세다.",
-        category = IndicatorCategory.TECHNICAL,
+        category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 110)
+        sortOrder = 220)
 public class IchimokuModACalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_MOD_A";

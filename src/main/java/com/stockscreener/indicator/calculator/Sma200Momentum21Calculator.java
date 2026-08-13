@@ -39,12 +39,12 @@ import java.util.NavigableMap;
         interpretation = "0보다 크면 장기 추세선이 상승 중이라는 뜻이다. "
                 + "다만 0을 겨우 넘는 값은 횡보와 구분되지 않으므로, "
                 + "회귀 기울기와 함께 보아야 추세 전환을 판단할 수 있다.",
-        category = IndicatorCategory.DERIVED,
+        category = IndicatorCategory.TECHNICAL,
         valueType = IndicatorValueType.PERCENT,
         unit = "%",
         decimalScale = 2,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 102,
+        sortOrder = 111,
         bands = {
                 @IndicatorMeta.Band(label = "강한 상승", from = 3),
                 @IndicatorMeta.Band(label = "상승", from = 0.5, to = 3),

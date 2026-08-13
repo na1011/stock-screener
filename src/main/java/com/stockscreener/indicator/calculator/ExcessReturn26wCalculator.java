@@ -46,7 +46,7 @@ import java.util.OptionalDouble;
         unit = "%",
         decimalScale = 2,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 129,
+        sortOrder = 135,
         bands = {
                 @IndicatorMeta.Band(label = "시장 대비 강함", from = 5),
                 @IndicatorMeta.Band(label = "시장 수준", from = -5, to = 5),

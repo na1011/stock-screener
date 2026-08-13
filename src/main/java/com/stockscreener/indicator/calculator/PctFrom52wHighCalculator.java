@@ -34,7 +34,7 @@ import java.util.List;
         unit = "%",
         decimalScale = 1,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 161,
+        sortOrder = 131,
         bands = {
                 @IndicatorMeta.Band(label = "신고가 부근", from = -5),
                 @IndicatorMeta.Band(label = "얕은 조정", from = -15, to = -5),

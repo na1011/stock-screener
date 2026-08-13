@@ -39,11 +39,11 @@ import java.util.NavigableMap;
                 + "1.25를 넘으면 단기 급등으로 추세선에서 크게 벌어진 상태이며, "
                 + "조정 시 추세선까지의 낙폭도 그만큼 커진다. "
                 + "0.9 아래는 장기 추세가 무너지고 있을 수 있다.",
-        category = IndicatorCategory.DERIVED,
+        category = IndicatorCategory.TECHNICAL,
         valueType = IndicatorValueType.RATIO,
         decimalScale = 3,
         direction = IndicatorMeta.Direction.NEUTRAL,
-        sortOrder = 101,
+        sortOrder = 110,
         bands = {
                 @IndicatorMeta.Band(label = "과열", from = 1.30),
                 @IndicatorMeta.Band(label = "고평가 구간", from = 1.15, to = 1.30),

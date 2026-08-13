@@ -36,7 +36,7 @@ import java.util.List;
         valueType = IndicatorValueType.COUNT,
         direction = IndicatorMeta.Direction.NEUTRAL,
         decimalScale = 2,
-        sortOrder = 110,
+        sortOrder = 120,
         // 70·30은 interpretation이 이미 적어 둔 경계다. 여기서 새로 정하는 것이 아니다.
         bands = {
                 @IndicatorMeta.Band(label = "과매수", from = 70),

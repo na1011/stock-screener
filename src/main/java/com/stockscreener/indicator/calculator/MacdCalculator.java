@@ -32,11 +32,11 @@ import java.util.List;
                 + "단기 흐름이 장기 흐름보다 얼마나 앞서 있는지를 나타낸다.",
         interpretation = "0보다 크면 단기 흐름이 장기 흐름보다 강하다는 뜻이다. "
                 + "값 자체는 주가 수준에 비례하므로 다른 종목과 직접 비교하지 않는다.",
-        category = IndicatorCategory.TECHNICAL,
+        category = IndicatorCategory.OSCILLATOR,
         valueType = IndicatorValueType.PRICE,
         direction = IndicatorMeta.Direction.NEUTRAL,
         decimalScale = 4,
-        sortOrder = 130
+        sortOrder = 200
 )
 public class MacdCalculator implements IndicatorCalculator {
 

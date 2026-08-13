@@ -34,11 +34,11 @@ import java.util.List;
                 + "밴드 하단이 0, 상단이 1이며 범위를 벗어나면 0 미만이나 1 초과가 된다.",
         interpretation = "1에 가까우면 최근 변동폭의 위쪽 끝, 0에 가까우면 아래쪽 끝에 있다는 뜻이다. "
                 + "1을 넘으면 단기 과열, 0 아래면 단기 침체로 보지만 강한 추세에서는 오래 머물 수 있다.",
-        category = IndicatorCategory.TECHNICAL,
+        category = IndicatorCategory.OSCILLATOR,
         valueType = IndicatorValueType.RATIO,
         direction = IndicatorMeta.Direction.NEUTRAL,
         decimalScale = 4,
-        sortOrder = 150,
+        sortOrder = 205,
         // 0과 1은 밴드의 하단·상단 그 자체다. 이 지표에서는 경계가 관습이 아니라 정의다.
         bands = {
                 @IndicatorMeta.Band(label = "밴드 상단 돌파", from = 1),

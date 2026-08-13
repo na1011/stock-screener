@@ -14,13 +14,13 @@ import java.math.BigDecimal;
         name = "일목 미래 구름 색",
         description = "26주 뒤에 놓일 구름의 색. 1 녹색 · −1 적색이다.",
         interpretation = "신생·진행 단계에서 ±3, 중기·성숙에서 ±2로 들어간다. 녹색이 강세다.",
-        category = IndicatorCategory.TECHNICAL,
+        category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 111)
+        sortOrder = 221)
 public class IchimokuModBCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_MOD_B";

@@ -40,7 +40,7 @@ import java.util.List;
         valueType = IndicatorValueType.PRICE,
         direction = IndicatorMeta.Direction.NEUTRAL,
         decimalScale = 2,
-        sortOrder = 120
+        sortOrder = 125
 )
 public class Atr14Calculator implements IndicatorCalculator {
 
