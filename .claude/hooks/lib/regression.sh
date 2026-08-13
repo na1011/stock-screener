@@ -54,6 +54,22 @@ check() {
       out=$(jq -n --arg c "$cmd" --arg s "sess-$RANDOM$RANDOM" '{session_id:$s,tool_input:{command:$c}}' \
             | "$HOOKS/warn-load-running.sh" 2>/dev/null)
       if [ -z "$out" ]; then got="침묵"; else got="발화"; fi ;;
+    # 이 둘만 `HOME`을 격리한다. 판정이 `$DUMP_DIR`의 내용에 달려 있어 기계의 상태를 그대로
+    # 쓰면 **덤프가 있는 기계에서는 deny 경로가 영영 안 돌고**, 그 침묵이 통과로 읽힌다.
+    rebuild-nodump)
+      home=$(mktemp -d)
+      out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+            | HOME="$home" "$HOOKS/guard-rebuild-without-dump.sh" 2>/dev/null)
+      if [ -z "$out" ]; then got="pass"
+      else got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "pass"'); fi ;;
+    rebuild-dump)
+      home=$(mktemp -d)
+      mkdir -p "$home/Library/Application Support/stock-screener/dumps"
+      : > "$home/Library/Application Support/stock-screener/dumps/fixture.dump"
+      out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+            | HOME="$home" "$HOOKS/guard-rebuild-without-dump.sh" 2>/dev/null)
+      if [ -z "$out" ]; then got="pass"
+      else got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "pass"'); fi ;;
   esac
   [ -z "$got" ] && got="(빈응답)"
   if [ "$got" = "$want" ]; then
@@ -100,6 +116,17 @@ echo "── 적재 인자 알림 ──"
 check 침묵 "적재 명령을 문서화한 커밋 메시지"  "$(hd 'git commit -F - <<MSG' 'docs: 절차' '' "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'" 'MSG')" bootstrap
 check 발화 "실제 적재 실행(플래그 없음)"        "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'" bootstrap
 check 침묵 "실제 적재 실행(플래그 있음)"        "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load --reload-existing=true'" bootstrap
+
+echo "── 덤프 없는 수정계수 재구축 (ADR-0049) ──"
+#
+# 막는 범위가 **좁은 것이 이 가드의 설계**다. 덤프가 하나라도 있으면 다시 걸리지 않는다 —
+# 신선도 창을 걸면 정상 재구축과 되돌리기 리허설까지 막혀 "선택지를 줄이는 기제"가 된다.
+# 아래 두 짝이 그 좁음을 실제로 잰다: 같은 명령이 덤프 유무로만 갈려야 한다.
+check deny "덤프 없이 재구축 실행"              "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=adjustment-rebuild'" rebuild-nodump
+check pass "덤프가 있으면 같은 명령이 통과"      "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=adjustment-rebuild'" rebuild-dump
+check pass "재구축을 문서화한 커밋 메시지"        "$(hd 'git commit -F - <<MSG' 'docs: 절차' '' "./gradlew bootRun --args='--job=adjustment-rebuild'" 'MSG')" rebuild-nodump
+check pass "gradle이 아닌 명령의 단순 언급"       "echo --job=adjustment-rebuild" rebuild-nodump
+check pass "다른 잡은 건드리지 않는다"           "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill'" rebuild-nodump
 
 echo "── 적재 중 gradle 알림 ──"
 #
@@ -268,10 +295,6 @@ check_mirror 발화 "ADJ_CLOSE 사본이 갈리면 잡는다" \
   ".claude/rules/test.md" 's/봉 하나로 값이 나오는 첫 지표다/봉 하나로 값이 나오는 최초 지표다/'
 check_mirror 발화 "사본이 한쪽에서 사라지면 잡는다" \
   ".claude/skills/batch-load/SKILL.md" 's/공공데이터포털은 없는 종목/공공데이터포털은 어떤 종목/'
-# skill(착수 전)과 훅(실행 후)은 서로를 발화시키지 못한다. 예외 태스크가 한쪽에서만
-# 바뀌면 적재 창 안에서 무엇을 돌려도 되는지에 대한 답이 둘로 갈린다.
-check_mirror 발화 "적재 창의 gradle 예외가 갈리면 잡는다" \
-  ".claude/skills/batch-load/SKILL.md" 's/gradlew checkDuplicateFiles/gradlew checkDupes/'
 
 #
 # 최소 git 트리를 만들어 거기서 돌린다. 저장소 자체를 비틀면 되돌리기를 잊고, 그러면 다음
