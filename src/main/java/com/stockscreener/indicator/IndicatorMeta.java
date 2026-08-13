@@ -53,6 +53,18 @@ public @interface IndicatorMeta {
     /** 결과 표에 기본 노출할 컬럼인지. */
     boolean defaultColumn() default false;
 
+    /**
+     * 종목 상세의 분류 구획에 기본으로 보일 것인지(ADR-0058).
+     *
+     * <p>{@code false}로 두어도 <b>폐기가 아니다.</b> 조건 빌더 드롭다운·결과 표·종목 상세의
+     * 「내 조건」 구획에는 그대로 나온다. 감추는 것은 <b>분류 구획 하나</b>이며, 사용자가 조건에
+     * 넣으면 다시 보인다.
+     *
+     * <p>{@link #defaultColumn}과 기본값이 반대인 것은 의도다. 대부분의 지표는 보여야 하고
+     * 감출 것은 소수라, 기본을 {@code false}로 두면 거의 모든 계산기에 {@code true}를 적게 된다.
+     */
+    boolean detailDefault() default true;
+
     int sortOrder() default 0;
 
     /**

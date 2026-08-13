@@ -12,6 +12,7 @@ import java.util.List;
  *
  * @param higherIsBetter        null이면 방향이 정해지지 않은 지표(RSI처럼 중간이 좋은 것)
  * @param defaultColumn         결과 표에 기본 노출할 컬럼인가
+ * @param detailDefault         종목 상세의 분류 구획에 기본으로 보이는가(ADR-0058)
  * @param sourceIndicatorCode   백분위 지표의 원본. 백분위가 아니면 null.
  * @param population            상대 비교의 모집단. 상대 지표가 아니면 null.
  * @param bands                 값 구간별 자연어 라벨. 제시할 수 없는 지표는 빈 목록이다.
@@ -27,6 +28,7 @@ public record IndicatorDescriptor(
         int decimalScale,
         Boolean higherIsBetter,
         boolean defaultColumn,
+        boolean detailDefault,
         int sortOrder,
         String sourceIndicatorCode,
         IndicatorPopulation population,

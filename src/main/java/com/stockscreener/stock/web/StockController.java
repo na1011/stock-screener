@@ -117,7 +117,10 @@ public class StockController {
             indicators.add(new StockDetailResponse.IndicatorValue(
                     descriptor.code(), descriptor.name(), value, descriptor.unit(),
                     descriptor.decimalScale(), descriptor.category(), descriptor.higherIsBetter(),
-                    descriptor.description(), descriptor.interpretation()));
+                    descriptor.description(), descriptor.interpretation(),
+                    // 거르지 않고 표시만 한다. 거르면 「내 조건」 구획이 감춘 지표의 값을
+                    // 못 받는다 — 서버는 사용자의 초안 조건을 모른다(화면에만 있는 상태다).
+                    descriptor.detailDefault()));
         }
 
         StockDetailResponse.Price price = stockReader.priceOn(stockId, resolved)

@@ -149,6 +149,8 @@ export interface IndicatorResponse {
   /** null이면 유불리 방향이 없다(RSI 등). */
   higherIsBetter: boolean | null
   defaultColumn: boolean
+  /** 종목 상세의 분류 구획에 기본으로 보이는가(ADR-0058). false여도 폐기가 아니다. */
+  detailDefault: boolean
   sortOrder: number
   /** 백분위가 아니면 null. */
   percentileOf: string | null
@@ -406,6 +408,11 @@ export interface StockIndicatorValue {
   higherIsBetter: boolean | null
   description: string
   interpretation: string
+  /**
+   * 분류 구획에 기본으로 보이는가. 서버가 실어 준다 — 카탈로그에서 되짚으면 도착 순서가
+   * 보장되지 않아 감출 카드가 그려졌다가 접힌다(ADR-0058).
+   */
+  detailDefault: boolean
 }
 
 /**

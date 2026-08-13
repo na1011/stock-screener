@@ -143,9 +143,9 @@ public class IndicatorCatalogSynchronizer {
         jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
-                                       default_column, source_indicator_code, population,
-                                       created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, true, ?, false, ?, ?, now(), now())
+                                       default_column, detail_default, source_indicator_code,
+                                       population, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, true, ?, false, true, ?, ?, now(), now())
                 ON CONFLICT (code) DO UPDATE SET
                     name                  = EXCLUDED.name,
                     description           = EXCLUDED.description,
@@ -205,8 +205,8 @@ public class IndicatorCatalogSynchronizer {
         jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
-                                       default_column, bands, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, CAST(? AS jsonb), now(), now())
+                                       default_column, detail_default, bands, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, CAST(? AS jsonb), now(), now())
                 ON CONFLICT (code) DO UPDATE SET
                     name             = EXCLUDED.name,
                     description      = EXCLUDED.description,
@@ -219,6 +219,7 @@ public class IndicatorCatalogSynchronizer {
                     is_active        = true,
                     sort_order       = EXCLUDED.sort_order,
                     default_column   = EXCLUDED.default_column,
+                    detail_default   = EXCLUDED.detail_default,
                     bands            = EXCLUDED.bands,
                     -- 계산기가 내는 값은 상대 지표가 아니다. 코드가 파생에서 계산기로 옮겨간
                     -- 경우에 옛 모집단이 남으면 화면이 없는 비교를 설명하게 된다.
@@ -236,6 +237,7 @@ public class IndicatorCatalogSynchronizer {
                 meta.direction().toHigherIsBetter(),
                 meta.sortOrder(),
                 meta.defaultColumn(),
+                meta.detailDefault(),
                 bandCodec.toJson(bandsOf(code, meta)));
     }
 

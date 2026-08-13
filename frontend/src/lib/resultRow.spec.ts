@@ -34,6 +34,7 @@ const catalogEntry: IndicatorResponse = {
   decimalScale: 1,
   higherIsBetter: false,
   defaultColumn: true,
+  detailDefault: true,
   sortOrder: 1,
   percentileOf: null,
   percentile: null,

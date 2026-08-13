@@ -28,7 +28,8 @@ public class IndicatorCatalog {
 
     private static final String SELECT = """
             SELECT code, name, description, interpretation, category, value_type, unit,
-                   decimal_scale, higher_is_better, default_column, sort_order, source_indicator_code,
+                   decimal_scale, higher_is_better, default_column, detail_default, sort_order,
+                   source_indicator_code,
                    population, bands
             FROM indicator
             """;
@@ -56,6 +57,7 @@ public class IndicatorCatalog {
                 // 같은 값이 되면 RSI가 PER처럼 다뤄진다.
                 rs.getObject("higher_is_better", Boolean.class),
                 rs.getBoolean("default_column"),
+                rs.getBoolean("detail_default"),
                 rs.getInt("sort_order"),
                 rs.getString("source_indicator_code"),
                 // NULL이 "상대 지표가 아니다"라는 뜻이므로 valueOf를 그대로 부르면 안 된다.

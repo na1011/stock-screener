@@ -88,10 +88,16 @@ public record StockDetailResponse(
      *
      * <p>{@code description}·{@code interpretation}이 함께 실린다 — spec §5가 "값만 나열하지
      * 않는다"를 요구한다. 초보 사용자는 PER 8.1이 좋은 것인지 알 수 없다.
+     *
+     * <p>{@code detailDefault}도 <b>여기</b> 싣는다(ADR-0058). 화면이 카탈로그에서 되짚을 수도
+     * 있지만 그러면 셋이 어긋난다 — 카탈로그 요청과 이 요청의 <b>도착 순서가 보장되지 않아</b>
+     * 감출 카드가 그려졌다가 접히고, 카탈로그가 실패하면 감춤이 통째로 무효가 되는데 그
+     * 사실이 화면에 남지 않는다. 구간({@code bands})을 카탈로그에서 잇는 선례와는 방향이
+     * 반대다 — 그쪽은 <b>덧붙이는</b> 것이라 실패해도 값과 설명이 남는다.
      */
     public record IndicatorValue(
             String code, String name, BigDecimal value, String unit, int decimalScale,
             IndicatorCategory category, Boolean higherIsBetter,
-            String description, String interpretation) {
+            String description, String interpretation, boolean detailDefault) {
     }
 }

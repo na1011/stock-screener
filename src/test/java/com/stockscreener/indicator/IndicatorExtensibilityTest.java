@@ -130,6 +130,26 @@ class IndicatorExtensibilityTest {
     }
 
     @Test
+    @DisplayName("종목 상세 기본 노출 여부가 계산 클래스에서 카탈로그로 흘러간다")
+    void detailDefaultFlagIsProjected() {
+        synchronizer(List.of(new PercentileSpec("PER", "PER 백분위", "설명", "해석")))
+                .synchronize();
+
+        // 기본값이 true인 것이 defaultColumn과 반대다(ADR-0058). 더미 계산기가 이 필드를
+        // 안 적으므로 아래 단언이 곧 기본값 검증이다.
+        Boolean dummyIsVisible = jdbcTemplate.queryForObject(
+                "SELECT detail_default FROM indicator WHERE code = ?", Boolean.class, DUMMY_CODE);
+        assertThat(dummyIsVisible)
+                .as("적지 않으면 보인다 — 감출 것이 소수라 기본을 false로 두면 거의 모든 계산기에 적게 된다")
+                .isTrue();
+
+        // 계산기가 없는 파생 행도 기본 노출이다. 감출 이유가 생기면 그때 PercentileSpec을 연다.
+        Boolean percentileIsVisible = jdbcTemplate.queryForObject(
+                "SELECT detail_default FROM indicator WHERE code = 'PER_PCTL'", Boolean.class);
+        assertThat(percentileIsVisible).isTrue();
+    }
+
+    @Test
     @DisplayName("백분위 행이 원본 지표를 가리킨다 — 부등호 방향 판단이 여기 의존한다")
     void percentileRowLinksBackToItsSource() {
         synchronizer(List.of(new PercentileSpec("PER", "PER 백분위", "설명", "해석")))
