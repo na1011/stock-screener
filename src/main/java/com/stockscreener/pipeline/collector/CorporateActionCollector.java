@@ -61,14 +61,26 @@ public class CorporateActionCollector {
     }
 
     /**
+     * 사람의 판정을 기다리며 <b>그 사이 지표를 억제하는</b> 새 후보(ADR-0055).
+     *
+     * <p>판정 전까지 이 종목의 장기창 지표가 화면에서 사라진다. 알림이 없으면 종목이 없어진
+     * 것을 아무도 모르고, {@code ICHI_*}는 사건 뒤 1,100거래일(약 4.4년)까지 이어진다.
+     */
+    public record PendingCandidate(String ticker, LocalDate effectiveDate,
+                                   CorporateAction.DetectionSource source) {
+    }
+
+    /**
      * @param recorded       실제로 새로 적히거나 승격된 행 수. <b>재실행에서 0이 정상이고 그 0이
      *                       멱등의 증거다</b>({@code CompanyProfileCollector}와 같은 판단).
      * @param nearDuplicates 사람이 갈라야 하는 충돌. 잡이 요약해 알린다.
+     * @param pending        이번 실행이 새로 만든 판정 대기 후보. 잡이 요약해 알린다.
      */
-    public record Result(long recorded, List<NearDuplicate> nearDuplicates) {
+    public record Result(long recorded, List<NearDuplicate> nearDuplicates,
+                         List<PendingCandidate> pending) {
 
         static Result empty() {
-            return new Result(0L, List.of());
+            return new Result(0L, List.of(), List.of());
         }
     }
 
@@ -121,7 +133,10 @@ public class CorporateActionCollector {
 
         List<NearDuplicate> conflicts = new ArrayList<>(disclosed.nearDuplicates());
         conflicts.addAll(heuristic.nearDuplicates());
-        return new Result(disclosed.recorded() + heuristic.recorded(), List.copyOf(conflicts));
+        List<PendingCandidate> pending = new ArrayList<>(disclosed.pending());
+        pending.addAll(heuristic.pending());
+        return new Result(disclosed.recorded() + heuristic.recorded(), List.copyOf(conflicts),
+                List.copyOf(pending));
     }
 
     /**
@@ -134,6 +149,7 @@ public class CorporateActionCollector {
     public Result recordAll(SecurityRef security, List<CorporateAction> actions) {
         long recorded = 0;
         List<NearDuplicate> conflicts = new ArrayList<>();
+        List<PendingCandidate> pending = new ArrayList<>();
         for (CorporateAction action : actions) {
             CorporateActionLedger.RecordResult result = ledger.record(security.stockId(), action);
             if (result.outcome() == CorporateActionLedger.Outcome.NEAR_DUPLICATE) {
@@ -155,7 +171,13 @@ public class CorporateActionCollector {
             if (result.changed()) {
                 recorded++;
             }
+            // 판정 전까지 이 종목의 장기창 지표가 화면에서 사라진다(ADR-0055). 세지 않으면
+            // 잡이 알릴 근거가 없고, 그러면 종목이 조용히 없어진다.
+            if (result.awaitsJudgement()) {
+                pending.add(new PendingCandidate(
+                        security.ticker(), action.effectiveDate(), action.source()));
+            }
         }
-        return new Result(recorded, List.copyOf(conflicts));
+        return new Result(recorded, List.copyOf(conflicts), List.copyOf(pending));
     }
 }

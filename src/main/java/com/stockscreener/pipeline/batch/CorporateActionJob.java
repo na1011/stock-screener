@@ -91,6 +91,7 @@ public class CorporateActionJob {
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
         List<CorporateActionCollector.NearDuplicate> conflicts = new ArrayList<>();
+        List<CorporateActionCollector.PendingCandidate> pending = new ArrayList<>();
 
         try {
             // MUST: 창 검증을 실행 행을 연 **뒤에** 한다. 앞에서 던지면 batch_execution에 아무
@@ -114,11 +115,13 @@ public class CorporateActionJob {
                     CorporateActionCollector.Result result =
                             collector.collect(security, windowStart, asOf);
                     conflicts.addAll(result.nearDuplicates());
+                    pending.addAll(result.pending());
                     return result.recorded();
                 });
             }
 
             alertOnConflicts(execution, conflicts);
+            alertOnPendingJudgement(execution, pending);
         } catch (DataSourceException e) {
             execution.failFatally(e);
             return BatchStatus.FAILED;
@@ -170,6 +173,36 @@ public class CorporateActionJob {
             body.append("나머지 %d건은 로그에 있다.".formatted(conflicts.size() - CONFLICTS_IN_ALERT));
         }
         execution.alertOperator(AlertSeverity.WARNING, "기업 행위 근접 중복", body.toString());
+    }
+
+    /**
+     * 새로 생긴 판정 대기 후보를 <b>요약 한 건</b>으로 알린다.
+     *
+     * <p>MUST NOT: 로그로만 두지 않는다. ADR-0055부터 판정되지 않은 후보는 그 종목의 장기창
+     * 지표를 억제하므로, 후보 하나가 생기는 순간 <b>그 종목이 모든 프리셋에서 사라진다</b> —
+     * 스크리닝은 최신 일자 한 장만 읽기 때문이다. 회복은 사람이 판정할 때까지이고
+     * {@code ICHI_*}는 사건 뒤 1,100거래일(약 4.4년)까지 이어진다.
+     *
+     * <p>이번 실행이 <b>새로 만든</b> 후보만 센다. 남아 있는 후보 전체를 세면 판정이 밀리는
+     * 동안 매 실행 같은 알림이 나가고, 며칠 안에 아무도 그 알림을 보지 않게 된다
+     * ({@link #alertOnConflicts}가 판정된 행을 빼는 것과 같은 이유다).
+     */
+    private void alertOnPendingJudgement(BatchExecutionContext execution,
+                                         List<CorporateActionCollector.PendingCandidate> pending) {
+        if (pending.isEmpty()) {
+            return;
+        }
+        StringBuilder body = new StringBuilder(
+                ("%d건이 판정을 기다린다. 판정 전까지 아래 종목의 장기창 지표는 계산되지 않고, "
+                        + "그 종목은 프리셋 결과에서 빠진다(ADR-0055).\n").formatted(pending.size()));
+        pending.stream().limit(CONFLICTS_IN_ALERT).forEach(candidate -> body.append(
+                "- %s: 효력일 %s (%s)\n".formatted(
+                        candidate.ticker(), candidate.effectiveDate(), candidate.source())));
+        if (pending.size() > CONFLICTS_IN_ALERT) {
+            body.append("나머지 %d건은 로그에 있다.".formatted(pending.size() - CONFLICTS_IN_ALERT));
+        }
+        body.append("판정은 PUT /api/admin/corporate-actions/{id}이다 — 화면은 없다(ADR-0049).");
+        execution.alertOperator(AlertSeverity.WARNING, "기업 행위 판정 대기", body.toString());
     }
 
     /**

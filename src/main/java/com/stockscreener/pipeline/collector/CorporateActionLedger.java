@@ -83,12 +83,27 @@ public class CorporateActionLedger {
     /**
      * @param existingId {@link Outcome#NEAR_DUPLICATE}면 충돌한 기존 행, 아니면 이 행의 id
      * @param conflictingStatus 충돌한 기존 행의 상태. 그 외에는 null.
+     * @param recordedStatus 이 행이 갖게 된 상태. {@link Outcome#NEAR_DUPLICATE}·{@link
+     *                       Outcome#IGNORED}면 null이다. 호출자가 <b>여기서</b> 읽어야 하는
+     *                       이유는, {@code OBSERVED}로 남은 행이 지표를 억제하기 때문이다
+     *                       (ADR-0055) — 판정 규칙을 호출자가 다시 쓰면 두 곳이 갈린다.
      */
     public record RecordResult(Outcome outcome, long existingId, LocalDate conflictingDate,
-                               CorporateActionStatus conflictingStatus) {
+                               CorporateActionStatus conflictingStatus,
+                               CorporateActionStatus recordedStatus) {
 
         public boolean changed() {
             return outcome == Outcome.INSERTED || outcome == Outcome.UPGRADED;
+        }
+
+        /**
+         * 사람의 판정을 기다리는 새 후보인가.
+         *
+         * <p>이 행이 있는 동안 그 종목의 장기창 지표가 <b>화면에서 사라진다</b>(ADR-0055).
+         * 조용히 두면 종목이 없어진 것을 아무도 모르므로 잡이 이것을 세어 알린다.
+         */
+        public boolean awaitsJudgement() {
+            return changed() && recordedStatus == CorporateActionStatus.OBSERVED;
         }
 
         /**
@@ -221,7 +236,7 @@ public class CorporateActionLedger {
                     NEAR_DUPLICATE_TRADING_DAYS, stockId, action.effectiveDate(),
                     row.effectiveDate(), row.id());
             return new RecordResult(Outcome.NEAR_DUPLICATE, row.id(), row.effectiveDate(),
-                    CorporateActionStatus.valueOf(row.status()));
+                    CorporateActionStatus.valueOf(row.status()), null);
         }
 
         // 같은 일자의 기존 행을 먼저 본다. INSERT와 UPDATE를 사후에 가를 수단이 없기
@@ -239,7 +254,7 @@ public class CorporateActionLedger {
             // 사람이 뒤에 볼 것이 종류 미상 행 하나뿐이 된다. 공시가 종류를 확정했을 때만
             // 덮을 값이 더 낫다.
             if (!CorporateActionStatus.OBSERVED.name().equals(row.status()) || !trusted) {
-                return new RecordResult(Outcome.IGNORED, row.id(), action.effectiveDate(), null);
+                return new RecordResult(Outcome.IGNORED, row.id(), action.effectiveDate(), null, null);
             }
             // 휴리스틱 후보를 공시가 덮는다. 창이 매일 도므로 휴리스틱이 대개 먼저 들어오고,
             // 그대로 두면 공시의 정확한 비율·일자가 흔적 없이 버려진다.
@@ -255,7 +270,7 @@ public class CorporateActionLedger {
                     row.id());
             log.info("휴리스틱 후보를 공시로 덮었다. stockId={} id={} {} type={} ratio={}",
                     stockId, row.id(), action.effectiveDate(), action.type(), action.ratio());
-            return new RecordResult(Outcome.UPGRADED, row.id(), action.effectiveDate(), null);
+            return new RecordResult(Outcome.UPGRADED, row.id(), action.effectiveDate(), null, status);
         }
 
         long id = insert(stockId, action, status);
@@ -263,7 +278,7 @@ public class CorporateActionLedger {
         log.info("기업 행위를 원장에 적었다. stockId={} id={} {} type={} ratio={} status={} source={}",
                 stockId, id, action.effectiveDate(), action.type(), action.ratio(),
                 status, action.source());
-        return new RecordResult(Outcome.INSERTED, id, action.effectiveDate(), null);
+        return new RecordResult(Outcome.INSERTED, id, action.effectiveDate(), null, status);
     }
 
     /**
@@ -582,8 +597,9 @@ public class CorporateActionLedger {
         log.info("휴리스틱 후보를 공시로 덮으며 효력일을 옮겼다. stockId={} id={} {} → {} type={} ratio={}",
                 stockId, near.id(), near.effectiveDate(), action.effectiveDate(),
                 action.type(), action.ratio());
-        return Optional.of(
-                new RecordResult(Outcome.UPGRADED, near.id(), action.effectiveDate(), null));
+        // 이 경로는 위 UPDATE가 APPROVED로 못박으므로 판정을 기다리는 행이 아니다.
+        return Optional.of(new RecordResult(Outcome.UPGRADED, near.id(), action.effectiveDate(),
+                null, CorporateActionStatus.APPROVED));
     }
 
     private Optional<Row> findById(long id) {
