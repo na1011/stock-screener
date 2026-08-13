@@ -254,7 +254,8 @@ class CorporateActionCollectorTest {
 
     private CorporateActionCollector collectorWith(FakeCorporateActionDataSource source) {
         DataSourceRegistry registry = new DataSourceRegistry(
-                List.of(), List.of(), List.of(), List.of(), List.of(source), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(source), List.of(),
+                List.of());
         return new CorporateActionCollector(registry, ledger, recalculator, priceCalendar);
     }
 

@@ -8,8 +8,6 @@ import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.RateLimiter;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -18,7 +16,6 @@ import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,10 +35,6 @@ import java.util.Set;
 @ConditionalOnApiKey("dart")
 @Component
 public class DartFinancialAdapter implements FinancialDataSource {
-
-    private static final Logger log = LoggerFactory.getLogger(DartFinancialAdapter.class);
-
-    private static final DateTimeFormatter RCEPT_DT = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     /** 보고서 코드 → 우리 회계기간 라벨. Q4는 별도 보고서가 없어 유도한다. */
     private static final Map<String, String> REPORT_CODES = new LinkedHashMap<>(Map.of(
@@ -266,33 +259,18 @@ public class DartFinancialAdapter implements FinancialDataSource {
     }
 
     /**
-     * 공시일을 {@code rcept_no} 앞 8자리에서 유도한다.
+     * 공시일과 회계기간은 {@link DartReportPeriods}가 정한다.
      *
-     * <p>정정공시 판별의 근거다 — 같은 기간에 대해 {@code rcept_no}가 큰 쪽이 최신이고,
-     * 그 사실이 {@code publishedAt}의 대소로 그대로 옮겨진다.
+     * <p>MUST: 여기에 되돌려 놓지 않는다. 전체 재무제표 어댑터가 같은 보고서를 같은
+     * {@code publishedAt}으로 옮겨야 {@code FinancialWriter}가 그것을 정정공시로 오인하지
+     * 않는다 — 그 오인의 대가가 해당 종목 지표의 보존 창 전량 삭제다.
      */
     private static LocalDate publishedAt(JsonNode row, int fallbackYear) {
-        String rceptNo = row.path("rcept_no").asString("");
-        if (rceptNo.length() >= 8) {
-            try {
-                return LocalDate.parse(rceptNo.substring(0, 8), RCEPT_DT);
-            } catch (RuntimeException e) {
-                log.warn("rcept_no에서 공시일을 얻지 못했다: '{}'", rceptNo);
-            }
-        }
-        // publishedAt은 null일 수 없다(포트 계약). 최후 수단으로 회계연도 말일을 쓴다.
-        return LocalDate.of(fallbackYear, 12, 31);
+        return DartReportPeriods.publishedAt(row, fallbackYear);
     }
 
-    /** 회계기간. 12월 결산을 전제한 근사값이며, 정확한 기간은 소스가 주지 않는다. */
     private static LocalDate[] periodRange(int year, String period) {
-        return switch (period) {
-            case "Q1" -> new LocalDate[]{LocalDate.of(year, 1, 1), LocalDate.of(year, 3, 31)};
-            case "Q2" -> new LocalDate[]{LocalDate.of(year, 4, 1), LocalDate.of(year, 6, 30)};
-            case "Q3" -> new LocalDate[]{LocalDate.of(year, 7, 1), LocalDate.of(year, 9, 30)};
-            case "Q4" -> new LocalDate[]{LocalDate.of(year, 10, 1), LocalDate.of(year, 12, 31)};
-            default -> new LocalDate[]{LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31)};
-        };
+        return DartReportPeriods.periodRange(year, period);
     }
 
     /** 한 보고서의 행들과 어느 연결기준을 썼는지. */

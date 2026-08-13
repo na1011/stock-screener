@@ -29,6 +29,7 @@ public class DataSourceRegistry {
 
     private final Map<String, PriceDataSource> priceByMarket;
     private final Map<String, FinancialDataSource> financialByMarket;
+    private final Map<String, FullStatementDataSource> fullStatementByMarket;
     private final Map<String, SecurityMasterDataSource> masterByMarket;
     private final Map<String, CompanyProfileDataSource> profileByMarket;
     private final Map<String, CorporateActionDataSource> corporateActionByMarket;
@@ -38,6 +39,7 @@ public class DataSourceRegistry {
     public DataSourceRegistry(
             List<PriceDataSource> priceSources,
             List<FinancialDataSource> financialSources,
+            List<FullStatementDataSource> fullStatementSources,
             List<SecurityMasterDataSource> masterSources,
             List<CompanyProfileDataSource> profileSources,
             List<CorporateActionDataSource> corporateActionSources,
@@ -45,6 +47,8 @@ public class DataSourceRegistry {
             List<MarketIndexDataSource> marketIndexSources) {
         this.priceByMarket = index(priceSources, PriceDataSource::supportedMarketCodes, "시세");
         this.financialByMarket = index(financialSources, FinancialDataSource::supportedMarketCodes, "재무");
+        this.fullStatementByMarket =
+                index(fullStatementSources, FullStatementDataSource::supportedMarketCodes, "전체재무제표");
         this.masterByMarket = index(masterSources, SecurityMasterDataSource::supportedMarketCodes, "종목마스터");
         this.profileByMarket = index(profileSources, CompanyProfileDataSource::supportedMarketCodes, "기업개황");
         this.corporateActionByMarket =
@@ -89,6 +93,18 @@ public class DataSourceRegistry {
 
     public FinancialDataSource financialSource(String marketCode) throws DataSourceException {
         return require(financialByMarket, marketCode, "재무");
+    }
+
+    /**
+     * 해당 시장의 전체 재무제표 소스.
+     *
+     * <p>{@link #financialSource}와 <b>따로 있는 것이 정상이다.</b> 둘이 같은 시장을 담당해도
+     * 포트 타입이 달라 위 중복 검사에 걸리지 않는다 — 요약본과 전체본은 조회 비용도 주는
+     * 항목도 다르므로 하나로 합치면 일일 갱신이 필요하지도 않은 비용을 매번 치른다.
+     * 근거는 {@link FullStatementDataSource}에 있다.
+     */
+    public FullStatementDataSource fullStatementSource(String marketCode) throws DataSourceException {
+        return require(fullStatementByMarket, marketCode, "전체재무제표");
     }
 
     public SecurityMasterDataSource securityMasterSource(String marketCode) throws DataSourceException {

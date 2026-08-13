@@ -105,7 +105,8 @@ class CompanyProfileCollectorTest {
 
     private CompanyProfileCollector collectorWith(CompanyProfileDataSource source) {
         DataSourceRegistry registry = new DataSourceRegistry(
-                List.of(), List.of(), List.of(), List.of(source), List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of(source), List.of(), List.of(),
+                List.of());
         return new CompanyProfileCollector(registry, jdbcTemplate);
     }
 
