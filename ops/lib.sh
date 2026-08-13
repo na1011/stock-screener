@@ -10,6 +10,11 @@
 DEPLOY="$HOME/Library/Application Support/stock-screener"
 LOG_DIR="$HOME/Library/Logs/stock-screener"
 
+# DB 덤프. **저장소 밖이다**(ADR-0034). 저장소는 개발 트리라 `gradlew clean`·`mv`·`git add`의
+# 사정거리 안이고, 1GB짜리 덤프가 작업 트리에 있으면 커밋 사고 반경에 들어온다. 배포 산출물과
+# 같은 700 트리에 두면 `.env`와 같은 보호를 받는다.
+DUMP_DIR="$DEPLOY/dumps"
+
 APP_PID_FILE="$DEPLOY/app.pid"
 TUNNEL_PID_FILE="$DEPLOY/tunnel.pid"
 TUNNEL_TOKEN_FILE="$DEPLOY/tunnel-token"
@@ -45,4 +50,16 @@ wait_for() {
 # cloudflared 실행 파일. Homebrew 경로가 /etc/paths에 없는 환경이 있어 직접 찾는다.
 cloudflared_bin() {
   command -v cloudflared 2>/dev/null || { [[ -x /opt/homebrew/bin/cloudflared ]] && echo /opt/homebrew/bin/cloudflared; }
+}
+
+# pg_dump·pg_restore 실행 파일. cloudflared와 같은 이유로 직접 찾는다 — Homebrew의
+# postgresql@16은 keg-only라 `/opt/homebrew/bin`의 심볼릭 링크가 없으면 Cellar까지 내려가야 한다.
+pg_bin() {
+  local name="$1"
+  command -v "$name" 2>/dev/null && return 0
+  local candidate
+  for candidate in "/opt/homebrew/bin/$name" "/opt/homebrew/opt/postgresql@16/bin/$name"; do
+    [[ -x "$candidate" ]] && { echo "$candidate"; return 0; }
+  done
+  return 1
 }
