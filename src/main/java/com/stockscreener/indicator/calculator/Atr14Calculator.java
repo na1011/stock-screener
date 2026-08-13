@@ -90,8 +90,14 @@ public class Atr14Calculator implements IndicatorCalculator {
         return points;
     }
 
-    /** max(고가−저가, |고가−전일종가|, |저가−전일종가|). 셋 다 수정 축척으로 맞춘 뒤 계산한다. */
-    private static BigDecimal trueRange(PriceBar current, PriceBar previous) {
+    /**
+     * max(고가−저가, |고가−전일종가|, |저가−전일종가|). 셋 다 수정 축척으로 맞춘 뒤 계산한다.
+     *
+     * <p>package-private인 것은 {@link Adx14Calculator}가 같은 값을 쓰기 때문이다. 베끼면
+     * <b>수정 축척으로 맞춘다는 판단이 두 곳에 생기고</b>, 한쪽만 고쳐도 값이 정상 범위 안이라
+     * 어긋난 것이 드러나지 않는다.
+     */
+    static BigDecimal trueRange(PriceBar current, PriceBar previous) {
         BigDecimal high = PriceScaling.adjustedHigh(current);
         BigDecimal low = PriceScaling.adjustedLow(current);
         BigDecimal previousClose = previous.adjClose();
