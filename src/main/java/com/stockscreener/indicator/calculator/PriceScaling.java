@@ -17,7 +17,7 @@ import java.math.RoundingMode;
  * {@code Atr14Calculator}·52주 고저에 모두 필요해 한 곳에 둔다 — 각자 구현하면 반올림이
  * 어긋나기 시작하는데 그 어긋남도 값이 그럴듯해 드러나지 않는다.
  */
-final class PriceScaling {
+public final class PriceScaling {
 
     private PriceScaling() {
     }
@@ -29,7 +29,7 @@ final class PriceScaling {
      * ({@code price_daily}에 0 종가가 들어오면 그것 자체가 수집 결함이다) 배치를 죽이지 않도록
      * 원값을 그대로 쓴다.
      */
-    static BigDecimal adjusted(PriceBar bar, BigDecimal rawValue) {
+    public static BigDecimal adjusted(PriceBar bar, BigDecimal rawValue) {
         if (bar.close().signum() == 0) {
             return rawValue;
         }
@@ -37,11 +37,11 @@ final class PriceScaling {
                 .divide(bar.close(), MovingAverages.SCALE, RoundingMode.HALF_UP);
     }
 
-    static BigDecimal adjustedHigh(PriceBar bar) {
+    public static BigDecimal adjustedHigh(PriceBar bar) {
         return adjusted(bar, bar.high());
     }
 
-    static BigDecimal adjustedLow(PriceBar bar) {
+    public static BigDecimal adjustedLow(PriceBar bar) {
         return adjusted(bar, bar.low());
     }
 
@@ -63,7 +63,7 @@ final class PriceScaling {
      * {@code close}·{@code adjClose}로 유도되므로 저장하면 계수와 lockstep으로 지켜야 할
      * 불변식이 하나 늘고, {@code PriceWriter}가 이미 정확히 그 형태의 버그를 냈다(ADR-0049).
      */
-    static BigDecimal adjustedVolume(PriceBar bar) {
+    public static BigDecimal adjustedVolume(PriceBar bar) {
         BigDecimal volume = BigDecimal.valueOf(bar.volume());
         if (bar.adjClose() == null || bar.adjClose().signum() == 0) {
             // adjClose = close × adj_factor이고 계수는 양수이므로 이 분기는 종가가 0일 때다.

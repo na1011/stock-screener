@@ -18,16 +18,16 @@ import java.util.List;
  * <p>MUST — 이동평균은 {@link PriceBar#adjClose()}로 계산한다(ADR-0002). 원주가를 쓰면
  * 액면분할 당일 값이 분할비율만큼 튀어 거짓 신호가 된다.
  */
-final class MovingAverages {
+public final class MovingAverages {
 
     /**
      * 저장 컬럼이 {@code numeric(24,8)}이라 그보다 정밀하게 계산해도 저장에서 잘린다.
      * 나눗셈 중간값은 이 자릿수로 맞춘다.
      */
-    static final int SCALE = 8;
+    public static final int SCALE = 8;
 
     /** 나눗셈이 무한소수가 되는 경우를 위해 정밀도를 고정한다. */
-    static final MathContext MC = new MathContext(20, RoundingMode.HALF_UP);
+    public static final MathContext MC = new MathContext(20, RoundingMode.HALF_UP);
 
     private MovingAverages() {
     }
