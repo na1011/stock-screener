@@ -342,6 +342,34 @@ public class CorporateActionLedger {
                 CorporateActionStatus.APPLIED.name(), CorporateAction.Type.UNKNOWN.name());
     }
 
+    /**
+     * <b>계수에 반영되지 않은</b> 사건의 효력일. {@link #findApplicable}의 짝이다(ADR-0055).
+     *
+     * <p>둘을 같은 클래스에 두는 이유는 <b>합집합이 원장 전체가 되어야 하기 때문이다.</b>
+     * 한쪽이 다른 파일로 흩어지면 두 정의가 겹치거나 비는데, 겹치면 보정된 종목의 지표가
+     * 이유 없이 사라지고 비면 <b>보정 안 된 가격으로 낸 값이 그대로 화면에 나간다.</b>
+     * 어느 쪽도 에러를 내지 않는다.
+     *
+     * <p>MUST: {@code type <> UNKNOWN}을 걸지 <b>않는다.</b> {@link #findApplicable}이 그것을
+     * 거르는 이유는 "종류를 모르는 비율은 계수가 아니다"인데, 여기서는 정반대다 — 종류를
+     * 모르는 사건이야말로 보정하지 못한 사건이다. 실측된 5종목의 사건이 <b>전부</b>
+     * {@code UNKNOWN}이므로, 이 조건을 걸면 이 기능이 통째로 아무 일도 하지 않는다.
+     *
+     * <p>{@code OBSERVED}가 들어가는 이유는 그것이 "사람이 아직 판정하지 않았다"이지
+     * "보정됐다"가 아니기 때문이다. {@code REJECTED}는 <b>그런 일이 없었다</b>이므로 대상이
+     * 아니고, 그 종목의 지표는 보정 없이 맞다.
+     */
+    @Transactional(readOnly = true)
+    public List<LocalDate> findUnadjusted(long stockId) {
+        return jdbcTemplate.queryForList("""
+                SELECT effective_date FROM corporate_action
+                WHERE stock_id = ? AND status IN (?, ?)
+                ORDER BY effective_date
+                """,
+                LocalDate.class, stockId,
+                CorporateActionStatus.OBSERVED.name(), CorporateActionStatus.UNSUPPORTED.name());
+    }
+
     /** 계수에 반영됐음을 표시한다. 호출자가 재구축과 <b>같은 트랜잭션</b>에서 부른다. */
     public void markApplied(List<Long> ids) {
         if (ids.isEmpty()) {

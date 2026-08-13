@@ -8,6 +8,7 @@ import com.stockscreener.indicator.calculator.PerCalculator;
 import com.stockscreener.indicator.calculator.Rsi14Calculator;
 import com.stockscreener.indicator.calculator.Sma20Calculator;
 import com.stockscreener.indicator.calculator.Sma200Calculator;
+import com.stockscreener.pipeline.collector.CorporateActionStatus;
 import com.stockscreener.support.TestDatabaseGuard;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -227,6 +228,84 @@ class IndicatorRunnerTest {
         assertThat(storedValue(MarketCapCalculator.CODE, exRights))
                 .as("접힌 구간은 비어 있으므로 원값 그대로여야 한다")
                 .isEqualByComparingTo("1000000000");
+    }
+
+    @Test
+    @DisplayName("보정 못 한 기업 행위가 창 안이면 그 지표의 값을 내지 않는다 — 창 밖 지표는 그대로다")
+    void suppressesIndicatorsWhoseWindowSpansAnUnadjustedAction() {
+        insertPriceHistory(250);
+        // 인덱스 60. SMA_200의 창(200봉)은 산출 일자 전부에서 이 날을 삼키고,
+        // SMA_20의 창(20봉)은 그 앞뒤 19일자에서만 삼킨다.
+        unadjustedAction(CorporateActionStatus.UNSUPPORTED, AS_OF.minusDays(190));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedCodes())
+                .as("두 축척이 이어붙은 창으로 낸 값은 그럴듯하지만 틀리다")
+                .doesNotContain(Sma200Calculator.CODE)
+                .contains(Sma20Calculator.CODE);
+        assertThat(storedTradeDates())
+                .as("사건이 미래인 일자는 축척이 하나뿐이라 살아남는다")
+                .contains(AS_OF.minusDays(200));
+    }
+
+    @Test
+    @DisplayName("판정 전 후보(OBSERVED)도 같다 — 보정되지 않았다는 사실이 판정 여부보다 앞선다")
+    void suppressesForUnjudgedCandidatesToo() {
+        insertPriceHistory(250);
+        unadjustedAction(CorporateActionStatus.OBSERVED, AS_OF.minusDays(190));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedCodes()).doesNotContain(Sma200Calculator.CODE);
+    }
+
+    @Test
+    @DisplayName("이미 저장된 행을 실제로 지운다 — 안 쓰는 것만으로는 제외가 성립하지 않는다")
+    void deletesRowsThatWereStoredBeforeTheActionWasKnown() {
+        insertPriceHistory(250);
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+        assertThat(storedCodes()).contains(Sma200Calculator.CODE);
+
+        // 사건이 뒤늦게 원장에 들어오는 것이 정상 경로다 — 휴리스틱 탐지도 공시 수집도
+        // 시세보다 늦다. 이때 SMA_200은 산출 일자가 전부 빠져 points가 **빈 목록**이 되는데,
+        // 러너가 거기서 continue하면 아래 단언이 깨진다.
+        unadjustedAction(CorporateActionStatus.UNSUPPORTED, AS_OF.minusDays(190));
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedCodes())
+                .as("UPSERT뿐이면 옛 행이 남고, 남은 값은 그럴듯해서 화면에서 드러나지 않는다")
+                .doesNotContain(Sma200Calculator.CODE);
+    }
+
+    @Test
+    @DisplayName("보정된 사건은 억제하지 않는다 — 계수가 이미 축척을 하나로 만들었다")
+    void appliedActionsDoNotSuppress() {
+        insertPriceHistory(250);
+        approvedAction("SPLIT", "5", AS_OF.minusDays(190), AS_OF.minusDays(190));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedCodes()).contains(Sma200Calculator.CODE);
+    }
+
+    @Test
+    @DisplayName("오탐으로 판정된 사건은 억제하지 않는다 — 그런 일이 없었으므로 값이 맞다")
+    void rejectedActionsDoNotSuppress() {
+        insertPriceHistory(250);
+        unadjustedAction(CorporateActionStatus.REJECTED, AS_OF.minusDays(190));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedCodes()).contains(Sma200Calculator.CODE);
+    }
+
+    private void unadjustedAction(CorporateActionStatus status, LocalDate effectiveDate) {
+        jdbcTemplate.update("""
+                INSERT INTO corporate_action
+                    (stock_id, effective_date, type, ratio, detection_source, status)
+                VALUES (?, ?, 'UNKNOWN', 5, 'HEURISTIC', ?)
+                """, stockId, effectiveDate, status.name());
     }
 
     /** 권리락에서 가격이 반토막 나고 신주상장에서 주식수가 두 배가 되는 시세. */

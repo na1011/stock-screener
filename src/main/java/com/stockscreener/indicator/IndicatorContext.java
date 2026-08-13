@@ -23,6 +23,7 @@ public final class IndicatorContext {
     private final List<FinancialFigures> annualFigures;
     private final List<FinancialFigures> quarterlyFigures;
     private final List<ShareAdjustment> shareAdjustments;
+    private final List<LocalDate> unadjustedActions;
     private final NavigableMap<LocalDate, BigDecimal> marketIndex;
     private final Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies;
 
@@ -33,6 +34,7 @@ public final class IndicatorContext {
             List<FinancialFigures> annualFigures,
             List<FinancialFigures> quarterlyFigures,
             List<ShareAdjustment> shareAdjustments,
+            List<LocalDate> unadjustedActions,
             NavigableMap<LocalDate, BigDecimal> marketIndex,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
         this.stockId = stockId;
@@ -42,6 +44,8 @@ public final class IndicatorContext {
         this.quarterlyFigures = quarterlyFigures == null ? List.of() : List.copyOf(quarterlyFigures);
         this.shareAdjustments =
                 shareAdjustments == null ? List.of() : List.copyOf(shareAdjustments);
+        this.unadjustedActions =
+                unadjustedActions == null ? List.of() : List.copyOf(unadjustedActions);
         this.marketIndex = marketIndex == null ? new TreeMap<>() : new TreeMap<>(marketIndex);
         this.dependencies = dependencies == null ? Map.of() : Map.copyOf(dependencies);
     }
@@ -56,7 +60,7 @@ public final class IndicatorContext {
             List<ShareAdjustment> shareAdjustments,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
         this(stockId, industryDivision, priceBars, annualFigures, quarterlyFigures,
-                shareAdjustments, null, dependencies);
+                shareAdjustments, List.of(), null, dependencies);
     }
 
     /** 업종을 모르는 컨텍스트. 업종을 쓰지 않는 계산기의 테스트가 쓴다. */
@@ -66,7 +70,7 @@ public final class IndicatorContext {
             List<FinancialFigures> annualFigures,
             List<FinancialFigures> quarterlyFigures,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
-        this(stockId, null, priceBars, annualFigures, quarterlyFigures, List.of(), null,
+        this(stockId, null, priceBars, annualFigures, quarterlyFigures, List.of(), List.of(), null,
                 dependencies);
     }
 
@@ -81,7 +85,8 @@ public final class IndicatorContext {
     public IndicatorContext withDependencies(
             Map<String, NavigableMap<LocalDate, BigDecimal>> newDependencies) {
         return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
-                quarterlyFigures, shareAdjustments, marketIndex, newDependencies);
+                quarterlyFigures, shareAdjustments, unadjustedActions, marketIndex,
+                newDependencies);
     }
 
     public long stockId() {
@@ -117,6 +122,23 @@ public final class IndicatorContext {
     /** 이 종목에 반영할 기업 행위. 원장의 승인된 행에서 온다(ADR-0051). */
     public List<ShareAdjustment> shareAdjustments() {
         return shareAdjustments;
+    }
+
+    /**
+     * <b>계수에 반영되지 않은</b> 기업 행위의 효력일. 오름차순이다(ADR-0055).
+     *
+     * <p>{@link #shareAdjustments()}의 짝이다 — 그쪽이 "보정한 것", 이쪽이 "보정하지 못한 것"이고
+     * 둘의 합집합이 원장 전체다. 여기 날짜가 있으면 그 종목의 시세에 <b>축척이 다른 구간이
+     * 이어붙어 있다.</b> 007340은 2024-10-08에 종가가 102,100에서 19,200으로 떨어지는데
+     * {@code adj_factor}가 1이다 — 그 계단을 넘는 창으로 낸 값은 무엇이든 틀리다.
+     *
+     * <p>MUST NOT: 계산기가 이것을 보고 스스로 값을 낼지 정하지 않는다. 판정은 러너가
+     * {@link IndicatorRegistry#effectiveLookback(String)}과 함께 한 곳에서 끝낸다 —
+     * 계산기마다 다시 판단하면 지표 하나를 더할 때 그 판단이 빠지고, 빠진 것은
+     * <b>값이 나오는 것</b>으로 나타나 아무도 못 본다.
+     */
+    public List<LocalDate> unadjustedActions() {
+        return unadjustedActions;
     }
 
     /**
@@ -226,6 +248,7 @@ public final class IndicatorContext {
      */
     public IndicatorContext withMarketIndex(NavigableMap<LocalDate, BigDecimal> newMarketIndex) {
         return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
-                quarterlyFigures, shareAdjustments, newMarketIndex, dependencies);
+                quarterlyFigures, shareAdjustments, unadjustedActions, newMarketIndex,
+                dependencies);
     }
 }

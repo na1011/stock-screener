@@ -6,11 +6,13 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -78,9 +80,31 @@ public class IndicatorRunner {
         // 이미 계산된 지표의 시계열. 뒤따르는 파생 지표가 여기서 부모를 찾는다.
         Map<String, NavigableMap<LocalDate, BigDecimal>> computed = new HashMap<>();
         long written = 0;
+        long deleted = 0;
+        int suppressedCodes = 0;
 
         for (IndicatorCalculator calculator : registry.executionOrder()) {
+            String code = calculator.code();
             List<IndicatorPoint> points = calculator.calculate(contextFor(base, calculator, computed));
+
+            // 창이 미보정 기업 행위를 삼키는 산출 일자는 값을 내지 않는다(ADR-0055).
+            // 사건이 없는 종목에서는 빈 집합이라 아래가 통째로 건너뛰어진다.
+            Set<LocalDate> suppressed = UnadjustedActionGuard.suppressedDates(
+                    base.priceBars(), base.unadjustedActions(), registry.effectiveLookback(code));
+            if (!suppressed.isEmpty()) {
+                points = points.stream()
+                        .filter(point -> !suppressed.contains(point.tradeDate()))
+                        .toList();
+                // MUST: 아래 points.isEmpty() 분기보다 **앞**이다. 전부 억제되면 points가 비고,
+                // 거기서 continue하면 이미 저장된 옛 행이 그대로 남는다 — 값이 그럴듯해서
+                // 화면에도 테스트에도 드러나지 않는다. 러너가 "쓰지 않는다"로 끝내면 제외가
+                // 성립하지 않는다는 것이 P8이 적어 둔 함정이고, 여기가 그 자리다.
+                long removed = writer.deleteAt(stockId, code, retainDates(suppressed, retentionCutoff));
+                if (removed > 0 || !points.isEmpty()) {
+                    suppressedCodes++;
+                }
+                deleted += removed;
+            }
 
             // 계산할 수 없으면 행을 쓰지 않는다(ADR-0002). 워밍업이 부족한 구간에서 정상이다.
             if (points.isEmpty()) {
@@ -88,10 +112,35 @@ public class IndicatorRunner {
             }
 
             // 파생 지표에는 창 전체를 넘긴다. 저장만 자르는 것이므로 여기는 자르기 전 값이다.
-            computed.put(calculator.code(), toSeries(points));
-            written += writer.write(stockId, calculator.code(), retain(points, retentionCutoff));
+            //
+            // 억제된 일자가 여기서도 빠진 채 넘어가는 것이 옳다. 자식의 창은 부모의 창을
+            // 포함하므로(effectiveLookback = 자기 몫 + 부모 최대) 부모에 구멍이 있는 날짜는
+            // 자식도 억제 대상이며, 자식이 성립하는 날짜에서는 부모에 구멍이 없다.
+            computed.put(code, toSeries(points));
+            written += writer.write(stockId, code, retain(points, retentionCutoff));
+        }
+
+        if (suppressedCodes > 0 || deleted > 0) {
+            // "이 종목이 왜 화면에서 빠졌는가"를 나중에 답할 수 있는 유일한 흔적이다.
+            log.info("미보정 기업 행위로 지표를 뺐다. stockId={} asOf={} 효력일={} 지표={}개 삭제={}행",
+                    stockId, asOf, base.unadjustedActions(), suppressedCodes, deleted);
         }
         return written;
+    }
+
+    /**
+     * 삭제 대상에서도 보존 경계 밖을 뺀다.
+     *
+     * <p>{@link #retain}과 <b>같은 부등호를 쓴다.</b> 어긋나면 러너가
+     * {@link IndicatorRetentionPolicy}가 소유한 구간을 침범하고, 그 침범은 지운 뒤에 다시
+     * 쓰이지 않으므로 <b>아무 증상도 남기지 않는다.</b>
+     */
+    private Collection<LocalDate> retainDates(Set<LocalDate> dates, Optional<LocalDate> cutoff) {
+        if (cutoff.isEmpty()) {
+            return dates;
+        }
+        LocalDate boundary = cutoff.get();
+        return dates.stream().filter(date -> date.isAfter(boundary)).toList();
     }
 
     /**
@@ -137,6 +186,9 @@ public class IndicatorRunner {
                 // 빠뜨려도 컴파일된다 — 전 종목이 빈 목록을 받아 권리락 구간 보정이 통째로
                 // 사라지고 값은 그럴듯하다. IndicatorRunnerTest가 이 자리를 지킨다.
                 reader.readShareAdjustments(stockId),
+                // 위의 짝이다. 빠뜨리면 보정 안 된 계단을 넘는 창으로 낸 값이 그대로 나간다
+                // (ADR-0055). 이쪽도 증상이 "값이 나온다"라 화면에서 드러나지 않는다.
+                reader.readUnadjustedActions(stockId),
                 // MUST: 시장별로 고르는 것이 여기서 끝난다(ADR-0046 §승인된 이탈 4).
                 // 계산기에 지수 여럿을 넘기면 "코스닥 종목의 지수는 코스닥"이라는 시장의 사실을
                 // 지표마다 다시 알아야 하고, 한 곳만 안 고쳐도 그 지표만 조용히 다른 벤치마크를 쓴다.

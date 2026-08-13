@@ -3,6 +3,10 @@ package com.stockscreener.indicator;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -51,6 +55,11 @@ public class IndicatorValueWriter {
             WHERE indicator_value.value IS DISTINCT FROM EXCLUDED.value
             """;
 
+    private static final String DELETE_AT = """
+            DELETE FROM indicator_value
+            WHERE stock_id = ? AND indicator_code = ? AND trade_date = ANY (?)
+            """;
+
     private final JdbcTemplate jdbcTemplate;
 
     public IndicatorValueWriter(JdbcTemplate jdbcTemplate) {
@@ -84,5 +93,33 @@ public class IndicatorValueWriter {
             }
         }
         return written;
+    }
+
+    /**
+     * 한 종목·한 지표의 <b>이미 저장된</b> 값을 지운다.
+     *
+     * <p>IMPORTANT — 이것이 없으면 계산기를 고쳐도 제외가 성립하지 않는다. {@link #write}는
+     * UPSERT뿐이라 <b>쓰지 않기로 한 날짜의 옛 행은 그대로 남고</b>, 남은 값은 그럴듯해서
+     * 화면에서 드러나지 않는다. P8이 이 함정을 *"계산기를 고치는 것만으로는 제외가 성립하지
+     * 않는다"*로 적어 두었고, ADR-0055의 억제가 그 자리에 정확히 들어간다.
+     *
+     * <p>날짜를 배열로 한 번에 넘긴다 — 날짜마다 문장을 던지면 5종목 × 71지표 × 180일자가
+     * 6만 번의 왕복이 된다.
+     *
+     * @param dates 지울 거래일. 비면 아무것도 하지 않는다
+     * @return 실제로 지워진 행 수. 계산된 적 없는 날짜는 0이다
+     */
+    public long deleteAt(long stockId, String indicatorCode, Collection<LocalDate> dates) {
+        if (dates.isEmpty()) {
+            return 0L;
+        }
+        return jdbcTemplate.update(connection -> {
+            PreparedStatement statement = connection.prepareStatement(DELETE_AT);
+            statement.setLong(1, stockId);
+            statement.setString(2, indicatorCode);
+            statement.setArray(3, connection.createArrayOf("date",
+                    dates.stream().map(Date::valueOf).toArray()));
+            return statement;
+        });
     }
 }

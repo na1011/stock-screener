@@ -195,6 +195,20 @@ public class IndicatorDataReader {
                 .toList();
     }
 
+    /**
+     * <b>계수에 반영되지 않은</b> 기업 행위의 효력일(ADR-0055). 오름차순이다.
+     *
+     * <p>{@link #readShareAdjustments}가 "무엇을 보정했나"를 나르는 것과 짝으로, 이것은
+     * "무엇을 보정하지 <b>못했나</b>"를 나른다. 러너가 이 날짜를 창에 대보고 값을 낼지 정한다.
+     *
+     * <p>{@link CorporateActionLedger#findUnadjusted}를 그대로 부른다 — 여기서 SQL을 다시 쓰면
+     * "보정된 사건"과 "보정 못 한 사건"의 정의가 두 곳이 되고, 그 어긋남은 <b>보정 안 된
+     * 가격으로 낸 지표가 계속 나가는 것</b>으로만 드러난다.
+     */
+    public List<LocalDate> readUnadjustedActions(long stockId) {
+        return corporateActions.findUnadjusted(stockId);
+    }
+
     /** 연간 재무를 최신 우선으로 읽는다. */
     public List<FinancialFigures> readAnnualFigures(long stockId, LocalDate asOf, int years) {
         if (years <= 0) {
