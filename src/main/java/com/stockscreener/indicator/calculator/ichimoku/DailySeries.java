@@ -28,14 +28,9 @@ final class DailySeries {
     private static final int SPAN_B = 52;
     private static final int SHIFT = 26;
 
-    /** {@code drv_55}의 되돌아보기. 원본 주석대로 130 거래일 ≈ 26주다. */
-    static final int RETURN_LOOKBACK = 130;
-
-    private final double[] adjClose;
     private final int[] kaizen;
 
-    private DailySeries(double[] adjClose, int[] kaizen) {
-        this.adjClose = adjClose;
+    private DailySeries(int[] kaizen) {
         this.kaizen = kaizen;
     }
 
@@ -81,26 +76,12 @@ final class DailySeries {
                     + (tenkan[j] > kijun[j] ? 1 : 0)
                     + (close[j] > close[back] ? 1 : 0);
         }
-        return new DailySeries(close, kaizen);
+        return new DailySeries(kaizen);
     }
 
     /** {@code drv_43} 일봉 호전 분류 0~3. 구름을 만들 수 없는 구간은 −1이다. */
     int kaizen(int index) {
         return kaizen[index];
-    }
-
-    /**
-     * {@code stock_ret_26w} — 130거래일 수익률(%).
-     *
-     * <p>{@code close[130]}이 0이면 원본은 0%로 접는다. 우리 {@code price_daily}에 0 종가는
-     * 정합성 검사에서 걸러지므로 이 분기는 실제로 밟히지 않는다.
-     */
-    double returnOver130(int index) {
-        int back = index - RETURN_LOOKBACK;
-        if (back < 0 || adjClose[back] == 0) {
-            return 0.0;
-        }
-        return (adjClose[index] / adjClose[back] - 1) * 100.0;
     }
 
     private static double highest(double[] values, int j, int length) {

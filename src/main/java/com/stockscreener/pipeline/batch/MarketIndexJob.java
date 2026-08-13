@@ -98,9 +98,11 @@ public class MarketIndexJob {
         List<String> codes = targetIndexCodes();
         execution.plan(CollectionPhase.MARKET_INDEX, codes.size());
         if (codes.isEmpty()) {
-            execution.alertOperator(AlertSeverity.ERROR, "지수 소스가 등록되지 않았다",
-                    "DATA_GO_KR_SERVICE_KEY가 없어 지수 어댑터가 빈으로 등록되지 않았다. "
-                            + "이 상태로는 ICHIMOKU_SP_KR이 영영 0건이다.");
+            // MUST NOT: 여기서 알리지 않는다. 어댑터가 없는 것은 <b>구성의 상태</b>이지 그날의
+            // 사건이 아니라, 거래일마다 같은 알림이 오면 곧 무시된다. 그날 실제로 무엇이
+            // 비었는가는 DailyUpdateJob의 "대상일 지수가 없다"가 답하고, 그쪽은 어댑터가 아니라
+            // **대상 종목이 필요로 하는 시장**으로 묻기 때문에 이 상태에서도 발화한다.
+            log.warn("지수 어댑터가 등록되지 않았다(키 없음). 지수 수집을 건너뛴다. {}~{}", from, to);
             return;
         }
         execution.stage("시장 지수 수집");

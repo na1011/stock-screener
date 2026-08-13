@@ -1,6 +1,7 @@
 package com.stockscreener.indicator.calculator.ichimoku;
 
 import com.stockscreener.indicator.PriceBar;
+import com.stockscreener.indicator.calculator.ExcessReturn;
 import com.stockscreener.indicator.calculator.PriceScaling;
 
 import java.math.BigDecimal;
@@ -8,8 +9,8 @@ import java.time.LocalDate;
 import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.NavigableMap;
+import java.util.OptionalDouble;
 import java.util.TreeMap;
 
 /**
@@ -63,44 +64,20 @@ public final class IchimokuAnalyzer {
             if (current + 1 < WeeklySeries.MIN_WEEKS) {
                 continue;
             }
-            LocalDate date = bars.get(i).tradeDate();
-            int back = i - DailySeries.RETURN_LOOKBACK;
-            if (back < 0) {
+            // MUST: 초과 수익률을 낼 수 없으면 그 일자를 통째로 건너뛴다(ADR-0046 §승인된 이탈 2).
+            // ICHI_TIER만 빼면 나머지 코드가 "절대 수익률" 뜻으로 화면에 나가는데, D5는
+            // bull/bear → conclusion·confidence → ext_signal까지 번진다.
+            OptionalDouble excess = ExcessReturn.at(bars, marketIndex, i);
+            if (excess.isEmpty()) {
                 continue;
             }
-            // MUST: 대상 일자는 **정확 일치**로 묻는다. floorEntry로 직전 값을 집으면 그날
-            // 지수가 없어도 어제 값으로 D5가 나오고, 그것은 이탈 2가 막으려는 바로 그 상태다 —
-            // "그날 지수가 있는가"를 묻는 MarketIndexCalendar.countOn과 같은 질문이어야 한다.
-            BigDecimal now = marketIndex.get(date);
-            Double indexBack = indexFloor(marketIndex, bars.get(back).tradeDate());
-            if (now == null || indexBack == null || indexBack == 0) {
-                continue;
-            }
-            double indexNow = now.doubleValue();
 
+            LocalDate date = bars.get(i).tradeDate();
             WeeklyWindow window = new WeeklyWindow(series, current, partials.get(i));
             WeeklyAnalysis weekly = WeeklyAnalyzer.analyze(window);
-            double excess = daily.returnOver130(i) - (indexNow / indexBack - 1) * 100.0;
-            result.put(date, IchimokuScoring.score(weekly, daily.kaizen(i), excess));
+            result.put(date, IchimokuScoring.score(weekly, daily.kaizen(i), excess.getAsDouble()));
         }
         return result;
-    }
-
-    /**
-     * <b>130봉 전</b> 시점의 지수 종가. 그 일자 이하의 가장 가까운 값을 쓴다.
-     *
-     * <p>MUST: 종목의 봉 날짜로 묻는다. 원본의 {@code idx_close[130]}은 지수 시계열의 130행 전이
-     * 아니라 <b>차트(=종목) 봉 130개 전</b>이다 — {@code request.security}가 차트 봉에 정렬하기
-     * 때문이다. 지수의 자체 행을 세면 거래정지가 있던 종목에서 두 수익률의 구간이 어긋나고,
-     * <b>초과 수익률이 통째로 다른 뜻이 되는데 값은 그럴듯하다.</b>
-     *
-     * <p>여기만 {@code floorEntry}인 것은 종목의 130봉 전 날짜가 지수의 휴장일과 어긋날 수 있기
-     * 때문이고, 그것이 Pine의 forward-fill과 같은 모양이다. <b>대상 일자는 정확 일치여야 한다</b> —
-     * 거기서 직전 값을 집으면 이탈 2가 무의미해진다.
-     */
-    private static Double indexFloor(NavigableMap<LocalDate, BigDecimal> index, LocalDate date) {
-        Map.Entry<LocalDate, BigDecimal> entry = index.floorEntry(date);
-        return entry == null ? null : entry.getValue().doubleValue();
     }
 
     /** 일자마다 "그 주의 시작부터 그날까지"의 집계. */

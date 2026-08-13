@@ -103,6 +103,7 @@ class PipelineEndToEndTest {
         // ADJ_CLOSE가 봉 하나로 값을 내는 첫 지표라 그때 비로소 이 구멍이 열렸다.
         jdbcTemplate.update("DELETE FROM indicator_value");
         jdbcTemplate.update("DELETE FROM price_daily");
+        jdbcTemplate.update("DELETE FROM market_index_daily");
         jdbcTemplate.update("DELETE FROM universe_membership");
         jdbcTemplate.update("DELETE FROM stock");
     }
@@ -295,6 +296,7 @@ class PipelineEndToEndTest {
         universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
         long stockId = stockIdOf(SEEDED_TICKER);
         fakePriceSource.withBars(stockId, List.of(bar("2026-08-05", "72000")));
+        seedMarketIndexes(AS_OF);
         dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
         alertPort.events.clear();
 
@@ -394,6 +396,7 @@ class PipelineEndToEndTest {
         }
         fakePriceSource.failingWith(failing, new DataSourceException(
                 DataSourceException.Kind.TRANSIENT, "fake-price", "일시적 오류"));
+        seedMarketIndexes(AS_OF);
         alertPort.events.clear();
 
         BatchStatus status = dailyUpdateJob.run(
@@ -509,6 +512,7 @@ class PipelineEndToEndTest {
         for (Long member : members) {
             fakePriceSource.withBars(member, List.of(bar("2026-08-05", "72000")));
         }
+        seedMarketIndexes(AS_OF);
 
         dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
 
@@ -519,8 +523,9 @@ class PipelineEndToEndTest {
                 """, executionId);
 
         assertThat(phases).extracting(phase -> phase.get("phase"))
-                .as("일일 갱신은 시세와 지표 두 단계를 돈다")
-                .containsExactlyInAnyOrder("INDICATOR", "PRICE");
+                .as("일일 갱신은 지수·시세·지표 세 단계를 돈다. 지수는 종목 루프 **앞**이다 — "
+                        + "지표가 그날 지수를 입력으로 쓰기 때문이다(ADR-0053)")
+                .containsExactlyInAnyOrder("INDICATOR", "MARKET_INDEX", "PRICE");
         Map<String, Object> price = phases.stream()
                 .filter(phase -> "PRICE".equals(phase.get("phase"))).findFirst().orElseThrow();
         assertThat(price.get("planned_count")).isEqualTo(members.size());
@@ -578,6 +583,24 @@ class PipelineEndToEndTest {
     private int countMemberships() {
         return jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM universe_membership", Integer.class);
+    }
+
+    /**
+     * 대상일의 지수를 심는다.
+     *
+     * <p>MUST: 알림을 느슨하게 하는 대신 여기서 심는다. 운영에서 지수는 시세와 함께 들어오는
+     * 것이 정상이고, <b>시세만 있고 지수가 없는 상태는 실제로 알려야 하는 사건</b>이다 —
+     * 그날 {@code ICHI_*}가 한 행도 안 써지는데 화면에서는 조건에 안 맞은 것과 같아 보인다.
+     * 단언을 넓히면 그 계약이 이 테스트에서 사라진다.
+     */
+    private void seedMarketIndexes(LocalDate date) {
+        for (String code : List.of("KOSPI", "KOSDAQ")) {
+            jdbcTemplate.update("""
+                    INSERT INTO market_index_daily (index_code, trade_date, close)
+                    VALUES (?, ?, 2500)
+                    ON CONFLICT (index_code, trade_date) DO NOTHING
+                    """, code, date);
+        }
     }
 
     private long stockIdOf(String ticker) {

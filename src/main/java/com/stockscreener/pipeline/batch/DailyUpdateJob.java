@@ -11,6 +11,7 @@ import com.stockscreener.pipeline.collector.PriceCalendar;
 import com.stockscreener.pipeline.collector.PriceCollector;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.MarketIndexCodes;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.watchlist.WatchlistAlertRunner;
 
@@ -230,7 +231,7 @@ public class DailyUpdateJob {
             }
 
             alertIfNothingArrived(execution, targets.size(), to);
-            alertIfIndexMissingWhilePricesArrived(execution, to);
+            alertIfIndexMissingWhilePricesArrived(execution, targets, to);
 
             // MUST: 여기부터의 기준일은 대상일이 아니라 **실제로 봉이 적재된** 최신 거래일이다.
             //
@@ -342,12 +343,23 @@ public class DailyUpdateJob {
      *
      * <p>시세도 함께 없으면 알리지 않는다 — 그것은 휴장이거나 소스 미공개이고
      * {@link #alertIfNothingArrived}가 이미 말한다. 여기서 물어야 하는 것은 <b>둘이 갈린 경우</b>뿐이다.
+     *
+     * <p>MUST: 기대하는 지수를 <b>대상 종목이 속한 시장</b>에서 뽑는다. 등록된 어댑터에서 뽑으면
+     * 키가 없어 어댑터가 아예 없는 환경에서 목록이 비어 <b>이 알림이 원리적으로 발화하지 않는다</b> —
+     * 그것이 정확히 가장 조용한 실패다.
      */
-    private void alertIfIndexMissingWhilePricesArrived(BatchExecutionContext execution, LocalDate to) {
+    private void alertIfIndexMissingWhilePricesArrived(BatchExecutionContext execution,
+                                                       List<SecurityRef> targets, LocalDate to) {
         if (priceCalendar.countOn(to) == 0) {
             return;
         }
-        List<String> missing = marketIndexJob.targetIndexCodes().stream()
+        List<String> missing = targets.stream()
+                .map(SecurityRef::marketCode)
+                .distinct()
+                // 아직 지수를 갖기로 하지 않은 시장(미국, v1.1)은 묻지 않는다. 그것은 결손이
+                // 아니라 범위 밖이고, 물으면 거래일마다 오는 알림이 되어 곧 무시된다.
+                .filter(MarketIndexCodes.ALL::contains)
+                .sorted()
                 .filter(code -> marketIndexCalendar.countOn(code, to) == 0)
                 .toList();
         if (missing.isEmpty()) {

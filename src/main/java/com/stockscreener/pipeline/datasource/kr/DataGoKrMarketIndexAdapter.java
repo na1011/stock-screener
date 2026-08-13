@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource.kr;
 
 import tools.jackson.databind.JsonNode;
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.MarketIndexCodes;
 import com.stockscreener.pipeline.datasource.MarketIndexDataSource;
 import com.stockscreener.pipeline.datasource.RawIndexBar;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
@@ -51,8 +52,8 @@ public class DataGoKrMarketIndexAdapter implements MarketIndexDataSource {
      * 만들지 않는 이유이기도 하다 — 사본이 늘면 갈린다.
      */
     private static final Map<String, String> INDEX_NAMES = Map.of(
-            "KOSPI", "코스피",
-            "KOSDAQ", "코스닥");
+            MarketIndexCodes.KOSPI, "코스피",
+            MarketIndexCodes.KOSDAQ, "코스닥");
 
     /**
      * 한 페이지에 요청할 행 수.
@@ -81,6 +82,14 @@ public class DataGoKrMarketIndexAdapter implements MarketIndexDataSource {
 
     @Override
     public Set<String> supportedIndexCodes() {
+        // MUST: MarketIndexCodes.ALL과 같아야 한다. 어긋나면 결손 알림이 기대하는 지수와
+        // 실제로 받는 지수가 갈리고, 그 차이는 "매일 오는 알림"이나 "영영 안 오는 알림"으로만
+        // 드러난다. 기동 시점에 실패시킨다.
+        if (!INDEX_NAMES.keySet().equals(MarketIndexCodes.ALL)) {
+            throw new IllegalStateException(
+                    "어댑터가 담당하는 지수가 MarketIndexCodes.ALL과 다르다: "
+                            + INDEX_NAMES.keySet() + " vs " + MarketIndexCodes.ALL);
+        }
         return INDEX_NAMES.keySet();
     }
 
