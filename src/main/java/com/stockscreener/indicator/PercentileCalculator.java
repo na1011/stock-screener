@@ -93,15 +93,20 @@ public class PercentileCalculator {
      */
     public long calculate(LocalDate tradeDate) {
         long written = 0;
+        long removed = 0;
         for (PercentileSpec spec : specs) {
             int rows = jdbcTemplate.update(
                     UPSERT_PERCENTILES, spec.code(), spec.sourceCode(), tradeDate);
             if (rows > 0) {
                 written += rows;
             }
+            // MUST: UPSERT만으로는 제외가 성립하지 않는다. 원본이 사라진 날에도 어제 쓴
+            // 백분위가 오늘 값처럼 남는다 — 위 SELECT가 그 종목을 안 뽑을 뿐이다.
+            removed += DerivedIndicatorCleanup.removeOrphans(
+                    jdbcTemplate, spec.code(), spec.sourceCode(), tradeDate);
         }
-        log.info("백분위를 계산했다. tradeDate={} 지표={}개 저장={}행",
-                tradeDate, specs.size(), written);
+        log.info("백분위를 계산했다. tradeDate={} 지표={}개 저장={}행 정리={}행",
+                tradeDate, specs.size(), written, removed);
         return written;
     }
 

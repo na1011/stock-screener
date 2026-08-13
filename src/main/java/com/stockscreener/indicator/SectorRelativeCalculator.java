@@ -156,6 +156,7 @@ public class SectorRelativeCalculator {
      */
     public long calculate(LocalDate tradeDate) {
         long written = 0;
+        long removed = 0;
         for (SectorMetricSpec spec : specs) {
             String chosen = spec.kind() == SectorMetricSpec.Kind.PERCENTILE
                     ? PERCENTILE_CHOSEN : MEDIAN_RATIO_CHOSEN;
@@ -163,9 +164,16 @@ public class SectorRelativeCalculator {
             written += upsert(chosen, spec.sourceCode(), tradeDate, spec.code(), "metric");
             // 표본 수는 상대값과 같은 층·같은 모집단에서 나온다. 따로 세면 둘이 갈린다.
             written += upsert(chosen, spec.sourceCode(), tradeDate, spec.peerCountCode(), "peers");
+
+            // MUST: 표본 수도 함께 정리한다. 상대값만 지우면 "값은 없는데 표본은 40"이 남고,
+            // 그 짝이 어긋난 것은 화면에서 표본만 보이는 형태로 나타난다.
+            removed += DerivedIndicatorCleanup.removeOrphans(
+                    jdbcTemplate, spec.code(), spec.sourceCode(), tradeDate);
+            removed += DerivedIndicatorCleanup.removeOrphans(
+                    jdbcTemplate, spec.peerCountCode(), spec.sourceCode(), tradeDate);
         }
-        log.info("업종 상대값을 계산했다. tradeDate={} 지표={}쌍 저장={}행",
-                tradeDate, specs.size(), written);
+        log.info("업종 상대값을 계산했다. tradeDate={} 지표={}쌍 저장={}행 정리={}행",
+                tradeDate, specs.size(), written, removed);
         return written;
     }
 
