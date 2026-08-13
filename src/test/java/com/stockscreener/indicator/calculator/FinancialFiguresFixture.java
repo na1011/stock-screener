@@ -128,6 +128,11 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    FinancialFiguresFixture operatingCashFlow(BigDecimal value) {
+        this.operatingCashFlow = value;
+        return this;
+    }
+
     FinancialFiguresFixture sharesOutstanding(BigDecimal value) {
         this.sharesOutstanding = value;
         return this;
