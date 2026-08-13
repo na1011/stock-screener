@@ -99,7 +99,8 @@ public class FullStatementRefillJob {
         // 리미터의 일일 카운터는 인메모리라 실행이 끝나면 사라진다. 여기서 세지 않으면
         // 소량 검증 → 전량 → 재실행이 이어질 때 실제 누적을 아무도 모른다.
         AtomicInteger actualCalls = new AtomicInteger();
-        AtomicInteger reportsFound = new AtomicInteger();
+        AtomicInteger reportsWritten = new AtomicInteger();
+        AtomicInteger missingReports = new AtomicInteger();
         AtomicInteger deferredRevisions = new AtomicInteger();
 
         try {
@@ -108,7 +109,8 @@ public class FullStatementRefillJob {
                     FullStatementCollector.Collected collected =
                             collector.collect(security, fromFiscalYear, toFiscalYear, periods);
                     actualCalls.addAndGet(collected.apiCalls());
-                    reportsFound.addAndGet(collected.reportsFound());
+                    reportsWritten.addAndGet(collected.reportsWritten());
+                    missingReports.addAndGet(collected.missingReports());
                     deferredRevisions.addAndGet(collected.outcome().deferredRevisions());
                     return collected.outcome().changed();
                 });
@@ -121,13 +123,13 @@ public class FullStatementRefillJob {
             throw e;
         }
 
-        // 요청 수와 받은 수의 차이가 곧 "공시가 존재하지 않는 (연도, 기간)"이다. 상장 전
-        // 회계연도가 여기로 드러나며, 그것이 적재로 메울 수 있는 결손과 원리적으로 없는
-        // 결손을 가르는 근거다.
-        String note = "보고서=%s 연도=%d~%d 요청=%d건 실제콜=%d 받은보고서=%d 없음=%d 정정보류=%d"
+        // MUST: '없음'을 요청 수에서 빼서 구하지 않는다. 분기 경로는 4분기 잔액을 유도해
+        // 함께 쓰므로 쓴 보고서가 요청 수를 넘고, 빼면 음수가 나온다. 어댑터가 직접 센 값을
+        // 쓴다 — 그 수가 곧 "상장 전 회계연도"와 "아직 오지 않은 분기"의 합이다.
+        String note = "보고서=%s 연도=%d~%d 요청=%d건 실제콜=%d 쓴보고서=%d 공시없음=%d 정정보류=%d"
                 .formatted(periods, fromFiscalYear, toFiscalYear, requestedReports,
-                        actualCalls.get(), reportsFound.get(),
-                        requestedReports - reportsFound.get(), deferredRevisions.get());
+                        actualCalls.get(), reportsWritten.get(), missingReports.get(),
+                        deferredRevisions.get());
         log.info("전체 재무제표 결손 보정을 마쳤다. {}", note);
         return execution.finish(note);
     }

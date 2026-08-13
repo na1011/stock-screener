@@ -110,22 +110,32 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
 
         List<RawFinancialReport> reports = new ArrayList<>();
         int calls = 0;
+        int missing = 0;
 
         for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
             // 선언 순서(FY, Q1..Q3)가 아니라 enum 순서로 돈다. 로그를 읽을 때 기간이 늘 같은
             // 순서로 나와야 종목 간 비교가 된다.
+            JsonNode annual = null;
             for (StatementPeriod period : StatementPeriod.values()) {
                 if (!periods.contains(period)) {
                     continue;
                 }
                 Fetched fetched = fetchOne(corpCode, year, period, security);
                 calls += fetched.calls();
-                if (fetched.list() != null) {
-                    reports.add(toReport(fetched.list(), year, period, security));
+                if (fetched.list() == null) {
+                    missing++;
+                    continue;
+                }
+                reports.add(toReport(fetched.list(), year, period, security));
+                if (period == StatementPeriod.FY) {
+                    annual = fetched.list();
                 }
             }
+            if (annual != null && periods.contains(StatementPeriod.Q3)) {
+                reports.add(toFourthQuarterBalance(annual, year, security));
+            }
         }
-        return new FullStatementResult(reports, calls);
+        return new FullStatementResult(reports, calls, missing);
     }
 
     /**
@@ -256,6 +266,60 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 // 발행주식수·EPS·BPS는 이 엔드포인트의 대상이 아니다. 주요계정 어댑터와 같이
                 // 비워 두며, 채우려면 stockTotqySttus가 따로 필요하다.
                 null, null, null);
+    }
+
+    /**
+     * 4분기 <b>잔액</b>만 담은 보고서. 손익과 현금흐름은 비운다.
+     *
+     * <p>4분기 보고서는 존재하지 않으므로 그 행은 원래 사업보고서에서 유도된 것이고, 이 어댑터가
+     * 사업보고서만 다시 받으면 그 행의 결손은 <b>영영 남는다.</b> §8의 이익잉여금이 정확히 그
+     * 자리다 — 채우지 않으면 {@code ALTMAN_Z}가 4분기 말을 최신으로 보는 구간(대략 1월~1분기
+     * 공시일)에서만 값을 내지 못하고, 그 구멍은 보존 창 한가운데에 생겨 원인을 찾기 어렵다.
+     *
+     * <p>IMPORTANT — <b>잔액만</b> 싣는다. 재무상태표는 시점 값이라 연말 잔액이 곧 4분기 말
+     * 잔액이지만, 손익과 현금흐름은 <b>유량</b>이라 사업보고서 값을 그대로 쓰면 1년치가 한
+     * 분기에 들어간다. 유도하려면 3분기 <b>누적</b>을 빼야 하는데 이 어댑터는 누적 컬럼을 읽지
+     * 않으므로(분기 누적의 의미가 §11-E에서 미확인이다) 아예 내지 않는다. 비워 두면
+     * {@code fillMissing}이 건드리지 않아 기존 유도값이 그대로 남는다.
+     *
+     * <p>MUST NOT: 분기를 요청하지 않은 경로에서 부르지 않는다. 전 종목 연간 적재가 이것을
+     * 함께 내면 4분기 행이 <b>없던 종목·연도에 잔액만 있는 행</b>이 생긴다.
+     */
+    private RawFinancialReport toFourthQuarterBalance(JsonNode list, int year, SecurityRef security) {
+        List<JsonNode> balance = DartFullAccountMapper.sections(
+                list, DartFullAccountMapper.SJ_BALANCE);
+        JsonNode any = list.get(0);
+        LocalDate[] range = DartReportPeriods.periodRange(year, "Q4");
+
+        BigDecimal retainedEarnings = DartFullAccountMapper.find(
+                balance, DartFullAccountMapper.ID_RETAINED_EARNINGS, DartAccountMapper.RETAINED_EARNINGS);
+        if (retainedEarnings == null) {
+            retainedEarnings = DartFullAccountMapper.retainedEarningsFromEquityChanges(
+                    list, security.ticker(), year, "Q4");
+        }
+
+        return new RawFinancialReport(
+                year, "Q4", range[0], range[1],
+                DartReportPeriods.publishedAt(any, year),
+                any.path("reprt_code").asString(null),
+                any.path("currency").asString("KRW"),
+                // 유량은 비운다 — 위 IMPORTANT 참조.
+                null, null, null,
+                DartFullAccountMapper.find(
+                        balance, DartFullAccountMapper.ID_TOTAL_ASSETS, DartAccountMapper.TOTAL_ASSETS),
+                DartFullAccountMapper.find(
+                        balance, DartFullAccountMapper.ID_TOTAL_EQUITY, DartAccountMapper.TOTAL_EQUITY),
+                DartFullAccountMapper.find(
+                        balance, DartFullAccountMapper.ID_TOTAL_LIABILITIES,
+                        DartAccountMapper.TOTAL_LIABILITIES),
+                DartFullAccountMapper.find(
+                        balance, DartFullAccountMapper.ID_CURRENT_ASSETS,
+                        DartAccountMapper.CURRENT_ASSETS),
+                DartFullAccountMapper.find(
+                        balance, DartFullAccountMapper.ID_CURRENT_LIABILITIES,
+                        DartAccountMapper.CURRENT_LIABILITIES),
+                retainedEarnings,
+                null, null, null, null);
     }
 
     /**

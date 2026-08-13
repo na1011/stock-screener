@@ -141,8 +141,8 @@ class FullStatementRefillJobTest {
         assertThat(note)
                 .contains("요청=6건")
                 .contains("실제콜=6")
-                .contains("받은보고서=1")
-                .contains("없음=5");
+                .contains("쓴보고서=1")
+                .contains("공시없음=5");
     }
 
     @Test

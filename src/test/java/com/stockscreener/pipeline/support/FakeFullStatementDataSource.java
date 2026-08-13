@@ -67,7 +67,7 @@ public class FakeFullStatementDataSource implements FullStatementDataSource {
                         .toList();
         // 실제 어댑터는 (연도 × 기간)마다 한 번씩 부르고, 연결이 비면 두 번 부른다.
         // 여기서는 요청한 만큼 불렀다고 본다 — 잡이 그 수를 그대로 실행 기록에 싣는지가 관심사다.
-        int calls = (toFiscalYear - fromFiscalYear + 1) * periods.size();
-        return new FullStatementResult(matched, calls);
+        int requested = (toFiscalYear - fromFiscalYear + 1) * periods.size();
+        return new FullStatementResult(matched, requested, requested - matched.size());
     }
 }

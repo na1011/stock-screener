@@ -46,18 +46,20 @@ public class FullStatementCollector {
         FinancialWriter.Outcome outcome = writer.writeDetailed(
                 security.stockId(), fetched.reports(),
                 FinancialWriter.WriteMode.FILL_WITHOUT_REVISION);
-        return new Collected(outcome, fetched.apiCalls(), fetched.reports().size());
+        return new Collected(outcome, fetched.apiCalls(),
+                fetched.reports().size(), fetched.missingReports());
     }
 
     /**
      * 한 종목의 수집 결과.
      *
-     * @param outcome      쓰기 내역. {@code deferredRevisions}가 못 채운 기간 수다
-     * @param apiCalls     실제로 태운 외부 호출 수. 예산 대조의 근거다
-     * @param reportsFound 소스가 실제로 준 보고서 수. 요청 수보다 적은 것이 정상이며,
-     *                     그 차이가 곧 <b>공시가 존재하지 않는 (연도, 기간)</b>이다 —
-     *                     상장 전 회계연도가 여기로 드러난다
+     * @param outcome        쓰기 내역. {@code deferredRevisions}가 못 채운 기간 수다
+     * @param apiCalls       실제로 태운 외부 호출 수. 예산 대조의 근거다
+     * @param reportsWritten 쓰기로 넘긴 보고서 수. 소스가 준 것과 유도한 것이 섞여 있다
+     * @param missingReports 요청했으나 <b>소스에 공시가 없던</b> 수. 상장 전 회계연도가
+     *                       여기로 드러난다
      */
-    public record Collected(FinancialWriter.Outcome outcome, int apiCalls, int reportsFound) {
+    public record Collected(FinancialWriter.Outcome outcome, int apiCalls,
+                            int reportsWritten, int missingReports) {
     }
 }

@@ -13,10 +13,16 @@ import java.util.List;
  * <p>MUST: 잡이 이 값을 합산해 실행 기록에 남긴다. 남기지 않으면 예산 대비 실제를 대조할
  * 근거가 사라지고, 다음 세션은 추정치를 실측으로 오인한다.
  *
- * @param reports  받은 보고서. 공시되지 않은 (연도, 기간)은 조용히 빠진다
- * @param apiCalls 이 조회가 태운 외부 호출 수
+ * @param reports         낸 보고서. <b>소스가 준 것과 우리가 유도한 것이 섞여 있다</b>
+ * @param apiCalls        이 조회가 태운 외부 호출 수
+ * @param missingReports  요청했으나 <b>소스에 공시가 없던</b> (연도, 기간)의 수.
+ *                        {@code reports.size()}에서 빼서 구하면 안 된다 — 유도한 행이 섞여
+ *                        있어 음수가 나온다. 이 수가 곧 "상장 전 회계연도"와 "아직 오지 않은
+ *                        분기"의 합이고, 적재로 메울 수 있는 결손과 원리적으로 없는 결손을
+ *                        가르는 근거다
  */
-public record FullStatementResult(List<RawFinancialReport> reports, int apiCalls) {
+public record FullStatementResult(List<RawFinancialReport> reports, int apiCalls,
+                                  int missingReports) {
 
     public FullStatementResult {
         if (reports == null) {
@@ -24,6 +30,9 @@ public record FullStatementResult(List<RawFinancialReport> reports, int apiCalls
         }
         if (apiCalls < 0) {
             throw new IllegalArgumentException("apiCalls는 음수일 수 없다: " + apiCalls);
+        }
+        if (missingReports < 0) {
+            throw new IllegalArgumentException("missingReports는 음수일 수 없다: " + missingReports);
         }
         reports = List.copyOf(reports);
     }

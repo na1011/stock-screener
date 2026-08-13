@@ -160,7 +160,7 @@ class DataSourceRegistryTest {
         @Override
         public FullStatementResult fetchStatements(SecurityRef security, int fromFiscalYear,
                                                    int toFiscalYear, Set<StatementPeriod> periods) {
-            return new FullStatementResult(List.of(), 0);
+            return new FullStatementResult(List.of(), 0, 0);
         }
     }
 }
