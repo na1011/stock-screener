@@ -15,6 +15,7 @@ import { useAsync } from '@/composables/useAsync'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { readBand } from '@/lib/band'
 import { conditionIndicatorCodes } from '@/lib/draftIndicators'
+import { hiddenCount, isVisibleByDefault, missingCount as countMissing } from '@/lib/detailVisibility'
 import { MISSING, splitIndicatorValue } from '@/lib/format'
 import { DETAIL_CATEGORY_RANK, groupByCategory } from '@/lib/indicatorCategory'
 import { indicatorBriefOf } from '@/lib/resultRow'
@@ -66,7 +67,8 @@ function readingOf(indicator: StockIndicatorValue) {
  */
 const groups = computed(() =>
   groupByCategory(
-    detail.data.value?.indicators ?? [],
+    // 감춘 지표는 여기서만 빠진다. 「내 조건」 구획은 이 필터를 타지 않는다(ADR-0058).
+    (detail.data.value?.indicators ?? []).filter(isVisibleByDefault),
     (indicator) => indicator.category,
     DETAIL_CATEGORY_RANK,
   ).map((group) => ({
@@ -132,18 +134,28 @@ const conditionRows = computed(() => {
   })
 })
 
+/** 분류 구획에 실제로 그린 카드 수. 아래 두 고지가 이것을 기준으로 센다. */
+const shownCount = computed(() =>
+  groups.value.reduce((total, group) => total + group.items.length, 0),
+)
+
 /**
  * 값이 없어 목록에 오르지 못한 지표 수.
  *
  * 서버는 값이 없는 지표의 행 자체를 보내지 않는다. 그것을 그냥 두면 화면에는 "지표가 원래
  * 그것뿐"인 것처럼 보인다. 몇 개가 왜 빠졌는지 한 줄로 알린다.
  */
-const missingCount = computed(() => {
-  if (detail.data.value === null || catalog.indicators.length === 0) {
-    return 0
-  }
-  return Math.max(0, catalog.indicators.length - detail.data.value.indicators.length)
-})
+const missingCount = computed(() =>
+  detail.data.value === null ? 0 : countMissing(catalog.indicators, shownCount.value),
+)
+
+/**
+ * 기본 화면에서 감춘 지표 수.
+ *
+ * 사라졌다는 사실이 화면에 남아야 한다 — 걸러내고 아무 말도 하지 않는 것이 던지는 것보다
+ * 나쁘다(`.claude/rules/frontend.md`).
+ */
+const hiddenIndicatorCount = computed(() => hiddenCount(detail.data.value?.indicators ?? []))
 
 function percentileOf(code: string) {
   return catalog.byCode.get(code)?.percentile ?? null
@@ -209,8 +221,8 @@ onMounted(() => {
           <section v-if="conditionRows.length > 0" class="indicator-group">
             <SectionHeading title="내 조건" :count="conditionRows.length" />
             <p class="indicator-group__note">
-              스크리너에 세워 둔 조건이 이 종목에서 얼마인지 보여 줍니다. 아래 분류에도 같은
-              지표가 다시 나옵니다.
+              스크리너에 세워 둔 조건이 이 종목에서 얼마인지 보여 줍니다. 아래 분류에 없는
+              세부 지표도 여기에는 나옵니다.
             </p>
             <ul class="indicator-group__list">
               <IndicatorCard
@@ -243,6 +255,11 @@ onMounted(() => {
               />
             </ul>
           </section>
+
+          <p v-if="hiddenIndicatorCount > 0" class="stock-detail__missing">
+            세부 지표 {{ hiddenIndicatorCount }}개는 기본 화면에서 감췄습니다. 스크리너에서 조건에
+            추가하면 맨 위 「내 조건」에 값이 나옵니다.
+          </p>
 
           <p v-if="missingCount > 0" class="stock-detail__missing">
             값이 없어 표시하지 못한 지표가 {{ missingCount }}개 있습니다. 계산에 필요한 이력이나 공시가
