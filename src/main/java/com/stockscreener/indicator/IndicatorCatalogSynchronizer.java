@@ -101,7 +101,7 @@ public class IndicatorCatalogSynchronizer {
     private void upsertSectorMetric(SectorMetricSpec spec) {
         boolean percentile = spec.kind() == SectorMetricSpec.Kind.PERCENTILE;
         upsertDerived(spec.code(), spec.name(), spec.description(), spec.interpretation(),
-                IndicatorValueType.RATIO, percentile ? 4 : 2,
+                categoryOf(spec.sourceCode()), IndicatorValueType.RATIO, percentile ? 4 : 2,
                 // 백분위는 방향이 원본에 있고, 배수는 자기 자신이 들고 있다.
                 percentile ? null : Boolean.FALSE,
                 910, percentile ? spec.sourceCode() : null, IndicatorPopulation.SECTOR);
@@ -121,7 +121,8 @@ public class IndicatorCatalogSynchronizer {
                         + "소분류 표본이 5 미만이면 중분류로 올라가며, 그 경우 이 수가 그 사실을 드러낸다.",
                 "클수록 업종 비교가 통계적으로 든든하다. 5는 값을 낼 수 있는 최소치일 뿐이므로, "
                         + "5에 가까운 값은 업종 대비 순위를 느슨하게 읽어야 한다.",
-                IndicatorValueType.COUNT, 0, Boolean.TRUE, 911, null, IndicatorPopulation.SECTOR);
+                categoryOf(spec.sourceCode()), IndicatorValueType.COUNT, 0, Boolean.TRUE, 911,
+                null, IndicatorPopulation.SECTOR);
     }
 
     /**
@@ -129,21 +130,27 @@ public class IndicatorCatalogSynchronizer {
      *
      * <p>{@link #upsertPercentile}과 컬럼 집합이 같아 한 자리로 모았다. 구간({@code bands})은
      * 넣지 않는다 — 여기 오는 값은 백분위·배수·개수라 자연어 구간이 붙을 자리가 아니다.
+     *
+     * <p>MUST: {@code category}를 여기서 정하지 않고 <b>원본 지표에서 받는다</b>(ADR-0057).
+     * 예전에는 {@code 'DERIVED'} 리터럴이었는데, 사용자에게 "PER 업종 백분위"는 파생 계산이
+     * 아니라 재무 지표다. {@code DO UPDATE SET}에 {@code category}가 함께 있어야 한다 —
+     * 하나만 고치면 <b>이미 있는 행이 갱신되지 않아</b> 원본이 옮겨가도 파생만 제자리에 남는다.
      */
     private void upsertDerived(String code, String name, String description, String interpretation,
-                               IndicatorValueType valueType, int decimalScale,
-                               Boolean higherIsBetter, int sortOrder, String sourceIndicatorCode,
-                               IndicatorPopulation population) {
+                               IndicatorCategory category, IndicatorValueType valueType,
+                               int decimalScale, Boolean higherIsBetter, int sortOrder,
+                               String sourceIndicatorCode, IndicatorPopulation population) {
         jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
                                        default_column, source_indicator_code, population,
                                        created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'DERIVED', ?, NULL, ?, ?, true, ?, false, ?, ?, now(), now())
+                VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, true, ?, false, ?, ?, now(), now())
                 ON CONFLICT (code) DO UPDATE SET
                     name                  = EXCLUDED.name,
                     description           = EXCLUDED.description,
                     interpretation        = EXCLUDED.interpretation,
+                    category              = EXCLUDED.category,
                     value_type            = EXCLUDED.value_type,
                     decimal_scale         = EXCLUDED.decimal_scale,
                     higher_is_better      = EXCLUDED.higher_is_better,
@@ -154,8 +161,25 @@ public class IndicatorCatalogSynchronizer {
                     updated_at            = now()
                 """,
                 code, name, emptyToNull(description), emptyToNull(interpretation),
-                valueType.name(), decimalScale, higherIsBetter, sortOrder, sourceIndicatorCode,
-                population == null ? null : population.name());
+                category.name(), valueType.name(), decimalScale, higherIsBetter, sortOrder,
+                sourceIndicatorCode, population == null ? null : population.name());
+    }
+
+    /**
+     * 원본 지표의 분류. 백분위·업종 상대값이 그것을 물려받는다(ADR-0057).
+     *
+     * <p>호출부가 이미 {@code registry.isRegistered(sourceCode())}로 걸렀으므로 여기서 비면
+     * 그 검사가 무너진 것이다 — 조용히 기본값을 주지 않고 던진다.
+     */
+    private IndicatorCategory categoryOf(String sourceCode) {
+        IndicatorCalculator source = registry.find(sourceCode).orElseThrow(() ->
+                new IllegalStateException("파생 지표의 원본이 등록되어 있지 않다: " + sourceCode));
+        IndicatorMeta meta = AnnotationUtils.findAnnotation(source.getClass(), IndicatorMeta.class);
+        if (meta == null) {
+            throw new IllegalStateException(
+                    source.getClass().getName() + "에 @IndicatorMeta가 없다 — 파생의 분류를 정할 수 없다.");
+        }
+        return meta.category();
     }
 
     /**
@@ -168,7 +192,7 @@ public class IndicatorCatalogSynchronizer {
      */
     private void upsertPercentile(PercentileSpec spec) {
         upsertDerived(spec.code(), spec.name(), spec.description(), spec.interpretation(),
-                IndicatorValueType.RATIO, 4,
+                categoryOf(spec.sourceCode()), IndicatorValueType.RATIO, 4,
                 // 유불리 방향은 원본이 들고 있다. 여기서 정하면 두 곳이 갈린다.
                 null, 900,
                 // 부등호 방향 판단이 이 링크에 걸린다 — 화면은 원본의 higher_is_better를 보고

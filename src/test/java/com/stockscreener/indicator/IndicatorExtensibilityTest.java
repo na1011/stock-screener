@@ -144,6 +144,23 @@ class IndicatorExtensibilityTest {
     }
 
     @Test
+    @DisplayName("백분위 행의 분류가 원본을 따라간다 — 두 곳에 적으면 갈린다")
+    void percentileRowInheritsItsSourceCategory() {
+        synchronizer(List.of(new PercentileSpec("PER", "PER 백분위", "설명", "해석")))
+                .synchronize();
+
+        // 사용자에게 "PER 백분위"는 파생 계산이 아니라 재무 지표다(ADR-0057). 분류를
+        // PercentileSpec에 따로 적으면 원본이 다른 구획으로 옮겨갈 때 파생만 제자리에 남는데,
+        // 그 어긋남은 화면에서 "유령 구획"으로만 드러난다.
+        String category = jdbcTemplate.queryForObject(
+                "SELECT category FROM indicator WHERE code = 'PER_PCTL'", String.class);
+        String sourceCategory = jdbcTemplate.queryForObject(
+                "SELECT category FROM indicator WHERE code = 'PER'", String.class);
+
+        assertThat(category).isEqualTo(sourceCategory).isEqualTo("FUNDAMENTAL");
+    }
+
+    @Test
     @DisplayName("새 지표의 값을 저장하는 데 스키마 변경이 필요 없다 — EAV의 핵심 성질")
     void storingNewIndicatorNeedsNoSchemaChange() {
         synchronizer(List.of()).synchronize();
