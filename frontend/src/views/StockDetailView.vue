@@ -7,22 +7,25 @@ import { api } from '@/api/endpoints'
 import type { StockIndicatorValue } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import AppViewHeader from '@/components/ui/AppViewHeader.vue'
-import IndicatorLabel from '@/components/IndicatorLabel.vue'
+import IndicatorCard from '@/components/stock/IndicatorCard.vue'
 import PriceReferencePanel from '@/components/stock/PriceReferencePanel.vue'
 import StockHeader from '@/components/stock/StockHeader.vue'
-import BandMeter from '@/components/ui/BandMeter.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useAsync } from '@/composables/useAsync'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { readBand } from '@/lib/band'
+import { conditionIndicatorCodes } from '@/lib/draftIndicators'
 import { MISSING, splitIndicatorValue } from '@/lib/format'
 import { DETAIL_CATEGORY_RANK, groupByCategory } from '@/lib/indicatorCategory'
+import { indicatorBriefOf } from '@/lib/resultRow'
 import { useCatalogStore } from '@/stores/catalog'
+import { useScreenDraftStore } from '@/stores/screenDraft'
 
 const props = defineProps<{ stockId: string }>()
 
 const route = useRoute()
 const catalog = useCatalogStore()
+const draft = useScreenDraftStore()
 const { isMobile } = useBreakpoint()
 
 const stockId = computed(() => Number(props.stockId))
@@ -75,6 +78,59 @@ const groups = computed(() =>
     })),
   })),
 )
+
+/**
+ * 스크리너에 세워 둔 조건이 이 종목에서 얼마인가.
+ *
+ * 분류 구획보다 **위**에 온다. 조건을 세우고 종목을 눌러 들어온 사용자가 가장 먼저 확인할
+ * 것이 그 값이기 때문이다.
+ *
+ * IMPORTANT — **값이 없는 지표도 그린다.** 결과 표에서 빠진 종목이라면 "왜 없는가"의 답이
+ * 여기밖에 없다(ADR-0055). 값이 없다는 것과 조건에 안 맞았다는 것은 다른 사실인데, 카드를
+ * 지우면 둘이 같아 보인다.
+ *
+ * 아래 분류 구획과 **중복을 허용한다.** 아래에서 빼면 "재무 지표" 구획이 조건 편집 상태에
+ * 따라 PER을 잃는다 — 분류가 초안의 함수가 되어 사용자가 기대한 자리에서 지표가 조용히
+ * 사라진다. 위는 핀 보드이고 아래는 안정된 분류다.
+ *
+ * 새로고침하면 초안이 비어 구획이 통째로 사라진다. "조건 없음"을 그리지 않는다 — 그러면
+ * "조건이 없다"와 "초안을 잃었다"를 구별 못 하는 채로 앞의 것을 단정하게 된다.
+ */
+const conditionRows = computed(() => {
+  const codes = conditionIndicatorCodes(draft.conditions)
+  if (codes.length === 0) {
+    return []
+  }
+  const values = new Map(
+    (detail.data.value?.indicators ?? []).map((indicator) => [indicator.code, indicator]),
+  )
+  return codes.map((code) => {
+    const indicator = values.get(code)
+    if (indicator !== undefined) {
+      return {
+        code,
+        name: indicator.name,
+        higherIsBetter: indicator.higherIsBetter,
+        description: indicator.description,
+        interpretation: indicator.interpretation,
+        parts: splitIndicatorValue(indicator.value, indicator.unit, indicator.decimalScale),
+        reading: readingOf(indicator),
+      }
+    }
+    // 값이 없다. 이름·단위는 카탈로그에서 오고, 카탈로그에도 없으면(폐기된 지표를 조건에
+    // 들고 있는 전략) `indicatorBriefOf`가 코드를 그대로 이름 자리에 둔다.
+    const brief = indicatorBriefOf(code, [], catalog.byCode)
+    return {
+      code,
+      name: brief.name,
+      higherIsBetter: brief.higherIsBetter,
+      description: catalog.byCode.get(code)?.description ?? null,
+      interpretation: brief.interpretation,
+      parts: splitIndicatorValue(null, brief.unit, brief.decimalScale),
+      reading: null,
+    }
+  })
+})
 
 /**
  * 값이 없어 목록에 오르지 못한 지표 수.
@@ -146,37 +202,45 @@ onMounted(() => {
             :unadjusted-actions="detail.data.value.unadjustedActions"
           />
 
+          <!--
+            스크리너에 세워 둔 조건이 맨 위에 온다. 아래 분류 구획에도 같은 지표가 다시
+            나오는 것은 의도다 — 여기서 빼면 분류가 초안에 따라 흔들린다.
+          -->
+          <section v-if="conditionRows.length > 0" class="indicator-group">
+            <SectionHeading title="내 조건" :count="conditionRows.length" />
+            <p class="indicator-group__note">
+              스크리너에 세워 둔 조건이 이 종목에서 얼마인지 보여 줍니다. 아래 분류에도 같은
+              지표가 다시 나옵니다.
+            </p>
+            <ul class="indicator-group__list">
+              <IndicatorCard
+                v-for="row in conditionRows"
+                :key="row.code"
+                :name="row.name"
+                :higher-is-better="row.higherIsBetter"
+                :percentile="percentileOf(row.code)"
+                :description="row.description"
+                :interpretation="row.interpretation"
+                :parts="row.parts"
+                :reading="row.reading"
+              />
+            </ul>
+          </section>
+
           <section v-for="group in groups" :key="group.category" class="indicator-group">
             <SectionHeading :title="group.label" :count="group.items.length" />
             <ul class="indicator-group__list">
-              <li v-for="row in group.items" :key="row.indicator.code" class="indicator">
-                <IndicatorLabel
-                  :name="row.indicator.name"
-                  :higher-is-better="row.indicator.higherIsBetter"
-                  :percentile="percentileOf(row.indicator.code)"
-                  :description="row.indicator.description"
-                  :interpretation="row.indicator.interpretation"
-                />
-                <!--
-                  숫자와 단위를 나눠 그린다. 붙여 놓으면 '%'가 숫자와 같은 무게로 읽혀,
-                  카드 스무 장을 훑을 때 눈이 자릿수 대신 기호에 걸린다.
-                -->
-                <span
-                  class="indicator__value tabular"
-                  :class="row.reading ? `indicator__value--${row.reading.tone.toLowerCase()}` : null"
-                >
-                  {{ row.parts.number
-                  }}<span v-if="row.parts.unit" class="indicator__unit">{{ row.parts.unit }}</span>
-                </span>
-                <!-- 구간을 아는 지표에만 붙는다. 없으면 지어내지 않는다(ADR-0023). -->
-                <BandMeter
-                  v-if="row.reading"
-                  class="indicator__meter"
-                  :reading="row.reading"
-                  :indicator-name="row.indicator.name"
-                />
-                <p class="indicator__interpretation">{{ row.indicator.interpretation }}</p>
-              </li>
+              <IndicatorCard
+                v-for="row in group.items"
+                :key="row.indicator.code"
+                :name="row.indicator.name"
+                :higher-is-better="row.indicator.higherIsBetter"
+                :percentile="percentileOf(row.indicator.code)"
+                :description="row.indicator.description"
+                :interpretation="row.indicator.interpretation"
+                :parts="row.parts"
+                :reading="row.reading"
+              />
             </ul>
           </section>
 
@@ -283,78 +347,11 @@ onMounted(() => {
   gap: 0.625rem;
 }
 
-/*
- * 카드가 캔버스 위 평면 하나였다. 위쪽을 미세하게 들어 올리고 상단 1px에 빛을 걸어야
- * 스물몇 장이 같은 깊이에 눕지 않는다 — 합성값의 정본은 `main.css`다.
- */
-.indicator {
-  border: 1px solid var(--p-content-border-color);
-  border-radius: var(--p-border-radius-md);
-  background: var(--app-surface-raised);
-  box-shadow: var(--app-edge-highlight);
-  padding: 0.625rem 0.75rem;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.25rem 0.5rem;
-  align-items: baseline;
-  transition: border-color var(--app-motion-fast) var(--app-ease);
-}
-
-.indicator:hover {
-  border-color: var(--p-surface-600);
-}
-
-.indicator__value {
-  font-size: var(--app-text-lg);
-  font-weight: 700;
-  justify-self: end;
-  white-space: nowrap;
-  color: var(--p-tone-neutral-text);
-}
-
-/*
- * 값의 색조. 판정 3상태와 같은 초록·빨강이되 **알약이 아니다** — 형태로 채널을 가른 것이고
- * 그래서 판정 Tag가 함께 나오는 결과 화면에는 이 색조를 두지 않는다(ADR-0021).
- */
-.indicator__value--favorable {
-  color: var(--p-tone-favorable-text);
-}
-
-.indicator__value--unfavorable {
-  color: var(--p-tone-unfavorable-text);
-}
-
-/* 단위는 숫자를 읽고 난 다음이다. 같은 무게면 자릿수 대신 기호에 눈이 걸린다. */
-.indicator__unit {
-  margin-inline-start: 0.0625rem;
-  font-size: var(--app-text-xs);
-  font-weight: 600;
-  color: var(--p-text-muted-color);
-}
-
-.indicator__meter {
-  grid-column: 1 / -1;
-  margin-top: 0.125rem;
-}
-
-/*
- * 설명은 두 줄까지만. 전문은 이름 옆 `ⓘ`가 **이미 같은 문장을 들고 있다**(`IndicatorLabel`).
- *
- * 자르는 이유는 자리 때문만이 아니다. 잘리지 않으면 문단이 카드 잉크의 절반을 넘어, 값을
- * 훑으려는 눈이 카드마다 산문을 먼저 만난다. 높이가 들쭉날쭉해 그리드에 구멍이 생기는 것도
- * 그 부작용이다.
- */
-.indicator__interpretation {
-  grid-column: 1 / -1;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  margin: 0;
+/* 구획 머리 아래 한 줄. 이 구획이 왜 여기 있는지를 설명한다. */
+.indicator-group__note {
+  margin: 0 0 0.5rem;
   font-size: var(--app-text-xs);
   color: var(--p-text-subtle-color);
-  line-height: 1.5;
 }
 
 @media (max-width: 767px) {
