@@ -57,6 +57,25 @@ const editingKey = ref<number | null>(null)
 /** 지표 목록이 닫히면 열어 줄 조건. `openPendingEditor`의 주석에 이유가 있다. */
 const pendingEditKey = ref<number | null>(null)
 
+/**
+ * 「직접 입력」을 사용자가 접었는가 펼쳤는가.
+ *
+ * `ConditionEditor`가 팝오버 안에서 `v-if`로 마운트·언마운트되므로 그쪽 지역 상태로 두면
+ * **닫을 때마다 소멸한다.** 그러면 값을 넣으러 펼친 사용자가 확인을 누르고 다시 열었을 때
+ * 접힌 화면을 다시 만난다. 여기 두면 세션 동안 남는다.
+ *
+ * IMPORTANT — `Set`이 아니라 `Map`이다. **"아직 정하지 않았다"와 "접기로 정했다"를 갈라야**
+ * 편집기가 기본값 규칙(구간이 없거나 값이 있으면 펼친다)을 언제 적용할지 알 수 있다.
+ * 키가 없으면 규칙, 있으면 사용자의 선택이다.
+ *
+ * 저장 대상이 아니라 `screenDraft`에 넣지 않는다 — 전략의 정의가 아니라 화면의 상태다.
+ */
+const manualOpen = ref<Map<number, boolean>>(new Map())
+
+function setManualOpen(key: number, open: boolean): void {
+  manualOpen.value = new Map(manualOpen.value).set(key, open)
+}
+
 const editing = computed(
   () => draft.conditions.find((it) => it.key === editingKey.value) ?? null,
 )
@@ -126,7 +145,17 @@ function openEditor(event: Event, key: number): void {
   editingKey.value = key
   void nextTick(() => {
     if (anchor !== null) {
-      editor.value?.show(event, anchor)
+      /*
+       * IMPORTANT — `event`를 그대로 넘기면 **PrimeVue의 앵커 가드가 죽는다.** `show(event, target)`은
+       * 위치 기준(`target`)은 둘째 인자에서 받지만 "이 클릭은 앵커를 누른 것이다"를 판정하는
+       * `eventTarget`은 여전히 `event.currentTarget`에서 읽는다. 여기는 `nextTick` 뒤라 그 값이
+       * 이미 null이고, 그러면 `isTargetClicked()`가 영원히 false가 되어 바깥 클릭 방어가 한 겹
+       * 사라진다.
+       *
+       * 새 `Event`를 만들어 대신할 수는 없다 — `currentTarget`은 읽기 전용이고 디스패치 중에만
+       * 채워진다. Popover가 `.currentTarget`만 읽으므로 그 모양의 객체를 넘긴다.
+       */
+      editor.value?.show({ currentTarget: anchor } as unknown as Event, anchor)
     }
   })
 }
@@ -295,7 +324,9 @@ function removeEditing(): void {
         :key="editing.key"
         :condition="editing"
         :readonly="readonly"
+        :manual-open="manualOpen.get(editing.key) ?? null"
         @remove="removeEditing"
+        @update:manual-open="setManualOpen(editing.key, $event)"
         @done="closeEditor"
       />
     </Popover>

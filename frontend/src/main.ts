@@ -8,10 +8,19 @@ import 'primeicons/primeicons.css'
 
 import App from './App.vue'
 import { initMonitoring } from './lib/monitoring'
+import { installOverlayClickShield } from './lib/overlayClickShield'
 import { router } from './router'
 import { installUnauthorizedHandler } from './stores/auth'
 import { ScreenerPreset } from './theme/preset'
 import './assets/main.css'
+
+/*
+ * PrimeVue보다 먼저 건다. 이 리스너가 없으면 조건 편집 팝오버가 Select 옵션을 고르는 것만으로
+ * 닫힌다 — 이유와 실측은 `lib/overlayClickShield.ts`에 있다(ADR-0064).
+ *
+ * MUST NOT: 이 줄을 지우지 않는다. 지워도 컴파일·테스트가 전부 통과하고 증상만 돌아온다.
+ */
+installOverlayClickShield()
 
 const app = createApp(App)
 

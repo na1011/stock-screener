@@ -2,7 +2,7 @@
 import Button from 'primevue/button'
 import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 
 import { OPERAND_TYPES } from '@/api/types'
 import type { ComparisonOperatorName, IndicatorBand, OperandType } from '@/api/types'
@@ -33,8 +33,19 @@ import { useScreenDraftStore } from '@/stores/screenDraft'
  * 구간이 없는 지표(주가 스케일 — SMA·ATR·MACD·종가)는 프리셋 없이 직접 입력만 낸다.
  * 없는 것을 지어내지 않는다. 근거는 ADR-0023에 있다.
  */
-const props = defineProps<{ condition: DraftCondition; readonly: boolean }>()
-const emit = defineEmits<{ remove: []; done: [] }>()
+const props = defineProps<{
+  condition: DraftCondition
+  readonly: boolean
+  /**
+   * 「직접 입력」을 사용자가 이미 접었는가 펼쳤는가. **null이면 아직 정하지 않은 것**이고,
+   * 그때만 아래 기본값 규칙을 적용한다.
+   *
+   * 이 상태가 밖에 있는 이유는 이 컴포넌트가 팝오버와 함께 언마운트되기 때문이다 —
+   * 지역 `ref`로 두면 닫을 때마다 사용자의 선택이 사라진다(`ConditionChipBar`의 주석).
+   */
+  manualOpen: boolean | null
+}>()
+const emit = defineEmits<{ remove: []; done: []; 'update:manual-open': [boolean] }>()
 
 const catalog = useCatalogStore()
 const draft = useScreenDraftStore()
@@ -71,23 +82,33 @@ const topQuintile = computed(() => topQuintileCondition(indicator.value?.percent
  * 제시할 구간이 없으면 접을 것이 없으므로 처음부터 펼친다. 이미 값이 들어 있는 조건을
  * 다시 열 때도 펼친다 — 고치러 온 사람에게 프리셋 목록을 먼저 보이면 한 번 더 눌러야 한다.
  */
-const manualOpen = ref(false)
+const manualOpen = computed(() => props.manualOpen ?? defaultManualOpen())
 
 /**
- * 규칙을 함수로 둔 이유는 부르는 곳이 **둘**이기 때문이다. 칩을 새로 열 때와 [초기화]다.
- * watch만 두면 초기화는 `key`를 바꾸지 않으므로(바꾸면 팝오버가 앵커를 잃는다) 재평가되지
+ * 사용자가 아직 정하지 않았을 때의 기본값.
+ *
+ * 규칙을 함수로 둔 이유는 부르는 곳이 **둘**이기 때문이다. 지금 그리는 값과 [초기화]다.
+ * 초기화는 `key`를 바꾸지 않으므로(바꾸면 팝오버가 앵커를 잃는다) watch만으로는 재평가되지
  * 않고, 값이 비워졌는데 입력칸이 펼쳐진 채 남는다.
  */
-function syncManualOpen(): void {
-  manualOpen.value = bands.value.length === 0 || props.condition.value !== null
+function defaultManualOpen(): boolean {
+  return bands.value.length === 0 || props.condition.value !== null
 }
 
-watch(() => props.condition.key, syncManualOpen, { immediate: true })
+/**
+ * 사용자의 선택을 지우고 기본값 규칙으로 되돌린다.
+ *
+ * [초기화]와 **지표 교체**가 부른다. 둘 다 값이 비고 구간이 달라지는 사건이라, 접힘 상태도
+ * 그 지표에 맞게 다시 정해져야 한다 — 여기서는 기억보다 규칙이 이긴다.
+ */
+function resetManualOpen(): void {
+  emit('update:manual-open', defaultManualOpen())
+}
 
 /** 지표만 남기고 값을 비운다. 되돌리는 것이 아니라 처음 상태로 보내는 것이다. */
 function resetValues(): void {
   draft.resetCondition(props.condition.key)
-  syncManualOpen()
+  resetManualOpen()
 }
 
 /**
@@ -261,7 +282,7 @@ function onOperandTypeChange(value: OperandType | null): void {
         type="button"
         class="app-list-button editor__manual-toggle"
         :aria-expanded="manualOpen"
-        @click="manualOpen = !manualOpen"
+        @click="emit('update:manual-open', !manualOpen)"
       >
         <i :class="manualOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" aria-hidden="true" />
         <span>직접 입력</span>
