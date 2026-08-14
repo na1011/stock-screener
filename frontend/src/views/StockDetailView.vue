@@ -8,6 +8,7 @@ import type { StockIndicatorValue } from '@/api/types'
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import AppViewHeader from '@/components/ui/AppViewHeader.vue'
 import IndicatorCard from '@/components/stock/IndicatorCard.vue'
+import FinancialsPanel from '@/components/stock/FinancialsPanel.vue'
 import PriceReferencePanel from '@/components/stock/PriceReferencePanel.vue'
 import StockHeader from '@/components/stock/StockHeader.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
@@ -40,6 +41,11 @@ const detail = useAsync((signal) => api.stock(stockId.value, asOf.value, signal)
  * 아니라는 사실이 구조로 드러나며, 모바일에서는 눌러서 받을 수 있다.
  */
 const priceReference = useAsync((signal) => api.priceReference(stockId.value, asOf.value, signal))
+/**
+ * 실적도 별도 요청이다(ADR-0059). 지지·저항과 달리 **처음부터 불러온다** — 접어 둘 이유가
+ * 없는 값이고, 지연 로드는 계산이 무거운 쪽에 쓰는 수단이다.
+ */
+const financials = useAsync((signal) => api.stockFinancials(stockId.value, signal))
 
 /** 모바일은 접힌 채로 시작한다. 데스크톱은 자리가 있으므로 함께 보인다. */
 const referenceOpen = ref(false)
@@ -171,6 +177,7 @@ function openReference(): void {
 onMounted(() => {
   void catalog.ensureCatalog()
   void detail.run()
+  void financials.run()
   if (!isMobile.value) {
     referenceOpen.value = true
     void priceReference.run()
@@ -265,7 +272,30 @@ onMounted(() => {
             값이 없어 표시하지 못한 지표가 {{ missingCount }}개 있습니다. 계산에 필요한 이력이나 공시가
             아직 없다는 뜻이며, 값이 {{ MISSING }}이라는 뜻이 아닙니다.
           </p>
+
+          <!--
+            업종 지표는 표본이 모자라면 **행 자체가 없다.** 위 `missingCount`는 "값이 없다"를 세는데
+            그 지표들은 애초에 응답에 오지 않아 거기서도 빠진다. 그래서 이유를 여기서 따로 말한다.
+            문구는 서버가 소유한다 — 화면이 자기 문장을 만들면 두 곳이 갈린다(ADR-0044).
+          -->
+          <p
+            v-if="detail.data.value?.sectorContext?.notice"
+            class="stock-detail__missing"
+          >
+            {{ detail.data.value.sectorContext.notice }}
+          </p>
         </template>
+      </AsyncPanel>
+
+      <!-- 실적도 별도 요청이다. 지표 구획이 실패해도 여기는 살고, 반대도 마찬가지다(ADR-0059). -->
+      <AsyncPanel
+        :state="financials.state.value"
+        :error="financials.error.value"
+        :retry="financials.retry"
+        panel="financials"
+        :skeleton-rows="4"
+      >
+        <FinancialsPanel v-if="financials.data.value" :financials="financials.data.value" />
       </AsyncPanel>
 
       <!-- 지지·저항은 별도 패널이자 별도 요청이다. 위가 실패해도 여기는 살고, 반대도 마찬가지다. -->

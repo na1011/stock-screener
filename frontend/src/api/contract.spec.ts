@@ -23,6 +23,7 @@ import {
   TRIGGERED_BY,
   ZONE_ROLES,
   ZONE_STRENGTHS,
+  FISCAL_PERIODS,
 } from './types'
 import { populationNote } from '@/lib/population'
 import { PRICE_REFERENCE_METHOD_SWING } from '@/lib/priceReference'
@@ -67,6 +68,7 @@ describe('서버 enum의 거울', () => {
     ['OperandType', OPERAND_TYPES],
     ['ZoneRole', ZONE_ROLES],
     ['ZoneStrength', ZONE_STRENGTHS],
+    ['FiscalPeriod', FISCAL_PERIODS],
     ['InteractionAction', INTERACTION_ACTIONS],
     ['BatchStatus', BATCH_STATUSES],
     ['TriggeredBy', TRIGGERED_BY],

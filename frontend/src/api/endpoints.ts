@@ -22,6 +22,7 @@ import type {
   ScreeningRequest,
   ScreeningResponse,
   StockDetailResponse,
+  StockFinancials,
   StockSearchResult,
   UniverseResponse,
   WatchlistItem,
@@ -77,6 +78,17 @@ export const api = {
 
   stock: (stockId: number, asOf?: IsoDate | null, signal?: AbortSignal) =>
     apiFetch<StockDetailResponse>(`/api/stocks/${stockId}`, { query: { asOf }, signal }),
+
+  /**
+   * 실적 원수치. 종목 상세와 **별도 요청**이다 — 한쪽이 실패해도 다른 쪽은 산다(ADR-0059).
+   *
+   * `asOf`를 받지 않는다. 재무는 공시된 기(期) 단위라 기준일이 뜻을 갖지 않는다.
+   */
+  stockFinancials: (stockId: number, signal?: AbortSignal) =>
+    apiFetch<StockFinancials>(`/api/stocks/${stockId}/financials`, {
+      signal,
+      retryDelaysMs: READ_RETRY_DELAYS_MS,
+    }),
 
   /** 지지·저항. 종목 상세와 **별도 요청**이다 — 한쪽이 실패해도 다른 쪽은 산다(ADR-0014). */
   priceReference: (stockId: number, asOf?: IsoDate | null, signal?: AbortSignal) =>

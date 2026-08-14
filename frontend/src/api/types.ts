@@ -439,6 +439,70 @@ export interface StockDetailResponse {
    * 없고, SCORING이라도 필수 조건이면 통째로 빠져 조건별 "데이터 없음"이 이유를 말하지 못한다.
    */
   unadjustedActions: UnadjustedActions
+  /** 업종 카드가 왜 없는지. 서버가 항상 싣는다. */
+  sectorContext: SectorContext
+}
+
+/**
+ * 업종 비교가 성립하는가.
+ *
+ * IMPORTANT — `evaluable`이 false인 것을 **강점으로 그리지 않는다.** "업종에서 유일한 종목"은
+ * 진입장벽이 아니라 조회 대상의 구성을 재는 값이다(ADR-0044 §버린 대안). 문구는 서버가
+ * 소유하므로 화면이 자기 문장을 만들지 않는다.
+ */
+export interface SectorContext {
+  industryCode: string | null
+  finePeers: number
+  broadPeers: number
+  evaluable: boolean
+  /** `evaluable`이 true면 null이다. */
+  notice: string | null
+}
+
+// ── 실적 원수치 ───────────────────────────────────────────────────
+
+export const FISCAL_PERIODS = ['FY', 'Q1', 'Q2', 'Q3', 'Q4'] as const
+export type FiscalPeriod = (typeof FISCAL_PERIODS)[number]
+
+/**
+ * 재무제표 한 기(期).
+ *
+ * IMPORTANT — `period_start`/`period_end`가 **일부러 없다.** 서버 쪽 값이 합성 규약이라
+ * 결산월이 12월이 아닌 종목에서 아직 오지 않은 기간을 가리킨다(ADR-0059). 기간 라벨은
+ * `fiscalYear`와 `fiscalPeriod`로만 짓는다.
+ *
+ * `derived`는 **우리가 만든 행**이라는 뜻이다 — 4분기 손익은 사업보고서에서 3분기 누적을
+ * 뺀 값이다. 이 표시를 감추면 사용자는 공시된 실적으로 읽는다.
+ */
+export interface FinancialPeriod {
+  fiscalYear: number
+  fiscalPeriod: FiscalPeriod
+  publishedAt: IsoDate | null
+  revised: boolean
+  derived: boolean
+  revenue: number | null
+  operatingIncome: number | null
+  netIncome: number | null
+  operatingCashFlow: number | null
+  totalAssets: number | null
+  totalLiabilities: number | null
+  totalEquity: number | null
+  /** 전년 **동기** 대비 증감률(%). 비교 대상이 없으면 null이다. */
+  revenueYoy: number | null
+  operatingIncomeYoy: number | null
+  netIncomeYoy: number | null
+}
+
+/** 화면이 반드시 함께 그려야 하는 고지. 서버가 문구를 소유한다. */
+export interface FinancialsNotice {
+  quarterlyCashFlow: string
+  derivedFourthQuarter: string
+}
+
+export interface StockFinancials {
+  annual: FinancialPeriod[]
+  quarterly: FinancialPeriod[]
+  notice: FinancialsNotice
 }
 
 // ── 지지·저항 참고정보 ─────────────────────────────────────────────

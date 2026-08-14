@@ -98,6 +98,43 @@ export function formatPrice(value: number | null | undefined): string {
   return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(value)}원`
 }
 
+/**
+ * 재무제표 금액을 조·억 단위로 줄여 쓴다.
+ *
+ * {@link formatPrice}와 나누는 기준은 **자릿수**다. 주가는 만 단위지만 재무는 조 단위라
+ * 원 단위로 그리면 한 칸에 15자리가 들어가 표에서 비교가 불가능하다.
+ *
+ * 반올림 자리를 소수 둘로 고정한다 — 조와 억이 섞인 열에서 자릿수가 흔들리면 눈으로
+ * 크기를 견주지 못한다. 음수는 그대로 부호를 붙인다(적자를 감추지 않는다).
+ */
+export function formatAmount(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return MISSING
+  }
+  const abs = Math.abs(value)
+  if (abs >= 1e12) {
+    return `${formatNumber(value / 1e12, 2)}조원`
+  }
+  if (abs >= 1e8) {
+    return `${formatNumber(value / 1e8, 2)}억원`
+  }
+  return formatPrice(value)
+}
+
+/**
+ * 증감률(%). 서버가 이미 계산한 값이라 부호만 붙인다.
+ *
+ * MUST NOT: 여기서 다시 계산하지 않는다. 분모의 절댓값 처리가 서버(`YearOverYear`)에 있고,
+ * 화면이 자기 식을 쓰면 적자 기업에서 같은 사실이 두 곳에 반대 부호로 나온다.
+ */
+export function formatSignedPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return MISSING
+  }
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${formatNumber(value, 1)}%`
+}
+
 /** 0..1 비율을 백분율로. 백분위 값과 점수 비율에 쓴다. */
 export function formatRatioAsPercent(value: number | null | undefined, decimalScale = 1): string {
   if (value === null || value === undefined || Number.isNaN(value)) {

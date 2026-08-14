@@ -17,6 +17,7 @@ export const ASYNC_PANELS = {
   screens: { subject: '전략 목록', particle: '을' },
   stock: { subject: '종목 정보', particle: '를' },
   priceReference: { subject: '지지·저항 참고정보', particle: '를' },
+  financials: { subject: '실적', particle: '을' },
   watchlist: { subject: '관심종목', particle: '을' },
   batchSummary: { subject: '운영 현황', particle: '을' },
   batches: { subject: '배치 실행 이력', particle: '을' },
