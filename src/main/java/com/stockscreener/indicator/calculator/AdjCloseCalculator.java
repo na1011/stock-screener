@@ -44,7 +44,12 @@ import java.util.List;
         valueType = IndicatorValueType.PRICE,
         direction = IndicatorMeta.Direction.NEUTRAL,
         decimalScale = 2,
-        sortOrder = 1
+        sortOrder = 1,
+        // 상세 카드로는 정보가 0이다 — 수정주가는 **과거를 소급 조정**하므로 가장 최근 봉에서는
+        // 원주가와 같아진다(실측 347/347이 헤더 종가와 동일, 종가와의 상관 1.000). 상세는
+        // 기준일 하나만 보므로 이 카드는 구조적으로 헤더 바로 아래에서 같은 수를 반복한다.
+        // 시계열에서는 여전히 뜻이 있고, 조건(추세 게이트 셋)도 이 코드를 그대로 쓴다.
+        detailDefault = false
 )
 public class AdjCloseCalculator implements IndicatorCalculator {
 

@@ -73,6 +73,10 @@ import java.util.List;
         decimalScale = 0,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
         sortOrder = 5,
+        // 거의 모든 종목이 같은 값이다 — 실측으로 345종목 중 **91%가 750**이다.
+        // min(size, 750)이라 포화하기 때문이며, 카드가 종목을 구분하지 못한다.
+        // 스윙 프리셋의 필수 조건이므로 조건·결과 표에는 그대로 남는다.
+        detailDefault = false,
         bands = {
                 @IndicatorMeta.Band(label = "3년 이상", from = 750),
                 @IndicatorMeta.Band(label = "2~3년", from = 500, to = 750),

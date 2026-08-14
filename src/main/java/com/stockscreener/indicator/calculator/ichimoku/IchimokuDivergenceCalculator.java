@@ -22,7 +22,15 @@ import java.math.BigDecimal;
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
         direction = IndicatorMeta.Direction.NEUTRAL,
-        sortOrder = 246)
+        sortOrder = 246,
+        // 값이 -1/0/1/2인 **순서 없는 분류**다. 이 지표의 interpretation이 스스로
+        // "2가 1보다 좋다는 뜻이 아니다"라고 적는데, 구간(bands)은 구조적으로 순서라
+        // 붙이면 화면이 2를 1보다 오른쪽에 그려 그 문장이 금지한 읽기를 만든다.
+        // 구간 없이 숫자만 두는 것은 frontend.md의 "값만 나열하지 않는다"에 걸리므로
+        // 감춘다 — ADR-0058이 ICHI_MOD_* 열셋을 감춘 것과 같은 근거다.
+        // 실측으로 구분력도 낮다(308종목 중 두 값에 97%가 몰린다).
+        // ICHIMOKU_SP_KR의 하이라이트 지표라 결과 표에는 그대로 나온다.
+        detailDefault = false)
 public class IchimokuDivergenceCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_DIVERGENCE";

@@ -156,7 +156,10 @@ public class IndicatorCatalogSynchronizer {
                     case MEDIAN_RATIO -> OFFSET_SECTOR_RATIO;
                     case MEDIAN -> OFFSET_SECTOR_MEDIAN;
                 },
-                link, IndicatorPopulation.SECTOR, unit, true);
+                link, IndicatorPopulation.SECTOR, unit,
+                // 중앙값은 **이 종목의 값이 아니다** — 같은 업종 종목이 전부 같은 수를 본다.
+                // 조건·결과 표에는 그대로 나오고 감추는 것은 분류 구획 하나다(ADR-0058).
+                spec.kind() != SectorMetricSpec.Kind.MEDIAN);
     }
 
     /**
@@ -179,7 +182,11 @@ public class IndicatorCatalogSynchronizer {
                         + "5에 가까운 값은 업종 대비 순위를 느슨하게 읽어야 한다.",
                 categoryOf(spec.sourceCode()), IndicatorValueType.COUNT, 0, Boolean.TRUE,
                 baseSortOrder(spec.sourceCode()) + OFFSET_PEER_COUNT,
-                null, IndicatorPopulation.SECTOR, null, true);
+                null, IndicatorPopulation.SECTOR, null,
+                // 표본 수는 **값의 신뢰도**이지 종목의 속성이 아니다. 세 장이 "7"·"30"만
+                // 말하며 재무 구획을 차지하던 자리다. 업종 비교가 성립하지 않는 종목에는
+                // SectorContext가 이미 문장으로 답한다(ADR-0044).
+                false);
     }
 
     /**
