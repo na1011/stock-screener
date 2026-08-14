@@ -148,6 +148,28 @@ class IndicatorExtensibilityTest {
                 "SELECT detail_default FROM indicator WHERE code = 'PER_PCTL'", Boolean.class);
         assertThat(percentileIsVisible).isTrue();
     }
+    @Test
+    @DisplayName("IMPORTANT — 계산기 없는 파생의 노출 정책이 **이미 있는 행에도** 반영된다")
+    void detailDefaultIsUpdatedOnExistingDerivedRows() {
+        // 이 지표들은 @IndicatorMeta가 없어 애너테이션으로 감출 수 없다. 노출 정책을 정하는
+        // 유일한 자리가 upsertDerived의 파라미터이고, 그것이 DO UPDATE SET에 없으면
+        // **감추라는 선언이 조용히 무시된다** — 에러도 로그도 없이 옛 값이 남는다.
+        jdbcTemplate.update("INSERT INTO indicator (code, name, category, value_type, detail_default)"
+                + " VALUES ('PER_PCTL', '옛 이름', 'FUNDAMENTAL', 'RATIO', false)"
+                + " ON CONFLICT (code) DO UPDATE SET detail_default = false, name = '옛 이름'");
+
+        synchronizer(List.of(new PercentileSpec("PER", "PER 백분위", "설명", "해석"))).synchronize();
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT name FROM indicator WHERE code = 'PER_PCTL'", String.class))
+                .as("대조군 — 이름은 갱신된다. 이것만 통과하고 아래가 실패하면 컬럼 하나가 빠진 것이다")
+                .isEqualTo("PER 백분위");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT detail_default FROM indicator WHERE code = 'PER_PCTL'", Boolean.class))
+                .as("동기화가 노출 정책을 갱신해야 한다 — DO UPDATE SET에 그 컬럼이 있어야 참이 된다")
+                .isTrue();
+    }
+
 
     @Test
     @DisplayName("백분위 행이 원본 지표를 가리킨다 — 부등호 방향 판단이 여기 의존한다")

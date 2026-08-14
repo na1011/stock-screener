@@ -156,7 +156,7 @@ public class IndicatorCatalogSynchronizer {
                     case MEDIAN_RATIO -> OFFSET_SECTOR_RATIO;
                     case MEDIAN -> OFFSET_SECTOR_MEDIAN;
                 },
-                link, IndicatorPopulation.SECTOR, unit);
+                link, IndicatorPopulation.SECTOR, unit, true);
     }
 
     /**
@@ -179,7 +179,7 @@ public class IndicatorCatalogSynchronizer {
                         + "5에 가까운 값은 업종 대비 순위를 느슨하게 읽어야 한다.",
                 categoryOf(spec.sourceCode()), IndicatorValueType.COUNT, 0, Boolean.TRUE,
                 baseSortOrder(spec.sourceCode()) + OFFSET_PEER_COUNT,
-                null, IndicatorPopulation.SECTOR, null);
+                null, IndicatorPopulation.SECTOR, null, true);
     }
 
     /**
@@ -187,6 +187,11 @@ public class IndicatorCatalogSynchronizer {
      *
      * <p>{@link #upsertPercentile}과 컬럼 집합이 같아 한 자리로 모았다. 구간({@code bands})은
      * 넣지 않는다 — 여기 오는 값은 백분위·배수·개수라 자연어 구간이 붙을 자리가 아니다.
+     *
+     * <p>MUST: {@code detail_default}를 리터럴로 박지 않는다. 여기 오는 지표는 <b>계산기가 없어
+     * {@code @IndicatorMeta}가 없으므로</b>, 이 파라미터가 그 노출 정책을 정하는 <b>유일한
+     * 자리</b>다. 그리고 {@code DO UPDATE SET}에 함께 있어야 한다 — 없으면 이미 있는 행이
+     * 갱신되지 않아 <b>감추라는 선언이 조용히 무시된다.</b>
      *
      * <p>MUST: {@code category}를 여기서 정하지 않고 <b>원본 지표에서 받는다</b>(ADR-0057).
      * 예전에는 {@code 'DERIVED'} 리터럴이었는데, 사용자에게 "PER 업종 백분위"는 파생 계산이
@@ -197,13 +202,13 @@ public class IndicatorCatalogSynchronizer {
                                IndicatorCategory category, IndicatorValueType valueType,
                                int decimalScale, Boolean higherIsBetter, int sortOrder,
                                String sourceIndicatorCode, IndicatorPopulation population,
-                               String unit) {
+                               String unit, boolean detailDefault) {
         jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
                                        default_column, detail_default, source_indicator_code,
                                        population, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, false, true, ?, ?, now(), now())
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, false, ?, ?, ?, now(), now())
                 ON CONFLICT (code) DO UPDATE SET
                     name                  = EXCLUDED.name,
                     description           = EXCLUDED.description,
@@ -215,13 +220,16 @@ public class IndicatorCatalogSynchronizer {
                     higher_is_better      = EXCLUDED.higher_is_better,
                     is_active             = true,
                     sort_order            = EXCLUDED.sort_order,
+                    -- MUST: 여기 있어야 노출 정책을 바꿀 수 있다. 빠뜨리면 이미 있는 행이
+                    -- 영원히 옛 값으로 남고 에러도 로그도 없다 — category가 같은 함정이었다.
+                    detail_default        = EXCLUDED.detail_default,
                     source_indicator_code = EXCLUDED.source_indicator_code,
                     population            = EXCLUDED.population,
                     updated_at            = now()
                 """,
                 code, name, emptyToNull(description), emptyToNull(interpretation),
                 category.name(), valueType.name(), emptyToNull(unit),
-                decimalScale, higherIsBetter, sortOrder,
+                decimalScale, higherIsBetter, sortOrder, detailDefault,
                 sourceIndicatorCode, population == null ? null : population.name());
     }
 
@@ -269,7 +277,7 @@ public class IndicatorCatalogSynchronizer {
                 // "상위 20%"가 >= 0.8인지 <= 0.2인지 정한다.
                 spec.sourceCode(),
                 // 백분위는 0~1의 무차원 값이라 단위가 없다.
-                IndicatorPopulation.UNIVERSE, null);
+                IndicatorPopulation.UNIVERSE, null, true);
     }
 
     private void upsert(String code, IndicatorMeta meta) {
