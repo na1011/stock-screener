@@ -1,4 +1,4 @@
-package com.stockscreener.indicator.calculator.ichimoku;
+package com.stockscreener.indicator.calculator;
 
 import java.time.LocalDate;
 
@@ -17,7 +17,7 @@ import java.time.LocalDate;
  * @param days    그 주에 담긴 일봉 수. 진행 중인 주를 판별하는 데는 쓰지 않는다 —
  *                휴장이 섞이면 완결된 주도 5일이 아니기 때문이다
  */
-record WeeklyBar(
+public record WeeklyBar(
         LocalDate endDate,
         double open,
         double high,

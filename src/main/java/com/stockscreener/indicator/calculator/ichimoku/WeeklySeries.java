@@ -1,6 +1,7 @@
 package com.stockscreener.indicator.calculator.ichimoku;
 
 import com.stockscreener.indicator.calculator.SeriesMath;
+import com.stockscreener.indicator.calculator.WeeklyBar;
 
 import java.util.List;
 

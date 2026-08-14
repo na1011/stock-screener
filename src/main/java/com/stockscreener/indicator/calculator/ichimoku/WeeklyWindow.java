@@ -1,6 +1,7 @@
 package com.stockscreener.indicator.calculator.ichimoku;
 
 import com.stockscreener.indicator.calculator.SeriesMath;
+import com.stockscreener.indicator.calculator.WeeklyBar;
 
 /**
  * 한 대상 일자에서 본 주봉 창. <b>인덱스 0이 진행 중인 주</b>이고 클수록 과거다 —

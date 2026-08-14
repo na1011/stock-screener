@@ -1,5 +1,7 @@
 package com.stockscreener.indicator.calculator.ichimoku;
 
+import com.stockscreener.indicator.calculator.WeeklyBar;
+import com.stockscreener.indicator.calculator.WeeklyResampler;
 import com.stockscreener.indicator.PriceBar;
 import com.stockscreener.indicator.calculator.PriceScaling;
 
