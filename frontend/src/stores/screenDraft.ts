@@ -278,6 +278,43 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     markDirty()
   }
 
+  /**
+   * 조건의 **지표를 바꾼다.** 값·연산자·피연산자는 함께 비운다.
+   *
+   * 사용자에게는 "삭제하고 다시 추가하기"와 같은 일인데 자리와 신원이 유지된다. 그래서
+   * {@link resetCondition}과 같은 의미론을 쓴다 — `key`를 보존해야 열려 있는 팝오버가 앵커를
+   * 잃지 않고, `enabled`를 보존해야 빼 둔 조건이 조용히 되살아나지 않는다. 둘 다
+   * `conditionDefaults` **밖**에 있어 저절로 그렇게 된다.
+   *
+   * IMPORTANT — 값과 연산자를 **반드시** 비운다. 지표마다 (a) 단위가 다르고(`%`가 23개인데
+   * `배`·`원`·`일`·`개`도 있다) (b) 구간이 다르며(부채비율 200/100/50 ↔ PER 30/20/10/5)
+   * (c) 백분위 지표는 상위 20%의 부등호 방향이 뒤집힌다. 옛 값을 끌고 가면 "PER 100배 이하"
+   * 같은 조건이 만들어지는데, **값도 결과도 그럴듯해 눈으로 드러나지 않는다.**
+   *
+   * IMPORTANT — 반대로 `required`·`weight`는 **보존한다.** 역할과 배점은 지표의 성질이 아니라
+   * **전략의 구조**다. 여기서 되돌리면 SCORING에서 필수로 지정해 둔 조건이 지표만 바꿨는데
+   * 조용히 "가중치 없는 점수 조건"이 된다. 둘을 함께 남겨도 `required`일 때 `weight`는 이미
+   * null이라 서버의 `ck_cond_required_weight`가 깨지지 않는다.
+   *
+   * 읽기 전용 전략에서는 아무 일도 하지 않는다. `markDirty()`가 `readOnly`를 풀어 버리는데
+   * `canSave`는 `editable`을 보므로, 막지 않으면 **고칠 수는 있는데 저장할 길이 없는 상태**가
+   * 된다({@link hasDisabledCondition}가 피한 것과 같은 상태다).
+   */
+  function setIndicator(key: number, indicatorCode: string): void {
+    if (!editable.value) {
+      return
+    }
+    const target = conditions.value.find((it) => it.key === key)
+    if (target === undefined || target.indicatorCode === indicatorCode) {
+      return
+    }
+    Object.assign(target, conditionDefaults(indicatorCode), {
+      required: target.required,
+      weight: target.weight,
+    })
+    markDirty()
+  }
+
   /** 되돌릴 것이 없으면 아무 일도 하지 않는다. 버퍼는 한 번만 쓴다. */
   function undoRemove(): void {
     const removed = lastRemoved.value
@@ -445,6 +482,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     addCondition,
     removeCondition,
     resetCondition,
+    setIndicator,
     setEnabled,
     undoRemove,
     setEvaluationMode,

@@ -22,6 +22,16 @@ import { useCatalogStore } from '@/stores/catalog'
  */
 const emit = defineEmits<{ pick: [code: string] }>()
 
+/**
+ * 편집 시트 **안**에 그릴 때 목록을 낮춘다.
+ *
+ * IMPORTANT — 높이 때문이 아니라 **화살표 때문이다.** `Popover.alignOverlay()`는 위로 뒤집을 때
+ * `p-popover-flipped`를 붙이기만 하고 **떼지 않는다**(PrimeVue 소스). 시트가 픽커 때문에
+ * 커졌다 줄면 팝오버는 아래로 돌아오는데 화살표는 위를 가리킨 채 남아, 어느 칩의 시트인지
+ * 가리키는 것이 거짓이 된다. 뒤집힘 자체를 안 일어나게 하는 편이 싸다.
+ */
+const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false })
+
 const catalog = useCatalogStore()
 const query = ref('')
 /**
@@ -68,7 +78,8 @@ function markerOf(indicator: IndicatorResponse): string {
 async function focusSearch(): Promise<void> {
   query.value = ''
   await nextTick()
-  searchInput.value?.$el?.focus()
+  // `preventScroll` — 시트 안에 인라인으로 그릴 때 조상 스크롤 컨테이너가 튀는 것을 막는다.
+  searchInput.value?.$el?.focus({ preventScroll: true })
 }
 
 defineExpose({ focusSearch })
@@ -88,7 +99,7 @@ defineExpose({ focusSearch })
       />
     </IconField>
 
-    <div class="picker__scroll">
+    <div class="picker__scroll" :class="{ 'picker__scroll--compact': props.compact }">
       <section v-for="group in groups" :key="group.category" class="picker__group">
         <h3 class="picker__group-title">
           {{ categoryLabel(group.category) }}
@@ -137,6 +148,11 @@ defineExpose({ focusSearch })
   overflow-y: auto;
   margin: 0 -0.25rem;
   padding: 0 0.25rem;
+}
+
+/* 시트 안에서 쓸 때. 이유는 `compact` prop의 주석에 있다. */
+.picker__scroll--compact {
+  max-height: 14rem;
 }
 
 .picker__group + .picker__group {

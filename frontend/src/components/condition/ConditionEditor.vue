@@ -2,10 +2,11 @@
 import Button from 'primevue/button'
 import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
-import { computed } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 
 import { OPERAND_TYPES } from '@/api/types'
 import type { ComparisonOperatorName, IndicatorBand, OperandType } from '@/api/types'
+import IndicatorPicker from '@/components/condition/IndicatorPicker.vue'
 import FormField from '@/components/ui/FormField.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import {
@@ -93,6 +94,36 @@ const manualOpen = computed(() => props.manualOpen ?? defaultManualOpen())
  */
 function defaultManualOpen(): boolean {
   return bands.value.length === 0 || props.condition.value !== null
+}
+
+/**
+ * 지표를 고르는 중인가.
+ *
+ * IMPORTANT — 목록을 **중첩 팝오버로 열지 않는다.** 이 시트 자체가 팝오버라 그 위에 또 하나를
+ * 얹으면 ADR-0024가 적어 둔 재진입 함정(같은 틱에 닫고 열면 컨테이너가 걷히는 중에
+ * `offsetHeight`를 읽고 죽는다)과 ADR-0064의 오버레이 클릭 문제를 동시에 불러온다.
+ * 시트 안에서 본문을 갈아 끼우면 둘 다 해당 없다.
+ */
+const picking = ref(false)
+
+const picker = ref<InstanceType<typeof IndicatorPicker> | null>(null)
+
+function startPicking(): void {
+  picking.value = true
+  void nextTick(() => void picker.value?.focusSearch())
+}
+
+/**
+ * 지표를 갈아 끼운다.
+ *
+ * `resetManualOpen()`을 함께 부르는 것이 요점이다. 새 지표는 구간이 다르고 값이 비어 있으므로
+ * 접힘 상태를 그 지표에 맞게 다시 정해야 한다 — **여기서는 사용자의 기억보다 규칙이 이긴다.**
+ * 값을 비우는 사건이라는 점에서 [초기화]와 같은 자리다.
+ */
+function pickIndicator(code: string): void {
+  draft.setIndicator(props.condition.key, code)
+  picking.value = false
+  resetManualOpen()
 }
 
 /**
@@ -206,11 +237,26 @@ function onOperandTypeChange(value: OperandType | null): void {
 </script>
 
 <template>
-  <div class="editor">
+  <div class="editor" :class="{ 'editor--picking': picking }">
     <header class="editor__head">
       <div class="editor__title">
         <h3 class="editor__name">{{ indicator?.name ?? '지표' }}</h3>
         <span v-if="unitSuffix" class="editor__unit">{{ unitSuffix }}</span>
+        <!--
+          지표를 바꾸는 길. 없으면 사용자는 지우고 다시 만들어야 하고, 그러면 값·역할·가중치를
+          전부 다시 넣게 된다. `readonly`에서는 제목이 글자로만 남는다.
+        -->
+        <Button
+          v-if="!readonly"
+          type="button"
+          text
+          size="small"
+          class="editor__change"
+          :label="picking ? '취소' : '변경'"
+          :aria-expanded="picking"
+          v-tooltip.top="picking ? '지표 바꾸기를 그만둔다' : '이 조건의 지표를 바꾼다'"
+          @click="picking ? (picking = false) : startPicking()"
+        />
       </div>
       <div class="editor__head-actions">
         <!--
@@ -243,182 +289,196 @@ function onOperandTypeChange(value: OperandType | null): void {
       </div>
     </header>
 
-    <!-- 무엇을 뜻하는 지표인지. 이름만으로는 값을 정할 수 없다. -->
-    <p v-if="indicator?.interpretation" class="editor__interpretation">
-      {{ indicator.interpretation }}
-    </p>
-    <p v-if="indicator?.percentile" class="editor__interpretation">
-      {{ indicator.percentile.label }}
-    </p>
+    <!--
+      지표를 고르는 중에는 본문을 통째로 갈아 끼운다. 설명·구간·입력칸을 아래 남겨 두면
+      **바꾸기 전 지표의 구간**이 목록 옆에 함께 떠서 어느 쪽이 지금 조건인지 알 수 없다.
+    -->
+    <IndicatorPicker
+      v-if="picking"
+      ref="picker"
+      compact
+      class="editor__picker"
+      @pick="pickIndicator"
+    />
 
-    <template v-if="!readonly">
-      <!-- 구간 프리셋. 숫자를 모르는 사용자가 먼저 만나는 것. -->
-      <p v-if="bands.length > 0" class="editor__bands-title">구간에서 고르기</p>
-      <div v-if="bands.length > 0" class="editor__bands">
+    <template v-else>
+      <!-- 무엇을 뜻하는 지표인지. 이름만으로는 값을 정할 수 없다. -->
+      <p v-if="indicator?.interpretation" class="editor__interpretation">
+        {{ indicator.interpretation }}
+      </p>
+      <p v-if="indicator?.percentile" class="editor__interpretation">
+        {{ indicator.percentile.label }}
+      </p>
+
+      <template v-if="!readonly">
+        <!-- 구간 프리셋. 숫자를 모르는 사용자가 먼저 만나는 것. -->
+        <p v-if="bands.length > 0" class="editor__bands-title">구간에서 고르기</p>
+        <div v-if="bands.length > 0" class="editor__bands">
+          <button
+            v-for="band in bands"
+            :key="band.label"
+            type="button"
+            class="app-list-button editor__band"
+            @click="applyBand(band)"
+          >
+            <span class="editor__band-range tabular">{{ bandLabel(band) }}</span>
+            <span class="editor__band-label">{{ band.label }}</span>
+          </button>
+        </div>
+
+        <Button
+          v-if="topQuintile"
+          label="상위 20% 바로 적용"
+          icon="pi pi-bolt"
+          size="small"
+          text
+          class="editor__quintile"
+          @click="applyTopQuintile"
+        />
+
         <button
-          v-for="band in bands"
-          :key="band.label"
+          v-if="bands.length > 0"
           type="button"
-          class="app-list-button editor__band"
-          @click="applyBand(band)"
+          class="app-list-button editor__manual-toggle"
+          :aria-expanded="manualOpen"
+          @click="emit('update:manual-open', !manualOpen)"
         >
-          <span class="editor__band-range tabular">{{ bandLabel(band) }}</span>
-          <span class="editor__band-label">{{ band.label }}</span>
+          <i :class="manualOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" aria-hidden="true" />
+          <span>직접 입력</span>
         </button>
-      </div>
 
-      <Button
-        v-if="topQuintile"
-        label="상위 20% 바로 적용"
-        icon="pi pi-bolt"
-        size="small"
-        text
-        class="editor__quintile"
-        @click="applyTopQuintile"
-      />
-
-      <button
-        v-if="bands.length > 0"
-        type="button"
-        class="app-list-button editor__manual-toggle"
-        :aria-expanded="manualOpen"
-        @click="emit('update:manual-open', !manualOpen)"
-      >
-        <i :class="manualOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" aria-hidden="true" />
-        <span>직접 입력</span>
-      </button>
-
-      <div v-show="manualOpen" class="editor__manual">
-        <FormField label="비교 대상">
-          <SegmentedControl
-            :model-value="condition.operandType"
-            :options="operandTypeOptions"
-            aria-label="비교 대상"
-            @update:model-value="onOperandTypeChange"
-          />
-        </FormField>
-
-        <FormField label="조건">
-          <Select
-            :model-value="condition.operator"
-            :options="operatorOptions"
-            option-label="label"
-            option-value="name"
-            fluid
-            @update:model-value="
-              (value) => {
-                condition.operator = value
-                draft.markDirty()
-              }
-            "
-          />
-        </FormField>
-
-        <template v-if="condition.operandType === 'LITERAL'">
-          <FormField :label="requiresUpperBound ? '하한' : '값'">
-            <InputNumber
-              :model-value="condition.value"
-              :max-fraction-digits="4"
-              :suffix="unitSuffix"
-              fluid
-              @update:model-value="
-                (value) => {
-                  condition.value = value
-                  draft.markDirty()
-                }
-              "
-            />
-          </FormField>
-          <FormField v-if="requiresUpperBound" label="상한">
-            <InputNumber
-              :model-value="condition.upperBound"
-              :max-fraction-digits="4"
-              :suffix="unitSuffix"
-              fluid
-              @update:model-value="
-                (value) => {
-                  condition.upperBound = value
-                  draft.markDirty()
-                }
-              "
-            />
-          </FormField>
-        </template>
-
-        <template v-else>
-          <FormField label="비교할 지표">
-            <Select
-              :model-value="condition.operandIndicatorCode"
-              :options="indicatorOptions"
-              option-group-label="label"
-              option-group-children="items"
-              option-label="label"
-              option-value="value"
-              :placeholder="PICK_INDICATOR"
-              filter
-              :filter-placeholder="SEARCH_INDICATOR"
-              fluid
-              @update:model-value="
-                (value) => {
-                  condition.operandIndicatorCode = value
-                  draft.markDirty()
-                }
-              "
-            />
-          </FormField>
-          <FormField label="배수">
-            <InputNumber
-              :model-value="condition.multiplier"
-              :max-fraction-digits="4"
-              placeholder="1"
-              fluid
-              @update:model-value="
-                (value) => {
-                  condition.multiplier = value
-                  draft.markDirty()
-                }
-              "
-            />
-          </FormField>
-        </template>
-
-        <!--
-          역할과 가중치는 점수 방식에서만 뜻이 있다. 거르기에서는 모든 조건이 이미 필수이고
-          점수도 매기지 않으므로 자리를 차지할 이유가 없다.
-
-          토글로 두는 것이 요점이다 — 필수와 가중치는 배타이고(서버의 ck_cond_required_weight),
-          체크박스 + 별도 입력칸으로 두면 둘 다 채워 놓고 400을 맞는 조합이 만들어진다.
-        -->
-        <template v-if="draft.evaluationMode === 'SCORING'">
-          <FormField label="역할" :hint="conditionRoleHints[conditionRole]">
+        <div v-show="manualOpen" class="editor__manual">
+          <FormField label="비교 대상">
             <SegmentedControl
-              :model-value="conditionRole"
-              :options="CONDITION_ROLES"
-              aria-label="조건의 역할"
-              @update:model-value="setRole"
+              :model-value="condition.operandType"
+              :options="operandTypeOptions"
+              aria-label="비교 대상"
+              @update:model-value="onOperandTypeChange"
             />
           </FormField>
 
-          <FormField v-if="conditionRole === 'SCORED'" label="가중치">
-            <InputNumber
-              :model-value="condition.weight"
-              :min="0"
-              :max-fraction-digits="2"
-              placeholder="1"
+          <FormField label="조건">
+            <Select
+              :model-value="condition.operator"
+              :options="operatorOptions"
+              option-label="label"
+              option-value="name"
               fluid
               @update:model-value="
                 (value) => {
-                  condition.weight = value
+                  condition.operator = value
                   draft.markDirty()
                 }
               "
             />
           </FormField>
-        </template>
-      </div>
-    </template>
 
-    <p v-else class="editor__readonly">읽기 전용 전략입니다. 복제하면 고칠 수 있습니다.</p>
+          <template v-if="condition.operandType === 'LITERAL'">
+            <FormField :label="requiresUpperBound ? '하한' : '값'">
+              <InputNumber
+                :model-value="condition.value"
+                :max-fraction-digits="4"
+                :suffix="unitSuffix"
+                fluid
+                @update:model-value="
+                  (value) => {
+                    condition.value = value
+                    draft.markDirty()
+                  }
+                "
+              />
+            </FormField>
+            <FormField v-if="requiresUpperBound" label="상한">
+              <InputNumber
+                :model-value="condition.upperBound"
+                :max-fraction-digits="4"
+                :suffix="unitSuffix"
+                fluid
+                @update:model-value="
+                  (value) => {
+                    condition.upperBound = value
+                    draft.markDirty()
+                  }
+                "
+              />
+            </FormField>
+          </template>
+
+          <template v-else>
+            <FormField label="비교할 지표">
+              <Select
+                :model-value="condition.operandIndicatorCode"
+                :options="indicatorOptions"
+                option-group-label="label"
+                option-group-children="items"
+                option-label="label"
+                option-value="value"
+                :placeholder="PICK_INDICATOR"
+                filter
+                :filter-placeholder="SEARCH_INDICATOR"
+                fluid
+                @update:model-value="
+                  (value) => {
+                    condition.operandIndicatorCode = value
+                    draft.markDirty()
+                  }
+                "
+              />
+            </FormField>
+            <FormField label="배수">
+              <InputNumber
+                :model-value="condition.multiplier"
+                :max-fraction-digits="4"
+                placeholder="1"
+                fluid
+                @update:model-value="
+                  (value) => {
+                    condition.multiplier = value
+                    draft.markDirty()
+                  }
+                "
+              />
+            </FormField>
+          </template>
+
+          <!--
+            역할과 가중치는 점수 방식에서만 뜻이 있다. 거르기에서는 모든 조건이 이미 필수이고
+            점수도 매기지 않으므로 자리를 차지할 이유가 없다.
+
+            토글로 두는 것이 요점이다 — 필수와 가중치는 배타이고(서버의 ck_cond_required_weight),
+            체크박스 + 별도 입력칸으로 두면 둘 다 채워 놓고 400을 맞는 조합이 만들어진다.
+          -->
+          <template v-if="draft.evaluationMode === 'SCORING'">
+            <FormField label="역할" :hint="conditionRoleHints[conditionRole]">
+              <SegmentedControl
+                :model-value="conditionRole"
+                :options="CONDITION_ROLES"
+                aria-label="조건의 역할"
+                @update:model-value="setRole"
+              />
+            </FormField>
+
+            <FormField v-if="conditionRole === 'SCORED'" label="가중치">
+              <InputNumber
+                :model-value="condition.weight"
+                :min="0"
+                :max-fraction-digits="2"
+                placeholder="1"
+                fluid
+                @update:model-value="
+                  (value) => {
+                    condition.weight = value
+                    draft.markDirty()
+                  }
+                "
+              />
+            </FormField>
+          </template>
+        </div>
+      </template>
+
+      <p v-else class="editor__readonly">읽기 전용 전략입니다. 복제하면 고칠 수 있습니다.</p>
+    </template>
 
     <!--
       footer가 `v-if="!readonly"` **바깥**에 있다. 읽기 전용 팝오버는 닫는 수단이 바깥
@@ -428,7 +488,7 @@ function onOperandTypeChange(value: OperandType | null): void {
       "여기서 끝났다"를 말할 자리를 주는 것이다. 구간 프리셋을 고르면 저절로 닫히는 것과
       달리 직접 입력에는 끝나는 지점이 없어, 사용자가 언제 확정됐는지 알 수 없었다.
     -->
-    <footer class="editor__foot">
+    <footer v-if="!picking" class="editor__foot">
       <Button
         v-if="!readonly"
         type="button"
@@ -480,6 +540,25 @@ function onOperandTypeChange(value: OperandType | null): void {
   align-items: center;
   flex: 0 0 auto;
   gap: 0.125rem;
+}
+
+/*
+ * 지표를 고르는 중에는 스크롤을 픽커에 맡긴다.
+ *
+ * `.editor`가 스크롤 컨테이너인 채로 두면 픽커의 검색창이 `.picker__scroll` **밖**이라
+ * 함께 밀려 올라가 사라진다 — 검색하려고 연 화면에서 검색창이 안 보인다.
+ */
+.editor--picking {
+  overflow-y: hidden;
+}
+
+.editor__change {
+  flex: 0 0 auto;
+  margin-inline-start: 0.125rem;
+}
+
+.editor__picker {
+  margin-top: 0.5rem;
 }
 
 .editor__name {

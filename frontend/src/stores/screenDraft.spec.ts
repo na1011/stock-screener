@@ -360,6 +360,107 @@ describe('resetCondition — 값만 비운다', () => {
   })
 })
 
+describe('setIndicator — 지표를 바꾸면 값은 비우고 신원·역할은 남긴다', () => {
+  it('값·연산자·피연산자를 비운다 — 단위와 구간이 지표마다 다르다', () => {
+    // 부채비율 100(%)을 PER로 끌고 가면 "PER 100배 이하"가 된다. 값도 결과도 그럴듯해
+    // 눈으로는 드러나지 않는다.
+    const draft = useScreenDraftStore()
+    draft.addCondition('DEBT_RATIO')
+    const target = draft.conditions[0] as DraftCondition
+    target.operator = 'LTE'
+    target.value = 100
+    target.upperBound = 200
+    target.operandType = 'INDICATOR'
+    target.operandIndicatorCode = 'PBR'
+    target.multiplier = 2
+
+    draft.setIndicator(target.key, 'PER')
+
+    expect(target.indicatorCode).toBe('PER')
+    expect(target.operator).toBe('GTE')
+    expect(target.value).toBeNull()
+    expect(target.upperBound).toBeNull()
+    expect(target.operandType).toBe('LITERAL')
+    expect(target.operandIndicatorCode).toBeNull()
+    expect(target.multiplier).toBeNull()
+    expect(isComplete(target)).toBe(false)
+  })
+
+  it('IMPORTANT — 역할과 가중치는 남긴다. 지표의 성질이 아니라 전략의 구조다', () => {
+    // 되돌리면 SCORING에서 필수로 지정해 둔 조건이 지표만 바꿨는데 조용히
+    // "가중치 없는 점수 조건"이 된다.
+    const draft = useScreenDraftStore()
+    draft.addCondition('DEBT_RATIO')
+    const scored = draft.conditions[0] as DraftCondition
+    scored.weight = 3
+    draft.addCondition('ROE')
+    const required = draft.conditions[1] as DraftCondition
+    required.required = true
+
+    draft.setIndicator(scored.key, 'PER')
+    draft.setIndicator(required.key, 'PBR')
+
+    expect(scored.weight).toBe(3)
+    expect(required.required).toBe(true)
+  })
+
+  it('key와 제외 상태는 건드리지 않는다', () => {
+    // key가 바뀌면 v-for가 다시 그려 열려 있던 팝오버가 앵커를 잃는다. enabled가 딸려 오면
+    // 실행에서 빼 둔 조건이 조용히 되살아난다.
+    const draft = useScreenDraftStore()
+    draft.addCondition('DEBT_RATIO')
+    const target = draft.conditions[0] as DraftCondition
+    draft.setEnabled(target.key, false)
+
+    draft.setIndicator(target.key, 'PER')
+
+    expect((draft.conditions[0] as DraftCondition).key).toBe(target.key)
+    expect(target.enabled).toBe(false)
+  })
+
+  it('실행에 반영되어야 하므로 손댄 것으로 친다', () => {
+    const draft = useScreenDraftStore()
+    draft.loadFrom(screen())
+    expect(draft.dirty).toBe(false)
+
+    draft.setIndicator((draft.conditions[0] as DraftCondition).key, 'PBR')
+
+    expect(draft.dirty).toBe(true)
+  })
+
+  it('읽기 전용 전략에서는 아무 일도 하지 않는다', () => {
+    // 막지 않으면 markDirty가 readOnly를 풀어 "고칠 수는 있는데 저장할 길이 없는 상태"가 된다.
+    const draft = useScreenDraftStore()
+    draft.loadFrom(screen({ type: 'PRESET', code: 'VALUE', editable: false }))
+    const target = draft.conditions[0] as DraftCondition
+
+    draft.setIndicator(target.key, 'PBR')
+
+    expect(target.indicatorCode).toBe('PER')
+    expect(draft.dirty).toBe(false)
+    expect(draft.readOnly).toBe(true)
+  })
+
+  it('같은 지표를 다시 고르면 값을 날리지 않는다', () => {
+    const draft = useScreenDraftStore()
+    draft.addCondition('PER')
+    const target = draft.conditions[0] as DraftCondition
+    target.value = 10
+
+    draft.setIndicator(target.key, 'PER')
+
+    expect(target.value).toBe(10)
+  })
+
+  it('없는 key는 무시한다', () => {
+    const draft = useScreenDraftStore()
+    draft.addCondition('PER')
+
+    expect(() => draft.setIndicator(999, 'PBR')).not.toThrow()
+    expect((draft.conditions[0] as DraftCondition).indicatorCode).toBe('PER')
+  })
+})
+
 describe('isComplete', () => {
   it('지표를 고르지 않은 행은 실행 대상이 아니다', () => {
     expect(isComplete(condition({ indicatorCode: null }))).toBe(false)
