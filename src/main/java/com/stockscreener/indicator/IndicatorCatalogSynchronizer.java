@@ -91,20 +91,40 @@ public class IndicatorCatalogSynchronizer {
     }
 
     /**
-     * 업종 상대값의 카탈로그 행.
+     * 업종 상대값의 카탈로그 행. <b>Kind마다 표시 속성이 셋씩 갈린다.</b>
      *
      * <p>{@code source_indicator_code}를 <b>백분위에만</b> 건다. 그 링크가 화면에
-     * "상위 20% = 0.2 이하" 안내를 만드는 근거인데, 중앙값 배수는 1.0이 중앙이라 그 안내가
-     * 뜻을 잃는다(ADR-0044). 대신 배수는 스스로 유불리 방향을 갖는다 — 부채가 업종 대비
-     * 가벼운 쪽이 좋으므로 낮은 쪽이 유리하다.
+     * "상위 20% = 0.2 이하" 안내를 만드는 근거인데, 배수는 1.0이 중앙이고 중앙값은 애초에
+     * 순위가 아니라 그 안내가 뜻을 잃는다(ADR-0044).
+     *
+     * <p>MUST: 여기를 {@code boolean}이 아니라 switch로 둔다. Kind가 늘 때 새 값이 else로
+     * 떨어지면 <b>거짓 유불리 방향이 카드에 붙는다</b> — 그리고 {@code .claude/rules/frontend.md}가
+     * 화면의 지표 코드 분기를 금지하므로 프론트에서 막을 길이 없다.
      */
     private void upsertSectorMetric(SectorMetricSpec spec) {
-        boolean percentile = spec.kind() == SectorMetricSpec.Kind.PERCENTILE;
+        IndicatorMeta source = sourceMetaOf(spec.sourceCode());
+        // 소수 자릿수 · 유불리 방향 · 원본 링크 · 단위가 함께 갈린다.
+        int scale = switch (spec.kind()) {
+            case PERCENTILE -> 4;
+            case MEDIAN_RATIO -> 2;
+            case MEDIAN -> source.decimalScale();
+        };
+        Boolean higherIsBetter = switch (spec.kind()) {
+            // 백분위는 방향이 원본에 있다(링크가 그것을 나른다).
+            case PERCENTILE -> null;
+            // 배수는 자기 자신이 들고 있다 — 업종 대비 가벼운 쪽이 좋다.
+            case MEDIAN_RATIO -> Boolean.FALSE;
+            // 중앙값은 이 종목에 대한 판정이 아니라 참조점이라 방향이 없다.
+            // "업종 PER이 낮아서 좋다"는 성립하지 않는 문장이고, FALSE를 주면 화면이 그것을 그린다.
+            case MEDIAN -> null;
+        };
+        String link = spec.kind() == SectorMetricSpec.Kind.PERCENTILE ? spec.sourceCode() : null;
+        // 중앙값은 원본과 같은 단위다("배"). 백분위·배수는 무차원이라 단위가 없다.
+        String unit = spec.kind() == SectorMetricSpec.Kind.MEDIAN ? source.unit() : null;
+
         upsertDerived(spec.code(), spec.name(), spec.description(), spec.interpretation(),
-                categoryOf(spec.sourceCode()), IndicatorValueType.RATIO, percentile ? 4 : 2,
-                // 백분위는 방향이 원본에 있고, 배수는 자기 자신이 들고 있다.
-                percentile ? null : Boolean.FALSE,
-                910, percentile ? spec.sourceCode() : null, IndicatorPopulation.SECTOR);
+                source.category(), IndicatorValueType.RATIO, scale, higherIsBetter,
+                910, link, IndicatorPopulation.SECTOR, unit);
     }
 
     /**
@@ -115,14 +135,18 @@ public class IndicatorCatalogSynchronizer {
      * 그것이 "업종당 둘뿐인데 값은 나온다"를 스스로 확인할 수단이다.
      */
     private void upsertSectorPeerCount(SectorMetricSpec spec) {
+        // MUST: 이름을 spec이 아니라 **원본 지표**에서 짓는다. 한 원본에 Kind가 둘 이상이면
+        // 이 행을 그들이 공유하는데, spec 이름을 쓰면 UPSERT가 뒤에 오는 선언으로 덮어써
+        // 표시 이름이 리스트 순서에 따라 뒤집힌다(값은 같아서 아무 증상이 없다).
+        String sourceName = sourceMetaOf(spec.sourceCode()).name();
         upsertDerived(spec.peerCountCode(),
-                spec.name() + " 표본 수",
-                "이 종목의 " + spec.name() + "을(를) 낼 때 실제로 비교한 같은 업종 종목 수. "
+                sourceName + " 업종 표본 수",
+                "이 종목의 " + sourceName + "을(를) 업종과 비교할 때 실제로 함께 센 같은 업종 종목 수. "
                         + "소분류 표본이 5 미만이면 중분류로 올라가며, 그 경우 이 수가 그 사실을 드러낸다.",
                 "클수록 업종 비교가 통계적으로 든든하다. 5는 값을 낼 수 있는 최소치일 뿐이므로, "
                         + "5에 가까운 값은 업종 대비 순위를 느슨하게 읽어야 한다.",
                 categoryOf(spec.sourceCode()), IndicatorValueType.COUNT, 0, Boolean.TRUE, 911,
-                null, IndicatorPopulation.SECTOR);
+                null, IndicatorPopulation.SECTOR, null);
     }
 
     /**
@@ -139,19 +163,21 @@ public class IndicatorCatalogSynchronizer {
     private void upsertDerived(String code, String name, String description, String interpretation,
                                IndicatorCategory category, IndicatorValueType valueType,
                                int decimalScale, Boolean higherIsBetter, int sortOrder,
-                               String sourceIndicatorCode, IndicatorPopulation population) {
+                               String sourceIndicatorCode, IndicatorPopulation population,
+                               String unit) {
         jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
                                        default_column, detail_default, source_indicator_code,
                                        population, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, true, ?, false, true, ?, ?, now(), now())
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, false, true, ?, ?, now(), now())
                 ON CONFLICT (code) DO UPDATE SET
                     name                  = EXCLUDED.name,
                     description           = EXCLUDED.description,
                     interpretation        = EXCLUDED.interpretation,
                     category              = EXCLUDED.category,
                     value_type            = EXCLUDED.value_type,
+                    unit                  = EXCLUDED.unit,
                     decimal_scale         = EXCLUDED.decimal_scale,
                     higher_is_better      = EXCLUDED.higher_is_better,
                     is_active             = true,
@@ -161,7 +187,8 @@ public class IndicatorCatalogSynchronizer {
                     updated_at            = now()
                 """,
                 code, name, emptyToNull(description), emptyToNull(interpretation),
-                category.name(), valueType.name(), decimalScale, higherIsBetter, sortOrder,
+                category.name(), valueType.name(), emptyToNull(unit),
+                decimalScale, higherIsBetter, sortOrder,
                 sourceIndicatorCode, population == null ? null : population.name());
     }
 
@@ -172,14 +199,24 @@ public class IndicatorCatalogSynchronizer {
      * 그 검사가 무너진 것이다 — 조용히 기본값을 주지 않고 던진다.
      */
     private IndicatorCategory categoryOf(String sourceCode) {
+        return sourceMetaOf(sourceCode).category();
+    }
+
+    /**
+     * 파생 지표가 원본에서 물려받을 표시 속성의 출처.
+     *
+     * <p>분류(ADR-0057)와 단위가 여기서 나온다. 파생마다 따로 적으면 원본이 옮겨가거나 단위가
+     * 바뀔 때 <b>파생만 제자리에 남는다.</b>
+     */
+    private IndicatorMeta sourceMetaOf(String sourceCode) {
         IndicatorCalculator source = registry.find(sourceCode).orElseThrow(() ->
                 new IllegalStateException("파생 지표의 원본이 등록되어 있지 않다: " + sourceCode));
         IndicatorMeta meta = AnnotationUtils.findAnnotation(source.getClass(), IndicatorMeta.class);
         if (meta == null) {
             throw new IllegalStateException(
-                    source.getClass().getName() + "에 @IndicatorMeta가 없다 — 파생의 분류를 정할 수 없다.");
+                    source.getClass().getName() + "에 @IndicatorMeta가 없다 — 파생의 표시 속성을 정할 수 없다.");
         }
-        return meta.category();
+        return meta;
     }
 
     /**
@@ -198,7 +235,8 @@ public class IndicatorCatalogSynchronizer {
                 // 부등호 방향 판단이 이 링크에 걸린다 — 화면은 원본의 higher_is_better를 보고
                 // "상위 20%"가 >= 0.8인지 <= 0.2인지 정한다.
                 spec.sourceCode(),
-                IndicatorPopulation.UNIVERSE);
+                // 백분위는 0~1의 무차원 값이라 단위가 없다.
+                IndicatorPopulation.UNIVERSE, null);
     }
 
     private void upsert(String code, IndicatorMeta meta) {

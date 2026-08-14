@@ -40,7 +40,7 @@ class SectorRelativeCalculatorTest {
                 ON CONFLICT (code) DO NOTHING
                 """);
         for (String code : List.of("DEBT_RATIO_SECTOR_REL", "DEBT_RATIO_SECTOR_N",
-                "DEBT_RATIO_SECTOR_PCTL")) {
+                "DEBT_RATIO_SECTOR_PCTL", "DEBT_RATIO_SECTOR_MEDIAN")) {
             jdbcTemplate.update("""
                     INSERT INTO indicator (code, name, category, value_type)
                     VALUES (?, ?, 'DERIVED', 'RATIO') ON CONFLICT (code) DO NOTHING
@@ -162,8 +162,62 @@ class SectorRelativeCalculatorTest {
         assertThat(calculate(spec)).isZero();
     }
 
-    private long calculate(SectorMetricSpec spec) {
-        return new SectorRelativeCalculator(jdbcTemplate, List.of(spec)).calculate(AS_OF);
+    private long calculate(SectorMetricSpec... specs) {
+        return new SectorRelativeCalculator(jdbcTemplate, List.of(specs)).calculate(AS_OF);
+    }
+
+    @Test
+    @DisplayName("중앙값 Kind는 배수가 아니라 중앙값 자체를 낸다 — 같은 업종은 같은 값이다")
+    void storesTheMedianItselfNotTheRatio() {
+        long low = member("26111", "10");
+        member("26112", "20");
+        long mid = member("26113", "30");
+        member("26114", "40");
+        long high = member("26115", "60");
+
+        calculate(median());
+
+        // 배수였다면 0.33 / 1.0 / 2.0이 나온다. 셋이 모두 30이어야 중앙값이다.
+        assertThat(value(low, "DEBT_RATIO_SECTOR_MEDIAN")).isEqualByComparingTo("30");
+        assertThat(value(mid, "DEBT_RATIO_SECTOR_MEDIAN")).isEqualByComparingTo("30");
+        assertThat(value(high, "DEBT_RATIO_SECTOR_MEDIAN")).isEqualByComparingTo("30");
+        assertThat(value(low, "DEBT_RATIO_SECTOR_N")).isEqualByComparingTo("5");
+    }
+
+    @Test
+    @DisplayName("중앙값도 폴백한 층의 것이다 — 층이 섞이면 값이 그럴듯하게 틀린다")
+    void medianComesFromTheChosenLayer() {
+        // 소분류 261에 둘, 262에 셋. 중분류 26 전체는 다섯이고 그 중앙값은 30이다.
+        long target = member("26111", "10");
+        member("26112", "20");
+        member("26201", "30");
+        member("26202", "40");
+        member("26203", "60");
+
+        calculate(median());
+
+        // 소분류(261)의 중앙값이면 15가 된다. 폴백한 중분류의 중앙값 30이어야 한다.
+        assertThat(value(target, "DEBT_RATIO_SECTOR_MEDIAN")).isEqualByComparingTo("30");
+        assertThat(value(target, "DEBT_RATIO_SECTOR_N")).isEqualByComparingTo("5");
+    }
+
+    @Test
+    @DisplayName("중앙값이 0 이하여도 낸다 — 배수의 음수 분모 가드를 복사하지 않는다")
+    void keepsNonPositiveMedian() {
+        long target = member("26111", "-30");
+        member("26112", "-20");
+        member("26113", "-10");
+        member("26114", "0");
+        member("26115", "10");
+
+        calculate(median(), medianRatio());
+
+        assertThat(value(target, "DEBT_RATIO_SECTOR_MEDIAN"))
+                .as("중앙값 -10은 참조값으로 성립한다. 0으로 나눌 때만 뜻이 없다")
+                .isEqualByComparingTo("-10");
+        assertThat(value(target, "DEBT_RATIO_SECTOR_REL"))
+                .as("배수는 같은 그룹에서 값을 내지 않는다 — 둘이 함께 사라지면 가드를 복사한 것이다")
+                .isNull();
     }
 
     private static SectorMetricSpec medianRatio() {
@@ -172,6 +226,10 @@ class SectorRelativeCalculatorTest {
 
     private static SectorMetricSpec percentile() {
         return new SectorMetricSpec(SOURCE, SectorMetricSpec.Kind.PERCENTILE, "백분위", "설명", "해석");
+    }
+
+    private static SectorMetricSpec median() {
+        return new SectorMetricSpec(SOURCE, SectorMetricSpec.Kind.MEDIAN, "중앙값", "설명", "해석");
     }
 
     /** 활성 유니버스에 편입된 종목 하나와 그날의 원본 지표 값. */

@@ -89,12 +89,12 @@ public class SectorRelativeCalculator {
             """;
 
     /**
-     * 층별 중앙값 둘 + 종목별 층 선택.
+     * 층별 중앙값 둘. {@link #MEDIAN_RATIO_CHOSEN}과 {@link #MEDIAN_CHOSEN}이 함께 쓴다.
      *
-     * <p>중앙값이 0 이하면 배수가 뜻을 잃으므로 값을 내지 않는다(원본 §2-2 P-07 음수 분모 가드).
-     * 자기자본이 잠식된 업종에서 실제로 생길 수 있다.
+     * <p>둘로 베껴 두지 않는 이유는 한쪽만 층 정의를 고쳐도 <b>두 지표가 다른 모집단의 중앙값을
+     * 말하면서 둘 다 그럴듯한 값</b>을 내기 때문이다.
      */
-    private static final String MEDIAN_RATIO_CHOSEN = MEMBER + """
+    private static final String MEDIAN_LAYERS = """
             , fineMedian AS (
                 SELECT fine,
                        (percentile_cont(0.5) WITHIN GROUP (ORDER BY value))::numeric AS med,
@@ -107,6 +107,15 @@ public class SectorRelativeCalculator {
                        count(*) AS n
                 FROM member GROUP BY broad
             )
+            """;
+
+    /**
+     * 값 ÷ 그 종목이 쓸 층의 중앙값.
+     *
+     * <p>중앙값이 0 이하면 배수가 뜻을 잃으므로 값을 내지 않는다(원본 §2-2 P-07 음수 분모 가드).
+     * 자기자본이 잠식된 업종에서 실제로 생길 수 있다.
+     */
+    private static final String MEDIAN_RATIO_CHOSEN = MEMBER + MEDIAN_LAYERS + """
             , chosen AS (
                 SELECT m.stock_id,
                        CASE WHEN f.n >= ? THEN
@@ -114,6 +123,28 @@ public class SectorRelativeCalculator {
                             ELSE CASE WHEN b.med > 0 THEN round(m.value / b.med, 8) END
                        END AS metric,
                        CASE WHEN f.n >= ? THEN f.n ELSE b.n END AS peers
+                FROM member m
+                JOIN fineMedian  f ON f.fine  = m.fine
+                JOIN broadMedian b ON b.broad = m.broad
+            )
+            """;
+
+    /**
+     * 그 종목이 쓸 층의 중앙값 <b>자체</b>. 같은 업종 종목끼리 같은 값을 받는다.
+     *
+     * <p>MUST NOT: 위 배수의 음수 분모 가드를 여기로 복사하지 않는다. 그 가드는 <b>0으로 나누는
+     * 것이 뜻이 없어서</b> 있는 것이지 중앙값 자체가 무의미해서가 아니다. 복사하면 자본잠식
+     * 업종에서 <b>두 지표가 함께 사라진다</b> — 참조값은 그때도 보여 줄 수 있어야 한다.
+     *
+     * <p>MUST: {@code chosen}이 바인딩하는 {@code ?}의 수를 다른 둘과 <b>같게 유지한다</b>(둘).
+     * {@link #upsert}가 자리표시자 순서를 텍스트 순서로 세므로, 하나만 늘면 파라미터 배열이
+     * 통째로 밀리면서 <b>값이 그럴듯하게 틀린다.</b>
+     */
+    private static final String MEDIAN_CHOSEN = MEMBER + MEDIAN_LAYERS + """
+            , chosen AS (
+                SELECT m.stock_id,
+                       CASE WHEN f.n >= ? THEN f.med ELSE b.med END AS metric,
+                       CASE WHEN f.n >= ? THEN f.n   ELSE b.n   END AS peers
                 FROM member m
                 JOIN fineMedian  f ON f.fine  = m.fine
                 JOIN broadMedian b ON b.broad = m.broad
@@ -158,8 +189,13 @@ public class SectorRelativeCalculator {
         long written = 0;
         long removed = 0;
         for (SectorMetricSpec spec : specs) {
-            String chosen = spec.kind() == SectorMetricSpec.Kind.PERCENTILE
-                    ? PERCENTILE_CHOSEN : MEDIAN_RATIO_CHOSEN;
+            // MUST: switch로 둔다. 삼항연산자면 Kind가 늘 때 새 값이 else로 조용히 떨어져
+            // 다른 뜻의 SQL이 그 코드로 저장된다 — 컴파일도 테스트도 통과하고 값만 틀린다.
+            String chosen = switch (spec.kind()) {
+                case PERCENTILE -> PERCENTILE_CHOSEN;
+                case MEDIAN_RATIO -> MEDIAN_RATIO_CHOSEN;
+                case MEDIAN -> MEDIAN_CHOSEN;
+            };
 
             written += upsert(chosen, spec.sourceCode(), tradeDate, spec.code(), "metric");
             // 표본 수는 상대값과 같은 층·같은 모집단에서 나온다. 따로 세면 둘이 갈린다.

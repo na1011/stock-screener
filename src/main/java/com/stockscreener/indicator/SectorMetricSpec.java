@@ -8,6 +8,11 @@ package com.stockscreener.indicator;
  * 다른 점은 <b>모집단</b>이다. 백분위는 유니버스 안에서 매기고(ADR-0036), 이쪽은
  * <b>활성 유니버스 전체 중 같은 업종</b>에서 매긴다(ADR-0044).
  *
+ * <p>MUST: 한 원본 지표에 선언이 <b>둘 이상</b>이면 표본 수 행({@link #peerCountCode()})을
+ * 그들이 공유한다. 그 행의 이름은 {@code kind}가 아니라 <b>원본 지표</b>에서 지어야 한다 —
+ * spec 이름을 쓰면 카탈로그 UPSERT가 뒤에 오는 선언으로 덮어써서, 표시 이름이
+ * <b>리스트 순서에 따라 뒤집힌다.</b>
+ *
  * <p>선언 하나가 지표 <b>둘</b>을 만든다 — 상대값과 <b>그 값을 낼 때 실제로 비교한 표본 수</b>다.
  * 표본 수를 함께 내는 이유는 임계(5)가 <b>5 미만만</b> 막기 때문이다. 5와 40의 차이는 값에
  * 아무 흔적을 남기지 않고, 계층 폴백까지 들어가면 같은 컬럼의 두 값이 서로 다른 크기의
@@ -37,6 +42,9 @@ public record SectorMetricSpec(
 
     /** 업종 중앙값 배수 코드의 접미사. */
     public static final String MEDIAN_RATIO_SUFFIX = "_SECTOR_REL";
+
+    /** 업종 중앙값 자체의 접미사. */
+    public static final String MEDIAN_SUFFIX = "_SECTOR_MEDIAN";
 
     /** 표본 수 코드의 접미사. 위 둘 어느 쪽이든 짝으로 따라온다. */
     public static final String PEER_COUNT_SUFFIX = "_SECTOR_N";
@@ -73,7 +81,16 @@ public record SectorMetricSpec(
         PERCENTILE(PERCENTILE_SUFFIX),
 
         /** 값 ÷ 업종 중앙값. 원본 §H-02의 "D/E ÷ 업종 중앙값"이 이것이다. */
-        MEDIAN_RATIO(MEDIAN_RATIO_SUFFIX);
+        MEDIAN_RATIO(MEDIAN_RATIO_SUFFIX),
+
+        /**
+         * 업종 중앙값 <b>자체</b>. 같은 업종 종목이 같은 값을 받는다.
+         *
+         * <p>위 둘과 성격이 다르다 — 저 둘은 <b>이 종목에 대한 판정</b>이고 이것은
+         * <b>참조점</b>이다. 그래서 유불리 방향이 없다. "업종 PER이 낮아서 좋다"는 문장이
+         * 성립하지 않는데, 방향을 주면 화면이 정확히 그 문장을 그린다.
+         */
+        MEDIAN(MEDIAN_SUFFIX);
 
         private final String suffix;
 
