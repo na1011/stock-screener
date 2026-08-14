@@ -1,7 +1,7 @@
-import { MISSING, formatDate, formatNumber, formatPrice } from './format'
+import { MISSING, formatDate, formatNumber, formatSignedPrice } from './format'
 
 /**
- * 시세 등락의 방향과 그것을 말로 푼 문장.
+ * 시세 등락의 방향·표기·기준.
  *
  * IMPORTANT — **방향 판정이 템플릿에 있으면 안 된다.** `rate > 0`을 화면이 직접 쓰면
  * `null`(값 없음)과 `0`(보합)이 같은 분기로 떨어지고, 그때 색이 붙지 않은 채 `—`만 남는다.
@@ -28,30 +28,35 @@ export function quoteTone(rate: number | null | undefined): QuoteTone | null {
 }
 
 /**
- * 무엇에 견준 값인지를 말로 푼다. 툴팁과 낭독기가 함께 쓴다.
+ * 등락 한 줄. `+12,500원 (+4.89%)`.
  *
- * IMPORTANT — 화면의 등락 옆에 **「전일 대비」라고 적지 않는다.** 거래정지 구간은 봉 자체가
- * 없어(`PriceWriter`가 OHLC 0 행을 버린다) 직전 거래일이 수 주 전일 수 있고, 그때 그 문구는
- * 그냥 거짓이다. 프론트에는 거래일 달력이 없어 인접 여부를 판정할 수단도 없다. 그래서
- * **날짜를 그대로 말한다** — 짧은 인라인 표기는 숫자만 두고, 기준은 이 문장이 진다.
+ * 금액이 앞, 백분율이 괄호 안이다 — 국내외 시세 화면이 공유하는 관례이고, 가운뎃점으로
+ * 나열하면 둘이 대등해 보여 무엇이 주된 값인지 흐려진다.
+ *
+ * 소수 **두 자리**다. {@link formatSignedPercent}(한 자리)를 쓰지 않는 이유는 그쪽이 재무
+ * 증감률용이기 때문이다 — 등락률은 두 자리가 관례이고 서버도 두 자리로 반올림해 보낸다.
+ *
+ * MUST NOT: 여기서 다시 계산하지 않는다. 서버는 **수정종가의 비**로 재고 미보정 기업 행위를
+ * 지나면 아예 내지 않는데(ADR-0055), 화면은 둘 다 알 수 없다.
  */
-export function quoteDescription(
-  previousTradeDate: string | null | undefined,
+export function formatQuoteChange(
   change: number | null | undefined,
   rate: number | null | undefined,
-): string | null {
-  const tone = quoteTone(rate)
-  if (tone === null || !previousTradeDate) {
-    return null
+): string {
+  if (quoteTone(rate) === null) {
+    return MISSING
   }
-  const on = formatDate(previousTradeDate)
-  if (tone === 'FLAT') {
-    return `${on} 종가와 같습니다.`
-  }
-  // 부호는 「올랐다/내렸다」가 이미 말한다. 숫자는 크기만 낸다.
-  const amount = formatPrice(change === null || change === undefined ? null : Math.abs(change))
-  const percent =
-    rate === null || rate === undefined ? MISSING : `${formatNumber(Math.abs(rate), 1)}%`
-  const verb = tone === 'RISE' ? '올랐습니다' : '내렸습니다'
-  return `${on} 종가보다 ${amount}(${percent}) ${verb}.`
+  const sign = (rate as number) > 0 ? '+' : ''
+  return `${formatSignedPrice(change)} (${sign}${formatNumber(rate, 2)}%)`
+}
+
+/**
+ * 무엇에 견준 값인가. 기준일 캡션 뒤에 붙는다.
+ *
+ * IMPORTANT — 「전일 대비」라고 적지 않는다. 거래정지 구간은 봉 자체가 없어(`PriceWriter`가
+ * OHLC 0 행을 버린다) 직전 거래일이 수 주 전일 수 있고 — 실제로 207940은 26거래일 전이다 —
+ * 프론트에는 거래일 달력이 없어 인접 여부를 판정할 수단도 없다. **날짜를 그대로 말한다.**
+ */
+export function quoteBasisLabel(previousTradeDate: string | null | undefined): string | null {
+  return previousTradeDate ? `${formatDate(previousTradeDate)} 대비` : null
 }

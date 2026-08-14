@@ -3,14 +3,8 @@ import { computed, useId } from 'vue'
 
 import type { IsoDate, StockPrice, StockSummary, UnadjustedActions } from '@/api/types'
 import WatchButton from '@/components/watchlist/WatchButton.vue'
-import {
-  formatCount,
-  formatDate,
-  formatPrice,
-  formatSignedPercent,
-  formatSignedPrice,
-} from '@/lib/format'
-import { quoteDescription, quoteTone } from '@/lib/quote'
+import { formatCount, formatDate, formatPrice } from '@/lib/format'
+import { formatQuoteChange, quoteBasisLabel, quoteTone } from '@/lib/quote'
 
 /**
  * 종목 상세의 요약 카드.
@@ -68,51 +62,76 @@ const noticeId = useId()
 const tone = computed(() => quoteTone(props.price?.changeRate))
 
 /**
- * 무엇에 견준 값인가. 툴팁과 낭독기가 같은 문장을 쓴다.
+ * 무엇에 견준 값인가. 기준일 캡션 뒤에 붙는다.
  *
- * 인라인에 「전일 대비」라고 적지 않는 이유는 `quoteDescription`의 주석에 있다 — 거래정지
- * 구간에서는 직전 거래일이 수 주 전이라 그 문구가 그냥 거짓이 된다.
+ * 툴팁이 아니라 **글자로** 둔다. 툴팁으로 두면 탭 정지가 하나 늘고, 그러고도 마우스를 올린
+ * 사람만 읽는다 — 이 화면에서 가장 자주 묻는 것("무엇에 견준 값인가")을 그렇게 감출 이유가
+ * 없다. 기준일이 이미 캡션으로 있으므로 그 옆이 제자리다.
  */
-const changeNotice = computed(() =>
-  quoteDescription(props.price?.previousTradeDate, props.price?.change, props.price?.changeRate),
-)
-
-const changeNoticeId = useId()
+const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
 </script>
 
 <template>
   <header class="stock-header">
     <!--
-      IMPORTANT — **좌우 열을 각각 상자로 묶지 않는다.** 지금 grid의 자식은 이름·티커·
-      가격칸·기준일 넷이고(낭독기 전용 span은 `position: absolute`라 트랙을 만들지 않는다),
-      가격칸만 상자다 — 그 안이 `inline-flex; align-items: baseline`이라 상자의 첫
-      베이스라인이 곧 가격의 베이스라인이고, 그래서 첫 줄 정렬이 유지된다.
+      읽는 순서가 곧 배치다 — **정체(이름·티커·소속) → 값(가격·등락) → 그 값이 언제 것인가.**
+      셋이 왼쪽 기준선 하나를 따라 세로로 흐르므로 눈이 가로로 튀지 않는다.
 
-      좌우를 묶으면 두 번째 줄(티커 / 기준일)이 어긋난다. flex의 `align-items: baseline`은 각
-      flex 아이템의 **첫** 베이스라인만 맞추기 때문이다 — 그 안의 둘째 줄은 각 상자의
-      line-height가 정하고, 28px 이름과 24px 가격은 그 값이 달라 5.5px 어긋났다.
-      grid는 **행마다** 베이스라인 그룹을 만들어 두 줄이 각각 맞는다.
+      예전에는 가격이 오른쪽 열에 있었다. 이름과 가격이 카드의 양 끝으로 벌어져 시선이 두
+      번 왕복했고, 등락까지 옆에 붙자 오른쪽 위 구석에 네 요소가 뭉쳤다.
 
-      DOM 순서는 화면 배치와 무관하다(`grid-area`가 정한다). 그래서 낭독 순서를
-      "이름 → 티커 → 가격 → 기준일"로 두어 정체와 값이 섞이지 않게 한다.
+      오른쪽에 남는 것은 **액션뿐이다.** 담기·판정은 값이 아니라 할 수 있는 일이라 읽는
+      흐름 바깥에 서야 한다. spec §5가 요구하는 "깊이 들여다본 그 자리에서 추적 시작"은
+      그대로다 — 자리만 위로 올라왔다.
     -->
     <div class="stock-header__top">
-      <h1 class="stock-header__name">{{ stock.name }}</h1>
-      <p class="stock-header__meta">
-        {{ stock.ticker }} · {{ stock.marketCode }}
-        <template v-if="stock.sector"> · {{ stock.sector }}</template>
-      </p>
-      <!--
-        수식자 셋이 각각 필요하다.
-        - `bottom` — 카드 안에서 아래로 편다. 위로 펴면 뒤로가기 줄을 덮는다.
-        - `focus` — **PrimeVue는 이 수식자가 있을 때만 `focus` 이벤트를 바인딩한다**(소스 확인).
-          없으면 `mouseenter`만 듣는 마우스 전용이 되어 `tabindex`가 헛돈다.
-        - `tabindex="0"` — 다른 툴팁은 전부 버튼·링크에 붙어 초점이 저절로 오지만 여기는
-          숫자를 담은 `<span>`이다.
+      <div class="stock-header__identity">
+        <h1 class="stock-header__name">{{ stock.name }}</h1>
+        <p class="stock-header__meta">
+          <!--
+            텍스트를 span으로 감싼다. `display: flex`에서는 **텍스트 노드 하나하나가 익명 flex
+            항목**이 되어, 감싸지 않으면 `· 반도체`가 별도 항목으로 떨어져 나가 gap이 두 번
+            들어간다.
+          -->
+          <span>
+            {{ stock.ticker }} · {{ stock.marketCode }}
+            <template v-if="stock.sector"> · {{ stock.sector }}</template>
+          </span>
+          <!--
+            이 배지는 판정이 아니라 소속이다. `Tag`를 쓰지 않는 이유가 그것이다 — 이 화면의
+            `Tag`는 판정 3상태가 쓰는 형태이고(ADR-0021), 소속 배지가 같은 모양이면 "충족"과
+            한 종류로 읽힌다. 채우지 않고 윤곽만 준다.
+          -->
+          <span
+            v-for="universe in stock.universes"
+            :key="universe.code"
+            class="stock-header__universe"
+          >
+            {{ universe.name }}
+          </span>
+        </p>
+      </div>
 
-        그래도 툴팁은 **눈**에만 닿는다. 낭독기 몫은 아래 `aria-describedby`가 맡는다.
+      <div class="stock-header__actions">
+        <WatchButton :stock-id="stock.id" :stock-name="stock.name" />
+      </div>
+
+      <!--
+        시세가 없으면 값 자리를 통째로 비운다. `—` 하나를 크게 띄우고 아래에서 "시세가
+        없습니다"를 또 말하면 같은 사실이 두 번 나오는데, 큰 쪽이 먼저 읽혀 무슨 뜻인지
+        모르는 채로 지나간다. 대신 아래 문구가 **어느 날짜인지**까지 말한다.
       -->
-      <div class="stock-header__price">
+      <div v-if="price" class="stock-header__quote">
+        <!--
+          수식자 셋이 각각 필요하다.
+          - `bottom` — 카드 안에서 아래로 편다. 위로 펴면 뒤로가기 줄을 덮는다.
+          - `focus` — **PrimeVue는 이 수식자가 있을 때만 `focus` 이벤트를 바인딩한다**(소스 확인).
+            없으면 `mouseenter`만 듣는 마우스 전용이 되어 `tabindex`가 헛돈다.
+          - `tabindex="0"` — 다른 툴팁은 전부 버튼·링크에 붙어 초점이 저절로 오지만 여기는
+            숫자를 담은 `<span>`이다.
+
+          그래도 툴팁은 **눈**에만 닿는다. 낭독기 몫은 아래 `aria-describedby`가 맡는다.
+        -->
         <span
           v-tooltip.bottom.focus="UNADJUSTED_PRICE_NOTICE"
           class="stock-header__price-value tabular"
@@ -126,51 +145,22 @@ const changeNoticeId = useId()
 
         <!--
           등락. **`tone`이 null이면 통째로 그리지 않는다** — 전일 봉이 없거나 미보정 기업
-          행위를 지나면 서버가 값을 내지 않는데, 그때 `0원 · 0.0%`를 그리면 "보합"이라는
+          행위를 지나면 서버가 값을 내지 않는데, 그때 `0원 (0.00%)`를 그리면 "보합"이라는
           없는 사실이 화면에 생긴다.
-
-          인라인에 「전일 대비」를 적지 않는다. 직전 거래일이 수 주 전일 수 있어(거래정지)
-          그 문구가 거짓이 되고, 프론트에는 거래일 달력이 없어 인접 여부를 판정할 수단도
-          없다. 기준 날짜는 아래 툴팁·낭독기 문장이 말한다.
         -->
         <span
           v-if="tone"
-          v-tooltip.bottom.focus="changeNotice"
           class="stock-header__change tabular"
           :class="`stock-header__change--${tone.toLowerCase()}`"
-          tabindex="0"
-          :aria-describedby="changeNoticeId"
         >
-          {{ formatSignedPrice(price?.change ?? null) }} ·
-          {{ formatSignedPercent(price?.changeRate ?? null) }}
-        </span>
-        <span v-if="changeNotice" :id="changeNoticeId" class="stock-header__sr-only">
-          {{ changeNotice }}
+          {{ formatQuoteChange(price?.change, price?.changeRate) }}
         </span>
       </div>
-      <span class="stock-header__price-label">기준일 {{ formatDate(asOf) }} 종가</span>
-    </div>
 
-    <div class="stock-header__base">
-      <!--
-        이 배지는 판정이 아니라 소속이다. `Tag`를 쓰지 않는 이유가 그것이다 — 이 화면의
-        `Tag`는 판정 3상태가 쓰는 형태이고(ADR-0021), 소속 배지가 같은 모양이면 "충족"과
-        한 종류로 읽힌다. accent를 옅게 깔아 머리글에 색을 하나 준다.
-      -->
-      <div class="stock-header__universes">
-        <span
-          v-for="universe in stock.universes"
-          :key="universe.code"
-          class="stock-header__universe"
-        >
-          {{ universe.name }}
-        </span>
-      </div>
-      <!--
-        담기를 여기 두는 이유는 spec §5의 흐름이다 — 종목을 깊이 들여다본 그 자리에서
-        추적을 시작할 수 있어야 한다. 별도 화면으로 빼면 흐름이 여기서 끊긴다.
-      -->
-      <WatchButton :stock-id="stock.id" :stock-name="stock.name" />
+      <!-- 값이 언제 것인가. 견준 상대도 여기서 말한다 — 툴팁에 감추지 않는 이유는 위에 있다. -->
+      <p v-if="price" class="stock-header__basis">
+        기준일 {{ formatDate(asOf) }} 종가<template v-if="basis"> · {{ basis }}</template>
+      </p>
     </div>
 
     <!-- 시세가 없으면 띠를 그리지 않는다. 빈 칸 다섯 개를 남기면 0인 것으로 읽힌다. -->
@@ -196,7 +186,9 @@ const changeNoticeId = useId()
         <span class="tabular">{{ formatCount(price.listedShares) }}</span>
       </span>
     </section>
-    <p v-else class="stock-header__no-price">이 날짜의 시세가 없습니다.</p>
+    <p v-else class="stock-header__no-price">
+      기준일 {{ formatDate(asOf) }}의 시세가 없습니다.
+    </p>
 
     <!--
       IMPORTANT — **툴팁이나 아코디언 뒤에 숨기지 않는다.** 이 문구는 "일부 지표가 왜
@@ -242,21 +234,29 @@ const changeNoticeId = useId()
 }
 
 /*
- * 2행 × 2열 grid. flex가 아닌 이유는 위 템플릿 주석에 있다 — **두 줄을 각각 맞춰야 한다.**
+ * 왼쪽 열이 읽는 흐름(정체 → 값 → 기준)이고 오른쪽은 액션뿐이다.
  *
  * `minmax(0, 1fr)`의 0이 핵심이다. grid 트랙의 기본 최소값은 `auto`(=내용 크기)라, 긴
- * 종목명이 트랙을 밀어 가격을 카드 밖으로 내보낸다. 0으로 내려야 이름이 줄어든다.
+ * 종목명이 트랙을 밀어 액션을 카드 밖으로 내보낸다. 0으로 내려야 이름이 줄어든다.
+ *
+ * 값과 기준일은 두 열을 **가로지른다** — 액션 아래까지 쓸 수 있어야 긴 등락 문자열이
+ * 좁은 폭에서 이르게 접히지 않는다.
  */
 .stock-header__top {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    'name  price'
-    'meta  asof';
-  align-items: baseline;
+    'identity actions'
+    'quote    quote'
+    'basis    basis';
+  align-items: start;
   column-gap: 1rem;
-  row-gap: 0.25rem;
-  padding: 0.875rem 1rem 0;
+  padding: 0.875rem 1rem;
+}
+
+.stock-header__identity {
+  grid-area: identity;
+  min-width: 0;
 }
 
 /*
@@ -271,7 +271,6 @@ const changeNoticeId = useId()
  * Pretendard Variable이 45~920이라 별도 파일을 받지 않는다(ADR-0022).
  */
 .stock-header__name {
-  grid-area: name;
   margin: 0;
   font-size: var(--app-text-3xl);
   font-weight: 800;
@@ -281,33 +280,58 @@ const changeNoticeId = useId()
   overflow-wrap: anywhere;
 }
 
-/* 티커·시장은 있어야 하지만 읽을 차례가 마지막이다. 간격은 grid의 row-gap이 준다. */
+/*
+ * 티커·시장·업종·소속이 한 줄이다. 넷 다 "이 종목이 무엇인가"에 답하므로 한 덩어리이고,
+ * 읽을 차례는 이름 다음이다. 배지가 섞이므로 `inline-flex`로 세로 눈금을 맞춘다.
+ */
 .stock-header__meta {
-  grid-area: meta;
-  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0.25rem 0 0;
   color: var(--p-text-subtle-color);
   font-size: var(--app-text-xs);
 }
 
 /*
- * 가격과 등락이 한 칸에 선다.
- *
- * IMPORTANT — `grid-area`·`justify-self`가 **이 상자**에 있다. `justify-self`는 그리드
- * 아이템에만 걸리므로, 값 쪽에 남겨 두면 아래 `@container` 분기의 `justify-self: start`가
- * 아무 일도 하지 않고 좁은 카드에서 가격만 오른쪽에 남는다.
- *
- * `align-items: baseline`이 상자의 첫 베이스라인을 가격의 것으로 만든다 — 그래야 첫 행에서
- * 종목명과 눈금이 맞는다. 좁아지면 등락이 아래로 내려간다(`flex-wrap`).
+ * IMPORTANT — **윤곽형이다. 채우지 않는다.** 판정 `Tag`가 같은 카드에 있어(오른쪽 액션),
+ * 둘 다 채워진 알약이면 ADR-0021이 막은 상태가 된다 — "소속 배지가 판정과 한 종류로 읽히면
+ * 안 된다". 색으로 가르지 않고 **형태로** 가른다.
  */
-.stock-header__price {
-  grid-area: price;
-  justify-self: end;
-  display: inline-flex;
+.stock-header__universe {
+  padding: 0.0625rem 0.375rem;
+  border: 1px solid var(--app-accent-border);
+  border-radius: var(--p-border-radius-sm);
+  color: var(--p-primary-300);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 값이 아니라 할 수 있는 일이다. 읽는 흐름 바깥, 오른쪽 위. */
+.stock-header__actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 0 0 auto;
+}
+
+/*
+ * 가격과 등락이 **한 줄의 한 덩어리**다. 이것이 이 카드의 값이다.
+ *
+ * `align-items: baseline`이라 크기가 다른 둘이 같은 글줄에 앉는다. 좁아지면 등락이 아래로
+ * 내려가되(`flex-wrap`) 왼쪽 기준선은 유지된다.
+ */
+.stock-header__quote {
+  grid-area: quote;
+  display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0 0.5rem;
+  gap: 0 0.625rem;
   min-width: 0;
+  margin-top: 0.875rem;
 }
 
 .stock-header__price-value {
@@ -329,6 +353,13 @@ const changeNoticeId = useId()
   text-decoration-thickness: 1px;
 }
 
+/* 초점은 반드시 보여야 한다 — `tabindex`로 닿을 수 있게 만든 요소이므로 더욱 그렇다. */
+.stock-header__price-value:focus-visible {
+  outline: var(--p-focus-ring-width) var(--p-focus-ring-style) var(--p-focus-ring-color);
+  outline-offset: 2px;
+  border-radius: var(--p-border-radius-sm);
+}
+
 /*
  * 등락.
  *
@@ -338,18 +369,16 @@ const changeNoticeId = useId()
  * 카드가 **반대 극성**으로 이미 쓰고 있다(`direction.ts`의 `▼`는 「낮을수록 유리」다).
  * 남은 구분 수단은 자리(헤더 vs 카드)와 부호뿐이다. 대가는 ADR-0065가 적는다.
  *
- * 가격보다 작고 가볍다 — 이 카드의 값은 종가이고 등락은 그것을 설명하는 것이다.
+ * 가격보다 한 단계 작다 — 이 카드의 값은 종가이고 등락은 그것을 설명하는 것이다. 그래도
+ * 굵기는 같이 준다. 작고 옅게 두면 덧붙인 주석처럼 보여 눈에 걸리지 않는다.
  */
 .stock-header__change {
-  font-size: var(--app-text-sm);
-  font-weight: 600;
+  font-size: var(--app-text-xl);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   color: var(--p-quote-flat-text);
-  /* 툴팁이 붙어 있다는 신호. 가격과 같은 관용을 쓴다. */
-  cursor: help;
-  text-decoration: underline dotted var(--p-text-subtle-color);
-  text-underline-offset: 0.3em;
-  text-decoration-thickness: 1px;
 }
 
 .stock-header__change--rise {
@@ -360,10 +389,12 @@ const changeNoticeId = useId()
   color: var(--p-quote-fall-text);
 }
 
-.stock-header__change:focus-visible {
-  outline: var(--p-focus-ring-width) var(--p-focus-ring-style) var(--p-focus-ring-color);
-  outline-offset: 2px;
-  border-radius: var(--p-border-radius-sm);
+/* 값이 언제 것인가. 값 바로 밑에 붙어야 그 값에 관한 말로 읽힌다. */
+.stock-header__basis {
+  grid-area: basis;
+  margin: 0.25rem 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--p-text-subtle-color);
 }
 
 /*
@@ -383,59 +414,6 @@ const changeNoticeId = useId()
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
-}
-
-/* 초점은 반드시 보여야 한다 — `tabindex`로 닿을 수 있게 만든 요소이므로 더욱 그렇다. */
-.stock-header__price-value:focus-visible {
-  outline: var(--p-focus-ring-width) var(--p-focus-ring-style) var(--p-focus-ring-color);
-  outline-offset: 2px;
-  border-radius: var(--p-border-radius-sm);
-}
-
-.stock-header__price-label {
-  grid-area: asof;
-  justify-self: end;
-  font-size: var(--app-text-2xs);
-  color: var(--p-text-subtle-color);
-}
-
-/*
- * 소속과 액션이 한 줄의 양끝에 선다. 이것이 이 컴포넌트의 요점이다 — 겹칠 수 있는
- * 세로 스택이 아니라 같은 flex 라인의 두 끝이라, 좁아져 wrap돼도 서로 침범하지 않는다.
- */
-.stock-header__base {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.75rem 1rem;
-}
-
-.stock-header__universes {
-  display: flex;
-  gap: 0.375rem;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-/*
- * IMPORTANT — **윤곽형이다. 채우지 않는다.**
- *
- * 소속 배지와 판정 `Tag`가 이제 같은 줄에 선다(위 `__base`). 예전에는 다른 줄이라 둘 다
- * 채워진 알약이어도 헷갈리지 않았지만, 나란히 놓이는 순간 ADR-0021이 막은 상태가 된다 —
- * "소속 배지가 판정과 한 종류로 읽히면 안 된다".
- *
- * 색으로 가르지 않고 **형태로** 가른다. 판정은 채워진 알약, 소속은 윤곽. ADR-0021이
- * 초록·빨강의 두 뜻을 가를 때 쓴 것과 같은 수법이고, 새 색을 쓰지 않는다.
- */
-.stock-header__universe {
-  padding: 0.1875rem 0.4375rem;
-  border: 1px solid var(--app-accent-border);
-  border-radius: var(--p-border-radius-sm);
-  color: var(--p-primary-300);
-  font-size: var(--app-text-2xs);
-  font-weight: 600;
 }
 
 /*
@@ -509,29 +487,24 @@ const changeNoticeId = useId()
  * **카드가** 좁을 때만 한 열로 쌓는다. 뷰포트가 아니라 카드를 재는 이유는 위 `.stock-header`
  * 주석에 있다.
  *
- * 24rem(384px)인 근거: 오른쪽 열이 실제로 차지하는 폭이 "기준일 …" 라벨의 ~130px이고,
- * 열 간격 1rem을 빼면 이름에 ~240px이 남는다. 그 아래로 내려가야 28px 이름이 서너 줄이
- * 되기 시작한다. 실측으로 카드 486px일 때 이름 트랙이 283px였다 — 767px 뷰포트에서
- * 쌓던 예전 규칙은 그 여유를 버리고 있었다.
+ * 24rem(384px)인 근거: 이름과 액션이 한 줄에 설 수 있는 하한이다. 그 아래로 내려가면 담기
+ * 버튼이 이름 트랙을 밀어 28px 이름이 서너 줄이 되기 시작한다.
+ *
+ * 액션이 **맨 아래**로 간다. 값과 기준일 사이에 끼면 읽는 흐름이 끊기고, 값 위에 두면
+ * 이 카드에서 가장 중요한 숫자가 버튼 밑으로 밀린다.
  */
 @container stock-header (max-width: 24rem) {
   .stock-header__top {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      'name'
-      'meta'
-      'price'
-      'asof';
+      'identity'
+      'quote'
+      'basis'
+      'actions';
   }
 
-  /* 쌓이면 우측 정렬이 어색하다 — 전부 왼쪽 기준선에 맞춘다. */
-  .stock-header__price,
-  .stock-header__price-label {
-    justify-self: start;
-  }
-
-  .stock-header__price {
-    justify-content: flex-start;
+  .stock-header__actions {
+    margin-top: 0.875rem;
   }
 
   /*
@@ -544,6 +517,10 @@ const changeNoticeId = useId()
 
   .stock-header__price-value {
     font-size: var(--app-text-xl);
+  }
+
+  .stock-header__change {
+    font-size: var(--app-text-md);
   }
 }
 </style>

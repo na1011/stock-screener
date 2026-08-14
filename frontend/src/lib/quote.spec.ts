@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { quoteDescription, quoteTone } from './quote'
+import { MISSING } from './format'
+import { formatQuoteChange, quoteBasisLabel, quoteTone } from './quote'
 
 describe('quoteTone — 값 없음과 보합을 가른다', () => {
   it('오르면 RISE, 내리면 FALL이다', () => {
@@ -16,25 +17,30 @@ describe('quoteTone — 값 없음과 보합을 가른다', () => {
   })
 })
 
-describe('quoteDescription — 무엇에 견준 값인지 날짜로 말한다', () => {
-  it('「전일」이라 적지 않는다 — 직전 거래일이 수 주 전일 수 있다', () => {
-    expect(quoteDescription('2026-07-20', 1200, 1.74)).toBe(
-      '2026. 07. 20. 종가보다 1,200원(1.7%) 올랐습니다.',
-    )
+describe('formatQuoteChange — 금액이 앞, 백분율이 괄호 안', () => {
+  it('오른 것에 부호를 붙이고 소수 두 자리로 낸다', () => {
+    expect(formatQuoteChange(12500, 4.89)).toBe('+12,500원 (+4.89%)')
   })
 
-  it('내린 것은 부호가 아니라 낱말이 말한다 — 숫자는 크기만 낸다', () => {
-    expect(quoteDescription('2026-08-13', -2300, -2.31)).toBe(
-      '2026. 08. 13. 종가보다 2,300원(2.3%) 내렸습니다.',
-    )
+  it('내린 것은 부호가 하나씩이다 — 두 번 붙지 않는다', () => {
+    expect(formatQuoteChange(-2050, -17.46)).toBe('-2,050원 (-17.46%)')
   })
 
-  it('보합은 크기를 말하지 않는다', () => {
-    expect(quoteDescription('2026-08-13', 0, 0)).toBe('2026. 08. 13. 종가와 같습니다.')
+  it('보합에는 부호가 없다', () => {
+    expect(formatQuoteChange(0, 0)).toBe('0원 (0.00%)')
   })
 
-  it('낼 것이 없으면 null이다 — 문장을 지어내지 않는다', () => {
-    expect(quoteDescription('2026-08-13', null, null)).toBeNull()
-    expect(quoteDescription(null, 1200, 1.74)).toBeNull()
+  it('값이 없으면 —다. 0으로 메우지 않는다', () => {
+    expect(formatQuoteChange(null, null)).toBe(MISSING)
+  })
+})
+
+describe('quoteBasisLabel — 「전일」이라 적지 않고 날짜를 말한다', () => {
+  it('직전 거래일을 그대로 낸다 — 26거래일 전일 수도 있다', () => {
+    expect(quoteBasisLabel('2025-10-29')).toBe('2025. 10. 29. 대비')
+  })
+
+  it('없으면 null이다 — 붙일 것이 없다', () => {
+    expect(quoteBasisLabel(null)).toBeNull()
   })
 })
