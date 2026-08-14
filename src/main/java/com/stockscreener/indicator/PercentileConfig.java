@@ -6,6 +6,7 @@ import com.stockscreener.indicator.calculator.PbrCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
 import com.stockscreener.indicator.calculator.RevenueGrowthCalculator;
 import com.stockscreener.indicator.calculator.RoeCalculator;
+import com.stockscreener.indicator.calculator.Turnover60Calculator;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +20,11 @@ import java.util.List;
  * 성립하는 지표뿐이다. 이동평균처럼 가격 단위인 지표는 "SMA200이 상위 20%"라는 조건 자체가
  * 무의미하다 — 주가가 비싼 종목이 항상 위에 온다. 저장량도 지표 수에 비례해 늘어나므로
  * 상대 비교가 실제로 쓰이는 것만 고른다.
+ *
+ * <p>거래대금은 원 단위인데도 넣는 이유는 <b>그 금지가 겨냥한 병에 걸리지 않기 때문</b>이다.
+ * 이동평균이 안 되는 것은 "주가가 비싼 종목이 항상 위에 온다"여서인데, 거래대금은 주가가 아니라
+ * 유동성을 재고 <b>시총 순위와의 순위상관이 0.722</b>다(2026-08-14 실측) — 중형주가 크게
+ * 거래되면 순위가 갈린다. 0.95를 넘었으면 넣지 않았을 자리다.
  *
  * <p>지표를 추가하면서 백분위도 원하면 여기 한 줄을 더한다. 계산기 추가 자체는 여전히
  * 파일 하나로 끝나며, 백분위는 그와 별개의 선택이다.
@@ -56,6 +62,12 @@ public class PercentileConfig {
                         "매출 성장률 백분위",
                         "편입 종목 중 이 종목의 매출 성장률이 어느 위치인지를 0~1로 나타낸 값.",
                         "1에 가까울수록 매출이 빠르게 늘고 있다."),
+                new PercentileSpec(
+                        Turnover60Calculator.CODE,
+                        "거래대금 백분위",
+                        "편입 종목 중 이 종목의 60일 평균 거래대금이 어느 위치인지를 0~1로 나타낸 값.",
+                        "1에 가까울수록 많이 거래된다(사고팔기 쉽다). 거래대금은 원 단위라 "
+                                + "절대값으로는 종목 간 비교가 어렵고, 이 순위가 그것을 대신한다."),
                 new PercentileSpec(
                         MacdVCalculator.CODE,
                         "MACD-V 백분위",

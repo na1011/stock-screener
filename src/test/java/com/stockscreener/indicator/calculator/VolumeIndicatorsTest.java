@@ -109,6 +109,41 @@ class VolumeIndicatorsTest {
                 .isBetween(new BigDecimal("0.9"), new BigDecimal("1.1"));
     }
 
+    @Test
+    @DisplayName("회전율은 거래량 ÷ 상장주식수다")
+    void turnoverRatioDividesVolumeByListedShares() {
+        PriceBar bar = new PriceBar(LocalDate.of(2026, 1, 2), BigDecimal.valueOf(100),
+                BigDecimal.valueOf(100), BigDecimal.valueOf(90), BigDecimal.valueOf(95),
+                BigDecimal.valueOf(95), 50_000L, null, BigDecimal.valueOf(1_000_000));
+
+        assertThat(new TurnoverRatioCalculator().calculate(context(List.of(bar))).get(0).value())
+                .isEqualByComparingTo("5");
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 회전율은 원 거래량을 쓴다. 수정 거래량을 쓰면 분할 이전이 배수만큼 커진다")
+    void turnoverRatioUsesRawVolumeSoSplitsCancelOut() {
+        // 분할 전 봉 — close 100, adjClose 50(2:1 분할이 뒤에 있었다), 거래량 1,000, 주식수 10,000.
+        // 회전율은 1,000/10,000 = 10%다. 수정 거래량(1,000 × 100/50 = 2,000)을 쓰면 20%가 된다.
+        PriceBar beforeSplit = new PriceBar(LocalDate.of(2026, 1, 2), BigDecimal.valueOf(100),
+                BigDecimal.valueOf(100), BigDecimal.valueOf(90), BigDecimal.valueOf(100),
+                BigDecimal.valueOf(50), 1_000L, null, BigDecimal.valueOf(10_000));
+
+        assertThat(new TurnoverRatioCalculator().calculate(context(List.of(beforeSplit))).get(0).value())
+                .as("비율은 축척에 불변이다 — 분할이면 거래량과 주식수가 함께 커진다")
+                .isEqualByComparingTo("10");
+    }
+
+    @Test
+    @DisplayName("상장주식수가 없으면 계산하지 않는다 — 0으로 두면 회전율이 무한이 된다")
+    void turnoverRatioNeedsListedShares() {
+        PriceBar bar = new PriceBar(LocalDate.of(2026, 1, 2), BigDecimal.valueOf(100),
+                BigDecimal.valueOf(100), BigDecimal.valueOf(90), BigDecimal.valueOf(95),
+                BigDecimal.valueOf(95), 50_000L, null, null);
+
+        assertThat(new TurnoverRatioCalculator().calculate(context(List.of(bar)))).isEmpty();
+    }
+
     private static IndicatorContext context(List<PriceBar> bars) {
         return new IndicatorContext(1L, bars, List.of(), List.of(), null);
     }

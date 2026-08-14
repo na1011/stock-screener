@@ -1,0 +1,88 @@
+package com.stockscreener.indicator.calculator;
+
+import com.stockscreener.indicator.DataRequirement;
+import com.stockscreener.indicator.IndicatorCalculator;
+import com.stockscreener.indicator.IndicatorCategory;
+import com.stockscreener.indicator.IndicatorContext;
+import com.stockscreener.indicator.IndicatorMeta;
+import com.stockscreener.indicator.IndicatorPoint;
+import com.stockscreener.indicator.IndicatorValueType;
+import com.stockscreener.indicator.PriceBar;
+
+import org.springframework.stereotype.Component;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 회전율 — 그날 <b>발행주식의 몇 %가 손바뀜했는가</b>.
+ *
+ * <p>거래대금({@code TURNOVER_60})과 답하는 질문이 다르다. 거래대금은 "얼마어치 거래됐나"라
+ * 규모가 큰 종목이 늘 위에 오지만, 회전율은 <b>자기 주식 수로 나눠 규모에 중립</b>이다 —
+ * 소형주가 크게 손바뀜하면 대형주보다 높게 나온다.
+ *
+ * <p>IMPORTANT — <b>{@link PriceScaling#adjustedVolume}을 쓰지 않는다.</b> 그 함수는 과거 봉을
+ * 전부 <b>분할 후 단위</b>로 올리는데({@code volume ÷ adj_factor}), 분모인
+ * {@link IndicatorContext#sharesOn}은 <b>권리락 구간에서만</b> 계단을 올리고 그 밖에서는
+ * 그날의 주식 수를 그대로 준다. 둘을 나누면 축척이 어긋나 <b>분할 이전 구간의 회전율이 사건
+ * 배수만큼 커지고, 최신 봉만 맞아 보인다.</b>
+ *
+ * <p>비율은 애초에 축척에 불변이다 — 분할이면 거래량과 주식 수가 함께 커진다. 그래서 보정할
+ * 것이 <b>권리락~신주상장 14~16거래일 하나</b>이고 그것을 {@code sharesOn}이 한다.
+ * {@code MarketCapCalculator}가 {@code close × sharesOn}으로 같은 짝을 쓴다(ADR-0051).
+ */
+@Component
+@IndicatorMeta(
+        name = "회전율",
+        description = "그날 거래된 주식 수가 발행주식 총수의 몇 %인지. 손바뀜이 얼마나 활발한지를 본다.",
+        interpretation = "높을수록 그날 주인이 많이 바뀌었다는 뜻이다. "
+                + "거래대금과 달리 회사 규모로 나눈 값이라 대형주와 소형주를 나란히 견줄 수 있다.",
+        category = IndicatorCategory.PRICE,
+        valueType = IndicatorValueType.PERCENT,
+        unit = "%",
+        // 활발한 것이 좋다고 말할 수 없다. 유동성은 조건의 재료이지 우열이 아니다.
+        direction = IndicatorMeta.Direction.NEUTRAL,
+        decimalScale = 2,
+        sortOrder = 6,
+        bands = {
+                @IndicatorMeta.Band(label = "매우 활발", from = 5),
+                @IndicatorMeta.Band(label = "활발", from = 2, to = 5),
+                @IndicatorMeta.Band(label = "보통", from = 0.5, to = 2),
+                @IndicatorMeta.Band(label = "한산", to = 0.5)
+        })
+public class TurnoverRatioCalculator implements IndicatorCalculator {
+
+    public static final String CODE = "TURNOVER_RATIO";
+
+    @Override
+    public String code() {
+        return CODE;
+    }
+
+    @Override
+    public DataRequirement dataRequirement() {
+        return DataRequirement.priceBars(1);
+    }
+
+    @Override
+    public List<IndicatorPoint> calculate(IndicatorContext context) {
+        List<PriceBar> bars = context.priceBars();
+        List<IndicatorPoint> points = new ArrayList<>(bars.size());
+        for (PriceBar bar : bars) {
+            if (bar.listedShares() == null || bar.listedShares().signum() <= 0) {
+                // 상장주식수가 없으면 계산하지 않는다. 0으로 두면 회전율이 무한이 되고,
+                // 임의의 큰 수를 쓰면 "가장 활발한 종목"으로 올라온다.
+                continue;
+            }
+            BigDecimal shares = context.sharesOn(bar.tradeDate(), bar.listedShares());
+            BigDecimal ratio =
+                    FinancialMath.percentage(BigDecimal.valueOf(bar.volume()), shares);
+            if (ratio == null) {
+                continue;
+            }
+            points.add(new IndicatorPoint(bar.tradeDate(), ratio));
+        }
+        return points;
+    }
+}
