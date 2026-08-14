@@ -102,6 +102,31 @@ final class FinancialMath {
     }
 
     /**
+     * 그 봉 시점의 <b>주당순이익(TTM)</b>. 값이 없으면 null이다.
+     *
+     * <p>{@code PER}과 {@code EPS_TTM}이 같은 나눗셈을 하므로 한곳에 둔다. 갈라 쓰면 한쪽만
+     * 주식수 출처나 반올림을 바꿔도 <b>두 지표가 서로 어긋난 채 둘 다 그럴듯한 값</b>을 낸다 —
+     * 화면에서 EPS × PER이 주가와 안 맞는 형태로만 드러난다.
+     *
+     * <p>IMPORTANT — <b>부호를 여기서 거르지 않는다.</b> 적자의 뜻이 두 지표에서 다르기 때문이다.
+     * 음수 PER은 "PER이 낮은 종목"을 찾는 조건에 적자 기업을 최상위로 올려 뜻을 잃지만,
+     * 음수 EPS는 그 자체가 사실이다. 거르는 것은 호출부의 몫이다.
+     *
+     * @param ttmNetIncome {@link #sumTrailingFourQuarters}로 미리 구한 최근 4분기 순이익 합
+     */
+    static BigDecimal trailingEpsOn(IndicatorContext context, PriceBar bar,
+                                    BigDecimal ttmNetIncome, List<FinancialFigures> quarters) {
+        if (ttmNetIncome == null) {
+            return null;
+        }
+        BigDecimal shares = sharesOf(context, bar, quarters);
+        if (shares == null) {
+            return null;
+        }
+        return ttmNetIncome.divide(shares, SCALE, RoundingMode.HALF_UP);
+    }
+
+    /**
      * 백분율로 나눈다. 분모가 0이거나 어느 쪽이든 null이면 null이다.
      *
      * <p>분모가 음수인 경우는 <b>거르지 않는다.</b> 자본잠식 기업의 ROE처럼 음수 분모가

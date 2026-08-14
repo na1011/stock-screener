@@ -57,7 +57,6 @@ import java.util.List;
 public class PerCalculator implements IndicatorCalculator {
 
     public static final String CODE = "PER";
-    private static final int TTM_QUARTERS = 4;
     private static final int SCALE = 8;
 
     @Override
@@ -89,14 +88,12 @@ public class PerCalculator implements IndicatorCalculator {
 
         // IMPORTANT — 주식수를 봉마다 읽는다. 유상증자·분할로 주식수가 바뀌면 그날부터
         // EPS가 달라져야 하는데, 하나로 고정하면 그 구간의 PER이 통째로 틀린다.
+        // 나눗셈 자체는 EPS_TTM과 공유한다(FinancialMath.trailingEpsOn) — 갈라 쓰면 두 지표가
+        // 어긋난 채 둘 다 그럴듯한 값을 낸다.
         List<IndicatorPoint> points = new ArrayList<>(context.priceBars().size());
         for (PriceBar bar : context.priceBars()) {
-            BigDecimal shares = FinancialMath.sharesOf(context, bar, quarters);
-            if (shares == null) {
-                continue;
-            }
-            BigDecimal eps = netIncome.divide(shares, SCALE, RoundingMode.HALF_UP);
-            if (eps.signum() <= 0) {
+            BigDecimal eps = FinancialMath.trailingEpsOn(context, bar, netIncome, quarters);
+            if (eps == null || eps.signum() <= 0) {
                 continue;
             }
             points.add(new IndicatorPoint(
