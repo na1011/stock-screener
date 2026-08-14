@@ -36,6 +36,8 @@ final class FinancialFiguresFixture {
     private BigDecimal sharesOutstanding;
     private BigDecimal eps;
     private BigDecimal bps;
+    private BigDecimal costOfSales;
+    private BigDecimal cashAndEquivalents;
 
     private FinancialFiguresFixture() {
     }
@@ -80,6 +82,8 @@ final class FinancialFiguresFixture {
         fixture.sharesOutstanding = source.sharesOutstanding();
         fixture.eps = source.eps();
         fixture.bps = source.bps();
+        fixture.costOfSales = source.costOfSales();
+        fixture.cashAndEquivalents = source.cashAndEquivalents();
         return fixture;
     }
 
@@ -138,11 +142,22 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    FinancialFiguresFixture costOfSales(BigDecimal value) {
+        this.costOfSales = value;
+        return this;
+    }
+
+    FinancialFiguresFixture cashAndEquivalents(BigDecimal value) {
+        this.cashAndEquivalents = value;
+        return this;
+    }
+
     FinancialFigures build() {
         return new FinancialFigures(
                 fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
                 revenue, operatingIncome, netIncome, totalAssets, totalEquity, totalLiabilities,
                 currentAssets, currentLiabilities, retainedEarnings,
-                operatingCashFlow, sharesOutstanding, eps, bps);
+                operatingCashFlow, sharesOutstanding, eps, bps,
+                costOfSales, cashAndEquivalents);
     }
 }

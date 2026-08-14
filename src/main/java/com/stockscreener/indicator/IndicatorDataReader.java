@@ -65,7 +65,7 @@ public class IndicatorDataReader {
                    currency_code, revenue, operating_income, net_income, total_assets,
                    total_equity, total_liabilities, current_assets, current_liabilities,
                    retained_earnings, operating_cash_flow, shares_outstanding,
-                   eps, bps
+                   eps, bps, cost_of_sales, cash_and_equivalents
             FROM financial_statement
             WHERE stock_id = ? AND is_latest AND period_end <= ?
               AND fiscal_period %s 'FY'
@@ -258,6 +258,8 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("operating_cash_flow"),
                 rs.getBigDecimal("shares_outstanding"),
                 rs.getBigDecimal("eps"),
-                rs.getBigDecimal("bps"));
+                rs.getBigDecimal("bps"),
+                rs.getBigDecimal("cost_of_sales"),
+                rs.getBigDecimal("cash_and_equivalents"));
     }
 }

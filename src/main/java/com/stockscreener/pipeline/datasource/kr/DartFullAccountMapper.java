@@ -57,11 +57,24 @@ final class DartFullAccountMapper {
             "ifrs-full_ProfitLossFromOperatingActivities",
             "ifrs_ProfitLossFromOperatingActivities");
     static final Set<String> ID_NET_INCOME = ordered("ifrs-full_ProfitLoss", "ifrs_ProfitLoss");
+    /**
+     * 매출원가. <b>없는 것이 결손이 아닌 유일한 계정</b>이다 — 금융업·서비스업은 개념 자체가
+     * 없어 원래 오지 않는다(실측: 8개사 중 KB금융·NAVER 둘이 그렇고 제조·유통·물류·제약
+     * 여섯은 전부 표준코드로 왔다).
+     */
+    static final Set<String> ID_COST_OF_SALES = ordered("ifrs-full_CostOfSales", "ifrs_CostOfSales");
 
     static final Set<String> ID_TOTAL_ASSETS = ordered("ifrs-full_Assets", "ifrs_Assets");
     static final Set<String> ID_TOTAL_LIABILITIES = ordered("ifrs-full_Liabilities", "ifrs_Liabilities");
     static final Set<String> ID_TOTAL_EQUITY = ordered("ifrs-full_Equity", "ifrs_Equity");
     static final Set<String> ID_CURRENT_ASSETS = ordered("ifrs-full_CurrentAssets", "ifrs_CurrentAssets");
+    /**
+     * 현금및현금성자산. <b>재무상태표에서만 읽는다</b> — 현금흐름표에도 같은 이름의 계정이
+     * 있고(기초·기말 잔액) 그쪽이 먼저 잡히면 <b>기초 잔액을 현재 보유 현금으로 저장</b>하게
+     * 된다. 실측에서 KB금융이 정확히 그랬다.
+     */
+    static final Set<String> ID_CASH_AND_EQUIVALENTS =
+            ordered("ifrs-full_CashAndCashEquivalents", "ifrs_CashAndCashEquivalents");
     static final Set<String> ID_CURRENT_LIABILITIES =
             ordered("ifrs-full_CurrentLiabilities", "ifrs_CurrentLiabilities");
     static final Set<String> ID_RETAINED_EARNINGS =

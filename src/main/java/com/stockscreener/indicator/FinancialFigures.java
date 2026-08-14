@@ -40,7 +40,9 @@ public record FinancialFigures(
         BigDecimal operatingCashFlow,
         BigDecimal sharesOutstanding,
         BigDecimal eps,
-        BigDecimal bps
+        BigDecimal bps,
+        BigDecimal costOfSales,
+        BigDecimal cashAndEquivalents
 ) {
 
     public enum FiscalPeriod {

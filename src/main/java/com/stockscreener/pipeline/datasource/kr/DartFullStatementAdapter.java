@@ -265,7 +265,15 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 operatingCashFlow(cashFlow, period),
                 // 발행주식수·EPS·BPS는 이 엔드포인트의 대상이 아니다. 주요계정 어댑터와 같이
                 // 비워 두며, 채우려면 stockTotqySttus가 따로 필요하다.
-                null, null, null);
+                null, null, null,
+                // 계정명 폴백을 두지 않는다. 매출원가는 회사마다 이름이 다양해 폴백이
+                // 「매출원가성 비용」류를 집을 위험이 표준코드 미사용분(2~9%)을 메우는
+                // 이득보다 크다.
+                DartFullAccountMapper.find(
+                        income, DartFullAccountMapper.ID_COST_OF_SALES, null),
+                // 재무상태표에서만 읽는다. 현금흐름표의 같은 이름은 기초·기말 잔액이다.
+                DartFullAccountMapper.find(
+                        balance, DartFullAccountMapper.ID_CASH_AND_EQUIVALENTS, null));
     }
 
     /**
@@ -319,7 +327,12 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                         balance, DartFullAccountMapper.ID_CURRENT_LIABILITIES,
                         DartAccountMapper.CURRENT_LIABILITIES),
                 retainedEarnings,
-                null, null, null, null);
+                null, null, null, null,
+                // 매출원가는 유량이라 여기서 비운다 — 위 IMPORTANT 참조.
+                null,
+                // 현금및현금성자산은 잔액이므로 4분기 행에도 담는다.
+                DartFullAccountMapper.find(
+                        balance, DartFullAccountMapper.ID_CASH_AND_EQUIVALENTS, null));
     }
 
     /**
