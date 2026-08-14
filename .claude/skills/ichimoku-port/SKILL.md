@@ -94,15 +94,23 @@ description: 주봉 일목 지표(ADR-0046)를 고치거나 늘릴 때. 시장 �
   붙이지 않는다.** 센티널은 「해당 없음」이 유리한 쪽 극단에 앉아 조건의 좌변을 뒤집는다.
 - **`PriceScaling`과 `MovingAverages.SCALE`이 package-private이다.** 하위 패키지는 접근하지 못하므로
   **둘을 `public`으로 올리거나 하위 패키지를 만들지 않는다.** 다시 구현하는 선택지는 없다.
+- **주봉 리샘플러는 일목 패키지 밖에 있다**(`calculator/WeeklyResampler`·`WeeklyBar`, ADR-0063).
+  `BETA_104W`가 같은 주 경계를 써야 해서 올렸다. **MUST NOT: 주봉 접기를 다시 짜지 않는다** —
+  ISO `weekBasedYear`를 쓰는 이유가 한쪽에만 반영되면 12월 마지막 주가 갈라진다.
+  **베타는 진행 중인 주를 버린다** — 이탈 3(진행 중인 주 포함)은 이제 일목에만 적용된다.
 
 ## 프리셋과 컬럼
 
-`ICHIMOKU_SP_KR`, FILTER 모드(`MOMENTUM_KR`이 선례). 조건 다섯 — `ICHI_TK_CROSS >= 1` ·
-`ICHI_PRICE_VS_KUMO >= 1` · `ICHI_MOD_A >= 1` · `ICHI_MOD_B >= 1` · `ICHI_MOD_D >= 1`.
+**`ICHIMOKU_SP_KR`은 폐기됐다**(2026-08-14, ADR-0061 — 사용자 결정. 테스트베드였다).
+`is_active = false`이고 조건 다섯은 `screen_condition`에 남아 있다.
 
-- **MUST NOT: 센티널이 섞인 셋(`_E`·`_H`·`_M`)을 좌변에 두지 않는다.** `IchimokuPresetTest`가
-  문구가 아니라 **조건 자체를 훑어** 확인한다 — 설명에 「쓰지 말 것」을 적는 것으로는 다음
-  사람이 쓰는 것을 막지 못한다.
+- **MUST NOT: 지표 18개를 「쓰는 프리셋이 없다」는 이유로 지우지 않는다.** 그 18개가
+  **읽기 창을 1,100으로 붙들고 있고**, 창이 줄면 `TRADING_DAYS_750`이 기존 게이트보다
+  강하게 자르기 시작하는데 **결과 종목 수는 그대로일 수 있어 화면에서 드러나지 않는다**
+  (ADR-0039). 조건 빌더에서 계속 고를 수 있다는 것은 부차적인 이유다.
+- **MUST NOT: 센티널이 섞인 셋(`_E`·`_H`·`_M`)을 좌변에 두지 않는다.**
+  `SentinelAndExtraColumnGuardTest`가 문구가 아니라 **조건 자체를 훑어** 확인하며,
+  프리셋이 사라진 뒤 **전 프리셋 대상**으로 넓혔다 — 함정이 사라진 것이 아니다.
 
 - **프리셋 전용 컬럼은 `defaultColumn`으로 띄우지 않는다** — 그것은 전역이라 모든 화면이 시끄러워진다
   (지금 넷뿐이다). **어셈블러가 `source.codeIfPreset()`으로 `PresetCatalog.extraColumns`를 조회해 union한다.**
@@ -113,7 +121,7 @@ description: 주봉 일목 지표(ADR-0046)를 고치거나 늘릴 때. 시장 �
   사이의 우열은 `extraColumns`가 값으로 보여 줄 뿐이므로 **`description`에 결핍으로 적는다**
   (ADR-0039의 기준을 승계).
 - **조건 지표를 `extraColumns`에 다시 넣지 않는다.** 어셈블러가 이미 union한다(`:75`).
-- **`SWING_MIDTERM_KR`은 조건이 정확히 20개(상한)다.** 건드리지 않는다 — `PresetCatalogTest`가 단언한다.
+- **중장기 스윙 프리셋(`SWING_TREND_KR`)은 조건이 24개이고 상한은 25다.** 건드리지 않는다 — `PresetCatalogTest`가 단언한다.
 - **주중에 값이 바뀌는 첫 프리셋이 된다.** 워치리스트가 이것을 참조하면 같은 주에 알림이 여러 번 울릴 수
   있다 — edge-trigger(ADR-0026)가 어디까지 접는지 착수 시 확인한다.
 
