@@ -32,20 +32,32 @@ v1.0, 미국시장 기준 26개 조건)를 `SWING_MIDTERM_KR`
 
 ## 검증
 
+**검증 대상이 `SWING_TREND_KR`로 바뀌었다(2026-08-14, ADR-0061).** `SWING_MIDTERM_KR`은
+폐기됐고 `is_active = false`이지만 **`screen_condition` 행은 남아 있어**, 그 코드를 계속
+재면 폐기된 프리셋을 재면서 영원히 `OK`를 내는 **실패할 수 없는 펜스**가 된다.
+
+아래 대조표는 **폐기된 프리셋이 원본에서 무엇을 못 옮겼는지의 기록으로 남긴다** — 후계
+프리셋의 조건 출처는 ADR-0061과 `PresetCatalog`의 javadoc이 답한다.
+
 프리셋 설명이 결핍을 실제로 말하는지 — 여섯 낱말이 모두 있어야 한다:
 
 ```bash
-psql -d stock_screener -At -c "SELECT description FROM screen WHERE code='SWING_MIDTERM_KR'" \
+psql -d stock_screener -At -c "SELECT description FROM screen WHERE code='SWING_TREND_KR'" \
   | grep -o '업종\|EBITDA\|이자보상\|베타\|피인수\|해자' | sort -u | wc -l
 ```
 
 `6`이어야 한다. 줄면 결핍 고지가 빠진 것이다.
 
-**낱말은 그대로인데 `업종`이 가리키는 결핍이 바뀌었다.** 예전에는 "업종 상대 비교를 못 옮겼다"였고
-지금은 "업종 표본이 5종목에 못 미치면 판정할 수 없다"다(ADR-0044). 나머지 다섯은 그대로다.
+**낱말은 그대로인데 둘이 가리키는 것이 바뀌었다.** `업종`은 예전에 "업종 상대 비교를 못
+옮겼다"였고 지금은 "업종 표본이 5종목에 못 미치면 판정할 수 없다"다(ADR-0044).
+**`베타`는 더 이상 결핍이 아니다** — T-08은 ADR-0063으로 구현됐고, 지금 그 낱말이 말하는
+것은 "104주치 이력이 없는 종목은 결과에서 빠진다"는 **제약**이다. 나머지 넷은 그대로다.
+
+**MUST NOT: 그것을 근거로 `베타`를 낱말 목록에서 빼지 않는다.** 빼면 검증이 5가 되고,
+그 상태에서 다른 결핍 하나가 더 빠져도 5가 나온다 — **줄었다는 사실이 드러나지 않는다.**
 
 ```premise 스윙 프리셋이 규모를 절대값으로 건다
-psql -d stock_screener -At -c "WITH c AS (SELECT c.indicator_code i, c.operator o FROM screen s JOIN condition_group g ON g.screen_id=s.id JOIN screen_condition c ON c.group_id=g.id WHERE s.code='SWING_MIDTERM_KR') SELECT CASE WHEN (SELECT count(*) FROM c) = 0 THEN 'SWING_MIDTERM_KR에 조건이 없다 — 프리셋이 투영되지 않았다' WHEN (SELECT count(*) FROM c WHERE i = 'MARKET_CAP_PCTL') > 0 THEN '시가총액을 백분위로 걸고 있다 — 유니버스 안에서 매겨져 코스닥 소형주가 통과한다' WHEN (SELECT count(*) FROM c WHERE i = 'MARKET_CAP') = 0 THEN '규모 조건이 사라졌다 — 원본 U-03이 통째로 빠진 상태다' ELSE 'OK 규모를 절대값으로 건다(조건 ' || (SELECT count(*) FROM c) || '개)' END"
+psql -d stock_screener -At -c "WITH c AS (SELECT c.indicator_code i, c.operator o FROM screen s JOIN condition_group g ON g.screen_id=s.id JOIN screen_condition c ON c.group_id=g.id WHERE s.code='SWING_TREND_KR') SELECT CASE WHEN (SELECT count(*) FROM c) = 0 THEN 'SWING_TREND_KR에 조건이 없다 — 프리셋이 투영되지 않았다' WHEN (SELECT count(*) FROM c WHERE i = 'MARKET_CAP_PCTL') > 0 THEN '시가총액을 백분위로 걸고 있다 — 유니버스 안에서 매겨져 코스닥 소형주가 통과한다' WHEN (SELECT count(*) FROM c WHERE i = 'MARKET_CAP') = 0 THEN '규모 조건이 사라졌다 — 원본 U-03이 통째로 빠진 상태다' ELSE 'OK 규모를 절대값으로 건다(조건 ' || (SELECT count(*) FROM c) || '개)' END"
 ```
 
 **`count(*) = 0`을 따로 답하는 것이 요점이다.** 프리셋이 아직 투영되지 않은 상태와
