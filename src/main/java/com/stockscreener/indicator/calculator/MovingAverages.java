@@ -92,6 +92,39 @@ public final class MovingAverages {
     }
 
     /** 수정종가 시계열. EMA·RSI처럼 값 목록만 필요한 계산에 쓴다. */
+    /**
+     * 값 목록의 <b>구간 합</b>. {@code i}번째는 {@code [i-period+1, i]}의 합이고, 창이 차기 전
+     * 구간은 {@code null}이다.
+     *
+     * <p>{@link #sma}가 {@code adjClose}에 묶여 있어 거래량 계열이 쓸 수 없다. 차이킨
+     * 자금흐름(두 계열의 21봉 합)과 거래량 비율(20봉 평균 = 합 ÷ 20)이 함께 쓴다 —
+     * 각자 짜면 반올림과 창 경계 처리가 갈리는데 값이 그럴듯해 드러나지 않는다.
+     *
+     * <p>입력에 {@code null}이 있으면 그 값을 포함하는 창은 전부 {@code null}이다. 0으로
+     * 대체하지 않는다 — "거래가 없었다"와 "모른다"는 다른 사실이고, 후자를 0으로 접으면
+     * 그 구간의 합이 조용히 작아진다.
+     */
+    static List<BigDecimal> rollingSum(List<BigDecimal> values, int period) {
+        List<BigDecimal> sums = new ArrayList<>(values.size());
+        for (int i = 0; i < values.size(); i++) {
+            if (i < period - 1) {
+                sums.add(null);
+                continue;
+            }
+            BigDecimal sum = BigDecimal.ZERO;
+            for (int j = i - period + 1; j <= i; j++) {
+                BigDecimal value = values.get(j);
+                if (value == null) {
+                    sum = null;
+                    break;
+                }
+                sum = sum.add(value);
+            }
+            sums.add(sum);
+        }
+        return sums;
+    }
+
     static List<BigDecimal> adjCloses(List<PriceBar> bars) {
         List<BigDecimal> values = new ArrayList<>(bars.size());
         for (PriceBar bar : bars) {
