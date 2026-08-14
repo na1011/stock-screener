@@ -208,7 +208,8 @@ class PresetCatalogTest {
         }
 
         ScreenPreset swing = presets.stream()
-                .filter(p -> "SWING_MIDTERM_KR".equals(p.code())).findFirst().orElseThrow();
+                .filter(p -> PresetCatalog.SWING_TREND_KR.equals(p.code()))
+                .findFirst().orElseThrow();
         int used = swing.conditions().conditions().size();
         // MUST NOT: 이 단언을 hasSize(MAX_CONDITIONS)로 되돌리지 않는다. 그렇게 두면
         // 상한을 올릴 때마다 프리셋도 함께 키워야 하고, 조건을 **빼도** 깨진다.
@@ -217,7 +218,7 @@ class PresetCatalogTest {
                 .as("스윙 프리셋의 조건 수. 상한은 %d이고 여유는 %d다",
                         ScreenDefinitionValidator.MAX_CONDITIONS,
                         ScreenDefinitionValidator.MAX_CONDITIONS - used)
-                .isEqualTo(21);
+                .isEqualTo(24);
         assertThat(ScreenDefinitionValidator.MAX_CONDITIONS - used)
                 .as("상한에 여유가 없으면 다음 지표 하나에 네 파일을 다시 열게 된다")
                 .isGreaterThanOrEqualTo(1);
