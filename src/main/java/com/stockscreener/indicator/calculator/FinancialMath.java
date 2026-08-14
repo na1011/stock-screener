@@ -38,11 +38,26 @@ final class FinancialMath {
      */
     static BigDecimal sumTrailingFourQuarters(List<FinancialFigures> quarters,
                                               Function<FinancialFigures, BigDecimal> field) {
-        if (quarters.size() < TTM_QUARTERS) {
+        return sumFourQuarters(quarters, field, 0);
+    }
+
+    /**
+     * {@code offset}번째 분기부터 4개를 합한다. {@code offset = 4}면 <b>직전 TTM</b>이다.
+     *
+     * <p>읽기가 {@code period_end} 내림차순이므로 인덱스가 클수록 과거다. 전년 대비 성장률을
+     * 만들 때 이것과 {@code offset = 0}을 짝지어 쓴다.
+     *
+     * <p>MUST NOT: 분기가 연속인지 여기서 검사한다고 믿지 않는다 — 세는 것은 <b>저장된 분기
+     * 여덟 개</b>이지 달력상 2년이 아니다. 공시가 빠진 종목에서는 두 구간이 겹치지 않을 뿐
+     * 값은 나온다. 그 판단은 호출부의 몫이다.
+     */
+    static BigDecimal sumFourQuarters(List<FinancialFigures> quarters,
+                                      Function<FinancialFigures, BigDecimal> field, int offset) {
+        if (quarters.size() < offset + TTM_QUARTERS) {
             return null;
         }
         BigDecimal sum = BigDecimal.ZERO;
-        for (int i = 0; i < TTM_QUARTERS; i++) {
+        for (int i = offset; i < offset + TTM_QUARTERS; i++) {
             BigDecimal value = field.apply(quarters.get(i));
             if (value == null) {
                 return null;

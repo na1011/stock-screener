@@ -21,6 +21,9 @@ public final class ExcessReturn {
     /** 원본 주석대로 130 거래일 ≈ 26주다. */
     public static final int LOOKBACK = 130;
 
+    /** 252 거래일 ≈ 52주. 검증된 모멘텀 문헌이 쓰는 기간이다. */
+    public static final int LOOKBACK_52W = 252;
+
     private ExcessReturn() {
     }
 
@@ -40,7 +43,20 @@ public final class ExcessReturn {
      */
     public static OptionalDouble at(List<PriceBar> bars,
                                     NavigableMap<LocalDate, BigDecimal> index, int i) {
-        int back = i - LOOKBACK;
+        return at(bars, index, i, LOOKBACK);
+    }
+
+    /**
+     * 기간을 지정하는 판. 위 설명이 그대로 적용되며 되돌아보는 거리만 다르다.
+     *
+     * <p>MUST NOT: 기간별로 이 공식을 다시 짜지 않는다. 정확 일치와 {@code floorEntry}를
+     * 나눠 쓰는 규칙이 한쪽에만 반영되면 <b>두 기간의 값이 서로 다른 것을 재면서 둘 다
+     * 그럴듯하다.</b>
+     */
+    public static OptionalDouble at(List<PriceBar> bars,
+                                    NavigableMap<LocalDate, BigDecimal> index, int i,
+                                    int lookback) {
+        int back = i - lookback;
         if (back < 0 || index == null || index.isEmpty()) {
             return OptionalDouble.empty();
         }

@@ -1,5 +1,6 @@
 package com.stockscreener.indicator;
 
+import com.stockscreener.indicator.calculator.ExcessReturn52wCalculator;
 import com.stockscreener.indicator.calculator.MacdVCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginCalculator;
 import com.stockscreener.indicator.calculator.PbrCalculator;
@@ -72,6 +73,13 @@ public class PercentileConfig {
                         MacdVCalculator.CODE,
                         "MACD-V 백분위",
                         "편입 종목 중 이 종목의 MACD-V가 어느 위치인지를 0~1로 나타낸 값.",
-                        "1에 가까울수록 변동성 대비 상승 모멘텀이 강하다."));
+                        "1에 가까울수록 변동성 대비 상승 모멘텀이 강하다."),
+                new PercentileSpec(
+                        ExcessReturn52wCalculator.CODE,
+                        "52주 초과 수익률 백분위",
+                        "편입 종목 중 이 종목의 52주 초과 수익률이 어느 위치인지를 0~1로 나타낸 값.",
+                        "1에 가까울수록 1년 동안 시장을 크게 이겼다. 추세 전략이 말하는 "
+                                + "'상대강도 상위'가 이 순위다 — 다만 분기별 가중을 쓰는 "
+                                + "미국식 RS 등급과는 계산이 다르다."));
     }
 }
