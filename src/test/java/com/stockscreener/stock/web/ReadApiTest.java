@@ -246,6 +246,93 @@ class ReadApiTest {
         assertThat(body).doesNotContain("스냅되지 않는다");
     }
 
+    // ── 실적 원수치 ────────────────────────────────────────────────────────
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("IMPORTANT — 4분기가 유도값임을 응답이 말한다. 없으면 공시된 실적으로 읽힌다")
+    void fourthQuarterIsMarkedAsDerived() throws Exception {
+        seedFinancials();
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId + "/financials"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notice.derivedFourthQuarter").isNotEmpty())
+                .andExpect(jsonPath("$.notice.quarterlyCashFlow").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode quarterly = objectMapper.readTree(body).get("quarterly");
+        assertThat(period(quarterly, 2025, "Q4").get("derived").asBoolean()).isTrue();
+        assertThat(period(quarterly, 2025, "Q3").get("derived").asBoolean())
+                .as("유도는 4분기만이다 — 전부 표시하면 표시가 뜻을 잃는다")
+                .isFalse();
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("IMPORTANT — 합성 기간(period_start/end)을 내보내지 않는다. 미래 기간이 표에 뜬다")
+    void doesNotCarrySyntheticPeriodBounds() throws Exception {
+        seedFinancials();
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId + "/financials"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body)
+                .as("결산월이 12월이 아닌 종목에서 이 값은 아직 오지 않은 기간을 가리킨다(ADR-0056)")
+                .doesNotContain("periodStart").doesNotContain("periodEnd");
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("전년 동기와 비교한다 — 직전 분기와 비교하면 계절성 업종에서 뜻이 없다")
+    void growthComparesTheSameQuarterLastYear() throws Exception {
+        seedFinancials();
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId + "/financials"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode quarterly = objectMapper.readTree(body).get("quarterly");
+        // 2025 Q1 매출 120, 2024 Q1 매출 100 → +20%. 직전 분기(2024 Q4 = 400)와 비교했다면 -70%다.
+        assertThat(period(quarterly, 2025, "Q1").get("revenueYoy").decimalValue())
+                .isEqualByComparingTo("20");
+        assertThat(period(quarterly, 2024, "Q1").get("revenueYoy").isNull())
+                .as("전년이 없으면 값을 만들지 않는다")
+                .isTrue();
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("실적은 상세에 실리지 않는다 — 별도 요청이라 한쪽이 실패해도 다른 쪽이 산다")
+    void detailDoesNotCarryFinancials() throws Exception {
+        seedFinancials();
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).doesNotContain("quarterly").doesNotContain("operatingCashFlow");
+    }
+
+    // ── 업종 표본 고지 ──────────────────────────────────────────────────────
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("IMPORTANT — 업종 표본이 모자라면 그 사실이 상세에 남는다. 없으면 수집 실패와 구분되지 않는다")
+    void detailExplainsWhySectorMetricsAreMissing() throws Exception {
+        jdbcTemplate.update("UPDATE stock SET industry_code = '26111' WHERE id = ?", stockId);
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sectorContext.evaluable").value(false))
+                .andExpect(jsonPath("$.sectorContext.notice").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body)
+                .as("표본이 적은 것을 강점으로 표현하지 않는다(ADR-0044 §버린 대안)")
+                .contains("업종에서 앞선다는 뜻이 아닙니다");
+    }
+
     @Test
     @WithMockUser(username = SUB)
     @DisplayName("없는 종목은 404다")
@@ -363,5 +450,48 @@ class ReadApiTest {
             }
         }
         throw new AssertionError("카탈로그에 " + code + "가 없다");
+    }
+
+    /** 2024·2025 각 FY와 Q1~Q4. Q4는 어댑터가 유도한 행과 같은 모양(사업보고서 코드)이다. */
+    private void seedFinancials() {
+        for (int year : new int[]{2024, 2025}) {
+            insertFinancial(year, "FY", "11011", 1000 + (year - 2024) * 200);
+            insertFinancial(year, "Q1", "11013", 100 + (year - 2024) * 20);
+            insertFinancial(year, "Q2", "11012", 200);
+            insertFinancial(year, "Q3", "11014", 300);
+            insertFinancial(year, "Q4", "11011", 400);
+        }
+    }
+
+    private void insertFinancial(int year, String period, String reportCode, long revenue) {
+        jdbcTemplate.update("""
+                INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period,
+                        period_start, period_end, published_at, revision_no, is_latest,
+                        report_code, currency_code, revenue, operating_income, net_income,
+                        total_assets, total_liabilities, total_equity)
+                VALUES (?, ?, ?, ?, ?, ?, 0, true, ?, 'KRW', ?, ?, ?, 9000, 4000, 5000)
+                ON CONFLICT DO NOTHING
+                """, stockId, year, period,
+                LocalDate.of(year, 1, 1), periodEnd(year, period), LocalDate.of(year + 1, 3, 10),
+                reportCode, revenue, revenue / 10, revenue / 20);
+    }
+
+    private static LocalDate periodEnd(int year, String period) {
+        return switch (period) {
+            case "Q1" -> LocalDate.of(year, 3, 31);
+            case "Q2" -> LocalDate.of(year, 6, 30);
+            case "Q3" -> LocalDate.of(year, 9, 30);
+            default -> LocalDate.of(year, 12, 31);
+        };
+    }
+
+    private static JsonNode period(JsonNode periods, int fiscalYear, String fiscalPeriod) {
+        for (JsonNode node : periods) {
+            if (node.get("fiscalYear").asInt() == fiscalYear
+                    && fiscalPeriod.equals(node.get("fiscalPeriod").asText())) {
+                return node;
+            }
+        }
+        throw new AssertionError(fiscalYear + " " + fiscalPeriod + "을 응답에서 찾지 못했다");
     }
 }

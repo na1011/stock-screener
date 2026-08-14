@@ -115,6 +115,82 @@ public class StockReader {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
+    /**
+     * 실적 원수치 이력. <b>지표가 아니라 소스가 준(또는 우리가 유도한) 재무제표 값이다.</b>
+     *
+     * <p>{@code IndicatorDataReader.readQuarterlyFigures}를 재사용하지 않는다. 같은 테이블을
+     * 읽지만 답하는 질문이 다르다 — 저쪽은 <b>지표 러너의 읽기 창</b>이라 {@code LIMIT}으로
+     * 행 수만 맞추고 연도 구멍이 보이지 않으며, {@code FinancialFigures}에 정정 회차가 없다.
+     *
+     * <p>MUST: {@code period_start}·{@code period_end}를 <b>내보내지 않는다.</b> ADR-0056이 그
+     * 값을 합성 규약({@code 01-01 ~ 12-31})으로 못박았고 결산월이 12월이 아닌 종목도 예외가
+     * 아니라, 화면에 그리면 <b>아직 오지 않은 기간</b>이 실적표에 뜬다(신영증권 FY2026이 실제로
+     * {@code 2026-01-01 ~ 2026-12-31}이고 공시일이 6월이다). 기간 라벨은 회계연도와 분기로 짓는다.
+     *
+     * @param limit 최근 몇 기(期)까지. 종목당 평균 30.9행·최대 37행이라 상한이 필요하다.
+     */
+    @Transactional(readOnly = true)
+    public List<FinancialRow> financialsOf(long stockId, int limit) {
+        return jdbcTemplate.query("""
+                SELECT fiscal_year, fiscal_period, published_at, revision_no, report_code,
+                       revenue, operating_income, net_income, operating_cash_flow,
+                       total_assets, total_liabilities, total_equity
+                FROM financial_statement
+                WHERE stock_id = ? AND is_latest
+                ORDER BY period_end DESC, fiscal_period DESC
+                LIMIT ?
+                """, (rs, n) -> new FinancialRow(
+                        rs.getInt("fiscal_year"),
+                        rs.getString("fiscal_period"),
+                        rs.getObject("published_at", LocalDate.class),
+                        rs.getInt("revision_no"),
+                        rs.getString("report_code"),
+                        rs.getBigDecimal("revenue"),
+                        rs.getBigDecimal("operating_income"),
+                        rs.getBigDecimal("net_income"),
+                        rs.getBigDecimal("operating_cash_flow"),
+                        rs.getBigDecimal("total_assets"),
+                        rs.getBigDecimal("total_liabilities"),
+                        rs.getBigDecimal("total_equity")),
+                stockId, limit);
+    }
+
+    /**
+     * 업종 비교의 표본 크기. <b>지표 행이 없는 이유를 답하는 자리다.</b>
+     *
+     * <p>{@code SectorRelativeCalculator}는 표본이 임계에 못 미치면 상대값뿐 아니라
+     * <b>표본 수 행까지 쓰지 않는다.</b> 그래서 그 종목의 상세에는 업종 카드도, 없는 이유도
+     * 남지 않고 사용자에게는 수집 실패와 구분되지 않는다. 실측으로 최신 지표 일자에
+     * {@code PER}은 269종목인데 {@code PER_SECTOR_N}은 215종목이다.
+     *
+     * <p>여기서 세는 것은 <b>구조적 업종 크기</b>이지 특정 지표의 표본이 아니다. 둘은 다르다 —
+     * 업종에 8종목이 있어도 그중 셋만 PER이 있으면 PER의 표본은 3이다. 그 구분은 지표별
+     * {@code _SECTOR_N}이 답하고, 이 값은 <b>업종 자체가 너무 작은가</b>에만 답한다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<SectorPeerRow> sectorPeersOf(long stockId) {
+        List<SectorPeerRow> rows = jdbcTemplate.query("""
+                WITH member AS (
+                    SELECT s.id, s.industry_code, s.industry_group, s.industry_division
+                    FROM stock s
+                    WHERE s.industry_code IS NOT NULL
+                      AND EXISTS (SELECT 1 FROM universe_membership m
+                                  JOIN universe u ON u.code = m.universe_code AND u.is_active
+                                  WHERE m.stock_id = s.id AND m.effective_to IS NULL)
+                ),
+                me AS (SELECT * FROM member WHERE id = ?)
+                SELECT me.industry_code,
+                       (SELECT count(*) FROM member g WHERE g.industry_group = me.industry_group) AS fine_peers,
+                       (SELECT count(*) FROM member d WHERE d.industry_division = me.industry_division) AS broad_peers
+                FROM me
+                """, (rs, n) -> new SectorPeerRow(
+                        rs.getString("industry_code"),
+                        rs.getInt("fine_peers"),
+                        rs.getInt("broad_peers")),
+                stockId);
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
     /** 이 종목이 현재 편입되어 있는 유니버스들. 상세 화면이 "어느 지수 종목인가"를 보여준다. */
     @Transactional(readOnly = true)
     public List<StockUniverse> currentUniversesOf(long stockId) {
@@ -225,6 +301,18 @@ public class StockReader {
     }
 
     /** @param tradeValue·listedShares 소스가 주지 않으면 null이다. */
+    /** 재무제표 한 기(期)의 원수치. 기간은 회계연도·분기가 정본이다(위 javadoc). */
+    public record FinancialRow(int fiscalYear, String fiscalPeriod, LocalDate publishedAt,
+                               int revisionNo, String reportCode,
+                               BigDecimal revenue, BigDecimal operatingIncome, BigDecimal netIncome,
+                               BigDecimal operatingCashFlow, BigDecimal totalAssets,
+                               BigDecimal totalLiabilities, BigDecimal totalEquity) {
+    }
+
+    /** 업종 자체의 크기. 지표별 표본은 {@code _SECTOR_N}이 따로 답한다. */
+    public record SectorPeerRow(String industryCode, int finePeers, int broadPeers) {
+    }
+
     public record PriceRow(LocalDate tradeDate, BigDecimal open, BigDecimal high, BigDecimal low,
                            BigDecimal close, Long volume, BigDecimal tradeValue,
                            BigDecimal listedShares) {

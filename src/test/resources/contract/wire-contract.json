@@ -5,17 +5,57 @@
     "읽는 쪽: src/test/java/.../WireContractTest.java, frontend/src/api/contract.spec.ts",
     "enum은 집합으로 대조한다. 순서는 계약이 아니라 프론트의 표시 판단이다."
   ],
-
   "enums": {
-    "IndicatorCategory": ["TECHNICAL", "FUNDAMENTAL", "PRICE", "OSCILLATOR", "DERIVED"],
-    "EvaluationMode": ["FILTER", "SCORING"],
-    "ScreenType": ["PRESET", "CUSTOM"],
-    "OutcomeStatus": ["MATCHED", "NOT_MATCHED", "NOT_EVALUABLE"],
-    "IndicatorPopulation": ["UNIVERSE", "SECTOR"],
-    "FavorableEnd": ["HIGH", "LOW", "UNKNOWN"],
-    "OperandType": ["LITERAL", "INDICATOR"],
-    "ZoneRole": ["SUPPORT", "RESISTANCE", "IN_RANGE"],
-    "ZoneStrength": ["HIGH", "MEDIUM", "LOW"],
+    "IndicatorCategory": [
+      "TECHNICAL",
+      "FUNDAMENTAL",
+      "PRICE",
+      "OSCILLATOR",
+      "DERIVED"
+    ],
+    "EvaluationMode": [
+      "FILTER",
+      "SCORING"
+    ],
+    "ScreenType": [
+      "PRESET",
+      "CUSTOM"
+    ],
+    "OutcomeStatus": [
+      "MATCHED",
+      "NOT_MATCHED",
+      "NOT_EVALUABLE"
+    ],
+    "IndicatorPopulation": [
+      "UNIVERSE",
+      "SECTOR"
+    ],
+    "FavorableEnd": [
+      "HIGH",
+      "LOW",
+      "UNKNOWN"
+    ],
+    "OperandType": [
+      "LITERAL",
+      "INDICATOR"
+    ],
+    "ZoneRole": [
+      "SUPPORT",
+      "RESISTANCE",
+      "IN_RANGE"
+    ],
+    "ZoneStrength": [
+      "HIGH",
+      "MEDIUM",
+      "LOW"
+    ],
+    "FiscalPeriod": [
+      "FY",
+      "Q1",
+      "Q2",
+      "Q3",
+      "Q4"
+    ],
     "InteractionAction": [
       "LOGIN",
       "SCREENING_RUN",
@@ -32,11 +72,23 @@
       "ADMIN_ALLOWLIST_REMOVE",
       "ADMIN_CORPORATE_ACTION_JUDGE"
     ],
-    "BatchStatus": ["RUNNING", "SUCCESS", "PARTIAL_SUCCESS", "FAILED", "ABORTED"],
-    "TriggeredBy": ["SCHEDULER", "ADMIN", "MANUAL"],
-    "JobParameters": ["TARGET_DATE", "DATE_RANGE"]
+    "BatchStatus": [
+      "RUNNING",
+      "SUCCESS",
+      "PARTIAL_SUCCESS",
+      "FAILED",
+      "ABORTED"
+    ],
+    "TriggeredBy": [
+      "SCHEDULER",
+      "ADMIN",
+      "MANUAL"
+    ],
+    "JobParameters": [
+      "TARGET_DATE",
+      "DATE_RANGE"
+    ]
   },
-
   "problemTypes": [
     "urn:stockscreener:invalid-condition",
     "urn:stockscreener:unknown-indicator",
@@ -61,7 +113,6 @@
     "urn:stockscreener:corporate-action-not-found",
     "urn:stockscreener:conflict"
   ],
-
   "problemProperties": {
     "_": [
       "problem+json 본문에 얹히는 추가 속성. 이 이름들은 양쪽 컴파일러 모두에게 보이지 않는다 —",
@@ -82,7 +133,6 @@
       "conditionIndex"
     ]
   },
-
   "constants": {
     "priceReferenceMethod": "SWING_EXTREMA_CLUSTERING",
     "maxConditions": 25,

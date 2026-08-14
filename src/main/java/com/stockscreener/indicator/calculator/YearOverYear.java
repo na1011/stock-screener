@@ -12,7 +12,7 @@ import java.util.function.Function;
  * <p>매출·영업이익 등 성장률 지표가 모두 같은 형태라 한곳에 둔다. 계산기마다 다시 쓰면
  * 그중 하나만 분모 처리를 다르게 해도 성장률끼리 비교가 어긋난다.
  */
-final class YearOverYear {
+public final class YearOverYear {
 
     private YearOverYear() {
     }
@@ -30,8 +30,20 @@ final class YearOverYear {
         if (annual.size() < 2) {
             return null;
         }
-        BigDecimal current = field.apply(annual.get(0));
-        BigDecimal previous = field.apply(annual.get(1));
+        return between(field.apply(annual.get(0)), field.apply(annual.get(1)));
+    }
+
+    /**
+     * 두 값 사이의 증감률(%). 어느 쪽이든 비었거나 직전이 0이면 null이다.
+     *
+     * <p>실적 표가 이것을 쓴다 — 지표 계산기와 <b>같은 식이어야</b> 한 화면의 두 증감률이
+     * 어긋나지 않는다. 특히 <b>분모의 절댓값</b>이 그렇다: 적자가 커진 기업의 이익 증감률이
+     * 한쪽에서만 양수로 나오면, 사용자는 같은 사실을 두 곳에서 반대로 읽는다.
+     *
+     * <p>비교 대상을 고르는 것은 호출부의 몫이다. 연간은 전년, 분기는 <b>전년 동기</b>다 —
+     * 직전 분기와 비교하면 계절성 있는 업종에서 뜻을 잃는다.
+     */
+    public static BigDecimal between(BigDecimal current, BigDecimal previous) {
         if (current == null || previous == null || previous.signum() == 0) {
             return null;
         }

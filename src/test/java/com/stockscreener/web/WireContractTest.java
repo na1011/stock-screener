@@ -1,6 +1,7 @@
 package com.stockscreener.web;
 
 import com.stockscreener.auth.web.AllowedEmailRequest;
+import com.stockscreener.indicator.FinancialFigures;
 import com.stockscreener.indicator.IndicatorCategory;
 import com.stockscreener.indicator.IndicatorDescriptor;
 import com.stockscreener.indicator.IndicatorPopulation;
@@ -104,6 +105,10 @@ class WireContractTest {
                 .isEqualTo(expected("enums", "OperandType"));
         assertThat(names(PriceReference.Role.class)).isEqualTo(expected("enums", "ZoneRole"));
         assertThat(names(PriceReference.Strength.class)).isEqualTo(expected("enums", "ZoneStrength"));
+        // 실적 표가 연간/분기를 이 값으로 가른다. 프론트에 없는 값이 오면 그 기(期)가
+        // 어느 표에도 못 들어가 조용히 사라진다.
+        assertThat(names(FinancialFigures.FiscalPeriod.class))
+                .isEqualTo(expected("enums", "FiscalPeriod"));
         // 관리자 화면의 행위 필터가 이 목록을 거울로 든다. 어긋나면 새로 더한 행위가
         // 필터 선택지에서 조용히 빠지고, 그 행위의 로그는 조회할 방법이 없어진다.
         assertThat(names(InteractionAction.class)).isEqualTo(expected("enums", "InteractionAction"));

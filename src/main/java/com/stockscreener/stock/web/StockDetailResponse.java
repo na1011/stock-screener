@@ -25,8 +25,52 @@ public record StockDetailResponse(
         Stock stock,
         Price price,
         List<IndicatorValue> indicators,
-        UnadjustedActions unadjustedActions
+        UnadjustedActions unadjustedActions,
+        SectorContext sectorContext
 ) {
+
+    /**
+     * 업종 비교가 성립하는가. <b>업종 카드가 왜 없는지에 답하는 자리다.</b>
+     *
+     * <p>{@link UnadjustedActions}와 같은 성격이다 — 둘 다 "값이 없다"가 아니라 <b>왜 없는지</b>를
+     * 말한다. 그것이 필요한 이유는 {@code SectorRelativeCalculator}가 표본이 임계(5)에 못 미치면
+     * 상대값뿐 아니라 <b>표본 수 행까지 쓰지 않기</b> 때문이다. 그래서 그 종목의 상세에는 업종
+     * 관련 행이 하나도 없고, 사용자에게는 <b>수집 실패와 구분되지 않는다.</b> 실측으로 최신 지표
+     * 일자에 {@code PER}은 269종목인데 {@code PER_SECTOR_N}은 215종목이다.
+     *
+     * <p>MUST NOT: 표본이 적은 것을 <b>강점으로 표현하지 않는다.</b> "업종에서 유일한 종목"은
+     * 진입장벽이 아니라 <b>우리 유니버스의 구성</b>을 재는 값이다 — 상장 전체를 원리적으로 볼 수
+     * 없어, 경쟁자가 비상장이거나 시총 미달이라 빠졌을 뿐인 과점 종목이 그 자리에 들어온다.
+     * 경위는 ADR-0044 §버린 대안이 정본이다.
+     *
+     * @param evaluable  업종 상대 지표를 낼 수 있는가. 두 층 모두 표본이 모자라면 false다
+     * @param finePeers  같은 소분류(앞 3자리)에 편입된 종목 수. 자기 자신을 포함한다
+     * @param broadPeers 같은 중분류(앞 2자리)에 편입된 종목 수
+     */
+    public record SectorContext(String industryCode, int finePeers, int broadPeers,
+                                boolean evaluable, String notice) {
+
+        /** {@code SectorRelativeCalculator.MIN_PEERS}와 같은 값이어야 한다. */
+        private static final int MIN_PEERS = 5;
+
+        public static SectorContext of(StockReader.SectorPeerRow row) {
+            if (row == null) {
+                // 업종 자체가 없다. 그 원인은 company-profile 잡을 아직 안 돌린 것이거나
+                // 편입이 풀린 것이고, 어느 쪽이든 업종 조건에서 판정불가인 것은 같다.
+                return new SectorContext(null, 0, 0, false,
+                        "업종 정보가 없어 업종 상대 지표를 낼 수 없습니다.");
+            }
+            int peers = Math.max(row.finePeers(), row.broadPeers());
+            if (peers >= MIN_PEERS) {
+                return new SectorContext(row.industryCode(), row.finePeers(), row.broadPeers(),
+                        true, null);
+            }
+            return new SectorContext(row.industryCode(), row.finePeers(), row.broadPeers(), false,
+                    "조회 대상 안에 같은 업종 종목이 " + peers + "개뿐이라 업종 상대 지표를 내지 "
+                            + "않습니다. 업종 중앙값이 사실상 이 종목 자신이 되기 때문입니다. "
+                            + "업종에서 앞선다는 뜻이 아닙니다.");
+        }
+    }
 
     /**
      * 계수에 반영되지 않은 기업 행위. <b>지표가 왜 없는지에 답하는 유일한 자리다</b>(ADR-0055).

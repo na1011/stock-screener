@@ -39,22 +39,33 @@ public class StockController {
     private final IndicatorDataReader priceReader;
     private final SupportResistanceAnalyzer analyzer;
     private final AsOfResolver asOfResolver;
+    private final StockFinancialsAssembler financialsAssembler;
 
     public StockController(StockReader stockReader, IndicatorCatalog indicatorCatalog,
                            ScreeningRepository screeningRepository, IndicatorDataReader priceReader,
-                           SupportResistanceAnalyzer analyzer, AsOfResolver asOfResolver) {
+                           SupportResistanceAnalyzer analyzer, AsOfResolver asOfResolver,
+                           StockFinancialsAssembler financialsAssembler) {
         this.stockReader = stockReader;
         this.indicatorCatalog = indicatorCatalog;
         this.screeningRepository = screeningRepository;
         this.priceReader = priceReader;
         this.analyzer = analyzer;
         this.asOfResolver = asOfResolver;
+        this.financialsAssembler = financialsAssembler;
     }
 
     /** 한 번에 돌려주는 최대 건수. 검색은 고르기 위한 것이지 훑어보기 위한 것이 아니다. */
     private static final int DEFAULT_SEARCH_LIMIT = 20;
     private static final int MAX_SEARCH_LIMIT = 50;
     private static final int MAX_QUERY_LENGTH = 50;
+
+    /**
+     * 실적 표가 한 번에 주는 기(期) 수.
+     *
+     * <p>연간 3 + 분기 12 = 15에 여유를 둔 값이다. 상한이 필요한 이유는 실측으로 종목당 평균
+     * <b>30.9행·최대 37행</b>이기 때문이다 — 모바일 패널에 37행을 그리지 않는다.
+     */
+    private static final int FINANCIAL_PERIODS = 20;
 
     /**
      * 종목명·티커 검색.
@@ -135,7 +146,26 @@ public class StockController {
                 // 결과에 아예 없고, SCORING이라도 필수 조건이면 통째로 빠져 조건별 "데이터
                 // 없음"이 이유를 말해 주지 못한다.
                 StockDetailResponse.UnadjustedActions.of(
-                        stockReader.unadjustedActionsOf(stockId)));
+                        stockReader.unadjustedActionsOf(stockId)),
+                // 업종 카드가 왜 없는지도 여기서만 말할 수 있다 — 표본이 임계에 못 미치면
+                // 상대값뿐 아니라 표본 수 행까지 쓰이지 않아 화면에 흔적이 0이다.
+                StockDetailResponse.SectorContext.of(
+                        stockReader.sectorPeersOf(stockId).orElse(null)));
+    }
+
+    /**
+     * 실적 원수치. <b>종목 상세와 별도 요청이다</b> — 이유는 {@link StockFinancialsResponse}에 있다.
+     *
+     * <p>{@code asOf}를 받지 않는다. 지표는 거래일마다 값이 다르지만 재무제표는 <b>공시된 기(期)</b>
+     * 단위라 기준일이 뜻을 갖지 않는다. 받으면 "그날 기준 재무"라는 없는 개념이 생긴다.
+     */
+    @GetMapping("/{stockId}/financials")
+    public StockFinancialsResponse financials(@PathVariable long stockId) {
+        stockReader.findById(stockId, asOfResolver.resolve(null))
+                .orElseThrow(() -> new ApiExceptions.StockNotFoundException(stockId));
+
+        return financialsAssembler.assemble(
+                stockReader.financialsOf(stockId, FINANCIAL_PERIODS));
     }
 
     /**
