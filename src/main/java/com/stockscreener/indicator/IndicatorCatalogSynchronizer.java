@@ -101,6 +101,33 @@ public class IndicatorCatalogSynchronizer {
      * 떨어지면 <b>거짓 유불리 방향이 카드에 붙는다</b> — 그리고 {@code .claude/rules/frontend.md}가
      * 화면의 지표 코드 분기를 금지하므로 프론트에서 막을 길이 없다.
      */
+    /**
+     * 저장되는 {@code sort_order}는 애너테이션 값의 <b>10배</b>이고, 파생은 원본의 자리에
+     * 1~5를 더해 <b>바로 뒤</b>에 선다.
+     *
+     * <p>예전에는 파생을 원본과 무관한 상수(백분위 900 · 업종 상대값 910 · 표본 수 911)로
+     * 박았다. 그래서 <b>PER(10)과 PER 백분위(900) 사이에 재무 지표 아홉이 끼었고</b>, 사용자가
+     * 둘을 나란히 비교할 수 없었다. 게다가 그 상수를 여럿이 공유해 같은 자리에 5개·4개·3개가
+     * 겹쳤고, 그 안의 순서는 {@code ORDER BY sort_order, code}가 <b>코드 알파벳순으로 조용히</b>
+     * 갈랐다(ADR-0057이 경고한 그것이다).
+     *
+     * <p>×10을 원본에도 거는 이유는 <b>간격을 만들기 위해서</b>다. 애너테이션 값(1~315)이
+     * 전부 유일하므로 ×10 하면 파생 다섯이 들어갈 자리가 구조적으로 생기고 충돌이 사라진다.
+     * 71개 계산기의 애너테이션은 손대지 않는다.
+     */
+    private static final int SORT_ORDER_SCALE = 10;
+
+    private static final int OFFSET_PERCENTILE = 1;
+    private static final int OFFSET_SECTOR_PERCENTILE = 2;
+    private static final int OFFSET_SECTOR_RATIO = 3;
+    private static final int OFFSET_SECTOR_MEDIAN = 4;
+    private static final int OFFSET_PEER_COUNT = 5;
+
+    /** 원본 지표가 앉는 자리. 파생은 여기에 오프셋을 더한다. */
+    private int baseSortOrder(String sourceCode) {
+        return sourceMetaOf(sourceCode).sortOrder() * SORT_ORDER_SCALE;
+    }
+
     private void upsertSectorMetric(SectorMetricSpec spec) {
         IndicatorMeta source = sourceMetaOf(spec.sourceCode());
         // 소수 자릿수 · 유불리 방향 · 원본 링크 · 단위가 함께 갈린다.
@@ -124,7 +151,12 @@ public class IndicatorCatalogSynchronizer {
 
         upsertDerived(spec.code(), spec.name(), spec.description(), spec.interpretation(),
                 source.category(), IndicatorValueType.RATIO, scale, higherIsBetter,
-                910, link, IndicatorPopulation.SECTOR, unit);
+                baseSortOrder(spec.sourceCode()) + switch (spec.kind()) {
+                    case PERCENTILE -> OFFSET_SECTOR_PERCENTILE;
+                    case MEDIAN_RATIO -> OFFSET_SECTOR_RATIO;
+                    case MEDIAN -> OFFSET_SECTOR_MEDIAN;
+                },
+                link, IndicatorPopulation.SECTOR, unit);
     }
 
     /**
@@ -145,7 +177,8 @@ public class IndicatorCatalogSynchronizer {
                         + "소분류 표본이 5 미만이면 중분류로 올라가며, 그 경우 이 수가 그 사실을 드러낸다.",
                 "클수록 업종 비교가 통계적으로 든든하다. 5는 값을 낼 수 있는 최소치일 뿐이므로, "
                         + "5에 가까운 값은 업종 대비 순위를 느슨하게 읽어야 한다.",
-                categoryOf(spec.sourceCode()), IndicatorValueType.COUNT, 0, Boolean.TRUE, 911,
+                categoryOf(spec.sourceCode()), IndicatorValueType.COUNT, 0, Boolean.TRUE,
+                baseSortOrder(spec.sourceCode()) + OFFSET_PEER_COUNT,
                 null, IndicatorPopulation.SECTOR, null);
     }
 
@@ -231,7 +264,7 @@ public class IndicatorCatalogSynchronizer {
         upsertDerived(spec.code(), spec.name(), spec.description(), spec.interpretation(),
                 categoryOf(spec.sourceCode()), IndicatorValueType.RATIO, 4,
                 // 유불리 방향은 원본이 들고 있다. 여기서 정하면 두 곳이 갈린다.
-                null, 900,
+                null, baseSortOrder(spec.sourceCode()) + OFFSET_PERCENTILE,
                 // 부등호 방향 판단이 이 링크에 걸린다 — 화면은 원본의 higher_is_better를 보고
                 // "상위 20%"가 >= 0.8인지 <= 0.2인지 정한다.
                 spec.sourceCode(),
@@ -273,7 +306,7 @@ public class IndicatorCatalogSynchronizer {
                 emptyToNull(meta.unit()),
                 meta.decimalScale(),
                 meta.direction().toHigherIsBetter(),
-                meta.sortOrder(),
+                meta.sortOrder() * SORT_ORDER_SCALE,
                 meta.defaultColumn(),
                 meta.detailDefault(),
                 bandCodec.toJson(bandsOf(code, meta)));

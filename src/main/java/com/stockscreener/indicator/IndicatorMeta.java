@@ -65,6 +65,20 @@ public @interface IndicatorMeta {
      */
     boolean detailDefault() default true;
 
+    /**
+     * 같은 분류 구획 안에서의 <b>상대 순서</b>. 작을수록 앞이다.
+     *
+     * <p>IMPORTANT — <b>여기 적은 값이 그대로 저장되지 않는다.</b> 카탈로그 동기화가 10을 곱해
+     * {@code indicator.sort_order}에 넣고, 그 사이 자리에 <b>파생 지표(백분위·업종 상대값·표본
+     * 수)가 1~5를 더해 들어간다.</b> 그래야 "PER"과 "PER 백분위"가 나란히 선다.
+     *
+     * <p>그래서 <b>여기서는 이웃과의 앞뒤만 정하면 되고 간격을 비워 둘 필요가 없다.</b>
+     * 반대로 DB 값을 보고 이 애너테이션을 되짚으면 10배 어긋난다 — 규칙의 정본은
+     * {@code IndicatorCatalogSynchronizer}다.
+     *
+     * <p>같은 구획 안에서 값이 겹치면 정렬이 {@code ORDER BY sort_order, code}로 떨어져
+     * <b>코드 알파벳순으로 조용히</b> 갈린다(ADR-0057).
+     */
     int sortOrder() default 0;
 
     /**
