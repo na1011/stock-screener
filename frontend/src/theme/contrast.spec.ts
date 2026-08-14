@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import Aura from '@primeuix/themes/aura'
 
-import { QUOTE_FALL, QUOTE_RISE, cobalt, ink } from './preset'
+import { TONE_FAVORABLE_TEXT, TONE_UNFAVORABLE_TEXT, cobalt, ink } from './preset'
 
 /**
  * 대비비를 자동 검증 대상으로 만든다.
@@ -157,34 +157,32 @@ function resolve(token: string): string {
 }
 
 /**
- * 시세 등락의 색(ADR-0065).
+ * 값 색조(`--p-tone-*`).
  *
  * 이 검사가 있는 이유는 **아무도 재지 않는 자리였기 때문**이다. 위 세 describe는 버튼만
- * 재므로, 새 토큰을 더해도 대비가 어떻든 전부 통과한다. 그리고 이 색은 판정·유불리와 뜻이
- * 겹치는 자리에 들어가는 것이라 "읽히기는 하는가"가 특히 중요하다.
+ * 재므로 색조는 대비가 어떻든 전부 통과한다. 그리고 지표 카드와 **시세 등락**이 함께 쓰는
+ * 색이라(ADR-0065) "읽히기는 하는가"가 두 곳에 걸린다.
  */
-describe('시세 등락 색', () => {
-  it('상승·하락 모두 어느 면 위에서든 본문 대비 기준을 넘는다', () => {
+describe('값 색조', () => {
+  it('유리·불리 모두 어느 면 위에서든 본문 대비 기준을 넘는다', () => {
     const failed = [
-      ['상승', resolve(QUOTE_RISE)],
-      ['하락', resolve(QUOTE_FALL)],
+      ['유리', resolve(TONE_FAVORABLE_TEXT)],
+      ['불리', resolve(TONE_UNFAVORABLE_TEXT)],
     ].flatMap(([label, hex]) =>
       Object.entries(SURFACES)
-        .map(([name, bg]) => [`${label}/${name}`, Number(contrast(hex as string, bg).toFixed(2))] as const)
+        .map(
+          ([name, bg]) =>
+            [`${label}/${name}`, Number(contrast(hex as string, bg).toFixed(2))] as const,
+        )
         .filter(([, cr]) => cr < 4.5),
     )
     expect(failed).toEqual([])
   })
 
-  it('IMPORTANT — 상승 빨강이 「불리」 빨강과 같은 칸이 아니다', () => {
-    // 같은 화면(`IndicatorCard`)에서 `--p-tone-unfavorable-text`가 "불리"를 뜻한다. 두 뜻이
-    // **같은 hex**가 되면 헤더의 상승과 카드의 불리를 눈으로 가를 수단이 하나도 남지 않는다
-    // — 형태로 가르는 길은 ADR-0021이 `▲`/`▼`에 색 주는 것을 막아 이미 닫혀 있다.
-    expect(resolve(QUOTE_RISE)).not.toBe(resolve('{red.300}'))
-  })
-
-  it('IMPORTANT — 하락 파랑이 accent(cobalt)와 같은 칸이 아니다', () => {
-    // 같으면 하락이 링크·주요 액션과 한 색이 되어 "눌리는 것"으로 읽힌다.
-    expect(resolve(QUOTE_FALL).toLowerCase()).not.toBe(cobalt[400].toLowerCase())
+  it('IMPORTANT — 값 색조가 accent(cobalt)와 같은 칸이 아니다', () => {
+    // 같으면 "유리하다"와 "누를 수 있다"가 한 색이 된다.
+    for (const token of [TONE_FAVORABLE_TEXT, TONE_UNFAVORABLE_TEXT]) {
+      expect(resolve(token).toLowerCase()).not.toBe(cobalt[400].toLowerCase())
+    }
   })
 })

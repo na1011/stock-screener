@@ -363,11 +363,12 @@ const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
 /*
  * 등락.
  *
- * 색은 **한국 시장 관례**다 — 상승 빨강·하락 파랑(사용자 결정, ADR-0065). 같은 화면의 지표
- * 카드에서 빨강이 "불리"를 뜻하므로 한 화면에서 빨강이 두 가지를 말하게 된다. 형태로 가르는
- * 길은 닫혀 있다 — ADR-0021이 `▲`/`▼`에 색 주는 것을 금지하고, 그 글리프는 이 화면의 지표
- * 카드가 **반대 극성**으로 이미 쓰고 있다(`direction.ts`의 `▼`는 「낮을수록 유리」다).
- * 남은 구분 수단은 자리(헤더 vs 카드)와 부호뿐이다. 대가는 ADR-0065가 적는다.
+ * IMPORTANT — **지표 카드와 같은 값 색조를 쓴다**(`--p-tone-*`). 상승이 초록, 하락이 빨강이라
+ * 이 화면에서 초록·빨강이 여전히 한 뜻씩만 갖는다. **국내 증권앱 관례(상승 빨강·하락 파랑)를
+ * 쓰지 않기로 한 것이고**, 그러면 같은 화면에서 빨강이 "상승"과 "불리" 둘을 말하게 되는데
+ * 형태로 가를 길이 없다 — ADR-0021이 `▲`/`▼`에 색 주는 것을 금지하고, 그 글리프는 이 화면의
+ * 지표 카드가 **반대 극성**으로 이미 쓴다(`direction.ts`의 `▼`는 「낮을수록 유리」다).
+ * 경위와 대가는 ADR-0065에 있다.
  *
  * 가격보다 한 단계 작다 — 이 카드의 값은 종가이고 등락은 그것을 설명하는 것이다. 그래도
  * 굵기는 같이 준다. 작고 옅게 두면 덧붙인 주석처럼 보여 눈에 걸리지 않는다.
@@ -378,15 +379,15 @@ const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
   line-height: 1.15;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  color: var(--p-quote-flat-text);
+  color: var(--p-tone-neutral-text);
 }
 
 .stock-header__change--rise {
-  color: var(--p-quote-rise-text);
+  color: var(--p-tone-favorable-text);
 }
 
 .stock-header__change--fall {
-  color: var(--p-quote-fall-text);
+  color: var(--p-tone-unfavorable-text);
 }
 
 /* 값이 언제 것인가. 값 바로 밑에 붙어야 그 값에 관한 말로 읽힌다. */

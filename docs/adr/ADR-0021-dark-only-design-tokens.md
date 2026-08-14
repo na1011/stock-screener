@@ -107,9 +107,11 @@ rg -n "paddingY: '0.5rem'" frontend/src/theme/preset.ts
 #    그것을 재는 spec, 그리고 "왜 이 토큰을 안 쓰는지"를 적은 주석까지 세면 검사가 자기 자신을
 #    물고 늘 빨개진다. 실제로 ADR-0065를 쓰면서 그렇게 됐다.
 rg -l -- '--p-tone-' frontend/src/components frontend/src/views
-#    → components/stock/IndicatorCard.vue 와 components/ui/BandMeter.vue 뿐이어야 한다.
+#    → components/stock/IndicatorCard.vue · components/stock/StockHeader.vue ·
+#      components/ui/BandMeter.vue 뿐이어야 한다. 셋 다 종목 상세다.
 #      components/result/ 아래가 나오면 판정 알약과 값 색조가 한 줄에 놓인 것이다.
-#      시세 등락은 이 검사에 걸리지 않는다 — 토큰 이름이 `--p-quote-*`로 갈려 있다(ADR-0065).
+#      StockHeader는 **시세 등락**이다 — 상승이 초록, 하락이 빨강이라 이 화면에서 초록·빨강이
+#      여전히 한 뜻씩만 갖는다(ADR-0065).
 
 # 3-2. 값 색조 매핑의 정본이 하나인가 (부르는 곳만 센다 — 주석의 언급은 세지 않는다)
 rg -ln 'readBand\(|toneForPosition\(|matchBandIndex\(' frontend/src

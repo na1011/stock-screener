@@ -29,13 +29,13 @@ import Aura from '@primeuix/themes/aura'
  * 이름만 램프 안으로 들여왔다 — `--p-surface-850`이 생기고 `.vue`도 그것을 쓸 수 있다.
  */
 /**
- * 시세 등락의 색 참조. `contrast.spec.ts`가 **이 상수를** 읽는다.
+ * 값 색조의 램프 참조. `contrast.spec.ts`가 **이 상수를** 읽는다.
  *
  * IMPORTANT — 검사 쪽에 hex를 옮겨 적으면 프리셋을 바꿔도 검사가 통과한다. `cobalt`·`ink`를
  * import하는 것과 같은 이유다.
  */
-export const QUOTE_RISE = '{red.400}'
-export const QUOTE_FALL = '{sky.400}'
+export const TONE_FAVORABLE_TEXT = '{emerald.300}'
+export const TONE_UNFAVORABLE_TEXT = '{red.300}'
 
 export const ink = {
   0: '#ffffff',
@@ -176,33 +176,21 @@ export const ScreenerPreset = definePreset(Aura, {
          * 그 규칙은 ADR-0021의 "형태로 가른다" 절에 있다 — 판정은 `Tag` 알약, 값 구간은
          * 미터 막대와 숫자 색조다. 그리고 값 색조는 판정 `Tag`가 없는 **종목 상세에만** 둔다.
          *
+         * **시세 등락(전일 대비)도 이 색을 쓴다**(ADR-0065). 상승이 초록이고 하락이 빨강이라
+         * 한 화면에서 초록·빨강이 여전히 한 뜻씩만 갖는다 — 국내 증권앱 관례(상승 빨강)를
+         * 쓰지 않기로 한 경위와 대가는 그 ADR에 있다.
+         *
          * 글자는 300, 막대는 400이다. 다크에서 400은 큰 면적일 때 눈이 아프고, 300은
          * 1~3px 막대로 쓰면 배경에 묻힌다.
          */
         tone: {
-          favorableText: '{emerald.300}',
+          favorableText: TONE_FAVORABLE_TEXT,
           favorableFill: '{emerald.400}',
-          unfavorableText: '{red.300}',
+          unfavorableText: TONE_UNFAVORABLE_TEXT,
           unfavorableFill: '{red.400}',
           neutralText: '{text.color}',
           neutralFill: '{surface.500}',
           track: '{surface.700}',
-        },
-
-        /**
-         * 시세 등락(전일 대비)의 색. **한국 시장 관례라 상승이 빨강이다**(사용자 결정, ADR-0065).
-         *
-         * IMPORTANT — 위 `tone`과 **이름을 나눈 것이 요점이다.** 재사용하면 한 토큰이 두 뜻을
-         * 겸하게 되고, ADR-0021 §검증 3-1(`rg -ln -- '--p-tone-'`)이 재는 채널 분리도 무너진다.
-         *
-         * 이 색이 치르는 대가는 ADR-0065가 적는다 — 같은 화면의 지표 카드에서 빨강이 "불리"를
-         * 뜻하는데 여기서는 "상승"이고, `primary`가 코발트라 파랑도 둘이 된다. 형태로 가를 수
-         * 없다(ADR-0021이 `▲`/`▼`에 색 주는 것을 금지한다). 대비는 `contrast.spec.ts`가 잰다.
-         */
-        quote: {
-          riseText: QUOTE_RISE,
-          fallText: QUOTE_FALL,
-          flatText: '{text.muted.color}',
         },
 
         // 떠 있는 것은 패널보다 밝고 그림자가 깊다. 다크에서 그림자만으로는 층이 안 보인다.
