@@ -22,6 +22,13 @@ defineProps<{
   percentile?: PercentileGuide | null
   description?: string | null
   interpretation?: string | null
+  /**
+   * 값이 없는 이유. 서버가 문구를 소유하므로 화면은 그대로 그린다(ADR-0060).
+   *
+   * IMPORTANT — 이것이 있으면 **해석문 대신** 이것을 보인다. 값이 없는데 "낮을수록 싸다"
+   * 같은 일반 해설을 그리면 사용자는 그 지표가 계산된 것으로 읽는다.
+   */
+  unavailableReason?: string | null
 }>()
 </script>
 
@@ -43,11 +50,29 @@ defineProps<{
     </span>
     <!-- 구간을 아는 지표에만 붙는다. 없으면 지어내지 않는다(ADR-0023). -->
     <BandMeter v-if="reading" class="indicator__meter" :reading="reading" :indicator-name="name" />
-    <p v-if="interpretation" class="indicator__interpretation">{{ interpretation }}</p>
+    <!--
+      사유가 해석문을 **대체한다.** 둘을 함께 그리면 "값이 없다"와 "낮을수록 좋다"가 나란히
+      서서, 값이 계산됐는데 화면이 못 그린 것처럼 읽힌다.
+    -->
+    <p v-if="unavailableReason" class="indicator__unavailable">{{ unavailableReason }}</p>
+    <p v-else-if="interpretation" class="indicator__interpretation">{{ interpretation }}</p>
   </li>
 </template>
 
 <style scoped>
+/*
+ * 사유는 해석문과 다른 색이다 — 같으면 "이 지표는 원래 이런 뜻이다"로 읽힌다.
+ * 경고색을 쓰지 않는 것도 의도다: 결손은 사용자가 고칠 수 있는 것이 아니고,
+ * 지지·저항의 경고 문구와 같은 무게로 보이면 그쪽 경고가 묽어진다.
+ */
+.indicator__unavailable {
+  margin: 0.35rem 0 0;
+  color: var(--text-color-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  font-style: italic;
+}
+
 /*
  * 카드가 캔버스 위 평면 하나였다. 위쪽을 미세하게 들어 올리고 상단 1px에 빛을 걸어야
  * 스물몇 장이 같은 깊이에 눕지 않는다 — 합성값의 정본은 `main.css`다.

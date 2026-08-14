@@ -16,6 +16,7 @@ function value(code: string, detailDefault: boolean): StockIndicatorValue {
     description: '',
     interpretation: '',
     detailDefault,
+    unavailableReason: null,
   }
 }
 

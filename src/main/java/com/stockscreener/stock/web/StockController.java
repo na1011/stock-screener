@@ -3,6 +3,7 @@ package com.stockscreener.stock.web;
 import com.stockscreener.indicator.IndicatorCatalog;
 import com.stockscreener.indicator.IndicatorDataReader;
 import com.stockscreener.indicator.IndicatorDescriptor;
+import com.stockscreener.indicator.UnavailabilityRule;
 import com.stockscreener.screening.query.ScreeningRepository;
 import com.stockscreener.stock.PriceReference;
 import com.stockscreener.stock.StockReader;
@@ -40,11 +41,13 @@ public class StockController {
     private final SupportResistanceAnalyzer analyzer;
     private final AsOfResolver asOfResolver;
     private final StockFinancialsAssembler financialsAssembler;
+    private final List<UnavailabilityRule> unavailabilityRules;
 
     public StockController(StockReader stockReader, IndicatorCatalog indicatorCatalog,
                            ScreeningRepository screeningRepository, IndicatorDataReader priceReader,
                            SupportResistanceAnalyzer analyzer, AsOfResolver asOfResolver,
-                           StockFinancialsAssembler financialsAssembler) {
+                           StockFinancialsAssembler financialsAssembler,
+                           List<UnavailabilityRule> unavailabilityRules) {
         this.stockReader = stockReader;
         this.indicatorCatalog = indicatorCatalog;
         this.screeningRepository = screeningRepository;
@@ -52,6 +55,7 @@ public class StockController {
         this.analyzer = analyzer;
         this.asOfResolver = asOfResolver;
         this.financialsAssembler = financialsAssembler;
+        this.unavailabilityRules = List.copyOf(unavailabilityRules);
     }
 
     /** 한 번에 돌려주는 최대 건수. 검색은 고르기 위한 것이지 훑어보기 위한 것이 아니다. */
@@ -117,12 +121,20 @@ public class StockController {
                         resolved)
                 .getOrDefault(stockId, Map.of());
 
-        // 값이 없는 지표는 행 자체를 내보내지 않는다. null 값을 주면 화면이 "0"이나 "-"로
-        // 그리는데, "계산되지 않았다"와 "값이 0이다"는 다른 사실이다.
+        // 값이 없는 지표는 원칙적으로 행째 빠진다 — null을 주면 화면이 "0"으로 그릴 위험이
+        // 있고 "계산되지 않았다"와 "값이 0이다"는 다른 사실이다.
+        //
+        // 다만 **왜 없는지 말할 수 있는 것**은 사유와 함께 남긴다. 걸러내고 아무 말도 하지
+        // 않는 것이 던지는 것보다 나쁘다(frontend.md). 사유를 모르는 나머지는 그대로 빠지고
+        // 화면의 "값이 없어 표시하지 못한 지표 N개"가 그것을 센다.
+        UnavailabilityRule.Context ruleContext = new UnavailabilityRule.Context(
+                values, stockReader.industryDivisionOf(stockId).orElse(null));
+
         List<StockDetailResponse.IndicatorValue> indicators = new ArrayList<>();
         for (IndicatorDescriptor descriptor : catalog) {
             BigDecimal value = values.get(descriptor.code());
-            if (value == null) {
+            String reason = value == null ? reasonFor(descriptor.code(), ruleContext) : null;
+            if (value == null && reason == null) {
                 continue;
             }
             indicators.add(new StockDetailResponse.IndicatorValue(
@@ -131,7 +143,8 @@ public class StockController {
                     descriptor.description(), descriptor.interpretation(),
                     // 거르지 않고 표시만 한다. 거르면 「내 조건」 구획이 감춘 지표의 값을
                     // 못 받는다 — 서버는 사용자의 초안 조건을 모른다(화면에만 있는 상태다).
-                    descriptor.detailDefault()));
+                    descriptor.detailDefault(),
+                    reason));
         }
 
         StockDetailResponse.Price price = stockReader.priceOn(stockId, resolved)
@@ -151,6 +164,21 @@ public class StockController {
                 // 상대값뿐 아니라 표본 수 행까지 쓰이지 않아 화면에 흔적이 0이다.
                 StockDetailResponse.SectorContext.of(
                         stockReader.sectorPeersOf(stockId).orElse(null)));
+    }
+
+    /**
+     * 이 지표가 이 종목에서 값이 없는 이유. 말할 수 있는 것이 없으면 null이다.
+     *
+     * <p>규칙은 {@code IndicatorUnavailabilityConfig}에 데이터로 선언되어 있다 —
+     * 여기서 지표 코드로 분기하지 않는다.
+     */
+    private String reasonFor(String code, UnavailabilityRule.Context context) {
+        for (UnavailabilityRule rule : unavailabilityRules) {
+            if (rule.code().equals(code) && rule.when().test(context)) {
+                return rule.reason();
+            }
+        }
+        return null;
     }
 
     /**

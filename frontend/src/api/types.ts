@@ -401,7 +401,14 @@ export interface StockPrice {
 export interface StockIndicatorValue {
   code: string
   name: string
-  value: number
+  /**
+   * IMPORTANT — **null일 수 있다.** 값이 없는 지표는 원래 응답에서 빠지지만, **왜 없는지
+   * 말할 수 있는 것**은 `unavailableReason`과 함께 실려 온다(ADR-0060).
+   *
+   * MUST NOT: `?? 0`으로 메우지 않는다. `splitIndicatorValue`가 null을 `—`로 그리고
+   * `readBand`가 null에 구간을 만들지 않는다 — 둘 다 이미 그렇게 되어 있다.
+   */
+  value: number | null
   unit: string | null
   decimalScale: number
   category: IndicatorCategory
@@ -413,6 +420,13 @@ export interface StockIndicatorValue {
    * 보장되지 않아 감출 카드가 그려졌다가 접힌다(ADR-0058).
    */
   detailDefault: boolean
+  /**
+   * 값이 없는 이유. 값이 있거나 이유를 모르면 null이다.
+   *
+   * MUST: **서버 문구를 그대로 쓴다.** 화면이 자기 문장을 만들면 두 곳이 갈리고,
+   * 갈린 쪽은 화면에서 드러나지 않는다.
+   */
+  unavailableReason: string | null
 }
 
 /**

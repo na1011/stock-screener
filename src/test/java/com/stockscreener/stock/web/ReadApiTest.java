@@ -246,6 +246,76 @@ class ReadApiTest {
         assertThat(body).doesNotContain("스냅되지 않는다");
     }
 
+    // ── 값이 없는 이유 ─────────────────────────────────────────────────────
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("IMPORTANT — 적자로 PER이 없으면 카드를 지우지 않고 사유와 함께 남긴다")
+    void carriesTheReasonWhenPerIsMissingBecauseOfLoss() throws Exception {
+        // PER은 없고 EPS_TTM만 음수인 상태 — 실제 적자 종목이 그렇다.
+        jdbcTemplate.update("DELETE FROM indicator_value WHERE stock_id = ? AND indicator_code = 'PER'",
+                stockId);
+        seedIndicator("EPS_TTM", new BigDecimal("-1500"));
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode per = find(objectMapper.readTree(body).get("indicators"), "PER");
+        assertThat(per.get("value").isNull())
+                .as("값은 비어야 한다 — 0으로 메우면 '싼 종목'으로 읽힌다")
+                .isTrue();
+        assertThat(per.get("unavailableReason").asText()).contains("적자");
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("사유를 말할 수 없는 지표는 그대로 빠진다 — 빈 카드를 깔지 않는다")
+    void dropsIndicatorsWhoseAbsenceCannotBeExplained() throws Exception {
+        // PER만 지우면 indicator_value가 통째로 비어 AsOfResolver가 503을 던진다("배치가 아직
+        // 안 돌았다"). 그것은 이 테스트가 재려는 것이 아니므로 다른 지표를 하나 남긴다.
+        seedIndicator("PBR", new BigDecimal("1.2"));
+        jdbcTemplate.update("DELETE FROM indicator_value WHERE stock_id = ? AND indicator_code = 'PER'",
+                stockId);
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // EPS_TTM이 없으니 적자 규칙이 성립하지 않는다. 그러면 PER은 카드로 남지 않는다.
+        assertThat(body).doesNotContain("\"code\":\"PER\"");
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("값이 있으면 사유를 붙이지 않는다 — 사유는 부재의 설명이지 값의 주석이 아니다")
+    void doesNotAttachReasonWhenValueExists() throws Exception {
+        seedIndicator("EPS_TTM", new BigDecimal("-1500"));
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode per = find(objectMapper.readTree(body).get("indicators"), "PER");
+        assertThat(per.get("value").isNull()).isFalse();
+        assertThat(per.get("unavailableReason").isNull()).isTrue();
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("보험·금융서비스의 Altman Z 부재는 결손이 아니라 설계라고 말한다")
+    void explainsAltmanZExclusionForInsurers() throws Exception {
+        jdbcTemplate.update("UPDATE stock SET industry_code = '65121' WHERE id = ?", stockId);
+
+        String body = mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode z = find(objectMapper.readTree(body).get("indicators"), "ALTMAN_Z");
+        assertThat(z.get("value").isNull()).isTrue();
+        assertThat(z.get("unavailableReason").asText()).contains("적용하지 않는");
+    }
+
     // ── 실적 원수치 ────────────────────────────────────────────────────────
 
     @Test
@@ -493,5 +563,17 @@ class ReadApiTest {
             }
         }
         throw new AssertionError(fiscalYear + " " + fiscalPeriod + "을 응답에서 찾지 못했다");
+    }
+
+    private void seedIndicator(String code, BigDecimal value) {
+        jdbcTemplate.update("""
+                INSERT INTO indicator (code, name, category, value_type)
+                VALUES (?, ?, 'FUNDAMENTAL', 'RATIO') ON CONFLICT (code) DO NOTHING
+                """, code, code);
+        jdbcTemplate.update("""
+                INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (trade_date, indicator_code, stock_id) DO UPDATE SET value = EXCLUDED.value
+                """, stockId, AS_OF, code, value);
     }
 }

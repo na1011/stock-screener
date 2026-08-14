@@ -88,6 +88,21 @@ public class AltmanZCalculator implements IndicatorCalculator {
      */
     private static final Set<String> INAPPLICABLE_DIVISIONS = Set.of("65", "66");
 
+    /**
+     * 이 업종에는 <b>값을 내지 않는 것이 옳은가.</b>
+     *
+     * <p>공개해 두는 이유는 <b>화면이 그 사실을 말해야 하기 때문</b>이다(위 javadoc의 요구).
+     * 그 판정을 화면 쪽에서 다시 쓰면 코드 범위가 두 곳이 되고, 여기를 넓혀도 화면은
+     * 옛 범위를 계속 말한다.
+     *
+     * <p>{@code null}(업종 미상)은 <b>제외 대상이 아니다.</b> {@code Set.of(...)}가
+     * {@code contains(null)}에 NPE를 던지므로 그 판단이 여기서 반드시 드러난다 —
+     * 업종을 모르는 종목이 조용히 제외되지 않는다.
+     */
+    public static boolean isInapplicable(String industryDivision) {
+        return industryDivision != null && INAPPLICABLE_DIVISIONS.contains(industryDivision);
+    }
+
     private static final BigDecimal W_WORKING_CAPITAL = new BigDecimal("1.2");
     private static final BigDecimal W_RETAINED_EARNINGS = new BigDecimal("1.4");
     private static final BigDecimal W_EBIT = new BigDecimal("3.3");
@@ -107,10 +122,7 @@ public class AltmanZCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        String division = context.industryDivision();
-        // null 검사를 밖에 두는 것이 의도다. Set.of(...)는 contains(null)에 NPE를 던지므로
-        // 업종 미상을 어떻게 다룰지가 여기서 반드시 드러난다 — 조용히 제외되지 않는다.
-        if (division != null && INAPPLICABLE_DIVISIONS.contains(division)) {
+        if (isInapplicable(context.industryDivision())) {
             // 값을 낼 수 없는 것이 아니라 내면 안 되는 것이다. 보험사의 Z는 계산은 되지만
             // 뜻이 없고, 뜻 없는 값이 필수 조건을 통과하는 것이 이 지표의 가장 큰 위험이다.
             return List.of();

@@ -123,6 +123,10 @@ const conditionRows = computed(() => {
         interpretation: indicator.interpretation,
         parts: splitIndicatorValue(indicator.value, indicator.unit, indicator.decimalScale),
         reading: readingOf(indicator),
+        // MUST: 아래 분류 구획과 **같은 사유**를 보인다. 이 가지가 카드 객체를 따로 만들기
+        // 때문에 빠뜨리기 쉬운데, 빠뜨리면 같은 화면 위아래에 사유 있는 `—`와 없는 `—`가
+        // 함께 뜬다. ADR-0058이 허용한 중복은 같은 내용의 중복이다.
+        unavailableReason: indicator.unavailableReason,
       }
     }
     // 값이 없다. 이름·단위는 카탈로그에서 오고, 카탈로그에도 없으면(폐기된 지표를 조건에
@@ -136,6 +140,9 @@ const conditionRows = computed(() => {
       interpretation: brief.interpretation,
       parts: splitIndicatorValue(null, brief.unit, brief.decimalScale),
       reading: null,
+      // 응답에 아예 없는 지표다. 서버가 사유를 말할 수 있었다면 위 가지로 왔을 것이므로
+      // 여기서는 지어내지 않는다.
+      unavailableReason: null,
     }
   })
 })
@@ -242,6 +249,7 @@ onMounted(() => {
                 :interpretation="row.interpretation"
                 :parts="row.parts"
                 :reading="row.reading"
+                :unavailable-reason="row.unavailableReason"
               />
             </ul>
           </section>
@@ -259,6 +267,7 @@ onMounted(() => {
                 :interpretation="row.indicator.interpretation"
                 :parts="row.parts"
                 :reading="row.reading"
+                :unavailable-reason="row.indicator.unavailableReason"
               />
             </ul>
           </section>
@@ -268,9 +277,15 @@ onMounted(() => {
             추가하면 맨 위 「내 조건」에 값이 나옵니다.
           </p>
 
+          <!--
+            문구가 이번에 바뀌었다. 예전에는 "값이 —라는 뜻이 아닙니다"였는데, 이제 사유를
+            말할 수 있는 지표는 실제로 `—` 카드로 남는다(ADR-0060). 두 상태를 화면이 가른다 —
+            **이유를 아는 것은 카드로, 모르는 것은 이 수로.**
+          -->
           <p v-if="missingCount > 0" class="stock-detail__missing">
-            값이 없어 표시하지 못한 지표가 {{ missingCount }}개 있습니다. 계산에 필요한 이력이나 공시가
-            아직 없다는 뜻이며, 값이 {{ MISSING }}이라는 뜻이 아닙니다.
+            값이 없어 목록에 넣지 못한 지표가 {{ missingCount }}개 있습니다. 계산에 필요한 이력이나
+            공시가 아직 없다는 뜻입니다. 이유를 말할 수 있는 지표는 위에 {{ MISSING }}로 남아
+            그 이유를 함께 보여 줍니다.
           </p>
 
           <!--

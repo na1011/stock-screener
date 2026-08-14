@@ -139,9 +139,25 @@ public record StockDetailResponse(
      * 사실이 화면에 남지 않는다. 구간({@code bands})을 카탈로그에서 잇는 선례와는 방향이
      * 반대다 — 그쪽은 <b>덧붙이는</b> 것이라 실패해도 값과 설명이 남는다.
      */
+    /**
+     * 지표 한 줄.
+     *
+     * <p>IMPORTANT — {@code value}가 <b>null일 수 있다.</b> 값이 없는 지표는 원래 행째로 빠지지만,
+     * <b>왜 없는지를 말할 수 있는 것만</b>은 {@code unavailableReason}과 함께 실어 보낸다.
+     * 걸러내고 아무 말도 하지 않는 것이 던지는 것보다 나쁘기 때문이다
+     * ({@code frontend.md} — <i>"사라졌다는 사실 자체가 드러나지 않아 셋 중 가장 나쁘다"</i>).
+     *
+     * <p>MUST: 화면은 {@code value}가 null이면 {@code —}로 그리고 사유를 함께 보인다.
+     * <b>0으로 메우지 않는다</b> — "계산되지 않았다"와 "값이 0이다"는 다른 사실이다.
+     *
+     * @param unavailableReason 값이 없는 이유. 값이 있거나 이유를 모르면 null이다.
+     *                          <b>문구는 서버가 소유한다</b> — 프론트가 자기 문장을 들면
+     *                          두 곳이 갈리고, 갈린 쪽은 화면에서 드러나지 않는다
+     */
     public record IndicatorValue(
             String code, String name, BigDecimal value, String unit, int decimalScale,
             IndicatorCategory category, Boolean higherIsBetter,
-            String description, String interpretation, boolean detailDefault) {
+            String description, String interpretation, boolean detailDefault,
+            String unavailableReason) {
     }
 }

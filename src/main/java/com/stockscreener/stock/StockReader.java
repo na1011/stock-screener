@@ -191,6 +191,25 @@ public class StockReader {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
+    /**
+     * 업종 중분류. <b>지표가 그 종목에 적용되지 않는다는 것을 판정하는 데 쓴다.</b>
+     *
+     * <p>MUST: {@link #sectorPeersOf}를 이 용도로 쓰지 않는다. 그 쿼리는 <b>업종이 있고 활성
+     * 유니버스에 편입된</b> 종목으로 좁혀 있어, 편입이 풀린 종목에 빈 결과를 준다 — 그러면
+     * "이 지표는 보험·금융서비스에 적용하지 않는다" 같은 사유가 <b>조용히 안 붙는다.</b>
+     * 적용 가능성은 편입 여부와 무관한 사실이다.
+     *
+     * <p>MUST NOT: {@code industry_code}를 받아 자바에서 앞 두 자리를 자르지 않는다.
+     * {@code industry_division}은 <b>DB 생성 컬럼</b>이고(V17) 그 자리를 만든 이유가
+     * "둘이 갈릴 수 없게"다. 자바에서 다시 자르면 유도 지점이 둘이 된다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> industryDivisionOf(long stockId) {
+        List<String> found = jdbcTemplate.queryForList(
+                "SELECT industry_division FROM stock WHERE id = ?", String.class, stockId);
+        return found.isEmpty() ? Optional.empty() : Optional.ofNullable(found.get(0));
+    }
+
     /** 이 종목이 현재 편입되어 있는 유니버스들. 상세 화면이 "어느 지수 종목인가"를 보여준다. */
     @Transactional(readOnly = true)
     public List<StockUniverse> currentUniversesOf(long stockId) {
