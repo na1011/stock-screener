@@ -13,6 +13,7 @@ import com.stockscreener.indicator.calculator.DebtRatioCalculator;
 import com.stockscreener.indicator.calculator.Disparity200Calculator;
 import com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculator;
 import com.stockscreener.indicator.calculator.ExcessReturn52wCalculator;
+import com.stockscreener.indicator.calculator.GrossProfitToAssetsCalculator;
 import com.stockscreener.indicator.calculator.MaAlignScoreCalculator;
 import com.stockscreener.indicator.calculator.MarketCapCalculator;
 import com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculator;
@@ -151,7 +152,9 @@ public class PresetCatalog {
                         + "발생액 비율은 연간 재무만 쓰므로 1년에 한 번 바뀌고, 같은 화면의 "
                         + "총자산이익률은 분기 기준이라 두 값의 기준 시점이 다르다. "
                         + "총자산이익률 조건은 편입 종목의 80%가 통과해 순위를 크게 가르지 않는다 — "
-                        + "적자 기업을 걸러내는 몫이다.",
+                        + "적자 기업을 걸러내는 몫이다. "
+                        + "총이익성은 매출원가 개념이 없는 업종(게임·바이오·금융·통신·인터넷)에서 "
+                        + "값이 아예 없어, 그 종목들은 이 조건에서 점수를 얻지 못한다.",
                 EvaluationMode.SCORING,
                 null,
                 ConditionGroup.and(List.of(
@@ -159,6 +162,9 @@ public class PresetCatalog {
                         weighted(pctl(PerCalculator.CODE), ComparisonOperator.LTE, "0.30", "3"),
                         // 하위 30% — PBR도 낮은 쪽이 좋으므로 <=
                         weighted(pctl(PbrCalculator.CODE), ComparisonOperator.LTE, "0.30", "3"),
+                        // 총이익성. 가치와 상보적인 축이며 업종에 따라 원본이 아예 없다.
+                        weighted(pctl(GrossProfitToAssetsCalculator.CODE),
+                                ComparisonOperator.GTE, "0.50", "2"),
                         // 이익의 질. 음수면 벌어들인 이익보다 들어온 현금이 많다는 뜻이다.
                         weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "2"),
                         // 가치함정 방어: 최소 수익성. 부호 조건이라 변별력은 낮다.
@@ -186,6 +192,13 @@ public class PresetCatalog {
      * (위 {@link #valueKr()}와 같은 이유).
      * <br><b>원문에 없는데 더한 것</b>: 발생액 비율(이익의 질), 부채비율 가드.
      *
+     * <p><b>총이익성의 배점이 3이 아니라 2인 이유는 커버리지가 업종으로 편향되기 때문이다.</b>
+     * 매출원가 개념이 없는 업종(게임·바이오·금융·통신·인터넷)이 편입 종목의 12%이고, 그
+     * 종목들은 이 조건에서 <b>영영 0점</b>이다. 최대 배점을 주면 업종 하나가 순위를 지배한다.
+     * <b>MUST NOT: 이것을 「결과 수를 보고 배점을 낮췄다」로 읽지 않는다</b> — 근거는 결과가
+     * 아니라 <b>어느 업종이 구조적으로 값을 못 갖는가</b>이고, 그것은 조건을 걸기 전에
+     * 알 수 있는 사실이다.
+     *
      * <p>MUST NOT: 15%·25%를 CAN SLIM의 「A(3년 연간 성장)」와 「C(당분기 대 전년동기)」라고
      * 적지 않는다. <b>둘 다 아니다</b> — 우리가 재는 것은 TTM 대 직전 TTM 하나이고, 임계값
      * 둘은 서로 다른 두 기준이 아니라 <b>누적 배점</b>이다.
@@ -200,10 +213,15 @@ public class PresetCatalog {
                         + "직전 4개 분기가 적자였던 종목은 값이 없어 그 조건을 채우지 못한다 — "
                         + "적자가 줄어든 것을 성장으로 읽지 않기 위해서다. "
                         + "그 때문에 편입 종목의 약 30%는 성장 조건에서 점수를 얻지 못한다. "
-                        + "수익성은 자기자본이익률이 아니라 총이익성으로 본다.",
+                        + "수익성은 자기자본이익률이 아니라 총이익성으로 본다 — 다만 게임·바이오·"
+                        + "금융·통신·인터넷처럼 매출원가 개념이 없는 업종은 그 값이 아예 없어 "
+                        + "이 조건에서 점수를 얻지 못한다. 편입 종목의 12%가 그렇다.",
                 EvaluationMode.SCORING,
                 null,
                 ConditionGroup.and(List.of(
+                        // Q — 총이익성. 배점을 최대(3)로 두지 않는 이유는 아래 javadoc에 있다.
+                        weighted(pctl(GrossProfitToAssetsCalculator.CODE),
+                                ComparisonOperator.GTE, "0.70", "2"),
                         // V — PER은 낮은 쪽이 좋으므로 <=. 성장주를 전부 배제하지 않도록 50%로 느슨하게.
                         weighted(pctl(PerCalculator.CODE), ComparisonOperator.LTE, "0.50", "3"),
                         // G — 매출 성장률은 높은 쪽이 좋으므로 >=

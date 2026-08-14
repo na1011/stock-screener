@@ -1,6 +1,7 @@
 package com.stockscreener.indicator;
 
 import com.stockscreener.indicator.calculator.ExcessReturn52wCalculator;
+import com.stockscreener.indicator.calculator.GrossProfitToAssetsCalculator;
 import com.stockscreener.indicator.calculator.MacdVCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginCalculator;
 import com.stockscreener.indicator.calculator.PbrCalculator;
@@ -74,6 +75,12 @@ public class PercentileConfig {
                         "MACD-V 백분위",
                         "편입 종목 중 이 종목의 MACD-V가 어느 위치인지를 0~1로 나타낸 값.",
                         "1에 가까울수록 변동성 대비 상승 모멘텀이 강하다."),
+                new PercentileSpec(
+                        GrossProfitToAssetsCalculator.CODE,
+                        "총이익성 백분위",
+                        "편입 종목 중 이 종목의 총이익성이 어느 위치인지를 0~1로 나타낸 값.",
+                        "1에 가까울수록 같은 자산으로 더 많은 총이익을 만들었다. "
+                                + "매출원가 개념이 없는 업종은 원본 값이 없어 순위에도 들지 않는다."),
                 new PercentileSpec(
                         ExcessReturn52wCalculator.CODE,
                         "52주 초과 수익률 백분위",

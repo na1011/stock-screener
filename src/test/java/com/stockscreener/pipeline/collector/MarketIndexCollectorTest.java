@@ -24,7 +24,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>후자가 이 테스트의 요점이다. 수집이 15일 창으로 도는 이상 "이 실행이 쓴 행 수"로 물으면
  * 대상일이 비어 있어도 창 안 과거 날짜의 재적재가 그 수를 채워 <b>알림이 원리적으로 발화하지
- * 않는다.</b> 그러면 {@code ICHIMOKU_SP_KR}이 매일 전 종목 0건인데 배치는 초록이다.
+ * 않는다.</b> 그러면 지수를 쓰는 지표들({@code EXCESS_RETURN_*}·{@code BETA_104W}·주봉 일목)이
+ * 매일 전 종목 결손인데 배치는 초록이다. <b>지수 소비자가 늘수록 이 침묵이 비싸진다</b> —
+ * 프리셋 셋이 52주 초과수익률의 백분위를 조건으로 쓴다.
  */
 @JpaSliceTest
 class MarketIndexCollectorTest {

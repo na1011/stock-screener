@@ -29,7 +29,7 @@ import java.math.BigDecimal;
         // 구간 없이 숫자만 두는 것은 frontend.md의 "값만 나열하지 않는다"에 걸리므로
         // 감춘다 — ADR-0058이 ICHI_MOD_* 열셋을 감춘 것과 같은 근거다.
         // 실측으로 구분력도 낮다(308종목 중 두 값에 97%가 몰린다).
-        // ICHIMOKU_SP_KR의 하이라이트 지표라 결과 표에는 그대로 나온다.
+        // 조건으로 쓰던 프리셋은 폐기됐지만(ADR-0061) 결과 표와 조건 빌더에는 그대로 나온다.
         detailDefault = false)
 public class IchimokuDivergenceCalculator extends IchimokuIndicator {
 
