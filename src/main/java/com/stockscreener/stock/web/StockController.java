@@ -147,9 +147,15 @@ public class StockController {
                     reason));
         }
 
+        // 미보정 기업 행위를 두 번 쓴다 — 아래 응답의 안내 문구와, 전일 대비를 낼 수 있는지의
+        // 판정이다. 후자가 없으면 계수가 없는 종목에서 등락이 원주가 뺄셈이 되어 007340이
+        // −81.2%로 나온다(ADR-0055).
+        List<LocalDate> unadjustedActions = stockReader.unadjustedActionsOf(stockId);
+
         StockDetailResponse.Price price = stockReader.priceOn(stockId, resolved)
-                .map(p -> new StockDetailResponse.Price(p.tradeDate(), p.open(), p.high(), p.low(),
-                        p.close(), p.volume(), p.tradeValue(), p.listedShares()))
+                .map(p -> StockDetailResponse.Price.of(
+                        p, stockReader.previousPrice(stockId, p.tradeDate()).orElse(null),
+                        unadjustedActions))
                 .orElse(null);
 
         return new StockDetailResponse(resolved,
@@ -158,8 +164,7 @@ public class StockController {
                 // 지표가 왜 비었는지는 여기서만 말할 수 있다(ADR-0055). 억제된 종목은 FILTER
                 // 결과에 아예 없고, SCORING이라도 필수 조건이면 통째로 빠져 조건별 "데이터
                 // 없음"이 이유를 말해 주지 못한다.
-                StockDetailResponse.UnadjustedActions.of(
-                        stockReader.unadjustedActionsOf(stockId)),
+                StockDetailResponse.UnadjustedActions.of(unadjustedActions),
                 // 업종 카드가 왜 없는지도 여기서만 말할 수 있다 — 표본이 임계에 못 미치면
                 // 상대값뿐 아니라 표본 수 행까지 쓰이지 않아 화면에 흔적이 0이다.
                 StockDetailResponse.SectorContext.of(

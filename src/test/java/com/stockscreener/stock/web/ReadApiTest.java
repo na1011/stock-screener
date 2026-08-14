@@ -190,8 +190,33 @@ class ReadApiTest {
                 .andExpect(jsonPath("$.price.close").value(10000))
                 // V9 이전 행에는 없고 소스가 안 주면 NULL이다. 0으로 채우면 사실이 아니다.
                 .andExpect(jsonPath("$.price.tradeValue").doesNotExist())
+                // 전일(9,000) 대비. 셋이 함께 실린다 — 화면이 "무엇에 대한 대비인지"를 잃지 않는다.
+                .andExpect(jsonPath("$.price.previousTradeDate").value(AS_OF.minusDays(1).toString()))
+                .andExpect(jsonPath("$.price.change").value(1000.0))
+                .andExpect(jsonPath("$.price.changeRate").value(11.11))
                 .andExpect(jsonPath("$.indicators[?(@.code=='PER')].value")
                         .value(org.hamcrest.Matchers.hasItem(8.5)));
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("미보정 기업 행위를 지나면 등락을 내지 않는다 — 계수가 없으면 수정종가가 원주가와 같다")
+    void detailWithholdsChangeAcrossUnadjustedAction() throws Exception {
+        // 이 배선이 빠지면 단위 테스트는 전부 통과한 채로 007340이 화면에 -81.2%를 띄운다.
+        // 컨트롤러가 효력일 목록을 실제로 넘기는가만 여기서 잴 수 있다.
+        jdbcTemplate.update("""
+                INSERT INTO corporate_action
+                    (stock_id, effective_date, type, ratio, detection_source, status)
+                VALUES (?, ?, 'UNKNOWN', 5, 'HEURISTIC', 'UNSUPPORTED')
+                """, stockId, AS_OF);
+
+        mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
+                .andExpect(status().isOk())
+                // 시세 자체는 그대로 나간다. 빠지는 것은 등락 셋뿐이다.
+                .andExpect(jsonPath("$.price.close").value(10000))
+                .andExpect(jsonPath("$.price.previousTradeDate").doesNotExist())
+                .andExpect(jsonPath("$.price.change").doesNotExist())
+                .andExpect(jsonPath("$.price.changeRate").doesNotExist());
     }
 
     @Test

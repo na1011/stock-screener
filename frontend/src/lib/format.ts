@@ -99,6 +99,22 @@ export function formatPrice(value: number | null | undefined): string {
 }
 
 /**
+ * 등락폭(원). {@link formatSignedPercent}의 금액 짝이다 — 오른 것에 `+`를 붙인다.
+ *
+ * MUST NOT: 여기서 다시 계산하지 않는다. 서버가 **수정종가의 비**로 낸 값이라(액면분할이
+ * 있으면 원주가 뺄셈과 다르다) 화면이 두 종가를 빼서 만들면 같은 사실이 두 곳에 다른
+ * 숫자로 나온다. {@link formatSignedPercent}의 같은 규율을 그대로 따른다.
+ */
+export function formatSignedPrice(value: number | null | undefined): string {
+  const formatted = formatPrice(value)
+  if (formatted === MISSING) {
+    return MISSING
+  }
+  // `formatPrice`가 음수에 이미 `-`를 붙인다. 양수에만 부호를 더한다.
+  return (value as number) > 0 ? `+${formatted}` : formatted
+}
+
+/**
  * 재무제표 금액을 조·억 단위로 줄여 쓴다.
  *
  * {@link formatPrice}와 나누는 기준은 **자릿수**다. 주가는 만 단위지만 재무는 조 단위라

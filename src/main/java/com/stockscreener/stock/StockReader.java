@@ -101,19 +101,41 @@ public class StockReader {
      */
     @Transactional(readOnly = true)
     public Optional<PriceRow> priceOn(long stockId, LocalDate tradeDate) {
-        List<PriceRow> rows = jdbcTemplate.query("""
-                SELECT trade_date, open, high, low, close, volume, trade_value, listed_shares
-                FROM price_daily WHERE stock_id = ? AND trade_date = ?
-                """, (rs, n) -> new PriceRow(
-                        rs.getObject("trade_date", LocalDate.class),
-                        rs.getBigDecimal("open"), rs.getBigDecimal("high"),
-                        rs.getBigDecimal("low"), rs.getBigDecimal("close"),
-                        rs.getObject("volume", Long.class),
-                        rs.getBigDecimal("trade_value"),
-                        rs.getBigDecimal("listed_shares")),
-                stockId, tradeDate);
-        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+        return jdbcTemplate.query(PRICE_SELECT + " AND trade_date = ?",
+                PRICE_ROW_MAPPER, stockId, tradeDate).stream().findFirst();
     }
+
+    /**
+     * {@code before} <b>직전</b>의 시세 한 행. 전일 대비 등락의 기준이다.
+     *
+     * <p>MUST NOT: {@code PriceCalendar.latestTradeDateOnOrBefore}로 대신하지 않는다.
+     * 그것은 <b>전 종목 공통</b>의 최근 거래일이라 그 종목이 거래정지였던 구간을 넘지 못하고,
+     * 그때 시세가 없는 날짜를 "직전 거래일"로 답한다.
+     *
+     * <p>IMPORTANT — 반환된 날짜가 <b>달력상 전일이라는 보장이 없다.</b> 거래정지 구간은
+     * 봉 자체가 없어(소스가 준 OHLC 0 행을 {@code PriceWriter}가 버린다) 수 주 전이 나올 수
+     * 있다. 그래서 화면이 라벨을 정할 수 있도록 <b>날짜를 함께</b> 내보낸다 — 26일 전 종가와의
+     * 차이를 "전일 대비"라 부르지 않기 위해서다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<PriceRow> previousPrice(long stockId, LocalDate before) {
+        // PK가 (stock_id, trade_date)라 역방향 인덱스 스캔 한 번이다.
+        return jdbcTemplate.query(PRICE_SELECT + " AND trade_date < ? ORDER BY trade_date DESC LIMIT 1",
+                PRICE_ROW_MAPPER, stockId, before).stream().findFirst();
+    }
+
+    private static final String PRICE_SELECT = """
+            SELECT trade_date, open, high, low, close, adj_close, volume, trade_value, listed_shares
+            FROM price_daily WHERE stock_id = ?""";
+
+    private static final RowMapper<PriceRow> PRICE_ROW_MAPPER = (rs, n) -> new PriceRow(
+            rs.getObject("trade_date", LocalDate.class),
+            rs.getBigDecimal("open"), rs.getBigDecimal("high"),
+            rs.getBigDecimal("low"), rs.getBigDecimal("close"),
+            rs.getBigDecimal("adj_close"),
+            rs.getObject("volume", Long.class),
+            rs.getBigDecimal("trade_value"),
+            rs.getBigDecimal("listed_shares"));
 
     /**
      * 실적 원수치 이력. <b>지표가 아니라 소스가 준(또는 우리가 유도한) 재무제표 값이다.</b>
@@ -319,7 +341,6 @@ public class StockReader {
     public record StockUniverse(String code, String name, LocalDate since) {
     }
 
-    /** @param tradeValue·listedShares 소스가 주지 않으면 null이다. */
     /** 재무제표 한 기(期)의 원수치. 기간은 회계연도·분기가 정본이다(위 javadoc). */
     public record FinancialRow(int fiscalYear, String fiscalPeriod, LocalDate publishedAt,
                                int revisionNo, String reportCode,
@@ -332,9 +353,21 @@ public class StockReader {
     public record SectorPeerRow(String industryCode, int finePeers, int broadPeers) {
     }
 
+    /**
+     * 시세 한 행.
+     *
+     * <p>{@code adjClose}는 화면에 <b>내보내지 않는다.</b> 표시가는 언제나 {@code close}다
+     * (사용자가 실제로 지불하는 가격이다). 이것을 함께 읽는 이유는 <b>전일 대비 등락</b>
+     * 하나뿐이다 — 등락은 두 날의 <b>비(比)</b>라 액면분할·무상증자를 지나면 원주가끼리
+     * 빼는 순간 −50%가 사실처럼 나온다. {@code adj_close}는 {@code NOT NULL}이라
+     * (V1 스키마) null 분기가 필요 없다.
+     *
+     * @param tradeValue  소스가 주지 않으면 null이다
+     * @param listedShares V9에서 추가된 컬럼이라 옛 행에는 없다
+     */
     public record PriceRow(LocalDate tradeDate, BigDecimal open, BigDecimal high, BigDecimal low,
-                           BigDecimal close, Long volume, BigDecimal tradeValue,
-                           BigDecimal listedShares) {
+                           BigDecimal close, BigDecimal adjClose, Long volume,
+                           BigDecimal tradeValue, BigDecimal listedShares) {
     }
 
     public record UniverseRow(String code, String name, String marketCode, int memberCount) {

@@ -1,9 +1,12 @@
 package com.stockscreener.stock.web;
 
 import com.stockscreener.indicator.IndicatorCategory;
+import com.stockscreener.indicator.UnadjustedActionGuard;
 import com.stockscreener.stock.StockReader;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -120,11 +123,92 @@ public record StockDetailResponse(
      *
      * <p>{@code tradeValue}는 소스가 주지 않으면 null이고, {@code listedShares}는 V9에서
      * 추가된 컬럼이라 옛 행에는 없다. 응답이 그것을 견뎌야 한다.
+     *
+     * <h2>전일 대비</h2>
+     * <p>{@code previousTradeDate}·{@code change}·{@code changeRate}는 <b>셋이 함께 산다.</b>
+     * 하나라도 낼 수 없으면 셋 다 null이다 — 화면이 부분적으로 그리다 "무엇에 대한 대비인지"를
+     * 잃는 상태를 만들지 않는다.
+     *
+     * <p>MUST NOT: 화면이 이 값을 다시 계산하지 않는다. 아래 {@link #of}가 하는 두 가지를
+     * 화면은 알 수 없다 — <b>수정종가의 비로 잰다</b>는 것과 <b>미보정 기업 행위를 지나면
+     * 아예 내지 않는다</b>는 것이다.
      */
     public record Price(
             LocalDate tradeDate,
             BigDecimal open, BigDecimal high, BigDecimal low, BigDecimal close,
-            Long volume, BigDecimal tradeValue, BigDecimal listedShares) {
+            Long volume, BigDecimal tradeValue, BigDecimal listedShares,
+            LocalDate previousTradeDate, BigDecimal change, BigDecimal changeRate) {
+
+        /**
+         * 나눗셈의 정밀도.
+         *
+         * <p>MUST: {@code BigDecimal.divide}에 이것을 <b>반드시</b> 넘긴다. 없으면 몫이
+         * 유한소수가 아닐 때 {@code ArithmeticException}이 나고(10,000 → 30,000이면 1/3)
+         * 종목 상세가 통째로 500이 된다.
+         */
+        private static final MathContext MC = MathContext.DECIMAL64;
+
+        private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
+
+        /** 등락률(%)의 소수 자리. 화면은 한 자리를 쓰지만 반올림은 서버가 한 번만 한다. */
+        private static final int RATE_SCALE = 2;
+
+        /** 등락폭(원)의 소수 자리. 원주가가 {@code numeric(18,4)}라 비를 곱하면 소수가 남는다. */
+        private static final int CHANGE_SCALE = 2;
+
+        /**
+         * 기준일 시세에 전일 대비를 얹는다.
+         *
+         * <h2>왜 수정종가의 비인가</h2>
+         * <p>원주가끼리 빼면 액면분할·무상증자 당일에 −50%가 <b>사실처럼</b> 나온다. 수정종가의
+         * 비만 그 사건에 영향받지 않으며, 사건이 없는 평상시에는
+         * {@code close_today − close_prev}와 정확히 같은 값이 된다.
+         *
+         * <h2>왜 그것만으로는 모자라는가</h2>
+         * <p>IMPORTANT — <b>계수를 확정하지 못한 사건에는 {@code adj_close}가 만들어지지 않는다.</b>
+         * {@code CorporateActionLedger.findApplicable}이 {@code APPROVED}·{@code APPLIED}만 고르고,
+         * 그 밖의 행은 {@code adj_factor = 1}로 남아 {@code adj_close == close}가 된다
+         * ({@code PriceWriter}). 그러면 위 비가 원주가 뺄셈과 <b>완전히 같아진다</b> — 007340은
+         * 2024-10-08에 종가가 102,100 → 19,200이라 헤더에 −81.2%가 뜬다.
+         *
+         * <p>그래서 두 거래일 사이에 미보정 사건이 있으면 <b>아무 값도 내지 않는다.</b> 경계
+         * 부등호는 {@link UnadjustedActionGuard#spansUnadjustedAction}이 소유한다 — 여기서
+         * 다시 적으면 지표 억제와 화면이 하루씩 어긋날 수 있고, 그 어긋남은 값이 그럴듯해
+         * 드러나지 않는다(ADR-0055).
+         *
+         * @param previous          직전 <b>거래일</b>의 시세. 없으면 null이다
+         * @param unadjustedActions 계수에 반영되지 않은 사건의 효력일
+         */
+        static Price of(StockReader.PriceRow today, StockReader.PriceRow previous,
+                        List<LocalDate> unadjustedActions) {
+            Price base = new Price(today.tradeDate(), today.open(), today.high(), today.low(),
+                    today.close(), today.volume(), today.tradeValue(), today.listedShares(),
+                    null, null, null);
+            if (previous == null
+                    || UnadjustedActionGuard.spansUnadjustedAction(
+                            previous.tradeDate(), today.tradeDate(), unadjustedActions)) {
+                return base;
+            }
+
+            BigDecimal todayAdj = today.adjClose();
+            BigDecimal prevAdj = previous.adjClose();
+            // 분모가 둘이다 — 비의 분모는 오늘, 등락률의 분모는 어제다. 하나만 막으면 남는다.
+            // NOT NULL 컬럼이라 null 분기는 두지 않는다(V1 스키마).
+            if (todayAdj.signum() == 0 || prevAdj.signum() == 0) {
+                return base;
+            }
+
+            BigDecimal rate = todayAdj.divide(prevAdj, MC).subtract(BigDecimal.ONE)
+                    .multiply(HUNDRED).setScale(RATE_SCALE, RoundingMode.HALF_UP);
+            // 중간값을 반올림한 뒤 뒤집지 않는다 — 오차가 두 번 실린다. 곱셈은 한 번뿐이다.
+            BigDecimal ratio = prevAdj.divide(todayAdj, MC);
+            BigDecimal change = today.close().multiply(BigDecimal.ONE.subtract(ratio), MC)
+                    .setScale(CHANGE_SCALE, RoundingMode.HALF_UP);
+
+            return new Price(today.tradeDate(), today.open(), today.high(), today.low(),
+                    today.close(), today.volume(), today.tradeValue(), today.listedShares(),
+                    previous.tradeDate(), change, rate);
+        }
     }
 
     /**

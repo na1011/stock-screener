@@ -8,6 +8,7 @@ import {
   formatNumber,
   formatPrice,
   formatRatioAsPercent,
+  formatSignedPrice,
   parseIsoDate,
   toIsoDate,
 } from './format'
@@ -65,6 +66,24 @@ describe('formatIndicatorValue — 단위는 서버가 준 문자열을 붙인�
 describe('formatPrice — 원주가라 소수점을 보이지 않는다', () => {
   it('천 단위를 끊고 원을 붙인다', () => {
     expect(formatPrice(70100)).toBe('70,100원')
+  })
+})
+
+describe('formatSignedPrice — 오른 것에만 부호를 더한다', () => {
+  it('양수에 +를 붙인다', () => {
+    expect(formatSignedPrice(1200)).toBe('+1,200원')
+  })
+
+  it('음수는 formatPrice가 이미 붙인 -를 그대로 쓴다 — 두 번 붙이지 않는다', () => {
+    expect(formatSignedPrice(-2300)).toBe('-2,300원')
+  })
+
+  it('보합에는 부호가 없다', () => {
+    expect(formatSignedPrice(0)).toBe('0원')
+  })
+
+  it('없으면 —다. 0으로 메우지 않는다', () => {
+    expect(formatSignedPrice(null)).toBe(MISSING)
   })
 })
 

@@ -396,6 +396,20 @@ export interface StockPrice {
   volume: number | null
   tradeValue: number | null
   listedShares: number | null
+  /**
+   * 직전 **거래일**. 달력상 전일이라는 보장이 없다 — 거래정지 구간은 봉 자체가 없어 수 주
+   * 전일 수 있다. 그래서 화면이 「전일 대비」라고 단정하지 않는다(`lib/quote.ts`).
+   */
+  previousTradeDate: IsoDate | null
+  /**
+   * 그날 대비 등락폭(원)과 등락률(%).
+   *
+   * IMPORTANT — **셋이 함께 산다.** 서버가 하나라도 낼 수 없으면 셋 다 null이다. 그리고
+   * 화면이 두 종가를 빼서 다시 만들지 않는다 — 서버는 **수정종가의 비**로 재고, 계수를
+   * 확정하지 못한 기업 행위를 지나면 아예 내지 않는다(ADR-0055). 화면은 둘 다 알 수 없다.
+   */
+  change: number | null
+  changeRate: number | null
 }
 
 export interface StockIndicatorValue {

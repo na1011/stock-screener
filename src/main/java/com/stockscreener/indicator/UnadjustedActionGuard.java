@@ -33,7 +33,7 @@ import java.util.Set;
  * <p>인덱스가 아니라 <b>날짜</b>로 비교하는 것도 계약이다. 007340은 2024-09-25~10-07이
  * 매매거래정지라 봉이 통째로 비는데, 인덱스 산술로 재면 그 공백만큼 창이 어긋난다.
  */
-final class UnadjustedActionGuard {
+public final class UnadjustedActionGuard {
 
     private UnadjustedActionGuard() {
     }
@@ -59,13 +59,32 @@ final class UnadjustedActionGuard {
         for (int i = 0; i < bars.size(); i++) {
             LocalDate tradeDate = bars.get(i).tradeDate();
             LocalDate windowStart = bars.get(Math.max(0, i - lookbackBars + 1)).tradeDate();
-            for (LocalDate effectiveDate : unadjustedActions) {
-                if (effectiveDate.isAfter(windowStart) && !effectiveDate.isAfter(tradeDate)) {
-                    suppressed.add(tradeDate);
-                    break;
-                }
+            if (spansUnadjustedAction(windowStart, tradeDate, unadjustedActions)) {
+                suppressed.add(tradeDate);
             }
         }
         return suppressed;
+    }
+
+    /**
+     * 창 {@code (windowStart, tradeDate]}가 미보정 사건을 삼키는가.
+     *
+     * <p><b>위 §경계의 부등호는 여기 한 곳에만 있다.</b> 같은 질문을 하는 곳이 지표 러너
+     * 밖에도 있다 — 종목 상세의 <b>전일 대비 등락</b>이 창이 두 봉뿐인 같은 판정을 한다
+     * (그쪽은 {@code windowStart}가 직전 거래일이다). 두 곳이 각자 부등호를 적으면 한쪽만
+     * 하루씩 어긋나도 <b>값이 그럴듯해 드러나지 않는다.</b>
+     *
+     * @param windowStart       창의 첫 봉 날짜. 이 날짜와 <b>같은</b> 효력일은 걸리지 않는다
+     * @param tradeDate         산출 일자. 이 날짜와 같은 효력일은 걸린다
+     * @param unadjustedActions 계수에 반영되지 않은 사건의 효력일. 비면 언제나 false다
+     */
+    public static boolean spansUnadjustedAction(LocalDate windowStart, LocalDate tradeDate,
+                                                List<LocalDate> unadjustedActions) {
+        for (LocalDate effectiveDate : unadjustedActions) {
+            if (effectiveDate.isAfter(windowStart) && !effectiveDate.isAfter(tradeDate)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

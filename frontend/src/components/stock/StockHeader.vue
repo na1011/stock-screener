@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { useId } from 'vue'
+import { computed, useId } from 'vue'
 
 import type { IsoDate, StockPrice, StockSummary, UnadjustedActions } from '@/api/types'
 import WatchButton from '@/components/watchlist/WatchButton.vue'
-import { formatCount, formatDate, formatPrice } from '@/lib/format'
+import {
+  formatCount,
+  formatDate,
+  formatPrice,
+  formatSignedPercent,
+  formatSignedPrice,
+} from '@/lib/format'
+import { quoteDescription, quoteTone } from '@/lib/quote'
 
 /**
  * 종목 상세의 요약 카드.
@@ -20,7 +27,7 @@ import { formatCount, formatDate, formatPrice } from '@/lib/format'
  * 뒤로가기(`‹ 스크리너`)는 여기 없다. 그것은 이 종목에 관한 것이 아니라 **페이지 이동**이라
  * 호출부에 남는다.
  */
-defineProps<{
+const props = defineProps<{
   stock: StockSummary
   /** 기준일에 시세 행이 없으면 null. 그때는 OHLC 띠를 통째로 그리지 않는다. */
   price: StockPrice | null
@@ -51,14 +58,37 @@ const UNADJUSTED_PRICE_NOTICE =
  * 정지만 하나 늘린다. 숨은 문단을 두고 직접 잇는다.
  */
 const noticeId = useId()
+
+/**
+ * 등락의 방향. 색만 이것으로 고른다.
+ *
+ * IMPORTANT — 템플릿에서 `changeRate > 0`으로 가르지 않는다. 그러면 `null`(값 없음)과
+ * `0`(보합)이 같은 분기로 떨어진다. 판정의 정본은 `lib/quote.ts`다.
+ */
+const tone = computed(() => quoteTone(props.price?.changeRate))
+
+/**
+ * 무엇에 견준 값인가. 툴팁과 낭독기가 같은 문장을 쓴다.
+ *
+ * 인라인에 「전일 대비」라고 적지 않는 이유는 `quoteDescription`의 주석에 있다 — 거래정지
+ * 구간에서는 직전 거래일이 수 주 전이라 그 문구가 그냥 거짓이 된다.
+ */
+const changeNotice = computed(() =>
+  quoteDescription(props.price?.previousTradeDate, props.price?.change, props.price?.changeRate),
+)
+
+const changeNoticeId = useId()
 </script>
 
 <template>
   <header class="stock-header">
     <!--
-      IMPORTANT — 네 요소가 **grid의 직계 자식**이다. 좌우를 각각 상자로 묶지 않는다.
+      IMPORTANT — **좌우 열을 각각 상자로 묶지 않는다.** 지금 grid의 자식은 이름·티커·
+      가격칸·기준일 넷이고(낭독기 전용 span은 `position: absolute`라 트랙을 만들지 않는다),
+      가격칸만 상자다 — 그 안이 `inline-flex; align-items: baseline`이라 상자의 첫
+      베이스라인이 곧 가격의 베이스라인이고, 그래서 첫 줄 정렬이 유지된다.
 
-      묶으면 두 번째 줄(티커 / 기준일)이 어긋난다. flex의 `align-items: baseline`은 각
+      좌우를 묶으면 두 번째 줄(티커 / 기준일)이 어긋난다. flex의 `align-items: baseline`은 각
       flex 아이템의 **첫** 베이스라인만 맞추기 때문이다 — 그 안의 둘째 줄은 각 상자의
       line-height가 정하고, 28px 이름과 24px 가격은 그 값이 달라 5.5px 어긋났다.
       grid는 **행마다** 베이스라인 그룹을 만들어 두 줄이 각각 맞는다.
@@ -82,16 +112,42 @@ const noticeId = useId()
 
         그래도 툴팁은 **눈**에만 닿는다. 낭독기 몫은 아래 `aria-describedby`가 맡는다.
       -->
-      <span
-        v-tooltip.bottom.focus="UNADJUSTED_PRICE_NOTICE"
-        class="stock-header__price-value tabular"
-        tabindex="0"
-        :aria-describedby="noticeId"
-      >
-        {{ formatPrice(price?.close ?? null) }}
-      </span>
-      <!-- 툴팁은 눈으로만 읽힌다. 같은 문구를 낭독기 몫으로 한 벌 더 둔다. -->
-      <span :id="noticeId" class="stock-header__sr-only">{{ UNADJUSTED_PRICE_NOTICE }}</span>
+      <div class="stock-header__price">
+        <span
+          v-tooltip.bottom.focus="UNADJUSTED_PRICE_NOTICE"
+          class="stock-header__price-value tabular"
+          tabindex="0"
+          :aria-describedby="noticeId"
+        >
+          {{ formatPrice(price?.close ?? null) }}
+        </span>
+        <!-- 툴팁은 눈으로만 읽힌다. 같은 문구를 낭독기 몫으로 한 벌 더 둔다. -->
+        <span :id="noticeId" class="stock-header__sr-only">{{ UNADJUSTED_PRICE_NOTICE }}</span>
+
+        <!--
+          등락. **`tone`이 null이면 통째로 그리지 않는다** — 전일 봉이 없거나 미보정 기업
+          행위를 지나면 서버가 값을 내지 않는데, 그때 `0원 · 0.0%`를 그리면 "보합"이라는
+          없는 사실이 화면에 생긴다.
+
+          인라인에 「전일 대비」를 적지 않는다. 직전 거래일이 수 주 전일 수 있어(거래정지)
+          그 문구가 거짓이 되고, 프론트에는 거래일 달력이 없어 인접 여부를 판정할 수단도
+          없다. 기준 날짜는 아래 툴팁·낭독기 문장이 말한다.
+        -->
+        <span
+          v-if="tone"
+          v-tooltip.bottom.focus="changeNotice"
+          class="stock-header__change tabular"
+          :class="`stock-header__change--${tone.toLowerCase()}`"
+          tabindex="0"
+          :aria-describedby="changeNoticeId"
+        >
+          {{ formatSignedPrice(price?.change ?? null) }} ·
+          {{ formatSignedPercent(price?.changeRate ?? null) }}
+        </span>
+        <span v-if="changeNotice" :id="changeNoticeId" class="stock-header__sr-only">
+          {{ changeNotice }}
+        </span>
+      </div>
       <span class="stock-header__price-label">기준일 {{ formatDate(asOf) }} 종가</span>
     </div>
 
@@ -233,9 +289,28 @@ const noticeId = useId()
   font-size: var(--app-text-xs);
 }
 
-.stock-header__price-value {
+/*
+ * 가격과 등락이 한 칸에 선다.
+ *
+ * IMPORTANT — `grid-area`·`justify-self`가 **이 상자**에 있다. `justify-self`는 그리드
+ * 아이템에만 걸리므로, 값 쪽에 남겨 두면 아래 `@container` 분기의 `justify-self: start`가
+ * 아무 일도 하지 않고 좁은 카드에서 가격만 오른쪽에 남는다.
+ *
+ * `align-items: baseline`이 상자의 첫 베이스라인을 가격의 것으로 만든다 — 그래야 첫 행에서
+ * 종목명과 눈금이 맞는다. 좁아지면 등락이 아래로 내려간다(`flex-wrap`).
+ */
+.stock-header__price {
   grid-area: price;
   justify-self: end;
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 0.5rem;
+  min-width: 0;
+}
+
+.stock-header__price-value {
   font-size: var(--app-text-2xl);
   font-weight: 700;
   line-height: 1.15;
@@ -252,6 +327,43 @@ const noticeId = useId()
   text-decoration: underline dotted var(--p-text-subtle-color);
   text-underline-offset: 0.3em;
   text-decoration-thickness: 1px;
+}
+
+/*
+ * 등락.
+ *
+ * 색은 **한국 시장 관례**다 — 상승 빨강·하락 파랑(사용자 결정, ADR-0065). 같은 화면의 지표
+ * 카드에서 빨강이 "불리"를 뜻하므로 한 화면에서 빨강이 두 가지를 말하게 된다. 형태로 가르는
+ * 길은 닫혀 있다 — ADR-0021이 `▲`/`▼`에 색 주는 것을 금지하고, 그 글리프는 이 화면의 지표
+ * 카드가 **반대 극성**으로 이미 쓰고 있다(`direction.ts`의 `▼`는 「낮을수록 유리」다).
+ * 남은 구분 수단은 자리(헤더 vs 카드)와 부호뿐이다. 대가는 ADR-0065가 적는다.
+ *
+ * 가격보다 작고 가볍다 — 이 카드의 값은 종가이고 등락은 그것을 설명하는 것이다.
+ */
+.stock-header__change {
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--p-quote-flat-text);
+  /* 툴팁이 붙어 있다는 신호. 가격과 같은 관용을 쓴다. */
+  cursor: help;
+  text-decoration: underline dotted var(--p-text-subtle-color);
+  text-underline-offset: 0.3em;
+  text-decoration-thickness: 1px;
+}
+
+.stock-header__change--rise {
+  color: var(--p-quote-rise-text);
+}
+
+.stock-header__change--fall {
+  color: var(--p-quote-fall-text);
+}
+
+.stock-header__change:focus-visible {
+  outline: var(--p-focus-ring-width) var(--p-focus-ring-style) var(--p-focus-ring-color);
+  outline-offset: 2px;
+  border-radius: var(--p-border-radius-sm);
 }
 
 /*
@@ -413,9 +525,13 @@ const noticeId = useId()
   }
 
   /* 쌓이면 우측 정렬이 어색하다 — 전부 왼쪽 기준선에 맞춘다. */
-  .stock-header__price-value,
+  .stock-header__price,
   .stock-header__price-label {
     justify-self: start;
+  }
+
+  .stock-header__price {
+    justify-content: flex-start;
   }
 
   /*
