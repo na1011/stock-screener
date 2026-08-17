@@ -33,7 +33,6 @@ import com.stockscreener.indicator.calculator.RoaCalculator;
 import com.stockscreener.indicator.calculator.RoeCalculator;
 import com.stockscreener.indicator.calculator.FcfMarginCalculator;
 import com.stockscreener.indicator.calculator.FcfYieldCalculator;
-import com.stockscreener.indicator.calculator.NetMarginCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginMin5yCalculator;
 import com.stockscreener.indicator.calculator.ProfitStreakYearsCalculator;
 import com.stockscreener.indicator.calculator.RetainedToMarket4yCalculator;
@@ -125,12 +124,10 @@ public class PresetCatalog {
      * MUST NOT: 그 문서를 프리셋 조건셋의 정본이라 적지 않는다.
      *
      * <p><b>원문 그대로</b>: {@code PROFIT_STREAK_Y >= 7}(0.2·1.2·5.1 — AAII가 요구하는 7개
-     * 회계연도 연속 흑자), {@code ROE >= 15}(0.3·3.1), {@code DEBT_RATIO <= 50}(0.3·3.2 —
-     * D/E 0.5), {@code GROSS_MARGIN >= 40}(1.3), {@code OPERATING_MARGIN >= 15}·
-     * {@code NET_MARGIN >= 10}(1.4·3.4), {@code RETAINED_TO_MARKET_4Y >= 1.0}(3.5의 1달러
-     * 유보 원칙), {@code FCF_MARGIN >= 8}·{@code FCF_YIELD >= 5}(3.3 대체·4.2), {@code PER <= 25}
-     * (4.3), {@code ROA >= 8}(3.6), {@code ACCRUAL_RATIO <= 0}(5.5), {@code SHARES_GROWTH_3Y <= 0}
-     * (2.1).
+     * 회계연도 연속 흑자), {@code DEBT_RATIO <= 50}(0.3·3.2 — D/E 0.5),
+     * {@code GROSS_MARGIN >= 40}(1.3·5.2), {@code RETAINED_TO_MARKET_4Y >= 1.0}(3.5의 1달러
+     * 유보 원칙), {@code FCF_MARGIN >= 8}·{@code FCF_YIELD >= 5}(3.3 대체·4.2),
+     * {@code ACCRUAL_RATIO <= 0}(5.5), {@code SHARES_GROWTH_3Y <= 0}(2.1).
      * <br><b>국내 분포로 재보정한 것</b>: 필수 게이트의 {@code ROE_MIN_3Y >= 10}(원문 15는
      * 19종목/5%)과 {@code DEBT_RATIO <= 100}. {@code ROIC_PRETAX >= 15}는 <b>분포가 아니라
      * 기저 때문에</b> 원문 12에서 옮겼다 — 원문은 세후이고 우리 지표는 세전이라 같은 수를 쓰면
@@ -144,10 +141,21 @@ public class PresetCatalog {
      * 1,261봉 전이 2021-06인데 FY−5 기말은 1,377봉 전이라, 5년으로 두면 주가와 이익잉여금의
      * 기준점이 7개월 어긋난 채 남는다(ADR-0067 §배경).
      * <br><b>원문에 없는데 더한 것</b>: {@code OPM_MIN_5Y}(3.4의 「일관성」을 최솟값으로 옮긴
-     * 형태), {@code PER_SECTOR_PCTL}·{@code OPERATING_MARGIN_SECTOR_PCTL}·
-     * {@code DEBT_RATIO_SECTOR_REL}(AAII 원 구현이 부채비율·영업이익률·순이익률을 <b>업종
-     * 기준값 대비</b>로 판정하는데 이식본이 TradingView의 한계로 절대값으로 바꿔 놓은 것을
-     * 실제 업종 모집단으로 되돌린 것이다).
+     * 형태), {@code PER_SECTOR_PCTL}(AAII 원 구현이 밸류에이션을 <b>업종 기준값 대비</b>로
+     * 판정하는데 이식본이 TradingView의 한계로 절대값으로 바꿔 놓은 것을 실제 업종 모집단으로
+     * 되돌린 것이다).
+     * <br><b>원문에 있는데 뺀 것</b>: {@code ROE >= 15}·{@code ROA >= 8}·
+     * {@code OPERATING_MARGIN >= 15}·{@code NET_MARGIN >= 10}·{@code PER <= 25}.
+     * <b>게이트가 이미 재는 것과 순위상관 ρ ≥ 0.8이면 점수에서 뺀다</b>는 잣대를 전 조건에
+     * 같게 적용한 결과다(ADR-0068) — {@code ROIC_PRETAX}와 ρ가 각각 0.870·0.832·0.836이고,
+     * {@code NET_MARGIN}은 {@code OPERATING_MARGIN}과 0.857이다. 축에 이름을 여섯 개 붙이는
+     * 것은 측정이 아니다.
+     *
+     * <p><b>질은 문이고 가격은 저울이다</b>(ADR-0068). 게이트 여섯은 전부 사업의 질과 규모이고,
+     * 가격은 게이트가 아니라 <b>배점 16 중 7(44%)</b>로 순위를 정한다. AAII Buffett-Hagstrom도
+     * {@code P/FCF ÷ FCF 성장률}이 낮은 순으로 뽑지 문턱으로 쓰지 않는다. <b>가격을 게이트로
+     * 올리는 안은 실측이 무너뜨렸다</b> — 통과 5종목 중 셋이 매출총이익률 9~20%짜리 자동차
+     * 체인이 되고 금융·보험 통과율이 48%로 뛴다(ADR-0068 §배경).
      *
      * <p><b>필수 게이트를 단일 시점 ROE가 아니라 3년 연속 ROE에 두는 것이 이 프리셋의 성격을
      * 정한다.</b> 문서 §11이 <i>"가장 중요한 건 3.1의 ROE 시계열 확인 — TTM 단일 시점만 보므로
@@ -191,8 +199,15 @@ public class PresetCatalog {
                         + "한 해 일회성 이익으로 수익성이 튄 종목은 여기서 빠진다. "
                         + "부채 조건을 수익성과 반드시 함께 거는 것이 이 방식의 요구다 — "
                         + "빚을 늘리면 자기자본이익률이 올라가므로 둘을 나누면 뜻이 사라진다. "
-                        + "가격 조건은 마지막에만 온다. 배점의 절반 가까이가 사업의 질에 걸려 있고 "
-                        + "저평가 조건은 낮은 배점으로 뒤에 붙는다. "
+                        + "사업에 묶인 자본이 벌어들이는 수익률도 필수다 — 자기자본이익률과 달리 "
+                        + "빚을 늘려 부풀릴 수 없어, 수익성이 사업에서 온 것인지 레버리지에서 온 "
+                        + "것인지를 가른다. 이 조건 하나가 매출총이익률 중앙값을 45%에서 50%로 "
+                        + "올린다. "
+                        + "가격은 걸러내는 조건이 아니라 순위를 정하는 몫이다 — 배점의 44%가 "
+                        + "가격에 걸려 있다. 좋은 회사를 비싸게 사지 않는다는 뜻이지만, "
+                        + "통과 목록 자체는 시장보다 비싼 편이다. 좋은 회사는 비싸게 거래되기 "
+                        + "때문이며, 이 화면은 '살 회사'가 아니라 '살 만한지 볼 회사'를 "
+                        + "순서대로 세운 것이다. "
                         + "필요한 이력이 길어 편입 종목의 4분의 1이 판정 자체를 받지 못한다 — "
                         + "7개 회계연도가 연속으로 있어야 하기 때문이며, 상장한 지 얼마 안 된 종목이 "
                         + "이력이 짧다는 이유로 유리해지지 않게 한 결과다. "
@@ -216,6 +231,13 @@ public class PresetCatalog {
                         + "숫자와 직접 견주면 안 된다. "
                         + "다년 지표와 매출총이익률·잉여현금흐름은 연간 기준이라 분기 기준 지표와 "
                         + "기준 시점이 다르다. "
+                        + "잉여현금흐름 수익률은 한 해의 설비투자에 흔들린다 — 큰 투자를 한 해에는 "
+                        + "좋은 회사도 비싸 보인다. 다섯 해 평균으로 재는 편이 낫지만 그만큼의 "
+                        + "이력이 있는 종목이 셋 중 둘뿐이라 만들지 않았다. "
+                        + "종목마다 가장 최근 회계연도가 달라, 새 연간 재무가 들어오는 3~4월에 "
+                        + "순위가 크게 바뀐다. "
+                        + "업종 비교 조건은 같은 업종 종목이 5개에 못 미치면 값이 없다 — "
+                        + "그 종목은 사업 성적이 아니라 표본 크기 때문에 배점을 잃는다. "
                         + "사업을 이해할 수 있는가, 경영진이 정직한가, 해자가 실재하는가 같은 "
                         + "이 방식의 앞선 기준들은 스크리너 밖에 있다.",
                 EvaluationMode.SCORING,
@@ -237,43 +259,39 @@ public class PresetCatalog {
                         // §7 유동성. 대형 지향이라 린치 고속성장주의 50억을 승계하지 않는다.
                         required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
 
-                        // ── 점수: 사업의 질 ──
-                        // 0.3·3.1 원문 임계. 필수에서 내린 대신 배점을 가장 높게 둔다.
-                        weighted(RoeCalculator.CODE, ComparisonOperator.GTE, "15", "3"),
-                        // 0.3·3.2 원문의 D/E 0.5. 게이트(100)보다 조인 값이다.
-                        weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "50", "2"),
+                        // ── 점수: 가격 — 배점 16 중 7이다 ──
+                        // 4.2 안전마진. P/FCF의 역수라 같은 조건이며 음수에서도 뜻이 산다.
+                        // 99/347(29%) 통과, 커버리지 323.
+                        weighted(FcfYieldCalculator.CODE, ComparisonOperator.GTE, "5", "3"),
+                        // 4.3의 업종 상대판. AAII 원 구현이 요구한 비교이고, 절대 PER과 달리
+                        // 국면이 바뀌어도 뜻이 유지된다. 115/347(33%), 커버리지 215.
+                        weighted(sectorPctl(PerCalculator.CODE),
+                                ComparisonOperator.LTE, "0.50", "2"),
+                        // 3.5 1달러 유보 → 1달러 시가. 원문 그대로의 기준이 1.0이다.
+                        // 144/347(41%), 커버리지 224 — 이 프리셋에서 가장 낮다.
+                        weighted(RetainedToMarket4yCalculator.CODE,
+                                ComparisonOperator.GTE, "1.0", "2"),
+
+                        // ── 점수: 이익의 질 ──
+                        // 5.5 회계 장난 경계 — 순이익과 영업현금흐름의 괴리. 217/347(63%).
+                        weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "2"),
+                        // 3.3의 대용·5.4. 오너 어닝이 아니다. 100/347(29%).
+                        // FCF_YIELD와 ρ 0.737이라 배점을 낮게 둔다.
+                        weighted(FcfMarginCalculator.CODE, ComparisonOperator.GTE, "8", "1"),
+
+                        // ── 점수: 해자 강도 — 게이트 위에서 더 재는 것만 ──
+                        // 1.3·5.2 코모디티 배제. ROIC 게이트와 ρ 0.332로 낮아 축이 따로 선다.
+                        // 67/347(19%), 커버리지 286.
                         weighted(GrossMarginCalculator.CODE, ComparisonOperator.GTE, "40", "2"),
-                        weighted(OperatingMarginCalculator.CODE, ComparisonOperator.GTE, "15", "2"),
-                        weighted(NetMarginCalculator.CODE, ComparisonOperator.GTE, "10", "2"),
-                        // 3.4 「일관성」. 나쁜 해에도 얼마나 남았는가를 본다.
+                        // 3.4 「일관성」. 나쁜 해에도 얼마나 남았는가. 58/347(17%).
                         weighted(OperatingMarginMin5yCalculator.CODE,
                                 ComparisonOperator.GTE, "8", "2"),
 
-                        // ── 점수: 현금과 자본배분 ──
-                        // 3.3의 대용·5.4. 오너 어닝이 아니다.
-                        weighted(FcfMarginCalculator.CODE, ComparisonOperator.GTE, "8", "2"),
-                        // 3.5 1달러 유보 → 1달러 시가. 원문 그대로의 기준이 1.0이다.
-                        weighted(RetainedToMarket4yCalculator.CODE,
-                                ComparisonOperator.GTE, "1.0", "2"),
-                        // 5.5 회계 장난 경계 — 순이익과 영업현금흐름의 괴리.
-                        weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
-                        // 2.1 자본배분. 소각만 잡고 자사주 취득은 못 잡는다.
+                        // ── 점수: 자본배분과 부채 여유 ──
+                        // 2.1 자본배분. 소각만 잡고 자사주 취득은 못 잡는다. 201/347(58%).
                         weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
-
-                        // ── 점수: 가격 — 마지막에 온다 ──
-                        // 4.2 안전마진. P/FCF의 역수라 같은 조건이며 음수에서도 뜻이 산다.
-                        weighted(FcfYieldCalculator.CODE, ComparisonOperator.GTE, "5", "2"),
-                        // 4.3 보조 밸류에이션. 버핏은 PER을 절대 기준으로 쓰지 않는다.
-                        weighted(PerCalculator.CODE, ComparisonOperator.LTE, "25", "1"),
-                        weighted(RoaCalculator.CODE, ComparisonOperator.GTE, "8", "1"),
-
-                        // ── 점수: 업종 상대 — AAII 원 구현이 요구한 비교다 ──
-                        weighted(sectorPctl(PerCalculator.CODE),
-                                ComparisonOperator.LTE, "0.50", "1"),
-                        weighted(sectorPctl(OperatingMarginCalculator.CODE),
-                                ComparisonOperator.GTE, "0.50", "1"),
-                        weighted(sectorRel(DebtRatioCalculator.CODE),
-                                ComparisonOperator.LTE, "1.0", "1"))));
+                        // 0.3·3.2 원문의 D/E 0.5. 게이트(100)보다 조인 값이다. 124/347(36%).
+                        weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "50", "1"))));
     }
 
     @Bean
@@ -427,8 +445,9 @@ public class PresetCatalog {
                         + "짧아서 빠지는 종목이 생기기 때문이다. "
                         + "옮기지 못한 조건이 많다. 배당 관련 셋(배당수익률·배당성향·연속 배당)은 "
                         + "배당 데이터가 없어 통째로 빠졌고, 순부채/EBITDA는 감가상각비와 "
-                        + "총차입금을 소스가 주지 않아 빠졌으며, 잉여현금흐름은 자본적지출이 "
-                        + "아직 적재돼 있지 않아 빠졌다 — 소스는 준다. "
+                        + "총차입금을 소스가 주지 않아 빠졌다. 잉여현금흐름은 계산할 수 있게 "
+                        + "됐지만 이 프리셋의 조건에는 넣지 않았다 — 린치가 요구한 것은 "
+                        + "현금흐름의 존재이고 그 자리는 발생액 비율이 지킨다. "
                         + "재고와 매출의 증가 속도 비교는 재고자산이 적재돼 있지 않다. "
                         + "세전이익률은 영업이익률로 대신했다 — 다른 값이다. "
                         + "금융·부동산 업종을 제외하지 못한다. 다만 저평가와 부채를 같은 업종 "
@@ -517,8 +536,8 @@ public class PresetCatalog {
                         + "시도의 재현율이 5%에 그쳤다 — 이 조건을 근거로 수익률을 기대하지 않는다. "
                         + "PEG 값이 없는 종목은 결과에서 빠진다. 적자이거나 이익이 줄고 있다는 뜻이다. "
                         + "옮기지 못한 조건이 있다. 배당 관련 셋은 배당 데이터가 없어 빠졌고, "
-                        + "순부채/EBITDA는 감가상각비와 총차입금을 소스가 주지 않아 빠졌고, "
-                        + "잉여현금흐름은 자본적지출이 아직 적재돼 있지 않아 빠졌다 — 소스는 준다. "
+                        + "순부채/EBITDA는 감가상각비와 총차입금을 소스가 주지 않아 빠졌다. "
+                        + "잉여현금흐름은 계산할 수 있게 됐지만 이 프리셋의 조건에는 넣지 않았다. "
                         + "세전이익률은 이 프리셋에 넣지 않았다. "
                         + "금융·부동산 업종을 제외하지 못한다 — 저평가를 같은 업종 안에서 견주는 "
                         + "것으로 일부만 대신한다. "
