@@ -67,15 +67,38 @@ public final class ExcessReturn {
         }
         double indexNow = now.doubleValue();
         double indexPast = past.getValue().doubleValue();
-        double priceNow = bars.get(i).adjClose().doubleValue();
-        double pricePast = bars.get(back).adjClose().doubleValue();
-        if (indexPast == 0 || pricePast == 0) {
+        if (indexPast == 0) {
             return OptionalDouble.empty();
         }
-        // MUST: 수정종가끼리 견준다. 원주가를 쓰면 5:1 분할이 −80%가 되고, 그 값이
-        // score_d5에 −ext_base로 붙는다 — 에러 없이.
-        double stockReturn = (priceNow / pricePast - 1) * 100.0;
+        OptionalDouble stockReturn = stockReturnAt(bars, i, lookback);
+        if (stockReturn.isEmpty()) {
+            return OptionalDouble.empty();
+        }
         double indexReturn = (indexNow / indexPast - 1) * 100.0;
-        return OptionalDouble.of(stockReturn - indexReturn);
+        return OptionalDouble.of(stockReturn.getAsDouble() - indexReturn);
+    }
+
+    /**
+     * 종목 자체의 {@code lookback}거래일 수익률(%). 지수를 보지 않는다.
+     *
+     * <p>{@link #at}가 초과 수익률을 만들 때 쓰는 <b>종목 쪽 항과 같은 것</b>이다. 지수 대비가
+     * 아니라 절대 수익률이 필요한 소비자({@code RETURN_52W})가 이것을 부르고, 초과 수익률은
+     * 여기에서 지수 항을 뺀다.
+     *
+     * <p>MUST: 수정종가끼리 견준다. 원주가를 쓰면 5:1 분할이 −80%가 되고, 그 값이
+     * score_d5에 −ext_base로 붙는다 — 에러 없이. <b>이 규칙이 한 곳에만 있어야 하는 이유가
+     * 그것이며</b>, 위 MUST NOT이 이 메서드에도 그대로 걸린다.
+     */
+    public static OptionalDouble stockReturnAt(List<PriceBar> bars, int i, int lookback) {
+        int back = i - lookback;
+        if (back < 0) {
+            return OptionalDouble.empty();
+        }
+        double priceNow = bars.get(i).adjClose().doubleValue();
+        double pricePast = bars.get(back).adjClose().doubleValue();
+        if (pricePast == 0) {
+            return OptionalDouble.empty();
+        }
+        return OptionalDouble.of((priceNow / pricePast - 1) * 100.0);
     }
 }

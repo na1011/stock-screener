@@ -5,6 +5,7 @@ import com.stockscreener.indicator.calculator.GrossProfitToAssetsCalculator;
 import com.stockscreener.indicator.calculator.MacdVCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginCalculator;
 import com.stockscreener.indicator.calculator.PbrCalculator;
+import com.stockscreener.indicator.calculator.PegCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
 import com.stockscreener.indicator.calculator.RevenueGrowthCalculator;
 import com.stockscreener.indicator.calculator.RoeCalculator;
@@ -43,6 +44,14 @@ public class PercentileConfig {
                         "코스피200·코스닥150 편입 종목 중 이 종목의 PER이 어느 위치인지를 0~1로 나타낸 값.",
                         "0에 가까울수록 PER이 낮다(이익 대비 주가가 싸다). "
                                 + "'저PER 하위 20%' 같은 조건은 0.2 이하로 표현한다."),
+                new PercentileSpec(
+                        PegCalculator.CODE,
+                        "PEG 백분위",
+                        "편입 종목 중 이 종목의 PEG가 어느 위치인지를 0~1로 나타낸 값.",
+                        "0에 가까울수록 성장 속도에 견줘 주가가 싸다. 절대 PEG 임계는 이익 "
+                                + "사이클의 위치에 따라 재는 자리가 달라지는데 이 순위는 "
+                                + "그것을 따라간다 — 이익이 줄고 있는 종목은 원본 값이 없어 "
+                                + "순위에도 들지 않는다."),
                 new PercentileSpec(
                         PbrCalculator.CODE,
                         "PBR 백분위",
