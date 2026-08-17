@@ -304,18 +304,31 @@ public class PresetCatalog {
     /**
      * 프리셋별 <b>추가 컬럼</b>. 조건에 쓰이지 않지만 그 화면에서만 함께 보여야 하는 지표다.
      *
-     * <p><b>지금은 쓰는 프리셋이 없다.</b> 유일한 소비자였던 주봉 일목 프리셋을 폐기했기
-     * 때문이며(ADR-0061), 확장점과 호출부({@code ScreeningResponseAssembler})는 남긴다 —
-     * FILTER 프리셋에 서버 정렬이 없는 한(ADR-0016) 「걸러진 종목 사이의 우열」을 보여 줄
-     * 다른 수단이 없다.
-     *
      * <p>MUST NOT: {@code defaultColumn}으로 띄우지 않는다. 그것은 <b>전역</b>이라 모든 화면이
      * 시끄러워진다.
      *
      * <p>MUST NOT: 더미 조건({@code ATR_PCT_14 >= -999})으로 대신하지 않는다. 조건 내역 화면에
      * 아무 뜻 없는 줄이 남고, 사용자는 그것을 걸러내는 기준으로 읽는다.
+     *
+     * <p>MUST NOT: 이미 {@code defaultColumn = true}인 지표를 여기 넣지 않는다. <b>아무 일도
+     * 일어나지 않는다</b> — {@code ScreeningResponseAssembler}가 이 목록을 합친 <b>직후에</b>
+     * 기본 컬럼을 넣으므로 결과가 같다. {@code PER}·{@code PBR}·{@code ROE}·{@code DEBT_RATIO}
+     * 넷이 그렇고, 넣어도 어떤 테스트도 깨지지 않아 <b>했다고 믿게 된다.</b>
      */
     public static List<String> extraColumns(String presetCode) {
+        if (BUFFETT_QUALITY_KR.equals(presetCode)) {
+            // 버핏 프리셋의 가격 조건 셋은 각각 다른 것에 견준다 — 잉여현금흐름 수익률은
+            // 절대 기준, PER 업종 백분위는 같은 업종 안, 유보 대비 시가는 자기 이익잉여금이다.
+            // 「시장 전체에 견줘 싼가」는 어느 조건도 묻지 않으며, 그것이 설계다(ADR-0068) —
+            // 버핏의 안전마진은 시장 평균이 아니라 내재가치 대비이고, 유니버스 백분위를
+            // 조건으로 넣으면 업종별 밸류에이션 수준이라는 혼란 요인이 도로 들어온다.
+            //
+            // 그러나 「묻지 않는 것」과 「보여 주지 않는 것」은 다르다. 사용자가 통과 종목을
+            // 시장과 나란히 놓고 볼 수 없으면, 이 화면이 우량주를 뽑는 것인지 싼 주식을 뽑는
+            // 것인지 화면만 봐서는 갈리지 않는다. 그래서 컬럼으로만 띄운다 — 순위에 영향을
+            // 주지 않고 결과에서 아무도 빼지 않는다.
+            return List.of(pctl(PerCalculator.CODE), pctl(PbrCalculator.CODE));
+        }
         return List.of();
     }
 
