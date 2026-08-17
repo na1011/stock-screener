@@ -351,6 +351,22 @@ class BuffettIndicatorsTest {
         }
 
         @Test
+        @DisplayName("IMPORTANT — 자본적지출이 음수로 와도 유출로 읽는다. 부호 규약이 회사마다 갈린다")
+        void treatsNegativeCapexAsOutflow() {
+            List<FinancialFigures> annual = List.of(
+                    FinancialFiguresFixture.annual(yearEnd(2025))
+                            .operatingCashFlow(new BigDecimal("300"))
+                            .capex(new BigDecimal("-100"))
+                            .revenue(new BigDecimal("1000"))
+                            .build());
+
+            assertThat(margin.calculate(annualContext(annual)).get(0).value())
+                    .as("부호를 그대로 빼면 40%가 나온다 — 뺄셈이 덧셈이 되어 "
+                            + "잉여현금흐름이 영업현금흐름보다 커지는데 값이 그럴듯해 안 드러난다")
+                    .isEqualByComparingTo("20");
+        }
+
+        @Test
         @DisplayName("IMPORTANT — 자본적지출이 없으면 값을 내지 않는다. 0으로 보면 자본집약 기업이 우량해 보인다")
         void emitsNothingWhenCapexMissing() {
             List<FinancialFigures> annual = List.of(
