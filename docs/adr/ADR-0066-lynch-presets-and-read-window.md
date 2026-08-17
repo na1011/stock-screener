@@ -36,9 +36,12 @@ applies_to:
 ## 검증
 
 ```bash
-rg -n "자사주 매입" src/main/java/com/stockscreener/
+rg -n "자사주 매입" src/main/java/com/stockscreener/indicator/calculator/SharesGrowth3yCalculator.java
 ```
-`SHARES_GROWTH_3Y` 근처에서 반환되면 위 MUST NOT을 어긴 것이다.
+아무것도 반환하지 않아야 한다. **대상을 그 파일 하나로 좁힌 이유**는 프리셋 설명이 "자사주 매입을
+보지 못한다"라고 **부정문으로** 같은 낱말을 쓰기 때문이다 — 저장소 전체를 훑으면 그 부정문까지
+발견으로 잡혀 펜스가 매번 시끄럽고, 시끄러운 펜스는 곧 무시된다. 지표의 뜻을 말하는 자리는
+`@IndicatorMeta` 하나이므로 거기만 본다.
 
 ```bash
 rg -n "financialYears\(" src/main/java/com/stockscreener/indicator/calculator/EpsCagr5yCalculator.java \
