@@ -11,6 +11,7 @@ import com.stockscreener.indicator.calculator.Beta104wCalculator;
 import com.stockscreener.indicator.calculator.Cmf21Calculator;
 import com.stockscreener.indicator.calculator.DebtRatioCalculator;
 import com.stockscreener.indicator.calculator.Disparity200Calculator;
+import com.stockscreener.indicator.calculator.EpsCagr5yCalculator;
 import com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculator;
 import com.stockscreener.indicator.calculator.ExcessReturn52wCalculator;
 import com.stockscreener.indicator.calculator.GrossProfitToAssetsCalculator;
@@ -21,10 +22,14 @@ import com.stockscreener.indicator.calculator.OperatingMarginCalculator;
 import com.stockscreener.indicator.calculator.PbrCalculator;
 import com.stockscreener.indicator.calculator.PctFrom52wHighCalculator;
 import com.stockscreener.indicator.calculator.PctFrom52wLowCalculator;
+import com.stockscreener.indicator.calculator.PegCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.indicator.calculator.PerMedian5yCalculator;
 import com.stockscreener.indicator.calculator.ProfitableQuarters4Calculator;
+import com.stockscreener.indicator.calculator.Return52wCalculator;
 import com.stockscreener.indicator.calculator.RevenueGrowthCalculator;
 import com.stockscreener.indicator.calculator.RoaCalculator;
+import com.stockscreener.indicator.calculator.RoeCalculator;
 import com.stockscreener.indicator.calculator.Rsi2Calculator;
 import com.stockscreener.indicator.calculator.SharesGrowth3yCalculator;
 import com.stockscreener.indicator.calculator.Sma150Calculator;
@@ -48,7 +53,12 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 사전 정의 전략 선언. spec §3이 요구하는 "Value, QVG형 전략"이 여기 있다.
+ * 사전 정의 전략 선언. spec §9가 요구하는 "최소 1개 이상의 사전정의 전략 프리셋"이 여기 있다.
+ *
+ * <p>spec §3은 <b>"(예: Value, QVG형 전략)"</b>이라 적는다 — 괄호가 말하듯 예시이고 목록이
+ * 아니다. {@code QVG_KR}은 2026-08-17 사용자 결정으로 폐기했고 그 자리를 린치 프리셋 둘이
+ * 받는다(ADR-0066). <b>spec에 이름이 적힌 둘 중 하나가 사라지는 변경이라 승인을 받았다</b> —
+ * CLAUDE.md의 기획 정본 조항이 그것을 요구한다.
  *
  * <p>{@code @Component} 하나씩이 아니라 {@code @Configuration}의 리스트 빈으로 두는 이유는
  * 프리셋이 <b>행위가 아니라 데이터</b>이기 때문이다({@code IndicatorCalculator}와 대비되고
@@ -95,8 +105,9 @@ public class PresetCatalog {
 
     @Bean
     public List<ScreenPreset> screenPresets() {
-        return List.of(valueKr(), qvgKr(), momentumKr(), swingTrendKr(),
-                stage2BreakoutKr(), pullbackUptrendKr(), lowvolQualityKr());
+        return List.of(valueKr(), lynchFastGrowerKr(), lynchStalwartKr(),
+                momentumKr(), swingTrendKr(), stage2BreakoutKr(),
+                pullbackUptrendKr(), lowvolQualityKr());
     }
 
     /**
@@ -180,66 +191,188 @@ public class PresetCatalog {
                                 .withWeight(new BigDecimal("1")))));
     }
 
-    // ── 2. 퀄리티·밸류·성장 ───────────────────────────────────────────────
+    // ── 2. 린치 고속성장주 ────────────────────────────────────────────────
 
-    public static final String QVG_KR = "QVG_KR";
+    public static final String LYNCH_FAST_GROWER_KR = "LYNCH_FAST_GROWER_KR";
 
     /**
-     * 퀄리티·밸류·성장 — 성장을 합리적 가격에 산다는 GARP와 CAN SLIM의 이익 성장 기준.
+     * 린치 고속성장주 — {@code docs/external/피터린치-방법론.md} §7 복사용 스크린의 이식.
      *
-     * <p><b>원문 그대로</b>: 이익 성장 임계 15%·25%.
-     * <br><b>국내 사정으로 바꾼 것</b>: 수익성 축이 {@code ROE_PCTL}이 아니라 총이익성이다
-     * (위 {@link #valueKr()}와 같은 이유).
-     * <br><b>원문에 없는데 더한 것</b>: 발생액 비율(이익의 질), 부채비율 가드.
+     * <p>원저는 Peter Lynch, <i>One Up on Wall Street</i>(Ch.10·13·15)와 AAII Lynch Screen이다.
+     * 저장소의 문서는 그것을 <b>TradingView 문법으로 옮긴 이식본</b>이며 조건의 출처로만 쓴다
+     * (ADR-0066). MUST NOT: 그 문서를 프리셋 조건셋의 정본이라 적지 않는다.
      *
-     * <p><b>총이익성의 배점이 3이 아니라 2인 이유는 커버리지가 업종으로 편향되기 때문이다.</b>
-     * 실측으로 편입 350종목 중 288종목(82%)에만 값이 있고, 없는 37종목 중 34개가
-     * 게임·바이오·금융·통신·인터넷이다. 그 종목들은 이 조건에서 <b>영영 0점</b>이다. 최대 배점을 주면 업종 하나가 순위를 지배한다.
-     * <b>MUST NOT: 이것을 「결과 수를 보고 배점을 낮췄다」로 읽지 않는다</b> — 근거는 결과가
-     * 아니라 <b>어느 업종이 구조적으로 값을 못 갖는가</b>이고, 그것은 조건을 걸기 전에
-     * 알 수 있는 사실이다.
+     * <p><b>원문 그대로</b>: {@code PEG <= 1.0}(3.3 — 린치의 판별 도구이자 그가 "마지막까지
+     * 고정"이라 한 둘 중 하나), {@code PER <= 20}(3.2), {@code REVENUE_GROWTH > 15}(§7),
+     * {@code RETURN_52W < 100}(5.1 뜨거운 종목 배제), {@code SHARES_GROWTH_3Y <= 0}(4.5),
+     * {@code EPS_CAGR_5Y 0~50}(3.17 지속 불가능한 성장 배제).
+     * <br><b>국내 분포로 재보정한 것</b>: {@code DEBT_RATIO <= 80}. 원문 D/E 0.33은 국내에서
+     * 23%만 통과해 제조업 중심 구조에 과하고, 0.8이 절반을 가른다(174/346). 유동성 하한은
+     * {@code SWING_TREND_KR}의 100억이 아니라 <b>50억</b>이다 — 아래 참조.
+     * <br><b>원문보다 약하게 옮긴 것</b>: {@code EPS_CAGR_5Y}를 필수가 아니라 점수에 둔다.
+     * 원문은 「마지막까지 고정」이라 하지만 값이 있는 종목이 170/347뿐이라, 필수로 걸면
+     * <b>성장이 과했기 때문이 아니라 이력이 짧아서</b> 탈락하는 종목이 생긴다.
+     * <br><b>원문에 없는데 더한 것</b>: {@code PEG_PCTL}(절대 임계가 이익 사이클에 흔들리는
+     * 것을 백분위가 받는다), {@code PER_SECTOR_PCTL}·{@code DEBT_RATIO_SECTOR_REL}(3.2·3.9의
+     * 업종 상대 요구를 실제 업종 모집단으로 옮긴 것), {@code ACCRUAL_RATIO}(3.13 현금흐름
+     * 신뢰의 대용), {@code OPERATING_MARGIN}(3.18 세전이익률의 대용).
      *
-     * <p>MUST NOT: 15%·25%를 CAN SLIM의 「A(3년 연간 성장)」와 「C(당분기 대 전년동기)」라고
-     * 적지 않는다. <b>둘 다 아니다</b> — 우리가 재는 것은 TTM 대 직전 TTM 하나이고, 임계값
-     * 둘은 서로 다른 두 기준이 아니라 <b>누적 배점</b>이다.
+     * <p><b>유동성 하한을 50억으로 내린 이유</b> — 시총 중앙값 이하 부분집합(173종목)에서
+     * 거래대금 p25가 53억이라 {@code >= 100억}은 <b>정확히 절반만 남긴다.</b> 그것은 유동성
+     * 하한이 아니라 <b>두 번째 규모 필터</b>이고, 시총 상한과 같은 방향으로 겹쳐 게이트
+     * 교집합을 7종목까지 떨어뜨렸다. 대형주 프리셋의 값을 그대로 승계하면 안 되는 자리다.
+     *
+     * <p><b>{@code PEG}를 필수로 두는 것이 이 프리셋의 성격을 정한다.</b> 값이 있는 종목이
+     * 163/347(47%)이므로 유니버스의 절반 이상이 이 게이트에서 탈락한다. 그것을
+     * {@code OCF_SUM_5Y}를 점수로 내린 이유("현금흐름이 나빠서가 아니라 이력이 짧아서")와
+     * <b>같이 읽지 않는다</b> — PEG가 없다는 것은 적자이거나 이익이 역성장한다는 뜻이고,
+     * 그것은 린치가 실제로 배제하려는 종목이다.
+     *
+     * <p>MUST NOT: §6의 「흑자 확인」을 게이트로 더하지 않는다. {@code PER}이 적자에 값을 내지
+     * 않으므로 {@code PEG}를 필수로 건 순간 흑자가 이미 강제된다 — 실측으로
+     * {@code EPS_TTM > 0}인 종목 수와 {@code PER} 값이 있는 종목 수가 269로 정확히 같다.
+     * 더하면 통과율 100%짜리 게이트가 하나 생긴다.
+     *
+     * <p>MUST NOT: 이 프리셋을 「텐배거를 찾는다」로 설명하지 않는다. 린치의 고속성장주는
+     * <b>소형주</b>에서 나오는데 우리 유니버스 하한이 5,100억이다. "중소형"은 유니버스 내
+     * 상대 규모로 치환한 것이지 린치가 말한 규모가 아니다.
      */
-    private static ScreenPreset qvgKr() {
+    private static ScreenPreset lynchFastGrowerKr() {
         return new ScreenPreset(
-                QVG_KR,
-                "퀄리티·밸류·성장(QVG)",
-                "수익성(Q)·저평가(V)·성장(G) 세 축을 가중 점수로 합산한다. "
-                        + "한 축만 뛰어난 종목보다 세 축이 고르게 좋은 종목이 위로 올라온다. "
-                        + "주당순이익 성장률은 최근 4개 분기를 그 직전 4개 분기와 견준 값이며, "
-                        + "직전 4개 분기가 적자였던 종목은 값이 없어 그 조건을 채우지 못한다 — "
-                        + "적자가 줄어든 것을 성장으로 읽지 않기 위해서다. "
-                        + "그 때문에 편입 종목의 약 30%는 성장 조건에서 점수를 얻지 못한다. "
-                        + "수익성은 자기자본이익률이 아니라 총이익성으로 본다 — 다만 게임·바이오·"
-                        + "금융·통신·인터넷처럼 매출원가 개념이 없는 업종은 그 값이 아예 없어 "
-                        + "이 조건에서 점수를 얻지 못한다. 편입 350종목 중 288종목에만 값이 있다.",
+                LYNCH_FAST_GROWER_KR,
+                "린치 고속성장주",
+                "이익이 빠르게 느는데 그 속도에 견줘 주가가 싼 종목을 점수로 줄 세운다. "
+                        + "판별 도구는 PEG다 — 주가수익비율을 이익 성장률로 나눈 값이며, "
+                        + "1보다 작으면 성장 속도만큼 값이 매겨지지 않았다는 뜻이다. "
+                        + "이익이 줄고 있는 종목은 PEG 값이 아예 없어 결과에서 빠진다. "
+                        + "편입 종목의 절반 남짓(163/347)에만 값이 있으며, 그것은 적자이거나 "
+                        + "이익이 역성장하는 종목을 이 방식이 의도적으로 배제하기 때문이다. "
+                        + "시가총액 상한을 두어 이미 큰 회사는 빼고, 1년에 두 배 넘게 오른 "
+                        + "종목도 뺀다. "
+                        + "5년 주당순이익 성장률은 필수가 아니라 점수 조건이다 — 다섯 해치 "
+                        + "재무가 있어야 계산되어, 필수로 걸면 성장이 과해서가 아니라 이력이 "
+                        + "짧아서 빠지는 종목이 생기기 때문이다. "
+                        + "옮기지 못한 조건이 많다. 배당 관련 셋(배당수익률·배당성향·연속 배당)은 "
+                        + "배당 데이터가 없어 통째로 빠졌고, 순부채/EBITDA와 잉여현금흐름은 "
+                        + "감가상각비·총차입금·자본적지출을 소스가 주지 않아 빠졌으며, "
+                        + "재고와 매출의 증가 속도 비교는 재고자산이 적재돼 있지 않다. "
+                        + "세전이익률은 영업이익률로 대신했다 — 다른 값이다. "
+                        + "금융·부동산 업종을 제외하지 못한다. 다만 저평가와 부채를 같은 업종 "
+                        + "안에서 견주므로 금융업은 금융업끼리 비교된다. "
+                        + "주식수 조건은 자사주 매입을 보지 못한다 — 상장주식수가 줄어야 잡히는데 "
+                        + "국내에서 자사주는 소각해야 줄어든다. "
+                        + "업종 표본이 5종목에 못 미치면 업종 상대 조건을 판정할 수 없고, "
+                        + "적자라 PER이 없는 종목도 그 조건에서 점수를 얻지 못한다 — "
+                        + "둘을 합쳐 132종목이 그렇다. "
+                        + "린치의 고속성장주는 본래 소형주에서 찾는 것인데 편입 종목의 하한이 "
+                        + "5,100억원이라 '중소형'은 이 목록 안에서의 상대 규모다.",
                 EvaluationMode.SCORING,
                 null,
                 ConditionGroup.and(List.of(
-                        // Q — 총이익성. 배점을 최대(3)로 두지 않는 이유는 아래 javadoc에 있다.
-                        weighted(pctl(GrossProfitToAssetsCalculator.CODE),
-                                ComparisonOperator.GTE, "0.70", "2"),
-                        // V — PER은 낮은 쪽이 좋으므로 <=. 성장주를 전부 배제하지 않도록 50%로 느슨하게.
-                        weighted(pctl(PerCalculator.CODE), ComparisonOperator.LTE, "0.50", "3"),
-                        // G — 매출 성장률은 높은 쪽이 좋으므로 >=
-                        weighted(pctl(RevenueGrowthCalculator.CODE),
-                                ComparisonOperator.GTE, "0.70", "2"),
-                        // G — 이익 성장. 두 임계는 누적 배점이지 서로 다른 두 기준이 아니다.
-                        weighted(EpsGrowthTtmYoyCalculator.CODE, ComparisonOperator.GTE, "15", "2"),
-                        weighted(EpsGrowthTtmYoyCalculator.CODE, ComparisonOperator.GTE, "25", "1"),
-                        // Q — 이익의 질
-                        weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "2"),
-                        // Q — 영업이익률도 높은 쪽이 좋으므로 >=
-                        weighted(pctl(OperatingMarginCalculator.CODE),
-                                ComparisonOperator.GTE, "0.70", "2"),
-                        // 가드
-                        weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "200", "1"))));
+                        // ── 필수 게이트 ──
+                        // 린치 정체성. 값이 없다는 것 자체가 배제 사유다(위 javadoc).
+                        required(PegCalculator.CODE, ComparisonOperator.LTE, "1.0"),
+                        // 2.3 "중소형"의 유니버스 내 치환. 시총 중앙값이다.
+                        required(MarketCapCalculator.CODE, ComparisonOperator.LTE,
+                                "2616000000000"),
+                        // §6 유동성. 100억을 승계하지 않는 이유는 위 javadoc에 있다.
+                        required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "5000000000"),
+                        // 5.1 가장 인기 있는 종목은 사지 않는다.
+                        required(Return52wCalculator.CODE, ComparisonOperator.LT, "100"),
+
+                        // ── 점수 ──
+                        // PEG는 낮은 쪽이 좋으므로 <=. 절대 임계가 국면에 흔들리는 것을 받는다.
+                        weighted(pctl(PegCalculator.CODE), ComparisonOperator.LTE, "0.30", "3"),
+                        // 3.2 업종 전체의 PER과 비교해서 봐야 한다 — 원문이 요구한 비교다.
+                        weighted(sectorPctl(PerCalculator.CODE),
+                                ComparisonOperator.LTE, "0.50", "2"),
+                        weighted(PerCalculator.CODE, ComparisonOperator.LTE, "20", "2"),
+                        weighted(RevenueGrowthCalculator.CODE, ComparisonOperator.GT, "15", "2"),
+                        weightedBetween(EpsGrowthTtmYoyCalculator.CODE, "10", "30", "2"),
+                        // 3.17 상한이 목적이라 위아래를 함께 자른다.
+                        weightedBetween(EpsCagr5yCalculator.CODE, "0", "50", "2"),
+                        weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "80", "2"),
+                        // 3.9 AAII 원문이 요구한 업종 상대 비교다. 1.0이 업종 중앙값이다.
+                        weighted(sectorRel(DebtRatioCalculator.CODE),
+                                ComparisonOperator.LTE, "1.0", "1"),
+                        // 3.5 자기 5년 PER 중앙값보다 낮은가. 원본 명세가 구현 불가로 둔 조건이다.
+                        IndicatorCondition.of(
+                                PerCalculator.CODE, ComparisonOperator.LT,
+                                ConditionOperand.IndicatorRef.of(PerMedian5yCalculator.CODE))
+                                .withWeight(new BigDecimal("1")),
+                        weighted(OperatingMarginCalculator.CODE, ComparisonOperator.GT, "10", "1"),
+                        weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
+                        weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"))));
     }
 
-    // ── 3. 추세 상승 ──────────────────────────────────────────────────────
+    // ── 3. 린치 대형우량주 ────────────────────────────────────────────────
+
+    public static final String LYNCH_STALWART_KR = "LYNCH_STALWART_KR";
+
+    /**
+     * 린치 대형우량주 — 같은 문서 2.2의 이식. 여섯 유형 중 「대형이면서 여전히 성장하는 회사」다.
+     *
+     * <p>{@link #lynchFastGrowerKr()}와 <b>시가총액 방향이 반대</b>라 실제로 다른 종목을 낸다
+     * (유니버스 시총 0.51조~1,566.8조, p25 1.43조 · p50 2.62조 · p75 6.77조).
+     *
+     * <p><b>원문 그대로</b>: {@code MARKET_CAP} 대형, {@code EPS_GROWTH_TTM_YOY 10~20},
+     * {@code ROE > 12}, {@code PEG <= 1.5}, {@code DEBT_RATIO <= 60}(D/E 0.6).
+     * <br><b>국내 분포로 재보정한 것</b>: "대형"의 경계를 유니버스 상위 25%(6.77조)로 둔다 —
+     * 절대 금액으로는 시장마다 뜻이 달라진다.
+     * <br><b>원문에 없는데 더한 것</b>: {@code PROFITABLE_QUARTERS_4}(4.1 이익 성장의 일관성),
+     * {@code ACCRUAL_RATIO}, {@code SHARES_GROWTH_3Y}, {@code PER_SECTOR_PCTL}.
+     *
+     * <p><b>{@code ROE}를 쓰는 것에 단서가 붙는다.</b> ADR-0061이 「한국거래소 2000-01~2019-06
+     * 표본에서 수익성 이상현상의 재현율이 5%」를 근거로 {@code ROE}를 조건에서 뺐고, 지금
+     * {@code ROE}·{@code ROE_PCTL}을 쓰는 프리셋이 하나도 없다. 여기서는 <b>린치 2.2 원문이
+     * 명시하므로 원문 그대로 옮기되 그 재현율을 {@code description}에 함께 적는다.</b>
+     * MUST NOT: 이것을 「수익성 축이 되살아났다」로 읽지 않는다 — 되살린 것이 아니라
+     * 원문을 옮긴 것이고, 그 원문이 감사된 근거를 갖는다는 뜻도 아니다.
+     */
+    private static ScreenPreset lynchStalwartKr() {
+        return new ScreenPreset(
+                LYNCH_STALWART_KR,
+                "린치 대형우량주",
+                "크면서도 아직 성장이 남아 있는 회사를 점수로 줄 세운다. "
+                        + "고속성장주와 시가총액 조건이 반대라 서로 다른 종목이 나온다 — "
+                        + "이쪽은 편입 종목 중 큰 편에 드는 회사만 본다. "
+                        + "성장 구간을 10~20%로 좁게 잡는 것은 의도다. 그보다 빠르면 대형우량주가 "
+                        + "아니고, 그런 종목은 고속성장주 쪽에서 다룬다. "
+                        + "자기자본이익률 조건은 원문에 있어 그대로 옮겼다. 다만 한국 시장을 "
+                        + "2000년부터 2019년까지 본 연구에서 수익성 지표로 초과수익을 설명하려는 "
+                        + "시도의 재현율이 5%에 그쳤다 — 이 조건을 근거로 수익률을 기대하지 않는다. "
+                        + "PEG 값이 없는 종목은 결과에서 빠진다. 적자이거나 이익이 줄고 있다는 뜻이다. "
+                        + "옮기지 못한 조건이 있다. 배당 관련 셋은 배당 데이터가 없어 빠졌고, "
+                        + "순부채/EBITDA와 잉여현금흐름은 감가상각비·총차입금·자본적지출을 "
+                        + "소스가 주지 않아 빠졌다. 세전이익률은 이 프리셋에 넣지 않았다. "
+                        + "금융·부동산 업종을 제외하지 못한다 — 저평가를 같은 업종 안에서 견주는 "
+                        + "것으로 일부만 대신한다. "
+                        + "주식수 조건은 자사주 매입이 아니라 상장주식수 감소를 본다.",
+                EvaluationMode.SCORING,
+                null,
+                ConditionGroup.and(List.of(
+                        // ── 필수 게이트 ──
+                        // "대형"의 경계. 유니버스 상위 25%다.
+                        required(MarketCapCalculator.CODE, ComparisonOperator.GTE,
+                                "6773000000000"),
+                        // 2.2 원문. 고속성장주보다 느슨하다.
+                        required(PegCalculator.CODE, ComparisonOperator.LTE, "1.5"),
+                        // 대형주 모집단이라 100억 승계가 맞다.
+                        required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
+
+                        // ── 점수 ──
+                        weightedBetween(EpsGrowthTtmYoyCalculator.CODE, "10", "20", "3"),
+                        weighted(RoeCalculator.CODE, ComparisonOperator.GT, "12", "3"),
+                        weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "60", "2"),
+                        weighted(sectorPctl(PerCalculator.CODE),
+                                ComparisonOperator.LTE, "0.50", "2"),
+                        // 4.1 이익 성장의 일관성. 넷 중 넷이 흑자인가.
+                        weighted(ProfitableQuarters4Calculator.CODE,
+                                ComparisonOperator.GTE, "4", "1"),
+                        weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
+                        weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"))));
+    }
+    // ── 4. 추세 상승 ──────────────────────────────────────────────────────
 
     public static final String MOMENTUM_KR = "MOMENTUM_KR";
 
@@ -309,7 +442,7 @@ public class PresetCatalog {
                                 ComparisonOperator.GTE, "0.70"))));
     }
 
-    // ── 4. 중장기 스윙 ────────────────────────────────────────────────────
+    // ── 5. 중장기 스윙 ────────────────────────────────────────────────────
 
     public static final String SWING_TREND_KR = "SWING_TREND_KR";
 
@@ -403,7 +536,7 @@ public class PresetCatalog {
                                 ComparisonOperator.GTE, "0.70", "1"))));
     }
 
-    // ── 5. 2국면 돌파 ─────────────────────────────────────────────────────
+    // ── 6. 2국면 돌파 ─────────────────────────────────────────────────────
 
     public static final String STAGE2_BREAKOUT_KR = "STAGE2_BREAKOUT_KR";
 
@@ -456,7 +589,7 @@ public class PresetCatalog {
                         literal(PctFrom52wHighCalculator.CODE, ComparisonOperator.GTE, "-10"))));
     }
 
-    // ── 6. 상승추세 눌림목 ────────────────────────────────────────────────
+    // ── 7. 상승추세 눌림목 ────────────────────────────────────────────────
 
     public static final String PULLBACK_UPTREND_KR = "PULLBACK_UPTREND_KR";
 
@@ -510,7 +643,7 @@ public class PresetCatalog {
                         literal(Cmf21Calculator.CODE, ComparisonOperator.GTE, "-0.10"))));
     }
 
-    // ── 7. 저변동 우량 ────────────────────────────────────────────────────
+    // ── 8. 저변동 우량 ────────────────────────────────────────────────────
 
     public static final String LOWVOL_QUALITY_KR = "LOWVOL_QUALITY_KR";
 
@@ -575,5 +708,22 @@ public class PresetCatalog {
     private static IndicatorCondition weighted(String code, ComparisonOperator operator,
                                                String value, String weight) {
         return literal(code, operator, value).withWeight(new BigDecimal(weight));
+    }
+
+    /**
+     * 구간 조건. 위 셋이 전부 단일 값 전용이라 따로 둔다.
+     *
+     * <p>{@code BETWEEN}은 <b>양쪽을 자른다</b> — 린치의 성장률 조건이 상한을 갖는 것이 요점이고
+     * (3.16·3.17), 하한만 거는 {@code GTE}로 바꾸면 「지속 불가능한 성장 배제」가 통째로 사라진다.
+     *
+     * <p>MUST NOT: 우변을 {@link ConditionOperand.IndicatorRef}로 바꾸지 않는다 —
+     * {@code ScreenDefinitionValidator}가 저장 시점에 막고 번역기도 던진다.
+     */
+    private static IndicatorCondition weightedBetween(String code, String lower, String upper,
+                                                      String weight) {
+        return IndicatorCondition.of(code, ComparisonOperator.BETWEEN,
+                        ConditionOperand.Literal.between(
+                                new BigDecimal(lower), new BigDecimal(upper)))
+                .withWeight(new BigDecimal(weight));
     }
 }

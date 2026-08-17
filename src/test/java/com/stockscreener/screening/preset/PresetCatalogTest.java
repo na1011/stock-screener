@@ -19,6 +19,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,10 +55,41 @@ class PresetCatalogTest {
     private List<SectorMetricSpec> sectorMetricSpecs;
 
     @Test
-    @DisplayName("spec §3이 요구한 프리셋이 선언되어 있다")
-    void declaresRequiredPresets() {
-        assertThat(presets).extracting(ScreenPreset::code)
-                .contains("VALUE_KR", "QVG_KR", "MOMENTUM_KR");
+    @DisplayName("spec §9가 요구한 「최소 1개 이상의 사전정의 전략 프리셋」이 있다")
+    void declaresAtLeastOnePreset() {
+        // IMPORTANT — 이 단언은 한때 VALUE_KR·QVG_KR·MOMENTUM_KR 셋을 이름으로 세면서
+        // "spec §3이 요구한"이라고 적었다. spec §3은 "(예: Value, QVG형 전략)"이라 적어
+        // 예시를 든 것이고 목록을 요구하지 않는다 — 개수를 정하는 곳은 §9의 "최소 1개 이상"뿐이다.
+        // 이름으로 세는 펜스는 프리셋을 개편할 때마다 거짓 실패를 내고, 그러면 다음 세션이
+        // 기획 정본을 확인하는 대신 단언을 고치게 된다(QVG_KR 폐기가 그 첫 사례다 — ADR-0066).
+        assertThat(presets).extracting(ScreenPreset::code).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 프리셋마다 조건의 출처가 javadoc에 갈려 적혀 있다")
+    void everyPresetRecordsWhereItsConditionsCameFrom() throws Exception {
+        // 파일 전체에서 낱말을 세는 방식은 실패할 수 없는 펜스다 — 기존 프리셋의 표기만으로
+        // 임계를 넘겨, 새 프리셋이 출처를 하나도 안 적어도 통과한다(ADR-0061 §결과가 경고한 모양).
+        // 그래서 프리셋 하나하나의 팩토리 메서드 javadoc을 본다.
+        String source = Files.readString(Path.of(
+                "src/main/java/com/stockscreener/screening/preset/PresetCatalog.java"));
+        List<String> markers = List.of("원문 그대로", "국내 분포로 재보정",
+                "원문에 없는데 더한", "원문보다 약하게 옮긴", "국내 사정으로 바꾼", "원문에서 되살린");
+
+        for (ScreenPreset preset : presets) {
+            int declaration = source.indexOf("String " + preset.code() + " =");
+            assertThat(declaration)
+                    .as("%s의 코드 상수를 찾지 못했다", preset.code())
+                    .isGreaterThanOrEqualTo(0);
+            // 상수 선언과 그 아래 팩토리 메서드 사이가 그 프리셋의 javadoc이다.
+            int body = source.indexOf("ScreenPreset(", declaration);
+            String block = source.substring(declaration, body < 0 ? source.length() : body);
+
+            assertThat(markers)
+                    .as("%s의 javadoc에 조건 출처 표기가 없다 — 갈리지 않으면 다음 세션이 "
+                            + "우리가 정한 값을 문헌이 검증한 값으로 읽는다", preset.code())
+                    .anyMatch(block::contains);
+        }
     }
 
     @Test
