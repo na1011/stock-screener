@@ -3,12 +3,14 @@ package com.stockscreener.indicator;
 import com.stockscreener.indicator.calculator.AltmanZCalculator;
 import com.stockscreener.indicator.calculator.EpsTtmCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.indicator.calculator.RoicPretaxCalculator;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 
 /**
  * "이 지표에 값이 없는 <b>이유</b>를 말할 수 있는가"의 선언.
@@ -52,7 +54,36 @@ public class IndicatorUnavailabilityConfig {
                         // AltmanZCalculator의 javadoc이 요구해 두었다.
                         context -> AltmanZCalculator.isInapplicable(context.industryDivision()),
                         "보험·금융서비스에는 적용하지 않는 지표입니다. "
-                                + "계산 자체는 되지만 그 업종의 재무 구조에서는 뜻을 갖지 않습니다."));
+                                + "계산 자체는 되지만 그 업종의 재무 구조에서는 뜻을 갖지 않습니다."),
+                new UnavailabilityRule(
+                        RoicPretaxCalculator.CODE,
+                        // 계산기가 업종으로 거르는 것이 아니라 재료가 원리적으로 없다 —
+                        // K-IFRS 금융업은 재무상태표를 유동/비유동으로 가르지 않는다.
+                        // 실측(2026-08-18): 최근 분기 유동부채가 비어 있는 33종목이 전부
+                        // KSIC 64·65·66이거나 업종 미상이다. 그 업종에서 값이 나오는 종목도
+                        // 있으므로(64의 35종목 중 22) 이 규칙은 값이 없을 때만 붙고,
+                        // 엉뚱한 종목에 사유를 붙일 여지가 없다.
+                        context -> isFinancialDivision(context.industryDivision()),
+                        "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
+                                + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다."));
+    }
+
+    /**
+     * 유동/비유동 구분이 없는 업종. 금융업·보험업·금융서비스업이다.
+     *
+     * <p>{@code AltmanZCalculator}의 {@code {65, 66}}과 <b>일부러 다르다.</b> 그쪽은 "지표가
+     * 뜻을 잃는 업종"이라 64를 뺐고(지주회사가 섞여 있다), 이쪽은 "재료가 오지 않는 업종"이라
+     * 64가 들어간다 — 지주회사든 은행이든 유동부채가 안 오는 것은 같기 때문이다.
+     */
+    private static final Set<String> FINANCIAL_DIVISIONS = Set.of("64", "65", "66");
+
+    /**
+     * MUST: null을 먼저 거른다. {@code industryDivision}은 <b>업종 미상이면 null</b>이고
+     * {@code Set.of(...)}는 불변 집합이라 {@code contains(null)}에서 NPE를 던진다 — 그 예외가
+     * 지표 하나가 아니라 <b>종목 상세 응답 전체</b>를 500으로 만든다.
+     */
+    private static boolean isFinancialDivision(String industryDivision) {
+        return industryDivision != null && FINANCIAL_DIVISIONS.contains(industryDivision);
     }
 
     private static boolean isNegative(BigDecimal value) {

@@ -7,6 +7,8 @@ import com.stockscreener.indicator.PriceBar;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -153,5 +155,43 @@ final class FinancialMath {
         }
         return numerator.multiply(HUNDRED)
                 .divide(denominator, SCALE, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 연속한 회계연도로 인정하는 {@code period_end} 간격.
+     *
+     * <p>1년은 365일 또는 366일이다. 폭을 조금 두는 이유는 결산월 변경으로 한 회계기간이
+     * 늘거나 줄 수 있기 때문이며, 폭을 넓히면 <b>한 해 건너뛴 구멍이 통과한다</b> — 그 경우
+     * 간격이 730일 안팎이라 아래 상한과 멀찍이 떨어져 있다.
+     */
+    private static final long MIN_ANNUAL_GAP_DAYS = 300;
+    private static final long MAX_ANNUAL_GAP_DAYS = 430;
+
+    /**
+     * 최근 {@code years}개 연간 재무가 <b>실제로 연속한 회계연도</b>인가.
+     *
+     * <p>IMPORTANT — 행 수만 세면 안 되는 이유가 여기 있다. {@code readAnnualFigures}가
+     * {@code ORDER BY period_end DESC LIMIT ?}라 <b>행 수만 맞으면 통과하고</b>, FY 행을 일곱
+     * 가진 종목이 267이라 중간에 한 해가 빠져도 요청한 개수는 채워진다 — <b>구멍이 보이지
+     * 않는다.</b> 그래서 {@code fiscalYear} 라벨이 아니라 {@code periodEnd} 간격으로 잰다.
+     * 라벨은 결산월이 12월이 아닌 회사에서 실제 기간과 어긋난다.
+     */
+    static boolean isConsecutiveAnnual(List<FinancialFigures> annual, int years) {
+        if (annual.size() < years) {
+            return false;
+        }
+        for (int i = 1; i < years; i++) {
+            // 읽기가 period_end 내림차순이므로 앞이 더 최근이다.
+            LocalDate newer = annual.get(i - 1).periodEnd();
+            LocalDate older = annual.get(i).periodEnd();
+            if (newer == null || older == null) {
+                return false;
+            }
+            long gap = ChronoUnit.DAYS.between(older, newer);
+            if (gap < MIN_ANNUAL_GAP_DAYS || gap > MAX_ANNUAL_GAP_DAYS) {
+                return false;
+            }
+        }
+        return true;
     }
 }
