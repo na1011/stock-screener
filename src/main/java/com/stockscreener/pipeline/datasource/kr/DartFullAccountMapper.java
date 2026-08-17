@@ -64,6 +64,23 @@ final class DartFullAccountMapper {
      */
     static final Set<String> ID_COST_OF_SALES = ordered("ifrs-full_CostOfSales", "ifrs_CostOfSales");
 
+    /**
+     * 자본적지출(유형자산의 취득). <b>현금흐름표에서만 읽는다.</b>
+     *
+     * <p>계정명 폴백을 두지 않는다. {@code 취득}이 든 계정이 회사마다 열 개 넘게 오고
+     * (자기주식의 취득·장기금융상품의 취득·관계기업투자의 취득·투자부동산의 취득…)
+     * 부분일치는 그중 아무거나 집는다 — §12에서 {@code 감가상각}이 오리온의
+     * {@code 투자부동산감가상각비 조정}을 집어 3/8을 2/8로 정정하게 만든 것과 같은 병이고,
+     * <b>이쪽은 틀린 값이 훨씬 커서 잉여현금흐름을 통째로 뒤집는다.</b>
+     *
+     * <p>표준코드로 8종목 8/8이 왔고 계정명도 여덟이 전부 {@code 유형자산의 취득}으로
+     * 같았다(§13). 폴백이 메울 것이 관측되지 않았다.
+     */
+    static final Set<String> ID_CAPEX = ordered(
+            "ifrs-full_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
+            "dart_PurchaseOfPropertyPlantAndEquipment",
+            "ifrs-full_PurchaseOfPropertyPlantAndEquipment");
+
     static final Set<String> ID_TOTAL_ASSETS = ordered("ifrs-full_Assets", "ifrs_Assets");
     static final Set<String> ID_TOTAL_LIABILITIES = ordered("ifrs-full_Liabilities", "ifrs_Liabilities");
     static final Set<String> ID_TOTAL_EQUITY = ordered("ifrs-full_Equity", "ifrs_Equity");

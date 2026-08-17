@@ -26,6 +26,9 @@ import java.time.LocalDate;
  * @param currentAssets      유동자산. {@code currentLiabilities}와 짝을 이뤄 운전자본이 된다.
  * @param currentLiabilities 유동부채.
  * @param retainedEarnings   이익잉여금. <b>자본총계와 다르다</b> — 자본금·자본잉여금을 포함하지 않는다.
+ * @param capex              자본적지출(유형자산의 취득). <b>유출을 양수 크기로 담는다</b> —
+ *                           실측 8종목이 전부 양수로 왔다(ADR-0067). 부호를 뒤집어 담으면
+ *                           잉여현금흐름이 두 배로 부풀고 값이 그럴듯해 드러나지 않는다.
  */
 public record RawFinancialReport(
         int fiscalYear,
@@ -49,7 +52,8 @@ public record RawFinancialReport(
         BigDecimal eps,
         BigDecimal bps,
         BigDecimal costOfSales,
-        BigDecimal cashAndEquivalents
+        BigDecimal cashAndEquivalents,
+        BigDecimal capex
 ) {
 
     public RawFinancialReport {

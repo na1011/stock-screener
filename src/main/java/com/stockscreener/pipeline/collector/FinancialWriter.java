@@ -336,10 +336,10 @@ public class FinancialWriter {
                      revenue, operating_income, net_income, total_assets, total_equity,
                      total_liabilities, current_assets, current_liabilities, retained_earnings,
                      operating_cash_flow, shares_outstanding, eps, bps,
-                     cost_of_sales, cash_and_equivalents,
+                     cost_of_sales, cash_and_equivalents, capex,
                      created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, now())
+                        ?, ?, ?, now())
                 """,
                 stockId, report.fiscalYear(), report.fiscalPeriod(),
                 report.periodStart(), report.periodEnd(), report.publishedAt(),
@@ -349,7 +349,7 @@ public class FinancialWriter {
                 report.currentAssets(), report.currentLiabilities(), report.retainedEarnings(),
                 report.operatingCashFlow(), report.sharesOutstanding(),
                 report.eps(), report.bps(),
-                report.costOfSales(), report.cashAndEquivalents());
+                report.costOfSales(), report.cashAndEquivalents(), report.capex());
     }
 
     /**
@@ -377,7 +377,8 @@ public class FinancialWriter {
         EPS("eps", RawFinancialReport::eps),
         BPS("bps", RawFinancialReport::bps),
         COST_OF_SALES("cost_of_sales", RawFinancialReport::costOfSales),
-        CASH_AND_EQUIVALENTS("cash_and_equivalents", RawFinancialReport::cashAndEquivalents);
+        CASH_AND_EQUIVALENTS("cash_and_equivalents", RawFinancialReport::cashAndEquivalents),
+        CAPEX("capex", RawFinancialReport::capex);
 
         private final String column;
         private final Function<RawFinancialReport, BigDecimal> accessor;

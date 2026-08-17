@@ -196,8 +196,10 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 // 발행주식수는 stockTotqySttus 별도 호출이 필요하다. Phase 3에서 붙인다.
                 null,
                 null, null,
-                // 매출원가·현금및현금성자산은 주요계정에 없다. 전체 재무제표 어댑터만 준다.
-                null, null);
+                // 매출원가·현금및현금성자산·자본적지출은 주요계정에 없다.
+                // 앞의 둘은 손익·재무상태표에 있지만 이 엔드포인트가 총계만 주고,
+                // 자본적지출은 현금흐름표라 이 엔드포인트가 아예 내지 않는다(§1).
+                null, null, null);
     }
 
     /**
@@ -237,7 +239,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 DartAccountMapper.find(annualBalance, DartAccountMapper.CURRENT_ASSETS, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.CURRENT_LIABILITIES, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.RETAINED_EARNINGS, false),
-                null, null, null, null, null, null));
+                null, null, null, null, null, null, null));
     }
 
     private static BigDecimal subtract(List<JsonNode> annual, List<JsonNode> thirdQuarter,

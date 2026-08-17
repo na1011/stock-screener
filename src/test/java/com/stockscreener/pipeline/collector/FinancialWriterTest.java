@@ -415,6 +415,6 @@ class FinancialWriterTest {
                 withBalanceDetail ? new BigDecimal("4000") : null,
                 withBalanceDetail ? new BigDecimal("6000") : null,
                 new BigDecimal("1500"), new BigDecimal("100"),
-                new BigDecimal("10"), new BigDecimal("120"), null, null);
+                new BigDecimal("10"), new BigDecimal("120"), null, null, null);
     }
 }

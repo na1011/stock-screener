@@ -38,6 +38,7 @@ final class FinancialFiguresFixture {
     private BigDecimal bps;
     private BigDecimal costOfSales;
     private BigDecimal cashAndEquivalents;
+    private BigDecimal capex;
 
     private FinancialFiguresFixture() {
     }
@@ -84,6 +85,7 @@ final class FinancialFiguresFixture {
         fixture.bps = source.bps();
         fixture.costOfSales = source.costOfSales();
         fixture.cashAndEquivalents = source.cashAndEquivalents();
+        fixture.capex = source.capex();
         return fixture;
     }
 
@@ -147,6 +149,11 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    FinancialFiguresFixture capex(BigDecimal value) {
+        this.capex = value;
+        return this;
+    }
+
     FinancialFiguresFixture cashAndEquivalents(BigDecimal value) {
         this.cashAndEquivalents = value;
         return this;
@@ -158,6 +165,6 @@ final class FinancialFiguresFixture {
                 revenue, operatingIncome, netIncome, totalAssets, totalEquity, totalLiabilities,
                 currentAssets, currentLiabilities, retainedEarnings,
                 operatingCashFlow, sharesOutstanding, eps, bps,
-                costOfSales, cashAndEquivalents);
+                costOfSales, cashAndEquivalents, capex);
     }
 }

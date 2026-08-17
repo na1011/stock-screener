@@ -273,7 +273,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                         income, DartFullAccountMapper.ID_COST_OF_SALES, null),
                 // 재무상태표에서만 읽는다. 현금흐름표의 같은 이름은 기초·기말 잔액이다.
                 DartFullAccountMapper.find(
-                        balance, DartFullAccountMapper.ID_CASH_AND_EQUIVALENTS, null));
+                        balance, DartFullAccountMapper.ID_CASH_AND_EQUIVALENTS, null),
+                capex(cashFlow, period));
     }
 
     /**
@@ -332,7 +333,9 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 null,
                 // 현금및현금성자산은 잔액이므로 4분기 행에도 담는다.
                 DartFullAccountMapper.find(
-                        balance, DartFullAccountMapper.ID_CASH_AND_EQUIVALENTS, null));
+                        balance, DartFullAccountMapper.ID_CASH_AND_EQUIVALENTS, null),
+                // 자본적지출은 유량이고 연간만 담는다 — 아래 capex() 참조.
+                null);
     }
 
     /**
@@ -347,6 +350,23 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             return null;
         }
         return DartFullAccountMapper.operatingCashFlow(cashFlow);
+    }
+
+    /**
+     * 자본적지출(유형자산의 취득). <b>연간만</b> 낸다 — 영업활동현금흐름과 같은 이유다.
+     *
+     * <p>둘이 같은 창에서만 값을 갖는 것이 중요하다. 잉여현금흐름은 둘의 차이인데 한쪽만
+     * 분기에 값이 있으면 <b>기간이 다른 두 수를 빼게 된다.</b>
+     *
+     * <p>MUST NOT: 무형자산의 취득을 여기 더하지 않는다. 실측에서 둘 다 8/8로 오지만
+     * (§13) 합칠지는 지표가 정할 문제이고, 원자료 계층에서 합치면 <b>나중에 가를 수
+     * 없다.</b> 원자료만 담는다는 선은 여기서도 지킨다.
+     */
+    private static BigDecimal capex(List<JsonNode> cashFlow, StatementPeriod period) {
+        if (period != StatementPeriod.FY) {
+            return null;
+        }
+        return DartFullAccountMapper.find(cashFlow, DartFullAccountMapper.ID_CAPEX, null);
     }
 
     /** 받은 행과 그것을 받는 데 든 호출 수. 연결이 비어 별도로 다시 부르면 2다. */
