@@ -14,6 +14,7 @@ import com.stockscreener.indicator.calculator.Disparity200Calculator;
 import com.stockscreener.indicator.calculator.EpsCagr5yCalculator;
 import com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculator;
 import com.stockscreener.indicator.calculator.ExcessReturn52wCalculator;
+import com.stockscreener.indicator.calculator.GrossMarginCalculator;
 import com.stockscreener.indicator.calculator.GrossProfitToAssetsCalculator;
 import com.stockscreener.indicator.calculator.MaAlignScoreCalculator;
 import com.stockscreener.indicator.calculator.MarketCapCalculator;
@@ -30,6 +31,14 @@ import com.stockscreener.indicator.calculator.Return52wCalculator;
 import com.stockscreener.indicator.calculator.RevenueGrowthCalculator;
 import com.stockscreener.indicator.calculator.RoaCalculator;
 import com.stockscreener.indicator.calculator.RoeCalculator;
+import com.stockscreener.indicator.calculator.FcfMarginCalculator;
+import com.stockscreener.indicator.calculator.FcfYieldCalculator;
+import com.stockscreener.indicator.calculator.NetMarginCalculator;
+import com.stockscreener.indicator.calculator.OperatingMarginMin5yCalculator;
+import com.stockscreener.indicator.calculator.ProfitStreakYearsCalculator;
+import com.stockscreener.indicator.calculator.RetainedToMarket4yCalculator;
+import com.stockscreener.indicator.calculator.RoeMin3yCalculator;
+import com.stockscreener.indicator.calculator.RoicPretaxCalculator;
 import com.stockscreener.indicator.calculator.Rsi2Calculator;
 import com.stockscreener.indicator.calculator.SharesGrowth3yCalculator;
 import com.stockscreener.indicator.calculator.Sma150Calculator;
@@ -103,11 +112,166 @@ public class PresetCatalog {
         return sourceCode + SectorMetricSpec.MEDIAN_RATIO_SUFFIX;
     }
 
+    // ── 9. 버핏 우량주 ────────────────────────────────────────────────────
+
+    public static final String BUFFETT_QUALITY_KR = "BUFFETT_QUALITY_KR";
+
+    /**
+     * 버핏 우량주 — {@code docs/external/워렌버핏-방법론.md} §8 복사용 스크린의 이식.
+     *
+     * <p>원저는 버핏의 주주서한(1977·1986·1992·2007·2019)과 해그스트롬 <i>The Warren Buffett
+     * Way</i>, 메리 버핏 <i>Buffettology</i>, AAII Buffett Hagstrom Screen이다. 저장소의 문서는
+     * 그것을 <b>TradingView 문법으로 옮긴 이식본</b>이며 조건의 출처로만 쓴다(ADR-0067).
+     * MUST NOT: 그 문서를 프리셋 조건셋의 정본이라 적지 않는다.
+     *
+     * <p><b>원문 그대로</b>: {@code PROFIT_STREAK_Y >= 7}(0.2·1.2·5.1 — AAII가 요구하는 7개
+     * 회계연도 연속 흑자), {@code ROE >= 15}(0.3·3.1), {@code DEBT_RATIO <= 50}(0.3·3.2 —
+     * D/E 0.5), {@code GROSS_MARGIN >= 40}(1.3), {@code OPERATING_MARGIN >= 15}·
+     * {@code NET_MARGIN >= 10}(1.4·3.4), {@code RETAINED_TO_MARKET_4Y >= 1.0}(3.5의 1달러
+     * 유보 원칙), {@code FCF_MARGIN >= 8}·{@code FCF_YIELD >= 5}(3.3 대체·4.2), {@code PER <= 25}
+     * (4.3), {@code ROA >= 8}(3.6), {@code ACCRUAL_RATIO <= 0}(5.5), {@code SHARES_GROWTH_3Y <= 0}
+     * (2.1).
+     * <br><b>국내 분포로 재보정한 것</b>: 필수 게이트의 {@code ROE_MIN_3Y >= 10}(원문 15는
+     * 19종목/5%)과 {@code DEBT_RATIO <= 100}. {@code ROIC_PRETAX >= 15}는 <b>분포가 아니라
+     * 기저 때문에</b> 원문 12에서 옮겼다 — 원문은 세후이고 우리 지표는 세전이라 같은 수를 쓰면
+     * 원문보다 느슨해진다.
+     * <br><b>원문보다 약하게 옮긴 것</b>: 3.5를 5년이 아니라 <b>4년</b>으로 잰다. 읽기 창
+     * 1,261봉 전이 2021-06인데 FY−5 기말은 1,377봉 전이라, 5년으로 두면 주가와 이익잉여금의
+     * 기준점이 7개월 어긋난 채 남는다(ADR-0067 §배경).
+     * <br><b>원문에 없는데 더한 것</b>: {@code OPM_MIN_5Y}(3.4의 「일관성」을 최솟값으로 옮긴
+     * 형태), {@code PER_SECTOR_PCTL}·{@code OPERATING_MARGIN_SECTOR_PCTL}·
+     * {@code DEBT_RATIO_SECTOR_REL}(AAII 원 구현이 부채비율·영업이익률·순이익률을 <b>업종
+     * 기준값 대비</b>로 판정하는데 이식본이 TradingView의 한계로 절대값으로 바꿔 놓은 것을
+     * 실제 업종 모집단으로 되돌린 것이다).
+     *
+     * <p><b>필수 게이트를 단일 시점 ROE가 아니라 3년 연속 ROE에 두는 것이 이 프리셋의 성격을
+     * 정한다.</b> 문서 §11이 <i>"가장 중요한 건 3.1의 ROE 시계열 확인 — TTM 단일 시점만 보므로
+     * 일회성 이익으로 ROE가 튄 해에 걸린 종목이 반드시 섞여 들어온다"</i>고 적고 그것을
+     * <b>사람이 눈으로 하라</b>고 미룬다. 우리는 그 확인을 지표로 만들 수 있으므로 게이트로
+     * 옮겼다. 원문 임계({@code ROE >= 15})는 배점이 가장 높은 점수 조건으로 남으므로,
+     * §8이 <i>"이 둘을 분리하는 순간 버핏 기준이 아니게 된다"</i>고 못박은 「ROE와 저부채를
+     * 함께 둔다」는 지켜진다.
+     *
+     * <p><b>게이트 둘이 같은 방향으로 겹친다.</b> {@code ROE_MIN_3Y >= 10}(53) ∧
+     * {@code PROFIT_STREAK_Y >= 7}(156)의 교집합이 37인데 독립 가정치는 23.8이라 <b>1.55배</b>다.
+     * 둘 다 「꾸준히 벌었는가」를 재기 때문이며, <b>단독 통과율만으로는 이 형태가 안 보인다.</b>
+     * 다섯을 전부 걸면 19종목이 남는다.
+     *
+     * <p>MUST NOT: 이 프리셋이 <b>지주회사를 걸러낸다고 적지 않는다.</b> 문서 §10이 지주회사를
+     * <i>"버핏식 스크린에서 가장 오염이 심한 구간"</i>으로 지목한다 — 지분법이익 때문에 ROE가
+     * 실체 없이 높게 잡히기 때문이고, <b>이 프리셋은 ROE 계열을 필수 게이트에 둔다.</b> 조건
+     * 좌변이 지표 FK라 섹터 범주 제외를 표현할 수 없고, KSIC 중분류 64가 금융업과 지주회사를
+     * 겸해 코드로도 못 가른다(ADR-0066이 그 길을 명시적으로 버렸다).
+     *
+     * <p>MUST NOT: {@code PROFIT_STREAK_Y}를 <b>금융업 배제로 읽지 않는다.</b> 일부 금융지주의
+     * FY2021·2022가 소스 정책상 오지 않아 통과율이 낮지만(실측 KSIC 64·65·66의 50종목 중 14),
+     * 그것은 <b>설계가 아니라 부작용</b>이고 열넷은 그대로 통과한다.
+     *
+     * <p>MUST NOT: {@code FCF_MARGIN}·{@code FCF_YIELD}를 <b>오너 어닝이라 적지 않는다.</b>
+     * 오너 어닝은 운전자본 증분까지 차감하며 감가상각비가 필요한데 그것은 닫혀 있다. 문서 3.3이
+     * 스스로 <i>"잉여현금흐름과 유사하나 운전자본 증분까지 차감한다는 점이 다르다"</i>고 적는다.
+     *
+     * <p>MUST NOT: 수익률을 주장하지 않는다. 조건의 출처로만 인용한다.
+     */
+    private static ScreenPreset buffettQualityKr() {
+        return new ScreenPreset(
+                BUFFETT_QUALITY_KR,
+                "버핏 우량주",
+                "여러 해에 걸쳐 꾸준히 잘 벌면서 빚이 적은 회사를 점수로 줄 세운다. "
+                        + "판별의 중심은 한 시점의 수익성이 아니라 그것이 이어져 왔는가다 — "
+                        + "최근 3개 회계연도가 각각 자기자본이익률 10%를 넘어야 하고, "
+                        + "최근 7개 회계연도가 모두 영업흑자여야 한다. "
+                        + "한 해 일회성 이익으로 수익성이 튄 종목은 여기서 빠진다. "
+                        + "부채 조건을 수익성과 반드시 함께 거는 것이 이 방식의 요구다 — "
+                        + "빚을 늘리면 자기자본이익률이 올라가므로 둘을 나누면 뜻이 사라진다. "
+                        + "가격 조건은 마지막에만 온다. 배점의 절반 가까이가 사업의 질에 걸려 있고 "
+                        + "저평가 조건은 낮은 배점으로 뒤에 붙는다. "
+                        + "필요한 이력이 길어 편입 종목의 4분의 1이 판정 자체를 받지 못한다 — "
+                        + "7개 회계연도가 연속으로 있어야 하기 때문이며, 상장한 지 얼마 안 된 종목이 "
+                        + "이력이 짧다는 이유로 유리해지지 않게 한 결과다. "
+                        + "옮기지 못한 조건이 많다. 기대수익률 모형은 배당 데이터가 없어 통째로 "
+                        + "빠졌고, 이자보상배율과 순부채·EBITDA는 이자비용과 감가상각비를 소스가 "
+                        + "주지 않아 빠졌으며, 유형자본 대비 수익률은 무형자산과 영업권을 아직 "
+                        + "가려 받지 못해 빠졌다. "
+                        + "잉여현금흐름은 주주이익이 아니다 — 운전자본 증가분을 빼지 않았고, "
+                        + "그것을 계산할 감가상각비가 없다. 원문이 지시한 대용이다. "
+                        + "유보 대비 시가 조건은 원문의 5년이 아니라 4년을 재며, 유상증자를 한 "
+                        + "회사는 실제보다 좋게 나온다 — 주식수만 늘고 이익잉여금은 늘지 않기 때문이다. "
+                        + "금융업과 지주회사를 제외하지 못한다. 원문은 지주회사를 이 방식에서 가장 "
+                        + "왜곡이 심한 구간으로 지목하는데, 자회사 지분법이익으로 자기자본이익률이 "
+                        + "실체 없이 높게 잡히고 이 화면은 그 지표를 필수로 건다. "
+                        + "발생액 비율과 3년 연속 조건이 부분적으로만 막아 준다. "
+                        + "주식수 조건은 자사주 매입을 보지 못한다 — 국내에서 자사주는 소각해야 "
+                        + "상장주식수가 줄어든다. "
+                        + "매출원가 개념이 없는 업종은 매출총이익률에서, 유동부채를 구분하지 않는 "
+                        + "금융업은 투하자본이익률에서 점수를 얻지 못한다. "
+                        + "투하자본이익률은 법인세를 빼기 전 기준이라 세후로 쓰인 외부 문헌의 "
+                        + "숫자와 직접 견주면 안 된다. "
+                        + "다년 지표와 매출총이익률·잉여현금흐름은 연간 기준이라 분기 기준 지표와 "
+                        + "기준 시점이 다르다. "
+                        + "사업을 이해할 수 있는가, 경영진이 정직한가, 해자가 실재하는가 같은 "
+                        + "이 방식의 앞선 기준들은 스크리너 밖에 있다.",
+                EvaluationMode.SCORING,
+                null,
+                ConditionGroup.and(List.of(
+                        // ── 필수 게이트 ──
+                        // 3.1 — 원문 15는 19종목(5%)이라 국내 분포로 재보정했다. 53종목(15%).
+                        required(RoeMin3yCalculator.CODE, ComparisonOperator.GTE, "10"),
+                        // 0.3·3.2 — ROE와 반드시 함께 건다. §8이 분리를 금지한 자리다. 196종목(57%).
+                        required(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100"),
+                        // 0.2·1.2·5.1 — AAII 원문의 7개 회계연도다. 156종목(45%).
+                        required(ProfitStreakYearsCalculator.CODE, ComparisonOperator.GTE, "7"),
+                        // 0.1 충분한 규모. 275종목(79%).
+                        required(MarketCapCalculator.CODE, ComparisonOperator.GTE, "1000000000000"),
+                        // §7 유동성. 대형 지향이라 린치 고속성장주의 50억을 승계하지 않는다.
+                        required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
+
+                        // ── 점수: 사업의 질 ──
+                        // 0.3·3.1 원문 임계. 필수에서 내린 대신 배점을 가장 높게 둔다.
+                        weighted(RoeCalculator.CODE, ComparisonOperator.GTE, "15", "3"),
+                        // 0.3·3.2 원문의 D/E 0.5. 게이트(100)보다 조인 값이다.
+                        weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "50", "2"),
+                        weighted(GrossMarginCalculator.CODE, ComparisonOperator.GTE, "40", "2"),
+                        weighted(OperatingMarginCalculator.CODE, ComparisonOperator.GTE, "15", "2"),
+                        weighted(NetMarginCalculator.CODE, ComparisonOperator.GTE, "10", "2"),
+                        // 1.3·1.5·1.6·3.6. 세전이라 원문 12가 아니라 15다 — 위 javadoc.
+                        weighted(RoicPretaxCalculator.CODE, ComparisonOperator.GTE, "15", "2"),
+                        // 3.4 「일관성」. 나쁜 해에도 얼마나 남았는가를 본다.
+                        weighted(OperatingMarginMin5yCalculator.CODE,
+                                ComparisonOperator.GTE, "8", "2"),
+
+                        // ── 점수: 현금과 자본배분 ──
+                        // 3.3의 대용·5.4. 오너 어닝이 아니다.
+                        weighted(FcfMarginCalculator.CODE, ComparisonOperator.GTE, "8", "2"),
+                        // 3.5 1달러 유보 → 1달러 시가. 원문 그대로의 기준이 1.0이다.
+                        weighted(RetainedToMarket4yCalculator.CODE,
+                                ComparisonOperator.GTE, "1.0", "2"),
+                        // 5.5 회계 장난 경계 — 순이익과 영업현금흐름의 괴리.
+                        weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
+                        // 2.1 자본배분. 소각만 잡고 자사주 취득은 못 잡는다.
+                        weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
+
+                        // ── 점수: 가격 — 마지막에 온다 ──
+                        // 4.2 안전마진. P/FCF의 역수라 같은 조건이며 음수에서도 뜻이 산다.
+                        weighted(FcfYieldCalculator.CODE, ComparisonOperator.GTE, "5", "2"),
+                        // 4.3 보조 밸류에이션. 버핏은 PER을 절대 기준으로 쓰지 않는다.
+                        weighted(PerCalculator.CODE, ComparisonOperator.LTE, "25", "1"),
+                        weighted(RoaCalculator.CODE, ComparisonOperator.GTE, "8", "1"),
+
+                        // ── 점수: 업종 상대 — AAII 원 구현이 요구한 비교다 ──
+                        weighted(sectorPctl(PerCalculator.CODE),
+                                ComparisonOperator.LTE, "0.50", "1"),
+                        weighted(sectorPctl(OperatingMarginCalculator.CODE),
+                                ComparisonOperator.GTE, "0.50", "1"),
+                        weighted(sectorRel(DebtRatioCalculator.CODE),
+                                ComparisonOperator.LTE, "1.0", "1"))));
+    }
+
     @Bean
     public List<ScreenPreset> screenPresets() {
         return List.of(valueKr(), lynchFastGrowerKr(), lynchStalwartKr(),
                 momentumKr(), swingTrendKr(), stage2BreakoutKr(),
-                pullbackUptrendKr(), lowvolQualityKr());
+                pullbackUptrendKr(), lowvolQualityKr(), buffettQualityKr());
     }
 
     /**
