@@ -135,6 +135,11 @@ public class PresetCatalog {
      * 19종목/5%)과 {@code DEBT_RATIO <= 100}. {@code ROIC_PRETAX >= 15}는 <b>분포가 아니라
      * 기저 때문에</b> 원문 12에서 옮겼다 — 원문은 세후이고 우리 지표는 세전이라 같은 수를 쓰면
      * 원문보다 느슨해진다.
+     *
+     * <p><b>{@code ROIC_PRETAX}가 게이트에 있는 것이 이 프리셋의 해자 축이다</b>(ADR-0068).
+     * 2019년 주주서한이 <i>"영업에 투입된 순유형자본 대비 좋은 수익률"</i>을 <b>첫 번째</b>
+     * 기준으로 든다. 이 게이트 하나가 통과를 19 → 14로 자르면서 <b>매출총이익률 중앙값을
+     * 44.8 → 50.5로 올린다</b>(유니버스 22.2) — 프랜차이즈가 남고 코모디티가 빠진다.
      * <br><b>원문보다 약하게 옮긴 것</b>: 3.5를 5년이 아니라 <b>4년</b>으로 잰다. 읽기 창
      * 1,261봉 전이 2021-06인데 FY−5 기말은 1,377봉 전이라, 5년으로 두면 주가와 이익잉여금의
      * 기준점이 7개월 어긋난 채 남는다(ADR-0067 §배경).
@@ -152,10 +157,12 @@ public class PresetCatalog {
      * §8이 <i>"이 둘을 분리하는 순간 버핏 기준이 아니게 된다"</i>고 못박은 「ROE와 저부채를
      * 함께 둔다」는 지켜진다.
      *
-     * <p><b>게이트 둘이 같은 방향으로 겹친다.</b> {@code ROE_MIN_3Y >= 10}(53) ∧
-     * {@code PROFIT_STREAK_Y >= 7}(156)의 교집합이 37인데 독립 가정치는 23.8이라 <b>1.55배</b>다.
-     * 둘 다 「꾸준히 벌었는가」를 재기 때문이며, <b>단독 통과율만으로는 이 형태가 안 보인다.</b>
-     * 다섯을 전부 걸면 19종목이 남는다.
+     * <p><b>게이트끼리 같은 방향으로 겹치는 쌍이 둘 있다.</b> {@code ROE_MIN_3Y >= 10}(53) ∧
+     * {@code PROFIT_STREAK_Y >= 7}(156) = 37로 독립 가정(23.8)의 <b>1.55배</b>, 그리고
+     * {@code ROE_MIN_3Y >= 10} ∧ {@code ROIC_PRETAX >= 15}(69) = 35로 독립 가정(10.5)의
+     * <b>3.3배</b>다. <b>단독 통과율만으로는 이 형태가 안 보인다.</b> 그럼에도 셋을 다 두는
+     * 이유는 각각이 실제로 자르기 때문이며(ROIC가 19 → 14), <b>게이트 여섯을 안전장치 여섯으로
+     * 읽지 않도록 그 배수를 여기 적는다.</b> 여섯을 전부 걸면 14종목이 남는다.
      *
      * <p>MUST NOT: 이 프리셋이 <b>지주회사를 걸러낸다고 적지 않는다.</b> 문서 §10이 지주회사를
      * <i>"버핏식 스크린에서 가장 오염이 심한 구간"</i>으로 지목한다 — 지분법이익 때문에 ROE가
@@ -223,6 +230,10 @@ public class PresetCatalog {
                         required(ProfitStreakYearsCalculator.CODE, ComparisonOperator.GTE, "7"),
                         // 0.1 충분한 규모. 275종목(79%).
                         required(MarketCapCalculator.CODE, ComparisonOperator.GTE, "1000000000000"),
+                        // 2019 주주서한의 첫 번째 기준 —「영업에 투입된 순유형자본 대비 좋은
+                        // 수익률」. 세전이라 원문 12가 아니라 15다(ADR-0067). 69/347(20%)이
+                        // 통과하고 이 게이트가 19 → 14로 자른다.
+                        required(RoicPretaxCalculator.CODE, ComparisonOperator.GTE, "15"),
                         // §7 유동성. 대형 지향이라 린치 고속성장주의 50억을 승계하지 않는다.
                         required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
 
@@ -234,8 +245,6 @@ public class PresetCatalog {
                         weighted(GrossMarginCalculator.CODE, ComparisonOperator.GTE, "40", "2"),
                         weighted(OperatingMarginCalculator.CODE, ComparisonOperator.GTE, "15", "2"),
                         weighted(NetMarginCalculator.CODE, ComparisonOperator.GTE, "10", "2"),
-                        // 1.3·1.5·1.6·3.6. 세전이라 원문 12가 아니라 15다 — 위 javadoc.
-                        weighted(RoicPretaxCalculator.CODE, ComparisonOperator.GTE, "15", "2"),
                         // 3.4 「일관성」. 나쁜 해에도 얼마나 남았는가를 본다.
                         weighted(OperatingMarginMin5yCalculator.CODE,
                                 ComparisonOperator.GTE, "8", "2"),
