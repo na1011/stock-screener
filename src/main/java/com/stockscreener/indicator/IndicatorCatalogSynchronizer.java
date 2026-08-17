@@ -87,7 +87,11 @@ public class IndicatorCatalogSynchronizer {
         }
 
         deactivateMissing(activeCodes);
-        return activeCodes.size();
+        // MUST: 중복을 걷어내고 센다. 한 원본 지표에 업종 선언이 둘이면 표본 수 코드를
+        // 공유하므로(PER이 그렇다 — SectorMetricConfig의 MUST) 목록에 같은 코드가 두 번 들어간다.
+        // deactivateMissing은 NOT IN이라 중복이 무해하지만, 그대로 세면 로그가 DB 행 수보다
+        // 하나 많다고 말한다 — 카탈로그가 늘 때 그 차이를 결손으로 오해하게 된다.
+        return (int) activeCodes.stream().distinct().count();
     }
 
     /**
