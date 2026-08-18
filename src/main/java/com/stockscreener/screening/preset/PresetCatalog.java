@@ -32,6 +32,7 @@ import com.stockscreener.indicator.calculator.RevenueGrowthCalculator;
 import com.stockscreener.indicator.calculator.RoaCalculator;
 import com.stockscreener.indicator.calculator.RoeCalculator;
 import com.stockscreener.indicator.calculator.FcfMarginCalculator;
+import com.stockscreener.indicator.calculator.InventoryGrowthGapCalculator;
 import com.stockscreener.indicator.calculator.FcfYieldCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginMin5yCalculator;
 import com.stockscreener.indicator.calculator.ProfitStreakYearsCalculator;
@@ -426,7 +427,11 @@ public class PresetCatalog {
      * 유동성 하한은 {@code SWING_TREND_KR}의 100억이 아니라 <b>50억</b>이다 — 아래 참조.
      * <br><b>원문에 없는데 더한 것</b>: {@code PER_SECTOR_PCTL}·{@code DEBT_RATIO_SECTOR_REL}
      * (3.2·3.9의 업종 상대 요구를 실제 업종 모집단으로 옮긴 것), {@code ACCRUAL_RATIO},
-     * {@code OPERATING_MARGIN}(3.18 세전이익률의 대용).
+     * {@code OPERATING_MARGIN}(3.18 세전이익률의 대용), {@code INVENTORY_GROWTH_GAP}(3.14 —
+     * ADR-0069가 원자료만 적재해 둔 자리이고 이 프리셋이 그 소비자다).
+     * <br><b>원문보다 약하게 옮긴 것</b>: {@code FCF_MARGIN > 0}. §3.13의 1차 조건은
+     * {@code Free Cash Flow Yield > 5}이고 마진은 보조인데, 밸류에이션 계열을 쓰면 성패 기준과
+     * 축이 겹쳐 부호 조건으로 옮겼다.
      *
      * <p><b>{@code EPS_CAGR_5Y}를 문에 세운 대가가 있다.</b> 값이 있는 종목이 170/347이라
      * 절반이 <b>사업 성적이 아니라 데이터 사유로</b> 빠진다. 배제 사유는 셋이고 뭉뚱그리면 안
@@ -472,9 +477,11 @@ public class PresetCatalog {
                         + "옮기지 못한 조건이 많다. 배당 관련 셋(배당수익률·배당성향·연속 배당)은 "
                         + "배당 데이터가 없어 통째로 빠졌고, 순부채/EBITDA는 감가상각비와 "
                         + "총차입금을 소스가 주지 않아 빠졌다. 잉여현금흐름은 계산할 수 있게 "
-                        + "됐지만 이 프리셋의 조건에는 넣지 않았다 — 린치가 요구한 것은 "
-                        + "현금흐름의 존재이고 그 자리는 발생액 비율이 지킨다. "
-                        + "재고와 매출의 증가 속도 비교는 재고자산이 적재돼 있지 않다. "
+                        + "됐고 이 프리셋도 쓴다 — 발생액 비율이 그 자리를 대신한다고 적어 "
+                        + "두었으나 둘의 순위상관이 -0.18이라 서로를 대신하지 않는다. "
+                        + "재고와 매출의 증가 속도 비교도 넣었다. 재고가 매출보다 빨리 늘면 "
+                        + "팔리지 않은 물건이 쌓이는 중이고 손익계산서에는 아직 안 나타난다 — "
+                        + "편입 종목 284개에 값이 있다. "
                         + "세전이익률은 영업이익률로 대신했다 — 다른 값이다. "
                         + "금융·부동산 업종을 제외하지 못한다. 다만 저평가와 부채를 같은 업종 "
                         + "안에서 견주므로 금융업은 금융업끼리 비교된다. "
@@ -522,7 +529,15 @@ public class PresetCatalog {
                                 ConditionOperand.IndicatorRef.of(PerMedian5yCalculator.CODE))
                                 .withWeight(new BigDecimal("1")),
                         weighted(OperatingMarginCalculator.CODE, ComparisonOperator.GT, "10", "1"),
+                        // 3.13 린치는 이익보다 현금흐름을 신뢰했다. 발생액이 이 자리를 지킨다고
+                        // 적어 두었으나 ρ(ACCRUAL_RATIO, FCF_MARGIN) = −0.184로 지키지 않는다 —
+                        // 둘 다 둔다. 원문 1차 조건은 FCF 수익률이라 약하게 옮긴 것이다.
+                        weighted(FcfMarginCalculator.CODE, ComparisonOperator.GT, "0", "2"),
                         weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
+                        // 3.14 재고가 매출보다 빨리 늘면 팔리지 않은 것이 쌓이는 중이다.
+                        // 커버 284/347.
+                        weighted(InventoryGrowthGapCalculator.CODE,
+                                ComparisonOperator.LTE, "0", "1"),
                         weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"))));
     }
 
@@ -548,7 +563,8 @@ public class PresetCatalog {
      * 자른다 — 게이트가 아니라 상수이고, 대형 게이트가 유동성을 이미 함의한다.
      * <br><b>원문에 없는데 더한 것</b>: {@code OPM_MIN_5Y > 0}(<b>유일한 질 게이트</b>),
      * {@code PROFITABLE_QUARTERS_4}(4.1 이익 성장의 일관성), {@code ACCRUAL_RATIO},
-     * {@code SHARES_GROWTH_3Y}, {@code PER_SECTOR_PCTL}.
+     * {@code SHARES_GROWTH_3Y}, {@code PER_SECTOR_PCTL}, {@code FCF_MARGIN}(3.13),
+     * {@code INVENTORY_GROWTH_GAP}(3.14).
      *
      * <p><b>질 게이트를 원문에서 가져오지 못했다.</b> §2.2의 질 조항은 {@code ROE > 12}와
      * {@code D/E 0~0.6} 둘인데 대형+CAGR 11종목에 걸면 <b>각각 1종목</b>만 남아 게이트로 쓸 수
@@ -583,7 +599,7 @@ public class PresetCatalog {
                         + "PEG 값이 없는 종목은 결과에서 빠진다. 적자이거나 이익이 줄고 있다는 뜻이다. "
                         + "옮기지 못한 조건이 있다. 배당 관련 셋은 배당 데이터가 없어 빠졌고, "
                         + "순부채/EBITDA는 감가상각비와 총차입금을 소스가 주지 않아 빠졌다. "
-                        + "잉여현금흐름은 계산할 수 있게 됐지만 이 프리셋의 조건에는 넣지 않았다. "
+                        + "잉여현금흐름과 재고-매출 속도 차를 조건에 넣었다. "
                         + "세전이익률은 이 프리셋에 넣지 않았다. "
                         + "금융·부동산 업종을 제외하지 못한다 — 저평가를 같은 업종 안에서 견주는 "
                         + "것으로 일부만 대신한다. "
@@ -616,7 +632,12 @@ public class PresetCatalog {
                         // 4.1 이익 성장의 일관성. 넷 중 넷이 흑자인가.
                         weighted(ProfitableQuarters4Calculator.CODE,
                                 ComparisonOperator.GTE, "4", "1"),
+                        // 3.13 이익보다 현금흐름. 발생액과 ρ −0.184라 서로를 대신하지 않는다.
+                        weighted(FcfMarginCalculator.CODE, ComparisonOperator.GT, "0", "2"),
                         weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
+                        // 3.14 재고-매출 속도 차.
+                        weighted(InventoryGrowthGapCalculator.CODE,
+                                ComparisonOperator.LTE, "0", "1"),
                         weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"))));
     }
     // ── 4. 추세 상승 ──────────────────────────────────────────────────────
