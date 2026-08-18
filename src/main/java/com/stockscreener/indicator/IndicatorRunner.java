@@ -4,10 +4,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.stockscreener.indicator.IndicatorDataReader.FinancialVisibility;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -70,31 +73,24 @@ public class IndicatorRunner {
      */
     public long run(long stockId, LocalDate asOf, Optional<LocalDate> retentionCutoff,
                     Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes) {
-        IndicatorContext base = readRawData(stockId, asOf, marketIndexes);
+        IndicatorContext base = readRawData(stockId, asOf, marketIndexes, FinancialVisibility.LATEST);
         if (base.priceBars().isEmpty()) {
             // 시세가 없으면 계산할 것이 없다. 신규 편입 직후나 거래정지 종목에서 정상적으로 생긴다.
             log.debug("시세가 없어 지표 계산을 건너뛴다. stockId={} asOf={}", stockId, asOf);
             return 0L;
         }
 
-        // 이미 계산된 지표의 시계열. 뒤따르는 파생 지표가 여기서 부모를 찾는다.
-        Map<String, NavigableMap<LocalDate, BigDecimal>> computed = new HashMap<>();
+        Computed computed = compute(base);
         long written = 0;
         long deleted = 0;
         int suppressedCodes = 0;
 
         for (IndicatorCalculator calculator : registry.executionOrder()) {
             String code = calculator.code();
-            List<IndicatorPoint> points = calculator.calculate(contextFor(base, calculator, computed));
+            List<IndicatorPoint> points = computed.points().getOrDefault(code, List.of());
+            Set<LocalDate> suppressed = computed.suppressed().getOrDefault(code, Set.of());
 
-            // 창이 미보정 기업 행위를 삼키는 산출 일자는 값을 내지 않는다(ADR-0055).
-            // 사건이 없는 종목에서는 빈 집합이라 아래가 통째로 건너뛰어진다.
-            Set<LocalDate> suppressed = UnadjustedActionGuard.suppressedDates(
-                    base.priceBars(), base.unadjustedActions(), registry.effectiveLookback(code));
             if (!suppressed.isEmpty()) {
-                points = points.stream()
-                        .filter(point -> !suppressed.contains(point.tradeDate()))
-                        .toList();
                 // MUST: 아래 points.isEmpty() 분기보다 **앞**이다. 전부 억제되면 points가 비고,
                 // 거기서 continue하면 이미 저장된 옛 행이 그대로 남는다 — 값이 그럴듯해서
                 // 화면에도 테스트에도 드러나지 않는다. 러너가 "쓰지 않는다"로 끝내면 제외가
@@ -110,13 +106,6 @@ public class IndicatorRunner {
             if (points.isEmpty()) {
                 continue;
             }
-
-            // 파생 지표에는 창 전체를 넘긴다. 저장만 자르는 것이므로 여기는 자르기 전 값이다.
-            //
-            // 억제된 일자가 여기서도 빠진 채 넘어가는 것이 옳다. 자식의 창은 부모의 창을
-            // 포함하므로(effectiveLookback = 자기 몫 + 부모 최대) 부모에 구멍이 있는 날짜는
-            // 자식도 억제 대상이며, 자식이 성립하는 날짜에서는 부모에 구멍이 없다.
-            computed.put(code, toSeries(points));
             written += writer.write(stockId, code, retain(points, retentionCutoff));
         }
 
@@ -171,8 +160,100 @@ public class IndicatorRunner {
         return reader.readMarketIndexes(asOf, registry.maxEffectiveLookback());
     }
 
+    /**
+     * 한 종목의 지표를 {@code asOf} 기준으로 계산해 <b>값만 돌려준다 — 저장도 삭제도 하지 않는다.</b>
+     *
+     * <p>시점 재현의 진입점이다(ADR-0071). 저장된 {@code indicator_value}를 쓰지 않는 이유는
+     * 그 값들에 <b>시간축이 없기 때문</b>이다 — {@code FinancialMath.spreadOverTradeDates}가
+     * 최신 재무로 낸 값 하나를 읽기 창 전 봉에 찍고 일일 갱신이 매일 다시 쓴다. 과거 일자에
+     * 조건을 걸면 결과가 <b>나오는데 전부 오늘 재무로 계산된 값</b>이다.
+     *
+     * <p>MUST: 마지막 봉의 일자가 {@code asOf}와 <b>정확히 같을 때만</b> 값을 낸다. 라이브
+     * 스크리닝이 {@code trade_date = asOf}로 정확히 일치시키므로({@code ScreeningRepository}),
+     * 여기서 "asOf 이하의 마지막 봉"으로 느슨하게 잡으면 <b>거래정지 종목이 화면에서는
+     * 판정불가인데 백테스트에서는 통과</b>하게 된다. 그 차이는 어느 쪽도 에러를 내지 않는다.
+     *
+     * <p>휴장일을 {@code asOf}로 주면 <b>전 종목이 빈 맵</b>이 되어 필수 조건이 모두
+     * 판정불가가 되고 통과가 0이 된다. 게이트 탓으로 오독하기 쉬우므로 호출부가 거래일을
+     * 준다(ADR-0071 §규칙).
+     *
+     * @param visibility 재무를 어느 시점의 눈으로 볼 것인가. 백테스트는
+     *                   {@link FinancialVisibility#KNOWN_ON}이다
+     * @return 지표 코드 → {@code asOf}의 값. 시세가 없거나 마지막 봉이 {@code asOf}가 아니면 빈 맵
+     */
+    public Map<String, BigDecimal> computeAt(long stockId, LocalDate asOf,
+                                             Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes,
+                                             FinancialVisibility visibility) {
+        IndicatorContext base = readRawData(stockId, asOf, marketIndexes, visibility);
+        List<PriceBar> bars = base.priceBars();
+        if (bars.isEmpty() || !bars.get(bars.size() - 1).tradeDate().equals(asOf)) {
+            return Map.of();
+        }
+        Map<String, BigDecimal> values = new LinkedHashMap<>();
+        compute(base).points().forEach((code, points) -> {
+            IndicatorPoint last = points.get(points.size() - 1);
+            if (last.tradeDate().equals(asOf)) {
+                values.put(code, last.value());
+            }
+        });
+        return values;
+    }
+
+    /**
+     * 계산기를 순서대로 돌린 결과. <b>저장·삭제와 무관하다.</b>
+     *
+     * @param points    지표 코드 → 억제를 걷어낸 뒤 남은 포인트. <b>빈 것은 담기지 않는다</b>
+     * @param suppressed 지표 코드 → 미보정 기업 행위로 억제된 일자. 억제가 없으면 담기지 않는다
+     */
+    private record Computed(Map<String, List<IndicatorPoint>> points,
+                            Map<String, Set<LocalDate>> suppressed) {
+    }
+
+    /**
+     * 계산 루프. {@link #run}과 {@link #computeAt}이 <b>이것 하나를 공유한다.</b>
+     *
+     * <p>MUST NOT: 백테스트 쪽에 루프를 따로 만들지 않는다. 두 벌이 되면 억제 규칙(ADR-0055)이나
+     * 파생 지표의 순서가 한쪽에서만 바뀌는데, <b>양쪽 다 값이 나오므로</b> 어긋난 것을 알 길이
+     * 화면에도 테스트에도 없다.
+     */
+    private Computed compute(IndicatorContext base) {
+        // 이미 계산된 지표의 시계열. 뒤따르는 파생 지표가 여기서 부모를 찾는다.
+        Map<String, NavigableMap<LocalDate, BigDecimal>> series = new HashMap<>();
+        Map<String, List<IndicatorPoint>> points = new LinkedHashMap<>();
+        Map<String, Set<LocalDate>> suppressedByCode = new HashMap<>();
+
+        for (IndicatorCalculator calculator : registry.executionOrder()) {
+            String code = calculator.code();
+            List<IndicatorPoint> computed = calculator.calculate(contextFor(base, calculator, series));
+
+            // 창이 미보정 기업 행위를 삼키는 산출 일자는 값을 내지 않는다(ADR-0055).
+            // 사건이 없는 종목에서는 빈 집합이라 아래가 통째로 건너뛰어진다.
+            Set<LocalDate> suppressed = UnadjustedActionGuard.suppressedDates(
+                    base.priceBars(), base.unadjustedActions(), registry.effectiveLookback(code));
+            if (!suppressed.isEmpty()) {
+                computed = computed.stream()
+                        .filter(point -> !suppressed.contains(point.tradeDate()))
+                        .toList();
+                suppressedByCode.put(code, suppressed);
+            }
+            if (computed.isEmpty()) {
+                continue;
+            }
+
+            // 파생 지표에는 창 전체를 넘긴다. 저장만 자르는 것이므로 여기는 자르기 전 값이다.
+            //
+            // 억제된 일자가 여기서도 빠진 채 넘어가는 것이 옳다. 자식의 창은 부모의 창을
+            // 포함하므로(effectiveLookback = 자기 몫 + 부모 최대) 부모에 구멍이 있는 날짜는
+            // 자식도 억제 대상이며, 자식이 성립하는 날짜에서는 부모에 구멍이 없다.
+            series.put(code, toSeries(computed));
+            points.put(code, computed);
+        }
+        return new Computed(points, suppressedByCode);
+    }
+
     private IndicatorContext readRawData(long stockId, LocalDate asOf,
-                                         Map<String, NavigableMap<LocalDate, BigDecimal>> indexes) {
+                                         Map<String, NavigableMap<LocalDate, BigDecimal>> indexes,
+                                         FinancialVisibility visibility) {
         int bars = registry.maxEffectiveLookback();
         int years = registry.maxFinancialYears();
         // 종목당 한 번만 읽는다. 지표마다 읽으면 850종목 × N지표의 N+1이 된다.
@@ -181,8 +262,8 @@ public class IndicatorRunner {
                 stockId,
                 attributes.industryDivision(),
                 reader.readPriceBars(stockId, asOf, bars),
-                reader.readAnnualFigures(stockId, asOf, years),
-                reader.readQuarterlyFigures(stockId, asOf, years),
+                reader.readAnnualFigures(stockId, asOf, years, visibility),
+                reader.readQuarterlyFigures(stockId, asOf, years, visibility),
                 // 빠뜨려도 컴파일된다 — 전 종목이 빈 목록을 받아 권리락 구간 보정이 통째로
                 // 사라지고 값은 그럴듯하다. IndicatorRunnerTest가 이 자리를 지킨다.
                 reader.readShareAdjustments(stockId),

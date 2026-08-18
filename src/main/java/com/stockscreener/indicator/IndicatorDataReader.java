@@ -50,28 +50,84 @@ public class IndicatorDataReader {
             ORDER BY trade_date
             """;
 
+    /** 두 질의가 같은 목록을 읽어야 한다 — 갈리면 시점 경로만 컬럼이 비고 값이 그럴듯하다. */
+    private static final String FINANCIAL_COLUMNS = """
+            fiscal_year, fiscal_period, period_start, period_end, published_at,
+            currency_code, revenue, operating_income, net_income, total_assets,
+            total_equity, total_liabilities, current_assets, current_liabilities,
+            retained_earnings, operating_cash_flow, shares_outstanding,
+            eps, bps, cost_of_sales, cash_and_equivalents, capex, inventories
+            """;
+
+    /**
+     * 재무를 어느 시점의 눈으로 볼 것인가(ADR-0071).
+     *
+     * <p>MUST: 호출부가 <b>반드시 고른다.</b> 기본값을 주거나 시점용 메서드를 옆에 따로 두면
+     * 새 호출부가 라이브 쪽을 골라도 <b>아무 증상이 없다</b> — 값이 나오고, 더 좋게 나온다.
+     * ADR-0045가 러너의 2인자 {@code run()}을 지운 것과 같은 이유다.
+     */
+    public enum FinancialVisibility {
+        /**
+         * 저장된 <b>최신 개정본</b>. 라이브 스크리닝이 쓴다.
+         *
+         * <p>{@code is_latest}로 거르는 이유는 정정공시 때문이다. 같은 기(期)에 여러 판이
+         * 쌓이며 이것이 없으면 낡은 판과 최신 판이 함께 잡혀 TTM이 중복 합산된다.
+         */
+        LATEST,
+        /**
+         * {@code asOf}에 <b>공시돼 있던 판</b>. 시점 재현이 쓴다.
+         *
+         * <p>{@code LATEST}와 두 곳이 다르다. {@code published_at <= asOf}로 <b>미래 공시</b>를
+         * 막고(실측 공시 지연 중앙값이 분기 45일·연간 80일, p90 152일), {@code is_latest} 대신
+         * 그 시점까지 나온 판 중 {@code revision_no}가 가장 큰 것을 고른다 — {@code is_latest}는
+         * <b>오늘의</b> 최신이라 과거 as-of에 정정 후 값이 샌다.
+         *
+         * <p>{@code period_end <= asOf}는 <b>그대로 남긴다.</b> 기말 전에 공시된 행이 실제로
+         * 있고(실측 5행) 그것을 들이면 완결되지 않은 기(期)를 확정 실적처럼 쓰게 된다.
+         */
+        KNOWN_ON
+    }
+
     /**
      * 재무는 {@code period_end} <b>내림차순</b>(최신 우선)이다({@link IndicatorContext} 계약).
      * TTM 합산이 "최근 4분기"를 앞에서부터 가져간다.
      *
-     * <p>{@code is_latest}로 거르는 이유는 정정공시 때문이다. 같은 기(期)에 여러 판이 쌓이며
-     * 이것이 없으면 낡은 판과 최신 판이 함께 잡혀 TTM이 중복 합산된다.
-     *
-     * <p>{@code period_end <= ?}인 이유는 <b>미래 정보 차단</b>이다. 과거 어느 날의 지표를
-     * 다시 계산할 때 그 시점에 없던 재무를 쓰면 백테스트가 조용히 낙관적으로 나온다.
+     * <p>{@code period_end <= ?}는 미래 <b>기말</b>을 막는다. <b>미래 공시는 막지 못한다</b> —
+     * 그것은 {@link FinancialVisibility#KNOWN_ON}의 몫이다.
      */
-    private static final String SELECT_FINANCIALS = """
-            SELECT fiscal_year, fiscal_period, period_start, period_end, published_at,
-                   currency_code, revenue, operating_income, net_income, total_assets,
-                   total_equity, total_liabilities, current_assets, current_liabilities,
-                   retained_earnings, operating_cash_flow, shares_outstanding,
-                   eps, bps, cost_of_sales, cash_and_equivalents, capex, inventories
+    private static final String SELECT_FINANCIALS_LATEST = ("""
+            SELECT %s
             FROM financial_statement
             WHERE stock_id = ? AND is_latest AND period_end <= ?
-              AND fiscal_period %s 'FY'
+              AND fiscal_period %%s 'FY'
             ORDER BY period_end DESC, published_at DESC
             LIMIT ?
-            """;
+            """).formatted(FINANCIAL_COLUMNS);
+
+    /**
+     * 그 시점에 공시돼 있던 판만 읽는다({@link FinancialVisibility#KNOWN_ON}).
+     *
+     * <p>기(期)마다 {@code revision_no} 최대를 고르는 것이 {@code is_latest}를 대신한다.
+     * 창을 {@code published_at}으로 먼저 좁힌 뒤 고르므로, 정정이 나중에 온 기는 <b>정정 전
+     * 판</b>이 뽑힌다. {@code idx_fs_asof}가 이 형태로 이미 있다(V1).
+     *
+     * <p>인자가 넷이다({@code stock_id}, {@code published_at}, {@code period_end}, {@code LIMIT}).
+     * {@code LATEST}는 셋이라 <b>인자 수가 다르다</b> — 한 배열로 합치면 조용히 어긋난다.
+     */
+    private static final String SELECT_FINANCIALS_KNOWN_ON = ("""
+            SELECT %1$s
+            FROM (
+                SELECT %1$s,
+                       row_number() OVER (PARTITION BY fiscal_year, fiscal_period
+                                          ORDER BY revision_no DESC) rn
+                FROM financial_statement
+                WHERE stock_id = ? AND published_at <= ? AND period_end <= ?
+                  AND fiscal_period %%s 'FY'
+            ) known
+            WHERE rn = 1
+            ORDER BY period_end DESC, published_at DESC
+            LIMIT ?
+            """).formatted(FINANCIAL_COLUMNS);
 
     private static final RowMapper<PriceBar> PRICE_BAR_MAPPER = (rs, rowNum) -> new PriceBar(
             rs.getObject("trade_date", LocalDate.class),
@@ -209,15 +265,18 @@ public class IndicatorDataReader {
         return corporateActions.findUnadjusted(stockId);
     }
 
-    /** 연간 재무를 최신 우선으로 읽는다. */
-    public List<FinancialFigures> readAnnualFigures(long stockId, LocalDate asOf, int years) {
+    /**
+     * 연간 재무를 최신 우선으로 읽는다.
+     *
+     * @param visibility 어느 시점의 눈으로 볼 것인가. <b>기본값이 없다</b> — 이유는
+     *                   {@link FinancialVisibility} javadoc에 있다
+     */
+    public List<FinancialFigures> readAnnualFigures(long stockId, LocalDate asOf, int years,
+                                                    FinancialVisibility visibility) {
         if (years <= 0) {
             return List.of();
         }
-        return jdbcTemplate.query(
-                SELECT_FINANCIALS.formatted("="),
-                IndicatorDataReader::mapFigures,
-                stockId, asOf, years);
+        return queryFigures("=", stockId, asOf, years, visibility);
     }
 
     /**
@@ -227,15 +286,34 @@ public class IndicatorDataReader {
      * TTM 4분기 합산이 경계에서 딱 맞아, 한 분기라도 누락된 종목은 값이 조용히 사라진다.
      * 재무 공시는 실제로 빠지는 일이 있으므로 한 해치를 더 읽는다.
      */
-    public List<FinancialFigures> readQuarterlyFigures(long stockId, LocalDate asOf, int years) {
+    public List<FinancialFigures> readQuarterlyFigures(long stockId, LocalDate asOf, int years,
+                                                       FinancialVisibility visibility) {
         if (years <= 0) {
             return List.of();
         }
-        int quarters = (years + 1) * 4;
-        return jdbcTemplate.query(
-                SELECT_FINANCIALS.formatted("<>"),
-                IndicatorDataReader::mapFigures,
-                stockId, asOf, quarters);
+        return queryFigures("<>", stockId, asOf, (years + 1) * 4, visibility);
+    }
+
+    /**
+     * 두 가시성의 인자 배열이 다르다는 사실을 여기 한 곳에 가둔다.
+     *
+     * <p>{@code KNOWN_ON}은 {@code asOf}를 <b>두 번</b> 쓴다({@code published_at}과
+     * {@code period_end}). 호출부마다 배열을 만들면 하나만 넘겨 <b>파라미터가 밀리는데</b>,
+     * JDBC는 개수가 맞으면 타입만 보고 통과시키므로 값이 그럴듯하게 틀린다.
+     */
+    private List<FinancialFigures> queryFigures(String periodOperator, long stockId,
+                                                LocalDate asOf, int limit,
+                                                FinancialVisibility visibility) {
+        return switch (visibility) {
+            case LATEST -> jdbcTemplate.query(
+                    SELECT_FINANCIALS_LATEST.formatted(periodOperator),
+                    IndicatorDataReader::mapFigures,
+                    stockId, asOf, limit);
+            case KNOWN_ON -> jdbcTemplate.query(
+                    SELECT_FINANCIALS_KNOWN_ON.formatted(periodOperator),
+                    IndicatorDataReader::mapFigures,
+                    stockId, asOf, asOf, limit);
+        };
     }
 
     private static FinancialFigures mapFigures(ResultSet rs, int rowNum) throws SQLException {
