@@ -5,6 +5,7 @@ import com.stockscreener.pipeline.collector.CorporateActionLedger;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
@@ -40,6 +41,9 @@ import org.springframework.context.annotation.Import;
         basePackages = {
                 "com.stockscreener.indicator",
                 "com.stockscreener.screening",
+                // 하네스 자신(PointInTimeScreener·AsOfCalendar). 운영 코드가 아니라
+                // 시점 재현 전용이라 src/test에 두고 여기서만 스캔한다.
+                "com.stockscreener.probe.backtest",
         },
         excludeFilters = {
                 @ComponentScan.Filter(
@@ -50,6 +54,10 @@ import org.springframework.context.annotation.Import;
                 @ComponentScan.Filter(
                         type = FilterType.REGEX, pattern = "com\\.stockscreener\\..*\\.web\\..*"),
         })
+// MUST: 엔티티 스캔을 명시한다. 기본값이 **이 설정 클래스의 패키지**라 그냥 두면 엔티티가
+// 하나도 등록되지 않고, 증상이 "테이블이 없다"가 아니라 UnknownEntityException이라
+// 원인이 스캔 범위라는 것이 드러나지 않는다.
+@EntityScan("com.stockscreener")
 @Import(CorporateActionLedger.class)
 public class BacktestHarnessContext {
 }

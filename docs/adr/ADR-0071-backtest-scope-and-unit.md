@@ -140,17 +140,27 @@ applies_to:
 rg 'published_at\s*<=' src/main/java/com/stockscreener/indicator/IndicatorDataReader.java
 ```
 
-백테스트 경로가 저장된 지표를 읽지 않는가.
+백테스트 경로가 저장된 지표를 읽지 않는가. **낱말이 아니라 접점을 센다** — 하네스에는
+그 이름이 「읽지 않는다」는 주석으로 여러 번 나오므로, 낱말을 세면 규칙을 지킨 파일이
+위반으로 보인다.
 
 ```bash
-rg 'indicator_value' src/test/java/com/stockscreener/probe/
+rg -n 'FROM indicator_value|import .*ScreeningRepository' \
+   src/test/java/com/stockscreener/probe/backtest/PointInTimeScreener.java
 ```
 
-기준일=오늘로 돌린 as-of 재계산의 통과 **집합**이 화면과 같은가(수가 아니라 집합이다).
+기준일=오늘로 돌린 as-of 재계산이 화면과 같은가. **집합과 점수를 함께 본다.**
+집합만 보면 배점 아홉이 검사되지 않는다 — SCORING의 포함 여부는 `satisfiesRequired`가
+정하므로 **필수 게이트만** 보고, 배점은 한 종목도 바꾸지 않는다. `PER_SECTOR_PCTL`은
+`computeAt`이 내지 않아 하네스가 `PERCENT_RANK`를 손으로 다시 구현한 것이라,
+**점수 대조가 그 재구현의 유일한 검사다.**
 
 ```bash
-./gradlew test --tests "*AsOfRecomputeTest*"
+./gradlew backtestProbe --tests "*AsOfRecomputeTest*"
 ```
+
+**MUST NOT: `./gradlew test`로 돌리지 않는다.** 그쪽은 전 테이블이 0행인 테스트 DB를 보므로
+0집합 = 0집합으로 **언제나 초록**이다.
 
 ---
 
