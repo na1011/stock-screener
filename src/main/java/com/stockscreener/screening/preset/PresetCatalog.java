@@ -415,6 +415,12 @@ public class PresetCatalog {
      * 달라지므로 「원문 그대로」에 넣지 않는다(ADR-0070). 옮긴 근거는 실측이다 — TTM YoY는
      * 사분위가 −16.7~79.4로 넓어 <b>밴드가 잡음보다 좁고</b>, 린치의 「연 20~25% 성장」은 다년
      * 지속률이지 TTM이 아니다. ρ(TTM, 5년CAGR) = 0.229로 둘은 사실상 다른 축이다.
+     * <br><b>원문에 있는데 뺀 것</b>: {@code PEG_PCTL}. {@code PEG}와 순위상관 <b>0.996</b>이라
+     * 배점 최대 가중치가 게이트와 같은 축을 두 번 세고 있었다(ADR-0068의 잣대를 그대로 적용).
+     * <br><b>자리를 옮긴 것</b>: {@code PEG}가 필수 게이트에서 <b>배점</b>으로 내려왔다. 린치의
+     * 판별 도구인 것은 맞지만 <b>가격은 문이 아니라 저울이다</b>(ADR-0070) — 게이트로 둘 때
+     * 자르는 일의 <b>74%가 임계값이 아니라 결측 배제</b>였다(대형 87 → PEG값 55 → 통과 44).
+     * 적자·역성장 배제는 이제 분류 게이트가 직접 한다.
      * <br><b>국내 분포로 재보정한 것</b>: {@code DEBT_RATIO <= 80}(§8 한국 조정값 표). 원문 D/E
      * 0.33은 국내에서 23%만 통과해 제조업 중심 구조에 과하고, 0.8이 절반을 가른다(174/346).
      * 유동성 하한은 {@code SWING_TREND_KR}의 100억이 아니라 <b>50억</b>이다 — 아래 참조.
@@ -483,8 +489,6 @@ public class PresetCatalog {
                 null,
                 ConditionGroup.and(List.of(
                         // ── 필수 게이트 ──
-                        // 린치 정체성. 값이 없다는 것 자체가 배제 사유다(위 javadoc).
-                        required(PegCalculator.CODE, ComparisonOperator.LTE, "1.0"),
                         // ★ 유형 분류. 이 프리셋을 「고속성장주」라 부를 수 있게 하는 조건이다.
                         // 하한 20은 §2.3, 상한 50은 §3.17 — 둘 다 원문이나 §2.3은 TTM YoY 축이라
                         // 밴드를 5년 CAGR로 옮긴 것이다(ADR-0070). 88 → 7종목.
@@ -498,8 +502,10 @@ public class PresetCatalog {
                         required(Return52wCalculator.CODE, ComparisonOperator.LT, "100"),
 
                         // ── 점수 ──
-                        // PEG는 낮은 쪽이 좋으므로 <=. 절대 임계가 국면에 흔들리는 것을 받는다.
-                        weighted(pctl(PegCalculator.CODE), ComparisonOperator.LTE, "0.30", "3"),
+                        // 3.3 린치의 판별 도구. 가격은 문이 아니라 저울이다(ADR-0070) — 게이트로
+                        // 두면 자르는 일의 74%가 임계값이 아니라 결측 배제였다. PEG_PCTL은
+                        // PEG와 순위상관 0.996이라 뺐다. 새 게이트축과는 ρ −0.010으로 직교한다.
+                        weighted(PegCalculator.CODE, ComparisonOperator.LTE, "1.0", "3"),
                         // 3.2 업종 전체의 PER과 비교해서 봐야 한다 — 원문이 요구한 비교다.
                         weighted(sectorPctl(PerCalculator.CODE),
                                 ComparisonOperator.LTE, "0.50", "2"),
@@ -537,6 +543,7 @@ public class PresetCatalog {
      * 걸면 대형 87종목 중 6이 남고 질 게이트를 하나만 더해도 0이 된다(ADR-0070).
      * <br><b>국내 분포로 재보정한 것</b>: "대형"의 경계를 유니버스 상위 25%(6.77조)로 둔다 —
      * 절대 금액으로는 시장마다 뜻이 달라진다.
+     * <br><b>자리를 옮긴 것</b>: {@code PEG <= 1.5}가 게이트에서 배점으로 내려왔다(ADR-0070).
      * <br><b>원문에 있는데 뺀 것</b>: {@code TURNOVER_60 >= 100억}. 대형 87종목 중 <b>0종목</b>을
      * 자른다 — 게이트가 아니라 상수이고, 대형 게이트가 유동성을 이미 함의한다.
      * <br><b>원문에 없는데 더한 것</b>: {@code OPM_MIN_5Y > 0}(<b>유일한 질 게이트</b>),
@@ -588,8 +595,6 @@ public class PresetCatalog {
                         // "대형"의 경계. 유니버스 상위 25%다.
                         required(MarketCapCalculator.CODE, ComparisonOperator.GTE,
                                 "6773000000000"),
-                        // 2.2 원문. 고속성장주보다 느슨하다.
-                        required(PegCalculator.CODE, ComparisonOperator.LTE, "1.5"),
                         // ★ 유형 분류. 2.2의 밴드를 5년 CAGR로 옮겼다(ADR-0070). 54 → 9종목.
                         requiredBetween(EpsCagr5yCalculator.CODE, "10", "20"),
                         // ★ 질. 「나쁜 해에도 영업흑자인가」 — 대형우량주가 약속하는 성질이다.
@@ -601,6 +606,8 @@ public class PresetCatalog {
                         // 상수이고, 대형 게이트가 유동성을 이미 함의한다(ADR-0070).
 
                         // ── 점수 ──
+                        // 2.2 원문. 고속성장주보다 느슨하다. 가격은 저울이다(ADR-0070).
+                        weighted(PegCalculator.CODE, ComparisonOperator.LTE, "1.5", "3"),
                         weightedBetween(EpsGrowthTtmYoyCalculator.CODE, "10", "20", "3"),
                         weighted(RoeCalculator.CODE, ComparisonOperator.GT, "12", "3"),
                         weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "60", "2"),
