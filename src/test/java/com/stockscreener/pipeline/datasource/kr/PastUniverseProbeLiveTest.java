@@ -67,8 +67,24 @@ class PastUniverseProbeLiveTest {
 
     private static final List<String> UNIVERSES = List.of("KOSPI_TOP200", "KOSDAQ_TOP150");
 
-    /** 폐지 종목의 실현 손실 가정. 하한·상한 둘로 재서 X를 구간으로 낸다. */
+    /** 폐지 종목의 실현 손실 가정. 하한·상한 둘로 재서 편향을 구간으로 낸다. */
     private static final double[] DELISTING_LOSS = {-0.80, -1.00};
+
+    /**
+     * 편향을 나눌 <b>미충족 집단</b>의 크기. 폐지 종목은 거의 전부 여기 있으므로 분모가
+     * 유니버스가 아니라 이쪽이다 — 게이트가 조일수록 미충족이 커지고 편향은 <b>작아진다.</b>
+     *
+     * <p>실측 통과 수에서 왔다: {@code ROIC_PRETAX} 69/347, {@code PROFIT_STREAK_Y} 156/350.
+     * 마지막 100은 통과가 많은 조건까지 덮는 <b>보수적 상한</b>이다.
+     */
+    private static final int[] UNSATISFIED_GROUP = {350, 278, 194, 100};
+
+    /**
+     * 사전등록된 검출 가능 효과({@code docs/phase-criteria.md} §P17). <b>6개월당</b>이다 —
+     * 창 전체 누적 폐지 수를 한 기간 유니버스로 나누면 이 값과 <b>단위가 달라</b>
+     * 편향이 4~5배로 부풀고, 그러면 「수익률 축은 못 쓴다」는 결론이 산식에서 나온다.
+     */
+    private static final double DETECTABLE_EFFECT_PP = 3.5;
 
     @Test
     @DisplayName("[live][probe] 과거 유니버스와 오늘을 견줘 편출과 폐지를 가른다 — 약 34콜")
@@ -139,13 +155,32 @@ class PastUniverseProbeLiveTest {
         System.out.println("  폐지: " + everDelisted);
         System.out.printf("평균 유니버스 크기 %d%n", avgUniverse);
 
-        for (double loss : DELISTING_LOSS) {
-            double bias = 100.0 * everDelisted.size() * Math.abs(loss) / avgUniverse;
-            System.out.printf("  폐지 %d × 손실 %.0f%% ÷ 유니버스 %d = 미충족 평균이 약 %.2f%%p 높게 잡힌다%n",
-                    everDelisted.size(), loss * 100, avgUniverse, bias);
+        // MUST: 누적 폐지 수를 그대로 쓰지 않는다. 검출 임계가 6개월당이므로 분자도 6개월당
+        // 이어야 한다 — 창 전체 19종목을 한 기간 유니버스로 나누면 편향이 4~5배로 부푼다.
+        LocalDate first = AS_OF.get(0);
+        LocalDate last = AS_OF.get(AS_OF.size() - 1);
+        double windowYears = (last.toEpochDay() - first.toEpochDay()) / 365.25;
+        double periods = windowYears / 0.5;
+        double delistedPerPeriod = everDelisted.size() / periods;
+
+        System.out.printf("창 %.2f년 = 6개월 구간 %.1f개 · 6개월당 폐지 %.2f종목%n",
+                windowYears, periods, delistedPerPeriod);
+        System.out.println("\n  미충족 집단 크기별 편향 (%p / 6개월) — 분모가 유니버스가 아니라"
+                + " 미충족인 이유는 폐지 종목이 거의 전부 거기 있기 때문이다:");
+        for (int group : UNSATISFIED_GROUP) {
+            StringBuilder line = new StringBuilder("    미충족 %3d명: ".formatted(group));
+            for (double loss : DELISTING_LOSS) {
+                line.append("손실 %.0f%% → %.2f%%p   "
+                        .formatted(loss * 100,
+                                100.0 * delistedPerPeriod * Math.abs(loss) / group));
+            }
+            System.out.println(line);
         }
-        System.out.println("사전등록된 검출 임계는 3.5%p/6개월이다(phase-criteria §P17).");
-        System.out.println("MUST: 위 값이 3.5%p에 근접하면 수익률 축은 부호를 말할 수 없다고 적는다.");
+        System.out.printf("%n  사전등록 검출 임계 %.1f%%p / 6개월(phase-criteria §P17)%n",
+                DETECTABLE_EFFECT_PP);
+        System.out.println("MUST: 편향이 임계를 넘으면 수익률 축은 부호를 말할 수 없다고 적는다.");
+        System.out.println("MUST: 넘지 않아도 「편향 없음」이 아니다 — 편향은 차를 0 쪽으로"
+                + " 누르므로, 임계 근처의 작은 양(+)의 효과는 여전히 못 가른다.");
         System.out.println("MUST NOT: 이 값을 「복원했다」로 읽지 않는다 — 폐지 종목은 지수에서"
                 + " 빠진 뒤 상장폐지되는 경우가 많아 편입 상태로는 잡히지 않는다. 이것은 하한이다.");
     }
