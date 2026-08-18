@@ -408,18 +408,25 @@ public class PresetCatalog {
      *
      * <p><b>원문 그대로</b>: {@code PEG <= 1.0}(3.3 — 린치의 판별 도구이자 그가 "마지막까지
      * 고정"이라 한 둘 중 하나), {@code PER <= 20}(3.2), {@code REVENUE_GROWTH > 15}(§7),
-     * {@code RETURN_52W < 100}(5.1 뜨거운 종목 배제), {@code SHARES_GROWTH_3Y <= 0}(4.5),
-     * {@code EPS_CAGR_5Y 0~50}(3.17 지속 불가능한 성장 배제).
-     * <br><b>국내 분포로 재보정한 것</b>: {@code DEBT_RATIO <= 80}. 원문 D/E 0.33은 국내에서
-     * 23%만 통과해 제조업 중심 구조에 과하고, 0.8이 절반을 가른다(174/346). 유동성 하한은
-     * {@code SWING_TREND_KR}의 100억이 아니라 <b>50억</b>이다 — 아래 참조.
-     * <br><b>원문보다 약하게 옮긴 것</b>: {@code EPS_CAGR_5Y}를 필수가 아니라 점수에 둔다.
-     * 원문은 「마지막까지 고정」이라 하지만 값이 있는 종목이 170/347뿐이라, 필수로 걸면
-     * <b>성장이 과했기 때문이 아니라 이력이 짧아서</b> 탈락하는 종목이 생긴다.
-     * <br><b>원문에 없는데 더한 것</b>: {@code PEG_PCTL}(절대 임계가 이익 사이클에 흔들리는
-     * 것을 백분위가 받는다), {@code PER_SECTOR_PCTL}·{@code DEBT_RATIO_SECTOR_REL}(3.2·3.9의
-     * 업종 상대 요구를 실제 업종 모집단으로 옮긴 것), {@code ACCRUAL_RATIO}(3.13 현금흐름
-     * 신뢰의 대용), {@code OPERATING_MARGIN}(3.18 세전이익률의 대용).
+     * {@code RETURN_52W < 100}(5.1 뜨거운 종목 배제), {@code SHARES_GROWTH_3Y <= 0}(4.5).
+     * <br><b>원문의 밴드를 다른 축으로 옮긴 것</b>: {@code EPS_CAGR_5Y 20~50}이 <b>유형 분류</b>이자
+     * 이 프리셋의 필수 게이트다. 하한 20은 §2.3, 상한 50은 §3.17에서 왔는데 <b>§2.3의 축은
+     * {@code EPS Diluted Growth (TTM YoY)}이고 5년 CAGR이 아니다.</b> 축을 옮기면 모집단이
+     * 달라지므로 「원문 그대로」에 넣지 않는다(ADR-0070). 옮긴 근거는 실측이다 — TTM YoY는
+     * 사분위가 −16.7~79.4로 넓어 <b>밴드가 잡음보다 좁고</b>, 린치의 「연 20~25% 성장」은 다년
+     * 지속률이지 TTM이 아니다. ρ(TTM, 5년CAGR) = 0.229로 둘은 사실상 다른 축이다.
+     * <br><b>국내 분포로 재보정한 것</b>: {@code DEBT_RATIO <= 80}(§8 한국 조정값 표). 원문 D/E
+     * 0.33은 국내에서 23%만 통과해 제조업 중심 구조에 과하고, 0.8이 절반을 가른다(174/346).
+     * 유동성 하한은 {@code SWING_TREND_KR}의 100억이 아니라 <b>50억</b>이다 — 아래 참조.
+     * <br><b>원문에 없는데 더한 것</b>: {@code PER_SECTOR_PCTL}·{@code DEBT_RATIO_SECTOR_REL}
+     * (3.2·3.9의 업종 상대 요구를 실제 업종 모집단으로 옮긴 것), {@code ACCRUAL_RATIO},
+     * {@code OPERATING_MARGIN}(3.18 세전이익률의 대용).
+     *
+     * <p><b>{@code EPS_CAGR_5Y}를 문에 세운 대가가 있다.</b> 값이 있는 종목이 170/347이라
+     * 절반이 <b>사업 성적이 아니라 데이터 사유로</b> 빠진다. 배제 사유는 셋이고 뭉뚱그리면 안
+     * 된다 — ① 상장 5년 미만 ② 5년 전이 적자 ③ <b>미보정 기업행위</b>(1,261봉 창, ADR-0055,
+     * 현재 6종목). ADR-0066이 바로 이 이유로 이 지표를 필수에서 점수로 내렸고 ADR-0070이 그
+     * 결정을 뒤집었다 — <b>분류가 문에 없으면 통과 집합의 66%가 급반등주가 되기 때문</b>이다.
      *
      * <p><b>유동성 하한을 50억으로 내린 이유</b> — 시총 중앙값 이하 부분집합(173종목)에서
      * 거래대금 p25가 53억이라 {@code >= 100억}은 <b>정확히 절반만 남긴다.</b> 그것은 유동성
@@ -478,6 +485,10 @@ public class PresetCatalog {
                         // ── 필수 게이트 ──
                         // 린치 정체성. 값이 없다는 것 자체가 배제 사유다(위 javadoc).
                         required(PegCalculator.CODE, ComparisonOperator.LTE, "1.0"),
+                        // ★ 유형 분류. 이 프리셋을 「고속성장주」라 부를 수 있게 하는 조건이다.
+                        // 하한 20은 §2.3, 상한 50은 §3.17 — 둘 다 원문이나 §2.3은 TTM YoY 축이라
+                        // 밴드를 5년 CAGR로 옮긴 것이다(ADR-0070). 88 → 7종목.
+                        requiredBetween(EpsCagr5yCalculator.CODE, "20", "50"),
                         // 2.3 "중소형"의 유니버스 내 치환. 시총 중앙값이다.
                         required(MarketCapCalculator.CODE, ComparisonOperator.LTE,
                                 "2616000000000"),
@@ -495,8 +506,6 @@ public class PresetCatalog {
                         weighted(PerCalculator.CODE, ComparisonOperator.LTE, "20", "2"),
                         weighted(RevenueGrowthCalculator.CODE, ComparisonOperator.GT, "15", "2"),
                         weightedBetween(EpsGrowthTtmYoyCalculator.CODE, "10", "30", "2"),
-                        // 3.17 상한이 목적이라 위아래를 함께 자른다.
-                        weightedBetween(EpsCagr5yCalculator.CODE, "0", "50", "2"),
                         weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "80", "2"),
                         // 3.9 AAII 원문이 요구한 업종 상대 비교다. 1.0이 업종 중앙값이다.
                         weighted(sectorRel(DebtRatioCalculator.CODE),
@@ -523,10 +532,27 @@ public class PresetCatalog {
      *
      * <p><b>원문 그대로</b>: {@code MARKET_CAP} 대형, {@code EPS_GROWTH_TTM_YOY 10~20},
      * {@code ROE > 12}, {@code PEG <= 1.5}, {@code DEBT_RATIO <= 60}(D/E 0.6).
+     * <br><b>원문의 밴드를 다른 축으로 옮긴 것</b>: {@code EPS_CAGR_5Y 10~20}이 <b>유형 분류</b>
+     * 이자 필수 게이트다. 2.2의 밴드를 그대로 썼지만 <b>원문의 축은 TTM YoY다</b> — 그 축으로
+     * 걸면 대형 87종목 중 6이 남고 질 게이트를 하나만 더해도 0이 된다(ADR-0070).
      * <br><b>국내 분포로 재보정한 것</b>: "대형"의 경계를 유니버스 상위 25%(6.77조)로 둔다 —
      * 절대 금액으로는 시장마다 뜻이 달라진다.
-     * <br><b>원문에 없는데 더한 것</b>: {@code PROFITABLE_QUARTERS_4}(4.1 이익 성장의 일관성),
-     * {@code ACCRUAL_RATIO}, {@code SHARES_GROWTH_3Y}, {@code PER_SECTOR_PCTL}.
+     * <br><b>원문에 있는데 뺀 것</b>: {@code TURNOVER_60 >= 100억}. 대형 87종목 중 <b>0종목</b>을
+     * 자른다 — 게이트가 아니라 상수이고, 대형 게이트가 유동성을 이미 함의한다.
+     * <br><b>원문에 없는데 더한 것</b>: {@code OPM_MIN_5Y > 0}(<b>유일한 질 게이트</b>),
+     * {@code PROFITABLE_QUARTERS_4}(4.1 이익 성장의 일관성), {@code ACCRUAL_RATIO},
+     * {@code SHARES_GROWTH_3Y}, {@code PER_SECTOR_PCTL}.
+     *
+     * <p><b>질 게이트를 원문에서 가져오지 못했다.</b> §2.2의 질 조항은 {@code ROE > 12}와
+     * {@code D/E 0~0.6} 둘인데 대형+CAGR 11종목에 걸면 <b>각각 1종목</b>만 남아 게이트로 쓸 수
+     * 없다. 그래서 「나쁜 해에도 영업흑자인가」로 대신하고 원문 둘은 저울에 남겼다.
+     * MUST NOT: 이것을 원문 조항이라 읽지 않는다 — <b>부호 조건이라 변별력도 낮다</b>(통과
+     * 9종목의 값이 0.69~11.66).
+     *
+     * <p><b>부채는 이 배치로 고쳐지지 않는다.</b> 통과 집합의 부채비율 중앙값이 149.5 → 117.6일
+     * 뿐 유니버스 77.9의 <b>1.5배</b>이고, 9종목 중 원문 {@code D/E <= 0.6}을 충족하는 것은
+     * 하나다. <b>지주회사도 못 가른다</b> — §8이 금융·부동산과 함께 지주회사 제외를 명시하는데
+     * 통과 9종목 중 둘(GS·LS)이 KSIC 64992다.
      *
      * <p><b>{@code ROE}를 쓰는 것에 단서가 붙는다.</b> ADR-0061이 「한국거래소 2000-01~2019-06
      * 표본에서 수익성 이상현상의 재현율이 5%」를 근거로 {@code ROE}를 조건에서 뺐고, 지금
@@ -564,8 +590,15 @@ public class PresetCatalog {
                                 "6773000000000"),
                         // 2.2 원문. 고속성장주보다 느슨하다.
                         required(PegCalculator.CODE, ComparisonOperator.LTE, "1.5"),
-                        // 대형주 모집단이라 100억 승계가 맞다.
-                        required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
+                        // ★ 유형 분류. 2.2의 밴드를 5년 CAGR로 옮겼다(ADR-0070). 54 → 9종목.
+                        requiredBetween(EpsCagr5yCalculator.CODE, "10", "20"),
+                        // ★ 질. 「나쁜 해에도 영업흑자인가」 — 대형우량주가 약속하는 성질이다.
+                        // 원문에 없는데 더한 것이다: §2.2의 질 조항 둘(ROE > 12 · D/E 0~0.6)은
+                        // 대형+CAGR 11종목에 걸면 각각 1종목만 남아 게이트로 쓸 수 없다.
+                        // 부호 조건이라 변별력은 낮다(통과 9종목이 0.69~11.66). 11 → 9종목.
+                        required(OperatingMarginMin5yCalculator.CODE, ComparisonOperator.GT, "0"),
+                        // TURNOVER_60을 뺀다 — 대형 87종목 중 0종목을 자른다. 게이트가 아니라
+                        // 상수이고, 대형 게이트가 유동성을 이미 함의한다(ADR-0070).
 
                         // ── 점수 ──
                         weightedBetween(EpsGrowthTtmYoyCalculator.CODE, "10", "20", "3"),
@@ -916,6 +949,20 @@ public class PresetCatalog {
     private static IndicatorCondition weighted(String code, ComparisonOperator operator,
                                                String value, String weight) {
         return literal(code, operator, value).withWeight(new BigDecimal(weight));
+    }
+
+    /**
+     * 필수 구간 조건. 린치의 <b>유형 분류</b>가 이 형태다 — 성장률이 어느 구간에 있는가가
+     * 유형을 정하고, 그 판정이 문에 서야 한다(ADR-0070).
+     *
+     * <p>MUST NOT: 상한을 떼고 {@code required(..., GTE, ...)}로 바꾸지 않는다. 상한이 없으면
+     * 「고속성장주」와 「대형우량주」의 구간이 겹쳐 <b>분류가 성립하지 않는다.</b>
+     */
+    private static IndicatorCondition requiredBetween(String code, String lower, String upper) {
+        return IndicatorCondition.of(code, ComparisonOperator.BETWEEN,
+                        ConditionOperand.Literal.between(
+                                new BigDecimal(lower), new BigDecimal(upper)))
+                .asRequired();
     }
 
     /**
