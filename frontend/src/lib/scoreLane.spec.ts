@@ -10,7 +10,7 @@ describe('laneScale — 레인이 뜻을 갖는 전략에서만 척도를 낸다
   })
 
   it('배점이 전부 같으면 null이다 — 막대가 판정 Tag와 같은 말만 하게 된다', () => {
-    // SWING_MIDTERM_KR의 점수 조건 넷이 이렇다. 트랙이 전부 같은 길이가 되고
+    // SWING_TREND_KR의 점수 조건이 이렇다. 트랙이 전부 같은 길이가 되고
     // 채움은 0 아니면 1이라, 옆의 `✓충족`이 이미 말한 것을 반복할 뿐이다.
     expect(laneScale([1, 1, 1, 1])).toBeNull()
     expect(laneScale([2, 2])).toBeNull()
