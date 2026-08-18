@@ -1,5 +1,5 @@
 #!/bin/bash
-# PreToolUse: 덤프가 하나도 없는데 수정계수 재구축을 띄우려 하면 막는다(ADR-0049).
+# PreToolUse: 덤프가 하나도 없는데 **지표를 소급해 지우는 잡**을 띄우려 하면 막는다.
 #
 # 트리거가 파일이 아니라 **argv의 모양**이라 `.claude/rules/`의 glob으로는 발화하지 않고,
 # `PostToolUse` 알림은 **명령이 실행된 뒤**에 뜬다. 차단이 필요하면 여기뿐이다.
@@ -13,7 +13,15 @@
 #
 # `guard-destructive.sh`에 넣지 않은 이유는 그 파일이 `~/.claude/hooks/`에 사본으로도
 # 등록돼 있어 고치면 전역까지 함께 고쳐야 하는데(`harness-hooks.md`), 이 판정은
-# `$DUMP_DIR`와 `--job=adjustment-rebuild`를 아는 **이 저장소 전용**이기 때문이다.
+# `$DUMP_DIR`와 잡 이름을 아는 **이 저장소 전용**이기 때문이다.
+#
+# **대상이 둘인 이유** — 지우는 방식이 달라도 결과가 같다.
+#   * `adjustment-rebuild`(ADR-0049) — `adj_close`를 소급해 다시 써서 그 종목 지표를 지운다.
+#   * `financial-refill`(ADR-0040) — 소스가 더 늦은 공시일을 주면 정정으로 판정하고
+#     `FinancialWriter`가 `invalidate`를 불러 그 종목 지표를 보존 창 전체에서 지운다.
+#     이쪽은 **원자료까지 영구히 바뀐다** — ADR-0071이 *"적재된 재무는 되돌리지 않는다"*로
+#     못박은 자리라, 되돌릴 수 있는 것이 덤프뿐이다.
+# 앞의 것만 막던 때가 있었고, 그때 뒤의 것은 **아무 경고 없이** 통과했다.
 set -euo pipefail
 
 # jq가 없으면 판정할 수 없다. 중앙 보고자(check-doc-staleness.sh)가 의존성 부재를 세므로
@@ -34,7 +42,11 @@ cmd=$(strip_heredoc_bodies "$cmd")
 
 # 실제로 gradle을 타는 경우로 한정한다. 인자가 `--args='...'` 따옴표 안이라 따옴표는 걷지 않는다.
 echo "$cmd" | grep -qE '(^|[[:space:];|&])(\./)?gradlew?([[:space:]]|$)' || exit 0
-case "$cmd" in *--job=adjustment-rebuild*) ;; *) exit 0 ;; esac
+case "$cmd" in
+  *--job=adjustment-rebuild*) job='adjustment-rebuild' ;;
+  *--job=financial-refill*)   job='financial-refill' ;;
+  *) exit 0 ;;
+esac
 
 # 경로의 정본은 ops/lib.sh다. 여기서 다시 쓰면 한쪽만 고쳐지는 날이 온다.
 lib="$HERE/../../ops/lib.sh"
@@ -50,7 +62,14 @@ if compgen -G "$DUMP_DIR/*.dump" >/dev/null 2>&1; then
   exit 0
 fi
 
-jq -n --arg reason "\`$DUMP_DIR\`에 덤프가 하나도 없다. \`rebuild()\`의 첫 호출은 저장된 \`adj_close\`를 전 구간 소급해 다시 쓰고 그 종목의 \`indicator_value\`를 통째로 지운다(ADR-0049). **먼저 \`ops/dump-db.sh\`를 돌려라** — 33MB·3초다. 덤프가 하나라도 있으면 이 가드는 다시 걸리지 않는다(정상 재구축과 되돌리기 리허설을 막지 않으려는 것이다)." \
+case "$job" in
+  adjustment-rebuild)
+    why="\`rebuild()\`의 첫 호출은 저장된 \`adj_close\`를 전 구간 소급해 다시 쓰고 그 종목의 \`indicator_value\`를 통째로 지운다(ADR-0049)." ;;
+  financial-refill)
+    why="이 잡은 결손만 채우는 것이 아니다. 소스가 더 늦은 공시일을 주면 **정정으로 판정해 개정본을 쌓고** 그 종목 지표를 보존 창 전체에서 지운다(ADR-0040). 게다가 적재된 원자료는 되돌리지 않는 것이 규칙이라(ADR-0071), 되돌릴 수 있는 것이 덤프뿐이다." ;;
+esac
+
+jq -n --arg reason "\`$DUMP_DIR\`에 덤프가 하나도 없다. $why **먼저 \`ops/dump-db.sh\`를 돌려라** — 33MB·3초다. 덤프가 하나라도 있으면 이 가드는 다시 걸리지 않는다(정상 실행과 되돌리기 리허설을 막지 않으려는 것이다)." \
   '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
