@@ -79,7 +79,7 @@
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/inject-progress.sh" },
           { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-doc-staleness.sh" },
-          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-premises.sh", "timeout": 30 }
+          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-premises.sh", "timeout": 45 }
         ]
       }
     ]

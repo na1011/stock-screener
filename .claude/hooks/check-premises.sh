@@ -40,12 +40,12 @@ guard="$root/.claude/hooks/guard-destructive.sh"
 # "왜 못 쟀는가"가 "5초 안에 끝나지 않았다"로 뭉개진다 — 접속 실패와 질의 지연과 DB
 # 다운이 한 문장으로 합쳐진다.
 #
-# MUST: `total_budget + per_limit < settings.json의 훅 timeout`을 유지한다(20 + 8 < 30).
+# MUST: `total_budget + per_limit < settings.json의 훅 timeout`을 유지한다(30 + 8 < 45).
 # 예산은 새 전제를 **시작할 때** 검사하므로 최악은 total_budget을 다 쓴 뒤 마지막 하나가
 # per_limit을 다 쓰는 경우다. 훅이 timeout에 걸리면 **출력이 통째로 사라지고**, 이 훅에게
 # 침묵은 가장 나쁜 결과다.
 per_limit=8
-total_budget=20
+total_budget=30
 
 # psql이 읽기 전용으로 붙게 한다. 러너가 도메인을 아는 유일한 지점이고, 무엇을 재는지
 # 해석하는 것이 아니라 **되돌릴 수 없는 일을 못 하게** 하는 방어다. psql이 아닌 전제에는
@@ -60,6 +60,11 @@ export PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=3s'
 # 올린 적이 있다. 그래서 아래 보고가 "적재가 돌고 있다"를 원인 후보로 함께 낸다.
 # MUST: 이 값을 다시 올리기 전에 그 줄이 떴는지부터 본다.
 export PGCONNECT_TIMEOUT=4
+
+# 전제마다 만들지 않고 한 번만 만든다 — 위 run_one이 truncate해서 돌려 쓴다.
+outfile=$(mktemp 2>/dev/null) || outfile=/dev/null
+errfile=$(mktemp 2>/dev/null) || errfile=/dev/null
+trap 'rm -f "$outfile" "$errfile" 2>/dev/null || true' EXIT
 
 findings=""
 unknowns=""
@@ -95,9 +100,9 @@ run_one() {
     return
   fi
 
-  local rc=0 out="" outfile errfile reason
-  outfile=$(mktemp 2>/dev/null) || outfile=""
-  errfile=$(mktemp 2>/dev/null) || errfile=""
+  local rc=0 out="" reason=""
+  : >"$outfile" 2>/dev/null || true
+  : >"$errfile" 2>/dev/null || true
 
   # MUST: 출력을 **파일로 받는다.** 명령 치환을 쓰면 파이프가 닫힐 때까지 기다리는데,
   # `alarm`은 exec된 프로세스만 죽이고 손자는 fd를 쥔 채 남는다 — 상한이 5초라고 보고하면서
@@ -121,18 +126,16 @@ run_one() {
       exit($? >> 8);
     ' "$per_limit" "$body" </dev/null >"${outfile:-/dev/null}" 2>"${errfile:-/dev/null}" ) || rc=$?
 
-  reason=""
-  if [ -n "$outfile" ]; then
-    out=$(cat "$outfile" 2>/dev/null || true)
-    rm -f "$outfile" 2>/dev/null || true
-  fi
-  if [ -n "$errfile" ]; then
-    reason=$(tr '\n' ' ' < "$errfile" 2>/dev/null | cut -c1-200 || true)
-    rm -f "$errfile" 2>/dev/null || true
+  [ -s "$outfile" ] && out=$(<"$outfile")
+  # stderr는 실패했을 때만 읽는다 — 성공한 전제에서 tr·cut을 돌릴 이유가 없다.
+  if [ "$rc" -ne 0 ] && [ -s "$errfile" ]; then
+    reason=$(tr '\n' ' ' < "$errfile" | cut -c1-200)
   fi
 
   # 앞뒤 공백·개행을 걷어낸다. psql -At는 붙이지 않지만 다른 도구는 붙인다.
-  out=$(printf '%s' "$out" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)
+  # MUST: 내장 치환으로 남긴다. 여기서 sed를 부르면 전제 하나당 프로세스가 하나 더 는다.
+  out="${out#"${out%%[![:space:]]*}"}"
+  out="${out%"${out##*[![:space:]]}"}"
 
   if [ "$rc" -ne 0 ]; then
     if [ "$rc" -eq 142 ]; then
