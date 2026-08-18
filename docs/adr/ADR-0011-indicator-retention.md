@@ -28,7 +28,7 @@ applies_to:
 보존 기간을 넘긴 행이 지워지고 그 안쪽은 남는지, 원자료는 그대로인지 확인한다.
 
 ```premise 지표가 180거래일 안에만 남아 있다
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '지표가 한 행도 없다 — 잴 것이 없었다' WHEN count(DISTINCT trade_date) <= 180 THEN 'OK ' || count(DISTINCT trade_date) || '거래일' ELSE count(DISTINCT trade_date) || '거래일이 남아 있다(보존 180). 정리가 돌지 않았거나 백필이 보존 밖을 되살렸다.' END FROM indicator_value"
+psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '지표가 한 행도 없다 — 잴 것이 없었다' WHEN count(DISTINCT trade_date) <= 180 THEN 'OK ' || count(DISTINCT trade_date) || '거래일' WHEN count(DISTINCT trade_date) = 181 THEN '181거래일이 남아 있다(보존 180) — 하루면 긴 백필이 경계를 앞지른 대가이고 다음 정리가 지운다(ADR-0045 §긴 백필). 앱을 띄워 일일 갱신을 돌린다.' ELSE count(DISTINCT trade_date) || '거래일이 남아 있다(보존 180). 하루가 아니면 정리가 오래 돌지 않았거나 백필이 보존 밖을 되살렸다.' END FROM indicator_value"
 ```
 운영 적재 이후, 남은 거래일이 180 이내여야 한다. **`count(*) = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다.
 
