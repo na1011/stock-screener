@@ -93,6 +93,9 @@ class ConditionReturnTest {
     @Autowired
     private List<ScreenPreset> presets;
 
+    /** 분위 수. 5분위면 시점당 한 칸에 60~70종목이라 평균이 흔들리지 않는다. */
+    private static final int QUANTILES = 5;
+
     /** 한 조건 × 한 시점의 관측. */
     private record Observation(LocalDate asOf, double differencePp,
                                int satisfied, int notSatisfied, int unevaluable) {
@@ -110,6 +113,9 @@ class ConditionReturnTest {
                 .toList();
 
         Map<String, List<Observation>> byCondition = new LinkedHashMap<>();
+        // 지표 코드 → 분위별 수익률(OOS 시점만 모은다). 단조성은 임계와 무관한 물음이라
+        // 조건이 아니라 **지표** 단위다 — DEBT_RATIO가 임계 둘로 나와도 분포는 하나다.
+        Map<String, List<List<Double>>> quantileReturns = new LinkedHashMap<>();
         int totalExcluded = 0;
 
         System.out.printf("%n===== P17 조건 단위 수익률 (%s) =====%n", preset.code());
@@ -128,6 +134,10 @@ class ConditionReturnTest {
                     asOf, window.end(),
                     (int) outcome.valuesByStock().values().stream().filter(v -> !v.isEmpty()).count(),
                     window.returns().size(), window.excluded().size());
+
+            if (asOf.isBefore(OOS_BOUNDARY)) {
+                collectQuantiles(conditions, outcome, window, quantileReturns);
+            }
 
             for (IndicatorCondition condition : conditions) {
                 List<Double> satisfied = new ArrayList<>();
@@ -169,6 +179,7 @@ class ConditionReturnTest {
         report("필수 게이트", conditions.stream().filter(IndicatorCondition::required).toList(),
                 byCondition);
         report("배점", conditions.stream().filter(c -> !c.required()).toList(), byCondition);
+        reportQuantiles(quantileReturns);
 
         System.out.printf("%n----- 결과에 반드시 붙이는 것 -----%n");
         System.out.printf("미보정 기업행위로 제외한 (종목,구간) %d건%n", totalExcluded);
@@ -178,6 +189,68 @@ class ConditionReturnTest {
                 + " 작은 양의 효과는 원리적으로 가려진다.");
         System.out.println("MUST: 수익성 게이트(ROE_MIN_3Y·ROIC_PRETAX·PROFIT_STREAK_Y)가 좋게"
                 + " 나왔다면 ADR-0061의 재현율 5.0%를 사전 확률로 두고 그것부터 의심한다.");
+    }
+
+    /**
+     * 지표 값 오름차순 5분위의 사후 수익률을 모은다.
+     *
+     * <p><b>임계값을 지나지 않는 물음이다.</b> 충족/미충족 차는 그 임계 하나에서만 답하지만,
+     * 분위는 <b>지표 자체에 방향이 있는가</b>를 묻는다 — 차가 유의해도 단조가 아니면 그 임계가
+     * 우연히 좋은 자리에 있었던 것이고, 차가 안 나와도 단조면 신호가 임계 밖에 있는 것이다.
+     */
+    private static void collectQuantiles(
+            List<IndicatorCondition> conditions, PointInTimeScreener.Outcome outcome,
+            ForwardReturns.Window window, Map<String, List<List<Double>>> into) {
+        for (String code : conditions.stream().map(IndicatorCondition::indicatorCode)
+                .distinct().toList()) {
+            List<double[]> pairs = new ArrayList<>();
+            for (Map.Entry<Long, Map<String, BigDecimal>> entry
+                    : outcome.valuesByStock().entrySet()) {
+                BigDecimal value = entry.getValue().get(code);
+                Double ret = window.returns().get(entry.getKey());
+                if (value == null || ret == null || window.excluded().contains(entry.getKey())) {
+                    continue;
+                }
+                pairs.add(new double[] {value.doubleValue(), ret});
+            }
+            if (pairs.size() < QUANTILES * 5) {
+                continue;
+            }
+            pairs.sort((a, b) -> Double.compare(a[0], b[0]));
+            List<List<Double>> buckets = into.computeIfAbsent(code, k -> {
+                List<List<Double>> fresh = new ArrayList<>();
+                for (int i = 0; i < QUANTILES; i++) {
+                    fresh.add(new ArrayList<>());
+                }
+                return fresh;
+            });
+            for (int q = 0; q < QUANTILES; q++) {
+                int from = q * pairs.size() / QUANTILES;
+                int to = (q + 1) * pairs.size() / QUANTILES;
+                double sum = 0;
+                for (int i = from; i < to; i++) {
+                    sum += pairs.get(i)[1];
+                }
+                // 시점마다 한 칸의 평균을 하나씩 쌓는다 — 시점 간 가중이 종목 수로 쏠리지 않는다.
+                buckets.get(q).add(100.0 * sum / (to - from));
+            }
+        }
+    }
+
+    private static void reportQuantiles(Map<String, List<List<Double>>> quantileReturns) {
+        System.out.printf("%n----- 분위별 단조성 (지표 오름차순 %d분위, OOS 시점 평균 %%p) -----%n",
+                QUANTILES);
+        System.out.println("MUST: 차가 유의해도 단조가 아니면 그 임계가 우연히 좋은 자리였던 것이다.");
+        quantileReturns.forEach((code, buckets) -> {
+            StringBuilder line = new StringBuilder("%-24s".formatted(code));
+            for (List<Double> bucket : buckets) {
+                line.append("%+8.1f".formatted(mean(bucket)));
+            }
+            double low = mean(buckets.get(0));
+            double high = mean(buckets.get(QUANTILES - 1));
+            line.append("   Q5−Q1 %+.1f%%p".formatted(high - low));
+            System.out.println(line);
+        });
     }
 
     /**

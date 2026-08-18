@@ -97,6 +97,8 @@ class GateDiagnosticsTest {
         Map<String, List<Integer>> failuresByGate = new LinkedHashMap<>();
         Map<String, List<Integer>> unevaluableByGate = new LinkedHashMap<>();
         List<Set<Long>> passSets = new ArrayList<>();
+        // 게이트 → 시점별 「임계값이 그날 분포의 몇 분위에 앉았는가」.
+        Map<String, List<Double>> thresholdPercentile = new LinkedHashMap<>();
 
         for (LocalDate asOf : grid) {
             PointInTimeScreener.Outcome outcome = screener.screen(
@@ -132,6 +134,12 @@ class GateDiagnosticsTest {
 
             System.out.printf("%s  대상 %3d · 값이 나온 종목 %3d · 통과 %2d%n",
                     asOf, outcome.evaluated(), withAnyValue, passed.size());
+            for (com.stockscreener.screening.IndicatorCondition gate : gateConditions(preset)) {
+                thresholdPercentile
+                        .computeIfAbsent(gate.indicatorCode(), k -> new ArrayList<>())
+                        .add(percentileOfThreshold(gate, outcome));
+            }
+
             for (String gate : sortedGates(preset)) {
                 int f = failed.getOrDefault(gate, 0);
                 int u = unevaluable.getOrDefault(gate, 0);
@@ -153,6 +161,16 @@ class GateDiagnosticsTest {
                     + " 안전장치가 아니라 상수이며, 화면·테스트·배치 로그 어디에도 안 드러난다.");
         }
 
+        System.out.println("\n----- 임계값이 앉은 분위의 이동 -----");
+        System.out.println("2026년 단면으로 정한 절대 임계가 과거에는 다른 자리에 앉는다."
+                + " 폭이 크면 그 게이트는 시점마다 다른 엄격도로 걸린 것이다.");
+        thresholdPercentile.forEach((code, series) -> {
+            double min = series.stream().mapToDouble(Double::doubleValue).min().orElse(Double.NaN);
+            double max = series.stream().mapToDouble(Double::doubleValue).max().orElse(Double.NaN);
+            System.out.printf("%-24s 처음 %.2f → 끝 %.2f · 폭 %.2f~%.2f (이동 %.2f)%n",
+                    code, series.getFirst(), series.getLast(), min, max, max - min);
+        });
+
         System.out.println("\n----- 통과 집합의 회전율 (자카드 거리) -----");
         for (int i = 1; i < passSets.size(); i++) {
             System.out.printf("%s → %s: %.2f  (유지 %d · 신규 %d · 이탈 %d)%n",
@@ -170,6 +188,42 @@ class GateDiagnosticsTest {
             long stockId, ScreenPreset preset, Map<String, java.math.BigDecimal> values) {
         return conditionEvaluator.evaluate(
                 stockId, preset.conditions(), EvaluationMode.SCORING, values);
+    }
+
+    private static List<com.stockscreener.screening.IndicatorCondition> gateConditions(
+            ScreenPreset preset) {
+        return preset.conditions().conditions().stream()
+                .filter(com.stockscreener.screening.IndicatorCondition::required).toList();
+    }
+
+    /**
+     * 그날 값이 나온 종목 분포에서 임계값이 앉은 분위. 0.30이면 「아래에서 30%를 자른다」다.
+     *
+     * <p>MUST: 방향을 보지 않는다 — 값 오름차순 분위 하나로 통일한다. 방향까지 넣으면
+     * {@code LTE} 게이트에서 수가 뒤집혀 <b>이동의 크기를 비교할 수 없게 된다.</b>
+     */
+    private static double percentileOfThreshold(
+            com.stockscreener.screening.IndicatorCondition gate,
+            PointInTimeScreener.Outcome outcome) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("value=([^,\\]]+)")
+                .matcher(String.valueOf(gate.operand()));
+        if (!m.find()) {
+            return Double.NaN;
+        }
+        double threshold = Double.parseDouble(m.group(1));
+        long below = 0;
+        long total = 0;
+        for (Map<String, java.math.BigDecimal> values : outcome.valuesByStock().values()) {
+            java.math.BigDecimal value = values.get(gate.indicatorCode());
+            if (value == null) {
+                continue;
+            }
+            total++;
+            if (value.doubleValue() < threshold) {
+                below++;
+            }
+        }
+        return total == 0 ? Double.NaN : (double) below / total;
     }
 
     private static List<String> sortedGates(ScreenPreset preset) {
