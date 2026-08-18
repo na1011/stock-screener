@@ -91,6 +91,44 @@ applies_to:
 - **MUST NOT: 재무를 열어 창이 늘어난 것을 시세가 늘어난 것으로 읽지 않는다.** `price_daily`가
   2020-01-02부터라 7개년이 2022-04에 열려도 그보다 앞으로는 못 간다. 그 시점에 시세가 있는
   종목은 **313/356**이다.
+- **MUST: 하네스는 운영 DB를 읽되 서버가 쓰기를 거부하게 한다** — JDBC URL에
+  `readOnlyMode=always`다. `hikari.read-only: true`만으로는 **아무것도 막히지 않는다**:
+  pgjdbc 기본 `transaction` 모드에서 `setReadOnly(true)`는 autoCommit이 꺼져 있을 때만
+  `BEGIN READ ONLY`를 내는데 `JdbcTemplate`의 기본은 autocommit이고, 접속 롤이 superuser에
+  서버의 `default_transaction_read_only`가 off다. `ReadOnlyDatabaseGuard`가 실제 INSERT를
+  던져 SQLSTATE **25006** 거부를 기동 시 단언한다 — 설정을 읽어 확인하면 아무것도 확인되지 않는다.
+- **MUST NOT: 하네스 컨텍스트에 `ApplicationRunner`를 들이지 않는다.** `IndicatorCatalogInitializer`·
+  `PresetCatalogInitializer`가 **기동만으로 DB에 쓰므로** 읽기 전용에서는 컨텍스트가 아예 안 뜬다.
+  이름이 아니라 **타입으로** 뺀다 — 규칙은 「이 둘을 뺀다」가 아니라 「하네스는 기동 쓰기를
+  하지 않는다」이고, 이름으로 지목하면 다음에 더해질 러너가 조용히 샌다.
+- **MUST NOT: `@Tag("live")`를 재사용하지 않는다.** `liveTest`는 `.env`를 주입해
+  `@ConditionalOnApiKey` 어댑터의 **등록 여부를 바꾼다.** 백테스트는 외부 호출이 0이라 키가
+  필요 없고, 무엇이 호출되는지 흐려지는 것이 백테스트에서 특히 나쁘다. `@Tag("backtest")`다.
+- **MUST: 정정본이 만든 공백을 「데이터 결손」으로 라벨링하고 수익률 축에서 종목·기간을 뺀다.**
+  `full-statement-refill`이 **최신 판만 채우고 옛 판을 채우는 잡이 없어**, `KNOWN_ON`이 고르는
+  `revision 0`에는 `operating_cash_flow`·`cost_of_sales`가 없다(실측: 개정본 있는 32기 중
+  revision 0의 둘 다 **0건**, revision 1은 11·10건). 영향받는 `FCF_YIELD`·`FCF_MARGIN`·
+  `GROSS_MARGIN`·`ACCRUAL_RATIO` 넷이 **전부 배점**이라 종목이 빠지는 게 아니라 **점수만 낮아져
+  통과 집합에서 밀려나고**, 「정정을 냈다」는 `ACCRUAL_RATIO`가 재려는 회계 품질과 상관이 있어
+  **편향의 방향이 랜덤이 아니다.** 라벨은 「그 시점에 몰랐던 값」이 **아니다** — 원 판은 그때
+  공시돼 있었고 우리가 그 현금흐름표를 안 받았을 뿐이다.
+- **MUST: 수익률 축에서 판정불가를 표본에서 뺀다. 미충족으로 접지 않는다.** 접으면 데이터
+  결손이 곧 미충족이 되어 부호가 정해진 편향이 들어간다. **게이트의 취급(판정불가 ≠ 통과,
+  `ConditionEvaluator.satisfiesRequired`)과 일부러 규칙이 다르다** — 축이 다르기 때문이며,
+  as-of마다 커버리지를 표에 함께 낸다.
+- **MUST: 수익률 제외를 종목이 아니라 종목·기간 단위로 한다.** `UNSUPPORTED` 7종목 중
+  **3건(2020-08·2021-01·2021-11)은 백테스트 창 밖 사건**이라 그 종목이 창 안에서는 살아 있다.
+  종목 통째로 빼면 표본이 조용히 좁아진다.
+- **MUST: `RETAINED_TO_MARKET_4Y`를 수익률 축에서 빼고 「이 표본으로는 못 잰다」로 적는다.**
+  가격 1,261봉이 필요해 값이 **2025-02-18**부터 나오고 아웃오브샘플 경계가 2025-04-01이라
+  **OOS 시점이 0**이다. `price_daily` 바닥이 2020-01-02라 **적재로 안 풀린다.**
+  그래서 배점 가족의 Holm 크기가 9가 아니라 **8**이다 — 결과를 보기 전에, 결과와 무관한
+  이유로 줄인 것이다. `SHARES_GROWTH_3Y`는 750봉이라 2023-01-11부터이고 **OOS 4 / 전체 6시점**
+  으로 잰다. **둘 다 진단 축(분위 이동)에서는 관측한다.**
+- **MUST: 편출 6종목을 배제하고 그 수를 결과에 붙인다.** `StockRegistrar`가 `--tickers` 경로까지
+  전부 `m.effective_to IS NULL AND s.is_active`로 대상을 잡아 **세 잡 어느 것으로도 넣을 수
+  없다.** 그 6종목은 `is_active`이고 4종목은 시세가 2020-01-02부터 편출일까지 다 있다 —
+  쓸 수 있었던 종목이라 **조용히 빼지 않는다.** 콜 추정의 분모도 356이 아니라 **350**이다.
 - **MUST NOT: 린치 프리셋으로 넓히지 않는다.** 통과 집합이 7·9라 표본 문제가 더 심하고, 린치는
   분류기라 유형 게이트가 먼저 서므로(ADR-0070) 조건 단위로 내리는 이 설계가 그대로 안 옮겨진다.
 
@@ -131,6 +169,18 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 �
 psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — universe_membership이 비었다' WHEN min(effective_from) = DATE '2026-08-05' THEN 'OK 유니버스 이력이 여전히 2026-08-05부터다 — 그 이전 시점 유니버스는 DB에 없다(구간 ' || count(DISTINCT effective_from) || '개)' ELSE '유니버스 이력의 시작이 ' || min(effective_from) || '로 바뀌었다 — 과거 편입을 넣는 경로가 생겼다면 생존편향 판정을 다시 한다' END FROM universe_membership"
 ```
 
+```premise 정정본의 옛 판에 전체재무제표 컬럼이 여전히 없다 — 데이터 결손 라벨의 근거
+psql -d stock_screener -At -c "WITH multi AS (SELECT stock_id, fiscal_year, fiscal_period FROM financial_statement GROUP BY 1,2,3 HAVING count(*) > 1) SELECT CASE WHEN (SELECT count(*) FROM multi) = 0 THEN 'OK 개정본이 있는 기가 없다 — as-of 경로가 옛 판을 고를 일이 없다' WHEN (SELECT count(f.operating_cash_flow) + count(f.cost_of_sales) FROM financial_statement f JOIN multi m USING (stock_id, fiscal_year, fiscal_period) WHERE f.revision_no = 0) = 0 THEN 'OK 개정본 ' || (SELECT count(*) FROM multi) || '기 · revision 0의 영업활동현금흐름·매출원가가 여전히 0건 — 그 종목·기간에서 FCF·매출총이익률·발생액이 판정불가다' ELSE '옛 판에도 전체재무제표가 채워졌다(' || (SELECT count(f.operating_cash_flow) + count(f.cost_of_sales) FROM financial_statement f JOIN multi m USING (stock_id, fiscal_year, fiscal_period) WHERE f.revision_no = 0) || '건) — 옛 판을 채우는 경로가 생겼다면 수익률 축의 제외 규칙을 다시 판단한다' END"
+```
+
+```premise 하네스가 운영 DB에 쓰지 못한다 — 설정이 아니라 서버가 거부하는가
+psql -d stock_screener -At -c "SELECT CASE WHEN current_setting('default_transaction_read_only') = 'on' THEN 'OK 서버 기본이 읽기 전용이다 — URL 파라미터 없이도 막힌다' WHEN (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN '접속 롤이 superuser이고 서버 기본이 off다 — 읽기 전용은 오직 JDBC URL의 readOnlyMode=always와 ReadOnlyDatabaseGuard의 25006 단언에 달려 있다. 그 둘을 지우면 하네스가 운영 지표를 덮어쓴다' ELSE '접속 롤이 superuser가 아니다 — 권한으로도 막히는지 GRANT를 확인하고 가드를 다시 판단한다' END"
+```
+
+```premise 상장폐지 종목이 여전히 DB에 없다 — 수익률 편향의 부호
+psql -d stock_screener -At -c "SELECT CASE WHEN count(*) FILTER (WHERE NOT is_active) = 0 THEN 'OK stock ' || count(*) || '행이 전부 활성이다 — 폐지 종목이 없어 미충족 집단 평균이 위로 당겨진다(실측 편향 0.57~2.47%p/6개월, 임계 3.5%p)' ELSE '비활성 종목이 ' || count(*) FILTER (WHERE NOT is_active) || '행 생겼다 — 폐지 이력이 들어왔다면 생존편향 하한을 다시 재고 부호 서술을 고친다' END FROM stock"
+```
+
 ```premise 수익률에서 제외할 종목이 아직 7이다
 psql -d stock_screener -At -c "WITH bad AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status IN ('OBSERVED','UNSUPPORTED') AND effective_date >= DATE '2020-01-01') SELECT CASE WHEN (SELECT count(*) FROM corporate_action) = 0 THEN '잴 것이 없었다 — 기업행위 원장이 비었다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 미보정 기업행위가 없다 — 수익률 제외 목록이 비었다' WHEN (SELECT count(*) FROM bad) = 7 THEN 'OK 미보정 기업행위 7종목(계획 기준) — 수익률 제외 목록이 그대로다' ELSE '미보정 기업행위가 ' || (SELECT count(*) FROM bad) || '종목이다(계획 기준 7) — 수익률 제외 목록이 낡았다' END"
 ```
@@ -162,9 +212,16 @@ P16·P16-B가 답한 것은 「버핏처럼 골랐는가」다. 「그렇게 고
 **단위를 내린 세 번째 이유는 식별이다.** 나쁜 결과의 원인 후보가 넷인데 표본이 그것을 가르지
 못한다. 그런데 **개별 조건은 이식 결함의 영향을 받지 않는다** — 「`ROIC_PRETAX >= 15`인 종목이
 국내에서 더 벌었는가」는 우리가 원저의 다른 조건을 못 옮긴 것과 무관한 물음이다. 개별 조건은
-방향이 맞는데 결합이 안 되면 **구조·이식** 쪽, 개별도 안 맞으면 **시장 차이** 쪽이고 후자는
-ADR-0061의 5.0%와 **출처가 다른 두 증거가 겹친다.** 그것이 이 설계가 얻을 수 있는 가장 강한
-형태의 결론이다. **방법론 자체가 틀렸을 가능성은 이 측정이 답하지 못한다.**
+방향이 맞는데 결합이 안 되면 **구조·이식** 쪽, 개별도 안 맞으면 **시장 차이** 쪽이다.
+
+**단 「개별도 안 맞았다」를 ADR-0061의 5.0%와 겹치는 두 번째 증거로 읽으면 안 된다.**
+생존 편향이 「충족 − 미충족」 차를 **0 쪽으로 누르고**, 그 방향이 5.0%가 가리키는 방향과
+**같기 때문**이다 — 폐지 종목이 DB에 아예 없고(`stock` 356행 전부 오늘 상장) 그것들은 거의
+전부 미충족 집단에 있었으므로 미충족 평균이 위로 당겨진다. 즉 겹치는 것은 출처가 다른 두
+증거가 아니라 **편향 하나와 사전 확률**이고, 둘은 이 측정으로 구분되지 않는다. 실측 편향은
+**6개월당 0.57~2.47%p**(폐지 19종목 하한, 미충족 집단 크기에 따라)로 사전등록 검출 임계
+3.5%p보다 작지만, 임계 근처의 작은 양(+)의 효과는 여전히 가리지 못한다.
+**방법론 자체가 틀렸을 가능성도 이 측정이 답하지 못한다.**
 
 ### 인샘플 경계와 오염의 상한
 
