@@ -274,7 +274,11 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 // 재무상태표에서만 읽는다. 현금흐름표의 같은 이름은 기초·기말 잔액이다.
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_CASH_AND_EQUIVALENTS, null),
-                capex(cashFlow, period));
+                capex(cashFlow, period),
+                // 재무상태표에서만 읽는다 — 현금흐름표의 같은 낱말은 증감분이고 손익의 것은
+                // 평가손실이다(§14).
+                DartFullAccountMapper.find(
+                        balance, DartFullAccountMapper.ID_INVENTORIES, null));
     }
 
     /**
@@ -335,7 +339,10 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_CASH_AND_EQUIVALENTS, null),
                 // 자본적지출은 유량이고 연간만 담는다 — 아래 capex() 참조.
-                null);
+                null,
+                // 재고자산은 잔액이므로 4분기 행에도 담는다. capex와 갈리는 자리다.
+                DartFullAccountMapper.find(
+                        balance, DartFullAccountMapper.ID_INVENTORIES, null));
     }
 
     /**

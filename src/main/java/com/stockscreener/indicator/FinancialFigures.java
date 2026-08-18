@@ -43,7 +43,8 @@ public record FinancialFigures(
         BigDecimal bps,
         BigDecimal costOfSales,
         BigDecimal cashAndEquivalents,
-        BigDecimal capex
+        BigDecimal capex,
+        BigDecimal inventories
 ) {
 
     public enum FiscalPeriod {

@@ -58,9 +58,13 @@ final class DartFullAccountMapper {
             "ifrs_ProfitLossFromOperatingActivities");
     static final Set<String> ID_NET_INCOME = ordered("ifrs-full_ProfitLoss", "ifrs_ProfitLoss");
     /**
-     * 매출원가. <b>없는 것이 결손이 아닌 유일한 계정</b>이다 — 금융업·서비스업은 개념 자체가
-     * 없어 원래 오지 않는다(실측: 8개사 중 KB금융·NAVER 둘이 그렇고 제조·유통·물류·제약
-     * 여섯은 전부 표준코드로 왔다).
+     * 매출원가. <b>없는 것이 결손이 아닌 계정</b>이다 — 금융업·서비스업은 개념 자체가 없어
+     * 원래 오지 않는다(실측: 8개사 중 KB금융·NAVER 둘이 그렇고 제조·유통·물류·제약 여섯은
+     * 전부 표준코드로 왔다).
+     *
+     * <p><b>둘째 사례가 {@link #ID_INVENTORIES}다</b>(§14). 그쪽은 금융업 하나만 없다 —
+     * <b>업종 부재의 범위가 계정마다 다르므로 한 계정의 결손 사유를 다른 계정에 복사하지
+     * 않는다.</b>
      */
     static final Set<String> ID_COST_OF_SALES = ordered("ifrs-full_CostOfSales", "ifrs_CostOfSales");
 
@@ -80,6 +84,22 @@ final class DartFullAccountMapper {
             "ifrs-full_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
             "dart_PurchaseOfPropertyPlantAndEquipment",
             "ifrs-full_PurchaseOfPropertyPlantAndEquipment");
+
+    /**
+     * 재고자산. <b>재무상태표에서만 읽는다.</b>
+     *
+     * <p>계정명 폴백을 두지 않는다. 좁히지 않으면 무는 것이 실측으로 셋 나왔다(§14) —
+     * 현금흐름표의 {@code 재고자산의 감소(증가)}는 <b>증감분</b>이라 잔액으로 저장하면
+     * 「재고 증가율」이 <i>증감의 증감</i>이 되고, 같은 표의 {@code 재고자산평가손실}은 손익
+     * 조정이며, 재무상태표의 {@code 상품권}(이마트 1.7조)은 재고와 무관한 항목인데 계정명
+     * 부분일치에 걸린다.
+     *
+     * <p>표준코드로 8종목 중 <b>7/8</b>이 왔고 일곱이 전부 {@code ifrs-full_Inventories}
+     * 하나였다 — 구접두어도 {@code dart_} 확장도 관측되지 않았다. <b>빠진 하나는 금융업이고
+     * 그 회사 재무상태표에는 재고 계열 행이 아예 없다</b>(결손이 아니라 업종이다).
+     * 계정명은 갈린다({@code 재고자산}·{@code 유동재고자산}).
+     */
+    static final Set<String> ID_INVENTORIES = ordered("ifrs-full_Inventories", "ifrs_Inventories");
 
     static final Set<String> ID_TOTAL_ASSETS = ordered("ifrs-full_Assets", "ifrs_Assets");
     static final Set<String> ID_TOTAL_LIABILITIES = ordered("ifrs-full_Liabilities", "ifrs_Liabilities");

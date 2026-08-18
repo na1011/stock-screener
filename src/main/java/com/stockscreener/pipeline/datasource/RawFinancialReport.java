@@ -29,6 +29,10 @@ import java.time.LocalDate;
  * @param capex              자본적지출(유형자산의 취득). <b>유출을 양수 크기로 담는다</b> —
  *                           실측 8종목이 전부 양수로 왔다(ADR-0067). 부호를 뒤집어 담으면
  *                           잉여현금흐름이 두 배로 부풀고 값이 그럴듯해 드러나지 않는다.
+ * @param inventories        재고자산. <b>저량(잔액)이라 분기 행에도 담는다</b> — 유량인
+ *                           {@code capex}와 다른 자리다. 금융업은 이 계정이 원리적으로 없어
+ *                           비는 것이 정상이다(§14). 0으로 대체하면 재고가 없는 회사가 되어
+ *                           값이 그럴듯하게 틀린다.
  */
 public record RawFinancialReport(
         int fiscalYear,
@@ -53,7 +57,8 @@ public record RawFinancialReport(
         BigDecimal bps,
         BigDecimal costOfSales,
         BigDecimal cashAndEquivalents,
-        BigDecimal capex
+        BigDecimal capex,
+        BigDecimal inventories
 ) {
 
     public RawFinancialReport {

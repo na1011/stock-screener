@@ -39,6 +39,7 @@ final class FinancialFiguresFixture {
     private BigDecimal costOfSales;
     private BigDecimal cashAndEquivalents;
     private BigDecimal capex;
+    private BigDecimal inventories;
 
     private FinancialFiguresFixture() {
     }
@@ -159,12 +160,17 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    FinancialFiguresFixture inventories(BigDecimal value) {
+        this.inventories = value;
+        return this;
+    }
+
     FinancialFigures build() {
         return new FinancialFigures(
                 fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
                 revenue, operatingIncome, netIncome, totalAssets, totalEquity, totalLiabilities,
                 currentAssets, currentLiabilities, retainedEarnings,
                 operatingCashFlow, sharesOutstanding, eps, bps,
-                costOfSales, cashAndEquivalents, capex);
+                costOfSales, cashAndEquivalents, capex, inventories);
     }
 }
