@@ -1,0 +1,131 @@
+---
+id: ADR-0072
+status: 채택됨
+date: 2026-08-19
+applies_to:
+  - "src/main/java/**/screening/preset/PresetCatalog.java"
+  - "src/main/java/**/indicator/calculator/MarketCapCalculator.java"
+  - "src/main/java/**/indicator/calculator/Turnover60Calculator.java"
+  - "docs/external/버핏프리셋-백테스트-보고서.md"
+---
+
+# ADR-0072. 백분위는 하한 게이트가 되지 못한다 — 백테스트가 넘긴 셋 중 실행할 수 있는 것이 없다
+
+## 결정
+
+P17 백테스트(ADR-0071)의 결과로 **`BUFFETT_QUALITY_KR`의 조건을 한 줄도 바꾸지 않는다.**
+
+보고서 §6이 사전정보로 넘긴 셋 중 유일하게 「설계를 고칠 근거」였던 것이 1번 —
+**절대 금액 임계(`MARKET_CAP ≥ 1조` · `TURNOVER_60 ≥ 100억`)를 분위로 두라**였다. 진단 축이
+낸 결론이라 수익률 금지에 걸리지 않았고, 실제로 그 둘의 분위 이동은 0.34·0.43으로 재무 게이트
+넷(0.04~0.08)과 자릿수가 다르다.
+
+**그 권고가 이 저장소에서는 두 게이트 모두에 대해 성립하지 않는다.** `PercentileCalculator`가
+`PARTITION BY m.universe_code`로 순위를 매기므로(ADR-0036) **하나의 분위 임계는 시장마다 다른
+절대 높이의 문**이 된다 — §배경의 표가 그 수다.
+
+## 규칙
+
+- **MUST NOT: 유니버스 백분위(`*_PCTL`)를 규모·유동성 하한 게이트로 쓰지 않는다.** 모집단이
+  시장별이라 한 임계가 코스피와 코스닥에서 다른 절대 높이가 된다. **백분위는 종목 간 상대
+  순위용이고 하한용이 아니다.** 상대 조건(「업종 대비 싼가」)에는 그대로 쓴다.
+- **MUST NOT: 국내 분포로 정한 임계값을 다른 시장의 프리셋에 옮기지 않는다. 분위도 같다.**
+  금액은 원화라 옮기면 즉시 틀린 것이 드러나지만 **분위는 무차원이라 아무 증상이 없다.**
+  기제가 실재한다 — `ScreenPreset.universeCode`가 버핏에서 `null`이고 실행 요청이 덮어쓸 수
+  있으며(`ScreeningService`의 `firstNonNull`), ADR-0010이 `SP500` 행과 시드를 유지하라고 못박는다.
+  **코드명의 `_KR`은 강제되지 않는다.**
+- **MUST NOT: 「신호 없음」을 조건을 빼는 근거로 쓰지 않는다.** 사전등록 검출 임계가
+  3.5%p/6개월인데 생존 편향 하한이 0.57~2.47%p라 **작은 양(+)의 효과는 원리적으로 가려진다.**
+  질 조건 여덟이 Holm을 못 넘은 것은 그 조건들에 대한 증거가 아니다.
+- **MUST: 프리셋 조건을 고치기 전에 그 게이트를 복사한 `CUSTOM` 화면을 센다.**
+  `PresetSynchronizer`는 `ScreenType.PRESET`만 갱신하므로 사본은 옛 조건을 든 채 남고, 화면
+  어디에도 그 차이가 표시되지 않는다. 실제로 「버핏+이평선」이 게이트 여섯을 글자 그대로
+  복사해 갖고 있었다(2026-08-19 사용자 확인 후 삭제).
+
+## 검증
+
+두 게이트가 아직 금액인가 — 분위로 바뀌면 이 결정이 뒤집힌 것이다.
+
+```bash
+rg -n 'MarketCapCalculator\.CODE|Turnover60Calculator\.CODE' \
+   src/main/java/com/stockscreener/screening/preset/PresetCatalog.java
+```
+
+버핏 블록(`buffettQualityKr`)에서 둘 다 `pctl(...)` 없이 원 코드로 나와야 한다.
+
+---
+
+**아래 둘은 이 결정이 아직 옳은지를 묻는다.**
+
+```premise 백분위가 아직 유니버스별로 매겨진다 — 이 결정의 전제
+if ! [ -f src/main/java/com/stockscreener/indicator/PercentileCalculator.java ]; then echo "잴 것이 없었다 — PercentileCalculator.java가 없다"; elif grep -q 'PARTITION BY m.universe_code' src/main/java/com/stockscreener/indicator/PercentileCalculator.java; then echo "OK 백분위 모집단이 여전히 유니버스별이다 — 분위 임계가 시장마다 다른 절대 높이가 된다"; else echo "PARTITION BY m.universe_code가 사라졌다 — 모집단이 통합됐다면 「백분위는 하한 게이트가 못 된다」의 근거가 없어진다. ADR-0036과 함께 다시 판단한다"; fi
+```
+
+```premise 국내 외 유니버스가 아직 활성이 아니다 — 시장 간 임계 이전 금지가 잠자는 이유
+psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — universe 테이블이 비었다' WHEN count(*) FILTER (WHERE is_active AND code NOT LIKE 'KOSPI%' AND code NOT LIKE 'KOSDAQ%') = 0 THEN 'OK 활성 유니버스가 국내뿐이다(' || string_agg(code, ' ') FILTER (WHERE is_active) || ') — 국내 임계가 다른 시장에 걸릴 경로가 아직 없다' ELSE '국내 외 유니버스가 활성이 됐다: ' || string_agg(code, ' ') FILTER (WHERE is_active AND code NOT LIKE 'KOSPI%' AND code NOT LIKE 'KOSDAQ%') || ' — universeCode가 null인 프리셋(버핏 포함)이 그 시장에 국내 임계를 그대로 건다. 시장별 프리셋을 가르기 전에는 실행하지 않는다' END FROM universe"
+```
+
+## 배경
+
+**두 게이트를 분위로 옮겼을 때의 실측**(2026-08-14 단면, 유니버스 347). 분위 수준은 각각
+**지금과 같은 수의 종목을 남기는 값**을 골랐다 — 즉 「형태만 바꾼」 가장 유리한 조건이다.
+
+| 게이트 | 분위 | KOSPI 실효 하한 | KOSDAQ 실효 하한 | 뒤집히는 종목 |
+|---|---|---|---|---|
+| `MARKET_CAP` | 0.285 | 2조 7,666억 | **7,863억** (−21%) | 1조 미만 **30종목**이 신규 통과 |
+| `TURNOVER_60` | 0.2905 | 139억 | **73억** (−27%) | 100억 미만 **14종목**이 신규 통과, 100억 초과 **14종목**이 탈락 |
+
+**유동성 쪽이 규모 쪽보다 더 갈린다.** `MarketCapCalculator`가 이미 적어 둔
+`MUST NOT: 백분위를 만들지 않는다 — 규모로 거르려는 의도와 정반대가 된다`가 옳았고, 그 논거가
+`TURNOVER_60`에 **더 세게** 걸린다. 그런데 `TURNOVER_60_PCTL`은 `PercentileConfig`에 **실제로
+존재**하므로 「지표가 이미 있으니 바꾸면 된다」는 오판에 도달할 경로가 시총보다 넓다.
+
+**보고서의 분위 수를 그대로 임계로 옮겨도 되는가는 별개이고, 답은 「거의 같다」다.**
+`GateDiagnosticsTest.percentileOfThreshold`는 유니버스를 나누지 않고 재는데, 전역 임계 하나를
+고르는 한 그 차이는 상쇄된다 — `TURNOVER_60`의 계수보존 분위가 **유니버스별 0.2905 · 통합
+0.2919**다. **한 시장 안의 임계**(KOSPI 0.218 / KOSDAQ 0.378)와 혼동하지 않는다.
+
+**「분위로 두면 형태만 바뀐다」도 사실이 아니다.** 보고서 §4의 `TURNOVER_60` 계열이
+0.18~0.61(처음 0.49 → 끝 0.22)이라 **측정 창의 중앙값(≈0.47)은 오늘 문턱을 100억에서 약
+185억으로 올린다.** 창 평균 엄격도를 보존하는 값은 현재 단면에서 수준 변경이다.
+
+**수익률 쪽으로는 애초에 고칠 수 없다.** ADR-0071이 「백테스트 결과로 임계값을 조정하지 않는다,
+어느 방향으로도」를 두었고, 원인 후보 넷(이식 결함·데이터 결함·시장 차이·방법론 자체)을 이
+표본이 가르지 못한다. 남은 것이 진단 축뿐이었고 그 하나가 위와 같이 막혔다.
+
+## 버린 대안
+
+- **시총을 분위로** — §배경의 표. 덧붙여 `MarketCapCalculator`의 `direction = NEUTRAL`이라
+  `higher_is_better`가 NULL이고, `PresetCatalogTest`의 백분위 방향 검사가 *"원본에 유불리
+  방향이 없어 상위/하위를 말할 수 없다"* 로 **즉시 붉어진다.**
+- **거래대금을 분위로** — §배경의 표. 더해 `required(pctl(...))`는 코드베이스에 **선례가
+  0건**이고, 필수 게이트를 파생 배치 산출물에 매달면 백분위 단계가 안 돈 날 결과가 「좁아지는」
+  것이 아니라 **0건**이 된다(`DailyUpdateJob`이 그 비대칭을 이미 주석으로 적는다).
+- **유니버스를 넘는 백분위 계층 신설** — ADR-0036 재검토. 보고서 권고를 그대로 실현할 수 있는
+  유일한 길이지만 저장·카탈로그·백테스트 하네스·화면이 함께 움직이고, 다른 프리셋의
+  `PER_PCTL` 해석까지 바뀐다. 게다가 스크리닝이 `universeCode`로 대상을 좁히는 것과 어긋난다 —
+  **거르는 모집단과 순위를 매기는 모집단이 달라진다**는 ADR-0036의 원 논거가 그대로 되돌아온다.
+- **시장 유동성 수준에 연동한 금액 임계** — 조건 모델이 `operand_indicator_code` ·
+  `operand_multiplier`를 들고 있어 표현은 되지만 **새 지표(시장 거래대금 수준)가 필요**하다.
+  측정 도구에 맞춰 프리셋을 고치는 쪽이고, ADR-0071이 같은 이유로 `PROFIT_STREAK_Y` 제거안을
+  버렸다.
+- **`MARKET_CAP`을 원저 §0.1의 5조로 올리기** — 원저 충실도는 가장 높다(*"대형 지향 시
+  $10B / 5조원 이상"*). 통과가 13 → 5종목이 되고, **드리프트를 고치지도 못한다** — 금액인 것은
+  그대로이므로 이 결정이 답하려던 문제가 남는다.
+
+## 결과
+
+**쉬워지는 것** — 다음에 이 자리를 볼 때 「백분위가 있는데 왜 안 쓰나」에 수로 답이 되어 있다.
+그 오판에 도달할 경로가 좁아진다.
+
+**어려워지는 것** — 금액 임계의 드리프트가 **알려진 결손으로 남는다.** `MARKET_CAP`은
+2022년에 유니버스의 45%를 자르던 문이 2026년엔 12%만 잘랐다. 통과 집합의 분기 회전율 중앙값
+0.33이 그 드리프트에서 오는지, 새 회계연도 공시로 재무 게이트가 뒤집혀서 오는지는
+`GateDiagnosticsTest`의 귀속 진단이 답한다.
+
+**보고서가 넘긴 셋의 처분** — ① 분위 전환: 이 ADR이 막았다. ② `PROFIT_STREAK_Y`의 방향이
+원저와 반대: **원문 그대로(AAII 7개 회계연도)이고 생존 편향으로도 설명되므로 답하지 않는다.**
+③ 회전율 0.33: 귀속 진단으로 원인을 가른다.
+
+**되돌리려면** — 유니버스를 넘는 백분위 계층을 먼저 만들어야 한다. 그것 없이 `PresetCatalog`의
+게이트만 `pctl(...)`로 바꾸면 §배경의 표가 그대로 일어난다.
