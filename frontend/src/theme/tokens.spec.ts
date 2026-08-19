@@ -2,12 +2,16 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
+import { Theme } from '@primeuix/themes'
+
 import { walkSource } from '@/lib/sourceScan'
+
+import { ScreenerPreset } from './preset'
 
 /**
  * ADR-0021의 `## 검증`을 실제로 돌리는 것을 만든다.
  *
- * 그 절은 손으로 치는 `rg` 명령 여덟 줄이었고 **아무것도 그것을 돌리지 않았다.** 그 공백에서
+ * 그 절은 손으로 치는 `rg` 명령이었고 **아무것도 그것을 돌리지 않았다.** 그 공백에서
  * 실제로 결함이 자랐다 — `FinancialsPanel.vue`가 어디에도 선언되지 않은 이름
  * (`--surface-card`·`--surface-border`·`--radius-lg`·`--primary-color`·`--text-color-secondary`)만
  * 참조해, **카드 면과 테두리가 통째로 사라진 채** 오래 살아 있었다. `contrast.spec.ts`가 대비비를
@@ -59,6 +63,60 @@ const SET_PROPERTY = /setProperty\(\s*['"](--[\w-]+)['"]/g
 
 /** **폴백 없는** 참조만 센다. `var(--x, y)`는 선언이 없어도 무효가 되지 않는다. */
 const BARE_REFERENCE = /var\(\s*(--[\w-]+)\s*\)/g
+
+/**
+ * `--p-*` **참조**. 폴백이 있어도 센다.
+ *
+ * IMPORTANT — 여기가 위 `BARE_REFERENCE`와 갈리는 자리다. 앱 변수는 폴백이 있으면 선언이
+ * 없어도 정상이지만, `--p-*`는 **그 이름이 PrimeVue에 존재해야 한다는 사실 자체**를 폴백이
+ * 가린다. 실제로 `--p-warn-color`가 `var(--p-warn-color, var(--p-text-color))`로 불렸고,
+ * 선언은 무효가 되지 않은 채 경고 문구의 색만 조용히 본문색으로 떨어져 있었다. 무폴백만
+ * 세는 검사였으면 그 형태를 지금도 못 잡는다.
+ */
+const PRIME_REFERENCE = /var\(\s*(--p-[\w-]+)\s*[,)]/g
+
+/** 생성된 CSS 안의 `--p-*` **선언**. */
+const PRIME_DECLARATION = /(--p-[\w-]+)\s*:/g
+
+/**
+ * PrimeVue가 실제로 내는 이름 집합.
+ *
+ * ADR-0021은 원래 이것을 **보지 않기로** 적어 두었다 — "생성 집합이 PrimeVue 내부 API에
+ * 물려 있어, 거기 기댄 검사는 의존성을 올릴 때 원인 불명으로 빨개진다." 셋이 그 사유를
+ * 무력화한다. (1) `Theme`은 `@primeuix/themes`의 **공개 export**다. (2) 의존성이 정확
+ * 버전으로 고정돼 있어(ADR-0019) 올릴 때 빨개지는 것은 확인해야 할 신호다. (3) 아래 검사가
+ * **집합 크기를 먼저 단정해** "원인 불명"을 없앤다 — 생성이 무너지면 참조 39개가 전부
+ * 미정의로 뜨는 대신 그 한 줄이 실패한다.
+ *
+ * `options`는 `main.ts`가 넘기는 것과 `Theme.defaults.options`가 채우는 기본값을 합친
+ * 것이다. `darkModeSelector`는 다크 값을 감싸는 **선택자**만 정하고 이름은 바꾸지 않으므로
+ * 이 검사의 결과에 영향이 없다 — 그 값이 `main.ts`와 맞는지는 `preset.spec.ts`가 본다.
+ */
+function generated(): { common: Set<string>; component: Set<string> } {
+  Theme.setTheme({
+    preset: ScreenerPreset,
+    options: { prefix: 'p', darkModeSelector: '.app-dark', cssLayer: false },
+  })
+
+  const common = new Set<string>()
+  const component = new Set<string>()
+  const collect = (into: Set<string>, css: unknown): void => {
+    for (const name of captures(String(css ?? ''), PRIME_DECLARATION)) into.add(name)
+  }
+
+  const shared = Theme.getCommon('', {})
+  collect(common, shared.primitive.css)
+  collect(common, shared.semantic.css)
+  collect(common, shared.global.css)
+
+  // 컴포넌트 토큰은 **그 컴포넌트 스타일이 로드된 뒤에만** 존재한다. 그래서 공통과 따로
+  // 모아 두고, 실패 메시지에서 "없는 이름"과 "아직 없는 이름"을 가르는 데에만 쓴다.
+  for (const name of Object.keys(ScreenerPreset.components ?? {})) {
+    collect(component, Theme.getComponent(name, {}).css)
+  }
+
+  return { common, component }
+}
 
 /** ADR-0021 §규칙: 글자 크기는 `--app-text-*`에서만 정의한다. 예외는 없다. */
 const FONT_SIZE_LITERAL = /font-size:\s*[0-9]/
@@ -198,11 +256,35 @@ describe('디자인 토큰 (ADR-0021)', () => {
 
   it('선언되지 않은 변수를 폴백 없이 참조하지 않는다', () => {
     // `--p-*`는 PrimeVue가 소유한다(ADR-0021: "`--p-*`를 소비만 한다"). 앱이 선언하지 않는
-    // 것이 정상이므로 여기서 세면 전부 위반이 된다.
+    // 것이 정상이므로 여기서 세면 전부 위반이 된다. 그 이름들이 **PrimeVue에는 있는가**는
+    // 아래 「PrimeVue가 내지 않는 `--p-*`」가 따로 묻는다.
     const strays = scan((line) =>
       captures(line, BARE_REFERENCE).filter(
         (name) => !name.startsWith('--p-') && !declared.has(name),
       ),
+    )
+
+    expect(format(strays)).toEqual([])
+  })
+
+  it('PrimeVue가 내지 않는 `--p-*`를 참조하지 않는다', () => {
+    const { common, component } = generated()
+
+    // 자기검사를 먼저 둔다. 이것이 없으면 생성이 무너졌을 때 참조 전부가 "미정의"로 떠,
+    // 원인이 앱이 아니라 검사 쪽이라는 사실이 실패 목록에 묻힌다.
+    expect(
+      common.size,
+      'PrimeVue가 공통 토큰을 이 방식으로 더 이상 내지 않는다 — 앱이 아니라 이 검사를 고쳐라',
+    ).toBeGreaterThan(300)
+
+    const strays = scan((line) =>
+      captures(line, PRIME_REFERENCE)
+        .filter((name) => !common.has(name))
+        .map((name) =>
+          component.has(name)
+            ? `${name} — 컴포넌트 토큰이다. 그 컴포넌트가 그려지기 전에는 존재하지 않는다`
+            : `${name} — PrimeVue가 내지 않는 이름이다`,
+        ),
     )
 
     expect(format(strays)).toEqual([])
