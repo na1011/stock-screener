@@ -35,8 +35,12 @@ applies_to:
   **전 조건에 같게** 적용한다 — 초안이 `ROA`(ρ 0.832)를 빼면서 더 겹치는 `ROE`(ρ 0.870)를 남긴
   것이 그 실패다. **축에 이름을 여섯 개 붙이는 것은 측정이 아니다.**
 - **MUST: 게이트끼리의 겹침을 독립 가정 대비 배수로 신고한다.** `ROE_MIN_3Y ≥ 10` ∧
-  `ROIC_PRETAX ≥ 15`가 **3.3배**(교집합 35 · 독립 가정 10.5)다. **겹치는데도 두기로 했으면 그
+  `ROIC_MIN_3Y ≥ 10`이 **4.47배**(교집합 41 · 독립 가정 9.2)다. **겹치는데도 두기로 했으면 그
   배수를 남긴다** — 다음 세션이 게이트 개수를 안전장치 개수로 읽지 않게.
+  **그리고 그 배수가 임계를 정한다.** ROIC 게이트를 연간 3년 최저로 옮기면서(ADR-0073) 두
+  게이트의 기저가 같아져 ρ가 0.870 → **0.882**로 올랐고, 임계를 12·15로 두면 배수가 5.61·6.30이
+  되어 아래 펜스의 5.0을 넘는다. **MUST NOT: 임계를 올리려고 그 5.0을 손대지 않는다** — 두
+  게이트가 하나가 됐다는 신호를 보고도 잣대를 느슨하게 하면 실패할 수 없는 펜스가 된다.
 - **MUST NOT: 인용을 절단하지 않는다.** 문서 §4.3의 원문은 *"버핏은 PER 자체를 절대 기준으로 쓰지
   않지만 **1차 관문으로는 유효하다**"* 이고, 뒷절을 떼면 단서 붙은 진술이 자기모순으로 바뀐다.
   같은 문장이 여러 지표를 가리키면(§1.3의 *"결과이지 원인이 아님"*이 `Gross Margin`과 `ROIC`를
@@ -65,12 +69,12 @@ w AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='ROE_MIN_3Y') roe3,
         max(value) FILTER (WHERE indicator_code='PROFIT_STREAK_Y') streak,
         max(value) FILTER (WHERE indicator_code='DEBT_RATIO') dr,
-        max(value) FILTER (WHERE indicator_code='ROIC_PRETAX') roic,
+        max(value) FILTER (WHERE indicator_code='ROIC_MIN_3Y') roic,
         max(value) FILTER (WHERE indicator_code='GROSS_MARGIN') gm,
         max(value) FILTER (WHERE indicator_code='MARKET_CAP') mc,
         max(value) FILTER (WHERE indicator_code='TURNOVER_60') tv
       FROM indicator_value iv, d WHERE iv.trade_date = d.t GROUP BY 1),
-g AS (SELECT gm FROM w WHERE streak>=7 AND roe3>=10 AND dr<=100 AND roic>=15
+g AS (SELECT gm FROM w WHERE streak>=7 AND roe3>=10 AND dr<=100 AND roic>=10
         AND mc>=1000000000000 AND tv>=10000000000 AND gm IS NOT NULL)
 SELECT CASE
   WHEN (SELECT count(*) FROM w WHERE gm IS NOT NULL) = 0
@@ -96,17 +100,17 @@ psql -d stock_screener -At -c "WITH d AS (
   SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'ADJ_CLOSE'),
 w AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='ROE_MIN_3Y') a,
-        max(value) FILTER (WHERE indicator_code='ROIC_PRETAX') b
+        max(value) FILTER (WHERE indicator_code='ROIC_MIN_3Y') b
       FROM indicator_value iv, d WHERE iv.trade_date = d.t GROUP BY 1),
 n AS (SELECT count(*) tot, count(*) FILTER (WHERE a>=10) na,
-             count(*) FILTER (WHERE b>=15) nb,
-             count(*) FILTER (WHERE a>=10 AND b>=15) nab FROM w)
+             count(*) FILTER (WHERE b>=10) nb,
+             count(*) FILTER (WHERE a>=10 AND b>=10) nab FROM w)
 SELECT CASE
   WHEN (SELECT na FROM n) = 0 OR (SELECT nb FROM n) = 0
     THEN '잴 것이 없었다 — 두 게이트 중 하나를 통과하는 종목이 없다'
   WHEN (SELECT nab::numeric / (na::numeric * nb / tot) FROM n) <= 5.0
     THEN 'OK 겹침 ' || round((SELECT nab::numeric / (na::numeric * nb / tot) FROM n),2)
-         || '배 (신고값 3.3)'
+         || '배 (신고값 4.47)'
   ELSE '겹침이 신고값에서 크게 벗어났다: '
        || round((SELECT nab::numeric / (na::numeric * nb / tot) FROM n),2)
        || '배. 두 게이트가 사실상 하나가 됐는지 본다'

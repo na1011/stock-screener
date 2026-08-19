@@ -74,7 +74,7 @@ class PastUniverseProbeLiveTest {
      * 편향을 나눌 <b>미충족 집단</b>의 크기. 폐지 종목은 거의 전부 여기 있으므로 분모가
      * 유니버스가 아니라 이쪽이다 — 게이트가 조일수록 미충족이 커지고 편향은 <b>작아진다.</b>
      *
-     * <p>실측 통과 수에서 왔다: {@code ROIC_PRETAX} 69/347, {@code PROFIT_STREAK_Y} 156/350.
+     * <p>실측 통과 수에서 왔다: {@code ROIC_MIN_3Y} 60/300, {@code PROFIT_STREAK_Y} 156/350.
      * 마지막 100은 통과가 많은 조건까지 덮는 <b>보수적 상한</b>이다.
      */
     private static final int[] UNSATISFIED_GROUP = {350, 278, 194, 100};

@@ -187,7 +187,7 @@ class ConditionReturnTest {
                 NOT_MEASURABLE);
         System.out.println("생존 편향이 차를 0 쪽으로 0.57~2.47%p/6개월 누른다(하한)."
                 + " 작은 양의 효과는 원리적으로 가려진다.");
-        System.out.println("MUST: 수익성 게이트(ROE_MIN_3Y·ROIC_PRETAX·PROFIT_STREAK_Y)가 좋게"
+        System.out.println("MUST: 수익성 게이트(ROE_MIN_3Y·ROIC_MIN_3Y·PROFIT_STREAK_Y)가 좋게"
                 + " 나왔다면 ADR-0061의 재현율 5.0%를 사전 확률로 두고 그것부터 의심한다.");
     }
 

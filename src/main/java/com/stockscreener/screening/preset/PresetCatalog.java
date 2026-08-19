@@ -38,7 +38,7 @@ import com.stockscreener.indicator.calculator.OperatingMarginMin5yCalculator;
 import com.stockscreener.indicator.calculator.ProfitStreakYearsCalculator;
 import com.stockscreener.indicator.calculator.RetainedToMarket4yCalculator;
 import com.stockscreener.indicator.calculator.RoeMin3yCalculator;
-import com.stockscreener.indicator.calculator.RoicPretaxCalculator;
+import com.stockscreener.indicator.calculator.RoicMin3yCalculator;
 import com.stockscreener.indicator.calculator.Rsi2Calculator;
 import com.stockscreener.indicator.calculator.SharesGrowth3yCalculator;
 import com.stockscreener.indicator.calculator.Sma150Calculator;
@@ -141,14 +141,20 @@ public class PresetCatalog {
      * 유보 원칙), {@code FCF_MARGIN >= 8}·{@code FCF_YIELD >= 5}(3.3 대체·4.2),
      * {@code ACCRUAL_RATIO <= 0}(5.5), {@code SHARES_GROWTH_3Y <= 0}(2.1).
      * <br><b>국내 분포로 재보정한 것</b>: 필수 게이트의 {@code ROE_MIN_3Y >= 10}(원문 15는
-     * 19종목/5%)과 {@code DEBT_RATIO <= 100}. {@code ROIC_PRETAX >= 15}는 <b>분포가 아니라
-     * 기저 때문에</b> 원문 12에서 옮겼다 — 원문은 세후이고 우리 지표는 세전이라 같은 수를 쓰면
-     * 원문보다 느슨해진다.
+     * 19종목/5%), {@code DEBT_RATIO <= 100}, {@code ROIC_MIN_3Y >= 10}(60/300, 20%).
+     * 마지막 것은 <b>두 번 옮긴 값이다</b> — 원문 12(세후)를 세전 기저에서 15로 올렸고
+     * (ADR-0067), 다시 단년 TTM에서 연간 3년 최저로 기저를 바꾸며 10으로 내렸다. 그 둘은
+     * 방향이 반대이므로 <b>어느 한쪽만 알고 수를 읽으면 반드시 틀린다.</b>
      *
-     * <p><b>{@code ROIC_PRETAX}가 게이트에 있는 것이 이 프리셋의 해자 축이다</b>(ADR-0068).
+     * <p><b>MUST: 이 절의 절대 임계는 전부 국내 분포에서 나온 값이다.</b> 미국 프리셋을 만들
+     * 때 이 메서드를 복사하면 임계가 그대로 따라가는데, <b>같은 수가 다른 시장에서 다른 위치를
+     * 잰다</b> — 원문 값을 그대로 옮기면 안 되는 이유(ADR-0061)가 시장 사이에도 그대로 걸린다.
+     * 프리셋 코드의 {@code _KR} 접미사가 구조를 갈라 두었으므로 <b>갈리지 않는 것은 수뿐이고,
+     * 그것은 복사할 때 사람이 지켜야 한다.</b> 지표 계산기는 시장 중립이라 고칠 것이 없다.
+     *
+     * <p><b>ROIC가 게이트에 있는 것이 이 프리셋의 해자 축이다</b>(ADR-0068).
      * 2019년 주주서한이 <i>"영업에 투입된 순유형자본 대비 좋은 수익률"</i>을 <b>첫 번째</b>
-     * 기준으로 든다. 이 게이트 하나가 통과를 19 → 14로 자르면서 <b>매출총이익률 중앙값을
-     * 44.8 → 50.5로 올린다</b>(유니버스 22.2) — 프랜차이즈가 남고 코모디티가 빠진다.
+     * 기준으로 든다. 이 게이트 하나가 통과를 19 → 16으로 자른다.
      * <br><b>원문보다 약하게 옮긴 것</b>: 3.5를 5년이 아니라 <b>4년</b>으로 잰다. 읽기 창
      * 1,261봉 전이 2021-06인데 FY−5 기말은 1,377봉 전이라, 5년으로 두면 주가와 이익잉여금의
      * 기준점이 7개월 어긋난 채 남는다(ADR-0067 §배경).
@@ -162,6 +168,11 @@ public class PresetCatalog {
      * 같게 적용한 결과다(ADR-0068) — {@code ROIC_PRETAX}와 ρ가 각각 0.870·0.832·0.836이고,
      * {@code NET_MARGIN}은 {@code OPERATING_MARGIN}과 0.857이다. 축에 이름을 여섯 개 붙이는
      * 것은 측정이 아니다.
+     * <br>게이트를 {@code ROIC_MIN_3Y}로 바꾼 뒤 같은 잣대를 다시 댔다 — 남은 점수 조건과의
+     * ρ는 {@code OPM_MIN_5Y} <b>0.786</b>, {@code FCF_MARGIN} 0.425, {@code FCF_YIELD} 0.354,
+     * {@code GROSS_MARGIN} <b>0.242</b>로 전부 0.8 미만이라 <b>뺄 것이 없다.</b>
+     * {@code OPM_MIN_5Y}가 경계에 가까운 것은 둘 다 다년 최솟값 수익성이기 때문이고, 다음에
+     * 게이트를 만질 때 먼저 볼 자리다.
      *
      * <p><b>질은 문이고 가격은 저울이다</b>(ADR-0068). 게이트 여섯은 전부 사업의 질과 규모이고,
      * 가격은 게이트가 아니라 <b>배점 16 중 7(44%)</b>로 순위를 정한다. AAII Buffett-Hagstrom도
@@ -179,10 +190,18 @@ public class PresetCatalog {
      *
      * <p><b>게이트끼리 같은 방향으로 겹치는 쌍이 둘 있다.</b> {@code ROE_MIN_3Y >= 10}(53) ∧
      * {@code PROFIT_STREAK_Y >= 7}(156) = 37로 독립 가정(23.8)의 <b>1.55배</b>, 그리고
-     * {@code ROE_MIN_3Y >= 10} ∧ {@code ROIC_PRETAX >= 15}(69) = 35로 독립 가정(10.5)의
-     * <b>3.3배</b>다. <b>단독 통과율만으로는 이 형태가 안 보인다.</b> 그럼에도 셋을 다 두는
-     * 이유는 각각이 실제로 자르기 때문이며(ROIC가 19 → 14), <b>게이트 여섯을 안전장치 여섯으로
-     * 읽지 않도록 그 배수를 여기 적는다.</b> 여섯을 전부 걸면 14종목이 남는다.
+     * {@code ROE_MIN_3Y >= 10} ∧ {@code ROIC_MIN_3Y >= 10}(60) = 41로 독립 가정(9.2)의
+     * <b>4.47배</b>다. <b>단독 통과율만으로는 이 형태가 안 보인다.</b> 그럼에도 셋을 다 두는
+     * 이유는 각각이 실제로 자르기 때문이며(ROIC가 19 → 16), <b>게이트 여섯을 안전장치 여섯으로
+     * 읽지 않도록 그 배수를 여기 적는다.</b> 여섯을 전부 걸면 16종목이 남는다.
+     *
+     * <p><b>그 4.47배가 임계 10을 고른 이유이기도 하다.</b> ROIC 게이트를 연간 3년 최저로 옮기면
+     * {@code ROE_MIN_3Y}와 <b>기저가 같아져</b>(둘 다 연간 3개년 최솟값) 겹침이 커진다 —
+     * ρ가 0.870({@code ROIC_PRETAX}~{@code ROE})에서 <b>0.882</b>로 올랐다. 임계를 12로 두면
+     * 5.61배, 15면 6.30배로 <b>ADR-0068이 건 5.0 펜스를 넘는다.</b> 회전만 보면 12가 더 낮지만
+     * (연간 임계 교차율 5.7/9.8/5.6/4.5% 대 9.4/13.1/7.4/5.5%), 두 게이트가 같은 것을 잰다는
+     * 신호를 보고도 잣대를 느슨하게 하는 것은 <b>실패할 수 없는 펜스를 만드는 일</b>이다.
+     * MUST NOT: 임계를 올리려고 그 펜스의 5.0을 손대지 않는다.
      *
      * <p>MUST NOT: 이 프리셋이 <b>지주회사를 걸러낸다고 적지 않는다.</b> 문서 §10이 지주회사를
      * <i>"버핏식 스크린에서 가장 오염이 심한 구간"</i>으로 지목한다 — 지분법이익 때문에 ROE가
@@ -265,9 +284,18 @@ public class PresetCatalog {
                         // 0.1 충분한 규모. 275종목(79%).
                         required(MarketCapCalculator.CODE, ComparisonOperator.GTE, "1000000000000"),
                         // 2019 주주서한의 첫 번째 기준 —「영업에 투입된 순유형자본 대비 좋은
-                        // 수익률」. 세전이라 원문 12가 아니라 15다(ADR-0067). 69/347(20%)이
-                        // 통과하고 이 게이트가 19 → 14로 자른다.
-                        required(RoicPretaxCalculator.CODE, ComparisonOperator.GTE, "15"),
+                        // 수익률」. 60/300(20%)이 통과하고 이 게이트가 19 → 16으로 자른다.
+                        //
+                        // 기저가 단년 TTM이 아니라 연간 3년 최저다. 단년은 분기 공시마다
+                        // 뒤집혀 목록의 회전을 만들었다 — 같은 임계에서 종목·연 임계 교차율이
+                        // 12~20%(단년) 대 9.4/13.1/7.4/5.5%(3년 최저)다.
+                        //
+                        // MUST NOT: 이 10을 세전 보정값 15에서 이어진 수로 읽지 않는다.
+                        // 3년 최저는 단년보다 구조적으로 낮아 같은 수가 같은 엄격도를 뜻하지
+                        // 않는다 — 15를 그대로 옮기면 통과가 8.7%로 조이고 겹침 배수가 6.3이
+                        // 되어 ADR-0068의 펜스를 깬다. 10은 국내 분포에서 다시 잰 값이고,
+                        // ROE_MIN_3Y가 원문 15를 10으로 내린 것과 같은 종류의 재보정이다.
+                        required(RoicMin3yCalculator.CODE, ComparisonOperator.GTE, "10"),
                         // §7 유동성. 대형 지향이라 린치 고속성장주의 50억을 승계하지 않는다.
                         required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
 
