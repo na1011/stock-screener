@@ -3,6 +3,7 @@ package com.stockscreener.indicator;
 import com.stockscreener.indicator.calculator.AltmanZCalculator;
 import com.stockscreener.indicator.calculator.EpsTtmCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.indicator.calculator.RoicMin3yCalculator;
 import com.stockscreener.indicator.calculator.RoicPretaxCalculator;
 
 import org.springframework.context.annotation.Bean;
@@ -63,6 +64,18 @@ public class IndicatorUnavailabilityConfig {
                         // KSIC 64·65·66이거나 업종 미상이다. 그 업종에서 값이 나오는 종목도
                         // 있으므로(64의 35종목 중 22) 이 규칙은 값이 없을 때만 붙고,
                         // 엉뚱한 종목에 사유를 붙일 여지가 없다.
+                        context -> isFinancialDivision(context.industryDivision()),
+                        "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
+                                + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다."),
+                new UnavailabilityRule(
+                        RoicMin3yCalculator.CODE,
+                        // 분모가 ROIC_PRETAX와 같으므로 같은 업종에서 같은 이유로 값이 없다.
+                        // 규칙이 코드 단위라 새 코드에 자동으로 붙지 않는다 — 안 적으면 실제로
+                        // 종목을 막는 게이트 쪽이 아무 말 없이 비고, 안 막는 쪽에만 사유가 남는다.
+                        //
+                        // MUST NOT: "3년 연속 재무가 없다"를 여기 사유로 적지 않는다. 그것은
+                        // 이 규칙이 확인할 수 없는 추측이고, 금융업이 아닌데 값이 없는 종목에
+                        // 틀린 이유를 붙이게 된다(ALTMAN_Z가 업종만 말하는 것과 같은 이유다).
                         context -> isFinancialDivision(context.industryDivision()),
                         "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
                                 + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다."));

@@ -167,6 +167,77 @@ class BuffettIndicatorsTest {
         }
     }
 
+    @Nested
+    @DisplayName("ROIC_MIN_3Y")
+    class RoicMin3y {
+
+        private final RoicMin3yCalculator calculator = new RoicMin3yCalculator();
+
+        @Test
+        @DisplayName("세 해 중 가장 낮은 해를 낸다 — 단년 TTM이 놓치는 그 해다")
+        void takesMinimumNotAverage() {
+            List<FinancialFigures> annual = List.of(
+                    annualRoic(LocalDate.of(2025, 12, 31), "40", "300", "100"),
+                    annualRoic(LocalDate.of(2024, 12, 31), "10", "300", "100"),
+                    annualRoic(LocalDate.of(2023, 12, 31), "30", "300", "100"));
+
+            List<IndicatorPoint> points = calculator.calculate(annualContext(annual));
+
+            assertThat(points.get(0).value())
+                    .as("투하자본 200에 최저 영업이익 10이면 5%다. 평균이면 13.3%가 나온다")
+                    .isEqualByComparingTo("5");
+        }
+
+        @Test
+        @DisplayName("IMPORTANT — 연간 영업이익을 합산하지 않는다. 합하면 세 배가 된다")
+        void doesNotSumAnnualFlows() {
+            List<FinancialFigures> annual = List.of(
+                    annualRoic(LocalDate.of(2025, 12, 31), "20", "300", "100"),
+                    annualRoic(LocalDate.of(2024, 12, 31), "20", "300", "100"),
+                    annualRoic(LocalDate.of(2023, 12, 31), "20", "300", "100"));
+
+            assertThat(calculator.calculate(annualContext(annual)).get(0).value())
+                    .as("연간 행의 영업이익은 이미 그 해 전체다 — 네 분기 합산 함수를 쓰면 안 된다")
+                    .isEqualByComparingTo("10");
+        }
+
+        @Test
+        @DisplayName("IMPORTANT — 한 해가 빠지면 값을 내지 않는다. 행 수만 세면 구멍이 안 보인다")
+        void emitsNothingWhenAYearIsMissing() {
+            List<FinancialFigures> annual = List.of(
+                    annualRoic(LocalDate.of(2025, 12, 31), "20", "300", "100"),
+                    // 2024가 없다. 행 수는 셋이라 LIMIT 검사는 통과한다.
+                    annualRoic(LocalDate.of(2023, 12, 31), "20", "300", "100"),
+                    annualRoic(LocalDate.of(2022, 12, 31), "20", "300", "100"));
+
+            assertThat(calculator.calculate(annualContext(annual))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("IMPORTANT — 투하자본이 음수인 해가 있으면 값을 내지 않는다. 영업적자가 양수가 된다")
+        void emitsNothingOnNegativeInvestedCapital() {
+            List<FinancialFigures> annual = List.of(
+                    annualRoic(LocalDate.of(2025, 12, 31), "-50", "100", "300"),
+                    annualRoic(LocalDate.of(2024, 12, 31), "20", "300", "100"),
+                    annualRoic(LocalDate.of(2023, 12, 31), "20", "300", "100"));
+
+            assertThat(calculator.calculate(annualContext(annual)))
+                    .as("자산 100 − 유동부채 300 = −200. 부호가 두 번 뒤집혀 +25%가 나온다")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("유동부채가 없는 해가 있으면 값을 내지 않는다 — 금융업이 여기 온다")
+        void emitsNothingWhenCurrentLiabilitiesAreMissing() {
+            List<FinancialFigures> annual = List.of(
+                    annualRoic(LocalDate.of(2025, 12, 31), "20", "300", null),
+                    annualRoic(LocalDate.of(2024, 12, 31), "20", "300", "100"),
+                    annualRoic(LocalDate.of(2023, 12, 31), "20", "300", "100"));
+
+            assertThat(calculator.calculate(annualContext(annual))).isEmpty();
+        }
+    }
+
     // ── 연속 영업흑자 연수 ─────────────────────────────────────────────────
 
     @Nested
@@ -492,6 +563,17 @@ class BuffettIndicatorsTest {
         return FinancialFiguresFixture.annual(periodEnd)
                 .netIncome(new BigDecimal(netIncome))
                 .totalEquity(new BigDecimal(equity))
+                .build();
+    }
+
+    /** 연간 투하자본이익률용. {@code currentLiabilities}가 null이면 금융업 형태다. */
+    private static FinancialFigures annualRoic(LocalDate periodEnd, String operatingIncome,
+                                               String assets, String currentLiabilities) {
+        return FinancialFiguresFixture.annual(periodEnd)
+                .operatingIncome(new BigDecimal(operatingIncome))
+                .totalAssets(new BigDecimal(assets))
+                .currentLiabilities(
+                        currentLiabilities == null ? null : new BigDecimal(currentLiabilities))
                 .build();
     }
 
