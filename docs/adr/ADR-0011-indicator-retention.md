@@ -28,34 +28,23 @@ applies_to:
 보존 기간을 넘긴 행이 지워지고 그 안쪽은 남는지, 원자료는 그대로인지 확인한다.
 
 ```premise 지표가 180거래일 안에만 남아 있다
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '지표가 한 행도 없다 — 잴 것이 없었다' WHEN count(DISTINCT trade_date) <= 180 THEN 'OK ' || count(DISTINCT trade_date) || '거래일' WHEN count(DISTINCT trade_date) = 181 THEN '181거래일이 남아 있다(보존 180) — 하루면 긴 백필이 경계를 앞지른 대가이고 다음 정리가 지운다(ADR-0045 §긴 백필). 앱을 띄워 일일 갱신을 돌린다.' ELSE count(DISTINCT trade_date) || '거래일이 남아 있다(보존 180). 하루가 아니면 정리가 오래 돌지 않았거나 백필이 보존 밖을 되살렸다.' END FROM indicator_value"
+psql -d stock_screener -At -c "WITH RECURSIVE t AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value iv WHERE iv.trade_date > t.d) FROM t WHERE t.d IS NOT NULL), c AS (SELECT count(*) n FROM t WHERE d IS NOT NULL) SELECT CASE WHEN n = 0 THEN '지표가 한 행도 없다 — 잴 것이 없었다' WHEN n <= 180 THEN 'OK ' || n || '거래일' WHEN n = 181 THEN '181거래일이 남아 있다(보존 180) — 하루면 긴 백필이 경계를 앞지른 대가이고 다음 정리가 지운다(ADR-0045 §긴 백필). 앱을 띄워 일일 갱신을 돌린다.' ELSE n || '거래일이 남아 있다(보존 180). 하루가 아니면 정리가 오래 돌지 않았거나 백필이 보존 밖을 되살렸다.' END FROM c"
 ```
-운영 적재 이후, 남은 거래일이 180 이내여야 한다. **`count(*) = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다.
+운영 적재 이후, 남은 거래일이 180 이내여야 한다. **`n = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다. `trade_date`가 `NOT NULL`이라 **「행이 없다」와 「거래일 0」은 정확히 같다.**
 
-**이 전제가 `statement timeout`으로 판정 불가가 되면 인덱스 블로트를 의심한다.** 2026-08-10 세션 시작에 실제로 그랬고, 원인은 지표 부재가 아니라 `indicator_value`의 인덱스가 힙의 2.8배(2,348MB vs 840MB)로 부푼 것이었다. `REINDEX INDEX CONCURRENTLY` 셋을 돌리자 199MB가 되고 **같은 쿼리가 0.15초에 답했다.** 판정 불가는 침묵이 아니라 무판정이므로, 그 상태를 "전제가 깨졌다"로도 "지켜진다"로도 읽지 않는다.
+**MUST NOT: `count(DISTINCT trade_date)`로 되돌리지 않는다.** 전수 Index Only Scan이라 566만 행에서 **3.79초**로 타임아웃한다(2026-08-19). 재귀 CTE는 `trade_date`가 pkey의 **선두**인 것을 써서 거래일 수만큼만 인덱스를 찔러 **힙 페치 138건 · 0.035초**다. **vacuum과 무관하지는 않다** — `min()`이 아래 `purge()`가 지우는 왼쪽 끝에서 출발해 `min()` 456버퍼 대 `max()` 6버퍼다.
 
-> **"왜 REINDEX 하루 만에 199MB → 803MB로 돌아왔는가"는 답을 찾았다 — ADR-0045가 정본이다.**
-> 위 문단이 후보로 든 반복 갱신 쪽이 맞았다(실측 `n_tup_upd` 3.2억 대 `n_tup_ins` 1,690만).
-> 다만 그것을 만든 것은 백필이 아니라 **일일 갱신 자신**이다 — 러너가 읽기 창 전체에 값을
-> 내므로 매 실행이 최대 571거래일치를 보존 밖에 쓰고 아래 `purge()`가 그것을 지웠다.
->
-> **REINDEX는 ADR-0045 배포 당일, 그 배포의 대량 삭제 직후에 돌렸다**(2026-08-11,
-> `1,229MB → 202MB`). "먼저 돌리면 다음 배치가 되돌린다"는 걱정은 **되돌리는 기제 자체가
-> 그 배포로 닫혀** 성립하지 않게 됐고, 아래 "정리 직후가 블로트 최대 시점"이 오히려 그
-> 시점을 가리킨다.
->
-> **귀속은 둘로 나눠 확보한다** — 이 축소는 REINDEX가 한 것이고, ADR-0045가 한 일은
-> **다음 배치가 그것을 되돌리지 않는 것**이다. 뒤엣것의 확인은 다음 거래일 배치 뒤에 한다.
+**이 전제가 `statement timeout`으로 판정 불가가 되면 인덱스/힙 비를 먼저 잰다 — 그 비가 2배를 넘을 때에 한해 인덱스 블로트다.**
 
 ```bash
 psql -d stock_screener -At -F'|' -c "SELECT indexrelname, pg_size_pretty(pg_relation_size(indexrelid)) FROM pg_stat_user_indexes WHERE relname='indicator_value' ORDER BY pg_relation_size(indexrelid) DESC"
 ```
 
-**정리(purge) 직후가 블로트 최대 시점이다** — 삭제된 행의 자리는 인덱스에서 바로 회수되지 않는다. 대량 삭제가 있었다면 REINDEX를 그 뒤에 붙인다.
+2026-08-10에 실제로 그랬다 — 힙 840MB에 인덱스 **2,348MB(2.8배)**였고 `REINDEX INDEX CONCURRENTLY` 셋이 199MB로 되돌렸다. **그것이 하루 만에 803MB가 된 이유는 ADR-0045가 정본이다**(일일 갱신이 읽기 창 전체를 다시 썼다). 재발 여부는 ADR-0045의 블로트 펜스가 상시로 잰다.
 
-전수 `count(DISTINCT trade_date)`지만 269만 행에서 **0.15초**다(`statement_timeout` 3초의 20배). 묶을 필요가 없다.
+**MUST: 그 비가 2배 아래면 REINDEX가 아니라 VACUUM이다.** 2026-08-19에 비가 **1.10배**(925MB / 840MB)인데 같은 무판정이 났다. 실체는 `ON CONFLICT DO UPDATE`가 쌓은 dead tuple이 visibility map을 무효화해 Index Only Scan이 힙을 랜덤으로 읽는 것이다(566만 중 **486만이 힙 페치**). **`last_autovacuum`이 마지막 쓰기보다 앞서고 `n_dead_tup`이 문턱(`0.2 × live`) 바로 아래 멎으면 아무도 청소하지 않는다** — 실제로 1,006,783 대 1,138,162였다. 느리면 최적화 전에 `pg_stat_user_tables`의 그 둘을 먼저 본다.
 
-**초 단위로 재어졌다면 테이블이 큰 것이 아니라 VACUUM 전 상태를 재고 있는 것이다.** 백필이 `ON CONFLICT DO UPDATE`로 dead tuple을 쌓으면 visibility map이 무효화되고 Index Only Scan이 힙을 랜덤으로 읽는다 — 백필 직후에 1.7초로 재어 그 값을 이 자리에 적었던 적이 있고, autovacuum이 돈 뒤 같은 쿼리가 0.15초였다. 느리면 최적화하기 전에 `pg_stat_user_tables.last_autovacuum`을 먼저 본다.
+**정리(purge) 직후가 그 상태의 최대 시점이다** — 삭제된 행의 자리는 인덱스에서 바로 회수되지 않는다. 그 사이 판정 불가는 침묵이 아니라 무판정이므로, "전제가 깨졌다"로도 "지켜진다"로도 읽지 않는다.
 
 ## 배경
 
