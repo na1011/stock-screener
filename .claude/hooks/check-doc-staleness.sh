@@ -443,7 +443,10 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   # MUST NOT: `git ls-files -z`에 `grep -v`를 물리지 않는다. BSD grep이 NUL 스트림을
   # 바이너리로 판정해 목록 대신 `Binary file … matches` 한 줄을 내고, 그러면 검사 대상이
   # 0개가 되어 **§6이 통째로 침묵한다** — 그 침묵은 "죽은 참조 없음"과 구분되지 않는다.
-  files=$(git ls-files '*.md' '*.sh' 2>/dev/null | grep -v '^\.claude/hooks/lib/regression\.sh$' || true)
+  # MUST: `core.quotePath=false`를 준다. `git ls-files`도 비ASCII 경로를 인용해 내고, 그러면
+  # 그 이름이 grep에 열리지 않아 **그 문서만 매 세션 조용히 검사에서 빠진다.** 이 저장소의
+  # `docs/external/` 한글 문서 셋이 실제로 그 상태였다(133개 중 3개 미검사).
+  files=$(git -c core.quotePath=false ls-files '*.md' '*.sh' 2>/dev/null | grep -v '^\.claude/hooks/lib/regression\.sh$' || true)
   if [ -n "$files" ]; then
     hits_path=$(printf '%s\n' "$files" | tr '\n' '\0' \
       | xargs -0 grep -oHE '(\.claude/[A-Za-z0-9_./-]+\.(md|sh)|docs/adr/[A-Za-z0-9_.-]+\.md|ops/[A-Za-z0-9_.-]+\.sh)' 2>/dev/null \
