@@ -51,7 +51,7 @@
 - **버핏 게이트의 ROIC를 연간 3년 최저로 내렸다**(ADR-0073). **다음에 게이트를 얹을 때 겹침 4.47배가 먼저 걸린다** — `ROE_MIN_3Y`와 기저가 같아져 ρ가 0.882다.
 - **ADR-0021 §검증 4가 빨갛다** — `IndicatorCard`·`FinancialsPanel`에 글자 크기 리터럴 8곳, **정의된 적 없는 `--text-color-secondary` 6곳**. 토큰에 없는 크기라 기계적으로는 못 바꾼다. **그 검증을 돌리는 것이 아무것도 없다.**
 - **훅의 빈자리 둘.** ① `/compact` 뒤 `SessionStart` 미발화(matcher) ② `progress.md` 갱신 상기 계층이 없다. 후보 `Stop`은 **배달이 미검정이다 — 재기 전에 세우지 않는다.**
-- **세션 시작은 `max()`라 `check-premises.sh`(7.05초)부터다**(`harness-hooks.md`, `stale`은 6.75초). 그 1.65초는 전제 66개를 `guard-destructive.sh`에 **하나씩** 먹이는 값이고 **바닥이 1.29초**(bash 기동+jq)라 내부 최적화는 0.2초뿐 — **묶어 먹이는 것만이 답인데 차단 가드의 인터페이스가 바뀐다.**
+- **세션 시작 벽시계는 이제 `check-premises.sh`(7.05초) 혼자 정한다** — 훅은 병렬이라 `max()`이고(`harness-hooks.md`) `check-doc-staleness.sh`는 1.00초가 됐다. 그 7.05초 중 1.65초는 전제 66개를 `guard-destructive.sh`에 **하나씩** 먹이는 값인데 **바닥이 1.29초**(bash 기동+jq)라 내부 최적화는 0.2초뿐 — **묶어 먹이는 것만이 답이고 차단 가드의 인터페이스가 바뀐다.**
 
 ---
 
