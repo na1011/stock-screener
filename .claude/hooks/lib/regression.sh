@@ -441,6 +441,65 @@ check_deadref 발화 "역따옴표 안 파일명 단독도 잡는다" '분량 �
 check_deadref 침묵 "실재하는 참조는 조용하다"       '규칙은 `.claude/rules/harness-core.md`에 있다.'
 check_deadref 침묵 "외부 패키지 표준 파일명은 거른다" 'PrimeVue의 `LICENSE.md`를 본다.'
 
+echo "── 문서 증가 추세 (check-doc-staleness §1c) ──"
+#
+# 이 절은 **회귀 커버리지가 0이었다.** 그런데 이 검사는 판정이 조용하다 — 발화하지 않는 것이
+# 정상 상태라, 로직이 망가져도 "오늘은 걸릴 문서가 없구나"와 구분되지 않는다.
+#
+# 임시 저장소에 **크기를 통제한 커밋을 실제로 쌓는다.** 기존 픽스처(check_deadref 등)는
+# `git add`만 하고 커밋을 안 하는데, 커밋이 없으면 `git log`가 비어 §1c가 통째로 안 돈다 —
+# 그 상태로는 이 표가 아무것도 재지 못한다.
+#
+# MUST: `LC_ALL`을 고정한다. §1c는 `wc -m`(문자)으로 재고 그것은 로케일 의존이다. 무로케일
+# 환경에서는 같은 코드가 **바이트**를 세므로, 고정하지 않으면 이 표의 판정이 기계마다 갈린다.
+#
+# $1 기대(발화/침묵) $2 설명 $3 파일 경로 $4 채울 글자 $5.. 커밋별 글자 수(오래된 순)
+check_growth() {
+  local want="$1" desc="$2" path="$3" fill="$4"; shift 4
+  local tmp got sz
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/rules" "$tmp/docs" "$tmp/$(dirname "$path")"
+  printf '# rules\n'    > "$tmp/.claude/rules/harness-core.md"
+  printf '# progress\n' > "$tmp/docs/progress.md"
+  ( cd "$tmp" && git init -q . ) >/dev/null 2>&1
+  for sz in "$@"; do
+    awk -v n="$sz" -v c="$fill" 'BEGIN { s=""; for (i=0;i<n;i++) s = s c; print s }' > "$tmp/$path"
+    ( cd "$tmp" && git add -A >/dev/null 2>&1 \
+      && git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false \
+             commit -q -m x >/dev/null 2>&1 )
+  done
+  if LC_ALL=ko_KR.UTF-8 CLAUDE_PROJECT_DIR="$tmp" "$HOOKS/check-doc-staleness.sh" </dev/null 2>/dev/null \
+     | jq -r '.hookSpecificOutput.additionalContext // empty' | grep -q '줄어든 적이 없는 문서'; then
+    got="발화"
+  else
+    got="침묵"
+  fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+# 창(12) 안에서 생긴 파일은 **생성 커밋이 빠진다.** 아래 5커밋 픽스처는 그래서 n=4가 되어
+# 겨우 min_points를 채운다 — 커밋을 하나 줄이면 침묵으로 넘어간다(마지막 케이스가 그것이다).
+check_growth 발화 "규칙 파일이 순증가로 임계를 넘으면 잡는다" ".claude/rules/x.md"  a  100 400 700 1000 1300
+check_growth 침묵 "한 번이라도 줄었으면 조용하다"           ".claude/rules/x.md"  a  100 400 700 600 1300
+check_growth 침묵 "순증가지만 임계 미달이면 조용하다"        ".claude/rules/x.md"  a  100 400 500 600 700
+check_growth 침묵 "커밋이 모자라면(생성 제외 후 n<4) 조용하다" ".claude/rules/x.md" a  100 400 700 1000
+
+# 임계가 경로마다 다르다(규칙 800 / 그 밖 3000). 하나로 합치면 ADR이 매번 울거나
+# 규칙이 영영 안 운다.
+check_growth 침묵 "ADR은 +900자로는 조용하다(임계 3000)"    "docs/adr/ADR-0001-x.md" a  100 400 700 1000 1300
+check_growth 발화 "ADR도 +3,200자면 잡는다"                "docs/adr/ADR-0001-x.md" a  100 1000 2000 3000 4200
+
+# **이 표에서 가장 중요한 행.** §1c는 `wc -m`(문자)으로 재는데 한글은 문자당 3바이트다.
+# 바이트로 재는 구현으로 "더 빠르게" 바꾸면(`git cat-file --batch-check`가 그 유혹이다)
+# 아래가 문자 +1,200 / 바이트 +3,600이 되어 **침묵해야 할 자리에서 발화한다.**
+check_growth 침묵 "한글 문서를 바이트로 세면 안 된다(문자 +1,200 · 바이트 +3,600)" \
+  "docs/adr/ADR-0002-x.md" 가  100 400 800 1200 1600
+
 echo
 printf '통과 %d / 실패 %d / 건너뜀 %d / 알려진 구멍 %d\n' "$pass" "$fail" "$skipped" "$holes"
 # MUST: 건너뛴 수를 함께 낸다. 건너뛴 것이 통과로 읽히면 "덮여 있다"고 믿게 된다 —
