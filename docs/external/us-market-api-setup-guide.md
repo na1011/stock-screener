@@ -4,7 +4,7 @@
 **대상** 프로젝트 소유자 본인
 **목적** SEC EDGAR / Alpaca 접근 자격 확보 및 즉시 검증
 
-관련 문서: `us-market-screener-planning-v2.md` (설계자용 기획서)
+관련 문서: `us-market-screener-planning.md` (설계자용 기획서, 본문이 v2다)
 
 ---
 
