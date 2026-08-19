@@ -441,6 +441,34 @@ check_deadref 발화 "역따옴표 안 파일명 단독도 잡는다" '분량 �
 check_deadref 침묵 "실재하는 참조는 조용하다"       '규칙은 `.claude/rules/harness-core.md`에 있다.'
 check_deadref 침묵 "외부 패키지 표준 파일명은 거른다" 'PrimeVue의 `LICENSE.md`를 본다.'
 
+# 나열 **순서**까지 본다. 기존 네 행은 전부 죽은 참조가 하나뿐이라 순서를 재지 못한다.
+#
+# §6은 「파일 순서 → 파일 안 정렬」로 낸다. 파일마다 grep을 부르던 것을 목록 일괄로 바꿀 때
+# 전역 `sort -u` 하나로 뭉개면 이 순서가 **사전순**으로 바뀌는데, 죽은 참조가 하나뿐이면
+# 두 구현이 같은 문장을 내어 그 회귀가 초록으로 덮인다.
+# 아래는 파일 순서(a.md → b.md)와 사전 순서(beta → zeta)가 **어긋나게** 배치했다.
+check_deadref_order() {
+  local desc="파일 순서대로 나열한다(사전순이 아니다)" tmp got want="zeta.md beta.md"
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/rules" "$tmp/.claude/hooks/lib" "$tmp/docs"
+  printf 'x\n'          > "$tmp/.claude/hooks/lib/bash-text.sh"
+  printf '# core\n'     > "$tmp/.claude/rules/harness-core.md"
+  printf '# progress\n' > "$tmp/docs/progress.md"
+  printf '분량은 `zeta.md`가 답한다.\n' > "$tmp/.claude/rules/a.md"
+  printf '배치는 `beta.md`가 답한다.\n' > "$tmp/.claude/rules/b.md"
+  ( cd "$tmp" && git init -q . && git add -A >/dev/null 2>&1 )
+  got=$(CLAUDE_PROJECT_DIR="$tmp" "$HOOKS/check-doc-staleness.sh" </dev/null 2>/dev/null \
+        | jq -r '.hookSpecificOutput.additionalContext // empty' \
+        | grep -o 'zeta\.md beta\.md\|beta\.md zeta\.md' | head -1)
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "순서" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (얻음: %s / 기대: %s)\n' "순서" "$desc" "${got:-없음}" "$want"
+  fi
+}
+check_deadref_order
+
 echo "── 문서 증가 추세 (check-doc-staleness §1c) ──"
 #
 # 이 절은 **회귀 커버리지가 0이었다.** 그런데 이 검사는 판정이 조용하다 — 발화하지 않는 것이

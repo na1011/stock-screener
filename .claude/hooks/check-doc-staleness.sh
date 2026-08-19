@@ -433,19 +433,66 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   # 이 검사는 "이름을 부르는 것"과 "예시로 인용하는 것"을 가르지 못한다. 실재하지 않는
   # 이름을 예로 들 때는 **역따옴표를 씌우지 않는다** — 씌우면 여기 걸린다(이 주석이 그렇게
   # 걸렸다). 가짜 이름에 강조가 필요할 만큼 중요하면 그것은 대개 진짜 참조다.
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    [ -f "$f" ] || continue
-    while IFS= read -r ref; do
-      [ -z "$ref" ] && continue
-      [ -e "$ref" ] || note_dead "${ref}"
-    done <<< "$(grep -ohE '(\.claude/[A-Za-z0-9_./-]+\.(md|sh)|docs/adr/[A-Za-z0-9_.-]+\.md|ops/[A-Za-z0-9_.-]+\.sh)' "$f" 2>/dev/null | sort -u || true)"
-    while IFS= read -r base; do
-      [ -z "$base" ] && continue
-      printf '%s' "$base" | grep -qE "^(${external})$" && continue
-      resolve_name "$base" || note_dead "${base}"
-    done <<< "$(grep -ohE '`[A-Za-z0-9_.-]+\.(md|sh)`' "$f" 2>/dev/null | tr -d '`' | sort -u || true)"
-  done <<< "$(git ls-files '*.md' '*.sh' 2>/dev/null | grep -v '^\.claude/hooks/lib/regression\.sh$' || true)"
+  #
+  # 파일마다 grep을 두 번 부르면 133개 × 2 = 266 프로세스가 되고 그것만으로 1.0초였다.
+  # 목록을 통째로 넘겨 두 번만 부른다.
+  #
+  # MUST: `-H`로 파일명을 함께 받아 **파일별 묶음**을 재구성한다. 전역 `sort -u` 하나로
+  # 뭉개면 보고 문장의 나열 순서가 「파일 순서 → 파일 안 정렬」에서 **사전순**으로 바뀐다.
+  # `git ls-files`가 경로순이라 `sort -u`가 그 두 층을 그대로 재현한다.
+  # MUST NOT: `git ls-files -z`에 `grep -v`를 물리지 않는다. BSD grep이 NUL 스트림을
+  # 바이너리로 판정해 목록 대신 `Binary file … matches` 한 줄을 내고, 그러면 검사 대상이
+  # 0개가 되어 **§6이 통째로 침묵한다** — 그 침묵은 "죽은 참조 없음"과 구분되지 않는다.
+  files=$(git ls-files '*.md' '*.sh' 2>/dev/null | grep -v '^\.claude/hooks/lib/regression\.sh$' || true)
+  if [ -n "$files" ]; then
+    hits_path=$(printf '%s\n' "$files" | tr '\n' '\0' \
+      | xargs -0 grep -oHE '(\.claude/[A-Za-z0-9_./-]+\.(md|sh)|docs/adr/[A-Za-z0-9_.-]+\.md|ops/[A-Za-z0-9_.-]+\.sh)' 2>/dev/null \
+      | sort -u || true)
+    hits_name=$(printf '%s\n' "$files" | tr '\n' '\0' \
+      | xargs -0 grep -oHE '`[A-Za-z0-9_.-]+\.(md|sh)`' 2>/dev/null \
+      | tr -d '`' | sort -u || true)
+
+    # 파일 순서대로, 파일마다 완전경로 참조 다음에 이름 단독 참조를 낸다 — 옛 중첩 루프와
+    # 같은 차례다. 첫 열의 `P`/`N`이 어느 쪽인지 알린다.
+    #
+    # MUST NOT: 이 목록들을 `awk -v`로 넘기지 않는다. **`-v`의 값은 개행을 담지 못한다** —
+    # BWK awk가 `newline in string`으로 죽고, 그러면 `ordered`가 비어 §6이 통째로 침묵한다.
+    # 죽은 참조가 없는 저장소에서는 그 침묵이 정상 출력과 **똑같아서** 출력 대조로도 안 잡힌다
+    # (실제로 그렇게 통과시킨 뒤 회귀표의 순서 행이 잡았다). 태그를 붙여 stdin으로 흘린다.
+    ordered=$( { printf '%s\n' "$files"     | sed 's/^/F\t/'
+                 printf '%s\n' "$hits_path" | sed 's/^/P\t/'
+                 printf '%s\n' "$hits_name" | sed 's/^/N\t/'; } \
+      | awk -F'\t' '
+          $1 == "F" { if ($2 != "") ord[++k] = $2; next }
+          $1 == "P" || $1 == "N" {
+            if ($2 == "") next
+            j = index($2, ":"); if (j == 0) next
+            f = substr($2, 1, j-1); m = substr($2, j+1)
+            if ($1 == "P") A[f] = A[f] m "\n"; else B[f] = B[f] m "\n"
+            next
+          }
+          END {
+            for (i = 1; i <= k; i++) {
+              f = ord[i]
+              n = split(A[f], X, "\n"); for (m = 1; m < n; m++) if (X[m] != "") print "P\t" X[m]
+              n = split(B[f], Y, "\n"); for (m = 1; m < n; m++) if (Y[m] != "") print "N\t" Y[m]
+            }
+          }' || true)
+
+    while IFS=$'\t' read -r kind ref; do
+      [ -z "${ref:-}" ] && continue
+      if [ "$kind" = "P" ]; then
+        [ -e "$ref" ] || note_dead "$ref"
+      else
+        # 외부 표준 파일명 거르기. `grep -qE`를 부르면 참조 하나당 프로세스가 하나 는다 —
+        # 파이프로 구분한 목록에 대한 멤버십 검사라 셸만으로 같은 판정이 된다.
+        case "|${external}|" in
+          *"|${ref}|"*) continue ;;
+        esac
+        resolve_name "$ref" || note_dead "$ref"
+      fi
+    done <<< "$ordered"
+  fi
 
   if [ -n "$dead_refs" ]; then
     add "산문이 가리키는데 실재하지 않는 파일이 있다: ${dead_refs}— 이름이 바뀌거나 갈렸는데 참조가 안 따라간 것이다. \`grep -rn\`으로 부르는 곳을 전부 찾아 지금 파일로 바꿔라. 죽은 포인터는 다음 세션이 \"그 파일에 있다\"고 믿게 만든다."
