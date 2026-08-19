@@ -44,6 +44,14 @@ guard="$root/.claude/hooks/guard-destructive.sh"
 # 예산은 새 전제를 **시작할 때** 검사하므로 최악은 total_budget을 다 쓴 뒤 마지막 하나가
 # per_limit을 다 쓰는 경우다. 훅이 timeout에 걸리면 **출력이 통째로 사라지고**, 이 훅에게
 # 침묵은 가장 나쁜 결과다.
+#
+# 이 부등식은 **아래 run_one이 예산을 심사보다 먼저 볼 때만** 참이다. 순서가 반대였을 때는
+# 심사 비용 전체가 부등식 밖에 있었고, 그것이 65개 전제에서 17.8초였다. 시간을 재서 고칠
+# 생각이 들면 그 순서부터 본다.
+#
+# MUST: 여기서 잰 초를 다른 기계·다른 시점의 수와 비교하지 않는다. 이 훅의 비용은 대부분
+# 프로세스 fork이고, **fork는 CPU 경합에 3.5배까지 부푼다**(실측). 같은 코드가 유휴와
+# 포화에서 3배 넘게 갈리므로, 절대 초는 부하를 함께 적지 않으면 뜻이 없다.
 per_limit=8
 total_budget=30
 
@@ -91,12 +99,17 @@ run_one() {
   local adr="$1" label="$2" body="$3"
   local where="${adr##*/} — ${label}"
 
-  if vetoed "$body"; then
-    add_unknown "${where}: 되돌릴 수 없는 명령으로 판정되어 **돌리지 않았다.**"
-    return
-  fi
+  # MUST: 예산을 **심사보다 먼저** 본다. 반대로 두면 심사 비용이 예산 밖에 놓여, 예산이
+  # 이미 바닥나도 남은 전제 전부가 guard-destructive.sh를 한 번씩 더 거친 뒤에야 여기
+  # 도달한다 — 그 비용이 65개 합쳐 17.8초였던 적이 있다(선검사로 1.8초가 됐지만, 예산을
+  # 우회하는 구조 자체는 그대로였다). 예산이 지키려는 것은 훅 timeout이고, 심사도 그
+  # timeout을 쓴다.
   if [ "$SECONDS" -ge "$total_budget" ]; then
     add_unknown "${where}: 예산(${total_budget}초)을 넘겨 돌리지 못했다."
+    return
+  fi
+  if vetoed "$body"; then
+    add_unknown "${where}: 되돌릴 수 없는 명령으로 판정되어 **돌리지 않았다.**"
     return
   fi
 
