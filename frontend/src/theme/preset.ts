@@ -73,6 +73,24 @@ export const cobalt = {
   950: '#071e45',
 } as const
 
+/**
+ * 컨트롤 높이 계산의 입력. **기본 36px, `sm` 29px**을 만드는 값들이다.
+ *
+ * `export`인 이유는 `cobalt`·`ink`와 같다 — `preset.spec.ts`가 이 상수를 읽어 높이를
+ * 검산한다. 검사 쪽에 값을 옮겨 적으면 프리셋을 바꿔도 검사가 통과한다.
+ *
+ * IMPORTANT — 이 값들만으로는 높이가 정해지지 않는다. `main.css`의 `:root .p-inputtext …`
+ * 규칙이 거는 `line-height`와 **짝**이고, 글자 크기의 실제 정본도 그쪽의 `--app-text-*`다
+ * (PrimeVue는 `formField.fontSize`를 기본 크기로 읽지 않는다). 한쪽만 바꾸면 목표 높이가
+ * 어긋나고, 그 어긋남은 Select와 InputNumber가 세로로 붙는 조건 편집기에서만 눈에 띈다.
+ */
+export const CONTROL = {
+  paddingY: '0.5rem',
+  fontSize: '0.8125rem',
+  iconOnlyWidth: '2.25rem',
+  sm: { paddingY: '0.3125rem', fontSize: '0.75rem', iconOnlyWidth: '1.8125rem' },
+} as const
+
 export const ScreenerPreset = definePreset(Aura, {
   primitive: {
     // 데이터 화면이라 모서리를 낮춘다. 둥글수록 셀 경계가 흐려지고 표가 물러 보인다.
@@ -107,9 +125,9 @@ export const ScreenerPreset = definePreset(Aura, {
      */
     formField: {
       paddingX: '0.5rem',
-      paddingY: '0.5rem',
-      fontSize: '0.8125rem',
-      sm: { fontSize: '0.75rem', paddingX: '0.4375rem', paddingY: '0.3125rem' },
+      paddingY: CONTROL.paddingY,
+      fontSize: CONTROL.fontSize,
+      sm: { fontSize: CONTROL.sm.fontSize, paddingX: '0.4375rem', paddingY: CONTROL.sm.paddingY },
       lg: { fontSize: '0.9375rem', paddingX: '0.6875rem', paddingY: '0.625rem' },
     },
 
@@ -307,6 +325,9 @@ export const ScreenerPreset = definePreset(Aura, {
               color: '{amber.950}',
               hoverColor: '{amber.950}',
               activeColor: '{amber.950}',
+              // 포커스 링도 severity를 따라간다. Aura 기본값이 orange라 여기만 빠지면
+              // amber 버튼에 주황 링이 걸린다.
+              focusRing: { color: '{amber.400}' },
             },
           },
 
@@ -342,6 +363,19 @@ export const ScreenerPreset = definePreset(Aura, {
               borderColor: 'color-mix(in srgb, {red.400}, transparent 30%)',
               color: '{red.400}',
             },
+            /**
+             * IMPORTANT — 채운 버튼만 amber로 밀어 두면 **면 없는 변형에 주황이 남는다.**
+             * ADR-0021의 "Button의 warn도 Tag와 같이 amber다"는 변형을 가리지 않는데,
+             * 조건별 rg는 `root`만 봐서 이 자리가 조용히 지지·저항 색으로 남아 있었다.
+             * 지금 소비처가 없어 화면에 안 뜰 뿐이고, `severity="warn"`을 text·outlined로
+             * 쓰는 순간 나온다.
+             */
+            warn: {
+              hoverBackground: 'color-mix(in srgb, {amber.400}, transparent 80%)',
+              activeBackground: 'color-mix(in srgb, {amber.400}, transparent 72%)',
+              borderColor: 'color-mix(in srgb, {amber.400}, transparent 30%)',
+              color: '{amber.400}',
+            },
           },
 
           /**
@@ -368,6 +402,11 @@ export const ScreenerPreset = definePreset(Aura, {
               hoverBackground: 'color-mix(in srgb, {red.400}, transparent 84%)',
               activeBackground: 'color-mix(in srgb, {red.400}, transparent 76%)',
             },
+            warn: {
+              hoverBackground: 'color-mix(in srgb, {amber.400}, transparent 84%)',
+              activeBackground: 'color-mix(in srgb, {amber.400}, transparent 76%)',
+              color: '{amber.400}',
+            },
           },
         },
       },
@@ -380,8 +419,8 @@ export const ScreenerPreset = definePreset(Aura, {
         // 아이콘 전용 버튼은 **정사각이어야 한다.** 폭을 높이와 같이 두지 않으면 칩 바와 표
         // 머리글에서 혼자 납작하거나 길쭉해 보인다. 기본값(Aura 2.5rem)도 함께 적는 이유는
         // 그 값이 새 기본 높이 36px과 4px 어긋나기 때문이다 — preset이 덮지 않아 그대로였다.
-        iconOnlyWidth: '2.25rem',
-        sm: { iconOnlyWidth: '1.8125rem' },
+        iconOnlyWidth: CONTROL.iconOnlyWidth,
+        sm: { iconOnlyWidth: CONTROL.sm.iconOnlyWidth },
       },
     },
 
@@ -429,5 +468,11 @@ export const ScreenerPreset = definePreset(Aura, {
     skeleton: { root: { background: '{surface.800}', animationBackground: 'rgba(255,255,255,0.06)' } },
 
     toast: { root: { borderWidth: '1px' } },
+
+    // 소비처가 아직 없지만 Aura 기본값이 orange다. 쓰기 시작하는 순간 지지·저항과 같은
+    // 색으로 뜨고, 그때는 왜 그런지 다시 찾아야 한다.
+    badge: {
+      colorScheme: { dark: { warn: { background: '{amber.400}', color: '{amber.950}' } } },
+    },
   },
 })

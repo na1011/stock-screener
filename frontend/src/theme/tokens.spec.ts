@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { Theme } from '@primeuix/themes'
 
-import { walkSource } from '@/lib/sourceScan'
+import { stripBlockComments, walkSource } from '@/lib/sourceScan'
 
 import { ScreenerPreset } from './preset'
 
@@ -34,17 +34,6 @@ const SRC = fileURLToPath(new URL('..', import.meta.url))
 const SCANNED = (name: string): boolean =>
   (name.endsWith('.vue') || name.endsWith('.css') || name.endsWith('.ts')) &&
   !name.endsWith('.spec.ts')
-
-/**
- * 블록 주석은 참조로 세지 않는다.
- *
- * 주석은 "왜 이 값을 안 쓰는지"를 적으려고 그 값을 부른다 — `breakpoints.ts`가
- * `@media (max-width: var(--x))`를 그렇게 인용한다. 그것까지 세면 검사가 늘 빨개져 아무도
- * 안 보게 된다. ADR §검증 1의 주석이 색 리터럴을 두고 같은 판단을 적어 두었다.
- *
- * 줄바꿈만 남기고 지우는 것은 **실패 메시지의 줄 번호를 밀지 않기 위해서다.**
- */
-const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g
 
 /**
  * 커스텀 프로퍼티 **선언**.
@@ -147,9 +136,7 @@ interface Hit {
 function read(accept: (name: string) => boolean): Source[] {
   return walkSource(SRC, accept).map((path) => ({
     file: path.slice(SRC.length),
-    text: readFileSync(path, 'utf8').replace(BLOCK_COMMENT, (block) =>
-      block.replace(/[^\n]/g, ' '),
-    ),
+    text: stripBlockComments(readFileSync(path, 'utf8')),
   }))
 }
 
@@ -400,6 +387,25 @@ describe('색 채널과 구조 계약 (ADR-0021)', () => {
       'components/stock/StockHeader.vue',
       'components/ui/BandMeter.vue',
     ])
+  })
+
+  /**
+   * 주황을 **쓰는** 곳이 지지·저항 하나뿐인가.
+   *
+   * 위 검사의 반대편이다. `preset.spec.ts`가 팔레트에 주황이 남지 않았음을 보고, 여기서는
+   * 화면이 `--p-orange-*`를 직접 부르지 않는지를 본다. 주황이 다른 뜻으로 한 번 더 쓰이면
+   * "확정된 매매 신호가 아니다"라는 경고가 그 순간 힘을 잃는다.
+   *
+   * `StockHeader`가 **왜 이 색을 안 쓰는지**를 주석에 적어 두었다 — 주석을 세면 정상인
+   * 코드가 위반으로 뜨므로, 이 목록은 주석이 지워진 텍스트 위에서만 뜻이 있다.
+   */
+  it('주황을 직접 쓰는 곳이 지지·저항뿐이다', () => {
+    expect(
+      filesUsing(
+        sources.filter((source) => TONE_SCOPE.test(source.file)),
+        (text) => text.includes('--p-orange-'),
+      ),
+    ).toEqual(['components/stock/PriceReferencePanel.vue'])
   })
 
   /**

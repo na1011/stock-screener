@@ -20,3 +20,16 @@ export function walkSource(dir: string, accept: (name: string) => boolean): stri
     return accept(entry.name) ? [path] : []
   })
 }
+
+/**
+ * 블록 주석을 **줄바꿈만 남기고** 지운다.
+ *
+ * 주석은 "왜 이 값을 안 쓰는지"를 적으려고 그 값을 부른다 — `breakpoints.ts`가
+ * `@media (max-width: var(--x))`를 그렇게 인용하고, `StockHeader`가 `--p-orange-*`를 두고
+ * 같은 일을 한다. 그것까지 세면 검사가 늘 빨개져 아무도 안 보게 된다.
+ *
+ * 공백으로 바꾸는 것은 **실패 메시지의 줄 번호를 밀지 않기 위해서다.**
+ */
+export function stripBlockComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))
+}
