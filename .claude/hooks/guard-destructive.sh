@@ -148,7 +148,22 @@ done <<< "$clean_segments"
 db_clients='psql|mysql|mariadb|sqlite3|mongosh|mongo|clickhouse-client'
 destructive_sql='\b(drop[[:space:]]+(table|database|schema)|truncate[[:space:]]+table)\b'
 
-if [ "$is_destructive" = false ]; then
+# 선검사 — 어느 세그먼트에도 파괴 SQL이 없으면 루프를 통째로 건너뛴다.
+#
+# 왜 필요한가 — 이 루프는 세그먼트마다 서브셸 둘과 `sed`·`basename` 프로세스를 낸다.
+# 전제 SQL은 `||`와 괄호가 많아 `split_segments`가 잘게 쪼개므로(65개 전제 = 2,519 세그먼트)
+# ADR 전제 검사 훅의 wall 23.4초 중 **17.8초가 여기서 났다**(실측). 그 비용은
+# `check-premises.sh`의 예산 검사보다 **먼저** 발생해 예산의 보호를 받지 않는다.
+#
+# MUST: 선검사 대상은 `$raw_segments`다. `$cmd`·`$executable`·`$clean` 중 어느 것도 아니다.
+#   - `grep`이 줄 단위이고 각 세그먼트가 정확히 한 줄이므로, 이것은 아래 루프가 세그먼트마다
+#     돌리는 `grep`의 **정확한 OR이다 — 근사가 아니라 항등**이다.
+#   - 전체 문자열에 걸면 판정이 **뒤집힌다.** `tr ';|()'`가 전체 문자열에 없던 **줄머리를
+#     만들기** 때문이다. `KEY=$(secrets/cat api.key)`가 그 예다(§2의 `^` 앵커에 걸린다).
+#   - `$clean`은 더 나쁘다 — 따옴표 안이 비워져 `-c "..."` 인자의 SQL이 통째로 사라진다.
+# MUST NOT: `[[ =~ ]]`로 바꾸지 않는다. bash 정규식은 개행을 `[[:space:]]`로 먹고 `^`/`$`가
+# 문자열 앵커가 되어 판정 경계가 통째로 달라진다.
+if [ "$is_destructive" = false ] && grep -qiE "$destructive_sql" <<< "$raw_segments"; then
   while IFS= read -r seg; do
     [ -z "${seg// /}" ] && continue
     prog=$(argv0_of "$(strip_quotes "$seg")")
@@ -189,6 +204,16 @@ fi
 # 따옴표는 걷어내지 않고 본다 — `cat ".env"`처럼 인용된 경로가 진짜 읽기일 수 있고,
 # 시크릿 판정에서는 **놓치는 쪽이 한 번 더 묻는 쪽보다 나쁘다.**
 secret_paths='(\.env([[:space:]]|$|[^.a-zA-Z])|\.env\.[a-zA-Z]|\.pem|\.p12|\.pfx|\.jks|\.keystore|(^|[[:space:]/])secrets?/|/credentials/|id_rsa|id_ed25519|\.ssh/)'
+
+# 선검사 — 근거는 §1b 위의 주석과 같다. 여기가 파일의 마지막 절이므로 건너뛰는 것과
+# `exit 0`이 같은 뜻이고, 그래야 아래 루프의 들여쓰기가 그대로 남는다.
+#
+# IMPORTANT — 대상이 `$raw_segments`인 것이 이 절에서는 **판정의 문제**다. 위 정규식의
+# `(^|[[:space:]/])secrets?/`가 `^` 앵커를 쓰는데, `split_segments`의 `tr ';|()'`가
+# 전체 문자열에 없던 줄머리를 만든다. `KEY=$(secrets/cat api.key)`는 전체 문자열에서
+# `secrets/` 앞이 `(`라 안 맞고, 세그먼트에서는 줄머리라 맞는다 — 전체 문자열로 선검사하면
+# 그 ask가 조용히 사라진다. 회귀표가 이 셋을 잰다.
+grep -qE "$secret_paths" <<< "$raw_segments" || exit 0
 
 while IFS= read -r seg; do
   [ -z "${seg// /}" ] && continue
