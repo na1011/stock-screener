@@ -193,6 +193,22 @@ export const ScreenerPreset = definePreset(Aura, {
           track: '{surface.700}',
         },
 
+        /**
+         * 떠 있지 **않은** 것의 그림자. 지금 소비처는 로그인 카드 하나다.
+         *
+         * IMPORTANT — `main.css`의 `--app-edge-highlight`와 자리가 갈리는 기준은 **값이 색
+         * 리터럴을 싣는가**다. 저쪽은 `--p-*`만 섞은 합성값이라 `main.css`에 있어도 "색은
+         * 하나도 없다"는 그 파일의 선언이 유지된다. 이쪽은 `rgba()`를 싣는다 — 색의 정본은
+         * `preset.ts`뿐이므로(ADR-0021) 여기 말고 둘 곳이 없다.
+         *
+         * `overlay.*.shadow`와 합치지 않는다. 저쪽은 팝오버·모달처럼 **띄운** 것이고 이쪽은
+         * 페이지에 얹힌 카드라, 합치면 이름이 뜻을 잃는다. Aura의 `--p-button-raised-shadow`와도
+         * 다른 것이다.
+         */
+        shadow: {
+          card: '0 24px 56px -24px rgba(0,0,0,0.7)',
+        },
+
         // 떠 있는 것은 패널보다 밝고 그림자가 깊다. 다크에서 그림자만으로는 층이 안 보인다.
         overlay: {
           select: { background: '{surface.850}', borderColor: '{surface.600}', shadow: '0 12px 28px -8px rgba(0,0,0,0.75)' },

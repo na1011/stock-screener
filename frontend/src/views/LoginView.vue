@@ -124,7 +124,7 @@ async function retryProbe(): Promise<void> {
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-border-radius-lg);
   background: var(--p-content-background);
-  box-shadow: 0 24px 56px -24px rgb(0 0 0 / 70%);
+  box-shadow: var(--p-shadow-card);
 }
 
 .login__mark {

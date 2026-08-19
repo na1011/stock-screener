@@ -63,8 +63,15 @@ const BARE_REFERENCE = /var\(\s*(--[\w-]+)\s*\)/g
 /** ADR-0021 §규칙: 글자 크기는 `--app-text-*`에서만 정의한다. 예외는 없다. */
 const FONT_SIZE_LITERAL = /font-size:\s*[0-9]/
 
-/** ADR-0021 §규칙: `.vue`와 `main.css`는 색을 소비만 한다. */
-const HEX_LITERAL = /#[0-9a-fA-F]{3,8}\b/
+/**
+ * ADR-0021 §규칙: `.vue`와 `main.css`는 색을 소비만 한다.
+ *
+ * hex만 보던 동안 `LoginView`의 `box-shadow: … rgb(0 0 0 / 70%)`가 남아 있었다 — **규칙은
+ * 처음부터 "hex·rgb·hsl"이라고 적혀 있었고 검사만 절반이었다.** 함수형 표기를 함께 본다.
+ *
+ * `\b`가 `color-mix(in srgb, …)`를 지킨다. `srgb`의 `s`가 낱말 문자라 `\brgb`가 걸리지 않는다.
+ */
+const COLOR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(/
 
 /** 색·크기 규칙이 걸리는 곳은 스타일이다. 토큰의 정본(`theme/preset.ts`)은 대상이 아니다. */
 const STYLE_FILE = (file: string): boolean => file.endsWith('.vue') || file.endsWith('.css')
@@ -154,7 +161,7 @@ describe('디자인 토큰 (ADR-0021)', () => {
     // 같은 함정을 "검사가 자기 자신을 물고"라고 적어 두었다.
     // 폴백(`var(--p-…, #…)`)은 ADR §규칙이 명시한 예외다.
     const strays = scan((line, source) =>
-      STYLE_FILE(source.file) && HEX_LITERAL.test(line) && !line.includes('var(--p-')
+      STYLE_FILE(source.file) && COLOR_LITERAL.test(line) && !line.includes('var(--p-')
         ? [line.trim()]
         : [],
     )
