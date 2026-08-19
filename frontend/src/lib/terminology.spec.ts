@@ -1,7 +1,8 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+
+import { walkSource } from './sourceScan'
 
 /**
  * 저장된 스크리닝 정의를 "화면"이라 부르지 못하게 막는다(ADR-0027).
@@ -64,16 +65,6 @@ const FORBIDDEN = [
   '남의 화면',
 ] as const
 
-function walk(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      return walk(path)
-    }
-    return SCANNED(entry.name) ? [path] : []
-  })
-}
-
 interface Hit {
   file: string
   line: number
@@ -81,7 +72,7 @@ interface Hit {
 }
 
 function collectHits(phrases: readonly string[]): { files: number; hits: Hit[] } {
-  const files = walk(SRC)
+  const files = walkSource(SRC, SCANNED)
   const hits = files.flatMap((file) =>
     readFileSync(file, 'utf8')
       .split('\n')

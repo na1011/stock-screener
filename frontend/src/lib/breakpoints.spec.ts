@@ -1,9 +1,9 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { BREAKPOINTS, maxWidthQuery } from './breakpoints'
+import { walkSource } from './sourceScan'
 
 /**
  * CSS가 토큰 밖의 경계값을 쓰지 못하게 막는다.
@@ -19,23 +19,13 @@ const SCANNED_EXTENSIONS = ['.vue', '.css']
 /** 미디어 쿼리의 폭 조건. `(max-width: 767px)`·`(min-width: 900px)` 둘 다 잡는다. */
 const WIDTH_CONDITION = /\((?:max|min)-width:\s*(\d+)px\s*\)/g
 
-function walk(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      return walk(path)
-    }
-    return SCANNED_EXTENSIONS.some((ext) => entry.name.endsWith(ext)) ? [path] : []
-  })
-}
-
 interface Usage {
   file: string
   px: number
 }
 
 function collectUsages(): Usage[] {
-  return walk(SRC).flatMap((file) => {
+  return walkSource(SRC, (name) => SCANNED_EXTENSIONS.some((ext) => name.endsWith(ext))).flatMap((file) => {
     const source = readFileSync(file, 'utf8')
     return [...source.matchAll(WIDTH_CONDITION)].map((match) => ({
       file: file.slice(SRC.length),
