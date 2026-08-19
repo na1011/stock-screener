@@ -40,6 +40,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       탈락을 국면 변화로 읽는 것을 막는 것이 이 열의 목적이다.
  *   <li><b>통과 집합의 회전율</b>(자카드 거리) — 매달 뒤집히면 「장기 보유」라는 원저의 전제가
  *       깨진 것이다.
+ *   <li><b>그 회전의 게이트별 귀속</b> — 회전율만으로는 <b>무엇을 고칠지 정할 수 없다</b>.
+ *       금액 게이트가 뒤집는다면 임계가 시장을 안 따라가서이고(ADR-0072가 그 수리를 막았다),
+ *       재무 게이트가 뒤집는다면 원저의 「장기 보유」와 어긋나는 것은 조건이 아니라
+ *       <b>분기 재공시 주기</b>이며 설계로 풀 것이 아니다.
  * </ol>
  *
  * <p><b>이 테스트는 판정을 하지 않는다.</b> 0건이 나와도 실패로 만들지 않는다 — 0건의 원인을
@@ -97,6 +101,10 @@ class GateDiagnosticsTest {
         Map<String, List<Integer>> failuresByGate = new LinkedHashMap<>();
         Map<String, List<Integer>> unevaluableByGate = new LinkedHashMap<>();
         List<Set<Long>> passSets = new ArrayList<>();
+        // 시점별 「종목 → 그 종목을 막은 필수 게이트 집합」. 비면 통과다.
+        // 값이 하나도 없는 종목은 아예 넣지 않는다 — 회전의 원인이 게이트가 아니라 데이터라서,
+        // 그것을 게이트에 귀속하면 고칠 수 없는 것을 고칠 것으로 읽게 된다.
+        List<Map<Long, Set<String>>> blockersByAsOf = new ArrayList<>();
         // 게이트 → 시점별 「임계값이 그날 분포의 몇 분위에 앉았는가」.
         Map<String, List<Double>> thresholdPercentile = new LinkedHashMap<>();
 
@@ -106,6 +114,7 @@ class GateDiagnosticsTest {
 
             Map<String, Integer> failed = new TreeMap<>();
             Map<String, Integer> unevaluable = new TreeMap<>();
+            Map<Long, Set<String>> blockers = new LinkedHashMap<>();
             int withAnyValue = 0;
             for (Long stockId : outcome.valuesByStock().keySet()) {
                 Map<String, java.math.BigDecimal> values = outcome.valuesByStock().get(stockId);
@@ -121,16 +130,34 @@ class GateDiagnosticsTest {
                     }
                     String code = co.condition().indicatorCode();
                     switch (co.status()) {
-                        case NOT_MATCHED -> failed.merge(code, 1, Integer::sum);
-                        case NOT_EVALUABLE -> unevaluable.merge(code, 1, Integer::sum);
+                        case NOT_MATCHED -> {
+                            failed.merge(code, 1, Integer::sum);
+                            blockers.computeIfAbsent(stockId, k -> new TreeSet<>()).add(code);
+                        }
+                        case NOT_EVALUABLE -> {
+                            unevaluable.merge(code, 1, Integer::sum);
+                            blockers.computeIfAbsent(stockId, k -> new TreeSet<>()).add(code);
+                        }
                         default -> { }
                     }
                 }
+                blockers.computeIfAbsent(stockId, k -> new TreeSet<>());
             }
+            blockersByAsOf.add(blockers);
 
             Set<Long> passed = new TreeSet<>();
             outcome.included().forEach(r -> passed.add(r.stockId()));
             passSets.add(passed);
+
+            // 귀속은 blockers가 통과 집합과 같은 것을 가리킬 때만 뜻이 있다. 스크리너의
+            // 포함 판정과 여기서 다시 돌린 평가가 갈리면 아래 표가 통째로 헛것이 된다.
+            Set<Long> derivedPass = new TreeSet<>(blockers.entrySet().stream()
+                    .filter(e -> e.getValue().isEmpty())
+                    .map(Map.Entry::getKey)
+                    .toList());
+            assertThat(derivedPass)
+                    .as("%s: 재평가로 얻은 통과 집합이 스크리너의 것과 달라 귀속이 성립하지 않는다", asOf)
+                    .isEqualTo(passed);
 
             System.out.printf("%s  대상 %3d · 값이 나온 종목 %3d · 통과 %2d%n",
                     asOf, outcome.evaluated(), withAnyValue, passed.size());
@@ -180,8 +207,88 @@ class GateDiagnosticsTest {
                     difference(passSets.get(i - 1), passSets.get(i)).size());
         }
 
+        reportTurnoverAttribution(grid, passSets, blockersByAsOf);
+
         System.out.println("\nMUST NOT: 위 수를 근거로 임계값을 조정하지 않는다."
                 + " 진단은 조건의 구조를 고칠 근거이지 손잡이를 풀 근거가 아니다.");
+    }
+
+    /**
+     * 회전을 <b>게이트에 귀속</b>한다 — 「분기마다 3분의 1이 바뀐다」의 원인을 가른다.
+     *
+     * <p>들어온 종목은 <b>직전 시점에 그를 막고 있던</b> 게이트에, 나간 종목은 <b>이번 시점에
+     * 그를 막은</b> 게이트에 귀속한다.
+     *
+     * <p>IMPORTANT — <b>한 종목이 여러 게이트에 동시에 걸리면 전부에 센다.</b> 그래서 귀속 합이
+     * 전환 수를 넘는다. 하나만 고르면 「대표 원인」이 생기는데 그런 것은 없다 — 두 게이트가
+     * 같이 뒤집힌 종목에서 어느 쪽이 원인인지는 이 자료로 정해지지 않는다.
+     *
+     * <p><b>값이 없다가 생긴(또는 사라진) 종목은 따로 센다.</b> 그 회전의 원인은 게이트가 아니라
+     * 적재·상장 이력이고, 게이트에 얹으면 고칠 수 없는 것을 고칠 것으로 읽게 된다.
+     */
+    private static void reportTurnoverAttribution(
+            List<LocalDate> grid,
+            List<Set<Long>> passSets,
+            List<Map<Long, Set<String>>> blockersByAsOf) {
+
+        Map<String, Integer> entryCause = new TreeMap<>();
+        Map<String, Integer> exitCause = new TreeMap<>();
+        int transitions = 0;
+        int dataCaused = 0;
+
+        for (int i = 1; i < passSets.size(); i++) {
+            Map<Long, Set<String>> prev = blockersByAsOf.get(i - 1);
+            Map<Long, Set<String>> cur = blockersByAsOf.get(i);
+
+            for (Long stockId : difference(passSets.get(i), passSets.get(i - 1))) {
+                transitions++;
+                Set<String> released = prev.get(stockId);
+                if (released == null) {
+                    dataCaused++;      // 직전 시점에는 값이 하나도 없던 종목이다.
+                    continue;
+                }
+                released.forEach(gate -> entryCause.merge(gate, 1, Integer::sum));
+            }
+            for (Long stockId : difference(passSets.get(i - 1), passSets.get(i))) {
+                transitions++;
+                Set<String> blocked = cur.get(stockId);
+                if (blocked == null) {
+                    dataCaused++;      // 이번 시점에 값이 통째로 사라진 종목이다.
+                    continue;
+                }
+                blocked.forEach(gate -> exitCause.merge(gate, 1, Integer::sum));
+            }
+        }
+
+        System.out.println("\n----- 그 회전을 무엇이 만들었나 (게이트별 귀속) -----");
+        System.out.printf("전환 %d건 (%s ~ %s, 연속한 시점 쌍 %d개)%n",
+                transitions, grid.getFirst(), grid.getLast(), passSets.size() - 1);
+        System.out.println("MUST: 한 종목이 여러 게이트에 걸리면 전부에 센다 —"
+                + " 아래 합은 전환 수를 넘는다. 「대표 원인」은 이 자료로 정해지지 않는다.");
+        if (transitions == 0) {
+            System.out.println("잴 것이 없었다 — 통과 집합이 한 번도 바뀌지 않았다.");
+            return;
+        }
+
+        Set<String> gates = new TreeSet<>(entryCause.keySet());
+        gates.addAll(exitCause.keySet());
+        System.out.printf("%-24s %8s %8s %8s%n", "게이트", "진입", "이탈", "합");
+        gates.stream()
+                .sorted((a, b) -> Integer.compare(
+                        exitCause.getOrDefault(b, 0) + entryCause.getOrDefault(b, 0),
+                        exitCause.getOrDefault(a, 0) + entryCause.getOrDefault(a, 0)))
+                .forEach(gate -> System.out.printf("%-24s %8d %8d %8d%n",
+                        gate,
+                        entryCause.getOrDefault(gate, 0),
+                        exitCause.getOrDefault(gate, 0),
+                        entryCause.getOrDefault(gate, 0) + exitCause.getOrDefault(gate, 0)));
+        System.out.printf("%-24s %8s %8s %8d  (게이트가 아니라 적재·상장 이력이다)%n",
+                "값 없음", "", "", dataCaused);
+
+        System.out.println("읽는 법: 금액 게이트(MARKET_CAP·TURNOVER_60)가 위에 오면 회전의 원인이"
+                + " 임계가 시장을 안 따라가는 것이고, 그 수리는 ADR-0072가 막았다."
+                + " 재무 게이트가 위에 오면 원저의 「장기 보유」와 어긋나는 것은 조건이 아니라"
+                + " 분기 재공시 주기이며 설계로 풀 것이 아니다.");
     }
 
     private ScreeningResult evaluateForDiagnostics(
