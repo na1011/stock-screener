@@ -21,7 +21,7 @@ applies_to:
 ## 규칙
 
 - MUST: 색·반경·폼 필드 치수는 `theme/preset.ts`에서만 정의한다. `.vue`와 `main.css`는 `--p-*`를 **소비만** 한다.
-- MUST NOT: `main.css`나 `<style scoped>`에 색 리터럴(hex·rgb·hsl)을 적지 않는다. 예외는 `PriceReferencePanel`의 `var(--p-orange-400, #fb923c)` 같은 **폴백**뿐이다.
+- MUST NOT: `main.css`나 `<style scoped>`에 색 리터럴(hex·rgb·hsl)을 적지 않는다. **그림자도 색을 싣는다** — 드롭 그림자의 정본은 `preset.ts`(`--p-shadow-*`)이고, `--p-*`만 섞은 **합성** 그림자(`--app-edge-highlight`)만 `main.css`에 남는다. 자리를 가르는 것은 용도가 아니라 **값이 리터럴인가**다. 예외는 `PriceReferencePanel`의 `var(--p-orange-400, #fb923c)` 같은 **폴백**뿐이다.
 - MUST: `--p-*`가 아닌 `var()`는 **앱이 선언한 이름이거나 폴백을 가져야 한다.** 폴백 없는 미정의 `var()`는 그 선언을 무효로 만드는데, **단축이면 더 크게 무너진다** — `border: 1px solid var(--미정의)`는 색만 잃는 것이 아니라 `border-style`까지 unset되어 테두리가 **아예 그려지지 않는다.** 폴백은 이 무효를 **조용한 오작동**으로 바꿀 뿐이다(`--p-warn-color`가 그렇게 본문색으로 떨어져 있었다). 지키는 것은 `theme/tokens.spec.ts`다.
 - MUST: **글자 크기는 `main.css`의 `--app-text-*`에서만 정의한다.** PrimeVue 프리셋에 글자 크기 축이 없기 때문이다 — `formField.fontSize`는 폼에만 닿고 `button.root.fontSize`는 아예 토큰이 아니다(타입이 거부한다). 색이 아니라 레이아웃 상수이므로 `--app-*`와 같은 자리에 둔다.
 - MUST NOT: `.vue`의 `<style scoped>`에 rem 리터럴로 글자 크기를 적지 않는다. 손으로 적힌 값 40여 개가 흩어져 있었고, 그래서 본문·버튼·제목이 전부 15~16px 한 옥타브에 몰려 위계가 사라졌다.
@@ -46,7 +46,7 @@ applies_to:
 
 선정 이유(`ConditionOutcomes`)의 막대는 **크기를 두 축으로** 말한다. 트랙의 길이가 그 조건의 배점이고, 채워진 만큼이 이 종목이 받은 점수다. 배점 3점 조건의 트랙은 1점 조건의 3배이고, 못 받았으면 그 긴 트랙이 빈 채로 남아 "큰 것을 놓쳤다"가 길이로 읽힌다. 그리는 것은 `components/ui/RatioBar.vue`이고 판단의 정본은 `lib/scoreLane.ts`다.
 
-- MUST: 레인은 **accent 단색**이다. 유불리 색조를 넣지 않는다 — 위 §검증 4가 지키는 것이 이 자리다. 못 받은 트랙을 빨갛게 칠하고 싶어지지만, 그 판단은 옆의 판정 `Tag`가 이미 하고 있다.
+- MUST: 레인은 **accent 단색**이다. 유불리 색조를 넣지 않는다 — `tokens.spec.ts`의 「값 색조는 판정 Tag가 없는 화면에만 있다」가 지키는 것이 이 자리다. 못 받은 트랙을 빨갛게 칠하고 싶어지지만, 그 판단은 옆의 판정 `Tag`가 이미 하고 있다.
 - MUST: 정규화 기준은 **최대 배점**이고 총점이 아니다. 총점 대비로 재면 조건이 늘수록 모든 레인이 짧아져 배점 차이가 다시 안 보인다.
 - MUST: **배점이 전부 같으면 레인을 그리지 않는다.** 그때 트랙은 전부 같은 길이가 되고 채움은 0 아니면 1이라, 막대가 옆의 판정 `Tag`와 똑같은 말만 한다. 뜻이 없는 그래픽 대신 그 폭을 글자가 쓴다.
 - MUST NOT: 채움을 **획득/총점**으로 되돌리지 않는다. 그것이 버린 인코딩이다 — 만점을 받은 3점 조건을 30%만 채워 그렸고 바로 옆 숫자는 `3.00 / 3.00`(만점)이었다. 한 줄에 붙은 둘이 분모가 달라 **서로를 부정했다.**
@@ -79,69 +79,46 @@ applies_to:
 
 ## 검증
 
-**색 리터럴·글자 크기·미정의 `var()` 셋은 `theme/tokens.spec.ts`가 돌린다**(`./gradlew frontendTest`).
-손으로 치던 `rg` 세 줄을 그것이 대체한다 — **아무도 돌리지 않는 검증 절에서 실제로 결함이 자랐다.**
-`FinancialsPanel`이 선언 없는 이름 다섯만 참조해 카드 면·테두리·표 구분선을 통째로 잃은 채,
-컴파일도 테스트도 통과하며 오래 살아 있었다.
-
-**그 spec이 아직 못 보는 것 둘.** 색은 **hex만** 본다(rgb·hsl은 아무것도 안 본다). `--p-*`의 선언
-여부는 보지 않는다 — 생성 집합이 PrimeVue 내부 API에 물려 있어, 거기 기댄 검사는 의존성을 올릴 때
-원인 불명으로 빨개진다. 그 구멍에서 `--p-warn-color`가 죽어 있었다.
-
-아래는 spec으로 옮기지 못한 것만 남는다.
+**이 절에 실행 가능한 명령은 한 줄뿐이다.**
 
 ```bash
-# 1. 다크 선택자가 살아 있는가
-rg -n 'class="app-dark"' frontend/index.html
-rg -n "darkModeSelector: '.app-dark'" frontend/src/main.ts
-
-# 2. Tag warn이 amber인가 (orange가 아닌가)
-rg -n 'warn: \{ background:.*amber' frontend/src/theme/preset.ts
-
-# 3. 컨트롤 높이의 짝이 살아 있는가
-#    preset의 formField 패딩과 main.css의 line-height는 **함께** 목표 높이를 만든다.
-#    한쪽만 바꾸면 계산이 어긋나고, 그 어긋남은 Select와 InputNumber가 세로로 붙는
-#    조건 편집기에서만 눈에 띈다.
-rg -n 'line-height: 1.4' frontend/src/assets/main.css
-rg -n "paddingY: '0.5rem'" frontend/src/theme/preset.ts
-#    → 기준선(1440×900, Chrome): 기본 컨트롤 36px, size="small" 29px,
-#      아이콘 전용 버튼 36×36 / 29×29
-
-# 4. 값 색조가 판정 Tag와 한 화면에 섞이지 않았는가 (채널 분리)
-#    화면 쪽만 뒤지는 이유는 5와 같다 — **쓰는 곳만 센다.** 토큰을 정의하는 `theme/preset.ts`와
-#    그것을 재는 spec, 그리고 "왜 이 토큰을 안 쓰는지"를 적은 주석까지 세면 검사가 자기 자신을
-#    물고 늘 빨개진다. 실제로 ADR-0065를 쓰면서 그렇게 됐다.
-rg -l -- '--p-tone-' frontend/src/components frontend/src/views
-#    → components/stock/IndicatorCard.vue · components/stock/StockHeader.vue ·
-#      components/ui/BandMeter.vue 뿐이어야 한다. 셋 다 종목 상세다.
-#      components/result/ 아래가 나오면 판정 알약과 값 색조가 한 줄에 놓인 것이다.
-#      StockHeader는 **시세 등락**이다 — 상승이 초록, 하락이 빨강이라 이 화면에서 초록·빨강이
-#      여전히 한 뜻씩만 갖는다(ADR-0065).
-
-# 5. 값 색조 매핑의 정본이 하나인가 (부르는 곳만 센다 — 주석의 언급은 세지 않는다)
-rg -ln 'readBand\(|toneForPosition\(|matchBandIndex\(' frontend/src
-#    → lib/band.ts, lib/band.spec.ts, lib/unavailableReason.spec.ts,
-#      views/StockDetailView.vue, components/result/ConditionOutcomes.vue 뿐이어야 한다.
-#      BandMeter는 읽은 결과를 받기만 한다 — 두 곳이 계산하면 초록 숫자 아래 빨간 막대가 나온다.
-#      ConditionOutcomes는 같은 함수를 부르되 **라벨만** 쓰고 tone은 버린다. 그래서 위 4에
-#      나타나지 않는 것이 이 결정이 지켜졌다는 증거다.
-
-# 6. PrimeVue 주입 CSS를 이기는 접두어가 살아 있는가
-rg -n ':root \.p-button' frontend/src/assets/main.css
-
-# 7. RatioBar의 새 prop이 **기본값을 실제로 갖는가**
-#    타입 전용 `defineProps<…>()`는 기본값을 줄 수단이 없다. 이것이 빠지면 기존 소비처 셋에
-#    `undefined`가 흘러 `width: undefined%`가 나가고 **관리자 진행률 막대가 오류 없이 사라진다.**
-rg -n 'withDefaults' frontend/src/components/ui/RatioBar.vue
-#    → 잡혀야 한다
-
-# 8. 조건 내역이 행마다 자기 그리드를 갖지 않는가 (컬럼이 행마다 어긋나는 회귀)
-rg -n 'grid-template-columns: subgrid' frontend/src/components/result/ConditionOutcomes.vue
-#    → 잡혀야 한다. 사라졌다면 고정 트랙으로 되돌아간 것이고, 그때 오른쪽 공백이 함께 돌아온다
-
-# 9. 레인 규칙이 테스트로 덮여 있는가 (`.vue` 안으로 되돌아가면 어떤 테스트도 닿지 않는다)
-cd frontend && npx vitest run src/lib/scoreLane.spec.ts
+./gradlew frontendTest
 ```
+
+이 결정이 부과하는 제약은 전부 spec이 진다. 손으로 치는 `rg`로 두면 **아무도 돌리지 않고,
+그 공백에서 실제로 결함이 자란다** — `FinancialsPanel`이 선언 없는 이름 다섯만 참조해 카드
+면·테두리·표 구분선을 통째로 잃은 채 컴파일도 테스트도 통과하며 오래 살아 있었고,
+`--p-warn-color`가 죽어 경고 문구가 본문색으로 떨어져 있었다. 그리고 rg 자체가 틀리기도
+한다 — `rg 'line-height: 1.4'`는 body의 `1.45`도 잡아 **진짜가 사라져도 통과했다.**
+
+| spec | 무엇을 지키는가 |
+|---|---|
+| `theme/tokens.spec.ts` | 색 리터럴(hex·rgb·hsl) · 글자 크기 리터럴 · 선언 없는 앱 변수 · **PrimeVue가 내지 않는 `--p-*`** · 값 색조와 주황의 소비처 집합 · 전역 `.p-` 규칙의 `:root` 접두어 · 조건 내역의 subgrid |
+| `theme/preset.spec.ts` | 다크 선택자와 `index.html`의 짝 · `color-scheme` 고정 · 다크 스킴에 주황 부재 · **컨트롤 높이 36/29 계산** |
+| `theme/contrast.spec.ts` | 버튼 강조 3단의 대비비 |
+| `components/ui/RatioBar.spec.ts` | 옵셔널 prop의 기본값이 렌더 결과에 실제로 흐르는가 |
+| `lib/scoreLane.spec.ts` | 점수 레인의 판단 규칙 |
+
+**셋만 여기 적어 둔다. 나머지는 spec의 주석이 정본이다.**
+
+**`--p-*`의 선언 여부를 검사가 본다.** 원래는 보지 않기로 했었다 — 생성 집합이 PrimeVue의
+API에 물려 있어 의존성을 올릴 때 원인 불명으로 빨개진다는 이유였다. 셋이 그 사유를
+무력화한다. `Theme`은 `@primeuix/themes`의 **공개 export**이고, 의존성이 정확 버전으로
+고정돼 있어(ADR-0019) 올릴 때 빨개지는 것은 **확인해야 할 신호**이며, 검사가 **집합 크기를
+먼저 단정해** "원인 불명"을 없앤다 — 생성이 무너지면 참조 전부가 미정의로 뜨는 대신 그 한
+줄이 "앱이 아니라 검사를 고쳐라"라고 실패한다.
+
+**그 검사만은 폴백까지 센다.** 앱 변수(`--app-*`)는 폴백이 있으면 선언이 없어도 정상이지만,
+`--p-*`는 폴백이 **그 이름이 존재해야 한다는 사실 자체**를 가린다. `--p-warn-color`가
+`var(--p-warn-color, var(--p-text-color))`로 불렸고, 선언은 무효가 되지 않은 채 색만 조용히
+떨어졌다. 무폴백만 세는 검사는 그 형태를 **지금 새로 만들어도** 못 잡는다.
+
+**컨트롤 높이는 값을 세지 않고 계산한다.** `preset.ts`가 `CONTROL`을 export하고 spec이
+`main.css`의 `line-height`·`--app-text-*`와 합쳐 36px/29px을 검산한다(기준선 1440×900,
+Chrome; 아이콘 전용 버튼 36×36 / 29×29). 글자 크기의 실제 정본이 `main.css`인 것이
+핵심이다 — PrimeVue는 `formField.fontSize`를 **기본 크기로 읽지 않아**(`sm`·`lg`만 소비한다)
+그 짝이 빠지면 `--app-text-*`만 바꿔도 계산이 초록으로 남는다. 테두리 2px은 PrimeVue CSS에
+하드코딩돼 토큰이 없어 **이 상수만 검증할 수단이 없다.**
 
 ```premise 레인이 뜻을 갖는 전략이 실제로 있다
 psql -d stock_screener -At -c "WITH t AS (SELECT s.code, count(DISTINCT sc.weight) FILTER (WHERE NOT sc.is_required) AS spreads, coalesce(string_agg(DISTINCT trim(trailing '.' from trim(trailing '0' from sc.weight::text)), ',') FILTER (WHERE NOT sc.is_required), '없음') AS lane FROM screen s JOIN condition_group g ON g.screen_id = s.id JOIN screen_condition sc ON sc.group_id = g.id GROUP BY s.code) SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — 조건을 가진 전략이 하나도 없다' WHEN count(*) FILTER (WHERE spreads >= 2) > 0 THEN 'OK 레인이 뜻을 갖는 전략 ' || count(*) FILTER (WHERE spreads >= 2) || '개 — ' || string_agg(code || ' 배점[' || lane || ']', ' / ') FILTER (WHERE spreads >= 2) ELSE '배점이 갈리는 전략이 하나도 없다 — 레인이 어디에서도 안 그려지고 이 결정의 절반이 죽은 코드다: ' || string_agg(code || ' 배점[' || lane || ']', ' / ') END FROM t"
@@ -150,11 +127,6 @@ psql -d stock_screener -At -c "WITH t AS (SELECT s.code, count(DISTINCT sc.weigh
 전제가 묻는 것은 **배점이 갈리는 전략이 남아 있는가**다. 전부 배점이 같아지면 레인은 어디에서도 그려지지 않고, 그때 이 결정의 절반은 죽은 코드가 된다.
 
 **MUST: 이 펜스가 참일 때 `OK`로 시작하게 유지한다.** 원래는 관측값만 뽑아 훅이 **참·거짓을 가리지 못했고**, 그래서 전제가 성립하는 동안에도 세션마다 발견으로 떴다. 그 상태는 잡음이 아니라 **탐지 실패**다 — 참이든 거짓이든 같은 화면이 나오므로 정작 배점이 평평해졌을 때 아무도 못 알아챈다. 계약은 `0000-template.md`에 있다.
-
-```bash
-# 버튼 강조 3단의 대비비
-cd frontend && npx vitest run src/theme/contrast.spec.ts
-```
 
 `theme/contrast.spec.ts`가 `preset.ts`에서 램프를 import해 WCAG 상대 광도로 계산한다 — 채운 버튼 글자 ≥4.5:1, 버튼 면과 토널 테두리가 네 면 각각에서 ≥3:1, 고스트 hover가 네 면 모두에서 ≥1.2:1, 그리고 **채운 버튼의 글자색이 어느 면 색과도 같지 않을 것**을 단정한다.
 
@@ -181,4 +153,4 @@ cd frontend && npx vitest run src/theme/contrast.spec.ts
 
 색을 한 곳에서 바꿀 수 있고, PrimeVue 컴포넌트 내부까지 같은 팔레트를 쓴다. 대신 라이트 화면은 존재하지 않으며, 켜려면 `colorScheme.light`를 새로 설계하고 판정 3상태·지지·저항 주황의 대비를 다시 검증해야 한다. 되돌리려면 `theme/preset.ts`를 지우고 `main.ts`의 `preset`을 `Aura`로, `index.html`의 클래스와 `color-scheme`을 되돌린다.
 
-값 색조를 더하면서 생긴 대가는 **"어느 화면에 무엇을 그리는가"가 규칙이 되었다는 것**이다. 형태로 채널을 갈랐으므로 결과 화면에 값 색조를 넣는 순간 두 뜻이 한 줄에 섞인다. 그 위반은 컴파일도 테스트도 잡지 못하고 눈으로만 보이므로, 위 §검증 4가 그 자리를 지킨다. 되돌리려면 `semantic.tone`과 `lib/band.ts`·`BandMeter.vue`를 걷어낸다 — 지표 카드는 값만 남고 ADR-0023 이전 상태로 돌아간다.
+값 색조를 더하면서 생긴 대가는 **"어느 화면에 무엇을 그리는가"가 규칙이 되었다는 것**이다. 형태로 채널을 갈랐으므로 결과 화면에 값 색조를 넣는 순간 두 뜻이 한 줄에 섞인다. 그 위반은 눈으로만 보이므로 `tokens.spec.ts`의 「값 색조는 판정 Tag가 없는 화면에만 있다」가 그 자리를 지킨다. 되돌리려면 `semantic.tone`과 `lib/band.ts`·`BandMeter.vue`를 걷어낸다 — 지표 카드는 값만 남고 ADR-0023 이전 상태로 돌아간다.

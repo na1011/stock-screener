@@ -287,8 +287,8 @@ describe('디자인 토큰 (ADR-0021)', () => {
 
   it('스타일에 색 리터럴을 적지 않는다', () => {
     // **스타일 파일만 본다.** `theme/preset.ts`는 색의 정본이라 hex가 있는 것이 정상이고,
-    // 그것까지 세면 검사가 정본을 위반으로 부르며 늘 빨개진다. ADR §검증 3-1의 주석이
-    // 같은 함정을 "검사가 자기 자신을 물고"라고 적어 두었다.
+    // 그것까지 세면 검사가 정본을 위반으로 부르며 늘 빨개진다 — 아래 소비처 집합 검사가
+    // `components/`·`views/`만 훑는 것도 같은 함정을 피하려는 것이다.
     // 폴백(`var(--p-…, #…)`)은 ADR §규칙이 명시한 예외다.
     const strays = scan((line, source) =>
       STYLE_FILE(source.file) && COLOR_LITERAL.test(line) && !line.includes('var(--p-')

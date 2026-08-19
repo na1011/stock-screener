@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import RatioBar from './RatioBar.vue'
 
 /**
- * ADR-0021 §검증이 `rg withDefaults`로 세던 자리다.
+ * ADR-0021이 `rg withDefaults` 한 줄로 세던 자리다.
  *
  * 존재를 세는 것으로는 부족하다. 기본값이 빠졌을 때 실제로 나가는 것은 `width:NaN%`이고
  * (`undefined >= 1`이 false라 `Math.max(0, undefined)`로 흘러든다), 그러면 **관리자 진행률
