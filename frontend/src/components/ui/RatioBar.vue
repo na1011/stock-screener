@@ -35,8 +35,11 @@ const props = withDefaults(
     ariaLabel?: string
   }>(),
   // IMPORTANT — 타입 전용 `defineProps<…>()`는 기본값을 줄 수단이 없다. 옵셔널 prop만
-  // 더하고 여기를 빼면 기존 소비처 셋에서 `undefined`가 흘러 `width: undefined%`가 나가고,
-  // 관리자 진행률 막대가 **아무 오류 없이 사라진다.**
+  // 더하고 여기를 빼면 기존 소비처 셋에서 `undefined`가 흘러 `width: NaN%`가 나가고
+  // (`undefined >= 1`이 false라 `Math.max(0, undefined)`로 떨어진다), 관리자 진행률 막대가
+  // **아무 오류 없이 사라진다.** 같이 falsy가 된 `floor`는 채움을 52%에서 50%로 조용히
+  // 갈라 놓는다 — 증상이 둘이라 `undefined`만 찾으면 어느 쪽도 못 본다.
+  // 실측은 `RatioBar.spec.ts`가 서버 렌더로 다시 낸다.
   { trackRatio: 1, floor: true },
 )
 
