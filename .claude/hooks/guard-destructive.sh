@@ -94,6 +94,17 @@ has_long_flag() {
   echo " $1 " | grep -qE "[[:space:]]${2}([[:space:]]|=|$)"
 }
 
+# 토큰이 **정확히** 그 문자열인지 본다.
+# MUST: 단문자 플래그를 `short_flags_of`로 찾지 않는다. 그 함수는 `-Fc`에서 글자 `F`와 `c`를
+# 둘 다 모으므로 `pg_restore -Fc`가 `--clean`으로 오탐된다. 대소문자도 갈려야 한다(`-c`≠`-C`).
+has_token() {
+  local seg="$1" want="$2" tok
+  for tok in $seg; do
+    [ "$tok" = "$want" ] && return 0
+  done
+  return 1
+}
+
 # --- 1. 파괴적 명령: deny ---
 
 # 실행될 텍스트만 남긴다. 판정 로직은 아래 그대로이고 **입력만** 바뀐다.
@@ -104,6 +115,10 @@ has_long_flag() {
 executable=$(strip_heredoc_bodies "$cmd")
 clean=$(strip_quotes_global "$(strip_comment "$executable")")
 is_destructive=false
+# ask 후보는 **적어만 두고 여기서 emit하지 않는다.** emit은 exit이라, 파괴 판정이 아직
+# 안 끝난 자리에서 부르면 뒤에 올 deny를 가린다 — §1b(SQL)와 heredoc 판정이 이 루프
+# 뒤에 있다. `cat .env && git push --force`가 deny인 것이 그 순서 덕이다.
+ask_reason=""
 raw_segments=$(split_segments "$executable")
 clean_segments=$(split_segments "$clean")
 
@@ -138,6 +153,33 @@ while IFS= read -r seg; do
       if echo "$seg" | grep -qE '(^|[[:space:]])clean([[:space:]]|$)' \
          && { [[ "$flags" == *f* ]] || has_long_flag "$seg" '--force'; }; then
         is_destructive=true; break
+      fi
+      ;;
+    dropdb)
+      # 덤프가 없으면 되돌릴 수 없고, 이 저장소에 정당한 호출이 하나도 없다.
+      is_destructive=true; break
+      ;;
+    pkill|killall)
+      # MUST NOT: `kill`을 여기 넣지 않는다. 이 저장소는 `kill <PID>`를 **처방한다** —
+      # `ops/stop.sh`가 그렇게 끄고, warn-load-running.sh·inject-progress.sh·ADR-0043이
+      # "PID를 특정해서 끈다"고 지시한다. 막으면 훅이 다른 훅의 처방을 차단한다.
+      # 이름으로 찾아 죽이는 쪽만 묻는다 — `pkill -f java`는 운영 앱을 함께 죽인다.
+      #
+      # 한계: `kill -9 $(pgrep -f java)`는 argv0이 `kill`이라 여기 안 걸린다. 막을 수단이
+      # 없으므로 "가드가 있으니 pkill류는 막힌다"고 믿지 않는다.
+      [ -z "$ask_reason" ] && ask_reason="프로세스를 이름으로 찾아 죽이려는 명령으로 보입니다. 운영 앱까지 함께 죽을 수 있으니 PID를 특정하는 편이 안전합니다."
+      ;;
+    pg_restore)
+      # MUST: 쓰기 플래그가 있을 때만 묻는다. `pg_restore -l`은 TOC를 읽기만 하고,
+      # **ADR-0052의 전제가 그것을 쓴다** — argv0만 보고 걸면 check-premises.sh의
+      # `vetoed()`가 그 전제를 영영 "판정 불가"로 만든다(0000-template.md가 그 결과를 적는다).
+      #
+      # deny가 아니라 ask인 이유: `ops/dump-db.sh`가 복구 처방으로 `pg_restore -d -c`를
+      # **출력한다.** deny면 되돌려야 하는 바로 그 순간에 되돌리는 길을 막는다.
+      if has_token "$seg" '-d' || has_token "$seg" '-C' || has_token "$seg" '-c' \
+         || has_long_flag "$seg" '--dbname' || has_long_flag "$seg" '--create' \
+         || has_long_flag "$seg" '--clean'; then
+        [ -z "$ask_reason" ] && ask_reason="덤프를 데이터베이스에 복원하려는 명령으로 보입니다. 대상 DB의 현재 내용이 덮이거나 지워질 수 있으니 확인 후 진행하세요."
       fi
       ;;
   esac
@@ -190,6 +232,13 @@ fi
 
 if [ "$is_destructive" = true ]; then
   emit "deny" "파괴적 명령으로 감지되었습니다. 확인 없이 실행하지 마세요."
+fi
+
+# 파괴 판정이 전부 끝난 뒤에 ask를 낸다. 위 §1 루프에서 미뤄 둔 것이다.
+# MUST: 이 자리를 §2(시크릿) **앞**에 둔다. §2는 선검사에서 `exit 0`으로 빠져나가므로
+# 뒤에 두면 시크릿 경로가 없는 명령에서 이 절이 통째로 도달하지 않는다.
+if [ -n "$ask_reason" ]; then
+  emit "ask" "$ask_reason"
 fi
 
 # --- 2. Bash 경유 시크릿 읽기: ask ---

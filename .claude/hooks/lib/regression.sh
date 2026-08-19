@@ -168,6 +168,26 @@ check pass "kill <PID> (ops/stop.sh 가 처방)"  "kill 12345" guard
 check pass "kill -9 <PID>"                     "kill -9 12345" guard
 check pass "pg_restore -l (ADR-0052 전제)"     "pg_restore -l /tmp/x.dump" guard
 check pass "pg_dump 는 읽기다"                 "pg_dump -Fc stock_screener -f /tmp/x.dump" guard
+check pass "pg_restore -f 는 파일로만 쓴다"    "pg_restore -f /tmp/out.sql /tmp/x.dump" guard
+# ADR-0052 전제의 실제 형태. 절대경로 + 파이프라 argv0 추출과 세그먼트 분해를 둘 다 지난다.
+check pass "전제가 쓰는 pg_restore -l 파이프"  "n=\$(/opt/homebrew/bin/pg_restore -l /tmp/x.dump | grep -c 'TABLE DATA')" guard
+
+echo "── 되돌리기 어려운 운영 명령은 물어야 한다 ──"
+check ask  "pkill -f 는 운영 앱도 죽인다"      "pkill -f java" guard
+check ask  "killall"                           "killall java" guard
+check deny "dropdb"                            "dropdb stock_screener" guard
+check ask  "pg_restore -d (운영 DB에 쓴다)"    "pg_restore -d stock_screener /tmp/x.dump" guard
+check ask  "pg_restore --clean"                "pg_restore --clean --if-exists -d stock_screener /tmp/x.dump" guard
+check ask  "pg_restore -C"                     "pg_restore -C -d postgres /tmp/x.dump" guard
+# ops/dump-db.sh 가 복구 처방으로 출력하는 바로 그 줄. deny 가 아니라 ask 여야 한다 —
+# 되돌려야 하는 순간에 되돌리는 길을 막으면 안 된다.
+check ask  "dump-db.sh 가 처방하는 복구 명령"  "pg_restore -d stock_screener -c --if-exists -j4 /tmp/x.dump" guard
+# `short_flags_of` 로 단문자를 찾으면 `-Fc` 가 `-c` 로 오탐된다. 토큰 완전 일치라야 통과한다.
+check pass "-Fc 는 --clean 이 아니다"          "pg_restore -Fc -l /tmp/x.dump" guard
+
+echo "── deny 는 새 ask 보다도 먼저다 ──"
+check deny "pkill 과 파괴 삭제가 같이 있으면"  "pkill -f java && rm -rf build" guard
+check deny "pg_restore -d 와 파괴 SQL"         'pg_restore -d s /tmp/x.dump && psql -d x -c "drop table y"' guard
 
 echo "── 적재 인자 알림 ──"
 check 침묵 "적재 명령을 문서화한 커밋 메시지"  "$(hd 'git commit -F - <<MSG' 'docs: 절차' '' "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'" 'MSG')" bootstrap
