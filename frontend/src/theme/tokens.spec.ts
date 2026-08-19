@@ -91,8 +91,20 @@ const sources: Source[] = files.map((path) => ({
 /** 선언은 세 경로로 들어온다 — CSS 선언 · `:style` 바인딩 · `setProperty`. */
 const declared = new Set<string>()
 for (const { text } of sources) {
-  for (const match of text.matchAll(DECLARATION)) declared.add(match[1])
-  for (const match of text.matchAll(SET_PROPERTY)) declared.add(match[1])
+  for (const name of captures(text, DECLARATION)) declared.add(name)
+  for (const name of captures(text, SET_PROPERTY)) declared.add(name)
+}
+
+/**
+ * 캡처 그룹 1만 모은다.
+ *
+ * 위 정규식은 전부 그룹을 하나씩 갖지만 `noUncheckedIndexedAccess`가 그것을 모른다. 좁히는
+ * 자리를 여기 하나로 모아, 부르는 쪽이 매번 단언으로 우회하지 않게 한다.
+ */
+function captures(text: string, pattern: RegExp): string[] {
+  return [...text.matchAll(pattern)].flatMap((match) =>
+    match[1] === undefined ? [] : [match[1]],
+  )
 }
 
 function scan(pick: (line: string, source: Source) => string[]): Hit[] {
@@ -120,9 +132,9 @@ describe('디자인 토큰 (ADR-0021)', () => {
     // `--p-*`는 PrimeVue가 소유한다(ADR-0021: "`--p-*`를 소비만 한다"). 앱이 선언하지 않는
     // 것이 정상이므로 여기서 세면 전부 위반이 된다.
     const strays = scan((line) =>
-      [...line.matchAll(BARE_REFERENCE)]
-        .map((match) => match[1])
-        .filter((name) => !name.startsWith('--p-') && !declared.has(name)),
+      captures(line, BARE_REFERENCE).filter(
+        (name) => !name.startsWith('--p-') && !declared.has(name),
+      ),
     )
 
     expect(format(strays)).toEqual([])
