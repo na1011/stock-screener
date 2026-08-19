@@ -40,3 +40,4 @@ paths:
 - **훅이 혼자 지키는 것**: `.env.<임의>`(`.env.production` 등), `*.key`, `*.pfx`, `id_rsa`, `credentials.json`, `service-account*.json`, `application-{local,secret,prod}.*`. permissions는 이 중 어느 것도 덮지 않는다.
 - 전역 `~/.claude/settings.json`은 커밋되지 않는다. **다른 클론에서 살아 있는 계층은 훅뿐이다.**
 - **MUST: 차단 가드(`guard-secrets.sh`·`guard-destructive.sh`·`lib/`)를 고치면 `~/.claude/hooks/`의 사본도 함께 고친다.** 같은 파일이 전역에도 등록돼 있다 — 저장소 사본은 클론에서 살아남고, 전역 사본은 이 하네스가 없는 프로젝트와 저장소 밖 세션을 덮는다. 갈리면 **저장소 안에서 막히는 것이 밖에서는 통과한다.** 전역 `SessionStart` 훅이 해시를 대조하지만 그건 다음 세션이다.
+- **MUST: 같은 변경에서 `bash .claude/hooks/lib/regression.sh`를 돌린다.** 이 가드들은 **오탐과 침묵이 정반대 방향으로 나쁘고** 한쪽만 보면 반대쪽이 무너진 것을 모른다. 그 표에는 **알려진 구멍이 옳은 기대값과 함께** 들어 있어(`check_hole`) 어긋나면 `KNOWN`, **막히면 `FAIL`로 승격을 요구한다** — 표를 돌리지 않으면 그 신호가 아무 데도 도달하지 않는다. **위험 문자열은 그 파일 안에 리터럴로 적는다**(인라인 셸로 시험하면 §1b가 `raw_segments`를 보므로 가드가 자기 자신을 막는다).
