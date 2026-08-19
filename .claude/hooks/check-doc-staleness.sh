@@ -112,6 +112,14 @@ fi
 # 줄이 아니라 **문자**로 센다. 한글 산문은 줄 수가 유지된 채 문장만 줄어드는 편집이 흔해
 # `--numstat`의 줄 기준으로는 감소가 보이지 않는다(§1이 `wc -m`을 쓰는 것과 같은 이유).
 # 파일이 생긴 커밋은 제외한다 — 안 하면 새 규칙 파일이 첫날부터 울린다.
+#
+# MUST NOT: 문자를 바이트로 바꾸지 않는다. `git cat-file --batch-check`가 크기를 공짜로 주어
+# 유혹이 있는데, 한글은 문자당 3바이트라 아래 임계 800·3000이 **조용히 3배 느슨해진다.**
+# `lib/regression.sh`의 「한글 문서를 바이트로 세면 안 된다」 행이 그 회귀를 붙든다.
+#
+# 조회는 **한 번에** 한다. 예전에는 파일마다 `git log`를 두 번(창 12 + 전체) 부르고 리비전마다
+# `git show | wc -m`을 불러 프로세스가 538개였고 그것만으로 4.9초였다. 판정 로직은 그대로이고
+# 무엇을 몇 번 묻는지만 바뀌었다.
 if command -v git >/dev/null 2>&1 \
    && git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
    && [ -d .claude/rules ]; then
@@ -126,56 +134,115 @@ if command -v git >/dev/null 2>&1 \
   # **다시 재지 않고 옮기지 않는다** — 근거가 분포뿐이라 분포가 바뀌면 근거도 바뀐다.
   min_growth=800
   min_growth_doc=3000
-  growing=""
+
+  # 대상 목록. **이 순서가 보고 순서의 정본이다** — awk의 `for (k in arr)`는 해시 순서라
+  # 그대로 쓰면 보고 문장의 파일 차례가 뒤섞인다(현행은 이 글롭 순서로 낸다).
+  targets=""
   for rule in .claude/rules/*.md .claude/skills/*/SKILL.md \
               docs/adr/ADR-*.md docs/api-spec/*.md; do
-    [ -f "$rule" ] || continue
-    # 오래된 순으로 뒤집는다. `tac`·`tail -r`은 플랫폼마다 갈리므로 sed로 한다.
-    # MUST NOT: `set -e` 아래에서 `[ 조건 ] && continue`를 쓰지 않는다. 조건이 거짓이면
-    # compound가 1을 반환해 **스크립트가 그 자리에서 죽고**, 뒤에 있는 검사들이 통째로
-    # 사라진다. 침묵으로 죽으므로 회귀표를 돌리기 전에는 드러나지 않는다.
-    # MUST: git 호출의 실패를 `|| true`로 흡수한다. `set -e` 아래에서 `x=$(실패)`는 그대로
-    # 스크립트를 죽이고, 죽은 훅은 **출력이 없어 "문제없음"과 구분되지 않는다.**
-    revs=$(git log --format=%H -n "$window" -- "$rule" 2>/dev/null | sed '1!G;h;$!d' || true)
-    n=$(printf '%s\n' "$revs" | grep -c . || true)
-    if [ "${n:-0}" -eq 0 ]; then continue; fi
-    # 파일이 이 창 안에서 생겼으면 **생성 커밋만** 뺀다. 창을 다 채울 때까지 기다리면,
-    # 11커밋 동안 한 번도 줄지 않은 채 2.8배가 된 파일이 끝내 발화하지 않는다.
-    total=$(git log --format=%H -- "$rule" 2>/dev/null | grep -c . || true)
-    if [ "${total:-0}" -le "$window" ]; then
-      revs=$(printf '%s\n' "$revs" | tail -n +2)
-      n=$((n - 1))
-    fi
-    if [ "$n" -lt "$min_points" ]; then continue; fi
-
-    shrank=0; prev=""; first=""; last=""
-    while IFS= read -r rev; do
-      if [ -z "$rev" ]; then continue; fi
-      cur=$(git show "${rev}:${rule}" 2>/dev/null | wc -m | tr -d ' ' || true)
-      if [ -z "$cur" ] || [ "$cur" -eq 0 ]; then continue; fi
-      if [ -z "$first" ]; then first="$cur"; fi
-      last="$cur"
-      # 감소한 커밋이 한 번이라도 있으면 조용하다. 늘었다 줄었다 하는 것은 정상이다.
-      if [ -n "$prev" ] && [ "$cur" -lt "$prev" ]; then shrank=1; fi
-      prev="$cur"
-    done <<< "$revs"
-
-    if [ -z "$first" ] || [ -z "$last" ]; then continue; fi
-    if [ "$shrank" -eq 1 ]; then continue; fi
-    case "$rule" in
-      .claude/rules/*) threshold=$min_growth ;;
-      *)               threshold=$min_growth_doc ;;
-    esac
-    if [ $((last - first)) -lt "$threshold" ]; then continue; fi
-    # skill은 파일명이 전부 SKILL.md라 basename만으로는 어느 것인지 알 수 없다.
-    label=$(basename "$rule")
-    case "$rule" in
-      .claude/skills/*) label="$(basename "$(dirname "$rule")")/${label}" ;;
-    esac
-    growing="${growing}${label}(+$((last - first))자) "
+    if [ -f "$rule" ]; then targets="${targets}${rule}"$'\n'; fi
   done
-  if [ -n "$growing" ]; then
-    add "지난 ${window}커밋 동안 줄어든 적이 없는 문서가 있다: ${growing}— 고정 예산이지 로그가 아니다. 다음에 더할 때 뺄 것을 함께 정하고, **사실이 아니라 그것을 알게 된 경위가 쌓인 것은 아닌지** 본다(\`.claude/rules/doc-facts.md\`)."
+
+  if [ -n "$targets" ]; then
+    # ① 파일별 rev 목록을 **한 번의 `git log`**로 얻는다.
+    #
+    # MUST: `core.quotePath=false`를 준다. git은 비ASCII 경로를 `"docs/…/\355\225\234.md"`로
+    # 인용해 내는데, 그러면 아래 awk의 키가 셸이 낸 경로와 안 맞아 **그 파일이 조용히 빠진다.**
+    # 이 저장소에 한글 이름 문서가 이미 있다.
+    # MUST: `--diff-merges=first-parent`를 준다. 머지 커밋의 diff는 기본으로 나오지 않아
+    # 그 커밋에서 일어난 증감이 안 보인다. 지금 머지가 0개인 것은 사실이지 불변식이 아니고,
+    # 어긋나면 `shrank` 판정이 조용히 뒤집힌다.
+    # pathspec을 주지 않고 awk로 거른다 — 92개 글롭을 인자로 넘기면 매칭 0인 글롭이 리터럴로
+    # 남아 git이 전체를 거부하고, 그러면 이 검사가 통째로 침묵한다.
+    #
+    # MUST: `|| true`로 받는다. `set -e`+`pipefail` 아래에서 커밋이 없는 저장소의 `git log`는
+    # 128을 내고 **스크립트가 그 자리에서 죽어 §2~§6이 통째로 사라진다.** 회귀표의 임시 트리가
+    # 실제로 그 상태다(커밋 없이 `git add`만 한다).
+    plan=$(git -c core.quotePath=false log --diff-merges=first-parent \
+             --format=$'\001%H' --name-only 2>/dev/null \
+           | awk -v W="$window" -v MP="$min_points" '
+               NR==FNR { want[$0] = 1; next }
+               /^\001/ { rev = substr($0, 2); next }
+               NF && ($0 in want) {
+                 cnt[$0]++
+                 if (cnt[$0] <= W) revs[$0] = revs[$0] rev " "
+               }
+               END {
+                 for (f in revs) {
+                   n = split(revs[f], R, " ")
+                   while (n > 0 && R[n] == "") n--
+                   # 창 안에서 생긴 파일이면 생성 커밋(가장 오래된 것)만 뺀다.
+                   if (cnt[f] <= W) n--
+                   if (n < MP) continue
+                   for (i = n; i >= 1; i--) print f "\t" R[i]
+                 }
+               }' <(printf '%s' "$targets") - || true)
+
+    if [ -n "$plan" ]; then
+      # ② 블롭의 문자 수를 **한 번의 `cat-file`**로 얻는다.
+      # perl이 `wc -m`과 같은 값을 낸다: UTF-8에서 문자 수 = 바이트 수 − continuation 바이트 수.
+      # MUST: `read`를 쓴다. `sysread`는 파이프 버퍼(16,384)에서 끊겨 큰 ADR의 크기가 거기
+      # 고정되고, 그러면 크기 시퀀스가 통째로 거짓이 된다.
+      counts=$(printf '%s\n' "$plan" | awk -F'\t' '{ print $2 ":" $1 }' \
+               | git cat-file --batch 2>/dev/null \
+               | perl -e '
+                   binmode(STDIN);
+                   while (my $h = <STDIN>) {
+                     chomp $h;
+                     if ($h =~ /missing$/) { print "0\n"; next }
+                     my @p = split / /, $h;
+                     my $sz = $p[-1];
+                     my $buf = "";
+                     read(STDIN, $buf, $sz);
+                     read(STDIN, my $nl, 1);
+                     my $c = () = $buf =~ /[\x80-\xBF]/g;
+                     print $sz - $c, "\n";
+                   }' || true)
+
+      # 두 목록의 길이가 어긋나면 짝이 밀려 **엉뚱한 크기로 판정한다.** 조용히 넘기지 않는다.
+      n_plan=$(printf '%s\n' "$plan" | grep -c . || true)
+      n_count=$(printf '%s\n' "$counts" | grep -c . || true)
+      if [ "${n_plan:-0}" -ne "${n_count:-0}" ]; then
+        add "문서 증가 추세를 재지 못했다(대상 ${n_plan}개 대 측정 ${n_count}개). 이 세션에서는 순증가 문서가 보고되지 않는다."
+      else
+        growing=$(paste <(printf '%s\n' "$plan") <(printf '%s\n' "$counts") \
+          | awk -F'\t' -v G="$min_growth" -v GD="$min_growth_doc" '
+              NR==FNR { ord[++k] = $0; next }
+              {
+                f = $1; c = $3 + 0
+                # 블롭이 없는 리비전(삭제 커밋)은 건너뛴다.
+                if (c == 0) next
+                if (!(f in first)) first[f] = c
+                if ((f in prev) && c < prev[f]) shrank[f] = 1
+                prev[f] = c; last[f] = c
+              }
+              END {
+                out = ""
+                for (i = 1; i <= k; i++) {
+                  f = ord[i]
+                  if (!(f in first)) continue
+                  # 감소한 커밋이 한 번이라도 있으면 조용하다. 늘었다 줄었다 하는 것은 정상이다.
+                  if (f in shrank) continue
+                  thr = (f ~ /^\.claude\/rules\//) ? G : GD
+                  d = last[f] - first[f]
+                  if (d < thr) continue
+                  # skill은 파일명이 전부 SKILL.md라 basename만으로는 어느 것인지 알 수 없다.
+                  base = f; sub(/.*\//, "", base)
+                  lab = base
+                  if (f ~ /^\.claude\/skills\//) {
+                    dir = f; sub(/\/[^\/]*$/, "", dir); sub(/.*\//, "", dir)
+                    lab = dir "/" base
+                  }
+                  out = out lab "(+" d "자) "
+                }
+                printf "%s", out
+              }' <(printf '%s' "$targets") - || true)
+
+        if [ -n "$growing" ]; then
+          add "지난 ${window}커밋 동안 줄어든 적이 없는 문서가 있다: ${growing}— 고정 예산이지 로그가 아니다. 다음에 더할 때 뺄 것을 함께 정하고, **사실이 아니라 그것을 알게 된 경위가 쌓인 것은 아닌지** 본다(\`.claude/rules/doc-facts.md\`)."
+        fi
+      fi
+    fi
   fi
 fi
 
