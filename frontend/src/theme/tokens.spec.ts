@@ -86,14 +86,29 @@ interface Hit {
   what: string
 }
 
-const files = walkSource(SRC, SCANNED)
+function read(accept: (name: string) => boolean): Source[] {
+  return walkSource(SRC, accept).map((path) => ({
+    file: path.slice(SRC.length),
+    text: readFileSync(path, 'utf8').replace(BLOCK_COMMENT, (block) =>
+      block.replace(/[^\n]/g, ' '),
+    ),
+  }))
+}
 
-const sources: Source[] = files.map((path) => ({
-  file: path.slice(SRC.length),
-  text: readFileSync(path, 'utf8').replace(BLOCK_COMMENT, (block) =>
-    block.replace(/[^\n]/g, ' '),
-  ),
-}))
+const files = walkSource(SRC, SCANNED)
+const sources: Source[] = read(SCANNED)
+
+/**
+ * `.spec.ts`까지 훑는 두 번째 목록.
+ *
+ * 아래 「값 색조 매핑의 정본」이 이것을 쓴다 — `band.spec.ts`·`unavailableReason.spec.ts`가
+ * 그 함수를 부르는 것이 **정상이고 기대 목록에 들어 있다.** 위 스캐너들이 `.spec.ts`를
+ * 제외하는 것은 정규식과 실패 메시지가 자기 자신을 물기 때문이며(같은 파일 위쪽에 이유가
+ * 있다), 여기서는 검사하는 낱말을 조각으로 지어 그 문제를 피한다.
+ */
+const specSources: Source[] = read(
+  (name) => name.endsWith('.vue') || name.endsWith('.css') || name.endsWith('.ts'),
+)
 
 /** 선언은 세 경로로 들어온다 — CSS 선언 · `:style` 바인딩 · `setProperty`. */
 const declared = new Set<string>()
@@ -261,5 +276,77 @@ describe('디자인 토큰 (ADR-0021)', () => {
     })
 
     expect(format(strays)).toEqual([])
+  })
+})
+
+/**
+ * 값 색조를 **쓰는** 곳. 정의하는 `theme/preset.ts`와 그것을 재는 spec은 세지 않는다 —
+ * 세면 검사가 자기 자신을 물고 늘 빨개진다(ADR-0021이 그 함정을 적어 두었다).
+ */
+const TONE_SCOPE = /^(components|views)\//
+
+/**
+ * 값 색조 매핑을 **부르는** 곳. 이름만 조각으로 지어 이 파일 자신이 걸리지 않게 한다 —
+ * `.spec.ts`를 훑는 검사라 리터럴로 적으면 스스로를 센다.
+ */
+const BAND_READERS = new RegExp(
+  ['readBand', 'toneForPosition', 'matchBandIndex'].map((name) => `${name}\\(`).join('|'),
+)
+
+const filesUsing = (list: Source[], test: (text: string) => boolean): string[] =>
+  list
+    .filter((source) => test(source.text))
+    .map((source) => source.file)
+    .sort()
+
+describe('색 채널과 구조 계약 (ADR-0021)', () => {
+  /**
+   * 판정 `Tag`와 값 색조가 한 줄에 섞이지 않았는가.
+   *
+   * 초록·빨강이 말해야 하는 것이 둘이라(조건 판정 · 값 구간) 색이 아니라 **형태와 자리**로
+   * 갈랐다. `components/result/` 아래가 나오면 판정 알약과 값 색조가 한 줄에 놓인 것이다.
+   * `StockHeader`는 시세 등락이고, 그 화면에서는 초록·빨강이 여전히 한 뜻씩만 갖는다.
+   */
+  it('값 색조는 판정 Tag가 없는 화면에만 있다', () => {
+    expect(
+      filesUsing(
+        sources.filter((source) => TONE_SCOPE.test(source.file)),
+        (text) => text.includes('--p-tone-'),
+      ),
+    ).toEqual([
+      'components/stock/IndicatorCard.vue',
+      'components/stock/StockHeader.vue',
+      'components/ui/BandMeter.vue',
+    ])
+  })
+
+  /**
+   * 값 색조 매핑의 정본이 하나인가.
+   *
+   * `BandMeter`는 읽은 결과를 **받기만** 한다 — 두 곳이 계산하면 초록 숫자 아래 빨간 막대가
+   * 나온다. `ConditionOutcomes`는 같은 함수를 부르되 라벨만 쓰고 tone은 버리며, 그래서 위
+   * 검사의 목록에 나타나지 않는 것이 이 결정이 지켜졌다는 증거다.
+   */
+  it('값 색조 매핑을 부르는 곳이 정해진 다섯뿐이다', () => {
+    expect(filesUsing(specSources, (text) => BAND_READERS.test(text))).toEqual([
+      'components/result/ConditionOutcomes.vue',
+      'lib/band.spec.ts',
+      'lib/band.ts',
+      'lib/unavailableReason.spec.ts',
+      'views/StockDetailView.vue',
+    ])
+  })
+
+  /**
+   * 조건 내역의 행이 **자기 그리드를 갖지 않는가.**
+   *
+   * 사라졌다면 고정 트랙으로 되돌아간 것이고, 그때 조건문 트랙이 남는 폭을 전부 먹어
+   * 오른쪽에 큰 공백이 함께 돌아온다. 컴파일도 다른 테스트도 통과한다.
+   */
+  it('조건 내역이 subgrid로 트랙을 공유한다', () => {
+    const outcomes = sources.find(
+      (source) => source.file === 'components/result/ConditionOutcomes.vue',
+    )
+    expect(outcomes?.text).toContain('grid-template-columns: subgrid')
   })
 })
