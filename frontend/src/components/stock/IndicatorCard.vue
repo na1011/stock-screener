@@ -67,8 +67,8 @@ defineProps<{
  */
 .indicator__unavailable {
   margin: 0.35rem 0 0;
-  color: var(--text-color-secondary);
-  font-size: 0.8rem;
+  color: var(--p-text-muted-color);
+  font-size: var(--app-text-xs);
   line-height: 1.5;
   font-style: italic;
 }

@@ -36,7 +36,7 @@
   --app-text-xs: 0.75rem; /* 12px — 표 본문, 칩 */
   --app-text-sm: 0.8125rem; /* 13px — 기본 본문, 폼, 버튼 */
   --app-text-md: 0.875rem; /* 14px — 강조 본문 */
-  --app-text-lg: 1rem; /* 16px — 섹션 제목 */
+  --app-text-lg: 1rem; /* 16px — 카드 하나에 하나뿐인 수치(지표 값) */
   --app-text-xl: 1.25rem; /* 20px — 화면 제목 */
   --app-text-2xl: 1.5rem; /* 24px — 종목 상세의 현재가처럼 한 화면에 하나뿐인 수치 */
   /*
