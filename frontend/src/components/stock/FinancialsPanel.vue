@@ -129,10 +129,11 @@ function label(row: FinancialPeriod): string {
 
 <style scoped>
 .financials {
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-border-radius-md);
   padding: 1.25rem;
-  background: var(--surface-card);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-edge-highlight);
 }
 
 .financials__header {
@@ -145,7 +146,7 @@ function label(row: FinancialPeriod): string {
 
 .financials__title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--app-text-md);
   font-weight: 600;
 }
 
@@ -155,32 +156,32 @@ function label(row: FinancialPeriod): string {
 }
 
 .financials__tab {
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-border-radius-sm);
   background: transparent;
-  color: var(--text-color-secondary);
+  color: var(--p-text-muted-color);
   padding: 0.25rem 0.75rem;
   font: inherit;
-  font-size: 0.85rem;
+  font-size: var(--app-text-xs);
   cursor: pointer;
 }
 
 .financials__tab--active {
-  border-color: var(--primary-color);
-  color: var(--primary-color);
+  border-color: var(--p-primary-color);
+  color: var(--p-primary-color);
 }
 
 .financials__lead,
 .financials__foot {
   margin: 0.5rem 0 0;
-  color: var(--text-color-secondary);
-  font-size: 0.85rem;
+  color: var(--p-text-muted-color);
+  font-size: var(--app-text-xs);
   line-height: 1.5;
 }
 
 .financials__empty {
   margin: 0.75rem 0 0;
-  color: var(--text-color-secondary);
+  color: var(--p-text-muted-color);
 }
 
 /* 열이 여덟이라 좁은 폭에서는 가로 스크롤이 접는 것보다 낫다 — 접으면 기간 간 비교가 끊긴다. */
@@ -192,21 +193,21 @@ function label(row: FinancialPeriod): string {
 .financials__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: var(--app-text-xs);
   white-space: nowrap;
 }
 
 .financials__table th,
 .financials__table td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--surface-border);
+  border-bottom: 1px solid var(--p-content-border-color);
   text-align: left;
 }
 
 .financials__table thead th {
-  color: var(--text-color-secondary);
+  color: var(--p-text-muted-color);
   font-weight: 500;
-  font-size: 0.8rem;
+  font-size: var(--app-text-2xs);
 }
 
 .financials__num {
@@ -220,12 +221,12 @@ function label(row: FinancialPeriod): string {
 
 .financials__badge {
   margin-left: 0.35rem;
-  font-size: 0.7rem;
+  font-size: var(--app-text-2xs);
 }
 
 .financials__yoy {
   display: block;
-  color: var(--text-color-secondary);
-  font-size: 0.75rem;
+  color: var(--p-text-subtle-color);
+  font-size: var(--app-text-2xs);
 }
 </style>
