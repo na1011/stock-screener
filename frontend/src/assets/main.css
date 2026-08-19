@@ -285,18 +285,28 @@ a:hover {
  *
  * 원칙은 컴포넌트에 `fluid` prop을 주는 것이다. 이 규칙은 fluid를 걸 수 없는 자리를 위한
  * 그물망이며, 지우면 좁은 폭에서 조용히 다시 새기 시작한다 — 넓은 화면에서는 증상이 없다.
+ *
+ * IMPORTANT — `:root` 접두어가 필요하다. `@primeuix/styles`가 `.p-datepicker`에 **같은
+ * `max-width: 100%`를 같은 특정도로** 걸고 주입 순서가 뒤라, 접두어 없이는 이 여덟 줄 중
+ * 하나가 한 번도 적용되지 않는다. 값이 같아 증상이 없었을 뿐이다.
  * ------------------------------------------------------------------------ */
-.p-inputnumber,
-.p-autocomplete,
-.p-datepicker,
-.p-iconfield,
-.p-select,
-.p-multiselect,
-.p-textarea,
-.p-inputgroup {
+:root .p-inputnumber,
+:root .p-autocomplete,
+:root .p-datepicker,
+:root .p-iconfield,
+:root .p-select,
+:root .p-multiselect,
+:root .p-textarea,
+:root .p-inputgroup {
   max-width: 100%;
 }
 
+/*
+ * MUST NOT: 여기에는 `:root`를 붙이지 않는다. PrimeVue의
+ * `.p-inputnumber-fluid .p-inputnumber-input { width: 1% }`와 특정도가 같아 **fluid가 이기는
+ * 것이 의도**인데, 접두어를 붙이면 이 규칙이 이겨 fluid 입력의 폭 계산이 뒤집힌다.
+ * 위 규칙과 갈리는 이유는 저쪽이 클래스 하나짜리라 동률에서 지고 있었기 때문이다.
+ */
 .p-inputnumber > .p-inputnumber-input,
 .p-autocomplete > .p-autocomplete-input,
 .p-datepicker > .p-datepicker-input,

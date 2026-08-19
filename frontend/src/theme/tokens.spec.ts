@@ -127,6 +127,52 @@ function scan(pick: (line: string, source: Source) => string[]): Hit[] {
 
 const format = (hits: Hit[]): string[] => hits.map((hit) => `${hit.where}  ${hit.what}`)
 
+/**
+ * **전역**으로 나가는 스타일 텍스트 — `main.css`와 `.vue`의 `scoped` 없는 `<style>`.
+ *
+ * 아래 `:root` 접두어 검사가 이것을 필요로 한다. `scoped` 블록은 컴파일러가 `[data-v-…]`를
+ * 붙여 특정도가 0,2,0이 되므로 PrimeVue의 0,1,0을 이미 이긴다 — 위험한 것은 전역뿐이다.
+ * 지금 해당하는 `.vue`는 `layouts/AppLayout.vue` 하나이고(서랍이 body로 teleport돼 scoped가
+ * 닿지 않는다), **아무 검사도 그 블록을 훑지 않았다.**
+ */
+const STYLE_BLOCK = /<style(?![^>]*\bscoped\b)[^>]*>([\s\S]*?)<\/style>/g
+
+function globalStyles(): Source[] {
+  return sources.flatMap((source) => {
+    if (source.file.endsWith('.css')) {
+      return [source]
+    }
+    if (!source.file.endsWith('.vue')) {
+      return []
+    }
+    // 줄 번호를 보존한다. 블록 밖을 공백으로 지워야 실패 메시지의 `파일:줄`이 소스와 맞는다.
+    const blanked = source.text.replace(/[^\n]/g, ' ')
+    let text = blanked
+    for (const match of source.text.matchAll(STYLE_BLOCK)) {
+      const body = match[1]
+      if (body === undefined || match.index === undefined) continue
+      const start = match.index + match[0].length - body.length - '</style>'.length
+      text = text.slice(0, start) + body + text.slice(start + body.length)
+    }
+    return text.trim() === '' ? [] : [{ file: source.file, text }]
+  })
+}
+
+/**
+ * 규칙 하나의 선택자 텍스트. `}`로 자른 조각에서 **가장 안쪽** 선택자만 꺼낸다.
+ *
+ * `@media (…) { :root { … }`처럼 조각 안에 `{`가 둘일 수 있다. 앞의 `{`까지 포함하면
+ * `@media` 문자열이 선택자로 섞여, `:root`로 시작하는지를 묻는 검사가 헛돈다.
+ */
+function selectorOf(chunk: string): string | null {
+  const open = chunk.lastIndexOf('{')
+  if (open < 0) return null
+  return chunk.slice(chunk.lastIndexOf('{', open - 1) + 1, open)
+}
+
+/** 선택자의 클래스 성분. 특정도를 재는 것이 아니라 **몇 개인지만** 센다. */
+const CLASS_COMPONENT = /\.(-?[_a-zA-Z][\w-]*)/g
+
 describe('디자인 토큰 (ADR-0021)', () => {
   it('스캐너가 실제로 파일을 읽는다', () => {
     // 경로가 어긋나 0건을 훑으면 아래 검사가 전부 통과해 버린다 — 통과가 곧 "검사하지 않음"이
@@ -165,6 +211,54 @@ describe('디자인 토큰 (ADR-0021)', () => {
         ? [line.trim()]
         : [],
     )
+
+    expect(format(strays)).toEqual([])
+  })
+
+  /**
+   * ADR-0021 §규칙: PrimeVue 주입 CSS를 이기는 `:root` 접두어.
+   *
+   * PrimeVue는 자기 CSS를 런타임에 `<head>`로 넣으므로 `main.css`보다 **항상 뒤**에 온다.
+   * 같은 특정도면 뒤가 이긴다. 접두어 없이 적혀 있던 `font-size: 0.875rem` 규칙은 **한 번도
+   * 적용된 적이 없었고** 그 사실이 화면 어디에도 드러나지 않았다.
+   *
+   * 클래스 성분이 **하나뿐인** `.p-` 규칙만 요구한다. 그것이 PrimeVue의 컴포넌트 규칙과
+   * 동률이 되는 형태이기 때문이다. 둘 이상이면 대개 이기지만 **항상은 아니다** —
+   * `main.css`의 `.p-inputnumber > .p-inputnumber-input`은 PrimeVue의
+   * `.p-inputnumber-fluid .p-inputnumber-input`과 동률이고 **지는 것이 의도**라, 이 검사가
+   * 요구하지 않는 자리에 그 판단이 주석으로 남아 있다. 특정도를 완전히 모형화하지 않는
+   * 대신 그 경계를 여기 적어 둔다.
+   */
+  it('전역 스타일의 `.p-` 규칙이 PrimeVue를 이기는 접두어를 갖는다', () => {
+    const strays = globalStyles().flatMap((source) => {
+      let offset = 0
+      return source.text.split('}').flatMap((chunk) => {
+        const start = source.text.slice(0, offset).split('\n').length
+        offset += chunk.length + 1
+        const selector = selectorOf(chunk)
+        if (selector === null) return []
+        // 선택자가 열리는 줄. 조각의 끝(`}`)을 가리키면 여러 줄짜리 선택자 목록에서
+        // 지목이 위반 지점에서 멀어진다.
+        const line = start + chunk.slice(0, chunk.lastIndexOf('{')).split('\n').length - 1
+        return selector
+          .split(',')
+          .map((one) => one.trim())
+          .filter((one) => {
+            const classes = [...one.matchAll(CLASS_COMPONENT)].flatMap((m) =>
+              m[1] === undefined ? [] : [m[1]],
+            )
+            return (
+              classes.length === 1 &&
+              classes[0]?.startsWith('p-') === true &&
+              !one.startsWith(':root')
+            )
+          })
+          .map((one) => ({
+            where: `${source.file}:${line}`,
+            what: `${one} — PrimeVue 주입 CSS와 동률이라 적용되지 않는다. \`:root\`를 앞에 붙여라`,
+          }))
+      })
+    })
 
     expect(format(strays)).toEqual([])
   })
