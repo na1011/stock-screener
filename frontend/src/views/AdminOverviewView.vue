@@ -564,7 +564,7 @@ function formatTime(value: string | null): string {
 
 /* 조치가 필요할 때만 강조한다. 늘 켜져 있으면 그 자리는 곧 배경이 된다. */
 .stat--alert {
-  border-color: var(--app-tonal-danger);
+  border-color: var(--p-red-400);
 }
 
 .stat--job {

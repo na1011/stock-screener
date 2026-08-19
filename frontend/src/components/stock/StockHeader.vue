@@ -466,8 +466,13 @@ const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
 }
 
 /*
- * 주의 문구. `--p-orange-*` 계열을 직접 쓰지 않고 경고 토큰을 쓴다 — 판정 3상태의 `warn`과
- * 같은 뜻("값이 없다")이라 색이 갈리면 두 자리가 다른 사실을 말하는 것처럼 읽힌다.
+ * 주의 문구. `--p-orange-*` 계열을 직접 쓰지 않고 `Tag`의 `warn` 글자색과 같은 amber를 쓴다 —
+ * 판정 3상태의 `warn`과 같은 뜻("값이 없다")이라 색이 갈리면 두 자리가 다른 사실을 말하는
+ * 것처럼 읽힌다. 정본은 `preset.ts`의 `tag.warn.color`(`{amber.300}`)다.
+ *
+ * **semantic에 `warn`은 없다.** Aura는 그것을 컴포넌트 스코프에만 두므로 `--p-warn-color`는
+ * 어디에서도 선언되지 않는다. 폴백을 달아 두면 무효가 아니라 **본문색으로 조용히 떨어져**
+ * 이 주석이 지키려는 것이 죽는다.
  */
 .stock-header__unadjusted {
   margin: 0;
@@ -475,7 +480,7 @@ const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
   border-top: 1px solid var(--p-content-border-color);
   font-size: var(--app-text-sm);
   line-height: 1.5;
-  color: var(--p-warn-color, var(--p-text-color));
+  color: var(--p-amber-300);
 }
 
 .stock-header__unadjusted-dates {
