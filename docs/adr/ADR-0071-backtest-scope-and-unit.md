@@ -4,6 +4,7 @@ status: 채택됨
 date: 2026-08-18
 applies_to:
   - "src/main/java/com/stockscreener/indicator/IndicatorDataReader.java"
+  - "src/main/java/com/stockscreener/pipeline/collector/FinancialWriter.java"
   - "src/test/java/com/stockscreener/probe/**"
   - "docs/phase-criteria.md"
 ---
@@ -104,14 +105,16 @@ applies_to:
 - **MUST NOT: `@Tag("live")`를 재사용하지 않는다.** `liveTest`는 `.env`를 주입해
   `@ConditionalOnApiKey` 어댑터의 **등록 여부를 바꾼다.** 백테스트는 외부 호출이 0이라 키가
   필요 없고, 무엇이 호출되는지 흐려지는 것이 백테스트에서 특히 나쁘다. `@Tag("backtest")`다.
-- **MUST: 정정본이 만든 공백을 「데이터 결손」으로 라벨링하고 수익률 축에서 종목·기간을 뺀다.**
-  `full-statement-refill`이 **최신 판만 채우고 옛 판을 채우는 잡이 없어**, `KNOWN_ON`이 고르는
-  `revision 0`에는 `operating_cash_flow`·`cost_of_sales`가 없다(실측: 개정본 있는 32기 중
-  revision 0의 둘 다 **0건**, revision 1은 11·10건). 영향받는 `FCF_YIELD`·`FCF_MARGIN`·
-  `GROSS_MARGIN`·`ACCRUAL_RATIO` 넷이 **전부 배점**이라 종목이 빠지는 게 아니라 **점수만 낮아져
-  통과 집합에서 밀려나고**, 「정정을 냈다」는 `ACCRUAL_RATIO`가 재려는 회계 품질과 상관이 있어
-  **편향의 방향이 랜덤이 아니다.** 라벨은 「그 시점에 몰랐던 값」이 **아니다** — 원 판은 그때
-  공시돼 있었고 우리가 그 현금흐름표를 안 받았을 뿐이다.
+- **MUST: 옛 판의 결손을 `revision_no`가 아니라 값의 null로 판정한다.** `full-statement-refill`은
+  그 순간의 `is_latest` 판만 채우고(`FinancialWriter:312`) 공시일이 다르면 채우지 않는다(`:190`).
+  **옛 판을 겨냥해 채우는 잡이 없으므로 결손 여부를 정하는 것은 판이 아니라 선후다** — 정정이
+  refill보다 늦게 오면 옛 판에 값이 남고, 먼저 오면 그 판은 영영 빈다. 실측으로 정정에 밀려난 FY 15행
+  중 `operating_cash_flow` 결손 **11** · `cost_of_sales` 결손 **13**이고, **`revision 0`이면
+  없다고 잡으면 채워진 4행을 오탐한다.** 영향받는 `FCF_YIELD`·`FCF_MARGIN`·`GROSS_MARGIN`·
+  `ACCRUAL_RATIO` 넷이 **전부 배점**이고 「정정을 냈다」는 `ACCRUAL_RATIO`가 재려는 회계 품질과
+  상관이 있어 **편향의 방향이 랜덤이 아니다.** 표본에서 빼는 것은 **아래 판정불가 규칙 하나**가
+  하며 여기서 또 지시하지 않는다. 수익률 축 앵커 여덟에서 걸린 것은 **고려아연 세 기뿐**이다.
+  「그 시점에 몰랐던 값」이 **아니다** — 원 판은 공시돼 있었고 우리가 그 현금흐름표를 안 받았다.
 - **MUST: 수익률 축에서 판정불가를 표본에서 뺀다. 미충족으로 접지 않는다.** 접으면 데이터
   결손이 곧 미충족이 되어 부호가 정해진 편향이 들어간다. **게이트의 취급(판정불가 ≠ 통과,
   `ConditionEvaluator.satisfiesRequired`)과 일부러 규칙이 다르다** — 축이 다르기 때문이며,
@@ -179,8 +182,8 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 �
 psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — universe_membership이 비었다' WHEN min(effective_from) = DATE '2026-08-05' THEN 'OK 유니버스 이력이 여전히 2026-08-05부터다 — 그 이전 시점 유니버스는 DB에 없다(구간 ' || count(DISTINCT effective_from) || '개)' ELSE '유니버스 이력의 시작이 ' || min(effective_from) || '로 바뀌었다 — 과거 편입을 넣는 경로가 생겼다면 생존편향 판정을 다시 한다' END FROM universe_membership"
 ```
 
-```premise 정정본의 옛 판에 전체재무제표 컬럼이 여전히 없다 — 데이터 결손 라벨의 근거
-psql -d stock_screener -At -c "WITH multi AS (SELECT stock_id, fiscal_year, fiscal_period FROM financial_statement GROUP BY 1,2,3 HAVING count(*) > 1) SELECT CASE WHEN (SELECT count(*) FROM multi) = 0 THEN 'OK 개정본이 있는 기가 없다 — as-of 경로가 옛 판을 고를 일이 없다' WHEN (SELECT count(f.operating_cash_flow) + count(f.cost_of_sales) FROM financial_statement f JOIN multi m USING (stock_id, fiscal_year, fiscal_period) WHERE f.revision_no = 0) = 0 THEN 'OK 개정본 ' || (SELECT count(*) FROM multi) || '기 · revision 0의 영업활동현금흐름·매출원가가 여전히 0건 — 그 종목·기간에서 FCF·매출총이익률·발생액이 판정불가다' ELSE '옛 판에도 전체재무제표가 채워졌다(' || (SELECT count(f.operating_cash_flow) + count(f.cost_of_sales) FROM financial_statement f JOIN multi m USING (stock_id, fiscal_year, fiscal_period) WHERE f.revision_no = 0) || '건) — 옛 판을 채우는 경로가 생겼다면 수익률 축의 제외 규칙을 다시 판단한다' END"
+```premise 정정에 밀려난 옛 판이 아직 비어 있다 — 결손을 값으로 판정하는 근거
+psql -d stock_screener -At -c "WITH sup AS (SELECT f.*, lead(f.published_at) OVER (PARTITION BY f.stock_id, f.fiscal_year, f.fiscal_period ORDER BY f.revision_no) sa FROM financial_statement f WHERE f.fiscal_period = 'FY') SELECT CASE WHEN count(*) FILTER (WHERE sa IS NOT NULL) = 0 THEN 'OK 정정에 밀려난 FY 판이 없다 — as-of 경로가 옛 판을 고를 일이 없다' WHEN count(*) FILTER (WHERE sa IS NOT NULL AND (operating_cash_flow IS NULL OR cost_of_sales IS NULL)) = 0 THEN '옛 판이 전부 채워졌다 — 옛 판을 채우는 경로가 생겼다면 수익률 축의 제외 규칙을 다시 판단한다' ELSE 'OK 옛 판 FY ' || count(*) FILTER (WHERE sa IS NOT NULL) || '행 중 영업활동현금흐름 결손 ' || count(*) FILTER (WHERE sa IS NOT NULL AND operating_cash_flow IS NULL) || ' · 매출원가 결손 ' || count(*) FILTER (WHERE sa IS NOT NULL AND cost_of_sales IS NULL) || ' — 그 종목·기간에서 FCF·매출총이익률·발생액이 판정불가다' END FROM sup"
 ```
 
 ```premise 하네스가 운영 DB에 쓰지 못한다 — 설정이 아니라 서버가 거부하는가
@@ -264,7 +267,13 @@ P16·P16-B가 답한 것은 「버핏처럼 골랐는가」다. 「그렇게 고
 ## 측정 결과 (2026-08-18)
 
 **표 전체는 `./gradlew backtestProbe`가 다시 낸다.** 여기에는 다시 재기 전에 알아야 할
-결론만 둔다. 재무는 FY2015~2026을 적재한 뒤이고(350종목·정정 6), 창은 **2022-04 ~ 2026-07**이다.
+결론만 둔다. 재무는 FY2015~2026을 적재한 뒤이고(350종목), 창은 **2022-04 ~ 2026-07**이다.
+
+**정정 옛 판의 결손은 이 표를 바꾸지 않는데, 축마다 이유가 다르다.** 수익률 축(앵커 여덟,
+2022-04-01~2025-10-01)에서 걸리는 것은 **고려아연 세 기뿐**이고, 뒤늦게 채워진 4행은 공시일이
+2026-03~05라 앵커 어디에도 안 걸린다. 진단 축(격자가 2026-07까지)은 **그 4행을 실제로 보지만**
+영향받는 넷이 전부 배점이고 진단 축은 **필수 게이트만 센다.** → **「P17 결과」라고 축 없이
+쓰지 않는다. 둘은 다른 이유로 안 바뀐다.**
 
 **아웃오브샘플 6시점(2022-04~2024-10)의 조건별 6개월 수익률 차 — Holm 보정 후 살아남은 것은 둘뿐이고 둘 다 음(−)이다.**
 
@@ -282,9 +291,7 @@ P16·P16-B가 답한 것은 「버핏처럼 골랐는가」다. 「그렇게 고
   (거래마찰 48.1)과 방향이 같다.
 - **수익성 게이트 셋은 아무 신호도 안 냈다**(`ROE_MIN_3Y` −2.4 · `ROIC_PRETAX` +0.2 ·
   `PROFIT_STREAK_Y` −5.8, 전부 Holm 유의하지 않음). ADR-0061의 **수익성 재현율 5.0%**와
-  출처가 다른 관측이 같은 방향을 가리킨다 — 단 §배경이 적었듯 **두 증거가 겹치는 것이
-  아니다.** 생존 편향이 같은 방향으로 누르기 때문이며, 그 크기가 하한 0.57~2.47%p라
-  **작은 양(+)의 효과는 원리적으로 가려진다.**
+  방향이 같지만 **두 증거가 겹치는 것이 아니다** — 그 이유는 §배경이 정본이다.
 - **MUST: 편향의 부호를 조건마다 따로 본다.** 폐지 종목은 작고 덜 거래되므로
   `MARKET_CAP`·`TURNOVER_60`의 **미충족** 쪽에 몰린다 — 그 결측이 미충족 평균을 끌어올려
   위 −13.76·−5.57은 **실제보다 과하게 음수**다. 방향은 남지만 크기는 상한이다.
@@ -309,7 +316,7 @@ P16·P16-B가 답한 것은 「버핏처럼 골랐는가」다. 「그렇게 고
 
 ## 버린 대안
 
-- **저장된 `indicator_value`로 재기** — 가장 싸고 **결과도 나온다**(11·13·16·14종목). 그래서
+- **저장된 `indicator_value`로 재기** — 가장 싸고 **결과도 나오지만**(§규칙 참조) 그래서
   버린다. 보존 창이 181일자뿐인 것은 부차적이고, 진짜 이유는 **그 값들에 시간축이 없다**는
   것이다. 창을 늘려도 안 풀린다.
 - **보존 기간을 늘려 과거 지표를 쌓기** — `RETAINED_TRADING_DAYS`를 올리면 `IndicatorRunner`가
