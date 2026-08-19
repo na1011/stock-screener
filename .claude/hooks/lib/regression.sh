@@ -79,6 +79,26 @@ check() {
   fi
 }
 
+# 알려진 구멍. **기대값에는 옳은 값을 적는다** — 현행 동작을 적으면 이 표가 구멍을 인증하고,
+# 그러면 "판정 불변"을 요구하는 다음 변경이 그 구멍을 **지키는 펜스**가 된다.
+#
+# 그래서 세 번째 상태를 둔다. 어긋나면 KNOWN(실패 아님), **맞으면 FAIL**이다 —
+# 구멍이 막혔는데 표가 조용하면 그 사실을 아무도 모르고, 이 줄은 영영 KNOWN으로 남는다.
+holes=0
+check_hole() {
+  local want="$1" desc="$2" cmd="$3" hook="$4" got out
+  out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' | "$HOOKS/$hook" 2>/dev/null)
+  if [ -z "$out" ]; then got="pass"
+  else got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "pass"'); fi
+  if [ "$got" = "$want" ]; then
+    fail=$((fail+1))
+    printf '  \033[31mFAIL\033[0m %-8s %s  (구멍이 막혔다 — check 로 승격하라)\n' "$got" "$desc"
+  else
+    holes=$((holes+1))
+    printf '  \033[33mKNOWN\033[0m %-7s %s  (알려진 구멍, 기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
 hd() { printf '%s\n' "$@"; }
 
 echo "── 실제 파괴 명령은 막혀야 한다 ──"
@@ -107,10 +127,47 @@ check ask  "base64 ssh 키"                     "base64 ~/.ssh/id_rsa" guard
 check ask  "heredoc 뒤에 숨긴 cat .env"        "$(hd 'git commit -F - <<MSG' 'msg' 'MSG' 'cat .env')" guard
 check ask  "상대경로 secrets/"                 "grep KEY secrets/prod.yaml" guard
 
+# 아래 둘은 **선검사를 어디에 거는가**를 잰다. 세그먼트 분해가 전체 문자열에 없던 줄머리를
+# 만들기 때문에, `$cmd`나 `$clean`을 선검사 대상으로 고르면 여기서 ask 가 pass 로 뒤집힌다.
+# `secret_paths` 의 `(^|[[:space:]/])secrets?/` 가 `^` 앵커를 쓰는 것이 그 이유다.
+check ask  "() 안의 secrets/ (줄머리가 생긴다)" 'KEY=$(secrets/cat api.key)' guard
+check ask  "&& 뒤에 붙은 secrets/"             "make deploy&&secrets/cat prod.key" guard
+check ask  "인용된 경로"                       'cat ".env"' guard
+
 echo "── 시크릿과 무관한 명령은 조용해야 한다 ──"
 check pass "예시 파일 조회"                    "grep -n SENTRY .env.example" guard
 check pass "push | tail (+메시지에 .env 언급)" "$(hd 'git add x' 'git commit -F - <<MSG' '.env가 test에 없으므로 평가되지 않는다' 'MSG' 'git push 2>&1 | tail -3')" guard
 check pass "checkEnv | tail"                   "./gradlew checkEnv 2>&1 | tail -5" guard
+
+echo "── deny 가 ask 를 이긴다 (§1b·§2 를 한 루프로 합치면 뒤집힌다) ──"
+# 모든 deny 소스(§1b 루프 + heredoc 판정)가 어떤 ask 보다 **먼저** 평가되는 것이 현재 구조다.
+# 합치면 세그먼트를 만난 자리에서 ask 를 emit 하게 되어 첫 줄이 ask 로 뒤집힌다.
+check deny "ask 세그먼트가 앞에 있어도 deny"   "cat .env && git push --force" guard
+check deny "deny 세그먼트가 앞에 있으면 deny"  "git push --force && cat .env" guard
+
+echo "── argv0 판정의 경계 ──"
+check deny "절대경로 argv0"                    "/usr/bin/git push --force" guard
+# 의도된 결손이다(파일 머리 주석: 값을 받는 플래그를 쓰는 래퍼는 argv0 을 놓친다).
+# **pass 로 못박는 이유** — 안 적으면 다음 세션이 이것을 버그로 보고 정규식 군비경쟁을 재개한다.
+check pass "sudo -u 래퍼는 놓친다(의도된 결손)" 'sudo -u postgres psql -d x -c "drop table y"' guard
+
+echo "── 알려진 구멍 ──"
+# `'"'"'\'"'"''` 는 작은따옴표 안에 아포스트로피를 넣는 표준 POSIX 형식이다. `strip_quotes_global`
+# (lib/bash-text.sh)의 상태기계가 그 마지막 따옴표에서 sq=1 로 열린 채 **문자열 끝까지 삼켜**,
+# 뒤에 오는 실제 명령이 §1 의 파괴 판정에서 보이지 않는다.
+#
+# 고치려면 그 상태기계를 손봐야 하고 그것은 별개 변경이다. 여기서는 **옳은 기대값을 적어 둔다** —
+# 구멍이 막히는 날 이 줄이 FAIL 로 울어 승격을 요구한다.
+check_hole deny "'\''  뒤의 파괴 삭제"         "git commit -m 'don'\''t' && rm -rf build" guard-destructive.sh
+check_hole deny "'\''  뒤의 force push"        "git commit -m 'it'\''s fine' && git push --force" guard-destructive.sh
+
+echo "── 이 저장소가 처방하는 종료·복원은 막지 않는다 ──"
+# 아래 넷은 **커밋 4(pkill·dropdb·pg_restore 판정 추가)가 깨뜨리지 말아야 할 것**이다.
+# 지금도 pass 이고 그 뒤로도 pass 여야 한다 — 그것을 지키는 것이 이 네 줄의 존재 이유다.
+check pass "kill <PID> (ops/stop.sh 가 처방)"  "kill 12345" guard
+check pass "kill -9 <PID>"                     "kill -9 12345" guard
+check pass "pg_restore -l (ADR-0052 전제)"     "pg_restore -l /tmp/x.dump" guard
+check pass "pg_dump 는 읽기다"                 "pg_dump -Fc stock_screener -f /tmp/x.dump" guard
 
 echo "── 적재 인자 알림 ──"
 check 침묵 "적재 명령을 문서화한 커밋 메시지"  "$(hd 'git commit -F - <<MSG' 'docs: 절차' '' "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'" 'MSG')" bootstrap
@@ -365,7 +422,7 @@ check_deadref 침묵 "실재하는 참조는 조용하다"       '규칙은 `.cl
 check_deadref 침묵 "외부 패키지 표준 파일명은 거른다" 'PrimeVue의 `LICENSE.md`를 본다.'
 
 echo
-printf '통과 %d / 실패 %d / 건너뜀 %d\n' "$pass" "$fail" "$skipped"
+printf '통과 %d / 실패 %d / 건너뜀 %d / 알려진 구멍 %d\n' "$pass" "$fail" "$skipped" "$holes"
 # MUST: 건너뛴 수를 함께 낸다. 건너뛴 것이 통과로 읽히면 "덮여 있다"고 믿게 된다 —
 # 이 표가 잡으려는 병과 같은 병이다.
 [ "$fail" -eq 0 ] || exit 1
