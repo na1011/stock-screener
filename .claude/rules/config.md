@@ -34,6 +34,7 @@ paths:
 
 - **`pipeline.scheduler.enabled` 기본 꺼짐을 유지한다.**(`spring.batch.job.enabled`는 Spring Batch와 함께 걷혔다 — ADR-0075) 켜면 애플리케이션을 띄우는 것만으로 배치가 돌아 외부 API 쿼터를 태운다. 운영 인스턴스는 `ops/run-app.sh`가 실행 인자로 켠다 — **`application-prod.yaml`을 만들지 않는다**(`guard-secrets.sh`가 그 이름을 막고, 실은 "이 프로세스가 운영인가"는 파일이 아니라 실행 방식이 정할 일이다).
 - **`management.health.mail.enabled: false`를 지우지 않는다.** `spring-boot-mail`이 SMTP에 실제로 접속하는 인디케이터를 함께 싣는다. 알림 자격증명이 없는 동안 `/actuator/health`가 통째로 503이 되고, 그 503을 배포 스크립트와 재부팅 검증이 "앱이 안 떴다"로 읽는다(ADR-0031).
+- **IMPORTANT — `spring.lifecycle.timeout-per-shutdown-phase`(15s)와 `ops/stop.sh`의 앱 대기(45s)는 짝이다.** 한쪽만 고치면 배포가 조용히 깨진다. 앱은 도는 배치가 끝나기를 상한만큼 기다린 뒤에야 빈을 파괴하므로, 상한이 대기보다 길면 `stop.sh`가 정상 종료를 실패로 판정하고 `ops/deploy.sh`의 `set -e`가 재기동에 도달하지 못한다 — 앱은 이미 SIGTERM을 받았으니 **아무것도 안 도는 상태로 끝난다.** 기본값 30초가 옛 대기 30초와 겹쳐 실제로 그랬다(실측 30,061ms, ADR-0078). 반대 방향(`ops/*.sh`를 열 때)은 그 ADR의 `applies_to`가 알린다.
 - **MUST NOT: `server.forward-headers-strategy: framework`를 지우지 않는다.** cloudflared가 로컬에 평문 HTTP로 붙어 원래 스킴이 `X-Forwarded-Proto`에만 남는다. 지우면 `redirect_uri`가 `http://`로 나가 도메인 로그인만 깨지는데 **localhost 개발과 테스트는 멀쩡하다** — 헤더가 없어 분기 자체를 안 타기 때문이다.
 
 ## `src/test/resources/application-test.yaml`
@@ -53,4 +54,5 @@ paths:
 
 ## `.env.example`
 
+- **`DB_NAME`은 앱이 안 쓴다.** 앱은 `DB_URL`로 붙고, 이 값은 `ops/`가 `psql`로 도는 배치를 물을 때만 쓴다. 둘이 갈리면 그 경고가 **빈 결과를 내고 그것은 「도는 배치 없음」과 구분되지 않는다.** `DB_URL`의 DB 이름을 바꾸면 함께 바꾼다.
 - **MUST NOT: 실제 값을 적지 않는다.** 플레이스홀더만 둔다. `.env` 자체는 `settings.json`의 `deny`와 `guard-secrets.sh`가 막지만, `.env.example`은 **열람이 허용돼 있어** 아무것도 막지 않는다.
