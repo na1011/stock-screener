@@ -187,6 +187,10 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 
 ## 이 소스들이 무엇을 위해 필요한가
 
-스윙 프리셋 조건의 정본은 [`docs/external/screener-spec-midterm-swing.md`](../../../docs/external/screener-spec-midterm-swing.md)이고
-(ADR-0041), **원본 26개 조건 중 무엇을 옮기고 무엇을 버렸는지의 정본은 ADR-0039의 조건
-대조표**다. 새 소스를 붙일 때 그 표를 **먼저** 본다 — 무엇이 살아나는지가 거기 적혀 있다.
+[`docs/external/screener-spec-midterm-swing.md`](../../../docs/external/screener-spec-midterm-swing.md)은
+**더 이상 프리셋 조건의 정본이 아니다.** 그 지위는 후계 프리셋에 승계되지 않았고(ADR-0041의
+머리말), 지금 프리셋 조건의 출처는 문헌이다(ADR-0061). 그 파일이 지금 지배하는 것은
+「에이전트가 고치지 않는다」와 「사본을 만들지 않는다」 둘뿐이다.
+
+**원본 26개 조건 중 무엇을 옮기고 무엇을 버렸는지의 정본은 여전히 ADR-0039의 조건 대조표**다.
+새 소스를 붙일 때 그 표를 **먼저** 본다 — 무엇이 살아나는지가 거기 적혀 있다.

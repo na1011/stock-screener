@@ -108,7 +108,7 @@ Phase 6은 착수 시점에 이 기준을 **먼저** 적고 시작했다(2026-08
 
 ### Phase 7 — 중장기 스윙 프리셋
 
-**원본 명세는 [`docs/external/screener-spec-midterm-swing.md`](./external/screener-spec-midterm-swing.md)다**(프리셋 조건셋의 정본 — ADR-0041). 아래에서 "원본"은 전부 그 문서를 가리킨다.
+**원본 명세는 [`docs/external/screener-spec-midterm-swing.md`](./external/screener-spec-midterm-swing.md)다** — 아래에서 "원본"은 전부 그 문서를 가리킨다. **그것이 「프리셋 조건셋의 정본」이던 것은 이 기준을 적을 때의 이야기이고**(ADR-0041), 그 지위는 후계 프리셋에 승계되지 않았다(ADR-0061). 여기 남는 것은 **이 phase가 무엇을 재고 있었는가**뿐이다.
 
 **2026-08-14 — 이 기준이 재던 `SWING_MIDTERM_KR`은 폐기됐다**(ADR-0061, 사용자 결정).
 **지우지 않는다** — 아래 항목 대부분은 프리셋 이름과 무관하게 성립해야 하는 것이라
