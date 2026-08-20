@@ -264,6 +264,39 @@ class ScreeningRepositoryTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * 필수 게이트 지표가 기준일에 <b>한 행도 없으면</b> SCORING이 통째로 0건이 된다.
+     *
+     * <p>린치 두 프리셋이 정확히 이 형태다 — {@code EPS_CAGR_5Y}가 필수 게이트인데 그 지표는
+     * 읽기 창(1,261)과 자기 lookback(1,260)의 차이 때문에 <b>실행당 한 날짜만</b> 채워진다.
+     * 백필이 그 날짜를 안 채우고 지나가면 화면이 <b>이유 없이 0건</b>이 되고, 배치는 SUCCESS로
+     * 마감된다. 조건이 나빠서가 아니라 지표 행이 없어서 생기는 0이라 게이트 탓으로 오독하기 쉽다.
+     *
+     * <p>대조군이 함께 있어야 이 단언이 뜻을 갖는다 — 행을 넣으면 0이 아니어야 한다.
+     * 없으면 다른 이유로 난 0에도 초록이 된다.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 필수 게이트 지표가 그날 없으면 SCORING이 0건이 된다")
+    void missingRequiredGateEmptiesScoring() {
+        ConditionGroup group = ConditionGroup.and(
+                condition("SMA_200", ComparisonOperator.GT, "0").asRequired(),
+                condition("PER", ComparisonOperator.LT, "10").withWeight(new BigDecimal("3")));
+
+        // SMA_200을 가진 종목이 하나도 없다 — setUp이 PER·PBR만 넣는다.
+        List<ScreeningResult> withoutGate = repository.screen(group, EvaluationMode.SCORING, AS_OF);
+        assertThat(withoutGate)
+                .as("필수 게이트가 전 종목 판정불가면 통과가 0이다 — 판정불가는 충족이 아니다")
+                .isEmpty();
+
+        // 대조군: 같은 조건에 게이트 지표만 채우면 0이 아니어야 한다.
+        insertIndicator(cheapStock, "SMA_200", "100");
+        List<ScreeningResult> withGate = repository.screen(group, EvaluationMode.SCORING, AS_OF);
+        assertThat(withGate)
+                .as("게이트 행을 넣으면 살아난다 — 위의 0이 데이터 결손 탓임을 이것이 증명한다")
+                .extracting(ScreeningResult::stockId)
+                .containsExactly(cheapStock);
+    }
+
     private IndicatorCondition condition(String code, ComparisonOperator operator, String value) {
         return IndicatorCondition.of(code, operator, ConditionOperand.Literal.of(value));
     }
