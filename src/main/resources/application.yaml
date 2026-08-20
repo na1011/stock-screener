@@ -2,6 +2,18 @@ spring:
   application:
     name: stock-screener
 
+  lifecycle:
+    # 종료할 때 "도는 작업이 끝나기를" 기다리는 상한이다. **끝나기를 기다리는 시간이 아니라
+    # 포기하기까지의 시간이다** — 배치는 시간 단위로 도므로 이 상한은 언제나 다 쓰인다.
+    #
+    # MUST: ops/stop.sh의 앱 대기(45초)보다 확실히 짧아야 한다. Boot 기본값 30초는 그 대기가
+    # 30초이던 시절과 정확히 겹쳐, 배치가 도는 중에 끄면 stop.sh가 정상 종료를 실패로 오판했다.
+    # 그러면 ops/deploy.sh의 set -e가 거기서 멈춰 재기동에 도달하지 못하고, 앱은 이미 SIGTERM을
+    # 받았으므로 아무것도 안 도는 상태로 끝난다(실측 30,061ms — ADR-0078).
+    #
+    # 이 값과 ops/stop.sh의 45초는 **짝**이다. 한쪽만 고치면 배포가 조용히 깨진다.
+    timeout-per-shutdown-phase: 15s
+
   datasource:
     # MUST NOT: 실제 자격증명을 이 파일에 넣지 않는다. 환경변수로만 다룬다.
     url: ${DB_URL:jdbc:postgresql://localhost:5432/stock_screener}

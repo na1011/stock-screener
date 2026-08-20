@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongConsumer;
@@ -98,6 +99,28 @@ public final class BatchExecutionContext {
      * 콜백으로 두는 이유는 컨텍스트가 자기를 만든 쪽을 알지 않게 하기 위해서다.
      */
     private final LongConsumer onTerminal;
+
+    /**
+     * 이미 마감했는가.
+     *
+     * <p>DB에도 같은 가드가 있지만({@link BatchExecutionRecorder}의
+     * {@code AND status = 'RUNNING'}) 그것은 <b>쓰기만</b> 막는다. 알림은 그 결과를 보지 않고
+     * 나가므로, 종료 훅이 먼저 마감한 실행에 대해 뒤늦게 도착한 워커가 <b>가짜 "부분 실패"를
+     * 그대로 쏜다.</b> 그래서 판정이 알림보다 <b>앞</b>에 있어야 한다.
+     *
+     * <p>MUST NOT: 이것으로 DB 가드를 대신하지 않는다. 이 플래그는 한 JVM 안에서만 유효하고,
+     * 다른 프로세스가 남긴 행과의 경합({@link BatchExecutionSweeper})은 여전히 DB가 판정한다.
+     */
+    private final AtomicBoolean terminal = new AtomicBoolean();
+
+    /**
+     * 마감된 상태. 경합에서 진 경로가 돌려줄 값이다.
+     *
+     * <p>값이 미리 정해진 경로들은 {@code recorder}를 부르기 <b>전에</b> 채운다. 그래야
+     * {@link #finish(String)}이 뒤늦게 도착해 졌을 때 비어 있지 않다 — {@code finish}만
+     * {@code recorder}가 상태를 판정하므로 그쪽만 나중에 채운다.
+     */
+    private volatile BatchStatus recordedStatus;
 
     /**
      * 이 실행이 <b>시작될 때</b> 미해결이던 (단계 → 종목) 쌍.
@@ -264,7 +287,11 @@ public final class BatchExecutionContext {
      * {@link BatchExecutionRecorder#finish(long, BatchProgress, String)}에 있다.
      */
     public BatchStatus finish(String note) {
+        if (!claimTerminal("정상 마감")) {
+            return recordedStatus;
+        }
         BatchStatus status = recorder.finish(executionId, snapshot(), note);
+        recordedStatus = status;
         onTerminal.accept(executionId);
 
         if (status == BatchStatus.PARTIAL_SUCCESS) {
@@ -294,7 +321,11 @@ public final class BatchExecutionContext {
      * 성공한 실행을 ABORTED로 덮는다.</b> 실제로 그 경로에 있었다.
      */
     public BatchStatus finishQuietly() {
+        if (!claimTerminal("정상 마감(무알림)")) {
+            return recordedStatus;
+        }
         BatchStatus status = recorder.finish(executionId, snapshot());
+        recordedStatus = status;
         onTerminal.accept(executionId);
         return status;
     }
@@ -306,6 +337,10 @@ public final class BatchExecutionContext {
      * 부분 실패와 달리 다음 실행이 스스로 회복하지 못한다.
      */
     public void failFatally(DataSourceException cause) {
+        if (!claimTerminal("복구 불가능한 실패")) {
+            return;
+        }
+        recordedStatus = BatchStatus.FAILED;
         recorder.fail(executionId, snapshot(), cause.kind() + ": " + cause.getMessage());
         onTerminal.accept(executionId);
         alertPort.send(AlertEvent.toOperator(
@@ -319,6 +354,10 @@ public final class BatchExecutionContext {
 
     /** 예상하지 못한 오류로 마감한다. 우리 코드의 버그일 가능성이 높다. */
     public void failUnexpectedly(Throwable cause) {
+        if (!claimTerminal("예상하지 못한 실패")) {
+            return;
+        }
+        recordedStatus = BatchStatus.FAILED;
         recorder.fail(executionId, snapshot(),
                 cause.getClass().getSimpleName() + ": " + cause.getMessage());
         onTerminal.accept(executionId);
@@ -337,6 +376,10 @@ public final class BatchExecutionContext {
      * 처리한다는 사실을 본문에 남긴다.
      */
     public void abort(String reason) {
+        if (!claimTerminal("외부 요인으로 중단")) {
+            return;
+        }
+        recordedStatus = BatchStatus.ABORTED;
         recorder.abort(executionId, snapshot(), reason);
         onTerminal.accept(executionId);
         alertPort.send(AlertEvent.toOperator(
@@ -377,8 +420,29 @@ public final class BatchExecutionContext {
      * 통째로 잃게 만들기 때문이다. 기록은 남고 로그도 남는다.
      */
     void abortOnShutdown(String reason) {
+        if (!claimTerminal("종료로 중단")) {
+            return;
+        }
+        recordedStatus = BatchStatus.ABORTED;
         recorder.abort(executionId, snapshot(), reason);
         onTerminal.accept(executionId);
+    }
+
+    /**
+     * 마감할 권리를 한 번만 준다.
+     *
+     * <p>MUST NOT: 조용히 넘어가지 않는다. 두 번째 마감은 대개 종료 경합이지만 버그일 수도
+     * 있고, 그 구분은 로그가 남아야 가능하다. {@code error}가 아니라 {@code warn}인 이유는
+     * {@code sentry.logging.minimum-event-level}이 {@code error}라 정상 종료마다 이벤트가
+     * 하나씩 쌓이기 때문이다.
+     */
+    private boolean claimTerminal(String attempted) {
+        if (terminal.compareAndSet(false, true)) {
+            return true;
+        }
+        log.warn("이미 마감된 배치 실행을 다시 마감하려 했다. 기록도 알림도 건너뛴다. "
+                + "id={} 이미={} 시도={}", executionId, recordedStatus, attempted);
+        return false;
     }
 
     String jobName() {

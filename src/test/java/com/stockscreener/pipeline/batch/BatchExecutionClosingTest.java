@@ -65,15 +65,23 @@ class BatchExecutionClosingTest {
     }
 
     @Test
-    @DisplayName("정상 마감된 실행은 종료 훅이 다시 건드리지 않는다")
-    void doesNotTouchAlreadyFinished() {
+    @DisplayName("마감하면 열린 목록에서 빠진다 — 안 빠지면 종료 훅이 성공한 실행을 덮으려 든다")
+    void removesFinishedExecutionFromOpenList() {
         BatchExecutionContext execution = batchExecutions.start(
                 JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+
         execution.finish();
+
+        // MUST: DB 상태가 아니라 목록을 묻는다. 상태로 물으면 배선(onTerminal)이 빠져도
+        // updateTerminalState의 `AND status = 'RUNNING'`이 SUCCESS를 지켜 **초록이 나온다** —
+        // 이 펜스는 실제로 그 상태로 오래 있었다. 종단 플래그가 생긴 뒤로는 그것까지
+        // 덮어 주므로 더더욱 목록을 직접 봐야 한다.
+        assertThat(batchExecutions.isOpen(execution.executionId()))
+                .as("마감했는데 열린 목록에 남아 있다 — onTerminal 배선이 끊겼다")
+                .isFalse();
 
         batchExecutions.closeOpenExecutions();
 
-        // 마감 뒤 목록에서 빠지지 않으면 SUCCESS가 ABORTED로 덮인다.
         assertThat(statusOf(execution.executionId())).isEqualTo("SUCCESS");
     }
 
@@ -95,18 +103,42 @@ class BatchExecutionClosingTest {
     }
 
     @Test
-    @DisplayName("IMPORTANT — 마감된 실행은 두 번 마감되지 않는다. 먼저 쓴 결과가 이긴다")
-    void refusesToReopenFinishedExecution() {
+    @DisplayName("IMPORTANT — DB 가드: 다른 프로세스가 마감된 행을 다시 마감하지 못한다")
+    void databaseGuardRefusesToReopenFinishedExecution() {
         BatchExecutionContext execution = batchExecutions.start(
                 JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
         execution.finish();
 
-        // 열린 목록에서 이미 빠졌지만, 다른 경로가 같은 id로 마감을 시도할 수 있다.
-        // 막지 않으면 성공한 실행이 중단으로 덮이고, 화면에는 아무 단서도 남지 않는다.
-        execution.abort("나중에 온 마감");
+        // MUST: recorder를 직접 부른다. 컨텍스트를 거치면 인메모리 종단 플래그가 먼저 삼켜
+        // **이 단언이 DB 가드를 전혀 재지 않게 된다.** 그 가드가 지키는 것은 다른 JVM이
+        // 남긴 행이므로(BatchExecutionSweeper와의 경합) 컨텍스트 밖에서 재야 옳다.
+        batchExecutions.recorder().abort(execution.executionId(),
+                new BatchProgress(99, 0, 999L, "나중에 온 마감", java.util.List.of()),
+                "나중에 온 마감");
 
         assertThat(statusOf(execution.executionId())).isEqualTo("SUCCESS");
         assertThat(noteOf(execution.executionId())).isNull();
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 종단 플래그: 뒤늦은 마감은 DB도 알림도 건드리지 않는다")
+    void terminalFlagSwallowsLateClosingWithinTheSameContext() {
+        BatchExecutionContext execution = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+
+        // 종료 훅이 이긴 상황이다. 그 뒤 워커가 자기 루프를 마치고 마감하러 온다.
+        batchExecutions.closeOpenExecutions();
+        BatchStatus late = execution.finish();
+
+        assertThat(statusOf(execution.executionId()))
+                .as("뒤늦은 마감이 종료 사유를 덮었다")
+                .isEqualTo("ABORTED");
+        assertThat(noteOf(execution.executionId()))
+                .as("종료 사유가 지워졌다 — 알림을 안 보내므로 이 문장이 유일한 설명이다")
+                .contains("프로세스가 종료돼 중단됐다");
+        assertThat(late)
+                .as("진 쪽이 먼저 기록된 상태를 돌려주지 않으면 호출부가 성공으로 읽는다")
+                .isEqualTo(BatchStatus.ABORTED);
     }
 
     @Test

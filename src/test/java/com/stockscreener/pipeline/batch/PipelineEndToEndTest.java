@@ -555,6 +555,15 @@ class PipelineEndToEndTest {
 
         // 유니버스 리밸런싱은 process()를 쓰지 않아 오랫동안 마감 신호를 보내지 않았고,
         // 그래서 열린 실행 목록에 남아 종료 훅이 성공한 행을 ABORTED로 덮을 수 있었다.
+        //
+        // MUST: 목록을 직접 묻는다. 마감 뒤 DB 상태로만 물으면 배선(finishQuietly의
+        // onTerminal)이 빠져도 updateTerminalState의 가드가 SUCCESS를 지켜 **초록이 나오고**,
+        // 종단 플래그가 생긴 뒤로는 그것까지 덮어 준다. 그러면 이 펜스는 떨어질 수 없다.
+        long executionId = ((Number) latestExecution(UniverseRebalanceJob.JOB_NAME).get("id")).longValue();
+        assertThat(batchExecutions.isOpen(executionId))
+                .as("마감했는데 열린 목록에 남아 있다 — finishQuietly의 onTerminal이 끊겼다")
+                .isFalse();
+
         batchExecutions.closeOpenExecutions();
 
         assertThat(latestExecution(UniverseRebalanceJob.JOB_NAME).get("status"))

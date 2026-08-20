@@ -21,11 +21,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 컨텍스트가 <b>실제로 닫힐 때</b> 열려 있던 실행이 마감되는지 본다.
  *
  * <p>이 테스트가 따로 있는 이유 — {@link BatchExecutionClosingTest}는
- * {@code closeOpenExecutions()}를 직접 부르므로 <b>{@code @PreDestroy} 배선과 파괴 순서를
- * 전혀 검증하지 않는다.</b> 애너테이션을 지워도 그쪽은 전부 초록이다. 여기서 검증하는 것은
- * {@code BatchExecutions}가 {@code Recorder}→{@code JdbcTemplate}→{@code DataSource}보다
- * 먼저 파괴되어 <b>그 시점에 아직 DB에 쓸 수 있다</b>는 전제다. 그 전제가 깨지면 종료 훅이
- * 조용히 로그만 남기고 행은 RUNNING으로 남는다.
+ * {@code closeOpenExecutions()}를 직접 부르므로 <b>이벤트 배선을 전혀 검증하지 않는다.</b>
+ * 애너테이션을 지워도 그쪽은 전부 초록이다. 여기서 검증하는 것은 {@code BatchExecutions}가
+ * {@code ContextClosedEvent}를 실제로 받아 <b>그 시점에 아직 DB에 쓸 수 있다</b>는 것이다.
+ * 배선이 끊기면 종료 훅은 아무 말 없이 안 돌고 행은 RUNNING으로 남는다.
+ *
+ * <p>워커가 <b>도는 중에</b> 닫히는 경합은 여기서 보지 않는다 —
+ * {@link BatchExecutionShutdownRaceTest}가 답한다.
  *
  * <p>공유 {@code @SpringBootTest} 컨텍스트를 쓸 수 없다. 닫는 것이 검증 대상이라 컨텍스트를
  * 따로 띄우고, 닫은 뒤에는 주입받은 {@code JdbcTemplate}이 죽으므로 <b>독립 커넥션</b>으로
@@ -70,7 +72,7 @@ class BatchExecutionShutdownHookTest {
 
         try (Connection connection = DriverManager.getConnection(url, user, password)) {
             assertThat(statusOf(connection, executionId))
-                    .as("컨텍스트 종료 시 @PreDestroy가 돌지 않았거나 그 시점에 DB를 못 썼다")
+                    .as("컨텍스트 종료 시 ContextClosedEvent 리스너가 돌지 않았거나 그 시점에 DB를 못 썼다")
                     .isEqualTo("ABORTED");
             delete(connection, executionId);
         }
