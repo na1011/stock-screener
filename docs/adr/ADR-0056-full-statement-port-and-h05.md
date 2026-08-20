@@ -92,7 +92,7 @@ SELECT CASE
 psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) = 0 THEN '잴 것이 없었다 — 편입 활성 종목이 없다'
   WHEN count(*) FILTER (WHERE miss > 0) = 0 THEN 'OK 결손 0종목'
-  ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '이다(2026-08-13에 0으로 만들었다) — 새 정정공시가 쌓였을 수 있다. batch-load skill의 36콜 스윕으로 어느 종목인지 먼저 묻는다'
+  ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '이다(2026-08-13에 0으로 만들었다) — 새 정정공시가 쌓였을 수 있다. batch-load skill의 128콜 스윕으로 어느 종목인지 먼저 묻는다'
   END FROM (SELECT s.id, count(*) FILTER (WHERE f.operating_cash_flow IS NULL) miss
     FROM stock s JOIN universe_membership m ON m.stock_id=s.id AND m.effective_to IS NULL
     JOIN financial_statement f ON f.stock_id=s.id AND f.is_latest AND f.fiscal_period='FY'
@@ -184,8 +184,11 @@ JIT 미가열)이고, `SCREENING_RUN` 107건의 중앙값은 49 ms다. 25조건�
   스케줄러·화면 어디에도 없다. 위 정정이 걸린 것은 **P10 적재를 돌렸기 때문**이지 탐지가
   작동해서가 아니다. 그 사이 고려아연의 지표는 틀린 채로 있었다.
   - **찾는 값은 싸다.** 다중회사 주요계정(`fnlttMultiAcnt`)이 회사별 `rcept_no`를 주므로
-    100종목 묶음 × 9기간(지표가 읽는 범위) = **36콜**이면 350종목을 훑는다. 2026-08-13 실측으로
-    2종목 9건이었다. 레시피는 `batch-load` skill에 있다. **잡으로 만들지는 않았다** — 다른
+    100종목 묶음으로 훑을 수 있다. **처음에 「9기간 × 4묶음 = 36콜」로 적었으나 그 범위는 정정을
+    놓친다** — `fiscal_period='Q1'`·`fiscal_year=2019`인데 `published_at`이 2021-08-31인 행이
+    실재한다. 구현(`DartRestatementProbeLiveTest`)은 **연도 8개 × 보고서 4종 × 4묶음 = 128콜**이고
+    그 클래스가 36콜 레시피를 명시적으로 금지한다. 2026-08-13 실측으로 2종목 9건이었다.
+    레시피는 `batch-load` skill에 있다. **잡으로 만들지는 않았다** — 다른
     엔드포인트라 어댑터·테스트가 붙고 그것은 phase 크기의 결정이다.
 - **이 무효화는 §P10의 "정정공시 분기로 떨어져 `indicator_value`가 지워지는 일이 없다"를
   되돌리지 않는다.** 그 기준은 **P10이 새로 만든 쓰기 경로**에 걸린 것이고, 그래서 그 경로는

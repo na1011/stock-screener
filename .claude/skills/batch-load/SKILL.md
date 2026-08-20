@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|adjustment-rebuild|market-index|backfill 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 정정공시가 지표를 지우는 자리와 그것을 36콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|adjustment-rebuild|market-index|backfill 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -80,7 +80,7 @@ DART 실패 하나가 지수 갱신 전체를 되돌린다. 인자 없이 돌리
 `full-statement-refill`을 **뒤이어** 돌린다. 순서를 뒤집으면 저장 공시일이 아직 옛것이라 또
 `정정보류`로 남는다.
 
-### 정정공시가 어디에 있는지 먼저 묻는다 — 36콜
+### 정정공시가 어디에 있는지 먼저 묻는다 — 128콜
 
 정기적으로 정정을 발견하는 경로는 **없다**(재무를 받는 잡 셋이 전부 수동 CLI다). 전 종목을
 `financial-refill`로 훑으면 8,400콜인데, **다중회사 주요계정이 회사별 `rcept_no`를 주므로**
@@ -90,9 +90,15 @@ DART 실패 하나가 지수 갱신 전체를 되돌린다. 인자 없이 돌리
 GET /api/fnlttMultiAcnt.json?corp_code=<쉼표로 100개>&bsns_year=<연도>&reprt_code=<코드>
 ```
 
-응답의 `rcept_no` 앞 8자리가 저장된 `published_at`보다 크면 정정 후보다. **지표가 실제로 읽는
-범위**(FY 5개 + 최근 3분기 + 당해 1분기 = 9기간) × 4묶음 = **36콜**이면 350종목이 끝난다.
-2026-08-13 실측으로 2종목 9건이었다. **후보로 나온 종목만 `financial-refill`에 넘긴다.**
+응답의 `rcept_no` 앞 8자리가 저장된 `published_at`보다 크면 정정 후보다.
+**구현은 `DartRestatementProbeLiveTest`이고 `./gradlew liveTest --tests "*DartRestatementProbeLiveTest*"`로
+돈다 — `--tests` 없이 `liveTest`를 치면 `@Tag("live")` 전부가 함께 돈다.**
+**연도 8개(2019~2026) × 보고서 4종 × 4묶음 = 128콜**이다. **후보로 나온 종목만 `financial-refill`에 넘긴다.**
+
+**MUST NOT: 「9기간 × 4묶음 = 36콜」로 좁히지 않는다.** 한때 그렇게 적혀 있었고 그 범위는
+**정정을 놓친다** — 저장된 행에 `fiscal_period='Q1'`·`fiscal_year=2019`인데 `published_at`이
+2021-08-31인 것이 실재한다. 좁히면 **다른 것을 재면서 잰 것처럼 보인다.** 그 금지는 위 테스트
+클래스의 javadoc이 정본이다.
 
 **IMPORTANT — 정정이 하나도 없어도 적재 뒤에는 백필이 필요하다.** 무효화는 **정정일 때만**
 걸린다. `FILL_MISSING`이 결손 컬럼을 채우거나 새 기(期)를 넣는 것은 정정이 아니라서

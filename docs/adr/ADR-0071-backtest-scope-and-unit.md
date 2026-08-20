@@ -85,7 +85,7 @@ applies_to:
   4종 ≈ **17,100콜**, 보수 예산 10,000/일의 171%). 그 재수집에서 **더 늦은 공시일이 오면
   정정으로 판정되고 `FinancialWriter:215`가 `invalidate`를 불러 그 종목 지표를 보존 창
   전체에서 지운다.** 복구는 백필이고 350종목이면 1시간 51분이다.
-  순서: **36콜 정정 탐침**(다중회사 주요계정의 `rcept_no` 앞 8자리를 저장된 `published_at`과
+  순서: **128콜 정정 탐침**(다중회사 주요계정의 `rcept_no` 앞 8자리를 저장된 `published_at`과
   대조 — `batch-load` skill) → **32콜 옛 연도 계정 탐침**(FY2015~2018의 IFRS 태그가 다를 수
   있고 재본 적이 없다) → `ops/dump-db.sh` → `financial-refill` → `full-statement-refill` →
   **무효화된 종목만** `backfill`.
