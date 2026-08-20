@@ -15,9 +15,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 축척 변환의 방향을 못박는다.
  *
- * <p>이 파일이 {@link PriceScaling#adjustedVolume}의 <b>유일한 호출자</b>다 — 거래량을 쓰는
- * 계산기가 아직 없고 첫 소비자는 P12의 주봉 OBV다(ADR-0046). 소비자가 오기 전에 부호를
- * 고정해 두는 것이 이 테스트의 목적이며, <b>뒤집혀도 값은 그럴듯하다</b>는 것이 그 이유다.
+ * <p>{@link PriceScaling#adjustedVolume}의 부호를 <b>소비자가 오기 전에</b> 고정해 둔 것이
+ * 이 테스트의 출발점이다(ADR-0051). 지금은 소비자가 다섯이다 — {@code OBV_T_13}·{@code MFI_14}·
+ * {@code VOLUME_RATIO_20}·{@code CMF_21}·주봉 OBV. <b>뒤집혀도 값은 그럴듯하다</b>는 것이
+ * 여기서 계속 재는 이유이며, 누적 지표에서는 그 오차가 영구히 남는다.
  *
  * <p>MUST: 가격과 거래량을 <b>같은 봉으로</b> 함께 잰다. 따로 재면 둘이 같은 방향인지
  * 반대 방향인지를 어느 단언도 묻지 않게 된다.
