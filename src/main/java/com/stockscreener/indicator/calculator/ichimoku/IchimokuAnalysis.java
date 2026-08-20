@@ -7,7 +7,7 @@ package com.stockscreener.indicator.calculator.ichimoku;
  * 백필이 실용 시간 안에 끝나지 않는다({@code phase-criteria.md} §P12).
  *
  * <p>여기 있는 값은 전부 <b>관측</b>이다 — 구름의 색, 선의 기울기, 가격의 위치. 이것들을
- * 점수로 합산해 등급을 내던 층은 걷어냈다(ADR-0046 개정). 그 층은 {@code screen_condition}이
+ * 점수로 합산해 등급을 내던 층은 걷어냈다(ADR-0077). 그 층은 {@code screen_condition}이
  * 표현할 수 없어 지표 안에 숨었고, 그래서 사용자가 왜 걸렸는지 볼 수 없었다. 지금은 조합이
  * 프리셋의 조건 목록으로 화면에 드러난다.
  *

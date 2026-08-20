@@ -13,8 +13,8 @@ import java.math.BigDecimal;
  *
  * <p><b>일봉판({@code OBV_T_13})과 같은 값이고 같은 공식이다</b>({@code SeriesMath.tStatistic}).
  * 그래서 표시도 같아야 한다 — 이름·구간이 갈려 있으면 한쪽만 초보가 읽을 수 있고, 실제로
- * 그랬다. 이 지표는 일목 점수화의 잔재가 <b>아니다</b>: ADR-0046 §2026-08-14가 삭제한 13개
- * 목록에 없고, {@code ICHI_DIVERGENCE}의 입력이다. 이 값을 조건으로 쓰던 프리셋은
+ * 그랬다. 이 지표는 일목 점수화의 잔재가 <b>아니다</b>: {@code V25__drop_ichimoku_scoring_values.sql}
+ * 이 지운 13코드 목록에 없고, {@code ICHI_DIVERGENCE}의 입력이다. 이 값을 조건으로 쓰던 프리셋은
  * 폐기됐지만(ADR-0061) 지표는 남는다 — 조건 빌더에서 고를 수 있다.
  *
  * <p>MUST: 구간을 일봉판과 <b>같은 임계(±1.96)</b>로 유지한다. 같은 통계량인데 임계가 갈리면

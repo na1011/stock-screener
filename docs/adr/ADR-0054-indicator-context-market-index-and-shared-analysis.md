@@ -113,5 +113,5 @@ psql -d stock_screener -At -c "SELECT CASE
     `withMarketIndex`가 사본을 만드는 이유가 그것이다.
 - **되돌리려면**: `IndicatorContext.marketIndex()`, `IndicatorRunner`의 4번째 인자와
   `marketIndexesFor`, 두 잡의 호출부, 그리고 `IchimokuAnalyses`. 되돌리면 `EXCESS_RETURN_26W`가
-  값을 못 내므로 **무증상은 아니다.** (`ICHI_*` 18개는 2026-08-14부터 지수를 쓰지 않는다 —
-  ADR-0046 §2026-08-14 개정.)
+  값을 못 내므로 **무증상은 아니다.** (`ICHI_*` 18개는 지수를 쓰지 않는다 —
+  ADR-0046 §승인된 이탈 2가 그 게이트의 철회를 든다.)

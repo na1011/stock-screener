@@ -22,7 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>이 계약을 여기서 재는 이유가 있다. 예전에는 {@code IchimokuAnalyzer}가 지수 결손일을
  * 통째로 건너뛰었고 그 게이트의 테스트가 이 계약을 <b>간접적으로</b> 지키고 있었다. 게이트를
- * 걷으면서(ADR-0046 개정) 지수에 기대는 지표가 이것 하나만 남았으므로, 그 하나를 직접 잰다.
+ * 걷으면서(ADR-0046 §승인된 이탈 2) 지수에 기대는 지표가 이것 하나만 남았으므로, 그 하나를
+ * 직접 잰다.
  *
  * <p>0으로 메우면 초과 수익률이 <b>절대 수익률로 뜻이 바뀌는데</b> 값의 범위가 같아 화면에서
  * 구별되지 않는다. 그리고 운영 알림 둘({@code DailyUpdateJob}·{@code MarketIndexJob})이

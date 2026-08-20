@@ -60,10 +60,9 @@ class IchimokuAnalyzerTest {
     void doesNotDependOnTheMarketIndex() {
         List<PriceBar> bars = dailyBars(212 * 5);
 
-        // 예전에는 지수가 없는 일자를 통째로 건너뛰었다(ADR-0046 §승인된 이탈 2). 그 게이트의
-        // 근거는 D5 점수가 절대 수익률로 뜻이 바뀌면 conclusion·confidence까지 번진다는
-        // 것이었는데, 그 사슬이 전부 사라졌다. 지수에 기대는 EXCESS_RETURN_26W는 별도
-        // 계산기이고 스스로 결손일을 건너뛴다 — 그 계약은 ExcessReturn26wCalculatorTest가 잰다.
+        // 지수 결손 시 전면 억제하던 게이트는 철회됐다(ADR-0046 §승인된 이탈 2). 지수에 기대는
+        // EXCESS_RETURN_26W는 별도 계산기이고 스스로 결손일을 건너뛴다 — 그 계약은
+        // ExcessReturn26wCalculatorTest가 잰다.
         assertThat(IchimokuAnalyzer.analyze(bars))
                 .as("지수를 아예 받지 않는다")
                 .isNotEmpty();

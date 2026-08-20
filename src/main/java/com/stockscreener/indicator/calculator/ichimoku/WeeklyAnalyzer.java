@@ -3,14 +3,19 @@ package com.stockscreener.indicator.calculator.ichimoku;
 import com.stockscreener.indicator.calculator.SeriesMath;
 
 /**
- * 원본 {@code weekly_analysis()}의 이식. 주봉 창 하나를 받아 13 수식자와 위치 판정을 낸다.
+ * 원본 {@code weekly_analysis()}의 이식. 주봉 창 하나를 받아 수식자와 위치 판정을 낸다.
  *
- * <p>점수화·단계 라벨·값폭관측론 leaf는 걷어냈다(ADR-0046 개정). 남은 것은 전부 <b>관측</b>이며
+ * <p>IMPORTANT — <b>원본은 이것을 "13 수식자"라 부르지만 실제는 12개다.</b> {@code mod_i}를
+ * 건너뛰고 {@code mod_a}~{@code mod_m}까지 간다. 원본 파일은 저장소에 없으므로(ADR-0077)
+ * 이 사실을 여기 남긴다 — 13을 찾다가 하나가 빈다고 판단하면 없는 것을 만들게 된다.
+ *
+ * <p>점수화·단계 라벨·값폭관측론 leaf는 걷어냈다(ADR-0077). 남은 것은 전부 <b>관측</b>이며
  * 그것을 어떻게 조합할지는 프리셋의 조건 목록이 정한다.
  *
  * <p>MUST: 부등호와 경계를 원본 그대로 옮긴다. 여기 나오는 값은 전부 <b>정수</b>라 하나가
  * 뒤집혀도 결과가 여전히 그럴듯하고 어떤 테스트도 깨지지 않는다({@code phase-criteria.md} §P12).
- * 원본의 줄 번호를 주석에 남기는 이유가 그것이다 — 대조가 유일한 검증 수단이다.
+ * 아래 {@code DRV-nn} 주석이 원본의 파생값 번호이며, 부등호를 고칠 때 짚을 수 있는 유일한
+ * 좌표다(ADR-0046 §승인된 예외 — 원본 대조를 한 적이 없다).
  *
  * <p>MUST NOT: 죽은 코드를 옮기지 않는다(ADR-0046). 옮기면 검증 대상만 늘고 출력은 안 바뀐다.
  * 여기서 빠진 것: {@code vol_sma_w} · {@code drv_04} · {@code drv_49} ·
@@ -24,7 +29,7 @@ final class WeeklyAnalyzer {
     /**
      * 시간론 anchor. <b>실효는 9개다</b> — {@code drv_51 ∈ [0,128]}이라 172·200·257은 도달
      * 불가이지만 <b>129는 {@code drv_51 = 128}에서 ±1로 걸린다.</b> 그때 stage 4이고
-     * {@code score_e}가 ±3이라 <b>빠뜨리면 6점이 뒤집힌다</b>(ADR-0046).
+     * <b>빠뜨리면 그 자리에서 {@code ICHI_MOD_E}(시간론 변화일)가 뒤집힌다</b>(ADR-0046).
      */
     private static final int[] HOSODA_ANCHORS = {9, 17, 26, 33, 42, 52, 65, 76, 129, 172, 200, 257};
 
