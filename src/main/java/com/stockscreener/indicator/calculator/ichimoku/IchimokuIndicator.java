@@ -22,11 +22,16 @@ import java.util.NavigableMap;
  * {@code IndicatorCatalogSynchronizer}가 {@code calculator.getClass()}에서 찾으므로
  * <b>여기에 붙이면 29개가 같은 이름으로 투영된다.</b>
  *
- * <p>IMPORTANT — {@code priceBarsNeeded}가 <b>러너의 읽기 창을 1,100봉으로 끌어올린다.</b>
- * 그전 전역 최대는 {@code SharesGrowth3yCalculator}의 751이었다. 창은 종목당 한 번 읽히므로
- * 모든 지표가 그것을 함께 쓰고, 재귀 지표({@code ATR_14}·{@code RSI_14}·{@code MACD}·
- * {@code MACD_V})의 시드가 349봉 앞으로 가 <b>저장값이 미세하게 바뀐다.</b> 그 회귀는
- * 테스트가 원리적으로 못 잡는다 — 픽스처가 창보다 짧아 값이 그대로다.
+ * <p>IMPORTANT — 러너의 읽기 창은 {@link com.stockscreener.indicator.IndicatorRegistry}의
+ * {@code maxEffectiveLookback()}이 <b>매번 전 지표의 최댓값으로</b> 정한다. 여기의
+ * {@code priceBarsNeeded}가 한동안 그 최댓값이었지만(751 → 1,100, P12), 지금 1,261을 내는 것은
+ * {@code EPS_CAGR_5Y}·{@code PER_MEDIAN_5Y}·{@code RETAINED_TO_MARKET_4Y}다(ADR-0066).
+ * <b>그래서 이 클래스를 지워도 창은 내려가지 않는다.</b>
+ *
+ * <p>창은 종목당 한 번 읽히므로 모든 지표가 그것을 함께 쓰고, <b>창이 움직이면</b> 재귀
+ * 지표({@code ATR_14}·{@code RSI_14}·{@code MACD}·{@code MACD_V})의 시드가 그만큼 앞으로 가
+ * <b>저장값이 미세하게 바뀐다.</b> 그 회귀는 테스트가 원리적으로 못 잡는다 — 픽스처가 창보다
+ * 짧아 값이 그대로다.
  */
 abstract class IchimokuIndicator implements IndicatorCalculator {
 
