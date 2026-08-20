@@ -17,8 +17,8 @@ OAuth 클라이언트 재발급, 맥북 교체. 그때 처음부터 다시 헤�
 
 - [x] **1-1. 계정 생성** — [dash.cloudflare.com](https://dash.cloudflare.com/) 회원가입. 이메일 인증까지 마친다.
 - [x] **1-2. `na1011.net` 구매** — [domains.cloudflare.com](https://domains.cloudflare.com/) 또는 대시보드 좌측 `Domain Registration` → `Register Domains`. 2026-08-08 기준 연 $11.86.
-> **1-3 ICANN 이메일 인증과 1-4 자동 갱신은 아직 안 끝났다 — [`TODO.md`](../TODO.md)에 있다.**
->   기한이 걸린 항목이라 완료 기록 사이에 묻어 두지 않는다.
+- [x] **1-3. ICANN 이메일 인증** — 2026-08-20 완료. **등록일로부터 15일이 기한이고, 놓치면 도메인이 정지되어 `screener.na1011.net`과 OAuth 리디렉션이 함께 죽는다.** 메일이 스팸함으로 가기도 한다. **MUST NOT: 터미널로 판정하지 않는다** — 인증 전에도 `dig`는 정상으로 보이고 정지는 조용히 온다. **새 도메인을 등록하면 다시 온다.**
+> **1-4 자동 갱신 확인만 남았다 — [`TODO.md`](../TODO.md)에 있다.**
 
 - [x] **1-5. 네임서버 확인** — 2026-08-07 확인됨(`khalid`·`jillian.ns.cloudflare.com`). 재확인은:
   ```bash
