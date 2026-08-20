@@ -62,6 +62,9 @@ class InitialLoadResumeTest {
     private FakePriceDataSource fakePriceSource;
 
     @Autowired
+    private FakeFinancialDataSource fakeFinancialSource;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     /** 1차에서 성공하는 종목. 2차가 이것을 건드리면 안 된다. */
@@ -79,6 +82,7 @@ class InitialLoadResumeTest {
         joinUniverse(pendingId);
 
         fakePriceSource.reset();
+        fakeFinancialSource.reset();
         fakePriceSource.withBars(doneId, bars())
                 .withBars(pendingId, bars())
                 // 1차에서 쿼터가 바닥난 상황. 종목 단위로 격리되어 나머지는 저장된다(ADR-0007).
@@ -153,6 +157,98 @@ class InitialLoadResumeTest {
                     .as("실행 %d의 단계 기록", executionId)
                     .isPositive();
         }
+    }
+
+    /**
+     * <b>시세는 들어왔고 재무만 실패한 종목</b>이 2차에서 다시 잡히는가.
+     *
+     * <p>대상 선정이 {@code price_daily}만 보던 동안 이 종목은 봉이 있다는 이유로 걸러졌고,
+     * 재무는 영영 안 채워졌다. 실패가 원장에 남아 있어도 아무도 그것을 읽지 않았다 —
+     * ADR-0075가 「재개 정밀도가 잡마다 다르고 여기가 그중 가장 나쁜 자리」로 지목한 곳이다.
+     *
+     * <p>발현 이력은 0건이다(FINANCIAL 실패가 역대 없다). 이 테스트가 유일한 검증이며,
+     * 실 DB에서 이 경로가 돈 적은 없다.
+     */
+    @Test
+    @DisplayName("시세는 됐고 재무만 실패한 종목을 2차가 다시 잡는다")
+    void rerunRetriesStockWhoseFinancialFailed() {
+        fakeFinancialSource.failingWith(pendingId, new DataSourceException(
+                DataSourceException.Kind.RATE_LIMITED, "fake-financial", "일일 호출 한도 소진"));
+        fakePriceSource.clearFailure(pendingId);
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, InitialLoadJob.LoadRange.defaults());
+
+        assertThat(unresolvedFinancialFailures(pendingId))
+                .as("1차에서 재무 실패가 원장에 남는다 — 이것이 2차의 단서다")
+                .isPositive();
+
+        fakeFinancialSource.reset();
+        fakeFinancialSource.fetchedStockIds.clear();
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, InitialLoadJob.LoadRange.defaults());
+
+        assertThat(fakeFinancialSource.fetchedStockIds)
+                .as("2차가 재무를 부른 종목")
+                .contains(pendingId);
+    }
+
+    /**
+     * 재무 때문에 잡힌 종목에 <b>시세를 다시 태우지 않는다.</b>
+     *
+     * <p>루프가 종목마다 시세→재무를 무조건 돌기 때문에, 대상 선정만 넓히면 재무 하나 때문에
+     * 시세 2년치를 다시 받게 된다. 이 잡의 제약이 쿼터이므로 그것은 고침이 아니라 다른 낭비다.
+     */
+    @Test
+    @DisplayName("재무 때문에 잡힌 종목은 시세를 다시 받지 않는다")
+    void rerunSkipsPriceForStockRetriedOnlyForFinancials() {
+        fakeFinancialSource.failingWith(pendingId, new DataSourceException(
+                DataSourceException.Kind.RATE_LIMITED, "fake-financial", "일일 호출 한도 소진"));
+        fakePriceSource.clearFailure(pendingId);
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, InitialLoadJob.LoadRange.defaults());
+
+        fakeFinancialSource.reset();
+        fakePriceSource.fetchedStockIds.clear();
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, InitialLoadJob.LoadRange.defaults());
+
+        assertThat(fakePriceSource.fetchedStockIds)
+                .as("2차가 시세를 부른 종목 — 봉이 이미 있으면 건너뛴다")
+                .doesNotContain(pendingId);
+    }
+
+    /**
+     * <b>실패 없이 재무가 0행인 종목은 안 잡는다.</b>
+     *
+     * <p>0행은 실패가 아니라 성공이다({@code StockTaskExecutor}가 예외만 안 나면 성공으로 센다).
+     * 소스가 원래 재무를 안 주는 종목(인프라 투자회사 등)이 그 상태이고, 그것을 대상으로 넣으면
+     * 실행마다 헛콜이 나가면서 영영 안 끝난다. <b>그 판정은 재개 로직이 아니라 데이터 감사의
+     * 몫이다</b> — 이 단언이 그 경계를 코드에 남긴다.
+     */
+    @Test
+    @DisplayName("실패 없이 재무가 0행인 종목은 대상이 아니다 — 재개와 데이터 감사를 섞지 않는다")
+    void rerunIgnoresStockWithNoFinancialsButNoFailure() {
+        fakePriceSource.clearFailure(pendingId);
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, InitialLoadJob.LoadRange.defaults());
+
+        assertThat(unresolvedFinancialFailures(pendingId))
+                .as("가짜 소스가 빈 목록을 주므로 실패가 없다 — 0행은 성공이다")
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM financial_statement WHERE stock_id = ?", Integer.class, pendingId))
+                .as("그런데 재무는 0행이다")
+                .isZero();
+
+        fakeFinancialSource.fetchedStockIds.clear();
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, InitialLoadJob.LoadRange.defaults());
+
+        assertThat(fakeFinancialSource.fetchedStockIds)
+                .as("2차가 재무를 부른 종목 — 실패 기록이 없으면 안 잡는다")
+                .doesNotContain(pendingId);
+    }
+
+    private int unresolvedFinancialFailures(long stockId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM batch_execution_failure
+                WHERE stock_id = ? AND failed_phase = 'FINANCIAL' AND NOT resolved
+                """, Integer.class, stockId);
     }
 
     private Map<String, Object> priceFingerprint(long stockId) {

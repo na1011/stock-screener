@@ -34,6 +34,13 @@ public class FakeFinancialDataSource implements FinancialDataSource {
         return this;
     }
 
+    /** 테스트 사이에 상태를 지운다. 이 빈은 싱글턴이라 안 지우면 앞 테스트의 실패가 샌다. */
+    public void reset() {
+        reportsByStock.clear();
+        failures.clear();
+        fetchedStockIds.clear();
+    }
+
     @Override
     public Set<String> supportedMarketCodes() {
         return markets;

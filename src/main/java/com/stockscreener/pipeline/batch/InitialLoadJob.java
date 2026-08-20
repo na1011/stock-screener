@@ -14,8 +14,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * 초기 적재. 시세 2년·재무 3년을 한 번 받아온다(spec §7).
@@ -80,7 +83,9 @@ public class InitialLoadJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LoadRange range) {
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(range));
+        List<Long> targetIds = resolveTargets(range);
+        Set<Long> skipPrice = stocksToSkipPrice(range, targetIds);
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(targetIds);
         if (targets.isEmpty()) {
             log.info("초기 적재가 필요한 종목이 없다. 모든 편입 종목에 이력이 있다.");
             BatchExecutionContext empty =
@@ -96,8 +101,9 @@ public class InitialLoadJob {
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
 
-        // 종목당 시세·재무 두 단계를 돌므로 작업 단위는 종목 수의 두 배다.
-        execution.plan(CollectionPhase.PRICE, targets.size());
+        // 종목당 시세·재무 두 단계를 돌되, 재무 결손 때문에 잡힌 종목은 시세를 건너뛴다.
+        // 계획 수가 실제와 어긋나면 관리자 화면의 진행률이 100%에 못 미친 채 끝난다.
+        execution.plan(CollectionPhase.PRICE, targets.size() - skipPrice.size());
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
 
         LocalDate priceFrom = asOf.minusYears(range.priceYears());
@@ -113,8 +119,10 @@ public class InitialLoadJob {
             for (SecurityRef target : targets) {
                 // 시세와 재무를 각각 독립된 단계로 처리한다. 재무만 실패한 종목의 시세를
                 // 재실행에서 다시 받지 않으려면 실패 기록이 단계를 구분해야 한다.
-                execution.process(target, CollectionPhase.PRICE,
-                        security -> priceCollector.collect(security, priceFrom, asOf));
+                if (!skipPrice.contains(target.stockId())) {
+                    execution.process(target, CollectionPhase.PRICE,
+                            security -> priceCollector.collect(security, priceFrom, asOf));
+                }
                 execution.process(target, CollectionPhase.FINANCIAL, security -> {
                     FinancialWriter.Outcome outcome = financialCollector.collectDetailed(
                             security, fromFiscalYear, FinancialWriter.WriteMode.APPEND_ONLY);
@@ -194,9 +202,38 @@ public class InitialLoadJob {
                 SELECT DISTINCT m.stock_id FROM universe_membership m
                 JOIN stock s ON s.id = m.stock_id
                 WHERE m.effective_to IS NULL AND s.is_active
-                  AND NOT EXISTS (SELECT 1 FROM price_daily p WHERE p.stock_id = m.stock_id)
+                  AND (
+                    NOT EXISTS (SELECT 1 FROM price_daily p WHERE p.stock_id = m.stock_id)
+                    OR (
+                      EXISTS (SELECT 1 FROM batch_execution_failure f
+                               WHERE f.stock_id = m.stock_id
+                                 AND f.failed_phase = 'FINANCIAL' AND NOT f.resolved)
+                      AND NOT EXISTS (SELECT 1 FROM financial_statement fs
+                                       WHERE fs.stock_id = m.stock_id)
+                    )
+                  )
                 ORDER BY m.stock_id
                 """, Long.class);
+    }
+
+    /**
+     * 시세를 건너뛸 종목. <b>재무 결손 때문에 잡힌 종목</b>이 여기 든다.
+     *
+     * <p>대상 선정을 넓히기만 하면 그 종목이 루프에서 시세도 다시 받는다 — 이 잡의 제약이
+     * 쿼터이므로 그것은 고침이 아니라 다른 낭비다.
+     *
+     * <p>MUST NOT: {@code --tickers}·{@code --reload-existing} 경로에 이 가드를 적용하지 않는다.
+     * 둘은 <b>"이미 있어도 다시 받아라"는 명시적 지시</b>이고, 가드를 걸면 그 지시가 조용히
+     * 무시되어 "돌렸는데 아무 일도 없었다"가 된다.
+     */
+    private Set<Long> stocksToSkipPrice(LoadRange range, List<Long> targetIds) {
+        if (range.hasTickers() || range.reloadExisting() || targetIds.isEmpty()) {
+            return Set.of();
+        }
+        String placeholders = targetIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        return new HashSet<>(jdbcTemplate.queryForList(
+                "SELECT DISTINCT stock_id FROM price_daily WHERE stock_id IN (" + placeholders + ")",
+                Long.class, targetIds.toArray()));
     }
 
     /**
