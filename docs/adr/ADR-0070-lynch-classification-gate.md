@@ -194,7 +194,17 @@ umed AS (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v) x FROM m),
 s AS (SELECT count(*) n, percentile_cont(0.5) WITHIN GROUP (ORDER BY v) med,
         count(*) FILTER (WHERE v < (SELECT x FROM umed)) better
       FROM m WHERE stock_id IN (SELECT stock_id FROM win)),
-o AS (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v) med FROM m WHERE stock_id IN (SELECT stock_id FROM woc))
+o AS (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v) med FROM m WHERE stock_id IN (SELECT stock_id FROM woc)),
+f AS (SELECT
+        '중앙값 ' || round(s.med::numeric,2)
+          || ' / n=' || s.n
+          || ' / 유니버스 ' || round(u.x::numeric,2) || '보다 나은 종목 ' || s.better || '개('
+          || round(100.0 * s.better / nullif(s.n,0), 1) || '%)'
+          || ' / 분류축을 뺀 집합 중앙값 ' || coalesce(round(o.med::numeric,2)::text,'없음')
+          || ' / 판정 기준 ' || CASE WHEN s.n < 20 THEN '비율(작은 표본)' ELSE '중앙값' END AS txt,
+        CASE WHEN s.n < 20 THEN s.better::numeric / nullif(s.n,0) > 0.5
+             ELSE s.med < u.x END AS ok
+      FROM s, umed u, o)
 SELECT CASE
   WHEN (SELECT count(*) FROM g) = 0 THEN '잴 것이 없었다 — LYNCH_STALWART_KR의 리터럴 필수 게이트가 없다'
   WHEN (SELECT x FROM umed) IS NULL THEN '잴 것이 없었다 — ACCRUAL_RATIO 값이 유니버스에 하나도 없다'
@@ -202,14 +212,9 @@ SELECT CASE
     THEN '잴 것이 없었다 — 게이트를 통과한 종목이 없다(0건은 갈라서 보고할 일이다)'
   WHEN (SELECT n FROM s) = 0
     THEN '잴 것이 없었다 — 통과 종목에 ACCRUAL_RATIO 값이 하나도 없다'
-  WHEN (SELECT med FROM s) < (SELECT x FROM umed)
-    THEN 'OK 중앙값 ' || round((SELECT med FROM s)::numeric,2) || ' (n=' || (SELECT n FROM s)
-         || ', 유니버스 ' || round((SELECT x FROM umed)::numeric,2) || '보다 나은 종목 '
-         || (SELECT better FROM s) || '개)'
-         || ' / 분류축을 뺀 집합은 ' || coalesce(round((SELECT med FROM o)::numeric,2)::text,'없음')
-  ELSE 'ACCRUAL_RATIO 축이 무너졌다 — 통과 집합 중앙값 ' || round((SELECT med FROM s)::numeric,2)
-       || ' (n=' || (SELECT n FROM s) || ')이 유니버스 ' || round((SELECT x FROM umed)::numeric,2)
-       || '보다 낫지 않다. 원인은 ADR-0070 §검증에 귀속돼 있다(재무 빈티지가 EPS_CAGR_5Y를 움직였다) — 다시 조사하지 말고, 남은 것은 배치를 고칠지에 대한 사용자 판단이다'
+  WHEN (SELECT ok FROM f) THEN 'OK ' || (SELECT txt FROM f)
+  ELSE 'ACCRUAL_RATIO 축이 무너졌다 — ' || (SELECT txt FROM f)
+       || '. 원인은 이 문서의 검증 절에 귀속돼 있고(재무 빈티지가 EPS_CAGR_5Y를 움직였다) 배치를 고칠지는 2026-08-20에 「고치지 않는다」로 끝났다 — 다시 조사하지도, 다시 묻지도 말 것. 이 줄은 배치가 바뀔 때 다시 재라는 표식으로 남는다'
   END"
 ```
 
@@ -232,6 +237,22 @@ SELECT CASE
 
 셋 다 게이트를 `screen_condition`에서 **동적으로 읽는다.** 임계를 펜스에 박으면 임계가 바뀔 때
 펜스가 조용히 낡는다. 실측 소요는 각 0.04초다.
+
+### 2026-08-20 — 잣대만 고쳤다. 배치는 그대로다
+
+**사용자 결정으로 펜스의 판정식을 바꿨고 게이트·임계·배점은 한 칸도 안 건드렸다.** 표본이
+작으면(`n < 20`) 중앙값 단독이 아니라 **「유니버스 중앙값보다 나은 종목의 비율」**로 판정한다.
+`n = 11`의 중앙값은 여섯 번째 한 종목이 정하지만 비율은 열한 종목이 모두 한 표씩 갖는다.
+표본이 크면 종전대로 중앙값을 본다. 그리고 **붉은 갈래에도 중앙값·n·비율 셋을 함께 싣는다** —
+빠져 있던 것은 출력이 아니라 붉은 쪽의 출력이었다.
+
+**MUST: 고친 뒤에도 펜스는 붉다.** 실측 `n=11 / 나은 종목 5개 / 45.5%`로 기준선 50%에 못
+미친다. **잣대를 바꾼 것이 판정을 뒤집지 않았다는 사실 자체가 이 변경이 골대 이동이 아니라는
+증거다.** 바뀐 것은 붉음의 유무가 아니라 **붉은 이유의 해상도**다.
+
+**MUST NOT: 붉은 것을 푸르게 하려고 기준선 0.5를 내리지 않는다.** 유니버스 중앙값보다 나은
+비율의 기준선은 정의상 0.5이고, 그것을 45% 아래로 옮기면 위 §규칙이 금지한 골대 이동이 된다.
+
 
 ## 배경
 
