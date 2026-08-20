@@ -159,25 +159,23 @@ public class DailyUpdateJob {
         BatchExecutionContext execution = batchExecutions.startRetry(
                 JOB_NAME, targetDate, targets.size(), previousExecutionId);
 
-        return collect(execution, targets, priceWindowStart(targetDate), targetDate,
-                previousExecutionId);
-    }
-
-    private BatchStatus collect(BatchExecutionContext execution, List<SecurityRef> targets,
-                                LocalDate from, LocalDate to) {
-        return collect(execution, targets, from, to, null);
+        return collect(execution, targets, priceWindowStart(targetDate), targetDate);
     }
 
     /**
      * 대상 종목의 시세를 수집하고, 이어서 지표를 계산한다.
      *
-     * <p>{@code resolvingExecutionId}가 있으면 부분 재실행이다. 이때
-     * <b>실제로 성공한 종목만</b> 해결로 표시한다. 대상 전체를 무조건 해결로 표시하면 두 번
-     * 연속 실패한 종목이 미해결 목록에서 사라져, 실패를 조용히 삼키지 않겠다는 파이프라인
-     * 전체의 전제가 바로 이 지점에서 깨진다.
+     * <p>해결 표시는 여기서 하지 않는다 — {@link BatchExecutionContext#process}가
+     * <b>어느 잡이든 한 종목·한 단계를 성공으로 끝낼 때</b> 그 종목의 이전 실패를 닫는다.
+     * 그 전에는 이 자리에 시세 단계 전용 호출이 있었고, 그래서 나머지 여섯 단계는 데이터가
+     * 채워진 뒤에도 미해결로 남았다.
+     *
+     * <p>MUST NOT: 대상 전체를 무조건 해결로 표시하지 않는다. 두 번 연속 실패한 종목이
+     * 미해결 목록에서 사라져, 실패를 조용히 삼키지 않겠다는 파이프라인 전체의 전제가 바로
+     * 이 지점에서 깨진다. 성공 여부로 가르는 것이 그 전제를 지킨다.
      */
     private BatchStatus collect(BatchExecutionContext execution, List<SecurityRef> targets,
-                                LocalDate from, LocalDate to, Long resolvingExecutionId) {
+                                LocalDate from, LocalDate to) {
         // 종목당 두 단계를 돌므로 작업 단위는 종목 수의 두 배다. 종목 수만 신고하면 화면이
         // 700/350으로 뜬다 — 지표 백필이 43400/350으로 뜨던 것과 같은 어긋남이다.
         //
@@ -207,11 +205,6 @@ public class DailyUpdateJob {
             for (SecurityRef target : targets) {
                 boolean collected = execution.process(target, CollectionPhase.PRICE,
                         security -> priceCollector.collect(security, from, to));
-
-                if (collected && resolvingExecutionId != null) {
-                    batchExecutions.recorder().resolveFailure(
-                            resolvingExecutionId, target.stockId(), CollectionPhase.PRICE);
-                }
 
                 // 수집이 예외 없이 끝난 종목만 지표를 계산한다. 실패한 종목은 계산할 새 원자료가
                 // 없으므로, 굳이 돌려서 실패를 하나 더 만들 이유가 없다.

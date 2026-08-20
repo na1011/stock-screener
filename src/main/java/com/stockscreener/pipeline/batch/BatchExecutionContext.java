@@ -17,6 +17,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongConsumer;
@@ -98,6 +99,15 @@ public final class BatchExecutionContext {
      */
     private final LongConsumer onTerminal;
 
+    /**
+     * 이 실행이 <b>시작될 때</b> 미해결이던 (단계 → 종목) 쌍.
+     *
+     * <p>성공할 때마다 DB를 묻지 않으려고 한 번만 읽는다. 평상시에는 비어 있어 아무 값도
+     * 치르지 않는다. 값을 지우면서 쓰므로(첫 성공에서만 {@code remove}가 참) 같은 종목이
+     * 두 번 성공해도 UPDATE는 한 번이다.
+     */
+    private final Map<CollectionPhase, Set<Long>> unresolvedAtStart;
+
     public BatchExecutionContext(long executionId, String jobName, LocalDate targetDate,
                                  StockTaskExecutor executor, BatchExecutionRecorder recorder,
                                  AlertPort alertPort, LongConsumer onTerminal) {
@@ -108,6 +118,7 @@ public final class BatchExecutionContext {
         this.recorder = recorder;
         this.alertPort = alertPort;
         this.onTerminal = onTerminal;
+        this.unresolvedAtStart = recorder.unresolvedStockPhases();
     }
 
     public long executionId() {
@@ -135,6 +146,7 @@ public final class BatchExecutionContext {
             writtenRowCount.addAndGet(outcome.writtenRows());
             counters.success.incrementAndGet();
             counters.writtenRows.addAndGet(outcome.writtenRows());
+            resolveIfPreviouslyFailed(security.stockId(), phase);
         } else {
             failureCount.incrementAndGet();
             counters.failure.incrementAndGet();
@@ -432,6 +444,28 @@ public final class BatchExecutionContext {
         } catch (DataAccessException e) {
             log.warn("배치 진척을 기록하지 못했다. 집계는 메모리에 남아 있고 마감 때 다시 쓴다. id={}",
                     executionId, e);
+        }
+    }
+
+    /**
+     * 이 종목·이 단계에 남아 있던 실패를 해결로 표시한다.
+     *
+     * <p>어느 잡이든 지나는 자리라 잡마다 흩뿌리지 않는다. 이전에는 {@code daily-update}의
+     * 시세 단계 하나에만 붙어 있었고, 그래서 나머지 여섯 단계의 실패는 데이터가 채워진 뒤에도
+     * 영영 미해결로 남았다 — spec §4의 "미해결 에러 건수"가 그만큼 거짓이었다.
+     *
+     * <p>집합에서 빠지지 않으면 아무 일도 하지 않는다. <b>평상시에 UPDATE가 나가지 않는 것이
+     * 이 가드의 목적이다.</b>
+     */
+    private void resolveIfPreviouslyFailed(long stockId, CollectionPhase phase) {
+        Set<Long> pending = unresolvedAtStart.get(phase);
+        if (pending == null || !pending.remove(stockId)) {
+            return;
+        }
+        int resolved = recorder.resolveFailures(stockId, phase);
+        if (resolved > 0) {
+            log.debug("이전 실패를 해결로 표시했다. stockId={} phase={} 건수={}",
+                    stockId, phase, resolved);
         }
     }
 

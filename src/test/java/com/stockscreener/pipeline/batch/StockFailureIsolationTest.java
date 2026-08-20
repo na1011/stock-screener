@@ -120,6 +120,75 @@ class StockFailureIsolationTest {
         assertThat(failures.get(0).get("resolved")).isEqualTo(false);
     }
 
+    /**
+     * <b>다른 실행</b>이 같은 종목·같은 단계를 성공시키면 앞선 실패가 닫힌다.
+     *
+     * <p>이전에는 해결 표시가 {@code daily-update}의 시세 단계 하나에만 붙어 있었고, 게다가
+     * 실패를 낸 실행 id로 좁혀 갱신했다. 그래서 <b>실패를 낸 실행과 그것을 채운 실행이 다르면</b>
+     * 데이터가 멀쩡해진 뒤에도 원장이 미해결이라 말했다 — {@code company-profile}의 52건이
+     * 정확히 그 상태였다. spec §4의 "미해결 에러 건수"가 그만큼 거짓이었다.
+     */
+    @Test
+    @DisplayName("다른 실행이 같은 단계를 성공시키면 앞선 실패가 해결로 닫힌다")
+    void laterExecutionResolvesEarlierFailureOfSamePhase() throws Exception {
+        SecurityRef broken = insertStock("000020", "먼저실패");
+
+        BatchExecutionContext first = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1);
+        first.process(broken, CollectionPhase.SECURITY_MASTER, s -> {
+            throw new DataSourceException(
+                    DataSourceException.Kind.TRANSIENT, "stub-source", "일시적 오류");
+        });
+        first.finish();
+        assertThat(unresolved(broken)).as("1차 직후 미해결").isEqualTo(1);
+
+        BatchExecutionContext second = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1);
+        second.process(broken, CollectionPhase.SECURITY_MASTER, s -> 1L);
+        second.finish();
+
+        assertThat(unresolved(broken))
+                .as("2차가 같은 단계를 성공시키면 앞선 실패가 닫힌다")
+                .isZero();
+    }
+
+    /**
+     * <b>다른 단계</b>의 성공은 남의 실패를 닫지 않는다.
+     *
+     * <p>이 대조군이 없으면 위 테스트는 "무조건 닫는다"로도 통과한다. 시세 수집 성공을 근거로
+     * 업종정보 실패를 지우면 <b>어느 단계가 실제로 다시 돌았는지가 사라져</b>, 실패를 조용히
+     * 삼키지 않겠다는 파이프라인 전체의 전제가 그 지점에서 깨진다.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 다른 단계의 성공은 남의 실패를 닫지 않는다")
+    void successInOtherPhaseDoesNotResolveUnrelatedFailure() throws Exception {
+        SecurityRef broken = insertStock("000021", "업종실패");
+
+        BatchExecutionContext first = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1);
+        first.process(broken, CollectionPhase.SECURITY_MASTER, s -> {
+            throw new DataSourceException(
+                    DataSourceException.Kind.TRANSIENT, "stub-source", "일시적 오류");
+        });
+        first.finish();
+
+        BatchExecutionContext second = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1);
+        second.process(broken, CollectionPhase.PRICE, s -> 500L);
+        second.finish();
+
+        assertThat(unresolved(broken))
+                .as("시세가 성공해도 업종정보 실패는 그대로다")
+                .isEqualTo(1);
+    }
+
+    private int unresolved(SecurityRef security) {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM batch_execution_failure
+                WHERE stock_id = ? AND NOT resolved
+                """, Integer.class, security.stockId());
+    }
+
     @Test
     @DisplayName("실패한 종목의 쓰기는 롤백되고 성공한 종목의 쓰기는 커밋된다")
     void rollsBackOnlyTheFailingStock() throws Exception {
@@ -280,8 +349,9 @@ class StockFailureIsolationTest {
                 JOB_NAME, TARGET_DATE, targets.size(), first.executionId());
         retry.process(broken, CollectionPhase.PRICE, s -> 1L);
         assertThat(retry.finish()).isEqualTo(BatchStatus.SUCCESS);
-        recorder.resolveFailure(first.executionId(), broken.stockId(), CollectionPhase.PRICE);
 
+        // 해결 표시를 손으로 부르지 않는다 — process가 성공하면 그 자리에서 닫힌다.
+        // 예전에는 잡이 직접 불러야 했고, 그래서 부르지 않는 잡의 실패는 영영 남았다.
         // 해결된 실패는 미해결 목록에서 빠진다 — 아니면 "미해결 건수"가 영원히 줄지 않는다.
         assertThat(recorder.unresolvedFailures(first.executionId())).isEmpty();
         assertThat(jdbcTemplate.queryForObject(

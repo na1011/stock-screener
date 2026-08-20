@@ -12,7 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.time.LocalDate;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 배치 실행 이력과 종목 단위 실패를 기록한다.
@@ -276,17 +280,51 @@ public class BatchExecutionRecorder {
     }
 
     /**
-     * 재실행에 성공한 실패를 해결로 표시한다.
+     * 아직 해결되지 않은 (종목, 단계) 쌍 전체.
+     *
+     * <p>실행 하나가 시작될 때 <b>한 번만</b> 읽는다. 성공할 때마다 조회하면 평상시(미해결 0건)에도
+     * 종목 수 × 단계 수만큼 쿼리가 붙는다.
+     *
+     * <p>실행 id로 좁히지 않는 것이 요점이다 — 실패를 낸 실행과 그것을 해결하는 실행이
+     * 대개 다르기 때문이다. 실제로 {@code company-profile}의 실패 52건이 그 다음 실행에서
+     * 전부 채워졌는데도 미해결로 남아 있었다.
+     */
+    @Transactional(readOnly = true)
+    public Map<CollectionPhase, Set<Long>> unresolvedStockPhases() {
+        Map<CollectionPhase, Set<Long>> byPhase = new EnumMap<>(CollectionPhase.class);
+        jdbcTemplate.query("""
+                SELECT DISTINCT stock_id, failed_phase FROM batch_execution_failure
+                WHERE NOT resolved
+                """, rs -> {
+            byPhase.computeIfAbsent(
+                            CollectionPhase.valueOf(rs.getString("failed_phase")),
+                            k -> ConcurrentHashMap.newKeySet())
+                    .add(rs.getLong("stock_id"));
+        });
+        return byPhase;
+    }
+
+    /**
+     * 한 종목·한 단계의 미해결 실패를 전부 해결로 표시한다.
      *
      * <p>이 갱신이 없으면 spec §4의 "미해결 에러 건수"가 영원히 줄지 않아, 관리자 화면의
      * 요약이 무의미해진다.
+     *
+     * <p>MUST: 단계를 함께 받는다. 시세 수집 성공을 근거로 업종정보 실패를 지우면 파이프라인
+     * 전체의 전제가 그 지점에서 깨진다 — 어느 단계가 실제로 다시 돌았는지가 사라지기 때문이다.
+     *
+     * <p>IMPORTANT — 여기서 말하는 성공은 <b>예외가 없었다</b>이지 <b>행을 썼다</b>가 아니다
+     * ({@code StockTaskExecutor}가 0행도 성공으로 센다). 거래정지처럼 정상적으로 빈 종목을
+     * 영원히 미해결로 남기지 않으려고 일부러 그렇게 두었다. 그 대가로, 같은 단계를 쓰는 다른
+     * 잡이 0행 성공만으로도 이 실패를 닫을 수 있다 — {@code FINANCIAL}을 쓰는 잡이 셋이고
+     * 받아오는 범위가 서로 다르다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int resolveFailure(long executionId, long stockId, CollectionPhase phase) {
+    public int resolveFailures(long stockId, CollectionPhase phase) {
         return jdbcTemplate.update("""
                 UPDATE batch_execution_failure SET resolved = true
-                WHERE execution_id = ? AND stock_id = ? AND failed_phase = ?
-                """, executionId, stockId, phase.name());
+                WHERE stock_id = ? AND failed_phase = ? AND NOT resolved
+                """, stockId, phase.name());
     }
 
     private static String describe(String message, Throwable cause) {
