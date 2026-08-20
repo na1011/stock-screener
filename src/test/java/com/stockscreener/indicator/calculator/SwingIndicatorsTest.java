@@ -419,7 +419,7 @@ class SwingIndicatorsTest {
         private final TradingDays750Calculator calculator = new TradingDays750Calculator();
 
         @Test
-        @DisplayName("IMPORTANT — 봉이 751개여도 750이다. 읽기 창이 그 이상을 주지 않으므로 큰 값은 거짓이 된다")
+        @DisplayName("IMPORTANT — 봉이 751개여도 750이다. min(size, 750)이라 창이 넓어져도 불변이다")
         void saturatesAtThreshold() {
             List<IndicatorPoint> points = calculator.calculate(contextOf(flat(751, 1_000)));
 

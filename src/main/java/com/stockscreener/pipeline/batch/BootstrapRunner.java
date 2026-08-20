@@ -74,8 +74,9 @@ import java.util.List;
  * # 지표 백필
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill --from=2020-01-02'
  *
- * # ICHI_* 만 채운다 — 워밍업이 207주라 한 실행이 창 안 약 137일자를 낸다(실측).
- * # 즉 단일 날짜 실행 하나가 보존 창 180일 중 대부분을 채운다
+ * # ICHI_* 만 채운다 — 워밍업이 207주(≈971봉)라 한 실행이 min(창 − 971 + 1, 보존 180)일자를
+ * # 낸다. 지금은 보존이 먼저 자르므로 단일 날짜 실행 하나가 보존 창 180일을 거의 다 채운다
+ * # (실측 종목당 177.4일자, 2026-08-20)
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill \
  *     --as-of=2026-08-11 --from=2026-08-11'
  *

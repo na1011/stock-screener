@@ -64,7 +64,7 @@ public class CorporateActionCollector {
      * 사람의 판정을 기다리며 <b>그 사이 지표를 억제하는</b> 새 후보(ADR-0055).
      *
      * <p>판정 전까지 이 종목의 장기창 지표가 화면에서 사라진다. 알림이 없으면 종목이 없어진
-     * 것을 아무도 모르고, {@code ICHI_*}는 사건 뒤 1,100거래일(약 4.4년)까지 이어진다.
+     * 것을 아무도 모르고, {@code ICHI_*}는 사건 뒤 <b>읽기 창 전체</b>(2026-08-20 기준 1,261거래일 ≈ 5년)까지 이어진다.
      */
     public record PendingCandidate(String ticker, LocalDate effectiveDate,
                                    CorporateAction.DetectionSource source) {

@@ -12,9 +12,9 @@ import java.util.List;
  * 전환·기준·선행A/B·ATR·OBV는 그 주까지의 완결된 주만으로 정해지기 때문이다. 대상 일자마다
  * 달라지는 것은 <b>진행 중인 주 하나뿐</b>이며 그것은 {@link WeeklyWindow}가 맡는다.
  *
- * <p>이 분리가 없으면 산출 일자마다 236주 전체를 다시 접게 되고, 한 실행이 약 137일자를 내므로
- * (실측) 종목당 그 비용이 137배가 된다. <b>여기서 새면 값이 맞아도 백필이 실용 시간 안에
- * 끝나지 않는다</b>({@code phase-criteria.md} §P12).
+ * <p>이 분리가 없으면 산출 일자마다 창 전체의 주봉을 다시 접게 되고, 한 실행이 내는 일자
+ * 수만큼 그 비용이 곱해진다(실측 종목당 177.4일자, 2026-08-20). <b>여기서 새면 값이 맞아도
+ * 백필이 실용 시간 안에 끝나지 않는다</b>({@code phase-criteria.md} §P12).
  */
 final class WeeklySeries {
 
@@ -96,8 +96,9 @@ final class WeeklySeries {
      *
      * <p>시드가 <b>첫 {@code length}개의 단순평균</b>이고 그 뒤로
      * {@code (tr + (n-1) * prev) / n}이다. 첫 봉의 참범위는 직전 종가가 없어 {@code high - low}다.
-     * 그 시드 위치가 우리 이력의 시작(2020-01-02)이라 TradingView와 다른데,
-     * <b>어긋나도 파면 안 되는 자리</b>로 ADR-0046에 적혀 있다.
+     * 그 시드 위치가 우리 이력의 시작(2020-01-02)이라 TradingView와 다르다. <b>어긋나는 것이
+     * 정상인 자리</b>이며 파지 않는다 — 알려진 차이 셋({@code phase-criteria.md} §P12)의 하나이고,
+     * 애초에 원본 대조를 한 적이 없다(ADR-0046 §승인된 예외).
      */
     private static double[] averageTrueRange(List<WeeklyBar> weeks, int length) {
         int n = weeks.size();
