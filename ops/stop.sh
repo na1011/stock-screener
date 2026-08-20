@@ -55,7 +55,16 @@ stop_one() {
 
 rc=0
 if [[ $WANT_APP -eq 1 ]]; then
-  stop_one "앱" "$APP_PID_FILE" "$APP_PATTERN" 30 || rc=1
+  # 끄기 전에 알린다. 이것이 도는 배치를 아는 **정본**이다 — deploy.sh도 부르지만 그쪽은
+  # 빌드 전이라 그 사이에 시작된 잡을 못 본다.
+  if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
+    warn_running_batches "stop"
+  fi
+  # 45초다. 앱은 종료 유예 상한 15초(application.yaml의 spring.lifecycle)를 다 쓴 뒤
+  # 빈을 파괴하고, 그 안의 커넥션 풀 종료가 10초짜리 상한을 여러 개 가진다. 30초였을 때는
+  # 배치가 도는 중에 끄면 실측 30,061ms로 **반드시 초과**해, deploy.sh가 재기동에 못 갔다.
+  # MUST: 이 값과 application.yaml의 15s는 짝이다. 한쪽만 고치면 배포가 조용히 깨진다.
+  stop_one "앱" "$APP_PID_FILE" "$APP_PATTERN" 45 || rc=1
 fi
 if [[ $WANT_TUNNEL -eq 1 ]]; then
   stop_one "터널" "$TUNNEL_PID_FILE" "$TUNNEL_PATTERN" 10 || rc=1

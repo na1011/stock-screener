@@ -47,6 +47,66 @@ wait_for() {
   return 1
 }
 
+# warn_running_batches <라벨>
+# 도는 배치가 있으면 알린다. **끄기 전에** 부른다 — 끄고 나면 사람이 되돌릴 수 없다.
+#
+# 왜 있는가: 종료로 끊긴 배치는 알림을 보내지 않는데(ADR-0078), 그날의 백분위·업종 상대값·
+# 워치리스트 통지는 다음 실행이 다시 만들지 않는다. PercentileCalculator·SectorRelativeCalculator가
+# 하루치만 받고 DailyUpdateJob이 asOf 하나로만 부르기 때문이다. ADR-0042의 15일 창은 **시세만**
+# 메운다. 그래서 여기서 안 알리면 그날 통지가 빠진 것을 알 경로가 하나도 없다.
+#
+# MUST NOT: 여기서 멈추지 않는다. 경고만 하고 진행한다 — 판단은 사람이 한다(ADR-0043).
+# MUST NOT: 조용히 넘어가지 않는다. 못 물었으면 **못 물었다고 찍는다.** "없음"과 구분되지
+#   않으면 이 함수는 있으나 마나다.
+# MUST: `if`로 쓴다. `[[ ... ]] && return`은 조건이 거짓일 때 AND 리스트가 1을 반환해
+#   set -e에 걸린다 — 그러면 이 함수가 stop.sh를 kill 앞에서 죽인다.
+warn_running_batches() {
+  local label="$1"
+  # MUST: 여기서 만든다. lib.sh는 DB도 DB_NAME도 정의하지 않으며, dump-db.sh의 그것은
+  # 그 스크립트의 지역 변수다. 그대로 참조하면 set -u에서 unbound variable로 죽는다.
+  local db="${DB_NAME:-stock_screener}"
+  local psql rows
+
+  # MUST: local과 대입을 가른다. `local x="$(...)"`는 local의 종료코드 0이 명령 치환의
+  # 실패를 삼켜, 뒤따르는 ||가 영원히 안 탄다. dump-db.sh가 local 없이 쓰는 이유가 그것이다.
+  psql="$(pg_bin psql)" || {
+    echo "[$label] psql이 없어 도는 배치를 확인하지 못했다 (DB $db)." >&2
+    return 0
+  }
+
+  # -w: 비밀번호를 물으면 프롬프트 없이 실패한다. 물으면 stop.sh가 **영영 멈춘다.**
+  # PGCONNECT_TIMEOUT: DB가 안 뜬 상태에서 기본 대기에 걸리지 않게 한다.
+  rows="$(PGCONNECT_TIMEOUT=3 "$psql" -w -d "$db" -tAF'|' -c "
+      SELECT job_name, triggered_by,
+             to_char(started_at, 'MM-DD HH24:MI'),
+             date_trunc('second', now() - started_at)
+        FROM batch_execution
+       WHERE status = 'RUNNING'
+       ORDER BY started_at" 2>/dev/null)" || {
+    echo "[$label] DB($db)를 읽지 못해 도는 배치를 확인하지 못했다." >&2
+    return 0
+  }
+
+  if [[ -z "$rows" ]]; then
+    return 0
+  fi
+
+  echo "[$label] 도는 배치가 있다 (DB $db) — 지금 끄면 중단된다:" >&2
+  while IFS='|' read -r job trigger started elapsed; do
+    if [[ -z "$job" ]]; then
+      continue
+    fi
+    if [[ "$trigger" == "MANUAL" ]]; then
+      # 적재 JVM(bootstrap 프로파일)이 만든 행이다. BatchExecutionSweeper는 MANUAL을
+      # **다음 적재 실행 때만** 닫으므로, 죽은 적재가 남긴 행이 영구히 남아 매번 보인다.
+      # 그래서 갈라 표시한다 — 도는 gradle 프로세스가 없으면 그것은 유령이다.
+      echo "         $job [$trigger · $started 시작 · $elapsed 경과] — 적재 JVM의 것. 도는 적재가 없으면 유령이다." >&2
+    else
+      echo "         $job [$trigger · $started 시작 · $elapsed 경과]" >&2
+    fi
+  done <<< "$rows"
+}
+
 # cloudflared 실행 파일. Homebrew 경로가 /etc/paths에 없는 환경이 있어 직접 찾는다.
 cloudflared_bin() {
   command -v cloudflared 2>/dev/null || { [[ -x /opt/homebrew/bin/cloudflared ]] && echo /opt/homebrew/bin/cloudflared; }

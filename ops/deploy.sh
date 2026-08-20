@@ -21,6 +21,14 @@ ROOT="$(cd "$HERE/.." && pwd)"
 . "$HERE/lib.sh"
 cd "$ROOT"
 
+# 빌드 앞에서 한 번 알린다. 이 배포는 곧 앱을 내리므로 도는 배치가 있으면 끊긴다.
+# 여기서 알리는 이유는 **빌드가 분 단위라, 끝난 뒤에 알면 이미 늦기 때문**이다 — 지금이라야
+# Ctrl-C로 되돌릴 수 있다. 다만 그 몇 분 사이에 시작된 잡은 여기서 안 보인다.
+# 정본은 stop.sh 쪽 호출이다(kill 직전에 다시 묻는다).
+if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
+  warn_running_batches "deploy"
+fi
+
 echo "== 빌드 =="
 ./gradlew clean build
 
