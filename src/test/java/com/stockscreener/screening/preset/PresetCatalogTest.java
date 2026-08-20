@@ -229,32 +229,28 @@ class PresetCatalogTest {
     }
 
     @Test
-    @DisplayName("조건 수가 상한에 얼마나 붙어 있는지 드러난다")
-    void reportsHeadroomAgainstTheConditionLimit() {
-        // 상한을 넘는 것은 위 검증이 잡는다. 여기서 보는 것은 **여유**다 — 가장 큰 프리셋이
-        // 상한에 얼마나 붙어 있는지가 코드 어디에도 드러나지 않으면, 다음 세션이 조건을
-        // 더하다가 기동 실패로 그때서야 만난다.
+    @DisplayName("가장 큰 프리셋의 조건 수가 숫자로 못박혀 있다")
+    void pinsTheLargestPresetConditionCount() {
+        // 상한을 넘는 것은 위 검증이 잡는다. 여기서 고정하는 것은 **지금 가장 큰 프리셋이
+        // 몇 개를 쓰는가**다 — 그 수가 코드 어디에도 없으면 다음 세션이 조건을 더하다가
+        // 기동 실패로 그때서야 상한을 만난다.
         for (ScreenPreset preset : presets) {
             assertThat(preset.conditions().conditions().size())
                     .as("%s의 조건 수", preset.code())
                     .isLessThanOrEqualTo(ScreenDefinitionValidator.MAX_CONDITIONS);
         }
 
-        ScreenPreset swing = presets.stream()
-                .filter(p -> PresetCatalog.SWING_TREND_KR.equals(p.code()))
-                .findFirst().orElseThrow();
-        int used = swing.conditions().conditions().size();
-        // MUST NOT: 이 단언을 hasSize(MAX_CONDITIONS)로 되돌리지 않는다. 그렇게 두면
-        // 상한을 올릴 때마다 프리셋도 함께 키워야 하고, 조건을 **빼도** 깨진다.
-        // 여기서 고정하려는 것은 "정확히 상한"이 아니라 **지금 몇 개를 쓰는가**다.
-        assertThat(used)
-                .as("스윙 프리셋의 조건 수. 상한은 %d이고 여유는 %d다",
-                        ScreenDefinitionValidator.MAX_CONDITIONS,
-                        ScreenDefinitionValidator.MAX_CONDITIONS - used)
-                .isEqualTo(24);
-        assertThat(ScreenDefinitionValidator.MAX_CONDITIONS - used)
-                .as("상한에 여유가 없으면 다음 지표 하나에 네 파일을 다시 열게 된다")
-                .isGreaterThanOrEqualTo(1);
+        // MUST NOT: 「상한과의 여유가 N 이상」으로 되돌리지 않는다. `SWING_TREND_KR`(24개)이
+        // 폐기되면서 최대가 17로 내려와 여유가 8이 됐고, 그 형태의 단언은 **실패할 수
+        // 없는 펜스**가 된다(2026-08-20). 여유가 아니라 최대값 자체를 못박는다.
+        // MUST NOT: 프리셋 코드를 박지 않는다. 어느 프리셋이 가장 큰지는 바뀌어도 되고,
+        // 바뀌는 것 자체는 이 단언이 물어야 할 일이 아니다.
+        int largest = presets.stream()
+                .mapToInt(p -> p.conditions().conditions().size())
+                .max().orElseThrow();
+        assertThat(largest)
+                .as("가장 큰 프리셋의 조건 수. 상한은 %d다", ScreenDefinitionValidator.MAX_CONDITIONS)
+                .isEqualTo(17);
     }
 
     @Test

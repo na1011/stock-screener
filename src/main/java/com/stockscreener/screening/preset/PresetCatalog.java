@@ -123,7 +123,7 @@ public class PresetCatalog {
         return sourceCode + SectorMetricSpec.MEDIAN_RATIO_SUFFIX;
     }
 
-    // ── 9. 버핏 우량주 ────────────────────────────────────────────────────
+    // ── 8. 버핏 우량주 ────────────────────────────────────────────────────
 
     public static final String BUFFETT_QUALITY_KR = "BUFFETT_QUALITY_KR";
 
@@ -337,7 +337,7 @@ public class PresetCatalog {
     @Bean
     public List<ScreenPreset> screenPresets() {
         return List.of(valueKr(), lynchFastGrowerKr(), lynchStalwartKr(),
-                momentumKr(), swingTrendKr(), stage2BreakoutKr(),
+                momentumKr(), stage2BreakoutKr(),
                 pullbackUptrendKr(), lowvolQualityKr(), buffettQualityKr());
     }
 
@@ -463,7 +463,7 @@ public class PresetCatalog {
      * 적자·역성장 배제는 이제 분류 게이트가 직접 한다.
      * <br><b>국내 분포로 재보정한 것</b>: {@code DEBT_RATIO <= 80}(§8 한국 조정값 표). 원문 D/E
      * 0.33은 국내에서 23%만 통과해 제조업 중심 구조에 과하고, 0.8이 절반을 가른다(174/346).
-     * 유동성 하한은 {@code SWING_TREND_KR}의 100억이 아니라 <b>50억</b>이다 — 아래 참조.
+     * 유동성 하한은 <b>50억</b>이고, 이는 추세 프리셋들이 쓰는 100억의 절반이다 — 아래 참조.
      * <br><b>원문에 없는데 더한 것</b>: {@code PER_SECTOR_PCTL}·{@code DEBT_RATIO_SECTOR_REL}
      * (3.2·3.9의 업종 상대 요구를 실제 업종 모집단으로 옮긴 것), {@code ACCRUAL_RATIO},
      * {@code OPERATING_MARGIN}(3.18 세전이익률의 대용), {@code INVENTORY_GROWTH_GAP}(3.14 —
@@ -749,102 +749,7 @@ public class PresetCatalog {
                                 ComparisonOperator.GTE, "0.70"))));
     }
 
-    // ── 5. 중장기 스윙 ────────────────────────────────────────────────────
-
-    public static final String SWING_TREND_KR = "SWING_TREND_KR";
-
-    /**
-     * 중장기 스윙 — 추세 게이트와 재무 생존을 함께 거는 게이트+점수 프리셋.
-     *
-     * <p>폐기한 {@code SWING_MIDTERM_KR}의 자리를 받는다(ADR-0061). 그 프리셋의 외부 명세는
-     * 「추세는 그대로, 생존은 얇은」 쪽으로 기울었다고 스스로 판정했고(ADR-0039 총량 판정),
-     * 여기서는 그 얇아진 축을 검증된 조건으로 메운다.
-     *
-     * <p><b>원문에서 되살린 것</b>: 2년 주간 베타(T-08)는 「시장 지수 시계열이 없다」는 이유로
-     * 버려졌는데 지수는 ADR-0053으로 적재됐다. 업종 상대 부채비율(H-02)과 업종 상대
-     * 영업이익률(S-02)도 되살린다.
-     * <br><b>국내 분포로 재보정한 것</b>: 베타 임계는 원문 1.3이 아니라 <b>1.2</b>다 — 1.3은
-     * 국내에서 82%가 통과해 게이트가 아니었고, 1.2가 상위 23%를 자른다.
-     * <br><b>원문보다 약하게 옮긴 것</b>: 5년 누적 영업현금흐름(H-05)과 3년 주식수 증가율
-     * (H-06)을 필수 게이트가 아니라 점수 조건에 둔다. 둘 다 값이 없는 종목이 많아
-     * (283종목·314종목) 게이트로 걸면 <b>현금흐름이 나빠서가 아니라 이력이 짧아서</b>
-     * 탈락하는 종목이 60~70개 생긴다.
-     *
-     * <p>{@code DISPARITY_200 <= 1.25}가 이 프리셋의 성격을 정한다 — 급등 종목이 구조적으로
-     * 나오지 않으며 <b>그것은 부작용이 아니라 설계다.</b> {@code ADJ_CLOSE > SMA_200}과
-     * 중복이 아니라 같은 값의 하한과 상한이다.
-     */
-    private static ScreenPreset swingTrendKr() {
-        return new ScreenPreset(
-                SWING_TREND_KR,
-                "중장기 스윙",
-                "3~6개월 보유를 전제로, 장기 추세가 살아 있으면서 아직 과열되지 않은 종목만 남긴 뒤 "
-                        + "저평가·수익성·성장으로 줄 세운다. 필수 조건을 하나라도 채우지 못하면 "
-                        + "결과에서 빠진다. 200일선 대비 이격도를 1.25로 제한하므로 최근 급등한 "
-                        + "종목은 구조적으로 나오지 않는다 — 의도된 설계다. "
-                        + "부채비율·저평가·수익성은 같은 업종 종목과 견준다 — 업종 표본이 5종목에 "
-                        + "못 미치면 판정할 수 없어 그 종목은 결과에서 빠진다. "
-                        + "2년 주간 베타는 104주치 주간 등락이 있어야 계산되며, 그만큼의 이력이 "
-                        + "없는 종목은 결과에서 빠진다. "
-                        + "옮기지 못한 조건이 있다 — 순부채/EBITDA와 이자보상배율(감가상각비·이자비용을 "
-                        + "소스가 주지 않는다), 피인수 종목 제외(공시 소스가 없다), "
-                        + "해자 지표 가운데 투하자본이익률(법인세비용이 적재돼 있지 않아 "
-                        + "세후 기준으로 계산할 수 없다). "
-                        + "5년 누적 영업현금흐름과 3년 주식수 증가율은 필수 조건이 아니라 점수 조건이다 — "
-                        + "다섯 회계연도가 모두 있어야 판정할 수 있어, 필수로 걸면 상장한 지 얼마 되지 "
-                        + "않은 종목이 현금흐름과 무관하게 빠지기 때문이다. "
-                        + "Altman Z는 보험·금융서비스 종목에서 계산하지 않는다 — 자본구조가 달라 "
-                        + "점수가 뜻을 잃기 때문이다. 다만 지주회사는 업종 코드가 금융업으로 오는 "
-                        + "경우가 있어 코드만으로는 가려지지 않는다.",
-                EvaluationMode.SCORING,
-                null,
-                ConditionGroup.and(List.of(
-                        // ── 규모와 유동성 ──
-                        required(MarketCapCalculator.CODE, ComparisonOperator.GTE,
-                                "1000000000000"),
-                        required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
-                        required(TradingDays750Calculator.CODE, ComparisonOperator.GTE, "750"),
-
-                        // ── 추세 국면 ──
-                        IndicatorCondition.of(AdjCloseCalculator.CODE, ComparisonOperator.GT,
-                                ConditionOperand.IndicatorRef.of(Sma200Calculator.CODE))
-                                .asRequired(),
-                        IndicatorCondition.of(Sma150Calculator.CODE, ComparisonOperator.GT,
-                                ConditionOperand.IndicatorRef.of(Sma200Calculator.CODE))
-                                .asRequired(),
-                        IndicatorCondition.of(Sma60Calculator.CODE, ComparisonOperator.GT,
-                                ConditionOperand.IndicatorRef.of(Sma200Calculator.CODE))
-                                .asRequired(),
-                        required(Sma200Momentum21Calculator.CODE, ComparisonOperator.GT, "0"),
-                        required(Sma200Slope60Calculator.CODE, ComparisonOperator.GT, "0"),
-                        // 추격매수 차단. 이 한 줄이 이 프리셋의 성격을 정한다.
-                        required(Disparity200Calculator.CODE, ComparisonOperator.LTE, "1.25"),
-                        required(PctFrom52wLowCalculator.CODE, ComparisonOperator.GTE, "30"),
-                        required(PctFrom52wHighCalculator.CODE, ComparisonOperator.GTE, "-25"),
-                        required(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "6"),
-                        // 원문 1.3은 국내에서 82%가 통과해 게이트가 아니다. 1.2가 상위 23%를 자른다.
-                        required(Beta104wCalculator.CODE, ComparisonOperator.LTE, "1.2"),
-
-                        // ── 생존 ──
-                        required(ProfitableQuarters4Calculator.CODE, ComparisonOperator.GTE, "3"),
-                        required(sectorRel(DebtRatioCalculator.CODE), ComparisonOperator.LTE, "1.5"),
-                        required(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "150"),
-                        required(AltmanZCalculator.CODE, ComparisonOperator.GTE, "2.6"),
-
-                        // ── 점수 ──
-                        weighted(OperatingCashFlow5ySumCalculator.CODE,
-                                ComparisonOperator.GT, "0", "1"),
-                        weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "5", "1"),
-                        weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
-                        weighted(sectorPctl(PerCalculator.CODE), ComparisonOperator.LTE, "0.50", "1"),
-                        weighted(sectorPctl(OperatingMarginCalculator.CODE),
-                                ComparisonOperator.GTE, "0.50", "1"),
-                        weighted(EpsGrowthTtmYoyCalculator.CODE, ComparisonOperator.GTE, "15", "1"),
-                        weighted(pctl(ExcessReturn52wCalculator.CODE),
-                                ComparisonOperator.GTE, "0.70", "1"))));
-    }
-
-    // ── 6. 2국면 돌파 ─────────────────────────────────────────────────────
+    // ── 5. 2국면 돌파 ─────────────────────────────────────────────────────
 
     public static final String STAGE2_BREAKOUT_KR = "STAGE2_BREAKOUT_KR";
 
@@ -897,7 +802,7 @@ public class PresetCatalog {
                         literal(PctFrom52wHighCalculator.CODE, ComparisonOperator.GTE, "-10"))));
     }
 
-    // ── 7. 상승추세 눌림목 ────────────────────────────────────────────────
+    // ── 6. 상승추세 눌림목 ────────────────────────────────────────────────
 
     public static final String PULLBACK_UPTREND_KR = "PULLBACK_UPTREND_KR";
 
@@ -951,7 +856,7 @@ public class PresetCatalog {
                         literal(Cmf21Calculator.CODE, ComparisonOperator.GTE, "-0.10"))));
     }
 
-    // ── 8. 저변동 우량 ────────────────────────────────────────────────────
+    // ── 7. 저변동 우량 ────────────────────────────────────────────────────
 
     public static final String LOWVOL_QUALITY_KR = "LOWVOL_QUALITY_KR";
 

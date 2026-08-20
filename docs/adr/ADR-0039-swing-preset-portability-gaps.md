@@ -32,21 +32,22 @@ v1.0, 미국시장 기준 26개 조건)를 `SWING_MIDTERM_KR`
 
 ## 검증
 
-**검증 대상이 `SWING_TREND_KR`로 바뀌었다(2026-08-14, ADR-0061).** `SWING_MIDTERM_KR`은
-폐기됐고 `is_active = false`이지만 **`screen_condition` 행은 남아 있어**, 그 코드를 계속
-재면 폐기된 프리셋을 재면서 영원히 `OK`를 내는 **실패할 수 없는 펜스**가 된다.
+> **2026-08-20 — 잴 대상이 하나도 안 남았다.** `SWING_MIDTERM_KR`이 2026-08-14에 폐기됐고
+> (ADR-0061) 그 자리를 받았던 `SWING_TREND_KR`도 폐기됐다. **이 명세의 후손인 활성 프리셋은
+> 이제 없다.** 폐기는 `is_active = false`일 뿐 **`screen_condition` 행은 남으므로**, 프리셋
+> 코드를 하드코딩한 펜스를 그대로 두면 **폐기된 프리셋을 재면서 영원히 `OK`를 내는 실패할 수
+> 없는 펜스**가 된다. 그래서 아래에서 **프리셋 코드에 묶인 펜스 셋을 걷었다** — 결핍 낱말
+> 여섯, 규모 조건 premise, 그리고 깔때기 SQL이다.
 
-아래 대조표는 **폐기된 프리셋이 원본에서 무엇을 못 옮겼는지의 기록으로 남긴다** — 후계
-프리셋의 조건 출처는 ADR-0061과 `PresetCatalog`의 javadoc이 답한다.
+**남긴 것과 걷은 것을 가르는 기준은 「프리셋 이름에 묶였는가」다.** 이 문서의 대조표와 임계값
+표는 **원본에서 무엇을 못 옮겼는지의 기록으로 남긴다**(그 기록이 이 ADR의 값이다). 반면
+프리셋 코드로 DB를 재던 펜스는 잴 것이 없어졌다.
 
-프리셋 설명이 결핍을 실제로 말하는지 — 여섯 낱말이 모두 있어야 한다:
+### 걷은 펜스 — 결핍 낱말 여섯
 
-```bash
-psql -d stock_screener -At -c "SELECT description FROM screen WHERE code='SWING_TREND_KR'" \
-  | grep -o '업종\|EBITDA\|이자보상\|베타\|피인수\|해자' | sort -u | wc -l
-```
-
-`6`이어야 한다. 줄면 결핍 고지가 빠진 것이다.
+프리셋 `description`에 결핍 고지 여섯 낱말(`업종`·`EBITDA`·`이자보상`·`베타`·`피인수`·`해자`)이
+남아 있는지를 재던 bash 펜스가 있었다. **폐기된 행의 `description`은 아무도 안 고치므로 영원히
+6이 나온다.** 아래 낱말 해설은 **원본의 결핍이 무엇이었는지의 기록으로** 남긴다.
 
 **낱말은 그대로인데 둘이 가리키는 것이 바뀌었다.** `업종`은 예전에 "업종 상대 비교를 못
 옮겼다"였고 지금은 "업종 표본이 5종목에 못 미치면 판정할 수 없다"다(ADR-0044).
@@ -56,24 +57,33 @@ psql -d stock_screener -At -c "SELECT description FROM screen WHERE code='SWING_
 **MUST NOT: 그것을 근거로 `베타`를 낱말 목록에서 빼지 않는다.** 빼면 검증이 5가 되고,
 그 상태에서 다른 결핍 하나가 더 빠져도 5가 나온다 — **줄었다는 사실이 드러나지 않는다.**
 
-```premise 스윙 프리셋이 규모를 절대값으로 건다
-psql -d stock_screener -At -c "WITH c AS (SELECT c.indicator_code i, c.operator o FROM screen s JOIN condition_group g ON g.screen_id=s.id JOIN screen_condition c ON c.group_id=g.id WHERE s.code='SWING_TREND_KR') SELECT CASE WHEN (SELECT count(*) FROM c) = 0 THEN 'SWING_TREND_KR에 조건이 없다 — 프리셋이 투영되지 않았다' WHEN (SELECT count(*) FROM c WHERE i = 'MARKET_CAP_PCTL') > 0 THEN '시가총액을 백분위로 걸고 있다 — 유니버스 안에서 매겨져 코스닥 소형주가 통과한다' WHEN (SELECT count(*) FROM c WHERE i = 'MARKET_CAP') = 0 THEN '규모 조건이 사라졌다 — 원본 U-03이 통째로 빠진 상태다' ELSE 'OK 규모를 절대값으로 건다(조건 ' || (SELECT count(*) FROM c) || '개)' END"
-```
+### 걷은 펜스 — 규모를 절대값으로 거는가
 
-**`count(*) = 0`을 따로 답하는 것이 요점이다.** 프리셋이 아직 투영되지 않은 상태와
-"백분위를 쓰지 않는다"가 둘 다 조용히 참이 되기 때문이다.
+원본 U-03(시가총액)을 `MARKET_CAP_PCTL`이 아니라 `MARKET_CAP`으로 걸었는지를 재던 premise가
+있었다. **걷은 이유는 같다** — 그 프리셋의 `screen_condition` 행이 남아 영원히 `OK`를 낸다.
+
+**남길 값이 있는 것은 펜스가 아니라 그 이유다.** 시가총액을 백분위로 걸면 모집단이 유니버스
+안이라 **코스닥 소형주가 「대형주」로 통과한다.** 규모는 절대값으로 거는 조건이며, 이것은
+프리셋과 무관하게 다음 프리셋에도 그대로 걸린다.
 
 **U-05의 이식이 근사인 것은 아래 포함 관계가 참인 동안만이다.** `TRADING_DAYS_750`은 러너의
-읽기 창에 값이 묶여 있다. 그 창을 정하던 것은 `SharesGrowth3yCalculator.LOOKBACK`(751)이었고, **지금은 `ICHI_*`의 1,100이다**(P12).
-둘 중 하나가 바뀌면 **U-05가 기존 게이트보다 강하게 자르기 시작하는데, 결과 종목 수는 그대로일
-수 있어 화면에서 드러나지 않는다.**
+**읽기 창에 값이 묶여 있고**, 창이 바뀌면 이 지표가 다른 것을 세기 시작한다. 창이 지금 얼마이고
+무엇이 그것을 정하는지는 **`IndicatorRunner`가 답한다** — 이 문서에 숫자를 적어 두면 창이 움직일
+때 여기만 낡는다.
+
+> **2026-08-20 — 이 premise에 걸린 것이 바뀌었다.** `SWING_TREND_KR`이 폐기되면서
+> **`TRADING_DAYS_750`을 쓰는 활성 프리셋이 하나도 없다.** 그래서 이 펜스가 붉어져도 조용히
+> 바뀌는 프리셋 결과는 이제 없다. **그래도 남긴다** — 이 지표는 조건 빌더에서 계속 고를 수
+> 있어 **사용자가 저장한 전략**이 그것을 걸 수 있고, 그때 이 포함 관계가 깨져 있으면 U-05가
+> 기존 게이트보다 강하게 자르는데 결과 수는 그대로일 수 있다. **재는 것은 같고 걸린 것이
+> 좁아졌다.**
 
 ```premise U-05가 SHARES_GROWTH_3Y보다 강하게 자르지 않는다
 psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) td FROM indicator_value), x AS (SELECT stock_id, max(value) FILTER (WHERE indicator_code='SHARES_GROWTH_3Y') sg, max(value) FILTER (WHERE indicator_code='TRADING_DAYS_750') days FROM indicator_value, d WHERE trade_date = d.td AND indicator_code IN ('SHARES_GROWTH_3Y','TRADING_DAYS_750') GROUP BY 1) SELECT CASE WHEN count(*) FILTER (WHERE days IS NOT NULL) = 0 THEN 'TRADING_DAYS_750이 최신 지표 일자에 하나도 없다 — 지표가 배포되지 않았거나 그날 백필이 돌지 않았다' WHEN count(*) FILTER (WHERE sg IS NOT NULL) = 0 THEN 'SHARES_GROWTH_3Y가 최신 지표 일자에 하나도 없다 — 포함 관계를 잴 대상이 없다' WHEN count(*) FILTER (WHERE sg IS NOT NULL AND (days IS NULL OR days < 750)) = 0 THEN 'OK SHARES_GROWTH_3Y 보유(' || count(*) FILTER (WHERE sg IS NOT NULL) || '종목)가 U-05 통과(' || count(*) FILTER (WHERE days >= 750) || '종목)의 부분집합이다' ELSE 'U-05가 SHARES_GROWTH_3Y보다 강하게 자른다: ' || count(*) FILTER (WHERE sg IS NOT NULL AND (days IS NULL OR days < 750)) || '종목 — 읽기 창이나 LOOKBACK이 바뀌었는지 본다' END FROM x"
 ```
 
 **모집단이 비는 경우를 둘로 가르는 이유**는 "지표가 배포되지 않았다"와 "그날 백필이 안 돌았다"가
-둘 다 흔하기 때문이다. 이 둘 중 **실행당 1일치만 채워지는 것은 이제 `TRADING_DAYS_750` 하나다**(위 §깔때기 · 창이 1,100이 되며 `SHARES_GROWTH_3Y`는 350일자를 낸다). 백필을 건너뛴
+둘 다 흔하기 때문이다. 이 둘 중 **실행당 1일치만 채워지는 것은 이제 `TRADING_DAYS_750` 하나다**(위 §깔때기 · `SHARES_GROWTH_3Y`는 창이 자기 LOOKBACK보다 넓어진 뒤로 여러 일자를 낸다). 백필을 건너뛴
 날짜에는 정상적으로 비어 있다.
 
 **수정주가·업종 쪽 펜스는 여기 없다** — 둘 다 착수해 정본이 옮겨 갔다. 수정계수는 원장이
@@ -136,8 +146,12 @@ FROM p"
 자기 몫보다 많이 자르는 것처럼 보이면 그것은 U-05가 아니라 **수집 결손**이다 — 아래 §단계 값이
 0이면… 절과 `TradingDays750Calculator`의 javadoc을 함께 본다.
 
-**MUST: 임계값을 고치면 이 SQL도 함께 고친다.** 정본은 `PresetCatalog.swingMidtermKr()`이고
-이것은 사본이다 — 어긋나면 깔때기가 프리셋과 다른 것을 재면서 그럴듯한 숫자를 낸다.
+> **2026-08-20 — 이 SQL은 폐기된 프리셋의 기록이다. 돌려서 지금을 판정하지 마라.**
+> 임계 16개가 여기 박혀 있고 정본이던 `PresetCatalog.swingMidtermKr()`은 **이미 없다**(그 프리셋도,
+> 자리를 받았던 `SWING_TREND_KR`도 폐기됐다). 남기는 이유는 **깔때기를 재는 방법**이 여기 있기
+> 때문이다 — 게이트가 단계마다 몇 종목을 떨어뜨렸는지는 SCORING 응답으로 알 수 없어, 이 형태를
+> 다시 쓰는 것이 유일한 길이다. **MUST: 다음 프리셋에 쓸 때는 임계를 베끼지 말고
+> `screen_condition`에서 동적으로 읽어라** — 사본을 두면 프리셋과 갈리면서 그럴듯한 숫자를 낸다.
 
 **단계 값이 0이면 조건이 아니라 지표 부재를 먼저 의심한다.** 값이 없는 종목은 SQL에서도
 비교가 NULL이 되어 조용히 빠지므로, 조건이 자른 것과 구분되지 않는다. 필수 지표별 종목 수를
