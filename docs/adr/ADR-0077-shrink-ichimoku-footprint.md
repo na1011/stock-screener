@@ -74,11 +74,16 @@ FROM (SELECT count(*) total, count(*) FILTER (WHERE is_active) active,
       FROM indicator WHERE code LIKE 'ICHI/_%' ESCAPE '/') s"
 ```
 
-**문서 쪽은 정적으로 잰다.**
+**문서 쪽은 정적으로 잰다.** **MUST: `--hidden`을 붙이고 이 파일을 뺀다** — `--no-ignore`는
+숨김 디렉터리를 안 열어 `.claude`가 통째로 빠지고, 이 파일 자신이 아래 문자열을 이력으로
+들고 있어 빼지 않으면 **떨어질 수 없는 검사**가 된다.
 
 ```
-rg -n --hidden --no-ignore -g '!build/**' 'ichimoku-port|ichimoku_sp_screener' .   # → 0건
-rg -n --hidden --no-ignore -g '!build/**' '29개|29코드' src docs                   # → 0건
+X='docs/adr/ADR-0077-shrink-ichimoku-footprint.md'
+rg -n --hidden --no-ignore -g '!build/**' -g "!$X" 'ichimoku-port|ichimoku_sp_screener' .  # → 0건
+rg -n --hidden --no-ignore -g '!build/**' -g "!$X" '29개|29코드' src docs                  # → 0건
+rg -n --hidden --no-ignore -g '!build/**' -g '!**/node_modules/**' -g '!frontend/dist/**' \
+   -g "!$X" '137일자|136\.8|236주|571거래일|43,093' .                                     # → 0건
 ```
 
 ## 배경
