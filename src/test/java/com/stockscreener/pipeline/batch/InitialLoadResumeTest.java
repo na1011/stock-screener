@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>IMPORTANT — <b>이 성질을 재는 테스트가 없었다.</b> {@code JobRestartTest}가 그 자리에
  * 있는 것처럼 보였으나 실제로 재던 것은 <b>테스트가 자기 손으로 만든 Spring Batch 합성 잡</b>의
  * {@code ExecutionContext} 재개였고, 우리 잡은 한 번도 지나가지 않았다. 그 잡은 Spring Batch를
- * 걷어내며 함께 지웠다(ADR-0074 계열 결정). 여기가 그 자리를 받는다.
+ * 걷어내며 함께 지웠다(ADR-0075). 여기가 그 자리를 받는다.
  *
  * <p>기존 테스트와 겹치지 않는 부분만 잰다. 대상 선정 자체는
  * {@code InitialLoadTargetSelectionTest}가, {@code ABORTED} 마감은
