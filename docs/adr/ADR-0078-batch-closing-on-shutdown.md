@@ -94,7 +94,7 @@ PARTIAL_SUCCESS로 덮는다」는 단정할 수 없고, 이번 회차에는 나
 
 | 확인한 것 | 결과 |
 |---|---|
-| `deploy.sh`가 빌드 앞에 경고 | `[deploy] 도는 배치가 있다 … indicator-backfill [ADMIN · 00:00:16 경과]` |
+| `deploy.sh`가 빌드 앞에 경고 | `[deploy] 도는 배치가 있다 … indicator-backfill [ADMIN · 00:00:16 경과]` — **그 스크립트의 해당 줄만 따로 태운 결과다.** 전체 배포를 한 번 더 돌리면 복구 중이던 잡을 또 끊게 되어 그렇게 했다 |
 | `stop.sh`가 kill 앞에 경고 | `[stop] 도는 배치가 있다 … 00:01:11 경과` |
 | **deploy가 `start.sh`까지 갔는가** | **갔다.** `[stop] 앱 종료` → `[start] 앱 OK` → 외부 `UP` |
 | `stop.sh` 소요 | **약 16초** (SIGTERM 02:06:23 → 종료 02:06:39). 대기 45초 대비 여유 29초 |
