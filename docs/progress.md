@@ -39,7 +39,6 @@
 
 ### 사용자 판단이 먼저인 것 — 묻고 시작한다
 
-- ④ **Spring Batch를 걷을지 쓸지** — ADR-0005의 재시작성을 아무도 안 쓴다(`BATCH_*` 0행, `linkJobExecution()`·`BatchExecutionContext.abort()`가 죽은 코드다).
 
 ### 바로 착수 가능한 것
 

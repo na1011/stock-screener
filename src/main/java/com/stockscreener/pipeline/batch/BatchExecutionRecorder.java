@@ -64,14 +64,6 @@ public class BatchExecutionRecorder {
                 """, Long.class, jobName, targetDate, targetCount, retriedFromId);
     }
 
-    /** Spring Batch 실행과 연결한다. 상세 스텝 이력이 필요하면 이 id로 조인한다. */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void linkJobExecution(long executionId, long jobExecutionId) {
-        jdbcTemplate.update(
-                "UPDATE batch_execution SET job_execution_id = ? WHERE id = ?",
-                jobExecutionId, executionId);
-    }
-
     /**
      * 종목 하나의 실패를 기록한다.
      *

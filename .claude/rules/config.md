@@ -32,7 +32,7 @@ paths:
 
 ## `src/main/resources/application.yaml`
 
-- **`spring.batch.job.enabled=false`와 `pipeline.scheduler.enabled` 기본 꺼짐을 유지한다.** 켜면 애플리케이션을 띄우는 것만으로 배치가 돌아 외부 API 쿼터를 태운다. 운영 인스턴스는 `ops/run-app.sh`가 실행 인자로 켠다 — **`application-prod.yaml`을 만들지 않는다**(`guard-secrets.sh`가 그 이름을 막고, 실은 "이 프로세스가 운영인가"는 파일이 아니라 실행 방식이 정할 일이다).
+- **`pipeline.scheduler.enabled` 기본 꺼짐을 유지한다.**(`spring.batch.job.enabled`는 Spring Batch와 함께 걷혔다 — ADR-0075) 켜면 애플리케이션을 띄우는 것만으로 배치가 돌아 외부 API 쿼터를 태운다. 운영 인스턴스는 `ops/run-app.sh`가 실행 인자로 켠다 — **`application-prod.yaml`을 만들지 않는다**(`guard-secrets.sh`가 그 이름을 막고, 실은 "이 프로세스가 운영인가"는 파일이 아니라 실행 방식이 정할 일이다).
 - **`management.health.mail.enabled: false`를 지우지 않는다.** `spring-boot-mail`이 SMTP에 실제로 접속하는 인디케이터를 함께 싣는다. 알림 자격증명이 없는 동안 `/actuator/health`가 통째로 503이 되고, 그 503을 배포 스크립트와 재부팅 검증이 "앱이 안 떴다"로 읽는다(ADR-0031).
 - **MUST NOT: `server.forward-headers-strategy: framework`를 지우지 않는다.** cloudflared가 로컬에 평문 HTTP로 붙어 원래 스킴이 `X-Forwarded-Proto`에만 남는다. 지우면 `redirect_uri`가 `http://`로 나가 도메인 로그인만 깨지는데 **localhost 개발과 테스트는 멀쩡하다** — 헤더가 없어 분기 자체를 안 타기 때문이다.
 

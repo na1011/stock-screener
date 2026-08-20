@@ -11,7 +11,7 @@ applies_to:
 
 ## 결정
 
-종목 하나의 처리를 독립된 `REQUIRES_NEW` 트랜잭션에서 실행하고, 실패는 **또 다른** 독립 트랜잭션으로 `batch_execution_failure`에 기록한다. Spring Batch의 `faultTolerant().skip()`은 쓰지 않는다. 실행 이력은 Spring Batch의 `BATCH_JOB_EXECUTION`을 대체하지 않고 `job_execution_id`로 참조한다.
+종목 하나의 처리를 독립된 `REQUIRES_NEW` 트랜잭션에서 실행하고, 실패는 **또 다른** 독립 트랜잭션으로 `batch_execution_failure`에 기록한다. Spring Batch의 `faultTolerant().skip()`은 쓰지 않는다. 실행 이력은 Spring Batch의 `BATCH_JOB_EXECUTION`을 대체하지 않고 `job_execution_id`로 참조한다. **(2026-08-20 — 그 링크는 한 번도 안 꽂혔고 Spring Batch와 함께 걷혔다. 이제 `batch_execution`이 실행 이력의 유일한 정본이다 — ADR-0075.)**
 
 ## 규칙
 

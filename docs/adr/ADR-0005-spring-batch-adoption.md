@@ -1,6 +1,6 @@
 ---
 id: ADR-0005
-status: 채택됨
+status: 대체됨(→ ADR-0075)
 date: 2026-08-05
 applies_to:
   - "src/main/java/com/stockscreener/pipeline/batch/**"
@@ -9,6 +9,13 @@ applies_to:
 ---
 
 # ADR-0005. Spring Batch를 도입하고 메타데이터 스키마를 Flyway로 관리한다
+
+> **2026-08-20 — 대체됐다(ADR-0075). Spring Batch를 걷었다.**
+> 이 결정이 세운 2계층(Batch가 재시작, `batch_execution`이 종목 실패, `job_execution_id`로 연결)의
+> **링크가 한 번도 안 꽂혔다** — 컬럼 99행 전부 NULL, 메타 6테이블 0행. 아래 §배경이 예측한
+> *「직접 만들면 600줄이 저품질 JobRepository가 된다」*는 **절반만 맞았다**: 실제로 1,336줄이 됐지만
+> 그중 관리자 조회 300줄은 Spring Batch가 줄 수 없는 것이었다(ADR-0007이 그 이유를 적었다).
+> **이 문서는 그 판단의 기록으로 남긴다.** 지금 무엇이 재시작을 주는지는 ADR-0075가 답한다.
 
 ## 결정
 
@@ -25,25 +32,16 @@ Spring Batch 6.0.4를 도입한다. `JobRepository`를 JDBC 구현으로 **명�
 
 ## 검증
 
-```bash
-./gradlew dependencies --configuration runtimeClasspath | grep -i spring-batch
-```
-`spring-batch-core:6.0.4`와 `spring-batch-infrastructure:6.0.4`가 나와야 한다.
+**이 결정은 대체됐다. 지켜지는지 잴 것이 없다** — 검증의 정본은 ADR-0075다.
+
+여기 남기는 것은 **되돌아왔는지**를 재는 것 하나다. 아무것도 반환하지 않아야 한다:
 
 ```bash
-./gradlew test --tests "*JobRestartTest*"
+rg -n "^\s*(implementation|testImplementation).*spring-batch" build.gradle
 ```
-통과해야 한다. 이 테스트는 중단된 잡이 **실제로 이어서 재시작되는지**를 `ExecutionContext`에 저장된 위치로 확인한다. 인메모리 `JobRepository`로 되돌아가면 이 테스트가 실패한다 — 도입 근거를 지키는 유일한 수단이다.
 
-```bash
-psql -d stock_screener_test -c "\dt batch_*"
-```
-`batch_job_instance`·`batch_job_execution`·`batch_job_execution_params`·`batch_job_execution_context`·`batch_step_execution`·`batch_step_execution_context` 6개가 있어야 한다.
-
-```bash
-grep -rn "spring.batch.jdbc" src/main/resources/ | grep -vE ':[0-9]+: *(#|--)'
-```
-아무것도 반환하지 않아야 한다(Boot 4.1에 없는 속성이다). 주석 줄을 제외하는 이유는 이 함정을 설명하는 주석이 설정 파일과 마이그레이션에 남아 있기 때문이다 — 그것이 없으면 다음 세션이 같은 속성을 다시 적는다.
+나오면 Spring Batch가 다시 들어온 것이고, 그때는 ADR-0075의 §버린 대안(특히 Tasklet `Step`)을
+먼저 읽는다 — **꽂지 않은 채 의존성만 되돌리는 것이 정확히 이 문서가 남긴 상태였다.**
 
 ## 배경
 

@@ -95,7 +95,8 @@ psql -d stock_screener -At -c "SELECT CASE
   한 것과 같은 판단으로 행으로 둔다.
 - **Spring Batch의 `StepExecution.readCount`/`writeCount`를 쓴다.** V5가 이미 기각했다 — 도메인
   의미가 없어 "시세 몇 행, 재무 몇 건"을 구분하지 못한다. 게다가 이 잡들은 `Job`/`Step`을 쓰지
-  않아 `BATCH_STEP_EXECUTION`이 0행이다.
+  않아 `BATCH_STEP_EXECUTION`이 0행이다. **(2026-08-20 — 여기 적힌 0행이 3년 뒤가 아니라 열흘
+  뒤에 Spring Batch를 걷는 근거가 됐다. 그 테이블은 이제 없다 — ADR-0075.)**
 
 ## 결과
 

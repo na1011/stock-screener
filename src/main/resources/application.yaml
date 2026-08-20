@@ -32,19 +32,6 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
-  batch:
-    # IMPORTANT — Boot 4.1에는 spring.batch.jdbc.* 속성이 없다. BatchProperties에 job 항목만
-    # 있어 initialize-schema 같은 Boot 3 속성을 여기 적으면 조용히 무시된다.
-    # 더 중요한 것은 Boot 4.1이 JDBC JobRepository를 자동 구성하지 않는다는 점이다 —
-    # 기본값은 인메모리(ResourcelessJobRepository)이고, 그대로 두면 잡은 정상 동작하는데
-    # 아무것도 기록되지 않아 재시작이 불가능하다. BatchInfrastructureConfig가 이를 대체한다.
-    # 스키마는 Flyway V6가 만든다.
-    job:
-      # MUST: 기동 시 잡을 자동 실행하지 않는다. 초기 적재는 1회성 수동 작업이고,
-      # 일일 갱신은 스케줄러가 정해진 시각에 띄운다. 이것을 켜두면 애플리케이션을
-      # 재시작할 때마다 850종목 수집이 시작된다.
-      enabled: false
-
   mail:
     # MUST NOT: 실제 계정·앱 비밀번호를 여기 넣지 않는다. 환경변수 참조만 둔다.
     #

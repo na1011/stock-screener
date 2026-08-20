@@ -48,16 +48,14 @@ dependencies {
     annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
     annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
 
-    // Spring Batch — 초기 적재의 재시작성이 도입 근거다. 850종목 × 2년 시세를 일일 쿼터가
-    // 있는 소스에서 받으므로 한 번에 끝나지 않는 것이 정상 시나리오이고, "어디까지 했는가"를
-    // 직접 만들면 그것이 곧 저품질 JobRepository가 된다. ADR-0005 참조.
-    // 메타데이터 스키마는 Boot의 자동 초기화가 아니라 Flyway가 관리한다(V6).
-    implementation 'org.springframework.boot:spring-boot-starter-batch'
-
-    // 재시도 백오프(RATE_LIMITED·TRANSIENT). spring-batch-core가 전이로 끌어오지만
-    // 직접 선언한다 — 전이 의존에 기대면 Batch 업그레이드가 조용히 걷어갈 수 있고,
-    // 그때 깨지는 것은 컴파일이 아니라 새벽 배치의 재시도 동작이다.
-    implementation 'org.springframework.retry:spring-retry'
+    // 재시도 백오프(RATE_LIMITED·TRANSIENT). Spring Batch를 걷은 뒤(ADR-0075) 이것이 유일한
+    // 경로다. 빠지면 깨지는 것은 컴파일이 아니라 새벽 배치의 재시도 동작이다.
+    //
+    // MUST: 버전을 여기 박는다. Boot의 BOM은 이것을 관리하지 않고 **spring-batch의 BOM이
+    // 주고 있었다** — 아티팩트를 직접 선언해 두었어도 버전은 전이였고, Batch를 걷자
+    // `Could not find ...spring-retry:.`로 컴파일이 멈췄다. 2.0.13은 걷기 직전에 실제로
+    // 해석되던 값이다.
+    implementation 'org.springframework.retry:spring-retry:2.0.13'
 
     // Boot 4는 Flyway 자동설정을 별도 모듈로 분리했다. flyway-core만 넣으면
     // 클래스패스에는 있지만 자동설정이 없어 마이그레이션이 조용히 실행되지 않는다.
@@ -94,8 +92,6 @@ dependencies {
     // @DataJpaTest는 spring-boot-starter-test에 없고 여기에 있다.
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
-    // JobLauncherTestUtils. 재시작성은 실제 JobRepository로만 검증할 수 있다.
-    testImplementation 'org.springframework.batch:spring-batch-test'
     // 실제 소켓을 열어 RestClient를 통과시킨다. Mockito로 RestClient를 목킹하면
     // 타임아웃·상태코드·봉투 파싱 같은 에러 매핑이 전혀 검증되지 않는다.
     // WireMock은 Jetty 전체를 끌어와 무겁고, Docker가 없어 컨테이너 기반은 배제된다.

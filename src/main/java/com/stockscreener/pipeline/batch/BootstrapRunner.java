@@ -16,7 +16,7 @@ import java.util.List;
  * 배치 잡을 손으로 한 번 돌리는 진입점.
  *
  * <p>{@code bootstrap} 프로파일에서만 등록된다. 기본 프로파일에 두면
- * {@code spring.batch.job.enabled=false}로 막아둔 것과 같은 사고가 난다 —
+ * 기동만으로 잡이 도는 것과 같은 사고가 난다 —
  * 애플리케이션을 재시작할 때마다 850종목 수집이 시작된다.
  *
  * <p>Phase 4의 관리자 API를 앞당기지 않은 이유는 적재가 <b>지금 필요한 것</b>이고 API는

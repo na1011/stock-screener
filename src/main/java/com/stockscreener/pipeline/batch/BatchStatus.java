@@ -3,7 +3,8 @@ package com.stockscreener.pipeline.batch;
 /**
  * 배치 실행의 상태. {@code batch_execution.status}의 값이다.
  *
- * <p>Spring Batch의 {@code BatchStatus}와 이름이 같지만 다른 타입이다. 이쪽은 종목 단위
+ * <p>Spring Batch의 동명 타입에서 이름을 빌렸지만 뜻이 다르고, 그 의존성은 걷었다(ADR-0075).
+ * 이쪽은 종목 단위
  * 부분 실패라는 이 프로젝트의 개념({@link #PARTIAL_SUCCESS})을 담아야 하고,
  * 그 개념은 Spring Batch의 상태 모델에 없다.
  */
