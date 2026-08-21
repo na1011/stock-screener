@@ -186,8 +186,15 @@ psql -d stock_screener -At -c "WITH seven AS (SELECT stock_id, max(published_at)
 ```
 
 ```premise 저장된 지표에 시간축이 없다 — 백테스트가 그것을 읽으면 안 되는 이유
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — PROFIT_STREAK_Y 행이 하나도 없다' WHEN max(updated_at)::date - min(updated_at)::date <= 2 THEN 'OK 저장된 지표 ' || count(DISTINCT trade_date) || '거래일이 ' || max(updated_at)::date || ' 한 번에 쓰였다 — 시간축이 없다' ELSE '저장된 지표의 updated_at이 ' || min(updated_at)::date || '~' || max(updated_at)::date || '로 갈렸다 — 시간축이 생겼는지 확인하고 백테스트 금지 규칙을 다시 판단한다' END FROM indicator_value WHERE indicator_code = 'PROFIT_STREAK_Y'"
+psql -d stock_screener -At -c "WITH d AS (SELECT stock_id, count(DISTINCT value) n FROM indicator_value WHERE indicator_code = 'PROFIT_STREAK_Y' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — PROFIT_STREAK_Y 행이 하나도 없다' WHEN (SELECT count(DISTINCT trade_date) FROM indicator_value) <= 1 THEN '잴 것이 없었다 — 보존 창에 거래일이 하나뿐이라 시간축을 물을 수 없다' WHEN (SELECT count(*) FROM d WHERE n > 1) = 0 THEN 'OK 저장된 PROFIT_STREAK_Y가 종목마다 값 하나뿐이다(' || (SELECT count(*) FROM d) || '종목 / ' || (SELECT count(DISTINCT trade_date) FROM indicator_value) || '거래일) — 시간축이 없다' ELSE (SELECT count(*) FROM d WHERE n > 1)::text || '종목이 보존 창에서 값이 둘 이상이다 — 시간축이 생겼는지 확인하고 백테스트 금지 규칙을 다시 판단한다' END"
 ```
+
+**`updated_at`으로 묻지 않는다.** 이 펜스의 첫 판이 그랬는데 **구조적으로 거짓 발견을 낸다** —
+`IndicatorValueWriter`의 `IS DISTINCT FROM` 때문에 값이 안 바뀐 행은 `updated_at`을 그대로 두고,
+새 거래일만 매일 새로 INSERT된다. 그래서 **일일 갱신이 사흘만 돌면 폭이 2일을 넘는다**
+(실측 2026-08-21: 08-18에 46,872행 · 그 뒤 사흘은 하루 263행씩 = 거래일 하나치). 그것은 시간축이
+아니라 **쓰기 시각의 분포**다. 묻는 것은 **값 자체**여야 한다 — 종목마다 보존 창 전체에서 값이
+하나뿐이면 시간축이 없는 것이고, 계산기가 봉마다 재무를 다시 세게 바뀌면 그때 붉어진다.
 
 ```premise 시점 유니버스가 DB에 여전히 없다 — 생존편향 판정의 근거
 psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — universe_membership이 비었다' WHEN min(effective_from) = DATE '2026-08-05' THEN 'OK 유니버스 이력이 여전히 2026-08-05부터다 — 그 이전 시점 유니버스는 DB에 없다(구간 ' || count(DISTINCT effective_from) || '개)' ELSE '유니버스 이력의 시작이 ' || min(effective_from) || '로 바뀌었다 — 과거 편입을 넣는 경로가 생겼다면 생존편향 판정을 다시 한다' END FROM universe_membership"
