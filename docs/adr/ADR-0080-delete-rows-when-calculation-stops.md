@@ -1,0 +1,137 @@
+---
+id: ADR-0080
+status: 채택됨
+date: 2026-08-21
+applies_to:
+  - "src/main/java/**/indicator/IndicatorRunner.java"
+  - "src/main/java/**/indicator/DerivedIndicatorCleanup.java"
+  - "src/main/java/**/indicator/PercentileCalculator.java"
+  - "src/main/java/**/indicator/SectorRelativeCalculator.java"
+---
+
+# ADR-0080. 계산이 그만 난 지표의 옛 행을 걷는다
+
+## 결정
+
+`IndicatorRunner.run`이 **계산기가 창 전체에 대해 한 점도 못 냈을 때** 그 종목·그 지표의 옛 행을
+**창의 거래일 범위 안에서** 지운다. 원본이 지워지면 파생 행이 고아가 되므로
+`DerivedIndicatorCleanup`을 **보존 창 전체**로 넓혀 잡마다 한 번 쓸어낸다.
+
+## 규칙
+
+- **MUST: 삭제 범위를 「창의 거래일」로 잡는다.** `trade_date > cutoff`짜리 무제한 DELETE는 **상한이
+  없어**, 보존 창 안 과거 일자로 백필하면 **그 뒤 오늘까지의 라이브 행이 함께 지워진다.** 창의
+  거래일은 `asOf`에서 끝나므로 상한이 구조적으로 묶인다. 같은 이유로 `writeCutoff()`가
+  `Optional.empty()`인 초기 상태도 안전하다 — `retain()`에서 empty는 「보존」인데 무제한 DELETE에서는
+  **「전부 삭제」로 뜻이 뒤집힌다.**
+- **MUST: 억제로 빈 것과 계산 불가로 빈 것을 가른다.** `compute()`가 억제 필터를 적용한 **뒤** 비면
+  `points` 맵에 안 담으므로 러너에서는 둘이 똑같이 빈 목록이다. `TradingDays750Calculator`는 마지막 봉
+  **하나만** 내므로 그 1점이 억제되면 빈 목록이 되는데, 거기서 창 전체를 지우면 **실행당 1일자인 그
+  지표는 복구에 날짜 수만큼의 백필이 든다.**
+- **MUST: 입력을 못 읽은 것과 값이 없는 것을 가른다.** 재무를 한 행도 못 읽었으면 「아직 모른다」이지
+  「값이 사라졌다」가 아니다. 안 가르면 **공시가 늦은 구간에서 재무 지표 이력이 사라졌다가 다음 실행에
+  다시 쓰인다** — ADR-0045가 닫은 왕복이다. 선언으로 판정되는 것은 `DataRequirement.needsFinancial`뿐이다.
+- **MUST: 원본을 지우면 파생도 함께 걷는다.** 날짜별 정리는 **그날 하나**만 보므로 원본이 보존 창
+  전체에서 사라지면 나머지 179일자의 파생 행은 어떤 경로도 안 건드린다. 남는 것은 **원본 없는 백분위**이고
+  화면에서는 그냥 숫자다.
+- **MUST NOT: 보존 창 정리를 날짜 루프 안에서 부르지 않는다.** 백필이 날짜를 바깥 루프로 돌므로
+  안에서 부르면 같은 일을 거래일 수만큼 한다(실측 지표당 약 200ms × 18스펙).
+- **MUST NOT: 「창 안에서 안 낸 날짜를 지운다」로 넓히지 않는다.** 정상적으로 창의 일부만 내는 계산기가
+  여럿이다 — `TRADING_DAYS_750`(마지막 봉만), `SHARES_GROWTH_3Y`(실측 평균 177.8일자),
+  `RETAINED_TO_MARKET_4Y`(앵커 이후만), `EpsCagr5y`(주식수 결손 날짜를 건너뜀).
+
+## 검증
+
+```bash
+./gradlew test --tests "*IndicatorRunnerTest*"
+```
+
+네 단언이 짝을 이룬다 — 지워야 할 것(`deletesRowsOfIndicatorsThatStoppedProducing`)과 **지우면 안 되는
+것 셋**(`keepsRowsWhenTheInputCouldNotBeReadAtAll`·`neverDeletesBeyondTheWindowItRead`·
+`doesNotCullWhenEmptinessCameFromSuppression`). **뒤엣것들이 없으면 「전부 지운다」로도 초록이 된다.**
+
+```premise 원본 없는 파생 행이 남아 있지 않다
+psql -d stock_screener -At -c "WITH o AS (SELECT d.indicator_code c, count(*) n FROM indicator_value d WHERE d.indicator_code LIKE '%\_PCTL' AND d.indicator_code NOT LIKE '%\_SECTOR\_PCTL' AND NOT EXISTS (SELECT 1 FROM indicator_value s WHERE s.stock_id = d.stock_id AND s.trade_date = d.trade_date AND s.indicator_code = regexp_replace(d.indicator_code, '_PCTL$', '')) GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM indicator_value WHERE indicator_code LIKE '%\_PCTL' AND indicator_code NOT LIKE '%\_SECTOR\_PCTL') = 0 THEN '잴 것이 없었다 — 백분위가 한 행도 없다' WHEN (SELECT count(*) FROM o) = 0 THEN 'OK 고아 백분위가 없다' ELSE (SELECT sum(n)::text FROM o) || '행이 원본 없는 백분위다(' || (SELECT string_agg(c, ',' ORDER BY c) FROM o) || ') — 파생 정리가 보존 창을 안 덮고 있다(ADR-0080)' END"
+```
+
+**백분위만 묻는 이유**는 규칙에서 파생 코드를 유도할 수 있는 것이 그쪽뿐이기 때문이다
+(`_PCTL`을 떼면 원본 코드다). **업종 상대값은 그 규칙을 안 따르므로 이름으로 빼낸다** —
+`PER_SECTOR_PCTL`도 `_PCTL`로 끝나지만 떼면 `PER_SECTOR`라는 없는 코드가 나온다.
+**이 펜스를 처음 세웠을 때 그 둘이 85,830행짜리 거짓 발견을 냈다.** 업종 쪽까지 묻자면 짝을
+손으로 적어야 하고 **그 목록이 낡는다** — 그래서 안 묻는다.
+
+## 배경
+
+`IndicatorValueWriter`는 UPSERT뿐이라 **쓸 것이 없으면 옛 행을 못 덮는다.** 러너는
+`points.isEmpty()`로 건너뛸 뿐이었고, `deleteAt`은 **억제(ADR-0055) 경로에서만** 불렸다. 그래서
+계산기가 값을 그만 내면 옛 행이 남았고, **남은 값은 그럴듯한 숫자라 화면에서도 테스트에서도 안 드러난다.**
+
+`V19__drop_altman_z_for_insurers.sql`의 주석이 이 결함을 그대로 적어 뒀다 — *"계산기를 고치는 것만으로는
+이미 저장된 행이 사라지지 않는다."* 저장소는 그것을 **손으로 쓴 마이그레이션 두 장**(V19·V25)으로 두 번
+해결했다. 이 결정이 그 자리를 구조로 옮긴다.
+
+**방아쇠는 정정공시가 아니다.** 낡은 행을 가진 종목 중 **정정 대상은 0종목**이었다. 원인은
+`FinancialWriter.fillMissing`이며 그 경로는 **일부러** `invalidate`를 안 부른다 — 그 javadoc의 근거가
+*"채우는 것은 「행 없음 → 행 생김」이다"*인데, **새 분기가 들어오는 것은 TTM 창을 미는 것이라 값이
+있던 자리를 없앨 수 있다.** 같은 javadoc이 *"다음에 이 경로로 다른 컬럼을 채울 때 다시 답해야 한다"*고
+적어 두었고, 이 결정이 그 답이다.
+
+`batch-load` skill이 정한 처방(refill 뒤 전 종목 단일 거래일 백필)은 **「값이 바뀐 것」만 고치고
+「값이 사라진 것」은 못 고친다.**
+
+## 측정 결과 (2026-08-21)
+
+전 코드 값 스냅숏을 뜨고 단일 날짜 백필로 적용했다.
+
+| 무엇 | 값 |
+|---|---|
+| 지운 행 | **15,485** (전체 574만의 0.27%) |
+| **값이 바뀐 행** | **0** — 이 결정은 지우기만 한다 |
+| **`asOf` 이후 일자 삭제** | **0** — 창 상한이 지켜졌다 |
+| 남은 고아 파생 행 | **0** |
+| 멱등성(2회차) | **삭제 0 · 값 변화 0** |
+| 소요 | 62~63초 → **74.6초**(정상 상태, **+18%**) · 복구 실행 95.7초 |
+
+- **원본과 파생이 짝으로 지워졌다** — `PER` 1,883 ↔ `PER_PCTL` 1,883 ↔ `PER_SECTOR_*` 각 1,679,
+  `PEG` 2,136 ↔ `PEG_PCTL` 2,136. **원본만 지웠으면 9,610행이 고아로 남았을 것이다.**
+- **`GOLDEN_CROSS_AGE`는 한 행도 안 지워졌다.** 그 계산기는 날짜마다 `continue`할 뿐이라 값이 있는
+  날짜가 하나라도 있으면 `points`가 안 빈다. 최신 일자에 값이 없는 165종목은 **그날 교차가
+  `SEARCH_DAYS`를 넘긴 것**이라 정상이고 그 옛 행은 낡은 것이 아니다. **이것이 중단 기준이었고 안 걸렸다.**
+- **확증 사례 `001040 CJ`**: 2026 Q2가 2026-08-14 공시로 들어오며 TTM이 **−233억**이 됐는데
+  `PER` 178행 + 파생 890행이 과거 일자에 남아 있었다. 지금은 전부 없다.
+- **시세가 끊긴 세 종목**(`183300`·`000880`·`082640`)의 행은 **안 지워졌다.** 봉이 있으면 계산기가
+  그 종목의 마지막 봉까지 값을 내므로 `points`가 안 빈다 — 규칙이 그 셋을 건드리지 않는 것이 옳다.
+
+## 버린 대안
+
+- **무제한 DELETE(`trade_date > cutoff`)로 지운다** — 상한이 없어 과거 일자 백필이 라이브 행을 지운다.
+  `Optional.empty()` cutoff에서 전 구간이 날아가는 것도 같은 뿌리다.
+- **「창 안에서 안 낸 날짜」를 전부 지운다** — 정상적으로 일부만 내는 계산기가 여럿이라 그들의 보존 창이
+  매 실행 깎인다. `TRADING_DAYS_750`은 백필이 날짜를 바깥 루프로 돌아 **뒤 날짜가 앞 날짜를 지운다.**
+- **계산기가 「나는 일부러 적게 낸다」를 선언하게 한다** — **ADR-0045 §버린 대안이 기각했다**
+  (*"새 규약이 하나 늘어 다음 계산기가 그것을 잊으면 다시 새어 나간다"*). 잊었을 때의 증상이
+  **조용한 데이터 삭제**라 지금 상태보다 나쁘다.
+- **`fillMissing`에서 `invalidate`를 부른다** — 그 javadoc이 이미 기각했다: *"회계기간 시작일로 전 종목에
+  부르면 지표 33종의 보존 창이 통째로 날아가고, **백분위는 날짜별로만 계산되므로 재계산으로 되살아나지
+  않는다.**"*
+- **손으로 쓴 마이그레이션을 한 장 더 쓴다**(V19·V25 선례) — 지금 낡은 것은 지우지만 **다음 refill 뒤에
+  다시 쌓인다.** 두 번 반복된 것을 세 번째로 반복하는 안이다.
+- **`DerivedIndicatorCleanup`의 SQL을 `trade_date` 범위로 바꾸고 날짜별 호출을 없앤다** — 날짜별 호출은
+  0.46ms인데 범위 호출은 206ms다. 날짜 루프 안에서 범위로 부르면 180배가 되므로 **둘을 함께 둔다** —
+  날짜별은 그대로, 범위는 **잡마다 한 번**.
+
+## 결과
+
+- **쉬워지는 것**: 계산기를 고치거나 원자료가 바뀌어 값이 사라지면 **다음 배치가 옛 행을 스스로 걷는다.**
+  V19·V25 같은 손 마이그레이션이 더는 필요 없다.
+- **어려워지는 것 — 남는 위험**: **상류가 통째로 비면 그 코드의 창이 지워졌다가 다음 실행에 다시 쓰인다.**
+  재무는 위 MUST가 막지만 **시장 지수는 `DataRequirement`에 없어 못 가른다** — 지수 시계열이 통째로
+  비면 `BETA_104W`·`EXCESS_RETURN_26W`·`EXCESS_RETURN_52W`(실측 180,735행)가 이 경로로 지워진다.
+  **하루치 결손으로는 안 터진다**(`ExcessReturn.at`이 그 날짜만 건너뛰므로 `points`가 안 빈다).
+  보상 통제인 `alertIfIndexMissingWhilePricesArrived`는 **`DailyUpdateJob`에만 있고 백필 잡에는 없다.**
+  복구는 단일 날짜 백필 1회다.
+- **비용**: 단일 날짜 실행이 **+18%**(62~63초 → 74.6초). 삭제 스캔은 **0행을 지울 때도 든다** —
+  `idx_iv_stock_date`가 `indicator_code`를 안 덮어 필터가 heap에서 걸리기 때문이다.
+  인덱스를 `(stock_id, indicator_code, trade_date)`로 바꾸면 없앨 수 있지만 **스키마 변경이라 안 했다.**
+- **되돌리려면** `IndicatorRunner.run`의 빈 목록 분기와 두 잡의 `removeOrphansInWindow` 호출.
+  **되돌리는 순간 옛 행이 다시 쌓이고 아무 에러도 안 난다** — 위 테스트 넷과 `premise`만이 그것을 잡는다.
