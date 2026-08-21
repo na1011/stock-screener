@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.Optional;
 import java.util.List;
 
 /**
@@ -185,6 +186,19 @@ public class SectorRelativeCalculator {
      *
      * @return <b>값이 실제로 달라진</b> 행 수. 같은 날을 다시 돌리면 0에 가깝다.
      */
+    public long removeOrphansInWindow(Optional<LocalDate> cutoff) {
+        long removed = 0;
+        for (SectorMetricSpec spec : specs) {
+            removed += DerivedIndicatorCleanup.removeOrphansAfter(
+                    jdbcTemplate, spec.code(), spec.sourceCode(), cutoff);
+            // MUST: 표본 수도 함께 — calculate()의 날짜별 정리와 같은 이유다.
+            removed += DerivedIndicatorCleanup.removeOrphansAfter(
+                    jdbcTemplate, spec.peerCountCode(), spec.sourceCode(), cutoff);
+        }
+        log.info("보존 창의 고아 업종 상대값을 정리했다. 지표={}쌍 정리={}행", specs.size(), removed);
+        return removed;
+    }
+
     public long calculate(LocalDate tradeDate) {
         long written = 0;
         long removed = 0;

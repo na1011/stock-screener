@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -84,6 +85,16 @@ public class IndicatorRunner {
         long written = 0;
         long deleted = 0;
         int suppressedCodes = 0;
+        long stale = 0;
+        int staleCodes = 0;
+
+        // 계산기가 값을 그만 냈을 때 지울 대상(ADR-0080). 창의 거래일이므로 상한이 asOf이고,
+        // 그래서 이 삭제는 **읽은 창 밖을 건드릴 수 없다** — 과거 일자로 백필해도 그 뒤의
+        // 라이브 행은 안전하다. 종목당 한 번만 만든다.
+        Collection<LocalDate> windowDates = retainDates(
+                base.priceBars().stream().map(PriceBar::tradeDate)
+                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)),
+                retentionCutoff);
 
         for (IndicatorCalculator calculator : registry.executionOrder()) {
             String code = calculator.code();
@@ -104,9 +115,30 @@ public class IndicatorRunner {
 
             // 계산할 수 없으면 행을 쓰지 않는다(ADR-0002). 워밍업이 부족한 구간에서 정상이다.
             if (points.isEmpty()) {
+                // MUST: 억제로 비었을 때는 여기서 지우지 않는다. 위 분기가 이미 제 범위를
+                // 지웠고, 여기서 또 지우면 **억제 창 밖까지** 번진다. 특히
+                // TradingDays750Calculator는 마지막 봉 하나만 내므로 그 1점이 억제되면
+                // points가 비는데, 그때 창 전체를 지우면 실행당 1일자인 그 지표는
+                // 복구에 날짜 수만큼의 백필이 든다.
+                if (suppressed.isEmpty() && !windowDates.isEmpty()
+                        && inputsWereReadable(calculator, base)) {
+                    long removed = writer.deleteAt(stockId, code, windowDates);
+                    if (removed > 0) {
+                        stale += removed;
+                        staleCodes++;
+                    }
+                }
                 continue;
             }
             written += writer.write(stockId, code, retain(points, retentionCutoff));
+        }
+
+        if (staleCodes > 0) {
+            // 계산기가 값을 그만 낸 자리다. 원자료가 바뀌어(FILL_MISSING처럼 무효화를 안 부르는
+            // 경로 포함) 값이 사라졌는데 옛 행만 남아 있던 것을 걷은 것이다 — 그 행들은
+            // 화면에서 그럴듯한 숫자로 보이므로 여기 말고는 드러나는 자리가 없다.
+            log.info("계산이 그만 난 지표의 옛 행을 걷었다. stockId={} asOf={} 지표={}개 삭제={}행",
+                    stockId, asOf, staleCodes, stale);
         }
 
         if (suppressedCodes > 0 || deleted > 0) {
@@ -115,6 +147,28 @@ public class IndicatorRunner {
                     stockId, asOf, base.unadjustedActions(), suppressedCodes, deleted);
         }
         return written;
+    }
+
+    /**
+     * 원자료를 <b>읽기는 했는가.</b> 「값이 없다」와 「입력을 못 읽었다」를 가른다(ADR-0080).
+     *
+     * <p>IMPORTANT — 이 구분이 없으면 <b>공시가 늦은 구간에서 재무 지표의 이력이 통째로 사라진다.</b>
+     * 계산기가 빈 목록을 내는 이유는 둘이다 — 값이 성립하지 않거나(TTM이 음수라 PER이 없다),
+     * 애초에 입력이 없거나(그 종목의 재무를 한 행도 못 읽었다). 앞엣것만 「옛 행이 낡았다」는
+     * 근거가 되고, 뒤엣것은 <b>아직 모른다</b>일 뿐이다. 뒤엣것에 삭제를 걸면 분기 하나가 늦게
+     * 들어오는 동안 그 종목의 재무 지표가 보존 창에서 사라지고, 다음 실행에 다시 쓰인다 —
+     * ADR-0045가 닫은 「삭제 → 재기록」 왕복이다.
+     *
+     * <p>선언으로 판정할 수 있는 것은 <b>재무뿐이다</b>({@code DataRequirement.needsFinancial}).
+     * 시장 지수는 {@code DataRequirement}에 없어 같은 방식으로 못 가른다 — 지수 시계열이 통째로
+     * 비면 {@code BETA_104W}·{@code EXCESS_RETURN_*}가 여전히 이 경로로 지워진다(ADR-0080 §결과).
+     * 시세는 {@code run}의 조기 반환이 이미 막는다.
+     */
+    private static boolean inputsWereReadable(IndicatorCalculator calculator, IndicatorContext base) {
+        if (!calculator.dataRequirement().needsFinancial()) {
+            return true;
+        }
+        return !base.annualFigures().isEmpty() || !base.quarterlyFigures().isEmpty();
     }
 
     /**

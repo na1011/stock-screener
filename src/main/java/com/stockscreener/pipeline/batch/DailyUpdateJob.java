@@ -247,6 +247,12 @@ public class DailyUpdateJob {
             // 업종 조건을 건 화면이 그 앞에서 판정되면 어제 값으로 오늘을 판정한다.
             sectorRelativeCalculator.calculate(asOf);
 
+            // 러너가 「값을 그만 낸」 지표의 옛 행을 보존 창 전체에서 지웠을 수 있다(ADR-0080).
+            // 그러면 파생 행이 그만큼 고아가 되는데, 위 두 계산의 날짜별 정리는 asOf 하나만 본다.
+            // MUST: 루프 밖에서 한 번이다.
+            percentileCalculator.removeOrphansInWindow(retentionCutoff);
+            sectorRelativeCalculator.removeOrphansInWindow(retentionCutoff);
+
             execution.stage("워치리스트 판정");
             // 워치리스트 판정은 백분위 뒤여야 한다. 백분위 조건("PER 하위 20%")을 건 화면이
             // 그 앞에서 판정되면 어제 백분위로 오늘을 판정하게 되고, 그것은 조용히 그럴듯하다.

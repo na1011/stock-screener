@@ -157,6 +157,13 @@ public class IndicatorBackfillJob {
                 // 백분위와 순서를 가릴 이유는 없다. 둘 다 원본 지표만 읽고 서로를 읽지 않는다.
                 sectorRelativeCalculator.calculate(tradeDate);
             }
+
+            // MUST: 날짜 루프 **밖**이다(ADR-0080). 러너가 「값을 그만 낸」 지표의 옛 행을 보존 창
+            // 전체에서 지우면 파생 행이 그만큼 고아가 되고, 날짜별 정리는 그날 하나만 본다.
+            // 루프 안에서 부르면 같은 일을 거래일 수만큼 반복한다(지표당 약 200ms × 18).
+            execution.stage("고아 파생값 정리");
+            percentileCalculator.removeOrphansInWindow(retentionCutoff);
+            sectorRelativeCalculator.removeOrphansInWindow(retentionCutoff);
         } catch (DataSourceException e) {
             // 외부 호출이 없으므로 정상적으로는 도달하지 않는다. StockTask의 시그니처가
             // 이 예외를 선언하고 있어 형식상 잡을 뿐이며, 실제로 온다면 그것 자체가 이상 신호다.

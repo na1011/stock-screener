@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.Optional;
 import java.util.List;
 
 /**
@@ -84,6 +85,29 @@ public class PercentileCalculator {
     public PercentileCalculator(JdbcTemplate jdbcTemplate, List<PercentileSpec> specs) {
         this.jdbcTemplate = jdbcTemplate;
         this.specs = List.copyOf(specs);
+    }
+
+
+    /**
+     * 보존 창 전체의 고아 파생 행을 쓸어낸다(ADR-0080). <b>잡마다 한 번만</b> 부른다.
+     *
+     * <p>{@link #calculate}의 날짜별 정리는 <b>그날 하나</b>만 본다. 러너가 「값을 그만 낸」
+     * 지표의 옛 행을 보존 창 전체에서 지우면 파생 행도 그만큼 고아가 되는데, 날짜별 정리로는
+     * 안 걸린다 — 남는 것은 <b>원본 없는 파생값</b>이고 화면에서는 그냥 숫자다.
+     *
+     * <p>MUST NOT: 날짜 루프 안에서 부르지 않는다. 백필이 날짜를 바깥 루프로 돌므로
+     * 그 안에서 부르면 같은 일을 180번 한다(실측 지표당 약 200ms).
+     *
+     * @return 지운 행 수
+     */
+    public long removeOrphansInWindow(Optional<LocalDate> cutoff) {
+        long removed = 0;
+        for (PercentileSpec spec : specs) {
+            removed += DerivedIndicatorCleanup.removeOrphansAfter(
+                    jdbcTemplate, spec.code(), spec.sourceCode(), cutoff);
+        }
+        log.info("보존 창의 고아 백분위를 정리했다. 지표={}개 정리={}행", specs.size(), removed);
+        return removed;
     }
 
     /**

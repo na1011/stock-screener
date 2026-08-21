@@ -279,6 +279,69 @@ class IndicatorRunnerTest {
     }
 
     @Test
+    @DisplayName("계산이 그만 나면 옛 행을 지운다 — UPSERT만으로는 사라진 값이 사라지지 않는다")
+    void deletesRowsOfIndicatorsThatStoppedProducing() {
+        insertPriceHistory(300);
+        // 재무를 **읽을 수는 있는데** TTM이 음수라 PER이 성립하지 않는 상태다. 001040 CJ가 정확히
+        // 이 형태였다 — 2026 Q2가 들어오며 TTM이 −233억이 됐고, 그 뒤로 계산기는 PER을 한 행도
+        // 안 내는데 백필은 UPSERT뿐이라 옛 178행을 못 덮었다.
+        insertLossMakingQuarters();
+        insertIndicatorRow(PerCalculator.CODE, AS_OF.minusDays(10), new BigDecimal("12.34"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedCodes())
+                .as("남은 값은 그럴듯한 숫자라 화면에서도 테스트에서도 드러나지 않는다")
+                .doesNotContain(PerCalculator.CODE);
+    }
+
+    @Test
+    @DisplayName("재무를 한 행도 못 읽었으면 안 지운다 — 「값이 없다」와 「모른다」는 다르다")
+    void keepsRowsWhenTheInputCouldNotBeReadAtAll() {
+        insertPriceHistory(300);
+        // 재무가 통째로 없다. 공시가 늦은 구간이 이 모양이고, 여기에 삭제를 걸면 그 종목의
+        // 재무 지표 이력이 사라졌다가 다음 실행에 다시 쓰인다 — ADR-0045가 닫은 왕복이다.
+        insertIndicatorRow(PerCalculator.CODE, AS_OF.minusDays(10), new BigDecimal("12.34"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedValue(PerCalculator.CODE, AS_OF.minusDays(10)))
+                .as("입력을 못 읽은 것을 「값이 사라졌다」로 읽으면 공시 지연이 이력을 지운다")
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("읽은 창 밖은 안 지운다 — 과거 일자 백필이 그 뒤의 라이브 행을 건드리면 안 된다")
+    void neverDeletesBeyondTheWindowItRead() {
+        insertPriceHistory(300);
+        // asOf 뒤의 행이다. 창은 asOf에서 끝나므로 이번 실행의 사정거리 밖이다.
+        insertIndicatorRow(PerCalculator.CODE, AS_OF.plusDays(3), new BigDecimal("12.34"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedValue(PerCalculator.CODE, AS_OF.plusDays(3)))
+                .as("삭제 범위가 창의 거래일이 아니라 「경계 뒤 전부」가 되면 이 행이 사라진다")
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("억제로 빈 것은 이 경로가 지우지 않는다 — 억제 창 밖까지 번지면 안 된다")
+    void doesNotCullWhenEmptinessCameFromSuppression() {
+        insertPriceHistory(250);
+        LocalDate earliest = AS_OF.minusDays(250);
+        // 효력일보다 **앞선** 일자는 억제 대상이 아니다(창 시작 == 효력일이면 억제하지 않는다).
+        insertIndicatorRow(Sma200Calculator.CODE, earliest, new BigDecimal("1000"));
+        unadjustedAction(CorporateActionStatus.UNSUPPORTED, AS_OF.minusDays(190));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedValue(Sma200Calculator.CODE, earliest))
+                .as("억제로 points가 비었을 때까지 창 전체를 지우면 TRADING_DAYS_750처럼 "
+                        + "실행당 1일자인 지표는 복구에 날짜 수만큼의 백필이 든다")
+                .isNotNull();
+    }
+
+    @Test
     @DisplayName("보정된 사건은 억제하지 않는다 — 계수가 이미 축척을 하나로 만들었다")
     void appliedActionsDoNotSuppress() {
         insertPriceHistory(250);
@@ -344,6 +407,29 @@ class IndicatorRunnerTest {
                 SELECT value FROM indicator_value
                 WHERE stock_id = ? AND indicator_code = ? AND trade_date = ?
                 """, BigDecimal.class, stockId, indicatorCode, tradeDate);
+    }
+
+    /** 최근 네 분기의 순이익 합이 음수인 상태. PerCalculator가 루프 앞에서 빈 목록을 낸다. */
+    private void insertLossMakingQuarters() {
+        LocalDate end = AS_OF.withDayOfMonth(1).minusDays(1);
+        for (int i = 0; i < 8; i++) {
+            LocalDate periodEnd = end.minusMonths(3L * i);
+            jdbcTemplate.update(
+                    "INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period,"
+                            + " period_start, period_end, published_at, revision_no, is_latest,"
+                            + " currency_code, net_income)"
+                            + " VALUES (?, ?, ?, ?, ?, ?, 0, true, 'KRW', ?)",
+                    stockId, periodEnd.getYear(), "Q" + (i % 4 + 1),
+                    periodEnd.minusMonths(3), periodEnd, periodEnd.plusDays(45),
+                    new BigDecimal("-1000000000"));
+        }
+    }
+
+    private void insertIndicatorRow(String indicatorCode, LocalDate tradeDate, BigDecimal value) {
+        jdbcTemplate.update(
+                "INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)"
+                        + " VALUES (?, ?, ?, ?)",
+                stockId, tradeDate, indicatorCode, value);
     }
 
     private void insertPriceHistory(int days) {
