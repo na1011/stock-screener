@@ -101,14 +101,16 @@ psql -d stock_screener -At -c "WITH i AS (SELECT sum(pg_relation_size(oid)) b FR
 ## 배경
 
 **러너는 지표마다 필요한 봉 수를 따로 읽지 않고 전역 최대 하나로 읽는다**
-(`IndicatorRunner.readRawData` → `registry.maxEffectiveLookback()`, N+1을 피하려는 설계다).
-전역 최대는 `maxEffectiveLookback()`이 매번 계산하며 이 결정을 내릴 당시에는
+(`IndicatorRunner.readRawData` → `registry.readWindowBars()`, N+1을 피하려는 설계다).
+그 폭은 **워밍업 최댓값 + 보존 일수**이며(ADR-0079) 이 결정을 내릴 당시에는 워밍업 최댓값이 곧
+읽기 창이었고,
 `SharesGrowth3yCalculator`의 751봉이었다. 그런데 **계산기 다수가 받은 창 전체에 대해 포인트를
 낸다** — `AdjCloseCalculator`는 `priceBars(1)`을 선언하고도 창을 통째로 순회한다.
 
 그 결과 **한 종목·한 실행이 최대 「창」거래일치를 쓰고, 보존이 180이므로 「창 − 180」거래일치가
 경계 밖**이다(지표마다 유효 워밍업이 달라 실제 날짜 수는 그보다 적을 수 있다). 착수 당시 창
-751로는 571이었고, 2026-08-20 기준 창 1,261로는 1,081이다.
+751로는 571이었고, 2026-08-21 기준 창 1,441로는 1,261이다 — **그 「창 − 180」이 워밍업 최댓값과
+같은 수인 것은 우연이 아니라 ADR-0079의 산식이다.**
 `purge()`가 배치 끝에서 그것을 지우므로 최종 상태는 언제나 옳고, 화면에도 흔적이 없다.
 
 2026-08-10 로그가 그 왕복을 실측으로 남겼다:
