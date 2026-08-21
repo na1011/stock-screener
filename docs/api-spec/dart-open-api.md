@@ -641,8 +641,8 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 | `fnlttSinglAcntAll.json` | **쓰고 있다** (P10) | §11-E | 종목·연도당 1(연간 전용), 폴백 시 2 |
 | `fnlttMultiAcnt.json` | 결정 (P10 비용) | §11-F | **100종목 묶음** = 64 |
 | `xbrlTaxonomy.json` | 결정 (P10 사전) | §11-G | `sj_div`당 1 |
-| `accnutAdtorNmNdAdtOpinion.json` | **후보**(채택 미정) | §11-I | 종목당 1 = 350 |
-| `elestock`·`majorstock`·`tesstkAcqsDspsSttus`·`list` | **미착수** (P11) | §11-J (이름·인자만) | — |
+| `accnutAdtorNmNdAdtOpinion.json` | **채택·미구현**(거버넌스 축) | §11-I | 종목당 1 = 350 |
+| `elestock`·`majorstock`·`tesstkAcqsDspsSttus`·`list` | **미착수** — 넷의 사정이 다르다(§11-J) | §11-J (이름·인자만) | — |
 
 **공통 요청 인자**: `crtfc_key`(STRING(40), 필수). 아래 표는 그 외의 것만 적는다.
 **응답 공통**: `status`·`message`(§4). 목록형은 `list` 배열로 온다 — **`company.json`만 평면
@@ -862,8 +862,14 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 
 ### 11-I. 회계감사인의 명칭 및 감사의견 — `accnutAdtorNmNdAdtOpinion.json`
 
-**후보다. 채택하려면 원본 명세 개정이 먼저이며 그것은 사용자 결정이다**(ADR-0039 §결과).
-실측(`적정의견` 문자열 · `bsns_year`가 기수 · 행이 2배)은 §10-D에 있다.
+**채택은 2026-08-21 사용자 결정으로 섰다**(거버넌스 축). 전에는 *"원본 명세 개정이 먼저"*로
+걸려 있었으나 **그 명세가 지배하던 프리셋은 전부 폐기됐다**(ADR-0061·0074) — 게이트가 가리키던
+대상이 없다.
+
+**IMPORTANT — 채택했다고 판정 지표를 바로 만들지 않는다.** 아래 §10-D가 *"비적정의 표기는
+미확인"*이라 적고 **그것을 보기 전에는 판정 로직을 만들지 않는다.** 원문 문자열을 그대로
+적재하는 것까지가 이번 범위이고, **350종목 적재가 곧 그 측정이다.** 실측(`적정의견` 문자열 ·
+`bsns_year`가 기수 · 행이 2배)은 §10-D에 있다.
 
 - 요청: `corp_code` · `bsns_year` · `reprt_code`. **1콜에 당기·전기·전전기 3개년**이 온다.
 - 응답: `rcept_no` `corp_cls` `corp_code` `corp_name` **`bsns_year`** `adtor`
@@ -875,13 +881,17 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 
 ### 11-J. 받았지만 아직 안 쓰는 넷
 
-**필드 표는 옮기지 않았다** — P11이 가장 먼 phase이고, 쓸 때 위 `git show`로 꺼내면 된다.
-요청 인자만 적어 둔다(비용 판단에 그것이면 충분하다).
+**필드 표는 옮기지 않았다** — 쓸 때 위 `git show`로 꺼내면 된다. 요청 인자만 적어 둔다
+(비용 판단에 그것이면 충분하다).
+
+**「미착수」의 뜻이 넷에서 갈린다.** `elestock`·`tesstkAcqsDspsSttus`는 **거버넌스 축이 쓸
+자리가 정해졌고 필드 표만 안 옮긴 것**이다. `majorstock`은 소비처가 아직 없고, `list.json`은
+§10-B가 열려 필요가 줄었다. **폐기된 P11(모듈 B)을 가리키던 옛 「쓸 곳」은 걷었다**(ADR-0039).
 
 | 엔드포인트 | 요청 인자 | 쓸 곳 |
 |---|---|---|
-| `elestock.json` (임원·주요주주 소유보고) | `corp_code`. **기간 파라미터가 없다** | 모듈 B의 S-F3·S-F4 |
-| `majorstock.json` (대량보유 상황보고) | `corp_code`. **기간 파라미터가 없다** | 모듈 B의 S 계열 |
+| `elestock.json` (임원·주요주주 소유보고) | `corp_code`. **기간 파라미터가 없다** | **거버넌스 축의 내부자 순매수** — 린치 §4.4가 이 소스를 이름으로 지목한다 |
+| `majorstock.json` (대량보유 상황보고) | `corp_code`. **기간 파라미터가 없다** | 거버넌스 축의 후보. 소비처가 아직 정해지지 않았다 |
 | `tesstkAcqsDspsSttus.json` (자기주식 취득·처분) | `corp_code` · `bsns_year` · `reprt_code` | H-06의 교란 요인(소각) |
 | `list.json` (공시검색) | `corp_code` · `bgn_de` · `end_de` 등 | **응답 결과 표가 원문에 빠져 있었다.** 10-B가 열려 필요가 줄었다 |
 

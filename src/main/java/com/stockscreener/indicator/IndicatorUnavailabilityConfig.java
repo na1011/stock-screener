@@ -2,7 +2,9 @@ package com.stockscreener.indicator;
 
 import com.stockscreener.indicator.calculator.AltmanZCalculator;
 import com.stockscreener.indicator.calculator.EpsTtmCalculator;
+import com.stockscreener.indicator.calculator.NcavToMarketCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.indicator.calculator.PsrCalculator;
 import com.stockscreener.indicator.calculator.RoicMin3yCalculator;
 import com.stockscreener.indicator.calculator.RoicPretaxCalculator;
 
@@ -48,6 +50,30 @@ public class IndicatorUnavailabilityConfig {
                         context -> isNegative(context.value(EpsTtmCalculator.CODE)),
                         "최근 4개 분기 순이익이 적자라 PER을 내지 않습니다. "
                                 + "음수 PER은 '주가가 싸다'로 읽혀 반대의 뜻이 되기 때문입니다."),
+                new UnavailabilityRule(
+                        NcavToMarketCalculator.CODE,
+                        // 재료가 원리적으로 없다 — K-IFRS 금융업은 재무상태표를 유동/비유동으로
+                        // 가르지 않아 유동자산이 오지 않는다(ROIC_PRETAX가 유동부채에서 겪는
+                        // 것과 같은 자리다).
+                        //
+                        // 실측(2026-08-21, 지표일 2026-08-20): 값이 없는 30종목 중 28이
+                        // KSIC 64·65·66이다. 남는 둘에는 사유가 안 붙는데 그것이 옳다 —
+                        // 그 둘이 왜 없는지 우리는 모른다.
+                        context -> isFinancialDivision(context.industryDivision()),
+                        "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
+                                + "순유동자산을 계산할 재료가 없습니다."),
+                new UnavailabilityRule(
+                        PsrCalculator.CODE,
+                        // 매출 개념이 없거나 다르게 잡히는 업종이다. 실측(2026-08-21): 값이 없는
+                        // 36종목 중 23이 KSIC 64·65·66이다.
+                        //
+                        // MUST NOT: 나머지 13에 이 사유를 넓혀 붙이지 않는다. 그들이 왜 없는지는
+                        // 재본 적이 없고(분기 재무 부족일 수도, 매출 계정 결손일 수도 있다),
+                        // 업종 조건이 그것을 자동으로 막아 준다. 비율이 64%뿐이라 이 규칙은
+                        // PER·ROIC의 규칙들보다 설명력이 낮다는 것을 함께 적어 둔다.
+                        context -> isFinancialDivision(context.industryDivision()),
+                        "금융업은 영업수익을 매출로 잡는 방식이 달라 "
+                                + "매출 대비 배수를 다른 업종과 같은 뜻으로 낼 수 없습니다."),
                 new UnavailabilityRule(
                         AltmanZCalculator.CODE,
                         // 계산기가 명시적으로 제외하는 업종이다(ADR-0044). 값이 안 나오는 것이
