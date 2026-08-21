@@ -22,7 +22,10 @@ import com.stockscreener.indicator.calculator.PbrCalculator;
 import com.stockscreener.indicator.calculator.PctFrom52wHighCalculator;
 import com.stockscreener.indicator.calculator.PctFrom52wLowCalculator;
 import com.stockscreener.indicator.calculator.PegCalculator;
+import com.stockscreener.indicator.calculator.PbrDiscount5yCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.indicator.calculator.PerDiscount5yCalculator;
+import com.stockscreener.indicator.calculator.PsrDiscount5yCalculator;
 import com.stockscreener.indicator.calculator.PerMedian5yCalculator;
 import com.stockscreener.indicator.calculator.ProfitableQuarters4Calculator;
 import com.stockscreener.indicator.calculator.Return52wCalculator;
@@ -364,7 +367,24 @@ public class PresetCatalog {
             // 시장과 나란히 놓고 볼 수 없으면, 이 화면이 우량주를 뽑는 것인지 싼 주식을 뽑는
             // 것인지 화면만 봐서는 갈리지 않는다. 그래서 컬럼으로만 띄운다 — 순위에 영향을
             // 주지 않고 결과에서 아무도 빼지 않는다.
-            return List.of(pctl(PerCalculator.CODE), pctl(PbrCalculator.CODE));
+            //
+            // 할인율 셋을 함께 띄운다. 위 조건 셋은 「싼가」를 묻되 전부 충족/불충족이라
+            // **얼마나** 싼지가 값으로 나오지 않는다 — 5% 싼 종목과 40% 싼 종목이 같은
+            // 점수를 받는다. 그것이 이 화면의 실제 물음("좋은 회사를 지금 사도 되는가")에
+            // 답하지 못하던 자리다.
+            //
+            // 셋을 다 띄우는 이유는 서로 어긋나는 것이 신호이기 때문이다. 실측에서
+            // 파크시스템스가 PER −80.5% / PBR +36.7%로 갈렸다 — 이익이 튄 해가 PER 이력을
+            // 왜곡한 자리이고, 하나만 띄우면 그 사실이 화면에서 사라진다.
+            //
+            // MUST NOT: 이것을 조건이나 배점으로 올리지 않는다. ADR-0068이 가격을 게이트로
+            // 올리면 해자가 무너진다는 것을 실측으로 보였고, 배치를 바꾸려면 통과율·겹침
+            // 배수·순위상관을 다시 재야 한다. 컬럼은 순위에 영향을 주지 않고 결과에서
+            // 아무도 빼지 않는다.
+            return List.of(pctl(PerCalculator.CODE), pctl(PbrCalculator.CODE),
+                    PerDiscount5yCalculator.CODE,
+                    PbrDiscount5yCalculator.CODE,
+                    PsrDiscount5yCalculator.CODE);
         }
         return List.of();
     }
