@@ -23,14 +23,17 @@ import java.util.NavigableMap;
  * <b>여기에 붙이면 18개가 같은 이름으로 투영된다.</b>
  *
  * <p>IMPORTANT — 러너의 읽기 창은 {@link com.stockscreener.indicator.IndicatorRegistry}의
- * {@code maxEffectiveLookback()}이 <b>매번 전 지표의 최댓값으로</b> 정한다. 여기의
- * {@code priceBarsNeeded}가 한동안 그 최댓값이었지만(751 → 1,100, P12) ADR-0066이 더 긴 창을
- * 요구하는 지표를 들이면서 그 자리를 내줬다 — 2026-08-20 기준 최댓값은 1,261이다.
- * <b>그래서 이 클래스를 지워도 창은 내려가지 않는다.</b>
+ * {@code readWindowBars()}가 정한다 — <b>전 지표 워밍업의 최댓값에 보존 일수를 얹은 값</b>이다
+ * (ADR-0079). 여기의 {@code priceBarsNeeded}가 한동안 그 워밍업 최댓값이었지만(751 → 1,100, P12)
+ * ADR-0066이 더 긴 것을 요구하는 지표를 들이면서 자리를 내줬다 — 2026-08-21 기준 워밍업 최댓값은
+ * 1,261, 읽기 창은 <b>1,441</b>이다. <b>그래서 이 클래스를 지워도 창은 내려가지 않는다.</b>
  *
- * <p>창은 종목당 한 번 읽히므로 모든 지표가 그것을 함께 쓰고, <b>창이 움직이면</b> 재귀
- * 지표({@code ATR_14}·{@code RSI_14}·{@code MACD}·{@code MACD_V})의 시드가 그만큼 앞으로 가
- * <b>저장값이 미세하게 바뀐다.</b> 그 회귀는 테스트가 원리적으로 못 잡는다 — 픽스처가 창보다
+ * <p>창은 종목당 한 번 읽히므로 모든 지표가 그것을 함께 쓰고, <b>창이 움직이면</b> 평활 시드가
+ * 그만큼 앞으로 가 <b>저장값이 미세하게 바뀐다.</b> 대상은 일봉 재귀 넷({@code ATR_14}·
+ * {@code RSI_14}·{@code MACD}·{@code MACD_V})만이 아니다 — {@code ADX_14}·{@code RSI_2}와
+ * <b>여기 {@code ICHI_*} 자신</b>도 그렇다. <b>이쪽이 더 크게 움직인다</b>: {@link WeeklySeries}의
+ * RMA는 <b>주봉</b>을 평활하므로 시드까지의 거리가 창의 봉 수가 아니라 그 1/5쯤인 주 수이고,
+ * 잔차가 일봉의 그것보다 자릿수로 크다. 그 회귀는 테스트가 원리적으로 못 잡는다 — 픽스처가 창보다
  * 짧아 값이 그대로다.
  */
 abstract class IchimokuIndicator implements IndicatorCalculator {

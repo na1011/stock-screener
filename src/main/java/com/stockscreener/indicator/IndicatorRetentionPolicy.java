@@ -30,6 +30,10 @@ public class IndicatorRetentionPolicy {
      * <p>200일 이동평균의 워밍업(200거래일)보다 짧아도 되는 이유는, 계산의 입력이
      * {@code price_daily}이지 {@code indicator_value}가 아니기 때문이다. 지표를 지워도
      * 다시 계산할 수 있다.
+     *
+     * <p>IMPORTANT — <b>읽기 창이 이 값에 얹혀 있다</b>({@code IndicatorRegistry.readWindowBars()}
+     * = 워밍업 최댓값 + 이 값, ADR-0079). 줄이면 보존만 줄어드는 것이 아니라 <b>가장 긴 워밍업
+     * 지표가 실행당 그만큼밖에 못 낸다.</b> 이 상수를 「보존만의 손잡이」로 읽지 않는다.
      */
     static final int RETAINED_TRADING_DAYS = 180;
 
@@ -44,9 +48,9 @@ public class IndicatorRetentionPolicy {
      *
      * <p>{@link #purge()}가 이미 쌓인 것을 지운다면 이쪽은 쌓이지 않게 한다. 둘 다 필요한
      * 이유는 러너가 <b>읽기 창 전체</b>에 대해 값을 내기 때문이다 — 창은
-     * {@code IndicatorRegistry.maxEffectiveLookback()}이 전 지표 최댓값으로 매번 계산하며
-     * (2026-08-20 기준 1,261봉), 이 경계가 없으면 매 실행이 <b>창 − 180</b>거래일치를 보존
-     * 밖에 쓰고 다음 정리가 그것을 지운다.
+     * {@code IndicatorRegistry.readWindowBars()}가 정하며(2026-08-21 기준 1,441봉), 이 경계가
+     * 없으면 매 실행이 <b>창 − 180</b>거래일치를 보존 밖에 쓰고 다음 정리가 그것을 지운다.
+     * <b>그 「창 − 180」이 곧 워밍업 최댓값과 같은 수인 것은 우연이 아니라 산식이다</b>(ADR-0079).
      * 값은 언제나 옳고 화면도 정상이라 드러나는 것은 몇 달 뒤 인덱스 크기뿐이다.
      *
      * <p>경계를 {@code price_daily}에서 세는 것이 {@link #purge()}와 다른 점이다. 지표 날짜는

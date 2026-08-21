@@ -141,9 +141,28 @@ public class IndicatorRegistry {
         return lookback;
     }
 
-    /** 모든 지표를 계산하기 위해 읽어야 하는 최대 시세 봉 수. 러너가 한 번만 읽으려고 쓴다. */
+    /**
+     * 가장 긴 유효 워밍업. <b>읽어올 봉 수가 아니다</b> — 그것은 {@link #readWindowBars()}다.
+     *
+     * <p>낱말이 같아 계속 헷갈리므로 갈라 적는다. 이 값은 <b>한 지표가 값 하나를 내는 데 필요한
+     * 봉 수의 최댓값</b>이고, {@code UnadjustedActionGuard}가 억제 창의 상한으로 쓰는 축이기도 하다.
+     */
     public int maxEffectiveLookback() {
         return effectiveLookback.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+    }
+
+    /**
+     * 러너가 종목당 한 번에 읽어올 시세 봉 수(ADR-0079).
+     *
+     * <p>계산기는 워밍업 W일 때 {@code bars.size() − W + 1}개 포인트를 낸다. 그래서 읽어오는 봉이
+     * 워밍업 최댓값과 <b>같으면</b> 그 지표는 <b>{@code asOf}당 한 일자</b>밖에 못 내고, 보존 창을
+     * 채우려면 날짜마다 한 번씩 180번을 돌아야 한다. 보존 일수만큼을 얹어 그 굴레를 없앤다.
+     *
+     * <p>MUST NOT: 러너의 두 호출 지점(시세·지수) 중 한쪽만 이것을 쓰지 않는다. 갈리면 오래된
+     * 산출 일자가 전부 「지수 결손」으로 접혀 사라지고 백필은 <b>SUCCESS로 끝난다.</b>
+     */
+    public int readWindowBars() {
+        return maxEffectiveLookback() + IndicatorRetentionPolicy.RETAINED_TRADING_DAYS;
     }
 
     /** 모든 지표를 계산하기 위해 읽어야 하는 최대 재무 연수. */

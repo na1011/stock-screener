@@ -74,9 +74,9 @@ import java.util.List;
  * # 지표 백필
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill --from=2020-01-02'
  *
- * # ICHI_* 만 채운다 — 워밍업이 207주(≈971봉)라 한 실행이 min(창 − 971 + 1, 보존 180)일자를
- * # 낸다. 지금은 보존이 먼저 자르므로 단일 날짜 실행 하나가 보존 창 180일을 거의 다 채운다
- * # (실측 종목당 177.4일자, 2026-08-20)
+ * # 단일 날짜 실행 하나가 보존 창 180일자를 채운다 — 읽기 창이 워밍업 최댓값 + 보존 일수라
+ * # 어떤 지표든 min(창 − 워밍업 + 1, 보존 180)이 180에서 포화한다(ADR-0079).
+ * # 예외는 일부러 마지막 봉만 내는 TRADING_DAYS_750과, 돌린 날짜에만 나는 *_PCTL·업종 상대값이다
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill \
  *     --as-of=2026-08-11 --from=2026-08-11'
  *

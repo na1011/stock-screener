@@ -157,7 +157,7 @@ public class IndicatorRunner {
      * 사라지고, 백필은 몇 일자만 쓰고 <b>SUCCESS로 끝난다.</b>
      */
     public Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexesFor(LocalDate asOf) {
-        return reader.readMarketIndexes(asOf, registry.maxEffectiveLookback());
+        return reader.readMarketIndexes(asOf, registry.readWindowBars());
     }
 
     /**
@@ -254,7 +254,7 @@ public class IndicatorRunner {
     private IndicatorContext readRawData(long stockId, LocalDate asOf,
                                          Map<String, NavigableMap<LocalDate, BigDecimal>> indexes,
                                          FinancialVisibility visibility) {
-        int bars = registry.maxEffectiveLookback();
+        int bars = registry.readWindowBars();
         int years = registry.maxFinancialYears();
         // 종목당 한 번만 읽는다. 지표마다 읽으면 850종목 × N지표의 N+1이 된다.
         IndicatorDataReader.StockAttributes attributes = reader.readStockAttributes(stockId);
