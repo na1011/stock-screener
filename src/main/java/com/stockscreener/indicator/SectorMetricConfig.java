@@ -3,6 +3,7 @@ package com.stockscreener.indicator;
 import com.stockscreener.indicator.calculator.DebtRatioCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.indicator.calculator.PsrCalculator;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -61,6 +62,29 @@ public class SectorMetricConfig {
                         "PER 업종 중앙값",
                         "이 종목이 속한 업종의 PER 중앙값. 같은 업종 종목은 같은 값을 본다.",
                         "이 종목의 PER을 옆에 두고 읽는 참조값이다. 업종마다 정상 PER 수준이 "
-                                + "달라 절대값만으로는 비싼지 알 수 없다. 유리한 방향이 따로 없다."));
+                                + "달라 절대값만으로는 비싼지 알 수 없다. 유리한 방향이 따로 없다."),
+                // PSR은 PER과 같은 형태로 둘을 선언한다. 백분위가 조건이고 중앙값이 참조값이다.
+                //
+                // 업종 축이 PER보다 더 필요한 지표다 — 매출 대비 주가의 정상 수준이 업종마다
+                // 훨씬 크게 갈린다(소프트웨어와 유통이 한 자릿수 배수 차이다). 절대 PSR로
+                // 거르면 원래 배수가 낮은 업종이 통째로 통과한다.
+                //
+                // 다만 표본은 PER보다도 얇을 수 있다. 매출 계정이 없는 업종에서 원본이 비므로
+                // PSR_SECTOR_N을 반드시 함께 읽는다.
+                new SectorMetricSpec(
+                        PsrCalculator.CODE,
+                        SectorMetricSpec.Kind.PERCENTILE,
+                        "PSR 업종 백분위",
+                        "같은 업종 종목 중 이 종목의 PSR이 어느 위치인지를 0~1로 나타낸 값.",
+                        "0에 가까울수록 같은 업종 안에서 매출 대비 주가가 싸다. "
+                                + "'업종 대비 저평가'는 0.5 이하로 표현한다."),
+                new SectorMetricSpec(
+                        PsrCalculator.CODE,
+                        SectorMetricSpec.Kind.MEDIAN,
+                        "PSR 업종 중앙값",
+                        "이 종목이 속한 업종의 PSR 중앙값. 같은 업종 종목은 같은 값을 본다.",
+                        "이 종목의 PSR을 옆에 두고 읽는 참조값이다. 업종마다 매출 대비 정상 "
+                                + "배수가 크게 달라 절대값만으로는 비싼지 알 수 없다. "
+                                + "유리한 방향이 따로 없다."));
     }
 }

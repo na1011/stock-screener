@@ -133,14 +133,33 @@ final class FinancialMath {
      */
     static BigDecimal trailingEpsOn(IndicatorContext context, PriceBar bar,
                                     BigDecimal ttmNetIncome, List<FinancialFigures> quarters) {
-        if (ttmNetIncome == null) {
+        return perShareOn(context, bar, ttmNetIncome, quarters);
+    }
+
+    /**
+     * 그 봉 시점의 <b>주당 금액</b>. {@link #trailingEpsOn}의 일반형이다.
+     *
+     * <p>주당 배수 지표({@code PER}·{@code PBR}·{@code PSR})가 <b>같은 나눗셈</b>을 하므로
+     * 한곳에 둔다. 갈라 쓰면 한쪽만 주식수 출처나 반올림을 바꿔도 <b>지표들이 서로 어긋난 채
+     * 전부 그럴듯한 값</b>을 낸다 — 화면에서는 배수끼리 비교가 안 맞는 형태로만 드러난다.
+     *
+     * <p>IMPORTANT — <b>부호를 여기서 거르지 않는다.</b> 무엇이 음수일 때 뜻이 없는지는 지표마다
+     * 다르다. 적자 순이익은 PER을 무의미하게 만들지만 EPS로는 그 자체가 사실이고, 매출은 음수가
+     * 원리적으로 없으며 자기자본은 자본잠식에서 음수가 뜻을 갖는다. <b>거르는 것은 호출부의
+     * 몫이다.</b>
+     *
+     * @param amount 유량이면 4분기 합(TTM), 저량이면 그 시점 잔액. <b>어느 쪽인지는 호출부가 안다</b>
+     */
+    static BigDecimal perShareOn(IndicatorContext context, PriceBar bar,
+                                 BigDecimal amount, List<FinancialFigures> quarters) {
+        if (amount == null) {
             return null;
         }
         BigDecimal shares = sharesOf(context, bar, quarters);
         if (shares == null) {
             return null;
         }
-        return ttmNetIncome.divide(shares, SCALE, RoundingMode.HALF_UP);
+        return amount.divide(shares, SCALE, RoundingMode.HALF_UP);
     }
 
     /**
