@@ -137,6 +137,30 @@ final class FinancialMath {
     }
 
     /**
+     * 그 날짜에 <b>이미 공시돼 있던</b> 첫 분기의 인덱스. 없으면 {@code -1}이다.
+     *
+     * <p>시점 판정을 {@code period_end}가 아니라 <b>{@code published_at}</b>으로 하는 것이 요점이다.
+     * 기말이 지났어도 공시 전에는 시장이 그 이익을 몰랐고, {@code period_end}로 자르면
+     * <b>미래를 알고 계산한 값</b>이 된다. 실측으로 {@code published_at}은 8,796행 전부 채워져 있다.
+     *
+     * <p><b>합산은 여기서 하지 않는다.</b> 인덱스만 돌려주는 이유는 호출부의 항목이 유량일 수도
+     * 저량일 수도 있기 때문이다 — 유량이면 이 자리부터 {@link #sumFourQuarters}로 넷을 더하고,
+     * 저량이면 <b>그 한 분기의 잔액</b>을 쓴다. 합산까지 여기서 하면 저량 호출부가
+     * <b>잔액을 네 번 더하게 되고 값이 그럴듯해 드러나지 않는다.</b>
+     *
+     * <p>분기는 {@code period_end} 내림차순으로 온다.
+     */
+    static int publishedIndexOn(List<FinancialFigures> quarters, LocalDate asOf) {
+        for (int i = 0; i < quarters.size(); i++) {
+            LocalDate published = quarters.get(i).publishedAt();
+            if (published != null && !published.isAfter(asOf)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
      * 그 봉 시점의 <b>주당 금액</b>. {@link #trailingEpsOn}의 일반형이다.
      *
      * <p>주당 배수 지표({@code PER}·{@code PBR}·{@code PSR})가 <b>같은 나눗셈</b>을 하므로

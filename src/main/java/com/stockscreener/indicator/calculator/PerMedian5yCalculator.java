@@ -8,14 +8,10 @@ import com.stockscreener.indicator.IndicatorContext;
 import com.stockscreener.indicator.IndicatorMeta;
 import com.stockscreener.indicator.IndicatorPoint;
 import com.stockscreener.indicator.IndicatorValueType;
-import com.stockscreener.indicator.PriceBar;
 
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -62,16 +58,8 @@ public class PerMedian5yCalculator implements IndicatorCalculator {
 
     public static final String CODE = "PER_MEDIAN_5Y";
 
-    /** 되돌아보는 거리. {@link EpsCagr5yCalculator}와 같은 창을 쓴다. */
-    static final int LOOKBACK = EpsCagr5yCalculator.LOOKBACK;
-
-    /**
-     * 중앙값을 낼 최소 표본. 5년치 거래일의 절반이다.
-     *
-     * <p>표본이 적으면 중앙값이 특정 국면 하나를 가리키는데 값은 그대로 나온다 —
-     * 「5년 중앙값」이라는 이름이 그때 거짓이 된다.
-     */
-    static final int MIN_SAMPLES = LOOKBACK / 2;
+    /** 창과 최소 표본은 형제 지표와 공유한다. */
+    static final int LOOKBACK = ValuationHistory.LOOKBACK;
 
     @Override
     public String code() {
@@ -87,56 +75,14 @@ public class PerMedian5yCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
-        List<PriceBar> bars = context.priceBars();
-        if (quarters.isEmpty() || bars.size() <= LOOKBACK) {
-            return List.of();
-        }
-
-        int from = bars.size() - LOOKBACK - 1;
-        List<Double> ratios = new ArrayList<>(LOOKBACK + 1);
-        for (int i = from; i < bars.size(); i++) {
-            PriceBar bar = bars.get(i);
-            BigDecimal ttm = ttmKnownOn(quarters, bar.tradeDate());
+        return ValuationHistory.median(context, (ctx, bar, quarters, published) -> {
+            BigDecimal ttm = FinancialMath.sumFourQuarters(
+                    quarters, FinancialFigures::netIncome, published);
             if (ttm == null || ttm.signum() <= 0) {
                 // 적자 구간의 음수 PER은 중앙값을 끌어내려 「싸다」로 읽힌다.
-                continue;
+                return null;
             }
-            BigDecimal eps = FinancialMath.trailingEpsOn(context, bar, ttm, quarters);
-            if (eps == null || eps.signum() <= 0) {
-                continue;
-            }
-            ratios.add(bar.close()
-                    .divide(eps, FinancialMath.SCALE, RoundingMode.HALF_UP)
-                    .doubleValue());
-        }
-        if (ratios.size() < MIN_SAMPLES) {
-            return List.of();
-        }
-
-        double[] values = new double[ratios.size()];
-        for (int i = 0; i < values.length; i++) {
-            values[i] = ratios.get(i);
-        }
-        BigDecimal median = BigDecimal.valueOf(SeriesMath.median(values))
-                .setScale(FinancialMath.SCALE, RoundingMode.HALF_UP);
-        return FinancialMath.spreadOverTradeDates(bars, median);
-    }
-
-    /**
-     * 그 날짜에 <b>이미 공시돼 있던</b> 4개 분기의 순이익 합. 위 IMPORTANT가 이 메서드의 이유다.
-     *
-     * <p>분기는 {@code period_end} 내림차순이므로, 공시일이 지난 첫 분기부터 넷을 더한다.
-     * 그 시점에 넷이 모이지 않으면 null이다 — 셋으로 TTM을 만들면 이익이 4분의 1 작아지고
-     * PER이 그만큼 부풀어 오른다.
-     */
-    private static BigDecimal ttmKnownOn(List<FinancialFigures> quarters, LocalDate asOf) {
-        for (int j = 0; j < quarters.size(); j++) {
-            LocalDate published = quarters.get(j).publishedAt();
-            if (published != null && !published.isAfter(asOf)) {
-                return FinancialMath.sumFourQuarters(quarters, FinancialFigures::netIncome, j);
-            }
-        }
-        return null;
+            return FinancialMath.perShareOn(ctx, bar, ttm, quarters);
+        });
     }
 }
