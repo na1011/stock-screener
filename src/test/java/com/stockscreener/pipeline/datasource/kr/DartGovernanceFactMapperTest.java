@@ -351,6 +351,156 @@ class DartGovernanceFactMapperTest {
                 .isEqualByComparingTo("1");
     }
 
+    @Test
+    @DisplayName("배당 — 주식 종류를 '-'로 낸 회사도 보통주로 읽는다 (에스엘 2024 실측)")
+    void dividendReadsUnspecifiedStockKindAsCommon() {
+        // 주식이 한 종류뿐인 회사는 stock_knd를 '-'로 낸다. 버리면 배당을 하는데 배당수익률이
+        // 없는 종목이 된다 — 이 회사가 실제로 배당성향 39.77%와 빈 배당수익률을 나란히 띄웠다.
+        List<GovernanceReportRow> rows = List.of(
+                dividendRow(11, "주당 현금배당금(원)", "-", "1,200", "900", "600"),
+                dividendRow(12, "주당 현금배당금(원)", "-", "-", "-", "-"),
+                dividendRow(4, "현금배당금총액(백만원)", "-", "55,267", "41,450", "27,633"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+
+        assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
+                .as("값이 든 행이 하나뿐이므로 그것이 보통주다")
+                .isEqualByComparingTo("1200");
+        assertThat(pick(facts, 2024, GovernanceMetric.DPS_COMMON)).isEqualByComparingTo("900");
+    }
+
+    @Test
+    @DisplayName("배당 — '-'로 온 행이 둘 다 값을 가지면 어느 쪽이 보통주인지 몰라 값을 안 낸다")
+    void dividendSkipsAmbiguousUnspecifiedStockKind() {
+        List<GovernanceReportRow> rows = List.of(
+                dividendRow(11, "주당 현금배당금(원)", "-", "1,200", "900", "600"),
+                dividendRow(12, "주당 현금배당금(원)", "-", "1,250", "950", "650"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+
+        assertThat(facts)
+                .as("우선주를 보통주로 세느니 값을 안 내는 편이 낫다 — 틀린 값은 화면에서 "
+                        + "그럴듯해 드러나지 않는다")
+                .noneMatch(fact -> fact.metric() == GovernanceMetric.DPS_COMMON);
+    }
+
+    @Test
+    @DisplayName("배당 — 종류를 밝힌 행이 있으면 '-' 행을 보통주로 읽지 않는다")
+    void dividendPrefersNamedStockKindOverSentinel() {
+        List<GovernanceReportRow> rows = List.of(
+                dividendRow(11, "주당 현금배당금(원)", "보통주", "1,668", "1,446", "1,444"),
+                dividendRow(12, "주당 현금배당금(원)", "-", "9,999", "9,999", "9,999"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+
+        assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
+                .as("밝힌 행이 이긴다. '-'를 함께 세면 우선주가 보통주로 섞인다")
+                .isEqualByComparingTo("1668");
+    }
+
+    @Test
+    @DisplayName("배당 — 주식 종류를 '보통주식'으로 낸 회사도 보통주 축이다")
+    void dividendAcceptsCommonStockSynonym() {
+        List<GovernanceReportRow> rows = List.of(
+                dividendRow(0, "주당 현금배당금(원)", "보통주식", "500", "450", "400"));
+
+        assertThat(pick(mapper.derive(GovernanceEndpoint.DIVIDEND, rows),
+                2025, GovernanceMetric.DPS_COMMON))
+                .as("실측 어휘다. 목록에 없으면 그 종목의 배당수익률이 통째로 사라진다")
+                .isEqualByComparingTo("500");
+    }
+
+    @Test
+    @DisplayName("주식의 총수 — '보통주식'·'의결권 있는 주식'도 보통주 행이다")
+    void shareTotalsAcceptsCommonStockSynonyms() {
+        // 실측 분포: 보통주 308종목 · 보통주식 32 · 의결권 있는 주식 13.
+        // 이 경로가 COMMON_CLASSES를 안 쓰고 "보통주" 완전일치로 비교해 45종목이 떨어져 있었다.
+        assertThat(index(mapper.derive(GovernanceEndpoint.SHARE_TOTALS, List.of(
+                shareRow("보통주식", "-", "-", "46,448,520", "393,082", "0"))))
+                .get(GovernanceMetric.ISSUED_SHARES_COMMON))
+                .isEqualByComparingTo("46448520");
+
+        assertThat(index(mapper.derive(GovernanceEndpoint.SHARE_TOTALS, List.of(
+                shareRow("의결권 있는 주식", "-", "-", "39,514,213", "1,180,000", "0"))))
+                .get(GovernanceMetric.ISSUED_SHARES_COMMON))
+                .as("정규화가 공백을 지우므로 COMMON_CLASSES에 이미 있는 값이다 — "
+                        + "최대주주 경로에서만 통과하고 여기서 떨어지던 자리다")
+                .isEqualByComparingTo("39514213");
+    }
+
+    @Test
+    @DisplayName("배당 — 보통주 행과 총액이 둘 다 '-'면 무배당이므로 0을 낸다 (펄어비스 2024 실측)")
+    void dividendReadsDashAsZeroWhenBothAreDash() {
+        // 소스가 보통주 행을 명시적으로 주면서 값이 '-'다. 버리면 「배당을 안 했다」와
+        // 「데이터가 없다」가 같은 상태가 되고, 화면은 무배당 회사를 「데이터 없음」으로 그린다.
+        List<GovernanceReportRow> rows = List.of(
+                dividendRow(4, "현금배당금총액(백만원)", "-", "-", "-", "-"),
+                dividendRow(11, "주당 현금배당금(원)", "보통주", "-", "-", "-"),
+                dividendRow(12, "주당 현금배당금(원)", "우선주", "-", "-", "-"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+
+        assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
+                .as("무배당은 결손이 아니라 0이다")
+                .isEqualByComparingTo("0");
+        assertThat(pick(facts, 2025, GovernanceMetric.CASH_DIVIDEND_TOTAL))
+                .isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 총액에 값이 있으면 주당배당금의 '-'는 0이 아니다 (코스메카코리아 2025 실측)")
+    void dividendKeepsDashUnknownWhenTotalHasValue() {
+        // 이 회사는 배당을 했다 — 총액 3,952백만원에 배당수익률 0.50%다. 주당배당금 칸만 '-'인데
+        // 그것을 0으로 읽으면 「배당수익률 0.00%」와 「배당성향 6.83%」가 나란히 뜬다.
+        List<GovernanceReportRow> rows = List.of(
+                dividendRow(4, "현금배당금총액(백만원)", "-", "3,952", "1,068", "-"),
+                dividendRow(11, "주당 현금배당금(원)", "보통주", "-", "-", "-"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+
+        assertThat(facts)
+                .as("어긋난 행에서는 아무것도 지어내지 않는다 — 전전기만 둘 다 '-'라고 그 해만 "
+                        + "0으로 채우면 이 회사의 최신 주당배당금이 FY2023 = 0이 되어 화면에 "
+                        + "「배당수익률 0.00%」가 뜬다. 배당을 한 회사인데도.")
+                .noneMatch(fact -> fact.metric() == GovernanceMetric.DPS_COMMON);
+        assertThat(pick(facts, 2025, GovernanceMetric.CASH_DIVIDEND_TOTAL))
+                .as("총액 쪽은 값이 있으므로 그대로 담는다")
+                .isEqualByComparingTo("3952000000");
+    }
+
+    @Test
+    @DisplayName("배당 — 배당을 끊은 해만 0이 되고 준 해는 그대로다 (현대해상 2024 실측)")
+    void dividendZeroesOnlyTheStoppedYear() {
+        List<GovernanceReportRow> rows = List.of(
+                dividendRow(4, "현금배당금총액(백만원)", "-", "-", "184,000", "175,000"),
+                dividendRow(11, "주당 현금배당금(원)", "보통주", "-", "2,063", "1,965"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+
+        assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
+                .as("당기가 '-'이고 총액도 '-'라 무배당이다")
+                .isEqualByComparingTo("0");
+        assertThat(pick(facts, 2024, GovernanceMetric.DPS_COMMON)).isEqualByComparingTo("2063");
+        assertThat(pick(facts, 2023, GovernanceMetric.DPS_COMMON)).isEqualByComparingTo("1965");
+    }
+
+    @Test
+    @DisplayName("배당 — 종류 미표기 두 행이 다 '-'면 0을 한 번만 낸다")
+    void dividendZeroesUnspecifiedRowsOnce() {
+        List<GovernanceReportRow> rows = List.of(
+                dividendRow(4, "현금배당금총액(백만원)", "-", "-", "-", "-"),
+                dividendRow(11, "주당 현금배당금(원)", "-", "-", "-", "-"),
+                dividendRow(12, "주당 현금배당금(원)", "-", "-", "-", "-"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+
+        assertThat(facts).filteredOn(fact -> fact.metric() == GovernanceMetric.DPS_COMMON
+                        && fact.fiscalYear() == 2025)
+                .as("어느 행을 골라도 0이라 모호하지 않다 — 그러나 두 번 내지는 않는다")
+                .hasSize(1);
+        assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON)).isEqualByComparingTo("0");
+    }
+
     // --- 픽스처 ------------------------------------------------------------
 
     private static GovernanceReportRow shareRow(String se, String issuedCum, String decreased,
@@ -364,8 +514,17 @@ class DartGovernanceFactMapperTest {
 
     private static GovernanceReportRow dividendRow(String se, String kind, String thstrm,
                                                    String frmtrm, String lwfr) {
+        return dividendRow(0, se, kind, thstrm, frmtrm, lwfr);
+    }
+
+    /**
+     * {@code ordinal}을 받는 판. 주식 종류를 안 밝힌 행끼리는 <b>자리</b>로만 구별되므로,
+     * 그 규칙을 재는 테스트는 실제 응답처럼 서로 다른 ordinal을 줘야 한다.
+     */
+    private static GovernanceReportRow dividendRow(int ordinal, String se, String kind,
+                                                   String thstrm, String frmtrm, String lwfr) {
         return new GovernanceReportRow(GovernanceEndpoint.DIVIDEND, 2025, "11011",
-                RECEIPT, PUBLISHED, 0,
+                RECEIPT, PUBLISHED, ordinal,
                 fields("se", se, "stock_knd", kind, "thstrm", thstrm, "frmtrm", frmtrm,
                         "lwfr", lwfr));
     }

@@ -87,6 +87,12 @@ FY2024가 어긋나고 FY2025는 맞는데, 지표가 쓰는 것은 FY2025다).
 psql -d stock_screener -At -c "WITH latest AS (SELECT max(trade_date) d FROM indicator_value), eff AS (SELECT f.stock_id, max(f.fiscal_year) y FROM governance_fact f, latest WHERE f.metric_key = 'MINORITY_TOTAL_SHARES' AND f.published_at <= latest.d GROUP BY f.stock_id), a AS (SELECT f.stock_id, f.value v FROM governance_fact f JOIN eff ON eff.stock_id = f.stock_id AND eff.y = f.fiscal_year WHERE f.metric_key = 'ISSUED_SHARES_COMMON'), b AS (SELECT f.stock_id, f.value v FROM governance_fact f JOIN eff ON eff.stock_id = f.stock_id AND eff.y = f.fiscal_year WHERE f.metric_key = 'MINORITY_TOTAL_SHARES'), bad AS (SELECT a.stock_id FROM a JOIN b ON b.stock_id = a.stock_id WHERE abs(a.v - b.v) > b.v * 0.5), leaked AS (SELECT count(*) n FROM bad JOIN indicator_value v ON v.stock_id = bad.stock_id AND v.indicator_code = 'LARGEST_HOLDER_STAKE', latest WHERE v.trade_date = latest.d) SELECT CASE WHEN (SELECT count(*) FROM eff) = 0 THEN '잴 것이 없었다 — 소액주주 총수 사실이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 지금 쓰이는 회계연도에 단위가 어긋난 종목이 없다' WHEN (SELECT n FROM leaked) = 0 THEN 'OK 어긋난 ' || (SELECT count(*) FROM bad) || '종목에 최대주주 지분율이 안 나간다' ELSE '어긋난 종목 ' || (SELECT n FROM leaked) || '개에 최대주주 지분율이 나가고 있다 — 대조 가드가 뚫렸다' END"
 ```
 
+**주식 종류 어휘는 관측으로만 안다.** 소스가 같은 뜻을 `보통주`·`보통주식`·`의결권 있는 주식`으로
+내고, 주식이 한 종류뿐인 회사는 `-`로 낸다. **허용목록이 좁으면 그 종목의 지표가 통째로 판정불가가
+되는데 화면에는 「값 없음」으로만 보인다** — 실제로 005850이 배당성향 39.77%와 빈 배당수익률을
+나란히 띄웠고 그런 종목이 22개였다. **그 무증상을 깨는 펜스는 ADR-0082에 있다** — 여기 있던 것은
+값이 든 행만 세어 **무배당 결손을 원리적으로 못 잡았다.**
+
 ## 배경
 
 버핏·린치 프리셋이 기업의 「질」을 재는데 **지배구조를 재는 지표가 하나도 없었다.** 스크리너가
