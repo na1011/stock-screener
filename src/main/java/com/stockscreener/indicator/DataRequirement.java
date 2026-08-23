@@ -6,6 +6,13 @@ import java.util.Set;
  * 지표 계산에 필요한 원자료와 의존 지표의 선언.
  *
  * @param priceBarsNeeded     필요한 시세 봉 개수(거래일 기준). 시세가 필요 없으면 0.
+ *
+ * <p>IMPORTANT — <b>1은 미보정 기업 행위 억제를 켜지 않는다.</b> {@code UnadjustedActionGuard}가
+ * 창을 {@code (windowStart, tradeDate]}로 잡는데 봉이 하나면 {@code windowStart == tradeDate}가
+ * 되어 판정이 항상 거짓이다. {@code PER}·{@code PSR}·{@code PBR}과 거버넌스 지표 전부가 이
+ * 성질을 갖는다 — <b>그 지표들은 억제의 보호를 안 받으므로 기업 행위 보정을 계산기가 명시로
+ * 한다</b>({@code IndicatorContext.corporateActionMultiple}). 0으로 두는 것이 더 위험하다는
+ * ADR-0066의 경고를 「1이면 안전하다」로 읽지 않는다.
  * @param financialYearsNeeded 필요한 재무제표 연수. 재무가 필요 없으면 0.
  * @param dependsOn           이 지표가 소비하는 <b>다른 지표</b>의 코드.
  * @param governanceYearsNeeded 필요한 거버넌스 회계연도 수. 안 쓰면 0.

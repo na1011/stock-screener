@@ -126,7 +126,7 @@ public class AdminJobLauncher {
                 request -> marketIndexJob.run(
                         request.orDefault(request.to(), LocalDate.now()),
                         BatchExecutionRecorder.TriggeredBy.ADMIN, request.from()),
-                // MUST NOT: governance-load를 여기 올리지 않는다. 전량이 5,950콜로 보수 예산
+                // MUST NOT: governance-load를 여기 올리지 않는다. 전량이 7,700콜로 보수 예산
                 // 10,000의 절반을 넘어, InitialLoadJob을 뺀 근거에 정확히 걸린다. 유도 잡은
                 // 외부 호출이 0이라 같은 근거가 없다.
                 GovernanceDeriveJob.JOB_NAME,

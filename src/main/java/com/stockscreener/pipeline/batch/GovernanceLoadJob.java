@@ -46,8 +46,8 @@ public class GovernanceLoadJob {
     /**
      * 표마다 «최신 해에서 몇 해 뒤까지» 받는가. 근거는 §16-C의 실측이다.
      *
-     * <p>MUST: 이 표를 바꾸면 콜 수가 함께 바뀐다. 지금 350종목 기준 <b>5,950콜</b>이고
-     * 보수 예산 10,000의 59.5%다.
+     * <p>MUST: 이 표를 바꾸면 콜 수가 함께 바뀐다. 지금 350종목 기준 <b>7,700콜</b>이고
+     * 보수 예산 10,000의 77%다.
      */
     private static final Map<GovernanceEndpoint, Integer> YEARS_BACK =
             new EnumMap<>(Map.of(

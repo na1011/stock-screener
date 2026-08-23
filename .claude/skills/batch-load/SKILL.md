@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|adjustment-rebuild|market-index|backfill 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|adjustment-rebuild|market-index|backfill|governance-load|governance-derive 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -21,6 +21,8 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 --job=adjustment-rebuild [--tickers=058470]
 --job=market-index [--from=2020-01-02]
 --job=backfill --from=2025-11-11 --as-of=2026-08-05 [--tickers=058470,086280]
+--job=governance-load [--governance-year=2025] [--governance-span=1] [--governance-endpoints=DIVIDEND,AUDIT_OPINION] [--tickers=…]
+--job=governance-derive [--tickers=005930]
 ```
 
 **모르는 인자는 실행 전에 거부된다.** 점을 포함한 이름(`--server.port=0`)은 Spring 몫이라 통과한다.
@@ -37,6 +39,8 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 | `company-profile` | 업종(KSIC)·결산월 | **기본 대상이 `industry_code IS NULL`인 편입 종목뿐**이라 평소 0콜이다. 티커를 주면 결손 여부와 무관하게 다시 받는다. 종목당 1콜(전량 350). ADR-0044 |
 | `corporate-action` | 기업 행위 → `corporate_action` 원장 | **계수를 바꾸지 않는다**(`rebuild()` 미호출). 공시 + 시세 급변 휴리스틱 둘을 함께 적는다. `--from` 기본값은 **저장된 시세의 첫 거래일**이고 종목당 콜은 창이 정한다(2020~오늘이면 2콜, 350종목 700콜 = `irdsSttus` 보수 예산의 7%). ADR-0049 |
 | `adjustment-rebuild` | `adj_factor`·`adj_close`를 원장에서 다시 짓기 | **저장된 시세를 소급해 다시 쓰는 유일한 경로다.** 외부 호출 0. **첫 실행 전에 `ops/dump-db.sh`가 필요하고 훅이 그것을 막는다**(ADR-0049·0052). 값이 바뀐 종목의 지표가 **보존 창 전체에서 지워지므로 `backfill`이 짝이다** — 알림 본문이 이어서 돌릴 명령을 준다. 화면에는 없다(런처·스케줄러 양쪽에서 뺐다). 350종목 2초 |
+| `governance-load` | 정기보고서 주요정보 여덟 → `governance_report_row` | **원문만 담는다.** 지표용 값은 `governance-derive`가 따로 만든다(ADR-0081). 표마다 받을 해가 달라 **지금 배치가 350종목 7,700콜**이다((엔드포인트, 연도) 22쌍) — DART 보수 예산 10,000의 77%라 **같은 날 `financial-refill`(5,600)과 겹치면 넘는다.** 화면에 버튼이 없다(한 번에 한도 절반을 넘는다) |
+| `governance-derive` | `governance_report_row` → `governance_fact` | **외부 호출 0.** 유도 규칙을 고친 뒤 이것만 다시 돌린다 — 표를 가른 이유가 이것이다. 종목을 **통째로** 다시 짓는다(회계연도로 좁히면 감사인 교체처럼 보고서 둘을 견줘 나오는 값이 빠진다). 화면에도 있다 |
 | `backfill` | 지표 계산 | 지정한 구간을 **날짜별로 반복**한다. `--tickers`로 종목을 좁혀도 **백분위·업종 상대값은 전 종목에서 나온다.** 그리고 **백분위(`*_PCTL`)는 돌린 날짜에만 생긴다** — 원본 지표는 실행 한 번에 수백 일자를 채우는데 백분위는 그날 하루뿐이라, 새 백분위를 더한 뒤 과거 날짜를 열면 **원본은 있는데 순위가 없다** |
 
 ## 조용히 아무 일도 하지 않는 조합
@@ -57,6 +61,17 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 빈 채로 들어오고, 업종 조건은 필수라 **그 종목이 프리셋에서 조용히 빠진다**(ADR-0044).
 리밸런싱 잡에 합쳐 두지 않은 이유는 그쪽이 종목 단위 실패 격리를 일부러 쓰지 않기 때문이다 —
 DART 실패 하나가 지수 갱신 전체를 되돌린다. 인자 없이 돌리면 결손 종목만 받으므로 싸다.
+
+**`governance-load`에 `--governance-span`을 안 주면 표 전체를 다시 받는다.** 이미 받아 둔 해에
+한 해만 얹으려는데 `--governance-year`만 주면 그 표의 기본 연수(최대 5)가 그대로 걸려 **한 해를
+위해 다섯 해를 받는다.** 성공으로 끝나고 결과도 같아서 **초과한 콜만 사라진다.**
+
+**`--governance-endpoints`를 안 주면 여덟을 다 부른다.** 나눠 돌릴 때 이것을 빠뜨리면 3개년을
+열로 주는 표를 두 번째 실행이 다시 부르고, **그 중복은 아무 데도 안 뜬다.**
+
+**`governance-load` 뒤에는 반드시 `governance-derive` → `backfill`이다.** 적재만 하면
+`governance_fact`가 안 바뀌고, 유도만 하면 `indicator_value`가 안 바뀐다 — **셋 다 성공으로
+끝나고 화면은 옛 값 그대로다.** 세 잡 중 어느 것도 다음 것을 부르지 않는다.
 
 **운영 앱이 도는 중에 띄우면 포트 8080 충돌로 컨텍스트가 죽는데 gradle은 `BUILD SUCCESSFUL`을
 낸다.** `bootRun`은 프로파일과 무관하게 웹 서버를 올린다. `--server.port=0`을 함께 주고,
@@ -187,6 +202,20 @@ TTM이 바뀐 종목이 **실제로는 탈락인데 통과로 남아 있었다**
 - `listed_shares` 빈값 0 — PER·PBR이 여기 의존한다(ADR-0013)
 - **종목별 최신 봉** — `SELECT max(trade_date) FROM price_daily GROUP BY stock_id`. 합계로는 안
   보이고, 뒤처진 종목은 대개 거래정지라 **그것이 정상이다**(`data-go-kr-stock-price.md` §거래정지).
+
+## 거버넌스 적재 후 확인
+
+행 수로는 부분 적재와 정상이 같아 보인다. 넷을 본다 — 근거는 `docs/phase-criteria.md` §P18 축①이다.
+
+- **표별로 실제 행이 온 종목** — `row_ordinal >= 0`으로 센다. **`status 013`은 `row_ordinal = -1`로
+  남으므로 행 수만 세면 「1건 있음」이 된다.** 기준값은 여덟 다 348/350이고, 빠지는 둘은
+  088980 맥쿼리인프라(인프라 투자회사)·950260 인제니아테라퓨틱스(Reg.S)로 **구조적 제외**다.
+- **`governance_fact`가 실제로 늘었는가** — 유도를 안 돌리면 원문만 늘고 지표는 그대로다.
+- **모르는 `metric_key`가 남지 않았는가** — 유도 잡이 실행당 한 번 ERROR로 알린다.
+  `GovernanceMetric`에서 상수를 빼거나 이름을 바꾸면 **컴파일도 테스트도 초록인 채** 그 지표만
+  전 종목 판정불가가 된다.
+- **허용목록에 없는 감사의견 표기** — 유도 잡이 WARN으로 남긴다. 새 표기는 「적정」으로 새지 않고
+  판정불가로 떨어지므로, 그 수가 늘면 허용목록에 더한다(`docs/api-spec/dart-open-api.md` §16-C).
 
 ## 외부 소스의 함정
 
