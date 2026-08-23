@@ -48,9 +48,14 @@ DART 배당 표(`alotMatter`)에서 **주당 현금배당금과 현금배당금�
 ./gradlew test --tests "*DartGovernanceFactMapperTest*"
 ```
 
-```premise 원문 행이 있는 종목이 전부 주당배당금 사실을 낸다
-psql -d stock_screener -At -c "WITH raw AS (SELECT DISTINCT r.stock_id FROM governance_report_row r WHERE r.endpoint = 'DIVIDEND' AND r.row_ordinal >= 0 AND r.payload->>'se' = '주당 현금배당금(원)'), missing AS (SELECT count(*) n FROM raw WHERE NOT EXISTS (SELECT 1 FROM governance_fact f WHERE f.stock_id = raw.stock_id AND f.metric_key = 'DPS_COMMON')) SELECT CASE WHEN (SELECT count(*) FROM raw) = 0 THEN '잴 것이 없었다 — 주당 현금배당금 원문 행이 하나도 없다' WHEN (SELECT n FROM missing) = 0 THEN 'OK 원문 행이 있는 ' || (SELECT count(*) FROM raw) || '종목이 전부 DPS_COMMON을 낸다' ELSE (SELECT n FROM missing) || '종목이 원문 행은 있는데 DPS_COMMON이 없다 — 센티널을 0으로 안 읽고 있다' END"
+```premise 총액과 맞는 원문 행을 가진 종목이 전부 주당배당금 사실을 낸다
+psql -d stock_screener -At -c "WITH d AS (SELECT stock_id, bsns_year, receipt_no, bool_and(payload->>'thstrm' IN ('-','')) t, bool_and(payload->>'frmtrm' IN ('-','')) f, bool_and(payload->>'lwfr' IN ('-','')) l FROM governance_report_row WHERE endpoint = 'DIVIDEND' AND row_ordinal >= 0 AND payload->>'se' = '주당 현금배당금(원)' AND replace(payload->>'stock_knd', ' ', '') IN ('보통주','보통주식','의결권있는주식','-','') GROUP BY 1,2,3), o AS (SELECT stock_id, bsns_year, receipt_no, (payload->>'thstrm' IN ('-','')) t, (payload->>'frmtrm' IN ('-','')) f, (payload->>'lwfr' IN ('-','')) l FROM governance_report_row WHERE endpoint = 'DIVIDEND' AND row_ordinal >= 0 AND payload->>'se' = '현금배당금총액(백만원)'), usable AS (SELECT DISTINCT d.stock_id FROM d JOIN o USING (stock_id, bsns_year, receipt_no) WHERE d.t = o.t AND d.f = o.f AND d.l = o.l), missing AS (SELECT count(*) n FROM usable u WHERE NOT EXISTS (SELECT 1 FROM governance_fact g WHERE g.stock_id = u.stock_id AND g.metric_key = 'DPS_COMMON')) SELECT CASE WHEN (SELECT count(*) FROM usable) = 0 THEN '잴 것이 없었다 — 총액과 어긋나지 않는 주당배당금 행이 하나도 없다' WHEN (SELECT n FROM missing) = 0 THEN 'OK 총액과 맞는 원문 행을 가진 ' || (SELECT count(*) FROM usable) || '종목이 전부 DPS_COMMON을 낸다' ELSE (SELECT n FROM missing) || '종목이 총액과 맞는 원문 행을 갖는데 DPS_COMMON이 없다 — 센티널을 0으로 안 읽고 있다' END"
 ```
+
+**모집단이 「원문 행이 있는 종목」이 아니라 「총액과 어긋나지 않는 행을 가진 종목」인 것이 요점이다.**
+어긋난 행에서는 값을 안 내는 것이 이 결정이므로, 그것까지 세면 **의도한 동작에 매 세션 울고**
+진짜 발견이 그 소음에 묻힌다(실제로 241710이 그렇게 울었다). 지금 347종목이고 그것이 사실 층의
+`DPS_COMMON` 보유 수와 같다.
 
 **이 펜스가 ADR-0081의 것을 대신한다.** 그쪽은 원문 조건을 `thstrm NOT IN ('-','')`로 좁혀
 **무배당 결손을 원리적으로 못 잡는다**(그래서 결함이 있는 채로 OK를 냈다). 이 결함이 **무증상이었던
