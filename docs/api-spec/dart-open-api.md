@@ -643,6 +643,7 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 | `fnlttMultiAcnt.json` | 결정 (P10 비용) | §11-F | **100종목 묶음** = 64 |
 | `xbrlTaxonomy.json` | 결정 (P10 사전) | §11-G | `sj_div`당 1 |
 | `accnutAdtorNmNdAdtOpinion.json` | **채택·미구현**(거버넌스 축) | §11-I | 종목당 1 = 350 |
+| **거버넌스 여덟**(`alotMatter`·`hyslrSttus`·`outcmpnyDrctrNdChangeSttus`·`mrhlSttus`·`hyslrChgSttus`·보수 셋) | **개발가이드 받음·미구현**(P18) | §11-K | 종목·연도당 1 = **각 350** |
 | `elestock`·`majorstock`·`tesstkAcqsDspsSttus`·`list` | **미착수** — 넷의 사정이 다르다(§11-J) | §11-J (이름·인자만) | — |
 
 **공통 요청 인자**: `crtfc_key`(STRING(40), 필수). 아래 표는 그 외의 것만 적는다.
@@ -879,6 +880,52 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 **IMPORTANT — 2019-12-09에 필드가 갈렸다.** `adt_reprt_spcmnt_matter`(감사보고서 특기사항)는
 **2019-12-08까지만** 쓰였고, 그 뒤로 `emphs_matter`(강조사항 등)·`core_adt_matter`(핵심감사사항)
 둘로 나뉜다. **한쪽만 읽으면 그 구간이 통째로 빈다** — §11-D의 `extrsc_trspprpd`와 같은 형태다.
+
+### 11-K. 거버넌스 여덟 — 정기보고서 주요정보 (2026-08-23 갈무리)
+
+**요청 인자가 여덟 다 똑같다** — `crtfc_key` · `corp_code` · `bsns_year`(2015~) ·
+`reprt_code`(`11011` 사업 / `11012` 반기 / `11013` 1분기 / `11014` 3분기). **종목·연도당 1콜**이고
+사업보고서만 부르면 350종목에 **엔드포인트당 350콜**이다.
+
+**IMPORTANT — `outcmpnyDrctrNdChangeSttus`의 `bsns_year` 타입이 개발가이드에 `STRING(1)`로
+적혀 있다. 문서 오기다** — 값 설명은 *"사업연도(4자리)"*이고 나머지 일곱은 전부 `STRING(4)`다.
+**타입을 그대로 믿고 한 자리를 보내면 안 된다.**
+
+**IMPORTANT — 3개년을 주는 방식이 갈린다.** `alotMatter`는 **열**로(`thstrm`·`frmtrm`·`lwfr`),
+보수 셋은 **행**으로(`fscl_year`가 `당기`/`전기`/`전전기`) 준다. **`fscl_year`는 연도가 아니다** —
+§10-D의 `bsns_year` 기수 표기와 같은 병이다. 나머지 넷은 요청한 해 하나만 준다.
+
+**IMPORTANT — 비율이 이미 계산돼 온다.** `qota_rt` · `shrholdr_rate` · `hold_stock_rate` ·
+`jan_avrg_mendng_am`이 그렇다. **spec §7이 「외부가 계산해 주는 값에 의존하지 않는다」를
+MUST로 걸므로 지표는 자체 계산한다** — 다행히 분자·분모가 같은 응답에 함께 온다
+(`hold_stock_co`/`stock_tot_co` 등). **원자료로는 담되 지표 계산에 쓰지 않는다**
+(`financial_statement.eps`·`bps`와 같은 취급이다).
+
+| 엔드포인트 | 한 회사의 응답 모양 | 고유 응답 필드 |
+|---|---|---|
+| **`alotMatter`** 배당 | **항목 × 주식종류** 행, 3개년이 열 | `se`(항목명) `stock_knd` **`thstrm`·`frmtrm`·`lwfr`** `stlm_dt` |
+| **`hyslrSttus`** 최대주주 | **주주(사람)별** 행 | `nm` `relate` `stock_knd` `bsis_posesn_stock_co`·`_qota_rt`(기초) **`trmend_posesn_stock_co`·`_qota_rt`(기말)** `rm` |
+| **`outcmpnyDrctrNdChangeSttus`** 사외이사 | **평면**(회사당 소수 행) | **`drctr_co`(이사 수)** **`otcmp_drctr_co`(사외이사 수)** `apnt`(선임) `rlsofc`(해임) `mdstrm_resig`(중도퇴임) |
+| **`mrhlSttus`** 소액주주 | **평면**(`se`=`소액주주`) | `shrholdr_co`(주주수) `shrholdr_tot_co` `shrholdr_rate` **`hold_stock_co`** **`stock_tot_co`** `hold_stock_rate` |
+| **`hyslrChgSttus`** 최대주주 변동 | **변동 사건별** 행 | **`change_on`(변동일)** `mxmm_shrholdr_nm` `posesn_stock_co` `qota_rt` `change_cause` `rm` |
+| `drctrAdtAllMendngSttusGmtsckConfmAmount` 보수(주총 승인) | `se` × `fscl_year` | `se` `nmpr`(인원수) `gmtsck_confm_amount` `rm` `fscl_year` |
+| `hmvAuditAllSttus` 보수(지급, 전체) | `fscl_year` | `nmpr` **`mendng_totamt`(보수 총액)** `jan_avrg_mendng_am` `fscl_year` + 주식기준보상 여섯(`stk_bsd_pd_mendng_totamt` `stk_opt_*` `othr_stk_bsd_cmpn_*`) |
+| `drctrAdtAllMendngSttusMendngPymntamtTyCl` 보수(지급, 유형별) | `se` × `fscl_year` | `se` `nmpr` `pymnt_totamt` `psn1_avrg_pymntamt` + 위와 같은 주식기준보상 여섯 |
+
+**여덟이 여덟 모양이라 원자료 표는 갈라야 한다.** 그러나 **지표 계층이 보는 것은 하나다** —
+사외이사 비율·소액주주 지분율·최대주주 지분율·배당성향·최대주주 변동 횟수·자기주식 비율이
+전부 **「종목 × 회계연도 × 스칼라」**로 환원된다. **`IndicatorContext`에 채널을 여섯 개 열
+이유가 없다** — 적재는 표마다 따로 하고, 지표용으로는 정규화된 층 하나를 둔다.
+**이 설계는 여덟을 다 보고서야 보인다.**
+
+**`se`가 세 엔드포인트에서 서로 다른 뜻이다** — `alotMatter`에서는 **배당 항목명**(주당 현금배당금
+등), `mrhlSttus`에서는 **`소액주주` 한 값**, 보수 둘에서는 **이사/감사 구분**이다.
+`stockTotqySttus`의 `se`(주식 종류)와도 다르다. **낱말이 같아 계속 헷갈리는 자리다.**
+
+**`alotMatter`의 `se` 값 집합은 미관측이다.** 개발가이드의 값 설명이 *"유상증자(주주배정),
+전환권행사 등"*으로 **다른 엔드포인트의 설명이 잘못 붙어 있다.** 실제로는 사업보고서 배당표의
+항목명(주당액면가액·현금배당성향·주당 현금배당금 등)일 것으로 보이나 **재보기 전에는 모른다** —
+`stockTotqySttus`의 `se`가 §16-A에서 그랬듯 **적재 코드 앞에 탐침이 필요하다.**
 
 ### 11-J. 받았지만 아직 안 쓰는 넷
 
