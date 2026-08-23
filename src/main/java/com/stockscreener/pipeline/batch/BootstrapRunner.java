@@ -106,6 +106,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final AdjustmentRebuildJob adjustmentRebuildJob;
     private final MarketIndexJob marketIndexJob;
     private final IndicatorBackfillJob indicatorBackfillJob;
+    private final GovernanceLoadJob governanceLoadJob;
+    private final GovernanceDeriveJob governanceDeriveJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
@@ -118,6 +120,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            AdjustmentRebuildJob adjustmentRebuildJob,
                            MarketIndexJob marketIndexJob,
                            IndicatorBackfillJob indicatorBackfillJob,
+                           GovernanceLoadJob governanceLoadJob,
+                           GovernanceDeriveJob governanceDeriveJob,
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
         this.universeRebalanceJob = universeRebalanceJob;
@@ -129,6 +133,8 @@ public class BootstrapRunner implements ApplicationRunner {
         this.adjustmentRebuildJob = adjustmentRebuildJob;
         this.marketIndexJob = marketIndexJob;
         this.indicatorBackfillJob = indicatorBackfillJob;
+        this.governanceLoadJob = governanceLoadJob;
+        this.governanceDeriveJob = governanceDeriveJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
     }
@@ -182,11 +188,21 @@ public class BootstrapRunner implements ApplicationRunner {
             case "backfill" -> indicatorBackfillJob.run(
                     date(args, "from", asOf.minusYears(2)), asOf,
                     BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
+            // MUST: --governance-endpoints로 나눠 돌린다. 안 좁히면 두 번째 실행이 3개년을
+            // 주는 표를 다시 불러 콜이 조용히 늘고, 그 초과는 아무 데도 안 뜬다.
+            case "governance-load" -> governanceLoadJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    optionalInteger(args, "governance-year"),
+                    governanceEndpoints(args), csv(args, "tickers"));
+            // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
+            case "governance-derive" -> governanceDeriveJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill"
                             + " | full-statement-refill | company-profile | corporate-action"
-                            + " | adjustment-rebuild | market-index | backfill");
+                            + " | adjustment-rebuild | market-index | backfill"
+                            + " | governance-load | governance-derive");
         };
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);
@@ -220,7 +236,7 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
             "job", "as-of", "price-years", "financial-years", "reload-existing", "tickers", "from",
-            "quarters");
+            "quarters", "governance-year", "governance-endpoints");
 
     /**
      * Spring 자신의 인자는 통과시킨다.

@@ -118,6 +118,25 @@ class DartGovernanceFactMapperTest {
     }
 
     @Test
+    @DisplayName("최대주주 — 회계연도를 갈라 센다 (안 가르면 두 해가 합쳐져 지분이 두 배가 된다)")
+    void largestHolderSplitsByFiscalYear() {
+        List<GovernanceReportRow> rows = List.of(
+                holderRow(2025, "정용진", "최대주주 본인", "보통주", "7,960,493"),
+                holderRow(2025, "한채양", "대표이사", "보통주", "400"),
+                holderRow(2025, "계", "", "보통주", "7,960,893"),
+                holderRow(2024, "정용진", "최대주주 본인", "보통주", "5,000,000"),
+                holderRow(2024, "계", "", "보통주", "5,000,000"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.LARGEST_HOLDER, rows);
+
+        assertThat(pick(facts, 2025, GovernanceMetric.LARGEST_HOLDER_SHARES_COMMON))
+                .as("두 해를 한 목록으로 받는다. 안 가르면 12,960,893이 되고 값이 그럴듯해 안 드러난다")
+                .isEqualByComparingTo("7960893");
+        assertThat(pick(facts, 2024, GovernanceMetric.LARGEST_HOLDER_SHARES_COMMON))
+                .isEqualByComparingTo("5000000");
+    }
+
+    @Test
     @DisplayName("최대주주 — 주식 종류가 '의결권 있는 주식'인 회사도 보통주 축이다 (오리온 2025 실측)")
     void largestHolderAcceptsVotingShareVocabulary() {
         List<GovernanceReportRow> rows = List.of(
@@ -261,6 +280,44 @@ class DartGovernanceFactMapperTest {
     }
 
     @Test
+    @DisplayName("감사의견 — 관측된 비적정을 잡고, 목록 밖은 「적정」이 아니라 판정불가다")
+    void auditOpinionUsesAnAllowlistInBothDirections() {
+        // 실측: 044490 태웅 FY2020.
+        assertThat(opinionOf("감사범위 제한으로\n인한 한정"))
+                .as("활성 유니버스 안에 실재하는 비적정이다")
+                .isEqualByComparingTo("1");
+        assertThat(opinionOf("적정의견")).isEqualByComparingTo("0");
+        assertThat(opinionOf("적 정"))
+                .as("공백이 낀 표기가 15행 있다. 정규화하지 않으면 판정불가가 된다")
+                .isEqualByComparingTo("0");
+
+        assertThat(opinionOf("부적정의견"))
+                .as("IMPORTANT — contains(\"적정\")로 물으면 이것이 「적정」으로 분류된다. "
+                        + "한 글자가 가장 위험한 종목을 통과시킨다")
+                .isNull();
+        assertThat(opinionOf("(주1)"))
+                .as("각주 기호가 실제로 온다. 「적정」으로 접지 않는다")
+                .isNull();
+        assertThat(opinionOf(""))
+                .as("빈 문자열이 185행이다. 없는 값을 0으로 만들지 않는다")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("감사의견 — 한 해의 두 행 중 하나만 비적정이어도 비적정이다")
+    void auditOpinionFoldsTwoRowsWithOr() {
+        List<GovernanceReportRow> rows = List.of(
+                auditOpinionRow("제10기\n(당기)", "적정의견"),
+                auditOpinionRow("제10기\n(당기)", "감사범위 제한으로 인한 한정"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.AUDIT_OPINION, rows);
+
+        assertThat(pick(facts, 2025, GovernanceMetric.AUDIT_OPINION_ADVERSE))
+                .as("두 행이 연결·별도로 보이나 필드로 구분되지 않는다 — 안전한 쪽으로 접는다")
+                .isEqualByComparingTo("1");
+    }
+
+    @Test
     @DisplayName("강조사항 — '-'로 시작하는 글머리표는 센티널이 아니다")
     void emphasisBulletIsNotASentinel() {
         List<GovernanceReportRow> rows = List.of(
@@ -295,7 +352,12 @@ class DartGovernanceFactMapperTest {
 
     private static GovernanceReportRow holderRow(String nm, String relate, String kind,
                                                  String shares) {
-        return new GovernanceReportRow(GovernanceEndpoint.LARGEST_HOLDER, 2025, "11011",
+        return holderRow(2025, nm, relate, kind, shares);
+    }
+
+    private static GovernanceReportRow holderRow(int bsnsYear, String nm, String relate,
+                                                 String kind, String shares) {
+        return new GovernanceReportRow(GovernanceEndpoint.LARGEST_HOLDER, bsnsYear, "11011",
                 RECEIPT, PUBLISHED, 0,
                 fields("nm", nm, "relate", relate, "stock_knd", kind,
                         "trmend_posesn_stock_co", shares));
@@ -318,6 +380,23 @@ class DartGovernanceFactMapperTest {
                 RECEIPT, PUBLISHED, 0,
                 fields("bsns_year", term, "adtor", auditor, "adt_opinion", "적정의견",
                         "emphs_matter", emphasis, "core_adt_matter", keyMatter));
+    }
+
+    private static BigDecimal opinionOf(String opinion) {
+        return pick(mapper().derive(GovernanceEndpoint.AUDIT_OPINION,
+                        List.of(auditOpinionRow("제10기\n(당기)", opinion))),
+                2025, GovernanceMetric.AUDIT_OPINION_ADVERSE);
+    }
+
+    private static DartGovernanceFactMapper mapper() {
+        return new DartGovernanceFactMapper();
+    }
+
+    private static GovernanceReportRow auditOpinionRow(String term, String opinion) {
+        return new GovernanceReportRow(GovernanceEndpoint.AUDIT_OPINION, 2025, "11011",
+                RECEIPT, PUBLISHED, 0,
+                fields("bsns_year", term, "adtor", "삼정회계법인", "adt_opinion", opinion,
+                        "emphs_matter", "해당사항 없음", "core_adt_matter", "핵심감사사항"));
     }
 
     private static Map<String, String> fields(String... pairs) {

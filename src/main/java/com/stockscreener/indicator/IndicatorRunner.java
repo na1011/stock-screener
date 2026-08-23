@@ -159,16 +159,21 @@ public class IndicatorRunner {
      * 들어오는 동안 그 종목의 재무 지표가 보존 창에서 사라지고, 다음 실행에 다시 쓰인다 —
      * ADR-0045가 닫은 「삭제 → 재기록」 왕복이다.
      *
-     * <p>선언으로 판정할 수 있는 것은 <b>재무뿐이다</b>({@code DataRequirement.needsFinancial}).
-     * 시장 지수는 {@code DataRequirement}에 없어 같은 방식으로 못 가른다 — 지수 시계열이 통째로
-     * 비면 {@code BETA_104W}·{@code EXCESS_RETURN_*}가 여전히 이 경로로 지워진다(ADR-0080 §결과).
-     * 시세는 {@code run}의 조기 반환이 이미 막는다.
+     * <p>선언으로 판정할 수 있는 것은 <b>재무와 거버넌스 둘</b>이다({@code needsFinancial}·
+     * {@code needsGovernance}). 시장 지수는 {@code DataRequirement}에 없어 같은 방식으로 못
+     * 가른다 — 지수 시계열이 통째로 비면 {@code BETA_104W}·{@code EXCESS_RETURN_*}가 여전히
+     * 이 경로로 지워진다(ADR-0080 §결과). 시세는 {@code run}의 조기 반환이 이미 막는다.
      */
     private static boolean inputsWereReadable(IndicatorCalculator calculator, IndicatorContext base) {
-        if (!calculator.dataRequirement().needsFinancial()) {
-            return true;
+        DataRequirement requirement = calculator.dataRequirement();
+        if (requirement.needsFinancial()
+                && base.annualFigures().isEmpty() && base.quarterlyFigures().isEmpty()) {
+            return false;
         }
-        return !base.annualFigures().isEmpty() || !base.quarterlyFigures().isEmpty();
+        // 거버넌스도 같은 판정을 받는다(ADR-0081). 선언하지 않은 채 늘 읽히면 적재 전이나
+        // 적재가 반쯤 된 구간에서 **부모 행은 남는데 이 지표 행만 지워진다** — 시장 지수가
+        // 그 상태이고(ADR-0080 §결과), 그 결손을 셋째 축으로 늘리지 않으려고 선언을 뒀다.
+        return !requirement.needsGovernance() || !base.governanceFacts().isEmpty();
     }
 
     /**
@@ -329,6 +334,9 @@ public class IndicatorRunner {
                 // 지표마다 다시 알아야 하고, 한 곳만 안 고쳐도 그 지표만 조용히 다른 벤치마크를 쓴다.
                 // 시장을 모르거나 그 지수가 없으면 null이고, 그때 계산기가 값을 내지 않는다.
                 indexes == null ? null : indexes.get(attributes.marketCode()),
+                // 거버넌스 사실. 빠뜨려도 컴파일되고, 빠지면 예외가 아니라 **값이 없는 지표**로
+                // 나타난다 — 필수 조건이면 전 종목 판정불가인데 에러도 경고도 없다.
+                reader.readGovernanceFacts(stockId, asOf, registry.maxGovernanceYears(), visibility),
                 Map.of());
     }
 

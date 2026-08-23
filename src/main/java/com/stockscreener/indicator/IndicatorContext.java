@@ -25,6 +25,7 @@ public final class IndicatorContext {
     private final List<ShareAdjustment> shareAdjustments;
     private final List<LocalDate> unadjustedActions;
     private final NavigableMap<LocalDate, BigDecimal> marketIndex;
+    private final List<GovernanceFigures> governanceFacts;
     private final Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies;
 
     public IndicatorContext(
@@ -36,6 +37,7 @@ public final class IndicatorContext {
             List<ShareAdjustment> shareAdjustments,
             List<LocalDate> unadjustedActions,
             NavigableMap<LocalDate, BigDecimal> marketIndex,
+            List<GovernanceFigures> governanceFacts,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
         this.stockId = stockId;
         this.industryDivision = industryDivision;
@@ -47,6 +49,8 @@ public final class IndicatorContext {
         this.unadjustedActions =
                 unadjustedActions == null ? List.of() : List.copyOf(unadjustedActions);
         this.marketIndex = marketIndex == null ? new TreeMap<>() : new TreeMap<>(marketIndex);
+        this.governanceFacts =
+                governanceFacts == null ? List.of() : List.copyOf(governanceFacts);
         this.dependencies = dependencies == null ? Map.of() : Map.copyOf(dependencies);
     }
 
@@ -60,7 +64,7 @@ public final class IndicatorContext {
             List<ShareAdjustment> shareAdjustments,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
         this(stockId, industryDivision, priceBars, annualFigures, quarterlyFigures,
-                shareAdjustments, List.of(), null, dependencies);
+                shareAdjustments, List.of(), null, List.of(), dependencies);
     }
 
     /** 업종을 모르는 컨텍스트. 업종을 쓰지 않는 계산기의 테스트가 쓴다. */
@@ -71,7 +75,7 @@ public final class IndicatorContext {
             List<FinancialFigures> quarterlyFigures,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
         this(stockId, null, priceBars, annualFigures, quarterlyFigures, List.of(), List.of(), null,
-                dependencies);
+                List.of(), dependencies);
     }
 
     /**
@@ -86,7 +90,7 @@ public final class IndicatorContext {
             Map<String, NavigableMap<LocalDate, BigDecimal>> newDependencies) {
         return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
                 quarterlyFigures, shareAdjustments, unadjustedActions, marketIndex,
-                newDependencies);
+                governanceFacts, newDependencies);
     }
 
     public long stockId() {
@@ -215,6 +219,24 @@ public final class IndicatorContext {
     }
 
     /**
+     * 거버넌스 사실. {@code fiscalYear} <b>내림차순</b>(최신 우선)이다(ADR-0081).
+     *
+     * <p>지표 계층이 <b>재무제표 밖의 회사 정보</b>를 받는 첫 자리다. 업종(ADR-0044)은 종목
+     * 속성이었고 지수(ADR-0053)는 종목 밖 시계열이었는데, 이것은 <b>주기가 다른 원자료</b>다 —
+     * 연 1회 스냅샷이고 회계연도가 끝난 이듬해 3월에 공시된다.
+     *
+     * <p>MUST: 봉마다 값을 고를 때 {@code GovernanceMath.on}을 쓴다. 최신 것을 창 전체에 펴면
+     * <b>공시 전 구간이 미래를 알고 계산한 값</b>이 된다 — 실측 공시일 중앙값이 2026-03-18이고
+     * 쓰기 창 180거래일 중 74가 그 앞이다.
+     *
+     * <p>MUST NOT: 비어 있는 것을 0으로 접지 않는다. 그 회사에 그 표가 없는 것과 아직 안 받은
+     * 것이 같아지고, 둘 다 「지배구조가 좋다」로 읽힌다.
+     */
+    public List<GovernanceFigures> governanceFacts() {
+        return governanceFacts;
+    }
+
+    /**
      * 의존 지표의 이미 계산된 시계열. {@link DataRequirement#dependsOn()}에 선언한 코드로 찾는다.
      *
      * <p>파생 지표가 부모의 계산을 다시 구현하지 않게 하는 통로다.
@@ -227,6 +249,18 @@ public final class IndicatorContext {
                             + " — DataRequirement.dependsOn에 추가하라.");
         }
         return Collections.unmodifiableNavigableMap(series);
+    }
+
+    /**
+     * 거버넌스 사실만 갈아끼운 사본. 테스트가 시드할 때 쓴다.
+     *
+     * <p>{@link #withMarketIndex}와 같은 이유로 있다 — 수집 어댑터가
+     * {@code @ConditionalOnApiKey}라 키 없는 환경에 아예 없는데 계산기가 읽는 것은 컨텍스트다.
+     */
+    public IndicatorContext withGovernanceFacts(List<GovernanceFigures> newGovernanceFacts) {
+        return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
+                quarterlyFigures, shareAdjustments, unadjustedActions, marketIndex,
+                newGovernanceFacts, dependencies);
     }
 
     /** 계산 대상 날짜들(시세 기준, 오름차순). */
@@ -249,6 +283,6 @@ public final class IndicatorContext {
     public IndicatorContext withMarketIndex(NavigableMap<LocalDate, BigDecimal> newMarketIndex) {
         return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
                 quarterlyFigures, shareAdjustments, unadjustedActions, newMarketIndex,
-                dependencies);
+                governanceFacts, dependencies);
     }
 }

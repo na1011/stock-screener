@@ -165,6 +165,14 @@ public class IndicatorRegistry {
         return maxEffectiveLookback() + IndicatorRetentionPolicy.RETAINED_TRADING_DAYS;
     }
 
+    /** 모든 지표를 계산하기 위해 읽어야 하는 최대 거버넌스 회계연도 수(ADR-0081). */
+    public int maxGovernanceYears() {
+        return byCode.values().stream()
+                .mapToInt(c -> c.dataRequirement().governanceYearsNeeded())
+                .max()
+                .orElse(0);
+    }
+
     /** 모든 지표를 계산하기 위해 읽어야 하는 최대 재무 연수. */
     public int maxFinancialYears() {
         return byCode.values().stream()

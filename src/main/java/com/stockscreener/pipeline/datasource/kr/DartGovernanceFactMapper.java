@@ -72,6 +72,32 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
 
     private static final String TOTAL_ROW_NAME = "계";
 
+    /**
+     * 적정 의견의 <b>관측된 표기</b>. 정규화(공백 제거) 후 완전일치로 묻는다.
+     *
+     * <p>MUST NOT: {@code contains("적정")}으로 바꾸지 않는다. {@code 부적정의견}이 그 물음을
+     * 통과해 <b>가장 위험한 종목이 「적정」으로 분류된다.</b>
+     *
+     * <p>목록이 서른에 가까운 것은 소스가 자유 텍스트를 받기 때문이다 — 350종목 6개년에서
+     * 정규화 후에도 서른셋이 나왔다(§16-C). 새 표기는 <b>판정불가로 떨어져 로그에 뜬다.</b>
+     */
+    private static final Set<String> CLEAN_OPINIONS = Set.of(
+            "적정의견", "적정", "적정함", "적정*", "적정주)",
+            "적정(감사)", "적정(감사의견)", "적정(검토)", "적정(주1)",
+            "적정(K-IFRS)", "적정(연결동일)",
+            "적정(별도,연결)", "적정(별도/연결)", "적정(연결/별도)",
+            "연결,별도:적정", "-연결:적정-별도:적정",
+            "적정예외사항없음예외사항없음예외사항없음", "적정의견예외사항없음(반기)");
+
+    /**
+     * 비적정 의견의 <b>관측된 표기</b>.
+     *
+     * <p>지금 하나뿐이다 — 044490 태웅 FY2020의 {@code 감사범위 제한으로 인한 한정}.
+     * <b>「하나뿐이니 없는 것과 같다」로 읽지 않는다</b>: 목록 밖이 판정불가로 떨어지므로
+     * 새 비적정 표기가 「적정」으로 새지 않는다는 것이 이 설계의 요점이다.
+     */
+    private static final Set<String> ADVERSE_OPINIONS = Set.of("감사범위제한으로인한한정");
+
     @Override
     public List<GovernanceFact> derive(GovernanceEndpoint endpoint,
                                        List<GovernanceReportRow> rows) {
@@ -211,6 +237,19 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      * 어긋나면 로그로 남긴다. 실측에서는 여덟 다 맞았다(오리온 열 주주 합 17,321,233).
      */
     private List<GovernanceFact> largestHolder(List<GovernanceReportRow> rows) {
+        // MUST: 회계연도로 먼저 가른다. 여러 해를 한 목록으로 받으므로 안 가르면 두 해의
+        // 주주를 함께 더해 **지분이 두 배가 되고 값이 그럴듯해 안 드러난다.**
+        Map<Integer, List<GovernanceReportRow>> byYear = new TreeMap<>();
+        for (GovernanceReportRow row : rows) {
+            byYear.computeIfAbsent(row.bsnsYear(), year -> new ArrayList<>()).add(row);
+        }
+        List<GovernanceFact> facts = new ArrayList<>();
+        byYear.values().forEach(yearRows -> largestHolderOfYear(yearRows).ifPresent(facts::add));
+        return facts;
+    }
+
+    private java.util.Optional<GovernanceFact> largestHolderOfYear(
+            List<GovernanceReportRow> rows) {
         BigDecimal summed = null;
         BigDecimal reportedTotal = null;
         GovernanceReportRow anchor = null;
@@ -229,14 +268,14 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
             summed = summed == null ? shares : summed.add(shares);
             anchor = anchor == null ? row : anchor;
         }
-        if (summed == null || anchor == null) {
-            return List.of();
+        if (summed == null || anchor == null || anchor.publishedAt() == null) {
+            return java.util.Optional.empty();
         }
         if (reportedTotal != null && reportedTotal.compareTo(summed) != 0) {
             log.warn("최대주주 합계가 소스의 '계' 행과 다르다. 우리 합={} 소스={} receipt={}",
                     summed, reportedTotal, anchor.receiptNo());
         }
-        return List.of(new GovernanceFact(anchor.bsnsYear(),
+        return java.util.Optional.of(new GovernanceFact(anchor.bsnsYear(),
                 GovernanceMetric.LARGEST_HOLDER_SHARES_COMMON, summed,
                 anchor.publishedAt(), anchor.receiptNo()));
     }
@@ -324,8 +363,10 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      */
     private List<GovernanceFact> auditOpinion(List<GovernanceReportRow> rows) {
         Map<Integer, Boolean> emphasisByYear = new TreeMap<>();
+        Map<Integer, Boolean> adverseByYear = new TreeMap<>();
         Map<Integer, Set<String>> auditorsByYear = new TreeMap<>();
         Map<Integer, GovernanceReportRow> anchorByYear = new LinkedHashMap<>();
+        Set<String> unknownOpinions = new LinkedHashSet<>();
 
         for (GovernanceReportRow row : rows) {
             Integer fiscalYear = fiscalYearOfTerm(row.field("bsns_year"), row.bsnsYear());
@@ -342,6 +383,16 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
                     || hasEmphasis(row.field("adt_reprt_spcmnt_matter"));
             emphasisByYear.merge(fiscalYear, present, (a, b) -> a || b);
 
+            String opinion = normalize(row.field("adt_opinion"));
+            if (ADVERSE_OPINIONS.contains(opinion)) {
+                adverseByYear.merge(fiscalYear, true, (a, b) -> a || b);
+            } else if (CLEAN_OPINIONS.contains(opinion)) {
+                adverseByYear.merge(fiscalYear, false, (a, b) -> a || b);
+            } else if (!opinion.isEmpty()) {
+                // 목록 밖이다. 「적정」으로 접지 않는다 — 새 비적정 표기가 여기로 온다.
+                unknownOpinions.add(opinion);
+            }
+
             String auditor = normalize(row.field("adtor"));
             if (!auditor.isEmpty() && !"-".equals(auditor)) {
                 auditorsByYear.computeIfAbsent(fiscalYear, y -> new LinkedHashSet<>()).add(auditor);
@@ -350,7 +401,20 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
             anchorByYear.merge(fiscalYear, row, DartGovernanceFactMapper::later);
         }
 
+        if (!unknownOpinions.isEmpty()) {
+            // MUST: 삼키지 않는다. 목록 밖 표기가 새로 생겼다는 것을 여기 말고는 알 자리가 없고,
+            // 그 사이 그 종목은 「감사의견 판정불가」로 조건에서 탈락한다.
+            log.warn("허용목록에 없는 감사의견 표기라 판정하지 않았다: {} — 관측된 표기면 "
+                    + "CLEAN_OPINIONS나 ADVERSE_OPINIONS에 더한다(§16-C).", unknownOpinions);
+        }
+
         List<GovernanceFact> facts = new ArrayList<>();
+        adverseByYear.forEach((year, adverse) -> {
+            GovernanceReportRow anchor = anchorByYear.get(year);
+            facts.add(new GovernanceFact(year, GovernanceMetric.AUDIT_OPINION_ADVERSE,
+                    adverse ? BigDecimal.ONE : BigDecimal.ZERO,
+                    anchor.publishedAt(), anchor.receiptNo()));
+        });
         emphasisByYear.forEach((year, present) -> {
             GovernanceReportRow anchor = anchorByYear.get(year);
             facts.add(new GovernanceFact(year, GovernanceMetric.AUDIT_EMPHASIS_PRESENT,

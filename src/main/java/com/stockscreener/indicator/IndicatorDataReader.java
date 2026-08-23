@@ -10,7 +10,10 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -292,6 +295,64 @@ public class IndicatorDataReader {
             return List.of();
         }
         return queryFigures("<>", stockId, asOf, (years + 1) * 4, visibility);
+    }
+
+    /**
+     * 거버넌스 사실을 회계연도 <b>내림차순</b>으로 읽는다(ADR-0081).
+     *
+     * <p>같은 {@code (회계연도, 지표)}에 <b>접수번호가 다른 판이 쌓인다</b>(정정본). 그중 가장 큰
+     * 것을 고르는 것이 {@code financial_statement}의 {@code revision_no}와 같은 자리이고,
+     * {@link FinancialVisibility#KNOWN_ON}은 거기에 {@code published_at <= asOf}를 얹어
+     * <b>그 시점에 공시돼 있던 판</b>만 남긴다.
+     *
+     * <p>MUST NOT: 여기서 <b>봉 단위 시점 판정을 하지 않는다.</b> 이 창은 「asOf까지 알려진 것」을
+     * 고를 뿐이고, 봉마다 「그날 공시돼 있었는가」는 {@code GovernanceMath.on}이 한다 —
+     * 그러지 않으면 백필이 한 창에 여러 공시 시점을 담을 때 과거 봉이 미래 값을 쓴다.
+     *
+     * <p>모르는 {@code metric_key}는 <b>던지지 않고 건너뛴다.</b> {@code IndicatorCatalog}가
+     * {@code valueOf}를 그대로 불러 비활성 행 하나로 카탈로그 조회가 통째로 터지던 형태를
+     * 되풀이하지 않는다 — 그 사고를 드러내는 자리는 유도 잡의 집계다.
+     *
+     * @param years 최근 몇 개 회계연도까지 읽을 것인가. 0 이하면 빈 목록이다
+     */
+    public List<GovernanceFigures> readGovernanceFacts(long stockId, LocalDate asOf, int years,
+                                                       FinancialVisibility visibility) {
+        if (years <= 0) {
+            return List.of();
+        }
+        String publishedFilter = visibility == FinancialVisibility.KNOWN_ON
+                ? "AND published_at <= ?" : "";
+        String sql = """
+                SELECT fiscal_year, metric_key, value, published_at
+                  FROM (
+                      SELECT fiscal_year, metric_key, value, published_at,
+                             row_number() OVER (PARTITION BY fiscal_year, metric_key
+                                                ORDER BY receipt_no DESC) rn,
+                             dense_rank() OVER (ORDER BY fiscal_year DESC) yr
+                        FROM governance_fact
+                       WHERE stock_id = ? %s
+                  ) ranked
+                 WHERE rn = 1 AND yr <= ?
+                 ORDER BY fiscal_year DESC
+                """.formatted(publishedFilter);
+
+        Object[] args = visibility == FinancialVisibility.KNOWN_ON
+                ? new Object[]{stockId, asOf, years} : new Object[]{stockId, years};
+
+        Map<Integer, Map<GovernanceMetric, GovernanceValue>> byYear = new LinkedHashMap<>();
+        jdbcTemplate.query(sql, rs -> {
+            GovernanceMetric metric = GovernanceMetric.find(rs.getString("metric_key"));
+            if (metric == null) {
+                return;
+            }
+            byYear.computeIfAbsent(rs.getInt("fiscal_year"), year -> new EnumMap<>(GovernanceMetric.class))
+                    .put(metric, new GovernanceValue(rs.getBigDecimal("value"),
+                            rs.getObject("published_at", LocalDate.class)));
+        }, args);
+
+        List<GovernanceFigures> figures = new ArrayList<>(byYear.size());
+        byYear.forEach((year, values) -> figures.add(new GovernanceFigures(year, values)));
+        return figures;
     }
 
     /**
