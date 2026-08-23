@@ -8,7 +8,7 @@ applies_to:
   - "src/main/resources/db/migration/**"
 ---
 
-# ADR-0057. 지표 분류를 사용자가 읽는 다섯 구획으로 만든다
+# ADR-0057. 지표 분류를 사용자가 읽는 여섯 구획으로 만든다
 
 ## 결정
 
@@ -27,7 +27,7 @@ applies_to:
 - **MUST: 백분위·업종 상대값의 분류는 원본 지표에서 유도한다.** `IndicatorCatalogSynchronizer`가 원본 계산기의 `@IndicatorMeta.category()`를 읽어 넘긴다. `PercentileConfig`·`SectorMetricConfig`에 `category`를 적지 않는다 — 적으면 원본이 옮겨갈 때 파생만 남아 두 곳이 어긋난다.
 - **MUST: 분류를 옮길 때 구획 안 `sortOrder`도 함께 본다.** 유일성을 강제하는 장치가 없고 정렬은 `ORDER BY sort_order, code`뿐이라, 충돌하면 코드 알파벳순으로 **조용히** 갈린다.
 
-## 다섯 구획
+## 여섯 구획
 
 | 분류 | 화면 라벨 | 무엇이 들어가는가 |
 |---|---|---|
@@ -36,6 +36,7 @@ applies_to:
 | `OSCILLATOR` | 오실레이터 | 기준선 위아래를 오가는 값(MACD, 스토캐스틱, OBV, 일목 구름의 정량 조건) |
 | `DERIVED` | 파생 지표 | 지표 둘 이상의 교차·위치(골든크로스, 전환선 대 기준선) |
 | `PRICE` | 가격·규모 | 가격 자체와 규모(종가, 시가총액, 거래대금) |
+| `GOVERNANCE` | 지배구조 | 주주환원·이사회 독립성·소유 집중·회계 신뢰(ADR-0081) |
 
 `TECHNICAL`과 `OSCILLATOR`가 갈리는 지점은 **기준선을 두고 진동하는가**다. 애매하면 `TECHNICAL`에 둔다 — 되돌리는 비용이 애너테이션 한 줄이다(`upsert`가 `category = EXCLUDED.category`를 갱신하므로 마이그레이션이 필요 없다).
 
@@ -46,7 +47,7 @@ psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) = 0 THEN 'OK 모든 category가 enum 안에 있다'
   ELSE 'enum에 없는 분류가 남아 있다: ' || string_agg(DISTINCT category, ', ')
   END FROM indicator
-  WHERE category NOT IN ('TECHNICAL','FUNDAMENTAL','PRICE','OSCILLATOR','DERIVED')"
+  WHERE category NOT IN ('TECHNICAL','FUNDAMENTAL','PRICE','OSCILLATOR','DERIVED','GOVERNANCE')"
 ```
 
 ```premise 백분위·업종상대의 분류가 원본과 같다

@@ -50,8 +50,9 @@ class SentinelAndExtraColumnGuardTest {
     @Test
     @DisplayName("추가 컬럼이 프리셋 경계를 넘지 않는다 — 넘으면 defaultColumn과 다를 바가 없다")
     void extraColumnsNeverLeakAcrossScreens() {
-        // 지금은 추가 컬럼을 쓰는 프리셋이 없다. 그래도 이 검사를 남기는 이유는,
-        // 다시 쓰기 시작할 때 「모든 화면에 뜬다」가 조용한 기본값이 되지 않게 하기 위해서다.
+        // 버핏 프리셋이 다섯을 쓴다(유니버스 백분위 둘 + 할인율 셋). 이 검사가 막는 것은
+        // 「모든 화면에 뜬다」가 조용한 기본값이 되는 것이다 — extraColumns는 그 프리셋에서만
+        // 걸려야 하고, 조건 지표와 겹치면 응답 조립이 이미 union하므로 뜻이 없다.
         for (ScreenPreset preset : presets) {
             assertThat(PresetCatalog.extraColumns(preset.code()))
                     .as("%s의 추가 컬럼은 조건 지표와 겹치면 안 된다 — 응답 조립이 이미 union한다",
