@@ -11,7 +11,8 @@
       "FUNDAMENTAL",
       "PRICE",
       "OSCILLATOR",
-      "DERIVED"
+      "DERIVED",
+      "GOVERNANCE"
     ],
     "EvaluationMode": [
       "FILTER",

@@ -53,5 +53,14 @@ public enum CollectionPhase {
      * 때문이다 — 한 종목의 계산이 터져도 나머지는 저장되어야 하고, 어느 종목이 왜 실패했는지
      * 남아야 관리자가 그 종목만 다시 돌릴 수 있다.
      */
-    INDICATOR
+    INDICATOR,
+
+    /**
+     * 정기보고서 주요정보 수집과 그 유도(ADR-0081).
+     *
+     * <p>{@link #UNIVERSE}·{@link #MARKET_INDEX}와 달리 <b>종목 단위로 실패한다</b> —
+     * 한 종목의 응답이 깨져도 나머지는 저장되어야 하고, 어느 종목이 왜 실패했는지 남아야
+     * 그 종목만 다시 받을 수 있다. 그래서 {@code process()}로 돌린다.
+     */
+    GOVERNANCE
 }

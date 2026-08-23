@@ -19,6 +19,7 @@ const CATEGORY_LABELS: Record<IndicatorCategory, string> = {
   FUNDAMENTAL: '재무 지표',
   OSCILLATOR: '오실레이터',
   DERIVED: '파생 지표',
+  GOVERNANCE: '지배구조',
 }
 
 /**
@@ -33,15 +34,17 @@ export const BUILDER_CATEGORY_RANK: Record<IndicatorCategory, number> = {
   OSCILLATOR: 2,
   DERIVED: 3,
   FUNDAMENTAL: 4,
+  GOVERNANCE: 5,
 }
 
 /** 종목 상세의 순위. 빌더와 다른 것은 의도다 — 상세는 재무부터 읽는다. */
 export const DETAIL_CATEGORY_RANK: Record<IndicatorCategory, number> = {
   FUNDAMENTAL: 0,
-  TECHNICAL: 1,
-  OSCILLATOR: 2,
-  DERIVED: 3,
-  PRICE: 4,
+  GOVERNANCE: 1,
+  TECHNICAL: 2,
+  OSCILLATOR: 3,
+  DERIVED: 4,
+  PRICE: 5,
 }
 
 /** 모르는 분류는 알려진 것들 뒤에 온다. 여럿이면 서버가 준 순서를 유지한다(정렬이 안정적이다). */

@@ -34,6 +34,7 @@ export const INDICATOR_CATEGORIES = [
   'PRICE',
   'OSCILLATOR',
   'DERIVED',
+  'GOVERNANCE',
 ] as const
 export type IndicatorCategory = (typeof INDICATOR_CATEGORIES)[number]
 
