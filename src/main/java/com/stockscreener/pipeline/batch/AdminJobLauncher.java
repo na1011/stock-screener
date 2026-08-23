@@ -76,7 +76,8 @@ public class AdminJobLauncher {
                             IndicatorBackfillJob indicatorBackfillJob,
                             CompanyProfileJob companyProfileJob,
                             CorporateActionJob corporateActionJob,
-                            MarketIndexJob marketIndexJob) {
+                            MarketIndexJob marketIndexJob,
+                            GovernanceDeriveJob governanceDeriveJob) {
         this.taskExecutor = taskExecutor;
         this.dailyUpdateJob = dailyUpdateJob;
         this.jobs = Map.of(
@@ -124,7 +125,14 @@ public class AdminJobLauncher {
                 MarketIndexJob.JOB_NAME,
                 request -> marketIndexJob.run(
                         request.orDefault(request.to(), LocalDate.now()),
-                        BatchExecutionRecorder.TriggeredBy.ADMIN, request.from()));
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, request.from()),
+                // MUST NOT: governance-load를 여기 올리지 않는다. 전량이 5,950콜로 보수 예산
+                // 10,000의 절반을 넘어, InitialLoadJob을 뺀 근거에 정확히 걸린다. 유도 잡은
+                // 외부 호출이 0이라 같은 근거가 없다.
+                GovernanceDeriveJob.JOB_NAME,
+                request -> governanceDeriveJob.run(
+                        request.orDefault(request.targetDate(), LocalDate.now()),
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()));
 
         this.catalog = List.of(
                 new Descriptor(DailyUpdateJob.JOB_NAME, "일일 갱신",
@@ -149,7 +157,10 @@ public class AdminJobLauncher {
                         Parameters.DATE_RANGE, 700),
                 new Descriptor(MarketIndexJob.JOB_NAME, "시장 지수 수집",
                         "코스피·코스닥 지수의 일별 종가를 받는다. from을 비우면 2020-01-02부터다.",
-                        Parameters.DATE_RANGE, 2));
+                        Parameters.DATE_RANGE, 2),
+                new Descriptor(GovernanceDeriveJob.JOB_NAME, "거버넌스 사실 유도",
+                        "이미 받아 둔 정기보고서 원문에서 지표용 값을 다시 만든다. 외부 API를 부르지 않는다.",
+                        Parameters.TARGET_DATE, 0));
     }
 
     /** 화면이 나열할 잡 목록. 프론트가 이름을 하드코딩하지 않게 서버가 준다. */

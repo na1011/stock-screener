@@ -134,6 +134,7 @@ class CorporateActionJobTest {
         seedBars();
         DataSourceRegistry empty = new DataSourceRegistry(
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(),
                 List.of());
         CorporateActionJob jobWithoutSource = new CorporateActionJob(
                 collector, stockRegistrar, priceCalendar, empty, batchExecutions);

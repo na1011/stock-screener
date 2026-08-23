@@ -36,10 +36,12 @@ class AdminJobLauncherTest {
     private final CompanyProfileJob companyProfileJob = mock(CompanyProfileJob.class);
     private final CorporateActionJob corporateActionJob = mock(CorporateActionJob.class);
     private final MarketIndexJob marketIndexJob = mock(MarketIndexJob.class);
+    private final GovernanceDeriveJob governanceDeriveJob = mock(GovernanceDeriveJob.class);
 
     private final AdminJobLauncher launcher = new AdminJobLauncher(
             new SimpleAsyncTaskExecutor(), dailyUpdateJob, universeRebalanceJob,
-            indicatorBackfillJob, companyProfileJob, corporateActionJob, marketIndexJob);
+            indicatorBackfillJob, companyProfileJob, corporateActionJob, marketIndexJob,
+            governanceDeriveJob);
 
     @Test
     @DisplayName("도는 중인 잡은 새로 띄우지 않는다")
@@ -149,7 +151,18 @@ class AdminJobLauncherTest {
                         // (전 구간 1,620행이 PAGE_SIZE 2000 안에 들어온다). 공공데이터포털
                         // 일일 한도 9,000의 0.02%이고, 결손이 전 종목의
                         // EXCESS_RETURN_26W를 멈추므로 화면에서 다시 채울 수 있어야 한다.
-                        MarketIndexJob.JOB_NAME);
+                        MarketIndexJob.JOB_NAME,
+                        // 외부 호출이 0이다. 이미 받아 둔 원문만 다시 읽는다 — 유도 규칙이
+                        // 틀린 것을 알았을 때 5,950콜을 다시 태우지 않게 하려고 잡을 가른 것이고,
+                        // 그 값어치가 화면에서 누를 수 있을 때 나온다.
+                        //
+                        // 짝인 governance-load는 여기 없다. 전량 5,950콜로 보수 예산 10,000의
+                        // 절반을 넘어 initial-load를 뺀 근거에 정확히 걸린다.
+                        GovernanceDeriveJob.JOB_NAME);
+
+        assertThat(launcher.isLaunchable(GovernanceLoadJob.JOB_NAME))
+                .as("governance-load는 한 번에 5,950콜이다 — 화면 버튼으로 두지 않는다")
+                .isFalse();
 
         assertThatThrownBy(() ->
                 launcher.launch(InitialLoadJob.JOB_NAME, AdminJobLauncher.JobRequest.empty()))

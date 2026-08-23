@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.datasource.GovernanceEndpoint;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -276,6 +278,25 @@ public class BootstrapRunner implements ApplicationRunner {
     }
 
     /** 쉼표로 구분한 목록. 빈 조각은 버린다 — 후행 쉼표가 빈 티커가 되면 안 된다. */
+    /**
+     * {@code --governance-endpoints=DIVIDEND,AUDIT_OPINION}. 비면 여덟 전부다.
+     *
+     * <p>MUST: 모르는 이름에 <b>즉시 실패한다.</b> 조용히 걸러내면 오타 하나가 「그 표만 안
+     * 받힌 실행」이 되는데, 성공으로 끝나 다음 세션이 적재됐다고 믿는다.
+     */
+    private static List<GovernanceEndpoint> governanceEndpoints(ApplicationArguments args) {
+        List<GovernanceEndpoint> endpoints = new java.util.ArrayList<>();
+        for (String name : csv(args, "governance-endpoints")) {
+            try {
+                endpoints.add(GovernanceEndpoint.valueOf(name.toUpperCase(java.util.Locale.ROOT)));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("모르는 거버넌스 표 이름이다: '" + name
+                        + "' — 아는 이름: " + java.util.Arrays.toString(GovernanceEndpoint.values()));
+            }
+        }
+        return endpoints;
+    }
+
     private static List<String> csv(ApplicationArguments args, String name) {
         String raw = value(args, name, null);
         if (raw == null || raw.isBlank()) {

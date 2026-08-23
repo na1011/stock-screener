@@ -35,6 +35,7 @@ public class DataSourceRegistry {
     private final Map<String, CorporateActionDataSource> corporateActionByMarket;
     private final Map<String, UniverseDataSource> universeByCode;
     private final Map<String, MarketIndexDataSource> marketIndexByCode;
+    private final Map<String, GovernanceDataSource> governanceByMarket;
 
     public DataSourceRegistry(
             List<PriceDataSource> priceSources,
@@ -44,7 +45,8 @@ public class DataSourceRegistry {
             List<CompanyProfileDataSource> profileSources,
             List<CorporateActionDataSource> corporateActionSources,
             List<UniverseDataSource> universeSources,
-            List<MarketIndexDataSource> marketIndexSources) {
+            List<MarketIndexDataSource> marketIndexSources,
+            List<GovernanceDataSource> governanceSources) {
         this.priceByMarket = index(priceSources, PriceDataSource::supportedMarketCodes, "시세");
         this.financialByMarket = index(financialSources, FinancialDataSource::supportedMarketCodes, "재무");
         this.fullStatementByMarket =
@@ -56,6 +58,8 @@ public class DataSourceRegistry {
         this.universeByCode = index(universeSources, UniverseDataSource::supportedUniverseCodes, "유니버스");
         this.marketIndexByCode =
                 index(marketIndexSources, MarketIndexDataSource::supportedIndexCodes, "시장지수");
+        this.governanceByMarket =
+                index(governanceSources, GovernanceDataSource::supportedMarketCodes, "거버넌스");
     }
 
     private static <T> Map<String, T> index(
@@ -126,6 +130,18 @@ public class DataSourceRegistry {
     public CorporateActionDataSource corporateActionSource(String marketCode)
             throws DataSourceException {
         return require(corporateActionByMarket, marketCode, "기업행위");
+    }
+
+    /**
+     * 정기보고서 주요정보 소스(ADR-0081).
+     *
+     * <p>MUST NOT: {@code Optional} 변형을 만들지 않는다. 국내 어댑터가
+     * {@code @ConditionalOnApiKey}라 키가 없으면 <b>빈으로 등록조차 되지 않으므로</b>,
+     * 비어 있음을 돌려주면 호출자가 0건을 처리하고 <b>성공으로 끝난다</b> — 거버넌스 지표가
+     * 전 종목에서 조용히 비는 형태로만 드러난다.
+     */
+    public GovernanceDataSource governanceSource(String marketCode) throws DataSourceException {
+        return require(governanceByMarket, marketCode, "거버넌스");
     }
 
     public UniverseDataSource universeSource(String universeCode) throws DataSourceException {

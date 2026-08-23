@@ -99,7 +99,8 @@ class MarketIndexCollectorTest {
     private MarketIndexCollector collectorWith(MarketIndexDataSource source) {
         DataSourceRegistry registry = new DataSourceRegistry(
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(source));
+                List.of(source),
+                List.of());
         return new MarketIndexCollector(registry, jdbcTemplate);
     }
 
