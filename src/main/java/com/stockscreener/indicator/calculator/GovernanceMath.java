@@ -1,9 +1,12 @@
 package com.stockscreener.indicator.calculator;
 
+import com.stockscreener.indicator.FinancialFigures;
 import com.stockscreener.indicator.GovernanceFigures;
 import com.stockscreener.indicator.GovernanceMetric;
 import com.stockscreener.indicator.GovernanceValue;
 import com.stockscreener.indicator.IndicatorContext;
+import com.stockscreener.indicator.IndicatorPoint;
+import com.stockscreener.indicator.PriceBar;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -129,8 +132,85 @@ public final class GovernanceMath {
         return value == null ? null : value.setScale(FinancialMath.SCALE, RoundingMode.HALF_UP);
     }
 
-    /** 계산기가 봉 목록을 받아 결과를 담을 때 쓰는 빈 목록. */
-    public static <T> List<T> none() {
-        return List.of();
+    /**
+     * 봉마다 <b>그날 공시돼 있던 회계연도</b>를 골라 값을 낸다. 거버넌스 계산기의 공용 뼈대다.
+     *
+     * <p>MUST: 한 봉의 모든 입력을 <b>같은 {@link GovernanceFigures}</b>에서 가져간다. 지표마다
+     * 따로 고르면 분자와 분모가 다른 해가 되는데 값이 그럴듯해 드러나지 않는다.
+     *
+     * @param anchor 그 봉에 값이 성립하는지 정하는 지표. 대개 분모다
+     * @param value  {@code (그 해의 사실, 봉)} → 값. 낼 수 없으면 null을 돌려준다
+     */
+    public static List<IndicatorPoint> overBars(
+            IndicatorContext context, GovernanceMetric anchor,
+            java.util.function.BiFunction<GovernanceFigures, PriceBar, BigDecimal> value) {
+        List<IndicatorPoint> points = new java.util.ArrayList<>();
+        for (PriceBar bar : context.priceBars()) {
+            GovernanceFigures figures = figuresOn(context, bar.tradeDate(), anchor);
+            if (figures == null) {
+                continue;
+            }
+            BigDecimal computed = value.apply(figures, bar);
+            if (computed != null) {
+                points.add(new IndicatorPoint(bar.tradeDate(), computed));
+            }
+        }
+        return points;
+    }
+
+    /** 그 해의 값. 없으면 null이다. */
+    public static BigDecimal valueOf(GovernanceFigures figures, GovernanceMetric metric) {
+        GovernanceValue found = figures == null ? null : figures.get(metric);
+        return found == null ? null : found.value();
+    }
+
+    /**
+     * {@code years}년 전 회계연도와의 <b>차분</b>. 두 해가 다 있어야 값을 낸다.
+     *
+     * <p>MUST: 누적값에 이것을 쓴다. 이익소각은 <b>상장 이래 누적</b>이라 그대로 한 해치로 읽으면
+     * 상장 이래 전량이 그 해에 소각된 것으로 나온다.
+     *
+     * <p>한 해라도 없으면 <b>부분 차분을 내지 않는다.</b> 이름이 {@code _3Y}인데 2년치를 세면
+     * {@code phase-criteria}의 <i>「지표 이름이 그 값이 실제로 세는 것을 말한다」</i>를 어긴다.
+     */
+    public static BigDecimal difference(IndicatorContext context, GovernanceFigures figures,
+                                        GovernanceMetric metric, int years) {
+        BigDecimal now = valueOf(figures, metric);
+        BigDecimal past = valueOf(ofYear(context, figures.fiscalYear() - years), metric);
+        return now == null || past == null ? null : now.subtract(past);
+    }
+
+    /**
+     * 최근 {@code years}개 회계연도의 <b>합</b>. 그 해들이 다 있어야 값을 낸다.
+     *
+     * <p>{@link #difference}와 같은 이유로 부분 합을 내지 않는다.
+     */
+    public static BigDecimal sumOfYears(IndicatorContext context, GovernanceFigures figures,
+                                        GovernanceMetric metric, int years) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (int offset = 0; offset < years; offset++) {
+            BigDecimal value = valueOf(ofYear(context, figures.fiscalYear() - offset), metric);
+            if (value == null) {
+                return null;
+            }
+            total = total.add(value);
+        }
+        return total;
+    }
+
+    /**
+     * 그 회계연도의 연간 재무. 없으면 null이다.
+     *
+     * <p>거버넌스 값을 재무로 나누는 지표가 <b>같은 해를 짝지어야</b> 하는 자리다 — 최신 재무를
+     * 그냥 쓰면 배당성향의 분자가 FY2024인데 분모가 FY2025가 되고 값이 그럴듯하다.
+     */
+    public static FinancialFigures annualOf(IndicatorContext context, int fiscalYear) {
+        for (FinancialFigures figures : context.annualFigures()) {
+            if (figures.fiscalYear() == fiscalYear
+                    && figures.fiscalPeriod() == FinancialFigures.FiscalPeriod.FY) {
+                return figures;
+            }
+        }
+        return null;
     }
 }
