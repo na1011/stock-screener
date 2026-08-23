@@ -1,6 +1,19 @@
 package com.stockscreener.indicator;
 
 import com.stockscreener.indicator.calculator.AltmanZCalculator;
+import com.stockscreener.indicator.calculator.AuditEmphasisCalculator;
+import com.stockscreener.indicator.calculator.AuditOpinionAdverseCalculator;
+import com.stockscreener.indicator.calculator.AuditorChange3yCalculator;
+import com.stockscreener.indicator.calculator.ControlTransfer3yCalculator;
+import com.stockscreener.indicator.calculator.DirectorTurnover3yCalculator;
+import com.stockscreener.indicator.calculator.DividendPayoutCalculator;
+import com.stockscreener.indicator.calculator.DividendYieldCalculator;
+import com.stockscreener.indicator.calculator.ExecPayToNetIncomeCalculator;
+import com.stockscreener.indicator.calculator.LargestHolderStakeCalculator;
+import com.stockscreener.indicator.calculator.MinorityHolderStakeCalculator;
+import com.stockscreener.indicator.calculator.OutsideDirectorRatioCalculator;
+import com.stockscreener.indicator.calculator.ProfitRetirement3yCalculator;
+import com.stockscreener.indicator.calculator.TreasuryShareRatioCalculator;
 import com.stockscreener.indicator.calculator.EpsTtmCalculator;
 import com.stockscreener.indicator.calculator.NcavToMarketCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
@@ -104,7 +117,41 @@ public class IndicatorUnavailabilityConfig {
                         // 틀린 이유를 붙이게 된다(ALTMAN_Z가 업종만 말하는 것과 같은 이유다).
                         context -> isFinancialDivision(context.industryDivision()),
                         "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
-                                + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다."));
+                                + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다."),
+                governanceMissing(DividendYieldCalculator.CODE),
+                governanceMissing(DividendPayoutCalculator.CODE),
+                governanceMissing(TreasuryShareRatioCalculator.CODE),
+                governanceMissing(ProfitRetirement3yCalculator.CODE),
+                governanceMissing(ExecPayToNetIncomeCalculator.CODE),
+                governanceMissing(OutsideDirectorRatioCalculator.CODE),
+                governanceMissing(DirectorTurnover3yCalculator.CODE),
+                governanceMissing(LargestHolderStakeCalculator.CODE),
+                governanceMissing(MinorityHolderStakeCalculator.CODE),
+                governanceMissing(ControlTransfer3yCalculator.CODE),
+                governanceMissing(AuditOpinionAdverseCalculator.CODE),
+                governanceMissing(AuditEmphasisCalculator.CODE),
+                governanceMissing(AuditorChange3yCalculator.CODE));
+    }
+
+    /**
+     * 거버넌스 지표가 없을 때, <b>그 종목의 정기보고서 주요정보가 통째로 없는 경우에만</b>
+     * 사유를 붙인다(ADR-0081).
+     *
+     * <p>MUST: 문구가 <b>우리 데이터에 대한 사실</b>이지 그 회사에 대한 주장이 아니다.
+     * 실측으로 이 상태인 종목은 둘이고 둘 다 구조적이지만(인프라 투자회사·외국 발행 증권),
+     * 셋째가 다른 이유로 생기면 그 문장이 거짓이 된다 — 그리고 「그럴듯한데 틀린 사유는 아무
+     * 말도 하지 않는 것보다 나쁘다」가 이 클래스의 MUST NOT이다.
+     *
+     * <p>지표 하나만 없는 경우(무배당이라 배당수익률이 없는 것 등)에는 <b>아무 말도 하지
+     * 않는다.</b> 원인이 여럿인데 {@link UnavailabilityRule.Context}가 그것을 가르지 못한다.
+     */
+    private static UnavailabilityRule governanceMissing(String code) {
+        return new UnavailabilityRule(code,
+                context -> context.value(OutsideDirectorRatioCalculator.CODE) == null
+                        && context.value(MinorityHolderStakeCalculator.CODE) == null
+                        && context.value(TreasuryShareRatioCalculator.CODE) == null,
+                "이 종목은 DART 정기보고서 주요정보가 한 행도 수집되지 않아 거버넌스 지표를 "
+                        + "계산할 수 없습니다.");
     }
 
     /**
