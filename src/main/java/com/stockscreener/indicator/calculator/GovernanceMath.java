@@ -69,12 +69,20 @@ public final class GovernanceMath {
     }
 
     /**
-     * {@code year}의 사실. <b>공시 시점을 보지 않는다</b> — 호출자가 이미
-     * {@link #figuresOn}으로 창을 정한 뒤 그 창 안에서 과거 해를 찾을 때만 쓴다.
+     * {@code fiscalYear}의 사실 중 그 거래일에 <b>공시돼 있던</b> 가장 최신 판.
+     *
+     * <p>MUST: 거래일을 받는다. 안 받으면 과거 해를 찾을 때 <b>아직 안 나온 보고서의 판</b>을
+     * 집어 차분과 합이 미래를 알고 계산한 값이 된다 — 목록이 공시일 내림차순이라 그 실수가
+     * 조용히 성립한다.
      */
-    public static GovernanceFigures ofYear(IndicatorContext context, int fiscalYear) {
+    public static GovernanceFigures ofYear(IndicatorContext context, int fiscalYear,
+                                           LocalDate tradeDate, GovernanceMetric metric) {
         for (GovernanceFigures figures : context.governanceFacts()) {
-            if (figures.fiscalYear() == fiscalYear) {
+            if (figures.fiscalYear() != fiscalYear) {
+                continue;
+            }
+            GovernanceValue value = figures.get(metric);
+            if (value != null && !value.publishedAt().isAfter(tradeDate)) {
                 return figures;
             }
         }
@@ -174,9 +182,10 @@ public final class GovernanceMath {
      * {@code phase-criteria}의 <i>「지표 이름이 그 값이 실제로 세는 것을 말한다」</i>를 어긴다.
      */
     public static BigDecimal difference(IndicatorContext context, GovernanceFigures figures,
-                                        GovernanceMetric metric, int years) {
+                                        GovernanceMetric metric, int years, LocalDate tradeDate) {
         BigDecimal now = valueOf(figures, metric);
-        BigDecimal past = valueOf(ofYear(context, figures.fiscalYear() - years), metric);
+        BigDecimal past = valueOf(
+                ofYear(context, figures.fiscalYear() - years, tradeDate, metric), metric);
         return now == null || past == null ? null : now.subtract(past);
     }
 
@@ -186,10 +195,11 @@ public final class GovernanceMath {
      * <p>{@link #difference}와 같은 이유로 부분 합을 내지 않는다.
      */
     public static BigDecimal sumOfYears(IndicatorContext context, GovernanceFigures figures,
-                                        GovernanceMetric metric, int years) {
+                                        GovernanceMetric metric, int years, LocalDate tradeDate) {
         BigDecimal total = BigDecimal.ZERO;
         for (int offset = 0; offset < years; offset++) {
-            BigDecimal value = valueOf(ofYear(context, figures.fiscalYear() - offset), metric);
+            BigDecimal value = valueOf(
+                    ofYear(context, figures.fiscalYear() - offset, tradeDate, metric), metric);
             if (value == null) {
                 return null;
             }

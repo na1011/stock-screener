@@ -62,7 +62,7 @@ public class ProfitRetirement3yCalculator implements IndicatorCalculator {
         return GovernanceMath.overBars(context, GovernanceMetric.ISSUED_SHARES_COMMON,
                 (figures, bar) -> GovernanceMath.percent(
                         GovernanceMath.difference(context, figures,
-                                GovernanceMetric.PROFIT_RETIRED_CUM, YEARS),
+                                GovernanceMetric.PROFIT_RETIRED_CUM, YEARS, bar.tradeDate()),
                         GovernanceMath.valueOf(figures, GovernanceMetric.ISSUED_SHARES_COMMON)));
     }
 }

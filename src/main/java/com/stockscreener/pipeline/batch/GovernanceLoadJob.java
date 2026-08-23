@@ -51,26 +51,27 @@ public class GovernanceLoadJob {
      */
     private static final Map<GovernanceEndpoint, Integer> YEARS_BACK =
             new EnumMap<>(Map.of(
-                    // 이익소각이 상장 이래 누적이라 3년 차분에 끝점 둘(Y-3·Y)이 필요하다.
-                    GovernanceEndpoint.SHARE_TOTALS, 4,
-                    // 한 응답이 3개년을 열로 준다.
-                    GovernanceEndpoint.DIVIDEND, 1,
-                    // 요청한 해만 준다(가이드의 fscl_year는 실측에서 '-'였다). 수준 지표뿐이라 둘이면 된다.
+                    // 이익소각이 상장 이래 누적이라 3년 차분에 끝점 둘(Y-3·Y)이 필요하고,
+                    // 창 앞부분에서도 그 차분이 서려면 한 해가 더 필요하다.
+                    GovernanceEndpoint.SHARE_TOTALS, 5,
+                    // 한 응답이 3개년을 열로 주지만 **두 해를 부른다** — 한 번만 부르면 FY2024
+                    // 배당을 2026년 3월에야 알게 된 것이 되어 창 앞 74거래일이 통째로 빈다.
+                    GovernanceEndpoint.DIVIDEND, 2,
+                    // 요청한 해만 준다(가이드의 fscl_year는 실측에서 '-'였다).
                     GovernanceEndpoint.EXEC_PAY, 2,
-                    // 3년 합이 필요하다.
-                    GovernanceEndpoint.OUTSIDE_DIRECTOR, 3,
+                    // 3년 합이 창 앞부분에서도 서려면 넉 해가 필요하다.
+                    GovernanceEndpoint.OUTSIDE_DIRECTOR, 4,
                     GovernanceEndpoint.LARGEST_HOLDER, 2,
                     GovernanceEndpoint.MINORITY_HOLDER, 2,
-                    // 요청 연도까지의 누적이라 최신 해 하나면 창을 우리가 자를 수 있다.
-                    GovernanceEndpoint.CONTROL_CHANGE, 1,
-                    // 1콜이 3개년이라 두 번이면 여섯 해가 온다(감사인 교체의 비교가 셋 선다).
-                    GovernanceEndpoint.AUDIT_OPINION, 4));
+                    // 요청 연도까지의 누적이라 창은 우리가 자르지만, 창 앞부분에서도 값이 서려면
+                    // 그 시점에 이미 나와 있던 보고서가 필요하다.
+                    GovernanceEndpoint.CONTROL_CHANGE, 2,
+                    // 1콜이 3개년이라 세 번이면 아홉 해가 온다.
+                    GovernanceEndpoint.AUDIT_OPINION, 7));
 
     /** {@link GovernanceEndpoint#AUDIT_OPINION}처럼 한 응답이 3개년을 주는 표의 호출 간격. */
     private static final Map<GovernanceEndpoint, Integer> YEAR_STRIDE =
-            new EnumMap<>(Map.of(
-                    GovernanceEndpoint.DIVIDEND, 3,
-                    GovernanceEndpoint.AUDIT_OPINION, 3));
+            new EnumMap<>(Map.of(GovernanceEndpoint.AUDIT_OPINION, 3));
 
     private final GovernanceCollector collector;
     private final StockRegistrar stockRegistrar;
@@ -86,12 +87,15 @@ public class GovernanceLoadJob {
     /**
      * @param latestFiscalYear 가장 최근 <b>사업보고서가 나온</b> 회계연도. 비면 {@code asOf}의
      *                         전년이다 — 사업보고서는 이듬해 3월에 나오므로 올해분은 아직 없다
+     * @param span             비면 표마다 정해진 해 수. 값이 있으면 <b>그것으로 덮는다</b> —
+     *                         이미 받아 둔 해에 한 해만 얹을 때 쓴다. 없으면 그 한 해를 위해
+     *                         표 전체를 다시 받아야 하고 콜이 몇 배가 된다
      * @param endpoints        비면 여덟 전부. <b>나눠 돌릴 때 이것으로 좁힌다</b> — 없으면 두 번째
      *                         실행이 3개년을 주는 표를 다시 불러 콜이 조용히 는다
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
-                           Integer latestFiscalYear, List<GovernanceEndpoint> endpoints,
-                           List<String> tickers) {
+                           Integer latestFiscalYear, Integer span,
+                           List<GovernanceEndpoint> endpoints, List<String> tickers) {
         int latest = latestFiscalYear != null ? latestFiscalYear : asOf.getYear() - 1;
         List<GovernanceEndpoint> targets = endpoints == null || endpoints.isEmpty()
                 ? List.of(GovernanceEndpoint.values()) : endpoints;
@@ -104,7 +108,7 @@ public class GovernanceLoadJob {
         Map<GovernanceEndpoint, List<Integer>> yearsByEndpoint = new EnumMap<>(GovernanceEndpoint.class);
         int expectedCalls = 0;
         for (GovernanceEndpoint endpoint : targets) {
-            List<Integer> years = yearsFor(endpoint, latest);
+            List<Integer> years = yearsFor(endpoint, latest, span);
             yearsByEndpoint.put(endpoint, years);
             expectedCalls += years.size() * stocks.size();
         }
@@ -156,8 +160,9 @@ public class GovernanceLoadJob {
      *
      * <p>안 건너뛰면 같은 3개년을 세 번 받아 콜이 세 배가 되는데, 결과가 같아 <b>어디에도 안 뜬다.</b>
      */
-    static List<Integer> yearsFor(GovernanceEndpoint endpoint, int latestFiscalYear) {
-        int span = YEARS_BACK.getOrDefault(endpoint, 1);
+    static List<Integer> yearsFor(GovernanceEndpoint endpoint, int latestFiscalYear,
+                                  Integer override) {
+        int span = override != null ? override : YEARS_BACK.getOrDefault(endpoint, 1);
         int stride = YEAR_STRIDE.getOrDefault(endpoint, 1);
         List<Integer> years = new ArrayList<>();
         for (int offset = 0; offset < span; offset += stride) {

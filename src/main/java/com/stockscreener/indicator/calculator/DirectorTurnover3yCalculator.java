@@ -59,9 +59,9 @@ public class DirectorTurnover3yCalculator implements IndicatorCalculator {
         return GovernanceMath.overBars(context, GovernanceMetric.DIRECTOR_COUNT,
                 (figures, bar) -> {
                     BigDecimal dismissed = GovernanceMath.sumOfYears(context, figures,
-                            GovernanceMetric.DIRECTOR_DISMISSED, YEARS);
+                            GovernanceMetric.DIRECTOR_DISMISSED, YEARS, bar.tradeDate());
                     BigDecimal resigned = GovernanceMath.sumOfYears(context, figures,
-                            GovernanceMetric.DIRECTOR_RESIGNED, YEARS);
+                            GovernanceMetric.DIRECTOR_RESIGNED, YEARS, bar.tradeDate());
                     if (dismissed == null || resigned == null) {
                         return null;
                     }

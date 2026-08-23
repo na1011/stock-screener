@@ -309,13 +309,30 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      * 이름을 기준선으로 삼아야 창 첫 사건의 전이가 빠지지 않는다.
      */
     private List<GovernanceFact> controlChange(List<GovernanceReportRow> rows) {
+        // MUST: 보고서(=요청 연도)마다 따로 센다. 한 덩어리로 접으면 사실이 최신 보고서 하나에만
+        // 서고, **그 보고서가 나오기 전 구간이 통째로 빈다** — 실측으로 쓰기 창 180거래일 중
+        // 74가 그 앞이다. 같은 실수를 최대주주 지분율에서 한 번 했다.
+        Map<Integer, List<GovernanceReportRow>> byYear = new TreeMap<>();
+        for (GovernanceReportRow row : rows) {
+            byYear.computeIfAbsent(row.bsnsYear(), year -> new ArrayList<>()).add(row);
+        }
+        List<GovernanceFact> facts = new ArrayList<>();
+        byYear.forEach((year, yearRows) ->
+                controlChangeOfReport(year, yearRows).ifPresent(facts::add));
+        return facts;
+    }
+
+    /**
+     * 보고서 하나가 아는 창(최근 3개 회계연도)의 최대주주 교체 횟수.
+     *
+     * <p>행 순서가 날짜순이 아니라 {@code change_on}으로 정렬한 뒤 걷는다. 창의 시작 <b>직전</b>
+     * 이름을 기준선으로 삼아야 창 첫 사건의 전이가 빠지지 않는다.
+     */
+    private java.util.Optional<GovernanceFact> controlChangeOfReport(
+            int bsnsYear, List<GovernanceReportRow> rows) {
         GovernanceReportRow anchor = null;
-        int bsnsYear = 0;
         TreeMap<LocalDate, String> holderByDate = new TreeMap<>();
         for (GovernanceReportRow row : rows) {
-            if (row.bsnsYear() > bsnsYear) {
-                bsnsYear = row.bsnsYear();
-            }
             // 데이터 없음 행도 닻이 된다 — 「그 해까지 변동이 없었다」는 0이라는 사실이고,
             // 잡이 같은 보고서의 접수번호를 찍어 두어 시점을 답할 수 있다.
             if (row.publishedAt() != null
@@ -334,21 +351,22 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
             // 같은 날 여러 행이면 마지막 것이 그날의 최대주주다.
             holderByDate.put(changedOn, holder);
         }
-        if (anchor == null || bsnsYear == 0) {
-            return List.of();
+        if (anchor == null) {
+            return java.util.Optional.empty();
         }
         LocalDate windowStart = LocalDate.of(bsnsYear - 2, 1, 1);
         String previous = null;
         int transfers = 0;
         for (Map.Entry<LocalDate, String> event : holderByDate.entrySet()) {
-            boolean inWindow = !event.getKey().isBefore(windowStart);
-            if (inWindow && previous != null && !previous.equals(event.getValue())) {
+            if (!event.getKey().isBefore(windowStart) && previous != null
+                    && !previous.equals(event.getValue())) {
                 transfers++;
             }
             previous = event.getValue();
         }
-        return List.of(new GovernanceFact(bsnsYear, GovernanceMetric.CONTROL_TRANSFERS_3Y,
-                BigDecimal.valueOf(transfers), anchor.publishedAt(), anchor.receiptNo()));
+        return java.util.Optional.of(new GovernanceFact(bsnsYear,
+                GovernanceMetric.CONTROL_TRANSFERS_3Y, BigDecimal.valueOf(transfers),
+                anchor.publishedAt(), anchor.receiptNo()));
     }
 
     // --- 감사의견 ----------------------------------------------------------

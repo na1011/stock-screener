@@ -234,6 +234,26 @@ class DartGovernanceFactMapperTest {
     }
 
     @Test
+    @DisplayName("최대주주 변동 — 보고서마다 따로 센다 (한 덩어리로 접으면 창 앞이 빈다)")
+    void controlChangeSplitsByReport() {
+        List<GovernanceReportRow> rows = List.of(
+                changeRow(2024, "2023년 05월 01일", "갑"),
+                changeRow(2024, "2024년 05월 01일", "을"),
+                changeRow(2025, "2023년 05월 01일", "갑"),
+                changeRow(2025, "2024년 05월 01일", "을"),
+                changeRow(2025, "2025년 05월 01일", "병"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.CONTROL_CHANGE, rows);
+
+        assertThat(pick(facts, 2024, GovernanceMetric.CONTROL_TRANSFERS_3Y))
+                .as("FY2024 보고서가 아는 창은 2022~2024다. 한 덩어리로 접으면 이 사실이 사라지고 "
+                        + "그 보고서가 나오기 전 구간이 통째로 빈다")
+                .isEqualByComparingTo("1");
+        assertThat(pick(facts, 2025, GovernanceMetric.CONTROL_TRANSFERS_3Y))
+                .isEqualByComparingTo("2");
+    }
+
+    @Test
     @DisplayName("최대주주 변동 — 데이터 없음 행도 「변동 0」이라는 사실이다")
     void controlChangeTreatsNoDataAsZero() {
         List<GovernanceReportRow> rows = List.of(
@@ -372,6 +392,13 @@ class DartGovernanceFactMapperTest {
                 RECEIPT, PUBLISHED, 0,
                 fields("change_on", changedOn, "mxmm_shrholdr_nm", holder,
                         "change_cause", cause));
+    }
+
+    private static GovernanceReportRow changeRow(int bsnsYear, String changedOn, String holder) {
+        return new GovernanceReportRow(GovernanceEndpoint.CONTROL_CHANGE, bsnsYear, "11011",
+                "2026031000" + bsnsYear, LocalDate.of(bsnsYear + 1, 3, 10), 0,
+                fields("change_on", changedOn, "mxmm_shrholdr_nm", holder,
+                        "change_cause", "장내매매"));
     }
 
     private static GovernanceReportRow auditRow(String term, String auditor, String emphasis,

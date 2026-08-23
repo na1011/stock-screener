@@ -193,6 +193,7 @@ public class BootstrapRunner implements ApplicationRunner {
             case "governance-load" -> governanceLoadJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     optionalInteger(args, "governance-year"),
+                    optionalInteger(args, "governance-span"),
                     governanceEndpoints(args), csv(args, "tickers"));
             // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
             case "governance-derive" -> governanceDeriveJob.run(
@@ -236,7 +237,7 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
             "job", "as-of", "price-years", "financial-years", "reload-existing", "tickers", "from",
-            "quarters", "governance-year", "governance-endpoints");
+            "quarters", "governance-year", "governance-span", "governance-endpoints");
 
     /**
      * Spring 자신의 인자는 통과시킨다.

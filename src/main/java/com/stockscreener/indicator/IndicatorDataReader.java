@@ -298,22 +298,29 @@ public class IndicatorDataReader {
     }
 
     /**
-     * 거버넌스 사실을 회계연도 <b>내림차순</b>으로 읽는다(ADR-0081).
+     * 거버넌스 사실을 <b>회계연도 내림차순 · 공시일 내림차순</b>으로 읽는다(ADR-0081).
      *
-     * <p>같은 {@code (회계연도, 지표)}에 <b>접수번호가 다른 판이 쌓인다</b>(정정본). 그중 가장 큰
-     * 것을 고르는 것이 {@code financial_statement}의 {@code revision_no}와 같은 자리이고,
-     * {@link FinancialVisibility#KNOWN_ON}은 거기에 {@code published_at <= asOf}를 얹어
-     * <b>그 시점에 공시돼 있던 판</b>만 남긴다.
+     * <p>IMPORTANT — 같은 회계연도의 여러 판을 <b>하나로 접지 않는다.</b> 접으면 「가장 최근에
+     * 접수된 판」만 남는데, 그것은 <b>계단 함수를 무력화한다</b>: FY2024 배당은 2025년 3월
+     * 보고서가 이미 말했는데 2026년 보고서에도 (전기 열로) 다시 실리므로, 접으면 그 값을
+     * <b>2026년 3월에야 알게 된 것</b>이 되어 창 앞부분이 통째로 빈다. 실측으로 그 앞부분이
+     * 쓰기 창 180거래일 중 74다.
      *
-     * <p>MUST NOT: 여기서 <b>봉 단위 시점 판정을 하지 않는다.</b> 이 창은 「asOf까지 알려진 것」을
-     * 고를 뿐이고, 봉마다 「그날 공시돼 있었는가」는 {@code GovernanceMath.on}이 한다 —
-     * 그러지 않으면 백필이 한 창에 여러 공시 시점을 담을 때 과거 봉이 미래 값을 쓴다.
+     * <p>어느 판을 볼지는 <b>봉이 정한다</b> — {@code GovernanceMath.on}이 그 거래일에 공시돼
+     * 있던 것 중 가장 최신 판을 고른다. 정정본은 자기 공시일부터 이기고, 그것이 곧 정정 반영이다.
+     *
+     * <p>IMPORTANT — <b>회계연도로 상한을 두지 않는다.</b> 계산기가 선언하는 연수는 「그 지표가
+     * 몇 해를 보는가」인데, 창 앞부분에서는 <b>최신 회계연도가 아직 공시되지 않아</b> 기준 해가
+     * 뒤로 밀린다 — 3년 차분이 실제로는 최신 해에서 다섯째 해까지를 본다. 선언 값으로 자르면
+     * 그 깊은 해가 잘려 <b>창 앞부분이 통째로 비는데 최신 일자는 멀쩡하다.</b> 실제로 그 상태가
+     * 났고, 세 지표가 창 시작에서 1종목이었다.
+     *
+     * <p>자르지 않아도 싸다 — 실측으로 <b>종목당 평균 64행 · 최대 78행</b>이다. {@code years}는
+     * 「읽을지 말지」만 정하고, 그 판정은 {@code DataRequirement.needsGovernance}가 소유한다.
      *
      * <p>모르는 {@code metric_key}는 <b>던지지 않고 건너뛴다.</b> {@code IndicatorCatalog}가
      * {@code valueOf}를 그대로 불러 비활성 행 하나로 카탈로그 조회가 통째로 터지던 형태를
      * 되풀이하지 않는다 — 그 사고를 드러내는 자리는 유도 잡의 집계다.
-     *
-     * @param years 최근 몇 개 회계연도까지 읽을 것인가. 0 이하면 빈 목록이다
      */
     public List<GovernanceFigures> readGovernanceFacts(long stockId, LocalDate asOf, int years,
                                                        FinancialVisibility visibility) {
@@ -323,35 +330,34 @@ public class IndicatorDataReader {
         String publishedFilter = visibility == FinancialVisibility.KNOWN_ON
                 ? "AND published_at <= ?" : "";
         String sql = """
-                SELECT fiscal_year, metric_key, value, published_at
-                  FROM (
-                      SELECT fiscal_year, metric_key, value, published_at,
-                             row_number() OVER (PARTITION BY fiscal_year, metric_key
-                                                ORDER BY receipt_no DESC) rn,
-                             dense_rank() OVER (ORDER BY fiscal_year DESC) yr
-                        FROM governance_fact
-                       WHERE stock_id = ? %s
-                  ) ranked
-                 WHERE rn = 1 AND yr <= ?
-                 ORDER BY fiscal_year DESC
+                SELECT fiscal_year, receipt_no, metric_key, value, published_at
+                  FROM governance_fact
+                 WHERE stock_id = ? %s
+                 ORDER BY fiscal_year DESC, published_at DESC, receipt_no DESC
                 """.formatted(publishedFilter);
 
         Object[] args = visibility == FinancialVisibility.KNOWN_ON
-                ? new Object[]{stockId, asOf, years} : new Object[]{stockId, years};
+                ? new Object[]{stockId, asOf} : new Object[]{stockId};
 
-        Map<Integer, Map<GovernanceMetric, GovernanceValue>> byYear = new LinkedHashMap<>();
+        // 키가 (회계연도, 접수번호)다 — 같은 해의 판 여럿이 각각 하나의 묶음이 된다.
+        Map<String, Map<GovernanceMetric, GovernanceValue>> byReport = new LinkedHashMap<>();
+        Map<String, Integer> yearOfReport = new LinkedHashMap<>();
         jdbcTemplate.query(sql, rs -> {
             GovernanceMetric metric = GovernanceMetric.find(rs.getString("metric_key"));
             if (metric == null) {
                 return;
             }
-            byYear.computeIfAbsent(rs.getInt("fiscal_year"), year -> new EnumMap<>(GovernanceMetric.class))
+            int fiscalYear = rs.getInt("fiscal_year");
+            String key = fiscalYear + "|" + rs.getString("receipt_no");
+            yearOfReport.putIfAbsent(key, fiscalYear);
+            byReport.computeIfAbsent(key, k -> new EnumMap<>(GovernanceMetric.class))
                     .put(metric, new GovernanceValue(rs.getBigDecimal("value"),
                             rs.getObject("published_at", LocalDate.class)));
         }, args);
 
-        List<GovernanceFigures> figures = new ArrayList<>(byYear.size());
-        byYear.forEach((year, values) -> figures.add(new GovernanceFigures(year, values)));
+        List<GovernanceFigures> figures = new ArrayList<>(byReport.size());
+        byReport.forEach((key, values) ->
+                figures.add(new GovernanceFigures(yearOfReport.get(key), values)));
         return figures;
     }
 

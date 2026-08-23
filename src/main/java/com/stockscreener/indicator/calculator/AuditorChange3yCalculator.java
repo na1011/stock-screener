@@ -56,6 +56,6 @@ public class AuditorChange3yCalculator implements IndicatorCalculator {
     public List<IndicatorPoint> calculate(IndicatorContext context) {
         return GovernanceMath.overBars(context, GovernanceMetric.AUDITOR_CHANGED,
                 (figures, bar) -> GovernanceMath.sumOfYears(context, figures,
-                        GovernanceMetric.AUDITOR_CHANGED, YEARS));
+                        GovernanceMetric.AUDITOR_CHANGED, YEARS, bar.tradeDate()));
     }
 }
