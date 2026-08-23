@@ -528,6 +528,51 @@ check_growth 발화 "ADR도 +3,200자면 잡는다"                "docs/adr/ADR
 check_growth 침묵 "한글 문서를 바이트로 세면 안 된다(문자 +1,200 · 바이트 +3,600)" \
   "docs/adr/ADR-0002-x.md" 가  100 400 800 1200 1600
 
+echo "── SessionStart matcher (설정 회귀) ──"
+#
+# 이 표에 **설정 파일을 보는 검사가 0건이었다.** 훅 자체가 멀쩡해도 matcher가 좁으면 그 훅은
+# 그냥 안 돈다. 그리고 **무효한 matcher 값은 에러 없이 아무것도 매칭하지 않으므로** 누가
+# 좁혀 놓아도 아무 신호가 없다 — 실제로 `compact` 직후, 즉 상태 주입이 가장 필요한 순간에
+# progress.md가 안 들어오는 상태로 오래 있었다.
+#
+# 유효 값은 다섯이다: startup · resume · clear · compact · fork.
+#
+# MUST: **항목마다** 다섯을 다 요구한다. 합집합으로 보면 일부러 좁힌 항목 하나가 다른 항목
+# 뒤에 숨는다. 좁힌 항목을 정말 두기로 했으면 이 검사를 고치되, **고치는 그 자리가 「왜
+# 좁혔는가」를 적을 자리다.**
+#
+# $1 설명, $2 settings.json 경로, $3 없을 때(skip|require)
+check_sessionstart_matcher() {
+  local desc="$1" path="$2" mode="$3" n i m v missing
+  if [ ! -f "$path" ]; then
+    if [ "$mode" = skip ]; then
+      skipped=$((skipped+1)); printf '  \033[33mSKIP\033[0m %s (설정 파일이 없다)\n' "$desc"; return
+    fi
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (설정 파일이 없다)\n' "$desc"; return
+  fi
+  n=$(jq -r '.hooks.SessionStart | length' "$path" 2>/dev/null)
+  if ! [ "${n:-0}" -gt 0 ] 2>/dev/null; then
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (SessionStart 항목이 없거나 JSON이 깨졌다)\n' "$desc"; return
+  fi
+  for ((i = 0; i < n; i++)); do
+    m=$(jq -r --argjson i "$i" '.hooks.SessionStart[$i].matcher // ""' "$path")
+    missing=""
+    for v in startup resume clear compact fork; do
+      printf '%s' "|$m|" | grep -q "|$v|" || missing="$missing $v"
+    done
+    if [ -z "$missing" ]; then
+      pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s [%d]\n' "다섯" "$desc" "$i"
+    else
+      fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s [%d]  (빠진 값:%s)\n' "누락" "$desc" "$i" "$missing"
+    fi
+  done
+}
+
+check_sessionstart_matcher "저장소 SessionStart가 다섯을 다 덮는다" ".claude/settings.json"       require
+# 전역은 이 저장소가 아니라 기계에 딸린 것이라 다른 기계에서는 없을 수 있다. 없으면 건너뛰되
+# **통과로 세지 않는다** — 건너뜀이 통과로 읽히면 덮여 있다고 믿게 된다.
+check_sessionstart_matcher "전역 SessionStart가 다섯을 다 덮는다"   "$HOME/.claude/settings.json" skip
+
 echo
 printf '통과 %d / 실패 %d / 건너뜀 %d / 알려진 구멍 %d\n' "$pass" "$fail" "$skipped" "$holes"
 # MUST: 건너뛴 수를 함께 낸다. 건너뛴 것이 통과로 읽히면 "덮여 있다"고 믿게 된다 —
