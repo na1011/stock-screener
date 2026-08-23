@@ -7,7 +7,7 @@
 # auto 모드가 그 거짓 위에서 판정을 계속했다. 몇 주간 아무 신호가 없었다.
 #
 # 평문 stdout을 쓴다. `SessionStart`의 평문 stdout은 그대로 컨텍스트가 되고 jq가 필요 없다 —
-# 의존성 부재를 그 의존성으로 알릴 수 없다는 규칙(`.claude/rules/harness.md`)과 같은 이유다.
+# 의존성 부재를 그 의존성으로 알릴 수 없다는 규칙(`.claude/rules/harness-hooks.md`)과 같은 이유다.
 #
 # 활성 등록은 `~/.claude/hooks/`의 사본 하나뿐이고, `.claude/hooks/`의 사본은 버전관리·드리프트
 # 대조용이며 등록하지 않는다. `~/.claude`는 git도 백업도 없어, 전역에만 두면 이 파일이 날아갔을
