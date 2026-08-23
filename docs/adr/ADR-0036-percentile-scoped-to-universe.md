@@ -36,6 +36,18 @@ applies_to:
 
 저장된 값으로도 묻는다 — 유니버스별로 매겼다면 **모든 활성 유니버스에서** 최소 0·최대 1이 나온다.
 
+**이 펜스가 정기 리밸런싱 뒤에는 「낡음」이 아닌 것에도 운다.** 옛 거래일의 백분위는 **그때의
+명부**로 매겨진 것인데 이 질의는 **지금 명부**로 슬라이스한다. 그날 최고값을 갖던 종목이 그 뒤
+유니버스에서 빠졌으면 지금 구성원의 `max`가 1에 못 미친다.
+
+실측(2026-08-24) — `KOSDAQ_TOP150`의 77거래일(2025-11-27 ~ 2026-03-30)이 그렇다. `min`은 0으로
+맞고 `max`만 0.979~0.989이며, 지금 구성원 94 중 그 구간에 `PER`이 있는 것이 91이다. 현재 명부는
+**2026-08-05에 짜인 것**이고 `KOSPI_TOP200`은 180거래일 전부 깨끗하다. **값이 틀린 것이 아니라
+질의의 렌즈가 지금 것이라서 생기는 차이다.**
+
+**MUST: 이 발견을 볼 때 먼저 물을 것은 「리밸런싱이 있었는가」다.** 유니버스별로 갈라 세면
+한쪽만 걸리는지가 바로 드러난다. 진짜 낡음이면 `min`도 0이 아니다.
+
 ```premise 백분위가 활성 유니버스 안에서만 매겨진다
 psql -d stock_screener -At -c "WITH t AS (SELECT count(*) n FROM indicator_value WHERE indicator_code = 'PER_PCTL'), g AS (SELECT iv.trade_date d, u.code, min(iv.value) mn, max(iv.value) mx FROM indicator_value iv JOIN universe_membership m ON m.stock_id = iv.stock_id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE iv.indicator_code = 'PER_PCTL' GROUP BY 1,2), bad AS (SELECT * FROM g WHERE mn <> 0 OR mx <> 1) SELECT CASE WHEN (SELECT n FROM t) = 0 THEN 'PER_PCTL이 한 행도 없다 — 잴 것이 없었다' WHEN (SELECT count(*) FROM g) = 0 THEN 'PER_PCTL은 ' || (SELECT n FROM t) || '행 있는데 활성 유니버스 편입 종목이 하나도 없다 — 모집단이 비어 잴 수 없었다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK ' || (SELECT count(DISTINCT d) FROM g) || '거래일 전부 유니버스별 0~1' ELSE (SELECT count(DISTINCT d) FROM bad) || '거래일이 유니버스 안에서 매겨지지 않았다(' || (SELECT min(d)||' ~ '||max(d) FROM bad) || ') — 그 구간의 백분위가 옛 기준이다' END"
 ```
