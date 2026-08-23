@@ -916,6 +916,9 @@ MUST로 걸므로 지표는 자체 계산한다** — 다행히 분자·분모�
 | `hmvAuditAllSttus` 보수(지급, 전체) | `fscl_year` | `nmpr` **`mendng_totamt`(보수 총액)** `jan_avrg_mendng_am` `fscl_year` + 주식기준보상 여섯(`stk_bsd_pd_mendng_totamt` `stk_opt_*` `othr_stk_bsd_cmpn_*`) |
 | `drctrAdtAllMendngSttusMendngPymntamtTyCl` 보수(지급, 유형별) | `se` × `fscl_year` | `se` `nmpr` `pymnt_totamt` `psn1_avrg_pymntamt` + 위와 같은 주식기준보상 여섯 |
 
+**여덟 다 `stlm_dt`(결산기준일, `YYYY-MM-DD`)를 함께 준다** — 표에 안 적은 것은 공통이기
+때문이지 안 오기 때문이 아니다. `corp_cls`·`corp_code`·`corp_name`·`rcept_no`도 같다.
+
 **여덟이 여덟 모양이라 원자료 표는 갈라야 한다.** 그러나 **지표 계층이 보는 것은 하나다** —
 사외이사 비율·소액주주 지분율·최대주주 지분율·배당성향·최대주주 변동 횟수·자기주식 비율이
 전부 **「종목 × 회계연도 × 스칼라」**로 환원된다. **`IndicatorContext`에 채널을 여섯 개 열
