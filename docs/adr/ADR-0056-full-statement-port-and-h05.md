@@ -99,7 +99,7 @@ SELECT CASE
 psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) = 0 THEN '잴 것이 없었다 — 편입 활성 종목이 없다'
   WHEN count(*) FILTER (WHERE miss > 0) = 0 THEN 'OK 결손 0종목'
-  ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '이다(2026-08-13에 0으로 만들었다) — 새 정정공시가 쌓였을 수 있다. batch-load skill의 128콜 스윕으로 어느 종목인지 먼저 묻는다'
+  ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '이다 — 정정공시로 단정하지 마라. 먼저 그 행의 revision_no를 본다: 0이면 리밸런싱 재편입이라 티커를 준 full-statement-refill 한 번이 닫고(2026-08-25에 넷이 그랬다), 1 이상이면 그때가 정정이라 batch-load skill의 128콜 스윕이다'
   END FROM (SELECT s.id, count(*) FILTER (WHERE f.operating_cash_flow IS NULL) miss
     FROM stock s JOIN universe_membership m ON m.stock_id=s.id AND m.effective_to IS NULL
     JOIN financial_statement f ON f.stock_id=s.id AND f.is_latest AND f.fiscal_period='FY'
