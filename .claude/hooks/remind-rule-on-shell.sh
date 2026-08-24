@@ -32,13 +32,16 @@ command -v jq >/dev/null 2>&1 || exit 0
 input=$(cat)
 cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
 session=$(echo "$input" | jq -r '.session_id // "nosession"')
+# 서브에이전트는 부모와 session_id가 같다. 키를 나누지 않으면 한쪽이 마커를 태우고 다른
+# 쪽이 영영 못 받는다. `remind-rule-on-write.sh`가 같은 이유로 같은 키를 쓴다.
+agent=$(echo "$input" | jq -r '.agent_id // "main"')
 [ -z "$cmd" ] && exit 0
 
 root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 rules_dir="${root}/.claude/rules"
 [ -d "$rules_dir" ] || exit 0
 
-marker_dir="${TMPDIR:-/tmp}/claude-harness-hooks/${session}/remind-rule-on-shell"
+marker_dir="${TMPDIR:-/tmp}/claude-harness-hooks/${session}-${agent}/remind-rule-on-shell"
 
 # 규칙 파일 단위로 세션당 1회. shasum이 없으면 중복 억제만 포기하고 알림은 계속한다 —
 # 알림 훅은 침묵이 아니라 발화 쪽으로 실패한다.
@@ -151,7 +154,11 @@ while IFS= read -r seg; do
           *"|${rname}|"*) ;;
           *) matched="${matched}|${rname}|" ;;
         esac
-        break
+        # MUST NOT: 여기서 `break`로 규칙 순회를 끊지 않는다. 이 목록은 `규칙<TAB>glob`을
+        # 평탄하게 편 것이라(형제 `remind-rule-on-write.sh`는 규칙이 바깥 루프다) 끊으면
+        # **한 토큰이 첫 규칙 하나만 낸다.** 순회가 파일명 사전순이라 `doc-facts.md`가 거의
+        # 늘 이기고 나머지는 침묵했다 — `lib/load-process.sh` 하나가 세 규칙의 지배를 받는데
+        # 하나만 떴다. 침묵 방향이라 `lib/regression.sh`가 못 잡는다(그 표는 발화 여부만 본다).
       fi
     done <<< "$rule_globs"
   done
