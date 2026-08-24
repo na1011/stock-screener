@@ -245,12 +245,16 @@ class PresetCatalogTest {
         // 없는 펜스**가 된다(2026-08-20). 여유가 아니라 최대값 자체를 못박는다.
         // MUST NOT: 프리셋 코드를 박지 않는다. 어느 프리셋이 가장 큰지는 바뀌어도 되고,
         // 바뀌는 것 자체는 이 단언이 물어야 할 일이 아니다.
+        //
+        // MUST: 이 수가 **조건 개수**임을 안다. 버핏 프리셋의 「배점 총합 17」과 값이 같아지는
+        // 시기가 있는데 **서로 무관한 수다** — 이것은 조건 몇 줄인가이고 저것은 가중치의 합이다.
+        // 17 → 18은 ADR-0083이 세 프리셋에 이익소각 배점을 하나씩 더한 결과다.
         int largest = presets.stream()
                 .mapToInt(p -> p.conditions().conditions().size())
                 .max().orElseThrow();
         assertThat(largest)
                 .as("가장 큰 프리셋의 조건 수. 상한은 %d다", ScreenDefinitionValidator.MAX_CONDITIONS)
-                .isEqualTo(17);
+                .isEqualTo(18);
     }
 
     @Test
