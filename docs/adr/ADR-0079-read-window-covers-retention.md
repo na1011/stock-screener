@@ -45,8 +45,12 @@ rg -n "maxEffectiveLookback\(\)" src/main/java
 `rg`는 `IndicatorRegistry.java`에만 걸려야 한다 — 러너가 다시 그것을 부르면 회귀다.
 
 ```premise 가장 긴 워밍업 지표가 보존 창을 한 번에 채운다
-psql -d stock_screener -At -c "WITH r AS (SELECT count(DISTINCT trade_date) n FROM indicator_value), e AS (SELECT count(DISTINCT trade_date) n FROM indicator_value WHERE indicator_code = 'EPS_CAGR_5Y') SELECT CASE WHEN (SELECT n FROM r) = 0 THEN '잴 것이 없었다 — indicator_value가 비어 있다' WHEN (SELECT n FROM e) = 0 THEN 'EPS_CAGR_5Y가 한 행도 없다 — 지표가 폐기됐으면 이 펜스도 함께 걷어라' WHEN (SELECT n FROM e) >= (SELECT n FROM r) THEN 'OK 보존 창 ' || (SELECT n FROM r) || '일자를 EPS_CAGR_5Y가 전부 덮는다' ELSE 'EPS_CAGR_5Y가 보존 창 ' || (SELECT n FROM r) || '일자 중 ' || (SELECT n FROM e) || '일자에만 있다 — 읽기 창이 다시 워밍업 최댓값으로 좁혀졌는지 본다(ADR-0079)' END"
+psql -d stock_screener -At -c "WITH RECURSIVE dates AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > dates.d) FROM dates WHERE dates.d IS NOT NULL), r AS (SELECT count(*) n FROM dates WHERE d IS NOT NULL), e AS (SELECT count(DISTINCT trade_date) n FROM indicator_value WHERE indicator_code = 'EPS_CAGR_5Y') SELECT CASE WHEN (SELECT n FROM r) = 0 THEN '잴 것이 없었다 — indicator_value가 비어 있다' WHEN (SELECT n FROM e) = 0 THEN 'EPS_CAGR_5Y가 한 행도 없다 — 지표가 폐기됐으면 이 펜스도 함께 걷어라' WHEN (SELECT n FROM e) >= (SELECT n FROM r) THEN 'OK 보존 창 ' || (SELECT n FROM r) || '일자를 EPS_CAGR_5Y가 전부 덮는다' ELSE 'EPS_CAGR_5Y가 보존 창 ' || (SELECT n FROM r) || '일자 중 ' || (SELECT n FROM e) || '일자에만 있다 — 읽기 창이 다시 워밍업 최댓값으로 좁혀졌는지 본다(ADR-0079)' END"
 ```
+
+**보존 창 일자 수는 재귀 CTE(loose index scan)로 묻는다.** `count(DISTINCT trade_date)`는 인덱스를
+끝까지 훑어 **2,434ms / 제한 3,000ms**인데 탐침은 **173ms**다(출력 동일). `trade_date`가 선두인
+`indicator_value_pkey`에 기대는 형태다 — 기본키를 갈아엎지 않는 한 사라지지 않는다.
 
 **`EPS_CAGR_5Y`를 이름으로 박는 이유**는 그것이 지금 워밍업 최댓값을 정하는 지표이고, 굶는 것은 언제나
 **최댓값을 정하는 그 지표 하나**이기 때문이다. 최댓값이 다른 지표로 옮겨가면 이 펜스는 낡는다 —

@@ -186,7 +186,7 @@ psql -d stock_screener -At -c "WITH seven AS (SELECT stock_id, max(published_at)
 ```
 
 ```premise 저장된 지표에 시간축이 없다 — 백테스트가 그것을 읽으면 안 되는 이유
-psql -d stock_screener -At -c "WITH td AS MATERIALIZED (SELECT count(DISTINCT trade_date) n FROM indicator_value), d AS (SELECT stock_id, count(DISTINCT value) n FROM indicator_value WHERE indicator_code = 'PROFIT_STREAK_Y' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — PROFIT_STREAK_Y 행이 하나도 없다' WHEN (SELECT n FROM td) <= 1 THEN '잴 것이 없었다 — 보존 창에 거래일이 하나뿐이라 시간축을 물을 수 없다' WHEN (SELECT count(*) FROM d WHERE n > 1) = 0 THEN 'OK 저장된 PROFIT_STREAK_Y가 종목마다 값 하나뿐이다(' || (SELECT count(*) FROM d) || '종목 / ' || (SELECT n FROM td) || '거래일) — 시간축이 없다' ELSE (SELECT count(*) FROM d WHERE n > 1)::text || '종목이 보존 창에서 값이 둘 이상이다 — 시간축이 생겼는지 확인하고 백테스트 금지 규칙을 다시 판단한다' END"
+psql -d stock_screener -At -c "WITH RECURSIVE dates AS (SELECT min(trade_date) dt FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > dates.dt) FROM dates WHERE dates.dt IS NOT NULL), td AS (SELECT count(*) n FROM dates WHERE dt IS NOT NULL), d AS (SELECT stock_id, count(DISTINCT value) n FROM indicator_value WHERE indicator_code = 'PROFIT_STREAK_Y' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — PROFIT_STREAK_Y 행이 하나도 없다' WHEN (SELECT n FROM td) <= 1 THEN '잴 것이 없었다 — 보존 창에 거래일이 하나뿐이라 시간축을 물을 수 없다' WHEN (SELECT count(*) FROM d WHERE n > 1) = 0 THEN 'OK 저장된 PROFIT_STREAK_Y가 종목마다 값 하나뿐이다(' || (SELECT count(*) FROM d) || '종목 / ' || (SELECT n FROM td) || '거래일) — 시간축이 없다' ELSE (SELECT count(*) FROM d WHERE n > 1)::text || '종목이 보존 창에서 값이 둘 이상이다 — 시간축이 생겼는지 확인하고 백테스트 금지 규칙을 다시 판단한다' END"
 ```
 
 **`updated_at`으로 묻지 않는다.** 이 펜스의 첫 판이 그랬는데 **구조적으로 거짓 발견을 낸다** —
@@ -196,15 +196,15 @@ psql -d stock_screener -At -c "WITH td AS MATERIALIZED (SELECT count(DISTINCT tr
 아니라 **쓰기 시각의 분포**다. 묻는 것은 **값 자체**여야 한다 — 종목마다 보존 창 전체에서 값이
 하나뿐이면 시간축이 없는 것이고, 계산기가 봉마다 재무를 다시 세게 바뀌면 그때 붉어진다.
 
-**`indicator_value` 전수를 두 번 세지 않는다.** `count(DISTINCT trade_date)`는 단독으로 1790ms인데
-판정과 출력 문구에서 **두 번** 불려 서버측 **2968ms / 제한 3000ms**까지 갔고, 세션마다 무작위로
-**판정 불가**가 났다(2026-08-24 실측, 3회 재실행 2.94~2.97s로 안정적이다 — 일시적 지연이 아니다).
-`MATERIALIZED` CTE로 한 번만 세게 해 **1547~1734ms**(가장 찬 실행 2346ms)다. **다만 여유가
-충분하다고는 못 적는다** — 고친 뒤 훅 5회 중 **첫 1회가 여전히 timeout이었고 그 실패는 재현되지
-않았다**(이후 4회 연속 통과). 남은 실패 조건을 갈라내지 못했다. **행 수는 거래일이 아니라 지표
-종수에 비례해 자라므로**(보존 창은 180거래일로 닫혀 있다) 여유는 다시 줄어든다 — 또 붉어지면
-**출력 문구의 거래일 수를 버리는 것**이 다음 수단이다. 판정에 필요한 것은 `<= 1` 하나뿐이고,
-그것은 `trade_date`가 선두인 인덱스 셋 중 하나로 전수 없이 답할 수 있다.
+**MUST NOT: 거래일 수를 `count(DISTINCT trade_date)`로 묻지 않는다.** 그 집계는 `indicator_value`
+인덱스를 **끝까지** 훑는다 — 실측 엔트리 7,135,123개 · 힙 페치 4,524,085 · **2,429ms / 제한
+3,000ms**다. 위 펜스는 재귀 CTE(loose index scan)로 같은 값을 **181번 탐침**해 얻는다(**181ms**,
+출력 문자열 동일). **`trade_date`가 선두인 인덱스에 기대는 형태이고**, 그것은
+`indicator_value_pkey`(`trade_date, indicator_code, stock_id`)라 기본키를 갈아엎지 않는 한 사라지지
+않는다.
+
+**행 수는 거래일이 아니라 지표 종수에 비례해 자란다**(보존 창은 180거래일로 닫혀 있다). 전수
+집계는 그래서 코드가 늘 때마다 여유를 잃지만, 탐침은 거래일 수에만 걸려 **그 축이 없다.**
 
 ```premise 시점 유니버스가 DB에 여전히 없다 — 생존편향 판정의 근거
 psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — universe_membership이 비었다' WHEN min(effective_from) = DATE '2026-08-05' THEN 'OK 유니버스 이력이 여전히 2026-08-05부터다 — 그 이전 시점 유니버스는 DB에 없다(구간 ' || count(DISTINCT effective_from) || '개)' ELSE '유니버스 이력의 시작이 ' || min(effective_from) || '로 바뀌었다 — 과거 편입을 넣는 경로가 생겼다면 생존편향 판정을 다시 한다' END FROM universe_membership"
