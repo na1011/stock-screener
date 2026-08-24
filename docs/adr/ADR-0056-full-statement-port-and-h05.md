@@ -24,6 +24,13 @@ applies_to:
 3. **조건 개수 상한을 20 → 25로 올린다.**
 4. **H-05(5년 누적 영업현금흐름 > 0)를 `SWING_MIDTERM_KR`의 필수 조건으로 건다.**
 
+> **2026-08-24 — 이 결정에는 대상이 없다.** `SWING_MIDTERM_KR`은 2026-08-14에 폐기됐고
+> (ADR-0061) 후계자 `SWING_TREND_KR`도 2026-08-20에 폐기됐다(ADR-0074). 지금 `OCF_SUM_5Y`를
+> 쓰는 곳은 `LOWVOL_QUALITY_KR`의 **배점 1점** 하나뿐이고(`PresetCatalog.java`의
+> `lowVolQualityKr()`), `is_required = true`인 유일한 저장 행은 폐기된 화면이다.
+> **그것은 아래 §버린 대안이 기각해 둔 형태다.** 어느 쪽이 옳은지는 여기서 정하지 않는다 —
+> 프리셋의 출처가 원본 명세에서 문헌으로 갈려(ADR-0061) 판정 근거 자체가 바뀌었다.
+
 ## 규칙
 
 - **MUST: 새 포트의 쓰기 경로에 `IndicatorInvalidationPort`를 부르는 가지를 만들지 않는다.**
@@ -84,7 +91,7 @@ a AS (SELECT stock_id, count(*) n, count(operating_cash_flow) ocf FROM r WHERE r
 SELECT CASE
   WHEN (SELECT count(*) FROM a) = 0 THEN '잴 것이 없었다 — 연간 재무가 하나도 없다'
   WHEN count(*) FILTER (WHERE n=5 AND ocf=5) >= 250 THEN 'OK ' || count(*) FILTER (WHERE n=5 AND ocf=5) || '종목'
-  ELSE '5년치를 가진 종목이 ' || count(*) FILTER (WHERE n=5 AND ocf=5) || '으로 줄었다(착수 시 283) — H-05가 조용히 전 종목을 떨어뜨린다'
+  ELSE '5년치를 가진 종목이 ' || count(*) FILTER (WHERE n=5 AND ocf=5) || '으로 줄었다(착수 시 283) — LOWVOL_QUALITY_KR의 OCF_SUM_5Y 배점이 그만큼 판정불가로 떨어진다'
   END FROM a"
 ```
 
@@ -159,6 +166,11 @@ JIT 미가열)이고, `SCREENING_RUN` 107건의 중앙값은 49 ms다. 25조건�
   예산에 73% 여유가 있어 이 위험을 살 이유가 없다.
 - **H-05를 가중 조건으로** — 원본 명세 §4가 Layer 1 게이트로 두므로 Layer 2 이동은 정본
   이탈이다. 가중이면 판정불가 종목이 0점을 받고 **결과에 남아** 이력이 짧은 종목이 살아남는다.
+
+  > **2026-08-24 — 이 기각이 뒤집힌 채로 실행되고 있다.** `LOWVOL_QUALITY_KR`이 `OCF_SUM_5Y`를
+  > 배점 1점으로 들고 있다. 첫째 근거(*"원본 명세 §4가 Layer 1 게이트로 둔다"*)는 그 명세가
+  > 프리셋 정본에서 내려오면서(ADR-0061) 더는 서지 않는다. **둘째 근거(판정불가가 0점을 받아
+  > 결과에 남는다)는 이 배점 자리에서 재보지 않았다.**
 - **자본변동표 이익잉여금을 추측으로 고르기** — 기초·증감·기말이 흩어져 있어 기초를 고르면 한
   해 늦은 값이 그럴듯하게 저장된다. 대신 대조군을 뒀다: 둘 다 가진 삼성전자에서 재무상태표
   값과 이 규칙이 고른 값이 402,135,600,000,000으로 일치했고, 오리온 2024의 값이 2025의
