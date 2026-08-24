@@ -33,7 +33,7 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 |---|---|---|
 | `universe` | 유니버스 편입 종목 갱신 | 시총 어댑터가 `@ConditionalOnApiKey`라 키가 없으면 시드만 남는다(ADR-0012) |
 | `market-index` | 코스피·코스닥 지수 시계열 | **종목과 무관해 `--tickers`가 없다.** 기간조회 1콜이라 전 구간을 받아도 **지수당 1콜, 전부 2콜**이다. `--from`을 비우면 소스 이력의 시작(2020-01-02)부터다 |
-| `initial-load` | 시세·재무 원자료 | **대상 선정이 `NOT EXISTS (price_daily)`다** — 아래 참조. 종목당 시세 1콜 + **재무 16콜**(재무 단계를 빼는 플래그가 없다) |
+| `initial-load` | 시세·재무 원자료 | **대상 선정이 `NOT EXISTS (price_daily)`다** — 아래 참조. 종목당 시세 1콜 + 재무 `(연수+1)×4`콜(기본 3년이면 16, `--financial-years=7`이면 **32**). **기업 행위는 한 건도 안 적는다** — `DataGoKrPriceAdapter`가 `fetchCorporateActions`를 오버라이드하지 않아 `PriceCollector`의 `recordAll`이 늘 빈 목록을 받는다. **몇 해치를 새로 넣으면 `corporate-action`이 뒤따라야 하고**, 안 그러면 미보정 시세가 그대로 지표가 된다 |
 | `financial-refill` | 재무의 **결손 컬럼만** | 편입 전 종목. 종목당 **16콜**(4개년 × 보고서 4종), 350종목이면 **약 5,600콜** — `fnlttSinglAcnt` 보수 예산(10,000)의 56%다. **한도는 API별이라 다른 잡과 경쟁하지 않는다**(`api-sources` skill). ADR-0040 |
 | `full-statement-refill` | 전체 재무제표에서 **결손만** — 주로 영업활동현금흐름 | 종목당 **6콜**(연간만), 350종목이면 **2,100콜**. `fnlttSinglAcntAll`은 카운터가 별개다. **정정공시를 만나면 채우지 않고 남긴다**(`정정보류=`) — 그것을 여는 것은 `financial-refill`이다. `--quarters=true`는 **티커와 함께여야** 받아들인다. ADR-0056 |
 | `company-profile` | 업종(KSIC)·결산월 | **기본 대상이 `industry_code IS NULL`인 편입 종목뿐**이라 평소 0콜이다. 티커를 주면 결손 여부와 무관하게 다시 받는다. 종목당 1콜(전량 350). ADR-0044 |
