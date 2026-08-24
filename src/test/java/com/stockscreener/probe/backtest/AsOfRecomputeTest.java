@@ -108,7 +108,7 @@ class AsOfRecomputeTest {
 
     /**
      * <b>집합만 견주면 배점 조건이 검사되지 않는다.</b> SCORING의 포함 여부는
-     * {@code satisfiesRequired}가 정하므로 <b>필수 게이트만</b> 보고, 배점 아홉은 집합을
+     * {@code satisfiesRequired}가 정하므로 <b>필수 게이트만</b> 보고, 배점 열은 집합을
      * 한 종목도 바꾸지 않는다. 즉 위 단언이 통과해도 배점 쪽은 아무것도 확인되지 않는다.
      *
      * <p>그중 {@code PER_SECTOR_PCTL}이 특히 그렇다 — 그 값은 {@code computeAt}이 내지 않아

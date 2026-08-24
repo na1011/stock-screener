@@ -164,7 +164,7 @@ rg -n 'FROM indicator_value|import .*ScreeningRepository' \
 ```
 
 기준일=오늘로 돌린 as-of 재계산이 화면과 같은가. **집합과 점수를 함께 본다.**
-집합만 보면 배점 아홉이 검사되지 않는다 — SCORING의 포함 여부는 `satisfiesRequired`가
+집합만 보면 배점 열이 검사되지 않는다 — SCORING의 포함 여부는 `satisfiesRequired`가
 정하므로 **필수 게이트만** 보고, 배점은 한 종목도 바꾸지 않는다. `PER_SECTOR_PCTL`은
 `computeAt`이 내지 않아 하네스가 `PERCENT_RANK`를 손으로 다시 구현한 것이라,
 **점수 대조가 그 재구현의 유일한 검사다.**

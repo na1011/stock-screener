@@ -293,8 +293,9 @@ class ConditionReturnTest {
             System.out.printf("%-30s %3d %+7.2f%%p %6.2f %6.2f %8.3f %8.3f | %s%n",
                     keys.get(i), n, s[0], s[1], s[2], s[3], holm[i], inSample);
         }
-        System.out.println("MUST: Holm p를 본다. 개별 p로 결론을 내면 조건 15개에서"
-                + " 기대 오탐이 0.75개라 아무 관계가 없어도 하나는 좋아 보인다.");
+        System.out.println("MUST: Holm p를 본다. 개별 p로 결론을 내면 조건 16개에서"
+                + " 기대 오탐이 0.80개라 아무 관계가 없어도 하나는 좋아 보인다."
+                + " 실제로 재는 것은 15개다 — RETAINED_TO_MARKET_4Y가 OOS 0시점이라 빠진다.");
         System.out.println("MUST: n을 본다. 사전등록의 3.5%p는 시점 8개 기준이고,"
                 + " OOS만 쓰면 n이 그보다 작아 검출 한계가 그만큼 커진다.");
     }
