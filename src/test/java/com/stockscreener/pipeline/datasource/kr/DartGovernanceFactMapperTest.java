@@ -324,6 +324,27 @@ class DartGovernanceFactMapperTest {
     }
 
     @Test
+    @DisplayName("감사의견 — 목록에 없어 판정불가로 있던 비적정 일곱 (2026-08-24 전수)")
+    void auditOpinionCoversEveryObservedAdverseWording() {
+        // 원문 그대로다. 정규화(공백 제거)를 타야 맞으므로 줄바꿈·공백을 살려 둔다.
+        assertThat(opinionOf("한정")).as("251970 펌텍코리아 · 327260 RF머트리얼즈")
+                .isEqualByComparingTo("1");
+        assertThat(opinionOf("한정\n(아래 참조)")).as("052400 코나아이")
+                .isEqualByComparingTo("1");
+        assertThat(opinionOf("의견거절")).as("214370 케어젠")
+                .isEqualByComparingTo("1");
+        assertThat(opinionOf("의견거절(*1)")).as("950160 코오롱티슈진 3개년")
+                .isEqualByComparingTo("1");
+        assertThat(opinionOf("의견거절(*2)")).isEqualByComparingTo("1");
+        assertThat(opinionOf("의견거절(*3)")).isEqualByComparingTo("1");
+
+        // 각주 번호는 의견이 아니다. 짝 행이 없어 유추할 근거도 없다.
+        assertThat(opinionOf("(*)"))
+                .as("316140 FY2019. 같은 회계연도에 짝 행이 없어 「적정」으로도 「비적정」으로도 못 읽는다")
+                .isNull();
+    }
+
+    @Test
     @DisplayName("감사의견 — 한 해의 두 행 중 하나만 비적정이어도 비적정이다")
     void auditOpinionFoldsTwoRowsWithOr() {
         List<GovernanceReportRow> rows = List.of(

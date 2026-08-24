@@ -118,13 +118,25 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
             "적정예외사항없음예외사항없음예외사항없음", "적정의견예외사항없음(반기)");
 
     /**
-     * 비적정 의견의 <b>관측된 표기</b>.
+     * 비적정 의견의 <b>관측된 표기</b>. 전수 8행 / 6종목이다(2026-08-24 실측).
      *
-     * <p>지금 하나뿐이다 — 044490 태웅 FY2020의 {@code 감사범위 제한으로 인한 한정}.
-     * <b>「하나뿐이니 없는 것과 같다」로 읽지 않는다</b>: 목록 밖이 판정불가로 떨어지므로
-     * 새 비적정 표기가 「적정」으로 새지 않는다는 것이 이 설계의 요점이다.
+     * <p>목록 밖이 판정불가로 떨어지므로 <b>새 비적정 표기가 「적정」으로 새지 않는다</b>는 것이
+     * 이 설계의 요점이다. 그 안전은 실제로 작동했다 — 아래 일곱은 목록에 없는 동안
+     * <b>「적정」이 아니라 판정불가</b>로 있었다.
+     *
+     * <p>MUST NOT: 각주 표기({@code (*)}·{@code (*1)}·{@code (주1)})를 여기에도
+     * {@link #CLEAN_OPINIONS}에도 더하지 않는다. 의견이 아니라 <b>주석 번호</b>이고, 그 행들은
+     * 기수 표기가 {@code TERM_OFFSETS}에 없어 {@code fiscalYearOfTerm}에서 이미 버려진다 —
+     * 더해도 효과가 0이다. 316140 FY2019의 {@code (*)} 하나만 살아남는데 <b>같은 회계연도에
+     * 짝 행이 없어</b> 의견을 유추할 근거가 없다.
      */
-    private static final Set<String> ADVERSE_OPINIONS = Set.of("감사범위제한으로인한한정");
+    private static final Set<String> ADVERSE_OPINIONS = Set.of(
+            // 044490 태웅 FY2020
+            "감사범위제한으로인한한정",
+            // 251970 펌텍코리아 · 327260 RF머트리얼즈 · 052400 코나아이
+            "한정", "한정(아래참조)",
+            // 214370 케어젠 · 950160 코오롱티슈진(3개년)
+            "의견거절", "의견거절(*1)", "의견거절(*2)", "의견거절(*3)");
 
     @Override
     public List<GovernanceFact> derive(GovernanceEndpoint endpoint,
@@ -547,9 +559,10 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      * 한 회계연도에 행이 둘이다(연결·별도로 보이나 <b>필드로 구분되지 않는다</b>, §16-B).
      * 강조사항은 <b>OR</b>로 접고 감사인은 <b>집합</b>으로 접는다.
      *
-     * <p>MUST NOT: {@code adt_opinion}으로 판정 지표를 만들지 않는다. 비적정 표기를 본 적이 없고
-     * 활성 유니버스 안에서는 원리적으로 안 나온다 — 여기서 만드는 것은 강조사항 유무와 감사인
-     * 교체뿐이고 둘 다 <b>관측된 값 위에</b> 선다.
+     * <p><b>{@code adt_opinion}으로 판정 지표를 만든다</b>({@code AUDIT_OPINION_ADVERSE}).
+     * 한때 <i>"비적정 표기를 본 적이 없고 활성 유니버스 안에서는 원리적으로 안 나온다"</i>고
+     * 적혀 있었으나 <b>둘 다 거짓이다</b> — 전수로 8행 / 6종목이 나온다. 판정은 허용목록
+     * <b>양쪽</b> 위에 서고, 어느 목록에도 없는 표기는 「적정」으로 접지 않고 판정불가로 남긴다.
      */
     private List<GovernanceFact> auditOpinion(List<GovernanceReportRow> rows) {
         Map<Integer, Boolean> emphasisByYear = new TreeMap<>();
