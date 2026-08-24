@@ -29,10 +29,14 @@ stray_load_pids() {
   # `pgrep -f`는 환경변수를 보지 못한다.
   #
   # 패턴이 `-`로 시작하지 않게 괄호로 연다 — pgrep이 옵션으로 읽는다.
-  # MUST: `BootstrapRunner`의 `switch`에 잡을 더하면 여기도 함께 더한다. 빠지면 그 잡은
-  # **어느 훅에도 안 잡힌다** — 몇 시간짜리 적재가 도는 중에 경고 없이 다른 적재를 띄우게 된다.
-  # `financial-refill`이 실제로 그렇게 빠져 있었다.
-  pids=$(pgrep -f '(^|[[:space:]])--job=(universe|initial-load|financial-refill|company-profile|corporate-action|adjustment-rebuild|backfill)|spring\.profiles\.active=[^[:space:]]*bootstrap' 2>/dev/null) || true
+  # MUST: `BootstrapRunner`의 `switch`에 잡을 더하면 여기도 함께 더한다. 실제로 넷이 빠져
+  # 있었다(`financial-refill`, 그리고 2026-08-24에 `full-statement-refill`·`market-index`·
+  # `governance-load`·`governance-derive`).
+  #
+  # **빠졌을 때 무엇이 안 잡히는지 정확히 적는다** — 정상 기동은 아래 프로파일 가지가 잡는다
+  # (실측: 잡 이름 11개 전부 매치). 안 잡히는 것은 위 환경변수 형태 하나이고, 그때는 두 가지가
+  # 다 침묵해 몇 시간짜리 적재 위에 다른 적재를 경고 없이 띄우게 된다.
+  pids=$(pgrep -f '(^|[[:space:]])--job=(universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|adjustment-rebuild|market-index|backfill|governance-load|governance-derive)|spring\.profiles\.active=[^[:space:]]*bootstrap' 2>/dev/null) || true
   [ -z "$pids" ] && return 1
 
   # **실행파일이 java인 것만 남긴다. 이 필터가 없으면 훅이 자기 자신을 적재로 읽는다.**
