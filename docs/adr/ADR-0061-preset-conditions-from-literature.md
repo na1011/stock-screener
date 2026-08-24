@@ -85,9 +85,11 @@ SELECT CASE
   WHEN atr BETWEEN 0.15 AND 0.45 AND beta BETWEEN 0.15 AND 0.45 AND vol BETWEEN 0.6 AND 0.9
     THEN 'OK ATR ' || round(atr::numeric,2) || ' / 베타 ' || round(beta::numeric,2)
        || ' / 거래량 ' || round(vol::numeric,2)
-  ELSE '분위가 의도(ATR·베타 하위 30%, 거래량 상위 22%)에서 벗어났다 — ATR '
-       || round(atr::numeric,2) || ' 베타 ' || round(beta::numeric,2)
-       || ' 거래량 ' || round(vol::numeric,2) END
+  ELSE (SELECT string_agg(t, ' · ') FROM (
+      SELECT 'ATR ' || round(atr::numeric,2) t FROM p WHERE atr NOT BETWEEN 0.15 AND 0.45
+      UNION ALL SELECT '베타 ' || round(beta::numeric,2) FROM p WHERE beta NOT BETWEEN 0.15 AND 0.45
+      UNION ALL SELECT '거래량 ' || round(vol::numeric,2) FROM p WHERE vol NOT BETWEEN 0.6 AND 0.9) x)
+    || ' 축만 밴드 밖이다(나머지는 안). **임계가 움직였다는 뜻이 아니다** — 등록 근거는 같은 날 단면이고(phase-criteria의 「검증된 이론 기반 프리셋 개편」 절), 그 기준으로 다시 재기 전에는 국면과 못 가른다. **MUST NOT: 이것을 근거로 임계를 풀지 않는다**(§규칙)' END
 FROM p"
 ```
 
@@ -100,6 +102,13 @@ FROM p"
 > **MUST NOT: 이것을 근거로 1.5배를 내리지 않는다**(위 §규칙의 「결과 수를 근거로 임계값을
 > 풀지 않는다」가 그대로 걸린다). 판단이 필요한 것은 **밴드 상한 0.9가 국내 분포에 비해
 > 좁은가**이고, 그건 이 펜스가 아니라 사람이 정한다.
+>
+> **MUST NOT: 이 펜스를 보존 창 전체를 합친 분포로 다시 재지 않는다.** 등록 근거가 **같은 날
+> 단면**이라(`phase-criteria`의 「검증된 이론 기반 프리셋 개편」 절, 2026-08-13) 창을 바꾸면
+> 다른 임계를 재게 된다. 실제로 그렇게 재어 **셋 다 신고와 어긋난다**는 결론에 도달한 적이
+> 있는데(풀 45.2% / 17.4% / 13.1%), 등록 기준으로 같은 날 다시 재면 **ATR 29.6% · 베타 27.3%로
+> 등록값 그대로이고 어긋난 것은 거래량뿐**이다(2026-08-25). 창이 답을 정하는 측정으로는
+> 임계를 판정할 수 없다.
 
 조건의 출처가 코드에 남아 있는지 — 아래가 **활성 프리셋 수(지금 8) 이상**이어야 한다.
 프리셋마다 셋 중 적어도 하나는 해당하기 때문이다. **하한이지 목표가 아니다** — 2026-08-14에
