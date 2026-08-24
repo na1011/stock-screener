@@ -407,6 +407,73 @@ if [ -f "$criteria_doc" ]; then
   fi
 fi
 
+# 5c. 적재 잡 이름이 자리마다 갈렸는가
+#
+# `lib/load-process.sh`가 `MUST: BootstrapRunner의 switch에 잡을 더하면 여기도 함께 더한다`고
+# 적어 두는데 **실제로 넷이 빠져 있었다.** 빠지면 몇 시간짜리 적재 위에 다른 적재를 경고 없이
+# 띄운다. `guard-rebuild-without-dump.sh`는 더 비싸다 — **차단 가드**라 이름이 갈리면 덤프 없는
+# 수정계수 재구축이 조용히 통과한다.
+#
+# MUST: SKILL.md의 frontmatter와 본문을 **합집합으로 다루지 않는다.** 합치면 "frontmatter만
+# 낡은" 상태가 침묵하는데, `description`은 매 세션 상주하는 유일한 부분이라 그쪽이 낡는 것이
+# 더 나쁘다.
+# MUST: 어느 자리든 **빈 집합이면 발화한다.** 빈 집합을 "대상 없음"으로 넘기면 이 검사가 통째로
+# 침묵하고 그 침묵은 "일치한다"와 구분되지 않는다. 실제로 훅 쪽을 `--job=[A-Za-z|-]*`로 뽑으면
+# 여는 괄호가 문자군 밖이라 빈 집합이 나온다.
+# MUST: SKILL.md 본문은 **코드펜스 안**만 본다. 산문은 아직 없는 잡을 이름으로 부를 수 있다
+# (`docs/progress.md`가 예정된 판정 잡을 그렇게 적는다). 펜스 밖까지 보면 그것이 오탐이 된다.
+# MUST: runner 쪽은 `switch (job)` 블록 **안**만 본다. 파일에 다른 switch가 생기면 그 case가
+# 잡 이름으로 섞인다.
+# MUST: `|| true`로 받는다. `src/main/java`가 없는 트리에서 `find`가 1을 내고 `pipefail`이
+# 그것을 물려받아, `set -e` 아래에서 **이 대입 한 줄이 훅을 통째로 죽인다** — §6·§6b가
+# 사라지고 그 침묵은 "불일치 없음"과 구분되지 않는다. 회귀표의 임시 트리가 실제로 그 상태다.
+runner_src=$(find src/main/java -name BootstrapRunner.java -type f 2>/dev/null | head -1 || true)
+job_lib=".claude/hooks/lib/load-process.sh"
+job_skill=".claude/skills/batch-load/SKILL.md"
+job_guard=".claude/hooks/guard-rebuild-without-dump.sh"
+if [ -n "${runner_src:-}" ] && [ -f "$job_lib" ] && [ -f "$job_skill" ] && [ -f "$job_guard" ]; then
+  jobs_of() {  # $1 라벨, 나머지는 파이프라인이 stdin으로 받는다
+    sort -u | tr '\n' ' ' | sed 's/ $//'
+  }
+  j_runner=$(awk '/switch \(job\)/ { f = 1 }
+                  f && /^[[:space:]]*};[[:space:]]*$/ { f = 0 }
+                  f && match($0, /case "[a-z][a-z0-9-]*"/) { print substr($0, RSTART + 6, RLENGTH - 7) }' \
+             "$runner_src" 2>/dev/null | jobs_of)
+  j_hook=$(grep -oE -- '--job=\([a-z0-9|-]+\)' "$job_lib" 2>/dev/null \
+           | sed 's/--job=(//; s/)//' | tr '|' '\n' | jobs_of)
+  j_fm=$(awk '/^description:/' "$job_skill" 2>/dev/null | grep -oE -- '--job=[a-z0-9|-]+' \
+         | sed 's/--job=//' | tr '|' '\n' | jobs_of)
+  j_body=$(awk '/^```/ { f = !f; next } f' "$job_skill" 2>/dev/null \
+           | grep -oE -- '--job=[a-z0-9-]+' | sed 's/--job=//' | jobs_of)
+  j_guard=$(grep -oE -- '--job=[a-z0-9-]+' "$job_guard" 2>/dev/null | sed 's/--job=//' | jobs_of)
+
+  job_empty=""
+  [ -z "$j_runner" ] && job_empty="${job_empty}BootstrapRunner.java "
+  [ -z "$j_hook" ]   && job_empty="${job_empty}lib/load-process.sh "
+  [ -z "$j_fm" ]     && job_empty="${job_empty}batch-load/SKILL.md(frontmatter) "
+  [ -z "$j_body" ]   && job_empty="${job_empty}batch-load/SKILL.md(본문) "
+  [ -z "$j_guard" ]  && job_empty="${job_empty}guard-rebuild-without-dump.sh "
+  if [ -n "$job_empty" ]; then
+    add "적재 잡 이름을 하나도 못 뽑은 자리가 있다: ${job_empty}— **추출이 깨진 것이지 잡이 없는 것이 아니다.** 이 상태로는 자리 사이의 어긋남이 통째로 침묵한다."
+  else
+    job_diff=""
+    [ "$j_hook" != "$j_runner" ]  && job_diff="${job_diff}lib/load-process.sh "
+    [ "$j_fm" != "$j_runner" ]    && job_diff="${job_diff}batch-load/SKILL.md(frontmatter) "
+    [ "$j_body" != "$j_runner" ]  && job_diff="${job_diff}batch-load/SKILL.md(본문) "
+    if [ -n "$job_diff" ]; then
+      add "적재 잡 이름이 \`BootstrapRunner\`의 \`switch\`와 갈렸다: ${job_diff}— 정본은 runner다(\`${j_runner}\`). 훅이 갈리면 적재가 도는 것을 못 보고, skill이 갈리면 있는 잡을 못 부르거나 없는 잡을 부른다."
+    fi
+    # 이 자리만 **부분집합**이다. 전량이 아니라 재구축·재무 둘만 막는 것이 그 가드의 설계다.
+    job_orphan=""
+    for j in $j_guard; do
+      case " $j_runner " in *" $j "*) ;; *) job_orphan="${job_orphan}${j} " ;; esac
+    done
+    if [ -n "$job_orphan" ]; then
+      add "\`guard-rebuild-without-dump.sh\`가 \`BootstrapRunner\`에 없는 잡 이름을 막고 있다: ${job_orphan}— **차단 가드라 어긋나면 증상이 없다.** 이름이 바뀌었으면 덤프 없는 재구축이 지금 그냥 통과한다."
+    fi
+  fi
+fi
+
 # 6. 산문이 가리키는 하네스 파일이 실제로 있는가
 #
 # §4와 방향이 반대다. §4는 frontmatter의 glob이 파일을 잡는지 보고(그 파서는 리스트가
@@ -505,6 +572,40 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
         resolve_name "$ref" || note_dead "$ref"
       fi
     done <<< "$ordered"
+  fi
+
+  # 6b. 산문이 **이름으로 부르는 절**이 실재하는가
+  #
+  # §6과 방향이 같고 대상만 다르다. `doc-facts.md`가 「절을 번호로 가리키지 않는다 — 절 제목으로
+  # 가리킨다」고 요구하는데, **제목으로 가리켜도 그 절이 사라지면 아무도 울지 않았다.**
+  # `104d79b`가 `progress.md`의 한 절을 통째로 지우면서 그 안의 미결 질문이 함께 증발했고,
+  # `harness-docs.md`가 바로 그 사고를 금지하는 문장을 가진 채로 그 일이 났다.
+  #
+  # 사정거리를 정직하게 적는다 — 이 검사는 홑낫표로 감싼 뒤 `절`이 따라오는 형태만 본다.
+  # **`§` + 숫자 참조는 원리적으로 못 잡고**, 그것은 `doc-facts.md`가 이미 「어떤 훅도 잡지
+  # 않는다」로 적어 둔 자리다. 여기서 그 형태까지 열면 483건이 한꺼번에 대상이 된다.
+  #
+  # MUST NOT: 실재하지 않는 절 이름을 이 파일에 **예시로 적지 않는다.** §6의 역따옴표 함정과
+  # 같다 — 적으면 이 검사가 자기 주석에 걸린다.
+  # MUST NOT: 폴더로 대상을 거르지 않는다. `doc-facts.md`가 그 판정 방식을 문장 그대로 기각한다
+  # (`docs/external/`에 에이전트 산출물이 섞여 있다). 제외는 회귀표 하나뿐이고 §6과 같은 이유다.
+  #
+  # 해소는 **어느 추적 마크다운의 제목 줄에라도 그 문자열이 있는가**로 본다. 어느 문서인지까지
+  # 묶으면 표를 손으로 유지해야 하고, 잡으려는 병(절이 통째로 사라지는 것)에는 이것으로 충분하다.
+  if [ -n "$files" ]; then
+    headings=$(printf '%s\n' "$files" | tr '\n' '\0' \
+      | xargs -0 grep -hE '^#{1,6}[[:space:]]' 2>/dev/null | sort -u || true)
+    sec_refs=$(printf '%s\n' "$files" | tr '\n' '\0' \
+      | xargs -0 grep -hoE '「[^」]{2,60}」[[:space:]]*절' 2>/dev/null \
+      | sed 's/」[[:space:]]*절$//; s/^「//' | sort -u || true)
+    dead_secs=""
+    while IFS= read -r sec; do
+      [ -z "$sec" ] && continue
+      printf '%s\n' "$headings" | grep -qF -- "$sec" || dead_secs="${dead_secs}「${sec}」 "
+    done <<< "$sec_refs"
+    if [ -n "$dead_secs" ]; then
+      add "산문이 이름으로 부르는데 제목으로 실재하지 않는 절이 있다: ${dead_secs}— 절이 지워졌거나 제목이 바뀐 것이다. **절과 함께 그 안의 내용이 사라졌는지부터 본다** — 실제로 미결 질문 하나가 그렇게 증발한 적이 있다. 이름만 바뀐 것이면 부르는 쪽을 지금 고쳐라."
+    fi
   fi
 
   if [ -n "$dead_refs" ]; then

@@ -573,6 +573,140 @@ check_sessionstart_matcher "저장소 SessionStart가 다섯을 다 덮는다" "
 # **통과로 세지 않는다** — 건너뜀이 통과로 읽히면 덮여 있다고 믿게 된다.
 check_sessionstart_matcher "전역 SessionStart가 다섯을 다 덮는다"   "$HOME/.claude/settings.json" skip
 
+echo "── 포인터 훅이 낸 규칙의 집합 (remind-rule-on-*.sh) ──"
+#
+# 위 「규칙 포인터 알림」 그룹은 **발화 여부만** 본다. 그래서 `remind-rule-on-shell.sh`가 세 규칙
+# 중 **하나만** 내던 회귀가 이 표에 초록으로 남아 있었다(평탄 목록을 안쪽 루프에 놓고 첫 매칭에서
+# break 했고, 순회가 사전순이라 늘 같은 하나가 이겼다). 침묵이 아니라 **부분 발화**라 발화/침묵
+# 두 값으로는 원리적으로 못 가른다.
+#
+# MUST: 호출마다 **새 session_id**를 만든다. 훅이 규칙별로 세션당 1회만 내므로 고정 id를 쓰면
+# 2회차부터 빈 집합이 나오고, 이 행이 조용히 뒤집힌다(실측: 같은 id 2회 → 3개 / 0개).
+#
+# 기대 집합은 세 규칙의 `paths`가 `.claude/hooks/**`를 덮어서 나온 값이다.
+# **그 glob을 고치면 이 줄도 함께 고친다.** check-doc-staleness.sh §4가 glob이 죽는 것은 잡지만
+# 대상이 늘고 주는 것은 잡지 않는다.
+#
+# $1 기대 집합(공백 구분·사전순), $2 설명, $3 대상(명령 또는 경로), $4 훅(rule|write)
+check_rule_set() {
+  local want="$1" desc="$2" target="$3" hook="$4" got out key script
+  case "$hook" in
+    rule)  key=command;   script=remind-rule-on-shell.sh ;;
+    write) key=file_path; script=remind-rule-on-write.sh ;;
+    *)     fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (알 수 없는 훅: %s)\n' "$desc" "$hook"; return ;;
+  esac
+  out=$(jq -n --arg v "$target" --arg k "$key" --arg s "sess-$RANDOM$RANDOM" \
+        '{session_id:$s, tool_input:{($k):$v}}' | "$HOOKS/$script" 2>/dev/null)
+  got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null \
+        | grep -oE 'rules/[a-z-]+\.md' | sed 's|rules/||' | sort -u | tr '\n' ' ')
+  got="${got% }"
+  [ -z "$got" ] && got="(없음)"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "집합" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s\n            얻음: %s\n            기대: %s\n' "집합" "$desc" "$got" "$want"
+  fi
+}
+
+RULESET_HOOKS_LIB="doc-facts.md harness-core.md harness-hooks.md"
+check_rule_set "$RULESET_HOOKS_LIB" "셸 읽기가 지배 규칙 셋을 다 낸다" \
+  "grep -n pgrep .claude/hooks/lib/load-process.sh" rule
+check_rule_set "$RULESET_HOOKS_LIB" "셸 편집(sed -i)도 셋을 다 낸다" \
+  "sed -i '' 's/a/b/' .claude/hooks/lib/load-process.sh" rule
+check_rule_set "$RULESET_HOOKS_LIB" "Write 경로도 셋을 다 낸다" \
+  ".claude/hooks/lib/load-process.sh" write
+
+echo "── 적재 잡 이름 거울 (check-doc-staleness §5c) ──"
+#
+# 저장소를 건드리지 않는다. 다섯 자리를 임시 트리에 복사해 거기서 비튼다.
+# $1 기대(발화/침묵), $2 설명, $3 비틀 파일(트리 기준 경로, 없으면 원본 그대로), $4 perl 치환식
+check_jobnames() {
+  local want="$1" desc="$2" target="${3:-}" expr="${4:-}" tmp got runner
+  runner=$(find src/main/java -name BootstrapRunner.java -type f 2>/dev/null | head -1 || true)
+  if [ -z "$runner" ]; then
+    skipped=$((skipped+1)); printf '  \033[33mSKIP\033[0m %s (BootstrapRunner.java가 없다)\n' "$desc"; return
+  fi
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/rules" "$tmp/.claude/hooks/lib" "$tmp/.claude/skills/batch-load" \
+           "$tmp/docs" "$tmp/src/main/java/x"
+  printf 'x\n' > "$tmp/.claude/hooks/lib/bash-text.sh"
+  printf '# rules\n'    > "$tmp/.claude/rules/harness-core.md"
+  printf '# progress\n' > "$tmp/docs/progress.md"
+  cp "$runner"                                  "$tmp/src/main/java/x/BootstrapRunner.java"
+  cp .claude/hooks/lib/load-process.sh          "$tmp/.claude/hooks/lib/"
+  cp .claude/hooks/guard-rebuild-without-dump.sh "$tmp/.claude/hooks/"
+  cp .claude/skills/batch-load/SKILL.md         "$tmp/.claude/skills/batch-load/"
+  [ -n "$target" ] && perl -i -pe "$expr" "$tmp/$target"
+  if CLAUDE_PROJECT_DIR="$tmp" "$HOOKS/check-doc-staleness.sh" </dev/null 2>/dev/null \
+     | jq -r '.hookSpecificOutput.additionalContext // empty' \
+     | grep -q '적재 잡 이름\|guard-rebuild-without-dump.sh`가'; then
+    got="발화"
+  else
+    got="침묵"
+  fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+check_jobnames 침묵 "다섯 자리가 맞으면 조용하다"
+check_jobnames 발화 "훅의 pgrep 목록에서 잡이 빠지면 잡는다" \
+  ".claude/hooks/lib/load-process.sh" 's/\|governance-derive\)/)/'
+# 아래 둘이 이 그룹의 요점이다. frontmatter와 본문을 합집합으로 보면 **둘 다 침묵으로 뒤집힌다** —
+# `description`은 매 세션 상주하는 유일한 부분이라 그쪽이 낡는 것이 더 나쁘다.
+check_jobnames 발화 "skill의 frontmatter만 낡아도 잡는다" \
+  ".claude/skills/batch-load/SKILL.md" 's/\|market-index\|/\|/ if /^description:/'
+check_jobnames 발화 "skill의 본문만 낡아도 잡는다" \
+  ".claude/skills/batch-load/SKILL.md" 's/^--job=market-index.*\n//'
+# 차단 가드는 **부분집합**이 정상이다. 이름이 갈리는 것만 잡아야 하고, 둘뿐인 것을 잡으면 안 된다.
+check_jobnames 발화 "차단 가드의 잡 이름 오타를 잡는다" \
+  ".claude/hooks/guard-rebuild-without-dump.sh" 's/financial-refill\*\)/financial-refil*)/'
+
+echo "── 이름으로 부른 절 (check-doc-staleness §6b) ──"
+#
+# **이 그룹은 `src/`가 없는 트리에서 돈다.** 그것이 의도다 — §5c가 `find src/main/java`의 실패를
+# `|| true` 없이 받으면 `set -e`가 훅을 통째로 죽여 §6·§6b가 사라지는데, 그 침묵은 "불일치 없음"과
+# 구분되지 않는다. 실제로 그 상태로 한 번 작성됐고 이 그룹이 잡았다.
+#
+# $1 기대(발화/침묵), $2 설명, $3 progress.md 본문, $4 규칙 파일 본문
+check_section() {
+  local want="$1" desc="$2" prog="$3" rule="$4" tmp got
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/rules" "$tmp/.claude/hooks/lib" "$tmp/docs"
+  printf 'x\n' > "$tmp/.claude/hooks/lib/bash-text.sh"
+  printf '%s\n' "$prog" > "$tmp/docs/progress.md"
+  printf '%s\n' "$rule" > "$tmp/.claude/rules/harness-core.md"
+  ( cd "$tmp" && git init -q . && git add -A >/dev/null 2>&1 )
+  if CLAUDE_PROJECT_DIR="$tmp" "$HOOKS/check-doc-staleness.sh" </dev/null 2>/dev/null \
+     | jq -r '.hookSpecificOutput.additionalContext // empty' | grep -q '제목으로 실재하지 않는 절'; then
+    got="발화"
+  else
+    got="침묵"
+  fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+check_section 침묵 "부르는 절이 제목으로 있으면 조용하다" \
+  "$(hd '# 진행 상태' '' '## 사용자 판단이 먼저인 것 — 묻고 시작한다' '' '내용')" \
+  "$(hd '# rules' '' '「사용자 판단이 먼저인 것」 절을 비었다고 지우지 않는다.')"
+# `104d79b`가 실제로 낸 사고. 절과 함께 그 안의 미결 질문이 증발했고 아무 검사도 울지 않았다.
+check_section 발화 "부르는 절이 통째로 사라지면 잡는다" \
+  "$(hd '# 진행 상태' '' '## 다른 절만 있다')" \
+  "$(hd '# rules' '' '「사용자 판단이 먼저인 것」 절을 비었다고 지우지 않는다.')"
+# 제목이 부르는 이름보다 길어도 해소다. 완전일치로 바꾸면 이 행이 붉어진다 — 저장소의 실제
+# 참조 하나가 그 형태다(제목에 뒤가 더 붙어 있다).
+check_section 침묵 "제목이 더 길어도 해소로 본다" \
+  "$(hd '# 진행 상태' '' '#### 백테스트가 뒤집을 수 있다고 적었으나, 못 뒤집는다 — 실측')" \
+  "$(hd '# rules' '' '아래 「백테스트가 뒤집을 수 있다」 절이 그 실측을 든다.')"
+
 echo
 printf '통과 %d / 실패 %d / 건너뜀 %d / 알려진 구멍 %d\n' "$pass" "$fail" "$skipped" "$holes"
 # MUST: 건너뛴 수를 함께 낸다. 건너뛴 것이 통과로 읽히면 "덮여 있다"고 믿게 된다 —
