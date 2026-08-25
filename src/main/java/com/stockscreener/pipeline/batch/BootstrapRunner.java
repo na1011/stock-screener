@@ -171,20 +171,43 @@ public class BootstrapRunner implements ApplicationRunner {
      * {@code BUILD SUCCESSFUL}과 종료코드 0을 낸다. 그러면 <b>아무 일도 안 일어난 실행이
      * 성공한 실행과 구분되지 않는다.</b>
      *
-     * <p>이것은 catch-all이 아니다 — 스택 트레이스를 그대로 남기고 <b>프로세스를 실패로
-     * 끝낸다.</b> 삼키는 것과 정반대이며, 여기서 잡지 않으면 그 예외가 갈 곳이 없다.
+     * <p><b>{@link Throwable}까지 잡는 것이 의도다.</b> 전역 지시문이 금지하는 catch-all은
+     * <b>삼키는</b> 핸들러인데 이것은 반대다 — 스택 트레이스를 남기고 <b>프로세스를 실패로
+     * 끝낸다.</b> {@code RuntimeException}만 잡으면 백필 중의 {@code OutOfMemoryError} 같은
+     * {@link Error}가 그대로 새어 <b>위의 exit 0으로 되돌아간다.</b> 그리고 여기서 잡지 않으면
+     * 그 예외가 갈 곳이 없다 — 받을 호출부가 없다.
+     *
+     * <p>MUST: 갈래 둘을 합치지 않는다. 아래 각 갈래의 주석이 이유를 따로 답한다.
+     *
+     * <p><b>이 경로에는 테스트가 없다.</b> {@code System.exit}은 JVM을 내리므로 단위 테스트로
+     * 감쌀 수 없고, 이 저장소에는 종료코드를 재는 통합 테스트도 없다({@code rg 'System.exit'
+     * src/test} → 0건). <b>두 줄을 지워도 컴파일도 테스트도 전부 초록이고, 그때 증상은 다시
+     * 침묵이다.</b> 판정을 순수 함수로 떼어내 테스트하는 안은 일부러 버렸다 — 그러면
+     * {@code System.exit} <b>배선이 사라져도</b> 그 테스트는 초록이라, 덮이지 않은 것을 덮인
+     * 것처럼 보이게 만든다.
      */
     @Override
     public void run(ApplicationArguments args) {
         try {
             runJob(args);
         } catch (BatchShutdownException e) {
-            // 실패가 아니라 프로세스가 내려간다는 신호다(ADR-0078). error로 찍으면 종료마다
-            // Sentry 이슈가 하나씩 나고, 종료 코드는 어차피 신호가 정한다.
+            // MUST NOT: 여기서 System.exit을 부르지 않는다. 이 예외는 **종료가 이미 시작된
+            // 뒤에만** 난다(BatchExecutions.onContextClosed가 abandonedOnShutdown을 켠 뒤다).
+            // 그 시점의 System.exit은 종료 훅 러너가 쥔 락을 기다리므로 이 스레드가 멈춘다.
+            //
+            // 실패가 아니라 프로세스가 내려간다는 신호이므로 info다(ADR-0078) — error로 찍으면
+            // 종료마다 Sentry 이슈가 하나씩 난다(sentry.logging.minimum-event-level: error).
             log.info("부트스트랩 러너가 종료로 중단됐다. batch_execution에 ABORTED로 남는다.");
-        } catch (RuntimeException e) {
-            log.error("부트스트랩 러너가 실패했다. 아무것도 적재되거나 판정되지 않았다.", e);
-            System.exit(1);
+        } catch (Throwable e) {
+            // MUST: exit을 finally에 둔다. OutOfMemoryError 상황에서 log.error는 메시지
+            // 포맷과 스택 렌더링으로 다시 할당하는데, 거기서 두 번째 OOME가 나면 그 줄 뒤로
+            // 못 가고 **닫으려던 그 exit 0으로 되돌아간다.** exit을 앞에 놓는 것으로는 안 된다 —
+            // System.exit은 돌아오지 않으므로 로그가 아예 안 남는다. finally라야 둘 다 된다.
+            try {
+                log.error("부트스트랩 러너가 실패했다. 아무것도 적재되거나 판정되지 않았다.", e);
+            } finally {
+                System.exit(1);
+            }
         }
     }
 
