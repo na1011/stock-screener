@@ -6,10 +6,15 @@ applies_to:
   - "src/main/java/**/pipeline/batch/BatchExecutions.java"
   - "src/main/java/**/pipeline/batch/BatchExecutionContext.java"
   - "src/main/java/**/pipeline/batch/BatchExecutionSweeper.java"
+  - "src/main/java/**/pipeline/batch/BatchShutdownException.java"
+  - "src/main/java/**/pipeline/batch/StockTaskExecutor.java"
+  - "src/main/java/**/pipeline/batch/AdminJobLauncher.java"
+  - "src/main/java/**/pipeline/scheduler/PipelineScheduler.java"
+  - "src/main/java/**/observability/SentryConfig.java"
   - "ops/*.sh"
 ---
 
-# ADR-0078. 프로세스가 내려갈 때 배치 실행을 어떻게 마감하는가
+# ADR-0078. 프로세스가 내려갈 때 배치 실행을 어떻게 마감하고 멈추는가
 
 ## 결정
 
@@ -17,12 +22,17 @@ applies_to:
 상한을 명시해** `ops/stop.sh`의 대기보다 짧게 유지한다. 종료 마감은 **알리지 않되**, 끄기
 **전에** `ops`가 도는 배치를 사람에게 알린다.
 
-세 기제가 분담한다. 어디에도 적혀 있지 않아 이 문서를 쓴다.
+마감한 실행의 워커는 **협조적으로 멈춘다** — 잡이 새 작업 단위를 시작하려는 자리에서
+`BatchShutdownException`을 던져 루프를 끊는다. 그때 나는 예외·로그·알림은 **버그가 아니라
+신호로** 다룬다.
+
+기제가 분담한다. 어디에도 적혀 있지 않아 이 문서를 쓴다.
 
 | 기제 | 담당 | 알림 |
 |---|---|---|
 | `BatchExecutions`의 종료 리스너 | **이 JVM이** 열어 둔 실행 | 없음 |
 | `BatchExecutionContext`의 종단 플래그 | 한 실행을 **두 번** 마감하려는 시도 | 없음(건너뛴 것을 `warn`) |
+| `BatchExecutionContext`의 **버림 플래그** | 마감된 실행의 워커를 **멈추는 것** | 없음 |
 | `BatchExecutionRecorder`의 DB 가드 | **다른 JVM**이 남긴 행과의 경합 | 해당 없음 |
 | `BatchExecutionSweeper` | 훅조차 못 돈 경우(SIGKILL·전원 차단) | 없음 |
 
@@ -42,6 +52,27 @@ applies_to:
   웹훅이 connect 5초 + read 10초라 **종료 예산을 먹어 아래 「배경」의 결함을 되살린다.**
 - MUST: `ops`의 사전 경고는 **막지 않고 알리기만 한다**(ADR-0043). 조회에 실패하면 **「확인하지
   못했다」를 찍는다** — 「없음」과 구분되지 않으면 그 경고는 있으나 마나다.
+
+### 협조적 중단
+
+- **MUST: 버림 플래그를 `claimTerminal` 성공 **뒤**, `recorder.abort` **앞**에서 켠다.**
+  그래야 「플래그가 참」 = 「이미 마감됐다」가 되고, **잡 열한 개가 자기
+  `catch (RuntimeException)`을 안 고쳐도 되는 근거가 그 불변식 하나다.** 순서를 바꾸면
+  열한 곳을 전부 고쳐야 한다.
+- **MUST: 게이트를 `process()`만이 아니라 `stage()`·`plan()`에도 둔다.** 종목 루프만 막으면
+  `DailyUpdateJob`의 백분위·업종 상대값·워치리스트가 그대로 돈다 — 그 셋은 `process()`를
+  지나지 않는다. **구간 신고는 곧 「그 구간을 시작한다」는 선언이다.**
+- **MUST: 게이트를 울타리가 아니라 경계로 읽는다.** 한 단계 *도중에* 켜지면 그 단계는 끝까지
+  간다. 신고를 아예 안 하는 루프(`UniverseRebalanceJob`·`MarketIndexJob`)는 직접 물어야 한다.
+- **MUST NOT: 종료 중 알림을 「막는」 것으로 끝내지 않는다 — 로그로 내린다.** 여기 오는 알림
+  여섯은 대응하는 개별 로그가 **아예 없어** 막기만 하면 그 사실이 어디에도 안 남는다.
+  `UniverseRebalanceJob`은 포트를 직접 부르므로 같은 판단을 그 잡 안에서 다시 한다.
+- **MUST: 종료 신호를 실패로 세지 않고, 종료 중에는 진척을 쓰지 않는다.** 전자를 어기면
+  「이미 마감된 …」 경고가 **종료마다** 나 진짜 마감 경합을 가리키기를 그만두고, 후자를
+  어기면 `flushNow`의 좁은 catch를 통과하는 예외가 난다(근거는 그 메서드 옆에 있다).
+- **MUST: 종료 중에는 `ERROR`로 찍지 않는다.** `sentry.logging.minimum-event-level`이 `error`라
+  ERROR 로그가 곧 이슈다. `SentryConfig`의 필터는 **백스톱이지 주 기제가 아니다** — 종료 중
+  로그 대부분은 원본 예외를 실어 원인 체인에 신호가 없다.
 
 ## 검증
 
@@ -66,10 +97,32 @@ rg -o '"\$APP_PATTERN" \d+' ops/stop.sh
 # ④ 셸 경고가 set -e에서 죽지 않는가 — 실패 두 경로를 실제로 태운다
 bash -c '. ops/lib.sh; set -euo pipefail; DB_NAME=없는db warn_running_batches "검증"; echo "살아 있다"'
 bash -c '. ops/lib.sh; set -euo pipefail; pg_bin() { return 1; }; warn_running_batches "검증"; echo "살아 있다"'
+
+# ⑤ 게이트가 세 자리에 다 있는가 — process·stage·plan (3이어야 한다)
+# MUST: 행 머리 + 세미콜론으로 센다. 이름만 세면 javadoc의 {@link}가 함께 잡힌다.
+rg -c '^\s*abortIfAbandoned\(\);' src/main/java/com/stockscreener/pipeline/batch/BatchExecutionContext.java
+
+# ⑥ 신고를 안 하는 루프 둘이 명시적으로 묻는가 (3, 1이어야 한다)
+# UniverseRebalanceJob은 루프 머리 + 안쪽 catch 둘이라 3이다. 하나라도 줄면 종료 중에
+# 가짜 알림이 동기로 나가는 경로가 되살아난다.
+rg -c 'execution\.abortIfAbandoned\(\)' src/main/java/com/stockscreener/pipeline/batch/UniverseRebalanceJob.java
+rg -c 'execution\.abortIfAbandoned\(\)' src/main/java/com/stockscreener/pipeline/batch/MarketIndexJob.java
+
+# ⑦ 불변식: 플래그가 claimTerminal **뒤**인가 — 두 줄 번호를 뽑아 눈으로 본다
+awk '/void abortOnShutdown/,/^    }/' \
+  src/main/java/com/stockscreener/pipeline/batch/BatchExecutionContext.java \
+  | grep -n 'claimTerminal(\|^        abandonedOnShutdown = true;'
 ```
 
-동적 검증은 `BatchExecutionShutdownRaceTest`가 한다 — 워커를 돌려 놓고 컨텍스트를 닫아
-`close()` 소요·마감 상태·사유·알림 수를 함께 잰다. **상한을 지우면 30초가 나와 떨어진다.**
+동적 검증이 둘이다. `BatchExecutionShutdownRaceTest`가 **종료 예산**을 잰다 — 워커를 돌려
+놓고 컨텍스트를 닫아 `close()` 소요·마감 상태·사유·알림 수를 함께 본다. **상한을 지우면
+30초가 나와 떨어진다.** `BatchExecutionCooperativeStopTest`가 **루프가 멈추는가**를 잰다 —
+컨텍스트를 닫지 않고 `closeOpenExecutions()`만 불러 유예를 안 태운다.
+
+**MUST NOT: 둘을 하나로 합치지 않는다.** 앞의 것은 게이트를 못 잰다 — 가짜 작업이 인터럽트로
+끝나고 그 인터럽트가 닫힌 풀을 만나 죽으므로 루프가 **고치기 전에도** 2회차에 못 가, 진입
+횟수가 1 → 1이라 갈리지 않는다. 그렇다고 작업 시간을 줄이면 유예 상한이 안 밟혀 14~25초
+밴드가 무너지는데, 그 밴드가 상한과 `stop.sh` 대기를 지키는 유일한 펜스다.
 
 ### 측정 결과 (2026-08-21)
 
@@ -87,6 +140,24 @@ bash -c '. ops/lib.sh; set -euo pipefail; pg_bin() { return 1; }; warn_running_b
 통제군에서도 마감 자체는 훅이 이겼다 — **경합이라 회차마다 갈린다.** 「워커가 이겨서
 PARTIAL_SUCCESS로 덮는다」는 단정할 수 없고, 이번 회차에는 나타나지 않았다. 종단 플래그를
 넣는 근거는 그 확률이지 관측이 아니다.
+
+### 측정 결과 — 협조적 중단 (2026-08-25)
+
+`BatchExecutionCooperativeStopTest`로 잰 것이다. 짧은 작업 5개짜리 루프를 돌려 놓고 첫
+작업이 잡혀 있는 동안 `closeOpenExecutions()`를 부른 뒤 놓아줬다.
+
+| | 통제군(고치기 전) | 처리군 |
+|---|---|---|
+| 종목 작업 진입 | **5회** — 종료 뒤에도 남은 넷을 마저 돌았다 | **1회** |
+| 루프를 끊은 것 | 없음(끝까지 돌았다) | `BatchShutdownException` |
+| 마감 상태 | ABORTED | 같음 |
+| 알림 | 0 | 0 |
+
+**`close()` 소요는 이 표에 없다** — 이 테스트는 컨텍스트를 닫지 않는다. 그 수는 위
+2026-08-21 표가 답하고, 이 변경 뒤에도 같다(가짜 작업이 잠 안에서 플래그를 맞아 게이트에
+안 닿는다). **Sentry 이벤트가 실제로 몇 건 줄었는지는 재지 않았다** — 로컬·테스트는
+`sentry.dsn`이 빈 문자열이라 `BeforeSendCallback`이 단위 테스트 밖에서 돌지 않는다.
+재려면 운영 DSN이 실린 인스턴스에서 배치를 띄우고 `ops/deploy.sh`를 쳐야 한다.
 
 ### 운영 관통 (2026-08-21)
 
@@ -147,11 +218,16 @@ ABORTED 10건은 전부 `MANUAL`이고 **현행 스위퍼가 만든 것이 아�
 
 - **`spring.task.execution.shutdown.await-termination=true`** — 더 나쁘다. 그 플래그가
   `lateShutdown`을 켜서 executor의 조기 정지를 통째로 건너뛴다. 종료가 오히려 길어진다.
-- **`Future.cancel(true)` 또는 `process()`에서 인터럽트를 보고 루프 절단** — 인터럽트는
-  신뢰할 수 있는 중단 신호가 아니다. `ExternalApiClientFactory`가 `SimpleClientHttpRequestFactory`
+- **`Future.cancel(true)` 또는 인터럽트를 보고 루프 절단** — 인터럽트는 신뢰할 수 있는 중단
+  신호가 아니다. `ExternalApiClientFactory`가 `SimpleClientHttpRequestFactory`
   (=`HttpURLConnection`)라 소켓 읽기가 인터럽트를 무시하고, pgjdbc도 보지 않는다. 입구는
   `TokenBucketRateLimiter`의 `Thread.sleep` 하나뿐이라 **`IndicatorBackfillJob`처럼 어댑터를
-  안 타는 잡에는 아예 안 통한다.** 아래 「결과」의 결손 1이 이것이다.
+  안 타는 잡에는 아예 안 통한다.**
+  **이 기각은 지금도 유효하다.** 위 「협조적 중단」이 뒤집은 것이 아니다 — 신호를 읽는 자리가
+  소켓이 아니라 **잡과 프레임워크가 만나는 경계**(`process`·`stage`·`plan`)여서 같은 한계에
+  안 걸릴 뿐이고, 어댑터를 안 타는 잡도 그 경계는 지난다. **MUST NOT: 「협조적 중단이 있으니
+  인터럽트도 켜자」로 읽지 않는다** — 진행 중인 호출을 못 끊는 것은 그대로라 얻는 것이 없고,
+  어댑터가 인터럽트를 수집 실패로 오분류하는 경로만 늘어난다.
 - **`@Order(Ordered.HIGHEST_PRECEDENCE)`로 리스너를 맨 앞에** — 실익이 없다. executor의
   같은 이벤트 리스너는 `executor.shutdown()`만 부르는 비차단 호출이라 순서가 결과를 안 바꾸는데,
   맨 앞이 되면 여기서 새는 예외의 폭발 반경만 최대가 된다.
@@ -161,13 +237,13 @@ ABORTED 10건은 전부 `MANUAL`이고 **현행 스위퍼가 만든 것이 아�
   그래도 안 한다. 동기 전송이고 웹훅이 최악 15초라 그만큼이 `stop.sh`의 대기에 얹혀
   위 결함을 다른 경로로 되살린다. 대신 **끄기 전 경고**를 `ops`에 두었다 — 예산을 안 먹고,
   사람이 되돌릴 수 있는 시점에 오며, 알림 채널에 의존하지 않는다.
-  `BatchExecutionContext.abortOnShutdown`이 적고 있던 옛 근거(「그 시점에 알림 채널의 빈이
-  이미 파괴됐을 수 있다」)는 **이 결정으로 거짓이 됐고**, 그래서 근거를 갈아 끼웠다.
 - **`ops/stop.sh`의 대기만 늘리기** — 처음에 「문제를 미룰 뿐」이라며 기각했다가 **뒤집었다.**
   그 기각은 **상한이 없던 상태의 논리**였다. 상한이 생긴 뒤의 질문은 "대기가 상한 + 빈 파괴
   비용을 덮는가"이고, 그것은 미루는 것이 아니라 덮는 것이다. 45초로 채택했다.
 - **`StockTaskExecutor`에서 인터럽트면 실패로 세지 않기** — 가짜 실패 행 하나만 놓고 보면
-  가장 싸지만 루프를 못 멈춘다. 위 인터럽트 항목과 같은 한계에 걸린다.
+  가장 싸지만 **루프를 못 멈춘다.** 위 인터럽트 항목과 같은 한계에 걸린다. 지금 그 클래스가
+  종료를 인지하는 것은 이것과 다른 목적이다 — 루프는 컨텍스트의 게이트가 멈추고, 그쪽은
+  **ERROR로 안 찍기 위해서**다(그 로그가 곧 Sentry 이슈이고 돌던 종목 수만큼 난다).
 
 ## 결과
 
@@ -179,21 +255,28 @@ ABORTED 10건은 전부 `MANUAL`이고 **현행 스위퍼가 만든 것이 아�
 
 ### 남은 결손
 
-1. **인터럽트가 중단 신호로 안 통한다.** 종료 상한 15초 동안 종목 루프가 계속 돌며 쿼터를
-   태운다. 그 뒤 인터럽트가 와도 `IndicatorBackfillJob`처럼 어댑터를 안 타는 잡에는 안 통한다.
-   실측에서 인터럽트된 워커는 자기 실패를 **기록조차 못 하고**
-   `CannotCreateTransactionException`으로 죽었다(풀이 이미 닫혔다).
-2. **그 예외가 Sentry로 간다.** 경로가 둘이다 — `AdminJobLauncher`의 `log.error`와,
-   예외를 안 잡는 `PipelineScheduler`(Spring 기본 핸들러가 ERROR로 찍는다). 운영에서 실제로
-   밟는 것은 후자다. 전자의 문구(「batch_execution에는 남지 않았을 수 있다」)는 이 결정
-   이후 **거짓**이다 — 행은 ABORTED로 남는다.
-3. **`flushNow`의 좁은 catch.** `DataAccessException`만 잡는데 EMF가 닫힌 뒤엔
-   `IllegalStateException`이 나서 빠져나간다. **상한을 15초로 당긴 것이 이 확률을 높인다.**
-   그 좁은 catch는 「그 밖의 예외는 우리 코드의 버그이고 버그는 드러나야 한다」는 의도라
-   넓히지 않았다.
-4. **집계가 조금 낮다.** 마감이 스냅샷을 찍는 순간 워커가 처리 중인 종목의 커밋은 뒤에 난다.
+**협조적 중단으로 둘이 좁아졌고 하나가 닫혔다. 다섯이 남는다.**
+
+1. **작업 *사이*만 멈춘다.** 이미 시작된 하나는 끝까지 간다 — `GovernanceLoadJob`은 그 하나가
+   DART **22콜**이다(`YEARS_BACK`의 8표). 인터럽트로도 못 끊는 것은 「버린 대안」이 답한다.
+2. **Sentry 오염이 좁아졌지 닫히지 않았다.** 신호를 다는 것은 `process()` 안뿐이다.
+   `process()` 밖의 DB 작업 — `priceCalendar` 조회, 백분위·업종 상대값 계산, 고아 정리 —
+   **도중에** 플래그가 켜지면 raw 예외가 그대로 올라가 원인 체인에 신호가 없다. 그러면
+   `SentryConfig`의 백스톱도 `PipelineScheduler`의 catch도 그것을 못 알아본다.
+   **잔여 빈도는 재보지 않았다.**
+3. **집계가 조금 낮다.** 마감이 스냅샷을 찍는 순간 워커가 처리 중인 종목의 커밋은 뒤에 난다.
    ABORTED 행의 `success_count`가 실제보다 1~2 낮을 수 있다 — 버그가 아니다.
-5. **사후 복구 경로가 없다.** 끊긴 날의 백분위·업종 상대값은 수동 `indicator-backfill`뿐이다.
-   `ops`의 경고는 **사전** 완화이지 복구가 아니다.
-6. **`MANUAL` 상시 오탐.** 스위퍼는 `MANUAL`을 **다음 적재 실행 때만** 닫으므로 죽은 적재가
+4. **사후 복구가 조건부로만 있다.** 끊긴 날의 백분위·업종 상대값은 여전히 스스로 안 돌아온다.
+   다만 **끊긴 `daily-update`에 미해결 실패 행이 남으면** 관리자 화면의 부분 재실행이
+   열리고, 그 재실행이 `collect()`를 다시 돌려 그날의 백분위·업종 상대값·워치리스트를
+   **함께** 만든다(`AdminBatchController`의 게이트가 상태를 안 보는 것이 여기서는 이롭다).
+   **그 행이 남는 일 자체가 드물다** — 게이트가 진입에서 끊으므로 다음 종목은 시작도 안 하고,
+   진행 중이던 하나는 풀이 닫힌 뒤에야 예외를 받아 기록도 함께 실패한다. 운영 원장 실측
+   (2026-08-25)으로 `ABORTED`+미해결 조합은 **0건**이고 `ABORTED` 12건 중 `daily-update`는
+   **0건**이다. 조건이 안 맞으면 수동 `indicator-backfill`뿐이다.
+5. **`MANUAL` 상시 오탐.** 스위퍼는 `MANUAL`을 **다음 적재 실행 때만** 닫으므로 죽은 적재가
    남긴 행이 영구히 남아 경고에 매번 뜬다. 갈라 표시하는 것으로만 완화했다.
+
+**닫힌 것** — `flushNow`의 좁은 catch를 빠져나가던 예외. catch를 넓히는 대신 **종료 중에는
+진척을 아예 쓰지 않는 것**으로 트리거를 없앴다. 그 좁음은 「그 밖은 우리 코드의 버그이고
+버그는 드러나야 한다」는 의도라 지금도 유지한다.
