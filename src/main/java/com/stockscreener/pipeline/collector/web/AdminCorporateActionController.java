@@ -23,6 +23,11 @@ import java.util.List;
 /**
  * 기업 행위 원장을 <b>사람이 판정하는</b> 경로 (ADR-0049 · ADR-0050).
  *
+ * <p><b>이제 문이 둘이다</b> — {@code CorporateActionJudgeJob}이 같은 일을 셸에서 한다
+ * (ADR-0084). 여기가 {@code ROLE_ADMIN}에 OIDC 세션 쿠키로만 닿기 때문이다. 검증은 양쪽 다
+ * {@link CorporateActionLedger}가 하므로 갈리지 않는다. <b>이쪽에만 있는 것은
+ * {@code @RecordInteraction} 하나이고</b>, 그래서 관리자 인터랙션 조회는 브라우저 판정만 센다.
+ *
  * <p>화면은 만들지 않는다(ADR-0049 §버린 대안). 판정은 연 수 건이고 API와 원장만으로 성립하며,
  * 프론트 작업을 이 phase에 들이면 phase가 커진다.
  *

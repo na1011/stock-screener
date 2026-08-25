@@ -281,8 +281,9 @@ public final class BatchExecutionContext {
     /**
      * 종목 격리를 거치지 않고 집계된 결과를 반영한다.
      *
-     * <p>{@link UniverseRebalanceJob}이 유일한 사용처다. 그 잡의 처리 단위는 종목이 아니라
-     * 지수여서 {@link #process}를 쓰지 않고 스스로 센다. 그래도 여기를 지나게 하는 이유는
+     * <p>처리 단위가 종목이 아닌 잡이 쓴다 — {@link UniverseRebalanceJob}은 지수가,
+     * {@link CorporateActionJudgeJob}은 원장 행이 단위다. 그런 잡은 {@link #process}를 쓸 수 없다
+     * ({@code batch_execution_failure.stock_id}가 NOT NULL + FK다). 그래도 여기를 지나게 하는 이유는
      * <b>단계별 집계와 진행률이 잡 종류와 무관하게 성립해야</b> 하기 때문이다 — 이 경로가
      * 없으면 그 잡만 화면에서 분모도 단계도 없이 뜬다.
      */

@@ -653,8 +653,11 @@ check_jobnames() {
 }
 
 check_jobnames 침묵 "다섯 자리가 맞으면 조용하다"
+# MUST NOT: 목록의 **마지막** 이름을 지우는 식으로 비틀지 않는다. 잡을 하나 더하면 그 이름이
+# 더는 마지막이 아니라 치환이 no-op이 되고, 이 행이 조용히 FAIL로 뒤집힌다 — 하필 거울 검사를
+# 지키는 행이다. 가운데 이름을 지워 순서에 안 기대게 한다.
 check_jobnames 발화 "훅의 pgrep 목록에서 잡이 빠지면 잡는다" \
-  ".claude/hooks/lib/load-process.sh" 's/\|governance-derive\)/)/'
+  ".claude/hooks/lib/load-process.sh" 's/initial-load\|//'
 # 아래 둘이 이 그룹의 요점이다. frontmatter와 본문을 합집합으로 보면 **둘 다 침묵으로 뒤집힌다** —
 # `description`은 매 세션 상주하는 유일한 부분이라 그쪽이 낡는 것이 더 나쁘다.
 check_jobnames 발화 "skill의 frontmatter만 낡아도 잡는다" \

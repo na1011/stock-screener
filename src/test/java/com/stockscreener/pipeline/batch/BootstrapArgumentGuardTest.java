@@ -33,7 +33,64 @@ class BootstrapArgumentGuardTest {
                 new DefaultApplicationArguments(
                         "--job=initial-load", "--tickers=082640,121600",
                         "--price-years=7", "--financial-years=3",
-                        "--reload-existing=true", "--as-of=2026-08-11", "--from=2020-01-02")))
+                        "--reload-existing=true", "--as-of=2026-08-11", "--from=2020-01-02",
+                        "--ca-id=97", "--ca-status=APPROVED", "--ca-type=SPLIT", "--ca-ticker=005930",
+                        "--ca-limit=200", "--ca-ratio=5", "--ca-effective-date=2026-02-04",
+                        "--ca-listing-date=2026-02-20", "--ca-note=메모")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("--ca-*는 원장 잡에서만 통과한다 — 수집 잡이 접두어라 -judge를 빠뜨리면 쿼터를 태운다")
+    void rejectsLedgerOptionsOnCollectionJob() {
+        assertThatThrownBy(() -> BootstrapRunner.rejectLedgerOptionsOutsideLedgerJobs(
+                new DefaultApplicationArguments("--job=corporate-action", "--ca-id=97",
+                        "--ca-status=APPROVED"),
+                "corporate-action"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ca-id");
+
+        assertThatCode(() -> BootstrapRunner.rejectLedgerOptionsOutsideLedgerJobs(
+                new DefaultApplicationArguments("--job=corporate-action-judge", "--ca-id=97",
+                        "--ca-status=APPROVED", "--ca-type=SPLIT", "--ca-ratio=5",
+                        "--ca-effective-date=2026-02-04", "--ca-listing-date=2026-02-20",
+                        "--ca-ticker=005930", "--ca-limit=200", "--ca-note=주식수 배수로 확인했다"),
+                "corporate-action-judge"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("따옴표가 뒤의 플래그를 품었으면 막는다 — 그 플래그는 적용되지 않는데 잡은 성공으로 끝난다")
+    void rejectsNoteThatSwallowedFollowingFlags() {
+        assertThatThrownBy(() -> BootstrapRunner.rejectLedgerOptionsOutsideLedgerJobs(
+                new DefaultApplicationArguments("--job=corporate-action-judge", "--ca-id=97",
+                        "--ca-note=메모 --ca-status=APPROVED --ca-type=SPLIT --ca-ratio=2"),
+                "corporate-action-judge"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("따옴표");
+    }
+
+    @Test
+    @DisplayName("따옴표 없이 쪼개진 메모를 막는다 — 옵션 이름 검사는 사라진 낱말을 못 본다")
+    void rejectsNoteSplitByUnquotedSpaces() {
+        // gradle이 공백에서 쪼갠 결과가 이 모양이다(실측: `--ca-note=메모 두 낱말`이 그냥
+        // 성공했다). 남은 낱말은 non-option 인자가 되므로 getOptionNames()에 안 잡힌다.
+        assertThatThrownBy(() -> BootstrapRunner.rejectLedgerOptionsOutsideLedgerJobs(
+                new DefaultApplicationArguments("--job=corporate-action-judge", "--ca-id=97",
+                        "--ca-note=메모", "두", "낱말"),
+                "corporate-action-judge"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("붙지 않은 낱말");
+    }
+
+    @Test
+    @DisplayName("문서화된 줄바꿈의 백슬래시는 통과한다 — 막으면 정상 명령이 통째로 멈춘다")
+    void allowsDocumentedLineContinuation() {
+        // `--args='… \`+개행은 작은따옴표 안이라 리터럴 백슬래시가 그대로 넘어온다(od -c 실측).
+        assertThatCode(() -> BootstrapRunner.rejectLedgerOptionsOutsideLedgerJobs(
+                new DefaultApplicationArguments("--job=corporate-action-review", "\\",
+                        "--ca-status=OBSERVED"),
+                "corporate-action-review"))
                 .doesNotThrowAnyException();
     }
 

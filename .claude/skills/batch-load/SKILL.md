@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|adjustment-rebuild|market-index|backfill|governance-load|governance-derive 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|governance-load|governance-derive 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -25,6 +25,16 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 --job=governance-derive [--tickers=005930]
 ```
 
+**기업 행위 원장은 접두를 달리한다** — 판정은 운영 앱이 뜬 채로 하는 일이라 포트를 비켜야 한다.
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 <아래>'
+
+--job=corporate-action-review [--ca-status=OBSERVED] [--ca-type=UNKNOWN] [--ca-ticker=005930] [--ca-limit=200]
+--job=corporate-action-review --ca-id=97
+--job=corporate-action-judge --ca-id=97 --ca-status=APPROVED --ca-type=BONUS_ISSUE --ca-ratio=1.4699 --ca-listing-date=2021-12-20 --ca-note="…"
+```
+
 **모르는 인자는 실행 전에 거부된다.** 점을 포함한 이름(`--server.port=0`)은 Spring 몫이라 통과한다.
 
 ## 각 잡이 하는 일
@@ -41,6 +51,8 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 | `adjustment-rebuild` | `adj_factor`·`adj_close`를 원장에서 다시 짓기 | **저장된 시세를 소급해 다시 쓰는 유일한 경로다.** 외부 호출 0. **첫 실행 전에 `ops/dump-db.sh`가 필요하고 훅이 그것을 막는다**(ADR-0049·0052). 값이 바뀐 종목의 지표가 **보존 창 전체에서 지워지므로 `backfill`이 짝이다** — 알림 본문이 이어서 돌릴 명령을 준다. 화면에는 없다(런처·스케줄러 양쪽에서 뺐다). 350종목 2초 |
 | `governance-load` | 정기보고서 주요정보 여덟 → `governance_report_row` | **원문만 담는다.** 지표용 값은 `governance-derive`가 따로 만든다(ADR-0081). 표마다 받을 해가 달라 **지금 배치가 350종목 7,700콜**이다((엔드포인트, 연도) 22쌍) — DART 보수 예산 10,000의 77%라 **같은 날 `financial-refill`(5,600)과 겹치면 넘는다.** 화면에 버튼이 없다(한 번에 한도 절반을 넘는다) |
 | `governance-derive` | `governance_report_row` → `governance_fact` | **외부 호출 0.** 유도 규칙을 고친 뒤 이것만 다시 돌린다 — 표를 가른 이유가 이것이다. 종목을 **통째로** 다시 짓는다(회계연도로 좁히면 감사인 교체처럼 보고서 둘을 견줘 나오는 값이 빠진다). 화면에도 있다 |
+| `corporate-action-review` | 원장 조회 — 대기열과 판정 증거 | **외부 호출 0, 원장을 한 글자도 안 고친다.** 상태별 집계를 언제나 찍고, 필터를 안 주면 `status=OBSERVED`로 좁힌다(무엇으로 좁혔는지 함께 찍는다). `--ca-id`를 주면 그 행 + 효력일 이후 상장주식수 점프 **전부**를 찍는다 — **하나를 고르는 것은 사람이다**(ADR-0050). `batch_execution`에 행을 안 만든다. ADR-0084 |
+| `corporate-action-judge` | 원장 판정 — 상태와 값을 사람이 준다 | **외부 호출 0.** `--ca-id` 필수. 검증은 전부 `CorporateActionLedger.judge`가 한다(HTTP 경로와 같은 문). **판정해도 계수는 안 바뀐다** — `adjustment-rebuild` → `backfill`이 뒤따라야 끝나고, 잡이 그 명령을 찍어 준다. 실패하면 실행 행을 아예 안 연다(사람의 오타가 운영자 알림을 타면 안 된다). ADR-0084 |
 | `backfill` | 지표 계산 | 지정한 구간을 **날짜별로 반복**한다. `--tickers`로 종목을 좁혀도 **백분위·업종 상대값은 전 종목에서 나온다.** 그리고 **백분위(`*_PCTL`)는 돌린 날짜에만 생긴다** — 원본 지표는 실행 한 번에 수백 일자를 채우는데 백분위는 그날 하루뿐이라, 새 백분위를 더한 뒤 과거 날짜를 열면 **원본은 있는데 순위가 없다** |
 
 ## 조용히 아무 일도 하지 않는 조합
@@ -90,9 +102,11 @@ DART 실패 하나가 지수 갱신 전체를 되돌린다. 인자 없이 돌리
 `governance_fact`가 안 바뀌고, 유도만 하면 `indicator_value`가 안 바뀐다 — **셋 다 성공으로
 끝나고 화면은 옛 값 그대로다.** 세 잡 중 어느 것도 다음 것을 부르지 않는다.
 
-**운영 앱이 도는 중에 띄우면 포트 8080 충돌로 컨텍스트가 죽는데 gradle은 `BUILD SUCCESSFUL`을
-낸다.** `bootRun`은 프로파일과 무관하게 웹 서버를 올린다. `--server.port=0`을 함께 주고,
-적재 뒤 **저장된 행 수를 센다** — 로그를 열지 않으면 적재된 것으로 읽히고, 행 수만이 그것을 가른다.
+**러너가 어떻게 실패하든 gradle은 `BUILD SUCCESSFUL`과 종료코드 0을 낸다.** 모르는 잡 이름도,
+모르는 인자도 exit 0이다 — devtools가 러너를 별도 스레드에서 돌려 예외가 빌드까지 안 간다.
+**초록은 「돌았다」가 아니라 「gradle이 띄우기까지 했다」**이므로, 일어났는지는 **로그의 결과
+줄이나 저장된 행 수**로 확인한다. 운영 앱이 도는 중이면 `--server.port=0`을 함께 준다 —
+`bootRun`은 프로파일과 무관하게 웹 서버를 올리고, 포트 8080 충돌도 같은 모양으로 조용히 끝난다.
 
 **재수집으로는 결손 컬럼이 안 채워진다.** 스키마에 금액 컬럼이 늘면 이미 저장된 행은 그
 자리가 NULL로 남는데, `initial-load`는 `--reload-existing=true`를 줘도 **한 행도 바꾸지 않는다**
@@ -194,6 +208,33 @@ DART 실패 하나가 지수 갱신 전체를 되돌린다. 인자 없이 돌리
 **`corporate-action`에 최근 며칠짜리 창을 주면 원리적으로 0건이다** — 기업 행위는
 정기보고서에만 실려 **최대 넉 달 늦는다.** 실패가 아니라 창을 좁힌 대가이니 `--from`을 비워
 기본값(저장된 시세 전 구간)을 쓴다. 뒤쪽 구간은 휴리스틱이 `OBSERVED` 후보로 올린다.
+
+## 기업 행위 원장을 판정할 때
+
+**순서가 넷이다.** `corporate-action-review`로 `id`와 증거를 본다 → `corporate-action-judge`로
+값을 적는다 → `adjustment-rebuild --tickers=…` → `backfill --tickers=…`. 뒤의 둘을 빼면
+**원장만 바뀌고 계수도 지표도 그대로인데 셋 다 성공으로 끝난다.** 판정 잡이 이어 돌릴 명령을 찍는다.
+
+**증거에서 하나를 고르는 것은 사람이다.** 잡은 효력일 이후 창의 상장주식수 점프를 전부 찍고
+각각이 가격 움직임과 맞는지만 표시한다. **가격과 맞는 점프가 둘 이상이면 전환권행사·유상증자가
+섞인 것이다** — 그때 배수 하나를 집어 넣으면 틀린 계수가 아무 에러 없이 들어간다(ADR-0050).
+
+**시험: 비율의 정본을 어디서 뗐는가** → 분할·병합이면 **효력일 당일** `listed_shares` 배수이고,
+무상증자면 당일 배수가 정확히 1.0000이라 거기서 안 나온다 — **신주상장일의 배수**가 정본이다.
+당일 배수 1.0000을 보고 "사건이 없다"로 읽으면 가장 흔한 종류를 통째로 놓친다(ADR-0049).
+
+**시험: 종류와 비율 중 하나만 주려 하는가** → 원장이 거절한다. 하나만 바꾸면 관측된 가격 배수에
+종류 딱지가 붙거나 그 반대가 되고, 그 행은 승인되는 순간 틀린 계수가 된다.
+무상증자를 `APPROVED`로 올리려면 `--ca-listing-date`가 함께 있어야 한다 — 모르면 `UNSUPPORTED`가
+그 자리다("있었는데 못 고친다"이고 집계가 그것을 센다).
+
+**판정을 미루면서 값만 고치는 것이 정당한 경로다.** `--ca-status`를 빼고 날짜나 종류만 준다.
+`APPLIED`·`OBSERVED`는 사람이 못 찍는다 — 전자는 재구축이, 후자는 수집이 만든다.
+
+**`--ca-note`에 공백이 있으면 큰따옴표로 감싼다.** 안 감싸면 gradle이 공백에서 쪼개 **첫 낱말만
+남고 나머지는 사라진다.** 따옴표를 **안 닫은** 경우는 gradle이 `unbalanced quotes in …`으로
+빌드를 세우므로 조용하지 않다. 남는 형태 둘 — 쪼개진 낱말과, 닫혀 있는데 그 안에 뒤 플래그가
+들어간 메모 — 은 러너가 거절한다.
 
 ## 적재 후 확인
 

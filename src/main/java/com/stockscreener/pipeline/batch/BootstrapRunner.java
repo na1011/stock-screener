@@ -1,5 +1,8 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.collector.CorporateActionLedger;
+import com.stockscreener.pipeline.collector.CorporateActionStatus;
+import com.stockscreener.pipeline.datasource.CorporateAction;
 import com.stockscreener.pipeline.datasource.GovernanceEndpoint;
 
 import org.slf4j.Logger;
@@ -85,11 +88,33 @@ import java.util.List;
  * # 무효화된 종목만 다시 채운다 — 백분위·업종 상대값은 그래도 전 종목에서 나온다
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill \
  *     --from=2025-11-17 --tickers=058470,086280'
+ *
+ * # 기업 행위 판정 대기열과 증거를 본다. 외부 호출 0, 원장을 고치지 않는다(ADR-0084).
+ * # 필터를 안 주면 status=OBSERVED로 좁힌다 — 집계는 언제나 전체를 찍는다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
+ *     --job=corporate-action-review --ca-status=UNSUPPORTED'
+ *
+ * # 한 행과 그 행의 상장주식수 점프 전부. 고르는 것은 사람이다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
+ *     --job=corporate-action-review --ca-id=97'
+ *
+ * # 판정을 적는다. MUST: --ca-note를 큰따옴표로 열었으면 반드시 닫는다 —
+ * # 안 닫으면 gradle이 뒤의 플래그를 통째로 삼키고, 러너가 그것을 거절한다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
+ *     --job=corporate-action-judge --ca-id=97 --ca-status=APPROVED \
+ *     --ca-type=BONUS_ISSUE --ca-ratio=1.4699 --ca-listing-date=2021-12-20 \
+ *     --ca-note="권리락 당일 주식수 배수 1.0, 창 안 정합 점프 하나"'
  * </pre>
  *
- * <p>IMPORTANT — 운영 앱이 도는 중이면 {@code --server.port=0}을 함께 준다. 포트 8080 충돌로
- * 컨텍스트가 죽는데 gradle은 {@code BUILD SUCCESSFUL}을 내므로, 로그를 열지 않으면 적재된
- * 것으로 읽힌다.
+ * <p><b>원장 잡 둘에는 {@code --server.port=0}이 사실상 필수다.</b> 그것이 대신하는 일이
+ * "앱을 띄우고 로그인해서 PUT"이라 <b>운영 앱이 8080에 떠 있는 것이 정상 사용 조건</b>이다.
+ *
+ * <p>IMPORTANT — <b>이 러너가 어떻게 실패하든 gradle은 {@code BUILD SUCCESSFUL}과 종료코드 0을
+ * 낸다</b>(실측: 모르는 잡 이름·모르는 인자 둘 다 exit 0). devtools가 러너를 별도 스레드에서
+ * 돌려 예외가 빌드까지 전파되지 않기 때문이다. <b>초록은 "돌았다"가 아니라 "gradle이 띄우기까지
+ * 했다"이므로</b>, 실제로 일어났는지는 <b>로그의 결과 줄이나 저장된 행</b>으로 확인한다.
+ * 운영 앱이 도는 중이면 {@code --server.port=0}을 함께 준다 — 포트 8080 충돌도 같은 모양으로
+ * 조용히 끝난다.
  */
 @Profile("bootstrap")
 @Component
@@ -108,6 +133,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final IndicatorBackfillJob indicatorBackfillJob;
     private final GovernanceLoadJob governanceLoadJob;
     private final GovernanceDeriveJob governanceDeriveJob;
+    private final CorporateActionJudgeJob corporateActionJudgeJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
@@ -122,6 +148,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            IndicatorBackfillJob indicatorBackfillJob,
                            GovernanceLoadJob governanceLoadJob,
                            GovernanceDeriveJob governanceDeriveJob,
+                           CorporateActionJudgeJob corporateActionJudgeJob,
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
         this.universeRebalanceJob = universeRebalanceJob;
@@ -135,6 +162,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.governanceLoadJob = governanceLoadJob;
         this.governanceDeriveJob = governanceDeriveJob;
+        this.corporateActionJudgeJob = corporateActionJudgeJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
     }
@@ -144,6 +172,10 @@ public class BootstrapRunner implements ApplicationRunner {
         // 오타는 아무것도 하기 전에 막는다. 태운 외부 호출은 되돌릴 수 없다.
         rejectUnknownOptions(args);
 
+        String job = required(args, "job");
+        rejectLedgerOptionsOutsideLedgerJobs(args, job);
+        LocalDate asOf = date(args, "as-of", LocalDate.now());
+
         // 이전 부트스트랩 실행이 SIGKILL 등으로 남긴 행을 여기서 닫는다.
         //
         // IMPORTANT — 스위퍼의 `ApplicationReadyEvent` 리스너는 **이 프로파일에서 돌지 않는다.**
@@ -151,10 +183,16 @@ public class BootstrapRunner implements ApplicationRunner {
         // `System.exit()`으로 내려가기 때문이다. 그래서 직접 부른다.
         //
         // 내 잡의 행은 아래에서 만들어지므로 이 시점의 정리 대상이 아니다(스위퍼가 기동 시각으로 가른다).
-        executionSweeper.sweepBootstrapOrphans();
-
-        String job = required(args, "job");
-        LocalDate asOf = date(args, "as-of", LocalDate.now());
+        //
+        // MUST NOT: 원장 잡에서는 돌리지 않는다(ADR-0084). 스윕은 기동 시각 이전의
+        // `MANUAL` + `RUNNING`을 **전부** 닫으므로 **다른 JVM에서 지금 돌고 있는 행까지** 마감한다.
+        // 적재끼리는 "둘을 동시에 띄우는 드문 실수"였지만(`BatchExecutionSweeper` javadoc),
+        // 원장 조회·판정은 몇 초짜리라 **적재가 도는 중에 아무렇지 않게 치게 된다** — 그러면 몇
+        // 시간짜리 백필의 실행 행이 ABORTED가 되고 백필 자신은 계속 돌다가 마감에 실패한다.
+        // 이 둘은 고아를 거의 안 남기고, 남더라도 다음 적재 잡의 스윕이 닫는다.
+        if (!isLedgerJob(job)) {
+            executionSweeper.sweepBootstrapOrphans();
+        }
 
         log.info("부트스트랩 러너를 시작한다. job={} asOf={}", job, asOf);
         BatchStatus status = switch (job) {
@@ -198,12 +236,21 @@ public class BootstrapRunner implements ApplicationRunner {
             // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
             case "governance-derive" -> governanceDeriveJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
+            // 외부 호출이 0이고 원장을 읽기만 한다. 실행 행도 안 만든다(ADR-0084).
+            case "corporate-action-review" -> corporateActionJudgeJob.review(
+                    caStatus(args), caType(args), value(args, "ca-ticker", null),
+                    optionalLong(args, "ca-id"), optionalInteger(args, "ca-limit"));
+            // MUST: --ca-id가 필요하다. 대상을 못 고른 판정은 아무 의미가 없으므로 기본값을 두지 않는다.
+            case "corporate-action-judge" -> corporateActionJudgeJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    requiredLong(args, "ca-id"), judgement(args));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill"
                             + " | full-statement-refill | company-profile | corporate-action"
                             + " | adjustment-rebuild | market-index | backfill"
-                            + " | governance-load | governance-derive");
+                            + " | governance-load | governance-derive"
+                            + " | corporate-action-review | corporate-action-judge");
         };
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);
@@ -237,7 +284,87 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
             "job", "as-of", "price-years", "financial-years", "reload-existing", "tickers", "from",
-            "quarters", "governance-year", "governance-span", "governance-endpoints");
+            "quarters", "governance-year", "governance-span", "governance-endpoints",
+            "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
+            "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note");
+
+    /** 원장을 보거나 고치는 잡. {@code --ca-*}는 여기서만 뜻이 있다. */
+    private static final java.util.Set<String> LEDGER_JOBS = java.util.Set.of(
+            CorporateActionJudgeJob.REVIEW_JOB_NAME, CorporateActionJudgeJob.JOB_NAME);
+
+    private static boolean isLedgerJob(String job) {
+        return LEDGER_JOBS.contains(job);
+    }
+
+    /**
+     * {@code --ca-*}를 원장 잡 밖에서 쓰면 즉시 실패시킨다.
+     *
+     * <p>IMPORTANT — {@link #KNOWN_OPTIONS}가 잡별이 아니라 <b>전역</b>이고
+     * {@code corporate-action}이 원장 잡 두 이름의 <b>접두어</b>라, 뒤의 {@code -judge}를
+     * 빠뜨린 {@code --job=corporate-action --ca-id=97 --ca-status=APPROVED}가 그냥 통과한다.
+     * 그러면 판정은 한 건도 안 들어간 채 <b>수집 잡</b>이 돌아 350종목 700콜을 태우고
+     * {@code SUCCESS}로 끝난다. 이 저장소가 {@link #rejectUnknownOptions}를 만든 이유
+     * ("오타 하나가 쿼터를 태운다")와 같은 사고이며, <b>접두어 관계 때문에 오타 확률이
+     * 구조적으로 높다.</b>
+     */
+    static void rejectLedgerOptionsOutsideLedgerJobs(ApplicationArguments args, String job) {
+        if (isLedgerJob(job)) {
+            requireCleanNote(args);
+            return;
+        }
+        List<String> ledgerOptions = args.getOptionNames().stream()
+                .filter(name -> name.startsWith("ca-"))
+                .sorted()
+                .toList();
+        if (!ledgerOptions.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "--ca-* 인자는 원장 잡에서만 쓴다: " + ledgerOptions + " — 지금 잡은 '" + job
+                            + "'이다. '" + CorporateActionJudgeJob.JOB_NAME + "'에서 뒤를 빠뜨린 것이면"
+                            + " 그대로 두었을 때 판정은 한 건도 안 들어가고 수집 잡이 돌아 쿼터를 태운다."
+                            + " 원장 잡: " + LEDGER_JOBS.stream().sorted().toList());
+        }
+    }
+
+    /**
+     * 문서화된 줄바꿈이 남기는 토큰. 이것만은 non-option 인자로 있어도 정상이다.
+     *
+     * <p>실측 — {@code --args='… \}+개행 형태는 작은따옴표 안이라 <b>리터럴 백슬래시</b>가
+     * 그대로 넘어온다({@code od -c}로 확인). 이 저장소의 skill과 javadoc이 그 형태로 명령을
+     * 싣고 있으므로, 걸러내지 않으면 정상 명령이 통째로 막힌다.
+     */
+    private static final String LINE_CONTINUATION = "\\";
+
+    /**
+     * {@code --ca-note}가 쪼개졌거나 다른 플래그를 품었는지 본다.
+     *
+     * <p>IMPORTANT — <b>메모에 공백이 있는데 따옴표로 안 감싸면 첫 낱말만 남고 나머지는 조용히
+     * 사라진다.</b> gradle이 공백에서 쪼개고 남은 낱말은 non-option 인자가 되는데,
+     * {@link #rejectUnknownOptions}는 {@code getOptionNames()}만 보므로 그것을 <b>못 본다</b>
+     * (실측: {@code --ca-note=메모 두 낱말}이 성공으로 끝났다). 판정은 그 잘린 메모를 그대로
+     * 원장에 적는다.
+     *
+     * <p>따옴표를 <b>안 닫은</b> 경우는 여기까지 오지 않는다 — gradle이
+     * {@code unbalanced quotes in …}로 빌드를 세운다(실측). 남는 위험은 <b>닫혀 있는데 그
+     * 안에 뒤 플래그가 들어간</b> 형태이고, 그때 원장의 {@code UPDATE}가
+     * {@code status = coalesce(?, status)}라 <b>상태를 안 바꾼 채 note만 덮고 SUCCESS로 끝난다.</b>
+     */
+    private static void requireCleanNote(ApplicationArguments args) {
+        List<String> strays = args.getNonOptionArgs().stream()
+                .filter(arg -> !LINE_CONTINUATION.equals(arg))
+                .toList();
+        if (!strays.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "인자에 붙지 않은 낱말이 있다: " + strays + " — 공백이 든 값(대개 --ca-note)을"
+                            + " 따옴표로 감싸지 않으면 첫 낱말만 남고 나머지는 조용히 사라진다.");
+        }
+        String note = value(args, "ca-note", null);
+        if (note != null && (note.contains("--ca-") || note.contains("--job="))) {
+            throw new IllegalArgumentException(
+                    "--ca-note 안에 다른 플래그가 들어 있다: '" + note + "' — 따옴표가 뒤 플래그를"
+                            + " 품으면 그 플래그는 적용되지 않고, 상태는 안 바뀐 채 note만 덮이면서"
+                            + " 성공으로 끝난다.");
+        }
+    }
 
     /**
      * Spring 자신의 인자는 통과시킨다.
@@ -286,6 +413,68 @@ public class BootstrapRunner implements ApplicationRunner {
     private static int integer(ApplicationArguments args, String name, int fallback) {
         String raw = value(args, name, null);
         return raw == null ? fallback : Integer.parseInt(raw);
+    }
+
+    private static Long optionalLong(ApplicationArguments args, String name) {
+        String raw = value(args, name, null);
+        return raw == null ? null : Long.valueOf(raw);
+    }
+
+    private static long requiredLong(ApplicationArguments args, String name) {
+        return Long.parseLong(required(args, name));
+    }
+
+    /**
+     * 판정할 값. 비운 항목은 원장이 그대로 둔다.
+     *
+     * <p>MUST NOT: 여기서 값들 사이의 관계를 검증하지 않는다({@code type}과 {@code ratio}가 함께
+     * 왔는가, 승인인데 종류를 아는가). 그 판정의 정본은 {@code CorporateActionLedger}이고,
+     * 러너가 자기 사본을 들면 HTTP 경로와 갈린다 — {@code CorporateActionJudgementRequest}가
+     * 같은 이유로 Jakarta 제약을 하나도 안 쓴다.
+     */
+    private static CorporateActionLedger.Judgement judgement(ApplicationArguments args) {
+        return new CorporateActionLedger.Judgement(
+                caStatus(args), caType(args),
+                optionalDecimal(args, "ca-ratio"),
+                date(args, "ca-effective-date", null),
+                date(args, "ca-listing-date", null),
+                value(args, "ca-note", null));
+    }
+
+    private static java.math.BigDecimal optionalDecimal(ApplicationArguments args, String name) {
+        String raw = value(args, name, null);
+        return raw == null ? null : new java.math.BigDecimal(raw);
+    }
+
+    /**
+     * MUST: 모르는 이름에 <b>즉시 실패한다.</b> {@link #governanceEndpoints}와 같은 계약이다 —
+     * 조용히 null로 떨어뜨리면 오타 하나가 「상태를 안 고친 판정」이 되는데, 원장이 그것을
+     * 정당한 경로로 받아들여 성공으로 끝난다.
+     */
+    private static CorporateActionStatus caStatus(ApplicationArguments args) {
+        String raw = value(args, "ca-status", null);
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return CorporateActionStatus.valueOf(raw.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("모르는 원장 상태다: '" + raw + "' — 아는 이름: "
+                    + java.util.Arrays.toString(CorporateActionStatus.values()));
+        }
+    }
+
+    private static CorporateAction.Type caType(ApplicationArguments args) {
+        String raw = value(args, "ca-type", null);
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return CorporateAction.Type.valueOf(raw.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("모르는 기업 행위 종류다: '" + raw + "' — 아는 이름: "
+                    + java.util.Arrays.toString(CorporateAction.Type.values()));
+        }
     }
 
     /** 안 주면 null. 잡이 자기 기본값을 아는 편이 낫다 — 러너가 두 번째 정본이 되지 않는다. */
