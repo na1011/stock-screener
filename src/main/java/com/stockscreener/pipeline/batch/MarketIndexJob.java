@@ -117,6 +117,9 @@ public class MarketIndexJob {
     private void collectAll(BatchExecutionContext execution, List<String> codes,
                             LocalDate from, LocalDate to) {
         for (String code : codes) {
+            // 이 잡은 process()도 루프 안 stage()도 쓰지 않아 자동 게이트가 안 닿는다.
+            // 그래서 명시적으로 묻는다 — 없으면 종료 뒤에도 남은 지수를 마저 받는다.
+            execution.abortIfAbandoned();
             try {
                 long written = collector.collect(code, from, to);
                 execution.countExternally(CollectionPhase.MARKET_INDEX, 1, 0, written);

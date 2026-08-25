@@ -223,6 +223,17 @@ public final class BatchExecutionContext {
         }
     }
 
+    /**
+     * 종료가 시작돼 이 실행이 버려졌는가.
+     *
+     * <p>끊는 자리에서는 {@link #abortIfAbandoned()}를 쓴다. 이 접근자는 <b>끊을 수 없는
+     * 자리</b>를 위한 것이다 — 알림 포트를 직접 부르는 코드가 그렇다. 그쪽은 던지는 대신
+     * 로그로 내려야 한다({@link #alertOperator}가 같은 판단을 한다).
+     */
+    public boolean abandonedOnShutdown() {
+        return abandonedOnShutdown;
+    }
+
     /** 종료 중에 난 실패면 신호로 갈아 끼운다. 아니면 원본 그대로 — 진짜 버그는 드러나야 한다. */
     private RuntimeException asShutdownSignalIfAbandoned(RuntimeException cause) {
         if (!abandonedOnShutdown || cause instanceof BatchShutdownException) {

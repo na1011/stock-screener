@@ -79,23 +79,32 @@ public class UniverseRebalanceJob {
         long changedRows = 0;
         try {
             for (UniverseTarget target : targets) {
+                // 이 잡은 process()도 루프 안 stage()도 쓰지 않아 자동 게이트가 안 닿는다.
+                execution.abortIfAbandoned();
                 try {
                     UniverseReconciler.Result result = rebalanceOne(target, asOf);
                     changedRows += result.addedCount() + result.removedCount();
                     succeeded++;
                     if (result.changed()) {
-                        alertPort.send(AlertEvent.toOperator(
+                        alert(execution, AlertEvent.toOperator(
                                 AlertSeverity.INFO,
                                 target.universeCode() + " 구성종목 변경",
                                 "편입 %d, 제외 %d (기준일 %s)"
                                         .formatted(result.addedCount(), result.removedCount(), asOf),
                                 JOB_NAME + ':' + target.universeCode() + ':' + asOf));
                     }
+                } catch (BatchShutdownException e) {
+                    // MUST: 아래 두 catch보다 앞이다. 뒤에 두면 종료 신호가 "갱신 거부"로
+                    // 둔갑해 가짜 알림이 나간다.
+                    throw e;
                 } catch (DataSourceException e) {
+                    // MUST: 이 판정이 먼저다. 종료가 fetch 도중에 들어오면 그 실패는 소스의
+                    // 문제가 아닌데, 여기 그대로 흘리면 "소스 조회에 실패했다"가 나간다.
+                    execution.abortIfAbandoned();
                     failed++;
                     log.error("유니버스 갱신 실패. universe={} kind={} source={}",
                             target.universeCode(), e.kind(), e.sourceName(), e);
-                    alertPort.send(AlertEvent.toOperator(
+                    alert(execution, AlertEvent.toOperator(
                             AlertSeverity.ERROR,
                             target.universeCode() + " 구성종목 갱신 실패",
                             "소스 조회에 실패했다: %s (%s). 이전 구성으로 스크리닝이 계속된다."
@@ -103,9 +112,12 @@ public class UniverseRebalanceJob {
                             JOB_NAME + ':' + target.universeCode() + ':' + asOf));
                 } catch (RuntimeException e) {
                     // 안전장치(제외 비율 초과)에 걸린 경우가 여기 온다. 조용히 넘기지 않는다.
+                    // 다만 종료가 만든 실패는 거부가 아니다 — 풀이 닫히며 나는
+                    // CannotCreateTransactionException이 정확히 여기 떨어진다.
+                    execution.abortIfAbandoned();
                     failed++;
                     log.error("유니버스 갱신이 거부되었다. universe={}", target.universeCode(), e);
-                    alertPort.send(AlertEvent.toOperator(
+                    alert(execution, AlertEvent.toOperator(
                             AlertSeverity.ERROR,
                             target.universeCode() + " 구성종목 갱신 거부",
                             e.getMessage(),
@@ -118,6 +130,24 @@ public class UniverseRebalanceJob {
         }
 
         return finish(execution, succeeded, failed, changedRows);
+    }
+
+    /**
+     * 알림을 보내되 <b>종료 중에는 로그로 내린다.</b>
+     *
+     * <p>이 잡만 {@code alertPort}를 직접 부른다 — 작업 단위가 종목이 아니라 지수여서
+     * dedupeKey를 지수 코드로 짓기 때문이다. 그래서 {@code BatchExecutionContext}의
+     * {@code alertOperator} 가드가 안 닿고, 여기서 같은 판단을 다시 한다. 종료 경로에서
+     * 알림 포트를 부르지 않는 이유는 ADR-0078에 있다 — 동기 전송이고 웹훅이 최악 15초라
+     * 종료 예산을 그만큼 먹는다.
+     */
+    private void alert(BatchExecutionContext execution, AlertEvent event) {
+        if (execution.abandonedOnShutdown()) {
+            log.warn("종료 중이라 알림을 보내지 않는다 — 이 로그가 유일한 기록이다. 제목={} 본문={}",
+                    event.title(), event.body());
+            return;
+        }
+        alertPort.send(event);
     }
 
     private UniverseReconciler.Result rebalanceOne(UniverseTarget target, LocalDate asOf)
