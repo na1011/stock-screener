@@ -707,6 +707,91 @@ check_section 침묵 "제목이 더 길어도 해소로 본다" \
   "$(hd '# 진행 상태' '' '#### 백테스트가 뒤집을 수 있다고 적었으나, 못 뒤집는다 — 실측')" \
   "$(hd '# rules' '' '아래 「백테스트가 뒤집을 수 있다」 절이 그 실측을 든다.')"
 
+echo "── 진행 상태 주입 (inject-progress.sh · check-doc-staleness §1) ──"
+#
+# 이 그룹이 생기기 전까지 **주입 훅을 재는 행이 하나도 없었다.** 세션 간 전달 경로는
+# 훅과 progress.md 둘뿐인데 그 하나가 통째로 무측정이었다.
+#
+# MUST: 훅을 임시 트리로 **복사해서** 돌린다. inject-progress.sh는 lib을 `BASH_SOURCE`
+# 기준으로 찾으므로, 저장소의 훅을 그대로 부르면 **저장소의 lib**을 읽어 "lib이 없을 때"를
+# 원리적으로 못 잰다.
+# MUST: `load-process.sh`를 복사하지 않는다. 복사하면 픽스처가 실제 프로세스를 뒤져
+# 적재가 도는 동안 앞머리에 다른 문장이 붙는다 — 그래서 자수가 아니라 문자열로 잰다.
+
+# 백로그 절을 채운 진행 상태. 파일은 경고선(4,000)을 넘고 주입분은 안 넘는 모양이다.
+# MUST: 패딩을 ASCII로 만든다. 한글로 채우면 BSD awk의 `length()`가 **바이트**를 세어
+# 목표의 3분의 1만 나오고, 그러면 파일이 경고선에 못 미쳐 **발화 행도 침묵 행도 전부
+# 거짓 통과**한다(실제로 그렇게 통과했다). §1이 재는 것은 `wc -m`, 즉 문자 수다.
+_pad=$(awk 'BEGIN{ while (i++ < 5000) printf "x" }')
+_prog_with=$(hd '# 진행 상태' '' '## 지금 어디까지 왔는가' '' '상태 한 줄.' '' \
+  '## 다음에 할 일' '' '### 바로 착수 가능한 것' '' "- 백로그 하나. ${_pad}" '- 백로그 둘.' '' \
+  '## 되돌리지 말 것' '' '뒤 절은 남아야 한다.')
+# MUST NOT: `${var/### …/…}`로 제목만 바꾸려 하지 않는다. 패턴 첫 글자 `#`를 bash가
+# **앵커 수식자**로 먹어 치환이 조용히 안 일어난다 — 픽스처 둘이 같아져 발화 행이 전부
+# 침묵으로 통과한다(실제로 그렇게 세 행이 거짓 통과했다). 제목이 다른 본문을 따로 짓는다.
+_prog_renamed=$(hd '# 진행 상태' '' '## 지금 어디까지 왔는가' '' '상태 한 줄.' '' \
+  '## 다음에 할 일' '' '### 이름을 바꿨다' '' "- 백로그 하나. ${_pad}" '- 백로그 둘.' '' \
+  '## 되돌리지 말 것' '' '뒤 절은 남아야 한다.')
+
+check_inject() {
+  local want="$1" desc="$2" prog="$3" pat="$4" withlib="${5:-yes}" tmp got
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/hooks/lib" "$tmp/docs"
+  cp "$HOOKS/inject-progress.sh" "$tmp/.claude/hooks/" 2>/dev/null
+  [ "$withlib" = yes ] && cp "$HOOKS/lib/progress-section.sh" "$tmp/.claude/hooks/lib/" 2>/dev/null
+  printf '%s\n' "$prog" > "$tmp/docs/progress.md"
+  if CLAUDE_PROJECT_DIR="$tmp" bash "$tmp/.claude/hooks/inject-progress.sh" </dev/null 2>/dev/null \
+     | jq -r '.hookSpecificOutput.additionalContext // empty' | grep -qF -- "$pat"; then
+    got="포함"
+  else
+    got="제외"
+  fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+check_inject 제외 "절이 있으면 백로그 본문이 주입에 안 실린다" "$_prog_with" "백로그 둘."
+check_inject 포함 "그때 항목 수를 한 줄로 낸다"               "$_prog_with" "2개는 주입에서 뺐다"
+check_inject 포함 "뒤 절은 주입에 남는다"                     "$_prog_with" "되돌리지 말 것"
+# 제목이 바뀌면 **전부 주입**한다. 조용히 다 빼는 쪽이 무성실패다 — 백로그가 사라진 것이
+# 「항목 0」과 구분되지 않는다.
+check_inject 포함 "절 제목이 바뀌면 전부 주입한다"            "$_prog_renamed" "백로그 둘."
+check_inject 포함 "그리고 못 찾았다고 말한다"                 "$_prog_renamed" "절을 못 찾아 전부 주입했다"
+check_inject 포함 "lib이 없어도 주입은 죽지 않는다"           "$_prog_with" "백로그 둘." no
+check_inject 포함 "그리고 lib이 없다고 말한다"                "$_prog_with" "필터 없이 전부 주입했다" no
+
+# §1은 **주입분**을 재야 한다. 파일 전체를 재면 필터를 넣은 뒤에도 헛경보가 난다.
+check_progsize() {
+  local want="$1" desc="$2" prog="$3" tmp got
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/hooks/lib" "$tmp/docs" "$tmp/.claude/rules"
+  printf 'x\n' > "$tmp/.claude/hooks/lib/bash-text.sh"
+  cp "$HOOKS/inject-progress.sh" "$tmp/.claude/hooks/" 2>/dev/null
+  cp "$HOOKS/lib/progress-section.sh" "$tmp/.claude/hooks/lib/" 2>/dev/null
+  printf '%s\n' "$prog" > "$tmp/docs/progress.md"
+  ( cd "$tmp" && git init -q . && git add -A >/dev/null 2>&1 )
+  if CLAUDE_PROJECT_DIR="$tmp" "$HOOKS/check-doc-staleness.sh" </dev/null 2>/dev/null \
+     | jq -r '.hookSpecificOutput.additionalContext // empty' | grep -q '주입분이'; then
+    got="발화"
+  else
+    got="침묵"
+  fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+check_progsize 침묵 "백로그가 커도 주입분이 작으면 안 운다" "$_prog_with"
+# 필터가 풀리면 그 큰 파일이 통째로 주입되므로 그때는 울어야 한다.
+check_progsize 발화 "절 제목이 바뀌면 주입분이 커져 운다"   "$_prog_renamed"
+
 echo "── 사전등록 임계 거울 (check-doc-staleness §5d) ──"
 #
 # 이 그룹이 붙드는 것은 발화 여부만이 아니다. §5d에는 **조용히 뚫리는 형태가 둘** 있고 둘 다
