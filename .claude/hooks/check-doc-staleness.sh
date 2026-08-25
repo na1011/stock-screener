@@ -381,7 +381,8 @@ ADJ_CLOSE.는 봉 하나로.*FK로 정리가 중단된다\.|.claude/rules/data-p
 MUST NOT: 0건을 휴장으로 단정하지 않는다\.|docs/api-spec/data-go-kr-stock-price.md|.claude/skills/batch-load/SKILL.md|0건과 휴장의 구분
 기준과 현황이 같은 곳에 있으면 기준이 현황에 맞춰 조용히 느슨해진다|docs/phase-criteria.md|.claude/rules/phase-gate.md|기준과 현황의 분리
 끝난 뒤에 세운 기준은 이미 한 일을 정당화하는 쪽으로 기운다|docs/phase-criteria.md|.claude/hooks/remind-plan-obligations.sh|착수 전 기준 작성
-규칙을 어기는 값과 깨지는 경로는 다르다|.claude/rules/harness-docs.md|docs/progress.md|수용 테스트 0단계"
+규칙을 어기는 값과 깨지는 경로는 다르다|.claude/rules/harness-docs.md|docs/progress.md|수용 테스트 0단계
+큰 틀에서 같이 묶여 있으면.*무시는 갈래가 아니다|docs/progress.md|.claude/hooks/remind-verify-options.sh|발견의 갈래"
 
 extract_mirror() {  # $1=파일 $2=정규식
   tr '\n' ' ' < "$1" | tr -s ' ' | sed -n "s/.*\($2\).*/\1/p"
