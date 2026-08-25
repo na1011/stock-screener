@@ -689,7 +689,13 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
     dead_secs=""
     while IFS= read -r sec; do
       [ -z "$sec" ] && continue
-      printf '%s\n' "$headings" | grep -qF -- "$sec" || dead_secs="${dead_secs}「${sec}」 "
+      # MUST: 헤어스트링으로 먹인다. `printf … | grep -q`는 **`pipefail` 아래에서 거짓 발화한다** —
+      # `grep -q`가 첫 매치에서 즉시 끝나면 아직 쓰고 있던 `printf`가 SIGPIPE로 죽고 파이프라인이
+      # 141을 내므로, **실재하는 절이 「사라졌다」로 신고된다.** 게다가 그것이 **매치 위치에
+      # 의존한다** — 정렬된 제목 1,547줄에서 앞쪽(326·352·371행)에 걸린 셋만 141이고 뒤쪽
+      # (730·1154·1538행)은 0이었다. 즉 같은 코드가 문서가 늘 때마다 다른 절을 신고한다.
+      # 오탐이 반복되면 이 검사 자체가 무시되므로 파이프를 쓰지 않는다.
+      grep -qF -- "$sec" <<< "$headings" || dead_secs="${dead_secs}「${sec}」 "
     done <<< "$sec_refs"
     if [ -n "$dead_secs" ]; then
       add "산문이 이름으로 부르는데 제목으로 실재하지 않는 절이 있다: ${dead_secs}— 절이 지워졌거나 제목이 바뀐 것이다. **절과 함께 그 안의 내용이 사라졌는지부터 본다** — 실제로 미결 질문 하나가 그렇게 증발한 적이 있다. 이름만 바뀐 것이면 부르는 쪽을 지금 고쳐라."
