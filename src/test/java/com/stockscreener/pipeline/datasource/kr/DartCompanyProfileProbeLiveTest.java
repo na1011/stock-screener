@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 넷 다 성립하지 않는다.
  *
  * <p>테스트가 아니라 <b>탐침</b>이다. 단언은 최소한만 두고 관측을 표준출력으로 낸다 —
- * 그 출력이 {@code docs/api-spec/dart-open-api.md}의 「기업개황」 절에 그대로 옮겨진다.
+ * 그 출력이 {@code docs/api-spec/dart-company-profile.md}에 그대로 옮겨진다.
  *
  * <p>알아야 할 것 넷:
  * <ol>

@@ -151,7 +151,7 @@ public class AdjustmentRecalculator {
      *
      * <p><b>남은 한계</b> — 인적분할의 분할비율이 우연히 단순 유리수면 여기서 분할·병합으로
      * 읽힌다. 그것을 가르는 것은 소스의 낱말이고 국내에 그 경로가 아직 없다
-     * (dart-open-api.md의 「카탈로그」 절 — 「회사분할 결정」은 미착수).
+     * (dart-corporate-action.md의 「카탈로그」 절 — 「회사분할 결정」은 미착수).
      * 후보가 {@code OBSERVED}에서 멈추는 것이 그 자리의 방어다.
      */
     public List<CorporateAction> detectCandidates(long stockId) {

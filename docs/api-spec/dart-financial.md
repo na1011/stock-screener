@@ -1,6 +1,7 @@
 # DART — 재무 계정 (주요계정 · 전체 재무제표)
 
-인증·`status`·쿼터·엔드포인트 색인은 [`dart-open-api.md`](./dart-open-api.md)가 답한다.
+`status` 판정은 `DartResponse.kindOf`, 종목코드 → `corp_code` 매핑은 `DartCorpCodeCache`가
+정본이다. 쿼터와 엔드포인트 색인은 `api-sources` skill이 답한다.
 여기는 **재무 계정의 필드 계약과 「어느 계정이 실제로 오는가」**다.
 어댑터는 `pipeline/datasource/kr/DartFinancialAdapter`·`DartFullStatementAdapter`,
 매퍼는 `DartAccountMapper`다.

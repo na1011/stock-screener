@@ -1,6 +1,7 @@
 # DART — 거버넌스 원자료 여덟 (정기보고서 주요정보)
 
-인증·`status`·쿼터·엔드포인트 색인은 [`dart-open-api.md`](./dart-open-api.md)가 답한다.
+`status` 판정은 `DartResponse.kindOf`, 종목코드 → `corp_code` 매핑은 `DartCorpCodeCache`가
+정본이다. 쿼터와 엔드포인트 색인은 `api-sources` skill이 답한다.
 여기는 **거버넌스 여덟 표의 계약과 실측**이다. 어댑터는
 `pipeline/datasource/kr/DartGovernanceAdapter`, 유도는 `DartGovernanceFactMapper`,
 설계 결정은 ADR-0081이다.

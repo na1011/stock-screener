@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * EBITDA(§H-03), 그리고 {@code financial_statement.eps} 대조.
  *
  * <p><b>IMPORTANT — 이 탐침의 판정은 비대칭이다. "닫혔다"는 결론만 낼 수 있고 "열렸다"는 못 낸다.</b>
- * 근거가 이 저장소 안에 둘 있다. ① {@code dart-open-api.md}의 「미검증 항목」 절이
+ * 근거가 이 저장소 안에 둘 있다. ① {@code dart-financial.md}의 「아직 확인하지 못한 것 — 재무」 절이
  * <i>"계정 집합의 회사별 편차 범위 — 표본 4개사로 일반화할 수 없다"</i>를 스스로 적는다.
  * ② dart-financial.md의 「계정 집합이 회사마다 다르다」 절이 그 반례다 — 이익잉여금은 4개사 대조군에서
  * <b>전부 왔는데</b> 350종목 전수에서 3종목이
@@ -181,8 +181,8 @@ class DartMissingAccountProbeLiveTest {
 
             System.out.printf("%n--- %s(%s) status=%s%n", sample.getValue(), sample.getKey(), status);
             if (list == null || list.isEmpty()) {
-                // 013(데이터 없음)과 100(요청이 틀림)을 구분하지 않으면 탐침이 뜻을 잃는다(dart-open-api.md의 「status 코드」 절).
-                System.out.println("    행이 없다 — status의 뜻을 dart-open-api.md의 「status 코드」 절에서 확인한다. 이 회사는 판정에서 뺀다.");
+                // 013(데이터 없음)과 100(요청이 틀림)을 구분하지 않으면 탐침이 뜻을 잃는다(DartResponse.kindOf가 정본이다).
+                System.out.println("    행이 없다 — status의 뜻은 DartResponse.kindOf가 든다. 이 회사는 판정에서 뺀다.");
                 continue;
             }
             answered++;

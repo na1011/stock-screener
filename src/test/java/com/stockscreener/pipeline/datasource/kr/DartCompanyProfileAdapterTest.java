@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 기업개황 파싱. 값은 {@code docs/api-spec/dart-open-api.md}의 「기업개황」 절이 든 실측 응답이다.
+ * 기업개황 파싱. 값은 {@code docs/api-spec/dart-company-profile.md}가 든 실측 응답이다.
  *
  * <p>이 어댑터에서만 갈리는 것이 둘이다 — <b>응답이 평면 객체</b>이고
  * <b>업종코드 자릿수가 3·5로 섞인다.</b> 둘 다 틀려도 예외가 나지 않고 값이 없거나

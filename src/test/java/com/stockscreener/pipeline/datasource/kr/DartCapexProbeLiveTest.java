@@ -178,7 +178,7 @@ class DartCapexProbeLiveTest {
             System.out.printf("%n--- %s(%s) %s%n", sample.getValue(), sample.getKey(),
                     DartProbeSupport.describeStatus(body));
             if (list == null || list.isEmpty()) {
-                // 013(데이터 없음)과 100(요청이 틀림)을 구분하지 않으면 탐침이 뜻을 잃는다(dart-open-api.md의 「status 코드」 절).
+                // 013(데이터 없음)과 100(요청이 틀림)을 구분하지 않으면 탐침이 뜻을 잃는다(DartResponse.kindOf가 정본이다).
                 System.out.println("    행이 없다 — 이 회사는 판정에서 뺀다.");
                 continue;
             }

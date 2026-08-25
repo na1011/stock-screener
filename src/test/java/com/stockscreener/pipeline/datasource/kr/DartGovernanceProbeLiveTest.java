@@ -603,7 +603,7 @@ class DartGovernanceProbeLiveTest {
                 .sorted(java.util.Comparator.reverseOrder()).findFirst().orElse("(없음)");
     }
 
-    /** status 100(필드의 부적절한 값)만 센다 — 013은 「데이터 없음」이라 실패가 아니다(dart-open-api.md의 「status 코드」 절). */
+    /** status 100(필드의 부적절한 값)만 센다 — 013은 「데이터 없음」이라 실패가 아니다(DartResponse.kindOf가 정본이다). */
     private static int malformedCount(JsonNode body) {
         return body != null && "100".equals(body.path("status").asString("")) ? 1 : 0;
     }

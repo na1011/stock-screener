@@ -39,7 +39,7 @@ public class GovernanceLoadJob {
 
     public static final String JOB_NAME = "governance-load";
 
-    /** 사업보고서. dart-open-api.md 「쿼터」 절의 MUST가 이 하나로 좁히는 근거다. */
+    /** 사업보고서. 보고서 코드를 이 하나로 좁히는 근거는 {@code batch-load} skill에 있다(넷을 다 부르면 콜이 4배다). */
     public static final String ANNUAL_REPORT = "11011";
 
     private static final Logger log = LoggerFactory.getLogger(GovernanceLoadJob.class);
