@@ -136,7 +136,7 @@ public class AdjustmentRecalculator {
      * 종가로 재면 {@code 0.094073}인데 주식수로 재면 <b>정확히 0.1</b>이고, 그 6% 차이는
      * 승인하는 순간 2020~2023 전 구간에 소급 적용된다. 값은 언제나 그럴듯하다.
      *
-     * <p>dart-corporate-action.md의 「증자(감자) 현황」 절-2의 3분류를 그대로 옮긴다. 실측 25건이 전부 아래로 갈린다.
+     * <p>위 절의 3분류를 그대로 옮긴다. 전수 대조가 전부 아래 셋으로 갈렸다.
      * <ul>
      *   <li>주식수 배수가 <b>단순 유리수로 스냅되고</b> 가격 움직임과 어긋나지 않으면 →
      *       {@code SPLIT}/{@code REVERSE_SPLIT} + 스냅된 비율 (11건 + 무상감자 1건)
@@ -150,9 +150,9 @@ public class AdjustmentRecalculator {
      * 딱지를 달고 나갔고, 그것을 승인하면 틀린 계수가 들어갔다.
      *
      * <p><b>남은 한계</b> — 인적분할의 분할비율이 우연히 단순 유리수면 여기서 분할·병합으로
-     * 읽힌다. 그것을 가르는 것은 소스의 낱말이고 국내에 그 경로가 아직 없다(dart-open-api.md의 「카탈로그」
-     * 절의 「회사분할
-     * 결정」은 미착수). 후보가 {@code OBSERVED}에서 멈추는 것이 그 자리의 방어다.
+     * 읽힌다. 그것을 가르는 것은 소스의 낱말이고 국내에 그 경로가 아직 없다
+     * (dart-open-api.md의 「카탈로그」 절 — 「회사분할 결정」은 미착수).
+     * 후보가 {@code OBSERVED}에서 멈추는 것이 그 자리의 방어다.
      */
     public List<CorporateAction> detectCandidates(long stockId) {
         return jdbcTemplate.query("""
