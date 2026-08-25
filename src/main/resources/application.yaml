@@ -220,3 +220,15 @@ spring:
   devtools:
     restart:
       enabled: false
+
+# 운영 앱이 8080에 떠 있는 채로 적재·판정을 돌리는 것이 정상 사용 조건이라 포트를 비운다.
+# 손으로 `--server.port=0`을 주는 것으로는 안 된다 — 빠뜨리면 컨텍스트가 포트 충돌로 죽는데
+# **그때 BootstrapRunner는 아예 시작되지 않아** 그 실패 처리가 걸리지 않고, gradle은
+# BUILD SUCCESSFUL과 종료코드 0을 낸다(실측). 즉 아무 일도 안 일어난 실행이 성공으로 읽힌다.
+#
+# MUST NOT: 이 문서에 `server:` 매핑을 두 번 두지 않는다. YAML은 같은 문서의 같은 루트 키를
+# 뒤엣것으로 덮으므로 앞 블록이 조용히 사라지는데, 잃는 것이 위 문서의
+# `forward-headers-strategy`면 **로컬·테스트는 멀쩡하고 도메인 로그인만 깨진다** — 그 값의
+# 근거는 위 문서의 `server:` 블록 주석에 있다.
+server:
+  port: 0

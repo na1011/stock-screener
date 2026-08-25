@@ -133,10 +133,23 @@ rg -n "formLogin|httpBasic" src/main/java
     `BootstrapRunner`의 `switch`(정본) · `load-process.sh` · `batch-load` skill의 frontmatter와
     본문 코드펜스를 집합으로 대조한다.
   - **판정 하나에 JVM이 한 번 뜬다.** 읽기 실행 실측 약 3초. 브라우저를 띄우는 것보다는 싸다.
-  - **`--server.port=0`을 빠뜨리면 판정이 조용히 안 일어난다.** 포트 8080 충돌로 컨텍스트가 죽고
-    **러너가 아예 시작되지 않아** gradle이 `BUILD SUCCESSFUL`과 종료코드 0을 낸다(실측). 판정은
-    운영 앱이 뜬 채로 하는 일이라 이 함정에 정면으로 걸린다 — 잡이 찍는 결과 줄이나 원장을 다시
-    읽어 확인한다. 잡을 고른 뒤의 실패는 종료코드 1이라 이것과 구분된다.
+  - **포트는 이제 프로파일이 비운다**(`application.yaml`의 `on-profile: bootstrap`에
+    `server.port: 0`). 판정은 운영 앱이 8080에 뜬 채로 하는 일이라 손으로 주는 플래그에 맡기면
+    빠뜨리는 날이 오고, 그때 컨텍스트가 죽는데 **러너는 아예 시작되지 않아** 실패 처리가 걸리지
+    않는다 — gradle은 `BUILD SUCCESSFUL`과 종료코드 0을 낸다(실측). 잡을 고른 **뒤의** 실패는
+    종료코드 1이라 이것과 구분된다. **다만 그 exit 경로에는 테스트가 없다**(`System.exit`은
+    단위 테스트로 감쌀 수 없다) — 두 줄을 지워도 전부 초록이고 증상은 다시 침묵이다.
+  - **그 대신 교환 둘을 받는다.**
+    ① **포트 충돌이 사실상의 상호배제였다.** 배치에 DB 잠금이 없어(`pg_advisory`·`LOCK TABLE`·
+    `FOR UPDATE` 전부 0건) 지금까지는 적재 JVM 둘을 겹쳐 띄우면 둘째가 8080에서 죽었다. 이제
+    둘 다 뜨고, **둘째의 `sweepBootstrapOrphans()`가 몇 시간째 도는 첫째의 `batch_execution`
+    행을 `ABORTED`로 마감한다** — 첫째는 계속 돌다가 마감에 실패한다. 남는 층은
+    `warn-load-running.sh` 하나이고 그것은 `PostToolUse` 권고라 막지 못한다.
+    ② **bootstrap 기동이 이제 항상 컨텍스트를 띄운다.** 그 컨텍스트는 카탈로그 시더 둘
+    (`IndicatorCatalogInitializer` `@Order(0)` · `PresetCatalogInitializer` `@Order(10)`, 둘 다
+    `@Profile` 없음)을 러너보다 **먼저** 돌려 `indicator`·`screen_condition`에 쓴다 —
+    실측으로 행 수는 안 바뀌고 `updated_at`이 갱신된다. **그러므로 「읽기 전용 잡」이라는 말은
+    잡에만 참이고 실행 전체에는 거짓이다.** DB를 바꿔 가며 관통 검증을 할 때 이것이 걸린다.
 - **되돌리려면**: 두 `case`와 `CorporateActionJudgeJob`을 걷고, `KNOWN_OPTIONS`의 `ca-*` 아홉과
   두 가드를 지우고, 거울 넷에서 이름을 뺀다. **판정 경로가 브라우저 콘솔 하나로 돌아가므로,
   되돌리기 전에 다음 리밸런싱의 판정을 누가 어떻게 할지 먼저 답한다.**
