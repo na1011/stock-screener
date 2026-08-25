@@ -1,5 +1,8 @@
 package com.stockscreener.pipeline.batch;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.support.TestDatabaseGuard;
@@ -7,6 +10,7 @@ import com.stockscreener.support.TestDatabaseGuard;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -176,12 +180,29 @@ class BatchExecutionCooperativeStopTest {
                 .hasSize(1);
 
         batchExecutions.closeOpenExecutions();
-        execution.alertOperator(AlertSeverity.WARNING, "기업 행위 판정 대기", "후보 3건");
+
+        ListAppender<ILoggingEvent> logs = new ListAppender<>();
+        logs.start();
+        Logger contextLogger = (Logger) LoggerFactory.getLogger(BatchExecutionContext.class);
+        contextLogger.addAppender(logs);
+        try {
+            execution.alertOperator(AlertSeverity.WARNING, "기업 행위 판정 대기", "후보 3건");
+        } finally {
+            contextLogger.detachAppender(logs);
+        }
 
         // 동기 전송이고 웹훅이 최악 15초라 종료 예산을 먹는다(ADR-0078).
         assertThat(alertPort.events)
                 .as("종료 경로에서 알림 포트를 불렀다 — 그 대기가 종료 예산에 그대로 얹힌다")
                 .hasSize(1);
+        // MUST: 여기가 이 가드의 절반이다. 막기만 하면 이 알림에 대응하는 개별 로그가 없는
+        // 자리에서 사실이 통째로 사라진다 — 「기업 행위 판정 대기」가 바로 그 자리다.
+        assertThat(logs.list)
+                .as("알림을 막았는데 로그도 안 남겼다 — 그 사실이 어디에도 없게 된다")
+                .anySatisfy(event -> {
+                    assertThat(event.getFormattedMessage()).contains("기업 행위 판정 대기");
+                    assertThat(event.getFormattedMessage()).contains("후보 3건");
+                });
     }
 
     @Test
