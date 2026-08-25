@@ -109,12 +109,10 @@ import java.util.List;
  * <p><b>원장 잡 둘에는 {@code --server.port=0}이 사실상 필수다.</b> 그것이 대신하는 일이
  * "앱을 띄우고 로그인해서 PUT"이라 <b>운영 앱이 8080에 떠 있는 것이 정상 사용 조건</b>이다.
  *
- * <p>IMPORTANT — <b>이 러너가 어떻게 실패하든 gradle은 {@code BUILD SUCCESSFUL}과 종료코드 0을
- * 낸다</b>(실측: 모르는 잡 이름·모르는 인자 둘 다 exit 0). devtools가 러너를 별도 스레드에서
- * 돌려 예외가 빌드까지 전파되지 않기 때문이다. <b>초록은 "돌았다"가 아니라 "gradle이 띄우기까지
- * 했다"이므로</b>, 실제로 일어났는지는 <b>로그의 결과 줄이나 저장된 행</b>으로 확인한다.
- * 운영 앱이 도는 중이면 {@code --server.port=0}을 함께 준다 — 포트 8080 충돌도 같은 모양으로
- * 조용히 끝난다.
+ * <p>IMPORTANT — 운영 앱이 도는 중이면 {@code --server.port=0}을 함께 준다. 포트 8080 충돌은
+ * 컨텍스트를 죽이는데 <b>그때 이 러너는 아예 돌지 않아</b> {@link #run}의 실패 처리가 걸리지
+ * 않는다 — gradle이 {@code BUILD SUCCESSFUL}과 <b>종료코드 0</b>을 내고(실측), 로그를 열지
+ * 않으면 적재된 것으로 읽힌다. <b>잡을 고른 뒤의 실패는 다르다 — 종료코드 1로 끝난다.</b>
  */
 @Profile("bootstrap")
 @Component
@@ -167,8 +165,30 @@ public class BootstrapRunner implements ApplicationRunner {
         this.context = context;
     }
 
+    /**
+     * IMPORTANT — <b>예외를 던지는 것만으로는 실패가 셸에 닿지 않는다.</b> devtools가 러너를
+     * {@code restartedMain} 스레드에서 돌려 {@code main}은 그냥 돌아오고, gradle은
+     * {@code BUILD SUCCESSFUL}과 종료코드 0을 낸다. 그러면 <b>아무 일도 안 일어난 실행이
+     * 성공한 실행과 구분되지 않는다.</b>
+     *
+     * <p>이것은 catch-all이 아니다 — 스택 트레이스를 그대로 남기고 <b>프로세스를 실패로
+     * 끝낸다.</b> 삼키는 것과 정반대이며, 여기서 잡지 않으면 그 예외가 갈 곳이 없다.
+     */
     @Override
     public void run(ApplicationArguments args) {
+        try {
+            runJob(args);
+        } catch (BatchShutdownException e) {
+            // 실패가 아니라 프로세스가 내려간다는 신호다(ADR-0078). error로 찍으면 종료마다
+            // Sentry 이슈가 하나씩 나고, 종료 코드는 어차피 신호가 정한다.
+            log.info("부트스트랩 러너가 종료로 중단됐다. batch_execution에 ABORTED로 남는다.");
+        } catch (RuntimeException e) {
+            log.error("부트스트랩 러너가 실패했다. 아무것도 적재되거나 판정되지 않았다.", e);
+            System.exit(1);
+        }
+    }
+
+    private void runJob(ApplicationArguments args) {
         // 오타는 아무것도 하기 전에 막는다. 태운 외부 호출은 되돌릴 수 없다.
         rejectUnknownOptions(args);
 
@@ -260,7 +280,7 @@ public class BootstrapRunner implements ApplicationRunner {
 
         // IMPORTANT — 잡이 끝나면 애플리케이션을 내린다. 웹 스타터가 있어 그냥 두면 서버가
         // 계속 떠 있고, 스크립트로 여러 잡을 이어 돌릴 때 다음 명령으로 넘어가지 못한다.
-        // 종료 코드는 0이다 — 실패는 위에서 예외로 이미 드러냈다.
+        // 여기까지 왔으면 성공이라 0이다 — 실패는 run()이 1로 끝낸다.
         int exitCode = SpringApplication.exit(context, () -> 0);
         System.exit(exitCode);
     }
