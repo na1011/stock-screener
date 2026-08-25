@@ -1,6 +1,6 @@
 ---
 name: api-sources
-description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소스에 실제로 있는지 판단할 때. 어느 시장의 어느 소스가 무엇을 주고 어느 문서에 그 계약이 있는지, 「막힌 것이 원자료인가 계산기인가 요구 자체인가」를 가르는 다섯 단계, 새 소스를 붙일 때 처음 만나는 벽(소스마다 다른 실패 계약과 서비스별 승인), 쿼터를 API별로 세는 이유와 착수 판단에 쓰는 값, 어떤 소스든 조용히 틀린 값을 주는 자리(0건 응답·공개 지연·회사가 비워서 낸 표·이미 계산된 비율), 착수 전에 반드시 재야 하는 값.
+description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소스에 실제로 있는지 판단할 때. 어느 시장의 어느 소스가 무엇을 주고 어느 문서에 그 계약이 있는지, 「막힌 것이 원자료인가 계산기인가 요구 자체인가」를 가르는 다섯 단계, 새 소스를 붙일 때 처음 만나는 벽(소스마다 다른 실패 계약과 서비스별 승인), 쿼터를 API별로 세는 이유와 착수 판단에 쓰는 값, 엔드포인트마다 지위가 다르다는 것(사용 중·탐침만·미착수)과 받았지만 아직 안 쓰는 넷, 어떤 소스든 조용히 틀린 값을 주는 자리(0건 응답·공개 지연·회사가 비워서 낸 표·이미 계산된 비율), 착수 전에 반드시 재야 하는 값.
 ---
 
 # 외부 소스로 무엇이 되는가
@@ -14,17 +14,72 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 |---|---|---|---|---|---|
 | KR | 시세·상장주식수·시가총액 | 공공데이터포털 주식시세정보 | `DATA_GO_KR_SERVICE_KEY` | `datasource/kr/DataGoKrPriceAdapter` | [`data-go-kr-stock-price.md`](../../../docs/api-spec/data-go-kr-stock-price.md) |
 | KR | 주가지수 시계열 | 공공데이터포털 지수시세정보 | 같은 키, **승인됨** | `datasource/kr/DataGoKrMarketIndexAdapter` | [`data-go-kr-market-index.md`](../../../docs/api-spec/data-go-kr-market-index.md) |
-| KR | 인증·실패·쿼터·엔드포인트 색인 | DART Open API | `DART_API_KEY`(40자리) | `datasource/kr/Dart*Adapter` | [`dart-open-api.md`](../../../docs/api-spec/dart-open-api.md) |
-| KR | 재무 계정 — 무엇이 실제로 오는가 | 〃 | 〃 | 〃 | [`dart-financial.md`](../../../docs/api-spec/dart-financial.md) |
+| KR | 재무 계정 — 무엇이 실제로 오는가 | DART Open API | `DART_API_KEY`(40자리) | `datasource/kr/Dart*Adapter` | [`dart-financial.md`](../../../docs/api-spec/dart-financial.md) |
 | KR | 기업 행위 — 분할·병합·증자·합병 | 〃 | 〃 | 〃 | [`dart-corporate-action.md`](../../../docs/api-spec/dart-corporate-action.md) |
 | KR | 거버넌스 여덟 · 감사의견 · 주식 총수 | 〃 | 〃 | 〃 | [`dart-governance.md`](../../../docs/api-spec/dart-governance.md) |
+| KR | 기업개황 — 업종·설립일·결산월 | 〃 | 〃 | 〃 | [`dart-company-profile.md`](../../../docs/api-spec/dart-company-profile.md) |
 
 **미국 시장은 아직 어댑터도 계약 문서도 없다**(v1.1, ADR-0010). 소스가 늘면 이 표에 **행을
-더하고** `docs/api-spec/`에 그 소스 이름의 파일을 만든다 — 파일명이 소스를 말하고, 소스가 곧
-시장이다.
+더하고** `docs/api-spec/`에 파일을 만든다 — **파일명이 말하는 것은 소스가 아니라 축이다.**
+한 소스가 여러 축을 주면 축마다 파일이 하나다(DART가 넷이다). 그래야 한 파일을 열었을 때 그 축의
+계약이 거기 다 있다.
+
+**DART의 인증·`status`·`corp_code` 계약은 문서가 아니라 코드가 정본이다** —
+`DartResponse.kindOf`(status 13코드 → `Kind`)와 `DartCorpCodeCache`(종목코드 → `corp_code`,
+ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인증 실패**가 그 판정에 걸린다.
 
 **「KRX상장종목정보」는 승인했지만 쓰지 않는다** — 상장일이 없고 전부 겹쳤다
 (`data-go-kr-krx-listed.md`).
+
+## 엔드포인트 색인 — 무엇을 어디까지 믿을 수 있나
+
+**지위가 곧 신뢰도다.** "사용 중"은 코드가 매일 부르는 것이고, "미착수"는 스펙만 읽은 것이다.
+**공통 요청 인자**는 `crtfc_key`(STRING(40), 필수)이고, 각 계약 문서의 표는 그 외의 것만 적는다.
+
+| 엔드포인트 | 지위 | 필드 계약 | 콜 수 |
+|---|---|---|---|
+| `getStockPriceInfo` (공공데이터포털) | **사용 중** | `data-go-kr-stock-price.md` | 종목당 1(기간조회) |
+| `corpCode.xml` | **사용 중** | `DartCorpCodeCache` javadoc | 전체 1 |
+| `company.json` | **사용 중** | `dart-company-profile.md` | 종목당 1 = 350 |
+| `fnlttSinglAcnt.json` | **사용 중** | `dart-financial.md` | 종목·연도당 4 |
+| `fnlttSinglAcntAll.json` | **사용 중** | 〃 | 종목·연도당 1(연간 전용), 폴백 시 2 |
+| `fnlttMultiAcnt.json` | **탐침만** (정정 탐지) | 〃 | **100종목 묶음** = 64 |
+| `xbrlTaxonomy.json` | 미착수 (계정 사전) | 〃 | `sj_div`당 1 |
+| `irdsSttus.json` | **사용 중** | `dart-corporate-action.md` | 창이 정한다 — 2020~2026 백필이 **종목당 2** |
+| `cmpMgDecsn.json` · `stkExtrDecsn.json` | 미착수 (U-06) | 〃 | 각 종목당 1 = 350 |
+| **거버넌스 여덟**(`alotMatter`·`hyslrSttus`·`outcmpnyDrctrNdChangeSttus`·`mrhlSttus`·`hyslrChgSttus`·`hmvAuditAllSttus`·`stockTotqySttus`·`accnutAdtorNmNdAdtOpinion`) | **사용 중**(ADR-0081) | `dart-governance.md` | 종목·연도당 1. 지금 배치가 **7,700** |
+| `elestock`·`majorstock`·`tesstkAcqsDspsSttus`·`list` | **미착수** — 넷의 사정이 다르다 | 아래 | — |
+
+### 받았지만 아직 안 쓰는 넷
+
+**「미착수」의 뜻이 넷에서 갈린다.** `elestock`·`tesstkAcqsDspsSttus`는 **쓸 자리가 정해졌고
+필드 표만 안 옮긴 것**이다. `majorstock`은 소비처가 아직 없고, `list.json`은 증자(감자) 현황이
+열려 필요가 줄었다.
+
+| 엔드포인트 | 요청 인자 | 쓸 곳 |
+|---|---|---|
+| `elestock.json` (임원·주요주주 소유보고) | `corp_code`. **기간 파라미터가 없다** | **거버넌스 축의 내부자 순매수** — 린치 §4.4가 이 소스를 이름으로 지목한다 |
+| `majorstock.json` (대량보유 상황보고) | `corp_code`. **기간 파라미터가 없다** | 거버넌스 축의 후보. 소비처가 아직 정해지지 않았다 |
+| `tesstkAcqsDspsSttus.json` (자기주식 취득·처분) | `corp_code` · `bsns_year` · `reprt_code` | `SHARES_GROWTH_3Y`의 교란 요인(소각) |
+| `list.json` (공시검색) | `corp_code` · `bgn_de` · `end_de` 등 | **응답 결과 표가 원문에 빠져 있었다** |
+
+### 개발가이드 원문을 꺼내는 법
+
+**받은 개발가이드 원문 13종과 카탈로그 101줄은 저장소에서 지웠다.** 관리되지 않는 임시 txt가
+포인터로 남는 비용이 보관 이득보다 컸다. **필요하면 git 이력에서 꺼낸다:**
+
+```bash
+git show 6bc3d09:docs/api-spec/dart-api-개발가이드.txt   # 13종 요청·응답 필드 표
+git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 목록
+```
+
+**개발가이드는 이미 있는 API의 사용법이라 없는 API를 증명하지 못한다** — 두 자료는 답하는
+질문이 다르다.
+
+**MUST NOT: 「다른 파일이 덮는다」를 확인 없이 쓰지 않는다.** 덮는지는 그 파일을 열어 **필드 표가
+있는지**로 판정한다 — **실측 발견을 적은 자리와 필드 계약을 적은 자리는 다르다.** 덮는다고 보고
+건너뛰었다가 전체 재무제표의 "분/반기 손익은 [3개월] 금액"과 택사노미의 `sj_div` 26코드표가
+통째로 빠진 적이 있다.
 
 ## 막힌 것이 무엇인지 먼저 가른다
 
@@ -92,10 +147,19 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 | DART | API당 일 20,000 | **10,000** |
 | 공공데이터포털 | 서비스당 일 10,000 규모(계정마다 다름) | **5,000** |
 
+**DART의 20,000은 2차 출처 다수와 사용자가 대는 값이고 공식 문서에서 확인하지 못했다**
+(`status 020` 설명에 "일반적으로는 20,000건 이상의 요청에 대하여"가 있을 뿐이다).
+**하루 17,000콜에서도 한도에 안 걸린 관측이 있다** — **MUST NOT: 그것을 「20,000이 맞다」로
+읽지 않는다.** 관측은 **17,000까지 안 걸렸다**까지이고, 보수 예산 10,000은 그대로 선다.
+그것도 한 엔드포인트에 쏠린 잡이 아니라 여러 잡의 합이었다.
+
+**우리 리미터는 `dartRateLimiter` 빈 하나로 DART 전체를 센다** — 소스 쪽 한도는 안 겹쳐도
+**우리 쪽에서 먼저 막힌다.**
+
 **진짜 위험은 합산이 아니라 쏠림이다** — 한 엔드포인트에 몰리는 잡 하나가 자기 한도를 혼자
 태운다. **그 자리에서 예산을 정하는 것은 콜 수가 아니라 「어느 보고서 코드가 필요한가」다** —
 순서를 뒤집어 폴백 비율부터 재면 **존재하지도 않는 예산 초과를 관리하느라 4배를 태운다.**
-잡별 콜 수 표는 `dart-open-api.md`의 「잡별 비용」 절과 `data-go-kr-stock-price.md`에 있다.
+잡별 콜 수는 `batch-load` skill의 「각 잡이 하는 일」 절과 `data-go-kr-stock-price.md`에 있다.
 
 - **공공데이터포털 초당 30 TPS**, 평균 응답 500ms, 갱신주기 일 1회.
   **DART의 분당 제한은 문서에 없다.**
@@ -126,7 +190,7 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 **「더 정확히 재면 좋은 값」이 아니라 phase가 성립하는지를 정하는 값**이 따로 있다. 표본 몇
 개사로는 답이 나오지 않는다. **MUST: 각 phase의 첫 단계가 그것을 재는 것이어야 한다** —
 나중에 재면 이미 구조를 짠 뒤라 결과에 맞춰 기준이 기운다. 지금 남아 있는 것은
-`dart-open-api.md`의 「표본으로는 원리적으로 못 재는 것」 절에 있다.
+`dart-corporate-action.md`의 「표본으로는 원리적으로 못 재는 것」 절에 있다(둘 다 분할·병합이다).
 
 ## 이 소스들이 무엇을 위해 필요한가
 

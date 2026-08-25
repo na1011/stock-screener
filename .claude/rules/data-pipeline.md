@@ -35,7 +35,9 @@ paths:
 
 ### 외부 소스
 
-정본은 [`docs/api-spec/`](../../docs/api-spec/)이다 — 자동 로드되지 않으므로 아래 둘만 여기 둔다.
+정본은 [`docs/api-spec/`](../../docs/api-spec/)이고 **축마다 파일이 하나다.** 다만 **해석 지점이 코드에 하나뿐인 둘은 그 javadoc이 정본이다** — DART의 `status` 13코드는 `DartResponse.kindOf`, 종목코드 → `corp_code` 매핑과 ZIP 계약은 `DartCorpCodeCache`다. 문서로 떼어 두면 갈려도 아무도 모른다.
+
+`docs/api-spec/`은 자동 로드되지 않으므로 아래 둘만 여기 둔다.
 
 - IMPORTANT — 공공데이터포털은 없는 종목·휴장일·파라미터 오타의 응답이 동일하다 (`resultCode "00"` + `totalCount 0` + HTTP 200). 날짜 형식 오타가 "그날 데이터 없음"으로 저장된다. **요청 전 파라미터 검증이 유일한 방어**다. 앞 문장은 `batch-load` skill과 일부러 같은 사본이고, 어긋나면 `check-doc-staleness.sh`가 잡는다.
 - **IMPORTANT — `totalCount`를 보지 않으면 조용히 잘린다.** `totalCount=1618`인데 `numOfRows=1000`이면 618일이 **경고 없이** 사라진다.

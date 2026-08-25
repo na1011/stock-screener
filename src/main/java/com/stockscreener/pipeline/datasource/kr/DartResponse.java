@@ -34,9 +34,9 @@ final class DartResponse {
      * status만 검사하고 <b>루트를 그대로</b> 준다.
      *
      * <p>IMPORTANT — 기업개황({@code company.json})은 응답이 {@code list} 배열이 아니라
-     * <b>평면 객체</b>다(dart-open-api.md의 「기업개황」 절). 그 엔드포인트에 {@link #requireList}를 쓰면 없는
-     * {@code list}를
-     * 찾아 빈 결과가 되는데, 오류가 아니라 <b>"이 종목은 값이 없다"로 읽힌다.</b>
+     * <b>평면 객체</b>다({@code docs/api-spec/dart-company-profile.md}). 그 엔드포인트에
+     * {@link #requireList}를 쓰면 없는 {@code list}를 찾아 빈 결과가 되는데, 오류가 아니라
+     * <b>"이 종목은 값이 없다"로 읽힌다.</b>
      * status 판정을 두 곳에 복사하지 않으려고 이쪽을 정본으로 두고 저쪽이 부른다.
      */
     static JsonNode requireSuccess(JsonNode root, String context) throws DataSourceException {
@@ -70,9 +70,33 @@ final class DartResponse {
     }
 
     /**
-     * status 코드를 재시도 정책으로 옮긴다.
+     * status 코드를 재시도 정책으로 옮긴다. <b>이 표의 정본이 여기다</b> — 해석 지점이
+     * 저장소에 이곳 하나뿐이라 문서로 떼어 두면 갈려도 아무도 모른다.
      *
-     * <p>전체 표는 {@code docs/api-spec/dart-open-api.md}의 「status 코드」 절에 있다.
+     * <pre>
+     * 000 정상                            —
+     * 010 등록되지 않은 인증키             AUTH
+     * 011 사용할 수 없는 키(일시 중지)      AUTH
+     * 012 접근할 수 없는 IP                AUTH
+     * 013 조회된 데이터 없음               NOT_FOUND
+     * 014 파일이 존재하지 않음             NOT_FOUND
+     * 020 요청 제한 초과                   RATE_LIMITED
+     * 021 조회 가능한 회사 개수 초과(최대 100)  MALFORMED
+     * 100 필드의 부적절한 값               MALFORMED
+     * 101 부적절한 접근                    AUTH
+     * 800 시스템 점검 중                   TRANSIENT
+     * 900 정의되지 않은 오류               TRANSIENT
+     * 901 개인정보 보유기간 만료 키         AUTH
+     * </pre>
+     *
+     * <p>실측: 없는 연도 조회 → HTTP 200 + {@code status 013}. 잘못된 키 → HTTP 200 + {@code status 010}.
+     *
+     * <p><b>MUST NOT: {@code status 013}을 「그런 사건이 없다」로 읽지 않는다.</b> 회사가 표를
+     * {@code status 000} + 전 필드 {@code -}인 1행으로 낼 수도 있고, 없는 보고서를 부른 결과일
+     * 수도 있다. 표마다 다른 그 함정은 {@code docs/api-spec/}의 축별 문서에 있다.
+     *
+     * <p><b>응답 공통</b>: {@code status}·{@code message}. 목록형은 {@code list} 배열로 오고
+     * {@code company.json}만 평면 객체다({@link #requireSuccess}).
      */
     private static DataSourceException.Kind kindOf(String status) {
         return switch (status) {

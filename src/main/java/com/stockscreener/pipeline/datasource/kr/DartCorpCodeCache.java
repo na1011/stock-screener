@@ -25,7 +25,12 @@ import java.util.zip.ZipInputStream;
  * 종목코드 → DART 고유번호(`corp_code`) 매핑.
  *
  * <p>DART의 재무 API는 종목코드가 아니라 8자리 {@code corp_code}를 받는다. 그 매핑을 주는
- * 유일한 공식 경로가 {@code corpCode.xml}이며, <b>ZIP 바이너리</b>로 온다.
+ * <b>유일한 공식 경로</b>가 {@code corpCode.xml}이며, <b>ZIP 바이너리</b>로 온다.
+ * <b>이 엔드포인트 계약의 정본이 여기다</b> — 해석 지점이 저장소에 이 클래스 하나뿐이다.
+ *
+ * <p>요청 인자는 {@code crtfc_key} 하나. 응답은 3.5MB ZIP이고 안에 {@code CORPCODE.xml} 한 개가
+ * 들어 있다. 필드는 {@code corp_code}(8자리) · {@code corp_name} · {@code corp_eng_name} ·
+ * {@code stock_code}(6자리, <b>상장사만 채워진다</b>) · {@code modify_date} 다섯이다.
  *
  * <p>테이블이 아니라 인메모리로 두는 이유는 되돌리기 쉽고 규모가 작기 때문이다 —
  * 실측 기준 전체 118,664법인 중 상장사는 3,925건뿐이다. 영속화가 필요해지면 그때 옮긴다.
