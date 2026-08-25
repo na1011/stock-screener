@@ -6,14 +6,15 @@
 --
 -- 이 컬럼이 늦게 생긴 이유는 소스가 아니라 우리 기록에 있다 — 프리셋 설명이 "자본적지출을
 -- 소스가 주지 않아" 빠졌다고 적고 있었는데 api-spec 어디에도 그 측정이 없었다. 재보니 8종목
--- 8/8로 왔다(dart-open-api.md §13).
+-- 8/8로 왔다(dart-financial.md의 「계정별 가용성」 절).
 --
 -- MUST NOT: 절댓값을 씌워 저장하지 않는다. 실측 8종목이 전부 양수로(유출을 크기로) 왔으므로
 -- 잉여현금흐름 = operating_cash_flow - capex가 그대로 맞다. 절댓값을 씌우면 음수로 오는 회사가
 -- 하나라도 있을 때 그 종목의 잉여현금흐름이 두 배로 부풀고 값이 그럴듯해 드러나지 않는다.
 --
 -- MUST NOT: 분기 값을 저장하지 않는다. 현금흐름표의 분기 금액이 3개월인지 누적인지 재지
--- 않았다(dart-open-api.md §11-E). operating_cash_flow가 연간 전용인 것과 같은 이유다.
+-- 않았다(dart-financial.md의 「아직 확인하지 못한 것 — 재무」 절).
+-- operating_cash_flow가 연간 전용인 것과 같은 이유다.
 --
 -- 기존 행은 NULL로 남는다 — V16·V27이 그랬던 것과 같고, 채우는 것은 full-statement-refill
 -- 재적재의 몫이다. 그 잡이 FILL_WITHOUT_REVISION으로 쓰기 때문에 채워진다. APPEND_ONLY였다면

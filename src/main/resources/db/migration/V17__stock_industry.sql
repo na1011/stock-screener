@@ -11,7 +11,7 @@
 ALTER TABLE stock ADD COLUMN industry_code varchar(8);
 
 -- IMPORTANT — DART의 induty_code는 자릿수가 3자리와 5자리로 섞여 온다(6개사 중 2개가
--- 3자리, docs/api-spec/dart-open-api.md §10-A). KSIC에서 3자리는 소분류이고 5자리의 앞
+-- 3자리, dart-company-profile.md의 「기업개황」 절). KSIC에서 3자리는 소분류이고 5자리의 앞
 -- 3자리도 소분류이므로 left(_, 3)이 두 형태 모두에서 소분류를 낸다.
 ALTER TABLE stock ADD COLUMN industry_group varchar(3)
     GENERATED ALWAYS AS (left(industry_code, 3)) STORED;
