@@ -65,50 +65,56 @@ applies_to:
 절대 임계를 쓴 조건들이 **분포 이동으로 뜻을 잃지 않았는가**. 백분위 조건은 자동 적응하므로
 전제가 아니다.
 
-```premise 프리셋의 절대 임계가 의도한 분위에 아직 앉아 있다
+```premise 저변동 우량의 두 변동성 축이 의도한 분위에 아직 앉아 있다
 psql -d stock_screener -At -c "WITH d AS (
   SELECT indicator_code, value,
          percent_rank() OVER (PARTITION BY indicator_code ORDER BY value) pr
   FROM indicator_value
   WHERE trade_date = (SELECT max(trade_date) FROM indicator_value)
-    AND indicator_code IN ('ATR_PCT_14','VOLUME_RATIO_20','BETA_104W')),
+    AND indicator_code IN ('ATR_PCT_14','BETA_104W')),
 p AS (
   SELECT
-    max(pr) FILTER (WHERE indicator_code='ATR_PCT_14'      AND value <= 5.9) atr,
-    max(pr) FILTER (WHERE indicator_code='VOLUME_RATIO_20' AND value <  1.5) vol,
-    max(pr) FILTER (WHERE indicator_code='BETA_104W'       AND value <= 0.40) beta
+    max(pr) FILTER (WHERE indicator_code='ATR_PCT_14' AND value <= 5.9) atr,
+    max(pr) FILTER (WHERE indicator_code='BETA_104W'  AND value <= 0.40) beta
   FROM d)
 SELECT CASE
-  WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — 세 지표 중 하나도 값이 없다'
-  WHEN atr IS NULL OR vol IS NULL OR beta IS NULL
+  WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — 두 지표 중 하나도 값이 없다'
+  WHEN atr IS NULL OR beta IS NULL
     THEN '한 임계가 분포 밖으로 나갔다 — 통과가 0이거나 전부다'
-  WHEN atr BETWEEN 0.15 AND 0.45 AND beta BETWEEN 0.15 AND 0.45 AND vol BETWEEN 0.6 AND 0.9
+  WHEN atr BETWEEN 0.15 AND 0.45 AND beta BETWEEN 0.15 AND 0.45
     THEN 'OK ATR ' || round(atr::numeric,2) || ' / 베타 ' || round(beta::numeric,2)
-       || ' / 거래량 ' || round(vol::numeric,2)
   ELSE (SELECT string_agg(t, ' · ') FROM (
       SELECT 'ATR ' || round(atr::numeric,2) t FROM p WHERE atr NOT BETWEEN 0.15 AND 0.45
-      UNION ALL SELECT '베타 ' || round(beta::numeric,2) FROM p WHERE beta NOT BETWEEN 0.15 AND 0.45
-      UNION ALL SELECT '거래량 ' || round(vol::numeric,2) FROM p WHERE vol NOT BETWEEN 0.6 AND 0.9) x)
-    || ' 축만 밴드 밖이다(나머지는 안). **임계가 움직였다는 뜻이 아니다** — 등록 근거는 같은 날 단면이고(phase-criteria의 「검증된 이론 기반 프리셋 개편」 절), 그 기준으로 다시 재기 전에는 국면과 못 가른다. **MUST NOT: 이것을 근거로 임계를 풀지 않는다**(§규칙)' END
+      UNION ALL SELECT '베타 ' || round(beta::numeric,2) FROM p WHERE beta NOT BETWEEN 0.15 AND 0.45) x)
+    || ' 축만 밴드 밖이다(나머지는 안). **임계가 움직였다는 뜻이 아니다** — 등록 근거는 같은 날 단면이고(phase-criteria의 P14 표), 그 기준으로 다시 재기 전에는 국면과 못 가른다. **MUST NOT: 이것을 근거로 임계를 풀지 않는다**(§규칙)' END
 FROM p"
 ```
 
-> **2026-08-20 — 위 분위 펜스가 붉다. 거래량 하나 때문이고, 임계를 풀 근거가 아니다.**
-> 실측 `ATR 0.29 / 베타 0.28 / 거래량 0.94`인데 앞의 둘은 의도(하위 30%)에 앉아 있고 거래량만
-> 밴드 상단(0.9)을 넘었다. **날짜별로 재보면 08-12부터 0.89·0.82·0.88·0.84로 내내 상단에
-> 붙어 있다가 08-19에 넘어갔다** — 임계 1.5배가 움직인 것이 아니라 시장의 거래량이 20일
-> 평균 대비 조용해진 것이다.
+> **2026-08-25 — 이 펜스에서 거래량 축을 뺐다(사용자 결정).** 남은 것은 ATR·베타 둘이다.
 >
-> **MUST NOT: 이것을 근거로 1.5배를 내리지 않는다**(위 §규칙의 「결과 수를 근거로 임계값을
-> 풀지 않는다」가 그대로 걸린다). 판단이 필요한 것은 **밴드 상한 0.9가 국내 분포에 비해
-> 좁은가**이고, 그건 이 펜스가 아니라 사람이 정한다.
+> **사용자가 고른 문장**: *"네 권고대로 (a)로 할게"* — 즉 「축을 뺀다」. **그에 대한 내 해석**:
+> 밴드를 조용하게 만드는 순간(약 `0.60~0.96`) 이 축이 잡는 것은 **큰 변경 하나뿐**이고
+> (`1.5 → 1.23`은 `vol` 0.78이라 그 밴드 안이다), 그것은 아래 §5d 거울이 시장과 무관하게
+> **어떤 크기의 변경이든** 잡는다. 그래서 잃는 정보가 없다고 판단했다.
 >
-> **MUST NOT: 이 펜스를 보존 창 전체를 합친 분포로 다시 재지 않는다.** 등록 근거가 **같은 날
-> 단면**이라(`phase-criteria`의 「검증된 이론 기반 프리셋 개편」 절, 2026-08-13) 창을 바꾸면
-> 다른 임계를 재게 된다. 실제로 그렇게 재어 **셋 다 신고와 어긋난다**는 결론에 도달한 적이
-> 있는데(풀 45.2% / 17.4% / 13.1%), 등록 기준으로 같은 날 다시 재면 **ATR 29.6% · 베타 27.3%로
-> 등록값 그대로이고 어긋난 것은 거래량뿐**이다(2026-08-25). 창이 답을 정하는 측정으로는
-> 임계를 판정할 수 없다.
+> **등록값 「상위 약 22%」는 잰 적이 없는 수다.** 등록 기준일(2026-08-13)의 `p75 1.35 · p90 1.88`은
+> 표와 맞는데 **그날 실제 통과율은 18.4%**였고 22%는 둘 사이를 보간한 값이다. 보존 창 180일에서
+> 22%를 넘은 날은 **25/180**이고 중앙은 11.1%(= `vol` 0.889)로, **밴드 상한 0.9 바로 아래**다.
+> 펜스가 44%의 날에 붉었던 것은 그 때문이지 임계가 움직여서가 아니다.
+>
+> **MUST NOT: 여러 날 중앙으로 바꿔 되살리지 않는다.** 실측으로 60일 중앙은 2026-08-21에
+> **0.921**로 여전히 밴드 밖이고, 20일 중앙은 판정한 161일 중 **69일(42.9%)**이 밖이다.
+> 초록이 되는 유일한 길이 밴드 확대이고 그것은 ADR-0070이 「골대 이동」으로 금지한 형태다.
+>
+> **남는 결손을 조건과 함께 적는다.** `VOLUME_RATIO_20 ≥ 1.5`가 **지금 몇 %를 자르는지는 이제
+> 자동으로 재지 않는다**(2026-08-21 실측 4.9%). 재려면 손으로 돌린다:
+> `psql -d stock_screener -At -c "SELECT round(100.0*count(*) FILTER (WHERE value>=1.5)/count(*),1) FROM indicator_value WHERE indicator_code='VOLUME_RATIO_20' AND trade_date=(SELECT max(trade_date) FROM indicator_value)"`
+> **§5d가 지키는 것은 값이 등록표와 갈리지 않는 것뿐이고, 분위는 아니다.**
+>
+> **MUST NOT: 남은 두 축을 보존 창 전체를 합친 분포로 재지 않는다.** 등록 근거가 **같은 날
+> 단면**이라(`phase-criteria`의 P14 표, 2026-08-13/14) 창을 바꾸면 다른 임계를 재게 된다.
+> 실제로 그렇게 재어 **셋 다 신고와 어긋난다**는 결론에 도달한 적이 있는데(풀 45.2% / 17.4% /
+> 13.1%), 등록 기준으로 같은 날 재면 **ATR 29.6% · 베타 27.3%로 등록값 그대로**다.
 
 조건의 출처가 코드에 남아 있는지 — 아래가 **활성 프리셋 수(지금 8) 이상**이어야 한다.
 프리셋마다 셋 중 적어도 하나는 해당하기 때문이다. **하한이지 목표가 아니다** — 2026-08-14에
