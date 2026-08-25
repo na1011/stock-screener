@@ -44,17 +44,30 @@ public class StockTaskExecutor {
      *
      * <p>MUST NOT: 실패를 조용히 넘기지 않는다. 모든 실패 경로가 기록과 로그를 남긴다.
      *
+     * <p>{@code shuttingDown}이면 실패를 <b>버그로 신고하지 않는다.</b> 아래
+     * {@link #abandonOnShutdown} 참고 — 그 분기가 없으면 종료 한 번에 ERROR 로그가
+     * <b>종목 수만큼</b> 나고 그대로 Sentry 이슈가 된다.
+     *
+     * @param shuttingDown 프로세스가 내려가는 중인가. 판정의 정본은
+     *                     {@code BatchExecutionContext}의 종료 플래그이고 여기는 그것을
+     *                     넘겨받기만 한다 — 이 클래스가 스스로 물으면 판정이 둘로 갈린다.
      * @throws DataSourceException {@link DataSourceException#fatal()}인 경우에만. 키가 틀렸는데
      *                             850종목을 모두 시도하면 쿼터만 태우고 850건의 동일한 실패
      *                             기록을 남길 뿐이다. 배치를 즉시 멈추는 편이 낫다.
+     * @throws BatchShutdownException {@code shuttingDown} 중에 실패했을 때. 종료 신호이지
+     *                             실패가 아니다.
      */
     public Outcome execute(long executionId, SecurityRef security, CollectionPhase phase,
-                           StockTask task) throws DataSourceException {
+                           StockTask task, boolean shuttingDown) throws DataSourceException {
         try {
             long written = runner.runInNewTransaction(security, task);
             return Outcome.success(written);
 
         } catch (DataSourceException e) {
+            if (shuttingDown) {
+                throw abandonOnShutdown(security, phase, e,
+                        () -> recorder.recordFailure(executionId, security.stockId(), phase, e));
+            }
             if (e.fatal()) {
                 // 기록하고 다시 던진다. 이 실패는 종목의 문제가 아니라 배치 전체의 문제다.
                 recorder.recordFailure(executionId, security.stockId(), phase, e);
@@ -69,6 +82,11 @@ public class StockTaskExecutor {
             return Outcome.failure();
 
         } catch (RuntimeException e) {
+            if (shuttingDown) {
+                throw abandonOnShutdown(security, phase, e,
+                        () -> recorder.recordUnexpectedFailure(
+                                executionId, security.stockId(), phase, e));
+            }
             // 예상하지 못한 실패는 우리 코드의 버그일 가능성이 높다. DataSourceException과
             // 섞어 catch하지 않는 이유가 그것이다 — 뭉뚱그리면 버그가 수집 실패 통계에 묻힌다.
             recorder.recordUnexpectedFailure(executionId, security.stockId(), phase, e);
@@ -76,6 +94,33 @@ public class StockTaskExecutor {
                     security.stockId(), security.ticker(), phase, e);
             return Outcome.failure();
         }
+    }
+
+    /**
+     * 종료가 끊은 종목 하나를 <b>실패가 아니라 신호로</b> 처리한다.
+     *
+     * <p>IMPORTANT — 여기가 종료 시 Sentry 오염의 주된 출처였다. 위 두 catch가 원본 예외를
+     * {@code log.error}로 찍는데 {@code sentry.logging.minimum-event-level}이 {@code error}라
+     * 그것이 곧 이벤트이고, <b>돌던 종목 수만큼</b> 난다. 원인 체인에 종료 신호가 없으므로
+     * {@code SentryConfig}의 필터로는 걸러지지 않는다 — 그래서 애초에 ERROR로 안 찍는다.
+     *
+     * <p>MUST: 기록은 <b>시도한다.</b> 그 종목은 실제로 처리되지 않았으므로 진짜 결손이다.
+     * 다만 종료 유예가 끝난 뒤라면 커넥션 풀이 이미 닫혀 기록 자체가 실패하는데, 그것을
+     * 삼키지 않고 {@code addSuppressed}로 신호에 실어 보낸다.
+     */
+    private BatchShutdownException abandonOnShutdown(SecurityRef security, CollectionPhase phase,
+                                                     Exception cause, Runnable recordAttempt) {
+        BatchShutdownException signal = new BatchShutdownException(
+                "프로세스가 내려가는 중에 종목 처리가 끊겼다. stockId=%d ticker=%s phase=%s"
+                        .formatted(security.stockId(), security.ticker(), phase), cause);
+        try {
+            recordAttempt.run();
+        } catch (RuntimeException e) {
+            signal.addSuppressed(e);
+        }
+        log.warn("종료 중이라 종목 처리가 끊겼다 — 버그가 아니다. stockId={} ticker={} phase={} 원인={}",
+                security.stockId(), security.ticker(), phase, cause.toString());
+        return signal;
     }
 
     /**

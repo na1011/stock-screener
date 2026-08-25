@@ -114,6 +114,21 @@ public final class BatchExecutionContext {
     private final AtomicBoolean terminal = new AtomicBoolean();
 
     /**
+     * 프로세스가 내려가서 마감됐는가. 잡의 루프를 <b>협조적으로</b> 끊는 신호다.
+     *
+     * <p>IMPORTANT — 이것은 {@link #terminal}과 다르다. 정상 마감에는 켜지지 않는다.
+     * 그리고 <b>{@code claimTerminal}에 성공한 뒤에만</b> 켜지므로 「이 플래그가 참」은
+     * 「이 실행은 이미 마감됐다」와 같다. 그 불변식 때문에 잡 열한 개가 자기 루프를
+     * 고치지 않아도 되고, 어디서 {@link BatchShutdownException}이 나가든 행이
+     * {@code RUNNING}으로 남지 않는다. <b>순서를 바꾸면 그 보장이 사라진다.</b>
+     *
+     * <p>인터럽트를 쓰지 않는 이유는 ADR-0078에 있다 — 소켓 읽기가 인터럽트를 무시하고,
+     * 외부 호출을 아예 안 하는 잡에는 신호가 도달할 입구조차 없다. 여기는 <b>잡과
+     * 프레임워크가 만나는 자리</b>라 어느 잡이든 지난다.
+     */
+    private volatile boolean abandonedOnShutdown;
+
+    /**
      * 마감된 상태. 경합에서 진 경로가 돌려줄 값이다.
      *
      * <p>값이 미리 정해진 경로들은 {@code recorder}를 부르기 <b>전에</b> 채운다. 그래야
@@ -160,22 +175,61 @@ public final class BatchExecutionContext {
      */
     public boolean process(SecurityRef security, CollectionPhase phase, StockTask task)
             throws DataSourceException {
-        StockTaskExecutor.Outcome outcome = executor.execute(executionId, security, phase, task);
-        PhaseCounters counters = byPhase.get(phase);
+        abortIfAbandoned();
+        try {
+            StockTaskExecutor.Outcome outcome =
+                    executor.execute(executionId, security, phase, task, abandonedOnShutdown);
+            PhaseCounters counters = byPhase.get(phase);
 
-        boolean succeeded = outcome.succeeded();
-        if (succeeded) {
-            successCount.incrementAndGet();
-            writtenRowCount.addAndGet(outcome.writtenRows());
-            counters.success.incrementAndGet();
-            counters.writtenRows.addAndGet(outcome.writtenRows());
-            resolveIfPreviouslyFailed(security.stockId(), phase);
-        } else {
-            failureCount.incrementAndGet();
-            counters.failure.incrementAndGet();
+            boolean succeeded = outcome.succeeded();
+            if (succeeded) {
+                successCount.incrementAndGet();
+                writtenRowCount.addAndGet(outcome.writtenRows());
+                counters.success.incrementAndGet();
+                counters.writtenRows.addAndGet(outcome.writtenRows());
+                resolveIfPreviouslyFailed(security.stockId(), phase);
+            } else {
+                failureCount.incrementAndGet();
+                counters.failure.incrementAndGet();
+            }
+            flushIfDue();
+            return succeeded;
+
+        } catch (RuntimeException e) {
+            // MUST: 감싸는 범위가 본문 **전체**다. executor 호출 한 줄로 좁히면 그 뒤의
+            // flushIfDue()가 빠지는데, 거기서 나오는 CannotCreateTransactionException은
+            // DataAccessException이 아니라(→ TransactionException → NestedRuntimeException)
+            // flushNow의 좁은 catch를 그대로 통과해 원본 그대로 Sentry까지 간다.
+            //
+            // DataSourceException은 checked라 여기 안 걸린다 — 이 메서드의 계약은 그대로다.
+            throw asShutdownSignalIfAbandoned(e);
         }
-        flushIfDue();
-        return succeeded;
+    }
+
+    /**
+     * 종료가 시작됐으면 여기서 끊는다.
+     *
+     * <p>잡이 <b>새 작업 단위를 시작하려는 자리</b>에서 부른다. {@link #process}·{@link #stage}·
+     * {@link #plan}이 자동으로 부르므로 대개 잡이 직접 부를 일은 없다 — 그 셋 중 아무것도
+     * 신고하지 않는 루프만 직접 부른다({@code UniverseRebalanceJob}·{@code MarketIndexJob}).
+     *
+     * <p>MUST NOT: 이것을 「울타리」로 읽지 않는다. <b>경계</b>다 — 플래그가 한 단계 도중에
+     * 켜지면 그 단계는 끝까지 간다. 진행 중인 외부 호출 하나는 이 기제로 못 끊는다.
+     */
+    public void abortIfAbandoned() {
+        if (abandonedOnShutdown) {
+            throw new BatchShutdownException(
+                    "프로세스가 내려가는 중이라 이 실행을 더 진행하지 않는다. id=" + executionId);
+        }
+    }
+
+    /** 종료 중에 난 실패면 신호로 갈아 끼운다. 아니면 원본 그대로 — 진짜 버그는 드러나야 한다. */
+    private RuntimeException asShutdownSignalIfAbandoned(RuntimeException cause) {
+        if (!abandonedOnShutdown || cause instanceof BatchShutdownException) {
+            return cause;
+        }
+        return new BatchShutdownException(
+                "프로세스가 내려가는 중에 실패했다. id=" + executionId, cause);
     }
 
     /**
@@ -190,6 +244,7 @@ public final class BatchExecutionContext {
      * 실패한 종목의 지표를 건너뛰므로 100%에 못 닿는데, 그 차이가 곧 건너뛴 종목 수다.
      */
     public void plan(CollectionPhase phase, int tasks) {
+        abortIfAbandoned();
         PhaseCounters counters = byPhase.get(phase);
         counters.planned.set(tasks);
         counters.declared = true;
@@ -205,6 +260,10 @@ public final class BatchExecutionContext {
      * 돌고 있다"가 실제로 알고 싶은 것이고, 그것을 알아야 남은 시간을 가늠할 수 있다.
      */
     public void stage(String label) {
+        // MUST: 구간 신고는 곧 **그 구간을 시작한다**는 선언이다. 그래서 여기가 게이트다 —
+        // 종목 루프만 막으면 루프 **뒤**의 백분위·업종 상대값·워치리스트가 안 끊긴다.
+        // 새 신고 자리를 만들 때 이 계약이 함께 따라온다는 것이 이 배치의 요점이다.
+        abortIfAbandoned();
         this.stageLabel = label;
     }
 
@@ -239,6 +298,20 @@ public final class BatchExecutionContext {
      * 찾을 수 없다. dedupeKey도 같은 규칙을 따라야 억제가 일관된다.
      */
     public void alertOperator(AlertSeverity severity, String title, String body) {
+        if (abandonedOnShutdown) {
+            // MUST: 「안 보낸다」가 아니라 「로그로 내린다」이다. 여기 오는 알림 중 여섯은
+            // 대응하는 개별 로그가 아예 없어(기업 행위 판정 대기·근접 중복, 대상일 시세 0건,
+            // 대상일 지수 없음 등) 통째로 막으면 **그 사실이 어디에도 안 남는다.**
+            // 판정 대기 후보가 사라지면 그 종목의 장기창 지표는 ADR-0055로 억제된 채
+            // 남는데, 화면에서는 "조건에 안 맞았다"와 구분되지 않는다.
+            //
+            // 안 보내는 이유는 ADR-0078이다 — CompositeAlertPort.send가 동기이고 웹훅이
+            // connect 5초 + read 10초라 종료 예산을 그만큼 먹는다.
+            log.warn("종료 중이라 알림을 보내지 않는다 — 이 로그가 유일한 기록이다. "
+                            + "id={} job={} 심각도={} 제목={} 본문={}",
+                    executionId, jobName, severity, title, body);
+            return;
+        }
         alertPort.send(AlertEvent.toOperator(
                 severity, jobName + " — " + title, body, dedupeKey() + ':' + title, context()));
     }
@@ -352,8 +425,19 @@ public final class BatchExecutionContext {
                 context()));
     }
 
-    /** 예상하지 못한 오류로 마감한다. 우리 코드의 버그일 가능성이 높다. */
+    /**
+     * 예상하지 못한 오류로 마감한다. 우리 코드의 버그일 가능성이 높다.
+     *
+     * <p>{@link BatchShutdownException}은 <b>여기서 되돌아 나간다.</b> 그것은 설계된 종료
+     * 신호이지 버그가 아니고, 잡 열한 개가 이 메서드를 일반 {@code catch (RuntimeException)}
+     * 에서 부르므로 걸러내지 않으면 <b>종료마다</b> {@code claimTerminal}의 "이미 마감된 …"
+     * 경고가 확정적으로 난다. 그러면 그 경고가 진짜 마감 경합을 가리키는 신호이기를
+     * 그만두는데, 그 구분이 가능해야 한다는 것이 {@link #claimTerminal}의 존재 이유다.
+     */
     public void failUnexpectedly(Throwable cause) {
+        if (cause instanceof BatchShutdownException) {
+            return;
+        }
         if (!claimTerminal("예상하지 못한 실패")) {
             return;
         }
@@ -415,14 +499,24 @@ public final class BatchExecutionContext {
     /**
      * 프로세스가 내려가서 중단됐음을 기록한다. <b>알리지 않는다.</b>
      *
-     * <p>{@link BatchExecutions}의 종료 훅 전용이다. 알림을 보내지 않는 이유는 그 시점에
-     * 알림 채널의 빈이 이미 파괴됐을 수 있고, 종료 경로에서 나는 예외는 마감 자체를
-     * 통째로 잃게 만들기 때문이다. 기록은 남고 로그도 남는다.
+     * <p>{@link BatchExecutions}의 종료 훅 전용이다. 알림을 보내지 않는 이유는 둘이다 —
+     * {@code CompositeAlertPort.send}가 <b>동기</b>이고 웹훅이 connect 5초 + read 10초라
+     * 종료 예산을 그만큼 먹고, 종료 경로에서 나는 예외는 마감 자체를 통째로 잃게 만든다.
+     * 기록은 남고 로그도 남는다.
+     *
+     * <p>MUST NOT: "그 시점에 알림 채널의 빈이 이미 파괴됐을 수 있다"를 이유로 되돌리지
+     * 않는다. 그것은 {@code @PreDestroy} 시절의 사유이고 지금은 <b>거짓</b>이다 —
+     * {@link BatchExecutions}의 리스너는 빈이 살아 있는 것이 프레임워크 계약으로 보장되는
+     * 자리에서 돈다.
      */
     void abortOnShutdown(String reason) {
         if (!claimTerminal("종료로 중단")) {
             return;
         }
+        // MUST: recorder.abort **앞**이다. 그것은 REQUIRES_NEW DB 왕복이라 종료 중엔 수 초가
+        // 될 수 있고, 그 사이 워커는 다음 종목의 외부 호출을 새로 시작한다. 그리고
+        // claimTerminal **뒤**여야 한다 — 그 순서가 이 플래그의 불변식이다.
+        abandonedOnShutdown = true;
         recordedStatus = BatchStatus.ABORTED;
         recorder.abort(executionId, snapshot(), reason);
         onTerminal.accept(executionId);
@@ -502,6 +596,13 @@ public final class BatchExecutionContext {
      * 잡는 이유는 그 밖의 예외는 우리 코드의 버그이고, 버그는 드러나야 하기 때문이다.
      */
     private void flushNow() {
+        if (abandonedOnShutdown) {
+            // 마감된 행에는 어차피 안 닿는다(progress의 UPDATE가 `AND status = 'RUNNING'`).
+            // 그런데 종료 중에는 이 호출이 CannotCreateTransactionException을 낼 수 있고,
+            // 그것은 DataAccessException이 **아니라서** 아래 catch를 그대로 통과한다.
+            // 넓히는 대신 부르지 않는다 — 그 catch의 좁음은 "그 밖은 우리 버그다"라는 의도다.
+            return;
+        }
         lastFlushNanos.set(System.nanoTime());
         try {
             recorder.progress(executionId, snapshot());
