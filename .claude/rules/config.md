@@ -41,7 +41,7 @@ paths:
 
 - **커넥션 풀은 2로 제한한다.** 기본값 10이면 무관한 테스트가 "too many clients"로 깨진다(실제 14건).
 - **`out-of-order: true`가 필요하다.** 테스트 전용 V900이 운영 마이그레이션보다 위에 있다.
-- **`clean-on-validation-error: true`에 기대지 않는다.** 체크섬이 어긋나면 테스트 DB를 통째로 밀고 다시 적용해 **원인을 덮는다** — 무엇이 어긋났는지 모른 채 초록이 된다. 처방은 아래 마이그레이션 절이 정본이다.
+- **체크섬이 어긋나면 테스트도 함께 죽는다.** 예전에는 `clean-on-validation-error: true`가 테스트 DB를 비우고 다시 적용한다고 적혀 있었는데, **그 값은 Spring Boot 4.1·Flyway 12.4에 바인딩되지 않아 아무 일도 하지 않는다**(2026-08-25 실측: 여덟을 어긋내니 테스트 컨텍스트가 전부 `FlywayValidateException`으로 죽었다). 그래서 **운영과 테스트가 같은 처방을 받는다** — 아래 마이그레이션 절이 정본이고, `UPDATE`는 두 DB에 각각 돌린다.
 
 ## `src/main/resources/db/migration/**`
 
