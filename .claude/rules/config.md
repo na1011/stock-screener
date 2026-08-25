@@ -41,12 +41,14 @@ paths:
 
 - **커넥션 풀은 2로 제한한다.** 기본값 10이면 무관한 테스트가 "too many clients"로 깨진다(실제 14건).
 - **`out-of-order: true`가 필요하다.** 테스트 전용 V900이 운영 마이그레이션보다 위에 있다.
-- **`clean-on-validation-error: true`에 기대지 않는다.** 체크섬이 어긋나면 테스트 DB를 통째로 밀고 다시 적용해 **원인을 덮는다** — 무엇이 어긋났는지 모른 채 초록이 된다. 아래 마이그레이션 절의 처방(해당 `flyway_schema_history` 행과 객체를 지우고 재적용)이 정본이다.
+- **`clean-on-validation-error: true`에 기대지 않는다.** 체크섬이 어긋나면 테스트 DB를 통째로 밀고 다시 적용해 **원인을 덮는다** — 무엇이 어긋났는지 모른 채 초록이 된다. 처방은 아래 마이그레이션 절이 정본이다.
 
 ## `src/main/resources/db/migration/**`
 
-- **마이그레이션 체크섬이 어긋나면** `clean-on-validation-error`가 항상 구해주지 않는다. 해당 `flyway_schema_history` 행과 객체를 지우고 재적용한다.
-- **적용된 마이그레이션 파일은 고치지 않는다.** 실데이터가 들어 있어 재적용이 곧 재적재다.
+- **적용된 파일을 고치면 기동이 막힌다.** Flyway가 파일 전체의 체크섬을 대조하므로 **주석 한 줄만 바꿔도** `FlywayValidateException`으로 컨텍스트가 죽는다.
+- **처방은 편집의 종류가 정한다. 「고치지 않는다」가 걸리는 것은 앞쪽뿐이다.**
+  - **스키마를 바꿨으면 고치지 않는다.** 이력 행과 객체를 지우고 재적용하는 것이 유일한 길인데 **실데이터가 들어 있어 재적용이 곧 재적재다.**
+  - **주석만 바꿨으면 체크섬만 맞춘다**(`flyway repair`가 하는 일이고 실패 메시지도 그것을 시킨다). 실패가 `Applied to database`와 `Resolved locally`를 둘 다 찍고 **불일치 전부를 한 번에 신고하므로 부팅 한 번이면 값이 다 나온다.** `UPDATE flyway_schema_history SET checksum=<Resolved locally> WHERE version='<N>'` 뒤 `installed_rank`·`installed_on`·`execution_time`이 그대로다 — **재적용이 아니다.** **MUST: 운영 DB에서는 `ops/dump-db.sh`를 먼저 뜬다.**
 
 ## `frontend/package.json`
 
