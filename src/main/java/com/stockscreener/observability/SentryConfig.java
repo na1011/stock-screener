@@ -1,5 +1,6 @@
 package com.stockscreener.observability;
 
+import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.web.ApiException;
 
 import io.sentry.SentryEvent;
@@ -23,6 +24,17 @@ import org.springframework.context.annotation.Configuration;
  * <p>5xx {@link ApiException}은 <b>거르지 않는다.</b> 그것은 우리 쪽 문제이고
  * {@code ApiExceptionHandler}가 이미 {@code log.error}로 남기는 것과 짝이 맞는다.
  *
+ * <p>거르는 것이 하나 더 있다 — {@link BatchShutdownException}. 프로세스가 내려가서 배치가
+ * 스스로 멈춘 것은 코드가 예상하고 {@code ABORTED}로 기록까지 하는 사건이라 위의 역할
+ * 분담에서 자체 알림 쪽에 속한다.
+ *
+ * <p><b>MUST NOT: 이 판정을 종료 오염의 주된 방어로 여기지 않는다.</b> 종료 중에 나는 로그
+ * 대부분은 <b>원본 예외</b>를 싣고 있어 원인 체인에 이 타입이 없다. 실제로 막는 것은
+ * {@code StockTaskExecutor}가 그때 ERROR로 찍지 않는 것이고, 여기는 그 뒤에 남는 자리를
+ * 받는다 — {@code BootstrapRunner}가 대표적이다. 그쪽은 잡을 메인 스레드에서 부르므로
+ * 예외가 {@code SpringApplication}의 실패 처리까지 올라가고, <b>거기서는 이 판정이 유일한
+ * 방어다.</b>
+ *
  * <p>IMPORTANT — 확장점으로 {@code SentryOptions.BeforeSendCallback} 빈을 쓴다.
  * {@code Sentry.OptionsConfiguration} 빈을 <b>{@code sentryOptionsConfiguration}이라는 이름으로</b>
  * 정의하면 안 된다. Sentry의 자동 구성이 그 이름에
@@ -36,20 +48,30 @@ public class SentryConfig {
     /** 원인 체인을 따라갈 최대 깊이. 순환 참조가 있어도 여기서 멈춘다. */
     private static final int MAX_CAUSE_DEPTH = 16;
 
+    /**
+     * MUST NOT: 이 빈의 이름을 {@code sentryOptionsConfiguration}으로 짓지 않는다 —
+     * 위 javadoc의 함정이다. 그 밖의 이름은 안전하다. Sentry는 이 빈을 <b>타입으로</b> 찾는다.
+     */
     @Bean
-    public SentryOptions.BeforeSendCallback dropExpectedApiRejections() {
-        return (event, hint) -> isExpectedRejection(event.getThrowable()) ? null : event;
+    public SentryOptions.BeforeSendCallback dropExpectedEvents() {
+        return (event, hint) -> isExpected(event.getThrowable()) ? null : event;
     }
 
     /**
-     * 이 예외가 "코드가 예상하고 사용자에게 설명한 거절"인가.
+     * 이 예외가 "코드가 예상한 사건"인가 — 설명된 거절이거나, 종료로 인한 중단이거나.
      *
      * <p>{@link SentryEvent#getThrowable()}은 Sentry가 씌운 래퍼를 벗겨 주지만 우리 코드가
      * 감싼 것까지는 벗기지 않으므로 원인 체인을 따라간다.
+     *
+     * <p>MUST: 종료 판정을 {@link ApiException} 판정보다 <b>앞</b>에서 한다. 그쪽은 만나는
+     * 즉시 돌아가므로 뒤에 두면 {@code ApiException}이 낀 체인에서 종료 신호가 안 보인다.
      */
-    static boolean isExpectedRejection(Throwable throwable) {
+    static boolean isExpected(Throwable throwable) {
         Throwable current = throwable;
         for (int depth = 0; current != null && depth < MAX_CAUSE_DEPTH; depth++) {
+            if (current instanceof BatchShutdownException) {
+                return true;
+            }
             if (current instanceof ApiException apiException) {
                 return apiException.status().is4xxClientError();
             }

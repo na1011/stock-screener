@@ -235,9 +235,16 @@ public class AdminJobLauncher {
             try {
                 BatchStatus status = job.get();
                 log.info("관리자가 띄운 잡이 끝났다. jobName={} status={}", jobName, status);
+            } catch (BatchShutdownException e) {
+                // 프로세스가 내려가서 잡이 스스로 멈춘 것이다. error로 찍으면 배포마다
+                // Sentry 이슈가 하나씩 난다 — sentry.logging.minimum-event-level이 error다.
+                log.info("관리자가 띄운 잡이 종료로 중단됐다. jobName={} — "
+                        + "batch_execution에 ABORTED로 남는다. 필요하면 다시 띄운다.", jobName);
             } catch (RuntimeException e) {
+                // MUST NOT: "batch_execution에는 남지 않았을 수 있다"로 되돌리지 않는다.
+                // ADR-0078 이후 거짓이다 — 종료 훅과 스위퍼가 열린 행을 반드시 마감한다.
                 log.error("관리자가 띄운 잡이 기록 바깥에서 터졌다. jobName={} — "
-                        + "batch_execution에는 남지 않았을 수 있다.", jobName, e);
+                        + "실행 행은 마감되지만 이 예외 자체는 여기 말고 어디에도 없다.", jobName, e);
             } finally {
                 running.remove(jobName);
             }

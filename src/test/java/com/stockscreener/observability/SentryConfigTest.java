@@ -1,5 +1,6 @@
 package com.stockscreener.observability;
 
+import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.web.ApiExceptions;
 
 import io.sentry.Hint;
@@ -18,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SentryConfigTest {
 
-    private final SentryOptions.BeforeSendCallback callback = new SentryConfig().dropExpectedApiRejections();
+    private final SentryOptions.BeforeSendCallback callback = new SentryConfig().dropExpectedEvents();
 
     @Test
     @DisplayName("4xx ApiException은 버린다 — 사용자에게 설명된 거절은 이슈가 아니다")
@@ -68,6 +69,25 @@ class SentryConfigTest {
         SentryEvent event = new SentryEvent();
 
         assertThat(callback.execute(event, new Hint())).isSameAs(event);
+    }
+
+    @Test
+    @DisplayName("종료로 중단된 배치는 버린다 — 코드가 예상하고 ABORTED로 기록까지 한 사건이다")
+    void dropsBatchShutdownSignals() {
+        SentryEvent event = new SentryEvent(new BatchShutdownException("내려가는 중이다"));
+
+        assertThat(callback.execute(event, new Hint())).isNull();
+    }
+
+    @Test
+    @DisplayName("ApiException이 낀 체인에서도 종료 신호를 본다 — 그쪽 판정이 먼저면 안 보인다")
+    void looksPastApiExceptionsToFindShutdownSignals() {
+        // ApiException 판정은 만나는 즉시 돌아가므로, 종료 판정이 뒤에 있으면 5xx가 낀
+        // 순간 이 이벤트가 이슈로 올라간다.
+        SentryEvent event = new SentryEvent(new BatchShutdownException(
+                "내려가는 중이다", new ApiExceptions.IndicatorDataNotReadyException()));
+
+        assertThat(callback.execute(event, new Hint())).isNull();
     }
 
     /** {@code initCause}는 자기 참조를 거부하므로 {@code getCause}를 덮어 만든다. */

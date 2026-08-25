@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.scheduler;
 
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
+import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
 import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
 
@@ -73,7 +74,15 @@ public class PipelineScheduler {
     public void runDailyUpdate() {
         LocalDate targetDate = targetDateFor(LocalDate.now(KR_ZONE));
         log.info("일일 갱신을 시작한다. targetDate={}", targetDate);
-        dailyUpdateJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        try {
+            dailyUpdateJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        } catch (BatchShutdownException e) {
+            // IMPORTANT — 운영에서 종료가 배치를 끊는 경로가 실제로 여기다. 안 잡으면 Spring의
+            // 기본 처리가 ERROR로 찍고, sentry.logging.minimum-event-level이 error라 배포마다
+            // 이슈가 하나씩 쌓인다. catch-all이 아니라 이름 붙은 신호 하나만 받는다.
+            log.info("일일 갱신이 종료로 중단됐다. targetDate={} — ABORTED로 남는다. "
+                    + "시세는 조회 창이 다시 시도하지만 백분위·워치리스트는 안 이어진다.", targetDate);
+        }
     }
 
     /**
@@ -122,6 +131,13 @@ public class PipelineScheduler {
     public void runUniverseRebalance() {
         LocalDate asOf = targetDateFor(LocalDate.now(KR_ZONE));
         log.info("유니버스 리밸런싱을 시작한다. asOf={}", asOf);
-        universeRebalanceJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        try {
+            universeRebalanceJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        } catch (BatchShutdownException e) {
+            // 위와 같은 이유다. 이 잡은 process()·stage()를 안 지나므로 신호가 나려면
+            // UniverseRebalanceJob의 지수 루프에 건 게이트가 살아 있어야 한다 — 그것을
+            // 지우면 이 catch가 조용히 죽은 코드가 된다.
+            log.info("유니버스 리밸런싱이 종료로 중단됐다. asOf={} — 다음 토요일에 다시 돈다.", asOf);
+        }
     }
 }
