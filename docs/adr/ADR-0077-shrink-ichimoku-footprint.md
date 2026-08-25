@@ -49,9 +49,9 @@ applies_to:
   게이트와 사라진 절을 가리킨다. **적용된 마이그레이션이라 주석 한 글자만 바꿔도
   `flyway_schema_history`의 체크섬과 어긋나 운영 기동이 `FlywayValidateException`으로 죽는다**
   (`application.yaml`에 `validate-on-migrate` 재정의가 없어 기본값 `true`).
-  **비대칭이라고 적어 뒀던 것은 틀렸다** — `application-test.yaml`의 `clean-on-validation-error`는
-  Boot 4.1·Flyway 12.4에 **바인딩되지 않아 아무 일도 하지 않는다.** 2026-08-25에 여덟을 어긋내
-  실측했고 **테스트도 운영과 똑같이 죽는다.** 그래서 `./gradlew build`가 이 사고의 탐지기다.
+  **`application-test.yaml`의 `clean-on-validation-error`는 Boot 4.1·Flyway 12.4에 바인딩되지
+  않아 아무 일도 하지 않는다** — 여덟을 어긋내 실측했고 **테스트도 운영과 똑같이 죽는다.**
+  그래서 `./gradlew build`가 이 사고의 탐지기다.
 - **`docs/phase-criteria.md`의 「대상이 없다는 것과 통과했다는 것이 다르기 때문이다」.**
   `check-doc-staleness.sh` §5b가 `통과했다`를 문자열로 잡아 매 세션 경고한다. **오탐이며
   그 문장은 통과 읽힘을 되레 부인한다.** 훅을 조용하게 만들려고 고치면 훅이 지키려는

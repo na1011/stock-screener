@@ -41,14 +41,14 @@ paths:
 
 - **커넥션 풀은 2로 제한한다.** 기본값 10이면 무관한 테스트가 "too many clients"로 깨진다(실제 14건).
 - **`out-of-order: true`가 필요하다.** 테스트 전용 V900이 운영 마이그레이션보다 위에 있다.
-- **체크섬이 어긋나면 테스트도 함께 죽는다.** 예전에는 `clean-on-validation-error: true`가 테스트 DB를 비우고 다시 적용한다고 적혀 있었는데, **그 값은 Spring Boot 4.1·Flyway 12.4에 바인딩되지 않아 아무 일도 하지 않는다**(2026-08-25 실측: 여덟을 어긋내니 테스트 컨텍스트가 전부 `FlywayValidateException`으로 죽었다). 그래서 **운영과 테스트가 같은 처방을 받는다** — 아래 마이그레이션 절이 정본이고, `UPDATE`는 두 DB에 각각 돌린다.
+- **체크섬이 어긋나면 테스트도 함께 죽는다.** `clean-on-validation-error`는 Boot 4.1·Flyway 12.4에 **바인딩되지 않아 아무 일도 하지 않는다**(실측: 여덟을 어긋내니 테스트 컨텍스트가 전부 `FlywayValidateException`으로 죽었다). **MUST NOT: 「테스트는 어차피 낫는다」로 두지 않는다** — 두 DB가 같은 처방을 받고 `UPDATE`도 각각 돌린다. 값을 얻는 가장 싼 길이 `./gradlew build`다.
 
 ## `src/main/resources/db/migration/**`
 
 - **적용된 파일을 고치면 기동이 막힌다.** Flyway가 파일 전체의 체크섬을 대조하므로 **주석 한 줄만 바꿔도** `FlywayValidateException`으로 컨텍스트가 죽는다.
 - **처방은 편집의 종류가 정한다. 「고치지 않는다」가 걸리는 것은 앞쪽뿐이다.**
   - **스키마를 바꿨으면 고치지 않는다.** 이력 행과 객체를 지우고 재적용하는 것이 유일한 길인데 **실데이터가 들어 있어 재적용이 곧 재적재다.**
-  - **주석만 바꿨으면 체크섬만 맞춘다**(`flyway repair`가 하는 일이고 실패 메시지도 그것을 시킨다). 실패가 `Applied to database`와 `Resolved locally`를 둘 다 찍고 **불일치 전부를 한 번에 신고하므로 부팅 한 번이면 값이 다 나온다.** `UPDATE flyway_schema_history SET checksum=<Resolved locally> WHERE version='<N>'` 뒤 `installed_rank`·`installed_on`·`execution_time`이 그대로다 — **재적용이 아니다.** **MUST: 운영 DB에서는 `ops/dump-db.sh`를 먼저 뜬다.**
+  - **주석만 바꿨으면 체크섬만 맞춘다**(`flyway repair`가 하는 일이고 실패 메시지도 그것을 시킨다). 실패가 `Applied to database`와 `Resolved locally`를 둘 다 찍고 **불일치 전부를 한 번에 신고하므로 부팅 한 번이면 값이 다 나온다.** `UPDATE flyway_schema_history SET checksum=<Resolved locally> WHERE version='<N>'` 뒤 `installed_rank`·`installed_on`·`execution_time`이 그대로다 — **재적용이 아니다.** **MUST: 운영 DB에서는 `ops/dump-db.sh`를 먼저 뜨고 같은 창에서 재배포까지 간다** — 배포된 jar가 옛 바이트를 들고 있어 체크섬만 고치면 **다음 재기동이 죽고 증상은 며칠 뒤에 난다.**
 
 ## `frontend/package.json`
 
