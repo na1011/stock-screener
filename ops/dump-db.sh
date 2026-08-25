@@ -84,6 +84,12 @@ cat <<RESTORE
 
   # 이 phase만 되돌리려면 테이블 셋으로 좁힌다.
   $PG_RESTORE -d $DB -c --if-exists -t corporate_action -t price_daily -t indicator_value "$TARGET"
+
+  # 복원 뒤 기동이 FlywayValidateException으로 죽으면 덤프가 못 쓰는 것이 아니다.
+  # 덤프를 뜬 뒤에 마이그레이션 파일이 고쳐져 체크섬이 갈린 것이고, 실패 메시지가
+  # Applied to database와 Resolved locally를 불일치 전부에 대해 한 번에 찍는다.
+  # 그 Resolved locally 값으로 맞춘다 — 재적용이 아니라 값만 고치는 것이다.
+  psql -d $DB -c "UPDATE flyway_schema_history SET checksum=<Resolved locally> WHERE version='<N>'"
 RESTORE
 
 echo "== 쌓인 덤프 =="
