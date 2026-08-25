@@ -19,20 +19,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 거버넌스 원자료 둘을 <b>적재 코드보다 먼저</b> 관측한다. 저장 표의 모양을 이 결과가 정한다.
  *
- * <p>둘 다 §11-H·§11-I에 필드 표가 있지만 <b>필드 표가 있는 것과 파서를 쓸 수 있는 것은
+ * <p>둘 다 dart-governance.md의 「주식의 총수 현황」·「회계감사인의 명칭 및 감사의견」 절에 필드 표가 있지만
+ * <b>필드 표가 있는 것과 파서를 쓸 수 있는 것은
  * 다르다.</b> 이 탐침이 묻는 것은 표에 없는 것들이다 — {@code se}가 실제로 몇 종류로 오는지,
  * 센티널 {@code -}가 어느 자리에 오는지, 감사의견의 {@code adt_opinion}이 어떤 문자열인지.
  *
- * <p><b>MUST NOT: 이 결과로 감사의견 판정 지표를 만들지 않는다.</b> §10-D가 <i>"표본 둘 다
+ * <p><b>MUST NOT: 이 결과로 감사의견 판정 지표를 만들지 않는다.</b> dart-governance.md가 <i>"표본 둘 다
  * `적정의견`이라 비적정의 표기는 미확인이다. 그것을 보기 전에는 판정 로직을 만들지 않는다"</i>고
  * 적었고, 이 표본도 활성 유니버스 안이라 <b>같은 한계를 물려받는다.</b> 여기서 얻는 것은
  * 「적정」쪽 표기와 응답 구조뿐이다.
  *
- * <p>표본은 §12·§13·§15와 <b>같은 여덟</b>이다. 호출 수는 <b>엔드포인트당 8콜</b>이고
+ * <p>표본은 앞선 계정 탐침 셋과 <b>같은 여덟</b>이다. 호출 수는 <b>엔드포인트당 8콜</b>이고
  * 최대주주 변동현황만 두 해를 물어 16콜이라 <b>합쳐서 56콜</b>이다.
  *
- * <p>여덟 중 둘(주식의 총수·감사의견)은 2026-08-21에 관측해 §16-A·§16-B가 됐고, 나머지 여섯은
- * 2026-08-23에 더했다. <b>여섯의 값 집합은 개발가이드가 답하지 못한다</b> — §11-K가 그 가이드의
+ * <p>여덟 중 둘(주식의 총수·감사의견)은 2026-08-21에 관측해 dart-governance.md가 됐고, 나머지 여섯은
+ * 2026-08-23에 더했다. <b>여섯의 값 집합은 개발가이드가 답하지 못한다</b> — dart-governance.md의 「여덟이 여덟
+ * 모양이다」 절이 그 가이드의
  * 오류 둘을 이미 적어 뒀고({@code alotMatter}의 {@code se} 설명이 다른 엔드포인트 것,
  * {@code outcmpnyDrctrNdChangeSttus}의 {@code bsns_year} 타입 오기), 「3개년을 준다」도
  * <b>갈무리이지 실측이 아니다.</b>
@@ -54,7 +56,7 @@ class DartGovernanceProbeLiveTest {
      */
     private static final String EARLIER_YEAR = "2023";
 
-    /** 실측된 센티널. 빈 문자열이 아니라 이 문자열이다(§10-B). */
+    /** 실측된 센티널. 빈 문자열이 아니라 이 문자열이다(dart-corporate-action.md의 「증자(감자) 현황」 절). */
     private static final String DASH = "-";
 
     private static final Map<String, String> SAMPLES = new LinkedHashMap<>();
@@ -222,7 +224,7 @@ class DartGovernanceProbeLiveTest {
      *
      * <p>여기서 {@code bsns_year}를 <b>네 자리로</b> 보내는 것이 관측이기도 하다 —
      * 개발가이드가 {@code outcmpnyDrctrNdChangeSttus}의 타입을 {@code STRING(1)}로 적었고
-     * §11-K가 문서 오기로 판정했는데, 그 판정을 실물로 확인하는 것이 이 호출이다.
+     * dart-governance.md가 문서 오기로 판정했는데, 그 판정을 실물로 확인하는 것이 이 호출이다.
      */
     private static JsonNode fetch(RestClient client, String apiKey, String path,
                                   String corpCode, String year) {
@@ -246,7 +248,7 @@ class DartGovernanceProbeLiveTest {
 
         System.out.println("\n===== 배당에 관한 사항 (" + SETTLED_YEAR + " 사업보고서) =====");
         System.out.println("개발가이드의 se 값 설명에 '유상증자(주주배정), 전환권행사 등'이 적혀 있는데");
-        System.out.println("그것은 다른 엔드포인트의 설명이다(§11-K). 실제 항목명은 여기서만 나온다.");
+        System.out.println("그것은 다른 엔드포인트의 설명이다(개발가이드 오기). 실제 항목명은 여기서만 나온다.");
 
         Set<String> seValues = new LinkedHashSet<>();
         Set<String> stockKinds = new LinkedHashSet<>();
@@ -352,7 +354,7 @@ class DartGovernanceProbeLiveTest {
         System.out.println("stock_knd 값 집합: " + stockKinds);
         System.out.println("'계'가 든 행: " + (totalLikeNames.isEmpty() ? "(없음)" : totalLikeNames));
         System.out.println("  ← 비어 있지 않으면 유도가 그 행을 반드시 버려야 한다. 안 버리면 지분율이 두 배다");
-        System.out.println("MUST NOT: qota_rt를 지표에 쓰지 않는다(spec §7). 분자는 주식수, 분모는 §11-H의 istc_totqy다.");
+        System.out.println("MUST NOT: qota_rt를 지표에 쓰지 않는다(spec §7). 분자는 주식수, 분모는 「주식의 총수 현황」 절의 istc_totqy다.");
         System.out.println("호출 수: 회사당 1콜 = " + SAMPLES.size() + "콜.");
 
         assertThat(answered).as("여덟 중 하나도 응답하지 않았다").isPositive();
@@ -601,7 +603,7 @@ class DartGovernanceProbeLiveTest {
                 .sorted(java.util.Comparator.reverseOrder()).findFirst().orElse("(없음)");
     }
 
-    /** status 100(필드의 부적절한 값)만 센다 — 013은 「데이터 없음」이라 실패가 아니다(§4). */
+    /** status 100(필드의 부적절한 값)만 센다 — 013은 「데이터 없음」이라 실패가 아니다(dart-open-api.md의 「status 코드」 절). */
     private static int malformedCount(JsonNode body) {
         return body != null && "100".equals(body.path("status").asString("")) ? 1 : 0;
     }

@@ -30,7 +30,8 @@ public interface CorporateActionDataSource {
      *
      * <p>IMPORTANT — <b>소스가 최대 넉 달 늦을 수 있다.</b> 국내는 이 값이 정기보고서에만
      * 실리므로, 사건은 그것을 담는 보고서가 제출되기 전까지 <b>원리적으로 보이지 않는다</b>
-     * (api-spec §10-B). 그래서 <b>좁은 최근 창으로 부르면 구조적으로 0건</b>이고 그것은
+     * (api-spec dart-corporate-action.md의 「증자(감자) 현황」 절). 그래서 <b>좁은 최근 창으로 부르면
+     * 구조적으로 0건</b>이고 그것은
      * 실패가 아니다. 호출자의 창은 그 지연보다 넓어야 하며, 그 사이의 사건은
      * {@code AdjustmentRecalculator.detectCandidates}가 후보로 올린다.
      *

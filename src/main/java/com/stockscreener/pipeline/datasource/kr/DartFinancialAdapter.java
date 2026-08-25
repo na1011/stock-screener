@@ -26,7 +26,7 @@ import java.util.Set;
 /**
  * DART 단일회사 주요계정 어댑터. 국내 재무제표를 받는다.
  *
- * <p>스펙과 실측 결과는 {@code docs/api-spec/dart-open-api.md}에 있다.
+ * <p>스펙과 실측 결과는 {@code docs/api-spec/dart-financial.md}에 있다.
  *
  * <p>MUST NOT: {@code fnlttSinglIndx}(주요 재무지표)를 쓰지 않는다. 계산된 비율을 반환해
  * spec §7의 "모든 지표는 원자료에서 자체 계산"과 충돌하고, 2023년 3분기 이후만 제공한다.
@@ -198,7 +198,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 null, null,
                 // 매출원가·현금및현금성자산·자본적지출·재고자산은 주요계정에 없다.
                 // 앞의 둘과 재고자산은 손익·재무상태표에 있지만 이 엔드포인트가 총계만 주고,
-                // 자본적지출은 현금흐름표라 이 엔드포인트가 아예 내지 않는다(§1).
+                // 자본적지출은 현금흐름표라 이 엔드포인트가 아예 내지 않는다(dart-financial.md의 「단일회사 주요계정」 절).
                 null, null, null, null);
     }
 

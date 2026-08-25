@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 넷 다 성립하지 않는다.
  *
  * <p>테스트가 아니라 <b>탐침</b>이다. 단언은 최소한만 두고 관측을 표준출력으로 낸다 —
- * 그 출력이 {@code docs/api-spec/dart-open-api.md} §10에 그대로 옮겨진다.
+ * 그 출력이 {@code docs/api-spec/dart-open-api.md}의 「기업개황」 절에 그대로 옮겨진다.
  *
  * <p>알아야 할 것 넷:
  * <ol>
@@ -45,7 +45,8 @@ class DartCompanyProfileProbeLiveTest {
      * 업종이 서로 갈리도록 고른 여섯.
      *
      * <p><b>금융 둘(KB금융·삼성화재)이 표본의 핵심이다.</b> 업종 코드 체계는 값 하나로는
-     * 판정할 수 없고, "금융끼리 붙고 제조와 떨어지는가"를 봐야 갈린다. 오리온은 api-spec §8의
+     * 판정할 수 없고, "금융끼리 붙고 제조와 떨어지는가"를 봐야 갈린다. 오리온은 api-spec dart-financial.md의
+     * 「계정 집합이 회사마다 다르다」 절의
      * 이익잉여금 결손 3사 중 하나이며, 지주회사 구조가 업종 코드에 어떻게 나오는지 본다.
      */
     private static final Map<String, String> SAMPLES = new LinkedHashMap<>();
@@ -56,7 +57,7 @@ class DartCompanyProfileProbeLiveTest {
         SAMPLES.put("000810", "삼성화재(보험)");
         SAMPLES.put("035720", "카카오(서비스)");
         SAMPLES.put("035420", "NAVER(서비스)");
-        SAMPLES.put("271560", "오리온(식품·§8 결손사)");
+        SAMPLES.put("271560", "오리온(식품·이익잉여금 결손사)");
     }
 
     @Test

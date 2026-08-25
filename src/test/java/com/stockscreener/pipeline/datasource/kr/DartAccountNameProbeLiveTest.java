@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 주요계정({@code fnlttSinglAcnt.json})의 <b>계정명이 회사마다 얼마나 갈리는지</b> 실측한다.
  *
- * <p>{@code docs/api-spec/dart-open-api.md}의 미검증 항목이 이것이다 — "계정명 일관성은
+ * <p>{@code docs/api-spec/dart-open-api.md}의 「미검증 항목」 절이 이것이다 — "계정명 일관성은
  * 4개사에서만 확인했고, 업종이 다양해지면 후보군 보강이 필요할 수 있다."
  *
  * <p>실제로 새어 나갔다. 2026-08-10 결손 보정 뒤 <b>이익잉여금만 세 종목에서 비었다</b>

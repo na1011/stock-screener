@@ -24,9 +24,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * EBITDA(§H-03), 그리고 {@code financial_statement.eps} 대조.
  *
  * <p><b>IMPORTANT — 이 탐침의 판정은 비대칭이다. "닫혔다"는 결론만 낼 수 있고 "열렸다"는 못 낸다.</b>
- * 근거가 이 저장소 안에 둘 있다. ① {@code dart-open-api.md} §미검증이
+ * 근거가 이 저장소 안에 둘 있다. ① {@code dart-open-api.md}의 「미검증 항목」 절이
  * <i>"계정 집합의 회사별 편차 범위 — 표본 4개사로 일반화할 수 없다"</i>를 스스로 적는다.
- * ② §8이 그 반례다 — 이익잉여금은 4개사 대조군에서 <b>전부 왔는데</b> 350종목 전수에서 3종목이
+ * ② dart-financial.md의 「계정 집합이 회사마다 다르다」 절이 그 반례다 — 이익잉여금은 4개사 대조군에서
+ * <b>전부 왔는데</b> 350종목 전수에서 3종목이
  * 비었다. V18(6개사 표본이 4자리 52종목을 놓쳤다)도 같은 병이다.
  *
  * <p>그러므로 결과는 셋으로만 읽는다.
@@ -40,7 +41,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>MUST NOT: {@code xbrlTaxonomy.json}을 여기에 끼우지 않는다. 요청 {@code sj_div}가
  * {@code IS1}~{@code CF4} 등 <b>26코드</b>라 응답의 {@code sj_div}({@code IS}·{@code CIS}·
  * {@code CF})와 다른 것이고 손익만 덮어도 16콜이며, 무엇보다 <b>{@code corp_code}를 받지 않아
- * 회사별 값을 원리적으로 알 수 없다</b>(§10-C). 이 탐침의 질문에 답하지 않는 엔드포인트다.
+ * 회사별 값을 원리적으로 알 수 없다</b>(dart-financial.md의 「다중회사 주요계정」 절). 이 탐침의 질문에 답하지
+ * 않는 엔드포인트다.
  *
  * <p>MUST NOT: 감가상각비가 왔다고 <b>조정</b> EBITDA가 열렸다고 읽지 않는다. 조정치를 막는 것은
  * 계정의 부재가 아니라 ① 발행사가 스스로 정의하는 값이라는 것 ② spec §7의 "외부가 계산해 준 값에
@@ -61,10 +63,12 @@ class DartMissingAccountProbeLiveTest {
 
     /**
      * <b>중분류가 겹치지 않게</b> 고른 여덟. 기존 탐침(삼성전자·KB금융·카카오·NAVER)과 일부러
-     * 다르다 — 그 4개사 표본이 §8과 V18에서 실제로 새어 나갔기 때문이다.
+     * 다르다 — 그 4개사 표본이 dart-financial.md의 「계정 집합이 회사마다 다르다」 절과 V18에서 실제로 새어
+     * 나갔기 때문이다.
      *
      * <p>카카오를 빼고 이마트를 넣었다. 카카오는 NAVER와 같은 {@code 63120}이라 표본 한 칸을
-     * 낭비하고, 이마트는 §11-E가 이미 <b>계정명이 어긋나는 회사로 지목한 종목</b>이다.
+     * 낭비하고, 이마트는 dart-financial.md의 「전체 재무제표」 절이 이미 <b>계정명이 어긋나는 회사로 지목한
+     * 종목</b>이다.
      */
     private static final Map<String, String> SAMPLES = new LinkedHashMap<>();
 
@@ -80,9 +84,10 @@ class DartMissingAccountProbeLiveTest {
     }
 
     /**
-     * 찾는 계정. {@code account_id}를 먼저 보고 계정명을 폴백으로 둔다(§7).
+     * 찾는 계정. {@code account_id}를 먼저 보고 계정명을 폴백으로 둔다(dart-financial.md의 「전체 재무제표」 절).
      *
-     * <p>현금및현금성자산은 <b>넣지 않았다</b> — 이미 4/4로 §7 표에 있다. 다시 재면 콜만 쓴다.
+     * <p>현금및현금성자산은 <b>넣지 않았다</b> — 이미 4/4로 dart-financial.md의 「계정별 가용성」 절에 있다.
+     * 다시 재면 콜만 쓴다.
      */
     private record Target(String label, List<String> accountIds, List<String> nameFragments,
                           String opens) {
@@ -125,7 +130,8 @@ class DartMissingAccountProbeLiveTest {
                     "계속영업의 짝 — 둘이 있어야 합이 검산된다"));
 
     /**
-     * 총차입금은 <b>목록에 없다.</b> §7이 <i>"무엇을 더할지가 회사마다 다르므로 총차입금은
+     * 총차입금은 <b>목록에 없다.</b> dart-financial.md의 「계정별 가용성」 절이 <i>"무엇을 더할지가 회사마다
+     * 다르므로 총차입금은
      * 우리가 만드는 값"</i>이라고 적는다 — 8종목으로 나오는 것은 어떤 조합이 오는가까지이고
      * 합성 규칙이 350에 통하는지는 아니다. 그래서 아래는 <b>세지 않고 나열만</b> 한다.
      */
@@ -175,8 +181,8 @@ class DartMissingAccountProbeLiveTest {
 
             System.out.printf("%n--- %s(%s) status=%s%n", sample.getValue(), sample.getKey(), status);
             if (list == null || list.isEmpty()) {
-                // 013(데이터 없음)과 100(요청이 틀림)을 구분하지 않으면 탐침이 뜻을 잃는다(§4).
-                System.out.println("    행이 없다 — status의 뜻을 §4에서 확인한다. 이 회사는 판정에서 뺀다.");
+                // 013(데이터 없음)과 100(요청이 틀림)을 구분하지 않으면 탐침이 뜻을 잃는다(dart-open-api.md의 「status 코드」 절).
+                System.out.println("    행이 없다 — status의 뜻을 dart-open-api.md의 「status 코드」 절에서 확인한다. 이 회사는 판정에서 뺀다.");
                 continue;
             }
             answered++;
@@ -216,8 +222,8 @@ class DartMissingAccountProbeLiveTest {
                 System.out.println("         회사별 계정명: " + foundNames.get(target.label()));
             }
         }
-        System.out.println("\n호출 수: 회사당 1콜 = " + SAMPLES.size() + "콜. xbrlTaxonomy는 부르지 않는다(§10-C).");
-        System.out.println("MUST: 이 출력을 dart-open-api.md에 **새 절로** 옮긴다. §7 표는 4개사 표본을");
+        System.out.println("\n호출 수: 회사당 1콜 = " + SAMPLES.size() + "콜. xbrlTaxonomy는 부르지 않는다(dart-financial.md의 「다중회사 주요계정」 절).");
+        System.out.println("MUST: 이 출력을 dart-financial.md의 「계정별 가용성」 절에 옮긴다. 4개사 표본 행은");
         System.out.println("      머리에 못박고 있어 다른 표본의 행을 섞으면 그 문장이 거짓이 된다.");
 
         // 탐침의 최소 단언 — 응답 자체가 오지 않으면 위 판정이 전부 무의미하다.

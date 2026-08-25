@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 유도 규칙을 <b>실측 응답</b>으로 검증한다.
  *
- * <p>값이 전부 {@code docs/api-spec/dart-open-api.md} §16-A·§16-B·§16-C에서 온 것이다.
+ * <p>값이 전부 {@code docs/api-spec/dart-governance.md}에서 온 것이다.
  * 합성 데이터를 쓰지 않는 이유는 그것이 <b>계산 구조만 검증하고 소스 해석의 오류는 못 잡기</b>
  * 때문이다 — 이 매퍼의 위험은 산수가 아니라 「어느 행을 고르는가」에 있다.
  */

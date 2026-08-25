@@ -29,7 +29,8 @@ import java.util.Set;
  * 되고 <b>그 네 배는 아무 에러 없이 다른 잡의 여유를 먹는다</b> — 우리 리미터가 DART 전체를
  * 버킷 하나로 세기 때문이다.
  *
- * <p>표마다 <b>받을 해가 다르다.</b> 근거는 실측이다(§16-C) — 배당은 한 응답이 3개년을 열로
+ * <p>표마다 <b>받을 해가 다르다.</b> 근거는 실측이다(dart-governance.md의 「배당」 절) — 배당은 한 응답이
+ * 3개년을 열로
  * 주고, 최대주주 변동은 요청 연도까지의 누적이라 한 해면 되며, 이익소각은 상장 이래 누적이라
  * 3년 차분에 끝점 둘이 필요해 넉 해를 받는다.
  */
@@ -38,13 +39,13 @@ public class GovernanceLoadJob {
 
     public static final String JOB_NAME = "governance-load";
 
-    /** 사업보고서. §5의 MUST가 이 하나로 좁히는 근거다. */
+    /** 사업보고서. dart-open-api.md 「쿼터」 절의 MUST가 이 하나로 좁히는 근거다. */
     public static final String ANNUAL_REPORT = "11011";
 
     private static final Logger log = LoggerFactory.getLogger(GovernanceLoadJob.class);
 
     /**
-     * 표마다 «최신 해에서 몇 해 뒤까지» 받는가. 근거는 §16-C의 실측이다.
+     * 표마다 «최신 해에서 몇 해 뒤까지» 받는가. 근거는 dart-governance.md의 실측이다.
      *
      * <p>MUST: 이 표를 바꾸면 콜 수가 함께 바뀐다. 지금 350종목 기준 <b>7,700콜</b>이고
      * 보수 예산 10,000의 77%다.

@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * 「증자(감자) 현황」을 어느 정기보고서에서 받아야 {@code [from, to]}가 덮이는가.
  *
- * <p>IMPORTANT — api-spec §10-B의 <i>"최근 사업보고서 1콜로 5년 이력이 끝난다"</i>는
+ * <p>IMPORTANT — api-spec dart-corporate-action.md의 <i>"최근 사업보고서 1콜로 5년 이력이 끝난다"</i>는
  * <b>깊이의 주장이지 최신성의 주장이 아니다.</b> 2025 사업보고서는 2026-03에 나오고
  * 2025-12-31까지만 담는다. 1콜로 고정하면 <b>직전 회계연도 말 이후의 사건을 원리적으로
  * 못 본다</b> — ADR-0049가 배경으로 든 루닛 2026-05 무상증자가 정확히 그 자리다.
@@ -25,13 +25,14 @@ import java.util.List;
  */
 final class DartIrdsReports {
 
-    /** §11-B — {@code bsns_year}는 2015년 이후만 받는다. */
+    /** dart-corporate-action.md의 「증자(감자) 현황」 절 — {@code bsns_year}는 2015년 이후만 받는다. */
     private static final int EARLIEST_BUSINESS_YEAR = 2015;
 
     /**
      * 사업보고서 하나가 담는 이력의 길이(햇수).
      *
-     * <p>실측 근거는 §10-B다 — 카카오 2021 사업보고서 하나가 2017~2021의 128행을 준다.
+     * <p>실측 근거는 dart-corporate-action.md의 「조용히 틀리는 자리」 절이다 — 카카오 2021 사업보고서 하나가
+     * 2017~2021의 128행을 준다.
      */
     private static final int ANNUAL_HISTORY_YEARS = 5;
 

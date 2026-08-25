@@ -18,7 +18,7 @@ import java.util.Set;
  *   <li><b>{@code account_id}가 있다.</b> 실측에서 영업활동현금흐름이 회사마다
  *       {@code 영업활동현금흐름}·{@code 영업활동으로 인한 현금흐름}·
  *       {@code 영업활동으로부터의 현금흐름} 셋으로 왔는데 {@code account_id}는 하나였다
- *       (§7). 계정명 후보군을 늘리는 방식은 업종이 늘수록 반드시 새어 나간다.
+ *       (dart-financial.md의 「전체 재무제표」 절). 계정명 후보군을 늘리는 방식은 업종이 늘수록 반드시 새어 나간다.
  *   <li><b>{@code sj_div}가 다섯이다</b>({@code BS}·{@code IS}·{@code CIS}·{@code CF}·
  *       {@code SCE}). 요약본은 {@code BS}/{@code IS} 둘로 정규화해 줬지만 여기서는
  *       <b>표본 4사 중 3사에 {@code IS}가 아예 없다</b> — 손익이 {@code CIS}에만 있다.
@@ -62,7 +62,8 @@ final class DartFullAccountMapper {
      * 원래 오지 않는다(실측: 8개사 중 KB금융·NAVER 둘이 그렇고 제조·유통·물류·제약 여섯은
      * 전부 표준코드로 왔다).
      *
-     * <p><b>둘째 사례가 {@link #ID_INVENTORIES}다</b>(§14). 그쪽은 금융업 하나만 없다 —
+     * <p><b>둘째 사례가 {@link #ID_INVENTORIES}다</b>(dart-financial.md의 「계정별 가용성」 절). 그쪽은 금융업
+     * 하나만 없다 —
      * <b>업종 부재의 범위가 계정마다 다르므로 한 계정의 결손 사유를 다른 계정에 복사하지
      * 않는다.</b>
      */
@@ -73,12 +74,12 @@ final class DartFullAccountMapper {
      *
      * <p>계정명 폴백을 두지 않는다. {@code 취득}이 든 계정이 회사마다 열 개 넘게 오고
      * (자기주식의 취득·장기금융상품의 취득·관계기업투자의 취득·투자부동산의 취득…)
-     * 부분일치는 그중 아무거나 집는다 — §12에서 {@code 감가상각}이 오리온의
+     * 부분일치는 그중 아무거나 집는다 — {@code DartMissingAccountProbeLiveTest}에서 {@code 감가상각}이 오리온의
      * {@code 투자부동산감가상각비 조정}을 집어 3/8을 2/8로 정정하게 만든 것과 같은 병이고,
      * <b>이쪽은 틀린 값이 훨씬 커서 잉여현금흐름을 통째로 뒤집는다.</b>
      *
      * <p>표준코드로 8종목 8/8이 왔고 계정명도 여덟이 전부 {@code 유형자산의 취득}으로
-     * 같았다(§13). 폴백이 메울 것이 관측되지 않았다.
+     * 같았다(dart-financial.md의 「계정별 가용성」 절). 폴백이 메울 것이 관측되지 않았다.
      */
     static final Set<String> ID_CAPEX = ordered(
             "ifrs-full_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
@@ -88,7 +89,8 @@ final class DartFullAccountMapper {
     /**
      * 재고자산. <b>재무상태표에서만 읽는다.</b>
      *
-     * <p>계정명 폴백을 두지 않는다. 좁히지 않으면 무는 것이 실측으로 셋 나왔다(§14) —
+     * <p>계정명 폴백을 두지 않는다. 좁히지 않으면 무는 것이 실측으로 셋 나왔다(dart-financial.md의 「계정별
+     * 가용성」 절) —
      * 현금흐름표의 {@code 재고자산의 감소(증가)}는 <b>증감분</b>이라 잔액으로 저장하면
      * 「재고 증가율」이 <i>증감의 증감</i>이 되고, 같은 표의 {@code 재고자산평가손실}은 손익
      * 조정이며, 재무상태표의 {@code 상품권}(이마트 1.7조)은 재고와 무관한 항목인데 계정명
@@ -117,7 +119,7 @@ final class DartFullAccountMapper {
     static final Set<String> ID_RETAINED_EARNINGS =
             ordered("ifrs-full_RetainedEarnings", "ifrs_RetainedEarnings");
 
-    /** 표본 4/4에서 확인된 유일한 항목이다(§7). 이 전환으로 실제로 열리는 것이 이것 하나다. */
+    /** 표본 4/4에서 확인된 유일한 항목이다(dart-financial.md의 「전체 재무제표」 절). 이 전환으로 실제로 열리는 것이 이것 하나다. */
     static final Set<String> ID_OPERATING_CASH_FLOW = ordered(
             "ifrs-full_CashFlowsFromUsedInOperatingActivities",
             "ifrs_CashFlowsFromUsedInOperatingActivities");
@@ -253,7 +255,8 @@ final class DartFullAccountMapper {
     /**
      * 재무상태표에 이익잉여금이 없을 때 <b>자본변동표의 기말 잔액</b>으로 대신한다.
      *
-     * <p>§8의 세 종목(오리온·오리온홀딩스·에스티큐브)은 요약본에도 전체 재무제표의
+     * <p>dart-financial.md의 「계정 집합이 회사마다 다르다」 절의 세 종목(오리온·오리온홀딩스·에스티큐브)은
+     * 요약본에도 전체 재무제표의
      * 재무상태표에도 <b>행 자체가 없다.</b> 이름이 다른 것이 아니므로 계정명 후보군을 늘려도
      * 열리지 않는다. 남는 자리가 자본변동표다.
      *

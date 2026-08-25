@@ -28,8 +28,8 @@ import java.util.Set;
 /**
  * DART 정기보고서 주요정보 어댑터. 표 여덟을 <b>원문 그대로</b> 받는다(ADR-0081).
  *
- * <p>실측과 필드 계약은 {@code docs/api-spec/dart-open-api.md} §11-H·§11-I·§11-K와 §16에 있다.
- * <b>갈무리(§11-K)와 실측(§16)이 갈리면 §16이 정본이다</b> — 개발가이드가 틀렸던 자리가 넷이다.
+ * <p>실측과 필드 계약은 {@code docs/api-spec/dart-governance.md}에 있다.
+ * <b>개발가이드 갈무리와 실측이 갈리면 실측이 정본이다</b> — 개발가이드가 틀렸던 자리가 넷이다.
  *
  * <p>IMPORTANT — <b>여기서 값을 해석하지 않는다.</b> 숫자로 바꾸는 것도, 행을 고르는 것도
  * {@link DartGovernanceFactMapper}의 몫이다. 어댑터가 타입을 확정하면 매핑을 한 번 틀릴 때마다
@@ -129,7 +129,7 @@ public class DartGovernanceAdapter implements GovernanceDataSource {
                             .queryParam("crtfc_key", apiKey)
                             .queryParam("corp_code", corpCode.get())
                             // MUST: 네 자리다. 개발가이드가 outcmpnyDrctrNdChangeSttus의 타입을
-                            // STRING(1)로 적었으나 오기이고, 네 자리로 000이 오는 것을 §16-C가 봤다.
+                            // STRING(1)로 적었으나 오기이고, 네 자리로 000이 오는 것을 실측이 봤다.
                             .queryParam("bsns_year", String.valueOf(bsnsYear))
                             .queryParam("reprt_code", reportCode)
                             .build())

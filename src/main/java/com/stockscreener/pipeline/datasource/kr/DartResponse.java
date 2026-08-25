@@ -34,7 +34,8 @@ final class DartResponse {
      * status만 검사하고 <b>루트를 그대로</b> 준다.
      *
      * <p>IMPORTANT — 기업개황({@code company.json})은 응답이 {@code list} 배열이 아니라
-     * <b>평면 객체</b>다(§10-A). 그 엔드포인트에 {@link #requireList}를 쓰면 없는 {@code list}를
+     * <b>평면 객체</b>다(dart-open-api.md의 「기업개황」 절). 그 엔드포인트에 {@link #requireList}를 쓰면 없는
+     * {@code list}를
      * 찾아 빈 결과가 되는데, 오류가 아니라 <b>"이 종목은 값이 없다"로 읽힌다.</b>
      * status 판정을 두 곳에 복사하지 않으려고 이쪽을 정본으로 두고 저쪽이 부른다.
      */
@@ -71,7 +72,7 @@ final class DartResponse {
     /**
      * status 코드를 재시도 정책으로 옮긴다.
      *
-     * <p>전체 표는 {@code docs/api-spec/dart-open-api.md}에 있다.
+     * <p>전체 표는 {@code docs/api-spec/dart-open-api.md}의 「status 코드」 절에 있다.
      */
     private static DataSourceException.Kind kindOf(String status) {
         return switch (status) {

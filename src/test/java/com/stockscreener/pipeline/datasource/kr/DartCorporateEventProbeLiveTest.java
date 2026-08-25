@@ -50,7 +50,7 @@ class DartCorporateEventProbeLiveTest {
 
     private static final List<Sample> OPINION_SAMPLES = List.of(
             new Sample("005930", "삼성전자", "대형 제조"),
-            new Sample("271560", "오리온", "api-spec §8 결손사"));
+            new Sample("271560", "오리온", "api-spec 이익잉여금 결손사"));
 
     @Test
     @DisplayName("[live][probe] 합병·주식교환 결정이 U-06을 열어 주는지 기록한다")

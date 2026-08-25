@@ -34,7 +34,7 @@ import java.util.Set;
 /**
  * DART 「증자(감자) 현황」({@code irdsSttus.json}) 어댑터. 액면분할·병합과 무상증자를 받는다.
  *
- * <p>실측과 필드 계약은 {@code docs/api-spec/dart-open-api.md} §10-B·§10-B-2·§11-B에 있다.
+ * <p>실측과 필드 계약은 {@code docs/api-spec/dart-corporate-action.md}에 있다.
  *
  * <h2>IMPORTANT — 이 소스 하나로는 값이 나오지 않는다</h2>
  * <p><b>무엇이 가격을 바꾸는 행위인가는 DART의 낱말이 답하고, 얼마나 바꾸는가와 언제부터인가는
@@ -46,7 +46,8 @@ import java.util.Set;
  * <h2>이 소스가 답하지 못하는 것 둘</h2>
  * <ul>
  *   <li><b>액면병합이 실리지 않는다.</b> 대한전선 2023 10:1 병합은 <b>행 자체가 없다</b> —
- *       병합은 자본금을 바꾸지 않아 「증자(감자)」에 실릴 자리가 없다(§10-B 실측). 그쪽은
+ * 병합은 자본금을 바꾸지 않아 「증자(감자)」에 실릴 자리가 없다(dart-corporate-action.md의 「증자(감자) 현황」
+ * 절 실측). 그쪽은
  *       {@code AdjustmentRecalculator.detectCandidates}가 후보로 올린다.
  *   <li><b>최대 넉 달 늦다.</b> 정기보고서에만 실리므로 {@link DartIrdsReports}가 <b>빈 집합을
  *       내는 것이 정상</b>인 창이 있다.
@@ -236,7 +237,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
                     yield Optional.empty();
                 }
                 // MUST NOT: 조용히 버리지 않는다. 버리면 "그런 사건이 없다"와 "우리가 그 이름을
-                // 모른다"가 구분되지 않는다(§8의 이익잉여금 전례). 로그로만 두는 것도 같다 —
+                // 모른다"가 구분되지 않는다(dart-financial.md의 「계정 집합이 회사마다 다르다」 절의 이익잉여금 전례). 로그로만 두는 것도 같다 —
                 // 판정하는 사람은 로그를 보지 않는다(ADR-0050).
                 yield nameOnly(row, evidence, security);
             }

@@ -127,7 +127,7 @@ class DartCorporateActionAdapterLiveTest {
         System.out.println("""
 
                 → '우선'이 안 들어간 우선주 표기가 있으면 어댑터의 필터를 그 값으로 고친다.
-                  MUST: 관측 결과를 api-spec §10-B에 옮겨 적는다. 여기 출력만 남으면 증발한다.""");
+                  MUST: 관측 결과를 api-spec dart-corporate-action.md에 옮겨 적는다. 여기 출력만 남으면 증발한다.""");
     }
 
     private record Probe(int year, String code, String label) {

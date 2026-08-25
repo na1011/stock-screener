@@ -23,7 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <h2>세 번째로 재는 이유 — 앞의 둘이 시험한 표준코드는 하나뿐이었다</h2>
  *
- * <p>§7이 4개사에서 1/4, §12가 8개사에서 실질 2/8로 닫았다. 그런데 <b>그 둘이 완전일치로 센
+ * <p>4개사 표본이 1/4, {@code DartMissingAccountProbeLiveTest}가 8개사에서 실질 2/8로 닫았다. 그런데 <b>그 둘이
+ * 완전일치로 센
  * {@code account_id}는 {@code ifrs-full_AdjustmentsForDepreciationAndAmortisationExpense}
  * 하나</b>이고 나머지는 계정명 부분일치였다(그중 하나가 오리온 오진이라 3/8 → 2/8로 정정됐다).
  * <b>「그 하나가 안 왔다」와 「감가상각비 계정이 없다」는 다르다.</b>
@@ -40,20 +41,23 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p><b>IMPORTANT — 판정은 비대칭이다.</b> 0/8은 「닫혔다」가 되지만 8/8은 「유망」까지다. §8이
  * 그 반례다 — 이익잉여금은 4개사에 다 왔는데 350종목에서 셋이 비었다. <b>350종목 재적재로 재기
- * 전에는 지표를 걸지 않는다</b>(§12의 MUST).
+ * 전에는 지표를 걸지 않는다</b>(dart-financial.md의 「계정별 가용성」 절의 MUST).
  *
- * <p><b>MUST NOT: 계정명 부분일치를 발견 수에 더하지 않는다.</b> §12가 정확히 그 방식으로 3/8을
+ * <p><b>MUST NOT: 계정명 부분일치를 발견 수에 더하지 않는다.</b> {@code DartMissingAccountProbeLiveTest}가
+ * 정확히 그 방식으로 3/8을
  * 냈다가 오리온의 {@code 투자부동산감가상각비 조정}을 걸러 2/8로 정정했다 — 그것은 투자부동산 한
  * 항목의 조정액이지 총 감가상각비가 아니고, <b>이 오진은 틀린 값이 훨씬 작아 눈에 덜 띈다.</b>
  * 그래서 이름에 {@code 감가상각}·{@code 상각}이 든 행은 <b>세지 않고 나열만</b> 한다. 나열의
  * 목적은 후보 {@code account_id}가 아직도 모자라는지 사람이 판정하는 것이다.
  *
  * <p>이것이 여는 것은 EBITDA이고, 그 위에 EV/EBITDA와 순부채/EBITDA(원본 H-03)가 선다.
- * <b>다만 EBITDA가 열려도 EV는 총차입금 없이 서지 않는다</b> — 그쪽은 §7·§12가 「우리가 만드는
+ * <b>다만 EBITDA가 열려도 EV는 총차입금 없이 서지 않는다</b> — 그쪽은 dart-financial.md의 「계정별 가용성」
+ * 절이 「우리가 만드는
  * 값」이라 적었고 ADR-0062 §버린 대안이 기각했다. <b>이 탐침의 결과를 「EV/EBITDA를 만들어도
  * 된다」로 읽지 않는다.</b>
  *
- * <p>표본은 §12·§13과 <b>같은 여덟</b>이다. 호출 수는 <b>회사당 1콜 = 8콜</b>.
+ * <p>표본은 {@code DartMissingAccountProbeLiveTest}·{@code DartCapexProbeLiveTest}와 <b>같은 여덟</b>이다. 호출
+ * 수는 <b>회사당 1콜 = 8콜</b>.
  */
 @Tag("live")
 @EnabledIfEnvironmentVariable(named = "DART_API_KEY", matches = ".+",
@@ -66,7 +70,7 @@ class DartDepreciationProbeLiveTest {
     /** 결산이 끝나 사업보고서가 확실히 있는 연도. */
     private static final String SETTLED_YEAR = "2025";
 
-    /** §12·§13과 같은 여덟. 중분류가 겹치지 않는다. */
+    /** 앞선 탐침 둘과 같은 여덟. 중분류가 겹치지 않는다. */
     private static final Map<String, String> SAMPLES = new LinkedHashMap<>();
 
     static {
@@ -93,7 +97,7 @@ class DartDepreciationProbeLiveTest {
                     List.of("ifrs-full_AdjustmentsForDepreciationAndAmortisationExpense",
                             "dart_AdjustmentsForDepreciationAndAmortisationExpense",
                             "ifrs_AdjustmentsForDepreciationAndAmortisationExpense"),
-                    "§7·§12가 유일하게 완전일치로 센 축. 그 결과가 1/4·1/8이었다"),
+                    "앞선 탐침 둘이 유일하게 완전일치로 센 축. 그 결과가 1/4·1/8이었다"),
             new Target("CF 감가상각 조정(단독)", List.of("CF"),
                     List.of("ifrs-full_AdjustmentsForDepreciationExpense",
                             "dart_AdjustmentsForDepreciationExpense"),
@@ -122,7 +126,7 @@ class DartDepreciationProbeLiveTest {
     /**
      * 세지 않고 나열만 하는 것. 후보 {@code account_id}가 모자랐는지 사람이 판정하는 재료다.
      *
-     * <p>MUST NOT: 여기 걸린 것을 발견 수에 더하지 않는다. §12의 오리온
+     * <p>MUST NOT: 여기 걸린 것을 발견 수에 더하지 않는다. {@code DartMissingAccountProbeLiveTest}의 오리온
      * {@code 투자부동산감가상각비 조정}이 정확히 그렇게 3/8이라는 거짓 판정을 만들었다.
      */
     private static final List<String> NAME_HINTS = List.of("감가상각", "상각");
@@ -135,7 +139,7 @@ class DartDepreciationProbeLiveTest {
         String apiKey = DartProbeSupport.apiKey();
 
         System.out.println("\n===== 감가상각비 재측정 (" + SETTLED_YEAR + " 사업보고서, CFS) =====");
-        System.out.println("§7은 1/4, §12는 실질 2/8로 닫았다. 그 둘이 완전일치로 센 ID는 하나뿐이다.");
+        System.out.println("4개사는 1/4, 8개사는 실질 2/8로 닫았다. 그 둘이 완전일치로 센 ID는 하나뿐이다.");
         System.out.println("이 탐침이 새로 하는 것은 축을 넓히는 것뿐이다 — 표본도 방법도 같다.");
         System.out.println("MUST: 이름 부분일치는 세지 않는다. 아래 '나열'은 후보 부족 판정용이다.");
 
@@ -244,8 +248,8 @@ class DartDepreciationProbeLiveTest {
             unmatchedIds.forEach((id, n) -> System.out.printf("    %-70s %d개사%n", id, n));
         }
         System.out.println("\n호출 수: 회사당 1콜 = " + SAMPLES.size() + "콜.");
-        System.out.println("MUST: 이 출력을 dart-open-api.md에 §12와 나란한 새 절로 옮긴다.");
-        System.out.println("      §7·§12 표에 섞지 않는다 — 그 절들이 머리에 표본을 못박고 있다.");
+        System.out.println("MUST: 이 출력을 dart-financial.md의 「계정별 가용성」 절에 옮긴다.");
+        System.out.println("      앞선 탐침들의 표에 섞지 않는다 — 그 절들이 머리에 표본을 못박고 있다.");
         System.out.println("MUST NOT: 결과를 'EV/EBITDA를 만들어도 된다'로 읽지 않는다. EV는 총차입금이 막는다.");
 
         assertThat(answered)

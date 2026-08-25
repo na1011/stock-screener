@@ -22,10 +22,10 @@ import java.util.List;
  *
  * <p>보통주 행을 쓰는 이유는 {@code price_daily.listed_shares}·{@code MARKET_CAP}이 전부 보통주
  * 축이라 <b>합계를 쓰면 이 지표만 분모가 달라지기</b> 때문이다 — 삼성전자 합계 발행총수가 67.4억인데
- * 보통주만은 59.2억이다(§16-A).
+ * 보통주만은 59.2억이다(dart-governance.md의 「주식의 총수 현황」 절).
  *
  * <p>분자와 분모가 <b>같은 응답의 같은 행</b>에서 온다. 그래서 소스가 단위를 잘못 낸 회사에서도
- * 비율은 성립한다 — 229640은 두 값이 함께 10<sup>6</sup>배로 왔다(§16-C).
+ * 비율은 성립한다 — 229640은 두 값이 함께 10<sup>6</sup>배로 왔다(dart-governance.md의 「주식의 총수 현황」 절).
  */
 @Component
 @IndicatorMeta(

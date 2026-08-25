@@ -18,7 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 실측한다. ADR-0049가 착수 전에 재라고 지목한 값이다.
  *
  * <p>{@link DartShareChangeProbeLiveTest}가 액면분할이 {@code 주식분할}로 온다는 것을 이미
- * 확인했다(api-spec §10-B). 남은 둘은 미관측이고, <b>낱말을 틀리면 0건이 되며 그것이
+ * 확인했다(api-spec dart-corporate-action.md의 「증자(감자) 현황」 절). 남은 둘은 미관측이고, <b>낱말을 틀리면
+ * 0건이 되며 그것이
  * "그런 사건이 없다"로 읽힌다.</b> 그래서 별도 탐침으로 둔다 — 저쪽을 다시 돌리면 이미 답이
  * 나온 분할에 콜을 다시 태운다.
  *
@@ -64,7 +65,7 @@ class DartCorporateActionWordProbeLiveTest {
     private static final String ANNUAL = "11011";
 
     /**
-     * 최근 사업보고서 하나가 5년을 준다는 §10-B의 실측을 이 표본으로 다시 건다.
+     * 최근 사업보고서 하나가 5년을 준다는 dart-corporate-action.md의 실측을 이 표본으로 다시 건다.
      * 참이면 두 사건 모두 이 해의 보고서 하나에 실려 있어야 한다.
      */
     private static final int RECENT_ANNUAL_YEAR = 2025;
@@ -86,7 +87,7 @@ class DartCorporateActionWordProbeLiveTest {
                     known.name(), known.ticker(), known.label(),
                     known.priceJumpDate(), known.shareChangeDate(), known.expectedRatio());
 
-            // 최근 사업보고서 하나로 끝나는지가 곧 적재 비용이다(§10-B의 350콜 주장).
+            // 최근 사업보고서 하나로 끝나는지가 곧 적재 비용이다(dart-corporate-action.md의 350콜 주장).
             JsonNode recent = fetch(client, corpCode, RECENT_ANNUAL_YEAR);
             List<JsonNode> rows = rowsOf(recent);
             System.out.println("    [" + RECENT_ANNUAL_YEAR + " 사업보고서] status="
@@ -117,7 +118,7 @@ class DartCorporateActionWordProbeLiveTest {
 
                 → 이 목록이 어댑터의 '가격을 바꾸는 행위' 판정표의 씨앗이다.
                   MUST: 목록에 없는 낱말을 조용히 버리지 않는다. 버리면 '그런 사건이 없다'와
-                  '우리가 그 이름을 모른다'가 구분되지 않는다(api-spec §8의 이익잉여금 전례).""");
+                  '우리가 그 이름을 모른다'가 구분되지 않는다(api-spec dart-financial.md의 「계정 집합이 회사마다 다르다」 절의 이익잉여금 전례).""");
 
         assertThat(allForms)
                 .as("응답이 통째로 비면 요청 자체가 틀린 것이다 — status를 위 출력에서 확인한다")

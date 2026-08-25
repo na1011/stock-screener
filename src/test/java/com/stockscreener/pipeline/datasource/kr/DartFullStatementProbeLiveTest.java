@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>주요계정이 주지 않는 넷 — 영업활동현금흐름·현금성자산·총차입금·이자비용 — 을 얻으려면
  * 여기로 옮겨야 하는데, 옮기기 전에 <b>정말 주는지</b>와 <b>비용이 얼마인지</b>를 숫자로
- * 알아야 한다. <b>이 탐침의 결과가 {@code docs/api-spec/dart-open-api.md} §7이다.</b>
+ * 알아야 한다. <b>이 탐침의 결과가 {@code docs/api-spec/dart-financial.md}의 「전체 재무제표」 절이다.</b>
  *
  * <p>테스트라기보다 <b>탐침</b>이다. 단언은 최소한만 두고 관측한 것을 표준출력으로 낸다 —
  * 그 출력이 api-spec 문서에 그대로 옮겨진다. 알아야 할 것은 넷이다.

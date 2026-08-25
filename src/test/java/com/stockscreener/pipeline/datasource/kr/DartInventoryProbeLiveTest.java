@@ -19,11 +19,12 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 전체 재무제표가 <b>재고자산</b>을 주는지 실측한다. §13이 묶어 세었던 무형자산·영업권을 함께 잰다.
+ * 전체 재무제표가 <b>재고자산</b>을 주는지 실측한다. {@code DartCapexProbeLiveTest}가 묶어 세었던
+ * 무형자산·영업권을 함께 잰다.
  *
  * <h2>왜 지금 재는가 — 이 계정은 한 번도 재본 적이 없다</h2>
  *
- * <p>탐침 표 §7(4개사)·§12(8개사)·§13(8개사) <b>어디에도 재고자산이 없다.</b> 그런데
+ * <p>탐침 표(4개사·8개사·8개사) <b>어디에도 재고자산이 없다.</b> 그런데
  * {@code docs/phase-criteria.md:449}가 <i>"재고 대 매출 증가율은 {@code IndicatorRef}로 쓸 수
  * 있지만 재고자산이 없어 값이 안 난다"</i>라고 적어 <b>원자료의 부재로 읽힌다.</b> 같은 파일
  * 448행이 바로 그 구분을 요구한다 — <i>"도구의 한계인지 원자료의 부재인지 갈렸다. 둘은 다르다
@@ -34,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 남아 있는 사례다.</b>
  *
  * <p><b>IMPORTANT — 판정은 비대칭이다. "닫혔다"는 결론만 낼 수 있고 "열렸다"는 못 낸다</b>
- * (§12·§13과 같다). §8이 반례다 — 이익잉여금은 4개사에서 전부 왔는데 350종목에서 3종목이 비었다.
+ * (앞선 탐침 둘과 같다). 이익잉여금이 반례다 — 이익잉여금은 4개사에서 전부 왔는데 350종목에서 3종목이 비었다.
  * <b>8/8이 나와도 350종목 재적재로 재기 전에는 커버리지를 한 줄도 주장하지 않는다.</b>
  *
  * <h2>MUST — 분모는 8이 아니다</h2>
@@ -43,7 +44,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 자체가 없다. 서비스업(NAVER)도 희박하다(원리적 부재인지 회사 사정인지는 <b>미확인</b>이며
  * 결과로 확정한다). 선례가 코드에 있다 — {@link DartFullAccountMapper} {@code ID_COST_OF_SALES}
  * javadoc이 <i>"없는 것이 결손이 아닌 유일한 계정이다 — 금융업·서비스업은 개념 자체가 없어
- * 원래 오지 않는다"</i>라고 적고, §12 표의 매출원가 행도 <i>"6/8 … 결손이 아니라 업종이다"</i>로
+ * 원래 오지 않는다"</i>라고 적고, dart-financial.md의 「계정별 가용성」 절 표의 매출원가 행도 <i>"6/8 … 결손이
+ * 아니라 업종이다"</i>로
  * 같은 형식을 쓴다.
  *
  * <p>MUST NOT: {@code 6/8}처럼 <b>분모만</b> 적지 않는다. 적으려면 같은 칸에 빠진 회사 이름과
@@ -54,11 +56,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p><b>① {@code sj_div}를 {@code BS}로 좁힌다.</b> 재고자산은 <b>저량(잔액)</b>인데 같은 이름이
  * 두 곳에 더 있다 — {@code CF}의 {@code 재고자산의 감소(증가)}는 <b>증감분</b>이라 잔액으로
  * 저장하면 「재고 증가율」이 <i>증감의 증감</i>이 되고, {@code IS}/{@code CIS}에
- * {@code 재고자산평가손실}과 {@code 제품 및 재공품의 변동}이 있다. §7이 현금및현금성자산에서
+ * {@code 재고자산평가손실}과 {@code 제품 및 재공품의 변동}이 있다. dart-financial.md의 「계정별 가용성」 절이
+ * 현금및현금성자산에서
  * 같은 함정을 적었다 — KB금융은 CF의 {@code 기초 현금 및 현금성자산}이 먼저 잡혔다.
  *
  * <p><b>② 부호의 뜻이 capex와 반대다.</b> capex는 유출의 표기 관례라 음수가 정상일 수 있었지만
- * (§13에서 350종목 중 22행), <b>재고자산은 저량이라 음수가 원리적으로 없다.</b> 나오면 그것
+ * ({@code DartCapexProbeLiveTest}에서 350종목 중 22행), <b>재고자산은 저량이라 음수가 원리적으로 없다.</b>
+ * 나오면 그것
  * 자체가 새 사실이므로 부호를 함께 찍는다.
  *
  * <p><b>③ CFS가 비면 OFS로 다시 부른다.</b> capex 탐침은 {@code CFS} 한 번만 부르고 빈 응답이면
@@ -66,18 +70,20 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 운영 어댑터 {@link DartFullStatementAdapter}는 그 폴백을 갖고 있고, 여기서 빠뜨리면
  * 커버리지 분모가 오염된다.
  *
- * <h2>무형자산을 함께 재는 이유 — §13이 스스로 남긴 MUST의 이행</h2>
+ * <h2>무형자산을 함께 재는 이유 — {@code DartCapexProbeLiveTest}가 남긴 MUST의 이행</h2>
  *
- * <p>§13이 표준코드 <b>둘을 한 칸에 묶어</b> 세어 무형자산 8/8이라는 <b>과대 판정</b>을 냈고,
+ * <p>{@code DartCapexProbeLiveTest}가 표준코드 <b>둘을 한 칸에 묶어</b> 세어 무형자산 8/8이라는 <b>과대
+ * 판정</b>을 냈고,
  * <i>"MUST: 3.6(유형자본 대비 수익률)을 열려면 두 표준코드를 갈라 다시 잰다"</i>가 미이행으로
  * 남아 있다. {@code IntangibleAssetsOtherThanGoodwill}은 영업권을 <b>빼고</b>
  * {@code IntangibleAssetsAndGoodwill}은 <b>포함한다.</b> 셋 다 재고자산과 같은 {@code BS}
  * 구간·같은 응답이라 <b>추가 API 콜이 0이다.</b>
  *
- * <p>MUST NOT: 뜻이 다른 표준코드를 한 칸에 묶어 세지 않는다. §12의 오진은 계정명 부분일치였고
- * §13의 오진은 표준코드 묶음이었다 — <b>표준코드를 쓴다고 오진이 사라지지 않는다.</b>
+ * <p>MUST NOT: 뜻이 다른 표준코드를 한 칸에 묶어 세지 않는다. {@code DartMissingAccountProbeLiveTest}의 오진은
+ * 계정명 부분일치였고
+ * 이쪽 오진은 표준코드 묶음이었다 — <b>표준코드를 쓴다고 오진이 사라지지 않는다.</b>
  *
- * <p><b>정본은 {@code dart-open-api.md} §14 하나다.</b> 이 javadoc과 실행 출력은 그리로 가는
+ * <p><b>정본은 {@code dart-financial.md}의 「계정별 가용성」 절 하나다.</b> 이 javadoc과 실행 출력은 그리로 가는
  * 포인터이며, 같은 문장을 여러 곳에 두면 {@code check-doc-staleness.sh}의 거울 표에 등록해야
  * 한다(등록하지 않은 사본은 갈려도 아무도 모른다).
  *
@@ -94,7 +100,7 @@ class DartInventoryProbeLiveTest {
     /** 결산이 끝나 사업보고서가 확실히 있는 연도. */
     private static final String SETTLED_YEAR = "2025";
 
-    /** §12·§13과 같은 여덟. 중분류가 겹치지 않는다. */
+    /** 앞선 탐침 둘과 같은 여덟. 중분류가 겹치지 않는다. */
     private static final Map<String, String> SAMPLES = new LinkedHashMap<>();
 
     static {
@@ -138,7 +144,7 @@ class DartInventoryProbeLiveTest {
                     "총계와 뜻이 다르므로 별도 칸. 요소 존재 미확인"),
             new Target("무형자산(영업권 제외)", "BS",
                     List.of("ifrs-full_IntangibleAssetsOtherThanGoodwill"),
-                    "3.6 유형자본 — §13이 아래와 묶어 세어 과대 판정했다"),
+                    "3.6 유형자본 — 앞선 탐침이 아래와 묶어 세어 과대 판정했다"),
             new Target("무형자산 및 영업권(포함)", "BS",
                     List.of("ifrs-full_IntangibleAssetsAndGoodwill"),
                     "3.6 — 위와 뜻이 다르다. 영업권을 포함한다"),
@@ -149,7 +155,7 @@ class DartInventoryProbeLiveTest {
     /**
      * 세지 않고 나열만 하는 <b>이름 축</b>. {@code sj_div}를 좁히지 않고 다섯 구분 전부를 훑는다.
      *
-     * <p>MUST NOT: 이 목록에 걸린 것을 발견 수에 더하지 않는다. §12의 오리온
+     * <p>MUST NOT: 이 목록에 걸린 것을 발견 수에 더하지 않는다. {@code DartMissingAccountProbeLiveTest}의 오리온
      * {@code 투자부동산감가상각비 조정}이 정확히 그렇게 3/8이라는 거짓 판정을 만들었다.
      * {@code 상품}은 {@code 상품권}을, {@code 제품}은 {@code 제품보증충당부채}를 문다.
      */
@@ -213,7 +219,7 @@ class DartInventoryProbeLiveTest {
             System.out.printf("%n--- %s(%s) [%s] %s%n", sample.getValue(), sample.getKey(),
                     usedDiv, DartProbeSupport.describeStatus(body));
             if (list == null || list.isEmpty()) {
-                // 013(데이터 없음)과 100(요청이 틀림)을 구분하지 않으면 탐침이 뜻을 잃는다(§4).
+                // 013(데이터 없음)과 100(요청이 틀림)을 구분하지 않으면 탐침이 뜻을 잃는다(dart-open-api.md의 「status 코드」 절).
                 System.out.println("    CFS·OFS 둘 다 행이 없다 — 회사 사정이므로 분모에서 뺀다.");
                 continue;
             }
@@ -257,7 +263,7 @@ class DartInventoryProbeLiveTest {
             }
         }
         System.out.println("\n호출 수: 회사당 1~2콜 = " + (SAMPLES.size() + ofsFallbacks) + "콜.");
-        System.out.println("MUST: 이 출력을 dart-open-api.md §14로 옮긴다. §7 표에는 섞지 않는다");
+        System.out.println("MUST: 이 출력을 dart-financial.md의 「계정별 가용성」 절에 옮긴다");
         System.out.println("      (그 절이 머리에 4개사 표본을 못박고 있어 섞으면 거짓이 된다).");
         System.out.println("MUST: 8/8이어도 350종목 재적재 전에는 커버리지를 주장하지 않는다.");
 

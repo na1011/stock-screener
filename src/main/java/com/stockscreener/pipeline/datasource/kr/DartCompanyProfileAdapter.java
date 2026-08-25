@@ -22,7 +22,7 @@ import java.util.Set;
 /**
  * DART 기업개황 어댑터. 업종코드(KSIC)와 결산월을 받는다.
  *
- * <p>실측과 필드 계약은 {@code docs/api-spec/dart-open-api.md} §10-A·§11-A에 있다.
+ * <p>실측과 필드 계약은 {@code docs/api-spec/dart-open-api.md}의 「기업개황」 절에 있다.
  *
  * <p>IMPORTANT — <b>이 엔드포인트만 응답이 {@code list} 배열이 아니라 평면 객체다.</b>
  * 다른 DART 엔드포인트와 형태가 달라 {@link DartResponse#requireList}를 그대로 쓰면

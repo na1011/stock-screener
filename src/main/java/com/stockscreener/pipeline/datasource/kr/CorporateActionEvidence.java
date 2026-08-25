@@ -14,7 +14,8 @@ import java.util.Optional;
  * 우리가 저장한 시계열이 기업 행위에 대해 <b>실제로 무엇을 말하는가</b>.
  *
  * <p>DART가 답하는 것은 <i>"그 무렵 이런 종류의 사건이 있었다"</i>까지다. 언제 효력이
- * 생겼고 비율이 얼마인지는 {@code listed_shares}가 답한다(ADR-0049 · api-spec §10-B-2).
+ * 생겼고 비율이 얼마인지는 {@code listed_shares}가 답한다(ADR-0049 · api-spec dart-corporate-action.md의
+ * 「분할·병합의 비율과 효력일」 절).
  * 여기 있는 것은 전부 <b>순수 함수</b>이며 소스를 모른다.
  *
  * <p>IMPORTANT — <b>일자 보정의 방향이 사건 종류마다 반대다.</b> 액면분할은 소스 원값이

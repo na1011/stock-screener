@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <b>일자 보정의 방향이 사건 종류마다 반대이며</b>, <b>무상증자에는 스냅을 걸면 안 된다.</b>
  * 셋 다 틀려도 예외가 나지 않고 값이 그럴듯하다.
  *
- * <p>응답 픽스처와 시세는 {@code docs/api-spec/dart-open-api.md} §10-B·§10-B-2와
+ * <p>응답 픽스처와 시세는 {@code docs/api-spec/dart-corporate-action.md}와
  * {@code price_daily} 실측이다. 조회 창을 <b>과거로 잡은 것은 의도적이다</b> —
  * {@link DartIrdsReports}가 제출일을 보므로, 최근 창으로 잡으면 이 테스트가 달력에 따라
  * 초록·빨강을 오간다.

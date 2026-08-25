@@ -258,7 +258,7 @@ class AdjustmentRecalculatorTest {
     @DisplayName("주식수가 그대로인 급락은 SPLIT이 아니라 UNKNOWN이다 — 무상증자 권리락이 그 모양이다")
     void exRightsDayWithUnchangedShareCountIsUnknown() {
         // 루닛 2023-11-09 실측. 예전에는 여기서 SPLIT + ratio 1.89가 나갔고, 승인하면
-        // 틀린 계수가 들어갔다. 무상증자의 비율은 신주상장일에야 나온다(§10-B-2).
+        // 틀린 계수가 들어갔다. 무상증자의 비율은 신주상장일에야 나온다(dart-corporate-action.md의 「분할·병합의 비율과 효력일」 절).
         writer.write(stockId, List.of(
                 bar("2023-11-08", "170500", 12_381_004L),
                 bar("2023-11-09", "90200", 12_381_004L)));

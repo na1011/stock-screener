@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 잡은 성공으로 끝난다. 콜 수는 문서 넷에 적혀 있어 <b>실제와 갈리면 아무도 못 잡는다</b> —
  * 실제로 한 번 갈렸다.
  *
- * <p>해 수의 근거는 전부 실측이다({@code docs/api-spec/dart-open-api.md} §16-C·§16-D).
+ * <p>해 수의 근거는 전부 실측이다({@code docs/api-spec/dart-governance.md}).
  */
 class GovernanceLoadJobTest {
 
@@ -72,7 +72,7 @@ class GovernanceLoadJobTest {
         assertThat(pairs).as("(엔드포인트, 연도) 쌍").isEqualTo(22);
         assertThat(pairs * UNIVERSE)
                 .as("DART 보수 예산 10,000의 77%다. 이 수가 바뀌면 batch-load·api-sources skill과 "
-                        + "ADR-0081·api-spec §16-D의 인용을 함께 고친다 — 한 번 갈린 적이 있다")
+                        + "ADR-0081·api-spec dart-governance.md의 인용을 함께 고친다 — 한 번 갈린 적이 있다")
                 .isEqualTo(7700);
     }
 

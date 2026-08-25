@@ -27,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <i>"(대상법인 복수조회 가능)"</i> 한 줄이고, 그것은 문서지 실측이 아니다.
  *
  * <p>택사노미는 반대 방향의 관측이다. 요청 인자가 {@code crtfc_key} + {@code sj_div} 둘뿐이라
- * <b>{@code corp_code}를 받지 않는다</b> — 즉 api-spec §9가 적어 둔 "§8의 이익잉여금 결손이
+ * <b>{@code corp_code}를 받지 않는다</b> — 즉 api-spec §9가 적어 둔 "dart-financial.md의 「계정 집합이
+ * 회사마다 다르다」 절의 이익잉여금 결손이
  * '계정이 없는 것'인지 '우리가 이름을 모르는 것'인지 가르는 데 쓸 수 있다"는 <b>성립할 수
  * 없다.</b> 회사별 재무제표가 아니라 표준계정 사전이기 때문이다. 그 사실을 실측으로 확정하고,
  * 대신 P10의 계정 매칭 후보군을 손으로 늘리지 않고 만들 수 있는지를 본다.

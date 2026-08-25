@@ -29,8 +29,10 @@ import java.util.Set;
 /**
  * DART 단일회사 <b>전체</b> 재무제표 어댑터({@code fnlttSinglAcntAll}).
  *
- * <p>주요계정({@link DartFinancialAdapter})이 주지 않는 것을 받는다. 실측(§7)에서 이 전환으로
- * 실제로 열리는 것은 <b>영업활동현금흐름 하나</b>이고, 그 밖에 자본변동표가 함께 와서 §8의
+ * <p>주요계정({@link DartFinancialAdapter})이 주지 않는 것을 받는다. 실측(dart-financial.md의 「계정별 가용성」
+ * 절)에서 이 전환으로
+ * 실제로 열리는 것은 <b>영업활동현금흐름 하나</b>이고, 그 밖에 자본변동표가 함께 와서 dart-financial.md의
+ * 「계정 집합이 회사마다 다르다」 절의
  * 이익잉여금 결손을 여는 길이 된다. 이자비용·감가상각비는 <b>여전히 얻지 못한다</b> —
  * 표본 4사 중 금융지주에만 표준코드로 왔다.
  *
@@ -40,7 +42,8 @@ import java.util.Set;
  *
  * <p>MUST NOT: 분기 보고서의 영업활동현금흐름을 저장하지 않는다. 개발가이드가 [3개월] 금액
  * 이라고 밝힌 것은 <b>(포괄)손익계산서뿐</b>이고 현금흐름표는 누적인지 3개월인지 실측되지
- * 않았다(§11-E). 연간만 쓰는 동안은 드러나지 않지만, 모른 채로 저장해 두면 분기 OCF를 쓰는
+ * 않았다(dart-financial.md의 「전체 재무제표」 절). 연간만 쓰는 동안은 드러나지 않지만, 모른 채로 저장해 두면
+ * 분기 OCF를 쓰는
  * 조건이 붙는 순간 <b>4배나 1/4로 조용히 틀린다.</b>
  */
 // 키가 없으면 등록하지 않는다. 같은 패키지의 다른 DART 어댑터와 같은 이유다.
@@ -230,7 +233,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         BigDecimal retainedEarnings = DartFullAccountMapper.find(
                 balance, DartFullAccountMapper.ID_RETAINED_EARNINGS, DartAccountMapper.RETAINED_EARNINGS);
         if (retainedEarnings == null) {
-            // §8의 세 종목이 여기 걸린다. 재무상태표에 행 자체가 없으므로 자본변동표의
+            // dart-financial.md의 「계정 집합이 회사마다 다르다」 절의 세 종목이 여기 걸린다. 재무상태표에 행 자체가 없으므로 자본변동표의
             // 기말 잔액으로 대신한다 — 규칙의 근거는 그 메서드에 있다.
             retainedEarnings = DartFullAccountMapper.retainedEarningsFromEquityChanges(
                     list, security.ticker(), year, label);
@@ -276,7 +279,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                         balance, DartFullAccountMapper.ID_CASH_AND_EQUIVALENTS, null),
                 capex(cashFlow, period),
                 // 재무상태표에서만 읽는다 — 현금흐름표의 같은 낱말은 증감분이고 손익의 것은
-                // 평가손실이다(§14).
+                // 평가손실이다(dart-financial.md의 「계정별 가용성」 절).
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_INVENTORIES, null));
     }
@@ -285,14 +288,16 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 4분기 <b>잔액</b>만 담은 보고서. 손익과 현금흐름은 비운다.
      *
      * <p>4분기 보고서는 존재하지 않으므로 그 행은 원래 사업보고서에서 유도된 것이고, 이 어댑터가
-     * 사업보고서만 다시 받으면 그 행의 결손은 <b>영영 남는다.</b> §8의 이익잉여금이 정확히 그
+     * 사업보고서만 다시 받으면 그 행의 결손은 <b>영영 남는다.</b> dart-financial.md의 「계정 집합이 회사마다
+     * 다르다」 절의 이익잉여금이 정확히 그
      * 자리다 — 채우지 않으면 {@code ALTMAN_Z}가 4분기 말을 최신으로 보는 구간(대략 1월~1분기
      * 공시일)에서만 값을 내지 못하고, 그 구멍은 보존 창 한가운데에 생겨 원인을 찾기 어렵다.
      *
      * <p>IMPORTANT — <b>잔액만</b> 싣는다. 재무상태표는 시점 값이라 연말 잔액이 곧 4분기 말
      * 잔액이지만, 손익과 현금흐름은 <b>유량</b>이라 사업보고서 값을 그대로 쓰면 1년치가 한
      * 분기에 들어간다. 유도하려면 3분기 <b>누적</b>을 빼야 하는데 이 어댑터는 누적 컬럼을 읽지
-     * 않으므로(분기 누적의 의미가 §11-E에서 미확인이다) 아예 내지 않는다. 비워 두면
+     * 않으므로(분기 누적의 의미가 dart-financial.md의 「전체 재무제표」 절에서 미확인이다) 아예 내지 않는다.
+     * 비워 두면
      * {@code fillMissing}이 건드리지 않아 기존 유도값이 그대로 남는다.
      *
      * <p>MUST NOT: 분기를 요청하지 않은 경로에서 부르지 않는다. 전 종목 연간 적재가 이것을
@@ -349,7 +354,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 영업활동현금흐름. <b>연간만</b> 낸다.
      *
      * <p>분기 값을 버리는 것이 아깝게 보이지만, 그 값이 3개월인지 누적인지 모르는 채로
-     * 저장하면 나중에 그것을 쓰는 쪽이 <b>모른다는 사실조차 모른다.</b> 실측이 그 절(§11-E)에
+     * 저장하면 나중에 그것을 쓰는 쪽이 <b>모른다는 사실조차 모른다.</b> 실측이 그 절(dart-financial.md의 「전체
+     * 재무제표」 절)에
      * 적히면 그때 연다.
      */
     private static BigDecimal operatingCashFlow(List<JsonNode> cashFlow, StatementPeriod period) {
@@ -366,7 +372,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 분기에 값이 있으면 <b>기간이 다른 두 수를 빼게 된다.</b>
      *
      * <p>MUST NOT: 무형자산의 취득을 여기 더하지 않는다. 실측에서 둘 다 8/8로 오지만
-     * (§13) 합칠지는 지표가 정할 문제이고, 원자료 계층에서 합치면 <b>나중에 가를 수
+     * (dart-financial.md의 「계정별 가용성」 절) 합칠지는 지표가 정할 문제이고, 원자료 계층에서 합치면
+     * <b>나중에 가를 수
      * 없다.</b> 원자료만 담는다는 선은 여기서도 지킨다.
      */
     private static BigDecimal capex(List<JsonNode> cashFlow, StatementPeriod period) {

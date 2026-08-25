@@ -239,7 +239,8 @@ public class FinancialWriter {
      * 다음에 이 경로로 다른 컬럼을 채울 때 다시 답해야 한다(ADR-0040).
      *
      * <p><b>P10에서 다시 답했다 — 여전히 성립한다.</b> 이 경로로 새로 차는 컬럼은
-     * {@code operating_cash_flow}(전 행 NULL이었다)와 §8 세 종목의
+     * {@code operating_cash_flow}(전 행 NULL이었다)와 dart-financial.md의 「계정 집합이 회사마다 다르다」 절의
+     * 세 종목의
      * {@code retained_earnings}다.
      * <ul>
      *   <li>OCF를 소비하는 지표는 이 phase에서 <b>처음 생긴다.</b> 저장된 값이 있을 수 없다.

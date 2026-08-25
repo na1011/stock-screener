@@ -39,7 +39,8 @@ public class CorporateActionLedger {
      *
      * <p>IMPORTANT — <b>달력일이 아니라 그 종목의 거래일</b>이다. 병합·감자는 변경상장 전에
      * 매매거래정지가 끼어(대한전선 2023은 11거래일이 비어 있다) 달력일로 재면 같은 사건이
-     * 멀어 보인다. 소스 원값이 사건 종류마다 ±1~2일 어긋나므로(§10-B) 이 창이 없으면 같은
+     * 멀어 보인다. 소스 원값이 사건 종류마다 ±1~2일 어긋나므로(dart-corporate-action.md의 「증자(감자) 현황」
+     * 절) 이 창이 없으면 같은
      * 사건이 두 행이 되고, <b>둘 다 승인되면 재구축이 두 계수를 곱해 정확히 두 번 적용한다.</b>
      */
     private static final int NEAR_DUPLICATE_TRADING_DAYS = 5;
@@ -210,7 +211,8 @@ public class CorporateActionLedger {
      * 것도 같은 이유다.
      *
      * <p>IMPORTANT — <b>근접중복 판정보다 신뢰도 판정이 먼저다.</b> 반대로 두면 원장이
-     * <b>선착순</b>이 된다. 소스가 최대 넉 달 늦으므로(api-spec §10-B) 그 사각지대의 사건은
+     * <b>선착순</b>이 된다. 소스가 최대 넉 달 늦으므로(api-spec dart-corporate-action.md의 「증자(감자) 현황」
+     * 절) 그 사각지대의 사건은
      * <b>구조적으로 휴리스틱이 먼저</b> 들어오고, 나중에 온 공시가 며칠 어긋났다는 이유로
      * 버려진다 — 남는 것은 {@code UNKNOWN} 후보 하나이고 {@link #findApplicable}이 그것을
      * 제외한다. {@link #judge}가 생긴 지금은 사람이 되살릴 수 있지만, <b>그러려면 사람이 그
@@ -566,7 +568,8 @@ public class CorporateActionLedger {
      * 며칠 어긋난 휴리스틱 후보를 공시가 <b>제자리로 옮기며</b> 덮는다. 덮지 못하면 비어 있음.
      *
      * <p>같은 일자의 {@code UPGRADED} 경로와 뜻이 같고 <b>{@code effective_date}까지 옮기는</b>
-     * 것만 다르다. 소스 원값이 사건 종류마다 반대쪽으로 ±1~2일 어긋나므로(api-spec §10-B)
+     * 것만 다르다. 소스 원값이 사건 종류마다 반대쪽으로 ±1~2일 어긋나므로(api-spec dart-corporate-action.md의
+     * 「증자(감자) 현황」 절)
      * 두 경로가 같은 사건에 서로 다른 날짜를 낸다 — 날짜가 정확히 일치할 때만 덮으면
      * <b>공시의 정확한 비율·일자가 흔치 않은 경로에서만 조용히 버려진다.</b>
      *

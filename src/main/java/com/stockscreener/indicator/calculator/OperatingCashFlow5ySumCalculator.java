@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  * 때문이다.
  *
  * <p><b>연간(FY) 재무를 쓴다.</b> 분기 현금흐름표의 금액이 3개월인지 누적인지는 실측되지
- * 않았고({@code dart-open-api.md} §11-E), 모른 채로 합치면 4배나 1/4로 조용히 틀린다.
+ * 않았고({@code dart-financial.md}의 「전체 재무제표」 절), 모른 채로 합치면 4배나 1/4로 조용히 틀린다.
  *
  * <h2>다섯 해가 실제로 다섯 해인지 확인한다</h2>
  *

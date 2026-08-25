@@ -31,8 +31,8 @@ import java.util.regex.Pattern;
  * (ADR-0006). 같은 패키지에 있어야 숫자 파싱의 정본인 {@link DartAccountMapper#parseAmount}를
  * 다시 짜지 않는다 — 콤마와 센티널 {@code -}의 규칙이 두 벌이 되면 한쪽만 고쳐진다.
  *
- * <p>모든 행 선택 규칙의 근거는 {@code docs/api-spec/dart-open-api.md} §16-A·§16-B·§16-C의
- * <b>실측</b>이다. 개발가이드(§11-K)와 갈리는 자리가 넷이며 그때는 §16이 정본이다.
+ * <p>모든 행 선택 규칙의 근거는 {@code docs/api-spec/dart-governance.md}의
+ * <b>실측</b>이다. 개발가이드와 갈리는 자리가 넷이며 그때는 실측이 정본이다.
  */
 @Component
 class DartGovernanceFactMapper implements GovernanceFactMapper {
@@ -43,11 +43,11 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
     private static final Map<String, Integer> COLUMN_OFFSETS =
             Map.of("thstrm", 0, "frmtrm", 1, "lwfr", 2);
 
-    /** 기수 표기의 구분 토큰. 공백·개행 변형이 셋이라 걷어낸 뒤 견준다(§16-B). */
+    /** 기수 표기의 구분 토큰. 공백·개행 변형이 셋이라 걷어낸 뒤 견준다(dart-governance.md의 「회계감사인의 명칭 및 감사의견」 절). */
     private static final Map<String, Integer> TERM_OFFSETS =
             Map.of("(당기)", 0, "(전기)", 1, "(전전기)", 2);
 
-    /** {@code 2025년 03월 31일}. 이 엔드포인트만 한국어 날짜다(§16-C). */
+    /** {@code 2025년 03월 31일}. 이 엔드포인트만 한국어 날짜다(dart-governance.md의 「최대주주」 절). */
     private static final Pattern KOREAN_DATE =
             Pattern.compile("(\\d{4})년\\s*(\\d{1,2})월\\s*(\\d{1,2})일");
 
@@ -55,7 +55,8 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      * 「강조사항 없음」의 표기. 목록 밖은 <b>모르는 토큰이 아니라 강조사항의 내용</b>이다.
      *
      * <p>표본 48행에서 41이 이 목록에 들었고({@code 해당사항 없음} 35 · 빈 문자열 6) 7이 실제
-     * 강조사항이었다 — 증권선물위원회 조치에 대한 행정소송 6, 재무제표 재작성 1(§16-C).
+     * 강조사항이었다 — 증권선물위원회 조치에 대한 행정소송 6, 재무제표 재작성 1(dart-governance.md의
+     * 「회계감사인의 명칭 및 감사의견」 절).
      *
      * <p>IMPORTANT — {@code -}가 목록에 있지만 <b>{@code -}로 시작하는 것은 센티널이 아니다.</b>
      * 실측에 {@code - 증권선물위원회의 조치에 대한 행정소송}이 있고 그것은 글머리표다.
@@ -92,7 +93,8 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
     /**
      * 현금배당금총액을 가리키는 {@code se}. {@link #DPS_ITEM}과 <b>서로의 대표 필드</b>다.
      *
-     * <p>§16-A가 「행에 값이 있으면 {@code -}는 0」을 판정하려면 대표 필드가 필요한데, 배당 행에는
+     * <p>dart-governance.md의 「주식의 총수 현황」 절이 「행에 값이 있으면 {@code -}는 0」을 판정하려면 대표
+     * 필드가 필요한데, 배당 행에는
      * 숫자 열이 3개년뿐이라 그 역할을 할 필드가 행 안에 없다. <b>대신 같은 보고서의 짝이 그것을
      * 한다</b> — 주당배당금과 총액이 <b>둘 다</b> {@code -}면 배당이 없었던 것이고, 한쪽만
      * {@code -}면 소스가 그 칸을 안 채운 것이다. 실측이 양방향으로 실재한다(당기 기준: DPS만
@@ -107,7 +109,8 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      * 통과해 <b>가장 위험한 종목이 「적정」으로 분류된다.</b>
      *
      * <p>목록이 서른에 가까운 것은 소스가 자유 텍스트를 받기 때문이다 — 350종목 6개년에서
-     * 정규화 후에도 서른셋이 나왔다(§16-C). 새 표기는 <b>판정불가로 떨어져 로그에 뜬다.</b>
+     * 정규화 후에도 서른셋이 나왔다(dart-governance.md의 「350종목 전수 적재가 답한 것」 절). 새 표기는
+     * <b>판정불가로 떨어져 로그에 뜬다.</b>
      */
     private static final Set<String> CLEAN_OPINIONS = Set.of(
             "적정의견", "적정", "적정함", "적정*", "적정주)",
@@ -164,7 +167,8 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      * {@code se}가 {@code 보통주}인 행 하나를 쓴다.
      *
      * <p>{@code 합계}를 쓰면 우선주가 섞여 {@code listed_shares} 기반 기존 지표와 분모가 갈리고,
-     * {@code 비고} 행은 숫자 자리에 <b>문자열</b>({@code 자사주소각})을 싣고 온다(§16-A).
+     * {@code 비고} 행은 숫자 자리에 <b>문자열</b>({@code 자사주소각})을 싣고 온다(dart-governance.md의 「주식의
+     * 총수 현황」 절).
      */
     private List<GovernanceFact> shareTotals(List<GovernanceReportRow> rows) {
         List<GovernanceFact> facts = new ArrayList<>();
@@ -174,7 +178,7 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
             }
             BigDecimal issued = DartAccountMapper.parseAmount(row.field("istc_totqy"));
             if (issued == null || issued.signum() <= 0) {
-                // 행 전체가 '-'면 그 주식 종류가 없다는 뜻이다 — 0주 발행이 아니다(§16-A).
+                // 행 전체가 '-'면 그 주식 종류가 없다는 뜻이다 — 0주 발행이 아니다(dart-governance.md의 「주식의 총수 현황」 절).
                 continue;
             }
             add(facts, row, GovernanceMetric.ISSUED_SHARES_COMMON, issued);
@@ -387,7 +391,7 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
     // --- 사외이사 ----------------------------------------------------------
 
     /**
-     * 회사당 1행이다(§16-C).
+     * 회사당 1행이다(dart-governance.md의 「여덟이 여덟 모양이다」 절).
      *
      * <p>변동 필드의 {@code -}는 <b>0명</b>이다 — 이사 수가 채워져 있는데 해임이 {@code -}인 것이
      * 8/8이었다. 결손으로 세면 이사회 축이 전 종목 판정불가가 된다.
@@ -487,7 +491,7 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      * 최근 3개 회계연도에 <b>최대주주 이름이 바뀐 횟수</b>를 센다.
      *
      * <p>행 수를 세지 않는 이유는 그 표가 <b>지분 변동 내역</b>이기 때문이다 — KB금융의 28행이
-     * 전부 같은 {@code 국민연금공단}이고 원인이 전부 {@code 장내매매}였다(§16-C).
+     * 전부 같은 {@code 국민연금공단}이고 원인이 전부 {@code 장내매매}였다(dart-governance.md의 「최대주주」 절).
      *
      * <p>행 순서가 날짜순이 아니라 {@code change_on}으로 정렬한 뒤 걷는다. 창의 시작 <b>직전</b>
      * 이름을 기준선으로 삼아야 창 첫 사건의 전이가 빠지지 않는다.
@@ -556,7 +560,8 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
     // --- 감사의견 ----------------------------------------------------------
 
     /**
-     * 한 회계연도에 행이 둘이다(연결·별도로 보이나 <b>필드로 구분되지 않는다</b>, §16-B).
+     * 한 회계연도에 행이 둘이다(연결·별도로 보이나 <b>필드로 구분되지 않는다</b>, dart-governance.md의
+     * 「회계감사인의 명칭 및 감사의견」 절).
      * 강조사항은 <b>OR</b>로 접고 감사인은 <b>집합</b>으로 접는다.
      *
      * <p><b>{@code adt_opinion}으로 판정 지표를 만든다</b>({@code AUDIT_OPINION_ADVERSE}).
@@ -577,11 +582,11 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
                 continue;
             }
             // MUST NOT: core_adt_matter(핵심감사사항)를 여기 넣지 않는다. 감사기준의 필수
-            // 기재사항이라 표본 48행이 **전부** 값을 갖는다(§16-C) — 넣으면 이 지표가 전 종목 1인
+            // 기재사항이라 표본 48행이 **전부** 값을 갖는다(dart-governance.md의 「350종목 전수 적재가 답한 것」 절) — 넣으면 이 지표가 전 종목 1인
             // 상수가 되고, 그것은 아무도 못 자르는 게이트다.
             //
             // adt_reprt_spcmnt_matter는 2019-12-08까지 쓰이던 같은 자리의 필드다. 한쪽만 읽으면
-            // 그 이전 구간이 통째로 「강조사항 없음」이 된다(§11-I).
+            // 그 이전 구간이 통째로 「강조사항 없음」이 된다(dart-governance.md의 「회계감사인의 명칭 및 감사의견」 절).
             boolean present = hasEmphasis(row.field("emphs_matter"))
                     || hasEmphasis(row.field("adt_reprt_spcmnt_matter"));
             emphasisByYear.merge(fiscalYear, present, (a, b) -> a || b);
@@ -608,7 +613,7 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
             // MUST: 삼키지 않는다. 목록 밖 표기가 새로 생겼다는 것을 여기 말고는 알 자리가 없고,
             // 그 사이 그 종목은 「감사의견 판정불가」로 조건에서 탈락한다.
             log.warn("허용목록에 없는 감사의견 표기라 판정하지 않았다: {} — 관측된 표기면 "
-                    + "CLEAN_OPINIONS나 ADVERSE_OPINIONS에 더한다(§16-C).", unknownOpinions);
+                    + "CLEAN_OPINIONS나 ADVERSE_OPINIONS에 더한다(dart-governance.md의 「회계감사인의 명칭 및 감사의견」 절).", unknownOpinions);
         }
 
         List<GovernanceFact> facts = new ArrayList<>();
@@ -661,7 +666,7 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
     }
 
     /**
-     * 값이 있는 행의 {@code -}는 <b>0</b>이다(§16-A).
+     * 값이 있는 행의 {@code -}는 <b>0</b>이다(dart-governance.md의 「주식의 총수 현황」 절).
      *
      * <p>호출부가 「그 행이 성립하는가」를 먼저 판정한 뒤에만 쓴다 — 행 전체가 {@code -}인 것은
      * 0이 아니라 <b>해당 없음</b>이고, 그 구분은 호출부가 대표 필드로 한다.
