@@ -15,7 +15,7 @@ applies_to:
 
 **재고자산을 적재한다.** 저장소가 이 계정을 한 번도 재본 적이 없으면서 `phase-criteria.md`가
 *"재고자산이 없어 값이 안 난다"*라고 **원자료의 부재로** 적고 있었다. 재보니 열려 있다
-(`dart-open-api.md` §14). `financial_statement.inventories` 컬럼을 더하고
+(`dart-financial.md`의 「계정별 가용성」 절). `financial_statement.inventories` 컬럼을 더하고
 `full-statement-refill`로 채운다. **새 엔드포인트가 아니다** — 이미 쓰고 있는
 `fnlttSinglAcntAll` 응답 안에 있었고 매퍼가 읽지 않았을 뿐이다(ADR-0062·0067과 같은 형태).
 

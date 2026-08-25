@@ -84,7 +84,7 @@ https://apis.data.go.kr/1160100/service/GetMarketIndexInfoService/getStockMarket
 
 **문서에 없는 필드가 더 온다** — `lstgMrktTotAmt`(상장시가총액) `trPrc`(거래대금)
 `yrWRcrdHgst`·`yrWRcrdHgstDt`·`yrWRcrdLwst`·`yrWRcrdLwstDt`(연중 최고·최저와 그 일자)
-`lsYrEdVsFltRg`. **MUST NOT: 표에 없는 필드에 의존하지 않는다** — §10-C의 `corp_code`와 같은
+`lsYrEdVsFltRg`. **MUST NOT: 표에 없는 필드에 의존하지 않는다** — `dart-financial.md`의 「다중회사 주요계정」 절이 적은 `corp_code`와 같은
 자리다. 다만 `yrWRcrd*`는 52주 고저를 소스가 직접 주는 것이라 필요해지면 실측하고 표에 올린다.
 
 ---
