@@ -56,12 +56,49 @@ progress="docs/progress.md"
 content=$(cat "$progress" 2>/dev/null) || bail "${progress}를 읽지 못했다."
 [ -n "$content" ] || bail "${progress}가 비어 있다."
 
+# --- 백로그 절은 주입하지 않는다 -------------------------------------------
+# 상태·제약은 **모르면 실수하므로** 주입해야 하고, 백로그는 **모르면 고를 뿐이라** 주입할
+# 필요가 없다. 그런데 그것이 파일의 절반 가까이이고 매 세션 실린다. 파일은 안 가른다 —
+# 갈라서 주입 밖에 두면 안 읽혀 낡는다(이 저장소의 `TODO.md`가 그 전례다).
+#
+# MUST NOT: 여기서 `bail`하지 않는다. `bail`은 주입을 통째로 포기하는데, 그것이 이 훅이
+# 막으려는 바로 그 상태다. 못 가르면 **전부 주입하고 그 사실을 낸다** — 커진 주입은 아래
+# 절단 경고로 드러나지만, 조용히 다 빼면 백로그가 사라진 것을 아무도 모른다.
+backlog_note=""
+if [ -r "${hooks_dir}/lib/progress-section.sh" ]; then
+  # shellcheck source=lib/progress-section.sh
+  . "${hooks_dir}/lib/progress-section.sh"
+  if progress_has_section "$progress"; then
+    kept=$(progress_kept "$progress")
+    n_backlog=$(progress_excluded_items "$progress")
+    if [ -n "$kept" ]; then
+      content="$kept"
+      backlog_note="**「바로 착수 가능한 것」 ${n_backlog}개는 주입에서 뺐다** — 일을 고를 때 \`${progress}\`를 열어라. 상태·제약·사용자 판단 대기는 아래에 그대로 있다.
+
+"
+    else
+      backlog_note="**「바로 착수 가능한 것」 절을 뺐더니 남는 것이 없어 전부 주입했다** — 문서가 그 절 하나뿐인 상태다.
+
+"
+    fi
+  else
+    backlog_note="**「바로 착수 가능한 것」 절을 못 찾아 전부 주입했다** — 절 제목이 바뀌었으면 \`.claude/hooks/lib/progress-section.sh\`의 이름도 함께 고친다.
+
+"
+  fi
+else
+  backlog_note="**\`lib/progress-section.sh\`가 없어 필터 없이 전부 주입했다.**
+
+"
+fi
+
 # jq는 아래 출력에만 필요하다. 없으면 내용을 그대로 stdout으로 낸다 —
 # 잘려서라도 컨텍스트에 닿는 것이 아무것도 안 하는 것보다 낫다.
 if ! command -v jq >/dev/null 2>&1; then
   echo "jq가 없어 구조화 주입을 건너뛴다. 아래가 docs/progress.md 원문이다."
   echo
   [ -n "$load_note" ] && printf '%s' "$load_note"
+  [ -n "$backlog_note" ] && printf '%s' "$backlog_note"
   echo "$content"
   exit 0
 fi
@@ -82,7 +119,7 @@ fi
 
 jq -n --arg ctx "${load_note}다음은 이 프로젝트의 현재 진행 상태다 (\`docs/progress.md\`). 작업을 시작하기 전에 이것을 기준으로 삼아라.
 
-${content}${truncated}" \
+${backlog_note}${content}${truncated}" \
   '{
     hookSpecificOutput: {
       hookEventName: "SessionStart",

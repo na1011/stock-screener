@@ -72,11 +72,33 @@ if [ -f docs/progress.md ] && [ -f "$inject_hook" ]; then
     # 그때는 뒷부분이 이번 세션에 전달되지 않은 상태이고, 무엇이 잘렸는지도 모른다.
     # 별도 상수를 두지 않고 절단선에서 계산해, 한쪽만 바뀌는 조합을 애초에 만들지 않는다.
     warn_limit=$(( inject_limit / 2 ))
-    len=$(wc -m < docs/progress.md 2>/dev/null | tr -d ' ')
-    if [ -n "$len" ] && [ "$len" -gt "$inject_limit" ]; then
-      add "docs/progress.md가 ${len}자로 주입 상한(${inject_limit}자)을 넘는다. 세션 시작 주입이 이미 잘렸고, 뒷부분은 이번 세션에 전달되지 않았다. 파일을 직접 읽고 줄여라."
-    elif [ -n "$len" ] && [ "$len" -gt "$warn_limit" ]; then
-      add "docs/progress.md가 ${len}자로 경고선(${warn_limit}자)을 넘었다. 절단은 ${inject_limit}자부터다. 줄을 더하기 전에 뺄 것을 먼저 정하라 — 고정 예산이지 로그가 아니다. 파일별 함정은 \`.claude/rules/\`로, 작업 절차는 skill로 내린다."
+    file_len=$(wc -m < docs/progress.md 2>/dev/null | tr -d ' ')
+
+    # 주입 훅이 백로그 절을 빼고 주입하므로 **파일 크기와 주입 크기가 다르다.** 파서를
+    # 여기 복제하지 않고 같은 lib을 쓴다 — 두 곳에 적으면 갈리고, 그때 이 검사는 통과하는데
+    # 주입은 다른 것을 낸다. lib이 없거나 절을 못 찾으면 훅이 전부 주입하므로 여기서도
+    # 파일 전체가 주입분이다.
+    inj_len="$file_len"
+    if [ -r .claude/hooks/lib/progress-section.sh ]; then
+      # shellcheck source=lib/progress-section.sh
+      . .claude/hooks/lib/progress-section.sh
+      if progress_has_section docs/progress.md; then
+        inj_len=$(progress_kept docs/progress.md | wc -m | tr -d ' ')
+      fi
+    fi
+
+    if [ -n "$inj_len" ] && [ "$inj_len" -gt "$inject_limit" ]; then
+      add "docs/progress.md의 **주입분이 ${inj_len}자로 주입 상한(${inject_limit}자)을 넘는다.** 세션 시작 주입이 이미 잘렸고, 뒷부분은 이번 세션에 전달되지 않았다. 파일을 직접 읽고 줄여라."
+    elif [ -n "$inj_len" ] && [ "$inj_len" -gt "$warn_limit" ]; then
+      add "docs/progress.md의 **주입분이 ${inj_len}자로 경고선(${warn_limit}자)을 넘었다.** 절단은 ${inject_limit}자부터다. 줄을 더하기 전에 뺄 것을 먼저 정하라 — 고정 예산이지 로그가 아니다. 파일별 함정은 \`.claude/rules/\`로, 작업 절차는 skill로 내린다."
+    fi
+
+    # 파일 전체를 따로 잰다. **주입분만 재면 백로그가 무한히 커져도 아무도 안 운다** —
+    # 저장소에서 이 파일의 크기를 재는 곳은 여기 하나뿐이다(§1c의 대상 목록에도 없다).
+    # 선을 주입분과 같이 쓰는 근거는 임의가 아니다: 절 제목이 바뀌면 필터가 풀려 **전부**
+    # 주입되므로, 그때 넘을 값이 곧 파일 크기다.
+    if [ -n "$file_len" ] && [ "$file_len" != "$inj_len" ] && [ "$file_len" -gt "$warn_limit" ]; then
+      add "docs/progress.md가 ${file_len}자다 — 주입되는 것은 ${inj_len}자이고 나머지는 주입에서 뺀 백로그다. **절 제목이 바뀌면 필터가 풀려 전부 주입되고 그때 경고선(${warn_limit}자)을 넘는다.** 백로그도 고정 예산이다."
     fi
   fi
 fi
