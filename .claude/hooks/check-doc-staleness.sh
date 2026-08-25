@@ -474,6 +474,71 @@ if [ -n "${runner_src:-}" ] && [ -f "$job_lib" ] && [ -f "$job_skill" ] && [ -f 
   fi
 fi
 
+# 5d. 착수 전 사전등록한 절대 임계가 코드와 갈렸는가
+#
+# `docs/phase-criteria.md`의 P14 표는 **코드를 한 줄도 만들기 전에** 적은 값이고, `PresetCatalog`가
+# 그것을 실제로 들고 있다. 둘이 갈려도 아무도 모른다 — 코드에서 값을 바꾸면 등록 표는 그대로
+# 남고, 그러면 **사전등록이 사후정당화로 조용히 바뀐다.** `phase-gate.md`가 막으려는 그 상태다.
+#
+# MUST: **표를 자동 파싱하지 않고 아래를 열거한다.** 등록 표는 끝난 phase의 기록이라 지우지
+# 않으므로(`phase-gate.md`), 나중 결정이 **정당하게 갈아엎은 행**이 섞여 있다. 실측으로 넷이다 —
+# `DISPARITY_200`·`BETA_104W ≤ 1.2`(스윙 프리셋 폐기, ADR-0074) · `ALTMAN_Z`(같은 커밋에서
+# 소비자를 잃었고 지표는 남겼다) · `EPS_GROWTH_TTM_YOY ≥ 15/25`(`QVG_KR` 폐기, 커밋 `ad88d9d`).
+# 표 전체를 같게 요구하면 이 넷이 매 세션 오탐이 되고, 오탐이 반복되면 이 검사가 무시된다.
+#
+# MUST: **값의 끝을 다음 구분자까지 닫는다.** `≤ 0`으로 열어 두면 `≤ 0.10`에 매치해 침묵한다 —
+# 그것은 가정이 아니라 ADR-0061 §규칙이 「초안의 발생액 ≤0.10이 96% 통과였다」로 적어 둔
+# 되돌림 경로다.
+# MUST: **개수를 함께 본다.** `ACCRUAL_RATIO ≤ 0`은 코드 5곳, `ROA ≥ 0`은 2곳이라 「있는가」만
+# 물으면 **한 곳만 바뀌어도 남은 곳이 grep을 만족시켜 침묵한다.**
+# MUST: **개행을 접고 센다.** 값이 다음 줄에 있는 호출이 실재한다(`MARKET_CAP`·`TURNOVER_60`).
+# MUST: **`|| true`로 받는다.** 매치 0은 이 검사가 잡으려는 바로 그 상태인데, `set -e` 아래에서
+# 대입으로 받으면 그 순간 훅이 죽고 §6·§6b가 통째로 사라진다.
+#
+# **사정거리** — 이 검사가 보는 것은 아홉이다. `PresetCatalog`의 절대 임계 리터럴은 72개이고,
+# P15 이후의 등록 표는 열 구성이 달라 여기서 안 본다. **새 조건을 등록 표에 넣게 만드는 기제는
+# 없다** — 그 MUST는 `phase-criteria.md` 본문에 있어 그 파일을 열어야만 뜬다.
+#
+# 한 줄이 `자바계산기|연산자|코드값|기대개수|표코드정규식|표기호|표값`이다.
+# MUST: 표코드정규식에 `|`를 쓰지 않는다. 구분자와 같아 **필드가 조용히 쪼개지고**, 그러면
+# 그 행이 늘 「등록 표에서 사라졌다」로 오발화한다(실제로 `[^|]*`를 넣었다가 그렇게 됐다).
+# 표에서 같은 지표가 두 번 나오면(BETA_104W가 저변동 축·스윙 게이트 둘이다) 괄호 주석으로
+# 가른다 — 아래 정규식의 `.`은 역따옴표다.
+preset_reg="AtrPct14|LTE|5.9|1|ATR_PCT_14|≤|5.9
+Beta104w|LTE|0.40|1|BETA_104W. (저변동|≤|0.40
+VolumeRatio20|GTE|1.5|1|VOLUME_RATIO_20|≥|1.5
+Adx14|GTE|20|1|ADX_14|≥|20
+Rsi2|LT|10|1|RSI_2|<|10
+AccrualRatio|LTE|0|5|ACCRUAL_RATIO|≤|0
+Roa|GTE|0|2|ROA|≥|0
+MarketCap|GTE|1000000000000|1|MARKET_CAP|≥|1조원
+Turnover60|GTE|10000000000|2|TURNOVER_60|≥|100억원"
+
+preset_src=$(find src/main/java -name PresetCatalog.java -type f 2>/dev/null | head -1 || true)
+criteria_reg="docs/phase-criteria.md"
+if [ -n "${preset_src:-}" ] && [ -f "$criteria_reg" ]; then
+  # 개행을 접어 한 줄로 만든다. 호출이 여러 줄에 걸쳐 있어도 같은 정규식으로 잡힌다.
+  preset_flat=$(tr '\n' ' ' < "$preset_src" | tr -s ' ' || true)
+  criteria_flat=$(tr '\n' ' ' < "$criteria_reg" | tr -s ' ' || true)
+  reg_drift=""
+  while IFS='|' read -r r_calc r_op r_val r_want r_code r_sym r_tval; do
+    [ -z "${r_calc:-}" ] && continue
+    got=$(printf '%s' "$preset_flat" \
+          | grep -oE "${r_calc}Calculator\.CODE, ComparisonOperator\.${r_op}, \"${r_val}\"" 2>/dev/null \
+          | grep -c . || true)
+    intable=$(printf '%s' "$criteria_flat" \
+              | grep -c "${r_code}[^|]*| ${r_sym} ${r_tval} |" 2>/dev/null || true)
+    if [ "${got:-0}" -ne "${r_want:-0}" ]; then
+      reg_drift="${reg_drift}${r_code} ${r_sym} ${r_tval}(코드 ${got}곳, 등록은 ${r_want}곳) "
+    elif [ "${intable:-0}" -eq 0 ]; then
+      reg_drift="${reg_drift}${r_code} ${r_sym} ${r_tval}(코드에는 있는데 등록 표에서 사라졌다) "
+    fi
+  done <<< "$preset_reg"
+  if [ -n "$reg_drift" ]; then
+    add "착수 전 등록한 절대 임계가 코드와 갈렸다: ${reg_drift}— 정본은 **등록 표**다(\`docs/phase-criteria.md\` P14, 코드를 만들기 전에 적었다). 코드를 고친 것이면 **푸는 쪽인지 조이는 쪽인지를 함께 적고 사용자에게 올린다**(\`phase-gate.md\`). 등록 표가 지워진 것이면 되살린다 — 끝난 phase의 기준도 지우지 않는다."
+  fi
+fi
+
 # 6. 산문이 가리키는 하네스 파일이 실제로 있는가
 #
 # §4와 방향이 반대다. §4는 frontmatter의 glob이 파일을 잡는지 보고(그 파서는 리스트가

@@ -707,6 +707,58 @@ check_section 침묵 "제목이 더 길어도 해소로 본다" \
   "$(hd '# 진행 상태' '' '#### 백테스트가 뒤집을 수 있다고 적었으나, 못 뒤집는다 — 실측')" \
   "$(hd '# rules' '' '아래 「백테스트가 뒤집을 수 있다」 절이 그 실측을 든다.')"
 
+echo "── 사전등록 임계 거울 (check-doc-staleness §5d) ──"
+#
+# 이 그룹이 붙드는 것은 발화 여부만이 아니다. §5d에는 **조용히 뚫리는 형태가 둘** 있고 둘 다
+# 아래 케이스가 없으면 초록으로 덮인다 — ① 등록 표 값의 끝을 안 닫으면 `≤ 0`이 `≤ 0.10`에
+# 매치한다 ② 같은 (연산자,값)이 코드 여러 곳에 있을 때 한 곳만 바뀌면 나머지가 grep을 만족시킨다.
+#
+# $1 기대(발화/침묵), $2 설명, $3 비틀 파일(트리 기준), $4 perl 치환식
+check_preset_reg() {
+  local want="$1" desc="$2" target="${3:-}" expr="${4:-}" tmp got src
+  src=$(find src/main/java -name PresetCatalog.java -type f 2>/dev/null | head -1 || true)
+  if [ -z "$src" ] || [ ! -f docs/phase-criteria.md ]; then
+    skipped=$((skipped+1)); printf '  \033[33mSKIP\033[0m %s (PresetCatalog.java 또는 등록 표가 없다)\n' "$desc"; return
+  fi
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/rules" "$tmp/.claude/hooks/lib" "$tmp/docs" "$tmp/src/main/java/x"
+  printf 'x\n' > "$tmp/.claude/hooks/lib/bash-text.sh"
+  printf '# rules\n'    > "$tmp/.claude/rules/harness-core.md"
+  printf '# progress\n' > "$tmp/docs/progress.md"
+  cp "$src"                   "$tmp/src/main/java/x/PresetCatalog.java"
+  cp docs/phase-criteria.md   "$tmp/docs/phase-criteria.md"
+  [ -n "$target" ] && perl -i -pe "$expr" "$tmp/$target"
+  if CLAUDE_PROJECT_DIR="$tmp" "$HOOKS/check-doc-staleness.sh" </dev/null 2>/dev/null \
+     | jq -r '.hookSpecificOutput.additionalContext // empty' | grep -q '등록한 절대 임계'; then
+    got="발화"
+  else
+    got="침묵"
+  fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+check_preset_reg 침묵 "코드와 등록 표가 맞으면 조용하다"
+check_preset_reg 발화 "코드 리터럴이 바뀌면 잡는다" \
+  "src/main/java/x/PresetCatalog.java" 's/ComparisonOperator\.LTE, "5\.9"/ComparisonOperator.LTE, "4.9"/'
+check_preset_reg 발화 "등록 표의 값이 바뀌면 잡는다" \
+  "docs/phase-criteria.md" 's/\| ≤ 5\.9 \|/| ≤ 4.9 |/'
+#
+# **이 표에서 가장 중요한 두 행.** 값 끝을 안 닫거나 개수를 안 세면 둘 다 침묵으로 뒤집힌다.
+# 위쪽은 ADR-0061 §규칙이 「초안의 발생액 ≤0.10이 96% 통과였다」로 적어 둔 되돌림 경로다.
+check_preset_reg 발화 "등록 표가 ≤ 0 → ≤ 0.10 이면 잡는다(접두 일치 금지)" \
+  "docs/phase-criteria.md" 's/\| ≤ 0 \|/| ≤ 0.10 |/'
+check_preset_reg 발화 "같은 값 5곳 중 1곳만 바뀌어도 잡는다(개수 보존)" \
+  "src/main/java/x/PresetCatalog.java" 'if (!$done && s/AccrualRatioCalculator\.CODE, ComparisonOperator\.LTE, "0"/AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0.05"/) { $done = 1 }'
+# 열거식이라 표에만 있는 이름은 안 본다. 그것이 설계다 — 나중 결정이 정당하게 갈아엎은 행이
+# 표에 남아 있고, 전부 같기를 요구하면 그 넷이 매 세션 오탐이 된다.
+check_preset_reg 침묵 "표에만 있고 열거에 없는 행은 안 본다" \
+  "docs/phase-criteria.md" 's/^\| `ALTMAN_Z`/| `GHOST_METRIC` | >= 1 | x |\n| `ALTMAN_Z`/'
+
 echo
 printf '통과 %d / 실패 %d / 건너뜀 %d / 알려진 구멍 %d\n' "$pass" "$fail" "$skipped" "$holes"
 # MUST: 건너뛴 수를 함께 낸다. 건너뛴 것이 통과로 읽히면 "덮여 있다"고 믿게 된다 —
