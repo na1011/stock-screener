@@ -7,6 +7,7 @@ applies_to:
   - "src/main/java/**/pipeline/collector/CorporateActionReader.java"
   - "src/main/java/**/pipeline/collector/CorporateActionStatus.java"
   - "src/main/java/**/pipeline/collector/web/**"
+  - "src/main/java/**/pipeline/batch/CorporateActionJudgeJob.java"
   - "src/main/java/**/pipeline/datasource/PriceDiscontinuity.java"
   - "src/main/resources/db/migration/V22__corporate_action_source_form.sql"
 ---
