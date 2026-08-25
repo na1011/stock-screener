@@ -48,7 +48,8 @@ paths:
 - **적용된 파일을 고치면 기동이 막힌다.** Flyway가 파일 전체의 체크섬을 대조하므로 **주석 한 줄만 바꿔도** `FlywayValidateException`으로 컨텍스트가 죽는다.
 - **처방은 편집의 종류가 정한다. 「고치지 않는다」가 걸리는 것은 앞쪽뿐이다.**
   - **스키마를 바꿨으면 고치지 않는다.** 이력 행과 객체를 지우고 재적용하는 것이 유일한 길인데 **실데이터가 들어 있어 재적용이 곧 재적재다.**
-  - **주석만 바꿨으면 체크섬만 맞춘다**(`flyway repair`가 하는 일이고 실패 메시지도 그것을 시킨다). 실패가 `Applied to database`와 `Resolved locally`를 둘 다 찍고 **불일치 전부를 한 번에 신고하므로 부팅 한 번이면 값이 다 나온다.** `UPDATE flyway_schema_history SET checksum=<Resolved locally> WHERE version='<N>'` 뒤 `installed_rank`·`installed_on`·`execution_time`이 그대로다 — **재적용이 아니다.** **MUST: 운영 DB에서는 `ops/dump-db.sh`를 먼저 뜨고 같은 창에서 재배포까지 간다** — 배포된 jar가 옛 바이트를 들고 있어 체크섬만 고치면 **다음 재기동이 죽고 증상은 며칠 뒤에 난다.** **그리고 고친 뒤 다시 뜬다** — 먼저 뜬 덤프는 그 `UPDATE`로 **스스로 무효가 된다.** 실측으로 저장된 덤프 9개가 이 순서 때문에 한꺼번에 그렇게 됐다(2026-08-25). **「복원 불가」가 아니다** — 복원은 되고, 죽는 것은 그 DB로 앱을 띄우는 것이며, 처방은 위에 적은 그 `UPDATE`다.
+  - **`COMMENT ON`은 주석이 아니다 — 실행되는 DDL이고 그 문장이 DB 카탈로그에 저장된다**(마이그레이션 33개 중 **24개**가 들고 있다). 파일만 고치고 체크섬을 맞추면 **파일은 새 문장, `col_description()`은 옛 문장**으로 영구히 갈리고 아무 에러도 안 난다. 고칠 것이 그 문자열이면 **새 마이그레이션으로 다시 `COMMENT ON`한다** — `V29__financial_capex_comment.sql`이 그 형태다.
+  - **파일 안 `--` 주석만 바꿨으면 체크섬만 맞춘다**(`flyway repair`가 하는 일이고 실패 메시지도 그것을 시킨다). 실패가 `Applied to database`와 `Resolved locally`를 둘 다 찍고 **불일치 전부를 한 번에 신고하므로 부팅 한 번이면 값이 다 나온다.** `UPDATE flyway_schema_history SET checksum=<Resolved locally> WHERE version='<N>'` 뒤 `installed_rank`·`installed_on`·`execution_time`이 그대로다 — **재적용이 아니다.** **MUST: 운영 DB에서는 `ops/dump-db.sh`를 먼저 뜨고 같은 창에서 재배포까지 간다** — 배포된 jar가 옛 바이트를 들고 있어 체크섬만 고치면 **다음 재기동이 죽고 증상은 며칠 뒤에 난다.** **그리고 고친 뒤 다시 뜬다** — 먼저 뜬 덤프는 그 `UPDATE`로 **스스로 무효가 된다.** 실측으로 저장된 덤프 9개가 이 순서 때문에 한꺼번에 그렇게 됐다(2026-08-25). **「복원 불가」가 아니다** — 복원은 되고, 죽는 것은 그 DB로 앱을 띄우는 것이며, 처방은 위에 적은 그 `UPDATE`다.
 
 ## `frontend/package.json`
 
