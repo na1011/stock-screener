@@ -54,6 +54,11 @@ check() {
       out=$(jq -n --arg c "$cmd" --arg s "sess-$RANDOM$RANDOM" '{session_id:$s,tool_input:{command:$c}}' \
             | "$HOOKS/warn-load-running.sh" 2>/dev/null)
       if [ -z "$out" ]; then got="침묵"; else got="발화"; fi ;;
+    # `$cmd`를 `도구:명령`으로 받는다 — 이 훅만 tool_name으로도 갈리므로 명령만으로는 못 잰다.
+    triage)
+      out=$(jq -n --arg t "${cmd%%:*}" --arg c "${cmd#*:}" '{tool_name:$t,tool_input:{command:$c}}' \
+            | "$HOOKS/remind-finding-triage.sh" 2>/dev/null)
+      if [ -z "$out" ]; then got="침묵"; else got="발화"; fi ;;
     # 이 둘만 `HOME`을 격리한다. 판정이 `$DUMP_DIR`의 내용에 달려 있어 기계의 상태를 그대로
     # 쓰면 **덤프가 있는 기계에서는 deny 경로가 영영 안 돌고**, 그 침묵이 통과로 읽힌다.
     rebuild-nodump)
@@ -615,6 +620,17 @@ check_rule_set "$RULESET_HOOKS_LIB" "셸 편집(sed -i)도 셋을 다 낸다" \
   "sed -i '' 's/a/b/' .claude/hooks/lib/load-process.sh" rule
 check_rule_set "$RULESET_HOOKS_LIB" "Write 경로도 셋을 다 낸다" \
   ".claude/hooks/lib/load-process.sh" write
+
+echo "── 발견의 갈래 상기 (remind-finding-triage) ──"
+# MUST NOT: 이 훅에 세션당 억제를 넣지 않는다. 값을 만드는 것이 **반복**이라 한 번만 뜨면
+# 세션 시작 주입과 같아진다(그 희석이 이 훅을 만든 이유다). 그래서 「두 번째 커밋도 운다」가 행이다.
+check 발화 "커밋에 뜬다"              "Bash:git commit -m x"                    triage
+check 발화 "두 번째 커밋도 뜬다"       "Bash:git commit -m y"                    triage
+check 발화 "amend에도 뜬다"           "Bash:git commit --amend --no-edit"       triage
+check 발화 "질문에 뜬다"              "AskUserQuestion:"                        triage
+check 침묵 "읽기만 하는 git엔 안 뜬다" "Bash:git log --oneline --grep=commit"    triage
+check 침묵 "일반 명령엔 안 뜬다"       "Bash:./gradlew build"                    triage
+check 침묵 "다른 도구엔 안 뜬다"       "Edit:docs/progress.md"                   triage
 
 echo "── 적재 잡 이름 거울 (check-doc-staleness §5c) ──"
 #
