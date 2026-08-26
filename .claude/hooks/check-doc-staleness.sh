@@ -376,12 +376,18 @@ fi
 # 표에 `추출정규식|파일A|파일B|이름` 한 줄을 더하면 등록된다. 줄바꿈 위치가 파일마다 달라
 # 줄 단위로는 못 비교하므로 개행을 접고 문장만 뽑아 대조한다.
 # 정규식에 역따옴표를 쓰지 않는다 — 큰따옴표 안에서 명령 치환으로 읽힌다. `.`로 대신한다.
+# 「반증 각도」 행만 성질이 다르다. 짝이 저장소 밖(auto-memory)이라 **경로에 프로젝트명이 박혀
+# 이 기계에서만 살고**, `lib/regression.sh`의 `check_mirror`는 임시 트리에 파일 넷만 복사하므로
+# **이 행은 회귀표가 원리적으로 안 덮는다** — 표가 초록이어도 이 행은 안 재본 것이다. memory를
+# memory 시스템이 다시 쓰면 사람이 아무것도 안 고쳐도 울 수 있고 **그 빈도는 미측정이다.**
+# 짝이 없는 클론에서는 아래 `[ -f ]`가 조용히 건너뛴다(경보가 아니다).
 mirrors="공공데이터포털은 없는 종목[^)]*)|.claude/rules/data-pipeline.md|.claude/skills/batch-load/SKILL.md|공공데이터포털 응답 모양
 ADJ_CLOSE.는 봉 하나로.*FK로 정리가 중단된다\.|.claude/rules/data-pipeline.md|.claude/rules/test.md|ADJ_CLOSE FK 함정
 MUST NOT: 0건을 휴장으로 단정하지 않는다\.|docs/api-spec/data-go-kr-stock-price.md|.claude/skills/batch-load/SKILL.md|0건과 휴장의 구분
 기준과 현황이 같은 곳에 있으면 기준이 현황에 맞춰 조용히 느슨해진다|docs/phase-criteria.md|.claude/rules/phase-gate.md|기준과 현황의 분리
 끝난 뒤에 세운 기준은 이미 한 일을 정당화하는 쪽으로 기운다|docs/phase-criteria.md|.claude/hooks/remind-plan-obligations.sh|착수 전 기준 작성
-규칙을 어기는 값과 깨지는 경로는 다르다|.claude/rules/harness-docs.md|docs/progress.md|수용 테스트 0단계"
+규칙을 어기는 값과 깨지는 경로는 다르다|.claude/rules/harness-docs.md|docs/progress.md|수용 테스트 0단계
+각도를 좁히지 않고, 마지막 둘을.*으로 연다\.|.claude/hooks/remind-plan-obligations.sh|$HOME/.claude/projects/-Users-na1011-dev-stock-screener/memory/adversarial-review-before-executing.md|반증 각도"
 
 extract_mirror() {  # $1=파일 $2=정규식
   tr '\n' ' ' < "$1" | tr -s ' ' | sed -n "s/.*\($2\).*/\1/p"
