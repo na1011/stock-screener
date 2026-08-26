@@ -92,7 +92,7 @@ server:
   # cloudflared는 로컬 :8080에 **평문 HTTP**로 붙고 원래 스킴은 X-Forwarded-Proto에만 남는다.
   # 기본값(NONE)이면 Spring이 그 헤더를 무시해 redirect_uri를 http://screener.na1011.net/...
   # 으로 만들고, 등록된 것은 https://...이므로 Google이 redirect_uri_mismatch를 낸다.
-  # 호스트는 맞고 스킴만 달라서 화면만 봐서는 원인이 보이지 않는다(ADR-0018).
+  # 호스트는 맞고 스킴만 달라서 화면만 봐서는 원인이 보이지 않는다(ADR-0035).
   # localhost 직접 접속에는 이 헤더가 없으므로 로컬 개발 동작은 그대로다.
   forward-headers-strategy: framework
 
