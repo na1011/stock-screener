@@ -93,6 +93,10 @@ GET https://paper-api.alpaca.markets/v2/assets
   `KIM.PRL — Kimco Realty Corporation Class L Depositary Shares, each of which represents a
   one-one thousandth fractional interest in …` 형태다. 이름을 잘라 저장하면 **서로 다른 우선주가
   같은 이름이 된다.**
+- **이름이 티커와 같은 종목이 실재한다.** 8,504종목 중 `RH`(Restoration Hardware)와 `VTEX`
+  둘이다. `StockRegistrar`가 마스터 조회에 실패했을 때 만드는 행과 **구분되지 않는 모양**이라,
+  「이름=티커인 행 수」를 결손 신호로 쓰면 이 둘이 늘 걸린다. 판정은 수가 아니라 **집합**으로
+  한다(`AlpacaUniverseLiveTest`가 그 목록을 들고 있다).
 - **응답이 3.88MB다.** 페이징이 없으므로 스트리밍 없이 통째로 메모리에 올라온다.
 - **기획서의 추정치(~5,600)는 실제의 66%였다.** 추정치에서 뽑은 상수는 소스가 반쯤 준 날 울지
   않는다 — 바닥값은 위 실측에서 뽑고 측정일을 함께 적는다.

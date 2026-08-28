@@ -1,0 +1,41 @@
+[
+  {
+    "id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+    "class": "us_equity",
+    "exchange": "NASDAQ",
+    "symbol": "AAPL",
+    "name": "Apple Inc. Common Stock",
+    "status": "active",
+    "tradable": true,
+    "marginable": true,
+    "shortable": true,
+    "fractionable": true,
+    "attributes": ["has_options", "fractional_eh_enabled"]
+  },
+  {
+    "id": "8ccae427-5dd0-45b3-b5fe-7ba5e422c766",
+    "class": "us_equity",
+    "exchange": "NYSE",
+    "symbol": "KIM.PRL",
+    "name": "Kimco Realty Corporation Class L Depositary Shares, each of which represents a one-one thousandth fractional interest in a share of 5.125% Class L Cumulative Redeemable Preferred Stock, liquidation preference $25,000.00 per share",
+    "status": "active",
+    "tradable": true,
+    "marginable": false,
+    "shortable": false,
+    "fractionable": false,
+    "attributes": []
+  },
+  {
+    "id": "f30d734c-2806-4d0d-b145-f9fade61432b",
+    "class": "us_equity",
+    "exchange": "NYSE",
+    "symbol": "DATAONLY",
+    "name": "Data Only Asset Inc.",
+    "status": "active",
+    "tradable": false,
+    "marginable": false,
+    "shortable": false,
+    "fractionable": false,
+    "attributes": []
+  }
+]
