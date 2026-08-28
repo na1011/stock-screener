@@ -18,9 +18,11 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 | KR | 기업 행위 — 분할·병합·증자·합병 | 〃 | 〃 | 〃 | [`dart-corporate-action.md`](../../../docs/api-spec/dart-corporate-action.md) |
 | KR | 거버넌스 여덟 · 감사의견 · 주식 총수 | 〃 | 〃 | 〃 | [`dart-governance.md`](../../../docs/api-spec/dart-governance.md) |
 | KR | 기업개황 — 업종·설립일·결산월 | 〃 | 〃 | 〃 | [`dart-company-profile.md`](../../../docs/api-spec/dart-company-profile.md) |
+| US | 자산 마스터 — 유니버스·종목명·거래소 | Alpaca Trading API | `APCA_API_KEY_ID` + `APCA_API_SECRET_KEY`(**키가 둘이다**) | `datasource/us/Alpaca*Adapter` | [`alpaca-universe.md`](../../../docs/api-spec/alpaca-universe.md) |
 
-**미국 시장은 아직 어댑터도 계약 문서도 없다**(v1.1, ADR-0010). 소스가 늘면 이 표에 **행을
-더하고** `docs/api-spec/`에 파일을 만든다 — **파일명이 말하는 것은 소스가 아니라 축이다.**
+**미국 시장은 유니버스 축만 열려 있다**(ADR-0086). 시세·재무·기업행위·거버넌스는 어댑터도
+계약 문서도 아직 없다 — **그래서 미국 종목은 「전 종목」에 들어가면 안 된다**(ADR-0087).
+소스가 늘면 이 표에 **행을 더하고** `docs/api-spec/`에 파일을 만든다 — **파일명이 말하는 것은 소스가 아니라 축이다.**
 한 소스가 여러 축을 주면 축마다 파일이 하나다(DART가 넷이다). 그래야 한 파일을 열었을 때 그 축의
 계약이 거기 다 있다.
 
@@ -49,6 +51,7 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | `cmpMgDecsn.json` · `stkExtrDecsn.json` | 미착수 (U-06) | 〃 | 각 종목당 1 = 350 |
 | **거버넌스 여덟**(`alotMatter`·`hyslrSttus`·`outcmpnyDrctrNdChangeSttus`·`mrhlSttus`·`hyslrChgSttus`·`hmvAuditAllSttus`·`stockTotqySttus`·`accnutAdtorNmNdAdtOpinion`) | **사용 중**(ADR-0081) | `dart-governance.md` | 종목·연도당 1. 지금 배치가 **7,700** |
 | `elestock`·`majorstock`·`tesstkAcqsDspsSttus`·`list` | **미착수** — 넷의 사정이 다르다 | 아래 | — |
+| `/v2/assets` (Alpaca Trading) | **탐침만** (`AlpacaAssetProbeLiveTest`) | `alpaca-universe.md` | **전체 1** — 페이징이 없고 `exchange` 콤마 목록이 동작한다 |
 
 ### 받았지만 아직 안 쓰는 넷
 
