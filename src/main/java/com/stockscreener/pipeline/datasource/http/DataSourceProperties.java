@@ -21,6 +21,18 @@ public class DataSourceProperties {
     private final Source dart = new Source("https://opendart.fss.or.kr/api");
 
     /**
+     * Alpaca <b>Trading API</b>. 자산 마스터({@code /v2/assets})와 마켓 캘린더가 여기에 있다.
+     *
+     * <p>IMPORTANT — 시세는 base URL이 다르다({@code https://data.alpaca.markets}). 섞으면
+     * 404이고, 인증 헤더는 두 계열이 같아 <b>키가 틀린 것처럼 보이지 않는다.</b> 시세 어댑터를
+     * 붙일 때는 이 {@code Source}의 키를 공유하고 base URL만 필드로 하나 더 둔다 —
+     * {@link #getDataGoKrMarketIndexBaseUrl()}이 같은 이유로 그렇게 되어 있다.
+     *
+     * <p>이 소스만 <b>키가 둘이다</b>({@code api-key} = Key ID, {@code secret-key} = Secret).
+     */
+    private final Source alpaca = new Source("https://paper-api.alpaca.markets");
+
+    /**
      * 지수시세정보 서비스의 base URL. 같은 제공기관(prefix {@code 1160100})의 <b>다른
      * 오퍼레이션 셋</b>이라 경로만 갈린다.
      *
@@ -52,6 +64,10 @@ public class DataSourceProperties {
         return dart;
     }
 
+    public Source getAlpaca() {
+        return alpaca;
+    }
+
     /** 소스 하나의 접속·한도 설정. */
     public static class Source {
 
@@ -65,6 +81,18 @@ public class DataSourceProperties {
          */
         private String apiKey = "";
 
+        /**
+         * 두 번째 자격증명. 지금은 Alpaca만 쓴다({@code APCA-API-SECRET-KEY}).
+         *
+         * <p>MUST NOT: 이것을 {@code @ConditionalOnApiKey}의 판정에 넣지 않는다. 키 하나만
+         * 채워진 상태에서 어댑터를 등록하지 않으면 그것은 <b>조용한 미등록</b>이 되는데, 등록해
+         * 두면 조회 시점에 {@code AUTH}로 실패하고 {@code fatal()}이 배치를 즉시 멈춘다 —
+         * 그쪽이 훨씬 시끄럽다. 대신 어댑터가 생성 시점에 빈 값을 거부한다.
+         *
+         * <p>MUST NOT: 로그에 남기지 않는다. {@code apiKey}와 같은 이유다.
+         */
+        private String secretKey = "";
+
         /** 연결 타임아웃. 기본값(무한대)이면 응답하지 않는 소스가 배치 스레드를 영원히 붙잡는다. */
         private Duration connectTimeout = Duration.ofSeconds(5);
 
@@ -76,6 +104,18 @@ public class DataSourceProperties {
 
         /** 일일 총량. 0 이하면 무제한. */
         private long dailyQuota;
+
+        public String getSecretKey() {
+            return secretKey;
+        }
+
+        public void setSecretKey(String secretKey) {
+            this.secretKey = secretKey;
+        }
+
+        public boolean hasSecretKey() {
+            return secretKey != null && !secretKey.isBlank();
+        }
 
         Source(String defaultBaseUrl) {
             this.baseUrl = defaultBaseUrl;

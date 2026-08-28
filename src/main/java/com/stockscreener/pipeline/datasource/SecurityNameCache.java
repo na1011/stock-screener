@@ -1,6 +1,5 @@
-package com.stockscreener.pipeline.datasource.kr;
+package com.stockscreener.pipeline.datasource;
 
-import com.stockscreener.pipeline.datasource.SecurityDescriptor;
 
 import org.springframework.stereotype.Component;
 
@@ -18,8 +17,12 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>포트 구현을 하나 더 만들지 않고 캐시를 별도 빈으로 둔 이유는
  * {@code DataSourceRegistry}가 같은 시장에 마스터 소스가 둘이면 <b>기동에 실패</b>하기
- * 때문이다. {@link DataGoKrSecurityMasterAdapter}가 이 캐시를 먼저 보게 하면 포트 구현은
+ * 때문이다. 시장별 마스터 어댑터가 이 캐시를 먼저 보게 하면 포트 구현은
  * 하나로 유지되면서 호출만 사라진다.
+ *
+ * <p><b>시장 중립이다.</b> 그래서 {@code kr} 패키지가 아니라 여기 있다 — 미국 유니버스
+ * 어댑터도 같은 응답에서 이름을 심고, 그쪽은 <b>이 캐시 말고 이름을 얻을 경로가 없다</b>
+ * (마스터 전용 엔드포인트를 따로 부르지 않는다).
  *
  * <p>영속 캐시가 아니다. {@code stock} 행이 만들어지고 나면
  * {@code StockRegistrar.resolveOne}이 DB에서 찾아 마스터를 부르지 않으므로, 이 캐시가

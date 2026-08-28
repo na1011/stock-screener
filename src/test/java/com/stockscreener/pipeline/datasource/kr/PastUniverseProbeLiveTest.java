@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.datasource.kr;
 
+import com.stockscreener.pipeline.datasource.SecurityNameCache;
 import com.stockscreener.pipeline.datasource.UniverseSnapshot;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;

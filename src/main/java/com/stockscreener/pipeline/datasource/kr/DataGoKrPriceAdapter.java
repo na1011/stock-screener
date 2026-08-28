@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.datasource.kr;
 
+import com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey;
 import tools.jackson.databind.JsonNode;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.PriceDataSource;

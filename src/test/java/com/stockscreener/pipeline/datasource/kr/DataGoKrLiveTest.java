@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.datasource.kr;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.RawPriceBar;
 import com.stockscreener.pipeline.datasource.SecurityDescriptor;
+import com.stockscreener.pipeline.datasource.SecurityNameCache;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;

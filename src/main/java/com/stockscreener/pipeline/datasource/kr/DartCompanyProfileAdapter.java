@@ -4,6 +4,7 @@ import com.stockscreener.pipeline.datasource.CompanyProfile;
 import com.stockscreener.pipeline.datasource.CompanyProfileDataSource;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.RateLimiter;

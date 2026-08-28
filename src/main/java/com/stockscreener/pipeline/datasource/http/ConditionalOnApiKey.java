@@ -1,4 +1,4 @@
-package com.stockscreener.pipeline.datasource.kr;
+package com.stockscreener.pipeline.datasource.http;
 
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;

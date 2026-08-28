@@ -5,6 +5,7 @@ import com.stockscreener.pipeline.datasource.GovernanceDataSource;
 import com.stockscreener.pipeline.datasource.GovernanceEndpoint;
 import com.stockscreener.pipeline.datasource.GovernanceReportRow;
 import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.RateLimiter;

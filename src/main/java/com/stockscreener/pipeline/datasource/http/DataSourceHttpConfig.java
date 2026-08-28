@@ -21,6 +21,17 @@ public class DataSourceHttpConfig {
                 "data-go-kr", source.getPermitsPerMinute(), source.getDailyQuota());
     }
 
+    /**
+     * Alpaca 전체를 센다. 시세 어댑터가 붙어도 <b>같은 빈을 공유한다</b> — 같은 계정이면
+     * 쿼터도 같기 때문이다.
+     */
+    @Bean
+    public RateLimiter alpacaRateLimiter(DataSourceProperties properties) {
+        DataSourceProperties.Source source = properties.getAlpaca();
+        return new TokenBucketRateLimiter(
+                "alpaca", source.getPermitsPerMinute(), source.getDailyQuota());
+    }
+
     @Bean
     public RateLimiter dartRateLimiter(DataSourceProperties properties) {
         DataSourceProperties.Source source = properties.getDart();

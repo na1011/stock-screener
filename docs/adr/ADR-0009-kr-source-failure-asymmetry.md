@@ -47,9 +47,11 @@ grep -rn "fnlttSinglIndx\|fnlttCmpnyIndx" src/main/java/ | grep -vE ':[0-9]+: *(
 아무것도 반환하지 않아야 한다. 주석 줄을 제외하는 이유는 "왜 쓰지 않는가"를 설명하려면 그 이름을 적어야 하기 때문이다 — 항상 걸리는 검사는 곧 무시된다.
 
 ```bash
-grep -rn "ConditionalOnProperty" src/main/java/com/stockscreener/pipeline/datasource/kr/ | grep -vE ':[0-9]+: *(\*|//|/\*)'
+grep -rn "ConditionalOnProperty" src/main/java/com/stockscreener/pipeline/datasource/ | grep -vE ':[0-9]+: *(\*|//|/\*)'
 ```
 아무것도 반환하지 않아야 한다 — 빈 문자열 함정 때문에 `@ConditionalOnApiKey`를 쓴다.
+범위가 `kr/`이 아니라 `datasource/` 전체인 이유는 애노테이션이 `http/`에 있고 어댑터가 시장별
+하위 패키지로 늘기 때문이다. `kr/`로 좁히면 **새 시장의 어댑터에서 같은 함정이 통과한다.**
 
 ## 배경
 
