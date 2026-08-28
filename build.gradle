@@ -217,6 +217,7 @@ tasks.register('checkEnv') {
         // MUST NOT: 값을 출력하지 않는다. 줄 번호·분류·길이만 낸다.
         println '\n.env 줄 구조 (값 미출력):'
         def lineNo = 0
+        def unquotedSpaceKeys = []
         rootProject.file('.env').eachLine('UTF-8') { raw ->
             lineNo++
             def line = raw.trim()
@@ -238,9 +239,29 @@ tasks.register('checkEnv') {
                 println "  ${lineNo}: '='가 없어 무시됨 (${body.length()}자)${hint}"
                 return
             }
-            println "  ${lineNo}: 키 '${body.substring(0, sep).trim()}' → 값 ${body.length() - sep - 1}자${hint}"
+            def rawValue = body.substring(sep + 1)
+            // IMPORTANT — 값에 공백이 있는데 따옴표가 없으면 운영 기동이 통째로 죽는다.
+            // ops/run-app.sh가 `set -euo pipefail` 아래 `set -a; . .env`로 읽으므로 공백 뒤
+            // 조각이 명령으로 해석되어 exit 127이 되고, 그 뒤 줄의 키가 하나도 안 실린다.
+            // 실측으로 한 번 앱이 내려갔다 — .env.example의 MUST만으로는 못 막았으므로
+            // 여기서 잡는다. 값은 출력하지 않는다.
+            def quoted = (rawValue.startsWith('"') && rawValue.endsWith('"'))
+                    || (rawValue.startsWith("'") && rawValue.endsWith("'"))
+            def unquotedSpace = rawValue.contains(' ') && !quoted
+            if (unquotedSpace) {
+                unquotedSpaceKeys << body.substring(0, sep).trim()
+            }
+            def warn = unquotedSpace ? '  ⟵ 🔴 공백이 있는데 따옴표가 없다' : ''
+            println "  ${lineNo}: 키 '${body.substring(0, sep).trim()}' → 값 ${body.length() - sep - 1}자${hint}${warn}"
         }
         println "\n파일 크기: ${rootProject.file('.env').length()}바이트, 총 ${lineNo}줄"
+
+        if (!unquotedSpaceKeys.isEmpty()) {
+            throw new GradleException(
+                    "값에 공백이 있는데 따옴표가 없는 키: ${unquotedSpaceKeys}\n" +
+                    "  ops/run-app.sh가 `set -a; . .env`로 읽으므로 이대로면 운영 기동이 exit 127로 죽고,\n" +
+                    "  그 뒤 줄의 키가 하나도 안 실린다. 값을 큰따옴표로 감싸라.")
+        }
     }
 }
 

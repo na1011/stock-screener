@@ -1,6 +1,6 @@
 ---
 id: ADR-0010
-status: 채택됨
+status: 대체됨(→ ADR-0086)
 date: 2026-08-06
 applies_to:
   - "src/main/java/com/stockscreener/pipeline/datasource/**"
@@ -9,6 +9,15 @@ applies_to:
 ---
 
 # ADR-0010. 미국 시장을 v1.1로 미룬다
+
+> **이 결정은 [ADR-0086](./ADR-0086-us-universe-by-listing.md)이 대체했다(2026-08-29).**
+> 아래 §규칙의 *"MUST NOT: 미국 종목을 유니버스에 편입하지 않는다"*는 더 이상 유효하지 않다 —
+> 유니버스는 거래소 상장 기준으로 채워졌다. 다만 **§버린 대안의 「미국을 유니버스에 두고 실패를
+> 감수」는 아직 살아 있는 근거다**: 그 상태를 피할 수 있게 된 것은 ADR-0087이 수집 대상을
+> 선언된 시장으로 좁혔기 때문이고, 그 장치를 걷으면 이 기각 근거가 그대로 되살아난다.
+>
+> **아래 §배경의 실측(Finnhub 403·Yahoo 429·Stooq 챌린지·각 ToS)은 지우지 않는다** — 그 소스들을
+> 다시 시도하려는 세션에 여전히 답한다.
 
 ## 결정
 
@@ -46,7 +55,7 @@ psql -d stock_screener -c "SELECT code FROM universe ORDER BY code"
 
 - **Finnhub `/stock/candle` → HTTP 403** (`{"error":"You don't have access to this resource."}`). 무료 티어에서 과거 OHLC가 막혔다. spec §7의 "미국 시세 및 재무 데이터는 Finnhub를 통해 확보한다" 중 **시세 부분이 성립하지 않는다.**
 - **Finnhub `/stock/financials-reported` → HTTP 200.** 재무는 무료로 살아 있고 `bs`/`ic`/`cf`가 `{concept, unit, label, value}` 배열로 온다. 즉 **재무만으로는 진행할 수 있으나 시세가 없다.** 무료 티어의 호출 한도는 **분당 60회 수준**이라, v1.1에서 500종목 재무를 적재하려면 그 전제 위에 배치를 설계해야 한다.
-  - **이 한 줄은 더 이상 후속 판단의 근거가 아니다.** `docs/external/us-market-screener-planning.md`가 재무도 유료 티어로 이관돼 **채택 근거가 소멸**했다고 적고 Finnhub를 「배제한 소스」 표에 올렸으며, 미국 재무 소스를 **SEC EDGAR로 확정**했다. **그 이관을 이 프로젝트가 다시 재보지는 않았다** — 재볼 이유가 없어서다. 지우지 않는 이유는 위 문장이 "재무는 열려 있다"로 읽혀 실제로 `.env.example`에 그렇게 적히는 일이 있었기 때문이다.
+  - **이 한 줄은 더 이상 후속 판단의 근거가 아니다.** [ADR-0086](./ADR-0086-us-universe-by-listing.md)이 재무도 유료 티어로 이관돼 **채택 근거가 소멸**했음을 기록하고 미국 재무 소스를 **SEC EDGAR로 확정**했다. **그 이관을 이 프로젝트가 다시 재보지는 않았다** — 재볼 이유가 없어서다. 지우지 않는 이유는 위 문장이 "재무는 열려 있다"로 읽혀 실제로 `.env.example`에 그렇게 적히는 일이 있었기 때문이다.
 - **Stooq → JS proof-of-work 챌린지.** 다수 자료가 여전히 추천하지만 스크립트로 접근할 수 없다.
 - **SEC EDGAR → 정상**(키 불필요, 10,398종목). 미국 재무의 최선이지만 **OHLC는 제공하지 않는다.**
 

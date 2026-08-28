@@ -28,7 +28,7 @@ applies_to:
 ## 검증
 
 ```bash
-grep -rnE 'finnhub|Finnhub|[Dd]art|data\.go\.kr|opendart|stooq|Stooq|KRX' \
+grep -rnE 'finnhub|Finnhub|[Dd]art|data\.go\.kr|opendart|stooq|Stooq|KRX|[Aa]lpaca|APCA|sec\.gov|EDGAR' \
   src/main/java/com/stockscreener/pipeline/collector \
   src/main/java/com/stockscreener/pipeline/batch \
   src/main/java/com/stockscreener/pipeline/scheduler 2>/dev/null \
@@ -37,6 +37,8 @@ grep -rnE 'finnhub|Finnhub|[Dd]art|data\.go\.kr|opendart|stooq|Stooq|KRX' \
 아무것도 반환하지 않아야 한다. 주석 줄을 제외하는 이유는, 규칙의 근거를 설명하려면 어느 벤더가 그렇게 동작하는지 적어야 하기 때문이다(예: "거래대금은 KRX만 제공한다"). 코드에 등장하면 위반이다.
 
 **`DART|dart`가 아니라 `[Dd]art`인 것이 중요하다.** 벤더 클래스 이름이 `DartGovernanceFactMapper`처럼 **대문자 D + 소문자**로 오면 앞 패턴이 못 잡는다 — 위반이 성립해도 통과하는 펜스가 된다(ADR-0074가 금지한 형태). 실제로 그 이름을 collector에 노출할 뻔했고, 그래서 구현을 `datasource/kr`에 package-private으로 두고 포트만 내보냈다(ADR-0081).
+
+**미국 소스가 붙으면서 패턴에 넷을 더했다**(`[Aa]lpaca`·`APCA`·`sec.gov`·`EDGAR`). 시장이 늘 때 이 목록을 함께 늘리지 않으면 **위반이 성립해도 통과하는 펜스**가 된다 — 위 `[Dd]art`와 같은 자리다. `APCA`가 따로 있는 이유는 인증 헤더 이름이 벤더명을 안 쓰기 때문이다(`APCA-API-KEY-ID`).
 
 ```bash
 grep -rnE 'RestClientException|HttpClientErrorException|JsonProcessingException' \
