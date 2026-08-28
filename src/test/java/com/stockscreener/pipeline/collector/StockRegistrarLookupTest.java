@@ -100,6 +100,29 @@ class StockRegistrarLookupTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 수집하기로 하지 않은 시장은 활성 유니버스에 있어도 대상이 아니다")
+    void excludesMarketsWeDoNotCollect() {
+        // 미국 유니버스를 켠다. 적재하려면 반드시 켜야 하고, 켜는 순간 편입 종목이 전부
+        // "전 종목"에 들어온다 — 활성 유니버스 조인만으로는 이것을 막지 못한다.
+        jdbcTemplate.update("UPDATE universe SET is_active = true WHERE code = 'US_LISTED'");
+        long usStock = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, listing_exchange)
+                VALUES ('US', 'AAPL', 'Apple Inc. Common Stock', 'NASDAQ') RETURNING id
+                """, Long.class);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('US_LISTED', ?, ?)
+                """, usStock, FROM);
+        long krStock = member("005930", "삼성전자", true, null);
+
+        assertThat(registrar.activeUniverseMemberIds())
+                .as("수집 어댑터가 하나도 없는 시장이라 종목마다 실패하게 된다")
+                .contains(krStock).doesNotContain(usStock);
+        assertThat(registrar.activeUniverseMemberIdsByTicker(List.of("005930", "AAPL")))
+                .containsExactly(krStock);
+    }
+
+    @Test
     @DisplayName("모르는 티커로 조회해도 종목을 만들지 않는다 — resolveOrCreate와 갈라놓은 이유다")
     void neverCreatesStockRows() {
         int before = stockCount();

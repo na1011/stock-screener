@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
+import com.stockscreener.pipeline.datasource.CollectedMarkets;
 import com.stockscreener.pipeline.datasource.SecurityDescriptor;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 
@@ -96,6 +97,18 @@ public class StockRegistrar {
         return new SecurityDescriptor(marketCode, ticker, ticker, null, null, null, null, null);
     }
 
+    /**
+     * {@link CollectedMarkets#ALL}을 정렬해 배열로. 정렬하는 이유는 <b>질의 문자열을 안정시켜</b>
+     * 실행 계획 캐시와 로그 대조가 실행마다 흔들리지 않게 하려는 것이다.
+     */
+    private static Object[] collectedMarkets() {
+        return CollectedMarkets.ALL.stream().sorted().toArray();
+    }
+
+    private static String collectedMarketPlaceholders() {
+        return String.join(",", java.util.Collections.nCopies(CollectedMarkets.ALL.size(), "?"));
+    }
+
     private Long findId(String marketCode, String ticker) {
         List<Long> found = jdbcTemplate.queryForList(
                 "SELECT id FROM stock WHERE market_code = ? AND ticker = ?",
@@ -124,6 +137,11 @@ public class StockRegistrar {
      *
      * <p>{@code PercentileCalculator}와 {@code StockReader.selectableUniverses}는 처음부터
      * 이 조인을 갖고 있었다. 여기 없던 것이 비대칭이었다.
+     *
+     * <p><b>MUST: {@link CollectedMarkets}로도 좁힌다.</b> 유니버스에 편입하는 것과 데이터를
+     * 모으는 것은 다르다 — 미국은 편입까지만 열려 있고 수집 어댑터가 하나도 없어서, 대상에
+     * 넣으면 종목마다 실패한다. 활성 유니버스 조인만으로는 이것을 막지 못한다: <b>적재하려면
+     * 그 유니버스를 켜야 하고, 켜는 순간 편입 종목이 전부 여기 들어온다.</b>
      */
     public List<Long> activeUniverseMemberIds() {
         return jdbcTemplate.queryForList("""
@@ -131,8 +149,9 @@ public class StockRegistrar {
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE m.effective_to IS NULL AND s.is_active
+                  AND s.market_code IN (%s)
                 ORDER BY m.stock_id
-                """, Long.class);
+                """.formatted(collectedMarketPlaceholders()), Long.class, collectedMarkets());
     }
 
     /**
@@ -148,8 +167,9 @@ public class StockRegistrar {
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE m.effective_to IS NULL AND s.is_active AND s.industry_code IS NULL
+                  AND s.market_code IN (%s)
                 ORDER BY m.stock_id
-                """, Long.class);
+                """.formatted(collectedMarketPlaceholders()), Long.class, collectedMarkets());
     }
 
     /**
@@ -169,13 +189,17 @@ public class StockRegistrar {
             return List.of();
         }
         String placeholders = String.join(",", java.util.Collections.nCopies(tickers.size(), "?"));
+        Object[] args = java.util.stream.Stream
+                .concat(tickers.stream(), java.util.Arrays.stream(collectedMarkets()))
+                .toArray();
         return jdbcTemplate.queryForList("""
                 SELECT DISTINCT m.stock_id FROM universe_membership m
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE m.effective_to IS NULL AND s.is_active AND s.ticker IN (%s)
+                  AND s.market_code IN (%s)
                 ORDER BY m.stock_id
-                """.formatted(placeholders), Long.class, tickers.toArray());
+                """.formatted(placeholders, collectedMarketPlaceholders()), Long.class, args);
     }
 
     /**
