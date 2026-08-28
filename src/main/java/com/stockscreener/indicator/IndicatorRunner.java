@@ -100,13 +100,22 @@ public class IndicatorRunner {
             String code = calculator.code();
             List<IndicatorPoint> points = computed.points().getOrDefault(code, List.of());
             Set<LocalDate> suppressed = computed.suppressed().getOrDefault(code, Set.of());
+            // 게이트와 삭제 범위가 **같은 값**을 본다. 삭제는 보존 창으로 거르는데 아래 걷기의
+            // 게이트가 거르지 않은 집합을 보면, 억제 일자가 전부 컷오프 아래일 때
+            // **삭제는 0행이고 걷기는 거부되는** 조합이 생긴다 — 그 자리에서 옛 행이 영영
+            // 안 걷힌다(ADR-0085). 실제로 UNSUPPORTED 기업 행위를 가진 종목들이 그 상태였다.
+            Collection<LocalDate> retainedSuppressed = retainDates(suppressed, retentionCutoff);
 
+            // MUST: 이 진입 조건은 **거르지 않은** suppressed를 본다. retainedSuppressed로
+            // 바꾸면 억제가 컷오프 아래로만 있는 종목에서 suppressedCodes가 안 올라가
+            // "미보정 기업 행위로 지표를 뺐다" 로그가 사라진다 — 아래가 적듯 그것이
+            // "이 종목이 왜 화면에서 빠졌는가"를 답할 수 있는 유일한 흔적이다.
             if (!suppressed.isEmpty()) {
                 // MUST: 아래 points.isEmpty() 분기보다 **앞**이다. 전부 억제되면 points가 비고,
                 // 거기서 continue하면 이미 저장된 옛 행이 그대로 남는다 — 값이 그럴듯해서
                 // 화면에도 테스트에도 드러나지 않는다. 러너가 "쓰지 않는다"로 끝내면 제외가
                 // 성립하지 않는다는 것이 P8이 적어 둔 함정이고, 여기가 그 자리다.
-                long removed = writer.deleteAt(stockId, code, retainDates(suppressed, retentionCutoff));
+                long removed = writer.deleteAt(stockId, code, retainedSuppressed);
                 if (removed > 0 || !points.isEmpty()) {
                     suppressedCodes++;
                 }
@@ -120,7 +129,11 @@ public class IndicatorRunner {
                 // TradingDays750Calculator는 마지막 봉 하나만 내므로 그 1점이 억제되면
                 // points가 비는데, 그때 창 전체를 지우면 실행당 1일자인 그 지표는
                 // 복구에 날짜 수만큼의 백필이 든다.
-                if (suppressed.isEmpty() && !windowDates.isEmpty()
+                //
+                // MUST: 게이트가 보는 것은 **보존 창으로 거른** 억제 집합이다. 거르지 않은 것을
+                // 보면 위 삭제가 0행인데도 여기가 막혀, 억제 효력일이 보존 창보다 오래된 종목은
+                // 이 걷기에서 영구히 면제된다.
+                if (retainedSuppressed.isEmpty() && !windowDates.isEmpty()
                         && inputsWereReadable(calculator, base)) {
                     long removed = writer.deleteAt(stockId, code, windowDates);
                     if (removed > 0) {

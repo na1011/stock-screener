@@ -1,6 +1,7 @@
 package com.stockscreener.indicator;
 
 import com.stockscreener.indicator.calculator.Atr14Calculator;
+import com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculator;
 import com.stockscreener.indicator.calculator.MacdCalculator;
 import com.stockscreener.indicator.calculator.MarketCapCalculator;
 import com.stockscreener.indicator.calculator.MacdVCalculator;
@@ -339,6 +340,28 @@ class IndicatorRunnerTest {
                 .as("억제로 points가 비었을 때까지 창 전체를 지우면 TRADING_DAYS_750처럼 "
                         + "실행당 1일자인 지표는 복구에 날짜 수만큼의 백필이 든다")
                 .isNotNull();
+    }
+
+    @Test
+    @DisplayName("억제가 보존 창 아래로만 있으면 걷는다 — 삭제 0행인데 게이트만 막히면 안 된다")
+    void cullsWhenSuppressionIsEntirelyBelowTheRetentionCutoff() {
+        insertPriceHistory(400);
+        // 억제 일자가 **전부 보존 컷오프 아래**인 상태를 만든다. 그러면 억제 분기의 삭제는
+        // 0행인데, 게이트가 거르지 않은 집합을 보면 걷기가 통째로 거부된다 — 그 조합에서
+        // 옛 행이 영영 안 걷힌다. 010060 OCI홀딩스가 실제로 그 상태였다(79행).
+        LocalDate cutoff = AS_OF.minusDays(100);
+        unadjustedAction(CorporateActionStatus.UNSUPPORTED, AS_OF.minusDays(399));
+        // 앞 4분기 합이 음수라 EpsGrowthTtmYoyCalculator가 루프 앞에서 빈 목록을 낸다.
+        // **억제 때문이 아니다** — 그 구분이 이 테스트의 전부다.
+        insertLossMakingQuarters();
+        insertIndicatorRow(EpsGrowthTtmYoyCalculator.CODE, AS_OF.minusDays(10),
+                new BigDecimal("12.34"));
+
+        runner.run(stockId, AS_OF, Optional.of(cutoff), Map.of());
+
+        assertThat(storedCodes())
+                .as("억제 효력일이 보존 창보다 오래되면 그 종목은 걷기에서 영구히 면제된다")
+                .doesNotContain(EpsGrowthTtmYoyCalculator.CODE);
     }
 
     @Test
