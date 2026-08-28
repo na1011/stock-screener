@@ -27,7 +27,7 @@ public class StockEntity {
     @Column(name = "ticker", nullable = false, length = 20)
     private String ticker;
 
-    @Column(name = "name", nullable = false, length = 200)
+    @Column(name = "name", nullable = false, length = 400)
     private String name;
 
     @Column(name = "is_active", nullable = false)

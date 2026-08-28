@@ -138,7 +138,7 @@ public class DataGoKrSecurityMasterAdapter implements SecurityMasterDataSource {
             }
             // 섹터·상장일은 이 소스가 주지 않는다. nullable이며 v1은 쓰지 않는다.
             return Optional.of(new SecurityDescriptor(
-                    market, ticker, name, null, null, null, null));
+                    market, ticker, name, null, null, null, null, null));
         }
         // 빈 결과는 예외가 아니다 — 상장폐지·거래정지가 정상적으로 발생한다.
         return Optional.empty();

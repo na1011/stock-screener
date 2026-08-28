@@ -171,7 +171,7 @@ public class MarketCapUniverseAdapter implements UniverseDataSource {
         for (Candidate candidate : candidates) {
             nameCache.put(new SecurityDescriptor(
                     candidate.marketCode(), candidate.ticker(), candidate.name(),
-                    null, null, null, null));
+                    null, null, null, null, null));
         }
 
         List<String> tickers = select(candidates, target.topN());

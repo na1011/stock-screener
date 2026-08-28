@@ -59,12 +59,12 @@ public class StockRegistrar {
         SecurityDescriptor descriptor = describe(marketCode, ticker);
         jdbcTemplate.update("""
                 INSERT INTO stock (market_code, ticker, name, name_en, sector, listed_on,
-                                   is_active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, true, now(), now())
+                                   listing_exchange, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, true, now(), now())
                 ON CONFLICT (market_code, ticker) DO NOTHING
                 """,
                 marketCode, ticker, descriptor.name(), descriptor.nameEn(),
-                descriptor.sector(), descriptor.listedOn());
+                descriptor.sector(), descriptor.listedOn(), descriptor.listingExchange());
 
         Long created = findId(marketCode, ticker);
         if (created == null) {
@@ -93,7 +93,7 @@ public class StockRegistrar {
             log.warn("종목 마스터 조회에 실패했다. {}/{} kind={} — 최소 정보로 등록한다. {}",
                     marketCode, ticker, e.kind(), e.getMessage());
         }
-        return new SecurityDescriptor(marketCode, ticker, ticker, null, null, null, null);
+        return new SecurityDescriptor(marketCode, ticker, ticker, null, null, null, null, null);
     }
 
     private Long findId(String marketCode, String ticker) {

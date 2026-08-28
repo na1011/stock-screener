@@ -10,6 +10,10 @@ import java.time.LocalDate;
  *
  * <p>{@code marketCode}를 소스가 정하는 이유는 티커만으로는 시장을 알 수 없기 때문이다 —
  * 코스피와 코스닥은 같은 6자리 숫자 체계를 쓴다.
+ *
+ * <p>{@code listingExchange}는 <b>시장 안에서 거래소를 가른다.</b> 미국은 {@code market_code}가
+ * {@code US} 하나이고 NYSE·NASDAQ이 그 안에 있어, 마켓 캘린더를 거래소마다 따로 조회하려면
+ * 이 값이 필요하다. 국내는 시장이 곧 거래소라 {@code null}이다.
  */
 public record SecurityDescriptor(
         String marketCode,
@@ -18,7 +22,8 @@ public record SecurityDescriptor(
         String nameEn,
         String sector,
         LocalDate listedOn,
-        LocalDate delistedOn
+        LocalDate delistedOn,
+        String listingExchange
 ) {
 
     public SecurityDescriptor {
