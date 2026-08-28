@@ -173,6 +173,37 @@ public class SectorRelativeCalculator {
             WHERE indicator_value.value IS DISTINCT FROM EXCLUDED.value
             """;
 
+    /**
+     * {@link #UPSERT}가 쓰지 <b>않기로 한</b> 종목의 그날 옛 행을 지운다.
+     *
+     * <p>MUST: 술어를 {@code UPSERT}의 {@code WHERE}와 <b>정확히 여집합</b>으로 둔다. 그 조건은
+     * {@code peers >= ? AND … IS NOT NULL}이라 <b>배제 사유가 둘</b>이고, 표본 수만 보면
+     * 중앙값이 0 이하라 값이 빠진 자리(자본잠식 업종)의 옛 행이 남는다.
+     *
+     * <p>IMPORTANT — 이것은 {@link DerivedIndicatorCleanup}의 javadoc이 금지하는
+     * <b>「이번에 안 썼다」가 아니다.</b> 그쪽이 경계하는 것은 <b>UPSERT가 반환한 행 수</b>를
+     * 기준으로 삼는 것인데({@code IS DISTINCT FROM} 때문에 값이 그대로인 날은 0행이라 멀쩡한
+     * 행을 지운다), 여기 기준은 <b>집합의 소속</b>이다 — 값이 안 바뀐 날에도 그 종목은
+     * {@code chosen}에 있으므로 지워지지 않는다.
+     *
+     * <p>이 술어가 {@code removeOrphans}의 「원본이 없다」를 <b>포함한다.</b> 원본이 없는 종목은
+     * {@code member}에 안 들어가 {@code chosen}에도 없기 때문이다. 그래서 날짜별
+     * {@code removeOrphans} 호출을 이것으로 갈음한다 — 같은 행의 소유가 둘이면 한쪽을 고칠 때
+     * 다른 쪽이 조용히 남는다.
+     *
+     * <p><b>지우는 것은 그날 하나뿐이다.</b> 과거 일자에 남은 것은
+     * {@link #removeOrphansInWindow}와 유니버스 이탈 정리가 본다.
+     */
+    private static final String DELETE_UNWRITTEN = """
+            WITH %s
+            DELETE FROM indicator_value v
+            WHERE v.trade_date = ?
+              AND v.indicator_code = ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM chosen c
+                  WHERE c.stock_id = v.stock_id AND c.peers >= ? AND c.%s IS NOT NULL)
+            """;
+
     private final JdbcTemplate jdbcTemplate;
     private final List<SectorMetricSpec> specs;
 
@@ -215,12 +246,16 @@ public class SectorRelativeCalculator {
             // 표본 수는 상대값과 같은 층·같은 모집단에서 나온다. 따로 세면 둘이 갈린다.
             written += upsert(chosen, spec.sourceCode(), tradeDate, spec.peerCountCode(), "peers");
 
+            // 그날 안 쓰기로 한 자리의 옛 행을 걷는다(ADR-0085). 모집단이 MIN_PEERS 아래로
+            // 떨어지거나 중앙값이 0 이하가 되면 UPSERT가 그 종목을 안 쓰는데, 이 정리가 없으면
+            // **어제 쓴 값이 오늘 값처럼 남는다.** 실측으로 리밸런싱 한 번에 1,508행이 그렇게
+            // 남아 있었다(490470이 빠지며 division 72의 표본이 5 → 4가 됐다).
+            //
             // MUST: 표본 수도 함께 정리한다. 상대값만 지우면 "값은 없는데 표본은 40"이 남고,
             // 그 짝이 어긋난 것은 화면에서 표본만 보이는 형태로 나타난다.
-            removed += DerivedIndicatorCleanup.removeOrphans(
-                    jdbcTemplate, spec.code(), spec.sourceCode(), tradeDate);
-            removed += DerivedIndicatorCleanup.removeOrphans(
-                    jdbcTemplate, spec.peerCountCode(), spec.sourceCode(), tradeDate);
+            removed += deleteUnwritten(chosen, spec.sourceCode(), tradeDate, spec.code(), "metric");
+            removed += deleteUnwritten(chosen, spec.sourceCode(), tradeDate,
+                    spec.peerCountCode(), "peers");
         }
         log.info("업종 상대값을 계산했다. tradeDate={} 지표={}쌍 저장={}행 정리={}행",
                 tradeDate, specs.size(), written, removed);
@@ -232,6 +267,17 @@ public class SectorRelativeCalculator {
         return jdbcTemplate.update(
                 UPSERT.formatted(chosen, column, column),
                 // 자리표시자 순서는 SQL 텍스트 순서다 — member(2) → chosen(2) → SELECT(2) → WHERE(1).
+                sourceCode, tradeDate,
+                MIN_PEERS, MIN_PEERS,
+                tradeDate, targetCode,
+                MIN_PEERS);
+    }
+
+    private int deleteUnwritten(String chosen, String sourceCode, LocalDate tradeDate,
+                                String targetCode, String column) {
+        return jdbcTemplate.update(
+                DELETE_UNWRITTEN.formatted(chosen, column),
+                // 자리표시자 순서가 upsert와 같다 — member(2) → chosen(2) → DELETE(3).
                 sourceCode, tradeDate,
                 MIN_PEERS, MIN_PEERS,
                 tradeDate, targetCode,

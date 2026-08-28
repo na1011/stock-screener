@@ -220,6 +220,72 @@ class SectorRelativeCalculatorTest {
                 .isNull();
     }
 
+    @Test
+    @DisplayName("표본이 임계 아래로 떨어지면 옛 행을 걷는다 — 어제 쓴 값이 오늘 값처럼 남으면 안 된다")
+    void deletesRowsWhenThePopulationFallsBelowTheThreshold() {
+        long lonely = member("12000", "10");
+        member("12001", "20");
+        // 어제까지는 표본이 5였다가 리밸런싱으로 빠진 상태다. 실측으로 490470이 유니버스에서
+        // 빠지며 division 72의 표본이 5 → 4가 됐고, 그때 1,508행이 이렇게 남았다.
+        staleRow(lonely, "DEBT_RATIO_SECTOR_REL", "1.5");
+        staleRow(lonely, "DEBT_RATIO_SECTOR_N", "5");
+
+        calculate(medianRatio());
+
+        assertThat(value(lonely, "DEBT_RATIO_SECTOR_REL")).isNull();
+        assertThat(value(lonely, "DEBT_RATIO_SECTOR_N"))
+                .as("상대값만 걷으면 「값은 없는데 표본은 5」가 남는다")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("중앙값 가드로 값이 빠진 자리도 걷는다 — 배제 사유가 표본 수 하나가 아니다")
+    void deletesRowsWhenTheMedianGuardRemovedTheValue() {
+        long target = member("26111", "-10");
+        member("26112", "-20");
+        member("26113", "0");
+        member("26114", "-40");
+        member("26115", "-50");
+        // 표본은 5라 임계를 넘는다. UPSERT의 WHERE가 `peers >= ? AND … IS NOT NULL`이므로
+        // 표본 수만 보는 술어로는 이 행이 안 걷힌다 — 여집합이라야 걷힌다.
+        staleRow(target, "DEBT_RATIO_SECTOR_REL", "1.5");
+
+        calculate(medianRatio());
+
+        assertThat(value(target, "DEBT_RATIO_SECTOR_REL")).isNull();
+        assertThat(value(target, "DEBT_RATIO_SECTOR_N"))
+                .as("표본 수는 사실이므로 남는다 — 이쪽까지 걷으면 여집합을 잘못 잡은 것이다")
+                .isEqualByComparingTo("5");
+    }
+
+    @Test
+    @DisplayName("값이 안 바뀐 날에도 쓴 행은 남는다 — 「이번에 안 썼다」를 기준으로 삼으면 안 된다")
+    void keepsRowsOnDaysWhenTheUpsertWroteNothing() {
+        long target = member("26111", "10");
+        member("26112", "20");
+        member("26113", "30");
+        member("26114", "40");
+        member("26115", "50");
+        SectorMetricSpec spec = medianRatio();
+        calculate(spec);
+        assertThat(value(target, "DEBT_RATIO_SECTOR_REL")).isNotNull();
+
+        // 두 번째 실행은 IS DISTINCT FROM 때문에 0행을 쓴다. 삭제 술어를 「UPSERT가 반환한
+        // 행 수」로 잡으면 여기서 멀쩡한 행이 사라진다 — DerivedIndicatorCleanup의 javadoc이
+        // 그 함정을 적어 뒀고, 이 단언이 그 경계를 지킨다.
+        calculate(spec);
+
+        assertThat(value(target, "DEBT_RATIO_SECTOR_REL")).isNotNull();
+        assertThat(value(target, "DEBT_RATIO_SECTOR_N")).isNotNull();
+    }
+
+    private void staleRow(long stockId, String code, String value) {
+        jdbcTemplate.update("""
+                INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)
+                VALUES (?, ?, ?, ?)
+                """, stockId, AS_OF, code, new BigDecimal(value));
+    }
+
     private static SectorMetricSpec medianRatio() {
         return new SectorMetricSpec(SOURCE, SectorMetricSpec.Kind.MEDIAN_RATIO, "배수", "설명", "해석");
     }
