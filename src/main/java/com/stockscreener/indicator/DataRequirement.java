@@ -20,8 +20,17 @@ import java.util.Set;
  * <p>재무와 갈라 선언하는 이유는 <b>{@code IndicatorRunner.inputsWereReadable}이 이것으로
  * 「값이 없는 것」과 「입력을 못 읽은 것」을 가르기 때문</b>이다(ADR-0080). 선언하지 않으면
  * 거버넌스를 한 행도 못 읽은 종목에서 <b>부모 행은 남는데 이 지표 행만 지워진다.</b>
- * 시장 지수가 선언 없이 늘 읽히는 바람에 같은 결손을 안고 있는데(ADR-0080 §결과),
- * 그것을 셋째 축으로 늘리지 않는다.
+ * @param needsMarketIndex   시장 지수 시계열을 쓰는가. 같은 이유로 선언한다(ADR-0085) —
+ * 선언이 없던 동안 지수가 통째로 비면 {@code BETA_104W}·{@code EXCESS_RETURN_*}가
+ * 「값이 사라졌다」로 판정되어 걷혔다(ADR-0080 §결과가 적어 둔 구멍이다).
+ *
+ * <p>IMPORTANT — <b>이 축은 「통째로 없는가」만 가른다.</b> {@code IndicatorContext}가
+ * {@code null}을 빈 맵으로 접으므로 판정이 결국 「맵이 비었는가」다. <b>날짜별 결손은 못 가른다</b> —
+ * 그쪽은 {@code IndicatorRunner}가 꼬리 후보에서 날짜 단위로 뺀다.
+ *
+ * <p>ADR-0045 §버린 대안이 기각한 「계산기가 <b>적게 낸다</b>고 선언한다」와 다른 것이다.
+ * 그쪽은 <b>산출량</b> 선언이라 잊으면 조용한 삭제가 되고, 이쪽은 <b>입력 축</b> 선언이라
+ * 잊으면 지금과 같은 상태로 돌아갈 뿐이다.
  *
  * <p>{@code dependsOn}이 핵심이다. spec이 예로 든 MACD-V는 {@code (MACD / ATR) × 100}인데,
  * 이를 선언하면 러너가 위상 정렬해 이미 계산된 시계열을 넘겨준다. 이 필드가 없으면 파생 지표마다
@@ -35,7 +44,8 @@ public record DataRequirement(
         int priceBarsNeeded,
         int financialYearsNeeded,
         Set<String> dependsOn,
-        int governanceYearsNeeded
+        int governanceYearsNeeded,
+        boolean needsMarketIndex
 ) {
 
     public DataRequirement {
@@ -54,7 +64,24 @@ public record DataRequirement(
 
     /** 넷째 컴포넌트가 생기기 전의 형태. 거버넌스를 안 쓰는 계산기가 그대로 쓴다. */
     public DataRequirement(int priceBarsNeeded, int financialYearsNeeded, Set<String> dependsOn) {
-        this(priceBarsNeeded, financialYearsNeeded, dependsOn, 0);
+        this(priceBarsNeeded, financialYearsNeeded, dependsOn, 0, false);
+    }
+
+    /** 다섯째 컴포넌트가 생기기 전의 형태. 지수를 안 쓰는 계산기가 그대로 쓴다. */
+    public DataRequirement(int priceBarsNeeded, int financialYearsNeeded, Set<String> dependsOn,
+                           int governanceYearsNeeded) {
+        this(priceBarsNeeded, financialYearsNeeded, dependsOn, governanceYearsNeeded, false);
+    }
+
+    /**
+     * 시세와 <b>시장 지수</b>를 쓰는 지표.
+     *
+     * <p>이 축을 쓰는 계산기는 셋뿐이고({@code BETA_104W}·{@code EXCESS_RETURN_26W}·
+     * {@code EXCESS_RETURN_52W}) 그 셋에 의존하는 파생 지표는 러너 안에 없다.
+     * <b>주봉 일목은 지수를 안 쓴다</b> — {@code IchimokuAnalyzer}가 그렇게 못 박는다.
+     */
+    public static DataRequirement priceAndMarketIndex(int bars) {
+        return new DataRequirement(bars, 0, Set.of(), 0, true);
     }
 
     /** 거버넌스를 쓰는 지표. 시세는 산출 일자를 정하는 데 필요하므로 최소 1이다. */

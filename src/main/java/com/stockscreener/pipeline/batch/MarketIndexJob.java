@@ -73,8 +73,8 @@ public class MarketIndexJob {
             // 그대로 두면 지수가 영영 안 들어오는데 잡은 초록이다.
             execution.alertOperator(AlertSeverity.ERROR, "지수 소스가 등록되지 않았다",
                     "DATA_GO_KR_SERVICE_KEY가 없어 지수 어댑터가 빈으로 등록되지 않았다. "
-                            + "이 상태로는 지수를 쓰는 지표(EXCESS_RETURN_26W·"
-                            + "EXCESS_RETURN_52W·BETA_104W와 주봉 일목 전부)가 영영 안 나온다.");
+                            + "이 상태로는 지수를 쓰는 지표 셋(EXCESS_RETURN_26W·"
+                            + "EXCESS_RETURN_52W·BETA_104W)이 영영 안 나온다.");
             return execution.finish();
         }
 

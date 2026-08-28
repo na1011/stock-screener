@@ -2,6 +2,7 @@ package com.stockscreener.indicator;
 
 import com.stockscreener.indicator.calculator.Atr14Calculator;
 import com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculator;
+import com.stockscreener.indicator.calculator.ExcessReturn26wCalculator;
 import com.stockscreener.indicator.calculator.MacdCalculator;
 import com.stockscreener.indicator.calculator.MarketCapCalculator;
 import com.stockscreener.indicator.calculator.MacdVCalculator;
@@ -308,6 +309,23 @@ class IndicatorRunnerTest {
 
         assertThat(storedValue(PerCalculator.CODE, AS_OF.minusDays(10)))
                 .as("입력을 못 읽은 것을 「값이 사라졌다」로 읽으면 공시 지연이 이력을 지운다")
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("시장 지수를 통째로 못 읽었으면 안 지운다 — 재무·거버넌스와 같은 판정이다")
+    void keepsRowsWhenTheMarketIndexCouldNotBeReadAtAll() {
+        insertPriceHistory(300);
+        // 지수를 안 넘긴다. 지수 적재가 실패했거나 어댑터가 등록되지 않은 상태가 이 모양이고,
+        // 그때 EXCESS_RETURN_*·BETA_104W는 「값이 사라진 것」이 아니라 「아직 모른다」이다.
+        // 선언이 없던 동안 이 경로로 실측 180,735행이 지워질 수 있었다(ADR-0080 §결과).
+        insertIndicatorRow(ExcessReturn26wCalculator.CODE, AS_OF.minusDays(10),
+                new BigDecimal("1.5"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedValue(ExcessReturn26wCalculator.CODE, AS_OF.minusDays(10)))
+                .as("보상 통제인 지수 결손 경보는 일일 갱신에만 있어 백필에서는 아무것도 안 막는다")
                 .isNotNull();
     }
 

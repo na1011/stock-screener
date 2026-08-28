@@ -59,7 +59,7 @@ public class ExcessReturn52wCalculator implements IndicatorCalculator {
 
     @Override
     public DataRequirement dataRequirement() {
-        return DataRequirement.priceBars(ExcessReturn.LOOKBACK_52W + 1);
+        return DataRequirement.priceAndMarketIndex(ExcessReturn.LOOKBACK_52W + 1);
     }
 
     @Override

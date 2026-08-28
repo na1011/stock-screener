@@ -12,9 +12,14 @@ import java.util.OptionalDouble;
 /**
  * 시장 지수 대비 초과 수익률. 원본 {@code DRV-55}이고 T-08(2년 주간 베타)도 같은 값을 쓴다.
  *
- * <p>공식이 여기 <b>한 곳</b>에 있는 이유는 소비자가 둘이기 때문이다 —
- * {@code EXCESS_RETURN_26W} 계산기와 일목 분석의 D5 점수. 각자 구현하면 어긋나기 시작하는데
- * <b>두 값 다 그럴듯해서 드러나지 않는다.</b>
+ * <p>공식이 여기 <b>한 곳</b>에 있는 이유는 소비자가 여럿이기 때문이다. 지수를 쓰는
+ * {@link #at}은 {@code EXCESS_RETURN_26W}·{@code EXCESS_RETURN_52W} 둘이 쓰고, 지수를 안 쓰는
+ * {@link #stockReturnAt}은 거기에 {@code RETURN_52W}가 더해져 셋이다. 각자 구현하면 어긋나기
+ * 시작하는데 <b>값이 다 그럴듯해서 드러나지 않는다.</b>
+ *
+ * <p><b>주봉 일목은 이 클래스를 안 쓴다</b> — {@code IchimokuAnalyzer}가 시장 지수를 받지
+ * 않는다. 그 사실이 {@code DataRequirement.priceAndMarketIndex}를 붙일 대상을 셋으로 묶는
+ * 근거이기도 하다(ADR-0085).
  */
 public final class ExcessReturn {
 

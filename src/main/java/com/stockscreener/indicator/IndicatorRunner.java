@@ -172,10 +172,11 @@ public class IndicatorRunner {
      * 들어오는 동안 그 종목의 재무 지표가 보존 창에서 사라지고, 다음 실행에 다시 쓰인다 —
      * ADR-0045가 닫은 「삭제 → 재기록」 왕복이다.
      *
-     * <p>선언으로 판정할 수 있는 것은 <b>재무와 거버넌스 둘</b>이다({@code needsFinancial}·
-     * {@code needsGovernance}). 시장 지수는 {@code DataRequirement}에 없어 같은 방식으로 못
-     * 가른다 — 지수 시계열이 통째로 비면 {@code BETA_104W}·{@code EXCESS_RETURN_*}가 여전히
-     * 이 경로로 지워진다(ADR-0080 §결과). 시세는 {@code run}의 조기 반환이 이미 막는다.
+     * <p>선언으로 판정할 수 있는 것은 <b>재무·거버넌스·시장 지수 셋</b>이다. 시세는
+     * {@code run}의 조기 반환이 이미 막는다.
+     *
+     * <p>IMPORTANT — 세 축 모두 <b>「통째로 없는가」만</b> 가른다. 날짜별 결손은 여기서 못
+     * 보므로, 꼬리 걷기가 날짜 단위로 한 번 더 거른다(ADR-0085).
      */
     private static boolean inputsWereReadable(IndicatorCalculator calculator, IndicatorContext base) {
         DataRequirement requirement = calculator.dataRequirement();
@@ -184,9 +185,15 @@ public class IndicatorRunner {
             return false;
         }
         // 거버넌스도 같은 판정을 받는다(ADR-0081). 선언하지 않은 채 늘 읽히면 적재 전이나
-        // 적재가 반쯤 된 구간에서 **부모 행은 남는데 이 지표 행만 지워진다** — 시장 지수가
-        // 그 상태이고(ADR-0080 §결과), 그 결손을 셋째 축으로 늘리지 않으려고 선언을 뒀다.
-        return !requirement.needsGovernance() || !base.governanceFacts().isEmpty();
+        // 적재가 반쯤 된 구간에서 **부모 행은 남는데 이 지표 행만 지워진다**.
+        if (requirement.needsGovernance() && base.governanceFacts().isEmpty()) {
+            return false;
+        }
+        // 시장 지수가 셋째 축이다(ADR-0085). 이 선언이 없던 동안 지수 시계열이 통째로 비면
+        // BETA_104W·EXCESS_RETURN_*(실측 180,735행)가 이 경로로 지워졌다 — ADR-0080 §결과가
+        // 「못 가른다」로 적어 둔 구멍이고, 보상 통제인 지수 결손 경보는 일일 갱신에만 있어
+        // 백필에서는 아무것도 막지 않았다.
+        return !requirement.needsMarketIndex() || !base.marketIndex().isEmpty();
     }
 
     /**

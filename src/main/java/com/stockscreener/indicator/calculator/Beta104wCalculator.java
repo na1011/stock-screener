@@ -75,7 +75,7 @@ public class Beta104wCalculator implements IndicatorCalculator {
 
     @Override
     public DataRequirement dataRequirement() {
-        return DataRequirement.priceBars(PRICE_BARS);
+        return DataRequirement.priceAndMarketIndex(PRICE_BARS);
     }
 
     @Override
