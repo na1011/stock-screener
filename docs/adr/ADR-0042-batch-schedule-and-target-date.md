@@ -93,4 +93,9 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 �
 - **공휴일마다 WARNING이 최대 2회 온다** — 공휴일 당일(직전 거래일이 아직 미공개)과 다음 거래일(대상일이 공휴일). 연 30건 남짓이고, `DailyUpdateJob`이 이미 논증한 교환("배치 시각이 이르면 거래일마다 온다")은 그대로 유효하다.
 - **`PriceWriter`의 충돌 절을 함께 고쳤다.** 창이 매일 과거를 재적재하는데 `adj_factor = EXCLUDED.adj_factor`(수집이 내는 값은 항상 1)라 **그 날짜의 수정계수가 1로 되돌아갔다.** 계수가 전량 1인 지금은 무증상이고 P9(수정주가)에서 비로소 틀리는데, 그때는 **차트를 직접 보기 전까지 드러나지 않는다.** 이제 재적재는 원본 OHLC만 갱신하고 계수를 보존한다 — 수정계수는 봉의 속성이 아니라 이후 기업 행위의 함수이고 그 정본은 `AdjustmentRecalculator`다.
 - **`DailyUpdateJob`의 `isWeekend` 조기 반환은 스케줄러 경로에서 발화하지 않게 됐다** — 대상이 언제나 평일이기 때문이다. 죽은 코드가 아니다: 관리자가 주말 일자를 직접 넣는 경로가 남아 있다.
-- **되돌리려면**: `PipelineScheduler`의 크론·`targetDateFor`, `DailyUpdateJob`의 `PRICE_LOOKBACK_DAYS`·기준일 해소·결손 판정, 그리고 `PriceCalendar`.
+- **되돌리려면**: `PipelineScheduler`의 크론, `DailyUpdateJob`의 `targetDateFor`·`PRICE_LOOKBACK_DAYS`·기준일 해소·결손 판정, 그리고 `PriceCalendar`.
+  - **`targetDateFor`가 `DailyUpdateJob`에 있는 이유**는 스케줄러만의 것이 아니기 때문이다 —
+    관리자 화면이 날짜 칸을 비웠을 때의 기본값도 같은 규칙이어야 한다. `AdminJobLauncher`가
+    자체 계산(`minusDays(1)`)을 들고 있었을 때 **월요일에 대상이 일요일**이 되어 주말 분기가
+    `batch_execution` 행 없이 `SUCCESS`를 돌려줬다. **MUST NOT: `MarketCalendar`로 옮기지 않는다** —
+    §규칙의 `previousBusinessDay` 금지가 정확히 그 자리다.

@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +113,38 @@ public class DailyUpdateJob {
      */
     public static LocalDate priceWindowStart(LocalDate to) {
         return to.minusDays(PRICE_LOOKBACK_DAYS);
+    }
+
+    /**
+     * 실행 일자로부터 수집 대상일을 정한다 — <b>직전 평일</b>이다.
+     *
+     * <p>메서드로 빼 둔 이유는 <b>크론과 짝을 이뤄야만 의미가 있기 때문</b>이다. 어느 거래일이
+     * 덮이는가는 크론만으로도, 이 규칙만으로도 알 수 없고 둘을 합쳐야 나온다. 실제로 금요일
+     * 종가가 새던 것이 그 조합에서 생긴 구멍이었다.
+     *
+     * <p>MUST NOT: 이것을 "직전 <b>영업일</b>"로 부르지 않는다. 공휴일을 모르므로 낼 수 있는
+     * 값은 직전 <i>평일</i>뿐이고, 그 차이가 결손을 낳는다 — 월(거래)·화(공휴일)·수(거래)일 때
+     * 월요일치는 <b>수요일</b> 13시에 공개되는데, 화요일 실행은 월요일(미공개)을 수요일 실행은
+     * 화요일(휴장)을 노려 <b>월요일을 대상으로 삼는 실행이 어느 요일에도 없다.</b>
+     *
+     * <p>그 결손을 여기서 고치지 않는다. 고치려면 공휴일 달력이 필요한데 그것을 두지 않기로
+     * 했고({@link com.stockscreener.pipeline.collector.MarketCalendar}), 대신
+     * {@link #PRICE_LOOKBACK_DAYS} 창이 흡수한다(ADR-0042). <b>셋을 합쳐야 모든 거래일이
+     * 덮인다</b> — {@code PipelineSchedulerTest}가 셋을 합쳐 검사한다.
+     *
+     * <p><b>스케줄러만의 것이 아니라 여기 두는 이유</b>: 관리자 화면이 날짜 칸을 비웠을 때의
+     * 기본값도 같은 규칙이어야 한다. {@link AdminJobLauncher}가 자체 계산({@code minusDays(1)})을
+     * 들고 있었을 때, <b>월요일에 날짜를 비우고 띄우면 대상이 일요일이 되어</b> 위 {@code run}의
+     * 주말 분기가 {@code batch_execution} 행조차 만들지 않고 {@code SUCCESS}를 돌려줬다 —
+     * 화면에는 아무 흔적이 없다. MUST NOT: 대상 일자 기본값을 이 메서드 밖에서 다시 계산하지 않는다.
+     */
+    public static LocalDate targetDateFor(LocalDate runDate) {
+        LocalDate date = runDate.minusDays(1);
+        while (date.getDayOfWeek() == DayOfWeek.SATURDAY
+                || date.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            date = date.minusDays(1);
+        }
+        return date;
     }
 
     /**

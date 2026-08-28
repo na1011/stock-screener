@@ -55,7 +55,7 @@ class PipelineSchedulerTest {
             assertThat(next).as("%d번째 실행이 없다", i).isNotNull();
             cursor = next;
 
-            LocalDate target = PipelineScheduler.targetDateFor(next.toLocalDate());
+            LocalDate target = DailyUpdateJob.targetDateFor(next.toLocalDate());
             // 주말이 대상이면 DailyUpdateJob이 아무것도 하지 않고 돌아간다.
             if (!TRADING_DAYS.contains(target.getDayOfWeek())) {
                 continue;
@@ -91,7 +91,7 @@ class PipelineSchedulerTest {
         // IMPORTANT — 시각 단언만으로는 부족하다. **옛 구성(20시 + 당일 대상)도 이 단언은
         // 통과하면서** 매일 0건으로 끝났다. 대상이 실행일보다 앞이라는 것이 D+1을 실제로
         // 인코딩하는 단언이다.
-        assertThat(PipelineScheduler.targetDateFor(next.toLocalDate()))
+        assertThat(DailyUpdateJob.targetDateFor(next.toLocalDate()))
                 .as("당일을 대상으로 하면 그날 종가는 자정까지도 소스에 없다")
                 .isBefore(next.toLocalDate());
     }
@@ -121,7 +121,7 @@ class PipelineSchedulerTest {
                 if (run.isBefore(publishedOn)) {
                     return false;                       // 그 실행 시점엔 아직 안 나왔다
                 }
-                LocalDate to = PipelineScheduler.targetDateFor(run);
+                LocalDate to = DailyUpdateJob.targetDateFor(run);
                 return !tradingDay.isBefore(DailyUpdateJob.priceWindowStart(to))
                         && !tradingDay.isAfter(to);
             });
@@ -142,7 +142,7 @@ class PipelineSchedulerTest {
         LocalDate lastBeforeClosure = LocalDate.of(2026, 9, 11);
         LocalDate firstRunAfter = LocalDate.of(2026, 9, 23);
 
-        LocalDate to = PipelineScheduler.targetDateFor(firstRunAfter);
+        LocalDate to = DailyUpdateJob.targetDateFor(firstRunAfter);
 
         assertThat(DailyUpdateJob.priceWindowStart(to))
                 .as("창이 연휴를 건너뛰지 못하면 %s 종가를 받을 실행이 없다", lastBeforeClosure)

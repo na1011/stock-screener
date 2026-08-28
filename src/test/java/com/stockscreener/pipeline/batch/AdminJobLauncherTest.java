@@ -10,10 +10,12 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -195,6 +197,38 @@ class AdminJobLauncherTest {
         launcher.launch(IndicatorBackfillJob.JOB_NAME, AdminJobLauncher.JobRequest.empty());
 
         await().atMost(2, TimeUnit.SECONDS).until(() -> calls.get() == 1);
+    }
+
+    @Test
+    @DisplayName("날짜를 비운 일일 갱신·유니버스 갱신의 기본 대상일이 주말이 아니다")
+    void emptyTargetDateNeverFallsOnAWeekend() {
+        // 위 테스트가 이 자리를 못 지킨다 — 그쪽은 indicatorBackfillJob만 띄우고 isNotNull()만 본다.
+        // 여기가 지키는 것: 자체 계산(minusDays(1))으로 되돌리면 **월요일에 대상이 일요일**이 되고,
+        // DailyUpdateJob의 주말 분기가 batch_execution 행조차 안 만든 채 SUCCESS를 돌려준다.
+        // 화면에 흔적이 없어 무증상이므로 단언이 없으면 아무도 모른다.
+        AtomicReference<LocalDate> daily = new AtomicReference<>();
+        AtomicReference<LocalDate> universe = new AtomicReference<>();
+        when(dailyUpdateJob.run(any(), any())).thenAnswer(invocation -> {
+            daily.set(invocation.getArgument(0));
+            return BatchStatus.SUCCESS;
+        });
+        when(universeRebalanceJob.run(any(), any())).thenAnswer(invocation -> {
+            universe.set(invocation.getArgument(0));
+            return BatchStatus.SUCCESS;
+        });
+
+        launcher.launch(DailyUpdateJob.JOB_NAME, AdminJobLauncher.JobRequest.empty());
+        launcher.launch(UniverseRebalanceJob.JOB_NAME, AdminJobLauncher.JobRequest.empty());
+
+        await().atMost(2, TimeUnit.SECONDS)
+                .until(() -> daily.get() != null && universe.get() != null);
+
+        // MUST: 요일로 단언한다. "오늘−1"로 적으면 그것이 곧 옛 구현이라 항등식이 된다.
+        assertThat(daily.get().getDayOfWeek()).isNotIn(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY);
+        assertThat(universe.get().getDayOfWeek()).isNotIn(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY);
+        // 둘이 같은 규칙을 쓴다 — 유니버스 쪽은 주말 가드가 없어 갈리면 콜을 태운다.
+        assertThat(universe.get()).isEqualTo(daily.get());
+        assertThat(daily.get()).isEqualTo(DailyUpdateJob.targetDateFor(LocalDate.now()));
     }
 
     /** 일일 갱신을 잡아 둔다. 반환된 래치를 내려야 끝난다. */

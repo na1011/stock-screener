@@ -81,14 +81,23 @@ public class AdminJobLauncher {
         this.taskExecutor = taskExecutor;
         this.dailyUpdateJob = dailyUpdateJob;
         this.jobs = Map.of(
+                // MUST NOT: 대상 일자 기본값을 여기서 다시 계산하지 않는다. 자체 계산
+                // (minusDays(1))을 들고 있었을 때 **월요일에 날짜를 비우면 대상이 일요일**이 되어,
+                // DailyUpdateJob의 주말 분기가 batch_execution 행조차 안 만들고 SUCCESS를
+                // 돌려줬다 — 화면에 아무 흔적이 없다. 스케줄러와 같은 규칙을 쓴다(ADR-0042).
                 DailyUpdateJob.JOB_NAME,
                 request -> dailyUpdateJob.run(
-                        request.orDefault(request.targetDate(), LocalDate.now().minusDays(1)),
+                        request.orDefault(request.targetDate(),
+                                DailyUpdateJob.targetDateFor(LocalDate.now())),
                         BatchExecutionRecorder.TriggeredBy.ADMIN),
 
+                // 같은 규칙을 쓰는 이유가 여기서는 더 급하다 — 이 잡에는 주말 가드가 **없다.**
+                // 토요일에 당일을 물으면 소스에 없어 어댑터가 하루씩 거슬러 올라가고 그 소급이
+                // 날짜당 콜을 태운다(PipelineScheduler.runUniverseRebalance의 판단).
                 UniverseRebalanceJob.JOB_NAME,
                 request -> universeRebalanceJob.run(
-                        request.orDefault(request.targetDate(), LocalDate.now()),
+                        request.orDefault(request.targetDate(),
+                                DailyUpdateJob.targetDateFor(LocalDate.now())),
                         BatchExecutionRecorder.TriggeredBy.ADMIN),
 
                 IndicatorBackfillJob.JOB_NAME,

@@ -11,7 +11,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
@@ -72,7 +71,7 @@ public class PipelineScheduler {
      */
     @Scheduled(cron = "0 30 13 * * MON-FRI", zone = "Asia/Seoul")
     public void runDailyUpdate() {
-        LocalDate targetDate = targetDateFor(LocalDate.now(KR_ZONE));
+        LocalDate targetDate = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
         log.info("일일 갱신을 시작한다. targetDate={}", targetDate);
         try {
             dailyUpdateJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
@@ -83,32 +82,6 @@ public class PipelineScheduler {
             log.info("일일 갱신이 종료로 중단됐다. targetDate={} — ABORTED로 남는다. "
                     + "시세는 조회 창이 다시 시도하지만 백분위·워치리스트는 안 이어진다.", targetDate);
         }
-    }
-
-    /**
-     * 실행 일자로부터 수집 대상일을 정한다 — <b>직전 평일</b>이다.
-     *
-     * <p>메서드로 빼 둔 이유는 <b>크론과 짝을 이뤄야만 의미가 있기 때문</b>이다. 어느 거래일이
-     * 덮이는가는 크론만으로도, 이 규칙만으로도 알 수 없고 둘을 합쳐야 나온다. 실제로 금요일
-     * 종가가 새던 것이 그 조합에서 생긴 구멍이었다.
-     *
-     * <p>MUST NOT: 이것을 "직전 <b>영업일</b>"로 부르지 않는다. 공휴일을 모르므로 낼 수 있는
-     * 값은 직전 <i>평일</i>뿐이고, 그 차이가 결손을 낳는다 — 월(거래)·화(공휴일)·수(거래)일 때
-     * 월요일치는 <b>수요일</b> 13시에 공개되는데, 화요일 실행은 월요일(미공개)을 수요일 실행은
-     * 화요일(휴장)을 노려 <b>월요일을 대상으로 삼는 실행이 어느 요일에도 없다.</b>
-     *
-     * <p>그 결손을 여기서 고치지 않는다. 고치려면 공휴일 달력이 필요한데 그것을 두지 않기로
-     * 했고({@link com.stockscreener.pipeline.collector.MarketCalendar}), 대신
-     * {@link DailyUpdateJob#PRICE_LOOKBACK_DAYS} 창이 흡수한다(ADR-0042). <b>셋을 합쳐야
-     * 모든 거래일이 덮인다</b> — {@code PipelineSchedulerTest}가 셋을 합쳐 검사한다.
-     */
-    static LocalDate targetDateFor(LocalDate runDate) {
-        LocalDate date = runDate.minusDays(1);
-        while (date.getDayOfWeek() == DayOfWeek.SATURDAY
-                || date.getDayOfWeek() == DayOfWeek.SUNDAY) {
-            date = date.minusDays(1);
-        }
-        return date;
     }
 
     /**
@@ -129,7 +102,7 @@ public class PipelineScheduler {
      */
     @Scheduled(cron = "0 0 20 * * SAT", zone = "Asia/Seoul")
     public void runUniverseRebalance() {
-        LocalDate asOf = targetDateFor(LocalDate.now(KR_ZONE));
+        LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
         log.info("유니버스 리밸런싱을 시작한다. asOf={}", asOf);
         try {
             universeRebalanceJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
