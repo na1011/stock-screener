@@ -143,6 +143,17 @@ public class IndicatorRunner {
                 }
                 continue;
             }
+            // 꼬리 걷기(ADR-0085). 위 분기는 **창 전체가 빌 때만** 지우므로, 창의 앞쪽은
+            // 여전히 내면서 어느 시점부터 그만 내는 계산기의 옛 행은 지워지지도 덮이지도
+            // 않는다 — write가 UPSERT라 **산출한 날짜만** 덮기 때문이다. 006400 삼성SDI의
+            // 배당성향 112행이 그 모양이었다(앵커가 적자 연도로 옮겨가 분모 가드가 값을
+            // 안 내는데 FY2024로 계산된 11.63%가 남았다).
+            long culled = writer.deleteAt(stockId, code,
+                    tailAfterLastProduced(windowDates, points, suppressed, calculator, base));
+            if (culled > 0) {
+                stale += culled;
+                staleCodes++;
+            }
             written += writer.write(stockId, code, retain(points, retentionCutoff));
         }
 
@@ -160,6 +171,52 @@ public class IndicatorRunner {
                     stockId, asOf, base.unadjustedActions(), suppressedCodes, deleted);
         }
         return written;
+    }
+
+    /**
+     * 마지막 산출 일자 <b>뒤에</b> 남은 창의 거래일. 여기 있는 옛 행이 낡은 것이다(ADR-0085).
+     *
+     * <p>ADR-0080 §버린 대안이 기각한 <b>「창 안에서 안 낸 날짜를 전부 지운다」와 다르다</b> —
+     * 그 기각의 근거는 <b>정상적으로 일부만 내는 계산기</b>였는데, 열거된 넷이 비우는 곳이
+     * 전부 <b>앞쪽</b>이라 꼬리에는 걸리지 않는다({@code TRADING_DAYS_750}은 마지막 봉만 내므로
+     * 꼬리가 공집합이고, {@code RETAINED_TO_MARKET_4Y}·{@code SHARES_GROWTH_3Y}는 앵커·워밍업
+     * 이후만 낸다). 백필의 날짜 바깥 루프도 안전하다 — 창이 {@code asOf}에서 끝나고
+     * {@code lastProduced <= asOf}라 삭제 상한이 구조적으로 묶인다.
+     *
+     * <p>MUST: <b>억제 일자를 뺀다.</b> 그 날짜는 위 억제 분기가 소유하고, 그쪽은 보존 창으로
+     * 거른 범위만 지운다. 여기서 또 넣으면 소유가 둘이 되어 한쪽을 고칠 때 다른 쪽이 조용히 남는다.
+     *
+     * <p>MUST: <b>시장 지수를 쓰는 코드는 그 날짜에 지수가 있는 날짜만 후보로 둔다.</b>
+     * {@code ExcessReturn.at}이 지수를 정확 일치로 묻고 없으면 그 날짜를 건너뛰므로,
+     * 창 <b>끝쪽</b>의 지수 결손은 {@code points}를 비우지 않으면서 {@code lastProduced}만
+     * 앞으로 당긴다 — 그대로 두면 지수 재적재가 실패한 날 {@code BETA_104W}·
+     * {@code EXCESS_RETURN_*}의 꼬리가 조용히 지워진다. {@code DataRequirement}의 축은
+     * 「통째로 없는가」만 가르므로 이 <b>부분 결손</b>은 거기서 못 잡는다.
+     *
+     * <p>MUST NOT: 같은 필터를 거버넌스에 걸지 않는다. 앵커가 없어 값이 없는 것은 <b>결손이
+     * 아니라 사실</b>이고, 그것이 정확히 이 걷기가 걷어야 하는 것이다.
+     */
+    private static Collection<LocalDate> tailAfterLastProduced(
+            Collection<LocalDate> windowDates,
+            List<IndicatorPoint> points,
+            Set<LocalDate> suppressed,
+            IndicatorCalculator calculator,
+            IndicatorContext base) {
+        if (windowDates.isEmpty() || points.isEmpty()
+                || !inputsWereReadable(calculator, base)) {
+            return List.of();
+        }
+        // 정렬을 가정하지 않는다. 삭제 범위를 정하는 값이라 순서가 어긋나면 창의 앞쪽이 날아간다.
+        LocalDate lastProduced = points.stream()
+                .map(IndicatorPoint::tradeDate)
+                .max(LocalDate::compareTo)
+                .orElseThrow();
+        boolean indexAware = calculator.dataRequirement().needsMarketIndex();
+        return windowDates.stream()
+                .filter(date -> date.isAfter(lastProduced))
+                .filter(date -> !suppressed.contains(date))
+                .filter(date -> !indexAware || base.marketIndex().containsKey(date))
+                .toList();
     }
 
     /**

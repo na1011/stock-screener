@@ -27,7 +27,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.TreeMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -344,6 +346,82 @@ class IndicatorRunnerTest {
     }
 
     @Test
+    @DisplayName("마지막 산출 일자 뒤에 남은 행을 지운다 — 창의 앞쪽을 아직 내면 빈-목록 분기가 안 걸린다")
+    void deletesRowsAfterTheLastProducedDate() {
+        // 앞 290봉은 주식수가 있고 뒤 10봉은 없다. MarketCapCalculator가 주식수 없는 날짜를
+        // continue하므로 **창의 앞쪽은 내면서 어느 시점부터 그만 내는** 모양이 된다.
+        // 006400 삼성SDI의 배당성향이 이 모양이었다 — 앵커가 적자 연도로 옮겨간 뒤로 값이
+        // 안 나오는데 FY2024로 계산된 112행이 남았다.
+        insertPriceHistoryWithSharesUntil(300, 290);
+        insertIndicatorRow(MarketCapCalculator.CODE, AS_OF.minusDays(5),
+                new BigDecimal("1000000000"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedValueOrNull(MarketCapCalculator.CODE, AS_OF.minusDays(5)))
+                .as("write는 UPSERT라 산출한 날짜만 덮는다 — 꼬리를 안 걷으면 옛 값이 그대로 남는다")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("마지막 산출 일자 앞의 구멍은 그대로 둔다 — 꼬리 걷기가 창 전체로 번지면 안 된다")
+    void keepsRowsBeforeTheLastProducedDate() {
+        // 창 **안쪽**에 산출 구멍을 하나 뚫는다. 꼬리 뒤에 있는 행과 달리 이 행은 write가
+        // 다시 쓰지 않으므로, 후보가 「창 안에서 안 낸 날짜 전부」로 넓어지면 **여기서만**
+        // 드러난다. 꼬리 밖 행으로 단언하면 삭제 직후 write가 되살려 항등식이 된다.
+        insertPriceHistoryWithSharesUntil(300, 290, 150);
+        LocalDate hole = AS_OF.minusDays(150);
+        insertIndicatorRow(MarketCapCalculator.CODE, hole, new BigDecimal("777"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedValueOrNull(MarketCapCalculator.CODE, hole))
+                .as("「창 안에서 안 낸 날짜를 전부 지운다」로 넓히면 정상적으로 일부만 내는 "
+                        + "계산기들의 보존 창이 매 실행 깎인다(ADR-0080 §버린 대안)")
+                .isNotNull();
+        assertThat(storedDatesOf(MarketCapCalculator.CODE))
+                .doesNotContain(AS_OF.minusDays(10), AS_OF.minusDays(1));
+    }
+
+    @Test
+    @DisplayName("꼬리에 지수가 없는 날짜는 안 지운다 — 부분 결손은 DataRequirement 축이 못 가른다")
+    void doesNotCullTheTailWhenTheMarketIndexIsMissingOnThatDate() {
+        insertPriceHistory(300);
+        // 창 **끝쪽** 지수만 빠진 상태다. ExcessReturn.at이 그 날짜를 건너뛰므로 points는
+        // 안 비고 lastProduced만 앞으로 당겨진다 — 축은 「통째로 없는가」만 가르므로 여기서
+        // 걸러지지 않고, 그대로 두면 지수 재적재가 실패한 날 꼬리가 조용히 지워진다.
+        NavigableMap<LocalDate, BigDecimal> index = new TreeMap<>();
+        for (int i = 0; i < 300; i++) {
+            LocalDate date = AS_OF.minusDays(300L - i);
+            if (date.isBefore(AS_OF.minusDays(10))) {
+                index.put(date, new BigDecimal(2000 + (i % 5) * 10));
+            }
+        }
+        insertIndicatorRow(ExcessReturn26wCalculator.CODE, AS_OF.minusDays(5),
+                new BigDecimal("1.5"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of("KOSPI", index));
+
+        assertThat(storedValueOrNull(ExcessReturn26wCalculator.CODE, AS_OF.minusDays(5)))
+                .as("지수 결손을 「값이 사라졌다」로 읽으면 지수 복구 전에 꼬리가 날아간다")
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("꼬리 걷기도 읽은 창 밖은 안 지운다 — 상한이 asOf로 묶여 있어야 한다")
+    void tailCullNeverReachesBeyondTheWindowItRead() {
+        insertPriceHistoryWithSharesUntil(300, 290);
+        insertIndicatorRow(MarketCapCalculator.CODE, AS_OF.plusDays(3),
+                new BigDecimal("1000000000"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedValueOrNull(MarketCapCalculator.CODE, AS_OF.plusDays(3)))
+                .as("후보가 창의 거래일이 아니라 「lastProduced 뒤 전부」가 되면 이 행이 사라진다")
+                .isNotNull();
+    }
+
+    @Test
     @DisplayName("억제로 빈 것은 이 경로가 지우지 않는다 — 억제 창 밖까지 번지면 안 된다")
     void doesNotCullWhenEmptinessCameFromSuppression() {
         insertPriceHistory(250);
@@ -471,6 +549,46 @@ class IndicatorRunnerTest {
                 "INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)"
                         + " VALUES (?, ?, ?, ?)",
                 stockId, tradeDate, indicatorCode, value);
+    }
+
+    /**
+     * 앞 {@code barsWithShares}봉에만 주식수를 넣는다. MarketCapCalculator가 주식수 없는
+     * 날짜를 건너뛰므로 「창의 앞쪽은 내고 뒤쪽은 안 내는」 계산기가 된다.
+     */
+    private void insertPriceHistoryWithSharesUntil(int days, int barsWithShares) {
+        insertPriceHistoryWithSharesUntil(days, barsWithShares, -1);
+    }
+
+    private void insertPriceHistoryWithSharesUntil(int days, int barsWithShares, int holeIndex) {
+        for (int i = 0; i < days; i++) {
+            LocalDate date = AS_OF.minusDays((long) days - i);
+            BigDecimal close = new BigDecimal(1000 + (i % 7) * 10);
+            if (i < barsWithShares && i != holeIndex) {
+                jdbcTemplate.update("""
+                        INSERT INTO price_daily
+                            (stock_id, trade_date, open, high, low, close, adj_close, adj_factor,
+                             volume, listed_shares)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1000, 1000000)
+                        """, stockId, date, close, close, close, close, close);
+            } else {
+                insertBar(date, close, close);
+            }
+        }
+    }
+
+    private BigDecimal storedValueOrNull(String indicatorCode, LocalDate tradeDate) {
+        List<BigDecimal> found = jdbcTemplate.queryForList("""
+                SELECT value FROM indicator_value
+                WHERE stock_id = ? AND indicator_code = ? AND trade_date = ?
+                """, BigDecimal.class, stockId, indicatorCode, tradeDate);
+        return found.isEmpty() ? null : found.get(0);
+    }
+
+    private List<LocalDate> storedDatesOf(String indicatorCode) {
+        return jdbcTemplate.queryForList("""
+                SELECT trade_date FROM indicator_value
+                WHERE stock_id = ? AND indicator_code = ? ORDER BY trade_date
+                """, LocalDate.class, stockId, indicatorCode);
     }
 
     private void insertPriceHistory(int days) {
