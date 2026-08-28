@@ -66,7 +66,26 @@ public class UniverseRebalanceJob {
      * 깨졌다고 S&amp;P500까지 갱신하지 않을 이유가 없다.
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
-        List<UniverseTarget> targets = activeUniverses();
+        return run(asOf, triggeredBy, null);
+    }
+
+    /**
+     * 지수 하나만 골라 리밸런싱한다. <b>비활성 지수도 고를 수 있다.</b>
+     *
+     * <p>비활성인 채로 채우는 상태가 실재하기 때문이다 — 미국은 유니버스 구성만 쌓고 시세·재무는
+     * 아직 모으지 않는다. 지나간 시점의 구성은 사후 복원이 불가능하므로 데이터를 모으기 전에도
+     * 쌓아 두어야 하는데, 켜 버리면 편입 종목이 <b>스크리닝 모집단</b>에 들어와 지표 하나 없는
+     * 종목이 0점·전 조건 판정불가로 화면에 실린다(ADR-0087).
+     *
+     * <p>MUST NOT: 이 경로를 스케줄러에 걸지 않는다. 손으로 고른 지수 하나를 채우는 수단이며,
+     * 자동 실행은 활성 지수만 돈다 — 그래야 "활성"이 무엇을 뜻하는지가 한 가지로 남는다.
+     *
+     * @param onlyCode 채울 지수 코드. {@code null}이면 활성 지수 전체다.
+     */
+    public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                           String onlyCode) {
+        List<UniverseTarget> targets =
+                onlyCode == null ? activeUniverses() : oneUniverse(onlyCode);
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
 
@@ -189,6 +208,30 @@ public class UniverseRebalanceJob {
                 """,
                 (rs, rowNum) -> new UniverseTarget(
                         rs.getString("code"), rs.getString("market_code")));
+    }
+
+    /**
+     * 이름으로 고른 지수 하나. <b>활성 여부를 보지 않는다.</b>
+     *
+     * <p>없는 코드면 빈 목록이 아니라 예외다 — 오타 하나가 "대상 0건 성공"으로 끝나면
+     * 채웠다고 믿게 된다. {@code BootstrapRunner}의 인자 가드가 같은 자리를 지킨다.
+     */
+    private List<UniverseTarget> oneUniverse(String universeCode) {
+        List<UniverseTarget> found = jdbcTemplate.query("""
+                SELECT code, market_code, is_active FROM universe WHERE code = ?
+                """,
+                (rs, rowNum) -> {
+                    if (!rs.getBoolean("is_active")) {
+                        log.info("{}는 비활성이다 — 구성만 쌓고 수집·스크리닝에는 넣지 않는다.",
+                                rs.getString("code"));
+                    }
+                    return new UniverseTarget(rs.getString("code"), rs.getString("market_code"));
+                }, universeCode);
+        if (found.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "그런 유니버스가 없다: " + universeCode + " — universe 테이블의 code를 확인하라.");
+        }
+        return found;
     }
 
     private record UniverseTarget(String universeCode, String marketCode) {

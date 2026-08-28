@@ -32,6 +32,9 @@ import java.util.List;
  * # 유니버스 갱신
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=universe'
  *
+ * <p>{@code --universe=US_LISTED}를 주면 그 지수 하나만 채운다. <b>비활성 지수도 채울 수
+ * 있다</b> — 구성만 쌓고 수집·스크리닝에는 넣지 않는 상태가 실재한다(ADR-0087).
+ *
  * # 소수 종목으로 관통 검증(시세 2년·재무 3년)
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'
  *
@@ -240,7 +243,7 @@ public class BootstrapRunner implements ApplicationRunner {
         log.info("부트스트랩 러너를 시작한다. job={} asOf={}", job, asOf);
         BatchStatus status = switch (job) {
             case "universe" -> universeRebalanceJob.run(
-                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, value(args, "universe", null));
             case "initial-load" -> initialLoadJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, loadRange(args));
             case "financial-refill" -> financialRefillJob.run(
@@ -326,7 +329,8 @@ public class BootstrapRunner implements ApplicationRunner {
      * 통과시킨다. 태운 호출은 되돌릴 수 없으므로 실행 전에 막는 것이 유일한 방어다.
      */
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
-            "job", "as-of", "price-years", "financial-years", "reload-existing", "tickers", "from",
+            "job", "as-of", "universe", "price-years", "financial-years", "reload-existing",
+            "tickers", "from",
             "quarters", "governance-year", "governance-span", "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
             "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note");
