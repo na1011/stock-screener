@@ -50,6 +50,9 @@ applies_to:
 것 셋**(`keepsRowsWhenTheInputCouldNotBeReadAtAll`·`neverDeletesBeyondTheWindowItRead`·
 `doesNotCullWhenEmptinessCameFromSuppression`). **뒤엣것들이 없으면 「전부 지운다」로도 초록이 된다.**
 
+**같은 파일에 ADR-0085의 단언 여덟이 함께 있다** — 이 결정이 안 걸리는 세 자리를 그쪽이 소유한다.
+`--tests "*IndicatorRunnerTest*"` 한 번이 둘을 다 돌리므로 **명령은 그대로이고 세는 수만 다르다.**
+
 ```premise 원본 없는 파생 행이 남아 있지 않다
 psql -d stock_screener -At -c "WITH o AS (SELECT d.indicator_code c, count(*) n FROM indicator_value d WHERE d.indicator_code LIKE '%\_PCTL' AND d.indicator_code NOT LIKE '%\_SECTOR\_PCTL' AND NOT EXISTS (SELECT 1 FROM indicator_value s WHERE s.stock_id = d.stock_id AND s.trade_date = d.trade_date AND s.indicator_code = regexp_replace(d.indicator_code, '_PCTL$', '')) GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM indicator_value WHERE indicator_code LIKE '%\_PCTL' AND indicator_code NOT LIKE '%\_SECTOR\_PCTL') = 0 THEN '잴 것이 없었다 — 백분위가 한 행도 없다' WHEN (SELECT count(*) FROM o) = 0 THEN 'OK 고아 백분위가 없다' ELSE (SELECT sum(n)::text FROM o) || '행이 원본 없는 백분위다(' || (SELECT string_agg(c, ',' ORDER BY c) FROM o) || ') — 파생 정리가 보존 창을 안 덮고 있다(ADR-0080)' END"
 ```
@@ -130,11 +133,10 @@ psql -d stock_screener -At -c "WITH o AS (SELECT d.indicator_code c, count(*) n 
 - **쉬워지는 것**: 계산기를 고치거나 원자료가 바뀌어 값이 사라지면 **다음 배치가 옛 행을 스스로 걷는다.**
   V19·V25 같은 손 마이그레이션이 더는 필요 없다.
 - **어려워지는 것 — 남는 위험**: **상류가 통째로 비면 그 코드의 창이 지워졌다가 다음 실행에 다시 쓰인다.**
-  재무는 위 MUST가 막지만 **시장 지수는 `DataRequirement`에 없어 못 가른다** — 지수 시계열이 통째로
-  비면 `BETA_104W`·`EXCESS_RETURN_26W`·`EXCESS_RETURN_52W`(실측 180,735행)가 이 경로로 지워진다.
-  **하루치 결손으로는 안 터진다**(`ExcessReturn.at`이 그 날짜만 건너뛰므로 `points`가 안 빈다).
-  보상 통제인 `alertIfIndexMissingWhilePricesArrived`는 **`DailyUpdateJob`에만 있고 백필 잡에는 없다.**
-  복구는 단일 날짜 백필 1회다.
+  재무·거버넌스는 위 MUST가 막고, **시장 지수는 ADR-0085가 셋째 축(`needsMarketIndex`)으로 막았다.**
+  세 축 다 **「통째로 없는가」만** 가른다 — 날짜별 결손은 원리적으로 못 보므로, 꼬리 걷기 쪽은
+  ADR-0085가 날짜 단위로 한 번 더 거른다. 보상 통제인 `alertIfIndexMissingWhilePricesArrived`는
+  여전히 **`DailyUpdateJob`에만 있고 백필 잡에는 없다.** 복구는 단일 날짜 백필 1회다.
 - **비용**: 단일 날짜 실행이 **+18%**(62~63초 → 74.6초). 삭제 스캔은 **0행을 지울 때도 든다** —
   `idx_iv_stock_date`가 `indicator_code`를 안 덮어 필터가 heap에서 걸리기 때문이다.
   인덱스를 `(stock_id, indicator_code, trade_date)`로 바꾸면 없앨 수 있지만 **스키마 변경이라 안 했다.**
