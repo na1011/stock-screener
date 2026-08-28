@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class FinancialRefillJobTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 8, 10);
-    private static final String UNIVERSE = "KOSPI_TOP200";
+    private static final String UNIVERSE = "KOSPI200";
 
     @Autowired
     private FinancialRefillJob job;

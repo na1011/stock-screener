@@ -36,6 +36,11 @@ class ScreeningRepositoryTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 8, 4);
     private static final String TEST_UNIVERSE = "TESTUNIV";
+    /**
+     * 좁히지 않았을 때의 모집단. "전체"는 {@code stock} 전량이 아니라 <b>활성 유니버스 편입
+     * 종목</b>이므로(ADR-0087), 픽스처가 어느 활성 유니버스에도 없으면 조건과 무관하게 빠진다.
+     */
+    private static final String TEST_UNIVERSE_ALL = "TESTUNIVALL";
 
     @Autowired
     private ScreeningRepository repository;
@@ -67,6 +72,10 @@ class ScreeningRepositoryTest {
                 INSERT INTO universe (code, name, market_code)
                 VALUES (?, '테스트 유니버스', 'TESTMKT') ON CONFLICT DO NOTHING
                 """, TEST_UNIVERSE);
+        jdbcTemplate.update("""
+                INSERT INTO universe (code, name, market_code)
+                VALUES (?, '테스트 유니버스(전체)', 'TESTMKT') ON CONFLICT DO NOTHING
+                """, TEST_UNIVERSE_ALL);
 
         cheapStock = insertStock("000001", "저평가주");
         expensiveStock = insertStock("000002", "고평가주");
@@ -246,7 +255,7 @@ class ScreeningRepositoryTest {
     }
 
     @Test
-    @DisplayName("유니버스를 지정하지 않으면 전체가 대상이다")
+    @DisplayName("유니버스를 지정하지 않으면 활성 유니버스 편입 종목 전체가 대상이다")
     void nullUniverseMeansEveryActiveStock() {
         joinUniverse(cheapStock);
 
@@ -255,6 +264,24 @@ class ScreeningRepositoryTest {
         assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, null))
                 .extracting(ScreeningResult::stockId)
                 .containsExactlyInAnyOrder(cheapStock, partialStock);
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 「전체」가 stock 전량이 아니다. 활성 유니버스 밖 종목은 빠진다(ADR-0087)")
+    void nullUniverseExcludesStocksOutsideEveryActiveUniverse() {
+        long outsider = insertBareStock("000009", "유니버스밖주");
+        insertIndicator(outsider, "PER", "1");
+        entityManager.clear();
+
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "10"));
+
+        // PER 1이라 조건을 가장 잘 만족하는데도 빠져야 한다. 좁히지 않으면 지표가 하나도 없는
+        // 시장의 종목이 0점·전 조건 판정불가로 응답에 실리고, 서버가 전량을 내려보내므로
+        // (ADR-0016) 그대로 화면까지 간다.
+        assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, null))
+                .extracting(ScreeningResult::stockId).doesNotContain(outsider);
+        assertThat(repository.screen(group, EvaluationMode.SCORING, AS_OF, null))
+                .extracting(ScreeningResult::stockId).doesNotContain(outsider);
     }
 
     @Test
@@ -303,7 +330,15 @@ class ScreeningRepositoryTest {
         return IndicatorCondition.of(code, operator, ConditionOperand.Literal.of(value));
     }
 
+    /** 편입까지 함께 한다 — 어느 활성 유니버스에도 없으면 "전체"에서도 빠진다(ADR-0087). */
     private long insertStock(String ticker, String name) {
+        long stockId = insertBareStock(ticker, name);
+        joinUniverse(TEST_UNIVERSE_ALL, stockId);
+        return stockId;
+    }
+
+    /** 유니버스에 넣지 않는다. ADR-0087을 재는 테스트만 쓴다. */
+    private long insertBareStock(String ticker, String name) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO stock (market_code, ticker, name) VALUES ('TESTMKT', ?, ?) RETURNING id
                 """, Long.class, ticker, name);
@@ -311,10 +346,14 @@ class ScreeningRepositoryTest {
 
     /** 테스트 유니버스에 편입시킨다. {@code effective_to}가 NULL이면 현재 구성원이다. */
     private void joinUniverse(long stockId) {
+        joinUniverse(TEST_UNIVERSE, stockId);
+    }
+
+    private void joinUniverse(String universeCode, long stockId) {
         jdbcTemplate.update("""
                 INSERT INTO universe_membership (universe_code, stock_id, effective_from)
                 VALUES (?, ?, ?) ON CONFLICT DO NOTHING
-                """, TEST_UNIVERSE, stockId, AS_OF.minusYears(1));
+                """, universeCode, stockId, AS_OF.minusYears(1));
     }
 
     private void insertIndicator(long stockId, String code, String value) {

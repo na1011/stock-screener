@@ -58,6 +58,8 @@ class ScreeningApiContractTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 8, 5);
     private static final String SUB = "google-sub-contract";
+    /** 픽스처 종목이 "전체"에 들기 위한 활성 유니버스(ADR-0087). */
+    private static final String CONTRACT_UNIVERSE = "TESTUNIVCONTRACT";
 
     private MockMvc mockMvc;
 
@@ -85,6 +87,10 @@ class ScreeningApiContractTest {
                 INSERT INTO market (code, country_code, currency_code, timezone)
                 VALUES ('TESTMKT','KR','KRW','Asia/Seoul') ON CONFLICT DO NOTHING
                 """);
+        jdbcTemplate.update("""
+                INSERT INTO universe (code, name, market_code)
+                VALUES (?, '계약 테스트 유니버스', 'TESTMKT') ON CONFLICT DO NOTHING
+                """, CONTRACT_UNIVERSE);
         jdbcTemplate.update("""
                 INSERT INTO app_user (email, name, provider, provider_user_id, is_admin, is_active)
                 VALUES ('contract@example.com','계약테스트','GOOGLE',?,false,true)
@@ -390,10 +396,22 @@ class ScreeningApiContractTest {
         return IndicatorCondition.of(code, operator, ConditionOperand.Literal.of(value));
     }
 
+    /**
+     * 종목을 만들고 <b>활성 유니버스에 편입시킨다.</b>
+     *
+     * <p>편입까지 하는 이유는 "전체"가 {@code stock} 전량이 아니기 때문이다(ADR-0087) —
+     * 어느 활성 유니버스에도 없으면 조건과 무관하게 응답에서 빠지고, 그러면 이 계약 테스트가
+     * 재려는 것(HTTP 결과와 인메모리 판정의 일치)이 <b>양쪽 다 0건이라 항등식</b>이 된다.
+     */
     private long insertStock(String ticker, String name) {
-        return jdbcTemplate.queryForObject("""
+        long stockId = jdbcTemplate.queryForObject("""
                 INSERT INTO stock (market_code, ticker, name) VALUES ('TESTMKT', ?, ?) RETURNING id
                 """, Long.class, ticker, name);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+                """, CONTRACT_UNIVERSE, stockId, LocalDate.of(2020, 1, 2));
+        return stockId;
     }
 
     private void insertValue(long stockId, String code, String value) {

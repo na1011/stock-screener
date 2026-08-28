@@ -10,6 +10,7 @@ import com.stockscreener.screening.EvaluationMode;
 import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.stock.QIndicatorValueEntity;
 import com.stockscreener.stock.QStockEntity;
+import com.stockscreener.stock.QUniverseEntity;
 import com.stockscreener.stock.QUniverseMembershipEntity;
 
 import jakarta.persistence.EntityManager;
@@ -111,15 +112,19 @@ public class ScreeningRepository {
      * <p>유니버스 한정은 조건 트리와 무관한 <b>바깥 술어</b>다. 조건 개수에 비례하지 않으므로
      * "쿼리는 항상 2개"가 유지되고, SCORING에서도 적용된다 — 코스피 화면에 코스닥 종목이
      * 0점으로 섞여 나오면 순위의 의미가 무너진다.
+     *
+     * <p><b>유니버스를 지정하지 않아도 좁힌다</b>(ADR-0087). "전체"는 {@code stock} 전량이
+     * 아니라 <b>활성 유니버스 중 하나에라도 편입된 종목</b>이다. 프리셋은 대부분
+     * {@code universeCode}가 null이고 SCORING은 좁히지 않으므로, 좁히지 않으면 지표가 하나도
+     * 없는 시장의 종목이 <b>0점·전 조건 판정불가로 응답에 그대로 실린다</b> — 그리고 서버가
+     * 전량을 내려보내므로(ADR-0016) 그대로 화면까지 간다.
      */
     private List<Long> selectStockIds(ConditionGroup group, EvaluationMode mode, LocalDate asOf,
                                       String universeCode) {
         QStockEntity stock = QStockEntity.stockEntity;
 
         var query = queryFactory.select(stock.id).from(stock).where(stock.active.isTrue());
-        if (universeCode != null) {
-            query.where(currentlyIn(universeCode, stock));
-        }
+        query.where(universeCode != null ? currentlyIn(universeCode, stock) : inAnyActiveUniverse(stock));
         if (mode == EvaluationMode.FILTER) {
             query.where(translator.toPredicate(group, stock, asOf));
         }
@@ -141,6 +146,25 @@ public class ScreeningRepository {
                 .where(membership.stockId.eq(stock.id)
                         .and(membership.universeCode.eq(universeCode))
                         .and(membership.effectiveTo.isNull()))
+                .exists();
+    }
+
+    /**
+     * 활성 유니버스 중 하나에라도 지금 편입되어 있는가.
+     *
+     * <p>{@code universe}를 조인하는 것이 요점이다. 편입 행은 유니버스를 비활성으로 내려도
+     * 남으므로, {@code universe_membership}만 보면 <b>꺼 둔 유니버스의 종목이 계속 걸린다.</b>
+     * {@code PercentileCalculator}가 같은 조인을 갖고 있어 모집단이 그쪽과 어긋나지 않는다.
+     */
+    private static BooleanExpression inAnyActiveUniverse(QStockEntity stock) {
+        QUniverseMembershipEntity membership = QUniverseMembershipEntity.universeMembershipEntity;
+        QUniverseEntity universe = QUniverseEntity.universeEntity;
+        return JPAExpressions.selectOne()
+                .from(membership)
+                .join(universe).on(universe.code.eq(membership.universeCode))
+                .where(membership.stockId.eq(stock.id)
+                        .and(membership.effectiveTo.isNull())
+                        .and(universe.active.isTrue()))
                 .exists();
     }
 

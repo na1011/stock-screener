@@ -111,11 +111,25 @@ public class StockRegistrar {
      *
      * <p>MUST NOT: 이 질의를 잡마다 다시 적지 않는다. 실제로 사본이 둘이었고, 하나만 고치면
      * 두 잡이 서로 다른 "전 종목"을 처리하는데 <b>어느 쪽도 에러를 내지 않는다.</b>
+     *
+     * <p><b>MUST: {@code universe.is_active}를 조인한다</b>(ADR-0087). 편입 행은 유니버스의
+     * 활성 여부와 무관하게 남으므로, 조인하지 않으면 <b>비활성 유니버스에만 편입된 종목이
+     * 영구히 "전 종목"에 남는다</b> — 유니버스를 다시 내려도 빠지지 않고, 되돌리려 해도
+     * {@code UniverseReconciler}의 대량 제외 가드가 정확히 그때 거부한다.
+     *
+     * <p>그 상태가 무엇을 하는지는 소스가 없는 시장을 켜 보면 드러난다. 수집은 종목마다
+     * {@code NOT_FOUND}로 실패해 <b>부분 실패 알림이 상시화되고 진짜 장애가 묻히며</b>,
+     * {@code CorporateActionJob}처럼 <b>루프 앞에서 시장별 소스를 먼저 해석하는 잡</b>은
+     * 다른 시장까지 통째로 멈춘다.
+     *
+     * <p>{@code PercentileCalculator}와 {@code StockReader.selectableUniverses}는 처음부터
+     * 이 조인을 갖고 있었다. 여기 없던 것이 비대칭이었다.
      */
     public List<Long> activeUniverseMemberIds() {
         return jdbcTemplate.queryForList("""
                 SELECT DISTINCT m.stock_id FROM universe_membership m
                 JOIN stock s ON s.id = m.stock_id
+                JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE m.effective_to IS NULL AND s.is_active
                 ORDER BY m.stock_id
                 """, Long.class);
@@ -132,6 +146,7 @@ public class StockRegistrar {
         return jdbcTemplate.queryForList("""
                 SELECT DISTINCT m.stock_id FROM universe_membership m
                 JOIN stock s ON s.id = m.stock_id
+                JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE m.effective_to IS NULL AND s.is_active AND s.industry_code IS NULL
                 ORDER BY m.stock_id
                 """, Long.class);
@@ -157,6 +172,7 @@ public class StockRegistrar {
         return jdbcTemplate.queryForList("""
                 SELECT DISTINCT m.stock_id FROM universe_membership m
                 JOIN stock s ON s.id = m.stock_id
+                JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE m.effective_to IS NULL AND s.is_active AND s.ticker IN (%s)
                 ORDER BY m.stock_id
                 """.formatted(placeholders), Long.class, tickers.toArray());
