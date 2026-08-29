@@ -79,6 +79,36 @@ final class AlpacaResponse {
      */
     static JsonNode requireBars(HttpStatusCode status, JsonNode body, String sourceName,
                                 String context) throws DataSourceException {
+        return requireEnvelope(status, body, "bars", sourceName, context);
+    }
+
+    /**
+     * 기업 행위 봉투에서 {@code corporate_actions} 객체를 꺼내거나 던진다(ADR-0090).
+     *
+     * <p><b>내용물의 계약이 시세와 다르다.</b> 이쪽은 <b>온 타입의 키만</b> 들어 있어
+     * {@code {"corporate_actions":{}}}가 정상적인 「그 창에 사건이 없다」이고(실측), 없는 타입은
+     * 빈 배열이 아니라 키 자체가 없다. 그래서 호출자가 타입 키를 하나씩 꺼내 본다.
+     */
+    static JsonNode requireCorporateActions(HttpStatusCode status, JsonNode body, String sourceName,
+                                            String context) throws DataSourceException {
+        return requireEnvelope(status, body, "corporate_actions", sourceName, context);
+    }
+
+    /**
+     * {@code {"<key>": {...}, "next_page_token": …}} 봉투에서 {@code key}를 꺼낸다.
+     *
+     * <p>MUST: <b>상태코드를 먼저 본다.</b> 403 본문에는 그 키가 없어, 순서를 뒤집으면
+     * 권한 오류가 <b>「0건」으로 접힌다</b> — 실제로 탐침에서 그 오독이 났고 정반대 결론이
+     * 나왔다({@code .claude/rules/data-pipeline.md}).
+     *
+     * <p><b>키가 없는 것과 0건은 다르다.</b> 전자는 스펙 변경 신호이므로 던지고, 후자는
+     * 빈 객체로 정상 반환한다. {@code sourceName}을 인자로 받는 이유는 실패가
+     * {@code batch_execution_failure.source_name}에 <b>부른 어댑터의 이름</b>으로 남아야
+     * 관리자 화면의 소스별 집계가 안 엉키기 때문이다.
+     */
+    private static JsonNode requireEnvelope(HttpStatusCode status, JsonNode body, String key,
+                                            String sourceName, String context)
+            throws DataSourceException {
         if (!status.is2xxSuccessful()) {
             throw new DataSourceException(kindOf(status.value()), sourceName,
                     "HTTP %d — %s. %s".formatted(status.value(), message(body), context));
@@ -87,18 +117,18 @@ final class AlpacaResponse {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, sourceName,
                     "객체가 아닌 응답이다 — 스펙이 바뀌었을 수 있다. " + context);
         }
-        JsonNode bars = body.path("bars");
-        if (bars.isMissingNode() || bars.isNull()) {
-            // 봉이 0개인 것과 bars 키 자체가 없는 것은 다르다. 후자는 스펙 변경 신호이고,
-            // 실제로 403 본문이 정확히 그 모양이다 — 상태코드를 안 보면 「봉 0개」로 접힌다.
+        JsonNode node = body.path(key);
+        if (node.isMissingNode() || node.isNull()) {
+            // 0건인 것과 키 자체가 없는 것은 다르다. 후자는 스펙 변경 신호이고,
+            // 실제로 403 본문이 정확히 그 모양이다 — 상태코드를 안 보면 「0건」으로 접힌다.
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, sourceName,
-                    "bars 키가 없다 — 봉 0개와 다른 사건이다. " + context);
+                    key + " 키가 없다 — 0건과 다른 사건이다. " + context);
         }
-        if (!bars.isObject()) {
+        if (!node.isObject()) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, sourceName,
-                    "bars가 객체가 아니다. " + context);
+                    key + "가 객체가 아니다. " + context);
         }
-        return bars;
+        return node;
     }
 
     static DataSourceException.Kind kindOf(int status) {

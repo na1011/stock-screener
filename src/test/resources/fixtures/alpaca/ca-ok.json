@@ -1,0 +1,14 @@
+{"corporate_actions":{
+  "cash_dividends":[
+    {"symbol":"NVDA","cusip":"67066G104","ex_date":"2024-06-11","rate":0.01,
+     "record_date":"2024-06-11","payable_date":"2024-06-28","process_date":"2024-06-28",
+     "special":false,"foreign":false,"id":"d1"}],
+  "forward_splits":[
+    {"symbol":"NVDA","cusip":"67066G104","ex_date":"2024-06-10","old_rate":1,"new_rate":10,
+     "record_date":"2024-06-07","payable_date":"2024-06-10",
+     "due_bill_redemption_date":"2024-06-10","process_date":"2024-06-10","id":"s1"}],
+  "spin_offs":[
+    {"source_symbol":"NVDA","new_symbol":"ZZZZ","source_rate":1,"new_rate":0.5,
+     "ex_date":"2024-03-01","record_date":"2024-02-28","payable_date":"2024-03-05",
+     "process_date":"2024-03-05","id":"p1"}]},
+ "next_page_token":null}

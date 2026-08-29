@@ -1,0 +1,4 @@
+{"corporate_actions":{"reverse_splits":[
+  {"symbol":"NVDA","old_cusip":"046513107","new_cusip":"046513206","ex_date":"2024-06-20",
+   "old_rate":25,"new_rate":1,"record_date":"2024-06-20","payable_date":"2024-06-20",
+   "process_date":"2024-06-20","id":"r1"}]},"next_page_token":null}

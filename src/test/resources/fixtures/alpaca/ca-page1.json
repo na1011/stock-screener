@@ -1,0 +1,4 @@
+{"corporate_actions":{"forward_splits":[
+  {"symbol":"NVDA","ex_date":"2024-06-10","old_rate":1,"new_rate":10,
+   "payable_date":"2024-06-10","process_date":"2024-06-10","id":"s1"}]},
+ "next_page_token":"tok"}
