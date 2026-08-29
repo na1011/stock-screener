@@ -1,0 +1,120 @@
+---
+id: ADR-0094
+status: 채택됨
+date: 2026-08-30
+applies_to:
+  - "src/main/java/com/stockscreener/indicator/IndicatorDataReader.java"
+  - "src/test/java/com/stockscreener/indicator/CurrencyGateTest.java"
+---
+
+# ADR-0094. 재무 통화가 시장 통화와 다른 종목은 재무를 통째로 주지 않는다
+
+## 결정
+
+**재무의 통화가 그 종목이 상장된 시장의 통화와 다르면, 지표 계층이 그 종목의 재무를 한 행도
+읽지 않는다.** 판정의 축은 `market.currency_code`이고, 게이트는 `IndicatorDataReader`의
+재무 질의 둘 안에 있다(`CURRENCY_GATE`).
+
+**환산하지 않는다.** 환율 시계열이 없고, 그것을 들이는 것은 새 외부 소스와 새 축이다.
+
+## 규칙
+
+- **MUST: 게이트를 종목 단위로 건다.** 행 단위로 거르면 창이 두 통화를 섞은 채 계산된다 —
+  두산밥캣이 KRW 34행(2016~2023)과 USD 14행(2023~2026)을 함께 갖고 **5년 창 지표가 그 둘을
+  더한다.** USD 행만 빼면 2023-09 재무가 최신인 척하고, KRW 행만 빼면 5년 창이 2년치가 된다.
+  **어느 쪽도 「정상값 보존」이 아니다.**
+- **MUST: 판정을 시장 통화와의 대조로 둔다.** `MUST NOT: 통화 리터럴로 바꾸지 않는다` —
+  「USD를 버린다」로 만들면 **미국을 켜는 순간 전 종목의 재무가 사라진다.**
+- **MUST: 리더에서 막는다.** ADR-0080이 옛 행을 걷는 조건이 「계산기가 창 전체에 대해 한 점도
+  못 냈을 때」라, `IndicatorValueWriter`나 상위에서 거르면 **이미 저장된 오염값이 안 걷힌다.**
+- **MUST: `LATEST`와 `KNOWN_ON` 둘 다 같은 게이트를 탄다.** 한쪽만 걸면 시점 재현이 라이브와
+  다른 모집단을 보게 되고, 그 차이는 값이 나오는 형태라 드러나지 않는다.
+- **MUST NOT: NULL 통화 갈래를 만들지 않는다.** `financial_statement.currency_code`가
+  **NOT NULL**이라 「모른다」가 원리적으로 없다(실측 15,695행 전부 KRW 아니면 USD).
+  NULL 방어를 적으면 **없는 방어선을 보증하는 문장**이 된다.
+
+## 검증
+
+```bash
+./gradlew test --tests "*CurrencyGateTest*"
+```
+
+**단정을 「게이트 SQL이 있는가」로 세우지 않았다** — 그것은 문자열을 보는 것이라 정의상 언제나
+참이다. 재는 것은 *섞인 종목의 재무가 실제로 안 나오는가*이고, **대조군으로 확인했다**:
+게이트를 빼면 「막힌다」를 단정하는 둘이 붉고, 「통과한다」를 단정하는 둘은 그대로 초록이다.
+
+```premise 통화가 섞인 종목의 오염된 지표가 아직 남아 있는가
+psql -d stock_screener -At -c "
+WITH mismatched AS (
+  SELECT DISTINCT s.id, s.ticker, s.name
+  FROM financial_statement f
+  JOIN stock s ON s.id = f.stock_id
+  JOIN market m ON m.code = s.market_code
+  WHERE f.currency_code <> m.currency_code),
+ stale AS (
+  SELECT count(*) AS rows, count(DISTINCT v.stock_id) AS stocks
+  FROM indicator_value v JOIN mismatched x ON x.id = v.stock_id)
+SELECT CASE
+  WHEN (SELECT count(*) FROM mismatched) = 0
+    THEN '잴 것이 없었다 — 재무 통화가 시장 통화와 다른 종목이 하나도 없다'
+  WHEN (SELECT rows FROM stale) = 0
+    THEN 'OK 통화가 섞인 ' || (SELECT count(*) FROM mismatched)
+         || '종목에 저장된 지표가 없다 (' || (SELECT string_agg(ticker, ',') FROM mismatched) || ')'
+  ELSE '통화가 섞인 ' || (SELECT stocks FROM stale) || '종목에 지표 '
+       || (SELECT rows FROM stale) || '행이 남아 있다 — 게이트는 새 계산을 막지만 '
+       || '옛 행은 ADR-0080의 걷기가 지운다. 전 종목 단일 거래일 백필이 그것을 닫는다'
+END"
+```
+
+**이 전제가 묻는 것은 게이트가 아니라 그 뒤처리다.** 게이트를 넣은 직후에는 반드시 발화하며,
+**백필 한 번으로 닫힌다** — 닫히지 않으면 걷기가 이 종목들에 안 걸린 것이다.
+
+## 배경
+
+`market.currency_code`(KOSPI·KOSDAQ = KRW, US = USD)와 `financial_statement.currency_code`가
+어긋나는 종목이 **셋** 있고(두산밥캣 241560 · 코오롱티슈진 950160 · 인제니아테라퓨틱스 950260),
+아무도 둘을 대조하지 않았다. 리더는 후자를 이미 읽고 있었으므로 **재료는 다 있고 판정만 없었다.**
+
+저장된 값이 무증상이 아니다 — 두산밥캣의 `PER 17,386` · `PBR 1,163` · `PSR 937` ·
+`ALTMAN_Z 960` · `PER_DISCOUNT_5Y −163,019` · `PER_PCTL 1.0`. 주가를 안 쓰는 것도 오염된다
+(`EXEC_PAY_TO_NET_INCOME 1,873` = 보수 KRW ÷ 순이익 USD). **비율 지표는 멀쩡하다**
+(`OPM_MIN_5Y 7.8`) — 분자와 분모가 같은 통화라 상쇄되기 때문이고, 그래서 **눈으로 훑으면
+정상으로 보이는 지표가 섞여 있다.**
+
+**지금 고치는 이유는 미국 때문이다.** 미국을 켜면 이 게이트의 뜻이 시장마다 달라지므로,
+**켜기 전에 형태를 정해야 한다.** 판정 축을 시장 통화로 둔 것이 그 답이다.
+
+## 버린 대안
+
+- **행 단위로 거른다** — 처음에 「KRW 시절의 정상값을 안 지운다」는 이유로 그렇게 적었는데
+  **재보니 거짓이었다.** 두산밥캣의 저장된 `EPS_CAGR_5Y`가 **−75.2%**이고 `OCF_SUM_5Y`가
+  원화 3년과 달러 2년의 단순 합이다. 어느 쪽을 남겨도 창이 망가진다.
+- **환산한다** — 환율 시계열이 없다. 들이면 새 외부 소스·새 저장 축·시점별 환율 선택 규칙이
+  함께 붙고, 그 셋 중 어느 것도 이 결함이 요구하는 크기가 아니다.
+- **`IndicatorValueWriter`나 상위에서 거른다** — ADR-0080의 걷기가 「계산기가 못 냈을 때」에만
+  걸리므로 **이미 저장된 오염값이 영구히 남는다.**
+- **통화가 USD인 재무를 버린다** — 미국을 켜면 전 종목이 지워진다. 지금은 무해해 보이지만
+  **v1.1에서 정확히 반대로 작동한다.**
+- **종목 단위 판정을 별도 질의로 한다** — 왕복이 는다. 백필이 날짜×종목이라 180×350×2 =
+  약 12만 회가 되므로 서브쿼리로 넣었다. 실측 비용은 종목당 **+0.7ms**(1.178 → 1.898ms).
+
+## 결과
+
+**쉬워지는 것**: 통화가 섞인 종목이 「조건 미달」로 위장하지 않는다. 값이 안 나오면
+판정불가이고, `ConditionEvaluator.satisfiesRequired`가 그것을 충족으로 읽지 않는다.
+
+**어려워지는 것**
+
+- **국내 3종목의 재무 지표가 사라진다.** `EPS_CAGR_5Y`가 린치 프리셋 둘의 필수 게이트라
+  그 셋은 **전부터 탈락하고 있었고**, 달라지는 것은 탈락의 이유가 「오염된 값」에서
+  「값 없음」으로 바뀌는 것이다. 화면에서는 여전히 구별되지 않는다 — **그 구별을 만드는 것은
+  이 결정의 범위가 아니다.**
+- **백분위 모집단이 바뀐다.** 값을 지우면 국내 350종목의 `*_PCTL`이 다시 매겨지고,
+  **알림이 걸린 워치리스트 1건**이 `PER_PCTL`·`PBR_PCTL`을 건다(ADR-0026의 엣지 트리거).
+- **저장된 오염값은 백필 전까지 남는다.** 위 premise가 그것을 신고하고, 전 종목 단일 거래일
+  백필 한 번으로 닫힌다.
+
+**되돌리려면**: `CURRENCY_GATE`를 두 질의에서 빼면 된다. 그러면 `CurrencyGateTest`의 넷 중
+둘이 붉는다 — **되돌린 것이 조용하지 않다는 것이 그 테스트의 값이다.** 다만 **지워진 지표는
+코드를 되돌려도 안 돌아온다**(백필이 다시 계산해야 하고, 백분위는 전 종목 × 보존창이라
+실측 1시간 51분이다).

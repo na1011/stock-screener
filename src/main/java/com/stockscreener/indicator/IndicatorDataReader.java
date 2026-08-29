@@ -30,30 +30,26 @@ import java.util.TreeMap;
  * 두 타입이 하나가 되는 순간 외부 소스의 스펙 변경이 지표 계산기까지 번진다. 이 리더가
  * 그 경계에 서서 저장된 것을 지표 계층의 말로 옮기는 역할을 한다.
  *
- * <h2>아직 없는 것 — 통화 게이트 (2026-08-30 실측)</h2>
+ * <h2>통화 게이트 (2026-08-30)</h2>
  *
- * <p><b>재무의 통화가 시장의 통화와 다른 종목이 실재하고, 아무도 둘을 대조하지 않는다.</b>
- * {@code market.currency_code}(KOSPI·KOSDAQ = KRW, US = USD)와
- * {@code financial_statement.currency_code}가 그 둘이고, 이 리더가 후자를 이미 읽고 있다
- * ({@code FINANCIAL_COLUMNS}) — <b>재료는 다 있고 판정만 없다.</b>
+ * <p><b>재무의 통화가 시장의 통화와 다른 종목이 실재한다.</b> {@code market.currency_code}
+ * (KOSPI·KOSDAQ = KRW, US = USD)와 {@code financial_statement.currency_code}가 그 둘이고,
+ * <b>{@link #CURRENCY_GATE}가 그 종목의 재무를 통째로 안 준다</b> — 계약과 비용은 그 상수의
+ * javadoc이 정본이다.
  *
- * <p>지금 닿는 종목이 셋이다 — 두산밥캣(241560) · 코오롱티슈진(950160) ·
+ * <p>걸리는 종목이 셋이다 — 두산밥캣(241560) · 코오롱티슈진(950160) ·
  * 인제니아테라퓨틱스(950260). 두산밥캣의 저장된 값:
  * {@code PER 17,386} · {@code PBR 1,163} · {@code PSR 937} · {@code PEG 1,265} ·
  * {@code ALTMAN_Z 960} · {@code PER_DISCOUNT_5Y −163,019} · {@code PER_PCTL 1.0}.
  * 주가를 안 쓰는 둘도 오염된다 — {@code EXEC_PAY_TO_NET_INCOME 1,873}(보수 KRW ÷ 순이익 USD) ·
  * {@code DIVIDEND_PAYOUT 57,522}. <b>비율 지표는 멀쩡하다</b>({@code OPM_MIN_5Y 7.8}).
  *
- * <p><b>MUST: 게이트를 행이 아니라 종목 단위로 건다.</b> 처음에 「행 단위여야 KRW 시절의
- * 정상값을 안 지운다」고 적었는데 <b>재보니 거짓이다</b>. 두산밥캣은 KRW 34행(2016~2023)과
+ * <p><b>행 단위가 아니라 종목 단위인 이유는 실측이다.</b> 처음에 「행 단위여야 KRW 시절의
+ * 정상값을 안 지운다」고 적었는데 <b>재보니 거짓이었다</b>. 두산밥캣은 KRW 34행(2016~2023)과
  * USD 14행(2023~2026)을 함께 갖고 <b>5년 창 지표가 그 둘을 섞는다</b> — 저장된
  * {@code EPS_CAGR_5Y}가 <b>−75.2%</b>이고 {@code OCF_SUM_5Y}는 원화 3년과 달러 2년의 단순
  * 합이다. USD 행만 빼면 2023-09 재무가 최신인 척하고, KRW 행만 빼면 5년 창이 2년치가 된다.
  * <b>어느 쪽도 「정상값 보존」이 아니다.</b>
- *
- * <p><b>MUST: 게이트를 계산기(또는 이 리더)가 값을 안 내는 형태로 둔다.</b> ADR-0080이 옛 행을
- * 걷는 조건이 <b>「계산기가 창 전체에 대해 한 점도 못 냈을 때」</b>라, {@code IndicatorValueWriter}나
- * 상위에서 거르면 <b>이미 저장된 오염값이 안 걷힌다.</b>
  *
  * <p><b>파급은 쟀다</b>: {@code EPS_CAGR_5Y}가 린치 프리셋 둘의 <b>필수 게이트</b>라
  * (`requiredBetween` 20~50 · 10~20) 그 셋은 지금 데이터 때문에 탈락하고 있고, 화면에서는
@@ -61,9 +57,9 @@ import java.util.TreeMap;
  * {@code *_PCTL}이 전부 다시 매겨지는데, <b>알림이 걸린 워치리스트는 1건</b>이고 그 하나가
  * {@code PER_PCTL}·{@code PBR_PCTL}을 건다(ADR-0026의 엣지 트리거가 거기 닿는다).
  *
- * <p><b>미국을 켜면 이 게이트의 뜻이 시장마다 달라진다</b> — 지금은 「USD 재무 = 오염」이지만
- * 그때는 USD가 정상인 시장이 생긴다. 그래서 시장 통화와 대조하는 형태여야 하고,
- * 「USD를 버린다」로 만들면 미국에서 전 종목이 지워진다.
+ * <p><b>미국을 켜도 뜻이 유지된다</b> — 판정의 축이 「USD인가」가 아니라 「시장 통화와 같은가」라,
+ * USD가 정상인 시장이 생겨도 그 종목은 통과한다. <b>MUST NOT: 이 판정을 통화 리터럴로
+ * 바꾸지 않는다</b> — 「USD를 버린다」로 만들면 미국에서 전 종목이 지워진다.
  */
 @Component
 public class IndicatorDataReader {
@@ -133,11 +129,44 @@ public class IndicatorDataReader {
      * <p>{@code period_end <= ?}는 미래 <b>기말</b>을 막는다. <b>미래 공시는 막지 못한다</b> —
      * 그것은 {@link FinancialVisibility#KNOWN_ON}의 몫이다.
      */
+    /**
+     * 재무의 통화가 <b>시장의 통화와 다른 종목</b>을 재무 읽기에서 통째로 뺀다.
+     *
+     * <p><b>MUST: 종목 단위다.</b> 행 단위로 거르면 창이 두 통화를 섞은 채 계산된다 —
+     * 두산밥캣이 KRW 34행(2016~2023)과 USD 14행(2023~2026)을 함께 갖고, 5년 창 지표가
+     * 그 둘을 더한다. 어느 쪽을 남겨도 「정상값 보존」이 아니므로 <b>전부 안 준다.</b>
+     *
+     * <p><b>MUST: 시장 통화와 대조한다.</b> 「USD를 버린다」로 만들면 미국을 켰을 때
+     * 전 종목이 지워진다. 판정의 축은 {@code market.currency_code}다.
+     *
+     * <p><b>MUST: 여기(리더)에서 막는다.</b> 상위에서 거르면 ADR-0080의 「계산이 그만 난
+     * 지표의 옛 행을 걷는다」가 안 걸려 <b>이미 저장된 오염값이 남는다.</b> 리더가 빈 목록을
+     * 주면 계산기가 값을 못 내고, 그때 걷기가 옛 행을 지운다.
+     *
+     * <p><b>NULL 갈래를 두지 않는다.</b> {@code financial_statement.currency_code}가 <b>NOT NULL</b>이라
+     * (컬럼 제약이 막는다) 「모른다」가 원리적으로 없다 — 실측 15,695행이 전부 KRW 아니면 USD다.
+     * NULL 방어를 적으면 <b>없는 방어선을 보증하는 문장</b>이 된다.
+     *
+     * <p>실측(2026-08-30): 재무가 있는 377종목 중 <b>3종목</b>이 걸린다 — 두산밥캣(241560) ·
+     * 코오롱티슈진(950160) · 인제니아테라퓨틱스(950260). 비용은 종목당 <b>약 +0.7ms</b>
+     * (1.178ms → 1.898ms, 삼성전자 연간 8행 기준).
+     */
+    private static final String CURRENCY_GATE = """
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM financial_statement mismatched
+                  JOIN stock gated ON gated.id = mismatched.stock_id
+                  JOIN market gate_market ON gate_market.code = gated.market_code
+                  WHERE mismatched.stock_id = financial_statement.stock_id
+                    AND mismatched.currency_code <> gate_market.currency_code)
+            """;
+
     private static final String SELECT_FINANCIALS_LATEST = ("""
             SELECT %s
             FROM financial_statement
             WHERE stock_id = ? AND is_latest AND period_end <= ?
               AND fiscal_period %%s 'FY'
+            """ + CURRENCY_GATE + """
             ORDER BY period_end DESC, published_at DESC
             LIMIT ?
             """).formatted(FINANCIAL_COLUMNS);
@@ -161,6 +190,7 @@ public class IndicatorDataReader {
                 FROM financial_statement
                 WHERE stock_id = ? AND published_at <= ? AND period_end <= ?
                   AND fiscal_period %%s 'FY'
+            """ + CURRENCY_GATE + """
             ) known
             WHERE rn = 1
             ORDER BY period_end DESC, published_at DESC
