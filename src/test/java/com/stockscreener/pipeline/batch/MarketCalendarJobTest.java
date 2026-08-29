@@ -175,6 +175,25 @@ class MarketCalendarJobTest {
     }
 
     @Test
+    @DisplayName("결측이 있으면 요약이 알림으로 나간다 — 표만 채우고 아무도 안 보면 이 잡은 아무것도 답하지 않는다")
+    void alertsWhenGapsExist() {
+        // 미국은 일일 갱신 대상이 아니라 DailyUpdateJob의 결손 알림이 원리적으로 안 닿는다.
+        // 이 알림이 이 축에서 사람에게 닿는 유일한 자동 경로다.
+        source.sessions = List.of("2024-01-02", "2024-01-03", "2024-01-04");
+        long stockId = usStockWithBars("GAPPY", "2024-01-02", "2024-01-04");
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, FROM);
+
+        assertThat(alerts.events)
+                .anyMatch(e -> e.title().contains("봉 결측이 있다")
+                        && e.body().contains("SESSION_WITHOUT_BAR")
+                        && e.body().contains("GAPPY")
+                        && e.body().contains("2024-01-03"));
+        jdbcTemplate.update("DELETE FROM price_daily WHERE stock_id = ?", stockId);
+        jdbcTemplate.update("DELETE FROM stock WHERE id = ?", stockId);
+    }
+
+    @Test
     @DisplayName("어댑터가 하나도 없으면 0건 성공이 아니라 ERROR 알림이다")
     void emptyTargetListAlerts() {
         MarketCalendarJob withoutSource = new MarketCalendarJob(collector, gapReader,
@@ -191,6 +210,21 @@ class MarketCalendarJobTest {
     }
 
     // ── 도구 ─────────────────────────────────────────────────────────────
+
+    private long usStockWithBars(String ticker, String... dates) {
+        Long id = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, listing_exchange)
+                VALUES ('US', ?, ?, 'NYSE') RETURNING id
+                """, Long.class, ticker, ticker + " Inc.");
+        for (String date : dates) {
+            jdbcTemplate.update("""
+                    INSERT INTO price_daily
+                        (stock_id, trade_date, open, high, low, close, adj_close, adj_factor, volume)
+                    VALUES (?, ?::date, 100, 100, 100, 100, 100, 1, 1000)
+                    """, id, date);
+        }
+        return id == null ? 0L : id;
+    }
 
     private long rowCount() {
         Long count = jdbcTemplate.queryForObject("SELECT count(*) FROM market_calendar", Long.class);
