@@ -296,7 +296,8 @@ class SecEdgarProbeLiveTest {
         RestClient data = client(DATA_URL);
 
         System.out.println("\n===== companyfacts 실측 =====");
-        System.out.printf("%-6s %10s %8s %6s  %s%n", "종목", "바이트", "us-gaap", "dei", "네임스페이스");
+        System.out.printf("%-6s %10s %8s %6s  %-28s %s%n",
+                "종목", "바이트", "us-gaap", "dei", "제출자", "네임스페이스");
 
         Map<String, Integer> unitKeys = new TreeMap<>();
         Map<String, Integer> fpValues = new TreeMap<>();
@@ -321,12 +322,16 @@ class SecEdgarProbeLiveTest {
             maxBytes = Math.max(maxBytes, bytes);
             totalBytes += bytes;
 
-            JsonNode facts = MAPPER.readTree(raw).path("facts");
+            JsonNode parsed = MAPPER.readTree(raw);
+            JsonNode facts = parsed.path("facts");
             List<String> namespaces = new ArrayList<>(facts.propertyNames());
             JsonNode usGaap = facts.path("us-gaap");
             JsonNode dei = facts.path("dei");
-            System.out.printf("%-6s %10d %8d %6d  %s%n",
-                    symbol, bytes, usGaap.size(), dei.size(), namespaces);
+            // 제출자 이름을 함께 찍는 이유는 **응답 크기가 100배 차이 나기 때문**이다.
+            // 작은 응답이 「결손」인지 「다른 회사」인지는 크기만으로 못 가른다.
+            System.out.printf("%-6s %10d %8d %6d  %-28s %s%n",
+                    symbol, bytes, usGaap.size(), dei.size(),
+                    parsed.path("entityName").asString("(없음)"), namespaces);
 
             // 이 종목이 우리 17개 컬럼의 후보 태그 중 무엇을 실제로 갖고 있는가.
             for (Map.Entry<String, List<String>> col : TAG_CANDIDATES.entrySet()) {
@@ -619,6 +624,24 @@ class SecEdgarProbeLiveTest {
                 gz.getBody() == null ? 0 : gz.getBody().getBytes(StandardCharsets.UTF_8).length,
                 parsed ? "성공" : "★ 실패 — 압축이 안 풀린다");
         System.out.println("  → 실패하면 어댑터는 이 헤더를 붙이지 않는다(가이드 §2.1이 권하더라도)");
+    }
+
+    @Test
+    @DisplayName("[live][probe] 벌크 파일 크기를 잰다 — 전량을 종목당 1콜로 받을지의 대조군이다")
+    void probeBulkSize() {
+        // 이 phase는 파일럿만 넣으므로 여기서 계획이 갈리지 않는다. 그래도 재는 이유는
+        // **전량 여부가 열린 결정으로 남아 있고**(docs/progress.md), 종목당 1콜이 약 29GB라
+        // 그 결정에 견줄 값이 이것뿐이기 때문이다. HEAD 1콜이다.
+        throttle();
+        ResponseEntity<Void> head = client(FILES_URL).head()
+                .uri("/Archives/edgar/daily-index/xbrl/companyfacts.zip")
+                .retrieve().toBodilessEntity();
+        long length = head.getHeaders().getContentLength();
+        System.out.printf("%n===== companyfacts.zip =====%nHTTP %s · Content-Length=%s%n",
+                head.getStatusCode(),
+                length < 0 ? "(헤더 없음)" : "%.1fGB".formatted(length / 1e9));
+        System.out.println("  → 종목당 1콜은 약 29GB다(표본 19종목 65.2MB 평균). 이 값과 견준다");
+        System.out.println("     크기만으로 정하지 않는다 — 벌크는 하루 한 번 재발행이라 신선도가 다르다");
     }
 
     private static String preview(String body) {

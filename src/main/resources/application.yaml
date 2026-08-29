@@ -202,9 +202,14 @@ stockscreener:
     alpaca:
       # Trading API다. 자산 마스터(/v2/assets)와 마켓 캘린더가 여기에 있다.
       base-url: https://paper-api.alpaca.markets
-      # Market Data API. 시세(/v2/stocks/bars)가 여기에 있고 base-url과 섞으면 404다 —
+      # 시세(/v2/stocks/bars)는 base URL이 다르다(https://data.alpaca.markets). 섞으면 404이고
       # 인증 헤더가 두 계열 모두 같아서 "키가 틀렸다"로 읽히지 않는다. 키는 아래 둘을 공유한다.
-      market-data-base-url: https://data.alpaca.markets
+      #
+      # MUST NOT: 그 두 번째 base URL을 이 블록 안에 키로 두지 않는다. `Source`에 세터가 없어
+      # ignoreUnknownFields 기본값이 조용히 삼키고, 그 줄은 아무 일도 하지 않으면서 설정처럼
+      # 보인다 — 실제로 그 상태였고 자바 기본값과 값이 같아 증상이 없었다.
+      # 값은 DataSourceProperties.alpacaMarketDataBaseUrl에 있다(dataGoKrMarketIndexBaseUrl과
+      # 같은 형태다). DataSourcePropertiesBindingTest가 이 함정을 잠근다.
       # 이 소스만 키가 둘이다. api-key가 Key ID, secret-key가 Secret Key다.
       api-key: ${APCA_API_KEY_ID:}
       secret-key: ${APCA_API_SECRET_KEY:}

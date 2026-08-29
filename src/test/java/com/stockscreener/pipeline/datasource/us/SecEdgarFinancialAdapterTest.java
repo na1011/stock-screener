@@ -181,6 +181,40 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("사업보고서가 아직 없는 해의 분기도 담는다 — 안 담으면 TTM이 최대 1년 뒤처진다")
+    void labelsQuartersOfTheYearInProgress() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-in-progress-year.json"));
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+
+        RawFinancialReport q1 = reports.stream()
+                .filter(r -> r.fiscalYear() == 2024 && "Q1".equals(r.fiscalPeriod()))
+                .findFirst().orElseThrow(() -> new AssertionError("2024/Q1이 없다"));
+        assertThat(q1.periodStart()).isEqualTo(LocalDate.of(2024, 1, 1));
+        assertThat(q1.periodEnd()).isEqualTo(LocalDate.of(2024, 3, 31));
+        assertThat(q1.revenue()).isEqualByComparingTo(new BigDecimal("130"));
+        assertThat(q1.totalAssets())
+                .as("잔액도 그 분기 말 것이어야 한다").isEqualByComparingTo(new BigDecimal("1150"));
+    }
+
+    @Test
+    @DisplayName("한 해에 회계연도가 둘 끝나면 MALFORMED다 — 제약이 안 잡으므로 여기서 막는다")
+    void refusesTwoPeriodsUnderOneLabel() {
+        enqueue(200, fixture("tickers.json"));
+        // 파일 이름에 conflict를 쓰지 않는다 — 전역 .gitignore의 `*CONFLICT*`가 삼켜
+        // 저장소에 안 들어가고, 그러면 여기서는 통과하고 새로 클론한 곳에서만 깨진다.
+        enqueue(200, fixture("companyfacts-two-years-one-label.json"));
+
+        // uq_fs_latest에 기간이 없어 라벨이 겹쳐도 제약이 걸리지 않는다. FinancialWriter가
+        // 개정 갈래에서 UPDATE를 INSERT보다 먼저 돌리므로, 앞 기간의 최신 표시가 조용히
+        // 내려가고 뒤 기간이 그 자리를 차지한다 — 어댑터의 자기 단언이 유일한 방어선이다.
+        assertThatThrownBy(() -> adapter().fetchReports(FIX, FROM))
+                .isInstanceOf(DataSourceException.class)
+                .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.MALFORMED)
+                .hasMessageContaining("같은 라벨에 기간이 둘이다");
+    }
+
+    @Test
     @DisplayName("매핑 파일에 없는 티커는 NOT_FOUND다 — 조용한 0건이 아니다")
     void unknownTickerIsNotFound() {
         enqueue(200, fixture("tickers.json"));
