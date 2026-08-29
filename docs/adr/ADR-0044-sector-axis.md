@@ -21,6 +21,11 @@ KSIC 업종 코드(`company.json`의 `induty_code`)를 `stock.industry_code`에 
 
 표본이 부족하거나 업종이 비어 있으면 **값을 쓰지 않는다** — 유니버스 백분위로 폴백하지 않는다.
 
+> **2026-08-29 — 분류 체계가 둘이 되면서 이 모집단이 한 번 더 좁아졌다**(ADR-0092).
+> 「활성 유니버스 전체 ∩ 같은 업종」이 **「… ∩ 같은 체계의 같은 업종」**이 된다. 파티션 키는
+> `stock.industry_group_key`·`industry_division_key`이고 값에 체계 접두가 구워져 있다.
+> **선택이 아니라 강제다** — KSIC와 SIC 사이에 공표된 매핑이 없고, 앞 2자리가 실제로 겹친다.
+
 ## 규칙
 
 - MUST: 업종 판정은 `industry_code`·`industry_group`·`industry_division`만 본다.
@@ -77,25 +82,33 @@ KSIC 업종 코드(`company.json`의 `induty_code`)를 `stock.industry_code`에 
 업종 판정이 표시 라벨에 기대지 않는지 — 모집단을 가르는 키가 무엇인지로 묻는다:
 
 ```bash
-rg -n "PARTITION BY|GROUP BY|JOIN stock" src/main/java/com/stockscreener/indicator/SectorRelativeCalculator.java
+rg -n "PARTITION BY|GROUP BY|JOIN stock|AS fine|AS broad" src/main/java/com/stockscreener/indicator/SectorRelativeCalculator.java
 ```
 
-전부 `industry_group` 또는 `industry_division`이어야 한다. **`sector`가 나오면 표시 라벨이
-판정에 새어 들어간 것이다.** 낱말이 아니라 이 자리로 묻는 이유는, javadoc이 `stock.sector`를
-설명으로 언급하는 것은 정상이라 낱말 검색이 거짓 경보를 내기 때문이다.
+**`AS fine`·`AS broad`를 패턴에 넣는 이유**는 파티션 줄이 별칭만 찍기 때문이다
+(`PARTITION BY fine`) — 그 둘이 없으면 **어느 컬럼에서 왔는지가 출력에 안 나온다.**
+별칭을 만드는 줄이 `s.industry_group_key`·`s.industry_division_key`여야 한다
+(ADR-0092 이전에는 접미 없는 `industry_group`·`industry_division`이었다).
+
+**`sector`가 나오면 표시 라벨이 판정에 새어 들어간 것이다.** 낱말이 아니라 이 자리로 묻는
+이유는, javadoc이 `stock.sector`를 설명으로 언급하는 것은 정상이라 낱말 검색이 거짓 경보를
+내기 때문이다.
+
+**파티션 키의 이름에 `sector`를 쓰지 않는 것도 이 펜스가 정한다** — 쓰는 순간 이 검사가
+정상 상태를 위반으로 신고한다.
 
 ```premise 업종 코드가 활성 편입 종목에 들어와 있다
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 종목이 하나도 없다' WHEN count(*) FILTER (WHERE s.industry_code IS NOT NULL) = 0 THEN '업종이 전량 비어 있다(' || count(*) || '종목) — company-profile 잡이 아직 돌지 않았다. 업종 조건은 전 종목 판정불가다' WHEN count(*) FILTER (WHERE s.industry_code IS NULL) > 0 THEN '업종이 ' || count(*) FILTER (WHERE s.industry_code IS NULL) || '/' || count(*) || '종목에서 비어 있다 — 신규 편입 뒤 company-profile을 돌리지 않았다. 그 종목은 업종 필수 조건에서 조용히 빠진다' ELSE 'OK 활성 편입 ' || count(*) || '종목 전부에 업종이 있다' END FROM stock s JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active" 
+psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 종목이 하나도 없다' WHEN count(*) FILTER (WHERE s.industry_group_key IS NOT NULL) = 0 THEN '업종이 전량 비어 있다(' || count(*) || '종목) — company-profile 잡이 아직 돌지 않았다. 업종 조건은 전 종목 판정불가다' WHEN count(*) FILTER (WHERE s.industry_group_key IS NULL) > 0 THEN '업종이 ' || count(*) FILTER (WHERE s.industry_group_key IS NULL) || '/' || count(*) || '종목에서 비어 있다 — 신규 편입 뒤 company-profile을 돌리지 않았다. 그 종목은 업종 필수 조건에서 조용히 빠진다' ELSE 'OK 활성 편입 ' || count(*) || '종목 전부에 업종이 있다' END FROM stock s JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active" 
 ```
 
 **`count(*) = 0`과 "전량 비어 있음"을 따로 답하는 이유**는 둘 다 조용히 참이 되기 때문이다 —
 유니버스가 비어도, 잡을 한 번도 안 돌려도 업종 조건은 똑같이 전 종목 판정불가가 된다.
 
 ```premise Altman Z가 보험·금융서비스 종목에 값을 내지 않는다
-psql -d stock_screener -At -c "WITH f AS (SELECT s.id FROM stock s JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE s.industry_division IN ('65','66')), z AS (SELECT count(*) n FROM indicator_value iv WHERE iv.indicator_code = 'ALTMAN_Z' AND iv.stock_id IN (SELECT id FROM f)) SELECT CASE WHEN (SELECT count(*) FROM stock WHERE industry_code IS NOT NULL) = 0 THEN '잴 것이 없었다 — 업종이 하나도 적재되지 않았다' WHEN (SELECT count(*) FROM f) = 0 THEN '잴 것이 없었다 — 65·66 중분류 종목이 편입되어 있지 않다' WHEN (SELECT n FROM z) = 0 THEN 'OK 보험·금융서비스 ' || (SELECT count(*) FROM f) || '종목에 ALTMAN_Z 행이 없다' ELSE '보험·금융서비스 종목에 ALTMAN_Z가 ' || (SELECT n FROM z) || '행 남아 있다 — 계산기는 제외하는데 저장된 행이 지워지지 않았다. 필수 조건이 옛 값으로 계속 통과한다' END"
+psql -d stock_screener -At -c "WITH f AS (SELECT s.id FROM stock s JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE s.industry_division_key IN ('KSIC:65','KSIC:66')), z AS (SELECT count(*) n FROM indicator_value iv WHERE iv.indicator_code = 'ALTMAN_Z' AND iv.stock_id IN (SELECT id FROM f)) SELECT CASE WHEN (SELECT count(*) FROM stock WHERE industry_group_key IS NOT NULL) = 0 THEN '잴 것이 없었다 — 업종이 하나도 적재되지 않았다' WHEN (SELECT count(*) FROM f) = 0 THEN '잴 것이 없었다 — KSIC 65·66 중분류 종목이 편입되어 있지 않다' WHEN (SELECT n FROM z) = 0 THEN 'OK 보험·금융서비스 ' || (SELECT count(*) FROM f) || '종목에 ALTMAN_Z 행이 없다' ELSE '보험·금융서비스 종목에 ALTMAN_Z가 ' || (SELECT n FROM z) || '행 남아 있다 — 계산기는 제외하는데 저장된 행이 지워지지 않았다. 필수 조건이 옛 값으로 계속 통과한다' END"
 ```
 
-**중분류 64를 빼고 재는 것이 요점이다.** 64에는 값이 있어야 정상인 비금융 사업지주가
+**중분류 `KSIC:64`를 빼고 재는 것이 요점이다.** 64에는 값이 있어야 정상인 비금융 사업지주가
 21종목 들어 있어, 그것까지 위반으로 세면 이 전제는 <b>영원히 거짓을 알린다.</b>
 
 **날짜를 고정하지 않는 것도 요점이다.** 최신 일자만 보면 그날 백필이 돌지 않은 상태에서

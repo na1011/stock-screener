@@ -33,6 +33,8 @@ SEC EDGAR로 확정한다. 유니버스 코드는 `US_LISTED` 하나이고 `mark
   허용해 **SEC의 SIC 4자리가 그대로 통과하고**, 통과하면 생성 컬럼이 만들어져 금융업
   판정(`industry_division` 64~66)과 업종 백분위가 **KSIC 종목과 SIC 종목을 한 그룹으로 묶는다.**
   아무 에러도 안 나고 값이 그럴듯하다.
+  **갈 자리는 `stock.sic_code`이고 그 결정은 ADR-0092다** — 이 금지는 그대로 살아 있으며,
+  이제 `ck_stock_ksic_is_not_us`가 **시장으로** 그것을 강제한다.
 - MUST: `universe.code = 'SP500'` 행과 `sp500.csv` 시드, `SeededUniverseDataSource`의 담당
   코드를 유지한다(ADR-0010에서 승계). 비활성으로 내렸을 뿐이며, **지우면
   `universe_membership`의 FK와 테스트 픽스처가 함께 끊긴다.**
@@ -72,7 +74,7 @@ WITH u AS (SELECT is_active FROM universe WHERE code = 'US_LISTED'),
        CASE WHEN NOT EXISTS (SELECT 1 FROM governance_report_row g JOIN stock st ON st.id = g.stock_id
                               WHERE st.market_code = 'US') THEN '거버넌스' END,
        CASE WHEN NOT EXISTS (SELECT 1 FROM stock st
-                              WHERE st.market_code = 'US' AND st.industry_code IS NOT NULL)
+                              WHERE st.market_code = 'US' AND st.sic_code IS NOT NULL)
             THEN '업종' END], NULL) AS missing)
 SELECT CASE
   WHEN (SELECT count(*) FROM u) = 0 THEN '잴 것이 없었다 — US_LISTED 행이 없다(V34 미적용)'
@@ -96,8 +98,16 @@ END"
 
 **데이터 유무로 재는 것은 어댑터 등록 여부의 대리 지표다.** 어댑터가 있어도 아직 안 돌렸으면
 비어 보인다. 그래도 이 축으로 재는 이유는, SQL이 스프링 빈 목록을 볼 수 없고 **비어 있다는
-사실 자체가 켜면 안 되는 이유**로 충분하기 때문이다. 비활성일 때도 목록을 함께 찍어,
-켜기 전에 무엇이 남았는지가 매 세션 보이게 한다.
+사실 자체가 켜면 안 되는 이유**로 충분하기 때문이다.
+
+**MUST NOT: 「비활성일 때도 목록을 찍으니 매 세션 보인다」로 읽지 않는다 — 안 보인다.**
+비활성 갈래의 출력이 `OK`로 시작하고 `check-premises.sh`는 **`OK`를 침묵시킨다**(그 파일 머리가
+그렇게 적는다). 세션 시작에 뜨는 것은 참·발견·판정불가의 **수뿐**이다. 남은 축을 보려면
+이 질의를 **직접 쳐야 한다.** 목록을 함께 찍는 것은 그때 한 번에 읽히게 하는 것이지
+자동 알림이 아니다.
+
+**업종 축이 미국에서 보는 컬럼은 `sic_code`다**(ADR-0092). `industry_code`는 KSIC 전용이라
+미국에서 영원히 NULL이고, 그대로 두면 **적재한 뒤에도 「업종 없음」이라 답한다.**
 
 ## 배경
 

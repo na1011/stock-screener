@@ -240,8 +240,10 @@ AAPL(9월 결산) · MSFT(6월 결산) · JPM(은행) 셋으로 쟀다.
   적재해 보니 **176행 중 1행**만 나왔다 — 형식은 통과하지만 내용이 없다.
   **모집단에서 몇인지는 안 쟀다.**
 - **기업행위.** 분할·배당을 주지 않는다. 미국 `adj_factor`가 전 구간 1인 것과 별개 축이다(ADR-0088).
-- **업종.** `submissions` 엔드포인트에 SIC가 있으나 **이 저장소는 저장하지 않는다** —
-  `stock.industry_code`가 KSIC 전용이고 SIC 4자리가 그 CHECK를 그대로 통과한다(ADR-0086).
+- **업종.** `companyfacts`에는 없다. `submissions`가 주고 **그 축은 열렸다** —
+  계약은 [`sec-edgar-company-profile.md`](./sec-edgar-company-profile.md), 결정은 ADR-0092다.
+  담는 자리는 `stock.sic_code`이며 **`industry_code`는 여전히 KSIC 전용**이다
+  (SIC 4자리가 그 CHECK를 그대로 통과하므로 금지는 살아 있다 — ADR-0086).
 - **XOM이 78KB·94개념으로 다른 대형주의 1/50인 이유.** 매핑은 맞다 — 응답의 `entityName`이
   `Exxon Mobil Corporation`이다. 즉 **CIK를 잘못 붙인 것이 아니라 소스 쪽이 희소하다.**
   왜 희소한지는 **재지 않았다.** 크기만으로 결손을 단정하지 않는다.

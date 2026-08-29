@@ -111,8 +111,8 @@ GET https://paper-api.alpaca.markets/v2/assets
 
 **「없다」와 「아직 안 물었다」를 가르기 위해 적는다.**
 
-- **업종.** 응답에 없다. SEC의 SIC를 쓰더라도 `stock.industry_code`는 KSIC 전용이라
-  **다른 컬럼이거나 다른 판정이어야 한다**(ADR-0086 §규칙).
+- **업종.** 응답에 없다. **SEC `submissions`가 그 자리를 채웠다**(ADR-0092) —
+  담기는 컬럼은 `stock.sic_code`이고 `industry_code`는 여전히 KSIC 전용이다(ADR-0086 §규칙).
 - **상장일.** 없다. `attributes`의 `ipo`는 상태 표시이지 날짜가 아니다.
 - **상장폐지·거래정지·무거래의 구분.** `status`는 활성 여부만 답한다. **마켓 캘린더가
   붙어 휴장은 갈렸지만**(ADR-0091) 나머지는 그대로다 — 거래정지 목록이 없고, `status`가

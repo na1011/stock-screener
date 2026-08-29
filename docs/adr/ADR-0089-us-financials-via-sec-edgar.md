@@ -67,7 +67,8 @@ applies_to:
   파싱이 터져 **404가 `TRANSIENT`**가 된다.
 - **MUST NOT: 우선주를 `.PR<X>` → `-P<X>`로 붙이지 않는다.** 365종목이 더 붙지만 그 CIK가
   보통주와 같아 **발행사 재무가 우선주 행에 실린다.**
-- **MUST NOT: SIC를 `stock.industry_code`에 넣지 않는다**(ADR-0086 승계).
+- **MUST NOT: SIC를 `stock.industry_code`에 넣지 않는다**(ADR-0086 승계). 갈 자리는
+  `stock.sic_code`다(ADR-0092).
 - **MUST NOT: `--skip-price`를 스케줄러·`AdminJobLauncher`에 걸지 않는다.**
 
 ## 검증

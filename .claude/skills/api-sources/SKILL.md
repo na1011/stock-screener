@@ -23,12 +23,18 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 | US | 재무 계정 — XBRL 팩트 | SEC EDGAR | `SEC_EDGAR_USER_AGENT`(**키가 아니라 신원 표시다**) | `datasource/us/SecEdgar*` | [`sec-edgar-financial.md`](../../../docs/api-spec/sec-edgar-financial.md) |
 | US | 기업 행위 — 분할·병합 | Alpaca **Market Data** API | Alpaca와 같은 키 둘 | `datasource/us/AlpacaCorporateActionAdapter` | [`alpaca-corporate-action.md`](../../../docs/api-spec/alpaca-corporate-action.md) |
 | US | 세션 달력 — 봉 결측 판정의 근거 | Alpaca **Trading** API | Alpaca와 같은 키 둘 | `datasource/us/AlpacaMarketCalendarAdapter` | [`alpaca-calendar.md`](../../../docs/api-spec/alpaca-calendar.md) |
+| US | 업종(SIC)·결산월 | SEC EDGAR | `SEC_EDGAR_USER_AGENT` | `datasource/us/SecEdgarCompanyProfileAdapter` | [`sec-edgar-company-profile.md`](../../../docs/api-spec/sec-edgar-company-profile.md) |
 
-**미국은 유니버스·시세·재무·기업행위 넷이 열려 있고 거버넌스·업종이 남았다**(ADR-0086·0088·0089·0090).
-**그래서 `US_LISTED`는 아직 못 켠다** — 다만 **이유가 바뀌었다**. 배치를 죽이던 관문
-(`CorporateActionJob.requireSources`)은 ADR-0090이 닫았고, 지금 남은 것은 **거버넌스·업종
-어댑터가 없어 그 두 잡이 매 실행 8,504건 부분 실패를 남기는 것**이다. 무엇이 비었는지는
-ADR-0086의 premise가 축별로 수로 답한다.
+**미국은 유니버스·시세·재무·기업행위·업종 다섯이 열려 있고 거버넌스가 남았다**
+(ADR-0086·0088·0089·0090·0092).
+**그래서 `US_LISTED`는 아직 못 켠다** — 다만 **이유가 계속 좁아졌다**. 배치를 죽이던 관문
+(`CorporateActionJob.requireSources`)은 ADR-0090이 닫았고, 업종은 ADR-0092가 닫았다.
+지금 남은 것은 **거버넌스·전체재무제표 어댑터가 없어 그 두 잡이 매 실행 8,504건 부분 실패를
+남기는 것**이다. 무엇이 비었는지는 ADR-0086의 premise가 축별로 수로 답한다.
+
+**거버넌스는 다른 축들과 성격이 다르다** — DART 전용 엔드포인트 여덟에 걸려 있어 미국에
+대응 소스가 아직 없다. 「어댑터를 안 만들었다」가 아니라 **소스를 안 찾았다**이며,
+그것을 할지는 사용자 판단이다(`docs/progress.md`).
 소스가 늘면 이 표에 **행을 더하고** `docs/api-spec/`에 파일을 만든다 — **파일명이 말하는 것은 소스가 아니라 축이다.**
 한 소스가 여러 축을 주면 축마다 파일이 하나다(DART가 넷이다). 그래야 한 파일을 열었을 때 그 축의
 계약이 거기 다 있다.
@@ -64,7 +70,7 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | `company_tickers_exchange.json` (SEC) | **사용 중** | `SecTickerCikCache` javadoc | 실행당 1 |
 | `/v1/corporate-actions` (Alpaca) | **사용 중** | `alpaca-corporate-action.md` | 종목당 1(구간조회). **묶지 않는다** — `limit`이 전체 기준이라 묶으면 한 종목의 결측과 묶음 전체의 절단이 같은 모양이 된다 |
 | `/v3/calendar` (Alpaca **Trading**) | **사용 중** | `alpaca-calendar.md` | **거래소당 1 = 2**. 창과 무관하다 — 11년치가 한 응답이고 페이징이 없다 |
-| `submissions` (SEC) | **미착수** | — | 미국에 남은 축이다 |
+| `submissions` (SEC) | **사용 중** | `sec-edgar-company-profile.md` | **종목당 1** — 업종·결산월 넷을 위해 평균 385KB를 받는다(공시 이력이 함께 온다). 필드를 고르는 파라미터가 없다 |
 
 ### 받았지만 아직 안 쓰는 넷
 
