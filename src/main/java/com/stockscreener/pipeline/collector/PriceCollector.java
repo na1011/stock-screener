@@ -74,7 +74,19 @@ public class PriceCollector {
         }
 
         if (bars.isEmpty()) {
-            log.debug("수집된 시세가 없다. stockId={} {} ~ {} — 휴장이거나 거래정지일 수 있다.",
+            // MUST NOT: debug로 내리지 않는다. application.yaml에 logging.level 설정이 없어
+            // 기본이 INFO이고, debug면 이 줄은 **어디에도 안 찍힌다** — 종목 하나가 창 전체에서
+            // 빈 것을 볼 수 있는 자리가 여기뿐인데 그렇게 되면 그 상태가 통째로 무증상이 된다.
+            // DailyUpdateJob의 결손 알림은 **대상일 전 시장 합계가 0**일 때만 울어 종목 하나를
+            // 못 본다.
+            //
+            // 소음이 아니다: 활성 편입 종목 중 최근 15일 창이 빈 것이 3종목이다(2026-08-27 기준,
+            // 셋 다 08-28 신규 편입이라 아직 봉이 없다). 거래정지 종목은 대개 유니버스 밖이다.
+            //
+            // 미국은 이 줄이 아니라 세션 달력이 답한다 — 짧은 응답(252 대신 240)은 여기서
+            // 안 보이고 bar-gap-review의 SESSION_WITHOUT_BAR가 잡는다(ADR-0091).
+            // **국내에는 그 달력이 없어 이 줄이 유일한 신호다.**
+            log.info("수집된 시세가 없다. stockId={} {} ~ {} — 휴장이거나 거래정지일 수 있다.",
                     security.stockId(), from, to);
         }
         return written;
