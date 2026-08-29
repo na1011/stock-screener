@@ -1,0 +1,292 @@
+package com.stockscreener.pipeline.datasource.us;
+
+import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.RawFinancialReport;
+import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
+import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
+import com.stockscreener.pipeline.datasource.http.TokenBucketRateLimiter;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
+
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * {@link SecEdgarFinancialAdapter}의 재구성 규칙을 잠근다.
+ *
+ * <p>MockWebServer를 쓰는 이유는 실제 소켓을 열어 {@code RestClient}를 통과시키기 위해서다.
+ * {@code RestClient}를 목킹하면 <b>봉투 판별과 상태코드 처리가 전혀 검증되지 않는다.</b>
+ *
+ * <p>픽스처는 손으로 만든 것이고 <b>{@link SecEdgarProbeLiveTest}가 실측한 모양</b>을 담았다 —
+ * 같은 종료일의 여러 기간 길이 · 값 그대로의 재보고 · 보고서마다 갈리는 후보 태그 ·
+ * 3자가 아닌 단위 키 · 기말보다 뒤인 표지 주식수 · 정기보고서가 아닌 {@code form}.
+ * 그 하나하나가 <b>없으면 에러 없이 틀리는</b> 자리다.
+ */
+class SecEdgarFinancialAdapterTest {
+
+    private static final SecurityRef FIX = new SecurityRef(1L, "US", "FIX");
+    private static final int FROM = 2020;
+
+    private MockWebServer server;
+
+    @BeforeEach
+    void startServer() throws IOException {
+        server = new MockWebServer();
+        server.start();
+    }
+
+    @AfterEach
+    void stopServer() throws IOException {
+        server.shutdown();
+    }
+
+    @Test
+    @DisplayName("회계연도는 보고서에서, 기간 구분은 길이에서 온다 — 같은 종료일의 누적은 라벨이 안 된다")
+    void labelsPeriodsByDurationLength() throws Exception {
+        List<RawFinancialReport> reports = fetch();
+
+        assertThat(reports).extracting(RawFinancialReport::fiscalPeriod)
+                .as("9개월 누적이 Q3와 같은 종료일이지만 라벨이 되면 안 된다")
+                .containsExactlyInAnyOrder("Q1", "Q2", "Q3", "Q4", "FY", "FY");
+        assertThat(reports).allSatisfy(r ->
+                assertThat(r.fiscalYear()).as("라벨의 회계연도는 보고서가 준다").isEqualTo(2023));
+
+        RawFinancialReport q3 = of(reports, "Q3");
+        assertThat(q3.periodStart()).isEqualTo(LocalDate.of(2023, 7, 1));
+        assertThat(q3.periodEnd()).isEqualTo(LocalDate.of(2023, 9, 30));
+        assertThat(q3.revenue()).as("3개월 값이어야 한다 — 9개월 누적 330이 아니다")
+                .isEqualByComparingTo(new BigDecimal("120"));
+    }
+
+    @Test
+    @DisplayName("값이 그대로인 재보고는 정정이 아니다 — 접지 않으면 지표가 보존 창째 지워진다")
+    void foldsUnchangedRestatements() throws Exception {
+        List<RawFinancialReport> reports = fetch();
+
+        assertThat(reports).filteredOn(r -> "Q1".equals(r.fiscalPeriod()))
+                .as("Q1을 뒤 보고서가 값 그대로 다시 실었다. 판은 하나여야 한다")
+                .hasSize(1);
+        assertThat(of(reports, "Q1").publishedAt())
+                .as("접을 때 남는 것은 그 기간을 자기 기간으로 낸 보고서다")
+                .isEqualTo(LocalDate.of(2023, 4, 20));
+    }
+
+    @Test
+    @DisplayName("값이 달라진 재보고는 정정이다 — 공시일 오름차순으로 낸다")
+    void keepsRealRestatements() throws Exception {
+        List<RawFinancialReport> annual = fetch().stream()
+                .filter(r -> "FY".equals(r.fiscalPeriod())).toList();
+
+        assertThat(annual)
+                .as("정정 둘 중 값이 달라진 하나만 판이 된다 — 값이 같은 재보고는 접힌다")
+                .hasSize(2);
+        assertThat(annual).extracting(RawFinancialReport::publishedAt)
+                .as("MUST: 오름차순이다. 뒤집으면 FinancialWriter가 더 이른 판을 버려 원본이 사라진다")
+                .isSorted();
+        assertThat(annual.get(0).revenue()).isEqualByComparingTo(new BigDecimal("500"));
+        assertThat(annual.get(1).revenue()).isEqualByComparingTo(new BigDecimal("505"));
+        assertThat(annual.get(0).reportCode()).as("정정 추적의 근거").startsWith("10-K:");
+        assertThat(annual.get(1).reportCode()).startsWith("10-K/A:");
+    }
+
+    @Test
+    @DisplayName("보고서마다 후보 태그가 갈려도 정정이 아니다 — 값이 아니라 태그가 바뀐 것이다")
+    void doesNotTreatTagSwitchAsRestatement() throws Exception {
+        List<RawFinancialReport> annual = fetch().stream()
+                .filter(r -> "FY".equals(r.fiscalPeriod())).toList();
+
+        // 픽스처의 첫 정정(10-K/A, 2024-06-01)은 매출이 그대로이고 현금만 다른 후보 태그로
+        // 낸다(300 → 355). 기간마다 태그를 고정하지 않으면 그 차이가 정정으로 읽혀 판이
+        // 셋이 된다. 고정하면 그 보고서는 접히고, 값이 실제로 바뀐 정정만 남는다.
+        assertThat(annual).extracting(RawFinancialReport::publishedAt)
+                .as("2024-06-01 판이 남으면 태그 교체를 정정으로 읽은 것이다")
+                .containsExactly(LocalDate.of(2024, 2, 1), LocalDate.of(2024, 9, 1));
+        assertThat(annual).extracting(RawFinancialReport::cashAndEquivalents)
+                .as("두 판 모두 우선순위가 높은 태그의 값이다")
+                .containsOnly(new BigDecimal("300"));
+    }
+
+    @Test
+    @DisplayName("표지 주식수는 기말보다 뒤여도 받고, 그것이 앵커를 밀지 않는다")
+    void takesCoverPageSharesWithoutMovingTheAnchor() throws Exception {
+        List<RawFinancialReport> reports = fetch();
+
+        assertThat(reports).as("주식수가 앵커를 밀면 보고서가 한 건도 안 나온다").isNotEmpty();
+        assertThat(of(reports, "Q1").sharesOutstanding())
+                .as("PER·PBR의 분모다 — 종료일로 거르면 미국에서 영영 빈다")
+                .isEqualByComparingTo(new BigDecimal("900"));
+        assertThat(of(reports, "Q1").periodEnd())
+                .as("기간은 손익이 정한다. 표지 날짜가 아니다")
+                .isEqualTo(LocalDate.of(2023, 3, 31));
+    }
+
+    @Test
+    @DisplayName("3자가 아닌 단위 키는 금액도 통화도 되지 않는다")
+    void ignoresNonCurrencyUnits() throws Exception {
+        List<RawFinancialReport> reports = fetch();
+
+        assertThat(reports).allSatisfy(r -> assertThat(r.currencyCode())
+                .as("character(3) 컬럼이다. 넘치면 그 종목의 적재가 통째로 롤백된다")
+                .isEqualTo("USD"));
+        assertThat(fetchAnnualLatest(reports).revenue())
+                .as("segment 단위의 5가 매출에 더해지면 안 된다")
+                .isEqualByComparingTo(new BigDecimal("505"));
+    }
+
+    @Test
+    @DisplayName("Q4를 유도한다 — 손익만 차감하고 잔액은 기말 값을 그대로 쓴다")
+    void derivesFourthQuarter() throws Exception {
+        RawFinancialReport q4 = of(fetch(), "Q4");
+
+        assertThat(q4.revenue()).as("정정된 연간에서 뺀다: 505 - (100+110+120)")
+                .isEqualByComparingTo(new BigDecimal("175"));
+        assertThat(q4.netIncome()).as("50 - (10+11+12)")
+                .isEqualByComparingTo(new BigDecimal("17"));
+        assertThat(q4.totalAssets()).as("잔액은 차감하지 않는다 — 차감하면 자산총계가 음수가 된다")
+                .isEqualByComparingTo(new BigDecimal("1100"));
+        assertThat(q4.operatingCashFlow())
+                .as("현금흐름은 연간만 담는다 — Q4에도 담지 않는다").isNull();
+    }
+
+    @Test
+    @DisplayName("현금흐름은 연간 행에만 담는다 — 분기에 담으면 기간이 다른 두 수를 뺀다")
+    void keepsCashFlowAnnualOnly() throws Exception {
+        List<RawFinancialReport> reports = fetch();
+
+        assertThat(of(reports, "Q1").operatingCashFlow())
+                .as("픽스처에 분기 값이 있는데도 담지 않는다").isNull();
+        assertThat(reports).filteredOn(r -> "FY".equals(r.fiscalPeriod()))
+                .allSatisfy(r -> assertThat(r.operatingCashFlow())
+                        .isEqualByComparingTo(new BigDecimal("60")));
+    }
+
+    @Test
+    @DisplayName("정기보고서가 아닌 form은 통째로 무시한다")
+    void ignoresNonPeriodicForms() throws Exception {
+        assertThat(of(fetch(), "Q1").revenue())
+                .as("8-K의 999가 섞이면 안 된다")
+                .isEqualByComparingTo(new BigDecimal("100"));
+    }
+
+    @Test
+    @DisplayName("매핑 파일에 없는 티커는 NOT_FOUND다 — 조용한 0건이 아니다")
+    void unknownTickerIsNotFound() {
+        enqueue(200, fixture("tickers.json"));
+        assertThatThrownBy(() -> adapter()
+                .fetchReports(new SecurityRef(2L, "US", "NOPE"), FROM))
+                .isInstanceOf(DataSourceException.class)
+                .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("404는 NOT_FOUND이고, 그 본문이 XML이어도 판정이 안 바뀐다")
+    void mapsNotFound() {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(404, "<?xml version=\"1.0\"?><Error><Code>NoSuchKey</Code></Error>");
+        assertThatThrownBy(() -> adapter().fetchReports(FIX, FROM))
+                .isInstanceOf(DataSourceException.class)
+                .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("403을 AUTH로 접지 않는다 — 접으면 스로틀 한 번이 배치 전체를 죽인다")
+    void doesNotEscalateForbiddenToAuth() {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(403, "{}");
+        assertThatThrownBy(() -> adapter().fetchReports(FIX, FROM))
+                .isInstanceOf(DataSourceException.class)
+                .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.RATE_LIMITED)
+                .satisfies(e -> assertThat(((DataSourceException) e).fatal())
+                        .as("fatal이면 국내 수집까지 멈춘다").isFalse());
+    }
+
+    @Test
+    @DisplayName("200인데 facts가 없으면 MALFORMED다 — 스펙 변경 신호다")
+    void mapsMissingFactsToMalformed() {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, "{\"cik\":1}");
+        assertThatThrownBy(() -> adapter().fetchReports(FIX, FROM))
+                .isInstanceOf(DataSourceException.class)
+                .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.MALFORMED);
+    }
+
+    @Test
+    @DisplayName("신원 표시가 비면 호출 전에 AUTH로 멈춘다")
+    void requiresUserAgentBeforeCalling() {
+        DataSourceProperties properties = new DataSourceProperties();
+        ExternalApiClientFactory factory = new ExternalApiClientFactory();
+        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("sec-edgar", 0, 0);
+        SecEdgarFinancialAdapter adapter = new SecEdgarFinancialAdapter(factory, properties, limiter,
+                new SecTickerCikCache(factory, properties, limiter, baseUrl(), 1), baseUrl());
+
+        assertThatThrownBy(() -> adapter.fetchReports(FIX, FROM))
+                .isInstanceOf(DataSourceException.class)
+                .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.AUTH);
+        assertThat(server.getRequestCount()).as("호출 전에 멈춘다").isZero();
+    }
+
+    @Test
+    @DisplayName("담당 시장은 US 하나다")
+    void declaresUsOnly() {
+        assertThat(adapter().supportedMarketCodes()).containsExactly(UsMarket.CODE);
+        assertThat(adapter().sourceName()).isEqualTo("sec-edgar");
+    }
+
+    /** 최신 연간 판. 정정이 있으면 뒤엣것이다. */
+    private static RawFinancialReport fetchAnnualLatest(List<RawFinancialReport> reports) {
+        return reports.stream().filter(r -> "FY".equals(r.fiscalPeriod()))
+                .reduce((a, b) -> b).orElseThrow();
+    }
+
+    private List<RawFinancialReport> fetch() throws DataSourceException {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts.json"));
+        return adapter().fetchReports(FIX, FROM);
+    }
+
+    private static RawFinancialReport of(List<RawFinancialReport> reports, String period) {
+        return reports.stream().filter(r -> period.equals(r.fiscalPeriod())).findFirst()
+                .orElseThrow(() -> new AssertionError(period + " 보고서가 없다"));
+    }
+
+    private SecEdgarFinancialAdapter adapter() {
+        DataSourceProperties properties = new DataSourceProperties();
+        properties.getSecEdgar().setApiKey("Test Runner test@example.com");
+        ExternalApiClientFactory factory = new ExternalApiClientFactory();
+        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("sec-edgar", 0, 0);
+        return new SecEdgarFinancialAdapter(factory, properties, limiter,
+                new SecTickerCikCache(factory, properties, limiter, baseUrl(), 1), baseUrl());
+    }
+
+    private String baseUrl() {
+        return server.url("/").toString();
+    }
+
+    private void enqueue(int status, String body) {
+        server.enqueue(new MockResponse()
+                .setResponseCode(status)
+                .setHeader("Content-Type", "application/json;charset=UTF-8")
+                .setBody(body));
+    }
+
+    private static String fixture(String name) {
+        try {
+            return new String(new ClassPathResource("fixtures/sec-edgar/" + name)
+                    .getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("fixture를 읽을 수 없다: " + name, e);
+        }
+    }
+}

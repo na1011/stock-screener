@@ -1,0 +1,582 @@
+package com.stockscreener.pipeline.datasource.us;
+
+import com.stockscreener.pipeline.datasource.RawFinancialReport;
+import tools.jackson.databind.JsonNode;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+
+/**
+ * {@code companyfacts}의 XBRL 팩트를 {@link RawFinancialReport}로 재구성한다.
+ *
+ * <p><b>이 클래스가 이 축의 위험 전부다.</b> DART는 (연도·보고서코드)로 기간이 정해져 오지만
+ * EDGAR는 전 기간 팩트를 한 번에 쏟고 <b>기간·회계연도·정정 여부가 전부 우리 해석</b>이다.
+ * 아래 넷은 전부 <b>에러 없이 그럴듯하게 틀리는</b> 자리이고, 실측이 근거다
+ * ({@code docs/api-spec/sec-edgar-financial.md}).
+ *
+ * <p><b>① {@code fy}/{@code fp}는 그 사실의 기간이 아니라 그것을 실은 보고서를 가리킨다.</b>
+ * FY2024 10-K의 FY2023·FY2022 비교표 팩트도 {@code fy=2024, fp=FY}로 온다 — 실측에서
+ * <b>라벨 70개가 전부 종료일을 둘 이상 갖고 최대 12개</b>였다. 그래서 라벨을 팩트에서 직접
+ * 읽지 않고, <b>보고서가 자기 기간에 붙인 것만</b> 쓴다({@link #anchorsOf}).
+ *
+ * <p><b>② 한 보고서가 자기 종료일에 기간 길이를 둘 이상 싣는다</b>(실측 72개 중 48개).
+ * 10-Q가 누적과 분기 단독을 함께 싣기 때문이다. 그래서 <b>회계연도는 앵커에서, 기간 구분은
+ * 길이에서</b> 가져온다. 저장 키에 기간이 없어({@code uq_fs_latest}) 라벨이 겹치면
+ * <b>제약이 걸리는 것이 아니라 앞 기간의 최신 표시가 조용히 내려간다.</b>
+ *
+ * <p><b>③ 같은 기간이 이후 보고서마다 다시 실리고 공시일은 매번 늦다.</b> 값 비교 없이 내면
+ * 실측 <b>112개 중 107개가 가짜 정정</b>이 되고, 정정 판정은 그 종목의 지표를 보존 창 전체에서
+ * 지운다. <b>그 접기는 여기서만 한다</b> — {@code FinancialWriter}는 공시일만 보고 값을
+ * 비교하지 않는다({@code writeOne}의 정정 갈래).
+ *
+ * <p><b>④ {@code units} 키는 통화가 아니다.</b> 실측에서 3자를 넘는 키가 44종이었고
+ * ({@code pure}·{@code shares}·{@code USD/shares}·{@code segment}…),
+ * {@code financial_statement.currency_code}가 {@code character(3)}라 그대로 담으면
+ * <b>그 종목의 적재가 통째로 롤백된다.</b>
+ *
+ * <p>MUST: 만들 수 없는 기간은 <b>버리고 센다</b>({@link Result#dropped()}).
+ * {@link RawFinancialReport}의 생성자가 던지면 그 종목의 <b>다른 기간까지 전부</b> 못 담는다.
+ */
+final class SecEdgarFacts {
+
+    /**
+     * 정기보고서만 쓴다.
+     *
+     * <p>실측에서 {@code form}에 {@code 8-K} 9,688건과 {@code DEF 14A}가 섞여 있었다.
+     * 그 팩트를 그대로 담으면 기간 계열이 오염된다 — 8-K는 회계기간을 대표하지 않는다.
+     */
+    private static final Set<String> PERIODIC_FORMS = Set.of(
+            "10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A");
+
+    /** 12개월로 보는 폭. 회사마다 52/53주라 며칠씩 다르다. */
+    private static final int ANNUAL_MIN = 350;
+    private static final int ANNUAL_MAX = 380;
+    /** 3개월로 보는 폭. */
+    private static final int QUARTER_MIN = 80;
+    private static final int QUARTER_MAX = 100;
+
+    private SecEdgarFacts() {
+    }
+
+    /** 재구성 결과와, 만들지 못해 버린 수. 버린 수를 안 세면 결손 판정이 서지 않는다. */
+    record Result(List<RawFinancialReport> reports, int dropped) {
+    }
+
+    /** 팩트 하나. 소스가 준 그대로이고 해석은 아래에서 한다. */
+    private record Fact(String accn, LocalDate start, LocalDate end, BigDecimal value,
+                        LocalDate filed, String form, int fiscalYear, String reportedPeriod,
+                        String unit) {
+    }
+
+    /** 한 보고서가 자기 기간에 붙인 라벨. */
+    private record Anchor(String accn, LocalDate end, LocalDate filed, String form,
+                          int fiscalYear, String reportedPeriod) {
+    }
+
+    /** 저장 라벨. {@code financial_statement}의 키와 같은 축이다. */
+    private record Label(int fiscalYear, String period) implements Comparable<Label> {
+        @Override
+        public int compareTo(Label o) {
+            return fiscalYear != o.fiscalYear
+                    ? Integer.compare(fiscalYear, o.fiscalYear) : period.compareTo(o.period);
+        }
+    }
+
+    /** 라벨이 가리키는 실제 기간. 근사하지 않고 팩트의 값을 그대로 쓴다. */
+    private record Window(LocalDate start, LocalDate end) {
+    }
+
+    private record Slot(String accn, LocalDate start, LocalDate end) {
+    }
+
+    /**
+     * 재구성한다.
+     *
+     * @param facts          {@code companyfacts}의 {@code facts} 노드
+     * @param fromFiscalYear 이 회계연도부터. 앞의 것은 만들지 않는다(버린 수에 안 든다)
+     */
+    static Result build(JsonNode facts, int fromFiscalYear) {
+        Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts);
+        Map<String, Anchor> anchors = anchorsOf(byColumn);
+        Map<Label, Window> windows = new TreeMap<>();
+        Map<Label, Anchor> labelAnchors = new LinkedHashMap<>();
+        int dropped = labelPeriods(byColumn, anchors, windows, labelAnchors);
+
+        List<RawFinancialReport> reports = new ArrayList<>();
+        for (Map.Entry<Label, Window> e : windows.entrySet()) {
+            Label label = e.getKey();
+            if (label.fiscalYear() < fromFiscalYear) {
+                continue;
+            }
+            reports.addAll(revisionsOf(label, e.getValue(), labelAnchors.get(label),
+                    byColumn, anchors));
+        }
+        reports.addAll(deriveFourthQuarters(reports, windows, fromFiscalYear));
+        reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
+                .thenComparing(RawFinancialReport::fiscalPeriod)
+                .thenComparing(RawFinancialReport::publishedAt));
+        return new Result(reports, dropped);
+    }
+
+    // ---------- 1. 팩트를 컬럼별로 모은다 ----------
+
+    /**
+     * 컬럼별 팩트. 후보 태그를 <b>뒤에서 앞으로</b> 넣어 우선순위가 높은 태그가 이긴다.
+     *
+     * <p>후보를 하나만 보지 않는 이유는 <b>같은 회사가 연도에 따라 태그를 바꾸기 때문</b>이다 —
+     * 「첫 후보가 있으면 그것만 본다」로 짜면 그 회사의 옛 연도가 통째로 빈다.
+     */
+    private static Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> collect(JsonNode facts) {
+        Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn =
+                new EnumMap<>(SecEdgarColumn.class);
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            // 후보 순서(우선순위)를 유지한다. 아래에서 기간마다 태그 하나를 고를 때 쓴다.
+            Map<String, Map<Slot, Fact>> byTag = new LinkedHashMap<>();
+            for (String candidate : column.candidates()) {
+                boolean dei = candidate.startsWith("dei:");
+                JsonNode tag = facts.path(dei ? "dei" : "us-gaap")
+                        .path(dei ? candidate.substring(4) : candidate);
+                Map<Slot, Fact> slots = new HashMap<>();
+                readUnits(tag, column, slots);
+                if (!slots.isEmpty()) {
+                    byTag.put(candidate, slots);
+                }
+            }
+            byColumn.put(column, byTag);
+        }
+        return byColumn;
+    }
+
+    /** 한 컬럼의 모든 팩트. 태그를 가리지 않는 순회가 필요한 자리에서 쓴다. */
+    private static Iterable<Fact> allFacts(Map<String, Map<Slot, Fact>> byTag) {
+        List<Fact> all = new ArrayList<>();
+        byTag.values().forEach(slots -> all.addAll(slots.values()));
+        return all;
+    }
+
+    private static void readUnits(JsonNode tag, SecEdgarColumn column, Map<Slot, Fact> slots) {
+        for (String unit : tag.path("units").propertyNames()) {
+            if (!column.acceptsUnit(unit)) {
+                continue;
+            }
+            for (JsonNode node : tag.path("units").path(unit)) {
+                String form = node.path("form").asString("");
+                if (!PERIODIC_FORMS.contains(form)) {
+                    continue;
+                }
+                LocalDate end = date(node, "end");
+                LocalDate filed = date(node, "filed");
+                if (end == null || filed == null || !node.has("val")) {
+                    continue;
+                }
+                LocalDate start = date(node, "start");
+                Fact fact = new Fact(node.path("accn").asString(""), start, end,
+                        new BigDecimal(node.path("val").asString("0")), filed, form,
+                        node.path("fy").asInt(0), node.path("fp").asString(""), unit);
+                slots.put(new Slot(fact.accn(), start, end), fact);
+            }
+        }
+    }
+
+    private static LocalDate date(JsonNode node, String field) {
+        String raw = node.path(field).asString("");
+        return raw.isBlank() ? null : LocalDate.parse(raw);
+    }
+
+    // ---------- 2. 보고서가 자기 기간에 붙인 라벨을 찾는다 ----------
+
+    /**
+     * 보고서별 앵커. 그 보고서의 <b>유량 팩트 중 종료일이 가장 늦은 것</b>이 자기 기간이다.
+     *
+     * <p>{@code fy}/{@code fp}를 팩트에서 직접 읽지 않고 여기를 거치는 것이 ①의 처방이다.
+     *
+     * <p><b>IMPORTANT — 유량만 본다.</b> 표지 항목인 주식수는 종료일이 <b>기말이 아니라 제출
+     * 직전 날짜</b>라 기말보다 뒤다. 그것을 함께 세면 앵커의 종료일이 그 날짜로 밀리고,
+     * 그러면 <b>어떤 유량 팩트도 앵커와 안 맞아 보고서가 한 건도 안 나온다.</b>
+     * 실측에서 AAPL이 정확히 그렇게 0건이었다 — 에러 없이 「데이터가 없다」로 보였다.
+     */
+    private static Map<String, Anchor> anchorsOf(
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        Map<String, Anchor> anchors = new LinkedHashMap<>();
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> entry : byColumn.entrySet()) {
+            if (entry.getKey().instant()) {
+                continue;
+            }
+            for (Fact fact : allFacts(entry.getValue())) {
+                anchors.merge(fact.accn(),
+                        new Anchor(fact.accn(), fact.end(), fact.filed(), fact.form(),
+                                fact.fiscalYear(), fact.reportedPeriod()),
+                        (a, b) -> a.end().isAfter(b.end()) ? a : b);
+            }
+        }
+        return anchors;
+    }
+
+    /**
+     * 앵커가 자기 종료일에 실은 <b>기간 길이별로</b> 라벨을 만든다.
+     *
+     * <p>회계연도는 앵커에서, 기간 구분은 길이에서 온다 — 그것이 ②의 처방이다.
+     * 길이가 연도도 분기도 아닌 것(반기·9개월 누적)은 <b>버리고 센다.</b>
+     */
+    private static int labelPeriods(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                    Map<String, Anchor> anchors,
+                                    Map<Label, Window> windows,
+                                    Map<Label, Anchor> labelAnchors) {
+        int dropped = 0;
+        for (Map<String, Map<Slot, Fact>> byTag : byColumn.values()) {
+            for (Fact fact : allFacts(byTag)) {
+                if (fact.start() == null) {
+                    continue;   // 잔액은 라벨을 만들지 않는다. 기간을 만드는 것은 유량이다.
+                }
+                Anchor anchor = anchors.get(fact.accn());
+                if (anchor == null || !fact.end().equals(anchor.end())) {
+                    continue;   // 비교표다. 그 기간은 자기 보고서가 라벨을 준다.
+                }
+                String period = periodOf(fact, anchor);
+                if (period == null) {
+                    dropped++;
+                    continue;
+                }
+                Label label = new Label(anchor.fiscalYear(), period);
+                windows.putIfAbsent(label, new Window(fact.start(), fact.end()));
+                // 앵커가 여럿이면(원본 10-K와 10-K/A) 공시일이 가장 이른 것으로 고정한다.
+                // 실행마다 같은 publishedAt이 나와야 FinancialWriter의 「공시일이 같으면
+                // 아무것도 안 한다」 갈래에 안착한다.
+                labelAnchors.merge(label, anchor,
+                        (a, b) -> a.filed().isAfter(b.filed()) ? b : a);
+            }
+        }
+        return dropped;
+    }
+
+    /** 기간 길이로 {@code FY|Q1~Q4}를 정한다. 소스의 {@code fp}는 분기 번호에만 쓴다. */
+    private static String periodOf(Fact fact, Anchor anchor) {
+        long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
+        if (days >= ANNUAL_MIN && days <= ANNUAL_MAX) {
+            return "FY";
+        }
+        if (days < QUARTER_MIN || days > QUARTER_MAX) {
+            return null;
+        }
+        String reported = anchor.reportedPeriod();
+        if (reported.equals("Q1") || reported.equals("Q2") || reported.equals("Q3")) {
+            return reported;
+        }
+        // 사업보고서가 3개월을 함께 실었다. 그 분기는 4분기다 — 4분기 보고서는 없다.
+        return "Q4";
+    }
+
+    // ---------- 3. 정정을 접는다 ----------
+
+    /**
+     * 한 기간의 보고서들. <b>값이 실제로 달라진 것만</b> 낸다.
+     *
+     * <p>MUST: {@code publishedAt} 오름차순으로 낸다. {@code FinancialWriter}는 받은 순서대로
+     * 처리하고 더 이른 판이 나중에 오면 <b>버리므로</b>, 뒤집으면 정정본이
+     * {@code revision_no = 0}이 되고 원본이 사라진다.
+     */
+    private static List<RawFinancialReport> revisionsOf(Label label, Window window,
+                                                        Anchor labelAnchor,
+                                                        Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                                        Map<String, Anchor> anchors) {
+        // MUST: 컬럼마다 태그를 **기간 단위로 하나** 고정한다.
+        //
+        // 같은 기간을 보고서마다 다른 후보 태그로 내는 일이 실재한다 — 현금이
+        // CashAndCashEquivalentsAtCarryingValue와 CashCashEquivalentsRestrictedCash…로 갈리고
+        // 그 둘은 값이 다르다. 보고서별로 태그를 고르면 **값이 아니라 태그가 바뀐 것**을
+        // 정정으로 읽어, 값이 그대로인데도 판이 쌓인다(실측에서 AAPL 34건 중 절반이 그랬다).
+        Map<SecEdgarColumn, String> tags = chooseTags(window, byColumn);
+
+        List<Anchor> reporters = new ArrayList<>();
+        for (Anchor anchor : anchors.values()) {
+            if (hasAnyValue(anchor, window, tags, byColumn)) {
+                reporters.add(anchor);
+            }
+        }
+        reporters.sort(Comparator.comparing(Anchor::filed).thenComparing(Anchor::accn));
+
+        List<RawFinancialReport> out = new ArrayList<>();
+        Map<SecEdgarColumn, BigDecimal> baseline = null;
+        for (Anchor reporter : reporters) {
+            Map<SecEdgarColumn, BigDecimal> values =
+                    valuesOf(reporter, labelAnchor, label, window, tags, byColumn);
+            String currency = currencyOf(reporter, window, tags, byColumn);
+            if (currency == null) {
+                continue;
+            }
+            // 값이 하나도 없는 판은 보고서가 아니다. 담으면 공시일만 늦은 빈 정정본이 되어
+            // 그 종목의 지표를 지운다. 주식수는 라벨 앵커에서 오므로 판정에서 뺀다 —
+            // 그것만 있는 판은 「그 기간을 보고한 것」이 아니다.
+            boolean empty = true;
+            for (SecEdgarColumn column : SecEdgarColumn.values()) {
+                if (!column.anchoredInstant() && values.get(column) != null) {
+                    empty = false;
+                    break;
+                }
+            }
+            if (empty) {
+                continue;
+            }
+            // MUST: 「달라졌는가」를 둘 다 값이 있는 컬럼으로만 판정한다.
+            //
+            // 뒤 보고서는 비교표라 컬럼이 대개 더 적다. null이 된 것을 「달라졌다」로 읽으면
+            // 값이 그대로인데도 정정본이 쌓이고, 그 판정은 그 종목의 지표를 보존 창 전체에서
+            // 지운다. 실측에서 한 기간을 보고서 112개가 다시 실었고 값이 실제로 달라진 것은
+            // 5개뿐이었다 — 나머지 107개가 전부 가짜 정정이 될 뻔한 자리다.
+            //
+            // 채워 넣지는 않는다. 뒤 보고서가 값을 「더하는」 것은 정정이 아니라 보정이고,
+            // 이 잡은 APPEND_ONLY라 보정 경로가 없다(FinancialWriter.WriteMode).
+            if (baseline != null && !conflicts(baseline, values)) {
+                continue;
+            }
+            baseline = values;
+            out.add(toReport(label, window, reporter, currency, values));
+        }
+        return out;
+    }
+
+    /**
+     * 이 기간에 쓸 태그. 후보 순서대로 보고 <b>그 기간에 값이 있는 첫 태그</b>를 고른다.
+     *
+     * <p>어느 보고서가 냈는지를 보지 않는 것이 핵심이다 — 보고서별로 고르면 같은 기간의
+     * 판마다 태그가 갈려 <b>값이 아니라 태그가 바뀐 것</b>이 정정이 된다.
+     */
+    private static Map<SecEdgarColumn, String> chooseTags(
+            Window window, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        Map<SecEdgarColumn, String> chosen = new EnumMap<>(SecEdgarColumn.class);
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            for (Map.Entry<String, Map<Slot, Fact>> entry : byColumn.get(column).entrySet()) {
+                boolean covers = entry.getValue().values().stream().anyMatch(
+                        f -> column.anchoredInstant()
+                                || (column.instant()
+                                ? f.end().equals(window.end())
+                                : f.end().equals(window.end())
+                                && window.start().equals(f.start())));
+                if (covers) {
+                    chosen.put(column, entry.getKey());
+                    break;
+                }
+            }
+        }
+        return chosen;
+    }
+
+    /** 둘 다 값이 있는 컬럼 중 하나라도 다른가. 한쪽이 null인 것은 다름이 아니다. */
+    private static boolean conflicts(Map<SecEdgarColumn, BigDecimal> a,
+                                     Map<SecEdgarColumn, BigDecimal> b) {
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            BigDecimal x = a.get(column);
+            BigDecimal y = b.get(column);
+            // MUST: BigDecimal.compareTo로 본다. equals는 scale이 달라 같은 수를 다르다고 읽고,
+            // 그 오판 하나가 그 종목의 지표를 보존 창 전체에서 지운다.
+            if (x != null && y != null && x.compareTo(y) != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasAnyValue(Anchor anchor, Window window,
+                                       Map<SecEdgarColumn, String> tags,
+                                       Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            // MUST NOT: 주식수로 「그 기간을 보고했다」를 판정하지 않는다. 그 팩트는 기간을
+            // 묻지 않고 아무 보고서에서나 받으므로, 세면 **모든 보고서가 모든 기간의
+            // 보고자**가 되어 값 하나 없는 판이 라벨마다 쌓인다(실측에서 FY 하나에 10판).
+            if (!column.anchoredInstant()
+                    && factFor(anchor, column, window, tags, byColumn) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 그 보고서가 그 기간에 대해 낸 값.
+     *
+     * <p>유량은 (시작, 종료)가 정확히 맞는 것만, 잔액은 종료일이 맞는 것만 쓴다 —
+     * 「종료일만 같으면 된다」로 두면 <b>3개월 매출에 9개월 현금흐름</b>이 한 행에 앉는다.
+     */
+    private static Fact factFor(Anchor anchor, SecEdgarColumn column, Window window,
+                                Map<SecEdgarColumn, String> tags,
+                                Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        String tag = tags.get(column);
+        if (tag == null) {
+            return null;
+        }
+        Map<Slot, Fact> slots = byColumn.get(column).get(tag);
+        if (column.anchoredInstant()) {
+            // 표지 항목이라 종료일이 기말이 아니다. 같은 보고서에서 왔으면 받는다 —
+            // 이것을 종료일로 거르면 미국 PER·PBR의 분모가 영영 빈다(ADR-0013).
+            return slots.values().stream()
+                    .filter(f -> f.accn().equals(anchor.accn()))
+                    .max(Comparator.comparing(Fact::end))
+                    .orElse(null);
+        }
+        return column.instant()
+                ? slots.get(new Slot(anchor.accn(), null, window.end()))
+                : slots.get(new Slot(anchor.accn(), window.start(), window.end()));
+    }
+
+    /**
+     * 그 판의 값들.
+     *
+     * <p>주식수만 <b>라벨의 앵커</b>에서 가져온다 — 표지 항목이라 보고서마다 값이 다르고,
+     * 판마다 다르게 담으면 <b>값이 그대로인데도 매번 정정</b>이 된다. 그 기간을 자기 기간으로
+     * 낸 보고서가 붙인 수가 그 기간의 주식수다.
+     */
+    private static Map<SecEdgarColumn, BigDecimal> valuesOf(
+            Anchor anchor, Anchor labelAnchor, Label label, Window window,
+            Map<SecEdgarColumn, String> tags,
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        Map<SecEdgarColumn, BigDecimal> values = new EnumMap<>(SecEdgarColumn.class);
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            if (column.annualOnly() && !"FY".equals(label.period())) {
+                // 현금흐름·자본적지출은 연간만 담는다. 분기 커버리지가 고르지 않고
+                // (실측 손익 208 대 현금흐름 28), 잉여현금흐름이 둘의 차이라
+                // 한쪽만 분기에 값이 있으면 기간이 다른 두 수를 빼게 된다.
+                values.put(column, null);
+                continue;
+            }
+            Fact fact = factFor(
+                    column.anchoredInstant() && labelAnchor != null ? labelAnchor : anchor,
+                    column, window, tags, byColumn);
+            values.put(column, fact == null ? null : fact.value());
+        }
+        return values;
+    }
+
+    /**
+     * 행의 통화. <b>3자 ISO 키에서만 뽑는다.</b>
+     *
+     * <p>{@code units} 키에는 {@code pure}·{@code shares}·{@code segment}가 섞여 있고
+     * {@code currency_code}가 {@code character(3)}다. 그대로 담으면 그 종목의 적재가
+     * 통째로 롤백된다. 뽑을 것이 없으면 그 판을 내지 않는다 — 지어내지 않는다.
+     */
+    private static String currencyOf(Anchor anchor, Window window,
+                                     Map<SecEdgarColumn, String> tags,
+                                     Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            if (!column.monetary()) {
+                continue;
+            }
+            Fact fact = factFor(anchor, column, window, tags, byColumn);
+            if (fact != null && fact.unit().length() == 3) {
+                return fact.unit();
+            }
+        }
+        return null;
+    }
+
+    private static RawFinancialReport toReport(Label label, Window window, Anchor anchor,
+                                               String currency,
+                                               Map<SecEdgarColumn, BigDecimal> v) {
+        return new RawFinancialReport(
+                label.fiscalYear(), label.period(), window.start(), window.end(), anchor.filed(),
+                // 정정 추적의 근거. DART 쪽이 rcept_no 컬럼이 없어 못 하던 것이다.
+                "%s:%s".formatted(anchor.form(), anchor.accn()), currency,
+                v.get(SecEdgarColumn.REVENUE), v.get(SecEdgarColumn.OPERATING_INCOME),
+                v.get(SecEdgarColumn.NET_INCOME), v.get(SecEdgarColumn.TOTAL_ASSETS),
+                v.get(SecEdgarColumn.TOTAL_EQUITY), v.get(SecEdgarColumn.TOTAL_LIABILITIES),
+                v.get(SecEdgarColumn.CURRENT_ASSETS), v.get(SecEdgarColumn.CURRENT_LIABILITIES),
+                v.get(SecEdgarColumn.RETAINED_EARNINGS), v.get(SecEdgarColumn.OPERATING_CASH_FLOW),
+                v.get(SecEdgarColumn.SHARES_OUTSTANDING), v.get(SecEdgarColumn.EPS),
+                // bps는 소스가 주지 않는다. 자본총계/주식수로 지표 계층이 계산한다(spec §7).
+                null,
+                v.get(SecEdgarColumn.COST_OF_SALES), v.get(SecEdgarColumn.CASH_AND_EQUIVALENTS),
+                v.get(SecEdgarColumn.CAPEX), v.get(SecEdgarColumn.INVENTORIES));
+    }
+
+    // ---------- 4. Q4를 유도한다 ----------
+
+    /**
+     * Q4 = 사업보고서 − (Q1+Q2+Q3). <b>선택이 아니라 TTM이 요구한다.</b>
+     *
+     * <p>{@code IndicatorDataReader}가 분기 TTM을
+     * {@code fiscal_period <> 'FY' ORDER BY period_end DESC LIMIT 4}로 뽑는다. 4분기 보고서가
+     * 없으므로 Q4 행이 없으면 그 넷이 <b>Q3·Q2·Q1(N) + Q3(N−1)</b>이 되어 다섯 분기에 걸친
+     * 구멍 난 합이 된다 — 값이 그럴듯하고 에러가 없다.
+     *
+     * <p>IMPORTANT — <b>손익만 차감한다.</b> 재무상태표는 시점 잔액이라 차감하면 자산총계가
+     * 음수가 된다. 잔액은 FY 값을 그대로 쓴다({@code DartFinancialAdapter}와 같은 형태다).
+     *
+     * <p>소스가 Q4를 직접 준 회계연도는 건너뛴다 — 사업보고서가 3개월을 함께 싣는 경우가 있다.
+     */
+    private static List<RawFinancialReport> deriveFourthQuarters(
+            List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear) {
+        Map<Integer, RawFinancialReport> annual = new LinkedHashMap<>();
+        Map<Integer, Map<String, RawFinancialReport>> quarters = new LinkedHashMap<>();
+        for (RawFinancialReport report : existing) {
+            if ("FY".equals(report.fiscalPeriod())) {
+                annual.merge(report.fiscalYear(), report,
+                        (a, b) -> a.publishedAt().isAfter(b.publishedAt()) ? a : b);
+            } else {
+                quarters.computeIfAbsent(report.fiscalYear(), y -> new LinkedHashMap<>())
+                        .merge(report.fiscalPeriod(), report,
+                                (a, b) -> a.publishedAt().isAfter(b.publishedAt()) ? a : b);
+            }
+        }
+
+        List<RawFinancialReport> derived = new ArrayList<>();
+        for (Map.Entry<Integer, RawFinancialReport> e : annual.entrySet()) {
+            int year = e.getKey();
+            if (year < fromFiscalYear) {
+                continue;
+            }
+            Map<String, RawFinancialReport> byPeriod =
+                    quarters.getOrDefault(year, Map.of());
+            if (byPeriod.containsKey("Q4")) {
+                continue;
+            }
+            RawFinancialReport q1 = byPeriod.get("Q1");
+            RawFinancialReport q2 = byPeriod.get("Q2");
+            RawFinancialReport q3 = byPeriod.get("Q3");
+            if (q1 == null || q2 == null || q3 == null) {
+                continue;
+            }
+            RawFinancialReport fy = e.getValue();
+            Window window = windows.get(new Label(year, "Q4"));
+            LocalDate start = window != null ? window.start() : q3.periodEnd().plusDays(1);
+            derived.add(new RawFinancialReport(
+                    year, "Q4", start, fy.periodEnd(), fy.publishedAt(), fy.reportCode(),
+                    fy.currencyCode(),
+                    minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue()),
+                    minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
+                            q3.operatingIncome()),
+                    minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()),
+                    // 잔액은 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
+                    fy.totalAssets(), fy.totalEquity(), fy.totalLiabilities(),
+                    fy.currentAssets(), fy.currentLiabilities(), fy.retainedEarnings(),
+                    // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
+                    null, fy.sharesOutstanding(), null, null,
+                    minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales()),
+                    fy.cashAndEquivalents(), null, fy.inventories()));
+        }
+        return derived;
+    }
+
+    /** 하나라도 없으면 null이다. 0으로 대체하면 조용히 틀린 값이 저장된다. */
+    private static BigDecimal minus(BigDecimal total, BigDecimal... parts) {
+        if (total == null) {
+            return null;
+        }
+        BigDecimal result = total;
+        for (BigDecimal part : parts) {
+            if (part == null) {
+                return null;
+            }
+            result = result.subtract(part);
+        }
+        return result;
+    }
+}

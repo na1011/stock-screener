@@ -308,6 +308,7 @@ class SecEdgarProbeLiveTest {
             columnCoverage.put(c, 0);
         });
         List<String> noSharesTag = new ArrayList<>();
+        Map<String, Integer> signs = new TreeMap<>();
         int missingFp = 0;
         int totalFacts = 0;
         long maxBytes = 0;
@@ -344,6 +345,20 @@ class SecEdgarProbeLiveTest {
             }
             if (!dei.has("EntityCommonStockSharesOutstanding")) {
                 noSharesTag.add(symbol);
+            }
+
+            // capex의 부호. 뒤집혀 담기면 잉여현금흐름이 두 배로 부풀고 값이 그럴듯하다(ADR-0067).
+            for (String tag : TAG_CANDIDATES.get("capex")) {
+                for (JsonNode f : usGaap.path(tag).path("units").path("USD")) {
+                    signs.merge(f.path("val").asDouble(0) >= 0 ? "capex 양수" : "capex 음수",
+                            1, Integer::sum);
+                }
+            }
+            for (String tag : TAG_CANDIDATES.get("operating_cash_flow")) {
+                for (JsonNode f : usGaap.path(tag).path("units").path("USD")) {
+                    signs.merge(f.path("val").asDouble(0) >= 0 ? "OCF 양수" : "OCF 음수",
+                            1, Integer::sum);
+                }
             }
 
             // 단위 키·기간 표시는 팩트를 훑어야 나온다. 표본을 줄이려고 us-gaap만 센다.
@@ -388,6 +403,8 @@ class SecEdgarProbeLiveTest {
         }
         System.out.println("  → 앞의 수가 「몇 종목이 그 컬럼을 채울 수 있는가」다.");
         System.out.println("     뒤의 목록만 보면 「표본 어딘가에 있다」로 읽혀 커버리지를 덮는다");
+        System.out.printf("%n부호 분포: %s%n", signs);
+        System.out.println("  → capex가 음수로 오면 포트 계약(유출을 양수 크기로)과 반대다");
         System.out.printf("%ndei:EntityCommonStockSharesOutstanding이 없는 종목 %d개: %s%n",
                 noSharesTag.size(), noSharesTag);
         System.out.println("  → 미국은 시세도 재무도 주식수가 비어 있어 PER·PBR의 분모가 이것뿐이다");

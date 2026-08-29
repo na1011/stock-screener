@@ -124,6 +124,10 @@ GET https://www.sec.gov/files/company_tickers_exchange.json
 **`dei:EntityCommonStockSharesOutstanding`이 없는 종목이 19 중 2**(META·VTEX)이지만,
 주식수 컬럼 자체는 다른 후보가 받아 **19/19**다.
 
+**부호**: `PaymentsToAcquire…`(capex)가 **2,276건 전부 양수**다 — 포트가 요구하는
+「유출을 양수 크기로」와 같다(ADR-0067). 영업활동현금흐름은 양수 2,392 · **음수 232**로,
+음수가 정상 값이다(적자 기업).
+
 ### 기간 재구성 — 이 축의 핵심
 
 AAPL(9월 결산) · MSFT(6월 결산) · JPM(은행) 셋으로 쟀다.
