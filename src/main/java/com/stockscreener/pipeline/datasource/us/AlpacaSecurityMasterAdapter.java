@@ -107,10 +107,14 @@ public class AlpacaSecurityMasterAdapter implements SecurityMasterDataSource {
                     "호출 대기 중 인터럽트됐다. " + context, e);
         }
 
-        ResponseEntity<JsonNode> response;
+        ResponseEntity<String> response;
         try {
             response = client.get().uri("/v2/assets/{symbol}", ticker)
-                    .retrieve().toEntity(JsonNode.class);
+                    // MUST: 문자열로 받는다. 이 계열에는 오류 본문이 JSON이 아닌 엔드포인트가
+                    // 있고(AlpacaResponse), JsonNode로 받으면 상태코드를 보기 전에 변환이 터져
+                    // 404가 TRANSIENT가 된다 — 여기서는 404가 "그 티커를 모른다"라는 정상 갈래라
+                    // 그 오분류가 특히 나쁘다. 이 엔드포인트의 오류 본문 형식은 재보지 않았다.
+                    .retrieve().toEntity(String.class);
         } catch (RuntimeException e) {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
                     "호출에 실패했다. " + context, e);
@@ -126,11 +130,9 @@ public class AlpacaSecurityMasterAdapter implements SecurityMasterDataSource {
                     "HTTP %d. %s".formatted(status, context));
         }
 
-        if (response.getBody() == null) {
-            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
-                    "200인데 본문이 없다 — 스펙이 바뀌었을 수 있다. " + context);
-        }
-        AlpacaAsset asset = AlpacaAsset.from(response.getBody());
+        AlpacaAsset asset = AlpacaAsset.from(
+                AlpacaResponse.requireObject(response.getStatusCode(), response.getBody(),
+                        SOURCE_NAME, context));
         if (!asset.isUsable()) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                     "필수 필드가 빈 자산이 왔다. " + context);

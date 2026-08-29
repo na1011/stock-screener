@@ -180,7 +180,7 @@ public class AlpacaUniverseAdapter implements UniverseDataSource {
                     "호출 대기 중 인터럽트됐다. " + context, e);
         }
 
-        ResponseEntity<JsonNode> response;
+        ResponseEntity<String> response;
         try {
             response = client.get()
                     .uri(uri -> uri.path("/v2/assets")
@@ -189,7 +189,8 @@ public class AlpacaUniverseAdapter implements UniverseDataSource {
                             .queryParam("exchange", EXCHANGES)
                             .build())
                     .retrieve()
-                    .toEntity(JsonNode.class);
+                    // MUST: 문자열로 받는다 — 오류 본문이 JSON이 아닌 엔드포인트가 있다(AlpacaResponse).
+                    .toEntity(String.class);
         } catch (RuntimeException e) {
             // 벤더 예외가 상위로 새지 않게 여기서 감싼다(ADR-0006).
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,

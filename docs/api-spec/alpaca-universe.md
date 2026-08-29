@@ -53,7 +53,7 @@ GET https://paper-api.alpaca.markets/v2/assets
 | `cusip` | **8,504건 전부 없음** |
 | `class` | `us_equity` 하나뿐 |
 | `exchange` | `NYSE` · `NASDAQ` 둘뿐 |
-| 틀린 자격증명 | **HTTP 401** + `{"message": "unauthorized."}` |
+| 틀린 자격증명 | **HTTP 401** + `{"message": "unauthorized."}` — **이 엔드포인트의 본문 형식이다.** 같은 벤더 안에서 갈린다(`alpaca-calendar.md`의 「함정」) |
 
 **`attributes`에 실제로 오는 값 8종** — 전부 거래 속성이다:
 `fractional_eh_enabled` · `has_options` · `ipo` · `options_late_close` · `overnight_halted` ·

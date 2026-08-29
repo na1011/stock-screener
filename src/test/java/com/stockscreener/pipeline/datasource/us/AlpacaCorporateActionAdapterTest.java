@@ -211,6 +211,40 @@ class AlpacaCorporateActionAdapterTest {
     }
 
     @Test
+    @DisplayName("401 본문이 HTML이어도 AUTH다 — JsonNode로 받으면 상태코드를 보기 전에 터져 TRANSIENT가 된다")
+    void mapsUnauthorizedToAuthEvenWhenBodyIsHtml() {
+        // 실측(2026-08-29): 이 엔드포인트의 401 본문은 JSON이 아니라 nginx HTML이고
+        // Content-Type이 text/html이다. 본문을 JsonNode로 받으면 변환이 먼저 터지고,
+        // 그 RuntimeException이 어댑터의 일반 catch에 걸려 인증 실패가 TRANSIENT가 된다 —
+        // 키가 틀린 것이 원인인데 종목마다 「일시 오류」로 기록되고 배치는 부분 성공으로 끝난다.
+        server.enqueue(new MockResponse()
+                .setResponseCode(401)
+                .setHeader("Content-Type", "text/html")
+                .setBody("<html>\n<head><title>401 Authorization Required</title></head>\n"
+                        + "<body><center><h1>401 Authorization Required</h1></center></body>\n</html>"));
+
+        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO))
+                .isInstanceOf(DataSourceException.class)
+                .extracting(e -> ((DataSourceException) e).kind())
+                .as("TRANSIENT면 원인이 우리 키라는 사실이 종목별 실패에 묻힌다")
+                .isEqualTo(DataSourceException.Kind.AUTH);
+    }
+
+    @Test
+    @DisplayName("200인데 JSON이 아니면 MALFORMED다 — 재시도해도 안 되는 것을 재시도로 적지 않는다")
+    void mapsNonJsonSuccessBodyToMalformed() {
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "text/html")
+                .setBody("<html><body>maintenance</body></html>"));
+
+        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO))
+                .isInstanceOf(DataSourceException.class)
+                .extracting(e -> ((DataSourceException) e).kind())
+                .isEqualTo(DataSourceException.Kind.MALFORMED);
+    }
+
+    @Test
     @DisplayName("다른 심볼의 사건은 붙이지 않는다 — 붙이면 엉뚱한 종목의 계수가 틀린다")
     void skipsRowsOfAnotherSymbol() throws Exception {
         enqueue(200, fixture("ca-other-symbol.json"));

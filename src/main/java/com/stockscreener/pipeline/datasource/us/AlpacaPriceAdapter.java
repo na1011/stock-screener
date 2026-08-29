@@ -152,15 +152,13 @@ public class AlpacaPriceAdapter implements PriceDataSource {
         int page = 0;
         do {
             String context = "bars %s %s~%s page=%d".formatted(symbol, from, to, page + 1);
-            ResponseEntity<JsonNode> response = call(symbol, from, end, pageToken, context);
-            JsonNode body = response.getBody();
-            JsonNode barsNode = AlpacaResponse.requireBars(
-                    response.getStatusCode(), body, SOURCE_NAME, context);
-            for (JsonNode node : barsNode.path(symbol)) {
+            ResponseEntity<String> response = call(symbol, from, end, pageToken, context);
+            AlpacaResponse.Envelope envelope = AlpacaResponse.requireBars(
+                    response.getStatusCode(), response.getBody(), SOURCE_NAME, context);
+            for (JsonNode node : envelope.value().path(symbol)) {
                 bars.add(toBar(node, symbol, context));
             }
-            JsonNode next = body.path("next_page_token");
-            pageToken = next.isNull() || next.asString("").isBlank() ? null : next.asString("");
+            pageToken = envelope.nextPageToken();
             page++;
             if (page >= maxPages && pageToken != null) {
                 // MUST NOT: 부분 결과를 반환하지 않는다. PriceCollector가 반환 목록을 완전한
@@ -188,7 +186,7 @@ public class AlpacaPriceAdapter implements PriceDataSource {
         return requested.isBefore(safe) ? requested : safe;
     }
 
-    private ResponseEntity<JsonNode> call(String symbol, LocalDate from, Instant end,
+    private ResponseEntity<String> call(String symbol, LocalDate from, Instant end,
                                           String pageToken, String context)
             throws DataSourceException {
         if (!rateLimiter.hasDailyQuota()) {
@@ -203,7 +201,7 @@ public class AlpacaPriceAdapter implements PriceDataSource {
                     "호출 대기 중 인터럽트됐다. " + context, e);
         }
 
-        ResponseEntity<JsonNode> response;
+        ResponseEntity<String> response;
         try {
             response = client.get()
                     .uri(uri -> {
@@ -222,7 +220,8 @@ public class AlpacaPriceAdapter implements PriceDataSource {
                         return uri.build();
                     })
                     .retrieve()
-                    .toEntity(JsonNode.class);
+                    // MUST: 문자열로 받는다 — 오류 본문이 JSON이 아니다(AlpacaResponse).
+                    .toEntity(String.class);
         } catch (RuntimeException e) {
             // 벤더 예외가 상위로 새지 않게 여기서 감싼다(ADR-0006).
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
