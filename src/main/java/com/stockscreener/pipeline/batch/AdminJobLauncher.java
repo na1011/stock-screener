@@ -114,8 +114,9 @@ public class AdminJobLauncher {
                 // InitialLoadJob을 뺀 근거(한 번에 한도 절반)가 여기엔 없다.
                 //
                 // MUST: universeCode에 null을 명시한다. 자동 실행은 활성 유니버스만 돈다 —
-                // US_LISTED를 켜는 날 이 버튼의 대상이 6,689종목이 되고, 그때는
-                // governance-load를 화면에서 뺀 근거(ADR-0092 · 7,700콜)가 여기에 걸린다.
+                // US_LISTED를 켜는 날 이 버튼의 대상이 2,238종목(실제 콜 423)이 되고,
+                // 그때는 governance-load를 화면에서 뺀 근거(ADR-0092 · 7,700콜)가 여기에 걸린다.
+                // 수의 출처는 StockRegistrar.activeUniverseMemberIdsWithoutIndustry의 javadoc이다.
                 CompanyProfileJob.JOB_NAME,
                 request -> companyProfileJob.run(
                         request.orDefault(request.targetDate(), LocalDate.now()),

@@ -62,22 +62,24 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 
 파일럿은 **2024년 11종목**만 넣었다. 그 창을 고른 이유가 곧 전량 적재의 선행 조건이다.
 
-**`price_daily`의 거래일을 시장으로 안 가르고 세는 자리가 다섯이다** — `PriceCalendar`의
-`latestTradeDateOnOrBefore`·`earliestTradeDate`·`countOn`, `IndicatorRetentionPolicy.writeCutoff`,
-`IndicatorBackfillJob.tradeDatesBetween`. **국내가 휴장이고 미국이 개장한 날**이 전역
-「거래일」이 되면 지표 기준일·보존 경계·결손 판정·백필 대상이 **함께** 밀린다.
+**거래일을 시장으로 가르는 것은 ADR-0093이 했다 — 하나만 남았다.**
+`PriceCalendar`의 셋 · `IndicatorRetentionPolicy.writeCutoff`·`purge` ·
+`IndicatorBackfillJob`의 보존 경계 판정 · `DailyUpdateJob`의 알림 둘과 `asOf` · 워치리스트가
+전부 시장별이다. **남은 것은 화면 기준일(`IndicatorCalendar`·`AsOfResolver`)이고, 여는 조건은
+ADR-0093 §결과가 적는다** — `indicator_value`에 `stock`을 조인하면 0.099ms가 1,207ms가 되는데
+그것이 요청마다 도는 질의다.
 
-**거기에 둘이 더 있다 — 지금은 안 닿지만 미국이 일일 갱신에 들어오면 닿는다.**
-`DailyUpdateJob.alertIfNothingArrived`가 `countOn`을 전 시장 합계로 보므로 **국내 시세 결손
-알림이 원리적으로 발화하지 않게 되고**, `MarketCalendar.isWeekend`는 javadoc이 *"시장의
-시간대로 판단해야 한다"*고 적었는데 구현은 `LocalDate`의 요일만 본다. 다섯이 아니라 **일곱이다.**
+**남은 하나가 무엇을 막고 있는가**: 미국 지표가 한 행이라도 생기면, 국내 휴장·미국 개장일에
+화면 기준일이 미국 날짜가 되어 **국내 전 프리셋이 「조건에 맞는 종목이 없다」**가 된다.
+지금은 미국 `indicator_value`가 0행이고 백필이 활성 유니버스만 보므로 안 닿는다 —
+**`US_LISTED`를 켜거나 미국에 백필을 돌리기 전에 정해야 한다.**
 
 - 보존창(최근 180거래일) 안의 국내 휴장 평일 **13일 중 미국 개장이 9일**이다(2026-08-29 실측).
-- 최근 구간을 적재하면 `writeCutoff`가 그만큼 뒤로 밀리고, **`purge()`는 `indicator_value`
-  기준이라 그 어긋남이 자연 소멸하지 않는다** — ADR-0045의 premise가 원인을 틀리게 가리키며
-  상시 발화한다.
 - 2024년 창은 현재 181번째 거래일(2025-12-01)보다 과거라 그 집합에 못 들어온다. **피한 것이지
-  고친 것이 아니다.**
+  고친 것이 아니다** — 최근 구간을 적재하면 그 회피가 끝난다.
+- **`MarketCalendar.isWeekend`는 고칠 자리가 아니다.** 주어진 `LocalDate`의 요일은 시간대와
+  무관하다. 시간대가 걸리는 곳은 「어제」를 정하는 `DailyUpdateJob.targetDateFor`이고, 지금은
+  15일 창이 흡수한다(ADR-0042).
 
 **적재 뒤 첫 확인은 봉 수가 아니라 경계다:**
 
@@ -93,6 +95,8 @@ psql -d stock_screener -At -c "SELECT min(trade_date) FROM
 
 **켜면 `company-profile`의 기본 대상도 함께 넓어진다** — 지금은 `universe.is_active` 조인이
 미국을 막고 있어 평소 0콜이지만, 켜는 순간 업종이 빈 미국 종목이 전부 대상이 된다.
+**대상 2,238종목·실제 콜 423**이고(2026-08-30 실측 — 6,266은 ADR-0092가 이미 채웠다),
+그중 **1,815는 CIK에 안 붙어 영원히 결손으로 남아 매 실행 다시 대상이 된다.**
 `AdminJobLauncher`의 「전량이어도 350콜」 주석이 그때 거짓이 된다.
 
 ## 미국 기업 행위와 계수 (ADR-0090)
@@ -137,7 +141,7 @@ psql -d stock_screener -At -c "SELECT min(trade_date) FROM
 
 **`--reload-existing=true`가 없으면 대상이 0건이 되고 잡이 성공으로 끝난다** — 유니버스
 경로는 티커로 좁힌 **뒤에** 봉이 있는 종목을 걸러낸다. `--skip-price`가 없으면 최근 봉이
-함께 들어와 위의 일곱 자리가 밀린다.
+함께 들어와 위의 화면 기준일이 밀린다.
 
 **`KIM.PRL`처럼 SEC 매핑 파일에 없는 티커는 `NOT_FOUND`로 실패한다 — 정상이다.**
 우리 8,504 중 1,815가 거기 없다(ETF·펀드 1,332, 우선주·워런트·유닛 483).

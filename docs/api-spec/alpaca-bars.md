@@ -126,6 +126,35 @@ page 10~13: NVDA만            (13페이지에서 next_page_token=null)
   재무 쪽으로 폴백한다(ADR-0013).
 - **거래대금.** 없다. `close × volume`으로 합성하지 않는다 — 시간외·단주가 거래량에만 더해져
   다른 값이 된다(가이드 §3.7①). `vw`(VWAP)도 대용이 아니다.
+- **상장주식수.** 없다. `price_daily.listed_shares`가 미국 전 행 NULL이다(ADR-0013 §검증이
+  그래서 시장으로 좁혀 센다).
+
+### 그 둘이 없어서 미국에서 값이 안 나는 지표 — 실측 (2026-08-30)
+
+**MUST: 「미국은 지표가 아직 없다」로 뭉뚱그리지 않는다.** 아래는 데이터가 들어와도 안 나는
+것들이고, 원인이 소스 계약이라 적재로 해결되지 않는다.
+
+| 지표 | 왜 |
+|---|---|
+| `TURNOVER_60` | `trade_value` 부재. **합성은 위에서 이미 기각했다** — 다시 열지 마라 |
+| `MARKET_CAP` · `TURNOVER_RATIO` · `SHARES_GROWTH_3Y` · `EPS_CAGR_5Y` · `EPS_GROWTH_TTM_YOY` · `RETAINED_TO_MARKET_4Y` | 봉의 주식수만 쓰고 **재무 폴백을 안 탄다**(`IndicatorContext.sharesOn`은 인자가 null이면 null을 낸다). `MarketCapCalculator`는 그 폴백을 MUST NOT으로 막아 뒀고 사유가 국내의 무상증자 구간이다 |
+| `FCF_YIELD` · `NCAV_TO_MARKET` · `ALTMAN_Z` | 위 `MARKET_CAP`에 의존한다 |
+
+**재무 폴백을 타는 것은 `PbrCalculator` 하나다.** ADR-0013 §규칙이 *"시세에 없으면 재무 쪽을
+쓴다"*를 MUST로 정했고 *"소스에 따라 재무 쪽에만 있을 수 있다"*로 이 상황을 예고했는데,
+그 폴백이 실제로 깔린 계산기가 하나뿐이다.
+
+**그래서 필수 게이트를 가진 프리셋 셋이 미국에서 영구 0건이다** — 버핏(`MARKET_CAP` 하한 +
+`TURNOVER_60`) · 린치 고성장(`EPS_CAGR_5Y` + `MARKET_CAP` 상한 + `TURNOVER_60`) ·
+린치 대형우량(`MARKET_CAP` 하한 + `EPS_CAGR_5Y`). **판정불가는 충족이 아니다**
+(`ConditionEvaluator.satisfiesRequired`가 일부러 그렇게 정했다).
+
+**주식수를 SEC에서 가져오면 해상도가 갈린다.** 국내는 소스가 봉마다 주고 실제로 350종목 중
+**183**이 최근 1년에 값이 바뀌었다. 미국은 보고 기간마다 값 하나뿐이라 약 63거래일에 한 값을
+펴야 하고, 그 사이 자사주 매입만큼 시총이 크게 나온다 — AAPL 실측으로 2023 Q4
+15,552,752,000 → 2026 Q3 14,594,180,000(**분기당 약 0.6%**).
+**BRK.A·BRK.B는 그 주식수마저 전량 NULL이다**(같은 18행에서 매출·순이익·자본은 다 온다 —
+클래스 A/B 이중 구조라 단일 태그가 안 맞는다). **모집단 커버리지는 안 쟀다.**
 - **분할·배당.** 이 엔드포인트는 주지 않는다. `/v1/corporate-actions`가 따로 있고
   **붙였다**(ADR-0090 · [`alpaca-corporate-action.md`](./alpaca-corporate-action.md)) —
   분할·병합만 담고 배당은 안 담는다. 계수는 적재된 구간에 대해서만 1이 아니다.

@@ -164,8 +164,11 @@ public class StockRegistrar {
      * <p><b>결손은 두 컬럼을 함께 본다</b>(ADR-0092). 업종 체계가 시장마다 다르므로
      * {@code industry_code}만 보면 SIC를 채운 미국 종목이 <b>영원히 결손</b>으로 남는다.
      * 지금은 {@code US_LISTED}가 비활성이라 그 종목이 이 질의에 한 건도 안 들어오지만,
-     * <b>켜는 날 매 실행 6,689콜을 다시 태운다</b> — {@code AdminJobLauncher}의 콜 수 주석과
-     * 같은 조건에 걸린 자리다.
+     * <b>켜면 매 실행 2,238종목이 대상이 되고 그중 423종목에 실제 콜이 나간다</b>
+     * (2026-08-30 실측 — 미국 8,504 중 6,266이 이미 {@code sic_code}를 받았고, 남은 2,238 중
+     * 1,815는 CIK에 안 붙어 HTTP 콜이 0이다). <b>그 1,815는 영원히 결손으로 남아 매 실행 다시
+     * 대상이 된다</b> — 실패가 아니라 그 종목에 SEC 서류가 없는 것이다.
+     * {@code AdminJobLauncher}의 콜 수 주석과 같은 조건에 걸린 자리다.
      */
     public List<Long> activeUniverseMemberIdsWithoutIndustry() {
         return jdbcTemplate.queryForList("""
