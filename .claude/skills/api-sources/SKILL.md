@@ -58,7 +58,8 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | `/v2/stocks/bars` (Alpaca Market Data) | **사용 중** | `alpaca-bars.md` | 종목당 1(구간조회). **묶지 않는다** — 실패 격리의 단위가 종목이 아니게 된다 |
 | `/api/xbrl/companyfacts` (SEC EDGAR) | **사용 중** | `sec-edgar-financial.md` | **종목당 1** — 전 기간이 한 응답에 온다. 대신 **한 종목이 78KB~7.9MB**이고 전량이 약 29GB다 |
 | `company_tickers_exchange.json` (SEC) | **사용 중** | `SecTickerCikCache` javadoc | 실행당 1 |
-| `/v1/corporate-actions` (Alpaca) · `/v3/calendar` (Alpaca) · `submissions`(SEC) | **미착수** | — | 미국에 남은 축이다 |
+| `/v1/corporate-actions` (Alpaca) | **탐침만** — 계약은 다 쟀고 어댑터가 없다 | `alpaca-corporate-action.md` | 종목당 1(구간조회). **묶지 않는다** — `limit`이 전체 기준이라 묶으면 한 종목의 결측과 묶음 전체의 절단이 같은 모양이 된다 |
+| `/v3/calendar` (Alpaca) · `submissions`(SEC) | **미착수** | — | 미국에 남은 축이다 |
 
 ### 받았지만 아직 안 쓰는 넷
 
