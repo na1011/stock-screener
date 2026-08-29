@@ -7,6 +7,9 @@ applies_to:
   - "src/main/java/com/stockscreener/pipeline/datasource/CollectedMarkets.java"
   - "src/main/java/com/stockscreener/pipeline/collector/StockRegistrar.java"
   - "src/main/java/com/stockscreener/pipeline/batch/InitialLoadJob.java"
+  # 시장을 안 가르고 price_daily의 거래일을 세는 자리. 전량 적재의 선행 조건이다(§결과).
+  - "src/main/java/com/stockscreener/pipeline/collector/PriceCalendar.java"
+  - "src/main/java/com/stockscreener/indicator/IndicatorRetentionPolicy.java"
   - "docs/api-spec/alpaca-bars.md"
 ---
 

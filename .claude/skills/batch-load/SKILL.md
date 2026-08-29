@@ -56,6 +56,33 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 | `corporate-action-judge` | 원장 판정 — 상태와 값을 사람이 준다 | **외부 호출 0.** `--ca-id` 필수. 검증은 전부 `CorporateActionLedger.judge`가 한다(HTTP 경로와 같은 문). **판정해도 계수는 안 바뀐다** — `adjustment-rebuild` → `backfill`이 뒤따라야 끝나고, 잡이 그 명령을 찍어 준다. 실패하면 실행 행을 아예 안 연다(사람의 오타가 운영자 알림을 타면 안 된다). ADR-0084 |
 | `backfill` | 지표 계산 | 지정한 구간을 **날짜별로 반복**한다. `--tickers`로 종목을 좁혀도 **백분위·업종 상대값은 전 종목에서 나온다.** 그리고 **백분위(`*_PCTL`)는 돌린 날짜에만 생긴다** — 원본 지표는 실행 한 번에 수백 일자를 채우는데 백분위는 그날 하루뿐이라, 새 백분위를 더한 뒤 과거 날짜를 열면 **원본은 있는데 순위가 없다** |
 
+## 미국 전량 적재 전에 닫아야 하는 것 (ADR-0088)
+
+파일럿은 **2024년 11종목**만 넣었다. 그 창을 고른 이유가 곧 전량 적재의 선행 조건이다.
+
+**`price_daily`의 거래일을 시장으로 안 가르고 세는 자리가 다섯이다** — `PriceCalendar`의
+`latestTradeDateOnOrBefore`·`earliestTradeDate`·`countOn`, `IndicatorRetentionPolicy.writeCutoff`,
+`IndicatorBackfillJob.tradeDatesBetween`. **국내가 휴장이고 미국이 개장한 날**이 전역
+「거래일」이 되면 지표 기준일·보존 경계·결손 판정·백필 대상이 **함께** 밀린다.
+
+- 보존창(최근 180거래일) 안의 국내 휴장 평일 **13일 중 미국 개장이 9일**이다(2026-08-29 실측).
+- 최근 구간을 적재하면 `writeCutoff`가 그만큼 뒤로 밀리고, **`purge()`는 `indicator_value`
+  기준이라 그 어긋남이 자연 소멸하지 않는다** — ADR-0045의 premise가 원인을 틀리게 가리키며
+  상시 발화한다.
+- 2024년 창은 현재 181번째 거래일(2025-12-01)보다 과거라 그 집합에 못 들어온다. **피한 것이지
+  고친 것이 아니다.**
+
+**적재 뒤 첫 확인은 봉 수가 아니라 경계다:**
+
+```bash
+psql -d stock_screener -At -c "SELECT min(trade_date) FROM
+  (SELECT DISTINCT trade_date FROM price_daily ORDER BY trade_date DESC LIMIT 181) x"
+```
+
+그리고 **`US_LISTED`를 켜는 것은 또 다른 문제다** — 재무·기업행위 어댑터가 없으면
+`CorporateActionJob`이 루프 앞에서 `failFatally`로 끝나 **국내 수집까지 멈춘다.**
+무엇이 비어 있는지는 ADR-0086의 premise가 축별로 답한다.
+
 ## 조용히 아무 일도 하지 않는 조합
 
 **`--reload-existing=true`가 없으면 기존에 봉이 하나라도 있는 종목은 건너뛴다.** 기간을
