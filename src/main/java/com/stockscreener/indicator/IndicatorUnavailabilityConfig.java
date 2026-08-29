@@ -161,12 +161,15 @@ public class IndicatorUnavailabilityConfig {
      * "지표가 뜻을 잃는 업종"이라 64를 뺐고(지주회사가 섞여 있다), 이쪽은 "재료가 오지 않는
      * 업종"이라 64가 들어간다 — 지주회사든 은행이든 유동부채가 안 오는 것은 같기 때문이다.
      *
-     * <p><b>원소는 체계 접두가 붙은 키다</b>(ADR-0092). SIC 쪽 집합은 전량 적재 뒤 실측으로
-     * 정한다 — 미국 은행·REIT도 유동/비유동을 안 가르지만(실측 커버리지 15/19)
-     * <b>어느 2자리가 그 집합인지는 값을 받아야 안다.</b>
+     * <p><b>원소는 체계 접두가 붙은 키다</b>(ADR-0092). SIC 쪽은 Division H 전체이며
+     * <b>{@code 66}은 SIC에 존재하지 않는다</b>(실측 6,266종목). 미국 은행·REIT가 유동/비유동을
+     * 안 가른다는 것은 실측이 답했다({@code AssetsCurrent} 커버리지 15/19).
+     * <b>{@code AltmanZCalculator}와 이번에는 SIC 쪽이 같다</b> — KR에서 둘을 가른 근거였던
+     * "값이 실제로 나온 종목" 데이터가 미국에는 아직 없기 때문이고, 생기면 그때 갈린다.
      */
-    private static final Set<String> FINANCIAL_DIVISIONS =
-            Set.of("KSIC:64", "KSIC:65", "KSIC:66");
+    private static final Set<String> FINANCIAL_DIVISIONS = Set.of(
+            "KSIC:64", "KSIC:65", "KSIC:66",
+            "SIC:60", "SIC:61", "SIC:62", "SIC:63", "SIC:64", "SIC:65", "SIC:67");
 
     /**
      * MUST: null을 먼저 거른다. {@code industryDivisionKey}은 <b>업종 미상이면 null</b>이고
