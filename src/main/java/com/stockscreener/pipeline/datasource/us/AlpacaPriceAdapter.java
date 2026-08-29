@@ -87,6 +87,7 @@ public class AlpacaPriceAdapter implements PriceDataSource {
     private final RestClient client;
     private final RateLimiter rateLimiter;
     private final boolean credentialsPresent;
+    private final int maxPages;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -96,18 +97,23 @@ public class AlpacaPriceAdapter implements PriceDataSource {
     public AlpacaPriceAdapter(ExternalApiClientFactory clientFactory,
                               DataSourceProperties properties,
                               @Qualifier("alpacaRateLimiter") RateLimiter rateLimiter) {
-        this(clientFactory, properties, rateLimiter, properties.getAlpacaMarketDataBaseUrl());
+        this(clientFactory, properties, rateLimiter, properties.getAlpacaMarketDataBaseUrl(),
+                MAX_PAGES);
     }
 
-    // MockWebServer 테스트 전용 — base URL을 바꿔 끼운다.
+    // MockWebServer 테스트 전용 — base URL과 페이지 상한을 바꿔 끼운다.
+    // 상한을 주입하는 이유는 51개 응답을 늘어놓지 않고 "부분 결과를 버린다"를 재기 위해서다
+    // (AlpacaUniverseAdapter가 하한을 같은 이유로 주입받는다).
     AlpacaPriceAdapter(ExternalApiClientFactory clientFactory,
                        DataSourceProperties properties,
                        RateLimiter rateLimiter,
-                       String baseUrl) {
+                       String baseUrl,
+                       int maxPages) {
         DataSourceProperties.Source source = properties.getAlpaca();
         this.client = clientFactory.create(source, baseUrl, AlpacaHeaders.of(source));
         this.rateLimiter = rateLimiter;
         this.credentialsPresent = source.hasApiKey() && source.hasSecretKey();
+        this.maxPages = maxPages;
     }
 
     @Override
@@ -156,12 +162,12 @@ public class AlpacaPriceAdapter implements PriceDataSource {
             JsonNode next = body.path("next_page_token");
             pageToken = next.isNull() || next.asString("").isBlank() ? null : next.asString("");
             page++;
-            if (page >= MAX_PAGES && pageToken != null) {
+            if (page >= maxPages && pageToken != null) {
                 // MUST NOT: 부분 결과를 반환하지 않는다. PriceCollector가 반환 목록을 완전한
                 // 구간으로 취급하므로, 잘린 목록은 "그 기간에 데이터가 없다"와 구별되지 않는다.
                 throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                         "페이지가 %d를 넘는다 — 상한을 걸고 부분 결과를 버린다. %s"
-                                .formatted(MAX_PAGES, context));
+                                .formatted(maxPages, context));
             }
         } while (pageToken != null);
 

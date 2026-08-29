@@ -143,6 +143,21 @@ class AlpacaPriceAdapterTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 상한을 넘으면 예외다. 받은 만큼 돌려주면 「데이터 없음」과 같아진다")
+    void discardsPartialResultsWhenPagesExceedTheCap() {
+        // 토큰이 끝나지 않는 응답. 소스가 순환 토큰을 주거나 우리 파라미터가 틀렸을 때의 모양이다.
+        enqueue(200, fixture("bars-page1.json"));
+        enqueue(200, fixture("bars-page1.json"));
+
+        assertThatThrownBy(() -> adapter(2).fetchDailyBars(AAPL, FROM, TO))
+                .isInstanceOf(DataSourceException.class)
+                .extracting(e -> ((DataSourceException) e).kind())
+                .isEqualTo(DataSourceException.Kind.MALFORMED);
+        // PriceCollector가 반환 목록을 완전한 구간으로 취급하므로(ADR-0009), 잘린 목록을
+        // 돌려주면 "그 기간에 데이터가 없다"와 구별되지 않는다.
+    }
+
+    @Test
     @DisplayName("모르는 심볼은 빈 목록이다 — 이 소스는 「봉 없음」과 「종목 모름」을 갈라 주지 않는다")
     void returnsEmptyForSymbolsTheSourceOmits() throws Exception {
         enqueue(200, fixture("bars-unknown-symbol.json"));
@@ -193,7 +208,7 @@ class AlpacaPriceAdapterTest {
     void failsFastWhenSecretMissing() {
         AlpacaPriceAdapter adapter = new AlpacaPriceAdapter(
                 new ExternalApiClientFactory(), properties("test-key-id", ""),
-                new TokenBucketRateLimiter("alpaca", 0, 0), server.url("/").toString());
+                new TokenBucketRateLimiter("alpaca", 0, 0), server.url("/").toString(), 50);
 
         assertThatThrownBy(() -> adapter.fetchDailyBars(AAPL, FROM, TO))
                 .extracting(e -> ((DataSourceException) e).kind())
@@ -221,9 +236,13 @@ class AlpacaPriceAdapterTest {
     }
 
     private AlpacaPriceAdapter adapter() {
+        return adapter(50);
+    }
+
+    private AlpacaPriceAdapter adapter(int maxPages) {
         return new AlpacaPriceAdapter(
                 new ExternalApiClientFactory(), properties("test-key-id", "test-secret"),
-                new TokenBucketRateLimiter("alpaca", 0, 0), server.url("/").toString());
+                new TokenBucketRateLimiter("alpaca", 0, 0), server.url("/").toString(), maxPages);
     }
 
     private static DataSourceProperties properties(String apiKey, String secretKey) {
