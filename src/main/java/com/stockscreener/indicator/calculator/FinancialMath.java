@@ -99,8 +99,26 @@ final class FinancialMath {
      * <p>IMPORTANT — 시세 쪽 값은 {@link IndicatorContext#sharesOn}을 <b>거쳐서</b> 나온다.
      * 그래서 이 메서드가 컨텍스트를 받는다 — 인자로 받지 않으면 호출부마다 보정을 기억해야 하고,
      * 하나만 빠뜨려도 그 지표만 권리락 구간에서 배수만큼 틀린 채 조용히 남는다(ADR-0051).
-     * <b>재무 폴백에는 걸지 않는다</b> — 분기 재무의 주식수는 공시 시점의 값이라 권리락 구간과
-     * 무관하고, 거기 곱하면 이미 신주가 반영된 수에 한 번 더 곱하게 된다.
+     * <b>재무 폴백에 {@code sharesOn}을 걸지 않는다</b> — 분기 재무의 주식수는 공시 시점의 값이라
+     * 권리락 구간과 무관하고, 거기 곱하면 이미 신주가 반영된 수에 한 번 더 곱하게 된다.
+     *
+     * <p><b>대신 재무 폴백에는 {@link IndicatorContext#corporateActionMultiple}을 건다(ADR-0096).
+     * 그 둘은 다른 함수다</b> — {@code sharesOn}은 권리락~신주상장 <b>구간의 계단</b>이고,
+     * 이쪽은 <b>두 시점 사이의 누적 배수</b>다. 재무 주식수는 <b>보고 종료일의 값</b>인데 봉의
+     * 종가는 그 뒤 분할을 이미 반영하므로, 보정 없이 곱하면 그 사이 구간이 배수만큼 틀린다.
+     *
+     * <p><b>실측(NVDA)</b>: 2024-06-10에 종가가 {@code 1,208.88 → 121.79}(10:1 분할)인데 그 시점
+     * 최신 재무는 {@code period_end 2024-04-28}의 <b>2,460,000,000</b>(분할 전)이다. 곱하면
+     * 시가총액이 <b>정확히 1/10</b>이고 다음 보고(2024-08-28 공시)까지 <b>약 55거래일</b> 그대로다.
+     * 결측이 아니라 그럴듯한 숫자라 눈으로는 안 드러난다. 보정하면
+     * {@code 2.46B × 10 = 24.6B}이고 실제 다음 보고값이 24.53B다.
+     *
+     * <p><b>경계의 등호는 {@code corporateActionMultiple}의 것을 그대로 쓴다</b> —
+     * {@code from}(보고 종료일) 당일 사건은 빼고 {@code to}(봉) 당일 사건은 넣는다. 그쪽 javadoc이
+     * 그 방향을 정한 근거는 {@code sharesOn}과의 짝인데, 여기서는 {@code sharesOn}을 안 곱하므로
+     * <b>그 전제가 성립하지 않는다.</b> 보고 종료일 당일에 효력이 생긴 사건은 그 보고서의
+     * 주식수에 이미 반영돼 있다고 보는 것이 옳고, 그래서 같은 방향이 맞다 —
+     * {@code FinancialSharesSplitTest}가 그 하루를 고정한다.
      *
      * @return 양수인 주식수. 양쪽 모두 없거나 0 이하면 null이다.
      */
@@ -110,12 +128,51 @@ final class FinancialMath {
             return context.sharesOn(bar.tradeDate(), bar.listedShares());
         }
         if (!quarters.isEmpty()) {
-            BigDecimal fromFinancials = quarters.get(0).sharesOutstanding();
+            FinancialFigures latest = quarters.get(0);
+            BigDecimal fromFinancials = latest.sharesOutstanding();
             if (fromFinancials != null && fromFinancials.signum() > 0) {
-                return fromFinancials;
+                if (bar == null || latest.periodEnd() == null) {
+                    // 보정할 두 시점 중 하나가 없다. 보정 없이 내는 것이 값을 안 내는 것보다
+                    // 낫다 — 분할이 없는 구간에서는 배수가 1이라 같은 값이다.
+                    return fromFinancials;
+                }
+                return shiftToBar(context, fromFinancials, latest.periodEnd(), bar.tradeDate());
             }
         }
         return null;
+    }
+
+    /**
+     * 보고 종료일의 주식수를 <b>그 봉 시점의 주식수</b>로 옮긴다.
+     *
+     * <p><b>양방향이다.</b> 재무 스냅샷 하나를 읽기 창 전체에 펴는 것이 이 프로젝트의 계약이라
+     * ({@code batch-load} skill: <i>"재무를 쓰는 지표는 실행 한 번이 읽기 창 전체에 값을 쓴다"</i>)
+     * 봉은 보고 종료일보다 <b>앞일 수도 뒤일 수도</b> 있다. 한쪽만 보정하면 반대쪽이 배수만큼
+     * 틀린 채 그럴듯하게 남는다.
+     *
+     * <ul>
+     *   <li>봉이 <b>뒤</b>면 그 사이 분할을 <b>곱한다</b> — 보고 이후 늘어난 주식수를 따라간다.
+     *   <li>봉이 <b>앞</b>이면 <b>나눈다</b> — 그때는 아직 안 늘어난 주식수여야 한다.
+     *       {@link IndicatorContext#corporateActionMultiple} javadoc이 적은
+     *       <i>"두 시점의 주식수를 견줄 때 나눠서 쓴다"</i>가 이 방향이다.
+     * </ul>
+     *
+     * <p><b>보정하지 않으면 미국이 양쪽으로 틀린다.</b> NVDA 실측: 2024-06-10 10:1 분할에서
+     * 뒤쪽 55거래일은 시가총액이 <b>1/10</b>, 분할 전 봉은 최신 재무(24.5B)를 쓰면 <b>10배</b>다.
+     * 국내는 봉의 {@code listed_shares}가 전량 차 있어(실측 NULL 0행) 이 폴백을 <b>타지 않는다.</b>
+     */
+    private static BigDecimal shiftToBar(IndicatorContext context, BigDecimal reportedShares,
+                                         LocalDate periodEnd, LocalDate barDate) {
+        if (barDate.isAfter(periodEnd)) {
+            return reportedShares.multiply(context.corporateActionMultiple(periodEnd, barDate));
+        }
+        BigDecimal multiple = context.corporateActionMultiple(barDate, periodEnd);
+        if (multiple.signum() <= 0) {
+            // 비율이 0 이하인 원장 행은 판정이 거절하지만(CorporateActionLedger.judge),
+            // 여기서 나눗셈이 터지면 그 종목의 지표가 통째로 사라진다.
+            return reportedShares;
+        }
+        return reportedShares.divide(multiple, SCALE, RoundingMode.HALF_UP);
     }
 
     /**

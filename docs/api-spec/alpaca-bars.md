@@ -140,9 +140,15 @@ page 10~13: NVDA만            (13페이지에서 next_page_token=null)
 | `MARKET_CAP` · `TURNOVER_RATIO` · `SHARES_GROWTH_3Y` · `EPS_CAGR_5Y` · `EPS_GROWTH_TTM_YOY` · `RETAINED_TO_MARKET_4Y` | 봉의 주식수만 쓰고 **재무 폴백을 안 탄다**(`IndicatorContext.sharesOn`은 인자가 null이면 null을 낸다). `MarketCapCalculator`는 그 폴백을 MUST NOT으로 막아 뒀고 사유가 국내의 무상증자 구간이다 |
 | `FCF_YIELD` · `NCAV_TO_MARKET` · `ALTMAN_Z` | 위 `MARKET_CAP`에 의존한다 |
 
-**재무 폴백을 타는 것은 `PbrCalculator` 하나다.** ADR-0013 §규칙이 *"시세에 없으면 재무 쪽을
-쓴다"*를 MUST로 정했고 *"소스에 따라 재무 쪽에만 있을 수 있다"*로 이 상황을 예고했는데,
-그 폴백이 실제로 깔린 계산기가 하나뿐이다.
+**재무 폴백을 타는 계산기는 일곱이다(2026-08-30 전수).** `PbrCalculator`가 `sharesOf`를 직접
+부르고, 나머지 여섯은 `FinancialMath.perShareOn`을 거친다 — `PerCalculator` ·
+`EpsTtmCalculator` · `PsrCalculator` · `PerMedian5yCalculator` · `PbrMedian5yCalculator` ·
+`PsrMedian5yCalculator`. **파일명 grep으로는 여섯이 안 잡힌다.** ADR-0013 §규칙이
+*"시세에 없으면 재무 쪽을 쓴다"*를 MUST로 정했고 *"소스에 따라 재무 쪽에만 있을 수 있다"*로
+이 상황을 예고한 것이 실제로 그렇게 깔려 있다.
+
+**그 폴백은 보고 종료일의 주식수를 봉 시점으로 옮긴다**(ADR-0096) — 분할 구간에서 보정하지
+않으면 NVDA 실측으로 시가총액이 1/10 또는 10배가 된다.
 
 **그래서 필수 게이트를 가진 프리셋 셋이 미국에서 영구 0건이다** — 버핏(`MARKET_CAP` 하한 +
 `TURNOVER_60`) · 린치 고성장(`EPS_CAGR_5Y` + `MARKET_CAP` 상한 + `TURNOVER_60`) ·
