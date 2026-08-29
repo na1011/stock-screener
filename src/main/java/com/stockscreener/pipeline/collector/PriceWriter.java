@@ -31,6 +31,21 @@ public class PriceWriter {
     /** {@code adj_close numeric(18,6)}에 맞춘다. 더 정밀하게 계산해도 저장에서 잘린다. */
     private static final int ADJ_CLOSE_SCALE = 6;
 
+    /**
+     * {@code open/high/low/close numeric(18,4)}에 맞춘다.
+     *
+     * <p>IMPORTANT — <b>파생값을 반올림 <i>뒤</i>의 값에서 낸다.</b> 안 그러면 {@code close}는
+     * DB가 4자리로 접어 저장하는데 {@code adj_close}는 자바가 계산한 원래 정밀도로 들어가
+     * <b>둘이 어긋난다</b>. 그 어긋남은 ADR-0049의 불변식({@code adj_close = close × adj_factor})을
+     * 깨는데, <b>재적재하면 {@code ON CONFLICT} 절이 저장된 {@code close}에서 다시 써서 저절로
+     * 맞는다</b> — 첫 적재에만 틀리고 다시 돌리면 사라지므로 회귀로 안 읽힌다.
+     *
+     * <p>국내 소스는 종가가 정수라 이 자리가 무증상이었다(실측: {@code price_daily}
+     * 539,517행 중 소수 있는 종가 0행). 미국 봉은 소수를 갖는다 — 실측 최대 4자리라 지금은
+     * 폭 안이지만, <b>정밀도를 맞추는 것과 폭이 넉넉한 것은 다른 보장이다.</b>
+     */
+    private static final int PRICE_SCALE = 4;
+
     /** application.yaml의 {@code hibernate.jdbc.batch_size}와 맞춘다. */
     private static final int BATCH_SIZE = 100;
 
@@ -100,14 +115,16 @@ public class PriceWriter {
 
         // 배치 크기를 나눠 넘기는 오버로드라 반환이 int[][]다 — 배치마다 한 배열이다.
         int[][] results = jdbcTemplate.batchUpdate(UPSERT, valid, BATCH_SIZE, (ps, bar) -> {
+            // 저장될 정밀도로 먼저 접는다. 반올림은 단조라 ck_price_ohlc의 대소 관계는 보존된다.
+            BigDecimal close = stored(bar.close());
             ps.setLong(1, stockId);
             ps.setObject(2, bar.tradeDate());
-            ps.setBigDecimal(3, bar.open());
-            ps.setBigDecimal(4, bar.high());
-            ps.setBigDecimal(5, bar.low());
-            ps.setBigDecimal(6, bar.close());
-            // 신규 저장 시 adj_factor = 1이므로 adj_close = close다.
-            ps.setBigDecimal(7, bar.close().setScale(ADJ_CLOSE_SCALE, RoundingMode.HALF_UP));
+            ps.setBigDecimal(3, stored(bar.open()));
+            ps.setBigDecimal(4, stored(bar.high()));
+            ps.setBigDecimal(5, stored(bar.low()));
+            ps.setBigDecimal(6, close);
+            // 신규 저장 시 adj_factor = 1이므로 adj_close = close다. 위에서 접은 값에서 낸다.
+            ps.setBigDecimal(7, close.setScale(ADJ_CLOSE_SCALE, RoundingMode.HALF_UP));
             ps.setBigDecimal(8, BigDecimal.ONE);
             ps.setLong(9, bar.volume());
             if (bar.tradeValue() == null) {
@@ -130,5 +147,10 @@ public class PriceWriter {
             }
         }
         return written;
+    }
+
+    /** 그 값이 {@code price_daily}에 실제로 저장될 모습. {@link #PRICE_SCALE} 참조. */
+    private static BigDecimal stored(BigDecimal price) {
+        return price.setScale(PRICE_SCALE, RoundingMode.HALF_UP);
     }
 }

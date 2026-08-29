@@ -150,6 +150,26 @@ class PriceWriterTest {
                 "SELECT count(*) FROM price_daily WHERE stock_id = ?", Integer.class, stockId);
     }
 
+    @Test
+    @DisplayName("IMPORTANT — 소수가 컬럼 폭을 넘어도 adj_close가 저장된 close와 어긋나지 않는다")
+    void derivesAdjCloseFromTheStoredPrecision() {
+        // close numeric(18,4)를 넘는 소수. 국내 종가는 정수라 이 자리가 여태 무증상이었고,
+        // 미국 봉이 들어오면서 처음 닿는다.
+        writer.write(stockId, List.of(bar("2026-01-05", "0.000126", "0.000135", "0.000121", "0.000135")));
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT close, adj_close, adj_factor,
+                       (adj_close = round(close * adj_factor, 6)) AS 불변식
+                FROM price_daily WHERE stock_id = ? AND trade_date = '2026-01-05'
+                """, stockId);
+
+        // ADR-0049의 불변식이다. 어긋나면 계수를 원장에서 다시 지을 때 기준이 갈린다 —
+        // 그리고 재적재하면 ON CONFLICT 절이 저절로 맞춰 버려 간헐적으로만 드러난다.
+        assertThat((Boolean) row.get("불변식"))
+                .as("close=%s adj_close=%s", row.get("close"), row.get("adj_close"))
+                .isTrue();
+    }
+
     private static RawPriceBar bar(String date, String open, String high, String low, String close) {
         return new RawPriceBar(
                 LocalDate.parse(date),
