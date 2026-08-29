@@ -145,7 +145,7 @@ public class AlpacaUniverseAdapter implements UniverseDataSource {
                         "중복 심볼이 왔다: " + asset.symbol());
             }
             nameCache.put(new SecurityDescriptor(
-                    AlpacaSecurityMasterAdapter.MARKET_CODE, asset.symbol(), asset.name(),
+                    UsMarket.CODE, asset.symbol(), asset.name(),
                     null, null, null, null, asset.exchange()));
             tickers.add(asset.symbol());
             if (!asset.tradable()) {

@@ -38,4 +38,16 @@ public class DataSourceHttpConfig {
         return new TokenBucketRateLimiter(
                 "dart", source.getPermitsPerMinute(), source.getDailyQuota());
     }
+
+    /**
+     * SEC EDGAR 전체를 센다. <b>호스트가 둘이어도 같은 빈을 공유한다</b> —
+     * 초당 한도가 {@code data.sec.gov}와 {@code www.sec.gov}에 <b>사용자 단위로</b> 함께
+     * 걸리기 때문이다. 매핑 파일만 따로 세면 그만큼 한도를 넘긴다.
+     */
+    @Bean
+    public RateLimiter secEdgarRateLimiter(DataSourceProperties properties) {
+        DataSourceProperties.Source source = properties.getSecEdgar();
+        return new TokenBucketRateLimiter(
+                "sec-edgar", source.getPermitsPerMinute(), source.getDailyQuota());
+    }
 }

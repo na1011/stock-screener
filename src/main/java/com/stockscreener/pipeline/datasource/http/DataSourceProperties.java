@@ -43,6 +43,29 @@ public class DataSourceProperties {
     private String alpacaMarketDataBaseUrl = "https://data.alpaca.markets";
 
     /**
+     * SEC EDGAR. <b>재무 원자료</b>({@code /api/xbrl/companyfacts})가 여기에 있다.
+     *
+     * <p>IMPORTANT — 이 소스만 <b>{@code api-key}에 시크릿이 아니라 신원 표시가 들어간다.</b>
+     * EDGAR는 키를 발급하지 않고 {@code User-Agent}({@code <이름> <이메일>})만 요구하는데,
+     * {@code @ConditionalOnApiKey}가 {@code …<name>.api-key} 하나만 보므로 그 자리를 쓴다.
+     * 애노테이션을 넓히면 어댑터 열둘이 쓰는 공용 기제를 호출자 하나 때문에 고치게 된다.
+     * 값이 비면 어댑터가 등록되지 않고, 미국 재무를 받으려 할 때 <b>"재무 소스가 등록되지
+     * 않았다"</b>로 실패한다 — 조용하지 않다.
+     */
+    private final Source secEdgar = new Source("https://data.sec.gov");
+
+    /**
+     * 매핑 파일과 벌크의 호스트. 티커→CIK({@code /files/company_tickers_exchange.json})가 여기다.
+     *
+     * <p><b>MUST NOT: 이것을 {@code sec-edgar:} 블록 <u>안</u>의 yaml 키로 만들지 않는다.</b>
+     * 그러면 {@code stockscreener.datasource.sec-edgar.files-base-url}이 되어 {@link Source}로
+     * 바인딩되는데 거기에는 세터가 없고, {@code ignoreUnknownFields} 기본값이 <b>조용히
+     * 삼킨다</b> — 그 줄은 아무 일도 하지 않으면서 설정처럼 보인다.
+     * {@link #dataGoKrMarketIndexBaseUrl}과 같은 이유로 같은 모양이다(yaml 항목 없이 필드만).
+     */
+    private String secEdgarFilesBaseUrl = "https://www.sec.gov";
+
+    /**
      * 지수시세정보 서비스의 base URL. 같은 제공기관(prefix {@code 1160100})의 <b>다른
      * 오퍼레이션 셋</b>이라 경로만 갈린다.
      *
@@ -84,6 +107,18 @@ public class DataSourceProperties {
 
     public Source getAlpaca() {
         return alpaca;
+    }
+
+    public Source getSecEdgar() {
+        return secEdgar;
+    }
+
+    public String getSecEdgarFilesBaseUrl() {
+        return secEdgarFilesBaseUrl;
+    }
+
+    public void setSecEdgarFilesBaseUrl(String secEdgarFilesBaseUrl) {
+        this.secEdgarFilesBaseUrl = secEdgarFilesBaseUrl;
     }
 
     /** 소스 하나의 접속·한도 설정. */

@@ -1,0 +1,8 @@
+{
+ "fields": ["cik", "name", "ticker", "exchange"],
+ "data": [
+  [1, "픽스처", "FIX", "Nasdaq"],
+  [1067983, "BERKSHIRE HATHAWAY INC", "BRK-A", "NYSE"],
+  [1067983, "BERKSHIRE HATHAWAY INC", "BRK-B", "NYSE"]
+ ]
+}

@@ -226,6 +226,24 @@ stockscreener:
       daily-quota: 0
       # 활성 종목 전량이 한 응답에 온다(실측 3.88MB). 페이징 파라미터가 없어 나눠 받을 수 없다.
       read-timeout: 60s
+    sec-edgar:
+      base-url: https://data.sec.gov
+      # IMPORTANT — 여기 들어가는 것은 시크릿이 아니라 신원 표시다. EDGAR는 키를 발급하지 않고
+      # User-Agent(`<이름> <이메일>`)만 요구하는데, @ConditionalOnApiKey가 `.api-key` 하나만
+      # 보므로 그 자리를 쓴다. 비면 어댑터가 등록되지 않고 미국 재무를 받으려 할 때
+      # "재무 소스가 등록되지 않았다"로 실패한다.
+      #
+      # MUST: 이 줄이 없으면 @ConditionalOnApiKey가 Environment에서 값을 못 찾아 어댑터가
+      # 영영 등록되지 않는다 — alpaca 블록의 같은 주석과 같은 이유다.
+      api-key: ${SEC_EDGAR_USER_AGENT:}
+      # 공표는 초당 10회다. 착수 판단은 공표값의 절반으로 한다(api-sources skill).
+      # 리미터는 60_000/이 값으로 균등 간격을 내므로 300이면 200ms, 곧 초당 5회다.
+      permits-per-minute: 300
+      # 일일 총량 공표값이 없다. 0은 무제한이다 — 지어낸 상한은 소진되는 날 "쿼터 초과"라는
+      # 거짓 원인을 남긴다(alpaca와 같은 판단).
+      daily-quota: 0
+      # 한 종목 응답이 최대 7.9MB다(실측, sec-edgar-financial.md).
+      read-timeout: 60s
 
 # ── 적재 프로파일 ───────────────────────────────────────────────
 # MUST: devtools 재기동을 꺼 둔다. 적재는 몇 시간을 도는데 devtools는 classpath가 바뀌면

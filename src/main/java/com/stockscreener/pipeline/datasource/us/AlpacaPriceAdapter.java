@@ -119,7 +119,7 @@ public class AlpacaPriceAdapter implements PriceDataSource {
     @Override
     public Set<String> supportedMarketCodes() {
         // 미국은 시장이 하나다. 거래소는 stock.listing_exchange가 가른다(ADR-0086).
-        return Set.of(AlpacaSecurityMasterAdapter.MARKET_CODE);
+        return Set.of(UsMarket.CODE);
     }
 
     @Override

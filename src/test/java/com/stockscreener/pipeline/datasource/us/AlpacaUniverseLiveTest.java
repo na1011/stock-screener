@@ -70,7 +70,7 @@ class AlpacaUniverseLiveTest {
         // 그래서 개수가 아니라 **집합**으로 판정한다 — 새 이름이 뜨면 실제로 그 종목을 보고
         // 목록을 늘릴지 결함인지 가른다. 개수 상한으로 두면 그 판단을 건너뛰게 된다.
         assertThat(snapshot.tickers().stream()
-                .map(ticker -> nameCache.find(AlpacaSecurityMasterAdapter.MARKET_CODE, ticker))
+                .map(ticker -> nameCache.find(UsMarket.CODE, ticker))
                 .filter(Optional::isPresent).map(Optional::get)
                 .filter(descriptor -> descriptor.name().equals(descriptor.ticker()))
                 .map(SecurityDescriptor::ticker).sorted().toList())
@@ -79,7 +79,7 @@ class AlpacaUniverseLiveTest {
 
         // 거래소는 두 값 중 하나여야 한다. 그 밖이면 ck_stock_listing_exchange가 적재를 되돌린다.
         assertThat(snapshot.tickers().stream()
-                .map(ticker -> nameCache.find(AlpacaSecurityMasterAdapter.MARKET_CODE, ticker))
+                .map(ticker -> nameCache.find(UsMarket.CODE, ticker))
                 .filter(Optional::isPresent).map(Optional::get)
                 .map(SecurityDescriptor::listingExchange)
                 .distinct().toList())

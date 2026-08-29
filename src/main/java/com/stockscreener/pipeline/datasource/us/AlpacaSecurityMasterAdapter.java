@@ -43,9 +43,6 @@ import java.util.Set;
 @ConditionalOnApiKey("alpaca")
 public class AlpacaSecurityMasterAdapter implements SecurityMasterDataSource {
 
-    /** 미국은 시장이 하나다. 거래소(NYSE·NASDAQ)는 {@code stock.listing_exchange}가 가른다. */
-    public static final String MARKET_CODE = "US";
-
     private static final String SOURCE_NAME = "alpaca:master";
     private static final Logger log = LoggerFactory.getLogger(AlpacaSecurityMasterAdapter.class);
 
@@ -75,7 +72,7 @@ public class AlpacaSecurityMasterAdapter implements SecurityMasterDataSource {
 
     @Override
     public Set<String> supportedMarketCodes() {
-        return Set.of(MARKET_CODE);
+        return Set.of(UsMarket.CODE);
     }
 
     @Override
