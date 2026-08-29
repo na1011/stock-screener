@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|governance-load|governance-derive 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|governance-load|governance-derive|market-calendar|bar-gap-review 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -34,6 +34,8 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 --job=corporate-action-review [--ca-status=OBSERVED] [--ca-type=UNKNOWN] [--ca-ticker=005930] [--ca-limit=200]
 --job=corporate-action-review --ca-id=97
 --job=corporate-action-judge --ca-id=97 --ca-status=APPROVED --ca-type=BONUS_ISSUE --ca-ratio=1.4699 --ca-listing-date=2021-12-20 --ca-note="…"
+--job=market-calendar [--from=2016-01-01]
+--job=bar-gap-review [--tickers=NVDA,AAPL] [--from=2024-01-01]
 ```
 
 **모르는 인자는 실행 전에 거부된다.** 점을 포함한 이름(`--server.port=0`)은 Spring 몫이라 통과한다.
@@ -138,6 +140,27 @@ psql -d stock_screener -At -c "SELECT min(trade_date) FROM
 
 **적재 뒤 확인은 행 수가 아니라 넷이다**: 국내 재무가 안 변했는가 · 미국 봉이 안 늘었는가 ·
 보존 경계가 그대로인가 · 미국 지표가 여전히 0인가. **두 번 돌려 정정이 0건**이어야 한다.
+
+## 봉이 없는 날을 판정할 때 (ADR-0091)
+
+**`market-calendar`가 표를 채우고 `bar-gap-review`가 그것을 읽는다.** 적재 잡이 끝에 요약을
+알림으로 내므로 대개 둘째를 따로 칠 일은 없다 — 좁혀 다시 볼 때만 쓴다.
+
+- **`bar-gap-review`는 적재가 도는 중에 쳐도 안전하다.** 읽기 전용 잡 목록에 들어 있어
+  **고아 실행 스위퍼를 안 돌린다** — 안 들어 있으면 지금 도는 적재의 실행 행을 ABORTED로 닫는다.
+- **판정은 종목마다 창을 좁힌 뒤에 한다** — `[그 종목의 첫 봉, 마지막 봉] ∩ [달력의 min, max]`.
+  그래서 **마지막 봉 이후의 세션은 결측이 아니다.** 시세를 안 받은 채 달력만 최신으로 채워도
+  결측이 늘지 않는 것이 정상이다.
+- **`BAR_ON_NON_SESSION`이 먼저다.** 「비세션인데 봉이 있다」는 달력 쪽이 틀렸다는 뜻이고,
+  달력이 세션을 빠뜨리면 **수집 실패가 휴장으로 접혀 영구히 침묵한다.** 반대 방향
+  (`SESSION_WITHOUT_BAR`)은 시끄러울 뿐이다.
+- **`--as-of`를 미래로 주면 거절한다.** 소스가 **2030년부터 휴장일을 모르면서 평일을 그대로
+  세션으로 준다**(실측: 알려진 휴장이 2029년 10일 → 2030년 1일 → 2031년 0일). 담으면
+  크리스마스가 개장일이 되고 봉 없는 날이 전부 결측으로 뒤집힌다.
+- **닫히는 것은 넷 중 「휴장」 하나다.** 개장일인데 봉이 없는 것이 무거래·비활성·거래정지·
+  수집 실패 중 무엇인지는 **여전히 안 갈린다.** 요약의 「세션인데 봉 없음」을 수집 실패로 읽지 않는다.
+- **국내는 판정 대상이 아니다.** 조인 키가 `stock.listing_exchange`이고 국내는 그 값이 NULL이라
+  원리적으로 안 걸린다. 요약의 「달력이 없어 판정불가」에 국내 전량이 잡히는 것이 정상이다.
 
 ## 조용히 아무 일도 하지 않는 조합
 
@@ -328,9 +351,8 @@ DART 실패 하나가 지수 갱신 전체를 되돌린다. 인자 없이 돌리
 
 ## 적재 후 확인
 
-행 수만 보면 부분 적재와 정상 적재가 같아 보인다. 다섯을 다 본다.
+행 수만 보면 부분 적재와 정상 적재가 같아 보인다. 넷을 다 본다.
 
-- `ck_price_ohlc` 제약 위반 0
 - 편입 종목 중 시세가 하나도 없는 종목 0
 - **`min(trade_date)`가 `2020-01-02`다 — 요청한 구간 시작과 비교하지 않는다.** 소스 이력이 거기서
   시작하므로 `--price-years=7`은 정상 적재도 어긋나 보이고, 그러면 **성공을 실패로 읽고**

@@ -39,11 +39,12 @@ class AdminJobLauncherTest {
     private final CorporateActionJob corporateActionJob = mock(CorporateActionJob.class);
     private final MarketIndexJob marketIndexJob = mock(MarketIndexJob.class);
     private final GovernanceDeriveJob governanceDeriveJob = mock(GovernanceDeriveJob.class);
+    private final MarketCalendarJob marketCalendarJob = mock(MarketCalendarJob.class);
 
     private final AdminJobLauncher launcher = new AdminJobLauncher(
             new SimpleAsyncTaskExecutor(), dailyUpdateJob, universeRebalanceJob,
             indicatorBackfillJob, companyProfileJob, corporateActionJob, marketIndexJob,
-            governanceDeriveJob);
+            marketCalendarJob, governanceDeriveJob);
 
     @Test
     @DisplayName("도는 중인 잡은 새로 띄우지 않는다")
@@ -160,7 +161,16 @@ class AdminJobLauncherTest {
                         //
                         // 짝인 governance-load는 여기 없다. 전량 7,700콜로 보수 예산 10,000의
                         // 절반을 넘어 initial-load를 뺀 근거에 정확히 걸린다.
-                        GovernanceDeriveJob.JOB_NAME);
+                        GovernanceDeriveJob.JOB_NAME,
+                        // 거래소당 1콜, 전부 2콜이다(창과 무관하다 — 11년치가 한 응답이다).
+                        // Alpaca는 일일 총량을 공표하지 않고 분당 한도만 있어 사실상 0에 가깝다.
+                        // 화면에 두는 이유는 **스케줄러에 못 걸기 때문**이다: 미국 장이 한국
+                        // 시각 새벽에 닫아 13시 30분 크론이 뜻을 갖지 않는다. 사람이 눌러야
+                        // 적재 창이 안 낡고, 낡으면 봉 결측 판정이 조용히 판정불가로 퇴화한다.
+                        //
+                        // 짝인 bar-gap-review는 여기 없다. 실행 행을 안 만들어 화면이 202를
+                        // 받고 아무것도 안 뜬다 — corporate-action-review와 같은 이유다.
+                        MarketCalendarJob.JOB_NAME);
 
         assertThat(launcher.isLaunchable(GovernanceLoadJob.JOB_NAME))
                 .as("governance-load는 한 번에 7,700콜이다 — 화면 버튼으로 두지 않는다")

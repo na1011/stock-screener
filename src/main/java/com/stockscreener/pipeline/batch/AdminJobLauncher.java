@@ -77,6 +77,7 @@ public class AdminJobLauncher {
                             CompanyProfileJob companyProfileJob,
                             CorporateActionJob corporateActionJob,
                             MarketIndexJob marketIndexJob,
+                            MarketCalendarJob marketCalendarJob,
                             GovernanceDeriveJob governanceDeriveJob) {
         this.taskExecutor = taskExecutor;
         this.dailyUpdateJob = dailyUpdateJob;
@@ -145,7 +146,18 @@ public class AdminJobLauncher {
                 GovernanceDeriveJob.JOB_NAME,
                 request -> governanceDeriveJob.run(
                         request.orDefault(request.targetDate(), LocalDate.now()),
-                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()));
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()),
+                // 거래소당 1콜(둘)이고 되돌릴 수 있다. 화면에 두는 이유는 **적재 창이 낡으면
+                // 판정이 조용히 판정불가로 퇴화하기 때문**이다 — 스케줄러에 못 걸어서
+                // (미국 장이 한국 시각 새벽에 닫는다) 사람이 주기적으로 눌러야 한다.
+                //
+                // MUST NOT: bar-gap-review는 여기 올리지 않는다. 그 잡은 실행 행을 안 만들어
+                // 화면이 202를 받고 **아무것도 안 뜬다** — corporate-action-review가 카탈로그에
+                // 없는 것과 같은 이유다.
+                MarketCalendarJob.JOB_NAME,
+                request -> marketCalendarJob.run(
+                        request.orDefault(request.to(), LocalDate.now()),
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, request.from()));
 
         this.catalog = List.of(
                 new Descriptor(DailyUpdateJob.JOB_NAME, "일일 갱신",
@@ -173,7 +185,11 @@ public class AdminJobLauncher {
                         Parameters.DATE_RANGE, 2),
                 new Descriptor(GovernanceDeriveJob.JOB_NAME, "거버넌스 사실 유도",
                         "이미 받아 둔 정기보고서 원문에서 지표용 값을 다시 만든다. 외부 API를 부르지 않는다.",
-                        Parameters.TARGET_DATE, 0));
+                        Parameters.TARGET_DATE, 0),
+                new Descriptor(MarketCalendarJob.JOB_NAME, "세션 달력 수집",
+                        "NYSE·NASDAQ이 정규장을 연 날을 받는다. 미국 봉이 없는 날을 휴장과 가르는 "
+                                + "근거이며, from을 비우면 2016-01-01부터다.",
+                        Parameters.DATE_RANGE, 2));
     }
 
     /** 화면이 나열할 잡 목록. 프론트가 이름을 하드코딩하지 않게 서버가 준다. */

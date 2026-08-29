@@ -87,6 +87,17 @@ import java.util.List;
  * # 기간조회 1콜이라 전 구간을 받아도 지수당 1~2콜이다. 종목과 무관하므로 티커를 받지 않는다
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=market-index'
  *
+ * # 거래소 세션 달력 적재 — 거래소당 1콜(NYSE·NASDAQ 둘)이라 창을 넓혀도 콜이 안 는다.
+ * # --from을 안 주면 2016-01-01부터. --as-of가 미래면 거절한다(소스가 2030년부터 휴장일을
+ * # 모르면서 평일을 그대로 세션으로 준다). 적재 뒤 봉 결측 요약이 알림으로 나간다
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
+ *     --job=market-calendar'
+ *
+ * # 봉 결측 판정만 — 외부 호출 0, 아무것도 안 고치고 batch_execution 행도 안 만든다.
+ * # 적재가 도는 중에 쳐도 안전하다(스위퍼를 안 돌린다)
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
+ *     --job=bar-gap-review --tickers=NVDA,AAPL'
+ *
  * # 지표 백필
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill --from=2020-01-02'
  *
@@ -142,6 +153,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final IndicatorBackfillJob indicatorBackfillJob;
     private final GovernanceLoadJob governanceLoadJob;
     private final GovernanceDeriveJob governanceDeriveJob;
+    private final MarketCalendarJob marketCalendarJob;
     private final CorporateActionJudgeJob corporateActionJudgeJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
@@ -157,6 +169,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            IndicatorBackfillJob indicatorBackfillJob,
                            GovernanceLoadJob governanceLoadJob,
                            GovernanceDeriveJob governanceDeriveJob,
+                           MarketCalendarJob marketCalendarJob,
                            CorporateActionJudgeJob corporateActionJudgeJob,
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
@@ -171,6 +184,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.governanceLoadJob = governanceLoadJob;
         this.governanceDeriveJob = governanceDeriveJob;
+        this.marketCalendarJob = marketCalendarJob;
         this.corporateActionJudgeJob = corporateActionJudgeJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
@@ -245,7 +259,7 @@ public class BootstrapRunner implements ApplicationRunner {
         // 원장 조회·판정은 몇 초짜리라 **적재가 도는 중에 아무렇지 않게 치게 된다** — 그러면 몇
         // 시간짜리 백필의 실행 행이 ABORTED가 되고 백필 자신은 계속 돌다가 마감에 실패한다.
         // 이 둘은 고아를 거의 안 남기고, 남더라도 다음 적재 잡의 스윕이 닫는다.
-        if (!isLedgerJob(job)) {
+        if (!isReadOnlyJob(job)) {
             executionSweeper.sweepBootstrapOrphans();
         }
 
@@ -293,6 +307,12 @@ public class BootstrapRunner implements ApplicationRunner {
             // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
             case "governance-derive" -> governanceDeriveJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
+            case "market-calendar" -> marketCalendarJob.run(
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, date(args, "from", null));
+            // 외부 호출이 0이고 읽기만 한다. 실행 행도 안 만든다 — 적재가 도는 중에 치게 되는
+            // 명령이라, 행을 열면 그 자체가 관측 대상을 흔든다(ADR-0091).
+            case "bar-gap-review" -> marketCalendarJob.review(
+                    csv(args, "tickers"), date(args, "from", null));
             // 외부 호출이 0이고 원장을 읽기만 한다. 실행 행도 안 만든다(ADR-0084).
             case "corporate-action-review" -> corporateActionJudgeJob.review(
                     caStatus(args), caType(args), value(args, "ca-ticker", null),
@@ -307,7 +327,8 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | full-statement-refill | company-profile | corporate-action"
                             + " | adjustment-rebuild | market-index | backfill"
                             + " | governance-load | governance-derive"
-                            + " | corporate-action-review | corporate-action-judge");
+                            + " | corporate-action-review | corporate-action-judge"
+                            + " | market-calendar | bar-gap-review");
         };
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);
@@ -400,8 +421,29 @@ public class BootstrapRunner implements ApplicationRunner {
     private static final java.util.Set<String> LEDGER_JOBS = java.util.Set.of(
             CorporateActionJudgeJob.REVIEW_JOB_NAME, CorporateActionJudgeJob.JOB_NAME);
 
+    /**
+     * 외부 호출 없이 읽기만 하는 잡. <b>고아 실행 스위퍼를 돌리지 않는다.</b>
+     *
+     * <p>{@link #LEDGER_JOBS}와 갈라 둔 이유는 <b>두 집합이 다른 질문에 답하기</b> 때문이다 —
+     * 저쪽은 "{@code --ca-*}가 뜻을 갖는가", 이쪽은 "스윕을 돌려도 되는가"다. 하나로 두면
+     * 읽기 전용 잡을 더할 때 <b>{@code --ca-*}까지 열리거나, 안 열려고 빼면 스윕이 돈다.</b>
+     *
+     * <p>스윕은 기동 시각 이전의 {@code MANUAL} + {@code RUNNING}을 전부 닫으므로
+     * <b>다른 JVM에서 지금 돌고 있는 행까지 마감한다.</b> 이 잡들은 몇 초짜리라 적재가 도는
+     * 중에 아무렇지 않게 치게 되고, 그러면 몇 시간짜리 적재의 실행 행이 ABORTED가 된다.
+     */
+    private static final java.util.Set<String> READ_ONLY_JOBS = java.util.Set.of(
+            CorporateActionJudgeJob.REVIEW_JOB_NAME, CorporateActionJudgeJob.JOB_NAME,
+            MarketCalendarJob.REVIEW_JOB_NAME);
+
     private static boolean isLedgerJob(String job) {
         return LEDGER_JOBS.contains(job);
+    }
+
+    // package-private — 이 집합이 갈리면 읽기 전용 명령이 남의 적재를 마감한다.
+    // 그 증상은 조회 쪽에 안 나타나므로 테스트가 이름으로 잠근다.
+    static boolean isReadOnlyJob(String job) {
+        return READ_ONLY_JOBS.contains(job);
     }
 
     /**

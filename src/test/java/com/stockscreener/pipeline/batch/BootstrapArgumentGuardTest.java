@@ -2,8 +2,10 @@ package com.stockscreener.pipeline.batch;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.DefaultApplicationArguments;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -159,5 +161,48 @@ class BootstrapArgumentGuardTest {
                 new DefaultApplicationArguments("--job=universe", "--universe=US_LISTED"),
                 "universe"))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("읽기 전용 잡은 고아 실행 스위퍼를 안 돌린다 — 돌리면 지금 도는 적재의 실행 행을 닫는다")
+    void readOnlyJobsSkipTheOrphanSweeper() {
+        // 스윕은 기동 시각 이전의 MANUAL + RUNNING을 전부 ABORTED로 닫으므로 **다른 JVM에서
+        // 지금 도는 행까지** 마감한다. 이 잡들은 몇 초짜리라 적재가 도는 중에 아무렇지 않게
+        // 치게 되고, 그러면 몇 시간짜리 적재가 계속 돌다가 마감에 실패한다.
+        assertThat(BootstrapRunner.isReadOnlyJob("bar-gap-review")).isTrue();
+        assertThat(BootstrapRunner.isReadOnlyJob(CorporateActionJudgeJob.REVIEW_JOB_NAME)).isTrue();
+        assertThat(BootstrapRunner.isReadOnlyJob(CorporateActionJudgeJob.JOB_NAME)).isTrue();
+
+        // 반대쪽이 이 시험의 값이다 — 적재 잡까지 빠지면 고아가 영영 안 닫힌다.
+        for (String loadJob : new String[] {"initial-load", "corporate-action", "market-calendar",
+                "adjustment-rebuild", "backfill", "universe"}) {
+            assertThat(BootstrapRunner.isReadOnlyJob(loadJob))
+                    .as("%s는 적재라 스윕을 돌려야 한다", loadJob)
+                    .isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("--ca-*는 읽기 전용이어도 원장 잡 밖에서 거절된다 — 두 집합은 다른 질문에 답한다")
+    void ledgerOptionsStayClosedOnTheGapReview() {
+        ApplicationArguments args = new DefaultApplicationArguments(
+                "--job=bar-gap-review", "--ca-id=97");
+
+        assertThatThrownBy(() ->
+                BootstrapRunner.rejectLedgerOptionsOutsideLedgerJobs(args, "bar-gap-review"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ca-id");
+    }
+
+    @Test
+    @DisplayName("--universe는 캘린더 잡에서 거절된다 — 대상이 종목이 아니라 거래소다")
+    void rejectsUniverseOnTheCalendarJob() {
+        ApplicationArguments args = new DefaultApplicationArguments(
+                "--job=market-calendar", "--universe=US_LISTED");
+
+        assertThatThrownBy(() ->
+                BootstrapRunner.rejectMisplacedLoadOptions(args, "market-calendar"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("universe");
     }
 }
