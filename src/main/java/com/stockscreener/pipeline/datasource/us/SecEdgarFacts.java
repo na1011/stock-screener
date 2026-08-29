@@ -391,7 +391,7 @@ final class SecEdgarFacts {
         // CashAndCashEquivalentsAtCarryingValue와 CashCashEquivalentsRestrictedCash…로 갈리고
         // 그 둘은 값이 다르다. 보고서별로 태그를 고르면 **값이 아니라 태그가 바뀐 것**을
         // 정정으로 읽어, 값이 그대로인데도 판이 쌓인다(실측에서 AAPL 34건 중 절반이 그랬다).
-        Map<SecEdgarColumn, String> tags = chooseTags(window, byColumn);
+        Map<SecEdgarColumn, String> tags = chooseTags(labelAnchor, window, byColumn);
 
         List<Anchor> reporters = new ArrayList<>();
         for (Anchor anchor : anchors.values()) {
@@ -448,23 +448,52 @@ final class SecEdgarFacts {
      * 판마다 태그가 갈려 <b>값이 아니라 태그가 바뀐 것</b>이 정정이 된다.
      */
     private static Map<SecEdgarColumn, String> chooseTags(
-            Window window, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+            Anchor labelAnchor, Window window,
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
         Map<SecEdgarColumn, String> chosen = new EnumMap<>(SecEdgarColumn.class);
         for (SecEdgarColumn column : SecEdgarColumn.values()) {
-            for (Map.Entry<String, Map<Slot, Fact>> entry : byColumn.get(column).entrySet()) {
-                boolean covers = entry.getValue().values().stream().anyMatch(
-                        f -> column.anchoredInstant()
-                                || (column.instant()
-                                ? f.end().equals(window.end())
-                                : f.end().equals(window.end())
-                                && window.start().equals(f.start())));
-                if (covers) {
-                    chosen.put(column, entry.getKey());
-                    break;
-                }
+            // 1순위 — 그 기간을 자기 기간으로 낸 보고서가 실제로 쓴 태그.
+            //
+            // 아무 보고서나 가진 태그를 고르면, 앵커가 다른 태그를 썼을 때 그 값이 **null이
+            // 된다.** 실측에서 AT&T의 FY2023·2024 영업활동현금흐름이 그렇게 사라졌다 —
+            // 뒤 보고서가 다른 후보로 실은 것을 골랐고 앵커에는 그 태그가 없었다.
+            String tag = coveringTag(column, window, byColumn, labelAnchor);
+            if (tag == null) {
+                // 2순위 — 앵커가 그 계정을 아예 안 냈다. 그때만 보고서를 가리지 않는다.
+                tag = coveringTag(column, window, byColumn, null);
+            }
+            if (tag != null) {
+                chosen.put(column, tag);
             }
         }
         return chosen;
+    }
+
+    /**
+     * 그 기간을 덮는 팩트가 있는 첫 후보 태그. {@code accn}을 주면 그 보고서의 팩트만 본다.
+     *
+     * <p>후보 순서가 우선순위다 — <b>어느 보고서가 냈는지로 순서를 바꾸지 않는다.</b>
+     * 보고서별로 우선순위가 갈리면 같은 기간의 판마다 태그가 달라져 값이 아니라 태그가
+     * 바뀐 것이 정정이 된다.
+     */
+    private static String coveringTag(SecEdgarColumn column, Window window,
+                                      Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                      Anchor only) {
+        for (Map.Entry<String, Map<Slot, Fact>> entry : byColumn.get(column).entrySet()) {
+            for (Fact fact : entry.getValue().values()) {
+                if (only != null && !fact.accn().equals(only.accn())) {
+                    continue;
+                }
+                boolean covers = column.anchoredInstant()
+                        || (column.instant()
+                        ? fact.end().equals(window.end())
+                        : fact.end().equals(window.end()) && window.start().equals(fact.start()));
+                if (covers) {
+                    return entry.getKey();
+                }
+            }
+        }
+        return null;
     }
 
     /** 둘 다 값이 있는 컬럼 중 하나라도 다른가. 한쪽이 null인 것은 다름이 아니다. */

@@ -117,8 +117,10 @@ END FROM financial_statement WHERE is_latest"
 
 ```premise 재고자산이 분기 잔액 행에서 형제 저량보다 덜 채워지지 않았다
 psql -d stock_screener -At -c "
-WITH q AS (SELECT inventories, cash_and_equivalents FROM financial_statement
-            WHERE fiscal_period = 'Q4' AND is_latest AND fiscal_year >= 2021)
+WITH q AS (SELECT f.inventories, f.cash_and_equivalents
+             FROM financial_statement f JOIN stock s ON s.id = f.stock_id
+            WHERE f.fiscal_period = 'Q4' AND f.is_latest AND f.fiscal_year >= 2021
+              AND s.market_code IN ('KOSPI', 'KOSDAQ'))
 SELECT CASE
   WHEN (SELECT count(*) FROM q) = 0
     THEN '잴 것이 없었다 — FY2021 이후 Q4 행이 하나도 없다'
@@ -132,6 +134,13 @@ SELECT CASE
   ELSE 'OK Q4 ' || (SELECT count(inventories) FROM q) || '/' || (SELECT count(*) FROM q) || '행'
 END"
 ```
+
+**시장을 가르는 것이 셋째 펜스의 일부다.** 이 펜스가 재는 것은 `toFourthQuarterBalance`,
+곧 **DART 어댑터의 코드 경로**다. 미국은 Q4를 다른 자리에서 유도하고(`SecEdgarFacts`,
+ADR-0089) 재고가 원리적으로 없는 업종이 표본에 섞여 있어, 좁히지 않으면 **의도한 동작에
+우는 펜스**가 된다 — 실제로 미국 재무를 넣자 국내 기여가 0인데 차이가 10행으로 붉어졌다
+(ADR-0013의 `listed_shares` 펜스가 같은 이유로 같은 모양이다). **미국 쪽 결손은
+ADR-0089의 전제가 따로 받는다.**
 
 **셋째 펜스가 절대수가 아니라 형제 저량과의 대조인 이유**는 그렇지 않으면 **영원히 빨갛기**
 때문이다. 둘 다 0일 때 `OK`를 내는 것도 같은 이유이며 **침묵을 건강으로 위장하는 것이 아니다** —
