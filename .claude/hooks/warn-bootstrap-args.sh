@@ -36,9 +36,24 @@ case "$cmd" in *--reload-existing=true*) exit 0 ;; esac
 # `--tickers`는 `NOT EXISTS`를 아예 타지 않는다(InitialLoadJob.resolveTargets). 아래 경고를
 # 그대로 내면 **거짓을 말하고**, 그것을 따라 `--reload-existing=true`를 붙이게 만든다 —
 # 그 플래그는 티커가 있을 때 무시되므로 얻는 것 없이 명령만 읽기 어려워진다.
-case "$cmd" in *--tickers=*) exit 0 ;; esac
+#
+# **단 `--universe`가 함께 있으면 그 면제가 거짓이다.** `resolveTargets`는 `hasUniverse()`를
+# **먼저** 보고 `resolveUniverseTargets`로 가는데, 거기서는 티커가 대상을 좁힐 뿐 봉이 있는
+# 종목을 걸러내는 필터가 **그대로 걸린다.** 그래서 유니버스 경로에서는 티커를 줘도 대상이
+# 0건이 되고 잡이 성공으로 끝난다 — 이 훅이 막으려는 바로 그 모양이다.
+case "$cmd" in
+  *--universe=*) ;;
+  *--tickers=*) exit 0 ;;
+esac
 
-jq -n --arg ctx "이 실행에는 \`--reload-existing=true\`가 없다. 대상 선정이 \`NOT EXISTS (price_daily)\`라 봉이 하나라도 있는 종목은 건너뛰고, **잡은 성공으로 끝난다** — 기간을 늘려도 아무 일이 일어나지 않는다. 새로 적재한 것이 맞는지 행 수로 확인하고, 기존 종목의 구간을 늘리려던 것이면 플래그를 붙여 다시 실행하라." \
+ctx="이 실행에는 \`--reload-existing=true\`가 없다. 대상 선정이 \`NOT EXISTS (price_daily)\`라 봉이 하나라도 있는 종목은 건너뛰고, **잡은 성공으로 끝난다** — 기간을 늘려도 아무 일이 일어나지 않는다. 새로 적재한 것이 맞는지 행 수로 확인하고, 기존 종목의 구간을 늘리려던 것이면 플래그를 붙여 다시 실행하라."
+case "$cmd" in
+  *--universe=*) ctx="$ctx
+
+**\`--universe\`가 있으므로 \`--tickers\`를 줘도 이 필터를 피하지 못한다** — 유니버스 경로는 티커로 대상을 좁힌 **뒤에** 봉이 있는 종목을 걸러낸다. 재무만 받으려는 것이면 \`--reload-existing=true --skip-price\`가 그 조합이다." ;;
+esac
+
+jq -n --arg ctx "$ctx" \
   '{
     hookSpecificOutput: {
       hookEventName: "PostToolUse",
