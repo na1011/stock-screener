@@ -49,6 +49,27 @@ import java.util.Optional;
  * <b>보존 창 전체</b>에서 지워진다({@code StoredIndicatorInvalidationPort}의 {@code >=}).
  * 필터가 없으면 한 종목의 판정을 고칠 때마다 180거래일 × 350종목을 다시 돌아야 하고
  * (실측 2.6~8시간), 그 비용이 <b>"판정을 한 번에 다 끝내야 한다"</b>는 제약을 만든다.
+ *
+ * <h2>{@code --universe} 갈래를 낼 때 — 그것만으로는 순환이 반만 끊긴다</h2>
+ *
+ * <p>이 잡은 활성 유니버스만 보므로 <b>「켜야 지표가 생기고, 지표가 없으면 켜면 안 되는」
+ * 순환</b>이 있다(미국이 그 자리다 — 켜는 순간 값 하나 없는 8,504종목이 프리셋 결과에 실린다).
+ * {@code corporate-action}·{@code adjustment-rebuild}·{@code initial-load}·
+ * {@code company-profile}이 이미 {@code --universe}로 그 순환을 끊었으므로 여기도 같은 갈래를
+ * 낼 수 있다({@code BootstrapRunner.UNIVERSE_JOBS}를 함께 넓힌다 — 안 넓히면
+ * {@code rejectMisplacedLoadOptions}가 첫 줄에서 거절한다).
+ *
+ * <p><b>MUST: 그때 위 두 계산을 함께 다룬다.</b> {@code percentileCalculator.calculate}와
+ * {@code sectorRelativeCalculator.calculate}가 <b>{@code u.is_active}를 조인</b>하므로,
+ * 비활성 유니버스에 백필하면 <b>원본 지표는 생기는데 {@code *_PCTL}·업종 상대값이 한 행도
+ * 안 생기고 잡은 SUCCESS로 끝난다.</b> 나중에 그 유니버스를 켜도 <b>과거 179일자는 영영
+ * 빈다</b> — 두 계산기가 거래일 하나씩만 다시 쓰기 때문이다.
+ *
+ * <p>바로 위 절과 충돌하는 것처럼 보이지만 아니다. 저기서 금지한 것은 <b>모집단을 좁히는
+ * 것</b>이고, 여기서 필요한 것은 <b>모집단에 비활성 유니버스를 넣는 것</b>이다 — 방향이 반대다.
+ * 넣는 방식을 정할 때 {@code PercentileCalculator}의 IMPORTANT를 함께 본다:
+ * <b>한 종목이 최대 하나의 활성 유니버스에 속한다</b>는 전제가 깨지면 JOIN이 행을 늘려
+ * PostgreSQL이 cardinality violation으로 배치를 죽인다.
  */
 @Component
 public class IndicatorBackfillJob {

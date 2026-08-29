@@ -29,6 +29,41 @@ import java.util.TreeMap;
  * {@code RawPriceBar}·{@code RawFinancialReport}와 <b>다른 타입이며 합치지 않는다</b>(ADR-0006).
  * 두 타입이 하나가 되는 순간 외부 소스의 스펙 변경이 지표 계산기까지 번진다. 이 리더가
  * 그 경계에 서서 저장된 것을 지표 계층의 말로 옮기는 역할을 한다.
+ *
+ * <h2>아직 없는 것 — 통화 게이트 (2026-08-30 실측)</h2>
+ *
+ * <p><b>재무의 통화가 시장의 통화와 다른 종목이 실재하고, 아무도 둘을 대조하지 않는다.</b>
+ * {@code market.currency_code}(KOSPI·KOSDAQ = KRW, US = USD)와
+ * {@code financial_statement.currency_code}가 그 둘이고, 이 리더가 후자를 이미 읽고 있다
+ * ({@code FINANCIAL_COLUMNS}) — <b>재료는 다 있고 판정만 없다.</b>
+ *
+ * <p>지금 닿는 종목이 셋이다 — 두산밥캣(241560) · 코오롱티슈진(950160) ·
+ * 인제니아테라퓨틱스(950260). 두산밥캣의 저장된 값:
+ * {@code PER 17,386} · {@code PBR 1,163} · {@code PSR 937} · {@code PEG 1,265} ·
+ * {@code ALTMAN_Z 960} · {@code PER_DISCOUNT_5Y −163,019} · {@code PER_PCTL 1.0}.
+ * 주가를 안 쓰는 둘도 오염된다 — {@code EXEC_PAY_TO_NET_INCOME 1,873}(보수 KRW ÷ 순이익 USD) ·
+ * {@code DIVIDEND_PAYOUT 57,522}. <b>비율 지표는 멀쩡하다</b>({@code OPM_MIN_5Y 7.8}).
+ *
+ * <p><b>MUST: 게이트를 행이 아니라 종목 단위로 건다.</b> 처음에 「행 단위여야 KRW 시절의
+ * 정상값을 안 지운다」고 적었는데 <b>재보니 거짓이다</b>. 두산밥캣은 KRW 34행(2016~2023)과
+ * USD 14행(2023~2026)을 함께 갖고 <b>5년 창 지표가 그 둘을 섞는다</b> — 저장된
+ * {@code EPS_CAGR_5Y}가 <b>−75.2%</b>이고 {@code OCF_SUM_5Y}는 원화 3년과 달러 2년의 단순
+ * 합이다. USD 행만 빼면 2023-09 재무가 최신인 척하고, KRW 행만 빼면 5년 창이 2년치가 된다.
+ * <b>어느 쪽도 「정상값 보존」이 아니다.</b>
+ *
+ * <p><b>MUST: 게이트를 계산기(또는 이 리더)가 값을 안 내는 형태로 둔다.</b> ADR-0080이 옛 행을
+ * 걷는 조건이 <b>「계산기가 창 전체에 대해 한 점도 못 냈을 때」</b>라, {@code IndicatorValueWriter}나
+ * 상위에서 거르면 <b>이미 저장된 오염값이 안 걷힌다.</b>
+ *
+ * <p><b>파급은 쟀다</b>: {@code EPS_CAGR_5Y}가 린치 프리셋 둘의 <b>필수 게이트</b>라
+ * (`requiredBetween` 20~50 · 10~20) 그 셋은 지금 데이터 때문에 탈락하고 있고, 화면에서는
+ * 「조건 미달」과 구별되지 않는다. 값을 지우면 백분위 모집단이 바뀌어 국내 350종목의
+ * {@code *_PCTL}이 전부 다시 매겨지는데, <b>알림이 걸린 워치리스트는 1건</b>이고 그 하나가
+ * {@code PER_PCTL}·{@code PBR_PCTL}을 건다(ADR-0026의 엣지 트리거가 거기 닿는다).
+ *
+ * <p><b>미국을 켜면 이 게이트의 뜻이 시장마다 달라진다</b> — 지금은 「USD 재무 = 오염」이지만
+ * 그때는 USD가 정상인 시장이 생긴다. 그래서 시장 통화와 대조하는 형태여야 하고,
+ * 「USD를 버린다」로 만들면 미국에서 전 종목이 지워진다.
  */
 @Component
 public class IndicatorDataReader {
