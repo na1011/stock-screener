@@ -107,10 +107,13 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
-    @DisplayName("원장·재구축 잡은 --universe를 받는다 — 비활성 유니버스를 손으로 고르는 경로다")
+    @DisplayName("원장·재구축·업종 잡은 --universe를 받는다 — 비활성 유니버스를 손으로 고르는 경로다")
     void acceptsUniverseOnTheLedgerAndRebuildJobs() {
-        // ADR-0090. 이 둘이 UNIVERSE_JOBS에 없으면 미국 적재 명령이 첫 줄에서 거절된다.
-        for (String job : new String[] {"corporate-action", "adjustment-rebuild"}) {
+        // ADR-0090·ADR-0092. 이들이 UNIVERSE_JOBS에 없으면 미국 적재 명령이 첫 줄에서 거절된다.
+        //
+        // MUST: 새 잡을 열 때 여기에 이름을 더한다. 이 테스트는 집합을 열거하지 않고 잡을
+        // 하나씩 단언하므로, 안 더하면 **테스트는 전부 초록인 채** 명령만 런타임에 죽는다.
+        for (String job : new String[] {"corporate-action", "adjustment-rebuild", "company-profile"}) {
             assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(
                     new DefaultApplicationArguments("--job=" + job, "--universe=US_LISTED"), job))
                     .doesNotThrowAnyException();

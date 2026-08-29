@@ -65,6 +65,11 @@ import java.util.List;
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=company-profile \
  *     --tickers=005930,035420'
  *
+ * # 비활성 유니버스의 업종 — 미국은 이 경로로만 닿는다(US_LISTED가 비활성이라
+ * # 기본 대상 질의의 is_active 조인에 한 건도 안 걸린다). 6,689콜, 약 22분
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=company-profile \
+ *     --universe=US_LISTED'
+ *
  * # 기업 행위 수집 — 계수는 바꾸지 않고 원장에만 적는다. 창은 저장된 시세 전 구간이 기본이고
  * # 종목당 콜 수는 창을 덮는 정기보고서 수가 정한다(2020~오늘이면 2콜)
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=corporate-action'
@@ -278,7 +283,8 @@ public class BootstrapRunner implements ApplicationRunner {
                     optionalInteger(args, "financial-years"), csv(args, "tickers"),
                     Boolean.parseBoolean(value(args, "quarters", "false")));
             case "company-profile" -> companyProfileJob.run(
-                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
+                    value(args, "universe", null));
             // --from을 안 주면 잡이 저장된 시세의 첫 거래일을 쓴다. 러너가 기본값을 정하지
             // 않는 이유는 backfill의 minusYears(2)와 같은 두 번째 정본을 만들지 않기 위해서다.
             case "corporate-action" -> corporateActionJob.run(
@@ -379,7 +385,8 @@ public class BootstrapRunner implements ApplicationRunner {
      * 그 실패는 인자를 고치러 가게 만든다. {@code initial-load}는 둘이 우연히 같다.
      */
     private static final java.util.Set<String> UNIVERSE_JOBS = java.util.Set.of(
-            "universe", "initial-load", "corporate-action", "adjustment-rebuild");
+            "universe", "initial-load", "corporate-action", "adjustment-rebuild",
+            "company-profile");
 
     /**
      * {@code --skip-financial}·{@code --skip-price}가 뜻을 갖는 잡. 위와 같은 이유로

@@ -160,13 +160,20 @@ public class StockRegistrar {
      * <p>{@link #activeUniverseMemberIds()} 옆에 두는 이유는 그 javadoc이 적은 것과 같다 —
      * "편입 중인 활성 종목"의 정의가 잡마다 갈리면 <b>어느 쪽도 에러를 내지 않는다.</b>
      * 여기는 그 정의에 결손 조건 하나만 더한 것이며, 정의 자체는 위와 같은 자리에서 온다.
+     *
+     * <p><b>결손은 두 컬럼을 함께 본다</b>(ADR-0092). 업종 체계가 시장마다 다르므로
+     * {@code industry_code}만 보면 SIC를 채운 미국 종목이 <b>영원히 결손</b>으로 남는다.
+     * 지금은 {@code US_LISTED}가 비활성이라 그 종목이 이 질의에 한 건도 안 들어오지만,
+     * <b>켜는 날 매 실행 6,689콜을 다시 태운다</b> — {@code AdminJobLauncher}의 콜 수 주석과
+     * 같은 조건에 걸린 자리다.
      */
     public List<Long> activeUniverseMemberIdsWithoutIndustry() {
         return jdbcTemplate.queryForList("""
                 SELECT DISTINCT m.stock_id FROM universe_membership m
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
-                WHERE m.effective_to IS NULL AND s.is_active AND s.industry_code IS NULL
+                WHERE m.effective_to IS NULL AND s.is_active
+                  AND s.industry_code IS NULL AND s.sic_code IS NULL
                   AND s.market_code IN (%s)
                 ORDER BY m.stock_id
                 """.formatted(collectedMarketPlaceholders()), Long.class, collectedMarkets());

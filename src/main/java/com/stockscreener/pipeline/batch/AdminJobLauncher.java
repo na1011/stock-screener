@@ -109,13 +109,17 @@ public class AdminJobLauncher {
                         request.orDefault(request.to(), LocalDate.now()),
                         BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()),
 
-                // 화면에서 띄워도 되는 이유는 대상이 **업종이 비어 있는 종목뿐**이라
-                // 평소 0콜이고, 전량이어도 종목당 1콜(350)이기 때문이다.
+                // 화면에서 띄워도 되는 이유는 대상이 **활성 유니버스에서 업종이 비어 있는
+                // 종목뿐**이라 평소 0콜이고, 전량이어도 종목당 1콜(국내 350)이기 때문이다.
                 // InitialLoadJob을 뺀 근거(한 번에 한도 절반)가 여기엔 없다.
+                //
+                // MUST: universeCode에 null을 명시한다. 자동 실행은 활성 유니버스만 돈다 —
+                // US_LISTED를 켜는 날 이 버튼의 대상이 6,689종목이 되고, 그때는
+                // governance-load를 화면에서 뺀 근거(ADR-0092 · 7,700콜)가 여기에 걸린다.
                 CompanyProfileJob.JOB_NAME,
                 request -> companyProfileJob.run(
                         request.orDefault(request.targetDate(), LocalDate.now()),
-                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()),
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of(), null),
 
                 // MUST NOT: from에 기본값을 주지 않는다. 잡이 null을 "저장된 시세의 첫 거래일"로
                 // 읽고, 짧은 창은 소스가 정기보고서에만 실려 **원리적으로 0건**이 된다.
