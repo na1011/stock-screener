@@ -77,6 +77,7 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | `company_tickers_exchange.json` (SEC) | **사용 중** | `SecTickerCikCache` javadoc | 실행당 1 |
 | `/v1/corporate-actions` (Alpaca) | **사용 중** | `alpaca-corporate-action.md` | 종목당 1(구간조회). **묶지 않는다** — `limit`이 전체 기준이라 묶으면 한 종목의 결측과 묶음 전체의 절단이 같은 모양이 된다 |
 | `/v3/calendar` (Alpaca **Trading**) | **사용 중** | `alpaca-calendar.md` | **거래소당 1 = 2**. 창과 무관하다 — 11년치가 한 응답이고 페이징이 없다 |
+| `frames`·`companyconcept` (SEC) | **탐침만** | `sec-edgar-financial.md` | `frames`는 **`us-gaap`만** 준다(`ifrs-full` 404). `companyconcept`는 **둘 다** 주고 응답이 **종목당 약 1.2KB**라 — 횡단면을 셀 때 `companyfacts`(3.4MB)보다 3,000배 싸다 |
 | `submissions` (SEC) | **사용 중** | `sec-edgar-company-profile.md` | **종목당 1** — 업종·결산월 넷을 위해 평균 385KB를 받는다(공시 이력이 함께 온다). 필드를 고르는 파라미터가 없다 |
 
 ### 받았지만 아직 안 쓰는 넷
