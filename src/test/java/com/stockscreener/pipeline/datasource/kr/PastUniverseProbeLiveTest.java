@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.datasource.kr;
 
+import com.stockscreener.pipeline.support.ReadOnlyDb;
+
 import com.stockscreener.pipeline.datasource.SecurityNameCache;
 import com.stockscreener.pipeline.datasource.UniverseSnapshot;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
@@ -245,7 +247,7 @@ class PastUniverseProbeLiveTest {
 
     private static Set<String> readTickers(String sql) throws Exception {
         Set<String> tickers = new TreeSet<>();
-        try (Connection connection = DartRestatementProbeLiveTest.openReadOnly();
+        try (Connection connection = ReadOnlyDb.open();
              PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {

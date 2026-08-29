@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.datasource.kr;
 
+import com.stockscreener.pipeline.support.ReadOnlyDb;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -8,7 +10,6 @@ import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -177,7 +178,7 @@ class DartRestatementProbeLiveTest {
                 GROUP BY 1, 2, 3
                 """;
         Map<String, Map<String, LocalDate>> stored = new LinkedHashMap<>();
-        try (Connection connection = openReadOnly();
+        try (Connection connection = ReadOnlyDb.open();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, FROM_FISCAL_YEAR);
             statement.setInt(2, TO_FISCAL_YEAR);
@@ -190,24 +191,6 @@ class DartRestatementProbeLiveTest {
             }
         }
         return stored;
-    }
-
-    /**
-     * 운영 DB를 읽기 전용으로 연다.
-     *
-     * <p>{@code readOnlyMode=always}가 있어야 서버가 실제로 거부한다 — 드라이버 기본값
-     * {@code transaction}은 autoCommit이 꺼져 있을 때만 {@code BEGIN READ ONLY}를 낸다.
-     * 접속 롤이 superuser라 이 한 줄이 없으면 아무것도 막히지 않는다.
-     */
-    static Connection openReadOnly() throws Exception {
-        String url = System.getenv().getOrDefault(
-                "DB_URL", "jdbc:postgresql://localhost:5432/stock_screener");
-        String user = System.getenv().getOrDefault("DB_USERNAME", System.getProperty("user.name"));
-        String password = System.getenv().getOrDefault("DB_PASSWORD", "");
-        Connection connection = DriverManager.getConnection(
-                url + (url.contains("?") ? "&" : "?") + "readOnlyMode=always", user, password);
-        connection.setReadOnly(true);
-        return connection;
     }
 
     private static JsonNode call(RestClient client, List<String> corpCodes,

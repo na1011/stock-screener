@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.datasource.kr;
 
+import com.stockscreener.pipeline.support.ReadOnlyDb;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -184,7 +186,7 @@ class DartOldFiscalYearProbeLiveTest {
                 ORDER BY s.ticker
                 """;
         List<String> tickers = new ArrayList<>();
-        try (Connection connection = DartRestatementProbeLiveTest.openReadOnly();
+        try (Connection connection = ReadOnlyDb.open();
              PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {
