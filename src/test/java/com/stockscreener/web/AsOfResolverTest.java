@@ -17,13 +17,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class AsOfResolverTest {
 
+    /** 시장은 이 테스트의 축이 아니다 — 정책만 본다. 시장 분리는 IndicatorCalendarTest가 잰다. */
+    private static final java.util.Set<String> MARKET = java.util.Set.of("KOSPI");
+
     private static final LocalDate LATEST = LocalDate.of(2026, 8, 5);
     private static final LocalDate EARLIEST = LocalDate.of(2025, 11, 3);
 
     @Test
     @DisplayName("일자를 비우면 최신 지표 일자로 정해진다")
     void resolvesToLatestWhenUnspecified() {
-        assertThat(resolver(LATEST, EARLIEST).resolve(null)).isEqualTo(LATEST);
+        assertThat(resolver(LATEST, EARLIEST).resolve(null, MARKET)).isEqualTo(LATEST);
     }
 
     @Test
@@ -31,7 +34,7 @@ class AsOfResolverTest {
     void clampsFutureRequestToLatest() {
         // 실제로 겪는 상황이다(오늘 08-06, 최신 지표 08-05). 거절하면 매일 아침 화면이
         // 깨지고, 응답의 asOf 에코가 밀렸다는 사실을 이미 드러내 준다.
-        assertThat(resolver(LATEST, EARLIEST).resolve(LocalDate.of(2026, 8, 6))).isEqualTo(LATEST);
+        assertThat(resolver(LATEST, EARLIEST).resolve(LocalDate.of(2026, 8, 6), MARKET)).isEqualTo(LATEST);
     }
 
     @Test
@@ -39,12 +42,12 @@ class AsOfResolverTest {
     void resolvesNonTradingDayDownwards() {
         AsOfResolver resolver = new AsOfResolver(new StubCalendar(LATEST, EARLIEST) {
             @Override
-            public Optional<LocalDate> nearestOnOrBefore(LocalDate date) {
+            public Optional<LocalDate> nearestOnOrBefore(LocalDate date, java.util.Collection<String> markets) {
                 return Optional.of(LocalDate.of(2026, 7, 31));
             }
         });
 
-        assertThat(resolver.resolve(LocalDate.of(2026, 8, 2))).isEqualTo(LocalDate.of(2026, 7, 31));
+        assertThat(resolver.resolve(LocalDate.of(2026, 8, 2), MARKET)).isEqualTo(LocalDate.of(2026, 7, 31));
     }
 
     @Test
@@ -52,12 +55,12 @@ class AsOfResolverTest {
     void rejectsDatesOutsideRetention() {
         AsOfResolver resolver = new AsOfResolver(new StubCalendar(LATEST, EARLIEST) {
             @Override
-            public Optional<LocalDate> nearestOnOrBefore(LocalDate date) {
+            public Optional<LocalDate> nearestOnOrBefore(LocalDate date, java.util.Collection<String> markets) {
                 return Optional.empty();
             }
         });
 
-        assertThatThrownBy(() -> resolver.resolve(LocalDate.of(2020, 1, 2)))
+        assertThatThrownBy(() -> resolver.resolve(LocalDate.of(2020, 1, 2), MARKET))
                 .isInstanceOfSatisfying(ApiExceptions.IndicatorHistoryUnavailableException.class, e -> {
                     assertThat(e.status().value()).isEqualTo(400);
                     assertThat(e.retryable()).isFalse();
@@ -73,7 +76,7 @@ class AsOfResolverTest {
     void reportsNotReadyWhenNoIndicatorsAtAll() {
         AsOfResolver resolver = new AsOfResolver(new StubCalendar(null, null));
 
-        assertThatThrownBy(() -> resolver.resolve(null))
+        assertThatThrownBy(() -> resolver.resolve(null, MARKET))
                 .isInstanceOfSatisfying(ApiExceptions.IndicatorDataNotReadyException.class, e -> {
                     // 사용자가 고칠 수 있는 것이 없고 배치가 돌면 해결된다 —
                     // frontend.md의 "자동 짧은 재시도"가 겨냥하는 경우다.
@@ -98,17 +101,17 @@ class AsOfResolverTest {
         }
 
         @Override
-        public Optional<LocalDate> latestIndicatorDate() {
+        public Optional<LocalDate> latestIndicatorDate(java.util.Collection<String> markets) {
             return Optional.ofNullable(latest);
         }
 
         @Override
-        public Optional<LocalDate> earliestIndicatorDate() {
+        public Optional<LocalDate> earliestIndicatorDate(java.util.Collection<String> markets) {
             return Optional.ofNullable(earliest);
         }
 
         @Override
-        public Optional<LocalDate> nearestOnOrBefore(LocalDate date) {
+        public Optional<LocalDate> nearestOnOrBefore(LocalDate date, java.util.Collection<String> markets) {
             return Optional.ofNullable(latest);
         }
     }

@@ -10,6 +10,7 @@ import com.stockscreener.stock.StockReader;
 import com.stockscreener.stock.SupportResistanceAnalyzer;
 import com.stockscreener.web.ApiExceptions;
 import com.stockscreener.web.AsOfResolver;
+import com.stockscreener.web.MarketScope;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,12 +41,14 @@ public class StockController {
     private final IndicatorDataReader priceReader;
     private final SupportResistanceAnalyzer analyzer;
     private final AsOfResolver asOfResolver;
+    private final MarketScope marketScope;
     private final StockFinancialsAssembler financialsAssembler;
     private final List<UnavailabilityRule> unavailabilityRules;
 
     public StockController(StockReader stockReader, IndicatorCatalog indicatorCatalog,
                            ScreeningRepository screeningRepository, IndicatorDataReader priceReader,
                            SupportResistanceAnalyzer analyzer, AsOfResolver asOfResolver,
+                           MarketScope marketScope,
                            StockFinancialsAssembler financialsAssembler,
                            List<UnavailabilityRule> unavailabilityRules) {
         this.stockReader = stockReader;
@@ -54,6 +57,7 @@ public class StockController {
         this.priceReader = priceReader;
         this.analyzer = analyzer;
         this.asOfResolver = asOfResolver;
+        this.marketScope = marketScope;
         this.financialsAssembler = financialsAssembler;
         this.unavailabilityRules = List.copyOf(unavailabilityRules);
     }
@@ -109,7 +113,7 @@ public class StockController {
             @PathVariable long stockId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
 
-        LocalDate resolved = asOfResolver.resolve(asOf);
+        LocalDate resolved = asOfResolver.resolve(asOf, marketScope.forStock(stockId));
         StockReader.StockRow row = stockReader.findById(stockId, resolved)
                 .orElseThrow(() -> new ApiExceptions.StockNotFoundException(stockId));
 
@@ -194,7 +198,7 @@ public class StockController {
      */
     @GetMapping("/{stockId}/financials")
     public StockFinancialsResponse financials(@PathVariable long stockId) {
-        stockReader.findById(stockId, asOfResolver.resolve(null))
+        stockReader.findById(stockId, asOfResolver.resolve(null, marketScope.forStock(stockId)))
                 .orElseThrow(() -> new ApiExceptions.StockNotFoundException(stockId));
 
         return financialsAssembler.assemble(
@@ -213,7 +217,7 @@ public class StockController {
             @PathVariable long stockId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
 
-        LocalDate resolved = asOfResolver.resolve(asOf);
+        LocalDate resolved = asOfResolver.resolve(asOf, marketScope.forStock(stockId));
         stockReader.findById(stockId, resolved)
                 .orElseThrow(() -> new ApiExceptions.StockNotFoundException(stockId));
 

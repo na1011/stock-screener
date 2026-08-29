@@ -63,6 +63,9 @@ class ReadApiTest {
         this.mockMvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
     }
 
+    @Autowired
+    private com.stockscreener.indicator.IndicatorTradeDateIndex tradeDateIndex;
+
     @BeforeEach
     void seed() {
         jdbcTemplate.update("""
@@ -93,6 +96,11 @@ class ReadApiTest {
                 VALUES (?, ?, 'PER', ?)
                 ON CONFLICT (trade_date, indicator_code, stock_id) DO UPDATE SET value = EXCLUDED.value
                 """, stockId, AS_OF, new BigDecimal("8.5"));
+
+        // 화면 기준일은 indicator_value가 아니라 파생 색인을 읽는다(ADR-0095). 운영에서는
+        // 지표를 쓰는 잡이 끝에서 이것을 부르므로, 픽스처도 같은 계약을 따른다 —
+        // 손으로 색인 행을 넣으면 잡이 그것을 빠뜨려도 이 테스트가 초록이 된다.
+        tradeDateIndex.rebuild();
 
         // 지지·저항 계산에 쓸 봉. trade_value는 일부러 NULL로 둔다 — 응답이 견뎌야 한다.
         for (int i = 0; i < 130; i++) {

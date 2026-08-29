@@ -5,6 +5,7 @@ import com.stockscreener.indicator.IndicatorCalendar;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -32,12 +33,21 @@ public class AsOfResolver {
 
     /**
      * @param requested 요청이 지정한 일자. {@code null}이면 서버가 최신으로 정한다.
+     * @param marketCodes 어느 시장의 달력으로 볼 것인가. <b>호출부가 반드시 고른다</b> —
+     *                    기본값을 주면 전 시장을 고른 호출부가 <b>아무 증상 없이</b> 국내
+     *                    휴장·미국 개장일에 국내를 통째로 비운다(ADR-0095).
+     *                    {@link MarketScope}가 유니버스·종목에서 그것을 유도한다
      * @return 실제로 지표가 있는 거래일. 호출자는 이것을 <b>응답에 에코해야 한다.</b>
      * @throws ApiExceptions.IndicatorDataNotReadyException          지표가 하나도 없다
      * @throws ApiExceptions.IndicatorHistoryUnavailableException 보존 구간보다 이전이다
      */
-    public LocalDate resolve(LocalDate requested) {
-        LocalDate latest = calendar.latestIndicatorDate()
+    public LocalDate resolve(LocalDate requested, Collection<String> marketCodes) {
+        if (marketCodes == null || marketCodes.isEmpty()) {
+            // 시장을 못 정했다 = 그 요청이 볼 수 있는 지표가 없다. 「전 시장」으로 접으면
+            // 활성 유니버스가 0인 상태(ADR-0012가 막는 그것)가 조용히 성공으로 보인다.
+            throw new ApiExceptions.IndicatorDataNotReadyException();
+        }
+        LocalDate latest = calendar.latestIndicatorDate(marketCodes)
                 .orElseThrow(ApiExceptions.IndicatorDataNotReadyException::new);
 
         if (requested == null) {
@@ -49,15 +59,15 @@ public class AsOfResolver {
             return latest;
         }
 
-        return calendar.nearestOnOrBefore(requested)
+        return calendar.nearestOnOrBefore(requested, marketCodes)
                 .orElseThrow(() -> new ApiExceptions.IndicatorHistoryUnavailableException(
                         requested,
-                        calendar.earliestIndicatorDate().orElse(latest),
+                        calendar.earliestIndicatorDate(marketCodes).orElse(latest),
                         latest));
     }
 
     /** 보존 구간. 화면이 날짜 선택기의 범위를 정할 때 쓴다. */
-    public Optional<LocalDate> earliest() {
-        return calendar.earliestIndicatorDate();
+    public Optional<LocalDate> earliest(Collection<String> marketCodes) {
+        return calendar.earliestIndicatorDate(marketCodes);
     }
 }

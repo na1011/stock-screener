@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
+import com.stockscreener.indicator.IndicatorTradeDateIndex;
 import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.PercentileCalculator;
 import com.stockscreener.indicator.SectorRelativeCalculator;
@@ -84,6 +85,7 @@ public class IndicatorBackfillJob {
     private final PercentileCalculator percentileCalculator;
     private final SectorRelativeCalculator sectorRelativeCalculator;
     private final IndicatorRetentionPolicy retentionPolicy;
+    private final IndicatorTradeDateIndex tradeDateIndex;
     private final JdbcTemplate jdbcTemplate;
 
     public IndicatorBackfillJob(StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
@@ -91,6 +93,7 @@ public class IndicatorBackfillJob {
                                 PercentileCalculator percentileCalculator,
                                 SectorRelativeCalculator sectorRelativeCalculator,
                                 IndicatorRetentionPolicy retentionPolicy,
+                                IndicatorTradeDateIndex tradeDateIndex,
                                 JdbcTemplate jdbcTemplate) {
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
@@ -98,6 +101,7 @@ public class IndicatorBackfillJob {
         this.percentileCalculator = percentileCalculator;
         this.sectorRelativeCalculator = sectorRelativeCalculator;
         this.retentionPolicy = retentionPolicy;
+        this.tradeDateIndex = tradeDateIndex;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -209,6 +213,11 @@ public class IndicatorBackfillJob {
             execution.stage("고아 파생값 정리");
             percentileCalculator.removeOrphansInWindow(orphanCutoff);
             sectorRelativeCalculator.removeOrphansInWindow(orphanCutoff);
+
+            // MUST: 쓰기와 지우기가 전부 끝난 뒤다. 화면 기준일이 이 색인을 읽으므로
+            // (ADR-0095) 여기를 빠뜨리면 새로 채운 날짜가 화면에 영영 안 보인다.
+            execution.stage("거래일 색인 갱신");
+            log.info("지표 거래일 색인을 갱신했다. 색인={}건", tradeDateIndex.rebuild());
         } catch (DataSourceException e) {
             // 외부 호출이 없으므로 정상적으로는 도달하지 않는다. StockTask의 시그니처가
             // 이 예외를 선언하고 있어 형식상 잡을 뿐이며, 실제로 온다면 그것 자체가 이상 신호다.

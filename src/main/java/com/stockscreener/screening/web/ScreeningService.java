@@ -12,6 +12,7 @@ import com.stockscreener.screening.store.ScreenType;
 import com.stockscreener.stock.StockReader;
 import com.stockscreener.web.ApiExceptions;
 import com.stockscreener.web.AsOfResolver;
+import com.stockscreener.web.MarketScope;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +46,7 @@ public class ScreeningService {
     private final IndicatorCatalog indicatorCatalog;
     private final StockReader stockReader;
     private final AsOfResolver asOfResolver;
+    private final MarketScope marketScope;
     private final ScreeningResponseAssembler assembler;
 
     public ScreeningService(ScreenStore screenStore,
@@ -52,12 +54,14 @@ public class ScreeningService {
                             IndicatorCatalog indicatorCatalog,
                             StockReader stockReader,
                             AsOfResolver asOfResolver,
+                            MarketScope marketScope,
                             ScreeningResponseAssembler assembler) {
         this.screenStore = screenStore;
         this.screeningRepository = screeningRepository;
         this.indicatorCatalog = indicatorCatalog;
         this.stockReader = stockReader;
         this.asOfResolver = asOfResolver;
+        this.marketScope = marketScope;
         this.assembler = assembler;
     }
 
@@ -79,7 +83,10 @@ public class ScreeningService {
             throw new ApiExceptions.UniverseNotFoundException(universeCode);
         }
 
-        LocalDate asOf = asOfResolver.resolve(request.asOf());
+        // 기준일은 시장마다 다르다(ADR-0095). 유니버스를 지정했으면 그 시장 하나,
+        // 안 했으면 활성 유니버스 전체 — 요청이 inAnyActiveUniverse로 도는 것과 짝이다.
+        LocalDate asOf = asOfResolver.resolve(
+                request.asOf(), marketScope.forScreening(universeCode));
 
         List<ScreeningResult> results =
                 screeningRepository.screen(source.conditions(), mode, asOf, universeCode);

@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
 import com.stockscreener.indicator.IndicatorRunner;
+import com.stockscreener.indicator.IndicatorTradeDateIndex;
 import com.stockscreener.indicator.PercentileCalculator;
 import com.stockscreener.indicator.SectorRelativeCalculator;
 import com.stockscreener.notification.AlertSeverity;
@@ -80,6 +81,7 @@ public class DailyUpdateJob {
     private final PercentileCalculator percentileCalculator;
     private final SectorRelativeCalculator sectorRelativeCalculator;
     private final IndicatorRetentionPolicy retentionPolicy;
+    private final IndicatorTradeDateIndex tradeDateIndex;
     private final WatchlistAlertRunner watchlistAlertRunner;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
@@ -89,6 +91,7 @@ public class DailyUpdateJob {
                           IndicatorRunner indicatorRunner, PercentileCalculator percentileCalculator,
                           SectorRelativeCalculator sectorRelativeCalculator,
                           IndicatorRetentionPolicy retentionPolicy,
+                          IndicatorTradeDateIndex tradeDateIndex,
                           WatchlistAlertRunner watchlistAlertRunner) {
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
@@ -101,6 +104,7 @@ public class DailyUpdateJob {
         this.percentileCalculator = percentileCalculator;
         this.sectorRelativeCalculator = sectorRelativeCalculator;
         this.retentionPolicy = retentionPolicy;
+        this.tradeDateIndex = tradeDateIndex;
         this.watchlistAlertRunner = watchlistAlertRunner;
     }
 
@@ -339,8 +343,17 @@ public class DailyUpdateJob {
         try {
             execution.stage("지표 보존 정리");
             retentionPolicy.purge();
+
+            // MUST: purge 뒤다. 색인이 화면 기준일의 하한·상한을 답하므로(ADR-0095),
+            // 앞에 두면 방금 지운 날짜가 색인에 남아 화면이 조회하면 비는 범위를 연다.
+            //
+            // MUST: 매일 도는 이 잡이 부른다. 백필에만 달면 기준일이 마지막 백필 시점에 언 채
+            // 매일 하루씩 벌어지는데, 값은 전부 옳아 아무 증상이 없다.
+            execution.stage("거래일 색인 갱신");
+            log.info("지표 거래일 색인을 갱신했다. 색인={}건", tradeDateIndex.rebuild());
         } catch (RuntimeException e) {
-            log.warn("지표 보존 정리에 실패했다. 수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
+            log.warn("지표 보존 정리 또는 거래일 색인 갱신에 실패했다. "
+                    + "수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
         }
 
         return execution.finish();
