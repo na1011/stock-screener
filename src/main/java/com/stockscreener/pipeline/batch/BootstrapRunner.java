@@ -46,6 +46,14 @@ import java.util.List;
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load \
  *     --tickers=082640,121600 --price-years=7'
  *
+ * # 재무만 받는다 — 시세가 과거 구간으로만 들어와 있는 시장에서 쓴다(미국이 그 상태다).
+ * # --skip-price가 없으면 최근 봉이 함께 들어와 보존 경계가 밀리고, 그 어긋남은 자연
+ * # 소멸하지 않는다(ADR-0088). --reload-existing이 필요한 이유는 유니버스 경로가 봉이
+ * # 있는 종목을 걸러내 대상이 0건이 되고 잡이 **성공으로 끝나기** 때문이다.
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load \
+ *     --universe=US_LISTED --skip-price --reload-existing=true --financial-years=3 \
+ *     --tickers=AAPL,MSFT'
+ *
  * # 재무 결손 보정 — 스키마에 컬럼이 늘어 NULL로 남은 자리만 채운다(ADR-0040)
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=financial-refill \
  *     --financial-years=3 --tickers=005930,035420'
@@ -320,7 +328,8 @@ public class BootstrapRunner implements ApplicationRunner {
                 Boolean.parseBoolean(value(args, "reload-existing", "false")),
                 csv(args, "tickers"),
                 value(args, "universe", null),
-                Boolean.parseBoolean(value(args, "skip-financial", "false")));
+                Boolean.parseBoolean(value(args, "skip-financial", "false")),
+                Boolean.parseBoolean(value(args, "skip-price", "false")));
     }
 
     /**
@@ -333,7 +342,7 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
             "job", "as-of", "universe", "price-years", "financial-years", "reload-existing",
-            "skip-financial", "tickers", "from",
+            "skip-financial", "skip-price", "tickers", "from",
             "quarters", "governance-year", "governance-span", "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
             "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note");
@@ -349,11 +358,18 @@ public class BootstrapRunner implements ApplicationRunner {
     private static final java.util.Set<String> UNIVERSE_JOBS = java.util.Set.of(
             "universe", "initial-load");
 
-    /** {@code --skip-financial}이 뜻을 갖는 잡. 위와 같은 이유로 {@code --job=}의 값이다. */
+    /**
+     * {@code --skip-financial}·{@code --skip-price}가 뜻을 갖는 잡. 위와 같은 이유로
+     * {@code --job=}의 값이다.
+     */
     private static final String INITIAL_LOAD_JOB = "initial-load";
 
+    /** 초기 적재에서만 뜻이 있는 인자. 나머지 잡에서는 조용히 무시되므로 거절한다. */
+    private static final java.util.Set<String> INITIAL_LOAD_ONLY_OPTIONS =
+            java.util.Set.of("skip-financial", "skip-price");
+
     /**
-     * {@code --universe}·{@code --skip-financial}을 뜻이 없는 잡에서 쓰면 즉시 실패시킨다.
+     * {@code --universe}·{@code --skip-*}를 뜻이 없는 잡에서 쓰면 즉시 실패시킨다.
      *
      * <p>IMPORTANT — {@link #KNOWN_OPTIONS}가 잡별이 아니라 <b>전역</b>이라, 뜻이 없는 잡에
      * 붙은 이 인자들은 <b>아무 말 없이 무시된다.</b> {@code --universe=US_LISTED}를 붙였는데
@@ -367,10 +383,14 @@ public class BootstrapRunner implements ApplicationRunner {
                             + "에서만 쓴다 — 지금 잡은 '" + job + "'이고, 그대로 두면 인자가 조용히"
                             + " 무시된 채 전 종목이 대상이 된다.");
         }
-        if (!INITIAL_LOAD_JOB.equals(job) && args.getOptionNames().contains("skip-financial")) {
-            throw new IllegalArgumentException(
-                    "--skip-financial은 '" + INITIAL_LOAD_JOB + "'에서만 쓴다 — 지금 잡은 '"
-                            + job + "'이다.");
+        if (!INITIAL_LOAD_JOB.equals(job)) {
+            for (String option : INITIAL_LOAD_ONLY_OPTIONS) {
+                if (args.getOptionNames().contains(option)) {
+                    throw new IllegalArgumentException(
+                            "--" + option + "은 '" + INITIAL_LOAD_JOB + "'에서만 쓴다 — 지금 잡은 '"
+                                    + job + "'이다.");
+                }
+            }
         }
     }
 

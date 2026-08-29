@@ -165,6 +165,44 @@ class InitialLoadTargetSelectionTest {
         assertThat(phases).containsExactly("PRICE");
     }
 
+    @Test
+    @DisplayName("IMPORTANT — 시세를 건너뛰면 그 단계의 계획도 함께 빠진다")
+    void skippingPriceAlsoDropsItsPlan() {
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                new InitialLoadJob.LoadRange(1, 1, true, List.of("005930"), null, false, true));
+
+        List<String> phases = jdbcTemplate.queryForList("""
+                SELECT phase FROM batch_execution_phase
+                WHERE execution_id = (SELECT max(id) FROM batch_execution WHERE job_name = ?)
+                ORDER BY phase
+                """, String.class, InitialLoadJob.JOB_NAME);
+
+        assertThat(phases).as("재무 쪽과 대칭이다").containsExactly("FINANCIAL");
+        assertThat(fakePriceSource.fetchedStockIds)
+                .as("시세 소스를 한 번도 부르지 않는다 — 최근 봉이 들어오면 보존 경계가 밀린다")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("유니버스 경로에서 --skip-price가 무력화되지 않는다")
+    void skippingPriceHoldsOnTheUniversePath() {
+        // stocksToSkipPrice는 hasUniverse()면 빈 집합을 조기 반환한다. 그 종목별 판단과
+        // 이 전역 플래그를 한 기제로 합치면 정확히 이 경로에서 시세가 다시 들어온다.
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                new InitialLoadJob.LoadRange(1, 1, true, List.of(), UNIVERSE, false, true));
+
+        assertThat(fakePriceSource.fetchedStockIds).isEmpty();
+    }
+
+    @Test
+    @DisplayName("시세와 재무를 둘 다 건너뛰면 만들 때 막는다 — 아무것도 안 하고 성공하지 않는다")
+    void refusesToSkipBoth() {
+        assertThatThrownBy(() -> new InitialLoadJob.LoadRange(
+                1, 1, false, List.of(), null, true, true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("할 일이 없다");
+    }
+
     private long insertStock(String ticker, String name) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO stock (market_code, ticker, name) VALUES ('KOSPI', ?, ?) RETURNING id

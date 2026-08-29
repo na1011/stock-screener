@@ -84,7 +84,11 @@ public class InitialLoadJob {
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LoadRange range) {
         List<Long> targetIds = resolveTargets(range);
-        Set<Long> skipPrice = stocksToSkipPrice(range, targetIds);
+        // 이름이 range.skipPrice()와 비슷하지만 뜻이 다르다. 이쪽은 「봉이 이미 있어 재수집이
+        // 불필요한 종목」이라는 종목별 판단이고, 저쪽은 「이번 실행은 시세를 아예 안 받는다」는
+        // 전역 플래그다. 둘을 한 기제로 합치면 --skip-price가 유니버스 경로에서 무력화된다 —
+        // stocksToSkipPrice는 hasUniverse()면 빈 집합을 조기 반환하기 때문이다.
+        Set<Long> skippedForResume = stocksToSkipPrice(range, targetIds);
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(targetIds);
         if (targets.isEmpty()) {
             log.info("초기 적재가 필요한 종목이 없다. 모든 편입 종목에 이력이 있다.");
@@ -93,8 +97,9 @@ public class InitialLoadJob {
             return empty.finish();
         }
 
-        log.info("초기 적재를 시작한다. 대상 {}종목, 시세 {}년·재무 {} (대상 선정: {})",
-                targets.size(), range.priceYears(),
+        log.info("초기 적재를 시작한다. 대상 {}종목, 시세 {}·재무 {} (대상 선정: {})",
+                targets.size(),
+                range.skipPrice() ? "건너뜀" : range.priceYears() + "년",
                 range.skipFinancial() ? "건너뜀" : range.financialYears() + "년",
                 range.hasUniverse()
                         ? "유니버스 " + range.universeCode()
@@ -107,7 +112,11 @@ public class InitialLoadJob {
 
         // 종목당 시세·재무 두 단계를 돌되, 재무 결손 때문에 잡힌 종목은 시세를 건너뛴다.
         // 계획 수가 실제와 어긋나면 관리자 화면의 진행률이 100%에 못 미친 채 끝난다.
-        execution.plan(CollectionPhase.PRICE, targets.size() - skipPrice.size());
+        if (!range.skipPrice()) {
+            // MUST: 건너뛰면 계획도 함께 뺀다. 재무 쪽과 같은 이유다 — 안 빼면 진행률이
+            // 절반에서 끝나고, 그것은 멎은 것과 구분되지 않는다.
+            execution.plan(CollectionPhase.PRICE, targets.size() - skippedForResume.size());
+        }
         if (!range.skipFinancial()) {
             // MUST: 건너뛰면 계획도 함께 뺀다. 안 빼면 진행률이 절반에서 끝나고, 그것은
             // 멎은 것과 구분되지 않는다.
@@ -127,7 +136,7 @@ public class InitialLoadJob {
             for (SecurityRef target : targets) {
                 // 시세와 재무를 각각 독립된 단계로 처리한다. 재무만 실패한 종목의 시세를
                 // 재실행에서 다시 받지 않으려면 실패 기록이 단계를 구분해야 한다.
-                if (!skipPrice.contains(target.stockId())) {
+                if (!range.skipPrice() && !skippedForResume.contains(target.stockId())) {
                     execution.process(target, CollectionPhase.PRICE,
                             security -> priceCollector.collect(security, priceFrom, asOf));
                 }
@@ -157,8 +166,11 @@ public class InitialLoadJob {
                             + "경고도 나지 않는다. 어느 종목인지는 로그의 '정정공시를 반영한다'가 답한다.")
                             .formatted(revised.get()));
         }
-        return execution.finish(range.skipFinancial()
-                ? "재무 건너뜀 (그 시장에 재무 소스가 없다)"
+        if (range.skipFinancial()) {
+            return execution.finish("재무 건너뜀 (그 시장에 재무 소스가 없다)");
+        }
+        return execution.finish(range.skipPrice()
+                ? "시세 건너뜀 · 정정=%d".formatted(revised.get())
                 : "정정=%d".formatted(revised.get()));
     }
 
@@ -267,22 +279,42 @@ public class InitialLoadJob {
      * @param reloadExisting 이미 시세가 있는 종목도 다시 받을지. 기간 확장 시 참이다.
      * @param tickers        비면 위 두 규칙대로 전 종목. 값이 있으면 <b>그 종목만</b>이고
      *                       {@code reloadExisting}은 무시된다 — 아래 참조.
+     * @param skipFinancial  재무를 건너뛴다. 그 시장에 재무 소스가 없을 때 쓴다.
+     * @param skipPrice      시세를 건너뛴다. <b>{@code skipFinancial}과 대칭이다.</b>
+     *                       재무만 받아야 하는 상태가 실재하기 때문에 있다 — 미국 시세는
+     *                       파일럿 창(과거 구간)으로만 들어와 있고, 재무를 받으려고 이 잡을
+     *                       다시 돌리면 <b>최근 시세가 함께 들어온다.</b> 그러면 시장을 안
+     *                       가르고 거래일을 세는 읽기들(지표 기준일·보존 경계·결손 판정·
+     *                       백필 대상)이 함께 밀리고, {@code purge()}는 {@code indicator_value}
+     *                       기준이라 그 어긋남이 자연 소멸하지 않는다(ADR-0088 §배경).
      */
     public record LoadRange(int priceYears, int financialYears, boolean reloadExisting,
-                            List<String> tickers, String universeCode, boolean skipFinancial) {
+                            List<String> tickers, String universeCode, boolean skipFinancial,
+                            boolean skipPrice) {
 
         public LoadRange {
             if (priceYears < 0 || financialYears < 0) {
                 throw new IllegalArgumentException(
                         "적재 연수는 음수일 수 없다: 시세=" + priceYears + " 재무=" + financialYears);
             }
+            if (skipPrice && skipFinancial) {
+                // 둘 다 건너뛰면 이 잡이 아무것도 하지 않고 성공으로 끝난다. 조용한 0건이다.
+                throw new IllegalArgumentException(
+                        "시세와 재무를 둘 다 건너뛰면 이 잡이 할 일이 없다.");
+            }
             tickers = tickers == null ? List.of() : List.copyOf(tickers);
             universeCode = universeCode == null || universeCode.isBlank() ? null : universeCode;
         }
 
         public LoadRange(int priceYears, int financialYears, boolean reloadExisting,
+                         List<String> tickers, String universeCode, boolean skipFinancial) {
+            this(priceYears, financialYears, reloadExisting, tickers, universeCode,
+                    skipFinancial, false);
+        }
+
+        public LoadRange(int priceYears, int financialYears, boolean reloadExisting,
                          List<String> tickers) {
-            this(priceYears, financialYears, reloadExisting, tickers, null, false);
+            this(priceYears, financialYears, reloadExisting, tickers, null, false, false);
         }
 
         public LoadRange(int priceYears, int financialYears, boolean reloadExisting) {
