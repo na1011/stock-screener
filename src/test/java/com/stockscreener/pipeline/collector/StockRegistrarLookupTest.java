@@ -163,6 +163,29 @@ class StockRegistrarLookupTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 손으로 고른 유니버스는 비활성이어도 낸다. 다만 시장 게이트는 남는다")
+    void oneUniverseIgnoresActivenessButNotTheMarketGate() {
+        long inactiveMember = insertStock("100003", "비활성유니버스종목", true);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('KOSPI_TOP200', ?, ?)
+                """, inactiveMember, FROM);
+        long outsideStock = memberOfUncollectedMarket();
+
+        assertThat(registrar.oneUniverseMemberIds("KOSPI_TOP200", List.of()))
+                .as("이 경로가 없으면 비활성 유니버스는 적재할 방법이 없다")
+                .contains(inactiveMember);
+        assertThat(registrar.oneUniverseMemberIds("XX_ALL", List.of()))
+                .as("CollectedMarkets가 이 경로의 유일한 게이트다 — 없는 시장이면 비어야 한다")
+                .doesNotContain(outsideStock)
+                .isEmpty();
+        assertThat(registrar.oneUniverseMemberIds("KOSPI_TOP200", List.of("100003")))
+                .containsExactly(inactiveMember);
+        assertThat(registrar.oneUniverseMemberIds("KOSPI_TOP200", List.of("999999")))
+                .as("교집합이 비면 호출부가 예외로 끝낸다").isEmpty();
+    }
+
+    @Test
     @DisplayName("빈 목록은 빈 결과다 — IN () 조립으로 문법 오류가 나면 안 된다")
     void handlesEmptyTickerList() {
         assertThat(registrar.activeUniverseMemberIdsByTicker(List.of())).isEmpty();

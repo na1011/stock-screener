@@ -220,6 +220,7 @@ public class BootstrapRunner implements ApplicationRunner {
 
         String job = required(args, "job");
         rejectLedgerOptionsOutsideLedgerJobs(args, job);
+        rejectMisplacedLoadOptions(args, job);
         LocalDate asOf = date(args, "as-of", LocalDate.now());
 
         // 이전 부트스트랩 실행이 SIGKILL 등으로 남긴 행을 여기서 닫는다.
@@ -317,7 +318,9 @@ public class BootstrapRunner implements ApplicationRunner {
                 integer(args, "price-years", defaults.priceYears()),
                 integer(args, "financial-years", defaults.financialYears()),
                 Boolean.parseBoolean(value(args, "reload-existing", "false")),
-                csv(args, "tickers"));
+                csv(args, "tickers"),
+                value(args, "universe", null),
+                Boolean.parseBoolean(value(args, "skip-financial", "false")));
     }
 
     /**
@@ -330,10 +333,46 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
             "job", "as-of", "universe", "price-years", "financial-years", "reload-existing",
-            "tickers", "from",
+            "skip-financial", "tickers", "from",
             "quarters", "governance-year", "governance-span", "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
             "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note");
+
+    /**
+     * {@code --universe}가 뜻을 갖는 잡. 나머지에서는 조용히 무시되므로 거절한다.
+     *
+     * <p><b>IMPORTANT — 여기 적는 것은 {@code --job=}의 값이지 {@code JOB_NAME}이 아니다.</b>
+     * 둘은 같지 않다 — 리밸런싱은 {@code --job=universe}인데 {@code JOB_NAME}이
+     * {@code universe-rebalance}다. {@code JOB_NAME}을 쓰면 <b>정상 명령이 막히고</b>
+     * 그 실패는 인자를 고치러 가게 만든다. {@code initial-load}는 둘이 우연히 같다.
+     */
+    private static final java.util.Set<String> UNIVERSE_JOBS = java.util.Set.of(
+            "universe", "initial-load");
+
+    /** {@code --skip-financial}이 뜻을 갖는 잡. 위와 같은 이유로 {@code --job=}의 값이다. */
+    private static final String INITIAL_LOAD_JOB = "initial-load";
+
+    /**
+     * {@code --universe}·{@code --skip-financial}을 뜻이 없는 잡에서 쓰면 즉시 실패시킨다.
+     *
+     * <p>IMPORTANT — {@link #KNOWN_OPTIONS}가 잡별이 아니라 <b>전역</b>이라, 뜻이 없는 잡에
+     * 붙은 이 인자들은 <b>아무 말 없이 무시된다.</b> {@code --universe=US_LISTED}를 붙였는데
+     * 잡 이름을 잘못 적으면 <b>전 종목</b>이 대상이 되고 잡은 성공으로 끝난다 —
+     * {@link #rejectLedgerOptionsOutsideLedgerJobs}가 접두어 오타에 대해 막는 것과 같은 사고다.
+     */
+    static void rejectMisplacedLoadOptions(ApplicationArguments args, String job) {
+        if (!UNIVERSE_JOBS.contains(job) && args.getOptionNames().contains("universe")) {
+            throw new IllegalArgumentException(
+                    "--universe는 " + UNIVERSE_JOBS.stream().sorted().toList()
+                            + "에서만 쓴다 — 지금 잡은 '" + job + "'이고, 그대로 두면 인자가 조용히"
+                            + " 무시된 채 전 종목이 대상이 된다.");
+        }
+        if (!INITIAL_LOAD_JOB.equals(job) && args.getOptionNames().contains("skip-financial")) {
+            throw new IllegalArgumentException(
+                    "--skip-financial은 '" + INITIAL_LOAD_JOB + "'에서만 쓴다 — 지금 잡은 '"
+                            + job + "'이다.");
+        }
+    }
 
     /** 원장을 보거나 고치는 잡. {@code --ca-*}는 여기서만 뜻이 있다. */
     private static final java.util.Set<String> LEDGER_JOBS = java.util.Set.of(

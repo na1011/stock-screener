@@ -93,10 +93,14 @@ public class InitialLoadJob {
             return empty.finish();
         }
 
-        log.info("초기 적재를 시작한다. 대상 {}종목, 시세 {}년·재무 {}년 (대상 선정: {})",
-                targets.size(), range.priceYears(), range.financialYears(),
-                range.hasTickers() ? "지정한 티커 " + range.tickers().size() + "개"
-                        : range.reloadExisting() ? "편입 전 종목" : "이력이 없는 종목만");
+        log.info("초기 적재를 시작한다. 대상 {}종목, 시세 {}년·재무 {} (대상 선정: {})",
+                targets.size(), range.priceYears(),
+                range.skipFinancial() ? "건너뜀" : range.financialYears() + "년",
+                range.hasUniverse()
+                        ? "유니버스 " + range.universeCode()
+                                + (range.hasTickers() ? " ∩ 티커 " + range.tickers().size() + "개" : "")
+                        : range.hasTickers() ? "지정한 티커 " + range.tickers().size() + "개"
+                                : range.reloadExisting() ? "편입 전 종목" : "이력이 없는 종목만");
 
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
@@ -104,7 +108,11 @@ public class InitialLoadJob {
         // 종목당 시세·재무 두 단계를 돌되, 재무 결손 때문에 잡힌 종목은 시세를 건너뛴다.
         // 계획 수가 실제와 어긋나면 관리자 화면의 진행률이 100%에 못 미친 채 끝난다.
         execution.plan(CollectionPhase.PRICE, targets.size() - skipPrice.size());
-        execution.plan(CollectionPhase.FINANCIAL, targets.size());
+        if (!range.skipFinancial()) {
+            // MUST: 건너뛰면 계획도 함께 뺀다. 안 빼면 진행률이 절반에서 끝나고, 그것은
+            // 멎은 것과 구분되지 않는다.
+            execution.plan(CollectionPhase.FINANCIAL, targets.size());
+        }
 
         LocalDate priceFrom = asOf.minusYears(range.priceYears());
         int fromFiscalYear = asOf.getYear() - range.financialYears();
@@ -123,12 +131,14 @@ public class InitialLoadJob {
                     execution.process(target, CollectionPhase.PRICE,
                             security -> priceCollector.collect(security, priceFrom, asOf));
                 }
-                execution.process(target, CollectionPhase.FINANCIAL, security -> {
-                    FinancialWriter.Outcome outcome = financialCollector.collectDetailed(
-                            security, fromFiscalYear, FinancialWriter.WriteMode.APPEND_ONLY);
-                    revised.addAndGet(outcome.revised());
-                    return outcome.changed();
-                });
+                if (!range.skipFinancial()) {
+                    execution.process(target, CollectionPhase.FINANCIAL, security -> {
+                        FinancialWriter.Outcome outcome = financialCollector.collectDetailed(
+                                security, fromFiscalYear, FinancialWriter.WriteMode.APPEND_ONLY);
+                        revised.addAndGet(outcome.revised());
+                        return outcome.changed();
+                    });
+                }
             }
         } catch (DataSourceException e) {
             execution.failFatally(e);
@@ -147,7 +157,9 @@ public class InitialLoadJob {
                             + "경고도 나지 않는다. 어느 종목인지는 로그의 '정정공시를 반영한다'가 답한다.")
                             .formatted(revised.get()));
         }
-        return execution.finish("정정=%d".formatted(revised.get()));
+        return execution.finish(range.skipFinancial()
+                ? "재무 건너뜀 (그 시장에 재무 소스가 없다)"
+                : "정정=%d".formatted(revised.get()));
     }
 
     /**
@@ -164,6 +176,9 @@ public class InitialLoadJob {
      * 끝나면 안 된다({@link FinancialRefillJob}과 같은 기준이다).
      */
     private List<Long> resolveTargets(LoadRange range) {
+        if (range.hasUniverse()) {
+            return resolveUniverseTargets(range);
+        }
         if (!range.hasTickers()) {
             return range.reloadExisting()
                     ? stockRegistrar.activeUniverseMemberIds()
@@ -183,6 +198,47 @@ public class InitialLoadJob {
     }
 
     /**
+     * 유니버스를 손으로 골랐을 때의 대상.
+     *
+     * <p>{@code StockRegistrar.oneUniverseMemberIds}가 <b>활성 여부를 보지 않는다</b> —
+     * 비활성인 채로 적재해야 하는 상태가 실재하기 때문이다. 그 대신 {@code CollectedMarkets}가
+     * 유일한 게이트이므로 <b>0건이면 예외로 끝낸다.</b> 조용한 0건은 "적재할 것이 없다"와
+     * 구별되지 않는다.
+     *
+     * <p>{@code reloadExisting}이 아니면 <b>봉이 없는 종목만</b> 남긴다 — 쿼터가 마르거나
+     * 프로세스가 죽어도 다음 실행이 이어서 처리하게 하는 것이 이 잡의 재개 방식이다.
+     */
+    private List<Long> resolveUniverseTargets(LoadRange range) {
+        List<Long> members =
+                stockRegistrar.oneUniverseMemberIds(range.universeCode(), range.tickers());
+        if (members.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "유니버스 '" + range.universeCode() + "'에 대상이 하나도 없다"
+                            + (range.hasTickers() ? " (티커 " + range.tickers() + ")" : "")
+                            + " — 유니버스 코드와, 그 시장이 CollectedMarkets에 있는지 확인하라."
+                            + " 대상 0건으로 성공시키지 않는다.");
+        }
+        if (range.reloadExisting()) {
+            return members;
+        }
+        Set<Long> loaded = stocksWithBars(members);
+        List<Long> remaining = members.stream().filter(id -> !loaded.contains(id)).toList();
+        log.info("유니버스 {} 편입 {}종목 중 시세가 없는 {}종목이 대상이다.",
+                range.universeCode(), members.size(), remaining.size());
+        return remaining;
+    }
+
+    private Set<Long> stocksWithBars(List<Long> stockIds) {
+        if (stockIds.isEmpty()) {
+            return Set.of();
+        }
+        String placeholders = stockIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        return new HashSet<>(jdbcTemplate.queryForList(
+                "SELECT DISTINCT stock_id FROM price_daily WHERE stock_id IN (" + placeholders + ")",
+                Long.class, stockIds.toArray()));
+    }
+
+    /**
      * 시세를 건너뛸 종목. <b>재무 결손 때문에 잡힌 종목</b>이 여기 든다.
      *
      * <p>대상 선정을 넓히기만 하면 그 종목이 루프에서 시세도 다시 받는다 — 이 잡의 제약이
@@ -193,7 +249,8 @@ public class InitialLoadJob {
      * 무시되어 "돌렸는데 아무 일도 없었다"가 된다.
      */
     private Set<Long> stocksToSkipPrice(LoadRange range, List<Long> targetIds) {
-        if (range.hasTickers() || range.reloadExisting() || targetIds.isEmpty()) {
+        if (range.hasTickers() || range.reloadExisting() || range.hasUniverse()
+                || targetIds.isEmpty()) {
             return Set.of();
         }
         String placeholders = targetIds.stream().map(id -> "?").collect(Collectors.joining(","));
@@ -212,7 +269,7 @@ public class InitialLoadJob {
      *                       {@code reloadExisting}은 무시된다 — 아래 참조.
      */
     public record LoadRange(int priceYears, int financialYears, boolean reloadExisting,
-                            List<String> tickers) {
+                            List<String> tickers, String universeCode, boolean skipFinancial) {
 
         public LoadRange {
             if (priceYears < 0 || financialYears < 0) {
@@ -220,6 +277,12 @@ public class InitialLoadJob {
                         "적재 연수는 음수일 수 없다: 시세=" + priceYears + " 재무=" + financialYears);
             }
             tickers = tickers == null ? List.of() : List.copyOf(tickers);
+            universeCode = universeCode == null || universeCode.isBlank() ? null : universeCode;
+        }
+
+        public LoadRange(int priceYears, int financialYears, boolean reloadExisting,
+                         List<String> tickers) {
+            this(priceYears, financialYears, reloadExisting, tickers, null, false);
         }
 
         public LoadRange(int priceYears, int financialYears, boolean reloadExisting) {
@@ -233,6 +296,11 @@ public class InitialLoadJob {
 
         public boolean hasTickers() {
             return !tickers.isEmpty();
+        }
+
+        /** 유니버스를 손으로 골랐는가. 그러면 활성 여부를 보지 않는다. */
+        public boolean hasUniverse() {
+            return universeCode != null;
         }
     }
 }

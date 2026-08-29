@@ -120,6 +120,51 @@ class InitialLoadTargetSelectionTest {
         assertThat(fakePriceSource.fetchedStockIds).containsExactly(emptyId);
     }
 
+    @Test
+    @DisplayName("IMPORTANT — 유니버스를 손으로 고르면 비활성이어도 대상이 된다")
+    void oneUniversePathReachesInactiveUniverses() {
+        // 운영의 US_LISTED가 이 모양이다 — 켜면 지표 하나 없는 종목이 프리셋 결과에 실리므로
+        // 켤 수 없는데, 켜지 않으면 활성 유니버스 조인 때문에 대상이 0건이다.
+        jdbcTemplate.update("UPDATE universe SET is_active = false WHERE code = ?", UNIVERSE);
+        try {
+            job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    new InitialLoadJob.LoadRange(1, 0, false, List.of(), UNIVERSE, true));
+
+            assertThat(fakePriceSource.fetchedStockIds)
+                    .as("비활성이라 활성 경로는 0건이다")
+                    .containsExactly(emptyId);
+        } finally {
+            jdbcTemplate.update("UPDATE universe SET is_active = true WHERE code = ?", UNIVERSE);
+        }
+    }
+
+    @Test
+    @DisplayName("유니버스에 대상이 없으면 조용히 성공하지 않고 실패한다")
+    void oneUniversePathFailsLoudlyWhenEmpty() {
+        assertThatThrownBy(() -> job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                new InitialLoadJob.LoadRange(1, 0, false, List.of(), "NO_SUCH_UNIVERSE", true)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("NO_SUCH_UNIVERSE");
+
+        assertThat(fakePriceSource.fetchedStockIds).isEmpty();
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 재무를 건너뛰면 그 단계의 계획도 함께 빠진다")
+    void skippingFinancialAlsoDropsItsPlan() {
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                new InitialLoadJob.LoadRange(1, 0, false, List.of("005930"), null, true));
+
+        List<String> phases = jdbcTemplate.queryForList("""
+                SELECT phase FROM batch_execution_phase
+                WHERE execution_id = (SELECT max(id) FROM batch_execution WHERE job_name = ?)
+                ORDER BY phase
+                """, String.class, InitialLoadJob.JOB_NAME);
+
+        // 계획만 남기고 안 돌면 진행률이 절반에서 끝나고, 그것은 멎은 것과 구분되지 않는다.
+        assertThat(phases).containsExactly("PRICE");
+    }
+
     private long insertStock(String ticker, String name) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO stock (market_code, ticker, name) VALUES ('KOSPI', ?, ?) RETURNING id

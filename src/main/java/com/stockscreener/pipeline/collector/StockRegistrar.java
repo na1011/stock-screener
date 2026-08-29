@@ -246,6 +246,46 @@ public class StockRegistrar {
     }
 
     /**
+     * <b>유니버스 하나</b>를 골라 그 편입 종목을 낸다. <b>활성 여부를 보지 않는다.</b>
+     *
+     * <p>MUST NOT: 이 경로를 스케줄러·{@code AdminJobLauncher}에 걸지 않는다. 손으로 고른
+     * 유니버스 하나를 적재하는 수단이며, 자동 실행은 활성 유니버스만 돈다 — 그래야 "활성"이
+     * 무엇을 뜻하는지가 한 가지로 남는다. {@code UniverseRebalanceJob}의 {@code oneUniverse}가
+     * 같은 이유로 같은 모양이다.
+     *
+     * <p>비활성인 채로 적재해야 하는 상태가 실재하기 때문에 있다 — 미국은 시세가 붙어도
+     * 재무가 없어 {@code US_LISTED}를 켤 수 없는데(켜면 지표 하나 없는 8,504종목이 프리셋
+     * 결과에 실린다), 켜지 않으면 위 질의 셋이 그 종목을 하나도 내지 않는다.
+     *
+     * <p><b>IMPORTANT — 이 경로에서는 {@link CollectedMarkets}가 유일한 게이트다.</b>
+     * ADR-0087이 두 겹으로 만든 이유의 반대편이므로, 그 목록에 없는 시장의 유니버스를 주면
+     * 결과가 비고 호출부가 예외로 끝낸다. <b>조용한 0건이 되지 않는 것</b>이 두 번째 겹을
+     * 포기하는 대가다.
+     *
+     * @param tickers 비면 그 유니버스 전체. 값이 있으면 그 종목과의 교집합이다.
+     */
+    public List<Long> oneUniverseMemberIds(String universeCode, List<String> tickers) {
+        String tickerFilter = tickers.isEmpty() ? ""
+                : "AND s.ticker IN (%s) ".formatted(
+                        String.join(",", java.util.Collections.nCopies(tickers.size(), "?")));
+        Object[] args = java.util.stream.Stream.of(
+                        java.util.stream.Stream.of((Object) universeCode),
+                        tickers.stream().map(t -> (Object) t),
+                        java.util.Arrays.stream(collectedMarkets()))
+                .flatMap(java.util.function.Function.identity())
+                .toArray();
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                WHERE m.effective_to IS NULL AND s.is_active
+                  AND m.universe_code = ?
+                  %s
+                  AND s.market_code IN (%s)
+                ORDER BY m.stock_id
+                """.formatted(tickerFilter, collectedMarketPlaceholders()), Long.class, args);
+    }
+
+    /**
      * 배치가 처리할 종목의 참조를 만든다.
      *
      * <p>{@code IN} 절을 문자열로 조립하는 이유는 {@code setArray}가 드라이버별 타입 이름에

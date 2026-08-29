@@ -103,4 +103,32 @@ class BootstrapArgumentGuardTest {
                         "--debug", "--job=universe")))
                 .doesNotThrowAnyException();
     }
+
+    @Test
+    @DisplayName("--universe·--skip-financial은 뜻이 있는 잡에서만 통과한다 — 아니면 조용히 무시된다")
+    void rejectsMisplacedLoadOptions() {
+        // 잡 이름을 잘못 적으면 --universe가 무시된 채 전 종목이 대상이 되고 성공으로 끝난다.
+        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=backfill", "--universe=US_LISTED"),
+                "backfill"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("universe");
+
+        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=universe", "--skip-financial=true"),
+                "universe"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("skip-financial");
+
+        assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=initial-load", "--universe=US_LISTED",
+                        "--skip-financial=true"),
+                "initial-load"))
+                .doesNotThrowAnyException();
+
+        assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=universe", "--universe=US_LISTED"),
+                "universe"))
+                .doesNotThrowAnyException();
+    }
 }
