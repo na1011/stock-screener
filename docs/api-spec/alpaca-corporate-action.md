@@ -11,6 +11,7 @@
   [`dart-corporate-action.md`](./dart-corporate-action.md)가 답한다.
 - 쿼터와 엔드포인트 색인은 `api-sources` skill이 답한다.
 - 탐침: `AlpacaCorporateActionProbeLiveTest` — **아래 실측이 그 출력 그대로다.**
+  어댑터가 실제 소스에 통하는지는 `AlpacaCorporateActionLiveTest`가 지킨다.
 - 호출 방법과 함정의 원문은 [`../external/us-market-api-dev-guide.md`](../external/us-market-api-dev-guide.md).
 
 여기는 **이 축의 필드 계약과, 그 문서가 답하지 않았거나 실측에서 달랐던 자리**다.
