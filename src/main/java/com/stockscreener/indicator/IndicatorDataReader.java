@@ -168,7 +168,7 @@ public class IndicatorDataReader {
     /**
      * 계산기가 쓰는 종목 속성.
      *
-     * @param industryDivision KSIC 중분류(업종코드 앞 2자리). 모르면 null이다.
+     * @param industryDivisionKey KSIC 중분류(업종코드 앞 2자리). 모르면 null이다.
      *                         <p>지표 계층이 처음으로 <b>종목 속성</b>을 읽은 자리이며 근거는
      *                         ADR-0044다. 중분류만 내는 이유는 계산기가 필요로 하는 것이
      *                         그것뿐이기 때문이다 — 소분류까지 주면 계산기가 업종 <b>비교</b>를
@@ -178,7 +178,7 @@ public class IndicatorDataReader {
      *                         "코스닥 종목의 지수는 코스닥"이 지표의 규칙이 아니라 시장의 사실이라
      *                         계산기마다 다시 알 이유가 없기 때문이다
      */
-    public record StockAttributes(String industryDivision, String marketCode) {
+    public record StockAttributes(String industryDivisionKey, String marketCode) {
     }
 
     /**
@@ -190,9 +190,9 @@ public class IndicatorDataReader {
      */
     public StockAttributes readStockAttributes(long stockId) {
         List<StockAttributes> found = jdbcTemplate.query(
-                "SELECT industry_division, market_code FROM stock WHERE id = ?",
+                "SELECT industry_division_key, market_code FROM stock WHERE id = ?",
                 (rs, rowNum) -> new StockAttributes(
-                        rs.getString("industry_division"), rs.getString("market_code")),
+                        rs.getString("industry_division_key"), rs.getString("market_code")),
                 stockId);
         return found.isEmpty() ? new StockAttributes(null, null) : found.get(0);
     }

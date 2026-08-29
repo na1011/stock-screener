@@ -193,17 +193,20 @@ public class StockReader {
     public Optional<SectorPeerRow> sectorPeersOf(long stockId) {
         List<SectorPeerRow> rows = jdbcTemplate.query("""
                 WITH member AS (
-                    SELECT s.id, s.industry_code, s.industry_group, s.industry_division
+                    SELECT s.id, coalesce(s.industry_code, s.sic_code) AS industry_code,
+                           s.industry_group_key, s.industry_division_key
                     FROM stock s
-                    WHERE s.industry_code IS NOT NULL
+                    WHERE s.industry_group_key IS NOT NULL
                       AND EXISTS (SELECT 1 FROM universe_membership m
                                   JOIN universe u ON u.code = m.universe_code AND u.is_active
                                   WHERE m.stock_id = s.id AND m.effective_to IS NULL)
                 ),
                 me AS (SELECT * FROM member WHERE id = ?)
                 SELECT me.industry_code,
-                       (SELECT count(*) FROM member g WHERE g.industry_group = me.industry_group) AS fine_peers,
-                       (SELECT count(*) FROM member d WHERE d.industry_division = me.industry_division) AS broad_peers
+                       (SELECT count(*) FROM member g
+                         WHERE g.industry_group_key = me.industry_group_key) AS fine_peers,
+                       (SELECT count(*) FROM member d
+                         WHERE d.industry_division_key = me.industry_division_key) AS broad_peers
                 FROM me
                 """, (rs, n) -> new SectorPeerRow(
                         rs.getString("industry_code"),
@@ -221,14 +224,14 @@ public class StockReader {
      * "이 지표는 보험·금융서비스에 적용하지 않는다" 같은 사유가 <b>조용히 안 붙는다.</b>
      * 적용 가능성은 편입 여부와 무관한 사실이다.
      *
-     * <p>MUST NOT: {@code industry_code}를 받아 자바에서 앞 두 자리를 자르지 않는다.
-     * {@code industry_division}은 <b>DB 생성 컬럼</b>이고(V17) 그 자리를 만든 이유가
+     * <p>MUST NOT: 업종 원문을 받아 자바에서 앞 두 자리를 자르지 않는다.
+     * {@code industry_division_key}는 <b>DB 생성 컬럼</b>이고(V17·V36) 그 자리를 만든 이유가
      * "둘이 갈릴 수 없게"다. 자바에서 다시 자르면 유도 지점이 둘이 된다.
      */
     @Transactional(readOnly = true)
-    public Optional<String> industryDivisionOf(long stockId) {
+    public Optional<String> industryDivisionKeyOf(long stockId) {
         List<String> found = jdbcTemplate.queryForList(
-                "SELECT industry_division FROM stock WHERE id = ?", String.class, stockId);
+                "SELECT industry_division_key FROM stock WHERE id = ?", String.class, stockId);
         return found.isEmpty() ? Optional.empty() : Optional.ofNullable(found.get(0));
     }
 

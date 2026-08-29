@@ -298,6 +298,35 @@ class SectorRelativeCalculatorTest {
         return new SectorMetricSpec(SOURCE, SectorMetricSpec.Kind.MEDIAN, "중앙값", "설명", "해석");
     }
 
+    @Test
+    @DisplayName("IMPORTANT — 앞자리가 겹치는 두 분류 체계가 한 모집단이 되지 않는다")
+    void keepsClassificationSchemesInSeparatePopulations() {
+        // 접두가 없으면 이 열 종목이 한 파티션이 된다. KSIC 0100과 SIC 0100은 잘라 낸
+        // 소분류·중분류가 글자 그대로 같기 때문이다(둘 다 010 / 01). 실제로 겹치는
+        // 값이라 가정이 아니다 — submissions가 0100·0200을 주고 KSIC에는 011이 있다.
+        long kr = member("01001", "10");
+        member("01002", "20");
+        member("01003", "30");
+        member("01004", "40");
+        member("01005", "50");
+
+        long us = usMember("0100", "1000");
+        usMember("0100", "2000");
+        usMember("0100", "3000");
+        usMember("0100", "4000");
+        usMember("0100", "5000");
+
+        calculate(medianRatio());
+
+        // 섞였다면 열 종목의 중앙값이 분모가 되어 국내 종목의 배수가 완전히 달라진다.
+        assertThat(value(kr, "DEBT_RATIO_SECTOR_REL")).isEqualByComparingTo("0.33333333");
+        assertThat(value(us, "DEBT_RATIO_SECTOR_REL")).isEqualByComparingTo("0.33333333");
+
+        // 그리고 표본 수가 각각 5다. 10이면 한 모집단이 된 것이다.
+        assertThat(value(kr, "DEBT_RATIO_SECTOR_N")).isEqualByComparingTo("5");
+        assertThat(value(us, "DEBT_RATIO_SECTOR_N")).isEqualByComparingTo("5");
+    }
+
     /** 활성 유니버스에 편입된 종목 하나와 그날의 원본 지표 값. */
     private long member(String industryCode, String value) {
         String ticker = String.valueOf(nextTicker++);
@@ -314,6 +343,34 @@ class SectorRelativeCalculatorTest {
                 INSERT INTO universe_membership (universe_code, stock_id, effective_from)
                 VALUES (?, ?, ?)
                 """, universe, stockId, AS_OF.minusYears(1));
+
+        jdbcTemplate.update("""
+                INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)
+                VALUES (?, ?, ?, ?)
+                """, stockId, AS_OF, SOURCE, new BigDecimal(value));
+        return stockId;
+    }
+
+    /**
+     * 미국 종목 하나. 업종은 {@code sic_code}에 들어간다 — {@code ck_stock_sic_is_us}가
+     * 시장으로 그것을 강제하므로 <b>이 헬퍼로만 만들 수 있다</b>(ADR-0092).
+     *
+     * <p>{@code US_LISTED}를 여기서 활성으로 올린다. 슬라이스 테스트가 트랜잭션째 롤백하므로
+     * 다른 테스트에 새지 않는다. 운영에서 이 유니버스가 꺼져 있는 것은 별개의 사실이고,
+     * 이 테스트가 묻는 것은 <b>켜졌을 때 두 체계가 섞이는가</b>다.
+     */
+    private long usMember(String sicCode, String value) {
+        String ticker = "US" + nextTicker++;
+        Long stockId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, sic_code)
+                VALUES ('US', ?, ?, ?) RETURNING id
+                """, Long.class, ticker, ticker, sicCode);
+
+        jdbcTemplate.update("UPDATE universe SET is_active = true WHERE code = 'US_LISTED'");
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('US_LISTED', ?, ?)
+                """, stockId, AS_OF.minusYears(1));
 
         jdbcTemplate.update("""
                 INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)

@@ -380,20 +380,25 @@ class SwingIndicatorsTest {
         void refusesInsuranceAndFinancialServices() {
             // 위 combinesFiveTerms와 재무가 같다. 즉 값이 안 나오는 이유는 데이터 결손이
             // 아니라 정의역이며, 그것이 부작용과 명시 제외의 차이다.
-            for (String division : List.of("65", "66")) {
+            for (String division : List.of("KSIC:65", "KSIC:66")) {
                 assertThat(calculator.calculate(inDivision(division, bd(800))))
-                        .as("중분류 %s는 Altman Z의 정의역 밖이다", division)
+                        .as("%s는 Altman Z의 정의역 밖이다", division)
                         .isEmpty();
             }
+            // 접두가 없는 값은 제외 대상이 아니다. 이것이 SIC 65(부동산)를 KSIC 65(보험)로
+            // 읽지 않는다는 것의 실동작이다(ADR-0092) — 숫자만 비교하면 여기서 안 걸린다.
+            assertThat(calculator.calculate(inDivision("65", bd(800))))
+                    .as("체계 접두가 없는 '65'는 어느 체계인지 알 수 없어 제외하지 않는다")
+                    .hasSize(1);
         }
 
         @Test
-        @DisplayName("64(금융업)와 업종 미상은 제외하지 않는다 — 지주회사를 코드로 가를 수 없다")
+        @DisplayName("KSIC 64(금융업)와 업종 미상은 제외하지 않는다 — 지주회사를 코드로 가를 수 없다")
         void keepsHoldingCompaniesAndUnknownIndustry() {
             // 64992에 금융지주와 사업지주가 함께 있어, 64를 자르면 적용 가능한 종목이 함께
             // 사라진다(ADR-0044). 업종 미상도 같은 이유로 남긴다 — 아는 64는 넣으면서
             // 모르는 것만 빼면 비일관이다.
-            assertThat(calculator.calculate(inDivision("64", bd(800)))).hasSize(1);
+            assertThat(calculator.calculate(inDivision("KSIC:64", bd(800)))).hasSize(1);
             assertThat(calculator.calculate(inDivision(null, bd(800)))).hasSize(1);
         }
 
@@ -404,10 +409,10 @@ class SwingIndicatorsTest {
             // 거기서 업종이 빠지면 제외가 통째로 무효가 되는데 아무 에러도 나지 않는다.
             NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
             cap.put(START, bd(800));
-            IndicatorContext reassembled = inDivision("65", bd(800))
+            IndicatorContext reassembled = inDivision("KSIC:65", bd(800))
                     .withDependencies(Map.of(MarketCapCalculator.CODE, cap));
 
-            assertThat(reassembled.industryDivision()).isEqualTo("65");
+            assertThat(reassembled.industryDivisionKey()).isEqualTo("KSIC:65");
             assertThat(calculator.calculate(reassembled)).isEmpty();
         }
     }
@@ -501,11 +506,11 @@ class SwingIndicatorsTest {
     }
 
     /** {@link #balanceSheetContext}와 재무가 같고 업종만 다르다. 값 차이의 원인을 업종으로 못박는다. */
-    private static IndicatorContext inDivision(String industryDivision, BigDecimal marketCap) {
+    private static IndicatorContext inDivision(String industryDivisionKey, BigDecimal marketCap) {
         PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
         NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
         cap.put(START, marketCap);
-        return new IndicatorContext(1L, industryDivision, List.of(bar), List.of(),
+        return new IndicatorContext(1L, industryDivisionKey, List.of(bar), List.of(),
                 balanceSheetQuarters(), List.of(), Map.of(MarketCapCalculator.CODE, cap));
     }
 

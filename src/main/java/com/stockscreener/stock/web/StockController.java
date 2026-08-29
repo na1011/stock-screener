@@ -128,7 +128,7 @@ public class StockController {
         // 않는 것이 던지는 것보다 나쁘다(frontend.md). 사유를 모르는 나머지는 그대로 빠지고
         // 화면의 "값이 없어 표시하지 못한 지표 N개"가 그것을 센다.
         UnavailabilityRule.Context ruleContext = new UnavailabilityRule.Context(
-                values, stockReader.industryDivisionOf(stockId).orElse(null));
+                values, stockReader.industryDivisionKeyOf(stockId).orElse(null));
 
         List<StockDetailResponse.IndicatorValue> indicators = new ArrayList<>();
         for (IndicatorDescriptor descriptor : catalog) {

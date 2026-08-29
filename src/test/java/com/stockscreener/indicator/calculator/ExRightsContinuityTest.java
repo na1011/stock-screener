@@ -229,7 +229,7 @@ class ExRightsContinuityTest {
 
     /** 같은 봉·같은 재무에 원장만 없앤 컨텍스트. 단언이 실제로 원장에 걸려 있는지 가른다. */
     private static IndicatorContext withoutAdjustments(IndicatorContext context) {
-        return new IndicatorContext(context.stockId(), context.industryDivision(),
+        return new IndicatorContext(context.stockId(), context.industryDivisionKey(),
                 context.priceBars(), context.annualFigures(), context.quarterlyFigures(),
                 List.of(), Map.of());
     }

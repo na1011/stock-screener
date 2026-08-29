@@ -17,9 +17,15 @@ import java.util.List;
  * 정해지기 때문이다.
  *
  * <p><b>모집단이 {@link PercentileCalculator}와 다르다.</b> 저쪽은 유니버스별로 나누고
- * (ADR-0036), 이쪽은 <b>활성 유니버스 전체 중 같은 업종</b>으로 묶는다. 유니버스로 한 번 더
- * 나누면 350종목이 유니버스 2 × 업종 40으로 쪼개져 표본이 남지 않는다. 그것이 ADR-0036을
- * 다시 여는 지점이며, 그래서 화면이 두 모집단을 구분해 설명해야 한다.
+ * (ADR-0036), 이쪽은 <b>활성 유니버스 전체 중 같은 체계의 같은 업종</b>으로 묶는다.
+ * 유니버스로 한 번 더 나누면 350종목이 유니버스 2 × 업종 40으로 쪼개져 표본이 남지 않는다.
+ * 그것이 ADR-0036을 다시 여는 지점이며, 그래서 화면이 두 모집단을 구분해 설명해야 한다.
+ *
+ * <p><b>지수는 안 가리지만 분류 체계는 가린다</b>(ADR-0092). 파티션 키가
+ * {@code stock.industry_group_key}·{@code industry_division_key}이고 그 값에 체계 접두가
+ * 구워져 있다 — KSIC와 SIC는 <b>앞 2자리가 실제로 겹친다</b>(둘 다 {@code 01}이 있고,
+ * {@code 65}는 한쪽이 보험 다른 쪽이 부동산이다). 접두를 떼면 두 나라가 한 모집단이 되는데
+ * <b>아무 에러도 안 나고 값이 그럴듯하다.</b>
  *
  * <p>IMPORTANT — <b>두 층의 순위표를 각각 만들고 종목이 쓸 층을 고른다.</b> 소분류 표본이
  * 모자란 종목만 중분류로 올라가는데, 그때 그 종목은 <b>중분류 전체를 모집단으로</b> 삼아야
@@ -51,15 +57,20 @@ public class SectorRelativeCalculator {
      *
      * <p>업종이 NULL인 종목을 여기서 빼는 것이 곧 "업종이 비어 있으면 판정불가"의 구현이다.
      * 남겨 두면 NULL끼리 한 그룹이 되어 <b>업종 없는 종목끼리 순위가 매겨진다.</b>
+     *
+     * <p><b>키가 NULL인지로 묻는다.</b> 체계가 둘이므로 {@code industry_code IS NOT NULL}로
+     * 물으면 SIC를 채운 종목이 통째로 빠진다 — 생성 컬럼이 두 원문 중 있는 쪽에서 만들어지므로
+     * 키의 NULL 여부가 "업종을 아는가"의 유일한 답이다(ADR-0092).
      */
     private static final String MEMBER = """
             member AS (
-                SELECT iv.stock_id, iv.value, s.industry_group AS fine, s.industry_division AS broad
+                SELECT iv.stock_id, iv.value,
+                       s.industry_group_key AS fine, s.industry_division_key AS broad
                 FROM indicator_value iv
                 JOIN stock s ON s.id = iv.stock_id
                 WHERE iv.indicator_code = ?
                   AND iv.trade_date = ?
-                  AND s.industry_code IS NOT NULL
+                  AND s.industry_group_key IS NOT NULL
                   AND EXISTS (
                       SELECT 1 FROM universe_membership m
                       JOIN universe u ON u.code = m.universe_code AND u.is_active

@@ -396,7 +396,7 @@ public class IndicatorRunner {
         IndicatorDataReader.StockAttributes attributes = reader.readStockAttributes(stockId);
         return new IndicatorContext(
                 stockId,
-                attributes.industryDivision(),
+                attributes.industryDivisionKey(),
                 reader.readPriceBars(stockId, asOf, bars),
                 reader.readAnnualFigures(stockId, asOf, years, visibility),
                 reader.readQuarterlyFigures(stockId, asOf, years, visibility),

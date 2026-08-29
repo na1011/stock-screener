@@ -18,7 +18,7 @@ import java.util.TreeMap;
 public final class IndicatorContext {
 
     private final long stockId;
-    private final String industryDivision;
+    private final String industryDivisionKey;
     private final List<PriceBar> priceBars;
     private final List<FinancialFigures> annualFigures;
     private final List<FinancialFigures> quarterlyFigures;
@@ -30,7 +30,7 @@ public final class IndicatorContext {
 
     public IndicatorContext(
             long stockId,
-            String industryDivision,
+            String industryDivisionKey,
             List<PriceBar> priceBars,
             List<FinancialFigures> annualFigures,
             List<FinancialFigures> quarterlyFigures,
@@ -40,7 +40,7 @@ public final class IndicatorContext {
             List<GovernanceFigures> governanceFacts,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
         this.stockId = stockId;
-        this.industryDivision = industryDivision;
+        this.industryDivisionKey = industryDivisionKey;
         this.priceBars = priceBars == null ? List.of() : List.copyOf(priceBars);
         this.annualFigures = annualFigures == null ? List.of() : List.copyOf(annualFigures);
         this.quarterlyFigures = quarterlyFigures == null ? List.of() : List.copyOf(quarterlyFigures);
@@ -57,13 +57,13 @@ public final class IndicatorContext {
     /** 지수를 쓰지 않던 시절의 생성자. 기존 테스트가 그대로 컴파일되게 남긴다. */
     public IndicatorContext(
             long stockId,
-            String industryDivision,
+            String industryDivisionKey,
             List<PriceBar> priceBars,
             List<FinancialFigures> annualFigures,
             List<FinancialFigures> quarterlyFigures,
             List<ShareAdjustment> shareAdjustments,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
-        this(stockId, industryDivision, priceBars, annualFigures, quarterlyFigures,
+        this(stockId, industryDivisionKey, priceBars, annualFigures, quarterlyFigures,
                 shareAdjustments, List.of(), null, List.of(), dependencies);
     }
 
@@ -88,7 +88,7 @@ public final class IndicatorContext {
      */
     public IndicatorContext withDependencies(
             Map<String, NavigableMap<LocalDate, BigDecimal>> newDependencies) {
-        return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualFigures,
                 quarterlyFigures, shareAdjustments, unadjustedActions, marketIndex,
                 governanceFacts, newDependencies);
     }
@@ -104,8 +104,8 @@ public final class IndicatorContext {
      * 그 예다(ADR-0044). 업종 <b>비교</b>는 여기서 할 수 없다. 그것은 같은 날 여러 종목을
      * 봐야 하므로 {@link SectorRelativeCalculator}의 몫이다.
      */
-    public String industryDivision() {
-        return industryDivision;
+    public String industryDivisionKey() {
+        return industryDivisionKey;
     }
 
     /** 날짜 오름차순 시세. 워밍업 구간을 포함해 {@link DataRequirement}가 요구한 만큼 담긴다. */
@@ -258,7 +258,7 @@ public final class IndicatorContext {
      * {@code @ConditionalOnApiKey}라 키 없는 환경에 아예 없는데 계산기가 읽는 것은 컨텍스트다.
      */
     public IndicatorContext withGovernanceFacts(List<GovernanceFigures> newGovernanceFacts) {
-        return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualFigures,
                 quarterlyFigures, shareAdjustments, unadjustedActions, marketIndex,
                 newGovernanceFacts, dependencies);
     }
@@ -281,7 +281,7 @@ public final class IndicatorContext {
      * 컨텍스트이므로, 시드가 없으면 {@code EXCESS_RETURN_26W}가 비고 <b>에러는 안 난다.</b>
      */
     public IndicatorContext withMarketIndex(NavigableMap<LocalDate, BigDecimal> newMarketIndex) {
-        return new IndicatorContext(stockId, industryDivision, priceBars, annualFigures,
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualFigures,
                 quarterlyFigures, shareAdjustments, unadjustedActions, newMarketIndex,
                 governanceFacts, dependencies);
     }

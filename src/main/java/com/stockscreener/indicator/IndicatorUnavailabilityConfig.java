@@ -72,7 +72,7 @@ public class IndicatorUnavailabilityConfig {
                         // 실측(2026-08-21, 지표일 2026-08-20): 값이 없는 30종목 중 28이
                         // KSIC 64·65·66이다. 남는 둘에는 사유가 안 붙는데 그것이 옳다 —
                         // 그 둘이 왜 없는지 우리는 모른다.
-                        context -> isFinancialDivision(context.industryDivision()),
+                        context -> isFinancialDivision(context.industryDivisionKey()),
                         "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
                                 + "순유동자산을 계산할 재료가 없습니다."),
                 new UnavailabilityRule(
@@ -84,7 +84,7 @@ public class IndicatorUnavailabilityConfig {
                         // 재본 적이 없고(분기 재무 부족일 수도, 매출 계정 결손일 수도 있다),
                         // 업종 조건이 그것을 자동으로 막아 준다. 비율이 64%뿐이라 이 규칙은
                         // PER·ROIC의 규칙들보다 설명력이 낮다는 것을 함께 적어 둔다.
-                        context -> isFinancialDivision(context.industryDivision()),
+                        context -> isFinancialDivision(context.industryDivisionKey()),
                         "금융업은 영업수익을 매출로 잡는 방식이 달라 "
                                 + "매출 대비 배수를 다른 업종과 같은 뜻으로 낼 수 없습니다."),
                 new UnavailabilityRule(
@@ -92,7 +92,7 @@ public class IndicatorUnavailabilityConfig {
                         // 계산기가 명시적으로 제외하는 업종이다(ADR-0044). 값이 안 나오는 것이
                         // 결손이 아니라 설계이며, 그 사실을 화면이 말해야 한다고
                         // AltmanZCalculator의 javadoc이 요구해 두었다.
-                        context -> AltmanZCalculator.isInapplicable(context.industryDivision()),
+                        context -> AltmanZCalculator.isInapplicable(context.industryDivisionKey()),
                         "보험·금융서비스에는 적용하지 않는 지표입니다. "
                                 + "계산 자체는 되지만 그 업종의 재무 구조에서는 뜻을 갖지 않습니다."),
                 new UnavailabilityRule(
@@ -103,7 +103,7 @@ public class IndicatorUnavailabilityConfig {
                         // KSIC 64·65·66이거나 업종 미상이다. 그 업종에서 값이 나오는 종목도
                         // 있으므로(64의 35종목 중 22) 이 규칙은 값이 없을 때만 붙고,
                         // 엉뚱한 종목에 사유를 붙일 여지가 없다.
-                        context -> isFinancialDivision(context.industryDivision()),
+                        context -> isFinancialDivision(context.industryDivisionKey()),
                         "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
                                 + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다."),
                 new UnavailabilityRule(
@@ -115,7 +115,7 @@ public class IndicatorUnavailabilityConfig {
                         // MUST NOT: "3년 연속 재무가 없다"를 여기 사유로 적지 않는다. 그것은
                         // 이 규칙이 확인할 수 없는 추측이고, 금융업이 아닌데 값이 없는 종목에
                         // 틀린 이유를 붙이게 된다(ALTMAN_Z가 업종만 말하는 것과 같은 이유다).
-                        context -> isFinancialDivision(context.industryDivision()),
+                        context -> isFinancialDivision(context.industryDivisionKey()),
                         "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
                                 + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다."),
                 governanceMissing(DividendYieldCalculator.CODE),
@@ -157,19 +157,24 @@ public class IndicatorUnavailabilityConfig {
     /**
      * 유동/비유동 구분이 없는 업종. 금융업·보험업·금융서비스업이다.
      *
-     * <p>{@code AltmanZCalculator}의 {@code {65, 66}}과 <b>일부러 다르다.</b> 그쪽은 "지표가
-     * 뜻을 잃는 업종"이라 64를 뺐고(지주회사가 섞여 있다), 이쪽은 "재료가 오지 않는 업종"이라
-     * 64가 들어간다 — 지주회사든 은행이든 유동부채가 안 오는 것은 같기 때문이다.
+     * <p>{@code AltmanZCalculator}의 {@code {KSIC:65, KSIC:66}}과 <b>일부러 다르다.</b> 그쪽은
+     * "지표가 뜻을 잃는 업종"이라 64를 뺐고(지주회사가 섞여 있다), 이쪽은 "재료가 오지 않는
+     * 업종"이라 64가 들어간다 — 지주회사든 은행이든 유동부채가 안 오는 것은 같기 때문이다.
+     *
+     * <p><b>원소는 체계 접두가 붙은 키다</b>(ADR-0092). SIC 쪽 집합은 전량 적재 뒤 실측으로
+     * 정한다 — 미국 은행·REIT도 유동/비유동을 안 가르지만(실측 커버리지 15/19)
+     * <b>어느 2자리가 그 집합인지는 값을 받아야 안다.</b>
      */
-    private static final Set<String> FINANCIAL_DIVISIONS = Set.of("64", "65", "66");
+    private static final Set<String> FINANCIAL_DIVISIONS =
+            Set.of("KSIC:64", "KSIC:65", "KSIC:66");
 
     /**
-     * MUST: null을 먼저 거른다. {@code industryDivision}은 <b>업종 미상이면 null</b>이고
+     * MUST: null을 먼저 거른다. {@code industryDivisionKey}은 <b>업종 미상이면 null</b>이고
      * {@code Set.of(...)}는 불변 집합이라 {@code contains(null)}에서 NPE를 던진다 — 그 예외가
      * 지표 하나가 아니라 <b>종목 상세 응답 전체</b>를 500으로 만든다.
      */
-    private static boolean isFinancialDivision(String industryDivision) {
-        return industryDivision != null && FINANCIAL_DIVISIONS.contains(industryDivision);
+    private static boolean isFinancialDivision(String industryDivisionKey) {
+        return industryDivisionKey != null && FINANCIAL_DIVISIONS.contains(industryDivisionKey);
     }
 
     private static boolean isNegative(BigDecimal value) {

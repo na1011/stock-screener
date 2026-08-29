@@ -207,18 +207,18 @@ public class PointInTimeScreener {
                 .divide(BigDecimal.valueOf(peers.size() - 1L), 8, RoundingMode.HALF_UP);
     }
 
-    /** 업종 층 둘. {@code industry_code}가 비면 백분위 모집단에서 빠진다(라이브와 같다). */
+    /** 업종 층 둘. 키가 비면 백분위 모집단에서 빠진다(라이브와 같다). 체계 접두가 값에 있다. */
     private record Sector(String fine, String broad) {
     }
 
     private Map<Long, Sector> readSectors() {
         Map<Long, Sector> byStock = new LinkedHashMap<>();
         jdbcTemplate.query("""
-                SELECT id, industry_group, industry_division
-                FROM stock WHERE industry_code IS NOT NULL
+                SELECT id, industry_group_key, industry_division_key
+                FROM stock WHERE industry_group_key IS NOT NULL
                 """, rs -> {
             byStock.put(rs.getLong("id"),
-                    new Sector(rs.getString("industry_group"), rs.getString("industry_division")));
+                    new Sector(rs.getString("industry_group_key"), rs.getString("industry_division_key")));
         });
         return byStock;
     }

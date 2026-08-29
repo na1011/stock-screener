@@ -30,9 +30,9 @@ public record UnavailabilityRule(String code, Predicate<Context> when, String re
      * 판정에 쓸 수 있는 것. <b>이 둘로 답할 수 없는 사유는 규칙으로 두지 않는다.</b>
      *
      * @param values           그 기준일에 계산된 지표 값들. 없는 지표는 키가 없다
-     * @param industryDivision KSIC 중분류. 업종 미상이면 null이다
+     * @param industryDivisionKey KSIC 중분류. 업종 미상이면 null이다
      */
-    public record Context(Map<String, BigDecimal> values, String industryDivision) {
+    public record Context(Map<String, BigDecimal> values, String industryDivisionKey) {
 
         public BigDecimal value(String code) {
             return values.get(code);

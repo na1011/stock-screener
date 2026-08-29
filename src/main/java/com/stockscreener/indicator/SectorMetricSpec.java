@@ -6,7 +6,7 @@ package com.stockscreener.indicator;
  * <p>{@link PercentileSpec}과 형제다 — 둘 다 {@link IndicatorCalculator}가 될 수 없다.
  * 계산기는 한 종목의 원자료만 보는데 이 값들은 같은 날 <b>여러 종목</b>을 봐야 정해진다.
  * 다른 점은 <b>모집단</b>이다. 백분위는 유니버스 안에서 매기고(ADR-0036), 이쪽은
- * <b>활성 유니버스 전체 중 같은 업종</b>에서 매긴다(ADR-0044).
+ * <b>활성 유니버스 전체 중 같은 체계의 같은 업종</b>에서 매긴다(ADR-0044 · ADR-0092).
  *
  * <p>MUST: 한 원본 지표에 선언이 <b>둘 이상</b>이면 표본 수 행({@link #peerCountCode()})을
  * 그들이 공유한다. 그 행의 이름은 {@code kind}가 아니라 <b>원본 지표</b>에서 지어야 한다 —

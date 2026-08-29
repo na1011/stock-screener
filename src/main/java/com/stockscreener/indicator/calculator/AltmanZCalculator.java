@@ -34,6 +34,12 @@ import java.util.Set;
  * <p>IMPORTANT — <b>금융업·보험업에는 적용할 수 없다.</b> 자본구조가 근본적으로 달라 계수
  * 자체가 성립하지 않는다. KSIC 중분류 <b>65(보험)·66(금융서비스)</b>를 명시적으로 제외한다.
  *
+ * <p><b>제외 집합의 원소는 체계 접두가 붙은 키다</b>({@code KSIC:65}, ADR-0092). 숫자만
+ * 비교하면 SIC {@code 65}(부동산)가 KSIC {@code 65}(보험)로 읽혀 <b>엉뚱한 업종이 잘린다.</b>
+ * <b>SIC 쪽 집합은 아직 없다</b> — 규칙(앞 2자리로 판정한다)은 정했고 집합은 전량 적재 뒤
+ * 실측으로 정한다(ADR-0044가 착수 시 {@code 64,65,66}을 실측으로 {@code 65,66}으로 좁힌 것과
+ * 같은 절차). 그때까지 미국 종목은 이 제외에 걸리지 않으며, 미국 지표 자체가 0행이다.
+ *
  * <p><b>64(금융업)는 제외하지 않는다.</b> 이름과 달리 그 중분류는 <b>지주회사 버킷을 겸한다</b> —
  * {@code 64992}에 신한지주·KB금융 같은 금융지주와 LG·SK·GS 같은 비금융 사업지주가 함께 있고,
  * 3자리 {@code 649}에도 미래에셋벤처투자와 효성·HDC가 섞인다. <b>코드로는 가를 수 없다.</b>
@@ -82,11 +88,11 @@ public class AltmanZCalculator implements IndicatorCalculator {
      * 함께 담아 코드로 가를 수 없다.
      *
      * <p>업종을 <b>모르는</b> 종목은 제외하지 않는다. 제외 집합이 좁고 특정적이라
-     * "모르면 뺀다"로 두면 <b>64인 것을 아는 종목은 넣으면서 아무것도 모르는 종목은 빼는</b>
+     * "모르면 뺀다"로 두면 <b>KSIC:64인 것을 아는 종목은 넣으면서 아무것도 모르는 종목은 빼는</b>
      * 비일관이 된다. 업종이 비어 있는 종목이 프리셋을 통과하지는 않는다 — 업종 상대 조건이
      * 그 종목에 값을 내지 않아 판정불가로 먼저 걸린다(ADR-0044).
      */
-    private static final Set<String> INAPPLICABLE_DIVISIONS = Set.of("65", "66");
+    private static final Set<String> INAPPLICABLE_DIVISIONS = Set.of("KSIC:65", "KSIC:66");
 
     /**
      * 이 업종에는 <b>값을 내지 않는 것이 옳은가.</b>
@@ -99,8 +105,8 @@ public class AltmanZCalculator implements IndicatorCalculator {
      * {@code contains(null)}에 NPE를 던지므로 그 판단이 여기서 반드시 드러난다 —
      * 업종을 모르는 종목이 조용히 제외되지 않는다.
      */
-    public static boolean isInapplicable(String industryDivision) {
-        return industryDivision != null && INAPPLICABLE_DIVISIONS.contains(industryDivision);
+    public static boolean isInapplicable(String industryDivisionKey) {
+        return industryDivisionKey != null && INAPPLICABLE_DIVISIONS.contains(industryDivisionKey);
     }
 
     private static final BigDecimal W_WORKING_CAPITAL = new BigDecimal("1.2");
@@ -122,7 +128,7 @@ public class AltmanZCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        if (isInapplicable(context.industryDivision())) {
+        if (isInapplicable(context.industryDivisionKey())) {
             // 값을 낼 수 없는 것이 아니라 내면 안 되는 것이다. 보험사의 Z는 계산은 되지만
             // 뜻이 없고, 뜻 없는 값이 필수 조건을 통과하는 것이 이 지표의 가장 큰 위험이다.
             return List.of();
