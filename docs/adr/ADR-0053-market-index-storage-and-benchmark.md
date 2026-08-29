@@ -66,8 +66,15 @@ applies_to:
 마지막 것이 이 ADR 고유의 자리다 — 쓴 행 수로 물으면 초록인 채 알림이 죽는다.
 
 ```premise 시장 지수 — 시세가 있는데 지수만 없는 거래일이 있는가
-[ "$(psql -d stock_screener -At -c "SELECT to_regclass('public.market_index_daily') IS NOT NULL")" = t ] || { echo "잴 것이 없었다 — market_index_daily 테이블이 아직 없다(V23 미적용)"; exit 0; }; psql -d stock_screener -At -c "WITH gap AS (SELECT c.index_code, p.trade_date FROM (SELECT DISTINCT trade_date FROM price_daily WHERE trade_date >= (SELECT min(trade_date) FROM market_index_daily)) p CROSS JOIN (SELECT DISTINCT index_code FROM market_index_daily) c WHERE NOT EXISTS (SELECT 1 FROM market_index_daily m WHERE m.index_code = c.index_code AND m.trade_date = p.trade_date)) SELECT CASE WHEN (SELECT count(*) FROM market_index_daily) = 0 THEN '잴 것이 없었다 — 지수가 한 행도 없다. --job=market-index를 아직 안 돌렸다' WHEN (SELECT count(*) FROM price_daily) = 0 THEN '잴 것이 없었다 — price_daily가 비어 있다' WHEN (SELECT count(*) FROM gap) = 0 THEN 'OK 시세가 있는 모든 거래일에 두 지수가 다 있다(지수 최초일 이후 기준)' ELSE (SELECT count(*) FROM gap)::text || '개의 (지수, 거래일)이 비어 있다 — 그 일자의 해당 시장 종목은 ICHI_* 가 통째로 없다. 가장 최근 ' || (SELECT max(trade_date)::text FROM gap) END"
+[ "$(psql -d stock_screener -At -c "SELECT to_regclass('public.market_index_daily') IS NOT NULL")" = t ] || { echo "잴 것이 없었다 — market_index_daily 테이블이 아직 없다(V23 미적용)"; exit 0; }; psql -d stock_screener -At -c "WITH gap AS (SELECT c.index_code, p.trade_date FROM (SELECT DISTINCT p2.trade_date FROM price_daily p2 JOIN stock s2 ON s2.id = p2.stock_id WHERE s2.market_code IN ('KOSPI','KOSDAQ') AND p2.trade_date >= (SELECT min(trade_date) FROM market_index_daily)) p CROSS JOIN (SELECT DISTINCT index_code FROM market_index_daily) c WHERE NOT EXISTS (SELECT 1 FROM market_index_daily m WHERE m.index_code = c.index_code AND m.trade_date = p.trade_date)) SELECT CASE WHEN (SELECT count(*) FROM market_index_daily) = 0 THEN '잴 것이 없었다 — 지수가 한 행도 없다. --job=market-index를 아직 안 돌렸다' WHEN (SELECT count(*) FROM price_daily p3 JOIN stock s3 ON s3.id = p3.stock_id WHERE s3.market_code IN ('KOSPI','KOSDAQ')) = 0 THEN '잴 것이 없었다 — 지수를 갖는 시장의 시세가 비어 있다' WHEN (SELECT count(*) FROM gap) = 0 THEN 'OK 시세가 있는 모든 거래일에 두 지수가 다 있다(지수 최초일 이후 기준)' ELSE (SELECT count(*) FROM gap)::text || '개의 (지수, 거래일)이 비어 있다 — 그 일자의 해당 시장 종목은 ICHI_* 가 통째로 없다. 가장 최근 ' || (SELECT max(trade_date)::text FROM gap) END"
 ```
+
+**거래일을 지수가 있는 시장에서만 뽑는 것이 이 질의의 일부다.** `price_daily` 전량으로 뽑으면
+**지수를 갖기로 하지 않은 시장의 거래일**까지 세어, 국내가 휴장이고 그 시장이 개장한 날마다
+「지수가 비었다」가 뜬다 — 미국 봉이 들어오자 실제로 32건이 떴다(ADR-0088). 코드 쪽
+`DailyUpdateJob.alertIfIndexMissingWhilePricesArrived`는 처음부터 `MarketIndexCodes.ALL`로
+거르고 있었고, **사본인 이 질의만 안 걸렀다.** 시장 목록은 그 상수의 사본이므로 함께 자란다.
+
 
 **MUST: 테이블 존재를 별도 호출로 먼저 묻는다.** PostgreSQL은 `CASE`의 어느 가지도 실행하기
 전에 문장 전체를 파싱하므로, 같은 쿼리 안에서 `information_schema`로 가드해도 **없는 테이블을
