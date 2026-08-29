@@ -14,6 +14,7 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 --job=universe
 --job=initial-load --price-years=7 --financial-years=7 --reload-existing=true
 --job=initial-load --tickers=082640,121600 --price-years=7
+--job=initial-load --universe=US_LISTED --price-years=2 --skip-financial=true
 --job=financial-refill --financial-years=3 [--tickers=005930,035420]
 --job=full-statement-refill [--financial-years=5] [--tickers=…] [--quarters=true]
 --job=company-profile [--tickers=005930,035420]
@@ -43,7 +44,7 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 |---|---|---|
 | `universe` | 유니버스 편입 종목 갱신 | 시총 어댑터가 `@ConditionalOnApiKey`라 키가 없으면 시드만 남는다(ADR-0012) |
 | `market-index` | 코스피·코스닥 지수 시계열 | **종목과 무관해 `--tickers`가 없다.** 기간조회 1콜이라 전 구간을 받아도 **지수당 1콜, 전부 2콜**이다. `--from`을 비우면 소스 이력의 시작(2020-01-02)부터다 |
-| `initial-load` | 시세·재무 원자료 | **대상 선정이 `NOT EXISTS (price_daily)`다** — 아래 참조. 종목당 시세 1콜 + 재무 `(연수+1)×4`콜(기본 3년이면 16, `--financial-years=7`이면 **32**). **기업 행위는 한 건도 안 적는다** — `DataGoKrPriceAdapter`가 `fetchCorporateActions`를 오버라이드하지 않아 `PriceCollector`의 `recordAll`이 늘 빈 목록을 받는다. **몇 해치를 새로 넣으면 `corporate-action`이 뒤따라야 하고**, 안 그러면 미보정 시세가 그대로 지표가 된다 |
+| `initial-load` | 시세·재무 원자료 | **대상 선정이 「활성 유니버스 편입 + 수집 대상 시장 + `NOT EXISTS (price_daily)`」다** — 앞의 둘이 없던 사본을 2026-08-29에 채웠다(그때 대상이 미국 8,504종목이었다). **`--universe=`를 주면 그 유니버스만 보고 활성 여부를 안 본다** — 비활성인 채로 적재해야 하는 미국이 그 자리이고, 0건이면 예외로 끝난다. **`--skip-financial=true`는 재무 단계를 통째로 뺀다**(계획도 함께 빠진다) — 그 시장에 재무 소스가 없을 때 쓴다. 아래 참조. 종목당 시세 1콜 + 재무 `(연수+1)×4`콜(기본 3년이면 16, `--financial-years=7`이면 **32**). **기업 행위는 한 건도 안 적는다** — `DataGoKrPriceAdapter`가 `fetchCorporateActions`를 오버라이드하지 않아 `PriceCollector`의 `recordAll`이 늘 빈 목록을 받는다. **몇 해치를 새로 넣으면 `corporate-action`이 뒤따라야 하고**, 안 그러면 미보정 시세가 그대로 지표가 된다 |
 | `financial-refill` | 재무의 **결손 컬럼만** | 편입 전 종목. 종목당 **16콜**(4개년 × 보고서 4종), 350종목이면 **약 5,600콜** — `fnlttSinglAcnt` 보수 예산(10,000)의 56%다. **한도는 API별이라 다른 잡과 경쟁하지 않는다**(`api-sources` skill). ADR-0040 |
 | `full-statement-refill` | 전체 재무제표에서 **결손만** — 주로 영업활동현금흐름 | 종목당 **요청 6건**(연간 5년), 350종목이면 2,100건. **실제 콜은 그 1.3~1.5배다** — 로그가 `요청=N 실제콜=M`으로 갈라 적는다(실측 2,100→2,714 · 32→47). **쿼터는 실제콜로 센다.** `fnlttSinglAcntAll`은 카운터가 별개다. **정정공시를 만나면 채우지 않고 남긴다**(`정정보류=`) — 그것을 여는 것은 `financial-refill`이다. `--quarters=true`는 **티커와 함께여야** 받아들인다. ADR-0056 |
 | `company-profile` | 업종(KSIC)·결산월 | **기본 대상이 `industry_code IS NULL`인 편입 종목뿐**이라 평소 0콜이다. 티커를 주면 결손 여부와 무관하게 다시 받는다. 종목당 1콜(전량 350). ADR-0044 |
@@ -251,7 +252,8 @@ DART 실패 하나가 지수 갱신 전체를 되돌린다. 인자 없이 돌리
 - **`min(trade_date)`가 `2020-01-02`다 — 요청한 구간 시작과 비교하지 않는다.** 소스 이력이 거기서
   시작하므로 `--price-years=7`은 정상 적재도 어긋나 보이고, 그러면 **성공을 실패로 읽고**
   `--reload-existing`으로 전 종목을 다시 받게 된다. 2020-01-02보다 늦을 때만 신호다.
-- `listed_shares` 빈값 0 — PER·PBR이 여기 의존한다(ADR-0013)
+- `listed_shares` 빈값 0 — PER·PBR이 여기 의존한다(ADR-0013). **국내로 좁혀서 센다** —
+  미국 시세 소스는 이 값을 주지 않아 전량으로 세면 미국 행 수만큼 언제나 붉다
 - **종목별 최신 봉** — `SELECT max(trade_date) FROM price_daily GROUP BY stock_id`. 합계로는 안
   보이고, 뒤처진 종목은 대개 거래정지라 **그것이 정상이다**(`data-go-kr-stock-price.md`).
 

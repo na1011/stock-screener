@@ -29,9 +29,15 @@ PER·PBR의 분모인 상장주식수를 `price_daily.listed_shares`에 **날짜
 "시세의 상장주식수를 재무보다 우선한다"와 "시세에 없으면 재무로 폴백한다"가 통과해야 한다.
 
 ```sql
-SELECT count(*) FILTER (WHERE listed_shares IS NULL) AS 빈값, count(*) FROM price_daily;
+SELECT count(*) FILTER (WHERE p.listed_shares IS NULL) AS 빈값, count(*)
+FROM price_daily p JOIN stock s ON s.id = p.stock_id
+WHERE s.market_code IN ('KOSPI', 'KOSDAQ');
 ```
-국내 종목은 빈값이 0이어야 한다. 대량으로 비면 소스가 `lstgStCnt`를 주지 않기 시작한 것이다.
+빈값이 0이어야 한다. 대량으로 비면 소스가 `lstgStCnt`를 주지 않기 시작한 것이다.
+
+**시장을 가르는 것이 이 질의의 일부다.** 미국 시세 소스는 상장주식수를 주지 않으므로
+(`alpaca-bars.md`) `price_daily` 전량으로 세면 **미국 행 수만큼 언제나 붉다** — 아래 §배경이
+예고한 "미국이 그럴 수 있다"가 실현된 자리이고, 좁히지 않으면 **의도한 동작에 우는 펜스**가 된다.
 
 ```sql
 SELECT count(DISTINCT stock_id) FROM indicator_value WHERE indicator_code = 'PER';
