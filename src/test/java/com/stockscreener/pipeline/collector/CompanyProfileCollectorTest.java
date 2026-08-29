@@ -104,6 +104,91 @@ class CompanyProfileCollectorTest {
                 .hasMessageContaining("ck_stock_industry_code");
     }
 
+    @Test
+    @DisplayName("체계가 SIC면 sic_code에 담긴다 — 어느 컬럼인지는 어댑터가 아니라 체계가 정한다")
+    void routesSicToItsOwnColumn() throws Exception {
+        // 국내 종목에 SIC를 넣으려 하면 시장 제약이 막는다. 그것이 이 분기의 방어선이고,
+        // 아래 두 테스트가 그 제약을 각각 확인한다.
+        long usId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'AAPL', 'Apple Inc.')
+                RETURNING id
+                """, Long.class);
+        SecurityRef us = new SecurityRef(usId, "US", "AAPL");
+
+        assertThat(collectorWith(new StubProfileSource(sicProfile("3571", 9), "US")).collect(us))
+                .isEqualTo(1L);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT sic_code FROM stock WHERE id = ?", String.class, usId)).isEqualTo("3571");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT industry_code FROM stock WHERE id = ?", String.class, usId)).isNull();
+        // 접두가 값에 구워져 국내와 같은 파티션에 못 들어간다(ADR-0092).
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT industry_group_key FROM stock WHERE id = ?", String.class, usId))
+                .isEqualTo("SIC:357");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT industry_division_key FROM stock WHERE id = ?", String.class, usId))
+                .isEqualTo("SIC:35");
+    }
+
+    // 두 방향을 한 테스트에 묶지 않는다. 제약 위반이 트랜잭션을 abort시켜 뒤 문장이
+    // "current transaction is aborted"로 죽고, 그러면 두 번째 방향을 실제로 재지 못한다.
+
+    @Test
+    @DisplayName("IMPORTANT — 국내 종목에 SIC를 선언하면 그 종목만 실패한다. 컬럼 선택으로는 못 막는다")
+    void rejectsSicOnDomesticStock() {
+        CompanyProfileCollector wrong =
+                collectorWith(new StubProfileSource(sicProfile("6500", 12), "KOSPI"));
+        assertThatThrownBy(() -> wrong.collect(security))
+                .hasMessageContaining("ck_stock_sic_is_us");
+    }
+
+    @Test
+    @DisplayName("반대 방향도 막는다 — 미국 종목에 KSIC를 선언하면 industry_code 쪽 제약이 걸린다")
+    void rejectsKsicOnUsStock() {
+        long usId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'MSFT', 'Microsoft')
+                RETURNING id
+                """, Long.class);
+        SecurityRef us = new SecurityRef(usId, "US", "MSFT");
+        CompanyProfileCollector wrong =
+                collectorWith(new StubProfileSource(profile("26111", 12), "US"));
+        assertThatThrownBy(() -> wrong.collect(us))
+                .hasMessageContaining("ck_stock_ksic_is_not_us");
+    }
+
+    @Test
+    @DisplayName("SIC는 네 자리만 통과한다 — 소스가 앞자리 0을 채워 주므로 가공할 일이 없다")
+    void rejectsSicThatIsNotFourDigits() throws Exception {
+        long usId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'LMNR', 'Limoneira')
+                RETURNING id
+                """, Long.class);
+        SecurityRef us = new SecurityRef(usId, "US", "LMNR");
+
+        // 앞자리가 0인 코드는 정상이다(실측: LMNR=0100).
+        assertThat(collectorWith(new StubProfileSource(sicProfile("0100", 10), "US")).collect(us))
+                .isEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT industry_division_key FROM stock WHERE id = ?", String.class, usId))
+                .isEqualTo("SIC:01");
+
+    }
+
+    @Test
+    @DisplayName("세 자리 SIC는 제약이 막는다 — 잘려 온 것을 담으면 중분류를 소분류라 부른다")
+    void rejectsThreeDigitSic() {
+        long usId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'ALCO', 'Alico')
+                RETURNING id
+                """, Long.class);
+        SecurityRef us = new SecurityRef(usId, "US", "ALCO");
+        CompanyProfileCollector threeDigits =
+                collectorWith(new StubProfileSource(sicProfile("100", 10), "US"));
+        assertThatThrownBy(() -> threeDigits.collect(us))
+                .hasMessageContaining("ck_stock_sic_code");
+    }
+
     private CompanyProfileCollector collectorWith(CompanyProfileDataSource source) {
         DataSourceRegistry registry = new DataSourceRegistry(
                 List.of(), List.of(), List.of(), List.of(), List.of(source), List.of(), List.of(),
@@ -127,11 +212,16 @@ class CompanyProfileCollectorTest {
     }
 
     /** 개황 소스를 고정한다. 이 테스트의 관심사는 저장과 파생이다. */
-    private record StubProfileSource(CompanyProfile profile) implements CompanyProfileDataSource {
+    private record StubProfileSource(CompanyProfile profile, String market)
+            implements CompanyProfileDataSource {
+
+        StubProfileSource(CompanyProfile profile) {
+            this(profile, "KOSPI");
+        }
 
         @Override
         public Set<String> supportedMarketCodes() {
-            return Set.of("KOSPI");
+            return Set.of(market);
         }
 
         @Override
