@@ -88,10 +88,18 @@ fi
 
 ```premise 무효화된 종목이 지표를 다시 갖고 있다
 psql -d stock_screener -At -c "WITH ev AS (
-  SELECT DISTINCT stock_id FROM corporate_action
-  WHERE status IN ('APPROVED','APPLIED') AND type <> 'UNKNOWN')
+  -- 모집단을 **활성 유니버스 편입 종목**으로 좁힌다. 이 전제가 묻는 것은 「재구축이 지운 뒤
+  -- 백필이 안 따라왔는가」인데, 백필의 대상이 바로 그 집합이기 때문이다
+  -- (IndicatorBackfillJob.resolveTargets). 안 좁히면 **지표를 아직 안 만들기로 한 시장**이
+  -- 함께 잡혀 매 세션 거짓 발견이 난다 — 미국이 실제로 그랬다(ADR-0090으로 원장이 차면서
+  -- NVDA가 APPLIED가 됐는데 미국 지표는 0행인 것이 정상이다).
+  -- 이 집합이 자라는 자리는 universe.is_active다 — 새 시장을 켜면 저절로 들어온다.
+  SELECT DISTINCT c.stock_id FROM corporate_action c
+  WHERE c.status IN ('APPROVED','APPLIED') AND c.type <> 'UNKNOWN'
+    AND EXISTS (SELECT 1 FROM universe_membership m JOIN universe u ON u.code = m.universe_code
+                 WHERE m.stock_id = c.stock_id AND m.effective_to IS NULL AND u.is_active))
 SELECT CASE
-  WHEN count(*) = 0 THEN '잴 것이 없었다 — 적용 대상 사건이 있는 종목이 없다'
+  WHEN count(*) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 적용 대상 사건이 있는 종목이 없다'
   WHEN count(*) FILTER (WHERE dates = 0) = 0
     THEN 'OK 보정 대상 ' || count(*) || '종목 전부 지표를 갖고 있다(최소 ' || min(dates) || '일자)'
   ELSE count(*) FILTER (WHERE dates = 0)
