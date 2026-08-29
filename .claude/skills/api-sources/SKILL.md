@@ -19,9 +19,12 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 | KR | 거버넌스 여덟 · 감사의견 · 주식 총수 | 〃 | 〃 | 〃 | [`dart-governance.md`](../../../docs/api-spec/dart-governance.md) |
 | KR | 기업개황 — 업종·설립일·결산월 | 〃 | 〃 | 〃 | [`dart-company-profile.md`](../../../docs/api-spec/dart-company-profile.md) |
 | US | 자산 마스터 — 유니버스·종목명·거래소 | Alpaca Trading API | `APCA_API_KEY_ID` + `APCA_API_SECRET_KEY`(**키가 둘이다**) | `datasource/us/Alpaca*Adapter` | [`alpaca-universe.md`](../../../docs/api-spec/alpaca-universe.md) |
+| US | 일별 시세 — OHLC·거래량 | Alpaca **Market Data** API(base URL이 다르다) | 위와 같은 키 | `datasource/us/AlpacaPriceAdapter` | [`alpaca-bars.md`](../../../docs/api-spec/alpaca-bars.md) |
+| US | 재무 계정 — XBRL 팩트 | SEC EDGAR | `SEC_EDGAR_USER_AGENT`(**키가 아니라 신원 표시다**) | `datasource/us/SecEdgar*` | [`sec-edgar-financial.md`](../../../docs/api-spec/sec-edgar-financial.md) |
 
-**미국 시장은 유니버스 축만 열려 있다**(ADR-0086). 시세·재무·기업행위·거버넌스는 어댑터도
-계약 문서도 아직 없다 — **그래서 미국 종목은 「전 종목」에 들어가면 안 된다**(ADR-0087).
+**미국은 유니버스·시세·재무 셋이 열려 있고 기업행위·거버넌스·업종이 남았다**(ADR-0086·0088·0089).
+**그래서 `US_LISTED`는 아직 못 켠다** — 켜면 `CorporateActionJob`이 루프 앞에서 `failFatally`로
+끝나 국내 수집까지 멈춘다. 무엇이 비었는지는 ADR-0086의 premise가 축별로 수로 답한다.
 소스가 늘면 이 표에 **행을 더하고** `docs/api-spec/`에 파일을 만든다 — **파일명이 말하는 것은 소스가 아니라 축이다.**
 한 소스가 여러 축을 주면 축마다 파일이 하나다(DART가 넷이다). 그래야 한 파일을 열었을 때 그 축의
 계약이 거기 다 있다.
@@ -51,7 +54,11 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | `cmpMgDecsn.json` · `stkExtrDecsn.json` | 미착수 (U-06) | 〃 | 각 종목당 1 = 350 |
 | **거버넌스 여덟**(`alotMatter`·`hyslrSttus`·`outcmpnyDrctrNdChangeSttus`·`mrhlSttus`·`hyslrChgSttus`·`hmvAuditAllSttus`·`stockTotqySttus`·`accnutAdtorNmNdAdtOpinion`) | **사용 중**(ADR-0081) | `dart-governance.md` | 종목·연도당 1. 지금 배치가 **7,700** |
 | `elestock`·`majorstock`·`tesstkAcqsDspsSttus`·`list` | **미착수** — 넷의 사정이 다르다 | 아래 | — |
-| `/v2/assets` (Alpaca Trading) | **탐침만** (`AlpacaAssetProbeLiveTest`) | `alpaca-universe.md` | **전체 1** — 페이징이 없고 `exchange` 콤마 목록이 동작한다 |
+| `/v2/assets` (Alpaca Trading) | **사용 중** | `alpaca-universe.md` | **전체 1** — 페이징이 없고 `exchange` 콤마 목록이 동작한다 |
+| `/v2/stocks/bars` (Alpaca Market Data) | **사용 중** | `alpaca-bars.md` | 종목당 1(구간조회). **묶지 않는다** — 실패 격리의 단위가 종목이 아니게 된다 |
+| `/api/xbrl/companyfacts` (SEC EDGAR) | **사용 중** | `sec-edgar-financial.md` | **종목당 1** — 전 기간이 한 응답에 온다. 대신 **한 종목이 78KB~7.9MB**이고 전량이 약 29GB다 |
+| `company_tickers_exchange.json` (SEC) | **사용 중** | `SecTickerCikCache` javadoc | 실행당 1 |
+| `/v1/corporate-actions` (Alpaca) · `/v3/calendar` (Alpaca) · `submissions`(SEC) | **미착수** | — | 미국에 남은 축이다 |
 
 ### 받았지만 아직 안 쓰는 넷
 
@@ -131,6 +138,12 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 |---|---|---|
 | DART | **HTTP 200** + `status` 필드 | HTTP 상태만 보면 잘못된 키로 조회한 결과가 정상으로 보인다 |
 | 공공데이터포털 | **HTTP 403** + `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` | **봉투가 `response`가 아니라 `OpenAPI_ServiceResponse`라** 정상 경로 파서로는 「빈 응답」처럼 보인다 |
+| Alpaca | **HTTP 401**(자격증명) · **403**(권한·15분 규칙) | 코드를 제대로 쓴다. 다만 가이드가 401을 403으로 적어 뒀다 |
+| SEC EDGAR | **HTTP 404 + XML 본문** | 오류가 JSON이 아니라 XML이라 **정상 경로 파서에 넣으면 상태코드를 보기도 전에 터진다** — 그 예외가 404를 「일시 장애」로 만든다 |
+
+**IMPORTANT — 스로틀·차단 시의 코드는 소스마다 재봐야 하는데, SEC는 재면 안 된다.**
+유발하면 IP가 일시 제한되어 그동안 아무것도 못 받는다. **모르는 코드는 재시도 쪽으로 접는다** —
+`AUTH`로 접으면 `fatal()`이라 스로틀 한 번이 배치 전체를 죽인다.
 
 **IMPORTANT — 공공데이터포털은 서비스마다 따로 승인한다.** 키 문자열이 같아도 활용신청하지
 않은 서비스는 위 403이고, **신청은 사람만 할 수 있다.**
@@ -149,6 +162,11 @@ git show 6bc3d09:docs/api-spec/dart-api-카탈로그.txt     # 엔드포인트 �
 |---|---|---|
 | DART | API당 일 20,000 | **10,000** |
 | 공공데이터포털 | 서비스당 일 10,000 규모(계정마다 다름) | **5,000** |
+| Alpaca | 분당 200(일일 총량 공표 없음) | **분당 100 · 일일 무제한** |
+| SEC EDGAR | **초당 10**(일일 총량 없음) | **초당 5**(`permits-per-minute: 300`) |
+
+**SEC의 한도는 사용자 단위라 호스트가 둘이어도 하나로 센다** — `data.sec.gov`와
+`www.sec.gov`가 같은 리미터를 공유한다.
 
 **DART의 20,000은 2차 출처 다수와 사용자가 대는 값이고 공식 문서에서 확인하지 못했다**
 (`status 020` 설명에 "일반적으로는 20,000건 이상의 요청에 대하여"가 있을 뿐이다).

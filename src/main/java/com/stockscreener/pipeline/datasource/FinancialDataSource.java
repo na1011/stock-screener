@@ -24,7 +24,9 @@ public interface FinancialDataSource {
      * {@link RawFinancialReport#publishedAt()}로 판단하며, 그 판단은 저장 계층의 몫이다 —
      * 어댑터가 걸러내면 "그 시점에 공개되어 있던 값"을 나중에 복원할 수 없다.
      *
-     * <p>MUST: 소스가 준 형태 그대로 낸다. FY와 Q4를 합치거나 유도하지 않는다.
+     * <p>MUST: 소스가 준 형태 그대로 낸다. <b>FY와 Q4를 한 행으로 합치지 않는다.</b>
+     * <b>Q4는 예외다</b> — 4분기 보고서가 어느 소스에도 없고, 그 행이 없으면 분기 TTM이
+     * 다섯 분기에 걸친 구멍 난 합이 된다. 근거와 계약은 {@link RawFinancialReport}에 있다.
      */
     List<RawFinancialReport> fetchReports(SecurityRef security, int fromFiscalYear)
             throws DataSourceException;

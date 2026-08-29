@@ -14,8 +14,19 @@ import java.time.LocalDate;
  * <p>모든 금액이 nullable이다. 소스가 항목을 누락하는 일이 흔하고, null이면 그 지표를 계산하지
  * 않는 것이 옳다 — 0으로 대체하면 조용히 틀린 값이 저장된다.
  *
- * <p>MUST: 소스가 준 형태 그대로 담는다. FY와 Q4를 합치거나 Q4를 {@code FY-(Q1+Q2+Q3)}로
- * 유도하지 않는다. DART는 사업보고서와 분기보고서를 따로 내며, 그 판단은 지표 계층의 몫이다.
+ * <p>MUST: 소스가 준 형태 그대로 담는다. <b>FY와 Q4를 한 행으로 합치지 않는다</b> —
+ * 합치면 연간과 4분기가 구별되지 않아 TTM이 그 해를 두 번 세거나 아예 못 센다.
+ *
+ * <p><b>Q4는 예외이고, 유도하는 것이 규칙이다.</b> 4분기 보고서는 어느 소스에도 없다
+ * (DART는 사업보고서와 분기보고서를 따로 내고, EDGAR는 10-K와 10-Q뿐이다). 그런데
+ * {@code IndicatorDataReader}의 분기 TTM이 {@code fiscal_period <> 'FY'}를
+ * {@code period_end} 역순으로 넷 뽑으므로, <b>Q4 행이 없으면 그 넷이 다섯 분기에 걸친
+ * 구멍 난 합</b>이 된다 — 값이 그럴듯하고 에러가 없다. 그래서 어댑터가 별도 행으로 유도한다
+ * ({@code DartFinancialAdapter.deriveFourthQuarter}·{@code SecEdgarFacts.deriveFourthQuarters}).
+ *
+ * <p>MUST: 유도는 <b>손익만</b> 차감한다. 재무상태표는 시점 잔액이라 차감하면 자산총계가
+ * 음수가 된다. 그리고 <b>부분이 하나라도 없으면 유도하지 않는다</b> — 0으로 대체하면 조용히
+ * 틀린 값이 저장된다.
  *
  * @param fiscalPeriod  {@code FY|Q1|Q2|Q3|Q4}. {@code financial_statement.ck_fs_period}와 같은 집합.
  * @param periodEnd     기간의 근거. 회계연도가 달력연도와 다를 수 있어({@code fiscalYear}는 라벨)

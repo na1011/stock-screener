@@ -65,6 +65,11 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 `IndicatorBackfillJob.tradeDatesBetween`. **국내가 휴장이고 미국이 개장한 날**이 전역
 「거래일」이 되면 지표 기준일·보존 경계·결손 판정·백필 대상이 **함께** 밀린다.
 
+**거기에 둘이 더 있다 — 지금은 안 닿지만 미국이 일일 갱신에 들어오면 닿는다.**
+`DailyUpdateJob.alertIfNothingArrived`가 `countOn`을 전 시장 합계로 보므로 **국내 시세 결손
+알림이 원리적으로 발화하지 않게 되고**, `MarketCalendar.isWeekend`는 javadoc이 *"시장의
+시간대로 판단해야 한다"*고 적었는데 구현은 `LocalDate`의 요일만 본다. 다섯이 아니라 **일곱이다.**
+
 - 보존창(최근 180거래일) 안의 국내 휴장 평일 **13일 중 미국 개장이 9일**이다(2026-08-29 실측).
 - 최근 구간을 적재하면 `writeCutoff`가 그만큼 뒤로 밀리고, **`purge()`는 `indicator_value`
   기준이라 그 어긋남이 자연 소멸하지 않는다** — ADR-0045의 premise가 원인을 틀리게 가리키며
@@ -79,9 +84,29 @@ psql -d stock_screener -At -c "SELECT min(trade_date) FROM
   (SELECT DISTINCT trade_date FROM price_daily ORDER BY trade_date DESC LIMIT 181) x"
 ```
 
-그리고 **`US_LISTED`를 켜는 것은 또 다른 문제다** — 재무·기업행위 어댑터가 없으면
+그리고 **`US_LISTED`를 켜는 것은 또 다른 문제다** — 기업행위 어댑터가 없으면
 `CorporateActionJob`이 루프 앞에서 `failFatally`로 끝나 **국내 수집까지 멈춘다.**
 무엇이 비어 있는지는 ADR-0086의 premise가 축별로 답한다.
+
+## 미국 재무만 받는다 (ADR-0089)
+
+시세가 과거 구간으로만 들어와 있으므로 **재무를 받을 때 시세를 함께 받으면 안 된다.**
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load \
+  --universe=US_LISTED --skip-price=true --reload-existing=true --financial-years=3 \
+  --tickers=AAPL,BRK.A,BRK.B,F,META,MSFT,NVDA,RH,T,VTEX'
+```
+
+**`--reload-existing=true`가 없으면 대상이 0건이 되고 잡이 성공으로 끝난다** — 유니버스
+경로는 티커로 좁힌 **뒤에** 봉이 있는 종목을 걸러낸다. `--skip-price`가 없으면 최근 봉이
+함께 들어와 위의 일곱 자리가 밀린다.
+
+**`KIM.PRL`처럼 SEC 매핑 파일에 없는 티커는 `NOT_FOUND`로 실패한다 — 정상이다.**
+우리 8,504 중 1,815가 거기 없다(ETF·펀드 1,332, 우선주·워런트·유닛 483).
+
+**적재 뒤 확인은 행 수가 아니라 넷이다**: 국내 재무가 안 변했는가 · 미국 봉이 안 늘었는가 ·
+보존 경계가 그대로인가 · 미국 지표가 여전히 0인가. **두 번 돌려 정정이 0건**이어야 한다.
 
 ## 조용히 아무 일도 하지 않는 조합
 
