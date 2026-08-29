@@ -62,6 +62,7 @@ public class TurnoverRatioCalculator implements IndicatorCalculator {
 
     @Override
     public DataRequirement dataRequirement() {
+        // MUST NOT: 재무를 선언하지 않는다 — 사유는 MarketCapCalculator와 같다(ADR-0097).
         return DataRequirement.priceBars(1);
     }
 
@@ -75,7 +76,7 @@ public class TurnoverRatioCalculator implements IndicatorCalculator {
                 // 임의의 큰 수를 쓰면 "가장 활발한 종목"으로 올라온다.
                 continue;
             }
-            BigDecimal shares = context.sharesOn(bar.tradeDate(), bar.listedShares());
+            BigDecimal shares = FinancialMath.sharesOf(context, bar, context.quarterlyFigures());
             BigDecimal ratio =
                     FinancialMath.percentage(BigDecimal.valueOf(bar.volume()), shares);
             if (ratio == null) {

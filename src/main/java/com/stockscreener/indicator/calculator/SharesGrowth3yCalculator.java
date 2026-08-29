@@ -97,6 +97,7 @@ public class SharesGrowth3yCalculator implements IndicatorCalculator {
 
     @Override
     public DataRequirement dataRequirement() {
+        // MUST NOT: 재무를 선언하지 않는다 — 사유는 MarketCapCalculator와 같다(ADR-0097).
         return DataRequirement.priceBars(LOOKBACK + 1);
     }
 
@@ -113,8 +114,8 @@ public class SharesGrowth3yCalculator implements IndicatorCalculator {
             PriceBar nowBar = bars.get(i);
             // 양 끝을 같은 축척으로 옮긴다. 권리락 구간에 걸린 끝점은 종가와 짝이 맞는 수여야
             // 아래 배수와 정확히 상쇄된다.
-            BigDecimal past = context.sharesOn(pastBar.tradeDate(), pastBar.listedShares());
-            BigDecimal now = context.sharesOn(nowBar.tradeDate(), nowBar.listedShares());
+            BigDecimal past = FinancialMath.sharesOf(context, pastBar, context.quarterlyFigures());
+            BigDecimal now = FinancialMath.sharesOf(context, nowBar, context.quarterlyFigures());
             // 어느 한쪽이라도 없으면 증가율을 지어내지 않는다. 상장 3년 미만 종목이 여기서 빠진다.
             if (past == null || now == null || past.signum() <= 0) {
                 continue;

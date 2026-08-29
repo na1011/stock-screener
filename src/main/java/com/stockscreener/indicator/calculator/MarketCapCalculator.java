@@ -62,6 +62,14 @@ public class MarketCapCalculator implements IndicatorCalculator {
 
     @Override
     public DataRequirement dataRequirement() {
+        // MUST NOT: 재무를 선언하지 않는다. 이 지표는 재무 없이도(국내) 값을 내므로
+        // 재무는 **필수 입력이 아니다.** 선언하면 IndicatorRunner.inputsWereReadable이
+        // 「재무가 통째로 없으면 걷지 않는다」로 접어, 재무 0행 종목에서 옛 행이 영영
+        // 안 걷힌다(국내에 실재한다 — 맥쿼리인프라·인제니아). IndicatorRunnerTest의
+        // 꼬리 걷기 테스트가 그것을 잡았다.
+        //
+        // 그런데도 calculate가 context.quarterlyFigures()를 쓸 수 있는 이유는 러너가
+        // registry.maxFinancialYears()로 **전 계산기의 최대 연수를 한 번에** 읽기 때문이다.
         return DataRequirement.priceBars(1);
     }
 
@@ -73,10 +81,13 @@ public class MarketCapCalculator implements IndicatorCalculator {
         for (PriceBar bar : bars) {
             // MUST: 원값이 아니라 종가와 짝이 맞는 주식수다. 무상증자 권리락~신주상장 구간은
             // 이미 희석된 종가를 희석 전 주식수와 짝지어 시가총액이 배수만큼 작게 나온다
-            // (루닛 2026-05-04 1.21조 → 0.61조, ADR-0051).
-            // MUST NOT: FinancialMath.sharesOf로 갈아타지 않는다 — 그쪽 재무 폴백은 이 지표가
-            // 일부러 값을 내지 않는 봉에 값을 만든다.
-            BigDecimal shares = context.sharesOn(bar.tradeDate(), bar.listedShares());
+            // (루닛 2026-05-04 1.21조 → 0.61조, ADR-0051). sharesOf의 첫 갈래가 그 보정이다.
+            //
+            // 재무 폴백을 타는 것은 ADR-0051 §규칙의 MUST NOT을 ADR-0097이 시장으로 가른
+            // 결과다. 그 금지의 사유는 국내 무상증자 구간, 즉 「값이 있는데 짝이 안 맞아
+            // 일부러 뺀 봉」인데, 미국 봉은 listed_shares가 전량 NULL이라 그 개념이 성립하지
+            // 않는다 — 값이 없는 이유가 의도가 아니라 소스 부재다.
+            BigDecimal shares = FinancialMath.sharesOf(context, bar, context.quarterlyFigures());
             // 소스가 주식수를 주지 않은 봉은 건너뛴다. 0으로 두면 시가총액 0인 회사가 되어
             // 어떤 하한 조건에도 걸리지 않고 조용히 결과에서 빠진다.
             if (shares == null || shares.signum() <= 0) {
