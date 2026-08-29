@@ -22,7 +22,8 @@ applies_to:
 > **개정(2026-08-29 · ADR-0088).** 미국이 `CollectedMarkets.ALL`에 들어왔다 — 시세 어댑터가
 > 붙었기 때문이며, 나머지 다섯 축은 아직 어댑터가 없다. 그리고 **비활성 유니버스를 손으로
 > 골라 적재하는 경로**가 생겼다. 그 경로는 `universe.is_active`를 보지 않으므로
-> **`CollectedMarkets`가 유일한 게이트**다 — 위 두 겹이 한 겹이 되는 유일한 자리이고,
+> **`CollectedMarkets`가 유일한 게이트**다 — 위 두 겹이 한 겹이 되는 자리이고,
+> **그 자리가 셋이다**(`initial-load`·`corporate-action`·`adjustment-rebuild`, ADR-0090).
 > 대상이 0건이면 예외로 끝나 조용한 0건이 되지 않는 것이 그 대가다.
 
 ## 규칙

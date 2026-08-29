@@ -21,10 +21,13 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 | US | 자산 마스터 — 유니버스·종목명·거래소 | Alpaca Trading API | `APCA_API_KEY_ID` + `APCA_API_SECRET_KEY`(**키가 둘이다**) | `datasource/us/Alpaca*Adapter` | [`alpaca-universe.md`](../../../docs/api-spec/alpaca-universe.md) |
 | US | 일별 시세 — OHLC·거래량 | Alpaca **Market Data** API(base URL이 다르다) | 위와 같은 키 | `datasource/us/AlpacaPriceAdapter` | [`alpaca-bars.md`](../../../docs/api-spec/alpaca-bars.md) |
 | US | 재무 계정 — XBRL 팩트 | SEC EDGAR | `SEC_EDGAR_USER_AGENT`(**키가 아니라 신원 표시다**) | `datasource/us/SecEdgar*` | [`sec-edgar-financial.md`](../../../docs/api-spec/sec-edgar-financial.md) |
+| US | 기업 행위 — 분할·병합 | Alpaca **Market Data** API | Alpaca와 같은 키 둘 | `datasource/us/AlpacaCorporateActionAdapter` | [`alpaca-corporate-action.md`](../../../docs/api-spec/alpaca-corporate-action.md) |
 
-**미국은 유니버스·시세·재무 셋이 열려 있고 기업행위·거버넌스·업종이 남았다**(ADR-0086·0088·0089).
-**그래서 `US_LISTED`는 아직 못 켠다** — 켜면 `CorporateActionJob`이 루프 앞에서 `failFatally`로
-끝나 국내 수집까지 멈춘다. 무엇이 비었는지는 ADR-0086의 premise가 축별로 수로 답한다.
+**미국은 유니버스·시세·재무·기업행위 넷이 열려 있고 거버넌스·업종이 남았다**(ADR-0086·0088·0089·0090).
+**그래서 `US_LISTED`는 아직 못 켠다** — 다만 **이유가 바뀌었다**. 배치를 죽이던 관문
+(`CorporateActionJob.requireSources`)은 ADR-0090이 닫았고, 지금 남은 것은 **거버넌스·업종
+어댑터가 없어 그 두 잡이 매 실행 8,504건 부분 실패를 남기는 것**이다. 무엇이 비었는지는
+ADR-0086의 premise가 축별로 수로 답한다.
 소스가 늘면 이 표에 **행을 더하고** `docs/api-spec/`에 파일을 만든다 — **파일명이 말하는 것은 소스가 아니라 축이다.**
 한 소스가 여러 축을 주면 축마다 파일이 하나다(DART가 넷이다). 그래야 한 파일을 열었을 때 그 축의
 계약이 거기 다 있다.
@@ -58,7 +61,7 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | `/v2/stocks/bars` (Alpaca Market Data) | **사용 중** | `alpaca-bars.md` | 종목당 1(구간조회). **묶지 않는다** — 실패 격리의 단위가 종목이 아니게 된다 |
 | `/api/xbrl/companyfacts` (SEC EDGAR) | **사용 중** | `sec-edgar-financial.md` | **종목당 1** — 전 기간이 한 응답에 온다. 대신 **한 종목이 78KB~7.9MB**이고 전량이 약 29GB다 |
 | `company_tickers_exchange.json` (SEC) | **사용 중** | `SecTickerCikCache` javadoc | 실행당 1 |
-| `/v1/corporate-actions` (Alpaca) | **탐침만** — 계약은 다 쟀고 어댑터가 없다 | `alpaca-corporate-action.md` | 종목당 1(구간조회). **묶지 않는다** — `limit`이 전체 기준이라 묶으면 한 종목의 결측과 묶음 전체의 절단이 같은 모양이 된다 |
+| `/v1/corporate-actions` (Alpaca) | **사용 중** | `alpaca-corporate-action.md` | 종목당 1(구간조회). **묶지 않는다** — `limit`이 전체 기준이라 묶으면 한 종목의 결측과 묶음 전체의 절단이 같은 모양이 된다 |
 | `/v3/calendar` (Alpaca) · `submissions`(SEC) | **미착수** | — | 미국에 남은 축이다 |
 
 ### 받았지만 아직 안 쓰는 넷

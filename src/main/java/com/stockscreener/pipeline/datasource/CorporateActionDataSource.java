@@ -35,9 +35,11 @@ public interface CorporateActionDataSource {
      * 실패가 아니다. 호출자의 창은 그 지연보다 넓어야 하며, 그 사이의 사건은
      * {@code AdjustmentRecalculator.detectCandidates}가 후보로 올린다.
      *
-     * <p>MUST: <b>시세를 먼저 저장한 뒤 부른다.</b> 구현이 우리가 이미 저장한 시계열
-     * ({@code StoredPriceSeries})을 근거로 일자와 비율을 유도하므로, 순서가 반대면 최근 봉을
-     * 못 봐 유도가 <b>조용히 실패한다</b>(로그 한 줄만 남는다).
+     * <p>MUST: <b>시세를 먼저 저장한 뒤 부른다 — 다만 이유가 시장마다 다르다.</b> 국내 구현은
+     * 우리가 이미 저장한 시계열({@code StoredPriceSeries})에서 일자와 비율을 <b>유도</b>하므로
+     * 순서가 반대면 유도가 조용히 실패한다. 미국 구현은 소스가 비율을 직접 주므로 유도하지
+     * 않지만, 호출자({@code CorporateActionCollector})가 봉 없는 종목을 건너뛰므로 결과는 같다 —
+     * <b>그쪽에서는 조정할 봉이 없다는 것이 근거다</b>(ADR-0090).
      *
      * <p>빈 목록은 "그 창에 사건이 없다"이지 실패가 아니다.
      */

@@ -84,9 +84,40 @@ psql -d stock_screener -At -c "SELECT min(trade_date) FROM
   (SELECT DISTINCT trade_date FROM price_daily ORDER BY trade_date DESC LIMIT 181) x"
 ```
 
-그리고 **`US_LISTED`를 켜는 것은 또 다른 문제다** — 기업행위 어댑터가 없으면
-`CorporateActionJob`이 루프 앞에서 `failFatally`로 끝나 **국내 수집까지 멈춘다.**
+그리고 **`US_LISTED`를 켜는 것은 또 다른 문제다.** 배치를 통째로 죽이던 자리
+(`CorporateActionJob`의 루프 앞 `requireSources`)는 ADR-0090이 닫았고, 남은 것은 **거버넌스·업종·
+전체재무제표 어댑터가 없어 그 세 잡이 매 실행 8,504건 부분 실패를 남기는 것**이다.
 무엇이 비어 있는지는 ADR-0086의 premise가 축별로 답한다.
+
+## 미국 기업 행위와 계수 (ADR-0090)
+
+**두 잡을 이어 돌려야 끝난다.** 원장만 채우면 계수는 그대로인데 **둘 다 성공으로 끝난다.**
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
+  --job=corporate-action --universe=US_LISTED --from=2023-12-01 --tickers=AAPL,NVDA,…'
+
+./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
+  --job=adjustment-rebuild --universe=US_LISTED --tickers=AAPL,NVDA,…'
+```
+
+- **`--universe=US_LISTED`가 없으면 즉시 실패한다.** 두 잡의 기본 대상이 활성 유니버스인데
+  미국은 비활성이라 `--tickers`만 줘도 *"편입 중인 활성 종목이 하나도 없다"*가 된다.
+- **`--from`을 준다.** 기본값은 `min(price_daily.trade_date)`(국내가 정한 전역값)인데, 미국 봉이
+  없는 구간에서는 **원장의 근접중복 창이 퇴화한다** — 두 날짜 사이의 *봉 수*로 5거래일을 세므로
+  봉이 없으면 45일 안의 두 사건이 무조건 한 사건으로 붙고, **알림 없이 `log.info`로 끝난다.**
+- **`--server.port=0`이 사실상 필수다.** 운영 앱이 8080을 물고 있으면 러너가 아예 시작되지
+  않은 채 `BUILD SUCCESSFUL` + 종료코드 0이 난다.
+
+**MUST NOT: 재구축 알림을 보고 미국에 백필을 돌리지 않는다.** `alertOnInvalidation`이
+**계수가 바뀐 종목 수**로 문장을 지어(`invalidate`가 `void`라 실제 삭제 행을 못 센다)
+*"지표가 보존 창 전체에서 지워졌다 … 백필하라"*를 보내는데, **미국 지표는 0행이라 지워진 것이
+없다.** 그 말을 따르면 미국에 아무 일도 안 하면서 **한 시간 넘게 도는 백필**이 걸린다.
+국내는 그 알림이 참이므로 그대로 따른다.
+
+**적재 뒤 확인은 원장 행 수가 아니라 `adj_close`다.** 효력일이 하루만 밀려도 이미 조정된 봉이
+한 번 더 나뉘는데, `adj_close = close × adj_factor`도 · 원장의 `APPLIED`도 · 재실행 0행도
+그것을 **못 본다**. ADR-0090의 premise가 결과에서 다시 재는 유일한 자리다.
 
 ## 미국 재무만 받는다 (ADR-0089)
 
