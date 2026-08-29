@@ -59,6 +59,23 @@ final class SecEdgarResponse {
      */
     static JsonNode requireFacts(HttpStatusCode status, String body, String context)
             throws DataSourceException {
+        JsonNode parsed = requireJson(status, body, context);
+        if (!parsed.has("facts")) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                    "200인데 facts 키가 없다. %s — %s".formatted(context, message(body)));
+        }
+        return parsed.path("facts");
+    }
+
+    /**
+     * 상태코드를 먼저 보고 본문을 JSON으로 판다. <b>엔드포인트에 무관한 부분이다.</b>
+     *
+     * <p>{@code submissions}가 {@code companyfacts}와 <b>같은 실패 계약</b>이라는 것을 실측했다
+     * (둘 다 404 + XML {@code NoSuchKey}, {@code sec-edgar-company-profile.md}). 그래서 판정을
+     * 여기 하나로 둔다 — 엔드포인트마다 사본을 두면 한쪽만 고쳐도 아무 데서도 티가 안 난다.
+     */
+    static JsonNode requireJson(HttpStatusCode status, String body, String context)
+            throws DataSourceException {
         if (!status.is2xxSuccessful()) {
             // MUST: 파싱하지 않고 상태코드로만 판정한다. 오류 본문이 XML이라 JSON으로 읽으면
             // 여기 오기 전에 터지고, 그 예외는 404를 TRANSIENT로 만든다.
@@ -72,11 +89,11 @@ final class SecEdgarResponse {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                     "200인데 JSON이 아니다. %s — %s".formatted(context, message(body)), e);
         }
-        if (parsed == null || !parsed.has("facts")) {
+        if (parsed == null) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
-                    "200인데 facts 키가 없다. %s — %s".formatted(context, message(body)));
+                    "200인데 본문이 없다. %s".formatted(context));
         }
-        return parsed.path("facts");
+        return parsed;
     }
 
     static DataSourceException.Kind kindOf(int status) {

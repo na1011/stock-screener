@@ -4,6 +4,7 @@ import com.stockscreener.pipeline.datasource.CompanyProfile;
 import com.stockscreener.pipeline.datasource.CompanyProfileDataSource;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
+import com.stockscreener.pipeline.datasource.IndustryScheme;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.support.JpaSliceTest;
 
@@ -118,7 +119,11 @@ class CompanyProfileCollectorTest {
     }
 
     private static CompanyProfile profile(String industryCode, Integer accountingMonth) {
-        return new CompanyProfile(industryCode, accountingMonth, "Y");
+        return new CompanyProfile(industryCode, IndustryScheme.KSIC, accountingMonth, "Y");
+    }
+
+    private static CompanyProfile sicProfile(String sicCode, Integer accountingMonth) {
+        return new CompanyProfile(sicCode, IndustryScheme.SIC, accountingMonth, null);
     }
 
     /** 개황 소스를 고정한다. 이 테스트의 관심사는 저장과 파생이다. */

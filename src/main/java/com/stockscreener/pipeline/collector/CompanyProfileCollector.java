@@ -4,6 +4,7 @@ import com.stockscreener.pipeline.datasource.CompanyProfile;
 import com.stockscreener.pipeline.datasource.CompanyProfileDataSource;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
+import com.stockscreener.pipeline.datasource.IndustryScheme;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 
 import org.slf4j.Logger;
@@ -22,6 +23,10 @@ import java.util.Optional;
  * <p>MUST NOT: 소스가 준 코드를 잘라 넘기지 않는다. 소분류·중분류 키는 저장 계층의 생성
  * 컬럼이 만든다 — 두 곳에서 자르면 어느 쪽이 참인지 알 수 없고, 어긋나도 아무 에러가 나지
  * 않은 채 종목이 다른 업종으로 묶인다.
+ *
+ * <p><b>어느 컬럼에 쓸지는 {@link IndustryScheme}이 정한다</b>(ADR-0092). 체계마다 UPDATE를
+ * 따로 두는 이유는 <b>컬럼 이름을 문자열로 조립하지 않기 위해서</b>이고, 잘못 고른 값은
+ * {@code ck_stock_sic_is_us}·{@code ck_stock_ksic_is_not_us}가 그 종목만 실패시킨다.
  */
 @Component
 public class CompanyProfileCollector {
@@ -55,25 +60,57 @@ public class CompanyProfileCollector {
         }
         CompanyProfile found = profile.get();
 
+        if (found.scheme() == null) {
+            // 레코드의 압축 생성자가 "코드가 있으면 체계도 있다"를 이미 강제하므로 여기 오면
+            // 코드가 비어 있다. 포트 계약상 그때는 Optional.empty()라야 한다 — 조용히
+            // 넘기면 어댑터의 계약 위반이 영영 안 드러난다.
+            throw new IllegalStateException(
+                    source.sourceName() + "가 업종코드 없는 개황을 냈다. ticker=" + security.ticker()
+                            + " — 코드가 비면 Optional.empty()여야 한다");
+        }
+
         // IS DISTINCT FROM인 이유는 IndicatorValueWriter와 같다 — 값이 그대로면 updated_at까지
         // 건드리지 않아야 "언제 실제로 바뀌었나"가 남는다. 업종은 거의 바뀌지 않으므로
         // 재실행에서 0행이 정상이고, 그 0이 곧 멱등의 증거다.
-        int updated = jdbcTemplate.update("""
-                UPDATE stock
-                   SET industry_code    = ?,
-                       accounting_month = ?,
-                       updated_at       = now()
-                 WHERE id = ?
-                   AND (industry_code    IS DISTINCT FROM ?
-                     OR accounting_month IS DISTINCT FROM ?)
-                """,
+        int updated = jdbcTemplate.update(updateFor(found.scheme()),
                 found.industryCode(), found.accountingMonth(), security.stockId(),
                 found.industryCode(), found.accountingMonth());
 
         if (updated > 0) {
-            log.info("업종을 채웠다. ticker={} induty_code={} acc_mt={}",
-                    security.ticker(), found.industryCode(), found.accountingMonth());
+            log.info("업종을 채웠다. ticker={} scheme={} code={} acc_mt={}",
+                    security.ticker(), found.scheme(), found.industryCode(), found.accountingMonth());
         }
         return updated;
     }
+
+    /**
+     * 체계별 UPDATE. <b>switch가 완전해야 한다</b> — 체계가 늘면 여기서 컴파일이 깨지고,
+     * 그것이 새 체계를 기존 컬럼에 밀어 넣지 않게 만드는 자리다.
+     */
+    private static String updateFor(IndustryScheme scheme) {
+        return switch (scheme) {
+            case KSIC -> UPDATE_KSIC;
+            case SIC -> UPDATE_SIC;
+        };
+    }
+
+    private static final String UPDATE_KSIC = """
+            UPDATE stock
+               SET industry_code    = ?,
+                   accounting_month = ?,
+                   updated_at       = now()
+             WHERE id = ?
+               AND (industry_code    IS DISTINCT FROM ?
+                 OR accounting_month IS DISTINCT FROM ?)
+            """;
+
+    private static final String UPDATE_SIC = """
+            UPDATE stock
+               SET sic_code         = ?,
+                   accounting_month = ?,
+                   updated_at       = now()
+             WHERE id = ?
+               AND (sic_code         IS DISTINCT FROM ?
+                 OR accounting_month IS DISTINCT FROM ?)
+            """;
 }

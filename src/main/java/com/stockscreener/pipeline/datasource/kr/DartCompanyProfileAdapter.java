@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.datasource.kr;
 import com.stockscreener.pipeline.datasource.CompanyProfile;
 import com.stockscreener.pipeline.datasource.CompanyProfileDataSource;
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.IndustryScheme;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
@@ -130,6 +131,7 @@ public class DartCompanyProfileAdapter implements CompanyProfileDataSource {
 
         return Optional.of(new CompanyProfile(
                 industryCode,
+                IndustryScheme.KSIC,
                 accountingMonth(root, security),
                 root.path("corp_cls").asString("").strip()));
     }
