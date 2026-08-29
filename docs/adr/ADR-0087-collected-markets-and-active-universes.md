@@ -15,9 +15,15 @@ applies_to:
 배치의 대상 선정과 스크리닝의 유니버스 미지정 경로를 **두 겹**으로 좁힌다.
 
 1. **활성 유니버스 편입** — `universe.is_active`를 조인한다.
-2. **수집하기로 한 시장** — `CollectedMarkets.ALL`(지금 `KOSPI`·`KOSDAQ`)로 거른다.
+2. **수집하기로 한 시장** — `CollectedMarkets.ALL`로 거른다.
 
-유니버스에 **편입하는 것**과 데이터를 **모으는 것**을 가른다. 미국은 편입까지만 열려 있다.
+유니버스에 **편입하는 것**과 데이터를 **모으는 것**을 가른다.
+
+> **개정(2026-08-29 · ADR-0088).** 미국이 `CollectedMarkets.ALL`에 들어왔다 — 시세 어댑터가
+> 붙었기 때문이며, 나머지 다섯 축은 아직 어댑터가 없다. 그리고 **비활성 유니버스를 손으로
+> 골라 적재하는 경로**가 생겼다. 그 경로는 `universe.is_active`를 보지 않으므로
+> **`CollectedMarkets`가 유일한 게이트**다 — 위 두 겹이 한 겹이 되는 유일한 자리이고,
+> 대상이 0건이면 예외로 끝나 조용한 0건이 되지 않는 것이 그 대가다.
 
 ## 규칙
 
@@ -56,7 +62,7 @@ SELECT CASE
 END
 FROM (
   SELECT count(*) AS total,
-         count(*) FILTER (WHERE s.market_code NOT IN ('KOSPI','KOSDAQ')) AS outside
+         count(*) FILTER (WHERE s.market_code NOT IN ('KOSPI','KOSDAQ','US')) AS outside
   FROM stock s
   WHERE s.is_active
     AND EXISTS (SELECT 1 FROM universe_membership m
@@ -67,6 +73,12 @@ FROM (
 
 **시장 목록을 질의에 박은 것은 사본이다.** 자라는 자리는 `CollectedMarkets.ALL`이고, 거기에
 코드를 더하면 이 질의도 함께 고쳐야 한다 — 안 고치면 **의도한 동작에 우는 펜스**가 된다.
+
+**미국을 더하면서 이 펜스가 잃는 것이 있다.** 목록을 넓히기 전에는 `US_LISTED`를 켜는 날
+이 질의가 울어 「어댑터가 없는 시장이 대상에 있다」를 알렸다. 넓힌 뒤로는 조용하다 —
+미국이 수집 범위 **안**이기 때문이고, 그것이 의도다. **그 경고는 ADR-0086의 premise가
+받는다** — 그쪽이 유니버스를 켠 상태에서 축별로 무엇이 비어 있는지를 수로 신고한다.
+둘 중 하나만 보면 「켰는데 어댑터가 없다」가 어디에서도 안 뜬다.
 
 ## 배경
 

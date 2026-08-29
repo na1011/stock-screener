@@ -200,9 +200,11 @@ stockscreener:
       # corpCode.xml은 3.5MB ZIP이라 기본 읽기 타임아웃으로는 부족할 수 있다.
       read-timeout: 60s
     alpaca:
-      # Trading API다. 시세는 https://data.alpaca.markets 이고 섞으면 404다 — 인증 헤더가
-      # 두 계열 모두 같아서 "키가 틀렸다"로 읽히지 않는다.
+      # Trading API다. 자산 마스터(/v2/assets)와 마켓 캘린더가 여기에 있다.
       base-url: https://paper-api.alpaca.markets
+      # Market Data API. 시세(/v2/stocks/bars)가 여기에 있고 base-url과 섞으면 404다 —
+      # 인증 헤더가 두 계열 모두 같아서 "키가 틀렸다"로 읽히지 않는다. 키는 아래 둘을 공유한다.
+      market-data-base-url: https://data.alpaca.markets
       # 이 소스만 키가 둘이다. api-key가 Key ID, secret-key가 Secret Key다.
       api-key: ${APCA_API_KEY_ID:}
       secret-key: ${APCA_API_SECRET_KEY:}
@@ -214,8 +216,13 @@ stockscreener:
       # 착수 판단은 공표값의 절반으로 한다(api-sources skill). 유니버스는 실행당 1콜이라
       # 어느 쪽이든 닿지 않는다.
       permits-per-minute: 100
-      # 일일 총량은 공표값이 없다. 0은 무제한이며, 세는 것이 의미를 갖는 시점은 시세가
-      # 붙어 종목당 호출이 생길 때다.
+      # 일일 총량은 공표값이 없다. 0은 무제한이다.
+      #
+      # 시세가 붙었으니 이 값을 한 번 판단했다: 그대로 0으로 둔다. 근거는 셀 기준이 없다는
+      # 것이다 — 벤더가 일일 총량을 공표하지 않아 어떤 수를 넣어도 우리가 지어낸 값이고,
+      # 지어낸 상한은 소진되는 날 "쿼터 초과"라는 **거짓 원인**을 남긴다. 실제로 우리를 막는
+      # 것은 위의 분당 한도이고 그쪽은 공표값이 있다.
+      # MUST NOT: 전량 적재 비용을 이 값으로 막으려 하지 않는다. 그것은 대상 선정이 정한다.
       daily-quota: 0
       # 활성 종목 전량이 한 응답에 온다(실측 3.88MB). 페이징 파라미터가 없어 나눠 받을 수 없다.
       read-timeout: 60s

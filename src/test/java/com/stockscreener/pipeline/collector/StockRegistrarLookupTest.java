@@ -102,23 +102,13 @@ class StockRegistrarLookupTest {
     @Test
     @DisplayName("IMPORTANT — 수집하기로 하지 않은 시장은 활성 유니버스에 있어도 대상이 아니다")
     void excludesMarketsWeDoNotCollect() {
-        // 미국 유니버스를 켠다. 적재하려면 반드시 켜야 하고, 켜는 순간 편입 종목이 전부
-        // "전 종목"에 들어온다 — 활성 유니버스 조인만으로는 이것을 막지 못한다.
-        jdbcTemplate.update("UPDATE universe SET is_active = true WHERE code = 'US_LISTED'");
-        long usStock = jdbcTemplate.queryForObject("""
-                INSERT INTO stock (market_code, ticker, name, listing_exchange)
-                VALUES ('US', 'AAPL', 'Apple Inc. Common Stock', 'NASDAQ') RETURNING id
-                """, Long.class);
-        jdbcTemplate.update("""
-                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
-                VALUES ('US_LISTED', ?, ?)
-                """, usStock, FROM);
         long krStock = member("005930", "삼성전자", true, null);
+        long outsideStock = memberOfUncollectedMarket();
 
         assertThat(registrar.activeUniverseMemberIds())
                 .as("수집 어댑터가 하나도 없는 시장이라 종목마다 실패하게 된다")
-                .contains(krStock).doesNotContain(usStock);
-        assertThat(registrar.activeUniverseMemberIdsByTicker(List.of("005930", "AAPL")))
+                .contains(krStock).doesNotContain(outsideStock);
+        assertThat(registrar.activeUniverseMemberIdsByTicker(List.of("005930", "XX0001")))
                 .containsExactly(krStock);
     }
 
@@ -134,15 +124,7 @@ class StockRegistrarLookupTest {
                 VALUES ('KOSPI_TOP200', ?, ?)
                 """, onlyInactiveUniverse, FROM);
 
-        jdbcTemplate.update("UPDATE universe SET is_active = true WHERE code = 'US_LISTED'");
-        long usStock = jdbcTemplate.queryForObject("""
-                INSERT INTO stock (market_code, ticker, name, listing_exchange)
-                VALUES ('US', 'AAPL', 'Apple Inc. Common Stock', 'NASDAQ') RETURNING id
-                """, Long.class);
-        jdbcTemplate.update("""
-                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
-                VALUES ('US_LISTED', ?, ?)
-                """, usStock, FROM);
+        long outsideStock = memberOfUncollectedMarket();
 
         List<Long> ids = registrar.activeUniverseMemberIdsNeedingHistory();
 
@@ -152,7 +134,7 @@ class StockRegistrarLookupTest {
                 .doesNotContain(onlyInactiveUniverse);
         assertThat(ids)
                 .as("수집 어댑터가 없는 시장은 종목마다 NOT_FOUND로 실패한다")
-                .doesNotContain(usStock);
+                .doesNotContain(outsideStock);
     }
 
     @Test
@@ -184,6 +166,34 @@ class StockRegistrarLookupTest {
     @DisplayName("빈 목록은 빈 결과다 — IN () 조립으로 문법 오류가 나면 안 된다")
     void handlesEmptyTickerList() {
         assertThat(registrar.activeUniverseMemberIdsByTicker(List.of())).isEmpty();
+    }
+
+    /**
+     * <b>수집하기로 하지 않은 시장</b>의 활성 유니버스 편입 종목.
+     *
+     * <p>시장을 테스트가 직접 만드는 이유는, {@code CollectedMarkets.ALL}이 지금 존재하는
+     * 시장 코드를 <b>전부</b> 담고 있어 실재하는 시장으로는 이 갈래를 만들 수 없기 때문이다.
+     * 여기서 실재 시장을 쓰면 목록이 자랄 때마다 이 테스트가 <b>의도한 동작에 붉어지고</b>,
+     * 그러면 가드가 지워진다 — 실제로 미국을 더하면서 그렇게 될 뻔했다.
+     */
+    private long memberOfUncollectedMarket() {
+        jdbcTemplate.update("""
+                INSERT INTO market (code, country_code, currency_code, timezone)
+                VALUES ('XX', 'XX', 'XXX', 'UTC') ON CONFLICT (code) DO NOTHING
+                """);
+        jdbcTemplate.update("""
+                INSERT INTO universe (code, name, market_code, is_active)
+                VALUES ('XX_ALL', '수집 대상 밖', 'XX', true) ON CONFLICT (code) DO NOTHING
+                """);
+        long stockId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('XX', 'XX0001', '범위 밖 종목')
+                RETURNING id
+                """, Long.class);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('XX_ALL', ?, ?)
+                """, stockId, FROM);
+        return stockId;
     }
 
     private long member(String ticker, String name, boolean active, LocalDate effectiveTo) {

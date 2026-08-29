@@ -57,22 +57,47 @@ grep -rnE 'alpaca|Alpaca|APCA' \
 ```
 아무것도 반환하지 않아야 한다 — 벤더 이름이 상위 계층에 새지 않는다(ADR-0006).
 
-```premise 미국 유니버스가 켜졌으면 수집 어댑터가 함께 있는가
+```premise 미국 유니버스가 켜졌으면 축별 어댑터가 함께 있는가
 psql -d stock_screener -At -c "
+WITH u AS (SELECT is_active FROM universe WHERE code = 'US_LISTED'),
+     m AS (SELECT count(*) AS members FROM universe_membership
+            WHERE universe_code = 'US_LISTED' AND effective_to IS NULL),
+     s AS (SELECT array_remove(ARRAY[
+       CASE WHEN NOT EXISTS (SELECT 1 FROM price_daily p JOIN stock st ON st.id = p.stock_id
+                              WHERE st.market_code = 'US') THEN '시세' END,
+       CASE WHEN NOT EXISTS (SELECT 1 FROM financial_statement f JOIN stock st ON st.id = f.stock_id
+                              WHERE st.market_code = 'US') THEN '재무' END,
+       CASE WHEN NOT EXISTS (SELECT 1 FROM corporate_action c JOIN stock st ON st.id = c.stock_id
+                              WHERE st.market_code = 'US') THEN '기업행위' END,
+       CASE WHEN NOT EXISTS (SELECT 1 FROM governance_report_row g JOIN stock st ON st.id = g.stock_id
+                              WHERE st.market_code = 'US') THEN '거버넌스' END,
+       CASE WHEN NOT EXISTS (SELECT 1 FROM stock st
+                              WHERE st.market_code = 'US' AND st.industry_code IS NOT NULL)
+            THEN '업종' END], NULL) AS missing)
 SELECT CASE
-  WHEN u.code IS NULL THEN '잴 것이 없었다 — US_LISTED 행이 없다(V34 미적용)'
-  WHEN NOT u.is_active THEN 'OK US_LISTED는 비활성이다 (구성 ' || u.members || '종목을 쌓아 두었다)'
-  ELSE 'US_LISTED가 켜졌다 — CollectedMarkets에 US를 더했는지, 시세·재무 어댑터가 있는지 확인하라'
-END
-FROM (SELECT code, is_active,
-             (SELECT count(*) FROM universe_membership m
-               WHERE m.universe_code = 'US_LISTED' AND m.effective_to IS NULL) AS members
-        FROM universe WHERE code = 'US_LISTED') u
-RIGHT JOIN (SELECT 1) x ON true"
+  WHEN (SELECT count(*) FROM u) = 0 THEN '잴 것이 없었다 — US_LISTED 행이 없다(V34 미적용)'
+  WHEN NOT (SELECT is_active FROM u)
+    THEN 'OK US_LISTED는 비활성이다 (구성 ' || (SELECT members FROM m) || '종목 · 비어 있는 축: '
+         || coalesce(array_to_string((SELECT missing FROM s), ', '), '없음') || ')'
+  WHEN array_length((SELECT missing FROM s), 1) IS NULL
+    THEN 'OK US_LISTED가 켜졌고 다섯 축 전부에 데이터가 있다'
+  ELSE 'US_LISTED가 켜졌는데 ' || array_length((SELECT missing FROM s), 1) || '개 축이 비어 있다: '
+       || array_to_string((SELECT missing FROM s), ', ')
+       || ' — 기업행위가 비면 CorporateActionJob이 루프 앞에서 failFatally로 끝나 국내 수집까지 멈춘다'
+END"
 ```
 
 **켜는 것 자체가 결함은 아니다.** 이 전제가 묻는 것은 *"켤 때 함께 해야 할 것을 했는가"*이며,
 그 짝은 ADR-0087의 `CollectedMarkets`다.
+
+**축별로 세는 이유는 그 짝이 더 이상 경고를 주지 않기 때문이다.** 미국이
+`CollectedMarkets.ALL`에 들어가면서(ADR-0088) ADR-0087의 premise는 미국을 「수집 범위 안」으로
+읽어 조용해진다 — 그것이 의도다. **잃은 경고를 여기서 받는다.**
+
+**데이터 유무로 재는 것은 어댑터 등록 여부의 대리 지표다.** 어댑터가 있어도 아직 안 돌렸으면
+비어 보인다. 그래도 이 축으로 재는 이유는, SQL이 스프링 빈 목록을 볼 수 없고 **비어 있다는
+사실 자체가 켜면 안 되는 이유**로 충분하기 때문이다. 비활성일 때도 목록을 함께 찍어,
+켜기 전에 무엇이 남았는지가 매 세션 보이게 한다.
 
 ## 배경
 

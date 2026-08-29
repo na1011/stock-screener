@@ -33,6 +33,16 @@ public class DataSourceProperties {
     private final Source alpaca = new Source("https://paper-api.alpaca.markets");
 
     /**
+     * Alpaca <b>Market Data API</b>의 base URL. 시세({@code /v2/stocks/bars})가 여기에 있다.
+     *
+     * <p>별도 {@code Source}로 두지 않는 이유는 {@link #getDataGoKrMarketIndexBaseUrl()}과 같다 —
+     * 그러면 {@code api-key}·{@code secret-key}를 두 벌 적게 되고, 한쪽만 비면
+     * {@code @ConditionalOnApiKey}가 <b>시세 어댑터만 등록하지 않는다.</b> 그 상태는 미국 시세가
+     * 영영 안 들어오는 형태로만 드러난다. 키는 위 {@link #alpaca}의 것을 공유한다.
+     */
+    private String alpacaMarketDataBaseUrl = "https://data.alpaca.markets";
+
+    /**
      * 지수시세정보 서비스의 base URL. 같은 제공기관(prefix {@code 1160100})의 <b>다른
      * 오퍼레이션 셋</b>이라 경로만 갈린다.
      *
@@ -62,6 +72,14 @@ public class DataSourceProperties {
 
     public Source getDart() {
         return dart;
+    }
+
+    public String getAlpacaMarketDataBaseUrl() {
+        return alpacaMarketDataBaseUrl;
+    }
+
+    public void setAlpacaMarketDataBaseUrl(String alpacaMarketDataBaseUrl) {
+        this.alpacaMarketDataBaseUrl = alpacaMarketDataBaseUrl;
     }
 
     public Source getAlpaca() {

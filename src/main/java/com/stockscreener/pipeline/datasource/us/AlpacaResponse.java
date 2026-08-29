@@ -64,6 +64,43 @@ final class AlpacaResponse {
         return body;
     }
 
+    /**
+     * 시세 봉투에서 {@code bars} 객체를 꺼내거나 던진다.
+     *
+     * <p>{@link #requireArray}와 갈라놓은 이유가 둘이다. 시세 응답은 배열이 아니라
+     * {@code {"bars": {...}, "next_page_token": ...}} 객체이고, 저쪽은 {@code sourceName}을
+     * 유니버스 어댑터의 것으로 <b>하드코딩</b>한다 — 그대로 쓰면 시세 실패가
+     * {@code batch_execution_failure.source_name}에 유니버스 소스 이름으로 기록되고
+     * 관리자 화면의 소스별 집계가 그것으로 묶인다.
+     *
+     * <p><b>빈 {@code bars}를 던지지 않는다.</b> 유니버스에서 빈 목록은 "전 종목 제외"라
+     * 대량 오탈락이지만, 시세에서 빈 구간은 <b>정상</b>이다 — 상장 전·거래정지·무거래.
+     * 포트가 그것을 빈 목록으로 정의한다.
+     */
+    static JsonNode requireBars(HttpStatusCode status, JsonNode body, String sourceName,
+                                String context) throws DataSourceException {
+        if (!status.is2xxSuccessful()) {
+            throw new DataSourceException(kindOf(status.value()), sourceName,
+                    "HTTP %d — %s. %s".formatted(status.value(), message(body), context));
+        }
+        if (body == null || !body.isObject()) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, sourceName,
+                    "객체가 아닌 응답이다 — 스펙이 바뀌었을 수 있다. " + context);
+        }
+        JsonNode bars = body.path("bars");
+        if (bars.isMissingNode() || bars.isNull()) {
+            // 봉이 0개인 것과 bars 키 자체가 없는 것은 다르다. 후자는 스펙 변경 신호이고,
+            // 실제로 403 본문이 정확히 그 모양이다 — 상태코드를 안 보면 「봉 0개」로 접힌다.
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, sourceName,
+                    "bars 키가 없다 — 봉 0개와 다른 사건이다. " + context);
+        }
+        if (!bars.isObject()) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, sourceName,
+                    "bars가 객체가 아니다. " + context);
+        }
+        return bars;
+    }
+
     static DataSourceException.Kind kindOf(int status) {
         return switch (status) {
             case 401, 403 -> DataSourceException.Kind.AUTH;
