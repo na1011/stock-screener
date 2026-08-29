@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -228,7 +229,11 @@ public class DailyUpdateJob {
 
         // 종목마다 묻지 않는다 — 350번 같은 답을 받는다. 이 루프 안에서 오늘치 시세가 들어와
         // 경계가 하루 밀리지만, 그 하루는 아래 purge가 정상 회전으로 걷어 간다.
-        Optional<LocalDate> retentionCutoff = retentionPolicy.writeCutoff();
+        //
+        // MUST: 시장마다 따로다. 전 시장 합계로 세면 국내가 휴장이고 미국이 개장한 날이 전역
+        // 「거래일」이 되어 국내 경계가 그만큼 뒤로 밀리는데, purge는 indicator_value 기준이라
+        // 그 어긋남이 자연 소멸하지 않는다.
+        Map<String, Optional<LocalDate>> retentionCutoffs = retentionPolicy.writeCutoffs();
         // 지수도 종목마다 묻지 않는다. asOf 단위로 한 번 읽어 러너에 넘긴다 — readRawData는
         // 종목마다 불리므로 거기서 읽으면 350번 같은 쿼리를 던진다(ADR-0054).
         Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes =
@@ -250,14 +255,20 @@ public class DailyUpdateJob {
                 // 조건을 "행을 썼는가"로 좁히지 않는 이유는 위 resolveFailure가 같은 값을 쓰기
                 // 때문이다. 거래정지처럼 정상적으로 빈 종목이 영원히 미해결로 남게 된다.
                 if (collected) {
+                    Optional<LocalDate> cutoff = retentionCutoffs
+                            .getOrDefault(target.marketCode(), Optional.empty());
                     execution.process(target, CollectionPhase.INDICATOR,
                             security -> indicatorRunner.run(
-                                    security.stockId(), to, retentionCutoff, marketIndexes));
+                                    security.stockId(), to, cutoff, marketIndexes));
                 }
             }
 
-            alertIfNothingArrived(execution, targets.size(), to);
-            alertIfIndexMissingWhilePricesArrived(execution, targets, to);
+            // 대상 종목이 실제로 걸쳐 있는 시장들. 알림도 기준일도 이 축으로 나뉜다.
+            List<String> markets = targets.stream()
+                    .map(SecurityRef::marketCode).distinct().sorted().toList();
+
+            alertIfNothingArrived(execution, targets, markets, to);
+            alertIfIndexMissingWhilePricesArrived(execution, markets, to);
 
             // MUST: 여기부터의 기준일은 대상일이 아니라 **실제로 봉이 적재된** 최신 거래일이다.
             //
@@ -268,28 +279,47 @@ public class DailyUpdateJob {
             // **결과가 비는 것이 아니라 그럴듯하게 좁아진다.**
             //
             // 루프 뒤여야 한다 — 봉이 커밋된 뒤에만 옳은 값이 나온다.
-            LocalDate asOf = priceCalendar.latestTradeDateOnOrBefore(to).orElse(to);
+            //
+            // MUST: 시장마다 따로다. 두 시장의 휴장일이 다르므로 전 시장에 물으면 국내 휴장·
+            // 미국 개장일에 기준일이 미국 날짜가 되고, 그날 국내 종목은 백분위가 0행이 된다.
+            Map<String, LocalDate> asOfByMarket = new LinkedHashMap<>();
+            for (String market : markets) {
+                asOfByMarket.put(market,
+                        priceCalendar.latestTradeDateOnOrBefore(market, to).orElse(to));
+            }
 
             // 루프가 끝난 뒤에도 할 일이 남아 있다. 구간을 신고하지 않으면 이 몇 분이 화면에
             // "100%인데 안 끝남"으로 보이고, 그것은 멎은 것과 구분되지 않는다.
             execution.stage("백분위 계산");
             // 백분위는 전 종목의 값이 저장된 뒤에야 계산할 수 있다. 종목 루프 안에서는 원리적으로
             // 불가능하므로 루프가 끝난 뒤 하루치를 한 번에 처리한다.
-            percentileCalculator.calculate(asOf);
-            // 업종 상대값도 같은 이유로 루프 뒤다. 워치리스트보다 앞이어야 하는 것도 같다 —
-            // 업종 조건을 건 화면이 그 앞에서 판정되면 어제 값으로 오늘을 판정한다.
-            sectorRelativeCalculator.calculate(asOf);
+            //
+            // 날짜가 시장마다 다르면 **서로 다른 날짜에 대해** 각각 돈다. 두 계산기 다
+            // `trade_date = ?`로 정확히 일치시키므로, 한 날짜 실행은 그날 값이 있는 종목만
+            // 건드린다 — 다른 시장의 종목은 애초에 걸리지 않는다. 그래서 날짜별로 나눠 도는 것이
+            // 안전하고, 두 시장의 날짜가 같으면 집합이 하나라 실행도 한 번이다.
+            for (LocalDate date : asOfByMarket.values().stream().distinct().sorted().toList()) {
+                percentileCalculator.calculate(date);
+                // 업종 상대값도 같은 이유로 루프 뒤다. 워치리스트보다 앞이어야 하는 것도 같다 —
+                // 업종 조건을 건 화면이 그 앞에서 판정되면 어제 값으로 오늘을 판정한다.
+                sectorRelativeCalculator.calculate(date);
+            }
 
             // 러너가 「값을 그만 낸」 지표의 옛 행을 보존 창 전체에서 지웠을 수 있다(ADR-0080).
             // 그러면 파생 행이 그만큼 고아가 되는데, 위 두 계산의 날짜별 정리는 asOf 하나만 본다.
             // MUST: 루프 밖에서 한 번이다.
-            percentileCalculator.removeOrphansInWindow(retentionCutoff);
-            sectorRelativeCalculator.removeOrphansInWindow(retentionCutoff);
+            //
+            // 경계는 시장별 최솟값을 쓴다. 창이 넓어질 뿐이고 판정("그날 원본이 없다")은
+            // 시장과 무관하므로, 넓은 쪽이 언제나 안전하다.
+            Optional<LocalDate> orphanCutoff = retentionCutoffs.values().stream()
+                    .flatMap(Optional::stream).min(LocalDate::compareTo);
+            percentileCalculator.removeOrphansInWindow(orphanCutoff);
+            sectorRelativeCalculator.removeOrphansInWindow(orphanCutoff);
 
             execution.stage("워치리스트 판정");
             // 워치리스트 판정은 백분위 뒤여야 한다. 백분위 조건("PER 하위 20%")을 건 화면이
             // 그 앞에서 판정되면 어제 백분위로 오늘을 판정하게 되고, 그것은 조용히 그럴듯하다.
-            evaluateWatchlist(execution, asOf);
+            evaluateWatchlist(execution, asOfByMarket);
         } catch (DataSourceException e) {
             // AUTH처럼 복구 불가능한 실패다. 850종목을 마저 시도할 이유가 없다.
             execution.failFatally(e);
@@ -350,13 +380,24 @@ public class DailyUpdateJob {
      * <p>창이 생긴 뒤로는 공휴일마다 최대 2회 온다 — 공휴일 당일(직전 거래일이 아직 미공개)과
      * 다음 거래일(대상일이 공휴일). 위 교환은 그대로 유효하다.
      */
-    private void alertIfNothingArrived(BatchExecutionContext execution, int targetCount, LocalDate to) {
-        if (targetCount == 0 || priceCalendar.countOn(to) > 0) {
+    private void alertIfNothingArrived(BatchExecutionContext execution, List<SecurityRef> targets,
+                                       List<String> markets, LocalDate to) {
+        if (targets.isEmpty()) {
             return;
         }
+        List<String> empty = markets.stream()
+                .filter(market -> priceCalendar.countOn(market, to) == 0)
+                .toList();
+        if (empty.isEmpty()) {
+            return;
+        }
+        // MUST: 시장이 여럿이어도 **알림은 한 건**이다. 시장마다 보내면 dedupeKey가 같아
+        // (제목이 같다) 알림 계층이 뒤엣것을 삼키고, **어느 시장이 살아남는지가 임의**가 된다.
+        // 지수 결손 알림이 빠진 지수를 한 줄에 나열하는 것과 같은 형태다.
+        long count = targets.stream().filter(t -> empty.contains(t.marketCode())).count();
         execution.alertOperator(AlertSeverity.WARNING, "대상일 시세가 한 건도 없다",
-                "%d종목을 조회했으나 대상일 %s에 저장된 행이 0이다. 휴장이거나, 소스가 아직 그날치를 내지 않았다. "
-                        .formatted(targetCount, to)
+                "%s의 %d종목을 조회했으나 대상일 %s에 저장된 행이 0이다. 휴장이거나, 소스가 아직 그날치를 내지 않았다. "
+                        .formatted(empty, count, to)
                         + "거래일마다 이 알림이 오면 배치 시각이 소스의 공개 시각보다 이르다는 뜻이다.");
     }
 
@@ -381,13 +422,12 @@ public class DailyUpdateJob {
      * 그것이 정확히 가장 조용한 실패다.
      */
     private void alertIfIndexMissingWhilePricesArrived(BatchExecutionContext execution,
-                                                       List<SecurityRef> targets, LocalDate to) {
-        if (priceCalendar.countOn(to) == 0) {
-            return;
-        }
-        List<String> missing = targets.stream()
-                .map(SecurityRef::marketCode)
-                .distinct()
+                                                       List<String> markets, LocalDate to) {
+        List<String> missing = markets.stream()
+                // MUST: 시세 유무를 **그 시장에서** 묻는다. 전 시장 합계로 물으면 국내 휴장·
+                // 미국 개장일에 "시세는 들어왔다"가 참이 되어 국내 지수 결손 알림이 상시
+                // 오발화한다 — 그날 국내는 휴장이라 지수가 없는 것이 정상이다.
+                .filter(market -> priceCalendar.countOn(market, to) > 0)
                 // 아직 지수를 갖기로 하지 않은 시장(미국, v1.1)은 묻지 않는다. 그것은 결손이
                 // 아니라 범위 밖이고, 물으면 거래일마다 오는 알림이 되어 곧 무시된다.
                 .filter(MarketIndexCodes.ALL::contains)
@@ -415,9 +455,10 @@ public class DailyUpdateJob {
      * 저장 공간 문제일 뿐이지만, 워치리스트 판정이 며칠 조용히 안 돌면 사용자는 알림이
      * 없는 것을 "조건에 안 맞았나 보다"로 읽는다 — 기능이 죽은 채로 정상처럼 보인다.
      */
-    private void evaluateWatchlist(BatchExecutionContext execution, LocalDate asOf) {
+    private void evaluateWatchlist(BatchExecutionContext execution,
+                                  Map<String, LocalDate> asOfByMarket) {
         try {
-            WatchlistAlertRunner.Result result = watchlistAlertRunner.run(asOf);
+            WatchlistAlertRunner.Result result = watchlistAlertRunner.run(asOfByMarket);
             if (result.hasFailure()) {
                 execution.alertOperator(AlertSeverity.WARNING, "워치리스트 판정 부분 실패",
                         "전략 %d개의 조건을 판정하지 못했다. 판정 %d건, 통지 %d명."

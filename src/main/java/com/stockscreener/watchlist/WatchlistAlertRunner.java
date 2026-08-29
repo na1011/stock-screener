@@ -73,16 +73,23 @@ public class WatchlistAlertRunner {
     /**
      * 알림 조건이 걸린 항목을 전부 판정하고 통지한다.
      *
-     * @param asOf 판정에 쓸 지표 일자. 일일 갱신이 그날 계산을 마친 뒤 그 일자를 넘긴다 —
-     *             지표가 저장되기 전에 판정하면 어제 값으로 오늘을 판정하게 되고,
-     *             그것은 조용히 그럴듯하다.
+     * @param asOfByMarket 시장 코드 → 판정에 쓸 지표 일자. 일일 갱신이 그날 계산을 마친 뒤
+     *                     넘긴다 — 지표가 저장되기 전에 판정하면 어제 값으로 오늘을 판정하게
+     *                     되고, 그것은 조용히 그럴듯하다.
+     *                     <p><b>MUST: 날짜 하나로 되돌리지 않는다.</b> 두 시장의 휴장일이
+     *                     다르므로 한 날짜로 전부 판정하면, 그날 휴장이던 시장의 종목은 값이
+     *                     없어 <b>전 조건 판정불가 → 불충족</b>이 된다. 그러면
+     *                     {@code recordEvaluation}이 {@code last_satisfied}를 내려
+     *                     <b>다음 거래일에 같은 알림이 새 충족인 것처럼 다시 나간다</b>(ADR-0026).
      */
     @Transactional
-    public Result run(LocalDate asOf) {
+    public Result run(Map<String, LocalDate> asOfByMarket) {
         List<WatchlistItem> items = store.findAlerting();
         if (items.isEmpty()) {
             return Result.empty();
         }
+        Map<Long, String> marketByStock = store.marketsOf(
+                items.stream().map(WatchlistItem::stockId).distinct().toList());
 
         // 화면 단위로 묶는다. 같은 조건을 건 종목이 여럿이면 조건 로딩과 지표 조회가
         // 한 번으로 끝난다 — 항목마다 화면을 다시 읽으면 그것이 N+1이다.
@@ -95,7 +102,8 @@ public class WatchlistAlertRunner {
 
         for (Map.Entry<Long, List<WatchlistItem>> entry : byScreen.entrySet()) {
             try {
-                evaluated.addAll(evaluateScreen(entry.getKey(), entry.getValue(), asOf));
+                evaluated.addAll(evaluateScreen(entry.getKey(), entry.getValue(),
+                        marketByStock, asOfByMarket));
             } catch (RuntimeException e) {
                 // 한 화면의 실패가 나머지를 막지 않는다. 실패 격리의 단위가 종목인 것과 같은
                 // 원칙이다. MUST NOT: 조용히 넘기지 않는다 — error로 남겨야 Sentry가 잡는다.
@@ -106,7 +114,7 @@ public class WatchlistAlertRunner {
         }
 
         List<Evaluated> triggered = evaluated.stream().filter(Evaluated::triggered).toList();
-        int notifiedUsers = notify(triggered, asOf);
+        int notifiedUsers = notify(triggered, marketByStock, asOfByMarket);
 
         // 알림을 보낸 뒤에 기록한다. 순서를 뒤집으면 기록에 실패했을 때 알림 자체가
         // 나가지 않고, 그 손실은 아무 데도 드러나지 않는다. 이 순서라면 최악이
@@ -116,12 +124,19 @@ public class WatchlistAlertRunner {
         }
 
         log.info("워치리스트 판정을 마쳤다. asOf={}, 판정 {}건, 새로 충족 {}건, 통지 {}명, 실패 화면 {}개",
-                asOf, evaluated.size(), triggered.size(), notifiedUsers, failedScreens);
+                asOfByMarket, evaluated.size(), triggered.size(), notifiedUsers, failedScreens);
         return new Result(evaluated.size(), triggered.size(), notifiedUsers, failedScreens);
     }
 
-    /** 화면 하나에 걸린 항목들을 판정한다. */
-    private List<Evaluated> evaluateScreen(long screenId, List<WatchlistItem> items, LocalDate asOf) {
+    /**
+     * 화면 하나에 걸린 항목들을 판정한다.
+     *
+     * <p>시장이 섞여 있으면 <b>시장마다 다른 기준일</b>로 지표를 읽는다. 조건 판정 자체는
+     * 같으므로 조건 로딩은 한 번이고, 갈라지는 것은 지표 조회뿐이다.
+     */
+    private List<Evaluated> evaluateScreen(long screenId, List<WatchlistItem> items,
+                                           Map<Long, String> marketByStock,
+                                           Map<String, LocalDate> asOfByMarket) {
         Optional<ScreenDefinition> found = screenStore.findById(screenId);
         if (found.isEmpty()) {
             // FK가 있으므로 정상적으로는 불가능하다. 그래도 조용히 건너뛰지 않는다 —
@@ -138,12 +153,32 @@ public class WatchlistAlertRunner {
         }
 
         ConditionGroup group = definition.conditions();
-        List<Long> stockIds = items.stream().map(WatchlistItem::stockId).distinct().toList();
-        Map<Long, Map<String, BigDecimal>> valuesByStock =
-                screeningRepository.loadIndicatorValues(stockIds, group.referencedIndicatorCodes(), asOf);
 
-        List<Evaluated> results = new ArrayList<>(items.size());
-        for (WatchlistItem item : items) {
+        // 시장별로 나눠 읽는다. 그 종목의 시장에 기준일이 없으면(그날 그 시장이 대상이 아니었다면)
+        // 판정하지 않는다 — 값이 없는 것을 불충족으로 접으면 last_satisfied가 내려가고,
+        // 다음 실행에서 같은 알림이 새 충족인 것처럼 다시 나간다.
+        Map<Long, Map<String, BigDecimal>> valuesByStock = new LinkedHashMap<>();
+        Map<String, List<Long>> stockIdsByMarket = items.stream()
+                .map(WatchlistItem::stockId).distinct()
+                .filter(id -> marketByStock.get(id) != null)
+                .collect(Collectors.groupingBy(marketByStock::get, LinkedHashMap::new,
+                        Collectors.toList()));
+        List<WatchlistItem> judgeable = new ArrayList<>();
+        for (Map.Entry<String, List<Long>> byMarket : stockIdsByMarket.entrySet()) {
+            LocalDate asOf = asOfByMarket.get(byMarket.getKey());
+            if (asOf == null) {
+                log.info("기준일이 없는 시장이라 워치리스트 판정을 건너뛴다. 시장={}, 항목 {}건",
+                        byMarket.getKey(), byMarket.getValue().size());
+                continue;
+            }
+            valuesByStock.putAll(screeningRepository.loadIndicatorValues(
+                    byMarket.getValue(), group.referencedIndicatorCodes(), asOf));
+            byMarket.getValue().forEach(id -> items.stream()
+                    .filter(item -> item.stockId() == id).forEach(judgeable::add));
+        }
+
+        List<Evaluated> results = new ArrayList<>(judgeable.size());
+        for (WatchlistItem item : judgeable) {
             Map<String, BigDecimal> values = valuesByStock.getOrDefault(item.stockId(), Map.of());
             ScreeningResult outcome = evaluator.evaluate(
                     item.stockId(), group, EvaluationMode.FILTER, values);
@@ -165,7 +200,8 @@ public class WatchlistAlertRunner {
      *
      * @return 통지한 사용자 수
      */
-    private int notify(List<Evaluated> triggered, LocalDate asOf) {
+    private int notify(List<Evaluated> triggered, Map<Long, String> marketByStock,
+                       Map<String, LocalDate> asOfByMarket) {
         if (triggered.isEmpty()) {
             return 0;
         }
@@ -173,8 +209,27 @@ public class WatchlistAlertRunner {
                 .collect(Collectors.groupingBy(e -> e.item().userId(), LinkedHashMap::new,
                         Collectors.toList()));
 
-        List<Long> stockIds = triggered.stream().map(e -> e.item().stockId()).distinct().toList();
-        Map<Long, StockReader.StockRow> stocks = stockReader.findRows(stockIds, asOf);
+        // 표시용 값도 그 종목의 시장 기준일로 읽는다. 하나로 읽으면 그날 휴장이던 시장의
+        // 종목이 값 없는 카드로 나간다.
+        Map<Long, StockReader.StockRow> stocks = new LinkedHashMap<>();
+        triggered.stream().map(e -> e.item().stockId()).distinct()
+                .collect(Collectors.groupingBy(
+                        id -> marketByStock.getOrDefault(id, ""), LinkedHashMap::new,
+                        Collectors.toList()))
+                .forEach((market, ids) -> {
+                    LocalDate marketAsOf = asOfByMarket.get(market);
+                    if (marketAsOf != null) {
+                        stocks.putAll(stockReader.findRows(ids, marketAsOf));
+                    }
+                });
+
+        // 중복 억제 키와 본문 머리는 **쓰인 기준일 전부**로 짓는다. 하나만 적으면 다른 시장의
+        // 종목이 그 날짜에 판정된 것처럼 읽힌다.
+        List<LocalDate> usedDates = triggered.stream()
+                .map(e -> asOfByMarket.get(marketByStock.get(e.item().stockId())))
+                .filter(java.util.Objects::nonNull).distinct().sorted().toList();
+        String asOf = usedDates.stream().map(LocalDate::toString)
+                .collect(Collectors.joining("/"));
 
         byUser.forEach((userId, entries) -> alertPort.send(AlertEvent.toUser(
                 userId,
@@ -188,7 +243,7 @@ public class WatchlistAlertRunner {
     }
 
     private static String describe(List<Evaluated> entries,
-                                   Map<Long, StockReader.StockRow> stocks, LocalDate asOf) {
+                                   Map<Long, StockReader.StockRow> stocks, String asOf) {
         StringBuilder sb = new StringBuilder("기준일 ").append(asOf).append('\n');
         entries.stream().limit(MAX_LISTED_STOCKS).forEach(entry -> {
             StockReader.StockRow stock = stocks.get(entry.item().stockId());

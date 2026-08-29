@@ -14,9 +14,11 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -80,18 +82,28 @@ public class CorporateActionJob {
 
         // 시세가 하나도 없으면 소스를 부를 근거가 없다. 어댑터가 우리 시계열에서 일자와 비율을
         // 유도하므로, 이 확인이 없으면 종목마다 콜을 태우고 전부 유도 실패로 끝난다.
-        Optional<LocalDate> earliest = priceCalendar.earliestTradeDate();
-        if (targets.isEmpty() || earliest.isEmpty()) {
+        //
+        // MUST: 첫 거래일을 **시장마다** 묻는다. 전 시장 최솟값을 쓰면 국내가 정한 2020-01-02이
+        // 미국의 기본 창이 되는데, 미국 봉이 없는 구간에서는 원장의 근접중복 창이 두 날짜 사이의
+        // **봉 수**로 5거래일을 세므로 45일 안의 두 사건이 무조건 한 사건으로 붙는다 — 그리고
+        // 알림 없이 log.info로 끝난다(ADR-0090).
+        Map<String, LocalDate> earliestByMarket = new LinkedHashMap<>();
+        for (SecurityRef target : targets) {
+            earliestByMarket.computeIfAbsent(target.marketCode(),
+                    market -> priceCalendar.earliestTradeDate(market).orElse(null));
+        }
+        earliestByMarket.values().removeIf(Objects::isNull);
+
+        if (targets.isEmpty() || earliestByMarket.isEmpty()) {
             log.info("기업 행위를 모을 대상이 없다. 대상={}종목 저장된 시세={} — 시세를 먼저 적재한다.",
-                    targets.size(), earliest.map(LocalDate::toString).orElse("없음"));
+                    targets.size(), earliestByMarket.isEmpty() ? "없음" : earliestByMarket);
             return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
         }
 
-        LocalDate windowStart = from != null ? from : earliest.get();
-
         log.info("기업 행위 수집을 시작한다. 대상 {}종목, 창 {} ~ {}"
                         + " — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.",
-                targets.size(), windowStart, asOf);
+                targets.size(),
+                from != null ? from.toString() : "시장별 첫 거래일 " + earliestByMarket, asOf);
 
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
@@ -102,9 +114,13 @@ public class CorporateActionJob {
             // MUST: 창 검증을 실행 행을 연 **뒤에** 한다. 앞에서 던지면 batch_execution에 아무
             // 흔적도 안 남고, 관리자 화면으로 띄운 경우 런처의 스레드 경계 로그만 남는다 —
             // 화면에는 202 뒤 아무 일도 안 일어난 것으로 보인다(ADR-0050).
-            if (windowStart.isAfter(asOf)) {
-                throw new IllegalArgumentException(
-                        "조회 창의 시작이 대상일보다 늦다: " + windowStart + " > " + asOf);
+            for (Map.Entry<String, LocalDate> e : earliestByMarket.entrySet()) {
+                LocalDate start = from != null ? from : e.getValue();
+                if (start.isAfter(asOf)) {
+                    throw new IllegalArgumentException(
+                            "조회 창의 시작이 대상일보다 늦다: " + e.getKey() + ' '
+                                    + start + " > " + asOf);
+                }
             }
 
             // MUST: 루프에 들어가기 전에 소스를 해석한다. 등록되지 않았을 때 나오는 NOT_FOUND는
@@ -116,6 +132,15 @@ public class CorporateActionJob {
             execution.stage("종목별 기업 행위 수집");
 
             for (SecurityRef target : targets) {
+                LocalDate windowStart = from != null
+                        ? from : earliestByMarket.get(target.marketCode());
+                if (windowStart == null) {
+                    // 그 시장에 봉이 하나도 없다. 종목을 건너뛰되 조용히 넘기지 않는다 —
+                    // 0건과 「적재할 것이 없다」가 구별되지 않으면 나중에 원인을 못 찾는다.
+                    log.warn("시세가 없는 시장이라 기업 행위를 건너뛴다. {}/{}",
+                            target.marketCode(), target.ticker());
+                    continue;
+                }
                 execution.process(target, CollectionPhase.ADJUSTMENT, security -> {
                     CorporateActionCollector.Result result =
                             collector.collect(security, windowStart, asOf);

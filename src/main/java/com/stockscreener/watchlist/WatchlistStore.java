@@ -9,7 +9,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -90,6 +92,25 @@ public class WatchlistStore {
     public List<WatchlistItem> findAlerting() {
         return jdbcTemplate.query(
                 SELECT_ITEM + " WHERE screen_id IS NOT NULL ORDER BY user_id, id", ITEM_MAPPER);
+    }
+
+    /**
+     * 종목 → 시장 코드.
+     *
+     * <p>판정 기준일이 <b>시장마다 다르기 때문에</b> 필요하다({@code DailyUpdateJob}).
+     * {@link WatchlistItem}에 시장을 싣지 않는 이유는 그것이 워치리스트의 사실이 아니라
+     * 종목의 사실이어서다 — 실으면 종목이 바뀔 때 두 곳이 갈린다.
+     */
+    public Map<Long, String> marketsOf(List<Long> stockIds) {
+        if (stockIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(stockIds.size(), "?"));
+        Map<Long, String> markets = new LinkedHashMap<>();
+        jdbcTemplate.query("SELECT id, market_code FROM stock WHERE id IN (" + placeholders + ')',
+                rs -> { markets.put(rs.getLong("id"), rs.getString("market_code")); },
+                stockIds.toArray());
+        return markets;
     }
 
     // ── 쓰기 ──────────────────────────────────────────────────────────────

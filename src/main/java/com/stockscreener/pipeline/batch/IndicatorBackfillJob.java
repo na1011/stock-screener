@@ -99,25 +99,43 @@ public class IndicatorBackfillJob {
             return BatchStatus.SUCCESS;
         }
 
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
+
         // 보존 경계 밖은 계산해도 저장되지 않는다(ADR-0011). 그 사실을 여기서 말하지 않으면
         // 몇 시간을 돌고 0행으로 끝나는데 잡은 SUCCESS다 — 원인을 데이터나 계산기에서 찾게 된다.
-        Optional<LocalDate> retentionCutoff = retentionPolicy.writeCutoff();
-        long outsideRetention = retentionCutoff
-                .map(cutoff -> tradeDates.stream().filter(date -> !date.isAfter(cutoff)).count())
-                .orElse(0L);
-        if (outsideRetention == tradeDates.size()) {
-            log.warn("요청 구간이 전부 보존 경계({}) 밖이라 저장될 값이 없다. 돌지 않는다."
-                    + " from={} to={} 거래일={}일", retentionCutoff.orElseThrow(),
-                    from, to, tradeDates.size());
+        //
+        // MUST: 경계를 시장마다 잰다. 전 시장 합계로 세면 국내가 휴장이고 미국이 개장한 날이
+        // 전역 「거래일」이 되어 국내 경계가 뒤로 밀리고, 그러면 저장될 값이 있는 구간을
+        // "전부 경계 밖"으로 읽어 **돌지 않고 SUCCESS로 끝난다.**
+        Map<String, Optional<LocalDate>> retentionCutoffs = retentionPolicy.writeCutoffs();
+        List<String> markets = targets.stream()
+                .map(SecurityRef::marketCode).distinct().sorted().toList();
+
+        // 「전부 경계 밖」은 **대상 시장 전부**에 대해 참일 때만 참이다. 한 시장이라도 쓸 값이
+        // 있으면 돌아야 한다.
+        boolean allOutside = !markets.isEmpty() && markets.stream().allMatch(market -> {
+            Optional<LocalDate> cutoff = retentionCutoffs.getOrDefault(market, Optional.empty());
+            return cutoff.isPresent()
+                    && tradeDates.stream().allMatch(date -> !date.isAfter(cutoff.get()));
+        });
+        if (allOutside) {
+            log.warn("요청 구간이 대상 시장 전부에서 보존 경계 밖이라 저장될 값이 없다. 돌지 않는다."
+                    + " from={} to={} 거래일={}일 경계={}", from, to, tradeDates.size(),
+                    retentionCutoffs);
             return BatchStatus.SUCCESS;
         }
-        if (outsideRetention > 0) {
-            log.warn("요청 구간의 {}/{}거래일이 보존 경계({}) 밖이라 계산해도 저장되지 않는다."
-                    + " 남은 {}거래일만 반영된다.", outsideRetention, tradeDates.size(),
-                    retentionCutoff.orElseThrow(), tradeDates.size() - outsideRetention);
+        for (String market : markets) {
+            Optional<LocalDate> cutoff = retentionCutoffs.getOrDefault(market, Optional.empty());
+            long outside = cutoff
+                    .map(c -> tradeDates.stream().filter(date -> !date.isAfter(c)).count())
+                    .orElse(0L);
+            if (outside > 0) {
+                log.warn("{}: 요청 구간의 {}/{}거래일이 보존 경계({}) 밖이라 계산해도 저장되지 않는다."
+                                + " 남은 {}거래일만 반영된다.", market, outside, tradeDates.size(),
+                        cutoff.orElseThrow(), tradeDates.size() - outside);
+            }
         }
 
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, to, triggeredBy, targets.size());
 
@@ -148,9 +166,11 @@ public class IndicatorBackfillJob {
                         indicatorRunner.marketIndexesFor(tradeDate);
 
                 for (SecurityRef target : targets) {
+                    Optional<LocalDate> cutoff = retentionCutoffs
+                            .getOrDefault(target.marketCode(), Optional.empty());
                     execution.process(target, CollectionPhase.INDICATOR,
                             security -> indicatorRunner.run(
-                                    security.stockId(), tradeDate, retentionCutoff, marketIndexes));
+                                    security.stockId(), tradeDate, cutoff, marketIndexes));
                 }
                 percentileCalculator.calculate(tradeDate);
                 // 업종 상대값도 같은 자리다 — 그날 전 종목의 값이 있어야 정해진다.
@@ -161,9 +181,13 @@ public class IndicatorBackfillJob {
             // MUST: 날짜 루프 **밖**이다(ADR-0080). 러너가 「값을 그만 낸」 지표의 옛 행을 보존 창
             // 전체에서 지우면 파생 행이 그만큼 고아가 되고, 날짜별 정리는 그날 하나만 본다.
             // 루프 안에서 부르면 같은 일을 거래일 수만큼 반복한다(지표당 약 200ms × 18).
+            // 경계는 시장별 최솟값을 쓴다. 창이 넓어질 뿐이고 판정("그날 원본이 없다")은
+            // 시장과 무관하므로 넓은 쪽이 언제나 안전하다.
+            Optional<LocalDate> orphanCutoff = retentionCutoffs.values().stream()
+                    .flatMap(Optional::stream).min(LocalDate::compareTo);
             execution.stage("고아 파생값 정리");
-            percentileCalculator.removeOrphansInWindow(retentionCutoff);
-            sectorRelativeCalculator.removeOrphansInWindow(retentionCutoff);
+            percentileCalculator.removeOrphansInWindow(orphanCutoff);
+            sectorRelativeCalculator.removeOrphansInWindow(orphanCutoff);
         } catch (DataSourceException e) {
             // 외부 호출이 없으므로 정상적으로는 도달하지 않는다. StockTask의 시그니처가
             // 이 예외를 선언하고 있어 형식상 잡을 뿐이며, 실제로 온다면 그것 자체가 이상 신호다.
@@ -201,6 +225,16 @@ public class IndicatorBackfillJob {
         return matched;
     }
 
+    /**
+     * 구간 안의 거래일 — <b>전 시장의 합집합</b>이다.
+     *
+     * <p>MUST NOT: 이것을 시장별로 가르지 않는다. 날짜 루프의 목적은 <b>어느 날짜를 한 번씩
+     * 돌 것인가</b>이고, 그 답은 합집합이 맞다. 한 시장이 쉰 날에 그 시장 종목을 돌려도
+     * 러너는 <b>그 종목의 마지막 봉 날짜</b>로 같은 값을 다시 쓸 뿐이라 멱등이다.
+     *
+     * <p>시장으로 갈라야 하는 것은 이 목록이 아니라 <b>보존 경계</b>다 — 그쪽은 날짜가 밀리면
+     * 「저장될 값이 없다」로 읽혀 잡이 돌지 않고 SUCCESS로 끝난다.
+     */
     private List<LocalDate> tradeDatesBetween(LocalDate from, LocalDate to) {
         return jdbcTemplate.queryForList("""
                 SELECT DISTINCT trade_date FROM price_daily

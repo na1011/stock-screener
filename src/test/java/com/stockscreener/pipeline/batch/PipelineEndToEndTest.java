@@ -294,8 +294,11 @@ class PipelineEndToEndTest {
     @DisplayName("이미 수집한 날짜를 다시 돌려도 0건 알림이 오지 않는다")
     void dailyUpdateDoesNotFalselyAlertOnRerun() {
         universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
-        long stockId = stockIdOf(SEEDED_TICKER);
-        fakePriceSource.withBars(stockId, List.of(bar("2026-08-05", "72000")));
+        // 지수 하나가 아니라 편입 전 종목에 심는다 — 0건 판정이 시장별이라, 한 지수만 심으면
+        // 나머지 지수의 결손이 알림으로 올라와 아래 "비어 있다"가 깨진다.
+        for (Long member : allActiveMembers()) {
+            fakePriceSource.withBars(member, List.of(bar("2026-08-05", "72000")));
+        }
         seedMarketIndexes(AS_OF);
         dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
         alertPort.events.clear();
@@ -386,10 +389,42 @@ class PipelineEndToEndTest {
     }
 
     @Test
+    @DisplayName("미국 봉이 그날 있어도 국내 결손은 알리고, 국내 지수 결손은 알리지 않는다")
+    void marketScopedAlertsDoNotBleedAcrossMarkets() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        // 국내는 대상일에 한 봉도 없고, 미국만 그날 봉이 있다. 국내 휴장·미국 개장일의 모양이다.
+        // 국내 지수도 없다 — 국내가 쉬었으니 그것이 정상이고, 알리면 안 되는 것이 이 테스트다.
+        long usStockId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'AAPL', 'Apple Inc.')
+                ON CONFLICT (market_code, ticker) DO UPDATE SET name = EXCLUDED.name
+                RETURNING id
+                """, Long.class);
+        jdbcTemplate.update("""
+                INSERT INTO price_daily (stock_id, trade_date, open, high, low, close,
+                                         adj_close, adj_factor, volume)
+                VALUES (?, ?, 100, 100, 100, 100, 100, 1, 1000)
+                """, usStockId, AS_OF);
+        alertPort.events.clear();
+
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        assertThat(alertPort.events)
+                .as("전 시장 합계로 세면 미국 봉 하나가 국내 결손 알림을 죽인다(거짓 음성)")
+                .extracting(AlertEvent::title)
+                .contains("daily-update — 대상일 시세가 한 건도 없다");
+        assertThat(alertPort.events)
+                .as("같은 합계가 지수 쪽에서는 반대로 작동한다 — 국내가 쉰 날 지수가 없는 것은 "
+                        + "정상인데 「시세는 들어왔다」가 참이 되어 상시 오발화한다(거짓 양성)")
+                .extracting(AlertEvent::title)
+                .doesNotContain("daily-update — 대상일 지수가 없다");
+    }
+
+    @Test
     @DisplayName("일부 종목이 실패해도 나머지가 수집되고 요약 알림 한 건이 간다")
     void dailyUpdateIsolatesFailures() {
         universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
-        List<Long> members = reconciler.currentMembers("KOSPI200");
+        // 지수 하나가 아니라 편입 전 종목이다 — 위 allActiveMembers의 javadoc이 이유다.
+        List<Long> members = allActiveMembers();
         long failing = members.get(0);
         for (Long member : members) {
             fakePriceSource.withBars(member, List.of(bar("2026-08-05", "1000")));
@@ -415,7 +450,8 @@ class PipelineEndToEndTest {
     @DisplayName("실패한 종목만 재실행하고 해결로 표시한다")
     void retriesOnlyFailedStocks() {
         universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
-        List<Long> members = reconciler.currentMembers("KOSPI200");
+        // 지수 하나가 아니라 편입 전 종목이다 — 위 allActiveMembers의 javadoc이 이유다.
+        List<Long> members = allActiveMembers();
         long failing = members.get(0);
         for (Long member : members) {
             fakePriceSource.withBars(member, List.of(bar("2026-08-05", "1000")));
@@ -447,7 +483,8 @@ class PipelineEndToEndTest {
     @DisplayName("재실행에서 또 실패하면 해결로 표시하지 않는다 — 실패가 조용히 사라지면 안 된다")
     void keepsFailureUnresolvedWhenRetryFailsAgain() {
         universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
-        List<Long> members = reconciler.currentMembers("KOSPI200");
+        // 지수 하나가 아니라 편입 전 종목이다 — 위 allActiveMembers의 javadoc이 이유다.
+        List<Long> members = allActiveMembers();
         long failing = members.get(0);
         for (Long member : members) {
             fakePriceSource.withBars(member, List.of(bar("2026-08-05", "1000")));
@@ -611,6 +648,21 @@ class PipelineEndToEndTest {
                     ON CONFLICT (index_code, trade_date) DO NOTHING
                     """, code, date);
         }
+    }
+
+    /**
+     * 활성 유니버스 <b>전부</b>의 편입 종목.
+     *
+     * <p>MUST: 봉을 심을 때 이것을 쓴다. 한 지수에만 심으면 나머지 지수는 대상일에 봉이 0이
+     * 되는데, <b>0건 판정이 시장별이라</b> 그 지수에 대해 결손 알림이 뜬다 — 그것은 오탐이
+     * 아니라 픽스처가 만든 진짜 결손이고, 그 알림 때문에 다른 단언이 깨진다.
+     */
+    private List<Long> allActiveMembers() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN universe u ON u.code = m.universe_code AND u.is_active
+                WHERE m.effective_to IS NULL
+                """, Long.class);
     }
 
     private long stockIdOf(String ticker) {

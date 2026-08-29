@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -37,6 +38,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WatchlistAlertRunnerTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 8, 5);
+    /** 판정 기준일은 시장마다 다르다. 이 픽스처의 종목은 전부 KOSPI다. */
+    private static final Map<String, LocalDate> AS_OF_BY_MARKET = Map.of("KOSPI", AS_OF);
 
     @Autowired
     private WatchlistAlertRunner runner;
@@ -71,7 +74,7 @@ class WatchlistAlertRunnerTest {
         long itemId = watch(userId, stockId, screenId);
         putIndicator(stockId, "PER", new BigDecimal("8"));
 
-        WatchlistAlertRunner.Result result = runner.run(AS_OF);
+        WatchlistAlertRunner.Result result = runner.run(AS_OF_BY_MARKET);
 
         assertThat(result.triggered()).isEqualTo(1);
         assertThat(result.notifiedUsers()).isEqualTo(1);
@@ -88,10 +91,10 @@ class WatchlistAlertRunnerTest {
         long itemId = watch(userId, stockId, screenId);
         putIndicator(stockId, "PER", new BigDecimal("8"));
 
-        runner.run(AS_OF);
+        runner.run(AS_OF_BY_MARKET);
         alertPort.received.clear();
 
-        WatchlistAlertRunner.Result second = runner.run(AS_OF);
+        WatchlistAlertRunner.Result second = runner.run(AS_OF_BY_MARKET);
 
         assertThat(second.evaluated()).isEqualTo(1);
         assertThat(second.triggered()).isZero();
@@ -104,15 +107,15 @@ class WatchlistAlertRunnerTest {
     void notifiesAgainAfterFalling() {
         long itemId = watch(userId, stockId, screenId);
         putIndicator(stockId, "PER", new BigDecimal("8"));
-        runner.run(AS_OF);
+        runner.run(AS_OF_BY_MARKET);
 
         putIndicator(stockId, "PER", new BigDecimal("20"));
-        runner.run(AS_OF);
+        runner.run(AS_OF_BY_MARKET);
         assertThat(lastSatisfied(itemId)).isFalse();
         alertPort.received.clear();
 
         putIndicator(stockId, "PER", new BigDecimal("7"));
-        runner.run(AS_OF);
+        runner.run(AS_OF_BY_MARKET);
 
         assertThat(alertPort.received).hasSize(1);
     }
@@ -123,7 +126,7 @@ class WatchlistAlertRunnerTest {
         long itemId = watch(userId, stockId, screenId);
         // 지표를 심지 않는다.
 
-        WatchlistAlertRunner.Result result = runner.run(AS_OF);
+        WatchlistAlertRunner.Result result = runner.run(AS_OF_BY_MARKET);
 
         assertThat(result.triggered()).isZero();
         assertThat(alertPort.received).isEmpty();
@@ -139,7 +142,7 @@ class WatchlistAlertRunnerTest {
         putIndicator(stockId, "PER", new BigDecimal("8"));
         putIndicator(second, "PER", new BigDecimal("9"));
 
-        WatchlistAlertRunner.Result result = runner.run(AS_OF);
+        WatchlistAlertRunner.Result result = runner.run(AS_OF_BY_MARKET);
 
         assertThat(result.triggered()).isEqualTo(2);
         assertThat(result.notifiedUsers()).isEqualTo(1);
@@ -156,7 +159,7 @@ class WatchlistAlertRunnerTest {
         watch(otherUserId, stockId, otherScreen);
         putIndicator(stockId, "PER", new BigDecimal("8"));
 
-        WatchlistAlertRunner.Result result = runner.run(AS_OF);
+        WatchlistAlertRunner.Result result = runner.run(AS_OF_BY_MARKET);
 
         assertThat(result.notifiedUsers()).isEqualTo(2);
         assertThat(alertPort.received).extracting(AlertEvent::recipientUserId)
@@ -175,7 +178,7 @@ class WatchlistAlertRunnerTest {
         // 조건을 충족하지 못하는 값. SCORING으로 판정하면 included가 참이라 알림이 나간다.
         putIndicator(stockId, "PER", new BigDecimal("50"));
 
-        WatchlistAlertRunner.Result result = runner.run(AS_OF);
+        WatchlistAlertRunner.Result result = runner.run(AS_OF_BY_MARKET);
 
         assertThat(result.evaluated()).isEqualTo(1);
         assertThat(result.triggered()).isZero();
@@ -188,7 +191,7 @@ class WatchlistAlertRunnerTest {
         watch(userId, stockId, null);
         putIndicator(stockId, "PER", new BigDecimal("8"));
 
-        WatchlistAlertRunner.Result result = runner.run(AS_OF);
+        WatchlistAlertRunner.Result result = runner.run(AS_OF_BY_MARKET);
 
         assertThat(result.evaluated()).isZero();
         assertThat(alertPort.received).isEmpty();
@@ -201,7 +204,7 @@ class WatchlistAlertRunnerTest {
         putIndicator(stockId, "PER", new BigDecimal("8"));
         jdbcTemplate.update("UPDATE screen SET is_active = false WHERE id = ?", screenId);
 
-        WatchlistAlertRunner.Result result = runner.run(AS_OF);
+        WatchlistAlertRunner.Result result = runner.run(AS_OF_BY_MARKET);
 
         assertThat(result.evaluated()).isZero();
         assertThat(result.failedScreens()).isZero();
