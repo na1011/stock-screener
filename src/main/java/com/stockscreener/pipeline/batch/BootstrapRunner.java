@@ -269,11 +269,13 @@ public class BootstrapRunner implements ApplicationRunner {
             // 않는 이유는 backfill의 minusYears(2)와 같은 두 번째 정본을 만들지 않기 위해서다.
             case "corporate-action" -> corporateActionJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
-                    date(args, "from", null), csv(args, "tickers"));
+                    date(args, "from", null), csv(args, "tickers"),
+                    value(args, "universe", null));
             // MUST: 이 잡의 첫 실행 앞에 ops/dump-db.sh가 있어야 한다(ADR-0049).
             // guard-rebuild-without-dump.sh가 덤프가 하나도 없을 때 이 명령을 막는다.
             case "adjustment-rebuild" -> adjustmentRebuildJob.run(
-                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
+                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
+                    value(args, "universe", null));
             // 지수는 종목과 무관하므로 --tickers를 받지 않는다. --from을 안 주면 잡이 소스
             // 이력의 시작을 쓴다 — 러너가 기본값을 정하면 두 번째 정본이 생긴다.
             case "market-index" -> marketIndexJob.run(
@@ -356,7 +358,7 @@ public class BootstrapRunner implements ApplicationRunner {
      * 그 실패는 인자를 고치러 가게 만든다. {@code initial-load}는 둘이 우연히 같다.
      */
     private static final java.util.Set<String> UNIVERSE_JOBS = java.util.Set.of(
-            "universe", "initial-load");
+            "universe", "initial-load", "corporate-action", "adjustment-rebuild");
 
     /**
      * {@code --skip-financial}·{@code --skip-price}가 뜻을 갖는 잡. 위와 같은 이유로

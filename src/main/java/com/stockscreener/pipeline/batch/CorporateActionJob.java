@@ -69,11 +69,14 @@ public class CorporateActionJob {
      * 않는다 — 소스가 정기보고서에만 실려 <b>원리적으로 0건</b>이 된다(dart-corporate-action.md의 「증자(감자)
      * 현황」 절).
      *                창을 넓혀도 콜은 거의 안 는다(전 구간 종목당 2콜, 한 달 1콜).
-     * @param tickers 비면 편입 중인 활성 종목 전체.
+     * @param tickers      비면 편입 중인 활성 종목 전체.
+     * @param universeCode 손으로 고른 유니버스. 주면 <b>활성 여부를 보지 않는다</b>(ADR-0090).
+     *                     자동 실행은 언제나 null이다 — 그래야 "활성"의 뜻이 한 가지로 남는다.
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
-                           LocalDate from, List<String> tickers) {
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
+                           LocalDate from, List<String> tickers, String universeCode) {
+        List<SecurityRef> targets =
+                stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
 
         // 시세가 하나도 없으면 소스를 부를 근거가 없다. 어댑터가 우리 시계열에서 일자와 비율을
         // 유도하므로, 이 확인이 없으면 종목마다 콜을 태우고 전부 유도 실패로 끝난다.
@@ -214,7 +217,10 @@ public class CorporateActionJob {
      * 이 잡은 <b>재실행에서 0행이 정상</b>이므로, 오타로 대상이 빈 것과 이미 다 적힌 것이
      * 로그에서 구분되지 않는다({@link CompanyProfileJob}과 같은 자리다).
      */
-    private List<Long> resolveTargets(List<String> tickers) {
+    private List<Long> resolveTargets(List<String> tickers, String universeCode) {
+        if (universeCode != null && !universeCode.isBlank()) {
+            return resolveUniverseTargets(universeCode, tickers);
+        }
         if (tickers != null && !tickers.isEmpty()) {
             List<Long> matched = stockRegistrar.activeUniverseMemberIdsByTicker(tickers);
             if (matched.isEmpty()) {
@@ -229,5 +235,28 @@ public class CorporateActionJob {
             return matched;
         }
         return stockRegistrar.activeUniverseMemberIds();
+    }
+
+    /**
+     * 유니버스를 손으로 골랐을 때의 대상(ADR-0090).
+     *
+     * <p>MUST: <b>0건이면 예외로 끝낸다.</b> {@code oneUniverseMemberIds}는 활성 여부를 보지
+     * 않는 대신 <b>예외를 던지지 않고 빈 목록을 낸다</b> — 그 자리를 여기서 채우지 않으면
+     * 위쪽 {@code targets.isEmpty()} 갈래로 빠져 <b>SUCCESS로 끝난다.</b> 조용한 0건은
+     * "적재할 것이 없다"와 구별되지 않는다(ADR-0088 §규칙 · {@code InitialLoadJob}과 같은 자리).
+     */
+    private List<Long> resolveUniverseTargets(String universeCode, List<String> tickers) {
+        List<String> requested = tickers == null ? List.of() : tickers;
+        List<Long> members = stockRegistrar.oneUniverseMemberIds(universeCode, requested);
+        if (members.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "유니버스 '" + universeCode + "'에 대상이 하나도 없다"
+                            + (requested.isEmpty() ? "" : " (티커 " + requested + ")")
+                            + " — 유니버스 코드와, 그 시장이 CollectedMarkets에 있는지 확인하라."
+                            + " 대상 0건으로 성공시키지 않는다.");
+        }
+        log.info("유니버스 {} 편입 {}종목이 대상이다. 활성 여부는 보지 않았다.",
+                universeCode, members.size());
+        return members;
     }
 }

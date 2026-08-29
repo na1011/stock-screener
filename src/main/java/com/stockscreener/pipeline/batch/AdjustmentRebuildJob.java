@@ -67,11 +67,16 @@ public class AdjustmentRebuildJob {
     /**
      * 원장의 적용 대상으로 계수와 수정종가를 다시 짓는다.
      *
-     * @param tickers 비면 편입 중인 활성 종목 전체
+     * @param tickers      비면 편입 중인 활성 종목 전체
+     * @param universeCode 손으로 고른 유니버스. 주면 <b>활성 여부를 보지 않는다</b>(ADR-0090).
+     *                     <b>이 잡의 「전량이 곧 검증」이 그만큼 갈린다</b> — 인자 없이 도는
+     *                     실행은 여전히 활성 유니버스만 보므로, 비활성 시장의 계수는 손으로
+     *                     이 인자를 줄 때만 다시 지어진다.
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
-                           List<String> tickers) {
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
+                           List<String> tickers, String universeCode) {
+        List<SecurityRef> targets =
+                stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
         if (targets.isEmpty()) {
             log.info("재구축할 대상이 없다. 유니버스를 먼저 갱신한다.");
             return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
@@ -166,7 +171,21 @@ public class AdjustmentRebuildJob {
      * 이 잡은 <b>재실행에서 0행이 정상</b>이므로 오타로 대상이 빈 것과 이미 일치하는 것이
      * 로그에서 구분되지 않는다({@link CorporateActionJob}과 같은 자리다).
      */
-    private List<Long> resolveTargets(List<String> tickers) {
+    private List<Long> resolveTargets(List<String> tickers, String universeCode) {
+        if (universeCode != null && !universeCode.isBlank()) {
+            List<String> requested = tickers == null ? List.of() : tickers;
+            List<Long> members = stockRegistrar.oneUniverseMemberIds(universeCode, requested);
+            if (members.isEmpty()) {
+                // MUST: 0건이면 예외다. oneUniverseMemberIds는 빈 목록을 낼 뿐이라,
+                // 안 막으면 위쪽 targets.isEmpty() 갈래로 빠져 SUCCESS로 끝난다(ADR-0088 §규칙).
+                throw new IllegalArgumentException(
+                        "유니버스 '" + universeCode + "'에 대상이 하나도 없다"
+                                + (requested.isEmpty() ? "" : " (티커 " + requested + ")")
+                                + " — 유니버스 코드와, 그 시장이 CollectedMarkets에 있는지 확인하라."
+                                + " 대상 0건으로 성공시키지 않는다.");
+            }
+            return members;
+        }
         if (tickers == null || tickers.isEmpty()) {
             return stockRegistrar.activeUniverseMemberIds();
         }

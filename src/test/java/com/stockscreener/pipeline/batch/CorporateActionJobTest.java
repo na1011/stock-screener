@@ -94,7 +94,7 @@ class CorporateActionJobTest {
         jdbcTemplate.update("DELETE FROM corporate_action");
         jdbcTemplate.update("DELETE FROM price_daily");
         jdbcTemplate.update("DELETE FROM universe_membership");
-        jdbcTemplate.update("DELETE FROM stock WHERE ticker = '005930'");
+        jdbcTemplate.update("DELETE FROM stock WHERE ticker IN ('005930', 'NVDA')");
     }
 
     @Test
@@ -103,7 +103,7 @@ class CorporateActionJobTest {
         seedBars();
         fakeSource.with(memberId, split("2026-02-04"));
 
-        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of());
+        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(ledgerRowCount()).isEqualTo(1);
@@ -118,7 +118,7 @@ class CorporateActionJobTest {
         seedBars();
         fakeSource.with(memberId, split("2026-02-04"));
 
-        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of());
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
 
         assertThat(statusOf("2026-02-04")).isEqualTo("APPROVED");
         assertThat(jdbcTemplate.queryForObject(
@@ -140,7 +140,7 @@ class CorporateActionJobTest {
                 collector, stockRegistrar, priceCalendar, empty, batchExecutions);
 
         BatchStatus status = jobWithoutSource.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of());
+                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
 
         assertThat(status).isEqualTo(BatchStatus.FAILED);
         // 루프를 돌았다면 종목마다 NOT_FOUND가 실패로 기록됐을 것이다. 그 0이
@@ -159,7 +159,7 @@ class CorporateActionJobTest {
                 """, Long.class);
         writer.write(other, List.of(bar("2026-02-02", "1000")));
 
-        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of());
+        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(fakeSource.fetchedStockIds).isEmpty();
@@ -171,7 +171,7 @@ class CorporateActionJobTest {
     @Test
     @DisplayName("저장된 시세가 하나도 없으면 소스를 부르지 않고 끝낸다 — 시세가 먼저다")
     void doesNothingWhenNoPriceIsStored() {
-        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of());
+        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(fakeSource.fetchedStockIds).isEmpty();
@@ -183,7 +183,7 @@ class CorporateActionJobTest {
         seedBars();
 
         assertThatThrownBy(() -> job.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of("999999")))
+                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of("999999"), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("999999");
 
@@ -196,7 +196,7 @@ class CorporateActionJobTest {
         seedBars();
 
         assertThatThrownBy(() -> job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
-                AS_OF.plusDays(1), List.of()))
+                AS_OF.plusDays(1), List.of(), null))
                 .isInstanceOf(IllegalArgumentException.class);
 
         // IMPORTANT — 검증이 실행 행보다 앞에 있으면 batch_execution에 아무 흔적도 안 남는다.
@@ -232,6 +232,52 @@ class CorporateActionJobTest {
                 "SELECT count(*) FROM corporate_action", Integer.class);
     }
 
+    @Test
+    @DisplayName("유니버스를 손으로 주면 비활성이어도 그 종목을 고른다 — 활성 조인을 안 탄다")
+    void picksTheChosenUniverseEvenWhenItIsInactive() {
+        seedBars();
+        long usStockId = seedInactiveUniverseMember();
+
+        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                LocalDate.of(2020, 1, 2), List.of(), "US_LISTED");
+
+        assertThat(status).isEqualTo(BatchStatus.SUCCESS);
+        assertThat(fakeSource.fetchedStockIds)
+                .as("US_LISTED는 비활성이라 활성 유니버스 경로로는 하나도 안 나온다")
+                .containsExactly(usStockId);
+        assertThat(fakeSource.fetchedStockIds)
+                .as("활성 유니버스의 국내 종목은 대상이 아니다 — 손으로 고른 유니버스 하나만 본다")
+                .doesNotContain(memberId);
+    }
+
+    @Test
+    @DisplayName("고른 유니버스에 대상이 0건이면 예외다 — 조용한 0건은 「적재할 것이 없다」와 같다")
+    void failsWhenTheChosenUniverseHasNoTargets() {
+        seedBars();
+
+        assertThatThrownBy(() -> job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                null, List.of(), "SP500"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("대상이 하나도 없다");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM batch_execution", Integer.class))
+                .as("대상을 못 고른 실행은 행을 열지 않는다")
+                .isZero();
+    }
+
+    /** 비활성 유니버스에 든 미국 종목 하나. 봉을 함께 넣는다 — 없으면 수집기가 건너뛴다. */
+    private long seedInactiveUniverseMember() {
+        long id = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'NVDA', 'NVIDIA')
+                RETURNING id
+                """, Long.class);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('US_LISTED', ?, ?)
+                """, id, AS_OF.minusYears(1));
+        writer.write(id, List.of(bar("2026-02-02", "1000"), bar("2026-02-03", "1010")));
+        return id;
+    }
+
     private String statusOf(String date) {
         return jdbcTemplate.queryForObject(
                 "SELECT status FROM corporate_action WHERE effective_date = ?",
@@ -248,7 +294,7 @@ class CorporateActionJobTest {
 
         @Bean
         FakeCorporateActionDataSource fakeCorporateActionDataSource() {
-            return new FakeCorporateActionDataSource("KOSPI", "KOSDAQ");
+            return new FakeCorporateActionDataSource("KOSPI", "KOSDAQ", "US");
         }
     }
 }

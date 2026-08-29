@@ -105,6 +105,23 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
+    @DisplayName("원장·재구축 잡은 --universe를 받는다 — 비활성 유니버스를 손으로 고르는 경로다")
+    void acceptsUniverseOnTheLedgerAndRebuildJobs() {
+        // ADR-0090. 이 둘이 UNIVERSE_JOBS에 없으면 미국 적재 명령이 첫 줄에서 거절된다.
+        for (String job : new String[] {"corporate-action", "adjustment-rebuild"}) {
+            assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                    new DefaultApplicationArguments("--job=" + job, "--universe=US_LISTED"), job))
+                    .doesNotThrowAnyException();
+        }
+        // 그리고 넓힌 뒤에도 나머지 잡에서는 여전히 막혀야 한다. 그것이 이 가드의 값이다.
+        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=governance-load", "--universe=US_LISTED"),
+                "governance-load"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("universe");
+    }
+
+    @Test
     @DisplayName("--universe·--skip-*는 뜻이 있는 잡에서만 통과한다 — 아니면 조용히 무시된다")
     void rejectsMisplacedLoadOptions() {
         // 잡 이름을 잘못 적으면 --universe가 무시된 채 전 종목이 대상이 되고 성공으로 끝난다.

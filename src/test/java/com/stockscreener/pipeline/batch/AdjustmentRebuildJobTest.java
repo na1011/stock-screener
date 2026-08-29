@@ -47,6 +47,46 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Import({TestDatabaseGuard.class, AdjustmentRebuildJobTest.RecordingAlertConfig.class})
 class AdjustmentRebuildJobTest {
 
+    @Test
+    @DisplayName("유니버스를 손으로 주면 비활성이어도 계수를 다시 짓는다 — 활성 조인을 안 탄다")
+    void rebuildsTheChosenUniverseEvenWhenItIsInactive() {
+        long usStockId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'NVDA', 'NVIDIA')
+                RETURNING id
+                """, Long.class);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('US_LISTED', ?, ?)
+                """, usStockId, AS_OF.minusYears(1));
+        writer.write(usStockId, List.of(
+                bar(LocalDate.of(2026, 2, 2), "1000"), bar(EFFECTIVE, "100")));
+        long id = ledger.record(usStockId, new CorporateAction(
+                EFFECTIVE, EFFECTIVE, EFFECTIVE, CorporateAction.Type.SPLIT, new BigDecimal("10"),
+                CorporateAction.DetectionSource.SOURCE_DISCLOSURE, "forward_split")).existingId();
+
+        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                List.of(), "US_LISTED");
+
+        assertThat(status).isEqualTo(BatchStatus.SUCCESS);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT adj_factor FROM price_daily WHERE stock_id = ? AND trade_date = ?",
+                java.math.BigDecimal.class, usStockId, LocalDate.of(2026, 2, 2)))
+                .as("효력일 이전 봉이 1/10이 되어야 한다")
+                .isEqualByComparingTo(new BigDecimal("0.1"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM corporate_action WHERE id = ?", String.class, id))
+                .isEqualTo("APPLIED");
+    }
+
+    @Test
+    @DisplayName("고른 유니버스에 대상이 0건이면 예외다 — 안 막으면 SUCCESS로 끝난다")
+    void failsWhenTheChosenUniverseHasNoTargets() {
+        assertThatThrownBy(() -> job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                List.of(), "SP500"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("대상이 하나도 없다");
+    }
+
     private static final LocalDate AS_OF = LocalDate.of(2026, 2, 5);
     private static final LocalDate EFFECTIVE = LocalDate.of(2026, 2, 4);
     private static final String TICKER = "900101";
@@ -98,28 +138,28 @@ class AdjustmentRebuildJobTest {
         jdbcTemplate.update("DELETE FROM batch_execution");
         jdbcTemplate.update("""
                 DELETE FROM corporate_action WHERE stock_id IN
-                    (SELECT id FROM stock WHERE ticker = ?)
+                    (SELECT id FROM stock WHERE ticker IN (?, 'NVDA'))
                 """, TICKER);
         jdbcTemplate.update("""
                 DELETE FROM indicator_value WHERE stock_id IN
-                    (SELECT id FROM stock WHERE ticker = ?)
+                    (SELECT id FROM stock WHERE ticker IN (?, 'NVDA'))
                 """, TICKER);
         jdbcTemplate.update("""
                 DELETE FROM price_daily WHERE stock_id IN
-                    (SELECT id FROM stock WHERE ticker = ?)
+                    (SELECT id FROM stock WHERE ticker IN (?, 'NVDA'))
                 """, TICKER);
         jdbcTemplate.update("""
                 DELETE FROM universe_membership WHERE stock_id IN
-                    (SELECT id FROM stock WHERE ticker = ?)
+                    (SELECT id FROM stock WHERE ticker IN (?, 'NVDA'))
                 """, TICKER);
-        jdbcTemplate.update("DELETE FROM stock WHERE ticker = ?", TICKER);
+        jdbcTemplate.update("DELETE FROM stock WHERE ticker IN (?, 'NVDA')", TICKER);
     }
 
     @Test
     @DisplayName("지표를 지웠으면 백필이 남았다고 알린다 — 성공으로 끝나는 것이 일이 끝난 것이 아니다")
     void alertsThatBackfillIsStillPending() {
         BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
-                List.of(TICKER));
+                List.of(TICKER), null);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(jdbcTemplate.queryForObject(
@@ -140,10 +180,10 @@ class AdjustmentRebuildJobTest {
     @Test
     @DisplayName("두 번째 실행은 아무 행도 건드리지 않고 알리지도 않는다 — 알림이 매번 오면 아무도 안 본다")
     void secondRunChangesNothing() {
-        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, List.of(TICKER));
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, List.of(TICKER), null);
         alertPort.events.clear();
 
-        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, List.of(TICKER));
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, List.of(TICKER), null);
 
         // 억제기가 접은 것과 구분하기 위해 DB의 갱신 행 수로도 본다. 알림만 보면 "억제됐다"와
         // "바꿀 것이 없었다"가 같아 보이고, 전자면 무효화는 매번 일어난 것이다.
@@ -157,7 +197,7 @@ class AdjustmentRebuildJobTest {
     @DisplayName("티커가 하나도 안 맞으면 0종목 성공이 아니라 예외다 — 재실행에서 0행이 정상이라 구분되지 않는다")
     void unknownTickerFailsInsteadOfSucceedingWithNoTargets() {
         assertThatThrownBy(() -> job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
-                List.of("999999")))
+                List.of("999999"), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("편입 중인 활성 종목이 하나도 없다");
     }
