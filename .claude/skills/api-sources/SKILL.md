@@ -22,6 +22,7 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 | US | 일별 시세 — OHLC·거래량 | Alpaca **Market Data** API(base URL이 다르다) | 위와 같은 키 | `datasource/us/AlpacaPriceAdapter` | [`alpaca-bars.md`](../../../docs/api-spec/alpaca-bars.md) |
 | US | 재무 계정 — XBRL 팩트 | SEC EDGAR | `SEC_EDGAR_USER_AGENT`(**키가 아니라 신원 표시다**) | `datasource/us/SecEdgar*` | [`sec-edgar-financial.md`](../../../docs/api-spec/sec-edgar-financial.md) |
 | US | 기업 행위 — 분할·병합 | Alpaca **Market Data** API | Alpaca와 같은 키 둘 | `datasource/us/AlpacaCorporateActionAdapter` | [`alpaca-corporate-action.md`](../../../docs/api-spec/alpaca-corporate-action.md) |
+| US | 세션 달력 — 봉 결측 판정의 근거 | Alpaca **Trading** API | Alpaca와 같은 키 둘 | `datasource/us/AlpacaMarketCalendarAdapter` | [`alpaca-calendar.md`](../../../docs/api-spec/alpaca-calendar.md) |
 
 **미국은 유니버스·시세·재무·기업행위 넷이 열려 있고 거버넌스·업종이 남았다**(ADR-0086·0088·0089·0090).
 **그래서 `US_LISTED`는 아직 못 켠다** — 다만 **이유가 바뀌었다**. 배치를 죽이던 관문
@@ -62,7 +63,8 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | `/api/xbrl/companyfacts` (SEC EDGAR) | **사용 중** | `sec-edgar-financial.md` | **종목당 1** — 전 기간이 한 응답에 온다. 대신 **한 종목이 78KB~7.9MB**이고 전량이 약 29GB다 |
 | `company_tickers_exchange.json` (SEC) | **사용 중** | `SecTickerCikCache` javadoc | 실행당 1 |
 | `/v1/corporate-actions` (Alpaca) | **사용 중** | `alpaca-corporate-action.md` | 종목당 1(구간조회). **묶지 않는다** — `limit`이 전체 기준이라 묶으면 한 종목의 결측과 묶음 전체의 절단이 같은 모양이 된다 |
-| `/v3/calendar` (Alpaca) · `submissions`(SEC) | **미착수** | — | 미국에 남은 축이다 |
+| `/v3/calendar` (Alpaca **Trading**) | **사용 중** | `alpaca-calendar.md` | **거래소당 1 = 2**. 창과 무관하다 — 11년치가 한 응답이고 페이징이 없다 |
+| `submissions` (SEC) | **미착수** | — | 미국에 남은 축이다 |
 
 ### 받았지만 아직 안 쓰는 넷
 

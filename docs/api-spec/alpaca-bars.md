@@ -116,8 +116,11 @@ page 10~13: NVDA만            (13페이지에서 next_page_token=null)
 
 **「없다」와 「아직 안 물었다」를 가르기 위해 적는다.**
 
-- **봉이 없는 이유.** 휴장·무거래·비활성·거래정지 넷을 가르지 못한다. 마켓 캘린더
-  (`/v3/calendar`, Trading API)와 거래정지 목록이 함께 필요하다.
+- **봉이 없는 이유 중 셋.** **휴장은 갈렸다** — 마켓 캘린더를 붙였다(ADR-0091 ·
+  [`alpaca-calendar.md`](./alpaca-calendar.md)). **남은 셋(무거래·비활성·거래정지)은 그대로
+  뭉쳐 있다**: 거래정지 목록이 없고 `stock.is_active`·`delisted_on`·`listed_on`이 미국 전
+  종목에서 비어 있다. 그리고 **판정은 달력을 적재한 구간에서만** 선다 — `--job=bar-gap-review`가
+  그 판정을 찍고, 창 밖은 휴장이 아니라 **판정불가**다.
 - **상장주식수.** 응답에 없다. 국내 소스는 `lstgStCnt`를 주지만 이쪽은 안 준다 —
   `price_daily.listed_shares`가 미국에서 NULL인 것이 **정상**이고, PER·PBR의 분모는
   재무 쪽으로 폴백한다(ADR-0013).
