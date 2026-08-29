@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.datasource.us;
 
+import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import tools.jackson.databind.JsonNode;
 
@@ -105,12 +106,13 @@ final class SecEdgarFacts {
      * @param facts          {@code companyfacts}의 {@code facts} 노드
      * @param fromFiscalYear 이 회계연도부터. 앞의 것은 만들지 않는다(버린 수에 안 든다)
      */
-    static Result build(JsonNode facts, int fromFiscalYear) {
+    static Result build(JsonNode facts, int fromFiscalYear) throws DataSourceException {
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts);
         Map<String, Anchor> anchors = anchorsOf(byColumn);
+        List<Window> fiscalYears = annualWindows(byColumn, anchors);
         Map<Label, Window> windows = new TreeMap<>();
         Map<Label, Anchor> labelAnchors = new LinkedHashMap<>();
-        int dropped = labelPeriods(byColumn, anchors, windows, labelAnchors);
+        int dropped = labelPeriods(byColumn, anchors, fiscalYears, windows, labelAnchors);
 
         List<RawFinancialReport> reports = new ArrayList<>();
         for (Map.Entry<Label, Window> e : windows.entrySet()) {
@@ -230,8 +232,9 @@ final class SecEdgarFacts {
      */
     private static int labelPeriods(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
                                     Map<String, Anchor> anchors,
+                                    List<Window> fiscalYears,
                                     Map<Label, Window> windows,
-                                    Map<Label, Anchor> labelAnchors) {
+                                    Map<Label, Anchor> labelAnchors) throws DataSourceException {
         int dropped = 0;
         for (Map<String, Map<Slot, Fact>> byTag : byColumn.values()) {
             for (Fact fact : allFacts(byTag)) {
@@ -242,13 +245,24 @@ final class SecEdgarFacts {
                 if (anchor == null || !fact.end().equals(anchor.end())) {
                     continue;   // 비교표다. 그 기간은 자기 보고서가 라벨을 준다.
                 }
-                String period = periodOf(fact, anchor);
-                if (period == null) {
+                Label label = labelOf(fact, fiscalYears);
+                if (label == null) {
                     dropped++;
                     continue;
                 }
-                Label label = new Label(anchor.fiscalYear(), period);
-                windows.putIfAbsent(label, new Window(fact.start(), fact.end()));
+                Window window = new Window(fact.start(), fact.end());
+                Window seen = windows.putIfAbsent(label, window);
+                if (seen != null && !seen.equals(window)) {
+                    // 저장 키에 기간이 없다. 라벨이 겹치면 uq_fs_latest가 걸리는 것이 아니라
+                    // 앞 기간의 최신 표시가 조용히 내려간다 — FinancialWriter가 개정 갈래에서
+                    // UPDATE를 INSERT보다 먼저 돌리기 때문이다. 그래서 여기서 막는 것이
+                    // 유일한 방어선이다.
+                    throw new DataSourceException(DataSourceException.Kind.MALFORMED,
+                            SecEdgarResponse.SOURCE_NAME,
+                            "같은 라벨에 기간이 둘이다: %d/%s → %s~%s vs %s~%s".formatted(
+                                    label.fiscalYear(), label.period(),
+                                    seen.start(), seen.end(), window.start(), window.end()));
+                }
                 // 앵커가 여럿이면(원본 10-K와 10-K/A) 공시일이 가장 이른 것으로 고정한다.
                 // 실행마다 같은 publishedAt이 나와야 FinancialWriter의 「공시일이 같으면
                 // 아무것도 안 한다」 갈래에 안착한다.
@@ -259,21 +273,103 @@ final class SecEdgarFacts {
         return dropped;
     }
 
-    /** 기간 길이로 {@code FY|Q1~Q4}를 정한다. 소스의 {@code fp}는 분기 번호에만 쓴다. */
-    private static String periodOf(Fact fact, Anchor anchor) {
-        long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
-        if (days >= ANNUAL_MIN && days <= ANNUAL_MAX) {
-            return "FY";
+    /**
+     * 회계연도 창. 앵커가 자기 기간에 실은 <b>12개월 팩트</b>가 그 회사의 회계연도다.
+     *
+     * <p>이것을 소스의 {@code fy}에서 읽지 않는 이유는 그 필드가 <b>기간이 아니라 보고서</b>를
+     * 가리키기 때문이다(실측: 라벨 70개가 전부 종료일을 둘 이상 갖는다).
+     */
+    private static List<Window> annualWindows(
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+            Map<String, Anchor> anchors) {
+        Map<LocalDate, Window> byEnd = new TreeMap<>();
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> entry : byColumn.entrySet()) {
+            if (entry.getKey().instant()) {
+                continue;
+            }
+            for (Fact fact : allFacts(entry.getValue())) {
+                Anchor anchor = anchors.get(fact.accn());
+                if (fact.start() == null || anchor == null || !fact.end().equals(anchor.end())) {
+                    continue;
+                }
+                long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
+                if (days >= ANNUAL_MIN && days <= ANNUAL_MAX) {
+                    byEnd.putIfAbsent(fact.end(), new Window(fact.start(), fact.end()));
+                }
+            }
         }
-        if (days < QUARTER_MIN || days > QUARTER_MAX) {
+        return new ArrayList<>(byEnd.values());
+    }
+
+    /**
+     * 기간에 붙일 라벨. <b>소스의 {@code fy}/{@code fp}를 쓰지 않는다.</b>
+     *
+     * <p>회계연도는 <b>그 기간을 품는 회계연도 창의 종료 연도</b>이고, 분기 번호는 그 창
+     * 안에서의 <b>위치</b>다. 소스의 {@code fp}로 분기를 정하면 조용히 틀린다 — 실측에서
+     * AT&amp;T의 같은 보고서가 7~9월 기간에 {@code Q2}를 붙였고, 1월 결산 회사(RH·NVDA)는
+     * 연속한 두 회계연도에 같은 {@code fy}가 붙었다. 그 라벨로 저장하면 <b>기간이 다른 두
+     * 행이 같은 키</b>를 받고, 저장 키에 기간이 없어 앞엣것의 최신 표시가 조용히 내려간다.
+     *
+     * <p>길이가 연도도 분기도 아닌 것(반기·9개월 누적)은 라벨을 만들지 않는다 — 버리고 센다.
+     */
+    private static Label labelOf(Fact fact, List<Window> fiscalYears) {
+        long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
+        boolean annual = days >= ANNUAL_MIN && days <= ANNUAL_MAX;
+        if (!annual && (days < QUARTER_MIN || days > QUARTER_MAX)) {
             return null;
         }
-        String reported = anchor.reportedPeriod();
-        if (reported.equals("Q1") || reported.equals("Q2") || reported.equals("Q3")) {
-            return reported;
+        if (annual) {
+            return new Label(fact.end().getYear(), "FY");
         }
-        // 사업보고서가 3개월을 함께 실었다. 그 분기는 4분기다 — 4분기 보고서는 없다.
-        return "Q4";
+        Window year = enclosingYear(fact.end(), fiscalYears);
+        if (year == null) {
+            // 진행 중인 회계연도다. 사업보고서가 아직 없어 창이 없을 뿐이므로 직전 창에서
+            // 투영한다 — 안 하면 **최근 분기 셋이 통째로 빠져** TTM이 최대 1년 뒤처진다.
+            //
+            // 투영이 안전한 이유는 라벨만 정하기 때문이다. 저장되는 기간은 언제나 팩트의
+            // start/end 원본이고, 52/53주 결산으로 며칠이 달라져도 종료 연도와 분기 위치는
+            // 같아서 사업보고서가 나온 뒤에도 같은 라벨이 나온다.
+            year = projectYear(fact.end(), fiscalYears);
+            if (year == null) {
+                return null;
+            }
+        }
+        long fromStart = ChronoUnit.DAYS.between(year.start(), fact.end());
+        int quarter = (int) Math.min(4, Math.max(1, Math.round(fromStart / 91.31)));
+        return new Label(year.end().getYear(), "Q" + quarter);
+    }
+
+    /**
+     * 직전 회계연도 창에서 한 해씩 밀어 그 종료일을 품는 창을 만든다.
+     *
+     * <p>회계연도 창이 하나도 없으면 투영할 근거가 없어 {@code null}이다 — 그 회사는
+     * 사업보고서를 낸 적이 없다.
+     */
+    private static Window projectYear(LocalDate end, List<Window> fiscalYears) {
+        if (fiscalYears.isEmpty()) {
+            return null;
+        }
+        Window last = fiscalYears.get(fiscalYears.size() - 1);
+        if (end.isBefore(last.end())) {
+            return null;   // 과거인데 창에 안 들어온다. 지어내지 않는다.
+        }
+        LocalDate start = last.end().plusDays(1);
+        LocalDate close = last.end().plusYears(1);
+        while (end.isAfter(close)) {
+            start = close.plusDays(1);
+            close = close.plusYears(1);
+        }
+        return new Window(start, close);
+    }
+
+    /** 그 종료일을 품는 회계연도 창. 없으면 null이다. */
+    private static Window enclosingYear(LocalDate end, List<Window> fiscalYears) {
+        for (Window year : fiscalYears) {
+            if (!end.isBefore(year.start()) && !end.isAfter(year.end())) {
+                return year;
+            }
+        }
+        return null;
     }
 
     // ---------- 3. 정정을 접는다 ----------
@@ -514,42 +610,52 @@ final class SecEdgarFacts {
      */
     private static List<RawFinancialReport> deriveFourthQuarters(
             List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear) {
-        Map<Integer, RawFinancialReport> annual = new LinkedHashMap<>();
-        Map<Integer, Map<String, RawFinancialReport>> quarters = new LinkedHashMap<>();
+        Map<Label, RawFinancialReport> latest = new LinkedHashMap<>();
         for (RawFinancialReport report : existing) {
-            if ("FY".equals(report.fiscalPeriod())) {
-                annual.merge(report.fiscalYear(), report,
-                        (a, b) -> a.publishedAt().isAfter(b.publishedAt()) ? a : b);
-            } else {
-                quarters.computeIfAbsent(report.fiscalYear(), y -> new LinkedHashMap<>())
-                        .merge(report.fiscalPeriod(), report,
-                                (a, b) -> a.publishedAt().isAfter(b.publishedAt()) ? a : b);
-            }
+            latest.merge(new Label(report.fiscalYear(), report.fiscalPeriod()), report,
+                    (a, b) -> a.publishedAt().isAfter(b.publishedAt()) ? a : b);
         }
 
         List<RawFinancialReport> derived = new ArrayList<>();
-        for (Map.Entry<Integer, RawFinancialReport> e : annual.entrySet()) {
-            int year = e.getKey();
-            if (year < fromFiscalYear) {
-                continue;
-            }
-            Map<String, RawFinancialReport> byPeriod =
-                    quarters.getOrDefault(year, Map.of());
-            if (byPeriod.containsKey("Q4")) {
-                continue;
-            }
-            RawFinancialReport q1 = byPeriod.get("Q1");
-            RawFinancialReport q2 = byPeriod.get("Q2");
-            RawFinancialReport q3 = byPeriod.get("Q3");
-            if (q1 == null || q2 == null || q3 == null) {
+        for (Map.Entry<Label, RawFinancialReport> e : latest.entrySet()) {
+            Label label = e.getKey();
+            if (!"FY".equals(label.period()) || label.fiscalYear() < fromFiscalYear) {
                 continue;
             }
             RawFinancialReport fy = e.getValue();
-            Window window = windows.get(new Label(year, "Q4"));
-            LocalDate start = window != null ? window.start() : q3.periodEnd().plusDays(1);
+            Label q4 = new Label(label.fiscalYear(), "Q4");
+            if (latest.containsKey(q4)) {
+                continue;   // 사업보고서가 3개월을 함께 실었다. 유도하지 않는다.
+            }
+
+            // MUST: 라벨이 아니라 **기간 포함관계**로 분기를 고른다.
+            //
+            // 1월 결산 회사는 소스가 연간과 그 다음 회계연도의 분기에 **같은 회계연도**를
+            // 붙인다(실측: RH의 FY가 2023-01-28에 끝나는데 같은 라벨의 Q3가 2023-10-29에
+            // 끝난다). 라벨로 묶으면 시작이 끝보다 뒤인 행을 만들어 그 종목의 적재가
+            // 통째로 죽는다 — 실제로 그렇게 났다.
+            List<RawFinancialReport> inside = new ArrayList<>();
+            for (RawFinancialReport candidate : latest.values()) {
+                if (!"FY".equals(candidate.fiscalPeriod())
+                        && !candidate.periodStart().isBefore(fy.periodStart())
+                        && !candidate.periodEnd().isAfter(fy.periodEnd())) {
+                    inside.add(candidate);
+                }
+            }
+            inside.sort(Comparator.comparing(RawFinancialReport::periodEnd));
+            if (inside.size() != 3 || !inside.get(0).periodStart().equals(fy.periodStart())) {
+                continue;
+            }
+            RawFinancialReport q3 = inside.get(2);
+            LocalDate start = q3.periodEnd().plusDays(1);
+            if (!start.isBefore(fy.periodEnd())) {
+                continue;
+            }
+            RawFinancialReport q1 = inside.get(0);
+            RawFinancialReport q2 = inside.get(1);
             derived.add(new RawFinancialReport(
-                    year, "Q4", start, fy.periodEnd(), fy.publishedAt(), fy.reportCode(),
-                    fy.currencyCode(),
+                    label.fiscalYear(), "Q4", start, fy.periodEnd(), fy.publishedAt(),
+                    fy.reportCode(), fy.currencyCode(),
                     minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue()),
                     minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
                             q3.operatingIncome()),

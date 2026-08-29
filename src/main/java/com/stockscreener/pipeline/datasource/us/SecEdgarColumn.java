@@ -60,9 +60,17 @@ enum SecEdgarColumn {
 
     TOTAL_ASSETS(Kind.INSTANT, Unit.MONETARY, List.of("Assets")),
     TOTAL_LIABILITIES(Kind.INSTANT, Unit.MONETARY, List.of("Liabilities")),
+    /**
+     * 자본총계. <b>비지배지분을 포함하는 쪽을 먼저 본다.</b>
+     *
+     * <p>국내가 {@code 자본총계}(K-IFRS 연결에서 비지배지분 포함)를 쓰므로 여기서도 같은 것을
+     * 골라야 <b>시장 간 계산 방식이 갈리지 않는다</b>(spec §7). 순서를 뒤집으면 비지배지분이
+     * 큰 회사에서 <b>자산 = 부채 + 자본이 깨진다</b> — 실측에서 BRK·F의 151행 중 50행이
+     * 어긋났고, 차이가 정확히 비지배지분이었다. 값이 그럴듯해 눈으로는 안 드러난다.
+     */
     TOTAL_EQUITY(Kind.INSTANT, Unit.MONETARY, List.of(
-            "StockholdersEquity",
-            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest")),
+            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+            "StockholdersEquity")),
     CURRENT_ASSETS(Kind.INSTANT, Unit.MONETARY, List.of("AssetsCurrent")),
     CURRENT_LIABILITIES(Kind.INSTANT, Unit.MONETARY, List.of("LiabilitiesCurrent")),
     RETAINED_EARNINGS(Kind.INSTANT, Unit.MONETARY, List.of("RetainedEarningsAccumulatedDeficit")),
