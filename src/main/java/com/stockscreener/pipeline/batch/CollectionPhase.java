@@ -34,6 +34,19 @@ public enum CollectionPhase {
      */
     MARKET_INDEX,
 
+    /**
+     * 거래소 세션 달력 수집(ADR-0091).
+     *
+     * <p>{@link #MARKET_INDEX}와 같은 자리다 — 처리 단위가 종목이 아니라 <b>거래소</b>이고,
+     * MUST NOT: {@link BatchExecutionContext#process}로 돌리지 않는다
+     * ({@code batch_execution_failure.stock_id}가 NOT NULL + FK다). 집계는
+     * {@code countExternally}, 통지는 {@code alertOperator}로 간다.
+     *
+     * <p>한 거래소의 달력이 없으면 <b>그 거래소 전 종목의 봉 결측 판정</b>이 함께 판정불가가
+     * 된다 — 실패 격리의 단위가 종목이라는 원칙이 원리적으로 성립하지 않는 자리다.
+     */
+    MARKET_CALENDAR,
+
     /** 종목 마스터(이름·섹터·상장일) 수집. */
     SECURITY_MASTER,
 

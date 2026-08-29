@@ -85,6 +85,7 @@ class DataSourceRegistryTest {
         DataSourceRegistry registry = new DataSourceRegistry(
                 List.of(), List.of(summary), List.of(full), List.of(), List.of(), List.of(),
                 List.of(), List.of(),
+                List.of(),
                 List.of());
 
         assertThat(registry.financialSource("KOSPI")).isSameAs(summary);
@@ -100,6 +101,7 @@ class DataSourceRegistryTest {
         assertThatThrownBy(() -> new DataSourceRegistry(
                 List.of(), List.of(), List.of(first, second), List.of(), List.of(), List.of(),
                 List.of(), List.of(),
+                List.of(),
                 List.of()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("KOSPI")
@@ -109,6 +111,7 @@ class DataSourceRegistryTest {
     private static DataSourceRegistry registryOf(List<PriceDataSource> priceSources) {
         return new DataSourceRegistry(
                 priceSources, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(),
                 List.of(),
                 List.of());
     }

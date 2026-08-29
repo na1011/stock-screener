@@ -36,6 +36,7 @@ public class DataSourceRegistry {
     private final Map<String, UniverseDataSource> universeByCode;
     private final Map<String, MarketIndexDataSource> marketIndexByCode;
     private final Map<String, GovernanceDataSource> governanceByMarket;
+    private final Map<String, MarketCalendarDataSource> marketCalendarByExchange;
 
     public DataSourceRegistry(
             List<PriceDataSource> priceSources,
@@ -46,7 +47,8 @@ public class DataSourceRegistry {
             List<CorporateActionDataSource> corporateActionSources,
             List<UniverseDataSource> universeSources,
             List<MarketIndexDataSource> marketIndexSources,
-            List<GovernanceDataSource> governanceSources) {
+            List<GovernanceDataSource> governanceSources,
+            List<MarketCalendarDataSource> marketCalendarSources) {
         this.priceByMarket = index(priceSources, PriceDataSource::supportedMarketCodes, "시세");
         this.financialByMarket = index(financialSources, FinancialDataSource::supportedMarketCodes, "재무");
         this.fullStatementByMarket =
@@ -60,6 +62,8 @@ public class DataSourceRegistry {
                 index(marketIndexSources, MarketIndexDataSource::supportedIndexCodes, "시장지수");
         this.governanceByMarket =
                 index(governanceSources, GovernanceDataSource::supportedMarketCodes, "거버넌스");
+        this.marketCalendarByExchange = index(
+                marketCalendarSources, MarketCalendarDataSource::supportedExchangeCodes, "마켓캘린더");
     }
 
     private static <T> Map<String, T> index(
@@ -163,6 +167,24 @@ public class DataSourceRegistry {
     /** 수집할 수 있는 지수 전체. 잡이 대상을 정할 때 쓴다. */
     public Set<String> marketIndexCodes() {
         return marketIndexByCode.keySet();
+    }
+
+    /**
+     * 거래소 세션 달력 어댑터(ADR-0091).
+     *
+     * <p>MUST NOT: {@code Optional}을 돌려주지 않는다. 어댑터가 없는 것은 {@code NOT_FOUND}여야
+     * 하고, 비어 있음을 돌려주면 호출자가 0건으로 성공한다 — 그러면 그 거래소의 세션이 영영
+     * 안 들어오는데 <b>그 거래소 전 종목의 봉이 「휴장이라 없다」로 읽히는 형태</b>로만 드러난다.
+     * 위 {@link #marketIndexSource}·{@link #corporateActionSource}와 같은 자리다.
+     */
+    public MarketCalendarDataSource marketCalendarSource(String exchangeCode)
+            throws DataSourceException {
+        return require(marketCalendarByExchange, exchangeCode, "마켓캘린더");
+    }
+
+    /** 달력을 받을 수 있는 거래소 전체. 잡이 대상을 정할 때 쓴다. */
+    public Set<String> marketCalendarExchangeCodes() {
+        return marketCalendarByExchange.keySet();
     }
 
     private static <T> T require(Map<String, T> map, String key, String label)
