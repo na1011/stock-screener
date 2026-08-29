@@ -123,6 +123,54 @@ class StockRegistrarLookupTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 이력이 없어도 두 조건 밖의 종목은 초기 적재 대상이 아니다(ADR-0087)")
+    void needingHistoryAppliesBothConditions() {
+        // 셋 다 price_daily가 비어 있다. 갈리는 것은 유니버스 활성 여부와 시장뿐이다.
+        long krMember = member("005930", "삼성전자", true, null);
+
+        long onlyInactiveUniverse = insertStock("100002", "비활성유니버스전용", true);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('KOSPI_TOP200', ?, ?)
+                """, onlyInactiveUniverse, FROM);
+
+        jdbcTemplate.update("UPDATE universe SET is_active = true WHERE code = 'US_LISTED'");
+        long usStock = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, listing_exchange)
+                VALUES ('US', 'AAPL', 'Apple Inc. Common Stock', 'NASDAQ') RETURNING id
+                """, Long.class);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('US_LISTED', ?, ?)
+                """, usStock, FROM);
+
+        List<Long> ids = registrar.activeUniverseMemberIdsNeedingHistory();
+
+        assertThat(ids).contains(krMember);
+        assertThat(ids)
+                .as("비활성 유니버스에만 편입된 종목은 유니버스를 다시 내려도 영구히 남았다")
+                .doesNotContain(onlyInactiveUniverse);
+        assertThat(ids)
+                .as("수집 어댑터가 없는 시장은 종목마다 NOT_FOUND로 실패한다")
+                .doesNotContain(usStock);
+    }
+
+    @Test
+    @DisplayName("봉이 하나라도 있으면 초기 적재 대상에서 빠진다 — 재개 가능성의 근거다")
+    void needingHistorySkipsStocksThatAlreadyHaveBars() {
+        long loaded = member("005930", "삼성전자", true, null);
+        long empty = member("035420", "NAVER", true, null);
+        jdbcTemplate.update("""
+                INSERT INTO price_daily (stock_id, trade_date, open, high, low, close,
+                                         adj_close, volume)
+                VALUES (?, ?, 1, 1, 1, 1, 1, 0)
+                """, loaded, FROM);
+
+        assertThat(registrar.activeUniverseMemberIdsNeedingHistory())
+                .contains(empty).doesNotContain(loaded);
+    }
+
+    @Test
     @DisplayName("모르는 티커로 조회해도 종목을 만들지 않는다 — resolveOrCreate와 갈라놓은 이유다")
     void neverCreatesStockRows() {
         int before = stockCount();

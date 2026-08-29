@@ -173,6 +173,49 @@ public class StockRegistrar {
     }
 
     /**
+     * 이력이 아직 없는 편입 종목. 초기 적재의 기본 대상이다.
+     *
+     * <p>{@link #activeUniverseMemberIdsWithoutIndustry()} 옆에 두는 이유가 같다 — 이것도
+     * <b>{@link #activeUniverseMemberIds()}의 정의에 결손 조건 하나만 더한 것</b>이며, 정의
+     * 자체는 위와 같은 자리에서 온다. {@code InitialLoadJob}이 이 질의를 자기 안에 들고 있었고
+     * 거기에는 <b>두 조건이 둘 다 없었다</b> — 실 DB에서 그 사본의 대상이 미국 8,504종목이고
+     * 국내가 0건이었다(2026-08-29 실측). 어댑터가 없는 시장이라 종목마다 {@code NOT_FOUND}로
+     * 실패하는데, 플래그 없이 {@code --job=initial-load}를 한 번 치는 것만으로 그렇게 된다.
+     *
+     * <p>{@code NOT EXISTS}로 판정하는 이유는 "한 봉이라도 있으면 적재된 것으로 본다"가
+     * 이 시점에 충분하기 때문이다. 부분 적재의 정밀한 판정은 시세 이력의 실제 시작일을
+     * 봐야 하는데, 상장일이 적재 기간 이내인 종목과 구분할 수 없어 오히려 틀린다.
+     *
+     * <p>IMPORTANT — 그 대가로 <b>기간을 늘려도 대상이 0건이 된다.</b> 2년치를 받아둔 상태에서
+     * 7년으로 넓히면 봉이 이미 있어 전 종목이 걸러지고, 잡은 "적재할 종목이 없다"며 성공으로
+     * 끝난다. 기간을 늘렸는데 아무 일도 일어나지 않고 성공으로 보이는 것이 그 결함의 성질이며,
+     * {@code InitialLoadJob}의 {@code reloadExisting}이 존재하는 이유가 그것이다.
+     *
+     * <p>두 번째 갈래(재무 실패가 미해결인데 재무가 한 행도 없는 종목)는 시세가 아니라
+     * <b>재무</b> 결손을 다시 시도하려는 것이다. 호출부가 그 종목의 시세를 건너뛴다.
+     */
+    public List<Long> activeUniverseMemberIdsNeedingHistory() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                JOIN universe u ON u.code = m.universe_code AND u.is_active
+                WHERE m.effective_to IS NULL AND s.is_active
+                  AND s.market_code IN (%s)
+                  AND (
+                    NOT EXISTS (SELECT 1 FROM price_daily p WHERE p.stock_id = m.stock_id)
+                    OR (
+                      EXISTS (SELECT 1 FROM batch_execution_failure f
+                               WHERE f.stock_id = m.stock_id
+                                 AND f.failed_phase = 'FINANCIAL' AND NOT f.resolved)
+                      AND NOT EXISTS (SELECT 1 FROM financial_statement fs
+                                       WHERE fs.stock_id = m.stock_id)
+                    )
+                  )
+                ORDER BY m.stock_id
+                """.formatted(collectedMarketPlaceholders()), Long.class, collectedMarkets());
+    }
+
+    /**
      * 티커로 편입 종목을 골라낸다. <b>없는 종목을 만들지 않는다.</b>
      *
      * <p>{@link #resolveOrCreate}와 갈라놓은 이유가 그것이다 — 저쪽은 유니버스 편입이 근거라

@@ -153,7 +153,7 @@ public class InitialLoadJob {
     /**
      * 대상 종목을 정한다.
      *
-     * <p>IMPORTANT — <b>티커를 주면 {@link #stocksNeedingHistory()}의 {@code NOT EXISTS}를
+     * <p>IMPORTANT — <b>티커를 주면 {@code StockRegistrar.activeUniverseMemberIdsNeedingHistory()}의 {@code NOT EXISTS}를
      * 적용하지 않는다.</b> 교집합으로 만들면 봉이 한 개라도 있는 종목을 지정했을 때 대상이
      * 0건이 되고, 아래 호출부가 "적재가 필요한 종목이 없다"며 <b>성공으로 끝난다</b> —
      * 그것은 이 경로가 고치려는 결함(신규 편입 종목이 1~2봉만 있어 영원히 건너뛰어지는 것)과
@@ -167,7 +167,7 @@ public class InitialLoadJob {
         if (!range.hasTickers()) {
             return range.reloadExisting()
                     ? stockRegistrar.activeUniverseMemberIds()
-                    : stocksNeedingHistory();
+                    : stockRegistrar.activeUniverseMemberIdsNeedingHistory();
         }
         List<Long> matched = stockRegistrar.activeUniverseMemberIdsByTicker(range.tickers());
         if (matched.isEmpty()) {
@@ -180,40 +180,6 @@ public class InitialLoadJob {
                     range.tickers().size(), matched.size(), range.tickers());
         }
         return matched;
-    }
-
-    /**
-     * 이력이 없는 편입 종목.
-     *
-     * <p>이미 적재된 종목을 건너뛰는 것이 재실행 가능성의 근거다. 쿼터 소진으로 중단해도
-     * 다음 실행이 남은 종목부터 이어서 처리한다.
-     *
-     * <p>{@code NOT EXISTS}로 판정하는 이유는 "한 봉이라도 있으면 적재된 것으로 본다"가
-     * 이 시점에 충분하기 때문이다. 부분 적재의 정밀한 판정은 시세 이력의 실제 시작일을
-     * 봐야 하는데, 상장일이 2년 이내인 종목과 구분할 수 없어 오히려 틀린다.
-     *
-     * <p>IMPORTANT — 그 대가로 <b>기간을 늘려도 대상이 0건이 된다.</b> 2년치를 받아둔 상태에서
-     * 7년으로 넓히면 봉이 이미 있어 전 종목이 걸러지고, 잡은 "적재할 종목이 없다"며 성공으로
-     * 끝난다. 기간을 늘렸는데 아무 일도 일어나지 않고 성공으로 보이는 것이 그 결함의 성질이며,
-     * {@code reloadExisting}이 존재하는 이유가 그것이다.
-     */
-    private List<Long> stocksNeedingHistory() {
-        return jdbcTemplate.queryForList("""
-                SELECT DISTINCT m.stock_id FROM universe_membership m
-                JOIN stock s ON s.id = m.stock_id
-                WHERE m.effective_to IS NULL AND s.is_active
-                  AND (
-                    NOT EXISTS (SELECT 1 FROM price_daily p WHERE p.stock_id = m.stock_id)
-                    OR (
-                      EXISTS (SELECT 1 FROM batch_execution_failure f
-                               WHERE f.stock_id = m.stock_id
-                                 AND f.failed_phase = 'FINANCIAL' AND NOT f.resolved)
-                      AND NOT EXISTS (SELECT 1 FROM financial_statement fs
-                                       WHERE fs.stock_id = m.stock_id)
-                    )
-                  )
-                ORDER BY m.stock_id
-                """, Long.class);
     }
 
     /**
