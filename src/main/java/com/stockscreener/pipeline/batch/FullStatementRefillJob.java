@@ -63,14 +63,16 @@ public class FullStatementRefillJob {
      * @param yearsBack       몇 년 거슬러 받을지. null이면 기본 5년
      * @param tickers         비면 전 종목. 값이 있으면 <b>편입 종목과의 교집합</b>만 처리한다
      * @param includeQuarters 분기 보고서도 받을지. <b>티커를 함께 줘야 한다</b> — 아래 참조
+     * @param allQuarters     <b>전 종목</b> 분기를 명시적으로 승인한다. 콜이 4배다 — 아래 참조
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
-                           Integer yearsBack, List<String> tickers, boolean includeQuarters) {
+                           Integer yearsBack, List<String> tickers, boolean includeQuarters,
+                           boolean allQuarters) {
         int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
-        Set<StatementPeriod> periods = resolvePeriods(includeQuarters, tickers);
+        Set<StatementPeriod> periods = resolvePeriods(includeQuarters, allQuarters, tickers);
 
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
         if (targets.isEmpty()) {
@@ -141,20 +143,33 @@ public class FullStatementRefillJob {
     /**
      * 받을 기간을 정한다.
      *
-     * <p>IMPORTANT — 분기를 받으려면 티커를 함께 줘야 한다. 분기가 필요한 것은 이익잉여금
-     * 결손 세 종목뿐이고(요약본이 그 행을 아예 주지 않는다), 전 종목으로 넓히면 <b>얻는 것
-     * 없이 콜만 4배</b>가 된다. 이것을 관행이 아니라 예외로 막는 이유는, 관행은 "이왕 도는
-     * 김에"라는 한 번의 판단으로 무너지고 그 대가가 6,300콜이기 때문이다.
+     * <p>IMPORTANT — 분기는 <b>콜이 4배</b>다. 그래서 두 가지 의사표시 중 하나를 요구한다:
+     * {@code --tickers}로 대상을 좁히거나, {@code --all-quarters=true}로 <b>전 종목 분기를
+     * 명시적으로 승인</b>하거나. 이것을 관행이 아니라 예외로 막는 이유는, 관행은 "이왕 도는
+     * 김에"라는 한 번의 판단으로 무너지고 그 대가가 <b>실제 콜 1만을 넘기</b> 때문이다.
+     *
+     * <p><b>전 종목 분기가 필요한 이유가 2026-08-30에 하나 생겼다</b> — 주당 지표의 분자를
+     * 지배기업 소유주 귀속 순이익으로 바꾸면서다({@code net_income_controlling}). 요약본이
+     * 그 값을 원리적으로 못 주고(중복된 두 행의 값이 같다), 주당 지표는 전부 <b>분기 행</b>을
+     * 읽는다. 그전까지 분기가 필요한 것은 이익잉여금 결손 세 종목뿐이었고, 그때의 문구는
+     * "전 종목으로 넓히면 얻는 것 없이 콜만 4배"였다 — <b>그 전제가 바뀐 것이지 규칙이
+     * 느슨해진 것이 아니다.</b>
+     *
+     * <p>MUST NOT: {@code --all-quarters}를 기본값으로 만들지 않는다. 명시적으로 적는
+     * 행위 자체가 이 잡의 유일한 예산 통제다 — 로그의 {@code 요청=N 실제콜=M}은 <b>다 태운
+     * 뒤에야</b> 나온다.
      */
     private static Set<StatementPeriod> resolvePeriods(boolean includeQuarters,
+                                                       boolean allQuarters,
                                                        List<String> tickers) {
-        if (!includeQuarters) {
+        if (!includeQuarters && !allQuarters) {
             return EnumSet.of(StatementPeriod.FY);
         }
-        if (tickers == null || tickers.isEmpty()) {
+        if (!allQuarters && (tickers == null || tickers.isEmpty())) {
             throw new IllegalArgumentException(
-                    "분기 보고서는 종목을 지정해야 받을 수 있다. 분기가 필요한 것은 이익잉여금 "
-                            + "결손 종목뿐이고, 전 종목으로 넓히면 얻는 것 없이 호출이 4배가 된다.");
+                    "분기 보고서는 종목을 지정하거나 --all-quarters=true로 전 종목을 명시해야 "
+                            + "받을 수 있다. 콜이 4배이고 그 4배는 아무 에러 없이 다른 잡의 "
+                            + "여유를 먹는다.");
         }
         return EnumSet.allOf(StatementPeriod.class);
     }

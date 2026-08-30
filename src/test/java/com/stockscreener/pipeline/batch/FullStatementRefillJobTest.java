@@ -86,7 +86,7 @@ class FullStatementRefillJobTest {
         fakeSource.withReports(memberId, List.of(annualReport(2025, "1500")));
 
         BatchStatus status = job.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false);
+                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false, false);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(operatingCashFlowOf(memberId)).isEqualByComparingTo("1500");
@@ -97,7 +97,7 @@ class FullStatementRefillJobTest {
     @Test
     @DisplayName("기본은 사업보고서만 부른다 — 보고서 넷을 다 부르면 호출이 4배다")
     void requestsAnnualReportsOnly() {
-        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false);
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false, false);
 
         assertThat(fakeSource.requestedPeriods)
                 .isNotEmpty()
@@ -106,10 +106,10 @@ class FullStatementRefillJobTest {
     }
 
     @Test
-    @DisplayName("분기는 종목을 지정해야 받을 수 있다 — 전 종목 분기는 얻는 것 없이 호출만 4배다")
+    @DisplayName("분기는 종목을 지정하거나 --all-quarters로 명시해야 받을 수 있다 — 콜이 4배다")
     void refusesQuartersWithoutTickers() {
         assertThatThrownBy(() -> job.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), true))
+                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), true, false))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("분기");
 
@@ -117,9 +117,23 @@ class FullStatementRefillJobTest {
     }
 
     @Test
+    @DisplayName("--all-quarters면 티커 없이도 전 종목 분기를 받는다 — 명시가 유일한 예산 통제다")
+    void acceptsAllQuartersWithoutTickers() {
+        // 2026-08-30에 이 갈래가 생겼다. 주당 지표의 분자를 지배주주 귀속 순이익으로 바꾸면서
+        // net_income_controlling이 전 종목 분기에 필요해졌고, 요약본은 그 값을 원리적으로
+        // 못 준다. 그전의 「얻는 것 없이 콜만 4배」는 그때의 전제였다.
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false, true);
+
+        assertThat(fakeSource.requestedPeriods)
+                .isNotEmpty()
+                .allSatisfy(periods -> assertThat(periods)
+                        .containsExactlyInAnyOrder(StatementPeriod.values()));
+    }
+
+    @Test
     @DisplayName("종목을 지정하면 분기까지 받는다")
     void requestsQuartersForNamedTickers() {
-        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of("005930"), true);
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of("005930"), true, false);
 
         assertThat(fakeSource.requestedPeriods)
                 .allSatisfy(periods -> assertThat(periods)
@@ -133,7 +147,7 @@ class FullStatementRefillJobTest {
         // 그 차이가 곧 "상장 전 회계연도"를 가르는 근거가 된다.
         fakeSource.withReports(memberId, List.of(annualReport(2025, "1500")));
 
-        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false);
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false, false);
 
         String note = jdbcTemplate.queryForObject(
                 "SELECT note FROM batch_execution WHERE job_name = ? ORDER BY id DESC LIMIT 1",
@@ -149,7 +163,7 @@ class FullStatementRefillJobTest {
     @Test
     @DisplayName("편입 중인 활성 종목만 대상으로 삼는다")
     void targetsOnlyActiveUniverseMembers() {
-        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false);
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false, false);
 
         assertThat(fakeSource.fetchedStockIds).containsExactly(memberId);
         assertThat(fakeSource.fetchedStockIds).doesNotContain(outsiderId);
@@ -159,7 +173,7 @@ class FullStatementRefillJobTest {
     @DisplayName("티커가 하나도 매칭되지 않으면 조용히 성공하지 않고 실패한다")
     void failsLoudlyWhenNoTickerMatches() {
         assertThatThrownBy(() -> job.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of("999999"), false))
+                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of("999999"), false, false))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("999999");
 

@@ -277,11 +277,13 @@ public class BootstrapRunner implements ApplicationRunner {
             case "financial-refill" -> financialRefillJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     optionalInteger(args, "financial-years"), csv(args, "tickers"));
-            // --quarters는 티커와 함께여야 한다. 잡이 거절하며, 그 근거는 거기 있다.
+            // --quarters는 티커와 함께여야 하고, 전 종목 분기는 --all-quarters로 명시한다.
+            // 잡이 거절하며, 그 근거는 거기 있다.
             case "full-statement-refill" -> fullStatementRefillJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     optionalInteger(args, "financial-years"), csv(args, "tickers"),
-                    Boolean.parseBoolean(value(args, "quarters", "false")));
+                    Boolean.parseBoolean(value(args, "quarters", "false")),
+                    Boolean.parseBoolean(value(args, "all-quarters", "false")));
             case "company-profile" -> companyProfileJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
                     value(args, "universe", null));
@@ -372,7 +374,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
             "job", "as-of", "universe", "price-years", "financial-years", "reload-existing",
             "skip-financial", "skip-price", "tickers", "from",
-            "quarters", "governance-year", "governance-span", "governance-endpoints",
+            "quarters", "all-quarters", "governance-year", "governance-span",
+            "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
             "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note");
 
