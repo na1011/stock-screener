@@ -76,12 +76,18 @@ rg -n "ID_INVENTORIES" src/main/java/com/stockscreener/pipeline/datasource/kr/Da
 **두 줄**이어야 한다 — `toReport`와 `toFourthQuarterBalance` 둘 다. 한 줄이면 저량을 유량처럼
 다룬 것이고 **4분기 행이 조용히 빈다.**
 
+**모집단을 국내로 좁힌다.** 금융업 제외가 `industry_division`(KSIC)으로 되어 있고 미국은
+그 컬럼이 NULL이라(체계가 SIC다 — ADR-0092) `ksic IS NULL` 갈래로 **전부 모집단에 들어온다.**
+미국 재무를 적재하자 커버리지가 44%로 떨어져 이 전제가 울었다(2026-08-30) — 국내 계정
+매핑은 그대로인데 분모만 바뀐 것이다. **미국 재고자산을 재려면 SIC 기준으로 별도 전제를 만든다.**
+
 ```premise 재고자산이 재무제표에 채워져 있고 그 결손이 금융업에 몰려 있다
 psql -d stock_screener -At -c "
 WITH fy AS (
   SELECT f.inventories, s.industry_division AS ksic
     FROM financial_statement f JOIN stock s ON s.id = f.stock_id
-   WHERE f.fiscal_period = 'FY' AND f.is_latest AND f.fiscal_year >= 2021),
+   WHERE f.fiscal_period = 'FY' AND f.is_latest AND f.fiscal_year >= 2021
+     AND s.market_code IN ('KOSPI', 'KOSDAQ')),
 pop AS (SELECT * FROM fy WHERE ksic IS NULL OR ksic NOT IN ('64','65','66'))
 SELECT CASE
   WHEN (SELECT count(*) FROM fy) = 0

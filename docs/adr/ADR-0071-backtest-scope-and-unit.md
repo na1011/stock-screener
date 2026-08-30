@@ -181,8 +181,12 @@ rg -n 'FROM indicator_value|import .*ScreeningRepository' \
 **아래 넷은 이 결정이 아직 옳은지를 묻는다.** 넷 다 실측이 근거이고, 값이 움직이면 결론의
 어느 부분이 바뀌는지가 각 라벨에 있다.
 
+**모집단을 국내로 좁힌다.** 백테스트가 대상으로 삼는 프리셋이 국내 유니버스에 묶여 있고,
+창 시작은 **국내 7개년 재무의 공시일**이 정한다. 좁히지 않으면 미국 종목의 공시일이 `min`을
+끌어내려 창이 움직인 것처럼 보인다 — 미국 재무 적재 직후 2025-04-24로 울었다(2026-08-30).
+
 ```premise 백테스트 창의 시작이 아직 2026-03-09이다
-psql -d stock_screener -At -c "WITH seven AS (SELECT stock_id, max(published_at) p7 FROM (SELECT stock_id, fiscal_year, published_at, row_number() OVER (PARTITION BY stock_id ORDER BY fiscal_year DESC) rn FROM financial_statement WHERE fiscal_period = 'FY' AND is_latest) t WHERE rn <= 7 GROUP BY stock_id HAVING count(*) = 7) SELECT CASE WHEN (SELECT count(*) FROM financial_statement WHERE fiscal_period = 'FY') = 0 THEN '잴 것이 없었다 — 연간 재무가 한 행도 없다' WHEN (SELECT count(*) FROM seven) = 0 THEN '7개년을 갖춘 종목이 없다 — PROFIT_STREAK_Y가 전 종목 판정불가이고 백테스트 창이 0이다' WHEN (SELECT min(p7) FROM seven) = DATE '2026-03-09' THEN 'OK 백테스트 창 시작 2026-03-09 · 7개년 확보 ' || (SELECT count(*) FROM seven) || '종목' ELSE '창 시작이 ' || (SELECT min(p7) FROM seven) || '로 움직였다(계획 기준 2026-03-09) — 재무 적재가 돌았거나 정정이 공시일을 바꿨다' END"
+psql -d stock_screener -At -c "WITH seven AS (SELECT stock_id, max(published_at) p7 FROM (SELECT stock_id, fiscal_year, published_at, row_number() OVER (PARTITION BY stock_id ORDER BY fiscal_year DESC) rn FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE fiscal_period = 'FY' AND is_latest AND s.market_code IN ('KOSPI','KOSDAQ')) t WHERE rn <= 7 GROUP BY stock_id HAVING count(*) = 7) SELECT CASE WHEN (SELECT count(*) FROM financial_statement WHERE fiscal_period = 'FY') = 0 THEN '잴 것이 없었다 — 연간 재무가 한 행도 없다' WHEN (SELECT count(*) FROM seven) = 0 THEN '7개년을 갖춘 종목이 없다 — PROFIT_STREAK_Y가 전 종목 판정불가이고 백테스트 창이 0이다' WHEN (SELECT min(p7) FROM seven) = DATE '2026-03-09' THEN 'OK 백테스트 창 시작 2026-03-09 · 7개년 확보 ' || (SELECT count(*) FROM seven) || '종목' ELSE '창 시작이 ' || (SELECT min(p7) FROM seven) || '로 움직였다(계획 기준 2026-03-09) — 재무 적재가 돌았거나 정정이 공시일을 바꿨다' END"
 ```
 
 ```premise 저장된 지표에 시간축이 없다 — 백테스트가 그것을 읽으면 안 되는 이유

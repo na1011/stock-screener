@@ -95,6 +95,12 @@ SELECT CASE
   END FROM a"
 ```
 
+**모집단은 활성 유니버스 편입 종목이다.** `universe`를 함께 조인하는 것이 그 강제이며,
+빼면 **비활성 유니버스의 편입 행이 들어온다** — `US_LISTED`가 비활성인데 편입 8,504건을
+들고 있어, 미국 재무를 적재하자 이 전제가 1,163종목으로 울었다(2026-08-30). 그 결손은
+H-05가 DART 전체재무제표로 채우는 것이라 **EDGAR 종목에는 애초에 걸리지 않는다.**
+P20 축②가 *「편입 행은 유니버스의 활성 여부와 무관하게 존재한다」*로 경고한 자리다.
+
 ```premise 정정공시라 채우지 못한 연간 결손
 psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) = 0 THEN '잴 것이 없었다 — 편입 활성 종목이 없다'
@@ -102,6 +108,7 @@ psql -d stock_screener -At -c "SELECT CASE
   ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '이다 — 정정공시로 단정하지 마라. 먼저 그 행의 revision_no를 본다: 0이면 리밸런싱 재편입이라 티커를 준 full-statement-refill 한 번이 닫고(2026-08-25에 넷이 그랬다), 1 이상이면 그때가 정정이라 batch-load skill의 128콜 스윕이다'
   END FROM (SELECT s.id, count(*) FILTER (WHERE f.operating_cash_flow IS NULL) miss
     FROM stock s JOIN universe_membership m ON m.stock_id=s.id AND m.effective_to IS NULL
+    JOIN universe u ON u.code = m.universe_code AND u.is_active
     JOIN financial_statement f ON f.stock_id=s.id AND f.is_latest AND f.fiscal_period='FY'
       AND f.fiscal_year BETWEEN 2021 AND 2025
     WHERE s.is_active GROUP BY 1) t"
