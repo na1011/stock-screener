@@ -49,6 +49,21 @@ class DartControllingProfitProbeLiveTest {
     private static final String QUARTER_YEAR = "2026";
 
     /**
+     * 표본과 기간을 시스템 프로퍼티로 덮는다 — <b>결손 종목을 겨냥해 다시 재기 위한 것이다.</b>
+     *
+     * <p>전수 적재 뒤에 「FY에는 있는데 그 분기만 없는」 종목이 남았을 때, 원인이 <b>소스가
+     * 안 주는 것</b>인지 <b>우리가 못 읽는 것</b>인지를 갈라야 처방이 정해진다. 표본을 코드에
+     * 박아 두면 그때마다 파일을 고치게 되고, 그 수정이 커밋에 섞인다.
+     *
+     * <pre>./gradlew liveTest --tests "*DartControllingProfitProbe*" \
+     *   -Dprobe.tickers=004800,028670 -Dprobe.quarterYear=2026 -Dprobe.quarterReport=11012</pre>
+     */
+    private static String prop(String key, String fallback) {
+        String value = System.getProperty(key);
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    /**
      * <b>비지배지분이 큰 지주회사를 일부러 넣었다.</b> 기존 탐침들의 표본(업종 분산)과 다른 이유는
      * 이 탐침의 질문이 업종이 아니라 <b>지분 구조</b>이기 때문이다 — 종속기업이 없는 회사는 애초에
      * 이 계정을 내지 않고, 그것은 결손이 아니라 정상이다.
@@ -62,6 +77,18 @@ class DartControllingProfitProbeLiveTest {
     private static final Map<String, String> SAMPLES = new LinkedHashMap<>();
 
     static {
+        String override = prop("probe.tickers", null);
+        if (override != null) {
+            for (String ticker : override.split(",")) {
+                SAMPLES.put(ticker.strip(), ticker.strip() + "(지정 표본)");
+            }
+        }
+    }
+
+    static {
+        if (!SAMPLES.isEmpty()) {
+            // 지정 표본이 있으면 기본 여덟을 넣지 않는다 — 섞으면 콜만 두 배가 된다.
+        } else {
         SAMPLES.put("032190", "다우데이타(배수 5.48 — 전수 최대)");
         SAMPLES.put("000880", "한화(5.35 — 지주)");
         SAMPLES.put("267250", "HD현대(3.82 — 지주)");
@@ -70,6 +97,7 @@ class DartControllingProfitProbeLiveTest {
         SAMPLES.put("105560", "KB금융(64 금융 — 계정 체계가 다르다)");
         SAMPLES.put("035420", "NAVER(63 정보서비스)");
         SAMPLES.put("207940", "삼성바이오로직스(21 의약품)");
+        }
     }
 
     /**
@@ -118,7 +146,10 @@ class DartControllingProfitProbeLiveTest {
             }
 
             for (String[] period : new String[][] {
-                    {"연간", SETTLED_YEAR, ANNUAL_REPORT}, {"분기", QUARTER_YEAR, HALF_REPORT}}) {
+                    {"연간", prop("probe.annualYear", SETTLED_YEAR),
+                            prop("probe.annualReport", ANNUAL_REPORT)},
+                    {"분기", prop("probe.quarterYear", QUARTER_YEAR),
+                            prop("probe.quarterReport", HALF_REPORT)}}) {
                 JsonNode body = DartProbeSupport.get(client, uri -> uri
                         .path("/fnlttSinglAcntAll.json")
                         .queryParam("crtfc_key", apiKey)

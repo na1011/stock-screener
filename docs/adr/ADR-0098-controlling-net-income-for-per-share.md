@@ -83,23 +83,29 @@ SELECT CASE
 
 ```premise 정정공시가 지배주주 순이익을 되돌리지 않았다
 psql -d stock_screener -At -c "SELECT CASE
-  WHEN count(*) FILTER (WHERE f.fiscal_period <> 'FY') = 0
-    THEN '잴 것이 없었다 — 국내 분기 행이 하나도 없다'
-  WHEN count(*) FILTER (WHERE f.fiscal_period <> 'FY'
-                          AND f.net_income_controlling IS NULL
-                          AND f.revision_no > 0) = 0
-    THEN 'OK 개정본 분기 행에 결손이 없다'
-  ELSE '개정본이 지배주주 순이익을 NULL로 되돌렸다: '
-       || count(*) FILTER (WHERE f.fiscal_period <> 'FY'
-                             AND f.net_income_controlling IS NULL AND f.revision_no > 0)
-       || '행 — full-statement-refill에 그 종목만 넘긴다' END
-FROM financial_statement f JOIN stock s ON s.id = f.stock_id
-WHERE f.is_latest AND s.market_code IN ('KOSPI', 'KOSDAQ')"
+  WHEN (SELECT count(*) FROM financial_statement WHERE is_latest AND revision_no > 0) = 0
+    THEN '잴 것이 없었다 — 개정본이 하나도 없다'
+  WHEN count(*) = 0 THEN 'OK 개정본이 지운 지배주주 순이익이 없다'
+  ELSE count(*) || '행이 개정본에서 사라졌다 — full-statement-refill에 그 종목만 넘긴다: '
+       || string_agg(DISTINCT s.ticker, ',') END
+FROM financial_statement cur
+JOIN financial_statement old ON old.stock_id = cur.stock_id
+  AND old.fiscal_year = cur.fiscal_year AND old.fiscal_period = cur.fiscal_period
+  AND old.revision_no < cur.revision_no AND NOT old.is_latest
+JOIN stock s ON s.id = cur.stock_id
+WHERE cur.is_latest AND s.market_code IN ('KOSPI', 'KOSDAQ')
+  AND cur.net_income_controlling IS NULL AND old.net_income_controlling IS NOT NULL"
 ```
 
-`revision_no > 0`으로 좁히는 것이 이 펜스의 핵심이다. **초판에서 비는 것은 「비지배지분이 없어
-소스가 행을 안 낸다」라 정상**이고, 그것까지 세면 매 세션 거짓 발견이 난다. 개정본에서만 비는
-것이 「메우러 와서 지우고 간」 자리다.
+**축은 「개정본인가」가 아니라 「이전 리비전에 있던 값이 사라졌는가」다.** 처음에는 개정본에서
+NULL인 행을 셌는데 **8행이 전부 거짓 발견이었다** — 재보니 소스 사정이었다: 그 분기의
+연결재무제표가 아예 없어 별도로 폴백한 경우(SFA넥셀 2026 Q2·카카오뱅크 2026 Q1이 `status 013`),
+그리고 보험사처럼 지분 구분을 원래 안 내는 회사(코리안리). **전자는 별도재무제표라 지배·비지배
+구분이 원리적으로 없고, 둘 다 폴백이 옳은 동작이다.**
+
+`FinancialWriter`가 개정본을 NULL로 쌓는 경로는 실재하므로(같은 파일 javadoc의 *"메우러 와서
+지우고 가는 셈"*) 그것만 정확히 잡는다 — **옛 행에 값이 있었는데 최신 개정본에 없으면** 그것이
+지운 것이다. 실측 0행.
 
 ## 배경
 

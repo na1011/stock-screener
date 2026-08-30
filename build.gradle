@@ -397,6 +397,14 @@ tasks.register('liveTest', Test) {
     }
     // 관통테스트는 실제 키를 쓰는 것이 목적이므로 주입한다(단위 test와 정반대다).
     applyDotEnv(it)
+    // 탐침의 표본·기간을 밖에서 준다. gradle의 -D는 gradle JVM에만 닿으므로 명시적으로 넘긴다.
+    // 결손 종목을 겨냥해 다시 잴 때 쓴다 — 표본을 코드에 박으면 그때마다 커밋에 섞인다.
+    ['probe.tickers', 'probe.annualYear', 'probe.annualReport',
+     'probe.quarterYear', 'probe.quarterReport'].each { key ->
+        if (System.getProperty(key)) {
+            systemProperty key, System.getProperty(key)
+        }
+    }
     // 실패해도 나머지를 계속 돌려 어느 소스가 깨졌는지 한 번에 본다.
     ignoreFailures = false
     testLogging {
