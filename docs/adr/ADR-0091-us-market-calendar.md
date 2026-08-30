@@ -120,14 +120,21 @@ SELECT CASE
     THEN (SELECT count(*) FROM extra) || '행이 비세션인데 봉이 있다: '
          || (SELECT string_agg(ticker || ' ' || d, ', ') FROM (SELECT * FROM extra LIMIT 10) x)
          || ' — 달력이 세션을 빠뜨렸다. 이쪽이 먼저다: 열린 날을 닫혔다고 하면 수집 실패가 휴장으로 접혀 침묵한다'
-  WHEN (SELECT count(*) FROM missing) > 0
-    THEN (SELECT count(*) FROM missing) || '행이 세션인데 봉이 없다: '
-         || (SELECT string_agg(ticker || ' ' || d, ', ') FROM (SELECT * FROM missing LIMIT 10) y)
-         || ' — 무거래·비활성·거래정지·수집 실패 중 하나이고 넷은 아직 안 갈린다'
-  ELSE 'OK 판정 대상 ' || (SELECT count(*) FROM scoped) || '종목에서 양방향 0건 (달력 '
-       || (SELECT count(*) FROM market_calendar) || '행)'
+  ELSE 'OK 달력이 세션을 빠뜨린 곳이 없다 — 판정 대상 ' || (SELECT count(*) FROM scoped)
+       || '종목 · 세션인데 봉 없음 ' || (SELECT count(*) FROM missing)
+       || '행(무거래·비활성·거래정지·수집 실패가 안 갈린 수이고 발화 조건이 아니다)'
   END"
 ```
+
+**MUST: `missing`으로 발화하지 않는다 — 세는 것은 맞고 발화 조건이 아니다.** 이 결정이
+스스로 *"`BAR_ON_NON_SESSION`이 먼저다 … 반대 방향은 시끄러울 뿐이다"*로 적어 둔 그 우선순위를
+전제에도 그대로 건 것이다. 종목·구간이 늘면 `missing`은 **반드시** 생긴다 — 1,005종목 × 7년에서
+**2,778행**이고(2026-08-31 실측) 그중 무거래·비활성·거래정지·수집 실패가 안 갈린다.
+파일럿이 11종목 × 1년이라 0이었을 뿐이다.
+
+**상시 붉은 펜스는 곧 무시되고, 그러면 `extra`까지 함께 묻힌다.** 그쪽이 이 결정이 실제로
+지키려는 것이다 — **달력이 세션을 빠뜨리면 수집 실패가 휴장으로 접혀 영구히 침묵한다.**
+그래서 `missing`은 `OK` 문장 안에 수로 싣고, 붉히는 것은 `extra`만 남긴다.
 
 **두 방향을 한 전제에 둔 이유는 같은 스캔이기 때문이고, 순서를 「비세션인데 봉 있음」 먼저로
 둔 이유는 그쪽이 치명적 방향이기 때문이다.** 모집단이 비는 경우를 둘로 갈랐다 —

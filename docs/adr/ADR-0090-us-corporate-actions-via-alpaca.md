@@ -86,29 +86,52 @@ applies_to:
 
 소스가 아직 그대로인지를 지킨다. 실측값의 정본은 `docs/api-spec/alpaca-corporate-action.md`다.
 
-```premise 미국 수정종가에 남은 불연속이 없다
+```premise 계수를 반영한 효력일에 남은 불연속이 없다
 psql -d stock_screener -At -c "
-WITH b AS (SELECT s.ticker, p.trade_date, p.adj_close,
-       lag(p.adj_close) OVER (PARTITION BY p.stock_id ORDER BY p.trade_date) AS prev
-   FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code = 'US'),
-d AS (SELECT * FROM b WHERE prev IS NOT NULL AND prev > 0
-       AND (adj_close / prev > 1.30 OR adj_close / prev < 0.70))
+WITH applied AS (
+  SELECT c.stock_id, s.ticker, c.effective_date
+  FROM corporate_action c JOIN stock s ON s.id = c.stock_id
+  WHERE s.market_code = 'US' AND c.status = 'APPLIED'),
+b AS (SELECT p.stock_id, p.trade_date, p.adj_close,
+             lag(p.adj_close) OVER (PARTITION BY p.stock_id ORDER BY p.trade_date) AS prev
+        FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code = 'US'),
+resid AS (
+  SELECT DISTINCT a.ticker, b.trade_date
+  FROM applied a JOIN b ON b.stock_id = a.stock_id
+   AND b.trade_date BETWEEN a.effective_date - 3 AND a.effective_date + 3
+  WHERE b.prev IS NOT NULL AND b.prev > 0
+    AND (b.adj_close / b.prev > 1.30 OR b.adj_close / b.prev < 0.70))
 SELECT CASE
-  WHEN (SELECT count(*) FROM b WHERE prev IS NOT NULL) = 0
-    THEN '잴 것이 없었다 — 미국 봉이 둘 이상인 종목이 없다'
-  WHEN (SELECT count(*) FROM d) = 0
-    THEN 'OK 미국 수정종가에 임계를 넘는 불연속이 없다 (' || (SELECT count(*) FROM b) || '행)'
-  ELSE (SELECT count(*) FROM d) || '행이 아직 불연속이다: '
-       || (SELECT string_agg(ticker || ' ' || trade_date, ', ') FROM d)
-       || ' — 원장이 비었거나 효력일이 우리 봉과 어긋난다. 계수는 효력일 *이전* 봉에 걸리므로 '
-       || '하루만 밀려도 이미 조정된 봉이 한 번 더 나뉜다.'
+  WHEN (SELECT count(*) FROM applied) = 0
+    THEN '잴 것이 없었다 — 계수가 반영된 미국 기업행위가 없다'
+  WHEN (SELECT count(*) FROM resid) = 0
+    THEN 'OK 계수가 반영된 ' || (SELECT count(*) FROM applied) || '건의 효력일 언저리에 남은 불연속이 없다'
+  ELSE (SELECT count(*) FROM resid) || '건이 효력일 언저리에 아직 불연속이다: '
+       || (SELECT string_agg(ticker || ' ' || trade_date, ', ') FROM (SELECT * FROM resid LIMIT 12) x)
+       || ' — 효력일이 우리 봉과 어긋났다. 계수는 효력일 *이전* 봉에 걸리므로 하루만 밀려도 '
+       || '이미 조정된 봉이 한 번 더 나뉜다.'
   END"
 ```
+
+**MUST: 모집단을 「계수를 반영한 효력일의 언저리」로 좁힌다.** 처음에는 미국 봉 **전체**의
+`adj_close` 불연속을 셌는데, 그 형태는 종목·구간이 늘어나면 **의도한 동작에 운다** —
+1,000종목 × 7년에서 **771행**이 임계를 넘고 그 배수 분포가 1.3~1.9배 414 · 0.25~0.7배 260으로
+**대부분이 분할이 아니라 큰 하루**다(2026-08-31 실측 · ADR-0100). 코로나 급락일과 밈 주식이
+그대로 들어온다. 상시 붉은 펜스는 곧 무시되고, **그러면 이 전제가 잡으라고 만들어진
+`extra` 방향까지 함께 묻힌다.**
+
+**좁힌 뒤에 못 보게 되는 것도 적는다**: **원장이 통째로 빈 종목**은 이제 여기 안 걸린다.
+그것을 재는 자리는 ADR-0088의 premise다. 이 전제는 아래 문장이 스스로 밝히는 것 하나만 잰다.
 
 **이 전제가 묻는 것은 원장의 유무가 아니라 효력일의 정합이다.** `adj_close = close × adj_factor`
 불변식도 · 원장이 `APPLIED`인 것도 · 재실행 0행도 · 사건 수와 불연속 수의 대조도 **효력일이
 하루 밀린 것을 못 본다**(ADR-0050이 적어 둔 자리). **결과에서 재는 것이 이 전제뿐이다.**
 임계는 `PriceDiscontinuity.LIMIT_UPPER`/`LOWER`와 같은 값이고, 그쪽이 바뀌면 여기도 바꾼다.
+
+**대조군으로 확인했다**(2026-08-31): 원장의 효력일만 하루 옮기면 **안 붉는다** — 이미 저장된
+`adj_close`가 안 바뀌기 때문이고, 그것이 이 전제가 **결과에서** 재는 자리라는 증거다.
+효력일 직전 봉의 `adj_close`를 조정 전 값으로 되돌리면(계수가 하루 밀려 적용된 모양) 그때
+붉는다. 둘 다 롤백하는 트랜잭션 안에서 쟀다.
 
 ## 배경
 
