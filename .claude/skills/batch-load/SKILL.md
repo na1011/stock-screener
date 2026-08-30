@@ -58,74 +58,95 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 | `corporate-action-judge` | 원장 판정 — 상태와 값을 사람이 준다 | **외부 호출 0.** `--ca-id` 필수. 검증은 전부 `CorporateActionLedger.judge`가 한다(HTTP 경로와 같은 문). **판정해도 계수는 안 바뀐다** — `adjustment-rebuild` → `backfill`이 뒤따라야 끝나고, 잡이 그 명령을 찍어 준다. 실패하면 실행 행을 아예 안 연다(사람의 오타가 운영자 알림을 타면 안 된다). ADR-0084 |
 | `backfill` | 지표 계산 | 지정한 구간을 **날짜별로 반복**한다. `--tickers`로 종목을 좁혀도 **백분위·업종 상대값은 전 종목에서 나온다.** 그리고 **백분위(`*_PCTL`)는 돌린 날짜에만 생긴다** — 원본 지표는 실행 한 번에 수백 일자를 채우는데 백분위는 그날 하루뿐이라, 새 백분위를 더한 뒤 과거 날짜를 열면 **원본은 있는데 순위가 없다** |
 
-## 미국 전량 적재 전에 닫아야 하는 것 (ADR-0088)
+## 미국을 적재할 때 (ADR-0088·0099)
 
-파일럿은 **2024년 11종목**만 넣었다. 그 창을 고른 이유가 곧 전량 적재의 선행 조건이다.
-
-**거래일을 시장으로 가르는 것은 끝났다.** ADR-0093이 `PriceCalendar`의 셋 ·
-`IndicatorRetentionPolicy.writeCutoff`·`purge` · `IndicatorBackfillJob`의 보존 경계 판정 ·
-`DailyUpdateJob`의 알림 둘과 `asOf` · 워치리스트를 시장별로 만들었고,
-**화면 기준일은 ADR-0095가 닫았다** — `IndicatorCalendar`가 파생 색인
-`indicator_trade_date`를 시장별로 읽고 `AsOfResolver`가 요청에서 시장을 유도한다.
-(`indicator_value`에 `stock`을 조인하면 0.099ms가 1,333ms가 되는데 그것이 요청마다 도는
-질의라 색인을 뒀다.)
-
-**MUST NOT: `IndicatorBackfillJob.tradeDatesBetween`을 시장별로 가르지 않는다** —
-날짜 루프가 묻는 것은 *어느 날짜를 한 번씩 돌 것인가*이고 그 답은 **합집합**이다(ADR-0093 §규칙).
-
-**남은 것은 ADR-0095 §결과가 적는 셋이다.** 그중 **유니버스 미지정 요청**이 미국을 켜는 순간
-다시 열린다 — 활성 유니버스 전체의 시장 집합을 쓰므로 최댓값이 미국 날짜가 될 수 있다.
-
-- 보존창(최근 180거래일) 안의 국내 휴장 평일 **13일 중 미국 개장이 9일**이다(2026-08-29 실측).
-- 2024년 창은 현재 181번째 거래일(2025-12-01)보다 과거라 그 집합에 못 들어온다. **피한 것이지
-  고친 것이 아니다** — 최근 구간을 적재하면 그 회피가 끝난다.
-- **`MarketCalendar.isWeekend`는 고칠 자리가 아니다.** 주어진 `LocalDate`의 요일은 시간대와
-  무관하다. 시간대가 걸리는 곳은 「어제」를 정하는 `DailyUpdateJob.targetDateFor`이고, 지금은
-  15일 창이 흡수한다(ADR-0042).
-
-**적재 뒤 첫 확인은 봉 수가 아니라 경계다:**
+**대상 유니버스가 둘이고 뜻이 다르다.** `US_LISTED`는 NYSE·NASDAQ 상장 전량이라 「적재는
+넓게」의 쪽이고, `US_TOP1000`은 시총 상위 N이라 **노출과 백필의 모집단**이다(ADR-0099).
+**시세·기업행위·계수는 뒤쪽을 대상으로 돌린다** — 앞쪽으로 돌리면 여덟 배를 태우고 그중
+대부분이 지표를 못 낸다.
 
 ```bash
-psql -d stock_screener -At -c "SELECT min(trade_date) FROM
-  (SELECT DISTINCT trade_date FROM price_daily ORDER BY trade_date DESC LIMIT 181) x"
+--job=universe --universe=US_LISTED     # 상장 목록 갱신. 1콜
+--job=universe --universe=US_TOP1000    # 시총 순위 재계산. 자산 1콜 + 종가 묶음 약 19콜
+--job=initial-load --universe=US_TOP1000 --skip-financial=true --price-years=7 --reload-existing=true
+--job=company-profile --universe=US_TOP1000
 ```
 
-그리고 **`US_LISTED`를 켜는 것은 또 다른 문제다.** 배치를 통째로 죽이던 자리
-(`CorporateActionJob`의 루프 앞 `requireSources`)는 ADR-0090이 닫았고 업종은 ADR-0092가 닫았다.
-남은 것은 **거버넌스·전체재무제표 어댑터가 없어 그 두 잡이 매 실행 8,504건 부분 실패를
-남기는 것**이다. 무엇이 비어 있는지는 ADR-0086의 premise가 축별로 답한다.
+- **`US_TOP1000`은 `US_LISTED`의 편입 원장을 안 본다** — 실행마다 소스에서 목록을 새로 받는다.
+  그래도 **순서가 있다**: 새로 상장한 종목의 `stock` 행과 재무는 `US_LISTED` 갱신 뒤에
+  생기고, 주식수가 없으면 후보가 못 된다.
+- **`--reload-existing=true`가 없으면 대상이 0건이고 잡은 성공으로 끝난다.** 유니버스 경로가
+  티커로 좁힌 **뒤에** 봉이 있는 종목을 걸러낸다.
+- **`--price-years`는 읽기 창이 정한다.** `IndicatorRegistry.readWindowBars()`가 1,441봉이라
+  약 5.7년이고, 그보다 짧으면 창이 긴 지표가 **통째로 비는데 배치는 SUCCESS다.**
+  콜 수는 창과 무관하지만(한 종목 한 페이지) **저장은 무관하지 않다.**
+- **거래일을 시장으로 가르는 것은 끝났다.** ADR-0093이 `PriceCalendar`의 셋 ·
+  `IndicatorRetentionPolicy.writeCutoff`·`purge` · `IndicatorBackfillJob`의 보존 경계 판정 ·
+  `DailyUpdateJob`의 알림 둘과 `asOf` · 워치리스트를 시장별로 만들었고, **화면 기준일은
+  ADR-0095가 닫았다**(파생 색인 `indicator_trade_date`).
+  **MUST NOT: `IndicatorBackfillJob.tradeDatesBetween`을 시장별로 가르지 않는다** — 날짜 루프가
+  묻는 것은 *어느 날짜를 한 번씩 돌 것인가*이고 그 답은 **합집합**이다(ADR-0093 §규칙).
+- **적재 뒤 첫 확인은 봉 수가 아니라 경계이고, 그 질의를 시장으로 좁힌다.** 전 시장 합집합으로
+  세면 달력이 다른 시장의 봉이 들어오는 것만으로 경계가 밀려 멀쩡한 시장이 「보존 초과」로
+  읽힌다.
 
-**켜면 `company-profile`의 기본 대상도 함께 넓어진다** — 지금은 `universe.is_active` 조인이
-미국을 막고 있어 평소 0콜이지만, 켜는 순간 업종이 빈 미국 종목이 전부 대상이 된다.
-**대상 2,238종목·실제 콜 423**이고(2026-08-30 실측 — 6,266은 ADR-0092가 이미 채웠다),
-그중 **1,815는 CIK에 안 붙어 영원히 결손으로 남아 매 실행 다시 대상이 된다.**
-`AdminJobLauncher`의 「전량이어도 350콜」 주석이 그때 거짓이 된다.
+```bash
+psql -d stock_screener -At -c "SELECT market_code, min(trade_date) FROM (
+  SELECT market_code, trade_date, row_number() OVER (PARTITION BY market_code
+    ORDER BY trade_date DESC) rn
+  FROM (SELECT DISTINCT s.market_code, p.trade_date
+        FROM price_daily p JOIN stock s ON s.id = p.stock_id) d) t
+WHERE rn <= 181 GROUP BY market_code"
+```
+
+**켜는 것은 또 다른 문제다.** 배치를 통째로 죽이던 자리(`CorporateActionJob`의 루프 앞
+`requireSources`)는 ADR-0090이, 업종은 ADR-0092가 닫았다. **남은 다섯의 정본은 ADR-0099
+§켜기 전에 닫아야 하는 것**이고, 무엇이 비어 있는지는 ADR-0086의 premise가 축별로 답한다.
 
 ## 미국 기업 행위와 계수 (ADR-0090)
 
 **두 잡을 이어 돌려야 끝난다.** 원장만 채우면 계수는 그대로인데 **둘 다 성공으로 끝난다.**
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
-  --job=corporate-action --universe=US_LISTED --from=2023-12-01 --tickers=AAPL,NVDA,…'
-
-./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
-  --job=adjustment-rebuild --universe=US_LISTED --tickers=AAPL,NVDA,…'
+--job=corporate-action --universe=US_TOP1000 --from=<그 시장 봉의 min(trade_date)>
+--job=adjustment-rebuild --universe=US_TOP1000
 ```
 
-- **`--universe=US_LISTED`가 없으면 즉시 실패한다.** 두 잡의 기본 대상이 활성 유니버스인데
-  미국은 비활성이라 `--tickers`만 줘도 *"편입 중인 활성 종목이 하나도 없다"*가 된다.
-- **`--from`을 준다.** 기본값은 `min(price_daily.trade_date)`(국내가 정한 전역값)인데, 미국 봉이
-  없는 구간에서는 **원장의 근접중복 창이 퇴화한다** — 두 날짜 사이의 *봉 수*로 5거래일을 세므로
-  봉이 없으면 45일 안의 두 사건이 무조건 한 사건으로 붙고, **알림 없이 `log.info`로 끝난다.**
+- **`--universe`가 없으면 즉시 실패한다.** 두 잡의 기본 대상이 활성 유니버스인데 미국이
+  비활성이면 `--tickers`만 줘도 *"편입 중인 활성 종목이 하나도 없다"*가 된다.
+- **`--from`을 준다.** 기본값 `min(price_daily.trade_date)`는 **전 시장 전역값**이라, 그 시장의
+  봉이 없는 구간에서는 **원장의 근접중복 창이 퇴화한다** — 두 날짜 사이의 *봉 수*로 5거래일을
+  세므로 봉이 없으면 45일 안의 두 사건이 무조건 한 사건으로 붙고, **알림 없이 `log.info`로 끝난다.**
 - **`--server.port=0`이 사실상 필수다.** 운영 앱이 8080을 물고 있으면 러너가 아예 시작되지
   않은 채 `BUILD SUCCESSFUL` + 종료코드 0이 난다.
 
-**MUST NOT: 재구축 알림을 보고 미국에 백필을 돌리지 않는다.** `alertOnInvalidation`이
-**계수가 바뀐 종목 수**로 문장을 지어(`invalidate`가 `void`라 실제 삭제 행을 못 센다)
-*"지표가 보존 창 전체에서 지워졌다 … 백필하라"*를 보내는데, **미국 지표는 0행이라 지워진 것이
-없다.** 그 말을 따르면 미국에 아무 일도 안 하면서 **한 시간 넘게 도는 백필**이 걸린다.
-국내는 그 알림이 참이므로 그대로 따른다.
+**IMPORTANT — `corporate-action`의 급변 휴리스틱 임계는 KRX 가격제한폭이다.**
+`AdjustmentRecalculator.detectCandidates`가 `PriceDiscontinuity`의 `1.30`/`0.70`으로 후보를
+올리는데, 그 상수의 javadoc이 스스로 「KRX 가격제한폭」이라 적는다. **일일 가격제한이 없는
+시장에서는 정상 매매가 그 폭을 넘고**, 게다가 그 시장의 `listed_shares`가 비면 비율 대조가
+없어 후보가 전부 `UNKNOWN`+`OBSERVED`로 쌓인다. 그러면 `findUnadjusted`가 그것을 그대로
+돌려주고 `UnadjustedActionGuard`가 **그 효력일을 창에 삼키는 산출 일자를 억제한다** —
+워밍업이 긴 지표는 **한 건만 걸려도 보존 창 전체가 빈다.** 배치는 SUCCESS다.
+
+**시험: 그 시장에서 이 술어가 몇 건을 올리는가를 돌리기 전에 셌는가** → 안 셌으면 센다.
+국내 대조군은 이웃 쌍 543,002 중 **72건·67종목**(0.013%)이다. 그 층을 크게 넘으면 임계를
+시장별로 가르는 것이 먼저다.
+
+```sql
+SELECT count(*) FILTER (WHERE close/prev > 1.30 OR close/prev < 0.70) AS 급변,
+       count(DISTINCT stock_id) FILTER (WHERE close/prev > 1.30 OR close/prev < 0.70) AS 종목
+FROM (SELECT p.stock_id, p.close,
+             lag(p.close) OVER (PARTITION BY p.stock_id ORDER BY p.trade_date) prev
+      FROM price_daily p JOIN stock s ON s.id = p.stock_id
+      WHERE s.market_code = '<시장>') t
+WHERE prev > 0 AND close > 0;
+```
+
+**MUST NOT: 재구축 알림을 보고 지표가 없는 시장에 백필을 돌리지 않는다.**
+`alertOnInvalidation`이 **계수가 바뀐 종목 수**로 문장을 지어(`invalidate`가 `void`라 실제
+삭제 행을 못 센다) *"지표가 보존 창 전체에서 지워졌다 … 백필하라"*를 보내는데, 그 시장에
+지표가 없으면 **지워진 것이 없다.** 그 말을 따르면 아무 일도 안 하면서 **한 시간 넘게 도는
+백필**이 걸린다.
 
 **적재 뒤 확인은 원장 행 수가 아니라 `adj_close`다.** 효력일이 하루만 밀려도 이미 조정된 봉이
 한 번 더 나뉘는데, `adj_close = close × adj_factor`도 · 원장의 `APPLIED`도 · 재실행 0행도
@@ -133,23 +154,25 @@ psql -d stock_screener -At -c "SELECT min(trade_date) FROM
 
 ## 미국 재무만 받는다 (ADR-0089)
 
-시세가 과거 구간으로만 들어와 있으므로 **재무를 받을 때 시세를 함께 받으면 안 된다.**
+**시세와 재무의 창이 다를 때 둘을 함께 받으면 안 된다.** `--skip-price`가 없으면 최근 봉이
+딸려 들어와 보존 경계와 화면 기준일이 함께 밀린다.
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load \
-  --universe=US_LISTED --skip-price=true --reload-existing=true --financial-years=3 \
-  --tickers=AAPL,BRK.A,BRK.B,F,META,MSFT,NVDA,RH,T,VTEX'
+--job=initial-load --universe=US_TOP1000 --skip-price=true --reload-existing=true \
+  --financial-years=7 --tickers=AAPL,MSFT
 ```
 
-**`--reload-existing=true`가 없으면 대상이 0건이 되고 잡이 성공으로 끝난다** — 유니버스
-경로는 티커로 좁힌 **뒤에** 봉이 있는 종목을 걸러낸다. `--skip-price`가 없으면 최근 봉이
-함께 들어와 위의 화면 기준일이 밀린다.
+**EDGAR는 종목당 1콜이다** — DART가 (연도·보고서코드)로 나눠 받는 것과 다르다. 응답이
+78KB~7.9MB라 **콜 수가 아니라 대역폭이 소요를 정한다.**
 
-**`KIM.PRL`처럼 SEC 매핑 파일에 없는 티커는 `NOT_FOUND`로 실패한다 — 정상이다.**
-우리 8,504 중 1,815가 거기 없다(ETF·펀드 1,332, 우선주·워런트·유닛 483).
+**SEC 매핑 파일에 없는 티커는 `NOT_FOUND`로 실패한다 — 정상이다.** 우리 미국 종목 중
+약 1,815가 거기 없다(ETF·펀드 1,332, 우선주·워런트·유닛 483).
 
 **적재 뒤 확인은 행 수가 아니라 넷이다**: 국내 재무가 안 변했는가 · 미국 봉이 안 늘었는가 ·
-보존 경계가 그대로인가 · 미국 지표가 여전히 0인가. **두 번 돌려 정정이 0건**이어야 한다.
+보존 경계가 시장마다 그대로인가 · **두 번 돌려 정정이 0건인가.**
+
+**MUST: 「재무가 0행인 종목」을 재개 기준으로 바꾸지 않는다** — EDGAR가 정당하게 0건을 주는
+종목이 매 실행 다시 잡혀 재개가 수렴하지 않는다(`InitialLoadResumeTest`가 기각해 뒀다).
 
 ## 봉이 없는 날을 판정할 때 (ADR-0091)
 
