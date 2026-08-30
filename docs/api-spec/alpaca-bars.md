@@ -206,9 +206,6 @@ page 10~13: NVDA만            (13페이지에서 next_page_token=null)
 그 셋은 `IndicatorContext`의 지수 시계열을 읽으므로(`Beta104wCalculator`·`ExcessReturn`)
 데이터가 아무리 들어와도 값이 안 난다.
 
-**MUST NOT: 닫힌 문을 `TURNOVER_60` 하나로 적지 않는다 — 넷이다.** 그 문장이 참이던 것은
-미국 시장지수를 축으로 세기 전이고, 세어 보니 지수를 읽는 셋이 함께 닫혀 있다.
-
 **시가총액 계열은 ADR-0097이 열었다.** `MARKET_CAP`·`TURNOVER_RATIO`·`SHARES_GROWTH_3Y`·
 `EPS_CAGR_5Y`·`EPS_GROWTH_TTM_YOY`·`RETAINED_TO_MARKET_4Y`와 그 파생 셋
 (`FCF_YIELD`·`NCAV_TO_MARKET`·`ALTMAN_Z`)이 이제 `FinancialMath.sharesOf`를 타
