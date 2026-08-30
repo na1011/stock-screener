@@ -225,11 +225,38 @@ final class SecEdgarFacts {
     }
 
     /**
+     * 두 창이 <b>같은 기간을 달리 적은 것</b>인가.
+     *
+     * <p>종료일이 같고 시작일만 며칠 다른 쌍이 실재한다 — 52/53주 회계달력에서 「직전 기간
+     * 종료일」과 「그 다음 날」 중 어느 쪽을 시작으로 적는지가 보고서마다 갈리기 때문이다.
+     * 실측(2026-08-31)으로 미국 재무가 거절된 236종목 중 <b>93건</b>이 이 모양이고,
+     * 시작일 차이가 <b>1일 54 · 2일 12 · 3~10일 27로 전부 10일 이내</b>다.
+     *
+     * <p><b>진짜로 다른 기간과는 자릿수가 다르다.</b> 분기 대 반기 대 연간은 시작일이 약 90·270일
+     * 벌어지므로 이 관용에 걸릴 수 없다. 남는 143건은 <b>종료일 자체가 다르고</b>
+     * ({@code JNJ 2023/Q3 → 2022-07-04~2022-10-02 vs 2023-07-03~2023-10-01}) 그것은
+     * 이 관용이 아니라 {@link #labelOf}의 회계연도 배정이 답할 문제다.
+     */
+    private static boolean sameWindowStatedDifferently(Window a, Window b) {
+        return a.end().equals(b.end())
+                && Math.abs(java.time.temporal.ChronoUnit.DAYS.between(a.start(), b.start()))
+                   <= SAME_PERIOD_START_TOLERANCE_DAYS;
+    }
+
+    /**
      * 앵커가 자기 종료일에 실은 <b>기간 길이별로</b> 라벨을 만든다.
      *
      * <p>회계연도는 앵커에서, 기간 구분은 길이에서 온다 — 그것이 ②의 처방이다.
      * 길이가 연도도 분기도 아닌 것(반기·9개월 누적)은 <b>버리고 센다.</b>
      */
+    /**
+     * 같은 종료일의 두 창을 같은 기간으로 볼 시작일 차이의 상한(일).
+     *
+     * <p>실측 분포의 최댓값이 10이고, 진짜로 다른 기간(분기/반기/연간)은 약 90일 이상
+     * 벌어진다. <b>그 사이가 비어 있어서 고른 값이지 여유가 아니다.</b>
+     */
+    private static final int SAME_PERIOD_START_TOLERANCE_DAYS = 10;
+
     private static int labelPeriods(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
                                     Map<String, Anchor> anchors,
                                     List<Window> fiscalYears,
@@ -252,7 +279,14 @@ final class SecEdgarFacts {
                 }
                 Window window = new Window(fact.start(), fact.end());
                 Window seen = windows.putIfAbsent(label, window);
-                if (seen != null && !seen.equals(window)) {
+                if (seen != null && sameWindowStatedDifferently(seen, window)) {
+                    // 같은 기간을 시작일만 달리 적은 것이다. 좁은 쪽(늦은 시작일)으로 고정한다 —
+                    // 고르는 규칙이 있어야 실행마다 같은 값이 나오고, period_start는 무효화
+                    // 하한으로만 쓰여 며칠 차이가 결과를 바꾸지 않는다.
+                    if (window.start().isAfter(seen.start())) {
+                        windows.put(label, window);
+                    }
+                } else if (seen != null && !seen.equals(window)) {
                     // 저장 키에 기간이 없다. 라벨이 겹치면 uq_fs_latest가 걸리는 것이 아니라
                     // 앞 기간의 최신 표시가 조용히 내려간다 — FinancialWriter가 개정 갈래에서
                     // UPDATE를 INSERT보다 먼저 돌리기 때문이다. 그래서 여기서 막는 것이

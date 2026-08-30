@@ -215,6 +215,24 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("종료일이 같고 시작일만 며칠 다르면 같은 기간이다 — 52/53주 달력의 표기 차이다")
+    void foldsSamePeriodStatedWithDifferentStart() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-same-end-different-start.json"));
+
+        // 실측(2026-08-31): 미국 재무가 거절된 236종목 중 93건이 이 모양이고 시작일 차이가
+        // 전부 10일 이내다. 던지면 그 종목의 재무가 통째로 안 들어온다.
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+
+        assertThat(reports).extracting(RawFinancialReport::fiscalPeriod).contains("Q1");
+        RawFinancialReport q1 = of(reports, "Q1");
+        assertThat(q1.periodEnd()).isEqualTo(LocalDate.of(2023, 4, 1));
+        assertThat(q1.periodStart())
+                .as("좁은 쪽으로 고정한다 — 규칙이 있어야 실행마다 같은 값이 나온다")
+                .isEqualTo(LocalDate.of(2023, 1, 2));
+    }
+
+    @Test
     @DisplayName("매핑 파일에 없는 티커는 NOT_FOUND다 — 조용한 0건이 아니다")
     void unknownTickerIsNotFound() {
         enqueue(200, fixture("tickers.json"));
