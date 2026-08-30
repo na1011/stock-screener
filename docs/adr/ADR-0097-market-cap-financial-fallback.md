@@ -27,10 +27,15 @@ applies_to:
 
 ## 규칙
 
-- **MUST NOT: 이 여섯에 `DataRequirement`의 재무를 선언하지 않는다.** 재무는 이 지표들의
+- **MUST NOT: 재무 없이도 값이 나는 것에 `DataRequirement`의 재무를 선언하지 않는다.**
+  **여섯 중 셋이 그렇다** — `MARKET_CAP`·`TURNOVER_RATIO`·`SHARES_GROWTH_3Y`가 `priceBars`만
+  선언한다. 나머지 셋(`EPS_CAGR_5Y`·`EPS_GROWTH_TTM_YOY`·`RETAINED_TO_MARKET_4Y`)은 재무가
+  **진짜 필수 입력**이라 `priceAndFinancial`을 그대로 쓴다 — **코드가 옳고 이 문구가 넓었다.** 재무는 이 지표들의
   **필수 입력이 아니다**(국내는 재무 없이 값을 낸다). 선언하면
   `IndicatorRunner.inputsWereReadable`이 「재무가 통째로 없으면 걷지 않는다」로 접어
-  **재무 0행 종목에서 옛 행이 영영 안 걷힌다** — 국내에 실재한다(맥쿼리인프라·인제니아).
+  **재무 0행 종목에서 옛 행이 영영 안 걷힌다** — 국내에 실재한다(맥쿼리인프라).
+  **인제니아는 더 이상 그 사례가 아니다** — 2026-06-30 재무가 들어왔고, 그 종목이 안 걷히던
+  이유는 재무 부재가 아니라 **통화 게이트**였다(ADR-0080 §규칙이 그것을 열었다).
   **`IndicatorRunnerTest`의 꼬리 걷기 테스트가 이것을 잡았다.**
   - 그런데도 `calculate`가 `context.quarterlyFigures()`를 쓸 수 있는 이유는 러너가
     **`registry.maxFinancialYears()`로 전 계산기의 최대 연수를 한 번에 읽기** 때문이다.

@@ -7,7 +7,8 @@ applies_to:
   - "src/main/java/com/stockscreener/pipeline/datasource/CollectedMarkets.java"
   - "src/main/java/com/stockscreener/pipeline/collector/StockRegistrar.java"
   - "src/main/java/com/stockscreener/pipeline/batch/InitialLoadJob.java"
-  # 시장을 안 가르고 price_daily의 거래일을 세는 자리. 전량 적재의 선행 조건이다(§결과).
+  # 시장을 안 가르고 price_daily의 거래일을 세던 자리. ADR-0093이 넷을 닫았고,
+  # 백필의 날짜 합집합 하나만 의도로 남았다(§결과).
   - "src/main/java/com/stockscreener/pipeline/collector/PriceCalendar.java"
   - "src/main/java/com/stockscreener/indicator/IndicatorRetentionPolicy.java"
   - "docs/api-spec/alpaca-bars.md"
@@ -129,8 +130,8 @@ SELECT CASE
 그래서 파일럿을 **2024년**으로 옮겼다 — 현재 181번째 거래일이 2025-12-01이라 2024년 일자는
 그 집합에 들어올 수 없다. 적재 뒤 경계가 2025-12-01 그대로임을 확인했다.
 
-**미국 시세가 매일 들어오기 시작하면 그 다섯 자리를 먼저 고쳐야 한다.** 파일럿은 그것을
-피한 것이지 고친 것이 아니다.
+**미국 시세가 매일 들어오기 시작하면 그 자리들을 먼저 고쳐야 한다.** 파일럿은 그것을
+피한 것이지 고친 것이 아니다 — **넷은 ADR-0093이 닫았고 화면 기준일은 ADR-0095가 닫았다.**
 
 ## 버린 대안
 
@@ -171,7 +172,10 @@ SELECT CASE
 - **수동 적재 경로가 「전 종목」의 네 번째 정의이고 잡 셋에 걸린다**(ADR-0090이 둘을 더했다).
   `StockRegistrar` 안에 두고 MUST NOT을
   붙였지만, 자동 경로가 그것을 부르기 시작하면 활성 유니버스의 뜻이 갈린다.
-- **시장을 안 가르는 거래일 읽기 다섯 자리가 그대로 남았다.** 전량 적재의 선행 조건이다.
+- **시장을 안 가르던 거래일 읽기 다섯 자리 중 넷은 ADR-0093이 닫았다.**
+  `PriceCalendar`의 셋과 `IndicatorRetentionPolicy.writeCutoff`가 시장을 받는다.
+  **남은 하나(`IndicatorBackfillJob.tradeDatesBetween`)는 의도다** — 날짜 루프가 묻는 것은
+  *어느 날짜를 한 번씩 돌 것인가*이고 그 답이 합집합이라, ADR-0093 §규칙이 가르는 것을 금지했다.
 
 **되돌리려면**: `AlpacaPriceAdapter`를 지우고 `CollectedMarkets.ALL`에서 `US`를 빼고
 ADR-0087의 premise 리터럴을 되돌린다. 적재된 미국 봉은 `price_daily`에서 시장으로 지운다 —

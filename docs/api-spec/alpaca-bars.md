@@ -189,8 +189,11 @@ page 10~13: NVDA만            (13페이지에서 next_page_token=null)
 | 지표 | 왜 |
 |---|---|
 | `TURNOVER_60` | `trade_value` 부재. **합성은 위에서 이미 기각했다** — 다시 열지 마라 |
-| `MARKET_CAP` · `TURNOVER_RATIO` · `SHARES_GROWTH_3Y` · `EPS_CAGR_5Y` · `EPS_GROWTH_TTM_YOY` · `RETAINED_TO_MARKET_4Y` | 봉의 주식수만 쓰고 **재무 폴백을 안 탄다**(`IndicatorContext.sharesOn`은 인자가 null이면 null을 낸다). `MarketCapCalculator`는 그 폴백을 MUST NOT으로 막아 뒀고 사유가 국내의 무상증자 구간이다 |
-| `FCF_YIELD` · `NCAV_TO_MARKET` · `ALTMAN_Z` | 위 `MARKET_CAP`에 의존한다 |
+
+**시가총액 계열은 ADR-0097이 열었다.** `MARKET_CAP`·`TURNOVER_RATIO`·`SHARES_GROWTH_3Y`·
+`EPS_CAGR_5Y`·`EPS_GROWTH_TTM_YOY`·`RETAINED_TO_MARKET_4Y`와 그 파생 셋
+(`FCF_YIELD`·`NCAV_TO_MARKET`·`ALTMAN_Z`)이 이제 `FinancialMath.sharesOf`를 타
+**재무에서 주식수를 폴백**한다. **닫힌 문으로 남은 것은 `TURNOVER_60` 하나다.**
 
 **재무 폴백을 타는 계산기는 일곱이다(2026-08-30 전수).** `PbrCalculator`가 `sharesOf`를 직접
 부르고, 나머지 여섯은 `FinancialMath.perShareOn`을 거친다 — `PerCalculator` ·
@@ -202,10 +205,12 @@ page 10~13: NVDA만            (13페이지에서 next_page_token=null)
 **그 폴백은 보고 종료일의 주식수를 봉 시점으로 옮긴다**(ADR-0096) — 분할 구간에서 보정하지
 않으면 NVDA 실측으로 시가총액이 1/10 또는 10배가 된다.
 
-**그래서 필수 게이트를 가진 프리셋 셋이 미국에서 영구 0건이다** — 버핏(`MARKET_CAP` 하한 +
-`TURNOVER_60`) · 린치 고성장(`EPS_CAGR_5Y` + `MARKET_CAP` 상한 + `TURNOVER_60`) ·
-린치 대형우량(`MARKET_CAP` 하한 + `EPS_CAGR_5Y`). **판정불가는 충족이 아니다**
-(`ConditionEvaluator.satisfiesRequired`가 일부러 그렇게 정했다).
+**필수 게이트를 가진 프리셋 셋이 미국에서 0건인 것은 그대로인데, 사유가 갈렸다.**
+버핏과 린치 고성장은 **`TURNOVER_60`이 없어** 여전히 영구 0건이다. **린치 대형우량은 이제
+값이 나온다** — 남은 것은 그 프리셋의 `MARKET_CAP` 하한이 **원화 6.773조**라는 것이고,
+USD 시총과 견주면 전부 탈락한다. **원인이 「값 없음」에서 「임계의 통화 단위」로 바뀌었고**,
+그것이 `progress.md`의 「프리셋 여덟을 국내로 묶는다」가 가리키는 자리다.
+**판정불가는 충족이 아니다**(`ConditionEvaluator.satisfiesRequired`가 일부러 그렇게 정했다).
 
 **주식수를 SEC에서 가져오면 해상도가 갈린다.** 국내는 소스가 봉마다 주고 실제로 350종목 중
 **183**이 최근 1년에 값이 바뀌었다. 미국은 보고 기간마다 값 하나뿐이라 약 63거래일에 한 값을

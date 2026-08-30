@@ -62,17 +62,19 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 
 파일럿은 **2024년 11종목**만 넣었다. 그 창을 고른 이유가 곧 전량 적재의 선행 조건이다.
 
-**거래일을 시장으로 가르는 것은 ADR-0093이 했다 — 하나만 남았다.**
-`PriceCalendar`의 셋 · `IndicatorRetentionPolicy.writeCutoff`·`purge` ·
-`IndicatorBackfillJob`의 보존 경계 판정 · `DailyUpdateJob`의 알림 둘과 `asOf` · 워치리스트가
-전부 시장별이다. **남은 것은 화면 기준일(`IndicatorCalendar`·`AsOfResolver`)이고, 여는 조건은
-ADR-0093 §결과가 적는다** — `indicator_value`에 `stock`을 조인하면 0.099ms가 1,207ms가 되는데
-그것이 요청마다 도는 질의다.
+**거래일을 시장으로 가르는 것은 끝났다.** ADR-0093이 `PriceCalendar`의 셋 ·
+`IndicatorRetentionPolicy.writeCutoff`·`purge` · `IndicatorBackfillJob`의 보존 경계 판정 ·
+`DailyUpdateJob`의 알림 둘과 `asOf` · 워치리스트를 시장별로 만들었고,
+**화면 기준일은 ADR-0095가 닫았다** — `IndicatorCalendar`가 파생 색인
+`indicator_trade_date`를 시장별로 읽고 `AsOfResolver`가 요청에서 시장을 유도한다.
+(`indicator_value`에 `stock`을 조인하면 0.099ms가 1,333ms가 되는데 그것이 요청마다 도는
+질의라 색인을 뒀다.)
 
-**남은 하나가 무엇을 막고 있는가**: 미국 지표가 한 행이라도 생기면, 국내 휴장·미국 개장일에
-화면 기준일이 미국 날짜가 되어 **국내 전 프리셋이 「조건에 맞는 종목이 없다」**가 된다.
-지금은 미국 `indicator_value`가 0행이고 백필이 활성 유니버스만 보므로 안 닿는다 —
-**`US_LISTED`를 켜거나 미국에 백필을 돌리기 전에 정해야 한다.**
+**MUST NOT: `IndicatorBackfillJob.tradeDatesBetween`을 시장별로 가르지 않는다** —
+날짜 루프가 묻는 것은 *어느 날짜를 한 번씩 돌 것인가*이고 그 답은 **합집합**이다(ADR-0093 §규칙).
+
+**남은 것은 ADR-0095 §결과가 적는 셋이다.** 그중 **유니버스 미지정 요청**이 미국을 켜는 순간
+다시 열린다 — 활성 유니버스 전체의 시장 집합을 쓰므로 최댓값이 미국 날짜가 될 수 있다.
 
 - 보존창(최근 180거래일) 안의 국내 휴장 평일 **13일 중 미국 개장이 9일**이다(2026-08-29 실측).
 - 2024년 창은 현재 181번째 거래일(2025-12-01)보다 과거라 그 집합에 못 들어온다. **피한 것이지

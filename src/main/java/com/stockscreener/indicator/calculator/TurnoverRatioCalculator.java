@@ -30,7 +30,9 @@ import java.util.List;
  *
  * <p>비율은 애초에 축척에 불변이다 — 분할이면 거래량과 주식 수가 함께 커진다. 그래서 보정할
  * 것이 <b>권리락~신주상장 14~16거래일 하나</b>이고 그것을 {@code sharesOn}이 한다.
- * {@code MarketCapCalculator}가 {@code close × sharesOn}으로 같은 짝을 쓴다(ADR-0051).
+ * {@code MarketCapCalculator}가 같은 짝을 쓴다 — 다만 <b>둘 다 이제 {@code sharesOn}이 아니라
+ * {@link FinancialMath#sharesOf}를 부른다</b>(ADR-0097). 봉에 주식수가 있으면 그것이 이기므로
+ * 국내 동작은 그대로이고, 없으면(미국) 재무에서 폴백해 봉 시점으로 옮긴다.
  */
 @Component
 @IndicatorMeta(
