@@ -249,6 +249,40 @@ END"
   NULL로 들어오고 배치는 SUCCESS다 — `--job=universe` 뒤에 `--tickers` 적재와
   `company-profile`을 잇는다(`batch-load` skill).
 
+### 켜기 전에 닫아야 하는 것 — 다섯
+
+**MUST: 이 유니버스를 활성으로 올리는 것은 별도 작업이다.** 아래 다섯이 **지금은 안 닿아서
+조용한 것**이고, `is_active = true` UPDATE 하나가 다섯을 동시에 연다. 각각 무엇이 읽고
+무엇이 틀리는지를 적는다.
+
+1. **프리셋에 시장 축이 없다.** `ScreeningRepository`가 `universeCode`가 null이면
+   `inAnyActiveUniverse`로 떨어지고 활성 프리셋 여덟이 전부 그 상태다. `MARKET_CAP` 임계가
+   **원화 리터럴**인데(`LYNCH_STALWART_KR` 6.773e12 · `LYNCH_FAST_GROWER_KR` 2.616e12 ·
+   `BUFFETT_QUALITY_KR` 1e12, 셋 다 필수) **ADR-0097의 재무 폴백이 미국에 USD 원값
+   `MARKET_CAP`을 실제로 만든다.** `TURNOVER_60` 부재가 둘을 우연히 배제하지만
+   **`LYNCH_STALWART_KR`에는 그 완충이 없다.** **ADR-0072의 premise가 이것을 이름으로 막는다** —
+   *"시장별 프리셋을 가르기 전에는 실행하지 않는다"*. `ScreenPreset.universeCode`가 코드
+   하나라 「국내」(유니버스 둘)를 표현할 수 없어 **새 축이 필요하고 그것이 ADR 감이다.**
+2. **「전체」 화면의 기준일이 미국 날짜가 된다.** `MarketScope.forScreening(null)`이 활성
+   유니버스의 시장 집합을 쓰고 `IndicatorCalendar.latestIndicatorDate`가 **시장이 여럿이면
+   최댓값**이다(그 javadoc이 *"여러 시장을 한 기준일로 묶는 호출부는 그 시장의 종목을
+   판정하지 않아야 한다"*로 적어 뒀다). 보존 창 안에 국내 휴장·미국 개장이 9일이라 그 9일에
+   **국내 프리셋이 전부 0건**이고 HTTP 200이다. **1번으로는 안 닫힌다** —
+   `ScreeningService.resolveSource`가 즉석 조건을 **언제나 `universeCode = null`**로 만든다.
+   범위는 ADR-0095 §결과가 예약해 뒀다.
+3. **미국에 시장지수가 없다.** `ck_market_index_code CHECK (index_code IN ('KOSPI','KOSDAQ'))`라
+   **마이그레이션 없이는 한 행도 못 넣는다.** `BETA_104W`·`EXCESS_RETURN_26W`·
+   `EXCESS_RETURN_52W`가 미국에서 값이 안 난다 — **적재로 해결되지 않는 축이다**
+   (`alpaca-bars.md`가 그 넷을 센다).
+4. **미국 일일 갱신에 스케줄이 없다.** `PipelineScheduler.runDailyUpdate` javadoc:
+   *"미국 시장은 이 시각을 쓸 수 없다 — 미국 장은 한국 시각 다음 날 오전 5~6시에 닫는다.
+   붙일 때 별도 스케줄이 필요하다."* 리밸런싱의 `asOf`도 국내 달력에서 나온다.
+5. **손으로 돌리는 잡 둘이 부분 실패를 쌓는다.** 거버넌스·전체재무제표 어댑터가 미국에 없어
+   `governance-load`·`full-statement-refill`이 편입 종목 수만큼 실패를 남긴다. **스케줄러에는
+   없으므로 켜는 것 자체가 배치를 죽이지는 않는다**(`@Scheduled`는 일일 갱신·주간 리밸런싱
+   둘뿐, 실측). 그리고 `company-profile`의 기본 대상이 넓어진다 — 이 유니버스 안의
+   `sic_code` 결손은 **5종목**이다(실측).
+
 ### 미룬 문 둘 — 여는 조건
 
 **MUST: 이것을 「안 한다」로 읽지 않는다.** 닫힌 문이 아니라 미룬 문이고, 조건이 다르다.
