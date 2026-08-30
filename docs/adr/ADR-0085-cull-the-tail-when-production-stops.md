@@ -81,8 +81,13 @@ applies_to:
 날짜에 값이 없다」이므로 **비교 대상이 정의상 없다** — 무조건 통과하면서 반증 가능해 보인다.
 
 ```premise 앵커가 적자 연도로 옮겨간 뒤에도 남은 배당성향 행이 없다
-psql -d stock_screener -At -c "WITH anchored AS (SELECT v.stock_id, v.trade_date, (SELECT g.fiscal_year FROM governance_fact g WHERE g.stock_id = v.stock_id AND g.metric_key = 'CASH_DIVIDEND_TOTAL' AND g.published_at <= v.trade_date ORDER BY g.fiscal_year DESC, g.published_at DESC LIMIT 1) fy FROM indicator_value v WHERE v.indicator_code = 'DIVIDEND_PAYOUT'), bad AS (SELECT a.stock_id, count(*) n FROM anchored a JOIN financial_statement f ON f.stock_id = a.stock_id AND f.fiscal_year = a.fy AND f.fiscal_period = 'FY' AND f.is_latest AND f.net_income <= 0 GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM anchored WHERE fy IS NOT NULL) = 0 THEN '잴 것이 없었다 — 앵커가 잡히는 배당성향 행이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 앵커 회계연도가 적자인 배당성향 행이 없다(' || (SELECT count(*) FROM anchored WHERE fy IS NOT NULL) || '행 검사)' ELSE (SELECT sum(n)::text FROM bad) || '행이 적자 앵커 위에 남아 있다 — 꼬리 걷기가 안 도는 것이다(ADR-0085)' END"
+psql -d stock_screener -At -c "WITH anchored AS (SELECT v.stock_id, v.trade_date, (SELECT g.fiscal_year FROM governance_fact g WHERE g.stock_id = v.stock_id AND g.metric_key = 'CASH_DIVIDEND_TOTAL' AND g.published_at <= v.trade_date ORDER BY g.fiscal_year DESC, g.published_at DESC LIMIT 1) fy FROM indicator_value v WHERE v.indicator_code = 'DIVIDEND_PAYOUT'), bad AS (SELECT a.stock_id, count(*) n FROM anchored a JOIN financial_statement f ON f.stock_id = a.stock_id AND f.fiscal_year = a.fy AND f.fiscal_period = 'FY' AND f.is_latest AND COALESCE(f.net_income_controlling, f.net_income) <= 0 GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM anchored WHERE fy IS NOT NULL) = 0 THEN '잴 것이 없었다 — 앵커가 잡히는 배당성향 행이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 앵커 회계연도가 적자인 배당성향 행이 없다(' || (SELECT count(*) FROM anchored WHERE fy IS NOT NULL) || '행 검사)' ELSE (SELECT sum(n)::text FROM bad) || '행이 적자 앵커 위에 남아 있다 — 꼬리 걷기가 안 도는 것이다(ADR-0085)' END"
 ```
+
+**적자 판정은 배당성향의 실제 분모로 한다** — 2026-08-30부터 그것이
+`net_income_controlling`이고(ADR-0098), 없으면 `net_income`으로 폴백하는 것까지 계산기와 같다.
+**`net_income`으로 재면 377행이 거짓 발견으로 뜬다**(실측: 그 377행 전부가 「연결 총액은 적자인데
+지배주주는 흑자」이고 둘 다 적자인 행은 0이다). **분모를 바꾸는 결정은 이 펜스를 함께 고쳐야 한다.**
 
 **모집단을 「배당성향 전량」이 아니라 「앵커가 잡히고 그 해가 적자인 행」으로 좁힌 것이 요점이다.**
 「마지막 값 일자가 그 종목의 마지막 지표 일자보다 이르다」로 넓게 물으면 **정상 중단이 224건**
