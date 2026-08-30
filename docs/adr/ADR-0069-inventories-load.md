@@ -121,41 +121,41 @@ SELECT CASE
 END FROM financial_statement WHERE is_latest"
 ```
 
-```premise 재고자산이 분기 잔액 행에서 형제 저량보다 덜 채워지지 않았다
+```premise Q4 유도가 사업보고서의 재고자산을 잃지 않았다
 psql -d stock_screener -At -c "
-WITH q AS (SELECT f.inventories, f.cash_and_equivalents
-             FROM financial_statement f JOIN stock s ON s.id = f.stock_id
-            WHERE f.fiscal_period = 'Q4' AND f.is_latest AND f.fiscal_year >= 2021
-              AND s.market_code IN ('KOSPI', 'KOSDAQ'))
+WITH cur AS (SELECT DISTINCT um.stock_id FROM universe_membership um
+               JOIN universe u ON u.code = um.universe_code
+              WHERE u.is_active AND um.effective_to IS NULL),
+p AS (SELECT f.stock_id, f.fiscal_year,
+        max(f.inventories) FILTER (WHERE f.fiscal_period = 'FY') fy,
+        max(f.inventories) FILTER (WHERE f.fiscal_period = 'Q4') q4,
+        count(*) FILTER (WHERE f.fiscal_period = 'Q4') q4rows
+      FROM financial_statement f JOIN stock s ON s.id = f.stock_id
+      JOIN cur ON cur.stock_id = f.stock_id
+      WHERE f.is_latest AND f.fiscal_year >= 2021
+        AND s.market_code IN ('KOSPI', 'KOSDAQ') AND f.fiscal_period IN ('FY', 'Q4')
+      GROUP BY 1, 2)
 SELECT CASE
-  WHEN (SELECT count(*) FROM q) = 0
-    THEN '잴 것이 없었다 — FY2021 이후 Q4 행이 하나도 없다'
-  WHEN (SELECT count(cash_and_equivalents) FROM q) = 0
-    THEN 'OK 형제 저량도 0이다 — 분기 잔액 경로(--quarters=true)가 아직 안 돌아 잴 것이 없고, '
-         || '「덜 채워지지 않았다」는 그대로 참이다'
-  WHEN (SELECT count(inventories) FROM q) < (SELECT count(cash_and_equivalents) FROM q)
-    THEN 'Q4에서 재고자산이 현금및현금성자산보다 '
-         || (SELECT count(cash_and_equivalents) - count(inventories) FROM q)
-         || '행 덜 채워졌다 — toFourthQuarterBalance의 재고자산 자리를 의심한다'
-  ELSE 'OK Q4 ' || (SELECT count(inventories) FROM q) || '/' || (SELECT count(*) FROM q) || '행'
+  WHEN (SELECT count(*) FROM p WHERE q4rows > 0) = 0
+    THEN 'OK 분기 잔액 경로(--quarters=true)가 아직 안 돌아 잴 것이 없다'
+  WHEN (SELECT count(*) FROM p WHERE q4rows > 0 AND fy IS NOT NULL AND q4 IS NULL) = 0
+    THEN 'OK 사업보고서에 재고가 있는 ' || (SELECT count(*) FROM p WHERE q4rows > 0 AND fy IS NOT NULL)
+         || '쌍이 Q4에도 있다'
+  ELSE (SELECT count(*)::text FROM p WHERE q4rows > 0 AND fy IS NOT NULL AND q4 IS NULL)
+       || '쌍이 FY에는 있는데 Q4에 없다 — toFourthQuarterBalance의 재고자산 자리를 의심한다'
 END"
 ```
 
-**셋째 펜스가 신고하는 114행의 실체는 「Q4의 재고자산」이 아니다**(2026-08-31 진단).
-전 종목 분기를 처음 받고 나서 재보니 **14종목의 분기가 통째로 전체본에 안 닿아 있다** —
-FY는 닿았는데(`cash_and_equivalents` 기준 348종목 중 348) 분기는 **334/348**이고, 빠진 14가
-그 종목들이다. 재고만이 아니라 **현금·영업활동현금흐름도 함께 없고 자산총계만 있다.**
-오뚜기·코스모신소재·와이지-원·삼지전자·에스티큐브·메디톡스·앱클론 등 **아홉이 매년 걸린다.**
+**개수를 견주지 않고 「같은 (종목, 연도)에서 FY에 있던 값이 Q4에 있는가」를 묻는다.** 처음에는
+`count(inventories) < count(cash_and_equivalents)`로 셌는데 **114행이 영구 거짓 발견이었다** —
+**재고 개념이 없는 업종**(금융업 등)이 있는 한 그 부등호는 언제나 참이기 때문이다.
+실측(2026-08-31)으로 재고 채움 비율이 **FY 92.2% · Q4 92.2%로 완전히 같아**, 유도는 원본을
+하나도 잃지 않고 있었다.
 
-- **`--quarters=true`가 안 돌던 시절에는 이 펜스가 「잴 것이 없어서」 초록이었다.** 붉어진 것은
-  회귀가 아니라 **처음으로 재게 된 것**이다.
-- **원인은 아직 안 쟀다.** 갈래는 「그 종목의 분기 보고서를 소스가 안 준다」와 「연결이 없어
-  별도로 폴백했는데 그 계정이 없다」 둘인데, **재적재 로그가 답한다**(효성 사례에서 그 로그가
-  `정정공시라 채우지 않고 남긴다`로 원인을 바로 짚었다).
-- **지배주주 귀속 순이익(ADR-0098)과는 무관하다** — 그 14종목과 TTM 결손 종목의 **교집합이 0**이고,
-  `created_at`이 2026-08-06이라 그 변경 이전부터 있던 상태다.
-- **걸리는 지표**: `INVENTORY_GROWTH_GAP`·`ACCRUAL_RATIO`·`FCF_YIELD`·`ALTMAN_Z` 등이
-  그 14종목의 분기 구간에서 판정불가가 된다.
+**모집단은 「현재 편입 중인 종목」이다.** `full-statement-refill`의 대상이 현재 편입 종목이라
+(`resolveTargets`) **이탈 종목의 분기는 애초에 받지 않으며 그것이 설계대로다.** 좁히지 않으면
+리밸런싱이 돌 때마다 빠진 종목이 거짓 발견으로 뜬다 — 실측으로 분기에 전체본이 통째로 안 닿은
+14종목이 **전부 유니버스 밖**이었다(`effective_to`가 2026-08-21·08-28의 두 리밸런싱).
 
 **시장을 가르는 것이 셋째 펜스의 일부다.** 이 펜스가 재는 것은 `toFourthQuarterBalance`,
 곧 **DART 어댑터의 코드 경로**다. 미국은 Q4를 다른 자리에서 유도하고(`SecEdgarFacts`,
