@@ -296,7 +296,17 @@ END"
    `MARKET_CAP`을 실제로 만든다.** `TURNOVER_60` 부재가 둘을 우연히 배제하지만
    **`LYNCH_STALWART_KR`에는 그 완충이 없다.** **ADR-0072의 premise가 이것을 이름으로 막는다** —
    *"시장별 프리셋을 가르기 전에는 실행하지 않는다"*. `ScreenPreset.universeCode`가 코드
-   하나라 「국내」(유니버스 둘)를 표현할 수 없어 **새 축이 필요하고 그것이 ADR 감이다.**
+   하나라 「국내」(유니버스 둘)를 표현할 수 없다.
+
+   **축은 시장 목록이 아니라 「임계의 통화」다(2026-08-31 결정).** 프리셋이 깨지는 원인이
+   `MARKET_CAP` 임계가 **원화 리터럴**이라는 것이므로 원인과 같은 축으로 묶는다.
+   `screen`에 임계 통화를 두고 `ScreeningRepository`가 **그 통화를 쓰는 시장의 활성
+   유니버스로** 좁힌다(`market.currency_code`가 이미 KOSPI·KOSDAQ = KRW, US = USD다).
+   **시장 코드로 하면 국내를 둘로 나열해야 하고 시장이 늘 때마다 그 목록을 고쳐야 한다** —
+   고치지 않은 프리셋은 조용히 새 시장까지 판정한다. 통화로 하면 **임계가 없는 프리셋은
+   비워 두어 양쪽에서 돈다**는 것도 같은 필드로 표현된다.
+   닿는 곳: `screen` 마이그레이션 · `ScreenPreset` · `PresetCatalog`(활성 여덟에 `KRW`) ·
+   `ScreeningRepository` · `wire-contract.json`(ADR-0020) · 프론트.
 2. **「전체」 화면의 기준일이 미국 날짜가 된다.** `MarketScope.forScreening(null)`이 활성
    유니버스의 시장 집합을 쓰고 `IndicatorCalendar.latestIndicatorDate`가 **시장이 여럿이면
    최댓값**이다(그 javadoc이 *"여러 시장을 한 기준일로 묶는 호출부는 그 시장의 종목을
