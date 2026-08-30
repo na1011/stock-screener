@@ -74,7 +74,8 @@ public class IndicatorRunner {
      */
     public long run(long stockId, LocalDate asOf, Optional<LocalDate> retentionCutoff,
                     Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes) {
-        IndicatorContext base = readRawData(stockId, asOf, marketIndexes, FinancialVisibility.LATEST);
+        RawData raw = readRawData(stockId, asOf, marketIndexes, FinancialVisibility.LATEST);
+        IndicatorContext base = raw.context();
         if (base.priceBars().isEmpty()) {
             // 시세가 없으면 계산할 것이 없다. 신규 편입 직후나 거래정지 종목에서 정상적으로 생긴다.
             log.debug("시세가 없어 지표 계산을 건너뛴다. stockId={} asOf={}", stockId, asOf);
@@ -134,7 +135,7 @@ public class IndicatorRunner {
                 // 보면 위 삭제가 0행인데도 여기가 막혀, 억제 효력일이 보존 창보다 오래된 종목은
                 // 이 걷기에서 영구히 면제된다.
                 if (retainedSuppressed.isEmpty() && !windowDates.isEmpty()
-                        && inputsWereReadable(calculator, base)) {
+                        && inputsWereReadable(calculator, base, raw.currencyMismatched())) {
                     long removed = writer.deleteAt(stockId, code, windowDates);
                     if (removed > 0) {
                         stale += removed;
@@ -149,7 +150,8 @@ public class IndicatorRunner {
             // 배당성향 112행이 그 모양이었다(앵커가 적자 연도로 옮겨가 분모 가드가 값을
             // 안 내는데 FY2024로 계산된 11.63%가 남았다).
             long culled = writer.deleteAt(stockId, code,
-                    tailAfterLastProduced(windowDates, points, suppressed, calculator, base));
+                    tailAfterLastProduced(windowDates, points, suppressed, calculator, base,
+                            raw.currencyMismatched()));
             if (culled > 0) {
                 stale += culled;
                 staleCodes++;
@@ -201,9 +203,10 @@ public class IndicatorRunner {
             List<IndicatorPoint> points,
             Set<LocalDate> suppressed,
             IndicatorCalculator calculator,
-            IndicatorContext base) {
+            IndicatorContext base,
+            boolean currencyMismatched) {
         if (windowDates.isEmpty() || points.isEmpty()
-                || !inputsWereReadable(calculator, base)) {
+                || !inputsWereReadable(calculator, base, currencyMismatched)) {
             return List.of();
         }
         // 정렬을 가정하지 않는다. 삭제 범위를 정하는 값이라 순서가 어긋나면 창의 앞쪽이 날아간다.
@@ -234,11 +237,24 @@ public class IndicatorRunner {
      *
      * <p>IMPORTANT — 세 축 모두 <b>「통째로 없는가」만</b> 가른다. 날짜별 결손은 여기서 못
      * 보므로, 꼬리 걷기가 날짜 단위로 한 번 더 거른다(ADR-0085).
+     *
+     * <p><b>못 읽은 이유가 「우리가 건 게이트」면 그것은 「값이 없다」이다</b>(ADR-0094).
+     * 통화 게이트에 걸린 종목은 재무가 0행으로 오는데, 그것을 「아직 모른다」로 읽으면
+     * <b>이미 저장된 오염값이 영영 안 걷힌다</b> — 게이트는 새 계산만 막기 때문이다.
+     * 판정은 {@link IndicatorDataReader.StockAttributes#financialCurrencyMismatched()}가
+     * 종목당 한 번 도는 질의에 얹어 낸다. <b>MUST: 이 축을 더한다고 재무 0행 종목이 함께
+     * 열리지 않는다</b> — 판정이 「통화가 다른 재무 행이 있는가」라 재무가 통째로 없으면
+     * 거짓이고, 맥쿼리인프라처럼 재무가 원래 없는 종목은 그대로 보호된다.
      */
-    private static boolean inputsWereReadable(IndicatorCalculator calculator, IndicatorContext base) {
+    private static boolean inputsWereReadable(IndicatorCalculator calculator, IndicatorContext base,
+                                              boolean currencyMismatched) {
         DataRequirement requirement = calculator.dataRequirement();
         if (requirement.needsFinancial()
-                && base.annualFigures().isEmpty() && base.quarterlyFigures().isEmpty()) {
+                && base.annualFigures().isEmpty() && base.quarterlyFigures().isEmpty()
+                // 통화가 안 맞아 **우리가 막은** 것은 「아직 모른다」가 아니라 「값이 없다」이다
+                // (ADR-0094). 안 가르면 그 종목의 오염된 옛 행이 영영 안 걷힌다 — 게이트는
+                // 새 계산만 막고, 저장된 값은 화면에서 그럴듯한 숫자로 남는다.
+                && !currencyMismatched) {
             return false;
         }
         // 거버넌스도 같은 판정을 받는다(ADR-0081). 선언하지 않은 채 늘 읽히면 적재 전이나
@@ -320,7 +336,7 @@ public class IndicatorRunner {
     public Map<String, BigDecimal> computeAt(long stockId, LocalDate asOf,
                                              Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes,
                                              FinancialVisibility visibility) {
-        IndicatorContext base = readRawData(stockId, asOf, marketIndexes, visibility);
+        IndicatorContext base = readRawData(stockId, asOf, marketIndexes, visibility).context();
         List<PriceBar> bars = base.priceBars();
         if (bars.isEmpty() || !bars.get(bars.size() - 1).tradeDate().equals(asOf)) {
             return Map.of();
@@ -387,14 +403,23 @@ public class IndicatorRunner {
         return new Computed(points, suppressedByCode);
     }
 
-    private IndicatorContext readRawData(long stockId, LocalDate asOf,
-                                         Map<String, NavigableMap<LocalDate, BigDecimal>> indexes,
-                                         FinancialVisibility visibility) {
+    /**
+     * 원자료와, 그것을 <b>우리가 일부러 막았는지</b>를 함께 낸다.
+     *
+     * <p>통화 판정을 {@link IndicatorContext}에 담지 않는 이유는 그것이 <b>계산기의 입력이
+     * 아니기 때문</b>이다 — 걷기 판정에만 쓰이고, 담으면 생성 지점 68곳이 함께 움직인다.
+     */
+    private record RawData(IndicatorContext context, boolean currencyMismatched) {
+    }
+
+    private RawData readRawData(long stockId, LocalDate asOf,
+                                Map<String, NavigableMap<LocalDate, BigDecimal>> indexes,
+                                FinancialVisibility visibility) {
         int bars = registry.readWindowBars();
         int years = registry.maxFinancialYears();
         // 종목당 한 번만 읽는다. 지표마다 읽으면 850종목 × N지표의 N+1이 된다.
         IndicatorDataReader.StockAttributes attributes = reader.readStockAttributes(stockId);
-        return new IndicatorContext(
+        return new RawData(new IndicatorContext(
                 stockId,
                 attributes.industryDivisionKey(),
                 reader.readPriceBars(stockId, asOf, bars),
@@ -414,7 +439,8 @@ public class IndicatorRunner {
                 // 거버넌스 사실. 빠뜨려도 컴파일되고, 빠지면 예외가 아니라 **값이 없는 지표**로
                 // 나타난다 — 필수 조건이면 전 종목 판정불가인데 에러도 경고도 없다.
                 reader.readGovernanceFacts(stockId, asOf, registry.maxGovernanceYears(), visibility),
-                Map.of());
+                Map.of()),
+                attributes.financialCurrencyMismatched());
     }
 
     /**

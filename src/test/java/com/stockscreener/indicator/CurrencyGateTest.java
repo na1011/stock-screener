@@ -96,6 +96,55 @@ class CurrencyGateTest {
                 .hasSize(2);
     }
 
+    @Test
+    @DisplayName("러너가 볼 판정도 같은 축이다 — 「USD인가」로 쓰면 미국이 통째로 걸린다")
+    void stockAttributesReportTheSameMismatchAxis() {
+        long domestic = insertStock("KOSPI", "241560", "두산밥캣");
+        insertAnnual(domestic, 2024, "USD");
+        long american = insertStock("US", "MSFT", "Microsoft");
+        insertAnnual(american, 2024, "USD");
+
+        // 짝으로 둔다. 앞엣것만 단정하면 서브쿼리를 `<> 'KRW'`로 써도 초록이고,
+        // 그러면 미국을 켜는 순간 전 종목의 지표가 「값이 없다」로 걷힌다.
+        assertThat(reader.readStockAttributes(domestic).financialCurrencyMismatched())
+                .as("시장이 KRW인데 재무가 USD면 우리가 막은 것이다 — 러너가 그것을 걷어야 한다")
+                .isTrue();
+        assertThat(reader.readStockAttributes(american).financialCurrencyMismatched())
+                .as("미국 시장의 USD는 정상이다. 여기가 참이 되면 미국 지표가 통째로 사라진다")
+                .isFalse();
+    }
+
+    /**
+     * <b>MUST: 이 술어를 {@code CURRENCY_GATE}와 같게 유지한다.</b> 그쪽이 {@code is_latest}를
+     * 보지 않으므로 여기도 보지 않는다 — 갈리면 게이트는 막는데 러너는 「불일치 아님」으로 읽어
+     * 옛 행이 영영 안 걷힌다.
+     */
+    @Test
+    @DisplayName("개정 전 판에만 통화가 다르면 게이트와 판정이 함께 걸린다 — 두 술어가 안 갈린다")
+    void mismatchOnASupersededRevisionIsSeenByBoth() {
+        long stockId = insertStock("KOSPI", "999990", "개정된 종목");
+        // 최신판은 KRW인데 개정 전 판이 USD다. 미국에 실재하는 모양이 이것이다(실측 6종목).
+        jdbcTemplate.update("""
+                INSERT INTO financial_statement
+                    (stock_id, fiscal_year, fiscal_period, period_start, period_end,
+                     published_at, revision_no, is_latest, currency_code, revenue)
+                VALUES (?, 2024, 'FY', '2024-01-01', '2024-12-31', '2025-03-31', 0, false, 'USD', 1000)
+                """, stockId);
+        jdbcTemplate.update("""
+                INSERT INTO financial_statement
+                    (stock_id, fiscal_year, fiscal_period, period_start, period_end,
+                     published_at, revision_no, is_latest, currency_code, revenue)
+                VALUES (?, 2024, 'FY', '2024-01-01', '2024-12-31', '2025-05-31', 1, true, 'KRW', 1000)
+                """, stockId);
+
+        assertThat(reader.readAnnualFigures(stockId, AS_OF, 5, FinancialVisibility.LATEST))
+                .as("게이트는 is_latest를 안 보므로 개정 전 판의 통화도 그 종목을 막는다")
+                .isEmpty();
+        assertThat(reader.readStockAttributes(stockId).financialCurrencyMismatched())
+                .as("둘이 갈리면 막힌 종목의 옛 행이 영영 안 걷힌다")
+                .isTrue();
+    }
+
     private long insertStock(String marketCode, String ticker, String name) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO stock (market_code, ticker, name) VALUES (?, ?, ?) RETURNING id

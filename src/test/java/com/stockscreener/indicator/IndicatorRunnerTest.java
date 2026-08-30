@@ -315,6 +315,23 @@ class IndicatorRunnerTest {
     }
 
     @Test
+    @DisplayName("통화가 안 맞아 우리가 막은 것은 지운다 — 「모른다」가 아니라 「값이 없다」다")
+    void deletesRowsWhenFinancialsWereBlockedByTheCurrencyGate() {
+        insertPriceHistory(300);
+        // KOSPI 종목인데 재무가 USD다(두산밥캣·코오롱티슈진이 실제로 그렇다). 게이트가
+        // 그 종목의 재무를 한 행도 안 주므로 계산기는 위 테스트와 똑같이 빈 목록을 낸다 —
+        // 다른 것은 **못 읽은 이유**이고, 그 구분이 없으면 오염된 옛 값이 영영 남는다.
+        insertFinancialRow("USD");
+        insertIndicatorRow(PerCalculator.CODE, AS_OF.minusDays(10), new BigDecimal("17386.29"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(storedCodes())
+                .as("게이트는 새 계산만 막는다 — 저장된 PER 17,386을 걷는 것은 이 걷기뿐이다")
+                .doesNotContain(PerCalculator.CODE);
+    }
+
+    @Test
     @DisplayName("시장 지수를 통째로 못 읽었으면 안 지운다 — 재무·거버넌스와 같은 판정이다")
     void keepsRowsWhenTheMarketIndexCouldNotBeReadAtAll() {
         insertPriceHistory(300);
@@ -542,6 +559,21 @@ class IndicatorRunnerTest {
                     periodEnd.minusMonths(3), periodEnd, periodEnd.plusDays(45),
                     new BigDecimal("-1000000000"));
         }
+    }
+
+    /**
+     * 한 해치 재무를 그 통화로 넣는다. {@code USD}면 KOSPI(=KRW)와 어긋나 통화 게이트가
+     * 그 종목의 재무를 통째로 막는다(ADR-0094).
+     */
+    private void insertFinancialRow(String currencyCode) {
+        LocalDate periodEnd = AS_OF.withDayOfYear(1).minusDays(1);
+        jdbcTemplate.update(
+                "INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period,"
+                        + " period_start, period_end, published_at, revision_no, is_latest,"
+                        + " currency_code, revenue, net_income)"
+                        + " VALUES (?, ?, 'FY', ?, ?, ?, 0, true, ?, 1000000000, 100000000)",
+                stockId, periodEnd.getYear(), periodEnd.withDayOfYear(1), periodEnd,
+                periodEnd.plusMonths(3), currencyCode);
     }
 
     private void insertIndicatorRow(String indicatorCode, LocalDate tradeDate, BigDecimal value) {

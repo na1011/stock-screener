@@ -242,24 +242,45 @@ public class IndicatorDataReader {
      *                         고르는 데 쓴다(ADR-0053·ADR-0054). 계산기에 넘기지 않는 이유는
      *                         "코스닥 종목의 지수는 코스닥"이 지표의 규칙이 아니라 시장의 사실이라
      *                         계산기마다 다시 알 이유가 없기 때문이다
+     * @param financialCurrencyMismatched 재무의 통화가 <b>시장의 통화와 다른가</b>.
+     *                         참이면 {@link #CURRENCY_GATE}가 그 종목의 재무를 한 행도 안 준다 —
+     *                         러너는 그것을 <b>「값이 없다」로 읽어 옛 행을 걷는다</b>(ADR-0080·0094).
+     *                         이 필드가 없으면 러너가 「우리가 막은 것」과 「아직 안 들어온 것」을
+     *                         구별할 수단이 없어, <b>오염된 값이 영영 남는다.</b>
      */
-    public record StockAttributes(String industryDivisionKey, String marketCode) {
+    public record StockAttributes(
+            String industryDivisionKey, String marketCode, boolean financialCurrencyMismatched) {
     }
 
     /**
      * 종목 속성을 한 번에 읽는다.
      *
-     * <p>둘을 한 쿼리로 묶은 이유는 러너가 <b>종목당 한 번</b> 부르기 때문이다. 시장 코드만
+     * <p>셋을 한 쿼리로 묶은 이유는 러너가 <b>종목당 한 번</b> 부르기 때문이다. 시장 코드만
      * 따로 물으면 실행마다 350개의 추가 왕복이 생기는데, 그것이 정확히 {@code readRawData}가
      * 피하려는 형태다.
+     *
+     * <p><b>MUST: 통화 판정의 술어를 {@link #CURRENCY_GATE}와 같게 유지한다.</b> 그쪽이
+     * {@code is_latest}를 보지 않으므로 여기도 보지 않는다 — 통화가 다른 행이 <b>개정 전 판에만</b>
+     * 있는 종목이 실재하고(실측 6종목, 전부 US), 둘이 갈리면 <b>게이트는 막는데 러너는
+     * 「불일치 아님」으로 읽어</b> 옛 행이 영영 안 걷힌다. 미국 지표가 생기는 날 드러난다.
      */
     public StockAttributes readStockAttributes(long stockId) {
-        List<StockAttributes> found = jdbcTemplate.query(
-                "SELECT industry_division_key, market_code FROM stock WHERE id = ?",
+        List<StockAttributes> found = jdbcTemplate.query("""
+                SELECT s.industry_division_key,
+                       s.market_code,
+                       EXISTS (SELECT 1
+                                 FROM financial_statement f
+                                 JOIN market m ON m.code = s.market_code
+                                WHERE f.stock_id = s.id
+                                  AND f.currency_code <> m.currency_code) AS currency_mismatched
+                  FROM stock s
+                 WHERE s.id = ?
+                """,
                 (rs, rowNum) -> new StockAttributes(
-                        rs.getString("industry_division_key"), rs.getString("market_code")),
+                        rs.getString("industry_division_key"), rs.getString("market_code"),
+                        rs.getBoolean("currency_mismatched")),
                 stockId);
-        return found.isEmpty() ? new StockAttributes(null, null) : found.get(0);
+        return found.isEmpty() ? new StockAttributes(null, null, false) : found.get(0);
     }
 
     /**
