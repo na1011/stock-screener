@@ -619,7 +619,13 @@ final class SecEdgarFacts {
                 // bps는 소스가 주지 않는다. 자본총계/주식수로 지표 계층이 계산한다(spec §7).
                 null,
                 v.get(SecEdgarColumn.COST_OF_SALES), v.get(SecEdgarColumn.CASH_AND_EQUIVALENTS),
-                v.get(SecEdgarColumn.CAPEX), v.get(SecEdgarColumn.INVENTORIES));
+                v.get(SecEdgarColumn.CAPEX), v.get(SecEdgarColumn.INVENTORIES),
+                // 지배주주 귀속 순이익을 따로 담지 않는다. 미국은 net_income이 이미
+                // `NetIncomeLoss`(us-gaap 정의상 지배주주 귀속)를 첫 후보로 쓰고 있어
+                // (SecEdgarColumn.NET_INCOME) 폴백이 곧 옳은 값을 쓴다. 여기서 갈라 담으면
+                // 이미 적재된 행은 옛 정의, 새 행은 새 정의인 혼합물이 된다 —
+                // fillMissing이 stored == null일 때만 채우므로(ADR-0056) 되돌릴 길이 없다.
+                null);
     }
 
     // ---------- 4. Q4를 유도한다 ----------
@@ -695,7 +701,9 @@ final class SecEdgarFacts {
                     // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
                     null, fy.sharesOutstanding(), null, null,
                     minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales()),
-                    fy.cashAndEquivalents(), null, fy.inventories()));
+                    fy.cashAndEquivalents(), null, fy.inventories(),
+                    // 위 toReport와 같은 이유로 담지 않는다.
+                    null));
         }
         return derived;
     }

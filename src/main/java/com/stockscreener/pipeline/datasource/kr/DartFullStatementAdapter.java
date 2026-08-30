@@ -282,7 +282,12 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 // 재무상태표에서만 읽는다 — 현금흐름표의 같은 낱말은 증감분이고 손익의 것은
                 // 평가손실이다(dart-financial.md의 「계정별 가용성」 절).
                 DartFullAccountMapper.find(
-                        balance, DartFullAccountMapper.ID_INVENTORIES, null));
+                        balance, DartFullAccountMapper.ID_INVENTORIES, null),
+                // 지배기업 소유주 귀속 순이익. 계정명 폴백을 두지 않는 이유가 특히 강하다 —
+                // 한 계정을 회사마다 일곱 가지 이름으로 부르고, 새면 연결 총액이 그 자리에
+                // 앉아 값이 그럴듯하게 틀린다(ID_NET_INCOME_CONTROLLING javadoc).
+                DartFullAccountMapper.find(
+                        income, DartFullAccountMapper.ID_NET_INCOME_CONTROLLING, null));
     }
 
     /**
@@ -348,7 +353,9 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 null,
                 // 재고자산은 잔액이므로 4분기 행에도 담는다. capex와 갈리는 자리다.
                 DartFullAccountMapper.find(
-                        balance, DartFullAccountMapper.ID_INVENTORIES, null));
+                        balance, DartFullAccountMapper.ID_INVENTORIES, null),
+                // 손익이라 싣지 않는다 — 위 javadoc의 IMPORTANT가 정한 그 규칙이다.
+                null);
     }
 
     /**

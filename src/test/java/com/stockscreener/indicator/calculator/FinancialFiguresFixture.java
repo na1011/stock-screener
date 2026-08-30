@@ -40,6 +40,7 @@ final class FinancialFiguresFixture {
     private BigDecimal cashAndEquivalents;
     private BigDecimal capex;
     private BigDecimal inventories;
+    private BigDecimal netIncomeControlling;
 
     private FinancialFiguresFixture() {
     }
@@ -87,6 +88,11 @@ final class FinancialFiguresFixture {
         fixture.costOfSales = source.costOfSales();
         fixture.cashAndEquivalents = source.cashAndEquivalents();
         fixture.capex = source.capex();
+        // MUST: 컴포넌트를 더하면 여기에도 더한다. 빠뜨리면 from()을 거친 픽스처만 그 값을
+        // 조용히 잃고, 그 테스트는 「값이 없을 때」를 재는 것으로 바뀌는데 이름은 그대로다.
+        // inventories가 실제로 그렇게 빠져 있었다.
+        fixture.inventories = source.inventories();
+        fixture.netIncomeControlling = source.netIncomeControlling();
         return fixture;
     }
 
@@ -165,12 +171,22 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    /**
+     * 지배기업 소유주 귀속 순이익. <b>기본값 null이 의도다</b> — 비지배지분이 없는 회사에서
+     * 소스가 이 행을 아예 내지 않는 것이 정상이고, 그때 {@code netIncome}으로 폴백하는 것이
+     * 옳다. 그 폴백을 타는 것이 대부분의 테스트가 재는 상황이다.
+     */
+    FinancialFiguresFixture netIncomeControlling(BigDecimal value) {
+        this.netIncomeControlling = value;
+        return this;
+    }
+
     FinancialFigures build() {
         return new FinancialFigures(
                 fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
                 revenue, operatingIncome, netIncome, totalAssets, totalEquity, totalLiabilities,
                 currentAssets, currentLiabilities, retainedEarnings,
                 operatingCashFlow, sharesOutstanding, eps, bps,
-                costOfSales, cashAndEquivalents, capex, inventories);
+                costOfSales, cashAndEquivalents, capex, inventories, netIncomeControlling);
     }
 }

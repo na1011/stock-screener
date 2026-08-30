@@ -79,9 +79,9 @@ public class EpsGrowthTtmYoyCalculator implements IndicatorCalculator {
     public List<IndicatorPoint> calculate(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         BigDecimal recentTtm =
-                FinancialMath.sumFourQuarters(quarters, FinancialFigures::netIncome, 0);
+                FinancialMath.sumControllingNetIncome(quarters, 0);
         BigDecimal priorTtm =
-                FinancialMath.sumFourQuarters(quarters, FinancialFigures::netIncome, 4);
+                FinancialMath.sumControllingNetIncome(quarters, 4);
         // ③ 기저가 0 이하면 증감률이 뜻을 잃는다.
         if (recentTtm == null || priorTtm == null || priorTtm.signum() <= 0) {
             return List.of();

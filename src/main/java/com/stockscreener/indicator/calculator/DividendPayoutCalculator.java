@@ -75,7 +75,7 @@ public class DividendPayoutCalculator implements IndicatorCalculator {
                     }
                     return GovernanceMath.percent(
                             GovernanceMath.valueOf(figures, GovernanceMetric.CASH_DIVIDEND_TOTAL),
-                            annual.netIncome());
+                            FinancialMath.controllingNetIncomeOf(annual));
                 });
     }
 }

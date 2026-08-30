@@ -70,6 +70,62 @@ final class FinancialMath {
     }
 
     /**
+     * 주당 지표가 쓰는 <b>지배기업 소유주 귀속</b> 순이익의 4분기 합(TTM).
+     *
+     * <p>K-IFRS 1033이 주당이익을 지배기업 보통주 귀속 이익으로 정의한다. 연결 총액을 쓰면
+     * <b>비지배지분의 몫까지 보통주 EPS에 얹혀</b> PER이 낮게 나오고, 그 크기가 종목마다
+     * 다르다 — 배당표 전수 대조 512쌍에서 <b>96쌍이 5% 초과, 65쌍이 20% 초과</b>이며
+     * 지주회사에서 최대 5.48배다. 그래서 「PER 낮은 종목」 조건의 최상위를 지주회사가 점거한다.
+     *
+     * <p><b>IMPORTANT — 폴백이 행 단위가 아니라 창 단위인 것이 이 메서드의 요점이다.</b>
+     * 네 분기 중 일부만 {@code netIncomeControlling}을 갖고 있을 때 행마다 폴백하면 합계가
+     * <b>지배주주와 연결 총액의 혼합</b>이 되어 어느 쪽도 아닌 수가 나온다. 값은 그럴듯하고
+     * 에러도 없다. 그래서 <b>넷이 모두 있을 때만</b> 그것으로 합하고, 하나라도 없으면
+     * <b>넷 다</b> {@code netIncome}으로 합한다.
+     *
+     * <p>폴백이 옳은 근거는 <b>비지배지분이 없는 회사에서는 소스가 그 행을 아예 내지
+     * 않는다</b>는 것이다(실측: 삼성바이오로직스의 비지배지분이 정확히 0). 그때는 연결 총액이
+     * 곧 지배주주 귀속분이다. 다만 <b>「원래 없다」와 「못 받았다」를 NULL 하나로는 가를 수
+     * 없으므로</b>, 그 수를 세는 것이 유일한 방어다(ADR §검증의 premise).
+     *
+     * @param offset {@code 0}이면 최근 TTM, {@code 4}면 직전 TTM. {@link #sumFourQuarters}와 같다
+     * @return 4분기 합. 분기가 모자라거나 {@code netIncome}조차 한 분기라도 비면 null이다
+     */
+    static BigDecimal sumControllingNetIncome(List<FinancialFigures> quarters, int offset) {
+        BigDecimal controlling =
+                sumFourQuarters(quarters, FinancialFigures::netIncomeControlling, offset);
+        if (controlling != null) {
+            return controlling;
+        }
+        return sumFourQuarters(quarters, FinancialFigures::netIncome, offset);
+    }
+
+    /** 최근 4개 분기. {@link #sumControllingNetIncome(List, int)}의 {@code offset = 0}이다. */
+    static BigDecimal sumControllingNetIncome(List<FinancialFigures> quarters) {
+        return sumControllingNetIncome(quarters, 0);
+    }
+
+    /**
+     * 연간 한 행의 <b>지배기업 소유주 귀속</b> 순이익. 없으면 연결 총액으로 폴백한다.
+     *
+     * <p>{@code DIVIDEND_PAYOUT}·{@code EXEC_PAY_TO_NET_INCOME}처럼 <b>순이익이 분모</b>인
+     * 연간 지표가 쓴다. 배당과 임원보수를 받는 몫이 지배주주의 것이므로 분모도 그쪽이어야
+     * 한다 — 실측으로 DART가 계산해 주는 {@code (연결)현금배당성향}이 정확히 이 분모를 쓴다
+     * (삼성전자 FY2025: 25.10% 대 우리 24.57%).
+     *
+     * <p>여기는 행이 하나라 창 단위 문제가 없다. 그래도 같은 파일에 두는 이유는
+     * <b>폴백 규칙이 한 곳에 있어야</b> 나중에 한쪽만 바뀌지 않기 때문이다.
+     */
+    static BigDecimal controllingNetIncomeOf(FinancialFigures annual) {
+        if (annual == null) {
+            return null;
+        }
+        return annual.netIncomeControlling() != null
+                ? annual.netIncomeControlling()
+                : annual.netIncome();
+    }
+
+    /**
      * 재무에서 나온 값 하나를 시세 날짜 전체에 펼친다.
      *
      * <p>분기 공시라 재무는 하루짜리 값이지만, 조건 판정은 "최신 거래일의 지표"를 읽으므로

@@ -57,6 +57,27 @@ final class DartFullAccountMapper {
             "ifrs-full_ProfitLossFromOperatingActivities",
             "ifrs_ProfitLossFromOperatingActivities");
     static final Set<String> ID_NET_INCOME = ordered("ifrs-full_ProfitLoss", "ifrs_ProfitLoss");
+
+    /**
+     * <b>지배기업 소유주 귀속</b> 당기순이익. 주당 지표의 분자다(K-IFRS 1033).
+     *
+     * <p>MUST NOT: 계정명 폴백을 두지 않는다. 실측에서 <b>한 계정을 여덟 회사가 일곱 가지
+     * 이름으로 부른다</b> — {@code 지배기업소유주지분} · {@code 지배주주} ·
+     * {@code 지배기업소유주지분순이익} · {@code 지배기업 소유주지분} ·
+     * {@code 지배회사지분 반기순이익} · {@code 지배기업주주지분순이익} ·
+     * {@code 지배기업의 소유주에게 귀속되는 당기순이익(손실)}. 어느 이름을 후보로 넣어도
+     * 새어 나가고, 새면 <b>연결 총액이 그 자리에 앉아 값이 그럴듯하게 틀린다.</b>
+     *
+     * <p>IMPORTANT — {@link #ID_NET_INCOME}과 <b>부분일치로 겹친다.</b>
+     * {@code ifrs-full_ProfitLoss}는 이 ID의 접두사이므로, {@link #findBy}가 완전일치가
+     * 아니었다면 연결 총액을 물었을 것이다. 이 파일 머리의 MUST NOT이 지키는 것이 그것이다.
+     *
+     * <p>실측 <b>연간 8/8 · 분기 8/8</b>이고 {@code sj_div}가 {@code IS}와 {@code CIS}로
+     * 갈린다(dart-financial.md의 「계정별 가용성」 절). 호출부가 두 절을 함께 모으므로 걸리지 않는다.
+     */
+    static final Set<String> ID_NET_INCOME_CONTROLLING = ordered(
+            "ifrs-full_ProfitLossAttributableToOwnersOfParent",
+            "ifrs_ProfitLossAttributableToOwnersOfParent");
     /**
      * 매출원가. <b>없는 것이 결손이 아닌 계정</b>이다 — 금융업·서비스업은 개념 자체가 없어
      * 원래 오지 않는다(실측: 8개사 중 KB금융·NAVER 둘이 그렇고 제조·유통·물류·제약 여섯은

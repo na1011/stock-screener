@@ -62,7 +62,7 @@ public class ExecPayToNetIncomeCalculator implements IndicatorCalculator {
                     }
                     return GovernanceMath.percent(
                             GovernanceMath.valueOf(figures, GovernanceMetric.EXEC_PAY_TOTAL),
-                            annual.netIncome());
+                            FinancialMath.controllingNetIncomeOf(annual));
                 });
     }
 }

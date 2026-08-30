@@ -338,9 +338,9 @@ public class FinancialWriter {
                      total_liabilities, current_assets, current_liabilities, retained_earnings,
                      operating_cash_flow, shares_outstanding, eps, bps,
                      cost_of_sales, cash_and_equivalents, capex, inventories,
-                     created_at)
+                     net_income_controlling, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, now())
+                        ?, ?, ?, ?, ?, now())
                 """,
                 stockId, report.fiscalYear(), report.fiscalPeriod(),
                 report.periodStart(), report.periodEnd(), report.publishedAt(),
@@ -351,7 +351,7 @@ public class FinancialWriter {
                 report.operatingCashFlow(), report.sharesOutstanding(),
                 report.eps(), report.bps(),
                 report.costOfSales(), report.cashAndEquivalents(), report.capex(),
-                report.inventories());
+                report.inventories(), report.netIncomeControlling());
     }
 
     /**
@@ -368,6 +368,8 @@ public class FinancialWriter {
         REVENUE("revenue", RawFinancialReport::revenue),
         OPERATING_INCOME("operating_income", RawFinancialReport::operatingIncome),
         NET_INCOME("net_income", RawFinancialReport::netIncome),
+        NET_INCOME_CONTROLLING("net_income_controlling",
+                RawFinancialReport::netIncomeControlling),
         TOTAL_ASSETS("total_assets", RawFinancialReport::totalAssets),
         TOTAL_EQUITY("total_equity", RawFinancialReport::totalEquity),
         TOTAL_LIABILITIES("total_liabilities", RawFinancialReport::totalLiabilities),

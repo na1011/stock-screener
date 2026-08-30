@@ -70,8 +70,8 @@ public class EpsTtmCalculator implements IndicatorCalculator {
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
-        BigDecimal netIncome =
-                FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::netIncome);
+        // PER과 같은 분자여야 한다 — 갈리면 화면에서 EPS x PER이 주가와 안 맞는다.
+        BigDecimal netIncome = FinancialMath.sumControllingNetIncome(quarters);
         if (netIncome == null) {
             // 분기가 모자라거나 한 분기라도 순이익이 비면 계산하지 않는다. 부호는 보지 않는다.
             return List.of();

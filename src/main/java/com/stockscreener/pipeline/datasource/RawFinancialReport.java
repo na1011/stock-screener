@@ -44,6 +44,14 @@ import java.time.LocalDate;
  *                           {@code capex}와 다른 자리다. 금융업은 이 계정이 원리적으로 없어
  * 비는 것이 정상이다(dart-financial.md의 「계정별 가용성」 절). 0으로 대체하면 재고가 없는 회사가 되어
  *                           값이 그럴듯하게 틀린다.
+ * @param netIncomeControlling <b>지배기업 소유주에게 귀속되는</b> 당기순이익.
+ *                           {@code netIncome}(연결 총액, 비지배지분 포함)과 <b>다른 값이고 둘 다
+ *                           사실이다</b> — 어느 쪽을 쓸지는 짝이 정한다. 주당 지표는 이쪽이고
+ *                           (K-IFRS 1033이 주당이익을 지배기업 보통주 귀속 이익으로 정의한다),
+ *                           분모가 연결 전체인 비율 지표(ROE·ROA·순이익률)는 {@code netIncome}이다.
+ *                           <b>비지배지분이 없는 회사에서는 소스가 이 행을 아예 내지 않는다</b> —
+ *                           결손이 아니라 정상이고, 그때는 {@code netIncome}이 곧 이 값이다.
+ *                           실측은 dart-financial.md의 「계정별 가용성」(연간 8/8 · 분기 8/8).
  */
 public record RawFinancialReport(
         int fiscalYear,
@@ -69,7 +77,8 @@ public record RawFinancialReport(
         BigDecimal costOfSales,
         BigDecimal cashAndEquivalents,
         BigDecimal capex,
-        BigDecimal inventories
+        BigDecimal inventories,
+        BigDecimal netIncomeControlling
 ) {
 
     public RawFinancialReport {

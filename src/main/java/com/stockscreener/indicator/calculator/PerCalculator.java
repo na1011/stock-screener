@@ -78,8 +78,10 @@ public class PerCalculator implements IndicatorCalculator {
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
-        BigDecimal netIncome =
-                FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::netIncome);
+        // 지배기업 소유주 귀속분이다 — K-IFRS 1033의 주당이익 정의이고, 분모인
+        // 발행주식수도 보통주만이라 여기서 짝이 맞는다. 연결 총액을 쓰면 비지배지분의
+        // 몫까지 보통주 EPS에 얹혀 지주회사의 PER이 최대 1/5로 나온다.
+        BigDecimal netIncome = FinancialMath.sumControllingNetIncome(quarters);
         if (netIncome == null || netIncome.signum() <= 0) {
             // 적자이거나 재무가 부족하면 계산하지 않는다. 음수 PER을 저장하면
             // "PER이 낮은 종목" 조건에 적자 기업이 최상위로 올라온다.
