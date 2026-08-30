@@ -153,9 +153,33 @@ public class AdjustmentRecalculator {
      * 읽힌다. 그것을 가르는 것은 소스의 낱말이고 국내에 그 경로가 아직 없다
      * (dart-corporate-action.md의 「카탈로그」 절 — 「회사분할 결정」은 미착수).
      * 후보가 {@code OBSERVED}에서 멈추는 것이 그 자리의 방어다.
+     *
+     * <h2>MUST: 상장주식수가 없으면 후보를 올리지 않는다</h2>
+     * <p>임계 {@code 1.30}/{@code 0.70}은 <b>KRX 가격제한폭</b>이다({@link PriceDiscontinuity}의
+     * 상수 javadoc). 그 제도가 없는 시장에서는 <b>정상 매매가 그 폭을 넘고</b>, 게다가
+     * {@code listed_shares}가 비면 {@link #parValueRatio}가 언제나 비어 종류도 비율도 못 낸다 —
+     * 후보가 전부 {@code UNKNOWN}으로 쌓인다.
+     *
+     * <p><b>그 행은 무해하지 않다.</b> {@code CorporateActionLedger.findUnadjusted}가
+     * {@code OBSERVED}를 그대로 돌려주고 {@code UnadjustedActionGuard}가 <b>그 효력일을 창에
+     * 삼키는 산출 일자를 억제한다</b> — 워밍업이 1,261봉인 지표는 한 건만 걸려도 보존 창 전체가
+     * 빈다. 배치는 SUCCESS이고 화면은 「값 없음」이라 <b>조건 미달과 구별되지 않는다.</b>
+     *
+     * <p>실측(2026-08-31): 같은 술어가 국내에서 이웃 쌍 543,002 중 <b>72건·67종목</b>인데
+     * 미국에서는 1,652,647 중 <b>771건·317종목</b>이다(3.5배). 그 771의 배수 분포가
+     * 1.3~1.9배 414 · 0.25~0.7배 260으로 <b>대부분이 분할이 아니라 큰 하루</b>다.
+     *
+     * <p><b>축은 시장이 아니라 주식수의 유무다.</b> 국내는 {@code listed_shares} 결손이 0행이라
+     * 이 술어로 후보가 <b>한 건도 안 줄고</b>(72 → 72), 미국은 전 행이 NULL이라 0이 된다(실측).
+     * 시장 코드로 분기하면 새 시장마다 그 목록을 고쳐야 하고, <b>고치지 않은 시장은 조용히
+     * 옛 임계를 쓴다.</b>
+     *
+     * <p>MUST NOT: 이것을 「그 시장에는 기업행위 탐지가 없다」로 읽지 않는다. 소스가 분할·병합을
+     * 직접 주는 시장에서는 <b>그쪽이 정본</b>이고(ADR-0090), 이 휴리스틱은 <b>소스가 액면병합을
+     * 안 싣는 국내를 위한 두 번째 그물</b>이다(ADR-0049).
      */
     public List<CorporateAction> detectCandidates(long stockId) {
-        return jdbcTemplate.query("""
+        return withoutUnjudgeable(stockId, jdbcTemplate.query("""
                 SELECT trade_date, close, prev_close, listed_shares, prev_listed_shares FROM (
                     SELECT trade_date, close, listed_shares,
                            lag(close) OVER w AS prev_close,
@@ -171,6 +195,12 @@ public class AdjustmentRecalculator {
                     LocalDate date = rs.getObject("trade_date", LocalDate.class);
                     BigDecimal close = rs.getBigDecimal("close");
                     BigDecimal prevClose = rs.getBigDecimal("prev_close");
+
+                    if (rs.getBigDecimal("listed_shares") == null
+                            || rs.getBigDecimal("prev_listed_shares") == null) {
+                        // 판정 재료가 없다. null은 아래에서 걸러지고 그 수가 로그로 남는다.
+                        return null;
+                    }
 
                     Optional<BigDecimal> fromShares = parValueRatio(
                             rs.getBigDecimal("prev_listed_shares"), rs.getBigDecimal("listed_shares"),
@@ -190,7 +220,25 @@ public class AdjustmentRecalculator {
                             PriceDiscontinuity.observedRatio(close, prevClose),
                             CorporateAction.DetectionSource.HEURISTIC);
                 },
-                stockId, PriceDiscontinuity.LIMIT_UPPER, PriceDiscontinuity.LIMIT_LOWER);
+                stockId, PriceDiscontinuity.LIMIT_UPPER, PriceDiscontinuity.LIMIT_LOWER));
+    }
+
+    /**
+     * 주식수가 없어 판정할 수 없었던 불연속을 걸러 내고 <b>그 수를 남긴다.</b>
+     *
+     * <p>조용히 건너뛰면 이 저장소가 가장 싫어하는 형태가 된다 — 그래서 세어서 로그로 낸다.
+     * 국내에서는 {@code listed_shares} 결손이 0행이라 이 줄이 안 뜨고(실측), 뜨면 그것이
+     * <b>V9 이전 형태의 행이 다시 들어왔다</b>는 신호다.
+     */
+    private List<CorporateAction> withoutUnjudgeable(long stockId, List<CorporateAction> rows) {
+        long skipped = rows.stream().filter(java.util.Objects::isNull).count();
+        if (skipped > 0) {
+            log.info("상장주식수가 없어 후보로 올리지 않은 가격 불연속이 {}건이다. stockId={} — "
+                    + "종류도 비율도 못 내는 후보는 OBSERVED로 쌓여 그 효력일을 창에 삼키는 "
+                    + "지표를 통째로 억제한다(AdjustmentRecalculator.detectCandidates javadoc).",
+                    skipped, stockId);
+        }
+        return rows.stream().filter(java.util.Objects::nonNull).toList();
     }
 
     /**

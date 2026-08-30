@@ -233,12 +233,14 @@ class AdjustmentRecalculatorTest {
     @DisplayName("KRX 가격제한폭을 넘는 변동만 후보다 — 임계가 비대칭이다")
     void detectsOnlyMovesBeyondThePriceLimit() {
         // +35% / −35%는 제한폭 밖이고, +25% / −25%는 안이다.
+        // 주식수를 채운다. 이 시험의 주제는 임계이고, 주식수가 없으면 그 앞의 게이트에서
+        // 걸러져 임계를 재지 못한다(detectCandidates javadoc).
         writer.write(stockId, List.of(
-                bar("2026-01-02", "1000"),
-                bar("2026-01-05", "1250"),   // +25% — 정상
-                bar("2026-01-06", "1688"),   // +35% — 후보
-                bar("2026-01-07", "1266"),   // −25% — 정상
-                bar("2026-01-08", "823")));  // −35% — 후보
+                bar("2026-01-02", "1000", 1_000_000L),
+                bar("2026-01-05", "1250", 1_000_000L),   // +25% — 정상
+                bar("2026-01-06", "1688", 1_000_000L),   // +35% — 후보
+                bar("2026-01-07", "1266", 1_000_000L),   // −25% — 정상
+                bar("2026-01-08", "823", 1_000_000L)));  // −35% — 후보
 
         assertThat(recalculator.detectCandidates(stockId))
                 .extracting(CorporateAction::effectiveDate)
@@ -290,10 +292,31 @@ class AdjustmentRecalculatorTest {
                 .isEqualTo(CorporateAction.Type.UNKNOWN);
     }
 
+    /**
+     * <b>이 시험은 계약을 뒤집은 자리다.</b> 전에는 주식수가 없어도 {@code UNKNOWN} 후보를
+     * 올렸는데, 그 행은 무해하지 않다 — {@code findUnadjusted}가 {@code OBSERVED}를 돌려주고
+     * {@code UnadjustedActionGuard}가 <b>그 효력일을 창에 삼키는 산출 일자를 억제한다.</b>
+     * 임계가 KRX 가격제한폭이라 그 제도가 없는 시장에서는 정상 매매가 그 폭을 넘고,
+     * 실측으로 미국 1,652,647쌍 중 771건·317종목이 그렇게 올라온다(국내는 543,002쌍 중 72건).
+     *
+     * <p><b>「가격으로 비율을 대신 내지 않는다」는 옛 시험의 이유는 그대로 유효하다</b> —
+     * 바뀐 것은 <b>올릴지</b>이고 {@code parValueRatio}는 안 건드렸다.
+     */
     @Test
-    @DisplayName("주식수가 없으면 종류를 모르는 것으로 둔다 — 가격으로 대신 내면 오차가 돌아온다")
-    void missingShareCountYieldsUnknown() {
+    @DisplayName("주식수가 없으면 후보로 올리지 않는다 — 판정할 수 없는 후보가 지표를 억제한다")
+    void missingShareCountYieldsNoCandidate() {
         writer.write(stockId, List.of(bar("2023-04-27", "1492"), bar("2023-05-16", "15860")));
+
+        assertThat(recalculator.detectCandidates(stockId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("주식수가 있는데 비율이 가격을 설명하지 못하면 여전히 UNKNOWN이다")
+    void unexplainedShareRatioStillYieldsUnknown() {
+        // 주식수가 1.54배로 늘었는데 가격은 1.47배로 올랐다 — 액면 변경으로 설명되지 않는다.
+        writer.write(stockId, List.of(
+                bar("2025-10-29", "1221000", 71_174_000L),
+                bar("2025-11-24", "1789000", 109_608_000L)));
 
         assertThat(recalculator.detectCandidates(stockId))
                 .singleElement()
@@ -304,9 +327,12 @@ class AdjustmentRecalculatorTest {
     @Test
     @DisplayName("탐지 결과는 전부 HEURISTIC이다 — 원장이 그것으로 승인 게이트를 건다")
     void candidatesAreAlwaysHeuristic() {
-        writer.write(stockId, List.of(bar("2026-01-02", "100000"), bar("2026-01-05", "2000")));
+        writer.write(stockId, List.of(
+                bar("2026-01-02", "100000", 1_000_000L),
+                bar("2026-01-05", "2000", 50_000_000L)));
 
         assertThat(recalculator.detectCandidates(stockId))
+                .isNotEmpty()
                 .allMatch(a -> a.source() == CorporateAction.DetectionSource.HEURISTIC);
     }
 
