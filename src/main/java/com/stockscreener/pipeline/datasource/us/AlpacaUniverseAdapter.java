@@ -164,8 +164,13 @@ public class AlpacaUniverseAdapter implements UniverseDataSource {
      *
      * <p>MUST: {@code status=active}를 명시한다. 기본값이 "모든 상태 포함"이라 빠뜨리면
      * 상장폐지 종목이 섞인다 — 실측에서 2,163개가 더 왔다.
+     *
+     * <p><b>패키지 접근인 이유</b>: {@link UsMarketCapUniverseAdapter}가 같은 목록을 필요로
+     * 하는데, 그쪽이 {@code /v2/assets}를 <b>또 알게 되면</b> 벤더 지식이 두 곳으로 갈린다
+     * (ADR-0006). {@code fetchConstituents}를 대신 부를 수 없는 것은 그것이 티커만 담은
+     * {@link UniverseSnapshot}을 돌려주기 때문이다 — 저쪽은 <b>이름</b>으로 증권 종류를 가른다.
      */
-    private List<AlpacaAsset> fetchActiveAssets() throws DataSourceException {
+    List<AlpacaAsset> fetchActiveAssets() throws DataSourceException {
         String context = "assets exchange=" + EXCHANGES;
 
         if (!rateLimiter.hasDailyQuota()) {
