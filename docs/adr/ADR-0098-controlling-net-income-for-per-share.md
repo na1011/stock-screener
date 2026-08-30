@@ -1,0 +1,165 @@
+---
+id: ADR-0098
+status: 채택됨
+date: 2026-08-30
+applies_to:
+  - "src/main/java/com/stockscreener/indicator/calculator/FinancialMath.java"
+  - "src/main/java/com/stockscreener/indicator/FinancialFigures.java"
+  - "src/main/java/com/stockscreener/pipeline/datasource/RawFinancialReport.java"
+  - "src/main/java/com/stockscreener/pipeline/datasource/kr/DartFullAccountMapper.java"
+  - "src/main/java/com/stockscreener/pipeline/batch/FullStatementRefillJob.java"
+---
+
+# ADR-0098. 주당 지표의 분자를 지배기업 소유주 귀속 순이익으로 바꾼다
+
+## 결정
+
+`financial_statement.net_income_controlling`을 더하고 **주당 지표 일곱**이 그것을 쓴다.
+**`net_income`은 연결 총액 그대로 둔다** — 분모가 연결 전체인 비율 지표는 계속 그쪽을 쓴다.
+
+전 종목 **분기**가 필요해져 `full-statement-refill`의 「전 종목 분기 거절」 가드에
+`--all-quarters` 갈래를 더한다.
+
+## 규칙
+
+- **MUST: 짝으로 고른다.** 분모가 보통주 주식수면 분자도 지배주주 귀속(주당 지표), 분모가
+  자본총계·자산총계·매출이면 분자도 연결 총액(비율 지표)이다. **순이익이 분모인 둘
+  (`DIVIDEND_PAYOUT`·`EXEC_PAY_TO_NET_INCOME`)은 주당 쪽이다** — 배당과 임원보수를 받는 몫이
+  지배주주의 것이고, DART가 계산해 주는 `(연결)현금배당성향`이 정확히 그 분모를 쓴다.
+- **MUST: 폴백을 창 단위로 둔다**(`FinancialMath.sumControllingNetIncome`). 소비처가 전부
+  네 분기를 더하므로 **행마다 폴백하면 합이 두 기준의 혼합**이 되어 어느 쪽도 아닌 수가
+  나온다. 넷이 모두 있을 때만 지배주주로 합하고, 하나라도 없으면 넷 다 연결 총액으로 합한다.
+- **MUST NOT: `account_id`를 부분일치로 맞추지 않는다.** `ifrs-full_ProfitLoss`가
+  `ifrs-full_ProfitLossAttributableToOwnersOfParent`의 **접두사**라 부분일치면 정반대 값을 문다.
+- **MUST NOT: 계정명 폴백을 두지 않는다.** 표본 여덟이 한 계정을 **일곱 가지 이름**으로 부른다.
+- **MUST NOT: `net_income`의 뜻을 바꾸지 않는다.** 바꾸면 비율 지표가 조용히 따라 움직이고
+  두 값을 대조할 근거도 사라진다.
+- **MUST: 적재 뒤 `--job=backfill`을 잇는다.** `fillMissing`은 무효화를 부르지 않으므로
+  백필이 없으면 `financial_statement`가 다 차도 화면이 한 글자도 안 바뀐다.
+- **MUST NOT: `--all-quarters`를 기본값으로 만들지 않는다.** 명시적으로 적는 행위 자체가
+  이 잡의 유일한 예산 통제다 — 로그의 `요청=N 실제콜=M`은 **다 태운 뒤에야** 나온다.
+
+## 검증
+
+```bash
+./gradlew test --tests "*ControllingNetIncomeTest*" --tests "*FullStatementRefillJobTest*"
+```
+
+**대조군으로 확인했다**: `PerCalculator`를 연결 총액으로 되돌리면 `ControllingNetIncomeTest`
+넷 중 **둘이 붉고** 폴백 경로 둘은 그대로 초록이다 — 그 둘이 실제로 분자를 재고 있다.
+
+**소스가 계산해 준 값과 맞는지가 이 결정의 유일한 외부 대조군이다.** 삼성전자 FY2025에서
+DART 배당표의 `(연결)현금배당성향` **25.10%** 대 우리 `DIVIDEND_PAYOUT` **25.096**이다
+(바꾸기 전 24.571).
+
+```premise 주당 지표의 분자가 지배주주 귀속으로 남아 있다
+psql -d stock_screener -At -c "WITH d AS (
+  SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'DIVIDEND_PAYOUT'),
+src AS (SELECT NULLIF(replace(g.payload->>'thstrm', ',', ''), '-')::numeric v
+        FROM governance_report_row g JOIN stock s ON s.id = g.stock_id
+        WHERE s.ticker = '005930' AND g.endpoint = 'DIVIDEND' AND g.bsns_year = 2025
+          AND g.payload->>'se' LIKE '%현금배당성향%'),
+ours AS (SELECT iv.value v FROM indicator_value iv JOIN stock s ON s.id = iv.stock_id, d
+         WHERE s.ticker = '005930' AND iv.indicator_code = 'DIVIDEND_PAYOUT'
+           AND iv.trade_date = d.t)
+SELECT CASE
+  WHEN (SELECT count(*) FROM src) = 0 THEN '잴 것이 없었다 — 배당표에 성향 행이 없다'
+  WHEN (SELECT count(*) FROM ours) = 0 THEN '잴 것이 없었다 — DIVIDEND_PAYOUT이 0행이다'
+  WHEN abs((SELECT v FROM ours) - (SELECT v FROM src)) <= 0.05
+    THEN 'OK 소스 ' || (SELECT v FROM src) || ' 대 우리 ' || round((SELECT v FROM ours), 3)
+  ELSE '분모가 갈렸다 — 소스 ' || (SELECT v FROM src) || ' 대 우리 '
+       || round((SELECT v FROM ours), 3) || ' (연결 총액이면 약 24.57)' END"
+```
+
+모집단을 삼성전자 하나로 좁힌 이유: **소스가 성향을 계산해 주는 종목이 대조군이 될 수 있는데,
+그 값의 반올림 자릿수가 회사마다 달라** 전 종목으로 넓히면 의도한 동작에 우는 펜스가 된다.
+삼성전자는 이 결정을 만든 실측의 출처이기도 하다.
+
+```premise 정정공시가 지배주주 순이익을 되돌리지 않았다
+psql -d stock_screener -At -c "SELECT CASE
+  WHEN count(*) FILTER (WHERE f.fiscal_period <> 'FY') = 0
+    THEN '잴 것이 없었다 — 국내 분기 행이 하나도 없다'
+  WHEN count(*) FILTER (WHERE f.fiscal_period <> 'FY'
+                          AND f.net_income_controlling IS NULL
+                          AND f.revision_no > 0) = 0
+    THEN 'OK 개정본 분기 행에 결손이 없다'
+  ELSE '개정본이 지배주주 순이익을 NULL로 되돌렸다: '
+       || count(*) FILTER (WHERE f.fiscal_period <> 'FY'
+                             AND f.net_income_controlling IS NULL AND f.revision_no > 0)
+       || '행 — full-statement-refill에 그 종목만 넘긴다' END
+FROM financial_statement f JOIN stock s ON s.id = f.stock_id
+WHERE f.is_latest AND s.market_code IN ('KOSPI', 'KOSDAQ')"
+```
+
+`revision_no > 0`으로 좁히는 것이 이 펜스의 핵심이다. **초판에서 비는 것은 「비지배지분이 없어
+소스가 행을 안 낸다」라 정상**이고, 그것까지 세면 매 세션 거짓 발견이 난다. 개정본에서만 비는
+것이 「메우러 와서 지우고 간」 자리다.
+
+## 배경
+
+사용자가 삼성전자의 네이버 PER 11.53과 우리 10.32의 차이를 물었다. 성분이 셋이었고 **둘은
+정의 차이, 하나가 결함**이다.
+
+| 성분 | 우리 | 네이버 | PER 배수 |
+|---|---|---|---|
+| 주가 기준일 | 266,000(08-27) | 257,000(08-28) | ×1.035 — ADR-0042대로다 |
+| 주식수 분모 | 보통주 5,846,278,608 | 보통주+우선주 | ×0.878 — 유지 결정 |
+| **이익 귀속** | **연결 총액** | **지배주주** | **×0.979 — 이 결정** |
+
+**결함인 이유는 짝이 안 맞기 때문이다.** 분모가 보통주 주식수인데 분자에 비지배지분의 몫이
+들어 있었다. K-IFRS 1033이 주당이익을 지배기업 보통주 귀속 이익으로 정의하는 것이 그 이유다.
+
+**크기가 종목마다 달라 랭킹이 기운다.** 배당표의 `(연결)당기순이익`(지배주주 귀속)과 우리
+`net_income`을 전수 대조하니 **512쌍 중 96쌍이 5% 초과, 65쌍이 20% 초과**였다. 중앙값 배수는
+1.0000인데 꼬리가 두껍다 — 다우데이타 5.48 · 한화 5.35 · 신세계 4.64 · HD현대 3.82로 **지주회사**다.
+즉 「PER이 낮은 종목」 조건의 최상위를 지주회사가 점거하고 있었다.
+
+**요약본으로는 못 얻는다.** `fnlttSinglAcnt`는 이미 받고 있어 거기 있으면 추가 호출이 0이었는데,
+픽스처 실측에서 중복된 `당기순이익(손실)` 두 행의 **값이 같았다**(FY2025 `ord` 29·61 둘 다
+45,206,805,000,000). 지분 구분이 아니다.
+
+**전체 재무제표는 연간·분기 모두 8/8로 준다**(`DartControllingProfitProbeLiveTest`).
+검산 `연결총액 = 지배주주 + 비지배`가 16/16 통과했고, 삼성전자 FY2025가
+**44,260,956,000,000으로 배당표 값과 정확히 일치**한다.
+
+## 버린 대안
+
+- **자본총계도 지배주주지분으로 바꾼다** — 짝은 맞지만 `자산 = 부채 + 자본`이 깨진다.
+  `SecEdgarColumn.TOTAL_EQUITY` javadoc이 실측으로 이미 기각해 뒀다(BRK·F 151행 중 50행이
+  어긋났고 차이가 정확히 비지배지분). `DEBT_RATIO`·`ALTMAN_Z`가 함께 바뀐다.
+- **주식수 분모에 우선주를 넣어 네이버와 맞춘다** — 남은 12% 차이가 여기서 온다. 그러나
+  **우리 시가총액이 보통주 기준**이라 내부 일관성이 지금 쪽이 낫다(네이버는 시총 보통주 /
+  EPS 우선주 포함으로 서로 어긋난다). K-IFRS 1033도 보통주 기준이다. 2026-08-30 사용자 결정.
+- **주요계정의 둘째 `당기순이익(손실)` 행을 쓴다** — 추가 호출이 0이라 가장 쌌다. 위 실측으로
+  닫혔다.
+- **연간 지배주주 비율을 분기에 곱해 합성한다** — 콜이 4배 대신 그대로다. 그러나 phase-criteria
+  P22 축② 「소스가 주지 않는 값을 합성하지 않았다」를 어긴다. Q4 유도는 **산술적 유도**지만
+  이것은 **추정**이라 성격이 다르다.
+- **미국 SEC도 같이 갈라 담는다** — spec §7의 시장 간 일관성 때문에 검토했으나 **지금보다
+  나빠진다.** 미국 `net_income`은 이미 `NetIncomeLoss`(us-gaap 정의상 지배주주 귀속)를 첫
+  후보로 써서 158,925행 중 149,761행이 **한 정의로 일관**돼 있고, 덮어쓸 경로가 없다
+  (`fillMissing`은 `stored == null`일 때만 채우고 ADR-0056이 덮기를, ADR-0040이 지우고
+  재적재를 못박아 기각했다). 갈라 담으면 옛 행과 새 행이 다른 정의인 혼합물이 된다.
+  **국내가 이 결정으로 바뀌면 주당 지표의 분자는 두 시장이 자동으로 일치한다.**
+
+## 결과
+
+**쉬워지는 것**: 주당 지표가 회계기준의 정의와 같아진다. 지주회사의 PER이 제자리로 올라가
+「PER 낮은 종목」 랭킹이 뜻을 되찾는다. 배당성향이 소스가 계산해 준 값과 맞아 **대조군이 생겼다**
+— 그전에는 어긋나는 것이 정상이라 검증할 방법이 없었다.
+
+**어려워지는 것**
+
+- **화면 실적표와 EPS가 어긋난다.** `StockReader.financialsOf`의 「당기순이익」은 연결 총액인데
+  `EPS_TTM`은 지배주주라 **EPS × 주식수가 화면의 순이익과 안 맞는다.** 이번 범위에 넣지 않았다
+  (`FinancialRow` → `FinancialsPanel.vue`가 프론트 계약이라 화면 변경이 따라온다).
+  ADR-0059가 지배하는 자리다.
+- **NULL 하나가 두 뜻을 갖는다** — 「비지배지분이 없어 소스가 행을 안 낸다」와 「못 받았다」.
+  스키마로는 못 가르므로 위 premise가 개정본으로 좁혀 센다.
+- **분기 적재 비용이 상시화된다.** 이 잡이 이제 전 종목 분기를 도는 이유가 생겨, 새 종목이
+  편입될 때마다 그 종목의 분기를 받아야 한다.
+- **네이버와 여전히 12% 다르다.** 우선주 분모 결정의 결과이지 결함이 아니다 —
+  다음 세션이 이것을 다시 파헤치지 않게 여기 적는다.
+
+**되돌리려면**: 일곱 계산기의 `sumControllingNetIncome`·`controllingNetIncomeOf` 호출을
+되돌리고 V38 컬럼을 지운다. 적재된 값은 `full-statement-refill`로 복구된다.
