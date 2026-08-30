@@ -4,6 +4,8 @@ status: 채택됨
 date: 2026-08-30
 applies_to:
   - "src/main/java/com/stockscreener/indicator/IndicatorDataReader.java"
+  # 걷기를 결정하는 자리. 통화 축이 여기 없으면 게이트가 새 계산만 막는다(§규칙).
+  - "src/main/java/com/stockscreener/indicator/IndicatorRunner.java"
   - "src/test/java/com/stockscreener/indicator/CurrencyGateTest.java"
 ---
 
@@ -27,6 +29,15 @@ applies_to:
   「USD를 버린다」로 만들면 **미국을 켜는 순간 전 종목의 재무가 사라진다.**
 - **MUST: 리더에서 막는다.** ADR-0080이 옛 행을 걷는 조건이 「계산기가 창 전체에 대해 한 점도
   못 냈을 때」라, `IndicatorValueWriter`나 상위에서 거르면 **이미 저장된 오염값이 안 걷힌다.**
+  - **그것만으로는 안 걷혔다.** 리더에서 막으면 재무가 0행으로 오는데, ADR-0080의
+    `inputsWereReadable`이 그것을 **「아직 모른다」로 접어** `needsFinancial` 계산기의 삭제를
+    스킵한다. **MUST: 러너가 「우리가 막은 것」을 알아야 한다** —
+    `StockAttributes.financialCurrencyMismatched`가 그 축이고, 없으면 이 결정은
+    **새 계산만 막고 저장된 오염값은 영구히 남긴다.**
+- **MUST: 그 판정의 술어를 `CURRENCY_GATE`와 같게 유지한다.** 게이트가 `is_latest`를 안 보므로
+  판정도 안 본다 — 통화가 다른 행이 **개정 전 판에만** 있는 종목이 실재하고(실측 6종목, 전부 US),
+  갈리면 **게이트는 막는데 러너는 「불일치 아님」으로 읽어** 옛 행이 영영 안 걷힌다.
+  `CurrencyGateTest`의 「두 술어가 안 갈린다」가 그 자리를 잠근다.
 - **MUST: `LATEST`와 `KNOWN_ON` 둘 다 같은 게이트를 탄다.** 한쪽만 걸면 시점 재현이 라이브와
   다른 모집단을 보게 되고, 그 차이는 값이 나오는 형태라 드러나지 않는다.
 - **MUST NOT: NULL 통화 갈래를 만들지 않는다.** `financial_statement.currency_code`가
@@ -43,33 +54,52 @@ applies_to:
 참이다. 재는 것은 *섞인 종목의 재무가 실제로 안 나오는가*이고, **대조군으로 확인했다**:
 게이트를 빼면 「막힌다」를 단정하는 둘이 붉고, 「통과한다」를 단정하는 둘은 그대로 초록이다.
 
-```premise 통화가 섞인 종목의 오염된 지표가 아직 남아 있는가
+```premise 통화가 섞인 종목에 재무 기반 지표가 남아 있는가
 psql -d stock_screener -At -c "
 WITH mismatched AS (
-  SELECT DISTINCT s.id, s.ticker, s.name
+  SELECT DISTINCT s.id, s.ticker
   FROM financial_statement f
   JOIN stock s ON s.id = f.stock_id
   JOIN market m ON m.code = s.market_code
   WHERE f.currency_code <> m.currency_code),
  stale AS (
   SELECT count(*) AS rows, count(DISTINCT v.stock_id) AS stocks
-  FROM indicator_value v JOIN mismatched x ON x.id = v.stock_id)
+  FROM indicator_value v
+  JOIN mismatched x ON x.id = v.stock_id
+  JOIN indicator i ON i.code = v.indicator_code
+  WHERE i.category = 'FUNDAMENTAL')
 SELECT CASE
   WHEN (SELECT count(*) FROM mismatched) = 0
     THEN '잴 것이 없었다 — 재무 통화가 시장 통화와 다른 종목이 하나도 없다'
+  WHEN NOT EXISTS (SELECT 1 FROM indicator WHERE category = 'FUNDAMENTAL')
+    THEN '잴 것이 없었다 — FUNDAMENTAL 지표가 카탈로그에 하나도 없다'
   WHEN (SELECT rows FROM stale) = 0
     THEN 'OK 통화가 섞인 ' || (SELECT count(*) FROM mismatched)
-         || '종목에 저장된 지표가 없다 (' || (SELECT string_agg(ticker, ',') FROM mismatched) || ')'
-  ELSE '통화가 섞인 ' || (SELECT stocks FROM stale) || '종목에 지표 '
-       || (SELECT rows FROM stale) || '행이 남아 있다 — 게이트는 새 계산을 막지만 '
-       || '옛 행은 ADR-0080의 걷기가 지운다. 활성 유니버스 단일 거래일 백필이 그것을 닫는다 (미국은 US_LISTED가 비활성이라 대상이 아니다)'
+         || '종목에 재무 기반 지표가 없다 (' || (SELECT string_agg(ticker, ',') FROM mismatched) || ')'
+  ELSE '통화가 섞인 ' || (SELECT stocks FROM stale) || '종목에 재무 기반 지표 '
+       || (SELECT rows FROM stale) || '행이 남아 있다 — IndicatorRunner.inputsWereReadable의 '
+       || '통화 축부터 본다. 그 축이 없으면 게이트가 재무를 0행으로 만드는 것이 '
+       || 'ADR-0080의 「입력을 못 읽었다」로 접혀 걷기가 스킵된다'
 END"
 ```
 
-**이 전제가 묻는 것은 게이트가 아니라 그 뒤처리다.** 게이트를 넣은 직후에는 반드시 발화하며,
-**백필 한 번으로 닫힌다** — 닫히지 않으면 걷기가 이 종목들에 안 걸린 것이다.
-**그 백필의 대상은 활성 유니버스뿐이다**(`IndicatorBackfillJob.resolveTargets`) —
-지금은 국내 350종목이고, 이 결함이 국내 3종목이라 그것으로 충분하다.
+**이 전제가 묻는 것은 게이트가 아니라 그 뒤처리다.** 게이트를 넣은 직후에는 반드시 발화하고,
+**걷기가 열린 뒤의 백필 한 번으로 닫힌다.** 그 백필의 대상은 활성 유니버스뿐이다
+(`IndicatorBackfillJob.resolveTargets`) — 지금은 국내 350종목이고 이 결함이 국내 3종목이다.
+
+**MUST: 모집단을 `indicator.category = 'FUNDAMENTAL'`로 좁힌 것이 이 전제의 핵심이다.**
+처음에는 그 종목의 `indicator_value`를 **전량** 셌는데, 그러면 **활성 종목에 대해 원리적으로
+`OK`를 못 낸다** — 두산밥캣은 편입 중이라 매 거래일 122개 지표가 새로 들어오고 그중 대부분이
+`ADJ_CLOSE`·이동평균처럼 **재무를 안 쓰는 정상값**이다. `0000-template.md`가
+*"MUST NOT: 의도한 동작에 우는 펜스를 만들지 않는다"*로 이름 붙인 병이 그것이다.
+
+**`FUNDAMENTAL` 53종은 전수로 확인했다 — 재무 없이 값을 내는 것이 하나도 없다.**
+`MARKET_CAP`·`TURNOVER_RATIO`·`SHARES_GROWTH_3Y`는 `PRICE`이고
+`DIVIDEND_PAYOUT`·`EXEC_PAY_TO_NET_INCOME`은 `GOVERNANCE`다. 카테고리는
+`@IndicatorMeta` → `IndicatorCatalogSynchronizer`가 유지하므로 **손으로 적은 목록처럼 낡지
+않는다.** **이 모집단이 자라는 자리**: 재무를 안 쓰는 `FUNDAMENTAL` 지표가 새로 생기면
+이 전제가 영구히 붉는다 — 그때 여기서 그 코드를 빼는 것이 아니라 **그 지표의 카테고리가
+맞는지를 먼저 본다.**
 
 ## 배경
 
@@ -99,6 +129,9 @@ END"
   **v1.1에서 정확히 반대로 작동한다.**
 - **종목 단위 판정을 별도 질의로 한다** — 왕복이 는다. 백필이 날짜×종목이라 180×350×2 =
   약 12만 회가 되므로 서브쿼리로 넣었다. 실측 비용은 종목당 **+0.7ms**(1.178 → 1.898ms).
+  **이 기각은 「질의를 하나 더 던지는 것」에 걸린다** — `readStockAttributes`처럼 **이미 종목당
+  한 번 도는 질의에 컬럼을 얹는 것**은 왕복이 안 늘어 여기 해당하지 않는다(실측 0.084 → 0.48ms,
+  350종목 × 1거래일에 **+0.14초**). 그 자리가 러너의 통화 축이다.
 
 ## 결과
 
@@ -113,8 +146,15 @@ END"
   이 결정의 범위가 아니다.**
 - **백분위 모집단이 바뀐다.** 값을 지우면 국내 350종목의 `*_PCTL`이 다시 매겨지고,
   **알림이 걸린 워치리스트 1건**이 `PER_PCTL`·`PBR_PCTL`을 건다(ADR-0026의 엣지 트리거).
-- **저장된 오염값은 백필 전까지 남는다.** 위 premise가 그것을 신고하고, 활성 유니버스
-  단일 거래일 백필 한 번으로 닫힌다(국내 350종목 · 실측 64초).
+- **저장된 오염값을 걷으려면 러너에 통화 축이 있어야 한다.** 이 결정만으로는 안 걷혔다 —
+  위 §규칙의 두 번째 항목이 그 이유이고, 축을 더한 뒤의 단일 거래일 백필 한 번이 닫는다.
+- **걷히는 것의 절반쯤은 오염값이 아니다.** 비율 지표는 분자·분모가 같은 통화라 상쇄되므로
+  값 자체는 맞는데(`OPM_MIN_5Y 7.8`), `needsFinancial`을 선언한 이상 함께 걷힌다.
+  **그것이 이 결정이 이미 치르기로 한 대가다** — 종목 단위 게이트를 고른 순간 정해졌다.
+- **업종 상대값이 백분위보다 크게 움직인다.** 오염값이 백분위 **최상단**이라 그것을 빼도
+  남은 종목의 `rank`는 **한 종목도 안 바뀌고**(실측) 분모만 줄어 최대 0.014 움직인다.
+  반면 업종 중앙값은 **`DEBT_RATIO`가 54종목·최대 26.5%, `PSR`이 42종목·최대 28.7%**로 바뀐다.
+  **MUST NOT: 「백분위가 밀린다」를 이 결정의 근거로 적지 않는다 — 재보니 거짓이다.**
 
 **되돌리려면**: `CURRENCY_GATE`를 두 질의에서 빼면 된다. 그러면 `CurrencyGateTest`의 넷 중
 둘이 붉는다 — **되돌린 것이 조용하지 않다는 것이 그 테스트의 값이다.** 다만 **지워진 지표는

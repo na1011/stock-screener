@@ -4,6 +4,8 @@ status: 채택됨
 date: 2026-08-21
 applies_to:
   - "src/main/java/**/indicator/IndicatorRunner.java"
+  # 「우리가 막은 것」의 판정이 여기서 온다(§규칙). 게이트를 고칠 때 걷기를 함께 봐야 한다.
+  - "src/main/java/**/indicator/IndicatorDataReader.java"
   - "src/main/java/**/indicator/DerivedIndicatorCleanup.java"
   - "src/main/java/**/indicator/PercentileCalculator.java"
   - "src/main/java/**/indicator/SectorRelativeCalculator.java"
@@ -30,7 +32,15 @@ applies_to:
   지표는 복구에 날짜 수만큼의 백필이 든다.**
 - **MUST: 입력을 못 읽은 것과 값이 없는 것을 가른다.** 재무를 한 행도 못 읽었으면 「아직 모른다」이지
   「값이 사라졌다」가 아니다. 안 가르면 **공시가 늦은 구간에서 재무 지표 이력이 사라졌다가 다음 실행에
-  다시 쓰인다** — ADR-0045가 닫은 왕복이다. 선언으로 판정되는 것은 `DataRequirement.needsFinancial`뿐이다.
+  다시 쓰인다** — ADR-0045가 닫은 왕복이다. 선언으로 판정되는 축은 **셋**이다 —
+  `needsFinancial`(이 결정) · `needsGovernance`(ADR-0081) · `needsMarketIndex`(ADR-0085).
+- **MUST: 못 읽은 이유가 「우리가 건 게이트」면 그것은 「값이 없다」다.** 통화가 시장과 다른 종목은
+  `IndicatorDataReader`의 `CURRENCY_GATE`가 재무를 **0행**으로 주는데(ADR-0094), 그것을 위 규칙의
+  「아직 모른다」로 접으면 **이미 저장된 오염값이 영영 안 걷힌다** — 게이트는 새 계산만 막는다.
+  판정은 `StockAttributes.financialCurrencyMismatched`가 **종목당 한 번 도는 질의에 얹어** 낸다.
+  **MUST NOT: 이 축을 「재무가 없으면 걷는다」로 넓히지 않는다** — 판정이 「통화가 다른 재무 행이
+  있는가」라 재무가 통째로 없는 종목은 거짓이고, 그래야 맥쿼리인프라처럼 재무가 원래 없는 종목이
+  보호된다(ADR-0097이 지킨 자리).
 - **MUST: 원본을 지우면 파생도 함께 걷는다.** 날짜별 정리는 **그날 하나**만 보므로 원본이 보존 창
   전체에서 사라지면 나머지 179일자의 파생 행은 어떤 경로도 안 건드린다. 남는 것은 **원본 없는 백분위**이고
   화면에서는 그냥 숫자다.
@@ -46,9 +56,13 @@ applies_to:
 ./gradlew test --tests "*IndicatorRunnerTest*"
 ```
 
-네 단언이 짝을 이룬다 — 지워야 할 것(`deletesRowsOfIndicatorsThatStoppedProducing`)과 **지우면 안 되는
-것 셋**(`keepsRowsWhenTheInputCouldNotBeReadAtAll`·`neverDeletesBeyondTheWindowItRead`·
+다섯 단언이 짝을 이룬다 — 지워야 할 것 **둘**(`deletesRowsOfIndicatorsThatStoppedProducing` ·
+`deletesRowsWhenFinancialsWereBlockedByTheCurrencyGate`)과 **지우면 안 되는 것 셋**
+(`keepsRowsWhenTheInputCouldNotBeReadAtAll`·`neverDeletesBeyondTheWindowItRead`·
 `doesNotCullWhenEmptinessCameFromSuppression`). **뒤엣것들이 없으면 「전부 지운다」로도 초록이 된다.**
+
+**대조군으로 확인했다**: `inputsWereReadable`에서 통화 축을 걷으면 **새 단정 하나만 붉고**
+나머지 30개는 그대로 초록이다 — 그 축이 여는 것이 정확히 한 갈래라는 뜻이다.
 
 **같은 파일에 ADR-0085의 단언 여덟이 함께 있다** — 이 결정이 안 걸리는 세 자리를 그쪽이 소유한다.
 `--tests "*IndicatorRunnerTest*"` 한 번이 둘을 다 돌리므로 **명령은 그대로이고 세는 수만 다르다.**
