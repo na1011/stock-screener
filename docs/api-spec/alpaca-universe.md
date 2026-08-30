@@ -95,6 +95,38 @@ AGM.A · CIG.C · PBR.A · BH.A). **반대로 안 빼면 같은 회사가 두 �
 `AKO.A`/`AKO.B`처럼 두 클래스가 다 상장된 쌍이 있어 국내의 우선주 배제가 막던 중복이
 그대로 재현된다. **점은 이 판정의 축이 아니다.**
 
+### 이름 × CIK 교차표 — ADR-0086이 「재본 적 없다」로 열어 둔 커버리지 (2026-08-30)
+
+**세는 규칙**: 이름 라벨은 대문자 부분문자열(`PREFERRED|PFD` → Preferred, `WARRANT`, `UNIT`,
+`RIGHT`, `DEPOSITARY`, `NOTE|DEBENTURE|BOND`, `ETF| FUND| TRUST`, `COMMON STOCK|ORDINARY SHARES`,
+나머지 미분류). CIK는 `company_tickers_exchange.json`에 **그대로 또는 점→하이픈**으로 붙는가.
+모수 8,495(`UsUniverseAxisProbeLiveTest`).
+
+| 이름 라벨 | CIK 단독 | CIK 중복 | CIK 없음 |
+|---|---|---|---|
+| (미분류) | 1,789 | **153** | 22 |
+| Common Stock | 2,527 | 507 | 12 |
+| Depositary | 239 | 10 | 10 |
+| Fund/Trust | 310 | 13 | 1,080 |
+| Note/Bond | 19 | 147 | 185 |
+| Preferred | 18 | 110 | 309 |
+| Right | 12 | 106 | 45 |
+| Unit | 110 | 241 | 64 |
+| Warrant | 2 | 367 | 88 |
+
+**두 축의 구멍이 이 표의 답이다.**
+
+- **CIK 축의 구멍 = 161** — `단독 × (Preferred·Warrant·Unit·Right·Note)`. 발행사와 CIK를
+  공유하지 않아 중복 배제에 안 걸리는 비보통주다.
+- **이름 축의 구멍 = 153** — `중복 × (미분류)`. 같은 CIK를 나눠 쓰는데 이름으로는 종류를
+  못 가르는 것들이다. **ADR-0086이 물은 수가 이것이고, 이름만으로는 못 닫는다.**
+- **`중복 × Common Stock` 507**은 정당한 이중 클래스(`BRK.A/B`·`GOOGL/GOOG`)와 진짜 중복이
+  섞여 있다 — **가르려면 다른 축이 필요하다.**
+- **`Fund/Trust × CIK 없음` 1,080**이 ETF·펀드의 대부분이다.
+
+**둘 중 하나만 쓰면 안 닫힌다.** 상위 1,000을 실제로 뽑아 보면 CIK 중복 124 · 우선주류 이름
+62가 들어오는데(`alpaca-bars.md` §시가총액 분포) **그 둘은 겹치지 않는다.**
+
 **「ETF·펀드가 몇인가」는 세는 규칙이 정한다.** 위 이름 단서로 세면 ETF 1,250 · Fund/Trust
 1,500이고, CIK에 안 붙는 것으로 세면 1,815(그중 ETF·펀드 1,332), 이름을
 `%ETF%|%fund%|%trust%|%index%`로 훑으면 1,677이다. **셋 다 다른 것을 세고 있다** — 수를
