@@ -50,8 +50,41 @@ applies_to:
 본다 — 계산 입력까지 자르는 회귀를 이 테스트만 잡는다.
 
 ```premise 보존 경계 밖에 지표가 쌓이지 않는다
-psql -d stock_screener -At -c "WITH b AS (SELECT DISTINCT trade_date FROM price_daily ORDER BY trade_date DESC OFFSET 180 LIMIT 1) SELECT CASE WHEN (SELECT count(*) FROM indicator_value) = 0 THEN '지표가 한 행도 없다 — 잴 것이 없었다' WHEN (SELECT count(*) FROM b) = 0 THEN '시세가 180거래일보다 적다 — 경계가 아직 없어 거를 것이 없다' WHEN NOT EXISTS (SELECT 1 FROM indicator_value, b WHERE indicator_value.trade_date <= b.trade_date) THEN 'OK 보존 경계 밖 지표가 없다' WHEN (SELECT count(DISTINCT indicator_value.trade_date) FROM indicator_value, b WHERE indicator_value.trade_date <= b.trade_date) = 1 THEN '1거래일(' || (SELECT min(indicator_value.trade_date) FROM indicator_value, b WHERE indicator_value.trade_date <= b.trade_date) || ')이 경계 밖이다 — 하루면 §긴 백필의 대가이고 다음 정리가 지운다. 필터를 고치지 말고 앱을 띄워 일일 갱신을 돌린다(ADR-0043 — 저절로 돌지 않는다)' ELSE (SELECT count(DISTINCT indicator_value.trade_date)::text FROM indicator_value, b WHERE indicator_value.trade_date <= b.trade_date) || '거래일이 경계 밖이다 — 여럿이면 §긴 백필의 대가가 아니라 경계 필터를 거치지 않은 쓰기다' END" 2>&1
+psql -d stock_screener -At -c "
+WITH b AS (
+  SELECT m.code AS market_code,
+         (SELECT p.trade_date FROM price_daily p JOIN stock s ON s.id = p.stock_id
+           WHERE s.market_code = m.code
+           GROUP BY p.trade_date ORDER BY p.trade_date DESC OFFSET 180 LIMIT 1) AS cutoff
+  FROM market m),
+outside AS (
+  SELECT b.market_code, count(*) AS days, min(i.trade_date) AS first_day
+  FROM b JOIN indicator_trade_date i ON i.market_code = b.market_code
+  WHERE b.cutoff IS NOT NULL AND i.trade_date <= b.cutoff
+  GROUP BY b.market_code)
+SELECT CASE
+  WHEN (SELECT count(*) FROM indicator_trade_date) = 0
+    THEN '지표가 한 행도 없다 — 잴 것이 없었다'
+  WHEN (SELECT count(*) FROM b WHERE cutoff IS NOT NULL) = 0
+    THEN '어느 시장도 시세가 180거래일보다 적다 — 경계가 아직 없어 거를 것이 없다'
+  WHEN (SELECT count(*) FROM outside) = 0 THEN 'OK 보존 경계 밖 지표가 없다'
+  WHEN (SELECT max(days) FROM outside) = 1
+    THEN (SELECT string_agg(market_code || ' 1거래일(' || first_day || ')', ', ' ORDER BY market_code)
+          FROM outside)
+         || '이 경계 밖이다 — 하루면 §긴 백필의 대가이고 다음 정리가 지운다. 필터를 고치지 말고 '
+         || '앱을 띄워 일일 갱신을 돌린다(ADR-0043 — 저절로 돌지 않는다)'
+  ELSE (SELECT string_agg(market_code || ' ' || days || '거래일', ', ' ORDER BY market_code) FROM outside)
+       || '이 경계 밖이다 — 여럿이면 §긴 백필의 대가가 아니라 경계 필터를 거치지 않은 쓰기다'
+END"
 ```
+
+**MUST: 경계를 시장마다 잰다.** 처음에는 `price_daily`의 **전역** distinct 거래일에서 경계를
+뽑았는데, 그러면 달력이 다른 시장의 봉이 들어오는 것만으로 발화한다 — 국내 거래일과 NYSE
+세션을 합치면 경계가 2025-12-01에서 2025-12-12로 밀려 국내 지표 **18거래일**이 경계 밖으로
+읽힌다(2026-08-31 실측). **그때 이 전제가 대는 원인이 거짓이다** — 아래 마지막 갈래가
+*"경계 필터를 거치지 않은 쓰기다"*라고 신고하는데 필터는 멀쩡하고 렌즈만 합집합이라,
+다음 세션이 `IndicatorRetentionPolicy`를 고치러 간다. `writeCutoff`는 이미 시장을 받는다
+(ADR-0093).
 
 **모집단이 비는 경우를 둘로 가른다** — "지표가 통째로 없다"와 "시세가 아직 180거래일에
 못 미친다"는 원인이 다르고, 뒤엣것은 초기 적재 중에 정상이다.

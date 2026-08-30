@@ -28,9 +28,47 @@ applies_to:
 보존 기간을 넘긴 행이 지워지고 그 안쪽은 남는지, 원자료는 그대로인지 확인한다.
 
 ```premise 지표가 180거래일 안에만 남아 있다
-psql -d stock_screener -At -c "WITH RECURSIVE t AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value iv WHERE iv.trade_date > t.d) FROM t WHERE t.d IS NOT NULL), c AS (SELECT count(*) n FROM t WHERE d IS NOT NULL) SELECT CASE WHEN n = 0 THEN '지표가 한 행도 없다 — 잴 것이 없었다' WHEN n <= 180 THEN 'OK ' || n || '거래일' WHEN n = 181 THEN '181거래일이 남아 있다(보존 180) — 하루면 긴 백필이 경계를 앞지른 대가이고 다음 정리가 지운다(ADR-0045 §긴 백필). 앱을 띄워 일일 갱신을 돌린다.' ELSE n || '거래일이 남아 있다(보존 180). 하루가 아니면 정리가 오래 돌지 않았거나 백필이 보존 밖을 되살렸다.' END FROM c"
+psql -d stock_screener -At -c "
+WITH RECURSIVE t AS (
+  SELECT min(trade_date) d FROM indicator_value
+  UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value iv WHERE iv.trade_date > t.d)
+  FROM t WHERE t.d IS NOT NULL),
+src AS (SELECT count(*) AS n FROM t WHERE d IS NOT NULL),
+idx AS (SELECT market_code, count(*) AS n FROM indicator_trade_date GROUP BY market_code),
+allidx AS (SELECT count(DISTINCT trade_date) AS n FROM indicator_trade_date),
+over AS (SELECT market_code, n FROM idx WHERE n > 180)
+SELECT CASE
+  WHEN (SELECT n FROM src) = 0 THEN '지표가 한 행도 없다 — 잴 것이 없었다'
+  WHEN (SELECT count(*) FROM idx) = 0
+    THEN '지표는 ' || (SELECT n FROM src) || '거래일 있는데 indicator_trade_date가 비었다 — '
+         || '색인이 원본과 갈렸다. IndicatorTradeDateIndex.rebuild가 그 자리다'
+  WHEN (SELECT n FROM allidx) <> (SELECT n FROM src)
+    THEN '색인이 원본과 갈렸다: indicator_trade_date ' || (SELECT n FROM allidx)
+         || '거래일 대 indicator_value ' || (SELECT n FROM src)
+         || '거래일 — 보존을 재기 전에 색인부터 다시 짓는다(IndicatorTradeDateIndex.rebuild)'
+  WHEN (SELECT count(*) FROM over) = 0
+    THEN 'OK ' || (SELECT string_agg(market_code || ' ' || n || '거래일', ', ' ORDER BY market_code)
+                   FROM idx)
+  WHEN (SELECT max(n) FROM over) = 181
+    THEN (SELECT string_agg(market_code || ' 181거래일', ', ' ORDER BY market_code) FROM over)
+         || '이 남아 있다(보존 180) — 하루면 긴 백필이 경계를 앞지른 대가이고 다음 정리가 지운다'
+         || '(ADR-0045 §긴 백필). 앱을 띄워 일일 갱신을 돌린다.'
+  ELSE (SELECT string_agg(market_code || ' ' || n || '거래일', ', ' ORDER BY market_code) FROM over)
+       || '이 남아 있다(보존 180). 하루가 아니면 정리가 오래 돌지 않았거나 백필이 보존 밖을 되살렸다.'
+END"
 ```
-운영 적재 이후, 남은 거래일이 180 이내여야 한다. **`n = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다. `trade_date`가 `NOT NULL`이라 **「행이 없다」와 「거래일 0」은 정확히 같다.**
+**MUST: 시장마다 센다.** 전 시장 합집합으로 세면 **달력이 다른 시장의 봉이 들어오는 것만으로**
+이 전제가 발화한다 — 국내 거래일과 NYSE 세션을 합치면 보존창 경계가 2025-12-01에서
+2025-12-12로 밀리고, 그러면 국내 지표 **18거래일**이 「보존 초과」로 신고된다(2026-08-31 실측).
+값은 멀쩡한데 렌즈가 합집합이라 생기는 차이이고, `IndicatorRetentionPolicy.purge`는 이미
+시장별이다.
+
+**모집단이 `indicator_trade_date`인 이유는 비용이다.** `indicator_value`에 `stock`을 조인하면
+0.099ms가 1,333ms가 된다(V37 실측 7,179,721행). 대신 그것은 **파생 색인**이라 원본과 갈릴 수
+있으므로, **갈림을 먼저 묻고** 갈렸으면 보존을 재지 않는다 — 원본 쪽 거래일 수는 재귀 CTE로
+0.024초에 나온다(실측).
+
+운영 적재 이후, 남은 거래일이 시장마다 180 이내여야 한다. **`n = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다. `trade_date`가 `NOT NULL`이라 **「행이 없다」와 「거래일 0」은 정확히 같다.**
 
 **MUST NOT: `count(DISTINCT trade_date)`로 되돌리지 않는다.** 전수 Index Only Scan이라 566만 행에서 **3.79초**로 타임아웃한다(2026-08-19). 재귀 CTE는 `trade_date`가 pkey의 **선두**인 것을 써서 거래일 수만큼만 인덱스를 찔러 **힙 페치 138건 · 0.035초**다. **vacuum과 무관하지는 않다** — `min()`이 아래 `purge()`가 지우는 왼쪽 끝에서 출발해 `min()` 456버퍼 대 `max()` 6버퍼다.
 

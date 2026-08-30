@@ -90,27 +90,45 @@ FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code = 'US'"
 
 ```premise 미국 지표가 미보정 시세 위에 서 있지 않다
 psql -d stock_screener -At -c "
-WITH t AS (
+WITH scoped AS (
+  SELECT DISTINCT i.stock_id FROM indicator_value i
+  JOIN stock s ON s.id = i.stock_id WHERE s.market_code = 'US'),
+t AS (
   SELECT (SELECT count(*) FROM price_daily p JOIN stock s ON s.id = p.stock_id
            WHERE s.market_code = 'US') AS bars,
-         (SELECT count(*) FROM indicator_value i JOIN stock s ON s.id = i.stock_id
-           WHERE s.market_code = 'US') AS indicators,
-         (SELECT count(*) FROM corporate_action c JOIN stock s ON s.id = c.stock_id
-           WHERE s.market_code = 'US') AS actions,
-         (SELECT count(*) FROM price_daily p JOIN stock s ON s.id = p.stock_id
-           WHERE s.market_code = 'US' AND p.adj_factor <> 1) AS adjusted)
+         (SELECT count(*) FROM scoped) AS stocks,
+         (SELECT count(DISTINCT c.stock_id) FROM corporate_action c
+           JOIN scoped x ON x.stock_id = c.stock_id) AS with_actions,
+         (SELECT count(DISTINCT p.stock_id) FROM price_daily p
+           JOIN scoped x ON x.stock_id = p.stock_id WHERE p.adj_factor <> 1) AS adjusted)
 SELECT CASE
   WHEN bars = 0 THEN '잴 것이 없었다 — 미국 시세가 한 행도 없다'
-  WHEN indicators = 0 THEN 'OK 미국 지표가 없다 — 수정계수 부채가 아직 아무것도 떠받치지 않는다 (시세 ' || bars || '행)'
-  WHEN actions > 0 OR adjusted > 0 THEN 'OK 미국 원장이 ' || actions || '건이고 보정된 봉이 ' || adjusted || '행이다'
-  ELSE '미국 지표가 ' || indicators || '행 있는데 기업행위 원장이 0건이라 adj_factor가 전 구간 1이다 — '
-       || '분할을 건너는 이동평균·추세 게이트가 아무 에러 없이 틀린다(ADR-0088의 부채가 만기를 넘겼다)'
+  WHEN stocks = 0 THEN 'OK 미국 지표가 없다 — 수정계수 부채가 아직 아무것도 떠받치지 않는다 (시세 '
+                       || bars || '행)'
+  WHEN with_actions > 0 OR adjusted > 0
+    THEN 'OK 지표가 있는 미국 ' || stocks || '종목 중 원장이 닿은 것이 ' || with_actions
+         || '종목, 보정된 봉을 가진 것이 ' || adjusted || '종목이다'
+  ELSE '지표가 있는 미국 ' || stocks || '종목 전부에 기업행위 원장도 보정된 봉도 없다 — '
+       || 'adj_factor가 전 구간 1이라 분할을 건너는 이동평균·추세 게이트가 아무 에러 없이 '
+       || '틀린다(ADR-0088의 부채가 만기를 넘겼다)'
   END FROM t"
 ```
 
 **이 전제가 묻는 것은 시세의 유무가 아니라 부채의 만기다.** 지금은 미국 지표가 없어 조용하고,
 **지표를 만드는 순간 원장이 비어 있으면 발화한다** — 그 시점이 정확히 이 결정이 미뤄 둔 값을
 치러야 하는 때다.
+
+**MUST: 모집단을 「지표가 있는 종목」으로 좁힌다.** 처음에는 미국 **전체**의 원장 행 수와 보정된
+봉 수를 세었는데, 그러면 **파일럿 한 종목이 전 종목의 부채를 대변한다** — 실측으로 원장 1건
+(NVDA)·보정된 봉 110행이 이미 있어 그 형태는 **어떤 규모의 미국 적재에도 도달 불가능**했다
+(언제나 `OK`). 부채는 「미국에 원장이 있는가」가 아니라 **「지표가 선 그 종목들에 원장이
+닿았는가」**다.
+
+**이 전제가 못 보는 것도 적는다.** 좁힌 뒤에도 판정은 **집합 전체에 대해 하나**라, 1,000종목
+중 한 종목만 보정돼 있어도 `OK`다. 종목마다 물을 수 없는 이유는 **분할이 없는 종목의 원장
+0건이 정상**이기 때문이다 — 「사건이 없다」와 「원장을 안 돌렸다」를 데이터로 가를 수 없다.
+그것을 가르는 것은 이 펜스가 아니라 **적재 절차**이고, `batch-load` skill이 두 잡을 이어
+돌리라고 적는 자리가 그것이다.
 
 ## 배경
 

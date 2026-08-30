@@ -189,11 +189,25 @@ page 10~13: NVDA만            (13페이지에서 next_page_token=null)
 | 지표 | 왜 |
 |---|---|
 | `TURNOVER_60` | `trade_value` 부재. **합성은 위에서 이미 기각했다** — 다시 열지 마라 |
+| `BETA_104W` | 미국 시장지수가 없다 — 아래 |
+| `EXCESS_RETURN_26W` | 〃 |
+| `EXCESS_RETURN_52W` | 〃 |
+
+**시장지수가 없는 것은 이 소스의 한계가 아니라 우리가 아직 안 고른 것이다.**
+`market_index_daily`에 `ck_market_index_code CHECK (index_code IN ('KOSPI','KOSDAQ'))`가 걸려
+있어 **마이그레이션 없이는 한 행도 못 넣는다**(V23). `MarketIndexCodes` javadoc이 그 상태를
+*"미국은 여기 없다. 그래서 미국 종목이 유니버스에 들어와도 「지수가 없다」고 알리지 않는다"*로
+적어 두었다 — **아직 갖기로 하지 않은 것**과 **갖기로 했는데 없는 것**은 다르고, 지금은 앞쪽이다.
+그 셋은 `IndicatorContext`의 지수 시계열을 읽으므로(`Beta104wCalculator`·`ExcessReturn`)
+데이터가 아무리 들어와도 값이 안 난다.
+
+**MUST NOT: 닫힌 문을 `TURNOVER_60` 하나로 적지 않는다 — 넷이다.** 그 문장이 참이던 것은
+미국 시장지수를 축으로 세기 전이고, 세어 보니 지수를 읽는 셋이 함께 닫혀 있다.
 
 **시가총액 계열은 ADR-0097이 열었다.** `MARKET_CAP`·`TURNOVER_RATIO`·`SHARES_GROWTH_3Y`·
 `EPS_CAGR_5Y`·`EPS_GROWTH_TTM_YOY`·`RETAINED_TO_MARKET_4Y`와 그 파생 셋
 (`FCF_YIELD`·`NCAV_TO_MARKET`·`ALTMAN_Z`)이 이제 `FinancialMath.sharesOf`를 타
-**재무에서 주식수를 폴백**한다. **닫힌 문으로 남은 것은 `TURNOVER_60` 하나다.**
+**재무에서 주식수를 폴백**한다. **닫힌 문으로 남은 것은 `TURNOVER_60`과 지수를 읽는 셋, 합쳐 넷이다.**
 
 **재무 폴백을 타는 계산기는 일곱이다(2026-08-30 전수).** `PbrCalculator`가 `sharesOf`를 직접
 부르고, 나머지 여섯은 `FinancialMath.perShareOn`을 거친다 — `PerCalculator` ·

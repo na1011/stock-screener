@@ -61,9 +61,11 @@ grep -rnE 'alpaca|Alpaca|APCA' \
 
 ```premise 미국 유니버스가 켜졌으면 축별 어댑터가 함께 있는가
 psql -d stock_screener -At -c "
-WITH u AS (SELECT is_active FROM universe WHERE code = 'US_LISTED'),
-     m AS (SELECT count(*) AS members FROM universe_membership
-            WHERE universe_code = 'US_LISTED' AND effective_to IS NULL),
+WITH u AS (SELECT code FROM universe WHERE market_code = 'US' AND is_active),
+     m AS (SELECT string_agg(x.code || ' ' || x.members || '종목', ', ' ORDER BY x.code) AS listed
+           FROM (SELECT uu.code, count(mm.stock_id) FILTER (WHERE mm.effective_to IS NULL) AS members
+                 FROM universe uu LEFT JOIN universe_membership mm ON mm.universe_code = uu.code
+                 WHERE uu.market_code = 'US' GROUP BY uu.code) x),
      s AS (SELECT array_remove(ARRAY[
        CASE WHEN NOT EXISTS (SELECT 1 FROM price_daily p JOIN stock st ON st.id = p.stock_id
                               WHERE st.market_code = 'US') THEN '시세' END,
@@ -77,13 +79,16 @@ WITH u AS (SELECT is_active FROM universe WHERE code = 'US_LISTED'),
                               WHERE st.market_code = 'US' AND st.sic_code IS NOT NULL)
             THEN '업종' END], NULL) AS missing)
 SELECT CASE
-  WHEN (SELECT count(*) FROM u) = 0 THEN '잴 것이 없었다 — US_LISTED 행이 없다(V34 미적용)'
-  WHEN NOT (SELECT is_active FROM u)
-    THEN 'OK US_LISTED는 비활성이다 (구성 ' || (SELECT members FROM m) || '종목 · 비어 있는 축: '
+  WHEN (SELECT count(*) FROM universe WHERE market_code = 'US') = 0
+    THEN '잴 것이 없었다 — 미국 유니버스 행이 하나도 없다(V34 미적용)'
+  WHEN (SELECT count(*) FROM u) = 0
+    THEN 'OK 미국 유니버스가 전부 비활성이다 (' || (SELECT listed FROM m) || ' · 비어 있는 축: '
          || coalesce(array_to_string((SELECT missing FROM s), ', '), '없음') || ')'
   WHEN array_length((SELECT missing FROM s), 1) IS NULL
-    THEN 'OK US_LISTED가 켜졌고 다섯 축 전부에 데이터가 있다'
-  ELSE 'US_LISTED가 켜졌는데 ' || array_length((SELECT missing FROM s), 1) || '개 축이 비어 있다: '
+    THEN 'OK ' || (SELECT string_agg(code, ', ' ORDER BY code) FROM u)
+         || '이(가) 켜졌고 다섯 축 전부에 데이터가 있다'
+  ELSE (SELECT string_agg(code, ', ' ORDER BY code) FROM u) || '이(가) 켜졌는데 '
+       || array_length((SELECT missing FROM s), 1) || '개 축이 비어 있다: '
        || array_to_string((SELECT missing FROM s), ', ')
        || ' — 기업행위가 비면 CorporateActionJob이 루프 앞에서 failFatally로 끝나 국내 수집까지 멈춘다'
 END"
@@ -99,6 +104,11 @@ END"
 **데이터 유무로 재는 것은 어댑터 등록 여부의 대리 지표다.** 어댑터가 있어도 아직 안 돌렸으면
 비어 보인다. 그래도 이 축으로 재는 이유는, SQL이 스프링 빈 목록을 볼 수 없고 **비어 있다는
 사실 자체가 켜면 안 되는 이유**로 충분하기 때문이다.
+
+**MUST NOT: 유니버스 코드를 리터럴로 박지 않는다.** 처음에는 `WHERE code = 'US_LISTED'`였는데,
+그러면 **미국 유니버스를 새로 만들어 켜는 순간 이 펜스가 눈이 먼다** — 그 코드는 여전히
+비활성이므로 `OK`를 그대로 내고, 그 침묵은 「축이 다 찼다」와 구별되지 않는다. ADR-0099가
+`US_TOP1000`을 만들면서 실제로 그 상태가 됐다. 묻는 것은 코드가 아니라 **시장이다.**
 
 **MUST NOT: 「비활성일 때도 목록을 찍으니 매 세션 보인다」로 읽지 않는다 — 안 보인다.**
 비활성 갈래의 출력이 `OK`로 시작하고 `check-premises.sh`는 **`OK`를 침묵시킨다**(그 파일 머리가
