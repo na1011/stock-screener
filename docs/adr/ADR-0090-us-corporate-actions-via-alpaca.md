@@ -86,12 +86,12 @@ applies_to:
 
 소스가 아직 그대로인지를 지킨다. 실측값의 정본은 `docs/api-spec/alpaca-corporate-action.md`다.
 
-```premise 계수를 반영한 효력일에 남은 불연속이 없다
+```premise 사람이 안 본 효력일에 남은 불연속이 없다
 psql -d stock_screener -At -c "
 WITH applied AS (
   SELECT c.stock_id, s.ticker, c.effective_date
   FROM corporate_action c JOIN stock s ON s.id = c.stock_id
-  WHERE s.market_code = 'US' AND c.status = 'APPLIED'),
+  WHERE s.market_code = 'US' AND c.status = 'APPLIED' AND c.note IS NULL),
 b AS (SELECT p.stock_id, p.trade_date, p.adj_close,
              lag(p.adj_close) OVER (PARTITION BY p.stock_id ORDER BY p.trade_date) AS prev
         FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code = 'US'),
@@ -105,11 +105,12 @@ SELECT CASE
   WHEN (SELECT count(*) FROM applied) = 0
     THEN '잴 것이 없었다 — 계수가 반영된 미국 기업행위가 없다'
   WHEN (SELECT count(*) FROM resid) = 0
-    THEN 'OK 계수가 반영된 ' || (SELECT count(*) FROM applied) || '건의 효력일 언저리에 남은 불연속이 없다'
+    THEN 'OK 사람이 아직 안 본 ' || (SELECT count(*) FROM applied) || '건의 효력일 언저리에 남은 불연속이 없다'
   ELSE (SELECT count(*) FROM resid) || '건이 효력일 언저리에 아직 불연속이다: '
        || (SELECT string_agg(ticker || ' ' || trade_date, ', ') FROM (SELECT * FROM resid LIMIT 12) x)
-       || ' — 효력일이 우리 봉과 어긋났다. 계수는 효력일 *이전* 봉에 걸리므로 하루만 밀려도 '
-       || '이미 조정된 봉이 한 번 더 나뉜다.'
+       || ' — 효력일이 우리 봉과 어긋났거나 소스가 준 비율을 가격이 안 받친다. '
+       || '증거는 corporate-action-review가 관측 배수로 낸다. 재보고 계수가 맞으면 '
+       || 'corporate-action-judge --ca-note 로 확인한 사실을 남긴다 — 그러면 여기서 빠진다.'
   END"
 ```
 
@@ -127,6 +128,13 @@ SELECT CASE
 불변식도 · 원장이 `APPLIED`인 것도 · 재실행 0행도 · 사건 수와 불연속 수의 대조도 **효력일이
 하루 밀린 것을 못 본다**(ADR-0050이 적어 둔 자리). **결과에서 재는 것이 이 전제뿐이다.**
 임계는 `PriceDiscontinuity.LIMIT_UPPER`/`LOWER`와 같은 값이고, 그쪽이 바뀌면 여기도 바꾼다.
+
+**MUST: `note`가 있는 행을 뺀다 — 이 전제가 묻는 것은 「이상한가」가 아니라 「아직 안 봤는가」다.**
+가격만으로는 **효력일이 밀린 것과 그날의 실제 등락을 못 가른다.** 실측(2026-08-31)으로 `QXO`가
+그 자리다 — 1:8 병합에 8배를 적용하고도 1.686배가 남는데, 주식수가 2024-03-31 5,315,581에서
+2024-06-30 409,430,195로 뛴 리캡이라 **그 잔차는 실제 등락이고 계수는 맞다.** 뺄 방법이
+없으면 이 펜스는 그 한 건 때문에 영구히 붉고, **상시 붉은 펜스는 곧 무시된다.**
+`note`는 `judge`만 쓰는 사람의 필드라(ADR-0050) **그것이 「봤다」의 유일한 기록이다.**
 
 **대조군으로 확인했다**(2026-08-31): 원장의 효력일만 하루 옮기면 **안 붉는다** — 이미 저장된
 `adj_close`가 안 바뀌기 때문이고, 그것이 이 전제가 **결과에서** 재는 자리라는 증거다.

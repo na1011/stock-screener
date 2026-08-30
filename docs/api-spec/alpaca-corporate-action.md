@@ -154,9 +154,16 @@ GET https://data.alpaca.markets/v1/corporate-actions
 국내는 그 가정이 참이었다(공시 62건 전부 적용, ADR-0090의 premise가 초록). **미국에서는 3건이
 아니다.**
 
-**판정은 사람이 한다**(ADR-0050) — `corporate-action-review --ca-ticker=<심볼>`로 증거를 보고
-`corporate-action-judge --ca-status=UNSUPPORTED`가 그 자리다. 그 뒤 `adjustment-rebuild`가
-계수를 되돌린다. **드러나는 자리는 ADR-0090의 premise 하나다.**
+**셋을 판정했다(2026-08-31).** `HON`·`DRS`는 **`REJECTED`** — 가격이 그 비율로 안 움직였으므로
+계수로 적용할 사건이 아니다. **`UNSUPPORTED`가 아닌 이유**는 그것이 `findUnadjusted`에 잡혀
+**가격에 영향도 없는 사건 때문에 지표를 억제**하기 때문이다(`CorporateActionStatus` javadoc이
+두 뜻을 가른다). `QXO`는 **`APPLIED`를 유지**했다 — 주식수가 2024-03-31 `5,315,581`에서
+2024-06-30 `409,430,195`로 뛴 리캡이라 `5,315,581 / 8 = 664,448`에 신주가 얹힌 값과 맞고,
+관측 13.489배 중 8배가 병합이며 남는 1.686배가 그날의 실제 등락이다.
+
+**MUST: 가격만으로는 「효력일이 밀린 것」과 「그날의 실제 등락」을 못 가른다.** 그래서
+ADR-0090의 premise는 **`note`가 없는 행만** 묻는다 — 확인한 사실을 `judge --ca-note`로 남기면
+빠진다. 그러지 않으면 `QXO` 한 건 때문에 그 펜스가 영구히 붉고, **상시 붉은 펜스는 무시된다.**
 
 ## 함정
 
