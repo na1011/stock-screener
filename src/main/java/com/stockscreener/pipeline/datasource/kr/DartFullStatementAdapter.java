@@ -120,6 +120,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             // 선언 순서(FY, Q1..Q3)가 아니라 enum 순서로 돈다. 로그를 읽을 때 기간이 늘 같은
             // 순서로 나와야 종목 간 비교가 된다.
             JsonNode annual = null;
+            // Q4의 지배주주 순이익을 유도하려면 그 해 FY와 Q1~Q3가 한자리에 있어야 한다.
+            List<RawFinancialReport> thisYear = new ArrayList<>();
             for (StatementPeriod period : StatementPeriod.values()) {
                 if (!periods.contains(period)) {
                     continue;
@@ -130,13 +132,15 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                     missing++;
                     continue;
                 }
-                reports.add(toReport(fetched.list(), year, period, security));
+                RawFinancialReport report = toReport(fetched.list(), year, period, security);
+                reports.add(report);
+                thisYear.add(report);
                 if (period == StatementPeriod.FY) {
                     annual = fetched.list();
                 }
             }
             if (annual != null && periods.contains(StatementPeriod.Q3)) {
-                reports.add(toFourthQuarterBalance(annual, year, security));
+                reports.add(toFourthQuarterBalance(annual, year, security, thisYear));
             }
         }
         return new FullStatementResult(reports, calls, missing);
@@ -299,17 +303,29 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 자리다 — 채우지 않으면 {@code ALTMAN_Z}가 4분기 말을 최신으로 보는 구간(대략 1월~1분기
      * 공시일)에서만 값을 내지 못하고, 그 구멍은 보존 창 한가운데에 생겨 원인을 찾기 어렵다.
      *
-     * <p>IMPORTANT — <b>잔액만</b> 싣는다. 재무상태표는 시점 값이라 연말 잔액이 곧 4분기 말
-     * 잔액이지만, 손익과 현금흐름은 <b>유량</b>이라 사업보고서 값을 그대로 쓰면 1년치가 한
-     * 분기에 들어간다. 유도하려면 3분기 <b>누적</b>을 빼야 하는데 이 어댑터는 누적 컬럼을 읽지
-     * 않으므로(분기 누적의 의미가 dart-financial.md의 「전체 재무제표」 절에서 미확인이다) 아예 내지 않는다.
-     * 비워 두면
-     * {@code fillMissing}이 건드리지 않아 기존 유도값이 그대로 남는다.
+     * <p>IMPORTANT — <b>잔액과 지배주주 순이익만</b> 싣는다. 재무상태표는 시점 값이라 연말
+     * 잔액이 곧 4분기 말 잔액이지만, 나머지 손익과 현금흐름은 <b>유량</b>이라 사업보고서 값을
+     * 그대로 쓰면 1년치가 한 분기에 들어간다. 비워 두면 {@code fillMissing}이 건드리지 않아
+     * 주요계정이 만든 기존 유도값이 그대로 남는다.
+     *
+     * <p><b>지배주주 순이익만 예외인 이유는 주요계정이 그것을 원리적으로 못 만들기 때문이다</b>
+     * (ADR-0098). 그쪽의 {@code deriveFourthQuarter}는 {@code FY − 3분기 누적}으로 Q4를 유도하는데,
+     * 요약본에는 지분을 가르는 계정이 아예 없다. 그래서 <b>여기서 같은 산술을 한다</b> —
+     * 누적 컬럼 대신 이미 만든 {@code Q1+Q2+Q3}(각 3개월)를 더해 뺀다. 둘은 같은 값이다
+     * (삼성전자 2025 연결: {@code 8.2229+5.1164+12.2257 = 25.5650}, {@code 45.2068−25.5650 = 19.6417}로
+     * 주요계정의 유도값과 일치).
+     *
+     * <p><b>Q4가 없으면 이 결정 전체가 무력해진다.</b> TTM은 최근 4분기이고 12월 결산 종목의
+     * 그 창에 Q4가 반드시 들어가는데, {@code FinancialMath}의 폴백이 <b>창 단위</b>라 한 분기만
+     * 비어도 넷 다 연결 총액으로 간다 — <b>실측으로 Q4 채움이 0%일 때 PER이 한 종목도 안 바뀌었다.</b>
      *
      * <p>MUST NOT: 분기를 요청하지 않은 경로에서 부르지 않는다. 전 종목 연간 적재가 이것을
      * 함께 내면 4분기 행이 <b>없던 종목·연도에 잔액만 있는 행</b>이 생긴다.
+     *
+     * @param thisYear 같은 회계연도의 FY·Q1~Q3 보고서. Q4 지배주주 순이익의 유도 재료다
      */
-    private RawFinancialReport toFourthQuarterBalance(JsonNode list, int year, SecurityRef security) {
+    private RawFinancialReport toFourthQuarterBalance(JsonNode list, int year, SecurityRef security,
+                                                      List<RawFinancialReport> thisYear) {
         List<JsonNode> balance = DartFullAccountMapper.sections(
                 list, DartFullAccountMapper.SJ_BALANCE);
         JsonNode any = list.get(0);
@@ -327,7 +343,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 DartReportPeriods.publishedAt(any, year),
                 any.path("reprt_code").asString(null),
                 any.path("currency").asString("KRW"),
-                // 유량은 비운다 — 위 IMPORTANT 참조.
+                // 나머지 유량은 비운다 — 위 IMPORTANT 참조.
                 null, null, null,
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_TOTAL_ASSETS, DartAccountMapper.TOTAL_ASSETS),
@@ -354,8 +370,37 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 // 재고자산은 잔액이므로 4분기 행에도 담는다. capex와 갈리는 자리다.
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_INVENTORIES, null),
-                // 손익이라 싣지 않는다 — 위 javadoc의 IMPORTANT가 정한 그 규칙이다.
-                null);
+                // 손익이지만 이것만 예외다 — 주요계정이 원리적으로 못 만든다(위 javadoc).
+                deriveFourthQuarterControlling(thisYear, year));
+    }
+
+    /**
+     * Q4의 <b>지배기업 소유주 귀속</b> 순이익 = {@code FY − (Q1 + Q2 + Q3)}.
+     *
+     * <p>MUST: 넷 중 하나라도 없으면 {@code null}을 돌린다. 빠진 분기를 0으로 보면 그만큼
+     * Q4가 부풀고, <b>그 값은 그럴듯해 드러나지 않는다.</b> null이면 {@code FinancialMath}의
+     * 창 단위 폴백이 그 종목의 TTM을 통째로 연결 총액으로 돌린다 — 뜻이 섞이는 것보다 낫다.
+     */
+    static BigDecimal deriveFourthQuarterControlling(List<RawFinancialReport> thisYear,
+                                                             int year) {
+        BigDecimal annual = null;
+        BigDecimal quarterSum = BigDecimal.ZERO;
+        int quarters = 0;
+        for (RawFinancialReport report : thisYear) {
+            if (report.fiscalYear() != year || report.netIncomeControlling() == null) {
+                continue;
+            }
+            if (StatementPeriod.FY.label().equals(report.fiscalPeriod())) {
+                annual = report.netIncomeControlling();
+            } else {
+                quarterSum = quarterSum.add(report.netIncomeControlling());
+                quarters++;
+            }
+        }
+        if (annual == null || quarters != 3) {
+            return null;
+        }
+        return annual.subtract(quarterSum);
     }
 
     /**
