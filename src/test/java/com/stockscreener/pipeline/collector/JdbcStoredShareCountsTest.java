@@ -127,6 +127,54 @@ class JdbcStoredShareCountsTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 보고 종료일 뒤의 분할만큼 주식수를 옮긴다. 안 옮기면 시총이 배수로 틀린다")
+    void shiftsSharesByCorporateActionsAfterThePeriodEnd() {
+        long stockId = insertStock("US", "SPLT", "Split After Report Inc.");
+        insertQuarter(stockId, 2026, "Q2", LocalDate.of(2026, 3, 28), "USD", "100");
+        // 실측 모양: BYND가 1:30 병합 전 주식수라 시총이 30배로 잡혀 상위 1,000에 잘못 들어왔다.
+        insertAction(stockId, LocalDate.of(2026, 5, 1), "SPLIT", "2", "APPLIED");
+
+        assertThat(find("SPLT").orElseThrow().shares())
+                .as("안 옮기면 시총이 절반으로 잡혀 순위가 밀린다")
+                .isEqualByComparingTo(new BigDecimal("200"));
+    }
+
+    @Test
+    @DisplayName("보고 종료일 이전의 사건은 이미 주식수에 반영돼 있어 다시 곱하지 않는다")
+    void ignoresCorporateActionsBeforeThePeriodEnd() {
+        long stockId = insertStock("US", "PRIO", "Prior Split Inc.");
+        insertQuarter(stockId, 2026, "Q2", LocalDate.of(2026, 3, 28), "USD", "100");
+        insertAction(stockId, LocalDate.of(2026, 1, 5), "SPLIT", "2", "APPLIED");
+
+        assertThat(find("PRIO").orElseThrow().shares()).isEqualByComparingTo(new BigDecimal("100"));
+    }
+
+    /**
+     * <b>MUST: `APPLIED`만 쓴다.</b> `OBSERVED`는 <i>"있었는데 아직 못 고쳤다"</i>라 그 비율이
+     * 계수가 아니다(ADR-0049). 쓰면 사람이 판정하지 않은 값이 시총에 그대로 들어간다.
+     */
+    @Test
+    @DisplayName("판정되지 않은 사건은 주식수를 안 옮긴다 — 그 비율은 계수가 아니다")
+    void ignoresUnjudgedActions() {
+        long stockId = insertStock("US", "OBSV", "Observed Only Inc.");
+        insertQuarter(stockId, 2026, "Q2", LocalDate.of(2026, 3, 28), "USD", "100");
+        insertAction(stockId, LocalDate.of(2026, 5, 1), "SPLIT", "2", "OBSERVED");
+
+        assertThat(find("OBSV").orElseThrow().shares()).isEqualByComparingTo(new BigDecimal("100"));
+    }
+
+    @Test
+    @DisplayName("사건이 여럿이면 곱해서 옮긴다")
+    void multipliesMultipleActions() {
+        long stockId = insertStock("US", "MULT", "Multiple Actions Inc.");
+        insertQuarter(stockId, 2026, "Q2", LocalDate.of(2026, 3, 28), "USD", "100");
+        insertAction(stockId, LocalDate.of(2026, 5, 1), "SPLIT", "2", "APPLIED");
+        insertAction(stockId, LocalDate.of(2026, 6, 1), "SPLIT", "3", "APPLIED");
+
+        assertThat(find("MULT").orElseThrow().shares()).isEqualByComparingTo(new BigDecimal("600"));
+    }
+
+    @Test
     @DisplayName("다른 시장의 종목은 내지 않는다")
     void scopesToTheRequestedMarket() {
         long stockId = insertStock("KOSPI", "999991", "국내 종목");
@@ -139,6 +187,15 @@ class JdbcStoredShareCountsTest {
         List<StoredShareCounts.ShareCount> counts =
                 shareCounts.activeByMarket("US", OLDEST);
         return counts.stream().filter(c -> c.ticker().equals(ticker)).findFirst();
+    }
+
+    private void insertAction(long stockId, LocalDate effectiveDate, String type,
+                              String ratio, String status) {
+        jdbcTemplate.update("""
+                INSERT INTO corporate_action
+                    (stock_id, effective_date, type, ratio, detection_source, status)
+                VALUES (?, ?, ?, ?, 'SOURCE_DISCLOSURE', ?)
+                """, stockId, effectiveDate, type, new BigDecimal(ratio), status);
     }
 
     private long insertStock(String marketCode, String ticker, String name) {

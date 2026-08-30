@@ -43,6 +43,38 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             """;
 
     /**
+     * 보고 종료일 <b>이후</b>에 반영된 분할·병합만큼 주식수를 옮긴다.
+     *
+     * <p>주식수는 보고 종료일 기준이고 종가는 오늘이라, 그 사이에 분할이 있으면
+     * <b>시총이 배수만큼 틀린다.</b> 결측이 아니라 <b>그럴듯한 숫자</b>로 나온다 —
+     * 실측(2026-08-31)으로 편입 1,000 중 <b>5종목</b>이 그 상태였고 그중 {@code BYND}는
+     * 1:30 병합 전 주식수라 시총이 <b>7.15B로 30배</b> 잡혀 상위 1,000에 <b>잘못 들어왔다</b>
+     * (실제 약 0.24B). 나머지 넷({@code IESC}·{@code MLI}·{@code MNST}·{@code SNEX})은 반대
+     * 방향이라 편입 자체는 옳았고 순위만 낮게 잡혔다.
+     *
+     * <p>ADR-0096이 지표 계층에 세운 것과 <b>같은 원리이고 자리만 다르다</b> —
+     * {@code shiftToBar}는 이 조인을 타지 않는다(ADR-0099 §결과가 적어 둔 자리다).
+     *
+     * <p><b>MUST: {@code APPLIED}만 쓴다.</b> 그것이 사람·소스가 확정한 계수라는 뜻이고,
+     * {@code OBSERVED}는 <i>"있었는데 아직 못 고쳤다"</i>라 비율이 계수가 아니다(ADR-0049).
+     *
+     * <p><b>순환이 하나 있다 — 원장이 유니버스보다 먼저다.</b> 원장은 편입 종목을 대상으로
+     * 채우므로, 새로 편입될 종목은 <b>그 시점에 원장이 비어</b> 이 보정을 못 받는다.
+     * 창이 「최신 보고 종료일 이후」라 최대 한 분기이고, 다음 리밸런싱이 수렴시킨다.
+     * <b>MUST NOT: 그것을 이 질의에서 풀려고 하지 않는다</b> — 유니버스를 정하려고 유니버스
+     * 밖 전 종목의 원장을 채우는 것이 그 대가다.
+     *
+     * <p>{@code exp(sum(ln(...)))}인 이유는 PostgreSQL에 곱 집계가 없어서다. 비율은
+     * {@code ck_ca_ratio_sign}이 양수로 못 박으므로 {@code ln}의 정의역을 벗어나지 않는다.
+     */
+    private static final String SHIFT_TO_TODAY = """
+            coalesce((SELECT exp(sum(ln(ca.ratio))) FROM corporate_action ca
+                       WHERE ca.stock_id = latest.stock_id
+                         AND ca.status = 'APPLIED'
+                         AND ca.effective_date > latest.period_end), 1)
+            """;
+
+    /**
      * {@code DISTINCT ON}으로 기(期)를 고른다. 정렬의 둘째 키가 {@code revision_no}인 것이
      * 계약이다 — 같은 기에 개정본이 여럿이면 나중 판을 쓴다.
      *
@@ -63,12 +95,14 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                   AND f.period_end >= ?
                 ORDER BY f.stock_id, f.period_end DESC, f.revision_no DESC
             )
-            SELECT s.ticker, latest.shares_outstanding, s.sic_code, latest.period_end,
+            SELECT s.ticker,
+                   latest.shares_outstanding * %s AS shares_outstanding,
+                   s.sic_code, latest.period_end,
                    %s AS currency_mismatched
             FROM latest
             JOIN stock s ON s.id = latest.stock_id
             ORDER BY s.ticker
-            """.formatted(CURRENCY_MISMATCHED);
+            """.formatted(SHIFT_TO_TODAY, CURRENCY_MISMATCHED);
 
     private final JdbcTemplate jdbcTemplate;
 

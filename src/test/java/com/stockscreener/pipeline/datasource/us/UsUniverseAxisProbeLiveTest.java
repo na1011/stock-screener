@@ -241,34 +241,45 @@ class UsUniverseAxisProbeLiveTest {
     /**
      * 증권 유형의 <b>이름 문자열</b> 추정. ADR-0086이 <i>"커버리지를 재본 적이 없다"</i>로 열어 둔
      * 축이고, 이 탐침이 재는 것이 바로 그 커버리지다 — <b>판정에 쓰지 않는다.</b>
+     *
+     * <p><b>MUST: 토큰 경계로 센다.</b> 부분문자열로 재면 회사명 안에서 우연히 일치한다 —
+     * {@code NETFLIX}가 {@code ETF}에, {@code Curtiss-Wright}·{@code Bright*}가 {@code RIGHT}에,
+     * {@code First United}가 {@code UNIT}에 걸린다. 2026-08-31 실측으로 {@code %UNIT%}인데
+     * {@code % UNIT%}가 아닌 종목이 8,504 중 <b>133</b>이었고, 그 오분류가 아래 교차표에
+     * 그대로 실려 <b>다른 규칙에 인용되면 틀린 근거</b>가 된다(ADR-0099 §규칙).
      */
     private static String labelOf(String name) {
         String upper = name.toUpperCase(Locale.ROOT);
-        if (upper.contains("PREFERRED") || upper.contains("PFD")) {
+        if (hasToken(upper, "PREFERRED") || hasToken(upper, "PFD")) {
             return "Preferred";
         }
-        if (upper.contains("WARRANT")) {
+        if (hasToken(upper, "WARRANTS?")) {
             return "Warrant";
         }
-        if (upper.contains("UNIT")) {
+        if (hasToken(upper, "UNITS?")) {
             return "Unit";
         }
-        if (upper.contains("RIGHT")) {
+        if (hasToken(upper, "RIGHTS?")) {
             return "Right";
         }
-        if (upper.contains("DEPOSITARY")) {
+        if (hasToken(upper, "DEPOSITARY")) {
             return "Depositary";
         }
-        if (upper.contains("NOTE") || upper.contains("DEBENTURE") || upper.contains("BOND")) {
+        if (hasToken(upper, "NOTES?") || hasToken(upper, "DEBENTURES?") || hasToken(upper, "BONDS?")) {
             return "Note/Bond";
         }
-        if (upper.contains("ETF") || upper.contains(" FUND") || upper.contains(" TRUST")) {
+        if (hasToken(upper, "ETFS?") || hasToken(upper, "FUNDS?") || hasToken(upper, "TRUSTS?")) {
             return "Fund/Trust";
         }
         if (upper.contains("COMMON STOCK") || upper.contains("ORDINARY SHARES")) {
             return "Common Stock";
         }
         return "(미분류)";
+    }
+
+    /** 낱말 경계로 찾는다. {@code token}은 정규식 조각이라 {@code S?} 같은 접미를 받는다. */
+    private static boolean hasToken(String upper, String token) {
+        return java.util.regex.Pattern.compile("\\b" + token + "\\b").matcher(upper).find();
     }
 
     private static void write(Path path, String content) {

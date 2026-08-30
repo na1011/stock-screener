@@ -62,7 +62,7 @@ import java.util.regex.Pattern;
  *       스팩·리츠를 뺀 것과 대칭이고, <b>이름이 아니라 코드로</b> 판정한다.</li>
  *   <li><b>이름</b> — 증권 종류를 가리키는 낱말. 아래 {@link #NON_COMMON_NAME}.</li>
  *   <li><b>CIK 중복</b> — 우선주·baby bond가 발행사의 주식수를 그대로 써서 같은 회사가 여러 번
- *       들어온다(상위 1,000에 124건). {@code AKO.A}/{@code AKO.B}처럼 두 클래스가 다 상장된
+ *       들어온다(상위 1,000에 98건). {@code AKO.A}/{@code AKO.B}처럼 두 클래스가 다 상장된
  *       쌍도 여기서 걸린다.</li>
  * </ol>
  *
