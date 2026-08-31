@@ -30,7 +30,7 @@ applies_to:
 `fnlttSinglAcntAll` 응답 안에 있었고 매퍼가 읽지 않았을 뿐이다(ADR-0062와 같은 형태다).
 
 지표 여덟(`ROE_MIN_3Y`·`PROFIT_STREAK_Y`·`NET_MARGIN`·`ROIC_PRETAX`·`OPM_MIN_5Y`·
-`RETAINED_TO_MARKET_4Y`·`FCF_MARGIN`·`FCF_YIELD`)과 프리셋 하나(`BUFFETT_QUALITY_KR`)를
+`RETAINED_TO_MARKET_4Y`·`FCF_MARGIN`·`FCF_YIELD`)과 프리셋 하나(`BUFFETT_QUALITY`)를
 만든다. 프리셋은 아홉이 된다 — **폐기하는 것이 없다.**
 
 **워밍업 최댓값은 1,261 그대로다**(읽기 창은 ADR-0079가 그 위에 보존 일수를 얹어 1,441이다).
@@ -229,7 +229,7 @@ FY2020 기말부터 재어 **기준점이 7개월 어긋난다.** FY2021 기말�
 `AltmanZCalculator`가 같은 자리에서 `{65,66}`을 제외하는 선례가 있다(ADR-0044).
 
 **프리셋을 폐기하지 않는다.** 개수 상한은 코드·DB·화면 어디에도 없다(ADR-0066). 축 중복도 낮다 —
-`VALUE_KR`은 백분위 밸류에이션이, `LOWVOL_QUALITY_KR`은 변동성이 1차 축이고, **다년 ROE 일관성과
+`VALUE`은 백분위 밸류에이션이, `LOWVOL_QUALITY`은 변동성이 1차 축이고, **다년 ROE 일관성과
 저부채를 짝지어 필수로 거는 프리셋이 없다.** `QVG_KR` 때와 달리 공유하는 축이 점수 조건뿐이다.
 
 ## 버린 대안

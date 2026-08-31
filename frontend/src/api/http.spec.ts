@@ -137,12 +137,12 @@ describe('apiFetch', () => {
     // 없으면 403이 나오는데 증상이 인증 버그처럼 보인다.
     fetchMock.mockResolvedValue(jsonResponse(200, { ok: true }, 'application/json'))
 
-    await apiFetch('/api/screening', { method: 'POST', body: { presetCode: 'VALUE_KR' } })
+    await apiFetch('/api/screening', { method: 'POST', body: { presetCode: 'VALUE' } })
 
     const { init } = fetchCall(fetchMock)
     expect(init.headers['X-XSRF-TOKEN']).toBe('token-value')
     expect(init.headers['Content-Type']).toBe('application/json')
-    expect(init.body).toBe('{"presetCode":"VALUE_KR"}')
+    expect(init.body).toBe('{"presetCode":"VALUE"}')
   })
 
   it('problem+json을 파싱해 type으로 분기할 수 있게 한다', async () => {

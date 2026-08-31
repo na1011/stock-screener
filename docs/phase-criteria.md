@@ -496,7 +496,7 @@ Wilder 평활을 쓴다. 단순 평균은 이틀 중 하락이 없으면 곧장 
 
 **⑤ 폐기가 남긴 빈자리**
 
-- **`QVG_KR`이 지키던 축이 어디로 갔는지 답한다.** `GP_TO_ASSETS`는 승계하지 않고 `VALUE_KR`에 남으며, `ACCRUAL_RATIO`는 린치 3.13의 대용으로 승계한다.
+- **`QVG_KR`이 지키던 축이 어디로 갔는지 답한다.** `GP_TO_ASSETS`는 승계하지 않고 `VALUE`에 남으며, `ACCRUAL_RATIO`는 린치 3.13의 대용으로 승계한다.
 - **폐기된 프리셋의 `screen`·`screen_condition` 행이 남아 있다**(ADR-0017). `is_active=false`뿐이다.
 - **프리셋 이름을 하드코딩한 자동 펜스가 죽은 대상을 재지 않는다.** `PresetCatalogTest.declaresRequiredPresets`가 그것이다.
 - **출처 표기 검증이 프리셋별로 센다.** 파일 전체를 세는 방식은 **실패할 수 없는 펜스**다 — 기존 프리셋의 표기만으로 임계를 넘겨 새 프리셋이 출처를 하나도 안 적어도 통과한다.

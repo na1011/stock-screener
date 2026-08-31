@@ -21,8 +21,8 @@ applies_to:
 재보정한 것 / 원문에 없는데 더한 것** 셋을 갈라 적는다.
 
 `SWING_MIDTERM_KR`과 `ICHIMOKU_SP_KR`을 폐기한다(2026-08-14 사용자 결정 — **둘 다
-지표를 늘려 보기 위한 테스트베드였다**). 그 자리에 `SWING_TREND_KR`·`STAGE2_BREAKOUT_KR`·
-`PULLBACK_UPTREND_KR`·`LOWVOL_QUALITY_KR`을 둔다. 프리셋은 다섯에서 일곱이 됐다.
+지표를 늘려 보기 위한 테스트베드였다**). 그 자리에 `SWING_TREND_KR`·`STAGE2_BREAKOUT`·
+`PULLBACK_UPTREND`·`LOWVOL_QUALITY`을 둔다. 프리셋은 다섯에서 일곱이 됐다.
 
 ## 규칙
 

@@ -55,7 +55,7 @@ KSIC 업종 코드(`company.json`의 `induty_code`)를 `stock.industry_code`에 
 
 `docs/phase-criteria.md` Phase 7의 *"프리셋이 실제로 종목을 낸다"* 는 이 예외를 가리킨다.
 
-- **예외의 범위는 이 프리셋 하나다.** `VALUE_KR`·`QVG_KR`·`MOMENTUM_KR`에는 걸리지 않는다.
+- **예외의 범위는 이 프리셋 하나다.** `VALUE`·`QVG_KR`·`MOMENTUM`에는 걸리지 않는다.
 - **MUST NOT: 0건을 임계값을 풀 근거로 읽지 않는다.** 원인을 ① 조건 ② 데이터 ③ 시장 국면으로
   가른 뒤 숫자만 보고한다. 손잡이를 푸는 것은 사용자 결정이다.
 

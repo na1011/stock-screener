@@ -12,7 +12,7 @@ applies_to:
 ## 결정
 
 `ROIC_MIN_3Y`(연간 영업이익 ÷ 그 해 기말 투하자본, 3개 회계연도 최솟값)를 만들고,
-`BUFFETT_QUALITY_KR`의 필수 게이트를 `ROIC_PRETAX ≥ 15`에서 **`ROIC_MIN_3Y ≥ 10`**으로 바꾼다.
+`BUFFETT_QUALITY`의 필수 게이트를 `ROIC_PRETAX ≥ 15`에서 **`ROIC_MIN_3Y ≥ 10`**으로 바꾼다.
 `ROIC_PRETAX` 지표 자체는 남긴다.
 
 ## 규칙

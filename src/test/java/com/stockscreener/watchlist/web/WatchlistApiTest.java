@@ -167,7 +167,7 @@ class WatchlistApiTest {
     @DisplayName("프리셋은 알림 조건으로 쓸 수 있다")
     void presetIsUsableAsCondition() throws Exception {
         Long presetId = jdbcTemplate.queryForObject(
-                "SELECT id FROM screen WHERE code = 'VALUE_KR'", Long.class);
+                "SELECT id FROM screen WHERE code = 'VALUE'", Long.class);
 
         mockMvc.perform(post("/api/watchlist").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)

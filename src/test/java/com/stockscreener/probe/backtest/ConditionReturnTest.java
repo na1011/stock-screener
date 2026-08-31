@@ -105,7 +105,7 @@ class ConditionReturnTest {
     @DisplayName("조건별 사후 6개월 수익률 차를 인샘플·아웃오브샘플로 나눠 낸다")
     void measureConditionReturns() {
         ScreenPreset preset = presets.stream()
-                .filter(p -> p.code().equals(PresetCatalog.BUFFETT_QUALITY_KR))
+                .filter(p -> p.code().equals(PresetCatalog.BUFFETT_QUALITY))
                 .findFirst().orElseThrow();
 
         List<IndicatorCondition> conditions = preset.conditions().conditions().stream()

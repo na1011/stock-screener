@@ -85,7 +85,7 @@ class GateDiagnosticsTest {
     @DisplayName("게이트별 탈락·판정불가·회전율을 시점별로 낸다")
     void reportGateDiagnostics() {
         ScreenPreset preset = presets.stream()
-                .filter(p -> p.code().equals(PresetCatalog.BUFFETT_QUALITY_KR))
+                .filter(p -> p.code().equals(PresetCatalog.BUFFETT_QUALITY))
                 .findFirst().orElseThrow();
 
         List<LocalDate> grid = calendar.every(

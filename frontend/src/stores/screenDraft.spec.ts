@@ -37,7 +37,7 @@ function screen(overrides: Partial<ScreenResponse> = {}): ScreenResponse {
 }
 
 const readOnlyPreset = () =>
-  screen({ id: 1, code: 'VALUE_KR', name: '가치주', type: 'PRESET', editable: false })
+  screen({ id: 1, code: 'VALUE', name: '가치주', type: 'PRESET', editable: false })
 
 function condition(overrides: Partial<DraftCondition> = {}): DraftCondition {
   return {
@@ -77,7 +77,7 @@ describe('편집 가능 여부는 서버 판단을 그대로 쓴다', () => {
     // 서버가 계산해 주는 값이다.
     const draft = useScreenDraftStore()
 
-    draft.loadFrom(screen({ code: 'VALUE_KR', type: 'PRESET', editable: true }))
+    draft.loadFrom(screen({ code: 'VALUE', type: 'PRESET', editable: true }))
 
     expect(draft.readOnly).toBe(false)
     // 출처는 여전히 프리셋이다 — 표시와 실행 형태는 그쪽을 따른다.
@@ -114,7 +114,7 @@ describe('실행 요청의 형태는 출처와 dirty가 정한다', () => {
 
     const request = draft.toRequest()
 
-    expect(request?.presetCode).toBe('VALUE_KR')
+    expect(request?.presetCode).toBe('VALUE')
     expect(request?.conditions).toBeUndefined()
   })
 
@@ -174,7 +174,7 @@ describe('보낸 것을 기록한다', () => {
 
     draft.toRequest()
 
-    expect(draft.lastSent?.request.presetCode).toBe('VALUE_KR')
+    expect(draft.lastSent?.request.presetCode).toBe('VALUE')
     expect(draft.lastSent?.keys).toEqual(draft.conditions.map((it) => it.key))
   })
 
@@ -263,7 +263,7 @@ describe('조건을 실행에서 뺀다', () => {
     // 껐는데 결과가 그대로다.
     const draft = useScreenDraftStore()
     draft.loadFrom(readOnlyPreset())
-    expect(draft.toRequest()?.presetCode).toBe('VALUE_KR')
+    expect(draft.toRequest()?.presetCode).toBe('VALUE')
 
     draft.setEnabled((draft.conditions[0] as DraftCondition).key, false)
 

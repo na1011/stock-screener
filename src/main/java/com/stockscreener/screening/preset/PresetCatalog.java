@@ -145,7 +145,7 @@ public class PresetCatalog {
 
     // ── 8. 버핏 우량주 ────────────────────────────────────────────────────
 
-    public static final String BUFFETT_QUALITY_KR = "BUFFETT_QUALITY_KR";
+    public static final String BUFFETT_QUALITY = "BUFFETT_QUALITY";
 
     /**
      * 버핏 우량주 — {@code docs/external/워렌버핏-방법론.md} §8 복사용 스크린의 이식.
@@ -263,7 +263,7 @@ public class PresetCatalog {
      */
     private static ScreenPreset buffettQualityKr() {
         return new ScreenPreset(
-                BUFFETT_QUALITY_KR,
+                BUFFETT_QUALITY,
                 "버핏 우량주",
                 "여러 해에 걸쳐 꾸준히 잘 벌면서 빚이 적은 회사를 점수로 줄 세운다. "
                         + "판별의 중심은 한 시점의 수익성이 아니라 그것이 이어져 왔는가다 — "
@@ -426,7 +426,7 @@ public class PresetCatalog {
      * 넷이 그렇고, 넣어도 어떤 테스트도 깨지지 않아 <b>했다고 믿게 된다.</b>
      */
     public static List<String> extraColumns(String presetCode) {
-        if (BUFFETT_QUALITY_KR.equals(presetCode)) {
+        if (BUFFETT_QUALITY.equals(presetCode)) {
             // 버핏 프리셋의 가격 조건 셋은 각각 다른 것에 견준다 — 잉여현금흐름 수익률은
             // 절대 기준, PER 업종 백분위는 같은 업종 안, 유보 대비 시가는 자기 이익잉여금이다.
             // 「시장 전체에 견줘 싼가」는 어느 조건도 묻지 않으며, 그것이 설계다(ADR-0068) —
@@ -461,7 +461,7 @@ public class PresetCatalog {
 
     // ── 1. 저평가 가치주 ──────────────────────────────────────────────────
 
-    public static final String VALUE_KR = "VALUE_KR";
+    public static final String VALUE = "VALUE";
 
     /**
      * 저평가 가치주 — Piotroski F-Score(2000)와 Sloan 발생액(1996), Novy-Marx 총이익성(2013).
@@ -484,7 +484,7 @@ public class PresetCatalog {
      */
     private static ScreenPreset valueKr() {
         return new ScreenPreset(
-                VALUE_KR,
+                VALUE,
                 "저평가 가치주",
                 "이익·자산 대비 주가가 낮으면서 재무 건전성을 갖춘 종목을 점수로 줄 세운다. "
                         + "업종별 편차를 피하려 절대 PER이 아니라 유니버스 내 상대 순위를 쓴다. "
@@ -524,7 +524,7 @@ public class PresetCatalog {
 
     // ── 2. 린치 고속성장주 ────────────────────────────────────────────────
 
-    public static final String LYNCH_FAST_GROWER_KR = "LYNCH_FAST_GROWER_KR";
+    public static final String LYNCH_FAST_GROWER = "LYNCH_FAST_GROWER";
 
     /**
      * 린치 고속성장주 — {@code docs/external/피터린치-방법론.md} §7 복사용 스크린의 이식.
@@ -596,7 +596,7 @@ public class PresetCatalog {
      */
     private static ScreenPreset lynchFastGrowerKr() {
         return new ScreenPreset(
-                LYNCH_FAST_GROWER_KR,
+                LYNCH_FAST_GROWER,
                 "린치 고속성장주",
                 "이익이 빠르게 느는데 그 속도에 견줘 주가가 싼 종목을 점수로 줄 세운다. "
                         + "판별 도구는 PEG다 — 주가수익비율을 이익 성장률로 나눈 값이며, "
@@ -692,7 +692,7 @@ public class PresetCatalog {
 
     // ── 3. 린치 대형우량주 ────────────────────────────────────────────────
 
-    public static final String LYNCH_STALWART_KR = "LYNCH_STALWART_KR";
+    public static final String LYNCH_STALWART = "LYNCH_STALWART";
 
     /**
      * 린치 대형우량주 — 같은 문서 2.2의 이식. 여섯 유형 중 「대형이면서 여전히 성장하는 회사」다.
@@ -753,7 +753,7 @@ public class PresetCatalog {
      */
     private static ScreenPreset lynchStalwartKr() {
         return new ScreenPreset(
-                LYNCH_STALWART_KR,
+                LYNCH_STALWART,
                 "린치 대형우량주",
                 "크면서도 아직 성장이 남아 있는 회사를 점수로 줄 세운다. "
                         + "고속성장주와 시가총액 조건이 반대라 서로 다른 종목이 나온다 — "
@@ -825,7 +825,7 @@ public class PresetCatalog {
     }
     // ── 4. 추세 상승 ──────────────────────────────────────────────────────
 
-    public static final String MOMENTUM_KR = "MOMENTUM_KR";
+    public static final String MOMENTUM = "MOMENTUM";
 
     /**
      * 추세 상승 — Minervini 트렌드 템플릿 여덟 조건의 이식.
@@ -848,7 +848,7 @@ public class PresetCatalog {
      */
     private static ScreenPreset momentumKr() {
         return new ScreenPreset(
-                MOMENTUM_KR,
+                MOMENTUM,
                 "추세 상승",
                 "장기 상승 추세가 확인된 종목만 남긴다. 널리 쓰이는 여덟 조건을 그대로 옮겼다 — "
                         + "주가가 150일선·200일선 위에 있고, 150일선이 200일선 위에 있으며, "
@@ -895,7 +895,7 @@ public class PresetCatalog {
 
     // ── 5. 2국면 돌파 ─────────────────────────────────────────────────────
 
-    public static final String STAGE2_BREAKOUT_KR = "STAGE2_BREAKOUT_KR";
+    public static final String STAGE2_BREAKOUT = "STAGE2_BREAKOUT";
 
     /**
      * 2국면 돌파 — Weinstein 국면 분석의 1국면→2국면 전환 정의.
@@ -918,7 +918,7 @@ public class PresetCatalog {
      */
     private static ScreenPreset stage2BreakoutKr() {
         return new ScreenPreset(
-                STAGE2_BREAKOUT_KR,
+                STAGE2_BREAKOUT,
                 "2국면 돌파",
                 "바닥 다지기를 끝내고 상승 국면으로 넘어가는 신호가 한꺼번에 나온 종목을 남긴다. "
                         + "주가가 30주선(150일선) 위로 올라섰고, 그 이동평균 자체가 상승으로 돌아섰으며, "
@@ -956,7 +956,7 @@ public class PresetCatalog {
 
     // ── 6. 상승추세 눌림목 ────────────────────────────────────────────────
 
-    public static final String PULLBACK_UPTREND_KR = "PULLBACK_UPTREND_KR";
+    public static final String PULLBACK_UPTREND = "PULLBACK_UPTREND";
 
     /**
      * 상승추세 눌림목 — Connors의 평균회귀 규칙.
@@ -979,7 +979,7 @@ public class PresetCatalog {
      */
     private static ScreenPreset pullbackUptrendKr() {
         return new ScreenPreset(
-                PULLBACK_UPTREND_KR,
+                PULLBACK_UPTREND,
                 "상승추세 눌림목",
                 "장기 상승 추세를 유지한 채 단기적으로만 급하게 밀린 종목을 남긴다. "
                         + "주가가 200일선 위에 있고 중기 추세도 상승인 상태에서, 2일 RSI가 10 미만으로 "
@@ -1010,7 +1010,7 @@ public class PresetCatalog {
 
     // ── 7. 저변동 우량 ────────────────────────────────────────────────────
 
-    public static final String LOWVOL_QUALITY_KR = "LOWVOL_QUALITY_KR";
+    public static final String LOWVOL_QUALITY = "LOWVOL_QUALITY";
 
     /**
      * 저변동 우량 — 저변동성 이상현상.
@@ -1028,7 +1028,7 @@ public class PresetCatalog {
      */
     private static ScreenPreset lowvolQualityKr() {
         return new ScreenPreset(
-                LOWVOL_QUALITY_KR,
+                LOWVOL_QUALITY,
                 "저변동 우량",
                 "적게 흔들리면서 이익과 현금흐름이 꾸준한 종목을 점수로 줄 세운다. "
                         + "흔들림은 두 가지로 본다 — 하루 평균 변동폭이 작은가, 그리고 시장이 움직일 때 "

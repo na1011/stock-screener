@@ -17,7 +17,7 @@ applies_to:
 
 `docs/external/피터린치-방법론.md`를 **조건의 출처로만** 들인다 — ADR-0041이 스윙 명세에 준 「프리셋 한정 정본」 지위를 주지 않는다. 임계값은 그 문서 §8이 아니라 국내 분포 실측이 정한다.
 
-지표 넷(`PEG`·`RETURN_52W`·`EPS_CAGR_5Y`·`PER_MEDIAN_5Y`)과 프리셋 둘(`LYNCH_FAST_GROWER_KR`·`LYNCH_STALWART_KR`)을 만든다. 뒤의 두 지표 때문에 **러너의 워밍업 최댓값이 1,100 → 1,261봉으로 오른다** — 그때는 그것이 곧
+지표 넷(`PEG`·`RETURN_52W`·`EPS_CAGR_5Y`·`PER_MEDIAN_5Y`)과 프리셋 둘(`LYNCH_FAST_GROWER`·`LYNCH_STALWART`)을 만든다. 뒤의 두 지표 때문에 **러너의 워밍업 최댓값이 1,100 → 1,261봉으로 오른다** — 그때는 그것이 곧
 읽기 창이었다. ADR-0079가 둘을 갈라 지금 읽기 창은 1,441이다.
 
 `QVG_KR`을 폐기한다(2026-08-17 사용자 결정). 프리셋은 일곱에서 여덟이 된다.
@@ -121,7 +121,7 @@ SELECT CASE
 
 코스피200·코스닥150은 시장 전체보다 PBR이 높다. 이것이 ADR-0061의 「절대 임계는 국내 분포를 재고 정한다」가 겨냥한 자리다.
 
-**`QVG_KR` 폐기의 근거는 축 중복이다.** `QVG_KR`과 린치 고속성장주가 `PER`·`EPS_GROWTH_TTM_YOY`·`REVENUE_GROWTH`·`DEBT_RATIO`를 공유하는데, `QVG_KR`의 성장 축인 GARP는 개념 자체가 린치에게서 왔으면서 **그 판별 도구인 PEG를 갖고 있지 않다.** 사용자가 "잡탕 방식은 원하지 않는다, 아예 린치로 갈아엎어야 한다"로 정했다(2026-08-17, 프리셋이 서로 독립이라 유지해도 조건이 섞이지 않는다는 것을 확인한 뒤의 결정이다). 잃는 것은 `GP_TO_ASSETS` 축 하나이고 `VALUE_KR`에 남는다. `QVG_KR`을 참조하는 워치리스트는 0건이라 `last_satisfied` 리셋(ADR-0061)이 걸리지 않는다.
+**`QVG_KR` 폐기의 근거는 축 중복이다.** `QVG_KR`과 린치 고속성장주가 `PER`·`EPS_GROWTH_TTM_YOY`·`REVENUE_GROWTH`·`DEBT_RATIO`를 공유하는데, `QVG_KR`의 성장 축인 GARP는 개념 자체가 린치에게서 왔으면서 **그 판별 도구인 PEG를 갖고 있지 않다.** 사용자가 "잡탕 방식은 원하지 않는다, 아예 린치로 갈아엎어야 한다"로 정했다(2026-08-17, 프리셋이 서로 독립이라 유지해도 조건이 섞이지 않는다는 것을 확인한 뒤의 결정이다). 잃는 것은 `GP_TO_ASSETS` 축 하나이고 `VALUE`에 남는다. `QVG_KR`을 참조하는 워치리스트는 0건이라 `last_satisfied` 리셋(ADR-0061)이 걸리지 않는다.
 
 **spec §3이 `(예: Value, QVG형 전략)`이라 적어 QVG를 이름으로 언급한다.** 괄호가 예시임을 말하고 §9 수용 기준은 "최소 1개 이상"이지만, spec에 이름이 적힌 둘 중 하나가 사라지는 변경이라 사용자에게 제안하고 승인받았다(CLAUDE.md의 기획 정본 조항). `PresetCatalogTest.declaresRequiredPresets`의 DisplayName "spec §3이 요구한"은 과장이므로 함께 고친다.
 

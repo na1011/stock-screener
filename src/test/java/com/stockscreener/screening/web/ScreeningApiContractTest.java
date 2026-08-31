@@ -234,7 +234,7 @@ class ScreeningApiContractTest {
         mockMvc.perform(post("/api/screening").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"presetCode":"VALUE_KR",
+                                {"presetCode":"VALUE",
                                  "conditions": {"conditions":[
                                    {"indicatorCode":"PER","operator":"LT","operand":{"type":"LITERAL","value":10}}]}}
                                 """))
@@ -318,10 +318,10 @@ class ScreeningApiContractTest {
     @DisplayName("프리셋을 코드로 실행할 수 있다 — 시딩과 실행 경로가 이어져 있다")
     void runsSeededPresetByCode() throws Exception {
         JsonNode response = run("""
-                {"presetCode":"VALUE_KR","asOf":"2026-08-05"}
+                {"presetCode":"VALUE","asOf":"2026-08-05"}
                 """);
 
-        assertThat(response.get("screen").get("code").asText()).isEqualTo("VALUE_KR");
+        assertThat(response.get("screen").get("code").asText()).isEqualTo("VALUE");
         assertThat(response.get("screen").get("type").asText()).isEqualTo("PRESET");
         assertThat(response.get("evaluationMode").asText()).isEqualTo("SCORING");
         // 조건 사전이 실려야 화면이 "조건별 획득 점수"를 그릴 수 있다.

@@ -67,7 +67,7 @@ class AsOfRecomputeTest {
     @DisplayName("기준일=최신 거래일의 통과 집합이 저장된 지표로 낸 것과 같다")
     void recomputedSetMatchesStoredIndicatorSet() {
         LocalDate asOf = calendar.latestTradingDay();
-        ScreenPreset preset = presetByCode(PresetCatalog.BUFFETT_QUALITY_KR);
+        ScreenPreset preset = presetByCode(PresetCatalog.BUFFETT_QUALITY);
 
         // 프리셋이 자기 판정 방식과 유니버스를 들고 있다. 여기서 다시 정하면 화면과 갈린다.
         PointInTimeScreener.Outcome recomputed = screener.screen(

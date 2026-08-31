@@ -57,7 +57,7 @@ class PresetCatalogTest {
     @Test
     @DisplayName("spec §9가 요구한 「최소 1개 이상의 사전정의 전략 프리셋」이 있다")
     void declaresAtLeastOnePreset() {
-        // IMPORTANT — 이 단언은 한때 VALUE_KR·QVG_KR·MOMENTUM_KR 셋을 이름으로 세면서
+        // IMPORTANT — 이 단언은 한때 VALUE·QVG_KR·MOMENTUM 셋을 이름으로 세면서
         // "spec §3이 요구한"이라고 적었다. spec §3은 "(예: Value, QVG형 전략)"이라 적어
         // 예시를 든 것이고 목록을 요구하지 않는다 — 개수를 정하는 곳은 §9의 "최소 1개 이상"뿐이다.
         // 이름으로 세는 펜스는 프리셋을 개편할 때마다 거짓 실패를 내고, 그러면 다음 세션이

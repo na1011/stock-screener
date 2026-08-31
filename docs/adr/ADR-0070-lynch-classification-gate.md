@@ -12,7 +12,7 @@ applies_to:
 
 ## 결정
 
-`LYNCH_FAST_GROWER_KR`·`LYNCH_STALWART_KR`의 **게이트와 배점 배치**를 다시 정한다. ADR-0066이
+`LYNCH_FAST_GROWER`·`LYNCH_STALWART`의 **게이트와 배점 배치**를 다시 정한다. ADR-0066이
 정한 배치를 대체한다.
 
 **이 문서의 통과 수는 전부 2026-08-13 단면이다**(유니버스 347). **재현하려면 그 `trade_date`를
@@ -53,7 +53,7 @@ applies_to:
 - **MUST: 게이트의 한계 기여를 신고한다** — 「그것만 뺐을 때의 통과 수」다. **누적 교집합은 얹는
   순서에 따라 값이 달라져 재현되지 않고**, ADR-0066의 90% 펜스처럼 유니버스를 분모로 잡으면
   **다른 게이트를 통과한 뒤에는 아무도 자르지 않는 조건**을 구조적으로 못 잡는다. 실제로
-  `LYNCH_STALWART_KR.TURNOVER_60`이 유니버스 기준 71%라 그 펜스를 통과하면서 **44 → 44**였다.
+  `LYNCH_STALWART.TURNOVER_60`이 유니버스 기준 71%라 그 펜스를 통과하면서 **44 → 44**였다.
 - **MUST: 상관계수의 종류를 명시한다.** 이 문서의 ρ은 전부 **순위상관(Spearman)**이고 결측 쌍은
   제외했다. 같은 쌍이 Pearson에서 다른 값을 낸다 — `PEG ~ PEG_PCTL`이 Spearman 0.996인데 Pearson
   0.529다. 계수를 안 적으면 다음 세션이 다른 잣대로 재고 정반대 결론을 낸다.
@@ -120,7 +120,7 @@ SELECT CASE
 ```
 
 **이 펜스가 이번 결정의 성패다.** ADR-0066의 90% 펜스가 못 보는 자리이고, 지금 이 저장소에서
-실제로 붉다(`LYNCH_STALWART_KR.TURNOVER_60 44→44`).
+실제로 붉다(`LYNCH_STALWART.TURNOVER_60 44→44`).
 
 ```premise 린치 고속성장주의 통과 집합이 유니버스보다 현금흐름이 좋다
 psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
@@ -129,7 +129,7 @@ uni AS (SELECT DISTINCT stock_id FROM (SELECT iv0.* FROM indicator_value iv0 JOI
 g AS (SELECT c.id cid, c.indicator_code ind, c.operator op, c.literal_value v1, c.literal_value_2 v2
       FROM screen_condition c JOIN condition_group cg ON cg.id = c.group_id
       JOIN screen s ON s.id = cg.screen_id
-      WHERE s.code = 'LYNCH_FAST_GROWER_KR' AND s.is_active AND c.is_required AND c.operand_type = 'LITERAL'),
+      WHERE s.code = 'LYNCH_FAST_GROWER' AND s.is_active AND c.is_required AND c.operand_type = 'LITERAL'),
 p AS (SELECT g.cid, g.ind, u.stock_id,
         COALESCE(CASE g.op
           WHEN 'LTE' THEN iv.value <= g.v1 WHEN 'LT' THEN iv.value < g.v1
@@ -149,7 +149,7 @@ s AS (SELECT count(*) n, percentile_cont(0.5) WITHIN GROUP (ORDER BY v) med,
       FROM m WHERE stock_id IN (SELECT stock_id FROM win)),
 o AS (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v) med FROM m WHERE stock_id IN (SELECT stock_id FROM woc))
 SELECT CASE
-  WHEN (SELECT count(*) FROM g) = 0 THEN '잴 것이 없었다 — LYNCH_FAST_GROWER_KR의 리터럴 필수 게이트가 없다'
+  WHEN (SELECT count(*) FROM g) = 0 THEN '잴 것이 없었다 — LYNCH_FAST_GROWER의 리터럴 필수 게이트가 없다'
   WHEN (SELECT x FROM umed) IS NULL THEN '잴 것이 없었다 — FCF_MARGIN 값이 유니버스에 하나도 없다'
   WHEN (SELECT count(*) FROM win) = 0
     THEN '잴 것이 없었다 — 게이트를 통과한 종목이 없다(0건은 갈라서 보고할 일이다)'
@@ -176,7 +176,7 @@ uni AS (SELECT DISTINCT stock_id FROM (SELECT iv0.* FROM indicator_value iv0 JOI
 g AS (SELECT c.id cid, c.indicator_code ind, c.operator op, c.literal_value v1, c.literal_value_2 v2
       FROM screen_condition c JOIN condition_group cg ON cg.id = c.group_id
       JOIN screen s ON s.id = cg.screen_id
-      WHERE s.code = 'LYNCH_STALWART_KR' AND s.is_active AND c.is_required AND c.operand_type = 'LITERAL'),
+      WHERE s.code = 'LYNCH_STALWART' AND s.is_active AND c.is_required AND c.operand_type = 'LITERAL'),
 p AS (SELECT g.cid, g.ind, u.stock_id,
         COALESCE(CASE g.op
           WHEN 'LTE' THEN iv.value <= g.v1 WHEN 'LT' THEN iv.value < g.v1
@@ -206,7 +206,7 @@ f AS (SELECT
              ELSE s.med < u.x END AS ok
       FROM s, umed u, o)
 SELECT CASE
-  WHEN (SELECT count(*) FROM g) = 0 THEN '잴 것이 없었다 — LYNCH_STALWART_KR의 리터럴 필수 게이트가 없다'
+  WHEN (SELECT count(*) FROM g) = 0 THEN '잴 것이 없었다 — LYNCH_STALWART의 리터럴 필수 게이트가 없다'
   WHEN (SELECT x FROM umed) IS NULL THEN '잴 것이 없었다 — ACCRUAL_RATIO 값이 유니버스에 하나도 없다'
   WHEN (SELECT count(*) FROM win) = 0
     THEN '잴 것이 없었다 — 게이트를 통과한 종목이 없다(0건은 갈라서 보고할 일이다)'

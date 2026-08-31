@@ -4,7 +4,7 @@ import { laneScale, scoreLane } from './scoreLane'
 
 describe('laneScale — 레인이 뜻을 갖는 전략에서만 척도를 낸다', () => {
   it('배점이 갈리면 최대 배점을 낸다', () => {
-    // VALUE_KR의 실제 배점이다. 3점 조건의 트랙이 1점 조건의 3배가 된다.
+    // VALUE의 실제 배점이다. 3점 조건의 트랙이 1점 조건의 3배가 된다.
     expect(laneScale([3, 2, 2, 2, 1])).toBe(3)
     expect(laneScale([3, 2, 3, 3, 2, 1])).toBe(3)
   })

@@ -20,7 +20,7 @@ import jakarta.validation.constraints.Size;
  * 어긋나기 시작하기 때문이다.
  *
  * <p><b>시더가 심는 프리셋 설명은 아래 {@code description} 상한을 넘는다</b>(2026-08-25 실측:
- * {@code BUFFETT_QUALITY_KR} 2,089자 / 상한 2,000, 넘는 것은 그 하나다). <b>오늘은 안 깨진다</b> —
+ * {@code BUFFETT_QUALITY} 2,089자 / 상한 2,000, 넘는 것은 그 하나다). <b>오늘은 안 깨진다</b> —
  * 프리셋은 이 DTO를 거치지 않고, {@code screen.description}은 {@code text}라 저장도 안 막으며,
  * 프론트의 {@code screenDraft}에는 {@code description} 필드가 아예 없어 프리셋을 불러와도
  * 그 값이 요청으로 흘러가지 않는다.

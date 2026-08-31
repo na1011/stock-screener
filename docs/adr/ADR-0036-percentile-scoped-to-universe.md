@@ -77,7 +77,7 @@ psql -d stock_screener -At -c "WITH t AS (SELECT count(*) n FROM indicator_value
 
 ## 유니버스를 지정하지 않은 화면은 어떤 뜻이 되는가
 
-`ScreeningRepository.screen`의 `universeCode`가 `null`이면 대상은 활성 종목 **전체**다. 프리셋 셋(`VALUE_KR`·`QVG_KR`·`MOMENTUM_KR`)이 지금 그렇고, 그 조건의 다수가 백분위다. 그래서 "PER 하위 20%"는 이 결정 이후 **각 유니버스 하위 20%의 합집합**을 뜻한다.
+`ScreeningRepository.screen`의 `universeCode`가 `null`이면 대상은 활성 종목 **전체**다. 프리셋 셋(`VALUE`·`QVG_KR`·`MOMENTUM`)이 지금 그렇고, 그 조건의 다수가 백분위다. 그래서 "PER 하위 20%"는 이 결정 이후 **각 유니버스 하위 20%의 합집합**을 뜻한다.
 
 **그것을 정본으로 삼는다.** 코스피 대형주와 코스닥 중소형주를 한 줄로 세우지 않는 편이 "저평가"라는 말의 뜻에 가깝다. 대상을 좁히는 축(유니버스)과 순위를 매기는 축이 어긋나 보이지만, 어긋난 것이 아니라 **순위가 언제나 같은 시장 안에서 매겨지고 화면은 그중 무엇을 보여줄지만 정한다.**
 

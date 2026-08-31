@@ -291,10 +291,10 @@ END"
 
 1. **프리셋에 시장 축이 없다.** `ScreeningRepository`가 `universeCode`가 null이면
    `inAnyActiveUniverse`로 떨어지고 활성 프리셋 여덟이 전부 그 상태다. `MARKET_CAP` 임계가
-   **원화 리터럴**인데(`LYNCH_STALWART_KR` 6.773e12 · `LYNCH_FAST_GROWER_KR` 2.616e12 ·
-   `BUFFETT_QUALITY_KR` 1e12, 셋 다 필수) **ADR-0097의 재무 폴백이 미국에 USD 원값
+   **원화 리터럴**인데(`LYNCH_STALWART` 6.773e12 · `LYNCH_FAST_GROWER` 2.616e12 ·
+   `BUFFETT_QUALITY` 1e12, 셋 다 필수) **ADR-0097의 재무 폴백이 미국에 USD 원값
    `MARKET_CAP`을 실제로 만든다.** `TURNOVER_60` 부재가 둘을 우연히 배제하지만
-   **`LYNCH_STALWART_KR`에는 그 완충이 없다.** **ADR-0072의 premise가 이것을 이름으로 막는다** —
+   **`LYNCH_STALWART`에는 그 완충이 없다.** **ADR-0072의 premise가 이것을 이름으로 막는다** —
    *"시장별 프리셋을 가르기 전에는 실행하지 않는다"*. `ScreenPreset.universeCode`가 코드
    하나라 「국내」(유니버스 둘)를 표현할 수 없다.
 

@@ -120,7 +120,7 @@ class ScreenApiTest {
     @DisplayName("프리셋 수정·삭제는 403이다 — 목록에 이미 보이므로 없는 척하지 않는다")
     void presetIsReadOnly() throws Exception {
         Long presetId = jdbcTemplate.queryForObject(
-                "SELECT id FROM screen WHERE code = 'VALUE_KR'", Long.class);
+                "SELECT id FROM screen WHERE code = 'VALUE'", Long.class);
 
         mockMvc.perform(put("/api/screens/" + presetId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
@@ -136,7 +136,7 @@ class ScreenApiTest {
     @DisplayName("프리셋은 읽을 수 있고 editable=false로 표시된다")
     void presetIsReadableButNotEditable() throws Exception {
         Long presetId = jdbcTemplate.queryForObject(
-                "SELECT id FROM screen WHERE code = 'VALUE_KR'", Long.class);
+                "SELECT id FROM screen WHERE code = 'VALUE'", Long.class);
 
         mockMvc.perform(get("/api/screens/" + presetId))
                 .andExpect(status().isOk())
