@@ -44,6 +44,14 @@ import java.time.LocalDate;
  *                           {@code capex}와 다른 자리다. 금융업은 이 계정이 원리적으로 없어
  * 비는 것이 정상이다(dart-financial.md의 「계정별 가용성」 절). 0으로 대체하면 재고가 없는 회사가 되어
  *                           값이 그럴듯하게 틀린다.
+ * @param interestAndDividendIncome 이자·배당수익(은행). <b>영업이익 유도의 재료이지 지표가 아니다.</b>
+ * @param noninterestIncome 비이자수익(은행).
+ * @param interestExpense 이자비용.
+ * @param noninterestExpense 비이자비용(은행).
+ * @param benefitsLossesAndExpenses 보험금·손실·비용(보험). {@code revenue}에서 빼면 영업이익이다.
+ * @param grossProfit 매출총이익. 소스가 직접 낸 값이며 {@code revenue − costOfSales}와 다를 수 있다.
+ * @param operatingExpenses 영업비용. {@code grossProfit}에서 빼면 영업이익이다.
+ * @param costsAndExpenses 총원가·비용. {@code revenue}에서 빼면 영업이익이다.
  * @param netIncomeControlling <b>지배기업 소유주에게 귀속되는</b> 당기순이익.
  *                           {@code netIncome}(연결 총액, 비지배지분 포함)과 <b>다른 값이고 둘 다
  *                           사실이다</b> — 어느 쪽을 쓸지는 짝이 정한다. 주당 지표는 이쪽이고
@@ -78,7 +86,15 @@ public record RawFinancialReport(
         BigDecimal cashAndEquivalents,
         BigDecimal capex,
         BigDecimal inventories,
-        BigDecimal netIncomeControlling
+        BigDecimal netIncomeControlling,
+        BigDecimal interestAndDividendIncome,
+        BigDecimal noninterestIncome,
+        BigDecimal interestExpense,
+        BigDecimal noninterestExpense,
+        BigDecimal benefitsLossesAndExpenses,
+        BigDecimal grossProfit,
+        BigDecimal operatingExpenses,
+        BigDecimal costsAndExpenses
 ) {
 
     public RawFinancialReport {

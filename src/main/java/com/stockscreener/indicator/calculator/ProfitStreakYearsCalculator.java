@@ -100,7 +100,7 @@ public class ProfitStreakYearsCalculator implements IndicatorCalculator {
         }
         int streak = 0;
         for (int i = 0; i < YEARS; i++) {
-            BigDecimal operatingIncome = annual.get(i).operatingIncome();
+            BigDecimal operatingIncome = FinancialMath.operatingIncomeOf(annual.get(i));
             if (operatingIncome == null) {
                 // MUST: 계정이 비어 있으면 값을 내지 않는다. 예전엔 여기서 끊고 지금까지 센 수를
                 // 냈는데, 그러면 **결손이 「짧은 흑자 연수」라는 그럴듯한 수로 나온다.** 특히 첫

@@ -72,7 +72,7 @@ public class ProfitableQuarters4Calculator implements IndicatorCalculator {
 
         int profitable = 0;
         for (int i = 0; i < FinancialMath.TTM_QUARTERS; i++) {
-            BigDecimal operatingIncome = quarters.get(i).operatingIncome();
+            BigDecimal operatingIncome = FinancialMath.operatingIncomeOf(quarters.get(i));
             // 공시가 빠진 분기가 하나라도 있으면 세지 않는다. 없는 것을 적자로도 흑자로도
             // 읽을 수 없고, 어느 쪽으로 읽든 그 종목의 판정이 조용히 틀린다.
             if (operatingIncome == null) {

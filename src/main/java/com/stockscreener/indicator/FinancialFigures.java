@@ -61,7 +61,15 @@ public record FinancialFigures(
         BigDecimal cashAndEquivalents,
         BigDecimal capex,
         BigDecimal inventories,
-        BigDecimal netIncomeControlling
+        BigDecimal netIncomeControlling,
+        BigDecimal interestAndDividendIncome,
+        BigDecimal noninterestIncome,
+        BigDecimal interestExpense,
+        BigDecimal noninterestExpense,
+        BigDecimal benefitsLossesAndExpenses,
+        BigDecimal grossProfit,
+        BigDecimal operatingExpenses,
+        BigDecimal costsAndExpenses
 ) {
 
     public enum FiscalPeriod {

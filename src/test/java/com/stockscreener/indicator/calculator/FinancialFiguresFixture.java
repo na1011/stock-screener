@@ -41,6 +41,14 @@ final class FinancialFiguresFixture {
     private BigDecimal capex;
     private BigDecimal inventories;
     private BigDecimal netIncomeControlling;
+    private BigDecimal interestAndDividendIncome;
+    private BigDecimal noninterestIncome;
+    private BigDecimal interestExpense;
+    private BigDecimal noninterestExpense;
+    private BigDecimal benefitsLossesAndExpenses;
+    private BigDecimal grossProfit;
+    private BigDecimal operatingExpenses;
+    private BigDecimal costsAndExpenses;
 
     private FinancialFiguresFixture() {
     }
@@ -103,6 +111,47 @@ final class FinancialFiguresFixture {
      */
     FinancialFiguresFixture publishedAt(LocalDate value) {
         this.publishedAt = value;
+        return this;
+    }
+
+    /** 영업이익 유도의 재료 여덟(V40). 국내는 전부 null인 것이 정상이다. */
+    FinancialFiguresFixture interestAndDividendIncome(BigDecimal v) {
+        this.interestAndDividendIncome = v;
+        return this;
+    }
+
+    FinancialFiguresFixture noninterestIncome(BigDecimal v) {
+        this.noninterestIncome = v;
+        return this;
+    }
+
+    FinancialFiguresFixture interestExpense(BigDecimal v) {
+        this.interestExpense = v;
+        return this;
+    }
+
+    FinancialFiguresFixture noninterestExpense(BigDecimal v) {
+        this.noninterestExpense = v;
+        return this;
+    }
+
+    FinancialFiguresFixture benefitsLossesAndExpenses(BigDecimal v) {
+        this.benefitsLossesAndExpenses = v;
+        return this;
+    }
+
+    FinancialFiguresFixture grossProfit(BigDecimal v) {
+        this.grossProfit = v;
+        return this;
+    }
+
+    FinancialFiguresFixture operatingExpenses(BigDecimal v) {
+        this.operatingExpenses = v;
+        return this;
+    }
+
+    FinancialFiguresFixture costsAndExpenses(BigDecimal v) {
+        this.costsAndExpenses = v;
         return this;
     }
 
@@ -197,6 +246,9 @@ final class FinancialFiguresFixture {
                 revenue, operatingIncome, netIncome, totalAssets, totalEquity, totalLiabilities,
                 currentAssets, currentLiabilities, retainedEarnings,
                 operatingCashFlow, sharesOutstanding, eps, bps,
-                costOfSales, cashAndEquivalents, capex, inventories, netIncomeControlling);
+                costOfSales, cashAndEquivalents, capex, inventories, netIncomeControlling,
+                interestAndDividendIncome, noninterestIncome, interestExpense,
+                noninterestExpense, benefitsLossesAndExpenses,
+                grossProfit, operatingExpenses, costsAndExpenses);
     }
 }

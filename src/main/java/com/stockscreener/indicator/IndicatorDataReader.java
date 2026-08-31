@@ -91,7 +91,10 @@ public class IndicatorDataReader {
             total_equity, total_liabilities, current_assets, current_liabilities,
             retained_earnings, operating_cash_flow, shares_outstanding,
             eps, bps, cost_of_sales, cash_and_equivalents, capex, inventories,
-            net_income_controlling
+            net_income_controlling,
+            interest_and_dividend_income, noninterest_income, interest_expense,
+            noninterest_expense, benefits_losses_and_expenses,
+            gross_profit, operating_expenses, costs_and_expenses
             """;
 
     /**
@@ -495,6 +498,14 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("cash_and_equivalents"),
                 rs.getBigDecimal("capex"),
                 rs.getBigDecimal("inventories"),
-                rs.getBigDecimal("net_income_controlling"));
+                rs.getBigDecimal("net_income_controlling"),
+                rs.getBigDecimal("interest_and_dividend_income"),
+                rs.getBigDecimal("noninterest_income"),
+                rs.getBigDecimal("interest_expense"),
+                rs.getBigDecimal("noninterest_expense"),
+                rs.getBigDecimal("benefits_losses_and_expenses"),
+                rs.getBigDecimal("gross_profit"),
+                rs.getBigDecimal("operating_expenses"),
+                rs.getBigDecimal("costs_and_expenses"));
     }
 }

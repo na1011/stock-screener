@@ -105,7 +105,7 @@ public class RoicMin3yCalculator implements IndicatorCalculator {
         BigDecimal min = null;
         for (int i = 0; i < YEARS; i++) {
             FinancialFigures figures = annual.get(i);
-            BigDecimal operatingIncome = figures.operatingIncome();
+            BigDecimal operatingIncome = FinancialMath.operatingIncomeOf(figures);
             BigDecimal assets = figures.totalAssets();
             BigDecimal currentLiabilities = figures.currentLiabilities();
             if (operatingIncome == null || assets == null || currentLiabilities == null) {

@@ -417,6 +417,7 @@ class FinancialWriterTest {
                 new BigDecimal("1500"), new BigDecimal("100"),
                 new BigDecimal("10"), new BigDecimal("120"), null, null, null, null,
                 // 지배주주 귀속 순이익. 주요계정 어댑터가 낼 수 없는 값이라 null이 기본이다.
-                null);
+                null,
+                null, null, null, null, null, null, null, null);
     }
 }

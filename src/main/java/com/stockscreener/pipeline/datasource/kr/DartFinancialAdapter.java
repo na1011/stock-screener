@@ -205,7 +205,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 // 중복된 `당기순이익(손실)` 두 행의 값이 같아 지분을 가를 수 없고
                 // (dart-financial.md의 「숫자 파싱과 중복 행」 절), account_id가 없어 다른 길도 없다.
                 // 전체 재무제표가 채운다 — 여기서 null인 것은 결손이 아니라 이 소스의 경계다.
-                null);
+                null,
+                null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -247,7 +248,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 DartAccountMapper.find(annualBalance, DartAccountMapper.RETAINED_EARNINGS, false),
                 null, null, null, null, null, null, null, null,
                 // 지배주주 귀속 순이익. 위와 같은 이유로 이 엔드포인트가 낼 수 없다.
-                null));
+                null,
+                null, null, null, null, null, null, null, null));
     }
 
     private static BigDecimal subtract(List<JsonNode> annual, List<JsonNode> thirdQuarter,

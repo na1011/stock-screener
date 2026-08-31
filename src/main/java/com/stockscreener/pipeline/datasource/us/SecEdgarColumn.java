@@ -95,6 +95,30 @@ enum SecEdgarColumn {
             "WeightedAverageNumberOfDilutedSharesOutstanding",
             "WeightedAverageNumberOfSharesOutstandingBasic")),
 
+    /**
+     * 영업이익 유도의 재료 여덟. <b>그 자체가 지표는 아니다</b> — 유도는 지표 계층
+     * ({@code FinancialMath.operatingIncomeOf})이 한다.
+     *
+     * <p><b>왜 있는가</b>: {@code OperatingIncomeLoss}가 미국에서 대량으로 비는데 그것이
+     * 「없는 것」이 아니라 <b>US-GAAP의 표시 관행</b>이다. K-IFRS는 은행도 영업이익을 표시해
+     * 국내 금융업 50종목이 FY 영업이익을 <b>100%</b> 갖는 반면, 미국은 금융업 170 중
+     * <b>119(70%)</b>가 판정불가였다 — <b>같은 이름의 조건이 시장마다 다른 것을 쟀다.</b>
+     * 막힌 119종목 전량에 물으니 <b>83(69.7%)</b>이 아래 재료를 갖는다.
+     *
+     * <p><b>MUST NOT: 비었다고 결손으로 읽지 않는다.</b> 업종마다 내는 것이 다르고,
+     * 셋 다 비는 것이 정상인 종목은 {@code OperatingIncomeLoss}를 직접 내는 종목이다.
+     */
+    INTEREST_AND_DIVIDEND_INCOME(Kind.DURATION, Unit.MONETARY, List.of(
+            "InterestAndDividendIncomeOperating")),
+    NONINTEREST_INCOME(Kind.DURATION, Unit.MONETARY, List.of("NoninterestIncome")),
+    INTEREST_EXPENSE(Kind.DURATION, Unit.MONETARY, List.of("InterestExpense")),
+    NONINTEREST_EXPENSE(Kind.DURATION, Unit.MONETARY, List.of("NoninterestExpense")),
+    BENEFITS_LOSSES_AND_EXPENSES(Kind.DURATION, Unit.MONETARY, List.of(
+            "BenefitsLossesAndExpenses")),
+    GROSS_PROFIT(Kind.DURATION, Unit.MONETARY, List.of("GrossProfit")),
+    OPERATING_EXPENSES(Kind.DURATION, Unit.MONETARY, List.of("OperatingExpenses")),
+    COSTS_AND_EXPENSES(Kind.DURATION, Unit.MONETARY, List.of("CostsAndExpenses")),
+
     /** 주당순이익. <b>대조용이다</b> — 지표는 언제나 자체 계산이다(spec §7). */
     EPS(Kind.DURATION, Unit.PER_SHARE, List.of("EarningsPerShareBasic", "EarningsPerShareDiluted"));
 

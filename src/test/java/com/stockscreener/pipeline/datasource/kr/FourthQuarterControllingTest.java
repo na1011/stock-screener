@@ -86,6 +86,7 @@ class FourthQuarterControllingTest {
                 LocalDate.of(year + 1, 3, 15), "11011", "KRW",
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null,
-                controlling == null ? null : new BigDecimal(controlling));
+                controlling == null ? null : new BigDecimal(controlling),
+                null, null, null, null, null, null, null, null);
     }
 }

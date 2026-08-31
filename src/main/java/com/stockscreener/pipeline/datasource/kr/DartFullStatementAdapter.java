@@ -291,7 +291,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 // 한 계정을 회사마다 일곱 가지 이름으로 부르고, 새면 연결 총액이 그 자리에
                 // 앉아 값이 그럴듯하게 틀린다(ID_NET_INCOME_CONTROLLING javadoc).
                 DartFullAccountMapper.find(
-                        income, DartFullAccountMapper.ID_NET_INCOME_CONTROLLING, null));
+                        income, DartFullAccountMapper.ID_NET_INCOME_CONTROLLING, null),
+                null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -371,7 +372,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_INVENTORIES, null),
                 // 손익이지만 이것만 예외다 — 주요계정이 원리적으로 못 만든다(위 javadoc).
-                deriveFourthQuarterControlling(thisYear, year));
+                deriveFourthQuarterControlling(thisYear, year),
+                null, null, null, null, null, null, null, null);
     }
 
     /**

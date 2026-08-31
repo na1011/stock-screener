@@ -84,10 +84,11 @@ public class OperatingMarginMin5yCalculator implements IndicatorCalculator {
         for (int i = 0; i < YEARS; i++) {
             FinancialFigures figures = annual.get(i);
             BigDecimal revenue = figures.revenue();
-            if (figures.operatingIncome() == null || revenue == null || revenue.signum() <= 0) {
+            BigDecimal operatingIncome = FinancialMath.operatingIncomeOf(figures);
+            if (operatingIncome == null || revenue == null || revenue.signum() <= 0) {
                 return null;
             }
-            BigDecimal margin = FinancialMath.percentage(figures.operatingIncome(), revenue);
+            BigDecimal margin = FinancialMath.percentage(operatingIncome, revenue);
             if (min == null || margin.compareTo(min) < 0) {
                 min = margin;
             }

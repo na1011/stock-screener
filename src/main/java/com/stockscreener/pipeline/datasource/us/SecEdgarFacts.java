@@ -697,7 +697,17 @@ final class SecEdgarFacts {
                 // (SecEdgarColumn.NET_INCOME) 폴백이 곧 옳은 값을 쓴다. 여기서 갈라 담으면
                 // 이미 적재된 행은 옛 정의, 새 행은 새 정의인 혼합물이 된다 —
                 // fillMissing이 stored == null일 때만 채우므로(ADR-0056) 되돌릴 길이 없다.
-                null);
+                null,
+                // 영업이익 유도의 재료 여덟(V40). 여기서 계산하지 않는다 — 원자료만 담고
+                // 판단은 지표 계층이 한다(FinancialMath.operatingIncomeOf).
+                v.get(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME),
+                v.get(SecEdgarColumn.NONINTEREST_INCOME),
+                v.get(SecEdgarColumn.INTEREST_EXPENSE),
+                v.get(SecEdgarColumn.NONINTEREST_EXPENSE),
+                v.get(SecEdgarColumn.BENEFITS_LOSSES_AND_EXPENSES),
+                v.get(SecEdgarColumn.GROSS_PROFIT),
+                v.get(SecEdgarColumn.OPERATING_EXPENSES),
+                v.get(SecEdgarColumn.COSTS_AND_EXPENSES));
     }
 
     // ---------- 4. Q4를 유도한다 ----------
@@ -775,7 +785,24 @@ final class SecEdgarFacts {
                     minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales()),
                     fy.cashAndEquivalents(), null, fy.inventories(),
                     // 위 toReport와 같은 이유로 담지 않는다.
-                    null));
+                    null,
+                    // 유도 재료 여덟은 전부 유량이라 차감한다. 하나라도 없으면 minus가
+                    // null을 내므로 Q4 영업이익이 지어지지 않는다 — 그것이 옳다.
+                    minus(fy.interestAndDividendIncome(), q1.interestAndDividendIncome(),
+                            q2.interestAndDividendIncome(), q3.interestAndDividendIncome()),
+                    minus(fy.noninterestIncome(), q1.noninterestIncome(),
+                            q2.noninterestIncome(), q3.noninterestIncome()),
+                    minus(fy.interestExpense(), q1.interestExpense(),
+                            q2.interestExpense(), q3.interestExpense()),
+                    minus(fy.noninterestExpense(), q1.noninterestExpense(),
+                            q2.noninterestExpense(), q3.noninterestExpense()),
+                    minus(fy.benefitsLossesAndExpenses(), q1.benefitsLossesAndExpenses(),
+                            q2.benefitsLossesAndExpenses(), q3.benefitsLossesAndExpenses()),
+                    minus(fy.grossProfit(), q1.grossProfit(), q2.grossProfit(), q3.grossProfit()),
+                    minus(fy.operatingExpenses(), q1.operatingExpenses(),
+                            q2.operatingExpenses(), q3.operatingExpenses()),
+                    minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
+                            q2.costsAndExpenses(), q3.costsAndExpenses())));
         }
         return derived;
     }

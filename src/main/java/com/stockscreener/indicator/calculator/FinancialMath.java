@@ -348,6 +348,72 @@ final class FinancialMath {
     }
 
     /**
+     * 그 기(期)의 <b>영업이익</b>. 소스가 직접 낸 값이 있으면 그것이고, 없으면 <b>영업수익에서
+     * 영업비용을 뺀다.</b>
+     *
+     * <p><b>왜 유도가 필요한가 — 이것은 소스의 부재가 아니라 표시 관행이다.</b>
+     * K-IFRS는 은행도 영업이익을 표시해 국내 활성 유니버스의 금융업 <b>50종목이 FY 영업이익을
+     * 100% 갖고</b> 그중 23종목이 {@code OPM_MIN_5Y} 값을 낸다. 반면 US-GAAP은 금융업에
+     * {@code OperatingIncomeLoss}를 잘 쓰지 않아 미국 금융업 <b>170 중 119(70%)</b>가
+     * 판정불가였다. 그대로 두면 <b>같은 이름의 조건이 시장마다 다른 것을 잰다</b>
+     * (phase-criteria §P27 축①·②가 금지하는 모양이다).
+     *
+     * <p><b>유도식은 K-IFRS의 정의를 따른다 — 영업수익 − 영업비용</b>(2026-08-31 사용자 결정).
+     * 우선순위가 있고 <b>앞의 것이 이긴다</b>:
+     * <ol>
+     *   <li>소스가 낸 {@code operatingIncome}
+     *   <li><b>은행형</b> — (이자·배당수익 + 비이자수익) − (이자비용 + 비이자비용)
+     *   <li><b>보험형</b> — 매출(= 영업수익) − 보험금·손실·비용
+     *   <li><b>비금융</b> — 매출총이익 − 영업비용
+     *   <li><b>비금융 대안</b> — 매출 − 총원가·비용
+     * </ol>
+     *
+     * <p><b>MUST: 재료가 하나라도 없으면 그 갈래를 건너뛴다.</b> 없는 것을 0으로 두면
+     * 이자비용이 0인 은행이 되어 영업이익이 부풀고, <b>그 값은 그럴듯해서 안 드러난다.</b>
+     *
+     * <p><b>MUST NOT: 이 유도를 적재 계층으로 내리지 않는다.</b> {@code financial_statement}는
+     * 원자료만 담고 판단은 지표 계층이 한다({@code FreeCashFlow} javadoc ·
+     * phase-criteria §P22 축②). 여덟 개 재료 컬럼이 원자료이고 이 메서드가 판단이다.
+     *
+     * <p><b>국내는 언제나 첫 갈래로 떨어진다</b> — DART 어댑터가 재료 여덟을 채우지 않으므로
+     * (전부 null) 유도가 성립할 수 없고, 애초에 {@code operatingIncome}이 100% 차 있다.
+     * 그 불변을 {@code OperatingIncomeDerivationTest}가 잠근다.
+     */
+    static BigDecimal operatingIncomeOf(FinancialFigures figures) {
+        if (figures == null) {
+            return null;
+        }
+        if (figures.operatingIncome() != null) {
+            return figures.operatingIncome();
+        }
+        BigDecimal bank = minus(
+                sum(figures.interestAndDividendIncome(), figures.noninterestIncome()),
+                sum(figures.interestExpense(), figures.noninterestExpense()));
+        if (bank != null) {
+            return bank;
+        }
+        BigDecimal insurance = minus(figures.revenue(), figures.benefitsLossesAndExpenses());
+        if (insurance != null) {
+            return insurance;
+        }
+        BigDecimal fromGrossProfit = minus(figures.grossProfit(), figures.operatingExpenses());
+        if (fromGrossProfit != null) {
+            return fromGrossProfit;
+        }
+        return minus(figures.revenue(), figures.costsAndExpenses());
+    }
+
+    /** 하나라도 없으면 null이다. 0으로 대체하면 없는 항목이 「0원이었다」가 된다. */
+    private static BigDecimal sum(BigDecimal a, BigDecimal b) {
+        return a == null || b == null ? null : a.add(b);
+    }
+
+    /** 하나라도 없으면 null이다. */
+    private static BigDecimal minus(BigDecimal a, BigDecimal b) {
+        return a == null || b == null ? null : a.subtract(b);
+    }
+
+    /**
      * 연속한 회계연도로 인정하는 {@code period_end} 간격.
      *
      * <p>1년은 365일 또는 366일이다. 폭을 조금 두는 이유는 결산월 변경으로 한 회계기간이

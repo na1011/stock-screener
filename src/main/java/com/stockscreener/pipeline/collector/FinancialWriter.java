@@ -338,9 +338,12 @@ public class FinancialWriter {
                      total_liabilities, current_assets, current_liabilities, retained_earnings,
                      operating_cash_flow, shares_outstanding, eps, bps,
                      cost_of_sales, cash_and_equivalents, capex, inventories,
-                     net_income_controlling, created_at)
+                     net_income_controlling,
+                     interest_and_dividend_income, noninterest_income, interest_expense,
+                     noninterest_expense, benefits_losses_and_expenses,
+                     gross_profit, operating_expenses, costs_and_expenses, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, now())
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
                 """,
                 stockId, report.fiscalYear(), report.fiscalPeriod(),
                 report.periodStart(), report.periodEnd(), report.publishedAt(),
@@ -351,7 +354,11 @@ public class FinancialWriter {
                 report.operatingCashFlow(), report.sharesOutstanding(),
                 report.eps(), report.bps(),
                 report.costOfSales(), report.cashAndEquivalents(), report.capex(),
-                report.inventories(), report.netIncomeControlling());
+                report.inventories(), report.netIncomeControlling(),
+                report.interestAndDividendIncome(), report.noninterestIncome(),
+                report.interestExpense(), report.noninterestExpense(),
+                report.benefitsLossesAndExpenses(),
+                report.grossProfit(), report.operatingExpenses(), report.costsAndExpenses());
     }
 
     /**
@@ -383,7 +390,18 @@ public class FinancialWriter {
         COST_OF_SALES("cost_of_sales", RawFinancialReport::costOfSales),
         CASH_AND_EQUIVALENTS("cash_and_equivalents", RawFinancialReport::cashAndEquivalents),
         CAPEX("capex", RawFinancialReport::capex),
-        INVENTORIES("inventories", RawFinancialReport::inventories);
+        INVENTORIES("inventories", RawFinancialReport::inventories),
+        // 영업이익 유도의 재료 여덟(V40). 그 자체가 지표는 아니다.
+        INTEREST_AND_DIVIDEND_INCOME("interest_and_dividend_income",
+                RawFinancialReport::interestAndDividendIncome),
+        NONINTEREST_INCOME("noninterest_income", RawFinancialReport::noninterestIncome),
+        INTEREST_EXPENSE("interest_expense", RawFinancialReport::interestExpense),
+        NONINTEREST_EXPENSE("noninterest_expense", RawFinancialReport::noninterestExpense),
+        BENEFITS_LOSSES_AND_EXPENSES("benefits_losses_and_expenses",
+                RawFinancialReport::benefitsLossesAndExpenses),
+        GROSS_PROFIT("gross_profit", RawFinancialReport::grossProfit),
+        OPERATING_EXPENSES("operating_expenses", RawFinancialReport::operatingExpenses),
+        COSTS_AND_EXPENSES("costs_and_expenses", RawFinancialReport::costsAndExpenses);
 
         private final String column;
         private final Function<RawFinancialReport, BigDecimal> accessor;
