@@ -70,7 +70,7 @@ psql -d stock_screener -At -c "WITH d AS (
   SELECT indicator_code, value,
          percent_rank() OVER (PARTITION BY indicator_code ORDER BY value) pr
   FROM indicator_value
-  WHERE trade_date = (SELECT max(trade_date) FROM indicator_value)
+  WHERE trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))
     AND indicator_code IN ('ATR_PCT_14','BETA_104W')),
 p AS (
   SELECT

@@ -72,8 +72,7 @@ rg -n 'PerCalculator|RoaCalculator|NetMarginCalculator' \
 버핏 프리셋 블록에서 아무것도 반환하지 않아야 한다 — 셋 다 게이트와 ρ ≥ 0.8이라 뺐다.
 
 ```premise 버핏 프리셋이 유니버스보다 해자가 강한 집합을 낸다
-psql -d stock_screener -At -c "WITH d AS (
-  SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'ADJ_CLOSE'),
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
 w AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='ROE_MIN_3Y') roe3,
         max(value) FILTER (WHERE indicator_code='PROFIT_STREAK_Y') streak,
@@ -105,8 +104,7 @@ SELECT CASE
 검증이 되지 못하고, **해자가 유지되는가**만 실패할 수 있다.
 
 ```premise 버핏 게이트끼리의 겹침이 신고한 배수 근처에 있다
-psql -d stock_screener -At -c "WITH d AS (
-  SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'ADJ_CLOSE'),
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
 w AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='ROE_MIN_3Y') a,
         max(value) FILTER (WHERE indicator_code='ROIC_MIN_3Y') b

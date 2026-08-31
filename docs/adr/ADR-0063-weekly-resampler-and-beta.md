@@ -48,7 +48,7 @@ psql -d stock_screener -At -c "SELECT CASE
        || '로 1에 가깝다 — 지수를 잘못 붙였거나 종목별 시장 분기가 빠졌다' END
 FROM indicator_value
 WHERE indicator_code = 'BETA_104W'
-  AND trade_date = (SELECT max(trade_date) FROM indicator_value WHERE indicator_code = 'BETA_104W')"
+  AND trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))"
 ```
 
 주봉 접기가 한 곳뿐인지 — 아래가 `WeeklyResampler.java` 하나만 반환해야 한다.

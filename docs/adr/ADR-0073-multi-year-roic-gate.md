@@ -37,8 +37,7 @@ applies_to:
 ## 검증
 
 ```premise 다년 ROIC 게이트를 재료 부족이 막지 않는다
-psql -d stock_screener -At -c "WITH d AS (
-  SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'ADJ_CLOSE'),
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
 w AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='ROE_MIN_3Y') roe3,
         max(value) FILTER (WHERE indicator_code='PROFIT_STREAK_Y') streak,

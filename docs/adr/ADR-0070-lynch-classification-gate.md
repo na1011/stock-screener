@@ -79,7 +79,7 @@ rg -n 'PegCalculator\.CODE, ComparisonOperator' \
 린치 두 블록에서 `required(`로 감싸인 것이 없어야 한다 — 가격은 저울이다.
 
 ```premise 린치 게이트에 자르는 것이 0인 조건이 없다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'ADJ_CLOSE'),
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
 uni AS (SELECT DISTINCT stock_id FROM indicator_value iv, d
         WHERE iv.trade_date = d.t AND iv.indicator_code = 'ADJ_CLOSE'),
 g AS (SELECT s.code sc, c.id cid, c.indicator_code ind, c.operator op,
@@ -123,7 +123,7 @@ SELECT CASE
 실제로 붉다(`LYNCH_STALWART_KR.TURNOVER_60 44→44`).
 
 ```premise 린치 고속성장주의 통과 집합이 유니버스보다 현금흐름이 좋다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'ADJ_CLOSE'),
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
 uni AS (SELECT DISTINCT stock_id FROM indicator_value iv, d
         WHERE iv.trade_date = d.t AND iv.indicator_code = 'ADJ_CLOSE'),
 g AS (SELECT c.id cid, c.indicator_code ind, c.operator op, c.literal_value v1, c.literal_value_2 v2
@@ -170,7 +170,7 @@ SELECT CASE
 않았는가」를 지키는 자리이며, 그 사실을 적어 두지 않으면 다음 세션이 이것을 성패로 읽는다.
 
 ```premise 린치 대형우량주의 이익이 현금으로 뒷받침된다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'ADJ_CLOSE'),
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
 uni AS (SELECT DISTINCT stock_id FROM indicator_value iv, d
         WHERE iv.trade_date = d.t AND iv.indicator_code = 'ADJ_CLOSE'),
 g AS (SELECT c.id cid, c.indicator_code ind, c.operator op, c.literal_value v1, c.literal_value_2 v2

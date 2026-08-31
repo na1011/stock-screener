@@ -119,13 +119,13 @@ SELECT CASE
 ```premise 버핏 프리셋의 필수 게이트가 유니버스의 90% 넘게 통과시키지 않는다
 psql -d stock_screener -At -c "WITH pop AS (
   SELECT count(DISTINCT stock_id) n FROM indicator_value
-  WHERE trade_date = (SELECT max(trade_date) FROM indicator_value WHERE indicator_code = 'ADJ_CLOSE')
+  WHERE trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))
     AND indicator_code = 'ADJ_CLOSE'),
 g AS (
   SELECT c.indicator_code, c.operator, c.literal_value,
          (SELECT count(*) FROM indicator_value iv
           WHERE iv.indicator_code = c.indicator_code
-            AND iv.trade_date = (SELECT max(trade_date) FROM indicator_value WHERE indicator_code = 'ADJ_CLOSE')
+            AND iv.trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))
             AND CASE c.operator
                   WHEN 'LTE' THEN iv.value <= c.literal_value
                   WHEN 'LT'  THEN iv.value <  c.literal_value
@@ -151,7 +151,7 @@ SELECT CASE
 psql -d stock_screener -At -c "WITH v AS (
   SELECT value FROM indicator_value
   WHERE indicator_code = 'ROE_MIN_3Y'
-    AND trade_date = (SELECT max(trade_date) FROM indicator_value WHERE indicator_code = 'ROE_MIN_3Y')),
+    AND trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))),
 r AS (SELECT (SELECT count(*) FROM v WHERE value < 10)::numeric / NULLIF((SELECT count(*) FROM v), 0) pr)
 SELECT CASE
   WHEN (SELECT count(*) FROM v) = 0 THEN '잴 것이 없었다 — ROE_MIN_3Y 값이 하나도 없다'

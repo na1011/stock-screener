@@ -59,8 +59,7 @@ DART 배당표의 `(연결)현금배당성향` **25.10%** 대 우리 `DIVIDEND_P
 (바꾸기 전 24.571).
 
 ```premise 주당 지표의 분자가 지배주주 귀속으로 남아 있다
-psql -d stock_screener -At -c "WITH d AS (
-  SELECT max(trade_date) t FROM indicator_value WHERE indicator_code = 'DIVIDEND_PAYOUT'),
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
 src AS (SELECT NULLIF(replace(g.payload->>'thstrm', ',', ''), '-')::numeric v
         FROM governance_report_row g JOIN stock s ON s.id = g.stock_id
         WHERE s.ticker = '005930' AND g.endpoint = 'DIVIDEND' AND g.bsns_year = 2025
