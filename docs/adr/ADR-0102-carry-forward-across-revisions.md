@@ -42,22 +42,32 @@ applies_to:
 **대조군으로 확인했다**: `carryForward`가 `values`를 그대로 돌려주게 만들면 **정확히 그 시험
 하나만 붉고** 나머지 열여덟은 초록이다.
 
-```premise 미국 FY에서 뒤 판이 앞 판의 영업이익을 지운 행
+```premise 노출 유니버스에서 뒤 판이 앞 판의 영업이익을 지운 행
 psql -d stock_screener -At -c "SELECT CASE
-  WHEN (SELECT count(*) FROM financial_statement f JOIN stock s ON s.id = f.stock_id
-        WHERE s.market_code = 'US' AND f.fiscal_period = 'FY') = 0
-    THEN '잴 것이 없었다 — 미국 FY 재무가 한 행도 없다'
+  WHEN (SELECT count(*) FROM financial_statement f
+        JOIN universe_membership m ON m.stock_id = f.stock_id
+        WHERE m.universe_code = 'US_TOP1000' AND m.effective_to IS NULL
+          AND f.fiscal_period = 'FY') = 0
+    THEN '잴 것이 없었다 — US_TOP1000에 FY 재무가 한 행도 없다'
   WHEN count(*) = 0 THEN 'OK 0행'
-  ELSE '뒤 판이 앞 판의 영업이익을 지운 FY 행이 ' || count(*) || '개다 — 겹치기가 안 걸렸거나 되돌아갔다'
+  ELSE '뒤 판이 앞 판의 영업이익을 지운 FY 행이 ' || count(*) || '개다 — 겹치기가 되돌아갔거나, 겹치기 이후 적재되지 않은 종목이 편입됐다'
   END
-FROM financial_statement l JOIN stock s ON s.id = l.stock_id
-WHERE s.market_code = 'US' AND l.is_latest AND l.fiscal_period = 'FY'
-  AND l.operating_income IS NULL
+FROM financial_statement l
+JOIN universe_membership m ON m.stock_id = l.stock_id
+  AND m.universe_code = 'US_TOP1000' AND m.effective_to IS NULL
+WHERE l.is_latest AND l.fiscal_period = 'FY' AND l.operating_income IS NULL
   AND EXISTS (SELECT 1 FROM financial_statement o
               WHERE o.stock_id = l.stock_id AND o.fiscal_year = l.fiscal_year
                 AND o.fiscal_period = l.fiscal_period AND NOT o.is_latest
                 AND o.operating_income IS NOT NULL)"
 ```
+
+**MUST: 모집단을 `US_TOP1000`으로 좁힌 근거를 함께 읽는다.** 이 결정은 **코드**에 걸리지만
+**이미 저장된 행은 재적재가 닿아야 고쳐진다.** `US_LISTED`에만 있고 노출 유니버스 밖인 종목은
+겹치기 이전 모양 그대로이고 **실측 1,578행**이 그렇다(전부 `is_latest`의 공시일이 더 늦어
+`FinancialWriter`가 정당하게 손대지 않은 것이다). 그것까지 세면 **의도한 동작에 우는 펜스**가
+된다. **그 목록이 자라는 자리는 리밸런싱이다** — 새로 편입된 종목이 겹치기 이후 적재를 안
+거쳤으면 이 전제가 그때 발화하고, 처방은 `--job=financial-refill --universe=US_TOP1000`이다.
 
 ## 배경
 

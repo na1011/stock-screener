@@ -46,15 +46,13 @@ applies_to:
 첫 갈래가 이긴다. 국내 543,735봉에서 `listed_shares`가 NULL인 행이 **0**이고 0인 행도 **0**이라
 이 폴백을 타는 봉이 없다.
 
-```premise 미국 SHARES_GROWTH_3Y가 상수인가
-psql -d stock_screener -At -c "SELECT CASE
-  WHEN count(*) = 0 THEN '잴 것이 없었다 — 미국 SHARES_GROWTH_3Y가 한 행도 없다'
-  WHEN count(DISTINCT value) > 1 THEN 'OK 서로 다른 값 ' || count(DISTINCT value) || '개'
-  ELSE '창 전체에서 값이 하나뿐이다(' || max(value) || ') — 조건이 아니라 상수다'
-  END
-FROM indicator_value iv JOIN stock s ON s.id = iv.stock_id
-WHERE s.market_code = 'US' AND iv.indicator_code = 'SHARES_GROWTH_3Y'"
-```
+**이 결정은 별도 premise를 두지 않는다** — ADR-0096이 같은 이유로 그렇게 했다. 재는 대상이
+「저장된 `SHARES_GROWTH_3Y`가 상수인가」인데 **미국 `indicator_value`가 0행이라 모집단이 없고**,
+생기는 시점이 곧 미국을 켜는 단계다. 그때까지 매 세션 「잴 것이 없었다」를 신고하는 것은
+발견이 아니라 소음이다.
+
+**켠 뒤에 그것을 묻는 자리는 둘이다** — `UsSharesResolutionTest`(계약)와 P27의 커버리지
+탐침(분포). 전자는 지금도 돌고, 후자가 「값이 났는데 distinct가 1인가」를 지표별로 답한다.
 
 ## 배경
 
