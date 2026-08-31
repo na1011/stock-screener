@@ -253,7 +253,7 @@ SELECT CASE
 붉어지면 시세 이력이 앞으로 열린 것이고, 그때는 이 문서의 판단을 다시 연다.
 
 ```premise EPS_CAGR_5Y의 아웃오브샘플 관측이 여전히 0이다
-psql -d stock_screener -At -c "WITH anchors(a) AS (VALUES (DATE '2022-04-01'),(DATE '2022-10-01'),(DATE '2023-04-01'),(DATE '2023-10-01'),(DATE '2024-04-01'),(DATE '2024-10-01')), cnt AS (SELECT a, (SELECT count(*) FROM (SELECT stock_id FROM price_daily WHERE trade_date <= a GROUP BY stock_id HAVING count(*) >= 1261) x) c FROM anchors) SELECT CASE WHEN (SELECT count(*) FROM price_daily) = 0 THEN '잴 것이 없었다 — price_daily가 비었다' WHEN (SELECT max(c) FROM cnt) = 0 THEN 'OK 아웃오브샘플 6시점 전부 1,261봉 확보 0종목 — EPS_CAGR_5Y를 수익률 축으로 못 잰다' ELSE '1,261봉 확보 종목이 생겼다(최대 ' || (SELECT max(c) FROM cnt) || '종목) — 시세 이력이 앞으로 열렸다면 이 축의 백테스트 판정을 다시 한다' END"
+psql -d stock_screener -At -c "WITH anchors(a) AS (VALUES (DATE '2022-04-01'),(DATE '2022-10-01'),(DATE '2023-04-01'),(DATE '2023-10-01'),(DATE '2024-04-01'),(DATE '2024-10-01')), cnt AS (SELECT a, (SELECT count(*) FROM (SELECT p.stock_id FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code IN ('KOSPI','KOSDAQ') AND p.trade_date <= a GROUP BY p.stock_id HAVING count(*) >= 1261) x) c FROM anchors) SELECT CASE WHEN (SELECT count(*) FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code IN ('KOSPI','KOSDAQ')) = 0 THEN '잴 것이 없었다 — 국내 price_daily가 비었다' WHEN (SELECT max(c) FROM cnt) = 0 THEN 'OK 아웃오브샘플 6시점 전부 1,261봉 확보 0종목 — EPS_CAGR_5Y를 수익률 축으로 못 잰다' ELSE '1,261봉 확보 종목이 생겼다(최대 ' || (SELECT max(c) FROM cnt) || '종목) — 시세 이력이 앞으로 열렸다면 이 축의 백테스트 판정을 다시 한다' END"
 ```
 
 ### 2026-08-20 — 펜스의 판정식만 고쳤다. **게이트·임계·배점은 안 건드렸다**
