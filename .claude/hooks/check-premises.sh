@@ -35,12 +35,12 @@ guard="$root/.claude/hooks/guard-destructive.sh"
 # 전제 하나당 상한(초)과 전체 예산(초).
 # macOS 기본에 timeout·gtimeout이 둘 다 없다. perl의 alarm이 유일하게 있는 수단이다.
 #
-# MUST: `per_limit > PGCONNECT_TIMEOUT + statement_timeout`을 유지한다(8 > 4 + 3).
+# MUST: `per_limit > PGCONNECT_TIMEOUT + statement_timeout`을 유지한다(11 > 4 + 6).
 # 부등호가 뒤집히면 psql이 자기 오류 문자열을 내기 전에 alarm이 먼저 프로세스를 죽여,
 # "왜 못 쟀는가"가 "5초 안에 끝나지 않았다"로 뭉개진다 — 접속 실패와 질의 지연과 DB
 # 다운이 한 문장으로 합쳐진다.
 #
-# MUST: `total_budget + per_limit < settings.json의 훅 timeout`을 유지한다(30 + 8 < 45).
+# MUST: `total_budget + per_limit < settings.json의 훅 timeout`을 유지한다(30 + 11 < 45).
 # 예산은 새 전제를 **시작할 때** 검사하므로 최악은 total_budget을 다 쓴 뒤 마지막 하나가
 # per_limit을 다 쓰는 경우다. 훅이 timeout에 걸리면 **출력이 통째로 사라지고**, 이 훅에게
 # 침묵은 가장 나쁜 결과다.
@@ -58,7 +58,7 @@ guard="$root/.claude/hooks/guard-destructive.sh"
 # 전제 둘의 `indicator_value` 전수 집계를 걷어 **9.53초**가 됐다(ADR-0079 ① · ADR-0071 ②).
 # **9.5초도 안전하지 않다** — 위 3.5배가 그대로 걸리면 예산을 넘는다. 다음에 느려지면
 # **예산·상한을 올리기 전에 어느 전제가 느린지부터 재고 그 전제를 고친다.**
-per_limit=8
+per_limit=11
 total_budget=30
 
 # --- 값을 붙잡는 갈래 ------------------------------------------------------
@@ -81,7 +81,10 @@ fi
 # psql이 읽기 전용으로 붙게 한다. 러너가 도메인을 아는 유일한 지점이고, 무엇을 재는지
 # 해석하는 것이 아니라 **되돌릴 수 없는 일을 못 하게** 하는 방어다. psql이 아닌 전제에는
 # 그냥 무시되는 환경변수다.
-export PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=3s'
+# statement_timeout이 3s였을 때 ADR-0094의 전제가 무판정으로 끝난 적이 있다. 그 질의는
+# 워밍업된 캐시에서 0.74초인데 **콜드 캐시에서 5.2초**였다 — 적재나 재기동 직후가 그렇다.
+# 무판정은 침묵 다음으로 나쁜 결과이므로, 상한을 그 실측 위로 올린다.
+export PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=6s'
 # 2초로는 적재가 도는 동안 접속이 못 붙어 무판정이 났다. 슬롯 고갈이 아니라 CPU 포화다 —
 # 적재 JVM과 빌드가 함께 돌면 SCRAM 인증과 프로세스 fork가 실제로 느려진다. 그래서 값을
 # 올리는 것이 맞는 처방이고, 위 per_limit 부등식이 그 여유를 감당한다.

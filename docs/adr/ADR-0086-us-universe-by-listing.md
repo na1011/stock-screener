@@ -68,16 +68,18 @@ WITH u AS (SELECT code FROM universe WHERE market_code = 'US' AND is_active),
                  WHERE uu.market_code = 'US' GROUP BY uu.code) x),
      s AS (SELECT array_remove(ARRAY[
        CASE WHEN NOT EXISTS (SELECT 1 FROM price_daily p JOIN stock st ON st.id = p.stock_id
-                              WHERE st.market_code = 'US') THEN '시세' END,
+                              WHERE st.market_code = 'US') THEN '시세(지표가 하나도 안 난다)' END,
        CASE WHEN NOT EXISTS (SELECT 1 FROM financial_statement f JOIN stock st ON st.id = f.stock_id
-                              WHERE st.market_code = 'US') THEN '재무' END,
+                              WHERE st.market_code = 'US') THEN '재무(재무 기반 지표가 전부 판정불가)' END,
        CASE WHEN NOT EXISTS (SELECT 1 FROM corporate_action c JOIN stock st ON st.id = c.stock_id
-                              WHERE st.market_code = 'US') THEN '기업행위' END,
+                              WHERE st.market_code = 'US')
+            THEN '기업행위(CorporateActionJob이 루프 앞에서 failFatally로 끝나 국내 수집까지 멈춘다)' END,
        CASE WHEN NOT EXISTS (SELECT 1 FROM governance_report_row g JOIN stock st ON st.id = g.stock_id
-                              WHERE st.market_code = 'US') THEN '거버넌스' END,
+                              WHERE st.market_code = 'US')
+            THEN '거버넌스(PROFIT_RETIREMENT_3Y가 안 난다 — 그 배점을 미국 종목이 못 얻는다: 버핏 5.9% 린치고속성장 4.5% 린치대형우량 5.0%)' END,
        CASE WHEN NOT EXISTS (SELECT 1 FROM stock st
                               WHERE st.market_code = 'US' AND st.sic_code IS NOT NULL)
-            THEN '업종' END], NULL) AS missing)
+            THEN '업종(업종 상대 지표가 판정불가)' END], NULL) AS missing)
 SELECT CASE
   WHEN (SELECT count(*) FROM universe WHERE market_code = 'US') = 0
     THEN '잴 것이 없었다 — 미국 유니버스 행이 하나도 없다(V34 미적용)'
@@ -90,7 +92,6 @@ SELECT CASE
   ELSE (SELECT string_agg(code, ', ' ORDER BY code) FROM u) || '이(가) 켜졌는데 '
        || array_length((SELECT missing FROM s), 1) || '개 축이 비어 있다: '
        || array_to_string((SELECT missing FROM s), ', ')
-       || ' — 기업행위가 비면 CorporateActionJob이 루프 앞에서 failFatally로 끝나 국내 수집까지 멈춘다'
 END"
 ```
 
