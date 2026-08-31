@@ -193,6 +193,9 @@ class ReadApiTest {
         mockMvc.perform(get("/api/stocks/" + stockId).param("asOf", AS_OF.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stock.ticker").value("910001"))
+                // 화면이 「원」을 붙일지 「$」를 붙일지의 유일한 근거다. 시장 코드에서
+                // 유도하면 시장이 늘 때 서버는 맞고 화면만 낡는다(ADR-0107 §규칙).
+                .andExpect(jsonPath("$.stock.currencyCode").value("KRW"))
                 .andExpect(jsonPath("$.stock.sector").value("반도체"))
                 .andExpect(jsonPath("$.stock.universes[0].code").value(UNIVERSE))
                 .andExpect(jsonPath("$.price.close").value(10000))
@@ -514,8 +517,12 @@ class ReadApiTest {
         JsonNode universes = objectMapper.readTree(body);
         assertThat(universes.size()).isPositive();
         universes.forEach(u -> assertThat(u.get("memberCount").asInt()).isPositive());
-        // 데이터가 없는 미국은 자동으로 빠진다. v1.1에서 붙으면 자동으로 나타난다.
+        // 편입 0건인 SP500은 빠진다. **미국이 통째로 빠지는 것이 아니다** — US_TOP1000은
+        // 편입 1,000건이라 목록에 뜬다(ADR-0107). 술어는 편입이지 시장이 아니다.
         assertThat(body).doesNotContain("SP500");
+        // 조회 대상마다 통화가 함께 온다. 이것이 없으면 조건 빌더가 미국을 고른 상태에서
+        // 시가총액 칩을 「원」으로 그린다.
+        universes.forEach(u -> assertThat(u.get("currencyCode").asText()).isNotBlank());
     }
 
     // ── 오류 규약 ─────────────────────────────────────────────────────────
