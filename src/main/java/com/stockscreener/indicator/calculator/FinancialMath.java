@@ -152,6 +152,20 @@ final class FinancialMath {
      * <p>재무를 폴백으로 남기는 이유는 소스마다 다르기 때문이다. 국내 시세 API는
      * {@code lstgStCnt}를 주지만, 그것을 주지 않는 소스에서는 재무 쪽만 채워질 수 있다.
      *
+     * <p><b>재무 폴백은 봉마다 그 시점에 공시돼 있던 분기를 고른다</b>({@link #publishedIndexOn}).
+     * 「재무 스냅샷 하나를 읽기 창 전체에 편다」는 계약이 <b>주식수에는 걸리지 않는다</b> —
+     * 그러면 창 전체가 같은 수를 받고, {@link #shiftToBar}의 배수가
+     * {@code SharesGrowth3yCalculator}의 {@code corporateActionMultiple}과 <b>구간 가법성으로
+     * 정확히 상쇄</b>되어 {@code SHARES_GROWTH_3Y}가 <b>항등 0</b>이 된다(미국 실측: 편입 1,000
+     * 전부가 정확히 0이고 창 안 distinct 값이 하나뿐이었다). 같은 상쇄가
+     * {@code EPS_GROWTH_TTM_YOY}·{@code EPS_CAGR_5Y}에서는 주식수를 <b>완전히 약분</b>시켜
+     * 「주당」이 아닌 값을 낸다.
+     *
+     * <p><b>그 봉 시점에 공시된 분기가 없으면 값을 안 낸다.</b> 최신 분기를 되돌려 쓰면
+     * <b>미래를 알고 계산한 수</b>가 된다. 비용을 쟀다 — 미국 편입 1,000 중 최신 봉에서 값이
+     * 나는 종목은 <b>982</b>(나머지 18은 분기 주식수 자체가 없어 지금도 값이 없다)이고,
+     * 3년 전 기준점에서 못 내는 종목이 <b>67</b>, 읽기 창 앞부분을 잃는 종목이 <b>169</b>다.
+     *
      * <p>IMPORTANT — 시세 쪽 값은 {@link IndicatorContext#sharesOn}을 <b>거쳐서</b> 나온다.
      * 그래서 이 메서드가 컨텍스트를 받는다 — 인자로 받지 않으면 호출부마다 보정을 기억해야 하고,
      * 하나만 빠뜨려도 그 지표만 권리락 구간에서 배수만큼 틀린 채 조용히 남는다(ADR-0051).
@@ -183,17 +197,33 @@ final class FinancialMath {
         if (bar != null && bar.listedShares() != null && bar.listedShares().signum() > 0) {
             return context.sharesOn(bar.tradeDate(), bar.listedShares());
         }
-        if (!quarters.isEmpty()) {
-            FinancialFigures latest = quarters.get(0);
-            BigDecimal fromFinancials = latest.sharesOutstanding();
-            if (fromFinancials != null && fromFinancials.signum() > 0) {
-                if (bar == null || latest.periodEnd() == null) {
-                    // 보정할 두 시점 중 하나가 없다. 보정 없이 내는 것이 값을 안 내는 것보다
-                    // 낫다 — 분할이 없는 구간에서는 배수가 1이라 같은 값이다.
-                    return fromFinancials;
-                }
-                return shiftToBar(context, fromFinancials, latest.periodEnd(), bar.tradeDate());
+        if (quarters.isEmpty()) {
+            return null;
+        }
+        // MUST: 봉 시점에 **공시돼 있던** 분기를 고른다. quarters.get(0)을 어느 봉에나 쓰면
+        // 창 전체가 같은 수를 받고, shiftToBar의 배수가 SharesGrowth3yCalculator의
+        // corporateActionMultiple과 구간 가법성으로 정확히 상쇄되어 값이 **항등 0**이 된다.
+        // bar가 없으면 시점을 물을 수 없으므로 최신을 쓴다.
+        int from = bar == null ? 0 : publishedIndexOn(quarters, bar.tradeDate());
+        if (from < 0) {
+            // 그 봉 시점에 공시된 분기가 하나도 없다. **값을 지어내지 않는다** —
+            // 최신 분기를 되돌려 쓰면 미래를 알고 계산한 수가 된다.
+            return null;
+        }
+        for (int i = from; i < quarters.size(); i++) {
+            // 고른 판이 주식수를 안 실었으면 그보다 앞선 판으로 내려간다. 그 시점에 알 수
+            // 있었던 가장 최근 수가 답이지, 「그 판이 안 실었으니 없다」가 아니다.
+            FinancialFigures asOf = quarters.get(i);
+            BigDecimal fromFinancials = asOf.sharesOutstanding();
+            if (fromFinancials == null || fromFinancials.signum() <= 0) {
+                continue;
             }
+            if (bar == null || asOf.periodEnd() == null) {
+                // 보정할 두 시점 중 하나가 없다. 보정 없이 내는 것이 값을 안 내는 것보다
+                // 낫다 — 분할이 없는 구간에서는 배수가 1이라 같은 값이다.
+                return fromFinancials;
+            }
+            return shiftToBar(context, fromFinancials, asOf.periodEnd(), bar.tradeDate());
         }
         return null;
     }
@@ -201,10 +231,14 @@ final class FinancialMath {
     /**
      * 보고 종료일의 주식수를 <b>그 봉 시점의 주식수</b>로 옮긴다.
      *
-     * <p><b>양방향이다.</b> 재무 스냅샷 하나를 읽기 창 전체에 펴는 것이 이 프로젝트의 계약이라
-     * ({@code batch-load} skill: <i>"재무를 쓰는 지표는 실행 한 번이 읽기 창 전체에 값을 쓴다"</i>)
-     * 봉은 보고 종료일보다 <b>앞일 수도 뒤일 수도</b> 있다. 한쪽만 보정하면 반대쪽이 배수만큼
-     * 틀린 채 그럴듯하게 남는다.
+     * <p><b>양방향이지만 이제 한쪽이 거의 안 쓰인다.</b> {@link #sharesOf}가 봉마다 그 시점에
+     * 공시돼 있던 분기를 고르므로({@code published_at <= barDate}) 고른 판의 기말은 통상 봉보다
+     * <b>앞</b>이고 곱셈 갈래로 간다. 나눗셈 갈래가 남는 것은 <b>기말 전에 공시된 판</b> 때문이며
+     * 리더가 그런 행을 <b>5행</b> 세어 두었다. <b>지우지 않는다</b> — 그 5행에서 배수만큼 틀린
+     * 값이 조용히 나온다.
+     *
+     * <p>이것이 ADR-0096의 <b>§결정을 바꾼 자리</b>다. 저쪽은 「스냅샷 하나를 창 전체에 편다」를
+     * 전제로 양방향을 세웠는데, 주식수는 더 이상 그 전제 위에 있지 않다.
      *
      * <ul>
      *   <li>봉이 <b>뒤</b>면 그 사이 분할을 <b>곱한다</b> — 보고 이후 늘어난 주식수를 따라간다.

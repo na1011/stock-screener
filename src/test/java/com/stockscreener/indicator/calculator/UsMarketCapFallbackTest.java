@@ -72,6 +72,9 @@ class UsMarketCapFallbackTest {
         List<FinancialFigures> quarters = financialShares == null
                 ? List.of()
                 : List.of(FinancialFiguresFixture.quarter(LocalDate.of(2026, 6, 30))
+                        // 봉(2026-08-28)보다 앞선 공시일이어야 sharesOf가 이 분기를 고른다
+                        // (ADR-0103). 기본 유도값 periodEnd+2개월은 봉보다 이틀 뒤다.
+                        .publishedAt(LocalDate.of(2026, 8, 5))
                         .sharesOutstanding(financialShares).build());
         return new IndicatorContext(1L, List.of(bar), List.of(), quarters, Map.of());
     }

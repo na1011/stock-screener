@@ -96,6 +96,16 @@ final class FinancialFiguresFixture {
         return fixture;
     }
 
+    /**
+     * 공시일을 손으로 정한다. 기본 유도값({@code periodEnd + 2개월})이 <b>봉보다 뒤</b>인
+     * 픽스처가 여럿이라, {@code FinancialMath.sharesOf}가 봉 시점 분기를 고르게 된 뒤
+     * (ADR-0103) 그 픽스처들은 「그 시점에 공시된 분기가 없다」로 떨어진다.
+     */
+    FinancialFiguresFixture publishedAt(LocalDate value) {
+        this.publishedAt = value;
+        return this;
+    }
+
     FinancialFiguresFixture revenue(BigDecimal value) {
         this.revenue = value;
         return this;

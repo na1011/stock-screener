@@ -112,6 +112,11 @@ public class EpsGrowthTtmYoyCalculator implements IndicatorCalculator {
             }
 
             // ① 양 끝의 주식수가 다르므로 약분되지 않는다.
+            //
+            // 미국에서는 한동안 거짓이었다. sharesOf가 quarters.get(0) 한 행을 양 끝에 써서
+            // 주식수가 완전히 약분됐고, 이 지표가 「주당」이 아니라 순수 순이익 성장률을
+            // 냈다 — 값이 그럴듯해 상수 판정에도 안 걸렸다. ADR-0103이 봉 시점 분기를
+            // 고르게 해 그 상쇄를 깼다.
             BigDecimal recentEps = recentTtm.divide(nowShares, FinancialMath.SCALE,
                     RoundingMode.HALF_UP);
             BigDecimal priorEps = priorTtm.divide(scaledPastShares, FinancialMath.SCALE,

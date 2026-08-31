@@ -106,8 +106,14 @@ class PbrCalculatorTest {
         return new PriceBar(LocalDate.of(2026, 1, 2), close, close, close, close, close, 1000L, null, null);
     }
 
+    /**
+     * 봉이 2026-01-02이므로 <b>그날 이미 공시돼 있던</b> 분기여야 한다(ADR-0103).
+     * 기말 2025-12-31짜리를 쓰면 이틀 뒤 봉이 아직 모르는 수를 쓰게 되고, {@code sharesOf}가
+     * 그 분기를 안 고른다 — 픽스처가 비현실적이었던 것이지 계산기가 바뀐 것이 아니다.
+     */
     private static FinancialFigures figures(BigDecimal equity, BigDecimal shares) {
-        return FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31))
+        return FinancialFiguresFixture.quarter(LocalDate.of(2025, 9, 30))
+                .publishedAt(LocalDate.of(2025, 11, 14))
                 .totalEquity(equity)
                 .sharesOutstanding(shares)
                 .build();

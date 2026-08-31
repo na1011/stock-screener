@@ -46,7 +46,8 @@ class FinancialSharesSplitTest {
     @DisplayName("봉이 보고 종료일보다 뒤면 그 사이 분할을 곱한다")
     void multipliesWhenBarIsAfterReport() {
         // period_end 2024-04-28의 분할 전 주식수를 분할 뒤 봉에 쓴다.
-        FinancialFigures q = quarter(LocalDate.of(2024, 4, 28), PRE_SPLIT_SHARES);
+        FinancialFigures q = quarter(
+                LocalDate.of(2024, 4, 28), LocalDate.of(2024, 5, 29), PRE_SPLIT_SHARES);
         IndicatorContext context = context(AFTER_SPLIT, q);
 
         BigDecimal shares = FinancialMath.sharesOf(context, bar(AFTER_SPLIT), List.of(q));
@@ -56,10 +57,15 @@ class FinancialSharesSplitTest {
     }
 
     @Test
-    @DisplayName("봉이 보고 종료일보다 앞이면 나눈다 — 그때는 아직 안 늘어난 주식수여야 한다")
+    @DisplayName("기말 전에 공시된 판은 봉보다 뒤 기말이라 나눈다 — 이 갈래가 남는 유일한 이유다")
     void dividesWhenBarIsBeforeReport() {
         // period_end 2024-07-28의 분할 후 주식수를 분할 전 봉에 쓴다.
-        FinancialFigures q = quarter(LocalDate.of(2024, 7, 28), POST_SPLIT_SHARES);
+        //
+        // ADR-0103 뒤 이 갈래에 닿으려면 **기말보다 먼저 공시된 판**이어야 한다. 고른 판의
+        // 기말이 봉보다 앞이면 언제나 곱셈으로 가기 때문이다. 리더가 그런 행을 5행 세어
+        // 두었고, 그 5행에서 보정을 빼면 배수만큼 틀린 값이 조용히 나온다.
+        FinancialFigures q = quarter(
+                LocalDate.of(2024, 7, 28), LocalDate.of(2024, 6, 1), POST_SPLIT_SHARES);
         IndicatorContext context = context(BEFORE_SPLIT, q);
 
         BigDecimal shares = FinancialMath.sharesOf(context, bar(BEFORE_SPLIT), List.of(q));
@@ -71,7 +77,8 @@ class FinancialSharesSplitTest {
     @Test
     @DisplayName("두 시점 사이에 사건이 없으면 그대로다 — 곱셈이 스케일을 흔들지 않는다")
     void unchangedWhenNoActionBetween() {
-        FinancialFigures q = quarter(LocalDate.of(2024, 4, 28), PRE_SPLIT_SHARES);
+        FinancialFigures q = quarter(
+                LocalDate.of(2024, 4, 28), LocalDate.of(2024, 5, 29), PRE_SPLIT_SHARES);
         IndicatorContext context = context(BEFORE_SPLIT, q);
 
         // 봉이 분할 전이므로 그 사이에 사건이 없다.
@@ -82,12 +89,13 @@ class FinancialSharesSplitTest {
     @Test
     @DisplayName("봉에 상장주식수가 있으면 폴백을 타지 않는다 — 국내가 이 갈래다")
     void priceBarWins() {
-        FinancialFigures q = quarter(LocalDate.of(2024, 4, 28), PRE_SPLIT_SHARES);
+        FinancialFigures q = quarter(
+                LocalDate.of(2024, 4, 28), LocalDate.of(2024, 5, 29), PRE_SPLIT_SHARES);
         IndicatorContext context = context(AFTER_SPLIT, q);
         PriceBar withShares = new PriceBar(AFTER_SPLIT, ten(), ten(), ten(), ten(), ten(),
                 1000L, null, new BigDecimal("777"));
 
-        // 국내 543,370봉은 listed_shares가 전부 차 있다(실측 NULL 0행). 이 단정이 깨지면
+        // 국내 543,735봉은 listed_shares가 전부 차 있다(실측 NULL 0행 · 0인 행도 0). 이 단정이 깨지면
         // 국내 지표가 재무 주식수로 갈아탄 것이고, 그것은 조용히 다른 값이다.
         assertThat(FinancialMath.sharesOf(context, withShares, List.of(q)))
                 .isEqualByComparingTo("777");
@@ -101,7 +109,7 @@ class FinancialSharesSplitTest {
     }
 
     private static PriceBar bar(LocalDate date) {
-        // listed_shares가 null인 것이 미국 봉의 모양이다(2,772행 전량 NULL, 실측).
+        // listed_shares가 null인 것이 미국 봉의 모양이다(1,680,969행 전량 NULL, 실측).
         return new PriceBar(date, ten(), ten(), ten(), ten(), ten(), 1000L, null, null);
     }
 
@@ -109,7 +117,17 @@ class FinancialSharesSplitTest {
         return BigDecimal.TEN;
     }
 
-    private static FinancialFigures quarter(LocalDate periodEnd, BigDecimal shares) {
-        return FinancialFiguresFixture.quarter(periodEnd).sharesOutstanding(shares).build();
+    /**
+     * <b>공시일을 명시한다.</b> 픽스처의 기본 유도값이 {@code periodEnd + 2개월}이라 아래 봉들보다
+     * 뒤인데, {@code sharesOf}는 <b>봉 시점에 공시돼 있던</b> 분기만 고른다(ADR-0103). 기본값을
+     * 그대로 쓰면 세 시험이 「그 시점에 공시된 분기가 없다」로 떨어져 <b>보정이 아니라 시점
+     * 선택을 재게 된다.</b>
+     */
+    private static FinancialFigures quarter(
+            LocalDate periodEnd, LocalDate publishedAt, BigDecimal shares) {
+        return FinancialFiguresFixture.quarter(periodEnd)
+                .publishedAt(publishedAt)
+                .sharesOutstanding(shares)
+                .build();
     }
 }
