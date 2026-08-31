@@ -2,7 +2,7 @@
 import Button from 'primevue/button'
 import Popover from 'primevue/popover'
 import { useToast } from 'primevue/usetoast'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 
 import { MAX_CONDITIONS } from '@/api/limits'
 import AsyncPanel from '@/components/AsyncPanel.vue'
@@ -11,6 +11,7 @@ import ConditionEditor from '@/components/condition/ConditionEditor.vue'
 import IndicatorPicker from '@/components/condition/IndicatorPicker.vue'
 import ScreenSettingsPopover from '@/components/condition/ScreenSettingsPopover.vue'
 import { useFreshDraft } from '@/composables/useFreshDraft'
+import { useSelectableUniverse } from '@/composables/useSelectableUniverse'
 import { disabledConditionNotice, incompleteConditionNotice } from '@/lib/conditionText'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { allUniversesLabel } from '@/lib/universe'
@@ -119,22 +120,9 @@ onMounted(() => {
   void catalog.ensureUniverses()
 })
 
-/**
- * 「전체」를 실행할 수 없는 상태이면 대상을 하나 고른다.
- *
- * 목록이 도착한 뒤라야 판정할 수 있어 `watch`다. 근거는 `ensureSelectableUniverse`에 있다.
- */
-watch(
-  // `universeCode`도 함께 본다 — 저장된 전략을 불러오면 `loadFrom`이 그 값을 그대로 넣는데,
-  // 그것이 null이면(대상을 안 정한 전략) 다시 「전체」가 되어 같은 4xx로 돌아간다.
-  () => [catalog.allowsAllUniverses, draft.universeCode] as const,
-  () =>
-    draft.ensureSelectableUniverse(
-      catalog.allowsAllUniverses,
-      catalog.universes[0]?.code ?? null,
-    ),
-  { immediate: true },
-)
+// 「전체」를 실행할 수 없는 상태이면 대상을 하나 골라 둔다. 배선이 왜 컴포넌트 밖에
+// 있는지(한 번 그리고 끝나는 렌더 시험으로는 못 잡는다)는 그 파일이 답한다.
+useSelectableUniverse()
 
 /**
  * 칩을 눌렀을 때.
