@@ -130,12 +130,13 @@ class BootstrapArgumentGuardTest {
     @DisplayName("--universe·--skip-*는 뜻이 있는 잡에서만 통과한다 — 아니면 조용히 무시된다")
     void rejectsMisplacedLoadOptions() {
         // 잡 이름을 잘못 적으면 --universe가 무시된 채 전 종목이 대상이 되고 성공으로 끝난다.
-        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(
-                new DefaultApplicationArguments("--job=backfill", "--universe=US_LISTED"),
-                "backfill"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("universe");
-
+        //
+        // 여기 있던 backfill은 2026-08-31에 뺐다. 그때까지 backfill은 활성 유니버스만 봤고
+        // 그래서 --universe가 뜻이 없었는데, 「켜야 지표가 생기고 지표가 없으면 켜면 안 되는」
+        // 순환을 끊으려고 그 잡에 갈래를 냈다(IndicatorBackfillJob 클래스 javadoc).
+        // 그러므로 이것은 버그 수정이 아니라 **계약 변경**이다 — 이 시험이 잠그고 있던 것을
+        // 사람이 골라서 풀었다. 대신 바로 위 시험이 「UNIVERSE_JOBS에 든 잡은 통과하고
+        // 나머지는 여전히 막힌다」를 지키므로 가드 자체는 그대로 값이 있다.
         assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(
                 new DefaultApplicationArguments("--job=universe", "--skip-financial=true"),
                 "universe"))

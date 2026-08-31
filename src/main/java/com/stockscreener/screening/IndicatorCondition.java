@@ -2,6 +2,7 @@ package com.stockscreener.screening;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 조건 하나. "지표 - 연산자 - 피연산자"의 3항 구조다.
@@ -84,6 +85,27 @@ public record IndicatorCondition(
     }
 
     /**
+     * 이 조건을 <b>그 통화 시장용으로</b> 해석한다.
+     *
+     * <p>{@link ConditionOperand.MarketLiteral}이면 그 통화의 임계를 골라 평범한
+     * {@link ConditionOperand.Literal}로 바꾼다. 그래서 <b>해석 뒤에는 아래
+     * {@link #evaluate}도, SQL 번역도, 백테스트 하네스도 이 축을 몰라도 된다.</b>
+     *
+     * @return 해석된 조건. 그 통화의 임계가 <b>없으면 빈 값</b>이다 — 호출부가 모아서
+     *         요청 단위로 거절한다({@link MarketThresholdMissingException}).
+     *         <b>다른 통화의 값으로 대신하지 않는다.</b>
+     */
+    public Optional<IndicatorCondition> resolveFor(String currencyCode) {
+        if (!(operand instanceof ConditionOperand.MarketLiteral market)) {
+            return Optional.of(this);
+        }
+        ConditionOperand.Literal chosen = market.forCurrency(currencyCode);
+        return chosen == null ? Optional.empty()
+                : Optional.of(new IndicatorCondition(
+                        indicatorCode, operator, chosen, weight, required));
+    }
+
+    /**
      * 주어진 지표 값들에 대해 이 조건을 판정한다.
      *
      * <p>IMPORTANT — 이것이 판정 의미의 정본이다. SQL 번역이 종목을 고른 근거와 화면에 보여주는
@@ -114,6 +136,12 @@ public record IndicatorCondition(
                 }
                 bound = ref.applyTo(reference);
             }
+            // 도달할 수 없다 — 실행 경로는 resolveFor를 먼저 지나고, 그 통화의 임계가 없으면
+            // 요청 단위로 거절된다. 판정불가로 접으면 조건이 없는 것처럼 종목이 통과하거나
+            // (SQL 번역) 0건의 사유가 사라진다(MarketThresholdMissingException의 javadoc).
+            case ConditionOperand.MarketLiteral ignored -> throw new IllegalStateException(
+                    "해석되지 않은 시장별 임계로 판정을 시도했다: " + indicatorCode
+                            + " — 실행 전에 resolveFor를 거쳐야 한다");
         }
 
         boolean matched = operator.test(actual, bound, upperBound);

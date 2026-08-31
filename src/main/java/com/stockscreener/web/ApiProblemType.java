@@ -37,6 +37,24 @@ public enum ApiProblemType {
     /** 지표가 아직 하나도 없다. 초기 적재 전이거나 배치가 실패했다. */
     INDICATOR_DATA_NOT_READY("indicator-data-not-ready", "지표 데이터가 아직 준비되지 않았다"),
 
+    /**
+     * 이 전략을 이 조회 대상에서 실행할 수 없다 — 임계가 그 시장 분포로 정해진 적이 없다.
+     *
+     * <p>IMPORTANT — 조건 단위 「판정불가」로 접지 않는 이유가 있다. 판정불가는 결과 행 안의
+     * {@code outcomes}로만 나가는데, 필수 게이트가 판정불가면 종목이 전부 빠져 <b>행이 0개</b>가
+     * 되고 사유가 실릴 자리 자체가 없다. P27 축①이 그 처방을 적어 뒀다 —
+     * <i>"필수 게이트가 빠진 채 도는 것보다 「이 시장에서 실행 불가」가 낫다"</i>.
+     */
+    MARKET_THRESHOLD_MISSING("market-threshold-missing", "이 조회 대상에서는 실행할 수 없다"),
+
+    /**
+     * 조회 대상을 좁히지 않았는데 활성 유니버스의 통화가 갈린다.
+     *
+     * <p>한 결과에 두 시장을 섞으면 임계가 어느 쪽 기준인지 정해지지 않는다. 섞는 대신
+     * 대상을 고르게 한다 — 사용자가 그렇게 정했다(2026-08-31).
+     */
+    UNIVERSE_REQUIRED("universe-required", "조회 대상을 하나 골라야 한다"),
+
     SCREEN_NOT_FOUND("screen-not-found", "화면을 찾을 수 없다"),
     STOCK_NOT_FOUND("stock-not-found", "종목을 찾을 수 없다"),
     UNIVERSE_NOT_FOUND("universe-not-found", "유니버스를 찾을 수 없다"),

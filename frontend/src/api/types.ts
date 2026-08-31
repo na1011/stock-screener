@@ -204,6 +204,13 @@ export interface OperandPayload {
   indicatorCode?: string | null
   /** INDICATOR의 배수. null이면 1.0. */
   multiplier?: number | null
+  /**
+   * 이 임계를 잰 시장의 통화. null이면 시장 중립이라 모든 조회 대상에 같은 값이 걸린다.
+   *
+   * **읽기 전용이다** — 요청에 담아도 서버가 무시하고 조건에서 다시 유도한다. 그래서
+   * 사용자가 축을 잘못 고를 경로가 없다.
+   */
+  thresholdCurrency?: string | null
 }
 
 export interface ConditionPayload {

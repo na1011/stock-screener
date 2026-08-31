@@ -1,0 +1,171 @@
+---
+id: ADR-0106
+status: 채택됨
+date: 2026-08-31
+applies_to:
+  - "src/main/java/com/stockscreener/screening/ConditionOperand.java"
+  - "src/main/java/com/stockscreener/screening/ConditionGroup.java"
+  - "src/main/java/com/stockscreener/screening/IndicatorCondition.java"
+  - "src/main/java/com/stockscreener/screening/preset/PresetCatalog.java"
+  - "src/main/java/com/stockscreener/screening/store/ScreenStore.java"
+  - "src/main/java/com/stockscreener/screening/web/ScreeningService.java"
+  - "src/main/java/com/stockscreener/watchlist/WatchlistAlertRunner.java"
+  - "src/main/resources/db/migration/V42__condition_threshold_currency.sql"
+  - "src/main/resources/db/migration/V43__derive_threshold_currency.sql"
+---
+
+# ADR-0106. 프리셋을 시장에서 빼지 않는다 — 임계가 시장을 따라간다
+
+## 결정
+
+**조건의 임계에 시장 축을 달되 쓰임은 「배제」가 아니라 「선택」이다.** 같은 프리셋을
+**조회 대상만 갈아끼우며** 국내·미국에서 돌린다(2026-08-31 사용자 요구). 결정은 넷이다.
+
+1. **축은 통화다.** `KRW` 하나가 코스피·코스닥 둘을 덮어 시장이 늘어도 조건마다 목록을 고칠
+   필요가 없다(ADR-0099가 정한 축을 그대로 쓴다). **다른 것은 둘** — 저장 입도가 `screen`이
+   아니라 **`screen_condition`**이고, 쓰임이 배제가 아니라 **선택**이다.
+2. **그 시장의 임계가 없으면 요청 단위로 거절한다.** 조건 단위 「판정불가」로 접지 않는다.
+3. **해석 지점은 실행 경로와 결과 조립 둘**이고 저장·편집은 원본을 본다.
+4. **사용자 조건의 축은 서버가 유도한다.** 화면에 고르는 자리를 만들지 않는다.
+
+> **사용자가 고른 문장(2026-08-31):** *"트레이딩뷰처럼, 동일한 프리셋 조건을 유니버스만
+> 갈아끼면서 검색하는 것 … 같은 프리셋에 미국+국내가 전부 나오면 좋겠지만 이는 구현 복잡도나
+> 정합성 측면에서 옳지 않아보여."*
+> **내 해석 — 갈라 적는다:** 한 결과에 두 시장을 섞지 않는다는 것이 닫혔고, 그래서 활성 조회
+> 대상의 통화가 갈리면 「전체」를 막는다. **임계값 자체와 미국을 켜는 시점은 열려 있다.**
+
+## 규칙
+
+- **MUST NOT: 없는 통화를 다른 통화의 값으로 대신하지 않는다.** 금액은 옮기면 즉시 틀린 것이
+  드러나지만 **무차원은 아무 증상이 없다**(ADR-0072).
+- **MUST: 임계가 없을 때 요청 단위로 거절한다.** 조건 단위 판정불가로 접으면 필수 게이트가
+  전 종목을 빼 **행이 0개**가 되는데, `outcomes`는 `ScreeningResponse.Row` **안에만** 있어
+  사유가 실릴 자리 자체가 없다. P27 축④가 그것을 금지하고 축①이 처방까지 적었다 —
+  *"필수 게이트가 빠진 채 도는 것보다 「이 시장에서 실행 불가」가 낫다"*.
+- **MUST: 해석 검사가 `asOfResolver.resolve`보다 앞이다.** 뒤에 두면 빈 시장 집합을
+  `AsOfResolver`가 먼저 **503**으로 접어 사용자가 할 일이 정반대가 된다(기다리기 대 대상
+  바꾸기). `MarketScope.forStock`의 javadoc이 **같은 함정을 이미 한 번 밟고** 적어 뒀다.
+- **MUST: 결과 조립도 해석본을 받는다.** 해석 전 조건을 실으면 미국 실행인데 「선정 이유」에
+  원화 기준값이 뜨고, 조건이 하나라도 떨어지면 조건 목록과 판정의 **인덱스가 어긋나 다른
+  조건의 판정이 붙는다.**
+- **MUST NOT: SQL 번역에서 해석 안 된 임계를 `null` 술어로 내려보내지 않는다.**
+  `Expressions.allOf`가 null을 **버려서** 그 조건이 없는 것처럼 종목이 통과한다 — 세우려는
+  것의 정반대다. 던진다.
+- **MUST: 빠진 임계를 전부 모은 뒤에 던진다.** 만들면서 던지면 조건이 전부 빠졌을 때
+  「조건이 하나도 없는 그룹」이라는 **다른 예외가 먼저 나간다**(대조군 시험이 실제로 잡았다).
+- **MUST NOT: 이 축을 안 쓴 조건을 「시장 중립」으로 읽지 않는다.** 중립의 근거가 될 수 있는
+  것은 **부호·개수·연수·백분위·상대비교**뿐이고 「비율이니까」는 근거가 아니다(P27 축①).
+- **MUST: 사용자 조건의 축을 서버가 유도한다.** 고를 수 있으면 잘못 고를 수 있고 그 오류는
+  **다른 시장에서만** 드러난다. 유도 술어는 지표 코드가 아니라 `indicator.value_type`이다.
+
+## 검증
+
+```bash
+./gradlew test --tests "*MarketThresholdAxisTest*" --tests "*ScreenStoreTest*" \
+               --tests "*PresetCatalogTest*" --tests "*WireContractTest*"
+cd frontend && npm run test:unit
+```
+
+**대조군으로 확인했다.** 통화 축을 되돌리면 `MarketThresholdAxisTest`의 둘이 붉는다 —
+「그 시장의 임계를 고른다」와 「없으면 대신하지 않고 거절한다」. 나머지 둘(시장 중립 불변 ·
+해석 안 한 임계로 판정하면 던진다)은 축과 무관하게 성립하므로 대조가 된다.
+
+```premise 통화 임계를 가졌는데 축이 비어 있는 활성 화면이 없다
+psql -d stock_screener -At -c "
+WITH suspect AS (
+  SELECT s.screen_type, coalesce(s.code, s.name) AS name, sc.indicator_code
+  FROM screen s
+  JOIN condition_group g ON g.screen_id = s.id
+  JOIN screen_condition sc ON sc.group_id = g.id
+  JOIN indicator i ON i.code = sc.indicator_code
+  WHERE s.is_active
+    AND sc.operand_type = 'LITERAL'
+    AND sc.threshold_currency IS NULL
+    AND i.value_type IN ('CURRENCY','PRICE')
+    AND (sc.literal_value <> 0 OR coalesce(sc.literal_value_2, 0) <> 0))
+SELECT CASE
+  WHEN (SELECT count(*) FROM screen_condition) = 0
+    THEN '잴 것이 없었다 — 조건이 한 행도 없다'
+  WHEN (SELECT count(*) FROM suspect) = 0
+    THEN 'OK 활성 화면의 통화 차원 임계가 전부 축을 들었다'
+  ELSE '축이 빈 통화 임계가 ' || (SELECT count(*) FROM suspect) || '건이다: '
+       || (SELECT string_agg(DISTINCT screen_type || ' ' || name || '/' || indicator_code, ', ')
+           FROM suspect)
+       || ' — 그 화면은 다른 통화 시장에서 원화 임계로 판정된다. 금액은 옮기면 즉시 틀린 것이 '
+       || '드러나지만 무차원은 아무 증상이 없다(ADR-0072)'
+END"
+```
+
+**비활성 화면은 모집단에서 뺐다.** 선언에서 사라진 프리셋은 시더가 `is_active`만 내리고 조건은
+안 건드리므로 **아무도 영원히 안 채운다** — 세면 매 세션 거짓 발견이 난다. 실측으로 그런 행이
+`SWING_MIDTERM_KR`·`SWING_TREND_KR` 둘에 있다.
+
+## 배경
+
+미국 유니버스를 켜기 전에 남은 것이 「프리셋에 시장 축이 없다」였다(ADR-0099 §결과 1번).
+직전 판단은 **KRW 프리셋을 미국에서 실행 불가로 만드는 것**이었는데, 사용자가 그것을
+*"국내 코드 때문에 대칭이 안 되면 새 로직을 개발하는 것이 옳다"*로 기각했다. 다시 읽으니
+저장소가 **이미 반대를 지시하고 있었다** — ADR-0073 §규칙:
+
+> **MUST: 미국 프리셋을 만들 때 이 임계를 복사하지 않고 그 시장 분포로 다시 잰다.**
+> … **지표 계산기는 시장 중립이라 고칠 것이 없다.**
+
+즉 미국 프리셋은 **전제**돼 있었고 금지된 것은 **복사**였으며 처방까지 적혀 있었다.
+「미국 프리셋을 만들지 않는다」를 §결정·§규칙에 적은 문서는 하나도 없다.
+
+### 실측 (2026-08-28 기준일 · 국내 활성 350 ↔ `US_TOP1000` 편입 1,000)
+
+| 조건 | 국내 통과 | 국내 임계의 분위 | 같은 분위의 미국값 | 그 값의 미국 통과 |
+|---|---|---|---|---|
+| `MARKET_CAP >= 1.000조` (버핏) | 78.9% | 0.2114 | **$7.94B** | 78.8% |
+| `MARKET_CAP <= 2.616조` (린치 고성장) | 50.3% | 0.5029 | **$17.28B** | 50.3% |
+| `MARKET_CAP >= 6.773조` (린치 대형우량) | 25.1% | 0.7486 | **$46.54B** | 25.2% |
+
+**축이 없으면 무엇이 되는지도 쟀다** — 원화 임계를 USD 원값에 그대로 걸면 통과율이
+**1.1% · 97.8% · 0.0%**다. 린치 고성장의 상한이 무력화되고 대형우량은 영구 0건이다.
+
+**무차원 임계는 이 축이 표현하지 못한다.** `ATR_PCT_14 <= 5.9`가 국내 39.4% 대 미국
+**89.7%**를 자르고 `ACCRUAL_RATIO <= 0`이 60.9 대 88.3이다. 반면 백분위 조건은
+`PER_PCTL` 24.3 대 24.8, `EXCESS_RETURN_52W_PCTL` 29.7 대 29.6으로 **거의 같다** —
+시장 중립이 구조적으로 성립한다는 뜻이고, 그것이 위 §규칙의 「근거가 될 수 있는 것」 목록이다.
+**무차원 임계의 처분은 이 결정의 범위 밖이고 사용자 결정으로 남는다.**
+
+## 버린 대안
+
+- **판정 상태를 3 → 4로 늘려 「이 시장 임계 미정」을 조건 단위로 낸다** — 처음 골랐고
+  **재보니 발화하지 않는다.** `outcomes`가 `Row` 안에만 있어 필수 게이트가 걸리면 행이 0개가
+  되고 화면이 아무 이유도 말하지 않는다. `docs/progress.md`가 그 사실을 이미 적어 뒀다.
+  파급도 컸다 — `outcome.ts`의 `severity` 유니온·`outcome.spec.ts`·`ScreeningApiContractTest`·
+  백테스트 둘까지 갔다.
+- **`screen`에 임계 통화를 두고 그 통화의 시장으로 좁힌다**(ADR-0099 §결과의 형태) —
+  프리셋이 그 시장에서 **아예 안 돈다.** 사용자가 원한 것의 정반대다.
+- **환율로 환산한다** — ADR-0094 §결정이 기각했다(환율 시계열이 없고 새 소스·저장 축·시점별
+  환율 선택 규칙 셋이 함께 붙는다). 임계를 시장마다 따로 재는 것이 그 대안이다.
+- **통화별 임계를 조건 **행**으로 저장한다** — `ScreenStore.loadConditions`가 행 수를 그대로
+  조건 수로 만들어 `LYNCH_FAST_GROWER_KR`이 18 → 36이 되고 `MAX_CONDITIONS`(25)가
+  **기동을 막는다.** 그래서 기준 통화는 조건 행에, 나머지는 자식 표에 둔다 — 그러면
+  `ck_cond_operand`(리터럴이면 값이 NOT NULL)도 고치지 않아도 된다.
+- **화면에 통화 선택기를 만든다** — 고를 수 있으면 잘못 고를 수 있고 그 오류는 다른 시장에서만
+  드러난다. 서버 유도로 그 경로를 아예 없앴고, 값은 **읽기 전용으로 응답에 실어** 사용자가
+  자기 화면이 왜 어떤 시장에서 안 도는지 알 수 있게 했다.
+
+## 결과
+
+**쉬워지는 것** — 같은 프리셋이 조회 대상만 바꿔 두 시장에서 돈다. 지표 계산기는 한 줄도
+안 바뀌었다(ADR-0073이 예고한 그대로다). 해석 지점이 하나라 `ConditionEvaluator`·
+`ConditionTranslator`·백테스트 하네스가 이 축을 모른다.
+
+**어려워지는 것**
+
+- **미국 임계가 아직 없다.** 셋에 `KRW`만 달았으므로 지금 미국 유니버스로 실행하면
+  **거절된다.** 그것이 조용히 느슨해지는 것보다 낫다는 것이 이 결정의 요점이다.
+  §배경의 후보값이 그 자리를 메울 수 있고, **확정은 사용자 결정이다**(ADR-0061·0044·0071).
+- **무차원 임계는 이 축이 못 잡는다**(§배경). 실측이 그 크기를 보였고 처분은 열려 있다.
+- **「전체」가 통화를 넘나들면 막힌다.** 지금은 활성 통화가 `KRW` 하나라 아무 일도 안 일어나고,
+  미국을 켜는 날 화면 기본값(「전체」)이 4xx가 되므로 **그때 기본 조회 대상을 함께 정한다.**
+- **워치리스트도 같은 해석을 쓴다.** 그 시장 임계가 없는 항목은 **건너뛰되 수를 세어 로그로
+  남긴다** — 조용히 빠지지 않는다.
+
+**되돌리려면** — V42·V43을 되돌리고 `ConditionOperand.MarketLiteral`과 `resolveFor`를 지운다.
+프리셋의 `requiredIn`을 `required`로 되돌리면 값은 그대로다. 저장된 자식 표의 통화별 임계는
+되돌리는 순간 사라진다.

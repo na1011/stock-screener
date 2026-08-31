@@ -16,7 +16,10 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -144,13 +147,28 @@ public class ScreenStore {
     }
 
     private ConditionGroup loadConditions(long groupId, ConditionGroup.LogicalOperator operator) {
+        // 통화별 임계를 먼저 모은다. 조건 행마다 따로 물으면 조건 수만큼 질의가 늘고,
+        // 조인으로 붙이면 한 조건이 통화 수만큼 행이 되어 매퍼가 조건을 중복 생성한다.
+        Map<Long, Map<String, ConditionOperand.Literal>> extras = new HashMap<>();
+        jdbcTemplate.query("""
+                SELECT t.condition_id, t.currency_code, t.literal_value, t.literal_value_2
+                FROM screen_condition_threshold t
+                JOIN screen_condition c ON c.id = t.condition_id
+                WHERE c.group_id = ?
+                """, rs -> {
+            extras.computeIfAbsent(rs.getLong("condition_id"), k -> new LinkedHashMap<>())
+                    .put(rs.getString("currency_code"), new ConditionOperand.Literal(
+                            rs.getBigDecimal("literal_value"), rs.getBigDecimal("literal_value_2")));
+        }, groupId);
+
         List<IndicatorCondition> conditions = jdbcTemplate.query("""
-                SELECT indicator_code, operator, operand_type, literal_value, literal_value_2,
-                       operand_indicator_code, operand_multiplier, weight, is_required
+                SELECT id, indicator_code, operator, operand_type, literal_value, literal_value_2,
+                       operand_indicator_code, operand_multiplier, weight, is_required,
+                       threshold_currency
                 FROM screen_condition
                 WHERE group_id = ?
                 ORDER BY sort_order, id
-                """, CONDITION_MAPPER, groupId);
+                """, (rs, rowNum) -> mapCondition(rs, extras), groupId);
 
         return new ConditionGroup(operator, conditions, List.of());
     }
@@ -182,6 +200,7 @@ public class ScreenStore {
 
         long groupId = insertRootGroup(screenId);
         insertConditions(groupId, definition.conditions());
+        deriveThresholdCurrency(groupId, definition.universeCode());
 
         return new ScreenDefinition(screenId, definition.code(), definition.name(),
                 definition.description(), definition.type(), definition.mode(),
@@ -214,6 +233,7 @@ public class ScreenStore {
         long groupId = rootGroupId(screenId).orElseGet(() -> insertRootGroup(screenId));
         jdbcTemplate.update("DELETE FROM screen_condition WHERE group_id = ?", groupId);
         insertConditions(groupId, definition.conditions());
+        deriveThresholdCurrency(groupId, definition.universeCode());
     }
 
     /** 화면을 지운다. 조건 그룹·조건은 {@code ON DELETE CASCADE}로 함께 사라진다. */
@@ -241,6 +261,7 @@ public class ScreenStore {
     private void insertConditions(long groupId, ConditionGroup group) {
         List<IndicatorCondition> conditions = group.conditions();
         List<Object[]> batch = new ArrayList<>(conditions.size());
+        Map<Integer, Map<String, ConditionOperand.Literal>> extraByOrder = new HashMap<>();
 
         for (int i = 0; i < conditions.size(); i++) {
             IndicatorCondition condition = conditions.get(i);
@@ -253,6 +274,9 @@ public class ScreenStore {
             String refCode = null;
             BigDecimal multiplier = null;
 
+            String baseCurrency = null;
+            Map<String, ConditionOperand.Literal> otherCurrencies = Map.of();
+
             switch (condition.operand()) {
                 case ConditionOperand.Literal value -> {
                     operandType = "LITERAL";
@@ -264,40 +288,148 @@ public class ScreenStore {
                     refCode = ref.indicatorCode();
                     multiplier = ref.multiplier();
                 }
+                // 기준 통화 하나를 조건 행에 두고 나머지를 자식 표에 넣는다. 그래야
+                // ck_cond_operand("리터럴이면 값이 NOT NULL")를 고치지 않아도 된다.
+                case ConditionOperand.MarketLiteral market -> {
+                    operandType = "LITERAL";
+                    Map<String, ConditionOperand.Literal> byCurrency =
+                            new LinkedHashMap<>(market.byCurrency());
+                    String first = byCurrency.keySet().iterator().next();
+                    ConditionOperand.Literal base = byCurrency.remove(first);
+                    baseCurrency = first;
+                    literal = base.value();
+                    literal2 = base.upperBound();
+                    otherCurrencies = byCurrency;
+                }
             }
 
             batch.add(new Object[]{
                     groupId, condition.indicatorCode(), condition.operator().name(), operandType,
-                    literal, literal2, refCode, multiplier, condition.weight(), condition.required(), i});
+                    literal, literal2, refCode, multiplier, condition.weight(), condition.required(),
+                    i, baseCurrency});
+            extraByOrder.put(i, otherCurrencies);
         }
 
         jdbcTemplate.batchUpdate("""
                 INSERT INTO screen_condition (group_id, indicator_code, operator, operand_type,
                                               literal_value, literal_value_2, operand_indicator_code,
-                                              operand_multiplier, weight, is_required, sort_order, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
+                                              operand_multiplier, weight, is_required, sort_order,
+                                              threshold_currency, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
                 """, batch);
+
+        insertExtraThresholds(groupId, extraByOrder);
+    }
+
+    /**
+     * 사용자가 만든 조건의 <b>통화 축을 서버가 유도한다.</b>
+     *
+     * <p>화면에 고르는 자리를 만들지 않는 이유가 이것이다 — 고를 수 있으면 잘못 고를 수 있고,
+     * 그 오류는 <b>다른 시장에서만</b> 드러난다. 대신 「금액·가격 차원의 지표에 0이 아닌 리터럴을
+     * 걸었다」는 사실에서 유도한다. 부호 조건({@code OCF_SUM_5Y &gt; 0})은 시장 중립이라 빠진다.
+     *
+     * <p>IMPORTANT — 이것이 없으면 <b>프리셋을 복사해 만든 사용자 화면이 원본보다 느슨해진다.</b>
+     * 시더는 {@code PRESET}만 갱신하므로 사본은 옛 조건을 든 채 남는다(ADR-0072 §규칙 · P27 축①).
+     *
+     * <p>어느 통화인가는 그 화면의 조회 대상이 답한다. 대상을 안 정했으면 활성 조회 대상의
+     * 통화가 하나일 때만 그것을 쓴다 — 갈리면 <b>아무것도 안 적는다.</b> 그 경우 실행이
+     * 「조회 대상을 하나 골라야 한다」로 거절되므로 조용히 틀리지 않는다.
+     */
+    private void deriveThresholdCurrency(long groupId, String universeCode) {
+        List<String> currencies = universeCode == null
+                ? jdbcTemplate.queryForList("""
+                        SELECT DISTINCT m.currency_code FROM universe u
+                        JOIN market m ON m.code = u.market_code WHERE u.is_active
+                        """, String.class)
+                : jdbcTemplate.queryForList("""
+                        SELECT m.currency_code FROM universe u
+                        JOIN market m ON m.code = u.market_code WHERE u.code = ?
+                        """, String.class, universeCode);
+        if (currencies.size() != 1) {
+            return;
+        }
+        jdbcTemplate.update("""
+                UPDATE screen_condition sc
+                SET threshold_currency = ?
+                FROM indicator i
+                WHERE i.code = sc.indicator_code
+                  AND sc.group_id = ?
+                  AND sc.threshold_currency IS NULL
+                  AND sc.operand_type = 'LITERAL'
+                  AND i.value_type IN ('CURRENCY', 'PRICE')
+                  AND (sc.literal_value <> 0 OR coalesce(sc.literal_value_2, 0) <> 0)
+                """, currencies.get(0), groupId);
+    }
+
+    /**
+     * 기준 통화가 아닌 임계를 자식 표에 넣는다.
+     *
+     * <p>id를 되받으려고 조건을 한 행씩 넣지 않는다 — 배치를 잃는다. 대신 방금 넣은 행을
+     * {@code sort_order}로 다시 찾는다. 그 값은 같은 그룹 안에서 유일하다(위 루프의 {@code i}).
+     */
+    private void insertExtraThresholds(
+            long groupId, Map<Integer, Map<String, ConditionOperand.Literal>> extraByOrder) {
+        if (extraByOrder.values().stream().allMatch(Map::isEmpty)) {
+            return;
+        }
+        Map<Integer, Long> idByOrder = new HashMap<>();
+        jdbcTemplate.query("SELECT id, sort_order FROM screen_condition WHERE group_id = ?",
+                rs -> { idByOrder.put(rs.getInt("sort_order"), rs.getLong("id")); }, groupId);
+
+        List<Object[]> rows = new ArrayList<>();
+        extraByOrder.forEach((order, byCurrency) -> byCurrency.forEach((currency, value) ->
+                rows.add(new Object[]{idByOrder.get(order), currency,
+                        value.value(), value.upperBound()})));
+        if (rows.isEmpty()) {
+            return;
+        }
+        jdbcTemplate.batchUpdate("""
+                INSERT INTO screen_condition_threshold
+                    (condition_id, currency_code, literal_value, literal_value_2)
+                VALUES (?, ?, ?, ?)
+                """, rows);
     }
 
     // ── 매핑 ──────────────────────────────────────────────────────────────
 
-    private static final RowMapper<IndicatorCondition> CONDITION_MAPPER = (rs, rowNum) -> {
+    /**
+     * 조건 한 행을 도메인으로 되돌린다.
+     *
+     * <p>IMPORTANT — <b>컴파일러가 잡아주지 않는 자리다.</b> 쓰기 쪽 switch와 달리 여기는
+     * 문자열 비교라, 컬럼을 더하고 이것을 잊으면 <b>저장은 되는데 읽을 때 조용히 기본값이 된다.</b>
+     * {@code threshold_currency}가 그 형태로 새면 시장별 임계가 통째로 사라지고
+     * <b>기준 통화의 값이 모든 시장에 걸린다</b> — 통화 축을 세운 목적과 정확히 반대다.
+     */
+    private static IndicatorCondition mapCondition(
+            ResultSet rs, Map<Long, Map<String, ConditionOperand.Literal>> extras)
+            throws SQLException {
         String indicatorCode = rs.getString("indicator_code");
         ComparisonOperator operator = ComparisonOperator.valueOf(rs.getString("operator"));
 
         // 합타입 복원. DB의 ck_cond_operand가 "둘 중 정확히 하나"를 이미 보장하므로
         // 여기서 다시 검사하지 않는다 — 제약을 믿지 못하면 제약을 둔 의미가 없다.
-        ConditionOperand operand = "LITERAL".equals(rs.getString("operand_type"))
-                ? new ConditionOperand.Literal(
-                        rs.getBigDecimal("literal_value"), rs.getBigDecimal("literal_value_2"))
-                : new ConditionOperand.IndicatorRef(
-                        rs.getString("operand_indicator_code"), rs.getBigDecimal("operand_multiplier"));
+        ConditionOperand operand;
+        if ("LITERAL".equals(rs.getString("operand_type"))) {
+            ConditionOperand.Literal base = new ConditionOperand.Literal(
+                    rs.getBigDecimal("literal_value"), rs.getBigDecimal("literal_value_2"));
+            String baseCurrency = rs.getString("threshold_currency");
+            if (baseCurrency == null) {
+                // 시장 중립. 부호·개수·연수·백분위·상대비교만 여기 온다(P27 축①).
+                operand = base;
+            } else {
+                Map<String, ConditionOperand.Literal> byCurrency = new LinkedHashMap<>();
+                byCurrency.put(baseCurrency, base);
+                byCurrency.putAll(extras.getOrDefault(rs.getLong("id"), Map.of()));
+                operand = new ConditionOperand.MarketLiteral(byCurrency);
+            }
+        } else {
+            operand = new ConditionOperand.IndicatorRef(
+                    rs.getString("operand_indicator_code"), rs.getBigDecimal("operand_multiplier"));
+        }
 
-        // 컴파일러가 잡아주지 않는 자리다. 위 switch와 달리 여기는 문자열 비교라, 컬럼을 더하고
-        // 이 매퍼를 잊으면 저장은 되는데 읽을 때 조용히 기본값이 된다.
         return new IndicatorCondition(indicatorCode, operator, operand,
                 rs.getBigDecimal("weight"), rs.getBoolean("is_required"));
-    };
+    }
 
     private static final RowMapper<ScreenSummary> SUMMARY_MAPPER =
             (rs, rowNum) -> mapSummary(rs);

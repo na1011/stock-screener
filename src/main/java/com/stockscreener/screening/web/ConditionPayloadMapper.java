@@ -78,6 +78,8 @@ public final class ConditionPayloadMapper {
 
     private static ConditionOperand toOperand(ConditionGroupPayload.ConditionPayload payload) {
         ConditionGroupPayload.OperandPayload operand = payload.operand();
+        // 들어오는 쪽은 언제나 평범한 리터럴이다 — thresholdCurrency는 읽기 전용이고
+        // 저장 경로가 조건에서 다시 유도한다. 사용자가 축을 잘못 고를 경로를 아예 만들지 않는다.
         return switch (operand.type()) {
             case LITERAL -> new ConditionOperand.Literal(operand.value(), operand.upperBound());
             case INDICATOR -> new ConditionOperand.IndicatorRef(
@@ -101,10 +103,22 @@ public final class ConditionPayloadMapper {
         ConditionGroupPayload.OperandPayload operand = switch (condition.operand()) {
             case ConditionOperand.Literal literal -> new ConditionGroupPayload.OperandPayload(
                     ConditionGroupPayload.OperandType.LITERAL,
-                    literal.value(), literal.upperBound(), null, null);
+                    literal.value(), literal.upperBound(), null, null, null);
             case ConditionOperand.IndicatorRef ref -> new ConditionGroupPayload.OperandPayload(
                     ConditionGroupPayload.OperandType.INDICATOR,
-                    null, null, ref.indicatorCode(), ref.multiplier());
+                    null, null, ref.indicatorCode(), ref.multiplier(), null);
+            // 기준 통화의 값만 싣고 그 통화를 함께 밝힌다. 화면은 이것을 **읽기 전용**으로
+            // 보인다 — 안 보이면 사용자는 자기 전략이 왜 어떤 시장에서 안 도는지 알 수 없다.
+            //
+            // MUST NOT: 통화를 밝히지 않은 채 값만 싣지 않는다. 그러면 미국 실행인데 원화
+            // 기준값이 「선정 이유」로 표시되고, 그 거짓은 대조하기 전까지 드러나지 않는다.
+            case ConditionOperand.MarketLiteral market -> {
+                var first = market.byCurrency().entrySet().iterator().next();
+                yield new ConditionGroupPayload.OperandPayload(
+                        ConditionGroupPayload.OperandType.LITERAL,
+                        first.getValue().value(), first.getValue().upperBound(),
+                        null, null, first.getKey());
+            }
         };
         return new ConditionGroupPayload.ConditionPayload(
                 condition.indicatorCode(), condition.operator(), operand,

@@ -117,6 +117,12 @@ import java.util.List;
 @Configuration
 public class PresetCatalog {
 
+    /**
+     * 이 절의 절대 임계가 나온 시장의 통화. KRW 하나가 코스피·코스닥 둘을 덮으므로
+     * 시장이 늘어도 이 상수는 안 바뀐다(ADR-0099).
+     */
+    private static final String KRW = "KRW";
+
     /** 백분위 지표 코드. 원본 코드에 접미사를 붙이는 규칙은 {@link PercentileSpec}이 정본이다. */
     private static String pctl(String sourceCode) {
         return sourceCode + PercentileSpec.SUFFIX;
@@ -326,7 +332,7 @@ public class PresetCatalog {
                         // 0.2·1.2·5.1 — AAII 원문의 7개 회계연도다. 159/347(46%).
                         required(ProfitStreakYearsCalculator.CODE, ComparisonOperator.GTE, "7"),
                         // 0.1 충분한 규모. 274/347(79%).
-                        required(MarketCapCalculator.CODE, ComparisonOperator.GTE, "1000000000000"),
+                        requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE, KRW, "1000000000000"),
                         // 2019 주주서한의 첫 번째 기준 —「영업에 투입된 순유형자본 대비 좋은
                         // 수익률」. 60/300(20%)이 통과하고 이 게이트가 18 → 15로 자른다.
                         //
@@ -632,7 +638,7 @@ public class PresetCatalog {
                         // 밴드를 5년 CAGR로 옮긴 것이다(ADR-0070). 89 → 9종목(2026-08-20).
                         requiredBetween(EpsCagr5yCalculator.CODE, "20", "50"),
                         // 2.3 "중소형"의 유니버스 내 치환. 시총 중앙값이다.
-                        required(MarketCapCalculator.CODE, ComparisonOperator.LTE,
+                        requiredIn(MarketCapCalculator.CODE, ComparisonOperator.LTE, KRW,
                                 "2616000000000"),
                         // §6 유동성. 버핏과 같은 임계를 쓴다 — 회전율은 규모에 중립이라
                         // 「대형 지향이냐」로 가를 이유가 없다. 크기 축은 위 MARKET_CAP이 든다.
@@ -777,7 +783,7 @@ public class PresetCatalog {
                 ConditionGroup.and(List.of(
                         // ── 필수 게이트 ──
                         // "대형"의 경계. 유니버스 상위 25%다.
-                        required(MarketCapCalculator.CODE, ComparisonOperator.GTE,
+                        requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE, KRW,
                                 "6773000000000"),
                         // ★ 유형 분류. 2.2의 밴드를 5년 CAGR로 옮겼다(ADR-0070). 53 → 10종목(2026-08-20).
                         requiredBetween(EpsCagr5yCalculator.CODE, "10", "20"),
@@ -1048,6 +1054,26 @@ public class PresetCatalog {
     }
 
     // ── 조건 생성 헬퍼 ────────────────────────────────────────────────────
+
+    /**
+     * <b>그 시장 분포에서 잰</b> 필수 임계. 통화가 다른 시장에서는 그 시장의 값을 따로 정해야
+     * 하고, 없으면 실행이 거절된다 — 다른 통화의 값으로 대신하지 않는다(ADR-0072).
+     *
+     * <p>ADR-0073 §규칙이 처방한 그대로다: <i>"미국 프리셋을 만들 때 이 임계를 복사하지 않고
+     * 그 시장 분포로 다시 잰다."</i> 옮기는 방법은 <b>분위 보존</b>이다 — 실측(2026-08-28)으로
+     * {@code MARKET_CAP >= 1조}이 국내 78.9%를 남기고 그 분위(0.2114)의 미국 값은
+     * <b>$7.94B</b>이며 거기서 78.8%가 남는다.
+     *
+     * <p>MUST NOT: 이 헬퍼를 안 쓴 조건을 「시장 중립」으로 읽지 않는다. 중립의 근거가 될 수
+     * 있는 것은 <b>부호·개수·연수·백분위·상대비교</b>뿐이고 「비율이니까」는 근거가 아니다
+     * (P27 축①). 실측으로 {@code ATR_PCT_14 &lt;= 5.9}는 국내 39.4% 대 미국 <b>89.7%</b>를
+     * 자른다 — 무차원인데도 전혀 다른 것을 잰다. <b>그 처분은 아직 정해지지 않았다.</b>
+     */
+    private static IndicatorCondition requiredIn(String code, ComparisonOperator operator,
+                                                 String currency, String value) {
+        return IndicatorCondition.of(code, operator, ConditionOperand.MarketLiteral.of(
+                currency, ConditionOperand.Literal.of(value))).asRequired();
+    }
 
     private static IndicatorCondition required(String code, ComparisonOperator operator,
                                                String value) {

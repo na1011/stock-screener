@@ -5,6 +5,7 @@ import com.stockscreener.notification.AlertPort;
 import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.screening.ConditionGroup;
 import com.stockscreener.screening.ConditionEvaluator;
+import com.stockscreener.screening.MarketThresholdMissingException;
 import com.stockscreener.screening.EvaluationMode;
 import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.screening.query.ScreeningRepository;
@@ -90,6 +91,7 @@ public class WatchlistAlertRunner {
         }
         Map<Long, String> marketByStock = store.marketsOf(
                 items.stream().map(WatchlistItem::stockId).distinct().toList());
+        Map<String, String> currencyByMarket = store.currencyByMarket();
 
         // 화면 단위로 묶는다. 같은 조건을 건 종목이 여럿이면 조건 로딩과 지표 조회가
         // 한 번으로 끝난다 — 항목마다 화면을 다시 읽으면 그것이 N+1이다.
@@ -103,7 +105,7 @@ public class WatchlistAlertRunner {
         for (Map.Entry<Long, List<WatchlistItem>> entry : byScreen.entrySet()) {
             try {
                 evaluated.addAll(evaluateScreen(entry.getKey(), entry.getValue(),
-                        marketByStock, asOfByMarket));
+                        marketByStock, currencyByMarket, asOfByMarket));
             } catch (RuntimeException e) {
                 // 한 화면의 실패가 나머지를 막지 않는다. 실패 격리의 단위가 종목인 것과 같은
                 // 원칙이다. MUST NOT: 조용히 넘기지 않는다 — error로 남겨야 Sentry가 잡는다.
@@ -136,6 +138,7 @@ public class WatchlistAlertRunner {
      */
     private List<Evaluated> evaluateScreen(long screenId, List<WatchlistItem> items,
                                            Map<Long, String> marketByStock,
+                                           Map<String, String> currencyByMarket,
                                            Map<String, LocalDate> asOfByMarket) {
         Optional<ScreenDefinition> found = screenStore.findById(screenId);
         if (found.isEmpty()) {
@@ -177,19 +180,47 @@ public class WatchlistAlertRunner {
                     .filter(item -> item.stockId() == id).forEach(judgeable::add));
         }
 
+        // 임계가 시장을 따라간다 — 스크리닝과 같은 해석을 여기서도 쓴다. 이 경로는
+        // ScreeningRepository.screen을 안 거치므로 그쪽 해석이 여기까지 오지 않는다.
+        //
+        // MUST NOT: 그 시장 임계가 없을 때 다른 통화의 값으로 판정하지 않는다 — 근거 없는
+        // 알림이 나간다. 건너뛰되 **조용히 빠지지 않게** 수를 세어 로그로 남긴다(같은 메서드가
+        // 기준일 없는 시장에 대해 이미 그 형태를 쓴다).
+        Map<String, ConditionGroup> resolvedByCurrency = new LinkedHashMap<>();
+        Map<String, Integer> skippedByCurrency = new LinkedHashMap<>();
+
         List<Evaluated> results = new ArrayList<>(judgeable.size());
         for (WatchlistItem item : judgeable) {
+            // 시장을 모르면 빈 문자열이 되어 해석이 실패하고, 그 항목은 아래에서
+            // 세어져 로그로 드러난다 — 조용히 빠지지 않는다.
+            String currency = currencyByMarket.getOrDefault(
+                    marketByStock.getOrDefault(item.stockId(), ""), "");
+            ConditionGroup resolvedGroup = resolvedByCurrency.get(currency);
+            if (resolvedGroup == null) {
+                try {
+                    resolvedGroup = group.resolveFor(currency);
+                    resolvedByCurrency.put(currency, resolvedGroup);
+                } catch (MarketThresholdMissingException e) {
+                    skippedByCurrency.merge(currency, 1, Integer::sum);
+                    continue;
+                }
+            }
             Map<String, BigDecimal> values = valuesByStock.getOrDefault(item.stockId(), Map.of());
             ScreeningResult outcome = evaluator.evaluate(
-                    item.stockId(), group, EvaluationMode.FILTER, values);
+                    item.stockId(), resolvedGroup, EvaluationMode.FILTER, values);
 
             // FILTER에서 included가 곧 "모든 조건을 충족했는가"다. 지표가 없어 판정할 수
             // 없었던 조건은 불충족으로 접히므로, 값이 아직 없는 종목은 알림을 받지 않는다 —
             // 그것이 맞다. 판정할 수 없는 것을 충족으로 읽으면 근거 없는 알림이 나간다.
             results.add(new Evaluated(item, definition, outcome.included()));
         }
+        skippedByCurrency.forEach((currency, count) -> log.info(
+                "그 시장 임계가 없어 워치리스트 판정을 건너뛴다. screenId={}, 통화={}, 항목 {}건",
+                screenId, currency, count));
         return results;
     }
+
+
 
     /**
      * 사용자당 <b>요약 한 통</b>을 보낸다.

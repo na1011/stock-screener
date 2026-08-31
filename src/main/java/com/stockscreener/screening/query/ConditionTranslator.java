@@ -81,6 +81,13 @@ public class ConditionTranslator {
                     literalPredicate(iv.value, condition.operator(), literal);
             case ConditionOperand.IndicatorRef ref ->
                     indicatorRefPredicate(iv, condition, ref, stock, asOf, aliasCounter);
+            // IMPORTANT — 여기서 null을 돌려주면 안 된다. Expressions.allOf가 null 술어를
+            // **버리므로** 그 조건이 없는 것처럼 종목이 통과한다 — 조용히 넓어지는 결과다.
+            // 실행 경로는 ConditionGroup.resolveFor를 먼저 지나고, 그 통화의 임계가 없으면
+            // 요청 단위로 거절되므로 여기에는 도달하지 않는다.
+            case ConditionOperand.MarketLiteral ignored -> throw new IllegalStateException(
+                    "해석되지 않은 시장별 임계를 SQL로 번역하려 했다: " + condition.indicatorCode()
+                            + " — 실행 전에 resolveFor를 거쳐야 한다");
         };
 
         return JPAExpressions.selectOne()

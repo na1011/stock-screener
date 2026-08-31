@@ -123,6 +123,33 @@ public final class ApiExceptions {
         }
     }
 
+    /**
+     * 임계가 그 시장 통화로 정해지지 않아 실행하지 않는다.
+     *
+     * <p>{@code missingIndicatorCodes}를 함께 싣는 것이 요점이다 — 사용자가 할 일이
+     * 「기다린다」가 아니라 「대상을 바꾸거나 그 임계를 정한다」이고, 무엇을 정해야 하는지는
+     * 조건 이름으로만 말할 수 있다.
+     */
+    public static class MarketThresholdMissingException extends ApiException {
+        public MarketThresholdMissingException(String currencyCode, java.util.List<String> codes) {
+            super(HttpStatus.UNPROCESSABLE_ENTITY, ApiProblemType.MARKET_THRESHOLD_MISSING,
+                    "이 전략은 " + currencyCode + " 시장에서 실행할 수 없다 — 임계가 그 시장"
+                            + " 분포로 정해지지 않은 조건이 " + codes.size() + "개다.");
+            with("thresholdCurrency", currencyCode);
+            with("missingIndicatorCodes", codes);
+        }
+    }
+
+    /** 활성 유니버스의 통화가 갈려 「전체」로는 실행할 수 없다. */
+    public static class UniverseRequiredException extends ApiException {
+        public UniverseRequiredException(java.util.Collection<String> currencies) {
+            super(HttpStatus.BAD_REQUEST, ApiProblemType.UNIVERSE_REQUIRED,
+                    "조회 대상을 하나 골라야 한다 — 활성 조회 대상의 통화가 " + currencies
+                            + "로 갈려 임계가 어느 시장 기준인지 정해지지 않는다.");
+            with("currencies", java.util.List.copyOf(currencies));
+        }
+    }
+
     public static class UniverseNotFoundException extends ApiException {
         public UniverseNotFoundException(String universeCode) {
             super(HttpStatus.NOT_FOUND, ApiProblemType.UNIVERSE_NOT_FOUND,

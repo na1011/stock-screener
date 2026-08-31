@@ -26,6 +26,10 @@ export const ProblemType = {
   AMBIGUOUS_SCREENING_INPUT: 'urn:stockscreener:ambiguous-screening-input',
   INDICATOR_HISTORY_UNAVAILABLE: 'urn:stockscreener:indicator-history-unavailable',
   INDICATOR_DATA_NOT_READY: 'urn:stockscreener:indicator-data-not-ready',
+  /** 이 전략을 이 조회 대상에서 실행할 수 없다 — 임계가 그 시장 분포로 정해진 적이 없다. */
+  MARKET_THRESHOLD_MISSING: 'urn:stockscreener:market-threshold-missing',
+  /** 활성 조회 대상의 통화가 갈려 「전체」로는 실행할 수 없다. 하나를 골라야 한다. */
+  UNIVERSE_REQUIRED: 'urn:stockscreener:universe-required',
   SCREEN_NOT_FOUND: 'urn:stockscreener:screen-not-found',
   STOCK_NOT_FOUND: 'urn:stockscreener:stock-not-found',
   UNIVERSE_NOT_FOUND: 'urn:stockscreener:universe-not-found',

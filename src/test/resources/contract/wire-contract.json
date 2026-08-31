@@ -97,6 +97,8 @@
     "urn:stockscreener:ambiguous-screening-input",
     "urn:stockscreener:indicator-history-unavailable",
     "urn:stockscreener:indicator-data-not-ready",
+    "urn:stockscreener:market-threshold-missing",
+    "urn:stockscreener:universe-required",
     "urn:stockscreener:screen-not-found",
     "urn:stockscreener:stock-not-found",
     "urn:stockscreener:universe-not-found",

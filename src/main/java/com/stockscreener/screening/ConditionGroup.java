@@ -50,6 +50,54 @@ public record ConditionGroup(
     }
 
     /** 이 그룹과 모든 하위 그룹의 조건을 평면화한다. 선정 이유 표시와 지표 조회에 쓴다. */
+    /**
+     * 이 조건 트리를 <b>그 통화 시장용으로</b> 해석한다.
+     *
+     * <p>해석 지점을 여기 하나로 두는 것이 요점이다 — {@code ConditionEvaluator}·
+     * {@code ConditionTranslator}·백테스트 하네스는 해석본을 받으므로 <b>이 축을 몰라도 된다.</b>
+     * ADR-0003의 「하나의 조건 모델」이 그대로 유지된다.
+     *
+     * <p>MUST: <b>결과 조립도 해석본을 받는다.</b> 화면의 「선정 이유」가 해석 전 임계를 보이면
+     * 미국 실행인데 원화 기준값이 표시되고, 조건이 하나라도 떨어지면 조건 목록과 판정의
+     * 인덱스가 어긋나 <b>다른 조건의 판정이 붙는다.</b>
+     *
+     * @throws MarketThresholdMissingException 그 통화의 임계가 없는 조건이 하나라도 있으면.
+     *         <b>일부만 해석해 돌리지 않는다</b> — 빠진 필수 게이트는 결과를 조용히 넓히고,
+     *         빠진 배점은 만점을 시장마다 다르게 만든다.
+     */
+    public ConditionGroup resolveFor(String currencyCode) {
+        // MUST: 빠진 것을 **전부 모은 뒤에** 판정한다. 만들면서 던지면 조건이 전부 빠졌을 때
+        // 「조건이 하나도 없는 그룹」이라는 다른 예외가 먼저 나가고, 그러면 사용자는 임계가
+        // 없다는 것 대신 조건셋이 망가졌다는 말을 듣는다 — 할 일이 정반대가 된다.
+        List<String> missing = new ArrayList<>();
+        collectMissing(currencyCode, missing);
+        if (!missing.isEmpty()) {
+            throw new MarketThresholdMissingException(currencyCode, missing);
+        }
+        return build(currencyCode);
+    }
+
+    private void collectMissing(String currencyCode, List<String> missing) {
+        for (IndicatorCondition condition : conditions) {
+            if (condition.resolveFor(currencyCode).isEmpty()) {
+                missing.add(condition.indicatorCode());
+            }
+        }
+        for (ConditionGroup child : childGroups) {
+            child.collectMissing(currencyCode, missing);
+        }
+    }
+
+    private ConditionGroup build(String currencyCode) {
+        List<IndicatorCondition> resolvedConditions = conditions.stream()
+                .map(condition -> condition.resolveFor(currencyCode).orElseThrow())
+                .toList();
+        List<ConditionGroup> resolvedChildren = childGroups.stream()
+                .map(child -> child.build(currencyCode))
+                .toList();
+        return new ConditionGroup(logicalOperator, resolvedConditions, resolvedChildren);
+    }
+
     public List<IndicatorCondition> flattenConditions() {
         List<IndicatorCondition> all = new ArrayList<>(conditions);
         for (ConditionGroup child : childGroups) {

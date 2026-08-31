@@ -3,6 +3,7 @@ package com.stockscreener.screening.web;
 import com.stockscreener.indicator.IndicatorCatalog;
 import com.stockscreener.screening.ConditionGroup;
 import com.stockscreener.screening.EvaluationMode;
+import com.stockscreener.screening.MarketThresholdMissingException;
 import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.screening.query.ScreeningRepository;
 import com.stockscreener.screening.store.ScreenDefinition;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 
 /**
@@ -83,18 +85,43 @@ public class ScreeningService {
             throw new ApiExceptions.UniverseNotFoundException(universeCode);
         }
 
+        // MUST: 임계 해석이 기준일 결정보다 **앞이다.** 뒤에 두면 빈 시장 집합을
+        // AsOfResolver가 먼저 503(「지표가 아직 준비되지 않았다」)으로 접어, 사용자가 할 일이
+        // 정반대가 된다 — 기다리기 대 대상 바꾸기. MarketScope.forStock의 javadoc이 같은
+        // 함정을 이미 한 번 밟고 그 경위를 적어 뒀다.
+        Set<String> currencies = marketScope.currenciesFor(universeCode);
+        if (currencies.size() > 1) {
+            // 「전체」가 통화를 넘나든다. 한 결과에 두 시장을 섞는 대신 대상을 고르게 한다.
+            throw new ApiExceptions.UniverseRequiredException(currencies);
+        }
+        Source resolved = source;
+        if (currencies.size() == 1) {
+            String currency = currencies.iterator().next();
+            try {
+                resolved = new Source(source.id(), source.code(), source.name(), source.type(),
+                        source.mode(), source.universeCode(),
+                        source.conditions().resolveFor(currency));
+            } catch (MarketThresholdMissingException e) {
+                throw new ApiExceptions.MarketThresholdMissingException(
+                        e.currencyCode(), e.indicatorCodes());
+            }
+        }
+
         // 기준일은 시장마다 다르다(ADR-0095). 유니버스를 지정했으면 그 시장 하나,
         // 안 했으면 활성 유니버스 전체 — 요청이 inAnyActiveUniverse로 도는 것과 짝이다.
         LocalDate asOf = asOfResolver.resolve(
                 request.asOf(), marketScope.forScreening(universeCode));
 
         List<ScreeningResult> results =
-                screeningRepository.screen(source.conditions(), mode, asOf, universeCode);
+                screeningRepository.screen(resolved.conditions(), mode, asOf, universeCode);
 
         boolean truncated = results.size() > MAX_ROWS;
         List<ScreeningResult> page = truncated ? results.subList(0, MAX_ROWS) : results;
 
-        return assembler.assemble(source, mode, universeCode, asOf, request.asOf(),
+        // MUST: 조립도 **해석본**을 받는다. 해석 전 조건을 실으면 미국 실행인데 화면의
+        // 「선정 이유」에 원화 기준값이 뜨고, 조건이 하나라도 떨어지면 조건 목록과 판정의
+        // 인덱스가 어긋나 다른 조건의 판정이 붙는다.
+        return assembler.assemble(resolved, mode, universeCode, asOf, request.asOf(),
                 results.size(), page, truncated);
     }
 

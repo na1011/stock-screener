@@ -113,6 +113,20 @@ public class WatchlistStore {
         return markets;
     }
 
+    /**
+     * 시장 코드 → 통화. {@code market}은 3행 규모라 통째로 읽는다.
+     *
+     * <p>{@link #marketsOf}와 짝이다 — 그쪽이 종목의 시장을, 이쪽이 그 시장의 통화를 준다.
+     * 조건의 임계가 어느 시장 분포에서 나왔는지를 통화로 표현하므로(ADR-0099) 판정 전에
+     * 이것이 필요하다.
+     */
+    public Map<String, String> currencyByMarket() {
+        Map<String, String> currencies = new LinkedHashMap<>();
+        jdbcTemplate.query("SELECT code, currency_code FROM market",
+                rs -> { currencies.put(rs.getString("code"), rs.getString("currency_code")); });
+        return currencies;
+    }
+
     // ── 쓰기 ──────────────────────────────────────────────────────────────
 
     /**

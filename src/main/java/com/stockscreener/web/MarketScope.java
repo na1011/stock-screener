@@ -54,6 +54,34 @@ public class MarketScope {
     }
 
     /**
+     * 그 범위의 <b>통화</b> 집합. 조건의 임계를 어느 시장 분포 기준으로 해석할지가 여기서 나온다.
+     *
+     * <p>축을 통화로 잡는 이유는 {@code KRW} 하나가 코스피·코스닥 둘을 덮기 때문이다 —
+     * 시장 코드로 두면 시장이 늘 때마다 조건마다 목록을 고쳐야 하고, 고치지 않은 조건이
+     * 새 시장까지 조용히 판정한다(ADR-0099).
+     *
+     * <p>둘 이상이 나오면 「전체」가 통화를 넘나든다는 뜻이고, 그때는 호출부가 대상을 고르게
+     * 한다 — 한 결과에 두 시장을 섞으면 임계가 어느 쪽 기준인지 정해지지 않는다.
+     *
+     * @return 통화 코드 집합. 유니버스를 지정했으면 하나, 안 했으면 활성 유니버스 전체의 것
+     */
+    @Transactional(readOnly = true)
+    public Set<String> currenciesFor(String universeCode) {
+        List<String> codes = universeCode == null
+                ? jdbcTemplate.queryForList("""
+                        SELECT DISTINCT m.currency_code
+                        FROM universe u JOIN market m ON m.code = u.market_code
+                        WHERE u.is_active
+                        """, String.class)
+                : jdbcTemplate.queryForList("""
+                        SELECT m.currency_code
+                        FROM universe u JOIN market m ON m.code = u.market_code
+                        WHERE u.code = ?
+                        """, String.class, universeCode);
+        return new LinkedHashSet<>(codes);
+    }
+
+    /**
      * 종목 하나를 보는 요청의 시장 범위.
      *
      * <p>상세·지지저항·재무 화면이 이 갈래다. <b>종목이 곧 시장이라</b> 애매함이 없다.

@@ -59,12 +59,19 @@ public record ConditionGroupPayload(
      * 다형 매핑의 설정 비용이 이득보다 크고, 잘못된 조합({@code type=LITERAL}인데 지표 코드가 온
      * 경우)의 오류 메시지가 훨씬 읽기 쉽다.
      */
+    /**
+     * @param thresholdCurrency 이 임계를 잰 시장의 통화. {@code null}이면 시장 중립이다
+     *                          (부호·개수·연수·백분위·상대비교). <b>읽기 전용이다</b> —
+     *                          요청에 담아도 서버가 무시하고 조건에서 다시 유도한다.
+     *                          그래서 사용자가 축을 잘못 고를 경로가 없다.
+     */
     public record OperandPayload(
             @NotNull(message = "피연산자 종류가 필요하다") OperandType type,
             BigDecimal value,
             BigDecimal upperBound,
             String indicatorCode,
-            BigDecimal multiplier
+            BigDecimal multiplier,
+            String thresholdCurrency
     ) {
     }
 
