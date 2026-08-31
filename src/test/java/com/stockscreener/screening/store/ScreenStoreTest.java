@@ -127,6 +127,43 @@ class ScreenStoreTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 조건 행에 앉는 기준 통화가 맵 순서에 안 흔들린다")
+    void baseCurrencyIsDeterministicRegardlessOfInsertionOrder() {
+        // MarketLiteral이 Map.copyOf로 순서를 지우므로 「첫」 항목을 기준으로 삼으면
+        // 어느 통화가 조건 행에 앉을지 정해지지 않는다. 시더가 기동마다 조건을 통째로
+        // 교체하니 **재기동만으로 뒤집히고**, literal_value를 직접 읽는 ADR 펜스가
+        // 국내 종목을 미국 임계로 판정한다(2026-09-01 실측: 프리셋 5개 · 조건 11개).
+        //
+        // 넣는 순서를 뒤집어 두 번 저장하고 **둘이 같은 기준을 갖는지** 본다.
+        Map<String, ConditionOperand.Literal> usdFirst = new LinkedHashMap<>();
+        usdFirst.put("USD", ConditionOperand.Literal.of("7940000000"));
+        usdFirst.put("KRW", ConditionOperand.Literal.of("1000000000000"));
+
+        Map<String, ConditionOperand.Literal> krwFirst = new LinkedHashMap<>();
+        krwFirst.put("KRW", ConditionOperand.Literal.of("1000000000000"));
+        krwFirst.put("USD", ConditionOperand.Literal.of("7940000000"));
+
+        assertThat(storedBaseCurrency(usdFirst, "달러 먼저"))
+                .as("통화 코드 오름차순이라 KRW가 기준이다 — 넣은 순서와 무관해야 한다")
+                .isEqualTo("KRW");
+        assertThat(storedBaseCurrency(krwFirst, "원화 먼저")).isEqualTo("KRW");
+    }
+
+    /** 저장 뒤 {@code screen_condition}에 실제로 앉은 기준 통화. 왕복이 아니라 **행**을 본다. */
+    private String storedBaseCurrency(Map<String, ConditionOperand.Literal> byCurrency, String name) {
+        ScreenDefinition saved = store.create(ScreenDefinition.custom(
+                null, name, null, EvaluationMode.FILTER, userId, "KOSPI200",
+                ConditionGroup.and(List.of(
+                        IndicatorCondition.of("MARKET_CAP", ComparisonOperator.GTE,
+                                new ConditionOperand.MarketLiteral(byCurrency))))));
+        return jdbcTemplate.queryForObject("""
+                SELECT sc.threshold_currency FROM screen_condition sc
+                JOIN condition_group g ON g.id = sc.group_id
+                WHERE g.screen_id = ?
+                """, String.class, saved.id());
+    }
+
+    @Test
     @DisplayName("대상을 지정하면 사용자 조건에 그 시장의 통화 축이 붙는다")
     void derivesThresholdCurrencyFromTheChosenUniverse() {
         // 이것이 없으면 프리셋을 복사해 만든 사용자 화면이 원본보다 느슨해진다 —

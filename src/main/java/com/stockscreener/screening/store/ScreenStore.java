@@ -290,10 +290,25 @@ public class ScreenStore {
                 }
                 // 기준 통화 하나를 조건 행에 두고 나머지를 자식 표에 넣는다. 그래야
                 // ck_cond_operand("리터럴이면 값이 NOT NULL")를 고치지 않아도 된다.
+                //
+                // MUST: 기준을 **통화 코드 오름차순**으로 정한다. 맵의 「첫」 항목을 쓰면
+                // 어느 통화가 조건 행에 앉을지 정해져 있지 않다 — MarketLiteral이
+                // Map.copyOf로 순서를 지우기 때문이다. 시더가 기동마다 조건을 통째로
+                // 교체하므로 **재기동만으로 기준이 뒤집힌다.** 실제로 그렇게 뒤집혀
+                // literal_value에 USD 값이 앉았고, 그것을 직접 읽는 ADR 펜스 넷이
+                // 국내 종목을 미국 임계로 판정해 붉었다(2026-09-01 실측: 프리셋 5개 ·
+                // 조건 11개가 전부 USD로 뒤집혀 있었다).
+                //
+                // MUST NOT: 실행 경로가 안전하니 괜찮다고 읽지 않는다. mapCondition이
+                // 기준과 자식을 합쳐 맵을 만들고 resolveFor가 통화로 고르므로 화면은
+                // 맞지만, **literal_value를 직접 읽는 것**(펜스·백테스트·V43 같은 유도)은
+                // 전부 흔들린다. ConditionPayloadMapper.toPayload가 같은 이유로 정렬한다.
                 case ConditionOperand.MarketLiteral market -> {
                     operandType = "LITERAL";
-                    Map<String, ConditionOperand.Literal> byCurrency =
-                            new LinkedHashMap<>(market.byCurrency());
+                    Map<String, ConditionOperand.Literal> byCurrency = new LinkedHashMap<>();
+                    market.byCurrency().entrySet().stream()
+                            .sorted(Map.Entry.comparingByKey())
+                            .forEach(entry -> byCurrency.put(entry.getKey(), entry.getValue()));
                     String first = byCurrency.keySet().iterator().next();
                     ConditionOperand.Literal base = byCurrency.remove(first);
                     baseCurrency = first;
