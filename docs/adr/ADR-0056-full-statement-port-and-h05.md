@@ -86,7 +86,7 @@ applies_to:
 psql -d stock_screener -At -c "WITH r AS (SELECT stock_id, operating_cash_flow, period_end,
   row_number() OVER (PARTITION BY stock_id ORDER BY period_end DESC) rn
   FROM financial_statement f JOIN stock s ON s.id=f.stock_id
-  WHERE f.is_latest AND f.fiscal_period='FY' AND s.is_active),
+  WHERE f.is_latest AND f.fiscal_period='FY' AND s.is_active AND s.market_code IN ('KOSPI','KOSDAQ')),
 a AS (SELECT stock_id, count(*) n, count(operating_cash_flow) ocf FROM r WHERE rn<=5 GROUP BY 1)
 SELECT CASE
   WHEN (SELECT count(*) FROM a) = 0 THEN '잴 것이 없었다 — 연간 재무가 하나도 없다'

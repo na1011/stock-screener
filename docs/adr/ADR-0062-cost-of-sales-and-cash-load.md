@@ -50,15 +50,16 @@ applies_to:
 ```premise 매출원가가 채워진 종목 수가 재적재 직후에서 줄지 않았다
 psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) = 0 THEN '잴 것이 없었다 — is_latest 연간 재무가 한 행도 없다'
-  WHEN count(*) FILTER (WHERE cost_of_sales IS NOT NULL) = 0
+  WHEN count(*) FILTER (WHERE f.cost_of_sales IS NOT NULL) = 0
     THEN '매출원가가 한 종목도 없다 — 컬럼만 생기고 재적재가 돌지 않았다'
-  WHEN count(DISTINCT stock_id) FILTER (WHERE cost_of_sales IS NOT NULL) >= 200
-    THEN 'OK ' || count(DISTINCT stock_id) FILTER (WHERE cost_of_sales IS NOT NULL)
-       || '종목 (연간 행 ' || count(*) FILTER (WHERE cost_of_sales IS NOT NULL) || ')'
+  WHEN count(DISTINCT f.stock_id) FILTER (WHERE f.cost_of_sales IS NOT NULL) >= 200
+    THEN 'OK ' || count(DISTINCT f.stock_id) FILTER (WHERE f.cost_of_sales IS NOT NULL)
+       || '종목 (연간 행 ' || count(*) FILTER (WHERE f.cost_of_sales IS NOT NULL) || ')'
   ELSE '매출원가 보유 종목이 '
-       || count(DISTINCT stock_id) FILTER (WHERE cost_of_sales IS NOT NULL)
+       || count(DISTINCT f.stock_id) FILTER (WHERE f.cost_of_sales IS NOT NULL)
        || '으로 줄었다 — 정정공시가 값을 지웠거나 매퍼가 회귀했다' END
-FROM financial_statement WHERE is_latest AND fiscal_period = 'FY'"
+FROM financial_statement f JOIN stock s ON s.id = f.stock_id
+WHERE f.is_latest AND f.fiscal_period = 'FY' AND s.market_code IN ('KOSPI','KOSDAQ')"
 ```
 
 `sj_div` 분기를 지우지 않았는지 — 아래가 어댑터의 두 조립부에서 각각 나와야 한다.
