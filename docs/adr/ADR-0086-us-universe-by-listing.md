@@ -89,6 +89,13 @@ SELECT CASE
   WHEN array_length((SELECT missing FROM s), 1) IS NULL
     THEN 'OK ' || (SELECT string_agg(code, ', ' ORDER BY code) FROM u)
          || '이(가) 켜졌고 다섯 축 전부에 데이터가 있다'
+  WHEN array_length((SELECT missing FROM s), 1) = 1
+       AND (SELECT missing FROM s)[1] LIKE '거버넌스%'
+    THEN 'OK ' || (SELECT string_agg(code, ', ' ORDER BY code) FROM u)
+         || '이(가) 켜졌고 비어 있는 축이 거버넌스뿐이다 — 그것은 결손이 아니라 '
+         || '2026-08-30에 미루기로 한 것이다(얻는 것이 거의 없고 재적재 48분). '
+         || '대가는 PROFIT_RETIREMENT_3Y 배점을 미국 종목이 못 얻는 것: '
+         || '버핏 5.9% 린치고속성장 4.5% 린치대형우량 5.0%'
   ELSE (SELECT string_agg(code, ', ' ORDER BY code) FROM u) || '이(가) 켜졌는데 '
        || array_length((SELECT missing FROM s), 1) || '개 축이 비어 있다: '
        || array_to_string((SELECT missing FROM s), ', ')
