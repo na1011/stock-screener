@@ -394,6 +394,81 @@ class ScreeningApiContractTest {
         return found;
     }
 
+    /**
+     * 활성 조회 대상의 통화가 갈리면 「전체」 실행을 거절한다(ADR-0107 §규칙 · 사용자 결정).
+     *
+     * <p><b>MUST NOT: 두 번째 시장을 {@code seed()}에 심지 않는다.</b> 이 클래스는
+     * {@code universeCode}를 한 번도 안 쓰고 {@link #run}이 {@code isOk()}를 단정하므로,
+     * {@code @BeforeEach}에 두면 <b>여덟이 400으로 붉고</b> {@code rejectsDatesOutsideRetention}은
+     * {@code type}이 {@code universe-required}로 바뀌어 깨진다. 롤백 단위가 시험이므로
+     * 여기서 심는 것으로 충분하다.
+     *
+     * <p><b>대조군은 둘이다.</b> 하나는 아래 「대상을 고르면 200」이고, 다른 하나는
+     * <b>이 클래스의 나머지 시험 전부</b>다 — 두 번째 시장이 없으면 대상 미지정도 200이라는
+     * 것을 그것들이 이미 매번 확인한다.
+     */
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("IMPORTANT — 활성 대상의 통화가 갈리면 「전체」를 거절한다. 대상을 고르면 돈다")
+    void refusesAllUniversesWhenActiveCurrenciesDiffer() throws Exception {
+        jdbcTemplate.update("""
+                INSERT INTO market (code, country_code, currency_code, timezone)
+                VALUES ('TESTUSD','US','USD','America/New_York') ON CONFLICT DO NOTHING
+                """);
+        jdbcTemplate.update("""
+                INSERT INTO universe (code, name, market_code)
+                VALUES ('TESTUNIVUSD', '계약 테스트 달러 유니버스', 'TESTUSD') ON CONFLICT DO NOTHING
+                """);
+        // 편입이 있어야 통화 집합에 든다 — MarketScope가 편입 있는 활성 유니버스만 센다.
+        long usdStock = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('TESTUSD','TESTUSD1','달러주')
+                RETURNING id
+                """, Long.class);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('TESTUNIVUSD', ?, ?)
+                """, usdStock, AS_OF.minusYears(1));
+
+        String conditions = """
+                {"conditions":[
+                   {"indicatorCode":"PER","operator":"LT","operand":{"type":"LITERAL","value":10}}]}""";
+
+        String body = mockMvc.perform(post("/api/screening").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"conditions\": " + conditions + "}"))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode problem = objectMapper.readTree(body);
+        assertThat(problem.get("type").asText()).endsWith("universe-required");
+        assertThat(problem.get("retryable").asBoolean())
+                .as("사용자가 대상을 고르면 되는 일이라 재시도가 아니다")
+                .isFalse();
+        // 무엇이 갈렸는지를 실어야 화면이 "어느 쪽 기준인지 정해지지 않는다"를 말할 수 있다.
+        List<String> currencies = new ArrayList<>();
+        problem.get("currencies").forEach(node -> currencies.add(node.asText()));
+        assertThat(currencies).containsExactlyInAnyOrder("KRW", "USD");
+
+        // 대조군 — 같은 조건이 대상을 고르면 그대로 돈다. 거절이 조건 탓이 아니라는 증거다.
+        JsonNode ok = run("{\"conditions\": " + conditions
+                + ", \"universeCode\": \"" + CONTRACT_UNIVERSE + "\"}");
+        assertThat(ok.get("currencyCode").asText())
+                .as("결과가 선 시장의 통화. 화면의 모든 금액 표기가 이것 하나에 걸린다")
+                .isEqualTo("KRW");
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("응답이 이 결과가 선 시장의 통화를 밝힌다 — 화면이 시장 코드에서 유도하지 않는다")
+    void declaresTheCurrencyOfTheResult() throws Exception {
+        JsonNode response = run("""
+                {"conditions": {"conditions":[
+                   {"indicatorCode":"PER","operator":"LT","operand":{"type":"LITERAL","value":10}}]}}
+                """);
+
+        assertThat(response.get("currencyCode").asText()).isEqualTo("KRW");
+    }
+
     private JsonNode run(String body) throws Exception {
         String json = mockMvc.perform(post("/api/screening").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
