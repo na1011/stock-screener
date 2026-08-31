@@ -52,7 +52,7 @@ rg -n "financialYears\(" src/main/java/com/stockscreener/indicator/calculator/Ep
 
 ```premise 린치 고속성장주의 시총 상한이 아직 중앙값 근처에 앉아 있다
 psql -d stock_screener -At -c "WITH v AS (
-  SELECT value FROM indicator_value
+  SELECT value FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) ivkr
   WHERE indicator_code = 'MARKET_CAP'
     AND trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')))
 SELECT CASE
@@ -68,12 +68,12 @@ SELECT CASE
 
 ```premise 린치 프리셋의 필수 게이트가 유니버스의 90% 넘게 통과시키지 않는다
 psql -d stock_screener -At -c "WITH pop AS (
-  SELECT count(DISTINCT stock_id) n FROM indicator_value
+  SELECT count(DISTINCT stock_id) n FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) ivkr
   WHERE trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))
     AND indicator_code = 'ADJ_CLOSE'),
 g AS (
   SELECT c.indicator_code, c.operator, c.literal_value,
-         (SELECT count(*) FROM indicator_value iv
+         (SELECT count(*) FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv
           WHERE iv.indicator_code = c.indicator_code
             AND iv.trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))
             AND CASE c.operator

@@ -64,7 +64,7 @@ src AS (SELECT NULLIF(replace(g.payload->>'thstrm', ',', ''), '-')::numeric v
         FROM governance_report_row g JOIN stock s ON s.id = g.stock_id
         WHERE s.ticker = '005930' AND g.endpoint = 'DIVIDEND' AND g.bsns_year = 2025
           AND g.payload->>'se' LIKE '%현금배당성향%'),
-ours AS (SELECT iv.value v FROM indicator_value iv JOIN stock s ON s.id = iv.stock_id, d
+ours AS (SELECT iv.value v FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv JOIN stock s ON s.id = iv.stock_id, d
          WHERE s.ticker = '005930' AND iv.indicator_code = 'DIVIDEND_PAYOUT'
            AND iv.trade_date = d.t)
 SELECT CASE

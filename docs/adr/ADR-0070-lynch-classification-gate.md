@@ -80,7 +80,7 @@ rg -n 'PegCalculator\.CODE, ComparisonOperator' \
 
 ```premise 린치 게이트에 자르는 것이 0인 조건이 없다
 psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
-uni AS (SELECT DISTINCT stock_id FROM indicator_value iv, d
+uni AS (SELECT DISTINCT stock_id FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d
         WHERE iv.trade_date = d.t AND iv.indicator_code = 'ADJ_CLOSE'),
 g AS (SELECT s.code sc, c.id cid, c.indicator_code ind, c.operator op,
              c.literal_value v1, c.literal_value_2 v2, c.operand_type ot
@@ -94,7 +94,7 @@ p AS (SELECT g.sc, g.cid, u.stock_id,
           WHEN 'GTE' THEN iv.value >= g.v1  WHEN 'GT' THEN iv.value > g.v1
           WHEN 'BETWEEN' THEN iv.value >= g.v1 AND iv.value <= g.v2 END, false) pass
       FROM g CROSS JOIN uni u
-      LEFT JOIN indicator_value iv ON iv.stock_id = u.stock_id
+      LEFT JOIN (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv ON iv.stock_id = u.stock_id
         AND iv.indicator_code = g.ind AND iv.trade_date = (SELECT t FROM d)),
 agg AS (SELECT sc, stock_id, count(*) FILTER (WHERE NOT pass) nf,
                min(cid) FILTER (WHERE NOT pass) fcid FROM p GROUP BY 1, 2),
@@ -124,7 +124,7 @@ SELECT CASE
 
 ```premise 린치 고속성장주의 통과 집합이 유니버스보다 현금흐름이 좋다
 psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
-uni AS (SELECT DISTINCT stock_id FROM indicator_value iv, d
+uni AS (SELECT DISTINCT stock_id FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d
         WHERE iv.trade_date = d.t AND iv.indicator_code = 'ADJ_CLOSE'),
 g AS (SELECT c.id cid, c.indicator_code ind, c.operator op, c.literal_value v1, c.literal_value_2 v2
       FROM screen_condition c JOIN condition_group cg ON cg.id = c.group_id
@@ -136,12 +136,12 @@ p AS (SELECT g.cid, g.ind, u.stock_id,
           WHEN 'GTE' THEN iv.value >= g.v1 WHEN 'GT' THEN iv.value > g.v1
           WHEN 'BETWEEN' THEN iv.value >= g.v1 AND iv.value <= g.v2 END, false) pass
       FROM g CROSS JOIN uni u
-      LEFT JOIN indicator_value iv ON iv.stock_id = u.stock_id
+      LEFT JOIN (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv ON iv.stock_id = u.stock_id
         AND iv.indicator_code = g.ind AND iv.trade_date = (SELECT t FROM d)),
 win AS (SELECT stock_id FROM p GROUP BY stock_id HAVING count(*) FILTER (WHERE NOT pass) = 0),
 woc AS (SELECT stock_id FROM p WHERE ind <> 'EPS_CAGR_5Y' GROUP BY stock_id
         HAVING count(*) FILTER (WHERE NOT pass) = 0),
-m AS (SELECT iv.stock_id, iv.value v FROM indicator_value iv, d
+m AS (SELECT iv.stock_id, iv.value v FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d
       WHERE iv.trade_date = d.t AND iv.indicator_code = 'FCF_MARGIN'),
 umed AS (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v) x FROM m),
 s AS (SELECT count(*) n, percentile_cont(0.5) WITHIN GROUP (ORDER BY v) med,
@@ -171,7 +171,7 @@ SELECT CASE
 
 ```premise 린치 대형우량주의 이익이 현금으로 뒷받침된다
 psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
-uni AS (SELECT DISTINCT stock_id FROM indicator_value iv, d
+uni AS (SELECT DISTINCT stock_id FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d
         WHERE iv.trade_date = d.t AND iv.indicator_code = 'ADJ_CLOSE'),
 g AS (SELECT c.id cid, c.indicator_code ind, c.operator op, c.literal_value v1, c.literal_value_2 v2
       FROM screen_condition c JOIN condition_group cg ON cg.id = c.group_id
@@ -183,12 +183,12 @@ p AS (SELECT g.cid, g.ind, u.stock_id,
           WHEN 'GTE' THEN iv.value >= g.v1 WHEN 'GT' THEN iv.value > g.v1
           WHEN 'BETWEEN' THEN iv.value >= g.v1 AND iv.value <= g.v2 END, false) pass
       FROM g CROSS JOIN uni u
-      LEFT JOIN indicator_value iv ON iv.stock_id = u.stock_id
+      LEFT JOIN (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv ON iv.stock_id = u.stock_id
         AND iv.indicator_code = g.ind AND iv.trade_date = (SELECT t FROM d)),
 win AS (SELECT stock_id FROM p GROUP BY stock_id HAVING count(*) FILTER (WHERE NOT pass) = 0),
 woc AS (SELECT stock_id FROM p WHERE ind <> 'EPS_CAGR_5Y' GROUP BY stock_id
         HAVING count(*) FILTER (WHERE NOT pass) = 0),
-m AS (SELECT iv.stock_id, iv.value v FROM indicator_value iv, d
+m AS (SELECT iv.stock_id, iv.value v FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d
       WHERE iv.trade_date = d.t AND iv.indicator_code = 'ACCRUAL_RATIO'),
 umed AS (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v) x FROM m),
 s AS (SELECT count(*) n, percentile_cont(0.5) WITHIN GROUP (ORDER BY v) med,

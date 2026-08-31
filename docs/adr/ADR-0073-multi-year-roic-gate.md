@@ -46,7 +46,7 @@ w AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='TURNOVER_60') tv,
         max(value) FILTER (WHERE indicator_code='ROIC_MIN_3Y') roic3,
         max(value) FILTER (WHERE indicator_code='ROIC_PRETAX') roic1
-      FROM indicator_value iv, d WHERE iv.trade_date = d.t GROUP BY 1),
+      FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d WHERE iv.trade_date = d.t GROUP BY 1),
 n AS (SELECT count(*) FILTER (WHERE roic1 IS NOT NULL) c1,
              count(*) FILTER (WHERE roic3 IS NOT NULL) c3,
              count(*) FILTER (WHERE roe3>=10 AND dr<=100 AND streak>=7

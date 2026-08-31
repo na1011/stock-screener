@@ -46,7 +46,7 @@ psql -d stock_screener -At -c "SELECT CASE
        || ' (n=' || count(*) || ')'
   ELSE '중앙값이 ' || round(percentile_cont(0.5) WITHIN GROUP (ORDER BY value)::numeric, 3)
        || '로 1에 가깝다 — 지수를 잘못 붙였거나 종목별 시장 분기가 빠졌다' END
-FROM indicator_value
+FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) ivkr
 WHERE indicator_code = 'BETA_104W'
   AND trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))"
 ```

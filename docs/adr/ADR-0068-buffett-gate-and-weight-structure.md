@@ -81,7 +81,7 @@ w AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='GROSS_MARGIN') gm,
         max(value) FILTER (WHERE indicator_code='MARKET_CAP') mc,
         max(value) FILTER (WHERE indicator_code='TURNOVER_60') tv
-      FROM indicator_value iv, d WHERE iv.trade_date = d.t GROUP BY 1),
+      FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d WHERE iv.trade_date = d.t GROUP BY 1),
 g AS (SELECT gm FROM w WHERE streak>=7 AND roe3>=10 AND dr<=100 AND roic>=10
         AND mc>=1000000000000 AND tv>=10000000000 AND gm IS NOT NULL)
 SELECT CASE
@@ -108,7 +108,7 @@ psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicato
 w AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='ROE_MIN_3Y') a,
         max(value) FILTER (WHERE indicator_code='ROIC_MIN_3Y') b
-      FROM indicator_value iv, d WHERE iv.trade_date = d.t GROUP BY 1),
+      FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d WHERE iv.trade_date = d.t GROUP BY 1),
 n AS (SELECT count(*) tot, count(*) FILTER (WHERE a>=10) na,
              count(*) FILTER (WHERE b>=10) nb,
              count(*) FILTER (WHERE a>=10 AND b>=10) nab FROM w)
