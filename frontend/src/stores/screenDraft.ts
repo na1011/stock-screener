@@ -337,6 +337,24 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
   }
 
   /** 처음부터 새로 만든다. */
+  /**
+   * 「전체」를 실행할 수 없는 상태에서 대상이 비어 있으면 하나를 고른다.
+   *
+   * 활성 대상의 통화가 둘 이상이면 서버가 「전체」 실행을 거절한다. 기본값이 `null`(전체)이라
+   * 고치지 않으면 **켠 직후 첫 화면이 4xx**다 — 사용자가 아무것도 안 했는데 오류부터 본다.
+   *
+   * 골라 주는 것이 `null`을 그대로 두는 것보다 낫다고 본 근거는, 이 선택이 **되돌릴 수 있고
+   * 화면에 그대로 보인다**는 것이다(설정 칩이 고른 대상을 적는다). 조용한 것은 아니다.
+   *
+   * MUST NOT: 사용자가 명시적으로 고른 대상을 덮지 않는다 — `null`일 때만 손댄다.
+   */
+  function ensureSelectableUniverse(allowsAll: boolean, firstCode: string | null): void {
+    if (allowsAll || universeCode.value !== null || firstCode === null) {
+      return
+    }
+    universeCode.value = firstCode
+  }
+
   function reset(): void {
     origin.value = { kind: 'custom' }
     conditions.value = []
@@ -464,6 +482,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     conditions,
     evaluationMode,
     universeCode,
+    ensureSelectableUniverse,
     asOf,
     dirty,
     editable,

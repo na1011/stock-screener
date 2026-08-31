@@ -56,6 +56,17 @@ export const useCatalogStore = defineStore('catalog', () => {
     return distinct.size === 1 ? ([...distinct][0] ?? null) : null
   }
 
+  /**
+   * 「전체」를 선택지로 제시해도 되는가.
+   *
+   * 활성 대상의 통화가 둘 이상이면 서버가 그 실행을 **거절한다** — 한 표에 두 통화가 섞이면
+   * 임계가 어느 쪽 기준인지 정해지지 않기 때문이다. 그때 「전체」를 그대로 두면 사용자는
+   * 고르고 나서야 4xx로 그것을 알게 된다. **고를 수 없는 것을 안 보이는 편이 낫다.**
+   *
+   * 목록이 아직 안 왔으면 `false`다 — 실행 가능한지 모르는 채로 제시하지 않는다.
+   */
+  const allowsAllUniverses = computed(() => currencyOf(null) !== null)
+
   async function ensureCatalog(): Promise<void> {
     if (catalogRequest.state.value === 'idle' || catalogRequest.state.value === 'error') {
       await catalogRequest.run()
@@ -82,6 +93,7 @@ export const useCatalogStore = defineStore('catalog', () => {
     byCode,
     grouped,
     currencyOf,
+    allowsAllUniverses,
     ensureCatalog,
     ensureUniverses,
   }

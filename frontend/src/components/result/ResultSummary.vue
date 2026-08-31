@@ -6,8 +6,9 @@ import type { ScreeningResponse } from '@/api/types'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
 import { populationNote } from '@/lib/population'
 import { screenTypeLabel, staleNotice, type StaleReason } from '@/lib/screen'
-import { ALL_UNIVERSES_LABEL, universeLabel } from '@/lib/universe'
+import { allUniversesLabel, universeLabel } from '@/lib/universe'
 import { formatCount, formatDate } from '@/lib/format'
+import { useCatalogStore } from '@/stores/catalog'
 
 /**
  * 결과의 전제를 드러내는 머리말.
@@ -33,6 +34,8 @@ const props = defineProps<{
   staleReason?: StaleReason
 }>()
 
+const catalog = useCatalogStore()
+
 const staleText = computed(() => staleNotice(props.staleReason ?? null))
 
 /** 서버가 일자를 정했는가. `asOfRequested`가 null이면 그렇다. */
@@ -44,7 +47,9 @@ const adjusted = computed(
 )
 
 const universeText = computed(() =>
-  props.result.universe === null ? ALL_UNIVERSES_LABEL : universeLabel(props.result.universe),
+  props.result.universe === null
+    ? allUniversesLabel(catalog.universes)
+    : universeLabel(props.result.universe),
 )
 
 /**

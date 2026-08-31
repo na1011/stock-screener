@@ -2,7 +2,7 @@
 import Button from 'primevue/button'
 import Popover from 'primevue/popover'
 import { useToast } from 'primevue/usetoast'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import { MAX_CONDITIONS } from '@/api/limits'
 import AsyncPanel from '@/components/AsyncPanel.vue'
@@ -13,7 +13,7 @@ import ScreenSettingsPopover from '@/components/condition/ScreenSettingsPopover.
 import { useFreshDraft } from '@/composables/useFreshDraft'
 import { disabledConditionNotice, incompleteConditionNotice } from '@/lib/conditionText'
 import { evaluationModeLabels } from '@/lib/evaluationMode'
-import { ALL_UNIVERSES_LABEL } from '@/lib/universe'
+import { allUniversesLabel } from '@/lib/universe'
 import { useCatalogStore } from '@/stores/catalog'
 import { FRESH_DRAFT_TITLE, useScreenDraftStore } from '@/stores/screenDraft'
 
@@ -107,14 +107,34 @@ const settingsLabel = computed(() => {
   const mode = evaluationModeLabels(draft.evaluationMode).short
   const universe =
     draft.universeCode === null
-      ? ALL_UNIVERSES_LABEL
+      ? allUniversesLabel(catalog.universes)
       : (catalog.universes.find((it) => it.code === draft.universeCode)?.name ?? draft.universeCode)
   return draft.asOf === null ? `${universe} · ${mode}` : `${universe} · ${mode} · ${draft.asOf}`
 })
 
 onMounted(() => {
   void catalog.ensureCatalog()
+  // 설정 팝오버를 열기 전에도 목록이 필요하다. 설정 칩이 대상 이름을 적고, 조건 칩이
+  // 그 대상의 통화로 임계에 단위를 붙인다 — 둘 다 팝오버를 열지 않아도 보이는 것이다.
+  void catalog.ensureUniverses()
 })
+
+/**
+ * 「전체」를 실행할 수 없는 상태이면 대상을 하나 고른다.
+ *
+ * 목록이 도착한 뒤라야 판정할 수 있어 `watch`다. 근거는 `ensureSelectableUniverse`에 있다.
+ */
+watch(
+  // `universeCode`도 함께 본다 — 저장된 전략을 불러오면 `loadFrom`이 그 값을 그대로 넣는데,
+  // 그것이 null이면(대상을 안 정한 전략) 다시 「전체」가 되어 같은 4xx로 돌아간다.
+  () => [catalog.allowsAllUniverses, draft.universeCode] as const,
+  () =>
+    draft.ensureSelectableUniverse(
+      catalog.allowsAllUniverses,
+      catalog.universes[0]?.code ?? null,
+    ),
+  { immediate: true },
+)
 
 /**
  * 칩을 눌렀을 때.

@@ -9,7 +9,7 @@ import FormField from '@/components/ui/FormField.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { evaluationModeOptions } from '@/lib/evaluationMode'
 import { parseIsoDate, toIsoDate } from '@/lib/format'
-import { ALL_UNIVERSES_LABEL, universeLabel } from '@/lib/universe'
+import { allUniversesLabel, universeLabel } from '@/lib/universe'
 import { useCatalogStore } from '@/stores/catalog'
 import { useScreenDraftStore } from '@/stores/screenDraft'
 
@@ -41,8 +41,16 @@ onMounted(() => {
  */
 const ALL_UNIVERSES = '__ALL__'
 
+/**
+ * 「전체」는 **실행할 수 있을 때만** 제시한다.
+ *
+ * 활성 대상의 통화가 둘 이상이면 서버가 그 실행을 거절하므로, 그대로 두면 사용자는 고르고
+ * 나서야 4xx로 그것을 안다. 고를 수 없는 것을 안 보이는 편이 낫다.
+ */
 const universeOptions = computed(() => [
-  { code: ALL_UNIVERSES, name: ALL_UNIVERSES_LABEL },
+  ...(catalog.allowsAllUniverses
+    ? [{ code: ALL_UNIVERSES, name: allUniversesLabel(catalog.universes) }]
+    : []),
   ...catalog.universes.map((u) => ({ code: u.code, name: universeLabel(u) })),
 ])
 
