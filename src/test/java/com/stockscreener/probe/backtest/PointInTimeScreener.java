@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -62,38 +63,66 @@ public class PointInTimeScreener {
      * @param included    통과(=포함)한 종목. 라이브와 같은 순서다
      * @param valuesByStock 종목 → 그날 계산된 지표 값. 진단 축이 분위 이동을 여기서 잰다
      * @param evaluated   판정을 시도한 종목 수. <b>통과 0의 원인을 가르는 데 이 수가 필요하다</b>
+     * @param resolvedConditions 그 대상의 통화로 해석된 조건. <b>호출부는 이것을 써야 한다</b> —
+     *                    원본을 다시 쓰면 {@code MarketLiteral}에서 던지거나, 던지지 않더라도
+     *                    임계를 문자열에서 긁게 되어 통화가 뒤바뀐다
      */
     public record Outcome(LocalDate asOf, List<ScreeningResult> included,
-                          Map<Long, Map<String, BigDecimal>> valuesByStock, int evaluated) {
+                          Map<Long, Map<String, BigDecimal>> valuesByStock, int evaluated,
+                          ConditionGroup resolvedConditions) {
     }
 
     /**
      * MUST: {@code asOf}는 {@code price_daily}에 있는 <b>거래일</b>이어야 한다. 휴장일을 주면
      * {@code computeAt}이 전 종목 빈 맵을 내고 필수 조건이 모두 판정불가가 되어 통과가 0이 되는데,
-     * <b>그것은 게이트가 아니라 날짜 탓이다.</b> 호출부가 {@link AsOfCalendar}로 고른다.
+     * <b>그것은 게이트가 아니라 날짜 탓이다.</b> 호출부가 {@link AsOfCalendar}로 <b>그 대상의
+     * 시장에서</b> 고른다.
      *
-     * @param universeCode 현재 이 유니버스에 편입된 종목으로 한정한다. {@code null}이면 활성 전체
+     * <p><b>모집단이 둘이고 일부러 다르다</b>(ADR-0108).
+     * <ul>
+     *   <li><b>값 계산·업종 백분위</b> — 활성 유니버스 편입 <b>전체</b>. 라이브
+     *       {@code SectorRelativeCalculator}가 그 모집단에서 {@code PARTITION BY
+     *       industry_group_key}로 매기므로, 대상 하나로 좁히면 동료 수와 {@code MIN_PEERS}
+     *       판정이 갈려 {@code AsOfRecomputeTest}의 점수 대조가 붉는다. 실측으로 활성 편입의
+     *       세분류 250개 중 <b>26개가 두 국내 유니버스에 걸쳐 있다.</b>
+     *   <li><b>판정</b> — 그 대상의 편입만. 한 결과에 두 시장을 섞지 않는다(ADR-0107).
+     * </ul>
+     * 시장이 섞일 걱정은 없다 — 업종 키에 체계 접두가 붙어({@code KSIC:}/{@code SIC:},
+     * ADR-0092) 두 시장이 같은 버킷에 못 들어간다.
+     *
+     * <p><b>조건을 그 대상의 통화로 해석한 뒤에 판정한다.</b> 안 하면
+     * {@code IndicatorCondition.evaluate}가 {@code MarketLiteral}에 던진다 — 실제로 이 하네스
+     * 셋이 전부 그렇게 죽어 있었다(2026-09-01 실측: 6개 중 3개 실패).
+     *
+     * @param target 조회 대상. 시장·통화·모집단이 여기서 나온다
+     * @throws com.stockscreener.screening.MarketThresholdMissingException
+     *         그 통화의 임계가 없는 조건이 있다. <b>조건 단위 판정불가로 접지 않는다</b>(ADR-0106)
      */
     public Outcome screen(LocalDate asOf, ConditionGroup group, EvaluationMode mode,
-                          String universeCode) {
-        List<Long> stockIds = selectStockIds(universeCode);
+                          ScreeningTargets.Target target) {
+        ConditionGroup resolved = group.resolveFor(target.currency());
+        List<Long> populationIds = selectSectorPopulationIds(target.currency());
+        Set<Long> targetIds = new LinkedHashSet<>(selectStockIds(target.code()));
 
         // MUST: 종목 루프 밖에서 한 번 읽는다. 안에서 읽으면 종목 수만큼 같은 쿼리를 던진다.
         Map<String, NavigableMap<LocalDate, BigDecimal>> indexes = runner.marketIndexesFor(asOf);
 
         Map<Long, Map<String, BigDecimal>> valuesByStock = new LinkedHashMap<>();
-        for (Long stockId : stockIds) {
+        for (Long stockId : populationIds) {
             valuesByStock.put(stockId,
                     new LinkedHashMap<>(runner.computeAt(stockId, asOf, indexes,
                             FinancialVisibility.KNOWN_ON)));
         }
 
-        addSectorPercentiles(valuesByStock, group.referencedIndicatorCodes());
+        addSectorPercentiles(valuesByStock, resolved.referencedIndicatorCodes());
 
+        // 판정과 반환은 대상으로 좁힌다 — 호출부가 「값이 나온 종목 수」를 대상 기준으로 읽는다.
+        Map<Long, Map<String, BigDecimal>> ofTarget = new LinkedHashMap<>();
         List<ScreeningResult> included = new ArrayList<>();
-        for (Long stockId : stockIds) {
-            ScreeningResult result = evaluator.evaluate(
-                    stockId, group, mode, valuesByStock.getOrDefault(stockId, Map.of()));
+        for (Long stockId : targetIds) {
+            Map<String, BigDecimal> values = valuesByStock.getOrDefault(stockId, Map.of());
+            ofTarget.put(stockId, values);
+            ScreeningResult result = evaluator.evaluate(stockId, resolved, mode, values);
             if (result.included()) {
                 included.add(result);
             }
@@ -102,22 +131,51 @@ public class PointInTimeScreener {
             included.sort(Comparator.comparing(ScreeningResult::score).reversed()
                     .thenComparing(ScreeningResult::stockId));
         }
-        return new Outcome(asOf, included, valuesByStock, stockIds.size());
+        return new Outcome(asOf, included, ofTarget, targetIds.size(), resolved);
     }
 
     /**
-     * 라이브의 {@code selectStockIds}와 같은 술어다 — 활성 종목, 선택적 유니버스 한정,
-     * {@code stock.id} 오름차순.
+     * 값 계산·업종 백분위의 모집단 — <b>활성 유니버스에 편입됐고 통화가 같은 종목.</b>
+     *
+     * <p>라이브 {@code ScreeningRepository.inAnyActiveUniverse}·
+     * {@code SectorRelativeCalculator.MEMBER}와 <b>같은 술어에 통화 한정을 더한 것</b>이다.
+     * {@code universe}를 조인하는 것이 요점이다 — 편입 행은 유니버스를 비활성으로 내려도
+     * 남으므로, {@code universe_membership}만 보면 <b>꺼 둔 유니버스의 종목이 계속 걸린다.</b>
+     *
+     * <p><b>통화로 좁혀도 업종 백분위가 라이브와 같은 값이다.</b> 업종 키에 체계 접두가
+     * 붙어(ADR-0092) 파티션이 통화를 넘지 못하기 때문이다 — 실측으로 {@code KSIC:}가 전부
+     * KRW, {@code SIC:}가 전부 USD다. 라이브 모집단 1,350 중 KRW 350·USD 1,000이고,
+     * 어느 파티션도 둘에 걸치지 않는다.
+     * <b>그 정렬이 깨지면 {@code AsOfRecomputeTest.assertScoresMatch}가 붉는다</b> —
+     * 그 단언이 이 좁히기의 펜스다. 가정으로 두지 않고 검사에 걸어 둔 이유가 그것이다.
+     *
+     * <p><b>왜 좁히는가</b>: 안 좁히면 대상 셋을 도는 데 {@code computeAt}이 56,700회가 되어
+     * 실측 <b>25분에도 안 끝났다.</b> 좁히면 18,600회다. 진단을 돌릴 수 없으면 그 진단은 없는
+     * 것과 같다.
+     */
+    private List<Long> selectSectorPopulationIds(String currencyCode) {
+        return jdbcTemplate.queryForList("""
+                SELECT s.id FROM stock s
+                JOIN market mk ON mk.code = s.market_code
+                WHERE s.is_active AND mk.currency_code = ? AND EXISTS (
+                    SELECT 1 FROM universe_membership m
+                    JOIN universe u ON u.code = m.universe_code AND u.is_active
+                    WHERE m.stock_id = s.id AND m.effective_to IS NULL)
+                ORDER BY s.id
+                """, Long.class, currencyCode);
+    }
+
+    /**
+     * 그 유니버스에 <b>지금</b> 편입된 종목. 라이브의 {@code currentlyIn}과 같은 술어다.
      *
      * <p>{@code effective_to IS NULL}이 <b>오늘의</b> 편입이라는 것이 이 하네스가 안고 가는
      * 생존 편향이며, 그 크기는 탐침이 따로 잰다. 여기서 {@code asOf}로 바꾸면 라이브와 달라져
      * 회귀 검사가 성립하지 않고, 무엇보다 <b>DB에 그 이력이 없다</b>(2026-08-05부터다).
+     *
+     * <p><b>{@code null} 갈래를 두지 않는다</b>(ADR-0108) — 「전체」는 통화가 갈려 임계를
+     * 해석할 수 없다. 대상은 {@link ScreeningTargets}가 정한다.
      */
     private List<Long> selectStockIds(String universeCode) {
-        if (universeCode == null) {
-            return jdbcTemplate.queryForList(
-                    "SELECT id FROM stock WHERE is_active ORDER BY id", Long.class);
-        }
         return jdbcTemplate.queryForList("""
                 SELECT s.id FROM stock s
                 WHERE s.is_active AND EXISTS (

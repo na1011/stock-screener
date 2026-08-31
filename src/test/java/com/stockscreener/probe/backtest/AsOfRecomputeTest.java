@@ -1,5 +1,6 @@
 package com.stockscreener.probe.backtest;
 
+import com.stockscreener.screening.ConditionGroup;
 import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.screening.query.ScreeningRepository;
 import com.stockscreener.screening.preset.PresetCatalog;
@@ -63,21 +64,60 @@ class AsOfRecomputeTest {
     @Autowired
     private ScreeningRepository screeningRepository;
 
-    @Test
-    @DisplayName("기준일=최신 거래일의 통과 집합이 저장된 지표로 낸 것과 같다")
-    void recomputedSetMatchesStoredIndicatorSet() {
-        LocalDate asOf = calendar.latestTradingDay();
-        ScreenPreset preset = presetByCode(PresetCatalog.BUFFETT_QUALITY);
+    @Autowired
+    private ScreeningTargets targets;
 
-        // 프리셋이 자기 판정 방식과 유니버스를 들고 있다. 여기서 다시 정하면 화면과 갈린다.
+    @Test
+    @DisplayName("조회 대상마다 기준일=최신 거래일의 통과 집합이 저장된 지표로 낸 것과 같다")
+    void recomputedSetMatchesStoredIndicatorSet() {
+        ScreenPreset preset = presetByCode(PresetCatalog.BUFFETT_QUALITY);
+        List<ScreeningTargets.Target> all = targets.all();
+        assertThat(all).as("조회 대상이 하나도 없다").isNotEmpty();
+
+        int compared = 0;
+        for (ScreeningTargets.Target target : all) {
+            compared += compareOne(preset, target) ? 1 : 0;
+        }
+        assertThat(compared)
+                .as("어느 조회 대상에서도 대조하지 못했다 — 이 검사는 아무것도 확인하지 않았다")
+                .isPositive();
+    }
+
+    /**
+     * 한 조회 대상의 대조.
+     *
+     * <p><b>기준일을 {@code price_daily}가 아니라 그 시장의 지표 달력에서 잡는다</b>(ADR-0108).
+     * 대조군이 저장된 {@code indicator_value}를 읽으므로, 배치가 밀려 봉만 하루 더 있으면
+     * 라이브 쪽이 통째로 비어 <b>대조가 아니라 「대조군 없음」</b>이 된다.
+     *
+     * @return 실제로 대조했는가
+     */
+    private boolean compareOne(ScreenPreset preset, ScreeningTargets.Target target) {
+        if (target.asOf() == null) {
+            System.out.printf("%n===== [%s] 지표 달력이 비어 있다 — 라이브에서는 503이다 =====%n",
+                    target.code());
+            return false;
+        }
+        ConditionGroup resolved;
+        try {
+            resolved = preset.conditions().resolveFor(target.currency());
+        } catch (com.stockscreener.screening.MarketThresholdMissingException e) {
+            System.out.printf("%n===== [%s] 실행 거절 — %s 임계 없음: %s =====%n",
+                    target.code(), e.currencyCode(), String.join(" ", e.indicatorCodes()));
+            return false;
+        }
+
+        LocalDate asOf = target.asOf();
+        // MUST: 양쪽에 **같은 해석본**을 넘긴다. 한쪽만 해석하면 임계가 갈린 것을
+        // 「시점 경로가 라이브와 다르다」로 읽게 된다 — 원인이 정반대다.
         PointInTimeScreener.Outcome recomputed = screener.screen(
-                asOf, preset.conditions(), preset.mode(), preset.universeCode());
+                asOf, preset.conditions(), preset.mode(), target);
         List<ScreeningResult> storedResults = screeningRepository.screen(
-                preset.conditions(), preset.mode(), asOf, preset.universeCode());
+                resolved, preset.mode(), asOf, target.code());
         Set<Long> fromRecompute = idsOf(recomputed.included());
         Set<Long> fromStored = idsOf(storedResults);
 
-        System.out.printf("%n===== as-of 재계산 회귀 (%s) =====%n", asOf);
+        System.out.printf("%n===== as-of 재계산 회귀 (%s · %s) =====%n", target.code(), asOf);
         System.out.printf("판정 시도 %d종목%n", recomputed.evaluated());
         System.out.printf("재계산 통과 %d · 저장 지표 통과 %d%n",
                 fromRecompute.size(), fromStored.size());
@@ -93,17 +133,19 @@ class AsOfRecomputeTest {
 
         // 0 == 0으로 초록이 되는 것을 막는다. 그 상태는 "경로가 같다"가 아니라 "못 쟀다"이다.
         assertThat(recomputed.evaluated())
-                .as("판정 대상이 0이면 이 검사는 아무것도 확인하지 않는다")
+                .as("%s: 판정 대상이 0이면 이 검사는 아무것도 확인하지 않는다", target.code())
                 .isPositive();
         assertThat(fromStored)
-                .as("저장 지표로도 통과가 0이면 대조군이 없다 — 최신 거래일에 지표가 채워져 있는지 본다")
+                .as("%s: 저장 지표로도 통과가 0이면 대조군이 없다 — 최신 거래일에 지표가"
+                        + " 채워져 있는지 본다", target.code())
                 .isNotEmpty();
         assertThat(fromRecompute)
-                .as("기준일이 최신 거래일이면 KNOWN_ON과 LATEST가 같은 답을 내야 한다."
-                        + " 다르면 시점 경로가 라이브 경로와 갈린 것이다")
+                .as("%s: 기준일이 최신 거래일이면 KNOWN_ON과 LATEST가 같은 답을 내야 한다."
+                        + " 다르면 시점 경로가 라이브 경로와 갈린 것이다", target.code())
                 .isEqualTo(fromStored);
 
         assertScoresMatch(recomputed.included(), storedResults);
+        return true;
     }
 
     /**

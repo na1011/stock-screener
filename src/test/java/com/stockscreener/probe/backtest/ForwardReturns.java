@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -20,14 +21,21 @@ import java.util.Set;
  * 실제로 끊겨 있어 −81%~+328%의 가짜 수익률을 낸다. 그러나 <b>7종목 중 셋은 백테스트 창 밖
  * 사건</b>(2020-08·2021-01·2021-11)이라 창 안에서는 멀쩡하다 — 종목 통째로 빼면 표본이
  * 조용히 좁아진다.
+ *
+ * <p><b>종료일을 시장으로 좁힌다</b>(ADR-0108). {@link AsOfCalendar#onOrBefore}와 같은 질의라
+ * 같은 함정이 있다 — 미국 전용 거래일(실측 176일)이 종료일로 잡히면 아래 자기조인
+ * ({@code e.trade_date = ?})이 <b>국내 종목을 전부 떨어뜨려</b> {@code returns}가 조용히 빈다.
+ * 「수익률 있는 종목 0」으로만 드러나고 어떤 에러도 나지 않는다.
  */
 @Component
 public class ForwardReturns {
 
     private final JdbcTemplate jdbcTemplate;
+    private final AsOfCalendar calendar;
 
-    public ForwardReturns(JdbcTemplate jdbcTemplate) {
+    public ForwardReturns(JdbcTemplate jdbcTemplate, AsOfCalendar calendar) {
         this.jdbcTemplate = jdbcTemplate;
+        this.calendar = calendar;
     }
 
     /**
@@ -43,12 +51,16 @@ public class ForwardReturns {
     /**
      * {@code asOf}부터 {@code months}개월 뒤까지.
      *
-     * <p>종료일은 <b>그 날짜 이하의 마지막 거래일</b>이다. 이후로 잡으면 그만큼 미래를 본다.
+     * <p>종료일은 <b>그 시장에서</b> 그 날짜 이하의 마지막 거래일이다. 이후로 잡으면 그만큼
+     * 미래를 본다.
+     *
+     * @param marketCodes 종료일을 고를 시장. <b>호출부가 반드시 고른다</b> — 위 javadoc 참조
      */
-    public Window measure(LocalDate asOf, int months) {
-        LocalDate end = jdbcTemplate.queryForObject(
-                "SELECT max(trade_date) FROM price_daily WHERE trade_date <= ?",
-                LocalDate.class, asOf.plusMonths(months));
+    public Window measure(LocalDate asOf, int months, Collection<String> marketCodes) {
+        LocalDate end = calendar.onOrBefore(asOf.plusMonths(months), marketCodes);
+        if (end == null) {
+            return new Window(asOf, null, Map.of(), Set.of());
+        }
 
         Map<Long, Double> returns = new HashMap<>();
         jdbcTemplate.query("""

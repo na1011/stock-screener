@@ -1,5 +1,7 @@
 package com.stockscreener.probe.backtest;
 
+import com.stockscreener.screening.ConditionGroup;
+import com.stockscreener.screening.ConditionOperand;
 import com.stockscreener.screening.ConditionOutcome;
 import com.stockscreener.screening.EvaluationMode;
 import com.stockscreener.screening.IndicatorCondition;
@@ -93,6 +95,9 @@ class ConditionReturnTest {
     @Autowired
     private List<ScreenPreset> presets;
 
+    @Autowired
+    private ScreeningTargets targets;
+
     /** 분위 수. 5분위면 시점당 한 칸에 60~70종목이라 평균이 흔들리지 않는다. */
     private static final int QUANTILES = 5;
 
@@ -102,15 +107,55 @@ class ConditionReturnTest {
     }
 
     @Test
-    @DisplayName("조건별 사후 6개월 수익률 차를 인샘플·아웃오브샘플로 나눠 낸다")
+    @DisplayName("조건별 사후 6개월 수익률 차를 조회 대상마다 인샘플·아웃오브샘플로 나눠 낸다")
     void measureConditionReturns() {
         ScreenPreset preset = presets.stream()
                 .filter(p -> p.code().equals(PresetCatalog.BUFFETT_QUALITY))
                 .findFirst().orElseThrow();
 
-        List<IndicatorCondition> conditions = preset.conditions().conditions().stream()
+        List<ScreeningTargets.Target> all = targets.all();
+        assertThat(all).as("조회 대상이 하나도 없다").isNotEmpty();
+        boolean measuredAny = false;
+        for (ScreeningTargets.Target target : all) {
+            measuredAny |= measureOne(preset, target);
+        }
+        assertThat(measuredAny)
+                .as("어느 조회 대상에서도 조건을 재지 못했다 — '효과 없음'이 아니라 '못 쟀다'이다")
+                .isTrue();
+    }
+
+    /**
+     * 한 조회 대상의 표. <b>사전등록한 시점 여덟을 그대로 쓰되, 그 시장의 재무 적재 범위보다
+     * 앞선 시점은 「잴 것이 없었다」로 건너뛴다</b>(ADR-0108) — 사전등록을 고치는 것이 아니라
+     * 못 재는 구간을 못 잰다고 적는 것이다. 실측으로 미국 재무는 FY2018부터라
+     * 앞쪽 시점에서 다년 조건이 전 종목 판정불가다.
+     *
+     * @return 한 조건이라도 쟀는가
+     */
+    private boolean measureOne(ScreenPreset preset, ScreeningTargets.Target target) {
+        if (target.asOf() == null) {
+            System.out.printf("%n===== [%s] 지표 달력이 비어 있다 =====%n", target.code());
+            return false;
+        }
+        ConditionGroup resolvedGroup;
+        try {
+            resolvedGroup = preset.conditions().resolveFor(target.currency());
+        } catch (com.stockscreener.screening.MarketThresholdMissingException e) {
+            System.out.printf("%n===== [%s] 실행 거절 — %s 임계 없음: %s =====%n",
+                    target.code(), e.currencyCode(), String.join(" ", e.indicatorCodes()));
+            return false;
+        }
+
+        List<IndicatorCondition> conditions = resolvedGroup.flattenConditions().stream()
                 .filter(c -> !c.indicatorCode().equals(NOT_MEASURABLE))
                 .toList();
+        Integer earliestFy = calendar.earliestFiscalYear(target.markets());
+        LocalDate floor = HarnessWindow.floorFor(earliestFy, resolvedGroup);
+        if (floor == null) {
+            System.out.printf("%n===== [%s] 잴 것이 없었다 — 그 시장에 재무가 한 행도 없다 =====%n",
+                    target.code());
+            return false;
+        }
 
         Map<String, List<Observation>> byCondition = new LinkedHashMap<>();
         // 지표 코드 → 분위별 수익률(OOS 시점만 모은다). 단조성은 임계와 무관한 물음이라
@@ -118,16 +163,26 @@ class ConditionReturnTest {
         Map<String, List<List<Double>>> quantileReturns = new LinkedHashMap<>();
         int totalExcluded = 0;
 
-        System.out.printf("%n===== P17 조건 단위 수익률 (%s) =====%n", preset.code());
+        System.out.printf("%n===== P17 조건 단위 수익률 (%s · %s · %s) =====%n",
+                preset.code(), target.code(), target.currency());
         System.out.println("MUST NOT: 이 표로 임계값을 조정하지 않는다. 용도는 다음 설계의 사전정보다.");
-        System.out.printf("사전등록 검출 가능 효과 %.1f%%p/6개월(2σ) · OOS 경계 %s%n%n",
-                DETECTABLE_EFFECT_PP, OOS_BOUNDARY);
+        System.out.printf("사전등록 검출 가능 효과 %.1f%%p/6개월(2σ) · OOS 경계 %s · 시점 하한 %s%n%n",
+                DETECTABLE_EFFECT_PP, OOS_BOUNDARY, floor);
 
         for (LocalDate anchor : ANCHORS) {
-            LocalDate asOf = calendar.onOrBefore(anchor);
+            if (anchor.isBefore(floor)) {
+                System.out.printf("%s  잴 것이 없었다 — 그 시장 재무가 FY%d부터라 다년 조건이"
+                        + " 전 종목 판정불가다%n", anchor, earliestFy);
+                continue;
+            }
+            LocalDate asOf = calendar.onOrBefore(anchor, target.markets());
+            if (asOf == null) {
+                System.out.printf("%s  잴 것이 없었다 — 그 시장에 그 이전 거래일이 없다%n", anchor);
+                continue;
+            }
             PointInTimeScreener.Outcome outcome = screener.screen(
-                    asOf, preset.conditions(), EvaluationMode.SCORING, preset.universeCode());
-            ForwardReturns.Window window = forwardReturns.measure(asOf, 6);
+                    asOf, preset.conditions(), EvaluationMode.SCORING, target);
+            ForwardReturns.Window window = forwardReturns.measure(asOf, 6, target.markets());
             totalExcluded += window.excluded().size();
 
             System.out.printf("%s → %s  값이 나온 종목 %d · 수익률 있는 종목 %d · 기업행위 제외 %d%n",
@@ -172,9 +227,11 @@ class ConditionReturnTest {
             }
         }
 
-        assertThat(byCondition)
-                .as("조건을 하나도 재지 못했으면 이 측정은 '효과 없음'이 아니라 '못 쟀다'이다")
-                .isNotEmpty();
+        if (byCondition.isEmpty()) {
+            System.out.printf("[%s] 잰 조건이 없다 — 시점 전부가 하한 아래이거나 수익률이 비었다.%n",
+                    target.code());
+            return false;
+        }
 
         report("필수 게이트", conditions.stream().filter(IndicatorCondition::required).toList(),
                 byCondition);
@@ -189,6 +246,7 @@ class ConditionReturnTest {
                 + " 작은 양의 효과는 원리적으로 가려진다.");
         System.out.println("MUST: 수익성 게이트(ROE_MIN_3Y·ROIC_MIN_3Y·PROFIT_STREAK_Y)가 좋게"
                 + " 나왔다면 ADR-0061의 재현율 5.0%를 사전 확률로 두고 그것부터 의심한다.");
+        return true;
     }
 
     /**
@@ -324,11 +382,17 @@ class ConditionReturnTest {
      *
      * <p>{@code operand().toString()}을 그대로 쓰지 않는다 — {@code Literal[value=10,
      * upperBound=null]}로 나와 표가 읽히지 않는다. 표가 이 측정의 산출물이다.
+     *
+     * <p><b>정규식으로 긁지 않는다</b>(ADR-0108). 여기 오는 조건은 이미 그 대상의 통화로
+     * 해석된 {@code Literal}이고, 해석 전 {@code MarketLiteral}을 긁으면 {@code Map.copyOf}가
+     * 순서를 지워 <b>실행마다 다른 통화의 임계</b>가 표에 앉는다.
      */
     private static String key(IndicatorCondition condition) {
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("value=([^,\\]]+)")
-                .matcher(String.valueOf(condition.operand()));
-        String threshold = m.find() ? m.group(1) : String.valueOf(condition.operand());
+        String threshold = condition.operand() instanceof ConditionOperand.Literal literal
+                && literal.value() != null
+                ? literal.value().toPlainString()
+                        + (literal.upperBound() == null ? "" : "~" + literal.upperBound().toPlainString())
+                : String.valueOf(condition.operand());
         return "%s %s %s".formatted(condition.indicatorCode(),
                 switch (condition.operator()) {
                     case GTE -> ">=";

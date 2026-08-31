@@ -62,6 +62,10 @@ class PresetAcrossUniversesTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    /** 대상 목록의 정본. <b>사본을 만들지 않는다</b> — 갈리면 하네스마다 다른 모집단을 본다. */
+    @Autowired
+    private ScreeningTargets screeningTargets;
+
     /**
      * 돌릴 전략 하나. <b>프리셋과 저장된 화면을 같은 자리에서 본다.</b>
      *
@@ -71,27 +75,10 @@ class PresetAcrossUniversesTest {
     private record Strategy(String label, EvaluationMode mode, ConditionGroup conditions) {
     }
 
-    /** 화면의 조회 대상 콤보와 <b>같은 술어</b>다 — 활성이고 편입이 있는 것. */
-    private record Target(String code, String name, String currency, LocalDate asOf, int members) {
-    }
-
     @Test
     @DisplayName("활성 프리셋이 모든 조회 대상에서 실행된다 — 통과 수를 표로 낸다")
     void everyPresetRunsInEveryUniverse() {
-        List<Target> targets = jdbcTemplate.query("""
-                SELECT u.code, u.name, mk.currency_code,
-                       (SELECT max(d.trade_date) FROM indicator_trade_date d
-                         WHERE d.market_code = u.market_code) AS as_of,
-                       count(m.stock_id) AS members
-                FROM universe u
-                JOIN market mk ON mk.code = u.market_code
-                JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL
-                WHERE u.is_active
-                GROUP BY u.code, u.name, mk.currency_code, u.market_code
-                ORDER BY u.code
-                """, (rs, n) -> new Target(rs.getString("code"), rs.getString("name"),
-                rs.getString("currency_code"), rs.getObject("as_of", LocalDate.class),
-                rs.getInt("members")));
+        List<ScreeningTargets.Target> targets = screeningTargets.all();
 
         assertThat(targets)
                 .as("조회 대상이 하나도 없다 — 유니버스가 비었거나 편입이 없다")
@@ -100,7 +87,7 @@ class PresetAcrossUniversesTest {
         List<String> unrunnable = new ArrayList<>();
         StringBuilder table = new StringBuilder("\n프리셋 × 조회 대상 — 통과 수\n");
 
-        for (Target target : targets) {
+        for (ScreeningTargets.Target target : targets) {
             table.append("\n[%s] %s · %s · %s · 편입 %d\n"
                     .formatted(target.code(), target.name(), target.currency(),
                             target.asOf(), target.members()));
