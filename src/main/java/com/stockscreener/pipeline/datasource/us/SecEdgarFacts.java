@@ -464,13 +464,14 @@ final class SecEdgarFacts {
             // 지운다. 실측에서 한 기간을 보고서 112개가 다시 실었고 값이 실제로 달라진 것은
             // 5개뿐이었다 — 나머지 107개가 전부 가짜 정정이 될 뻔한 자리다.
             //
-            // 채워 넣지는 않는다. 뒤 보고서가 값을 「더하는」 것은 정정이 아니라 보정이고,
-            // 이 잡은 APPEND_ONLY라 보정 경로가 없다(FinancialWriter.WriteMode).
-            if (baseline != null && !conflicts(baseline, values)) {
+            // 그리고 **앞 판의 값을 이어받는다**(carryForward). 그러지 않으면 뒤 판이 안 실은
+            // 컬럼이 null로 저장되어, 정정 하나가 그 기간의 손익을 통째로 지운다.
+            Map<SecEdgarColumn, BigDecimal> carried = carryForward(baseline, values);
+            if (baseline != null && !conflicts(baseline, carried)) {
                 continue;
             }
-            baseline = values;
-            out.add(toReport(label, window, reporter, currency, values));
+            baseline = carried;
+            out.add(toReport(label, window, reporter, currency, carried));
         }
         return out;
     }
@@ -528,6 +529,43 @@ final class SecEdgarFacts {
             }
         }
         return null;
+    }
+
+    /**
+     * 앞 판이 낸 값을 이어받는다 — <b>뒤 판이 안 실은 컬럼을 null로 덮지 않는다.</b>
+     *
+     * <p><b>실측(AAON FY2022)</b>: 10-K(2023-02-27)가 매출 888.8M · 영업이익 126.8M을 냈는데,
+     * 8개월 뒤 10-Q(2023-11-06)가 <b>비교 재무상태표만</b> 싣고 {@code retained_earnings}를
+     * 461,765,000 → 461,657,000으로 정정했다. 그 <b>한 컬럼</b> 때문에 판이 새로 나갔고
+     * 손익이 통째로 NULL인 행이 {@code is_latest}가 됐다. {@code US_TOP1000}의 FY 6,568행에서
+     * 그렇게 사라진 것이 <b>영업이익 373 · 매출 505 · 총자산 543</b>이다.
+     *
+     * <p><b>MUST: 라벨 하나 안에서만 겹친다.</b> 이 메서드는 {@code revisionsOf}가 한 기간의
+     * 판들을 훑는 루프 안에서만 불린다 — 기간을 넘어 겹치면 낡은 해의 값이 번진다.
+     *
+     * <p><b>MUST: {@code empty} 판정은 겹치기 전 값으로 한다.</b> 겹친 뒤에 보면 그 기간을
+     * 아무것도 보고하지 않은 판이 <b>상속만으로 「보고자」</b>가 된다.
+     *
+     * <p><b>정정 판정이 헐거워지지 않는다 — 오히려 촘촘해진다.</b> {@link #conflicts}는 양쪽 다
+     * 값이 있는 컬럼만 보므로, 이어받은 컬럼은 {@code baseline}과 같아져 <b>차이를 만들지
+     * 않는다.</b> 다만 {@code baseline}의 non-null이 누적되므로 <b>비교 대상이 늘고</b>, 그만큼
+     * 정정으로 판정되는 경우가 <b>늘거나 같다.</b> 가짜 정정 접기(실측 112 중 107)가 그대로인지는
+     * <b>논증이 아니라 측정</b>이며 {@code SecEdgarLiveTest}의 멱등 검사가 그것을 본다.
+     */
+    private static Map<SecEdgarColumn, BigDecimal> carryForward(
+            Map<SecEdgarColumn, BigDecimal> baseline, Map<SecEdgarColumn, BigDecimal> values) {
+        if (baseline == null) {
+            return values;
+        }
+        Map<SecEdgarColumn, BigDecimal> merged = new EnumMap<>(SecEdgarColumn.class);
+        merged.putAll(baseline);
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            BigDecimal value = values.get(column);
+            if (value != null) {
+                merged.put(column, value);
+            }
+        }
+        return merged;
     }
 
     /** 둘 다 값이 있는 컬럼 중 하나라도 다른가. 한쪽이 null인 것은 다름이 아니다. */

@@ -233,6 +233,36 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("뒤 판이 한 컬럼만 정정하고 나머지를 안 실으면 앞 판의 값이 살아남는다")
+    void laterFilingDoesNotEraseWhatEarlierFilingReported() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-revision-drops-columns.json"));
+
+        // 실측(AAON FY2022)이 이 모양이다. 10-K가 손익을 냈고, 8개월 뒤 10-Q가 비교
+        // 재무상태표만 실으면서 retained_earnings를 정정했다. 그 한 컬럼 때문에 판이
+        // 새로 나갔고 손익이 통째로 NULL인 행이 is_latest가 됐다.
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+
+        List<RawFinancialReport> fy = reports.stream()
+                .filter(r -> "FY".equals(r.fiscalPeriod())).toList();
+        assertThat(fy)
+                .as("정정이 실제로 났다 — retained_earnings가 달라졌으므로 판이 둘이어야 한다")
+                .hasSize(2);
+
+        RawFinancialReport later = fy.get(fy.size() - 1);
+        assertThat(later.publishedAt()).isEqualTo(LocalDate.of(2024, 11, 6));
+        assertThat(later.retainedEarnings())
+                .as("정정된 값이 이긴다 — 이어받기가 진짜 정정을 덮으면 안 된다")
+                .isEqualByComparingTo("461657000");
+        assertThat(later.revenue())
+                .as("뒤 판이 안 실은 컬럼은 앞 판에서 이어받는다. 이 단언이 이 시험의 전부다")
+                .isEqualByComparingTo("888788000");
+        assertThat(later.operatingIncome())
+                .as("영업이익도 같다 — US_TOP1000에서 373행이 이렇게 사라졌다")
+                .isEqualByComparingTo("126761000");
+    }
+
+    @Test
     @DisplayName("매핑 파일에 없는 티커는 NOT_FOUND다 — 조용한 0건이 아니다")
     void unknownTickerIsNotFound() {
         enqueue(200, fixture("tickers.json"));
