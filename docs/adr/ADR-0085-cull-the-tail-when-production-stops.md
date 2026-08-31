@@ -96,8 +96,13 @@ psql -d stock_screener -At -c "WITH anchored AS (SELECT v.stock_id, v.trade_date
 하나다 — 늘면 `metric_key`와 분모를 여기 함께 더한다.
 
 ```premise 최신 거래일에 표본 미달인데 남은 업종 상대값이 없다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_value WHERE indicator_code LIKE '%\_SECTOR\_N'), bad AS (SELECT n.stock_id, n.indicator_code FROM indicator_value n, d WHERE n.trade_date = d.t AND n.indicator_code LIKE '%\_SECTOR\_N' AND n.value < 5) SELECT CASE WHEN (SELECT t FROM d) IS NULL THEN '잴 것이 없었다 — 업종 표본 수 행이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 최신 거래일에 표본 미달로 남은 업종 상대값이 없다' ELSE (SELECT count(*)::text FROM bad) || '행이 표본 5 미만인데 남아 있다 — 여집합 삭제가 안 도는 것이다(ADR-0085)' END"
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')), bad AS (SELECT n.stock_id, n.indicator_code FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) n, d WHERE n.trade_date = d.t AND n.indicator_code LIKE '%\_SECTOR\_N' AND n.value < 5) SELECT CASE WHEN (SELECT t FROM d) IS NULL THEN '잴 것이 없었다 — 업종 표본 수 행이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 최신 거래일에 표본 미달로 남은 업종 상대값이 없다' ELSE (SELECT count(*)::text FROM bad) || '행이 표본 5 미만인데 남아 있다 — 여집합 삭제가 안 도는 것이다(ADR-0085)' END"
 ```
+
+**이 전제는 국내로 좁혀져 있다.** 재는 축 자체는 시장에 무관하지만 미국 지표가 아직
+0행이라 **미국 쪽을 오늘 검증할 수 없어** 넓히지 않았다 — 못 재는 보호막을 보증하지
+않으려는 것이다. **여는 조건은 미국 지표 백필**이고, 그때 시장별 최신일로 넓힌다.
+
 
 **최신 거래일만 묻는다.** 업종 상대값은 **돌린 날짜에만** 나므로(`batch-load` skill), 과거 일자에는
 그날의 모집단으로 쓴 값이 남아 있는 것이 정상이다. 전 구간을 물으면 그것이 매 세션 거짓 발견이 된다.

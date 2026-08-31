@@ -112,8 +112,13 @@ null 값을 거부하고, `indicator_value`에 사유 컬럼이 없으며, `calc
 ```
 
 ```premise 적자 종목의 PER 부재가 화면에서 설명된다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_value), x AS (SELECT s.id, max(iv.value) FILTER (WHERE iv.indicator_code='PER') per, max(iv.value) FILTER (WHERE iv.indicator_code='EPS_TTM') eps FROM stock s JOIN universe_membership m ON m.stock_id=s.id AND m.effective_to IS NULL JOIN universe u ON u.code=m.universe_code AND u.is_active LEFT JOIN indicator_value iv ON iv.stock_id=s.id AND iv.trade_date=(SELECT t FROM d), d GROUP BY s.id) SELECT CASE WHEN count(*) FILTER (WHERE eps IS NOT NULL) = 0 THEN '잴 것이 없었다 — EPS_TTM이 하나도 없다(백필 미실행)' WHEN count(*) FILTER (WHERE per IS NULL AND eps > 0) > 0 THEN 'PER이 없는데 EPS가 양수인 종목이 ' || count(*) FILTER (WHERE per IS NULL AND eps > 0) || ' — 적자 규칙이 그 종목에 거짓 사유를 붙인다' ELSE 'OK 적자로 설명되는 종목 ' || count(*) FILTER (WHERE per IS NULL AND eps <= 0) || ', 설명 못 하는 것 ' || count(*) FILTER (WHERE per IS NULL AND eps IS NULL) || '(재무 부족)' END FROM x"
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')), x AS (SELECT s.id, max(iv.value) FILTER (WHERE iv.indicator_code='PER') per, max(iv.value) FILTER (WHERE iv.indicator_code='EPS_TTM') eps FROM stock s JOIN universe_membership m ON m.stock_id=s.id AND m.effective_to IS NULL JOIN universe u ON u.code=m.universe_code AND u.is_active LEFT JOIN (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv ON iv.stock_id=s.id AND iv.trade_date=(SELECT t FROM d), d GROUP BY s.id) SELECT CASE WHEN count(*) FILTER (WHERE eps IS NOT NULL) = 0 THEN '잴 것이 없었다 — EPS_TTM이 하나도 없다(백필 미실행)' WHEN count(*) FILTER (WHERE per IS NULL AND eps > 0) > 0 THEN 'PER이 없는데 EPS가 양수인 종목이 ' || count(*) FILTER (WHERE per IS NULL AND eps > 0) || ' — 적자 규칙이 그 종목에 거짓 사유를 붙인다' ELSE 'OK 적자로 설명되는 종목 ' || count(*) FILTER (WHERE per IS NULL AND eps <= 0) || ', 설명 못 하는 것 ' || count(*) FILTER (WHERE per IS NULL AND eps IS NULL) || '(재무 부족)' END FROM x"
 ```
+
+**이 전제는 국내로 좁혀져 있다.** 재는 축 자체는 시장에 무관하지만 미국 지표가 아직
+0행이라 **미국 쪽을 오늘 검증할 수 없어** 넓히지 않았다 — 못 재는 보호막을 보증하지
+않으려는 것이다. **여는 조건은 미국 지표 백필**이고, 그때 시장별 최신일로 넓힌다.
+
 
 **"EPS가 양수인데 PER이 없다"를 위반으로 세는 것이 요점이다.** 그 종목에는 규칙이 **틀린 사유**를
 붙이게 되고, 화면에 그럴듯한 문장이 뜨므로 드러나지 않는다. 착수 시점 실측은 0이다(적자 68 ·

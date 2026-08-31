@@ -69,9 +69,9 @@ WITH lk(code,n) AS (VALUES
  ('SMA_200',200),('DISPARITY_200',200),('SMA_200_MOM_21',221),('PCT_FROM_52W_HIGH',252),
  ('PCT_FROM_52W_LOW',252),('SMA_200_SLOPE_60',260),('SHARES_GROWTH_3Y',751)),
 ca AS (SELECT stock_id, effective_date FROM corporate_action WHERE status IN ('UNSUPPORTED','OBSERVED')),
-latest AS (SELECT max(trade_date) d FROM indicator_value),
+latest AS (SELECT max(trade_date) d FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
 bad AS (SELECT iv.stock_id, iv.indicator_code
-        FROM indicator_value iv JOIN ca ON ca.stock_id=iv.stock_id
+        FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv JOIN ca ON ca.stock_id=iv.stock_id
         JOIN lk ON lk.code=iv.indicator_code
         WHERE iv.trade_date = (SELECT d FROM latest)
           AND iv.trade_date >= ca.effective_date
@@ -84,6 +84,11 @@ SELECT CASE
   ELSE '보정 안 된 계단을 넘는 창으로 낸 값이 ' || count(*) || '행 남아 있다'
   END FROM bad"
 ```
+
+**이 전제는 국내로 좁혀져 있다.** 재는 축 자체는 시장에 무관하지만 미국 지표가 아직
+0행이라 **미국 쪽을 오늘 검증할 수 없어** 넓히지 않았다 — 못 재는 보호막을 보증하지
+않으려는 것이다. **여는 조건은 미국 지표 백필**이고, 그때 시장별 최신일로 넓힌다.
+
 
 착수 시점 실측(2026-08-13, `max(trade_date)=2026-08-12`, 보존창 180일자). 이 결정이 지우는 양이며,
 반영 백필의 로그 합계가 **정확히 20,750행**으로 아래 표와 일치했다.

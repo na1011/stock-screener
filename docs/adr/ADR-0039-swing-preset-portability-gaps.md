@@ -79,8 +79,13 @@ v1.0, 미국시장 기준 26개 조건)를 `SWING_MIDTERM_KR`
 > 좁아졌다.**
 
 ```premise U-05가 SHARES_GROWTH_3Y보다 강하게 자르지 않는다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) td FROM indicator_value), x AS (SELECT stock_id, max(value) FILTER (WHERE indicator_code='SHARES_GROWTH_3Y') sg, max(value) FILTER (WHERE indicator_code='TRADING_DAYS_750') days FROM indicator_value, d WHERE trade_date = d.td AND indicator_code IN ('SHARES_GROWTH_3Y','TRADING_DAYS_750') GROUP BY 1) SELECT CASE WHEN count(*) FILTER (WHERE days IS NOT NULL) = 0 THEN 'TRADING_DAYS_750이 최신 지표 일자에 하나도 없다 — 지표가 배포되지 않았거나 그날 백필이 돌지 않았다' WHEN count(*) FILTER (WHERE sg IS NOT NULL) = 0 THEN 'SHARES_GROWTH_3Y가 최신 지표 일자에 하나도 없다 — 포함 관계를 잴 대상이 없다' WHEN count(*) FILTER (WHERE sg IS NOT NULL AND (days IS NULL OR days < 750)) = 0 THEN 'OK SHARES_GROWTH_3Y 보유(' || count(*) FILTER (WHERE sg IS NOT NULL) || '종목)가 U-05 통과(' || count(*) FILTER (WHERE days >= 750) || '종목)의 부분집합이다' ELSE 'U-05가 SHARES_GROWTH_3Y보다 강하게 자른다: ' || count(*) FILTER (WHERE sg IS NOT NULL AND (days IS NULL OR days < 750)) || '종목 — 읽기 창이나 LOOKBACK이 바뀌었는지 본다' END FROM x"
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) td FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')), x AS (SELECT stock_id, max(value) FILTER (WHERE indicator_code='SHARES_GROWTH_3Y') sg, max(value) FILTER (WHERE indicator_code='TRADING_DAYS_750') days FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) ivkr, d WHERE trade_date = d.td AND indicator_code IN ('SHARES_GROWTH_3Y','TRADING_DAYS_750') GROUP BY 1) SELECT CASE WHEN count(*) FILTER (WHERE days IS NOT NULL) = 0 THEN 'TRADING_DAYS_750이 최신 지표 일자에 하나도 없다 — 지표가 배포되지 않았거나 그날 백필이 돌지 않았다' WHEN count(*) FILTER (WHERE sg IS NOT NULL) = 0 THEN 'SHARES_GROWTH_3Y가 최신 지표 일자에 하나도 없다 — 포함 관계를 잴 대상이 없다' WHEN count(*) FILTER (WHERE sg IS NOT NULL AND (days IS NULL OR days < 750)) = 0 THEN 'OK SHARES_GROWTH_3Y 보유(' || count(*) FILTER (WHERE sg IS NOT NULL) || '종목)가 U-05 통과(' || count(*) FILTER (WHERE days >= 750) || '종목)의 부분집합이다' ELSE 'U-05가 SHARES_GROWTH_3Y보다 강하게 자른다: ' || count(*) FILTER (WHERE sg IS NOT NULL AND (days IS NULL OR days < 750)) || '종목 — 읽기 창이나 LOOKBACK이 바뀌었는지 본다' END FROM x"
 ```
+
+**이 전제는 국내로 좁혀져 있다.** 재는 축 자체는 시장에 무관하지만 미국 지표가 아직
+0행이라 **미국 쪽을 오늘 검증할 수 없어** 넓히지 않았다 — 못 재는 보호막을 보증하지
+않으려는 것이다. **여는 조건은 미국 지표 백필**이고, 그때 시장별 최신일로 넓힌다.
+
 
 **모집단이 비는 경우를 둘로 가르는 이유**는 "지표가 배포되지 않았다"와 "그날 백필이 안 돌았다"가
 둘 다 흔하기 때문이다. 이 둘 중 **실행당 1일치만 채워지는 것은 이제 `TRADING_DAYS_750` 하나다**(위 §깔때기 · `SHARES_GROWTH_3Y`는 창이 자기 LOOKBACK보다 넓어진 뒤로 여러 일자를 낸다). 백필을 건너뛴
