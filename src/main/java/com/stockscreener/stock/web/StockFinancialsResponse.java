@@ -39,8 +39,13 @@ public record StockFinancialsResponse(
      * @param publishedAt  공시일. 유도된 4분기는 사업보고서의 공시일이라 FY와 같다
      * @param revised      정정본인가({@code revision_no > 0}). {@code is_latest}만으로는 알 수 없다
      * @param derived      우리가 유도한 행인가. 4분기 손익이 그것이다
+     * @param currencyCode 이 행의 보고 통화. <b>행마다 다를 수 있다</b> — 재무제표는 상장 시장과
+     *                     다른 통화로 낼 수 있고, 회사가 중간에 갈아타기도 한다(241560이 2023년에
+     *                     KRW → USD). <b>MUST NOT: 화면이 이것을 종목의 시장 통화로 대신하지
+     *                     않는다</b> — 달러 매출이 「조원」으로 그려지고 값이 나오므로 안 드러난다.
      * @param revenueYoy   전년 <b>동기</b> 대비 증감률(%). 분기를 직전 분기와 비교하면
-     *                     계절성 있는 업종에서 뜻이 없다
+     *                     계절성 있는 업종에서 뜻이 없다. <b>통화가 갈린 쌍에서는 null이다</b> —
+     *                     환산 없이 뺀 값은 증감률이 아니다
      */
     public record Period(
             int fiscalYear,
@@ -48,6 +53,7 @@ public record StockFinancialsResponse(
             LocalDate publishedAt,
             boolean revised,
             boolean derived,
+            String currencyCode,
             BigDecimal revenue,
             BigDecimal operatingIncome,
             BigDecimal netIncome,

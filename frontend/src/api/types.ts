@@ -534,6 +534,13 @@ export interface FinancialPeriod {
   publishedAt: IsoDate | null
   revised: boolean
   derived: boolean
+  /**
+   * 이 행의 보고 통화. **행마다 다를 수 있다** — 회사가 중간에 갈아타기도 한다.
+   *
+   * MUST NOT: 종목의 시장 통화(`stock.currencyCode`)로 대신하지 않는다. 달러 매출이
+   * 「조원」으로 그려지고, 값이 나오므로 화면 어디에서도 드러나지 않는다.
+   */
+  currencyCode: string
   revenue: number | null
   operatingIncome: number | null
   netIncome: number | null
@@ -541,7 +548,7 @@ export interface FinancialPeriod {
   totalAssets: number | null
   totalLiabilities: number | null
   totalEquity: number | null
-  /** 전년 **동기** 대비 증감률(%). 비교 대상이 없으면 null이다. */
+  /** 전년 **동기** 대비 증감률(%). 비교 대상이 없거나 **통화가 갈리면** null이다. */
   revenueYoy: number | null
   operatingIncomeYoy: number | null
   netIncomeYoy: number | null

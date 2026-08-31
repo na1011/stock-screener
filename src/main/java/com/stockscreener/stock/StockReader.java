@@ -156,6 +156,7 @@ public class StockReader {
     public List<FinancialRow> financialsOf(long stockId, int limit) {
         return jdbcTemplate.query("""
                 SELECT fiscal_year, fiscal_period, published_at, revision_no, report_code,
+                       currency_code,
                        revenue, operating_income, net_income, operating_cash_flow,
                        total_assets, total_liabilities, total_equity
                 FROM financial_statement
@@ -168,6 +169,7 @@ public class StockReader {
                         rs.getObject("published_at", LocalDate.class),
                         rs.getInt("revision_no"),
                         rs.getString("report_code"),
+                        rs.getString("currency_code"),
                         rs.getBigDecimal("revenue"),
                         rs.getBigDecimal("operating_income"),
                         rs.getBigDecimal("net_income"),
@@ -354,9 +356,17 @@ public class StockReader {
     public record StockUniverse(String code, String name, LocalDate since) {
     }
 
-    /** 재무제표 한 기(期)의 원수치. 기간은 회계연도·분기가 정본이다(위 javadoc). */
+    /**
+     * 재무제표 한 기(期)의 원수치. 기간은 회계연도·분기가 정본이다(위 javadoc).
+     *
+     * @param currencyCode <b>행 단위 사실이다.</b> 시장 통화가 아니다 — 재무제표는 상장 시장과
+     *                     다른 통화로 낼 수 있고 실측으로 16종이 있다({@code RawFinancialReport}).
+     *                     <b>MUST NOT: 이 값을 {@code market.currency_code}로 대신하지 않는다.</b>
+     *                     두산밥캣(241560)이 2023년에 KRW에서 USD로 갈아탔고, 시장 통화로 그리면
+     *                     달러 매출이 「조원」으로 뜬다 — 값이 나오므로 화면에서 안 드러난다.
+     */
     public record FinancialRow(int fiscalYear, String fiscalPeriod, LocalDate publishedAt,
-                               int revisionNo, String reportCode,
+                               int revisionNo, String reportCode, String currencyCode,
                                BigDecimal revenue, BigDecimal operatingIncome, BigDecimal netIncome,
                                BigDecimal operatingCashFlow, BigDecimal totalAssets,
                                BigDecimal totalLiabilities, BigDecimal totalEquity) {

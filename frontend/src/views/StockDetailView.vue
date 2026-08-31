@@ -328,11 +328,8 @@ onMounted(() => {
         panel="financials"
         :skeleton-rows="4"
       >
-        <FinancialsPanel
-          v-if="financials.data.value"
-          :financials="financials.data.value"
-          :currency-code="currencyCode"
-        />
+        <!-- 통화를 안 넘긴다 — 재무 통화는 행 단위 사실이라 패널이 행에서 읽는다. -->
+        <FinancialsPanel v-if="financials.data.value" :financials="financials.data.value" />
       </AsyncPanel>
 
       <!-- 지지·저항은 별도 패널이자 별도 요청이다. 위가 실패해도 여기는 살고, 반대도 마찬가지다. -->

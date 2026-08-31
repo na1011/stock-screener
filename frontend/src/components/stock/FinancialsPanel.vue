@@ -23,8 +23,6 @@ import { MISSING, formatAmount, formatDate, formatSignedPercent } from '@/lib/fo
  */
 const props = defineProps<{
   financials: StockFinancials
-  /** 이 종목의 금액 표기 통화. 상세 응답이 아직이면 null이고, 그때는 통화를 안 붙인다. */
-  currencyCode: string | null
 }>()
 
 type Tab = 'annual' | 'quarterly'
@@ -100,22 +98,22 @@ function label(row: FinancialPeriod): string {
                 <Tag v-if="row.revised" value="정정" severity="info" class="financials__badge" />
               </th>
               <td class="financials__num">
-                {{ formatAmount(row.revenue, currencyCode) }}
+                {{ formatAmount(row.revenue, row.currencyCode) }}
                 <span class="financials__yoy">{{ formatSignedPercent(row.revenueYoy) }}</span>
               </td>
               <td class="financials__num">
-                {{ formatAmount(row.operatingIncome, currencyCode) }}
+                {{ formatAmount(row.operatingIncome, row.currencyCode) }}
                 <span class="financials__yoy">{{ formatSignedPercent(row.operatingIncomeYoy) }}</span>
               </td>
               <td class="financials__num">
-                {{ formatAmount(row.netIncome, currencyCode) }}
+                {{ formatAmount(row.netIncome, row.currencyCode) }}
                 <span class="financials__yoy">{{ formatSignedPercent(row.netIncomeYoy) }}</span>
               </td>
               <td v-if="showCashFlow" class="financials__num">
-                {{ formatAmount(row.operatingCashFlow, currencyCode) }}
+                {{ formatAmount(row.operatingCashFlow, row.currencyCode) }}
               </td>
-              <td class="financials__num">{{ formatAmount(row.totalAssets, currencyCode) }}</td>
-              <td class="financials__num">{{ formatAmount(row.totalEquity, currencyCode) }}</td>
+              <td class="financials__num">{{ formatAmount(row.totalAssets, row.currencyCode) }}</td>
+              <td class="financials__num">{{ formatAmount(row.totalEquity, row.currencyCode) }}</td>
               <td>{{ row.publishedAt ? formatDate(row.publishedAt) : MISSING }}</td>
             </tr>
           </tbody>
