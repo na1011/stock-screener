@@ -116,6 +116,12 @@ import java.util.List;
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill \
  *     --from=2025-11-17 --tickers=058470,086280'
  *
+ * # 아직 켜지 않은 유니버스를 채운다 — 「켜야 지표가 생기고, 지표가 없으면 켜면 안 되는」
+ * # 순환을 끊는 자리다. 대상이 그 유니버스로 좁혀지고, 백분위 모집단에도 그 하나만 더해진다.
+ * # 활성 유니버스와 종목이 겹치면 시작 전에 거절한다(IndicatorBackfillJob).
+ * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill \
+ *     --universe=US_TOP1000 --as-of=2026-08-28 --from=2026-08-28'
+ *
  * # 기업 행위 판정 대기열과 증거를 본다. 외부 호출 0, 원장을 고치지 않는다(ADR-0084).
  * # 필터를 안 주면 status=OBSERVED로 좁힌다 — 집계는 언제나 전체를 찍는다
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
@@ -305,7 +311,8 @@ public class BootstrapRunner implements ApplicationRunner {
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, date(args, "from", null));
             case "backfill" -> indicatorBackfillJob.run(
                     date(args, "from", asOf.minusYears(2)), asOf,
-                    BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
+                    BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
+                    value(args, "universe", null));
             // MUST: --governance-endpoints로 나눠 돌린다. 안 좁히면 두 번째 실행이 3개년을
             // 주는 표를 다시 불러 콜이 조용히 늘고, 그 초과는 아무 데도 안 뜬다.
             case "governance-load" -> governanceLoadJob.run(
@@ -390,7 +397,7 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     private static final java.util.Set<String> UNIVERSE_JOBS = java.util.Set.of(
             "universe", "initial-load", "corporate-action", "adjustment-rebuild",
-            "company-profile", "financial-refill");
+            "company-profile", "financial-refill", "backfill");
 
     /**
      * {@code --skip-financial}·{@code --skip-price}가 뜻을 갖는 잡. 위와 같은 이유로

@@ -104,10 +104,14 @@ public class AdminJobLauncher {
                 IndicatorBackfillJob.JOB_NAME,
                 // 티커를 비워 보낸다 — 화면에 그 입력이 없고, 만들지도 않는다. 종목을 좁힌
                 // 백필은 무효화 뒤 복구에 쓰는 경로이고 그 판단은 CLI에 남긴다.
+                //
+                // MUST: universeCode에 null을 명시한다. 아래 company-profile과 같은 이유다 —
+                // 화면 버튼은 **활성 유니버스만** 돌아야 한다. 비활성 유니버스를 채우는 것은
+                // 켜기 전 준비이고 그 판단은 CLI에 남긴다(IndicatorBackfillJob 클래스 javadoc).
                 request -> indicatorBackfillJob.run(
                         request.orDefault(request.from(), LocalDate.now().minusDays(7)),
                         request.orDefault(request.to(), LocalDate.now()),
-                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()),
+                        BatchExecutionRecorder.TriggeredBy.ADMIN, List.of(), null),
 
                 // 화면에서 띄워도 되는 이유는 대상이 **활성 유니버스에서 업종이 비어 있는
                 // 종목뿐**이라 평소 0콜이고, 전량이어도 종목당 1콜(국내 350)이기 때문이다.

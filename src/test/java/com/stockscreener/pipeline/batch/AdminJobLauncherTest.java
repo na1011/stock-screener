@@ -197,7 +197,7 @@ class AdminJobLauncherTest {
     @DisplayName("파라미터를 비우면 잡마다 정한 기본값으로 돈다")
     void emptyParametersFallBackToDefaults() {
         AtomicInteger calls = new AtomicInteger();
-        when(indicatorBackfillJob.run(any(), any(), any(), any())).thenAnswer(invocation -> {
+        when(indicatorBackfillJob.run(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             assertThat((LocalDate) invocation.getArgument(0)).isNotNull();
             assertThat((LocalDate) invocation.getArgument(1)).isNotNull();
             calls.incrementAndGet();

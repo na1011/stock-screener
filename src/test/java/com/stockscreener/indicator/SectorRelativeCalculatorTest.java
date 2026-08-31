@@ -163,7 +163,7 @@ class SectorRelativeCalculatorTest {
     }
 
     private long calculate(SectorMetricSpec... specs) {
-        return new SectorRelativeCalculator(jdbcTemplate, List.of(specs)).calculate(AS_OF);
+        return new SectorRelativeCalculator(jdbcTemplate, List.of(specs)).calculate(AS_OF, null);
     }
 
     @Test

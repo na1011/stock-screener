@@ -67,7 +67,7 @@ class PercentileCalculatorTest {
     @Test
     @DisplayName("가장 낮은 값이 0, 가장 높은 값이 1이다 — 항상 오름차순 기준이다")
     void ranksAscending() {
-        calculator.calculate(AS_OF);
+        calculator.calculate(AS_OF, null);
 
         assertThat(percentileOf(stockIds.get(0)))
                 .as("PER 10은 최저값이므로 0")
@@ -80,7 +80,7 @@ class PercentileCalculatorTest {
     @Test
     @DisplayName("중간값은 순위에 비례한다")
     void ranksProportionally() {
-        calculator.calculate(AS_OF);
+        calculator.calculate(AS_OF, null);
 
         // PERCENT_RANK는 (순위-1)/(전체-1)이다. 3번째 종목은 (3-1)/(5-1) = 0.5.
         assertThat(percentileOf(stockIds.get(2))).isEqualByComparingTo("0.5");
@@ -98,7 +98,7 @@ class PercentileCalculatorTest {
                 VALUES (?, ?, ?, 1)
                 """, outsider, AS_OF, PerCalculator.CODE);
 
-        calculator.calculate(AS_OF);
+        calculator.calculate(AS_OF, null);
 
         assertThat(jdbcTemplate.queryForList("""
                 SELECT value FROM indicator_value
@@ -121,7 +121,7 @@ class PercentileCalculatorTest {
                     new BigDecimal(i * 100)));
         }
 
-        calculator.calculate(AS_OF);
+        calculator.calculate(AS_OF, null);
 
         // 한 모집단으로 합치면 최고값은 PER 300(코스닥)뿐이라 아래 둘이 동시에 성립할 수 없다.
         assertThat(percentileOf(stockIds.get(4)))
@@ -143,7 +143,7 @@ class PercentileCalculatorTest {
         long retired = memberWithPer("KOSPI", "KOSPI_TOP200", "100001", BigDecimal.ONE);
         memberWithPer("KOSPI", "KOSPI_TOP200", "100002", new BigDecimal("2"));
 
-        calculator.calculate(AS_OF);
+        calculator.calculate(AS_OF, null);
 
         assertThat(jdbcTemplate.queryForList("""
                 SELECT value FROM indicator_value
@@ -172,7 +172,7 @@ class PercentileCalculatorTest {
         // IMPORTANT — 올라오는 것이 BadSqlGrammarException이다. PostgreSQL이 내는 것은
         // cardinality_violation(SQLState 21000)인데 Spring이 21 계열을 문법 오류로 번역한다.
         // 로그에서 이 이름만 보면 SQL 오타를 찾으러 가게 되므로, 진짜 원인은 root cause에 있다.
-        assertThatThrownBy(() -> calculator.calculate(AS_OF))
+        assertThatThrownBy(() -> calculator.calculate(AS_OF, null))
                 .isInstanceOf(DataAccessException.class)
                 .rootCause()
                 .hasMessageContaining("cannot affect row a second time");
@@ -183,7 +183,7 @@ class PercentileCalculatorTest {
     void skipsSingleMemberPopulation() {
         long lonely = memberWithPer("KOSDAQ", "KOSDAQ150", "100001", new BigDecimal("7"));
 
-        calculator.calculate(AS_OF);
+        calculator.calculate(AS_OF, null);
 
         assertThat(jdbcTemplate.queryForList("""
                 SELECT value FROM indicator_value
@@ -196,9 +196,9 @@ class PercentileCalculatorTest {
     @Test
     @DisplayName("값이 그대로면 다시 쓰지 않는다 — 재계산이 인덱스를 부풀리지 않는 근거다")
     void secondRunWritesNothingWhenValuesAreUnchanged() {
-        assertThat(calculator.calculate(AS_OF)).isPositive();
+        assertThat(calculator.calculate(AS_OF, null)).isPositive();
 
-        assertThat(calculator.calculate(AS_OF))
+        assertThat(calculator.calculate(AS_OF, null))
                 .as("같은 값을 다시 쓰면 MVCC가 행 버전과 인덱스 엔트리를 새로 만든다")
                 .isZero();
     }
@@ -206,9 +206,9 @@ class PercentileCalculatorTest {
     @Test
     @DisplayName("두 번 실행해도 행이 늘지 않는다")
     void isIdempotent() {
-        calculator.calculate(AS_OF);
+        calculator.calculate(AS_OF, null);
         int afterFirst = countPercentiles();
-        calculator.calculate(AS_OF);
+        calculator.calculate(AS_OF, null);
 
         assertThat(countPercentiles()).isEqualTo(afterFirst);
     }

@@ -73,7 +73,8 @@ public class SectorRelativeCalculator {
                   AND s.industry_group_key IS NOT NULL
                   AND EXISTS (
                       SELECT 1 FROM universe_membership m
-                      JOIN universe u ON u.code = m.universe_code AND u.is_active
+                      JOIN universe u ON u.code = m.universe_code
+                                     AND (u.is_active OR u.code = ?)
                       WHERE m.stock_id = iv.stock_id AND m.effective_to IS NULL)
             )
             """;
@@ -241,7 +242,9 @@ public class SectorRelativeCalculator {
         return removed;
     }
 
-    public long calculate(LocalDate tradeDate) {
+    public long calculate(LocalDate tradeDate, String backfillUniverseCode) {
+        // PercentileCalculator와 같은 이유로 빈 문자열로 접는다.
+        String extra = backfillUniverseCode == null ? "" : backfillUniverseCode;
         long written = 0;
         long removed = 0;
         for (SectorMetricSpec spec : specs) {
@@ -253,9 +256,10 @@ public class SectorRelativeCalculator {
                 case MEDIAN -> MEDIAN_CHOSEN;
             };
 
-            written += upsert(chosen, spec.sourceCode(), tradeDate, spec.code(), "metric");
+            written += upsert(chosen, spec.sourceCode(), tradeDate, extra, spec.code(), "metric");
             // 표본 수는 상대값과 같은 층·같은 모집단에서 나온다. 따로 세면 둘이 갈린다.
-            written += upsert(chosen, spec.sourceCode(), tradeDate, spec.peerCountCode(), "peers");
+            written += upsert(chosen, spec.sourceCode(), tradeDate, extra,
+                    spec.peerCountCode(), "peers");
 
             // 그날 안 쓰기로 한 자리의 옛 행을 걷는다(ADR-0085). 모집단이 MIN_PEERS 아래로
             // 떨어지거나 중앙값이 0 이하가 되면 UPSERT가 그 종목을 안 쓰는데, 이 정리가 없으면
@@ -264,8 +268,9 @@ public class SectorRelativeCalculator {
             //
             // MUST: 표본 수도 함께 정리한다. 상대값만 지우면 "값은 없는데 표본은 40"이 남고,
             // 그 짝이 어긋난 것은 화면에서 표본만 보이는 형태로 나타난다.
-            removed += deleteUnwritten(chosen, spec.sourceCode(), tradeDate, spec.code(), "metric");
-            removed += deleteUnwritten(chosen, spec.sourceCode(), tradeDate,
+            removed += deleteUnwritten(chosen, spec.sourceCode(), tradeDate, extra,
+                    spec.code(), "metric");
+            removed += deleteUnwritten(chosen, spec.sourceCode(), tradeDate, extra,
                     spec.peerCountCode(), "peers");
         }
         log.info("업종 상대값을 계산했다. tradeDate={} 지표={}쌍 저장={}행 정리={}행",
@@ -273,23 +278,23 @@ public class SectorRelativeCalculator {
         return written;
     }
 
-    private int upsert(String chosen, String sourceCode, LocalDate tradeDate,
+    private int upsert(String chosen, String sourceCode, LocalDate tradeDate, String extraUniverse,
                        String targetCode, String column) {
         return jdbcTemplate.update(
                 UPSERT.formatted(chosen, column, column),
-                // 자리표시자 순서는 SQL 텍스트 순서다 — member(2) → chosen(2) → SELECT(2) → WHERE(1).
-                sourceCode, tradeDate,
+                // 자리표시자 순서는 SQL 텍스트 순서다 — member(3) → chosen(2) → SELECT(2) → WHERE(1).
+                sourceCode, tradeDate, extraUniverse,
                 MIN_PEERS, MIN_PEERS,
                 tradeDate, targetCode,
                 MIN_PEERS);
     }
 
     private int deleteUnwritten(String chosen, String sourceCode, LocalDate tradeDate,
-                                String targetCode, String column) {
+                                String extraUniverse, String targetCode, String column) {
         return jdbcTemplate.update(
                 DELETE_UNWRITTEN.formatted(chosen, column),
-                // 자리표시자 순서가 upsert와 같다 — member(2) → chosen(2) → DELETE(3).
-                sourceCode, tradeDate,
+                // 자리표시자 순서가 upsert와 같다 — member(3) → chosen(2) → DELETE(3).
+                sourceCode, tradeDate, extraUniverse,
                 MIN_PEERS, MIN_PEERS,
                 tradeDate, targetCode,
                 MIN_PEERS);

@@ -43,6 +43,12 @@ public class PercentileCalculator {
      * 정상이고(제외는 삭제가 아니다), 그것으로 순위를 매기면 아무도 보지 않는 모집단이 생긴다.
      * 게다가 그 종목은 활성 유니버스에도 속해 있어 아래 겹침 조건에 그대로 걸린다.
      *
+     * <p>모집단에 <b>비활성 유니버스 하나를 더할 수 있다</b>({@code backfillUniverseCode}).
+     * 「켜야 지표가 생기고, 지표가 없으면 켜면 안 되는」 순환을 끊는 자리다 — 켜기 전에 백필하지
+     * 않으면 나중에 켜도 <b>과거 179일자의 백분위가 영영 빈다</b>(두 계산기가 거래일 하나씩만
+     * 다시 쓰기 때문이다). <b>MUST NOT: {@code u.is_active}를 통째로 지우지 않는다</b> — 그러면
+     * 폐기된 지수의 편입 이력이 전부 모집단에 들어와 아래 전제가 즉시 깨진다.
+     *
      * <p>IMPORTANT — 이 쿼리는 <b>한 종목이 최대 하나의 활성 유니버스에 속한다</b>는 전제 위에
      * 선다. {@code indicator_value}에 유니버스 축이 없어 종목당 값이 하나뿐이기 때문이다.
      * 전제가 깨지면 JOIN이 행을 늘려 {@code ON CONFLICT DO UPDATE}가 같은 행을 두 번 건드리고,
@@ -68,7 +74,7 @@ public class PercentileCalculator {
                 JOIN universe_membership m
                   ON m.stock_id = iv.stock_id AND m.effective_to IS NULL
                 JOIN universe u
-                  ON u.code = m.universe_code AND u.is_active
+                  ON u.code = m.universe_code AND (u.is_active OR u.code = ?)
                 WHERE iv.indicator_code = ?
                   AND iv.trade_date = ?
             ) ranked
@@ -113,14 +119,21 @@ public class PercentileCalculator {
     /**
      * 해당 날짜의 모든 백분위 지표를 계산해 저장한다.
      *
+     * @param backfillUniverseCode 모집단에 더할 <b>비활성</b> 유니버스. 없으면 {@code null}.
+     *                             <b>호출부가 반드시 고른다</b> — 기본값을 주면 새 호출부가
+     *                             활성만 보는 쪽을 골라도 아무 증상이 없다.
      * @return <b>값이 실제로 달라진</b> 행 수. 같은 날을 다시 돌리면 0에 가깝다.
      */
-    public long calculate(LocalDate tradeDate) {
+    public long calculate(LocalDate tradeDate, String backfillUniverseCode) {
+        // 빈 문자열로 접는다. null을 그대로 바인딩하면 PostgreSQL이 타입을 못 정해 거절할 수
+        // 있고, ''는 어떤 유니버스 코드와도 같지 않아 「더할 것이 없다」와 정확히 같은 뜻이다.
+        String extra = backfillUniverseCode == null ? "" : backfillUniverseCode;
         long written = 0;
         long removed = 0;
         for (PercentileSpec spec : specs) {
             int rows = jdbcTemplate.update(
-                    UPSERT_PERCENTILES, spec.code(), spec.sourceCode(), tradeDate);
+                    // 자리표시자 순서는 SQL 텍스트 순서다 — SELECT(1) → JOIN(1) → WHERE(2).
+                    UPSERT_PERCENTILES, spec.code(), extra, spec.sourceCode(), tradeDate);
             if (rows > 0) {
                 written += rows;
             }

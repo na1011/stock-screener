@@ -303,10 +303,10 @@ public class DailyUpdateJob {
             // 건드린다 — 다른 시장의 종목은 애초에 걸리지 않는다. 그래서 날짜별로 나눠 도는 것이
             // 안전하고, 두 시장의 날짜가 같으면 집합이 하나라 실행도 한 번이다.
             for (LocalDate date : asOfByMarket.values().stream().distinct().sorted().toList()) {
-                percentileCalculator.calculate(date);
+                percentileCalculator.calculate(date, null);
                 // 업종 상대값도 같은 이유로 루프 뒤다. 워치리스트보다 앞이어야 하는 것도 같다 —
                 // 업종 조건을 건 화면이 그 앞에서 판정되면 어제 값으로 오늘을 판정한다.
-                sectorRelativeCalculator.calculate(date);
+                sectorRelativeCalculator.calculate(date, null);
             }
 
             // 러너가 「값을 그만 낸」 지표의 옛 행을 보존 창 전체에서 지웠을 수 있다(ADR-0080).

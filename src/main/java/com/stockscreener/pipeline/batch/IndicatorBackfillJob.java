@@ -51,14 +51,17 @@ import java.util.Optional;
  * 필터가 없으면 한 종목의 판정을 고칠 때마다 180거래일 × 350종목을 다시 돌아야 하고
  * (실측 2.6~8시간), 그 비용이 <b>"판정을 한 번에 다 끝내야 한다"</b>는 제약을 만든다.
  *
- * <h2>{@code --universe} 갈래를 낼 때 — 그것만으로는 순환이 반만 끊긴다</h2>
+ * <h2>{@code --universe} 갈래 — 순환을 끊는 자리이고, 반만 끊으면 조용히 빈다</h2>
  *
  * <p>이 잡은 활성 유니버스만 보므로 <b>「켜야 지표가 생기고, 지표가 없으면 켜면 안 되는」
  * 순환</b>이 있다(미국이 그 자리다 — 켜는 순간 값 하나 없는 8,504종목이 프리셋 결과에 실린다).
  * {@code corporate-action}·{@code adjustment-rebuild}·{@code initial-load}·
- * {@code company-profile}이 이미 {@code --universe}로 그 순환을 끊었으므로 여기도 같은 갈래를
- * 낼 수 있다({@code BootstrapRunner.UNIVERSE_JOBS}를 함께 넓힌다 — 안 넓히면
+ * {@code company-profile}이 이미 {@code --universe}로 그 순환을 끊었고 <b>이 잡도 같은 갈래를
+ * 갖는다</b>({@code BootstrapRunner.UNIVERSE_JOBS}에 함께 올라 있다 — 빠지면
  * {@code rejectMisplacedLoadOptions}가 첫 줄에서 거절한다).
+ *
+ * <p>대상 선정은 {@code StockRegistrar.oneUniverseMemberIds}를 그대로 쓴다 — 그쪽이 이미
+ * {@code u.is_active}를 안 보고 코드 하나로 좁히며 {@code CollectedMarkets}로도 거른다.
  *
  * <p><b>MUST: 그때 위 두 계산을 함께 다룬다.</b> {@code percentileCalculator.calculate}와
  * {@code sectorRelativeCalculator.calculate}가 <b>{@code u.is_active}를 조인</b>하므로,
@@ -68,9 +71,15 @@ import java.util.Optional;
  *
  * <p>바로 위 절과 충돌하는 것처럼 보이지만 아니다. 저기서 금지한 것은 <b>모집단을 좁히는
  * 것</b>이고, 여기서 필요한 것은 <b>모집단에 비활성 유니버스를 넣는 것</b>이다 — 방향이 반대다.
- * 넣는 방식을 정할 때 {@code PercentileCalculator}의 IMPORTANT를 함께 본다:
- * <b>한 종목이 최대 하나의 활성 유니버스에 속한다</b>는 전제가 깨지면 JOIN이 행을 늘려
- * PostgreSQL이 cardinality violation으로 배치를 죽인다.
+ * 그래서 두 계산기는 {@code u.is_active}를 <b>지우지 않고</b> {@code OR u.code = ?}로 하나만
+ * 더한다. 통째로 열면 폐기된 지수의 편입 이력이 전부 들어와
+ * {@code PercentileCalculator}의 전제(<b>한 종목이 최대 하나의 활성 유니버스</b>)가 즉시 깨지고,
+ * JOIN이 행을 늘려 PostgreSQL이 cardinality violation으로 배치를 죽인다.
+ *
+ * <p><b>그 전제를 이 잡이 먼저 검사한다</b>({@code rejectOverlappingUniverse}). 실측으로
+ * {@code US_TOP1000}의 1,000종목이 전부 {@code US_LISTED}에도 편입돼 있으므로(2026-08-31),
+ * 겹치는 유니버스를 대상으로 주면 <b>읽기 어려운 cardinality violation</b> 대신 무엇이
+ * 겹쳤는지를 말하고 멈춘다.
  */
 @Component
 public class IndicatorBackfillJob {
@@ -117,14 +126,16 @@ public class IndicatorBackfillJob {
      */
     public BatchStatus run(LocalDate from, LocalDate to,
                            BatchExecutionRecorder.TriggeredBy triggeredBy,
-                           List<String> tickers) {
+                           List<String> tickers, String universeCode) {
+        rejectOverlappingUniverse(universeCode);
         List<LocalDate> tradeDates = tradeDatesBetween(from, to);
         if (tradeDates.isEmpty()) {
             log.info("해당 구간에 시세가 없어 백필할 것이 없다. from={} to={}", from, to);
             return BatchStatus.SUCCESS;
         }
 
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
+        List<SecurityRef> targets =
+                stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
 
         // 보존 경계 밖은 계산해도 저장되지 않는다(ADR-0011). 그 사실을 여기서 말하지 않으면
         // 몇 시간을 돌고 0행으로 끝나는데 잡은 SUCCESS다 — 원인을 데이터나 계산기에서 찾게 된다.
@@ -197,10 +208,10 @@ public class IndicatorBackfillJob {
                             security -> indicatorRunner.run(
                                     security.stockId(), tradeDate, cutoff, marketIndexes));
                 }
-                percentileCalculator.calculate(tradeDate);
+                percentileCalculator.calculate(tradeDate, universeCode);
                 // 업종 상대값도 같은 자리다 — 그날 전 종목의 값이 있어야 정해진다.
                 // 백분위와 순서를 가릴 이유는 없다. 둘 다 원본 지표만 읽고 서로를 읽지 않는다.
-                sectorRelativeCalculator.calculate(tradeDate);
+                sectorRelativeCalculator.calculate(tradeDate, universeCode);
             }
 
             // MUST: 날짜 루프 **밖**이다(ADR-0080). 러너가 「값을 그만 낸」 지표의 옛 행을 보존 창
@@ -238,8 +249,21 @@ public class IndicatorBackfillJob {
      * 로그에서 구분되지 않는다. 이 잡에서는 특히 나쁘다: 무효화 뒤 복구로 부르는 경우가 많고,
      * 그때 <b>0종목 성공</b>은 "그 종목이 화면에서 사라진 채로 끝났다"와 같은 뜻이다.
      */
-    private List<Long> resolveTargets(List<String> tickers) {
-        if (tickers == null || tickers.isEmpty()) {
+    private List<Long> resolveTargets(List<String> tickers, String universeCode) {
+        List<String> names = tickers == null ? List.of() : tickers;
+        if (universeCode != null) {
+            // 비활성 유니버스도 대상이 된다 — 그것이 이 갈래의 존재 이유다(클래스 javadoc).
+            List<Long> members = stockRegistrar.oneUniverseMemberIds(universeCode, names);
+            if (members.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "유니버스 " + universeCode + "에 대상 종목이 하나도 없다"
+                                + (names.isEmpty() ? "" : " (티커 " + names + ")")
+                                + " — 유니버스 코드와 수집 대상 시장을 확인하라."
+                                + " 대상 0건으로 성공시키지 않는다.");
+            }
+            return members;
+        }
+        if (names.isEmpty()) {
             return stockRegistrar.activeUniverseMemberIds();
         }
         List<Long> matched = stockRegistrar.activeUniverseMemberIdsByTicker(tickers);
@@ -253,6 +277,37 @@ public class IndicatorBackfillJob {
                     tickers.size(), matched.size(), tickers);
         }
         return matched;
+    }
+
+    /**
+     * 대상 유니버스가 <b>활성 유니버스와 종목을 겹치면</b> 시작 전에 멈춘다.
+     *
+     * <p>겹친 채로 돌면 두 계산기의 모집단에 같은 종목이 두 번 들어가 {@code ON CONFLICT DO
+     * UPDATE}가 같은 행을 두 번 건드리고, PostgreSQL이 <b>cardinality violation</b>으로 배치를
+     * 죽인다. 그 예외는 원인을 말하지 않으므로 여기서 무엇이 겹쳤는지를 세어 말한다.
+     *
+     * <p>MUST NOT: 겹침을 <b>허용</b>하는 쪽으로 고치지 않는다. {@code indicator_value}에
+     * 유니버스 축이 없어 종목당 값이 하나뿐이고, 그래서 어느 모집단의 순위인지가 정해지지 않는다.
+     */
+    private void rejectOverlappingUniverse(String universeCode) {
+        if (universeCode == null) {
+            return;
+        }
+        Long overlapping = jdbcTemplate.queryForObject("""
+                SELECT count(DISTINCT a.stock_id)
+                FROM universe_membership a
+                JOIN universe_membership b
+                  ON b.stock_id = a.stock_id AND b.effective_to IS NULL
+                JOIN universe u ON u.code = b.universe_code AND u.is_active
+                WHERE a.universe_code = ? AND a.effective_to IS NULL
+                """, Long.class, universeCode);
+        if (overlapping != null && overlapping > 0) {
+            throw new IllegalStateException(
+                    "유니버스 " + universeCode + "의 " + overlapping
+                            + "종목이 이미 활성 유니버스에도 편입돼 있다 — 백분위 모집단이"
+                            + " 겹쳐 배치가 cardinality violation으로 죽는다."
+                            + " 겹치는 유니버스를 먼저 비활성으로 내리거나 대상을 바꿔라.");
+        }
     }
 
     /**

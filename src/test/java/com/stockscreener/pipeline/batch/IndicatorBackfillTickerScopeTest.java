@@ -109,7 +109,7 @@ class IndicatorBackfillTickerScopeTest {
     @DisplayName("한 종목만 백필해도 대상 밖 종목의 백분위가 다시 매겨진다")
     void narrowingTargetsDoesNotNarrowThePercentilePopulation() {
         BatchStatus status = job.run(AS_OF, AS_OF,
-                BatchExecutionRecorder.TriggeredBy.MANUAL, List.of("900001"));
+                BatchExecutionRecorder.TriggeredBy.MANUAL, List.of("900001"), null);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
 
@@ -135,7 +135,7 @@ class IndicatorBackfillTickerScopeTest {
         // 무효화 뒤 복구로 부르는 경로라 0종목 성공은 "그 종목이 화면에서 사라진 채로 끝났다"와
         // 같은 뜻이다. 오타가 그것과 구분되지 않으면 안 된다.
         assertThatThrownBy(() -> job.run(AS_OF, AS_OF,
-                BatchExecutionRecorder.TriggeredBy.MANUAL, List.of("999999")))
+                BatchExecutionRecorder.TriggeredBy.MANUAL, List.of("999999"), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("편입 중인 활성 종목이 하나도 없다");
     }

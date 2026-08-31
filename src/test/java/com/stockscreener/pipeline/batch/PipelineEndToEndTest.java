@@ -523,7 +523,7 @@ class PipelineEndToEndTest {
         initialLoadJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
 
         indicatorBackfillJob.run(LocalDate.parse("2026-08-03"), LocalDate.parse("2026-08-05"),
-                BatchExecutionRecorder.TriggeredBy.MANUAL, List.of());
+                BatchExecutionRecorder.TriggeredBy.MANUAL, List.of(), null);
 
         Map<String, Object> row = latestExecution(IndicatorBackfillJob.JOB_NAME);
         int expected = tradeDates.size() * members.size();
