@@ -278,14 +278,16 @@ class BuffettIndicatorsTest {
         }
 
         @Test
-        @DisplayName("영업이익이 비어 있으면 흑자로 세지 않고 거기서 끊는다")
-        void treatsMissingAsBreak() {
+        @DisplayName("영업이익이 비어 있으면 값을 내지 않는다 — 결손을 짧은 연수로 말하지 않는다")
+        void treatsMissingAsUnevaluable() {
             List<FinancialFigures> annual = operatingIncomes(
                     "10", null, "10", "10", "10", "10", "10");
 
             List<IndicatorPoint> points = calculator.calculate(annualContext(annual));
 
-            assertThat(points.get(0).value()).isEqualByComparingTo("1");
+            assertThat(points)
+                    .as("계정이 비어 있는 것은 「1년 연속 흑자」가 아니다 — 판정불가여야 한다")
+                    .isEmpty();
         }
 
         @Test

@@ -89,7 +89,10 @@ public class ProfitStreakYearsCalculator implements IndicatorCalculator {
         return FinancialMath.spreadOverTradeDates(context.priceBars(), streak(context));
     }
 
-    /** @return 일곱 해가 연속으로 있을 때만 흑자 연수. 아니면 null */
+    /**
+     * @return 일곱 해가 연속으로 있고 <b>그 해들의 영업이익이 전부 채워져 있을 때만</b> 흑자 연수.
+     *         아니면 null
+     */
     private static BigDecimal streak(IndicatorContext context) {
         List<FinancialFigures> annual = context.annualFigures();
         if (!FinancialMath.isConsecutiveAnnual(annual, YEARS)) {
@@ -99,8 +102,15 @@ public class ProfitStreakYearsCalculator implements IndicatorCalculator {
         for (int i = 0; i < YEARS; i++) {
             BigDecimal operatingIncome = annual.get(i).operatingIncome();
             if (operatingIncome == null) {
-                // 계정이 비어 있는 것과 적자는 다르다. 흑자로 세지 않고 거기서 끊는다.
-                break;
+                // MUST: 계정이 비어 있으면 값을 내지 않는다. 예전엔 여기서 끊고 지금까지 센 수를
+                // 냈는데, 그러면 **결손이 「짧은 흑자 연수」라는 그럴듯한 수로 나온다.** 특히 첫
+                // 해가 비면 0이 나가고 밴드가 그것을 「직전 해가 영업적자」로 그린다 — 그 회사에
+                // 대한 거짓 사실이다.
+                //
+                // 국내에서는 이 갈래가 한 번도 안 걸려 무증상이었다(실측 0종목). 미국을 재니
+                // 값이 나오는 828종목 중 **350**이 이 갈래였다(1년차 결손 201 + 2~7년차 결손 149).
+                // 「끊는다」가 「거짓을 말한다」로 바뀐 것이 이 결정의 근거다.
+                return null;
             }
             if (operatingIncome.signum() <= 0) {
                 break;

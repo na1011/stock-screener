@@ -129,6 +129,40 @@ GET https://www.sec.gov/files/company_tickers_exchange.json
 「유출을 양수 크기로」와 같다(ADR-0067). 영업활동현금흐름은 양수 2,392 · **음수 232**로,
 음수가 정상 값이다(적자 기업).
 
+### 영업이익 결손의 원인이 셋이다 — 태그를 넓혀도 안 닫힌다 (2026-08-31 실측)
+
+**편입 1,000 기준 `OPM_MIN_5Y` 산출 가능이 537**(국내 350 중 288)이고 `PROFIT_STREAK_Y`는
+**값이 나오는 828 중 350에 거짓·과소 값**을 낸다(1년차 결손 201 · 2~7년차 결손 149 · 국내 0).
+`SecEdgarColumn.OPERATING_INCOME`의 후보가 `OperatingIncomeLoss` **하나뿐인 유일한 손익 컬럼**
+이라 「후보를 넓히면 된다」로 보였는데, **재보니 그것으로는 하나도 안 닫힌다.**
+
+결손 종목 12개의 `companyfacts`를 열어 `Operating`·`GrossProfit`·`CostsAndExpenses` 계열
+태그를 전수로 세니 원인이 셋으로 갈린다.
+
+**A. 소스에 영업이익 태그 자체가 없다** — `ADM`·`AER`·`BMY`·`IBM`은 FY 7행 중 **0행**이고
+`OperatingIncomeLoss`를 아예 안 낸다. 대신 있는 것은 `GrossProfit`(표본 12 중 9종목·연간
+973팩트) · `CostsAndExpenses`(6종목) · `OperatingExpenses`(5종목)다.
+**MUST: 이것을 「동의어 태그를 더한다」로 읽지 않는다 — 더할 동의어가 없다.**
+여는 길은 **유도**(`GrossProfit − OperatingExpenses` 또는 `Revenues − CostsAndExpenses`)이고,
+그것은 태그→컬럼 매핑이 아니라 **새 기제**다.
+
+**B. 특정 회계연도의 유량이 통째로 빈다** — `AAON` 2022 · `ACA` 2025 · `ADSK` 2020~2022 ·
+`AEP` 2022가 그 모양이다. 이 종목들은 `OperatingIncomeLoss`를 **넉넉히 갖고 있는데**
+(`ADSK` 연간 139팩트 · `AEP` 123 · `AAON` 52) 그 해만 빈다.
+그 행을 열어 보면 **기간은 맞게 잡혔고**(`AAON` 2022 = 2022-01-01~2022-12-31)
+**재무상태표 항목은 채워져 있는데**(총자산·자본·주식수) **유량이 전부 NULL이다**
+(매출·영업이익·순이익·영업활동현금흐름). **즉 그 창에 duration 팩트를 못 붙인 것**이고
+태그와 무관하다. ADR-0101이 접은 「종료일이 같고 시작일만 다른 창」과 같은 가족이되
+**다른 자리**다 — 저쪽은 거절이었고 이쪽은 조용한 결손이다.
+
+**C. 위 둘이 섞인 것** — 350의 대부분이 여기다.
+
+**MUST: 커버리지를 게이트가 쓰는 창으로 잰다.** 「최근 15개월 · 4분기 이상」으로 재면
+영업이익 764/1,000이 나오는데 **어느 게이트도 그 창을 안 쓴다.**
+`OperatingMarginMin5yCalculator`는 **연속 5개 회계연도 + `revenue > 0`**,
+`ProfitStreakYearsCalculator`는 **연속 7개 회계연도**를 요구한다
+(`FinancialMath.isConsecutiveAnnual`, 연간 gap 300~430일). 그 규칙으로 재야 537·828이 나온다.
+
 ### 기간 재구성 — 이 축의 핵심
 
 AAPL(9월 결산) · MSFT(6월 결산) · JPM(은행) 셋으로 쟀다.
