@@ -1,7 +1,13 @@
 import type { ConditionInfo, IndicatorResponse, OperandPayload } from '@/api/types'
 import type { DraftCondition } from '@/stores/screenDraft'
 
-import { formatEnteredNumber, formatIndicatorValue, formatNumber, unitAffixes } from './format'
+import {
+  formatEnteredNumber,
+  formatIndicatorValue,
+  formatNumber,
+  splitIndicatorValue,
+  unitAffixes,
+} from './format'
 
 /** 조건 문장을 둘로 나눈 것. 결과의 조건 내역이 이 둘을 **다른 칸에** 그린다. */
 export interface ConditionParts {
@@ -48,8 +54,13 @@ export function splitCondition(
   const operand = condition.operand
 
   if (condition.operator === 'BETWEEN') {
-    // 단위는 뒤에 한 번만. "45.00% ~ 70.00%"는 같은 말을 두 번 한다.
-    const lower = formatNumber(operand.value ?? null, scale)
+    // 단위(접미)는 뒤에 한 번만. "45.00% ~ 70.00%"는 같은 말을 두 번 한다.
+    //
+    // MUST: 통화 **접두**는 양쪽에 붙인다. 접미만 생각하고 하한을 `formatNumber`로 내면
+    // 달러 시장에서 `10,000 ~ $20,000`이 되어 하한이 통화 없는 수가 된다 —
+    // `summarizeDraftCondition`은 양쪽에 붙이므로 **칩과 표가 같은 임계를 다르게 적는다.**
+    // 값이 없을 때 `$—`가 되지 않게 `splitIndicatorValue`의 `number`를 쓴다.
+    const lower = splitIndicatorValue(operand.value ?? null, unit, scale, currency).number
     const upper = formatIndicatorValue(operand.upperBound ?? null, unit, scale, currency)
     return { subject, criterion: `${lower} ~ ${upper} ${condition.operatorLabel}` }
   }

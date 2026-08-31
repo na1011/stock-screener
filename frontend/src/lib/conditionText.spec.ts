@@ -143,6 +143,72 @@ describe('splitCondition — 서버가 준 한글 라벨을 그대로 쓴다', (
   })
 })
 
+describe('splitCondition — 금액은 그 시장의 통화로 적는다', () => {
+  const marketCap = (operand: OperandPayload, operator: ComparisonOperatorName, label: string) =>
+    condition({
+      operator,
+      operand,
+      operatorLabel: label,
+      indicator: {
+        code: 'MARKET_CAP',
+        name: '시가총액',
+        // 카탈로그는 시장 중립이라 금액을 이 문자열 하나로만 말한다. 화면이 그것을
+        // 행의 통화로 갈아끼우지 않으면 미국 임계가 「원」으로 뜬다.
+        unit: '원',
+        decimalScale: 0,
+        higherIsBetter: true,
+        interpretation: '',
+      },
+    })
+
+  it('달러 시장이면 접두 기호를 붙이고 「원」을 안 쓴다', () => {
+    const text = sentence(
+      marketCap({ type: 'LITERAL', value: 7940000000 }, 'GTE', '이상'),
+      name,
+      'USD',
+    )
+    expect(text).toBe('시가총액 $7,940,000,000 이상')
+  })
+
+  it('원화 시장이면 접미가 「원」이다 — 같은 조건이 시장에 따라 다르게 적힌다', () => {
+    const text = sentence(
+      marketCap({ type: 'LITERAL', value: 1000000000000 }, 'GTE', '이상'),
+      name,
+      'KRW',
+    )
+    expect(text).toBe('시가총액 1,000,000,000,000원 이상')
+  })
+
+  it('IMPORTANT — BETWEEN은 접두를 양쪽에 붙인다. 접미만 생각하면 하한이 통화를 잃는다', () => {
+    // `summarizeDraftCondition`(조건 칩)은 양쪽에 붙인다. 여기만 빠지면 같은 임계가
+    // 칩에서는 `$10,000,000,000`, 표에서는 `10,000,000,000`이 되어 두 곳이 갈린다.
+    const text = sentence(
+      marketCap({ type: 'LITERAL', value: 1e10, upperBound: 2e10 }, 'BETWEEN', '사이'),
+      name,
+      'USD',
+    )
+    expect(text).toBe('시가총액 $10,000,000,000 ~ $20,000,000,000 사이')
+  })
+
+  it('접미 통화의 BETWEEN은 뒤에 한 번만 붙는다 — 같은 말을 두 번 하지 않는다', () => {
+    const text = sentence(
+      marketCap({ type: 'LITERAL', value: 1e12, upperBound: 2e12 }, 'BETWEEN', '사이'),
+      name,
+      'KRW',
+    )
+    expect(text).toBe('시가총액 1,000,000,000,000 ~ 2,000,000,000,000원 사이')
+  })
+
+  it('값이 없으면 통화 기호를 안 붙인다 — `$—`는 없는 값에 통화를 붙인 것이라 거짓이다', () => {
+    const text = sentence(
+      marketCap({ type: 'LITERAL', value: null, upperBound: 2e10 }, 'BETWEEN', '사이'),
+      name,
+      'USD',
+    )
+    expect(text).toBe('시가총액 — ~ $20,000,000,000 사이')
+  })
+})
+
 describe('splitCondition — 경계는 지표 이름 뒤다', () => {
   it('이름에 공백이 있어도 subject가 통째로 남는다', () => {
     // 문장을 공백으로 쪼개 얻으면 여기서만 어긋난다 — subject가 "200일"이 되고
