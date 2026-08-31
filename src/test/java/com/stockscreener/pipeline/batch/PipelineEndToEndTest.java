@@ -82,8 +82,28 @@ class PipelineEndToEndTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    /**
+     * {@code reset()}이 끄기 전의 값. {@code cleanUp()}이 <b>이것으로</b> 되돌린다.
+     *
+     * <p><b>MUST NOT: 복원을 {@code true}로 박지 않는다.</b> 박으면 나중에 미국을 끄기로
+     * 결정했을 때 <b>이 테스트가 그 결정을 되돌린다</b> — 테스트가 초록인 채로 운영 의도를
+     * 뒤집는 형태다.
+     *
+     * <p><b>이것으로도 안 닫히는 구멍이 하나 남는다</b> — 이 클래스는 비트랜잭션이라
+     * JVM이 {@code reset()}과 {@code cleanUp()} 사이에 죽으면 테스트 DB에 꺼진 채 남는다.
+     * 지금 영향은 잰 만큼 작다(테스트 DB에서 {@code US_TOP1000}이 활성임을 단정하는 시험이
+     * <b>0건</b>이다). <b>닫혔다고 적지 않는다.</b>
+     */
+    private Boolean usTop1000WasActive;
+
     @BeforeEach
     void reset() {
+        // MUST: 원래 값을 cleanUp()보다 **먼저** 읽는다. 이 메서드의 첫 일이 cleanUp() 호출이라,
+        // 뒤에 두면 첫 시험에서 필드가 빈 채로 복원이 돌고 is_active의 NOT NULL을 위반한다.
+        if (usTop1000WasActive == null) {
+            usTop1000WasActive = jdbcTemplate.queryForObject(
+                    "SELECT is_active FROM universe WHERE code = 'US_TOP1000'", Boolean.class);
+        }
         cleanUp();
         // 미국은 이 클래스의 사정권 밖이다 — 지수 구성을 주는 어댑터가 @ConditionalOnApiKey라
         // 키 없는 테스트 환경에서 등록되지 않는다(FakeSourceConfig가 대신 두는 것은 **시세**
@@ -112,8 +132,12 @@ class PipelineEndToEndTest {
         jdbcTemplate.update("DELETE FROM market_index_daily");
         jdbcTemplate.update("DELETE FROM universe_membership");
         jdbcTemplate.update("DELETE FROM stock");
-        // reset()이 끈 것을 되돌린다. 이 클래스가 DB에 남기는 유일한 전역 상태다.
-        jdbcTemplate.update("UPDATE universe SET is_active = true WHERE code = 'US_TOP1000'");
+        // reset()이 끈 것을 **관측한 값으로** 되돌린다. 이 클래스가 DB에 남기는 유일한
+        // 전역 상태다. 아직 관측 전이면(첫 reset()의 cleanUp() 호출) 손대지 않는다.
+        if (usTop1000WasActive != null) {
+            jdbcTemplate.update("UPDATE universe SET is_active = ? WHERE code = 'US_TOP1000'",
+                    usTop1000WasActive);
+        }
     }
 
     @Test
