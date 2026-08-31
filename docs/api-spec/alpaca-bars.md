@@ -198,18 +198,59 @@ page 10~13: NVDA만            (13페이지에서 next_page_token=null)
 | `EXCESS_RETURN_26W` | 〃 |
 | `EXCESS_RETURN_52W` | 〃 |
 
-**시장지수가 없는 것은 이 소스의 한계가 아니라 우리가 아직 안 고른 것이다.**
-`market_index_daily`에 `ck_market_index_code CHECK (index_code IN ('KOSPI','KOSDAQ'))`가 걸려
-있어 **마이그레이션 없이는 한 행도 못 넣는다**(V23). `MarketIndexCodes` javadoc이 그 상태를
-*"미국은 여기 없다. 그래서 미국 종목이 유니버스에 들어와도 「지수가 없다」고 알리지 않는다"*로
-적어 두었다 — **아직 갖기로 하지 않은 것**과 **갖기로 했는데 없는 것**은 다르고, 지금은 앞쪽이다.
-그 셋은 `IndicatorContext`의 지수 시계열을 읽으므로(`Beta104wCalculator`·`ExcessReturn`)
-데이터가 아무리 들어와도 값이 안 난다.
+### 미국 시장지수 — 이 엔드포인트로 받을 수 있다 (2026-08-31 실측)
+
+**지수 심볼은 안 준다. 지수 추종 ETF는 준다.** `UsMarketIndexProbeLiveTest`가 잰 값:
+
+| 심볼 | 응답 |
+|---|---|
+| `^SPX` · `$SPX` · `^GSPC` · `US500` | **HTTP 400** `invalid symbol` |
+| `SPX` · `SPXUSD` | **HTTP 200인데 `bars`가 빈 객체** — 「모르는 심볼은 조용히 빠진다」 그 형태다 |
+| `SPY` · `VOO` · `IVV` · `QQQ` · `DIA` · `IWM` · `VTI` | **각 1,757봉 · 2019-09-03 ~ 2026-08-28 · 페이징 없음** |
+
+**MUST: 지수 심볼을 「없다」로 판정할 때 400과 200-빈목록을 갈라 적는다.** `SPX`가 200을 주므로
+상태코드만 보면 「받았다」로 읽힌다.
+
+**봉 창이 우리 종목 봉과 정확히 같고**(2019-09-03 ~ 2026-08-28) 읽기 창 1,441봉(ADR-0079)을 덮는다.
+`stock` 행이 없어도 받는다 — 자산 목록이 `exchange=NYSE,NASDAQ`이라 ARCA 상장인 `SPY`는
+`stock`에 없지만 이 엔드포인트는 심볼 문자열로 답한다.
+
+**ETF를 지수 대용으로 쓸 때의 오차를 쟀다.** FRED의 실제 S&P 500 지수(2,514행)와 공통 거래일
+1,757일을 대조한 결과:
+
+| 창 | SPY − 지수 수익률 차 |
+|---|---|
+| 26주(130거래일) | 평균 **−0.02%p** · 표준편차 0.19%p |
+| 52주(252거래일) | 평균 **−0.03%p** · 표준편차 0.19%p |
+| 104주(504거래일) | 평균 **−0.06%p** · 표준편차 0.22%p |
+
+일간 수익률 상관 **0.9928**이고 차가 0.2%p 미만인 날이 **1,705/1,756 = 97.1%**다. 큰 차는 전부
+2020-03 폭락기와 2025-04에 몰려 있다(종가 산정 시차).
+
+**MUST NOT: 「ETF라 배당락만큼 지수보다 낮게 흐른다」로 적지 않는다 — 재보니 틀렸다.**
+S&P 500은 **가격지수**라 배당락이 지수에도 그대로 있다. 처음에 그 편의를 걱정했는데 52주
+평균 차가 0.03%p다.
+
+**FRED도 키 없이 받아지지만 라이선스가 다르다.** `fredgraph.csv?id=SP500`이 HTTP 200에
+2,610행을 주고 빈 칸을 걸러낸 날짜가 우리 거래일과 정확히 일치한다(2026년 165 대 165). 그러나
+`SP500`·`NASDAQCOM`·`NASDAQ100`·`DJIA` 넷 다 **「Copyrighted: Pre-Approval Required」**이고
+*"Reproduction of S&P 500 in any form is prohibited except with the prior written permission"*가
+붙는다 — spec §2가 미국 시세에 이미 든 것과 **같은 class의 새 제약**이다. S&P·다우 계열은
+**10년 롤링**이라 이력도 계속 잘린다. **ETF 경로는 이미 운용 중인 계약 안이라 새 제약이 없다.**
+
+**남은 것은 저장 쪽이다.** `market_index_daily`에 `ck_market_index_code CHECK (index_code IN
+('KOSPI','KOSDAQ'))`가 걸려 있어 **마이그레이션 없이는 한 행도 못 넣는다**(V23). 그리고
+`MarketIndexCodes.ALL`과 그 CHECK가 사본이라 함께 자란다 —
+`DataGoKrMarketIndexAdapter`가 `INDEX_NAMES.keySet().equals(MarketIndexCodes.ALL)`로 기동 시
+대조하므로 **한쪽만 고치면 운영 기동이 죽는다**(키가 없는 테스트에서는 그 어댑터가 등록되지
+않아 `./gradlew build`는 초록이다).
 
 **시가총액 계열은 ADR-0097이 열었다.** `MARKET_CAP`·`TURNOVER_RATIO`·`SHARES_GROWTH_3Y`·
 `EPS_CAGR_5Y`·`EPS_GROWTH_TTM_YOY`·`RETAINED_TO_MARKET_4Y`와 그 파생 셋
 (`FCF_YIELD`·`NCAV_TO_MARKET`·`ALTMAN_Z`)이 이제 `FinancialMath.sharesOf`를 타
-**재무에서 주식수를 폴백**한다. **닫힌 문으로 남은 것은 `TURNOVER_60`과 지수를 읽는 셋, 합쳐 넷이다.**
+**재무에서 주식수를 폴백**한다. **남은 넷의 성격이 갈렸다.** 지수를 읽는 셋(`BETA_104W`·`EXCESS_RETURN_26W`·`EXCESS_RETURN_52W`)은
+**소스가 있다는 것이 실측됐고**(위 §미국 시장지수) 저장 쪽 마이그레이션만 남았다.
+**진짜 닫힌 문은 `TURNOVER_60` 하나**다 — 거래대금은 이 소스가 안 주고 합성도 위에서 기각했다.
 
 **재무 폴백을 타는 계산기는 일곱이다(2026-08-30 전수).** `PbrCalculator`가 `sharesOf`를 직접
 부르고, 나머지 여섯은 `FinancialMath.perShareOn`을 거친다 — `PerCalculator` ·
