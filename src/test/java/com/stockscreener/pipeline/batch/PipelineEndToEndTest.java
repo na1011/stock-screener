@@ -85,6 +85,12 @@ class PipelineEndToEndTest {
     @BeforeEach
     void reset() {
         cleanUp();
+        // 미국은 이 클래스의 사정권 밖이다 — 지수 구성을 주는 어댑터가 @ConditionalOnApiKey라
+        // 키 없는 테스트 환경에서 등록되지 않는다(FakeSourceConfig가 대신 두는 것은 **시세**
+        // 소스뿐이다). 켜 둔 채로 리밸런싱을 돌리면 미국 하나가 실패해 잡 전체가
+        // PARTIAL_SUCCESS가 되고, 그것은 이 테스트가 재려는 것과 무관한 붉음이다.
+        // 되돌리는 것은 cleanUp()이 맡는다 — 다른 클래스는 마이그레이션이 정한 상태를 본다.
+        jdbcTemplate.update("UPDATE universe SET is_active = false WHERE code = 'US_TOP1000'");
         alertPort.events.clear();
         // 컨텍스트가 캐시되므로 Fake의 상태가 테스트 간에 새어나간다.
         fakePriceSource.reset();
@@ -106,6 +112,8 @@ class PipelineEndToEndTest {
         jdbcTemplate.update("DELETE FROM market_index_daily");
         jdbcTemplate.update("DELETE FROM universe_membership");
         jdbcTemplate.update("DELETE FROM stock");
+        // reset()이 끈 것을 되돌린다. 이 클래스가 DB에 남기는 유일한 전역 상태다.
+        jdbcTemplate.update("UPDATE universe SET is_active = true WHERE code = 'US_TOP1000'");
     }
 
     @Test
