@@ -276,7 +276,8 @@ public class BootstrapRunner implements ApplicationRunner {
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, loadRange(args));
             case "financial-refill" -> financialRefillJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
-                    optionalInteger(args, "financial-years"), csv(args, "tickers"));
+                    optionalInteger(args, "financial-years"), csv(args, "tickers"),
+                    value(args, "universe", null));
             // --quarters는 티커와 함께여야 하고, 전 종목 분기는 --all-quarters로 명시한다.
             // 잡이 거절하며, 그 근거는 거기 있다.
             case "full-statement-refill" -> fullStatementRefillJob.run(
@@ -389,7 +390,7 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     private static final java.util.Set<String> UNIVERSE_JOBS = java.util.Set.of(
             "universe", "initial-load", "corporate-action", "adjustment-rebuild",
-            "company-profile");
+            "company-profile", "financial-refill");
 
     /**
      * {@code --skip-financial}·{@code --skip-price}가 뜻을 갖는 잡. 위와 같은 이유로

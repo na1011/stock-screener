@@ -62,15 +62,18 @@ public class FinancialRefillJob {
      * @param asOf       기준일. 여기서 {@code yearsBack}만큼 거슬러 올라간다.
      * @param yearsBack  몇 년 거슬러 받을지. null이면 기본 3년.
      * @param tickers    비면 전 종목. 값이 있으면 <b>편입 종목과의 교집합</b>만 처리한다.
+     * @param universeCode <b>비활성 유니버스를 대상으로 잡는 유일한 길이다.</b> null이면
+     *                     활성 유니버스의 편입 종목이다 — 그 갈래는 미국에 한 건도 안 닿는다.
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
-                           Integer yearsBack, List<String> tickers) {
+                           Integer yearsBack, List<String> tickers, String universeCode) {
         int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
 
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
+        List<SecurityRef> targets =
+                stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
         if (targets.isEmpty()) {
             log.info("편입 중인 활성 종목이 없다. 채울 것이 없다.");
             return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
@@ -163,7 +166,25 @@ public class FinancialRefillJob {
      * 끝나는데, 그것은 이 잡이 고치려는 결함과 <b>정확히 같은 모양</b>이다.
      * 일부만 매칭된 경우도 로그로 알린다 — 편입되지 않은 종목을 준 것이다.
      */
-    private List<Long> resolveTargets(List<String> tickers) {
+    private List<Long> resolveTargets(List<String> tickers, String universeCode) {
+        if (universeCode != null) {
+            // MUST: 유니버스를 명시하면 활성 여부를 보지 않는다. oneUniverseMemberIds가
+            // 그렇게 만들어져 있고(InitialLoadJob이 같은 술어를 쓴다) 그것이 이 갈래의
+            // 존재 이유다 — US_TOP1000이 비활성인 동안에만 미국 재무를 고칠 수 있는데,
+            // activeUniverseMemberIds는 u.is_active를 조인해 미국에 한 건도 안 닿는다.
+            // 0건이면 조용히 성공시키지 않는다 — 그것은 이 잡이 고치려는 결함과 같은 모양이다.
+            List<Long> members = stockRegistrar.oneUniverseMemberIds(
+                    universeCode, tickers == null ? List.of() : tickers);
+            if (members.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "유니버스 '" + universeCode + "'에 대상이 하나도 없다"
+                                + (tickers == null || tickers.isEmpty()
+                                        ? "" : " (티커 " + tickers + ")")
+                                + " — 유니버스 코드와, 그 시장이 CollectedMarkets에 있는지"
+                                + " 확인하라. 대상 0건으로 성공시키지 않는다.");
+            }
+            return members;
+        }
         if (tickers == null || tickers.isEmpty()) {
             return stockRegistrar.activeUniverseMemberIds();
         }

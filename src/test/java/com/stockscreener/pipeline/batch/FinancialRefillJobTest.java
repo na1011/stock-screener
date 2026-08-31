@@ -85,7 +85,7 @@ class FinancialRefillJobTest {
         insertReportWithoutBalanceDetail(memberId);
         fakeFinancialSource.withReports(memberId, List.of(report()));
 
-        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of());
+        BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of(), null);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(currentAssetsOf(memberId)).isEqualByComparingTo("9000");
@@ -96,17 +96,52 @@ class FinancialRefillJobTest {
     @Test
     @DisplayName("편입 중인 활성 종목만 대상으로 삼는다")
     void targetsOnlyActiveUniverseMembers() {
-        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of());
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of(), null);
 
         assertThat(fakeFinancialSource.fetchedStockIds).containsExactly(memberId);
         assertThat(fakeFinancialSource.fetchedStockIds).doesNotContain(outsiderId);
     }
 
     @Test
+    @DisplayName("--universe를 주면 비활성 유니버스에도 닿는다 — 안 주면 그 종목이 대상에서 빠진다")
+    void reachesInactiveUniverseOnlyWhenUniverseIsGiven() {
+        Boolean wasActive = jdbcTemplate.queryForObject(
+                "SELECT is_active FROM universe WHERE code = ?", Boolean.class, UNIVERSE);
+        jdbcTemplate.update("UPDATE universe SET is_active = false WHERE code = ?", UNIVERSE);
+        try {
+            // 대조군 — 유니버스를 안 주면 activeUniverseMemberIds가 u.is_active를 조인해
+            // 한 건도 안 잡는다. 미국 재무를 고칠 수 없었던 이유가 정확히 이것이다.
+            job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of(), null);
+            assertThat(fakeFinancialSource.fetchedStockIds)
+                    .as("비활성 유니버스는 기본 갈래로 안 잡힌다")
+                    .isEmpty();
+
+            job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of(), UNIVERSE);
+            assertThat(fakeFinancialSource.fetchedStockIds)
+                    .as("유니버스를 명시하면 활성 여부를 안 본다")
+                    .containsExactly(memberId);
+        } finally {
+            jdbcTemplate.update("UPDATE universe SET is_active = ? WHERE code = ?",
+                    wasActive, UNIVERSE);
+        }
+    }
+
+    @Test
+    @DisplayName("--universe에 대상이 하나도 없으면 조용히 성공하지 않고 실패한다")
+    void failsLoudlyWhenUniverseHasNoTargets() {
+        assertThatThrownBy(() -> job.run(
+                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of(), "NOPE"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("NOPE");
+
+        assertThat(fakeFinancialSource.fetchedStockIds).isEmpty();
+    }
+
+    @Test
     @DisplayName("티커가 하나도 매칭되지 않으면 조용히 성공하지 않고 실패한다")
     void failsLoudlyWhenNoTickerMatches() {
         assertThatThrownBy(() -> job.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of("999999")))
+                AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of("999999"), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("999999");
 
@@ -118,7 +153,7 @@ class FinancialRefillJobTest {
     void narrowsToIntersectionOfGivenTickers() {
         // 035420은 활성이지만 편입되어 있지 않다 — 하나만 남아야 한다.
         job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3,
-                List.of("005930", "035420"));
+                List.of("005930", "035420"), null);
 
         assertThat(fakeFinancialSource.fetchedStockIds).containsExactly(memberId);
     }
