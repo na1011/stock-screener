@@ -54,7 +54,7 @@ async function retryProbe(): Promise<void> {
     <section class="login__card">
       <BrandMark size="1.75rem" class="login__mark" />
       <h1 class="login__title">{{ APP_NAME }}</h1>
-      <p class="login__subtitle">코스피200·코스닥150 종목을 기술적·재무적 조건으로 걸러 봅니다.</p>
+      <p class="login__subtitle">국내·미국 종목을 기술적·재무적 조건으로 걸러 봅니다.</p>
 
       <Message v-if="loginFailed" severity="error" :closable="false" class="login__message">
         로그인할 수 없습니다. 접근 권한이 있는 계정인지 확인해 주세요.
