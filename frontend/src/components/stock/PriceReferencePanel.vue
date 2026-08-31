@@ -18,7 +18,11 @@ import { priceReferenceMethodLabel, zoneRoleStyle, zoneStrengthLabel } from '@/l
  * 3. **단일 값을 만들어내지 않는다.** 구간의 중앙값·평균처럼 진입가로 읽힐 숫자를 계산하지
  *    않는다(spec §10). 여기 있는 것은 구간과 그 구간이 몇 번 의미를 가졌는지뿐이다.
  */
-const props = defineProps<{ reference: PriceReference }>()
+const props = defineProps<{
+  reference: PriceReference
+  /** 이 종목의 금액 표기 통화. 상세 응답이 아직이면 null이고, 그때는 통화를 안 붙인다. */
+  currencyCode: string | null
+}>()
 
 /**
  * 위쪽 구간을 먼저 보인다. 가격 축과 같은 순서라야 읽는 방향이 어긋나지 않는다.
@@ -54,7 +58,7 @@ const zones = computed(() =>
 
     <template v-else>
       <p class="price-reference__last-close">
-        기준 종가 <strong class="tabular">{{ formatPrice(reference.lastClose) }}</strong>
+        기준 종가 <strong class="tabular">{{ formatPrice(reference.lastClose, currencyCode) }}</strong>
         <span class="price-reference__note">(수정종가 — 실제 매매 가격과 다를 수 있습니다)</span>
       </p>
 
@@ -62,7 +66,7 @@ const zones = computed(() =>
         <li v-for="zone in zones" :key="`${zone.lower}-${zone.upper}`" class="zone">
           <Tag :value="zone.role.label" :severity="zone.role.severity" />
           <span class="zone__range tabular">
-            {{ formatPrice(zone.lower) }} ~ {{ formatPrice(zone.upper) }}
+            {{ formatPrice(zone.lower, currencyCode) }} ~ {{ formatPrice(zone.upper, currencyCode) }}
           </span>
           <span class="zone__meta">
             {{ zone.touchCount }}회 · {{ zone.strength }} · 마지막

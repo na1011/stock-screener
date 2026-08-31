@@ -42,12 +42,13 @@ export function quoteTone(rate: number | null | undefined): QuoteTone | null {
 export function formatQuoteChange(
   change: number | null | undefined,
   rate: number | null | undefined,
+  currency: string | null | undefined,
 ): string {
   if (quoteTone(rate) === null) {
     return MISSING
   }
   const sign = (rate as number) > 0 ? '+' : ''
-  return `${formatSignedPrice(change)} (${sign}${formatNumber(rate, 2)}%)`
+  return `${formatSignedPrice(change, currency)} (${sign}${formatNumber(rate, 2)}%)`
 }
 
 /**

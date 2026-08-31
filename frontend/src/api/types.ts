@@ -189,6 +189,13 @@ export interface UniverseResponse {
   code: string
   name: string
   marketCode: string
+  /**
+   * 이 대상을 고르면 화면의 금액이 어느 통화로 그려지는가. 정본은 `market.currency_code`다.
+   *
+   * MUST NOT: `marketCode`에서 유도하지 않는다. 시장이 늘 때 서버는 맞고 화면만 낡는데,
+   * 그 낡음은 금액이 틀린 통화로 그려지는 것으로만 드러난다.
+   */
+  currencyCode: string
   memberCount: number
 }
 
@@ -345,6 +352,15 @@ export interface ScreeningResponse {
   /** 대상을 좁히지 않았으면 null. */
   universe: ScreeningUniverseInfo | null
   /**
+   * 이 결과가 선 시장의 통화. **화면의 모든 금액 표기가 여기에 걸린다** — 종가·금액 지표·
+   * 조건 칩의 임계까지 전부다.
+   *
+   * 행마다 오지 않는 이유는 한 실행이 통화 하나이기 때문이다. 대상을 안 고른 요청에서
+   * 활성 유니버스의 통화가 둘 이상이면 서버가 실행을 거절한다 — 한 표에 두 통화가 섞이면
+   * 임계가 어느 쪽 기준인지 정해지지 않는다.
+   */
+  currencyCode: string | null
+  /**
    * 이 결과가 **실제로 쓴** 상대 비교의 모집단. 비면 상대 지표를 하나도 쓰지 않은 것이다.
    *
    * 서버가 판단해서 준다. 화면이 카탈로그를 따로 받아 판단하면 그 요청만 실패했을 때
@@ -390,6 +406,8 @@ export interface StockSummary {
   ticker: string
   name: string
   marketCode: string
+  /** 이 종목의 금액 표기 통화. 상세 화면의 시세·재무·지지저항이 전부 이것을 쓴다. */
+  currencyCode: string
   sector: string | null
   universes: StockUniverseRef[]
 }

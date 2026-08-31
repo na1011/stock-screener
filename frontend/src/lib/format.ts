@@ -60,12 +60,32 @@ export function splitIndicatorValue(
   value: number | null | undefined,
   unit: string | null | undefined,
   decimalScale: number,
+  currency: string | null | undefined,
 ): { number: string; unit: string } {
   const formatted = formatNumber(value, decimalScale)
   if (formatted === MISSING) {
     return { number: MISSING, unit: '' }
   }
-  return { number: formatted, unit: unit ?? '' }
+  const { prefix, suffix } = unitAffixes(unit, currency)
+  return { number: `${prefix}${formatted}`, unit: suffix }
+}
+
+/**
+ * 서버가 준 단위 문자열을 **그 통화의 표기**로 옮긴다.
+ *
+ * 금액 지표만 통화를 탄다 — 나머지 단위('%'·'배'·'%p')는 시장 중립이라 그대로 쓴다.
+ * 사용자가 직접 넣은 값(조건 칩)과 서버가 계산한 값(결과 표)이 같은 규칙을 쓰게 하려고
+ * 뽑아 두었다. 한쪽만 고치면 같은 임계가 칩에서는 「10000000000원」, 표에서는 「$10,000,000,000」이 된다.
+ */
+export function unitAffixes(
+  unit: string | null | undefined,
+  currency: string | null | undefined,
+): { prefix: string; suffix: string } {
+  if (unit === MONEY_UNIT) {
+    const style = styleOf(currency)
+    return { prefix: style.prefix, suffix: style.suffix }
+  }
+  return { prefix: '', suffix: unit ?? '' }
 }
 
 /**
@@ -78,35 +98,87 @@ export function formatIndicatorValue(
   value: number | null | undefined,
   unit: string | null | undefined,
   decimalScale: number,
+  currency: string | null | undefined,
 ): string {
-  const parts = splitIndicatorValue(value, unit, decimalScale)
+  const parts = splitIndicatorValue(value, unit, decimalScale, currency)
   return `${parts.number}${parts.unit}`
 }
 
 /**
- * 주가. **원주가**이므로 사용자가 실제로 지불하는 금액이고, 소수점을 보이지 않는다.
+ * 통화별 표기 규칙. **시장을 추가하면 여기에 줄을 더한다.**
  *
- * 통화가 원으로 고정되어 있다. `market`에 `currency`(KRW/USD)가 있지만 어떤 DTO도 싣지 않아
- * 화면이 알 방법이 없다 — ADR-0010이 미국 시장을 v1.1로 미룬 상태이므로 지금은 문제가 되지
- * 않지만, 그때는 여기가 아니라 **응답 계약부터** 고쳐야 한다. 고치지 않으면 $150이 아무
- * 신호 없이 "150원"으로 그려진다.
+ * 정본은 `market.currency_code`이고 서버가 응답마다 실어 준다 — 화면이 시장 코드에서
+ * 유도하지 않는 이유가 그것이다. 모르는 코드는 **원화로 떨어지지 않고** ISO 코드를 그대로
+ * 붙인다(`1,234 JPY`). 못 그리는 것보다 나쁜 것은 **틀린 통화로 그려 놓고 조용한 것**이다.
+ *
+ * `scales`는 큰 쪽부터다. 접는 자리가 통화마다 다른 것이 의도다 — 한국어권은 만진법이라
+ * 조·억이고, 달러는 천진법이라 T·B·M이다. 한쪽 규칙을 다른 쪽에 쓰면 자릿수가 안 읽힌다.
  */
-export function formatPrice(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return MISSING
+interface CurrencyStyle {
+  prefix: string
+  suffix: string
+  scales: ReadonlyArray<readonly [number, string]>
+}
+
+const CURRENCIES: Readonly<Record<string, CurrencyStyle>> = {
+  KRW: { prefix: '', suffix: '원', scales: [[1e12, '조'], [1e8, '억']] },
+  USD: { prefix: '$', suffix: '', scales: [[1e12, 'T'], [1e9, 'B'], [1e6, 'M']] },
+}
+
+function styleOf(currency: string | null | undefined): CurrencyStyle {
+  if (!currency) {
+    // 서버가 통화를 못 정한 응답. 숫자만 낸다 — 아무 통화나 붙이는 것보다 낫다.
+    return { prefix: '', suffix: '', scales: [] }
   }
-  return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(value)}원`
+  return CURRENCIES[currency] ?? { prefix: '', suffix: ` ${currency}`, scales: [] }
 }
 
 /**
- * 등락폭(원). {@link formatSignedPercent}의 금액 짝이다 — 오른 것에 `+`를 붙인다.
+ * 서버 지표 카탈로그가 **금액 지표**에 쓰는 단위 문자열.
+ *
+ * 카탈로그는 시장 중립이라 통화를 모르고, 금액이라는 사실만 이 문자열로 말한다. 화면이
+ * 그것을 행의 통화로 갈아끼운다 — 안 갈아끼우면 미국 시가총액이 「원」으로 그려진다.
+ * 정본은 `IndicatorMeta.unit`이고 지금 이 값을 쓰는 지표는 넷이다
+ * (`MARKET_CAP`·`TURNOVER_60`·`EPS_TTM`·`OPERATING_CASH_FLOW_5Y_SUM`).
+ */
+export const MONEY_UNIT = '원'
+
+/**
+ * 주가. **원주가**이므로 사용자가 실제로 지불하는 금액이고, 소수점을 보이지 않는다.
+ *
+ * `currency`가 **필수 인자다.** 기본값을 주면 새 호출부가 아무것도 안 넘겨도 컴파일되고,
+ * 그 화면만 조용히 원화로 그린다 — $150이 「150원」이 되는 경로가 정확히 그것이다.
+ */
+export function formatPrice(
+  value: number | null | undefined,
+  currency: string | null | undefined,
+): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return MISSING
+  }
+  const style = styleOf(currency)
+  const digits = currency === 'KRW' || !currency ? 0 : 2
+  const number = new Intl.NumberFormat(LOCALE, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(Math.abs(value))
+  // 부호는 접두 통화 기호보다 **앞**이다. `$-150`이 아니라 `-$150`이라야 음수로 읽힌다.
+  const sign = value < 0 ? '-' : ''
+  return `${sign}${style.prefix}${number}${style.suffix}`
+}
+
+/**
+ * 등락폭. {@link formatSignedPercent}의 금액 짝이다 — 오른 것에 `+`를 붙인다.
  *
  * MUST NOT: 여기서 다시 계산하지 않는다. 서버가 **수정종가의 비**로 낸 값이라(액면분할이
  * 있으면 원주가 뺄셈과 다르다) 화면이 두 종가를 빼서 만들면 같은 사실이 두 곳에 다른
  * 숫자로 나온다. {@link formatSignedPercent}의 같은 규율을 그대로 따른다.
  */
-export function formatSignedPrice(value: number | null | undefined): string {
-  const formatted = formatPrice(value)
+export function formatSignedPrice(
+  value: number | null | undefined,
+  currency: string | null | undefined,
+): string {
+  const formatted = formatPrice(value, currency)
   if (formatted === MISSING) {
     return MISSING
   }
@@ -115,7 +187,7 @@ export function formatSignedPrice(value: number | null | undefined): string {
 }
 
 /**
- * 재무제표 금액을 조·억 단위로 줄여 쓴다.
+ * 재무제표 금액을 통화의 큰 단위로 줄여 쓴다(원화면 조·억, 달러면 T·B·M).
  *
  * {@link formatPrice}와 나누는 기준은 **자릿수**다. 주가는 만 단위지만 재무는 조 단위라
  * 원 단위로 그리면 한 칸에 15자리가 들어가 표에서 비교가 불가능하다.
@@ -123,18 +195,22 @@ export function formatSignedPrice(value: number | null | undefined): string {
  * 반올림 자리를 소수 둘로 고정한다 — 조와 억이 섞인 열에서 자릿수가 흔들리면 눈으로
  * 크기를 견주지 못한다. 음수는 그대로 부호를 붙인다(적자를 감추지 않는다).
  */
-export function formatAmount(value: number | null | undefined): string {
+export function formatAmount(
+  value: number | null | undefined,
+  currency: string | null | undefined,
+): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return MISSING
   }
+  const style = styleOf(currency)
   const abs = Math.abs(value)
-  if (abs >= 1e12) {
-    return `${formatNumber(value / 1e12, 2)}조원`
+  for (const [factor, symbol] of style.scales) {
+    if (abs >= factor) {
+      const sign = value < 0 ? '-' : ''
+      return `${sign}${style.prefix}${formatNumber(abs / factor, 2)}${symbol}${style.suffix}`
+    }
   }
-  if (abs >= 1e8) {
-    return `${formatNumber(value / 1e8, 2)}억원`
-  }
-  return formatPrice(value)
+  return formatPrice(value, currency)
 }
 
 /**

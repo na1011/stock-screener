@@ -138,7 +138,7 @@ const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
           tabindex="0"
           :aria-describedby="noticeId"
         >
-          {{ formatPrice(price?.close ?? null) }}
+          {{ formatPrice(price?.close ?? null, stock.currencyCode) }}
         </span>
         <!-- 툴팁은 눈으로만 읽힌다. 같은 문구를 낭독기 몫으로 한 벌 더 둔다. -->
         <span :id="noticeId" class="stock-header__sr-only">{{ UNADJUSTED_PRICE_NOTICE }}</span>
@@ -153,7 +153,7 @@ const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
           class="stock-header__change tabular"
           :class="`stock-header__change--${tone.toLowerCase()}`"
         >
-          {{ formatQuoteChange(price?.change, price?.changeRate) }}
+          {{ formatQuoteChange(price?.change, price?.changeRate, stock.currencyCode) }}
         </span>
       </div>
 
@@ -167,15 +167,15 @@ const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
     <section v-if="price" class="stock-header__ohlc">
       <span>
         <span class="stock-header__ohlc-label">시가</span>
-        <span class="tabular">{{ formatPrice(price.open) }}</span>
+        <span class="tabular">{{ formatPrice(price.open, stock.currencyCode) }}</span>
       </span>
       <span>
         <span class="stock-header__ohlc-label">고가</span>
-        <span class="tabular">{{ formatPrice(price.high) }}</span>
+        <span class="tabular">{{ formatPrice(price.high, stock.currencyCode) }}</span>
       </span>
       <span>
         <span class="stock-header__ohlc-label">저가</span>
-        <span class="tabular">{{ formatPrice(price.low) }}</span>
+        <span class="tabular">{{ formatPrice(price.low, stock.currencyCode) }}</span>
       </span>
       <span>
         <span class="stock-header__ohlc-label">거래량</span>

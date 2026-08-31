@@ -25,6 +25,8 @@ const props = defineProps<{
   /** 서버가 이 조건을 거부했는가. `invalid-condition`의 `conditionIndex`가 가리킨 것. */
   invalid: boolean
   readonly: boolean
+  /** 지금 고른 조회 대상의 통화. 금액 임계에 붙일 단위가 여기서 나온다. */
+  currencyCode: string | null
 }>()
 
 const emit = defineEmits<{ toggle: [] }>()
@@ -65,6 +67,7 @@ const label = computed(() =>
     indicator.value,
     operandIndicator.value,
     operatorLabel.value,
+    props.currencyCode,
   ),
 )
 

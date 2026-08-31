@@ -64,8 +64,15 @@ public class ScreeningResponseAssembler {
                 .toMap(SectorMetricSpec::code, SectorMetricSpec::peerCountCode));
     }
 
+    /**
+     * @param currencyCode 이 결과가 선 시장의 통화. <b>화면의 모든 금액 표기가 이것 하나에 걸린다</b> —
+     *                     종가·통화 단위 지표·조건 칩의 임계까지 전부다. 행마다 싣지 않는 이유는
+     *                     한 실행이 통화 하나라는 것을 {@code ScreeningService}가 이미 강제하기
+     *                     때문이다(둘이면 요청을 거절한다). 행에도 두면 같은 사실이 두 곳에 놓인다.
+     */
     ScreeningResponse assemble(ScreeningService.Source source, EvaluationMode mode,
-                               String universeCode, LocalDate asOf, LocalDate asOfRequested,
+                               String universeCode, String currencyCode,
+                               LocalDate asOf, LocalDate asOfRequested,
                                int totalCount, List<ScreeningResult> results, boolean truncated) {
 
         List<IndicatorCondition> conditions = source.conditions().flattenConditions();
@@ -122,6 +129,7 @@ public class ScreeningResponseAssembler {
                         ? ScreeningResponse.SORTED_BY_SCORE
                         : ScreeningResponse.SORTED_BY_STOCK,
                 universeInfo(universeCode),
+                currencyCode,
                 // 어느 모집단을 썼는지는 서버가 판단해서 준다. 화면이 카탈로그를 따로 받아
                 // 판단하면 그 요청만 실패해도 모집단 주의 문구가 조용히 사라진다.
                 //

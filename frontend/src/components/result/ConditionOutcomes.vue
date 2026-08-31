@@ -36,6 +36,8 @@ const props = defineProps<{
   evaluationMode: EvaluationMode
   /** 지표 코드 → 이름. 조건 문구가 코드 대신 이름을 쓰게 한다. */
   indicatorName: (code: string) => string
+  /** 이 결과가 선 시장의 통화. 임계와 실제값의 금액 표기가 여기에 걸린다. */
+  currencyCode: string | null
 }>()
 
 const catalog = useCatalogStore()
@@ -77,7 +79,7 @@ const items = computed(() =>
     const outcome = props.row.outcomes.find((it) => it.conditionIndex === condition.index) ?? null
     // 가중치는 null이면 1이다. 서버의 `effectiveWeight`와 같은 규칙이어야 획득/배점이 맞는다.
     const weight = condition.weight ?? 1
-    const parts = splitCondition(condition, props.indicatorName)
+    const parts = splitCondition(condition, props.indicatorName, props.currencyCode)
     return {
       condition,
       outcome,
@@ -224,6 +226,7 @@ const LANE_HINT =
                     item.outcome.actualValue,
                     item.condition.indicator.unit,
                     item.condition.indicator.decimalScale,
+                    props.currencyCode,
                   )
             }}
           </span>

@@ -200,7 +200,7 @@ function barRatio(row: ScreeningRow, code: string): number | null {
       header-class="result-table__num"
     >
       <template #body="{ data }: { data: ScreeningRow }">
-        <span class="tabular">{{ formatPrice(data.close) }}</span>
+        <span class="tabular">{{ formatPrice(data.close, result.currencyCode) }}</span>
       </template>
     </Column>
 
@@ -295,7 +295,14 @@ function barRatio(row: ScreeningRow, code: string): number | null {
             :class="{ 'result-table__missing': valueOf(data, indicator.code) === null }"
             :title="valueOf(data, indicator.code) === null ? RESULT_LABELS.notCalculated : undefined"
           >
-            {{ formatIndicatorValue(valueOf(data, indicator.code), indicator.unit, indicator.decimalScale) }}
+            {{
+              formatIndicatorValue(
+                valueOf(data, indicator.code),
+                indicator.unit,
+                indicator.decimalScale,
+                result.currencyCode,
+              )
+            }}
           </span>
           <!-- 값이 없는 칸에는 막대가 없다(`RatioBar`가 null을 받으면 그리지 않는다).
                있으면 0인 것으로 읽힌다. 숫자가 바로 위에 있으므로 낭독기에는 감춘다. -->
@@ -311,6 +318,7 @@ function barRatio(row: ScreeningRow, code: string): number | null {
           :row="data"
           :evaluation-mode="result.evaluationMode"
           :indicator-name="indicatorName"
+          :currency-code="result.currencyCode"
         />
       </div>
     </template>

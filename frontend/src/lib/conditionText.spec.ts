@@ -52,6 +52,7 @@ describe('splitCondition — 서버가 준 한글 라벨을 그대로 쓴다', (
     const text = sentence(
       condition({ operator: 'LT', operand: { type: 'LITERAL', value: 10 } }),
       name,
+      'KRW',
     )
     expect(text).toBe('PER 10.00배 미만')
   })
@@ -73,6 +74,7 @@ describe('splitCondition — 서버가 준 한글 라벨을 그대로 쓴다', (
         operand: { type: 'INDICATOR', indicatorCode: 'SMA_200', multiplier: 0.9 },
       }),
       name,
+      'KRW',
     )
     expect(text).toBe('수정종가 200일 이동평균 × 0.90 이상')
   })
@@ -82,6 +84,7 @@ describe('splitCondition — 서버가 준 한글 라벨을 그대로 쓴다', (
     const text = sentence(
       condition({ operator: 'LT', operand: { type: 'LITERAL', value: null } }),
       name,
+      'KRW',
     )
     expect(text).toBe('PER — 미만')
   })
@@ -94,6 +97,7 @@ describe('splitCondition — 서버가 준 한글 라벨을 그대로 쓴다', (
         operand: { type: 'LITERAL', value: 45, upperBound: 70 },
       }),
       name,
+      'KRW',
     )
     // 단위는 뒤에 한 번만. "45.00배 ~ 70.00배"는 같은 말을 두 번 한다.
     expect(text).toBe('PER 45.00 ~ 70.00배 사이')
@@ -107,6 +111,7 @@ describe('splitCondition — 서버가 준 한글 라벨을 그대로 쓴다', (
         operand: { type: 'INDICATOR', indicatorCode: 'SMA_200' },
       }),
       name,
+      'KRW',
     )
     expect(text).toBe('PER 200일 이동평균 초과')
   })
@@ -119,6 +124,7 @@ describe('splitCondition — 서버가 준 한글 라벨을 그대로 쓴다', (
         operand: { type: 'INDICATOR', indicatorCode: 'SMA_200', multiplier: 0.9 },
       }),
       name,
+      'KRW',
     )
     expect(text).toBe('PER 200일 이동평균 × 0.90 이상')
   })
@@ -131,6 +137,7 @@ describe('splitCondition — 서버가 준 한글 라벨을 그대로 쓴다', (
         operand: { type: 'INDICATOR', indicatorCode: 'SMA_200', multiplier: 1 },
       }),
       name,
+      'KRW',
     )
     expect(text).toBe('PER 200일 이동평균 초과')
   })
@@ -155,6 +162,7 @@ describe('splitCondition — 경계는 지표 이름 뒤다', () => {
         operand: { type: 'LITERAL', value: 20100 },
       }),
       name,
+      'KRW',
     )
     expect(parts.subject).toBe('200일 이동평균')
     expect(parts.criterion).toBe('20,100.00원 이상')
@@ -168,6 +176,7 @@ describe('splitCondition — 경계는 지표 이름 뒤다', () => {
         operand: { type: 'INDICATOR', indicatorCode: 'SMA_200', multiplier: 1.25 },
       }),
       name,
+      'KRW',
     )
     expect(parts.subject).toBe('PER')
     expect(parts.criterion).toBe('200일 이동평균 × 1.25 이상')

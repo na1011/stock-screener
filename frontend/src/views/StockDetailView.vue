@@ -34,6 +34,14 @@ const stockId = computed(() => Number(props.stockId))
 const asOf = computed(() => (typeof route.query.asOf === 'string' ? route.query.asOf : null))
 
 const detail = useAsync((signal) => api.stock(stockId.value, asOf.value, signal))
+
+/**
+ * 이 종목의 금액 표기 통화. 시세·재무·지지저항이 전부 이것 하나를 쓴다.
+ *
+ * 상세 응답이 아직 안 왔으면 `null`이고, 그때는 금액에 통화를 붙이지 않는다 —
+ * 기본값으로 원화를 그리면 미국 종목의 첫 렌더가 잠깐 「150원」이 된다.
+ */
+const currencyCode = computed(() => detail.data.value?.stock.currencyCode ?? null)
 /**
  * 지지·저항은 **별도 요청**이다.
  *
@@ -82,7 +90,12 @@ const groups = computed(() =>
     items: group.items.map((indicator) => ({
       indicator,
       reading: readingOf(indicator),
-      parts: splitIndicatorValue(indicator.value, indicator.unit, indicator.decimalScale),
+      parts: splitIndicatorValue(
+        indicator.value,
+        indicator.unit,
+        indicator.decimalScale,
+        currencyCode.value,
+      ),
     })),
   })),
 )
@@ -121,7 +134,12 @@ const conditionRows = computed(() => {
         higherIsBetter: indicator.higherIsBetter,
         description: indicator.description,
         interpretation: indicator.interpretation,
-        parts: splitIndicatorValue(indicator.value, indicator.unit, indicator.decimalScale),
+        parts: splitIndicatorValue(
+        indicator.value,
+        indicator.unit,
+        indicator.decimalScale,
+        currencyCode.value,
+      ),
         reading: readingOf(indicator),
         // MUST: 아래 분류 구획과 **같은 사유**를 보인다. 이 가지가 카드 객체를 따로 만들기
         // 때문에 빠뜨리기 쉬운데, 빠뜨리면 같은 화면 위아래에 사유 있는 `—`와 없는 `—`가
@@ -138,7 +156,7 @@ const conditionRows = computed(() => {
       higherIsBetter: brief.higherIsBetter,
       description: catalog.byCode.get(code)?.description ?? null,
       interpretation: brief.interpretation,
-      parts: splitIndicatorValue(null, brief.unit, brief.decimalScale),
+      parts: splitIndicatorValue(null, brief.unit, brief.decimalScale, currencyCode.value),
       reading: null,
       // 응답에 아예 없는 지표다. 서버가 사유를 말할 수 있었다면 위 가지로 왔을 것이므로
       // 여기서는 지어내지 않는다.
@@ -310,7 +328,11 @@ onMounted(() => {
         panel="financials"
         :skeleton-rows="4"
       >
-        <FinancialsPanel v-if="financials.data.value" :financials="financials.data.value" />
+        <FinancialsPanel
+          v-if="financials.data.value"
+          :financials="financials.data.value"
+          :currency-code="currencyCode"
+        />
       </AsyncPanel>
 
       <!-- 지지·저항은 별도 패널이자 별도 요청이다. 위가 실패해도 여기는 살고, 반대도 마찬가지다. -->
@@ -330,7 +352,11 @@ onMounted(() => {
           panel="priceReference"
           :skeleton-rows="3"
         >
-          <PriceReferencePanel v-if="priceReference.data.value" :reference="priceReference.data.value" />
+          <PriceReferencePanel
+            v-if="priceReference.data.value"
+            :reference="priceReference.data.value"
+            :currency-code="currencyCode"
+          />
         </AsyncPanel>
       </div>
     </div>

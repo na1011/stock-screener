@@ -1,7 +1,7 @@
 import type { ConditionInfo, IndicatorResponse, OperandPayload } from '@/api/types'
 import type { DraftCondition } from '@/stores/screenDraft'
 
-import { formatEnteredNumber, formatIndicatorValue, formatNumber } from './format'
+import { formatEnteredNumber, formatIndicatorValue, formatNumber, unitAffixes } from './format'
 
 /** 조건 문장을 둘로 나눈 것. 결과의 조건 내역이 이 둘을 **다른 칸에** 그린다. */
 export interface ConditionParts {
@@ -40,6 +40,7 @@ export interface ConditionParts {
 export function splitCondition(
   condition: ConditionInfo,
   indicatorName: (code: string) => string,
+  currency: string | null | undefined,
 ): ConditionParts {
   const subject = condition.indicator.name
   const scale = condition.indicator.decimalScale
@@ -49,13 +50,13 @@ export function splitCondition(
   if (condition.operator === 'BETWEEN') {
     // 단위는 뒤에 한 번만. "45.00% ~ 70.00%"는 같은 말을 두 번 한다.
     const lower = formatNumber(operand.value ?? null, scale)
-    const upper = formatIndicatorValue(operand.upperBound ?? null, unit, scale)
+    const upper = formatIndicatorValue(operand.upperBound ?? null, unit, scale, currency)
     return { subject, criterion: `${lower} ~ ${upper} ${condition.operatorLabel}` }
   }
 
   return {
     subject,
-    criterion: `${describeOperand(operand, scale, unit, indicatorName)} ${condition.operatorLabel}`,
+    criterion: `${describeOperand(operand, scale, unit, indicatorName, currency)} ${condition.operatorLabel}`,
   }
 }
 
@@ -80,12 +81,15 @@ export function summarizeDraftCondition(
   indicator: IndicatorResponse | null,
   operandIndicator: IndicatorResponse | null,
   operatorLabel: string | null,
+  currency: string | null | undefined,
 ): string | null {
   if (indicator === null) {
     return null
   }
   const scale = indicator.decimalScale
-  const unit = indicator.unit ?? ''
+  // 칩이 서버 단위 문자열을 그대로 붙이면, 미국 대상을 고른 채 시가총액을 넣었을 때
+  // 「10000000000원」이 된다. 결과 표와 같은 규칙(`unitAffixes`)을 쓴다.
+  const { prefix, suffix: unit } = unitAffixes(indicator.unit, currency)
   const tail = operatorLabel === null ? '' : ` ${operatorLabel}`
 
   if (condition.operandType === 'INDICATOR') {
@@ -111,10 +115,10 @@ export function summarizeDraftCondition(
     const lower = formatEnteredNumber(condition.value, scale)
     // 상한만 비어 있으면 하한까지는 보인다. 어디까지 넣었는지가 드러나야 한다.
     const upper = condition.upperBound === null ? '?' : formatEnteredNumber(condition.upperBound, scale)
-    return `${indicator.name} ${lower}~${upper}${unit}${tail}`
+    return `${indicator.name} ${prefix}${lower}~${prefix}${upper}${unit}${tail}`
   }
 
-  return `${indicator.name} ${formatEnteredNumber(condition.value, scale)}${unit}${tail}`
+  return `${indicator.name} ${prefix}${formatEnteredNumber(condition.value, scale)}${unit}${tail}`
 }
 
 /**
@@ -195,6 +199,7 @@ function describeOperand(
   decimalScale: number,
   unit: string | null,
   indicatorName: (code: string) => string,
+  currency: string | null | undefined,
 ): string {
   if (operand.type === 'INDICATOR') {
     const code = operand.indicatorCode ?? null
@@ -207,5 +212,5 @@ function describeOperand(
     return `${name} × ${formatNumber(multiplier, 2)}`
   }
   // 값이 없으면 단위도 붙지 않는다 — "—%"는 없는 값에 단위를 붙인 것이라 거짓이다.
-  return formatIndicatorValue(operand.value ?? null, unit, decimalScale)
+  return formatIndicatorValue(operand.value ?? null, unit, decimalScale, currency)
 }

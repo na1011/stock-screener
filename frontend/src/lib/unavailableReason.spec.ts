@@ -32,7 +32,7 @@ describe('값이 없는 지표의 표시', () => {
   it('값이 null이면 —로 그리고 단위를 붙이지 않는다', () => {
     const row = indicator(null, '적자라 PER을 내지 않습니다.')
 
-    const parts = splitIndicatorValue(row.value, row.unit, row.decimalScale)
+    const parts = splitIndicatorValue(row.value, row.unit, row.decimalScale, 'KRW')
 
     expect(parts.number).toBe(MISSING)
     // `—배`는 없는 값에 단위를 붙인 것이라 거짓이다.
@@ -40,7 +40,7 @@ describe('값이 없는 지표의 표시', () => {
   })
 
   it('MUST NOT: 값이 없을 때 0으로 메우지 않는다', () => {
-    const parts = splitIndicatorValue(indicator(null, '사유').value, '배', 2)
+    const parts = splitIndicatorValue(indicator(null, '사유').value, '배', 2, 'KRW')
 
     expect(parts.number).not.toBe('0')
     expect(parts.number).not.toBe('0.00')

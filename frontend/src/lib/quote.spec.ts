@@ -19,19 +19,19 @@ describe('quoteTone — 값 없음과 보합을 가른다', () => {
 
 describe('formatQuoteChange — 금액이 앞, 백분율이 괄호 안', () => {
   it('오른 것에 부호를 붙이고 소수 두 자리로 낸다', () => {
-    expect(formatQuoteChange(12500, 4.89)).toBe('+12,500원 (+4.89%)')
+    expect(formatQuoteChange(12500, 4.89, 'KRW')).toBe('+12,500원 (+4.89%)')
   })
 
   it('내린 것은 부호가 하나씩이다 — 두 번 붙지 않는다', () => {
-    expect(formatQuoteChange(-2050, -17.46)).toBe('-2,050원 (-17.46%)')
+    expect(formatQuoteChange(-2050, -17.46, 'KRW')).toBe('-2,050원 (-17.46%)')
   })
 
   it('보합에는 부호가 없다', () => {
-    expect(formatQuoteChange(0, 0)).toBe('0원 (0.00%)')
+    expect(formatQuoteChange(0, 0, 'KRW')).toBe('0원 (0.00%)')
   })
 
   it('값이 없으면 —다. 0으로 메우지 않는다', () => {
-    expect(formatQuoteChange(null, null)).toBe(MISSING)
+    expect(formatQuoteChange(null, null, 'KRW')).toBe(MISSING)
   })
 })
 

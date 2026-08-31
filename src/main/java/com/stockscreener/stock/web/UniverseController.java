@@ -28,10 +28,12 @@ public class UniverseController {
     @GetMapping
     public List<UniverseResponse> list() {
         return stockReader.selectableUniverses().stream()
-                .map(u -> new UniverseResponse(u.code(), u.name(), u.marketCode(), u.memberCount()))
+                .map(u -> new UniverseResponse(u.code(), u.name(), u.marketCode(),
+                        u.currencyCode(), u.memberCount()))
                 .toList();
     }
 
-    public record UniverseResponse(String code, String name, String marketCode, int memberCount) {
+    public record UniverseResponse(String code, String name, String marketCode,
+                                   String currencyCode, int memberCount) {
     }
 }

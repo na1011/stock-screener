@@ -41,6 +41,21 @@ export const useCatalogStore = defineStore('catalog', () => {
     ),
   )
 
+  /**
+   * 조회 대상 하나가 어느 통화로 그려지는가. 조건 빌더가 임계에 붙일 단위를 여기서 얻는다.
+   *
+   * `null`(전체)이면 **활성 대상의 통화가 하나일 때만** 그것을 답한다 — 둘 이상이면
+   * 서버가 그 실행 자체를 거절하므로, 화면이 임의로 한쪽을 골라 그리면 거절될 조건을
+   * 그럴듯하게 보여주는 것이 된다. 목록이 아직 안 왔을 때도 `null`이다.
+   */
+  function currencyOf(universeCode: string | null): string | null {
+    if (universeCode !== null) {
+      return universes.value.find((u) => u.code === universeCode)?.currencyCode ?? null
+    }
+    const distinct = new Set(universes.value.map((u) => u.currencyCode))
+    return distinct.size === 1 ? ([...distinct][0] ?? null) : null
+  }
+
   async function ensureCatalog(): Promise<void> {
     if (catalogRequest.state.value === 'idle' || catalogRequest.state.value === 'error') {
       await catalogRequest.run()
@@ -66,6 +81,7 @@ export const useCatalogStore = defineStore('catalog', () => {
     universes,
     byCode,
     grouped,
+    currencyOf,
     ensureCatalog,
     ensureUniverses,
   }

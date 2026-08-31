@@ -76,8 +76,9 @@ public class StockReader {
         }
 
         List<StockRow> rows = jdbcTemplate.query("""
-                SELECT s.id, s.ticker, s.name, s.market_code, s.sector, p.close
+                SELECT s.id, s.ticker, s.name, s.market_code, mk.currency_code, s.sector, p.close
                 FROM stock s
+                JOIN market mk ON mk.code = s.market_code
                 LEFT JOIN price_daily p ON p.stock_id = s.id AND p.trade_date = ?
                 WHERE s.id IN (%s)
                 """.formatted(placeholders), ROW_MAPPER, args);
@@ -262,15 +263,18 @@ public class StockReader {
     @Transactional(readOnly = true)
     public List<UniverseRow> selectableUniverses() {
         return jdbcTemplate.query("""
-                SELECT u.code, u.name, u.market_code, count(m.stock_id) AS member_count
+                SELECT u.code, u.name, u.market_code, mk.currency_code,
+                       count(m.stock_id) AS member_count
                 FROM universe u
+                JOIN market mk ON mk.code = u.market_code
                 JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL
                 WHERE u.is_active
-                GROUP BY u.code, u.name, u.market_code
+                GROUP BY u.code, u.name, u.market_code, mk.currency_code
                 ORDER BY u.code
                 """, (rs, n) -> new UniverseRow(
                 rs.getString("code"), rs.getString("name"),
-                rs.getString("market_code"), rs.getInt("member_count")));
+                rs.getString("market_code"), rs.getString("currency_code"),
+                rs.getInt("member_count")));
     }
 
     /**
@@ -333,12 +337,18 @@ public class StockReader {
             rs.getString("ticker"),
             rs.getString("name"),
             rs.getString("market_code"),
+            rs.getString("currency_code"),
             rs.getString("sector"),
             rs.getBigDecimal("close"));
 
-    /** @param close 기준일 <b>원주가</b> 종가. 사용자가 실제로 지불하는 가격이다(수정종가가 아니다). */
+    /**
+     * @param close        기준일 <b>원주가</b> 종가. 사용자가 실제로 지불하는 가격이다(수정종가가 아니다).
+     * @param currencyCode 그 금액의 통화. <b>화면이 「원」을 붙일지 「$」를 붙일지의 유일한 근거다</b> —
+     *                     시장 코드에서 유도하면 시장이 늘 때 프론트가 조용히 낡는다.
+     *                     이 한 질의가 결과 표와 종목 상세를 함께 먹이므로 두 화면이 같은 답을 쓴다.
+     */
     public record StockRow(long id, String ticker, String name, String marketCode,
-                           String sector, BigDecimal close) {
+                           String currencyCode, String sector, BigDecimal close) {
     }
 
     public record StockUniverse(String code, String name, LocalDate since) {
@@ -373,7 +383,13 @@ public class StockReader {
                            BigDecimal tradeValue, BigDecimal listedShares) {
     }
 
-    public record UniverseRow(String code, String name, String marketCode, int memberCount) {
+    /**
+     * @param currencyCode 이 유니버스를 고르면 화면의 금액이 어느 통화로 그려지는가.
+     *                     조건 빌더가 임계를 입력받을 때도 이것을 쓴다 — 없으면 미국을 고른
+     *                     상태에서 시가총액 칩이 「원」으로 그려진다.
+     */
+    public record UniverseRow(String code, String name, String marketCode, String currencyCode,
+                              int memberCount) {
     }
 
     /** @param universeCodes 현재 편입되어 있는 유니버스. 화면이 어느 지수 종목인지 보인다. */

@@ -95,8 +95,10 @@ public class ScreeningService {
             throw new ApiExceptions.UniverseRequiredException(currencies);
         }
         Source resolved = source;
-        if (currencies.size() == 1) {
-            String currency = currencies.iterator().next();
+        // 활성 유니버스가 하나도 없으면 빈 집합이다. 그때는 바로 아래 asOfResolver가 503으로
+        // 접으므로 이 null이 응답까지 가지 않는다.
+        String currency = currencies.isEmpty() ? null : currencies.iterator().next();
+        if (currency != null) {
             try {
                 resolved = new Source(source.id(), source.code(), source.name(), source.type(),
                         source.mode(), source.universeCode(),
@@ -121,7 +123,7 @@ public class ScreeningService {
         // MUST: 조립도 **해석본**을 받는다. 해석 전 조건을 실으면 미국 실행인데 화면의
         // 「선정 이유」에 원화 기준값이 뜨고, 조건이 하나라도 떨어지면 조건 목록과 판정의
         // 인덱스가 어긋나 다른 조건의 판정이 붙는다.
-        return assembler.assemble(resolved, mode, universeCode, asOf, request.asOf(),
+        return assembler.assemble(resolved, mode, universeCode, currency, asOf, request.asOf(),
                 results.size(), page, truncated);
     }
 

@@ -150,7 +150,7 @@ function toggle(stockId: number): void {
           </RouterLink>
           <span class="card__ticker">{{ row.ticker }}</span>
         </div>
-        <span class="card__price tabular">{{ formatPrice(row.close) }}</span>
+        <span class="card__price tabular">{{ formatPrice(row.close, result.currencyCode) }}</span>
       </header>
 
       <div class="card__metrics">
@@ -166,7 +166,12 @@ function toggle(stockId: number): void {
         <span v-for="indicator in previewColumns" :key="indicator.code" class="card__metric">
           <span class="card__metric-label">{{ indicator.name }}</span>
           <strong class="tabular">{{
-            formatIndicatorValue(valueOf(row, indicator.code), indicator.unit, indicator.decimalScale)
+            formatIndicatorValue(
+              valueOf(row, indicator.code),
+              indicator.unit,
+              indicator.decimalScale,
+              result.currencyCode,
+            )
           }}</strong>
         </span>
       </div>
@@ -192,6 +197,7 @@ function toggle(stockId: number): void {
         :row="row"
         :evaluation-mode="result.evaluationMode"
         :indicator-name="indicatorName"
+        :currency-code="result.currencyCode"
         class="card__outcomes"
       />
     </article>

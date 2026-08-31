@@ -41,6 +41,7 @@ public record ScreeningResponse(
         EvaluationMode evaluationMode,
         String sortedBy,
         UniverseInfo universe,
+        String currencyCode,
         List<IndicatorPopulation> relativePopulations,
         ScreenInfo screen,
         List<ConditionInfo> conditions,

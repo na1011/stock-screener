@@ -103,12 +103,14 @@ public record StockDetailResponse(
         }
     }
 
+    /** @param currencyCode 이 종목의 금액 표기 통화. 정본은 {@code market.currency_code} 하나다. */
     public record Stock(
-            long id, String ticker, String name, String marketCode, String sector,
-            List<Universe> universes) {
+            long id, String ticker, String name, String marketCode, String currencyCode,
+            String sector, List<Universe> universes) {
 
         static Stock of(StockReader.StockRow row, List<StockReader.StockUniverse> universes) {
-            return new Stock(row.id(), row.ticker(), row.name(), row.marketCode(), row.sector(),
+            return new Stock(row.id(), row.ticker(), row.name(), row.marketCode(),
+                    row.currencyCode(), row.sector(),
                     universes.stream()
                             .map(u -> new Universe(u.code(), u.name(), u.since()))
                             .toList());

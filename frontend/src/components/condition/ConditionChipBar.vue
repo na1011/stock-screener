@@ -264,6 +264,7 @@ function removeEditing(): void {
           :active="editingKey === condition.key"
           :invalid="props.invalidKey === condition.key"
           :readonly="readonly"
+          :currency-code="catalog.currencyOf(draft.universeCode)"
           @click="openEditor($event, condition.key)"
           @toggle="draft.setEnabled(condition.key, !condition.enabled)"
         />

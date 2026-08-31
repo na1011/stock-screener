@@ -21,7 +21,11 @@ import { MISSING, formatAmount, formatDate, formatSignedPercent } from '@/lib/fo
  * 연간과 분기를 나눈 것도 의도다. 매출·이익은 기간에 걸쳐 쌓이는 유량이고 자산·자본은 시점
  * 잔액이라, 한 표에 섞으면 사용자가 "이 분기 자산이 늘었다"를 잘못 읽는다.
  */
-const props = defineProps<{ financials: StockFinancials }>()
+const props = defineProps<{
+  financials: StockFinancials
+  /** 이 종목의 금액 표기 통화. 상세 응답이 아직이면 null이고, 그때는 통화를 안 붙인다. */
+  currencyCode: string | null
+}>()
 
 type Tab = 'annual' | 'quarterly'
 const tab = ref<Tab>('annual')
@@ -96,22 +100,22 @@ function label(row: FinancialPeriod): string {
                 <Tag v-if="row.revised" value="정정" severity="info" class="financials__badge" />
               </th>
               <td class="financials__num">
-                {{ formatAmount(row.revenue) }}
+                {{ formatAmount(row.revenue, currencyCode) }}
                 <span class="financials__yoy">{{ formatSignedPercent(row.revenueYoy) }}</span>
               </td>
               <td class="financials__num">
-                {{ formatAmount(row.operatingIncome) }}
+                {{ formatAmount(row.operatingIncome, currencyCode) }}
                 <span class="financials__yoy">{{ formatSignedPercent(row.operatingIncomeYoy) }}</span>
               </td>
               <td class="financials__num">
-                {{ formatAmount(row.netIncome) }}
+                {{ formatAmount(row.netIncome, currencyCode) }}
                 <span class="financials__yoy">{{ formatSignedPercent(row.netIncomeYoy) }}</span>
               </td>
               <td v-if="showCashFlow" class="financials__num">
-                {{ formatAmount(row.operatingCashFlow) }}
+                {{ formatAmount(row.operatingCashFlow, currencyCode) }}
               </td>
-              <td class="financials__num">{{ formatAmount(row.totalAssets) }}</td>
-              <td class="financials__num">{{ formatAmount(row.totalEquity) }}</td>
+              <td class="financials__num">{{ formatAmount(row.totalAssets, currencyCode) }}</td>
+              <td class="financials__num">{{ formatAmount(row.totalEquity, currencyCode) }}</td>
               <td>{{ row.publishedAt ? formatDate(row.publishedAt) : MISSING }}</td>
             </tr>
           </tbody>
