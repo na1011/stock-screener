@@ -331,14 +331,14 @@ public class PresetCatalog {
                 ConditionGroup.and(List.of(
                         // ── 필수 게이트 ──
                         // 3.1 — 원문 15는 19종목(5%)이라 국내 분포로 재보정했다. 53종목(15%).
-                        requiredIn(RoeMin3yCalculator.CODE, ComparisonOperator.GTE, "10", "22.4"),
+                        requiredIn(RoeMin3yCalculator.CODE, ComparisonOperator.GTE, "10", "22.6"),
                         // 0.3·3.2 — ROE와 반드시 함께 건다. §8이 분리를 금지한 자리다. 197/346(57%).
                         requiredIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100", "183"),
                         // 0.2·1.2·5.1 — AAII 원문의 7개 회계연도다. 159/347(46%).
                         required(ProfitStreakYearsCalculator.CODE, ComparisonOperator.GTE, "7"),
                         // 0.1 충분한 규모. 274/347(79%).
                         requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE,
-                                "1000000000000", "7940000000"),
+                                "1000000000000", "6500000000"),
                         // 2019 주주서한의 첫 번째 기준 —「영업에 투입된 순유형자본 대비 좋은
                         // 수익률」. 60/300(20%)이 통과하고 이 게이트가 18 → 15로 자른다.
                         //
@@ -390,8 +390,8 @@ public class PresetCatalog {
                         // 67/347(19%), 커버리지 287.
                         weighted(GrossMarginCalculator.CODE, ComparisonOperator.GTE, "40", "2"),
                         // 3.4 「일관성」. 나쁜 해에도 얼마나 남았는가. 58/347(17%).
-                        weighted(OperatingMarginMin5yCalculator.CODE,
-                                ComparisonOperator.GTE, "8", "2"),
+                        weightedIn(OperatingMarginMin5yCalculator.CODE,
+                                ComparisonOperator.GTE, "8", "17.8", "2"),
 
                         // ── 점수: 자본배분과 부채 여유 ──
                         // 2.1 자본배분. 소각만 잡고 자사주 취득은 못 잡는다. 201/347(58%).
@@ -514,7 +514,8 @@ public class PresetCatalog {
                         // 주식 미발행. 자사주를 소각한 기업은 음수다.
                         weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
                         // 부채로 부풀린 수익성 배제. 부채비율은 낮은 쪽이 좋으므로 <=
-                        weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "150", "1"),
+                        weightedIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE,
+                                "150", "276", "1"),
                         // 추세가 완전히 무너지지는 않았을 것 — 200일선 10% 아래까지 허용
                         IndicatorCondition.of(
                                 AdjCloseCalculator.CODE, ComparisonOperator.GTE,
@@ -645,7 +646,7 @@ public class PresetCatalog {
                         requiredBetween(EpsCagr5yCalculator.CODE, "20", "50"),
                         // 2.3 "중소형"의 유니버스 내 치환. 시총 중앙값이다.
                         requiredIn(MarketCapCalculator.CODE, ComparisonOperator.LTE,
-                                "2616000000000", "17300000000"),
+                                "2616000000000", "15800000000"),
                         // §6 유동성. 버핏과 같은 임계를 쓴다 — 회전율은 규모에 중립이라
                         // 「대형 지향이냐」로 가를 이유가 없다. 크기 축은 위 MARKET_CAP이 든다.
                         required(TurnoverRatio60Calculator.CODE,
@@ -673,7 +674,8 @@ public class PresetCatalog {
                                 PerCalculator.CODE, ComparisonOperator.LT,
                                 ConditionOperand.IndicatorRef.of(PerMedian5yCalculator.CODE))
                                 .withWeight(new BigDecimal("1")),
-                        weighted(OperatingMarginCalculator.CODE, ComparisonOperator.GT, "10", "1"),
+                        weightedIn(OperatingMarginCalculator.CODE, ComparisonOperator.GT,
+                                "10", "16.3", "1"),
                         // 3.13 린치는 이익보다 현금흐름을 신뢰했다. 발생액이 이 자리를 지킨다고
                         // 적어 두었으나 ρ(ACCRUAL_RATIO, FCF_MARGIN) = −0.184로 지키지 않는다 —
                         // 둘 다 둔다. 원문 1차 조건은 FCF 수익률이라 약하게 옮긴 것이다.
@@ -790,7 +792,7 @@ public class PresetCatalog {
                         // ── 필수 게이트 ──
                         // "대형"의 경계. 유니버스 상위 25%다.
                         requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE,
-                                "6773000000000", "46500000000"),
+                                "6773000000000", "41800000000"),
                         // ★ 유형 분류. 2.2의 밴드를 5년 CAGR로 옮겼다(ADR-0070). 53 → 10종목(2026-08-20).
                         requiredBetween(EpsCagr5yCalculator.CODE, "10", "20"),
                         // ★ 질. 「나쁜 해에도 영업흑자인가」 — 대형우량주가 약속하는 성질이다.
@@ -944,14 +946,15 @@ public class PresetCatalog {
                         literal(Adx14Calculator.CODE, ComparisonOperator.GTE, "20"),
                         // 거래량 확장. 원문 2~3배를 국내 분포로 옮긴 값이다.
                         literalIn(VolumeRatio20Calculator.CODE, ComparisonOperator.GTE,
-                                "1.5", "1.48"),
+                                "1.5", "1.38"),
                         // 거래량이 매수 쪽에 실렸는가
                         literal(Cmf21Calculator.CODE, ComparisonOperator.GT, "0"),
                         // 지수 대비 상대강도
                         literal(pctl(ExcessReturn52wCalculator.CODE),
                                 ComparisonOperator.GTE, "0.70"),
                         // 신고가 근접. 값은 항상 0 이하다.
-                        literal(PctFrom52wHighCalculator.CODE, ComparisonOperator.GTE, "-10"))));
+                        literalIn(PctFrom52wHighCalculator.CODE, ComparisonOperator.GTE,
+                                "-10", "-4.58"))));
     }
 
     // ── 6. 상승추세 눌림목 ────────────────────────────────────────────────
@@ -1005,7 +1008,8 @@ public class PresetCatalog {
                         IndicatorCondition.of(AdjCloseCalculator.CODE, ComparisonOperator.GTE,
                                 ConditionOperand.IndicatorRef.of(Sma60Calculator.CODE, "0.92")),
                         // 분산 국면 배제
-                        literal(Cmf21Calculator.CODE, ComparisonOperator.GTE, "-0.10"))));
+                        literalIn(Cmf21Calculator.CODE, ComparisonOperator.GTE,
+                                "-0.10", "-0.0503"))));
     }
 
     // ── 7. 저변동 우량 ────────────────────────────────────────────────────
@@ -1044,9 +1048,9 @@ public class PresetCatalog {
                 null,
                 ConditionGroup.and(List.of(
                         // 절대 변동폭 하위 약 30%
-                        weightedIn(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "5.9", "2.79", "3"),
+                        weightedIn(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "5.9", "3.09", "3"),
                         // 시장 동조 하위 약 30%. 국내 중앙값이 0.75라 0.9로는 축이 되지 않는다.
-                        weightedIn(Beta104wCalculator.CODE, ComparisonOperator.LTE, "0.40", "0.55", "3"),
+                        weightedIn(Beta104wCalculator.CODE, ComparisonOperator.LTE, "0.40", "0.436", "3"),
                         weighted(ProfitableQuarters4Calculator.CODE,
                                 ComparisonOperator.GTE, "4", "2"),
                         weightedIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100", "183", "2"),
@@ -1067,14 +1071,19 @@ public class PresetCatalog {
      * 그것이 「같은 뜻」의 조작적 정의다.
      *
      * <p>옮기는 방법은 <b>분위 보존</b>이다. ADR-0073 §규칙이 <i>"미국 프리셋을 만들 때 이
-     * 임계를 복사하지 않고 그 시장 분포로 다시 잰다"</i>로 처방했고, 값은 2026-08-28 단면에서
-     * 쟀다(국내 활성 350 ↔ {@code US_TOP1000} 1,000). <b>유효숫자 3자리로 반올림했다</b> —
-     * 그 이상은 없는 정밀도다.
+     * 임계를 복사하지 않고 그 시장 분포로 다시 잰다"</i>로 처방했다.
+     *
+     * <p><b>기준은 보존 창 전체다</b>(ADR-0109) — 국내 2025-12-03~2026-08-28 · 미국
+     * 2025-12-10~2026-08-28, 각 180거래일. 국내 활성 350 ↔ {@code US_TOP1000} 1,000의
+     * <b>(종목,일자) 관측을 한 표본으로 모아</b> 분위를 잡고 <b>유효숫자 3자리</b>로
+     * 반올림했다. <b>단면 하나로 재지 않는 이유</b>: 가격 유래 임계가 그날의 국면을 타
+     * {@code CMF_21}은 방향까지 뒤집혔고 {@code BETA_104W}는 21% 갈렸다. 재무 유래는
+     * 분기마다 계단으로 바뀌어 단면과 창이 사실상 같다.
      *
      * <p>MUST NOT: 이 헬퍼를 안 쓴 리터럴을 「시장 중립」으로 읽지 않는다. 중립의 근거가 될 수
      * 있는 것은 <b>부호·개수·연수·백분위·상대비교</b>뿐이다(P27 축①). 여기 없는 무차원
-     * 임계는 <b>문헌 원문값이라 그대로 둔 것</b>이고, 그 위치가 시장마다 다르다는 사실은
-     * ADR-0106 §배경의 표가 신고한다.
+     * 임계는 <b>문헌 원문값이라 그대로 둔 것</b>이다 — 출처가 코드에 없던 다섯은
+     * 2026-09-01에 이 헬퍼로 옮겨 그 문장이 참이 됐다(ADR-0109).
      *
      * <p>IMPORTANT — {@code DEBT_RATIO}는 옮기면서 <b>뜻이 한 겹 바뀐다.</b> 국내의 100은
      * D/E = 1.0이라는 회계적 경계이기도 한데, 미국의 183은 그 경계가 아니라 <b>같은 순위</b>다.
