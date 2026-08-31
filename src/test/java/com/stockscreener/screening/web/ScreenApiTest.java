@@ -146,6 +146,47 @@ class ScreenApiTest {
 
     @Test
     @WithMockUser(username = OWNER)
+    @DisplayName("IMPORTANT — 프리셋 조회가 통화별 임계를 전부 준다. 하나만 주면 화면이 거짓을 적는다")
+    void presetCarriesEveryCurrencyThreshold() throws Exception {
+        // 화면은 자기가 고른 조회 대상의 통화로 여기서 고른다. 하나만 실으면 그 값이 다른
+        // 시장의 단위로 그려진다 — 실측으로 조건 칩이 「시가총액 7,940,000,000원 이상」이
+        // 됐고(USD 값 + 원 단위) 같은 화면의 「선정 이유」는 1조원이라 위아래가 갈렸다.
+        Long presetId = jdbcTemplate.queryForObject(
+                "SELECT id FROM screen WHERE code = 'BUFFETT_QUALITY'", Long.class);
+
+        String body = mockMvc.perform(get("/api/screens/" + presetId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode marketCap = null;
+        for (JsonNode condition : objectMapper.readTree(body).get("conditions").get("conditions")) {
+            if ("MARKET_CAP".equals(condition.get("indicatorCode").asText())) {
+                marketCap = condition.get("operand");
+            }
+        }
+        assertThat(marketCap)
+                .as("이 프리셋에 MARKET_CAP 조건이 있어야 이 시험이 성립한다")
+                .isNotNull();
+
+        JsonNode byCurrency = marketCap.get("thresholdsByCurrency");
+        assertThat(byCurrency).isNotNull();
+        assertThat(byCurrency.propertyNames())
+                .as("통화 하나만 오면 나머지 시장의 조건 칩이 거짓을 적는다")
+                .containsExactlyInAnyOrder("KRW", "USD");
+        assertThat(byCurrency.get("KRW").get("value").decimalValue())
+                .isEqualByComparingTo("1000000000000");
+        assertThat(byCurrency.get("USD").get("value").decimalValue())
+                .isEqualByComparingTo("7940000000");
+
+        // value는 **대상을 아직 모를 때의 표시 기본값**이고 통화 코드 오름차순으로 정해진다.
+        // MUST: 「기준 통화」로 읽지 않는다 — MarketLiteral이 Map.copyOf로 순서를 지우므로
+        // 예전에는 어느 통화가 실릴지 정해져 있지 않았고, 그것이 위 결함의 원인이었다.
+        assertThat(marketCap.get("thresholdCurrency").asText()).isEqualTo("KRW");
+        assertThat(marketCap.get("value").decimalValue()).isEqualByComparingTo("1000000000000");
+    }
+
+    @Test
+    @WithMockUser(username = OWNER)
     @DisplayName("같은 이름을 두 번 저장하면 409다")
     void duplicateNameIsConflict() throws Exception {
         createScreen();

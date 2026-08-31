@@ -98,9 +98,10 @@ export function summarizeDraftCondition(
     return null
   }
   const scale = indicator.decimalScale
+  const threshold = marketThresholdOf(condition, currency)
   // 칩이 서버 단위 문자열을 그대로 붙이면, 미국 대상을 고른 채 시가총액을 넣었을 때
   // 「10000000000원」이 된다. 결과 표와 같은 규칙(`unitAffixes`)을 쓴다.
-  const { prefix, suffix: unit } = unitAffixes(indicator.unit, currency)
+  const { prefix, suffix: unit } = unitAffixes(indicator.unit, threshold.currency)
   const tail = operatorLabel === null ? '' : ` ${operatorLabel}`
 
   if (condition.operandType === 'INDICATOR') {
@@ -123,13 +124,52 @@ export function summarizeDraftCondition(
   }
 
   if (condition.operator === 'BETWEEN') {
-    const lower = formatEnteredNumber(condition.value, scale)
+    const lower = formatEnteredNumber(threshold.value, scale)
     // 상한만 비어 있으면 하한까지는 보인다. 어디까지 넣었는지가 드러나야 한다.
-    const upper = condition.upperBound === null ? '?' : formatEnteredNumber(condition.upperBound, scale)
+    const upper =
+      threshold.upperBound === null ? '?' : formatEnteredNumber(threshold.upperBound, scale)
     return `${indicator.name} ${prefix}${lower}~${prefix}${upper}${unit}${tail}`
   }
 
-  return `${indicator.name} ${prefix}${formatEnteredNumber(condition.value, scale)}${unit}${tail}`
+  return `${indicator.name} ${prefix}${formatEnteredNumber(threshold.value, scale)}${unit}${tail}`
+}
+
+/**
+ * 이 조건을 **지금 고른 조회 대상의 통화로** 읽는다.
+ *
+ * 프리셋 조건은 통화마다 다른 임계를 갖는다(ADR-0106). 서버는 그것을 전부 실어 주고
+ * `value`에는 표시 기본값 하나만 담으므로, **화면이 고르지 않으면 다른 시장의 임계가
+ * 자기 시장 단위로 그려진다** — 실측으로 버핏 프리셋의 조건 칩이 「시가총액
+ * 7,940,000,000원 이상」(USD 값 + 원 단위)이 됐고 같은 화면의 「선정 이유」는 1조원이었다.
+ *
+ * 세 갈래이고 셋 다 필요하다.
+ * 1. 대상 통화의 임계가 있으면 그것을 그 통화로 그린다.
+ * 2. 없으면 **값의 원래 통화로** 그린다. 대상 통화 단위를 붙이면 숫자와 단위가 어긋난 채
+ *    그럴듯해진다 — 그 전략은 그 시장에서 어차피 실행이 거절된다.
+ * 3. 시장 축이 없으면(사용자가 넣은 값·시장 중립 조건) 대상 통화로 그대로 그린다.
+ *
+ * **MUST: 사용자가 값을 손댔으면 맵을 안 쓴다.** 편집기가 `condition.value`를 직접 쓰므로
+ * 맵은 낡을 수 있다. 편집 자리마다 맵을 지우게 하면 새 편집 경로가 생길 때마다 빠뜨리므로,
+ * **읽는 쪽에서 「아직 서버가 준 그대로인가」를 대조한다.**
+ */
+function marketThresholdOf(
+  condition: DraftCondition,
+  currency: string | null | undefined,
+): { value: number | null; upperBound: number | null; currency: string | null | undefined } {
+  const byCurrency = condition.thresholdsByCurrency
+  const base = condition.thresholdCurrency
+  const loaded = byCurrency !== null && base !== null ? byCurrency[base] : undefined
+  const untouched =
+    loaded !== undefined &&
+    loaded.value === condition.value &&
+    (loaded.upperBound ?? null) === condition.upperBound
+  if (!untouched) {
+    return { value: condition.value, upperBound: condition.upperBound, currency }
+  }
+  const chosen = currency == null ? undefined : byCurrency?.[currency]
+  return chosen === undefined
+    ? { value: loaded.value, upperBound: loaded.upperBound ?? null, currency: base }
+    : { value: chosen.value, upperBound: chosen.upperBound ?? null, currency }
 }
 
 /**

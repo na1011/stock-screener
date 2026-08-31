@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 요청·응답에 실리는 조건 트리.
@@ -60,10 +61,23 @@ public record ConditionGroupPayload(
      * 경우)의 오류 메시지가 훨씬 읽기 쉽다.
      */
     /**
-     * @param thresholdCurrency 이 임계를 잰 시장의 통화. {@code null}이면 시장 중립이다
-     *                          (부호·개수·연수·백분위·상대비교). <b>읽기 전용이다</b> —
-     *                          요청에 담아도 서버가 무시하고 조건에서 다시 유도한다.
-     *                          그래서 사용자가 축을 잘못 고를 경로가 없다.
+     * @param thresholdCurrency     {@code value}가 <b>어느 통화의 값인가</b>. {@code null}이면
+     *                              시장 중립이다(부호·개수·연수·백분위·상대비교).
+     *                              <b>읽기 전용이다</b> — 요청에 담아도 서버가 무시하고 조건에서
+     *                              다시 유도한다. 그래서 사용자가 축을 잘못 고를 경로가 없다.
+     * @param thresholdsByCurrency  <b>그 조건이 가진 통화별 임계 전부.</b> 시장 축이 없는 조건에는
+     *                              {@code null}이다.
+     *                              <p><b>MUST: 화면은 자기가 고른 조회 대상의 통화로 여기서
+     *                              고른다.</b> {@code value} 하나만 읽으면 <b>다른 시장의 임계를
+     *                              자기 시장 단위로 그린다</b> — 실측으로 버핏 프리셋의 조건 칩이
+     *                              「시가총액 7,940,000,000원 이상」이 됐고(USD 값 + 원 단위),
+     *                              같은 화면의 「선정 이유」는 1조원이라 <b>위아래가 갈렸다.</b>
+     *                              <p><b>MUST NOT: 「기준 통화」가 있다고 읽지 않는다.</b> 한때
+     *                              {@code toPayload}가 맵의 <i>첫</i> 항목을 실었는데
+     *                              {@code MarketLiteral}이 {@code Map.copyOf}로 순서를 지우므로
+     *                              <b>어느 통화가 나올지 정해져 있지 않았다.</b> 지금
+     *                              {@code value}는 통화 코드 오름차순의 첫 값이고, 그것은
+     *                              <b>대상을 아직 모를 때의 표시 기본값일 뿐</b> 기준이 아니다.
      */
     public record OperandPayload(
             @NotNull(message = "피연산자 종류가 필요하다") OperandType type,
@@ -71,8 +85,13 @@ public record ConditionGroupPayload(
             BigDecimal upperBound,
             String indicatorCode,
             BigDecimal multiplier,
-            String thresholdCurrency
+            String thresholdCurrency,
+            Map<String, MarketThreshold> thresholdsByCurrency
     ) {
+    }
+
+    /** 한 통화에서 잰 임계. {@code upperBound}는 BETWEEN에만 있다. */
+    public record MarketThreshold(BigDecimal value, BigDecimal upperBound) {
     }
 
     public enum OperandType {

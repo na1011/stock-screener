@@ -6,7 +6,9 @@ import com.stockscreener.screening.IndicatorCondition;
 import com.stockscreener.web.ApiExceptions.ConditionValidationException;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 요청 페이로드를 도메인 조건 트리로 옮긴다.
@@ -103,21 +105,31 @@ public final class ConditionPayloadMapper {
         ConditionGroupPayload.OperandPayload operand = switch (condition.operand()) {
             case ConditionOperand.Literal literal -> new ConditionGroupPayload.OperandPayload(
                     ConditionGroupPayload.OperandType.LITERAL,
-                    literal.value(), literal.upperBound(), null, null, null);
+                    literal.value(), literal.upperBound(), null, null, null, null);
             case ConditionOperand.IndicatorRef ref -> new ConditionGroupPayload.OperandPayload(
                     ConditionGroupPayload.OperandType.INDICATOR,
-                    null, null, ref.indicatorCode(), ref.multiplier(), null);
-            // 기준 통화의 값만 싣고 그 통화를 함께 밝힌다. 화면은 이것을 **읽기 전용**으로
-            // 보인다 — 안 보이면 사용자는 자기 전략이 왜 어떤 시장에서 안 도는지 알 수 없다.
+                    null, null, ref.indicatorCode(), ref.multiplier(), null, null);
+            // MUST: 통화별 임계를 **전부** 싣는다. 화면이 자기가 고른 조회 대상의 통화로
+            // 고르기 때문이다. 하나만 실으면 그 값이 다른 시장의 단위로 그려진다 — 실측으로
+            // 버핏 프리셋의 조건 칩이 「시가총액 7,940,000,000원 이상」(USD 값 + 원 단위)이
+            // 됐고 같은 화면의 「선정 이유」는 1조원이라 위아래가 갈렸다.
             //
-            // MUST NOT: 통화를 밝히지 않은 채 값만 싣지 않는다. 그러면 미국 실행인데 원화
-            // 기준값이 「선정 이유」로 표시되고, 그 거짓은 대조하기 전까지 드러나지 않는다.
+            // MUST NOT: 맵의 **첫** 항목을 「기준 통화」로 삼지 않는다. MarketLiteral이
+            // Map.copyOf로 순서를 지우므로 어느 통화가 나올지 정해져 있지 않다 — 그것이
+            // 위 결함의 원인이었다. 아래 정렬은 그 비결정성을 없애기 위한 것이고,
+            // value는 **대상을 아직 모를 때의 표시 기본값**이지 기준이 아니다.
             case ConditionOperand.MarketLiteral market -> {
-                var first = market.byCurrency().entrySet().iterator().next();
+                Map<String, ConditionGroupPayload.MarketThreshold> byCurrency = new LinkedHashMap<>();
+                market.byCurrency().entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey())
+                        .forEach(entry -> byCurrency.put(entry.getKey(),
+                                new ConditionGroupPayload.MarketThreshold(
+                                        entry.getValue().value(), entry.getValue().upperBound())));
+                var fallback = byCurrency.entrySet().iterator().next();
                 yield new ConditionGroupPayload.OperandPayload(
                         ConditionGroupPayload.OperandType.LITERAL,
-                        first.getValue().value(), first.getValue().upperBound(),
-                        null, null, first.getKey());
+                        fallback.getValue().value(), fallback.getValue().upperBound(),
+                        null, null, fallback.getKey(), Map.copyOf(byCurrency));
             }
         };
         return new ConditionGroupPayload.ConditionPayload(

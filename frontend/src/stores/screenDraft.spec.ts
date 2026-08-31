@@ -47,6 +47,8 @@ function condition(overrides: Partial<DraftCondition> = {}): DraftCondition {
     operandType: 'LITERAL',
     value: 10,
     upperBound: null,
+    thresholdCurrency: null,
+    thresholdsByCurrency: null,
     operandIndicatorCode: null,
     multiplier: null,
     weight: null,

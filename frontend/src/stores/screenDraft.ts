@@ -8,6 +8,7 @@ import type {
   ConditionPayload,
   EvaluationMode,
   IsoDate,
+  MarketThreshold,
   OperandType,
   ScreenResponse,
   ScreeningRequest,
@@ -30,6 +31,20 @@ export interface DraftCondition {
   upperBound: number | null
   operandIndicatorCode: string | null
   multiplier: number | null
+  /**
+   * `value`가 어느 통화의 값인가. 서버가 준 그대로이고 사용자가 고를 수 없다.
+   *
+   * 아래 {@link thresholdsByCurrency}와 짝이다 — 사용자가 값을 손댔는지를 이 둘로 판정한다.
+   */
+  thresholdCurrency: string | null
+  /**
+   * 통화별 임계 전부. 조건 칩이 **지금 고른 조회 대상의 통화**로 여기서 고른다.
+   *
+   * IMPORTANT — 편집기가 `condition.value`를 직접 쓰므로 이 맵은 **낡을 수 있다.**
+   * 그래서 읽는 쪽(`summarizeDraftCondition`)이 「값이 아직 서버가 준 그대로인가」를
+   * 대조해서 쓴다. 편집 자리마다 이 맵을 지우게 하면 새 편집 경로가 생길 때마다 빠뜨린다.
+   */
+  thresholdsByCurrency: Record<string, MarketThreshold> | null
   weight: number | null
   /**
    * SCORING에서 미충족 종목을 결과에서 뺀다.
@@ -115,6 +130,8 @@ function conditionDefaults(
     upperBound: null,
     operandIndicatorCode: null,
     multiplier: null,
+    thresholdCurrency: null,
+    thresholdsByCurrency: null,
     weight: null,
     required: false,
   }
@@ -564,6 +581,8 @@ function fromPayload(payload: ConditionPayload): DraftCondition {
     upperBound: payload.operand.upperBound ?? null,
     operandIndicatorCode: payload.operand.indicatorCode ?? null,
     multiplier: payload.operand.multiplier ?? null,
+    thresholdCurrency: payload.operand.thresholdCurrency ?? null,
+    thresholdsByCurrency: payload.operand.thresholdsByCurrency ?? null,
     weight: payload.weight ?? null,
     required: payload.required ?? false,
   }

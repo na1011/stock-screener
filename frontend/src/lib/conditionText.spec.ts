@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ConditionInfo, ComparisonOperatorName, OperandPayload } from '@/api/types'
+import type {
+  ComparisonOperatorName,
+  ConditionInfo,
+  IndicatorResponse,
+  OperandPayload,
+} from '@/api/types'
+import { MONEY_UNIT } from '@/lib/format'
+import type { DraftCondition } from '@/stores/screenDraft'
 
 import {
   disabledConditionNotice,
   incompleteConditionNotice,
   splitCondition,
+  summarizeDraftCondition,
 } from './conditionText'
 
 const NAMES: Record<string, string> = {
@@ -206,6 +214,66 @@ describe('splitCondition — 금액은 그 시장의 통화로 적는다', () =>
       'USD',
     )
     expect(text).toBe('시가총액 — ~ $20,000,000,000 사이')
+  })
+})
+
+describe('summarizeDraftCondition — 조건 칩은 고른 대상의 임계를 보인다', () => {
+  const marketCap = (over: Partial<DraftCondition> = {}): DraftCondition => ({
+    key: 1,
+    indicatorCode: 'MARKET_CAP',
+    operator: 'GTE',
+    operandType: 'LITERAL',
+    value: 1e12,
+    upperBound: null,
+    thresholdCurrency: 'KRW',
+    thresholdsByCurrency: {
+      KRW: { value: 1e12, upperBound: null },
+      USD: { value: 7.94e9, upperBound: null },
+    },
+    operandIndicatorCode: null,
+    multiplier: null,
+    weight: null,
+    required: true,
+    enabled: true,
+    ...over,
+  })
+
+  const indicator = {
+    code: 'MARKET_CAP',
+    name: '시가총액',
+    unit: MONEY_UNIT,
+    decimalScale: 0,
+  } as IndicatorResponse
+
+  const chip = (condition: DraftCondition, currency: string | null): string | null =>
+    summarizeDraftCondition(condition, indicator, null, '이상', currency)
+
+  it('IMPORTANT — 미국을 고르면 미국 임계다. 원화 값에 「$」만 붙이지 않는다', () => {
+    // 실측으로 이 자리가 「시가총액 7,940,000,000원 이상」이었다 — USD 값에 원 단위가
+    // 붙은 것이고, 같은 화면의 「선정 이유」는 1조원이라 위아래가 갈렸다.
+    expect(chip(marketCap(), 'USD')).toBe('시가총액 $7,940,000,000 이상')
+  })
+
+  it('국내를 고르면 국내 임계다', () => {
+    expect(chip(marketCap(), 'KRW')).toBe('시가총액 1,000,000,000,000원 이상')
+  })
+
+  it('대상 통화에 임계가 없으면 **그 값의 원래 통화로** 그린다 — 숫자와 단위를 어긋내지 않는다', () => {
+    // 사용자가 만든 원화 전략을 미국 대상에서 볼 때다. 그 전략은 어차피 실행이 거절되므로
+    // 「$1,000,000,000,000」로 그리는 것보다 원화 임계임을 그대로 보이는 편이 참이다.
+    const krwOnly = marketCap({ thresholdsByCurrency: { KRW: { value: 1e12, upperBound: null } } })
+    expect(chip(krwOnly, 'USD')).toBe('시가총액 1,000,000,000,000원 이상')
+  })
+
+  it('사용자가 값을 고치면 맵을 안 쓴다 — 편집기가 value를 직접 쓰기 때문이다', () => {
+    // 맵은 그대로인데 값만 바뀐 상태. 여기서 맵을 쓰면 사용자가 넣은 수가 화면에서 사라진다.
+    expect(chip(marketCap({ value: 5e11 }), 'KRW')).toBe('시가총액 500,000,000,000원 이상')
+    expect(chip(marketCap({ value: 5e11 }), 'USD')).toBe('시가총액 $500,000,000,000 이상')
+  })
+
+  it('시장 축이 없는 조건은 고른 대상의 통화로 그대로 그린다', () => {
+    const neutral = marketCap({ thresholdCurrency: null, thresholdsByCurrency: null, value: 10 })
+    expect(chip(neutral, 'USD')).toBe('시가총액 $10 이상')
   })
 })
 

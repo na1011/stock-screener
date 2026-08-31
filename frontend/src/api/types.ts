@@ -212,12 +212,30 @@ export interface OperandPayload {
   /** INDICATOR의 배수. null이면 1.0. */
   multiplier?: number | null
   /**
-   * 이 임계를 잰 시장의 통화. null이면 시장 중립이라 모든 조회 대상에 같은 값이 걸린다.
+   * `value`가 **어느 통화의 값인가**. null이면 시장 중립이라 모든 조회 대상에 같은 값이 걸린다.
    *
    * **읽기 전용이다** — 요청에 담아도 서버가 무시하고 조건에서 다시 유도한다. 그래서
    * 사용자가 축을 잘못 고를 경로가 없다.
    */
   thresholdCurrency?: string | null
+  /**
+   * **그 조건이 가진 통화별 임계 전부.** 시장 축이 없는 조건에는 없다.
+   *
+   * MUST: 화면은 **자기가 고른 조회 대상의 통화로 여기서 고른다.** `value` 하나만 읽으면
+   * 다른 시장의 임계를 자기 시장 단위로 그린다 — 실측으로 버핏 프리셋의 조건 칩이
+   * 「시가총액 7,940,000,000원 이상」(USD 값 + 원 단위)이 됐고, 같은 화면의 「선정 이유」는
+   * 1조원이라 위아래가 갈렸다.
+   *
+   * MUST NOT: 「기준 통화」가 있다고 읽지 않는다. `value`는 **대상을 아직 모를 때의 표시
+   * 기본값**(통화 코드 오름차순 첫 값)이지 기준이 아니다.
+   */
+  thresholdsByCurrency?: Record<string, MarketThreshold> | null
+}
+
+/** 한 통화에서 잰 임계. `upperBound`는 BETWEEN에만 있다. */
+export interface MarketThreshold {
+  value: number | null
+  upperBound: number | null
 }
 
 export interface ConditionPayload {
