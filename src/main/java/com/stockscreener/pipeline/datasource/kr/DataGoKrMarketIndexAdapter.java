@@ -83,12 +83,16 @@ public class DataGoKrMarketIndexAdapter implements MarketIndexDataSource {
 
     @Override
     public Set<String> supportedIndexCodes() {
-        // MUST: MarketIndexCodes.ALL과 같아야 한다. 어긋나면 결손 알림이 기대하는 지수와
-        // 실제로 받는 지수가 갈리고, 그 차이는 "매일 오는 알림"이나 "영영 안 오는 알림"으로만
-        // 드러난다. 기동 시점에 실패시킨다.
-        if (!INDEX_NAMES.keySet().equals(MarketIndexCodes.ALL)) {
+        // MUST: MarketIndexCodes.ALL의 **부분집합**이어야 한다. 여기 없는 코드를 담당한다고
+        // 말하면 그 지수는 CHECK에 걸려 적재가 막히고, 결손 알림이 기대하는 지수와 실제로
+        // 받는 지수가 갈린다. 기동 시점에 실패시킨다.
+        //
+        // MUST NOT: `equals`로 되돌리지 않는다. 시장마다 소스가 다르므로 어댑터 하나가 전부를
+        // 담당하지 않는다 — 미국이 붙은 2026-08-31에 이 단정이 운영 기동을 죽였다.
+        // 합집합이 완전한지는 어댑터가 아니라 운영이 답한다(키가 없으면 등록조차 안 된다).
+        if (!MarketIndexCodes.ALL.containsAll(INDEX_NAMES.keySet())) {
             throw new IllegalStateException(
-                    "어댑터가 담당하는 지수가 MarketIndexCodes.ALL과 다르다: "
+                    "어댑터가 MarketIndexCodes.ALL에 없는 지수를 담당한다: "
                             + INDEX_NAMES.keySet() + " vs " + MarketIndexCodes.ALL);
         }
         return INDEX_NAMES.keySet();
