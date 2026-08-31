@@ -66,8 +66,21 @@ applies_to:
 마지막 것이 이 ADR 고유의 자리다 — 쓴 행 수로 물으면 초록인 채 알림이 죽는다.
 
 ```premise 시장 지수 — 시세가 있는데 지수만 없는 거래일이 있는가
-[ "$(psql -d stock_screener -At -c "SELECT to_regclass('public.market_index_daily') IS NOT NULL")" = t ] || { echo "잴 것이 없었다 — market_index_daily 테이블이 아직 없다(V23 미적용)"; exit 0; }; psql -d stock_screener -At -c "WITH gap AS (SELECT c.index_code, p.trade_date FROM (SELECT DISTINCT p2.trade_date FROM price_daily p2 JOIN stock s2 ON s2.id = p2.stock_id WHERE s2.market_code IN ('KOSPI','KOSDAQ') AND p2.trade_date >= (SELECT min(trade_date) FROM market_index_daily)) p CROSS JOIN (SELECT DISTINCT index_code FROM market_index_daily) c WHERE NOT EXISTS (SELECT 1 FROM market_index_daily m WHERE m.index_code = c.index_code AND m.trade_date = p.trade_date)) SELECT CASE WHEN (SELECT count(*) FROM market_index_daily) = 0 THEN '잴 것이 없었다 — 지수가 한 행도 없다. --job=market-index를 아직 안 돌렸다' WHEN (SELECT count(*) FROM price_daily p3 JOIN stock s3 ON s3.id = p3.stock_id WHERE s3.market_code IN ('KOSPI','KOSDAQ')) = 0 THEN '잴 것이 없었다 — 지수를 갖는 시장의 시세가 비어 있다' WHEN (SELECT count(*) FROM gap) = 0 THEN 'OK 시세가 있는 모든 거래일에 두 지수가 다 있다(지수 최초일 이후 기준)' ELSE (SELECT count(*) FROM gap)::text || '개의 (지수, 거래일)이 비어 있다 — 그 일자의 해당 시장 종목은 ICHI_* 가 통째로 없다. 가장 최근 ' || (SELECT max(trade_date)::text FROM gap) END"
+[ "$(psql -d stock_screener -At -c "SELECT to_regclass('public.market_index_daily') IS NOT NULL")" = t ] || { echo "잴 것이 없었다 — market_index_daily 테이블이 아직 없다(V23 미적용)"; exit 0; }; psql -d stock_screener -At -c "WITH gap AS (SELECT c.index_code, p.trade_date FROM (SELECT DISTINCT index_code FROM market_index_daily) c JOIN LATERAL (SELECT DISTINCT p2.trade_date FROM price_daily p2 JOIN stock s2 ON s2.id = p2.stock_id WHERE s2.market_code = c.index_code AND p2.trade_date >= (SELECT min(trade_date) FROM market_index_daily m2 WHERE m2.index_code = c.index_code)) p ON TRUE WHERE NOT EXISTS (SELECT 1 FROM market_index_daily m WHERE m.index_code = c.index_code AND m.trade_date = p.trade_date)) SELECT CASE WHEN (SELECT count(*) FROM market_index_daily) = 0 THEN '잴 것이 없었다 — 지수가 한 행도 없다. --job=market-index를 아직 안 돌렸다' WHEN (SELECT count(*) FROM price_daily p3 JOIN stock s3 ON s3.id = p3.stock_id WHERE s3.market_code IN (SELECT DISTINCT index_code FROM market_index_daily)) = 0 THEN '잴 것이 없었다 — 지수를 갖는 시장의 시세가 비어 있다' WHEN (SELECT count(*) FROM gap) = 0 THEN 'OK 지수를 갖는 모든 시장에서, 시세가 있는 거래일에 그 시장의 지수가 다 있다' ELSE (SELECT count(*) FROM gap)::text || '개의 (지수, 거래일)이 비어 있다 — 그 일자의 해당 시장 종목은 지수를 읽는 지표가 통째로 없다. 가장 최근 ' || (SELECT max(trade_date)::text FROM gap) END"
 ```
+
+**지수와 거래일을 시장으로 짝지어야 한다 — 두 축 다.** 예전 형태는 거래일만 국내로 좁히고
+지수 코드는 `CROSS JOIN`으로 전부 돌렸다. 지수가 국내 둘뿐일 때는 같은 결과였지만,
+**미국 지수가 붙자 「국내 거래일에 미국 지수가 없다」를 53건 신고했다**(2026-08-31).
+`index_code`가 `market_code`와 같은 문자열이므로 그 둘로 짝짓는다.
+
+**MUST NOT: 시장 목록을 이 질의에 리터럴로 적지 않는다.** 사본이 늘면 갈리고, 갈린 사본은
+새 시장이 붙는 날에만 드러난다 — 방금 그렇게 드러났다. `market_index_daily`에 실제로 있는
+`index_code`에서 뽑는다.
+
+**시작점도 지수마다 따로 잡는다.** 전역 `min(trade_date)`을 쓰면 늦게 붙은 지수가 자기보다
+이른 구간을 전부 결손으로 신고한다 — 미국 지수(2019-09-03~)와 국내(2020-01-02~)가 실제로
+그 관계다.
 
 **거래일을 지수가 있는 시장에서만 뽑는 것이 이 질의의 일부다.** `price_daily` 전량으로 뽑으면
 **지수를 갖기로 하지 않은 시장의 거래일**까지 세어, 국내가 휴장이고 그 시장이 개장한 날마다
