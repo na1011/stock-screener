@@ -136,7 +136,8 @@ g AS (
   JOIN condition_group cg ON cg.id = c.group_id
   JOIN screen s ON s.id = cg.screen_id
   WHERE s.code LIKE 'BUFFETT~_%' ESCAPE '~' AND s.is_active AND c.is_required
-    AND c.operand_type = 'LITERAL' AND c.literal_value_2 IS NULL)
+    AND c.operand_type = 'LITERAL' AND c.literal_value_2 IS NULL
+    AND c.indicator_code <> 'TURNOVER_RATIO_60')
 SELECT CASE
   WHEN (SELECT n FROM pop) = 0 THEN '잴 것이 없었다 — 최신 거래일에 ADJ_CLOSE가 하나도 없다'
   WHEN (SELECT count(*) FROM g) = 0 THEN '잴 것이 없었다 — 버핏 프리셋의 리터럴 필수 게이트가 없다'
@@ -146,6 +147,17 @@ SELECT CASE
        round(pass::numeric / pop.n * 100, 1) || '%', ', ') FROM g, pop WHERE pass::numeric / pop.n > 0.90)
   END"
 ```
+
+**`TURNOVER_RATIO_60`을 모집단에서 뺐다(2026-08-31).** 그 조건은 **선별자가 아니라 거래
+가능성 하한**이고, 이 규칙(ADR-0061 §규칙)이 잡으려는 것은 「안전장치처럼 보이는데 아무것도
+안 하는 선별자」다. 하한이 대부분을 통과시키는 것은 하한이 제 일을 하는 모양이다 —
+실측으로 국내 96.3% · 미국 96.6%를 통과시키고 걸러내는 3.7%가 거래가 얇은 종목이다(ADR-0105).
+안 빼면 **매 세션 거짓 발화**하고, 거짓 발견은 침묵보다 나쁘다.
+
+**MUST: 이 목록이 자라면 그때 규칙을 다시 본다.** 지금은 하나이고, 둘째가 생기는 순간
+「하한인가 선별자인가」를 조건마다 손으로 판정하고 있다는 뜻이므로 그 축을 데이터로
+표현할 때다. **그리고 이 제외는 「자르는 것이 0인 게이트」 축(ADR-0070)에는 걸지 않았다** —
+그쪽은 다른 질문이고, 답이 게이트를 빼는 것이라 사용자 결정이다.
 
 ```premise 3년 연속 ROE 임계가 분포의 상위권에 앉아 있다
 psql -d stock_screener -At -c "WITH v AS (

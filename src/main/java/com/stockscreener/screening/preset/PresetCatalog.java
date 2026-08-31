@@ -60,6 +60,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 
 /**
@@ -122,6 +124,9 @@ public class PresetCatalog {
      * 시장이 늘어도 이 상수는 안 바뀐다(ADR-0099).
      */
     private static final String KRW = "KRW";
+
+    /** 미국 임계는 국내 임계가 앉은 분위를 미국 분포에서 다시 잰 값이다. */
+    private static final String USD = "USD";
 
     /** 백분위 지표 코드. 원본 코드에 접미사를 붙이는 규칙은 {@link PercentileSpec}이 정본이다. */
     private static String pctl(String sourceCode) {
@@ -326,13 +331,14 @@ public class PresetCatalog {
                 ConditionGroup.and(List.of(
                         // ── 필수 게이트 ──
                         // 3.1 — 원문 15는 19종목(5%)이라 국내 분포로 재보정했다. 53종목(15%).
-                        required(RoeMin3yCalculator.CODE, ComparisonOperator.GTE, "10"),
+                        requiredIn(RoeMin3yCalculator.CODE, ComparisonOperator.GTE, "10", "22.4"),
                         // 0.3·3.2 — ROE와 반드시 함께 건다. §8이 분리를 금지한 자리다. 197/346(57%).
-                        required(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100"),
+                        requiredIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100", "183"),
                         // 0.2·1.2·5.1 — AAII 원문의 7개 회계연도다. 159/347(46%).
                         required(ProfitStreakYearsCalculator.CODE, ComparisonOperator.GTE, "7"),
                         // 0.1 충분한 규모. 274/347(79%).
-                        requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE, KRW, "1000000000000"),
+                        requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE,
+                                "1000000000000", "7940000000"),
                         // 2019 주주서한의 첫 번째 기준 —「영업에 투입된 순유형자본 대비 좋은
                         // 수익률」. 60/300(20%)이 통과하고 이 게이트가 18 → 15로 자른다.
                         //
@@ -345,7 +351,7 @@ public class PresetCatalog {
                         // 않는다 — 15를 그대로 옮기면 통과가 8.7%로 조이고 겹침 배수가 6.3이
                         // 되어 ADR-0068의 펜스를 깬다. 10은 국내 분포에서 다시 잰 값이고,
                         // ROE_MIN_3Y가 원문 15를 10으로 내린 것과 같은 종류의 재보정이다.
-                        required(RoicMin3yCalculator.CODE, ComparisonOperator.GTE, "10"),
+                        requiredIn(RoicMin3yCalculator.CODE, ComparisonOperator.GTE, "10", "15.8"),
                         // §7 유동성 — 문헌은 「Average Volume(30D) · 하한 설정 · 거래 불가
                         // 종목 유입 차단」이다. 조건과 목적은 문헌이 주고 수는 구현에 맡긴다.
                         //
@@ -638,8 +644,8 @@ public class PresetCatalog {
                         // 밴드를 5년 CAGR로 옮긴 것이다(ADR-0070). 89 → 9종목(2026-08-20).
                         requiredBetween(EpsCagr5yCalculator.CODE, "20", "50"),
                         // 2.3 "중소형"의 유니버스 내 치환. 시총 중앙값이다.
-                        requiredIn(MarketCapCalculator.CODE, ComparisonOperator.LTE, KRW,
-                                "2616000000000"),
+                        requiredIn(MarketCapCalculator.CODE, ComparisonOperator.LTE,
+                                "2616000000000", "17300000000"),
                         // §6 유동성. 버핏과 같은 임계를 쓴다 — 회전율은 규모에 중립이라
                         // 「대형 지향이냐」로 가를 이유가 없다. 크기 축은 위 MARKET_CAP이 든다.
                         required(TurnoverRatio60Calculator.CODE,
@@ -658,7 +664,7 @@ public class PresetCatalog {
                         weighted(PerCalculator.CODE, ComparisonOperator.LTE, "20", "2"),
                         weighted(RevenueGrowthCalculator.CODE, ComparisonOperator.GT, "15", "2"),
                         weightedBetween(EpsGrowthTtmYoyCalculator.CODE, "10", "30", "2"),
-                        weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "80", "2"),
+                        weightedIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "80", "152", "2"),
                         // 3.9 AAII 원문이 요구한 업종 상대 비교다. 1.0이 업종 중앙값이다.
                         weighted(sectorRel(DebtRatioCalculator.CODE),
                                 ComparisonOperator.LTE, "1.0", "1"),
@@ -783,8 +789,8 @@ public class PresetCatalog {
                 ConditionGroup.and(List.of(
                         // ── 필수 게이트 ──
                         // "대형"의 경계. 유니버스 상위 25%다.
-                        requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE, KRW,
-                                "6773000000000"),
+                        requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE,
+                                "6773000000000", "46500000000"),
                         // ★ 유형 분류. 2.2의 밴드를 5년 CAGR로 옮겼다(ADR-0070). 53 → 10종목(2026-08-20).
                         requiredBetween(EpsCagr5yCalculator.CODE, "10", "20"),
                         // ★ 질. 「나쁜 해에도 영업흑자인가」 — 대형우량주가 약속하는 성질이다.
@@ -937,7 +943,8 @@ public class PresetCatalog {
                         // 추세가 실재하는가. 방향이 아니라 유무를 잰다.
                         literal(Adx14Calculator.CODE, ComparisonOperator.GTE, "20"),
                         // 거래량 확장. 원문 2~3배를 국내 분포로 옮긴 값이다.
-                        literal(VolumeRatio20Calculator.CODE, ComparisonOperator.GTE, "1.5"),
+                        literalIn(VolumeRatio20Calculator.CODE, ComparisonOperator.GTE,
+                                "1.5", "1.48"),
                         // 거래량이 매수 쪽에 실렸는가
                         literal(Cmf21Calculator.CODE, ComparisonOperator.GT, "0"),
                         // 지수 대비 상대강도
@@ -1037,12 +1044,12 @@ public class PresetCatalog {
                 null,
                 ConditionGroup.and(List.of(
                         // 절대 변동폭 하위 약 30%
-                        weighted(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "5.9", "3"),
+                        weightedIn(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "5.9", "2.79", "3"),
                         // 시장 동조 하위 약 30%. 국내 중앙값이 0.75라 0.9로는 축이 되지 않는다.
-                        weighted(Beta104wCalculator.CODE, ComparisonOperator.LTE, "0.40", "3"),
+                        weightedIn(Beta104wCalculator.CODE, ComparisonOperator.LTE, "0.40", "0.55", "3"),
                         weighted(ProfitableQuarters4Calculator.CODE,
                                 ComparisonOperator.GTE, "4", "2"),
-                        weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100", "2"),
+                        weightedIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100", "183", "2"),
                         weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
                         weighted(RoaCalculator.CODE, ComparisonOperator.GTE, "0", "1"),
                         weighted(OperatingCashFlow5ySumCalculator.CODE,
@@ -1056,23 +1063,45 @@ public class PresetCatalog {
     // ── 조건 생성 헬퍼 ────────────────────────────────────────────────────
 
     /**
-     * <b>그 시장 분포에서 잰</b> 필수 임계. 통화가 다른 시장에서는 그 시장의 값을 따로 정해야
-     * 하고, 없으면 실행이 거절된다 — 다른 통화의 값으로 대신하지 않는다(ADR-0072).
+     * <b>시장마다 다른 임계.</b> 같은 프리셋이 두 시장에서 <b>같은 선택도</b>를 갖게 한다 —
+     * 그것이 「같은 뜻」의 조작적 정의다.
      *
-     * <p>ADR-0073 §규칙이 처방한 그대로다: <i>"미국 프리셋을 만들 때 이 임계를 복사하지 않고
-     * 그 시장 분포로 다시 잰다."</i> 옮기는 방법은 <b>분위 보존</b>이다 — 실측(2026-08-28)으로
-     * {@code MARKET_CAP >= 1조}이 국내 78.9%를 남기고 그 분위(0.2114)의 미국 값은
-     * <b>$7.94B</b>이며 거기서 78.8%가 남는다.
+     * <p>옮기는 방법은 <b>분위 보존</b>이다. ADR-0073 §규칙이 <i>"미국 프리셋을 만들 때 이
+     * 임계를 복사하지 않고 그 시장 분포로 다시 잰다"</i>로 처방했고, 값은 2026-08-28 단면에서
+     * 쟀다(국내 활성 350 ↔ {@code US_TOP1000} 1,000). <b>유효숫자 3자리로 반올림했다</b> —
+     * 그 이상은 없는 정밀도다.
      *
-     * <p>MUST NOT: 이 헬퍼를 안 쓴 조건을 「시장 중립」으로 읽지 않는다. 중립의 근거가 될 수
-     * 있는 것은 <b>부호·개수·연수·백분위·상대비교</b>뿐이고 「비율이니까」는 근거가 아니다
-     * (P27 축①). 실측으로 {@code ATR_PCT_14 &lt;= 5.9}는 국내 39.4% 대 미국 <b>89.7%</b>를
-     * 자른다 — 무차원인데도 전혀 다른 것을 잰다. <b>그 처분은 아직 정해지지 않았다.</b>
+     * <p>MUST NOT: 이 헬퍼를 안 쓴 리터럴을 「시장 중립」으로 읽지 않는다. 중립의 근거가 될 수
+     * 있는 것은 <b>부호·개수·연수·백분위·상대비교</b>뿐이다(P27 축①). 여기 없는 무차원
+     * 임계는 <b>문헌 원문값이라 그대로 둔 것</b>이고, 그 위치가 시장마다 다르다는 사실은
+     * ADR-0106 §배경의 표가 신고한다.
+     *
+     * <p>IMPORTANT — {@code DEBT_RATIO}는 옮기면서 <b>뜻이 한 겹 바뀐다.</b> 국내의 100은
+     * D/E = 1.0이라는 회계적 경계이기도 한데, 미국의 183은 그 경계가 아니라 <b>같은 순위</b>다.
+     * 미국 대형주의 레버리지 분포가 국내와 달라 둘을 동시에 만족시킬 수 없다 — 선택도를
+     * 지키는 쪽을 골랐고, 그 대가를 여기 적어 둔다.
      */
+    private static ConditionOperand marketLiteral(String krwValue, String usdValue) {
+        Map<String, ConditionOperand.Literal> byCurrency = new LinkedHashMap<>();
+        byCurrency.put(KRW, ConditionOperand.Literal.of(krwValue));
+        byCurrency.put(USD, ConditionOperand.Literal.of(usdValue));
+        return new ConditionOperand.MarketLiteral(byCurrency);
+    }
+
     private static IndicatorCondition requiredIn(String code, ComparisonOperator operator,
-                                                 String currency, String value) {
-        return IndicatorCondition.of(code, operator, ConditionOperand.MarketLiteral.of(
-                currency, ConditionOperand.Literal.of(value))).asRequired();
+                                                 String krwValue, String usdValue) {
+        return IndicatorCondition.of(code, operator, marketLiteral(krwValue, usdValue)).asRequired();
+    }
+
+    private static IndicatorCondition weightedIn(String code, ComparisonOperator operator,
+                                                 String krwValue, String usdValue, String weight) {
+        return IndicatorCondition.of(code, operator, marketLiteral(krwValue, usdValue))
+                .withWeight(new BigDecimal(weight));
+    }
+
+    private static IndicatorCondition literalIn(String code, ComparisonOperator operator,
+                                                String krwValue, String usdValue) {
+        return IndicatorCondition.of(code, operator, marketLiteral(krwValue, usdValue));
     }
 
     private static IndicatorCondition required(String code, ComparisonOperator operator,
