@@ -40,7 +40,15 @@ public class MarketScope {
             WHERE u.is_active
             """;
 
-    /** {@link #ACTIVE_MARKETS}의 통화 짝. 같은 술어를 쓰는 이유가 거기 있다. */
+    /**
+     * {@link #ACTIVE_MARKETS}의 통화 짝. 같은 술어를 쓰는 이유가 거기 있다.
+     *
+     * <p><b>MUST: 사본이 하나 더 있다 — {@code ScreenStore.deriveThresholdCurrency}.</b>
+     * 패키지가 달라 상수를 공유하지 못한다(그쪽은 도메인이고 이 클래스는 HTTP 계층에 있다).
+     * 갈리면 <b>저장이 보는 통화 집합과 실행이 보는 것이 달라지고</b>, 그 어긋남은 조건에
+     * 통화 축이 안 붙는 형태로만 드러난다 — 값은 그대로 나온다. 실제로 편입 조인이 그쪽에만
+     * 빠져 갈려 있었다.
+     */
     private static final String ACTIVE_CURRENCIES = """
             SELECT DISTINCT mk.currency_code
             FROM universe u

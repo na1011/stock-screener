@@ -332,14 +332,32 @@ public class ScreenStore {
      * 시더는 {@code PRESET}만 갱신하므로 사본은 옛 조건을 든 채 남는다(ADR-0072 §규칙 · P27 축①).
      *
      * <p>어느 통화인가는 그 화면의 조회 대상이 답한다. 대상을 안 정했으면 활성 조회 대상의
-     * 통화가 하나일 때만 그것을 쓴다 — 갈리면 <b>아무것도 안 적는다.</b> 그 경우 실행이
-     * 「조회 대상을 하나 골라야 한다」로 거절되므로 조용히 틀리지 않는다.
+     * 통화가 하나일 때만 그것을 쓴다 — 갈리면 <b>아무것도 안 적는다.</b>
+     *
+     * <p><b>MUST NOT: 그 「안 적음」을 안전하다고 읽지 않는다.</b> 한때 여기에
+     * <i>"그 경우 실행이 「조회 대상을 하나 골라야 한다」로 거절되므로 조용히 틀리지 않는다"</i>고
+     * 적혀 있었고 <b>그것은 거짓이었다.</b> 거절은 <b>실행 시점의</b> 대상으로 판정하는데
+     * ({@code ScreeningService}가 요청의 {@code universeCode}를 저장된 것보다 먼저 쓴다),
+     * 대상 없이 저장한 화면을 <b>실행 시점에 미국으로 지정하면</b> 그때 통화가 하나뿐이라
+     * 거절이 안 난다. 그리고 축이 안 붙은 조건은 {@code IndicatorCondition.resolveFor}가
+     * <b>평범한 리터럴로 그대로 통과시켜</b> 원화 임계가 달러 값에 걸린다.
+     * <b>지금 그 경로를 막는 것은 화면뿐이다</b> — 통화가 갈리면 조건 칩 바가 대상을 채워
+     * 저장 요청이 {@code null}을 안 싣는다. API를 직접 부르면 열려 있다.
+     *
+     * <p><b>MUST: 술어를 {@code MarketScope.ACTIVE_CURRENCIES}와 같게 유지한다</b> — <b>편입이
+     * 있는</b> 활성 유니버스만 센다. 갈리면 <b>저장이 보는 통화 집합과 실행이 보는 것이 달라진다.</b>
+     * 실제로 갈려 있었다: 편입 조인이 없어 테스트 DB에서 저장은 {@code {KRW, USD}}를 보는데
+     * 실행은 빈 집합을 봤다. 패키지가 달라 상수를 공유하지 못하므로 <b>사본이고, 한쪽을 고치면
+     * 반대쪽도 고친다.</b>
      */
     private void deriveThresholdCurrency(long groupId, String universeCode) {
         List<String> currencies = universeCode == null
                 ? jdbcTemplate.queryForList("""
                         SELECT DISTINCT m.currency_code FROM universe u
-                        JOIN market m ON m.code = u.market_code WHERE u.is_active
+                        JOIN market m ON m.code = u.market_code
+                        JOIN universe_membership um
+                          ON um.universe_code = u.code AND um.effective_to IS NULL
+                        WHERE u.is_active
                         """, String.class)
                 : jdbcTemplate.queryForList("""
                         SELECT m.currency_code FROM universe u

@@ -16,7 +16,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,7 +50,8 @@ class ScreenStoreTest {
                 VALUES ('PER','PER','FUNDAMENTAL','RATIO'),
                        ('RSI_14','RSI','TECHNICAL','COUNT'),
                        ('ADJ_CLOSE','수정종가','PRICE','PRICE'),
-                       ('SMA_200','SMA200','TECHNICAL','PRICE')
+                       ('SMA_200','SMA200','TECHNICAL','PRICE'),
+                       ('MARKET_CAP','시가총액','FUNDAMENTAL','CURRENCY')
                 ON CONFLICT DO NOTHING
                 """);
         userId = insertUser("sub-owner", "owner@example.com");
@@ -94,6 +97,140 @@ class ScreenStoreTest {
         ConditionOperand.IndicatorRef ref = (ConditionOperand.IndicatorRef) restored.get(2).operand();
         assertThat(ref.indicatorCode()).isEqualTo("SMA_200");
         assertThat(ref.multiplier()).isEqualByComparingTo("1.05");
+    }
+
+    @Test
+    @DisplayName("통화별 임계가 그대로 왕복한다 — 기준 행과 자식 표가 다시 한 조건이 된다")
+    void roundTripsMarketLiteral() {
+        // mapCondition이 threshold_currency를 안 읽으면 저장은 되는데 복원이 평범한 리터럴이
+        // 되고, 그러면 기준 통화의 값이 모든 시장에 걸린다 — 통화 축을 세운 목적의 정반대다.
+        // 그 자리를 그 메서드가 스스로 "컴파일러가 잡아주지 않는다"고 적어 뒀다.
+        Map<String, ConditionOperand.Literal> byCurrency = new LinkedHashMap<>();
+        byCurrency.put("KRW", ConditionOperand.Literal.of("1000000000000"));
+        byCurrency.put("USD", ConditionOperand.Literal.of("7940000000"));
+
+        ScreenDefinition saved = store.create(ScreenDefinition.custom(
+                null, "통화 축 화면", null, EvaluationMode.FILTER, userId, "KOSPI200",
+                ConditionGroup.and(List.of(
+                        IndicatorCondition.of("MARKET_CAP", ComparisonOperator.GTE,
+                                new ConditionOperand.MarketLiteral(byCurrency)).asRequired()))));
+
+        ConditionOperand restored =
+                store.findById(saved.id()).orElseThrow().conditions().conditions().get(0).operand();
+
+        assertThat(restored)
+                .as("복원이 평범한 리터럴이면 축이 통째로 사라진 것이다")
+                .isInstanceOf(ConditionOperand.MarketLiteral.class);
+        ConditionOperand.MarketLiteral market = (ConditionOperand.MarketLiteral) restored;
+        assertThat(market.forCurrency("KRW").value()).isEqualByComparingTo("1000000000000");
+        assertThat(market.forCurrency("USD").value()).isEqualByComparingTo("7940000000");
+    }
+
+    @Test
+    @DisplayName("대상을 지정하면 사용자 조건에 그 시장의 통화 축이 붙는다")
+    void derivesThresholdCurrencyFromTheChosenUniverse() {
+        // 이것이 없으면 프리셋을 복사해 만든 사용자 화면이 원본보다 느슨해진다 —
+        // 시더는 PRESET만 갱신하므로 사본은 축 없는 조건을 든 채 남는다(ADR-0072 §규칙).
+        ScreenDefinition saved = store.create(ScreenDefinition.custom(
+                null, "대상 지정 화면", null, EvaluationMode.FILTER, userId, "KOSPI200",
+                ConditionGroup.and(List.of(
+                        IndicatorCondition.of("MARKET_CAP", ComparisonOperator.GTE,
+                                ConditionOperand.Literal.of("1000000000000"))))));
+
+        ConditionOperand restored =
+                store.findById(saved.id()).orElseThrow().conditions().conditions().get(0).operand();
+
+        assertThat(restored).isInstanceOf(ConditionOperand.MarketLiteral.class);
+        assertThat(((ConditionOperand.MarketLiteral) restored).forCurrency("KRW").value())
+                .isEqualByComparingTo("1000000000000");
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 활성 통화가 갈리면 「전체」로 저장한 금액 조건에 축이 안 붙는다")
+    void leavesTheAxisEmptyWhenActiveCurrenciesDiffer() {
+        // 이 시험은 안전을 단정하지 않는다. **지뢰가 실재한다는 것**을 못박는다 —
+        // 축이 없는 조건은 resolveFor가 평범한 리터럴로 그대로 통과시키므로, 이 화면을
+        // 실행 시점에 미국으로 지정하면 원화 임계가 달러 값에 걸린다. 지금 그 경로를 막는
+        // 것은 화면뿐이고(조건 칩 바가 대상을 채운다) API를 직접 부르면 열려 있다.
+        //
+        // MUST: 통화를 **편입으로** 갈라 놓는다. 편입 없는 활성 유니버스만 있으면 집합이
+        // 비어 size != 1이 되어 **같은 초록이 다른 이유로** 나온다 — 그러면 이 시험은
+        // 아무것도 안 재고 있다.
+        seedMembership("KOSPI200", "KOSPI", "900101");
+        seedMembership("US_TOP1000", "US", "TESTUS1");
+        assertThat(activeCurrencyCount())
+                .as("이 시험의 전제 — 편입이 있는 활성 유니버스의 통화가 둘이라야 한다")
+                .isEqualTo(2);
+
+        ScreenDefinition saved = store.create(ScreenDefinition.custom(
+                null, "전체 대상 화면", null, EvaluationMode.FILTER, userId, null,
+                ConditionGroup.and(List.of(
+                        IndicatorCondition.of("MARKET_CAP", ComparisonOperator.GTE,
+                                ConditionOperand.Literal.of("1000000000000"))))));
+
+        ConditionOperand restored =
+                store.findById(saved.id()).orElseThrow().conditions().conditions().get(0).operand();
+
+        assertThat(restored)
+                .as("축이 안 붙는다 — 이것이 지금의 동작이고, 그래서 실행이 조용히 통과한다")
+                .isInstanceOf(ConditionOperand.Literal.class);
+    }
+
+    @Test
+    @DisplayName("「전체」의 통화는 편입이 있는 활성 유니버스로만 정한다 — 빈 유니버스가 축을 막지 않는다")
+    void derivesFromUniversesThatActuallyHaveMembers() {
+        // 두 술어가 **갈리는 유일한 자리**다. 편입 조인이 없으면 편입 0건인 활성 미국
+        // 유니버스가 통화 집합에 들어와 size가 2가 되고, 그러면 국내밖에 없는데도 축을
+        // 안 적는다 — MarketScope는 같은 상황에서 KRW 하나를 보므로 저장과 실행이 갈린다.
+        //
+        // ADR-0107 §규칙이 정한 것과 같은 술어다: 「전체」의 시장·통화는 편입이 있는
+        // 활성 유니버스로만 정한다.
+        seedMembership("KOSPI200", "KOSPI", "900102");
+        assertThat(activeCurrencyCount())
+                .as("이 시험의 전제 — 편입이 있는 것은 국내 하나, 편입 0건인 활성 미국이 함께 있다")
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM universe u JOIN market m ON m.code = u.market_code
+                WHERE u.is_active AND m.currency_code <> 'KRW'
+                """, Integer.class))
+                .as("편입 없는 다른 통화의 활성 유니버스가 있어야 옛 술어가 갈린다")
+                .isPositive();
+
+        ScreenDefinition saved = store.create(ScreenDefinition.custom(
+                null, "편입 기준 화면", null, EvaluationMode.FILTER, userId, null,
+                ConditionGroup.and(List.of(
+                        IndicatorCondition.of("MARKET_CAP", ComparisonOperator.GTE,
+                                ConditionOperand.Literal.of("1000000000000"))))));
+
+        ConditionOperand restored =
+                store.findById(saved.id()).orElseThrow().conditions().conditions().get(0).operand();
+
+        assertThat(restored)
+                .as("편입 0건인 활성 유니버스가 통화 집합에 끼면 축이 안 붙는다")
+                .isInstanceOf(ConditionOperand.MarketLiteral.class);
+        assertThat(((ConditionOperand.MarketLiteral) restored).forCurrency("KRW").value())
+                .isEqualByComparingTo("1000000000000");
+    }
+
+    private void seedMembership(String universeCode, String marketCode, String ticker) {
+        Long stockId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES (?, ?, ?) RETURNING id
+                """, Long.class, marketCode, ticker, "종목" + ticker);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES (?, ?, DATE '2020-01-01')
+                """, universeCode, stockId);
+    }
+
+    /** {@code ScreenStore.deriveThresholdCurrency}·{@code MarketScope}와 같은 술어다. */
+    private Integer activeCurrencyCount() {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(DISTINCT m.currency_code) FROM universe u
+                JOIN market m ON m.code = u.market_code
+                JOIN universe_membership um
+                  ON um.universe_code = u.code AND um.effective_to IS NULL
+                WHERE u.is_active
+                """, Integer.class);
     }
 
     @Test
