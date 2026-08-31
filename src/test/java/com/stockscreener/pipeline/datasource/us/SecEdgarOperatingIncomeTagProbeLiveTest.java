@@ -8,30 +8,34 @@ import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * 영업이익이 비는 미국 종목이 <b>어떤 태그로</b> 그것을 내는가.
+ * 영업이익이 비는 미국 종목에서 <b>유도가 몇 (종목, 회계연도) 쌍을 덮는가.</b>
  *
- * <p><b>§0의 착수 판단이 여기서 나온다.</b> {@link SecEdgarColumn#OPERATING_INCOME}의 후보가
- * {@code OperatingIncomeLoss} <b>하나뿐인 유일한 손익 컬럼</b>이고(매출 5·순이익 3·매출원가 4),
- * 그 결과 편입 1,000 중 {@code OPM_MIN_5Y} 산출 가능이 <b>537</b>뿐이며
- * {@code PROFIT_STREAK_Y}는 <b>350종목에 거짓·과소 값</b>을 낸다(실측 2026-08-31).
+ * <p>ADR-0102가 「뒤 판이 앞 판을 지운」 갈래를 닫은 뒤에도 {@code OPM_MIN_5Y}가 막히는
+ * 코호트가 <b>199종목 · 막는 FY 행 924개</b>다. 그중 <b>113종목이 SIC 6xxx</b>(은행·보험)이고
+ * 그쪽은 영업이익이 <b>원리적으로 없다</b> — {@code AssetsCurrent}가 없는 것과 같은 성질이다.
+ * 그래서 이 탐침의 표본은 <b>금융업을 뺀 86종목</b>이다.
  *
- * <p>같은 파일 javadoc이 이미 예고했다 — <i>"후보를 여럿 두는 이유는 회사마다, 그리고 같은
- * 회사도 연도마다 태그가 다르기 때문이다 … 표준 태그 하나만 보면 결측이 대량으로 난다."</i>
+ * <p><b>세는 단위가 태그 개수가 아니라 (종목, 회계연도) 쌍이다.</b> 예전 형태는 태그별 연간
+ * 팩트 <b>개수</b>만 세어 <i>"그 결손 연도에 재료가 있는가"</i>에 답하지 못했다.
  *
- * <p><b>MUST: 후보를 더하는 것 자체가 정정을 만든다</b>(같은 파일). 그러므로 이 탐침은
- * <b>무엇을 더할지만 정하고 적재는 하지 않는다.</b> 실제 확장은 미국 지표가 0행인 동안에만
- * 안전하다 — {@code FINANCIAL_REVISED}가 보존 창 전체를 지운다.
+ * <p><b>연간 판정을 {@code fp}로 하지 않는다.</b> 어댑터는 {@code fp}를 안 믿고 <b>기간 길이</b>로
+ * 회계연도를 만든다({@code SecEdgarFacts.ANNUAL_MIN/MAX}, 350~380일). {@code fp=="FY"}로 세면
+ * <b>적재의 창과 다른 모집단</b>을 재게 된다.
  *
- * <p>표본은 {@code -Dprobe.tickers=AA,ADM,...}로 준다. 코드에 박으면 결손 종목이 바뀔 때마다
- * 커밋에 섞인다.
+ * <p><b>MUST: 이 탐침은 무엇을 더할지만 정하고 적재는 하지 않는다.</b> 컬럼을 더하는 것 자체가
+ * 정정을 만들고({@code hasAnyValue}·{@code conflicts}·{@code currencyOf}가 모두
+ * {@code SecEdgarColumn.values()}를 순회한다) 그것은 미국 지표가 0행인 동안에만 안전하다.
+ *
+ * <p>표본은 {@code -Dprobe.tickers=AA,ADM,…}로 준다.
  */
 @Tag("live")
 @EnabledIfEnvironmentVariable(named = "SEC_EDGAR_USER_AGENT", matches = ".+",
@@ -59,8 +63,8 @@ class SecEdgarOperatingIncomeTagProbeLiveTest {
     }
 
     @Test
-    @DisplayName("[live][probe] 영업이익이 비는 종목이 어떤 us-gaap 태그를 쓰는가")
-    void probeOperatingIncomeTags() {
+    @DisplayName("[live][probe] 영업이익이 비는 (종목, 회계연도)에 유도 재료가 있는가")
+    void probeDerivationInputs() {
         List<String> tickers = List.of(
                 System.getProperty("probe.tickers", DEFAULT_TICKERS).split(","));
 
@@ -81,9 +85,13 @@ class SecEdgarOperatingIncomeTagProbeLiveTest {
             cikOf.putIfAbsent(row.get(iTicker).asString(""), row.get(iCik).asLong());
         }
 
-        // 태그 → (그 태그를 연간으로 내는 종목 수, 총 연간 팩트 수)
-        Map<String, int[]> agg = new TreeMap<>();
-        System.out.println("\n===== 종목별: 연간 팩트를 가진 'Operating' 계열 us-gaap 태그 =====");
+        // 유도에 필요한 태그. 영업이익 = GrossProfit − OperatingExpenses
+        //                     또는 = Revenues − CostsAndExpenses
+        List<String> wanted = List.of("OperatingIncomeLoss", "GrossProfit", "OperatingExpenses",
+                "CostsAndExpenses", "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax");
+
+        int pairs = 0, missingOi = 0, byGrossProfit = 0, byCostsAndExpenses = 0, byEither = 0;
+        System.out.println("\n===== (종목, 회계연도)별 유도 재료 =====");
         for (String t : tickers) {
             Long cik = cikOf.get(t.trim());
             if (cik == null) {
@@ -99,33 +107,53 @@ class SecEdgarOperatingIncomeTagProbeLiveTest {
                 continue;
             }
             JsonNode gaap = MAPPER.readTree(body).path("facts").path("us-gaap");
-            List<String> hits = new ArrayList<>();
-            for (String tag : (Iterable<String>) () -> gaap.propertyNames().iterator()) {
-                if (!tag.contains("Operating") && !tag.contains("GrossProfit")
-                        && !tag.contains("CostsAndExpenses")) {
-                    continue;
-                }
-                int annual = 0;
+
+            // 연도 → 그 해에 12개월 팩트가 있는 태그 집합. 길이로 가른다(fp를 안 믿는다).
+            Map<Integer, java.util.Set<String>> byYear = new TreeMap<>();
+            for (String tag : wanted) {
                 for (JsonNode unit : gaap.path(tag).path("units").path("USD")) {
-                    String fp = unit.path("fp").asString("");
-                    if ("FY".equals(fp) && unit.hasNonNull("start")) { annual++; }
-                }
-                if (annual > 0) {
-                    hits.add(tag + "(" + annual + ")");
-                    int[] a = agg.computeIfAbsent(tag, k -> new int[2]);
-                    a[0]++; a[1] += annual;
+                    String start = unit.path("start").asString("");
+                    String end = unit.path("end").asString("");
+                    if (start.isEmpty() || end.isEmpty()) { continue; }
+                    LocalDate s0 = LocalDate.parse(start), e0 = LocalDate.parse(end);
+                    long days = ChronoUnit.DAYS.between(s0, e0);
+                    if (days < 350 || days > 380) { continue; }
+                    byYear.computeIfAbsent(e0.getYear(), k -> new java.util.TreeSet<>()).add(tag);
                 }
             }
-            hits.sort(Comparator.naturalOrder());
-            System.out.printf("%-6s %s%n", t, hits.isEmpty() ? "(없음)" : String.join(" ", hits));
+
+            List<String> line = new ArrayList<>();
+            for (Map.Entry<Integer, java.util.Set<String>> e : byYear.entrySet()) {
+                java.util.Set<String> tags = e.getValue();
+                pairs++;
+                if (tags.contains("OperatingIncomeLoss")) { continue; }
+                missingOi++;
+                boolean gp = tags.contains("GrossProfit") && tags.contains("OperatingExpenses");
+                boolean ce = tags.contains("CostsAndExpenses")
+                        && (tags.contains("Revenues")
+                            || tags.contains("RevenueFromContractWithCustomerExcludingAssessedTax"));
+                if (gp) { byGrossProfit++; }
+                if (ce) { byCostsAndExpenses++; }
+                if (gp || ce) { byEither++; }
+                line.add(e.getKey() + (gp ? " GP-OE" : "") + (ce ? " REV-CE" : "")
+                        + (!gp && !ce ? " (재료없음)" : ""));
+            }
+            if (!line.isEmpty()) {
+                System.out.printf("%-6s 영업이익 없는 해: %s%n", t, String.join(" · ", line));
+            }
         }
 
-        System.out.println("\n===== 집계: 표본 " + tickers.size() + "종목 중 몇이 그 태그를 쓰는가 =====");
-        agg.entrySet().stream()
-                .sorted((a, b) -> Integer.compare(b.getValue()[0], a.getValue()[0]))
-                .limit(25)
-                .forEach(e -> System.out.printf("  %-3d종목 · 연간팩트 %-4d  %s%n",
-                        e.getValue()[0], e.getValue()[1], e.getKey()));
-        System.out.println("\n지금 SecEdgarColumn.OPERATING_INCOME 후보 = [OperatingIncomeLoss]");
+        System.out.println("\n===== 집계 =====");
+        System.out.printf("표본 %d종목 · 연간 창 %d쌍 · 그중 영업이익 없는 쌍 %d%n",
+                tickers.size(), pairs, missingOi);
+        System.out.printf("  GrossProfit − OperatingExpenses 로 유도 가능: %d (%.1f%%)%n",
+                byGrossProfit, missingOi == 0 ? 0.0 : 100.0 * byGrossProfit / missingOi);
+        System.out.printf("  Revenues − CostsAndExpenses 로 유도 가능:    %d (%.1f%%)%n",
+                byCostsAndExpenses, missingOi == 0 ? 0.0 : 100.0 * byCostsAndExpenses / missingOi);
+        System.out.printf("  둘 중 하나로 유도 가능:                       %d (%.1f%%)%n",
+                byEither, missingOi == 0 ? 0.0 : 100.0 * byEither / missingOi);
+        System.out.println("\nMUST: 이 수는 유도의 **상한**이다. 실제 적재는 어댑터의 라벨링을"
+                + " 거치므로 여기서 센 창과 완전히 같지 않다.");
     }
+
 }
