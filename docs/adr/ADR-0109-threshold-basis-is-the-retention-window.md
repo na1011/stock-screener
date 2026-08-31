@@ -63,58 +63,16 @@ applies_to:
 ```
 
 ```premise 통화 축을 단 조건이 두 시장에서 비슷한 선택도를 갖는가
-psql -d stock_screener -At -c "
-WITH cond AS (
-  SELECT s.code sc, c.id cid, c.indicator_code ind, c.operator op,
-         c.threshold_currency base, c.literal_value bval
-  FROM screen_condition c
-  JOIN condition_group g ON g.id = c.group_id
-  JOIN screen s ON s.id = g.screen_id
-  WHERE s.is_active AND s.screen_type = 'PRESET'
-    AND c.operand_type = 'LITERAL' AND c.threshold_currency IS NOT NULL
-    AND c.literal_value_2 IS NULL),
-thr AS (
-  SELECT cid, ind, op, base AS ccy, bval AS v FROM cond
-  UNION ALL
-  SELECT c.cid, c.ind, c.op, t.currency_code, t.literal_value
-  FROM cond c JOIN screen_condition_threshold t ON t.condition_id = c.cid),
-pop AS (
-  SELECT mk.currency_code ccy, iv.indicator_code ind, iv.value
-  FROM stock s
-  JOIN market mk ON mk.code = s.market_code
-  JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL
-  JOIN universe u ON u.code = m.universe_code AND u.is_active
-  JOIN indicator_value iv ON iv.stock_id = s.id),
-rate AS (
-  SELECT t.cid, t.ind, t.ccy,
-         count(*) FILTER (WHERE CASE t.op
-           WHEN 'GTE' THEN p.value >= t.v WHEN 'GT' THEN p.value > t.v
-           WHEN 'LTE' THEN p.value <= t.v WHEN 'LT' THEN p.value < t.v END)::numeric
-         / nullif(count(*), 0) AS pass
-  FROM thr t JOIN pop p ON p.ccy = t.ccy AND p.ind = t.ind
-  GROUP BY 1, 2, 3),
-gap AS (
-  SELECT cid, ind, max(pass) - min(pass) AS d, count(*) n
-  FROM rate GROUP BY 1, 2 HAVING count(*) > 1)
-SELECT CASE
-  WHEN (SELECT count(*) FROM thr) = 0
-    THEN '잴 것이 없었다 — 통화 축을 단 프리셋 조건이 하나도 없다'
-  WHEN (SELECT count(*) FROM gap) = 0
-    THEN '잴 것이 없었다 — 두 통화의 임계를 함께 가진 조건이 없다(한 시장만 켜져 있다)'
-  WHEN (SELECT max(d) FROM gap) <= 0.05
-    THEN 'OK 통화 축 ' || (SELECT count(*) FROM gap) || '조건의 시장 간 통과율 차가 최대 '
-         || (SELECT round(max(d) * 100, 1) FROM gap) || '%p다'
-  ELSE '통과율이 시장마다 갈린 조건이 있다: ' || (SELECT string_agg(
-         ind || ' ' || round(d * 100, 1) || '%p', ', ') FROM gap WHERE d > 0.05)
-       || ' — 분위 보존으로 옮긴 값이 더는 같은 선택도를 내지 않는다. 분포가 움직였으므로 '
-       || '다시 잰다(백테스트로 고치지 않는다 — ADR-0071)'
-END"
+psql -d stock_screener -At -c "WITH cond AS ( SELECT s.code sc, c.id cid, c.indicator_code ind, c.operator op, c.threshold_currency base, c.literal_value bval FROM screen_condition c JOIN condition_group g ON g.id = c.group_id JOIN screen s ON s.id = g.screen_id WHERE s.is_active AND s.screen_type = 'PRESET' AND c.operand_type = 'LITERAL' AND c.threshold_currency IS NOT NULL AND c.literal_value_2 IS NULL), thr AS (SELECT cid, ind, op, base AS ccy, bval AS v FROM cond UNION ALL SELECT c.cid, c.ind, c.op, t.currency_code, t.literal_value FROM cond c JOIN screen_condition_threshold t ON t.condition_id = c.cid), days AS (SELECT trade_date d, market_code mc FROM ( SELECT trade_date, market_code, row_number() OVER (PARTITION BY market_code ORDER BY trade_date DESC) rn FROM indicator_trade_date) z WHERE rn % 20 = 1), mem AS (SELECT DISTINCT s.id, mk.currency_code ccy, s.market_code FROM stock s JOIN market mk ON mk.code = s.market_code JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active), vals AS MATERIALIZED ( SELECT iv.stock_id, iv.indicator_code ind, iv.value, iv.trade_date FROM indicator_value iv WHERE iv.trade_date IN (SELECT DISTINCT d FROM days) AND iv.indicator_code IN (SELECT DISTINCT ind FROM cond)), pop AS (SELECT m.ccy, v.ind, v.value FROM vals v JOIN mem m ON m.id = v.stock_id JOIN days dd ON dd.d = v.trade_date AND dd.mc = m.market_code), rate AS (SELECT t.cid, t.ind, t.ccy, count(*) FILTER (WHERE CASE t.op WHEN 'GTE' THEN p.value >= t.v WHEN 'GT' THEN p.value > t.v WHEN 'LTE' THEN p.value <= t.v WHEN 'LT' THEN p.value < t.v END)::numeric / nullif(count(*), 0) AS pass FROM thr t JOIN pop p ON p.ccy = t.ccy AND p.ind = t.ind GROUP BY 1, 2, 3), gap AS (SELECT cid, ind, max(pass) - min(pass) d FROM rate GROUP BY 1, 2 HAVING count(*) > 1) SELECT CASE WHEN (SELECT count(*) FROM thr) = 0 THEN '잴 것이 없었다 — 통화 축을 단 프리셋 조건이 하나도 없다' WHEN (SELECT count(*) FROM gap) = 0 THEN '잴 것이 없었다 — 두 통화의 임계를 함께 가진 조건이 없다(한 시장만 켜져 있다)' WHEN (SELECT max(d) FROM gap) <= 0.05 THEN 'OK 통화 축 ' || (SELECT count(*) FROM gap) || '조건의 시장 간 통과율 차가 최대 ' || (SELECT round(max(d) * 100, 1) FROM gap) || '%p다' ELSE '통과율이 시장마다 갈린 조건이 있다: ' || (SELECT string_agg(ind || ' ' || round(d * 100, 1) || '%p', ', ' ORDER BY d DESC) FROM gap WHERE d > 0.05) || ' — 분위 보존으로 옮긴 값이 더는 같은 선택도를 내지 않는다. 분포가 움직였으므로 다시 잰다(백테스트로 고치지 않는다 — ADR-0071)' END"
 ```
 
 **이 전제가 재는 것은 「값이 맞는가」가 아니라 「같은 뜻을 유지하는가」다.** 분위 보존의
 조작적 정의가 *두 시장에서 같은 선택도*이므로, 그것이 5%p 넘게 갈리면 옮긴 값이 낡은 것이다.
-**모집단을 활성 유니버스 편입 × 보존 창 전체로 잡은 것이 요점이다** — 단면으로 재면 이 전제
-자체가 이 결정이 버린 기준을 쓰게 된다. **`BETWEEN`을 뺀 이유**는 상·하한 둘을 가진 조건에서
+**모집단을 활성 유니버스 편입 × 보존 창으로 잡은 것이 요점이다** — 단면으로 재면 이 전제
+자체가 이 결정이 버린 기준을 쓰게 된다. **다만 창을 20거래일 간격으로 표본한다**(180일 →
+9일): 전 구간을 훑으면 8초 상한을 넘어 **판정 불가**가 되고, 그러면 이 전제가 아무 말도
+못 한다. 국면 폭은 남기면서 비용을 20분의 1로 줄인 것이고, **덜 정밀한 답이 답 없음보다
+낫다.** 실측 0.55초에 최대 차 2.9%p다. **`BETWEEN`을 뺀 이유**는 상·하한 둘을 가진 조건에서
 「통과율」이 한 축으로 정의되지 않기 때문이고, 지금 그런 통화 축 조건은 없다.
 **이 모집단이 자라는 자리**: 세 번째 통화가 붙으면 `max - min`이 세 시장의 폭이 되므로,
 그때 이 잣대(5%p)가 여전히 맞는지 먼저 본다.

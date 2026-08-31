@@ -67,35 +67,23 @@ SELECT CASE
 ```
 
 ```premise 린치 프리셋의 필수 게이트가 유니버스의 90% 넘게 통과시키지 않는다
-psql -d stock_screener -At -c "WITH pop AS (
-  SELECT count(DISTINCT stock_id) n FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) ivkr
-  WHERE trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))
-    AND indicator_code = 'ADJ_CLOSE'),
-g AS (
-  SELECT c.indicator_code, c.operator, c.literal_value,
-         (SELECT count(*) FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv
-          WHERE iv.indicator_code = c.indicator_code
-            AND iv.trade_date = (SELECT max(trade_date) FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ'))
-            AND CASE c.operator
-                  WHEN 'LTE' THEN iv.value <= c.literal_value
-                  WHEN 'LT'  THEN iv.value <  c.literal_value
-                  WHEN 'GTE' THEN iv.value >= c.literal_value
-                  WHEN 'GT'  THEN iv.value >  c.literal_value
-                  ELSE false END) pass
-  FROM screen_condition c
-  JOIN condition_group cg ON cg.id = c.group_id
-  JOIN screen s ON s.id = cg.screen_id
-  WHERE s.code LIKE 'LYNCH~_%' ESCAPE '~' AND s.is_active AND c.is_required
-    AND c.operand_type = 'LITERAL' AND c.literal_value_2 IS NULL
-    AND c.indicator_code <> 'TURNOVER_RATIO_60')
-SELECT CASE
-  WHEN (SELECT count(*) FROM g) = 0 THEN '잴 것이 없었다 — 린치 프리셋의 리터럴 필수 게이트가 하나도 없다'
-  WHEN (SELECT count(*) FROM g, pop WHERE pass::numeric / pop.n > 0.90) = 0
-    THEN 'OK 필수 게이트 ' || (SELECT count(*) FROM g) || '개가 전부 90% 미만을 통과시킨다'
-  ELSE '게이트가 아니라 상수인 조건이 있다: ' || (SELECT string_agg(indicator_code || ' ' ||
-       round(pass::numeric / pop.n * 100, 1) || '%', ', ') FROM g, pop WHERE pass::numeric / pop.n > 0.90)
-  END"
+psql -d stock_screener -At -c "WITH tgt AS (SELECT u.code tc, mk.currency_code cc, (SELECT max(d.trade_date) FROM indicator_trade_date d WHERE d.market_code = u.market_code) t FROM universe u JOIN market mk ON mk.code = u.market_code JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL WHERE u.is_active GROUP BY 1, 2), uni AS (SELECT t.tc, t.cc, t.t, m.stock_id FROM tgt t JOIN universe_membership m ON m.universe_code = t.tc AND m.effective_to IS NULL WHERE t.t IS NOT NULL), pop AS (SELECT tc, count(*) n FROM uni GROUP BY 1), codes AS (SELECT DISTINCT c.indicator_code ind FROM screen_condition c JOIN condition_group cg ON cg.id = c.group_id JOIN screen s ON s.id = cg.screen_id WHERE s.code LIKE 'LYNCH~_%' ESCAPE '~' AND s.is_active AND c.is_required), vals AS MATERIALIZED (SELECT iv.stock_id, iv.trade_date, iv.indicator_code, iv.value FROM indicator_value iv WHERE iv.trade_date IN (SELECT DISTINCT t FROM tgt WHERE t IS NOT NULL) AND iv.indicator_code IN (SELECT ind FROM codes)), g AS (SELECT t.tc, c.indicator_code ind, c.operator op, c.threshold_currency base, COALESCE(x.literal_value, CASE WHEN c.threshold_currency IS NULL OR c.threshold_currency = t.cc THEN c.literal_value END) v1 FROM screen_condition c JOIN condition_group cg ON cg.id = c.group_id JOIN screen s ON s.id = cg.screen_id CROSS JOIN tgt t LEFT JOIN screen_condition_threshold x ON x.condition_id = c.id AND x.currency_code = t.cc WHERE s.code LIKE 'LYNCH~_%' ESCAPE '~' AND s.is_active AND c.is_required AND c.operand_type = 'LITERAL' AND c.literal_value_2 IS NULL AND c.indicator_code <> 'TURNOVER_RATIO_60'), pass AS (SELECT g.tc, g.ind, g.v1, count(*) FILTER (WHERE CASE g.op WHEN 'LTE' THEN iv.value <= g.v1 WHEN 'LT' THEN iv.value < g.v1 WHEN 'GTE' THEN iv.value >= g.v1 WHEN 'GT' THEN iv.value > g.v1 END) k FROM g JOIN uni u ON u.tc = g.tc LEFT JOIN vals iv ON iv.stock_id = u.stock_id AND iv.indicator_code = g.ind AND iv.trade_date = u.t WHERE g.v1 IS NOT NULL GROUP BY 1, 2, 3), loose AS (SELECT p.tc, p.ind, round(p.k::numeric * 100 / o.n, 1) r FROM pass p JOIN pop o ON o.tc = p.tc WHERE p.k::numeric / o.n > 0.90) SELECT CASE WHEN (SELECT count(*) FROM uni) = 0 THEN '잴 것이 없었다 — 편입이 있고 지표 달력이 찬 조회 대상이 하나도 없다' WHEN (SELECT count(*) FROM g) = 0 THEN '잴 것이 없었다 — 린치 프리셋의 리터럴 필수 게이트가 하나도 없다' WHEN (SELECT count(*) FROM g WHERE v1 IS NULL) > 0 THEN '그 시장 임계가 없어 실행이 거절되는 게이트가 있다(느슨한 것과 다른 사실이다): ' || (SELECT string_agg(DISTINCT tc || ' ' || ind, ', ') FROM g WHERE v1 IS NULL) WHEN (SELECT count(*) FROM loose) = 0 THEN 'OK 린치 필수 게이트가 조회 대상 ' || (SELECT count(DISTINCT tc) FROM pass) || '곳에서 전부 90% 미만을 통과시킨다' ELSE '게이트가 아니라 상수인 조건이 있다: ' || (SELECT string_agg(tc || ' ' || ind || ' ' || r || '%', ', ' ORDER BY tc, ind) FROM loose) END"
 ```
+
+**조회 대상마다 따로 잰다**(ADR-0108). 한 시장으로 뭉쳐 세면 미국 쪽이 안 보이고, 임계는
+그 대상의 통화로 해석한다 — `screen_condition.literal_value`는 **기준 통화 하나**뿐이라
+직접 읽으면 원화 임계로 미국을 판정한다(ADR-0106). **그 통화 임계가 없으면 「실행 거절」로
+따로 신고한다** — 느슨한 것과 다른 사실이고, 축을 안 쓴 조건을 「시장 중립」으로 읽는 것은
+P27 축①이 금지한다.
+
+**대상을 가르면 모집단이 좁아져 전보다 붉어질 수 있다.** 그것은 회귀가 아니라 **해상도**다 —
+라이브가 대상 하나로만 도므로(ADR-0107) 그 수가 사용자가 실제로 보는 것이다.
+
+**`TURNOVER_RATIO_60`을 모집단에서 뺀다.** ADR-0070의 leave-one-out 펜스가 그것을 이미
+신고하고 있어(세 대상 전부에서 상수다) 여기서도 세면 **같은 발견이 둘이 된다** — 그 결함이
+아니라 그 소리에 익숙해지는 것이 문제다. 답이 게이트를 빼는 것이라 사용자 결정으로 묶여 있다
+(ADR-0044). **이 제외가 자라는 자리**: 다른 게이트가 같은 상태가 되면 여기서 빼지 말고
+그 게이트를 고칠지부터 정한다.
 
 **`TURNOVER_RATIO_60`을 모집단에서 뺐다(2026-08-31).** 그 조건은 **선별자가 아니라 거래
 가능성 하한**이고, 이 규칙(ADR-0061 §규칙)이 잡으려는 것은 「안전장치처럼 보이는데 아무것도

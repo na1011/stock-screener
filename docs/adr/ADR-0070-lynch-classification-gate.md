@@ -79,48 +79,23 @@ rg -n 'PegCalculator\.CODE, ComparisonOperator' \
 린치 두 블록에서 `required(`로 감싸인 것이 없어야 한다 — 가격은 저울이다.
 
 ```premise 린치 게이트에 자르는 것이 0인 조건이 없다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
-uni AS (SELECT DISTINCT stock_id FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d
-        WHERE iv.trade_date = d.t AND iv.indicator_code = 'ADJ_CLOSE'),
-g AS (SELECT s.code sc, c.id cid, c.indicator_code ind, c.operator op,
-             c.literal_value v1, c.literal_value_2 v2, c.operand_type ot
-      FROM screen_condition c
-      JOIN condition_group cg ON cg.id = c.group_id
-      JOIN screen s ON s.id = cg.screen_id
-      WHERE s.code LIKE 'LYNCH~_%' ESCAPE '~' AND s.is_active AND c.is_required),
-p AS (SELECT g.sc, g.cid, u.stock_id,
-        COALESCE(CASE g.op
-          WHEN 'LTE' THEN iv.value <= g.v1  WHEN 'LT' THEN iv.value < g.v1
-          WHEN 'GTE' THEN iv.value >= g.v1  WHEN 'GT' THEN iv.value > g.v1
-          WHEN 'BETWEEN' THEN iv.value >= g.v1 AND iv.value <= g.v2 END, false) pass
-      FROM g CROSS JOIN uni u
-      LEFT JOIN (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv ON iv.stock_id = u.stock_id
-        AND iv.indicator_code = g.ind AND iv.trade_date = (SELECT t FROM d)),
-agg AS (SELECT sc, stock_id, count(*) FILTER (WHERE NOT pass) nf,
-               min(cid) FILTER (WHERE NOT pass) fcid FROM p GROUP BY 1, 2),
-base AS (SELECT sc, count(*) FILTER (WHERE nf = 0) allpass FROM agg GROUP BY 1),
-loo AS (SELECT g.sc, g.ind, b.allpass,
-          b.allpass + (SELECT count(*) FROM agg a
-                       WHERE a.sc = g.sc AND a.nf = 1 AND a.fcid = g.cid) lo
-        FROM g JOIN base b ON b.sc = g.sc)
-SELECT CASE
-  WHEN (SELECT count(*) FROM uni) = 0
-    THEN '잴 것이 없었다 — 최신 거래일에 ADJ_CLOSE가 하나도 없다'
-  WHEN (SELECT count(*) FROM g) = 0
-    THEN '잴 것이 없었다 — 린치 프리셋의 필수 게이트가 하나도 없다'
-  WHEN (SELECT count(*) FROM g WHERE ot <> 'LITERAL') > 0
-    THEN '판정할 수 없는 게이트가 있다(리터럴이 아니다): '
-         || (SELECT string_agg(DISTINCT sc || '.' || ind, ', ') FROM g WHERE ot <> 'LITERAL')
-  WHEN (SELECT count(*) FROM loo WHERE lo = allpass) = 0
-    THEN 'OK 린치 게이트 ' || (SELECT count(*) FROM g) || '개가 전부 종목을 자른다 — '
-         || (SELECT string_agg(sc || '.' || ind || ' ' || lo || '→' || allpass, ', ' ORDER BY sc, ind) FROM loo)
-  ELSE '자르는 것이 0인 게이트가 있다(게이트가 아니라 상수다): '
-       || (SELECT string_agg(sc || '.' || ind || ' ' || lo || '→' || allpass, ', ') FROM loo WHERE lo = allpass)
-  END"
+psql -d stock_screener -At -c "WITH tgt AS (SELECT u.code tc, mk.currency_code cc, (SELECT max(d.trade_date) FROM indicator_trade_date d WHERE d.market_code = u.market_code) t FROM universe u JOIN market mk ON mk.code = u.market_code JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL WHERE u.is_active GROUP BY 1, 2), uni AS (SELECT t.tc, t.cc, t.t, m.stock_id FROM tgt t JOIN universe_membership m ON m.universe_code = t.tc AND m.effective_to IS NULL WHERE t.t IS NOT NULL), codes AS (SELECT DISTINCT c.indicator_code ind FROM screen_condition c JOIN condition_group cg ON cg.id = c.group_id JOIN screen s ON s.id = cg.screen_id WHERE s.code LIKE 'LYNCH~_%' ESCAPE '~' AND s.is_active AND c.is_required), vals AS MATERIALIZED (SELECT iv.stock_id, iv.trade_date, iv.indicator_code, iv.value FROM indicator_value iv WHERE iv.trade_date IN (SELECT DISTINCT t FROM tgt WHERE t IS NOT NULL) AND iv.indicator_code IN (SELECT ind FROM codes)), g AS (SELECT s.code sc, t.tc, c.id cid, c.indicator_code ind, c.operator op, c.operand_type ot, c.threshold_currency base, COALESCE(x.literal_value, CASE WHEN c.threshold_currency IS NULL OR c.threshold_currency = t.cc THEN c.literal_value END) v1, COALESCE(x.literal_value_2, CASE WHEN c.threshold_currency IS NULL OR c.threshold_currency = t.cc THEN c.literal_value_2 END) v2 FROM screen_condition c JOIN condition_group cg ON cg.id = c.group_id JOIN screen s ON s.id = cg.screen_id CROSS JOIN tgt t LEFT JOIN screen_condition_threshold x ON x.condition_id = c.id AND x.currency_code = t.cc WHERE s.code LIKE 'LYNCH~_%' ESCAPE '~' AND s.is_active AND c.is_required), p AS (SELECT g.sc, g.tc, g.cid, u.stock_id, COALESCE(CASE g.op WHEN 'LTE' THEN iv.value <= g.v1 WHEN 'LT' THEN iv.value < g.v1 WHEN 'GTE' THEN iv.value >= g.v1 WHEN 'GT' THEN iv.value > g.v1 WHEN 'BETWEEN' THEN iv.value >= g.v1 AND iv.value <= g.v2 END, false) pass FROM g JOIN uni u ON u.tc = g.tc LEFT JOIN vals iv ON iv.stock_id = u.stock_id AND iv.indicator_code = g.ind AND iv.trade_date = u.t WHERE g.v1 IS NOT NULL), agg AS (SELECT sc, tc, stock_id, count(*) FILTER (WHERE NOT pass) nf, min(cid) FILTER (WHERE NOT pass) fcid FROM p GROUP BY 1, 2, 3), base AS (SELECT sc, tc, count(*) FILTER (WHERE nf = 0) allpass FROM agg GROUP BY 1, 2), loo AS (SELECT g.sc, g.tc, g.ind, b.allpass, b.allpass + (SELECT count(*) FROM agg a WHERE a.sc = g.sc AND a.tc = g.tc AND a.nf = 1 AND a.fcid = g.cid) lo FROM g JOIN base b ON b.sc = g.sc AND b.tc = g.tc WHERE g.v1 IS NOT NULL) SELECT CASE WHEN (SELECT count(*) FROM uni) = 0 THEN '잴 것이 없었다 — 편입이 있고 지표 달력이 찬 조회 대상이 하나도 없다' WHEN (SELECT count(*) FROM g) = 0 THEN '잴 것이 없었다 — 린치 프리셋의 필수 게이트가 하나도 없다' WHEN (SELECT count(*) FROM g WHERE ot <> 'LITERAL') > 0 THEN '판정할 수 없는 게이트가 있다(리터럴이 아니다): ' || (SELECT string_agg(DISTINCT sc || '.' || ind, ', ') FROM g WHERE ot <> 'LITERAL') WHEN (SELECT count(*) FROM g WHERE v1 IS NULL) > 0 THEN '그 시장 임계가 없어 실행이 거절되는 게이트가 있다(상수와 다른 사실이다): ' || (SELECT string_agg(DISTINCT tc || ' ' || sc || '.' || ind, ', ') FROM g WHERE v1 IS NULL) WHEN (SELECT count(*) FROM loo WHERE lo > 0) = 0 THEN '잴 것이 없었다 — 어느 조회 대상에서도 게이트 하나를 빼도 통과가 0이라 leave-one-out이 성립하지 않는다' WHEN (SELECT count(*) FROM loo WHERE lo = allpass AND lo > 0) = 0 THEN 'OK 린치 게이트가 잴 수 있는 (대상,게이트) ' || (SELECT count(*) FROM loo WHERE lo > 0) || '자리에서 전부 종목을 자른다 — ' || (SELECT string_agg(tc || ' ' || sc || '.' || ind || ' ' || lo || '→' || allpass, ', ' ORDER BY tc, sc, ind) FROM loo WHERE lo > 0) ELSE '자르는 것이 0인 게이트가 있다(게이트가 아니라 상수다): ' || (SELECT string_agg(tc || ' ' || sc || '.' || ind || ' ' || lo || '→' || allpass, ', ' ORDER BY tc, sc, ind) FROM loo WHERE lo = allpass AND lo > 0) END"
 ```
 
 **이 펜스가 이번 결정의 성패다.** ADR-0066의 90% 펜스가 못 보는 자리이고, 지금 이 저장소에서
-실제로 붉다(`LYNCH_STALWART.TURNOVER_60 44→44`).
+실제로 붉다 — **조회 대상 셋 전부에서** `LYNCH_FAST_GROWER.TURNOVER_RATIO_60`이 상수다
+(KOSDAQ 10→10 · KOSPI 3→3 · **US 51→51**). 답이 게이트를 빼는 것이라 사용자 결정으로
+묶여 있다(ADR-0044).
+
+**조회 대상마다 따로 잰다**(ADR-0108). 한 시장으로 뭉쳐 세면 미국 쪽이 안 보이고, 임계는
+그 대상의 통화로 해석한다 — `screen_condition.literal_value`는 **기준 통화 하나**뿐이라
+직접 읽으면 원화 임계로 미국을 판정한다(ADR-0106).
+
+**세 상태를 가른다.** ① 그 통화 임계가 없으면 「실행 거절」이고 상수와 **다른 사실**이다
+(P27 축①이 *"이 축을 안 쓴 조건을 「시장 중립」으로 읽지 않는다"*로 금지한 자리다).
+② `lo = 0`이면 그 게이트를 빼도 통과가 0이라 **leave-one-out이 성립하지 않는다** —
+「상수」로 세면 거짓 발견이 난다(실측으로 KOSDAQ의 `LYNCH_STALWART`가 그 형태다).
+③ 나머지만 상수 판정에 들어간다.
 
 ```premise 린치 고속성장주의 통과 집합이 유니버스보다 현금흐름이 좋다
 psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
