@@ -216,6 +216,11 @@ public class DartFinancialAdapter implements FinancialDataSource {
      *
      * <p>IMPORTANT — <b>손익만 차감한다.</b> 재무상태표는 시점 잔액이므로 차감하면 자산총계가
      * 음수가 된다. 아래에서 BS는 FY 값을 그대로 쓴다.
+     *
+     * <p>IMPORTANT — <b>통화가 갈리면 손익을 내지 않는다</b>(ADR-0110). 회사가 그 해에 보고
+     * 통화를 갈아타면 이 뺄셈이 <b>통화를 건너뛴다</b> — 실측으로 241560의 2023 Q4 매출이
+     * {@code -7,435,793,333,222}(USD 라벨)로 저장돼 있었다. 값이 그럴듯해 어떤 에러도 나지
+     * 않는다. <b>잔액은 그대로 낸다</b> — 그것은 FY의 연말 잔액이고 뺄셈을 거치지 않아 참이다.
      */
     private Optional<RawFinancialReport> deriveFourthQuarter(Map<String, PeriodRows> byPeriod,
                                                             int year) throws DataSourceException {
@@ -230,16 +235,24 @@ public class DartFinancialAdapter implements FinancialDataSource {
         List<JsonNode> annualBalance = filterBy(annual.rows(), DartAccountMapper.SJ_BALANCE);
         JsonNode any = annual.rows().get(0);
 
+        String annualCurrency = singleCurrency(annual.rows());
+        boolean subtractable = annualCurrency != null
+                && annualCurrency.equals(singleCurrency(thirdQuarter.rows()));
+
         return Optional.of(new RawFinancialReport(
                 year, "Q4",
                 LocalDate.of(year, 10, 1), LocalDate.of(year, 12, 31),
                 publishedAt(any, year),
                 any.path("reprt_code").asString(null),
-                any.path("currency").asString("KRW"),
-                subtract(annualIncome, thirdIncome, DartAccountMapper.REVENUE),
-                subtract(annualIncome, thirdIncome, DartAccountMapper.OPERATING_INCOME),
-                subtract(annualIncome, thirdIncome, DartAccountMapper.NET_INCOME),
-                // BS는 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
+                annualCurrency != null ? annualCurrency : any.path("currency").asString("KRW"),
+                subtractable ? subtract(annualIncome, thirdIncome, DartAccountMapper.REVENUE) : null,
+                subtractable
+                        ? subtract(annualIncome, thirdIncome, DartAccountMapper.OPERATING_INCOME)
+                        : null,
+                subtractable
+                        ? subtract(annualIncome, thirdIncome, DartAccountMapper.NET_INCOME)
+                        : null,
+                // BS는 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다. 통화가 갈려도 참이다.
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_ASSETS, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_EQUITY, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_LIABILITIES, false),
@@ -250,6 +263,28 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 // 지배주주 귀속 순이익. 위와 같은 이유로 이 엔드포인트가 낼 수 없다.
                 null,
                 null, null, null, null, null, null, null, null));
+    }
+
+    /**
+     * 그 행들이 <b>한 통화로 일치하면</b> 그 통화, 아니면 {@code null}.
+     *
+     * <p>「아무 행의 통화」를 라벨로 쓰지 않으려고 둔다 — 섞인 보고서에서 첫 행을 집으면
+     * <b>라벨이 실제와 다른 값</b>이 되고, 그 오류는 값이 나오는 형태라 드러나지 않는다.
+     */
+    private static String singleCurrency(List<JsonNode> rows) {
+        String found = null;
+        for (JsonNode row : rows) {
+            String currency = row.path("currency").asString(null);
+            if (currency == null || currency.isBlank()) {
+                continue;
+            }
+            if (found == null) {
+                found = currency;
+            } else if (!found.equals(currency)) {
+                return null;
+            }
+        }
+        return found;
     }
 
     private static BigDecimal subtract(List<JsonNode> annual, List<JsonNode> thirdQuarter,

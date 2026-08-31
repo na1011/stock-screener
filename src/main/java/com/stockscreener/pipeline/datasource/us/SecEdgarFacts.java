@@ -724,6 +724,12 @@ final class SecEdgarFacts {
      * 음수가 된다. 잔액은 FY 값을 그대로 쓴다({@code DartFinancialAdapter}와 같은 형태다).
      *
      * <p>소스가 Q4를 직접 준 회계연도는 건너뛴다 — 사업보고서가 3개월을 함께 싣는 경우가 있다.
+     *
+     * <p>IMPORTANT — <b>통화가 갈리면 손익을 내지 않는다</b>(ADR-0110). 회사가 그 해에 보고
+     * 통화를 갈아타면 이 뺄셈이 <b>통화를 건너뛴다</b>. 실측으로 MLR의 2025 Q4 매출이
+     * FY 790,271,000 USD에서 Q1 225,651,000 <b>GBP</b>를 뺀 {@code 171,918,000}으로 저장돼
+     * 있었고, <b>그 수는 결손처럼 보이지도 않는다.</b> 오염 11행 중 아홉이 이 자리에서 났다.
+     * <b>잔액은 그대로 낸다</b> — FY의 연말 잔액이라 뺄셈을 거치지 않는다.
      */
     private static List<RawFinancialReport> deriveFourthQuarters(
             List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear) {
@@ -770,41 +776,57 @@ final class SecEdgarFacts {
             }
             RawFinancialReport q1 = inside.get(0);
             RawFinancialReport q2 = inside.get(1);
+            boolean subtractable = sameCurrency(fy, q1, q2, q3);
             derived.add(new RawFinancialReport(
                     label.fiscalYear(), "Q4", start, fy.periodEnd(), fy.publishedAt(),
                     fy.reportCode(), fy.currencyCode(),
-                    minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue()),
-                    minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
-                            q3.operatingIncome()),
-                    minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()),
+                    subtractable ? minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue()) : null,
+                    subtractable ? minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
+                            q3.operatingIncome()) : null,
+                    subtractable ? minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()) : null,
                     // 잔액은 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
                     fy.totalAssets(), fy.totalEquity(), fy.totalLiabilities(),
                     fy.currentAssets(), fy.currentLiabilities(), fy.retainedEarnings(),
                     // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
                     null, fy.sharesOutstanding(), null, null,
-                    minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales()),
+                    subtractable ? minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales()) : null,
                     fy.cashAndEquivalents(), null, fy.inventories(),
                     // 위 toReport와 같은 이유로 담지 않는다.
                     null,
                     // 유도 재료 여덟은 전부 유량이라 차감한다. 하나라도 없으면 minus가
                     // null을 내므로 Q4 영업이익이 지어지지 않는다 — 그것이 옳다.
-                    minus(fy.interestAndDividendIncome(), q1.interestAndDividendIncome(),
-                            q2.interestAndDividendIncome(), q3.interestAndDividendIncome()),
-                    minus(fy.noninterestIncome(), q1.noninterestIncome(),
-                            q2.noninterestIncome(), q3.noninterestIncome()),
-                    minus(fy.interestExpense(), q1.interestExpense(),
-                            q2.interestExpense(), q3.interestExpense()),
-                    minus(fy.noninterestExpense(), q1.noninterestExpense(),
-                            q2.noninterestExpense(), q3.noninterestExpense()),
-                    minus(fy.benefitsLossesAndExpenses(), q1.benefitsLossesAndExpenses(),
-                            q2.benefitsLossesAndExpenses(), q3.benefitsLossesAndExpenses()),
-                    minus(fy.grossProfit(), q1.grossProfit(), q2.grossProfit(), q3.grossProfit()),
-                    minus(fy.operatingExpenses(), q1.operatingExpenses(),
-                            q2.operatingExpenses(), q3.operatingExpenses()),
-                    minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
-                            q2.costsAndExpenses(), q3.costsAndExpenses())));
+                    subtractable ? minus(fy.interestAndDividendIncome(), q1.interestAndDividendIncome(),
+                            q2.interestAndDividendIncome(), q3.interestAndDividendIncome()) : null,
+                    subtractable ? minus(fy.noninterestIncome(), q1.noninterestIncome(),
+                            q2.noninterestIncome(), q3.noninterestIncome()) : null,
+                    subtractable ? minus(fy.interestExpense(), q1.interestExpense(),
+                            q2.interestExpense(), q3.interestExpense()) : null,
+                    subtractable ? minus(fy.noninterestExpense(), q1.noninterestExpense(),
+                            q2.noninterestExpense(), q3.noninterestExpense()) : null,
+                    subtractable ? minus(fy.benefitsLossesAndExpenses(), q1.benefitsLossesAndExpenses(),
+                            q2.benefitsLossesAndExpenses(), q3.benefitsLossesAndExpenses()) : null,
+                    subtractable ? minus(fy.grossProfit(), q1.grossProfit(), q2.grossProfit(), q3.grossProfit()) : null,
+                    subtractable ? minus(fy.operatingExpenses(), q1.operatingExpenses(),
+                            q2.operatingExpenses(), q3.operatingExpenses()) : null,
+                    subtractable ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
+                            q2.costsAndExpenses(), q3.costsAndExpenses()) : null));
         }
         return derived;
+    }
+
+    /**
+     * 넷이 <b>한 통화로 일치하는가.</b> 아니면 뺄셈이 통화를 건너뛴다(ADR-0110).
+     *
+     * <p>{@code currencyCode}가 {@code NOT NULL}이라 「모른다」가 원리적으로 없다
+     * (ADR-0094 §규칙) — NULL 방어를 적으면 없는 방어선을 보증하는 문장이 된다.
+     */
+    private static boolean sameCurrency(RawFinancialReport fy, RawFinancialReport... quarters) {
+        for (RawFinancialReport quarter : quarters) {
+            if (!fy.currencyCode().equals(quarter.currencyCode())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** 하나라도 없으면 null이다. 0으로 대체하면 조용히 틀린 값이 저장된다. */

@@ -386,14 +386,17 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
     static BigDecimal deriveFourthQuarterControlling(List<RawFinancialReport> thisYear,
                                                              int year) {
         BigDecimal annual = null;
+        String annualCurrency = null;
         BigDecimal quarterSum = BigDecimal.ZERO;
         int quarters = 0;
+        boolean sameCurrency = true;
         for (RawFinancialReport report : thisYear) {
             if (report.fiscalYear() != year || report.netIncomeControlling() == null) {
                 continue;
             }
             if (StatementPeriod.FY.label().equals(report.fiscalPeriod())) {
                 annual = report.netIncomeControlling();
+                annualCurrency = report.currencyCode();
             } else {
                 quarterSum = quarterSum.add(report.netIncomeControlling());
                 quarters++;
@@ -402,7 +405,17 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         if (annual == null || quarters != 3) {
             return null;
         }
-        return annual.subtract(quarterSum);
+        for (RawFinancialReport report : thisYear) {
+            if (report.fiscalYear() == year && report.netIncomeControlling() != null
+                    && !StatementPeriod.FY.label().equals(report.fiscalPeriod())
+                    && !report.currencyCode().equals(annualCurrency)) {
+                sameCurrency = false;
+            }
+        }
+        // MUST: 통화가 갈리면 내지 않는다(ADR-0110). 이 뺄셈도 FY − 3분기라
+        // DartFinancialAdapter·SecEdgarFacts와 **같은 자리**이고, 넷 중 하나만 빼먹으면
+        // 그 경로로만 오염이 다시 들어온다 — 실제로 이 자리가 계획에서 두 번 빠졌다.
+        return sameCurrency ? annual.subtract(quarterSum) : null;
     }
 
     /**

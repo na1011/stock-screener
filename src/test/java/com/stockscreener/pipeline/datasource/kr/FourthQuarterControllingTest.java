@@ -76,8 +76,42 @@ class FourthQuarterControllingTest {
                 .isEqualByComparingTo("19.292054");
     }
 
+    @Test
+    @DisplayName("회계연도 안에서 통화가 갈리면 유도하지 않는다 — 뺄셈이 통화를 건너뛴다")
+    void refusesWhenCurrencyChangesWithinTheYear() {
+        // 실측 형태: 241560의 2023이 FY는 USD, Q1~Q3는 KRW다. 그대로 빼면
+        // -7,435,793,333,222 같은 수가 나오는데 결손처럼 보이지도 않는다(ADR-0110).
+        List<RawFinancialReport> year = List.of(
+                report(2025, "FY", "44.260956", "USD"), report(2025, "Q1", "8.028407", "KRW"),
+                report(2025, "Q2", "4.934034", "KRW"), report(2025, "Q3", "12.006461", "KRW"));
+
+        assertThat(DartFullStatementAdapter.deriveFourthQuarterControlling(year, 2025)).isNull();
+    }
+
+    @Test
+    @DisplayName("한 분기만 통화가 갈려도 유도하지 않는다 — Q3만 보면 안 갈린 것으로 읽힌다")
+    void refusesWhenOnlyOneQuarterCrosses() {
+        // MLR 2025가 그 형태였다 — 분기 통화가 {GBP, USD}라 Q3만 대조하면 통과한다.
+        List<RawFinancialReport> year = List.of(
+                report(2025, "FY", "44.260956", "USD"), report(2025, "Q1", "8.028407", "GBP"),
+                report(2025, "Q2", "4.934034", "USD"), report(2025, "Q3", "12.006461", "USD"));
+
+        assertThat(DartFullStatementAdapter.deriveFourthQuarterControlling(year, 2025)).isNull();
+    }
+
     private static RawFinancialReport report(String period, String controlling) {
         return report(2025, period, controlling);
+    }
+
+    private static RawFinancialReport report(int year, String period, String controlling,
+                                             String currency) {
+        RawFinancialReport base = report(year, period, controlling);
+        return new RawFinancialReport(
+                base.fiscalYear(), base.fiscalPeriod(), base.periodStart(), base.periodEnd(),
+                base.publishedAt(), base.reportCode(), currency,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, base.netIncomeControlling(),
+                null, null, null, null, null, null, null, null);
     }
 
     private static RawFinancialReport report(int year, String period, String controlling) {
