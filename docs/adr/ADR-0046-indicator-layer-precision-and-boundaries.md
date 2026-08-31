@@ -124,13 +124,13 @@ Flyway 체크섬 때문에 고칠 수 없다.
 
 ```premise 207주 미만 이탈이 아직 필요한가
 psql -d stock_screener -At -c "SELECT CASE
-  WHEN count(*) = 0 THEN '잴 것이 없었다 — price_daily가 비어 있다'
+  WHEN count(*) = 0 THEN '잴 것이 없었다 — 국내 price_daily가 비어 있다'
   WHEN count(*) FILTER (WHERE wk BETWEEN 130 AND 206) = 0
     THEN 'OK 130~206주 밴드가 비었다 — 원본 가드와 우리 이탈이 같은 결과를 낸다'
   ELSE 'OK 130~206주 밴드 ' || count(*) FILTER (WHERE wk BETWEEN 130 AND 206)
        || '종목 / 207주 이상 ' || count(*) FILTER (WHERE wk >= 207) || '종목'
-  END FROM (SELECT stock_id, count(DISTINCT date_trunc('week', trade_date)) wk
-            FROM price_daily GROUP BY 1) w"
+  END FROM (SELECT p.stock_id, count(DISTINCT date_trunc('week', p.trade_date)) wk
+            FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code IN ('KOSPI','KOSDAQ') GROUP BY 1) w"
 ```
 
 **시장 지수 결손과 `ICHI_*` 산출 일자는 여기서 재지 않는다** — ADR-0053·ADR-0054의 `premise`

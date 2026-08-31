@@ -38,7 +38,7 @@ ADR-0033 §결정의 "평일 20시·대상 일자 당일"을 대체한다.
 **두 회귀 테스트가 실제로 무언가를 지키는지 되돌려 확인했다**(2026-08-11). 창을 1일로 좁히면 `noTradingDayIsMissedAroundHolidays`·`priceWindowCoversLongClosure`가, 기준일을 대상일로 되돌리면 `percentilesUseTheLatestActuallyLoadedTradeDate`가 각각 실패한다.
 
 ```premise 수집된 시세가 소스의 공개 지연을 따라잡고 있다
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '시세가 한 행도 없다 — 잴 것이 없었다' WHEN current_date - max(trade_date) <= 8 THEN 'OK 최신 ' || max(trade_date) || ' (' || (current_date - max(trade_date)) || '일 전)' ELSE '최신 시세가 ' || max(trade_date) || '에 멈춰 있다(' || (current_date - max(trade_date)) || '일 전). 3일 이상 연휴 직후가 아니면 배치가 대상 일자를 놓치고 있거나 소스의 공개 규칙이 바뀐 것이다 — 15일 창이 아직 덮는 구간이라 다음 실행이 메울 수 있다.' END FROM price_daily"
+psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '국내 시세가 한 행도 없다 — 잴 것이 없었다' WHEN current_date - max(p.trade_date) <= 8 THEN 'OK 최신 ' || max(p.trade_date) || ' (' || (current_date - max(p.trade_date)) || '일 전)' ELSE '최신 시세가 ' || max(p.trade_date) || '에 멈춰 있다(' || (current_date - max(p.trade_date)) || '일 전). 3일 이상 연휴 직후가 아니면 배치가 대상 일자를 놓치고 있거나 소스의 공개 규칙이 바뀐 것이다 — 15일 창이 아직 덮는 구간이라 다음 실행이 메울 수 있다.' END FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code IN ('KOSPI','KOSDAQ')"
 ```
 
 0.053초(2026-08-11 실측, `idx_price_date`의 끝을 한 번 훑는다). 그때 값은 `OK 최신 2026-08-07 (4일 전)`이었다.

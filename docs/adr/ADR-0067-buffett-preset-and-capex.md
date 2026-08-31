@@ -100,8 +100,8 @@ rg -n "abs" src/main/java/com/stockscreener/pipeline/collector/FinancialWriter.j
 
 ```premise 자본적지출이 재무제표에 실제로 채워져 있다
 psql -d stock_screener -At -c "WITH fy AS (
-  SELECT capex FROM financial_statement
-  WHERE fiscal_period = 'FY' AND is_latest AND fiscal_year >= 2021)
+  SELECT f.capex FROM financial_statement f JOIN stock s ON s.id = f.stock_id
+  WHERE s.market_code IN ('KOSPI','KOSDAQ') AND f.fiscal_period = 'FY' AND f.is_latest AND f.fiscal_year >= 2021)
 SELECT CASE
   WHEN (SELECT count(*) FROM fy) = 0
     THEN '잴 것이 없었다 — FY2021 이후 재무제표 행이 하나도 없다'

@@ -72,7 +72,7 @@ rg -n 'FILL_MISSING' src/main/java
 ```
 
 ```premise 최신 분기 재무에 유동자산이 채워져 있다
-psql -d stock_screener -At -c "WITH q AS (SELECT max(period_end) AS pe FROM financial_statement WHERE is_latest AND fiscal_period <> 'FY' AND period_end <= CURRENT_DATE), s AS (SELECT count(*) AS n, count(fs.current_assets) AS filled FROM financial_statement fs, q WHERE fs.is_latest AND fs.fiscal_period <> 'FY' AND fs.period_end = q.pe AND fs.period_end <= CURRENT_DATE) SELECT CASE WHEN n = 0 THEN '최신 분기 재무 행이 0건이다 — 재무 수집이 비었거나 period_end가 잡히지 않는다' WHEN filled = 0 THEN '최신 분기 ' || n || '행의 유동자산이 전량 NULL이다 — 결손 보정이 돌지 않았다(ALTMAN_Z가 0건이 된다)' WHEN filled::numeric / n < 0.5 THEN '최신 분기 ' || n || '행 중 ' || filled || '행만 채워졌다 — 금융업 결손만으로는 설명되지 않는다' ELSE 'OK 최신 분기 ' || n || '행 중 ' || filled || '행에 유동자산이 있다' END FROM s"
+psql -d stock_screener -At -c "WITH q AS (SELECT max(f.period_end) AS pe FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE s.market_code IN ('KOSPI','KOSDAQ') AND f.is_latest AND f.fiscal_period <> 'FY' AND f.period_end <= CURRENT_DATE), s AS (SELECT count(*) AS n, count(fs.current_assets) AS filled FROM financial_statement fs JOIN stock s ON s.id = fs.stock_id, q WHERE s.market_code IN ('KOSPI','KOSDAQ') AND fs.is_latest AND fs.fiscal_period <> 'FY' AND fs.period_end = q.pe AND fs.period_end <= CURRENT_DATE) SELECT CASE WHEN n = 0 THEN '최신 분기 재무 행이 0건이다 — 재무 수집이 비었거나 period_end가 잡히지 않는다' WHEN filled = 0 THEN '최신 분기 ' || n || '행의 유동자산이 전량 NULL이다 — 결손 보정이 돌지 않았다(ALTMAN_Z가 0건이 된다)' WHEN filled::numeric / n < 0.5 THEN '최신 분기 ' || n || '행 중 ' || filled || '행만 채워졌다 — 금융업 결손만으로는 설명되지 않는다' ELSE 'OK 최신 분기 ' || n || '행 중 ' || filled || '행에 유동자산이 있다' END FROM s"
 ```
 
 **분기를 못 박지 않고 쿼리가 최신 분기를 스스로 고르는 것이 요점이다.** `fiscal_year=2026 AND
