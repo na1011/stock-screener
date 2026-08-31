@@ -18,7 +18,10 @@ import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -64,15 +67,33 @@ public class AlpacaMarketIndexAdapter implements MarketIndexDataSource {
     /** 페이지 수 상한. 토큰이 안 끝날 때 무한 루프 대신 실패한다. */
     private static final int MAX_PAGES = 20;
 
+    /**
+     * 요청 끝을 <b>현재로부터 이만큼 뒤로</b> 민다. 무료 플랜의 15분 규칙 때문이다.
+     *
+     * <p><b>MUST: 날짜가 아니라 Instant로 준다.</b> {@code end}에 날짜만 주면 소스가 그날의
+     * 끝으로 해석해 UTC로는 미래가 되고, <b>어제 날짜도 403</b>이 난다(실측 2026-08-31:
+     * {@code subscription does not permit querying recent SIP data}). 그 403은 {@code AUTH}로
+     * 접히면 {@code fatal()}이라 배치 전체를 죽인다 — 가이드가 규칙을 적었지만
+     * <b>우리가 보낼 값에 대해 참인지는 안 적었다</b>({@code .claude/rules/data-pipeline.md}).
+     */
+    private static final Duration END_MARGIN = Duration.ofMinutes(16);
+
     private final RestClient client;
     private final RateLimiter rateLimiter;
+    private final boolean credentialsPresent;
 
     public AlpacaMarketIndexAdapter(ExternalApiClientFactory clientFactory,
                                     DataSourceProperties properties,
                                     @Qualifier("alpacaRateLimiter") RateLimiter rateLimiter) {
-        this.client = clientFactory.create(properties.getAlpaca(),
-                properties.getAlpacaMarketDataBaseUrl());
+        DataSourceProperties.Source source = properties.getAlpaca();
+        // MUST: AlpacaHeaders를 붙인다. 이 소스는 헤더가 둘이라(APCA-API-KEY-ID ·
+        // APCA-API-SECRET-KEY) 기본 create로는 401이 나고, 그 응답이 JSON이 아니라 nginx의
+        // HTML이라 상태코드를 안 보면 파싱에서 터진다.
+        this.client = clientFactory.create(source, properties.getAlpacaMarketDataBaseUrl(),
+                AlpacaHeaders.of(source));
         this.rateLimiter = rateLimiter;
+        // @ConditionalOnApiKey는 api-key 하나만 보므로 시크릿이 비어도 어댑터는 등록된다.
+        this.credentialsPresent = source.hasApiKey() && source.hasSecretKey();
     }
 
     @Override
@@ -94,6 +115,10 @@ public class AlpacaMarketIndexAdapter implements MarketIndexDataSource {
     @Override
     public List<RawIndexBar> fetchDailyBars(String indexCode, LocalDate from, LocalDate to)
             throws DataSourceException {
+        if (!credentialsPresent) {
+            throw new DataSourceException(DataSourceException.Kind.AUTH, sourceName(),
+                    "APCA_API_KEY_ID와 APCA_API_SECRET_KEY가 둘 다 설정되어야 한다.");
+        }
         if (!MarketIndexCodes.US.equals(indexCode)) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, sourceName(),
                     "이 어댑터가 담당하지 않는 지수다: " + indexCode);
@@ -105,13 +130,20 @@ public class AlpacaMarketIndexAdapter implements MarketIndexDataSource {
                     "구간이 뒤집혔거나 비었다: " + from + " ~ " + to);
         }
 
+        Instant end = clampEnd(to);
+        if (!end.isAfter(from.atStartOfDay(ZoneOffset.UTC).toInstant())) {
+            // 구간 전체가 마지막 16분 안이다. 닫힌 봉이 있을 수 없으므로 빈 목록이 옳다.
+            log.debug("요청 구간이 15분 규칙 안이라 받을 봉이 없다. {} ~ {}", from, to);
+            return List.of();
+        }
+
         List<RawIndexBar> bars = new ArrayList<>();
         String pageToken = null;
         int page = 0;
         do {
             String context = "index %s(%s) %s~%s page=%d"
                     .formatted(indexCode, SYMBOL, from, to, page + 1);
-            ResponseEntity<String> response = call(from, to, pageToken, context);
+            ResponseEntity<String> response = call(from, end, pageToken, context);
             AlpacaResponse.Envelope envelope = AlpacaResponse.requireBars(
                     response.getStatusCode(), response.getBody(), sourceName(), context);
             JsonNode nodes = envelope.value().path(SYMBOL);
@@ -143,7 +175,13 @@ public class AlpacaMarketIndexAdapter implements MarketIndexDataSource {
         return bars;
     }
 
-    private ResponseEntity<String> call(LocalDate from, LocalDate to, String pageToken,
+    private static Instant clampEnd(LocalDate to) {
+        Instant requested = to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant safe = Instant.now().minus(END_MARGIN);
+        return requested.isBefore(safe) ? requested : safe;
+    }
+
+    private ResponseEntity<String> call(LocalDate from, Instant end, String pageToken,
                                         String context) throws DataSourceException {
         try {
             rateLimiter.acquire();
@@ -159,7 +197,7 @@ public class AlpacaMarketIndexAdapter implements MarketIndexDataSource {
                                 .queryParam("symbols", SYMBOL)
                                 .queryParam("timeframe", "1Day")
                                 .queryParam("start", from.toString())
-                                .queryParam("end", to.toString())
+                                .queryParam("end", end.toString())
                                 .queryParam("feed", "sip")
                                 .queryParam("adjustment", "raw")
                                 .queryParam("limit", PAGE_LIMIT)
