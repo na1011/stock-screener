@@ -91,6 +91,16 @@ class ScreeningApiContractTest {
                 INSERT INTO universe (code, name, market_code)
                 VALUES (?, '계약 테스트 유니버스', 'TESTMKT') ON CONFLICT DO NOTHING
                 """, CONTRACT_UNIVERSE);
+        // 이 시장의 지표 달력. 없으면 AsOfResolver가 503을 낸다.
+        //
+        // MUST: 픽스처가 **자기 시장의** 달력을 심는다. 예전에는 이 줄이 없어도 통과했는데,
+        // 그것은 테스트 DB의 시드 유니버스(KOSPI200·KOSDAQ150)가 **편입 0건인 채로 활성**이라
+        // 그 시장의 달력이 딸려 들어온 것이다 — 이 테스트와 아무 상관 없는 행에 기대고 있었다.
+        // 그 우연이 사라지면 기준일 해석이 통째로 무너진다.
+        jdbcTemplate.update("""
+                INSERT INTO indicator_trade_date (market_code, trade_date)
+                VALUES ('TESTMKT', ?) ON CONFLICT DO NOTHING
+                """, AS_OF);
         jdbcTemplate.update("""
                 INSERT INTO app_user (email, name, provider, provider_user_id, is_admin, is_active)
                 VALUES ('contract@example.com','계약테스트','GOOGLE',?,false,true)

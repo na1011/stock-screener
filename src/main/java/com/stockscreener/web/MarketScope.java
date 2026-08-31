@@ -21,6 +21,34 @@ import java.util.Set;
 @Component
 public class MarketScope {
 
+    /**
+     * 「전체」가 실제로 훑는 유니버스.
+     *
+     * <p><b>편입이 있는 것만 센다.</b> 대상을 안 고른 요청은 {@code inAnyActiveUniverse}로 도는데
+     * 그 조인이 편입을 요구하므로, <b>편입 0건인 활성 유니버스는 결과에 한 종목도 못 넣는다.</b>
+     * 그런데도 시장·통화 집합에는 들어가면 실행 자체가 달라진다 — 기준일이 종목 없는 시장의
+     * 달력에서 나오고, 통화가 둘이 되어 <b>요청이 거절된다.</b> 실제로 테스트 DB가 그 형태다
+     * (시드 유니버스가 활성이고 편입은 0건이며 시장이 셋이다).
+     *
+     * <p>{@code StockReader.selectableUniverses}가 화면에 제시하는 목록과 <b>같은 술어</b>다.
+     * 갈리면 화면이 못 고르는 대상이 기준일과 통화를 정하게 된다.
+     */
+    private static final String ACTIVE_MARKETS = """
+            SELECT DISTINCT u.market_code
+            FROM universe u
+            JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL
+            WHERE u.is_active
+            """;
+
+    /** {@link #ACTIVE_MARKETS}의 통화 짝. 같은 술어를 쓰는 이유가 거기 있다. */
+    private static final String ACTIVE_CURRENCIES = """
+            SELECT DISTINCT mk.currency_code
+            FROM universe u
+            JOIN market mk ON mk.code = u.market_code
+            JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL
+            WHERE u.is_active
+            """;
+
     private final JdbcTemplate jdbcTemplate;
 
     public MarketScope(JdbcTemplate jdbcTemplate) {
@@ -46,8 +74,7 @@ public class MarketScope {
     @Transactional(readOnly = true)
     public Set<String> forScreening(String universeCode) {
         List<String> codes = universeCode == null
-                ? jdbcTemplate.queryForList(
-                        "SELECT DISTINCT market_code FROM universe WHERE is_active", String.class)
+                ? jdbcTemplate.queryForList(ACTIVE_MARKETS, String.class)
                 : jdbcTemplate.queryForList(
                         "SELECT market_code FROM universe WHERE code = ?", String.class, universeCode);
         return new LinkedHashSet<>(codes);
@@ -68,11 +95,7 @@ public class MarketScope {
     @Transactional(readOnly = true)
     public Set<String> currenciesFor(String universeCode) {
         List<String> codes = universeCode == null
-                ? jdbcTemplate.queryForList("""
-                        SELECT DISTINCT m.currency_code
-                        FROM universe u JOIN market m ON m.code = u.market_code
-                        WHERE u.is_active
-                        """, String.class)
+                ? jdbcTemplate.queryForList(ACTIVE_CURRENCIES, String.class)
                 : jdbcTemplate.queryForList("""
                         SELECT m.currency_code
                         FROM universe u JOIN market m ON m.code = u.market_code
