@@ -534,6 +534,11 @@ fi
 # 한 줄이 `자바계산기|연산자|코드값|기대개수|표코드정규식|표기호|표값`이다.
 # MUST: 표코드정규식에 `|`를 쓰지 않는다. 구분자와 같아 **필드가 조용히 쪼개지고**, 그러면
 # 그 행이 늘 「등록 표에서 사라졌다」로 오발화한다(실제로 `[^|]*`를 넣었다가 그렇게 됐다).
+#
+# 연산자와 값 **사이의 인자 하나를 허용한다**(`([A-Z_]+, )?`). 임계에 시장 축이 붙으면서
+# `requiredIn(..., ComparisonOperator.GTE, KRW, "1000000000000")` 모양이 생겼는데(ADR-0106),
+# 이 검사가 재는 것은 **값**이지 호출 모양이 아니다. 안 넓히면 값이 그대로인데도
+# 「코드 0곳」으로 매 세션 거짓 발화한다 — 거짓 발견은 침묵보다 나쁘다.
 # 표에서 같은 지표가 두 번 나오면(BETA_104W가 저변동 축·스윙 게이트 둘이다) 괄호 주석으로
 # 가른다 — 아래 정규식의 `.`은 역따옴표다.
 preset_reg="AtrPct14|LTE|5.9|1|ATR_PCT_14|≤|5.9
@@ -556,7 +561,7 @@ if [ -n "${preset_src:-}" ] && [ -f "$criteria_reg" ]; then
   while IFS='|' read -r r_calc r_op r_val r_want r_code r_sym r_tval; do
     [ -z "${r_calc:-}" ] && continue
     got=$(printf '%s' "$preset_flat" \
-          | grep -oE "${r_calc}Calculator\.CODE, ComparisonOperator\.${r_op}, \"${r_val}\"" 2>/dev/null \
+          | grep -oE "${r_calc}Calculator\.CODE, ComparisonOperator\.${r_op}, ([A-Z_]+, )?\"${r_val}\"" 2>/dev/null \
           | grep -c . || true)
     intable=$(printf '%s' "$criteria_flat" \
               | grep -c "${r_code}[^|]*| ${r_sym} ${r_tval} |" 2>/dev/null || true)
