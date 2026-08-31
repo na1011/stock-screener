@@ -61,6 +61,23 @@ guard="$root/.claude/hooks/guard-destructive.sh"
 per_limit=8
 total_budget=30
 
+# --- 값을 붙잡는 갈래 ------------------------------------------------------
+# `PREMISE_CAPTURE`에 파일 경로를 주면 전제마다 **판정과 출력 전문**을 그 파일에 적는다.
+# 훅은 판정을 개수로만 접으므로(`n_ok`가 OK 문자열을 버린다) **켜기 전/후 대조가 원리적으로
+# 불가능하다** — 같은 「OK」가 다른 모집단을 재고 있어도 수는 그대로다. 그 대조가 필요한
+# 작업(새 시장을 켜는 것)에서만 쓴다.
+#
+# MUST: 새 러너를 만들지 않고 여기에 갈래를 둔다. 파서·타임아웃·파괴적 명령 심사·예산이
+# 전부 이 파일에 있고, 사본을 만들면 둘이 갈린 채 한쪽만 고쳐진다.
+# 붙잡을 때는 예산을 넓힌다 — 이 경로는 SessionStart가 아니라 손으로 부르는 것이라
+# settings.json의 훅 timeout이 걸리지 않는다. 위 `total_budget + per_limit < 45` 부등식은
+# 훅 경로에만 걸린다.
+capture="${PREMISE_CAPTURE:-}"
+if [ -n "$capture" ]; then
+  total_budget=600
+  : >"$capture"
+fi
+
 # psql이 읽기 전용으로 붙게 한다. 러너가 도메인을 아는 유일한 지점이고, 무엇을 재는지
 # 해석하는 것이 아니라 **되돌릴 수 없는 일을 못 하게** 하는 방어다. psql이 아닌 전제에는
 # 그냥 무시되는 환경변수다.
@@ -181,6 +198,11 @@ run_one() {
     n_ok=$((n_ok + 1))
   else
     add_finding "${where}: ${out}"
+  fi
+
+  # 붙잡기는 판정 **뒤**다 — 판정을 안 바꾸고 옆에 적기만 한다.
+  if [ -n "$capture" ]; then
+    printf '%s\t%s\n' "$where" "${out:-<출력 없음 rc=$rc>}" >>"$capture"
   fi
 }
 
