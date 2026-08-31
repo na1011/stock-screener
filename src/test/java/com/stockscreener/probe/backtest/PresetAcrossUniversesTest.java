@@ -2,8 +2,11 @@ package com.stockscreener.probe.backtest;
 
 import com.stockscreener.screening.MarketThresholdMissingException;
 import com.stockscreener.screening.ScreeningResult;
+import com.stockscreener.screening.ConditionGroup;
+import com.stockscreener.screening.EvaluationMode;
 import com.stockscreener.screening.preset.ScreenPreset;
 import com.stockscreener.screening.query.ScreeningRepository;
+import com.stockscreener.screening.store.ScreenStore;
 import com.stockscreener.support.ReadOnlyDatabaseGuard;
 
 import org.junit.jupiter.api.DisplayName;
@@ -54,7 +57,19 @@ class PresetAcrossUniversesTest {
     private ScreeningRepository screeningRepository;
 
     @Autowired
+    private ScreenStore screenStore;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    /**
+     * 돌릴 전략 하나. <b>프리셋과 저장된 화면을 같은 자리에서 본다.</b>
+     *
+     * <p>프리셋만 재면 절반만 재는 것이다 — 사용자가 저장한 화면도 같은 조건 모델을 쓰고
+     * 같은 통화 해석을 거치는데, 그쪽이 깨져도 프리셋 표는 초록으로 나온다.
+     */
+    private record Strategy(String label, EvaluationMode mode, ConditionGroup conditions) {
+    }
 
     /** 화면의 조회 대상 콤보와 <b>같은 술어</b>다 — 활성이고 편입이 있는 것. */
     private record Target(String code, String name, String currency, LocalDate asOf, int members) {
@@ -95,11 +110,11 @@ class PresetAcrossUniversesTest {
                 table.append("  (지표 달력이 비어 있다 — 라이브에서는 503이다)\n");
                 continue;
             }
-            for (ScreenPreset preset : presets) {
+            for (Strategy strategy : strategies()) {
                 try {
                     List<ScreeningResult> results = screeningRepository.screen(
-                            preset.conditions().resolveFor(target.currency()),
-                            preset.mode(), target.asOf(), target.code());
+                            strategy.conditions().resolveFor(target.currency()),
+                            strategy.mode(), target.asOf(), target.code());
                     // 이 수는 **필수 게이트를 통과한 종목 수**다. 모드에 따라 뜻이 갈린다 —
                     // FILTER는 곧 결과이고, SCORING은 순위에 오른 모집단이다.
                     //
@@ -107,21 +122,42 @@ class PresetAcrossUniversesTest {
                     // VALUE·LOWVOL_QUALITY가 실제로 그렇다(필수 조건 0개 — 실측) — 순위를
                     // 매기는 것이 목적인 프리셋이라 전 종목이 오르는 것이 설계다.
                     long included = results.stream().filter(ScreeningResult::included).count();
-                    table.append("  %-24s 필수통과 %5d / 편입 %-5d\n".formatted(
-                            preset.code(), included, target.members()));
+                    table.append("  %-32s 필수통과 %5d / 편입 %-5d\n".formatted(
+                            strategy.label(), included, target.members()));
                 } catch (MarketThresholdMissingException e) {
-                    table.append("  %-24s 실행 거절 — %s 임계 없음: %s\n".formatted(
-                            preset.code(), e.currencyCode(), String.join(" ", e.indicatorCodes())));
-                    unrunnable.add(preset.code() + " @ " + target.code());
+                    table.append("  %-32s 실행 거절 — %s 임계 없음: %s\n".formatted(
+                            strategy.label(), e.currencyCode(),
+                            String.join(" ", e.indicatorCodes())));
+                    unrunnable.add(strategy.label() + " @ " + target.code());
                 }
             }
         }
 
         System.out.println(table);
 
-        assertThat(unrunnable)
+        // 저장된 화면에 그 시장 임계가 없는 것은 **사용자가 채울 몫**이라 여기서 붉히지 않는다
+        // (임계를 정하는 것이 사용자 결정이다 — ADR-0044·0061). 프리셋은 저장소 책임이라 붉힌다.
+        assertThat(unrunnable.stream().filter(it -> !it.startsWith(SAVED)).toList())
                 .as("이 프리셋들이 그 대상에서 실행되지 않는다 — 임계를 그 시장 분포로 재서 "
                         + "채운다(ADR-0073 §규칙). 비우고 넘어가면 「미국을 포기한 것」이 된다")
                 .isEmpty();
+    }
+
+    private static final String SAVED = "[저장] ";
+
+    /** 활성 프리셋 + 활성 저장 화면. 둘 다 같은 조건 모델·같은 통화 해석을 거친다. */
+    private List<Strategy> strategies() {
+        List<Strategy> all = new ArrayList<>(presets.stream()
+                .map(p -> new Strategy(p.code(), p.mode(), p.conditions()))
+                .toList());
+        List<Long> savedIds = jdbcTemplate.queryForList(
+                """
+                SELECT id FROM screen WHERE is_active AND screen_type = 'CUSTOM' ORDER BY id
+                """, Long.class);
+        for (Long id : savedIds) {
+            screenStore.findById(id).ifPresent(d ->
+                    all.add(new Strategy(SAVED + d.name(), d.mode(), d.conditions())));
+        }
+        return all;
     }
 }
