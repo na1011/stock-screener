@@ -288,6 +288,13 @@ public class IndicatorBackfillJob {
      *
      * <p>MUST NOT: 겹침을 <b>허용</b>하는 쪽으로 고치지 않는다. {@code indicator_value}에
      * 유니버스 축이 없어 종목당 값이 하나뿐이고, 그래서 어느 모집단의 순위인지가 정해지지 않는다.
+     *
+     * <p><b>MUST: 자기 자신을 겹침에서 뺀다</b>({@code b.universe_code <> a.universe_code}).
+     * 이 갈래는 <b>비활성</b> 유니버스를 채우려고 만들었지만 대상이 <b>활성</b>일 수도 있고
+     * (리밸런싱 뒤 채우기 · 보존 창 복구), 그때 자기 조인이 <b>전 종목을 자기와 겹치는 것으로</b>
+     * 신고한다. 실측으로 {@code US_TOP1000}이 켜진 뒤 1,000종목 전부가 그렇게 걸렸고
+     * (자기 제외 시 0), 그 메시지가 <b>「겹치는 유니버스를 먼저 비활성으로 내려라」라는 실행
+     * 불가능한 처방</b>을 냈다 — 내려야 할 대상이 자기 자신이다.
      */
     private void rejectOverlappingUniverse(String universeCode) {
         if (universeCode == null) {
@@ -298,6 +305,7 @@ public class IndicatorBackfillJob {
                 FROM universe_membership a
                 JOIN universe_membership b
                   ON b.stock_id = a.stock_id AND b.effective_to IS NULL
+                 AND b.universe_code <> a.universe_code
                 JOIN universe u ON u.code = b.universe_code AND u.is_active
                 WHERE a.universe_code = ? AND a.effective_to IS NULL
                 """, Long.class, universeCode);

@@ -22,7 +22,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 종목을 좁힌 백필이 <b>순위의 모집단을 좁히지 않는지</b> 고정한다.
+ * 백필의 <b>대상 좁히기</b> 두 갈래를 고정한다 — {@code --tickers}와 {@code --universe}.
+ *
+ * <p>앞의 것은 <b>순위의 모집단을 좁히지 않는지</b>를, 뒤의 것은 <b>겹침 가드가 자기 자신을
+ * 겹침으로 세지 않는지</b>를 묻는다. 같은 잡의 같은 픽스처를 쓰므로 한 클래스에 둔다.
  *
  * <p>phase 기준 §P9가 <i>"재계산이 순위의 모집단을 좁히지 않는다"</i>를 명시한다(ADR-0036과 같은
  * 자리다). {@code --tickers}가 필요한 이유는 무효화가 낀 재백필의 복구 비용이고
@@ -48,6 +51,8 @@ class IndicatorBackfillTickerScopeTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 8, 5);
     private static final String UNIVERSE = "KOSPI200";
+    /** 겹침 갈래용. <b>활성이라야 뜻이 있다</b> — 비활성 유니버스와의 겹침은 가드 대상이 아니다. */
+    private static final String OTHER_ACTIVE_UNIVERSE = "KOSDAQ150";
     private static final List<String> TICKERS = List.of("900001", "900002", "900003");
 
     @Autowired
@@ -138,6 +143,45 @@ class IndicatorBackfillTickerScopeTest {
                 BatchExecutionRecorder.TriggeredBy.MANUAL, List.of("999999"), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("편입 중인 활성 종목이 하나도 없다");
+    }
+
+    @Test
+    @DisplayName("대상 유니버스가 활성이어도 자기 자신과 겹친 것으로 거절하지 않는다")
+    void activeTargetUniverseIsNotItsOwnOverlap() {
+        // 이 갈래는 비활성 유니버스를 채우려고 만들었지만 대상이 활성일 수도 있다 —
+        // 리밸런싱 뒤 채우기와 보존 창 복구가 그 자리다. 자기 조인이 자기를 안 빼면
+        // 전 종목이 「이미 활성 유니버스에도 편입돼 있다」로 걸려 이 경로가 통째로 막힌다.
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT is_active FROM universe WHERE code = ?", Boolean.class, UNIVERSE))
+                .as("이 시험의 전제 — %s이 활성이라야 자기 겹침이 재현된다", UNIVERSE)
+                .isTrue();
+
+        BatchStatus status = job.run(AS_OF, AS_OF,
+                BatchExecutionRecorder.TriggeredBy.MANUAL, List.of(), UNIVERSE);
+
+        assertThat(status).isEqualTo(BatchStatus.SUCCESS);
+        assertThat(targetCountOfLatestRun())
+                .as("유니버스 필터가 실제로 걸렸는가")
+                .isEqualTo(TICKERS.size());
+    }
+
+    @Test
+    @DisplayName("다른 활성 유니버스와 겹치면 여전히 거절한다 — 자기 제외가 가드를 무력화하지 않는다")
+    void overlapWithAnotherActiveUniverseStillRejects() {
+        // 대조군의 반대편이다. 자기만 빼고 남은 겹침은 그대로 잡아야 한다 —
+        // 안 잡으면 PercentileCalculator의 UPSERT가 같은 행을 두 번 건드려
+        // PostgreSQL이 cardinality violation으로 배치를 죽인다(ADR-0036 §규칙).
+        for (String ticker : TICKERS) {
+            jdbcTemplate.update("""
+                    INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                    SELECT ?, id, ? FROM stock WHERE ticker = ?
+                    """, OTHER_ACTIVE_UNIVERSE, AS_OF.minusYears(1), ticker);
+        }
+
+        assertThatThrownBy(() -> job.run(AS_OF, AS_OF,
+                BatchExecutionRecorder.TriggeredBy.MANUAL, List.of(), UNIVERSE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("3종목이 이미 활성 유니버스에도 편입돼 있다");
     }
 
     private Integer targetCountOfLatestRun() {
