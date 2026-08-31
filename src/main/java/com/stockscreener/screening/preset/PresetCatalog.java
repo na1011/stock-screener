@@ -48,7 +48,7 @@ import com.stockscreener.indicator.calculator.Sma200Calculator;
 import com.stockscreener.indicator.calculator.Sma200Momentum21Calculator;
 import com.stockscreener.indicator.calculator.Sma200Slope60Calculator;
 import com.stockscreener.indicator.calculator.Sma60Calculator;
-import com.stockscreener.indicator.calculator.Turnover60Calculator;
+import com.stockscreener.indicator.calculator.TurnoverRatio60Calculator;
 import com.stockscreener.indicator.calculator.VolumeRatio20Calculator;
 import com.stockscreener.screening.ComparisonOperator;
 import com.stockscreener.screening.ConditionGroup;
@@ -340,8 +340,18 @@ public class PresetCatalog {
                         // 되어 ADR-0068의 펜스를 깬다. 10은 국내 분포에서 다시 잰 값이고,
                         // ROE_MIN_3Y가 원문 15를 10으로 내린 것과 같은 종류의 재보정이다.
                         required(RoicMin3yCalculator.CODE, ComparisonOperator.GTE, "10"),
-                        // §7 유동성. 대형 지향이라 린치 고속성장주의 50억을 승계하지 않는다.
-                        required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "10000000000"),
+                        // §7 유동성 — 문헌은 「Average Volume(30D) · 하한 설정 · 거래 불가
+                        // 종목 유입 차단」이다. 조건과 목적은 문헌이 주고 수는 구현에 맡긴다.
+                        //
+                        // 원화 금액에서 회전율로 갈아탄 이유가 대칭이다. 같은 100억원이
+                        // 국내에서는 통과율 67.7%인데 미국에서는 98.9%라 같은 조건이 시장마다
+                        // 다른 것을 쟀고, 미국은 소스가 trade_value를 안 줘 아예 0행이었다.
+                        // 0.15%는 국내 96.3% · 미국 96.6%로 두 시장에서 같은 만큼을 자른다.
+                        //
+                        // 크기 축은 이 조건이 아니라 MARKET_CAP이 든다 — 100억 게이트가
+                        // 국내에서 자르던 32%는 「거래 불가」가 아니라 대형주 선호였다.
+                        required(TurnoverRatio60Calculator.CODE,
+                                ComparisonOperator.GTE, "0.15"),
 
                         // ── 점수: 가격 — 배점 16 중 7이다 ──
                         // 4.2 안전마진. P/FCF의 역수라 같은 조건이며 음수에서도 뜻이 산다.
@@ -624,8 +634,10 @@ public class PresetCatalog {
                         // 2.3 "중소형"의 유니버스 내 치환. 시총 중앙값이다.
                         required(MarketCapCalculator.CODE, ComparisonOperator.LTE,
                                 "2616000000000"),
-                        // §6 유동성. 100억을 승계하지 않는 이유는 위 javadoc에 있다.
-                        required(Turnover60Calculator.CODE, ComparisonOperator.GTE, "5000000000"),
+                        // §6 유동성. 버핏과 같은 임계를 쓴다 — 회전율은 규모에 중립이라
+                        // 「대형 지향이냐」로 가를 이유가 없다. 크기 축은 위 MARKET_CAP이 든다.
+                        required(TurnoverRatio60Calculator.CODE,
+                                ComparisonOperator.GTE, "0.15"),
                         // 5.1 가장 인기 있는 종목은 사지 않는다.
                         required(Return52wCalculator.CODE, ComparisonOperator.LT, "100"),
 
@@ -1029,8 +1041,10 @@ public class PresetCatalog {
                         weighted(RoaCalculator.CODE, ComparisonOperator.GTE, "0", "1"),
                         weighted(OperatingCashFlow5ySumCalculator.CODE,
                                 ComparisonOperator.GT, "0", "1"),
-                        weighted(Turnover60Calculator.CODE,
-                                ComparisonOperator.GTE, "10000000000", "1"))));
+                        // 배점도 같은 축으로 옮긴다. 원화 금액으로 두면 미국 종목이
+                        // 이 1점을 원리적으로 못 얻어 만점이 시장마다 달라진다(P27 축③).
+                        weighted(TurnoverRatio60Calculator.CODE,
+                                ComparisonOperator.GTE, "0.15", "1"))));
     }
 
     // ── 조건 생성 헬퍼 ────────────────────────────────────────────────────

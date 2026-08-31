@@ -544,7 +544,7 @@ Rsi2|LT|10|1|RSI_2|<|10
 AccrualRatio|LTE|0|5|ACCRUAL_RATIO|≤|0
 Roa|GTE|0|2|ROA|≥|0
 MarketCap|GTE|1000000000000|1|MARKET_CAP|≥|1조원
-Turnover60|GTE|10000000000|2|TURNOVER_60|≥|100억원"
+TurnoverRatio60|GTE|0.15|3|TURNOVER_RATIO_60|≥|0.15%"
 
 preset_src=$(find src/main/java -name PresetCatalog.java -type f 2>/dev/null | head -1 || true)
 criteria_reg="docs/phase-criteria.md"
