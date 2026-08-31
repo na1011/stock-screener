@@ -33,6 +33,14 @@ import java.util.List;
  * {@code MarketCapCalculator}가 같은 짝을 쓴다 — 다만 <b>둘 다 이제 {@code sharesOn}이 아니라
  * {@link FinancialMath#sharesOf}를 부른다</b>(ADR-0097). 봉에 주식수가 있으면 그것이 이기므로
  * 국내 동작은 그대로이고, 없으면(미국) 재무에서 폴백해 봉 시점으로 옮긴다.
+ *
+ * <p><b>IMPORTANT — 재무 폴백에서는 위 축척 논증의 전제가 성립하지 않는다.</b> 그 논증은
+ * <i>"분모인 {@code sharesOn}이 그날의 주식 수를 그대로 준다"</i>에 서 있는데, 폴백에는
+ * <b>「그날의 주식 수」가 없다</b> — 분모가 <b>공시된 주식수 × 그 뒤 원장 사건의 배수</b>이고
+ * 분자는 보정하지 않은 {@code bar.volume()}이다. 따라서 <b>원장에 없는 분할은 그 구간의
+ * 회전율을 배수만큼 틀리게 한다.</b> 오차 창은 {@code sharesOf}가 봉 시점 분기를 고르므로
+ * <b>분할일~다음 공시(약 63거래일)</b>로 좁혀지지만 없어지지는 않는다 —
+ * <b>원장 커버리지가 곧 이 지표의 정확도다.</b>
  */
 @Component
 @IndicatorMeta(
@@ -73,12 +81,17 @@ public class TurnoverRatioCalculator implements IndicatorCalculator {
         List<PriceBar> bars = context.priceBars();
         List<IndicatorPoint> points = new ArrayList<>(bars.size());
         for (PriceBar bar : bars) {
-            if (bar.listedShares() == null || bar.listedShares().signum() <= 0) {
-                // 상장주식수가 없으면 계산하지 않는다. 0으로 두면 회전율이 무한이 되고,
-                // 임의의 큰 수를 쓰면 "가장 활발한 종목"으로 올라온다.
+            BigDecimal shares = FinancialMath.sharesOf(context, bar, context.quarterlyFigures());
+            // MUST: 가드는 sharesOf **뒤**다. 앞에 두면 봉의 listedShares가 null인 순간
+            // continue가 걸려 재무 폴백에 영영 도달하지 못한다 — 미국 봉이 전량 NULL이라
+            // ADR-0097이 열었다고 적은 이 지표가 실제로는 0행이었다. MarketCapCalculator가
+            // 같은 커밋에서 이 형태를 썼고 여기만 안 고쳐졌다.
+            //
+            // 판정 자체는 그대로다. 0으로 두면 회전율이 무한이 되고, 임의의 큰 수를 쓰면
+            // "가장 활발한 종목"으로 올라온다.
+            if (shares == null || shares.signum() <= 0) {
                 continue;
             }
-            BigDecimal shares = FinancialMath.sharesOf(context, bar, context.quarterlyFigures());
             BigDecimal ratio =
                     FinancialMath.percentage(BigDecimal.valueOf(bar.volume()), shares);
             if (ratio == null) {

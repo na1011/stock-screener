@@ -57,6 +57,14 @@ applies_to:
 **`IndicatorRunnerTest`를 함께 돌리는 이유**는 이 변경이 실제로 그것을 한 번 깼기 때문이다.
 재무를 선언했더니 꼬리 걷기가 막혔고, 그 테스트가 유일한 신호였다.
 
+**MUST: 대조군을 갈아탄 계산기 전부에 돌린다.** 위 대조군은 `MarketCapCalculator` **하나**만
+돌렸고, 그래서 `TURNOVER_RATIO`가 **갈아타지 못한 것을 못 잡았다** — 그 계산기에는
+`bar.listedShares() == null`이면 먼저 `continue`하는 가드가 `sharesOf` **앞**에 남아 있어
+재무 폴백에 영영 도달하지 못했다. 같은 커밋이 `MarketCapCalculator`에는 가드를 `sharesOf`
+**뒤**로 옮겼는데 여기만 안 고쳤다. **§결정과 §결과가 여섯을 갈아탔다고 적는 동안 미국에서
+그 지표는 0행이었다** — 2026-08-31에 ADR-0103 작업 중에 발견해 고쳤고,
+`TurnoverRatioFallbackTest`가 그 갈래를 잠근다.
+
 ## 배경
 
 미국 봉은 상장주식수를 안 준다(`alpaca-bars.md`). 그래서 이 여섯과 그 파생 셋
