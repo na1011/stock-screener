@@ -37,7 +37,7 @@ import java.util.List;
         unit = "%",
         decimalScale = 2,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 202,
+        sortOrder = 207,
         bands = {
                 @IndicatorMeta.Band(label = "상승 모멘텀", from = 5),
                 @IndicatorMeta.Band(label = "횡보", from = -5, to = 5),

@@ -40,6 +40,7 @@ import java.util.List;
         decimalScale = 2,
         direction = IndicatorMeta.Direction.NEUTRAL,
         sortOrder = 210,
+        detailDefault = false,
         bands = {
                 @IndicatorMeta.Band(label = "과열", from = 80),
                 @IndicatorMeta.Band(label = "중립", from = 20, to = 80),

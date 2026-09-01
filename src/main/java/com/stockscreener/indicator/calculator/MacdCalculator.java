@@ -22,8 +22,15 @@ import java.util.List;
  * 26일 EMA가 없는 구간에서는 뺄 수 없으므로, <b>26일 EMA가 존재하는 시점부터만</b> 값을 낸다.
  * 이것을 맞추지 않으면 앞 구간이 통째로 어긋난 채 그럴듯한 값이 저장된다.
  *
- * <p>시그널선(9일 EMA)과 히스토그램은 별도 지표로 두지 않았다. 필요해지면 이 지표에
- * {@code dependsOn}으로 의존하는 계산기를 파일 하나로 추가하면 된다.
+ * <p><b>시그널선과 히스토그램은 이 지표가 아니라 {@code MACD_V} 위에 지었다</b>
+ * ({@link MacdVHistCalculator}). 여기 붙이면 <b>주가 스케일 그대로</b>라 구간(bands)을 못 붙이고
+ * (ADR-0023) 종목 간 비교도 안 되어, 조건의 좌변으로도 카드로도 뜻이 약하다. 정규화된
+ * {@code MACD_V} 위에서는 히스토그램의 부호가 골든/데드 상태를, 크기가 교차까지의 거리를
+ * 담는다. <b>MUST NOT: 여기에 같은 것을 또 만들지 않는다.</b>
+ *
+ * <p>{@code detailDefault = false}는 <b>2026-09-01 사용자 결정</b>이다 — 종목 상세의 분류
+ * 구획에서만 감춘다. 폐기가 아니라 조건 빌더·결과 표·「내 조건」에는 그대로 나오고(ADR-0058),
+ * {@code MACD_V}가 이 값을 부모로 계속 쓴다.
  */
 @Component
 @IndicatorMeta(
@@ -36,7 +43,8 @@ import java.util.List;
         valueType = IndicatorValueType.PRICE,
         direction = IndicatorMeta.Direction.NEUTRAL,
         decimalScale = 4,
-        sortOrder = 200
+        sortOrder = 200,
+        detailDefault = false
 )
 public class MacdCalculator implements IndicatorCalculator {
 
