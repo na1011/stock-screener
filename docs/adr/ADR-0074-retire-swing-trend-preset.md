@@ -141,7 +141,7 @@ rg -n "code *= *'(SWING_TREND_KR|SWING_MIDTERM_KR|QVG_KR|ICHIMOKU_SP_KR)'" \
 ```
 
 ```premise 활성 프리셋이 전부 코드 선언에서 온다
-psql -d stock_screener -At -c "WITH a AS (SELECT count(*) n FROM screen WHERE screen_type = 'PRESET' AND is_active), d AS (SELECT count(*) n FROM screen WHERE screen_type = 'PRESET' AND NOT is_active) SELECT CASE WHEN (SELECT n FROM a) = 0 THEN '활성 프리셋이 0개다 — 시더가 안 돌았거나 선언이 비었다' WHEN (SELECT n FROM a) <> 8 THEN '활성 프리셋이 ' || (SELECT n FROM a) || '개다(선언은 8개) — PresetCatalog와 DB가 갈렸다. 앱을 띄우면 동기화된다' ELSE 'OK 활성 ' || (SELECT n FROM a) || ' / 폐기 보관 ' || (SELECT n FROM d) END"
+psql -d stock_screener -At -c "WITH a AS (SELECT count(*) n FROM screen WHERE screen_type = 'PRESET' AND is_active), d AS (SELECT count(*) n FROM screen WHERE screen_type = 'PRESET' AND NOT is_active) SELECT CASE WHEN (SELECT n FROM a) = 0 THEN '활성 프리셋이 0개다 — 시더가 안 돌았거나 선언이 비었다' WHEN (SELECT n FROM a) <> 9 THEN '활성 프리셋이 ' || (SELECT n FROM a) || '개다(선언은 9개) — PresetCatalog와 DB가 갈렸다. 앱을 띄우면 동기화된다' ELSE 'OK 활성 ' || (SELECT n FROM a) || ' / 폐기 보관 ' || (SELECT n FROM d) END"
 ```
 
 ## 버린 대안

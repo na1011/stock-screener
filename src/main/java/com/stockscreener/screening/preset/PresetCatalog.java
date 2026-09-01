@@ -15,7 +15,13 @@ import com.stockscreener.indicator.calculator.ExcessReturn52wCalculator;
 import com.stockscreener.indicator.calculator.GrossMarginCalculator;
 import com.stockscreener.indicator.calculator.GrossProfitToAssetsCalculator;
 import com.stockscreener.indicator.calculator.MaAlignScoreCalculator;
+import com.stockscreener.indicator.calculator.MacdVCalculator;
+import com.stockscreener.indicator.calculator.MacdVHistCalculator;
+import com.stockscreener.indicator.calculator.MacdVHistChange5Calculator;
+import com.stockscreener.indicator.calculator.MacdVHistChangeWeeklyCalculator;
+import com.stockscreener.indicator.calculator.MacdVWeeklyCalculator;
 import com.stockscreener.indicator.calculator.MarketCapCalculator;
+import com.stockscreener.indicator.calculator.ObvT13Calculator;
 import com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginCalculator;
 import com.stockscreener.indicator.calculator.PbrCalculator;
@@ -430,7 +436,8 @@ public class PresetCatalog {
     public List<ScreenPreset> screenPresets() {
         return List.of(valueKr(), lynchFastGrowerKr(), lynchStalwartKr(),
                 momentumKr(), stage2BreakoutKr(),
-                pullbackUptrendKr(), lowvolQualityKr(), buffettQualityKr());
+                pullbackUptrendKr(), lowvolQualityKr(), buffettQualityKr(),
+                tripleScreenRebound());
     }
 
     /**
@@ -477,6 +484,20 @@ public class PresetCatalog {
                     PerDiscount5yCalculator.CODE,
                     PbrDiscount5yCalculator.CODE,
                     PsrDiscount5yCalculator.CODE);
+        }
+        if (TRIPLE_SCREEN_REBOUND.equals(presetCode)) {
+            // 조건 넷은 전부 부호 판정이라 「통과했다」만 말하고 <b>얼마나</b>를 말하지 않는다.
+            // 이 프리셋이 겨누는 것이 「도는 순간」이므로 그 둘이 화면에 없으면 사용자가
+            // 갓 돌아선 것과 한참 전에 돌아선 것을 가릴 수 없다.
+            //
+            // 일봉 히스토그램의 5일 변화량은 「어느 쪽으로 얼마나 빨리 가고 있는가」이고,
+            // 주봉 MACD-V는 「주 단위로 지금 어느 높이인가」다 — 조건은 주봉의 *기울기*만
+            // 묻고 높이는 안 묻는데, 같은 기울기라도 -100에서 오르는 것과 +40에서 오르는
+            // 것은 뜻이 다르다.
+            //
+            // MUST NOT: 이 둘을 조건으로 올리지 않는다. 올리면 통과율·순위상관을 다시 재야
+            // 하고(ADR-0061), 지금 넷이 여섯 쌍 전부 ρ < 0.8인 배치가 무너진다.
+            return List.of(MacdVHistChange5Calculator.CODE, MacdVWeeklyCalculator.CODE);
         }
         return List.of();
     }
@@ -1096,6 +1117,92 @@ public class PresetCatalog {
                         // 이 1점을 원리적으로 못 얻어 만점이 시장마다 달라진다(P27 축③).
                         weighted(TurnoverRatio60Calculator.CODE,
                                 ComparisonOperator.GTE, "0.15", "1"))));
+    }
+
+    // ── 9. 3중창 반등 ─────────────────────────────────────────────────────
+
+    public static final String TRIPLE_SCREEN_REBOUND = "TRIPLE_SCREEN_REBOUND";
+
+    /**
+     * 3중창 반등 — Elder의 다중 시간축에 Spiroglou의 모멘텀 국면 정의를 얹는다.
+     *
+     * <p><b>출처가 둘이다.</b> 시간축 구조는 Alexander Elder의 3중창 매매 시스템
+     * (<i>Trading for a Living</i>, 1993)이고, 진입 국면의 정의는 Alex Spiroglou의
+     * <i>MACD-V: Volatility Normalised Momentum</i>(2022 · CMT Charles H. Dow Award와
+     * NAAIM Founders Award 수상)이다. 매집 판정은 Joseph Granville의 OBV(1963)를 쓴다.
+     *
+     * <p><b>원문 그대로</b>: Spiroglou가 정의한 <i>Rebounding</i> 국면 —
+     * {@code 50 > MACD-V > -150 이면서 시그널선 위}. 논문이 이것을 강세 진입 국면으로 지목한다.
+     * 두 조건이 그 정의를 그대로 옮긴 것이다.
+     *
+     * <p><b>원문의 축을 옮긴 것</b>: Elder의 첫째 화면은 <b>주봉 MACD 히스토그램의 상승</b>이고
+     * 하락이면 매수를 금한다. 여기서는 고전 MACD가 아니라 <b>MACD-V</b>의 주봉 히스토그램을 쓴다 —
+     * 고전 MACD는 주가 수준에 비례해 종목 간 비교가 안 되고({@code MacdCalculator}의 해석문이
+     * 스스로 그렇게 적는다) 스크리너는 종목을 나란히 세우는 도구이기 때문이다. Spiroglou의 논문이
+     * 존재하는 이유가 정확히 그 결함이다.
+     * <b>다만 치환이 「상승」의 뜻을 바꾼다</b> — 모멘텀이 그대로여도 <b>변동성이 줄면</b>
+     * {@code MACD/ATR} 히스토그램은 오른다. 나쁜 신호는 아니지만 Elder가 그것까지 뜻했다고 읽으면
+     * 안 된다. <b>둘이 얼마나 자주 갈리는지는 재보지 않았다</b> — 주봉 고전 MACD를 저장하지 않는다.
+     *
+     * <p><b>원문에 없는데 더한 것</b>: {@code OBV_T_13 > 1.96}. 개념은 Granville의 OBV이고
+     * 임계는 이 지표가 이미 구간으로 들고 있는 95% 유의수준이다(그 위가 「매집 뚜렷」).
+     *
+     * <p><b>옮기지 못한 것이 둘이다.</b> 하나는 Elder의 <b>둘째 화면</b>이 요구하는
+     * 「되돌림을 기다린다」로, 조건으로 두지 않고 위 국면 판정으로 갈음했다 — 그래서 크게 밀리지
+     * 않은 종목도 걸린다. 다른 하나는 <b>셋째 화면</b>의 장중 진입 시점이다.
+     * <b>MUST NOT: 셋째를 「원리적으로 불가」로 적지 않는다</b> — {@code price_daily.high}가 있어
+     * 「종가 &gt; 전일 고가」는 계산된다. 못 하는 것은 장중 체결 시점이고, 이 스크리너가 종가
+     * 기준이라 진입 타이밍 축을 아예 만들지 않은 것이다(spec §3·§10이 진입가 제시를 금한다).
+     *
+     * <p>MUST NOT: ±150·±50을 국내 분포로 재보정하지 않는다(ADR-0109) — 원저가 그 시장을 보고
+     * 쓴 수다. <b>구간이 닫혀 있는 것은 원문과 다르다</b>: 원문은 {@code 50 > X > -150}(열림)인데
+     * {@code BETWEEN}은 양끝을 포함한다. 저장 자릿수 8에서 차이는 사실상 없고, 열린 구간으로
+     * 쪼개면 {@code MACD_V > -150} 하나가 <b>99.2% 통과</b>(과매도가 1,348 중 11)가 되어
+     * ADR-0061의 90% 규칙에 걸린다 — 그래서 한 조건으로 둔다.
+     *
+     * <p>시장 축(ADR-0106)을 안 쓴다. 넷 다 <b>부호 판정</b>이거나 <b>무차원 문헌 상수</b>라
+     * 통화가 개입하지 않는다.
+     *
+     * <p>착수 시점 실측(2026-08-31 · 편입 1,350): 조건별 통과율이 시장마다
+     * 72.5/74.7/37.2 · 80.5/81.3/68.0 · 69.5/60.0/30.4 · 40.0/28.0/23.2%이고
+     * <b>열두 칸 어디도 90%를 넘지 않는다.</b> 넷을 모두 통과한 것은 코스피 43 · 코스닥 21 ·
+     * 미국 35다. 네 지표의 순위상관은 최대 0.772로 여섯 쌍 다 0.8 미만이다.
+     * 형제 추세 프리셋 셋과 겹치는 것은 99 중 9뿐이다.
+     */
+    private static ScreenPreset tripleScreenRebound() {
+        return new ScreenPreset(
+                TRIPLE_SCREEN_REBOUND,
+                "3중창 반등",
+                "주봉 흐름이 위를 향하기 시작한 종목 중, 일봉 모멘텀이 바닥에서 막 돌아선 것을 "
+                        + "남긴다. 주봉 MACD-V 히스토그램이 오르고 있고(아직 0 아래여도 된다), "
+                        + "일봉 MACD-V가 -150~50 구간에 있으면서 시그널선 위로 올라섰으며, "
+                        + "거래량이 매집 쪽으로 통계적으로 뚜렷한 종목이다. "
+                        + "다중 시간축 판단은 Elder의 3중창을, 모멘텀 국면 구분은 Spiroglou의 "
+                        + "MACD-V를, 매집 판정은 Granville의 OBV를 따랐다. "
+                        + "원문에서 옮기지 못한 것이 둘이다 — 3중창의 둘째 화면이 요구하는 "
+                        + "「되돌림을 기다린다」는 조건으로 두지 않고 모멘텀 국면으로 갈음했으므로 "
+                        + "크게 밀리지 않은 종목도 걸리며, 셋째 화면의 장중 진입 시점은 이 "
+                        + "스크리너가 종가 기준이라 다루지 않는다. "
+                        + "진입가·손절가는 이 화면이 답하지 않는다. "
+                        + "주봉 조건이 상장 4년 미만 종목을 판정불가로 떨어뜨린다"
+                        + "(코스피 9% · 코스닥 12% · 미국 5.5%). "
+                        + "주봉 값은 진행 중인 주를 포함하므로 주중에 조건이 켜졌다 꺼질 수 있다. "
+                        + "결과 수는 시장 국면에 민감하다 — 최근 13거래일에 97건에서 328건 "
+                        + "사이를 오갔다. 0건인 날도 조건이 잘못된 것이 아니다. "
+                        + "점수가 아니라 충족/불충족으로 걸러낸다.",
+                EvaluationMode.FILTER,
+                null,
+                ConditionGroup.and(List.of(
+                        // 첫째 화면 — 주봉 조류가 위를 향한다. 0 아래여도 오르고 있으면 통과다.
+                        literal(MacdVHistChangeWeeklyCalculator.CODE, ComparisonOperator.GT, "0"),
+                        // 둘째 화면 — Spiroglou의 Rebounding 밴드
+                        IndicatorCondition.of(MacdVCalculator.CODE, ComparisonOperator.BETWEEN,
+                                ConditionOperand.Literal.between(
+                                        new BigDecimal("-150"), new BigDecimal("50"))),
+                        // 같은 국면 정의의 나머지 절반 — 시그널선 위
+                        literal(MacdVHistCalculator.CODE, ComparisonOperator.GT, "0"),
+                        // 매집이 통계적으로 뚜렷한가
+                        literal(ObvT13Calculator.CODE, ComparisonOperator.GT, "1.96"))));
     }
 
     // ── 조건 생성 헬퍼 ────────────────────────────────────────────────────
