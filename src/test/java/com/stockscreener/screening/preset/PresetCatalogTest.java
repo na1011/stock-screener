@@ -75,6 +75,14 @@ class PresetCatalogTest {
                 "src/main/java/com/stockscreener/screening/preset/PresetCatalog.java"));
         List<String> markers = List.of("원문 그대로", "국내 분포로 재보정",
                 "원문에 없는데 더한", "원문보다 약하게 옮긴", "국내 사정으로 바꾼", "원문에서 되살린");
+        // IMPORTANT — 이 검사는 낱말의 포함만 보므로 <b>부정문도 표기로 센다</b>.
+        // "국내 분포로 재보정하지 않는다"를 javadoc에 적으면 그 프리셋은 출처를 하나도 안
+        // 적어도 통과한다 — 실제로 TRIPLE_SCREEN_REBOUND가 그 모양이었고, 진짜 마커 둘을
+        // 지운 대조군이 초록으로 나와서야 드러났다(2026-09-02).
+        // 마커를 "<b>" 접두로 좁히는 처방은 못 쓴다 — MOMENTUM의 표기가 줄바꿈으로 갈려
+        // "<b>원문 그대로"로 시작하지 않아 거짓 실패가 난다(전수로 셌다).
+        // 그래서 규칙은 코드가 아니라 여기 있다: <b>MUST NOT: 마커 문자열을 부정문에 쓰지
+        // 않는다.</b> 안 했다는 말은 마커에 안 쓰인 낱말로 적는다.
 
         for (ScreenPreset preset : presets) {
             int declaration = source.indexOf("String " + preset.code() + " =");
