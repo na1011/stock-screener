@@ -91,6 +91,12 @@ fi
 # statement_timeout이 3s였을 때 ADR-0094의 전제가 무판정으로 끝난 적이 있다. 그 질의는
 # 워밍업된 캐시에서 0.74초인데 **콜드 캐시에서 5.2초**였다 — 적재나 재기동 직후가 그렇다.
 # 무판정은 침묵 다음으로 나쁜 결과이므로, 상한을 그 실측 위로 올린다.
+#
+# MUST NOT: settings.json의 env에 PGOPTIONS가 생겼다는 이유로 이 줄을 지우지 않는다.
+# 전역값은 statement_timeout=30s인데 위 per_limit 부등식은 11 > PGCONNECT_TIMEOUT + statement_timeout
+# 이다. 이 줄이 사라지면 11 > 4 + 30 이 되어 부등식이 뒤집히고, 전제 전부가 alarm에 잘려
+# 무판정이 된다 — 이 훅에게 그것은 침묵 다음으로 나쁜 결과다. 겹쳐 보이지만 값이 다르고,
+# default_transaction_read_only도 전역에는 없다.
 export PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=6s'
 # 2초로는 적재가 도는 동안 접속이 못 붙어 무판정이 났다. 슬롯 고갈이 아니라 CPU 포화다 —
 # 적재 JVM과 빌드가 함께 돌면 SCRAM 인증과 프로세스 fork가 실제로 느려진다. 그래서 값을

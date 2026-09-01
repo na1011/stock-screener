@@ -1,5 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "PGOPTIONS": "-c statement_timeout=30s -c idle_in_transaction_session_timeout=60s"
+  },
   "permissions": {
     "allow": [
       "Read(./.env.example)",
