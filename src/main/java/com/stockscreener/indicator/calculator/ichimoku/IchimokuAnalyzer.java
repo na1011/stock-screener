@@ -6,7 +6,6 @@ import com.stockscreener.indicator.PriceBar;
 import com.stockscreener.indicator.calculator.PriceScaling;
 
 import java.time.LocalDate;
-import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
@@ -25,8 +24,6 @@ import java.util.TreeMap;
  */
 public final class IchimokuAnalyzer {
 
-    private static final WeekFields ISO = WeekFields.ISO;
-
     private IchimokuAnalyzer() {
     }
 
@@ -38,7 +35,6 @@ public final class IchimokuAnalyzer {
      * @return 거래일 → 분석. 207 주봉을 못 채우는 구간은 담기지 않는다
      */
     public static NavigableMap<LocalDate, IchimokuAnalysis> analyze(List<PriceBar> bars) {
-
         NavigableMap<LocalDate, IchimokuAnalysis> result = new TreeMap<>();
         if (bars.isEmpty()) {
             return result;
@@ -85,7 +81,7 @@ public final class IchimokuAnalyzer {
         int days = 0;
 
         for (PriceBar bar : bars) {
-            long key = weekKey(bar.tradeDate());
+            long key = WeeklyResampler.weekKey(bar.tradeDate());
             double barHigh = PriceScaling.adjustedHigh(bar).doubleValue();
             double barLow = PriceScaling.adjustedLow(bar).doubleValue();
             if (key != currentKey) {
@@ -112,7 +108,7 @@ public final class IchimokuAnalyzer {
         long currentKey = Long.MIN_VALUE;
         int week = -1;
         for (int i = 0; i < bars.size(); i++) {
-            long key = weekKey(bars.get(i).tradeDate());
+            long key = WeeklyResampler.weekKey(bars.get(i).tradeDate());
             if (key != currentKey) {
                 currentKey = key;
                 week++;
@@ -120,9 +116,5 @@ public final class IchimokuAnalyzer {
             indexes[i] = week;
         }
         return indexes;
-    }
-
-    private static long weekKey(LocalDate date) {
-        return date.get(ISO.weekBasedYear()) * 100L + date.get(ISO.weekOfWeekBasedYear());
     }
 }
