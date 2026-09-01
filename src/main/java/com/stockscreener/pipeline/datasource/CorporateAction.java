@@ -84,7 +84,26 @@ public record CorporateAction(
         /** 무상증자. ratio > 1이며 1:1이면 2다. 상장주식수가 권리락보다 늦게 는다. */
         BONUS_ISSUE,
         /**
-         * 가격이 뛴 것은 확실하나 종류를 모른다. 인적분할·복합 사건·거래재개가 여기 들어온다.
+         * 인적분할. <b>존속법인 기준</b>이라 ratio &lt; 1이고, 가격과 주식수가 같은 날 바뀐다.
+         *
+         * <p>보정은 액면병합과 <b>기계적으로 같다</b> — 그런데도 낱말을 가르는 이유는 둘이
+         * <b>서로 다른 사실</b>이기 때문이다. ADR-0050이 그 자리를 이미 경고했다: 낱말이
+         * 원장에 없으면 사람이 그 행을 깨끗한 병합으로 읽고 승인한다.
+         *
+         * <p>MUST NOT: 여기에 {@code ShareRatioSnap}을 걸지 않는다. 분할비율은 순자산 비율에서
+         * 나와 <b>단순 유리수가 아닌 것이 정상</b>이고(실측 한화 0.7563532970), 그 사실 자체가
+         * 액면병합과 가르는 증거다. 스냅을 걸면 진짜 인적분할이 전부 거부된다.
+         *
+         * <p><b>승인된 한계</b> — 이 계수는 존속법인 시계열을 <b>가격 연속</b>으로 만들 뿐,
+         * 총주주수익률이 아니다. 분할된 법인의 가치만큼 수익률이 과소평가된다. 우리
+         * {@code adj_close}가 배당도 안 담는 것과 같은 성질이다(ADR-0090).
+         */
+        SPIN_OFF,
+        /**
+         * 가격이 뛴 것은 확실하나 종류를 모른다. 복합 사건·거래재개가 여기 들어온다.
+         *
+         * <p>인적분할도 <b>휴리스틱이 낼 때는</b> 여기로 온다 — 사람이 판정해야 비로소
+         * {@link #SPIN_OFF}가 된다. 그 배제의 근거가 표현 불가가 아니라 <b>탐지 불가</b>였다.
          *
          * <p>IMPORTANT — 이 종류의 {@code ratio}는 <b>관측된 가격 배수일 뿐 계수가 아니다.</b>
          * 그대로 적용하면 틀린 계수가 조용히 들어가므로 재구축 대상에서 제외된다.
@@ -96,7 +115,7 @@ public record CorporateAction(
             int vsOne = ratio.compareTo(BigDecimal.ONE);
             return switch (this) {
                 case SPLIT, BONUS_ISSUE -> vsOne > 0;
-                case REVERSE_SPLIT -> vsOne < 0;
+                case REVERSE_SPLIT, SPIN_OFF -> vsOne < 0;
                 case UNKNOWN -> true;
             };
         }

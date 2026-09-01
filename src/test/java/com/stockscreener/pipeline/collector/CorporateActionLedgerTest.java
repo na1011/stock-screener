@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.CorporateAction;
+import com.stockscreener.pipeline.datasource.ShareRatioSnap;
 import com.stockscreener.pipeline.datasource.RawPriceBar;
 import com.stockscreener.support.JpaSliceTest;
 
@@ -263,6 +264,41 @@ class CorporateActionLedgerTest {
                 VALUES (?, ?, 'REVERSE_SPLIT', 10.6300268068, 'SOURCE_DISCLOSURE', 'APPROVED')
                 """, stockId, LocalDate.parse("2023-05-16")))
                 .hasMessageContaining("ck_ca_ratio_sign");
+    }
+
+    @Test
+    @DisplayName("인적분할은 존속법인 기준이라 1보다 작다 — 방향이 뒤집히면 과거가 반대로 움직인다")
+    void spinOffRatioIsBelowOne() {
+        // 존속법인 1주가 0.7563532970주가 된 것이다(한화 2026-08-25 실측). 1보다 큰 값을 넣으면
+        // 계수가 역수로 들어가 과거 봉이 오를 자리에서 내려간다 — 값 자체는 그럴듯하다.
+        assertThatThrownBy(() -> new CorporateAction(
+                LocalDate.parse("2026-08-25"), CorporateAction.Type.SPIN_OFF,
+                new BigDecimal("1.3221334580"), CorporateAction.DetectionSource.HEURISTIC))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("부호가 어긋난다");
+
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO corporate_action
+                    (stock_id, effective_date, type, ratio, detection_source, status)
+                VALUES (?, ?, 'SPIN_OFF', 1.3221334580, 'HEURISTIC', 'APPROVED')
+                """, stockId, LocalDate.parse("2026-08-25")))
+                .hasMessageContaining("ck_ca_ratio_sign");
+    }
+
+    @Test
+    @DisplayName("인적분할은 단순 유리수가 아닌 비율을 받는다 — 스냅을 걸면 진짜 분할이 전부 거부된다")
+    void spinOffAcceptsANonSimpleRatio() {
+        // 분할비율은 순자산 비율에서 나오므로 ShareRatioSnap이 못 붙는 것이 정상이고,
+        // 그 사실 자체가 액면병합과 가르는 증거다(ADR-0117).
+        CorporateAction action = new CorporateAction(
+                LocalDate.parse("2026-08-25"), CorporateAction.Type.SPIN_OFF,
+                new BigDecimal("0.7563532970"), CorporateAction.DetectionSource.HEURISTIC);
+
+        assertThat(ShareRatioSnap.snap(action.ratio()))
+                .as("스냅이 붙으면 이 종류를 액면병합과 못 가른다")
+                .isEmpty();
+        assertThat(ledger.record(stockId, action).outcome())
+                .isEqualTo(CorporateActionLedger.Outcome.INSERTED);
     }
 
     @Test
