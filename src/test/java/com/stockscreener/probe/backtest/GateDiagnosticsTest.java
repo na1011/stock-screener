@@ -50,8 +50,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li><b>그 회전의 게이트별 귀속</b> — 회전율만으로는 <b>무엇을 고칠지 정할 수 없다</b>.
  * </ol>
  *
- * <p><b>조회 대상마다 따로 낸다</b>(ADR-0108). 시장·통화·달력·모집단이 대상 하나에서 나오고,
- * 조건은 그 대상의 통화로 <b>해석한 뒤에</b> 판정한다.
+ * <p><b>프리셋 × 조회 대상마다 따로 낸다</b>(ADR-0108). 시장·통화·달력·모집단이 대상 하나에서
+ * 나오고, 조건은 그 대상의 통화로 <b>해석한 뒤에</b> 판정한다. 어느 프리셋을 도는지는
+ * {@link #PRESETS}가 정하고 <b>수익률 축과 일부러 다르다</b> — 그 이유는 그 상수에 적었다.
  *
  * <p><b>이 테스트는 판정을 하지 않는다.</b> 0건이 나와도 실패로 만들지 않는다 — 0건의 원인을
  * ① 조건 ② 데이터 ③ 국면으로 가르는 것이 사람의 몫이고, 여기서 실패로 만들면 다음 세션이
@@ -85,23 +86,46 @@ class GateDiagnosticsTest {
     @Autowired
     private ConditionEvaluator conditionEvaluator;
 
-    @Test
-    @DisplayName("게이트별 탈락·판정불가·배점 충족률·회전율을 조회 대상마다 시점별로 낸다")
-    void reportGateDiagnostics() {
-        ScreenPreset preset = presets.stream()
-                .filter(p -> p.code().equals(PresetCatalog.BUFFETT_QUALITY))
-                .findFirst().orElseThrow();
+    /**
+     * 진단할 프리셋. <b>수익률 축과 일부러 다르다</b> — {@code ConditionReturnTest}는
+     * {@code BUFFETT_QUALITY} 하나만 재고 ADR-0071 §규칙이 린치로 넓히는 것을 MUST NOT으로
+     * 막는다(split 불균형). <b>그 금지는 수익률 축에만 걸린다</b>: 같은 문서가 진단 축을
+     * <i>"표본과 무관하게 답이 나오는 유일한 축"</i>이라 적었고, 표본 문제가 없으므로 넓히는
+     * 대가가 시간뿐이다.
+     *
+     * <p>넷을 고른 이유가 각각 있다 — 버핏은 승계, 린치 둘은 분류 게이트와 주주환원 배점이
+     * 걸리는 자리, {@code LOWVOL_QUALITY}는 <b>유동성 조건을 배점으로 든 유일한 프리셋</b>이라
+     * 그 축을 배점에서 보는 자리가 여기뿐이다.
+     *
+     * <p>MUST: 프리셋을 더하면 소요가 는다. 진단은 조회 대상 × 시점 × 종목이라
+     * <b>프리셋 수에 선형</b>이고, {@code backtestProbe} 예산을 그만큼 다시 잰다.
+     */
+    private static final List<String> PRESETS = List.of(
+            PresetCatalog.BUFFETT_QUALITY,
+            PresetCatalog.LYNCH_FAST_GROWER,
+            PresetCatalog.LYNCH_STALWART,
+            PresetCatalog.LOWVOL_QUALITY);
 
+    @Test
+    @DisplayName("게이트별 탈락·판정불가·배점 충족률·회전율을 프리셋·조회 대상마다 시점별로 낸다")
+    void reportGateDiagnostics() {
         List<ScreeningTargets.Target> all = targets.all();
         assertThat(all).as("조회 대상이 하나도 없다 — 유니버스가 비었거나 편입이 없다").isNotEmpty();
 
         int measured = 0;
-        for (ScreeningTargets.Target target : all) {
-            measured += reportOne(preset, target) ? 1 : 0;
+        for (String code : PRESETS) {
+            ScreenPreset preset = presets.stream()
+                    .filter(p -> p.code().equals(code))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError(
+                            "선언에 없는 프리셋을 진단 목록에 적었다: " + code));
+            for (ScreeningTargets.Target target : all) {
+                measured += reportOne(preset, target) ? 1 : 0;
+            }
         }
 
         assertThat(measured)
-                .as("어느 조회 대상에서도 격자를 못 만들었다 — 잴 것이 없었다")
+                .as("어느 프리셋·조회 대상에서도 격자를 못 만들었다 — 잴 것이 없었다")
                 .isPositive();
 
         System.out.println("\nMUST NOT: 위 수를 근거로 임계값을 조정하지 않는다."
@@ -111,8 +135,8 @@ class GateDiagnosticsTest {
     /** @return 그 대상에서 실제로 쟀는가. 격자가 비면 false이고 그것은 실패가 아니다. */
     private boolean reportOne(ScreenPreset preset, ScreeningTargets.Target target) {
         if (target.asOf() == null) {
-            System.out.printf("%n===== [%s] 지표 달력이 비어 있다 — 라이브에서는 503이다 =====%n",
-                    target.code());
+            System.out.printf("%n===== [%s · %s] 지표 달력이 비어 있다 — 라이브에서는 503이다 =====%n",
+                    preset.code(), target.code());
             return false;
         }
 
@@ -121,24 +145,25 @@ class GateDiagnosticsTest {
             resolved = preset.conditions().resolveFor(target.currency());
         } catch (com.stockscreener.screening.MarketThresholdMissingException e) {
             // 「그 시장에서 실행 불가」는 통과 0과 다른 사실이다(ADR-0106 §규칙).
-            System.out.printf("%n===== [%s] 실행 거절 — %s 임계 없음: %s =====%n",
-                    target.code(), e.currencyCode(), String.join(" ", e.indicatorCodes()));
+            System.out.printf("%n===== [%s · %s] 실행 거절 — %s 임계 없음: %s =====%n",
+                    preset.code(), target.code(), e.currencyCode(),
+                    String.join(" ", e.indicatorCodes()));
             return false;
         }
 
         LocalDate windowStart = HarnessWindow.floorFor(
                 calendar.earliestFiscalYear(target.markets()), resolved);
         if (windowStart == null) {
-            System.out.printf("%n===== [%s] 잴 것이 없었다 — 그 시장에 재무가 한 행도 없다 =====%n",
-                    target.code());
+            System.out.printf("%n===== [%s · %s] 잴 것이 없었다 — 그 시장에 재무가 한 행도 없다 =====%n",
+                    preset.code(), target.code());
             return false;
         }
         LocalDate lastAsOf = calendar.latestTradingDay(target.markets());
         List<LocalDate> grid = lastAsOf == null || windowStart.isAfter(lastAsOf) ? List.of()
                 : calendar.every(windowStart, lastAsOf, MONTH_STEP, target.markets());
         if (grid.isEmpty()) {
-            System.out.printf("%n===== [%s] 격자가 비었다 — 잴 것이 없었다 (하한 %s) =====%n",
-                    target.code(), windowStart);
+            System.out.printf("%n===== [%s · %s] 격자가 비었다 — 잴 것이 없었다 (하한 %s) =====%n",
+                    preset.code(), target.code(), windowStart);
             return false;
         }
 
