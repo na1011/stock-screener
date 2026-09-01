@@ -68,6 +68,27 @@ applies_to:
 ./gradlew liveTest --tests "*AlpacaDividendProbeLiveTest*"
 ```
 
+```premise 미국에서 무배당과 미수집이 갈려 있다
+psql -d stock_screener -At -c "WITH win AS ( SELECT DISTINCT stock_id, fiscal_year, period_start, period_end FROM financial_statement WHERE fiscal_period = 'FY') , paid AS ( SELECT r.stock_id, w.fiscal_year, count(*) AS payments FROM governance_report_row r JOIN stock s ON s.id = r.stock_id AND s.market_code = 'US' JOIN win w ON w.stock_id = r.stock_id AND r.published_at BETWEEN w.period_start AND w.period_end WHERE r.endpoint = 'DIVIDEND' AND r.reprt_code = 'CASHDIV' AND r.row_ordinal >= 0 GROUP BY 1, 2) , silent AS ( SELECT count(*) n FROM paid p JOIN governance_fact f ON f.stock_id = p.stock_id AND f.fiscal_year = p.fiscal_year AND f.metric_key = 'DPS_COMMON' AND f.value = 0) SELECT CASE WHEN (SELECT count(*) FROM paid) = 0 THEN '잴 것이 없었다 — 회계연도 창에 든 미국 배당 결제 원문 행이 하나도 없다' WHEN (SELECT n FROM silent) = 0 THEN 'OK 결제 원문이 회계연도 창에 든 ' || (SELECT count(*) FROM paid) || '개 (종목,회계연도)에 주당배당금 0이 붙지 않았다' ELSE (SELECT n FROM silent) || '개 (종목,회계연도)가 회계연도 창 안에 결제 원문을 갖는데 ' || '주당배당금이 0이다 — 무배당과 미수집이 다시 붙었다' END"
+```
+
+**회계연도 창으로 버킷한다 — `bsns_year`로 하면 안 된다.** 그 열은 `ex_date`의 연도라
+**비12월 결산에서 회계연도와 갈리고**, 붙여 세면 정상 동작이 발견으로 뜬다(실측: `BMNR`은
+8월 결산이라 2025-12-08 결제가 FY2026에 드는데 `bsns_year`가 2025다. 그 FY2026은 아직
+미완결이라 값을 안 내는 것이 맞다). 지금 1,296개 (종목,회계연도)를 재고 **0.06초**다.
+
+**도달성을 대조군으로 확인했다** — `f.value = 0`을 `>= 0`으로 풀면 1,094개가 잡힌다. 조인이
+행에 닿고 있고 0건인 것이 필터 때문이라는 뜻이다.
+
+```premise 총액이 빠진 미국 (종목,회계연도)가 전부 주식수 온전성 게이트로 설명된다
+psql -d stock_screener -At -c "WITH g AS ( SELECT f.stock_id, f.fiscal_year, (array_agg(f.shares_outstanding ORDER BY f.published_at) FILTER (WHERE f.shares_outstanding > 0))[1] AS shares, (array_agg(f.net_income / nullif(f.eps, 0) ORDER BY f.published_at) FILTER (WHERE f.net_income IS NOT NULL AND f.eps IS NOT NULL AND f.eps <> 0))[1] AS implied FROM financial_statement f JOIN stock s ON s.id = f.stock_id AND s.market_code = 'US' WHERE f.fiscal_period = 'FY' GROUP BY 1, 2) , gated AS ( SELECT stock_id, fiscal_year FROM g WHERE CASE WHEN implied IS NULL OR implied = 0 THEN shares WHEN abs(shares / implied - 1) > 0.20 THEN NULL ELSE shares END IS NULL) , missing AS ( SELECT d.stock_id, d.fiscal_year FROM governance_fact d JOIN stock s ON s.id = d.stock_id AND s.market_code = 'US' WHERE d.metric_key = 'DPS_COMMON' AND NOT EXISTS (SELECT 1 FROM governance_fact t WHERE t.stock_id = d.stock_id AND t.fiscal_year = d.fiscal_year AND t.metric_key = 'CASH_DIVIDEND_TOTAL')) , unexplained AS ( SELECT count(*) n FROM missing m WHERE NOT EXISTS (SELECT 1 FROM gated x WHERE x.stock_id = m.stock_id AND x.fiscal_year = m.fiscal_year)) SELECT CASE WHEN (SELECT count(*) FROM missing) = 0 THEN 'OK 총액이 빠진 미국 (종목,회계연도)가 하나도 없다' WHEN (SELECT n FROM unexplained) = 0 THEN 'OK 총액이 빠진 ' || (SELECT count(*) FROM missing) || '개 (종목,회계연도)가 전부 주식수 온전성 게이트로 설명된다' ELSE (SELECT n FROM unexplained) || '개 (종목,회계연도)가 주당배당금은 내면서 총액을 안 내는데 ' || '주식수 온전성 게이트로 설명되지 않는다 — 다른 사유가 총액을 조용히 지우고 있다' END"
+```
+
+**술어를 `GovernanceFactDeriver`에서 그대로 떠 왔다.** 베낀 것이 문제가 되는 자리이지만,
+**베끼지 않으면 「총액이 왜 없는가」에 답할 수단이 없다** — 유도 문맥은 저장되지 않는다.
+지금 108개가 그 게이트로 설명되고 **미설명 0**이며 **0.08초**다. 대조군으로 게이트 집합을
+비우면 108이 전부 미설명으로 뒤집힌다.
+
 **단위 시험이 규칙을 하나씩 잠근다** — 회계연도 버킷 · 최초 공시일 스탬프 · 무배당 0 ·
 미완결 회계연도 거절 · 관측 안 한 역년 거절 · 분할 정규화 · 주식수 없을 때 총액 생략 ·
 `special`·`foreign` 합산 · 수집일 없을 때 침묵.
