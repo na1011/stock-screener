@@ -27,12 +27,19 @@ public record UnavailabilityRule(String code, Predicate<Context> when, String re
     }
 
     /**
-     * 판정에 쓸 수 있는 것. <b>이 둘로 답할 수 없는 사유는 규칙으로 두지 않는다.</b>
+     * 판정에 쓸 수 있는 것. <b>이 셋으로 답할 수 없는 사유는 규칙으로 두지 않는다.</b>
+     *
+     * <p>{@code marketCode}가 셋째로 붙은 것은 미국을 켠 뒤다(ADR-0111). <b>원자료가 시장에
+     * 따라 아예 없는 축</b>이 생겼고, 그때 「수집되지 않았다」와 「이 시장에는 원래 없다」는
+     * 사용자가 할 일이 정반대다 — 앞은 기다리면 되고 뒤는 영영 안 온다.
      *
      * @param values           그 기준일에 계산된 지표 값들. 없는 지표는 키가 없다
-     * @param industryDivisionKey KSIC 중분류. 업종 미상이면 null이다
+     * @param industryDivisionKey 업종 중분류 키. <b>체계 접두가 붙어 있고</b>(ADR-0092)
+     *                            업종 미상이면 null이다
+     * @param marketCode       그 종목의 시장. 소스가 그 시장을 덮는지 가르는 데 쓴다
      */
-    public record Context(Map<String, BigDecimal> values, String industryDivisionKey) {
+    public record Context(Map<String, BigDecimal> values, String industryDivisionKey,
+                          String marketCode) {
 
         public BigDecimal value(String code) {
             return values.get(code);

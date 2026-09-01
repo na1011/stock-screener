@@ -54,7 +54,7 @@ public class IndicatorUnavailabilityConfig {
 
     @Bean
     public List<UnavailabilityRule> unavailabilityRules() {
-        return List.of(
+        List<UnavailabilityRule> rules = new java.util.ArrayList<>(List.of(
                 new UnavailabilityRule(
                         PerCalculator.CODE,
                         // 실측(2026-08-14) — PER이 없는 81종목 중 68이 EPS 음수이고 나머지 13은
@@ -117,42 +117,73 @@ public class IndicatorUnavailabilityConfig {
                         // 틀린 이유를 붙이게 된다(ALTMAN_Z가 업종만 말하는 것과 같은 이유다).
                         context -> isFinancialDivision(context.industryDivisionKey()),
                         "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
-                                + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다."),
-                governanceMissing(DividendYieldCalculator.CODE),
-                governanceMissing(DividendPayoutCalculator.CODE),
-                governanceMissing(TreasuryShareRatioCalculator.CODE),
-                governanceMissing(ProfitRetirement3yCalculator.CODE),
-                governanceMissing(ExecPayToNetIncomeCalculator.CODE),
-                governanceMissing(OutsideDirectorRatioCalculator.CODE),
-                governanceMissing(DirectorTurnover3yCalculator.CODE),
-                governanceMissing(LargestHolderStakeCalculator.CODE),
-                governanceMissing(MinorityHolderStakeCalculator.CODE),
-                governanceMissing(ControlTransfer3yCalculator.CODE),
-                governanceMissing(AuditOpinionAdverseCalculator.CODE),
-                governanceMissing(AuditEmphasisCalculator.CODE),
-                governanceMissing(AuditorChange3yCalculator.CODE));
+                                + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다.")));
+        // 거버넌스 사유는 코드마다 **둘**이다 — 술어가 서로 배타적이라 먼저 맞는 하나만 붙는다.
+        rules.addAll(GOVERNANCE_CODES.stream().flatMap(
+                code -> java.util.stream.Stream.of(
+                        governanceNotCollected(code), governanceOutOfMarket(code))).toList());
+        return List.copyOf(rules);
     }
+
+    /**
+     * 거버넌스 원자료를 주는 시장. 정본은 {@code DartGovernanceAdapter.supportedMarketCodes}이고
+     * 여기 사본을 두는 이유는 이 설정이 파이프라인을 끌어오지 않기 때문이다.
+     *
+     * <p><b>갈리면 문구가 거짓이 된다</b> — 새 시장에 거버넌스 소스가 붙었는데 여기를 안 고치면
+     * 그 시장 종목이 「이 시장에는 원래 없다」는 말을 계속 듣는다.
+     */
+    private static final Set<String> GOVERNANCE_MARKETS = Set.of("KOSPI", "KOSDAQ");
 
     /**
      * 거버넌스 지표가 없을 때, <b>그 종목의 정기보고서 주요정보가 통째로 없는 경우에만</b>
      * 사유를 붙인다(ADR-0081).
      *
      * <p>MUST: 문구가 <b>우리 데이터에 대한 사실</b>이지 그 회사에 대한 주장이 아니다.
-     * 실측으로 이 상태인 종목은 둘이고 둘 다 구조적이지만(인프라 투자회사·외국 발행 증권),
-     * 셋째가 다른 이유로 생기면 그 문장이 거짓이 된다 — 그리고 「그럴듯한데 틀린 사유는 아무
-     * 말도 하지 않는 것보다 나쁘다」가 이 클래스의 MUST NOT이다.
+     * 그리고 <b>그 시장에 대해서도 참이어야 한다</b>(P27 축④) — 미국을 켠 뒤 이 자리는
+     * 1,000종목에서 <i>"DART 정기보고서 주요정보가 한 행도 수집되지 않아"</i>라고 말하고
+     * 있었다. 미국에 DART는 애초에 없다.
+     *
+     * <p><b>두 문장을 가르는 것이 사용자가 할 일을 가른다.</b> 국내에서 이 상태인 종목은
+     * 둘이고 둘 다 구조적이지만(인프라 투자회사·외국 발행 증권) <b>수집으로 메울 여지</b>가
+     * 개념적으로 남는다. 소스가 안 덮는 시장은 <b>영영 안 온다</b> — 그것을 「수집되지
+     * 않았다」로 적으면 사용자가 기다린다.
      *
      * <p>지표 하나만 없는 경우(무배당이라 배당수익률이 없는 것 등)에는 <b>아무 말도 하지
      * 않는다.</b> 원인이 여럿인데 {@link UnavailabilityRule.Context}가 그것을 가르지 못한다.
      */
-    private static UnavailabilityRule governanceMissing(String code) {
+    private static UnavailabilityRule governanceNotCollected(String code) {
         return new UnavailabilityRule(code,
-                context -> context.value(OutsideDirectorRatioCalculator.CODE) == null
-                        && context.value(MinorityHolderStakeCalculator.CODE) == null
-                        && context.value(TreasuryShareRatioCalculator.CODE) == null,
+                context -> governanceEmpty(context)
+                        && GOVERNANCE_MARKETS.contains(context.marketCode()),
                 "이 종목은 DART 정기보고서 주요정보가 한 행도 수집되지 않아 거버넌스 지표를 "
                         + "계산할 수 없습니다.");
     }
+
+    /** 소스가 그 시장을 아예 안 덮는다. <b>기다려도 안 온다</b>는 것이 위 문장과 다른 점이다. */
+    private static UnavailabilityRule governanceOutOfMarket(String code) {
+        return new UnavailabilityRule(code,
+                context -> governanceEmpty(context)
+                        && !GOVERNANCE_MARKETS.contains(context.marketCode()),
+                "거버넌스 지표의 원자료는 국내 공시에서만 옵니다. 이 시장의 종목에는 "
+                        + "값이 나오지 않습니다.");
+    }
+
+    /** 그 종목의 거버넌스 원자료가 통째로 없는가. 두 규칙이 같은 술어를 쓴다. */
+    private static boolean governanceEmpty(UnavailabilityRule.Context context) {
+        return context.value(OutsideDirectorRatioCalculator.CODE) == null
+                && context.value(MinorityHolderStakeCalculator.CODE) == null
+                && context.value(TreasuryShareRatioCalculator.CODE) == null;
+    }
+
+    /** 거버넌스 사유가 붙는 지표. 새 거버넌스 지표를 더하면 여기에 함께 적는다. */
+    private static final List<String> GOVERNANCE_CODES = List.of(
+            DividendYieldCalculator.CODE, DividendPayoutCalculator.CODE,
+            TreasuryShareRatioCalculator.CODE, ProfitRetirement3yCalculator.CODE,
+            ExecPayToNetIncomeCalculator.CODE, OutsideDirectorRatioCalculator.CODE,
+            DirectorTurnover3yCalculator.CODE, LargestHolderStakeCalculator.CODE,
+            MinorityHolderStakeCalculator.CODE, ControlTransfer3yCalculator.CODE,
+            AuditOpinionAdverseCalculator.CODE, AuditEmphasisCalculator.CODE,
+            AuditorChange3yCalculator.CODE);
 
     /**
      * 유동/비유동 구분이 없는 업종. 금융업·보험업·금융서비스업이다.
