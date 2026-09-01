@@ -330,9 +330,14 @@ function formatTime(value: string | null): string {
           <!--
             미해결 에러 건수를 가장 크게 둔다. 이 화면에서 조치가 필요한지를 한 눈에 답하는
             숫자가 이것 하나이기 때문이다. 0이면 강조를 걷어 평상시 화면이 조용하게 만든다.
+
+            **라벨이 「편입 종목」이라고 말하는 이유**는 아래 배치 목록의 「미해결」 열과 축이
+            다르기 때문이다 — 저쪽은 그 실행에서 안 풀린 것 전부이고, 유니버스 밖 종목의
+            실패는 다시 성공할 기회가 없어 영원히 안 줄어든다. 라벨이 그 구분을 안 하면
+            같은 화면에서 0과 2,130이 나란히 떠 서로를 부정한다.
           -->
           <article class="stat" :class="{ 'stat--alert': admin.summary.unresolvedFailureCount > 0 }">
-            <span class="stat__label">미해결 실패</span>
+            <span class="stat__label">편입 종목 미해결</span>
             <strong class="stat__value tabular">{{ admin.summary.unresolvedFailureCount }}</strong>
             <span class="stat__unit">건</span>
           </article>

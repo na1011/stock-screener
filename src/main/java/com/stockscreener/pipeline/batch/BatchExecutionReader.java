@@ -169,8 +169,25 @@ public class BatchExecutionReader {
                 ORDER BY started_at DESC
                 """.formatted(EXECUTION_COLUMNS), EXECUTION_MAPPER);
 
-        Long unresolved = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM batch_execution_failure WHERE NOT resolved", Long.class);
+        // MUST: 편입 종목으로 좁힌다. 해소는 그 종목이 그 단계에서 **다시 성공**할 때만
+        // 일어나는데(BatchExecutionContext.resolveIfPreviouslyFailed) 활성 유니버스 밖 종목은
+        // 어떤 잡의 기본 대상도 아니라 **다시 성공할 기회가 원리적으로 없다.** 좁히지 않으면
+        // 이 수는 영원히 안 줄고, 그러면 진짜 실패가 하나 생겨도 총계가 1 늘 뿐이라 안 드러난다.
+        //
+        // 실측(2026-09-01): 좁히기 전 2,281건이 전부 US_LISTED 적재의 SEC 실패였고
+        // (NOT_FOUND 1,984 · MALFORMED 297, 종목 2,130개) **편입 중은 0개**였다.
+        // NOT_FOUND는 SEC 매핑에 없는 ETF·펀드·우선주라 정상이다(batch-load skill).
+        //
+        // MUST NOT: 실행별 unresolved_count(EXECUTION_COLUMNS)를 함께 좁히지 않는다. 그것은
+        // **그 실행에서 안 풀린 것**이고 축이 다르다. 게다가 재실행 버튼을 켜는 근거라
+        // (AdminBatchController) 좁히면 화면이 서버와 모순된다.
+        Long unresolved = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM batch_execution_failure f
+                WHERE NOT f.resolved
+                  AND EXISTS (SELECT 1 FROM universe_membership m
+                               JOIN universe u ON u.code = m.universe_code AND u.is_active
+                              WHERE m.stock_id = f.stock_id AND m.effective_to IS NULL)
+                """, Long.class);
 
         return new Summary(latest, unresolved == null ? 0 : unresolved);
     }
@@ -294,7 +311,13 @@ public class BatchExecutionReader {
             Instant occurredAt) {
     }
 
-    /** 잡별 최근 실행과 미해결 실패 총건수. */
+    /**
+     * 잡별 최근 실행과 미해결 실패 건수.
+     *
+     * @param unresolvedFailureCount <b>편입 중인 종목의</b> 미해결 실패다. 실행별
+     *        {@code unresolvedFailureCount}와 축이 다르다 — 저쪽은 그 실행에서 안 풀린
+     *        것 전부이고, 유니버스 밖 종목은 다시 성공할 기회가 없어 영원히 안 줄어든다.
+     */
     public record Summary(List<Execution> latestByJob, long unresolvedFailureCount) {
     }
 }

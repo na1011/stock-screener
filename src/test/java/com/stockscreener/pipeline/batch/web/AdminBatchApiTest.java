@@ -67,6 +67,7 @@ class AdminBatchApiTest {
     private AdminJobLauncher launcher;
 
     private long stockId;
+    private long outsideStockId;
 
     @Autowired
     void setUp(WebApplicationContext context) {
@@ -84,6 +85,23 @@ class AdminBatchApiTest {
                 ON CONFLICT (market_code, ticker) DO UPDATE SET name = EXCLUDED.name
                 RETURNING id
                 """, Long.class);
+
+        // 요약의 미해결 건수는 **편입 종목만** 센다. 그래서 픽스처가 편입시켜야 하고,
+        // 편입되지 않은 종목도 하나 둬야 그 좁힘이 실제로 무언가를 거르는지 볼 수 있다.
+        outsideStockId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, is_active)
+                VALUES ('KOSPI', '900202', '유니버스밖종목', true)
+                ON CONFLICT (market_code, ticker) DO UPDATE SET name = EXCLUDED.name
+                RETURNING id
+                """, Long.class);
+
+        String activeUniverse = jdbcTemplate.queryForObject(
+                "SELECT code FROM universe WHERE is_active AND market_code = 'KOSPI' LIMIT 1",
+                String.class);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES (?, ?, current_date - 1)
+                """, activeUniverse, stockId);
 
         when(launcher.catalog()).thenReturn(List.of(new AdminJobLauncher.Descriptor(
                 DailyUpdateJob.JOB_NAME, "일일 갱신", "설명",
@@ -121,14 +139,20 @@ class AdminBatchApiTest {
         long latest = insertExecution(DailyUpdateJob.JOB_NAME, "PARTIAL_SUCCESS", 0);
         insertExecution(UniverseRebalanceJob.JOB_NAME, "SUCCESS", 0);
 
-        insertFailure(latest, "PRICE", false);
-        insertFailure(old, "FINANCIAL", true);
+        insertFailure(latest, stockId, "PRICE", false);
+        insertFailure(old, stockId, "FINANCIAL", true);
+        // 유니버스 밖 종목의 미해결 실패. 이것이 세어지면 요약이 영원히 안 줄어든다 —
+        // 실측으로 그 상태였다(2026-09-01: 2,281건 전부가 US_LISTED 적재의 SEC 실패였고
+        // 편입 중은 0개였다). 해소는 그 종목이 다시 성공할 때만 일어나는데 유니버스 밖
+        // 종목은 어떤 잡의 대상도 아니라 그 기회가 원리적으로 없다.
+        insertFailure(latest, outsideStockId, "FINANCIAL", false);
 
         mockMvc.perform(get("/api/admin/batches/summary"))
                 .andExpect(status().isOk())
                 // 일일 갱신이 두 번 돌아도 유니버스의 마지막 결과가 밀려나지 않는다.
                 .andExpect(jsonPath("$.latestByJob.length()").value(2))
-                // 해결된 실패는 빠진다. 안 빠지면 요약이 영원히 줄지 않아 무의미해진다.
+                // 해결된 실패도 유니버스 밖 실패도 빠진다. 둘 중 하나라도 세면 요약이
+                // 영원히 줄지 않아 "조치가 필요한가"라는 물음에 답하지 못한다.
                 .andExpect(jsonPath("$.unresolvedFailureCount").value(1))
                 .andExpect(jsonPath("$.runningJobs.length()").value(0));
     }
@@ -304,10 +328,15 @@ class AdminBatchApiTest {
     }
 
     private void insertFailure(long executionId, String phase, boolean resolved) {
+        insertFailure(executionId, stockId, phase, resolved);
+    }
+
+    private void insertFailure(long executionId, long failedStockId, String phase,
+                               boolean resolved) {
         jdbcTemplate.update("""
                 INSERT INTO batch_execution_failure
                     (execution_id, stock_id, failed_phase, source_name, failure_kind, message, resolved)
                 VALUES (?, ?, ?, 'data-go-kr', 'TRANSIENT', '일시적 실패', ?)
-                """, executionId, stockId, phase, resolved);
+                """, executionId, failedStockId, phase, resolved);
     }
 }
