@@ -16,6 +16,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -45,6 +46,15 @@ public class PointInTimeScreener {
      * 그 상수가 package-private이라 값을 옮겨 왔고, 갈리면 하네스만 다른 모집단을 쓴다.
      */
     private static final int MIN_PEERS = 5;
+
+    /**
+     * 이 탐침이 인메모리로 다시 만드는 업종 상대값의 종류.
+     *
+     * <p>{@link SectorMetricSpec.Kind#MEDIAN}과 표본 수는 빠져 있다 — 지금 어떤 조건도 그 둘을
+     * 참조하지 않기 때문이고, 참조가 생기면 {@link #addSectorRelatives}가 던진다.
+     */
+    private static final Set<SectorMetricSpec.Kind> RECONSTRUCTED_KINDS =
+            EnumSet.of(SectorMetricSpec.Kind.PERCENTILE, SectorMetricSpec.Kind.MEDIAN_RATIO);
 
     private final IndicatorRunner runner;
     private final ConditionEvaluator evaluator;
@@ -114,7 +124,7 @@ public class PointInTimeScreener {
                             FinancialVisibility.KNOWN_ON)));
         }
 
-        addSectorPercentiles(valuesByStock, resolved.referencedIndicatorCodes());
+        addSectorRelatives(valuesByStock, resolved.referencedIndicatorCodes());
 
         // 판정과 반환은 대상으로 좁힌다 — 호출부가 「값이 나온 종목 수」를 대상 기준으로 읽는다.
         Map<Long, Map<String, BigDecimal>> ofTarget = new LinkedHashMap<>();
@@ -201,20 +211,46 @@ public class PointInTimeScreener {
      * <p>{@code PERCENT_RANK}의 정의를 그대로 옮긴다 — 동률은 <b>최소 순위</b>를 함께 받고
      * 분모가 {@code n-1}이다. 표본이 {@link #MIN_PEERS} 미만인 층은 값을 <b>넣지 않는다</b>
      * (0을 넣으면 "업종 최하위"로 읽혀 조건을 충족시킨다).
+     *
+     * <p><b>배수({@code _SECTOR_REL})도 함께 만든다.</b> 백분위만 만들면 그 지표를 쓰는 조건이
+     * 매 시점 판정불가가 되고, 진단 축은 그것을 <b>커버리지 0 — "원리적으로 못 얻는다"</b>로
+     * 찍는다. 저장된 값이 실재하고 라이브가 정상 판정하는데도 그렇게 나오므로, 그 신고를 믿으면
+     * 살아 있는 배점 축을 죽은 것으로 오판한다(실측: {@code DEBT_RATIO_SECTOR_REL}이 저장
+     * 54,879행인데 세 조회 대상 전부에서 0으로 찍혔다).
+     *
+     * <p>중앙값이 <b>0 이하면 값을 내지 않는다</b> — 배수가 뜻을 잃기 때문이고,
+     * {@code SectorRelativeCalculator.MEDIAN_RATIO_CHOSEN}의 {@code f.med > 0} 가드와 같다.
      */
-    private void addSectorPercentiles(Map<Long, Map<String, BigDecimal>> valuesByStock,
-                                      Set<String> referencedCodes) {
-        List<String> sourceCodes = referencedCodes.stream()
-                .filter(code -> code.endsWith(SectorMetricSpec.PERCENTILE_SUFFIX))
-                .map(code -> code.substring(
-                        0, code.length() - SectorMetricSpec.PERCENTILE_SUFFIX.length()))
-                .toList();
-        if (sourceCodes.isEmpty()) {
+    private void addSectorRelatives(Map<Long, Map<String, BigDecimal>> valuesByStock,
+                                    Set<String> referencedCodes) {
+        for (String code : referencedCodes) {
+            if (code.endsWith(SectorMetricSpec.MEDIAN_SUFFIX)
+                    || code.endsWith(SectorMetricSpec.PEER_COUNT_SUFFIX)) {
+                // 조건이 이 둘을 참조하는 날이 오면 재구성 규칙을 여기 더해야 한다. 조용히
+                // 판정불가로 두면 위 배수와 똑같이 「원리적으로 못 얻는다」로 찍힌다.
+                throw new IllegalStateException(
+                        "업종 참조값을 쓰는 조건은 아직 재구성하지 않는다: " + code);
+            }
+        }
+        Map<String, Set<SectorMetricSpec.Kind>> kindsBySource = new TreeMap<>();
+        for (String code : referencedCodes) {
+            for (SectorMetricSpec.Kind kind : RECONSTRUCTED_KINDS) {
+                if (code.endsWith(kind.suffix())) {
+                    kindsBySource.computeIfAbsent(
+                                    code.substring(0, code.length() - kind.suffix().length()),
+                                    k -> EnumSet.noneOf(SectorMetricSpec.Kind.class))
+                            .add(kind);
+                }
+            }
+        }
+        if (kindsBySource.isEmpty()) {
             return;
         }
         Map<Long, Sector> sectors = readSectors();
 
-        for (String sourceCode : sourceCodes) {
+        for (Map.Entry<String, Set<SectorMetricSpec.Kind>> source : kindsBySource.entrySet()) {
+            String sourceCode = source.getKey();
+            Set<SectorMetricSpec.Kind> kinds = source.getValue();
             // 층이 둘이다: 세분류 표본이 충분하면 그 안, 아니면 중분류 안이다.
             Map<String, List<Long>> fine = new TreeMap<>();
             Map<String, List<Long>> broad = new TreeMap<>();
@@ -244,10 +280,38 @@ public class PointInTimeScreener {
                 if (peers == null || peers.size() < MIN_PEERS) {
                     continue;
                 }
-                entry.getValue().put(sourceCode + SectorMetricSpec.PERCENTILE_SUFFIX,
-                        percentRank(peers, valuesByStock, sourceCode, value));
+                if (kinds.contains(SectorMetricSpec.Kind.PERCENTILE)) {
+                    entry.getValue().put(sourceCode + SectorMetricSpec.PERCENTILE_SUFFIX,
+                            percentRank(peers, valuesByStock, sourceCode, value));
+                }
+                if (kinds.contains(SectorMetricSpec.Kind.MEDIAN_RATIO)) {
+                    BigDecimal median = medianOf(peers, valuesByStock, sourceCode);
+                    if (median.signum() > 0) {
+                        entry.getValue().put(sourceCode + SectorMetricSpec.MEDIAN_RATIO_SUFFIX,
+                                value.divide(median, 8, RoundingMode.HALF_UP));
+                    }
+                }
             }
         }
+    }
+
+    /**
+     * {@code percentile_cont(0.5)}의 정의를 그대로 옮긴다 — 짝수 표본은 가운데 <b>둘의 평균</b>이다.
+     * 아래쪽 하나를 고르는 {@code percentile_disc}로 대신하면 배수가 조용히 다른 값이 된다.
+     */
+    private static BigDecimal medianOf(List<Long> peers,
+                                       Map<Long, Map<String, BigDecimal>> valuesByStock,
+                                       String sourceCode) {
+        List<BigDecimal> sorted = peers.stream()
+                .map(id -> valuesByStock.get(id).get(sourceCode))
+                .sorted()
+                .toList();
+        int n = sorted.size();
+        if (n % 2 == 1) {
+            return sorted.get(n / 2);
+        }
+        return sorted.get(n / 2 - 1).add(sorted.get(n / 2))
+                .divide(BigDecimal.valueOf(2), 8, RoundingMode.HALF_UP);
     }
 
     /** {@code PERCENT_RANK() OVER (ORDER BY value)} — 자기보다 <b>작은</b> 것의 비율이다. */
