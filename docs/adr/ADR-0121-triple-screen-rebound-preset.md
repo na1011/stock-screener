@@ -86,8 +86,12 @@ GROUP BY m.universe_code, c.indicator_code, c.sort_order ORDER BY m.universe_cod
 네 지표의 순위상관(ADR-0068의 잣대를 같은 형태로 적용 — 그 규칙 자체는 SCORING의 게이트 대
 배점에 걸리는 것이라 이 `FILTER`에는 문자 그대로 걸리지 않는다):
 
+**MUST NOT: 순위를 `corr()` 인자 자리에서 매기지 않는다** — `corr(rank() OVER (...), ...)`은
+*aggregate function calls cannot contain window function calls*로 죽는다. 순위를 CTE에서 먼저
+매기고 바깥에서 상관을 낸다.
+
 ```bash
-psql -d stock_screener -At -c "
+psql -d stock_screener -At -F ' | ' -c "
 WITH d AS (SELECT max(trade_date) md FROM indicator_value WHERE indicator_code='MACD_V_HIST_CHG_W'),
 p AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='MACD_V') a,
@@ -96,10 +100,18 @@ p AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='OBV_T_13') e
       FROM indicator_value WHERE trade_date=(SELECT md FROM d)
         AND indicator_code IN ('MACD_V','MACD_V_HIST','MACD_V_HIST_CHG_W','OBV_T_13')
-      GROUP BY stock_id)
-SELECT corr(rank() OVER (ORDER BY b), rank() OVER (ORDER BY c)) FROM p
-WHERE a IS NOT NULL AND b IS NOT NULL AND c IS NOT NULL AND e IS NOT NULL;"
+      GROUP BY stock_id),
+q AS (SELECT * FROM p WHERE a IS NOT NULL AND b IS NOT NULL AND c IS NOT NULL AND e IS NOT NULL),
+r AS (SELECT rank() OVER (ORDER BY a) ra, rank() OVER (ORDER BY b) rb,
+             rank() OVER (ORDER BY c) rc, rank() OVER (ORDER BY e) re FROM q)
+SELECT count(*), round(corr(ra,rb)::numeric,3), round(corr(ra,rc)::numeric,3),
+       round(corr(ra,re)::numeric,3), round(corr(rb,rc)::numeric,3),
+       round(corr(rb,re)::numeric,3), round(corr(rc,re)::numeric,3) FROM r;"
 ```
+
+**둘 다 2026-09-02에 실제로 돌렸다.** 첫째는 아래 §측정 결과의 통과율 열두 칸과 같은 수를,
+둘째는 `1259 | 0.385 | 0.399 | 0.573 | 0.772 | 0.653 | 0.493`을 냈다 — 순서는
+`n · MACD_V~HIST · MACD_V~CHG_W · MACD_V~OBV · HIST~CHG_W · HIST~OBV · CHG_W~OBV`다.
 
 **활성 프리셋 개수 펜스는 ADR-0074에 있고 같은 커밋에서 8 → 9로 고쳤다.** 그 ADR 자신의 MUST가
 「프리셋 코드를 하드코딩한 펜스는 같은 커밋에서 걷는다」이다.
