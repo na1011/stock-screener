@@ -89,22 +89,23 @@ applies_to:
 
 ```premise 통화가 섞인 종목에 재무 기반 지표가 남아 있는가
 psql -d stock_screener -At -c "
-WITH mismatched AS (
+WITH mismatched AS MATERIALIZED (
   SELECT DISTINCT s.id, s.ticker
   FROM financial_statement f
   JOIN stock s ON s.id = f.stock_id
   JOIN market m ON m.code = s.market_code
   WHERE f.currency_code <> m.currency_code),
+ fundamental AS MATERIALIZED (
+  SELECT code FROM indicator WHERE category = 'FUNDAMENTAL'),
  stale AS (
   SELECT count(*) AS rows, count(DISTINCT v.stock_id) AS stocks
   FROM indicator_value v
-  JOIN mismatched x ON x.id = v.stock_id
-  JOIN indicator i ON i.code = v.indicator_code
-  WHERE i.category = 'FUNDAMENTAL')
+  WHERE v.stock_id IN (SELECT id FROM mismatched)
+    AND v.indicator_code IN (SELECT code FROM fundamental))
 SELECT CASE
   WHEN (SELECT count(*) FROM mismatched) = 0
     THEN '잴 것이 없었다 — 재무 통화가 시장 통화와 다른 종목이 하나도 없다'
-  WHEN NOT EXISTS (SELECT 1 FROM indicator WHERE category = 'FUNDAMENTAL')
+  WHEN NOT EXISTS (SELECT 1 FROM fundamental)
     THEN '잴 것이 없었다 — FUNDAMENTAL 지표가 카탈로그에 하나도 없다'
   WHEN (SELECT rows FROM stale) = 0
     THEN 'OK 통화가 섞인 ' || (SELECT count(*) FROM mismatched)
@@ -115,6 +116,12 @@ SELECT CASE
        || 'ADR-0080의 「입력을 못 읽었다」로 접혀 걷기가 스킵된다'
 END"
 ```
+
+**`MATERIALIZED`와 `IN` 서브쿼리가 성능이 아니라 판정력의 문제다.** 평범한 CTE 조인으로 쓰면
+플래너가 종목 목록을 인덱스로 못 밀어 `indicator_value` 2,187만 행을 훑고 **5.66초**가 된다 —
+두 절은 각각 0.1초 미만인데 합치면 그렇다. 전제 전체 예산이 30초이므로 이 하나가 **뒤쪽
+전제를 통째로 예산 컷**으로 밀어낸다. 그 무판정은 「느리다」가 아니라 **「돌리지 못했다」**로
+나와 원인이 안 보인다. 이 형태로 **0.13초**다.
 
 **이 전제가 묻는 것은 게이트가 아니라 그 뒤처리다.** 게이트를 넣은 직후에는 반드시 발화하고,
 **걷기가 열린 뒤의 백필 한 번으로 닫힌다.** 그 백필의 대상은 활성 유니버스뿐이다
