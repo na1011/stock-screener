@@ -324,7 +324,10 @@ public class PipelineScheduler {
      * 공시일에 계단으로 바뀌므로 주 1회 돌면 <b>콜만 태운다</b> — 같은 값을 다시 받는 것이
      * {@code governance-load}는 7,700콜이다.
      */
-    private String heavyJobDueToday(DayOfWeek today) {
+    // 패키지 가시성인 이유는 **요일을 이 클래스가 스스로 읽기 때문**이다. 호출부가
+    // LocalDate.now()로 오늘을 정하므로, 이 판단을 밖에서 못 부르면 「화요일에 무엇이 도는가」를
+    // 화요일에만 시험할 수 있다. 인자로 받는 순수 함수라 여는 대가가 작다.
+    String heavyJobDueToday(DayOfWeek today) {
         Map<DayOfWeek, String> assignment = Map.of(
                 DayOfWeek.TUESDAY, GovernanceLoadJob.JOB_NAME,
                 DayOfWeek.WEDNESDAY, FullStatementRefillJob.JOB_NAME,
