@@ -126,13 +126,29 @@ public class IndicatorUnavailabilityConfig {
     }
 
     /**
-     * 거버넌스 원자료를 주는 시장. 정본은 {@code DartGovernanceAdapter.supportedMarketCodes}이고
-     * 여기 사본을 두는 이유는 이 설정이 파이프라인을 끌어오지 않기 때문이다.
+     * 거버넌스 원자료를 주는 시장. <b>지표마다 다르다.</b>
      *
-     * <p><b>갈리면 문구가 거짓이 된다</b> — 새 시장에 거버넌스 소스가 붙었는데 여기를 안 고치면
-     * 그 시장 종목이 「이 시장에는 원래 없다」는 말을 계속 듣는다.
+     * <p>정본은 어댑터의 {@code supportedMarketCodes}·{@code supportedEndpoints}이고 여기 사본을
+     * 두는 이유는 이 설정이 파이프라인을 끌어오지 않기 때문이다. <b>갈리면 문구가 거짓이 된다.</b>
+     *
+     * <p>집합 하나로 열셋을 판정하던 자리다. 미국에 배당 소스가 붙으면서(P28) 그 형태가 깨졌다 —
+     * <b>둘만 오고 열하나는 안 온다.</b> 집합에 US를 더하면 나머지 열하나가 「수집되지 않았다」로
+     * 바뀌어 <b>기다리면 온다는 거짓말</b>이 되고, 안 더하면 배당 둘이 「이 시장에는 원래 없다」는
+     * 거짓말을 계속한다. 그래서 축을 (지표, 시장)으로 내린다.
      */
-    private static final Set<String> GOVERNANCE_MARKETS = Set.of("KOSPI", "KOSDAQ");
+    private static final Set<String> KR_MARKETS = Set.of("KOSPI", "KOSDAQ");
+
+    /** 미국에도 소스가 있는 거버넌스 지표. Alpaca {@code cash_dividends}가 그 원자료다. */
+    private static final Set<String> US_BACKED_CODES = Set.of(
+            DividendYieldCalculator.CODE, DividendPayoutCalculator.CODE);
+
+    private static Set<String> marketsFor(String code) {
+        Set<String> markets = new java.util.LinkedHashSet<>(KR_MARKETS);
+        if (US_BACKED_CODES.contains(code)) {
+            markets.add("US");
+        }
+        return Set.copyOf(markets);
+    }
 
     /**
      * 거버넌스 지표가 없을 때, <b>그 종목의 정기보고서 주요정보가 통째로 없는 경우에만</b>
@@ -153,23 +169,37 @@ public class IndicatorUnavailabilityConfig {
      */
     private static UnavailabilityRule governanceNotCollected(String code) {
         return new UnavailabilityRule(code,
-                context -> governanceEmpty(context)
-                        && GOVERNANCE_MARKETS.contains(context.marketCode()),
-                "이 종목은 DART 정기보고서 주요정보가 한 행도 수집되지 않아 거버넌스 지표를 "
-                        + "계산할 수 없습니다.");
+                context -> marketsFor(code).contains(context.marketCode())
+                        && governanceEmpty(context),
+                "이 종목은 거버넌스 원자료가 한 행도 수집되지 않아 지표를 계산할 수 없습니다.");
     }
 
-    /** 소스가 그 시장을 아예 안 덮는다. <b>기다려도 안 온다</b>는 것이 위 문장과 다른 점이다. */
+    /**
+     * 소스가 <b>그 지표를</b> 그 시장에서 안 준다. <b>기다려도 안 온다</b>는 것이 위 문장과
+     * 다른 점이고, 그 차이가 사용자가 할 일을 가른다.
+     *
+     * <p>MUST NOT: 여기에 {@code governanceEmpty}를 걸지 않는다. 소스가 안 덮는다는 것은
+     * <b>그 종목에 다른 거버넌스 값이 있든 없든 참</b>이다 — 걸면 미국 종목이 배당 값을 가진
+     * 순간 나머지 열하나가 <b>아무 사유도 없이</b> 비게 된다.
+     */
     private static UnavailabilityRule governanceOutOfMarket(String code) {
         return new UnavailabilityRule(code,
-                context -> governanceEmpty(context)
-                        && !GOVERNANCE_MARKETS.contains(context.marketCode()),
-                "거버넌스 지표의 원자료는 국내 공시에서만 옵니다. 이 시장의 종목에는 "
+                context -> !marketsFor(code).contains(context.marketCode()),
+                "이 지표의 원자료는 국내 공시에서만 옵니다. 이 시장의 종목에는 "
                         + "값이 나오지 않습니다.");
     }
 
-    /** 그 종목의 거버넌스 원자료가 통째로 없는가. 두 규칙이 같은 술어를 쓴다. */
+    /**
+     * 그 종목의 거버넌스 원자료가 통째로 없는가.
+     *
+     * <p>MUST: <b>그 시장에서 원리적으로 값이 날 수 있는 지표</b>로만 판정한다. 국내 전용 지표로
+     * 물으면 미국에서는 언제나 참이 되어, 배당을 실제로 받아 온 종목까지 「한 행도 수집되지
+     * 않았다」는 말을 듣는다 — 술어가 시장을 안 보면 문구를 시장별로 갈라도 소용이 없다.
+     */
     private static boolean governanceEmpty(UnavailabilityRule.Context context) {
+        if (!KR_MARKETS.contains(context.marketCode())) {
+            return US_BACKED_CODES.stream().allMatch(code -> context.value(code) == null);
+        }
         return context.value(OutsideDirectorRatioCalculator.CODE) == null
                 && context.value(MinorityHolderStakeCalculator.CODE) == null
                 && context.value(TreasuryShareRatioCalculator.CODE) == null;

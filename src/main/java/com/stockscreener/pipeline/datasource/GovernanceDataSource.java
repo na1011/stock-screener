@@ -23,6 +23,18 @@ public interface GovernanceDataSource {
     String sourceName();
 
     /**
+     * 이 소스가 <b>실제로 답하는</b> 표. 기본은 여덟 전부다.
+     *
+     * <p>좁히는 소스가 생겼기 때문에 있는 자리다 — 미국은 배당 하나만 준다. 잡이 이것을 안 보고
+     * 여덟을 다 부르면 나머지 일곱에서 <b>「그 회사에 그 표가 없다」는 거짓 행</b>이 쌓이고,
+     * 그 행은 커버리지 판정의 재료라 <b>결손의 원인을 업종·구조·수집으로 가르는 축을 무너뜨린다.</b>
+     * 던지게 두는 것도 답이 아니다 — 종목마다 실패하면 부분 실패 알림이 상시화되고 진짜 장애가 묻힌다.
+     */
+    default java.util.Set<GovernanceEndpoint> supportedEndpoints() {
+        return java.util.EnumSet.allOf(GovernanceEndpoint.class);
+    }
+
+    /**
      * 표 하나를 받는다.
      *
      * <p>MUST: 소스가 «데이터 없음»으로 답하면 <b>빈 목록이 아니라</b>

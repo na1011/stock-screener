@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.datasource.kr;
 
 import com.stockscreener.indicator.GovernanceMetric;
+import com.stockscreener.pipeline.datasource.GovernanceDerivation;
 import com.stockscreener.pipeline.datasource.GovernanceEndpoint;
 import com.stockscreener.pipeline.datasource.GovernanceFact;
 import com.stockscreener.pipeline.datasource.GovernanceReportRow;
@@ -25,6 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class DartGovernanceFactMapperTest {
 
+    /** 국내 유도는 원문 밖 재료를 안 쓴다. 그 사실을 인자 하나로 드러낸다. */
+    private static final GovernanceDerivation NO_CONTEXT = GovernanceDerivation.none();
+
     private static final LocalDate PUBLISHED = LocalDate.of(2026, 3, 10);
     private static final String RECEIPT = "20260310002820";
 
@@ -44,7 +48,7 @@ class DartGovernanceFactMapperTest {
                 shareRow("비고", "-", "-", "-", "-", "자사주소각"));
 
         Map<GovernanceMetric, BigDecimal> facts = index(
-                mapper.derive(GovernanceEndpoint.SHARE_TOTALS, rows));
+                mapper.derive(GovernanceEndpoint.SHARE_TOTALS, rows, NO_CONTEXT));
 
         assertThat(facts.get(GovernanceMetric.ISSUED_SHARES_COMMON))
                 .as("합계 6,735,612,586이 아니라 보통주 5,919,637,922여야 한다 — 합계를 쓰면 "
@@ -66,7 +70,7 @@ class DartGovernanceFactMapperTest {
                 dividendRow("현금배당금총액(백만원)", "-", "11,107,906", "9,810,767", "9,809,438"),
                 dividendRow("(연결)현금배당성향(%)", "-", "25.10", "29.20", "67.80"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
                 .as("우선주 1,669가 아니라 보통주 1,668이어야 한다")
@@ -109,7 +113,7 @@ class DartGovernanceFactMapperTest {
                 holderRow("계", "", "우선주", "823,776"));
 
         Map<GovernanceMetric, BigDecimal> facts = index(
-                mapper.derive(GovernanceEndpoint.LARGEST_HOLDER, rows));
+                mapper.derive(GovernanceEndpoint.LARGEST_HOLDER, rows, NO_CONTEXT));
 
         assertThat(facts.get(GovernanceMetric.LARGEST_HOLDER_SHARES_COMMON))
                 .as("소스의 '계' 보통주 행과 정확히 같아야 한다. 계 행을 안 빼면 두 배가 되고, "
@@ -127,7 +131,7 @@ class DartGovernanceFactMapperTest {
                 holderRow(2024, "정용진", "최대주주 본인", "보통주", "5,000,000"),
                 holderRow(2024, "계", "", "보통주", "5,000,000"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.LARGEST_HOLDER, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.LARGEST_HOLDER, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2025, GovernanceMetric.LARGEST_HOLDER_SHARES_COMMON))
                 .as("두 해를 한 목록으로 받는다. 안 가르면 12,960,893이 되고 값이 그럴듯해 안 드러난다")
@@ -154,7 +158,7 @@ class DartGovernanceFactMapperTest {
                 holderRow("계", "", "-", "-"));
 
         Map<GovernanceMetric, BigDecimal> facts = index(
-                mapper.derive(GovernanceEndpoint.LARGEST_HOLDER, rows));
+                mapper.derive(GovernanceEndpoint.LARGEST_HOLDER, rows, NO_CONTEXT));
 
         assertThat(facts.get(GovernanceMetric.LARGEST_HOLDER_SHARES_COMMON))
                 .as("'보통주'만 받으면 이 회사가 통째로 빠진다 — 어휘가 넷이다")
@@ -170,7 +174,7 @@ class DartGovernanceFactMapperTest {
                         "rlsofc", "-", "mdstrm_resig", "2")));
 
         Map<GovernanceMetric, BigDecimal> facts = index(
-                mapper.derive(GovernanceEndpoint.OUTSIDE_DIRECTOR, rows));
+                mapper.derive(GovernanceEndpoint.OUTSIDE_DIRECTOR, rows, NO_CONTEXT));
 
         assertThat(facts.get(GovernanceMetric.DIRECTOR_COUNT)).isEqualByComparingTo("9");
         assertThat(facts.get(GovernanceMetric.OUTSIDE_DIRECTOR_COUNT)).isEqualByComparingTo("6");
@@ -189,7 +193,7 @@ class DartGovernanceFactMapperTest {
                         "hold_stock_co", "3,909,148,867", "stock_tot_co", "5,919,637,922")));
 
         Map<GovernanceMetric, BigDecimal> facts = index(
-                mapper.derive(GovernanceEndpoint.MINORITY_HOLDER, rows));
+                mapper.derive(GovernanceEndpoint.MINORITY_HOLDER, rows, NO_CONTEXT));
 
         assertThat(facts.get(GovernanceMetric.MINORITY_SHARES))
                 .isEqualByComparingTo("3909148867");
@@ -208,7 +212,7 @@ class DartGovernanceFactMapperTest {
                 changeRow("2025년 12월 31일", "국민연금공단", "장내매매"));
 
         Map<GovernanceMetric, BigDecimal> facts = index(
-                mapper.derive(GovernanceEndpoint.CONTROL_CHANGE, rows));
+                mapper.derive(GovernanceEndpoint.CONTROL_CHANGE, rows, NO_CONTEXT));
 
         assertThat(facts.get(GovernanceMetric.CONTROL_TRANSFERS_3Y))
                 .as("28행이 전부 같은 최대주주였다. 행 수를 세면 연기금이 매 분기 사고파는 회사가 "
@@ -228,7 +232,7 @@ class DartGovernanceFactMapperTest {
                 changeRow("2025년 05월 01일", "정"));
 
         Map<GovernanceMetric, BigDecimal> facts = index(
-                mapper.derive(GovernanceEndpoint.CONTROL_CHANGE, rows));
+                mapper.derive(GovernanceEndpoint.CONTROL_CHANGE, rows, NO_CONTEXT));
 
         assertThat(facts.get(GovernanceMetric.CONTROL_TRANSFERS_3Y)).isEqualByComparingTo("2");
     }
@@ -243,7 +247,7 @@ class DartGovernanceFactMapperTest {
                 changeRow(2025, "2024년 05월 01일", "을"),
                 changeRow(2025, "2025년 05월 01일", "병"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.CONTROL_CHANGE, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.CONTROL_CHANGE, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2024, GovernanceMetric.CONTROL_TRANSFERS_3Y))
                 .as("FY2024 보고서가 아는 창은 2022~2024다. 한 덩어리로 접으면 이 사실이 사라지고 "
@@ -261,7 +265,7 @@ class DartGovernanceFactMapperTest {
                         .stampedWith(RECEIPT, PUBLISHED));
 
         Map<GovernanceMetric, BigDecimal> facts = index(
-                mapper.derive(GovernanceEndpoint.CONTROL_CHANGE, rows));
+                mapper.derive(GovernanceEndpoint.CONTROL_CHANGE, rows, NO_CONTEXT));
 
         assertThat(facts.get(GovernanceMetric.CONTROL_TRANSFERS_3Y))
                 .as("표본 여덟 중 넷이 이 형태다. 값을 안 내면 그 넷이 조건에서 통째로 탈락한다")
@@ -279,7 +283,7 @@ class DartGovernanceFactMapperTest {
                 auditRow("제7기\n(전전기)", "삼정회계법인", "해당사항 없음", "재화의 판매"),
                 auditRow("제7기\n(전전기)", "삼정회계법인", "해당사항 없음", "재화의 판매"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.AUDIT_OPINION, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.AUDIT_OPINION, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2024, GovernanceMetric.AUDIT_EMPHASIS_PRESENT))
                 .as("한 해의 두 행 중 하나만 '재무제표 재작성'이다 — OR로 접지 않으면 놓친다")
@@ -351,7 +355,7 @@ class DartGovernanceFactMapperTest {
                 auditOpinionRow("제10기\n(당기)", "적정의견"),
                 auditOpinionRow("제10기\n(당기)", "감사범위 제한으로 인한 한정"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.AUDIT_OPINION, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.AUDIT_OPINION, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2025, GovernanceMetric.AUDIT_OPINION_ADVERSE))
                 .as("두 행이 연결·별도로 보이나 필드로 구분되지 않는다 — 안전한 쪽으로 접는다")
@@ -365,7 +369,7 @@ class DartGovernanceFactMapperTest {
                 auditRow("제10기\n(당기)", "삼정회계법인",
                         "- 증권선물위원회의 조치에 대한 행정소송", "핵심감사사항"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.AUDIT_OPINION, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.AUDIT_OPINION, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2025, GovernanceMetric.AUDIT_EMPHASIS_PRESENT))
                 .as("실측에 이 표기가 6행 있다. 앞 글자만 보고 센티널로 접으면 강조사항이 사라진다")
@@ -382,7 +386,7 @@ class DartGovernanceFactMapperTest {
                 dividendRow(12, "주당 현금배당금(원)", "-", "-", "-", "-"),
                 dividendRow(4, "현금배당금총액(백만원)", "-", "55,267", "41,450", "27,633"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
                 .as("값이 든 행이 하나뿐이므로 그것이 보통주다")
@@ -397,7 +401,7 @@ class DartGovernanceFactMapperTest {
                 dividendRow(11, "주당 현금배당금(원)", "-", "1,200", "900", "600"),
                 dividendRow(12, "주당 현금배당금(원)", "-", "1,250", "950", "650"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT);
 
         assertThat(facts)
                 .as("우선주를 보통주로 세느니 값을 안 내는 편이 낫다 — 틀린 값은 화면에서 "
@@ -412,7 +416,7 @@ class DartGovernanceFactMapperTest {
                 dividendRow(11, "주당 현금배당금(원)", "보통주", "1,668", "1,446", "1,444"),
                 dividendRow(12, "주당 현금배당금(원)", "-", "9,999", "9,999", "9,999"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
                 .as("밝힌 행이 이긴다. '-'를 함께 세면 우선주가 보통주로 섞인다")
@@ -425,7 +429,7 @@ class DartGovernanceFactMapperTest {
         List<GovernanceReportRow> rows = List.of(
                 dividendRow(0, "주당 현금배당금(원)", "보통주식", "500", "450", "400"));
 
-        assertThat(pick(mapper.derive(GovernanceEndpoint.DIVIDEND, rows),
+        assertThat(pick(mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT),
                 2025, GovernanceMetric.DPS_COMMON))
                 .as("실측 어휘다. 목록에 없으면 그 종목의 배당수익률이 통째로 사라진다")
                 .isEqualByComparingTo("500");
@@ -437,12 +441,12 @@ class DartGovernanceFactMapperTest {
         // 실측 분포: 보통주 308종목 · 보통주식 32 · 의결권 있는 주식 13.
         // 이 경로가 COMMON_CLASSES를 안 쓰고 "보통주" 완전일치로 비교해 45종목이 떨어져 있었다.
         assertThat(index(mapper.derive(GovernanceEndpoint.SHARE_TOTALS, List.of(
-                shareRow("보통주식", "-", "-", "46,448,520", "393,082", "0"))))
+                shareRow("보통주식", "-", "-", "46,448,520", "393,082", "0")), NO_CONTEXT))
                 .get(GovernanceMetric.ISSUED_SHARES_COMMON))
                 .isEqualByComparingTo("46448520");
 
         assertThat(index(mapper.derive(GovernanceEndpoint.SHARE_TOTALS, List.of(
-                shareRow("의결권 있는 주식", "-", "-", "39,514,213", "1,180,000", "0"))))
+                shareRow("의결권 있는 주식", "-", "-", "39,514,213", "1,180,000", "0")), NO_CONTEXT))
                 .get(GovernanceMetric.ISSUED_SHARES_COMMON))
                 .as("정규화가 공백을 지우므로 COMMON_CLASSES에 이미 있는 값이다 — "
                         + "최대주주 경로에서만 통과하고 여기서 떨어지던 자리다")
@@ -459,7 +463,7 @@ class DartGovernanceFactMapperTest {
                 dividendRow(11, "주당 현금배당금(원)", "보통주", "-", "-", "-"),
                 dividendRow(12, "주당 현금배당금(원)", "우선주", "-", "-", "-"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
                 .as("무배당은 결손이 아니라 0이다")
@@ -477,7 +481,7 @@ class DartGovernanceFactMapperTest {
                 dividendRow(4, "현금배당금총액(백만원)", "-", "3,952", "1,068", "-"),
                 dividendRow(11, "주당 현금배당금(원)", "보통주", "-", "-", "-"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT);
 
         assertThat(facts)
                 .as("어긋난 행에서는 아무것도 지어내지 않는다 — 전전기만 둘 다 '-'라고 그 해만 "
@@ -496,7 +500,7 @@ class DartGovernanceFactMapperTest {
                 dividendRow(4, "현금배당금총액(백만원)", "-", "-", "184,000", "175,000"),
                 dividendRow(11, "주당 현금배당금(원)", "보통주", "-", "2,063", "1,965"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT);
 
         assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
                 .as("당기가 '-'이고 총액도 '-'라 무배당이다")
@@ -513,7 +517,7 @@ class DartGovernanceFactMapperTest {
                 dividendRow(11, "주당 현금배당금(원)", "-", "-", "-", "-"),
                 dividendRow(12, "주당 현금배당금(원)", "-", "-", "-", "-"));
 
-        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows);
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT);
 
         assertThat(facts).filteredOn(fact -> fact.metric() == GovernanceMetric.DPS_COMMON
                         && fact.fiscalYear() == 2025)
@@ -591,7 +595,7 @@ class DartGovernanceFactMapperTest {
 
     private static BigDecimal opinionOf(String opinion) {
         return pick(mapper().derive(GovernanceEndpoint.AUDIT_OPINION,
-                        List.of(auditOpinionRow("제10기\n(당기)", opinion))),
+                        List.of(auditOpinionRow("제10기\n(당기)", opinion)), NO_CONTEXT),
                 2025, GovernanceMetric.AUDIT_OPINION_ADVERSE);
     }
 

@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.datasource.kr;
 
 import com.stockscreener.indicator.GovernanceMetric;
+import com.stockscreener.pipeline.datasource.GovernanceDerivation;
 import com.stockscreener.pipeline.datasource.GovernanceEndpoint;
 import com.stockscreener.pipeline.datasource.GovernanceFact;
 import com.stockscreener.pipeline.datasource.GovernanceFactMapper;
@@ -38,6 +39,12 @@ import java.util.regex.Pattern;
 class DartGovernanceFactMapper implements GovernanceFactMapper {
 
     private static final Logger log = LoggerFactory.getLogger(DartGovernanceFactMapper.class);
+
+    /** {@code DartGovernanceAdapter.supportedMarketCodes}와 같은 값이다. 갈리면 그 시장이 조용히 빈다. */
+    @Override
+    public java.util.Set<String> supportedMarketCodes() {
+        return java.util.Set.of("KOSPI", "KOSDAQ");
+    }
 
     /** 3개년을 열로 주는 표의 열 이름과 그 열이 가리키는 회계연도의 뒤로 물린 해 수. */
     private static final Map<String, Integer> COLUMN_OFFSETS =
@@ -143,7 +150,9 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
 
     @Override
     public List<GovernanceFact> derive(GovernanceEndpoint endpoint,
-                                       List<GovernanceReportRow> rows) {
+                                       List<GovernanceReportRow> rows,
+                                       GovernanceDerivation context) {
+        // 문맥을 쓰지 않는다. 국내는 사업보고서 한 장에 회계연도·공시일·주식수가 함께 온다.
         if (endpoint == null || rows == null || rows.isEmpty()) {
             return List.of();
         }

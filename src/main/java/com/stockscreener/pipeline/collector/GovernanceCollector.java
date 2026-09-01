@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 한 종목의 정기보고서 주요정보를 받아 <b>원문 그대로</b> 저장한다. 벤더를 모른다(ADR-0081).
@@ -94,6 +95,18 @@ public class GovernanceCollector {
                     + "다른 표에서 찾는다.", unresolved, security.ticker());
         }
         return stamped;
+    }
+
+    /**
+     * 그 시장의 소스가 <b>실제로 답하는</b> 표. 잡이 이것으로 좁힌다.
+     *
+     * <p>안 좁히면 소스가 안 주는 표에 <b>「그 회사에 그 표가 없다」는 거짓 행</b>이 쌓인다 —
+     * 미국에 없는 것은 그 회사의 표가 아니라 <b>그 표를 주는 소스</b>이고, 그 구분 위에
+     * 커버리지 판정이 선다. 소스가 없는 시장이면 예외가 그대로 올라간다.
+     */
+    public Set<GovernanceEndpoint> supportedEndpoints(String marketCode)
+            throws DataSourceException {
+        return registry.governanceSource(marketCode).supportedEndpoints();
     }
 
     /** 잡이 「그 해의 다른 표」로 데이터 없음 행을 마저 채울 때 쓴다. */

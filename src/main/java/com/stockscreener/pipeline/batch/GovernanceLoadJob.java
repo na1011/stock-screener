@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -107,14 +108,41 @@ public class GovernanceLoadJob {
         }
 
         Map<GovernanceEndpoint, List<Integer>> yearsByEndpoint = new EnumMap<>(GovernanceEndpoint.class);
-        int expectedCalls = 0;
         for (GovernanceEndpoint endpoint : targets) {
-            List<Integer> years = yearsFor(endpoint, latest, span);
-            yearsByEndpoint.put(endpoint, years);
-            expectedCalls += years.size() * stocks.size();
+            yearsByEndpoint.put(endpoint, yearsFor(endpoint, latest, span));
         }
-        log.info("거버넌스 수집을 시작한다. 대상 {}종목 × 표 {}개, 예상 호출 {}회 (보수 예산 10,000의 {}%)",
-                stocks.size(), targets.size(), expectedCalls, expectedCalls / 100);
+
+        // 시장마다 답하는 표가 다르다. 소스가 안 주는 표를 부르면 거짓 「데이터 없음」이 쌓인다.
+        Map<String, Set<GovernanceEndpoint>> endpointsByMarket = new LinkedHashMap<>();
+        Map<String, Integer> callsByMarket = new LinkedHashMap<>();
+        for (SecurityRef stock : stocks) {
+            Set<GovernanceEndpoint> supported = endpointsByMarket.computeIfAbsent(
+                    stock.marketCode(), market -> {
+                        try {
+                            return collector.supportedEndpoints(market);
+                        } catch (DataSourceException e) {
+                            // 소스가 없는 시장이다. 여기서 던지면 잡 전체가 죽으므로 비워 두고
+                            // 아래에서 수를 남긴다 — 종목마다 실패하면 부분 실패 알림이
+                            // 상시화되고 진짜 장애가 묻힌다.
+                            log.warn("거버넌스 소스가 없는 시장이라 건너뛴다. market={} 사유={}",
+                                    market, e.getMessage());
+                            return Set.of();
+                        }
+                    });
+            int calls = 0;
+            for (GovernanceEndpoint endpoint : targets) {
+                if (supported.contains(endpoint)) {
+                    calls += yearsByEndpoint.get(endpoint).size();
+                }
+            }
+            callsByMarket.merge(stock.marketCode(), calls, Integer::sum);
+        }
+
+        // MUST: 예산을 소스별로 센다. 한 수로 뭉쳐 「보수 예산 10,000의 N%」라고 적으면
+        // DART 예산에 Alpaca 호출이 섞여, 어느 쪽이 얼마나 남았는지 아무도 모른다.
+        log.info("거버넌스 수집을 시작한다. 대상 {}종목 · 표 {}개 · 시장별 예상 호출 {} "
+                        + "(DART 보수 예산은 10,000이고 Alpaca는 분당 100 · 일일 무제한이다)",
+                stocks.size(), targets.size(), callsByMarket);
 
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, stocks.size());
@@ -126,15 +154,25 @@ public class GovernanceLoadJob {
 
         try {
             for (SecurityRef stock : stocks) {
+                Set<GovernanceEndpoint> supported =
+                        endpointsByMarket.getOrDefault(stock.marketCode(), Set.of());
                 execution.process(stock, CollectionPhase.GOVERNANCE, security -> {
                     long written = 0;
                     for (GovernanceEndpoint endpoint : targets) {
+                        if (!supported.contains(endpoint)) {
+                            continue;
+                        }
                         written += collector.collect(security, endpoint,
                                 yearsByEndpoint.get(endpoint), ANNUAL_REPORT);
                     }
-                    // 여덟을 다 받은 뒤라야 「비어 온 표」에 같은 보고서의 접수번호를 찍을 수 있다.
-                    for (int year : touchedYears) {
-                        collector.stampNoDataFromSiblings(security.stockId(), year, ANNUAL_REPORT);
+                    // 표를 다 받은 뒤라야 「비어 온 표」에 같은 보고서의 접수번호를 찍을 수 있다.
+                    // 표가 하나뿐인 시장에는 형제가 없으므로 부르지 않는다 — 부르면 종목마다
+                    // 0행 UPDATE가 쌓인다.
+                    if (supported.size() > 1) {
+                        for (int year : touchedYears) {
+                            collector.stampNoDataFromSiblings(
+                                    security.stockId(), year, ANNUAL_REPORT);
+                        }
                     }
                     return written;
                 });
@@ -150,7 +188,9 @@ public class GovernanceLoadJob {
         long unstamped = collector.unstampedNoDataRows();
         if (unstamped > 0) {
             // 그 종목·그 해는 여덟이 다 비었다는 뜻이다. 시점을 모르므로 지표가 그 사실을 못 쓴다.
-            log.info("접수번호를 못 찍은 '데이터 없음' 행이 {}건이다 — 그 종목의 그 해는 여덟이 다 비었다.",
+            // 표를 여럿 받는 시장에서만 생긴다. 표가 하나인 시장의 행은 어댑터가 스스로
+            // 찍으므로 여기 안 세어진다.
+            log.info("접수번호를 못 찍은 '데이터 없음' 행이 {}건이다 — 그 종목의 그 해는 받은 표가 다 비었다.",
                     unstamped);
         }
         return execution.finish();

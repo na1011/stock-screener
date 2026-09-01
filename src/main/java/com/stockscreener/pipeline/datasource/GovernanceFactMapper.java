@@ -17,13 +17,26 @@ import java.util.List;
 public interface GovernanceFactMapper {
 
     /**
+     * 이 매퍼가 유도할 시장. <b>{@code GovernanceDataSource.supportedMarketCodes}와 같은 값이어야
+     * 한다</b> — 어댑터가 받아 온 원문을 유도할 매퍼가 없으면 그 시장의 사실이 조용히 0이 된다.
+     *
+     * <p>이 메서드가 생긴 이유는 매퍼가 <b>둘 이상</b>이 됐기 때문이다. 하나일 때는
+     * {@code GovernanceFactDeriver}가 빈 하나를 주입받았는데, 둘이 되면 Spring이 어느 쪽을 쓸지
+     * 정하지 못해 <b>기동에 실패한다.</b>
+     */
+    java.util.Set<String> supportedMarketCodes();
+
+    /**
      * 한 종목의 한 엔드포인트에 쌓인 <b>행 전부</b>를 받아 유도한다.
      *
      * <p>연도별로 나눠 부르지 <b>않는다.</b> 감사인 교체는 회계연도 둘을 견줘야 나오고 그 둘이
      * 서로 다른 보고서에서 오기 때문이다 — 나눠 부르면 그 지표만 조용히 값을 못 낸다.
      *
-     * @param rows 같은 {@code (종목, 엔드포인트)}의 행 전부. 데이터 없음 행이 섞여 있을 수 있다
+     * @param rows    같은 {@code (종목, 엔드포인트)}의 행 전부. 데이터 없음 행이 섞여 있을 수 있다
+     * @param context 원문 밖에서 오는 재료. 국내 매퍼는 쓰지 않는다 —
+     *                <b>default로 숨기지 않은 이유</b>는 {@link GovernanceDerivation}에 있다
      * @return 유도된 사실. 낼 것이 없으면 빈 목록이다
      */
-    List<GovernanceFact> derive(GovernanceEndpoint endpoint, List<GovernanceReportRow> rows);
+    List<GovernanceFact> derive(GovernanceEndpoint endpoint, List<GovernanceReportRow> rows,
+                                GovernanceDerivation context);
 }
