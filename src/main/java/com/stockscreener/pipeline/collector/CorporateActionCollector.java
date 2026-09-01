@@ -127,14 +127,21 @@ public class CorporateActionCollector {
                 .toList();
         Result heuristic = recordAll(security, detected);
 
-        for (CorporateAction action : nameOnly) {
-            ledger.annotate(security.stockId(), action);
-        }
-
         List<NearDuplicate> conflicts = new ArrayList<>(disclosed.nearDuplicates());
         conflicts.addAll(heuristic.nearDuplicates());
         List<PendingCandidate> pending = new ArrayList<>(disclosed.pending());
         pending.addAll(heuristic.pending());
+
+        // MUST: 주석이 **새로 만든** 행을 판정 대기에 합친다. 붙일 자리가 없으면 annotate가
+        // OBSERVED 행을 새로 만드는데, 그것도 findUnadjusted에 걸려 ADR-0055가 그 종목의
+        // 장기창 지표를 억제한다 — 즉 **그 종목이 모든 프리셋에서 사라진다.** 합치지 않으면
+        // 그 일이 log.info 한 줄만 남기고 조용히 일어난다.
+        for (CorporateAction action : nameOnly) {
+            if (ledger.annotate(security.stockId(), action)) {
+                pending.add(new PendingCandidate(security.ticker(), action.effectiveDate(),
+                        action.source()));
+            }
+        }
         return new Result(disclosed.recorded() + heuristic.recorded(), List.copyOf(conflicts),
                 List.copyOf(pending));
     }

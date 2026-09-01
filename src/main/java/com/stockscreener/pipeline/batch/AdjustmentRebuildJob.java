@@ -17,17 +17,24 @@ import java.util.List;
 /**
  * 원장에서 수정계수를 다시 짓는다. <b>저장된 시세를 소급해 다시 쓰는 유일한 경로다</b>(ADR-0049).
  *
- * <h2>왜 이 잡만 화면에 없는가</h2>
- * <p>MUST NOT: {@link AdminJobLauncher}의 카탈로그에 넣지 않는다. 스케줄러에도 넣지 않는다.
- * 버튼 한 번이 전 구간 {@code adj_close}를 다시 쓰고 <b>보정된 종목의
- * {@code indicator_value}를 보존 창 전체에서 지운다</b>({@code StoredIndicatorInvalidationPort}의
- * {@code >=}). 25만 행 남짓이고 다시 채우는 데 실측 2.6~8시간이 든다. 다른 잡은 잘못 눌러도
- * 다시 누르면 되지만 이것은 <b>누른 뒤에 백필이 따라와야 끝나는</b> 유일한 잡이다.
- * {@code AdminJobLauncherTest}가 카탈로그를 이름으로 못박고 있어, 넣으면 그 테스트가 함께 깨진다.
+ * <h2>왜 이 잡만 화면에 없는가 — 그리고 스케줄러에는 왜 있는가</h2>
+ * <p>MUST NOT: {@link AdminJobLauncher}의 카탈로그에 넣지 않는다. 버튼 한 번이 전 구간
+ * {@code adj_close}를 다시 쓰고 <b>보정된 종목의 {@code indicator_value}를 보존 창 전체에서
+ * 지운다</b>({@code StoredIndicatorInvalidationPort}의 {@code >=}). 25만 행 남짓이고 다시
+ * 채우는 데 실측 2.6~8시간이 든다. 다른 잡은 잘못 눌러도 다시 누르면 되지만 이것은
+ * <b>누른 뒤에 백필이 따라와야 끝나는</b> 잡이다. {@code AdminJobLauncherTest}가 카탈로그를
+ * 이름으로 못박고 있어, 넣으면 그 테스트가 함께 깨진다.
  *
- * <p>대신 {@code BootstrapRunner}의 {@code --job=adjustment-rebuild}가 경로이고,
+ * <p><b>스케줄러 금지는 풀렸고, 푼 것은 「백필이 따라온다」를 구조로 만든 것이다.</b>
+ * {@code PipelineScheduler}가 {@link #runAndReport}로 불러 <b>무효화된 종목을 받아 백필까지
+ * 이어 붙인다</b> — 위 문단이 금지의 근거로 든 것이 정확히 그 「따라오지 않음」이었다.
+ * 근거와 남은 한계는 ADR-0116에 있다. MUST NOT: 그 연결을 끊고 이 잡만 스케줄에 남기지
+ * 않는다 — 그러면 금지의 근거가 그대로 되살아난다.
+ *
+ * <p>손으로 도는 경로는 그대로다: {@code BootstrapRunner}의 {@code --job=adjustment-rebuild}.
  * {@code .claude/hooks/guard-rebuild-without-dump.sh}가 <b>덤프가 하나도 없을 때</b> 그 명령을
- * 막는다(ADR-0049가 요구하는 것이 "첫 실행 전에"다).
+ * 막는다(ADR-0049가 요구하는 것이 "첫 실행 전에"다). <b>IMPORTANT — 그 훅은 셸 명령을 보므로
+ * 스케줄 경로를 못 본다.</b> 런타임 가드는 없다.
  *
  * <h2>왜 원장에 행이 있는 종목만 돌지 않는가</h2>
  * <p>{@link AdjustmentRecalculator#rebuild}는 적용 대상이 하나도 없으면 <b>계수를 전량 1로
@@ -65,6 +72,20 @@ public class AdjustmentRebuildJob {
     }
 
     /**
+     * 이 실행이 무효화한 것. <b>백필로 다시 채워야 할 대상이다.</b>
+     *
+     * @param tickers  계수가 바뀐 종목. 비어 있으면 지워진 지표도 없다.
+     * @param earliest 그중 가장 이른 무효화 시작일. 비어 있으면 {@code null}이다.
+     *                 <b>보존 경계보다 앞일 수 있다</b> — 백필 구간을 정할 때 늦은 쪽을 쓴다.
+     */
+    public record Invalidation(BatchStatus status, List<String> tickers, LocalDate earliest) {
+
+        public boolean isEmpty() {
+            return tickers.isEmpty();
+        }
+    }
+
+    /**
      * 원장의 적용 대상으로 계수와 수정종가를 다시 짓는다.
      *
      * @param tickers      비면 편입 중인 활성 종목 전체
@@ -75,11 +96,28 @@ public class AdjustmentRebuildJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            List<String> tickers, String universeCode) {
+        return runAndReport(asOf, triggeredBy, tickers, universeCode).status();
+    }
+
+    /**
+     * {@link #run}과 같은 일을 하되 <b>무효화된 종목까지 돌려준다.</b>
+     *
+     * <p>스케줄러가 백필을 이어 붙이려면 이것이 필요하다. {@code run}이 {@link BatchStatus}만
+     * 내던 시절에는 <b>무엇을 다시 채워야 하는지가 알림 본문에만 있었고</b>, 그래서 사람이
+     * 그것을 읽어 명령을 다시 쳐야 했다 — 그 손이 빠지면 지운 채로 남는다.
+     *
+     * <p>MUST NOT: 반환값이 비었다는 것을 "재구축이 아무것도 안 했다"로 읽지 않는다. 계수가
+     * 원장과 이미 일치하면 갱신 0행이고 <b>그것이 정상이자 멱등의 증거다.</b>
+     */
+    public Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                     List<String> tickers, String universeCode) {
         List<SecurityRef> targets =
                 stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
         if (targets.isEmpty()) {
             log.info("재구축할 대상이 없다. 유니버스를 먼저 갱신한다.");
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
+            return new Invalidation(
+                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish(),
+                    List.of(), null);
         }
 
         BatchExecutionContext execution =
@@ -119,12 +157,15 @@ public class AdjustmentRebuildJob {
             // 외부 호출이 없으므로 정상적으로는 도달하지 않는다. StockTask의 시그니처가 이 예외를
             // 선언하고 있어 형식상 잡을 뿐이며, 실제로 온다면 그것 자체가 이상 신호다.
             execution.failFatally(e);
-            return BatchStatus.FAILED;
+            return new Invalidation(BatchStatus.FAILED, List.of(), null);
         } catch (RuntimeException e) {
             execution.failUnexpectedly(e);
             throw e;
         }
-        return execution.finish();
+        return new Invalidation(execution.finish(),
+                rebuilt.stream().map(Rebuilt::ticker).toList(),
+                rebuilt.stream().map(Rebuilt::earliest).filter(java.util.Objects::nonNull)
+                        .min(LocalDate::compareTo).orElse(null));
     }
 
     /**

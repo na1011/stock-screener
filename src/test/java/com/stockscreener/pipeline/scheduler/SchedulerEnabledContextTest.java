@@ -1,12 +1,21 @@
 package com.stockscreener.pipeline.scheduler;
 
+import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
+import com.stockscreener.pipeline.batch.CorporateActionJob;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
+import com.stockscreener.pipeline.batch.FinancialRefillJob;
+import com.stockscreener.pipeline.batch.FullStatementRefillJob;
+import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
+import com.stockscreener.pipeline.batch.GovernanceLoadJob;
+import com.stockscreener.pipeline.batch.IndicatorBackfillJob;
+import com.stockscreener.pipeline.batch.JobFreshnessAlerter;
 import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
 import com.stockscreener.support.TestDatabaseGuard;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.task.TaskSchedulingProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
@@ -39,7 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(TestDatabaseGuard.class)
 class SchedulerEnabledContextTest {
 
-    // MUST: 두 잡을 목으로 둔다. 여기가 스케줄러가 켜진 **유일한** 컨텍스트이고, Spring
+    // MUST: 스케줄러가 부르는 잡을 **전부** 목으로 둔다. 여기가 스케줄러가 켜진 **유일한** 컨텍스트이고, Spring
     // TestContext 캐시는 그것을 JVM이 끝날 때까지 닫지 않는다 — 즉 노출 창은 이 클래스의
     // 실행 시간이 아니라 `./gradlew test` 전체다. 배치가 평일 13시 30분으로 옮겨진 뒤로 그
     // 시각에 테스트를 돌릴 확률은 낮지 않다 — 근무 시간대 한복판이다.
@@ -50,11 +59,38 @@ class SchedulerEnabledContextTest {
     //
     // 목으로 바꿔도 이 테스트의 가치는 줄지 않는다. 잡아낸 결함은 taskScheduler 빈이 생기면서
     // AsyncTaskExecutor 주입 후보가 둘이 되는 것이고, 그 경로는 잡을 목으로 바꿔도 그대로 밟힌다.
+    //
+    // MUST: PipelineScheduler에 잡을 더하면 여기도 함께 더한다. 안 더하면 그 잡이 테스트 중에
+    // 진짜로 돌고, **그 시각에 돌린 실행에서만** 다른 테스트가 깨진다.
     @MockitoBean
     private DailyUpdateJob dailyUpdateJob;
 
     @MockitoBean
     private UniverseRebalanceJob universeRebalanceJob;
+
+    @MockitoBean
+    private CorporateActionJob corporateActionJob;
+
+    @MockitoBean
+    private AdjustmentRebuildJob adjustmentRebuildJob;
+
+    @MockitoBean
+    private IndicatorBackfillJob indicatorBackfillJob;
+
+    @MockitoBean
+    private GovernanceLoadJob governanceLoadJob;
+
+    @MockitoBean
+    private GovernanceDeriveJob governanceDeriveJob;
+
+    @MockitoBean
+    private FullStatementRefillJob fullStatementRefillJob;
+
+    @MockitoBean
+    private FinancialRefillJob financialRefillJob;
+
+    @MockitoBean
+    private JobFreshnessAlerter freshnessAlerter;
 
     @Autowired
     private ApplicationContext context;
@@ -71,5 +107,18 @@ class SchedulerEnabledContextTest {
         // 이 빈이 있어야 @Scheduled가 돈다. 동시에 이 빈이 AsyncTaskExecutor 주입을
         // 모호하게 만들던 원인이므로, 있다는 것 자체가 위 테스트의 의미를 만든다.
         assertThat(context.containsBean("taskScheduler")).isTrue();
+    }
+
+    @Test
+    @DisplayName("스케줄러 스레드가 하나다 — 이것이 두 배치가 안 겹치는 유일한 근거다")
+    void schedulerRunsOneTaskAtATime() {
+        // MUST NOT: 이 값을 키우지 않는다. PipelineScheduler의 네 스케줄은 서로 겹치면 안 되는데
+        // (기업 행위 사슬이 price_daily와 indicator_value를 다시 쓰고, 무거운 잡은 같은 날
+        // DART 한도를 나눠 쓴다) 겹침을 막는 것이 **이 풀 크기뿐**이다. 잠금이 따로 없다.
+        //
+        // 이 테스트가 없으면 application.yaml 한 줄이나 spring.threads.virtual 하나로 그 보장이
+        // 사라지는데 **아무것도 안 깨진다** — 겹치는 날에만 드러난다.
+        assertThat(context.getBean(TaskSchedulingProperties.class).getPool().getSize())
+                .isEqualTo(1);
     }
 }

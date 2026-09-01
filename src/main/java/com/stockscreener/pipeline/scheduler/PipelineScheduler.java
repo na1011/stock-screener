@@ -1,9 +1,19 @@
 package com.stockscreener.pipeline.scheduler;
 
+import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
+import com.stockscreener.pipeline.batch.CorporateActionJob;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
+import com.stockscreener.pipeline.batch.FinancialRefillJob;
+import com.stockscreener.pipeline.batch.FullStatementRefillJob;
+import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
+import com.stockscreener.pipeline.batch.GovernanceLoadJob;
+import com.stockscreener.pipeline.batch.IndicatorBackfillJob;
+import com.stockscreener.pipeline.batch.JobFreshnessAlerter;
+import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
 import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
+import com.stockscreener.indicator.IndicatorRetentionPolicy;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,8 +21,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * 배치를 정해진 시각에 띄운다.
@@ -33,13 +47,64 @@ public class PipelineScheduler {
     /** 국내 시장 기준 시간대. 대상 일자 판정에 쓴다. */
     private static final ZoneId KR_ZONE = ZoneId.of("Asia/Seoul");
 
+    /**
+     * 무효화된 종목이 이보다 많으면 백필을 <b>자동으로 돌리지 않고 알린다.</b>
+     *
+     * <p>실측 사건률이 월 2~3건이므로 한 실행이 이보다 많은 종목을 무효화했다면 그것은 새 분할이
+     * 아니라 <b>원장을 크게 고친 것</b>이고, 그때 백필은 시간 단위로 커진다
+     * ({@code AdjustmentRebuildJob} javadoc의 「2.6~8시간」). 다음 평일 13:30 일일 갱신까지
+     * 22시간이 남지만, 스케줄러 스레드 풀이 1이라 그 사이의 다른 스케줄을 전부 민다.
+     *
+     * <p><b>이 값은 예산이지 실측이 아니다</b> — 종목당 백필 소요를 지금 모집단(1,350)에서
+     * 재본 적이 없다. 재고 나면 이 상수의 근거를 그 수로 바꾼다.
+     */
+    private static final int AUTO_BACKFILL_STOCK_LIMIT = 10;
+
+    /**
+     * 무거운 잡을 다시 돌리기까지의 최소 간격(일).
+     *
+     * <p>{@code JobFreshnessPolicy}의 예산(40일)보다 <b>짧아야 한다.</b> 이쪽이 「돌린다」이고
+     * 그쪽이 「안 돌았다고 알린다」이므로, 이 값이 더 크면 <b>정상 운영에서 알림이 뜬다.</b>
+     */
+    private static final int HEAVY_JOB_MIN_INTERVAL_DAYS = 25;
+
     private final DailyUpdateJob dailyUpdateJob;
     private final UniverseRebalanceJob universeRebalanceJob;
+    private final CorporateActionJob corporateActionJob;
+    private final AdjustmentRebuildJob adjustmentRebuildJob;
+    private final IndicatorBackfillJob indicatorBackfillJob;
+    private final GovernanceLoadJob governanceLoadJob;
+    private final GovernanceDeriveJob governanceDeriveJob;
+    private final FullStatementRefillJob fullStatementRefillJob;
+    private final FinancialRefillJob financialRefillJob;
+    private final JobFreshnessAlerter freshnessAlerter;
+    private final JobFreshnessPolicy freshnessPolicy;
+    private final IndicatorRetentionPolicy retentionPolicy;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
-                             UniverseRebalanceJob universeRebalanceJob) {
+                             UniverseRebalanceJob universeRebalanceJob,
+                             CorporateActionJob corporateActionJob,
+                             AdjustmentRebuildJob adjustmentRebuildJob,
+                             IndicatorBackfillJob indicatorBackfillJob,
+                             GovernanceLoadJob governanceLoadJob,
+                             GovernanceDeriveJob governanceDeriveJob,
+                             FullStatementRefillJob fullStatementRefillJob,
+                             FinancialRefillJob financialRefillJob,
+                             JobFreshnessAlerter freshnessAlerter,
+                             JobFreshnessPolicy freshnessPolicy,
+                             IndicatorRetentionPolicy retentionPolicy) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
+        this.corporateActionJob = corporateActionJob;
+        this.adjustmentRebuildJob = adjustmentRebuildJob;
+        this.indicatorBackfillJob = indicatorBackfillJob;
+        this.governanceLoadJob = governanceLoadJob;
+        this.governanceDeriveJob = governanceDeriveJob;
+        this.fullStatementRefillJob = fullStatementRefillJob;
+        this.financialRefillJob = financialRefillJob;
+        this.freshnessAlerter = freshnessAlerter;
+        this.freshnessPolicy = freshnessPolicy;
+        this.retentionPolicy = retentionPolicy;
     }
 
     /**
@@ -112,5 +177,212 @@ public class PipelineScheduler {
             // 지우면 이 catch가 조용히 죽은 코드가 된다.
             log.info("유니버스 리밸런싱이 종료로 중단됐다. asOf={} — 다음 토요일에 다시 돈다.", asOf);
         }
+    }
+
+    /**
+     * 기업 행위 사슬. <b>평일 14시(KST)</b> — 수집 → 계수 재구축 → (무효화가 있으면) 백필.
+     *
+     * <h2>왜 셋을 한 자리에 묶는가</h2>
+     * <p><b>수집만 걸면 지금 고치려는 결함을 매 평일 재생산한다.</b> 소스가 종류까지 준 사건은
+     * 원장에 {@code APPROVED}로 들어오는데 {@code CorporateActionLedger.findUnadjusted}는
+     * {@code OBSERVED}·{@code UNSUPPORTED}만 돌려주므로 <b>{@code APPROVED}는 ADR-0055의 억제에도
+     * {@code CorporateActionJob}의 「판정 대기」 알림에도 안 걸린다.</b> 계수를 넣는 곳은
+     * {@code CorporateActionLedger.markApplied} 하나이고 그 유일한 호출자가
+     * {@code AdjustmentRecalculator.rebuild}다 — 즉 재구축이 빠지면 <b>계수 없는 승인</b>이
+     * 조용히 쌓이고 값은 전부 그럴듯하다.
+     *
+     * <p>실증이 있다: 2026-09-01 첫 실행이 셀트리온의 2026-06-04 무상증자
+     * ({@code 1.0492721033})를 찾았는데, 그 사건은 가격 배수가 0.9393이라 <b>휴리스틱 임계
+     * (0.70~1.30) 안</b>이었다 — 공시만이 잡을 수 있었고 그 공시는 08-13부터 안 읽힌 채였다.
+     *
+     * <p>그리고 재구축이 지운 지표를 <b>백필이 안 채우면 그 종목이 화면에서 통째로 사라진다.</b>
+     * 그래서 셋이 한 사슬이다. MUST NOT: 앞의 둘만 걸고 백필을 사람에게 남기지 않는다 —
+     * 그 손이 빠지면 지운 채로 남는다(2026-09-01 사용자 결정).
+     *
+     * <h2>왜 14시인가</h2>
+     * <p>13시 30분 일일 갱신이 실측 13분 36초라 13시 44분에 끝난다. 그리고 스케줄러 스레드
+     * 풀이 1이라 두 {@code @Scheduled}가 <b>원리적으로 동시에 돌지 않는다</b> — 앞이 길어지면
+     * 이쪽이 밀릴 뿐이다. MUST NOT: {@code spring.task.scheduling.pool.size}를 키우지 않는다.
+     * 키우는 순간 이 겹침 방지가 사라지고, 두 잡이 같은 종목의 {@code price_daily}를 함께 쓴다.
+     *
+     * <p>MUST NOT: {@code universeCode}에 값을 주지 않는다. 비활성 유니버스를 손으로 고르는
+     * 갈래는 <b>자동 실행에 걸지 않는다</b>(ADR-0088·0090). 인자 없는 기본 경로가 이미 활성
+     * 유니버스 전량을 덮는다 — {@code US_TOP1000}이 활성이 된 뒤로 그 안에 미국이 들어 있다
+     * (실측: 이 경로의 대상이 1,350종목).
+     *
+     * <p>IMPORTANT — {@code guard-rebuild-without-dump.sh}는 <b>셸 명령</b>을 보는 훅이라 이
+     * 경로를 못 본다. 런타임 가드는 없다. 근거는 ADR-0116에 있다.
+     */
+    @Scheduled(cron = "0 0 14 * * MON-FRI", zone = "Asia/Seoul")
+    public void runCorporateActionChain() {
+        LocalDate asOf = LocalDate.now(KR_ZONE);
+        log.info("기업 행위 사슬을 시작한다. asOf={} — 수집 → 재구축 → 백필까지 한 번에 간다.", asOf);
+        try {
+            corporateActionJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
+                    null, List.of(), null);
+
+            AdjustmentRebuildJob.Invalidation invalidation = adjustmentRebuildJob.runAndReport(
+                    asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null);
+            if (invalidation.isEmpty()) {
+                log.info("계수가 원장과 이미 일치한다 — 지워진 지표가 없어 백필도 없다.");
+                return;
+            }
+            backfillInvalidated(invalidation, asOf);
+        } catch (BatchShutdownException e) {
+            // 앞의 두 잡과 같은 이유다(runDailyUpdate 참조). 사슬 중간에 끊기면 다음 실행이
+            // 이어받는다 — 수집은 전 구간 재조회라 멱등이고, 재구축도 원장에서 매번 다시 짓는다.
+            log.info("기업 행위 사슬이 종료로 중단됐다. asOf={} — 다음 평일 실행이 다시 시도한다."
+                    + " 다만 백필까지 못 갔으면 그 종목의 지표는 지워진 채로 남는다.", asOf);
+        }
+    }
+
+    /**
+     * 무효화된 종목만 다시 채운다.
+     *
+     * <p>MUST: 구간을 보존 경계로 자른다. 무효화는 {@code trade_date >= 그 종목 첫 봉}으로
+     * 지우므로 {@code earliest}가 <b>보존 창보다 훨씬 앞</b>일 수 있는데(실측: 국내 첫 봉
+     * 2020-01-02 대 보존 창 189거래일), 경계 밖 일자는 계산해도 저장되지 않는다(ADR-0011).
+     * 자르지 않으면 <b>8배를 돌고 그 대부분을 버린다.</b>
+     *
+     * <p>MUST NOT: 종목 수가 많을 때도 그냥 돌리지 않는다. {@link #AUTO_BACKFILL_STOCK_LIMIT}가
+     * 그 자리이고, 넘으면 <b>알리고 멈춘다</b> — 자동으로 시간 단위 작업을 시작하면 그날의
+     * 다른 스케줄이 전부 밀린다.
+     */
+    private void backfillInvalidated(AdjustmentRebuildJob.Invalidation invalidation, LocalDate asOf) {
+        List<String> tickers = invalidation.tickers();
+        if (tickers.size() > AUTO_BACKFILL_STOCK_LIMIT) {
+            log.warn("무효화된 종목이 {}개로 자동 백필 상한({})을 넘는다. 돌리지 않는다 — "
+                            + "지표가 지워진 채로 남으므로 손으로 백필해야 한다. 종목={}",
+                    tickers.size(), AUTO_BACKFILL_STOCK_LIMIT, tickers);
+            return;
+        }
+
+        LocalDate from = clampToRetention(invalidation.earliest());
+        log.info("무효화된 {}종목을 다시 채운다. from={} asOf={} 종목={}",
+                tickers.size(), from, asOf, tickers);
+        indicatorBackfillJob.run(from, asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
+                tickers, null);
+    }
+
+    /**
+     * 보존 경계보다 앞인 일자를 잘라 낸다.
+     *
+     * <p>MUST: 시장별 경계 중 <b>가장 이른 것</b>을 쓴다. 늦은 것을 쓰면 보존이 더 긴 시장의
+     * 저장 가능한 구간을 함께 잘라, <b>그 시장 지표가 지워진 채로 남는다.</b>
+     */
+    private LocalDate clampToRetention(LocalDate earliest) {
+        Optional<LocalDate> floor = retentionPolicy.writeCutoffs().values().stream()
+                .flatMap(Optional::stream)
+                .min(LocalDate::compareTo)
+                .map(cutoff -> cutoff.plusDays(1));
+        if (earliest == null) {
+            return floor.orElseThrow(() -> new IllegalStateException(
+                    "무효화 시작일도 보존 경계도 없다 — 백필 구간을 정할 근거가 없다."));
+        }
+        return floor.filter(earliest::isBefore).orElse(earliest);
+    }
+
+    /**
+     * 무거운 잡 하나. <b>평일 14시 30분(KST)</b> — 요일로 나누되 <b>연체를 보정한다.</b>
+     *
+     * <h2>왜 하루에 하나인가</h2>
+     * <p>넷을 같은 날 돌리면 DART 콜이 23,570으로 우리 리미터({@code dart.daily-quota: 18000})를
+     * 넘는다. 하루 하나 + 14시의 기업 행위 수집(700)이면 어떤 조합도 그 안이다(최대 10,970).
+     * <b>그 보장이 「요일로 나눈다」의 실제 근거다</b> — 소스 쪽 한도는 엔드포인트마다 따로지만
+     * ({@code api-sources} skill) <b>우리 쪽에서 먼저 막힌다.</b>
+     *
+     * <h2>왜 요일만으로는 부족한가</h2>
+     * <p>이 앱은 사람이 켠 동안만 돈다(ADR-0043). 지정 요일에 안 떠 있었으면 그 잡은 <b>다음
+     * 달까지 밀린다</b> — 실측으로 13시 30분 크론조차 평일의 87%만 발화했다. 그래서 요일이 맞지
+     * 않아도 <b>연체된 것이 있으면 하나를 돌린다.</b> 이것이 ADR-0042가 시세에 대해 「15일 창」으로
+     * 푼 것과 같은 자리다 — 놓친 실행을 흡수하는 것이 주기 자체보다 앞선다.
+     */
+    @Scheduled(cron = "0 30 14 * * MON-FRI", zone = "Asia/Seoul")
+    public void runHeavyJobOfTheDay() {
+        LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
+        DayOfWeek today = LocalDate.now(KR_ZONE).getDayOfWeek();
+
+        String due = heavyJobDueToday(today);
+        if (due == null) {
+            log.info("오늘 돌릴 무거운 잡이 없다. today={} — 배정된 잡이 최근에 돌았거나 요일이 아니다.",
+                    today);
+            return;
+        }
+        log.info("무거운 잡을 하나 돌린다. job={} today={} — 하루에 하나만 돌려 DART 한도를 지킨다.",
+                due, today);
+        try {
+            runHeavy(due, asOf);
+        } catch (BatchShutdownException e) {
+            log.info("무거운 잡이 종료로 중단됐다. job={} — 연체로 남아 다음 평일 실행이 집어 간다.", due);
+        }
+    }
+
+    /**
+     * 오늘 돌 잡을 고른다. <b>배정 요일이 먼저이고, 없으면 가장 오래 밀린 것</b>이다.
+     *
+     * <p>MUST: {@link #HEAVY_JOB_MIN_INTERVAL_DAYS} 안에 돈 잡은 고르지 않는다. 거버넌스·재무는
+     * 공시일에 계단으로 바뀌므로 주 1회 돌면 <b>콜만 태운다</b> — 같은 값을 다시 받는 것이
+     * {@code governance-load}는 7,700콜이다.
+     */
+    private String heavyJobDueToday(DayOfWeek today) {
+        Map<DayOfWeek, String> assignment = Map.of(
+                DayOfWeek.TUESDAY, GovernanceLoadJob.JOB_NAME,
+                DayOfWeek.WEDNESDAY, FullStatementRefillJob.JOB_NAME,
+                DayOfWeek.THURSDAY, FinancialRefillJob.JOB_NAME);
+
+        String assigned = assignment.get(today);
+        if (assigned != null && isOverdue(assigned)) {
+            return assigned;
+        }
+        // 연체 보정. 배정 요일을 놓친 잡을 가장 오래 밀린 것부터 집는다.
+        return assignment.values().stream()
+                .filter(this::isOverdue)
+                .min((a, b) -> Long.compare(daysSinceSuccess(b), daysSinceSuccess(a)))
+                .orElse(null);
+    }
+
+    private boolean isOverdue(String jobName) {
+        return daysSinceSuccess(jobName) > HEAVY_JOB_MIN_INTERVAL_DAYS;
+    }
+
+    private long daysSinceSuccess(String jobName) {
+        return freshnessPolicy.daysSinceLastSuccess(jobName, java.time.Instant.now());
+    }
+
+    private void runHeavy(String jobName, LocalDate asOf) {
+        BatchExecutionRecorder.TriggeredBy by = BatchExecutionRecorder.TriggeredBy.SCHEDULER;
+        if (GovernanceLoadJob.JOB_NAME.equals(jobName)) {
+            // MUST: 유도를 이어 부른다. 적재만 하면 governance_fact가 안 바뀌고 화면은 옛 값
+            // 그대로인데 둘 다 성공으로 끝난다. span 2가 최소치다 — 회계연도가 역년 둘에
+            // 걸치는 종목(비12월 결산 약 24%)은 두 해를 다 받아야 사실이 난다.
+            governanceLoadJob.run(asOf, by, null, 2, List.of(), List.of());
+            governanceDeriveJob.run(asOf, by, List.of());
+        } else if (FullStatementRefillJob.JOB_NAME.equals(jobName)) {
+            // 전 종목 분기가 필요하다 — 주당 지표가 분기 행을 읽는다(ADR-0098).
+            fullStatementRefillJob.run(asOf, by, null, List.of(), false, true);
+        } else if (FinancialRefillJob.JOB_NAME.equals(jobName)) {
+            financialRefillJob.run(asOf, by, null, List.of(), null);
+        } else {
+            throw new IllegalStateException("배정에 없는 잡을 고를 수 없다: " + jobName);
+        }
+    }
+
+    /**
+     * 신선도 점검. <b>평일 15시 10분(KST)</b> — 안 돈 잡과 끊긴 사슬을 재서 알린다.
+     *
+     * <p><b>안 돈 것은 어디에도 안 뜬다</b> — {@code batch_execution}은 <b>돈 것</b>만 적기
+     * 때문이다. 그래서 이 자리가 필요하고, 그것이 이 변경 전체의 이유이기도 하다.
+     *
+     * <p>15시 10분인 근거는 앞선 14시 30분 잡이다. {@code governance-load}가 실측 1,290초라
+     * 14시 52분에 끝나고, 스레드 풀이 1이라 그전에는 이 평가가 밀린다. 밀려도 틀리지는 않지만
+     * <b>같은 날 안에 끝나는 것</b>이 알림의 뜻을 지킨다.
+     *
+     * <p>MUST NOT: {@code batch_execution}에 행을 만들지 않는다. 읽기이고, 실행 이력에 섞이면
+     * <b>「잡이 돌았다」와 「잡이 안 돈 것을 확인했다」가 같은 목록에 뜬다.</b>
+     */
+    @Scheduled(cron = "0 10 15 * * MON-FRI", zone = "Asia/Seoul")
+    public void checkJobFreshness() {
+        boolean sent = freshnessAlerter.evaluateAndAlert();
+        log.info("배치 신선도를 점검했다. 알림={}", sent ? "보냈다" : "없거나 이미 보냈다");
     }
 }

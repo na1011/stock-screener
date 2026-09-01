@@ -1,0 +1,207 @@
+---
+id: ADR-0116
+status: 채택됨
+date: 2026-09-01
+applies_to:
+  - "src/main/java/**/pipeline/scheduler/**"
+  - "src/main/java/**/pipeline/batch/JobFreshnessPolicy.java"
+  - "src/main/java/**/pipeline/batch/JobFreshnessAlerter.java"
+  - "src/main/java/**/pipeline/batch/AdjustmentRebuildJob.java"
+  - "src/main/java/**/pipeline/batch/web/StaleJobResponse.java"
+  - "src/main/java/**/pipeline/batch/web/BatchSummaryResponse.java"
+  - "src/main/resources/application.yaml"
+---
+
+# ADR-0116. 기업행위를 사슬로 자동화하고, 안 돈 잡을 연체로 잰다
+
+## 결정
+
+**잡의 주기를 앱 안 `@Scheduled`에 건다.** 셋이다.
+
+1. **평일 14:00 — 기업행위 사슬.** `corporate-action` → `adjustment-rebuild` →
+   (무효화가 있으면) `backfill`. **셋이 한 사슬이고 끊으면 안 된다.**
+2. **평일 14:30 — 무거운 DART 잡 하나.** 화=`governance-load`+`governance-derive` ·
+   수=`full-statement-refill` · 목=`financial-refill`. **월 1회로 묶고, 요일을 놓치면 다음
+   평일이 집어 간다.**
+3. **평일 15:10 — 신선도 점검.** 예산을 넘겨 안 돈 잡과 **끊긴 사슬**을 재서 알린다.
+   같은 판정을 관리 화면 상단 배너가 쓴다.
+
+> **사용자가 고른 문장(2026-09-01):** *"평일 매일 14:00"* · *"요일을 나눠 자동으로 걸고,
+> 노트북 종료 등으로 안 돌았을 때를 위해 알림까지 추가. 관리 페이지 들어갔을 때 상단에
+> 경고로 띄우면 좋음."* · *"수요일에 함께 건다"* · *"전부 자동화 되었으면 좋겠어.
+> 백필도 사람이 돌린다고? 말이 안 돼."*
+>
+> **그에 대한 내 해석 — 갈라 적는다:** 마지막 문장을 「수집·계수·지표를 한 사슬로 잇고
+> 사람은 판정만 한다」로 읽었다. **사용자가 닫은 것은 *무엇을 자동화하는가*이고,
+> *자동 백필의 상한을 어디에 두는가*는 내 판단이다**(§규칙의 `AUTO_BACKFILL_STOCK_LIMIT`).
+>
+> **선택지 설명 하나가 거짓이었고 다시 물었다.** 「`full-statement-refill`은 혼자서도 DART
+> 예산을 넘는다」로 올렸는데, 근거로 쓴 10,000은 `api-sources`의 **API당** 계획값이고 실제
+> 상한은 `dart.daily-quota: 18000`이다. 정정한 뒤 받은 답이 위 *"수요일에 함께 건다"*다.
+
+## 규칙
+
+- **MUST: 사슬 셋을 함께 건다.** 수집만 걸면 **지금 고친 결함을 매 평일 재생산한다.** 소스가
+  종류까지 준 사건은 원장에 `APPROVED`로 들어오는데 `CorporateActionLedger.findUnadjusted`는
+  `OBSERVED`·`UNSUPPORTED`만 돌려주므로 **`APPROVED`는 ADR-0055의 억제에도
+  `CorporateActionJob`의 「판정 대기」 알림에도 안 걸린다.** 계수를 넣는 곳은 `markApplied`
+  하나이고 그 유일한 호출자가 `AdjustmentRecalculator.rebuild`다.
+- **MUST: 백필 구간을 보존 경계로 자른다.** 무효화는 `trade_date >= 그 종목 첫 봉`으로 지우므로
+  (실측: 셀트리온 2020-01-02부터 22,552행 · RUSHB 2019-09-03부터 16,212행) 그대로 쓰면
+  **보존 창의 여덟 배를 돌고 대부분을 버린다.** 경계는 `IndicatorRetentionPolicy.writeCutoffs`가
+  시장마다 답하고, **가장 이른 것**을 쓴다 — 늦은 것을 쓰면 보존이 더 긴 시장이 지워진 채 남는다.
+- **MUST NOT: `universeCode`에 값을 주지 않는다.** 비활성 유니버스를 손으로 고르는 갈래는
+  자동 실행에 걸지 않는다(ADR-0088·0090). **그 MUST NOT은 이 결정이 뒤집지 않았다** —
+  `US_TOP1000`이 활성이 된 뒤로(ADR-0107) 인자 없는 기본 경로가 이미 미국을 덮기 때문이다
+  (실측: 이 경로의 대상 **1,350종목**).
+- **MUST: 하루에 무거운 DART 잡을 하나만 돈다.** 넷을 같은 날 돌리면 23,570콜로
+  `dart.daily-quota: 18000`을 넘는다. 하나 + 14시의 700이면 최대 10,970이다.
+  **소스 쪽 한도는 엔드포인트마다 따로지만 우리 쪽 리미터가 먼저 막는다** — `dartRateLimiter`
+  빈 하나가 DART 전체를 센다.
+- **MUST: 요일을 놓친 잡을 다음 평일이 집어 간다.** 이 앱은 사람이 켠 동안만 돌므로(ADR-0043)
+  요일만으로 두면 한 번 놓친 잡이 **다음 달까지 밀린다.** 실측으로 13:30 크론조차 평일의
+  87%만 발화했다(창 2026-08-12~09-01, 13/15).
+- **MUST: 무거운 잡의 재실행 간격(25일)을 연체 예산(40일)보다 짧게 둔다.** 뒤집으면
+  **정상 운영에서 알림이 뜬다** — 「돌린다」가 「안 돌았다고 알린다」보다 늦어지기 때문이다.
+- **MUST: `spring.task.scheduling.pool.size: 1`을 명시한다.** 네 스케줄이 안 겹치는 근거가
+  **그것뿐**이고 잠금은 따로 없다. Boot 기본값도 1이지만 기본값에 기대면 업그레이드가 조용히
+  뒤집는다. **MUST NOT: `spring.threads.virtual`을 켜지 않는다** — 켜면 이 크기가 무시된다.
+- **MUST: 신선도 판정을 서버가 하고 화면은 그리기만 한다.** 예산이 서버에만 있으므로 화면이
+  경과일로 다시 판정하면 두 곳이 갈린다(`.claude/rules/frontend.md`).
+- **MUST: 연체를 스케줄러 실행으로 잰다(있을 때만).** 좁은 수동 실행이 시계를 되돌린다 —
+  `corporate-action`의 2026-08-24 실행은 대상이 9종목·1종목이었고 **전량은 08-13이 마지막**
+  이었다. **`target_count`로 안 묻는 이유**는 잡마다 「전량」의 크기가 달라서다
+  (`company-profile`의 전량은 결손 종목뿐이라 평소 한 자리 수다).
+- **MUST NOT: 같은 연체를 매일 알리지 않는다.** 연체는 고칠 때까지 계속 참이라 매일 보내면
+  며칠 안에 아무도 안 본다. 연체로 넘어간 날 한 번 보내고 그 뒤로는 7일에 한 번이다.
+- **MUST NOT: 신선도 점검이 `batch_execution`에 행을 만들지 않는다.** 읽기이고, 섞이면
+  「잡이 돌았다」와 「잡이 안 돈 것을 확인했다」가 같은 목록에 뜬다.
+- **MUST NOT: 상시 붉을 잡을 감시 대상에 넣지 않는다.** `market-index`(일일 갱신이 덮는다) ·
+  `indicator-backfill`·`initial-load`·`corporate-action-judge`(사람의 판정이나 다른 잡의 꼬리라
+  주기가 없다)를 **일부러 뺐고 그 이유를 `JobFreshnessPolicy`에 적었다.**
+
+## 검증
+
+```bash
+./gradlew test --tests "com.stockscreener.pipeline.scheduler.*" \
+               --tests "*CorporateAction*" --tests "*AdjustmentRebuild*" \
+               --tests "*JobFreshness*" --tests "*AdminBatch*" --tests "*WireContract*"
+./gradlew frontendTest
+```
+
+```premise 원장이 승인됐는데 계수가 안 들어간 행이 없다
+psql -d stock_screener -At -c "SELECT CASE
+  WHEN (SELECT count(*) FROM corporate_action) = 0
+    THEN '잴 것이 없었다 — 원장이 비어 있다'
+  WHEN count(*) = 0 THEN 'OK 승인된 사건이 전부 계수에 들어갔다 (원장 '
+       || (SELECT count(*) FROM corporate_action) || '행)'
+  ELSE count(*) || '건이 APPROVED인데 applied_at이 비어 있다: '
+       || string_agg(id::text, ', ')
+       || ' — 그 종목의 지표는 오류 없이 틀린 값이다. 억제에도 판정 대기 알림에도 안 걸리므로 '
+       || 'adjustment-rebuild만이 닫는다. 평일 14시 사슬이 돌았는지 먼저 본다.'
+  END FROM corporate_action WHERE status = 'APPROVED' AND applied_at IS NULL"
+```
+
+**이 전제가 이 결정의 핵심을 잰다.** ADR-0049의 불변식(`adj_close = close × adj_factor`)도 ·
+원장이 `APPROVED`인 것도 · 재실행 0행도 **이 어긋남을 못 본다**. 그리고 이 상태는 실제로
+있었다 — 2026-09-01 첫 실행이 셀트리온과 RUSHB를 `APPROVED`로 넣었고, 재구축을 이어 돌리기
+전까지 계수는 1이었다.
+
+```premise 스케줄러 실행이 실제로 발화하고 있다
+psql -d stock_screener -At -c "WITH s AS (
+  SELECT job_name, max(started_at) AS last
+  FROM batch_execution WHERE triggered_by = 'SCHEDULER'
+    AND status IN ('SUCCESS','PARTIAL_SUCCESS') GROUP BY 1)
+SELECT CASE
+  WHEN (SELECT count(*) FROM batch_execution WHERE triggered_by = 'SCHEDULER') = 0
+    THEN '잴 것이 없었다 — 스케줄러가 남긴 실행이 하나도 없다'
+  WHEN (SELECT count(*) FROM s WHERE job_name = 'corporate-action') = 0
+    THEN '기업 행위 사슬의 스케줄 실행이 아직 없다 — 이 결정의 14시 크론이 한 번도 발화하지 '
+      || '않았다. 평일 14시에 앱이 떠 있어야 한다(ADR-0043).'
+  WHEN (SELECT current_date - last::date FROM s WHERE job_name = 'corporate-action') <= 5
+    THEN 'OK 기업 행위 사슬이 ' || (SELECT last::date FROM s WHERE job_name='corporate-action')
+      || '에 돌았다'
+  ELSE '기업 행위 사슬이 ' || (SELECT last::date FROM s WHERE job_name='corporate-action')
+      || ' 이후 스케줄로 안 돌았다 — 그동안의 분할·무상증자는 계수에 안 들어간다. '
+      || '관리 화면 상단 배너가 같은 것을 말한다.'
+  END"
+```
+
+**임계 5의 근거**: 평일 크론이므로 금→월이 3일이고 공휴일이 끼면 4일이다(실측 최장 공백 4일).
+5는 거기 여유 하루다. **연휴 직후에는 정상적으로 발화한다** — 그래서 메시지가 갈래를 말한다.
+
+**손으로 확인할 것 하나** — 관리 화면(`/admin`) 상단에 배너가 뜨는지는 질의로 못 본다.
+예산을 임시로 낮춰 **뜨는 것**과 되돌려 **사라지는 것**을 둘 다 본다.
+
+## 배경
+
+**주기가 없어서 실제로 값이 틀어져 있었다.** 스케줄러에 걸린 것이 둘뿐이고 나머지 열둘은 실행이
+전량 `MANUAL`·`ADMIN`이라, 신선도가 작업 세션의 우연에 달려 있었다. 국내 기업행위 수집이
+2026-08-13 이후 안 돌았고 그 사이 셋이 샜다.
+
+- **한화(`000880`) 2026-08-25** — 주식수 ×0.756353 · 종가 ×1.4093 · 시총 ×1.0659인데 원장 0행.
+  52주 최고가가 두 기준을 섞어 **현재가가 최고 대비 −10.2%로 보이지만 실제는 −32.1%**였다.
+- **셀트리온(`068270`) 2026-06-04 무상증자(1.0492721033)** — **가격 배수 0.9393이 휴리스틱
+  임계(0.70~1.30) 안**이라 공시만이 잡을 수 있었다. 그 공시는 08-13부터 안 읽힌 채였다.
+- **RUSHB 2026-09-01 분할(1.5)** — 미국은 `adjustment=raw`이고 `listed_shares`가 전 행 NULL이라
+  휴리스틱이 구조적으로 0건이다. **소스 공시가 유일한 그물**이다.
+
+**「조용히 틀린다」의 자리가 둘이라는 것이 이 결정의 형태를 정했다.** 탐지 안 된 사건과,
+**`APPROVED`인데 재구축을 안 돌린 사건**이다. 뒤엣것은 지금까지 사람이 `corporate-action` 뒤에
+`adjustment-rebuild`를 손으로 이어 돌려 가려져 있었다(착수 시점 원장의 `APPROVED`가 0행인 것이
+그 증거다). 자동화가 그 손만 대체하면 **가려져 있던 구멍이 그대로 드러난다.**
+
+**ADR-0050 §버린 대안이 크론 등록을 기각해 뒀고, 그 근거는 분기 크론에 대해서만 참이다.**
+원문은 *"그 분·그 날에 떠 있어야 발화한다. 사실상 안 도는데 등록되어 있으면 「분기마다 모인다」는
+거짓 믿음만 남는다. 화면 버튼이 실제 경로다."* — **평일 크론은 실측 87%로 발화하고**, 그 대안이
+「실제 경로」로 지목한 화면 버튼은 전 이력에서 `corporate-action`을 `ADMIN`으로 **한 번도 안
+띄웠다**(12회 전부 `MANUAL`). 즉 기각은 **주기에 걸린 것**이지 크론 자체에 걸린 것이 아니다.
+
+**`AdjustmentRebuildJob`의 「스케줄러에도 넣지 않는다」도 같이 풀었다.** 그 금지의 근거가
+*"누른 뒤에 백필이 따라와야 끝나는 잡이다"*였는데, 이 결정이 **백필을 사슬에 넣어 그 조건을
+구조로 만든다.** 근거가 사라졌으므로 금지도 사라진다 — **사슬을 끊으면 그 근거가 되살아난다.**
+
+## 버린 대안
+
+- **수집만 걸고 계수는 사람에게 남긴다** — 가장 작은 변경이지만 **매 평일 「계수 없는 승인」을
+  쌓는다.** 실측으로 첫 실행에만 둘이 생겼다.
+- **`APPROVED`를 `findUnadjusted`에 넣어 시끄럽게 만든다** — 자동으로 쓰는 것이 없어 안전하지만,
+  계수는 여전히 사람이 넣어야 하고 그때까지 그 종목이 프리셋에서 빠진다(사건률 월 2~3건).
+  ADR-0055 §결정의 *"`APPROVED`·`APPLIED`는 `adj_factor`가 이미 축척을 하나로 만들었다"*를
+  고쳐야 하는데, **그 문장은 재구축 전의 `APPROVED`에 대해 거짓**이므로 어차피 고쳤다.
+- **기동 시 따라잡기(catch-up)** — 앱을 켜면 연체된 잡을 바로 돈다. 일 단위 잡이 버는 것은 몇
+  시간뿐인데 `bootRun`·테스트마다 잡이 튈 위험을 새로 들인다. **흡수는 연체 보정이 맡는다.**
+- **`--universe=US_TOP1000`을 스케줄러에 준다** — ADR-0088·0090의 MUST NOT이고, `US_TOP1000`이
+  활성이 된 뒤로 **줄 필요가 없어졌다.**
+- **`governance-load`를 화면 버튼으로 올린다** — 배너가 가리킬 곳이 생기지만 **버튼 하나가
+  7,700콜을 태운다**(`AdminJobLauncher`의 명시 기각). 배너가 CLI 명령을 적는 것으로 대신한다.
+- **무거운 잡을 토요일에 몬다** — 일일 갱신과 안 겹치지만 **토요일 크론은 실측 발화가 2회**다.
+  평일 크론의 87%와 비교할 수 없다.
+- **`batch_execution`에 범위 컬럼을 더해 연체를 정확히 잰다** — 저장 구조가 늘고, 스케줄러가
+  언제나 기본 경로만 도는 한 `triggered_by`로 충분하다.
+
+## 결과
+
+- **쉬워지는 것**
+  - 소스가 종류를 준 사건(미국 전량 · 국내 무상증자·분할)이 **처음부터 끝까지 사람이 안 든다.**
+  - 사람이 판정한 뒤의 복구도 자동이다 — `judge`가 `APPROVED`로 올리면 **다음 평일 14시 사슬이
+    계수와 지표까지 집어 간다.**
+  - 안 돈 잡이 **화면과 알림 둘 다에 뜬다.** 그전에는 `batch_execution`이 **돈 것**만 적어
+    어디에도 안 보였다.
+- **어려워지는 것**
+  - **덤프 가드가 이 경로에는 안 걸린다.** `guard-rebuild-without-dump.sh`는 **셸 명령**을 보는
+    훅이라 스케줄 실행을 못 보고, 런타임 가드는 없다(전수 확인). ADR-0049가 요구한 것이
+    *"첫 실행 전에"*이고 그 첫 실행은 이미 지났지만, **이후 모든 자동 재구축은 그 보호 밖이다.**
+  - **다른 JVM은 못 막는다.** 사람이 친 `bootRun`은 별도 프로세스라 `dartRateLimiter`가 두 벌이
+    되고, 평일 14:00~15:10에 손으로 적재를 돌리면 실제 콜이 설계값의 두 배가 된다.
+  - **자동 백필에 상한이 있다.** 무효화된 종목이 `AUTO_BACKFILL_STOCK_LIMIT`(10)을 넘으면 돌지
+    않고 로그로 알린다 — 그때는 사람이 돌려야 한다. **그 수는 예산이지 실측이 아니다**:
+    실측한 것은 **2종목 × 180거래일 = 약 2분**(2026-09-01)이고, 종목 수에 대한 선형성은
+    재본 적이 없다.
+  - **사람에게 하나가 남는다** — `OBSERVED` 후보의 종류와 비율이다. ADR-0050이 실측으로
+    자동화를 기각한 자리이고(루닛 2026-05-04의 점프 셋), 그것은 자동화의 한계가 아니라
+    측정된 결정이다.
+- **되돌리려면**: `PipelineScheduler`의 새 `@Scheduled` 셋과 `AdjustmentRebuildJob.runAndReport`,
+  `JobFreshnessPolicy`·`JobFreshnessAlerter`, `BatchSummaryResponse`의 두 필드,
+  `AdminOverviewView`의 배너, `application.yaml`의 풀 크기. **되돌리기 전에 원장의
+  `APPROVED`가 0인지 본다** — 0이 아니면 계수가 안 들어간 채로 남는다.

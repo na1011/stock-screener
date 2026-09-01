@@ -297,7 +297,7 @@ public class CorporateActionLedger {
      * {@link #record}가 그 상태를 {@code OBSERVED}로 정한다.
      */
     @Transactional
-    public void annotate(long stockId, CorporateAction action) {
+    public boolean annotate(long stockId, CorporateAction action) {
         if (action.sourceForm() == null || action.sourceForm().isBlank()) {
             throw new IllegalArgumentException("붙일 낱말이 없다. effectiveDate=" + action.effectiveDate());
         }
@@ -308,7 +308,7 @@ public class CorporateActionLedger {
             log.info("소스가 이름만 아는 사건을 원장에 적었다. stockId={} id={} {} 형태='{}'"
                             + " — 종류와 비율은 사람이 정해야 한다.",
                     stockId, id, action.effectiveDate(), action.sourceForm());
-            return;
+            return true;
         }
         // MUST: 이미 있는 낱말을 덮지 않는다. 유도에 성공한 사건이 실은 더 정확한 낱말을 싣고
         // 들어왔을 수 있고, 그때 근접중복으로 잡힌 이쪽이 그것을 지우면 안 된다.
@@ -320,6 +320,7 @@ public class CorporateActionLedger {
             log.info("원장 행에 소스의 낱말을 붙였다. stockId={} id={} {} 형태='{}'",
                     stockId, target.get().id(), target.get().effectiveDate(), action.sourceForm());
         }
+        return false;
     }
 
     private long insert(long stockId, CorporateAction action, CorporateActionStatus status) {

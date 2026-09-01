@@ -159,6 +159,55 @@ class PipelineSchedulerTest {
         assertThat(TRADING_DAYS).doesNotContain(next.getDayOfWeek());
     }
 
+    @Test
+    @DisplayName("기업 행위 사슬이 일일 갱신 뒤에 돈다 — 앞이 끝나기 전에 시작하면 같은 봉을 함께 쓴다")
+    void corporateActionChainRunsAfterDailyUpdate() {
+        LocalDateTime base = LocalDate.of(2026, 9, 2).atStartOfDay();
+        LocalDateTime daily = cronOf("runDailyUpdate").next(base);
+        LocalDateTime chain = cronOf("runCorporateActionChain").next(base);
+
+        assertThat(daily).isNotNull();
+        assertThat(chain).isNotNull();
+        assertThat(chain.toLocalDate()).isEqualTo(daily.toLocalDate());
+        assertThat(chain.toLocalTime()).isAfter(daily.toLocalTime());
+        // 일일 갱신이 실측 13분 36초다. 여유가 그보다 넉넉해야 밀리지 않는다.
+        assertThat(java.time.Duration.between(daily, chain).toMinutes())
+                .isGreaterThanOrEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("무거운 잡과 신선도 점검이 사슬 뒤에 온다 — 순서가 뒤집히면 그날의 판정이 낡는다")
+    void heavyJobAndFreshnessComeAfterTheChain() {
+        LocalDateTime base = LocalDate.of(2026, 9, 2).atStartOfDay();
+        LocalTime chain = cronOf("runCorporateActionChain").next(base).toLocalTime();
+        LocalTime heavy = cronOf("runHeavyJobOfTheDay").next(base).toLocalTime();
+        LocalTime freshness = cronOf("checkJobFreshness").next(base).toLocalTime();
+
+        assertThat(heavy).isAfter(chain);
+        // governance-load가 실측 1,290초(21분 30초)다. 스레드 풀이 1이라 그 전에는 신선도
+        // 점검이 밀리므로, 여유를 그보다 크게 둔다 — 밀려도 틀리지는 않지만 같은 날 안에
+        // 끝나는 것이 알림의 뜻을 지킨다.
+        assertThat(java.time.Duration.between(heavy, freshness).toMinutes())
+                .isGreaterThanOrEqualTo(22);
+    }
+
+    @Test
+    @DisplayName("새 스케줄 셋이 전부 평일에만 돈다 — 주말에 돌면 대상일이 비어 헛돈다")
+    void newSchedulesRunOnWeekdaysOnly() {
+        for (String method : List.of("runCorporateActionChain", "runHeavyJobOfTheDay",
+                "checkJobFreshness")) {
+            CronExpression cron = cronOf(method);
+            LocalDateTime at = LocalDate.of(2026, 9, 4).atStartOfDay();  // 금요일
+            for (int i = 0; i < 10; i++) {
+                at = cron.next(at);
+                assertThat(at).isNotNull();
+                assertThat(TRADING_DAYS)
+                        .as("%s의 %s", method, at)
+                        .contains(at.getDayOfWeek());
+            }
+        }
+    }
+
     /** 주어진 일자 다음의 첫 개장일 — 주말도 휴장일도 아닌 날. */
     private static LocalDate nextOpenDay(LocalDate date, Set<LocalDate> closed) {
         LocalDate next = date.plusDays(1);
