@@ -285,9 +285,20 @@ if [ -n "$indented" ]; then
   add_unknown "들여쓴 \`premise\` 펜스를 읽지 못했다: ${indented}— 최상위로 옮겨라."
 fi
 
+# 예산 압박은 **발견이 하나도 없어도** 알린다. 넘기는 순간 뒤쪽 전제가 조용히 무판정이 되는데,
+# 그것은 「참」의 수가 줄어드는 것으로만 드러나고 아무도 매 세션 그 수를 세지 않는다. 실제로
+# 전제 하나가 예산의 4분의 1을 먹어 뒤쪽 14개가 무판정이던 적이 있다.
+#
+# 임계를 예산의 4/5에 둔다 — 남은 여유가 전제 서너 개 값이라 **다음에 더하는 사람이 아직
+# 선택할 수 있는** 지점이다. 넘긴 뒤에 알리면 알림이 사후 통보가 된다.
+budget_note=""
+if [ "$SECONDS" -ge "$(( total_budget * 4 / 5 ))" ]; then
+  budget_note="전제 예산이 ${SECONDS}초/${total_budget}초다 — 여유가 $(( total_budget - SECONDS ))초뿐이다. **새 전제를 더하기 전에 무엇을 뺄지 함께 정한다.** 넘기면 뒤쪽 전제가 조용히 무판정이 된다. 어느 하나가 튀는지는 전제마다 따로 재서 본다."$'\n'
+fi
+
 # 선언이 하나도 없으면 조용히 나간다. 채택 초기의 비용이 0이다.
 [ "$saw_any" -eq 0 ] && [ -z "$unknowns" ] && exit 0
-[ "$n_findings" -eq 0 ] && [ "$n_unknowns" -eq 0 ] && exit 0
+[ "$n_findings" -eq 0 ] && [ "$n_unknowns" -eq 0 ] && [ -z "$budget_note" ] && exit 0
 
 # DB가 안 떠 있으면 판정 불가가 무더기로 난다. 원인을 한 줄로 먼저 말한다.
 db_note=""
@@ -323,7 +334,7 @@ fi
 ctx="ADR이 선언한 전제를 확인했다. 결정이 아직 옳은지에 대한 재료이며, 무엇을 할지는 정하지 않는다.
 (참 ${n_ok} · 발견 ${n_findings} · 판정 불가 ${n_unknowns})
 
-${db_note}"
+${budget_note}${db_note}"
 [ -n "$findings" ] && ctx="${ctx}**전제가 깨졌다:**
 ${findings}
 "
