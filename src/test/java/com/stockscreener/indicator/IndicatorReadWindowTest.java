@@ -106,5 +106,22 @@ class IndicatorReadWindowTest {
                         .isGreaterThanOrEqualTo(retained);
             }
         }
+
+        @Test
+        @DisplayName("읽기 창이 조용히 넓어지지 않는다 — 위 단언은 원리적으로 못 잡는다")
+        void readWindowDoesNotDriftWiderWhenIndicatorsAreAdded() {
+            // 위 두 단언은 창을 지키지 못한다. 합성 단언은 등록된 지표와 무관하고, 바로 위 것은
+            // window = max + 보존이라 warmup <= max인 한 언제나 참이다. 즉 워밍업 1,500짜리
+            // 지표를 들여도 둘 다 초록이고, 그때 창은 1,441 -> 1,680이 되어 재귀 지표의 저장값이
+            // 전부 미세하게 바뀐다(ADR-0079). 그것을 알릴 경로가 이 단언 말고는 없다.
+            assertThat(registry.maxEffectiveLookback())
+                    .as("워밍업 최댓값이 움직였다 — 새로 들인 지표가 EPS_CAGR_5Y(1,261)를 넘었는지 "
+                            + "본다. 넘겼다면 창이 함께 넓어졌으므로 백필 전후 스냅숏을 "
+                            + "전 코드로 대조하고(ADR-0079 §MUST) 이 수를 함께 고친다")
+                    .isEqualTo(1261);
+            assertThat(registry.readWindowBars())
+                    .as("읽기 창은 워밍업 최댓값 + 보존 일수다")
+                    .isEqualTo(1261 + IndicatorRetentionPolicy.RETAINED_TRADING_DAYS);
+        }
     }
 }
