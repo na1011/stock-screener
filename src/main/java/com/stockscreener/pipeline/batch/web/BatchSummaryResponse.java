@@ -11,9 +11,17 @@ import java.util.List;
  *                                없게 되기 때문이다.
  * @param unresolvedFailureCount  미해결 에러 건수. 재실행에 성공한 실패는 여기서 빠진다.
  * @param runningJobs             지금 도는 중인 잡 이름.
+ * @param staleJobs               예산을 넘겨 <b>안 돈</b> 잡. 오래 밀린 것부터.
+ *                                <b>{@code latestByJob}으로는 이것을 못 낸다</b> —
+ *                                그 목록은 <b>돈 것</b>만 담고, 예산은 서버에만 있다.
+ * @param approvedWithoutCoefficient 원장이 승인됐는데 계수가 안 들어간 행 수.
+ *                                <b>사슬이 끊겼다는 것을 재는 유일한 술어다</b>
+ *                                ({@code JobFreshnessPolicy}의 javadoc).
  */
 public record BatchSummaryResponse(
         List<BatchExecutionResponse> latestByJob,
         long unresolvedFailureCount,
-        List<String> runningJobs) {
+        List<String> runningJobs,
+        List<StaleJobResponse> staleJobs,
+        long approvedWithoutCoefficient) {
 }

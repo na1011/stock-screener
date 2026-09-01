@@ -261,6 +261,63 @@ function formatTime(value: string | null): string {
     <AdminNav />
 
     <div class="admin__body">
+      <!--
+        안 돈 잡을 맨 위에 둔다. 아래 요약 카드는 **돈 것**만 보여 주므로, 잡이 통째로 빠진
+        것은 그 목록을 아무리 봐도 안 보인다 — 실제로 국내 기업행위 수집이 19일 안 돌아
+        무상증자 하나가 수정계수에 안 들어간 채로 있었고, 그동안 이 화면은 전부 초록이었다.
+
+        판정은 서버가 한다. 여기서 경과일을 다시 세면 예산이 두 곳에 있게 된다.
+      -->
+      <Message
+        v-if="admin.summary && admin.summary.staleJobs.length > 0"
+        severity="warn"
+        :closable="false"
+        class="admin__stale"
+      >
+        <strong>{{ admin.summary.staleJobs.length }}개 배치가 예산을 넘겨 안 돌았습니다.</strong>
+        <ul class="admin__stale-list">
+          <li v-for="job in admin.summary.staleJobs" :key="job.jobName">
+            <code>{{ job.jobName }}</code>
+            <!--
+              -1은 「한 번도 성공한 적이 없다」이고 0과 반대 뜻이다. 0으로 접으면 그 상태가
+              화면에서 사라진다.
+            -->
+            <span v-if="job.daysSince < 0"> — 한 번도 성공한 적이 없습니다</span>
+            <span v-else>
+              — {{ job.daysSince }}일째 (마지막 성공 {{ formatTime(job.lastSuccessAt) }},
+              예산 {{ job.budgetDays }}일)
+            </span>
+            <span v-if="!job.scheduledOnly" class="admin__stale-note">
+              스케줄 실행이 아직 없어 수동 실행까지 함께 셉니다.
+            </span>
+            <!--
+              버튼이 있는 잡에는 명령을 안 적는다. 둘 다 적으면 어느 쪽이 맞는지 묻게 된다.
+              무엇에 버튼이 있는지는 서버가 정한다(AdminJobLauncher 카탈로그).
+            -->
+            <code v-if="job.howToRun" class="admin__stale-cmd">{{ job.howToRun }}</code>
+            <span v-else class="admin__stale-note">아래 「배치 실행」에서 띄울 수 있습니다.</span>
+          </li>
+        </ul>
+      </Message>
+
+      <!--
+        원장이 승인됐는데 계수가 안 들어간 상태. 지표 억제에도 판정 대기 알림에도 안 걸려
+        값이 그럴듯하게 틀리므로, 연체와 따로 그린다.
+      -->
+      <Message
+        v-if="admin.summary && admin.summary.approvedWithoutCoefficient > 0"
+        severity="error"
+        :closable="false"
+        class="admin__stale"
+      >
+        <strong>
+          기업 행위 {{ admin.summary.approvedWithoutCoefficient }}건이 승인됐는데 수정계수가
+          아직 안 들어갔습니다.
+        </strong>
+        그동안 그 종목의 지표는 오류 없이 틀린 값으로 나옵니다 — 기업 행위 사슬이 다음 평일
+        14시에 닫습니다.
+      </Message>
+
       <!-- 운영 현황 요약 (spec §4의 첫 항목) -->
       <AsyncPanel
         :state="admin.summaryState"
@@ -569,6 +626,24 @@ function formatTime(value: string | null): string {
 
 .stat--job {
   align-items: center;
+}
+
+.admin__stale-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.admin__stale-note {
+  color: var(--p-text-muted-color);
+}
+
+.admin__stale-cmd {
+  display: block;
+  margin-top: 0.25rem;
+  word-break: break-all;
 }
 
 .stat__label {

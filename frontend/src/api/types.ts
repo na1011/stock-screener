@@ -788,11 +788,34 @@ export interface BatchExecutionDetail {
   retrySupported: boolean
 }
 
+/**
+ * 예산을 넘겨 **안 돈** 잡 하나.
+ *
+ * `latestByJob`으로는 이것을 못 만든다 — 그 목록은 **돈 것**만 담고, 얼마나 오래면 문제인지는
+ * 서버에만 있다. 그래서 판정된 결과를 그대로 받는다.
+ */
+export interface StaleJob {
+  jobName: string
+  /** 한 번도 성공한 적이 없으면 `null`이다. */
+  lastSuccessAt: string | null
+  /** **-1은 「한 번도 성공한 적이 없다」**이고 0과 반대 뜻이다. 0으로 접으면 그 상태가 사라진다. */
+  daysSince: number
+  budgetDays: number
+  /** false면 좁은 수동 실행이 이 시계를 되돌릴 수 있다. 화면이 그 사실을 함께 말한다. */
+  scheduledOnly: boolean
+  /** 화면에 실행 버튼이 **없는** 잡의 CLI 인자. 버튼이 있으면 `null`이다. */
+  howToRun: string | null
+}
+
 export interface BatchSummary {
   /** 잡별 가장 최근 실행 한 건씩. 전체 목록의 앞부분이 아니다. */
   latestByJob: BatchExecution[]
   unresolvedFailureCount: number
   runningJobs: string[]
+  /** 오래 밀린 것부터. 비어 있으면 배너를 안 그린다. */
+  staleJobs: StaleJob[]
+  /** 원장이 승인됐는데 계수가 안 들어간 행 수. 0이 아니면 값이 그럴듯하게 틀리고 있다. */
+  approvedWithoutCoefficient: number
 }
 
 /**

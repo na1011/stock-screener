@@ -5,6 +5,7 @@ import com.stockscreener.interaction.RecordInteraction;
 import com.stockscreener.pipeline.batch.AdminJobLauncher;
 import com.stockscreener.pipeline.batch.BatchExecutionReader;
 import com.stockscreener.pipeline.batch.BatchStatus;
+import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
 import com.stockscreener.web.ApiExceptions;
 import com.stockscreener.web.ApiProblemType;
 
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -38,10 +40,13 @@ public class AdminBatchController {
 
     private final BatchExecutionReader reader;
     private final AdminJobLauncher launcher;
+    private final JobFreshnessPolicy freshnessPolicy;
 
-    public AdminBatchController(BatchExecutionReader reader, AdminJobLauncher launcher) {
+    public AdminBatchController(BatchExecutionReader reader, AdminJobLauncher launcher,
+                                JobFreshnessPolicy freshnessPolicy) {
         this.reader = reader;
         this.launcher = launcher;
+        this.freshnessPolicy = freshnessPolicy;
     }
 
     @GetMapping("/batches")
@@ -64,7 +69,10 @@ public class AdminBatchController {
         return new BatchSummaryResponse(
                 summary.latestByJob().stream().map(BatchExecutionResponse::of).toList(),
                 summary.unresolvedFailureCount(),
-                launcher.runningJobs().stream().sorted().toList());
+                launcher.runningJobs().stream().sorted().toList(),
+                freshnessPolicy.stale(Instant.now()).stream()
+                        .map(StaleJobResponse::of).toList(),
+                freshnessPolicy.approvedWithoutCoefficient());
     }
 
     @GetMapping("/batches/{id}")
