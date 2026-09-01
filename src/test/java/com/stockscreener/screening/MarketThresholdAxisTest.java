@@ -28,6 +28,42 @@ class MarketThresholdAxisTest {
     }
 
     @Test
+    @DisplayName("응답으로 나갔다 요청으로 돌아와도 시장 축이 살아 있다 — 복제본이 원본과 같은 판정을 한다")
+    void survivesTheRoundTripThroughThePayload() {
+        Map<String, ConditionOperand.Literal> byCurrency = new LinkedHashMap<>();
+        byCurrency.put(KRW, ConditionOperand.Literal.of("1000000000000"));
+        byCurrency.put(USD, ConditionOperand.Literal.of("6500000000"));
+        IndicatorCondition original = marketCap(byCurrency);
+
+        // 화면이 하는 일 그대로다 — 응답을 받아 그 조건으로 다시 요청을 만든다.
+        ConditionGroup returned = com.stockscreener.screening.web.ConditionPayloadMapper.toDomain(
+                com.stockscreener.screening.web.ConditionPayloadMapper.toPayload(
+                        ConditionGroup.and(List.of(original))));
+
+        assertThat(returned.resolveFor(USD).conditions().get(0).operand())
+                .as("축이 빠지면 원화 값이 미국에 그대로 걸린다 — 실측으로 버핏 프리셋 복제본이 "
+                        + "미국에서 43종목 대신 4종목을 냈다(시총 $1조 이상만 남았다)")
+                .isEqualTo(ConditionOperand.Literal.of("6500000000"));
+        assertThat(returned.resolveFor(KRW).conditions().get(0).operand())
+                .isEqualTo(ConditionOperand.Literal.of("1000000000000"));
+    }
+
+    @Test
+    @DisplayName("사용자가 쓴 평범한 리터럴은 축 없이 그대로 돌아온다")
+    void keepsPlainLiteralsPlain() {
+        IndicatorCondition plain = IndicatorCondition.of(
+                "ROE", ComparisonOperator.GTE, ConditionOperand.Literal.of("10")).asRequired();
+
+        ConditionGroup returned = com.stockscreener.screening.web.ConditionPayloadMapper.toDomain(
+                com.stockscreener.screening.web.ConditionPayloadMapper.toPayload(
+                        ConditionGroup.and(List.of(plain))));
+
+        assertThat(returned.conditions().get(0).operand())
+                .as("축이 없는 조건에 축을 지어내면 그 시장에서만 실행이 거절된다")
+                .isEqualTo(ConditionOperand.Literal.of("10"));
+    }
+
+    @Test
     @DisplayName("그 시장의 임계를 고른다 — 해석 뒤에는 평범한 리터럴이라 아래 계층이 축을 모른다")
     void resolvesToTheThresholdOfThatMarket() {
         Map<String, ConditionOperand.Literal> byCurrency = new LinkedHashMap<>();

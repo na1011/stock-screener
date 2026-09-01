@@ -544,6 +544,33 @@ export function isComplete(condition: DraftCondition): boolean {
   return condition.operator !== 'BETWEEN' || condition.upperBound !== null
 }
 
+/**
+ * 이 조건의 임계가 **아직 서버가 준 그대로인가.**
+ *
+ * 편집기가 `condition.value`를 직접 쓰므로 {@link DraftCondition.thresholdsByCurrency}는
+ * 낡을 수 있다. 편집 자리마다 맵을 지우게 하면 새 편집 경로가 생길 때마다 빠뜨리므로,
+ * **읽는 쪽에서 대조한다.**
+ *
+ * 읽는 쪽이 둘이라 여기 둔다 — 칩이 「어느 통화로 그릴까」를 정할 때와,
+ * {@link toPayload}가 「시장별 임계를 되돌려 보낼까」를 정할 때다. 두 곳이 각자 대조하면
+ * 갈리는데, 갈린 쪽은 **다른 시장에서만** 드러난다.
+ */
+export function serverThresholdOf(condition: DraftCondition): MarketThreshold | null {
+  const base = condition.thresholdCurrency
+  const loaded =
+    condition.thresholdsByCurrency !== null && base !== null
+      ? condition.thresholdsByCurrency[base]
+      : undefined
+  if (
+    loaded === undefined ||
+    loaded.value !== condition.value ||
+    (loaded.upperBound ?? null) !== condition.upperBound
+  ) {
+    return null
+  }
+  return loaded
+}
+
 function toPayload(condition: DraftCondition): ConditionPayload {
   const operand =
     condition.operandType === 'INDICATOR'
@@ -556,6 +583,20 @@ function toPayload(condition: DraftCondition): ConditionPayload {
           type: 'LITERAL' as const,
           value: condition.value,
           upperBound: condition.operator === 'BETWEEN' ? condition.upperBound : null,
+          // 서버가 준 시장별 임계를 **그대로 되돌려 보낸다.** 안 보내면 서버가 그 조건을
+          // 시장 중립으로 읽고 **한 통화의 값을 다른 시장에 그대로 건다** — 실측으로
+          // 프리셋을 복제해 미국에서 돌리면 원본 43종목이 4종목이 됐다(원화 시총 1조를
+          // 달러에 걸어 시총 $1조 이상만 남았다). 화면은 USD 값을 그리고 있어 안 드러난다.
+          //
+          // MUST: 사용자가 값을 손댔으면 안 보낸다. 손댄 값의 축은 저장 시점에 서버가
+          // 유도한다(ADR-0106 §결정 4) — 이 자리가 되돌려 주는 것은 **서버가 준 것뿐**이라
+          // 사용자가 축을 고르는 경로가 생기지 않는다.
+          ...(serverThresholdOf(condition) !== null
+            ? {
+                thresholdCurrency: condition.thresholdCurrency,
+                thresholdsByCurrency: condition.thresholdsByCurrency,
+              }
+            : {}),
         }
 
   return {

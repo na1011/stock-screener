@@ -1,5 +1,5 @@
 import type { ConditionInfo, IndicatorResponse, OperandPayload } from '@/api/types'
-import type { DraftCondition } from '@/stores/screenDraft'
+import { serverThresholdOf, type DraftCondition } from '@/stores/screenDraft'
 
 import {
   formatEnteredNumber,
@@ -158,12 +158,8 @@ function marketThresholdOf(
 ): { value: number | null; upperBound: number | null; currency: string | null | undefined } {
   const byCurrency = condition.thresholdsByCurrency
   const base = condition.thresholdCurrency
-  const loaded = byCurrency !== null && base !== null ? byCurrency[base] : undefined
-  const untouched =
-    loaded !== undefined &&
-    loaded.value === condition.value &&
-    (loaded.upperBound ?? null) === condition.upperBound
-  if (!untouched) {
+  const loaded = serverThresholdOf(condition)
+  if (loaded === null) {
     return { value: condition.value, upperBound: condition.upperBound, currency }
   }
   const chosen = currency == null ? undefined : byCurrency?.[currency]

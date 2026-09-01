@@ -78,15 +78,41 @@ public final class ConditionPayloadMapper {
         }
     }
 
+    /**
+     * 요청의 피연산자를 도메인으로 옮긴다.
+     *
+     * <p><b>{@code thresholdsByCurrency}가 오면 시장별 임계로 되살린다.</b> 안 되살리면 그 조건이
+     * <b>시장 중립</b>이 되어 <b>한 통화의 값이 다른 시장에 그대로 걸린다</b> — 실측으로 버핏
+     * 프리셋을 복제해 미국에서 돌리면 원본 43종목이 <b>4종목</b>이 됐다(원화 시총 1조를 달러에
+     * 걸어 시총 $1조 이상만 남았다). <b>화면은 USD 값을 그리고 있어 아무 단서가 없다.</b>
+     *
+     * <p>MUST NOT: 이것을 「사용자가 축을 고른다」로 읽지 않는다(ADR-0106 §결정 4는 그대로다).
+     * 화면에는 고르는 자리가 없고 이 맵은 <b>서버가 준 것을 그대로 되돌려 준 것</b>이다.
+     * <b>사용자가 값을 손대면 화면이 맵을 안 보낸다</b> — 그때는 평범한 리터럴이 되고 축은
+     * 저장 경로가 지표의 {@code value_type}에서 다시 유도한다.
+     *
+     * <p>맵이 비면 {@code MarketLiteral}이 던진다. 통화 코드가 우리가 모르는 것이면 그 조건은
+     * 어느 조회 대상에서도 안 풀려 <b>요청 단위 거절</b>로 드러난다(ADR-0106 §규칙) —
+     * 조용히 다른 값으로 판정되는 경로가 없다.
+     */
     private static ConditionOperand toOperand(ConditionGroupPayload.ConditionPayload payload) {
         ConditionGroupPayload.OperandPayload operand = payload.operand();
-        // 들어오는 쪽은 언제나 평범한 리터럴이다 — thresholdCurrency는 읽기 전용이고
-        // 저장 경로가 조건에서 다시 유도한다. 사용자가 축을 잘못 고를 경로를 아예 만들지 않는다.
         return switch (operand.type()) {
-            case LITERAL -> new ConditionOperand.Literal(operand.value(), operand.upperBound());
+            case LITERAL -> toLiteral(operand);
             case INDICATOR -> new ConditionOperand.IndicatorRef(
                     operand.indicatorCode(), operand.multiplier());
         };
+    }
+
+    private static ConditionOperand toLiteral(ConditionGroupPayload.OperandPayload operand) {
+        Map<String, ConditionGroupPayload.MarketThreshold> byCurrency = operand.thresholdsByCurrency();
+        if (byCurrency == null || byCurrency.isEmpty()) {
+            return new ConditionOperand.Literal(operand.value(), operand.upperBound());
+        }
+        Map<String, ConditionOperand.Literal> literals = new LinkedHashMap<>();
+        byCurrency.forEach((currency, threshold) -> literals.put(currency,
+                new ConditionOperand.Literal(threshold.value(), threshold.upperBound())));
+        return new ConditionOperand.MarketLiteral(literals);
     }
 
     // ── 도메인 → 페이로드 (응답에 조건 사전을 실을 때) ───────────────────────

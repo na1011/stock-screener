@@ -487,3 +487,65 @@ describe('isComplete', () => {
     ).toBe(true)
   })
 })
+
+describe('시장별 임계는 왕복해도 살아 있어야 한다', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  function marketScoped(): ScreenResponse {
+    return screen({
+      type: 'PRESET',
+      conditions: {
+        logicalOperator: 'AND',
+        conditions: [
+          {
+            indicatorCode: 'MARKET_CAP',
+            operator: 'GTE',
+            operand: {
+              type: 'LITERAL',
+              value: 1000000000000,
+              upperBound: null,
+              thresholdCurrency: 'KRW',
+              thresholdsByCurrency: {
+                KRW: { value: 1000000000000, upperBound: null },
+                USD: { value: 6500000000, upperBound: null },
+              },
+            },
+            required: true,
+            weight: null,
+          },
+        ],
+        childGroups: [],
+      },
+    })
+  }
+
+  it('복제한 조건을 보낼 때 통화별 임계를 그대로 되돌려 보낸다', () => {
+    const draft = useScreenDraftStore()
+    draft.loadFrom(marketScoped())
+    draft.forkAsCustom()
+
+    const operand = draft.toConditionGroup().conditions[0]!.operand
+
+    // 안 보내면 서버가 시장 중립으로 읽고 원화 값을 미국에 그대로 건다 —
+    // 실측으로 버핏 프리셋 복제본이 미국에서 43종목 대신 4종목을 냈다.
+    expect(operand.thresholdsByCurrency).toEqual({
+      KRW: { value: 1000000000000, upperBound: null },
+      USD: { value: 6500000000, upperBound: null },
+    })
+    expect(operand.thresholdCurrency).toBe('KRW')
+  })
+
+  it('값을 손대면 통화별 임계를 안 보낸다 — 그 축은 저장 시점에 서버가 유도한다', () => {
+    const draft = useScreenDraftStore()
+    draft.loadFrom(marketScoped())
+    draft.forkAsCustom()
+    draft.conditions[0]!.value = 2000000000000
+
+    const operand = draft.toConditionGroup().conditions[0]!.operand
+
+    expect(operand.thresholdsByCurrency ?? null).toBeNull()
+    expect(operand.value).toBe(2000000000000)
+  })
+})
