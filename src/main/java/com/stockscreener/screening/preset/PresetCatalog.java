@@ -36,7 +36,6 @@ import com.stockscreener.indicator.calculator.FcfMarginCalculator;
 import com.stockscreener.indicator.calculator.InventoryGrowthGapCalculator;
 import com.stockscreener.indicator.calculator.FcfYieldCalculator;
 import com.stockscreener.indicator.calculator.OperatingMarginMin5yCalculator;
-import com.stockscreener.indicator.calculator.ProfitRetirement3yCalculator;
 import com.stockscreener.indicator.calculator.ProfitStreakYearsCalculator;
 import com.stockscreener.indicator.calculator.RetainedToMarket4yCalculator;
 import com.stockscreener.indicator.calculator.RoeMin3yCalculator;
@@ -181,18 +180,26 @@ public class PresetCatalog {
      * <br><b>원문에 없는데 더한 것</b>: {@code OPM_MIN_5Y}(3.4의 「일관성」을 최솟값으로 옮긴
      * 형태), {@code PER_SECTOR_PCTL}(AAII 원 구현이 밸류에이션을 <b>업종 기준값 대비</b>로
      * 판정하는데 이식본이 TradingView의 한계로 절대값으로 바꿔 놓은 것을 실제 업종 모집단으로
-     * 되돌린 것이다), {@code PROFIT_RETIREMENT_3Y > 0}(ADR-0083).
+     * 되돌린 것이다), {@code SHARES_GROWTH_3Y <= -0.760}(주주환원의 둘째 계단).
      *
-     * <p><b>2.1이 배점 둘을 갖는다</b>(ADR-0083). {@code SHARES_GROWTH_3Y <= 0}은 원문이 지시한
-     * 우회(<i>"발행주식수 추이를 컬럼으로 띄워 분기별 감소 여부 확인"</i>)이고,
-     * {@code PROFIT_RETIREMENT_3Y > 0}은 <b>같은 조항의 다른 반쪽</b>이다 — 2.1 원문이
-     * <i>"… 아니면 <b>주주에게 돌려주는지</b>. 버핏은 이 중 자사주 매입을 선호한다"</i>로 둘을
-     * 함께 적는다. 실측이 그 구분을 지지한다(2026-08-20): {@code SHARES_GROWTH_3Y <= 0}을
-     * 통과하면서 소각 값도 있는 <b>188종목 중 130이 소각을 한 번도 안 했고</b>(발행을 안 했을
-     * 뿐이다), 반대로 <b>16종목은 실제로 소각했는데</b> 순증이라 그 조건에서 빠진다. 순위상관은 <b>−0.432</b>(동률 평균 스피어만)로
-     * ADR-0068의 0.8 잣대에 한참 못 미친다.
-     * <br>MUST NOT: 이 조건을 「자사주 매입을 본다」로 적지 않는다(ADR-0066) — 국내에서 취득은
-     * 안 잡히고 <b>소각만</b> 잡힌다.
+     * <p><b>2.1이 배점 둘을 갖고, 둘 다 같은 변수의 계단이다.</b> {@code SHARES_GROWTH_3Y <= 0}은
+     * 원문이 지시한 우회(<i>"발행주식수 추이를 컬럼으로 띄워 분기별 감소 여부 확인"</i>)로
+     * <b>희석하지 않았는가</b>를 묻고, {@code <= -0.760}은 <b>의미 있게 줄였는가</b>를 묻는다 —
+     * 2.1 원문이 <i>"… 아니면 <b>주주에게 돌려주는지</b>. 버핏은 이 중 자사주 매입을 선호한다"</i>로
+     * 둘을 함께 적는다. 점수는 0/1/2이고, 같은 변수에 계단 둘을 얹는 것은 이 저장소에 이미 있다
+     * ({@code DEBT_RATIO}가 필수 {@code <= 100} + 배점 {@code <= 50}이다).
+     *
+     * <p><b>이 자리는 {@code PROFIT_RETIREMENT_3Y > 0}이었다</b>(ADR-0083). 그 지표가 국내에서
+     * 소각을 <b>정확히</b> 집는다는 것은 지금도 참이고(실측 2026-08-20: 희석 없음을 통과하면서
+     * 소각 값도 있는 188종목 중 130이 소각을 한 번도 안 했고, 반대로 16종목은 소각했는데 순증이라
+     * 빠진다 · 순위상관 −0.432), <b>그럼에도 바꾼 이유는 미국 커버리지가 0이라는 것</b>이다 —
+     * 만점 분모에만 남아 체계적으로 불리했고, 분모에서 빼는 것은 데이터 없는 종목의 달성률을
+     * 올린다(ADR-0112 · P27 축③). <b>잃는 것을 수로 적는다</b>: 최신 일자 국내 활성 편입에서
+     * 소각 배점을 받던 78종목 중 <b>25가 빠지고</b>(순증 16 · 감소가 0.760% 미만 9) 새로 21이 든다.
+     * <br>MUST NOT: 이 조건을 「소각을 본다」로 읽지 않는다 — {@code SHARES_GROWTH_3Y}는
+     * <b>유상감자·자본감소도 함께</b> 잡는다. 1:1 교체가 아니다.
+     * <br>{@code PROFIT_RETIREMENT_3Y} 지표 자체는 지우지 않는다(ADR-0061 §규칙) — 조건 빌더와
+     * 상세 화면에서 국내 종목에 여전히 쓸 수 있다.
      * <br>MUST NOT: {@code @IndicatorMeta.direction}을 주지 않는다 — 배점 조건을 거는 것과 방향을
      * 주는 것은 다른 일이고, 이 저장소는 방향이 NULL인 지표 열셋을 이미 배점으로 쓴다.
      * <br><b>원문에 있는데 뺀 것</b>: {@code ROE >= 15}·{@code ROA >= 8}·
@@ -399,10 +406,22 @@ public class PresetCatalog {
                         // ── 점수: 자본배분과 부채 여유 ──
                         // 2.1 자본배분. 소각만 잡고 자사주 취득은 못 잡는다. 201/347(58%).
                         weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
-                        // 2.1의 다른 반쪽 — 희석하지 않았는가가 아니라 돌려줬는가다(ADR-0083).
-                        // 77/300(26%) 통과. 값 있는 종목의 74%가 정확히 0이라 동률이 많고,
-                        // 그래서 순위상관을 동률 평균으로 잰다(midrank −0.432).
-                        weighted(ProfitRetirement3yCalculator.CODE, ComparisonOperator.GT, "0", "1"),
+                        // 4.5의 다른 반쪽 — 희석하지 않았는가가 아니라 **의미 있게 줄였는가**다.
+                        // 같은 변수의 둘째 계단이라 점수는 0/1/2다(DEBT_RATIO가 필수 100 +
+                        // 배점 50으로 같은 모양이다).
+                        //
+                        // 이 자리는 PROFIT_RETIREMENT_3Y > 0이었다(ADR-0083). 그 지표가 미국
+                        // 커버리지 0이라 만점 분모에만 남아 체계적으로 불리했고, 분모에서
+                        // 빼는 것은 데이터 없는 종목의 달성률을 올린다(ADR-0112 · P27 축③).
+                        // 계기를 시장마다 가르는 대신 하나로 두고 임계를 시장별로 옮겼다 —
+                        // IndicatorContext에 시장이 없어 계기를 가르면 파급이 크고, 그것이
+                        // 「같은 이름이 시장마다 다른 것을 잰다」의 형태이기도 하다.
+                        //
+                        // 임계는 그 배점의 국내 수여율을 승계한다: 보존 창 전체에서
+                        // PROFIT_RETIREMENT_3Y > 0이 21.87%였고 SHARES_GROWTH_3Y <= -0.760이
+                        // 21.87% · USD -7.86이 21.85%다(2026-09-01).
+                        weightedIn(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE,
+                                "-0.760", "-7.86", "1"),
                         // 0.3·3.2 원문의 D/E 0.5. 게이트(100)보다 조인 값이다. 131/347(38%).
                         weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "50", "1"))));
     }
@@ -560,10 +579,10 @@ public class PresetCatalog {
      * (3.2·3.9의 업종 상대 요구를 실제 업종 모집단으로 옮긴 것), {@code ACCRUAL_RATIO},
      * {@code OPERATING_MARGIN}(3.18 세전이익률의 대용), {@code INVENTORY_GROWTH_GAP}(3.14 —
      * ADR-0069가 원자료만 적재해 둔 자리이고 이 프리셋이 그 소비자다),
-     * {@code PROFIT_RETIREMENT_3Y > 0}(ADR-0083 — <b>4.5가 배점 둘을 갖게 된다.</b> 원문이
-     * 「스크리너 구현 불가」로 적고 발행주식수 추이를 우회로 드는 조항이고,
-     * {@code SHARES_GROWTH_3Y <= 0}이 그 우회다. 소각 조건은 <b>같은 조항의 다른 반쪽</b>이며
-     * 순위상관 −0.432로 겹치지 않는다. 자세한 근거는 {@link #buffettQualityKr()} javadoc에 있다).
+     * {@code SHARES_GROWTH_3Y <= -0.760}(<b>4.5가 배점 둘을 갖게 된다.</b> 원문이
+     * 「스크리너 구현 불가」로 적고 발행주식수 추이를 우회로 드는 조항이고, {@code <= 0}이 그
+     * 우회이며 이것은 <b>의미 있게 줄였는가</b>라는 둘째 계단이다. 이 자리가
+     * {@code PROFIT_RETIREMENT_3Y > 0}이었고 왜 바꿨는지는 {@link #buffettQualityKr()} javadoc에 있다).
      * <br>MUST NOT: {@code DIVIDEND_YIELD}를 여기 더하지 않는다 — §3.10에 명문 조건
      * {@code > 2}가 있지만 <b>그것이 어느 유형에 걸리는지를 원문이 정하지 않는다</b>(ADR-0083의
      * 「확인 못 한다」, 2026-08-24 사용자 결정). <b>출처가 없어서가 아니라 배치가 안 정해져서다.</b>
@@ -689,10 +708,22 @@ public class PresetCatalog {
                         weighted(InventoryGrowthGapCalculator.CODE,
                                 ComparisonOperator.LTE, "0", "1"),
                         weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
-                        // 4.5의 다른 반쪽 — 원문은 「구현 불가」로 적고 발행주식수 추이를 우회로
-                        // 든다. 위 조건이 그 우회이고 이것은 소각 자체를 잰다(ADR-0083).
-                        weighted(ProfitRetirement3yCalculator.CODE,
-                                ComparisonOperator.GT, "0", "1"))));
+                        // 4.5의 다른 반쪽 — 희석하지 않았는가가 아니라 **의미 있게 줄였는가**다.
+                        // 같은 변수의 둘째 계단이라 점수는 0/1/2다(DEBT_RATIO가 필수 100 +
+                        // 배점 50으로 같은 모양이다).
+                        //
+                        // 이 자리는 PROFIT_RETIREMENT_3Y > 0이었다(ADR-0083). 그 지표가 미국
+                        // 커버리지 0이라 만점 분모에만 남아 체계적으로 불리했고, 분모에서
+                        // 빼는 것은 데이터 없는 종목의 달성률을 올린다(ADR-0112 · P27 축③).
+                        // 계기를 시장마다 가르는 대신 하나로 두고 임계를 시장별로 옮겼다 —
+                        // IndicatorContext에 시장이 없어 계기를 가르면 파급이 크고, 그것이
+                        // 「같은 이름이 시장마다 다른 것을 잰다」의 형태이기도 하다.
+                        //
+                        // 임계는 그 배점의 국내 수여율을 승계한다: 보존 창 전체에서
+                        // PROFIT_RETIREMENT_3Y > 0이 21.87%였고 SHARES_GROWTH_3Y <= -0.760이
+                        // 21.87% · USD -7.86이 21.85%다(2026-09-01).
+                        weightedIn(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE,
+                                "-0.760", "-7.86", "1"))));
     }
 
     // ── 3. 린치 대형우량주 ────────────────────────────────────────────────
@@ -730,7 +761,7 @@ public class PresetCatalog {
      * <br><b>원문에 없는데 더한 것</b>: {@code OPM_MIN_5Y > 0}(<b>유일한 질 게이트</b>),
      * {@code PROFITABLE_QUARTERS_4}(4.1 이익 성장의 일관성), {@code ACCRUAL_RATIO},
      * {@code SHARES_GROWTH_3Y}, {@code PER_SECTOR_PCTL}, {@code FCF_MARGIN}(3.13),
-     * {@code INVENTORY_GROWTH_GAP}(3.14), {@code PROFIT_RETIREMENT_3Y > 0}(ADR-0083 — 4.5가
+     * {@code INVENTORY_GROWTH_GAP}(3.14), {@code SHARES_GROWTH_3Y <= -0.760}(4.5가
      * 배점 둘을 갖게 된다. 근거는 {@link #buffettQualityKr()} javadoc에 있다).
      * <br>MUST NOT: {@code DIVIDEND_YIELD}를 여기 더하지 않는다 — §3.10에 명문 조건
      * {@code > 2}가 있지만 <b>그것이 어느 유형에 걸리는지를 원문이 정하지 않는다</b>(ADR-0083의
@@ -824,9 +855,9 @@ public class PresetCatalog {
                         weighted(InventoryGrowthGapCalculator.CODE,
                                 ComparisonOperator.LTE, "0", "1"),
                         weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
-                        // 4.5의 다른 반쪽. 위 고속성장주와 같은 자리다(ADR-0083).
-                        weighted(ProfitRetirement3yCalculator.CODE,
-                                ComparisonOperator.GT, "0", "1"))));
+                        // 4.5의 다른 반쪽. 위 고속성장주와 같은 자리다.
+                        weightedIn(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE,
+                                "-0.760", "-7.86", "1"))));
     }
     // ── 4. 추세 상승 ──────────────────────────────────────────────────────
 

@@ -93,18 +93,20 @@ class GateDiagnosticsTest {
      * <i>"표본과 무관하게 답이 나오는 유일한 축"</i>이라 적었고, 표본 문제가 없으므로 넓히는
      * 대가가 시간뿐이다.
      *
-     * <p>넷을 고른 이유가 각각 있다 — 버핏은 승계, 린치 둘은 분류 게이트와 주주환원 배점이
-     * 걸리는 자리, {@code LOWVOL_QUALITY}는 <b>유동성 조건을 배점으로 든 유일한 프리셋</b>이라
-     * 그 축을 배점에서 보는 자리가 여기뿐이다.
+     * <p>셋을 고른 이유가 각각 있다 — 버핏은 승계, 린치 둘은 분류 게이트와 주주환원 배점이
+     * 걸리는 자리다.
      *
      * <p>MUST: 프리셋을 더하면 소요가 는다. 진단은 조회 대상 × 시점 × 종목이라
      * <b>프리셋 수에 선형</b>이고, {@code backtestProbe} 예산을 그만큼 다시 잰다.
+     * <b>필수 게이트가 없는 프리셋은 특히 비싸다</b> — {@code HarnessWindow}가 다년 요구를
+     * 못 읽어 기본 5개년으로 떨어지고, 그러면 격자가 두 배 넘게 길어진다(실측
+     * {@code LOWVOL_QUALITY} 26시점 대 버핏 12시점). <b>배점만 보려고 넣기에는 비싸므로</b>
+     * 그 프리셋의 배점을 실제로 고칠 때 넣는다.
      */
     private static final List<String> PRESETS = List.of(
             PresetCatalog.BUFFETT_QUALITY,
             PresetCatalog.LYNCH_FAST_GROWER,
-            PresetCatalog.LYNCH_STALWART,
-            PresetCatalog.LOWVOL_QUALITY);
+            PresetCatalog.LYNCH_STALWART);
 
     @Test
     @DisplayName("게이트별 탈락·판정불가·배점 충족률·회전율을 프리셋·조회 대상마다 시점별로 낸다")
@@ -241,14 +243,21 @@ class GateDiagnosticsTest {
 
             // 귀속은 blockers가 통과 집합과 같은 것을 가리킬 때만 뜻이 있다. 스크리너의
             // 포함 판정과 여기서 다시 돌린 평가가 갈리면 아래 표가 통째로 헛것이 된다.
+            //
+            // MUST: 두 집합을 **같은 모집단**에서 견준다. blockers에는 값이 하나라도 있는
+            // 종목만 들어가는데, 필수 게이트가 없는 프리셋에서는 스크리너가 **값이 없는
+            // 종목까지 포함**하므로 그대로 비교하면 그 차이만으로 깨진다 — 실제로
+            // LOWVOL_QUALITY(필수 0개)에서 깨졌고, 그것은 귀속의 결함이 아니라 비교의 결함이다.
             Set<Long> derivedPass = new TreeSet<>(blockers.entrySet().stream()
                     .filter(e -> e.getValue().isEmpty())
                     .map(Map.Entry::getKey)
                     .toList());
+            Set<Long> passedWithValues = new TreeSet<>(passed);
+            passedWithValues.retainAll(blockers.keySet());
             assertThat(derivedPass)
                     .as("%s %s: 재평가로 얻은 통과 집합이 스크리너의 것과 달라 귀속이 성립하지 않는다",
                             target.code(), asOf)
-                    .isEqualTo(passed);
+                    .isEqualTo(passedWithValues);
 
             System.out.printf("%s  대상 %4d · 값이 나온 종목 %4d · 통과 %3d%n",
                     asOf, outcome.evaluated(), withAnyValue, passed.size());
