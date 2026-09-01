@@ -17,13 +17,13 @@ applies_to:
 ## 규칙
 
 - **MUST: 두 시장이 같은 식을 쓴다.** 이 조건의 존재 이유가 대칭이다.
-- **~~MUST: 두 시장이 같은 임계를 쓴다.~~ 이 절반은 무효다(ADR-0112).** 근거로 든 것이
-  §배경의 「0.15%에서 두 시장이 거의 같은 만큼을 자른다」인데, **아무도 자르지 않는 값에서는
-  통과율이 언제나 비슷하다** — 실측으로 그 값은 조회 대상 셋 전부에서 증분 탈락이 **0**이다
-  (KOSDAQ 10→10 · KOSPI 3→3 · US 51→51). **임계는 미결로 돌아갔고 정하는 것은 실행 시점의
-  몫이다.** 이 줄을 지우지 않는 이유는 아래 §배경의 표가 아직 그 논거를 들고 있어서다.
+- **MUST: 임계가 옳은지를 통과율로 판정하지 않는다.** 이 문서가 처음 든 근거가 통과율의
+  대칭이었고 ADR-0112가 그것을 무너뜨렸다 — **아무도 자르지 않는 값에서는 통과율이 언제나
+  비슷하다.** 판정은 **무엇을 자르는가**로 한다(§배경·§검증). 두 시장이 같은 수를 쓰는지는
+  그 판정의 결과이지 전제가 아니다.
 - **MUST NOT: `close × volume`으로 거래대금을 합성해 되돌리지 않는다.** V1 스키마의 MUST NOT이고,
-  재보니 미국에서 **계통 +13.6%** 과대다(아래 §배경).
+  재보니 미국에서 **계통 +13.6%** 과대다(아래 §배경). **§검증이 그 값을 쓰는 것은 예외가 아니다** —
+  거기서 재는 것은 절대 금액이 아니라 **두 집합의 비**이고, 저장하지 않는다.
 - **MUST NOT: `PriceScaling.adjustedVolume`을 분자로 쓰지 않는다.** 분모(`sharesOf`)와 축척이
   어긋나 분할 이전 구간의 회전율이 사건 배수만큼 커진다.
 - **MUST: 크기 축은 `MARKET_CAP`이 든다.** 유동성 조건이 크기를 겸하게 하면 같은 실수가 반복된다.
@@ -39,41 +39,26 @@ applies_to:
 `check-doc-staleness.sh` §5d의 사전등록 표가 `TURNOVER_RATIO_60 ≥ 0.15%`를 **코드 3곳**으로
 들고 있어, 임계나 사용처가 갈리면 세션 시작에 잡힌다.
 
-```premise 유동성 게이트가 두 시장에서 같은 만큼을 자르는가
-psql -d stock_screener -At -c "SELECT CASE
-  WHEN count(*) FILTER (WHERE mkt = 'US') = 0 OR count(*) FILTER (WHERE mkt = 'KR') = 0
-    THEN '잴 것이 없었다 — 한쪽 시장의 회전율 표본이 비었다'
-  WHEN abs(max(pass) FILTER (WHERE mkt = 'KR') - max(pass) FILTER (WHERE mkt = 'US')) <= 15
-    THEN 'OK 국내 ' || round(max(pass) FILTER (WHERE mkt = 'KR'), 1)
-         || '% · 미국 ' || round(max(pass) FILTER (WHERE mkt = 'US'), 1) || '%'
-  ELSE '통과율이 갈렸다 — 국내 ' || round(max(pass) FILTER (WHERE mkt = 'KR'), 1)
-       || '% 대 미국 ' || round(max(pass) FILTER (WHERE mkt = 'US'), 1)
-       || '%. 같은 임계가 두 시장에서 다른 것을 자른다'
-  END
-FROM (
-  SELECT mkt, 100.0 * count(*) FILTER (WHERE turn >= 0.15) / count(*) AS pass
-  FROM (
-    SELECT u.mkt, p.stock_id,
-           avg(100.0 * p.volume / NULLIF(COALESCE(p.listed_shares, sh.shares), 0)) AS turn
-    FROM (SELECT DISTINCT m.stock_id, CASE WHEN un.market_code = 'US' THEN 'US' ELSE 'KR' END AS mkt
-          FROM universe_membership m JOIN universe un ON un.code = m.universe_code
-          WHERE m.effective_to IS NULL AND (un.is_active OR un.code = 'US_TOP1000')) u
-    JOIN price_daily p ON p.stock_id = u.stock_id
-    JOIN stock s ON s.id = p.stock_id
-    LEFT JOIN (SELECT stock_id,
-                 (array_agg(shares_outstanding ORDER BY published_at DESC)
-                  FILTER (WHERE shares_outstanding > 0))[1] AS shares
-               FROM financial_statement WHERE is_latest AND fiscal_period <> 'FY'
-               GROUP BY stock_id) sh ON sh.stock_id = u.stock_id
-    WHERE p.trade_date >= (SELECT max(trade_date) - 120 FROM price_daily)
-    GROUP BY 1, 2) r
-  GROUP BY mkt) g"
+```premise 유동성 하한이 두 시장에서 얇은 꼬리를 자르는가
+psql -d stock_screener -At -c "WITH thr AS ( SELECT max(c.literal_value) v FROM screen_condition c JOIN condition_group g ON g.id = c.group_id JOIN screen s ON s.id = g.screen_id WHERE s.is_active AND s.screen_type = 'PRESET' AND c.is_required AND c.indicator_code = 'TURNOVER_RATIO_60'), d AS (SELECT market_code mc, max(trade_date) t FROM indicator_trade_date GROUP BY 1), mem AS (SELECT DISTINCT s.id, s.market_code mc, mk.currency_code ccy FROM stock s JOIN market mk ON mk.code = s.market_code JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active), adv AS MATERIALIZED ( SELECT p.stock_id, avg(COALESCE(p.trade_value, p.close * p.volume)) v FROM price_daily p JOIN mem ON mem.id = p.stock_id JOIN d ON d.mc = mem.mc WHERE p.trade_date > d.t - 90 GROUP BY 1), turn AS (SELECT iv.stock_id, iv.value tr FROM indicator_value iv JOIN mem ON mem.id = iv.stock_id JOIN d ON d.mc = mem.mc AND d.t = iv.trade_date WHERE iv.indicator_code = 'TURNOVER_RATIO_60'), g AS (SELECT m.ccy, count(*) FILTER (WHERE t.tr < (SELECT v FROM thr)) cut, percentile_cont(0.5) WITHIN GROUP (ORDER BY adv.v) FILTER (WHERE t.tr < (SELECT v FROM thr)) cut_adv, percentile_cont(0.5) WITHIN GROUP (ORDER BY adv.v) FILTER (WHERE t.tr >= (SELECT v FROM thr)) kept_adv FROM turn t JOIN mem m ON m.id = t.stock_id JOIN adv ON adv.stock_id = t.stock_id GROUP BY 1) SELECT CASE WHEN (SELECT v FROM thr) IS NULL THEN '잴 것이 없었다 — 활성 프리셋에 유동성 필수 게이트가 없다' WHEN (SELECT count(*) FROM g WHERE cut > 0) = 0 THEN '하한이 어느 시장에서도 한 종목도 안 자른다 — 「거래 불가 유입 차단」이 성립하지 않는다' WHEN (SELECT count(*) FROM g WHERE cut > 0 AND cut_adv * 3 >= kept_adv) = 0 THEN 'OK 하한이 두 시장에서 얇은 꼬리를 자른다 — ' || (SELECT string_agg(ccy || ' ' || cut || '종목 중앙값 ' || round((cut_adv / 1e6)::numeric, 1) || ' 대 ' || round((kept_adv / 1e6)::numeric, 1) || ' (백만 ' || ccy || ')', ' · ' ORDER BY ccy) FROM g WHERE cut > 0) ELSE '하한이 얇은 꼬리를 안 자른다: ' || (SELECT string_agg(ccy || ' 잘린 중앙값 ' || round((cut_adv / 1e6)::numeric, 1) || ' 대 남은 중앙값 ' || round((kept_adv / 1e6)::numeric, 1) || ' (백만 ' || ccy || ')', ', ' ORDER BY ccy) FROM g WHERE cut > 0 AND cut_adv * 3 >= kept_adv) || ' — 임계가 거래 가능성 하한이 아니라 선별자가 됐다(ADR-0112·ADR-0066)' END"
 ```
 
-**모집단에서 뺀 근거**: 활성 유니버스와 `US_TOP1000`만 본다 — `US_LISTED`는 노출 밖이라
-게이트가 안 걸린다. **그 목록이 자라는 자리는 `universe` 표의 `is_active`**다.
-**허용 폭 15%p**는 지금 격차(0.3%p)보다 훨씬 넓게 잡았다 — 좁게 잡으면 시장 구성이 조금만
-바뀌어도 매 세션 울리고, 이 전제가 잡으려는 것은 **다시 갈라지는 것**이지 미세한 차이가 아니다.
+**재는 것이 「얼마나 자르는가」에서 「무엇을 자르는가」로 바뀌었다.** 앞의 술어는 두 시장의
+통과율 차를 봤는데, **아무도 안 자르는 값에서는 그 차가 언제나 작다**(ADR-0112). 그래서 그
+전제는 임계가 하한으로 서 있든 무너져 있든 초록이었다 — **실패할 수 없는 펜스**였다.
+
+문헌이 준 목적이 「거래 불가 종목 유입 차단」이므로 판정도 그 목적으로 한다: **잘리는 집합의
+일평균 체결금액 중앙값이 남는 집합보다 한 자릿수 낮은가.** 실측 배수가 국내 8.8배 · 미국
+37배이고 **경보선은 3배**다 — 좁게 잡으면 구성이 조금만 바뀌어도 울고, 이 전제가 잡으려는 것은
+**하한이 선별자로 변한 것**이지 미세한 이동이 아니다.
+
+**모집단을 통화로 묶는다.** 임계 축이 통화라 손잡이가 그 단위에만 있고(ADR-0106 §결정 1),
+조회 대상으로 가르면 `KOSDAQ_TOP150`처럼 꼬리가 없는 대상에서 「잘린 것이 0」이 되어
+**고칠 수 없는 것을 신고한다.**
+
+**미국은 `close × volume`이라 계통 +12.5% 과대다**(ADR-0112 실측). 그래도 쓰는 이유는 이 술어가
+재는 것이 **절대 금액이 아니라 두 집합의 비**이고, 계통 편의는 분자와 분모에 함께 걸리기 때문이다.
+**MUST NOT: 이 값을 지표로 저장하지 않는다** — §규칙의 MUST NOT이 그대로 걸린다.
 
 ## 배경
 
@@ -98,16 +83,22 @@ FROM (
 으로 적는다 — **조건과 목적은 문헌이 주고 수는 명시적으로 구현에 맡긴다.**
 ADR-0061 §규칙도 *"절대 임계값은 국내 분포를 재고 정한다"*를 MUST로 둔다.
 
-| 임계 | 국내 통과율 | 미국 통과율 |
-|---|---|---|
-| 0.10% | 98.9% | 97.1% |
-| **0.15%** | **96.3%** | **96.6%** |
-| 0.20% | 91.4% | 96.4% |
-| 0.30% | 81.7% | 95.6% |
+**임계가 옳은지는 통과율이 아니라 「무엇을 자르는가」가 답한다.** 처음에는 두 시장의 통과율이
+0.15%에서 거의 같다는 것을 근거로 삼았는데, **아무도 안 자르는 값에서는 통과율이 언제나
+비슷하므로** 그 논증은 성립하지 않았다(ADR-0112). 잣대를 갈아끼우고 다시 쟀다.
 
-**0.15%에서 두 시장이 거의 같은 만큼을 자른다.** 이것을 「같은 것을 재고 있다」는 증거로 읽은
-것이 **오판이다**(ADR-0112) — 그 값은 어느 시장에서도 종목을 자르지 않으므로 통과율이 비슷한
-것이 당연하고, 그래서 이 표는 축의 대칭에 대해 아무 말도 하지 않는다.
+**0.15%가 잘라 내는 집합의 일평균 체결금액**(2026-09-01 · 직전 90거래일 평균 · 미국은
+`close × volume`이라 계통 +12.5% 과대이나 순위에는 영향이 작다):
+
+| | 자르는 집합 | | | 남는 집합 |
+|---|---|---|---|---|
+| | n | 중앙값 | 최댓값 | 중앙값 |
+| 국내(활성 편입 349) | 13 | **24.6억원** | 890억원 | 241억원 |
+| 미국(`US_TOP1000`) | 14 | **$5.9M** | $111M | $220M |
+
+**두 시장에서 같은 것을 자른다 — 하루에 몇 백만 달러어치가 거래되는 꼬리다**(국내 24.6억원이
+약 $1.8M로 같은 자릿수). 문헌이 준 목적이 「거래 불가 종목 유입 차단」이므로, **이 표가 그
+목적에 대한 판정이고 통과율은 아니다.**
 
 ## 버린 대안
 

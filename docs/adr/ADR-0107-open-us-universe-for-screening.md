@@ -145,7 +145,7 @@ rg -n "is_active = true WHERE code = 'US_TOP1000'" src/main/resources/db/migrati
 `V45`에서 한 번 나와야 한다.
 
 ```premise 미국이 조회 대상으로 실제로 뜬다 — 이 결정이 작동하는가
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) FILTER (WHERE u.code = 'US_TOP1000') = 0 THEN 'US_TOP1000이 조회 대상에 없다 — 껐거나 편입이 비었다. ADR-0107을 되돌린 것이라면 그 경위를 적는다' WHEN count(*) FILTER (WHERE u.code = 'US_LISTED') > 0 THEN 'US_LISTED가 함께 켜졌다 — US_TOP1000과 겹쳐 PercentileCalculator의 UPSERT가 배치를 죽인다(ADR-0036)' ELSE 'OK 조회 대상 ' || count(*) || '개(' || string_agg(u.code, ' ' ORDER BY u.code) || ')' END FROM universe u JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL WHERE u.is_active GROUP BY 1 = 1"
+psql -d stock_screener -At -c "SELECT CASE WHEN count(*) FILTER (WHERE u.code = 'US_TOP1000') = 0 THEN 'US_TOP1000이 조회 대상에 없다 — 껐거나 편입이 비었다. ADR-0107을 되돌린 것이라면 그 경위를 적는다' WHEN count(*) FILTER (WHERE u.code = 'US_LISTED') > 0 THEN 'US_LISTED가 함께 켜졌다 — US_TOP1000과 겹쳐 PercentileCalculator의 UPSERT가 배치를 죽인다(ADR-0036)' ELSE 'OK 조회 대상 ' || count(DISTINCT u.code) || '개(' || string_agg(DISTINCT u.code, ' ') || ' · 편입 ' || count(*) || '종목)' END FROM universe u JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL WHERE u.is_active GROUP BY 1 = 1"
 ```
 
 ```premise 미국 신규 편입이 봉 없이 남아 있지 않다 — 리밸런싱 뒤 채웠는가
