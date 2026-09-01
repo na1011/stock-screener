@@ -79,6 +79,18 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
     /** 앞으로는 넓게 본다 — 변경상장 전에 매매거래정지가 낀다(대한전선은 11거래일). */
     private static final int PAR_CHANGE_LOOKAHEAD_DAYS = 45;
 
+    /**
+     * 공시 수량으로 효력일을 찾을 때 요구하는 <b>최소 주식수 변화</b>.
+     *
+     * <p>이보다 작으면 기계적 가격 이동이 하루 등락에 묻혀 <b>맞물림을 잴 수 없다</b> —
+     * 실측으로 {@code 신주인수권행사} 73건의 평균 주식수 배수가 1.0091이고, 그중 46건이
+     * 가격 조건을 <b>거저</b> 통과한다. 근거는 {@code coupledShareChange}의 javadoc에 있다.
+     */
+    private static final BigDecimal MIN_SHARE_CHANGE = new BigDecimal("0.05");
+
+    /** 주식수 배수 × 가격 배수가 1에서 벗어나도 되는 폭. 순수 희석은 이 폭을 크게 넘는다. */
+    private static final BigDecimal PRICE_MATCH_TOLERANCE = new BigDecimal("0.03");
+
     /** 권리락과 신주상장이 14~16거래일 벌어진다. 달력으로 넉넉히 덮는다. */
     private static final int BONUS_ISSUE_LOOKAHEAD_DAYS = 75;
 
@@ -264,10 +276,13 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
                                                SecurityRef security) {
         Optional<LocalDate> gap = evidence.firstPriceGap(
                 row.sourceDate().minusDays(PAR_CHANGE_LOOKBEHIND_DAYS),
-                row.sourceDate().plusDays(PAR_CHANGE_LOOKAHEAD_DAYS));
+                row.sourceDate().plusDays(PAR_CHANGE_LOOKAHEAD_DAYS))
+                .or(() -> coupledShareChange(row, evidence, security));
         if (gap.isEmpty()) {
             log.warn("가격을 바꿨을 수 있는 형태인데 시계열에 불연속이 없다."
-                            + " ticker={} {} 형태='{}' 수량={} — 상장 이전 사건이거나 창 밖이다.",
+                            + " ticker={} {} 형태='{}' 수량={} — 상장 이전 사건이거나 창 밖이거나,"
+                            + " 주식수는 그만큼 움직였는데 가격이 함께 움직이지 않은 것이다"
+                            + "(유상증자·전환권행사가 그렇다).",
                     security.ticker(), row.sourceDate(), row.form(), row.quantity());
             return Optional.empty();
         }
@@ -280,6 +295,66 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
                 security.ticker(), row.sourceDate(), row.form(), gap.get());
         return Optional.of(
                 CorporateAction.named(gap.get(), row.sourceDate(), observed.get(), row.form()));
+    }
+
+    /**
+     * 공시가 준 <b>수량</b>으로 효력일을 찾는다. 가격 불연속이 임계 안이라 안 잡힐 때의 둘째 그물이다.
+     *
+     * <h2>왜 필요한가</h2>
+     * <p>{@code firstPriceGap}은 {@link PriceDiscontinuity}의 가격제한폭(0.70~1.30)에 걸린 날만
+     * 찾는다. 그런데 <b>보정이 필요한 사건이 그 폭 안에서도 일어난다</b> — 현대지에프홀딩스
+     * 2026-07-20이 주식수 ×1.176345 · 종가 ×0.8659(−13.4%)이라 폭 안이었고, 그래서 DART가
+     * {@code 수량=27,492,898}로 정확히 알려준 사건이 <b>통째로 버려졌다.</b> 그 수량은 우리
+     * {@code listed_shares} 증분과 자릿수까지 같다.
+     *
+     * <h2>MUST: 두 조건을 함께 건다</h2>
+     * <p>수량 일치만으로 열면 <b>가격 보정이 없는 사건까지 전부 후보가 된다.</b> 실측:
+     * 전량 실행이 버린 공시 <b>382건·93종목</b> 중 {@code 신주인수권행사}가 207건인데 그것은
+     * 주식수만 늘고 가격은 안 움직인다. 그리고 그 부류는 주식수 변화가 평균 0.9%라
+     * <b>가격 조건만 걸면 거저 통과한다</b>(73건 중 46건).
+     *
+     * <ul>
+     *   <li>{@link #MIN_SHARE_CHANGE} — 기계적 가격 이동이 <b>하루 등락과 구별될 만큼</b>
+     *       커야 한다. 5%면 기대 이동이 약 4.8%다.</li>
+     *   <li>{@link #PRICE_MATCH_TOLERANCE} — 주식수 배수 × 가격 배수가 1에 가까워야 한다.
+     *       순수 희석이면 이 곱이 주식수 배수만큼 벌어진다(실측 유상증자 9건 평균 1.3349).</li>
+     * </ul>
+     *
+     * <p><b>둘을 함께 건 결과가 382건 → 3건이다</b>(2026-09-01 전수 실측):
+     * {@code 005440} 2026-07-20(곱 1.0187) · {@code 012450} 2024-09-27(곱 0.9841) ·
+     * {@code 066970} 2025-11-07(곱 1.0271). <b>임계는 이 3건 위에서 정해졌으므로 과적합을
+     * 가정하고 다룬다</b> — 늘려 잡을 근거가 생기기 전에는 좁히지도 넓히지도 않는다.
+     *
+     * <p>MUST NOT: 여기서 종류나 비율을 정하지 않는다. 찾는 것은 <b>효력일 하나</b>이고,
+     * 그 행은 호출부가 {@code UNKNOWN} + {@code OBSERVED}로 올려 사람의 판정을 기다린다.
+     * 수량이 맞는다는 것은 "그날 그 일이 있었다"까지이지 "그것이 분할이다"가 아니다.
+     */
+    private Optional<LocalDate> coupledShareChange(IrdsRow row, CorporateActionEvidence evidence,
+                                                   SecurityRef security) {
+        Optional<CorporateActionEvidence.ShareIssue> change = evidence.shareChangeOf(
+                row.quantity(),
+                row.sourceDate().minusDays(PAR_CHANGE_LOOKBEHIND_DAYS),
+                row.sourceDate().plusDays(PAR_CHANGE_LOOKAHEAD_DAYS));
+        if (change.isEmpty()) {
+            return Optional.empty();
+        }
+        BigDecimal shareRatio = change.get().ratio();
+        if (shareRatio.subtract(BigDecimal.ONE).abs().compareTo(MIN_SHARE_CHANGE) < 0) {
+            return Optional.empty();
+        }
+        Optional<BigDecimal> priceMultiple = evidence.closeMultipleOn(change.get().listingDate());
+        if (priceMultiple.isEmpty()) {
+            return Optional.empty();
+        }
+        BigDecimal product = shareRatio.multiply(priceMultiple.get());
+        if (product.subtract(BigDecimal.ONE).abs().compareTo(PRICE_MATCH_TOLERANCE) > 0) {
+            return Optional.empty();
+        }
+        log.warn("공시 수량으로 효력일을 찾았다. ticker={} {} 형태='{}' 수량={} 효력일={}"
+                        + " 주식수배수={} 가격배수={} — 가격 불연속이 임계 안이라 첫 그물이 놓친 것이다.",
+                security.ticker(), row.sourceDate(), row.form(), row.quantity(),
+                change.get().listingDate(), shareRatio, priceMultiple.get());
+        return Optional.of(change.get().listingDate());
     }
 
     /**

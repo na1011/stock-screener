@@ -159,4 +159,40 @@ class CorporateActionEvidenceTest {
         return new StoredPriceSeries.Bar(LocalDate.parse(date), new BigDecimal(close),
                 BigDecimal.valueOf(listedShares));
     }
+
+    @Test
+    @DisplayName("수량이 맞으면 줄어든 날도 찾는다 — 인적분할·감자는 늘지 않는다")
+    void shareChangeFindsADecrease() {
+        // 한화에어로스페이스 2024-09-27 실측: 50,630,000 → 45,581,161, 공시 수량 5,048,839.
+        // shareIncreaseOf는 증가만 보므로 이 날을 원리적으로 못 찾는다 — 그것이 이 메서드가
+        // 따로 있는 이유다.
+        CorporateActionEvidence evidence = new CorporateActionEvidence(List.of(
+                bar("2024-08-28", "290000", 50630000L),
+                bar("2024-09-27", "317000", 45581161L)));
+
+        assertThat(evidence.shareIncreaseOf(new BigDecimal("5048839"),
+                LocalDate.parse("2024-08-01"), LocalDate.parse("2024-10-31")))
+                .as("증가 전용 메서드는 감소를 찾으면 안 된다")
+                .isEmpty();
+
+        Optional<CorporateActionEvidence.ShareIssue> change = evidence.shareChangeOf(
+                new BigDecimal("5048839"),
+                LocalDate.parse("2024-08-01"), LocalDate.parse("2024-10-31"));
+
+        assertThat(change).isPresent();
+        assertThat(change.get().listingDate()).isEqualTo(LocalDate.parse("2024-09-27"));
+        assertThat(change.get().ratio()).isEqualByComparingTo(new BigDecimal("0.9002796958"));
+    }
+
+    @Test
+    @DisplayName("수량이 한 주라도 어긋나면 안 찾는다 — 근사로 열면 효력일이 애매해진다")
+    void shareChangeIsExact() {
+        CorporateActionEvidence evidence = new CorporateActionEvidence(List.of(
+                bar("2024-08-28", "290000", 50630000L),
+                bar("2024-09-27", "317000", 45581161L)));
+
+        assertThat(evidence.shareChangeOf(new BigDecimal("5048838"),
+                LocalDate.parse("2024-08-01"), LocalDate.parse("2024-10-31")))
+                .isEmpty();
+    }
 }

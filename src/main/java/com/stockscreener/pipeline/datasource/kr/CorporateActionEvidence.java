@@ -143,6 +143,38 @@ final class CorporateActionEvidence {
         return Optional.empty();
     }
 
+    /**
+     * 상장주식수가 정확히 {@code quantity}만큼 <b>늘거나 준</b> 거래일.
+     *
+     * <p>{@link #shareIncreaseOf}와 갈라 둔 이유는 <b>쓰는 곳이 다르기 때문</b>이다. 저쪽은
+     * 무상증자의 신주상장일을 찾는 자리라 증가만이 옳다 — 감소를 허용하면 자사주 소각이
+     * 신주상장으로 읽힌다. 이쪽은 <b>종류를 모르는 공시의 효력일</b>을 찾는 자리라 방향을
+     * 미리 정할 수 없다: 인적분할·감자는 줄고 주식배당·전환은 는다.
+     *
+     * <p>정수 완전 일치인 것은 저쪽과 같다. 근사로 열면 <b>애매해지고</b>, 애매한 효력일은
+     * 원장의 축을 틀리게 만들어 그 봉만 조용히 어긋난다.
+     */
+    Optional<ShareIssue> shareChangeOf(BigDecimal quantity, LocalDate notBefore, LocalDate notAfter) {
+        if (quantity == null || quantity.signum() <= 0) {
+            return Optional.empty();
+        }
+        for (int i = 1; i < bars.size(); i++) {
+            StoredPriceSeries.Bar bar = bars.get(i);
+            if (bar.tradeDate().isBefore(notBefore) || bar.tradeDate().isAfter(notAfter)) {
+                continue;
+            }
+            BigDecimal before = bars.get(i - 1).listedShares();
+            BigDecimal after = bar.listedShares();
+            if (before == null || after == null || before.signum() <= 0 || after.signum() <= 0) {
+                continue;
+            }
+            if (after.subtract(before).abs().compareTo(quantity) == 0) {
+                return Optional.of(new ShareIssue(bar.tradeDate(), before, after));
+            }
+        }
+        return Optional.empty();
+    }
+
     /** {@code date}보다 <b>엄격히 이른</b> 마지막 거래일. 무상증자의 권리락이 이 자리다. */
     Optional<LocalDate> lastTradingDayBefore(LocalDate date) {
         LocalDate found = null;
