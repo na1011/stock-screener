@@ -80,10 +80,8 @@ public class Atr14Calculator implements IndicatorCalculator {
         List<IndicatorPoint> points = new ArrayList<>(trueRanges.size() - PERIOD + 1);
         points.add(new IndicatorPoint(bars.get(PERIOD).tradeDate(), atr));
 
-        BigDecimal periodLessOne = BigDecimal.valueOf(PERIOD - 1L);
         for (int i = PERIOD; i < trueRanges.size(); i++) {
-            atr = atr.multiply(periodLessOne).add(trueRanges.get(i))
-                    .divide(period, MovingAverages.SCALE, RoundingMode.HALF_UP);
+            atr = rmaStep(atr, trueRanges.get(i), PERIOD);
             // trueRanges[i]는 bars[i+1]의 것이다 — 첫 봉에는 실체범위가 없어 한 칸 밀려 있다.
             points.add(new IndicatorPoint(bars.get(i + 1).tradeDate(), atr));
         }
@@ -98,13 +96,45 @@ public class Atr14Calculator implements IndicatorCalculator {
      * 어긋난 것이 드러나지 않는다.
      */
     static BigDecimal trueRange(PriceBar current, PriceBar previous) {
-        BigDecimal high = PriceScaling.adjustedHigh(current);
-        BigDecimal low = PriceScaling.adjustedLow(current);
-        BigDecimal previousClose = previous.adjClose();
+        return trueRange(PriceScaling.adjustedHigh(current), PriceScaling.adjustedLow(current),
+                previous.adjClose());
+    }
 
+    /**
+     * 축척을 이미 맞춘 값으로 실체범위를 낸다.
+     *
+     * <p>{@code PriceBar}를 받는 위 오버로드가 이것을 부른다. 따로 있는 이유는 <b>주봉</b>이
+     * {@code PriceBar}가 아니기 때문이다 — {@code WeeklyBar}는 리샘플러가 이미
+     * {@code PriceScaling}으로 옮긴 값이라, 여기서 다시 태우면 <b>두 번 보정된다.</b>
+     *
+     * <p>IMPORTANT — <b>{@code previousClose}가 {@code null}이면 갭이 정의되지 않아
+     * {@code 고가 − 저가}를 낸다.</b> 시계열의 첫 봉이 그렇다. <b>0을 넣지 마라</b> —
+     * 갭이 주가만큼 벌어진 것으로 계산되어 시드 평균이 통째로 부풀고, 그 봉을 시드에 쓰는
+     * 지표가 초기 구간에서 조용히 눌린다.
+     */
+    static BigDecimal trueRange(BigDecimal high, BigDecimal low, BigDecimal previousClose) {
         BigDecimal range = high.subtract(low);
+        if (previousClose == null) {
+            return range;
+        }
         BigDecimal highGap = high.subtract(previousClose).abs();
         BigDecimal lowGap = low.subtract(previousClose).abs();
         return range.max(highGap).max(lowGap);
+    }
+
+    /**
+     * Wilder RMA 한 걸음. {@code 새값 = (직전×(기간−1) + 실체범위) ÷ 기간}, 즉 α = 1/기간.
+     *
+     * <p>{@link #calculate}의 루프 본문을 그대로 뽑은 것이라 값이 같다. 뽑은 이유는 주봉 ATR이
+     * 진행 중인 주에 대해 걸음 하나만 밀어야 하기 때문이다.
+     *
+     * <p>IMPORTANT — <b>{@link MovingAverages#emaStep}과 바꿔 쓰면 안 된다.</b> EMA는
+     * α = 2/(기간+1)이라 14에서 {@code 0.1333} 대 {@code 0.0714}로 거의 두 배 다르다.
+     * 바꿔 써도 값이 정상 범위 안이라 <b>드러나지 않는다.</b>
+     */
+    static BigDecimal rmaStep(BigDecimal previous, BigDecimal trueRange, int period) {
+        return previous.multiply(BigDecimal.valueOf(period - 1L))
+                .add(trueRange)
+                .divide(BigDecimal.valueOf(period), MovingAverages.SCALE, RoundingMode.HALF_UP);
     }
 }

@@ -83,12 +83,31 @@ public final class MovingAverages {
         List<BigDecimal> result = new ArrayList<>(values.size() - period + 1);
         result.add(current);
         for (int i = period; i < values.size(); i++) {
-            current = values.get(i).multiply(alpha, MC)
-                    .add(current.multiply(oneMinusAlpha, MC))
-                    .setScale(SCALE, RoundingMode.HALF_UP);
+            current = emaStep(current, values.get(i), period);
             result.add(current);
         }
         return result;
+    }
+
+    /**
+     * EMA 한 걸음. {@code 새값 = x·α + 직전·(1−α)}, α = 2/(기간+1).
+     *
+     * <p>{@link #ema}의 루프 본문을 그대로 뽑은 것이라 값이 같다. 뽑은 이유는 <b>주봉 지표가
+     * 진행 중인 주에 대해 걸음 하나만 밀어야 하기 때문</b>이다 — 거래일마다 시계열 전체로 EMA를
+     * 다시 돌리면 종목당 주 수만큼 곱해진다.
+     *
+     * <p>IMPORTANT — <b>ATR의 평활은 이것이 아니다.</b> Wilder RMA는 α = 1/기간이라
+     * 14에서 {@code 2/15 = 0.1333} 대 {@code 1/14 = 0.0714}로 <b>거의 두 배 다르다.</b>
+     * 여기에 실체범위를 넣으면 ATR이 상시 작게 나오고 그것을 분모로 쓰는 MACD-V는 상시 크게
+     * 나오는데, <b>컴파일도 테스트도 통과한다.</b> ATR 쪽은
+     * {@link Atr14Calculator#rmaStep(BigDecimal, BigDecimal, int)}이다.
+     */
+    static BigDecimal emaStep(BigDecimal previous, BigDecimal value, int period) {
+        BigDecimal alpha = BigDecimal.valueOf(2)
+                .divide(BigDecimal.valueOf(period + 1L), MC);
+        return value.multiply(alpha, MC)
+                .add(previous.multiply(BigDecimal.ONE.subtract(alpha), MC))
+                .setScale(SCALE, RoundingMode.HALF_UP);
     }
 
     /** 수정종가 시계열. EMA·RSI처럼 값 목록만 필요한 계산에 쓴다. */
