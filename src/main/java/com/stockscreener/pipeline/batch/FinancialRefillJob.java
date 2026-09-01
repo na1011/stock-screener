@@ -170,8 +170,14 @@ public class FinancialRefillJob {
         if (universeCode != null) {
             // MUST: 유니버스를 명시하면 활성 여부를 보지 않는다. oneUniverseMemberIds가
             // 그렇게 만들어져 있고(InitialLoadJob이 같은 술어를 쓴다) 그것이 이 갈래의
-            // 존재 이유다 — US_TOP1000이 비활성인 동안에만 미국 재무를 고칠 수 있는데,
-            // activeUniverseMemberIds는 u.is_active를 조인해 미국에 한 건도 안 닿는다.
+            // 존재 이유다 — **비활성** 유니버스는 아래 activeUniverseMemberIds가 u.is_active를
+            // 조인해 한 건도 안 닿으므로, 그것을 채우려면 이 갈래뿐이다.
+            //
+            // MUST NOT: 이 갈래를 "미국 전용"으로 읽지 않는다. US_TOP1000은 2026-08-31에
+            // 활성이 됐고(ADR-0107), 그때부터 **인자 없는 기본 경로의 대상이 미국을 포함한다**
+            // — 지금 그 경로는 국내 350 + 미국 1,000이고 미국 몫은 DART가 아니라 SEC EDGAR를
+            // 부른다. 인자 없이 치면 국내만 돈다고 읽으면 소요와 콜을 둘 다 적게 잡는다.
+            //
             // 0건이면 조용히 성공시키지 않는다 — 그것은 이 잡이 고치려는 결함과 같은 모양이다.
             List<Long> members = stockRegistrar.oneUniverseMemberIds(
                     universeCode, tickers == null ? List.of() : tickers);
