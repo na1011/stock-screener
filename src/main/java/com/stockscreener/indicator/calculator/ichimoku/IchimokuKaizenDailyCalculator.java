@@ -12,7 +12,7 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "일봉 호전 분류",
-        description = "주봉 호전 분류와 같은 세 조건을 일봉 차원에서 센 값. 0~3이다.",
+        description = "주봉 호전 분류와 같은 세 일목 조건을 일봉 차원에서 센 값. 0~3이다.",
         interpretation = "많을수록 일봉 흐름이 호전됐다는 뜻이다. 주봉 호전이 함께 성립할 때 의미가 있고, "
                 + "일봉 단독으로는 하루 이틀의 움직임에 흔들린다.",
         category = IndicatorCategory.OSCILLATOR,

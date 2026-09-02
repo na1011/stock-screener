@@ -12,7 +12,8 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "주봉 호전 분류",
-        description = "구름 상방·전환선 골든크로스·26주 전 종가 상회 중 몇 개를 채웠는지. 0~3이다.",
+        description = "일목 3역호전을 이루는 세 조건 — 구름 상방·전환선 골든크로스·26주 전 종가 상회 — 중 "
+                + "몇 개를 채웠는지. 0~3이다.",
         interpretation = "많을수록 주봉 흐름이 호전됐다는 뜻이고, 셋을 다 채운 3이 3역호전이다. "
                 + "2 이상이어야 일봉 합치 판정이 열린다.",
         category = IndicatorCategory.OSCILLATOR,
