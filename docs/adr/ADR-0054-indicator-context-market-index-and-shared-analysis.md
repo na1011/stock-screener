@@ -17,7 +17,7 @@ applies_to:
 `IndicatorContext`에 **그 종목이 속한 시장의 지수 종가 시계열**을 담는다. 러너가
 `asOf` 단위로 한 번 읽어 받은 것을 종목의 `market_code`로 골라 넣는다.
 
-그리고 `ICHI_*` 18개가 **`IchimokuAnalyses` 메모이저 빈 하나**를 통해 같은 분석 결과를
+그리고 `ICHI_*` 31개가 **`IchimokuAnalyses` 메모이저 빈 하나**를 통해 같은 분석 결과를
 나눠 쓴다. 이것이 "계산기끼리 중간 구조체를 공유하지 않는다"는 암묵 규약을 깨는 첫 자리다.
 
 ## 규칙
@@ -59,25 +59,24 @@ applies_to:
 계약을 열었어도 지수를 쓰지 않는 새 지표는 여전히 파일 하나로 끝나야 한다. 아니면 ADR-0039가
 예고한 비용이 실현된 것이다.
 
-```premise 공유 분석 — ICHI_* 18개의 산출 일자가 서로 같은가
-psql -d stock_screener -At -c "SELECT CASE
-  WHEN (SELECT count(*) FROM indicator_value WHERE indicator_code LIKE 'ICHI\_%') = 0
-    THEN '잴 것이 없었다 — ICHI_* 가 한 행도 없다'
-  WHEN (SELECT count(DISTINCT n) FROM (SELECT indicator_code, count(*) n FROM indicator_value
-        WHERE indicator_code LIKE 'ICHI\_%' GROUP BY 1) t) = 1
-    THEN 'OK 18개가 같은 일자·종목 집합에 값을 낸다 (' ||
-         (SELECT max(n)::text FROM (SELECT count(*) n FROM indicator_value
-          WHERE indicator_code LIKE 'ICHI\_%' GROUP BY indicator_code) u) || '행씩)'
-  ELSE '행 수가 코드마다 다르다 — 분석 하나를 나눠 쓰는 전제가 깨졌거나 일부 코드만 무효화됐다: ' ||
-       (SELECT string_agg(indicator_code || '=' || n, ' ' ORDER BY n) FROM
-        (SELECT indicator_code, count(*) n FROM indicator_value
-         WHERE indicator_code LIKE 'ICHI\_%' GROUP BY 1) v)
-  END"
+```premise 공유 분석 — ICHI_* 31개가 같은 분석에서 나오는가
+psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE m.effective_to IS NULL), t AS (SELECT iv.indicator_code AS c, count(*) AS n, (iv.indicator_code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_EXT_SIGNAL','ICHI_CONFIDENCE','ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR')) AS needs_index FROM indicator_value iv JOIN act ON act.stock_id = iv.stock_id WHERE iv.indicator_code LIKE 'ICHI\_%' GROUP BY 1, 3) SELECT CASE WHEN (SELECT count(*) FROM t) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 ICHI_* 가 한 행도 없다' WHEN (SELECT count(*) FROM t) <> 31 THEN '코드가 31개가 아니다(' || (SELECT count(*) FROM t) || '개) — 지표가 늘거나 줄었으면 이 펜스의 무리 나눔부터 다시 본다' WHEN (SELECT count(DISTINCT n) FROM t WHERE NOT needs_index) > 1 THEN '지수를 안 쓰는 스물넷의 행 수가 갈렸다 — 분석 하나를 나눠 쓰는 전제가 깨졌거나 일부 코드만 무효화됐다: ' || (SELECT string_agg(c || '=' || n, ' ' ORDER BY n) FROM t WHERE NOT needs_index) WHEN (SELECT count(DISTINCT n) FROM t WHERE needs_index) > 1 THEN '지수에 기대는 일곱끼리 갈렸다 — 이 일곱은 서로 같아야 한다: ' || (SELECT string_agg(c || '=' || n, ' ' ORDER BY n) FROM t WHERE needs_index) WHEN (SELECT max(n) FROM t WHERE needs_index) > (SELECT min(n) FROM t WHERE NOT needs_index) THEN '지수에 기대는 일곱이 나머지보다 많다 — 지수 없는 일자에 0을 채운 자리다' ELSE 'OK 스물넷 ' || (SELECT max(n) FROM t WHERE NOT needs_index) || '행 · 지수에 기대는 일곱 ' || (SELECT max(n) FROM t WHERE needs_index) || '행' END"
 ```
 
-**행 수가 같아야 하는 근거**는 18개가 같은 `NavigableMap`을 순회해 포인트를 만든다는 것이다.
+**행 수가 같아야 하는 근거**는 31개가 같은 `NavigableMap`을 순회해 포인트를 만든다는 것이다.
 갈리면 공유가 깨졌거나 일부 코드만 지워진 것이고, 둘 다 **화면에서는 "그 종목이 조건에 안
 맞았다"와 같아 보인다.** `EXCESS_RETURN_26W`는 워밍업이 달라 여기 넣지 않는다.
+
+**단, 무리가 둘이다.** 초과 수익률에 기대는 일곱(`TIER`·`SIGNAL`·`EXT_SIGNAL`·`CONFIDENCE`·
+`CONCLUSION`·`BULL`·`BEAR`)은 지수가 없는 일자에 **값을 내지 않는 것이 정상**이라
+(ADR-0122 §규칙 — 0으로 채우면 "지수 없음"이 "초과 수익률 0%"가 된다) 나머지 스물넷보다
+적을 수 있다. 그 일곱끼리는 여전히 같아야 하고, 나머지보다 **많으면** 0을 채운 자리다.
+
+**MUST: 활성 유니버스로 좁혀서 잰다.** 유니버스에서 빠진 종목은 백필 대상이 아니므로
+(`IndicatorBackfillJob.resolveTargets`) 새 지표가 채워지지 않는데, **편입돼 있던 시기에 쓰인
+옛 행은 보존 창 안에 그대로 남는다.** 좁히지 않으면 그 잔여 행 때문에 되살린 열셋만 짧게
+보인다 — 실측으로 리밸런싱에서 빠진 10종목이 정확히 그 모양을 만들었고(2026-09-02),
+좁히면 31개가 전부 같은 225,588행이었다. **결손이 아니라 설계다.**
 
 ## 배경
 
@@ -85,8 +84,8 @@ psql -d stock_screener -At -c "SELECT CASE
 업종)과 다른 계층의 원장(ADR-0051, 기업 행위). 이번이 세 번째이고 성격이 다르다:
 **종목과 아무 관계가 없는 시계열**이다.
 
-공유 분석 쪽은 성능이 이유다. 일목 분석 하나가 지표 18개의 값을 함께 내는데 계산기 계약은
-지표 하나당 하나다. 각자 분석하면 종목·일자마다 18번 재계산이고, 실행당 산출 일자
+공유 분석 쪽은 성능이 이유다. 일목 분석 하나가 지표 31개의 값을 함께 내는데 계산기 계약은
+지표 하나당 하나다. 각자 분석하면 종목·일자마다 31번 재계산이고, 실행당 산출 일자
 수만큼 그 비용이 곱해진다(실측 종목당 177.4일자, 2026-08-20). `phase-criteria.md` §P12가 *"한 종목의 일목
 분석이 지표 개수만큼 반복되지 않는다"*를 완료 조건으로 적어 둔 이유다.
 
@@ -114,5 +113,5 @@ psql -d stock_screener -At -c "SELECT CASE
     `withMarketIndex`가 사본을 만드는 이유가 그것이다.
 - **되돌리려면**: `IndicatorContext.marketIndex()`, `IndicatorRunner`의 4번째 인자와
   `marketIndexesFor`, 두 잡의 호출부, 그리고 `IchimokuAnalyses`. 되돌리면 `EXCESS_RETURN_26W`가
-  값을 못 내므로 **무증상은 아니다.** (`ICHI_*` 18개는 지수를 쓰지 않는다 —
+  값을 못 내므로 **무증상은 아니다.** (`ICHI_*` 중 스물넷은 지수를 쓰지 않는다 —
   ADR-0046 §승인된 이탈 2가 그 게이트의 철회를 든다.)
