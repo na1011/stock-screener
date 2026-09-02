@@ -20,7 +20,7 @@ import java.math.BigDecimal;
  */
 @Component
 @IndicatorMeta(
-        name = "일목 전환선 > 기준선",
+        name = "일목 전환선이 기준선 위",
         description = "주봉 일목균형표의 전환선(9주)이 기준선(26주)보다 위에 있으면 1, 아니면 0이다. "
                 + "흔히 일목 골든크로스라 부르는 상태다.",
         interpretation = "1이 유리하다 — 단기 흐름이 중기 흐름보다 강하다는 뜻이다. "

@@ -8,10 +8,10 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
-/** 일목 파동 leaf. 값의 정의와 옮긴 근거는 {@link IchimokuAnalysis}와 ADR-0046에 있다. */
+/** 일목 파동 판정. 값의 정의와 옮긴 근거는 {@link IchimokuAnalysis}와 ADR-0046에 있다. */
 @Component
 @IndicatorMeta(
-        name = "일목 파동 leaf",
+        name = "일목 파동 판정",
         description = "호소다 값폭관측론의 파동 판정. 1 진행 중 · 2 실패 · 3 A 대용 · 4 C 미성숙 · "
                 + "5 첫 목표 도달 · 6 A 이탈 · 8 유보 · 9 초기 단계.",
         interpretation = "숫자는 순서가 아니라 분류라 크고 작음에 뜻이 없다. "

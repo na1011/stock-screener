@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 /** 3역호전 시점. 값의 정의와 옮긴 근거는 {@link IchimokuAnalysis}와 ADR-0046에 있다. */
 @Component
 @IndicatorMeta(
-        name = "3역호전 시점",
+        name = "일목 3역호전 시점",
         description = "3역호전이 처음 성립한 시점. 0이 이번 주이고 숫자가 클수록 오래된 신호다. "
                 + "−1은 130주 안에 성립하지 않았다는 뜻, "
                 + "−2는 130주 내내 성립해 시점을 특정할 수 없다는 뜻이다.",
