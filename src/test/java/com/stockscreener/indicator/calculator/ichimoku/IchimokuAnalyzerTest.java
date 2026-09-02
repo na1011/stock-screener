@@ -12,6 +12,7 @@ import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
+import java.util.TreeMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -33,7 +34,7 @@ class IchimokuAnalyzerTest {
         List<PriceBar> bars = dailyBars(206 * 5);
         assertThat(weeksOf(bars)).isEqualTo(206);
 
-        assertThat(IchimokuAnalyzer.analyze(bars)).isEmpty();
+        assertThat(IchimokuAnalyzer.analyze(bars, flatIndex(bars))).isEmpty();
     }
 
     @Test
@@ -41,7 +42,8 @@ class IchimokuAnalyzerTest {
     void startsExactlyAt207Weeks() {
         // 207주를 채운 뒤 5주를 더 둔다. 산출은 207주째가 시작되는 날부터다.
         List<PriceBar> bars = dailyBars(212 * 5);
-        NavigableMap<LocalDate, IchimokuAnalysis> result = IchimokuAnalyzer.analyze(bars);
+        NavigableMap<LocalDate, IchimokuAnalysis> result =
+                IchimokuAnalyzer.analyze(bars, flatIndex(bars));
 
         assertThat(result).isNotEmpty();
         // 206주까지의 마지막 거래일 — 여기에는 값이 없어야 한다.
@@ -56,25 +58,48 @@ class IchimokuAnalyzerTest {
     }
 
     @Test
-    @DisplayName("시장 지수 없이도 값이 나온다 — 남은 지표 중 지수를 쓰는 것이 없다")
-    void doesNotDependOnTheMarketIndex() {
+    @DisplayName("지수가 없으면 D5에 기댄 일곱만 null이고 나머지는 그대로 나온다")
+    void suppressesOnlyTheIndexDependentSeven() {
         List<PriceBar> bars = dailyBars(212 * 5);
 
-        // 지수 결손 시 전면 억제하던 게이트는 철회됐다(ADR-0046 §승인된 이탈 2). 지수에 기대는
-        // EXCESS_RETURN_26W는 별도 계산기이고 스스로 결손일을 건너뛴다 — 그 계약은
-        // ExcessReturn26wCalculatorTest가 잰다.
-        assertThat(IchimokuAnalyzer.analyze(bars))
-                .as("지수를 아예 받지 않는다")
+        NavigableMap<LocalDate, IchimokuAnalysis> without =
+                IchimokuAnalyzer.analyze(bars, new TreeMap<>());
+        assertThat(without)
+                .as("지수 결손이 그 일자를 통째로 버리던 게이트는 철회됐다(ADR-0046 §승인된 이탈 2)")
                 .isNotEmpty();
+
+        IchimokuAnalysis a = without.lastEntry().getValue();
+        assertThat(a.tier()).isNull();
+        assertThat(a.signal()).isNull();
+        assertThat(a.extSignal()).isNull();
+        assertThat(a.confidence()).isNull();
+        assertThat(a.conclusion()).isNull();
+        assertThat(a.bull()).isNull();
+        assertThat(a.bear()).isNull();
+        assertThat(a.excessReturn()).isNull();
+
+        // MUST: 관측 축은 지수를 쓰지 않는다. 여기가 무너지면 지수 결손일에 멀쩡한 지표
+        // 열여덟이 함께 사라진다 — 그것이 철회된 게이트가 하던 일이다.
+        assertThat(a.pillar()).isNotNull();
+        assertThat(a.stage()).isNotNull();
+        assertThat(a.leaf()).isNotNull();
+        assertThat(a.freshness()).isNotNull();
+        assertThat(a.t3yeok()).isNotNull();
+        assertThat(a.kaizenMatch()).isNotNull();
+
+        // 대조군 — 같은 봉에 지수를 주면 일곱이 값을 갖는다. 없으면 "언제나 null"인
+        // 구현도 위 단언을 통과한다.
+        IchimokuAnalysis withIndex =
+                IchimokuAnalyzer.analyze(bars, flatIndex(bars)).lastEntry().getValue();
+        assertThat(withIndex.tier()).isNotNull();
+        assertThat(withIndex.excessReturn()).isNotNull();
     }
 
     @Test
-    @DisplayName("분할은 수정 축척으로 흡수된다 — 가격이 구름 아래로 떨어지지 않는다")
-    void splitDoesNotPushThePriceBelowTheCloud() {
+    @DisplayName("분할은 수정 축척으로 흡수된다 — 26주 초과 수익률이 절벽을 갖지 않는다")
+    void splitDoesNotCreateACliffInTheExcessReturn() {
         // 마지막 60거래일에서 5:1 분할이 일어난다. 원주가는 1/5로 떨어지지만 adj_close는
-        // 이어진다. 원주가를 쓰면 종가만 20으로 꺾이고 구름은 과거의 100 근처에 남아
-        // ICHI_PRICE_VS_KUMO가 −1(구름 아래)이 된다 — 값이 정상 범위 안이라 그럴듯하고,
-        // 그 종목은 모든 일목 프리셋에서 조용히 탈락한다.
+        // 이어진다 — 원주가를 쓰면 stock_ret_26w가 −80%가 되어 score_d5가 −ext_base로 붙는다.
         int size = 212 * 5;
         List<PriceBar> bars = new ArrayList<>(size);
         LocalDate date = START;
@@ -87,14 +112,21 @@ class IchimokuAnalyzerTest {
             date = nextTradingDay(date);
         }
 
-        IchimokuAnalysis last = IchimokuAnalyzer.analyze(bars).lastEntry().getValue();
+        IchimokuAnalysis last =
+                IchimokuAnalyzer.analyze(bars, flatIndex(bars)).lastEntry().getValue();
 
-        assertThat(last.priceVsKumo())
-                .as("수정 축척이면 가격이 평평해 구름 안(0)이다. 원주가를 쓰면 −1이 된다")
-                .isZero();
-        assertThat(last.kaizenWeekly())
-                .as("호전 분류도 종가 비교를 품는다 — 26주 전보다 낮다고 읽히면 함께 깎인다")
-                .isEqualTo(0);
+        assertThat(last.excessReturn())
+                .as("수정 축척이면 가격이 평평하므로 초과 수익률이 0이다. 원주가를 쓰면 −80%다")
+                .isEqualTo(0.0);
+    }
+
+    /** 종목 봉과 같은 날짜에 값이 있는 평평한 지수. 초과 수익률이 0이 된다. */
+    private static NavigableMap<LocalDate, BigDecimal> flatIndex(List<PriceBar> bars) {
+        NavigableMap<LocalDate, BigDecimal> index = new TreeMap<>();
+        for (PriceBar bar : bars) {
+            index.put(bar.tradeDate(), new BigDecimal("100"));
+        }
+        return index;
     }
 
     /** 종가가 평평한 일봉. 축척 검증 외에는 값 자체가 중요하지 않다. */

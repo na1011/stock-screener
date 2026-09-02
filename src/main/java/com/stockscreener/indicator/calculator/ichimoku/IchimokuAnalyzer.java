@@ -3,8 +3,10 @@ package com.stockscreener.indicator.calculator.ichimoku;
 import com.stockscreener.indicator.calculator.WeeklyBar;
 import com.stockscreener.indicator.calculator.WeeklyResampler;
 import com.stockscreener.indicator.PriceBar;
+import com.stockscreener.indicator.calculator.ExcessReturn;
 import com.stockscreener.indicator.calculator.PriceScaling;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,13 +30,15 @@ public final class IchimokuAnalyzer {
     }
 
     /**
-     * <p>시장 지수를 받지 않는다 — <b>지표 18개 중 시장 지수를 쓰는 것이 없다.</b> 지수 결손 시
-     * 전면 억제하던 게이트는 철회됐다(ADR-0046 §승인된 이탈 2). 지수에 기대는
-     * {@code EXCESS_RETURN_26W}는 별도 계산기이며 스스로 결손일을 건너뛴다.
+     * <p>시장 지수를 받는 것은 {@code drv_55}(26주 초과 수익률)가 D5 점수로 번지기 때문이다.
+     * <b>지수가 없는 일자를 통째로 버리던 게이트는 철회됐다</b>(ADR-0046 §승인된 이탈 2) —
+     * 관측 지표 열여덟은 지수를 쓰지 않으므로 함께 막으면 회귀다. 그 일자에는 D5에 기대는
+     * 일곱만 {@code null}이 된다.
      *
      * @return 거래일 → 분석. 207 주봉을 못 채우는 구간은 담기지 않는다
      */
-    public static NavigableMap<LocalDate, IchimokuAnalysis> analyze(List<PriceBar> bars) {
+    public static NavigableMap<LocalDate, IchimokuAnalysis> analyze(
+            List<PriceBar> bars, NavigableMap<LocalDate, BigDecimal> marketIndex) {
         NavigableMap<LocalDate, IchimokuAnalysis> result = new TreeMap<>();
         if (bars.isEmpty()) {
             return result;
@@ -60,12 +64,13 @@ public final class IchimokuAnalyzer {
             }
             LocalDate date = bars.get(i).tradeDate();
             WeeklyWindow window = new WeeklyWindow(series, current, partials.get(i));
-            WeeklyAnalysis w = WeeklyAnalyzer.analyze(window);
-            result.put(date, new IchimokuAnalysis(
-                    w.modA(), w.modB(), w.modC(), w.modD(), w.modE(), w.modF(),
-                    w.modG(), w.modH(), w.modJ(), w.modK(), w.modL(), w.modM(),
-                    w.kaizenWeekly(), daily.kaizen(i), w.obvT(), w.divergence(),
-                    w.tkCross(), w.priceVsKumo()));
+            WeeklyAnalysis weekly = WeeklyAnalyzer.analyze(window);
+            // MUST: 지수가 없는 일자를 건너뛰지 않는다 — 그 게이트는 철회됐다(ADR-0046
+            // §승인된 이탈 2). 초과 수익률에 기대는 일곱만 값을 못 내고, 그것은
+            // IchimokuScoring이 null로 표현한다. 계산기 일곱은 priceAndMarketIndex를
+            // 선언해 프레임워크가 그 일자를 애초에 거른다.
+            result.put(date, IchimokuScoring.score(weekly, daily.kaizen(i),
+                    ExcessReturn.at(bars, marketIndex, i)));
         }
         return result;
     }

@@ -55,7 +55,21 @@ abstract class IchimokuIndicator implements IndicatorCalculator {
 
     @Override
     public DataRequirement dataRequirement() {
-        return DataRequirement.priceBars(LOOKBACK);
+        return needsMarketIndex()
+                ? DataRequirement.priceAndMarketIndex(LOOKBACK)
+                : DataRequirement.priceBars(LOOKBACK);
+    }
+
+    /**
+     * D5(26주 초과 수익률)에 기대는 <b>일곱</b>만 {@code true}를 낸다 —
+     * tier·signal·extSignal·confidence·conclusion·bull·bear.
+     *
+     * <p>MUST: 선언한 쪽만 지수를 요구한다. 열여덟은 지수를 쓰지 않으므로 함께 묶으면
+     * <b>지수가 결손인 날 멀쩡한 지표까지 사라진다</b> — 그렇게 하던 게이트가 철회된
+     * 결정이다(ADR-0046 §승인된 이탈 2).
+     */
+    protected boolean needsMarketIndex() {
+        return false;
     }
 
     @Override
@@ -66,7 +80,13 @@ abstract class IchimokuIndicator implements IndicatorCalculator {
         }
         List<IndicatorPoint> points = new ArrayList<>(byDate.size());
         for (Map.Entry<LocalDate, IchimokuAnalysis> entry : byDate.entrySet()) {
-            points.add(new IndicatorPoint(entry.getKey(), valueOf(entry.getValue())));
+            BigDecimal value = valueOf(entry.getValue());
+            // MUST: null이면 그 일자를 담지 않는다 — 지수가 없어 D5 축을 못 낸 자리다.
+            // 0을 채우면 "지수 없음"이 "중립"이 되고 조건 `<= 0`이 그것을 전부 통과시킨다.
+            if (value == null) {
+                continue;
+            }
+            points.add(new IndicatorPoint(entry.getKey(), value));
         }
         return points;
     }
@@ -77,5 +97,10 @@ abstract class IchimokuIndicator implements IndicatorCalculator {
     /** 정수 값을 담는다. {@code double} 오버로드를 타면 {@code 4.0}이 되어 자릿수가 늘어난다. */
     protected static BigDecimal of(int value) {
         return BigDecimal.valueOf(value);
+    }
+
+    /** 지수 결손으로 낼 수 없는 값. {@code null}이면 그 일자를 담지 않는다. */
+    protected static BigDecimal of(Integer value) {
+        return value == null ? null : BigDecimal.valueOf(value);
     }
 }

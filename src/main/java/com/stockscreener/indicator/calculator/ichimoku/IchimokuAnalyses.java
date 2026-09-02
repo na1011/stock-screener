@@ -54,7 +54,7 @@ public class IchimokuAnalyses {
             return cachedValue;
         }
         NavigableMap<LocalDate, IchimokuAnalysis> value =
-                IchimokuAnalyzer.analyze(bars);
+                IchimokuAnalyzer.analyze(bars, context.marketIndex());
         cachedKey = key;
         cachedValue = value;
         return value;
