@@ -224,14 +224,14 @@ public class CorporateActionJob {
         }
         StringBuilder body = new StringBuilder(
                 ("%d건이 판정을 기다린다. 판정 전까지 아래 종목의 장기창 지표는 계산되지 않고, "
-                        + "그 종목은 프리셋 결과에서 빠진다(ADR-0055).\n").formatted(pending.size()));
+                        + "그 종목은 프리셋 결과에서 빠진다.\n").formatted(pending.size()));
         pending.stream().limit(CONFLICTS_IN_ALERT).forEach(candidate -> body.append(
                 "- %s: 효력일 %s (%s)\n".formatted(
                         candidate.ticker(), candidate.effectiveDate(), candidate.source())));
         if (pending.size() > CONFLICTS_IN_ALERT) {
             body.append("나머지 %d건은 로그에 있다.".formatted(pending.size() - CONFLICTS_IN_ALERT));
         }
-        body.append("판정은 PUT /api/admin/corporate-actions/{id}이다 — 화면은 없다(ADR-0049).");
+        body.append("판정은 PUT /api/admin/corporate-actions/{id}이다 — 화면은 없다.");
         execution.alertOperator(AlertSeverity.WARNING, "기업 행위 판정 대기", body.toString());
     }
 

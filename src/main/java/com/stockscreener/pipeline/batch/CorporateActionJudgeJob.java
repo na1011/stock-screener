@@ -186,7 +186,7 @@ public class CorporateActionJudgeJob {
                     jump.date(), jump.sharesBefore(), jump.sharesAfter(),
                     jump.ratio(), jump.relative(), jump.matchesPrice());
         }
-        log.info("  MUST: 위에서 하나를 고르는 것은 사람이다. 가격과 맞는 점프가 둘 이상이면"
+        log.info("  위에서 하나를 고르는 것은 사람이다. 가격과 맞는 점프가 둘 이상이면"
                 + " 전환권행사·유상증자가 섞인 것이다(ADR-0050).");
     }
 }

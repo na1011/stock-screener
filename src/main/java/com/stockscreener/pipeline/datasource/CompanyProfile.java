@@ -36,7 +36,7 @@ public record CompanyProfile(
         if (industryCode != null && !industryCode.isBlank() && scheme == null) {
             throw new IllegalArgumentException(
                     "업종코드가 있는데 분류 체계가 없다: " + industryCode
-                            + " — 어느 컬럼에 담을지 정할 수 없다(ADR-0092)");
+                            + " — 어느 컬럼에 담을지 정할 수 없다");
         }
     }
 }
