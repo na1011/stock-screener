@@ -20,7 +20,7 @@ import java.math.BigDecimal;
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
         direction = IndicatorMeta.Direction.NEUTRAL,
-        sortOrder = 125)
+        sortOrder = 151)
 public class IchimokuLeafCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_LEAF";

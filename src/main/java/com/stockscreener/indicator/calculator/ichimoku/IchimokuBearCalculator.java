@@ -21,7 +21,7 @@ import java.math.BigDecimal;
         unit = "점",
         decimalScale = 0,
         direction = IndicatorMeta.Direction.LOWER_IS_BETTER,
-        sortOrder = 109)
+        sortOrder = 149)
 public class IchimokuBearCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_BEAR";

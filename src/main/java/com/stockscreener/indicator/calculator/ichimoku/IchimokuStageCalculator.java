@@ -20,7 +20,7 @@ import java.math.BigDecimal;
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
         direction = IndicatorMeta.Direction.NEUTRAL,
-        sortOrder = 105)
+        sortOrder = 145)
 public class IchimokuStageCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_STAGE";

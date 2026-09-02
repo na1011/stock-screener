@@ -20,7 +20,7 @@ import java.math.BigDecimal;
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
         direction = IndicatorMeta.Direction.LOWER_IS_BETTER,
-        sortOrder = 106,
+        sortOrder = 146,
         bands = {
                 @IndicatorMeta.Band(label = "약한", from = 3),
                 @IndicatorMeta.Band(label = "중간", from = 2, to = 3),

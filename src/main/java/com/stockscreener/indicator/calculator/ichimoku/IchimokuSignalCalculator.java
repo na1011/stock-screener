@@ -21,7 +21,7 @@ import java.math.BigDecimal;
         unit = "점",
         decimalScale = 0,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 101)
+        sortOrder = 141)
 public class IchimokuSignalCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_SIGNAL";

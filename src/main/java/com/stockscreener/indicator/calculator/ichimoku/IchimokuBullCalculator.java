@@ -21,7 +21,7 @@ import java.math.BigDecimal;
         unit = "점",
         decimalScale = 0,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 108)
+        sortOrder = 148)
 public class IchimokuBullCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_BULL";

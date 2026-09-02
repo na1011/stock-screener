@@ -21,7 +21,7 @@ import java.math.BigDecimal;
         unit = "주",
         decimalScale = 0,
         direction = IndicatorMeta.Direction.NEUTRAL,
-        sortOrder = 126)
+        sortOrder = 152)
 public class IchimokuT3yeokCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_T3YEOK";

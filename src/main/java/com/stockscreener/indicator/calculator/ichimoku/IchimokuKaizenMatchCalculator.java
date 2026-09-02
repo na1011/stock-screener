@@ -20,7 +20,7 @@ import java.math.BigDecimal;
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
         direction = IndicatorMeta.Direction.NEUTRAL,
-        sortOrder = 124)
+        sortOrder = 150)
 public class IchimokuKaizenMatchCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_KAIZEN_MATCH";

@@ -21,7 +21,7 @@ import java.math.BigDecimal;
         unit = "등급",
         decimalScale = 0,
         direction = IndicatorMeta.Direction.LOWER_IS_BETTER,
-        sortOrder = 100,
+        sortOrder = 140,
         bands = {
                 @IndicatorMeta.Band(label = "제외", from = 4),
                 @IndicatorMeta.Band(label = "관찰", from = 3, to = 4),

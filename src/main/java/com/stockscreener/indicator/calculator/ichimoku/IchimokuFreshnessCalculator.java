@@ -21,7 +21,7 @@ import java.math.BigDecimal;
         unit = "주",
         decimalScale = 0,
         direction = IndicatorMeta.Direction.NEUTRAL,
-        sortOrder = 102)
+        sortOrder = 142)
 public class IchimokuFreshnessCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_FRESHNESS";

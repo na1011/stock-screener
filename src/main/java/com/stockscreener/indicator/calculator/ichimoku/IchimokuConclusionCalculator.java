@@ -20,7 +20,7 @@ import java.math.BigDecimal;
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 107)
+        sortOrder = 147)
 public class IchimokuConclusionCalculator extends IchimokuIndicator {
 
     public static final String CODE = "ICHI_CONCLUSION";
