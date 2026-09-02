@@ -19,6 +19,12 @@ applies_to:
 **코드와 지표는 건드리지 않았다.** 계산기 30파일·지표 18개·`indicator_value` 992,988행이
 그대로다. 이번 변경은 문서·javadoc·주석에만 걸린다.
 
+**IMPORTANT — 위 문장이 적힌 2026-08-20에 이미 계산기 13개는 없었다.** 엿새 전
+`ffd8f24`가 지웠고 그것은 **에이전트 판단이었다.** 여기 "지표 18개"라 적힌 것은 그
+상태를 사실로 받아들인 결과이지 사용자가 18을 고른 것이 아니다 — 사용자가 고른 문장은
+아래 표의 *"유지 — 문서·하네스만 축소"*뿐이다. **13개는 2026-09-02에 되살아났다**
+(ADR-0122). 지금 활성은 **31개**다.
+
 ### 사용자가 고른 문장과 내 해석
 
 **MUST NOT: 둘을 붙여 적지 않는다** — 붙이면 다음 세션이 해석을 결정으로 읽는다.
@@ -60,20 +66,23 @@ applies_to:
 
 ## 검증
 
-```premise 일목 자국 — 지표 18개와 죽은 13코드가 그대로인가
+```premise 일목 자국 — 관측 18개와 되살린 점수화 13개가 다 활성인가
 psql -d stock_screener -At -c "SELECT CASE
   WHEN total = 0 THEN '잴 것이 없었다 — indicator에 ICHI_ 행이 하나도 없다'
-  WHEN active <> 18 THEN '활성 ICHI_ 가 ' || active || '개다 — 18이 아니다'
-  WHEN dead_rows > 0 THEN '철회된 13코드에 값이 ' || dead_rows || '행 되살아났다'
+  WHEN active <> 31 THEN '활성 ICHI_ 가 ' || active || '개다 — 31이 아니다'
   ELSE 'OK 활성 ' || active || ' / 비활성 ' || (total - active)
-       || ' · 철회 코드 값 0행' END
+       || ' · 점수화 13코드 값 ' || scoring_rows || '행' END
 FROM (SELECT count(*) total, count(*) FILTER (WHERE is_active) active,
              (SELECT count(*) FROM indicator_value
                WHERE indicator_code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_PILLAR','ICHI_CONFIDENCE',
                      'ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR','ICHI_EXT_SIGNAL','ICHI_STAGE',
-                     'ICHI_LEAF','ICHI_FRESHNESS','ICHI_T3YEOK','ICHI_KAIZEN_MATCH')) dead_rows
+                     'ICHI_LEAF','ICHI_FRESHNESS','ICHI_T3YEOK','ICHI_KAIZEN_MATCH')) scoring_rows
       FROM indicator WHERE code LIKE 'ICHI/_%' ESCAPE '/') s"
 ```
+
+**MUST NOT: 점수화 13개의 값이 0행인 것을 붉히지 않는다.** 되살린 직후와 백필 전 사이가
+그 상태이고(ADR-0122), 그때 붉히면 **의도한 동작에 우는 펜스**가 된다. 세는 것은 활성
+개수이고 행 수는 함께 찍어 주기만 한다.
 
 **문서 쪽은 정적으로 잰다.** **MUST: `--hidden`을 붙이고 이 파일을 뺀다** — `--no-ignore`는
 숨김 디렉터리를 안 열어 `.claude`가 통째로 빠지고, 이 파일 자신이 아래 문자열을 이력으로
