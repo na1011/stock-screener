@@ -12,8 +12,10 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "일목 추세 단계",
-        description = "1 신생 · 2 진행 · 3 중기 · 4 성숙 · 5 추세 부재 · 6 추세 성숙기.",
-        interpretation = "13 수식자의 배점이 전부 이 단계에 달려 있다. MUST NOT: 크기로 비교하지 않는다 — 5·6은 1~4의 연장이 아니라 별개 상태다.",
+        description = "추세가 어느 국면에 있는지. 1 신생 · 2 진행 · 3 중기 · 4 성숙 · 5 추세 부재 · "
+                + "6 추세 성숙기이며, 13개 세부 항목의 배점이 전부 이 단계에 따라 달라진다.",
+        interpretation = "1~4는 추세가 익어 가는 순서지만 5·6은 그 연장이 아니라 별개 상태라, "
+                + "숫자의 크고 작음으로 비교할 수 없다.",
         category = IndicatorCategory.TECHNICAL,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

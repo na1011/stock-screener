@@ -21,10 +21,10 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "일목 전환선 > 기준선",
-        description = "주봉 일목균형표의 전환선(9주)이 기준선(26주)보다 위에 있으면 1, "
-                + "아니면 0이다. 흔히 일목 골든크로스라 부르는 상태다.",
-        interpretation = "1이면 단기 흐름이 중기 흐름보다 강하다는 뜻이다. "
-                + "구름 위에서 성립할 때를 더 무겁게 보며, 구름 아래에서는 반등 시도로 읽는다.",
+        description = "주봉 일목균형표의 전환선(9주)이 기준선(26주)보다 위에 있으면 1, 아니면 0이다. "
+                + "흔히 일목 골든크로스라 부르는 상태다.",
+        interpretation = "1이 유리하다 — 단기 흐름이 중기 흐름보다 강하다는 뜻이다. "
+                + "구름 위에서 성립할 때를 더 무겁게 보고, 구름 아래에서는 반등 시도로 읽는다.",
         category = IndicatorCategory.DERIVED,
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,

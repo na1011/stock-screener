@@ -13,8 +13,8 @@ import java.math.BigDecimal;
 @IndicatorMeta(
         name = "일목 선행스팬 A 기울기",
         description = "13주 회귀 기울기가 ATR의 ±0.25배를 넘는지로 1 상승 · 0 평탄 · −1 하락으로 가른다.",
-        interpretation = "선행스팬 A는 전환선과 기준선의 중간값이라 구름의 앞쪽 경계를 만든다. "
-                + "상승(1)이면 앞으로 놓일 구름이 위로 올라간다는 뜻이다.",
+        interpretation = "상승(1)이 유리하다 — 앞으로 놓일 구름이 위로 올라간다는 뜻이다. "
+                + "선행스팬 A는 전환선과 기준선의 중간값이라 구름의 앞쪽 경계를 만든다.",
         category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

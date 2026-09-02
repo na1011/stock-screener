@@ -12,8 +12,11 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "3역호전 시점",
-        description = "3역호전이 처음 성립한 주 인덱스. 0이 현재이고 클수록 과거다.",
-        interpretation = "MUST NOT: 조건의 좌변으로 쓰지 않는다 — 「해당 없음」을 뜻하는 센티널이 유리한 쪽 극단에 앉아 있어 부등호를 걸면 정반대 집합이 걸린다. −1은 130주 안에 성립하지 않았다는 뜻이고 −2는 130주 내내 성립해 시점을 특정할 수 없다는 뜻이다 — 둘은 정반대 상태인데 값은 이웃해 있다.",
+        description = "3역호전이 처음 성립한 시점. 0이 이번 주이고 숫자가 클수록 오래된 신호다. "
+                + "−1은 130주 안에 성립하지 않았다는 뜻, "
+                + "−2는 130주 내내 성립해 시점을 특정할 수 없다는 뜻이다.",
+        interpretation = "최근에 성립한 쪽(작은 값)이 유리하다. "
+                + "다만 −1·−2는 순서가 아니라 별개 상태라 「N 이하」 조건을 걸면 이 둘이 함께 걸린다.",
         category = IndicatorCategory.TECHNICAL,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

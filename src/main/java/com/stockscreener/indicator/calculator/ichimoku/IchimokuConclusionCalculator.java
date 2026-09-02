@@ -12,8 +12,10 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "일목 방향 결론",
-        description = "1 강세 · −1 약세 · 0 중립. 신호 강도의 절대값이 결론 임계(5) 미만이면 0이다.",
-        interpretation = "Tier 1~3은 전부 이 값이 1인 종목이다. 0은 방향을 말할 수 없다는 뜻이지 중립적 매력이 아니다.",
+        description = "일목이 가리키는 방향. 1 강세 · −1 약세 · 0 중립이며, "
+                + "신호 강도의 절대값이 5에 못 미치면 0이 된다.",
+        interpretation = "1이 유리하다. 0은 중립적 매력이 아니라 방향을 말할 수 없다는 뜻이고, "
+                + "Tier 1~3은 전부 이 값이 1인 종목이다.",
         category = IndicatorCategory.TECHNICAL,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

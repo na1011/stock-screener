@@ -12,8 +12,9 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "일목 Tier",
-        description = "주봉 일목 13 수식자·파동 분석·외부 시그널을 합산해 낸 1~4 등급이다. 1이 가장 우선이고 4는 제외다.",
-        interpretation = "1은 강한 강세가 추세 시작 직후에 잡힌 자리, 2는 적격, 3은 관찰이다. 4는 약세·중립·추세 부재를 전부 담으므로 4가 많은 것은 정상이다.",
+        description = "주봉 일목균형표의 13개 세부 항목과 파동 분석, 일목 밖의 신호를 모두 합산해 매긴 등급. "
+                + "1 최우선(강한 강세가 추세 시작 직후에 잡힘) · 2 적격 · 3 관찰 · 4 제외.",
+        interpretation = "1이 가장 유리하다. 4는 약세·중립·추세 부재를 전부 담으므로 4가 많은 것이 정상이다.",
         category = IndicatorCategory.TECHNICAL,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

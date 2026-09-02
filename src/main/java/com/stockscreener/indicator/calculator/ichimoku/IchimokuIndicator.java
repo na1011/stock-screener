@@ -15,12 +15,12 @@ import java.util.NavigableMap;
 /**
  * {@code ICHI_*} 계산기의 공통 뼈대. 하위 클래스는 <b>코드와 값 하나</b>만 정한다.
  *
- * <p>18개가 {@link IchimokuAnalyses}의 분석 하나를 나눠 쓴다. 각자 분석하면 18번 재계산이
+ * <p>31개가 {@link IchimokuAnalyses}의 분석 하나를 나눠 쓴다. 각자 분석하면 31번 재계산이
  * 되고, 그러면 값이 맞아도 백필이 실용 시간 안에 끝나지 않는다({@code phase-criteria.md} §P12).
  *
  * <p>MUST: 하위 클래스마다 {@code @IndicatorMeta}를 붙인다.
  * {@code IndicatorCatalogSynchronizer}가 {@code calculator.getClass()}에서 찾으므로
- * <b>여기에 붙이면 18개가 같은 이름으로 투영된다.</b>
+ * <b>여기에 붙이면 31개가 같은 이름으로 투영된다.</b>
  *
  * <p>IMPORTANT — 러너의 읽기 창은 {@link com.stockscreener.indicator.IndicatorRegistry}의
  * {@code readWindowBars()}가 정한다 — <b>전 지표 워밍업의 최댓값에 보존 일수를 얹은 값</b>이다
@@ -64,7 +64,7 @@ abstract class IchimokuIndicator implements IndicatorCalculator {
      * D5(26주 초과 수익률)에 기대는 <b>일곱</b>만 {@code true}를 낸다 —
      * tier·signal·extSignal·confidence·conclusion·bull·bear.
      *
-     * <p>MUST: 선언한 쪽만 지수를 요구한다. 열여덟은 지수를 쓰지 않으므로 함께 묶으면
+     * <p>MUST: 선언한 쪽만 지수를 요구한다. 스물넷은 지수를 쓰지 않으므로 함께 묶으면
      * <b>지수가 결손인 날 멀쩡한 지표까지 사라진다</b> — 그렇게 하던 게이트가 철회된
      * 결정이다(ADR-0046 §승인된 이탈 2).
      */

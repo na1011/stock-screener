@@ -12,8 +12,11 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "일봉 호전 합치",
-        description = "2 강한 합치 · 1 약한 합치 · 0 합치 부재 · −1 비활성(주봉 호전이 2 미만).",
-        interpretation = "원본의 수식자 i와 같은 값이다. MUST NOT: 조건의 좌변으로 쓰지 않는다 — 「해당 없음」을 뜻하는 센티널이 유리한 쪽 극단에 앉아 있어 부등호를 걸면 정반대 집합이 걸린다. −1은 합치가 나쁜 것이 아니라 판정 자체가 활성화되지 않았다는 뜻이다.",
+        description = "주봉 호전이 2 이상일 때 일봉이 얼마나 따라 붙었는지. 2 강한 합치 · 1 약한 합치 · "
+                + "0 합치 부재이며, −1은 주봉 호전이 2에 못 미쳐 판정 자체가 열리지 않은 상태다.",
+        interpretation = "합치가 강할수록(2) 주봉 신호를 일봉이 뒷받침한다. "
+                + "−1은 합치가 나쁜 것이 아니라 판정이 열리지 않은 것이어서, "
+                + "부등호 조건을 걸면 그 종목까지 함께 걸린다.",
         category = IndicatorCategory.TECHNICAL,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

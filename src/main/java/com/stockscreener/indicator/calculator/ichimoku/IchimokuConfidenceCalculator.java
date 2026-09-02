@@ -12,7 +12,8 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "일목 신뢰도",
-        description = "1 강한 · 2 중간 · 3 약한. 신호 강도의 절대값이 15·8 임계를 넘는지로 갈린다.",
+        description = "신호가 얼마나 뚜렷한지. 1 강한 · 2 중간 · 3 약한이며, "
+                + "신호 강도의 절대값이 15·8을 넘는지로 갈린다.",
         interpretation = "작을수록 신호가 뚜렷하다. Tier 판정이 이 값과 추세 단계의 조합이다.",
         category = IndicatorCategory.TECHNICAL,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +

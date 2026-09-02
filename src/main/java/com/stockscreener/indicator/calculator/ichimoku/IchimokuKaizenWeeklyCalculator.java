@@ -13,7 +13,8 @@ import java.math.BigDecimal;
 @IndicatorMeta(
         name = "주봉 호전 분류",
         description = "구름 상방·전환선 골든크로스·26주 전 종가 상회 중 몇 개를 채웠는지. 0~3이다.",
-        interpretation = "3이 3역호전이다. 이 값이 2 이상이어야 일봉 합치가 활성화된다.",
+        interpretation = "많을수록 주봉 흐름이 호전됐다는 뜻이고, 셋을 다 채운 3이 3역호전이다. "
+                + "2 이상이어야 일봉 합치 판정이 열린다.",
         category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

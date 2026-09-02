@@ -12,8 +12,10 @@ import java.math.BigDecimal;
 @Component
 @IndicatorMeta(
         name = "일목 추세 신선도",
-        description = "3역호전이 처음 성립한 뒤 지난 주 수. 0~128이다.",
-        interpretation = "작을수록 추세 시작 직후라는 뜻이고 같은 Tier 안 2차 기준이다. MUST NOT: 조건의 좌변으로 쓰지 않는다 — 「해당 없음」을 뜻하는 센티널이 유리한 쪽 극단에 앉아 있어 부등호를 걸면 정반대 집합이 걸린다. −1은 3역호전 미성립 또는 추세 성숙기라 「신선도 5 이하」를 걸면 그것까지 통과한다.",
+        description = "3역호전이 처음 성립한 뒤 지난 주 수. 0~128이며, "
+                + "−1은 3역호전이 성립하지 않았거나 추세가 성숙기에 든 상태를 뜻한다.",
+        interpretation = "작을수록 추세가 막 시작된 것이라 유리하다. "
+                + "다만 −1은 순서가 아니라 「해당 없음」이어서 「5 이하」 같은 조건을 걸면 그것까지 함께 걸린다.",
         category = IndicatorCategory.TECHNICAL,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

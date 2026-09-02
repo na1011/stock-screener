@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 @IndicatorMeta(
         name = "일목 신호 강도",
         description = "강세 점수 합에서 약세 점수 합을 뺀 값. 양극단이 약 ±43이다.",
-        interpretation = "같은 Tier 안에서 어느 종목을 먼저 볼지 가르는 1차 기준이다. 클수록 강세 신호가 강하다.",
+        interpretation = "클수록 강세 신호가 강하다. 같은 Tier 안에서는 이 값이 큰 종목을 먼저 본다.",
         category = IndicatorCategory.TECHNICAL,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

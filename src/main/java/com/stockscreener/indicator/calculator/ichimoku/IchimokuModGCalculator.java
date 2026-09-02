@@ -13,8 +13,8 @@ import java.math.BigDecimal;
 @IndicatorMeta(
         name = "일목 기준선 기울기",
         description = "13주 회귀 기울기가 ATR의 ±0.5배를 넘는지로 1 상승 · 0 평탄 · −1 하락으로 가른다.",
-        interpretation = "기준선은 26주 흐름이라 전환선보다 느리게 움직인다. 상승(1)이 유리하며, "
-                + "이 선이 평탄하면 가격이 한동안 같은 대역에 머물렀다는 뜻이다.",
+        interpretation = "상승(1)이 유리하다. 기준선은 26주 흐름이라 전환선보다 느리게 움직이고, "
+                + "평탄하면 가격이 한동안 같은 대역에 머물렀다는 뜻이다.",
         category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +
         // 프론트 미러까지 번진다. 프론트는 valueType으로 포맷을 분기하지 않는다.

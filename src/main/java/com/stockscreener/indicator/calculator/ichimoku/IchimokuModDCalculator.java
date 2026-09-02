@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 @IndicatorMeta(
         name = "일목 후행스팬 조망",
         description = "26주 전 구간에 겹치는 가격대가 하나도 없으면 1(확보), 있으면 0이다.",
-        interpretation = "1이면 26주 전 가격대에 걸리는 것이 없어 위쪽이 트여 있다는 뜻이다. "
+        interpretation = "1이 유리하다 — 26주 전 가격대에 걸리는 것이 없어 위쪽이 트여 있다는 뜻이다. "
                 + "매물대가 비어 있으면 상승에 저항이 적다고 본다.",
         category = IndicatorCategory.OSCILLATOR,
         // 새 valueType enum을 만들지 않는다 — enum + CHECK 마이그레이션 + wire-contract +

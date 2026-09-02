@@ -18,8 +18,8 @@ import java.math.BigDecimal;
 @IndicatorMeta(
         name = "일목 가격 대 구름",
         description = "주봉 종가가 구름 위면 1, 구름 안이면 0, 구름 아래면 −1이다.",
-        interpretation = "구름 위는 상승 추세, 아래는 하락 추세로 본다. "
-                + "구름 안은 방향이 정해지지 않은 구간이며 구름이 두꺼울수록 오래 머문다.",
+        interpretation = "구름 위(1)가 유리하다 — 상승 추세로 본다. 구름 아래(−1)는 하락 추세이고, "
+                + "구름 안(0)은 방향이 정해지지 않은 구간이며 구름이 두꺼울수록 오래 머문다.",
         category = IndicatorCategory.DERIVED,
         valueType = IndicatorValueType.COUNT,
         decimalScale = 0,
