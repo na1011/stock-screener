@@ -23,6 +23,16 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 public @interface IndicatorMeta {
 
+    /*
+     * IMPORTANT — 아래 셋은 사용자가 읽는 문장이다. name은 카드 제목·표 머리글·조건 빌더 픽커·
+     * 팝오버 제목에, description은 픽커 부제·팝오버에(그리고 픽커의 **검색 코퍼스**에),
+     * interpretation은 종목 상세 카드 본문·조건 빌더 편집기에 뜬다.
+     *
+     * 여기에 "MUST NOT:" 같은 지시문이나 내부 이름을 적지 않는다 — 코드를 고치는 사람에게 할 말은
+     * javadoc에 둔다. 실제로 ICHI_* 다섯이 화면에 하네스 문체를 그대로 냈고, 그것을 지키는 검사가
+     * 하나도 없었다. IndicatorCopyGuardTest가 지금 그 자리다.
+     */
+
     /** 화면에 보이는 이름. */
     String name();
 
