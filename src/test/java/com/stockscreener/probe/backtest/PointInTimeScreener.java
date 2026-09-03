@@ -2,6 +2,7 @@ package com.stockscreener.probe.backtest;
 
 import com.stockscreener.indicator.IndicatorDataReader.FinancialVisibility;
 import com.stockscreener.indicator.IndicatorRunner;
+import com.stockscreener.indicator.PercentileSpec;
 import com.stockscreener.indicator.SectorMetricSpec;
 import com.stockscreener.screening.ConditionEvaluator;
 import com.stockscreener.screening.ConditionGroup;
@@ -79,7 +80,18 @@ public class PointInTimeScreener {
      */
     public record Outcome(LocalDate asOf, List<ScreeningResult> included,
                           Map<Long, Map<String, BigDecimal>> valuesByStock, int evaluated,
-                          ConditionGroup resolvedConditions) {
+                          ConditionGroup resolvedConditions, String rejection) {
+
+        Outcome(LocalDate asOf, List<ScreeningResult> included,
+                Map<Long, Map<String, BigDecimal>> valuesByStock, int evaluated,
+                ConditionGroup resolvedConditions) {
+            this(asOf, included, valuesByStock, evaluated, resolvedConditions, null);
+        }
+
+        /** 거절됐는가. <b>통과 0과 구분된다</b> — 그 구분이 없으면 「전략이 나쁘다」로 읽힌다. */
+        public boolean rejected() {
+            return rejection != null;
+        }
     }
 
     /**
@@ -110,38 +122,134 @@ public class PointInTimeScreener {
      */
     public Outcome screen(LocalDate asOf, ConditionGroup group, EvaluationMode mode,
                           ScreeningTargets.Target target) {
-        ConditionGroup resolved = group.resolveFor(target.currency());
-        List<Long> populationIds = selectSectorPopulationIds(target.currency());
-        Set<Long> targetIds = new LinkedHashSet<>(selectStockIds(target.code()));
+        return screenAll(asOf, List.of(new Request("", group, mode)), target).get("");
+    }
 
+    /**
+     * 이 하네스가 <b>원리적으로 못 만드는</b> 코드. 계산기도 없고 재구성 규칙도 없다.
+     *
+     * <p>실측(2026-09-03): 카탈로그 144개 중 계산기가 없는 것이 20개이고 그중 14개는 읽기 시점에
+     * 재구성한다(유니버스 백분위 10 + 업종 4). 남는 여섯이 이것이다.
+     */
+    static final Set<String> UNSERVABLE = Set.of(
+            "PER_SECTOR_MEDIAN", "PSR_SECTOR_MEDIAN",
+            "PER_SECTOR_N", "PSR_SECTOR_N", "DEBT_RATIO_SECTOR_N", "OPERATING_MARGIN_SECTOR_N");
+
+    /**
+     * 그 조건군이 참조하는 <b>서비스 불가 코드</b>. 비어 있으면 판정할 수 있다.
+     *
+     * <p><b>MUST: 전략 단위로 거절한다.</b> 예전에는 {@code addSectorRelatives}가 던져서
+     * <b>그런 전략 하나가 배치 전체를 죽였다</b> — 참조 코드를 합집합으로 넘기기 때문이다.
+     */
+    public static Set<String> unservableCodesOf(ConditionGroup resolved) {
+        Set<String> out = new LinkedHashSet<>(resolved.referencedIndicatorCodes());
+        out.retainAll(UNSERVABLE);
+        return out;
+    }
+
+    /** 한 번의 값 계산으로 판정할 조건군 하나. {@code label}이 {@link #screenAll} 결과의 키다. */
+    public record Request(String label, ConditionGroup group, EvaluationMode mode) {
+    }
+
+    /**
+     * 값을 <b>직접 계산해</b> 판정한다.
+     *
+     * <p><b>값 생산 뒤로는 {@link #screenAllFromValues}에 위임한다.</b> 업종 상대값 재구성·
+     * 유니버스 백분위·대상 좁히기·판정·정렬이 한 벌뿐이라 두 경로가 갈릴 수 없다.
+     *
+     * <p><b>그 대가</b>: 저장소 왕복 검증이 「같은 결론」을 확인해도 그것은 대체로 <b>동어반복</b>이
+     * 된다 — 남는 차이가 CSV 직렬화 왕복뿐이기 때문이다. 저장물의 완전성은 그 검증이 아니라
+     * <b>매니페스트의 선언된 코드 집합</b>과 {@link #unservableCodesOf}의 거절이 지킨다.
+     */
+    public Map<String, Outcome> screenAll(LocalDate asOf, List<Request> requests,
+                                          ScreeningTargets.Target target) {
+        List<Long> populationIds = selectSectorPopulationIds(target.currency());
         // MUST: 종목 루프 밖에서 한 번 읽는다. 안에서 읽으면 종목 수만큼 같은 쿼리를 던진다.
         Map<String, NavigableMap<LocalDate, BigDecimal>> indexes = runner.marketIndexesFor(asOf);
-
-        Map<Long, Map<String, BigDecimal>> valuesByStock = new LinkedHashMap<>();
+        Map<Long, Map<String, BigDecimal>> values = new LinkedHashMap<>();
         for (Long stockId : populationIds) {
-            valuesByStock.put(stockId,
-                    new LinkedHashMap<>(runner.computeAt(stockId, asOf, indexes,
-                            FinancialVisibility.KNOWN_ON)));
+            values.put(stockId, new LinkedHashMap<>(
+                    runner.computeAt(stockId, asOf, indexes, FinancialVisibility.KNOWN_ON)));
         }
+        return screenAllFromValues(asOf, requests, target, values);
+    }
 
-        addSectorRelatives(valuesByStock, resolved.referencedIndicatorCodes());
-
-        // 판정과 반환은 대상으로 좁힌다 — 호출부가 「값이 나온 종목 수」를 대상 기준으로 읽는다.
-        Map<Long, Map<String, BigDecimal>> ofTarget = new LinkedHashMap<>();
-        List<ScreeningResult> included = new ArrayList<>();
-        for (Long stockId : targetIds) {
-            Map<String, BigDecimal> values = valuesByStock.getOrDefault(stockId, Map.of());
-            ofTarget.put(stockId, values);
-            ScreeningResult result = evaluator.evaluate(stockId, resolved, mode, values);
-            if (result.included()) {
-                included.add(result);
+    /**
+     * <b>이미 계산된 값으로</b> 판정한다 — 시점 재현 저장소의 읽기 경로다.
+     *
+     * <p>{@link #screenAll}과 다른 것은 <b>값의 출처 하나뿐</b>이다. 업종 상대값 재구성·대상
+     * 좁히기·판정·정렬이 전부 같은 코드를 탄다. 그래야 「저장본으로 낸 결론이 직접 계산과
+     * 같은가」가 값의 출처만을 묻는 질문이 된다.
+     *
+     * <p><b>MUST: {@code populationValues}는 그 통화 모집단 전체여야 한다.</b> 대상으로 미리
+     * 좁힌 것을 주면 업종 백분위의 동료 수가 달라져 조용히 다른 값이 나온다 — 라이브
+     * {@code SectorRelativeCalculator}가 활성 유니버스 편입 전체에서 매기기 때문이다(ADR-0108).
+     */
+    public Map<String, Outcome> screenAllFromValues(
+            LocalDate asOf, List<Request> requests, ScreeningTargets.Target target,
+            Map<Long, Map<String, BigDecimal>> populationValues) {
+        Map<String, ConditionGroup> resolvedByLabel = new LinkedHashMap<>();
+        Set<String> referenced = new LinkedHashSet<>();
+        Map<String, String> rejected = new LinkedHashMap<>();
+        for (Request request : requests) {
+            ConditionGroup resolved = request.group().resolveFor(target.currency());
+            resolvedByLabel.put(request.label(), resolved);
+            Set<String> unservable = unservableCodesOf(resolved);
+            if (!unservable.isEmpty()) {
+                // MUST: 합집합에 넣지 않는다. 넣으면 addSectorRelatives가 던져 **이 전략 하나가
+                // 배치 전체를 죽인다.**
+                rejected.put(request.label(),
+                        "재구성 불가 지표를 참조한다: " + String.join(" ", unservable));
+                continue;
             }
+            referenced.addAll(resolved.referencedIndicatorCodes());
         }
-        if (mode == EvaluationMode.SCORING) {
-            included.sort(Comparator.comparing(ScreeningResult::score).reversed()
-                    .thenComparing(ScreeningResult::stockId));
+
+        // 저장본을 훼손하지 않으려고 복사한다 — addSectorRelatives가 맵에 써 넣는다.
+        Map<Long, Map<String, BigDecimal>> working = new LinkedHashMap<>();
+        populationValues.forEach((id, v) -> working.put(id, new LinkedHashMap<>(v)));
+        addSectorRelatives(working, referenced);
+
+        Set<Long> targetIds = new LinkedHashSet<>(selectStockIds(target.code()));
+
+        // MUST: 대상(=유니버스)을 정한 뒤에 부른다. 유니버스 백분위는 업종과 달리 통화 모집단이
+        // 아니라 **그 유니버스** 안에서 매겨진다(PercentileCalculator의 PARTITION BY universe_code).
+        addUniversePercentiles(working, referenced, targetIds);
+        Map<Long, Map<String, BigDecimal>> ofTarget = new LinkedHashMap<>();
+        for (Long stockId : targetIds) {
+            ofTarget.put(stockId, working.getOrDefault(stockId, Map.of()));
         }
-        return new Outcome(asOf, included, ofTarget, targetIds.size(), resolved);
+
+        Map<String, Outcome> outcomes = new LinkedHashMap<>();
+        for (Request request : requests) {
+            ConditionGroup resolved = resolvedByLabel.get(request.label());
+            if (rejected.containsKey(request.label())) {
+                // 거절은 「통과 0」과 구분돼야 한다 — 안 그러면 「전략이 나쁘다」로 읽힌다.
+                outcomes.put(request.label(), new Outcome(asOf, List.of(), Map.of(),
+                        targetIds.size(), resolved, rejected.get(request.label())));
+                continue;
+            }
+            List<ScreeningResult> included = new ArrayList<>();
+            for (Long stockId : targetIds) {
+                ScreeningResult result = evaluator.evaluate(
+                        stockId, resolved, request.mode(), ofTarget.get(stockId));
+                if (result.included()) {
+                    included.add(result);
+                }
+            }
+            if (request.mode() == EvaluationMode.SCORING) {
+                included.sort(Comparator.comparing(ScreeningResult::score).reversed()
+                        .thenComparing(ScreeningResult::stockId));
+            }
+            outcomes.put(request.label(),
+                    new Outcome(asOf, included, ofTarget, targetIds.size(), resolved));
+        }
+        return outcomes;
+    }
+
+    /** 그 통화의 값 계산 모집단. 저장소 적재가 이 목록으로 돈다. */
+    public List<Long> populationFor(String currencyCode) {
+        return selectSectorPopulationIds(currencyCode);
     }
 
     /**
@@ -315,6 +423,46 @@ public class PointInTimeScreener {
     }
 
     /** {@code PERCENT_RANK() OVER (ORDER BY value)} — 자기보다 <b>작은</b> 것의 비율이다. */
+    /**
+     * <b>유니버스</b> 백분위({@code _PCTL})를 그 유니버스 안에서 다시 매긴다.
+     *
+     * <p>업종 백분위({@code _SECTOR_PCTL})와 <b>모집단이 다르다</b> — 이쪽은
+     * {@code PercentileCalculator}가 {@code PARTITION BY m.universe_code}로 매기므로
+     * <b>대상 유니버스</b>가 모집단이고, 저쪽은 통화 전체다. 통화 단위 저장본에 구워 넣을 수 없고
+     * <b>읽기 시점에 유니버스별로</b> 만들어야 하는 이유가 이것이다.
+     *
+     * <p>정확성은 실측으로 확인했다(2026-09-03): 저장된 원천값에 이 방식으로 다시 매긴 값이
+     * 라이브 {@code PER_PCTL}과 <b>불일치 0 · 최대차 0</b>(3 유니버스 1,104종목).
+     *
+     * <p>모집단이 2 미만이면 값을 내지 않는다 — 라이브의 {@code population >= 2} 가드와 같다.
+     * 원천값이 없는 종목은 모집단에서 빠진다(라이브가 {@code indicator_value}에 그 행이 있는
+     * 종목만 세는 것과 같다).
+     */
+    private void addUniversePercentiles(Map<Long, Map<String, BigDecimal>> valuesByStock,
+                                        Set<String> referencedCodes, Set<Long> universeIds) {
+        for (String code : referencedCodes) {
+            if (!code.endsWith(PercentileSpec.SUFFIX)
+                    || code.endsWith(SectorMetricSpec.PERCENTILE_SUFFIX)) {
+                continue;
+            }
+            String source = code.substring(0, code.length() - PercentileSpec.SUFFIX.length());
+            List<Long> peers = universeIds.stream()
+                    .filter(id -> {
+                        Map<String, BigDecimal> v = valuesByStock.get(id);
+                        return v != null && v.get(source) != null;
+                    })
+                    .toList();
+            if (peers.size() < 2) {
+                continue;
+            }
+            for (Long stockId : peers) {
+                BigDecimal value = valuesByStock.get(stockId).get(source);
+                valuesByStock.get(stockId)
+                        .put(code, percentRank(peers, valuesByStock, source, value));
+            }
+        }
+    }
+
     private static BigDecimal percentRank(List<Long> peers,
                                           Map<Long, Map<String, BigDecimal>> valuesByStock,
                                           String sourceCode, BigDecimal value) {

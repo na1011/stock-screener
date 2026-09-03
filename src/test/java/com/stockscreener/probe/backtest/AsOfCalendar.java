@@ -104,6 +104,59 @@ public class AsOfCalendar {
                 Integer.class, marketCodes.toArray());
     }
 
+    /**
+     * {@code from}부터 {@code to}까지 그 시장의 <b>모든 거래일</b>.
+     *
+     * <p>{@link #every}의 분기 격자와 용도가 다르다. 그쪽은 조건축의 성질을 훑는 것이라
+     * 성긴 격자로 충분하지만, <b>백테스트 진입일은 「그 전략을 처음 통과한 날」이라</b>
+     * 하루라도 건너뛰면 진입가가 달라진다 — 커스텀 전략 백테스트 규약이 요구하는 해상도가
+     * 이것이다.
+     *
+     * <p>as-of는 <b>이 시장의</b> 거래일이어야 한다. 시장을 안 나누고 합집합을 쓰면 국내
+     * 휴장·미국 개장일이 국내 as-of로 들어가 {@code computeAt}이 빈 맵을 내고, 그 0이
+     * 게이트 탓으로 읽힌다 — {@link #placeholders}가 막는 실패와 같은 것이다.
+     */
+    public List<LocalDate> everyTradingDay(LocalDate from, LocalDate to,
+                                           Collection<String> marketCodes) {
+        Object[] args = new Object[marketCodes.size() + 2];
+        args[0] = from;
+        args[1] = to;
+        int i = 2;
+        for (String code : marketCodes) {
+            args[i++] = code;
+        }
+        return jdbcTemplate.queryForList(
+                "SELECT DISTINCT p.trade_date FROM price_daily p JOIN stock s ON s.id = p.stock_id"
+                        + " WHERE p.trade_date BETWEEN ? AND ? AND s.market_code IN ("
+                        + placeholders(marketCodes) + ") ORDER BY p.trade_date",
+                LocalDate.class, args);
+    }
+
+    /**
+     * 워밍업을 채울 수 있는 <b>가장 이른 as-of</b>. 그 시장 시세의 {@code warmupBars}번째 거래일이다.
+     *
+     * <p><b>백테스트 구간의 실제 하한이 이것이다.</b> {@link HarnessWindow#floorFor}가 재무
+     * 깊이로 정하는 하한과 <b>둘 중 늦은 쪽</b>이 답이고, v12·v13처럼 {@code PROFIT_STREAK_Y}가
+     * 5년이면 <b>이쪽이 이긴다</b>(실측 2026-09-02: 미국 2025-03-20 · 국내 2025-03-06).
+     * 재무 하한만 보고 격자를 열면 앞쪽 날짜가 전 종목 판정불가가 되는데, 그 0은 게이트가
+     * 아니라 시세 깊이 탓이다.
+     */
+    public LocalDate earliestComputableAsOf(int warmupBars, Collection<String> marketCodes) {
+        Object[] args = new Object[marketCodes.size() + 1];
+        int i = 0;
+        for (String code : marketCodes) {
+            args[i++] = code;
+        }
+        args[i] = warmupBars - 1;
+        List<LocalDate> found = jdbcTemplate.queryForList(
+                "SELECT p.trade_date FROM (SELECT DISTINCT p.trade_date FROM price_daily p"
+                        + " JOIN stock s ON s.id = p.stock_id WHERE s.market_code IN ("
+                        + placeholders(marketCodes) + ") ORDER BY p.trade_date) p"
+                        + " OFFSET ? LIMIT 1",
+                LocalDate.class, args);
+        return found.isEmpty() ? null : found.get(0);
+    }
+
     /** {@code IN (?, ?, …)}. 빈 컬렉션은 SQL이 성립하지 않으므로 호출부의 계약 위반이다. */
     private static String placeholders(Collection<String> marketCodes) {
         if (marketCodes == null || marketCodes.isEmpty()) {
