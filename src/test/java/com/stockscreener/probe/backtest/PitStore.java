@@ -62,37 +62,54 @@ final class PitStore {
     }
 
     /**
-     * 그 날짜가 <b>끝났고 아직 유효한가.</b>
-     *
-     * <p>매니페스트의 지문이 지금 지문과 다르면 <b>false</b>다 — 원자료가 바뀌었다는 뜻이고,
-     * 그때 저장본을 쓰면 조용히 틀린 답이 나온다.
+     * 저장본이 지금도 쓸 수 있는가. <b>못 쓰는 사유를 값으로 들고 다닌다</b> — 「없음」과
+     * 「지수가 바뀜」과 「미완료」를 {@code null} 하나로 접으면 재개가 왜 다시 도는지 알 수 없다.
      */
-    boolean isComplete(String currency, LocalDate asOf, Map<Long, String> fingerprints)
-            throws Exception {
-        return staleStocks(currency, asOf, fingerprints) != null
-                && staleStocks(currency, asOf, fingerprints).isEmpty();
+    record Freshness(String unusableReason, java.util.Set<Long> staleStocks) {
+
+        boolean usable() {
+            return unusableReason == null;
+        }
+
+        /** 그대로 읽어도 되는가. */
+        boolean complete() {
+            return usable() && staleStocks.isEmpty();
+        }
     }
 
     /**
-     * 그 날짜에서 <b>다시 만들어야 하는 종목</b>. 없으면 빈 집합, 날짜 자체가 미완료면 {@code null}.
+     * 그 날짜가 <b>끝났고 아직 유효한가.</b>
+     *
+     * <p><b>종목 지문</b>이 다르면 그 종목만 다시 만든다.
+     * <p><b>지수 지문</b>이 다르면 <b>날짜 전체</b>가 못 쓰게 된다 — 지수는 모집단이 함께 쓰므로
+     * 어느 한 종목의 낡음으로 돌릴 수 없다.
      *
      * <p><b>전역 지문을 쓰지 않는 이유</b>: 값이 실제로 바뀌는 사건이 평일 대낮에도 떨어진다
-     * (실측 2026-09-03 14:11:25에 기업행위 갱신으로 APH 한 종목의 시세 1,760행이 재작성됐다).
-     * 전역이면 그 한 종목 때문에 270MB가 통째로 죽는다. 종목 단위면 그 종목이 든 날짜 파일만
-     * 다시 쓴다 — <b>gzip은 부분 수정이 안 되므로 파일 단위가 최소 단위다.</b>
+     * (실측 2026-09-03 14:00 사슬이 APH 한 종목의 시세 1,760행을 재작성했다). 전역이면 그 한
+     * 종목 때문에 270MB가 통째로 죽는다. 종목 단위면 그 종목이 든 날짜 파일만 다시 쓴다 —
+     * <b>gzip은 부분 수정이 안 되므로 파일 단위가 최소 단위다.</b>
      *
-     * <p>매니페스트에 종목별 지문을 함께 적는다(1,350줄 · 파일당 약 60KB). 별도 색인을 두면
-     * 그것과 파일이 어긋날 때 아무도 모른다.
+     * <p>같은 24시간에 {@code updated_at}은 <b>1,350종목 전부</b>에서 움직였다. 그래서 지문은
+     * 내용만 본다({@link PitFingerprint}).
      */
-    java.util.Set<Long> staleStocks(String currency, LocalDate asOf,
-                                    Map<Long, String> fingerprints) throws Exception {
+    Freshness freshnessOf(String currency, LocalDate asOf,
+                          Map<Long, String> fingerprints, String indexFingerprint)
+            throws Exception {
         Path m = manifest(currency, asOf);
-        if (!Files.exists(m) || !Files.exists(data(currency, asOf))) {
-            return null;
+        if (!Files.exists(m)) {
+            return new Freshness("매니페스트 없음", java.util.Set.of());
+        }
+        if (!Files.exists(data(currency, asOf))) {
+            return new Freshness("데이터 파일 없음", java.util.Set.of());
         }
         Map<String, String> fields = readManifest(m);
         if (!"true".equals(fields.get("complete"))) {
-            return null;
+            return new Freshness("미완료(실패 " + fields.getOrDefault("failed", "?") + ")",
+                    java.util.Set.of());
+        }
+        String storedIndex = fields.get("indexFp");
+        if (storedIndex == null || !storedIndex.equals(indexFingerprint)) {
+            return new Freshness("지수 지문 불일치", java.util.Set.of());
         }
         java.util.Set<Long> stale = new java.util.TreeSet<>();
         for (Map.Entry<Long, String> e : fingerprints.entrySet()) {
@@ -102,7 +119,7 @@ final class PitStore {
             }
         }
         // 매니페스트에는 있는데 지금 모집단에 없는 종목은 낡음이 아니다(편출이다).
-        return stale;
+        return new Freshness(null, stale);
     }
 
     /**
@@ -111,11 +128,14 @@ final class PitStore {
      * @param attempted 시도한 모집단 수. 「유효하지만 짧은 파일」을 읽는 쪽에서 가려내는 근거다
      * @param codes     이 저장본이 담기로 <b>선언한</b> 코드 집합. 파일에서 관찰한 것이 아니다 —
      *                  한 종목에만 있는 코드가 통과해 버리기 때문이다
+     * @param indexFingerprint 종목에 안 걸리는 입력(시장 지수). 종목 지문에 섞으면 지수가 한 번
+     *                  바뀔 때 전 종목이 낡은 것으로 읽혀 종목 단위 무효화가 무의미해진다
      */
     void writeDate(String currency, LocalDate asOf,
                    Map<Long, Map<String, BigDecimal>> values,
                    int attempted, java.util.Set<String> codes,
-                   Map<Long, String> fingerprints, java.util.Set<Long> failed)
+                   Map<Long, String> fingerprints, String indexFingerprint,
+                   java.util.Set<Long> failed)
             throws Exception {
         Files.createDirectories(root);
         Path tmp = root.resolve(currency + "-" + asOf + ".csv.gz.tmp");
@@ -150,6 +170,7 @@ final class PitStore {
         sb.append("failed=").append(new java.util.TreeSet<>(failed).stream()
                 .map(String::valueOf).collect(java.util.stream.Collectors.joining(" ")))
                 .append('\n');
+        sb.append("indexFp=").append(indexFingerprint).append('\n');
         sb.append("complete=").append(failed.isEmpty()).append('\n');
         for (Map.Entry<Long, String> e : new java.util.TreeMap<>(fingerprints).entrySet()) {
             sb.append("fp:").append(e.getKey()).append('=').append(e.getValue()).append('\n');

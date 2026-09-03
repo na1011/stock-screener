@@ -46,6 +46,7 @@ class PitStoreResumeProbeTest {
     private static final LocalDate D1 = LocalDate.of(2026, 7, 30);
     private static final LocalDate D2 = LocalDate.of(2026, 7, 31);
     private static final Set<String> CODES = Set.of("PER", "ROE");
+    private static final String IDX = "index-fp-1";
 
     /** 종목 지문. 값이 바뀌면 그 종목만 낡는다. */
     private static Map<Long, String> fp(String s1, String s2, String s3) {
@@ -64,51 +65,56 @@ class PitStoreResumeProbeTest {
         Set<Long> noFailure = Set.of();
 
         // --- 1) 정상 적재 ---
-        store.writeDate(CCY, D1, fakeValues(), 350, CODES, fp("a", "b", "c"), noFailure);
-        assertThat(store.isComplete(CCY, D1, fp("a", "b", "c")))
+        store.writeDate(CCY, D1, fakeValues(), 350, CODES, fp("a", "b", "c"), IDX, noFailure);
+        assertThat(store.freshnessOf(CCY, D1, fp("a", "b", "c"), IDX).complete())
                 .as("정상 적재한 날짜가 완료로 안 읽힌다").isTrue();
-        assertThat(store.staleStocks(CCY, D1, fp("a", "b", "c"))).isEmpty();
 
-        // --- 2) 한 종목만 값이 바뀌었다 (실측 사례: 2026-09-03 14:11 APH) ---
-        assertThat(store.staleStocks(CCY, D1, fp("a", "CHANGED", "c")))
+        // --- 2) 한 종목만 값이 바뀌었다 (실측 사례: 2026-09-03 14:00 사슬의 APH) ---
+        PitStore.Freshness one = store.freshnessOf(CCY, D1, fp("a", "CHANGED", "c"), IDX);
+        assertThat(one.usable()).as("종목 하나가 바뀌었다고 날짜를 통째로 버리면 안 된다").isTrue();
+        assertThat(one.staleStocks())
                 .as("바뀐 종목만 골라야 한다 — 전역 지문이면 여기서 날짜 전체가 죽는다")
                 .containsExactly(2L);
-        assertThat(store.isComplete(CCY, D1, fp("a", "CHANGED", "c")))
-                .as("낡은 종목이 있는데 완료로 읽히면 조용히 틀린 답이 나온다").isFalse();
+        assertThat(one.complete()).isFalse();
 
-        // --- 3) 매니페스트 없는 데이터는 「끝났다」가 아니다 ---
+        // --- 3) 지수가 바뀌면 날짜 전체가 못 쓴다 ---
+        PitStore.Freshness idx = store.freshnessOf(CCY, D1, fp("a", "b", "c"), "index-fp-2");
+        assertThat(idx.usable())
+                .as("지수는 모집단이 함께 쓴다 — 어느 한 종목의 낡음으로 돌릴 수 없다").isFalse();
+        assertThat(idx.unusableReason()).isEqualTo("지수 지문 불일치");
+
+        // --- 4) 매니페스트 없는 데이터는 「끝났다」가 아니다 ---
         Files.copy(dir.resolve(CCY + "-" + D1 + ".csv.gz"),
                 dir.resolve(CCY + "-" + D2 + ".csv.gz"), StandardCopyOption.REPLACE_EXISTING);
-        assertThat(store.staleStocks(CCY, D2, fp("a", "b", "c")))
-                .as("죽은 실행의 반쪽 파일이 완료로 읽힌다").isNull();
+        assertThat(store.freshnessOf(CCY, D2, fp("a", "b", "c"), IDX).unusableReason())
+                .as("죽은 실행의 반쪽 파일이 완료로 읽힌다").isEqualTo("매니페스트 없음");
 
-        // --- 4) 실패가 있으면 완료로 적지 않는다 ---
-        store.writeDate(CCY, D2, fakeValues(), 350, CODES, fp("a", "b", "c"), Set.of(7L, 9L));
-        assertThat(store.staleStocks(CCY, D2, fp("a", "b", "c")))
-                .as("실패가 있는 날짜가 완료로 읽히면 생존분만 든 저장본을 쓰게 된다")
-                .isNull();
+        // --- 5) 실패가 있으면 완료로 적지 않는다 ---
+        store.writeDate(CCY, D2, fakeValues(), 350, CODES, fp("a", "b", "c"), IDX, Set.of(7L, 9L));
+        assertThat(store.freshnessOf(CCY, D2, fp("a", "b", "c"), IDX).usable())
+                .as("실패가 있는 날짜가 완료로 읽히면 생존분만 든 저장본을 쓰게 된다").isFalse();
         assertThat(store.readManifest(CCY, D2).get("failed")).isEqualTo("7 9");
         assertThat(store.readManifest(CCY, D2).get("complete")).isEqualTo("false");
 
-        // --- 5) 실패를 고쳐 다시 쓰면 완료가 된다 ---
-        store.writeDate(CCY, D2, fakeValues(), 350, CODES, fp("a", "b", "c"), noFailure);
-        assertThat(store.isComplete(CCY, D2, fp("a", "b", "c"))).isTrue();
+        // --- 6) 실패를 고쳐 다시 쓰면 완료가 된다 ---
+        store.writeDate(CCY, D2, fakeValues(), 350, CODES, fp("a", "b", "c"), IDX, noFailure);
+        assertThat(store.freshnessOf(CCY, D2, fp("a", "b", "c"), IDX).complete()).isTrue();
 
-        // --- 6) 표지 행·매니페스트가 살아 오는가 ---
+        // --- 7) 표지 행·매니페스트가 살아 오는가 ---
         Map<Long, Map<String, BigDecimal>> back = store.readDate(CCY, D2);
         assertThat(back).hasSize(3);
         assertThat(back.get(3L)).as("「계산했으나 값 없음」 표지").isEmpty();
         assertThat(back.get(1L).get("PER")).isEqualByComparingTo(new BigDecimal("12.34567890"));
         assertThat(store.readManifest(CCY, D2).get("fp:2")).isEqualTo("b");
 
-        // --- 7) .tmp가 남지 않는가 ---
+        // --- 8) .tmp가 남지 않는가 ---
         try (var st = Files.list(dir)) {
             assertThat(st.filter(x -> x.getFileName().toString().endsWith(".tmp")).toList())
                     .as(".tmp가 남았다 — 원자적 이동이 안 걸렸다").isEmpty();
         }
 
         System.out.printf("%n===== 재개·무효화 기제 =====%n");
-        System.out.println("종목 단위 무효화 · 실패 시 미완료 · 반쪽 파일 거부 · .tmp 0개");
+        System.out.println("종목 단위 무효화 · 지수는 날짜 단위 · 실패 시 미완료 · 반쪽 파일 거부 · .tmp 0개");
 
         try (var st = Files.list(dir)) {
             for (Path x : st.toList()) {
