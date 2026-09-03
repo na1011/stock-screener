@@ -54,6 +54,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p><b>{@code -Dpit.dryRun=true}</b>면 아무것도 안 쓰고 착수 전 점검만 한다. 3.6시간을
  * 시작하기 전에 이것부터 돌린다.
+ *
+ * <p><b>{@code -Dpit.recheck=calculator}</b>는 지표 계산기의 판만 다시 확인한다. 클래스 내용을
+ * 해시하는 판정이 <b>과검출</b>이기 때문이다 — 화면에 뜨는 설명 문구 한 낱말만 고쳐도 해시가
+ * 움직이는 것을 실측했고(최근 {@code fix(indicator)} 커밋 둘이 실제로 그런 변경이었다), 그때
+ * 값이 하나도 안 바뀌는데 3시간 41분을 다시 치른다. 표본을 <b>다시 계산해 저장본과 대조하고</b>
+ * 전부 같을 때만 판을 다시 찍는다.
+ *
+ * <p>실측 <b>5분 30초</b>(42,123칸 대조 · 선언 코드 125개를 전부 건드렸다). 3시간 41분과 다르다.
+ *
+ * <p>MUST NOT: 사람이 「이건 문구만 고친 것」이라고 선언해 통과시키지 않는다. 그 판단이 틀리면
+ * 조용히 옛 공식의 표가 나오고, 그것을 막으려고 이 기제를 만들었다. <b>재서 같으면 넘어가고
+ * 다르면 던진다.</b>
  */
 @Tag("backtest")
 @SpringBootTest(classes = BacktestHarnessContext.class,
@@ -73,6 +85,9 @@ class PitLoadTest {
      * 저장본</b>을 몇 시간에 걸쳐 만든다. 한 종목의 데이터 결손과 인프라 장애는 다른 일이다.
      */
     private static final double MAX_FAILURE_RATIO = 0.02;
+
+    /** 계산기 재확인 표본의 통화별 종목 수. 날짜 셋과 곱해진다. */
+    private static final int SAMPLE_STOCKS = 60;
 
     @Autowired
     private IndicatorRunner runner;
@@ -120,6 +135,10 @@ class PitLoadTest {
         }
         System.out.printf("계산할 (종목, 날짜) 총 %,d칸%n", total);
 
+        if ("calculator".equals(System.getProperty("pit.recheck"))) {
+            recheckCalculators(store, plan, calculatorFp, declared);
+            return;
+        }
         if (dryRun) {
             preflight(store, fingerprint, plan);
             return;
@@ -253,6 +272,107 @@ class PitLoadTest {
             }
         }
         return out;
+    }
+
+    /**
+     * 계산기 판만 다시 확인한다. <b>표본을 다시 계산해 저장본과 대조</b>하고 전부 같을 때만
+     * 매니페스트의 판을 갱신한다 — 값은 한 바이트도 안 건드린다.
+     *
+     * <p>표본은 <b>날짜 셋 × 종목 여럿</b>이다. 날짜를 하나만 보면 그 날짜에 값이 없는 지표가
+     * 통째로 안 걸리고, 종목을 적게 보면 일부 종목에만 있는 지표가 빠진다. <b>표본이 건드리지
+     * 못한 코드를 세어 함께 찍는다</b> — 안 찍으면 「전부 같다」가 「전부 봤다」로 읽힌다.
+     */
+    private void recheckCalculators(PitStore store, Map<String, List<LocalDate>> plan,
+                                    String calculatorFp, Set<String> declared) throws Exception {
+        System.out.println("\n-- 계산기 판 재확인 (값은 안 건드린다) --");
+        Set<String> touched = new java.util.TreeSet<>();
+        List<String> diffs = new ArrayList<>();
+        int comparedCells = 0;
+
+        for (Map.Entry<String, List<LocalDate>> e : plan.entrySet()) {
+            String currency = e.getKey();
+            List<LocalDate> stored = store.storedDates(currency);
+            if (stored.isEmpty()) {
+                System.out.printf("   %-4s 저장된 날짜가 없다 — 볼 것이 없다%n", currency);
+                continue;
+            }
+            List<LocalDate> sampleDates = List.of(stored.get(0),
+                    stored.get(stored.size() / 2), stored.get(stored.size() - 1));
+            List<Long> population = screener.populationFor(currency);
+            for (LocalDate asOf : sampleDates) {
+                Map<Long, Map<String, BigDecimal>> saved = store.readDate(currency, asOf);
+                Map<String, NavigableMap<LocalDate, BigDecimal>> indexes =
+                        runner.marketIndexesFor(asOf);
+                // 모집단을 고르게 훑는다. 앞에서 N개만 뽑으면 한쪽 업종·한쪽 시총에 몰린다.
+                int step = Math.max(1, population.size() / SAMPLE_STOCKS);
+                for (int i = 0; i < population.size(); i += step) {
+                    Long stockId = population.get(i);
+                    Map<String, BigDecimal> now =
+                            runner.computeAt(stockId, asOf, indexes, FinancialVisibility.KNOWN_ON);
+                    Map<String, BigDecimal> then = saved.getOrDefault(stockId, Map.of());
+                    touched.addAll(now.keySet());
+                    Set<String> codes = new LinkedHashSet<>(now.keySet());
+                    codes.addAll(then.keySet());
+                    for (String code : codes) {
+                        comparedCells++;
+                        BigDecimal a = now.get(code);
+                        BigDecimal b = then.get(code);
+                        if (a == null || b == null ? a != b : a.compareTo(b) != 0) {
+                            diffs.add(currency + " " + asOf + " stock=" + stockId + " " + code
+                                    + " 저장본=" + b + " 지금=" + a);
+                        }
+                    }
+                }
+            }
+        }
+
+        Set<String> untouched = new java.util.TreeSet<>(declared);
+        untouched.removeAll(touched);
+        System.out.printf("   대조한 칸 %,d · 표본이 건드린 코드 %d/%d%n",
+                comparedCells, touched.size(), declared.size());
+        if (!untouched.isEmpty()) {
+            System.out.printf("   표본이 못 건드린 코드 %d개: %s%n", untouched.size(),
+                    untouched.stream().limit(12).toList());
+        }
+        assertThat(comparedCells).as("대조한 칸이 0이면 이 재확인은 아무것도 안 봤다").isPositive();
+        if (!diffs.isEmpty()) {
+            diffs.stream().limit(10).forEach(d -> System.out.println("   차이: " + d));
+            throw new IllegalStateException("계산기가 실제로 다른 값을 낸다(" + diffs.size()
+                    + "칸) — 문구 수정이 아니라 공식 변경이다. 그 구간을 다시 적재한다");
+        }
+
+        int restamped = 0;
+        for (Map.Entry<String, List<LocalDate>> e : plan.entrySet()) {
+            for (LocalDate asOf : store.storedDates(e.getKey())) {
+                Map<String, String> mf = store.readManifest(e.getKey(), asOf);
+                if (calculatorFp.equals(mf.get("calculatorFp"))) {
+                    continue;
+                }
+                store.rewriteManifest(e.getKey(), asOf,
+                        Integer.parseInt(mf.getOrDefault("stocks", "0")),
+                        stampFrom(mf, calculatorFp));
+                restamped++;
+            }
+        }
+        System.out.printf("   차이 없음 — 매니페스트 %d개의 계산기 판만 갱신했다%n", restamped);
+    }
+
+    /** 매니페스트를 그대로 되쓰되 계산기 판만 바꾼다. 다른 값을 손대면 그것이 근거를 잃는다. */
+    private static PitStore.Stamp stampFrom(Map<String, String> mf, String calculatorFp) {
+        Map<Long, String> fps = new LinkedHashMap<>();
+        Set<String> codes = new java.util.TreeSet<>();
+        for (Map.Entry<String, String> e : mf.entrySet()) {
+            if (e.getKey().startsWith("fp:")) {
+                fps.put(Long.parseLong(e.getKey().substring(3)), e.getValue());
+            }
+        }
+        String declared = mf.get("codes");
+        if (declared != null && !declared.isBlank()) {
+            codes.addAll(List.of(declared.split(" ")));
+        }
+        return new PitStore.Stamp(Integer.parseInt(mf.getOrDefault("attempted", "0")), codes, fps,
+                mf.get("indexFp"), mf.get("inPlaceDigest"), calculatorFp,
+                Instant.parse(mf.get("writtenAt")), Set.of());
     }
 
     /** 착수 전 점검. 3.6시간을 시작하기 전에 답이 나와야 하는 것들이다. */

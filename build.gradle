@@ -446,7 +446,11 @@ tasks.register('backtestProbe', Test) {
     // 스윕 구간을 테스트 JVM으로 넘긴다. Gradle의 `-D`는 **데몬 JVM에만** 붙으므로 이 전달이
     // 없으면 `-Dsweep.from=`이 조용히 무시되고 기본 구간(1년)이 돈다 — 6일만 보려던 실행이
     // 몇 시간짜리가 되는데 아무 경고도 나지 않는다.
-    ['sweep.from', 'sweep.to', 'pit.from', 'pit.to', 'pit.days', 'pit.dryRun'].each { key ->
+    // MUST: 새 `-D` 스위치를 만들면 **이 목록에 함께 넣는다.** Gradle의 `-D`는 데몬 JVM에만
+    // 붙어서, 빠뜨리면 스위치가 조용히 무시되고 **기본 동작이 돈다.** 실제로 `pit.recheck`를
+    // 빠뜨려 3초짜리 재확인 대신 3시간 41분짜리 재적재가 20분 돌았다 — 같은 함정을 두 번 밟았다.
+    ['sweep.from', 'sweep.to',
+     'pit.from', 'pit.to', 'pit.days', 'pit.dryRun', 'pit.recheck'].each { key ->
         if (System.getProperty(key) != null) {
             systemProperty key, System.getProperty(key)
         }
