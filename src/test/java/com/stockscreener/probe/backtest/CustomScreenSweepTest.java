@@ -111,17 +111,43 @@ class CustomScreenSweepTest {
             System.out.println("-- 거절 (통과 0과 다르다) --");
             result.rejections().forEach((k, v) -> System.out.printf("   %-32s %s%n", k, v));
         }
+        HoldingOutcome holding = new HoldingOutcome(jdbcTemplate);
         for (Map.Entry<String, Map<Long, PitSweep.FirstPass>> e
                 : result.firstPasses().entrySet()) {
             System.out.printf("%n-- %s · 달성률 %s%% 이상 최초 통과 %d종목%n", e.getKey(),
                     MIN_SCORE_RATIO.movePointRight(2).stripTrailingZeros().toPlainString(),
                     e.getValue().size());
+            if (e.getValue().isEmpty()) {
+                continue;
+            }
+            System.out.printf("   %-10s %-26s %-6s %-8s %-7s %-8s %-8s %s%n",
+                    "매수일", "종목", "달성률", "결과", "소요일", "최고수익", "최대하락", "비고");
+            List<HoldingOutcome.Result> outcomes = new ArrayList<>();
             e.getValue().entrySet().stream()
                     .sorted(Map.Entry.comparingByValue())
-                    .forEach(x -> System.out.printf("   %s  %-28s %s/%s%n",
-                            x.getValue().asOf(), tickerOf(x.getKey()),
-                            x.getValue().score().stripTrailingZeros().toPlainString(),
-                            x.getValue().maxScore().stripTrailingZeros().toPlainString()));
+                    .forEach(x -> {
+                        HoldingOutcome.Result r = holding.measure(x.getKey(), x.getValue().asOf());
+                        outcomes.add(r);
+                        System.out.printf("   %-10s %-26s %-6s %-8s %-7s %-8s %-8s %s%n",
+                                r.entry(), abbreviate(tickerOf(x.getKey())),
+                                percent(ratioOf(x.getValue())), r.verdict(),
+                                r.daysToTarget() == null ? "-" : r.daysToTarget() + "일",
+                                percent(r.maxGainPct()), percent(r.maxDrawPct()),
+                                note(r));
+                    });
+            HoldingOutcome.Summary summary = HoldingOutcome.Summary.of(outcomes);
+            System.out.printf("   → 성공 %d · 부분성공 %d · 손절 %d%s · 목표 달성일 평균 %s · "
+                            + "기록 수익률 평균 %s%n",
+                    summary.success(), summary.partial(), summary.loss(),
+                    summary.noBars() > 0 ? " · 봉없음 " + summary.noBars() : "",
+                    summary.avgDaysToTarget() == null
+                            ? "-" : String.format("%.0f일", summary.avgDaysToTarget()),
+                    summary.avgReturnPct() == null
+                            ? "-" : String.format("%+.1f%%", summary.avgReturnPct() * 100));
+            if (summary.truncated() > 0 || summary.corporateGaps() > 0) {
+                System.out.printf("   → 창이 아직 안 닫힌 종목 %d · 보유 창에 미보정 기업행위가 "
+                                + "걸린 종목 %d%n", summary.truncated(), summary.corporateGaps());
+            }
         }
 
         // 0 == 0으로 초록이 되는 것을 막는다. 읽은 날짜가 0이면 잰 것이 없다.
@@ -149,6 +175,33 @@ class CustomScreenSweepTest {
         }
         return screenStore.findById(ids.get(0)).orElseThrow(() -> new IllegalStateException(
                 "screen id=" + ids.get(0) + "을 읽지 못했다"));
+    }
+
+    /** 규약 §2의 기록값이 아니라 **화면의 달성률**이다 — 진입 자격을 보이는 수다. */
+    private static BigDecimal ratioOf(PitSweep.FirstPass pass) {
+        return pass.maxScore().signum() == 0 ? BigDecimal.ONE
+                : pass.score().divide(pass.maxScore(), 4, java.math.RoundingMode.HALF_UP);
+    }
+
+    private static String percent(BigDecimal value) {
+        return value == null ? "-"
+                : String.format("%+.1f%%", value.multiply(new BigDecimal("100")).doubleValue());
+    }
+
+    /** 봉이 모자라거나 기업행위가 낀 것은 <b>숫자 옆에 적는다.</b> 안 적으면 그냥 성적이 된다. */
+    private static String note(HoldingOutcome.Result r) {
+        List<String> notes = new ArrayList<>();
+        if (r.truncated()) {
+            notes.add("창 미완");
+        }
+        if (r.corporateGap()) {
+            notes.add("미보정 기업행위");
+        }
+        return String.join(" ", notes);
+    }
+
+    private static String abbreviate(String name) {
+        return name.length() <= 26 ? name : name.substring(0, 25) + "…";
     }
 
     private String tickerOf(long stockId) {
