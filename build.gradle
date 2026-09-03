@@ -439,6 +439,18 @@ tasks.register('backtestProbe', Test) {
         events 'passed', 'skipped', 'failed'
         showStandardStreams = true
     }
+    // 힙. 기본값(512m)에서 OutOfMemoryError를 실측했다(350종목 × 1,441일자를 한 번에 든
+    // 계산에서). 그 계산은 기각돼 지웠고, **지금 경로가 512m에서 도는지는 안 쟀다** —
+    // 3.6시간짜리 적재가 힙으로 죽는 것이 가장 비싼 실패라 착수 전 시험까지 남겨 둔다.
+    maxHeapSize = '8g'
+    // 스윕 구간을 테스트 JVM으로 넘긴다. Gradle의 `-D`는 **데몬 JVM에만** 붙으므로 이 전달이
+    // 없으면 `-Dsweep.from=`이 조용히 무시되고 기본 구간(1년)이 돈다 — 6일만 보려던 실행이
+    // 몇 시간짜리가 되는데 아무 경고도 나지 않는다.
+    ['sweep.from', 'sweep.to'].each { key ->
+        if (System.getProperty(key) != null) {
+            systemProperty key, System.getProperty(key)
+        }
+    }
     // 캐시된 성공을 재사용하면 적재 뒤에도 옛 결과를 보게 된다.
     outputs.upToDateWhen { false }
 }
