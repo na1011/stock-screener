@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -59,6 +60,28 @@ final class PitStore {
 
     private Path manifest(String currency, LocalDate asOf) {
         return root.resolve(currency + "-" + asOf + ".manifest");
+    }
+
+    /**
+     * 한 날짜의 저장본에 붙는 사실들. 값이 아니라 <b>그 값을 믿어도 되는 근거</b>다.
+     *
+     * @param attempted        시도한 모집단 수. 「유효하지만 짧은 파일」을 가려내는 근거다
+     * @param codes            이 저장본이 담기로 <b>선언한</b> 코드 집합. 파일에서 관찰한 것이
+     *                         아니다 — 한 종목에만 있는 코드가 통과해 버리기 때문이다
+     * @param fingerprints     종목별 입력 지문. 바뀐 종목만 다시 만들기 위한 것
+     * @param indexFingerprint 종목에 안 걸리는 입력(시장 지수). 종목 지문에 섞으면 지수가 한 번
+     *                         바뀔 때 전 종목이 낡은 것으로 읽혀 종목 단위 무효화가 무의미해진다
+     * @param inPlaceDigest    적재 시점에 이미 있던 행들의 내용 해시. 읽는 쪽이 <b>제자리 수정</b>을
+     *                         싸게 알아채는 근거다({@link PitChangeDetector})
+     * @param writtenAt        <b>적재 실행이 시작한</b> 시각. 날짜마다 찍지 않는다 — 읽는 쪽은
+     *                         서로 다른 시각마다 변경 훑기를 한 번씩 돌아야 하고(회당 2초대),
+     *                         실측에서 그것이 스윕 시간을 통째로 지배했다. 실행 단위로 묶으면
+     *                         한 번이면 된다. 이르게 잡히므로 과검출이지 미검출이 아니다
+     * @param failed           값을 못 만든 종목. <b>비어 있지 않으면 완료로 적지 않는다</b>
+     */
+    record Stamp(int attempted, java.util.Set<String> codes, Map<Long, String> fingerprints,
+                 String indexFingerprint, String inPlaceDigest, Instant writtenAt,
+                 java.util.Set<Long> failed) {
     }
 
     /**
@@ -122,21 +145,9 @@ final class PitStore {
         return new Freshness(null, stale);
     }
 
-    /**
-     * 한 날짜를 쓴다. <b>데이터 → 원자적 이동 → 매니페스트</b> 순서를 지킨다.
-     *
-     * @param attempted 시도한 모집단 수. 「유효하지만 짧은 파일」을 읽는 쪽에서 가려내는 근거다
-     * @param codes     이 저장본이 담기로 <b>선언한</b> 코드 집합. 파일에서 관찰한 것이 아니다 —
-     *                  한 종목에만 있는 코드가 통과해 버리기 때문이다
-     * @param indexFingerprint 종목에 안 걸리는 입력(시장 지수). 종목 지문에 섞으면 지수가 한 번
-     *                  바뀔 때 전 종목이 낡은 것으로 읽혀 종목 단위 무효화가 무의미해진다
-     */
+    /** 한 날짜를 쓴다. <b>데이터 → 원자적 이동 → 매니페스트</b> 순서를 지킨다. */
     void writeDate(String currency, LocalDate asOf,
-                   Map<Long, Map<String, BigDecimal>> values,
-                   int attempted, java.util.Set<String> codes,
-                   Map<Long, String> fingerprints, String indexFingerprint,
-                   java.util.Set<Long> failed)
-            throws Exception {
+                   Map<Long, Map<String, BigDecimal>> values, Stamp stamp) throws Exception {
         Files.createDirectories(root);
         Path tmp = root.resolve(currency + "-" + asOf + ".csv.gz.tmp");
         try (Writer w = new BufferedWriter(new OutputStreamWriter(
@@ -161,18 +172,21 @@ final class PitStore {
         StringBuilder sb = new StringBuilder();
         sb.append("currency=").append(currency).append('\n');
         sb.append("asOf=").append(asOf).append('\n');
-        sb.append("attempted=").append(attempted).append('\n');
+        sb.append("attempted=").append(stamp.attempted()).append('\n');
         sb.append("stocks=").append(values.size()).append('\n');
-        sb.append("codes=").append(String.join(" ", new java.util.TreeSet<>(codes))).append('\n');
+        sb.append("codes=").append(String.join(" ", new java.util.TreeSet<>(stamp.codes())))
+                .append('\n');
         // MUST: 실패가 있으면 「완료」로 적지 않는다. 적으면 생존분만 든 날짜가 유효로 읽힌다.
         // MUST: 정렬해서 적는다. Set의 순회 순서는 보장되지 않으므로 같은 입력이 다른
         // 매니페스트를 만들고, 그러면 두 실행이 같은지를 파일로 비교할 수 없다.
-        sb.append("failed=").append(new java.util.TreeSet<>(failed).stream()
+        sb.append("failed=").append(new java.util.TreeSet<>(stamp.failed()).stream()
                 .map(String::valueOf).collect(java.util.stream.Collectors.joining(" ")))
                 .append('\n');
-        sb.append("indexFp=").append(indexFingerprint).append('\n');
-        sb.append("complete=").append(failed.isEmpty()).append('\n');
-        for (Map.Entry<Long, String> e : new java.util.TreeMap<>(fingerprints).entrySet()) {
+        sb.append("indexFp=").append(stamp.indexFingerprint()).append('\n');
+        sb.append("inPlaceDigest=").append(stamp.inPlaceDigest()).append('\n');
+        sb.append("writtenAt=").append(stamp.writtenAt()).append('\n');
+        sb.append("complete=").append(stamp.failed().isEmpty()).append('\n');
+        for (Map.Entry<Long, String> e : new java.util.TreeMap<>(stamp.fingerprints()).entrySet()) {
             sb.append("fp:").append(e.getKey()).append('=').append(e.getValue()).append('\n');
         }
         Files.writeString(mtmp, sb.toString(), StandardCharsets.UTF_8);
@@ -205,6 +219,22 @@ final class PitStore {
 
     Map<String, String> readManifest(String currency, LocalDate asOf) throws Exception {
         return readManifest(manifest(currency, asOf));
+    }
+
+    /** 저장소가 그 통화에 대해 담은 날짜. <b>파일이 정본이고 달력이 아니다.</b> */
+    java.util.List<LocalDate> storedDates(String currency) throws Exception {
+        if (!Files.exists(root)) {
+            return java.util.List.of();
+        }
+        String prefix = currency + "-";
+        try (var s = Files.list(root)) {
+            return s.map(p -> p.getFileName().toString())
+                    .filter(n -> n.startsWith(prefix) && n.endsWith(".manifest"))
+                    .map(n -> n.substring(prefix.length(), n.length() - ".manifest".length()))
+                    .map(LocalDate::parse)
+                    .sorted()
+                    .toList();
+        }
     }
 
     private static Map<String, String> readManifest(Path p) throws Exception {

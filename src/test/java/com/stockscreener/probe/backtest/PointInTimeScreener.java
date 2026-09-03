@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * as-of 하루의 지표를 <b>인메모리로 다시 계산해</b> 프리셋을 판정한다(P17, ADR-0071).
@@ -148,6 +149,49 @@ public class PointInTimeScreener {
     }
 
     /** 한 번의 값 계산으로 판정할 조건군 하나. {@code label}이 {@link #screenAll} 결과의 키다. */
+    /**
+     * 저장본이 담은 코드로 이 조건군을 판정할 수 있는가. 못 하면 <b>모자란 코드</b>를 돌려준다.
+     *
+     * <p>MUST NOT: {@code 참조 ⊆ 매니페스트}로 판정하지 않는다. {@code computeAt}은 교차단면
+     * 파생값을 <b>아예 내지 않으므로</b> 그 판정은 {@code _PCTL}·{@code _SECTOR_*}를 쓰는 전략을
+     * 전부 거절한다 — 저장소를 붙인 이유가 「어떤 전략이든 돌린다」인데 그 자리가 통째로 닫힌다.
+     * 파생값은 <b>원천 코드만 있으면 읽기 시점에 재구성된다.</b>
+     *
+     * <p>거절은 전략 단위다. 하나가 못 도는 것과 배치가 죽는 것은 다르다.
+     */
+    public static Set<String> missingCodesOf(ConditionGroup resolved, Set<String> storedCodes) {
+        Set<String> missing = new TreeSet<>();
+        for (String code : resolved.referencedIndicatorCodes()) {
+            if (storedCodes.contains(code)) {
+                continue;
+            }
+            String source = reconstructionSourceOf(code);
+            if (source != null && storedCodes.contains(source)) {
+                continue;
+            }
+            missing.add(code);
+        }
+        return missing;
+    }
+
+    /**
+     * 읽기 시점에 재구성되는 코드의 <b>원천</b>. 재구성 대상이 아니면 {@code null}.
+     *
+     * <p>업종 접미를 먼저 본다 — {@code PER_SECTOR_PCTL}은 유니버스 접미
+     * {@code _PCTL}로도 끝나므로, 순서를 뒤집으면 원천을 {@code PER_SECTOR}로 잘못 잡는다.
+     */
+    private static String reconstructionSourceOf(String code) {
+        for (SectorMetricSpec.Kind kind : RECONSTRUCTED_KINDS) {
+            if (code.endsWith(kind.suffix())) {
+                return code.substring(0, code.length() - kind.suffix().length());
+            }
+        }
+        if (code.endsWith(PercentileSpec.SUFFIX)) {
+            return code.substring(0, code.length() - PercentileSpec.SUFFIX.length());
+        }
+        return null;
+    }
+
     public record Request(String label, ConditionGroup group, EvaluationMode mode) {
     }
 

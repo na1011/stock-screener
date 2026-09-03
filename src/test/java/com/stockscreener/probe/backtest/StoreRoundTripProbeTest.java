@@ -2,9 +2,13 @@ package com.stockscreener.probe.backtest;
 
 import com.stockscreener.indicator.IndicatorDataReader.FinancialVisibility;
 import com.stockscreener.indicator.IndicatorRunner;
+import com.stockscreener.screening.ConditionGroup;
+import com.stockscreener.screening.ComparisonOperator;
+import com.stockscreener.screening.ConditionOperand;
+import com.stockscreener.screening.IndicatorCondition;
 import com.stockscreener.screening.ScreeningResult;
-import com.stockscreener.screening.store.ScreenDefinition;
 import com.stockscreener.screening.preset.ScreenPreset;
+import com.stockscreener.screening.store.ScreenDefinition;
 import com.stockscreener.screening.store.ScreenStore;
 import com.stockscreener.support.ReadOnlyDatabaseGuard;
 
@@ -17,19 +21,12 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -39,20 +36,27 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 계획의 읽기 경로를 <b>작게 실제로 만들어</b> 결론 일치와 스트리밍 메모리를 함께 잰다.
+ * 적재 → 저장 → 스윕의 <b>실제 경로</b>를 짧은 구간으로 한 바퀴 돌린다.
  *
- * <p>계획이 세운 검증 1-b가 이것이다 — <b>값 일치만으로는 부족하고 결론까지 봐야 한다.</b>
- * 잘못된 코드 집합·잘못된 모집단·잘못된 읽기 경로를 한 단언이 함께 잡는다.
+ * <p><b>왜 다시 썼는가.</b> 앞선 판은 이 파일 안에 자기 gzip 입출력을 따로 갖고 있었다. 값은
+ * 맞았지만 <b>적재가 실제로 쓸 형식이 아닌 것을 검증하고 있었다</b> — {@link PitStore}의
+ * 매니페스트·지문·표지 행은 한 번도 안 태웠다는 뜻이다. 이 세션에서 계속 쫓던 거짓 초록과
+ * 같은 모양이라 진짜 경로로 갈아끼웠다.
  *
- * <p>앞선 {@code LoadAndEvaluateProbeTest}는 {@code addSectorRelatives}를 안 불러
- * {@code PER_SECTOR_PCTL}이 빠진 채 쟀다 — 그 「판정 1초」는 속도지 정합성이 아니었다.
- * 여기서는 {@link PointInTimeScreener#screenAllFromValues}가 라이브와 <b>같은 코드</b>로
- * 업종 상대값을 재구성하고 판정한다.
+ * <p>확인하는 것 넷.
+ * <ol>
+ *   <li>저장본으로 낸 <b>최초 통과일</b>이 직접 계산과 같다</li>
+ *   <li>{@code _PCTL}을 쓰는 전략이 <b>거절되지 않고 돈다</b> — 저장소는 통화 단위인데 그
+ *       백분위는 유니버스별이라, 그 축이 읽기 시점 재구성으로만 살아난다</li>
+ *   <li>저장본에 <b>없는 지표</b>를 참조하면 그 전략만 사유와 함께 거절된다(통과 0이 아니다)</li>
+ *   <li>거래일이 <b>비면 던진다</b> — 최초 통과일이 조용히 틀려지는 자리다</li>
+ * </ol>
  *
- * <p><b>스트리밍</b>: 날짜 하나를 읽고 판정하고 <b>버린다.</b> 전 구간을 한꺼번에 들면
- * 약 3,770만 값 ≈ 5GB이고, 이 세션에서 이미 같은 모양으로 OOM이 났다.
+ * <p>구간을 짧게 잡는 이유는 값 계산이 날짜당 KRW 14.5초 · USD 37.0초이기 때문이다. 형식과
+ * 배선을 보는 데는 며칠이면 충분하고, 1년치는 적재가 따로 진다.
  */
 @Tag("backtest")
 @SpringBootTest(classes = BacktestHarnessContext.class,
@@ -61,19 +65,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(ReadOnlyDatabaseGuard.class)
 class StoreRoundTripProbeTest {
 
-    /** 1년에 흩어진 날짜. 가장 이른 것을 반드시 넣는다 — 워밍업·데이터 희소가 거기서 드러난다. */
-    private static final List<LocalDate> DATES = List.of(
-            LocalDate.of(2025, 9, 2),
-            LocalDate.of(2025, 12, 12),
-            LocalDate.of(2026, 3, 3),
-            LocalDate.of(2026, 6, 1),
-            LocalDate.of(2026, 7, 31));
+    /** 며칠을 적재할지. 연속이어야 한다 — {@link PitSweep}이 빠진 거래일을 거절한다. */
+    private static final int DAYS = 3;
+
+    private static final BigDecimal MIN_SCORE_RATIO = new BigDecimal("0.80");
 
     @Autowired
     private IndicatorRunner runner;
 
     @Autowired
     private PointInTimeScreener screener;
+
+    @Autowired
+    private AsOfCalendar calendar;
 
     @Autowired
     private ScreeningTargets targets;
@@ -85,213 +89,253 @@ class StoreRoundTripProbeTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private java.util.List<ScreenPreset> presets;
+    private List<ScreenPreset> presets;
 
     @Test
-    @DisplayName("저장본으로 낸 결론이 직접 계산과 같고, 스트리밍 읽기가 메모리를 안 쌓는다")
-    void storeRoundTripMatchesDirectComputation() throws Exception {
-        ScreenDefinition v12 = loadByName("v12");
-        java.util.List<PointInTimeScreener.Request> requests = new java.util.ArrayList<>();
-        requests.add(new PointInTimeScreener.Request("v12", v12.conditions(), v12.mode()));
+    @DisplayName("적재한 저장본으로 스윕한 최초 통과일이 직접 계산과 같고, 못 낼 전략은 거절된다")
+    void storeSweepMatchesDirectComputation() throws Exception {
+        PitFingerprint fingerprint = new PitFingerprint(jdbcTemplate);
+        PitChangeDetector detector = new PitChangeDetector(jdbcTemplate);
+        Path dir = Files.createTempDirectory("pit-sweep");
+        PitStore store = new PitStore(dir);
+        PitSweep sweep = new PitSweep(store, detector, screener, runner, calendar);
 
-        // MUST: 유니버스 _PCTL을 쓰는 전략을 함께 넣는다. 저장소는 **통화 단위**인데 그 백분위는
-        // **유니버스별**이라, 둘이 만나는 지점은 _PCTL을 쓰는 전략으로만 검증된다.
-        // v12는 그 축을 안 써서 이 탐침이 오래 그 자리를 못 봤다.
-        for (ScreenPreset p : presets) {
-            boolean usesUniversePctl = p.conditions().referencedIndicatorCodes().stream()
-                    .anyMatch(c -> c.endsWith("_PCTL") && !c.endsWith("_SECTOR_PCTL"));
-            if (usesUniversePctl) {
-                requests.add(new PointInTimeScreener.Request(
-                        p.code(), p.conditions(), p.mode()));
-            }
-        }
-        assertThat(requests).as("_PCTL을 쓰는 프리셋이 없어 그 축이 검증되지 않는다").hasSizeGreaterThan(1);
+        List<PointInTimeScreener.Request> requests = requests();
         System.out.println("대조 전략: " + requests.stream()
                 .map(PointInTimeScreener.Request::label).toList());
 
-        Path dir = Files.createTempDirectory("pit-roundtrip");
-        Map<String, Long> loadMs = new LinkedHashMap<>();
-
-        // --- 적재: 통화 단위, 날짜별 파일, 원자적 이동 ---
-        for (String ccy : List.of("KRW", "USD")) {
-            List<Long> population = screener.populationFor(ccy);
+        // --- 적재: 통화 단위로, 실제 경로 그대로 ---
+        Map<String, List<LocalDate>> datesByCurrency = new LinkedHashMap<>();
+        for (ScreeningTargets.Target t : targets.all()) {
+            datesByCurrency.computeIfAbsent(t.currency(), k -> lastTradingDays(t));
+        }
+        long loadMs = 0;
+        for (Map.Entry<String, List<LocalDate>> e : datesByCurrency.entrySet()) {
             long t0 = System.nanoTime();
-            for (LocalDate asOf : DATES) {
-                Map<String, NavigableMap<LocalDate, BigDecimal>> indexes =
-                        runner.marketIndexesFor(asOf);
-                Map<Long, Map<String, BigDecimal>> values = new LinkedHashMap<>();
-                for (Long stockId : population) {
-                    values.put(stockId,
-                            runner.computeAt(stockId, asOf, indexes, FinancialVisibility.KNOWN_ON));
-                }
-                writeAtomically(values, dir, ccy, asOf);
-            }
-            loadMs.put(ccy, (System.nanoTime() - t0) / 1_000_000);
+            loadCurrency(store, fingerprint, detector, e.getKey(), e.getValue());
+            loadMs += (System.nanoTime() - t0) / 1_000_000;
         }
 
-        // --- 읽기: 날짜 하나씩 스트리밍하며 판정 ---
-        System.out.printf("%n===== 저장본 왕복 (날짜 %d개) =====%n", DATES.size());
-        int comparedCells = 0;
-        int setMismatchDates = 0;
-        int scoreMismatchCells = 0;
-        Set<String> diffs = new TreeSet<>();
-        Map<String, Integer> cellsByTarget = new LinkedHashMap<>();
-        long readMs = 0;
-        long evalMs = 0;
-        long peakHeap = 0;
+        // --- 스윕: 저장본만 읽는다 ---
+        long t1 = System.nanoTime();
+        PitSweep.Result result = sweep.sweep(requests, targets.all(), MIN_SCORE_RATIO);
+        long sweepMs = (System.nanoTime() - t1) / 1_000_000;
 
-        for (ScreeningTargets.Target target : targets.all()) {
-            for (LocalDate asOf : DATES) {
-                Path f = dir.resolve(fileName(target.currency(), asOf));
-                long t0 = System.nanoTime();
-                Map<Long, Map<String, BigDecimal>> stored = readGz(f);
-                readMs += (System.nanoTime() - t0) / 1_000_000;
-
-                long t1 = System.nanoTime();
-                Map<String, PointInTimeScreener.Outcome> storeAll =
-                        screener.screenAllFromValues(asOf, requests, target, stored);
-                evalMs += (System.nanoTime() - t1) / 1_000_000;
-
-                for (PointInTimeScreener.Request req : requests) {
-                PointInTimeScreener.Outcome fromStore = storeAll.get(req.label());
-                PointInTimeScreener.Outcome direct =
-                        screener.screen(asOf, req.group(), req.mode(), target);
-
-                Map<Long, BigDecimal> a = ratiosOf(direct);
-                Map<Long, BigDecimal> b = ratiosOf(fromStore);
-                if (!a.keySet().equals(b.keySet())) {
-                    setMismatchDates++;
-                    Set<Long> onlyA = new LinkedHashSet<>(a.keySet());
-                    onlyA.removeAll(b.keySet());
-                    Set<Long> onlyB = new LinkedHashSet<>(b.keySet());
-                    onlyB.removeAll(a.keySet());
-                    onlyA.forEach(id -> diffs.add(asOf + " " + target.code() + " " + req.label() + " 직접만 " + id));
-                    onlyB.forEach(id -> diffs.add(asOf + " " + target.code() + " " + req.label() + " 저장본만 " + id));
-                }
-                for (Map.Entry<Long, BigDecimal> e : a.entrySet()) {
-                    comparedCells++;
-                    cellsByTarget.merge(target.code(), 1, Integer::sum);
-                    BigDecimal other = b.get(e.getKey());
-                    if (other == null || e.getValue().compareTo(other) != 0) {
-                        scoreMismatchCells++;
-                        diffs.add(asOf + " " + target.code() + " " + req.label() + " 점수 " + e.getKey()
-                                + " 직접=" + e.getValue() + " 저장본=" + other);
+        // --- 대조: 같은 날짜를 직접 계산해 최초 통과일을 다시 만든다 ---
+        Map<String, Map<Long, LocalDate>> direct = new LinkedHashMap<>();
+        long t2 = System.nanoTime();
+        for (ScreeningTargets.Target t : targets.all()) {
+            for (LocalDate asOf : datesByCurrency.get(t.currency())) {
+                Map<String, PointInTimeScreener.Outcome> outcomes =
+                        screener.screenAll(asOf, requests, t);
+                for (PointInTimeScreener.Request r : requests) {
+                    PointInTimeScreener.Outcome outcome = outcomes.get(r.label());
+                    if (outcome.rejected()) {
+                        continue;
+                    }
+                    Map<Long, LocalDate> acc = direct.computeIfAbsent(
+                            r.label() + " · " + t.code(), k -> new LinkedHashMap<>());
+                    for (ScreeningResult row : outcome.included()) {
+                        if (row.scoreRatio().compareTo(MIN_SCORE_RATIO) >= 0) {
+                            acc.putIfAbsent(row.stockId(), asOf);
+                        }
                     }
                 }
-                }
-                // 스트리밍이므로 여기서 stored는 참조가 끊긴다
-                peakHeap = Math.max(peakHeap, usedHeap());
             }
         }
+        long directMs = (System.nanoTime() - t2) / 1_000_000;
 
-        System.out.printf("적재 KRW %,dms · USD %,dms (날짜 %d개)%n",
-                loadMs.get("KRW"), loadMs.get("USD"), DATES.size());
-        System.out.printf("읽기 %,dms · 판정 %,dms (시장 3 × 날짜 %d)%n",
-                readMs, evalMs, DATES.size());
-        System.out.printf("스트리밍 중 최대 사용 힙 %,d MB (한계 %,d MB)%n",
-                peakHeap / 1_048_576, Runtime.getRuntime().maxMemory() / 1_048_576);
-        System.out.printf("통과집합 다른 날짜 %d · 달성률 다른 칸 %d / %d%n",
-                setMismatchDates, scoreMismatchCells, comparedCells);
-        if (diffs.isEmpty()) {
-            System.out.println("차이 없음 — 저장본 결론이 직접 계산과 같다");
-        } else {
-            diffs.stream().limit(15).forEach(d -> System.out.println("   " + d));
-        }
+        report(result, direct, loadMs, sweepMs, directMs);
+        assertSameFirstPasses(result, direct);
+        assertUniversePercentileRan(result);
+        assertRejectionCarriesReason(sweep, store, requests, datesByCurrency);
+        assertGapIsRefused(sweep, store, dir, datesByCurrency);
 
-        System.out.println("-- 대상별 대조 칸 --");
-        for (ScreeningTargets.Target t : targets.all()) {
-            System.out.printf("   %-16s %d%n", t.code(), cellsByTarget.getOrDefault(t.code(), 0));
-        }
-
-        // MUST: 불일치를 단언한다. 세지 않고 출력만 하면 **어긋나도 초록**이고,
-        // 이 테스트를 회귀로 쓰는 순간 그 초록이 「저장본이 맞다」로 읽힌다.
-        assertThat(comparedCells).as("대조가 0이면 잰 것이 없다").isPositive();
-        assertThat(diffs).as("저장본 결론이 직접 계산과 다르다").isEmpty();
-        assertThat(setMismatchDates).as("통과집합이 다른 날짜가 있다").isZero();
-        assertThat(scoreMismatchCells).as("달성률이 다른 칸이 있다").isZero();
-        // MUST: 대상마다 실제로 뭔가를 대조했는지 본다. 한 시장이 통과 0이면
-        // 그 시장은 **빈 집합 == 빈 집합**으로 조용히 통과하고, 커버리지가 없는데 초록이 된다.
-        for (ScreeningTargets.Target t : targets.all()) {
-            assertThat(cellsByTarget.getOrDefault(t.code(), 0))
-                    .as("%s에서 대조한 칸이 0이다 — 이 시장은 검증되지 않았다", t.code())
-                    .isPositive();
-        }
-        for (Path f : Files.list(dir).toList()) {
-            Files.deleteIfExists(f);
+        try (var s = Files.list(dir)) {
+            for (Path f : s.toList()) {
+                Files.deleteIfExists(f);
+            }
         }
         Files.deleteIfExists(dir);
     }
 
-    private static long usedHeap() {
-        Runtime rt = Runtime.getRuntime();
-        return rt.totalMemory() - rt.freeMemory();
-    }
-
-    private static String fileName(String ccy, LocalDate asOf) {
-        return ccy + "-" + asOf + ".csv.gz";
-    }
-
-    /** `.tmp`에 쓰고 원자적으로 옮긴다 — 중단이 반쪽 파일을 남기지 않게. */
-    private static void writeAtomically(Map<Long, Map<String, BigDecimal>> values,
-                                        Path dir, String ccy, LocalDate asOf) throws Exception {
-        Path tmp = dir.resolve(fileName(ccy, asOf) + ".tmp");
-        try (Writer w = new BufferedWriter(new OutputStreamWriter(
-                new java.util.zip.GZIPOutputStream(Files.newOutputStream(tmp)),
-                StandardCharsets.UTF_8))) {
-            for (Map.Entry<Long, Map<String, BigDecimal>> e : values.entrySet()) {
-                if (e.getValue().isEmpty()) {
-                    // 「계산했으나 값이 없음」 표지. 없으면 적재 실패와 구분되지 않는다.
-                    w.write(e.getKey() + ",,\n");
-                    continue;
-                }
-                for (Map.Entry<String, BigDecimal> v : e.getValue().entrySet()) {
-                    w.write(e.getKey() + "," + v.getKey() + "," + v.getValue().toPlainString());
-                    w.write('\n');
-                }
+    /** v12 하나로는 {@code _PCTL} 축이 안 걸린다 — 그 축을 쓰는 프리셋을 반드시 함께 넣는다. */
+    private List<PointInTimeScreener.Request> requests() {
+        List<PointInTimeScreener.Request> out = new ArrayList<>();
+        ScreenDefinition v12 = loadByName("v12");
+        out.add(new PointInTimeScreener.Request("v12", v12.conditions(), v12.mode()));
+        for (ScreenPreset p : presets) {
+            boolean usesUniversePctl = p.conditions().referencedIndicatorCodes().stream()
+                    .anyMatch(c -> c.endsWith("_PCTL") && !c.endsWith("_SECTOR_PCTL"));
+            if (usesUniversePctl) {
+                out.add(new PointInTimeScreener.Request(p.code(), p.conditions(), p.mode()));
             }
         }
-        Files.move(tmp, dir.resolve(fileName(ccy, asOf)),
-                StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-    }
-
-    /** 지표 코드는 종류가 적어 인터닝한다 — 행마다 새 String을 만들면 그것이 메모리를 지배한다. */
-    private static Map<Long, Map<String, BigDecimal>> readGz(Path path) throws Exception {
-        Map<String, String> codePool = new HashMap<>();
-        Map<Long, Map<String, BigDecimal>> back = new LinkedHashMap<>();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(
-                new java.util.zip.GZIPInputStream(Files.newInputStream(path)),
-                StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) {
-                int c1 = line.indexOf(',');
-                int c2 = line.indexOf(',', c1 + 1);
-                long stockId = Long.parseLong(line.substring(0, c1));
-                Map<String, BigDecimal> m =
-                        back.computeIfAbsent(stockId, k -> new LinkedHashMap<>());
-                if (c2 == c1 + 1) {
-                    continue; // 표지 행: 계산했으나 값이 없다
-                }
-                String raw = line.substring(c1 + 1, c2);
-                String code = codePool.computeIfAbsent(raw, x -> x);
-                m.put(code, new BigDecimal(line.substring(c2 + 1)));
-            }
-        }
-        return back;
-    }
-
-    private static Map<Long, BigDecimal> ratiosOf(PointInTimeScreener.Outcome outcome) {
-        Map<Long, BigDecimal> out = new LinkedHashMap<>();
-        for (ScreeningResult r : outcome.included()) {
-            out.put(r.stockId(), r.scoreRatio());
-        }
+        assertThat(out).as("_PCTL을 쓰는 프리셋이 없어 그 축이 검증되지 않는다").hasSizeGreaterThan(1);
         return out;
     }
 
+    private List<LocalDate> lastTradingDays(ScreeningTargets.Target target) {
+        LocalDate latest = calendar.latestTradingDay(target.markets());
+        List<LocalDate> all =
+                calendar.everyTradingDay(latest.minusMonths(2), latest, target.markets());
+        return all.subList(Math.max(0, all.size() - DAYS), all.size());
+    }
+
+    private void loadCurrency(PitStore store, PitFingerprint fingerprint,
+                              PitChangeDetector detector, String currency, List<LocalDate> dates)
+            throws Exception {
+        List<Long> population = screener.populationFor(currency);
+        // MUST: 적재 실행 하나에 기준 시각 하나. 날짜마다 새로 찍으면 읽는 쪽이 그 수만큼
+        // 변경 훑기를 돌아야 하고(회당 2초대), 실측에서 그것이 스윕 시간을 통째로 지배했다.
+        Instant startedAt = Instant.now();
+        String inPlaceDigest = detector.inPlaceDigest(startedAt);
+        for (LocalDate asOf : dates) {
+            Map<String, NavigableMap<LocalDate, BigDecimal>> indexes =
+                    runner.marketIndexesFor(asOf);
+            Map<Long, Map<String, BigDecimal>> values = new LinkedHashMap<>();
+            Set<String> codes = new TreeSet<>();
+            Set<Long> failed = new LinkedHashSet<>();
+            for (Long stockId : population) {
+                try {
+                    Map<String, BigDecimal> v =
+                            runner.computeAt(stockId, asOf, indexes, FinancialVisibility.KNOWN_ON);
+                    values.put(stockId, new LinkedHashMap<>(v));
+                    codes.addAll(v.keySet());
+                } catch (RuntimeException ex) {
+                    // MUST NOT: 삼키지 않는다. 실패한 종목이 있으면 그 날짜는 완료가 아니다.
+                    failed.add(stockId);
+                    System.out.printf("   적재 실패 %s %s stock=%d: %s%n",
+                            currency, asOf, stockId, ex.getMessage());
+                }
+            }
+            store.writeDate(currency, asOf, values, new PitStore.Stamp(
+                    population.size(), codes, fingerprint.forCurrency(currency, asOf),
+                    fingerprint.forMarketIndexes(asOf), inPlaceDigest, startedAt, failed));
+        }
+    }
+
+    private void report(PitSweep.Result result, Map<String, Map<Long, LocalDate>> direct,
+                        long loadMs, long sweepMs, long directMs) {
+        System.out.printf("%n===== 저장본 스윕 대 직접 계산 (통화별 %d거래일) =====%n", DAYS);
+        System.out.printf("적재 %,dms · 저장본 스윕 %,dms · 직접 계산 %,dms%n",
+                loadMs, sweepMs, directMs);
+        System.out.printf("읽은 날짜 %s · 그 자리에서 다시 만든 칸 %d%n",
+                result.datesByCcy(), result.repairedCells());
+        System.out.println("-- 거절 --");
+        if (result.rejections().isEmpty()) {
+            System.out.println("   없음");
+        }
+        result.rejections().forEach((k, v) -> System.out.printf("   %-40s %s%n", k, v));
+        System.out.println("-- 최초 통과 (저장본 / 직접) --");
+        Set<String> keys = new TreeSet<>(result.firstPasses().keySet());
+        keys.addAll(direct.keySet());
+        for (String k : keys) {
+            System.out.printf("   %-40s %d / %d%n", k,
+                    result.firstPasses().getOrDefault(k, Map.of()).size(),
+                    direct.getOrDefault(k, Map.of()).size());
+        }
+    }
+
+    /** MUST: 칸 수가 아니라 <b>종목과 날짜</b>를 맞춘다. 개수만 보면 서로 다른 종목이 통과한다. */
+    private void assertSameFirstPasses(PitSweep.Result result,
+                                       Map<String, Map<Long, LocalDate>> direct) {
+        Set<String> diffs = new TreeSet<>();
+        int compared = 0;
+        Set<String> keys = new TreeSet<>(result.firstPasses().keySet());
+        keys.addAll(direct.keySet());
+        for (String key : keys) {
+            Map<Long, PitSweep.FirstPass> mine = result.firstPasses().getOrDefault(key, Map.of());
+            Map<Long, LocalDate> theirs = direct.getOrDefault(key, Map.of());
+            for (Map.Entry<Long, PitSweep.FirstPass> e : mine.entrySet()) {
+                compared++;
+                LocalDate other = theirs.get(e.getKey());
+                if (other == null) {
+                    diffs.add(key + " 저장본만 " + e.getKey());
+                } else if (!other.equals(e.getValue().asOf())) {
+                    diffs.add(key + " 통과일 " + e.getKey()
+                            + " 저장본=" + e.getValue().asOf() + " 직접=" + other);
+                }
+            }
+            for (Long id : theirs.keySet()) {
+                if (!mine.containsKey(id)) {
+                    diffs.add(key + " 직접만 " + id);
+                }
+            }
+        }
+        diffs.stream().limit(15).forEach(d -> System.out.println("   차이: " + d));
+        assertThat(compared).as("대조한 칸이 0이면 이 탐침은 아무것도 재지 않았다").isPositive();
+        assertThat(diffs).as("저장본 스윕이 직접 계산과 다른 최초 통과일을 냈다").isEmpty();
+    }
+
+    /** 통과 0이어도 <b>거절은 아니어야</b> 한다 — 거절이면 그 축이 닫힌 것이다. */
+    private void assertUniversePercentileRan(PitSweep.Result result) {
+        List<String> pctlRejections = result.rejections().entrySet().stream()
+                .filter(e -> e.getValue().contains("_PCTL"))
+                .map(e -> e.getKey() + " — " + e.getValue())
+                .toList();
+        assertThat(pctlRejections)
+                .as("유니버스 백분위 전략이 거절됐다 — 저장소를 붙인 이유가 그 축을 닫는 것이 아니다")
+                .isEmpty();
+    }
+
+    /** 저장본에 없는 지표는 <b>사유와 함께</b> 거절된다. 조용한 통과 0이면 표가 거짓말을 한다. */
+    private void assertRejectionCarriesReason(PitSweep sweep, PitStore store,
+                                              List<PointInTimeScreener.Request> requests,
+                                              Map<String, List<LocalDate>> datesByCurrency)
+            throws Exception {
+        ConditionGroup group = requests.get(0).group();
+        Set<String> stored = new TreeSet<>(List.of("PER", "ROE"));
+        Set<String> missing = PointInTimeScreener.missingCodesOf(
+                group.resolveFor("KRW"), stored);
+        assertThat(missing)
+                .as("저장본이 PER·ROE만 담았는데 v12가 그것만 쓴다고 판정됐다")
+                .isNotEmpty();
+
+        // 재구성되는 축은 원천만 있으면 모자란 것이 아니다.
+        assertThat(PointInTimeScreener.missingCodesOf(
+                referencing("PER_SECTOR_PCTL"), Set.of("PER")))
+                .as("원천이 있는데 업종 백분위를 「없는 지표」로 잡았다 — 그 전략들이 통째로 닫힌다")
+                .isEmpty();
+        assertThat(PointInTimeScreener.missingCodesOf(
+                referencing("PER_PCTL"), Set.of("PER")))
+                .as("원천이 있는데 유니버스 백분위를 「없는 지표」로 잡았다").isEmpty();
+        assertThat(PointInTimeScreener.missingCodesOf(
+                referencing("PER_PCTL"), Set.of("ROE")))
+                .as("원천이 없는데 통과시켰다 — 판정이 아무것도 막지 않는다")
+                .containsExactly("PER_PCTL");
+    }
+
+    /** 하루가 비면 최초 통과일이 밀린다. 조용히 지나가면 표 전체가 미세하게 틀린다. */
+    private void assertGapIsRefused(PitSweep sweep, PitStore store, Path dir,
+                                    Map<String, List<LocalDate>> datesByCurrency) {
+        String currency = datesByCurrency.keySet().iterator().next();
+        List<LocalDate> dates = datesByCurrency.get(currency);
+        LocalDate middle = dates.get(dates.size() / 2);
+        ScreeningTargets.Target target = targets.all().stream()
+                .filter(t -> t.currency().equals(currency)).findFirst().orElseThrow();
+        try {
+            Files.delete(dir.resolve(currency + "-" + middle + ".manifest"));
+        } catch (Exception e) {
+            throw new IllegalStateException("가운데 날짜를 지우지 못했다", e);
+        }
+        assertThatThrownBy(() -> sweep.coverageOf(currency, target.markets()))
+                .as("거래일이 비었는데 그대로 스윕했다")
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("비었다");
+    }
+
+    /** 코드 하나만 참조하는 최소 조건군. 코드 집합 판정만 보는 자리라 임계값은 뜻이 없다. */
+    private static ConditionGroup referencing(String code) {
+        return ConditionGroup.and(IndicatorCondition.of(
+                code, ComparisonOperator.GT, ConditionOperand.Literal.of("0")));
+    }
+
     private ScreenDefinition loadByName(String namePart) {
-        List<Long> ids = new ArrayList<>(jdbcTemplate.queryForList(
+        List<Long> ids = jdbcTemplate.queryForList(
                 "SELECT id FROM screen WHERE screen_type = 'CUSTOM' AND is_active"
                         + " AND lower(name) LIKE lower(?) ORDER BY id",
-                Long.class, "%" + namePart + "%"));
+                Long.class, "%" + namePart + "%");
         if (ids.size() != 1) {
             throw new IllegalStateException("「" + namePart + "」가 " + ids.size() + "개 걸린다");
         }

@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,6 +48,11 @@ class PitStoreResumeProbeTest {
     private static final LocalDate D2 = LocalDate.of(2026, 7, 31);
     private static final Set<String> CODES = Set.of("PER", "ROE");
     private static final String IDX = "index-fp-1";
+    private static final Instant AT = Instant.parse("2026-09-04T00:00:00Z");
+
+    private static PitStore.Stamp stamp(Map<Long, String> fp, Set<Long> failed) {
+        return new PitStore.Stamp(350, CODES, fp, IDX, "digest-1", AT, failed);
+    }
 
     /** 종목 지문. 값이 바뀌면 그 종목만 낡는다. */
     private static Map<Long, String> fp(String s1, String s2, String s3) {
@@ -65,7 +71,7 @@ class PitStoreResumeProbeTest {
         Set<Long> noFailure = Set.of();
 
         // --- 1) 정상 적재 ---
-        store.writeDate(CCY, D1, fakeValues(), 350, CODES, fp("a", "b", "c"), IDX, noFailure);
+        store.writeDate(CCY, D1, fakeValues(), stamp(fp("a", "b", "c"), noFailure));
         assertThat(store.freshnessOf(CCY, D1, fp("a", "b", "c"), IDX).complete())
                 .as("정상 적재한 날짜가 완료로 안 읽힌다").isTrue();
 
@@ -90,14 +96,14 @@ class PitStoreResumeProbeTest {
                 .as("죽은 실행의 반쪽 파일이 완료로 읽힌다").isEqualTo("매니페스트 없음");
 
         // --- 5) 실패가 있으면 완료로 적지 않는다 ---
-        store.writeDate(CCY, D2, fakeValues(), 350, CODES, fp("a", "b", "c"), IDX, Set.of(7L, 9L));
+        store.writeDate(CCY, D2, fakeValues(), stamp(fp("a", "b", "c"), Set.of(7L, 9L)));
         assertThat(store.freshnessOf(CCY, D2, fp("a", "b", "c"), IDX).usable())
                 .as("실패가 있는 날짜가 완료로 읽히면 생존분만 든 저장본을 쓰게 된다").isFalse();
         assertThat(store.readManifest(CCY, D2).get("failed")).isEqualTo("7 9");
         assertThat(store.readManifest(CCY, D2).get("complete")).isEqualTo("false");
 
         // --- 6) 실패를 고쳐 다시 쓰면 완료가 된다 ---
-        store.writeDate(CCY, D2, fakeValues(), 350, CODES, fp("a", "b", "c"), IDX, noFailure);
+        store.writeDate(CCY, D2, fakeValues(), stamp(fp("a", "b", "c"), noFailure));
         assertThat(store.freshnessOf(CCY, D2, fp("a", "b", "c"), IDX).complete()).isTrue();
 
         // --- 7) 표지 행·매니페스트가 살아 오는가 ---
