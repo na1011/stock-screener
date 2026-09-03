@@ -73,6 +73,8 @@ final class PitStore {
      *                         바뀔 때 전 종목이 낡은 것으로 읽혀 종목 단위 무효화가 무의미해진다
      * @param inPlaceDigest    적재 시점에 이미 있던 행들의 내용 해시. 읽는 쪽이 <b>제자리 수정</b>을
      *                         싸게 알아채는 근거다({@link PitChangeDetector})
+     * @param calculatorFp     값을 만든 계산기의 판. DB가 하나도 안 움직여도 공식이 바뀌면
+     *                         저장본은 낡는데, 이것이 없으면 그것을 알 방법이 아예 없다
      * @param writtenAt        <b>적재 실행이 시작한</b> 시각. 날짜마다 찍지 않는다 — 읽는 쪽은
      *                         서로 다른 시각마다 변경 훑기를 한 번씩 돌아야 하고(회당 2초대),
      *                         실측에서 그것이 스윕 시간을 통째로 지배했다. 실행 단위로 묶으면
@@ -80,8 +82,8 @@ final class PitStore {
      * @param failed           값을 못 만든 종목. <b>비어 있지 않으면 완료로 적지 않는다</b>
      */
     record Stamp(int attempted, java.util.Set<String> codes, Map<Long, String> fingerprints,
-                 String indexFingerprint, String inPlaceDigest, Instant writtenAt,
-                 java.util.Set<Long> failed) {
+                 String indexFingerprint, String inPlaceDigest, String calculatorFp,
+                 Instant writtenAt, java.util.Set<Long> failed) {
     }
 
     /**
@@ -168,12 +170,33 @@ final class PitStore {
                 StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
 
         // MUST: 데이터가 최종 이름을 가진 뒤에 쓴다.
+        writeManifest(currency, asOf, values.size(), stamp);
+    }
+
+    /**
+     * 데이터는 그대로 두고 매니페스트만 다시 찍는다.
+     *
+     * <p>읽는 쪽이 「낡지 않았음」을 내용으로 확정한 뒤 쓴다. 안 되쓰면 다음 스윕이 같은
+     * 확정을 처음부터 되풀이하고, 전략을 여러 번 고치는 것이 이 저장소의 용도라 그 되풀이가
+     * 곧 비용이 된다.
+     */
+    void rewriteManifest(String currency, LocalDate asOf, int stocks, Stamp stamp)
+            throws Exception {
+        if (!Files.exists(data(currency, asOf))) {
+            throw new IllegalStateException(currency + " " + asOf
+                    + " 데이터 파일이 없는데 매니페스트만 쓰려 한다 — 그러면 없는 것이 완료로 읽힌다");
+        }
+        writeManifest(currency, asOf, stocks, stamp);
+    }
+
+    private void writeManifest(String currency, LocalDate asOf, int stocks, Stamp stamp)
+            throws Exception {
         Path mtmp = root.resolve(currency + "-" + asOf + ".manifest.tmp");
         StringBuilder sb = new StringBuilder();
         sb.append("currency=").append(currency).append('\n');
         sb.append("asOf=").append(asOf).append('\n');
         sb.append("attempted=").append(stamp.attempted()).append('\n');
-        sb.append("stocks=").append(values.size()).append('\n');
+        sb.append("stocks=").append(stocks).append('\n');
         sb.append("codes=").append(String.join(" ", new java.util.TreeSet<>(stamp.codes())))
                 .append('\n');
         // MUST: 실패가 있으면 「완료」로 적지 않는다. 적으면 생존분만 든 날짜가 유효로 읽힌다.
@@ -184,6 +207,7 @@ final class PitStore {
                 .append('\n');
         sb.append("indexFp=").append(stamp.indexFingerprint()).append('\n');
         sb.append("inPlaceDigest=").append(stamp.inPlaceDigest()).append('\n');
+        sb.append("calculatorFp=").append(stamp.calculatorFp()).append('\n');
         sb.append("writtenAt=").append(stamp.writtenAt()).append('\n');
         sb.append("complete=").append(stamp.failed().isEmpty()).append('\n');
         for (Map.Entry<Long, String> e : new java.util.TreeMap<>(stamp.fingerprints()).entrySet()) {
@@ -232,6 +256,9 @@ final class PitStore {
                     .filter(n -> n.startsWith(prefix) && n.endsWith(".manifest"))
                     .map(n -> n.substring(prefix.length(), n.length() - ".manifest".length()))
                     .map(LocalDate::parse)
+                    // 매니페스트만 보고 「있다」고 하지 않는다 — 데이터 파일이 사라진 날짜가
+                    // 목록에 들면 읽기가 그때서야 터진다.
+                    .filter(d -> Files.exists(data(currency, d)))
                     .sorted()
                     .toList();
         }

@@ -1,11 +1,13 @@
 package com.stockscreener.probe.backtest;
 
 import com.stockscreener.indicator.IndicatorDataReader.FinancialVisibility;
+import com.stockscreener.indicator.IndicatorRegistry;
 import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.PercentileSpec;
 import com.stockscreener.indicator.SectorMetricSpec;
 import com.stockscreener.screening.ConditionEvaluator;
 import com.stockscreener.screening.ConditionGroup;
+import com.stockscreener.screening.MarketThresholdMissingException;
 import com.stockscreener.screening.EvaluationMode;
 import com.stockscreener.screening.ScreeningResult;
 
@@ -159,6 +161,24 @@ public class PointInTimeScreener {
      *
      * <p>거절은 전략 단위다. 하나가 못 도는 것과 배치가 죽는 것은 다르다.
      */
+    /**
+     * {@code computeAt}이 <b>낼 수 있는</b> 코드. 저장본이 담기로 선언하는 집합이 이것이다.
+     *
+     * <p>MUST NOT: 만들어진 값을 관찰해 선언하지 않는다. 관찰하면 <b>한 종목에만 있는 코드가
+     * 「저장본에 있다」로 통과</b>하고, 그 전략은 나머지 종목 전부에서 판정불가가 된다 —
+     * 거절도 아니고 예외도 아니라 그냥 조용히 안 걸린다.
+     *
+     * <p>빼는 것 둘: 하네스가 원리적으로 못 내는 것({@link #UNSERVABLE})과, 값이 아니라
+     * <b>읽기 시점에 재구성</b>되는 교차단면 파생값이다. 후자는 원천만 있으면
+     * {@link #missingCodesOf}가 통과시킨다.
+     */
+    public static Set<String> declaredCodesOf(IndicatorRegistry registry) {
+        Set<String> out = new TreeSet<>(registry.codes());
+        out.removeAll(UNSERVABLE);
+        out.removeIf(code -> reconstructionSourceOf(code) != null);
+        return out;
+    }
+
     public static Set<String> missingCodesOf(ConditionGroup resolved, Set<String> storedCodes) {
         Set<String> missing = new TreeSet<>();
         for (String code : resolved.referencedIndicatorCodes()) {
@@ -236,7 +256,17 @@ public class PointInTimeScreener {
         Set<String> referenced = new LinkedHashSet<>();
         Map<String, String> rejected = new LinkedHashMap<>();
         for (Request request : requests) {
-            ConditionGroup resolved = request.group().resolveFor(target.currency());
+            ConditionGroup resolved;
+            try {
+                resolved = request.group().resolveFor(target.currency());
+            } catch (MarketThresholdMissingException e) {
+                // MUST: 전략 단위로 거절한다. 밖으로 던지면 임계 없는 전략 하나가 **배치 전체**를
+                // 죽인다 — 서비스 불가 지표에서 같은 결함을 이미 고쳤는데 이 축만 남아 있었다.
+                resolvedByLabel.put(request.label(), null);
+                rejected.put(request.label(),
+                        e.currencyCode() + " 임계 없음: " + String.join(" ", e.indicatorCodes()));
+                continue;
+            }
             resolvedByLabel.put(request.label(), resolved);
             Set<String> unservable = unservableCodesOf(resolved);
             if (!unservable.isEmpty()) {

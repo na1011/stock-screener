@@ -1,8 +1,6 @@
 package com.stockscreener.probe.backtest;
 
 import com.stockscreener.indicator.IndicatorRegistry;
-import com.stockscreener.screening.MarketThresholdMissingException;
-import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.screening.store.ScreenDefinition;
 import com.stockscreener.screening.store.ScreenStore;
 import com.stockscreener.support.ReadOnlyDatabaseGuard;
@@ -17,9 +15,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,8 +40,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 편입 이력이 2026-08-05/08-31부터라 고칠 수도 측정할 수도 없다. <b>절대 성공률을 전략
  * 성적으로 인용하지 않는다</b>는 뜻이고, v12 대 v13 비교에는 공통모드로 걸린다.
  *
- * <p>구간은 {@code -Dsweep.from=}·{@code -Dsweep.to=}로 좁힐 수 있다. 기본은 <b>1년</b>이며,
- * 짧게 줘서 먼저 맞는지 보고 전 구간을 돌리는 쪽이 싸다 — 날짜 하나가 세 시장 합쳐 약 1분이다.
+ * <p><b>값은 저장소에서 읽는다</b>({@link PitSweep}). 직접 계산하면 1년치가 약 4.5시간인데 —
+ * KRW 모집단 350을 코스피·코스닥이 각각 한 번씩 돌아 두 배가 되기 때문이다 — 저장본을 읽으면
+ * 날짜당 0.14초다(실측). 전략을 여러 번 고쳐 보는 것이 이 스윕의 용도이므로 그 차이가 곧
+ * 쓸 수 있느냐를 가른다.
+ *
+ * <p>저장소가 비어 있으면 <b>던진다.</b> 조용히 직접 계산으로 떨어지면 몇 시간짜리 실행이
+ * 아무 경고 없이 시작된다. 적재는 {@code PitLoadTest}가 진다:
+ *
+ * <pre>caffeinate -is ./gradlew backtestProbe --tests "*PitLoadTest*"</pre>
  */
 @Tag("backtest")
 @SpringBootTest(classes = BacktestHarnessContext.class,
@@ -76,100 +79,41 @@ class CustomScreenSweepTest {
     private IndicatorRegistry registry;
 
     @Autowired
+    private com.stockscreener.indicator.IndicatorRunner runner;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    @DisplayName("커스텀 전략을 시점 재현으로 일별 스윕해 종목별 최초 통과일을 낸다")
-    void sweepCustomScreensDaily() {
+    @DisplayName("저장본으로 커스텀 전략을 일별 스윕해 종목별 최초 통과일을 낸다")
+    void sweepCustomScreensDaily() throws Exception {
         List<ScreeningTargets.Target> allTargets = targets.all();
         assertThat(allTargets).as("조회 대상이 하나도 없다").isNotEmpty();
 
-        Map<String, ScreenDefinition> screens = new LinkedHashMap<>();
-        for (String name : SCREEN_NAMES) {
-            screens.put(name, loadByName(name));
-        }
-
-        int sweptMarkets = 0;
-        for (ScreeningTargets.Target target : allTargets) {
-            sweptMarkets += sweepMarket(screens, target) ? 1 : 0;
-        }
-        assertThat(sweptMarkets)
-                .as("어느 시장에서도 스윕하지 못했다 — 이 실행은 아무것도 재지 않았다")
-                .isPositive();
-    }
-
-    /**
-     * 시장 하나에서 <b>전 전략을 한 번에</b> 스윕한다.
-     *
-     * <p>전략별로 따로 돌지 않는 이유는 비용이 전부 값 계산에 있고 그것이 조건군과 무관하기
-     * 때문이다 — 전략 둘을 따로 부르면 일별 격자에서 시간이 그대로 두 배가 된다.
-     *
-     * @return 실제로 스윕했는가. 통화축 거절이나 워밍업 부족은 실패가 아니라 <b>대상 아님</b>이다
-     */
-    private boolean sweepMarket(Map<String, ScreenDefinition> screens,
-                                ScreeningTargets.Target target) {
-        LocalDate latest = calendar.latestTradingDay(target.markets());
-        LocalDate warmupFloor =
-                calendar.earliestComputableAsOf(registry.maxEffectiveLookback(), target.markets());
-        if (latest == null || warmupFloor == null) {
-            System.out.printf("%n===== [%s] 시세가 워밍업(%d봉)을 못 채운다 — 대상 아님 =====%n",
-                    target.code(), registry.maxEffectiveLookback());
-            return false;
-        }
-
-        LocalDate from = maxOf(warmupFloor, resolveBound("sweep.from", latest.minusYears(1)));
-        LocalDate to = minOf(latest, resolveBound("sweep.to", latest));
-
-        // 통화축 거절은 전략마다 따로 본다 — 묶어서 삼키면 어느 전략이 거절됐는지가 사라진다.
         List<PointInTimeScreener.Request> requests = new ArrayList<>();
-        for (Map.Entry<String, ScreenDefinition> e : screens.entrySet()) {
-            try {
-                e.getValue().conditions().resolveFor(target.currency());
-            } catch (MarketThresholdMissingException ex) {
-                System.out.printf("%n===== [%s · %s] 실행 거절 — %s 임계 없음: %s =====%n",
-                        e.getKey(), target.code(), ex.currencyCode(),
-                        String.join(" ", ex.indicatorCodes()));
-                continue;
-            }
+        for (String name : SCREEN_NAMES) {
+            ScreenDefinition screen = loadByName(name);
             requests.add(new PointInTimeScreener.Request(
-                    e.getKey(), e.getValue().conditions(), e.getValue().mode()));
-        }
-        if (requests.isEmpty()) {
-            return false;
+                    name, screen.conditions(), screen.mode()));
         }
 
-        List<LocalDate> dates = calendar.everyTradingDay(from, to, target.markets());
-        if (dates.isEmpty()) {
-            System.out.printf("%n===== [%s] 구간에 거래일이 없다 =====%n", target.code());
-            return false;
+        PitStore store = PitStore.fromEnvironment();
+        PitSweep sweep = new PitSweep(store, new PitChangeDetector(jdbcTemplate),
+                new PitFingerprint(jdbcTemplate), screener, runner, calendar, registry);
+
+        long t0 = System.nanoTime();
+        PitSweep.Result result = sweep.sweep(requests, allTargets, MIN_SCORE_RATIO);
+        long ms = (System.nanoTime() - t0) / 1_000_000;
+
+        System.out.printf("%n===== 저장본 스윕 %,dms · 읽은 날짜 %s · 다시 만든 칸 %d =====%n",
+                ms, result.datesByCcy(), result.repairedCells());
+        if (!result.rejections().isEmpty()) {
+            System.out.println("-- 거절 (통과 0과 다르다) --");
+            result.rejections().forEach((k, v) -> System.out.printf("   %-32s %s%n", k, v));
         }
-
-        // 전략 → 종목 → 최초 통과. 규약이 "종목당 한 번"이라 뒤의 통과는 버린다.
-        Map<String, Map<Long, Entry>> firstPass = new LinkedHashMap<>();
-        requests.forEach(r -> firstPass.put(r.label(), new LinkedHashMap<>()));
-        int evaluatedTotal = 0;
-
-        for (LocalDate asOf : dates) {
-            Map<String, PointInTimeScreener.Outcome> outcomes =
-                    screener.screenAll(asOf, requests, target);
-            for (Map.Entry<String, PointInTimeScreener.Outcome> e : outcomes.entrySet()) {
-                evaluatedTotal += e.getValue().evaluated();
-                Map<Long, Entry> acc = firstPass.get(e.getKey());
-                for (ScreeningResult row : e.getValue().included()) {
-                    if (row.scoreRatio().compareTo(MIN_SCORE_RATIO) < 0) {
-                        continue;
-                    }
-                    acc.computeIfAbsent(row.stockId(),
-                            id -> new Entry(asOf, row.score(), row.maxScore()));
-                }
-            }
-        }
-
-        System.out.printf("%n===== [%s] %s ~ %s · %d거래일 · 판정 시도 연인원 %d =====%n",
-                target.code(), from, to, dates.size(), evaluatedTotal);
-        for (Map.Entry<String, Map<Long, Entry>> e : firstPass.entrySet()) {
-            System.out.printf("-- %s · 달성률 %s%% 이상 최초 통과 %d종목%n",
-                    e.getKey(),
+        for (Map.Entry<String, Map<Long, PitSweep.FirstPass>> e
+                : result.firstPasses().entrySet()) {
+            System.out.printf("%n-- %s · 달성률 %s%% 이상 최초 통과 %d종목%n", e.getKey(),
                     MIN_SCORE_RATIO.movePointRight(2).stripTrailingZeros().toPlainString(),
                     e.getValue().size());
             e.getValue().entrySet().stream()
@@ -180,20 +124,10 @@ class CustomScreenSweepTest {
                             x.getValue().maxScore().stripTrailingZeros().toPlainString()));
         }
 
-        // 0 == 0으로 초록이 되는 것을 막는다. 판정 시도가 0이면 잰 것이 없다.
-        assertThat(evaluatedTotal)
-                .as("%s: 판정 시도가 0이면 이 스윕은 아무것도 재지 않았다", target.code())
+        // 0 == 0으로 초록이 되는 것을 막는다. 읽은 날짜가 0이면 잰 것이 없다.
+        assertThat(result.datesByCcy().values().stream().mapToInt(Integer::intValue).sum())
+                .as("어느 통화에서도 저장 날짜를 읽지 못했다 — 적재부터 돌린다")
                 .isPositive();
-        return true;
-    }
-
-    /** 종목별 최초 통과 기록. {@code asOf} 오름차순이 자연 순서다 — 출력이 매수 순서가 된다. */
-    private record Entry(LocalDate asOf, BigDecimal score, BigDecimal maxScore)
-            implements Comparable<Entry> {
-        @Override
-        public int compareTo(Entry other) {
-            return asOf.compareTo(other.asOf);
-        }
     }
 
     /**
@@ -223,17 +157,4 @@ class CustomScreenSweepTest {
                 String.class, stockId);
     }
 
-    /** 시스템 프로퍼티가 있으면 그 날짜, 없으면 기본값. */
-    private static LocalDate resolveBound(String key, LocalDate fallback) {
-        String raw = System.getProperty(key);
-        return (raw == null || raw.isBlank()) ? fallback : LocalDate.parse(raw.trim());
-    }
-
-    private static LocalDate maxOf(LocalDate a, LocalDate b) {
-        return a.isAfter(b) ? a : b;
-    }
-
-    private static LocalDate minOf(LocalDate a, LocalDate b) {
-        return a.isBefore(b) ? a : b;
-    }
 }

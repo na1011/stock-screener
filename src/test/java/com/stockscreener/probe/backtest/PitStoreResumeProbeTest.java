@@ -51,7 +51,7 @@ class PitStoreResumeProbeTest {
     private static final Instant AT = Instant.parse("2026-09-04T00:00:00Z");
 
     private static PitStore.Stamp stamp(Map<Long, String> fp, Set<Long> failed) {
-        return new PitStore.Stamp(350, CODES, fp, IDX, "digest-1", AT, failed);
+        return new PitStore.Stamp(350, CODES, fp, IDX, "digest-1", "calc-1", AT, failed);
     }
 
     /** 종목 지문. 값이 바뀌면 그 종목만 낡는다. */

@@ -101,6 +101,12 @@ class HarnessCoverageProbeTest {
         assertThat(ok.size() + mismatched.size())
                 .as("어느 조합도 대조하지 못했다 — 이 탐침은 아무것도 재지 않았다")
                 .isPositive();
+        // MUST: 불일치를 단언한다. 세어 출력만 하면 **어긋나도 초록**이고, 이 탐침을 회귀로
+        // 쓰는 순간 그 초록이 「하네스가 라이브를 재현한다」로 읽힌다. 실제로 착수 시점에
+        // 24 중 17만 맞았고, 그것을 고친 것이 이 파일의 존재 이유다.
+        assertThat(mismatched)
+                .as("하네스가 라이브를 재현하지 못하는 조합이 생겼다")
+                .isEmpty();
     }
 
     private enum Kind { OK, MISMATCH, NOT_COMPARABLE }

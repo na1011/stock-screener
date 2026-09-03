@@ -446,10 +446,16 @@ tasks.register('backtestProbe', Test) {
     // 스윕 구간을 테스트 JVM으로 넘긴다. Gradle의 `-D`는 **데몬 JVM에만** 붙으므로 이 전달이
     // 없으면 `-Dsweep.from=`이 조용히 무시되고 기본 구간(1년)이 돈다 — 6일만 보려던 실행이
     // 몇 시간짜리가 되는데 아무 경고도 나지 않는다.
-    ['sweep.from', 'sweep.to'].each { key ->
+    ['sweep.from', 'sweep.to', 'pit.from', 'pit.to', 'pit.days', 'pit.dryRun'].each { key ->
         if (System.getProperty(key) != null) {
             systemProperty key, System.getProperty(key)
         }
+    }
+    // 저장소 경로. `PitStore.fromEnvironment()`가 읽는 환경변수가 셸에서 데몬을 거쳐
+    // 워커까지 닿는지 재보지 않았으므로, 있으면 명시적으로 넘긴다 — `-D`가 데몬에만 붙는
+    // 함정을 이미 한 번 겪은 자리라 같은 모양을 되풀이하지 않는다.
+    if (System.getenv('PIT_STORE_DIR') != null) {
+        environment 'PIT_STORE_DIR', System.getenv('PIT_STORE_DIR')
     }
     // 캐시된 성공을 재사용하면 적재 뒤에도 옛 결과를 보게 된다.
     outputs.upToDateWhen { false }

@@ -83,6 +83,9 @@ class StoreRoundTripProbeTest {
     private ScreeningTargets targets;
 
     @Autowired
+    private com.stockscreener.indicator.IndicatorRegistry registry;
+
+    @Autowired
     private ScreenStore screenStore;
 
     @Autowired
@@ -98,7 +101,7 @@ class StoreRoundTripProbeTest {
         PitChangeDetector detector = new PitChangeDetector(jdbcTemplate);
         Path dir = Files.createTempDirectory("pit-sweep");
         PitStore store = new PitStore(dir);
-        PitSweep sweep = new PitSweep(store, detector, screener, runner, calendar);
+        PitSweep sweep = new PitSweep(store, detector, fingerprint, screener, runner, calendar, registry);
 
         List<PointInTimeScreener.Request> requests = requests();
         System.out.println("대조 전략: " + requests.stream()
@@ -210,8 +213,9 @@ class StoreRoundTripProbeTest {
                 }
             }
             store.writeDate(currency, asOf, values, new PitStore.Stamp(
-                    population.size(), codes, fingerprint.forCurrency(currency, asOf),
-                    fingerprint.forMarketIndexes(asOf), inPlaceDigest, startedAt, failed));
+                    population.size(), PointInTimeScreener.declaredCodesOf(registry),
+                    fingerprint.forCurrency(currency, asOf), fingerprint.forShared(asOf),
+                    inPlaceDigest, PitFingerprint.forCalculators(registry), startedAt, failed));
         }
     }
 

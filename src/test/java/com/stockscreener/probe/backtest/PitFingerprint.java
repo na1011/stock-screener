@@ -54,6 +54,21 @@ final class PitFingerprint {
      * 그 종목은 영원히 「낡음」으로 읽혀 날짜가 완료되지 않는다.
      */
     Map<Long, String> forCurrency(String currencyCode, LocalDate asOf) {
+        return forCurrency(currencyCode, asOf, null);
+    }
+
+    /**
+     * 같은 지문을 <b>일부 종목만</b> 잰다. 읽기 시점 검증이 이것을 쓴다 — 값 싼 훑기가
+     * 의심으로 올린 종목만 내용으로 확정하면 되고, 실측상 그 확정에서 살아남는 것은
+     * 하루에 한 종목 남짓이다.
+     *
+     * @param only {@code null}이면 모집단 전체
+     */
+    Map<Long, String> forCurrency(String currencyCode, LocalDate asOf,
+                                  java.util.Collection<Long> only) {
+        if (only != null && only.isEmpty()) {
+            return Map.of();
+        }
         String sql = """
                 SELECT s.id, md5(concat_ws('|',
                   coalesce((SELECT md5(string_agg(%s, ',' ORDER BY p.trade_date))
@@ -82,8 +97,11 @@ final class PitFingerprint {
                     SELECT 1 FROM universe_membership m
                     JOIN universe u ON u.code = m.universe_code AND u.is_active
                     WHERE m.stock_id = s.id AND m.effective_to IS NULL)
+                %s
                 ORDER BY s.id
-                """.formatted(priceExpression);
+                """.formatted(priceExpression, only == null ? ""
+                : "AND s.id IN (" + only.stream().map(String::valueOf)
+                        .collect(java.util.stream.Collectors.joining(",")) + ")");
 
         Map<Long, String> out = new LinkedHashMap<>();
         jdbcTemplate.query(sql, rs -> {
@@ -93,16 +111,76 @@ final class PitFingerprint {
     }
 
     /**
-     * 종목에 안 걸리는 입력. {@code IndicatorRunner.marketIndexesFor}가 읽는 지수는 모집단
-     * 전체가 함께 쓰므로 <b>종목 지문에 넣을 자리가 없다</b> — 넣으면 지수가 한 번 바뀔 때마다
-     * 전 종목이 낡는 것으로 읽혀 종목 단위 무효화가 무의미해진다. 매니페스트에 따로 적는다.
+     * 종목에 안 걸리는 입력. 종목 지문에 넣을 자리가 없다 — 넣으면 지수가 한 번 바뀔 때마다
+     * 전 종목이 낡은 것으로 읽혀 종목 단위 무효화가 무의미해진다. 매니페스트에 따로 적는다.
+     *
+     * <p>덮는 것 셋. <b>{@code market}과 {@code universe}는 시각 컬럼이 아예 없어</b>
+     * ({@code created_at}뿐) 내용으로만 볼 수 있다.
+     * <ul>
+     *   <li>{@code market_index_daily} — {@code marketIndexesFor}가 읽는다</li>
+     *   <li>{@code market} — {@code currency_code}가 재무 통화 게이트의 판정 축이다.
+     *       바뀌면 그 시장 종목의 재무가 통째로 사라지는데 다른 신호가 없다</li>
+     *   <li>{@code universe} — {@code is_active} 하나로 모집단이 통째로 바뀐다.
+     *       지금 비활성 유니버스가 넷 있어 켜고 끄는 것이 실재하는 조작이다</li>
+     * </ul>
      */
-    String forMarketIndexes(LocalDate asOf) {
+    String forShared(LocalDate asOf) {
         return jdbcTemplate.queryForObject("""
-                SELECT coalesce(md5(string_agg((to_jsonb(i.*) - 'created_at' - 'updated_at')::text,
-                                               ',' ORDER BY i.index_code, i.trade_date)), '')
-                FROM market_index_daily i WHERE i.trade_date <= ?
+                SELECT md5(concat_ws('|',
+                  coalesce((SELECT md5(string_agg((to_jsonb(i.*) - 'created_at' - 'updated_at')::text,
+                                                 ',' ORDER BY i.index_code, i.trade_date))
+                            FROM market_index_daily i WHERE i.trade_date <= ?), ''),
+                  coalesce((SELECT md5(string_agg((to_jsonb(m.*) - 'created_at')::text,
+                                                 ',' ORDER BY m.code)) FROM market m), ''),
+                  coalesce((SELECT md5(string_agg((to_jsonb(u.*) - 'created_at')::text,
+                                                 ',' ORDER BY u.code)) FROM universe u), '')
+                ))
                 """, String.class, asOf);
+    }
+
+    /**
+     * <b>값을 만든 계산기의 판.</b> DB가 하나도 안 움직여도 공식이 바뀌면 저장본은 낡는다.
+     *
+     * <p>이것이 없으면 {@code MacdVCalculator}의 식을 고치거나 워밍업 창을 바꿔도 저장본이
+     * 「유효」로 읽히고, 스윕이 <b>옛 공식으로 만든 값</b>으로 최초 통과일을 낸다 — 예외도
+     * 경고도 없다. 이 저장소의 용도가 「전략을 바꿀 때마다 스윕」인데 전략 손질과 지표 손질은
+     * 같은 세션에 일어난다(최근 커밋이 연달아 {@code fix(indicator)}다).
+     *
+     * <p>클래스 파일의 <b>내용</b>을 해시한다. 수정 시각으로는 재컴파일만으로 달라져
+     * 과검출이 상시가 되고, 코드 목록만으로는 <b>식을 고친 것</b>을 못 본다.
+     */
+    static String forCalculators(com.stockscreener.indicator.IndicatorRegistry registry) {
+        java.nio.file.Path classes;
+        try {
+            classes = java.nio.file.Path.of(
+                    com.stockscreener.indicator.IndicatorRunner.class.getProtectionDomain()
+                            .getCodeSource().getLocation().toURI())
+                    .resolve("com/stockscreener/indicator");
+        } catch (Exception e) {
+            throw new IllegalStateException("지표 계산기의 클래스 위치를 못 찾았다 — "
+                    + "그러면 공식이 바뀌어도 저장본이 유효해 보인다", e);
+        }
+        java.security.MessageDigest md;
+        try {
+            md = java.security.MessageDigest.getInstance("MD5");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("MD5가 없다", e);
+        }
+        md.update(String.join(",", new java.util.TreeSet<>(registry.codes()))
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        md.update(("|" + registry.maxEffectiveLookback() + "|" + registry.readWindowBars())
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        try (var walk = java.nio.file.Files.walk(classes)) {
+            for (java.nio.file.Path f : walk
+                    .filter(x -> x.getFileName().toString().endsWith(".class"))
+                    .sorted().toList()) {
+                md.update(f.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                md.update(java.nio.file.Files.readAllBytes(f));
+            }
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("지표 클래스 파일을 읽지 못했다: " + classes, e);
+        }
+        return java.util.HexFormat.of().formatHex(md.digest());
     }
 
     /** 통화별 모집단. 값 생산과 같은 조건을 쓰는지 시험이 확인할 수 있게 노출한다. */
