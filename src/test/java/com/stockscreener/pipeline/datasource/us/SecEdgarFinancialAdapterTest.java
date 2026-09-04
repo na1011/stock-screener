@@ -215,6 +215,25 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("적재 창 밖의 라벨 충돌은 종목을 거절하지 않는다 — 저장되지 않을 연도가 종목을 죽였다")
+    void ignoresLabelClashBeforeLoadWindow() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        // 2019/FY에 기간이 둘(2018-02-01~2019-01-31 · 2019-01-01~2019-12-31)이고
+        // 2021·2022는 깨끗하다. FROM이 2020이므로 그 충돌은 어차피 저장되지 않는다.
+        //
+        // 파일 이름에 conflict를 쓰지 않는다 — 전역 .gitignore의 `*CONFLICT*`가 삼킨다
+        // (refusesTwoPeriodsUnderOneLabel의 같은 주석이 그 함정을 적어 뒀고, 실제로
+        // 이 픽스처를 그 이름으로 만들었다가 git이 추적하지 않는 것을 보고 고쳤다).
+        enqueue(200, fixture("companyfacts-two-labels-before-load-window.json"));
+
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+
+        assertThat(reports).extracting(RawFinancialReport::fiscalYear)
+                .as("창 안 두 해만 나온다 — 창 밖(2019)의 충돌은 종목을 죽이지 않는다")
+                .containsExactlyInAnyOrder(2021, 2022);
+    }
+
+    @Test
     @DisplayName("종료일이 같고 시작일만 며칠 다르면 같은 기간이다 — 52/53주 달력의 표기 차이다")
     void foldsSamePeriodStatedWithDifferentStart() throws Exception {
         enqueue(200, fixture("tickers.json"));

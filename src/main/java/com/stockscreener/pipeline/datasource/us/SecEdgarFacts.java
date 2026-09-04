@@ -112,7 +112,8 @@ final class SecEdgarFacts {
         List<Window> fiscalYears = annualWindows(byColumn, anchors);
         Map<Label, Window> windows = new TreeMap<>();
         Map<Label, Anchor> labelAnchors = new LinkedHashMap<>();
-        int dropped = labelPeriods(byColumn, anchors, fiscalYears, windows, labelAnchors);
+        int dropped = labelPeriods(byColumn, anchors, fiscalYears, windows, labelAnchors,
+                fromFiscalYear);
 
         List<RawFinancialReport> reports = new ArrayList<>();
         for (Map.Entry<Label, Window> e : windows.entrySet()) {
@@ -261,7 +262,8 @@ final class SecEdgarFacts {
                                     Map<String, Anchor> anchors,
                                     List<Window> fiscalYears,
                                     Map<Label, Window> windows,
-                                    Map<Label, Anchor> labelAnchors) throws DataSourceException {
+                                    Map<Label, Anchor> labelAnchors,
+                                    int fromFiscalYear) throws DataSourceException {
         int dropped = 0;
         for (Map<String, Map<Slot, Fact>> byTag : byColumn.values()) {
             for (Fact fact : allFacts(byTag)) {
@@ -286,11 +288,19 @@ final class SecEdgarFacts {
                     if (window.start().isAfter(seen.start())) {
                         windows.put(label, window);
                     }
-                } else if (seen != null && !seen.equals(window)) {
+                } else if (seen != null && !seen.equals(window)
+                        && label.fiscalYear() >= fromFiscalYear) {
                     // 저장 키에 기간이 없다. 라벨이 겹치면 uq_fs_latest가 걸리는 것이 아니라
                     // 앞 기간의 최신 표시가 조용히 내려간다 — FinancialWriter가 개정 갈래에서
                     // UPDATE를 INSERT보다 먼저 돌리기 때문이다. 그래서 여기서 막는 것이
                     // 유일한 방어선이다.
+                    //
+                    // MUST: 판정을 적재 창 안으로 좁힌다. 지키려는 대상은 「저장되는 라벨」인데
+                    // 이 순회는 파싱된 전 기간에 걸려 있어서, 아래 build의 fromFiscalYear
+                    // 필터가 어차피 버릴 옛 연도의 충돌이 종목 전체를 죽였다. 실측(2026-09-04)
+                    // 으로 거절된 145종목 중 116이 2023년 미만에서 죽었고 거기에 AMZN(2019)이
+                    // 있다. 창 안의 충돌은 그대로 던진다 — 방어선을 낮추는 것이 아니라
+                    // 지키려던 범위에 맞추는 것이다.
                     throw new DataSourceException(DataSourceException.Kind.MALFORMED,
                             SecEdgarResponse.SOURCE_NAME,
                             "같은 라벨에 기간이 둘이다: %d/%s → %s~%s vs %s~%s".formatted(
