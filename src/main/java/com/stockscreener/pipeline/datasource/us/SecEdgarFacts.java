@@ -66,6 +66,27 @@ final class SecEdgarFacts {
     private static final int QUARTER_MIN = 80;
     private static final int QUARTER_MAX = 100;
 
+    /**
+     * 회계연도 번호를 읽을 때 종료일에서 물러서는 일수. <b>회계연도는 달력 연도가 아니다.</b>
+     *
+     * <p>「12월 31일에 가장 가까운 요일」로 결산하는 회사는 종료일이 <b>12-25 … 01-04</b>를
+     * 떠돈다. 그대로 {@code end.getYear()}를 쓰면 <b>연속한 두 회계연도가 같은 번호</b>를 받아
+     * 라벨이 겹친다 — 실측으로 {@code ILMN}의 FY2022({@code ~2023-01-01})와
+     * FY2023({@code ~2023-12-31})이 둘 다 {@code 2023/FY}였다.
+     *
+     * <p><b>4는 여유가 아니라 빈 구간이라서 고른 값이다.</b> 적재본과 거절된 145종목의
+     * 종료일을 합쳐 세면 <b>01-03에서 끝나고 01-25에서 다시 시작</b>하며 그 사이가 비어 있다
+     * (2026-09-04 실측 · {@code SecEdgarLabelDiffProbeLiveTest}가 소스에서도 같은 분포를
+     * 냈다). 4는 관측된 최댓값 01-03과 이론적 최댓값 01-04를 덮고, 1월말 결산 무리의
+     * 최솟값 01-25까지 21일 여유가 남는다.
+     *
+     * <p><b>MUST: 넓히기 전에 그 빈 구간이 아직 비어 있는지 다시 잰다.</b> 넓히면 1월말 결산
+     * 회사(NVDA·WMT·RH)의 라벨이 <b>조용히 한 칸씩 밀린다</b> — 그 회사들은 스스로 그 해를
+     * 「fiscal 2023」이라 부르고 지금 라벨이 맞다. 좁으면 그 종목이 계속 거절될 뿐이라
+     * <b>방향은 좁은 쪽이 안전하다.</b>
+     */
+    private static final int NEW_YEAR_DRIFT_DAYS = 4;
+
     private SecEdgarFacts() {
     }
 
@@ -363,7 +384,7 @@ final class SecEdgarFacts {
             return null;
         }
         if (annual) {
-            return new Label(fact.end().getYear(), "FY");
+            return new Label(fiscalYearOf(fact.end()), "FY");
         }
         Window year = enclosingYear(fact.end(), fiscalYears);
         if (year == null) {
@@ -380,7 +401,18 @@ final class SecEdgarFacts {
         }
         long fromStart = ChronoUnit.DAYS.between(year.start(), fact.end());
         int quarter = (int) Math.min(4, Math.max(1, Math.round(fromStart / 91.31)));
-        return new Label(year.end().getYear(), "Q" + quarter);
+        return new Label(fiscalYearOf(year.end()), "Q" + quarter);
+    }
+
+    /**
+     * 그 종료일이 속한 회계연도의 번호. <b>{@code getYear()}를 직접 쓰지 않는다.</b>
+     *
+     * <p>근거와 상수의 경계는 {@link #NEW_YEAR_DRIFT_DAYS}에 있다. 이 시프트는 <b>1월 초
+     * 날짜만 앞 해로 옮기고 나머지는 아무것도 안 건드린다</b> — 12-31은 그대로 그 해이고,
+     * 1월말 결산(01-25 이후)도 그대로다.
+     */
+    private static int fiscalYearOf(LocalDate end) {
+        return end.minusDays(NEW_YEAR_DRIFT_DAYS).getYear();
     }
 
     /**

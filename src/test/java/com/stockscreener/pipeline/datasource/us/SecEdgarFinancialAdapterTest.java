@@ -215,6 +215,37 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("신년을 넘는 결산의 두 해는 다른 라벨이다 — 달력 연도로 지으면 겹친다")
+    void labelsFiscalYearsThatCrossNewYearSeparately() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        // 「12월 31일에 가장 가까운 요일」로 결산하는 회사. 두 회계연도가 2023-01-01과
+        // 2023-12-31에 끝나 end.getYear()로는 둘 다 2023/FY가 된다(실측: ILMN).
+        enqueue(200, fixture("companyfacts-fiscal-year-crosses-new-year.json"));
+
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+
+        assertThat(reports).extracting(RawFinancialReport::fiscalYear)
+                .as("회계연도는 달력 연도가 아니다 — 앞 해는 2022여야 한다")
+                .containsExactlyInAnyOrder(2022, 2023);
+    }
+
+    @Test
+    @DisplayName("1월 말 결산 회사의 라벨은 안 바뀐다 — 시프트가 그 무리를 삼키면 안 된다")
+    void keepsLateJanuaryFiscalYearLabel() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        // 01-25는 실측으로 **관측된 가장 이른 1월 결산**이다(그 아래는 01-03에서 끊긴다).
+        // 즉 이 대조군의 민감도가 NEW_YEAR_DRIFT_DAYS = 25이고, 그보다 좁은 값에서는
+        // 라벨이 안 움직인다. 넓히려는 세션이 여기서 붉는 것을 보고 멈춘다.
+        enqueue(200, fixture("companyfacts-late-january-fiscal-year.json"));
+
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+
+        assertThat(reports).extracting(RawFinancialReport::fiscalYear)
+                .as("NVDA·WMT·RH는 스스로 그 해를 fiscal 2023이라 부른다 — 지금 라벨이 맞다")
+                .containsExactly(2023);
+    }
+
+    @Test
     @DisplayName("적재 창 밖의 라벨 충돌은 종목을 거절하지 않는다 — 저장되지 않을 연도가 종목을 죽였다")
     void ignoresLabelClashBeforeLoadWindow() throws Exception {
         enqueue(200, fixture("tickers.json"));
