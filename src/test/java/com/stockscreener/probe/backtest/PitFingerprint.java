@@ -36,6 +36,69 @@ final class PitFingerprint {
             WHERE table_name = 'price_daily' AND column_name NOT IN ('created_at', 'updated_at')
             """;
 
+    /**
+     * {@code stock}에서 <b>값 경로가 읽는 것</b>. 전 컬럼을 넣으면 {@code name}·{@code ticker}·
+     * {@code accounting_month}처럼 안 읽는 것이 지문을 흔드는데, 이 성분에는 날짜 절이 없어
+     * 한 행이 바뀌면 그 종목이 <b>저장된 전 날짜에서</b> 낡음이 되고 스윕 하나가 9분이 된다.
+     *
+     * <p>{@code industry_*_key}는 {@code industry_code}·{@code sic_code}에서 만들어지는 생성
+     * 컬럼이라 원본을 따로 안 넣는다 — 원본이 바뀌어도 키가 같으면 값이 안 바뀐다.
+     */
+    private static final String STOCK_COLUMNS =
+            "concat_ws(':', s.id, s.market_code, s.is_active,"
+                    + " coalesce(s.industry_group_key, ''), coalesce(s.industry_division_key, ''))";
+
+    /** 좁히기 이전. 마이그레이션에만 쓴다. */
+    private static final String STOCK_COLUMNS_WIDE =
+            "(to_jsonb(s.*) - 'created_at' - 'updated_at')::text";
+
+    /** 종목 지문 SQL. {@code %1$s}=시세 컬럼식 · {@code %2$s}=stock 식 · {@code %3$s}=종목 한정. */
+    private static final String FOR_CURRENCY_SQL = """
+                SELECT s.id, md5(concat_ws('|',
+                  coalesce((SELECT md5(string_agg(%1$s, ',' ORDER BY p.trade_date))
+                            FROM price_daily p
+                            WHERE p.stock_id = s.id AND p.trade_date <= ?), ''),
+                  coalesce((SELECT md5(string_agg((to_jsonb(f.*) - 'created_at')::text,
+                                                 ',' ORDER BY f.id))
+                            FROM financial_statement f
+                            WHERE f.stock_id = s.id AND f.published_at <= ?), ''),
+                  coalesce((SELECT md5(string_agg((to_jsonb(g.*) - 'created_at')::text,
+                                                 ',' ORDER BY g.fiscal_year, g.metric_key))
+                            FROM governance_fact g
+                            WHERE g.stock_id = s.id AND g.published_at <= ?), ''),
+                  coalesce((SELECT md5(string_agg(
+                                (to_jsonb(ca.*) - 'created_at' - 'updated_at')::text,
+                                ',' ORDER BY ca.id))
+                            FROM corporate_action ca WHERE ca.stock_id = s.id), ''),
+                  %2$s,
+                  coalesce((SELECT string_agg(m.universe_code, ',' ORDER BY m.universe_code)
+                            FROM universe_membership m
+                            WHERE m.stock_id = s.id AND m.effective_to IS NULL), '')
+                ))
+                FROM stock s
+                JOIN market mk ON mk.code = s.market_code
+                WHERE s.is_active AND mk.currency_code = ? AND EXISTS (
+                    SELECT 1 FROM universe_membership m
+                    JOIN universe u ON u.code = m.universe_code AND u.is_active
+                    WHERE m.stock_id = s.id AND m.effective_to IS NULL)
+                %3$s
+                ORDER BY s.id
+            """;
+
+    /** 공유 지문 SQL. 여기는 <b>==</b>가 불변식이라 안 읽는 컬럼이 하나도 없어야 한다. */
+    private static final String FOR_SHARED_SQL = """
+                SELECT md5(concat_ws('|',
+                  coalesce((SELECT md5(string_agg(i.index_code || ':' || i.trade_date || ':'
+                                                 || i.close, ',' ORDER BY i.index_code, i.trade_date))
+                            FROM market_index_daily i
+                            WHERE i.trade_date <= ?
+                              AND i.index_code IN (SELECT mk.code FROM market mk
+                                                   WHERE mk.currency_code = ?)), ''),
+                  coalesce((SELECT string_agg(mk.code || ':' || mk.currency_code, ',' ORDER BY mk.code)
+                            FROM market mk WHERE mk.currency_code = ?), '')
+                ))
+            """;
+
     private final JdbcTemplate jdbcTemplate;
     private final String priceExpression;
 
@@ -66,40 +129,16 @@ final class PitFingerprint {
      */
     Map<Long, String> forCurrency(String currencyCode, LocalDate asOf,
                                   java.util.Collection<Long> only) {
+        return forCurrency(currencyCode, asOf, only, STOCK_COLUMNS);
+    }
+
+    private Map<Long, String> forCurrency(String currencyCode, LocalDate asOf,
+                                          java.util.Collection<Long> only, String stockExpression) {
         if (only != null && only.isEmpty()) {
             return Map.of();
         }
-        String sql = """
-                SELECT s.id, md5(concat_ws('|',
-                  coalesce((SELECT md5(string_agg(%s, ',' ORDER BY p.trade_date))
-                            FROM price_daily p
-                            WHERE p.stock_id = s.id AND p.trade_date <= ?), ''),
-                  coalesce((SELECT md5(string_agg((to_jsonb(f.*) - 'created_at')::text,
-                                                 ',' ORDER BY f.id))
-                            FROM financial_statement f
-                            WHERE f.stock_id = s.id AND f.published_at <= ?), ''),
-                  coalesce((SELECT md5(string_agg((to_jsonb(g.*) - 'created_at')::text,
-                                                 ',' ORDER BY g.fiscal_year, g.metric_key))
-                            FROM governance_fact g
-                            WHERE g.stock_id = s.id AND g.published_at <= ?), ''),
-                  coalesce((SELECT md5(string_agg(
-                                (to_jsonb(ca.*) - 'created_at' - 'updated_at')::text,
-                                ',' ORDER BY ca.id))
-                            FROM corporate_action ca WHERE ca.stock_id = s.id), ''),
-                  (to_jsonb(s.*) - 'created_at' - 'updated_at')::text,
-                  coalesce((SELECT string_agg(m.universe_code, ',' ORDER BY m.universe_code)
-                            FROM universe_membership m
-                            WHERE m.stock_id = s.id AND m.effective_to IS NULL), '')
-                ))
-                FROM stock s
-                JOIN market mk ON mk.code = s.market_code
-                WHERE s.is_active AND mk.currency_code = ? AND EXISTS (
-                    SELECT 1 FROM universe_membership m
-                    JOIN universe u ON u.code = m.universe_code AND u.is_active
-                    WHERE m.stock_id = s.id AND m.effective_to IS NULL)
-                %s
-                ORDER BY s.id
-                """.formatted(priceExpression, only == null ? ""
+        String sql = FOR_CURRENCY_SQL
+                .formatted(priceExpression, stockExpression, only == null ? ""
                 : "AND s.id IN (" + only.stream().map(String::valueOf)
                         .collect(java.util.stream.Collectors.joining(",")) + ")");
 
@@ -109,6 +148,28 @@ final class PitFingerprint {
         }, asOf, asOf, asOf, currencyCode);
         return out;
     }
+
+    /**
+     * <b>좁히기 이전의</b> 종목 지문. 마이그레이션에만 쓴다 — 좁힌 입력이 <b>진부분집합</b>이므로
+     * 이 값이 저장된 것과 같으면 좁은 입력도 반드시 안 움직였다.
+     */
+    @Deprecated
+    Map<Long, String> forCurrencyBeforeNarrowing(String currencyCode, LocalDate asOf) {
+        return forCurrency(currencyCode, asOf, null, STOCK_COLUMNS_WIDE);
+    }
+
+    /**
+     * 펜스({@code PitColumnCoverageTest})가 보는 <b>실제 SQL</b>. 요약본을 따로 적지 않는다 —
+     * 사본을 두면 두 곳이 갈릴 때까지 드러나지 않고, 그때 펜스는 <b>거짓 초록</b>이 된다.
+     */
+    static String stockFingerprintSql() {
+        return FOR_CURRENCY_SQL.formatted("<price>", STOCK_COLUMNS, "");
+    }
+
+    static String sharedFingerprintSql() {
+        return FOR_SHARED_SQL;
+    }
+
 
     /**
      * 종목에 안 걸리는 입력. 종목 지문에 넣을 자리가 없다 — 넣으면 지수가 한 번 바뀔 때마다
@@ -136,18 +197,7 @@ final class PitFingerprint {
      * <b>읽는 쪽이 읽는 것</b>이 기준이고, 전 컬럼을 넣으면 값에 안 닿는 컬럼이 저장소를 흔든다.
      */
     String forShared(String currencyCode, LocalDate asOf) {
-        return jdbcTemplate.queryForObject("""
-                SELECT md5(concat_ws('|',
-                  coalesce((SELECT md5(string_agg(i.index_code || ':' || i.trade_date || ':'
-                                                 || i.close, ',' ORDER BY i.index_code, i.trade_date))
-                            FROM market_index_daily i
-                            WHERE i.trade_date <= ?
-                              AND i.index_code IN (SELECT mk.code FROM market mk
-                                                   WHERE mk.currency_code = ?)), ''),
-                  coalesce((SELECT string_agg(mk.code || ':' || mk.currency_code, ',' ORDER BY mk.code)
-                            FROM market mk WHERE mk.currency_code = ?), '')
-                ))
-                """, String.class, asOf, currencyCode, currencyCode);
+        return jdbcTemplate.queryForObject(FOR_SHARED_SQL, String.class, asOf, currencyCode, currencyCode);
     }
 
     /**

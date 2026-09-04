@@ -121,25 +121,46 @@ final class PitChangeDetector {
      * <b>적재 시점에 이미 있던 행</b>들의 내용 해시. 뒤에 붙은 행을 빼는 것이 요점이다 —
      * 안 빼면 매일의 적재가 해시를 움직여 저장소가 매일 통째로 무효가 된다.
      *
-     * <p>제자리 수정을 하는 표만 본다. 실측 1.9초대다.
+     * <p><b>모집단으로 좁힌다.</b> 모집단 밖은 어떤 일상 잡도 안 건드리는데
+     * (전 잡이 {@code activeUniverseMemberIds()} = 1,350을 돈다) digest만 그것을 보고 있었다 —
+     * 실측 노출면이 {@code financial_statement} 190,696행 중 <b>130,196행(68.3%)</b>,
+     * {@code stock} 8,872 중 7,522, {@code universe_membership} 9,911 중 7,554다.
+     *
+     * <p><b>통화별이 아니라 모집단 전체로 좁힌다.</b> {@code PitSweep.changeCache}가
+     * {@code Map<Instant, Changes>}이고 캐시된 digest가 String 하나라 <b>통화를 모른다</b> —
+     * 통화 의존으로 만들면 KRW 값이 USD 날짜에 재사용돼 USD가 영구 의심이 된다.
+     *
+     * <p><b>마이그레이션이 필요 없다.</b> {@code indexFp}와 달리 이 불일치는 조용한 오답이
+     * 아니라 <b>비용</b>이다 — 1단계가 전 종목을 의심으로 올리고 2단계가 내용으로 확정한 뒤
+     * {@code restamp}이 새 digest를 찍는다. <b>한 번의 스윕이 스스로 낫는다</b>(실측 8분대).
+     *
+     * <p>제자리 수정을 하는 표만 본다. 실측 2,031ms → <b>796ms</b>.
      */
     String inPlaceDigest(Instant since) {
         Timestamp t = Timestamp.from(since);
         return jdbcTemplate.queryForObject("""
+                WITH pop AS (
+                    SELECT s.id FROM stock s
+                    WHERE s.is_active AND EXISTS (
+                        SELECT 1 FROM universe_membership m
+                        JOIN universe u ON u.code = m.universe_code AND u.is_active
+                        WHERE m.stock_id = s.id AND m.effective_to IS NULL))
                 SELECT md5(concat_ws('|',
                   coalesce((SELECT md5(string_agg((to_jsonb(f.*) - 'created_at')::text,
                                                  ',' ORDER BY f.id))
-                            FROM financial_statement f WHERE f.created_at <= ?), ''),
+                            FROM financial_statement f JOIN pop ON pop.id = f.stock_id
+                            WHERE f.created_at <= ?), ''),
                   coalesce((SELECT md5(string_agg((to_jsonb(g.*) - 'created_at')::text,
                                        ',' ORDER BY g.stock_id, g.fiscal_year, g.metric_key))
-                            FROM governance_fact g WHERE g.created_at <= ?), ''),
+                            FROM governance_fact g JOIN pop ON pop.id = g.stock_id
+                            WHERE g.created_at <= ?), ''),
                   coalesce((SELECT md5(string_agg((to_jsonb(s.*) - 'created_at' - 'updated_at')::text,
                                                  ',' ORDER BY s.id))
-                            FROM stock s), ''),
+                            FROM stock s JOIN pop ON pop.id = s.id), ''),
                   coalesce((SELECT md5(string_agg(m.stock_id || ':' || m.universe_code || ':'
                                                  || coalesce(m.effective_to::text, ''),
                                                  ',' ORDER BY m.stock_id, m.universe_code))
-                            FROM universe_membership m), '')
+                            FROM universe_membership m JOIN pop ON pop.id = m.stock_id), '')
                 ))
                 """, String.class, t, t);
     }

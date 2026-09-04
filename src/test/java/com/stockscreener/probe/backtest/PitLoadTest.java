@@ -114,7 +114,7 @@ class PitLoadTest {
         PitFingerprint fingerprint = new PitFingerprint(jdbcTemplate);
         PitChangeDetector detector = new PitChangeDetector(jdbcTemplate);
         boolean dryRun = flag("pit.dryRun");
-        String recheck = choice("pit.recheck", "calculator", "index");
+        String recheck = choice("pit.recheck", "calculator", "index", "fingerprint");
 
         System.out.printf("%n===== 시점 재현 적재%s =====%n", dryRun ? " (점검만)" : "");
         System.out.println("저장소 " + store.root());
@@ -142,6 +142,10 @@ class PitLoadTest {
         }
         if ("index".equals(recheck)) {
             restampSharedFingerprints(store, fingerprint, plan);
+            return;
+        }
+        if ("fingerprint".equals(recheck)) {
+            restampStockFingerprints(store, fingerprint, plan);
             return;
         }
         if (dryRun) {
@@ -450,6 +454,49 @@ class PitLoadTest {
         if (!moved.isEmpty()) {
             System.out.println("   → 그 날짜들은 값을 다시 만들어야 한다. 적재를 돌린다");
         }
+    }
+
+    /**
+     * <b>종목 지문 식이 바뀌었을 때</b> 값을 다시 만들지 않고 매니페스트만 다시 찍는다.
+     *
+     * <p>{@link #restampSharedFingerprints}와 같은 <b>부분집합 논증</b>이다 — 좁힌 입력이
+     * 옛 입력의 진부분집합이므로, <b>옛 식이 저장된 값과 같으면 좁은 입력도 반드시 안 움직였다.</b>
+     *
+     * <p>이 마이그레이션이 없으면 좁히기가 곧 <b>전량 재적재 3시간 40분</b>이다 —
+     * {@code freshnessOf}가 전 종목을 낡음으로 읽기 때문이다.
+     */
+    private void restampStockFingerprints(PitStore store, PitFingerprint fingerprint,
+                                          Map<String, List<LocalDate>> plan) throws Exception {
+        System.out.println("\n-- 종목 지문 재찍기 (값은 안 건드린다) --");
+        String calculatorFp = PitFingerprint.forCalculators(registry);
+        int restamped = 0;
+        List<String> moved = new ArrayList<>();
+        for (Map.Entry<String, List<LocalDate>> e : plan.entrySet()) {
+            String currency = e.getKey();
+            for (LocalDate asOf : store.storedDates(currency)) {
+                Map<String, String> mf = store.readManifest(currency, asOf);
+                Map<Long, String> wide =
+                        fingerprint.forCurrencyBeforeNarrowing(currency, asOf);
+                boolean same = wide.entrySet().stream()
+                        .allMatch(x -> x.getValue().equals(mf.get("fp:" + x.getKey())));
+                if (!same) {
+                    moved.add(currency + " " + asOf);
+                    continue;
+                }
+                PitStore.Stamp base = stampFrom(mf, calculatorFp, mf.get("indexFp"));
+                store.rewriteManifest(currency, asOf,
+                        Integer.parseInt(mf.getOrDefault("stocks", "0")),
+                        new PitStore.Stamp(base.attempted(), base.codes(),
+                                fingerprint.forCurrency(currency, asOf), base.indexFingerprint(),
+                                base.inPlaceDigest(), base.calculatorFp(), base.writtenAt(),
+                                base.failed()));
+                restamped++;
+            }
+        }
+        System.out.printf("   다시 찍은 매니페스트 %d · 원자료가 실제로 움직인 날짜 %d%n",
+                restamped, moved.size());
+        moved.stream().limit(10).forEach(m -> System.out.println("   움직임: " + m));
+        assertThat(restamped + moved.size()).as("저장된 날짜가 없다").isPositive();
     }
 
     /** 매니페스트에 적힌 실패 종목. 없으면 빈 집합이다. */
