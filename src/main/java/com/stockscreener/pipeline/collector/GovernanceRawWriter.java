@@ -89,8 +89,42 @@ public class GovernanceRawWriter {
      *
      * <p>이 자리가 필요한 이유는 표를 하나씩 받기 때문이다. {@code CONTROL_CHANGE}가 비어 온
      * 종목은 그 호출 안에 다른 표가 없어, 여덟을 다 받은 뒤에야 찍을 수 있다.
+     *
+     * <p><b>MUST: 찍기 전에 이미 찍힌 자리의 빈 행을 걷는다.</b> 아래 UPDATE의 {@code WHERE}에는
+     * {@code endpoint}가 없는데(그것이 의도다 — 표를 가로질러 찍는 것이 이 메서드다)
+     * <b>유니크 키에는 있다.</b> 그래서 <b>두 번째 실행</b>에서 터진다: 1회차가
+     * {@code (…, '', -1)}을 찍어 {@code (…, 20240318000327, -1)}로 만들고, 2회차에 같은 표가
+     * 또 비어 와 {@code (…, '', -1)}이 다시 들어오면, 이 UPDATE가 그것을 <b>1회차가 만든 행과
+     * 같은 키</b>로 바꾸려 해 {@code uq_gov_row}를 위반한다. 실측(2026-09-04): 국내
+     * {@code 033100}/2023/11011의 {@code OUTSIDE_DIRECTOR}에서 실제로 났고, 같은 모양의 후보가
+     * <b>793그룹</b>이다 — 32종목만 돌려 1건이었던 것이지 드문 일이 아니다.
+     *
+     * <p>걷는 것이 안전한 근거: 센티넬의 {@code payload}는 <b>1,050행 전부가 {@code &#123;&#125;}</b>이라
+     * 빈 행과 찍힌 행의 내용이 같다. 같은 자리에 <b>같은 접수번호</b>가 이미 있을 때만 지우므로,
+     * 접수번호가 다르면(=다른 판이면) 그대로 두고 UPDATE가 찍는다.
      */
     public long stampNoData(long stockId, int bsnsYear, String reportCode) {
+        jdbcTemplate.update("""
+                DELETE FROM governance_report_row target
+                 WHERE target.stock_id = ? AND target.bsns_year = ? AND target.reprt_code = ?
+                   AND target.row_ordinal < 0
+                   AND target.receipt_no = ''
+                   AND EXISTS (SELECT 1 FROM governance_report_row dup
+                                WHERE dup.stock_id    = target.stock_id
+                                  AND dup.endpoint    = target.endpoint
+                                  AND dup.bsns_year   = target.bsns_year
+                                  AND dup.reprt_code  = target.reprt_code
+                                  AND dup.row_ordinal = target.row_ordinal
+                                  AND dup.receipt_no  = (SELECT receipt_no
+                                                           FROM governance_report_row src
+                                                          WHERE src.stock_id   = target.stock_id
+                                                            AND src.bsns_year  = target.bsns_year
+                                                            AND src.reprt_code = target.reprt_code
+                                                            AND src.row_ordinal >= 0
+                                                            AND src.published_at IS NOT NULL
+                                                          ORDER BY src.receipt_no DESC
+                                                          LIMIT 1))
+                """, stockId, bsnsYear, reportCode);
         return jdbcTemplate.update("""
                 UPDATE governance_report_row target
                    SET receipt_no   = source.receipt_no,
