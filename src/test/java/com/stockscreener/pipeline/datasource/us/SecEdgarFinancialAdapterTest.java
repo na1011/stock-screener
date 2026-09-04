@@ -215,6 +215,30 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("10-Q의 12개월 열은 회계연도가 아니다 — 롤링 창이 회계연도가 되면 분기가 밀린다")
+    void doesNotTreatTrailingTwelveMonthsAsFiscalYear() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        // 10-K가 FY2023을, 세 10-Q가 각자 분기와 「Twelve Months Ended」를 함께 싣는다.
+        // 그 12개월 열은 그 10-Q의 앵커 종료일(분기말)과 같아 길이만 보는 판정을 통과한다.
+        enqueue(200, fixture("companyfacts-trailing-twelve-months-in-10q.json"));
+
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+
+        assertThat(reports).extracting(RawFinancialReport::fiscalPeriod)
+                .as("롤링 창이 회계연도가 되면 분기 번호가 밀리고 라벨이 겹친다")
+                .containsExactlyInAnyOrder("Q1", "Q2", "Q3", "Q4", "FY");
+        assertThat(reports).extracting(RawFinancialReport::fiscalYear).containsOnly(2023);
+
+        // MUST: 12개월 값이 Q4로 앉지 않았는지 본다. labelOf가 인정 안 된 창을 null로
+        // 끝내지 않고 아래로 흘리면 round(364/91.31)=4가 되어 그 값이 Q4가 되고,
+        // deriveFourthQuarters가 「소스가 Q4를 직접 줬다」로 읽어 유도를 포기한다 —
+        // 예외도 경고도 안 나므로 값으로만 잡힌다.
+        assertThat(of(reports, "Q4").revenue())
+                .as("유도값 1000-(100+110+120)이어야 한다. 910/920/930이면 롤링 열이 앉은 것이다")
+                .isEqualByComparingTo(new BigDecimal("670"));
+    }
+
+    @Test
     @DisplayName("신년을 넘는 결산의 두 해는 다른 라벨이다 — 달력 연도로 지으면 겹친다")
     void labelsFiscalYearsThatCrossNewYearSeparately() throws Exception {
         enqueue(200, fixture("tickers.json"));

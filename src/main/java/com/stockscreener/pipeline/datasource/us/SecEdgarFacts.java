@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
 
@@ -58,6 +59,27 @@ final class SecEdgarFacts {
      */
     private static final Set<String> PERIODIC_FORMS = Set.of(
             "10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A");
+
+    /** 중간보고서. {@link #ANNUAL_FORMS}를 이것의 여집합으로 유도한다. */
+    private static final Set<String> INTERIM_FORMS = Set.of("10-Q", "10-Q/A");
+
+    /**
+     * 연차보고서. <b>회계연도 창은 이 form에서만 나온다.</b>
+     *
+     * <p>10-Q가 「Twelve Months Ended」 열을 실으면 그 팩트의 종료일이 <b>그 10-Q의 앵커
+     * 종료일(분기말)과 같아져</b> 길이만 보는 판정을 통과한다. 그러면 <b>롤링 12개월 창이
+     * 회계연도가 되고</b> 그 창을 기준으로 분기 번호가 매겨진다 — 실측(2026-09-04)으로
+     * {@code AMZN}은 회계연도 창 69개 중 <b>52개가 10-Q에서</b> 왔고, 그중
+     * {@code 2019-03-31}·{@code 2019-09-30}이 그 종목을 거절시킨 두 창이다.
+     *
+     * <p><b>MUST NOT: 목록을 손으로 박지 않는다.</b> {@link #PERIODIC_FORMS}에서 빼는 것이
+     * 계약이다 — 박아 두면 나중에 그쪽에만 폼을 더한 사람이 그 제출자의 회계연도를 통째로
+     * 지운다. 반대로 <b>중간보고 폼을 더할 때는 {@link #INTERIM_FORMS}에도 넣어야 한다</b> —
+     * 안 넣으면 유도가 그것을 연간으로 분류해 이 결함을 되연다.
+     */
+    private static final Set<String> ANNUAL_FORMS = PERIODIC_FORMS.stream()
+            .filter(form -> !INTERIM_FORMS.contains(form))
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
 
     /** 12개월로 보는 폭. 회사마다 52/53주라 며칠씩 다르다. */
     private static final int ANNUAL_MIN = 350;
@@ -130,7 +152,7 @@ final class SecEdgarFacts {
     static Result build(JsonNode facts, int fromFiscalYear) throws DataSourceException {
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts);
         Map<String, Anchor> anchors = anchorsOf(byColumn);
-        List<Window> fiscalYears = annualWindows(byColumn, anchors);
+        NavigableMap<LocalDate, Window> fiscalYears = annualWindows(byColumn, anchors);
         Map<Label, Window> windows = new TreeMap<>();
         Map<Label, Anchor> labelAnchors = new LinkedHashMap<>();
         int dropped = labelPeriods(byColumn, anchors, fiscalYears, windows, labelAnchors,
@@ -281,7 +303,7 @@ final class SecEdgarFacts {
 
     private static int labelPeriods(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
                                     Map<String, Anchor> anchors,
-                                    List<Window> fiscalYears,
+                                    NavigableMap<LocalDate, Window> fiscalYears,
                                     Map<Label, Window> windows,
                                     Map<Label, Anchor> labelAnchors,
                                     int fromFiscalYear) throws DataSourceException {
@@ -344,10 +366,10 @@ final class SecEdgarFacts {
      * <p>이것을 소스의 {@code fy}에서 읽지 않는 이유는 그 필드가 <b>기간이 아니라 보고서</b>를
      * 가리키기 때문이다(실측: 라벨 70개가 전부 종료일을 둘 이상 갖는다).
      */
-    private static List<Window> annualWindows(
+    private static NavigableMap<LocalDate, Window> annualWindows(
             Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
             Map<String, Anchor> anchors) {
-        Map<LocalDate, Window> byEnd = new TreeMap<>();
+        NavigableMap<LocalDate, Window> byEnd = new TreeMap<>();
         for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> entry : byColumn.entrySet()) {
             if (entry.getKey().instant()) {
                 continue;
@@ -357,13 +379,16 @@ final class SecEdgarFacts {
                 if (fact.start() == null || anchor == null || !fact.end().equals(anchor.end())) {
                     continue;
                 }
+                if (!ANNUAL_FORMS.contains(anchor.form())) {
+                    continue;   // 10-Q의 「Twelve Months Ended」는 회계연도가 아니다.
+                }
                 long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
                 if (days >= ANNUAL_MIN && days <= ANNUAL_MAX) {
                     byEnd.putIfAbsent(fact.end(), new Window(fact.start(), fact.end()));
                 }
             }
         }
-        return new ArrayList<>(byEnd.values());
+        return byEnd;
     }
 
     /**
@@ -377,14 +402,22 @@ final class SecEdgarFacts {
      *
      * <p>길이가 연도도 분기도 아닌 것(반기·9개월 누적)은 라벨을 만들지 않는다 — 버리고 센다.
      */
-    private static Label labelOf(Fact fact, List<Window> fiscalYears) {
+    private static Label labelOf(Fact fact, NavigableMap<LocalDate, Window> fiscalYears) {
         long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
         boolean annual = days >= ANNUAL_MIN && days <= ANNUAL_MAX;
         if (!annual && (days < QUARTER_MIN || days > QUARTER_MAX)) {
             return null;
         }
         if (annual) {
-            return new Label(fiscalYearOf(fact.end()), "FY");
+            // MUST: 길이만 보고 FY를 만들지 않는다 — 인정된 회계연도 창이어야 한다.
+            //
+            // 이 갈래가 fiscalYears를 안 보던 것이 결함의 절반이다. annualWindows에만
+            // form 게이트를 걸면 롤링 창이 여기서 여전히 Label(2019,"FY")를 만들어 진짜
+            // FY2019와 충돌한다. 그리고 **null을 명시적으로 내야 한다** — 아래로 흘리면
+            // round(364/91.31)=4가 되어 12개월 값이 Q4로 저장되고, deriveFourthQuarters가
+            // 「소스가 Q4를 직접 줬다」로 읽어 유도를 포기하므로 예외도 경고도 안 난다.
+            Window recognized = fiscalYears.get(fact.end());
+            return recognized == null ? null : new Label(fiscalYearOf(recognized.end()), "FY");
         }
         Window year = enclosingYear(fact.end(), fiscalYears);
         if (year == null) {
@@ -421,11 +454,11 @@ final class SecEdgarFacts {
      * <p>회계연도 창이 하나도 없으면 투영할 근거가 없어 {@code null}이다 — 그 회사는
      * 사업보고서를 낸 적이 없다.
      */
-    private static Window projectYear(LocalDate end, List<Window> fiscalYears) {
+    private static Window projectYear(LocalDate end, NavigableMap<LocalDate, Window> fiscalYears) {
         if (fiscalYears.isEmpty()) {
             return null;
         }
-        Window last = fiscalYears.get(fiscalYears.size() - 1);
+        Window last = fiscalYears.lastEntry().getValue();
         if (end.isBefore(last.end())) {
             return null;   // 과거인데 창에 안 들어온다. 지어내지 않는다.
         }
@@ -439,8 +472,8 @@ final class SecEdgarFacts {
     }
 
     /** 그 종료일을 품는 회계연도 창. 없으면 null이다. */
-    private static Window enclosingYear(LocalDate end, List<Window> fiscalYears) {
-        for (Window year : fiscalYears) {
+    private static Window enclosingYear(LocalDate end, NavigableMap<LocalDate, Window> fiscalYears) {
+        for (Window year : fiscalYears.values()) {
             if (!end.isBefore(year.start()) && !end.isAfter(year.end())) {
                 return year;
             }
