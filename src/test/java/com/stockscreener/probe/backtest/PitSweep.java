@@ -106,8 +106,16 @@ final class PitSweep {
         }
     }
 
-    /** 저장소가 담은 것. 스윕 전에 이것부터 사람이 본다 — 없는 것을 스윕할 수는 없다. */
-    record Coverage(String currency, List<LocalDate> dates, Set<String> codes) {
+    /**
+     * 저장소가 담은 것. 스윕 전에 이것부터 사람이 본다 — 없는 것을 스윕할 수는 없다.
+     *
+     * @param lagDays 저장 마지막 날짜 뒤로 <b>몇 거래일이 더 있는가.</b>
+     *                <b>MUST: 이것은 「시장 최신」이 아니다</b> — 기준이
+     *                {@code max(price_daily.trade_date)}이므로 일일 배치가 멈추면 저장본과
+     *                기준이 함께 멈춰 <b>뒤처짐이 0으로 읽힌다.</b> 「적재가 배치를 따라잡고
+     *                있는가」를 재는 것이지 「현실을 따라잡고 있는가」가 아니다
+     */
+    record Coverage(String currency, List<LocalDate> dates, Set<String> codes, int lagDays) {
     }
 
     /**
@@ -120,7 +128,7 @@ final class PitSweep {
     Coverage coverageOf(String currency, Set<String> markets) throws Exception {
         List<LocalDate> stored = store.storedDates(currency);
         if (stored.isEmpty()) {
-            return new Coverage(currency, List.of(), Set.of());
+            return new Coverage(currency, List.of(), Set.of(), 0);
         }
         List<LocalDate> expected =
                 calendar.everyTradingDay(stored.get(0), stored.get(stored.size() - 1), markets);
@@ -171,7 +179,12 @@ final class PitSweep {
                     + incomplete.subList(0, Math.min(5, incomplete.size())) + ") — "
                     + "생존한 종목만으로 판정하게 된다. 그 날짜를 다시 적재한다");
         }
-        return new Coverage(currency, stored, codes);
+        // 뒤처짐. 던지는 것은 호출부가 정한다 — 여기서는 재기만 한다.
+        LocalDate last = stored.get(stored.size() - 1);
+        LocalDate latest = calendar.latestTradingDay(markets);
+        int lag = latest == null || !latest.isAfter(last) ? 0
+                : calendar.everyTradingDay(last, latest, markets).size() - 1;
+        return new Coverage(currency, stored, codes, lag);
     }
 
     /**
@@ -200,6 +213,15 @@ final class PitSweep {
             Set<String> markets = new LinkedHashSet<>();
             ofCurrency.forEach(t -> markets.addAll(t.markets()));
             Coverage coverage = coverageOf(currency, markets);
+            // MUST: 「신고만 한다」로 두지 않는다. 이 저장소에 신고만 하는 형태가 이미 둘
+            // 있는데(읽은 날짜 · 창 미완) 그것이 안 읽혔다는 증거가 결과 표가 조용히 낡은
+            // 것이다. 문턱을 넘으면 던진다 — 넘기 전에는 값으로 실어 표에 찍힌다.
+            if (coverage.lagDays() > maxLag()) {
+                throw new IllegalStateException(currency + " 저장본이 "
+                        + coverage.lagDays() + "거래일 뒤처졌다(허용 " + maxLag() + ") — 마지막 저장 "
+                        + coverage.dates().get(coverage.dates().size() - 1)
+                        + ". 그만큼의 최근 진입을 못 본 표가 나온다. 적재를 먼저 돌린다");
+            }
             if (coverage.dates().isEmpty()) {
                 for (ScreeningTargets.Target t : ofCurrency) {
                     for (PointInTimeScreener.Request r : requests) {
@@ -386,10 +408,21 @@ final class PitSweep {
         if (declared != null && !declared.isBlank()) {
             codes.addAll(List.of(declared.split(" ")));
         }
+        // MUST: `failed`를 새로 만들지 않고 **이어받는다.** `Set.of()`를 넘기면
+        // `writeManifest`가 `complete = failed.isEmpty()`로 적어 **미완료 날짜를 조용히 완료로
+        // 승격**시킨다. 지금은 `coverageOf`가 `repair`보다 먼저 던져 안 닿지만, 그 순서 하나에만
+        // 의지하는 자리다.
+        Set<Long> failed = new java.util.TreeSet<>();
+        String storedFailed = mf.get("failed");
+        if (storedFailed != null && !storedFailed.isBlank()) {
+            for (String id : storedFailed.trim().split("\\s+")) {
+                failed.add(Long.parseLong(id));
+            }
+        }
         PitStore.Stamp stamp = new PitStore.Stamp(
                 Integer.parseInt(mf.getOrDefault("attempted", String.valueOf(values.size()))),
                 codes, merged, sharedNow, detectorDigest(),
-                PitFingerprint.forCalculators(registry), startedAt, Set.of());
+                PitFingerprint.forCalculators(registry), startedAt, failed);
         if (dataChanged) {
             store.writeDate(currency, asOf, values, stamp);
         } else {
@@ -413,6 +446,12 @@ final class PitSweep {
 
     private PitChangeDetector.Changes changesSince(Instant since) {
         return changeCache.computeIfAbsent(since, detector::since);
+    }
+
+    /** 허용 뒤처짐. 적재 직전 스윕이 하루 이틀로 막히지 않게 기본을 2거래일로 둔다. */
+    private static int maxLag() {
+        String raw = System.getProperty("sweep.maxLag");
+        return (raw == null || raw.isBlank()) ? 2 : Integer.parseInt(raw.trim());
     }
 
     private static String key(String label, ScreeningTargets.Target target) {

@@ -460,6 +460,9 @@ tasks.register('backtestProbe', Test) {
     // MUST: 접두사 전달은 **오타를 안 막는다.** `-Dpit.reheck=…`는 워커까지 전달되지만 읽는
     // 코드가 없어 조용히 기본 동작이 된다 — 없애려던 실패와 같은 모양이다. 그래서 아는 이름이
     // 아니면 빌드를 세운다. 이 집합은 **전달의 근거가 아니라 오타의 펜스**다.
+    // MUST: **읽는 코드가 생긴 뒤에** 이름을 더한다. 미리 넣어 두면 그 스위치가 펜스를
+    // 통과하면서 조용히 무시되는데, 그것이 이 펜스가 없애려는 바로 그 모양이다 —
+    // 실제로 `sweep.maxLag`를 읽는 코드 없이 먼저 넣었다가 검증에서 잡혔다.
     def knownSwitches = ['pit.from', 'pit.to', 'pit.days', 'pit.dryRun', 'pit.recheck',
                          'sweep.maxLag'] as Set
     def unknown = harnessSwitches - knownSwitches
