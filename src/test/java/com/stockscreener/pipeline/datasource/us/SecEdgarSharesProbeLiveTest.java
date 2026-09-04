@@ -150,6 +150,88 @@ class SecEdgarSharesProbeLiveTest {
         }
     }
 
+    @Test
+    @DisplayName("[live][probe] 같은 보고서 안에서 태그끼리 값이 얼마나 갈리는가")
+    void probeCrossTagSpreadWithinOneFiling() {
+        List<String> tickers = List.of(
+                System.getProperty("probe.tickers", DEFAULT_TICKERS).split(","));
+
+        RestClient www = client("https://www.sec.gov");
+        RestClient data = client("https://data.sec.gov");
+        Map<String, Long> cikOf = tickerToCik(www);
+        List<String> candidates = SecEdgarColumn.SHARES_OUTSTANDING.candidates();
+
+        // 같은 시점의 같은 회사 주식수는 태그가 달라도 자릿수가 같아야 한다. 갈린다면
+        // 한쪽이 다른 것을 재고 있거나 오염된 것이고, 그 배수가 게이트 임계의 근거다.
+        System.out.println("\n===== accn 하나 안에서 태그 간 max/min =====");
+        for (String raw : tickers) {
+            String t = raw.trim();
+            // MUST: SEC 표기로 정규화한다 — 이 파일은 점 표기(BRK.A)를 그대로 물으면
+            // 「CIK 매핑 없음」을 내는데, 적재는 SecTickerCikCache가 하이픈으로 바꿔 찾는다.
+            // 안 맞추면 탐침의 결함을 대상의 결함으로 읽는다(2026-09-04에 실제로 그랬다).
+            Long cik = cikOf.get(t);
+            if (cik == null) {
+                cik = cikOf.get(t.replace('.', '-'));
+            }
+            if (cik == null) {
+                System.out.printf("%-7s CIK 매핑 없음%n", t);
+                continue;
+            }
+            pause();
+            String body = data.get()
+                    .uri("/api/xbrl/companyfacts/CIK%010d.json".formatted(cik))
+                    .retrieve().body(String.class);
+            if (body == null || body.isBlank() || body.startsWith("<")) {
+                System.out.printf("%-7s companyfacts 응답 없음/HTML%n", t);
+                continue;
+            }
+            JsonNode facts = MAPPER.readTree(body).path("facts");
+
+            // accn|end → 태그별 값
+            Map<String, Map<String, BigDecimal>> byFiling = new LinkedHashMap<>();
+            for (String candidate : candidates) {
+                boolean dei = candidate.startsWith("dei:");
+                JsonNode tag = facts.path(dei ? "dei" : "us-gaap")
+                        .path(dei ? candidate.substring(4) : candidate);
+                for (String unit : tag.path("units").propertyNames()) {
+                    for (JsonNode node : tag.path("units").path(unit)) {
+                        if (!node.has("val")) {
+                            continue;
+                        }
+                        BigDecimal v = new BigDecimal(node.path("val").asString("0"));
+                        if (v.signum() <= 0) {
+                            continue;   // 0은 비율의 분모가 못 된다
+                        }
+                        String key = node.path("accn").asString("") + "|"
+                                + node.path("end").asString("");
+                        byFiling.computeIfAbsent(key, k -> new LinkedHashMap<>())
+                                .merge(candidate, v, BigDecimal::max);
+                    }
+                }
+            }
+            double worst = 0;
+            String worstKey = "";
+            int compared = 0;
+            for (Map.Entry<String, Map<String, BigDecimal>> e : byFiling.entrySet()) {
+                if (e.getValue().size() < 2) {
+                    continue;
+                }
+                compared++;
+                double mx = e.getValue().values().stream()
+                        .mapToDouble(BigDecimal::doubleValue).max().orElse(0);
+                double mn = e.getValue().values().stream()
+                        .mapToDouble(BigDecimal::doubleValue).min().orElse(1);
+                if (mn > 0 && mx / mn > worst) {
+                    worst = mx / mn;
+                    worstKey = e.getKey() + " " + e.getValue();
+                }
+            }
+            System.out.printf("%-7s 비교가능 보고서=%d/%d 최대배수=%.1f  %s%n",
+                    t, compared, byFiling.size(), worst,
+                    worst > 100 ? worstKey : "");
+        }
+    }
+
     private static String keysOf(JsonNode node) {
         List<String> keys = new ArrayList<>();
         node.propertyNames().forEach(keys::add);
