@@ -68,7 +68,7 @@ applies_to:
 `--tests "*IndicatorRunnerTest*"` 한 번이 둘을 다 돌리므로 **명령은 그대로이고 세는 수만 다르다.**
 
 ```premise 원본 없는 파생 행이 남아 있지 않다
-psql -d stock_screener -At -c "WITH o AS (SELECT d.indicator_code c, count(*) n FROM indicator_value d WHERE d.indicator_code LIKE '%\_PCTL' AND d.indicator_code NOT LIKE '%\_SECTOR\_PCTL' AND NOT EXISTS (SELECT 1 FROM indicator_value s WHERE s.stock_id = d.stock_id AND s.trade_date = d.trade_date AND s.indicator_code = regexp_replace(d.indicator_code, '_PCTL$', '')) GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM indicator_value WHERE indicator_code LIKE '%\_PCTL' AND indicator_code NOT LIKE '%\_SECTOR\_PCTL') = 0 THEN '잴 것이 없었다 — 백분위가 한 행도 없다' WHEN (SELECT count(*) FROM o) = 0 THEN 'OK 고아 백분위가 없다' ELSE (SELECT sum(n)::text FROM o) || '행이 원본 없는 백분위다(' || (SELECT string_agg(c, ',' ORDER BY c) FROM o) || ') — 파생 정리가 보존 창을 안 덮고 있다(ADR-0080)' END"
+psql -d stock_screener -At -c "WITH o AS (SELECT d.indicator_code c, count(*) n FROM indicator_value d WHERE d.indicator_code LIKE '%\_PCTL' AND d.indicator_code NOT LIKE '%\_SECTOR\_PCTL' AND NOT EXISTS (SELECT 1 FROM indicator_value s WHERE s.stock_id = d.stock_id AND s.trade_date = d.trade_date AND s.indicator_code = left(d.indicator_code, length(d.indicator_code) - 5)) GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM indicator_value WHERE indicator_code LIKE '%\_PCTL' AND indicator_code NOT LIKE '%\_SECTOR\_PCTL') = 0 THEN '잴 것이 없었다 — 백분위가 한 행도 없다' WHEN (SELECT count(*) FROM o) = 0 THEN 'OK 고아 백분위가 없다' ELSE (SELECT sum(n)::text FROM o) || '행이 원본 없는 백분위다(' || (SELECT string_agg(c, ',' ORDER BY c) FROM o) || ') — 파생 정리가 보존 창을 안 덮고 있다(ADR-0080)' END"
 ```
 
 **백분위만 묻는 이유**는 규칙에서 파생 코드를 유도할 수 있는 것이 그쪽뿐이기 때문이다
