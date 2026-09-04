@@ -397,10 +397,14 @@ tasks.register('liveTest', Test) {
     }
     // 관통테스트는 실제 키를 쓰는 것이 목적이므로 주입한다(단위 test와 정반대다).
     applyDotEnv(it)
+    // 기본 512MB로는 companyfacts 한 종목(최대 7.9MB · api-spec)의 Jackson 트리와
+    // 재구성 중간 맵이 함께 들어가는지 재본 적이 없다. **미측정을 기본값에 맡기지 않는다.**
+    maxHeapSize = '4g'
     // 탐침의 표본·기간을 밖에서 준다. gradle의 -D는 gradle JVM에만 닿으므로 명시적으로 넘긴다.
     // 결손 종목을 겨냥해 다시 잴 때 쓴다 — 표본을 코드에 박으면 그때마다 커밋에 섞인다.
     ['probe.tickers', 'probe.annualYear', 'probe.annualReport',
-     'probe.quarterYear', 'probe.quarterReport', 'probe.fromFiscalYear'].each { key ->
+     'probe.quarterYear', 'probe.quarterReport', 'probe.fromFiscalYear',
+     'probe.shareTagScope'].each { key ->
         if (System.getProperty(key)) {
             systemProperty key, System.getProperty(key)
         }
