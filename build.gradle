@@ -430,6 +430,35 @@ tasks.register('liveTest', Test) {
 //
 // MUST NOT: @Tag("live")로 대신하지 않는다. 그쪽은 .env를 주입하고, 매 관통테스트마다
 // 이 몇 시간짜리 하네스가 딸려 붙는다.
+["backtestLoad": "*PitLoadTest*", "backtestSweep": "*CustomScreenSweepTest*"].each { name, pattern ->
+    tasks.register(name, Test) {
+        group = 'verification'
+        testClassesDirs = sourceSets.test.output.classesDirs
+        classpath = sourceSets.test.runtimeClasspath
+        useJUnitPlatform { includeTags 'backtest' }
+        filter { includeTestsMatching pattern }
+        maxHeapSize = '8g'
+        testLogging { events 'passed', 'failed'; showStandardStreams = true }
+        outputs.upToDateWhen { false }
+        System.getProperties().stringPropertyNames()
+                .findAll { it.startsWith('pit.') || it.startsWith('sweep.') }
+                .each { systemProperty it, System.getProperty(it) }
+    }
+}
+
+/**
+ * 백테스트 한 번 = 저장본 따라잡기 + 스윕. **사람이 주기를 기억할 필요가 없다.**
+ *
+ * 아무것도 안 바뀐 날의 따라잡기가 실측 6초라 스윕(약 21초) 앞에 붙여도 부담이 없다.
+ * 새 거래일이 붙었으면 그것만 계산한다(KRW 15초 + USD 37초).
+ */
+tasks.register('backtest') {
+    group = 'verification'
+    description = '저장본을 따라잡은 뒤 커스텀 전략을 스윕한다'
+    dependsOn 'backtestLoad', 'backtestSweep'
+}
+tasks.named('backtestSweep') { mustRunAfter 'backtestLoad' }
+
 tasks.register('backtestProbe', Test) {
     group = 'verification'
     description = '운영 DB를 읽기 전용으로 보고 as-of 지표를 다시 계산하는 시점 재현 하네스.'
@@ -464,7 +493,9 @@ tasks.register('backtestProbe', Test) {
     // 통과하면서 조용히 무시되는데, 그것이 이 펜스가 없애려는 바로 그 모양이다 —
     // 실제로 `sweep.maxLag`를 읽는 코드 없이 먼저 넣었다가 검증에서 잡혔다.
     def knownSwitches = ['pit.from', 'pit.to', 'pit.days', 'pit.dryRun', 'pit.recheck',
-                         'sweep.maxLag', 'sweep.maxRecomputeDates'] as Set
+                         'sweep.maxLag', 'sweep.maxRecomputeDates',
+                         'sweep.from', 'sweep.to', 'sweep.targets', 'sweep.tickers',
+                         'sweep.screens'] as Set
     def unknown = harnessSwitches - knownSwitches
     if (unknown) {
         throw new GradleException(

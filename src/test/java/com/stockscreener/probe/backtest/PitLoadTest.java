@@ -168,6 +168,16 @@ class PitLoadTest {
             String currency = entry.getKey();
             List<Long> population = screener.populationFor(currency);
             for (LocalDate asOf : entry.getValue()) {
+                // MUST: 건너뛸지를 **싼 훑기로 먼저** 묻는다. 지문부터 재면 아무것도 안 바뀐
+                // 날에도 날짜당 0.56~1.43초가 들어 512날짜 확인만 9분이 된다 — 실측이다.
+                // 훑기가 「이 날짜에 의심 종목이 없다」고 하면 지문은 반드시 같으므로 안 잰다.
+                Map<String, String> mf = store.readManifest(currency, asOf);
+                if (skippableCheaply(store, detector, fingerprint, currency, asOf, mf,
+                        calculatorFp, population)) {
+                    skipped++;
+                    continue;
+                }
+
                 Map<Long, String> fps = fingerprint.forCurrency(currency, asOf);
                 String sharedFp = fingerprint.forShared(currency, asOf);
                 PitStore.Freshness freshness =
@@ -244,6 +254,34 @@ class PitLoadTest {
         }
         return failed;
     }
+
+    /**
+     * <b>지문을 재지 않고</b> 건너뛸 수 있는가. 「그렇다」일 때만 참을 돌려주고, 아니면
+     * 비싼 길로 보낸다 — <b>과검출은 하되 미검출은 안 한다.</b>
+     *
+     * <p>싼 훑기가 그 날짜에 의심 종목을 하나도 안 올리고, 매니페스트가 완료이며, 계산기 판과
+     * 지수 지문이 같으면 <b>종목 지문은 반드시 같다.</b> 그 확인이 실측 날짜당 0.56~1.43초인데
+     * 여기는 통화당 한 번의 훑기 + 날짜당 지수 지문 하나다.
+     */
+    private boolean skippableCheaply(PitStore store, PitChangeDetector detector,
+                                     PitFingerprint fingerprint, String currency, LocalDate asOf,
+                                     Map<String, String> mf, String calculatorFp,
+                                     List<Long> population) {
+        if (mf.isEmpty() || !"true".equals(mf.get("complete"))
+                || !calculatorFp.equals(mf.get("calculatorFp"))
+                || mf.get("writtenAt") == null) {
+            return false;
+        }
+        if (!fingerprint.forShared(currency, asOf).equals(mf.get("indexFp"))) {
+            return false;
+        }
+        PitChangeDetector.Changes changes =
+                changesCache.computeIfAbsent(Instant.parse(mf.get("writtenAt")), detector::since);
+        return changes.suspectsOn(asOf, population, mf.get("inPlaceDigest")).isEmpty();
+    }
+
+    /** 같은 시각을 여러 날짜가 묻는다. 훑기가 2초대라 캐시하지 않으면 그것이 지배한다. */
+    private final Map<Instant, PitChangeDetector.Changes> changesCache = new LinkedHashMap<>();
 
     /** 계산기 판이 다르면 저장본은 낡았다 — 값이 아니라 <b>만든 방법</b>이 달라졌다. */
     private boolean calculatorMatches(PitStore store, String currency, LocalDate asOf,

@@ -127,8 +127,21 @@ final class PitSweep {
      *                시장에서든 거래일이면 그날이 들어 있어야 한다
      */
     Coverage coverageOf(String currency, Set<String> markets) throws Exception {
-        List<LocalDate> stored = store.storedDates(currency);
+        List<LocalDate> all = store.storedDates(currency);
+        // 구간을 좁혀 달라고 했으면 저장본의 부분만 본다. **저장본을 안 건드린다** —
+        // 좁힌 구간은 「이번에 볼 것」이지 「가진 것」이 아니다.
+        LocalDate from = bound("sweep.from");
+        LocalDate to = bound("sweep.to");
+        List<LocalDate> stored = all.stream()
+                .filter(d -> from == null || !d.isBefore(from))
+                .filter(d -> to == null || !d.isAfter(to))
+                .toList();
         if (stored.isEmpty()) {
+            if (!all.isEmpty()) {
+                throw new IllegalStateException(currency + " 저장 구간 " + all.get(0) + "~"
+                        + all.get(all.size() - 1) + " 안에 요청 구간(" + from + "~" + to
+                        + ")이 없다 — 그 구간을 먼저 적재한다");
+            }
             return new Coverage(currency, List.of(), Set.of(), 0, Set.of());
         }
         List<LocalDate> expected =
@@ -189,8 +202,10 @@ final class PitSweep {
                     + "생존한 종목만으로 판정하게 된다. 그 날짜를 다시 적재한다");
         }
         // 뒤처짐. 던지는 것은 호출부가 정한다 — 여기서는 재기만 한다.
-        LocalDate last = stored.get(stored.size() - 1);
-        LocalDate latest = calendar.latestTradingDay(markets);
+        // MUST: 끝을 명시했으면 뒤처짐을 재지 않는다 — 사용자가 「거기까지 보겠다」고 한 것이라
+        // 그 뒤가 비어 있는 것은 결함이 아니다.
+        LocalDate last = all.get(all.size() - 1);
+        LocalDate latest = to != null ? null : calendar.latestTradingDay(markets);
         int lag = latest == null || !latest.isAfter(last) ? 0
                 : calendar.everyTradingDay(last, latest, markets).size() - 1;
         return new Coverage(currency, stored, codes, lag, sharedMoved);
@@ -229,7 +244,8 @@ final class PitSweep {
                 throw new IllegalStateException(currency + " 저장본이 "
                         + coverage.lagDays() + "거래일 뒤처졌다(허용 " + maxLag() + ") — 마지막 저장 "
                         + coverage.dates().get(coverage.dates().size() - 1)
-                        + ". 그만큼의 최근 진입을 못 본 표가 나온다. 적재를 먼저 돌린다");
+                        + ". 그만큼의 최근 진입을 못 본 표가 나온다. 적재를 먼저 돌린다:\n"
+                        + "  caffeinate -is ./gradlew backtestProbe --tests \"*PitLoadTest*\"");
             }
             // MUST: 문턱은 **통화당**이다. 두 통화를 합쳐 세면 평시 4~6이 되어 기본 5를
             // 매일 넘고, 그러면 싸고 잦은 것에까지 사람을 부른다 — 실측으로 평시에 흔들리는
@@ -478,6 +494,12 @@ final class PitSweep {
     private static int maxRecomputeDates() {
         String raw = System.getProperty("sweep.maxRecomputeDates");
         return (raw == null || raw.isBlank()) ? 5 : Integer.parseInt(raw.trim());
+    }
+
+    /** {@code -Dsweep.from}·{@code -Dsweep.to}. 없으면 저장본 전체다. */
+    private static LocalDate bound(String key) {
+        String raw = System.getProperty(key);
+        return (raw == null || raw.isBlank()) ? null : LocalDate.parse(raw.trim());
     }
 
     /** 허용 뒤처짐. 적재 직전 스윕이 하루 이틀로 막히지 않게 기본을 2거래일로 둔다. */

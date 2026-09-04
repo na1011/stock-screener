@@ -58,8 +58,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(ReadOnlyDatabaseGuard.class)
 class CustomScreenSweepTest {
 
-    /** 스윕할 전략. 이름의 일부이며 사용자 소유 `CUSTOM` 화면을 가리킨다. */
-    private static final List<String> SCREEN_NAMES = List.of("v12", "v13");
+    /**
+     * 스윕할 전략. 이름의 일부이며 사용자 소유 `CUSTOM` 화면을 가리킨다.
+     * {@code -Dsweep.screens=v12,v13}으로 갈아끼운다.
+     */
+    private static List<String> screenNames() {
+        return csv("sweep.screens", List.of("v12", "v13"));
+    }
 
     /** 달성률 문턱. 커스텀 전략 백테스트 규약이 정한 값이고 이것을 빼고 결론을 내지 않는다. */
     private static final BigDecimal MIN_SCORE_RATIO = new BigDecimal("0.80");
@@ -88,13 +93,19 @@ class CustomScreenSweepTest {
     @Test
     @DisplayName("저장본으로 커스텀 전략을 일별 스윕해 종목별 최초 통과일을 낸다")
     void sweepCustomScreensDaily() throws Exception {
-        List<ScreeningTargets.Target> allTargets = targets.all();
-        assertThat(allTargets).as("조회 대상이 하나도 없다").isNotEmpty();
+        // 시장을 좁혀 달라고 했으면 그것만 본다. **판정 모집단은 안 좁힌다** — 아래 참조.
+        List<String> wanted = csv("sweep.targets", List.of());
+        List<ScreeningTargets.Target> allTargets = targets.all().stream()
+                .filter(t -> wanted.isEmpty() || wanted.contains(t.code()))
+                .toList();
+        assertThat(allTargets)
+                .as("조회 대상이 하나도 없다 — -Dsweep.targets=%s 가 아는 이름인가", wanted)
+                .isNotEmpty();
 
         JudgementProvenance provenance = new JudgementProvenance(jdbcTemplate);
         List<PointInTimeScreener.Request> requests = new ArrayList<>();
         Map<String, Long> screenIds = new LinkedHashMap<>();
-        for (String name : SCREEN_NAMES) {
+        for (String name : screenNames()) {
             long id = screenIdOf(name);
             screenIds.put(name, id);
             ScreenDefinition screen = screenStore.findById(id).orElseThrow();
@@ -146,8 +157,14 @@ class CustomScreenSweepTest {
             System.out.printf("   %-10s %-26s %-6s %-8s %-7s %-8s %-8s %s%n",
                     "매수일", "종목", "달성률", "결과", "소요일", "최고수익", "최대하락", "비고");
             List<HoldingOutcome.Result> outcomes = new ArrayList<>();
+            // MUST: 티커 좁히기는 **출력에서만** 한다. 판정 모집단을 좁히면 업종·유니버스
+            // 백분위의 동료 집합이 달라져 **같은 종목의 달성률이 달라진다** — 전체를 돌린 표와
+            // 다른 수가 나오고 그것은 조용한 오답이다.
+            List<String> onlyTickers = csv("sweep.tickers", List.of());
             e.getValue().entrySet().stream()
                     .sorted(Map.Entry.comparingByValue())
+                    .filter(x -> onlyTickers.isEmpty()
+                            || onlyTickers.contains(tickerOf(x.getKey()).split(" ")[0]))
                     .forEach(x -> {
                         HoldingOutcome.Result r = holding.measure(x.getKey(), x.getValue().asOf());
                         outcomes.add(r);
@@ -224,6 +241,16 @@ class CustomScreenSweepTest {
 
     private static String abbreviate(String name) {
         return name.length() <= 26 ? name : name.substring(0, 25) + "…";
+    }
+
+    /** 쉼표로 나눈 스위치. 없으면 기본값. */
+    private static List<String> csv(String key, List<String> fallback) {
+        String raw = System.getProperty(key);
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        return java.util.Arrays.stream(raw.split(",")).map(String::trim)
+                .filter(x -> !x.isEmpty()).toList();
     }
 
     private String tickerOf(long stockId) {
