@@ -1,0 +1,6 @@
+# 시험용 별칭. 운영 CSV에 의존하면 데이터가 바뀔 때마다 시험이 붉는다.
+market_code,ticker,alias
+SRCHMKT,AAA,에이에이에이
+SRCHMKT,AAA,삼성별칭
+SRCHMKT,BBB,비비비
+SRCHMKT,BBB,비비비 코퍼레이션

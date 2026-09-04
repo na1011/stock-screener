@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,10 +34,13 @@ public class StockReader {
 
     private final JdbcTemplate jdbcTemplate;
     private final CorporateActionLedger corporateActions;
+    private final StockAliasIndex aliasIndex;
 
-    public StockReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions) {
+    public StockReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions,
+                       StockAliasIndex aliasIndex) {
         this.jdbcTemplate = jdbcTemplate;
         this.corporateActions = corporateActions;
+        this.aliasIndex = aliasIndex;
     }
 
     /**
@@ -296,7 +300,30 @@ public class StockReader {
         String prefix = normalized + "%";
         String contains = "%" + normalized + "%";
 
-        return jdbcTemplate.query("""
+        // 한국어 별칭으로 걸리는 종목. 미국 종목의 name은 영문이라 「마이크로소프트」가
+        // 이름 매칭에 안 걸린다. 별칭이 0건이면 아래 절을 아예 붙이지 않으므로
+        // 국내 검색과 영문 검색은 SQL이 글자 그대로 같다.
+        StockAliasIndex.Matches alias = aliasIndex.match(query);
+
+        List<Object> args = new ArrayList<>(List.of(contains, contains));
+        String aliasWhere = "";
+        if (!alias.isEmpty()) {
+            aliasWhere = " OR (" + pairsIn(alias.prefix(), alias.contains()) + ")";
+            addPairArgs(args, alias.prefix());
+            addPairArgs(args, alias.contains());
+        }
+        args.add(normalized);
+        args.add(prefix);
+        args.add(prefix);
+        args.add(contains);
+        args.add(contains);
+
+        // MUST: 별칭에 독립 등급을 준다. 아래 CASE는 티커·이름으로 걸린 것을 0~3으로
+        // 가르고, **별칭으로만 걸린 행은 어느 조건에도 안 맞아 자연히 ELSE 4**가 된다.
+        // 별칭을 ELSE 3(동급)에 두면 국내 「이름 포함」과 같은 등급이 되는데, 그때 국내가
+        // 안 밀리는 것은 이 DB의 collation이 한글을 라틴보다 앞에 두기 때문이지 설계가
+        // 아니다 — COLLATE "C"에서는 같은 질의(스)에서 국내가 18칸 밀려난다(실측).
+        String sql = """
                 SELECT s.id, s.ticker, s.name, s.market_code,
                        (SELECT string_agg(m.universe_code, ',' ORDER BY m.universe_code)
                           FROM universe_membership m
@@ -306,22 +333,45 @@ public class StockReader {
                         SELECT 1 FROM universe_membership m
                         JOIN universe u ON u.code = m.universe_code
                         WHERE m.stock_id = s.id AND m.effective_to IS NULL AND u.is_active)
-                  AND (lower(s.ticker) LIKE ? OR lower(s.name) LIKE ?)
+                  AND (lower(s.ticker) LIKE ? OR lower(s.name) LIKE ?%s)
                 ORDER BY CASE
                            WHEN lower(s.ticker) = ?     THEN 0
                            WHEN lower(s.ticker) LIKE ?  THEN 1
                            WHEN lower(s.name)   LIKE ?  THEN 2
-                           ELSE 3
+                           WHEN lower(s.ticker) LIKE ? OR lower(s.name) LIKE ? THEN 3
+                           ELSE 4
                          END,
                          s.name
                 LIMIT ?
-                """, (rs, n) -> new SearchRow(
+                """.formatted(aliasWhere);
+        args.add(limit);
+
+        return jdbcTemplate.query(sql, (rs, n) -> new SearchRow(
                         rs.getLong("id"),
                         rs.getString("ticker"),
                         rs.getString("name"),
                         rs.getString("market_code"),
                         splitCodes(rs.getString("universe_codes"))),
-                contains, contains, normalized, prefix, prefix, limit);
+                args.toArray());
+    }
+
+    /**
+     * {@code (market_code, ticker)} 쌍의 IN 절. <b>티커만으로 걸지 않는다</b> —
+     * 티커는 시장 안에서만 유일하고({@code uq_stock_market_ticker}), 지금 국내·미국이
+     * 안 겹치는 것은 데이터가 그런 것이지 보장이 아니다.
+     */
+    private static String pairsIn(List<StockAliasIndex.MarketTicker> first,
+                                  List<StockAliasIndex.MarketTicker> second) {
+        int n = first.size() + second.size();
+        String placeholders = String.join(",", java.util.Collections.nCopies(n, "(?,?)"));
+        return "(s.market_code, s.ticker) IN (" + placeholders + ")";
+    }
+
+    private static void addPairArgs(List<Object> args, List<StockAliasIndex.MarketTicker> pairs) {
+        for (StockAliasIndex.MarketTicker pair : pairs) {
+            args.add(pair.marketCode());
+            args.add(pair.ticker());
+        }
     }
 
     private static List<String> splitCodes(String aggregated) {

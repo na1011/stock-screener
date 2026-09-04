@@ -1,0 +1,901 @@
+# 미국 종목의 한국어 별칭. 검색이 「마이크로소프트」·「아마존」으로도 찾게 하려고 둔다.
+#
+# 출처: Wikidata (https://query.wikidata.org/sparql) · 라이선스 CC0 · 받은 날 2026-09-04
+# 질의: 거래소가 NYSE(wd:Q13677)·Nasdaq(wd:Q82059)인 P414 statement의 P249 한정자로
+#       티커를 읽고, 그 항목의 rdfs:label과 skos:altLabel 중 한국어를 받는다.
+#
+#   SELECT ?ticker ?c ?en ?ko WHERE {
+#     VALUES ?ticker { … }  VALUES ?ex { wd:Q13677 wd:Q82059 }
+#     ?c p:P414 ?st . ?st ps:P414 ?ex . ?st pq:P249 ?ticker .
+#     ?c rdfs:label ?en . FILTER(lang(?en)="en")
+#     { ?c rdfs:label ?ko } UNION { ?c skos:altLabel ?ko } FILTER(lang(?ko)="ko") }
+#
+# MUST: 티커를 wdt:P249로 읽지 않는다. Wikidata에서 티커는 거래소 statement의 한정자여서
+#       그 경로로는 AAPL·MSFT·AMZN이 전부 0건이다.
+# MUST: 거래소를 한정한다. 티커는 전 세계에서 재사용되어 ADM에 영국 Admiral Group이 붙는다.
+# MUST: 항목(QID) 단위로 영문 레이블을 우리 stock.name과 대조해 채택 여부를 정한다.
+#       티커 하나에 항목이 여럿인 경우가 있고(C = Citigroup + Stellantis North America),
+#       평탄화하면 남의 회사 이름이 섞인다. 그 대조로 52행/40종목을 버렸다.
+# 한글이 한 글자도 없는 별칭은 넣지 않는다 — 영문 검색은 stock.name이 이미 덮는다.
+#
+# 대상은 US_LISTED 8,495 전체다. US_TOP1000에만 맞추면 매주 토요일 리밸런싱마다 낡는다.
+# 커버리지(2026-09-04): 시총 상위 50 중 42 · 상위 100 중 84 · US_TOP1000 중 304 · 전체 559종목.
+# 빠지는 것은 대개 Wikidata에 한국어 레이블 자체가 없는 종목이다(WMT·TMO·KLAC·AVGO).
+#
+# 갱신: 위 질의를 다시 돌려 이 파일을 통째로 바꾼다. 새 종목이 편입돼도 별칭이 없을 뿐
+#       영문 검색은 그대로 되므로, 낡아도 기능이 깨지지 않는다.
+market_code,ticker,alias
+US,A,애질런트 테크놀로지스
+US,AA,알코아
+US,AAL,아메리칸 항공
+US,AAL,아메리칸 항공 그룹
+US,AAPL,애플
+US,AAPL,애플 컴퓨터
+US,AB,얼라이언스번스타인
+US,AB,얼라이언스번스틴
+US,ABBV,애브비
+US,ABEV,암베브
+US,ABNB,에어비앤비
+US,ABT,애벗 래버러토리스
+US,ACN,액센츄어
+US,ADBE,어도비 시스템즈
+US,ADI,아날로그 디바이스
+US,ADI,아날로그 디바이시스
+US,ADI,아날로그 디바이시즈
+US,ADM,아처 대니얼스 미들랜드
+US,ADNT,애디언트
+US,ADSK,오토 데스크
+US,ADSK,오토데스크
+US,ADT,ADT (기업)
+US,AEG,아혼
+US,AEO,아메리칸 이글 아웃피터스
+US,AEP,아메리칸 일렉트릭 파워
+US,AIG,아메리칸 인터내셔널 그룹
+US,AIN,알바니 인터내셔날
+US,ALC,알콘
+US,ALGT,알리잔트 항공
+US,ALGT,얼리전트 항공
+US,ALK,알래스카 항공
+US,ALK,알래스카항공
+US,ALK,알레스카 항공
+US,ALL,올스테이트
+US,ALLY,얼라이 파이낸셜
+US,ALSN,앨리슨 트랜스미션
+US,ALV,오토리브
+US,AMAT,어플라이드 머티어리얼즈
+US,AMC,AMC 시어터스
+US,AMCX,AMC네트웍스
+US,AMD,암드
+US,AMD,어드밴스드 마이크로 디바이스
+US,AMD,어드밴스드 마이크로 디바이시스
+US,AMD,어드밴스트 마이크로 디바이시스
+US,AMGN,암젠
+US,AMKR,앰코 테크놀로지
+US,AMP,아메리프라이즈 파이낸셜
+US,AMZN,아마존
+US,AMZN,아마존닷컴
+US,ANET,아리스타 네트웍스
+US,ANF,애버크롬비 & 피치
+US,AON,Aon(회사)
+US,AOS,A. O. 스미스
+US,APD,에어 프로덕츠
+US,APO,아폴로 글로벌 매니지먼트
+US,APP,앱러빈
+US,ARM,ARM 유한회사
+US,ARM,ARM 홀딩스
+US,ARW,애로우 일렉트로닉스
+US,AS,에이머 스포츠
+US,ASH,애슐랜드 글로벌
+US,AUR,오로라 이노베이션
+US,AXP,아메리칸 엑스프레스
+US,AXP,아메리칸 익스프레스
+US,AXP,아메리칸 익스프레스카드
+US,AXP,아멕스
+US,AXP,아멕스카드
+US,AZN,아스트라제네카
+US,BA,보잉
+US,BABA,알리바바
+US,BABA,알리바바 그룹
+US,BAC,뱅크 오브 아메리카
+US,BAC,뱅크 옵 아메리카
+US,BAC,뱅크오브아메리카
+US,BAC,아메리카 은행
+US,BAC,아메리카은행
+US,BAH,부즈 앨런 해밀턴
+US,BAM,브룩필드 자산운용
+US,BAX,백스터
+US,BB,리서치 인 모션
+US,BBD,방코 브라데스코
+US,BBD,브라데스쿠
+US,BBY,베스트 바이
+US,BCS,바클레이스
+US,BCS,바클레이스 PLC
+US,BCS,바클레이스 은행
+US,BCS,바클레이즈
+US,BCS,바클레이즈 PLC
+US,BCS,바클레이즈 그룹
+US,BCS,바클레이즈 은행
+US,BE,블룸 에너지
+US,BEN,프랭클린 템플턴 인베스트먼츠
+US,BHP,BHP 빌리튼
+US,BIDU,바이두
+US,BIIB,바이오젠
+US,BILI,비리비리
+US,BILI,빌리빌리
+US,BIRK,버켄스탁
+US,BIRK,비르켄슈토크
+US,BIRK,비르켄슈톡
+US,BKNG,부킹 홀딩스
+US,BKR,베이커 휴즈
+US,BLCO,바슈롬
+US,BLK,블랙록
+US,BLZE,백블레이즈
+US,BMBL,범블
+US,BMO,몬트리올 은행
+US,BMO,뱅크 오브 몬트리올
+US,BMY,브리스톨 마이어스 스퀴브
+US,BNTX,바이온텍
+US,BNY,뉴욕멜론은행
+US,BOH,하와이 은행
+US,BOX,박스
+US,BP,영국 석유 회사
+US,BP,영국석유회사
+US,BRK.A,버크샤이어 헤서웨이
+US,BRK.A,버크셔 해서웨이
+US,BRK.A,버크셔 헤더웨이
+US,BRK.A,버크셔 헤서웨이
+US,BRK.B,버크샤이어 헤서웨이
+US,BRK.B,버크셔 해서웨이
+US,BRK.B,버크셔 헤더웨이
+US,BRK.B,버크셔 헤서웨이
+US,BROS,더치 브로스 커피
+US,BSX,보스톤사이언티픽
+US,BTI,브리티쉬 아메리칸 토바코
+US,BTI,브리티시 아메리칸 토바코
+US,BTI,브리티시아메리칸토바코
+US,BUD,앤하이저부시 인베브
+US,BUD,앤호이저부시 인베브
+US,BW,밥콕 & 윌콕스
+US,BW,밥콕 앤 윌콕스
+US,BW,밥콕 앤 윌콕스 엔터프라이스
+US,BWA,보그워너
+US,BX,블랙스톤 그룹
+US,BYND,비욘드 미트
+US,C,시티 그룹
+US,C,시티그룹
+US,C,씨티 그룹
+US,C,씨티그룹
+US,C,씨티그룹 인코퍼레이션
+US,CAG,콘아그라 푸즈
+US,CAKE,치즈 케이크 팩토리
+US,CAKE,치즈케이크 팩토리
+US,CAN,카난 크리에이티브
+US,CARR,캐리어
+US,CAT,캐터필러
+US,CBRS,세레브라스 시스템즈
+US,CC,케무어스
+US,CCL,카니발 코퍼레이션
+US,CDNS,케이던스 디자인 시스템즈
+US,CG,칼라일 그룹
+US,CGAU,센테라 골드
+US,CGNX,코그넥스 코퍼레이션
+US,CHKP,체크 포인트
+US,CHT,중화 전신
+US,CHT,중화전신
+US,CHT,청화 텔레콤
+US,CHT,청화텔레콤
+US,CI,시그나
+US,CL,콜게이트 파몰리브
+US,CLX,크로락스
+US,CLX,클로락스
+US,CM,캐나다 임페리얼 상업은행
+US,CMCM,치타 모바일
+US,CMCSA,컴캐스트
+US,CME,CME 그룹
+US,CMG,치포틀레 멕시칸 그릴
+US,CMI,커민스
+US,CNI,캐나다 국립철도
+US,CNI,캐나다 국영 철도
+US,CNI,캐나다 국철
+US,CNI,캐나다 내셔널 철도
+US,CNI,캐나다내셔널 철도
+US,COF,캐피털 원
+US,COIN,코인베이스
+US,COLM,컬럼비아 스포츠웨어
+US,COP,코노코필립스
+US,COST,카스코로
+US,COST,코스트코
+US,COST,프라이스클럽
+US,COUR,코세라
+US,CPA,코파 항공
+US,CPAY,코페이
+US,CPB,캠벨 수프 컴퍼니
+US,CPNG,쿠팡
+US,CPRI,마이클 코스
+US,CRM,세일즈포스닷컴
+US,CROX,크록스
+US,CRUS,시러스 로직
+US,CRWD,크라우드스트라이크
+US,CSCO,시스코
+US,CSCO,시스코 시스템스
+US,CSCO,시스코 시스템즈
+US,CSX,CSX 코퍼레이션
+US,CTSH,카그너전트
+US,CTSH,코그니전트
+US,CTW,체인지더월드 주식회사
+US,CVNA,카바나
+US,CVS,CVS 헬스
+US,CVS,CVS헬스
+US,CVX,셰브런
+US,CVX,셰브론
+US,CW,커티스 라이트
+US,CWK,쿠시먼 앤드 웨이크필드
+US,CX,세멕스
+US,DAL,델타 항공
+US,DAL,델타항공
+US,DASH,도어대시
+US,DB,도이체 방크
+US,DB,도이체 방크 AG
+US,DD,듀폰
+US,DD,듀폰 사
+US,DD,듀퐁
+US,DD,듀퐁 사
+US,DDOG,데이터도그
+US,DE,디어 앤 컴파니
+US,DE,디어 앤 컴퍼니
+US,DE,존 디어
+US,DELL,델
+US,DELL,델 테크놀로지스
+US,DEO,디아지오
+US,DG,달러 제너럴
+US,DHR,다나허 코퍼레이션
+US,DIS,디즈니
+US,DIS,월트 디즈니
+US,DIS,월트 디즈니 컴퍼니
+US,DIS,월트디즈니
+US,DJT,트럼프 미디어 & 테크놀로지 그룹
+US,DLB,돌비 연구소
+US,DLR,디지털 리얼티
+US,DNUT,크리스피 크림
+US,DNUT,크리스피 크림 도넛
+US,DNUT,크리스피크림
+US,DOCN,디지털오션
+US,DOLE,돌 푸드 컴퍼니
+US,DOV,도버
+US,DOW,다우 케미컬
+US,DOW,다우케미컬
+US,DPZ,도미노 피자
+US,DPZ,도미노피자
+US,DXC,DXC 테크놀로지
+US,DXCM,덱스콤
+US,E,에니
+US,EBS,이머전트 바이오솔루션
+US,EBS,이머전트 바이오솔루션스
+US,EFX,에퀴팩스
+US,EH,이항
+US,EL,에스티 로더
+US,EMR,에머슨 일렉트릭
+US,ENR,에너자이저
+US,ENR,에너자이저 홀딩스
+US,EQIX,에퀴닉스
+US,EQNR,스타토일
+US,EQNR,에퀴노르
+US,ERIC,에릭슨
+US,ESLT,엘빗 시스템즈
+US,ETN,이튼 코퍼레이션
+US,ETOR,이토로
+US,EXC,엑셀론
+US,EXPE,익스피디아 그룹
+US,F,포드 자동차
+US,F,포드 자동차 회사
+US,F,포드 자동차사
+US,F,포드자동차
+US,FCEL,퓨얼셀에너지
+US,FCX,프리포트 맥모란
+US,FCX,프리포트-맥모란
+US,FDS,팩트셋 리서치 시스템즈
+US,FDX,페더럴 익스프레스
+US,FDX,페덱스
+US,FDX,페덱스 주식회사
+US,FFIV,F5 내트워크
+US,FISV,파이서브
+US,FLEX,플렉스
+US,FOSL,파슬 그룹
+US,FOX,21세기 폭스
+US,FOX,폭스 엔터테인먼트 그룹
+US,FOX,폭스 코퍼레이션
+US,FOXA,21세기 폭스
+US,FOXA,폭스 코퍼레이션
+US,FSLY,패스틀리
+US,FTI,테크닙FMC
+US,FTNT,포티넷
+US,FUBO,푸보티비
+US,FUTU,푸투
+US,GAP,갭
+US,GD,제너럴 다이나믹스
+US,GD,제너럴 다이내믹스
+US,GD,제너럴다이내믹스
+US,GD,제네럴 다이나믹스
+US,GDDY,고대디
+US,GE,GE 에비에이션
+US,GE,GE 에어로스페이스
+US,GE,GE항공
+US,GEHC,GE 헬스케어
+US,GETY,게티이미지
+US,GEV,GE버노바
+US,GFS,글로벌 파운드리
+US,GFS,글로벌파운드리
+US,GGR,고고로
+US,GIL,길단 액티브웨어
+US,GILD,길리어드 사이언스
+US,GIS,제너럴 밀스
+US,GLW,코닝 주식회사
+US,GM,제너럴 모터스
+US,GM,제너럴모터스
+US,GM,제네럴 모터스
+US,GM,지엠
+US,GOGO,고고 인플라이트 인터넷
+US,GOLF,아큐시네트
+US,GOOG,알파벳
+US,GOOGL,알파벳
+US,GPN,글로벌페이먼츠
+US,GRAB,그랩
+US,GRFS,그리폴즈
+US,GRMN,가르민
+US,GRPN,그루폰
+US,GRVY,그라비티
+US,GS,골드만 삭스
+US,GS,골드만삭스
+US,GS,골드만삭스그룹
+US,GSK,글락소 스미스 클라인
+US,GSK,글락소 스미스클라인
+US,GSK,글락소스미스클라인
+US,GSK,글락소웰컴
+US,GSK,글락스 스미스 클라인
+US,GSK,스미스 클라인
+US,GSK,스미스 클라인 비첨
+US,GSK,스미스클라인
+US,GSK,스미스클라인 비첨
+US,GT,굳이어
+US,GT,굳이어 타이어 앤드 러버 컴퍼니
+US,GT,굿이어
+US,GT,굿이어 타이어 앤 러버 컴퍼니
+US,H,하얏트
+US,HAFC,LA한미은행
+US,HAFC,한미 뱅크
+US,HAFC,한미은행 (미국)
+US,HAL,할리버튼
+US,HAS,하스브로
+US,HAS,해스브로
+US,HAS,해즈브로
+US,HD,홈디포
+US,HIMX,하이맥스
+US,HLF,허벌라이프 뉴트리션
+US,HLT,힐튼 월드와이드
+US,HMC,혼다 기연공업
+US,HMC,혼다 자동차
+US,HMC,혼다자동차
+US,HOG,할리데이비슨
+US,HON,허니웰
+US,HOOD,로빈후드 (기업)
+US,HPE,휴렛 팩커드 엔터프라이즈
+US,HPQ,휴렛 팩커드
+US,HRL,호멜
+US,HSBC,HSBC코리아
+US,HSBC,홍콩상하이은행
+US,HSBC,홍콩은행
+US,HSBC,회풍은행
+US,HSY,허쉬
+US,HSY,허쉬 초콜릿
+US,HSY,허쉬 초콜릿사
+US,HSY,허쉬스
+US,HSY,허쉬초콜릿
+US,HSY,허쉬초콜릿사
+US,HSY,허시 초콜릿
+US,HSY,허시 초콜릿사
+US,HSY,허시스
+US,HSY,허시초콜릿
+US,HSY,허시초콜릿사
+US,HTZ,더 허츠 코퍼레이션
+US,HUM,휴매나
+US,IBM,국제상무기기회사
+US,IBM,아이비엠
+US,IBN,ICICI 뱅크
+US,ICE,인터컨티넨탈 익스체인지
+US,IHG,인터콘티넨털 호텔스 그룹
+US,IMAX,아이맥스
+US,IMMR,이머전 코퍼레이션
+US,INFY,인포시스
+US,ING,ING 그룹
+US,INTC,인텔
+US,INTC,인텔 코퍼레이션
+US,INTU,인튜이트
+US,IONQ,아이온큐
+US,IP,인터내셔널페이퍼
+US,IQ,아이치이 (iQIYI)
+US,IQV,아이큐비아
+US,IRDM,이리듐 커뮤니케이션스
+US,ISRG,인튜이티브 서지컬
+US,IT,가트너
+US,ITT,ITT 코퍼레이션
+US,ITUB,이타오 우니방코
+US,ITUB,이타우 우니방코
+US,IX,오릭스
+US,JACK,잭 인 더 박스
+US,JBL,자빌
+US,JBLU,제트블루
+US,JBLU,제트블루 항공
+US,JCI,존슨 컨트롤스
+US,JD,징동닷컴
+US,JEF,제프리스 & Co
+US,JEF,제프리스 & Co.
+US,JEF,제프리스 & 컴퍼니
+US,JEF,제프리스 앤 컴퍼니
+US,JEF,제프리스 앤드 컴퍼니
+US,JEF,제프리스앤컴패니
+US,JEF,제프리스앤컴퍼니
+US,JEF,제프리스앤코
+US,JNJ,존슨 앤 존슨
+US,JNJ,존슨 앤드 존슨
+US,JNJ,존슨&존슨
+US,JNJ,존슨앤드존슨
+US,JNJ,존슨앤존슨
+US,JOBY,조비 에비에이션
+US,JPM,JP모간 체이스
+US,JPM,JP모건 체이스
+US,JPM,JP모건체이스
+US,KB,KB국민은행
+US,KB,국민은행
+US,KB,한국장기신용은행
+US,KD,킨드릴
+US,KEP,경성전기
+US,KEP,남선전기주식회사
+US,KEP,일한와사
+US,KEP,조선전업
+US,KEP,한국전력
+US,KEP,한국전력공사
+US,KEP,한국전력공사그룹
+US,KEP,한성전기회사
+US,KEP,한전
+US,KEYS,키사이트
+US,KHC,크래프트 하인즈
+US,KKR,콜버그 크래비스 로버츠
+US,KMB,킴벌리-클라크
+US,KNDI,칸디 테크놀로지
+US,KO,코카콜라 컴퍼니
+US,KODK,이스트먼 코닥
+US,KODK,코닥
+US,KR,빅 K 콜라
+US,KR,크로거
+US,KT,KT그룹
+US,KT,매가패스
+US,KT,메가패스
+US,KT,올레 KT
+US,KT,올레 케이티
+US,KT,올레KT
+US,KT,올레케이티
+US,KT,케이티
+US,KT,케이티 주식회사
+US,KT,한국전기통신공사
+US,KT,한국통신
+US,KVUE,켄뷰
+US,LAZ,라자드
+US,LCID,루시드 모터스
+US,LE,랜즈 엔드
+US,LEVI,리바이 스트라우스 앤드 컴퍼니
+US,LEVI,리바이스
+US,LFVN,프로탄딤
+US,LHX,L3해리스
+US,LI,리오토
+US,LIN,린데
+US,LLY,일라이 릴리
+US,LLY,일라이 릴리 앤드 컴퍼니
+US,LLY,일라이릴리
+US,LMND,레모네이드
+US,LMT,록히드 마틴
+US,LOGI,로지쿨
+US,LOGI,로지텍
+US,LOW,로우스
+US,LPL,LG 디스플레이
+US,LPL,LG.필립스 LCD
+US,LPL,LG디스플레이
+US,LPL,LG미디어
+US,LPL,LG소프트
+US,LPL,LG소프트웨어
+US,LPL,LG필립스LCD
+US,LPL,금성소프트웨어
+US,LPL,럭키금성미디어
+US,LPL,엘지 디스플레이
+US,LPL,엘지 엘시디
+US,LPL,엘지.필립스 엘시디
+US,LPL,엘지디스플레이
+US,LRCX,램 리서치
+US,LSCC,래티스 세미컨덕터
+US,LULU,룰루레몬 애틀라티카
+US,LUNR,인튜이티브 머신스
+US,LUV,사우스 웨스트 항공
+US,LUV,사우스웨스트 항공
+US,LUV,사우스웨스트항공
+US,LVS,라스베이거스 샌즈
+US,LYFT,리프트 (기업)
+US,LYG,로이즈 뱅킹 그룹
+US,LYV,라이브 네이션
+US,MA,마스타카드
+US,MA,마스터 카드
+US,MA,마스터카드
+US,MAR,매리엇 인터내셔널
+US,MAT,마텔
+US,MBLY,모빌아이
+US,MCD,맥도날드
+US,MCD,맥도널드
+US,MCD,맥도널드사
+US,MCHP,마이크로칩 테크놀로지
+US,MCK,맥케슨
+US,MCO,무디스
+US,MDLZ,몬덜리즈
+US,MDLZ,몬덜리즈 인터내셔널
+US,MDT,메드트로닉
+US,MET,메트라이프
+US,META,메타
+US,META,메타 플랫폼
+US,META,페북
+US,META,페이스북
+US,META,페이스북 (회사)
+US,META,페이스북 사
+US,MFG,미즈호 파이낸셜 그룹
+US,MGA,마그나 인터내셔널
+US,MGM,MGM 리조트 인터내셔널
+US,MNSO,미니소
+US,MNST,몬스터 음료
+US,MO,알트리아
+US,MO,알트리아 그룹
+US,MRK,머크
+US,MRK,머크앤드컴퍼니
+US,MRNA,모더나
+US,MRVL,마벨 테크놀로지 그룹
+US,MS,모건 스탠리
+US,MS,모건스탠리
+US,MSFT,마소
+US,MSFT,마이크로소프트
+US,MSI,모토로라 솔루션스
+US,MSTR,마이크로스트래티지
+US,MT,아르셀로 미탈
+US,MT,아르셀로미탈
+US,MTD,메틀러 톨레도
+US,MTEX,매나테크
+US,MTW,매니토웍 크레인
+US,MU,마이크론 테크놀로지
+US,NATH,네이산즈
+US,NATH,네이선스
+US,NATH,네이선스 페이머스
+US,NBIS,네비우스 그룹
+US,NDAQ,나스닥 주식회사
+US,NEGG,뉴에그
+US,NEM,뉴몬트
+US,NET,클라우드플레어
+US,NET,클플
+US,NFLX,넷플릭스
+US,NIO,니오
+US,NKE,나이키
+US,NKE,나이키 주식회사
+US,NMR,노무라 홀딩스
+US,NOC,노드롭 그루만
+US,NOC,노스럽 그러먼
+US,NOC,노스롭 그루먼
+US,NOK,노키아
+US,NOV,노브
+US,NOW,서비스나우
+US,NSC,노퍽 서던 철도
+US,NTAP,넷앱
+US,NTES,넷이즈
+US,NTGR,넷기어
+US,NTNX,뉴타닉스
+US,NTRS,노던 트러스트
+US,NUE,누코
+US,NVAX,노바백스
+US,NVDA,엔비디아
+US,NVDA,포스웨어
+US,NVMI,노바메저링인스트루먼츠
+US,NVO,노보 노디스크
+US,NVS,노바르티스
+US,NVS,노바티스
+US,NWS,뉴스 코퍼레이션
+US,NWS,뉴스 코프
+US,NWS,뉴스코퍼레이션
+US,NWS,뉴스코프
+US,NWSA,뉴스 코퍼레이션
+US,NWSA,뉴스 코프
+US,NWSA,뉴스코퍼레이션
+US,NWSA,뉴스코프
+US,NXPI,NXP 반도체
+US,NXPI,NXP 세미컨덕터
+US,NYT,뉴욕 타임스 컴퍼니
+US,OC,오웬스 코닝
+US,OC,오웬스코닝
+US,OKTA,옥타
+US,OLN,올린 코퍼레이션
+US,OMC,옴니콤 그룹
+US,OPEN,오픈도어
+US,OPRA,오페라 소프트웨어
+US,ORCL,오라클
+US,OTIS,오티스 엘리베이터 코리아
+US,OTLY,오틀리
+US,OWL,블루아울 캐피털
+US,OXY,옥시덴탈 석유회사
+US,PANW,팔로알토네트웍스
+US,PANW,팰러앨토 네트웍스
+US,PATH,UI패스
+US,PBR,페트로브라스
+US,PCAR,파카 그룹
+US,PEGA,페가시스템즈
+US,PEP,펩시 콜라 컴패니
+US,PEP,펩시 회사
+US,PEP,펩시코
+US,PEP,펲시코
+US,PFE,파이저
+US,PFE,화이자
+US,PFE,화이자제약
+US,PG,프락터 앤드 갬블
+US,PG,프록터 & 갬블
+US,PG,프록터 앤 갬블
+US,PG,프록터 앤드 갬블
+US,PG,프록터&갬블
+US,PG,프록터앤갬블
+US,PG,피앤지
+US,PH,파카
+US,PH,파카하니핀
+US,PH,파커 하니핀
+US,PHG,로얄 필립스 일렉트로닉스 N.V.
+US,PHG,로얄 필립스 일렉트로닉스 NV
+US,PHG,필립스
+US,PII,폴라리스
+US,PKX,광양제철소
+US,PKX,포스코
+US,PKX,포철
+US,PKX,포항제철
+US,PKX,포항종합제철
+US,PKX,포항종합제철 주식회사
+US,PL,플래닛랩스
+US,PLNT,플래닛 피트니스
+US,PLTR,팔란티어 테크놀로지스
+US,PM,필립 모리스 인터내셔널
+US,PNC,PNC 파이낸셜 서비시즈
+US,POST,포스트
+US,POST,포스트 홀딩스
+US,PPG,PPG 인더스트리
+US,PRU,푸르덴셜 파이낸셜
+US,PRU,프루덴셜 파이낸셜
+US,PSNY,폴스타
+US,PSO,피어슨
+US,PTLO,포틸로
+US,PTON,펠로톤
+US,PUK,프루덴셜
+US,PUK,프루덴셜 plc
+US,PZZA,파파존스
+US,PZZA,파파존스 피자
+US,QCOM,퀄컴
+US,QCOM,퀄컴주식회사
+US,QGEN,퀴아젠
+US,QMCO,퀀텀 코퍼레이션
+US,RCI,로저스 커뮤니케이션스
+US,RDDT,레딧 주식회사
+US,REGN,리제네론 파마슈티컬스
+US,RELX,리드 엘제비어
+US,RIO,리오 틴토
+US,RIVN,리비안
+US,RJF,레이몬드 제임스
+US,RL,랠프 로런
+US,RMBS,램버스
+US,ROK,로크웰 오토메이션
+US,ROK,로크웰 인터내셔널
+US,ROST,로스 스토어스
+US,RTX,RTX 코퍼레이션
+US,RUM,럼블
+US,RXT,랙스페이스
+US,RY,RBC 은행
+US,RY,캐나다 왕립은행
+US,RYAAY,라이언 에어
+US,RYAAY,라이언에어
+US,S,센티넬원
+US,SAN,그루포 산탄데르
+US,SAN,방코 산탄데르
+US,SAN,산탄데르 은행
+US,SAN,산탄데르센트랄히스파노 은행
+US,SBGI,싱클레어 브로드캐스트 그룹
+US,SBUX,별다방
+US,SBUX,스벅
+US,SBUX,스타벅스
+US,SCHL,스콜라스틱
+US,SCOR,컴스코어
+US,SDRL,시드릴
+US,SFIX,스티치 픽스
+US,SHAK,셰이크 섁
+US,SHEL,로얄 더치 셸
+US,SHEL,로얄 더치 쉘
+US,SHEL,로얄더치셸
+US,SHEL,로열 더치 셸
+US,SHEL,로열 더치 쉘
+US,SHEL,로열더치셸
+US,SHG,신한금융그룹
+US,SHG,신한금융지주
+US,SHG,신한금융지주회사
+US,SHG,신한은행
+US,SHG,신한지주
+US,SHOP,쇼피파이
+US,SHW,셔윈-윌리엄스 컴퍼니
+US,SHW,셔윈윌리암스
+US,SKM,SK 텔레콤
+US,SKM,SK텔레콤
+US,SKM,생각대로T
+US,SKM,에스케이텔레콤
+US,SKM,텔레콤 or 에스케이텔레콤
+US,SKM,한국이동통신
+US,SKM,한국이동통신주식회사
+US,SLB,슐룸베르거
+US,SMFG,미츠이 스미토모 파이낸셜 그룹
+US,SMWB,시밀러웹
+US,SNAP,스냅
+US,SNOW,스노우플레이크
+US,SNPS,시놉시스
+US,SNY,사노피
+US,SOFI,소파이
+US,SOHU,소후
+US,SONO,소노스
+US,SONY,소니그룹
+US,SONY,소니주식회사
+US,SOUN,사운드하운드
+US,SOXX,필라델피아 반도체 지수
+US,SPCE,버진 갤럭틱
+US,SPGI,맥그로-힐
+US,SPOT,스포티파이
+US,SSL,사솔
+US,SSTK,셔터스톡
+US,SSYS,스트라타시스
+US,STLA,스텔란티스
+US,STM,SGS-톰슨
+US,STM,ST 마이크로일렉트로닉스
+US,STM,ST마이크로일렉트로닉스
+US,STT,스테이트 스트리트 코퍼레이션
+US,STX,시게이트
+US,STX,시게이트 테크놀로지
+US,SUN,서노코
+US,SVA,시노백 바이오테크
+US,SWK,스탠리 블랙앤데커
+US,SYK,스트라이커 (기업)
+US,SYNA,시냅틱스
+US,T,에이티앤티
+US,TAK,다케다 약품공업
+US,TAP,몰슨 쿠어스
+US,TCOM,씨트립
+US,TD,TD 은행
+US,TD,TD은행
+US,TD,토론토 도미니온 은행
+US,TDC,테라데이터
+US,TEAM,아틀라시안
+US,TEAM,애틀라시안
+US,TEL,TE 커넥티비티
+US,TEM,템퍼스 AI
+US,TER,테라다인
+US,TEVA,테바 파마수티컬스
+US,TEX,테렉스
+US,TGT,타깃
+US,TGT,타깃 코퍼레이션
+US,TKC,투르크셀
+US,TM,도요타
+US,TM,도요타 자동차
+US,TM,도요타자동차
+US,TM,토요타 자동차
+US,TME,텐센트 뮤직
+US,TMUS,T-모바일 US
+US,TRI,톰슨 로이터
+US,TRIP,트립어드바이저
+US,TRIP,트립어드바이저 주식회사
+US,TROW,티. 로우 프라이스
+US,TRV,트래블러스
+US,TRVG,트리바고
+US,TSEM,타워 세미컨덕터
+US,TSLA,테슬라
+US,TSLA,테슬라 모터스
+US,TSN,타이슨 푸드
+US,TSQ,타운스퀘어 미디어
+US,TTWO,테이크투 인터랙티브
+US,TU,텔러스
+US,TV,텔레비사
+US,TV,텔레비자
+US,TXN,텍사스 인스트루먼츠
+US,TXN,텍사스 인스트루먼트
+US,TXN,텍사스인스트루먼트
+US,TXRH,텍사스 로드하우스
+US,TXT,텍스트론
+US,U,유니티 테크놀로지스
+US,UA,언더아머
+US,UAA,언더아머
+US,UAL,연합항공
+US,UAL,유나이티드 에어라인즈
+US,UAL,유나이티드 콘티넨탈 홀딩스
+US,UAL,유나이티드 항공
+US,UAL,유나이티드항공
+US,UBER,우버
+US,UIS,유니시스
+US,UL,유니레버
+US,ULCC,프론티어 에어
+US,ULCC,프론티어 항공
+US,ULTA,울타 뷰티
+US,UMC,유나이티드 마이크로일렉트로닉스
+US,UNH,유나이티드 헬스케어
+US,UNH,유나이티드헬스그룹
+US,UPS,유나이티드 파셀 서비스
+US,UPS,유나이티드 페러셀 서비스
+US,UPS,유피에스
+US,UPWK,업워크
+US,URBN,어반아웃피터스
+US,UTSI,유티스타컴
+US,V,비자
+US,V,비자 카드
+US,V,비자카드
+US,VALE,발레
+US,VLO,발레로 에너지
+US,VOD,보다폰
+US,VRSN,베리사인
+US,VRT,버티브
+US,VRTX,버텍스 파마슈티컬
+US,VSXY,빅토리아 시크릿
+US,VTRS,비아트리스
+US,VYX,NCR 코퍼레이션
+US,VZ,버라이존
+US,VZ,버라이존 커뮤니케이션
+US,VZ,버라이존 커뮤니케이션스
+US,VZ,버라이즌
+US,VZ,버라이즌 커뮤니케이션스
+US,W,웨이페어
+US,WAB,웹텍
+US,WB,웨이보
+US,WB,웨이보 (기업)
+US,WBD,워너 브라더스 디스커버리
+US,WDAY,워크데이
+US,WDC,웨스턴 디지털
+US,WDC,웨스턴 디지털 코퍼레이션
+US,WDC,웨스턴디지털
+US,WDS,우드사이드
+US,WDS,우드사이드 에너지
+US,WDS,우드사이드 페트롤리엄
+US,WEN,웬디스
+US,WF,우리금융
+US,WF,우리금융그룹
+US,WF,우리금융지주
+US,WFC,웰스 파고
+US,WFC,웰스파고
+US,WING,윙스탑
+US,WIT,위프로
+US,WLY,존 와일리 & 선즈
+US,WLYB,존 와일리 & 선즈
+US,WMG,워너 뮤직 그룹
+US,WOLF,울프스피드
+US,WPP,WPP 그룹
+US,WRBY,와비파커
+US,WTW,윌리스 타워스 왓슨
+US,WU,웨스턴 유니언
+US,WU,웨스턴 유니언 전신 회사
+US,WU,웨스턴 유니온
+US,WU,웨스턴 유니온 전신회사
+US,WWW,울버린 월드 와이드
+US,WY,와이어하우저
+US,WYNN,윈 리조트
+US,XNET,쉰레이
+US,XOM,엑손모빌
+US,XOM,엑슨모빌
+US,XOM,엑존모빌
+US,XPEV,샤오펑 전기차
+US,XRX,제록스
+US,XYZ,스퀘어 (회사)
+US,YELP,옐프
+US,YUM,얌! 브랜드
+US,Z,질로우
+US,ZBRA,지브라 테크놀로지스
+US,ZD,지프 데이비스
+US,ZG,질로우
+US,ZH,즈후
+US,ZIM,짐 (기업)
+US,ZM,줌 비디오 커뮤니케이션
+US,ZS,지스케일러
+US,ZUMZ,주미에즈

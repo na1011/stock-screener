@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @ActiveProfiles("test")
+// 별칭은 픽스처를 쓴다 — 운영 CSV에 의존하면 그 데이터가 바뀔 때마다 시험이 붉는다.
+@TestPropertySource(properties = "stock.alias-path=fixtures/stock-alias/test-alias.csv")
 @Import(TestDatabaseGuard.class)
 @Transactional
 class StockSearchApiTest {
@@ -68,6 +71,8 @@ class StockSearchApiTest {
         member("005930", "삼성전자");
         member("009150", "삼성전기");
         member("000660", "SK하이닉스");
+        // 이름에는 한글이 없고 별칭으로만 걸리는 종목. 미국 종목이 그 모양이다.
+        member("AAA", "Alpha Alpha Alpha Inc.");
         // 편입되지 않은 종목. 이름이 걸려도 결과에 나오면 안 된다.
         insertStock("900001", "삼성폐지된종목");
     }
@@ -85,6 +90,30 @@ class StockSearchApiTest {
                 INSERT INTO stock (market_code, ticker, name, sector)
                 VALUES (?, ?, ?, '테스트') RETURNING id
                 """, Long.class, MARKET, ticker, name);
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("한국어 별칭으로 찾는다 — 미국 종목의 name은 영문이라 이름 매칭에 안 걸린다")
+    void findsByKoreanAlias() throws Exception {
+        mockMvc.perform(get("/api/stocks").param("q", "에이에이에이"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].ticker").value("AAA"));
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("별칭은 마지막 등급이다 — 이름으로 걸린 국내 종목을 밀어내지 않는다")
+    void aliasRanksBehindNameMatches() throws Exception {
+        // AAA의 별칭이 「삼성별칭」이라 이 질의에 함께 걸린다. 별칭을 이름 포함과 같은
+        // 등급에 두면 정렬이 s.name으로만 갈리는데, 그때 국내가 앞서는 것은 이 DB의
+        // collation이 한글을 라틴보다 앞에 두기 때문이지 설계가 아니다.
+        mockMvc.perform(get("/api/stocks").param("q", "삼성"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].ticker").value("009150"))
+                .andExpect(jsonPath("$[1].ticker").value("005930"))
+                .andExpect(jsonPath("$[2].ticker").value("AAA"));
     }
 
     @Test
