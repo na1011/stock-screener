@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import com.stockscreener.pipeline.support.ReadOnlyDb;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -15,7 +16,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * <b>우리 코드가 무엇을 만드는가</b>를 잰다 — 소스가 무엇을 주는가를 재는 다른 탐침들과 목적이
@@ -169,6 +172,142 @@ class SecEdgarLabelDiffProbeLiveTest {
         System.out.println("\n===== 회계연도 창 종료일 — 12월 하순 · 1월 =====");
         endHistogram.forEach((md, n) -> System.out.printf("  %s %d%n", md, n));
         System.out.println("(빈 구간이 NEW_YEAR_DRIFT_DAYS의 근거다. 01-04~01-24가 비어야 4가 선다.)");
+    }
+
+    /**
+     * <b>저장본 대 새 산출.</b> 라벨 규칙을 고친 뒤 <b>기존 종목의 라벨이 설명 없이 바뀌지
+     * 않았는가</b>를 재는 것이 이 시험의 전부다.
+     *
+     * <p><b>비교 키가 라벨이 아니라 기간이다.</b> 라벨을 키로 하면 재라벨이 「없어짐 +
+     * 새로생김」으로 보여, 읽는 사람이 <i>"추가만 있으니 안전하다"</i>로 오판한다. 기간을
+     * 키로 하면 같은 자리가 <b>「값 변경」</b>으로 드러난다.
+     *
+     * <p><b>옛 코드를 다시 돌리지 않는다</b> — 저장본이 곧 「고치기 전 코드가 만든 것」이라
+     * 콜이 절반이다. 다만 <b>그 사이 소스가 재발행되면 그것도 차분에 섞인다</b>: 신규 공시는
+     * 「새로생김」으로, 새 연차보고서가 만든 창은 {@code projectYear} 기준을 바꿔 「라벨바뀜」
+     * 으로 나온다. <b>라벨바뀜은 종목을 열어 「수정 때문인가 신규 공시 때문인가」를 가른
+     * 뒤에 판정한다.</b>
+     *
+     * <p><b>MUST: {@code -Dprobe.fromFiscalYear}를 저장본을 만든 값과 맞춘다.</b> 다르면
+     * 경계 연도가 통째로 「사라짐/새로생김」이 된다. 지금 저장본의 실질 하한은 <b>2019</b>다.
+     */
+    @Test
+    @DisplayName("[live][probe] 저장본 대 새 산출 — 라벨이 설명 없이 바뀌지 않았는가")
+    void diffStoredVersusRebuilt() throws Exception {
+        List<String> tickers = List.of(
+                System.getProperty("probe.tickers", DEFAULT_TICKERS).split(","));
+        int fromFiscalYear = Integer.parseInt(System.getProperty("probe.fromFiscalYear", "2019"));
+
+        RestClient www = client("https://www.sec.gov");
+        RestClient data = client("https://data.sec.gov");
+        Map<String, Long> cikOf = tickerToCik(www);
+
+        int relabeled = 0;
+        int vanished = 0;
+        int appeared = 0;
+        int emptied = 0;
+        int recovered = 0;
+        int stillMalformed = 0;
+        List<String> relabelDetail = new ArrayList<>();
+
+        try (java.sql.Connection db = ReadOnlyDb.open()) {
+            System.out.println("\n===== 저장본 대 새 산출 (기간 키) =====");
+            for (String raw : tickers) {
+                String t = raw.trim();
+                Long cik = cikOf.get(t);
+                if (cik == null) {
+                    System.out.printf("%-6s CIK 매핑 없음%n", t);
+                    continue;
+                }
+                Map<String, String> stored = storedLabels(db, t);
+
+                pause();
+                String body = data.get()
+                        .uri("/api/xbrl/companyfacts/CIK%010d.json".formatted(cik))
+                        .retrieve().body(String.class);
+                if (body == null || body.isBlank() || body.startsWith("<")) {
+                    System.out.printf("%-6s companyfacts 응답 없음/HTML%n", t);
+                    continue;
+                }
+
+                Map<String, String> rebuilt = new LinkedHashMap<>();
+                int dropped = -1;
+                try {
+                    SecEdgarFacts.Result result =
+                            SecEdgarFacts.build(MAPPER.readTree(body).path("facts"), fromFiscalYear);
+                    dropped = result.dropped();
+                    for (var r : result.reports()) {
+                        rebuilt.put(r.periodStart() + "~" + r.periodEnd(),
+                                r.fiscalYear() + "/" + r.fiscalPeriod());
+                    }
+                } catch (Exception e) {
+                    stillMalformed++;
+                    System.out.printf("%-6s 여전히 거절: %s%n", t,
+                            String.valueOf(e.getMessage()).replaceAll("\\s+", " "));
+                    continue;
+                }
+                if (stored.isEmpty() && !rebuilt.isEmpty()) {
+                    recovered++;
+                }
+                if (!stored.isEmpty() && rebuilt.isEmpty()) {
+                    emptied++;
+                }
+
+                int changed = 0;
+                for (Map.Entry<String, String> e : stored.entrySet()) {
+                    String now = rebuilt.get(e.getKey());
+                    if (now == null) {
+                        vanished++;
+                    } else if (!now.equals(e.getValue())) {
+                        changed++;
+                        relabeled++;
+                        if (relabelDetail.size() < 40) {
+                            relabelDetail.add("%s %s: %s → %s"
+                                    .formatted(t, e.getKey(), e.getValue(), now));
+                        }
+                    }
+                }
+                for (String k : rebuilt.keySet()) {
+                    if (!stored.containsKey(k)) {
+                        appeared++;
+                    }
+                }
+                System.out.printf("%-6s 저장 %3d · 산출 %3d · 라벨바뀜 %2d · dropped %d%n",
+                        t, stored.size(), rebuilt.size(), changed, dropped);
+            }
+        }
+
+        System.out.println("\n===== 집계 =====");
+        System.out.printf("라벨바뀜 %d · 사라짐 %d · 새로생김 %d · 행이 0이 된 종목 %d "
+                        + "· 회수 %d · 여전히 거절 %d%n",
+                relabeled, vanished, appeared, emptied, recovered, stillMalformed);
+        System.out.println("(dropped는 기간이 아니라 팩트를 센다 — 컬럼×태그마다 다시 세므로 "
+                + "결함 3 뒤 크게 뛰는 것이 정상이다.)");
+        if (!relabelDetail.isEmpty()) {
+            System.out.println("\n===== 라벨바뀜 내역 =====");
+            relabelDetail.forEach(d -> System.out.println("  " + d));
+        }
+    }
+
+    /** 저장된 최신 라벨. 기간을 키로, 라벨을 값으로 낸다. */
+    private static Map<String, String> storedLabels(java.sql.Connection db, String ticker)
+            throws Exception {
+        Map<String, String> out = new LinkedHashMap<>();
+        String sql = """
+                SELECT f.period_start, f.period_end, f.fiscal_year, f.fiscal_period
+                  FROM financial_statement f JOIN stock s ON s.id = f.stock_id
+                 WHERE s.market_code = 'US' AND s.ticker = ? AND f.is_latest
+                """;
+        try (var ps = db.prepareStatement(sql)) {
+            ps.setString(1, ticker);
+            try (var rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.put(rs.getDate(1) + "~" + rs.getDate(2),
+                            rs.getInt(3) + "/" + rs.getString(4));
+                }
+            }
+        }
+        return out;
     }
 
     /** {@link SecEdgarColumn}의 duration 컬럼 후보 태그에서 유량 팩트를 모은다. */
