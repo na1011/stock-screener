@@ -17,6 +17,14 @@ applies_to:
 `guard-rebalance-on-dirty-rank.sh`가 `--job=universe`를 `deny`하고, 최신 주식수가 자기 이력
 중앙값의 50배를 넘는 종목을 수와 함께 보인다.
 
+**MUST NOT: 이것이 「봉인」이라고 읽지 않는다 — 경로가 둘이고 하나만 막힌다.**
+리밸런싱은 `PipelineScheduler:168`의 `@Scheduled(cron = "0 0 20 * * SAT")`가 앱 프로세스
+**안에서 직접** `universeRebalanceJob.run()`을 부르는 갈래로도 돈다. 그 갈래는 Bash를 거치지
+않으므로 **훅이 원리적으로 발화하지 않는다.** 가드가 실제로 막는 것은 **에이전트가 손으로
+돌리는 것**이고, 이번 사고가 바로 그 경로였다(2026-09-04 09:48 · `triggered_by = MANUAL`;
+`universe-rebalance` 실행 이력 전량이 `MANUAL`이다). 자동 갈래는 **`premise` 펜스가 세션
+시작에 수로 신고하는 것**이 유일한 안전망이며, 그것은 알림이지 차단이 아니다.
+
 **어댑터를 안 고치는 것은 미루는 것이 아니라 실측 결과다** — 게이트로 쓸 축을 찾아 두 번
 재봤고 둘 다 오염과 정상을 못 갈랐다(§버린 대안). 근거 없는 임계를 넣는 것보다 오염이
 **순위에 닿는 경로**를 막는 편이 낫다. 시총 = 주식수 × 종가이므로 그 경로가 유일하게
@@ -109,7 +117,7 @@ SELECT CASE
   WHEN count(*) = 0 THEN 'OK 순위 축 이상치 0 / 모집단 ' || (SELECT count(*) FROM cur)
   ELSE count(*) || '종목이 자기 이력 중앙값의 50배를 넘는다: '
        || string_agg(t, ', ' ORDER BY t)
-       || ' — 시총 = 주식수 × 종가이므로 상위 N을 밀어낸다. guard-rebalance-on-dirty-rank.sh가 리밸런싱을 막는다(ADR-0125)'
+       || ' — 시총 = 주식수 × 종가이므로 상위 N을 밀어낸다. 손으로 돌리는 리밸런싱은 guard-rebalance-on-dirty-rank.sh가 막지만 **토요일 20시 자동 갈래는 안 막힌다**(ADR-0125)'
   END
 FROM (SELECT s.ticker || ' ' || round(c.cur / med.md, 0) || '배' AS t
       FROM cur c JOIN med ON med.stock_id = c.stock_id JOIN stock s ON s.id = c.stock_id
@@ -130,6 +138,12 @@ echo '{"tool_input":{"command":"./gradlew bootRun --args=\"--job=universe\""}}' 
 ```
 
 ## 남은 것 — 다음 세션이 다시 재지 않게
+
+- **자동 리밸런싱은 오염된 채로 계속 돈다.** 토요일 20:00 갈래를 막을 수단이 지금 없다 —
+  코드 레벨 게이트를 넣으려면 판정축이 필요한데 그것이 위에서 두 번 기각됐다. **이미 편입된
+  `TBLA`·`AKTX`는 여전히 상위권이라 자동 실행이 그 편입을 유지한다** — 새 손해가 아니라
+  기존 손해의 지속이고, 그동안 정상 종목이 계속 밀려난다. **닫는 길은 주식수를 고치는 것
+  하나뿐이다.**
 
 - **결손 165종목은 `companyfacts`로 안 열린다.** 여는 길은 `companyconcept` API로 축이 붙은
   팩트를 따로 받거나, 시세 소스(Alpaca)에서 주식수를 받는 것이다. **둘 다 새 외부 연동이라

@@ -85,6 +85,25 @@ class GovernanceRawWriterTest {
         assertThat(writer.unstampedNoDataRows()).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("접수번호가 다른 판이 오면 데이터 없음 행을 지우지 않고 새 값을 찍는다")
+    void stampsNewReceiptWhenTheFilingChanged() {
+        loadOnce();
+
+        // 다음 해에 정정본이 와서 접수번호가 바뀐 상황. 지우는 갈래의 조건은
+        // `dup.receipt_no = source.receipt_no`라 여기서는 참이 아니고, UPDATE가 새 값을 찍는다.
+        String later = "20250318000001";
+        writer.write(stockId, List.of(
+                new GovernanceReportRow(GovernanceEndpoint.SHARE_TOTALS, YEAR, REPORT,
+                        later, LocalDate.of(2025, 3, 18), 0, Map.of("se", "보통주")),
+                GovernanceReportRow.noData(GovernanceEndpoint.OUTSIDE_DIRECTOR, YEAR, REPORT)));
+        assertThatCode(() -> writer.stampNoData(stockId, YEAR, REPORT)).doesNotThrowAnyException();
+
+        // 앞 판이 찍은 행은 남고, 새 판의 센티넬은 새 접수번호를 받는다 — 둘 다 있어야 한다.
+        assertThat(stampedReceipts()).containsExactlyInAnyOrder(RECEIPT, later);
+        assertThat(writer.unstampedNoDataRows()).isZero();
+    }
+
     /** 한 회차: 접수번호를 가진 표 하나 + 비어 온 표 하나를 쓰고 찍는다. */
     private void loadOnce() {
         writer.write(stockId, List.of(
