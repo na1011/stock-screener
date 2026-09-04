@@ -75,13 +75,35 @@ final class PitSweep {
      * @param firstPasses  (전략, 대상) → 종목 → 최초 통과
      * @param rejections   (전략, 대상) → 거절 사유. <b>「통과 0」과 구분해 들고 다닌다</b> —
      *                     섞으면 못 돌린 전략이 「아무것도 안 걸린 전략」으로 읽힌다
-     * @param datesByCcy   통화별로 실제로 읽은 날짜 수
+     * @param coverages    통화별로 실제로 읽은 구간. <b>날짜 「수」가 아니라 「양 끝」을 들고
+     *                     다닌다</b> — 수만 보면 두 통화의 시작일이 어긋난 것이 가려지고(실측
+     *                     KRW 2025-08-18 · USD 2025-08-28로 열흘 차이인데 둘 다 256일),
+     *                     무엇보다 <b>구간의 앞쪽이 침식되는 것을 아무도 못 본다.</b>
+     *                     {@code coverageOf}는 저장된 양 끝 <em>사이만</em> 보므로 첫 파일이
+     *                     사라지면 구간이 조용히 줄고 결손은 0으로 읽힌다 — 그런데 최초
+     *                     통과일이 뒤로 밀리는 것이 이 스윕의 유일한 산출물이다
      * @param repairedCells 저장본이 낡아 그 자리에서 다시 만든 (종목, 날짜) 수
      */
     record Result(Map<String, Map<Long, FirstPass>> firstPasses,
                   Map<String, String> rejections,
-                  Map<String, Integer> datesByCcy,
+                  Map<String, Coverage> coverages,
                   int repairedCells) {
+
+        /** 통화별 날짜 수. 단언에 쓴다 — 사람이 읽는 표에는 양 끝을 쓴다. */
+        Map<String, Integer> datesByCcy() {
+            Map<String, Integer> out = new LinkedHashMap<>();
+            coverages.forEach((ccy, c) -> out.put(ccy, c.dates().size()));
+            return out;
+        }
+
+        /** 사람이 읽는 구간 표기. */
+        String rangeText() {
+            List<String> parts = new ArrayList<>();
+            coverages.forEach((ccy, c) -> parts.add(c.dates().isEmpty() ? ccy + " 없음"
+                    : ccy + " " + c.dates().get(0) + "~" + c.dates().get(c.dates().size() - 1)
+                            + "(" + c.dates().size() + "일)"));
+            return String.join(" · ", parts);
+        }
     }
 
     /** 저장소가 담은 것. 스윕 전에 이것부터 사람이 본다 — 없는 것을 스윕할 수는 없다. */
@@ -163,7 +185,7 @@ final class PitSweep {
 
         Map<String, Map<Long, FirstPass>> firstPasses = new LinkedHashMap<>();
         Map<String, String> rejections = new LinkedHashMap<>();
-        Map<String, Integer> datesByCcy = new LinkedHashMap<>();
+        Map<String, Coverage> coverages = new LinkedHashMap<>();
         int repaired = 0;
 
         // 통화 우선. 대상 우선이면 같은 파일을 시장 수만큼 다시 연다.
@@ -186,7 +208,7 @@ final class PitSweep {
                 }
                 continue;
             }
-            datesByCcy.put(currency, coverage.dates().size());
+            coverages.put(currency, coverage);
 
             // 대상마다 돌릴 전략을 먼저 가른다. 통화축 거절과 코드 부족은 다른 사유이므로
             // 따로 적는다 — 뭉치면 무엇을 고쳐야 하는지가 사라진다.
@@ -256,7 +278,7 @@ final class PitSweep {
                 }
             }
         }
-        return new Result(firstPasses, rejections, datesByCcy, repaired);
+        return new Result(firstPasses, rejections, coverages, repaired);
     }
 
     /**

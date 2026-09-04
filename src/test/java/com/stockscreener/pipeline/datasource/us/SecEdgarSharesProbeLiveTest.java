@@ -627,7 +627,7 @@ class SecEdgarSharesProbeLiveTest {
         valueChanged.forEach(line -> System.out.println("  " + line));
         if (!notable.isEmpty()) {
             System.out.println("\\n예외·소멸 상세");
-            notable.stream().limit(40).forEach(line -> System.out.println("  " + line));
+            notable.stream().forEach(line -> System.out.println("  " + line));
         }
 
         assertThat(measured).as("한 종목도 못 쟀으면 위 수는 「잴 것이 없었다」다").isPositive();

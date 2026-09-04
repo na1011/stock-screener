@@ -447,18 +447,28 @@ tasks.register('backtestProbe', Test) {
     // 계산에서). 그 계산은 기각돼 지웠고, **지금 경로가 512m에서 도는지는 안 쟀다** —
     // 3.6시간짜리 적재가 힙으로 죽는 것이 가장 비싼 실패라 착수 전 시험까지 남겨 둔다.
     maxHeapSize = '8g'
-    // 스윕 구간을 테스트 JVM으로 넘긴다. Gradle의 `-D`는 **데몬 JVM에만** 붙으므로 이 전달이
-    // 없으면 `-Dsweep.from=`이 조용히 무시되고 기본 구간(1년)이 돈다 — 6일만 보려던 실행이
-    // 몇 시간짜리가 되는데 아무 경고도 나지 않는다.
-    // MUST: 새 `-D` 스위치를 만들면 **이 목록에 함께 넣는다.** Gradle의 `-D`는 데몬 JVM에만
-    // 붙어서, 빠뜨리면 스위치가 조용히 무시되고 **기본 동작이 돈다.** 실제로 `pit.recheck`를
-    // 빠뜨려 3초짜리 재확인 대신 3시간 41분짜리 재적재가 20분 돌았다 — 같은 함정을 두 번 밟았다.
-    ['sweep.from', 'sweep.to',
-     'pit.from', 'pit.to', 'pit.days', 'pit.dryRun', 'pit.recheck'].each { key ->
-        if (System.getProperty(key) != null) {
-            systemProperty key, System.getProperty(key)
-        }
+    // 스윕·적재 스위치를 테스트 JVM으로 넘긴다. Gradle의 `-D`는 **데몬 JVM에만** 붙으므로
+    // 이 전달이 없으면 스위치가 조용히 무시되고 **기본 동작이 돈다.**
+    //
+    // MUST: 목록으로 관리하지 않는다. 두 번 빠뜨렸다 — `sweep.from`(6일 볼 실행이 1년치가 됨)과
+    // `pit.recheck`(3초짜리 재확인 대신 3시간 41분짜리 재적재가 20분 돌았다). 두 번째는 그
+    // 목록 바로 위에 경고를 적어 둔 자리에서 났다. **기억할 것이 없으면 빠뜨릴 것도 없다.**
+    def harnessSwitches = System.getProperties().stringPropertyNames()
+            .findAll { it.startsWith('pit.') || it.startsWith('sweep.') }
+    harnessSwitches.each { systemProperty it, System.getProperty(it) }
+
+    // MUST: 접두사 전달은 **오타를 안 막는다.** `-Dpit.reheck=…`는 워커까지 전달되지만 읽는
+    // 코드가 없어 조용히 기본 동작이 된다 — 없애려던 실패와 같은 모양이다. 그래서 아는 이름이
+    // 아니면 빌드를 세운다. 이 집합은 **전달의 근거가 아니라 오타의 펜스**다.
+    def knownSwitches = ['pit.from', 'pit.to', 'pit.days', 'pit.dryRun', 'pit.recheck',
+                         'sweep.maxLag'] as Set
+    def unknown = harnessSwitches - knownSwitches
+    if (unknown) {
+        throw new GradleException(
+                "모르는 하네스 스위치다: ${unknown.sort()} — 오타이거나 아직 안 읽히는 이름이다. " +
+                "아는 것: ${knownSwitches.sort()}")
     }
+
     // 저장소 경로. `PitStore.fromEnvironment()`가 읽는 환경변수가 셸에서 데몬을 거쳐
     // 워커까지 닿는지 재보지 않았으므로, 있으면 명시적으로 넘긴다 — `-D`가 데몬에만 붙는
     // 함정을 이미 한 번 겪은 자리라 같은 모양을 되풀이하지 않는다.

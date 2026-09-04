@@ -120,7 +120,7 @@ class PitLoadTest {
         int swept = store.sweepTemporaries();
         System.out.printf("중단된 실행이 남긴 .tmp %d개를 지웠다%n", swept);
 
-        Map<String, List<LocalDate>> plan = plan();
+        Map<String, List<LocalDate>> plan = plan(store);
         String calculatorFp = PitFingerprint.forCalculators(registry);
         Set<String> declared = PointInTimeScreener.declaredCodesOf(registry);
         System.out.printf("계산기 판 %s · 선언 코드 %d개%n", calculatorFp, declared.size());
@@ -242,8 +242,20 @@ class PitLoadTest {
         return now.equals(store.readManifest(currency, asOf).get("calculatorFp"));
     }
 
-    /** 통화별 적재 구간. 저장소가 통화 단위라 시장이 아니라 통화로 묶는다. */
-    private Map<String, List<LocalDate>> plan() {
+    /**
+     * 통화별 적재 구간. 저장소가 통화 단위라 시장이 아니라 통화로 묶는다.
+     *
+     * <p><b>MUST: 이미 저장된 날짜를 계획에 합친다.</b> {@code -Dpit.days}는 <b>오늘 기준
+     * 상대값</b>이라 거래일이 하루 늘 때마다 창이 한 칸 밀리고, 그러면 <b>옛 시작일이 계획에서
+     * 빠져 고아가 된다</b> — 그 날짜만 옛 모집단·옛 지문인 채 저장소에 남는다. 스윕은 저장된
+     * 날짜를 전부 읽으므로 그 한 날짜가 전체를 멈춘다.
+     *
+     * <p>실제로 그렇게 됐다: 유니버스에서 32종목이 갈린 뒤 보수를 돌렸는데 그 사이 새 거래일이
+     * 생겨 창이 밀렸고, 255날짜를 다 고쳤는데도 <b>2025-08-28 하나가 옛 모집단으로 남아</b>
+     * 스윕이 같은 자리에서 다시 멈췄다. <b>저장된 것은 유지 대상이다</b> — 계획 밖이라고
+     * 버려두면 저장소가 「관리되는 절반」과 「버려진 절반」으로 조용히 갈린다.
+     */
+    private Map<String, List<LocalDate>> plan(PitStore store) throws Exception {
         Map<String, List<LocalDate>> out = new LinkedHashMap<>();
         int days = Integer.parseInt(System.getProperty("pit.days", String.valueOf(DEFAULT_DAYS)));
         for (ScreeningTargets.Target target : targets.all()) {
@@ -267,8 +279,10 @@ class PitLoadTest {
             List<LocalDate> chosen = (from == null || from.isBlank())
                     ? all.subList(Math.max(0, all.size() - days), all.size())
                     : all.stream().filter(d -> !d.isBefore(LocalDate.parse(from.trim()))).toList();
-            if (!chosen.isEmpty()) {
-                out.put(target.currency(), new ArrayList<>(chosen));
+            java.util.SortedSet<LocalDate> merged = new java.util.TreeSet<>(chosen);
+            merged.addAll(store.storedDates(target.currency()));
+            if (!merged.isEmpty()) {
+                out.put(target.currency(), new ArrayList<>(merged));
             }
         }
         return out;

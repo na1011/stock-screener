@@ -105,8 +105,11 @@ class CustomScreenSweepTest {
         PitSweep.Result result = sweep.sweep(requests, allTargets, MIN_SCORE_RATIO);
         long ms = (System.nanoTime() - t0) / 1_000_000;
 
-        System.out.printf("%n===== 저장본 스윕 %,dms · 읽은 날짜 %s · 다시 만든 칸 %d =====%n",
-                ms, result.datesByCcy(), result.repairedCells());
+        // MUST: 언제·무엇을 읽었는지를 표 안에 남긴다. 시간이 지나면 창 미완이 저절로 닫혀
+        // 판정이 바뀌므로, 표만 보고는 그것이 언제 기준인지 알 수 없다.
+        System.out.printf("%n===== 저장본 스윕 %,dms · %s =====%n", ms, java.time.LocalDateTime.now()
+                .truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
+        System.out.printf("구간 %s · 다시 만든 칸 %d%n", result.rangeText(), result.repairedCells());
         if (!result.rejections().isEmpty()) {
             System.out.println("-- 거절 (통과 0과 다르다) --");
             result.rejections().forEach((k, v) -> System.out.printf("   %-32s %s%n", k, v));
@@ -144,10 +147,10 @@ class CustomScreenSweepTest {
                             ? "-" : String.format("%.0f일", summary.avgDaysToTarget()),
                     summary.avgReturnPct() == null
                             ? "-" : String.format("%+.1f%%", summary.avgReturnPct() * 100));
-            if (summary.truncated() > 0 || summary.corporateGaps() > 0) {
-                System.out.printf("   → 창이 아직 안 닫힌 종목 %d · 보유 창에 미보정 기업행위가 "
-                                + "걸린 종목 %d%n", summary.truncated(), summary.corporateGaps());
-            }
+            // MUST: 0일 때도 찍는다. 안 찍으면 「창 미완 없음」과 「그 줄을 안 봤다」가
+            // 구분되지 않는다.
+            System.out.printf("   → 창이 아직 안 닫힌 종목 %d · 보유 창에 미보정 기업행위가 "
+                            + "걸린 종목 %d%n", summary.truncated(), summary.corporateGaps());
         }
 
         // 0 == 0으로 초록이 되는 것을 막는다. 읽은 날짜가 0이면 잰 것이 없다.

@@ -224,8 +224,8 @@ class StoreRoundTripProbeTest {
         System.out.printf("%n===== 저장본 스윕 대 직접 계산 (통화별 %d거래일) =====%n", DAYS);
         System.out.printf("적재 %,dms · 저장본 스윕 %,dms · 직접 계산 %,dms%n",
                 loadMs, sweepMs, directMs);
-        System.out.printf("읽은 날짜 %s · 그 자리에서 다시 만든 칸 %d%n",
-                result.datesByCcy(), result.repairedCells());
+        System.out.printf("구간 %s · 그 자리에서 다시 만든 칸 %d%n",
+                result.rangeText(), result.repairedCells());
         System.out.println("-- 거절 --");
         if (result.rejections().isEmpty()) {
             System.out.println("   없음");
