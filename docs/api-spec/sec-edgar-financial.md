@@ -289,6 +289,13 @@ GET https://data.sec.gov/api/xbrl/companyconcept/CIK##########/dei/EntityCommonS
 
 ## 함정
 
+- **주식수가 정확히 1000배 틀려서 온다.** 제출자의 inline XBRL `scale` 속성이 틀린 것이고
+  **그 파일이 인쇄하는 숫자는 이미 옳다**(`PKG` 10-K: `scale="3" decimals="-3"`에 텍스트
+  `89,213,394`). `companyfacts`만 그 속성을 곱해서 주므로 **EDGAR 뷰어로는 안 보인다** —
+  SEC 자신의 R-file 렌더링은 텍스트를 찍는다. **후보 순서를 바꿔도 안 고쳐진다**: `PKG`는
+  `dei:`만 있고 `DDS`·`ECHO`·`RPAY`는 `dei:`와 `CommonStockSharesOutstanding`이 **둘 다 없다.**
+  방향도 양쪽이다(`PKG`·`TBLA`·`RPAY`는 1000배 크고 `DDS`·`ECHO`는 1000배 작다).
+  감시와 처방은 ADR-0126에 있다.
 - **`fp`를 분기 번호로 쓰면 안 된다 — 같은 보고서가 7~9월 기간에 `Q2`를 붙인다**(실측: AT&T).
   그리고 **1월 결산 회사는 연속한 두 회계연도에 같은 `fy`가 붙는다**(실측: RH의 연간이
   2023-01-28에 끝나는데 같은 `fy`의 분기가 2023-10-29에 끝난다. NVDA도 같다).

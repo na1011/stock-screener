@@ -5,6 +5,7 @@ date: 2026-09-04
 applies_to:
   - "docs/adr/ADR-0125-share-count-contamination-and-the-rank-gate.md"
   - "src/main/java/com/stockscreener/pipeline/datasource/us/SecEdgarColumn.java"
+  - "src/main/java/com/stockscreener/indicator/calculator/FinancialMath.java"
 ---
 
 # ADR-0126. 주식수 단위 오태깅은 입력에서 못 거르고 출력에서 감시한다
