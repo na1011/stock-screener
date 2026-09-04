@@ -1,0 +1,107 @@
+---
+id: ADR-0126
+status: 채택됨
+date: 2026-09-04
+applies_to:
+  - "docs/adr/ADR-0125-share-count-contamination-and-the-rank-gate.md"
+  - "src/main/java/com/stockscreener/pipeline/datasource/us/SecEdgarColumn.java"
+---
+
+# ADR-0126. 주식수 단위 오태깅은 입력에서 못 거르고 출력에서 감시한다
+
+## 결정
+
+**입력 값을 자동으로 버리는 게이트를 만들지 않는다.** 대신 **출력(시총)에서 감시하고,
+검증한 행만 손으로 고친다.**
+
+미국 `shares_outstanding`이 정확히 1000배 틀리는 일이 있다. 원인은 우리 파싱이 아니라
+**제출자의 inline XBRL `scale` 속성**이고, 그 파일이 인쇄하는 숫자는 이미 옳다
+(`PKG` 10-K 원문: `<ix:nonFraction name="dei:EntityCommonStockSharesOutstanding"
+scale="3" decimals="-3">89,213,394</ix:nonFraction>`). **`companyfacts`만 그 속성을 곱해서
+준다** — SEC 자신의 R-file 렌더링은 텍스트를 찍으므로 EDGAR 뷰어에서는 안 보인다.
+
+## 규칙
+
+- **MUST NOT: 값을 버리는 판정축을 새로 만들지 않는다.** 다섯을 실측으로 재고 다섯 다
+  기각했다(ADR-0125 §측정·§버린 대안). **새 축을 올리기 전에 그 다섯을 먼저 읽는다.**
+- **MUST: 수리는 NULL이 아니라 값으로 한다.** `FinancialWriter.fillMissing`이
+  `stored == null`이면 소스 값으로 **다시 채우고**(그 메서드의 `toFill` 갈래) 값이 있으면
+  **안 덮고 경고만** 찍는다. `financial-refill`은 평일 스케줄러가 돌리므로
+  **NULL 수리는 며칠 안에 되돌아가고 값 수리는 남는다.**
+- **MUST: 고치는 행마다 근거를 둘 이상 댄다** — 그 종목의 인접 분기, SEC 원본의 다른 후보
+  태그, `net_income / eps` 검산 중 둘. 한 근거로 고치면 그것이 곧 기각된 판정축이다.
+- **MUST NOT: 이 펜스의 임계 100을 「오탐이 없어서 고른 값」으로 읽지 않는다.**
+  **정당한 기업행위도 이 축에 튄다** — 실측으로 `BKNG` 25:1 분할이 23.89·25.57배,
+  `AKTX` 1:40 감자가 **54.75배**다. 100이 지금 오탐 0인 것은 **이 창의 최대 사건이
+  1:40이기 때문**이고, `corporate_action` 원장의 극단은 SPLIT 50·REVERSE 1:120이다.
+  **둘 중 하나가 보존 창에 들면 오탐이 난다.**
+
+## 검증
+
+```premise 시총이 하루 사이 100배 뛰는 종목이 없다
+psql -d stock_screener -At -c "
+WITH mc AS (
+  SELECT s.ticker, iv.trade_date, iv.value v,
+         lag(iv.value) OVER (PARTITION BY iv.stock_id ORDER BY iv.trade_date) p
+  FROM indicator_value iv JOIN stock s ON s.id = iv.stock_id
+  WHERE iv.indicator_code = 'MARKET_CAP')
+SELECT CASE
+  WHEN (SELECT count(*) FROM mc) = 0
+    THEN '잴 것이 없었다 — MARKET_CAP 행이 하나도 없다'
+  WHEN count(*) = 0 THEN 'OK 시총 하루 점프 0 / 모집단 ' || (SELECT count(*) FROM mc)
+  ELSE count(*) || '건이 하루 사이 시총 100배 이상 어긋난다: ' || string_agg(t, ', ' ORDER BY t)
+       || ' — 시총 = 주식수 × 종가인데 종가는 그렇게 못 움직인다. 주식수 행의 단위를 의심하되,
+          기업행위 원장을 먼저 본다(50:1 분할·1:120 감자는 이 축에 정당하게 걸린다).'
+  END
+FROM (SELECT ticker || ' ' || trade_date || ' ' || round(GREATEST(v/p, p/v), 0) || '배' AS t
+      FROM mc WHERE p > 0 AND GREATEST(v/p, p/v) >= 100) z"
+```
+
+**양방향으로 센다** — 오염이 들어올 때와 정상으로 돌아올 때 둘 다 경계를 만든다.
+실측 비용 **0.62~0.87초**(전제 개당 상한 11초).
+
+**모집단을 함께 내는 이유**: `MARKET_CAP` 행이 통째로 비면 점프도 0이 되어 「깨끗하다」와
+구분되지 않는다. 실제로 **`MARKET_CAP`이 아예 없는 편입 종목이 17개** 있다(FY 행만 내는
+연차 제출자 — `IndicatorDataReader`가 분기 재무를 `fiscal_period <> 'FY'`로 읽는다).
+
+## 배경
+
+2026-09-04, ADR-0125가 남긴 마지막 미측정 축을 재다가 병이 태그 선택이 아니라 **단위**임을
+확인했다. 그 뒤 값 게이트를 넷 더 설계해 전부 반증으로 죽였고, 그 과정이 ADR-0125 §측정에
+쌓여 있다. **다섯 번 실패한 것이 이 결정의 근거다** — 이 소스는 「어느 수가 틀렸는가」를
+스스로 말해 주지 않는다.
+
+살아 있던 손해는 지표였다: `PKG`의 `MARKET_CAP`이 50거래일 동안 최대 **20,746.6B**(정상
+약 20.8B), `RPAY`가 180거래일 내내 205~351B(실제 약 0.3B), `TBLA` 최대 1,199.8B,
+`DDS` 최소 0.0083B. **순위 축(ADR-0125의 가드)은 최신 행만 보므로 이 넷 중 `TBLA` 하나만
+봤다.**
+
+## 버린 대안
+
+| 안 | 버린 이유 |
+|---|---|
+| 값 게이트 다섯 | 전부 실측 기각 — ADR-0125 §측정·§버린 대안이 근거와 반례를 들고 있다 |
+| 수리를 NULL로 한다 | `fillMissing`이 소스 값으로 다시 채운다. 평일 스케줄러가 돌리므로 며칠이면 되돌아간다 |
+| 오염 종목을 코드에 제외 목록으로 박는다 | ADR-0125가 기각했고 그 근거 셋이 그대로 걸린다. **일회성 데이터 수리는 다르다** — 코드에 안 남고, 재발은 이 펜스가 잡는다 |
+| 펜스를 주식수 쪽에 둔다 | ADR-0125의 펜스가 이미 그 축이고 **최신 행만** 본다. 과거 행이 지표를 망가뜨리는 것은 출력에서만 보인다 |
+
+## 결과
+
+**쉬워지는 것**: 단위 오태깅이 지표에 닿는 순간 세션 시작에 수로 뜬다. 값을 안 버리므로
+오탐의 대가가 확인 한 번이다.
+
+**어려워지는 것 — 이 펜스가 못 보는 것 넷**
+
+- **정상상태 오염**: `RPAY`처럼 계열 전체가 고르게 틀리면 점프가 없다. 이번엔 손으로 찾았다.
+- **지표가 없는 종목**: 유니버스 밖 오염은 편입되고 백필이 돈 **다음 세션**에야 보인다.
+  `TBLA`가 그 경로였다.
+- **보존 창 180거래일 밖**.
+- **1000배가 아닌 배수**: `PTCT` ÷10(57거래일 동안 시총 1/10) · `CIGI` ÷163.
+
+**남은 결함 하나 — 우리 코드다.** `BKNG`의 `MARKET_CAP`이 67거래일 동안 **2.99~3.90조
+달러**였다(실제 약 0.15조). 제출자 오류가 아니라 `FinancialMath.sharesOf`가 보정 기준점으로
+`period_end`를 쓰는데 `dei:`는 **표지일** 값이라, 기업행위가 `(period_end, published_at]`에
+들면 **비율이 한 번 더 곱해진다**(ADR-0096 자리). **이 ADR의 범위 밖이지만 재고 넘긴다.**
+
+**되돌리려면**: 이 펜스를 지우고, 2026-09-04 수리 41행을 덤프
+`stock_screener-20260904T144843Z.dump`에서 되돌린다.
