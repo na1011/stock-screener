@@ -31,8 +31,9 @@ import java.util.Set;
  *   <li>시드가 있으면 API 키 없이도 파이프라인 전체를 구성·검증할 수 있다.
  * </ol>
  *
- * <p>CSV 형식은 {@code ticker,name} 한 줄에 한 종목이며 첫 줄은 헤더다. 이름을 함께 두는
- * 이유는 사람이 목록을 갱신할 때 티커만으로는 무엇을 고치는지 알 수 없기 때문이다.
+ * <p>CSV 형식은 {@code ticker,name} 한 줄에 한 종목이며 <b>주석({@code #})을 걷어낸 뒤
+ * 처음 만나는 줄</b>이 헤더다. 이름을 함께 두는 이유는 사람이 목록을 갱신할 때 티커만으로는
+ * 무엇을 고치는지 알 수 없기 때문이다.
  */
 @Component
 public class SeededUniverseDataSource implements UniverseDataSource {
@@ -66,14 +67,17 @@ public class SeededUniverseDataSource implements UniverseDataSource {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
-            boolean header = true;
+            boolean headerSeen = false;
             while ((line = reader.readLine()) != null) {
-                if (header) {
-                    header = false;
-                    continue;
-                }
                 String trimmed = line.strip();
                 if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                    continue;
+                }
+                // MUST: 주석을 걷어낸 **뒤** 처음 만나는 줄이 헤더다. 무조건 첫 줄을 버리면
+                // 실제 파일의 첫 줄이 주석이라(셋 다 그렇다) 진짜 헤더 `ticker,name`이
+                // 데이터로 들어가 티커 "ticker"가 유니버스에 편입된다.
+                if (!headerSeen) {
+                    headerSeen = true;
                     continue;
                 }
                 // MUST: 티커는 문자열로 다룬다. '005930'을 숫자로 파싱하면 5930이 된다.
