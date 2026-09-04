@@ -113,7 +113,8 @@ class PitLoadTest {
         PitStore store = PitStore.fromEnvironment();
         PitFingerprint fingerprint = new PitFingerprint(jdbcTemplate);
         PitChangeDetector detector = new PitChangeDetector(jdbcTemplate);
-        boolean dryRun = Boolean.parseBoolean(System.getProperty("pit.dryRun", "false"));
+        boolean dryRun = flag("pit.dryRun");
+        String recheck = choice("pit.recheck", "calculator", "index");
 
         System.out.printf("%n===== 시점 재현 적재%s =====%n", dryRun ? " (점검만)" : "");
         System.out.println("저장소 " + store.root());
@@ -135,8 +136,12 @@ class PitLoadTest {
         }
         System.out.printf("계산할 (종목, 날짜) 총 %,d칸%n", total);
 
-        if ("calculator".equals(System.getProperty("pit.recheck"))) {
+        if ("calculator".equals(recheck)) {
             recheckCalculators(store, plan, calculatorFp, declared);
+            return;
+        }
+        if ("index".equals(recheck)) {
+            restampSharedFingerprints(store, fingerprint, plan);
             return;
         }
         if (dryRun) {
@@ -160,7 +165,7 @@ class PitLoadTest {
             List<Long> population = screener.populationFor(currency);
             for (LocalDate asOf : entry.getValue()) {
                 Map<Long, String> fps = fingerprint.forCurrency(currency, asOf);
-                String sharedFp = fingerprint.forShared(asOf);
+                String sharedFp = fingerprint.forShared(currency, asOf);
                 PitStore.Freshness freshness =
                         store.freshnessOf(currency, asOf, fps, sharedFp);
 
@@ -373,6 +378,12 @@ class PitLoadTest {
 
     /** 매니페스트를 그대로 되쓰되 계산기 판만 바꾼다. 다른 값을 손대면 그것이 근거를 잃는다. */
     private static PitStore.Stamp stampFrom(Map<String, String> mf, String calculatorFp) {
+        return stampFrom(mf, calculatorFp, mf.get("indexFp"));
+    }
+
+    /** 매니페스트를 그대로 되쓰되 계산기 판과 지수 지문만 바꾼다. */
+    private static PitStore.Stamp stampFrom(Map<String, String> mf, String calculatorFp,
+                                            String indexFp) {
         Map<Long, String> fps = new LinkedHashMap<>();
         Set<String> codes = new java.util.TreeSet<>();
         for (Map.Entry<String, String> e : mf.entrySet()) {
@@ -384,9 +395,73 @@ class PitLoadTest {
         if (declared != null && !declared.isBlank()) {
             codes.addAll(List.of(declared.split(" ")));
         }
+        // MUST: `failed`를 이어받는다. `Set.of()`를 넘기면 `complete = failed.isEmpty()`가
+        // **미완료 날짜를 조용히 완료로 승격**시킨다 — `PitSweep.restamp`에서 방금 없앤 결함을
+        // 형제 메서드에 되살리는 자리다. 「지금 미완료가 0건이라 안 닿는다」는 근거가 아니다.
         return new PitStore.Stamp(Integer.parseInt(mf.getOrDefault("attempted", "0")), codes, fps,
-                mf.get("indexFp"), mf.get("inPlaceDigest"), calculatorFp,
-                Instant.parse(mf.get("writtenAt")), Set.of());
+                indexFp, mf.get("inPlaceDigest"), calculatorFp,
+                Instant.parse(mf.get("writtenAt")), failedOf(mf));
+    }
+
+    /**
+     * <b>지수 지문 식이 바뀌었을 때</b> 값을 다시 만들지 않고 매니페스트만 다시 찍는다.
+     *
+     * <p>판정은 <b>내용</b>이다 — 시각이 아니다. 좁힌 입력은 옛 입력의 <b>진부분집합</b>이므로
+     * <b>옛 식이 저장된 값과 같으면 좁은 입력도 반드시 안 움직였다.</b> 그때만 새 식을 찍는다.
+     *
+     * <p>MUST NOT: {@code updated_at}으로 무죄를 선고하지 않는다. {@code market}·{@code universe}에는
+     * 시각 컬럼이 <b>아예 없고</b> 삭제도 시각에 안 남아, 그러면 ADR-0123 §규칙의
+     * 「싼 훑기는 의심을 고르고 <b>내용이 확정한다</b>」가 뒤집힌다 — 그 뒤집힘이 바로
+     * 이 저장소에서 찾은 조용한 오답의 모양이다.
+     *
+     * <p>옛 식이 다른 날짜는 <b>안 찍고 신고한다.</b> 그 날짜는 지수가 실제로 움직인 것이라
+     * 값을 다시 만들어야 하고, 그것은 적재의 일이다.
+     */
+    private void restampSharedFingerprints(PitStore store, PitFingerprint fingerprint,
+                                           Map<String, List<LocalDate>> plan) throws Exception {
+        System.out.println("\n-- 지수 지문 재찍기 (값은 안 건드린다) --");
+        String calculatorFp = PitFingerprint.forCalculators(registry);
+        int restamped = 0;
+        List<String> moved = new ArrayList<>();
+        for (Map.Entry<String, List<LocalDate>> e : plan.entrySet()) {
+            String currency = e.getKey();
+            for (LocalDate asOf : store.storedDates(currency)) {
+                Map<String, String> mf = store.readManifest(currency, asOf);
+                String stored = mf.get("indexFp");
+                if (!fingerprint.forSharedBeforeNarrowing(asOf).equals(stored)) {
+                    moved.add(currency + " " + asOf);
+                    continue;
+                }
+                String narrowed = fingerprint.forShared(currency, asOf);
+                if (narrowed.equals(stored)) {
+                    continue;
+                }
+                store.rewriteManifest(currency, asOf,
+                        Integer.parseInt(mf.getOrDefault("stocks", "0")),
+                        stampFrom(mf, calculatorFp, narrowed));
+                restamped++;
+            }
+        }
+        System.out.printf("   다시 찍은 매니페스트 %d · 지수가 실제로 움직인 날짜 %d%n",
+                restamped, moved.size());
+        moved.stream().limit(10).forEach(m -> System.out.println("   움직임: " + m));
+        assertThat(restamped + moved.size())
+                .as("저장된 날짜가 없다 — 재찍을 것이 없다").isPositive();
+        if (!moved.isEmpty()) {
+            System.out.println("   → 그 날짜들은 값을 다시 만들어야 한다. 적재를 돌린다");
+        }
+    }
+
+    /** 매니페스트에 적힌 실패 종목. 없으면 빈 집합이다. */
+    private static Set<Long> failedOf(Map<String, String> mf) {
+        Set<Long> out = new java.util.TreeSet<>();
+        String raw = mf.get("failed");
+        if (raw != null && !raw.isBlank()) {
+            for (String id : raw.trim().split("\\s+")) {
+                out.add(Long.parseLong(id));
+            }
+        }
+        return out;
     }
 
     /** 착수 전 점검. 3.6시간을 시작하기 전에 답이 나와야 하는 것들이다. */
@@ -425,6 +500,33 @@ class PitLoadTest {
         System.out.printf("   [%d/%d] %s %s · 실패 %d · 경과 %s · 남은 예상 %d분%n",
                 done + skipped, planned, currency, asOf, failed,
                 spent.toMinutes() + "분", etaSec / 60);
+    }
+
+    /**
+     * 스위치 <b>값</b>을 판정한다. 이름 펜스는 `build.gradle`이 지고, 여기는 값을 진다.
+     *
+     * <p>MUST: 모르는 값에 던진다. {@code -Dpit.recheck=calc}가 조용히 지나가면 3초짜리
+     * 재확인 대신 <b>3시간 41분짜리 적재</b>가 돈다 — 이름 오타와 같은 증상이고 원인만 다르다.
+     */
+    private static String choice(String key, String... allowed) {
+        String raw = System.getProperty(key);
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String value = raw.trim();
+        for (String candidate : allowed) {
+            if (candidate.equals(value)) {
+                return value;
+            }
+        }
+        throw new IllegalArgumentException("-D" + key + "=" + value
+                + "는 모르는 값이다. 아는 것: " + List.of(allowed));
+    }
+
+    /** {@code Boolean.parseBoolean}은 {@code yes}를 조용히 false로 읽는다. */
+    private static boolean flag(String key) {
+        String value = choice(key, "true", "false");
+        return "true".equals(value);
     }
 
     private static LocalDate bound(String key, LocalDate fallback) {

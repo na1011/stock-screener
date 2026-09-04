@@ -214,7 +214,7 @@ class StoreRoundTripProbeTest {
             }
             store.writeDate(currency, asOf, values, new PitStore.Stamp(
                     population.size(), PointInTimeScreener.declaredCodesOf(registry),
-                    fingerprint.forCurrency(currency, asOf), fingerprint.forShared(asOf),
+                    fingerprint.forCurrency(currency, asOf), fingerprint.forShared(currency, asOf),
                     inPlaceDigest, PitFingerprint.forCalculators(registry), startedAt, failed));
         }
     }

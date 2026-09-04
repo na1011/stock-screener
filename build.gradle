@@ -464,7 +464,7 @@ tasks.register('backtestProbe', Test) {
     // 통과하면서 조용히 무시되는데, 그것이 이 펜스가 없애려는 바로 그 모양이다 —
     // 실제로 `sweep.maxLag`를 읽는 코드 없이 먼저 넣었다가 검증에서 잡혔다.
     def knownSwitches = ['pit.from', 'pit.to', 'pit.days', 'pit.dryRun', 'pit.recheck',
-                         'sweep.maxLag'] as Set
+                         'sweep.maxLag', 'sweep.maxRecomputeDates'] as Set
     def unknown = harnessSwitches - knownSwitches
     if (unknown) {
         throw new GradleException(

@@ -114,17 +114,54 @@ final class PitFingerprint {
      * 종목에 안 걸리는 입력. 종목 지문에 넣을 자리가 없다 — 넣으면 지수가 한 번 바뀔 때마다
      * 전 종목이 낡은 것으로 읽혀 종목 단위 무효화가 무의미해진다. 매니페스트에 따로 적는다.
      *
-     * <p>덮는 것 셋. <b>{@code market}과 {@code universe}는 시각 컬럼이 아예 없어</b>
-     * ({@code created_at}뿐) 내용으로만 볼 수 있다.
+     * <p><b>사용 범위로 좁힌다.</b> 넓게 잡으면 값과 무관한 변경이 저장소를 흔든다.
      * <ul>
-     *   <li>{@code market_index_daily} — {@code marketIndexesFor}가 읽는다</li>
-     *   <li>{@code market} — {@code currency_code}가 재무 통화 게이트의 판정 축이다.
-     *       바뀌면 그 시장 종목의 재무가 통째로 사라지는데 다른 신호가 없다</li>
-     *   <li>{@code universe} — {@code is_active} 하나로 모집단이 통째로 바뀐다.
-     *       지금 비활성 유니버스가 넷 있어 켜고 끄는 것이 실재하는 조작이다</li>
+     *   <li><b>그 통화가 쓰는 지수만.</b> {@code IndicatorRunner:438}이
+     *       {@code indexes.get(attributes.marketCode())} 하나로 고르므로 갈리는 축은 종목의
+     *       {@code market_code}이고, 통화는 {@code market.currency_code}로 유도한다
+     *       (KRW = KOSPI·KOSDAQ · USD = US). <b>이 유도는 {@code index_code == market_code}
+     *       관례에 기댄다</b> — 그것을 강제하는 자리는 그 한 줄뿐이다.
+     *       안 좁히면 US 지수가 붙은 날 KRW 256날짜가, KR 지수가 붙은 날 USD 256날짜가
+     *       <b>증명 가능하게 무용한</b> 불일치가 된다.</li>
+     *   <li><b>{@code close}만.</b> {@code IndicatorDataReader.readMarketIndexes}가 그것만 읽는다.
+     *       {@code open}·{@code volume}·{@code constituent_count}는 값에 안 닿는다.</li>
+     *   <li><b>{@code market}은 {@code currency_code}만.</b> 재무 통화 게이트의 판정 축이다.</li>
+     *   <li><b>{@code universe}는 뺀다.</b> {@code IndicatorDataReader}가 그 표를 한 번도 안
+     *       읽는다 — 모집단 축이고, 그것은 {@code PitSweep.repair}의 완전성 검사와
+     *       {@code retainAll}, 적재 경로의 지문 부재가 이미 진다. 실측으로 {@code universe} 7행이
+     *       30일 창의 네 날짜에 늘었고, 날짜로 안 잘리므로 <b>그때마다 전 날짜를 흔들었다.</b></li>
      * </ul>
+     *
+     * <p>MUST NOT: 컬럼을 {@code information_schema}에서 만들지 않는다(ADR-0123 개정). 여기서는
+     * <b>읽는 쪽이 읽는 것</b>이 기준이고, 전 컬럼을 넣으면 값에 안 닿는 컬럼이 저장소를 흔든다.
      */
-    String forShared(LocalDate asOf) {
+    String forShared(String currencyCode, LocalDate asOf) {
+        return jdbcTemplate.queryForObject("""
+                SELECT md5(concat_ws('|',
+                  coalesce((SELECT md5(string_agg(i.index_code || ':' || i.trade_date || ':'
+                                                 || i.close, ',' ORDER BY i.index_code, i.trade_date))
+                            FROM market_index_daily i
+                            WHERE i.trade_date <= ?
+                              AND i.index_code IN (SELECT mk.code FROM market mk
+                                                   WHERE mk.currency_code = ?)), ''),
+                  coalesce((SELECT string_agg(mk.code || ':' || mk.currency_code, ',' ORDER BY mk.code)
+                            FROM market mk WHERE mk.currency_code = ?), '')
+                ))
+                """, String.class, asOf, currencyCode, currencyCode);
+    }
+
+    /**
+     * <b>좁히기 이전의</b> 지수 지문. 마이그레이션에만 쓴다 — 좁힌 입력은 이것의
+     * <b>진부분집합</b>이므로, 이 값이 저장된 것과 같으면 <b>좁은 입력도 반드시 안 움직였다.</b>
+     *
+     * <p>시각({@code updated_at})으로 판정하지 않는 이유: {@code market}·{@code universe}에는
+     * 시각 컬럼이 <b>아예 없고</b> 삭제도 시각에 안 남는다. 시각을 최종 판결로 쓰면
+     * ADR-0123 §규칙의 「싼 훑기는 의심을 고르고 내용이 확정한다」가 뒤집힌다.
+     *
+     * <p>실측: 512개 매니페스트 전수 대조에 <b>4.0초 · 불일치 0</b>.
+     */
+    @Deprecated
+    String forSharedBeforeNarrowing(LocalDate asOf) {
         return jdbcTemplate.queryForObject("""
                 SELECT md5(concat_ws('|',
                   coalesce((SELECT md5(string_agg((to_jsonb(i.*) - 'created_at' - 'updated_at')::text,

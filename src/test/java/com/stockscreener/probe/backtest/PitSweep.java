@@ -115,7 +115,8 @@ final class PitSweep {
      *                기준이 함께 멈춰 <b>뒤처짐이 0으로 읽힌다.</b> 「적재가 배치를 따라잡고
      *                있는가」를 재는 것이지 「현실을 따라잡고 있는가」가 아니다
      */
-    record Coverage(String currency, List<LocalDate> dates, Set<String> codes, int lagDays) {
+    record Coverage(String currency, List<LocalDate> dates, Set<String> codes, int lagDays,
+                    Set<LocalDate> sharedMoved) {
     }
 
     /**
@@ -128,7 +129,7 @@ final class PitSweep {
     Coverage coverageOf(String currency, Set<String> markets) throws Exception {
         List<LocalDate> stored = store.storedDates(currency);
         if (stored.isEmpty()) {
-            return new Coverage(currency, List.of(), Set.of(), 0);
+            return new Coverage(currency, List.of(), Set.of(), 0, Set.of());
         }
         List<LocalDate> expected =
                 calendar.everyTradingDay(stored.get(0), stored.get(stored.size() - 1), markets);
@@ -147,6 +148,11 @@ final class PitSweep {
         // 실패한 종목이 든 날짜를 그냥 읽으면 생존분만으로 판정하게 된다.
         String calculatorNow = PitFingerprint.forCalculators(registry);
         Set<String> codes = new TreeSet<>();
+        // MUST: 지수가 움직인 날짜를 **비용을 쓰기 전에** 센다. 날짜 루프 안에서 세면 한 날짜를
+        // 보는 중에 다른 날짜가 흔들렸는지 알 수 없어 「k날짜」를 낼 수 없고, 누적 카운터로
+        // 문턱을 걸면 **재실행할 때마다 k가 문턱만큼 줄어** 같은 명령을 반복하면 문이 저절로
+        // 열린다. 여기서는 매니페스트를 어차피 한 번 순회한다.
+        Set<LocalDate> sharedMoved = new java.util.LinkedHashSet<>();
         List<String> incomplete = new ArrayList<>();
         Set<String> otherCalculators = new TreeSet<>();
         for (LocalDate asOf : stored) {
@@ -161,6 +167,9 @@ final class PitSweep {
             if (!"true".equals(mf.get("complete"))) {
                 incomplete.add(asOf + "(실패 " + mf.getOrDefault("failed", "?") + ")");
                 continue;
+            }
+            if (!fingerprint.forShared(currency, asOf).equals(mf.get("indexFp"))) {
+                sharedMoved.add(asOf);
             }
             String declared = mf.get("codes");
             if (declared != null && !declared.isBlank()) {
@@ -184,7 +193,7 @@ final class PitSweep {
         LocalDate latest = calendar.latestTradingDay(markets);
         int lag = latest == null || !latest.isAfter(last) ? 0
                 : calendar.everyTradingDay(last, latest, markets).size() - 1;
-        return new Coverage(currency, stored, codes, lag);
+        return new Coverage(currency, stored, codes, lag, sharedMoved);
     }
 
     /**
@@ -221,6 +230,17 @@ final class PitSweep {
                         + coverage.lagDays() + "거래일 뒤처졌다(허용 " + maxLag() + ") — 마지막 저장 "
                         + coverage.dates().get(coverage.dates().size() - 1)
                         + ". 그만큼의 최근 진입을 못 본 표가 나온다. 적재를 먼저 돌린다");
+            }
+            // MUST: 문턱은 **통화당**이다. 두 통화를 합쳐 세면 평시 4~6이 되어 기본 5를
+            // 매일 넘고, 그러면 싸고 잦은 것에까지 사람을 부른다 — 실측으로 평시에 흔들리는
+            // 날짜는 통화당 2~4이고(마지막 1~2 거래일의 전날 정정), 대량 지수 적재에서만 270이다.
+            if (coverage.sharedMoved().size() > maxRecomputeDates()) {
+                int perDate = "USD".equals(currency) ? 37 : 15;
+                throw new IllegalStateException(currency + " 지수가 움직여 "
+                        + coverage.sharedMoved().size() + "날짜의 값이 낡았다(자동 복구 상한 "
+                        + maxRecomputeDates() + ") — 다시 만들면 약 "
+                        + (coverage.sharedMoved().size() * perDate / 60) + "분이다. "
+                        + "적재를 돌리거나 -Dsweep.maxRecomputeDates를 올려 정한다");
             }
             if (coverage.dates().isEmpty()) {
                 for (ScreeningTargets.Target t : ofCurrency) {
@@ -271,7 +291,8 @@ final class PitSweep {
             List<Long> population = screener.populationFor(currency);
             for (LocalDate asOf : coverage.dates()) {
                 Map<Long, Map<String, BigDecimal>> values = store.readDate(currency, asOf);
-                repaired += repair(currency, asOf, population, values);
+                repaired += repair(currency, asOf, population, values,
+                        coverage.sharedMoved().contains(asOf));
 
                 for (ScreeningTargets.Target t : ofCurrency) {
                     List<PointInTimeScreener.Request> ok = runnable.get(t.code());
@@ -324,7 +345,8 @@ final class PitSweep {
      * @return 값을 다시 만든 (종목, 날짜) 수
      */
     private int repair(String currency, LocalDate asOf, List<Long> population,
-                       Map<Long, Map<String, BigDecimal>> values) throws Exception {
+                       Map<Long, Map<String, BigDecimal>> values, boolean sharedMoved)
+            throws Exception {
         Map<String, String> mf = store.readManifest(currency, asOf);
         String writtenAt = mf.get("writtenAt");
         if (writtenAt == null) {
@@ -352,10 +374,7 @@ final class PitSweep {
         Set<Long> suspects = new LinkedHashSet<>(
                 changes.suspectsOn(asOf, population, mf.get("inPlaceDigest")));
 
-        // 종목에 안 걸리는 입력은 추정하지 않고 직접 잰다(실측 58ms). 다르면 그 날짜는
-        // 전 종목이 낡은 것이 맞다 — 모집단이 함께 쓰는 값이기 때문이다.
-        String sharedNow = fingerprint.forShared(asOf);
-        boolean sharedMoved = !sharedNow.equals(mf.get("indexFp"));
+        String sharedNow = fingerprint.forShared(currency, asOf);
         if (sharedMoved) {
             suspects.addAll(population);
         }
@@ -366,6 +385,13 @@ final class PitSweep {
         // 2단계 — 내용으로 확정한다. 여기서 대부분이 걸러진다.
         Map<Long, String> fresh = fingerprint.forCurrency(currency, asOf, suspects);
         Set<Long> stale = new LinkedHashSet<>();
+        // MUST: 지수가 움직였으면 **종목 지문의 확정을 거치지 않는다.** 2단계는 「종목별 입력이
+        // 바뀌었나」를 묻는 장치이고 지수는 종목별 입력이 아니다 — 종목 지문에 지수가 없으므로
+        // 전부 일치로 나오고, 그러면 **재계산 0회로 낡은 값에 새 지문이 찍힌다.** 주석이
+        // 「전 종목이 낡은 것이 맞다」고 적어 두고 코드가 그대로 안 하던 자리다.
+        if (sharedMoved) {
+            stale.addAll(population);
+        }
         for (Map.Entry<Long, String> e : fresh.entrySet()) {
             String stored = mf.get("fp:" + e.getKey());
             if (stored == null || !stored.equals(e.getValue())) {
@@ -446,6 +472,12 @@ final class PitSweep {
 
     private PitChangeDetector.Changes changesSince(Instant since) {
         return changeCache.computeIfAbsent(since, detector::since);
+    }
+
+    /** 스윕이 스스로 메울 날짜 수 상한. <b>통화당</b>이다. */
+    private static int maxRecomputeDates() {
+        String raw = System.getProperty("sweep.maxRecomputeDates");
+        return (raw == null || raw.isBlank()) ? 5 : Integer.parseInt(raw.trim());
     }
 
     /** 허용 뒤처짐. 적재 직전 스윕이 하루 이틀로 막히지 않게 기본을 2거래일로 둔다. */
