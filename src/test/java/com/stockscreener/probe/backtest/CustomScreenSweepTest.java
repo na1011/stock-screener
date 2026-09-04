@@ -16,6 +16,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -90,9 +91,13 @@ class CustomScreenSweepTest {
         List<ScreeningTargets.Target> allTargets = targets.all();
         assertThat(allTargets).as("조회 대상이 하나도 없다").isNotEmpty();
 
+        JudgementProvenance provenance = new JudgementProvenance(jdbcTemplate);
         List<PointInTimeScreener.Request> requests = new ArrayList<>();
+        Map<String, Long> screenIds = new LinkedHashMap<>();
         for (String name : SCREEN_NAMES) {
-            ScreenDefinition screen = loadByName(name);
+            long id = screenIdOf(name);
+            screenIds.put(name, id);
+            ScreenDefinition screen = screenStore.findById(id).orElseThrow();
             requests.add(new PointInTimeScreener.Request(
                     name, screen.conditions(), screen.mode()));
         }
@@ -110,6 +115,21 @@ class CustomScreenSweepTest {
         System.out.printf("%n===== 저장본 스윕 %,dms · %s =====%n", ms, java.time.LocalDateTime.now()
                 .truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
         System.out.printf("구간 %s · 다시 만든 칸 %d%n", result.rangeText(), result.repairedCells());
+
+        // MUST: 판정이 무엇 위에서 나왔는지 표와 함께 남긴다. 저장본은 안 낡았는데 이것들이
+        // 바뀌면 표가 바뀌고, 어느 것도 이력 표가 없어 사후에 알 방법이 없다.
+        JudgementProvenance.Snapshot provenanceNow = provenance.capture();
+        System.out.printf("업종 키 %s · 편입 %s · 소분류 미달 종목 %s · 달성률 문턱 %s%%%n",
+                provenanceNow.sectorKeyFingerprint().substring(0, 8),
+                provenanceNow.membershipFingerprint().substring(0, 8),
+                provenanceNow.fallbackStocks(),
+                MIN_SCORE_RATIO.movePointRight(2).stripTrailingZeros().toPlainString());
+        for (Map.Entry<String, Long> e : screenIds.entrySet()) {
+            List<String> conditions = provenance.describe(e.getValue());
+            System.out.printf("-- %s (screen id=%d · 조건 %d개) --%n",
+                    e.getKey(), e.getValue(), conditions.size());
+            conditions.forEach(c -> System.out.println("   " + c));
+        }
         if (!result.rejections().isEmpty()) {
             System.out.println("-- 거절 (통과 0과 다르다) --");
             result.rejections().forEach((k, v) -> System.out.printf("   %-32s %s%n", k, v));
@@ -166,7 +186,7 @@ class CustomScreenSweepTest {
      * 유지된다. 실제로 이 세션에서 v13이 그렇게 두 번 바뀌었다. 여럿이 걸리면 던진다:
      * 조용히 첫 번째를 고르면 <b>다른 전략의 표를 그 전략의 것으로 읽게 된다.</b>
      */
-    private ScreenDefinition loadByName(String namePart) {
+    private long screenIdOf(String namePart) {
         List<Long> ids = jdbcTemplate.queryForList(
                 "SELECT id FROM screen WHERE screen_type = 'CUSTOM' AND is_active"
                         + " AND lower(name) LIKE lower(?) ORDER BY id",
@@ -176,8 +196,7 @@ class CustomScreenSweepTest {
                     "「" + namePart + "」에 걸리는 활성 CUSTOM 화면이 " + ids.size() + "개다(id=" + ids
                             + ") — 하나만 걸리게 이름을 좁힌다");
         }
-        return screenStore.findById(ids.get(0)).orElseThrow(() -> new IllegalStateException(
-                "screen id=" + ids.get(0) + "을 읽지 못했다"));
+        return ids.get(0);
     }
 
     /** 규약 §2의 기록값이 아니라 **화면의 달성률**이다 — 진입 자격을 보이는 수다. */

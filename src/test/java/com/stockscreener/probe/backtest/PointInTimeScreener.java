@@ -49,7 +49,7 @@ public class PointInTimeScreener {
      * 업종 백분위의 최소 표본. {@code SectorRelativeCalculator.MIN_PEERS}와 같아야 한다 —
      * 그 상수가 package-private이라 값을 옮겨 왔고, 갈리면 하네스만 다른 모집단을 쓴다.
      */
-    private static final int MIN_PEERS = 5;
+    static final int MIN_PEERS = 5;
 
     /**
      * 이 탐침이 인메모리로 다시 만드는 업종 상대값의 종류.
