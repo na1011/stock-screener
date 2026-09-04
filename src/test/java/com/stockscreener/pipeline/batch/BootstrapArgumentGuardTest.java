@@ -19,6 +19,36 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class BootstrapArgumentGuardTest {
 
     @Test
+    @DisplayName("값 없는 --skip-price를 막는다 — 그것은 건너뛰기가 아니라 false다")
+    void rejectsValuelessSkipPrice() {
+        assertThatThrownBy(() -> BootstrapRunner.rejectValuelessBooleans(
+                new DefaultApplicationArguments(
+                        "--job=initial-load", "--universe=US_LISTED", "--skip-price",
+                        "--reload-existing=true")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("skip-price");
+    }
+
+    @Test
+    @DisplayName("값 없는 --skip-price가 실제로 false로 읽힌다 — 가드가 지키는 사실")
+    void valuelessBooleanReadsAsFalse() {
+        ApplicationArguments args = new DefaultApplicationArguments("--skip-price");
+        // Spring은 값 없는 --foo를 **빈 목록**으로 담는다. null이 아니다.
+        assertThat(args.containsOption("skip-price")).isTrue();
+        assertThat(args.getOptionValues("skip-price")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("값이 붙은 불리언은 통과한다")
+    void acceptsBooleansWithValues() {
+        assertThatCode(() -> BootstrapRunner.rejectValuelessBooleans(
+                new DefaultApplicationArguments(
+                        "--job=initial-load", "--skip-price=true", "--skip-financial=false",
+                        "--reload-existing=true", "--all-quarters=true")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     @DisplayName("--tickers의 오타를 실행 전에 막는다 — 무시하면 대상이 전 종목이 된다")
     void rejectsMisspelledTickersOption() {
         assertThatThrownBy(() -> BootstrapRunner.rejectUnknownOptions(
