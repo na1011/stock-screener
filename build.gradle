@@ -430,19 +430,66 @@ tasks.register('liveTest', Test) {
 //
 // MUST NOT: @Tag("live")로 대신하지 않는다. 그쪽은 .env를 주입하고, 매 관통테스트마다
 // 이 몇 시간짜리 하네스가 딸려 붙는다.
-["backtestLoad": "*PitLoadTest*", "backtestSweep": "*CustomScreenSweepTest*"].each { name, pattern ->
+// 하네스 스위치는 **태스크마다 읽는 것이 다르다.** 아래 둘은 전달의 근거가 아니라 오타의
+// 펜스다(ADR-0123 §규칙 — "스위치의 이름과 값을 둘 다 막는다").
+//
+// MUST: **읽는 코드가 생긴 뒤에** 이름을 더한다. 미리 넣어 두면 그 스위치가 펜스를 통과하면서
+// 조용히 무시되는데, 그것이 이 펜스가 없애려는 바로 그 모양이다.
+// MUST NOT: 집합 하나를 세 태스크가 공유하게 만들지 않는다. 펜스를 만든 두 사건이 정확히
+// 그 모양이다 — `sweep.from`(6일 볼 실행이 1년치가 됨)과 `pit.recheck`(3초짜리 재확인 대신
+// 3시간 41분짜리 재적재가 20분 돌았다). 공유하면 `backtestLoad -Dsweep.from=…`이 그대로
+// 되살아난다.
+def pitSwitches = ['pit.from', 'pit.to', 'pit.days', 'pit.dryRun', 'pit.recheck'] as Set
+def sweepSwitches = ['sweep.maxLag', 'sweep.maxRecomputeDates', 'sweep.from', 'sweep.to',
+                     'sweep.targets', 'sweep.tickers', 'sweep.screens'] as Set
+
+// `backtest`는 적재와 스윕을 함께 부르므로 그때는 합집합이 정상이다. 단독으로 부른 것이면
+// 그 태스크가 안 읽는 이름은 오타이거나 잘못 짚은 것이다.
+def viaBacktest = gradle.startParameter.taskNames.any {
+    it == 'backtest' || it.endsWith(':backtest')
+}
+
+// MUST: 펜스와 전달을 **실제로 도는 태스크에** 건다. 예전에는 `backtestProbe` 블록 안에만
+// 있어서, 사람이 치는 `backtest`·`backtestLoad`·`backtestSweep`는 오타를 그냥 통과시켰다
+// (실측: `-Dsweep.targts=…`가 BUILD SUCCESSFUL). Gradle은 태스크 그래프에 없는 태스크의
+// 설정 블록을 평가조차 하지 않는다.
+ext.wireHarnessSwitches = { task, Set known ->
+    def given = System.getProperties().stringPropertyNames()
+            .findAll { it.startsWith('pit.') || it.startsWith('sweep.') }
+    // Gradle의 `-D`는 **데몬 JVM에만** 붙는다. 이 전달이 없으면 스위치가 조용히 무시되고
+    // **기본 동작이 돈다.** 안 도는 태스크에 붙어도 무해하므로 설정 시점에 건다.
+    given.each { task.systemProperty it, System.getProperty(it) }
+    // `PitStore.fromEnvironment()`가 읽는다. `-D`가 데몬에만 붙는 함정을 이미 겪은 자리라
+    // 있으면 명시적으로 넘긴다.
+    if (System.getenv('PIT_STORE_DIR') != null) {
+        task.environment 'PIT_STORE_DIR', System.getenv('PIT_STORE_DIR')
+    }
+    // MUST: 펜스는 **실행 시점**에 건다. 설정 시점에 던지면 `mustRunAfter 'backtestLoad'`가
+    // 그 태스크를 realize시켜 **안 도는 태스크가 남의 집합으로 막는다** — 실측으로
+    // `backtestSweep -Dsweep.targets=…`가 "backtestLoad이 안 읽는 이름"으로 섰다.
+    // `doFirst`는 실제로 도는 태스크에서만 평가되고, 테스트가 뜨기 전이라 비용이 없다.
+    task.doFirst {
+        def unknown = given - known
+        if (unknown) {
+            throw new GradleException(
+                    "모르는 하네스 스위치다: ${unknown.sort()} — 오타이거나 ${task.name}이 " +
+                    "안 읽는 이름이다. 아는 것: ${known.sort()}")
+        }
+    }
+}
+
+["backtestLoad": ["*PitLoadTest*", pitSwitches],
+ "backtestSweep": ["*CustomScreenSweepTest*", sweepSwitches]].each { name, spec ->
     tasks.register(name, Test) {
         group = 'verification'
         testClassesDirs = sourceSets.test.output.classesDirs
         classpath = sourceSets.test.runtimeClasspath
         useJUnitPlatform { includeTags 'backtest' }
-        filter { includeTestsMatching pattern }
+        filter { includeTestsMatching spec[0] }
         maxHeapSize = '8g'
         testLogging { events 'passed', 'failed'; showStandardStreams = true }
         outputs.upToDateWhen { false }
-        System.getProperties().stringPropertyNames()
-                .findAll { it.startsWith('pit.') || it.startsWith('sweep.') }
-                .each { systemProperty it, System.getProperty(it) }
+        wireHarnessSwitches(delegate, viaBacktest ? (pitSwitches + sweepSwitches) : spec[1])
     }
 }
 
@@ -476,39 +523,13 @@ tasks.register('backtestProbe', Test) {
     // 계산에서). 그 계산은 기각돼 지웠고, **지금 경로가 512m에서 도는지는 안 쟀다** —
     // 3.6시간짜리 적재가 힙으로 죽는 것이 가장 비싼 실패라 착수 전 시험까지 남겨 둔다.
     maxHeapSize = '8g'
-    // 스윕·적재 스위치를 테스트 JVM으로 넘긴다. Gradle의 `-D`는 **데몬 JVM에만** 붙으므로
-    // 이 전달이 없으면 스위치가 조용히 무시되고 **기본 동작이 돈다.**
+    // 스위치 전달·오타 펜스·저장소 경로를 한 자리에서 건다. 이 태스크는 `@Tag("backtest")`
+    // 전부를 돌리므로 **합집합**이다.
     //
     // MUST: 목록으로 관리하지 않는다. 두 번 빠뜨렸다 — `sweep.from`(6일 볼 실행이 1년치가 됨)과
     // `pit.recheck`(3초짜리 재확인 대신 3시간 41분짜리 재적재가 20분 돌았다). 두 번째는 그
     // 목록 바로 위에 경고를 적어 둔 자리에서 났다. **기억할 것이 없으면 빠뜨릴 것도 없다.**
-    def harnessSwitches = System.getProperties().stringPropertyNames()
-            .findAll { it.startsWith('pit.') || it.startsWith('sweep.') }
-    harnessSwitches.each { systemProperty it, System.getProperty(it) }
-
-    // MUST: 접두사 전달은 **오타를 안 막는다.** `-Dpit.reheck=…`는 워커까지 전달되지만 읽는
-    // 코드가 없어 조용히 기본 동작이 된다 — 없애려던 실패와 같은 모양이다. 그래서 아는 이름이
-    // 아니면 빌드를 세운다. 이 집합은 **전달의 근거가 아니라 오타의 펜스**다.
-    // MUST: **읽는 코드가 생긴 뒤에** 이름을 더한다. 미리 넣어 두면 그 스위치가 펜스를
-    // 통과하면서 조용히 무시되는데, 그것이 이 펜스가 없애려는 바로 그 모양이다 —
-    // 실제로 `sweep.maxLag`를 읽는 코드 없이 먼저 넣었다가 검증에서 잡혔다.
-    def knownSwitches = ['pit.from', 'pit.to', 'pit.days', 'pit.dryRun', 'pit.recheck',
-                         'sweep.maxLag', 'sweep.maxRecomputeDates',
-                         'sweep.from', 'sweep.to', 'sweep.targets', 'sweep.tickers',
-                         'sweep.screens'] as Set
-    def unknown = harnessSwitches - knownSwitches
-    if (unknown) {
-        throw new GradleException(
-                "모르는 하네스 스위치다: ${unknown.sort()} — 오타이거나 아직 안 읽히는 이름이다. " +
-                "아는 것: ${knownSwitches.sort()}")
-    }
-
-    // 저장소 경로. `PitStore.fromEnvironment()`가 읽는 환경변수가 셸에서 데몬을 거쳐
-    // 워커까지 닿는지 재보지 않았으므로, 있으면 명시적으로 넘긴다 — `-D`가 데몬에만 붙는
-    // 함정을 이미 한 번 겪은 자리라 같은 모양을 되풀이하지 않는다.
-    if (System.getenv('PIT_STORE_DIR') != null) {
-        environment 'PIT_STORE_DIR', System.getenv('PIT_STORE_DIR')
-    }
+    wireHarnessSwitches(delegate, pitSwitches + sweepSwitches)
     // 캐시된 성공을 재사용하면 적재 뒤에도 옛 결과를 보게 된다.
     outputs.upToDateWhen { false }
 }
