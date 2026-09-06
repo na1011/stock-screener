@@ -238,7 +238,13 @@ class PitLoadTest {
                         PitStore.carryOver(mf, "ip:", population, inPlaceDigests);
                 store.writeDate(currency, asOf, values, new PitStore.Stamp(
                         population.size(), declared, mergedFps, sharedFp, mergedDigests,
-                        calculatorFp, startedAt, failed));
+                        calculatorFp,
+                        // MUST: 의심 종목만 쟀으면 나머지 `fp:`는 **옛 식**이다 — 그때 현행
+                        // 판을 찍으면 그 매니페스트가 「쉬는 상태」로 위장한다. 전량을 쟀을
+                        // 때만 찍고, 아니면 이어받는다.
+                        verdict.only() == null ? PitFingerprint.stockFormulaFp()
+                                : mf.get("fpFormula"),
+                        PitFingerprint.sharedFormulaFp(), startedAt, failed));
                 done++;
                 report(done, skipped, plannedDates, runBegan, currency, asOf, failed.size(),
                         partial ? "갈아 끼움" : "다시 만듦");
@@ -513,6 +519,11 @@ class PitLoadTest {
         // 그 실행 하나가 512날짜의 종목별 해시를 통째로 지우고 다음 스윕이 전량 재확인이 된다.
         return new PitStore.Stamp(Integer.parseInt(mf.getOrDefault("attempted", "0")), codes, fps,
                 indexFp, PitStore.prefixed(mf, "ip:"), calculatorFp,
+                // MUST: 식의 판을 **이어받는다.** 이 메서드는 계산기 판·지수 지문만 바꾸고
+                // `fp:`는 손대지 않으므로, 여기서 현행 판을 찍으면 **옛 식으로 찍힌
+                // 매니페스트가 「쉬는 상태」로 위장**한다. 현행 판은 전 종목을 현행 식으로
+                // 다시 잰 자리에서만 찍는다.
+                mf.get("fpFormula"), mf.get("indexFpFormula"),
                 Instant.parse(mf.get("writtenAt")), failedOf(mf));
     }
 
@@ -534,62 +545,150 @@ class PitLoadTest {
                                            Map<String, List<LocalDate>> plan) throws Exception {
         System.out.println("\n-- 지수 지문 재찍기 (값은 안 건드린다) --");
         String calculatorFp = PitFingerprint.forCalculators(registry);
+        String current = PitFingerprint.sharedFormulaFp();
+        int visited = 0;
+        int atRest = 0;
         int restamped = 0;
         List<String> moved = new ArrayList<>();
+        List<String> unknown = new ArrayList<>();
         for (Map.Entry<String, List<LocalDate>> e : plan.entrySet()) {
             String currency = e.getKey();
             for (LocalDate asOf : store.storedDates(currency)) {
+                visited++;
                 Map<String, String> mf = store.readManifest(currency, asOf);
-                String stored = mf.get("indexFp");
-                if (!fingerprint.forSharedBeforeNarrowing(asOf).equals(stored)) {
-                    moved.add(currency + " " + asOf);
+                if (current.equals(mf.get("indexFpFormula"))) {
+                    atRest++;
                     continue;
                 }
-                String narrowed = fingerprint.forShared(currency, asOf);
-                if (narrowed.equals(stored)) {
+                if (!PitFingerprint.sharedFormulaFpBeforeNarrowing()
+                        .equals(mf.get("indexFpFormula"))) {
+                    unknown.add(currency + " " + asOf);
+                    continue;
+                }
+                String stored = mf.get("indexFp");
+                if (!fingerprint.forSharedBeforeNarrowing(currency, asOf).equals(stored)) {
+                    moved.add(currency + " " + asOf);
                     continue;
                 }
                 store.rewriteManifest(currency, asOf,
                         Integer.parseInt(mf.getOrDefault("stocks", "0")),
-                        stampFrom(mf, calculatorFp, narrowed));
+                        withSharedFormula(
+                                stampFrom(mf, calculatorFp, fingerprint.forShared(currency, asOf))));
                 restamped++;
             }
         }
-        System.out.printf("   다시 찍은 매니페스트 %d · 지수가 실제로 움직인 날짜 %d%n",
-                restamped, moved.size());
+        refuseUnknownFormula(unknown, "지수");
+        report(visited, atRest, restamped, moved, "지수");
+    }
+
+    /**
+     * <b>저장본이 내가 모르는 식으로 찍혔으면 마이그레이션을 거절한다.</b>
+     *
+     * <p>저장본의 판은 <b>현행 식</b>(=할 일 없음)이거나 <b>기준선의 식</b>(=옮길 수 있음)
+     * 둘 중 하나여야 한다. 아니면 좁히면서 <b>옛 식을 {@code …BeforeNarrowing}으로 안 옮긴
+     * 것</b>이고, 그대로 밀면 전 날짜가 「원자료가 움직였다」로 나와 <b>사람이 원인을 데이터에서
+     * 찾는다.</b> 실제로 이 저장소에서 두 번 그랬다.
+     */
+    private static void refuseUnknownFormula(List<String> unknown, String axis) {
+        if (unknown.isEmpty()) {
+            return;
+        }
+        throw new IllegalStateException(axis + " 지문: 저장본이 현행 식도 기준선의 식도 아닌 "
+                + "판으로 찍혀 있다(" + unknown.size() + "날짜, 예: "
+                + unknown.stream().limit(3).toList() + "). 좁힐 때 옛 식을 "
+                + "…BeforeNarrowing으로 옮겼는지 확인하라 — 안 옮기면 이 레버가 죽고, "
+                + "죽은 것이 「전부 움직였다」로만 보인다");
+    }
+
+    /** 지수 지문을 현행 식으로 다시 쟀을 때만 그 판을 찍는다. */
+    private static PitStore.Stamp withSharedFormula(PitStore.Stamp base) {
+        return new PitStore.Stamp(base.attempted(), base.codes(), base.fingerprints(),
+                base.indexFingerprint(), base.inPlaceDigests(), base.calculatorFp(),
+                base.fpFormula(), PitFingerprint.sharedFormulaFp(), base.writtenAt(),
+                base.failed());
+    }
+
+    /**
+     * 재찍기의 결과를 한 자리에서 찍고 판정한다. 두 레버가 같은 판정을 써야 하고, 갈리면
+     * 한쪽만 조용해진다.
+     *
+     * <p><b>MUST: 「본 날짜 수」로 판정한다.</b> 옛 판은 {@code restamped + moved}가 양수인지
+     * 물었는데, 그것은 <b>「봤는데 할 일이 없었다」와 「아무것도 안 봤다」를 뭉친다.</b>
+     * {@code plan}이 비면 루프가 한 번도 안 돌고 "0 · 0"을 찍은 채 <b>초록으로 끝나</b>
+     * 사람이 마이그레이션이 돈 줄 안다 — 그것이 이 단언이 원래 막던 사고다.
+     * {@code plan}은 타깃이 없거나 워밍업이 안 차면 그 통화를 통째로 뺀다.
+     *
+     * <p><b>쉬는 상태는 성공이다.</b> 저장본의 식의 판이 현행과 같으면 재찍을 것이 없는 것이
+     * <b>정상</b>이다 — 마이그레이션이 끝난 뒤의 항구적 상태이고, 그것을 실패로 신고하면
+     * 다음 세션이 멀쩡한 저장본을 고치러 간다.
+     */
+    private static void report(int visited, int atRest, int restamped, List<String> moved,
+                               String axis) {
+        System.out.printf("   본 날짜 %d · 이미 현행 판 %d · 다시 찍음 %d · %s가 움직인 날짜 %d%n",
+                visited, atRest, restamped, axis, moved.size());
         moved.stream().limit(10).forEach(m -> System.out.println("   움직임: " + m));
-        assertThat(restamped + moved.size())
-                .as("저장된 날짜가 없다 — 재찍을 것이 없다").isPositive();
+        assertThat(visited)
+                .as("저장된 날짜를 하나도 안 봤다 — plan이 비었다(타깃·워밍업을 확인하라). "
+                        + "「재찍을 것이 없었다」와 구별해야 한다")
+                .isPositive();
         if (!moved.isEmpty()) {
-            System.out.println("   → 그 날짜들은 값을 다시 만들어야 한다. 적재를 돌린다");
+            System.out.println("   → 그 날짜들은 원자료가 움직였다. 적재·스윕으로 먼저 가라앉힌다");
         }
     }
 
     /**
      * <b>종목 지문 식이 바뀌었을 때</b> 값을 다시 만들지 않고 매니페스트만 다시 찍는다.
      *
-     * <p>{@link #restampSharedFingerprints}와 같은 <b>부분집합 논증</b>이다 — 좁힌 입력이
-     * 옛 입력의 진부분집합이므로, <b>옛 식이 저장된 값과 같으면 좁은 입력도 반드시 안 움직였다.</b>
+     * <p><b>부분집합 논증</b>이다 — 좁힌 입력이 같은 행의 재인코딩이므로, <b>옛 식이 저장된
+     * 값과 같으면 원행이 안 바뀌었고 따라서 좁은 식도 안 움직였다.</b> 이 마이그레이션이
+     * 없으면 좁히기가 곧 <b>전량 재적재 3시간 41분</b>이다.
      *
-     * <p>이 마이그레이션이 없으면 좁히기가 곧 <b>전량 재적재 3시간 40분</b>이다 —
-     * {@code freshnessOf}가 전 종목을 낡음으로 읽기 때문이다.
+     * <p><b>「할 일 없음」을 식의 판으로 판정한다 — 일치 수로는 원리적으로 못 가른다.</b>
+     * 종목 지문의 {@code corporate_action}·{@code stock}·{@code universe_membership} 성분에는
+     * <b>날짜 절이 없어</b> 한 종목의 한 행만 바뀌어도 <b>전 날짜</b>의 전량 일치가 깨진다.
+     * 실측으로 그런 날이 최근 31일 중 <b>14일</b>이고, 그때 일치가 349/350이다 — 기준선이
+     * 소진됐을 때의 275/350과 <b>같은 「전량 일치 아님」</b>이라 수로 안 갈린다.
+     * {@code fpFormula}가 그것을 <b>등호</b>로 바꾼다.
+     *
+     * <p><b>날짜를 통째로 옮기거나 아예 안 옮긴다.</b> 한 종목이라도 옛 식과 안 맞으면 그
+     * 날짜를 건너뛰고 <b>막는 종목을 이름으로</b> 신고한다 — 일부만 옮기면 한 매니페스트에
+     * 두 식의 해시가 섞이고, 그러면 {@code fpFormula}가 그 매니페스트를 설명하지 못한다.
+     * 그 대가는 <b>한 종목의 움직임이 그 날짜의 마이그레이션을 막는 것</b>이고, 처방은
+     * 적재·스윕으로 먼저 가라앉힌 뒤 다시 돌리는 것이다.
      */
     private void restampStockFingerprints(PitStore store, PitFingerprint fingerprint,
                                           Map<String, List<LocalDate>> plan) throws Exception {
         System.out.println("\n-- 종목 지문 재찍기 (값은 안 건드린다) --");
         String calculatorFp = PitFingerprint.forCalculators(registry);
+        String current = PitFingerprint.stockFormulaFp();
+        int visited = 0;
+        int atRest = 0;
         int restamped = 0;
         List<String> moved = new ArrayList<>();
+        List<String> unknown = new ArrayList<>();
         for (Map.Entry<String, List<LocalDate>> e : plan.entrySet()) {
             String currency = e.getKey();
             for (LocalDate asOf : store.storedDates(currency)) {
+                visited++;
                 Map<String, String> mf = store.readManifest(currency, asOf);
-                Map<Long, String> wide =
-                        fingerprint.forCurrencyBeforeNarrowing(currency, asOf);
-                boolean same = wide.entrySet().stream()
-                        .allMatch(x -> x.getValue().equals(mf.get("fp:" + x.getKey())));
-                if (!same) {
-                    moved.add(currency + " " + asOf);
+                if (current.equals(mf.get("fpFormula"))) {
+                    atRest++;
+                    continue;
+                }
+                if (!PitFingerprint.stockFormulaFpBeforeNarrowing().equals(mf.get("fpFormula"))) {
+                    unknown.add(currency + " " + asOf);
+                    continue;
+                }
+                Map<Long, String> baseline = fingerprint.forCurrencyBeforeNarrowing(currency, asOf);
+                Set<Long> blocking = new java.util.TreeSet<>();
+                for (Map.Entry<Long, String> x : baseline.entrySet()) {
+                    if (!x.getValue().equals(mf.get("fp:" + x.getKey()))) {
+                        blocking.add(x.getKey());
+                    }
+                }
+                if (!blocking.isEmpty()) {
+                    moved.add(currency + " " + asOf + " 종목 " + blocking.size() + "개 "
+                            + blocking.stream().limit(5).toList());
                     continue;
                 }
                 PitStore.Stamp base = stampFrom(mf, calculatorFp, mf.get("indexFp"));
@@ -597,15 +696,15 @@ class PitLoadTest {
                         Integer.parseInt(mf.getOrDefault("stocks", "0")),
                         new PitStore.Stamp(base.attempted(), base.codes(),
                                 fingerprint.forCurrency(currency, asOf), base.indexFingerprint(),
-                                base.inPlaceDigests(), base.calculatorFp(), base.writtenAt(),
-                                base.failed()));
+                                base.inPlaceDigests(), base.calculatorFp(),
+                                // 전 종목을 현행 식으로 다시 쟀다 — 여기가 현행 판을 찍는 자리다.
+                                PitFingerprint.stockFormulaFp(), base.indexFpFormula(),
+                                base.writtenAt(), base.failed()));
                 restamped++;
             }
         }
-        System.out.printf("   다시 찍은 매니페스트 %d · 원자료가 실제로 움직인 날짜 %d%n",
-                restamped, moved.size());
-        moved.stream().limit(10).forEach(m -> System.out.println("   움직임: " + m));
-        assertThat(restamped + moved.size()).as("저장된 날짜가 없다").isPositive();
+        refuseUnknownFormula(unknown, "종목");
+        report(visited, atRest, restamped, moved, "원자료");
     }
 
     /** 매니페스트에 적힌 실패 종목. 없으면 빈 집합이다. */

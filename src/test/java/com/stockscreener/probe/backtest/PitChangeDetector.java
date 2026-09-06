@@ -162,8 +162,21 @@ final class PitChangeDetector {
      * 1단계가 의심을 올리고 2단계가 내용으로 확정한 뒤 {@code restamp}이 새 해시를 찍는다.
      * <b>한 번의 스윕이 스스로 낫는다.</b>
      *
-     * <p>제자리 수정을 하는 표만 본다. 실측 종목별 <b>0.69~0.73초</b>(전역 식 0.76~0.86초보다
-     * 싸다 — 표를 통째로 조인하지 않고 종목 인덱스를 타기 때문이다).
+     * <p><b>시세·기업행위는 건수만 본다.</b> 그 둘은 1단계가 {@code updated_at}으로 훑으므로
+     * 삽입·수정은 이미 잡히는데 <b>삭제만 못 본다</b> — 시각은 사라진 행을 못 말한다. 건수를
+     * {@code created_at <= since}로 자르면 <b>일상 적재에 안 움직이고 삭제에만 준다</b>:
+     * {@code PriceWriter}의 UPSERT는 {@code DO UPDATE SET}에 {@code created_at}이 없고
+     * {@code AdjustmentRecalculator}는 {@code updated_at}만 손대며, 기업행위도 INSERT 1 ·
+     * UPDATE 5가 전부 {@code updated_at}만 건드린다(전수 확인). 실측: 최근 24시간에 갱신된
+     * 2,115행 중 <b>472행이 옛 {@code created_at}</b>을 그대로 들고 있다.
+     *
+     * <p>지금 그 삭제가 <b>운영 코드에 한 번도 없었고</b>({@code src/main}에 0건, `git log -S`로
+     * 저장소 전 이력 0건) 지문 대상 표로 오는 FK <b>14개가 전부 {@code NO ACTION}</b>이라 부모
+     * 삭제로도 못 사라진다. <b>그래도 여기 넣는 이유는 그 사실이 보장이 아니라 우연이기
+     * 때문이다</b> — 이 저장소는 다른 표에 보존 삭제를 쓴다({@code IndicatorRetentionPolicy} 등).
+     *
+     * <p>제자리 수정을 하는 표만 본다. 실측 종목별 <b>0.93초</b>(건수 둘을 넣기 전 0.71~0.75초,
+     * 옛 전역 식 0.76~0.86초). 스윕당 한 번이다.
      */
     Map<Long, String> inPlaceDigests(Instant since) {
         Timestamp t = Timestamp.from(since);
@@ -171,7 +184,7 @@ final class PitChangeDetector {
         jdbcTemplate.query(IN_PLACE_DIGEST_SQL,
                 rs -> {
                     out.put(rs.getLong(1), rs.getString(2));
-                }, t, t);
+                }, t, t, t, t);
         return out;
     }
 
@@ -209,7 +222,11 @@ final class PitChangeDetector {
               coalesce((SELECT string_agg(m.universe_code || ':'
                                           || coalesce(m.effective_to::text, ''),
                                           ',' ORDER BY m.universe_code)
-                        FROM universe_membership m WHERE m.stock_id = pop.id), '')
+                        FROM universe_membership m WHERE m.stock_id = pop.id), ''),
+              (SELECT count(*) FROM price_daily p
+                WHERE p.stock_id = pop.id AND p.created_at <= ?),
+              (SELECT count(*) FROM corporate_action ca
+                WHERE ca.stock_id = pop.id AND ca.created_at <= ?)
             ))
             FROM pop
             ORDER BY pop.id

@@ -100,7 +100,8 @@ class PitStoreResumeProbeTest {
 
     private static PitStore.Stamp stamp(Map<Long, String> fp, Map<Long, String> ip,
                                         Set<Long> failed) {
-        return new PitStore.Stamp(350, CODES, fp, IDX, ip, "calc-1", AT, failed);
+        return new PitStore.Stamp(350, CODES, fp, IDX, ip, "calc-1", "fp-formula-1",
+                "idx-formula-1", AT, failed);
     }
 
     /** 종목별 제자리-수정 해시. 지문과 축이 달라 같은 값이어도 무방하다. */

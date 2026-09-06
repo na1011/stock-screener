@@ -84,6 +84,11 @@ final class PitStore {
      *                         <b>제자리 수정</b>을 싸게 알아채는 근거다({@link PitChangeDetector}).
      *                         종목별인 이유는 저쪽 javadoc에 있다 — 전역 하나였을 때는 모집단이
      *                         바뀌기만 해도 전 종목이 의심이 됐다
+     * @param fpFormula        <b>종목 지문 식의 판</b>. 값이 아니라 <b>재는 방법</b>이다 —
+     *                         이것이 없으면 「마이그레이션이 끝난 쉬는 상태」와 「기준선이
+     *                         소진된 상태」를 구별할 수 없다. 둘 다 「전량 일치 아님」으로
+     *                         보이기 때문이다(실측: 소진 275/350, 기업행위 승인 하나 349/350)
+     * @param indexFpFormula   공유 지문 식의 판. 같은 이유다
      * @param calculatorFp     값을 만든 계산기의 판. DB가 하나도 안 움직여도 공식이 바뀌면
      *                         저장본은 낡는데, 이것이 없으면 그것을 알 방법이 아예 없다
      * @param writtenAt        <b>적재 실행이 시작한</b> 시각. 날짜마다 찍지 않는다 — 읽는 쪽은
@@ -94,6 +99,7 @@ final class PitStore {
      */
     record Stamp(int attempted, java.util.Set<String> codes, Map<Long, String> fingerprints,
                  String indexFingerprint, Map<Long, String> inPlaceDigests, String calculatorFp,
+                 String fpFormula, String indexFpFormula,
                  Instant writtenAt, java.util.Set<Long> failed) {
     }
 
@@ -223,6 +229,8 @@ final class PitStore {
                 .append('\n');
         sb.append("indexFp=").append(stamp.indexFingerprint()).append('\n');
         sb.append("calculatorFp=").append(stamp.calculatorFp()).append('\n');
+        sb.append("fpFormula=").append(stamp.fpFormula()).append('\n');
+        sb.append("indexFpFormula=").append(stamp.indexFpFormula()).append('\n');
         sb.append("writtenAt=").append(stamp.writtenAt()).append('\n');
         sb.append("complete=").append(stamp.failed().isEmpty()).append('\n');
         for (Map.Entry<Long, String> e : new java.util.TreeMap<>(stamp.fingerprints()).entrySet()) {

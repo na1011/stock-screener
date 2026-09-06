@@ -78,7 +78,7 @@ final class PitFingerprint {
      * <b>마이그레이션이 아니라 전량 재적재</b>가 된다.
      */
     private static final String CORPORATE_ACTION_COLUMNS_BEFORE_NARROWING =
-            "(to_jsonb(ca.*) - 'created_at' - 'updated_at')::text";
+            CORPORATE_ACTION_COLUMNS;
 
     /**
      * 종목 지문 SQL. {@code %1$s}=시세 컬럼식 · {@code %2$s}=stock 식 · {@code %3$s}=종목 한정 ·
@@ -127,6 +127,51 @@ final class PitFingerprint {
                             FROM market mk WHERE mk.currency_code = ?), '')
                 ))
             """;
+
+    /**
+     * <b>지문 식의 판.</b> {@code calculatorFp}와 같은 꼴이고 같은 이유다 — DB가 하나도 안
+     * 움직여도 <b>식이 바뀌면 저장본은 낡는다.</b>
+     *
+     * <p><b>이것이 없으면 「쉬는 상태」와 「기준선이 소진된 상태」를 구별할 수 없다.</b> 둘 다
+     * 「전량 일치 아님」으로 보이기 때문이다 — 실측: 소진이면 275/350·909/1000, <b>기업행위
+     * 승인 하나면 349/350</b>이고, 그런 날이 최근 31일 중 <b>14일</b>이다(종목 지문의
+     * {@code corporate_action}·{@code stock}·{@code universe_membership} 성분에 날짜 절이 없어
+     * 한 행이 바뀌면 <b>전 날짜</b>의 전량 일치가 깨진다). 일치 수로 가르는 것은 원리적으로
+     * 안 된다. <b>등호로 판정한다.</b>
+     */
+    static String stockFormulaFp() {
+        return md5(stockFingerprintSql());
+    }
+
+    /** 공유 지문 식의 판. 위와 같은 이유다. */
+    static String sharedFormulaFp() {
+        return md5(FOR_SHARED_SQL);
+    }
+
+    /** 저장본을 찍은 <b>직전 판</b>의 식. 좁히기 마이그레이션이 이것과 저장값을 대조한다. */
+    static String sharedFormulaFpBeforeNarrowing() {
+        return sharedFormulaFp();
+    }
+
+    /** 저장본을 찍은 <b>직전 판</b>의 식. 좁히기 마이그레이션이 이것과 저장값을 대조한다. */
+    static String stockFormulaFpBeforeNarrowing() {
+        return md5(FOR_CURRENCY_SQL.formatted("<price>", STOCK_COLUMNS, "",
+                CORPORATE_ACTION_COLUMNS_BEFORE_NARROWING));
+    }
+
+    private static String md5(String text) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("MD5")
+                    .digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("MD5가 없다", e);
+        }
+    }
 
     private final JdbcTemplate jdbcTemplate;
     private final String priceExpression;
@@ -255,18 +300,14 @@ final class PitFingerprint {
      * <p>실측: 512개 매니페스트 전수 대조에 <b>4.0초 · 불일치 0</b>.
      */
     @Deprecated
-    String forSharedBeforeNarrowing(LocalDate asOf) {
-        return jdbcTemplate.queryForObject("""
-                SELECT md5(concat_ws('|',
-                  coalesce((SELECT md5(string_agg((to_jsonb(i.*) - 'created_at' - 'updated_at')::text,
-                                                 ',' ORDER BY i.index_code, i.trade_date))
-                            FROM market_index_daily i WHERE i.trade_date <= ?), ''),
-                  coalesce((SELECT md5(string_agg((to_jsonb(m.*) - 'created_at')::text,
-                                                 ',' ORDER BY m.code)) FROM market m), ''),
-                  coalesce((SELECT md5(string_agg((to_jsonb(u.*) - 'created_at')::text,
-                                                 ',' ORDER BY u.code)) FROM universe u), '')
-                ))
-                """, String.class, asOf);
+    /**
+     * <b>저장본을 찍은 식으로 낸</b> 공유 지문. 마이그레이션에만 쓴다.
+     *
+     * <p><b>MUST: 좁힐 때 옛 식을 여기로 옮긴다.</b> 지금은 현행 식과 같다 — 마이그레이션이
+     * 끝난 <b>쉬는 상태</b>이고, 그 상태를 {@code sharedFormulaFp()}가 등호로 증명한다.
+     */
+    String forSharedBeforeNarrowing(String currencyCode, LocalDate asOf) {
+        return forShared(currencyCode, asOf);
     }
 
     /**

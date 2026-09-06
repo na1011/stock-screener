@@ -33,6 +33,8 @@ class PitDigestScopeTest {
             "g.stock_id = pop.id",
             "s.id = pop.id",
             "m.stock_id = pop.id",
+            "p.stock_id = pop.id",
+            "ca.stock_id = pop.id",
     };
 
     /**
@@ -48,7 +50,8 @@ class PitDigestScopeTest {
     void everyComponentIsBoundToOneStock() {
         String sql = PitChangeDetector.inPlaceDigestSql();
         for (String table : new String[]{
-                "financial_statement", "governance_fact", "stock", "universe_membership"}) {
+                "financial_statement", "governance_fact", "stock", "universe_membership",
+                "price_daily", "corporate_action"}) {
             assertThat(normalized(sql))
                     .as("제자리 수정을 하는 표가 해시에서 빠졌다 — 시각 훑기도 그 축을 못 보므로 "
                             + "조용히 낡은 값이 표가 된다: " + table)

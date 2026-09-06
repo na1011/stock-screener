@@ -145,6 +145,72 @@ class PitColumnCoverageTest {
                 .isEqualTo(PINNED_ZONE);
     }
 
+    /**
+     * <b>종목별 해시가 「그 종목의 행 집합이 달라진 것」을 실제로 잡는가.</b>
+     *
+     * <p><b>왜 이 형태인가.</b> 이 해시에 시세·기업행위의 <b>건수</b>를 넣은 이유는 그 둘의
+     * <b>삭제</b>가 1단계 시각 훑기에 안 잡히기 때문이다 — 시각은 사라진 행을 못 말한다.
+     * 그런데 하네스가 운영 DB에 <b>읽기 전용</b>으로 붙어(SQLSTATE 25006) 삭제를 재현할 수
+     * 없다.
+     *
+     * <p>그래서 <b>같은 것을 반대에서 잰다.</b> 기준 시각을 뒤로 옮기면 그 사이에 생긴 행이
+     * 집합에 <b>들어오고</b>, 그것은 삭제가 만드는 변화와 <b>같은 축</b>이다(행 집합의 크기).
+     * 두 시각으로 해시를 내고, <b>달라진 종목 집합</b>이 <b>그 창에 행이 생긴 종목 집합</b>과
+     * 같은지 본다.
+     *
+     * <p><b>MUST: 「전 종목이 의심이 되나」로 재지 않는다.</b> 배치가 도는 날은 그것이 언제나
+     * 참이다 — 실측으로 {@code price_daily.updated_at}이 하루에 1,350·1,348·999종목을 올린다.
+     * 그 시험은 항등식이라 아무것도 반증하지 못한다.
+     */
+    @Test
+    @DisplayName("기준 시각 사이에 행이 생긴 종목만 해시가 움직인다")
+    void digestTracksTheRowSetOfEachStock() {
+        java.util.List<java.time.Instant> bounds = jdbcTemplate.queryForList(
+                "SELECT max(created_at) FROM price_daily WHERE created_at < "
+                        + "(SELECT max(created_at) FROM price_daily) "
+                        + "UNION ALL SELECT max(created_at) FROM price_daily",
+                java.time.Instant.class);
+        java.time.Instant before = bounds.get(0);
+        java.time.Instant after = bounds.get(1);
+
+        PitChangeDetector detector = new PitChangeDetector(jdbcTemplate);
+        Map<Long, String> a = detector.inPlaceDigests(before);
+        Map<Long, String> b = detector.inPlaceDigests(after);
+
+        Set<Long> movedHashes = new TreeSet<>();
+        a.forEach((id, h) -> {
+            if (!h.equals(b.get(id))) {
+                movedHashes.add(id);
+            }
+        });
+        Set<Long> grewRows = new TreeSet<>(jdbcTemplate.queryForList("""
+                SELECT stock_id FROM price_daily WHERE created_at > ? AND created_at <= ?
+                UNION SELECT stock_id FROM corporate_action WHERE created_at > ? AND created_at <= ?
+                UNION SELECT stock_id FROM financial_statement WHERE created_at > ? AND created_at <= ?
+                UNION SELECT stock_id FROM governance_fact WHERE created_at > ? AND created_at <= ?
+                """, Long.class, java.sql.Timestamp.from(before), java.sql.Timestamp.from(after),
+                java.sql.Timestamp.from(before), java.sql.Timestamp.from(after),
+                java.sql.Timestamp.from(before), java.sql.Timestamp.from(after),
+                java.sql.Timestamp.from(before), java.sql.Timestamp.from(after)));
+        grewRows.retainAll(a.keySet());
+
+        System.out.printf("   창 %s ~ %s · 해시가 움직인 종목 %d · 행이 생긴 종목 %d%n",
+                before, after, movedHashes.size(), grewRows.size());
+
+        assertThat(grewRows)
+                .as("창에 행이 생긴 종목이 없다 — 이 시험은 그때 아무것도 안 잰다. "
+                        + "창을 넓히거나 배치가 돈 뒤에 돌려라")
+                .isNotEmpty();
+        assertThat(movedHashes)
+                .as("행 집합이 달라졌는데 해시가 안 움직인 종목이 있다 — 그 표의 성분이 "
+                        + "해시에서 빠졌고, 삭제가 영영 안 잡힌다")
+                .containsAll(grewRows);
+        assertThat(grewRows)
+                .as("행이 안 생겼는데 해시가 움직인 종목이 있다 — 기준 시각에 안 걸리는 "
+                        + "성분이 들어 있고, 그러면 매일 전 종목이 의심이 된다")
+                .containsAll(movedHashes);
+    }
+
     /** {@code build.gradle}의 {@code wireHarnessSwitches}가 박는 값. 갈리면 여기가 먼저 운다. */
     private static final String PINNED_ZONE = "Asia/Seoul";
 
