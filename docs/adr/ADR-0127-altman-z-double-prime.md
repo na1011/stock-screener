@@ -56,19 +56,30 @@ Wikipedia "Altman Z-score" · wallstreetprep). 같은 출처가 이 모델을 **
 ## 검증
 
 ```premise 알트만 수정모델이 원본보다 좁지 않다
+# 펜스 본문은 bash로 실행된다 — 여기 주석은 `#`다. `--`로 적으면 bash가 옵션으로 읽어
+# rc=2로 죽고, 그 전제는 영영 무판정이 된다(실측).
+#
+# 모집단이 활성 유니버스로 좁혀져 있다. 유니버스 밖 종목은 이탈 前 일자의 ALTMAN_Z를
+# 그대로 들고 있는데(ADR-0080) 지표 계산은 편입 종목만 도므로, 넓게 세면 리밸런싱이
+# 종목을 뺄 때마다 이 펜스가 운다. 실측으로 2026-09-06에 그 형태로 8종목이 잡혔고
+# 전부 전날 리밸런싱에서 빠진 종목이었다.
 psql -d stock_screener -At -c "WITH d AS (
   SELECT max(trade_date) t FROM indicator_trade_date),
-iv AS (SELECT stock_id, indicator_code FROM indicator_value, d
-       WHERE trade_date = d.t AND indicator_code IN ('ALTMAN_Z','ALTMAN_Z_DOUBLE_PRIME'))
+member AS (SELECT DISTINCT um.stock_id FROM universe_membership um
+  JOIN universe u ON u.code = um.universe_code AND u.is_active
+  WHERE um.effective_to IS NULL),
+iv AS (SELECT iv.stock_id, iv.indicator_code FROM indicator_value iv
+       CROSS JOIN d JOIN member m ON m.stock_id = iv.stock_id
+       WHERE iv.trade_date = d.t AND iv.indicator_code IN ('ALTMAN_Z','ALTMAN_Z_DOUBLE_PRIME'))
 SELECT CASE
   WHEN (SELECT count(*) FROM iv WHERE indicator_code='ALTMAN_Z') = 0
-    THEN '잴 것이 없었다 — 최신 거래일에 ALTMAN_Z가 한 행도 없다'
+    THEN '잴 것이 없었다 - 최신 거래일에 편입 종목의 ALTMAN_Z가 한 행도 없다'
   WHEN (SELECT count(*) FROM iv WHERE indicator_code='ALTMAN_Z_DOUBLE_PRIME') = 0
-    THEN '잴 것이 없었다 — 최신 거래일에 ALTMAN_Z_DOUBLE_PRIME이 한 행도 없다'
-  WHEN count(*) = 0 THEN 'OK 원본이 내는 종목을 수정모델이 전부 낸다 ('
-    || (SELECT count(*) FROM iv WHERE indicator_code='ALTMAN_Z') || ' → '
+    THEN '잴 것이 없었다 - 최신 거래일에 편입 종목의 ALTMAN_Z_DOUBLE_PRIME이 한 행도 없다'
+  WHEN count(*) = 0 THEN 'OK 원본이 내는 편입 종목을 수정모델이 전부 낸다 ('
+    || (SELECT count(*) FROM iv WHERE indicator_code='ALTMAN_Z') || ' -> '
     || (SELECT count(*) FROM iv WHERE indicator_code='ALTMAN_Z_DOUBLE_PRIME') || ')'
-  ELSE '수정모델만 값이 없는 종목이 ' || count(*) || '개다 — 장부가로 바꾼 판단의 전제가 깨졌다'
+  ELSE '수정모델만 값이 없는 편입 종목이 ' || count(*) || '개다 - 장부가로 바꾼 판단의 전제가 깨졌다'
   END
 FROM (SELECT stock_id FROM iv WHERE indicator_code='ALTMAN_Z'
       EXCEPT SELECT stock_id FROM iv WHERE indicator_code='ALTMAN_Z_DOUBLE_PRIME') gone"
@@ -102,11 +113,18 @@ FROM (SELECT stock_id FROM iv WHERE indicator_code='ALTMAN_Z'
 
 | 유니버스 | 모집단 | 전 `ALTMAN_Z` | 후 `ALTMAN_Z` | `ALTMAN_Z_DOUBLE_PRIME` |
 |---|---|---|---|---|
-| `KOSPI_TOP200` | 200 | 169 | 169 | **170** |
+| `KOSPI_TOP200` | 200 | 169 | 169 | **169** |
 | `KOSDAQ_TOP150` | 150 | 134 | 134 | **140** |
-| `US_TOP1000` | 1000 | 495 | **510** | **523** |
+| `US_TOP1000` | 1000 | 495 | **510** | **522** |
 
-- **잃는 종목이 0이다.** 지금 원본이 값을 내는 종목 전부가 `total_equity`를 갖고 있다.
+배포·백필 뒤 실제로 잰 값이다. `ALTMAN_Z`의 미국 510은 착수 전 예측과 정확히 맞았고,
+수정모델은 KOSPI·US에서 예측보다 **각각 하나 적다.** 원인은 계산기가 아니라 **최신
+거래일에 시세 봉이 없는 편입 종목**이다 — 착수 전 예측이 재무 조건만 보고 봉 존재를 안
+봤다. 그런 종목이 활성 유니버스에 11개 있고(KOSPI 3 · KOSDAQ 5 · US 3) 그들은 두 알트만
+어느 쪽도 값을 못 낸다. **이 결정이 만든 상태가 아니라 신규 편입 종목의 이력 결손이다.**
+
+- **잃는 종목이 0이다.** 편입 종목 기준 813 → 831이고, 원본이 값을 내는 종목을 수정모델이
+  전부 낸다(위 premise 실측). 지금 원본이 값을 내는 종목 전부가 `total_equity`를 갖고 있다.
 - `ALTMAN_Z`의 미국 +15는 EBIT 유도 경로 몫이고 **기존 값은 하나도 안 바뀐다** — 원시
   `operating_income`이 있으면 그것이 이기므로 새 행만 생긴다. 국내가 0인 것은 DART가 원시
   값을 100% 채우고 유도 재료 여덟을 안 채우기 때문이다.
@@ -115,7 +133,8 @@ FROM (SELECT stock_id FROM iv WHERE indicator_code='ALTMAN_Z'
   코오롱티슈진(`950160`)이 재무상태표가 완비돼 있어도 빠진다. 게이트를 빼고 세면 171·141이
   나오는데 **그 수는 재현되지 않는다.**
 
-**부피**: 약 15만 행(820종목 × 보존창 180거래일). `indicator_value` 2,976만 행 대비 +0.5%다.
+**부피**: 실측 **149,024행**(수정모델 · 보존창 189거래일). 원본도 미국 15종목의 이력만큼
+**2,685행** 늘었다. `indicator_value` 2,976만 행 대비 +0.5%다.
 **부피를 근거로 지표를 지우는 것은 ADR-0077이 실측으로 기각했다** — 미사용 지표 57개가
 저장 부피의 56.1%이고 「안 읽는데 부피를 쓴다」는 잣대는 그 전부에 똑같이 걸린다.
 이 결정이 더하는 0.5%도 같은 잣대 아래 있다.
