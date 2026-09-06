@@ -148,6 +148,45 @@ class PitColumnCoverageTest {
     /** {@code build.gradle}의 {@code wireHarnessSwitches}가 박는 값. 갈리면 여기가 먼저 운다. */
     private static final String PINNED_ZONE = "Asia/Seoul";
 
+    /** 값에 안 닿는 감사 컬럼. 이것만은 되돌리지 않고 빼도 된다. */
+    private static final Set<String> AUDIT_COLUMNS = Set.of("created_at", "updated_at");
+
+    /**
+     * {@code to_jsonb} 성분에서 <b>감사 컬럼이 아닌 것을 빼면 그 값을 다시 넣는가.</b>
+     *
+     * <p><b>왜 이것이 필요해졌는가.</b> 이 검사의 원래 면제 근거는 <i>"{@code to_jsonb}로 만든
+     * 성분은 전 컬럼 − 감사 컬럼이라 ⊇가 깨질 수 없다"</i>였다. 기업행위 성분이 타임존 의존을
+     * 없애려고 {@code - 'applied_at'}을 더하면서 그 근거가 <b>조건부</b>가 됐다 — 빼고 다시
+     * 넣으면 여전히 안전하지만, <b>빼고 안 넣으면 그 컬럼이 지문에서 통째로 사라진다.</b>
+     * 그리고 그것은 값이 아니라 <b>탐지</b>를 잃는 것이라 어떤 시험도 안 붉어진다.
+     *
+     * <p>{@code READ_COLUMNS}로는 못 잡는다 — 그 컬럼 이름들이 {@code to_jsonb(ca.*)} 안에 있어
+     * SQL 텍스트에 안 나타나므로, 목록에 넣으면 <b>거짓으로 붉어진다.</b>
+     */
+    @Test
+    @DisplayName("to_jsonb 성분에서 뺀 컬럼이 감사 컬럼이거나 다시 들어와 있다")
+    void nonAuditColumnsRemovedFromJsonbAreAddedBack() {
+        String sql = PitFingerprint.stockFingerprintSql();
+        java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("-\\s*'([a-z_]+)'").matcher(sql);
+        Set<String> unexplained = new TreeSet<>();
+        while (m.find()) {
+            String column = m.group(1);
+            if (AUDIT_COLUMNS.contains(column)) {
+                continue;
+            }
+            // 뺐으면 다른 형태로라도 다시 나와야 한다(예: `extract(epoch from ca.applied_at)`).
+            if (!java.util.regex.Pattern.compile("\\." + column + "\\b").matcher(sql).find()) {
+                unexplained.add(column);
+            }
+        }
+        System.out.printf("   to_jsonb에서 뺀 비감사 컬럼 중 안 돌아온 것 %d개%n", unexplained.size());
+
+        assertThat(unexplained)
+                .as("지문이 그 컬럼을 통째로 잃었다 — 값은 맞고 탐지만 사라지므로 조용하다")
+                .isEmpty();
+    }
+
     /**
      * SQL이 그 컬럼을 <b>테이블 별칭과 함께</b> 언급하는가.
      *

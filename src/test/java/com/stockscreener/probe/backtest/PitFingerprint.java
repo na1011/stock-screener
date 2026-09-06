@@ -48,11 +48,42 @@ final class PitFingerprint {
             "concat_ws(':', s.id, s.market_code, s.is_active,"
                     + " coalesce(s.industry_group_key, ''), coalesce(s.industry_division_key, ''))";
 
-    /** 좁히기 이전. 마이그레이션에만 쓴다. */
-    private static final String STOCK_COLUMNS_WIDE =
-            "(to_jsonb(s.*) - 'created_at' - 'updated_at')::text";
+    /**
+     * 기업행위 성분. <b>{@code applied_at}을 텍스트로 렌더하지 않는다.</b>
+     *
+     * <p>{@code to_jsonb}는 {@code timestamptz}를 <b>세션 타임존으로</b> 문자열화한다. 그래서
+     * 같은 행이 {@code Asia/Seoul}과 {@code UTC}에서 다른 지문을 냈다 — 실측
+     * <b>KRW 65 · USD 91종목</b>({@code applied_at IS NOT NULL}인 수와 같다). epoch는 그 렌더를
+     * 안 지나므로 <b>타임존에 안 갈린다</b>(실측: 두 통화 모두 차이 0).
+     *
+     * <p><b>신호는 안 잃는다.</b> 값 경로가 읽는 CA 컬럼은 {@code id}·{@code effective_date}·
+     * {@code listing_date}·{@code type}·{@code ratio}(+{@code stock_id}·{@code status})이고
+     * <b>{@code applied_at}을 읽는 SELECT는 운영 코드에 하나도 없다.</b> 게다가
+     * {@code CorporateActionLedger.markApplied}가
+     * {@code SET status=?, applied_at=coalesce(applied_at, now()), updated_at=now()}라
+     * <b>{@code status}·{@code updated_at}과 함께만 움직인다.</b>
+     */
+    private static final String CORPORATE_ACTION_COLUMNS =
+            "(to_jsonb(ca.*) - 'created_at' - 'updated_at' - 'applied_at')::text"
+                    + " || coalesce(extract(epoch from ca.applied_at)::text, '')";
 
-    /** 종목 지문 SQL. {@code %1$s}=시세 컬럼식 · {@code %2$s}=stock 식 · {@code %3$s}=종목 한정. */
+    /**
+     * <b>저장본을 실제로 찍은 식.</b> 마이그레이션의 기준선이고, 그것 말고 다른 뜻은 없다.
+     *
+     * <p><b>MUST: 좁히기를 할 때마다 여기를 「직전 판」으로 갱신한다.</b> 부분집합 논증은
+     * <b>한 번 쓰면 소진된다</b> — {@code stock} 성분을 좁힐 때 이 자리가
+     * {@code to_jsonb(s.*)}였고, 그 마이그레이션이 끝난 뒤로는 저장본이 <b>좁은 식</b>으로
+     * 찍혀 있어 옛 식은 100% 불일치가 됐다(실측 KRW 350/350 · USD 1000/1000). 그 상태로
+     * {@code -Dpit.recheck=fingerprint}를 돌리면 512날짜가 전부 {@code moved}로 나와
+     * <b>마이그레이션이 아니라 전량 재적재</b>가 된다.
+     */
+    private static final String CORPORATE_ACTION_COLUMNS_BEFORE_NARROWING =
+            "(to_jsonb(ca.*) - 'created_at' - 'updated_at')::text";
+
+    /**
+     * 종목 지문 SQL. {@code %1$s}=시세 컬럼식 · {@code %2$s}=stock 식 · {@code %3$s}=종목 한정 ·
+     * {@code %4$s}=기업행위 식.
+     */
     private static final String FOR_CURRENCY_SQL = """
                 SELECT s.id, md5(concat_ws('|',
                   coalesce((SELECT md5(string_agg(%1$s, ',' ORDER BY p.trade_date))
@@ -66,9 +97,7 @@ final class PitFingerprint {
                                                  ',' ORDER BY g.fiscal_year, g.metric_key))
                             FROM governance_fact g
                             WHERE g.stock_id = s.id AND g.published_at <= ?), ''),
-                  coalesce((SELECT md5(string_agg(
-                                (to_jsonb(ca.*) - 'created_at' - 'updated_at')::text,
-                                ',' ORDER BY ca.id))
+                  coalesce((SELECT md5(string_agg(%4$s, ',' ORDER BY ca.id))
                             FROM corporate_action ca WHERE ca.stock_id = s.id), ''),
                   %2$s,
                   coalesce((SELECT string_agg(m.universe_code, ',' ORDER BY m.universe_code)
@@ -129,18 +158,20 @@ final class PitFingerprint {
      */
     Map<Long, String> forCurrency(String currencyCode, LocalDate asOf,
                                   java.util.Collection<Long> only) {
-        return forCurrency(currencyCode, asOf, only, STOCK_COLUMNS);
+        return forCurrency(currencyCode, asOf, only, STOCK_COLUMNS, CORPORATE_ACTION_COLUMNS);
     }
 
     private Map<Long, String> forCurrency(String currencyCode, LocalDate asOf,
-                                          java.util.Collection<Long> only, String stockExpression) {
+                                          java.util.Collection<Long> only, String stockExpression,
+                                          String corporateActionExpression) {
         if (only != null && only.isEmpty()) {
             return Map.of();
         }
         String sql = FOR_CURRENCY_SQL
                 .formatted(priceExpression, stockExpression, only == null ? ""
                 : "AND s.id IN (" + only.stream().map(String::valueOf)
-                        .collect(java.util.stream.Collectors.joining(",")) + ")");
+                        .collect(java.util.stream.Collectors.joining(",")) + ")",
+                corporateActionExpression);
 
         Map<Long, String> out = new LinkedHashMap<>();
         jdbcTemplate.query(sql, rs -> {
@@ -150,12 +181,24 @@ final class PitFingerprint {
     }
 
     /**
-     * <b>좁히기 이전의</b> 종목 지문. 마이그레이션에만 쓴다 — 좁힌 입력이 <b>진부분집합</b>이므로
-     * 이 값이 저장된 것과 같으면 좁은 입력도 반드시 안 움직였다.
+     * <b>저장본을 찍은 식으로 낸</b> 종목 지문. 마이그레이션에만 쓴다 — 좁힌 입력이 같은 행의
+     * <b>재인코딩</b>이므로, 이 값이 저장된 것과 같으면 <b>원행이 안 바뀌었고</b> 따라서 좁은
+     * 식도 반드시 안 움직였다.
+     *
+     * <p><b>MUST: 이 메서드는 「지금 저장본이 무엇으로 찍혔는가」를 따라간다.</b> 새 좁히기를
+     * 넣을 때마다 여기를 직전 판으로 갱신하고, 마이그레이션이 끝나면 <b>다음 좁히기 전까지
+     * 그대로 둔다.</b> 그러지 않으면 옛 식이 저장본과 100% 불일치가 되어 이 레버가 통째로
+     * 죽는다 — 실제로 {@code stock} 좁히기 뒤에 그렇게 돼 있었고, 아무도 그것을 몰랐다.
+     *
+     * <p><b>MUST: 이것을 돌릴 때 타임존이 고정돼 있어야 한다.</b> wide 식이 {@code applied_at}을
+     * 텍스트로 렌더하므로 다른 TZ 세션에서 돌리면 156종목이 안 맞고 <b>512날짜가 전부
+     * {@code moved}</b>가 된다 — 조용히 틀리는 것이 아니라 <b>막히는</b> 쪽이다.
+     * {@code build.gradle}이 포크 JVM을 {@code Asia/Seoul}로 박고
+     * {@code PitColumnCoverageTest}가 그것을 지킨다.
      */
-    @Deprecated
     Map<Long, String> forCurrencyBeforeNarrowing(String currencyCode, LocalDate asOf) {
-        return forCurrency(currencyCode, asOf, null, STOCK_COLUMNS_WIDE);
+        return forCurrency(currencyCode, asOf, null, STOCK_COLUMNS,
+                CORPORATE_ACTION_COLUMNS_BEFORE_NARROWING);
     }
 
     /**
@@ -163,7 +206,8 @@ final class PitFingerprint {
      * 사본을 두면 두 곳이 갈릴 때까지 드러나지 않고, 그때 펜스는 <b>거짓 초록</b>이 된다.
      */
     static String stockFingerprintSql() {
-        return FOR_CURRENCY_SQL.formatted("<price>", STOCK_COLUMNS, "");
+        return FOR_CURRENCY_SQL.formatted("<price>", STOCK_COLUMNS, "",
+                CORPORATE_ACTION_COLUMNS);
     }
 
     static String sharedFingerprintSql() {
