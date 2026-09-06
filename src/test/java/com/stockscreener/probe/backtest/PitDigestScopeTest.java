@@ -35,10 +35,25 @@ class PitDigestScopeTest {
             "m.stock_id = pop.id",
     };
 
+    /**
+     * 성분이 <b>통째로 빠지지 않았는가.</b>
+     *
+     * <p>묶임만 보면 성분 하나를 지운 것을 못 본다 — 그러면 그 표의 제자리 수정이
+     * <b>영영 안 잡히고</b>, 시각 훑기도 못 보는 축이라(`financial_statement`·
+     * {@code governance_fact}에는 {@code updated_at}이 없다) <b>조용히 낡은 값이 표가 된다.</b>
+     * 묶임 술어가 그 표를 이름으로 들고 있으므로 아래 검사가 그것을 함께 지킨다.
+     */
     @Test
     @DisplayName("종목별 해시의 네 성분이 전부 그 종목으로 묶여 있다")
     void everyComponentIsBoundToOneStock() {
         String sql = PitChangeDetector.inPlaceDigestSql();
+        for (String table : new String[]{
+                "financial_statement", "governance_fact", "stock", "universe_membership"}) {
+            assertThat(normalized(sql))
+                    .as("제자리 수정을 하는 표가 해시에서 빠졌다 — 시각 훑기도 그 축을 못 보므로 "
+                            + "조용히 낡은 값이 표가 된다: " + table)
+                    .contains(table);
+        }
         for (String binding : PER_STOCK_BINDINGS) {
             assertThat(normalized(sql))
                     .as("성분이 그 종목으로 안 묶였다 — 모집단이 바뀌기만 해도 전 종목이 "
