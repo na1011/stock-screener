@@ -170,6 +170,11 @@ final class PitChangeDetector {
      * UPDATE 5가 전부 {@code updated_at}만 건드린다(전수 확인). 실측: 최근 24시간에 갱신된
      * 2,115행 중 <b>472행이 옛 {@code created_at}</b>을 그대로 들고 있다.
      *
+     * <p><b>{@code since} 시점에 이미 있던 행의 삭제만 잡는다.</b> 적재 실행은 기준 시각을 한 번
+     * 찍고 그 뒤 몇 시간을 도므로, <b>그 사이에 생겨 값에 실린 뒤 지워진 행</b>은 건수도
+     * {@code updated_at}도 안 움직여 못 본다. {@code PitStore.Stamp.writtenAt}의 「과검출이지
+     * 미검출이 아니다」는 <b>이 축에 한해 예외가 있다.</b> 도달 0건이다(아래).
+     *
      * <p>지금 그 삭제가 <b>운영 코드에 한 번도 없었고</b>({@code src/main}에 0건, `git log -S`로
      * 저장소 전 이력 0건) 지문 대상 표로 오는 FK <b>14개가 전부 {@code NO ACTION}</b>이라 부모
      * 삭제로도 못 사라진다. <b>그래도 여기 넣는 이유는 그 사실이 보장이 아니라 우연이기

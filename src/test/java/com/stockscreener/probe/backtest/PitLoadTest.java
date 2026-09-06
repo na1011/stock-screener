@@ -242,7 +242,7 @@ class PitLoadTest {
                         // MUST: 의심 종목만 쟀으면 나머지 `fp:`는 **옛 식**이다 — 그때 현행
                         // 판을 찍으면 그 매니페스트가 「쉬는 상태」로 위장한다. 전량을 쟀을
                         // 때만 찍고, 아니면 이어받는다.
-                        verdict.only() == null ? PitFingerprint.stockFormulaFp()
+                        verdict.only() == null ? fingerprint.stockFormulaFp()
                                 : mf.get("fpFormula"),
                         PitFingerprint.sharedFormulaFp(), startedAt, failed));
                 done++;
@@ -577,8 +577,8 @@ class PitLoadTest {
                 restamped++;
             }
         }
-        refuseUnknownFormula(unknown, "지수");
         report(visited, atRest, restamped, moved, "지수");
+        refuseUnknownFormula(unknown, "지수");
     }
 
     /**
@@ -660,7 +660,7 @@ class PitLoadTest {
                                           Map<String, List<LocalDate>> plan) throws Exception {
         System.out.println("\n-- 종목 지문 재찍기 (값은 안 건드린다) --");
         String calculatorFp = PitFingerprint.forCalculators(registry);
-        String current = PitFingerprint.stockFormulaFp();
+        String current = fingerprint.stockFormulaFp();
         int visited = 0;
         int atRest = 0;
         int restamped = 0;
@@ -698,13 +698,13 @@ class PitLoadTest {
                                 fingerprint.forCurrency(currency, asOf), base.indexFingerprint(),
                                 base.inPlaceDigests(), base.calculatorFp(),
                                 // 전 종목을 현행 식으로 다시 쟀다 — 여기가 현행 판을 찍는 자리다.
-                                PitFingerprint.stockFormulaFp(), base.indexFpFormula(),
+                                fingerprint.stockFormulaFp(), base.indexFpFormula(),
                                 base.writtenAt(), base.failed()));
                 restamped++;
             }
         }
-        refuseUnknownFormula(unknown, "종목");
         report(visited, atRest, restamped, moved, "원자료");
+        refuseUnknownFormula(unknown, "종목");
     }
 
     /** 매니페스트에 적힌 실패 종목. 없으면 빈 집합이다. */

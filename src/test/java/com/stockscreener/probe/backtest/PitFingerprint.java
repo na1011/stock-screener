@@ -129,6 +129,16 @@ final class PitFingerprint {
             """;
 
     /**
+     * <b>저장본을 찍은</b> 공유 지문 SQL. 좁히기 마이그레이션의 기준선이다.
+     *
+     * <p><b>MUST: 좁힐 때 옛 {@code FOR_SHARED_SQL}을 여기로 옮긴다.</b> 값과 판이 <b>이 상수
+     * 하나</b>에서 나오게 둔 이유가 그것이다 — 둘을 따로 적으면 하나만 옮겼을 때
+     * <b>새 식의 값을 옛 판으로 대조</b>하게 되고, 그러면 전 날짜가 「원자료가 움직였다」로
+     * 나온다. 이 커밋이 없애려던 바로 그 오독이다.
+     */
+    private static final String FOR_SHARED_SQL_BEFORE_NARROWING = FOR_SHARED_SQL;
+
+    /**
      * <b>지문 식의 판.</b> {@code calculatorFp}와 같은 꼴이고 같은 이유다 — DB가 하나도 안
      * 움직여도 <b>식이 바뀌면 저장본은 낡는다.</b>
      *
@@ -138,9 +148,14 @@ final class PitFingerprint {
      * {@code corporate_action}·{@code stock}·{@code universe_membership} 성분에 날짜 절이 없어
      * 한 행이 바뀌면 <b>전 날짜</b>의 전량 일치가 깨진다). 일치 수로 가르는 것은 원리적으로
      * 안 된다. <b>등호로 판정한다.</b>
+     *
+     * <p><b>시세 컬럼식을 포함한다.</b> {@code stockFingerprintSql()}은 펜스가 읽는 요약이라
+     * 그 자리에 {@code <price>} 리터럴이 들어가는데, 그것으로 판을 내면 {@code price_daily}에
+     * 컬럼이 늘어도 판이 안 움직여 <b>매니페스트가 「쉬는 상태」로 위장한다.</b>
      */
-    static String stockFormulaFp() {
-        return md5(stockFingerprintSql());
+    String stockFormulaFp() {
+        return md5(FOR_CURRENCY_SQL.formatted(priceExpression, STOCK_COLUMNS, "",
+                CORPORATE_ACTION_COLUMNS));
     }
 
     /** 공유 지문 식의 판. 위와 같은 이유다. */
@@ -150,11 +165,13 @@ final class PitFingerprint {
 
     /** 저장본을 찍은 <b>직전 판</b>의 식. 좁히기 마이그레이션이 이것과 저장값을 대조한다. */
     static String sharedFormulaFpBeforeNarrowing() {
-        return sharedFormulaFp();
+        return md5(FOR_SHARED_SQL_BEFORE_NARROWING);
     }
 
     /** 저장본을 찍은 <b>직전 판</b>의 식. 좁히기 마이그레이션이 이것과 저장값을 대조한다. */
     static String stockFormulaFpBeforeNarrowing() {
+        // 직전 판은 시세 컬럼식을 <price> 리터럴로 두고 냈다. 그래서 `price_daily`에 컬럼이
+        // 늘거나 줄어도 판이 안 움직였고, 그 매니페스트가 「쉬는 상태」로 위장했다.
         return md5(FOR_CURRENCY_SQL.formatted("<price>", STOCK_COLUMNS, "",
                 CORPORATE_ACTION_COLUMNS_BEFORE_NARROWING));
     }
@@ -235,11 +252,12 @@ final class PitFingerprint {
      * 그대로 둔다.</b> 그러지 않으면 옛 식이 저장본과 100% 불일치가 되어 이 레버가 통째로
      * 죽는다 — 실제로 {@code stock} 좁히기 뒤에 그렇게 돼 있었고, 아무도 그것을 몰랐다.
      *
-     * <p><b>MUST: 이것을 돌릴 때 타임존이 고정돼 있어야 한다.</b> wide 식이 {@code applied_at}을
-     * 텍스트로 렌더하므로 다른 TZ 세션에서 돌리면 156종목이 안 맞고 <b>512날짜가 전부
-     * {@code moved}</b>가 된다 — 조용히 틀리는 것이 아니라 <b>막히는</b> 쪽이다.
-     * {@code build.gradle}이 포크 JVM을 {@code Asia/Seoul}로 박고
-     * {@code PitColumnCoverageTest}가 그것을 지킨다.
+     * <p><b>MUST: 이것을 돌릴 때 타임존이 고정돼 있어야 한다.</b> 지금 지문 식은
+     * <b>timestamptz를 텍스트로 렌더하지 않는다</b>(실측: 같은 질의가 `Asia/Seoul`↔`UTC`에서
+     * 불일치 <b>0</b>, 옛 wide 식 대조군은 <b>65</b>). 그 성질이 깨지는 순간 — 누가
+     * {@code to_jsonb} 성분에 timestamptz를 되돌리면 — 저장본이 기계마다 낡는다.
+     * {@code build.gradle}이 포크 JVM을 `Asia/Seoul`로 박고 {@code PitColumnCoverageTest}가
+     * JVM·DB 세션 양 끝을 단언한다.
      */
     Map<Long, String> forCurrencyBeforeNarrowing(String currencyCode, LocalDate asOf) {
         return forCurrency(currencyCode, asOf, null, STOCK_COLUMNS,
@@ -290,24 +308,14 @@ final class PitFingerprint {
     }
 
     /**
-     * <b>좁히기 이전의</b> 지수 지문. 마이그레이션에만 쓴다 — 좁힌 입력은 이것의
-     * <b>진부분집합</b>이므로, 이 값이 저장된 것과 같으면 <b>좁은 입력도 반드시 안 움직였다.</b>
-     *
-     * <p>시각({@code updated_at})으로 판정하지 않는 이유: {@code market}·{@code universe}에는
-     * 시각 컬럼이 <b>아예 없고</b> 삭제도 시각에 안 남는다. 시각을 최종 판결로 쓰면
-     * ADR-0123 §규칙의 「싼 훑기는 의심을 고르고 내용이 확정한다」가 뒤집힌다.
-     *
-     * <p>실측: 512개 매니페스트 전수 대조에 <b>4.0초 · 불일치 0</b>.
-     */
-    @Deprecated
-    /**
      * <b>저장본을 찍은 식으로 낸</b> 공유 지문. 마이그레이션에만 쓴다.
      *
      * <p><b>MUST: 좁힐 때 옛 식을 여기로 옮긴다.</b> 지금은 현행 식과 같다 — 마이그레이션이
      * 끝난 <b>쉬는 상태</b>이고, 그 상태를 {@code sharedFormulaFp()}가 등호로 증명한다.
      */
     String forSharedBeforeNarrowing(String currencyCode, LocalDate asOf) {
-        return forShared(currencyCode, asOf);
+        return jdbcTemplate.queryForObject(FOR_SHARED_SQL_BEFORE_NARROWING, String.class,
+                asOf, currencyCode, currencyCode);
     }
 
     /**

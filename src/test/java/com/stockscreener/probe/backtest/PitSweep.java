@@ -487,7 +487,7 @@ final class PitSweep {
                 // 찍으면 **옛 식이 섞인 매니페스트가 「쉬는 상태」로 위장**한다. 의심이 모집단
                 // 전체인 날짜(옛 판의 저장본을 처음 만나는 마이그레이션이 그렇다)에서만 찍는다.
                 refreshed.keySet().containsAll(population)
-                        ? PitFingerprint.stockFormulaFp() : mf.get("fpFormula"),
+                        ? fingerprint.stockFormulaFp() : mf.get("fpFormula"),
                 PitFingerprint.sharedFormulaFp(), startedAt, failed);
         if (dataChanged) {
             store.writeDate(currency, asOf, values, stamp);

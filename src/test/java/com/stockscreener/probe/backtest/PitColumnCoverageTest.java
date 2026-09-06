@@ -112,12 +112,12 @@ class PitColumnCoverageTest {
     /**
      * <b>지문이 읽는 쪽의 타임존에 안 갈리는가.</b>
      *
-     * <p><b>왜 값이 아니라 기제를 단언하는가.</b> 종목 지문의 기업행위 성분이
-     * {@code to_jsonb(ca.*)}로 {@code applied_at}({@code timestamptz})을 <b>세션 타임존으로
-     * 렌더</b>한다. 실측: 같은 질의가 {@code Asia/Seoul}↔{@code UTC}에서
-     * <b>KRW 65 · USD 91종목</b>({@code applied_at IS NOT NULL}인 수와 같다)이 갈렸다.
-     * 저장본은 KST 세션에서 찍혔으므로 다른 TZ로 돌면 그 156종목이 <b>저장된 전 날짜에서</b>
-     * 낡음이 된다.
+     * <p><b>왜 값이 아니라 기제를 단언하는가.</b> {@code to_jsonb}는 {@code timestamptz}를
+     * <b>세션 타임존으로</b> 문자열화한다. 지문에서 그런 컬럼을 걷어낸 지금은 같은 질의가
+     * {@code Asia/Seoul}↔{@code UTC}에서 <b>불일치 0</b>이다 — 걷기 전 식을 대조군으로 돌리면
+     * <b>KRW 65종목</b>이 갈린다. 즉 <b>지금은 안 갈리는 것이 상태이지 보장이 아니다.</b>
+     * 누가 {@code to_jsonb} 성분에 timestamptz를 되돌리면 저장본이 기계마다 낡고, 그때
+     * 이 고정이 유일한 방어다.
      *
      * <p>그래서 {@code build.gradle}의 {@code wireHarnessSwitches}가 포크 JVM에
      * {@code user.timezone=Asia/Seoul}을 박는다. 여기서 <b>두 끝을 함께</b> 단언한다 —
@@ -165,13 +165,12 @@ class PitColumnCoverageTest {
     @Test
     @DisplayName("기준 시각 사이에 행이 생긴 종목만 해시가 움직인다")
     void digestTracksTheRowSetOfEachStock() {
-        java.util.List<java.time.Instant> bounds = jdbcTemplate.queryForList(
-                "SELECT max(created_at) FROM price_daily WHERE created_at < "
-                        + "(SELECT max(created_at) FROM price_daily) "
-                        + "UNION ALL SELECT max(created_at) FROM price_daily",
-                java.time.Instant.class);
-        java.time.Instant before = bounds.get(0);
-        java.time.Instant after = bounds.get(1);
+        // MUST: 창을 「가장 가까운 두 행 사이」로 잡지 않는다. 그러면 표 하나만 걸리고
+        // 나머지 성분은 0종목으로 재게 되는데, 그때 이 시험은 그 성분에 대해 **아무것도
+        // 안 잰다.** 직전 하루를 통째로 창으로 잡아 네 표가 함께 걸리게 한다.
+        java.time.Instant after = jdbcTemplate.queryForObject(
+                "SELECT max(created_at) FROM price_daily", java.time.Instant.class);
+        java.time.Instant before = after.minus(java.time.Duration.ofDays(1));
 
         PitChangeDetector detector = new PitChangeDetector(jdbcTemplate);
         Map<Long, String> a = detector.inPlaceDigests(before);
@@ -196,6 +195,21 @@ class PitColumnCoverageTest {
 
         System.out.printf("   창 %s ~ %s · 해시가 움직인 종목 %d · 행이 생긴 종목 %d%n",
                 before, after, movedHashes.size(), grewRows.size());
+
+        // MUST: 표마다 따로 찍는다. 한 표만 걸려도 통과하면 나머지 성분이 조용히 빠진다.
+        Set<String> unmeasured = new TreeSet<>();
+        for (String table : new String[]{
+                "price_daily", "corporate_action", "financial_statement", "governance_fact"}) {
+            Integer n = jdbcTemplate.queryForObject(
+                    "SELECT count(DISTINCT stock_id) FROM " + table
+                            + " WHERE created_at > ? AND created_at <= ?",
+                    Integer.class, java.sql.Timestamp.from(before), java.sql.Timestamp.from(after));
+            System.out.printf("   %-20s 창에 행이 생긴 종목 %d%n", table, n);
+            if (n == 0) {
+                unmeasured.add(table);
+            }
+        }
+        System.out.printf("   못 잰 성분 %s%n", unmeasured);
 
         assertThat(grewRows)
                 .as("창에 행이 생긴 종목이 없다 — 이 시험은 그때 아무것도 안 잰다. "

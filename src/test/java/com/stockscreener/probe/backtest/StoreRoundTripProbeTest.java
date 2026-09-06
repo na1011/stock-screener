@@ -216,7 +216,7 @@ class StoreRoundTripProbeTest {
                     population.size(), PointInTimeScreener.declaredCodesOf(registry),
                     fingerprint.forCurrency(currency, asOf), fingerprint.forShared(currency, asOf),
                     inPlaceDigests, PitFingerprint.forCalculators(registry),
-                    PitFingerprint.stockFormulaFp(), PitFingerprint.sharedFormulaFp(),
+                    fingerprint.stockFormulaFp(), PitFingerprint.sharedFormulaFp(),
                     startedAt, failed));
         }
     }
