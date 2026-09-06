@@ -101,6 +101,14 @@ final class FinancialFiguresFixture {
         // inventories가 실제로 그렇게 빠져 있었다.
         fixture.inventories = source.inventories();
         fixture.netIncomeControlling = source.netIncomeControlling();
+        fixture.interestAndDividendIncome = source.interestAndDividendIncome();
+        fixture.noninterestIncome = source.noninterestIncome();
+        fixture.interestExpense = source.interestExpense();
+        fixture.noninterestExpense = source.noninterestExpense();
+        fixture.benefitsLossesAndExpenses = source.benefitsLossesAndExpenses();
+        fixture.grossProfit = source.grossProfit();
+        fixture.operatingExpenses = source.operatingExpenses();
+        fixture.costsAndExpenses = source.costsAndExpenses();
         return fixture;
     }
 
