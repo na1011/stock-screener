@@ -23,6 +23,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -339,7 +340,7 @@ class ReadApiTest {
 
     @Test
     @WithMockUser(username = SUB)
-    @DisplayName("보험·금융서비스의 Altman Z 부재는 결손이 아니라 설계라고 말한다")
+    @DisplayName("보험·금융서비스의 Altman 두 지표 부재는 결손이 아니라 설계라고 말한다")
     void explainsAltmanZExclusionForInsurers() throws Exception {
         jdbcTemplate.update("UPDATE stock SET industry_code = '65121' WHERE id = ?", stockId);
 
@@ -347,9 +348,14 @@ class ReadApiTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
-        JsonNode z = find(objectMapper.readTree(body).get("indicators"), "ALTMAN_Z");
-        assertThat(z.get("value").isNull()).isTrue();
-        assertThat(z.get("unavailableReason").asText()).contains("적용하지 않는");
+        JsonNode indicators = objectMapper.readTree(body).get("indicators");
+        // 원본과 수정모델이 같은 술어를 쓰므로 한쪽만 말하면 화면에서 비대칭이 된다.
+        for (String code : List.of("ALTMAN_Z", "ALTMAN_Z_DOUBLE_PRIME")) {
+            JsonNode z = find(indicators, code);
+            assertThat(z.get("value").isNull()).as("%s는 이 업종에서 값을 내지 않는다", code).isTrue();
+            assertThat(z.get("unavailableReason").asText())
+                    .as("%s의 부재 사유가 화면에 뜬다", code).contains("적용하지 않는");
+        }
     }
 
     // ── 실적 원수치 ────────────────────────────────────────────────────────

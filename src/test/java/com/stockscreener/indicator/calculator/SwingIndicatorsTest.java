@@ -418,6 +418,150 @@ class SwingIndicatorsTest {
     }
 
     @Nested
+    @DisplayName("Altman Z''-Score — 수정모델")
+    class AltmanZDoublePrime {
+
+        private final AltmanZDoublePrimeCalculator calculator = new AltmanZDoublePrimeCalculator();
+
+        @Test
+        @DisplayName("네 항을 가중합한다 — 매출 항이 없고 시가총액 자리에 자기자본이 들어간다")
+        void combinesFourTerms() {
+            // 총자산 1,000 / 총부채 400 / 운전자본 200(유동 500−300) / 이익잉여금 300
+            // EBIT 100(25×4) / 자기자본 600
+            // Z'' = 6.56·0.2 + 3.26·0.3 + 6.72·0.1 + 1.05·1.5
+            //     = 1.312 + 0.978 + 0.672 + 1.575 = 4.537
+            List<IndicatorPoint> points = calculator.calculate(zppContext(null));
+
+            assertThat(points).hasSize(1);
+            assertThat(points.getFirst().value()).isEqualByComparingTo("4.537");
+        }
+
+        @Test
+        @DisplayName("IMPORTANT — 매출도 시가총액도 없이 값이 난다. 원본과 갈리는 지점이 여기다")
+        void needsNeitherRevenueNorMarketCap() {
+            List<FinancialFigures> quarters = new ArrayList<>();
+            for (FinancialFigures q : balanceSheetQuarters()) {
+                quarters.add(FinancialFiguresFixture.from(q).revenue(null).build());
+            }
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            // 의존 지표를 아예 안 넘긴다 — MARKET_CAP을 조회하면 여기서 터진다.
+            IndicatorContext noCap = new IndicatorContext(
+                    1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of());
+
+            assertThat(calculator.calculate(noCap)).hasSize(1);
+            assertThat(new AltmanZCalculator().dataRequirement().dependsOn())
+                    .as("원본은 시가총액에 의존한다 — 그 차이가 이 테스트의 전제다")
+                    .contains(MarketCapCalculator.CODE);
+            assertThat(calculator.dataRequirement().dependsOn()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("분기가 넷에 못 미치면 값을 내지 않는다 — TTM이 성립하지 않는다")
+        void yieldsNothingWithoutFourQuarters() {
+            List<FinancialFigures> three = balanceSheetQuarters().subList(0, 3);
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+
+            assertThat(calculator.calculate(new IndicatorContext(
+                    1L, null, List.of(bar), List.of(), three, List.of(), Map.of()))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("자기자본이 없으면 값을 내지 않는다 — 0으로 두면 X4가 사라져 낮게 나온다")
+        void yieldsNothingWithoutEquity() {
+            List<FinancialFigures> quarters = new ArrayList<>();
+            for (FinancialFigures q : balanceSheetQuarters()) {
+                quarters.add(FinancialFiguresFixture.from(q).totalEquity(null).build());
+            }
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+
+            assertThat(calculator.calculate(new IndicatorContext(
+                    1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of()))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("총자산·총부채가 0 이하면 값을 내지 않는다 — 분모가 성립하지 않는다")
+        void yieldsNothingWithUnusableDenominators() {
+            for (String field : List.of("assets", "liabilities")) {
+                List<FinancialFigures> quarters = new ArrayList<>();
+                for (FinancialFigures q : balanceSheetQuarters()) {
+                    FinancialFiguresFixture f = FinancialFiguresFixture.from(q);
+                    quarters.add(("assets".equals(field)
+                            ? f.totalAssets(BigDecimal.ZERO)
+                            : f.totalLiabilities(BigDecimal.ZERO)).build());
+                }
+                PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+
+                assertThat(calculator.calculate(new IndicatorContext(
+                        1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of())))
+                        .as("%s가 0이면 분모가 없다", field)
+                        .isEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("업종 정의역이 원본과 같다 — 판정을 복사하지 않고 원본의 것을 부른다")
+        void sharesTheDomainWithTheOriginal() {
+            for (String division : List.of("KSIC:65", "KSIC:66", "SIC:60", "SIC:63", "SIC:67")) {
+                assertThat(calculator.calculate(zppContext(division)))
+                        .as("%s는 Altman 계열의 정의역 밖이다", division)
+                        .isEmpty();
+            }
+            // 접두가 없으면 어느 체계인지 알 수 없어 제외하지 않는다(ADR-0092).
+            assertThat(calculator.calculate(zppContext("65"))).hasSize(1);
+            // 지주회사 버킷과 업종 미상은 남긴다(ADR-0044).
+            assertThat(calculator.calculate(zppContext("KSIC:64"))).hasSize(1);
+            assertThat(calculator.calculate(zppContext(null))).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("거래일 전체에 같은 값이 펼쳐지고 스케일이 저장 컬럼과 맞는다")
+        void spreadsOneValueOverEveryBar() {
+            List<PriceBar> bars = new ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                bars.add(new PriceBar(START.plusDays(i),
+                        bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100)));
+            }
+            List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
+                    1L, null, bars, List.of(), balanceSheetQuarters(), List.of(), Map.of()));
+
+            assertThat(points).hasSize(3);
+            assertThat(points).allSatisfy(point -> {
+                assertThat(point.value()).isEqualByComparingTo("4.537");
+                // 저장 컬럼이 numeric(24,8)이라 메모리 값도 거기 맞춰 접혀야 두 경로가 안 갈린다.
+                assertThat(point.value().scale()).isEqualTo(8);
+            });
+        }
+
+        @Test
+        @DisplayName("원시 영업이익이 없어도 유도 재료가 있으면 값이 난다")
+        void derivesOperatingIncomeWhenRawIsMissing() {
+            // 매출 200 − 총원가·비용 175 = 25. 원시 영업이익과 같은 값이므로 Z''도 같아야 한다.
+            List<FinancialFigures> quarters = new ArrayList<>();
+            for (FinancialFigures q : balanceSheetQuarters()) {
+                quarters.add(FinancialFiguresFixture.from(q)
+                        .operatingIncome(null)
+                        .revenue(bd(200))
+                        .costsAndExpenses(bd(175))
+                        .build());
+            }
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+
+            List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
+                    1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of()));
+
+            assertThat(points).hasSize(1);
+            assertThat(points.getFirst().value()).isEqualByComparingTo("4.537");
+        }
+
+        /** {@link #balanceSheetQuarters}와 재무가 같고 업종만 다르다. 시가총액은 넘기지 않는다. */
+        private IndicatorContext zppContext(String industryDivisionKey) {
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            return new IndicatorContext(1L, industryDivisionKey, List.of(bar), List.of(),
+                    balanceSheetQuarters(), List.of(), Map.of());
+        }
+    }
+
+    @Nested
     @DisplayName("거래일 수 — 세는 것이 상장 경과가 아니라 저장된 봉이다")
     class TradingDays {
 
@@ -482,7 +626,7 @@ class SwingIndicatorsTest {
         return quarters;
     }
 
-    /** Altman Z의 다섯 항을 모두 채운 분기 넷. 저량은 매 분기 같은 잔액이다. */
+    /** 두 Altman 계열이 읽는 항을 모두 채운 분기 넷. 저량은 매 분기 같은 잔액이다. */
     private static List<FinancialFigures> balanceSheetQuarters() {
         List<FinancialFigures> quarters = new ArrayList<>(4);
         LocalDate periodEnd = LocalDate.of(2025, 12, 31);
@@ -490,6 +634,7 @@ class SwingIndicatorsTest {
             quarters.add(FinancialFiguresFixture.quarter(periodEnd)
                     .totalAssets(bd(1_000))
                     .totalLiabilities(bd(400))
+                    .totalEquity(bd(600))      // 자산 1,000 − 부채 400. Z''가 읽는다
                     .currentAssets(bd(500))
                     .currentLiabilities(bd(300))
                     .retainedEarnings(bd(300))

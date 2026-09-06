@@ -53,7 +53,7 @@ import org.springframework.stereotype.Component;
         unit = "년",
         decimalScale = 0,
         direction = IndicatorMeta.Direction.HIGHER_IS_BETTER,
-        sortOrder = 47,
+        sortOrder = 48,
         bands = {
                 @IndicatorMeta.Band(label = "전 구간 흑자", from = 7),
                 @IndicatorMeta.Band(label = "길다", from = 5, to = 7),

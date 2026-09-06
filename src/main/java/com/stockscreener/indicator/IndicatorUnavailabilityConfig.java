@@ -1,6 +1,7 @@
 package com.stockscreener.indicator;
 
 import com.stockscreener.indicator.calculator.AltmanZCalculator;
+import com.stockscreener.indicator.calculator.AltmanZDoublePrimeCalculator;
 import com.stockscreener.indicator.calculator.AuditEmphasisCalculator;
 import com.stockscreener.indicator.calculator.AuditOpinionAdverseCalculator;
 import com.stockscreener.indicator.calculator.AuditorChange3yCalculator;
@@ -92,6 +93,13 @@ public class IndicatorUnavailabilityConfig {
                         // 계산기가 명시적으로 제외하는 업종이다(ADR-0044). 값이 안 나오는 것이
                         // 결손이 아니라 설계이며, 그 사실을 화면이 말해야 한다고
                         // AltmanZCalculator의 javadoc이 요구해 두었다.
+                        context -> AltmanZCalculator.isInapplicable(context.industryDivisionKey()),
+                        "보험·금융서비스에는 적용하지 않는 지표입니다. "
+                                + "계산 자체는 되지만 그 업종의 재무 구조에서는 뜻을 갖지 않습니다."),
+                new UnavailabilityRule(
+                        AltmanZDoublePrimeCalculator.CODE,
+                        // 수정모델도 정의역이 같다. 술어를 복사하지 않고 원본의 것을 그대로
+                        // 부르므로 집합을 넓히면 두 카드가 함께 따라온다.
                         context -> AltmanZCalculator.isInapplicable(context.industryDivisionKey()),
                         "보험·금융서비스에는 적용하지 않는 지표입니다. "
                                 + "계산 자체는 되지만 그 업종의 재무 구조에서는 뜻을 갖지 않습니다."),
