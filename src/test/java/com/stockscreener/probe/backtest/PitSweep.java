@@ -7,6 +7,7 @@ import com.stockscreener.screening.MarketThresholdMissingException;
 import com.stockscreener.screening.ScreeningResult;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -245,7 +246,7 @@ final class PitSweep {
                         + coverage.lagDays() + "거래일 뒤처졌다(허용 " + maxLag() + ") — 마지막 저장 "
                         + coverage.dates().get(coverage.dates().size() - 1)
                         + ". 그만큼의 최근 진입을 못 본 표가 나온다. 적재를 먼저 돌린다:\n"
-                        + "  caffeinate -is ./gradlew backtestProbe --tests \"*PitLoadTest*\"");
+                        + "  caffeinate -is ./gradlew backtestLoad");
             }
             // MUST: 문턱은 **통화당**이다. 두 통화를 합쳐 세면 평시 4~6이 되어 기본 5를
             // 매일 넘고, 그러면 싸고 잦은 것에까지 사람을 부른다 — 실측으로 평시에 흔들리는
@@ -305,10 +306,25 @@ final class PitSweep {
             }
 
             List<Long> population = screener.populationFor(currency);
+            // MUST: 날짜 루프의 진행을 찍는다. 안 찍으면 이 구간 전체가 무출력이고,
+            // 저장본이 낡았을 때 그것이 **몇 분**이다 — 실측 2026-09-05 USD 6분 37초.
+            // 사람이 그것을 「멈췄다」로 읽어 실제로 끊었고(daemon 로그 `Build cancelled …
+            // ':backtestSweep'`), **끊으면 restamp에 못 닿아 저장본이 안 낫는다.**
+            System.out.printf("   %s %d날짜를 읽는다 (낡은 자리는 그 자리에서 다시 만든다)%n",
+                    currency, coverage.dates().size());
+            Instant sweepBegan = Instant.now();
+            int seen = 0;
             for (LocalDate asOf : coverage.dates()) {
                 Map<Long, Map<String, BigDecimal>> values = store.readDate(currency, asOf);
                 repaired += repair(currency, asOf, population, values,
                         coverage.sharedMoved().contains(asOf));
+                if (++seen % 20 == 0) {
+                    long spent = Duration.between(sweepBegan, Instant.now()).toSeconds();
+                    System.out.printf("   [%d/%d] %s %s · 다시 만든 칸 %d · 경과 %d초 · "
+                                    + "남은 예상 %d초%n",
+                            seen, coverage.dates().size(), currency, asOf, repaired, spent,
+                            spent * (coverage.dates().size() - seen) / seen);
+                }
 
                 for (ScreeningTargets.Target t : ofCurrency) {
                     List<PointInTimeScreener.Request> ok = runnable.get(t.code());

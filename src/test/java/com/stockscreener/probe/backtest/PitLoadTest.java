@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 돌리므로 지정 없이 치면 몇 시간짜리 탐침들이 함께 딸려 온다.
  *
  * <pre>
- * caffeinate -is ./gradlew backtestProbe --tests "*PitLoadTest*" -Dpit.days=255
+ * caffeinate -is ./gradlew backtestLoad -Dpit.days=255
  * </pre>
  *
  * <p><b>{@code caffeinate}가 권고가 아니다.</b> 실측으로 이 기계는 {@code pmset sleep = 1} —
@@ -134,7 +134,11 @@ class PitLoadTest {
                     e.getValue().size(), population.size());
             total += (long) e.getValue().size() * population.size();
         }
-        System.out.printf("계산할 (종목, 날짜) 총 %,d칸%n", total);
+        // MUST: 이것이 **계획의 상한**이지 실제 계산량이 아니라는 것을 문장으로 적는다.
+        // 안 적으면 「매번 전량 재적재가 돈다」로 읽힌다 — 실측으로 이 수가 345,600일 때
+        // 실제 계산은 0칸이었다(2026-09-06).
+        System.out.printf("계획 상한 (종목, 날짜) %,d칸 — 안 바뀐 날짜는 건너뛰므로 "
+                + "실제 계산은 이보다 훨씬 적고 0일 수도 있다%n", total);
 
         if ("calculator".equals(recheck)) {
             recheckCalculators(store, plan, calculatorFp, declared);
@@ -167,15 +171,28 @@ class PitLoadTest {
         for (Map.Entry<String, List<LocalDate>> entry : plan.entrySet()) {
             String currency = entry.getKey();
             List<Long> population = screener.populationFor(currency);
+            // 통화마다 왜 비싼 길로 가는지 한 번 찍는다. 안 찍으면 값을 하나도 안 만드는
+            // 실행이 몇 분간 완전 무출력이 되고, 그것을 「멈췄다」로 읽어 끊게 된다.
+            // 끊으면 저장본은 안 낫는다 — 낫는 것은 스윕의 restamp뿐이다.
+            String costNote = null;
             for (LocalDate asOf : entry.getValue()) {
                 // MUST: 건너뛸지를 **싼 훑기로 먼저** 묻는다. 지문부터 재면 아무것도 안 바뀐
                 // 날에도 날짜당 0.56~1.43초가 들어 512날짜 확인만 9분이 된다 — 실측이다.
                 // 훑기가 「이 날짜에 의심 종목이 없다」고 하면 지문은 반드시 같으므로 안 잰다.
                 Map<String, String> mf = store.readManifest(currency, asOf);
-                if (skippableCheaply(store, detector, fingerprint, currency, asOf, mf,
-                        calculatorFp, population)) {
+                String cannotSkip = whyCannotSkipCheaply(detector, fingerprint, currency, asOf, mf,
+                        calculatorFp, population);
+                if (cannotSkip == null) {
                     skipped++;
+                    report(done, skipped, plannedDates, runBegan, currency, asOf, 0, "확인");
                     continue;
+                }
+                if (costNote == null) {
+                    costNote = cannotSkip;
+                    System.out.printf("   %s %d날짜를 지문으로 확인한다 — %s%n"
+                                    + "   (값이 안 바뀌었으면 다시 만들지 않는다. 확인만 %s당 "
+                                    + "0.6~1.5초라 몇 분 걸릴 수 있고 그동안 조용하다)%n",
+                            currency, entry.getValue().size(), cannotSkip, "날짜");
                 }
 
                 Map<Long, String> fps = fingerprint.forCurrency(currency, asOf);
@@ -211,7 +228,8 @@ class PitLoadTest {
                         population.size(), declared, fps, sharedFp, inPlaceDigest,
                         calculatorFp, startedAt, failed));
                 done++;
-                report(done, skipped, plannedDates, runBegan, currency, asOf, failed.size());
+                report(done, skipped, plannedDates, runBegan, currency, asOf, failed.size(),
+                        partial ? "갈아 끼움" : "다시 만듦");
             }
         }
 
@@ -256,28 +274,52 @@ class PitLoadTest {
     }
 
     /**
-     * <b>지문을 재지 않고</b> 건너뛸 수 있는가. 「그렇다」일 때만 참을 돌려주고, 아니면
-     * 비싼 길로 보낸다 — <b>과검출은 하되 미검출은 안 한다.</b>
+     * <b>지문을 재지 않고</b> 건너뛸 수 있는가. 건너뛸 수 있으면 {@code null}, 아니면
+     * <b>왜 비싼 길로 가는지</b>를 돌려준다 — <b>과검출은 하되 미검출은 안 한다.</b>
      *
      * <p>싼 훑기가 그 날짜에 의심 종목을 하나도 안 올리고, 매니페스트가 완료이며, 계산기 판과
      * 지수 지문이 같으면 <b>종목 지문은 반드시 같다.</b> 그 확인이 실측 날짜당 0.56~1.43초인데
      * 여기는 통화당 한 번의 훑기 + 날짜당 지수 지문 하나다.
+     *
+     * <p><b>사유를 문자열로 돌려주는 이유가 진단이다.</b> 갈래가 여섯인데 밖에서는 하나로
+     * 보여서, 값을 한 칸도 안 만드는 실행이 왜 몇 분씩 도는지 알 수 없었다. 실측 2026-09-06:
+     * 「새로 쓴 날짜 0 · 건너뛴 날짜 512」인 실행이 <b>12분 58초</b>, 그 직후 재실행이
+     * <b>21초</b>였고 차이는 전부 {@code inPlaceDigest} 하나였다.
+     *
+     * <p>MUST NOT: 이 사유를 {@link PitStore.Freshness}에 <b>더하지 않는다.</b> 저쪽의
+     * {@code unusableReason}은 「이 저장본을 못 쓴다」는 뜻이라 {@code complete()}를 거짓으로
+     * 만들고, 그러면 아래 건너뛰기와 {@code partial}이 <b>둘 다 무너져 전 종목을 다시 만든다.</b>
+     * digest 불일치는 <b>「못 쓴다」가 아니라 「확인이 필요하다」</b>다 — 실측으로 그때
+     * 종목 지문 불일치는 0이었다.
      */
-    private boolean skippableCheaply(PitStore store, PitChangeDetector detector,
-                                     PitFingerprint fingerprint, String currency, LocalDate asOf,
-                                     Map<String, String> mf, String calculatorFp,
-                                     List<Long> population) {
-        if (mf.isEmpty() || !"true".equals(mf.get("complete"))
-                || !calculatorFp.equals(mf.get("calculatorFp"))
-                || mf.get("writtenAt") == null) {
-            return false;
+    private String whyCannotSkipCheaply(PitChangeDetector detector,
+                                        PitFingerprint fingerprint, String currency, LocalDate asOf,
+                                        Map<String, String> mf, String calculatorFp,
+                                        List<Long> population) {
+        if (mf.isEmpty()) {
+            return "매니페스트 없음";
+        }
+        if (!"true".equals(mf.get("complete"))) {
+            return "미완료(실패 " + mf.getOrDefault("failed", "?") + ")";
+        }
+        if (!calculatorFp.equals(mf.get("calculatorFp"))) {
+            return "계산기 판 불일치";
+        }
+        if (mf.get("writtenAt") == null) {
+            return "writtenAt 없음";
         }
         if (!fingerprint.forShared(currency, asOf).equals(mf.get("indexFp"))) {
-            return false;
+            return "지수 지문 불일치";
         }
         PitChangeDetector.Changes changes =
                 changesCache.computeIfAbsent(Instant.parse(mf.get("writtenAt")), detector::since);
-        return changes.suspectsOn(asOf, population, mf.get("inPlaceDigest")).isEmpty();
+        String digestAtLoad = mf.get("inPlaceDigest");
+        if (digestAtLoad == null || !digestAtLoad.equals(changes.inPlaceDigest())) {
+            return "모집단 전역 해시(inPlaceDigest) 불일치 — 유니버스 편입이나 재무 제자리 수정이 "
+                    + "있었다. 값이 바뀐 종목은 지문이 가린다";
+        }
+        java.util.Set<Long> suspects = changes.suspectsOn(asOf, population, digestAtLoad);
+        return suspects.isEmpty() ? null : "원자료가 움직인 종목 " + suspects.size() + "개";
     }
 
     /** 같은 시각을 여러 날짜가 묻는다. 훑기가 2초대라 캐시하지 않으면 그것이 지배한다. */
@@ -574,17 +616,31 @@ class PitLoadTest {
         System.out.println("   점검 끝 — -Dpit.dryRun 없이 다시 돌리면 적재한다");
     }
 
+    /**
+     * 진척 한 줄. <b>건너뛰는 날짜에도 찍는다</b> — 안 찍으면 값을 하나도 안 만드는 실행이
+     * 몇 분간 완전 무출력이 되고, 사람이 그것을 「멈췄다」로 읽어 끊는다. 실측으로 그런
+     * 실행이 두 번 취소됐고(2026-09-05·09-06), <b>끊으면 저장본이 안 낫는다</b> —
+     * 낡음을 실제로 고치는 것은 {@link PitSweep}의 {@code restamp}뿐이다.
+     *
+     * <p>MUST: 스로틀과 ETA를 <b>{@code done + skipped}</b>로 센다. {@code done}으로 세면
+     * 건너뛰기만 도는 구간에서 {@code 0 % 10 == 0}이라 <b>매 날짜가 출력되고</b>, ETA는
+     * {@code spent}에 건너뛴 시간이 다 들어간 채 {@code done}으로만 나뉘어 부풀려진다 —
+     * 실측으로 첫 표본이 <b>64분</b>을 찍었는데 실제 소요는 10분 28초였다.
+     *
+     * @param note 이 줄이 무엇인지. {@code "확인"}이면 값을 안 만들고 지나간 것이다
+     */
     private static void report(int done, int skipped, int planned, Instant began,
-                               String currency, LocalDate asOf, int failed) {
-        if (done % 10 != 0) {
+                               String currency, LocalDate asOf, int failed, String note) {
+        int seen = done + skipped;
+        if (seen % 10 != 0) {
             return;
         }
         Duration spent = Duration.between(began, Instant.now());
-        long remaining = (long) (planned - done - skipped);
-        long etaSec = done == 0 ? 0 : spent.toSeconds() * remaining / done;
-        System.out.printf("   [%d/%d] %s %s · 실패 %d · 경과 %s · 남은 예상 %d분%n",
-                done + skipped, planned, currency, asOf, failed,
-                spent.toMinutes() + "분", etaSec / 60);
+        long remaining = (long) (planned - seen);
+        long etaSec = seen == 0 ? 0 : spent.toSeconds() * remaining / seen;
+        System.out.printf("   [%d/%d] %s %s · %s · 다시 만듦 %d · 실패 %d · 경과 %d분 · 남은 예상 %d분%n",
+                seen, planned, currency, asOf, note, done, failed,
+                spent.toMinutes(), etaSec / 60);
     }
 
     /**

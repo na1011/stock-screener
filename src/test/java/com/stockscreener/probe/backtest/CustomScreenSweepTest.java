@@ -49,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>저장소가 비어 있으면 <b>던진다.</b> 조용히 직접 계산으로 떨어지면 몇 시간짜리 실행이
  * 아무 경고 없이 시작된다. 적재는 {@code PitLoadTest}가 진다:
  *
- * <pre>caffeinate -is ./gradlew backtestProbe --tests "*PitLoadTest*"</pre>
+ * <pre>caffeinate -is ./gradlew backtestLoad</pre>
  */
 @Tag("backtest")
 @SpringBootTest(classes = BacktestHarnessContext.class,
