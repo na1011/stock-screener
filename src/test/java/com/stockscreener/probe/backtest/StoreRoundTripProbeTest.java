@@ -192,7 +192,7 @@ class StoreRoundTripProbeTest {
         // MUST: 적재 실행 하나에 기준 시각 하나. 날짜마다 새로 찍으면 읽는 쪽이 그 수만큼
         // 변경 훑기를 돌아야 하고(회당 2초대), 실측에서 그것이 스윕 시간을 통째로 지배했다.
         Instant startedAt = Instant.now();
-        String inPlaceDigest = detector.inPlaceDigest(startedAt);
+        Map<Long, String> inPlaceDigests = detector.inPlaceDigests(startedAt);
         for (LocalDate asOf : dates) {
             Map<String, NavigableMap<LocalDate, BigDecimal>> indexes =
                     runner.marketIndexesFor(asOf);
@@ -215,7 +215,7 @@ class StoreRoundTripProbeTest {
             store.writeDate(currency, asOf, values, new PitStore.Stamp(
                     population.size(), PointInTimeScreener.declaredCodesOf(registry),
                     fingerprint.forCurrency(currency, asOf), fingerprint.forShared(currency, asOf),
-                    inPlaceDigest, PitFingerprint.forCalculators(registry), startedAt, failed));
+                    inPlaceDigests, PitFingerprint.forCalculators(registry), startedAt, failed));
         }
     }
 

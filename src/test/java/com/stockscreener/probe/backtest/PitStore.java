@@ -54,6 +54,15 @@ final class PitStore {
         return root;
     }
 
+    /**
+     * 그 날짜의 <b>데이터 파일</b>이 있는가. {@code freshnessOf}가 이미 보지만 그것은
+     * <b>비싼 길</b>에서만 돌고, 싼 건너뛰기 판정은 매니페스트만 본다 — 매니페스트가
+     * 「완료」인데 gzip이 없으면 적재가 <b>영원히 건너뛰고</b> 스윕의 {@code readDate}가 던진다.
+     */
+    boolean hasData(String currency, LocalDate asOf) {
+        return Files.exists(data(currency, asOf));
+    }
+
     private Path data(String currency, LocalDate asOf) {
         return root.resolve(currency + "-" + asOf + ".csv.gz");
     }
@@ -71,8 +80,10 @@ final class PitStore {
      * @param fingerprints     종목별 입력 지문. 바뀐 종목만 다시 만들기 위한 것
      * @param indexFingerprint 종목에 안 걸리는 입력(시장 지수). 종목 지문에 섞으면 지수가 한 번
      *                         바뀔 때 전 종목이 낡은 것으로 읽혀 종목 단위 무효화가 무의미해진다
-     * @param inPlaceDigest    적재 시점에 이미 있던 행들의 내용 해시. 읽는 쪽이 <b>제자리 수정</b>을
-     *                         싸게 알아채는 근거다({@link PitChangeDetector})
+     * @param inPlaceDigests   적재 시점에 이미 있던 행들의 <b>종목별</b> 내용 해시. 읽는 쪽이
+     *                         <b>제자리 수정</b>을 싸게 알아채는 근거다({@link PitChangeDetector}).
+     *                         종목별인 이유는 저쪽 javadoc에 있다 — 전역 하나였을 때는 모집단이
+     *                         바뀌기만 해도 전 종목이 의심이 됐다
      * @param calculatorFp     값을 만든 계산기의 판. DB가 하나도 안 움직여도 공식이 바뀌면
      *                         저장본은 낡는데, 이것이 없으면 그것을 알 방법이 아예 없다
      * @param writtenAt        <b>적재 실행이 시작한</b> 시각. 날짜마다 찍지 않는다 — 읽는 쪽은
@@ -82,7 +93,7 @@ final class PitStore {
      * @param failed           값을 못 만든 종목. <b>비어 있지 않으면 완료로 적지 않는다</b>
      */
     record Stamp(int attempted, java.util.Set<String> codes, Map<Long, String> fingerprints,
-                 String indexFingerprint, String inPlaceDigest, String calculatorFp,
+                 String indexFingerprint, Map<Long, String> inPlaceDigests, String calculatorFp,
                  Instant writtenAt, java.util.Set<Long> failed) {
     }
 
@@ -103,7 +114,12 @@ final class PitStore {
     }
 
     /**
-     * 그 날짜가 <b>끝났고 아직 유효한가.</b>
+     * <b>넘겨받은 지문 집합</b>이 그 날짜의 저장본과 맞는가.
+     *
+     * <p><b>MUST: 「그 날짜가 끝났고 유효한가」로 읽지 않는다.</b> 이 판정은 인자로 준 종목만
+     * 본다 — {@code PitLoadTest}가 <b>의심 종목만</b> 넘기므로(1단계가 「그 밖은 안 움직였다」를
+     * 보증한다) 안 넘긴 종목은 <b>신선으로 가정</b>된다. 전량을 넘기던 때의 문장을 그대로 두면
+     * 다음 세션이 이것을 전수 감사로 읽는다.
      *
      * <p><b>종목 지문</b>이 다르면 그 종목만 다시 만든다.
      * <p><b>지수 지문</b>이 다르면 <b>날짜 전체</b>가 못 쓰게 된다 — 지수는 모집단이 함께 쓰므로
@@ -206,12 +222,16 @@ final class PitStore {
                 .map(String::valueOf).collect(java.util.stream.Collectors.joining(" ")))
                 .append('\n');
         sb.append("indexFp=").append(stamp.indexFingerprint()).append('\n');
-        sb.append("inPlaceDigest=").append(stamp.inPlaceDigest()).append('\n');
         sb.append("calculatorFp=").append(stamp.calculatorFp()).append('\n');
         sb.append("writtenAt=").append(stamp.writtenAt()).append('\n');
         sb.append("complete=").append(stamp.failed().isEmpty()).append('\n');
         for (Map.Entry<Long, String> e : new java.util.TreeMap<>(stamp.fingerprints()).entrySet()) {
             sb.append("fp:").append(e.getKey()).append('=').append(e.getValue()).append('\n');
+        }
+        // MUST: `fp:`와 같은 이유로 정렬해서 적는다. Set·Map의 순회 순서는 보장되지 않으므로
+        // 같은 입력이 다른 매니페스트를 만들고, 그러면 두 실행이 같은지를 파일로 비교할 수 없다.
+        for (Map.Entry<Long, String> e : new java.util.TreeMap<>(stamp.inPlaceDigests()).entrySet()) {
+            sb.append("ip:").append(e.getKey()).append('=').append(e.getValue()).append('\n');
         }
         Files.writeString(mtmp, sb.toString(), StandardCharsets.UTF_8);
         Files.move(mtmp, manifest(currency, asOf),
@@ -239,6 +259,56 @@ final class PitStore {
             }
         }
         return back;
+    }
+
+    /**
+     * 매니페스트의 <b>접두어 붙은 종목별 항목</b>을 뽑는다({@code fp:}·{@code ip:}).
+     *
+     * <p><b>MUST: 사본을 만들지 않는다.</b> 같은 파싱이 지금 {@code PitSweep.restamp}와
+     * {@code PitLoadTest.stampFrom} 둘에서 필요하고, 갈리면 한쪽만 항목을 잃는다 — 이 파일
+     * 계열에서 <b>이어받기를 빠뜨린 사고가 이미 두 번</b> 났다(ADR-0123 §규칙).
+     *
+     * @return 정렬된 가변 맵. 부르는 쪽이 모집단으로 자르고 새 값을 덮는다
+     */
+    static Map<Long, String> prefixed(Map<String, String> manifest, String prefix) {
+        Map<Long, String> out = new java.util.TreeMap<>();
+        for (Map.Entry<String, String> e : manifest.entrySet()) {
+            if (e.getKey().startsWith(prefix)) {
+                out.put(Long.parseLong(e.getKey().substring(prefix.length())), e.getValue());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 매니페스트의 종목별 항목을 <b>이어받되 모집단으로 자르고</b> 새로 잰 것을 덮는다.
+     *
+     * <p><b>양 끝이 다 결함이라 한 함수로 둔다.</b>
+     * <ul>
+     *   <li><b>안 이어받으면</b> — 부분만 재는 경로에서 안 잰 종목의 항목이 통째로 사라지고,
+     *       그 종목은 다음 실행에서 「지문 없음」으로 <b>영원히 낡음</b>이 된다.</li>
+     *   <li><b>안 자르면</b> — 편출 종목의 항목이 영원히 남는데 <b>값은
+     *       {@code values.keySet().retainAll(population)}으로 데이터 파일에서 빠진다.</b> 그
+     *       종목이 아무것도 안 바뀐 채 복귀하면 지문이 그대로 맞아 낡음이 아니게 되고, 값은
+     *       영영 안 만들어지며, {@code PitSweep.repair}의 완전성 검사가 그 날짜에서
+     *       <b>영구히 던진다.</b> 실측으로 편출입 이력이 있는 종목이 9개이고 2026-09-04에
+     *       둘이 실제로 복귀했다.</li>
+     * </ul>
+     *
+     * <p><b>지금까지 그 정리를 하던 것은 적재의 전량 교체 하나였다</b>(실측: 512 매니페스트가
+     * 전부 「지금 모집단과 정확히 같은 {@code fp:} 집합」을 든다 — 여분 0 · 결손 0 · 345,600줄).
+     * 적재가 부분만 재게 되면서 그 정리가 사라지므로 여기가 그 자리를 잇는다.
+     */
+    static Map<Long, String> carryOver(Map<String, String> manifest, String prefix,
+                                       java.util.Collection<Long> population,
+                                       Map<Long, String> fresh) {
+        Map<Long, String> out = prefixed(manifest, prefix);
+        out.putAll(fresh);
+        // MUST: 자르기를 **합친 뒤에** 한다. 이어받은 쪽만 자르면 새로 잰 쪽에 섞인 모집단 밖
+        // 종목이 그대로 실린다 — 종목별 해시는 **모집단 전체(두 통화)**를 한 번에 재므로 그것이
+        // 실제로 일어난다(실측: USD 매니페스트에 1,350개가 실렸다. 모집단은 1,000이다).
+        out.keySet().retainAll(new java.util.LinkedHashSet<>(population));
+        return out;
     }
 
     Map<String, String> readManifest(String currency, LocalDate asOf) throws Exception {

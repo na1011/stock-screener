@@ -34,6 +34,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>지문이 바뀌면 <b>끝난 날짜도 다시 한다</b> — 낡은 값을 쓰느니 느린 편이 낫다</li>
  *   <li>죽은 실행이 남긴 반쪽 파일이 <b>「끝났다」로 읽히지 않는다</b></li>
  *   <li>`.tmp`가 최종 이름을 갖는 순간이 <b>없다</b></li>
+ *   <li>부분 갱신이 <b>안 잰 종목의 항목을 잃지 않고</b>, 동시에 <b>모집단 밖 항목을 남기지
+ *       않는다</b> — 양 끝이 다 결함이고 둘 다 무증상이다</li>
  * </ol>
  */
 @Tag("backtest")
@@ -50,8 +52,62 @@ class PitStoreResumeProbeTest {
     private static final String IDX = "index-fp-1";
     private static final Instant AT = Instant.parse("2026-09-04T00:00:00Z");
 
+    /**
+     * <b>부분 갱신의 양 끝을 함께 단언한다.</b> 이것이 종목별 해시로 바꾸면서 생긴 유일한
+     * 치명 지점이다 — {@code PitLoadTest}가 이제 <b>의심 종목만</b> 재고,
+     * {@code PitSweep.restamp}도 부분만 새로 찍는다.
+     *
+     * <ul>
+     *   <li><b>안 이어받으면</b> 안 잰 종목이 「지문 없음」으로 영원히 낡음이 된다.</li>
+     *   <li><b>안 자르면</b> 편출 종목의 지문이 남는데 값은 데이터 파일에서 빠져, 그 종목이
+     *       복귀할 때 지문이 맞아 값이 영영 안 만들어지고 완전성 검사가 영구히 던진다.</li>
+     * </ul>
+     *
+     * <p><b>MUST: 앞엣것만 단언하지 않는다.</b> 그러면 정리 기제를 죽인 회귀를 <b>고정한다</b> —
+     * 지금까지 그 정리를 하던 것은 적재의 전량 교체였고, 부분 갱신이 그것을 없앴다.
+     */
+    @Test
+    @DisplayName("부분 갱신이 안 잰 종목을 잃지 않고 모집단 밖 종목을 남기지도 않는다")
+    void carryOverKeepsUnmeasuredAndDropsDeparted() {
+        Map<String, String> manifest = Map.of(
+                "fp:1", "keep-me", "fp:2", "stale", "fp:9", "departed",
+                "ip:1", "d1", "ip:2", "d2", "ip:9", "d9");
+        java.util.List<Long> population = java.util.List.of(1L, 2L, 3L);
+
+        Map<Long, String> fp = PitStore.carryOver(manifest, "fp:", population,
+                Map.of(2L, "fresh", 3L, "brand-new"));
+        // 종목별 해시는 **모집단 전체(두 통화)**를 한 번에 재므로, 새로 넣는 쪽에도 이 통화
+        // 밖의 종목이 섞여 들어온다. 이어받은 쪽만 자르면 그것이 그대로 매니페스트에 실린다 —
+        // 실측으로 USD 매니페스트에 1,350개가 실렸다(모집단은 1,000이다).
+        Map<Long, String> ip = PitStore.carryOver(manifest, "ip:", population,
+                Map.of(2L, "d2-new", 3L, "d3", 77L, "다른-통화"));
+
+        assertThat(fp).as("안 잰 종목(1)을 이어받고, 잰 것(2)은 덮고, 새 종목(3)은 더한다")
+                .containsEntry(1L, "keep-me").containsEntry(2L, "fresh")
+                .containsEntry(3L, "brand-new");
+        assertThat(fp).as("편출 종목(9)의 지문이 남으면 그 종목의 복귀가 영구 실패가 된다")
+                .doesNotContainKey(9L);
+        assertThat(ip).as("종목별 해시도 같은 양 끝을 지킨다")
+                .containsEntry(1L, "d1").containsEntry(2L, "d2-new").doesNotContainKey(9L);
+        assertThat(ip).as("새로 잰 쪽에 섞인 모집단 밖 종목(77)도 걸러야 한다 — "
+                        + "이어받은 쪽만 자르면 다른 통화의 해시가 이 매니페스트에 실린다")
+                .doesNotContainKey(77L);
+    }
+
     private static PitStore.Stamp stamp(Map<Long, String> fp, Set<Long> failed) {
-        return new PitStore.Stamp(350, CODES, fp, IDX, "digest-1", "calc-1", AT, failed);
+        return stamp(fp, digestsFor(fp.keySet()), failed);
+    }
+
+    private static PitStore.Stamp stamp(Map<Long, String> fp, Map<Long, String> ip,
+                                        Set<Long> failed) {
+        return new PitStore.Stamp(350, CODES, fp, IDX, ip, "calc-1", AT, failed);
+    }
+
+    /** 종목별 제자리-수정 해시. 지문과 축이 달라 같은 값이어도 무방하다. */
+    private static Map<Long, String> digestsFor(Set<Long> ids) {
+        Map<Long, String> out = new java.util.TreeMap<>();
+        ids.forEach(id -> out.put(id, "digest-" + id));
+        return out;
     }
 
     /** 종목 지문. 값이 바뀌면 그 종목만 낡는다. */

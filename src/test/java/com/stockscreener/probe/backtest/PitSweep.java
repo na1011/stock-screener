@@ -404,7 +404,7 @@ final class PitSweep {
         // 1단계 — 싼 훑기. 과검출이다.
         PitChangeDetector.Changes changes = changesSince(Instant.parse(writtenAt));
         Set<Long> suspects = new LinkedHashSet<>(
-                changes.suspectsOn(asOf, population, mf.get("inPlaceDigest")));
+                changes.suspectsOn(asOf, population, PitStore.prefixed(mf, "ip:")));
 
         String sharedNow = fingerprint.forShared(currency, asOf);
         if (sharedMoved) {
@@ -439,7 +439,7 @@ final class PitSweep {
                         runner.computeAt(stockId, asOf, indexes, FinancialVisibility.KNOWN_ON)));
             }
         }
-        restamp(currency, asOf, mf, values, fresh, sharedNow, !stale.isEmpty());
+        restamp(currency, asOf, mf, population, values, fresh, sharedNow, !stale.isEmpty());
         return stale.size();
     }
 
@@ -451,16 +451,17 @@ final class PitSweep {
      * 들어온 변경을 영영 못 본다. 그래서 이 스윕이 시작한 시각을 쓴다.
      */
     private void restamp(String currency, LocalDate asOf, Map<String, String> mf,
-                         Map<Long, Map<String, BigDecimal>> values,
+                         List<Long> population, Map<Long, Map<String, BigDecimal>> values,
                          Map<Long, String> refreshed, String sharedNow, boolean dataChanged)
             throws Exception {
-        Map<Long, String> merged = new java.util.TreeMap<>();
-        for (Map.Entry<String, String> e : mf.entrySet()) {
-            if (e.getKey().startsWith("fp:")) {
-                merged.put(Long.parseLong(e.getKey().substring(3)), e.getValue());
-            }
-        }
-        merged.putAll(refreshed);
+        // MUST: 이어받되 **모집단으로 자른다.** 이어받기만 하면 편출 종목의 `fp:`가 매니페스트에
+        // 영원히 남는데, 그 종목의 **값은 위 `retainAll`로 데이터 파일에서 빠진다.** 그러면 그
+        // 종목이 아무것도 안 바뀐 채 복귀할 때 `fp:`가 그대로 맞아 낡음이 아니게 되고, 값은
+        // 영영 안 만들어지며, `repair`의 완전성 검사가 그 날짜에서 **영구히 던진다.**
+        // 편출입 이력이 있는 종목이 실측 9종목이고 2026-09-04에 둘이 실제로 복귀했다.
+        Map<Long, String> merged = PitStore.carryOver(mf, "fp:", population, refreshed);
+        Map<Long, String> mergedDigests =
+                PitStore.carryOver(mf, "ip:", population, detectorDigests());
         Set<String> codes = new TreeSet<>();
         String declared = mf.get("codes");
         if (declared != null && !declared.isBlank()) {
@@ -479,7 +480,7 @@ final class PitSweep {
         }
         PitStore.Stamp stamp = new PitStore.Stamp(
                 Integer.parseInt(mf.getOrDefault("attempted", String.valueOf(values.size()))),
-                codes, merged, sharedNow, detectorDigest(),
+                codes, merged, sharedNow, mergedDigests,
                 PitFingerprint.forCalculators(registry), startedAt, failed);
         if (dataChanged) {
             store.writeDate(currency, asOf, values, stamp);
@@ -490,13 +491,13 @@ final class PitSweep {
 
     /** 스윕 하나에 훑기 하나. 날짜마다 다시 재면 그것이 스윕 시간을 지배한다(실측 2초대). */
     private final Instant startedAt = Instant.now();
-    private String cachedDigest;
+    private Map<Long, String> cachedDigests;
 
-    private String detectorDigest() {
-        if (cachedDigest == null) {
-            cachedDigest = detector.inPlaceDigest(startedAt);
+    private Map<Long, String> detectorDigests() {
+        if (cachedDigests == null) {
+            cachedDigests = detector.inPlaceDigests(startedAt);
         }
-        return cachedDigest;
+        return cachedDigests;
     }
 
     /** 같은 시각을 여러 날짜가 묻는다. 훑기가 2초대라 캐시하지 않으면 그것이 지배한다. */

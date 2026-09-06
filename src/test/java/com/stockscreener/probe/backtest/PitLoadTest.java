@@ -160,7 +160,7 @@ class PitLoadTest {
         // MUST: 실행 하나에 기준 시각 하나. 날짜마다 찍으면 읽는 쪽이 그 수만큼 변경 훑기를
         // 돌아야 하고, 실측에서 그것이 스윕 시간을 통째로 지배했다.
         Instant startedAt = Instant.now();
-        String inPlaceDigest = detector.inPlaceDigest(startedAt);
+        Map<Long, String> inPlaceDigests = detector.inPlaceDigests(startedAt);
 
         int done = 0;
         int skipped = 0;
@@ -180,22 +180,25 @@ class PitLoadTest {
                 // 날에도 날짜당 0.56~1.43초가 들어 512날짜 확인만 9분이 된다 — 실측이다.
                 // 훑기가 「이 날짜에 의심 종목이 없다」고 하면 지문은 반드시 같으므로 안 잰다.
                 Map<String, String> mf = store.readManifest(currency, asOf);
-                String cannotSkip = whyCannotSkipCheaply(detector, fingerprint, currency, asOf, mf,
-                        calculatorFp, population);
-                if (cannotSkip == null) {
+                Verdict verdict = whyCannotSkipCheaply(store, detector, fingerprint, currency,
+                        asOf, mf, calculatorFp, population);
+                if (verdict == null) {
                     skipped++;
                     report(done, skipped, plannedDates, runBegan, currency, asOf, 0, "확인");
                     continue;
                 }
                 if (costNote == null) {
-                    costNote = cannotSkip;
+                    costNote = verdict.reason();
                     System.out.printf("   %s %d날짜를 지문으로 확인한다 — %s%n"
-                                    + "   (값이 안 바뀌었으면 다시 만들지 않는다. 확인만 %s당 "
-                                    + "0.6~1.5초라 몇 분 걸릴 수 있고 그동안 조용하다)%n",
-                            currency, entry.getValue().size(), cannotSkip, "날짜");
+                                    + "   (값이 안 바뀌었으면 다시 만들지 않는다. 확인은 의심 "
+                                    + "종목 수에 비례한다 — 전량이면 날짜당 0.6~1.5초다)%n",
+                            currency, entry.getValue().size(), verdict.reason());
                 }
 
-                Map<Long, String> fps = fingerprint.forCurrency(currency, asOf);
+                // 의심 종목만 잰다. 1단계가 「그 밖은 안 움직였다」를 보증하므로 건전하고,
+                // 실측으로 전량 1.5초가 32종목이면 0.06초다. 다만 그 보증이 성립하는 갈래는
+                // digest 갈래 하나뿐이라 나머지는 `only`가 null(전량)이다 — `Verdict` 참조.
+                Map<Long, String> fps = fingerprint.forCurrency(currency, asOf, verdict.only());
                 String sharedFp = fingerprint.forShared(currency, asOf);
                 PitStore.Freshness freshness =
                         store.freshnessOf(currency, asOf, fps, sharedFp);
@@ -224,8 +227,17 @@ class PitLoadTest {
                     values.keySet().retainAll(new LinkedHashSet<>(population));
                 }
 
+                // MUST: 지문을 **이어받되 모집단으로 자른다.** 의심 종목만 쟀으므로 그대로
+                // 넘기면 안 잰 종목의 `fp:`가 통째로 사라지고, 그 종목은 다음 실행에서
+                // 「지문 없음」으로 영원히 낡음이 된다. 반대로 자르지 않고 이어받기만 하면
+                // **편출 종목의 `fp:`가 영원히 남는데 값은 `retainAll`로 빠져** 그 종목이
+                // 복귀할 때 지문이 맞아 값이 영영 안 만들어진다(실측: 편출입 이력 9종목).
+                // 지금까지 그 정리를 하던 것이 이 자리의 **전량 교체**였다.
+                Map<Long, String> mergedFps = PitStore.carryOver(mf, "fp:", population, fps);
+                Map<Long, String> mergedDigests =
+                        PitStore.carryOver(mf, "ip:", population, inPlaceDigests);
                 store.writeDate(currency, asOf, values, new PitStore.Stamp(
-                        population.size(), declared, fps, sharedFp, inPlaceDigest,
+                        population.size(), declared, mergedFps, sharedFp, mergedDigests,
                         calculatorFp, startedAt, failed));
                 done++;
                 report(done, skipped, plannedDates, runBegan, currency, asOf, failed.size(),
@@ -292,34 +304,53 @@ class PitLoadTest {
      * digest 불일치는 <b>「못 쓴다」가 아니라 「확인이 필요하다」</b>다 — 실측으로 그때
      * 종목 지문 불일치는 0이었다.
      */
-    private String whyCannotSkipCheaply(PitChangeDetector detector,
-                                        PitFingerprint fingerprint, String currency, LocalDate asOf,
-                                        Map<String, String> mf, String calculatorFp,
-                                        List<Long> population) {
+    private Verdict whyCannotSkipCheaply(PitStore store, PitChangeDetector detector,
+                                         PitFingerprint fingerprint, String currency, LocalDate asOf,
+                                         Map<String, String> mf, String calculatorFp,
+                                         List<Long> population) {
+        // MUST: 아래 다섯 갈래는 `only`가 **null(전량)**이다. 싼 훑기가 「그 밖은 안 움직였다」를
+        // 보증하는 것은 **종목별 해시를 대조할 수 있을 때뿐**이고, 여기서는 그 대조가 성립하지
+        // 않는다 — 앞의 둘은 `changesSince`를 부를 수조차 없고(`Instant.parse(null)`이 던진다),
+        // 뒤의 셋은 종목 지문에 안 들어 있는 축(지수·계산기 판·미완료)이 흔들린 것이다.
+        // 특히 `매니페스트 없음`은 `-Dpit.days`로 구간을 넓힐 때 지나는 실제 경로이고, 거기서
+        // 부분 지문을 쓰면 **병합할 옛 `fp:`가 없어 새 날짜가 결손으로 태어난다.**
         if (mf.isEmpty()) {
-            return "매니페스트 없음";
+            return new Verdict("매니페스트 없음", null);
+        }
+        // MUST: 데이터 파일을 여기서도 본다. `freshnessOf`가 보지만 그것은 비싼 길에서만
+        // 돌므로, 매니페스트가 「완료」인 채 gzip만 없으면 적재가 **영원히 건너뛴다.**
+        // 종목별 해시로 바꾸면서 이 건너뛰기가 훨씬 자주 성립하게 됐다.
+        if (!store.hasData(currency, asOf)) {
+            return new Verdict("데이터 파일 없음", null);
         }
         if (!"true".equals(mf.get("complete"))) {
-            return "미완료(실패 " + mf.getOrDefault("failed", "?") + ")";
+            return new Verdict("미완료(실패 " + mf.getOrDefault("failed", "?") + ")", null);
         }
         if (!calculatorFp.equals(mf.get("calculatorFp"))) {
-            return "계산기 판 불일치";
+            return new Verdict("계산기 판 불일치", null);
         }
         if (mf.get("writtenAt") == null) {
-            return "writtenAt 없음";
+            return new Verdict("writtenAt 없음", null);
         }
         if (!fingerprint.forShared(currency, asOf).equals(mf.get("indexFp"))) {
-            return "지수 지문 불일치";
+            return new Verdict("지수 지문 불일치", null);
         }
         PitChangeDetector.Changes changes =
                 changesCache.computeIfAbsent(Instant.parse(mf.get("writtenAt")), detector::since);
-        String digestAtLoad = mf.get("inPlaceDigest");
-        if (digestAtLoad == null || !digestAtLoad.equals(changes.inPlaceDigest())) {
-            return "모집단 전역 해시(inPlaceDigest) 불일치 — 유니버스 편입이나 재무 제자리 수정이 "
-                    + "있었다. 값이 바뀐 종목은 지문이 가린다";
-        }
-        java.util.Set<Long> suspects = changes.suspectsOn(asOf, population, digestAtLoad);
-        return suspects.isEmpty() ? null : "원자료가 움직인 종목 " + suspects.size() + "개";
+        java.util.Set<Long> suspects =
+                changes.suspectsOn(asOf, population, PitStore.prefixed(mf, "ip:"));
+        return suspects.isEmpty() ? null
+                : new Verdict("원자료가 움직였거나 제자리 수정이 있는 종목 " + suspects.size()
+                        + "개", suspects);
+    }
+
+    /**
+     * 왜 비싼 길로 가는가와, <b>그때 무엇만 재면 되는가.</b>
+     *
+     * @param only {@code null}이면 <b>전량</b>이다 — 「이 종목들만 재도 된다」를 말할 근거가
+     *             없다는 뜻이고, 빈 집합({@code Set.of()})과 <b>정반대</b>다
+     */
+    private record Verdict(String reason, java.util.Set<Long> only) {
     }
 
     /** 같은 시각을 여러 날짜가 묻는다. 훑기가 2초대라 캐시하지 않으면 그것이 지배한다. */
@@ -468,13 +499,8 @@ class PitLoadTest {
     /** 매니페스트를 그대로 되쓰되 계산기 판과 지수 지문만 바꾼다. */
     private static PitStore.Stamp stampFrom(Map<String, String> mf, String calculatorFp,
                                             String indexFp) {
-        Map<Long, String> fps = new LinkedHashMap<>();
+        Map<Long, String> fps = PitStore.prefixed(mf, "fp:");
         Set<String> codes = new java.util.TreeSet<>();
-        for (Map.Entry<String, String> e : mf.entrySet()) {
-            if (e.getKey().startsWith("fp:")) {
-                fps.put(Long.parseLong(e.getKey().substring(3)), e.getValue());
-            }
-        }
         String declared = mf.get("codes");
         if (declared != null && !declared.isBlank()) {
             codes.addAll(List.of(declared.split(" ")));
@@ -482,8 +508,11 @@ class PitLoadTest {
         // MUST: `failed`를 이어받는다. `Set.of()`를 넘기면 `complete = failed.isEmpty()`가
         // **미완료 날짜를 조용히 완료로 승격**시킨다 — `PitSweep.restamp`에서 방금 없앤 결함을
         // 형제 메서드에 되살리는 자리다. 「지금 미완료가 0건이라 안 닿는다」는 근거가 아니다.
+        // MUST: `ip:`도 같은 이유로 이어받는다. 이 메서드를 `recheckCalculators`·
+        // `restampSharedFingerprints`·`restampStockFingerprints` 셋이 부르므로, 여기서 빠뜨리면
+        // 그 실행 하나가 512날짜의 종목별 해시를 통째로 지우고 다음 스윕이 전량 재확인이 된다.
         return new PitStore.Stamp(Integer.parseInt(mf.getOrDefault("attempted", "0")), codes, fps,
-                indexFp, mf.get("inPlaceDigest"), calculatorFp,
+                indexFp, PitStore.prefixed(mf, "ip:"), calculatorFp,
                 Instant.parse(mf.get("writtenAt")), failedOf(mf));
     }
 
@@ -568,7 +597,7 @@ class PitLoadTest {
                         Integer.parseInt(mf.getOrDefault("stocks", "0")),
                         new PitStore.Stamp(base.attempted(), base.codes(),
                                 fingerprint.forCurrency(currency, asOf), base.indexFingerprint(),
-                                base.inPlaceDigest(), base.calculatorFp(), base.writtenAt(),
+                                base.inPlaceDigests(), base.calculatorFp(), base.writtenAt(),
                                 base.failed()));
                 restamped++;
             }

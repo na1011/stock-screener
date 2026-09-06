@@ -43,25 +43,46 @@ final class PitChangeDetector {
     }
 
     /**
-     * @param stockSuspects 종목 → <b>그 종목이 의심스러워지는 가장 이른 기준일.</b> 저장 날짜
-     *                      {@code D}는 그 값이 {@code D} 이하일 때만 의심이다 — {@code D} 뒤에
-     *                      붙은 행은 그날의 값을 바꾸지 않는다
-     * @param sharedFrom    종목에 안 걸리는 입력(시장 지수)이 흔들린 가장 이른 기준일.
-     *                      {@code null}이면 안 흔들렸다
-     * @param inPlaceDigest 적재 시점에 이미 있던 행들의 내용 해시. 적재 때 적어 둔 것과 다르면
-     *                      <b>어느 행이 바뀌었는지 이 신호로는 알 수 없어</b> 전부 의심한다
+     * @param stockSuspects  종목 → <b>그 종목이 의심스러워지는 가장 이른 기준일.</b> 저장 날짜
+     *                       {@code D}는 그 값이 {@code D} 이하일 때만 의심이다 — {@code D} 뒤에
+     *                       붙은 행은 그날의 값을 바꾸지 않는다
+     * @param sharedFrom     종목에 안 걸리는 입력(시장 지수)이 흔들린 가장 이른 기준일.
+     *                       {@code null}이면 안 흔들렸다
+     * @param inPlaceDigests 적재 시점에 이미 있던 행들의 <b>종목별</b> 내용 해시. 적재 때 적어 둔
+     *                       것과 다른 종목만 의심한다
      */
     record Changes(Map<Long, LocalDate> stockSuspects, LocalDate sharedFrom,
-                   String inPlaceDigest) {
+                   Map<Long, String> inPlaceDigests) {
 
-        /** 그 날짜에서 값을 다시 만들어야 하는 종목. */
-        Set<Long> suspectsOn(LocalDate asOf, Collection<Long> population, String digestAtLoad) {
-            if (digestAtLoad == null || !digestAtLoad.equals(inPlaceDigest)
-                    || (sharedFrom != null && !sharedFrom.isAfter(asOf))) {
+        /**
+         * 그 날짜에서 값을 다시 만들어야 하는 종목.
+         *
+         * <p><b>모집단이 바뀌었다는 것만으로는 아무 종목도 의심하지 않는다.</b> 저장되는 125개
+         * 코드는 전부 종목 단위이고({@code IndicatorRunner.computeAt}이 <b>종목 하나 + 시장
+         * 지수</b>만 받는다), 교차단면({@code _PCTL}·{@code _SECTOR_*})은 저장하지 않고
+         * {@code PointInTimeScreener}가 <b>읽는 시점에</b> 만든다. 그래서 편입·편출은 살아남은
+         * 종목의 저장값을 틀리게 만들 수 없다 — 실측으로 2026-09-04 리밸런싱을 사이에 두고
+         * <b>양쪽 모집단에 다 있는 1,310종목 중 해시가 움직인 것이 0</b>이었다.
+         *
+         * <p>새로 편입된 종목은 저장된 해시가 <b>없으므로</b> 의심이 된다. 다만 그 종목은 값도
+         * 없어서 {@code PitSweep.repair}의 완전성 검사가 <b>먼저</b> 던지고,
+         * {@code PitLoadTest}에서는 {@code fp:} 부재로 낡음이 되어 계산된다.
+         *
+         * @param digestsAtLoad 매니페스트에 적힌 종목별 해시. <b>비어 있으면 전 종목이 의심</b>이다
+         *                      — 옛 판으로 찍힌 매니페스트가 그렇고, 한 번의 스윕이 스스로 낫는다
+         */
+        Set<Long> suspectsOn(LocalDate asOf, Collection<Long> population,
+                             Map<Long, String> digestsAtLoad) {
+            if (sharedFrom != null && !sharedFrom.isAfter(asOf)) {
                 return new LinkedHashSet<>(population);
             }
             Set<Long> out = new LinkedHashSet<>();
             for (Long stockId : population) {
+                String atLoad = digestsAtLoad.get(stockId);
+                if (atLoad == null || !atLoad.equals(inPlaceDigests.get(stockId))) {
+                    out.add(stockId);
+                    continue;
+                }
                 LocalDate earliest = stockSuspects.get(stockId);
                 if (earliest != null && !earliest.isAfter(asOf)) {
                     out.add(stockId);
@@ -84,7 +105,7 @@ final class PitChangeDetector {
                 WHERE updated_at > ? GROUP BY stock_id
                 """, t);
         // 재무·거버넌스: updated_at이 없어 「새로 들어온 행」만 시각으로 잡힌다. 제자리 수정은
-        // 아래 inPlaceDigest가 맡는다. published_at은 과거를 가리킬 수 있어 자르는 기준이 된다.
+        // 아래 inPlaceDigests가 맡는다. published_at은 과거를 가리킬 수 있어 자르는 기준이 된다.
         collectEarliest(suspects, """
                 SELECT stock_id, min(published_at) FROM financial_statement
                 WHERE created_at > ? GROUP BY stock_id
@@ -103,7 +124,7 @@ final class PitChangeDetector {
         LocalDate sharedFrom = jdbcTemplate.queryForObject("""
                 SELECT min(trade_date) FROM market_index_daily WHERE updated_at > ?
                 """, LocalDate.class, t);
-        return new Changes(suspects, sharedFrom, inPlaceDigest(since));
+        return new Changes(suspects, sharedFrom, inPlaceDigests(since));
     }
 
     private void collectEarliest(Map<Long, LocalDate> out, String sql, Timestamp t) {
@@ -118,50 +139,79 @@ final class PitChangeDetector {
     }
 
     /**
-     * <b>적재 시점에 이미 있던 행</b>들의 내용 해시. 뒤에 붙은 행을 빼는 것이 요점이다 —
-     * 안 빼면 매일의 적재가 해시를 움직여 저장소가 매일 통째로 무효가 된다.
+     * <b>적재 시점에 이미 있던 행</b>들의 <b>종목별</b> 내용 해시. 뒤에 붙은 행을 빼는 것이
+     * 요점이다 — 안 빼면 매일의 적재가 해시를 움직여 저장소가 매일 통째로 무효가 된다.
+     *
+     * <p><b>왜 종목별인가.</b> 전역 문자열 하나였을 때는 무엇이 움직이든 <b>전 종목</b>이
+     * 의심으로 올라갔고, 그 확인이 512날짜에 <b>약 535초</b>였다(KRW 0.57초 · USD 1.53초 ×
+     * 256날짜, 적재와 스윕이 <b>각각</b> 문다). 그리고 그 「무엇」의 대부분이 <b>모집단 변경</b>
+     * 이었다 — 네 항이 전부 {@code JOIN pop}을 지나므로 리밸런싱 한 번이 저장본 전체를 무효로
+     * 읽혔다. 같은 저장소가 {@code PitStore.freshnessOf}의 javadoc(<b>「전역 지문을 쓰지 않는
+     * 이유」</b>)에서 이미 종목 축을 골랐고, 여기만 그 예외로 남아 있었다.
      *
      * <p><b>모집단으로 좁힌다.</b> 모집단 밖은 어떤 일상 잡도 안 건드리는데
      * (전 잡이 {@code activeUniverseMemberIds()} = 1,350을 돈다) digest만 그것을 보고 있었다 —
      * 실측 노출면이 {@code financial_statement} 190,696행 중 <b>130,196행(68.3%)</b>,
      * {@code stock} 8,872 중 7,522, {@code universe_membership} 9,911 중 7,554다.
      *
-     * <p><b>통화별이 아니라 모집단 전체로 좁힌다.</b> {@code PitSweep.changeCache}가
-     * {@code Map<Instant, Changes>}이고 캐시된 digest가 String 하나라 <b>통화를 모른다</b> —
-     * 통화 의존으로 만들면 KRW 값이 USD 날짜에 재사용돼 USD가 영구 의심이 된다.
+     * <p><b>모집단은 성분 안에 안 들어간다.</b> 좁히기는 <b>어느 종목을 낼지</b>만 정하고 각
+     * 종목의 해시는 자기 행들만 본다. 그래서 편입·편출이 살아남은 종목의 해시를 못 움직인다 —
+     * 그것이 이 변경의 전부이고, {@code PitDigestScopeTest}가 그 성질을 지킨다.
      *
-     * <p><b>마이그레이션이 필요 없다.</b> {@code indexFp}와 달리 이 불일치는 조용한 오답이
-     * 아니라 <b>비용</b>이다 — 1단계가 전 종목을 의심으로 올리고 2단계가 내용으로 확정한 뒤
-     * {@code restamp}이 새 digest를 찍는다. <b>한 번의 스윕이 스스로 낫는다</b>(실측 8분대).
+     * <p><b>마이그레이션이 필요 없다.</b> 이 불일치는 조용한 오답이 아니라 <b>비용</b>이다 —
+     * 1단계가 의심을 올리고 2단계가 내용으로 확정한 뒤 {@code restamp}이 새 해시를 찍는다.
+     * <b>한 번의 스윕이 스스로 낫는다.</b>
      *
-     * <p>제자리 수정을 하는 표만 본다. 실측 2,031ms → <b>796ms</b>.
+     * <p>제자리 수정을 하는 표만 본다. 실측 종목별 <b>0.69~0.73초</b>(전역 식 0.76~0.86초보다
+     * 싸다 — 표를 통째로 조인하지 않고 종목 인덱스를 타기 때문이다).
      */
-    String inPlaceDigest(Instant since) {
+    Map<Long, String> inPlaceDigests(Instant since) {
         Timestamp t = Timestamp.from(since);
-        return jdbcTemplate.queryForObject("""
-                WITH pop AS (
-                    SELECT s.id FROM stock s
-                    WHERE s.is_active AND EXISTS (
-                        SELECT 1 FROM universe_membership m
-                        JOIN universe u ON u.code = m.universe_code AND u.is_active
-                        WHERE m.stock_id = s.id AND m.effective_to IS NULL))
-                SELECT md5(concat_ws('|',
-                  coalesce((SELECT md5(string_agg((to_jsonb(f.*) - 'created_at')::text,
-                                                 ',' ORDER BY f.id))
-                            FROM financial_statement f JOIN pop ON pop.id = f.stock_id
-                            WHERE f.created_at <= ?), ''),
-                  coalesce((SELECT md5(string_agg((to_jsonb(g.*) - 'created_at')::text,
-                                       ',' ORDER BY g.stock_id, g.fiscal_year, g.metric_key))
-                            FROM governance_fact g JOIN pop ON pop.id = g.stock_id
-                            WHERE g.created_at <= ?), ''),
-                  coalesce((SELECT md5(string_agg((to_jsonb(s.*) - 'created_at' - 'updated_at')::text,
-                                                 ',' ORDER BY s.id))
-                            FROM stock s JOIN pop ON pop.id = s.id), ''),
-                  coalesce((SELECT md5(string_agg(m.stock_id || ':' || m.universe_code || ':'
-                                                 || coalesce(m.effective_to::text, ''),
-                                                 ',' ORDER BY m.stock_id, m.universe_code))
-                            FROM universe_membership m JOIN pop ON pop.id = m.stock_id), '')
-                ))
-                """, String.class, t, t);
+        Map<Long, String> out = new LinkedHashMap<>();
+        jdbcTemplate.query(IN_PLACE_DIGEST_SQL,
+                rs -> {
+                    out.put(rs.getLong(1), rs.getString(2));
+                }, t, t);
+        return out;
     }
+
+    /**
+     * 펜스({@code PitDigestScopeTest})가 보는 <b>실제 SQL</b>. 요약본을 따로 적지 않는다 —
+     * 사본을 두면 두 곳이 갈릴 때까지 드러나지 않고, 그때 펜스는 <b>거짓 초록</b>이 된다.
+     */
+    static String inPlaceDigestSql() {
+        return IN_PLACE_DIGEST_SQL;
+    }
+
+    /**
+     * <b>MUST: 네 성분이 전부 {@code pop.id}로 한정된다.</b> 성분 안에서 {@code pop}을 집합으로
+     * 쓰면(예: {@code JOIN pop}) 모집단 변경이 다시 전 종목의 해시를 움직여, 리밸런싱 한 번이
+     * 저장본 전체를 비싼 길로 보내던 옛 동작으로 돌아간다. 펜스가 그것을 본다.
+     */
+    private static final String IN_PLACE_DIGEST_SQL = """
+            WITH pop AS (
+                SELECT s.id FROM stock s
+                WHERE s.is_active AND EXISTS (
+                    SELECT 1 FROM universe_membership m
+                    JOIN universe u ON u.code = m.universe_code AND u.is_active
+                    WHERE m.stock_id = s.id AND m.effective_to IS NULL))
+            SELECT pop.id, md5(concat_ws('|',
+              coalesce((SELECT md5(string_agg((to_jsonb(f.*) - 'created_at')::text,
+                                             ',' ORDER BY f.id))
+                        FROM financial_statement f
+                        WHERE f.stock_id = pop.id AND f.created_at <= ?), ''),
+              coalesce((SELECT md5(string_agg((to_jsonb(g.*) - 'created_at')::text,
+                                   ',' ORDER BY g.fiscal_year, g.metric_key))
+                        FROM governance_fact g
+                        WHERE g.stock_id = pop.id AND g.created_at <= ?), ''),
+              coalesce((SELECT (to_jsonb(s.*) - 'created_at' - 'updated_at')::text
+                        FROM stock s WHERE s.id = pop.id), ''),
+              coalesce((SELECT string_agg(m.universe_code || ':'
+                                          || coalesce(m.effective_to::text, ''),
+                                          ',' ORDER BY m.universe_code)
+                        FROM universe_membership m WHERE m.stock_id = pop.id), '')
+            ))
+            FROM pop
+            ORDER BY pop.id
+            """;
 }
