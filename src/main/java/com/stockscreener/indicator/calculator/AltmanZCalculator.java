@@ -167,7 +167,10 @@ public class AltmanZCalculator implements IndicatorCalculator {
         BigDecimal currentLiabilities = latest.currentLiabilities();
         BigDecimal retainedEarnings = latest.retainedEarnings();
         // 유량 — 4분기 합.
-        BigDecimal ebit = FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::operatingIncome);
+        // 원시 영업이익이 없으면 유도한다(ADR-0104). 원시가 있으면 그것이 이기므로
+        // 이미 나온 값은 바뀌지 않고 값이 없던 종목에만 새로 난다.
+        BigDecimal ebit = FinancialMath.sumTrailingFourQuarters(
+                quarters, FinancialMath::operatingIncomeOf);
         BigDecimal sales = FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue);
 
         if (currentAssets == null || currentLiabilities == null

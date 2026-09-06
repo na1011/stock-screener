@@ -403,6 +403,30 @@ class SwingIndicatorsTest {
         }
 
         @Test
+        @DisplayName("원시 영업이익이 없어도 유도 재료가 있으면 값이 난다 — 수정모델과 EBIT 정의를 맞춘다")
+        void derivesOperatingIncomeWhenRawIsMissing() {
+            // 매출 200 − 총원가·비용 175 = 25로 원시 영업이익과 같으므로 Z도 2.99 그대로다.
+            // 즉 이 갈래가 여는 것은 값의 변경이 아니라 값이 없던 종목이다(ADR-0104).
+            List<FinancialFigures> quarters = new ArrayList<>();
+            for (FinancialFigures q : balanceSheetQuarters()) {
+                quarters.add(FinancialFiguresFixture.from(q)
+                        .operatingIncome(null)
+                        .costsAndExpenses(bd(175))
+                        .build());
+            }
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
+            cap.put(START, bd(800));
+
+            List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
+                    1L, null, List.of(bar), List.of(), quarters, List.of(),
+                    Map.of(MarketCapCalculator.CODE, cap)));
+
+            assertThat(points).hasSize(1);
+            assertThat(points.getFirst().value()).isEqualByComparingTo("2.99");
+        }
+
+        @Test
         @DisplayName("IMPORTANT — 의존 지표를 거치는 재조립 경로에서도 업종이 전달된다")
         void industrySurvivesDependencyReassembly() {
             // AltmanZ는 MARKET_CAP에 의존하므로 러너가 컨텍스트를 반드시 다시 만든다.
