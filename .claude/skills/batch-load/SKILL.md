@@ -26,10 +26,11 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 --job=governance-derive [--tickers=005930]
 ```
 
-**기업 행위 원장은 접두를 달리한다** — 판정은 운영 앱이 뜬 채로 하는 일이라 포트를 비켜야 한다.
+**아래는 원장을 보고 판정하는 잡들이다.** 접두는 위와 같다 — `bootstrap` 프로파일이
+`server.port: 0`을 이미 걸어 운영 앱이 8080에 떠 있어도 그냥 돌아간다.
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 <아래>'
+./gradlew bootRun --args='--spring.profiles.active=bootstrap <아래>'
 
 --job=corporate-action-review [--ca-status=OBSERVED] [--ca-type=UNKNOWN] [--ca-ticker=005930] [--ca-limit=200]
 --job=corporate-action-review --ca-id=97
@@ -123,8 +124,8 @@ WHERE rn <= 181 GROUP BY market_code"
 
 - **`--universe`가 없으면 즉시 실패한다.** 두 잡의 기본 대상이 활성 유니버스인데 미국이
   비활성이면 `--tickers`만 줘도 *"편입 중인 활성 종목이 하나도 없다"*가 된다.
-- **`--server.port=0`이 사실상 필수다.** 운영 앱이 8080을 물고 있으면 러너가 아예 시작되지
-  않은 채 `BUILD SUCCESSFUL` + 종료코드 0이 난다.
+- **포트는 신경 쓰지 않아도 된다** — `bootstrap` 프로파일의 `server.port: 0`이 이미 비운다
+  (`application.yaml`의 그 블록 주석이 손 플래그 대신 여기 박아 둔 이유를 적는다).
 
 **IMPORTANT — `corporate-action`의 급변 휴리스틱 임계는 KRX 가격제한폭이다.**
 `AdjustmentRecalculator.detectCandidates`가 `PriceDiscontinuity`의 `1.30`/`0.70`으로 후보를
@@ -280,9 +281,8 @@ DART 실패 하나가 지수 갱신 전체를 되돌린다. 인자 없이 돌리
 `governance_fact`가 안 바뀌고, 유도만 하면 `indicator_value`가 안 바뀐다 — **셋 다 성공으로
 끝나고 화면은 옛 값 그대로다.** 세 잡 중 어느 것도 다음 것을 부르지 않는다.
 
-**운영 앱이 도는 중에 `--server.port=0` 없이 띄우면 포트 8080 충돌로 컨텍스트가 죽는데 gradle은
-`BUILD SUCCESSFUL`과 종료코드 0을 낸다.** `bootRun`은 프로파일과 무관하게 웹 서버를 올린다.
-**그때 잡은 한 줄도 안 돌았다** — 러너가 아예 시작되지 않아 실패 처리도 걸리지 않는다. 적재 뒤
+**`BUILD SUCCESSFUL`과 종료코드 0은 적재의 근거가 아니다.** 컨텍스트가 뜨기 전에 죽으면 러너가
+아예 시작되지 않아 실패 처리도 걸리지 않고, 그때도 gradle은 성공을 낸다. 적재 뒤
 **저장된 행 수를 센다.** 잡을 고른 뒤의 실패(모르는 인자·잡 실패)는 종료코드 1로 끝나므로 이
 함정과 구분된다.
 

@@ -144,10 +144,14 @@ import java.util.List;
  * <p><b>원장 잡 둘에는 {@code --server.port=0}이 사실상 필수다.</b> 그것이 대신하는 일이
  * "앱을 띄우고 로그인해서 PUT"이라 <b>운영 앱이 8080에 떠 있는 것이 정상 사용 조건</b>이다.
  *
- * <p>IMPORTANT — 운영 앱이 도는 중이면 {@code --server.port=0}을 함께 준다. 포트 8080 충돌은
- * 컨텍스트를 죽이는데 <b>그때 이 러너는 아예 돌지 않아</b> {@link #run}의 실패 처리가 걸리지
- * 않는다 — gradle이 {@code BUILD SUCCESSFUL}과 <b>종료코드 0</b>을 내고(실측), 로그를 열지
- * 않으면 적재된 것으로 읽힌다. <b>잡을 고른 뒤의 실패는 다르다 — 종료코드 1로 끝난다.</b>
+ * <p><b>포트는 손으로 비우지 않는다 — {@code application.yaml}의 {@code bootstrap} 프로파일이
+ * {@code server.port: 0}을 이미 건다.</b> 운영 앱이 8080에 떠 있어도 그냥 돌리면 되고,
+ * {@code --server.port=0}은 있어도 무해하지만 필요하지 않다.
+ *
+ * <p>IMPORTANT — 그래도 {@code BUILD SUCCESSFUL}과 <b>종료코드 0</b>을 적재의 근거로 삼지
+ * 않는다. 컨텍스트가 뜨기 전에 죽는 어떤 이유로든 <b>이 러너는 아예 돌지 않고</b>
+ * {@link #run}의 실패 처리가 걸리지 않는다 — 그때도 gradle은 성공을 낸다(실측).
+ * <b>잡을 고른 뒤의 실패는 다르다 — 종료코드 1로 끝난다.</b> 적재 여부는 저장된 행으로 센다.
  */
 @Profile("bootstrap")
 @Component

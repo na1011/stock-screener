@@ -6,6 +6,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.boot.context.TypeExcludeFilter;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
@@ -46,6 +47,18 @@ import org.springframework.context.annotation.Import;
                 "com.stockscreener.probe.backtest",
         },
         excludeFilters = {
+                // 운영이 쓰는 바로 그 필터다. @SpringBootApplication이 이것을 달고, spring-boot-test가
+                // TestTypeExcludeFilter를 델리게이트로 심어 테스트 클래스와 그 내부 클래스,
+                // @TestComponent를 스캔에서 뺀다. 여기에 없으면 평범한 @ComponentScan이라
+                // 그 보호가 통째로 빠진다 — IndicatorExtensibilityTest의 @TestConfiguration이
+                // 실제로 스캔되어 DUMMY_TEST_INDICATOR가 레지스트리에 들었고, 그것이
+                // PitFingerprint의 코드 목록과 시점 재현 저장본 512개에 전부 실렸다.
+                //
+                // MUST NOT: @TestConfiguration 하나만 이름으로 빼지 않는다. 그러면 @TestComponent가
+                // 하나 생기는 날 같은 방식으로 다시 새는데, 그 누수는 저장본을 열어보기 전까지
+                // 드러나지 않는다.
+                @ComponentScan.Filter(
+                        type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
                 @ComponentScan.Filter(
                         type = FilterType.ASSIGNABLE_TYPE, classes = ApplicationRunner.class),
                 // 컨트롤러는 도메인별 `…/web`에 있다(.claude/rules/backend.md). 백테스트는 HTTP를
