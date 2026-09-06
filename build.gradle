@@ -454,6 +454,18 @@ def viaBacktest = gradle.startParameter.taskNames.any {
 // (실측: `-Dsweep.targts=…`가 BUILD SUCCESSFUL). Gradle은 태스크 그래프에 없는 태스크의
 // 설정 블록을 평가조차 하지 않는다.
 ext.wireHarnessSwitches = { task, Set known ->
+    // MUST: 포크 JVM의 기본 타임존을 고정한다. 종목 지문의 기업행위 성분이 `to_jsonb(ca.*)`로
+    // `applied_at`(timestamptz)을 **세션 타임존으로 렌더**하고, pgjdbc는 접속 스타트업 패킷에
+    // `TimeZone = TimeZone.getDefault().getID()`를 실어 보낸다 — 즉 **JVM 기본 TZ가 곧 PG 세션
+    // TZ**이고 그것이 지문 값을 바꾼다. 실측: 같은 질의가 `Asia/Seoul`↔`UTC`에서
+    // **KRW 65 · USD 91종목**(= `applied_at IS NOT NULL`인 수)이 갈렸다.
+    //
+    // 저장본은 KST 세션에서 찍혔으므로 다른 값으로 고정하면 그 156종목이 **저장된 전 날짜에서**
+    // 낡음이 된다. 여기를 안 걸면 컨테이너화·다른 기계·`-Duser.timezone` 하나로 그렇게 된다.
+    //
+    // MUST NOT: 아래 `known` 펜스에 `user.timezone`을 넣지 않는다. 그 펜스는 `pit.*`/`sweep.*`만
+    // 보고, 명령줄 `-D`는 **데몬 JVM에만** 붙어 포크된 테스트에 닿지도 않는다.
+    task.systemProperty 'user.timezone', 'Asia/Seoul'
     def given = System.getProperties().stringPropertyNames()
             .findAll { it.startsWith('pit.') || it.startsWith('sweep.') }
     // Gradle의 `-D`는 **데몬 JVM에만** 붙는다. 이 전달이 없으면 스위치가 조용히 무시되고
