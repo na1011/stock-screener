@@ -154,8 +154,9 @@ class CustomScreenSweepTest {
             if (e.getValue().isEmpty()) {
                 continue;
             }
-            System.out.printf("   %-10s %-26s %-6s %-8s %-7s %-8s %-8s %s%n",
-                    "매수일", "종목", "달성률", "결과", "소요일", "최고수익", "최대하락", "비고");
+            System.out.println("   " + pad("매수일", 11) + pad("종목", 27) + pad("달성률", 8)
+                    + pad("결과", 10) + pad("소요일", 8) + pad("최고수익", 10)
+                    + pad("최대하락", 10) + "비고");
             List<HoldingOutcome.Result> outcomes = new ArrayList<>();
             // MUST: 티커 좁히기는 **출력에서만** 한다. 판정 모집단을 좁히면 업종·유니버스
             // 백분위의 동료 집합이 달라져 **같은 종목의 달성률이 달라진다** — 전체를 돌린 표와
@@ -168,12 +169,15 @@ class CustomScreenSweepTest {
                     .forEach(x -> {
                         HoldingOutcome.Result r = holding.measure(x.getKey(), x.getValue().asOf());
                         outcomes.add(r);
-                        System.out.printf("   %-10s %-26s %-6s %-8s %-7s %-8s %-8s %s%n",
-                                r.entry(), abbreviate(tickerOf(x.getKey())),
-                                percent(ratioOf(x.getValue())), r.verdict(),
-                                r.daysToTarget() == null ? "-" : r.daysToTarget() + "일",
-                                percent(r.maxGainPct()), percent(r.maxDrawPct()),
-                                note(r));
+                        System.out.println("   "
+                                + pad(r.entry().toString(), 11)
+                                + pad(abbreviate(tickerOf(x.getKey()), 26), 27)
+                                + pad(percent(ratioOf(x.getValue())), 8)
+                                + pad(String.valueOf(r.verdict()), 10)
+                                + pad(r.daysToTarget() == null ? "-" : r.daysToTarget() + "일", 8)
+                                + pad(percent(r.maxGainPct()), 10)
+                                + pad(percent(r.maxDrawPct()), 10)
+                                + note(r));
                     });
             HoldingOutcome.Summary summary = HoldingOutcome.Summary.of(outcomes);
             System.out.printf("   → 성공 %d · 부분성공 %d · 손절 %d%s · 목표 달성일 평균 %s · "
@@ -239,8 +243,53 @@ class CustomScreenSweepTest {
         return String.join(" ", notes);
     }
 
-    private static String abbreviate(String name) {
-        return name.length() <= 26 ? name : name.substring(0, 25) + "…";
+    /**
+     * <b>터미널 표시 폭</b> 기준 왼쪽 정렬.
+     *
+     * <p>MUST NOT: {@code %-Ns}로 표를 맞추지 않는다. 그것은 <b>문자 수</b>로 패딩하는데
+     * 한글·전각은 한 글자가 <b>두 칸</b>을 차지한다. 그래서 「성공」(2자·4칸)과
+     * 「부분성공」(4자·8칸)이 같은 폭으로 채워져 <b>줄마다 열이 어긋난다</b> — 헤더가 전부
+     * 한글이라 첫 줄부터 밀리고, 국내 종목명은 폭이 두 배라 더 심하다.
+     */
+    private static String pad(String s, int width) {
+        int w = 0;
+        for (int i = 0; i < s.length(); ) {
+            int cp = s.codePointAt(i);
+            w += wide(cp) ? 2 : 1;
+            i += Character.charCount(cp);
+        }
+        return w >= width ? s : s + " ".repeat(width - w);
+    }
+
+    /** 두 칸을 차지하는 문자인가. 한글 음절·자모, CJK, 전각 기호가 그렇다. */
+    private static boolean wide(int cp) {
+        return (cp >= 0x1100 && cp <= 0x115F)
+                || (cp >= 0x2E80 && cp <= 0xA4CF)
+                || (cp >= 0xAC00 && cp <= 0xD7A3)
+                || (cp >= 0xF900 && cp <= 0xFAFF)
+                || (cp >= 0xFE30 && cp <= 0xFE6F)
+                || (cp >= 0xFF00 && cp <= 0xFF60)
+                || (cp >= 0xFFE0 && cp <= 0xFFE6);
+    }
+
+    /**
+     * 표시 폭이 {@code width}를 넘지 않게 자른다. <b>길이로 자르면 안 된다</b> — 국내
+     * 종목명은 한 글자가 두 칸이라 26자가 52칸이 되어 뒤 열이 통째로 밀린다.
+     */
+    private static String abbreviate(String name, int width) {
+        int w = 0;
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < name.length(); ) {
+            int cp = name.codePointAt(i);
+            int cw = wide(cp) ? 2 : 1;
+            if (w + cw > width - 1) {
+                return out.append('…').toString();
+            }
+            out.appendCodePoint(cp);
+            w += cw;
+            i += Character.charCount(cp);
+        }
+        return out.toString();
     }
 
     /** 쉼표로 나눈 스위치. 없으면 기본값. */
