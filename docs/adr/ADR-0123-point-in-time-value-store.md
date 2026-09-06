@@ -145,12 +145,23 @@ applies_to:
   그 156종목이 저장된 **전 날짜에서** 낡음이 된다. **이것은 `freshnessOf`가 보는 낡음 판정
   축이라 값을 다시 만들지를 정한다.** `PitColumnCoverageTest`는 「빠진 컬럼」을 잡지 형변환을
   안 보므로 원리적으로 못 잡는다.
+  - **MUST: 고칠 때 `corporate_action` 성분을 wide/narrow로 먼저 가른다.** 지금 그 성분은
+    `FOR_CURRENCY_SQL`에 **한 벌만** 있어 `forCurrencyBeforeNarrowing`과 공용이다(실측:
+    `to_jsonb(ca.*)` 출현 1회). `applied_at`만 빼면 **좁은 식과 넓은 식이 함께 바뀌어**
+    `-Dpit.recheck=fingerprint`의 부분집합 논증이 성립하지 않고 — 저장값과 안 맞아 전부
+    `moved`로 신고된다 — **마이그레이션이 아니라 전량 재적재(3시간 41분)가 된다.**
 - **`inPlaceDigest`의 `stock` 성분만 안 좁혀져 있다.** 종목 지문은 값 경로가 읽는 5컬럼만
   보는데(`PitFingerprint.STOCK_COLUMNS`) `inPlaceDigest`는 `to_jsonb(s.*)` 17컬럼을 본다.
   `name`·`ticker`가 움직이면 **digest만** 움직여 그 통화 전체가 비싼 길로 간다.
-- **모집단 `pop`이 바뀌면 digest의 네 항이 전부 움직인다.** 그래서 **한국 리밸런싱이 미국
-  저장본을 무효화한다**(2026-09-05 20:00 KOSDAQ 5 + KOSPI 3 교체 → USD 256날짜가 비싼 길로).
+- **모집단 `pop`이 바뀌면 digest의 네 항이 전부 움직인다 — 실측이다.** 리밸런싱 종목(효력일
+  2026-09-04)을 `pop`에서 빼고 항별로 해시하니 `financial_statement`·`governance_fact`·
+  `stock`·`universe_membership` **넷 다 불일치**였다. 그래서 **한국 리밸런싱이 미국 저장본을
+  무효화한다**(2026-09-05 20:00 KOSDAQ 5 + KOSPI 3 교체 → USD 256날짜가 비싼 길로).
   `pop`이 통화를 모르는 것은 의도지만(`PitChangeDetector` 주석), **그 대가는 안 적혀 있었다.**
+  - **MUST NOT: 위 「`stock` 성분 좁힘」을 이것의 처방으로 읽지 않는다.** 네 항이 전부
+    움직이므로 **`stock`만 좁혀도 리밸런싱은 그대로 비싸다.** 둘은 다른 문제다 —
+    좁힘 비대칭은 `name`·`ticker`가 바뀔 때만 걸린다. 근본 처방은 `pop` 자체를 손대는
+    것이어야 하고, 통화별로 쪼개는 갈래는 `PitSweep.changeCache`가 통화를 몰라 기각돼 있다.
 - **MUST NOT: 이 셋을 「시각 컷을 주면 된다」로 고치지 않는다.** `universe_membership`에는
   `updated_at`이 **없고** `effective_to`를 나중에 채운 제자리 수정이 **74행**이다 — 시각 컷은
   그것을 통째로 놓쳐 **미검출**이 된다. 아래 §버린 대안의 「타임스탬프 최댓값으로 낡음 판정」과
