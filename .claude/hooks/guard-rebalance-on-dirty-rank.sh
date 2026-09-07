@@ -70,30 +70,58 @@ export PGCONNECT_TIMEOUT=3
 # **절대 상한이 아니라 종목 안 중앙값 대비로 재는 이유**: 상한은 임의값이라 시장이 커지면
 # 낡는다. 종목 안에서 최신 값이 자기 이력의 50배를 넘는 것은 분할로 설명되지 않는다 —
 # 분할은 원장(`corporate_action`)이 따로 잡고 주식수 계열에는 그 배수가 안 실린다.
+# **판정축은 「그 행 안에서 두 값이 맞는가」다 — 종목 자기 이력과 비교하지 않는다.**
+# 주식수와 `net_income / eps`는 같은 보고서의 서로 다른 칸이라, 한쪽이 축척을 잘못 받으면
+# 둘이 갈린다. 이력을 안 보므로 **이력 전체가 오염된 종목도 잡히고**(자기 참조 축은 그때
+# 최신/중앙값이 1에 붙어 아무것도 못 본다) **정당한 희석은 안 잡힌다**(두 칸이 함께 커진다).
+#
+# **옛 축(최신 vs 이력 중앙값 50배)을 되돌리지 마라.** 실측(2026-09-08)으로 그 축은
+# **거짓 양성 4/4 · 거짓 음성 7/7**이었다 — 신고하던 `DVLT`·`EMAT`·`ORBS`·`QXO`는 전부 실제
+# 희석이고(`DVLT` 4.7M→950M이 매끄럽다), 정작 위험한 일곱은 배수가 0.00~1.21이라 안 걸렸다.
+# 그리고 그 축은 **ADR-0125 §버린 대안이 「분포에 절단점이 없다」로 이미 기각한 것**이다
+# (실측 분포: 10배 아래 4,533 → 25 → 4 → 9 → 3 → 3 → 1로 임계 50 아래위에 3+3이 붙어 있다).
+#
+# 이 축의 분포는 갈린다 — ±2배 안에 **4,203**, 애매 구간 [20,100)에 4, 위험 [100,∞)에 7이고
+# **편입 1,000 중 위험은 0**이다.
 outliers=$(psql -d "${DB_NAME:-stock_screener}" -At -F'|' -c "
-WITH med AS (
-  SELECT stock_id, (percentile_cont(0.5) WITHIN GROUP (ORDER BY shares_outstanding))::numeric AS md
-  FROM financial_statement WHERE shares_outstanding > 0 GROUP BY 1 HAVING count(*) >= 4),
-cur AS (
-  SELECT DISTINCT ON (f.stock_id) f.stock_id, f.shares_outstanding AS cur
-  FROM financial_statement f WHERE f.shares_outstanding > 0 AND f.is_latest
-  ORDER BY f.stock_id, f.period_end DESC)
+WITH cur AS (
+  SELECT DISTINCT ON (f.stock_id) f.stock_id, f.shares_outstanding AS sh,
+         COALESCE(f.net_income_controlling, f.net_income) / NULLIF(f.eps, 0) AS imp
+  FROM financial_statement f WHERE f.shares_outstanding > 0
+  ORDER BY f.stock_id, f.period_end DESC, f.revision_no DESC)
 SELECT string_agg(t, ', ' ORDER BY t) FROM (
-  SELECT s.ticker || ' ' || round(c.cur / med.md, 0) || '배' AS t, c.cur / med.md AS x
-  FROM cur c JOIN med ON med.stock_id = c.stock_id JOIN stock s ON s.id = c.stock_id
-  WHERE c.cur / med.md > 50 ORDER BY 2 DESC LIMIT 10) z" 2>/dev/null) || {
+  SELECT s.ticker || ' ' || round(c.imp / c.sh, 0) || '배' AS t, c.imp / c.sh AS x
+  FROM cur c JOIN stock s ON s.id = c.stock_id
+  WHERE c.imp IS NOT NULL AND c.imp / c.sh >= 100 AND c.imp / c.sh < 10000
+  ORDER BY 2 DESC LIMIT 10) z" 2>/dev/null) || {
   echo "[guard-rebalance] 순위 축 질의가 실패했다. 판정하지 못했다." >&2
   exit 1
 }
 
+# **MUST: 상한 10,000을 지우지 마라.** `eps`가 0에 가까우면 함의값이 터진다 — 실측으로
+# `DYAI` 277억주 · `KXIN` 2,118억주다. 그 둘을 신고하면 가드가 영구히 막힌다.
+#
+# **MUST NOT: 「eps가 없어 판정 못 한 종목」으로 막지 않는다.** 편입 1,000 중 65가 그렇다.
+# 못 잰 것은 오염의 증거가 아니고, 그것으로 막으면 이 가드가 다시 도달 불가능한 상태가 된다.
+# 다만 그 수를 함께 보인다 — 침묵은 「판정했고 문제없다」와 같은 신호다.
+unjudged=$(psql -d "${DB_NAME:-stock_screener}" -At -c "
+SELECT count(*) FROM (
+  SELECT DISTINCT ON (f.stock_id) f.stock_id, f.eps
+  FROM financial_statement f
+  JOIN universe_membership m ON m.stock_id = f.stock_id AND m.effective_to IS NULL
+  JOIN universe u ON u.code = m.universe_code AND u.is_active
+  WHERE f.shares_outstanding > 0
+  ORDER BY f.stock_id, f.period_end DESC, f.revision_no DESC) t
+WHERE t.eps IS NULL OR t.eps = 0" 2>/dev/null || echo "?")
+
 [ -z "$outliers" ] && exit 0
 
-jq -n --arg list "$outliers" \
+jq -n --arg list "$outliers" --arg unjudged "$unjudged" \
   '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: ("순위 축에 이상치가 있다 — 최신 상장주식수가 자기 이력 중앙값의 50배를 넘는 종목: " + $list + ". 시총 = 주식수 × 종가이므로 이 값들이 상위 N을 밀어낸다. 잘못 편입된 종목 하나가 정상 종목 하나를 1,000위 밖으로 밀고, `universe_membership`의 편입 이력은 사후 복원이 안 된다(ADR-0086·0099). 게다가 같은 날 두 번 못 돌아 고치는 데 하루가 걸린다. **주식수를 먼저 고쳐라** — 이상치가 0이 되면 이 가드는 다시 걸리지 않는다. 오염을 알면서 돌려야 하는 사정이 있으면 사용자에게 그 수를 보이고 승인을 받아라.")
+      permissionDecisionReason: ("순위 축에 오염이 있다 — 저장된 상장주식수가 같은 보고서의 `net_income / eps`가 함의하는 수와 100배 이상 갈리는 종목: " + $list + ". 시총 = 주식수 × 종가이므로 그 종목은 순위에서 **밀려나거나 밀어낸다**. 편입 이력은 사후 복원이 안 되고(ADR-0086·0099) 잘못 돌리면 다음 리밸런싱까지 화면에 남는다. **그 행들을 먼저 고쳐라** — 근거 둘을 세우는 절차는 ADR-0126 §규칙이고, 이력 전체가 오염된 종목은 세 번째 근거로 `SecEdgarSharesProbeLiveTest.probeCrossTagSpreadWithinOneFiling`을 쓴다. 이 축은 **0에 도달할 수 있다**(옛 축은 정당한 희석을 영구히 신고했다). 참고로 `eps`가 없어 판정하지 못한 편입 종목이 " + $unjudged + "개다 — 막지는 않지만 그만큼은 이 가드가 못 본다. 오염을 알면서 돌려야 하면 사용자에게 이 수를 보이고 승인을 받아라.")
     }
   }'
 exit 0
