@@ -40,6 +40,42 @@ applies_to:
 **소스 자신의 신고값으로 유도식을 검증했다.** 둘 다 있는 **3,258행**에서 오차 1% 이내가
 **2,713(83.3%)** · 10% 이내가 **2,887(88.6%)** · 부호가 다른 것이 **110(3.4%)**이다.
 
+```premise 영업이익을 소비하는 계산기가 전부 유도를 탄다
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date),
+mem AS (SELECT DISTINCT um.stock_id AS sid FROM universe_membership um
+        WHERE um.universe_code = 'US_TOP1000' AND um.effective_to IS NULL),
+have AS (SELECT iv.indicator_code AS code, iv.stock_id AS sid FROM indicator_value iv
+         CROSS JOIN d JOIN mem m ON m.sid = iv.stock_id WHERE iv.trade_date = d.t),
+gap AS (SELECT sid FROM have WHERE code = 'ROIC_MIN_3Y'
+        EXCEPT SELECT sid FROM have WHERE code = 'ROIC_PRETAX'),
+q AS (SELECT g.sid, count(*) FILTER (WHERE t.rn <= 4 AND t.der IS NOT NULL) der4
+      FROM gap g JOIN (
+        SELECT f.stock_id AS sid2,
+               COALESCE(f.operating_income,
+                 (f.interest_and_dividend_income + f.noninterest_income)
+                   - (f.interest_expense + f.noninterest_expense),
+                 f.revenue - f.benefits_losses_and_expenses,
+                 f.gross_profit - f.operating_expenses,
+                 f.revenue - f.costs_and_expenses) AS der,
+               row_number() OVER (PARTITION BY f.stock_id ORDER BY f.period_end DESC) AS rn
+        FROM financial_statement f WHERE f.is_latest AND f.fiscal_period <> 'FY') t
+        ON t.sid2 = g.sid GROUP BY 1)
+SELECT CASE
+  WHEN (SELECT count(*) FROM have WHERE code = 'ROIC_MIN_3Y') = 0
+    THEN '잴 것이 없었다 - 최신 거래일에 편입 종목의 ROIC_MIN_3Y가 한 행도 없다'
+  WHEN count(*) = 0 THEN 'OK 유도로 분기 넷을 채울 수 있는데 ROIC_PRETAX가 없는 종목 0'
+  ELSE '영업이익 유도를 안 타는 계산기가 있다: ' || count(*) || '종목이 3년 최저 ROIC는 내면서 현재 ROIC를 못 낸다'
+  END
+FROM q WHERE der4 = 4"
+```
+
+**모집단을 「분기 넷을 유도로 채울 수 있는 종목」으로 좁힌 것이 이 펜스의 전부다.**
+`ROIC_MIN_3Y`가 `ROIC_PRETAX`의 부분집합이어야 한다고 읽으면 안 된다 — **둘은 읽는 행이
+다르다**(연간 3개 대 분기 TTM). 좁히지 않고 세면 **지금도 붉는다**: 실측으로 그 차집합이
+49종목인데 그중 10은 분기 재무가 아예 없는 20-F·40-F 제출자(10-Q를 법적으로 안 낸다)이고,
+16은 유도해도 재료가 부족하며, 2는 분기가 넷이 안 된다. **의도한 동작에 우는 펜스는
+침묵보다 나쁘다.**
+
 ```premise 미국 금융업이 영업이익 결손에서 비금융보다 크게 뒤처지지 않는가
 psql -d stock_screener -At -c "SELECT CASE
   WHEN (SELECT count(*) FROM universe_membership WHERE universe_code = 'US_TOP1000'
@@ -89,10 +125,26 @@ FROM (
 물으니 **117(98.3%)**이 세전이익 태그를, **83(69.7%)**이 은행형 4요소 또는 보험형 구성요소를
 갖는다. 막은 것은 소스가 아니라 **우리 태그 매핑이 제조업 모양**이라는 것이었다.
 
-**이 지표를 쓰는 것이 넷이다** — `OPM_MIN_5Y` · `PROFIT_STREAK_Y` · `ROIC_MIN_3Y` ·
-`OPERATING_MARGIN`. 넷 다 유도를 타게 했다.
+**이 지표를 쓰는 것이 아홉이다.** 착수 시 넷이었고(`OPM_MIN_5Y` · `PROFIT_STREAK_Y` ·
+`ROIC_MIN_3Y` · `OPERATING_MARGIN`) 그 뒤 `PROFITABLE_QUARTERS_4` · `ALTMAN_Z` ·
+`ALTMAN_Z_DOUBLE_PRIME`이 붙었다. **`ROIC_PRETAX`·`OPERATING_INCOME_GROWTH` 둘은 raw를 읽고
+있었고 2026-09-07에 유도로 옮겼다** — 이 목록이 낡으면 새 계산기가 조용히 raw를 읽는다.
 
 ## 버린 대안
+
+- **매출총이익 − 판관비(SG&A) − 연구개발비로 유도한다** — NKE·JNJ·IBM·LLY·MRK·PFE처럼
+  `OperatingIncomeLoss`도 `OperatingExpenses`도 `CostsAndExpenses`도 내지 않는 회사가 있고
+  (US_TOP1000에 38종목), 그들은 `SellingGeneralAndAdministrativeExpense`를 낸다.
+  **재보니 기준 미달이다.** 신고 영업이익과 함께 가진 대조군 53종목에서 **1% 이내가 28%(15/53) ·
+  10% 이내가 49% · 중앙오차 12.0% · 부호 반전 3**이다 — 위 §검증이 이 결정을 정당화한 실측
+  (**1% 이내 83.3% · 10% 이내 88.6% · 부호 반전 3.4%**)보다 **세 배 나쁘다.** 영업비용에는
+  구조조정·손상·무형자산상각처럼 SG&A·R&D 밖의 항목이 들어가기 때문이다.
+  커버리지도 작다 — 3년 연속을 채우는 대상이 38 중 **14**뿐이다.
+  **새 컬럼 둘 · 마이그레이션 · 미국 재무 재적재를 치르고 얻는 것이 14종목이고 정확도는
+  기준의 1/3이라, 값이 없는 채로 두는 쪽이 낫다.**
+  - **세전이익 − 영업외손익**도 함께 쟀다. 1% 이내 68%로 더 정확하지만 재료가 85종목 중
+    31에만 있고, 아래 「세전이익을 대용으로 쓴다」의 기각 사유(영업외손익·중단영업이 섞인다)가
+    그대로 걸린다.
 
 - **세전이익을 대용으로 쓴다** — 커버리지가 117/119로 가장 넓지만 금융업의 「영업이익」이
   비금융과 **다른 것을 재게 된다**(영업외손익·중단영업이 섞인다). 국내와도 정의가 갈려
