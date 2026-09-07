@@ -106,7 +106,7 @@ public class FullStatementRefillJob {
         AtomicInteger deferredRevisions = new AtomicInteger();
         // 계정 매칭이 기존 값과 다른 답을 낸 컬럼 수. 덮지 않기로 정했으므로(ADR-0056) 이것이
         // 0이 아니면 두 매칭이 갈렸다는 뜻이고, 그 사실이 로그에만 있으면 다음 세션이 못 찾는다.
-        AtomicInteger mismatched = new AtomicInteger();
+        AtomicInteger corrected = new AtomicInteger();
 
         try {
             for (SecurityRef target : targets) {
@@ -117,7 +117,7 @@ public class FullStatementRefillJob {
                     reportsWritten.addAndGet(collected.reportsWritten());
                     missingReports.addAndGet(collected.missingReports());
                     deferredRevisions.addAndGet(collected.outcome().deferredRevisions());
-                    mismatched.addAndGet(collected.outcome().mismatched());
+                    corrected.addAndGet(collected.outcome().corrected());
                     return collected.outcome().changed();
                 });
             }
@@ -132,10 +132,10 @@ public class FullStatementRefillJob {
         // MUST: '없음'을 요청 수에서 빼서 구하지 않는다. 분기 경로는 4분기 잔액을 유도해
         // 함께 쓰므로 쓴 보고서가 요청 수를 넘고, 빼면 음수가 나온다. 어댑터가 직접 센 값을
         // 쓴다 — 그 수가 곧 "상장 전 회계연도"와 "아직 오지 않은 분기"의 합이다.
-        String note = "보고서=%s 연도=%d~%d 요청=%d건 실제콜=%d 쓴보고서=%d 공시없음=%d 정정보류=%d 불일치=%d"
+        String note = "보고서=%s 연도=%d~%d 요청=%d건 실제콜=%d 쓴보고서=%d 공시없음=%d 정정보류=%d 교정=%d"
                 .formatted(periods, fromFiscalYear, toFiscalYear, requestedReports,
                         actualCalls.get(), reportsWritten.get(), missingReports.get(),
-                        deferredRevisions.get(), mismatched.get());
+                        deferredRevisions.get(), corrected.get());
         log.info("전체 재무제표 결손 보정을 마쳤다. {}", note);
         return execution.finish(note);
     }

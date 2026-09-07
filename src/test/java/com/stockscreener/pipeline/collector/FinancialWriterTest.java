@@ -149,6 +149,14 @@ class FinancialWriterTest {
 
         private ListAppender<ILoggingEvent> appender;
         private ch.qos.logback.classic.Logger logger;
+        /** 덮어쓰기가 무효화를 부르는지 보려면 기록하는 포트가 필요하다. */
+        private final RecordingInvalidationPort invalidations = new RecordingInvalidationPort();
+        private FinancialWriter fillOnlyWriter;
+
+        @BeforeEach
+        void useRecordingPort() {
+            fillOnlyWriter = new FinancialWriter(jdbcTemplate, invalidations);
+        }
 
         @BeforeEach
         void attachAppender() {
@@ -183,17 +191,39 @@ class FinancialWriterTest {
         }
 
         @Test
-        @DisplayName("값이 있는 컬럼은 덮지 않고 경고로 남긴다 — 조용히 넘기면 소스 오류인지 파싱 오류인지 알 수 없다")
-        void doesNotOverwriteAndWarnsOnMismatch() {
+        @DisplayName("같은 공시일에 값이 달라지면 덮고, 무엇이 무엇으로 바뀌었는지 남긴다")
+        void overwritesAndRecordsOnMismatch() {
             writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
 
-            long changed = writer.write(stockId,
+            long changed = fillOnlyWriter.write(stockId,
                     List.of(report(2025, "FY", "2026-03-15", "950")), WriteMode.FILL_MISSING);
 
-            assertThat(changed).isZero();
-            assertThat((BigDecimal) latestRow().get("net_income")).isEqualByComparingTo("1000");
+            // 같은 공시일이므로 값이 달라진 것은 소스가 고쳐 낸 것이 아니라 우리 추출이 바뀐
+            // 것이다. 예전에는 덮지 않고 경고만 남겼는데, 그 규칙이 지킨 것은 데이터가 아니라
+            // 틀린 값이었다 — 매출 태그 우선순위를 고쳤을 때 US_TOP1000의 92종목이 과소계상인
+            // 채로 남았고 그때 이미 틀린 지표 값 542개가 화면에 나가 있었다.
+            assertThat(changed).isOne();
+            assertThat((BigDecimal) latestRow().get("net_income")).isEqualByComparingTo("950");
             assertThat(warnings()).hasSize(1);
-            assertThat(warnings().get(0)).contains("net_income").contains("덮지 않는다");
+            assertThat(warnings().get(0))
+                    .as("위험한 것은 갱신이 아니라 조용한 갱신이다 — 옛값과 새값이 다 남아야 한다")
+                    .contains("net_income").contains("1000").contains("950");
+        }
+
+        @Test
+        @DisplayName("값을 덮으면 무효화한다 — 그 값으로 계산된 지표가 이미 저장돼 있다")
+        void invalidatesWhenItOverwrites() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+
+            fillOnlyWriter.write(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "950")), WriteMode.FILL_MISSING);
+
+            // NULL을 채우는 것은 「행 없음 → 행 생김」이라 지울 낡은 값이 없지만, 덮는 것은
+            // 「틀린 값 → 다른 값」이라 이미 저장된 지표가 낡는다. 안 지우면 그 값이 그대로
+            // 남는데 그것은 그럴듯해서 아무도 눈치채지 못한다.
+            assertThat(invalidations.calls)
+                    .as("회계기간 시작일 이후를 지워야 한다")
+                    .hasSize(1);
         }
 
         @Test

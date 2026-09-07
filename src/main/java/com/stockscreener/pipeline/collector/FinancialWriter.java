@@ -42,8 +42,9 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li><b>공시일이 정확히 같을 때만 채운다.</b> 더 이른 판으로 채우면 행 하나가 두 공시의
  *       혼합이 되어, 어느 시점의 값인지 물을 수 없게 된다.
- *   <li><b>값이 있는 컬럼은 절대 덮지 않는다.</b> 다르면 {@code WARN}으로 남긴다 — 조용히
- *       넘기면 소스의 오류인지 우리 파싱의 오류인지 영영 알 수 없다.
+ *   <li><b>값이 다르면 덮되, 옛값과 새값을 로그에 남기고 무효화를 낸다.</b> 공시일이 같으므로
+ *       달라진 것은 소스가 아니라 <b>우리 추출</b>이다. 얼려 두면 틀린 값이 남을 뿐이고 어느
+ *       쪽 오류인지도 알 수 없다 — 위험한 것은 갱신이 아니라 <b>조용한</b> 갱신이다.
  *   <li><b>비교는 {@link BigDecimal#compareTo}다.</b> 컬럼이 {@code numeric(24,2)}라 저장값은
  *       scale 2로 돌아오는데 소스 파싱값은 scale 0이다. {@code equals}로 비교하면 같은 값이
  *       전부 "달라졌다"로 잡혀 경고가 수만 줄 나온다.
@@ -108,7 +109,7 @@ public class FinancialWriter {
      * 것을 아무도 모른다.</b>
      */
     public record Outcome(long changed, int inserted, int filled, int revised,
-                          int deferredRevisions, int mismatched) {
+                          int deferredRevisions, int corrected) {
     }
 
     /**
@@ -144,12 +145,12 @@ public class FinancialWriter {
         }
         if (mode != WriteMode.APPEND_ONLY) {
             // 종목 단위로 한 줄만 남긴다. 행마다 찍으면 350종목 × 16행이라 읽을 수 없다.
-            log.info("결손 보정. stockId={} 모드={} 신규={} 정정={} 채움={} 정정보류={} 불일치={} 무변경={}",
+            log.info("결손 보정. stockId={} 모드={} 신규={} 정정={} 채움={} 정정보류={} 교정={} 무변경={}",
                     stockId, mode, tally.inserted, tally.revised, tally.filled,
-                    tally.deferredRevisions, tally.mismatched, tally.untouched);
+                    tally.deferredRevisions, tally.corrected, tally.untouched);
         }
         return new Outcome(tally.changed(), tally.inserted, tally.filled, tally.revised,
-                tally.deferredRevisions, tally.mismatched);
+                tally.deferredRevisions, tally.corrected);
     }
 
     private void writeOne(long stockId, RawFinancialReport report, WriteMode mode, Tally tally) {
@@ -175,9 +176,8 @@ public class FinancialWriter {
         }
 
         if (report.publishedAt().isEqual(existing.publishedAt())) {
-            // 재수집이다.
-            // MUST NOT: 여기서 값을 덮지 않는다. 값이 달라졌다면 그것은 소스의 오류이거나
-            // 우리 파싱의 오류이며, 조용히 갱신하면 어느 쪽인지 영영 알 수 없다.
+            // 재수집이다. 값이 달라졌다면 우리 추출이 바뀐 것이므로 fillMissing이 덮고
+            // 그 사실을 남긴다. APPEND_ONLY는 그 판단을 안 하는 모드라 그냥 넘어간다.
             if (mode == WriteMode.APPEND_ONLY) {
                 tally.untouched++;
                 return;
@@ -222,40 +222,35 @@ public class FinancialWriter {
     /**
      * 같은 공시본의 <b>NULL 컬럼만</b> 채운다.
      *
-     * <p>MUST NOT: 여기서 {@link IndicatorInvalidationPort}를 부르지 않는다. 이유가 둘이다.
+     * <p><b>NULL을 채울 때는 무효화하지 않고, 값을 덮을 때는 무효화한다.</b> 둘은 다른 일이다.
      *
      * <ul>
-     *   <li><b>지울 낡은 값이 없다.</b> 금액을 소비하는 지표는 전부 null 전파형이다 —
-     *       {@code FinancialMath.sumTrailingFourQuarters}는 한 분기라도 null이면 null을 내고,
-     *       계산기는 그때 행을 아예 쓰지 않는다(ADR-0002). 즉 채우는 것은 "틀린 값 → 다른 틀린
-     *       값"이 아니라 <b>"행 없음 → 행 생김"</b>이다.
-     *   <li><b>부르면 오히려 파괴적이다.</b> {@code StoredIndicatorInvalidationPort}는 지표를
-     *       가리지 않고 <b>그 종목의 {@code trade_date >= fromDate} 전체</b>를 지운다. 회계기간
-     *       시작일로 전 종목에 부르면 지표 33종의 보존 창이 통째로 날아가고, 백분위는 날짜별로만
-     *       계산되므로 재계산으로 되살아나지 않는다.
+     *   <li><b>채우기는 「행 없음 → 행 생김」이다.</b> 금액을 소비하는 지표는 전부 null
+     *       전파형이라({@code FinancialMath.sumTrailingFourQuarters}가 한 분기라도 null이면
+     *       null을 낸다) 채우기 전에는 <b>지울 낡은 값이 아예 없다</b>. 게다가
+     *       {@code StoredIndicatorInvalidationPort}는 지표를 가리지 않고 그 종목의
+     *       {@code trade_date >= fromDate}를 <b>전부</b> 지우므로, 전 종목에 부르면 보존 창이
+     *       통째로 날아가고 백분위는 날짜별 계산이라 재계산으로 되살아나지 않는다.
+     *   <li><b>덮어쓰기는 「틀린 값 → 다른 값」이다.</b> 그 값으로 계산된 지표가 <b>이미 저장돼
+     *       있으므로</b> 위 논거가 성립하지 않는다. 안 지우면 낡은 값이 그대로 남는데 그것은
+     *       그럴듯해서 아무도 눈치채지 못한다.
      * </ul>
      *
-     * <p>이 판단은 <b>채우는 컬럼의 소비 지표에 저장된 값이 없을 때만</b> 성립한다.
-     * 다음에 이 경로로 다른 컬럼을 채울 때 다시 답해야 한다(ADR-0040).
+     * <p><b>MUST: 같은 공시일에 값이 달라지면 덮고, 무엇이 무엇으로 바뀌었는지 남긴다.</b>
+     * 예전에는 덮지 않고 경고만 남겼는데, 그 규칙이 지킨 것은 데이터가 아니라 <b>틀린 값</b>이었다 —
+     * 매출 태그 우선순위를 고쳤을 때 US_TOP1000의 92종목이 과소계상인 채로 남았고, 그때 화면에는
+     * 이미 틀린 지표 값 542개가 나가 있었다. 얼려 두는 것은 「소스 오류인지 우리 파싱 오류인지」를
+     * 알려주지도 않는다. 위험한 것은 갱신이 아니라 <b>조용한</b> 갱신이므로 로그와 무효화를 함께 낸다.
      *
-     * <p><b>P10에서 다시 답했다 — 여전히 성립한다.</b> 이 경로로 새로 차는 컬럼은
-     * {@code operating_cash_flow}(전 행 NULL이었다)와 dart-financial.md의 「계정 집합이 회사마다 다르다」 절의
-     * 세 종목의
-     * {@code retained_earnings}다.
-     * <ul>
-     *   <li>OCF를 소비하는 지표는 이 phase에서 <b>처음 생긴다.</b> 저장된 값이 있을 수 없다.
-     *   <li>이익잉여금을 소비하는 것은 {@code ALTMAN_Z} 하나이고 최근 분기 잔액
-     *       ({@code quarters.get(0)})을 읽는다. 세 종목은 보존 창이 덮는 전 분기에서 그 값이
-     *       NULL이라 <b>지표 행이 아예 없다</b>(창 시점 기준 실측). 즉 여기서도
-     *       "틀린 값 → 다른 틀린 값"이 아니라 "행 없음 → 행 생김"이다.
-     * </ul>
-     * 다만 <b>행이 생기는 것 자체가 스크리닝 결과를 바꾼다.</b> 무효화는 필요 없어도
-     * 백필은 필요하고, 그 변화는 H-05가 만드는 변화와 분리해서 세어야 한다.
+     * <p><b>MUST NOT: 이 경로를 소스가 값을 바꿨을 때의 방어선으로 쓰지 않는다.</b> 여기 오는 것은
+     * <b>같은 보고서</b>({@code published_at}이 같다)이므로 값이 달라졌다면 우리 추출이 바뀐 것이다.
+     * 소스가 실제로 고쳐 낸 것은 공시일이 더 늦어 정정 갈래로 간다.
      */
     private void fillMissing(long stockId, Existing existing, RawFinancialReport report,
                              Tally tally) {
         List<Amount> toFill = new ArrayList<>();
-        List<String> mismatches = new ArrayList<>();
+        List<Amount> toCorrect = new ArrayList<>();
+        List<String> corrections = new ArrayList<>();
 
         for (Amount amount : Amount.values()) {
             BigDecimal incoming = amount.of(report);
@@ -267,34 +262,45 @@ public class FinancialWriter {
                 toFill.add(amount);
             } else if (stored.compareTo(incoming) != 0) {
                 // scale이 달라도 같은 값이면 여기 오지 않는다(compareTo).
-                mismatches.add("%s 저장=%s 소스=%s".formatted(amount.column, stored, incoming));
+                toCorrect.add(amount);
+                corrections.add("%s %s -> %s".formatted(amount.column, stored, incoming));
             }
         }
 
-        if (!mismatches.isEmpty()) {
-            tally.mismatched += mismatches.size();
-            log.warn("재수집 값이 저장된 값과 다르다. 덮지 않는다. stockId={} {}/{} 공시일={} — {}",
-                    stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt(),
-                    String.join(" | ", mismatches));
-        }
-
-        if (toFill.isEmpty()) {
+        if (toFill.isEmpty() && toCorrect.isEmpty()) {
             tally.untouched++;
             return;
         }
 
-        String setClause = toFill.stream()
+        List<Amount> columns = new ArrayList<>(toFill);
+        columns.addAll(toCorrect);
+        String setClause = columns.stream()
                 .map(amount -> amount.column + " = ?")
                 .collect(Collectors.joining(", "));
-        Object[] args = new Object[toFill.size() + 1];
-        for (int i = 0; i < toFill.size(); i++) {
-            args[i] = toFill.get(i).of(report);
+        Object[] args = new Object[columns.size() + 1];
+        for (int i = 0; i < columns.size(); i++) {
+            args[i] = columns.get(i).of(report);
         }
-        args[toFill.size()] = existing.id();
+        args[columns.size()] = existing.id();
 
         jdbcTemplate.update(
                 "UPDATE financial_statement SET " + setClause + " WHERE id = ?", args);
-        tally.filled++;
+
+        if (!toFill.isEmpty()) {
+            tally.filled++;
+        }
+        if (!toCorrect.isEmpty()) {
+            // 무엇이 무엇으로 바뀌었는지를 반드시 남긴다. 이 경로의 위험은 갱신 자체가 아니라
+            // 조용함이고, 그래서 규칙이 "덮되 남긴다"다.
+            log.warn("우리 추출이 바뀌어 저장값을 덮는다. stockId={} {}/{} 공시일={} — {}",
+                    stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt(),
+                    String.join(" | ", corrections));
+            tally.corrected += toCorrect.size();
+            // 여기는 "행 없음 → 행 생김"이 아니라 "틀린 값 → 다른 값"이다. 그 값으로 계산된
+            // 지표가 이미 저장돼 있으므로 지우지 않으면 낡은 값이 그대로 남는다.
+            invalidationPort.invalidate(stockId, report.periodStart(),
+                    IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+        }
     }
 
     /**
@@ -426,11 +432,11 @@ public class FinancialWriter {
         private int revised;
         private int filled;
         private int deferredRevisions;
-        private int mismatched;
+        private int corrected;
         private int untouched;
 
         long changed() {
-            return (long) inserted + revised + filled;
+            return (long) inserted + revised + filled + corrected;
         }
     }
 }
