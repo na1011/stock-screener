@@ -59,9 +59,14 @@ public class AccrualRatioCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, AccrualRatioCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         List<FinancialFigures> annual = context.annualFigures();
         if (annual.isEmpty()) {
-            return List.of();
+            return null;
         }
         // 읽기가 period_end 내림차순이므로 앞이 더 최근이다.
         FinancialFigures latest = annual.get(0);
@@ -71,10 +76,8 @@ public class AccrualRatioCalculator implements IndicatorCalculator {
         BigDecimal assets = latest.totalAssets();
         if (netIncome == null || operatingCashFlow == null
                 || assets == null || assets.signum() <= 0) {
-            return List.of();
+            return null;
         }
-
-        return FinancialMath.spreadOverTradeDates(context.priceBars(),
-                FinancialMath.percentage(netIncome.subtract(operatingCashFlow), assets));
+        return FinancialMath.percentage(netIncome.subtract(operatingCashFlow), assets);
     }
 }

@@ -25,7 +25,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class QualityIndicatorsTest {
 
-    private static final LocalDate START = LocalDate.of(2024, 1, 2);
+    /**
+     * 재무를 쓰는 픽스처의 봉 시작일. <b>그 재무가 공시된 뒤</b>여야 한다(ADR-0128).
+     *
+     * <p>지표가 봉마다 「그 시점에 공시돼 있던」 재무로 계산하므로 봉이 공시일보다 앞이면
+     * 값을 내지 않는 것이 옳다. {@code FinancialFiguresFixture}가 공시일을
+     * {@code periodEnd + 2개월}로 둔다. 예전에는 스냅샷 하나를 창 전체에 펴서
+     * <b>봉이 몇 해 앞이어도 값이 나왔다.</b>
+     */
+    private static final LocalDate START = LocalDate.of(2026, 3, 2);
 
     @Nested
     @DisplayName("ROA")

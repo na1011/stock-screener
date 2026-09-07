@@ -20,6 +20,8 @@ public final class IndicatorContext {
     private final long stockId;
     private final String industryDivisionKey;
     private final List<PriceBar> priceBars;
+    private final List<FinancialFigures> annualRevisions;
+    private final List<FinancialFigures> quarterlyRevisions;
     private final List<FinancialFigures> annualFigures;
     private final List<FinancialFigures> quarterlyFigures;
     private final List<ShareAdjustment> shareAdjustments;
@@ -42,8 +44,11 @@ public final class IndicatorContext {
         this.stockId = stockId;
         this.industryDivisionKey = industryDivisionKey;
         this.priceBars = priceBars == null ? List.of() : List.copyOf(priceBars);
-        this.annualFigures = annualFigures == null ? List.of() : List.copyOf(annualFigures);
-        this.quarterlyFigures = quarterlyFigures == null ? List.of() : List.copyOf(quarterlyFigures);
+        this.annualRevisions = annualFigures == null ? List.of() : List.copyOf(annualFigures);
+        this.quarterlyRevisions =
+                quarterlyFigures == null ? List.of() : List.copyOf(quarterlyFigures);
+        this.annualFigures = latestPerPeriod(this.annualRevisions);
+        this.quarterlyFigures = latestPerPeriod(this.quarterlyRevisions);
         this.shareAdjustments =
                 shareAdjustments == null ? List.of() : List.copyOf(shareAdjustments);
         this.unadjustedActions =
@@ -88,8 +93,8 @@ public final class IndicatorContext {
      */
     public IndicatorContext withDependencies(
             Map<String, NavigableMap<LocalDate, BigDecimal>> newDependencies) {
-        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualFigures,
-                quarterlyFigures, shareAdjustments, unadjustedActions, marketIndex,
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
+                quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
                 governanceFacts, newDependencies);
     }
 
@@ -111,6 +116,93 @@ public final class IndicatorContext {
     /** 날짜 오름차순 시세. 워밍업 구간을 포함해 {@link DataRequirement}가 요구한 만큼 담긴다. */
     public List<PriceBar> priceBars() {
         return priceBars;
+    }
+
+    /**
+     * 그 <b>봉 시점에 공시돼 있던</b> 재무만 담은 사본(ADR-0128).
+     *
+     * <p>재무 지표의 시간축이 여기서 나온다. 리더가 {@code KNOWN_ON}으로 읽어 오는 것은
+     * <b>{@code asOf}까지의 판 이력 전부</b>이고, 그중 어느 판을 볼지는 <b>봉이 정한다</b> —
+     * {@code GovernanceMath}가 거버넌스에 대해 하는 것과 같은 형태다
+     * ({@code readGovernanceFacts} javadoc).
+     *
+     * <p>IMPORTANT — <b>거르기만 하고 접지 않는다.</b> 접는 것은 생성자가 하며
+     * ({@link #latestPerPeriod}) 그래서 이 사본의 {@link #annualFigures()}는 <b>그 봉 시점의
+     * 최신 판</b>이 된다. 여기서 접어 넘기면 판 이력이 사라져 다음 사본이 다시 못 고른다.
+     *
+     * <p>시세·기업행위·지수·거버넌스는 <b>안 거른다.</b> 시세는 계산기가 창으로 다루고,
+     * 기업행위 원장과 수정계수는 <b>지금 아는 것이 맞다</b>(과거 일자의 수정주가는 언제나
+     * 최신 원장 기준이다), 거버넌스는 {@code GovernanceMath}가 자기 축으로 이미 고른다.
+     */
+    public IndicatorContext visibleAt(LocalDate tradeDate) {
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars,
+                publishedOnOrBefore(annualRevisions, tradeDate),
+                publishedOnOrBefore(quarterlyRevisions, tradeDate),
+                shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies);
+    }
+
+    /**
+     * 재무 판이 바뀌는 날짜들 — <b>오름차순 · 중복 없음</b>(ADR-0128).
+     *
+     * <p>재무에서 나온 값은 <b>공시가 있을 때만</b> 바뀐다. 그래서 봉마다 다시 계산하지 않고
+     * 이 날짜들로 구간을 나눠 구간당 한 번만 계산한다({@code FinancialMath.byPublication}).
+     * 실측으로 보존 창 안 공시일은 종목당 한 자릿수라, 봉 1,441개에 대해 계산이
+     * 그만큼만 늘어난다.
+     */
+    public List<LocalDate> financialPublicationDates() {
+        return java.util.stream.Stream.concat(annualRevisions.stream(), quarterlyRevisions.stream())
+                .map(FinancialFigures::publishedAt)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    /** 그 날짜까지 공시된 판만. 순서는 그대로 둔다 — {@link #latestPerPeriod}가 그것에 기댄다. */
+    private static List<FinancialFigures> publishedOnOrBefore(List<FinancialFigures> figures,
+                                                              LocalDate tradeDate) {
+        return figures.stream()
+                .filter(f -> f.publishedAt() == null || !f.publishedAt().isAfter(tradeDate))
+                .toList();
+    }
+
+    /**
+     * 기(期)마다 판 하나만 남긴다. <b>이것이 없으면 TTM이 같은 분기를 두 번 더한다.</b>
+     *
+     * <p>리더가 판 이력을 통째로 주므로({@code SELECT_FINANCIALS_KNOWN_ON}) 접는 자리가
+     * 필요하다. 예전에는 SQL의 {@code row_number()}가 {@code asOf} 하나에 대해 접었는데,
+     * 그러면 <b>봉마다 다른 판을 고를 수 없다.</b>
+     *
+     * <p>IMPORTANT — <b>고르는 축이 {@code published_at}인 것은 실측에 근거한다.</b>
+     * {@code revision_no}가 {@link FinancialFigures}에 없어 공시일로 고르는데, 저장소 전체
+     * 32,198개 다판(多版) 행에서 <b>공시일이 판 번호와 역전되거나 같은 경우가 0</b>이다
+     * (2026-09-07 실측). {@code FinancialWriter}가 <b>더 늦은 공시일에만</b> 새 판을 만들기
+     * 때문이며({@code writeOne}의 정정 갈래) 그 성질이 깨지면 이 선택이 조용히 옛 판을 고른다.
+     *
+     * <p>입력이 {@code period_end DESC, published_at DESC} 순이라 <b>먼저 만난 것이 그 기의
+     * 최신 판</b>이다. 순서를 바꾸면 이 메서드가 조용히 옛 판을 남긴다.
+     *
+     * <p><b>MUST: 기(期)를 {@code periodEnd}로 가른다 — 회계연도 라벨로 가르지 않는다.</b>
+     * {@link FinancialFigures} javadoc이 *"{@code periodEnd}가 기간의 근거다 … {@code fiscalYear}는
+     * 라벨일 뿐"*으로 그 축을 정했고, 미국 라벨은 실제로 틀린다(ADR-0124가 회계연도 배정 결함
+     * 셋을 고쳤다). 라벨로 가르면 <b>라벨이 겹친 분기들이 하나로 접혀 TTM이 네 분기를 못
+     * 채우고 값이 통째로 사라진다</b> — 에러가 아니라 「판정불가」로 나온다.
+     *
+     * <p>연간과 분기가 <b>다른 목록</b>이므로 같은 {@code periodEnd}를 공유하는 FY와 유도 Q4가
+     * 여기서 만나지 않는다(ADR-0124 §검증이 분기 행끼리의 기준선을 0으로 잰다).
+     */
+    private static List<FinancialFigures> latestPerPeriod(List<FinancialFigures> figures) {
+        if (figures.size() <= 1) {
+            return figures;
+        }
+        List<FinancialFigures> kept = new java.util.ArrayList<>(figures.size());
+        java.util.Set<LocalDate> seen = new java.util.HashSet<>();
+        for (FinancialFigures f : figures) {
+            if (seen.add(f.periodEnd())) {
+                kept.add(f);
+            }
+        }
+        return List.copyOf(kept);
     }
 
     /** {@code periodEnd} 내림차순(최신 우선) 연간 재무. */
@@ -258,8 +350,8 @@ public final class IndicatorContext {
      * {@code @ConditionalOnApiKey}라 키 없는 환경에 아예 없는데 계산기가 읽는 것은 컨텍스트다.
      */
     public IndicatorContext withGovernanceFacts(List<GovernanceFigures> newGovernanceFacts) {
-        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualFigures,
-                quarterlyFigures, shareAdjustments, unadjustedActions, marketIndex,
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
+                quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
                 newGovernanceFacts, dependencies);
     }
 
@@ -281,8 +373,8 @@ public final class IndicatorContext {
      * 컨텍스트이므로, 시드가 없으면 {@code EXCESS_RETURN_26W}가 비고 <b>에러는 안 난다.</b>
      */
     public IndicatorContext withMarketIndex(NavigableMap<LocalDate, BigDecimal> newMarketIndex) {
-        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualFigures,
-                quarterlyFigures, shareAdjustments, unadjustedActions, newMarketIndex,
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
+                quarterlyRevisions, shareAdjustments, unadjustedActions, newMarketIndex,
                 governanceFacts, dependencies);
     }
 }

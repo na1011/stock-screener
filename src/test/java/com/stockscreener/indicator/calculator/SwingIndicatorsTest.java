@@ -30,6 +30,16 @@ class SwingIndicatorsTest {
 
     private static final LocalDate START = LocalDate.of(2022, 1, 3);
 
+    /**
+     * 재무를 쓰는 픽스처의 봉 시작일. <b>그 재무가 공시된 뒤</b>여야 한다(ADR-0128).
+     *
+     * <p>지표가 봉마다 「그 시점에 공시돼 있던」 재무로 계산하므로 봉이 공시일보다 앞이면
+     * 값을 내지 않는 것이 옳다. {@code FinancialFiguresFixture}가 공시일을
+     * {@code periodEnd + 2개월}로 둔다. 예전에는 스냅샷 하나를 창 전체에 펴서
+     * <b>봉이 몇 해 앞이어도 값이 나왔다.</b>
+     */
+    private static final LocalDate FINANCIAL_START = LocalDate.of(2026, 3, 2);
+
     @Nested
     @DisplayName("시가총액")
     class MarketCap {
@@ -359,9 +369,9 @@ class SwingIndicatorsTest {
                 quarters.add(FinancialFiguresFixture.from(q).totalLiabilities(null).build());
             }
 
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
             NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
-            cap.put(START, bd(800));
+            cap.put(FINANCIAL_START, bd(800));
 
             List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
                     1L, List.of(bar), List.of(), quarters,
@@ -381,9 +391,9 @@ class SwingIndicatorsTest {
                         .currentAssets(null).currentLiabilities(null).build());
             }
 
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
             NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
-            cap.put(START, bd(800));
+            cap.put(FINANCIAL_START, bd(800));
 
             assertThat(calculator.calculate(new IndicatorContext(
                     1L, List.of(bar), List.of(), quarters,
@@ -393,7 +403,7 @@ class SwingIndicatorsTest {
         @Test
         @DisplayName("시가총액이 없는 날은 건너뛴다 — 그 항이 0이면 Z가 낮게 나와 멀쩡한 기업이 부실로 읽힌다")
         void skipsDatesWithoutMarketCap() {
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, null);
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, null);
 
             assertThat(calculator.calculate(new IndicatorContext(
                     1L, List.of(bar), List.of(), balanceSheetQuarters(),
@@ -439,9 +449,9 @@ class SwingIndicatorsTest {
                         .costsAndExpenses(bd(175))
                         .build());
             }
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
             NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
-            cap.put(START, bd(800));
+            cap.put(FINANCIAL_START, bd(800));
 
             List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
                     1L, null, List.of(bar), List.of(), quarters, List.of(),
@@ -457,7 +467,7 @@ class SwingIndicatorsTest {
             // AltmanZ는 MARKET_CAP에 의존하므로 러너가 컨텍스트를 반드시 다시 만든다.
             // 거기서 업종이 빠지면 제외가 통째로 무효가 되는데 아무 에러도 나지 않는다.
             NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
-            cap.put(START, bd(800));
+            cap.put(FINANCIAL_START, bd(800));
             IndicatorContext reassembled = inDivision("KSIC:65", bd(800))
                     .withDependencies(Map.of(MarketCapCalculator.CODE, cap));
 
@@ -494,7 +504,7 @@ class SwingIndicatorsTest {
             for (FinancialFigures q : balanceSheetQuarters()) {
                 quarters.add(FinancialFiguresFixture.from(q).totalLiabilities(null).build());
             }
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
 
             List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
                     1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of()));
@@ -510,7 +520,7 @@ class SwingIndicatorsTest {
             for (FinancialFigures q : balanceSheetQuarters()) {
                 quarters.add(FinancialFiguresFixture.from(q).revenue(null).build());
             }
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
             // 의존 지표를 아예 안 넘긴다 — MARKET_CAP을 조회하면 여기서 터진다.
             IndicatorContext noCap = new IndicatorContext(
                     1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of());
@@ -526,7 +536,7 @@ class SwingIndicatorsTest {
         @DisplayName("분기가 넷에 못 미치면 값을 내지 않는다 — TTM이 성립하지 않는다")
         void yieldsNothingWithoutFourQuarters() {
             List<FinancialFigures> three = balanceSheetQuarters().subList(0, 3);
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
 
             assertThat(calculator.calculate(new IndicatorContext(
                     1L, null, List.of(bar), List.of(), three, List.of(), Map.of()))).isEmpty();
@@ -539,7 +549,7 @@ class SwingIndicatorsTest {
             for (FinancialFigures q : balanceSheetQuarters()) {
                 quarters.add(FinancialFiguresFixture.from(q).totalEquity(null).build());
             }
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
 
             assertThat(calculator.calculate(new IndicatorContext(
                     1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of()))).isEmpty();
@@ -556,7 +566,7 @@ class SwingIndicatorsTest {
                             ? f.totalAssets(BigDecimal.ZERO)
                             : f.totalLiabilities(BigDecimal.ZERO)).build());
                 }
-                PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+                PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
 
                 assertThat(calculator.calculate(new IndicatorContext(
                         1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of())))
@@ -585,7 +595,7 @@ class SwingIndicatorsTest {
         void spreadsOneValueOverEveryBar() {
             List<PriceBar> bars = new ArrayList<>();
             for (int i = 0; i < 3; i++) {
-                bars.add(new PriceBar(START.plusDays(i),
+                bars.add(new PriceBar(FINANCIAL_START.plusDays(i),
                         bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100)));
             }
             List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
@@ -611,7 +621,7 @@ class SwingIndicatorsTest {
                         .costsAndExpenses(bd(175))
                         .build());
             }
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
 
             List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
                     1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of()));
@@ -622,7 +632,7 @@ class SwingIndicatorsTest {
 
         /** {@link #balanceSheetQuarters}와 재무가 같고 업종만 다르다. 시가총액은 넘기지 않는다. */
         private IndicatorContext zppContext(String industryDivisionKey) {
-            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
             return new IndicatorContext(1L, industryDivisionKey, List.of(bar), List.of(),
                     balanceSheetQuarters(), List.of(), Map.of());
         }
@@ -719,16 +729,18 @@ class SwingIndicatorsTest {
 
     /** {@link #balanceSheetContext}와 재무가 같고 업종만 다르다. 값 차이의 원인을 업종으로 못박는다. */
     private static IndicatorContext inDivision(String industryDivisionKey, BigDecimal marketCap) {
-        PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+        PriceBar bar = new PriceBar(FINANCIAL_START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null,
+                bd(100));
         NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
-        cap.put(START, marketCap);
+        cap.put(FINANCIAL_START, marketCap);
         return new IndicatorContext(1L, industryDivisionKey, List.of(bar), List.of(),
                 balanceSheetQuarters(), List.of(), Map.of(MarketCapCalculator.CODE, cap));
     }
 
     private static IndicatorContext financialContext(List<FinancialFigures> quarterly,
                                                      List<FinancialFigures> annual) {
-        PriceBar bar = new PriceBar(START, bd(100), bd(100), bd(100), bd(100), bd(100), 10L, null, null);
+        PriceBar bar = new PriceBar(FINANCIAL_START, bd(100), bd(100), bd(100), bd(100), bd(100),
+                10L, null, null);
         return new IndicatorContext(1L, List.of(bar), annual, quarterly, Map.of());
     }
 

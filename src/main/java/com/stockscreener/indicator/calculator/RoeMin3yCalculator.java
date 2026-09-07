@@ -82,7 +82,7 @@ public class RoeMin3yCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        return FinancialMath.spreadOverTradeDates(context.priceBars(), minimumRoe(context));
+        return FinancialMath.byPublication(context, RoeMin3yCalculator::minimumRoe);
     }
 
     /** @return 세 해가 연속하고 모두 값이 있을 때만 최솟값. 아니면 null */

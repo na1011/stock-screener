@@ -11,6 +11,7 @@ import com.stockscreener.indicator.IndicatorValueType;
 
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -54,8 +55,11 @@ public class OperatingIncomeGrowthCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        return FinancialMath.spreadOverTradeDates(
-                context.priceBars(),
-                YearOverYear.growth(context.annualFigures(), FinancialMath::operatingIncomeOf));
+        return FinancialMath.byPublication(context, OperatingIncomeGrowthCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
+        return YearOverYear.growth(context.annualFigures(), FinancialMath::operatingIncomeOf);
     }
 }

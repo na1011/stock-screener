@@ -86,7 +86,7 @@ public class ProfitStreakYearsCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        return FinancialMath.spreadOverTradeDates(context.priceBars(), streak(context));
+        return FinancialMath.byPublication(context, ProfitStreakYearsCalculator::streak);
     }
 
     /**

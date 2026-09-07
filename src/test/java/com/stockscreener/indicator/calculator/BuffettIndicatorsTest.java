@@ -22,7 +22,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** 버핏 방법론 프리셋이 쓰는 신규 지표 여덟(ADR-0067). */
 class BuffettIndicatorsTest {
 
-    private static final LocalDate START = LocalDate.of(2021, 1, 4);
+    /**
+     * 봉의 시작일. <b>픽스처 재무가 전부 공시된 뒤</b>여야 한다(ADR-0128).
+     *
+     * <p>지표는 이제 봉마다 <b>그 시점에 공시돼 있던</b> 재무로 계산하므로, 봉이 공시일보다
+     * 앞이면 값을 내지 않는 것이 옳다. {@code FinancialFiguresFixture}가 공시일을
+     * {@code periodEnd + 2개월}로 두고 이 클래스의 최신 기말이 2025-12-31이라 그 뒤로 잡는다.
+     * 예전에는 재무 스냅샷 하나를 창 전체에 펴서 <b>봉이 2021년이어도 값이 나왔다.</b>
+     */
+    private static final LocalDate START = LocalDate.of(2026, 3, 2);
 
     // ── 순이익률 ──────────────────────────────────────────────────────────
 

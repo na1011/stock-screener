@@ -57,19 +57,22 @@ public class RoaCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, RoaCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         BigDecimal netIncome =
                 FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::netIncome);
         if (netIncome == null) {
-            return List.of();
+            return null;
         }
 
         BigDecimal assets = quarters.get(0).totalAssets();
         if (assets == null || assets.signum() <= 0) {
-            return List.of();
+            return null;
         }
-
-        return FinancialMath.spreadOverTradeDates(
-                context.priceBars(), FinancialMath.percentage(netIncome, assets));
+        return FinancialMath.percentage(netIncome, assets);
     }
 }

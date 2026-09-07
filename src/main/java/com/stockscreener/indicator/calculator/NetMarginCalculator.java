@@ -63,15 +63,19 @@ public class NetMarginCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, NetMarginCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         BigDecimal netIncome =
                 FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::netIncome);
         BigDecimal revenue =
                 FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue);
         if (netIncome == null || revenue == null || revenue.signum() <= 0) {
-            return List.of();
+            return null;
         }
-        return FinancialMath.spreadOverTradeDates(
-                context.priceBars(), FinancialMath.percentage(netIncome, revenue));
+        return FinancialMath.percentage(netIncome, revenue);
     }
 }

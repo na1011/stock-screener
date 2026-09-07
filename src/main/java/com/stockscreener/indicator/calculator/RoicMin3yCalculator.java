@@ -93,7 +93,7 @@ public class RoicMin3yCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        return FinancialMath.spreadOverTradeDates(context.priceBars(), minimumRoic(context));
+        return FinancialMath.byPublication(context, RoicMin3yCalculator::minimumRoic);
     }
 
     /** @return 세 해가 연속하고 모두 값이 있을 때만 최솟값. 아니면 null */

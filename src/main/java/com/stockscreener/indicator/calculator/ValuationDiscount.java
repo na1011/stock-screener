@@ -7,6 +7,7 @@ import com.stockscreener.indicator.PriceBar;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
 
@@ -56,20 +57,21 @@ final class ValuationDiscount {
         NavigableMap<LocalDate, BigDecimal> base = context.dependency(baseCode);
         NavigableMap<LocalDate, BigDecimal> median = context.dependency(medianCode);
 
-        // 둘 다 있는 가장 최근 봉을 찾는다. 뒤에서부터 보는 것이 요점이다 —
-        // 앞에서 찾으면 창의 첫 봉이 잡히고 그것은 「지금 싼가」가 아니다.
-        for (int i = bars.size() - 1; i >= 0; i--) {
-            LocalDate date = bars.get(i).tradeDate();
-            BigDecimal now = base.get(date);
-            BigDecimal reference = median.get(date);
+        // MUST: 봉마다 낸다(ADR-0128). 예전에는 둘 다 있는 **가장 최근** 봉의 할인율 하나를
+        // 창 전체에 폈는데, 부모인 5년 중앙값이 시계열이 된 지금 그 형태는 과거 일자에
+        // **그 뒤의 값**을 찍는다. 부모가 없는 봉은 값을 내지 않는 것이 옳다 — 자식의 창은
+        // 부모의 창을 포함하므로 그 봉에서는 애초에 할인율이 성립하지 않는다.
+        List<IndicatorPoint> points = new ArrayList<>(bars.size());
+        for (PriceBar bar : bars) {
+            BigDecimal now = base.get(bar.tradeDate());
+            BigDecimal reference = median.get(bar.tradeDate());
             if (now == null || reference == null || reference.signum() <= 0) {
                 continue;
             }
-            BigDecimal discount = reference.subtract(now)
+            points.add(new IndicatorPoint(bar.tradeDate(), reference.subtract(now)
                     .multiply(HUNDRED)
-                    .divide(reference, FinancialMath.SCALE, RoundingMode.HALF_UP);
-            return FinancialMath.spreadOverTradeDates(bars, discount);
+                    .divide(reference, FinancialMath.SCALE, RoundingMode.HALF_UP)));
         }
-        return List.of();
+        return points;
     }
 }

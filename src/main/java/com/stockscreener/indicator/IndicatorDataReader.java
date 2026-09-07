@@ -176,29 +176,34 @@ public class IndicatorDataReader {
             """).formatted(FINANCIAL_COLUMNS);
 
     /**
-     * 그 시점에 공시돼 있던 판만 읽는다({@link FinancialVisibility#KNOWN_ON}).
+     * 그 시점까지 공시된 <b>판 이력 전부</b>를 읽는다({@link FinancialVisibility#KNOWN_ON}).
      *
-     * <p>기(期)마다 {@code revision_no} 최대를 고르는 것이 {@code is_latest}를 대신한다.
-     * 창을 {@code published_at}으로 먼저 좁힌 뒤 고르므로, 정정이 나중에 온 기는 <b>정정 전
-     * 판</b>이 뽑힌다. {@code idx_fs_asof}가 이 형태로 이미 있다(V1).
+     * <p><b>기(期)마다 하나로 접지 않는다</b>(ADR-0128). 접으면 {@code asOf} 하나에 대해서만
+     * 판이 정해져 <b>봉마다 다른 판을 고를 수 없다</b> — 재무 지표의 시간축이 거기서 죽는다.
+     * 접는 것은 {@link IndicatorContext}가 하고, 어느 판을 볼지는 <b>봉이 정한다</b>
+     * ({@link IndicatorContext#visibleAt}). {@link #readGovernanceFacts}가 같은 이유로 같은
+     * 모양이다.
      *
-     * <p>인자가 넷이다({@code stock_id}, {@code published_at}, {@code period_end}, {@code LIMIT}).
-     * {@code LATEST}는 셋이라 <b>인자 수가 다르다</b> — 한 배열로 합치면 조용히 어긋난다.
+     * <p><b>MUST NOT: 연수나 행 수로 자르지 않는다.</b> {@code LIMIT}은 <b>행</b> 수라
+     * 창 앞부분에서는 최신 기(期)가 아직 공시되지 않아 <b>더 오래된 행으로 채워진다</b> —
+     * 그러면 요구한 연수가 조용히 한 해씩 미끄러지고, 자르면 그 깊은 해가 잘려
+     * <b>창 앞부분이 통째로 비는데 최신 일자는 멀쩡하다.</b> 거버넌스가 같은 자리에서 같은
+     * 결론에 도달했다({@link #readGovernanceFacts} javadoc의 「회계연도로 상한을 두지 않는다」).
+     *
+     * <p>자르지 않아도 싸다 — 실측(2026-09-07)으로 활성 유니버스 종목당 <b>평균 44.9행 ·
+     * 최대 114행</b>이고, 자르던 시절이 연간 7 + 분기 32 = 39행이었다.
+     *
+     * <p>인자가 셋이다({@code stock_id}, {@code published_at}, {@code period_end}).
+     * {@code LATEST}는 {@code LIMIT}을 써서 <b>인자 수가 다르다</b> — 한 배열로 합치면
+     * 조용히 어긋난다.
      */
     private static final String SELECT_FINANCIALS_KNOWN_ON = ("""
             SELECT %1$s
-            FROM (
-                SELECT %1$s,
-                       row_number() OVER (PARTITION BY fiscal_year, fiscal_period
-                                          ORDER BY revision_no DESC) rn
-                FROM financial_statement
-                WHERE stock_id = ? AND published_at <= ? AND period_end <= ?
-                  AND fiscal_period %%s 'FY'
+            FROM financial_statement
+            WHERE stock_id = ? AND published_at <= ? AND period_end <= ?
+              AND fiscal_period %%s 'FY'
             """ + CURRENCY_GATE + """
-            ) known
-            WHERE rn = 1
             ORDER BY period_end DESC, published_at DESC
-            LIMIT ?
             """).formatted(FINANCIAL_COLUMNS);
 
     private static final RowMapper<PriceBar> PRICE_BAR_MAPPER = (rs, rowNum) -> new PriceBar(
@@ -466,10 +471,11 @@ public class IndicatorDataReader {
                     SELECT_FINANCIALS_LATEST.formatted(periodOperator),
                     IndicatorDataReader::mapFigures,
                     stockId, asOf, limit);
+            // MUST: limit을 넘기지 않는다 — 이 갈래는 판 이력을 통째로 준다(위 javadoc).
             case KNOWN_ON -> jdbcTemplate.query(
                     SELECT_FINANCIALS_KNOWN_ON.formatted(periodOperator),
                     IndicatorDataReader::mapFigures,
-                    stockId, asOf, asOf, limit);
+                    stockId, asOf, asOf);
         };
     }
 

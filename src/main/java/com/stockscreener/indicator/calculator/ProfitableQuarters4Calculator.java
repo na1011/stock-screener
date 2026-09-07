@@ -65,9 +65,14 @@ public class ProfitableQuarters4Calculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, ProfitableQuarters4Calculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         if (quarters.size() < FinancialMath.TTM_QUARTERS) {
-            return List.of();
+            return null;
         }
 
         int profitable = 0;
@@ -76,13 +81,12 @@ public class ProfitableQuarters4Calculator implements IndicatorCalculator {
             // 공시가 빠진 분기가 하나라도 있으면 세지 않는다. 없는 것을 적자로도 흑자로도
             // 읽을 수 없고, 어느 쪽으로 읽든 그 종목의 판정이 조용히 틀린다.
             if (operatingIncome == null) {
-                return List.of();
+                return null;
             }
             if (operatingIncome.signum() > 0) {
                 profitable++;
             }
         }
-
-        return FinancialMath.spreadOverTradeDates(context.priceBars(), BigDecimal.valueOf(profitable));
+        return BigDecimal.valueOf(profitable);
     }
 }

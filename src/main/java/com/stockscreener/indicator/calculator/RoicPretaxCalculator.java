@@ -78,11 +78,16 @@ public class RoicPretaxCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, RoicPretaxCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         BigDecimal operatingIncome =
                 FinancialMath.sumTrailingFourQuarters(quarters, FinancialMath::operatingIncomeOf);
         if (operatingIncome == null) {
-            return List.of();
+            return null;
         }
 
         // 잔액이므로 최근 분기 하나를 쓴다. 합산하면 네 배가 되는데 값이 그럴듯해 드러나지 않는다.
@@ -91,14 +96,13 @@ public class RoicPretaxCalculator implements IndicatorCalculator {
         BigDecimal currentLiabilities = latest.currentLiabilities();
         if (assets == null || currentLiabilities == null) {
             // 금융업은 유동부채 자체가 오지 않는다. 위 javadoc 참조.
-            return List.of();
+            return null;
         }
 
         BigDecimal investedCapital = assets.subtract(currentLiabilities);
         if (investedCapital.signum() <= 0) {
-            return List.of();
+            return null;
         }
-        return FinancialMath.spreadOverTradeDates(
-                context.priceBars(), FinancialMath.percentage(operatingIncome, investedCapital));
+        return FinancialMath.percentage(operatingIncome, investedCapital);
     }
 }

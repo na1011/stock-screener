@@ -64,6 +64,20 @@ public class IndicatorRunner {
      * 마지막 값이 맞으므로, 입력을 줄이면 값 자체가 달라진다. 여기서 거르는 것은
      * {@link IndicatorValueWriter}에 넘길 목록뿐이다.
      *
+     * <p><b>저장 계약 — 봉의 값은 그 봉 시점에 공시돼 있던 재무로 낸다</b>(ADR-0128).
+     * 가시성이 {@link FinancialVisibility#KNOWN_ON}인 것이 그 계약의 절반이고, 나머지 절반은
+     * 계산기가 {@code FinancialMath.byPublication}을 거치는 것이다. <b>둘 중 하나만 있으면
+     * 아무 일도 일어나지 않는다</b> — 리더만 바꾸면 창의 마지막 봉 기준 스냅샷 하나가 그대로
+     * 펴지고, 계산기만 바꾸면 펼 대상이 여전히 오늘 재무다. 실측으로 리더만 바꾸는 것은
+     * <b>오늘 asOf에서 값이 한 칸도 안 바뀐다</b>(미래 공시 0행 · {@code is_latest}와
+     * 최대 개정본이 갈리는 기 0).
+     *
+     * <p><b>MUST NOT: 이 경로가 창 전체를 쓴다는 성질을 좁히지 않는다.</b> 넷이 거기 얹혀 있다 —
+     * 정정공시 무효화({@code StoredIndicatorInvalidationPort}가 상한 없이 지우는데
+     * {@code PipelineScheduler.runHeavy}가 백필을 잇지 않는다) · 미보정 기업행위 억제(ADR-0055) ·
+     * 꼬리 걷기(ADR-0085) · {@code adj_close} 재작성 복구(자동 백필이 10종목에서 포기한다).
+     * 지금 그 넷을 메우는 유일한 기제가 <b>다음 실행이 창 전체를 다시 쓰는 것</b>이다.
+     *
      * @param retentionCutoff 이 날짜 <b>이하</b>는 저장하지 않는다
      *                        ({@link IndicatorRetentionPolicy#writeCutoff()}).
      *                        비어 있으면 거르지 않는다 — 시세가 보존 기간보다 적게 쌓인 초기 상태다
@@ -74,7 +88,7 @@ public class IndicatorRunner {
      */
     public long run(long stockId, LocalDate asOf, Optional<LocalDate> retentionCutoff,
                     Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes) {
-        RawData raw = readRawData(stockId, asOf, marketIndexes, FinancialVisibility.LATEST);
+        RawData raw = readRawData(stockId, asOf, marketIndexes, FinancialVisibility.KNOWN_ON);
         IndicatorContext base = raw.context();
         if (base.priceBars().isEmpty()) {
             // 시세가 없으면 계산할 것이 없다. 신규 편입 직후나 거래정지 종목에서 정상적으로 생긴다.
@@ -315,10 +329,11 @@ public class IndicatorRunner {
     /**
      * 한 종목의 지표를 {@code asOf} 기준으로 계산해 <b>값만 돌려준다 — 저장도 삭제도 하지 않는다.</b>
      *
-     * <p>시점 재현의 진입점이다(ADR-0071). 저장된 {@code indicator_value}를 쓰지 않는 이유는
-     * 그 값들에 <b>시간축이 없기 때문</b>이다 — {@code FinancialMath.spreadOverTradeDates}가
-     * 최신 재무로 낸 값 하나를 읽기 창 전 봉에 찍고 일일 갱신이 매일 다시 쓴다. 과거 일자에
-     * 조건을 걸면 결과가 <b>나오는데 전부 오늘 재무로 계산된 값</b>이다.
+     * <p>시점 재현의 진입점이다(ADR-0071). <b>저장 경로와 같은 가시성을 쓰지만 값을 저장하지
+     * 않는다</b> — {@link #run}이 2026-09-07에 {@code KNOWN_ON}으로 옮겨졌으므로(ADR-0128)
+     * 둘의 차이는 이제 「저장하는가」뿐이다. 백테스트가 여전히 저장된 {@code indicator_value}를
+     * 읽지 않는 이유는 시간축이 없어서가 아니라 <b>보존 창 180거래일이 1년을 못 덮기</b>
+     * 때문이며, 그 물음은 ADR-0123의 시점 저장본이 갖는다.
      *
      * <p>MUST: 마지막 봉의 일자가 {@code asOf}와 <b>정확히 같을 때만</b> 값을 낸다. 라이브
      * 스크리닝이 {@code trade_date = asOf}로 정확히 일치시키므로({@code ScreeningRepository}),

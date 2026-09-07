@@ -67,16 +67,20 @@ public class FcfMarginCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, FcfMarginCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         List<FinancialFigures> annual = context.annualFigures();
         BigDecimal freeCashFlow = FreeCashFlow.latestAnnual(annual);
         if (freeCashFlow == null) {
-            return List.of();
+            return null;
         }
         BigDecimal revenue = annual.get(0).revenue();
         if (revenue == null || revenue.signum() <= 0) {
-            return List.of();
+            return null;
         }
-        return FinancialMath.spreadOverTradeDates(
-                context.priceBars(), FinancialMath.percentage(freeCashFlow, revenue));
+        return FinancialMath.percentage(freeCashFlow, revenue);
     }
 }

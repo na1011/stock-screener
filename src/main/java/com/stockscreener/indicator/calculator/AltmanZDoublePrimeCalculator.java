@@ -96,22 +96,27 @@ public class AltmanZDoublePrimeCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, AltmanZDoublePrimeCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         if (AltmanZCalculator.isInapplicable(context.industryDivisionKey())) {
             // 값을 낼 수 없는 것이 아니라 내면 안 되는 것이다. 뜻 없는 값이 필수 조건을
             // 통과하는 것이 이 계열의 가장 큰 위험이다.
-            return List.of();
+            return null;
         }
 
         List<FinancialFigures> quarters = context.quarterlyFigures();
         if (quarters.isEmpty()) {
-            return List.of();
+            return null;
         }
         FinancialFigures latest = quarters.get(0);
 
         BigDecimal totalAssets = latest.totalAssets();
         BigDecimal totalLiabilities = FinancialMath.totalLiabilitiesOf(latest);
         if (isUnusableDenominator(totalAssets) || isUnusableDenominator(totalLiabilities)) {
-            return List.of();
+            return null;
         }
 
         // 저량 — 최근 분기 잔액.
@@ -126,7 +131,7 @@ public class AltmanZDoublePrimeCalculator implements IndicatorCalculator {
         if (currentAssets == null || currentLiabilities == null
                 || retainedEarnings == null || equity == null || ebit == null) {
             // 금융업이 대개 여기서 빠진다 — 유동/비유동을 구분하지 않는 재무상태표를 내기 때문이다.
-            return List.of();
+            return null;
         }
 
         BigDecimal workingCapital = currentAssets.subtract(currentLiabilities);
@@ -137,8 +142,7 @@ public class AltmanZDoublePrimeCalculator implements IndicatorCalculator {
 
         // 저장 컬럼이 numeric(24,8)이라 DB 값은 어차피 접히지만, computeAt이 내는 메모리 값은
         // 접히지 않은 채 시점 재현 저장본에 실린다. 두 경로가 갈리지 않게 여기서 맞춘다.
-        return FinancialMath.spreadOverTradeDates(context.priceBars(),
-                z.setScale(FinancialMath.SCALE, RoundingMode.HALF_UP));
+        return z.setScale(FinancialMath.SCALE, RoundingMode.HALF_UP);
     }
 
     /** 총자산·총부채가 0 이하면 Z'' 자체가 성립하지 않는다. 음수 총자산은 데이터 결함이다. */

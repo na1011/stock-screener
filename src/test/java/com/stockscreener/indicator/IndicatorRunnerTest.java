@@ -7,6 +7,7 @@ import com.stockscreener.indicator.calculator.MacdCalculator;
 import com.stockscreener.indicator.calculator.MarketCapCalculator;
 import com.stockscreener.indicator.calculator.MacdVCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.indicator.calculator.GrossMarginCalculator;
 import com.stockscreener.indicator.calculator.Rsi14Calculator;
 import com.stockscreener.indicator.calculator.Sma20Calculator;
 import com.stockscreener.indicator.calculator.Sma200Calculator;
@@ -123,6 +124,84 @@ class IndicatorRunnerTest {
         runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         assertThat(countIndicatorValues()).isEqualTo(afterFirst);
+    }
+
+    @Test
+    @DisplayName("대조군 — 정정 전 봉은 그때 유효했던 판으로 계산한다(KNOWN_ON)")
+    void usesTheRevisionThatWasInForceOnThatBar() {
+        insertPriceHistory(300);
+        // 같은 기(期)의 두 판. rev1이 창 안에서 뒤늦게 정정으로 온다.
+        insertAnnualRevision(AS_OF.minusDays(250), 2023, 0, false, new BigDecimal("400000000"));
+        insertAnnualRevision(AS_OF.minusDays(20), 2023, 1, true, new BigDecimal("900000000"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        // 정정 전 봉은 40%, 정정 뒤 봉은 90%다. LATEST로 되돌리면 리더가 **정정본 하나만**
+        // 주므로 정정 전 봉이 공시일 필터에 걸려 값이 통째로 사라지고, 40이 없어진다.
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT DISTINCT value FROM indicator_value"
+                        + " WHERE stock_id = ? AND indicator_code = ? ORDER BY 1",
+                BigDecimal.class, stockId, GrossMarginCalculator.CODE))
+                .as("정정 전 판이 안 보이면 값이 하나만 남는다 — 그때는 저장 경로가 LATEST다")
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("대조군 — 공시일을 넘는 봉에서 재무 지표에 계단이 생긴다")
+    void fundamentalValueStepsAtThePublicationDate() {
+        insertPriceHistory(300);
+        // 창 안에서 공시된 두 기(期). 봉마다 계산하면 공시일 앞뒤 값이 달라진다.
+        insertAnnualPublishedOn(AS_OF.minusDays(250), 2023, new BigDecimal("400000000"));
+        insertAnnualPublishedOn(AS_OF.minusDays(100), 2024, new BigDecimal("700000000"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(DISTINCT value) FROM indicator_value"
+                        + " WHERE stock_id = ? AND indicator_code = ?",
+                Integer.class, stockId, GrossMarginCalculator.CODE))
+                .as("값 하나를 창 전체에 펴면 1이 나온다 — 그것이 시간축이 없다는 뜻이다")
+                .isGreaterThan(1);
+    }
+
+    /** 같은 기(期)의 판 하나. {@code revisionNo}가 클수록 늦게 공시된 정정본이다. */
+    private void insertAnnualRevision(LocalDate publishedAt, int fiscalYear, int revisionNo,
+                                      boolean isLatest, BigDecimal grossProfit) {
+        LocalDate periodEnd = LocalDate.of(fiscalYear, 12, 31);
+        jdbcTemplate.update(
+                "INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period,"
+                        + " period_start, period_end, published_at, revision_no, is_latest,"
+                        + " currency_code, revenue, cost_of_sales, net_income, total_equity)"
+                        + " VALUES (?, ?, 'FY', ?, ?, ?, ?, ?, 'KRW', 1000000000, ?,"
+                        + " 100000000, 1000000000)",
+                stockId, fiscalYear, periodEnd.withDayOfYear(1), periodEnd, publishedAt,
+                revisionNo, isLatest, new BigDecimal("1000000000").subtract(grossProfit));
+    }
+
+    /** {@code publishedAt}에 공시된 연간 재무 한 기. 기말은 공시일보다 앞이다. */
+    private void insertAnnualPublishedOn(LocalDate publishedAt) {
+        insertAnnualPublishedOn(publishedAt, publishedAt.getYear() - 1, new BigDecimal("400000000"));
+    }
+
+    private void insertAnnualPublishedOn(LocalDate publishedAt, int fiscalYear,
+                                        BigDecimal grossProfit) {
+        LocalDate periodEnd = LocalDate.of(fiscalYear, 12, 31);
+        jdbcTemplate.update(
+                "INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period,"
+                        + " period_start, period_end, published_at, revision_no, is_latest,"
+                        + " currency_code, revenue, cost_of_sales, net_income, total_equity)"
+                        + " VALUES (?, ?, 'FY', ?, ?, ?, 0, true, 'KRW', 1000000000, ?,"
+                        + " 100000000, 1000000000)",
+                stockId, fiscalYear, periodEnd.withDayOfYear(1), periodEnd, publishedAt,
+                new BigDecimal("1000000000").subtract(grossProfit));
+        jdbcTemplate.update(
+                "INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period,"
+                        + " period_start, period_end, published_at, revision_no, is_latest,"
+                        + " currency_code, revenue, cost_of_sales, net_income, total_equity)"
+                        + " VALUES (?, ?, 'Q4', ?, ?, ?, 0, true, 'KRW', 250000000, ?,"
+                        + " 25000000, 1000000000)",
+                stockId, fiscalYear, periodEnd.minusMonths(3), periodEnd, publishedAt,
+                new BigDecimal("250000000").subtract(grossProfit.divide(new BigDecimal("4"))));
     }
 
     @Test

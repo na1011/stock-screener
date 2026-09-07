@@ -85,7 +85,7 @@ public class OperatingCashFlow5ySumCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        return FinancialMath.spreadOverTradeDates(context.priceBars(), sumOfFiveYears(context));
+        return FinancialMath.byPublication(context, OperatingCashFlow5ySumCalculator::sumOfFiveYears);
     }
 
     /** @return 다섯 해가 연속하고 모두 값이 있을 때만 합. 아니면 null */

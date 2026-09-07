@@ -34,9 +34,8 @@ import java.util.List;
  * <p>중앙값을 평균이 아니라 중앙값으로 두는 이유는 적자 전후의 극단값 때문이다. TTM 이익이
  * 0에 가까운 분기가 한 번만 끼어도 PER이 수천 배로 튀고, 평균은 그 한 점에 끌려간다.
  *
- * <p>값 하나를 시세 날짜 전체에 펼친다({@link FinancialMath#spreadOverTradeDates}). 즉 과거
- * 날짜의 행도 <b>최신 시점에 계산한 중앙값</b>이며, 그것은 {@code OCF_SUM_5Y}를 비롯한 기존
- * 재무 지표와 같은 성질이다.
+ * <p>중앙값은 <b>봉마다 그 봉까지의 창</b>으로 낸다({@link ValuationHistory#median}, ADR-0128).
+ * 값 하나를 창 전체에 펴던 시절에는 과거 날짜의 행이 <b>그 뒤의 종가로 계산한 중앙값</b>이었다.
  */
 @Component
 @IndicatorMeta(

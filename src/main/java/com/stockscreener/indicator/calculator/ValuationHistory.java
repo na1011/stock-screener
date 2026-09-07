@@ -7,7 +7,9 @@ import com.stockscreener.indicator.PriceBar;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -24,9 +26,10 @@ import java.util.List;
  * <p>중앙값을 평균이 아니라 중앙값으로 두는 이유는 극단값 때문이다. 이익이 0에 가까운 분기가
  * 한 번만 끼어도 배수가 수천 배로 튀고, 평균은 그 한 점에 끌려간다.
  *
- * <p>값 하나를 시세 날짜 전체에 펼친다({@link FinancialMath#spreadOverTradeDates}). 즉 과거
- * 날짜의 행도 <b>최신 시점에 계산한 중앙값</b>이며, 그것은 {@code OCF_SUM_5Y}를 비롯한 기존
- * 재무 지표와 같은 성질이다.
+ * <p><b>중앙값은 봉마다 그 봉까지의 창으로 낸다</b>(ADR-0128). 값 하나를 창 전체에 펴던 시절에는
+ * 과거 일자의 「5년 중앙값」이 <b>그 뒤의 종가</b>로 계산돼 있었다 — 재무 쪽 look-ahead를 닫으면서
+ * 가격 쪽을 남기면 이 지표는 여전히 미래를 본다. 창을 한 칸씩 미는 형태라 비용은
+ * <b>정렬 하나가 아니라 삽입·삭제 하나씩</b>이다.
  */
 final class ValuationHistory {
 
@@ -56,40 +59,95 @@ final class ValuationHistory {
     private ValuationHistory() {
     }
 
-    /** 5년 배수 중앙값 하나를 만들어 시세 날짜 전체에 편다. 표본이 모자라면 빈 목록이다. */
+    /**
+     * 봉마다 그 봉까지의 5년 창으로 배수 중앙값을 낸다. 표본이 모자라는 봉은 값을 내지 않는다.
+     *
+     * <p>두 단계다. ① 봉마다 배수를 하나 만든다 — 분모의 재무는 <b>그 봉 시점에 공시돼 있던
+     * 판</b>만 본다({@link IndicatorContext#visibleAt}). ② 정렬된 창을 한 칸씩 밀며 중앙값을
+     * 읽는다.
+     *
+     * <p>MUST: ②의 창을 매번 새로 정렬하지 않는다. 봉당 들고 나는 것이 각각 하나뿐이라
+     * 삽입·삭제 하나로 끝나는데, 다시 정렬하면 창 길이 × 봉 수의 로그배가 붙는다.
+     *
+     * <p>MUST: {@code visible}을 <b>공시일을 넘을 때만</b> 다시 만든다. 봉마다 만들면
+     * 사본이 창 길이만큼 생긴다 — 값은 같고 비용만 는다.
+     */
     static List<IndicatorPoint> median(IndicatorContext context, PerShareDenominator denominator) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
         List<PriceBar> bars = context.priceBars();
-        if (quarters.isEmpty() || bars.size() <= LOOKBACK) {
+        if (bars.size() <= LOOKBACK) {
             return List.of();
         }
 
-        int from = bars.size() - LOOKBACK - 1;
-        List<Double> ratios = new ArrayList<>(LOOKBACK + 1);
-        for (int i = from; i < bars.size(); i++) {
+        Double[] ratios = new Double[bars.size()];
+        List<LocalDate> cuts = context.financialPublicationDates();
+        int cut = 0;
+        List<FinancialFigures> visible = null;
+        for (int i = 0; i < bars.size(); i++) {
             PriceBar bar = bars.get(i);
-            int published = FinancialMath.publishedIndexOn(quarters, bar.tradeDate());
+            boolean crossed = false;
+            while (cut < cuts.size() && !cuts.get(cut).isAfter(bar.tradeDate())) {
+                cut++;
+                crossed = true;
+            }
+            if (visible == null || crossed) {
+                visible = context.visibleAt(bar.tradeDate()).quarterlyFigures();
+            }
+            int published = FinancialMath.publishedIndexOn(visible, bar.tradeDate());
             if (published < 0) {
                 continue;
             }
-            BigDecimal perShare = denominator.on(context, bar, quarters, published);
+            BigDecimal perShare = denominator.on(context, bar, visible, published);
             if (perShare == null || perShare.signum() <= 0) {
                 continue;
             }
-            ratios.add(bar.close()
+            ratios[i] = bar.close()
                     .divide(perShare, FinancialMath.SCALE, RoundingMode.HALF_UP)
-                    .doubleValue());
-        }
-        if (ratios.size() < MIN_SAMPLES) {
-            return List.of();
+                    .doubleValue();
         }
 
-        double[] values = new double[ratios.size()];
-        for (int i = 0; i < values.length; i++) {
-            values[i] = ratios.get(i);
+        List<Double> window = new ArrayList<>(LOOKBACK + 1);
+        for (int i = 0; i <= LOOKBACK; i++) {
+            insertSorted(window, ratios[i]);
         }
-        BigDecimal median = BigDecimal.valueOf(SeriesMath.median(values))
-                .setScale(FinancialMath.SCALE, RoundingMode.HALF_UP);
-        return FinancialMath.spreadOverTradeDates(bars, median);
+
+        List<IndicatorPoint> points = new ArrayList<>(bars.size() - LOOKBACK);
+        for (int i = LOOKBACK; i < bars.size(); i++) {
+            if (i > LOOKBACK) {
+                removeSorted(window, ratios[i - LOOKBACK - 1]);
+                insertSorted(window, ratios[i]);
+            }
+            if (window.size() < MIN_SAMPLES) {
+                continue;
+            }
+            points.add(new IndicatorPoint(bars.get(i).tradeDate(),
+                    BigDecimal.valueOf(medianOf(window))
+                            .setScale(FinancialMath.SCALE, RoundingMode.HALF_UP)));
+        }
+        return points;
+    }
+
+    private static void insertSorted(List<Double> window, Double value) {
+        if (value == null) {
+            return;
+        }
+        int at = Collections.binarySearch(window, value);
+        window.add(at < 0 ? -at - 1 : at, value);
+    }
+
+    private static void removeSorted(List<Double> window, Double value) {
+        if (value == null) {
+            return;
+        }
+        int at = Collections.binarySearch(window, value);
+        // 같은 값이 여럿이면 binarySearch가 아무 자리나 준다. 지우는 개수만 맞으면 되므로
+        // 그 자리를 그대로 쓴다 — 창은 다중집합이고 순서만 유지하면 중앙값은 같다.
+        window.remove(at);
+    }
+
+    /** 정렬된 창의 중앙값. 짝수면 가운데 둘의 평균이다. */
+    private static double medianOf(List<Double> window) {
+        int n = window.size();
+        int mid = n / 2;
+        return n % 2 == 1 ? window.get(mid) : (window.get(mid - 1) + window.get(mid)) / 2.0;
     }
 }

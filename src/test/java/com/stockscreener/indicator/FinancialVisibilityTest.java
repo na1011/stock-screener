@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,13 +64,13 @@ class FinancialVisibilityTest {
     }
 
     @Test
-    @DisplayName("LATEST는 같은 자리에서 미래 공시를 준다 — 라이브 경로는 바뀌지 않았다")
+    @DisplayName("LATEST는 같은 자리에서 미래 공시를 준다 — 그것이 이 모드를 저장 경로에서 뺀 이유다")
     void latestStillSeesTheFuture() {
         insertAnnual(2024, PERIOD_END, PUBLISHED, 0, true, new BigDecimal("1000"));
 
-        // 이것이 버그가 아니라 **라이브의 계약**이다. asOf가 언제나 오늘이므로 라이브에서는
-        // 이 분기가 생기지 않는다. 시점 재현만 KNOWN_ON을 골라야 한다는 것이 요점이며,
-        // 이 단정이 깨지면 시점 경로가 라이브 경로를 오염시킨 것이다(ADR-0071 §규칙).
+        // **저장 경로는 2026-09-07에 KNOWN_ON으로 옮겼다**(ADR-0128). 이 단정이 남아 있는 것은
+        // 두 모드의 차이를 못박기 위해서다 — 지우면 KNOWN_ON이 무엇을 막는지 말하는 자리가
+        // 사라진다. 운영 코드에서 이 모드를 고르는 곳은 이제 없다.
         assertThat(reader.readAnnualFigures(stockId, BEFORE_PUBLICATION, 5, FinancialVisibility.LATEST))
                 .hasSize(1);
     }
@@ -80,19 +81,33 @@ class FinancialVisibilityTest {
         insertAnnual(2024, PERIOD_END, PUBLISHED, 0, false, new BigDecimal("1000"));
         insertAnnual(2024, PERIOD_END, LocalDate.of(2026, 5, 11), 1, true, new BigDecimal("777"));
 
+        // 리더는 판 이력을 통째로 주고, 어느 판을 볼지는 **봉이 정한다**(ADR-0128).
+        // 그래서 판정을 컨텍스트에 물어야 한다 — 리더에 물으면 둘 다 온다.
         LocalDate betweenRevisions = LocalDate.of(2025, 6, 30);
 
         // is_latest는 **오늘의** 최신이라 정정 후 777을 준다. 그 시점의 시장은 1000을 봤다.
-        assertThat(reader.readAnnualFigures(stockId, betweenRevisions, 5, FinancialVisibility.KNOWN_ON))
+        assertThat(visibleAnnual(betweenRevisions))
                 .singleElement()
                 .extracting(FinancialFigures::revenue)
                 .isEqualTo(new BigDecimal("1000.00"));
 
         // 정정이 공시된 뒤로 오면 정정본을 준다.
-        assertThat(reader.readAnnualFigures(stockId, LocalDate.of(2026, 8, 13), 5, FinancialVisibility.KNOWN_ON))
+        assertThat(visibleAnnual(LocalDate.of(2026, 8, 13)))
                 .singleElement()
                 .extracting(FinancialFigures::revenue)
                 .isEqualTo(new BigDecimal("777.00"));
+    }
+
+    @Test
+    @DisplayName("리더는 판 이력을 통째로 준다 — 접는 자리가 봉으로 내려갔다는 것의 실동작")
+    void knownOnReturnsEveryRevision() {
+        insertAnnual(2024, PERIOD_END, PUBLISHED, 0, false, new BigDecimal("1000"));
+        insertAnnual(2024, PERIOD_END, LocalDate.of(2026, 5, 11), 1, true, new BigDecimal("777"));
+
+        // 접어서 주면 봉마다 다른 판을 고를 수 없다. 이 단정이 그 성질을 못박는다.
+        assertThat(reader.readAnnualFigures(stockId, LocalDate.of(2026, 8, 13), 5,
+                FinancialVisibility.KNOWN_ON))
+                .hasSize(2);
     }
 
     @Test
@@ -108,15 +123,29 @@ class FinancialVisibilityTest {
     }
 
     @Test
-    @DisplayName("기(期)마다 한 판만 온다 — TTM이 중복 합산되지 않는다")
+    @DisplayName("계산기가 보는 것은 기(期)마다 한 판이다 — TTM이 중복 합산되지 않는다")
     void oneRevisionPerPeriod() {
         insertQuarter(2025, "Q1", LocalDate.of(2025, 3, 31), LocalDate.of(2025, 5, 15), 0, false);
         insertQuarter(2025, "Q1", LocalDate.of(2025, 3, 31), LocalDate.of(2025, 8, 20), 1, true);
 
-        List<FinancialFigures> figures =
-                reader.readQuarterlyFigures(stockId, LocalDate.of(2026, 8, 13), 5, FinancialVisibility.KNOWN_ON);
+        LocalDate asOf = LocalDate.of(2026, 8, 13);
+        List<FinancialFigures> revisions =
+                reader.readQuarterlyFigures(stockId, asOf, 5, FinancialVisibility.KNOWN_ON);
 
-        assertThat(figures).hasSize(1);
+        // 리더는 둘을 준다(위 knownOnReturnsEveryRevision). 접는 것은 컨텍스트이고,
+        // 그 접기가 없으면 TTM이 같은 분기를 두 번 더한다.
+        assertThat(revisions).hasSize(2);
+        assertThat(new IndicatorContext(stockId, List.of(), List.of(), revisions, Map.of())
+                .quarterlyFigures())
+                .hasSize(1);
+    }
+
+    /** 그 봉 시점에 계산기가 실제로 보는 연간 재무. */
+    private List<FinancialFigures> visibleAnnual(LocalDate tradeDate) {
+        List<FinancialFigures> revisions =
+                reader.readAnnualFigures(stockId, tradeDate, 5, FinancialVisibility.KNOWN_ON);
+        return new IndicatorContext(stockId, List.of(), revisions, List.of(), Map.of())
+                .visibleAt(tradeDate).annualFigures();
     }
 
     private void insertAnnual(int year, LocalDate periodEnd, LocalDate publishedAt,

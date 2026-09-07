@@ -54,14 +54,18 @@ class ValuationDiscountIndicatorsTest {
         }
 
         @Test
-        @DisplayName("IMPORTANT — 둘 다 있는 가장 최근 봉을 쓴다. 앞에서 찾으면 「지금 싼가」가 아니다")
+        @DisplayName("IMPORTANT — 봉마다 자기 배수로 낸다. 마지막 봉의 값을 펴면 과거가 미래를 본다")
         void usesLatestBarNotFirst() {
-            // 0번 봉은 40% 할인, 2번 봉은 25% 할인. 최신인 2번이 나와야 한다.
+            // 0번 봉은 40% 할인, 2번 봉은 25% 할인. **둘 다 나와야 한다** — 봉마다 자기 값이다.
             List<IndicatorPoint> points = calculator.calculate(
                     context(3, Map.of(0, "12", 2, "15"), Map.of(0, "20", 2, "20")));
 
+            assertThat(points).hasSize(2);
             assertThat(points.get(0).value())
-                    .as("0번 봉을 썼다면 40이 나온다")
+                    .as("0번 봉은 자기 배수로 40이다 — 마지막 봉의 값을 펴면 25가 나온다")
+                    .isEqualByComparingTo("40");
+            assertThat(points.get(1).value())
+                    .as("2번 봉은 25다")
                     .isEqualByComparingTo("25");
         }
 
@@ -73,14 +77,15 @@ class ValuationDiscountIndicatorsTest {
         }
 
         @Test
-        @DisplayName("값 하나를 모든 봉에 편다 — 저장되는 180일치가 같은 값이라는 뜻이다")
-        void spreadsOverEveryBar() {
+        @DisplayName("부모가 있는 봉에만 낸다 — 없는 봉을 채우면 그 값은 그 뒤의 것이다")
+        void emitsOnlyWhereBothParentsExist() {
             List<IndicatorPoint> points = calculator.calculate(
                     context(3, Map.of(2, "15"), Map.of(2, "20")));
 
-            assertThat(points).hasSize(3);
-            assertThat(points).allSatisfy(p ->
-                    assertThat(p.value()).isEqualByComparingTo("25"));
+            // 부모(배수·중앙값)가 2번 봉에만 있다. 예전에는 그 값 하나를 세 봉에 폈는데,
+            // 그러면 0·1번 봉이 **그 뒤의 값**을 갖는다(ADR-0128).
+            assertThat(points).hasSize(1);
+            assertThat(points.get(0).value()).isEqualByComparingTo("25");
         }
 
         @Test

@@ -73,21 +73,25 @@ public class InventoryGrowthGapCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, InventoryGrowthGapCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         List<FinancialFigures> annual = context.annualFigures();
         if (!isConsecutive(annual)) {
-            return List.of();
+            return null;
         }
         BigDecimal inventoryGrowth = YearOverYear.growth(annual, FinancialFigures::inventories);
         BigDecimal revenueGrowth = YearOverYear.growth(annual, FinancialFigures::revenue);
         if (inventoryGrowth == null || revenueGrowth == null) {
-            return List.of();
+            return null;
         }
-        return FinancialMath.spreadOverTradeDates(
-                context.priceBars(), inventoryGrowth.subtract(revenueGrowth));
+        return inventoryGrowth.subtract(revenueGrowth);
     }
 
     /** 최신 두 회계연도가 실제로 이웃한 해인가. 아니면 「1년치 변화」라는 이름이 거짓이 된다. */
-    private boolean isConsecutive(List<FinancialFigures> annual) {
+    private static boolean isConsecutive(List<FinancialFigures> annual) {
         return annual.size() >= 2
                 && annual.get(0).fiscalYear() - annual.get(1).fiscalYear() == 1;
     }

@@ -126,18 +126,49 @@ final class FinancialMath {
     }
 
     /**
-     * 재무에서 나온 값 하나를 시세 날짜 전체에 펼친다.
+     * 재무에서 나온 값을 <b>봉마다 그 시점의 판으로</b> 계산해 시계열로 낸다(ADR-0128).
      *
-     * <p>분기 공시라 재무는 하루짜리 값이지만, 조건 판정은 "최신 거래일의 지표"를 읽으므로
-     * 매 거래일에 행이 있어야 한다. 다음 공시 전까지는 같은 값이 유효하다는 뜻이기도 하다.
+     * <p>값 하나를 창 전체에 펴 바르던 자리를 대신한다. 그쪽은 <b>시간축이 없어</b> 과거 일자
+     * 조회가 「그날 아직 공시되지 않은 재무」로 판정하게 만들었다 — 실측(2026-09-07)
+     * as-of 2026-03-02에서 활성 1,350종목 중 <b>600(44.4%)</b>이 그 상태였다.
+     *
+     * <p><b>봉마다 다시 계산하지 않는다.</b> 재무에서 나온 값은 공시가 있을 때만 바뀌므로
+     * {@link IndicatorContext#financialPublicationDates()}로 구간을 나눠 <b>구간당 한 번</b>만
+     * 부른다. 봉이 오름차순인 것에 기대어 포인터로 훑는다 — 순서가 바뀌면 값이 앞 구간의
+     * 것으로 남는데 <b>그럴듯한 숫자라 드러나지 않는다.</b>
+     *
+     * <p>MUST: {@code valueOf}에 넘기는 것은 {@link IndicatorContext#visibleAt}의 사본이다.
+     * 원래 컨텍스트를 넘기면 <b>전 봉이 같은 값을 받아</b> 이 메서드가 이름만 바뀐
+     * 「하나를 펴 바르기」가 된다. 컴파일도 되고 값도 그럴듯하다.
+     *
+     * @param valueOf 그 시점의 재무만 담긴 컨텍스트를 받아 값 하나를 낸다. {@code null}이면
+     *                그 구간에는 행을 쓰지 않는다(ADR-0002)
      */
-    static List<IndicatorPoint> spreadOverTradeDates(List<PriceBar> bars, BigDecimal value) {
-        if (value == null || bars.isEmpty()) {
+    static List<IndicatorPoint> byPublication(
+            IndicatorContext context,
+            Function<IndicatorContext, BigDecimal> valueOf) {
+        List<PriceBar> bars = context.priceBars();
+        if (bars.isEmpty()) {
             return List.of();
         }
+        List<LocalDate> cuts = context.financialPublicationDates();
         List<IndicatorPoint> points = new ArrayList<>(bars.size());
+        int cut = 0;
+        BigDecimal cached = null;
+        boolean computed = false;
         for (PriceBar bar : bars) {
-            points.add(new IndicatorPoint(bar.tradeDate(), value));
+            boolean crossed = false;
+            while (cut < cuts.size() && !cuts.get(cut).isAfter(bar.tradeDate())) {
+                cut++;
+                crossed = true;
+            }
+            if (!computed || crossed) {
+                cached = valueOf.apply(context.visibleAt(bar.tradeDate()));
+                computed = true;
+            }
+            if (cached != null) {
+                points.add(new IndicatorPoint(bar.tradeDate(), cached));
+            }
         }
         return points;
     }

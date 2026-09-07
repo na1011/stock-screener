@@ -61,16 +61,19 @@ public class OperatingMarginCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, OperatingMarginCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         BigDecimal operatingIncome =
                 FinancialMath.sumTrailingFourQuarters(quarters, FinancialMath::operatingIncomeOf);
         BigDecimal revenue =
                 FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue);
         if (operatingIncome == null || revenue == null || revenue.signum() <= 0) {
-            return List.of();
+            return null;
         }
-
-        return FinancialMath.spreadOverTradeDates(
-                context.priceBars(), FinancialMath.percentage(operatingIncome, revenue));
+        return FinancialMath.percentage(operatingIncome, revenue);
     }
 }

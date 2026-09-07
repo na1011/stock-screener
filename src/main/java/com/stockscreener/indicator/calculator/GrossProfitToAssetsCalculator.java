@@ -61,16 +61,20 @@ public class GrossProfitToAssetsCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.byPublication(context, GrossProfitToAssetsCalculator::valueOf);
+    }
+
+    /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    private static BigDecimal valueOf(IndicatorContext context) {
         FinancialFigures latest = GrossProfit.latestAnnual(context.annualFigures());
         BigDecimal grossProfit = GrossProfit.of(latest);
         if (grossProfit == null) {
-            return List.of();
+            return null;
         }
         BigDecimal assets = latest.totalAssets();
         if (assets == null || assets.signum() <= 0) {
-            return List.of();
+            return null;
         }
-        return FinancialMath.spreadOverTradeDates(context.priceBars(),
-                FinancialMath.percentage(grossProfit, assets));
+        return FinancialMath.percentage(grossProfit, assets);
     }
 }

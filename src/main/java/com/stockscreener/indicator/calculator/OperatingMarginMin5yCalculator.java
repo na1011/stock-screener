@@ -71,7 +71,7 @@ public class OperatingMarginMin5yCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        return FinancialMath.spreadOverTradeDates(context.priceBars(), minimumMargin(context));
+        return FinancialMath.byPublication(context, OperatingMarginMin5yCalculator::minimumMargin);
     }
 
     /** @return 다섯 해가 연속하고 모두 값이 있을 때만 최솟값. 아니면 null */
