@@ -174,6 +174,58 @@ final class FinancialMath {
     }
 
     /**
+     * <b>봉 루프를 스스로 도는</b> 계산기를 공시 구간마다 다시 돌린다(ADR-0128).
+     *
+     * <p>{@link #byPublication}과 겨냥하는 결함은 같고 모양만 다르다. 그쪽은 값 <b>하나</b>를
+     * 내는 계산기를 위한 것이고, 이쪽은 <b>이미 봉마다 값을 내지만 재무 합산만 루프 밖에서
+     * 한 번</b> 하는 계산기를 위한 것이다 — {@code PER}·{@code PBR}·{@code PSR}·
+     * {@code EPS_TTM}이 그 모양이었고, 주식수·종가는 봉마다 읽으면서 <b>분자만 asOf
+     * 스냅샷</b>이었다.
+     *
+     * <p>실측(2026-09-08): {@code 005930}을 asOf 2026-09-04와 2026-06-01로 각각 계산하면
+     * {@code PER}이 <b>모든 날짜에서 정확히 1.796배</b>로 갈렸다. <b>배수가 날짜에 무관하게
+     * 일정한 것이 「분모가 하나」라는 증거다</b> — 봉마다 정해지면 배수가 날짜마다 달라진다.
+     *
+     * <p>구간마다 {@code compute}를 <b>전 봉에 대해</b> 부르고 <b>그 구간의 봉만</b> 취한다.
+     * 창 안 공시일이 한 자릿수라 비용이 그만큼만 는다. 계산기 본체는 한 줄도 안 바꾼다.
+     *
+     * <p>MUST: 넘기는 것은 {@link IndicatorContext#visibleAt}의 사본이다. 원래 컨텍스트를
+     * 넘기면 <b>이 메서드가 아무 일도 안 한다</b> — 컴파일도 되고 값도 그럴듯하다.
+     */
+    static List<IndicatorPoint> bySegment(
+            IndicatorContext context,
+            Function<IndicatorContext, List<IndicatorPoint>> compute) {
+        List<PriceBar> bars = context.priceBars();
+        if (bars.isEmpty()) {
+            return List.of();
+        }
+        List<LocalDate> cuts = context.financialPublicationDates();
+        List<IndicatorPoint> out = new ArrayList<>(bars.size());
+        int i = 0;
+        int cut = 0;
+        while (i < bars.size()) {
+            LocalDate from = bars.get(i).tradeDate();
+            while (cut < cuts.size() && !cuts.get(cut).isAfter(from)) {
+                cut++;
+            }
+            LocalDate next = cut < cuts.size() ? cuts.get(cut) : null;
+            int end = i;
+            while (end < bars.size()
+                    && (next == null || bars.get(end).tradeDate().isBefore(next))) {
+                end++;
+            }
+            LocalDate to = bars.get(end - 1).tradeDate();
+            for (IndicatorPoint point : compute.apply(context.visibleAt(from))) {
+                if (!point.tradeDate().isBefore(from) && !point.tradeDate().isAfter(to)) {
+                    out.add(point);
+                }
+            }
+            i = end;
+        }
+        return out;
+    }
+
+    /**
      * 그 시점의 주식수. <b>시세 쪽을 우선하고 재무를 폴백으로 쓴다.</b>
      *
      * <p>시세가 우선인 이유는 날짜별 값이기 때문이다 — 유상증자·분할로 주식수가 바뀌면 그날부터

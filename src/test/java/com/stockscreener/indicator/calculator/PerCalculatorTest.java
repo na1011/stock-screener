@@ -80,7 +80,7 @@ class PerCalculatorTest {
     @DisplayName("IMPORTANT — 원주가(close)를 쓴다. 수정주가는 시점의 발행주식수와 짝이 맞지 않는다")
     void usesUnadjustedClose() {
         // close 150, adjClose 30 (분할 반영). PER은 close 기준이어야 15가 나온다.
-        PriceBar bar = new PriceBar(LocalDate.of(2026, 1, 2),
+        PriceBar bar = new PriceBar(LocalDate.of(2026, 3, 2),
                 BigDecimal.valueOf(150), BigDecimal.valueOf(150), BigDecimal.valueOf(150),
                 BigDecimal.valueOf(150), BigDecimal.valueOf(30), 1000L, null, null);
 
@@ -99,7 +99,7 @@ class PerCalculatorTest {
     @DisplayName("시세의 상장주식수를 재무보다 우선한다 — 날짜별 값이라 증자·분할이 바로 반영된다")
     void prefersListedSharesFromPriceBar() {
         // 재무는 주식수 100(EPS 10 → PER 15)이라 하고, 시세는 200을 준다(EPS 5 → PER 30).
-        PriceBar bar = new PriceBar(LocalDate.of(2026, 1, 2),
+        PriceBar bar = new PriceBar(LocalDate.of(2026, 3, 2),
                 BigDecimal.valueOf(150), BigDecimal.valueOf(150), BigDecimal.valueOf(150),
                 BigDecimal.valueOf(150), BigDecimal.valueOf(150), 1000L, null, BigDecimal.valueOf(200));
 
@@ -123,7 +123,7 @@ class PerCalculatorTest {
     }
 
     private static PriceBar priceBar(BigDecimal close) {
-        return new PriceBar(LocalDate.of(2026, 1, 2), close, close, close, close, close, 1000L, null, null);
+        return new PriceBar(LocalDate.of(2026, 3, 2), close, close, close, close, close, 1000L, null, null);
     }
 
     private static List<FinancialFigures> quarters(int count, BigDecimal netIncome, BigDecimal shares) {

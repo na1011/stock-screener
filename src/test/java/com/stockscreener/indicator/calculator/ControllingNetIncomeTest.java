@@ -86,7 +86,7 @@ class ControllingNetIncomeTest {
     }
 
     private static PriceBar priceBar(BigDecimal close) {
-        return new PriceBar(LocalDate.of(2026, 1, 2), close, close, close, close, close,
+        return new PriceBar(LocalDate.of(2026, 3, 2), close, close, close, close, close,
                 1000L, null, null);
     }
 

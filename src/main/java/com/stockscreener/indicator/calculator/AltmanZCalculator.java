@@ -144,6 +144,16 @@ public class AltmanZCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.bySegment(context, AltmanZCalculator::pointsFrom);
+    }
+
+    /**
+     * 그 봉 시점에 공시돼 있던 재무만 담긴 컨텍스트로 낸 시계열(ADR-0128).
+     *
+     * <p>재무 합산이 이 루프 <b>밖</b>에 있는 것이 옳다 — 이 메서드 자체가 한
+     * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
+     */
+    private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
         if (isInapplicable(context.industryDivisionKey())) {
             // 값을 낼 수 없는 것이 아니라 내면 안 되는 것이다. 보험사의 Z는 계산은 되지만
             // 뜻이 없고, 뜻 없는 값이 필수 조건을 통과하는 것이 이 지표의 가장 큰 위험이다.

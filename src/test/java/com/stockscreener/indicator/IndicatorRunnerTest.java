@@ -164,6 +164,61 @@ class IndicatorRunnerTest {
                 .isGreaterThan(1);
     }
 
+    @Test
+    @DisplayName("대조군 — 봉 루프를 스스로 도는 계산기도 봉마다 그 시점 재무를 쓴다")
+    void perBarLoopCalculatorsAlsoSeeTheirOwnVintage() {
+        insertPriceHistory(300);
+        // 창 안에서 분기 넷이 차례로 공시된다. PER의 분자(TTM 순이익)가 봉마다 정해지면
+        // 공시일마다 값이 갈리고, 루프 밖에서 한 번 정해지면 **가격만 움직여** 종가 비율이
+        // 어느 날짜에서나 같아진다.
+        // 창 앞: TTM이 처음부터 서도록 네 분기를 미리 공시해 둔다.
+        insertQuarterPublishedOn(AS_OF.minusDays(330), 2023, "Q1", new BigDecimal("10000000"));
+        insertQuarterPublishedOn(AS_OF.minusDays(320), 2023, "Q2", new BigDecimal("10000000"));
+        insertQuarterPublishedOn(AS_OF.minusDays(312), 2023, "Q3", new BigDecimal("10000000"));
+        insertQuarterPublishedOn(AS_OF.minusDays(305), 2023, "Q4", new BigDecimal("10000000"));
+        // 창 안: 공시할 때마다 TTM 창이 한 분기씩 밀린다. 마지막이 아홉 배라 값이 크게 갈린다.
+        insertQuarterPublishedOn(AS_OF.minusDays(200), 2024, "Q1", new BigDecimal("20000000"));
+        insertQuarterPublishedOn(AS_OF.minusDays(150), 2024, "Q2", new BigDecimal("30000000"));
+        insertQuarterPublishedOn(AS_OF.minusDays(100), 2024, "Q3", new BigDecimal("40000000"));
+        insertQuarterPublishedOn(AS_OF.minusDays(40), 2024, "Q4", new BigDecimal("90000000"));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        // 마지막 분기가 아홉 배라 그 공시 앞뒤로 EPS가 갈린다. 봉 루프 밖에서 합산하면
+        // 전 봉이 같은 TTM을 받아 **종가 대비 비율이 하나로 접힌다.**
+        List<BigDecimal> ratios = jdbcTemplate.query(
+                "SELECT iv.value / p.close AS r FROM indicator_value iv"
+                        + " JOIN price_daily p ON p.stock_id = iv.stock_id"
+                        + " AND p.trade_date = iv.trade_date"
+                        + " WHERE iv.stock_id = ? AND iv.indicator_code = ?",
+                (rs, n) -> rs.getBigDecimal("r").setScale(6, java.math.RoundingMode.HALF_UP),
+                stockId, PerCalculator.CODE);
+        assertThat(ratios).isNotEmpty();
+        assertThat(ratios.stream().distinct().toList())
+                .as("종가 대비 비율이 하나뿐이면 TTM이 봉 루프 밖에서 한 번 정해진 것이다")
+                .hasSizeGreaterThan(1);
+    }
+
+    /** {@code publishedAt}에 공시된 분기 하나. TTM 합산에 쓸 순이익만 채운다. */
+    private void insertQuarterPublishedOn(LocalDate publishedAt, int fiscalYear, String period,
+                                          BigDecimal netIncome) {
+        LocalDate periodEnd = switch (period) {
+            case "Q1" -> LocalDate.of(fiscalYear, 3, 31);
+            case "Q2" -> LocalDate.of(fiscalYear, 6, 30);
+            case "Q3" -> LocalDate.of(fiscalYear, 9, 30);
+            default -> LocalDate.of(fiscalYear, 12, 31);
+        };
+        jdbcTemplate.update(
+                "INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period,"
+                        + " period_start, period_end, published_at, revision_no, is_latest,"
+                        + " currency_code, revenue, net_income, net_income_controlling,"
+                        + " total_equity, total_assets, shares_outstanding)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, 0, true, 'KRW', 1000000000, ?, ?,"
+                        + " 1000000000, 2000000000, 1000000)",
+                stockId, fiscalYear, period, periodEnd.minusMonths(3), periodEnd, publishedAt,
+                netIncome, netIncome);
+    }
+
     /** 같은 기(期)의 판 하나. {@code revisionNo}가 클수록 늦게 공시된 정정본이다. */
     private void insertAnnualRevision(LocalDate publishedAt, int fiscalYear, int revisionNo,
                                       boolean isLatest, BigDecimal grossProfit) {

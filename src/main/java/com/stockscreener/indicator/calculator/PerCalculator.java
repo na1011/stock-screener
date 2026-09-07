@@ -77,6 +77,16 @@ public class PerCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.bySegment(context, PerCalculator::pointsFrom);
+    }
+
+    /**
+     * 그 봉 시점에 공시돼 있던 재무만 담긴 컨텍스트로 낸 시계열(ADR-0128).
+     *
+     * <p>재무 합산이 이 루프 <b>밖</b>에 있는 것이 옳다 — 이 메서드 자체가 한
+     * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
+     */
+    private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         // 지배기업 소유주 귀속분이다 — K-IFRS 1033의 주당이익 정의이고, 분모인
         // 발행주식수도 보통주만이라 여기서 짝이 맞는다. 연결 총액을 쓰면 비지배지분의

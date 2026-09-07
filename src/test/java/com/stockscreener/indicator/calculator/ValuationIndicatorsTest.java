@@ -28,7 +28,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ValuationIndicatorsTest {
 
-    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 1, 2);
+    /**
+     * 봉 날짜. <b>픽스처 재무가 공시된 뒤</b>여야 한다(ADR-0128) — 지표가 봉마다 「그 시점에
+     * 공시돼 있던」 재무로 계산하므로 봉이 공시일보다 앞이면 값을 내지 않는 것이 옳다.
+     * {@code FinancialFiguresFixture}가 공시일을 {@code periodEnd + 2개월}로 둔다.
+     */
+    private static final LocalDate TRADE_DATE = LocalDate.of(2026, 3, 2);
 
     @Nested
     @DisplayName("PSR — 주가 ÷ 주당매출(TTM)")

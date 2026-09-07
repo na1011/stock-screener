@@ -69,6 +69,16 @@ public class EpsTtmCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.bySegment(context, EpsTtmCalculator::pointsFrom);
+    }
+
+    /**
+     * 그 봉 시점에 공시돼 있던 재무만 담긴 컨텍스트로 낸 시계열(ADR-0128).
+     *
+     * <p>재무 합산이 이 루프 <b>밖</b>에 있는 것이 옳다 — 이 메서드 자체가 한
+     * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
+     */
+    private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         // PER과 같은 분자여야 한다 — 갈리면 화면에서 EPS x PER이 주가와 안 맞는다.
         BigDecimal netIncome = FinancialMath.sumControllingNetIncome(quarters);

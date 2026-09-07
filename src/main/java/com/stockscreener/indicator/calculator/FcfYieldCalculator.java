@@ -74,6 +74,16 @@ public class FcfYieldCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.bySegment(context, FcfYieldCalculator::pointsFrom);
+    }
+
+    /**
+     * 그 봉 시점에 공시돼 있던 재무만 담긴 컨텍스트로 낸 시계열(ADR-0128).
+     *
+     * <p>재무 합산이 이 루프 <b>밖</b>에 있는 것이 옳다 — 이 메서드 자체가 한
+     * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
+     */
+    private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
         BigDecimal freeCashFlow = FreeCashFlow.latestAnnual(context.annualFigures());
         if (freeCashFlow == null) {
             return List.of();

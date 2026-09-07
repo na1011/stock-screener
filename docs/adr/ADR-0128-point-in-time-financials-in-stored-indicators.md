@@ -117,8 +117,24 @@ psql -d stock_screener -At -c "WITH floors AS (SELECT market_code, min(trade_dat
 
 - 과거 기준일 조회가 **그날의 값**으로 판정한다. 실측 확인: 삼성전자 `GROSS_MARGIN`이
   **2026-03-10에 37.99% → 39.38%로 계단**을 만들고, 그날이 FY2025의 실제 공시일이다.
-- **저장 값이 asOf와 무관해졌다.** 날짜 d의 값이 `KNOWN_ON(d)`이므로 **언제 다시 계산해도 같다** —
-  progress.md가 *"같은 T를 다시 백필하면 값이 달라진다"*로 올린 자리가 닫혔다.
+- **`byPublication`을 거치는 지표는 asOf와 무관해졌다.** 날짜 d의 값이 `KNOWN_ON(d)`이므로
+  언제 다시 계산해도 같다.
+
+**MUST: 이 결정은 아직 절반이다 — 봉 루프를 스스로 도는 계산기 일곱이 남았다.**
+`PER`·`PBR`·`PSR`·`EPS_TTM`·`ALTMAN_Z`·`NCAV_TO_MARKET`·`FCF_YIELD`은
+`spreadOverTradeDates`를 쓰지 않아 이 변경의 대상이 아니었는데, **재무 합산을 봉 루프 밖에서
+한 번** 하고 봉마다는 주식수·종가만 다시 읽는다(`PerCalculator`의
+`sumControllingNetIncome(quarters)`가 그 자리다). 그래서 **분자가 asOf 스냅샷 하나**다.
+
+**실측(2026-09-08)**: `005930`을 asOf 2026-09-04와 2026-06-01로 각각 계산하면 `PER`이
+**모든 날짜에서 정확히 1.796배**로 갈린다(2025-12-17 4.268 대 7.665 · 2026-03-10 7.432 대 13.348 ·
+2026-06-01 13.632 대 24.484). **배수가 날짜에 무관하게 일정한 것이 「분모가 하나」라는 증거다.**
+그 종목은 정정본이 0이고 KR 분기 주식수가 전부 NULL이라 **다른 원인이 배제된다.**
+
+**고치는 형태는 이미 저장소에 있다** — `PerMedian5yCalculator`의 람다가
+`publishedIndexOn`으로 봉의 분기를 고른 뒤 `sumControllingNetIncome(quarters, published)`를
+부른다. 즉 `PER_MEDIAN_5Y`의 표본은 봉별로 맞는데 **`PER` 자신은 아니고**,
+`PER_DISCOUNT_5Y`가 그 둘을 비교한다.
 - **보존 창 확대가 다시 판단할 자리가 됐다.** ADR-0071 §버린 대안이 그것을 기각한 근거가
   *"쌓이는 값이 여전히 오늘 재무로 계산된 것"*인데 **이 결정이 그 사유를 없앤다.** 확대 자체는
   별도 결정이다(재백필 비용은 그대로다).
