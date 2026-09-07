@@ -138,26 +138,13 @@ applies_to:
 
 ## 검증
 
-```premise 유니버스 순위 축에 이상치가 남아 있지 않다
-psql -d stock_screener -At -c "WITH med AS (
-  SELECT stock_id, (percentile_cont(0.5) WITHIN GROUP (ORDER BY shares_outstanding))::numeric AS md
-  FROM financial_statement WHERE shares_outstanding > 0 GROUP BY 1 HAVING count(*) >= 4),
-cur AS (
-  SELECT DISTINCT ON (f.stock_id) f.stock_id, f.shares_outstanding AS cur
-  FROM financial_statement f WHERE f.shares_outstanding > 0 AND f.is_latest
-  ORDER BY f.stock_id, f.period_end DESC)
-SELECT CASE
-  WHEN (SELECT count(*) FROM cur) = 0
-    THEN '잴 것이 없었다 — 최신 주식수를 가진 종목이 하나도 없다'
-  WHEN count(*) = 0 THEN 'OK 순위 축 이상치 0 / 모집단 ' || (SELECT count(*) FROM cur)
-  ELSE count(*) || '종목이 자기 이력 중앙값의 50배를 넘는다: '
-       || string_agg(t, ', ' ORDER BY t)
-       || ' — 시총 = 주식수 × 종가이므로 상위 N을 밀어낸다. 손으로 돌리는 리밸런싱은 guard-rebalance-on-dirty-rank.sh가 막지만 **토요일 20시 자동 갈래는 안 막힌다**(ADR-0125)'
-  END
-FROM (SELECT s.ticker || ' ' || round(c.cur / med.md, 0) || '배' AS t
-      FROM cur c JOIN med ON med.stock_id = c.stock_id JOIN stock s ON s.id = c.stock_id
-      WHERE c.cur / med.md > 50) z"
+```premise 유니버스 순위 축에 오염이 남아 있지 않다
+# MUST: 축이 가드(guard-rebalance-on-dirty-rank.sh)와 같아야 한다. 갈리면 가드는 통과시키는데
+# 세션 시작은 붉는(또는 그 반대) 상태가 되고, 그 어긋남은 어느 쪽도 신고하지 않는다.
+# 옛 축(최신 vs 이력 중앙값 50배)으로 되돌리지 마라 — 거짓 양성 4/4 · 거짓 음성 7/7이었다(§가드의 판정축을 바꿨다).
+psql -d stock_screener -At -c "WITH cur AS (SELECT DISTINCT ON (f.stock_id) f.stock_id, f.shares_outstanding AS sh, COALESCE(f.net_income_controlling, f.net_income) / NULLIF(f.eps, 0) AS imp FROM financial_statement f WHERE f.shares_outstanding > 0 ORDER BY f.stock_id, f.period_end DESC, f.revision_no DESC), bad AS (SELECT s.ticker, round(c.imp / c.sh) r FROM cur c JOIN stock s ON s.id = c.stock_id WHERE c.imp IS NOT NULL AND c.imp / c.sh >= 100 AND c.imp / c.sh < 10000) SELECT CASE WHEN (SELECT count(*) FROM cur WHERE imp IS NOT NULL) = 0 THEN '잴 것이 없었다 — eps가 있는 주식수 행이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 저장 주식수가 같은 보고서의 net_income/eps 함의와 어긋나는 종목이 없다' ELSE (SELECT count(*) FROM bad) || '종목의 주식수가 손익 함의와 100배 이상 갈린다: ' || (SELECT string_agg(ticker || ' ' || r || '배', ', ' ORDER BY r DESC) FROM bad) || ' — 시총 = 주식수 × 종가이므로 그 종목이 순위에서 밀려나거나 밀어낸다. 근거 둘로 고치는 절차는 이 문서 §규칙과 ADR-0126 §규칙에 있다' END"
 ```
+
 
 **모집단을 함께 내는 이유**: 주식수가 통째로 비면 이상치도 0이 되어 「깨끗하다」와 구분되지
 않는다.
