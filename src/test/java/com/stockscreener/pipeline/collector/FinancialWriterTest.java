@@ -211,6 +211,26 @@ class FinancialWriterTest {
         }
 
         @Test
+        @DisplayName("주식수는 달라져도 안 덮는다 — 그 값은 기간 보고서가 아니라 표지에서 온다")
+        void neverOverwritesSharesOutstanding() {
+            writer.write(stockId,
+                    List.of(withShares(2025, "FY", "2026-03-15", "1000", "15655000")));
+
+            long changed = fillOnlyWriter.write(stockId,
+                    List.of(withShares(2025, "FY", "2026-03-15", "1000", "15655")),
+                    WriteMode.FILL_MISSING);
+
+            // 덮기의 근거는 "같은 보고서인데 값이 달라졌으면 우리 추출이 바뀐 것"인데, 주식수만은
+            // 라벨 앵커의 표지에서 오므로 그 전제가 안 선다 — 차이는 소스의 두 보고서가 축척을
+            // 다르게 낸 것이다. 실측으로 DDS가 15,655,000 -> 15,655로 덮여 시총이 1/1000이 됐다.
+            assertThat(changed).isZero();
+            assertThat((BigDecimal) latestRow().get("shares_outstanding"))
+                    .as("표지 값은 소스의 두 보고서가 갈리므로 저장본을 지킨다")
+                    .isEqualByComparingTo("15655000");
+            assertThat(invalidations.calls).isEmpty();
+        }
+
+        @Test
         @DisplayName("값을 덮으면 무효화한다 — 그 값으로 계산된 지표가 이미 저장돼 있다")
         void invalidatesWhenItOverwrites() {
             writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
@@ -430,6 +450,25 @@ class FinancialWriterTest {
     private static RawFinancialReport withoutBalanceDetail(int fiscalYear, String period,
                                                            String publishedAt, String netIncome) {
         return report(fiscalYear, period, publishedAt, netIncome, false);
+    }
+
+    /** 주식수만 바꾼 보고서. 표지 값이 소스의 보고서마다 갈리는 것을 재현한다. */
+    private static RawFinancialReport withShares(int fiscalYear, String period, String publishedAt,
+                                                 String netIncome, String shares) {
+        RawFinancialReport base = report(fiscalYear, period, publishedAt, netIncome);
+        return new RawFinancialReport(
+                base.fiscalYear(), base.fiscalPeriod(), base.periodStart(), base.periodEnd(),
+                base.publishedAt(), base.reportCode(), base.currencyCode(),
+                base.revenue(), base.operatingIncome(), base.netIncome(),
+                base.totalAssets(), base.totalLiabilities(), base.totalEquity(),
+                base.currentAssets(), base.currentLiabilities(), base.retainedEarnings(),
+                base.operatingCashFlow(), new BigDecimal(shares),
+                base.eps(), base.bps(), base.costOfSales(), base.cashAndEquivalents(),
+                base.capex(), base.inventories(), base.netIncomeControlling(),
+                base.interestAndDividendIncome(), base.noninterestIncome(),
+                base.interestExpense(), base.noninterestExpense(),
+                base.benefitsLossesAndExpenses(), base.grossProfit(),
+                base.operatingExpenses(), base.costsAndExpenses());
     }
 
     private static RawFinancialReport report(int fiscalYear, String period, String publishedAt,

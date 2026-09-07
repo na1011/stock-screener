@@ -260,7 +260,7 @@ public class FinancialWriter {
             BigDecimal stored = existing.amounts().get(amount);
             if (stored == null) {
                 toFill.add(amount);
-            } else if (stored.compareTo(incoming) != 0) {
+            } else if (stored.compareTo(incoming) != 0 && amount.overwritable()) {
                 // scale이 달라도 같은 값이면 여기 오지 않는다(compareTo).
                 toCorrect.add(amount);
                 corrections.add("%s %s -> %s".formatted(amount.column, stored, incoming));
@@ -408,6 +408,27 @@ public class FinancialWriter {
         GROSS_PROFIT("gross_profit", RawFinancialReport::grossProfit),
         OPERATING_EXPENSES("operating_expenses", RawFinancialReport::operatingExpenses),
         COSTS_AND_EXPENSES("costs_and_expenses", RawFinancialReport::costsAndExpenses);
+
+        /**
+         * 값이 달라졌을 때 <b>덮어도 되는가.</b>
+         *
+         * <p>덮기의 근거는 <i>"같은 보고서인데 값이 달라졌다면 우리 추출이 바뀐 것"</i>인데,
+         * <b>{@code shares_outstanding}에는 그 전제가 성립하지 않는다.</b> 그 값만은 기간을 낸
+         * 보고서가 아니라 <b>라벨 앵커의 표지</b>에서 온다({@code SecEdgarFacts.valuesOf}의
+         * {@code anchoredInstant} 갈래) — 같은 기간의 판이 여럿이어도 전부 같은 표지를 보므로,
+         * 차이는 우리 추출이 아니라 <b>소스의 두 보고서가 축척을 다르게 낸 것</b>이다.
+         *
+         * <p>실측(2026-09-07): 이 가드가 없던 사이 `DDS`의 주식수가 8행에서
+         * <b>15,655,000 → 15,655</b>로 덮였다. 딜라드의 10-K가 희석주식수를 천 단위로,
+         * 같은 회사 10-Q는 단위로 낸다(ADR-0126의 축척 오태깅). 시가총액 = 주식수 × 종가라
+         * 그 종목의 시총이 <b>1,000분의 1</b>이 되고 유니버스 순위가 밀린다.
+         *
+         * <p>{@code SecEdgarFacts}가 같은 이유로 이미 두 곳에서 이 컬럼을 갈라 다룬다 —
+         * 「그것만 있는 판은 보고서가 아니다」 판정과 앵커 선택이다.
+         */
+        boolean overwritable() {
+            return this != SHARES_OUTSTANDING;
+        }
 
         private final String column;
         private final Function<RawFinancialReport, BigDecimal> accessor;
