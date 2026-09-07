@@ -101,6 +101,16 @@ public class EpsCagr5yCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.bySegment(context, EpsCagr5yCalculator::pointsFrom);
+    }
+
+    /**
+     * 그 봉 시점에 공시돼 있던 재무만 담긴 컨텍스트로 낸 시계열(ADR-0128).
+     *
+     * <p>재무 합산이 이 루프 <b>밖</b>에 있는 것이 옳다 — 이 메서드 자체가 한
+     * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
+     */
+    private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         BigDecimal recentTtm =
                 FinancialMath.sumControllingNetIncome(quarters, 0);
@@ -157,7 +167,7 @@ public class EpsCagr5yCalculator implements IndicatorCalculator {
      *
      * <p>인덱스만 믿으면 공시가 빠진 종목에서 <b>이름이 말하는 기간과 값이 재는 기간이 갈린다.</b>
      */
-    private boolean spansFiveYears(List<FinancialFigures> quarters) {
+    private static boolean spansFiveYears(List<FinancialFigures> quarters) {
         if (quarters.size() <= QUARTER_OFFSET) {
             return false;
         }

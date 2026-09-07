@@ -90,6 +90,9 @@ class EpsGrowthTtmYoyCalculatorTest {
             double perQuarter = i < 4 ? recentPerQuarter : priorPerQuarter;
             quarters.add(FinancialFiguresFixture.quarter(end.minusMonths(3L * i))
                     .netIncome(BigDecimal.valueOf(perQuarter))
+                    // 계산식을 재는 시험이라 공시 시차를 두지 않는다(ADR-0128) —
+                    // 봉마다 재무를 고르는 축은 IndicatorRunnerTest의 대조군이 갖는다.
+                    .publishedAt(START.minusDays(1))
                     .build());
         }
         return quarters;

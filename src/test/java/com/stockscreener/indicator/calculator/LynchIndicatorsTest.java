@@ -214,6 +214,7 @@ class LynchIndicatorsTest {
                 sparse.add(FinancialFiguresFixture
                         .quarter(START.plusDays(EpsCagr5yCalculator.LOOKBACK).minusMonths(6L * j))
                         .netIncome(new BigDecimal("25"))
+                        .publishedAt(START.minusDays(1))
                         .build());
             }
 
@@ -240,6 +241,10 @@ class LynchIndicatorsTest {
                 quarters.add(FinancialFiguresFixture
                         .quarter(START.plusDays(EpsCagr5yCalculator.LOOKBACK).minusMonths(3L * j))
                         .netIncome(BigDecimal.valueOf(amount))
+                        // 이 시험은 **계산식**을 잰다. 봉마다 재무를 고르는 축은
+                        // IndicatorRunnerTest의 대조군과 FinancialVisibilityTest가 갖는다 —
+                        // 여기서 공시 시차를 두면 두 축이 한 시험에 섞인다(ADR-0128).
+                        .publishedAt(START.minusDays(1))
                         .build());
             }
             return quarters;

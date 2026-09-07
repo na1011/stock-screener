@@ -584,6 +584,10 @@ class BuffettIndicatorsTest {
     private static FinancialFigures retained(LocalDate periodEnd, String value) {
         return FinancialFiguresFixture.annual(periodEnd)
                 .retainedEarnings(new BigDecimal(value))
+                // RETAINED_TO_MARKET_4Y의 봉은 4년 전 앵커부터 시작해야 해서 공시일보다
+                // 앞이다. 이 시험이 재는 것은 **비율 계산식**이고 봉마다 재무를 고르는 축은
+                // IndicatorRunnerTest의 대조군이 갖는다(ADR-0128).
+                .publishedAt(LocalDate.of(2021, 1, 1))
                 .build();
     }
 
