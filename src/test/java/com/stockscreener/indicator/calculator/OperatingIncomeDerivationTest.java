@@ -16,8 +16,20 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p><b>이 시험이 지키는 것은 대칭이다.</b> K-IFRS는 은행도 영업이익을 표시해 국내 활성
  * 유니버스의 금융업 <b>50종목이 FY 영업이익을 100%</b> 갖는데, US-GAAP은 그것을 잘 안 써서
  * 미국 금융업 <b>170 중 119(70%)</b>가 판정불가였다. 같은 이름의 조건이 시장마다 다른 것을
- * 재고 있었고, 그 넷({@code OPM_MIN_5Y}·{@code PROFIT_STREAK_Y}·{@code ROIC_MIN_3Y}·
- * {@code OPERATING_MARGIN})이 전부 이 값을 쓴다.
+ * 재고 있었다.
+ *
+ * <p><b>이 값을 쓰는 계산기는 아홉이다</b> — {@code OPM_MIN_5Y}·{@code PROFIT_STREAK_Y}·
+ * {@code ROIC_MIN_3Y}·{@code OPERATING_MARGIN}(착수 시 넷) ·
+ * {@code PROFITABLE_QUARTERS_4}·{@code ALTMAN_Z}·{@code ALTMAN_Z_DOUBLE_PRIME}(그 뒤에 붙었다) ·
+ * {@code ROIC_PRETAX}·{@code OPERATING_INCOME_GROWTH}(둘은 <b>raw를 읽고 있었다</b>).
+ *
+ * <p><b>그 둘이 빠져 있던 것이 화면에 드러나 있었다.</b> {@code ROIC_MIN_3Y}는 3년 연속을
+ * 요구하므로 <b>{@code ROIC_PRETAX}의 부분집합처럼 보여야 하는데</b>, 미국에서 「3년 최저
+ * ROIC는 있고 현재 ROIC는 없는」 종목이 <b>49</b>였고 국내는 <b>0</b>이었다. 49를 전수로 가르면
+ * 21이 정확히 이 비대칭이고, 나머지는 분기 재무가 없는 20-F 제출자(10) 등이다.
+ * <b>{@code ROIC_MIN_3Y} ⊄ {@code ROIC_PRETAX}는 원리적으로 0이 될 수 없다</b> — 둘은 읽는 행이
+ * 다르다(연간 3개 대 분기 TTM). 그래서 회귀는 「분기 넷을 유도로 채울 수 있는데 값이 없는 종목」
+ * 으로 재야 한다.
  *
  * <p><b>MUST: 「국내는 안 바뀐다」를 함께 잠근다.</b> 유도가 국내 값을 건드리면 그것은 대칭이
  * 아니라 다른 물건이 된 것이다.

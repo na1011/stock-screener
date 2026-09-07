@@ -403,6 +403,37 @@ final class FinancialMath {
         return minus(figures.revenue(), figures.costsAndExpenses());
     }
 
+    /**
+     * 부채총계. <b>없으면 자산총계 − 자기자본으로 유도한다.</b>
+     *
+     * <p><b>왜 유도가 필요한가</b>: 미국은 {@code us-gaap:Liabilities}가 <b>필수 표시 항목이
+     * 아니다.</b> 대조군 60종목(총부채가 비는 종목)에서 그 태그로 해당 기말 값이 잡힌 종목이
+     * <b>0</b>이었고 53종목은 태그 자체가 없었다 — 즉 <b>재적재로는 영영 안 채워진다.</b>
+     * DECK·NKE·AMZN·T·VZ·WMT·ORCL이 그 무리다. 국내는 DART가 100% 채우므로 이 갈래로
+     * 떨어지지 않는다.
+     *
+     * <p><b>유도가 얼마나 정확한가</b>(대조군 60종목 실측):
+     * 자기자본은 비지배지분 포함 태그를 먼저 보므로 <b>NCI 누출이 0</b>이고(그 태그로 값이
+     * 잡힌 35종목 전부 저장값과 일치), 남는 오차는 <b>메자닌(임시자본)</b>뿐이다 —
+     * 8/60에만 있고 유도 총부채 대비 중앙 0.43% · 최대 1.38%다. 유동+비유동 성분이 둘 다
+     * 있는 15종목과 직접 견주면 13/15가 0.1% 이내이고 최대 오차 1.40%(ACN)가 그 종목의
+     * 메자닌 1.38%와 일치한다. 방향이 <b>부채 과대</b>라 알트만 점수는 보수적으로 나온다.
+     *
+     * <p><b>MUST: 네 소비자가 전부 이것을 쓴다</b>({@code ALTMAN_Z} · {@code ALTMAN_Z''} ·
+     * {@code NCAV_TO_MARKET} · {@code DEBT_RATIO}). 예전에는 {@code DebtRatioCalculator}만
+     * 인라인 사본으로 이 유도를 갖고 있었고, 그래서 <b>한 종목에서 부채비율 카드는 값이
+     * 나가는데 알트만 카드 셋은 비었으며 그 이유가 화면에 없었다.</b> 사본을 다시 만들지 않는다.
+     */
+    static BigDecimal totalLiabilitiesOf(FinancialFigures figures) {
+        if (figures == null) {
+            return null;
+        }
+        if (figures.totalLiabilities() != null) {
+            return figures.totalLiabilities();
+        }
+        return minus(figures.totalAssets(), figures.totalEquity());
+    }
+
     /** 하나라도 없으면 null이다. 0으로 대체하면 없는 항목이 「0원이었다」가 된다. */
     private static BigDecimal sum(BigDecimal a, BigDecimal b) {
         return a == null || b == null ? null : a.add(b);

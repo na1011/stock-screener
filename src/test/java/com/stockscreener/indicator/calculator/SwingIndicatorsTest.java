@@ -348,6 +348,31 @@ class SwingIndicatorsTest {
         }
 
         @Test
+        @DisplayName("총부채를 안 낸 회사도 자산 − 자기자본으로 값이 나온다")
+        void derivesTotalLiabilitiesWhenTheSourceOmitsIt() {
+            // 미국은 us-gaap:Liabilities가 필수 표시가 아니다. 대조군 60종목에서 그 태그로 값이
+            // 잡힌 종목이 0이라 재적재로는 영영 안 채워진다 — DECK·AMZN·T·VZ·WMT가 그 무리다.
+            // 같은 유도가 DebtRatioCalculator에는 이미 있어서, 한 종목에서 부채비율만 값이
+            // 나가고 알트만 셋은 비었으며 그 이유가 화면에 없었다.
+            List<FinancialFigures> quarters = new ArrayList<>();
+            for (FinancialFigures q : balanceSheetQuarters()) {
+                quarters.add(FinancialFiguresFixture.from(q).totalLiabilities(null).build());
+            }
+
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+            NavigableMap<LocalDate, BigDecimal> cap = new TreeMap<>();
+            cap.put(START, bd(800));
+
+            List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
+                    1L, List.of(bar), List.of(), quarters,
+                    Map.of(MarketCapCalculator.CODE, cap)));
+
+            // 자산 1,000 − 자기자본 600 = 부채 400이므로 신고했을 때와 같은 값이어야 한다.
+            assertThat(points).hasSize(1);
+            assertThat(points.getFirst().value()).isEqualByComparingTo("2.99");
+        }
+
+        @Test
         @DisplayName("유동항목이 없으면 값을 내지 않는다 — 금융업이 대개 여기서 빠진다")
         void yieldsNothingWithoutCurrentItems() {
             List<FinancialFigures> quarters = new ArrayList<>();
@@ -455,6 +480,24 @@ class SwingIndicatorsTest {
             // Z'' = 6.56·0.2 + 3.26·0.3 + 6.72·0.1 + 1.05·1.5
             //     = 1.312 + 0.978 + 0.672 + 1.575 = 4.537
             List<IndicatorPoint> points = calculator.calculate(zppContext(null));
+
+            assertThat(points).hasSize(1);
+            assertThat(points.getFirst().value()).isEqualByComparingTo("4.537");
+        }
+
+        @Test
+        @DisplayName("총부채를 안 낸 회사도 자산 − 자기자본으로 값이 나온다")
+        void derivesTotalLiabilitiesWhenTheSourceOmitsIt() {
+            // 원본 알트만과 같은 유도를 쓴다. 둘이 갈리면 같은 종목에서 한 카드만 값이 나가고
+            // 그 이유가 화면에 없다 — ADR-0127이 EBIT에 대해 이미 못박은 것과 같은 자리다.
+            List<FinancialFigures> quarters = new ArrayList<>();
+            for (FinancialFigures q : balanceSheetQuarters()) {
+                quarters.add(FinancialFiguresFixture.from(q).totalLiabilities(null).build());
+            }
+            PriceBar bar = new PriceBar(START, bd(8), bd(8), bd(8), bd(8), bd(8), 10L, null, bd(100));
+
+            List<IndicatorPoint> points = calculator.calculate(new IndicatorContext(
+                    1L, null, List.of(bar), List.of(), quarters, List.of(), Map.of()));
 
             assertThat(points).hasSize(1);
             assertThat(points.getFirst().value()).isEqualByComparingTo("4.537");

@@ -56,6 +56,6 @@ public class OperatingIncomeGrowthCalculator implements IndicatorCalculator {
     public List<IndicatorPoint> calculate(IndicatorContext context) {
         return FinancialMath.spreadOverTradeDates(
                 context.priceBars(),
-                YearOverYear.growth(context.annualFigures(), FinancialFigures::operatingIncome));
+                YearOverYear.growth(context.annualFigures(), FinancialMath::operatingIncomeOf));
     }
 }

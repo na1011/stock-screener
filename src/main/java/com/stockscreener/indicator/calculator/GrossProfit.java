@@ -29,11 +29,23 @@ final class GrossProfit {
     }
 
     /**
-     * @return 매출과 매출원가가 둘 다 있고 매출이 양수일 때만 값. 아니면 null
+     * <b>회사가 신고한 매출총이익이 이긴다.</b> 없을 때만 매출 − 매출원가로 유도한다.
+     *
+     * <p>예전에는 신고값을 <b>한 번도 보지 않고</b> 언제나 유도했다. 적재는 되고 있었고
+     * (US_TOP1000의 417종목이 갖는다) 소비자만 안 읽은 것이라, ADR-0104 §규칙의
+     * <i>"소스가 낸 값이 언제나 이긴다"</i>와 방향이 반대였다.
+     *
+     * <p><b>매출이 양수여야 한다는 조건은 유도 갈래에만 건다.</b> 신고값은 그 자체가 결과이므로
+     * 매출로 나눌 쪽({@code GROSS_MARGIN})이 자기 자리에서 판단한다.
+     *
+     * @return 신고값 또는 유도값. 둘 다 불가능하면 null
      */
     static BigDecimal of(FinancialFigures figures) {
         if (figures == null) {
             return null;
+        }
+        if (figures.grossProfit() != null) {
+            return figures.grossProfit();
         }
         BigDecimal revenue = figures.revenue();
         BigDecimal costOfSales = figures.costOfSales();

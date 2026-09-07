@@ -45,6 +45,44 @@ class GrossProfitIndicatorsTest {
     }
 
     @Test
+    @DisplayName("회사가 신고한 매출총이익이 유도값을 이긴다")
+    void reportedGrossProfitWins() {
+        // 적재는 되고 있는데(US_TOP1000의 417종목이 갖는다) 여기서 한 번도 안 읽었다.
+        // ADR-0104 §규칙의 「소스가 낸 값이 언제나 이긴다」와 방향이 반대였던 자리다.
+        List<FinancialFigures> annual = List.of(
+                FinancialFiguresFixture.annual(LocalDate.of(2025, 12, 31))
+                        .revenue(BigDecimal.valueOf(1_000))
+                        .costOfSales(BigDecimal.valueOf(600))
+                        .grossProfit(BigDecimal.valueOf(250))
+                        .totalAssets(BigDecimal.valueOf(2_000))
+                        .build());
+        IndicatorContext context =
+                new IndicatorContext(1L, bars(), annual, List.of(), Map.of());
+
+        assertThat(margin.calculate(context).getLast().value())
+                .as("유도값 400이 아니라 신고값 250이어야 한다")
+                .isEqualByComparingTo("25.00000000");
+    }
+
+    @Test
+    @DisplayName("매출원가가 없어도 신고 매출총이익이 있으면 값이 나온다")
+    void usesReportedGrossProfitWithoutCostOfSales() {
+        // 실측으로 최신 FY에 이 모양인 종목이 19개다. 유도만 보던 때는 전부 빈칸이었다.
+        List<FinancialFigures> annual = List.of(
+                FinancialFiguresFixture.annual(LocalDate.of(2025, 12, 31))
+                        .revenue(BigDecimal.valueOf(1_000))
+                        .grossProfit(BigDecimal.valueOf(250))
+                        .totalAssets(BigDecimal.valueOf(2_000))
+                        .build());
+        IndicatorContext context =
+                new IndicatorContext(1L, bars(), annual, List.of(), Map.of());
+
+        assertThat(margin.calculate(context).getLast().value()).isEqualByComparingTo("25.00000000");
+        assertThat(toAssets.calculate(context).getLast().value())
+                .isEqualByComparingTo("12.50000000");
+    }
+
+    @Test
     @DisplayName("매출원가가 없으면 값을 내지 않는다 — 0으로 읽으면 마진이 100%가 된다")
     void emitsNothingWhenCostOfSalesIsAbsent() {
         List<FinancialFigures> annual = List.of(

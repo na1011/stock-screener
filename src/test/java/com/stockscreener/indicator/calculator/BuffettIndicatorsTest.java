@@ -91,6 +91,25 @@ class BuffettIndicatorsTest {
         }
 
         @Test
+        @DisplayName("영업이익을 안 낸 회사도 유도 재료가 있으면 값이 나온다")
+        void usesTheDerivedOperatingIncome() {
+            // 은행형 재료만 있고 operatingIncome은 없다. 이 계산기가 raw를 읽고 있어서
+            // 「3년 최저 ROIC는 있는데 현재 ROIC는 없는」 미국 종목이 49개 있었다(국내 0).
+            List<FinancialFigures> quarters = quarters(4, q -> q
+                    .interestAndDividendIncome(new BigDecimal("100"))
+                    .noninterestIncome(new BigDecimal("20"))
+                    .interestExpense(new BigDecimal("60"))
+                    .noninterestExpense(new BigDecimal("30"))
+                    .totalAssets(new BigDecimal("1000"))
+                    .currentLiabilities(new BigDecimal("200")));
+
+            List<IndicatorPoint> points = calculator.calculate(context(bars(1), quarters));
+
+            // 분기 영업이익 (100+20)−(60+30)=30 → TTM 120, 투하자본 800 → 15%
+            assertThat(points.get(0).value()).isEqualByComparingTo("15");
+        }
+
+        @Test
         @DisplayName("IMPORTANT — 유동부채가 없으면 값을 내지 않는다. 자산총계로 대체하면 ROA가 된다")
         void emitsNothingWhenCurrentLiabilitiesMissing() {
             List<FinancialFigures> quarters = quarters(4, q -> q

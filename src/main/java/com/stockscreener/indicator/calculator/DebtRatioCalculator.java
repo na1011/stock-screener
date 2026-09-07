@@ -19,9 +19,12 @@ import java.util.List;
  *
  * <p>둘 다 저량(stock) 항목이라 가장 최근 분기의 잔액을 그대로 쓴다. TTM 합산 대상이 아니다.
  *
- * <p>부채총계가 비어 있으면 자산총계 − 자기자본으로 유도한다. DART 주요계정이 부채총계를
- * 항상 주지는 않는 반면 자산·자본은 거의 항상 오기 때문이다. 유도조차 불가능하면 값을 내지 않는다 —
- * 0으로 두면 부채가 없는 우량기업으로 둔갑한다.
+ * <p>부채총계가 비어 있으면 {@link FinancialMath#totalLiabilitiesOf}가 자산총계 − 자기자본으로
+ * 유도한다. 유도조차 불가능하면 값을 내지 않는다 — 0으로 두면 부채가 없는 우량기업으로 둔갑한다.
+ *
+ * <p><b>그 유도는 여기 인라인으로 있었고, 그래서 알트만 둘과 NCAV는 같은 재료로도 값을 못
+ * 냈다.</b> 한 종목에서 이 카드만 값이 나가고 나머지 셋이 비는데 그 이유가 화면에 없었다.
+ * 사본을 다시 만들지 않는다.
  */
 @Component
 @IndicatorMeta(
@@ -71,13 +74,9 @@ public class DebtRatioCalculator implements IndicatorCalculator {
             return List.of();
         }
 
-        BigDecimal liabilities = latest.totalLiabilities();
+        BigDecimal liabilities = FinancialMath.totalLiabilitiesOf(latest);
         if (liabilities == null) {
-            BigDecimal assets = latest.totalAssets();
-            if (assets == null) {
-                return List.of();
-            }
-            liabilities = assets.subtract(equity);
+            return List.of();
         }
 
         return FinancialMath.spreadOverTradeDates(

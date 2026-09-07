@@ -93,7 +93,7 @@ public class NcavToMarketCalculator implements IndicatorCalculator {
         // 저량이다. 최근 분기 잔액 하나를 쓴다 — 4분기를 더하면 4배가 된다.
         FinancialFigures latest = quarters.get(0);
         BigDecimal currentAssets = latest.currentAssets();
-        BigDecimal totalLiabilities = latest.totalLiabilities();
+        BigDecimal totalLiabilities = FinancialMath.totalLiabilitiesOf(latest);
         if (currentAssets == null || totalLiabilities == null) {
             return List.of();
         }

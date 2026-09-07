@@ -109,7 +109,7 @@ public class AltmanZDoublePrimeCalculator implements IndicatorCalculator {
         FinancialFigures latest = quarters.get(0);
 
         BigDecimal totalAssets = latest.totalAssets();
-        BigDecimal totalLiabilities = latest.totalLiabilities();
+        BigDecimal totalLiabilities = FinancialMath.totalLiabilitiesOf(latest);
         if (isUnusableDenominator(totalAssets) || isUnusableDenominator(totalLiabilities)) {
             return List.of();
         }

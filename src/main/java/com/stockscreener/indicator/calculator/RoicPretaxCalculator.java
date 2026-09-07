@@ -80,7 +80,7 @@ public class RoicPretaxCalculator implements IndicatorCalculator {
     public List<IndicatorPoint> calculate(IndicatorContext context) {
         List<FinancialFigures> quarters = context.quarterlyFigures();
         BigDecimal operatingIncome =
-                FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::operatingIncome);
+                FinancialMath.sumTrailingFourQuarters(quarters, FinancialMath::operatingIncomeOf);
         if (operatingIncome == null) {
             return List.of();
         }
