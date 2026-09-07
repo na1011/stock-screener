@@ -26,10 +26,27 @@ import java.util.List;
  */
 enum SecEdgarColumn {
 
-    REVENUE(Kind.DURATION, Unit.MONETARY, List.of(
-            "RevenueFromContractWithCustomerExcludingAssessedTax",
-            "RevenueFromContractWithCustomerIncludingAssessedTax",
-            "Revenues", "SalesRevenueNet", "SalesRevenueGoodsNet")),
+    /**
+     * 매출. <b>이 컬럼만 후보 중 첫값이 아니라 가장 큰 값을 고른다.</b>
+     *
+     * <p><b>왜</b>: {@code RevenueFromContractWithCustomer…}는 ASC 606 계약 매출이라
+     * <b>총매출의 부분집합</b>이다. 리스(ASC 842)·상품파생·보험료가 큰 회사에서는 그 태그가
+     * 매출의 일부만 담는데, 첫값 규칙이 그것을 총매출 자리에 앉혔다. 실측(US_TOP1000 최신 FY
+     * 970종목 전수): <b>92종목이 어긋났고 92 전부가 과소계상</b>이며 과대계상은 0이었다 —
+     * MET 2,436M→77,084M · CHTR 889M→54,774M · ADM 24,956M→80,269M. 보험사와 은행이
+     * 가장 크게 걸린다.
+     *
+     * <p><b>MUST NOT: {@code …IncludingAssessedTax}를 최댓값 경쟁에 넣지 않는다.</b> 그것은
+     * 정의상 {@code …Excluding…}보다 크므로 둘 다 내는 회사에서 <b>언제나 이겨</b> 주세·판매세가
+     * 매출로 들어온다. 실측에서 브라운포먼(BF.A)이 순매출 3,928M 대신 총매출 5,082M을 받았다.
+     * 그래서 <b>마지막 수단</b>으로만 둔다 — 빼버리면 안 되는 이유는 그 태그가 <b>유일한</b>
+     * 매출 출처인 종목이 42개(AKAM·BALL·CPRT·CRWD…)이기 때문이다.
+     */
+    REVENUE(Kind.DURATION, Unit.MONETARY, Selection.LARGEST,
+            List.of("Revenues",
+                    "RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "SalesRevenueNet", "SalesRevenueGoodsNet"),
+            List.of("RevenueFromContractWithCustomerIncludingAssessedTax")),
     OPERATING_INCOME(Kind.DURATION, Unit.MONETARY, List.of("OperatingIncomeLoss")),
     NET_INCOME(Kind.DURATION, Unit.MONETARY, List.of(
             "NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic")),
@@ -126,24 +143,76 @@ enum SecEdgarColumn {
 
     private enum Unit { MONETARY, SHARES, PER_SHARE }
 
+    /**
+     * 그 기간을 덮는 태그가 여럿일 때 <b>무엇을 고르는가.</b>
+     *
+     * <p>기본은 {@link #FIRST}다 — 후보 순서가 곧 우선순위이고, 대부분의 계정은 태그마다
+     * 뜻이 같아 순서로 충분하다.
+     */
+    private enum Selection {
+        /** 후보 순서대로 처음 덮는 것. */
+        FIRST,
+        /**
+         * 값이 가장 큰 것. <b>후보끼리 뜻이 달라 부분값 태그가 총계보다 앞설 수 있는 컬럼</b>에만
+         * 쓴다. {@link #fallbackCandidates}는 이 경쟁에 참여하지 않는다.
+         */
+        LARGEST
+    }
+
     private final Kind kind;
     private final Unit unit;
     private final boolean annualOnly;
+    private final Selection selection;
     private final List<String> candidates;
+    private final List<String> fallbackCandidates;
 
     SecEdgarColumn(Kind kind, Unit unit, List<String> candidates) {
         this(kind, unit, false, candidates);
     }
 
     SecEdgarColumn(Kind kind, Unit unit, boolean annualOnly, List<String> candidates) {
+        this(kind, unit, annualOnly, Selection.FIRST, candidates, List.of());
+    }
+
+    SecEdgarColumn(Kind kind, Unit unit, Selection selection,
+                   List<String> candidates, List<String> fallbackCandidates) {
+        this(kind, unit, false, selection, candidates, fallbackCandidates);
+    }
+
+    SecEdgarColumn(Kind kind, Unit unit, boolean annualOnly, Selection selection,
+                   List<String> candidates, List<String> fallbackCandidates) {
         this.kind = kind;
         this.unit = unit;
         this.annualOnly = annualOnly;
+        this.selection = selection;
         this.candidates = candidates;
+        this.fallbackCandidates = fallbackCandidates;
     }
 
+    /**
+     * 이 컬럼이 볼 태그 전부. <b>경쟁 후보가 앞, 마지막 수단이 뒤</b>이고 이 순서가
+     * {@code SecEdgarFacts}의 태그 맵 순서가 된다.
+     */
     List<String> candidates() {
-        return candidates;
+        if (fallbackCandidates.isEmpty()) {
+            return candidates;
+        }
+        List<String> all = new java.util.ArrayList<>(candidates);
+        all.addAll(fallbackCandidates);
+        return List.copyOf(all);
+    }
+
+    /** 가장 큰 값을 골라야 하는 컬럼인가. */
+    boolean picksLargest() {
+        return selection == Selection.LARGEST;
+    }
+
+    /**
+     * 이 태그가 <b>최댓값 경쟁에 참여하는가.</b> 마지막 수단 태그는 참여하지 않는다 —
+     * 덮는 경쟁 후보가 하나도 없을 때만 쓰인다.
+     */
+    boolean competesForLargest(String tag) {
+        return !fallbackCandidates.contains(tag);
     }
 
     boolean instant() {

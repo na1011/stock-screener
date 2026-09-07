@@ -406,6 +406,61 @@ class SecEdgarFinancialAdapterTest {
                 .reduce((a, b) -> b).orElseThrow();
     }
 
+    @Test
+    @DisplayName("매출은 후보 중 가장 큰 값이다 — ASC606 태그는 총매출의 부분집합이다")
+    void picksTheLargestRevenueCandidate() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-revenue-tag-priority.json"));
+
+        // 픽스처는 실제 결함의 모양이다: ASC606(제외) 200이 총계 Revenues 500의 40%이고,
+        // 후보 순서로 첫값을 고르면 200이 총매출 자리에 앉는다. 실측에서 US_TOP1000
+        // 970종목 중 92종목이 이 모양이었고 92 전부가 과소계상이었다.
+        assertThat(of(adapter().fetchReports(FIX, FROM), "FY").revenue())
+                .as("ASC606 부분값 200이 아니라 총계 500이어야 한다")
+                .isEqualByComparingTo(new BigDecimal("500"));
+    }
+
+    @Test
+    @DisplayName("Revenues가 부분값인 회사에서는 ASC606 쪽이 이긴다 — 순서가 아니라 크기다")
+    void picksLargestEvenWhenRevenuesTagIsThePartialOne() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-revenues-tag-is-partial.json"));
+
+        // 이 시험이 없으면 「후보 순서만 바꾸면 된다」와 구분되지 않는다. 실측에서 OWL이
+        // 이 모양이었다 — 저장값(ASC606) 2,870M이 Revenues 568M보다 크고 그쪽이 맞다.
+        // 그래서 「Revenues를 앞세운다」는 처방은 기각됐고 최댓값이 남았다.
+        assertThat(of(adapter().fetchReports(FIX, FROM), "FY").revenue())
+                .as("Revenues 부분값 100이 아니라 총계 500이어야 한다")
+                .isEqualByComparingTo(new BigDecimal("500"));
+    }
+
+    @Test
+    @DisplayName("주세 포함 매출은 최댓값 경쟁에 끼지 않는다")
+    void doesNotLetAssessedTaxRevenueWinTheLargest() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-assessed-tax-revenue.json"));
+
+        // Revenues가 없고 세 포함(650)과 제외(500)만 있는 회사다. 세 포함은 정의상 제외보다
+        // 크므로 최댓값 경쟁에 넣으면 언제나 이겨 주세가 매출로 들어온다 — 실측에서
+        // 브라운포먼(BF.A)이 순매출 3,928M 대신 총매출 5,082M을 받을 자리였다.
+        assertThat(of(adapter().fetchReports(FIX, FROM), "FY").revenue())
+                .as("주세 포함 650이 아니라 순매출 500이어야 한다")
+                .isEqualByComparingTo(new BigDecimal("500"));
+    }
+
+    @Test
+    @DisplayName("주세 포함 매출이 유일한 출처면 그것을 쓴다 — 빼버리면 42종목이 빈다")
+    void stillUsesAssessedTaxRevenueWhenItIsTheOnlySource() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-only-assessed-tax-revenue.json"));
+
+        // 최댓값 경쟁에서 뺀 것이지 후보에서 뺀 것이 아니다. 실측으로 US_TOP1000의
+        // 42종목(AKAM·BALL·CPRT·CRWD…)이 이 태그만 낸다.
+        assertThat(of(adapter().fetchReports(FIX, FROM), "FY").revenue())
+                .as("경쟁 후보가 하나도 없으면 마지막 수단이 남아야 한다")
+                .isEqualByComparingTo(new BigDecimal("500"));
+    }
+
     private List<RawFinancialReport> fetch() throws DataSourceException {
         enqueue(200, fixture("tickers.json"));
         enqueue(200, fixture("companyfacts.json"));

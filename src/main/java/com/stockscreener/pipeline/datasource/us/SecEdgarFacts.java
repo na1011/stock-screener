@@ -588,9 +588,21 @@ final class SecEdgarFacts {
      * 보고서별로 우선순위가 갈리면 같은 기간의 판마다 태그가 달라져 값이 아니라 태그가
      * 바뀐 것이 정정이 된다.
      */
+    /**
+     * 이 기간을 덮는 태그 하나. <b>선택 규칙은 컬럼이 정한다</b>({@code SecEdgarColumn.Selection}).
+     *
+     * <p><b>MUST: 최댓값 판정을 이 메서드 안에 둔다.</b> 여기는 {@code chooseTags}가 앵커로
+     * 한정해 부르는 <b>1순위 층</b>이고, 그래야 고른 태그가 앵커에 반드시 존재한다. 2순위
+     * (앵커 무시)에서 최댓값을 고르면 <b>앵커가 안 쓴 태그가 뽑혀 {@code factFor}가 null을
+     * 낸다</b> — AT&amp;T의 FY2023·2024 영업활동현금흐름이 그렇게 사라진 전례가
+     * {@code chooseTags}의 주석에 있다.
+     */
     private static String coveringTag(SecEdgarColumn column, Window window,
                                       Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
                                       Anchor only) {
+        String first = null;
+        String largest = null;
+        BigDecimal largestValue = null;
         for (Map.Entry<String, Map<Slot, Fact>> entry : byColumn.get(column).entrySet()) {
             for (Fact fact : entry.getValue().values()) {
                 if (only != null && !fact.accn().equals(only.accn())) {
@@ -600,12 +612,26 @@ final class SecEdgarFacts {
                         || (column.instant()
                         ? fact.end().equals(window.end())
                         : fact.end().equals(window.end()) && window.start().equals(fact.start()));
-                if (covers) {
+                if (!covers) {
+                    continue;
+                }
+                if (!column.picksLargest()) {
                     return entry.getKey();
                 }
+                // 후보 순서가 곧 우선순위이므로 첫 매칭을 마지막 수단으로 들고 있는다.
+                if (first == null) {
+                    first = entry.getKey();
+                }
+                if (column.competesForLargest(entry.getKey()) && fact.value() != null
+                        && (largestValue == null || fact.value().compareTo(largestValue) > 0)) {
+                    largestValue = fact.value();
+                    largest = entry.getKey();
+                }
+                break;
             }
         }
-        return null;
+        // 경쟁 후보가 하나도 안 덮으면 마지막 수단 태그가 남는다.
+        return largest != null ? largest : first;
     }
 
     /**
