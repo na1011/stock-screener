@@ -92,6 +92,27 @@ class UniverseReconcilerTest {
     }
 
     @Test
+    @DisplayName("같은 기준일에 목록이 바뀌면 그날 편입된 것을 지운다 — 닫으면 유니버스가 통째로 거부된다")
+    void removesSameDayEntryInsteadOfClosingIt() {
+        // 첫 실행이 000002를 편입시킨다. 원자료가 그 뒤 고쳐져 같은 기준일의 두 번째 실행이
+        // 그것을 제외한다 — 그날로 닫으면 [JUNE, JUNE)이라 ck_membership_period가 막고
+        // **그 예외가 트랜잭션 전체를 되돌려 편입까지 사라진다**(2026-09-04 실증).
+        reconciler.reconcile(snapshot(JUNE, "000000", "000001", "000002"), ids(0, 1, 2));
+
+        UniverseReconciler.Result second =
+                reconciler.reconcile(snapshot(JUNE, "000000", "000001", "000003"), ids(0, 1, 3));
+
+        assertThat(second.removedCount()).isEqualTo(1);
+        assertThat(second.addedCount()).isEqualTo(1);
+        assertThat(intervalsOf(stockIds.get(2)))
+                .as("하루도 안 덮은 행은 닫을 이력이 아니라 취소된 편입이다")
+                .isEmpty();
+        assertThat(reconciler.currentMembers(UNIVERSE))
+                .as("거부되면 000003 편입도 함께 되돌아간다 — 그것이 이 시험이 막는 것이다")
+                .containsExactlyInAnyOrderElementsOf(ids(0, 1, 3));
+    }
+
+    @Test
     @DisplayName("제외 후 재편입이 가능하다 — 반열림 구간이라 EXCLUDE 제약을 위반하지 않는다")
     void supportsRemovalAndReentry() {
         reconciler.reconcile(snapshot(JUNE, "000000", "000001"), ids(0, 1));

@@ -17,9 +17,21 @@ import java.util.Set;
  * 지수 구성종목 스냅샷을 {@code universe_membership}의 시간 구간으로 반영한다.
  *
  * <h2>멱등성</h2>
- * <p>편입/제외를 <b>집합 차집합</b>으로 계산하고 교집합은 건드리지 않는다. 그래서 같은 날
- * 두 번 실행해도 두 번째는 아무것도 하지 않는다. 교집합까지 닫았다 여는 방식이면 같은 날
- * 제외와 재편입이 동시에 일어나 {@code ck_membership_period}(0일 구간 금지)에 걸린다.
+ * <p>편입/제외를 <b>집합 차집합</b>으로 계산하고 교집합은 건드리지 않는다. 교집합까지 닫았다
+ * 여는 방식이면 같은 날 제외와 재편입이 동시에 일어나 {@code ck_membership_period}(0일 구간
+ * 금지)에 걸린다.
+ *
+ * <p><b>MUST: 「같은 날 두 번 실행해도 두 번째는 아무것도 하지 않는다」는 목록이 같을 때만
+ * 참이다.</b> 원자료가 그 사이 고쳐지면 두 번째 실행의 목록이 달라지고, 그때 제외 대상 중
+ * <b>그날 편입된 행</b>이 나온다 — 그것을 그날로 닫으면 {@code [X, X)}라 위 제약에 걸리고
+ * <b>유니버스 전체가 롤백된다.</b> 실증: 2026-09-04 09:48 수동 실행이 편입시킨 종목을,
+ * 주식수 수리(같은 날 23:48) 뒤 2026-09-05 20:00 자동 실행이 제외하려다
+ * {@code DataIntegrityViolationException}으로 {@code US_TOP1000}을 통째로 거부했다.
+ *
+ * <p>그래서 <b>그날 열린 행은 닫지 않고 지운다.</b> 반열림 구간에서 {@code [X, X)}는 빈
+ * 구간이라 그 행이 덮은 날이 하루도 없다 — 닫을 이력이 아니라 <b>그 기준일에 대해 취소된
+ * 편입</b>이다. 지우지 않고 남기면 그 행이 다시 {@code effective_to IS NULL}로 「현재 편입 중」에
+ * 잡힌다.
  *
  * <h2>EXCLUDE 제약을 지키는 방법</h2>
  * <p>구간이 {@code [effective_from, effective_to)} 반열림이므로, 제외를
@@ -96,10 +108,23 @@ public class UniverseReconciler {
         }
 
         for (Long stockId : removed) {
-            jdbcTemplate.update("""
+            // MUST: 기준일 **이전에** 열린 행만 닫는다. 그날 열린 행을 그날 닫으면 [X, X)라
+            // ck_membership_period가 막고, 그 예외가 트랜잭션 전체를 되돌려 **그 유니버스가
+            // 통째로 거부된다**(클래스 javadoc의 실증).
+            int closed = jdbcTemplate.update("""
                     UPDATE universe_membership SET effective_to = ?
                     WHERE universe_code = ? AND stock_id = ? AND effective_to IS NULL
-                    """, effectiveDate, universeCode, stockId);
+                      AND effective_from < ?
+                    """, effectiveDate, universeCode, stockId, effectiveDate);
+            if (closed == 0) {
+                // 남은 경우는 그날 열린 행뿐이다 — removed가 effective_to IS NULL인 집합에서
+                // 왔으므로 「열린 행이 아예 없다」는 갈래가 아니다. 하루도 안 덮었으니 지운다.
+                jdbcTemplate.update("""
+                        DELETE FROM universe_membership
+                        WHERE universe_code = ? AND stock_id = ? AND effective_to IS NULL
+                          AND effective_from = ?
+                        """, universeCode, stockId, effectiveDate);
+            }
         }
 
         for (Long stockId : added) {

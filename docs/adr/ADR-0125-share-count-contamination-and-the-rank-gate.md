@@ -220,22 +220,35 @@ $0.32B가 저장 시총과 일치한다. 즉 **그 종목은 원래 상위 1,000
 
 **손으로 돌릴 필요가 없다 — 2026-09-12 토요일 20:00에 저절로 낫는다.**
 그 크론의 `asOf`가 `DailyUpdateJob.targetDateFor`(직전 평일)라 그때는 2026-09-11이 되고,
-`effective_from = 2026-09-04`와 겹치지 않아 아래 §함정에 안 걸린다. 주식수는 이미 고쳐져 있으므로
+`effective_from = 2026-09-04`와 겹치지 않는다(그 충돌은 2026-09-08에 원인을 고쳤다 — 아래). 주식수는 이미 고쳐져 있으므로
 그 실행이 `RPAY`·`TBLA`를 빼고 `MKC` 등을 되돌린다. **조건은 그때 앱이 떠 있는 것 하나다**(ADR-0043).
 손으로 돌리는 것은 `guard-rebalance-on-dirty-rank.sh`가 이상치 7종목으로 막고, **그중 넷은 정당한
 급증이라 이 축으로는 못 가른다** — 즉 손으로 여는 길이 더 비싸다.
 
-### 함정 — 금요일에 손으로 돌리면 그 주 토요일 자동 실행이 통째로 거부된다
+### 그 실행을 거부시킨 것은 화해 로직의 결함이었다 — 2026-09-08에 고쳤다
 
-토요일 크론의 `asOf`는 **직전 평일 = 금요일**이다. 그날 손으로 돌려 `effective_from`이 금요일로
-박히면, 토요일 실행이 같은 날짜로 닫으려다 `ck_membership_period`의 0일 구간 금지에 걸려
-**그 유니버스가 통째로 거부된다.** 실증: 2026-09-04(금) 09:48 수동 실행 → 2026-09-05(토) 20:00
-자동 실행이 `US_TOP1000`에서 `DataIntegrityViolationException`으로 거부됐다
+**원인**: `UniverseReconciler`가 제외 대상을 언제나 `effective_to = 기준일`로 닫았는데,
+**그날 편입된 행**을 그날 닫으면 `[X, X)`라 `ck_membership_period`가 막는다. 그 예외가
+트랜잭션 전체를 되돌려 **그 유니버스가 통째로 거부된다** — 제외뿐 아니라 편입까지 사라진다.
+
+**발화 조건은 「같은 날 두 번」이 아니라 「같은 기준일에 목록이 달라지는 것」이다.** 그 클래스의
+javadoc이 *"같은 날 두 번 실행해도 두 번째는 아무것도 하지 않는다"*로 적고 있었는데, 그것은
+**목록이 같을 때만** 참이다. 원자료가 그 사이 고쳐지면 목록이 달라진다 — 실증: 2026-09-04(금)
+09:48 수동 실행 → 같은 날 23:48 주식수 손 수리 → 2026-09-05(토) 20:00 자동 실행이
+`US_TOP1000`에서 `DataIntegrityViolationException`
 (`Failing row contains (10902, US_TOP1000, 7209, 2026-09-04, 2026-09-04, …)`).
 
-**MUST: 그 거부가 `batch_execution_failure`에 안 남는다.** `PARTIAL_SUCCESS 2/3`만 남고 실패 행은
-0이다 — `UniverseRebalanceJob`의 지수별 catch가 결과를 삼키기 때문이며(`data-pipeline.md`가
-그 catch를 이미 지목한다) **원인은 앱 로그에만 있다**(`~/Library/Logs/stock-screener/stdout.log`).
+**고친 형태**: 그날 열린 행은 **닫지 않고 지운다.** 반열림 구간에서 `[X, X)`는 빈 구간이라
+그 행이 덮은 날이 하루도 없다 — 닫을 이력이 아니라 **그 기준일에 대해 취소된 편입**이다.
+`UniverseReconcilerTest`의 「같은 기준일에 목록이 바뀌면 그날 편입된 것을 지운다」가 지키고,
+되돌리면 운영에서 난 것과 같은 예외로 붉는다.
+
+**MUST: 그 거부는 `batch_execution_failure`에 안 남는다 — 그것은 catch가 아니라 표의 모양이다.**
+`UniverseRebalanceJob`의 지수별 catch는 `log.error`와 `AlertSeverity.ERROR` 알림을 낸다.
+안 남는 이유는 **`batch_execution_failure.stock_id`가 NOT NULL + FK**라 유니버스 단위 실패를
+담을 수 없기 때문이고, `BatchExecutionContext.countExternally` javadoc이 그 제약을 이미 적어 뒀다.
+**여는 것은 스키마 변경이라 별도 결정이다.** 그때까지 원인을 찾는 곳은
+`~/Library/Logs/stock-screener/stdout.log`다.
 
 ## 남은 것 — 다음 세션이 다시 재지 않게
 
