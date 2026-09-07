@@ -32,11 +32,15 @@ applies_to:
 
 - **MUST: 시점 판정은 `published_at <= asOf`로 한다.** `period_end`만으로 자르면 공시 지연만큼
   미래를 본다 — 실측 중앙값이 분기 45일·연간 80일이고 p90이 152일이다. as-of 2026-01-01에서
-  7개년 확보 종목이 `period_end` 기준 **267**, `published_at` 기준 **0**이다. 참조 구현이 이미
+  7개년 확보 종목이 `period_end` 기준 **267**, `published_at` 기준 **0**이다
+  (**국내 350종목 · 그 as-of의 값이다.** 미국을 켜고 재무가 깊어진 뒤 활성 1,350으로 다시
+  재면 그 낙차가 훨씬 작다 — 실측 asOf 2026-03-02에서 7개년 1,110 → 1,087). 참조 구현이 이미
   있다: `PerMedian5yCalculator.ttmKnownOn`.
 - **MUST: 정정본을 as-of 시점 판으로 고른다.** `is_latest`는 **오늘의** 최신이라 과거 as-of에
   정정 후 값이 샌다(실측 32행·8종목).
-- **MUST NOT: 저장된 `indicator_value`를 백테스트가 읽지 않는다.** **이것이 이 결정에서 가장
+- **MUST NOT: 저장된 `indicator_value`를 백테스트가 읽지 않는다.** **근거가 2026-09-08에 갈렸다** —
+  아래의 *"시간축이 없다"*는 ADR-0128 이후 더는 참이 아니다. 규칙이 남는 이유는 **보존 창
+  180거래일이 1년을 못 덮기** 때문이고, 그 물음은 ADR-0123의 시점 저장본이 갖는다. **이것이 이 결정에서 가장
   어기기 쉬운 규칙이고, 어겨도 결과가 나온다.** 기존 스크리닝 경로로 과거 일자에 게이트 6개를
   걸면 2025-11-19·2026-02-13·2026-05-15·2026-08-13에서 **11·13·16·14종목**이라는 그럴듯한
   시계열이 나오는데 **전부 가짜다** — 그 181일자 행의 `updated_at`이 한 행도 빠짐없이 오늘이다.
@@ -189,9 +193,16 @@ rg -n 'FROM indicator_value|import .*ScreeningRepository' \
 psql -d stock_screener -At -c "WITH seven AS (SELECT stock_id, max(published_at) p7 FROM (SELECT stock_id, fiscal_year, published_at, row_number() OVER (PARTITION BY stock_id ORDER BY fiscal_year DESC) rn FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE fiscal_period = 'FY' AND is_latest AND s.market_code IN ('KOSPI','KOSDAQ')) t WHERE rn <= 7 GROUP BY stock_id HAVING count(*) = 7) SELECT CASE WHEN (SELECT count(*) FROM financial_statement WHERE fiscal_period = 'FY') = 0 THEN '잴 것이 없었다 — 연간 재무가 한 행도 없다' WHEN (SELECT count(*) FROM seven) = 0 THEN '7개년을 갖춘 종목이 없다 — PROFIT_STREAK_Y가 전 종목 판정불가이고 백테스트 창이 0이다' WHEN (SELECT min(p7) FROM seven) = DATE '2026-03-09' THEN 'OK 백테스트 창 시작 2026-03-09 · 7개년 확보 ' || (SELECT count(*) FROM seven) || '종목' ELSE '창 시작이 ' || (SELECT min(p7) FROM seven) || '로 움직였다(계획 기준 2026-03-09) — 재무 적재가 돌았거나 정정이 공시일을 바꿨다' END"
 ```
 
-```premise 저장된 지표에 시간축이 없다 — 백테스트가 그것을 읽으면 안 되는 이유
-psql -d stock_screener -At -c "WITH RECURSIVE dates AS (SELECT min(trade_date) dt FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > dates.dt) FROM dates WHERE dates.dt IS NOT NULL), td AS (SELECT count(*) n FROM dates WHERE dt IS NOT NULL), d AS (SELECT stock_id, count(DISTINCT value) n FROM indicator_value WHERE indicator_code = 'PROFIT_STREAK_Y' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — PROFIT_STREAK_Y 행이 하나도 없다' WHEN (SELECT n FROM td) <= 1 THEN '잴 것이 없었다 — 보존 창에 거래일이 하나뿐이라 시간축을 물을 수 없다' WHEN (SELECT count(*) FROM d WHERE n > 1) = 0 THEN 'OK 저장된 PROFIT_STREAK_Y가 종목마다 값 하나뿐이다(' || (SELECT count(*) FROM d) || '종목 / ' || (SELECT n FROM td) || '거래일) — 시간축이 없다' ELSE (SELECT count(*) FROM d WHERE n > 1)::text || '종목이 보존 창에서 값이 둘 이상이다 — 시간축이 생겼는지 확인하고 백테스트 금지 규칙을 다시 판단한다' END"
+```premise 저장된 지표에 시간축이 생겼다 — 2026-09-08에 뜻이 뒤집힌 펜스다
+psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE m.effective_to IS NULL AND u.is_active), d AS (SELECT iv.stock_id, count(DISTINCT iv.value) n FROM indicator_value iv JOIN act ON act.stock_id = iv.stock_id WHERE iv.indicator_code = 'GROSS_MARGIN' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — 편입 종목의 GROSS_MARGIN 행이 하나도 없다' WHEN (SELECT count(*) FROM d WHERE n > 1) = 0 THEN '계단이 하나도 없다 — 저장 지표가 다시 스냅샷 하나가 됐다(ADR-0128이 되돌려졌는지 본다)' ELSE 'OK ' || (SELECT count(*) FROM d WHERE n > 1) || '/' || (SELECT count(*) FROM d) || '종목에 공시일 계단이 있다 — 저장 값이 봉마다 그 시점 재무다' END"
 ```
+
+**MUST: 이 펜스를 「시간축이 없어야 한다」로 되돌리지 않는다.** ADR-0128이 저장 경로를 봉별
+시점 재무로 옮겨 **시간축이 있는 것이 정상 상태**가 됐다. 옛 판은 `PROFIT_STREAK_Y`가 창 안에서
+값이 하나인지를 물었는데, **그 물음은 백필이 도는 동안 계산 빈티지 이음매에도 붉었다**
+(2026-09-07 실측: 신고된 20종목이 전부 미국·전부 `n=2`이고 갈리는 자리가 그때 백필의 진척과
+정확히 같은 34거래일이었다). 지금 펜스는 `GROSS_MARGIN`을 쓴다 — 순수 재무이면서 연간 한 기로
+서므로 분기 결손에 흔들리지 않는다.
 
 **`updated_at`으로 묻지 않는다.** 이 펜스의 첫 판이 그랬는데 **구조적으로 거짓 발견을 낸다** —
 `IndicatorValueWriter`의 `IS DISTINCT FROM` 때문에 값이 안 바뀐 행은 `updated_at`을 그대로 두고,
