@@ -41,7 +41,11 @@ applies_to:
 **2,713(83.3%)** · 10% 이내가 **2,887(88.6%)** · 부호가 다른 것이 **110(3.4%)**이다.
 
 ```premise 영업이익을 소비하는 계산기가 전부 유도를 탄다
-psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date),
+# MUST: 최신 거래일을 **시장으로 좁힌다**. 대상이 US_TOP1000 인데 전역 max 를 쓰면,
+# 미국이 휴장이고 국내가 개장인 날(예: 2026-09-07 노동절)에 국내 날짜가 뽑혀
+# 미국 종목이 한 행도 없고 '잴 것이 없었다'로 거짓 발화한다. ADR-0128 의 펜스가
+# 같은 자리에서 같은 수정을 했다(하한을 시장마다 잡는다).
+psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code = 'US'),
 mem AS (SELECT DISTINCT um.stock_id AS sid FROM universe_membership um
         WHERE um.universe_code = 'US_TOP1000' AND um.effective_to IS NULL),
 have AS (SELECT iv.indicator_code AS code, iv.stock_id AS sid FROM indicator_value iv
