@@ -101,6 +101,14 @@ SELECT CASE
 H-05가 DART 전체재무제표로 채우는 것이라 **EDGAR 종목에는 애초에 걸리지 않는다.**
 P20 축②가 *「편입 행은 유니버스의 활성 여부와 무관하게 존재한다」*로 경고한 자리다.
 
+**MUST: 이 펜스가 「연간」인 것을 사실로 읽는다 — 분기 OCF는 전 시장 100% 비어 있고 그것이
+정상이다**(2026-09-08 전수: 편입 종목의 분기 행 KOSDAQ 5,040 · KOSPI 6,788 · US 30,326이
+**전부** NULL이고, 같은 조건의 연간 결손은 0.0~0.6%다). **읽는 쪽이 없기 때문이다** — OCF를
+쓰는 계산기 넷이 모두 `context.annualFigures()`를 읽는다(`AccrualRatioCalculator` ·
+`OperatingCashFlow5ySumCalculator` · `FcfYieldCalculator`·`FcfMarginCalculator`가
+`FreeCashFlow.latestAnnual`로). **분기를 읽는 계산기가 생기면 그때 결함이 된다** —
+`--quarters=true`가 그 자리를 여는 명령이고 종목당 요청이 넷 배가 된다.
+
 ```premise 정정공시라 채우지 못한 연간 결손
 psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) = 0 THEN '잴 것이 없었다 — 편입 활성 종목이 없다'
