@@ -101,7 +101,18 @@ const populationNotes = computed(() =>
       </div>
       <div class="summary__fact">
         <dt>대상</dt>
-        <dd>{{ universeText }}</dd>
+        <dd>
+          {{ universeText }}
+          <!--
+            시총 순위로 뽑은 대상인데 그 순위를 못 믿을 수 있다는 것을 말한다. 서버가 세어
+            주는 이유는 `relativePopulations`와 같다 — 화면이 카탈로그로 판단하면 그 요청만
+            실패했을 때 이 경고가 조용히 사라진다.
+          -->
+          <span v-if="result.adsSuspectCount > 0" class="summary__hint">
+            미국예탁증서(ADS) {{ result.adsSuspectCount }}종목 포함 — 시총 순위가 정확하지 않을
+            수 있습니다
+          </span>
+        </dd>
       </div>
       <div class="summary__fact">
         <dt>결과</dt>

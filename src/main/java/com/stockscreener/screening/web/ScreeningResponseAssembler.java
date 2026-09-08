@@ -130,6 +130,7 @@ public class ScreeningResponseAssembler {
                         : ScreeningResponse.SORTED_BY_STOCK,
                 universeInfo(universeCode),
                 currencyCode,
+                adsSuspectCount(universeCode),
                 // 어느 모집단을 썼는지는 서버가 판단해서 준다. 화면이 카탈로그를 따로 받아
                 // 판단하면 그 요청만 실패해도 모집단 주의 문구가 조용히 사라진다.
                 //
@@ -149,6 +150,22 @@ public class ScreeningResponseAssembler {
                 rows.size(),
                 truncated,
                 rows);
+    }
+
+    /**
+     * 「시총 상위 N」이 사실이 아닐 수 있다는 것을 화면이 말할 수 있게 하는 수.
+     *
+     * <p>대상을 안 좁혔으면({@code universeCode == null}) 활성 유니버스 전체의 합이다 —
+     * 그때 스크리닝이 도는 대상이 정확히 그 집합이다({@code selectableUniverses}가
+     * {@code MarketScope}와 같은 술어를 쓴다).
+     *
+     * <p>근거와 이 축이 못 잡는 것은 {@code StockReader.UniverseRow}의 javadoc에 있다.
+     */
+    private int adsSuspectCount(String universeCode) {
+        return stockReader.selectableUniverses().stream()
+                .filter(u -> universeCode == null || u.code().equals(universeCode))
+                .mapToInt(StockReader.UniverseRow::adsSuspectCount)
+                .sum();
     }
 
     private ScreeningResponse.UniverseInfo universeInfo(String universeCode) {
