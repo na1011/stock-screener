@@ -344,6 +344,16 @@ final class PitStore {
 
     private static Map<String, String> readManifest(Path p) throws Exception {
         Map<String, String> out = new LinkedHashMap<>();
+        // MUST: 없는 매니페스트는 빈 맵이다 — 던지지 않는다. 읽는 쪽이 이미 그 계약을 들고
+        // 있다: {@code PitLoadTest.whyCannotSkipCheaply}의 첫 갈래가 {@code mf.isEmpty()}를
+        // 「매니페스트 없음」으로 받고, 그 주석이 그것을 *"-Dpit.days로 구간을 넓힐 때 지나는
+        // 실제 경로"*라고 적는다. 던지면 그 갈래가 **원리적으로 도달 불가**가 되고, 저장본에
+        // 없는 날짜를 계획이 포함하는 순간 전량 패스가 죽는다 — 달력이 저장본보다 하루라도
+        // 앞서면 언제나 그렇다. 실측(2026-09-09): 1시간 42분을 돌아 KRW 256일자를 다 만든 뒤
+        // USD를 시작도 못 하고 NoSuchFileException으로 끝났다.
+        if (!Files.exists(p)) {
+            return out;
+        }
         for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
             int eq = line.indexOf('=');
             if (eq > 0) {
