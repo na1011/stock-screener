@@ -37,7 +37,7 @@ class GovernanceLoadJobTest {
         // 서려면 한 해가 더 필요하다.
         expected.put(GovernanceEndpoint.SHARE_TOTALS, List.of(2025, 2024, 2023, 2022, 2021));
         // 한 응답이 3개년을 열로 주지만 그 셋이 **같은 공시일**을 갖는다. 한 번만 부르면
-        // FY2024 배당을 2026년 3월에야 알게 된 것이 되어 창 앞 74거래일이 빈다.
+        // FY2024 배당을 2026년 3월에야 알게 된 것이 되어 창 앞 137거래일이 빈다(2026-09-08 실측).
         expected.put(GovernanceEndpoint.DIVIDEND, List.of(2025, 2024));
         // 개발가이드는 3개년을 준다고 적었으나 실측은 1행이고 fscl_year가 '-'였다.
         expected.put(GovernanceEndpoint.EXEC_PAY, List.of(2025, 2024));

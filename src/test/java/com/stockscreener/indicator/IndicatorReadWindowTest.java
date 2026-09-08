@@ -17,8 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 읽기 창이 <b>보존 창을 한 번에 채울 만큼</b> 넓은가(ADR-0079).
  *
  * <p>계산기는 워밍업 W일 때 {@code bars.size() − W + 1}개 포인트를 낸다. 러너가 읽어오는 봉이
- * 정확히 <b>가장 긴 워밍업</b>이면 그 지표는 <b>{@code asOf}당 한 일자</b>밖에 못 내고, 보존 창
- * 180거래일은 하루에 하나씩 180번 실행해야 채워진다. 실제로 {@code EPS_CAGR_5Y}가 그 상태로
+ * 정확히 <b>가장 긴 워밍업</b>이면 그 지표는 <b>{@code asOf}당 한 일자</b>밖에 못 내고, 보존 창은
+ * 하루에 하나씩 보존 일수만큼 실행해야 채워진다. 실제로 {@code EPS_CAGR_5Y}가 그 상태로
  * 172일자를 비운 채 있었다.
  *
  * <p>IMPORTANT — <b>이 회귀는 되돌려도 아무 에러가 안 난다.</b> 러너를
@@ -112,7 +112,7 @@ class IndicatorReadWindowTest {
         void readWindowDoesNotDriftWiderWhenIndicatorsAreAdded() {
             // 위 두 단언은 창을 지키지 못한다. 합성 단언은 등록된 지표와 무관하고, 바로 위 것은
             // window = max + 보존이라 warmup <= max인 한 언제나 참이다. 즉 워밍업 1,500짜리
-            // 지표를 들여도 둘 다 초록이고, 그때 창은 1,441 -> 1,680이 되어 재귀 지표의 저장값이
+            // 지표를 들여도 둘 다 초록이고, 그때 창은 1,516 -> 1,755가 되어 재귀 지표의 저장값이
             // 전부 미세하게 바뀐다(ADR-0079). 그것을 알릴 경로가 이 단언 말고는 없다.
             assertThat(registry.maxEffectiveLookback())
                     .as("워밍업 최댓값이 움직였다 — 새로 들인 지표가 EPS_CAGR_5Y(1,261)를 넘었는지 "

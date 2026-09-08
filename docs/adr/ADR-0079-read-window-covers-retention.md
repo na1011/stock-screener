@@ -13,7 +13,9 @@ applies_to:
 ## 결정
 
 `IndicatorRegistry.readWindowBars() = maxEffectiveLookback() + RETAINED_TRADING_DAYS`를 새로 두고,
-`IndicatorRunner`의 두 호출 지점(`readRawData`·`marketIndexesFor`)이 **그것만** 본다. 1,261 → **1,441봉**.
+`IndicatorRunner`의 두 호출 지점(`readRawData`·`marketIndexesFor`)이 **그것만** 본다.
+2026-08-21에 1,261 → **1,441봉**이 됐고, 보존이 255로 넓어지며 **1,516봉**이다(ADR-0129).
+**수는 상수 둘에서 나온다 — 여기 적힌 값이 정본이 아니다.**
 
 **`effectiveLookback(code)`·`maxEffectiveLookback()`·`RETAINED_TRADING_DAYS`는 안 바꾼다.**
 
@@ -29,7 +31,7 @@ applies_to:
   접혀 사라지고 백필은 **SUCCESS로 끝난다**(`marketIndexesFor` javadoc).
 - **MUST NOT: `RETAINED_TRADING_DAYS`를 「보존만」의 손잡이로 읽지 않는다.** 이제 읽기 창이 여기 얹혀
   있어, 줄이면 가장 긴 워밍업 지표가 실행당 그만큼밖에 못 낸다.
-- **MUST: 「읽기 창」과 「워밍업」을 같은 낱말로 쓰지 않는다.** 값이 갈렸다(1,441 대 1,261).
+- **MUST: 「읽기 창」과 「워밍업」을 같은 낱말로 쓰지 않는다.** 값이 갈렸다(1,516 대 1,261).
 - **MUST: 창을 움직이면 스냅숏 대조를 밟는다**(ADR-0066 §결과 승계). **대상은 일봉 재귀 넷이 아니라
   전 코드다** — 아래 §측정이 그 이유를 실측으로 답한다.
 
@@ -54,18 +56,20 @@ psql -d stock_screener -At -c "WITH RECURSIVE dates AS (SELECT min(trade_date) d
 
 **`EPS_CAGR_5Y`를 이름으로 박는 이유**는 그것이 지금 워밍업 최댓값을 정하는 지표이고, 굶는 것은 언제나
 **최댓값을 정하는 그 지표 하나**이기 때문이다. 최댓값이 다른 지표로 옮겨가면 이 펜스는 낡는다 —
-그때는 위 단위 테스트가 먼저 붉어진다. **`TRADING_DAYS_750`은 넣지 않는다**: 일부러 마지막 봉만 내므로
-넣으면 **아무도 떨어뜨릴 수 없는 펜스**가 된다(ADR-0074가 금지한 형태).
+그때는 위 단위 테스트가 먼저 붉어진다. **`TRADING_DAYS_750`을 뺐던 이유는 2026-09-08에 사라졌다** — 그때는 일부러 마지막 봉만 내서
+넣으면 **아무도 떨어뜨릴 수 없는 펜스**가 됐는데(ADR-0074가 금지한 형태), 이제 창 안 산출
+일자마다 값을 낸다(ADR-0129). **그 지표의 격자 채움은 ADR-0129 §검증이 잰다** — 여기 더하면
+같은 것을 두 곳에서 재고 전제 예산만 먹는다.
 
 ```premise 지수 이력이 읽기 창을 덮는다
-psql -d stock_screener -At -c "WITH i AS (SELECT index_code, count(*) n FROM market_index_daily GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM i) = 0 THEN '잴 것이 없었다 — market_index_daily가 비어 있다' WHEN (SELECT min(n) FROM i) >= 1441 THEN 'OK 지수 최소 ' || (SELECT min(n) FROM i) || '봉이 읽기 창 1441을 덮는다(여유 ' || ((SELECT min(n) FROM i) - 1441) || '일자)' ELSE '지수 ' || (SELECT index_code FROM i ORDER BY n LIMIT 1) || '가 ' || (SELECT min(n) FROM i) || '봉뿐이라 읽기 창 1441에 못 미친다 — 오래된 산출 일자가 조용히 지수 결손이 된다' END"
+psql -d stock_screener -At -c "WITH i AS (SELECT index_code, count(*) n FROM market_index_daily GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM i) = 0 THEN '잴 것이 없었다 — market_index_daily가 비어 있다' WHEN (SELECT min(n) FROM i) >= 1516 THEN 'OK 지수 최소 ' || (SELECT min(n) FROM i) || '봉이 읽기 창 1516을 덮는다(여유 ' || ((SELECT min(n) FROM i) - 1516) || '일자)' ELSE '지수 ' || (SELECT index_code FROM i ORDER BY n LIMIT 1) || '가 ' || (SELECT min(n) FROM i) || '봉뿐이라 읽기 창 1516에 못 미친다 — 오래된 산출 일자가 조용히 지수 결손이 된다' END"
 ```
 
-**여기 1441은 손으로 적은 수다** — SQL이 Java 상수를 못 읽는다. 창을 바꾸면 이 수도 함께 바꾼다.
+**여기 1516은 손으로 적은 수다** — SQL이 Java 상수를 못 읽는다. 창을 바꾸면 이 수도 함께 바꾼다.
 
 ## 배경
 
-`EPS_CAGR_5Y`가 보존 창 180거래일 중 **172일에 한 행도 없었다**. 린치 두 프리셋의 필수 게이트라
+`EPS_CAGR_5Y`가 보존 창 180거래일 중 **172일에 한 행도 없었다**(2026-08-21 · 그때의 창). 린치 두 프리셋의 필수 게이트라
 (ADR-0070) 화면의 날짜 선택기로 과거 일자를 고르면 두 프리셋이 **이유 없이 0건**이 됐다.
 
 기제는 산술 하나다. `readRawData`가 종목당 `maxEffectiveLookback()`봉을 한 번만 읽고(N+1 회피),

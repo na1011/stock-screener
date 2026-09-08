@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><b>왜 색인이 따로 있는가</b>: 화면 기준일이 시장을 갈라야 하는데, {@code indicator_value}에
  * {@code stock}을 조인하면 {@code max(trade_date)}가 <b>0.099ms → 1,333ms</b>다(실측 7,179,721행).
  * 그것이 <b>요청마다 도는 질의</b>라 쓸 수 없어 ADR-0093이 미뤄 두었고, 이 색인이 그 자리를 닫는다.
- * 색인은 시장 수 × 보존 180거래일이라 수백 행이다.
+ * 색인은 시장 수 × 보존 일수라 수백 행이다.
  *
  * <p><b>MUST: 지표를 쓰거나 지우는 잡의 끝에서 부른다.</b> 지금 그 잡은 둘이다 —
  * {@code IndicatorBackfillJob}과 <b>{@code DailyUpdateJob}</b>. <b>매일 도는 것은 후자이므로
@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code IndicatorRetentionPolicy} 전부), 만들면 <b>실패 격리의 단위가 종목이 아니게 된다</b>.
  * 이 클래스만 자기 트랜잭션을 갖고, 원본에서 유도하므로 <b>몇 번을 불러도 결과가 같다.</b>
  *
- * <p>비용은 원본을 두 번 훑는 것이다(약 2.7초). 배치 끝에 한 번이라 백필 실측(350종목 ×
+ * <p>비용은 원본을 두 번 훑는 것이다(약 2.7초). 배치 끝에 한 번이라 백필 실측(2026-08 · 350종목 ×
  * 180일자 = 1시간 51분) 옆에서 무시할 수 있다.
  */
 @Component

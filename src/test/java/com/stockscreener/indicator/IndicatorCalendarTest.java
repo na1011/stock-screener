@@ -120,8 +120,8 @@ class IndicatorCalendarTest {
     @DisplayName("다른 시장의 더 최근 지표가 이 시장의 기준일을 움직이지 않는다")
     void otherMarketDoesNotMoveThisMarketsLatest() {
         insertFor(stockId, LocalDate.of(2026, 8, 5));
-        // 이 시장이 쉰 날에 다른 시장이 열렸다. 실측으로 보존창 안 국내 휴장 평일 13일 중
-        // 미국 개장이 9일이고, 그날 기준일이 미국으로 밀리면 국내 전 프리셋이 0건이 된다.
+        // 이 시장이 쉰 날에 다른 시장이 열렸다. 실측으로 보존창 안 국내 휴장 평일 18일 중
+        // 미국 개장이 14일이고(2026-09-08), 그날 기준일이 미국으로 밀리면 국내 전 프리셋이 0건이 된다.
         insertFor(otherMarketStockId, LocalDate.of(2026, 8, 6));
         tradeDateIndex.rebuild();
 

@@ -13,8 +13,8 @@ applies_to:
 
 ## 결정
 
-`IndicatorRunner`가 계산 결과를 저장하기 전에 **보존 경계(180거래일, ADR-0011)보다 오래된
-포인트를 버린다.** 경계는 `IndicatorRetentionPolicy.writeCutoff()`가 한 곳에서 내고, 잡이
+`IndicatorRunner`가 계산 결과를 저장하기 전에 **보존 경계(ADR-0011의 `RETAINED_TRADING_DAYS`,
+2026-09-08 기준 255거래일)보다 오래된 포인트를 버린다.** 경계는 `IndicatorRetentionPolicy.writeCutoff()`가 한 곳에서 내고, 잡이
 종목 루프 **밖에서 한 번** 구해 러너에 넘긴다.
 
 `IndicatorRetentionPolicy.purge()`는 그대로 둔다. 지우는 쪽과 쓰지 않는 쪽 둘 다 남는다.
@@ -28,8 +28,8 @@ applies_to:
 - **MUST: 필터의 부등호를 `purge()`의 `trade_date <= cutoff`와 같은 방향으로 유지한다.**
   어긋나면 경계일 하루가 매 실행 쓰였다가 매 정리에 지워지고, 그 왕복은 어떤 값도 바꾸지
   않아 증상이 없다.
-- **MUST NOT: 경계를 종목마다 묻지 않는다.** 350종목 × 774거래일이면 같은 답을 27만 번 받는다.
-- **MUST NOT: 경계를 `asOf`에서 역산하지 않는다.** 보존은 **지금 최신**에서 180거래일이지
+- **MUST NOT: 경계를 종목마다 묻지 않는다.** 1,350종목 × 창이면 같은 답을 수십만 번 받는다.
+- **MUST NOT: 경계를 `asOf`에서 역산하지 않는다.** 보존은 **지금 최신**에서 `RETAINED_TRADING_DAYS`거래일이지
   요청한 날짜에서가 아니다. 역산하면 과거 구간 백필이 그 시점 기준으로 보존 밖을 되살린다.
 - **긴 백필은 경계일 하루를 되살린다 — 버그가 아니라 위 MUST NOT의 대가다.** 경계를 잡 시작에
   한 번만 구하므로, 실행이 길어 그 사이 일일 갱신이 돌면 **경계가 앞으로 밀렸는데 러너는 옛
@@ -56,7 +56,7 @@ WITH b AS (
   SELECT m.code AS market_code,
          (SELECT p.trade_date FROM price_daily p JOIN stock s ON s.id = p.stock_id
            WHERE s.market_code = m.code
-           GROUP BY p.trade_date ORDER BY p.trade_date DESC OFFSET 180 LIMIT 1) AS cutoff
+           GROUP BY p.trade_date ORDER BY p.trade_date DESC OFFSET 255 LIMIT 1) AS cutoff
   FROM market m),
 outside AS (
   SELECT b.market_code, count(*) AS days, min(i.trade_date) AS first_day
@@ -67,7 +67,7 @@ SELECT CASE
   WHEN (SELECT count(*) FROM indicator_trade_date) = 0
     THEN '지표가 한 행도 없다 — 잴 것이 없었다'
   WHEN (SELECT count(*) FROM b WHERE cutoff IS NOT NULL) = 0
-    THEN '어느 시장도 시세가 180거래일보다 적다 — 경계가 아직 없어 거를 것이 없다'
+    THEN '어느 시장도 시세가 255거래일보다 적다 — 경계가 아직 없어 거를 것이 없다'
   WHEN (SELECT count(*) FROM outside) = 0 THEN 'OK 보존 경계 밖 지표가 없다'
   WHEN (SELECT max(days) FROM outside) = 1
     THEN (SELECT string_agg(market_code || ' 1거래일(' || first_day || ')', ', ' ORDER BY market_code)
@@ -79,6 +79,8 @@ SELECT CASE
 END"
 ```
 
+**여기 255는 손으로 적은 수다** — SQL이 Java 상수를 못 읽는다. 창을 바꾸면 이 수도 함께 바꾼다.
+
 **MUST: 경계를 시장마다 잰다.** 처음에는 `price_daily`의 **전역** distinct 거래일에서 경계를
 뽑았는데, 그러면 달력이 다른 시장의 봉이 들어오는 것만으로 발화한다 — 국내 거래일과 NYSE
 세션을 합치면 경계가 2025-12-01에서 2025-12-12로 밀려 국내 지표 **18거래일**이 경계 밖으로
@@ -87,7 +89,7 @@ END"
 다음 세션이 `IndicatorRetentionPolicy`를 고치러 간다. `writeCutoff`는 이미 시장을 받는다
 (ADR-0093).
 
-**모집단이 비는 경우를 둘로 가른다** — "지표가 통째로 없다"와 "시세가 아직 180거래일에
+**모집단이 비는 경우를 둘로 가른다** — "지표가 통째로 없다"와 "시세가 아직 보존 일수에
 못 미친다"는 원인이 다르고, 뒤엣것은 초기 적재 중에 정상이다.
 
 **`EXISTS`로 먼저 묻고 개수는 어긋났을 때만 센다.** 정상이면 인덱스에서 첫 행을 못 찾고
@@ -105,7 +107,8 @@ END"
 `IndicatorValueWriter`의 `IS DISTINCT FROM` 가드가 걸러 **같은 코드가 열 배 차이를 낸다.**
 상태에 안 휘둘리는 것은 **거래일 수**와 **잡 구조**뿐이다.
 
-배포 뒤 정상 상태는 **180거래일 / 2,006,860행**이고 단일 날짜 백필을 다시 돌려도 그대로다.
+배포 뒤(2026-08-11) 정상 상태는 **180거래일 / 2,006,860행**이었고 단일 날짜 백필을 다시 돌려도
+그대로였다. **그 수는 그날의 것이다** — 보존 창은 이후 255로 넓어졌다(ADR-0129).
 배포 전 코드였다면 그 한 번이 **~570거래일을 되살렸다**(`readRawData`가 단일 날짜여도
 창 전체를 읽는다).
 
@@ -130,9 +133,9 @@ psql -d stock_screener -At -c "WITH i AS (SELECT sum(pg_relation_size(oid)) b FR
 그 폭은 **워밍업 최댓값 + 보존 일수**다(ADR-0079). 그런데 **계산기 다수가 받은 창 전체에 대해
 포인트를 낸다** — `AdjCloseCalculator`는 `priceBars(1)`을 선언하고도 창을 통째로 순회한다.
 
-그 결과 **한 종목·한 실행이 최대 「창」거래일치를 쓰고, 보존이 180이므로 「창 − 180」거래일치가
+그 결과 **한 종목·한 실행이 최대 「창」거래일치를 쓰고, 보존이 255이므로 「창 − 255」거래일치가
 경계 밖**이다(지표마다 유효 워밍업이 달라 실제 날짜 수는 그보다 적을 수 있다).
-**그 「창 − 180」이 워밍업 최댓값과 같은 수인 것은 우연이 아니라 ADR-0079의 산식이다.**
+**그 「창 − 255」가 워밍업 최댓값과 같은 수인 것은 우연이 아니라 ADR-0079의 산식이다.**
 `purge()`가 배치 끝에서 그것을 지우므로 최종 상태는 언제나 옳고, 화면에도 흔적이 없다.
 
 **일일 갱신 하나가 그 왕복을 매 거래일 돈다** — 정리가 437만 행을 지운 직후 같은 실행이
@@ -162,7 +165,7 @@ psql -d stock_screener -At -c "WITH i AS (SELECT sum(pg_relation_size(oid)) b FR
 - **계산기가 마지막 포인트만 내게 고친다** — 계산기 수십 개를 전부 고쳐야 하고, "지표 추가
   비용 1파일"에 새 규약이 하나 늘어 다음 계산기가 그것을 잊으면 다시 새어 나간다. 러너
   한 곳에서 자르면 계산기는 아무것도 몰라도 된다.
-- **`indicator_value`를 경계 기준으로 삼는다**(purge와 같은 소스) — 지표가 아직 180거래일만큼
+- **`indicator_value`를 경계 기준으로 삼는다**(purge와 같은 소스) — 지표가 아직 보존 일수만큼
   쌓이지 않은 동안 경계가 비어, 초기 적재가 전 구간을 그대로 쓴다. 시세는 먼저 쌓이므로
   `price_daily`가 이 문제를 겪지 않는다.
 

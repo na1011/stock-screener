@@ -146,7 +146,7 @@ public final class IndicatorContext {
      *
      * <p>재무에서 나온 값은 <b>공시가 있을 때만</b> 바뀐다. 그래서 봉마다 다시 계산하지 않고
      * 이 날짜들로 구간을 나눠 구간당 한 번만 계산한다({@code FinancialMath.byPublication}).
-     * 실측으로 보존 창 안 공시일은 종목당 한 자릿수라, 봉 1,441개에 대해 계산이
+     * 실측으로 보존 창 안 공시일은 종목당 한 자릿수라, 봉 1,516개에 대해 계산이
      * 그만큼만 늘어난다.
      */
     public List<LocalDate> financialPublicationDates() {
@@ -319,7 +319,7 @@ public final class IndicatorContext {
      *
      * <p>MUST: 봉마다 값을 고를 때 {@code GovernanceMath.on}을 쓴다. 최신 것을 창 전체에 펴면
      * <b>공시 전 구간이 미래를 알고 계산한 값</b>이 된다 — 실측 공시일 중앙값이 2026-03-18이고
-     * 쓰기 창 180거래일 중 74가 그 앞이다.
+     * 쓰기 창 255거래일 중 137이 그 앞이다(2026-09-08 실측).
      *
      * <p>MUST NOT: 비어 있는 것을 0으로 접지 않는다. 그 회사에 그 표가 없는 것과 아직 안 받은
      * 것이 같아지고, 둘 다 「지배구조가 좋다」로 읽힌다.

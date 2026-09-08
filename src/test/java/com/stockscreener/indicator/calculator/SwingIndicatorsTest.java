@@ -645,12 +645,12 @@ class SwingIndicatorsTest {
         private final TradingDays750Calculator calculator = new TradingDays750Calculator();
 
         @Test
-        @DisplayName("IMPORTANT — 봉이 751개여도 750이다. min(size, 750)이라 창이 넓어져도 불변이다")
+        @DisplayName("IMPORTANT — 봉이 751개여도 마지막 값은 750이다. min(i+1, 750)이라 창이 넓어져도 불변이다")
         void saturatesAtThreshold() {
             List<IndicatorPoint> points = calculator.calculate(contextOf(flat(751, 1_000)));
 
-            assertThat(points).hasSize(1);
-            assertThat(points.get(0).value()).isEqualByComparingTo("750");
+            assertThat(points).hasSize(751);
+            assertThat(points.getLast().value()).isEqualByComparingTo("750");
         }
 
         @Test
@@ -658,8 +658,8 @@ class SwingIndicatorsTest {
         void reportsShortHistoryAsIs() {
             List<IndicatorPoint> points = calculator.calculate(contextOf(flat(749, 1_000)));
 
-            assertThat(points).hasSize(1);
-            assertThat(points.get(0).value()).isEqualByComparingTo("749");
+            assertThat(points).hasSize(749);
+            assertThat(points.getLast().value()).isEqualByComparingTo("749");
         }
 
         @Test
@@ -667,18 +667,32 @@ class SwingIndicatorsTest {
         void countsEvenTwoBars() {
             List<IndicatorPoint> points = calculator.calculate(contextOf(flat(2, 1_000)));
 
-            assertThat(points.get(0).value()).isEqualByComparingTo("2");
+            assertThat(points.getLast().value()).isEqualByComparingTo("2");
+            assertThat(points.get(0).value()).isEqualByComparingTo("1");
         }
 
         @Test
-        @DisplayName("값은 마지막 봉 하루뿐이다 — 창 앞쪽에도 세면 창 밖 이력을 무시한 값이 된다")
-        void writesOnlyTheLastBar() {
+        @DisplayName("창 안의 산출 일자마다 값을 낸다 — 마지막 봉 하나만 내면 과거 일자가 통째로 빈다")
+        void writesEveryBarInTheWindow() {
             List<PriceBar> bars = flat(300, 1_000);
 
             List<IndicatorPoint> points = calculator.calculate(contextOf(bars));
 
-            assertThat(points).hasSize(1);
-            assertThat(points.get(0).tradeDate()).isEqualTo(bars.getLast().tradeDate());
+            assertThat(points).hasSize(300);
+            assertThat(points.get(0).tradeDate()).isEqualTo(bars.get(0).tradeDate());
+            assertThat(points.get(0).value()).isEqualByComparingTo("1");
+            assertThat(points.getLast().tradeDate()).isEqualTo(bars.getLast().tradeDate());
+            assertThat(points.getLast().value()).isEqualByComparingTo("300");
+        }
+
+        @Test
+        @DisplayName("포화 경계가 정확히 750번째 봉이다 — 게이트가 >= 750이라 한 칸이 판정을 가른다")
+        void saturationBoundarySitsOnTheSevenHundredFiftiethBar() {
+            List<IndicatorPoint> points = calculator.calculate(contextOf(flat(800, 1_000)));
+
+            assertThat(points.get(748).value()).isEqualByComparingTo("749");
+            assertThat(points.get(749).value()).isEqualByComparingTo("750");
+            assertThat(points.get(750).value()).isEqualByComparingTo("750");
         }
 
         @Test

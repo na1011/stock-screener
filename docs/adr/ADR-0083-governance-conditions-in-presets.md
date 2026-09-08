@@ -190,7 +190,7 @@ psql -d stock_screener -At -c "WITH d AS (SELECT market_code mc, max(trade_date)
 **700콜**(DART 보수 예산 10,000의 7%)이고 그러면 FY2020~2025 6년이 된다.
 **MUST: 두 해를 받아야 하는 이유를 안다** — `GovernanceMath.figuresOn`이 그 거래일에 **공시돼
 있던** 최신 회계연도를 앵커로 잡는데 FY2025 DPS 공시일 중앙값이 2026-03-18이라 저장 창
-180거래일 중 **앞 74일은 앵커 FY2024, 뒤 106일은 FY2025**다. 한 해만 받으면 뒤 106일만 5년이 된다.
+255거래일 중 **앞 137일은 앵커 FY2024, 뒤 118일은 FY2025**다(2026-09-08 실측 · 창이 매일 미끄러지므로 그날의 수다). 한 해만 받으면 뒤 106일만 5년이 된다.
 **MUST NOT: `--governance-span`을 「안 주면 최대 5년」으로 적지 않는다** — `GovernanceLoadJob`의
 `YEARS_BACK`에서 **`DIVIDEND`는 2**다(5는 `SHARE_TOTALS`).
 

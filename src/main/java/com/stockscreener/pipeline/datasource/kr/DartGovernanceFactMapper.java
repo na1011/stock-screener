@@ -507,8 +507,8 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      */
     private List<GovernanceFact> controlChange(List<GovernanceReportRow> rows) {
         // MUST: 보고서(=요청 연도)마다 따로 센다. 한 덩어리로 접으면 사실이 최신 보고서 하나에만
-        // 서고, **그 보고서가 나오기 전 구간이 통째로 빈다** — 실측으로 쓰기 창 180거래일 중
-        // 74가 그 앞이다. 같은 실수를 최대주주 지분율에서 한 번 했다.
+        // 서고, **그 보고서가 나오기 전 구간이 통째로 빈다** — 실측으로 쓰기 창 255거래일 중
+        // 137이 그 앞이다(2026-09-08). 같은 실수를 최대주주 지분율에서 한 번 했다.
         Map<Integer, List<GovernanceReportRow>> byYear = new TreeMap<>();
         for (GovernanceReportRow row : rows) {
             byYear.computeIfAbsent(row.bsnsYear(), year -> new ArrayList<>()).add(row);

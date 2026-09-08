@@ -31,7 +31,7 @@ import java.util.List;
  *       우리 자산 목록({@code exchange=NYSE,NASDAQ})에 없어 {@code stock} 행이 없다.
  *       그러나 이 엔드포인트는 {@code stock} 행을 요구하지 않는다. <b>모르는 심볼은 200
  *       응답에서 조용히 빠지므로</b>(alpaca-bars.md) 빈 목록과 실패를 갈라 적는다.</li>
- *   <li><b>읽기 창을 덮는가</b> — 1,441봉(ADR-0079)을 못 덮으면 지수를 붙여도 값이 안 난다.</li>
+ *   <li><b>읽기 창을 덮는가</b> — 1,516봉(ADR-0079)을 못 덮으면 지수를 붙여도 값이 안 난다.</li>
  * </ul>
  *
  * <p>종가를 파일로 내보내 <b>FRED의 실제 S&amp;P 500 지수와 대조</b>할 수 있게 한다.
@@ -139,6 +139,6 @@ class UsMarketIndexProbeLiveTest {
         } catch (Exception e) {
             System.out.printf("파일 쓰기 실패: %s%n", e.getMessage());
         }
-        System.out.println("읽기 창 1,441봉 충족 = " + (lines.size() >= 1441));
+        System.out.println("읽기 창 1,516봉 충족 = " + (lines.size() >= 1516));
     }
 }

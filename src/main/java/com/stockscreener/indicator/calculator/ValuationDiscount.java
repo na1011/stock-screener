@@ -29,7 +29,7 @@ import java.util.NavigableMap;
  *
  * <p>그래서 <b>둘 다 값이 있는 가장 최근 봉에서 한 번 계산해 펼친다.</b> 그 봉에서는 「현재값의
  * 기저」와 「중앙값의 마지막 표본의 기저」가 같은 재무라 어긋남이 원리적으로 없다. 저장되는
- * 180일치가 전부 같은 값이 되는데, 그것은 {@code PER_MEDIAN_5Y}·{@code OCF_SUM_5Y}·
+ * 보존 창 전체가 같은 값이 되는데, 그것은 {@code PER_MEDIAN_5Y}·{@code OCF_SUM_5Y}·
  * {@code RETAINED_TO_MARKET_4Y}가 <b>이미 갖는 성질</b>이다 — 새 성질을 들이지 않는다.
  *
  * <p><b>MUST NOT: 저장된 과거 행을 그 시점의 판단으로 읽지 않는다.</b> 이 값은 최신 일자 기준이고

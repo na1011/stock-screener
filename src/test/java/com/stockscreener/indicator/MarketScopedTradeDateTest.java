@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 정의상 언제나 참이다. 여기서 재는 것은 <b>미국 봉이 국내 답을 움직이는가</b>이고, 시장
  * 조건을 지우면 아래 셋이 전부 붉어진다.
  *
- * <p>픽스처가 그 축을 만든다 — 국내는 {@code AS_OF}까지 200거래일, 미국은 <b>더 최근으로
+ * <p>픽스처가 그 축을 만든다 — 국내는 {@code AS_OF}까지 {@code KR_DAYS}거래일(보존 일수 + 20), 미국은 <b>더 최근으로
  * 10일</b>과 <b>훨씬 이른 하루</b>다. 그래서 전 시장 합계로 세면 국내의 보존 경계가 10일
  * 뒤로 밀리고 첫 거래일이 몇 백 일 앞으로 당겨진다.
  */
@@ -35,7 +35,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MarketScopedTradeDateTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 8, 5);
-    private static final int KR_DAYS = 200;
+    /**
+     * 국내 봉 수. <b>보존 일수에서 유도한다 — 리터럴로 박지 않는다.</b>
+     * {@code writeCutoff}가 {@code OFFSET RETAINED_TRADING_DAYS}로 묻는데 봉이 그보다
+     * 적으면 <b>0행이 돌아와 {@code Optional.empty()}가 되고</b>, 그러면 아래 단언이
+     * 보존 경계가 아니라 픽스처 크기 때문에 떨어진다. 상수를 올린 커밋이 실제로
+     * 그 자리에서 붉었다(180 → 255).
+     */
+    private static final int KR_DAYS = IndicatorRetentionPolicy.RETAINED_TRADING_DAYS + 20;
     private static final int US_RECENT_DAYS = 10;
 
     @Autowired

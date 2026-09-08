@@ -57,7 +57,7 @@ public class GovernanceLoadJob {
                     // 창 앞부분에서도 그 차분이 서려면 한 해가 더 필요하다.
                     GovernanceEndpoint.SHARE_TOTALS, 5,
                     // 한 응답이 3개년을 열로 주지만 **두 해를 부른다** — 한 번만 부르면 FY2024
-                    // 배당을 2026년 3월에야 알게 된 것이 되어 창 앞 74거래일이 통째로 빈다.
+                    // 배당을 2026년 3월에야 알게 된 것이 되어 창 앞 137거래일이 통째로 빈다(2026-09-08 실측).
                     GovernanceEndpoint.DIVIDEND, 2,
                     // 요청한 해만 준다(가이드의 fscl_year는 실측에서 '-'였다).
                     GovernanceEndpoint.EXEC_PAY, 2,

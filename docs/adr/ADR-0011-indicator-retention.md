@@ -7,16 +7,19 @@ applies_to:
   - "src/main/java/com/stockscreener/pipeline/batch/**"
 ---
 
-# ADR-0011. 지표 값은 180거래일만 보관하고 원자료는 전량 보관한다
+# ADR-0011. 지표 값은 최근 N거래일만 보관하고 원자료는 전량 보관한다
 
 ## 결정
 
-`indicator_value`는 최근 **180거래일**만 보관하고 그 이전은 배치가 지운다. 원자료(`price_daily`·`financial_statement`)는 **지우지 않는다.**
+`indicator_value`는 최근 **255거래일**만 보관하고 그 이전은 배치가 지운다. 원자료(`price_daily`·`financial_statement`)는 **지우지 않는다.**
+
+**정본은 `IndicatorRetentionPolicy.RETAINED_TRADING_DAYS` 하나다.** 2026-08-06에 180으로 정했고 **2026-09-08에 255로 넓혔다**(ADR-0129 — 과거 기준일 조회가 1년을 못 덮었다).
 
 ## 규칙
 
 - MUST: 원자료는 전량 보관한다. 지표는 원자료에서 재생성할 수 있지만 그 역은 불가능하다.
-- MUST: 보존 기간을 늘리는 것은 언제든 가능하되, **줄이는 변경은 지운 뒤 되돌릴 수 없다**는 점을 전제로 판단한다(백필로 복구되지만 850종목 × N일의 재계산 비용이 든다).
+- MUST: 보존 기간을 늘리는 것은 언제든 가능하되, **줄이는 변경은 지운 뒤 되돌릴 수 없다**는 점을 전제로 판단한다(백필로 복구되지만 1,350종목 × N일의 재계산 비용이 든다).
+- **MUST: 늘릴 때는 도는 앱을 먼저 갈아끼운다**(ADR-0129). `DailyUpdateJob`이 `purge()`를 부르므로 **옛 상수를 든 jar가 방금 채운 구간을 지운다.**
 - MUST NOT: 보존 정리를 일일 갱신과 같은 트랜잭션에 넣지 않는다. 정리가 실패해도 그날의 수집·계산은 남아야 한다.
 - MUST NOT: 백분위(`_PCTL`)에만 다른 보존 기간을 두지 않는다. 같은 테이블의 같은 성격의 행이며, 분리하면 "어떤 지표가 어디까지 남아 있는가"를 매번 확인해야 한다.
 
@@ -27,7 +30,7 @@ applies_to:
 ```
 보존 기간을 넘긴 행이 지워지고 그 안쪽은 남는지, 원자료는 그대로인지 확인한다.
 
-```premise 지표가 180거래일 안에만 남아 있다
+```premise 지표가 보존 창 안에만 남아 있다
 psql -d stock_screener -At -c "
 WITH RECURSIVE t AS (
   SELECT min(trade_date) d FROM indicator_value
@@ -36,7 +39,7 @@ WITH RECURSIVE t AS (
 src AS (SELECT count(*) AS n FROM t WHERE d IS NOT NULL),
 idx AS (SELECT market_code, count(*) AS n FROM indicator_trade_date GROUP BY market_code),
 allidx AS (SELECT count(DISTINCT trade_date) AS n FROM indicator_trade_date),
-over AS (SELECT market_code, n FROM idx WHERE n > 180)
+over AS (SELECT market_code, n FROM idx WHERE n > 255)
 SELECT CASE
   WHEN (SELECT n FROM src) = 0 THEN '지표가 한 행도 없다 — 잴 것이 없었다'
   WHEN (SELECT count(*) FROM idx) = 0
@@ -49,12 +52,12 @@ SELECT CASE
   WHEN (SELECT count(*) FROM over) = 0
     THEN 'OK ' || (SELECT string_agg(market_code || ' ' || n || '거래일', ', ' ORDER BY market_code)
                    FROM idx)
-  WHEN (SELECT max(n) FROM over) = 181
-    THEN (SELECT string_agg(market_code || ' 181거래일', ', ' ORDER BY market_code) FROM over)
-         || '이 남아 있다(보존 180) — 하루면 긴 백필이 경계를 앞지른 대가이고 다음 정리가 지운다'
+  WHEN (SELECT max(n) FROM over) = 256
+    THEN (SELECT string_agg(market_code || ' 256거래일', ', ' ORDER BY market_code) FROM over)
+         || '이 남아 있다(보존 255) — 하루면 긴 백필이 경계를 앞지른 대가이고 다음 정리가 지운다'
          || '(ADR-0045 §긴 백필). 앱을 띄워 일일 갱신을 돌린다.'
   ELSE (SELECT string_agg(market_code || ' ' || n || '거래일', ', ' ORDER BY market_code) FROM over)
-       || '이 남아 있다(보존 180). 하루가 아니면 정리가 오래 돌지 않았거나 백필이 보존 밖을 되살렸다.'
+       || '이 남아 있다(보존 255). 하루가 아니면 정리가 오래 돌지 않았거나 백필이 보존 밖을 되살렸다.'
 END"
 ```
 **MUST: 시장마다 센다.** 전 시장 합집합으로 세면 **달력이 다른 시장의 봉이 들어오는 것만으로**
@@ -68,7 +71,7 @@ END"
 있으므로, **갈림을 먼저 묻고** 갈렸으면 보존을 재지 않는다 — 원본 쪽 거래일 수는 재귀 CTE로
 0.024초에 나온다(실측).
 
-운영 적재 이후, 남은 거래일이 시장마다 180 이내여야 한다. **`n = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다. `trade_date`가 `NOT NULL`이라 **「행이 없다」와 「거래일 0」은 정확히 같다.**
+운영 적재 이후, 남은 거래일이 시장마다 255 이내여야 한다. **`n = 0`을 따로 답하는 것이 요점이다** — 빈 테이블이 "OK"로 읽히면 보존은 지켜지는데 지표가 통째로 사라진 상태를 놓친다. `trade_date`가 `NOT NULL`이라 **「행이 없다」와 「거래일 0」은 정확히 같다.**
 
 **MUST NOT: `count(DISTINCT trade_date)`로 되돌리지 않는다.** 전수 Index Only Scan이라 566만 행에서 **3.79초**로 타임아웃한다(2026-08-19). 재귀 CTE는 `trade_date`가 pkey의 **선두**인 것을 써서 거래일 수만큼만 인덱스를 찔러 **힙 페치 138건 · 0.035초**다. **vacuum과 무관하지는 않다** — `min()`이 아래 `purge()`가 지우는 왼쪽 끝에서 출발해 `min()` 456버퍼 대 `max()` 6버퍼다.
 
@@ -90,7 +93,7 @@ psql -d stock_screener -At -F'|' -c "SELECT indexrelname, pg_size_pretty(pg_rela
 
 핵심 관찰은 **스크리닝이 언제나 최신 일자 한 장만 읽는다**는 것이다. 조건 판정은 `trade_date = (최신일)`이고, 과거 지표 시계열이 필요한 차트는 v1 범위 밖이다(spec §10). 즉 오래된 지표 행은 저장 비용만 발생시키고 아무도 읽지 않는다.
 
-180일을 고른 이유는 셋이다. ① 200일 이동평균의 워밍업이 200거래일이므로, 그보다 짧게 잡아도 계산에는 지장이 없다 — 계산 입력은 `price_daily`이지 `indicator_value`가 아니다. ② 분기 재무가 한 번 이상 갱신되는 기간을 덮어, 정정공시 무효화 후 재계산할 구간이 대개 이 안에 들어온다. ③ ADR-0002의 성능 실측이 60일 기준이었는데, 180일이면 그 3배인 23M행 규모에서도 커버링 인덱스가 최신 일자만 훑으므로 조회 비용이 사실상 늘지 않는다.
+**처음** 180일을 고른 이유는 셋이었다. ① 200일 이동평균의 워밍업이 200거래일이므로, 그보다 짧게 잡아도 계산에는 지장이 없다 — 계산 입력은 `price_daily`이지 `indicator_value`가 아니다. ② 분기 재무가 한 번 이상 갱신되는 기간을 덮어, 정정공시 무효화 후 재계산할 구간이 대개 이 안에 들어온다. ③ ADR-0002의 성능 실측이 60일 기준이었는데, 180일이면 그 3배인 23M행 규모에서도 커버링 인덱스가 최신 일자만 훑으므로 조회 비용이 사실상 늘지 않는다.
 
 ## 버린 대안
 
@@ -101,6 +104,6 @@ psql -d stock_screener -At -F'|' -c "SELECT indexrelname, pg_size_pretty(pg_rela
 
 ## 결과
 
-- 쉬워지는 것: 저장량이 180/500 수준으로 내려간다. 조회 성능은 최신 일자만 읽으므로 영향이 없다.
+- 쉬워지는 것: 저장량이 255/500 수준으로 내려간다. 조회 성능은 최신 일자만 읽으므로 영향이 없다.
 - 어려워지는 것: 과거 지표를 보려면 백필을 돌려야 한다. v1에 그 화면이 없으므로 지금은 비용이 아니다.
 - 되돌리려면: 보존 기간을 늘리는 것은 상수 하나지만, 이미 지워진 구간은 `IndicatorBackfillJob`으로 다시 계산해야 한다. 원자료가 남아 있으므로 복구는 항상 가능하다 — 그것이 원자료를 지우지 않는 이유다.

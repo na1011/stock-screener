@@ -12,6 +12,7 @@ import com.stockscreener.indicator.PriceBar;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -35,12 +36,12 @@ import java.util.List;
  * "상장 3년 미만"으로 읽으면 <b>화면이 틀린 이유를 확신 있게 말하게 된다.</b>
  *
  * <p>IMPORTANT — <b>750에서 포화한다.</b> 러너는 종목당 {@code readWindowBars()}봉만 읽지만
- * 이 값은 {@code min(size, 750)}이라 <b>창이 넓어져도 불변</b>이다 — P12가 창을 1,100으로 올린
- * 뒤에도 1,620봉짜리 종목은 여전히 750이다. 게이트가 {@code >= 750}이라 판정에는 정확히
- * 충분하며, 포화를 정의에 넣지 않으면 화면의 값이 실제 이력으로 읽힌다.
+ * 산출 일자 {@code i}의 값이 {@code min(i + 1, 750)}이라 <b>창이 넓어져도 불변</b>이다 —
+ * P12가 창을 1,100으로 올린 뒤에도 1,620봉짜리 종목은 여전히 750이다. 게이트가 {@code >= 750}이라
+ * 판정에는 정확히 충분하며, 포화를 정의에 넣지 않으면 화면의 값이 실제 이력으로 읽힌다.
  *
- * <p><b>창 확대가 U-05 게이트를 흔든다고 오해하지 않는다.</b> 값도, 산출 일자 수(1)도 그대로다 —
- * 바뀐 것은 {@link SharesGrowth3yCalculator} 쪽뿐이다.
+ * <p><b>창 확대가 U-05 게이트를 흔든다고 오해하지 않는다.</b> 포화 때문에 <b>값이 안 움직인다</b> —
+ * 넓어지는 것은 값을 내는 <b>일자 수</b>뿐이고, 그것은 부피 변화이지 정확성 변화가 아니다.
  *
  * <p>{@code priceBars(750)}을 스스로 선언하는 이유는 <b>다른 지표에 얹히지 않기 위해서다.</b>
  * <b>창의 최댓값을 내는 지표는 시간이 지나며 바뀐다</b> — {@link SharesGrowth3yCalculator}였다가
@@ -48,12 +49,21 @@ import java.util.List;
  * 않으면 그것들을 걷는 순간 이 지표가 <b>아무 증상 없이</b> 750을 판정할 수 없게 된다. 선언해도 전역 최대가
  * 더 커서 읽기 창은 그대로다.
  *
- * <p>MUST NOT: 창 안의 과거 날짜에도 값을 내지 않는다. {@code i}번째 봉에 {@code i+1}을 세면
- * <b>창 밖의 이력을 무시</b>해 틀린 값이 되고, 같은 값을 창 전체에 펴면 과거 날짜가 미래 정보를
- * 갖는다. 백필이 날짜를 바깥 루프로 돌아 각 날짜를 그날 기준으로 다시 계산하므로
- * ({@code IndicatorBackfillJob}), 마지막 봉 하나만 내는 것이 유일하게 정확하다. 그 대가로
- * <b>실행당 1일치만 채워진다</b> — {@code SHARES_GROWTH_3Y}와 같은 성질이고, 날짜별 백필을
- * 돌리지 않으면 그 날짜에 값이 없어 필수 조건이 판정불가가 된다.
+ * <p><b>창 안의 산출 일자마다 값을 낸다</b>(2026-09-08, ADR-0129). 그전에는 마지막 봉 하나만
+ * 냈고 근거가 <i>"{@code i}번째 봉에 {@code i+1}을 세면 창 밖의 이력을 무시해 틀린 값이 된다"</i>
+ * 였다. <b>그 실패가 값에 닿지 않는다</b> — 보존 창의 가장 이른 산출 일자는 창 인덱스
+ * {@code readWindowBars() − RETAINED_TRADING_DAYS = maxEffectiveLookback()}에 앉고 그 값이
+ * 1,261이라 {@code i + 1 >= 1262}인데, 이 지표는 <b>750에서 포화</b>한다. 창보다 이력이 짧은
+ * 종목은 창이 그 종목의 전 이력이라 {@code i + 1}이 애초에 정확하다.
+ *
+ * <p><b>MUST: 그 논증은 {@code maxEffectiveLookback() >= THRESHOLD}에 얹혀 있다.</b> 이 계산기
+ * 자신이 {@code priceBars(750)}을 선언하므로 등록돼 있는 한 산식으로 참이고
+ * ({@code maxEffectiveLookback()}은 전 코드 최댓값이다), {@code IndicatorReadWindowTest}가 그
+ * 최댓값을 등식으로 못박는다. <b>그 수가 750 아래로 내려가면 과거 일자 값이 조용히 틀린다.</b>
+ *
+ * <p>등가성은 선언이 아니라 값으로 쟀다 — 마지막 봉만 내던 시절에 쌓인 활성 유니버스
+ * <b>172,614행</b>이 {@code min(rank, 750)}과 <b>차 0</b>이고, 그중 <b>9,545칸이 비포화</b>라
+ * 그 갈래가 실제로 태워진 대조다(2026-09-08 실측).
  *
  * <p>분류가 {@link IndicatorCategory#PRICE}인 것은 자리가 넷뿐이라서다. 시세에서 나온 값이라
  * {@code TURNOVER_60}과 같은 칸에 두었고, 조건 빌더에서 "가격" 묶음에 뜬다.
@@ -109,8 +119,11 @@ public class TradingDays750Calculator implements IndicatorCalculator {
         }
         // 봉이 하나라도 있으면 언제나 값이 나온다. 다른 지표와 달리 워밍업이 없다 —
         // 개수를 세는 데는 이력이 필요하지 않고, 이력이 짧다는 사실 자체가 이 지표의 답이다.
-        int counted = Math.min(bars.size(), THRESHOLD);
-        return List.of(new IndicatorPoint(
-                bars.getLast().tradeDate(), BigDecimal.valueOf(counted)));
+        List<IndicatorPoint> points = new ArrayList<>(bars.size());
+        for (int i = 0; i < bars.size(); i++) {
+            points.add(new IndicatorPoint(bars.get(i).tradeDate(),
+                    BigDecimal.valueOf(Math.min(i + 1, THRESHOLD))));
+        }
+        return points;
     }
 }

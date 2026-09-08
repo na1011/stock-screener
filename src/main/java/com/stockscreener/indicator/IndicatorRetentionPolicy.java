@@ -27,17 +27,18 @@ public class IndicatorRetentionPolicy {
     private static final Logger log = LoggerFactory.getLogger(IndicatorRetentionPolicy.class);
 
     /**
-     * 보존할 거래일 수(ADR-0011).
+     * 보존할 거래일 수(ADR-0011 · 2026-09-08에 180 → 255, ADR-0129).
      *
-     * <p>200일 이동평균의 워밍업(200거래일)보다 짧아도 되는 이유는, 계산의 입력이
-     * {@code price_daily}이지 {@code indicator_value}가 아니기 때문이다. 지표를 지워도
-     * 다시 계산할 수 있다.
+     * <p>이 값이 계산의 워밍업과 무관한 이유는, 계산의 입력이 {@code price_daily}이지
+     * {@code indicator_value}가 아니기 때문이다. 지표를 지워도 다시 계산할 수 있다.
+     * 정하는 것은 <b>과거 기준일 조회가 어디까지 열리는가</b>이고, 255는 두 시장 다
+     * 1년을 넘기는 값이다(ADR-0129).
      *
      * <p>IMPORTANT — <b>읽기 창이 이 값에 얹혀 있다</b>({@code IndicatorRegistry.readWindowBars()}
      * = 워밍업 최댓값 + 이 값, ADR-0079). 줄이면 보존만 줄어드는 것이 아니라 <b>가장 긴 워밍업
      * 지표가 실행당 그만큼밖에 못 낸다.</b> 이 상수를 「보존만의 손잡이」로 읽지 않는다.
      */
-    static final int RETAINED_TRADING_DAYS = 180;
+    static final int RETAINED_TRADING_DAYS = 255;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -50,9 +51,9 @@ public class IndicatorRetentionPolicy {
      *
      * <p>{@link #purge()}가 이미 쌓인 것을 지운다면 이쪽은 쌓이지 않게 한다. 둘 다 필요한
      * 이유는 러너가 <b>읽기 창 전체</b>에 대해 값을 내기 때문이다 — 창은
-     * {@code IndicatorRegistry.readWindowBars()}가 정하며(2026-08-21 기준 1,441봉), 이 경계가
-     * 없으면 매 실행이 <b>창 − 180</b>거래일치를 보존 밖에 쓰고 다음 정리가 그것을 지운다.
-     * <b>그 「창 − 180」이 곧 워밍업 최댓값과 같은 수인 것은 우연이 아니라 산식이다</b>(ADR-0079).
+     * {@code IndicatorRegistry.readWindowBars()}가 정하며(2026-09-08 기준 1,516봉), 이 경계가
+     * 없으면 매 실행이 <b>창 − 255</b>거래일치를 보존 밖에 쓰고 다음 정리가 그것을 지운다.
+     * <b>그 「창 − 255」가 곧 워밍업 최댓값과 같은 수인 것은 우연이 아니라 산식이다</b>(ADR-0079).
      * 값은 언제나 옳고 화면도 정상이라 드러나는 것은 몇 달 뒤 인덱스 크기뿐이다.
      *
      * <p>경계를 {@code price_daily}에서 세는 것이 {@link #purge()}와 다른 점이다. 지표 날짜는
@@ -110,7 +111,7 @@ public class IndicatorRetentionPolicy {
     /**
      * 보존 경계보다 오래된 지표 값을 지운다.
      *
-     * <p>경계를 달력이 아니라 <b>실제 거래일</b>로 센다. 달력으로 180일 전을 잡으면 휴장일이
+     * <p>경계를 달력이 아니라 <b>실제 거래일</b>로 센다. 달력으로 255일 전을 잡으면 휴장일이
      * 포함되어 실제 보존되는 거래일이 그보다 적어지고, 그 차이는 연휴가 긴 해에 커진다.
      *
      * @return 지운 행 수

@@ -108,9 +108,10 @@ import java.util.List;
  * # 지표 백필
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill --from=2020-01-02'
  *
- * # 단일 날짜 실행 하나가 보존 창 180일자를 채운다 — 읽기 창이 워밍업 최댓값 + 보존 일수라
- * # 어떤 지표든 min(창 − 워밍업 + 1, 보존 180)이 180에서 포화한다(ADR-0079).
- * # 예외는 일부러 마지막 봉만 내는 TRADING_DAYS_750과, 돌린 날짜에만 나는 *_PCTL·업종 상대값이다
+ * # 단일 날짜 실행 하나가 보존 창 전체를 채운다 — 읽기 창이 워밍업 최댓값 + 보존 일수라
+ * # 어떤 지표든 min(창 − 워밍업 + 1, 보존 일수)가 보존 일수에서 포화한다(ADR-0079).
+ * # 예외는 돌린 날짜에만 나는 *_PCTL·업종 상대값 하나다 — TRADING_DAYS_750은 2026-09-08에
+ * # 창 안 산출 일자마다 값을 내게 되어 이 예외에서 빠졌다(ADR-0129).
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill \
  *     --as-of=2026-08-11 --from=2026-08-11'
  *

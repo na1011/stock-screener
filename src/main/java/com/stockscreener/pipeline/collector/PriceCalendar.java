@@ -18,7 +18,7 @@ import java.util.Optional;
  * <p><b>MUST: 시장 인자를 없애지 않는다.</b> 두 시장의 휴장일이 다르므로 전 시장 합계로 세면
  * <b>국내가 휴장이고 미국이 개장한 날</b>이 전역 「거래일」이 된다. 그러면 지표 기준일·보존
  * 경계·결손 판정이 함께 밀리는데, <b>값은 전부 그럴듯하고 아무 에러도 나지 않는다.</b>
- * 실측으로 보존창(최근 180거래일) 안의 국내 휴장 평일 13일 중 <b>미국 개장이 9일</b>이다.
+ * 실측으로 보존창 안의 국내 휴장 평일 18일 중 미국 개장이 14일이다(2026-09-08).
  *
  * <p>IMPORTANT — 기준이 {@code indicator_value}가 아니라 {@code price_daily}다.
  * {@link com.stockscreener.indicator.IndicatorCalendar}는 <b>조회 화면</b>의 기준 일자를

@@ -584,8 +584,8 @@ class IndicatorRunnerTest {
         runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         assertThat(storedValue(Sma200Calculator.CODE, earliest))
-                .as("억제로 points가 비었을 때까지 창 전체를 지우면 TRADING_DAYS_750처럼 "
-                        + "실행당 1일자인 지표는 복구에 날짜 수만큼의 백필이 든다")
+                .as("억제로 points가 비었을 때까지 창 전체를 지우면 억제 창 밖까지 번진다 — "
+                        + "그 범위는 위 분기가 이미 제 몫만큼 지웠다")
                 .isNotNull();
     }
 

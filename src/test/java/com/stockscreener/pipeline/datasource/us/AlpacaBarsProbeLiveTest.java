@@ -311,7 +311,7 @@ class AlpacaBarsProbeLiveTest {
 
         // MUST: 모집단을 먼저 신고한다. 0을 "미국도 휴장"으로 읽는 것과 "호출이 빈 응답"으로
         // 읽는 것은 정반대이고, 이 수 위에 파일럿 창 선택이 서 있다.
-        System.out.printf("%n===== 보존창(180거래일) 안 =====%n"
+        System.out.printf("%n===== 보존창 안 =====%n"
                         + "AAPL 2025-12-01~" + SAFE_END + " 봉 %d개 (첫 %s / 마지막 %s)%n",
                 usDates.size(),
                 usDates.isEmpty() ? "없음" : usDates.get(0),

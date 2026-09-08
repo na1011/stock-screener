@@ -311,7 +311,7 @@ END"
 2. **「전체」 화면의 기준일이 미국 날짜가 된다.** `MarketScope.forScreening(null)`이 활성
    유니버스의 시장 집합을 쓰고 `IndicatorCalendar.latestIndicatorDate`가 **시장이 여럿이면
    최댓값**이다(그 javadoc이 *"여러 시장을 한 기준일로 묶는 호출부는 그 시장의 종목을
-   판정하지 않아야 한다"*로 적어 뒀다). 보존 창 안에 국내 휴장·미국 개장이 9일이라 그 9일에
+   판정하지 않아야 한다"*로 적어 뒀다). 보존 창 안에 국내 휴장·미국 개장이 14일이라 그 14일에
    **국내 프리셋이 전부 0건**이고 HTTP 200이다. **1번으로는 안 닫힌다** —
    `ScreeningService.resolveSource`가 즉석 조건을 **언제나 `universeCode = null`**로 만든다.
    범위는 ADR-0095 §결과가 예약해 뒀다.
