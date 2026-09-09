@@ -405,7 +405,8 @@ public class BootstrapRunner implements ApplicationRunner {
             "quarters", "all-quarters", "governance-year", "governance-span",
             "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
-            "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note");
+            "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note",
+            "apply", "replace", "dates");
 
     /**
      * {@code --universe}가 뜻을 갖는 잡. 나머지에서는 조용히 무시되므로 거절한다.

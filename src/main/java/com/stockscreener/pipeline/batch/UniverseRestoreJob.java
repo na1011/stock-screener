@@ -91,13 +91,12 @@ public class UniverseRestoreJob {
                         "관측 편입이 없어 복원 상한을 정할 수 없다: " + universeCode
                                 + " — 리밸런싱을 한 번도 안 돌린 유니버스다. 복원은 관측 원장의 하한에서 끊는다."));
 
-        List<LocalDate> grid = dates == null || dates.isEmpty()
-                ? restorer.weeklyGrid(target.marketCode(), floor)
-                : dates;
+        boolean replay = dates != null && !dates.isEmpty();
+        List<LocalDate> grid = replay ? dates : restorer.weeklyGrid(target.marketCode(), floor);
         if (grid.isEmpty()) {
             log.info("복원할 격자점이 없다. {} 하한={} — 보존 창이 이미 관측 구간 안이다",
                     universeCode, floor);
-            return new Report(universeCode, floor, List.of(), 0, 0, Set.of(), null, 0);
+            return new Report(universeCode, floor, List.of(), 0, 0, Set.of(), null, 0, List.of());
         }
 
         // ── Phase A: 페치. 트랜잭션 밖이고, 쓰기 갈래에서만 stock 행을 만든다.
@@ -121,21 +120,27 @@ public class UniverseRestoreJob {
         }
 
         // ── Phase B: 접기. 순수 함수라 여기까지가 공짜다.
-        Plan plan = restorer.plan(universeCode, floor, points);
+        //
+        // 닫는 날짜가 갈린다. 복원은 관측 하한에서 끊지만, 대조는 격자가 하한 **뒤**라
+        // 하한으로 닫으면 [from, to)의 to가 from보다 이르다. 대조에서는 「마지막 격자일
+        // 다음 날」이 「우리가 아는 것이 끝나는 날」이다.
+        LocalDate closeAt = replay ? grid.get(grid.size() - 1).plusDays(1) : floor;
+        Plan plan = restorer.plan(universeCode, closeAt, points);
 
         // ── Phase C: 보고.
-        log.info("복원 계획. {} 격자={}점({}~{}) 하한={} 구간={} 해석 못 한 티커={}",
+        log.info("복원 계획. {} 격자={}점({}~{}) 하한={} 닫는날={} 구간={} 해석 못 한 티커={}",
                 universeCode, grid.size(), grid.get(0), grid.get(grid.size() - 1), floor,
-                plan.intervals().size(), unresolved.size());
+                closeAt, plan.intervals().size(), unresolved.size());
         if (!unresolved.isEmpty()) {
             log.info("그날 편입이었는데 stock에 없는 종목 {}개: {}", unresolved.size(),
                     unresolved.stream().limit(40).toList());
         }
+        List<Recall> recalls = replay ? compare(universeCode, grid, plan) : List.of();
 
         // ── Phase D: 쓰기.
         int inserted = apply ? restorer.apply(plan, replace) : 0;
         return new Report(universeCode, floor, grid, fetched, plan.intervals().size(),
-                Set.copyOf(unresolved), plan, inserted);
+                Set.copyOf(unresolved), plan, inserted, recalls);
     }
 
     /**
@@ -159,6 +164,55 @@ public class UniverseRestoreJob {
             }
         }
         return new LinkedHashSet<>(found.values());
+    }
+
+    /**
+     * 재생한 명부를 <b>그날의 관측 원장</b>과 견준다 — 이것이 복원을 쓸지 정하는 판정이다.
+     *
+     * <p><b>격자가 아니라 원장이 실제로 쓴 날짜로 재생하는 것이 요점이다.</b> 주간 격자로
+     * 대조하면 미국은 관측 구간에 격자점이 <b>둘</b>밖에 안 걸리고(하한 뒤 주별 마지막 거래일이
+     * 그것뿐이다), 손으로 돌린 실행은 그 주의 마지막 거래일도 아니라 아예 안 걸린다.
+     * 원장의 {@code effective_from}을 그대로 재생하면 <b>대조가 격자 선택과 무관해져
+     * 「복원 오차」만 남는다.</b>
+     *
+     * <p><b>MUST: 놓친 종목을 수로만 보지 않는다.</b> 그 종목이 복원 명부의 <b>몇 위였는지</b>가
+     * 경계 잡음(1,001~1,020위)과 순위 축 파손(3,000위)을 가른다 — 뒤쪽이면 고칠 수 있는
+     * 결함이지 복원의 한계가 아니다. 지금은 순위를 안 들고 있으므로 <b>티커를 낸다.</b>
+     */
+    private List<Recall> compare(String universeCode, List<LocalDate> grid, Plan plan) {
+        List<Recall> recalls = new ArrayList<>();
+        for (LocalDate date : grid) {
+            Set<Long> observed = new LinkedHashSet<>(jdbcTemplate.queryForList("""
+                    SELECT stock_id FROM universe_membership
+                    WHERE universe_code = ? AND origin = 'OBSERVED'
+                      AND effective_from <= ? AND (effective_to IS NULL OR effective_to > ?)
+                    """, Long.class, universeCode, date, date));
+            Set<Long> restored = plan.membersOn(date);
+            Set<Long> hit = new LinkedHashSet<>(observed);
+            hit.retainAll(restored);
+            Set<Long> missed = new LinkedHashSet<>(observed);
+            missed.removeAll(restored);
+            Set<Long> extra = new LinkedHashSet<>(restored);
+            extra.removeAll(observed);
+            double recall = observed.isEmpty() ? Double.NaN : (double) hit.size() / observed.size();
+            recalls.add(new Recall(date, observed.size(), restored.size(), hit.size(),
+                    tickers(missed), tickers(extra), recall));
+            log.info("재생 대조. {} {} 관측={} 복원={} 재현율={} 놓침={} 더든것={}",
+                    universeCode, date, observed.size(), restored.size(),
+                    observed.isEmpty() ? "잴 것이 없었다" : "%.4f".formatted(recall),
+                    tickers(missed), tickers(extra));
+        }
+        return recalls;
+    }
+
+    private List<String> tickers(Set<Long> stockIds) {
+        if (stockIds.isEmpty()) {
+            return List.of();
+        }
+        String holes = String.join(",", java.util.Collections.nCopies(stockIds.size(), "?"));
+        return jdbcTemplate.queryForList(
+                "SELECT ticker FROM stock WHERE id IN (" + holes + ") ORDER BY ticker",
+                String.class, stockIds.toArray());
     }
 
     private Target target(String universeCode) {
@@ -186,6 +240,16 @@ public class UniverseRestoreJob {
      */
     public record Report(String universeCode, LocalDate floor, List<LocalDate> grid,
                          int fetchedPoints, int intervals, Set<String> unresolvedTickers,
-                         Plan plan, int inserted) {
+                         Plan plan, int inserted, List<Recall> recalls) {
+    }
+
+    /**
+     * 그 날짜의 재생 정확도.
+     *
+     * @param recall {@code |복원∩관측| / |관측|}. 관측이 0이면 {@code NaN}이고 그것은
+     *               <b>「잴 것이 없었다」</b>이지 0이 아니다 — 둘을 섞으면 못 잰 것이 실패로 읽힌다
+     */
+    public record Recall(LocalDate date, int observed, int restored, int hit,
+                         List<String> missedTickers, List<String> extraTickers, double recall) {
     }
 }
