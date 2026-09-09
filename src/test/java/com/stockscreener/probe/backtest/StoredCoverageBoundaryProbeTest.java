@@ -109,8 +109,10 @@ class StoredCoverageBoundaryProbeTest {
                 matchesKnownOn++;
             } else if (l != null && l.compareTo(s) == 0) {
                 matchesLatestOnly++;
+                System.out.printf("        ! %s 저장=%s KNOWN_ON=%s LATEST=%s%n", code, s, k, l);
             } else {
                 neither++;
+                System.out.printf("        ? %s 저장=%s KNOWN_ON=%s LATEST=%s%n", code, s, k, l);
             }
         }
         return "저장 일치: KNOWN_ON " + matchesKnownOn

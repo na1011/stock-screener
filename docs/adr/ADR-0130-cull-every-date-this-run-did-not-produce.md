@@ -114,8 +114,54 @@ psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM univ
 **어려워지는 것**
 
 - **삭제 스캔이 코드마다 창 전체를 본다.** ADR-0080이 잰 삭제 비용(+18%)의 성질은 같고
-  후보 집합만 넓어진다 — **이 결정의 실행 비용은 아래 실측에 적는다.**
+  후보 집합만 넓어진다.
 - **`asOf`에 따라 커버리지가 움직이는 지표에서 왕복이 생길 수 있다**(§규칙의 마지막 MUST).
+
+### 적용 실측 — 3종목 대조군 (2026-09-09 · `--tickers=WAT,ANET,UI` 단일 날짜)
+
+되돌리기 파일: `~/Library/Application Support/stock-screener/dumps/cull-head-20260909-before.psv`
+(93,812행).
+
+| 종목 | 전 | 후 | 차 | 러너가 신고한 걷기 |
+|---|---|---|---|---|
+| `WAT` | 30,022 | 27,668 | **−2,354** | 28코드 1,727행 |
+| `ANET` | 30,763 | 29,283 | **−1,480** | 24코드 960행 |
+| `UI` | 33,027 | 32,782 | **−245** | 3코드 245행 |
+
+**차가 신고보다 큰 것은 파생 고아 정리다** — 원본이 사라지면 `DerivedIndicatorCleanup`이
+그 백분위를 함께 걷고, 그것은 러너의 로그에 안 잡힌다.
+
+**멱등**: 같은 인자로 한 번 더 돌려 **걷기 로그 0줄 · 행 수 그대로**.
+
+**잔재가 실제로 사라졌다**: `WAT` 2025-12-24가 걷기 전 「`KNOWN_ON` 1 · `LATEST`만 0 ·
+어느 쪽도 아님 **4**」에서 걷은 뒤 「`KNOWN_ON` 1 · 나머지 **0**」이 됐다.
+
+### 남은 것 — 이 결정이 안 닫는 부류 하나 (2026-09-09)
+
+**값 수준의 look-ahead는 걷기로 안 닫힌다.** 걷기는 **이번 실행이 안 낸 날짜**만 보는데,
+이번 실행이 값을 내되 **그 값이 시점 재현이 아니면** 그 행은 그대로 덮여 남는다.
+
+실측으로 `MARKET_CAP`이 그 부류다 — 저장값이 `LATEST`와 **정확히 일치**하고 `KNOWN_ON`과 갈린다.
+
+| 저장(=`LATEST`) | `KNOWN_ON` | 차 |
+|---|---|---|
+| 17,801,570,726.94 | 17,845,929,415.30 | 0.25% |
+| 20,541,187,395.30 | 20,592,372,773.50 | 0.25% |
+| **19,426,185,662.00** | **32,010,640,507.30** | **65%** |
+| 17,974,728,700.80 | 29,618,916,892.32 | 65% |
+| 19,907,226,361.20 | 32,803,303,624.98 | 65% |
+
+**원인은 호출부다.** ADR-0128 §규칙이 *"재무에서 값을 내는 계산기는 `byPublication`이나
+`bySegment`를 반드시 거친다"*로 못박았는데, **넷이 어느 쪽도 안 거치고
+`context.quarterlyFigures()`를 직접 쓴다** — `MarketCapCalculator` ·
+`SharesGrowth3yCalculator` · `TurnoverRatio60Calculator` · `TurnoverRatioCalculator`.
+`sharesOf`의 `publishedIndexOn`이 **기(期)**는 봉 시점으로 고르지만, 컨텍스트가
+`latestPerPeriod`로 **오늘 기준 최신 개정본**을 접어 둔 뒤라 **판(revision)이 미래의 것**이다.
+(`GovernanceMath`는 자기 축으로 이미 고르므로 설계다 — ADR-0128 §결과.)
+
+**이것은 별도 결정이다** — `MARKET_CAP`이 유니버스 순위와 버핏 시총 게이트에 실리므로
+전후 대조를 먼저 만든다. 사용자가 연 축(`FinancialMath.sharesOf`의 시점 정합)과 같은 함수의
+호출부라 그쪽으로 묶는다.
 
 **되돌리려면** `windowDatesWithoutProduction`의 필터를 `date.isAfter(lastProduced)`로 되돌리고
 `IndicatorRunnerTest.cullsRowsInsideTheWindowThisRunDidNotProduce`의 단언을 뒤집는다.
