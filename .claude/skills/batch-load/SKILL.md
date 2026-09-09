@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|governance-load|governance-derive|market-calendar|bar-gap-review 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|governance-load|governance-derive|market-calendar|bar-gap-review 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -12,6 +12,7 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 ./gradlew bootRun --args='--spring.profiles.active=bootstrap <아래>'
 
 --job=universe
+--job=universe-restore --universe=KOSPI_TOP200 [--apply=true] [--replace=true] [--dates=…]
 --job=initial-load --price-years=7 --financial-years=7 --reload-existing=true
 --job=initial-load --tickers=082640,121600 --price-years=7
 --job=initial-load --universe=US_LISTED --price-years=2 --skip-financial=true
@@ -72,6 +73,28 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 --job=initial-load --universe=US_TOP1000 --skip-financial=true --price-years=7 --reload-existing=true
 --job=company-profile --universe=US_TOP1000
 ```
+
+### 과거 편입 복원 — `--job=universe-restore` (ADR-0135)
+
+보존 창 안의 과거 편입을 소스에서 복원해 원장의 **둘째 평면**(`origin='RESTORED'`)에 넣는다.
+과거 기준일 조회가 그날의 명부로 답하려면 이것이 먼저다.
+
+- **쓰기는 옵트인이다 — `--apply=true`가 없으면 한 행도 안 쓴다.** `--dry-run`이 아닌 이유는
+  이 저장소의 CLI가 맨 불리언 플래그를 **`false`로 읽기** 때문이다. 오타 한 번이 되돌릴 수
+  없는 쓰기가 되는 것을 그렇게 막는다.
+- **쓰기 없는 갈래는 `stock` 행도 안 만든다.** 대신 **「그날 편입이었는데 `stock`에 없는 종목」의
+  수와 티커를 보고한다** — 그 수가 곧 데이터를 안 가진 과거 구성원의 크기이고, 그 뒤 적재를
+  정하는 근거다.
+- **`--dates`는 `--apply`와 못 쓴다.** 관측 하한 뒤를 가리키는 격자로 쓰면 겹치는 구간을
+  만들려다 GiST에 걸리는데, **막힌 이유를 사람이 해석해야 한다.** 관측 구간 재생 대조가
+  그 인자를 쓰는 유일한 자리다.
+- **격자는 그 주의 마지막 거래일**이고 `indicator_trade_date`에서 뽑는다. 상한은
+  `origin='OBSERVED'`의 `min(effective_from)`이라 **관측 구간을 절대 안 건드린다.**
+- **격자점 하나가 실패하면 그 유니버스를 통째로 중단한다.** 그 날짜만 빼고 이으면 런렝스가
+  구멍 위를 이어 **없던 편입을 지어낸다.**
+- 콜: 국내 유니버스당 격자점 수만큼(격자점 약 50 → 50콜), 미국은 격자점당 약 20콜.
+- **`guard-rebalance-on-dirty-rank.sh`가 이 잡에도 걸린다**(`*--job=universe*` 부분 일치).
+  쓰기 0인 대조도 막히는데, 그때는 순위 축 오염을 먼저 고치는 것이 맞다.
 
 - **같은 날 두 번째로 돌리면 편입이 바뀔 때 제약에 걸린다.** 리밸런싱이 제외를
   `effective_to = 기준일`로 닫는데 그날 편입된 행은 `effective_from`이 같아

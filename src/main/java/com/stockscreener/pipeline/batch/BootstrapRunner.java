@@ -161,6 +161,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(BootstrapRunner.class);
 
     private final UniverseRebalanceJob universeRebalanceJob;
+    private final UniverseRestoreJob universeRestoreJob;
     private final InitialLoadJob initialLoadJob;
     private final FinancialRefillJob financialRefillJob;
     private final FullStatementRefillJob fullStatementRefillJob;
@@ -177,6 +178,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final ConfigurableApplicationContext context;
 
     public BootstrapRunner(UniverseRebalanceJob universeRebalanceJob,
+                           UniverseRestoreJob universeRestoreJob,
                            InitialLoadJob initialLoadJob,
                            FinancialRefillJob financialRefillJob,
                            FullStatementRefillJob fullStatementRefillJob,
@@ -192,6 +194,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context) {
         this.universeRebalanceJob = universeRebalanceJob;
+        this.universeRestoreJob = universeRestoreJob;
         this.initialLoadJob = initialLoadJob;
         this.financialRefillJob = financialRefillJob;
         this.fullStatementRefillJob = fullStatementRefillJob;
@@ -286,6 +289,15 @@ public class BootstrapRunner implements ApplicationRunner {
         BatchStatus status = switch (job) {
             case "universe" -> universeRebalanceJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, value(args, "universe", null));
+            // MUST: 쓰기가 옵트인이다(--apply=true). 맨 플래그는 false가 되므로 --dry-run으로
+            // 두면 오타 한 번이 되돌릴 수 없는 쓰기가 된다(ADR-0135).
+            case "universe-restore" -> {
+                universeRestoreJob.run(required(args, "universe"),
+                        Boolean.parseBoolean(value(args, "apply", "false")),
+                        Boolean.parseBoolean(value(args, "replace", "false")),
+                        dates(args, "dates"));
+                yield BatchStatus.SUCCESS;
+            }
             case "initial-load" -> initialLoadJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, loadRange(args));
             case "financial-refill" -> financialRefillJob.run(
@@ -404,8 +416,8 @@ public class BootstrapRunner implements ApplicationRunner {
      * 그 실패는 인자를 고치러 가게 만든다. {@code initial-load}는 둘이 우연히 같다.
      */
     private static final java.util.Set<String> UNIVERSE_JOBS = java.util.Set.of(
-            "universe", "initial-load", "corporate-action", "adjustment-rebuild",
-            "company-profile", "financial-refill", "backfill");
+            "universe", "universe-restore", "initial-load", "corporate-action",
+            "adjustment-rebuild", "company-profile", "financial-refill", "backfill");
 
     /**
      * {@code --skip-financial}·{@code --skip-price}가 뜻을 갖는 잡. 위와 같은 이유로
@@ -604,7 +616,8 @@ public class BootstrapRunner implements ApplicationRunner {
      * 돌아간다 — {@code BootstrapArgumentGuardTest}가 이 목록과 실제 호출부를 대조한다.
      */
     private static final java.util.Set<String> BOOLEAN_OPTIONS = java.util.Set.of(
-            "skip-financial", "skip-price", "reload-existing", "quarters", "all-quarters");
+            "skip-financial", "skip-price", "reload-existing", "quarters", "all-quarters",
+            "apply", "replace");
 
     private static String required(ApplicationArguments args, String name) {
         String value = value(args, name, null);
@@ -716,6 +729,15 @@ public class BootstrapRunner implements ApplicationRunner {
             }
         }
         return endpoints;
+    }
+
+    /**
+     * 쉼표로 준 날짜 목록. 복원 대조가 <b>원장이 실제로 쓴 날짜</b>를 그대로 재생할 때 쓴다 —
+     * 주간 격자로는 그 날짜들이 안 걸린다(관측 하한 뒤라 격자에서 잘리고, 손으로 돌린 실행은
+     * 그 주의 마지막 거래일도 아니다).
+     */
+    private static List<LocalDate> dates(ApplicationArguments args, String name) {
+        return csv(args, name).stream().map(LocalDate::parse).toList();
     }
 
     private static List<String> csv(ApplicationArguments args, String name) {

@@ -12,7 +12,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -107,6 +109,27 @@ public class StockRegistrar {
 
     private static String collectedMarketPlaceholders() {
         return String.join(",", java.util.Collections.nCopies(CollectedMarkets.ALL.size(), "?"));
+    }
+
+    /**
+     * 이미 있는 종목만 티커 → id로 해석한다. <b>행을 만들지 않는다.</b>
+     *
+     * <p>{@link #resolveOrCreate}와 <b>일부러 다른 계약</b>이다. 저쪽은 「없으면 만든다」라
+     * 쓰기이고, 여기는 <b>쓰기 0</b>이라 되돌릴 수 없는 단계 앞에 둘 수 있다(ADR-0135의
+     * 복원 대조가 그 자리다). <b>빠진 티커의 수가 곧 「우리가 데이터를 안 가진 과거 편입」의
+     * 크기</b>이고, 그것을 재는 것이 이 메서드의 목적이다.
+     *
+     * @return 티커 → id. 없는 티커는 <b>키 자체가 없다</b> — {@code null}로 채우지 않는다
+     */
+    public Map<String, Long> existingIdsByTicker(String marketCode, List<String> tickers) {
+        Map<String, Long> found = new LinkedHashMap<>();
+        for (String ticker : tickers) {
+            Long id = findId(marketCode, ticker);
+            if (id != null) {
+                found.put(ticker, id);
+            }
+        }
+        return found;
     }
 
     private Long findId(String marketCode, String ticker) {

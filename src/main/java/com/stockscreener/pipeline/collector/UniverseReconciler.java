@@ -51,12 +51,15 @@ public class UniverseReconciler {
     /**
      * 한 번에 제외할 수 있는 최대 비율. 이를 넘으면 소스가 부분 목록을 줬다고 보고 거부한다.
      *
+     * <p><b>package-private인 것이 계약이다</b> — {@link UniverseLedgerRestorer}가 같은 상수를
+     * 읽는다(ADR-0135). 사본을 만들면 한쪽만 움직여도 아무도 모른다.
+     *
      * <p>IMPORTANT — 이 안전장치가 없으면 소스의 파싱 실패 한 번이 유니버스를 통째로 비우고,
      * 그 결과는 "스크리닝에 아무 종목도 나오지 않는다"로 나타난다. 원인을 유니버스에서
      * 찾기까지 시간이 걸린다. 정기 리밸런싱의 실제 교체 규모는 코스피200 기준 연 2회 각
      * 10종목 안팎이므로 30%는 충분히 여유 있는 임계다.
      */
-    private static final double MAX_REMOVAL_RATIO = 0.3;
+    static final double MAX_REMOVAL_RATIO = 0.3;
 
     /**
      * 비율 검사를 적용하기 시작하는 최소 제외 건수.
@@ -66,7 +69,7 @@ public class UniverseReconciler {
      * 이 하한이 실제 운영에서 검사를 무력화하지 않는다. 반대로 하한이 없으면 테스트와
      * 초기 구축 단계에서 정상적인 변경이 거부된다.
      */
-    private static final int MIN_REMOVALS_FOR_RATIO_CHECK = 5;
+    static final int MIN_REMOVALS_FOR_RATIO_CHECK = 5;
 
     private final JdbcTemplate jdbcTemplate;
 
