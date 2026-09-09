@@ -89,12 +89,19 @@ ADR-0128은 계산을 바꾸고 값을 다시 썼지만 **새 규칙이 못 내�
 production 변경이 안 걸리면 그 시험이 그대로 붉는다.
 
 ```premise 저장 지표에 어느 시점 규칙으로도 재현되지 않는 행이 남아 있는가
-psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE m.effective_to IS NULL AND u.is_active AND u.code = 'US_TOP1000'), d AS (SELECT trade_date, row_number() OVER (ORDER BY trade_date) rn FROM indicator_trade_date WHERE market_code = 'US'), edge AS (SELECT max(trade_date) FILTER (WHERE rn = 74) prev, max(trade_date) FILTER (WHERE rn = 75) cur FROM d), a AS (SELECT indicator_code, count(*) n FROM indicator_value, edge WHERE trade_date = edge.prev AND stock_id IN (SELECT stock_id FROM act) GROUP BY 1), b AS (SELECT indicator_code, count(*) n FROM indicator_value, edge WHERE trade_date = edge.cur AND stock_id IN (SELECT stock_id FROM act) GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM b) = 0 THEN '잴 것이 없었다 — 그 거래일에 US 지표가 한 행도 없다' WHEN (SELECT count(*) FROM edge WHERE prev IS NULL OR cur IS NULL) > 0 THEN '잴 것이 없었다 — US 지표 달력이 75거래일에 못 미친다' WHEN (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0)) FROM b LEFT JOIN a USING (indicator_code)) = 0 THEN 'OK 옛 보존 창 경계에서 코드별 계단이 없다(' || (SELECT count(*) FROM b) || '코드 검사)' ELSE (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0))::text FROM b LEFT JOIN a USING (indicator_code)) || '칸이 경계 뒤쪽에만 있다 — 옛 판의 잔재가 안 걷혔다. 보존 창을 한 판 다시 돌린다' END"
+psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE m.effective_to IS NULL AND u.is_active AND u.code = 'US_TOP1000'), d AS (SELECT trade_date, row_number() OVER (ORDER BY trade_date) rn FROM indicator_trade_date WHERE market_code = 'US'), edge AS (SELECT max(trade_date) FILTER (WHERE rn = 74) prev, max(trade_date) FILTER (WHERE rn = 75) cur FROM d), a AS (SELECT indicator_code, count(*) n FROM indicator_value, edge WHERE trade_date = edge.prev AND stock_id IN (SELECT stock_id FROM act) GROUP BY 1), b AS (SELECT indicator_code, count(*) n FROM indicator_value, edge WHERE trade_date = edge.cur AND stock_id IN (SELECT stock_id FROM act) GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM b) = 0 THEN '잴 것이 없었다 — 그 거래일에 US 지표가 한 행도 없다' WHEN (SELECT count(*) FROM edge WHERE prev IS NULL OR cur IS NULL) > 0 THEN '잴 것이 없었다 — US 지표 달력이 75거래일에 못 미친다' WHEN (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0)) FROM b LEFT JOIN a USING (indicator_code)) <= 200 THEN 'OK 옛 보존 창 경계의 계단이 ' || (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0))::text FROM b LEFT JOIN a USING (indicator_code)) || '칸이다(' || (SELECT count(*) FROM b) || '코드 검사 · 기준선 43)' ELSE (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0))::text FROM b LEFT JOIN a USING (indicator_code)) || '칸이 경계 뒤쪽에만 있다 — 옛 판의 잔재가 안 걷혔다. 보존 창을 한 판 다시 돌린다' END"
 ```
 
 **이 전제가 재는 것은 「값이 맞는가」가 아니라 「경계에 계단이 있는가」다.** 계단은 옛 창의
 경계에서만 생기므로, 창을 다시 넓히면 그 경계도 함께 움직인다 — `rn = 74/75`가 그 뜻이고
 **보존 창 길이를 바꾸면 이 전제의 수를 함께 고친다.**
+
+**문턱을 0이 아니라 200으로 둔 근거는 잔여가 정상 동작이라는 것이다.** 걷기 전 **2,515칸**이던
+것이 걷은 뒤 **43칸**인데, 그 43은 **그날 모집단이 1종목 늘어서** 생긴다 — `ADJ_CLOSE`와
+`TRADING_DAYS_750`이 각각 +1이고(그 종목의 첫 봉이 그날이다), 업종 집계가 `MIN_PEERS`를
+넘으며 `PER_SECTOR_*` +5 · `OPERATING_MARGIN_SECTOR_*` +3으로 번진다. **0으로 두면 이 전제가
+매 세션 거짓 발견을 낸다.** 여유를 4배 넘게 둔 것은 그 잔여가 **모집단이 늘어나는 날 커지기**
+때문이고, 커지는 방향이 그것 하나라 상한이 폭주하지 않는다.
 
 ## 버린 대안
 
@@ -135,6 +142,39 @@ psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM univ
 
 **잔재가 실제로 사라졌다**: `WAT` 2025-12-24가 걷기 전 「`KNOWN_ON` 1 · `LATEST`만 0 ·
 어느 쪽도 아님 **4**」에서 걷은 뒤 「`KNOWN_ON` 1 · 나머지 **0**」이 됐다.
+
+### 적용 실측 — 전 종목 판 (2026-09-09 15:16~15:39 · `--as-of=--from=2026-09-08`)
+
+**22분 15초 · 1,350종목 · 성공 1,350 · 실패 0 · `written_row_count` 0**(값이 바뀐 행은 없다 —
+걷기만 돌았다는 뜻이다).
+
+| 축 | 값 |
+|---|---|
+| 걷기가 걸린 종목 | **796** / 1,350 |
+| 러너가 신고한 삭제 | **184,977행** |
+| 표에서 실제로 줄어든 행 | **285,498행**(42,299,315 → 42,013,817) |
+| 시장별 | US **−207,142** · KOSPI **−41,529** · KOSDAQ **−36,827** |
+| 경계 계단 | **2,515 → 43칸**(−98.3%) |
+
+**신고와 실제의 차 100,521행이 파생 고아 정리다** — 3종목 대조군과 같은 성질이고,
+`DerivedIndicatorCleanup`은 러너의 로그에 안 잡힌다.
+
+**국내 두 시장이 미국의 5분의 1인 것이 이 결함의 모양을 말한다** — 국내 봉은
+`listed_shares`가 차 있어 재무 폴백을 안 타므로(ADR-0097) 잔재가 재무 유래 코드에 몰린다.
+
+**멱등**: 가장 많이 걷힌 셋(`HRB` 3,408 · `IFF` 2,361 · `QXO` 1,811)을 같은 인자로 다시 돌려
+**걷기 로그 0줄 · 총 행 수 그대로**(42,013,817).
+
+**이 결정이 실제로 닫은 것은 통과 집합이다**(`StoredAsOfParityProbeTest` 전후).
+
+| | 걷기 전 | 걷은 뒤 |
+|---|---|---|
+| 통과 집합이 갈린 조합 | **8 / 12** | **0 / 12** |
+| 「저장에만」 종목 | 날짜당 1~2 | **0** |
+| 점수만 갈린 조합 | 4 | **4**(그대로) |
+
+**점수 축은 이 결정이 안 닫는다** — 포함 여부는 필수 게이트가 정하므로 배점 열이 틀려도 집합은
+안 움직인다. 남은 4건이 위 §남은 것의 값 수준 look-ahead이고 **`MARKET_CAP`이 배점에 실린다.**
 
 ### 남은 것 — 이 결정이 안 닫는 부류 하나 (2026-09-09)
 
