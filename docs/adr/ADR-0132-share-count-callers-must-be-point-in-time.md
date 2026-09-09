@@ -122,6 +122,9 @@ rg -l "FinancialMath.sharesOf" src/main/java/com/stockscreener/indicator/calcula
   `PER_SECTOR_PCTL`(0.50847458 대 0.50000000 · 0.50000000 대 0.60000000)로 **하네스가
   `PERCENT_RANK`를 손으로 재구현한 자리**다(ADR-0131 §결과).
 
+**MUST: base 판 뒤에 파생층을 창 전체로 다시 돌린다** — 백분위는 돌린 날짜에만 다시 나므로
+base만 돌리면 나머지 날짜가 옛 모집단으로 매겨진 채 남는다(ADR-0130 §규칙 · 실측 5분 17초).
+
 **되돌리려면** 네 계산기의 `calculate`를 `computeSegment` 본체로 되돌린다.
 **되돌리는 순간 과거 일자 값이 다시 미래의 판으로 계산되고 아무 에러도 안 난다** —
 위 두 탐침만이 그것을 잡는다.
