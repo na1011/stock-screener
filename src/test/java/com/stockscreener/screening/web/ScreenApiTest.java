@@ -179,7 +179,7 @@ class ScreenApiTest {
         // 다시 잴 때 이 시험이 붉어야 한다 — 정본은 ADR-0109(보존 창 전체 분위)이고,
         // KRW 쪽은 check-doc-staleness.sh의 사전등록 표가 따로 잡는다.
         assertThat(byCurrency.get("USD").get("value").decimalValue())
-                .isEqualByComparingTo("6500000000");
+                .isEqualByComparingTo("7160000000");
 
         // value는 **대상을 아직 모를 때의 표시 기본값**이고 통화 코드 오름차순으로 정해진다.
         // MUST: 「기준 통화」로 읽지 않는다 — MarketLiteral이 Map.copyOf로 순서를 지우므로

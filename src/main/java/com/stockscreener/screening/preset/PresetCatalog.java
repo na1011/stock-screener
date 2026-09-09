@@ -345,14 +345,14 @@ public class PresetCatalog {
                 ConditionGroup.and(List.of(
                         // ── 필수 게이트 ──
                         // 3.1 — 원문 15는 19종목(5%)이라 국내 분포로 재보정했다. 53종목(15%).
-                        requiredIn(RoeMin3yCalculator.CODE, ComparisonOperator.GTE, "10", "22.6"),
+                        requiredIn(RoeMin3yCalculator.CODE, ComparisonOperator.GTE, "10", "23.0"),
                         // 0.3·3.2 — ROE와 반드시 함께 건다. §8이 분리를 금지한 자리다. 197/346(57%).
-                        requiredIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100", "183"),
+                        requiredIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100", "181"),
                         // 0.2·1.2·5.1 — AAII 원문의 7개 회계연도다. 159/347(46%).
                         required(ProfitStreakYearsCalculator.CODE, ComparisonOperator.GTE, "7"),
                         // 0.1 충분한 규모. 274/347(79%).
                         requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE,
-                                "1000000000000", "6500000000"),
+                                "1000000000000", "7160000000"),
                         // 2019 주주서한의 첫 번째 기준 —「영업에 투입된 순유형자본 대비 좋은
                         // 수익률」. 60/300(20%)이 통과하고 이 게이트가 18 → 15로 자른다.
                         //
@@ -365,7 +365,7 @@ public class PresetCatalog {
                         // 않는다 — 15를 그대로 옮기면 통과가 8.7%로 조이고 겹침 배수가 6.3이
                         // 되어 ADR-0068의 펜스를 깬다. 10은 국내 분포에서 다시 잰 값이고,
                         // ROE_MIN_3Y가 원문 15를 10으로 내린 것과 같은 종류의 재보정이다.
-                        requiredIn(RoicMin3yCalculator.CODE, ComparisonOperator.GTE, "10", "15.8"),
+                        requiredIn(RoicMin3yCalculator.CODE, ComparisonOperator.GTE, "10", "17.1"),
                         // §7 유동성 — 문헌은 「Average Volume(30D) · 하한 설정 · 거래 불가
                         // 종목 유입 차단」이다. 조건과 목적은 문헌이 주고 수는 구현에 맡긴다.
                         //
@@ -408,7 +408,7 @@ public class PresetCatalog {
                         weighted(GrossMarginCalculator.CODE, ComparisonOperator.GTE, "40", "2"),
                         // 3.4 「일관성」. 나쁜 해에도 얼마나 남았는가. 58/347(17%).
                         weightedIn(OperatingMarginMin5yCalculator.CODE,
-                                ComparisonOperator.GTE, "8", "17.8", "2"),
+                                ComparisonOperator.GTE, "8", "17.9", "2"),
 
                         // ── 점수: 자본배분과 부채 여유 ──
                         // 2.1 자본배분. 소각만 잡고 자사주 취득은 못 잡는다. 201/347(58%).
@@ -428,7 +428,7 @@ public class PresetCatalog {
                         // PROFIT_RETIREMENT_3Y > 0이 21.87%였고 SHARES_GROWTH_3Y <= -0.760이
                         // 21.87% · USD -7.86이 21.85%다(2026-09-01).
                         weightedIn(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE,
-                                "-0.760", "-7.86", "1"),
+                                "-0.760", "-8.25", "1"),
                         // 0.3·3.2 원문의 D/E 0.5. 게이트(100)보다 조인 값이다. 131/347(38%).
                         weighted(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "50", "1"))));
     }
@@ -558,7 +558,7 @@ public class PresetCatalog {
                         weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
                         // 부채로 부풀린 수익성 배제. 부채비율은 낮은 쪽이 좋으므로 <=
                         weightedIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE,
-                                "150", "276", "1"),
+                                "150", "275", "1"),
                         // 추세가 완전히 무너지지는 않았을 것 — 200일선 10% 아래까지 허용
                         IndicatorCondition.of(
                                 AdjCloseCalculator.CODE, ComparisonOperator.GTE,
@@ -689,7 +689,7 @@ public class PresetCatalog {
                         requiredBetween(EpsCagr5yCalculator.CODE, "20", "50"),
                         // 2.3 "중소형"의 유니버스 내 치환. 시총 중앙값이다.
                         requiredIn(MarketCapCalculator.CODE, ComparisonOperator.LTE,
-                                "2616000000000", "15800000000"),
+                                "2616000000000", "17300000000"),
                         // §6 유동성. 버핏과 같은 임계를 쓴다 — 회전율은 규모에 중립이라
                         // 「대형 지향이냐」로 가를 이유가 없다. 크기 축은 위 MARKET_CAP이 든다.
                         required(TurnoverRatio60Calculator.CODE,
@@ -708,7 +708,7 @@ public class PresetCatalog {
                         weighted(PerCalculator.CODE, ComparisonOperator.LTE, "20", "2"),
                         weighted(RevenueGrowthCalculator.CODE, ComparisonOperator.GT, "15", "2"),
                         weightedBetween(EpsGrowthTtmYoyCalculator.CODE, "10", "30", "2"),
-                        weightedIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "80", "152", "2"),
+                        weightedIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "80", "150", "2"),
                         // 3.9 AAII 원문이 요구한 업종 상대 비교다. 1.0이 업종 중앙값이다.
                         weighted(sectorRel(DebtRatioCalculator.CODE),
                                 ComparisonOperator.LTE, "1.0", "1"),
@@ -718,7 +718,7 @@ public class PresetCatalog {
                                 ConditionOperand.IndicatorRef.of(PerMedian5yCalculator.CODE))
                                 .withWeight(new BigDecimal("1")),
                         weightedIn(OperatingMarginCalculator.CODE, ComparisonOperator.GT,
-                                "10", "16.3", "1"),
+                                "10", "18.2", "1"),
                         // 3.13 린치는 이익보다 현금흐름을 신뢰했다. 발생액이 이 자리를 지킨다고
                         // 적어 두었으나 ρ(ACCRUAL_RATIO, FCF_MARGIN) = −0.184로 지키지 않는다 —
                         // 둘 다 둔다. 원문 1차 조건은 FCF 수익률이라 약하게 옮긴 것이다.
@@ -744,7 +744,7 @@ public class PresetCatalog {
                         // PROFIT_RETIREMENT_3Y > 0이 21.87%였고 SHARES_GROWTH_3Y <= -0.760이
                         // 21.87% · USD -7.86이 21.85%다(2026-09-01).
                         weightedIn(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE,
-                                "-0.760", "-7.86", "1"))));
+                                "-0.760", "-8.25", "1"))));
     }
 
     // ── 3. 린치 대형우량주 ────────────────────────────────────────────────
@@ -847,7 +847,7 @@ public class PresetCatalog {
                         // ── 필수 게이트 ──
                         // "대형"의 경계. 유니버스 상위 25%다.
                         requiredIn(MarketCapCalculator.CODE, ComparisonOperator.GTE,
-                                "6773000000000", "41800000000"),
+                                "6773000000000", "44400000000"),
                         // ★ 유형 분류. 2.2의 밴드를 5년 CAGR로 옮겼다(ADR-0070). 53 → 10종목(2026-08-20).
                         requiredBetween(EpsCagr5yCalculator.CODE, "10", "20"),
                         // ★ 질. 「나쁜 해에도 영업흑자인가」 — 대형우량주가 약속하는 성질이다.
@@ -878,7 +878,7 @@ public class PresetCatalog {
                         weighted(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
                         // 4.5의 다른 반쪽. 위 고속성장주와 같은 자리다.
                         weightedIn(SharesGrowth3yCalculator.CODE, ComparisonOperator.LTE,
-                                "-0.760", "-7.86", "1"))));
+                                "-0.760", "-8.25", "1"))));
     }
     // ── 4. 추세 상승 ──────────────────────────────────────────────────────
 
@@ -1001,7 +1001,7 @@ public class PresetCatalog {
                         literal(Adx14Calculator.CODE, ComparisonOperator.GTE, "20"),
                         // 거래량 확장. 원문 2~3배를 국내 분포로 옮긴 값이다.
                         literalIn(VolumeRatio20Calculator.CODE, ComparisonOperator.GTE,
-                                "1.5", "1.38"),
+                                "1.5", "1.37"),
                         // 거래량이 매수 쪽에 실렸는가
                         literal(Cmf21Calculator.CODE, ComparisonOperator.GT, "0"),
                         // 지수 대비 상대강도
@@ -1009,7 +1009,7 @@ public class PresetCatalog {
                                 ComparisonOperator.GTE, "0.70"),
                         // 신고가 근접. 값은 항상 0 이하다.
                         literalIn(PctFrom52wHighCalculator.CODE, ComparisonOperator.GTE,
-                                "-10", "-4.58"))));
+                                "-10", "-5.01"))));
     }
 
     // ── 6. 상승추세 눌림목 ────────────────────────────────────────────────
@@ -1064,7 +1064,7 @@ public class PresetCatalog {
                                 ConditionOperand.IndicatorRef.of(Sma60Calculator.CODE, "0.92")),
                         // 분산 국면 배제
                         literalIn(Cmf21Calculator.CODE, ComparisonOperator.GTE,
-                                "-0.10", "-0.0503"))));
+                                "-0.10", "-0.0588"))));
     }
 
     // ── 7. 저변동 우량 ────────────────────────────────────────────────────
@@ -1103,12 +1103,12 @@ public class PresetCatalog {
                 null,
                 ConditionGroup.and(List.of(
                         // 절대 변동폭 하위 약 30%
-                        weightedIn(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "5.9", "3.09", "3"),
+                        weightedIn(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "5.9", "3.29", "3"),
                         // 시장 동조 하위 약 30%. 국내 중앙값이 0.75라 0.9로는 축이 되지 않는다.
-                        weightedIn(Beta104wCalculator.CODE, ComparisonOperator.LTE, "0.40", "0.436", "3"),
+                        weightedIn(Beta104wCalculator.CODE, ComparisonOperator.LTE, "0.40", "0.428", "3"),
                         weighted(ProfitableQuarters4Calculator.CODE,
                                 ComparisonOperator.GTE, "4", "2"),
-                        weightedIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100", "183", "2"),
+                        weightedIn(DebtRatioCalculator.CODE, ComparisonOperator.LTE, "100", "181", "2"),
                         weighted(AccrualRatioCalculator.CODE, ComparisonOperator.LTE, "0", "1"),
                         weighted(RoaCalculator.CODE, ComparisonOperator.GTE, "0", "1"),
                         weighted(OperatingCashFlow5ySumCalculator.CODE,
