@@ -154,9 +154,13 @@ class StoredAsOfParityProbeTest {
                 onlyRecomputed.size(), onlyStored.size(), scoreGaps);
         Set<Long> divergent = new TreeSet<>(onlyRecomputed);
         divergent.addAll(onlyStored);
+        // 점수만 갈린 종목도 찍는다. 집합이 맞아도 배점 열이 틀리면 **순위가 달라지고**,
+        // 그 원인은 집합 축과 다를 수 있다 — 실제로 달랐다.
+        divergent.addAll(scoreGapIds(recomputed.included(), stored));
         for (Long stockId : divergent) {
             reportValueGaps(stockId, asOf, resolved, recomputed,
-                    onlyStored.contains(stockId) ? "저장에만" : "재계산에만");
+                    onlyStored.contains(stockId) ? "저장에만"
+                            : onlyRecomputed.contains(stockId) ? "재계산에만" : "점수만 갈림");
         }
         return onlyRecomputed.isEmpty() && onlyStored.isEmpty() && scoreGaps == 0;
     }
@@ -207,6 +211,22 @@ class StoredAsOfParityProbeTest {
      * 배점 열이 통째로 틀려도 집합은 안 움직인다({@code AsOfRecomputeTest.assertScoresMatch}가
      * 같은 근거로 점수를 본다).
      */
+    /** 점수가 갈린 종목 id. {@link #countScoreGaps}와 같은 판정이고 목록을 낸다. */
+    private static Set<Long> scoreGapIds(List<ScreeningResult> recomputed,
+                                         List<ScreeningResult> stored) {
+        Map<Long, BigDecimal> storedScores = stored.stream().collect(
+                java.util.stream.Collectors.toMap(ScreeningResult::stockId,
+                        ScreeningResult::score));
+        Set<Long> out = new TreeSet<>();
+        for (ScreeningResult result : recomputed) {
+            BigDecimal expected = storedScores.get(result.stockId());
+            if (expected == null || result.score().compareTo(expected) != 0) {
+                out.add(result.stockId());
+            }
+        }
+        return out;
+    }
+
     private static int countScoreGaps(List<ScreeningResult> recomputed,
                                       List<ScreeningResult> stored) {
         Map<Long, BigDecimal> storedScores = stored.stream().collect(

@@ -101,8 +101,20 @@ public class SharesGrowth3yCalculator implements IndicatorCalculator {
         return DataRequirement.priceBars(LOOKBACK + 1);
     }
 
+    /**
+     * <p><b>{@link FinancialMath#bySegment}를 거친다</b>(ADR-0128 §규칙 · ADR-0132). 이 계산기는
+     * 봉 루프를 스스로 돌지만 재무를 {@code context}에서 <b>한 번</b> 읽으므로, 감싸지 않으면
+     * 그 컨텍스트가 <b>오늘 기준으로 접힌 최신 개정본</b>을 들고 있어 과거 봉이 <b>미래의
+     * 판(revision)</b>을 쓴다. {@code sharesOf}의 {@code publishedIndexOn}은 <b>기(期)</b>만
+     * 봉 시점으로 고르고 판은 못 고른다 — 실측으로 저장된 {@code MARKET_CAP}이
+     * {@code LATEST}와 정확히 일치했고 최대 <b>19.4B 대 32.0B</b>였다.
+     */
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
+        return FinancialMath.bySegment(context, this::computeSegment);
+    }
+
+    private List<IndicatorPoint> computeSegment(IndicatorContext context) {
         List<PriceBar> bars = context.priceBars();
         if (bars.size() <= LOOKBACK) {
             return List.of();
