@@ -215,6 +215,54 @@ class ScreeningApiContractTest {
         assertThat(response.get("asOfRequested").isNull()).isTrue();
     }
 
+    /**
+     * <b>하한을 정하는 것이 둘이다</b>(ADR-0135) — 지표 보존 창과 <b>편입 이력의 하한</b>.
+     * 편입 술어를 시점화하고 복원을 안 돌리면 보존 창의 <b>90~98%</b>가 <b>조용한 0건</b>이 되는데
+     * (실측: 255일 중 국내 231 · 미국 249), <b>200에 0행은 「조건이 빡빡하다」로 읽혀</b> 사용자가
+     * 조건을 고치러 간다. 그 상태를 400으로 만드는 것이 이 인터록의 쓸모다.
+     *
+     * <p><b>문구가 어느 하한에 걸렸는지 말해야 한다.</b> 편입 하한에 걸린 경우 <b>지표는 있으므로</b>
+     * "지표는 최근 구간만 보존한다"는 거짓말이 된다.
+     */
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("IMPORTANT — 편입 하한 이전은 조용한 0건이 아니라 400이고, 지표 탓으로 말하지 않는다")
+    void rejectsDatesBeforeTheMembershipFloor() throws Exception {
+        // 지표는 그날 있는데 편입 이력이 그보다 늦게 시작한다 — 인터록이 없으면 200에 0행이다.
+        LocalDate before = AS_OF.minusDays(3);
+        jdbcTemplate.update("""
+                INSERT INTO indicator_trade_date (market_code, trade_date)
+                VALUES ('TESTMKT', ?) ON CONFLICT DO NOTHING
+                """, before);
+        // 픽스처의 편입은 2020년부터라 하한이 그보다 이르다. 하한을 기준일 뒤로 옮겨
+        // 「지표는 있는데 원장이 못 답하는」 상태를 만든다.
+        jdbcTemplate.update("""
+                UPDATE universe_membership SET effective_from = ? WHERE universe_code = ?
+                """, AS_OF, CONTRACT_UNIVERSE);
+
+        String body = mockMvc.perform(post("/api/screening").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"universeCode":"%s",
+                                 "conditions": {"conditions":[
+                                   {"indicatorCode":"PER","operator":"LT","operand":{"type":"LITERAL","value":10}}]},
+                                 "asOf":"%s"}
+                                """.formatted(CONTRACT_UNIVERSE, before)))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode problem = objectMapper.readTree(body);
+        assertThat(problem.get("type").asText()).endsWith("indicator-history-unavailable");
+        assertThat(problem.get("boundBy").asText())
+                .as("어느 하한에 걸렸는지를 프로그램이 읽을 수 있어야 한다")
+                .isEqualTo("MEMBERSHIP");
+        assertThat(problem.get("detail").asText())
+                .as("편입 하한에 걸렸는데 「지표가 보존 밖」이라고 말하면 읽는 쪽이 틀린 데를 고치러 간다")
+                .contains("편입 이력")
+                .doesNotContain("지표는 최근 구간만 보존한다");
+        assertThat(problem.has("retentionFrom")).isTrue();
+    }
+
     @Test
     @WithMockUser(username = SUB)
     @DisplayName("IMPORTANT — 보존 구간 밖은 빈 결과가 아니라 400이고 조회 가능 구간을 알려준다")

@@ -221,10 +221,6 @@ psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM univ
 **행 수는 거래일이 아니라 지표 종수에 비례해 자란다**(보존 창은 180거래일로 닫혀 있다). 전수
 집계는 그래서 코드가 늘 때마다 여유를 잃지만, 탐침은 거래일 수에만 걸려 **그 축이 없다.**
 
-```premise 시점 유니버스가 DB에 여전히 없다 — 생존편향 판정의 근거
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — universe_membership이 비었다' WHEN min(effective_from) = DATE '2026-08-05' THEN 'OK 유니버스 이력이 여전히 2026-08-05부터다 — 그 이전 시점 유니버스는 DB에 없다(구간 ' || count(DISTINCT effective_from) || '개)' ELSE '유니버스 이력의 시작이 ' || min(effective_from) || '로 바뀌었다 — 과거 편입을 넣는 경로가 생겼다면 생존편향 판정을 다시 한다' END FROM universe_membership"
-```
-
 ```premise 정정에 밀려난 옛 판이 아직 비어 있다 — 결손을 값으로 판정하는 근거
 psql -d stock_screener -At -c "WITH sup AS (SELECT f.*, lead(f.published_at) OVER (PARTITION BY f.stock_id, f.fiscal_year, f.fiscal_period ORDER BY f.revision_no) sa FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE s.market_code IN ('KOSPI','KOSDAQ') AND f.fiscal_period = 'FY') SELECT CASE WHEN count(*) FILTER (WHERE sa IS NOT NULL) = 0 THEN 'OK 정정에 밀려난 FY 판이 없다 — as-of 경로가 옛 판을 고를 일이 없다' WHEN count(*) FILTER (WHERE sa IS NOT NULL AND (operating_cash_flow IS NULL OR cost_of_sales IS NULL)) = 0 THEN '옛 판이 전부 채워졌다 — 옛 판을 채우는 경로가 생겼다면 수익률 축의 제외 규칙을 다시 판단한다' ELSE 'OK 옛 판 FY ' || count(*) FILTER (WHERE sa IS NOT NULL) || '행 중 영업활동현금흐름 결손 ' || count(*) FILTER (WHERE sa IS NOT NULL AND operating_cash_flow IS NULL) || ' · 매출원가 결손 ' || count(*) FILTER (WHERE sa IS NOT NULL AND cost_of_sales IS NULL) || ' — 그 종목·기간에서 FCF·매출총이익률·발생액이 판정불가다' END FROM sup"
 ```
@@ -279,6 +275,24 @@ P16·P16-B가 답한 것은 「버핏처럼 골랐는가」다. 「그렇게 고
 3.5%p보다 작지만, 임계 근처의 작은 양(+)의 효과는 여전히 가리지 못한다.
 **방법론 자체가 틀렸을 가능성도 이 측정이 답하지 못한다.**
 
+#### 생존 편향을 값으로 재게 됐다 — 다만 창이 다르다 (2026-09-09)
+
+**MUST: 위 「6개월당 0.57~2.47%p」와 아래 수를 섞지 않는다. 창이 다르다.** 위는 **백테스트 창
+(2022-04~)**의 하한 추정이고, 아래는 **보존 창(255거래일)**의 실측이다. 아래가 위를 덮지 않는다 —
+그 창에는 여전히 편입 이력이 없다.
+
+ADR-0135가 보존 창의 편입을 복원해, 「오늘 명부로 과거를 판정하면 얼마나 틀리는가」가
+**하한이 아니라 값**으로 나온다. 오늘 명부 중 그날에도 편입이던 비율:
+
+| 유니버스 | 창 앞단(약 1년 전) | 평균 | 창 전체 합집합 / 오늘 명부 |
+|---|---|---|---|
+| `KOSPI_TOP200` | **91.0%** | 94.6% | 237 / 200 |
+| `KOSDAQ_TOP150` | **71.3%** | 82.9% | 247 / 150 |
+
+**거리에 따라 커진다.** ADR-0129가 33일 뒤로 재서 코스닥 91.3%를 냈는데, 1년 창에서는
+**71.3%**다 — 즉 그 시점의 후보 150개 중 **43개가 그날 편입이 아니었고** 진짜 편입 43개가
+빠져 있었다. **MUST NOT: 33일 값을 1년 창의 근거로 인용하지 않는다.**
+
 ### 이 판정력 수의 전제가 미국을 켜면서 반쯤 바뀌었다 (2026-09-01)
 
 **위 두 수는 국내 350종목 위에서 쟀다.** 미국을 켠 뒤(ADR-0107) 그 입력이 갈렸는데
@@ -315,15 +329,25 @@ ADR-0044의 *"손잡이를 푸는 것은 사용자 결정이다"*와 ADR-0061의
 
 ### 무엇이 재현되지 않는가
 
-**시점 유니버스는 DB로도 소스로도 복원되지 않는다. 이유가 셋이고 성질이 다르다.**
-(i) `UniverseReconciler`가 실행일을 `effective_from`으로 찍고 현재 편입분과의 차집합만 계산해
-이력이 **2026-08-05부터**다. (ii) `MarketCapUniverseAdapter`는 과거 기준일을 재현하지만 편입
-판정에 히스테리시스가 있어(`RETENTION_BAND = 1.1`) **경로 의존적**이다 — as-of 1콜로는 그날의
-실제 멤버십이 나오지 않는다. (iii) 복원해도 데이터가 없다 — `stock`·`price_daily` 모두 정확히
-356종목이고, **편출 6종목의 마지막 봉이 전부 `effective_to` 당일**이다(`StockRegistrar`가
-`effective_to IS NULL`로 대상을 잡으므로 편출 즉시 수집이 멈춘다).
+**보존 창 안에서는 복원됐다(2026-09-09 · ADR-0135). 창 밖은 여전히 아니다.**
 
-→ 탐침으로 **하한만** 잰다. **「복원했다」로 적지 않는다.**
+셋 중 (i)이 닫혔고, (ii)는 **처음부터 틀린 서술이었으며**, (iii)은 그대로 산다.
+
+- **(i) 이력이 짧다 — 닫혔다.** 보존 창(255거래일)의 편입을 소스에서 복원해
+  `origin = 'RESTORED'` 평면에 넣었다. 이력의 하한이 KR **2025-08-22** · US **2025-09-03**이다.
+- **(ii) 히스테리시스가 경로 의존이다 — 거짓이었다.** `MarketCapUniverseAdapter.select()`는
+  **순수 상위 N**을 반환하고 `RETENTION_BAND = 1.1`은 `log.debug` 한 줄에만 쓰인다
+  (도입 커밋 이후 변경 0건 · **낡은 게 아니라 처음부터 그랬다**). 실제 경로 의존은 다른 자리다 —
+  실행일 스탬프 · `MAX_REMOVAL_RATIO` 거부 · 같은 날 재실행 DELETE 갈래 · **미국
+  `fetchActiveAssets()`가 오늘 목록**이라는 것. 앞의 셋은 격자를 원장의 격자에 맞춰 재현했고,
+  넷째는 재현되지 않는다(폐지 종목 **22**가 그 크기다).
+- **(iii) 복원해도 데이터가 없다 — 그대로 산다.** `StockRegistrar`의 대상 술어 다섯과
+  `IndicatorBackfillJob`의 둘이 전부 `effective_to IS NULL`이라 **복원 구간에 어느 잡도 안 닿는다.**
+  복원이 만든 종목이 **109**(KOSPI 31 · KOSDAQ 78 · 미국 0)이고, 그것을 채우는 것은 별도 결정이다.
+
+**이 창 안에서는 「복원했다」로 적을 수 있다.** 관측 구간 재생 대조에서 재현율이
+KR 0.9950/0.9844 · US 0.9873이고 사전등록한 합격선(0.95 · 0.90)을 넘었다(ADR-0135 §결과).
+**창 밖(2022-04~)은 그대로 복원되지 않는다** — 이 하네스의 앵커 여덟 중 **일곱이 거기 있다.**
 
 **수익률의 정본에도 구멍이 있다.** 2020 이후 원장 사건 91건 중 `UNSUPPORTED` 7 · `REJECTED` 3.
 `UNSUPPORTED` 7종목은 인적분할·감자처럼 비율을 낼 수 없어 원장이 포기한 것이라 `adj_close`가

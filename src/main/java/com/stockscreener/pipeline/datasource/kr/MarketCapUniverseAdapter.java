@@ -68,12 +68,20 @@ public class MarketCapUniverseAdapter implements UniverseDataSource {
     private static final int MAX_LOOKBACK_DAYS = 10;
 
     /**
-     * 편입 유지 여유 배수(히스테리시스).
+     * 경계 구간을 로그로 남기는 폭. <b>편입 판정에 안 쓰인다.</b>
      *
-     * <p>신규 편입은 상위 N 이내여야 하지만, 이미 편입된 종목은 N×1.1 이내면 유지한다.
-     * 경계에서 순위가 진동하는 종목이 매주 들락거리는 것을 막는다 — 실측상 200위와 201위의
-     * 시총 차이가 0.2%에 불과해, 단순 컷오프로는 2개월간 7종목이 교체되지만 이 여유를 두면
-     * 2종목으로 준다. 편입·제외가 잦으면 백분위 모집단이 흔들리고 이력도 지저분해진다.
+     * <p><b>MUST NOT: 이것을 히스테리시스로 읽지 않는다.</b> {@link #select}는 <b>순수 상위 N</b>을
+     * 반환하고 이 값은 <b>{@code log.debug} 한 줄</b>에만 쓰인다 — 「이미 편입된 종목은 N×1.1
+     * 이내면 유지한다」는 <b>코드가 한 적이 없는 일</b>이고, 도입 커밋 이후 이 자리는 한 번도
+     * 안 바뀌었다.
+     *
+     * <p>그 오독이 <b>문서 일곱 곳에 퍼져</b> 「과거 유니버스는 경로 의존이라 as-of 1콜로 복원
+     * 안 된다」의 근거로 인용됐고, 그 위에서 복원이 **1년 넘게 막혀 있었다**(ADR-0135가 그것을
+     * 걷었다). 실제 경로 의존은 {@code UniverseReconciler}(실행일 스탬프 · 제외 비율 거부 ·
+     * 같은 날 DELETE 갈래)와 미국의 {@code fetchActiveAssets()}에 있다.
+     *
+     * <p>밴드를 <b>실제로</b> 걸고 싶으면 여기가 아니라 {@code UniverseReconciler}다 — 어댑터는
+     * 현재 편입 목록을 모르므로 유지 판정을 할 수 없다({@link #select}의 javadoc이 그 이유를 적는다).
      */
     private static final double RETENTION_BAND = 1.1;
 

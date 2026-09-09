@@ -152,18 +152,23 @@ public class UniverseRestoreJob {
      */
     private Set<Long> resolve(Target target, UniverseSnapshot snapshot, boolean apply,
                               Set<String> unresolved) {
-        if (apply) {
-            return new LinkedHashSet<>(
-                    stockRegistrar.resolveOrCreate(target.marketCode(), snapshot.tickers()));
-        }
+        // 있는 것부터 한 질의로 찾는다. resolveOrCreate는 티커마다 조회하므로 격자 하나에
+        // 천 번이 나가고 53점이면 오만 번이 된다 — 실측으로 격자점당 37초였다.
         Map<String, Long> found =
                 stockRegistrar.existingIdsByTicker(target.marketCode(), snapshot.tickers());
-        for (String ticker : snapshot.tickers()) {
-            if (!found.containsKey(ticker)) {
-                unresolved.add(ticker);
-            }
+        List<String> missing = snapshot.tickers().stream()
+                .filter(ticker -> !found.containsKey(ticker))
+                .toList();
+        if (!apply) {
+            unresolved.addAll(missing);
+            return new LinkedHashSet<>(found.values());
         }
-        return new LinkedHashSet<>(found.values());
+        // 쓰기 갈래에서만 없는 종목을 만든다. 대상이 없는 격자점에서는 아예 안 부른다.
+        Set<Long> ids = new LinkedHashSet<>(found.values());
+        if (!missing.isEmpty()) {
+            ids.addAll(stockRegistrar.resolveOrCreate(target.marketCode(), missing));
+        }
+        return ids;
     }
 
     /**
