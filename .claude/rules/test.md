@@ -17,6 +17,14 @@ paths:
 - **테스트는 로컬 PostgreSQL을 쓴다**(H2는 EAV가 의존하는 PG 기능을 못 쓴다). **Zonky는 재검토 불필요.** 격리는 `@Transactional` 롤백이 기본이고, 커밋을 요구하는 테스트만 `@AfterEach` 정리를 쓴다.
 - **테스트 DB와 운영 DB의 활성 유니버스가 정반대다.** 운영은 `KOSPI_TOP200`·`KOSDAQ_TOP150`이 활성이고 시드는 0건, 테스트 DB는 시드가 활성·전부 0건이다. 유니버스 테스트는 픽스처를 직접 심는다.
 - **`ADJ_CLOSE`는 봉 하나로 값이 나오는 첫 지표다. `DELETE FROM stock` 앞에 `indicator_value` 정리가 없으면 FK로 정리가 중단된다.** 그 결과로 **무관해 보이는 다른 테스트**가 깨진다. 앞 두 문장은 `.claude/rules/data-pipeline.md`와 일부러 같은 사본이다.
+- **MUST: `--tests` 좁힌 실행으로 「초록」을 판정하지 않는다 — 두 층이 원리적으로 안 걸린다.**
+  ① **`WireContractTest`**는 프론트 거울(`wire-contract.json`)을 보므로, 고친 클래스 이름으로
+  좁히면 안 돈다 — problem 속성 하나를 더한 변경이 실제로 그렇게 빠졌다. ② **`PipelineEndToEndTest`**는
+  픽스처가 잡·계산기·읽기 경로를 잇는 층이라, 그중 **한 층만** 이름으로 좁히면 픽스처가 만든
+  어긋남이 안 드러난다(편입을 `AS_OF`에 열어 두고 백분위를 `AS_OF-1`로 돌려 **시험이 스스로 0건을
+  만들었다**). **값의 의미를 바꾸는 변경 뒤에는 `./gradlew clean build`를 한 번 돌린다** —
+  좁힌 실행 열 번이 이 둘을 대신하지 못한다.
+
 - **MockMvc는 `with(csrf())`가 없으면 403이다.** CSRF 지연 로딩을 꺼둔 결과다(`.claude/rules/backend.md`).
 
 **증상이 설정 쪽이면 `.claude/rules/config.md`를 본다.** 커넥션 풀·`out-of-order`·Flyway 체크섬·`.env` 주입 금지가 거기 있다. 그 파일을 열면 자동으로 로드되지만, **진단은 대개 그 파일을 열기 전에 시작된다.**
