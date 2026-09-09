@@ -297,55 +297,61 @@ final class FinancialMath {
             // 고른 판이 주식수를 안 실었으면 그보다 앞선 판으로 내려간다. 그 시점에 알 수
             // 있었던 가장 최근 수가 답이지, 「그 판이 안 실었으니 없다」가 아니다.
             FinancialFigures asOf = quarters.get(i);
+            // MUST: 내려가면서 **공시일을 다시 본다**(ADR-0133). publishedIndexOn은 첫 자리만
+            // 고르고 이 루프는 **기말이 더 앞선** 판으로 가는데, 그런 판이 뒤 보고서의 비교열로
+            // 실려 **봉보다 늦게 공시**돼 있을 수 있다. 안 걸러내면 그 봉이 미래에 공시된
+            // 주식수를 쓴다 — 실측으로 LYFT·HOOD·TWLO·UHAL 넷이 그 자리였고, 봉이 공시일보다
+            // 최대 **9개월** 앞이었다.
+            if (bar != null && asOf.publishedAt() != null
+                    && asOf.publishedAt().isAfter(bar.tradeDate())) {
+                continue;
+            }
             BigDecimal fromFinancials = asOf.sharesOutstanding();
             if (fromFinancials == null || fromFinancials.signum() <= 0) {
                 continue;
             }
-            if (bar == null || asOf.periodEnd() == null) {
+            // MUST: 앵커는 **공시일**이다(ADR-0133). 이 수는 보고서 표지 기준이라 기말 이후
+            // 공시 전에 일어난 기업행위가 **이미 반영돼 있고**, 기말에서 배수를 걸면 그
+            // 구간이 한 번 더 곱해진다. 공시일이 없는 행에서만 기말로 물러선다.
+            LocalDate anchor = asOf.publishedAt() != null ? asOf.publishedAt() : asOf.periodEnd();
+            if (bar == null || anchor == null) {
                 // 보정할 두 시점 중 하나가 없다. 보정 없이 내는 것이 값을 안 내는 것보다
                 // 낫다 — 분할이 없는 구간에서는 배수가 1이라 같은 값이다.
                 return fromFinancials;
             }
-            return shiftToBar(context, fromFinancials, asOf.periodEnd(), bar.tradeDate());
+            return shiftToBar(context, fromFinancials, anchor, bar.tradeDate());
         }
         return null;
     }
 
     /**
-     * 보고 종료일의 주식수를 <b>그 봉 시점의 주식수</b>로 옮긴다.
+     * <b>공시일</b>의 주식수를 그 봉 시점의 주식수로 옮긴다(ADR-0133).
      *
-     * <p><b>양방향이지만 이제 한쪽이 거의 안 쓰인다.</b> {@link #sharesOf}가 봉마다 그 시점에
-     * 공시돼 있던 분기를 고르므로({@code published_at <= barDate}) 고른 판의 기말은 통상 봉보다
-     * <b>앞</b>이고 곱셈 갈래로 간다. 나눗셈 갈래가 남는 것은 <b>기말 전에 공시된 판</b> 때문이며
-     * 리더가 그런 행을 <b>5행</b> 세어 두었다. <b>지우지 않는다</b> — 그 5행에서 배수만큼 틀린
-     * 값이 조용히 나온다.
+     * <p><b>앵커가 기말이 아니라 공시일인 것이 요점이다.</b> 이 수는 보고서 표지 기준이라
+     * 기말 이후 공시 전에 일어난 기업행위가 <b>이미 반영돼 있다</b> — 기말에서 배수를 걸면
+     * 그 구간이 한 번 더 곱해진다. 실측(2026-09-09)으로 활성 유니버스에서 그 자리가
+     * <b>미국 6종목</b>이었고 배수가 최대 <b>25배</b>였다({@code BKNG} 시가총액 3.7조 달러).
      *
-     * <p>이것이 ADR-0096의 <b>§결정을 바꾼 자리</b>다. 저쪽은 「스냅샷 하나를 창 전체에 편다」를
-     * 전제로 양방향을 세웠는데, 주식수는 더 이상 그 전제 위에 있지 않다.
+     * <p><b>한 방향뿐이다 — 봉은 앵커보다 앞일 수 없다.</b> {@link #sharesOf}가
+     * {@code publishedIndexOn}으로 <b>{@code published_at <= barDate}인 판만</b> 고르고,
+     * 그 뒤로 내려가며 고르는 옛 판도 ADR-0132가 컨텍스트를 봉 시점으로 좁혀 같은 성질을
+     * 갖는다. <b>MUST: 그 둘 중 하나를 되돌리면 여기에 나눗셈 갈래를 되살린다</b> —
+     * 안 되살리면 봉보다 뒤에 공시된 주식수가 그대로 쓰여 배수만큼 틀린다.
      *
-     * <ul>
-     *   <li>봉이 <b>뒤</b>면 그 사이 분할을 <b>곱한다</b> — 보고 이후 늘어난 주식수를 따라간다.
-     *   <li>봉이 <b>앞</b>이면 <b>나눈다</b> — 그때는 아직 안 늘어난 주식수여야 한다.
-     *       {@link IndicatorContext#corporateActionMultiple} javadoc이 적은
-     *       <i>"두 시점의 주식수를 견줄 때 나눠서 쓴다"</i>가 이 방향이다.
-     * </ul>
-     *
-     * <p><b>보정하지 않으면 미국이 양쪽으로 틀린다.</b> NVDA 실측: 2024-06-10 10:1 분할에서
-     * 뒤쪽 55거래일은 시가총액이 <b>1/10</b>, 분할 전 봉은 최신 재무(24.5B)를 쓰면 <b>10배</b>다.
-     * 국내는 봉의 {@code listed_shares}가 전량 차 있어(실측 NULL 0행) 이 폴백을 <b>타지 않는다.</b>
+     * <p><b>보정 자체를 빼면 미국이 양쪽으로 틀린다.</b> NVDA 실측: 2024-06-10 10:1 분할에서
+     * 뒤쪽 55거래일은 시가총액이 <b>1/10</b>이 된다. 국내는 봉의 {@code listed_shares}가 전량
+     * 차 있어(실측 NULL 0행) 이 폴백을 <b>타지 않는다.</b>
      */
     private static BigDecimal shiftToBar(IndicatorContext context, BigDecimal reportedShares,
-                                         LocalDate periodEnd, LocalDate barDate) {
-        if (barDate.isAfter(periodEnd)) {
-            return reportedShares.multiply(context.corporateActionMultiple(periodEnd, barDate));
+                                         LocalDate anchor, LocalDate barDate) {
+        if (barDate.isBefore(anchor)) {
+            // 도달할 수 없는 자리다(위 javadoc). 조용히 틀린 값을 내느니 던진다 —
+            // 여기 오면 판 선택이 시점성을 잃은 것이고, 그 증상은 값이 배수만큼 틀린 것뿐이다.
+            throw new IllegalStateException(
+                    "봉(" + barDate + ")이 공시일(" + anchor + ")보다 앞이다 —"
+                            + " 판 선택이 published_at <= barDate를 지키지 않았다");
         }
-        BigDecimal multiple = context.corporateActionMultiple(barDate, periodEnd);
-        if (multiple.signum() <= 0) {
-            // 비율이 0 이하인 원장 행은 판정이 거절하지만(CorporateActionLedger.judge),
-            // 여기서 나눗셈이 터지면 그 종목의 지표가 통째로 사라진다.
-            return reportedShares;
-        }
-        return reportedShares.divide(multiple, SCALE, RoundingMode.HALF_UP);
+        return reportedShares.multiply(context.corporateActionMultiple(anchor, barDate));
     }
 
     /**

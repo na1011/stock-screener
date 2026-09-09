@@ -57,21 +57,50 @@ class FinancialSharesSplitTest {
     }
 
     @Test
-    @DisplayName("기말 전에 공시된 판은 봉보다 뒤 기말이라 나눈다 — 이 갈래가 남는 유일한 이유다")
-    void dividesWhenBarIsBeforeReport() {
-        // period_end 2024-07-28의 분할 후 주식수를 분할 전 봉에 쓴다.
+    @DisplayName("기말과 공시일 사이의 분할은 한 번만 센다 — 공시일 주식수에 이미 들어 있다")
+    void doesNotDoubleCountActionsBetweenPeriodEndAndPublication() {
+        // period_end 2024-04-28 · 공시일 2024-06-11로, 그 사이에 분할이 있다. 표지일 기준
+        // 주식수라 **분할이 이미 반영된** 24.53B이 실린다.
         //
-        // ADR-0103 뒤 이 갈래에 닿으려면 **기말보다 먼저 공시된 판**이어야 한다. 고른 판의
-        // 기말이 봉보다 앞이면 언제나 곱셈으로 가기 때문이다. 리더가 그런 행을 5행 세어
-        // 두었고, 그 5행에서 보정을 빼면 배수만큼 틀린 값이 조용히 나온다.
+        // 기말에서 배수를 걸면 여기에 10을 한 번 더 곱해 245.3B이 된다 — 실측으로 그 자리가
+        // 미국 6종목이었고 BKNG 시가총액이 3.7조 달러였다(ADR-0133).
         FinancialFigures q = quarter(
-                LocalDate.of(2024, 7, 28), LocalDate.of(2024, 6, 1), POST_SPLIT_SHARES);
+                LocalDate.of(2024, 4, 28), LocalDate.of(2024, 6, 11), POST_SPLIT_SHARES);
+        IndicatorContext context = context(AFTER_SPLIT, q);
+
+        BigDecimal shares = FinancialMath.sharesOf(context, bar(AFTER_SPLIT), List.of(q));
+
+        assertThat(shares).isEqualByComparingTo(POST_SPLIT_SHARES);
+    }
+
+    @Test
+    @DisplayName("주식수 없는 판에서 내려갈 때도 공시일을 본다 — 비교열이 미래에서 새어 든다")
+    void skipsOlderRevisionsPublishedAfterTheBar() {
+        // 봉 시점에 공시된 판(기말 2024-04-28)이 주식수를 안 실었다. 그러면 더 앞선 기말로
+        // 내려가는데, 그 판이 **뒤 보고서의 비교열**이라 공시일이 봉보다 늦다.
+        //
+        // 공시일을 다시 안 보면 그 수를 그대로 쓴다 — 미래를 알고 계산한 값이다. 실측으로
+        // LYFT·HOOD·TWLO·UHAL 넷이 그 자리였고 봉이 공시일보다 최대 9개월 앞이었다.
+        FinancialFigures picked = quarter(
+                LocalDate.of(2024, 4, 28), LocalDate.of(2024, 5, 29), null);
+        FinancialFigures comparative = quarter(
+                LocalDate.of(2024, 1, 28), LocalDate.of(2025, 5, 29), PRE_SPLIT_SHARES);
+        IndicatorContext context = context(AFTER_SPLIT, picked, comparative);
+
+        assertThat(FinancialMath.sharesOf(
+                context, bar(AFTER_SPLIT), List.of(picked, comparative))).isNull();
+    }
+
+    @Test
+    @DisplayName("봉보다 뒤에 공시된 판은 애초에 안 골라진다 — 그것이 나눗셈이 없는 이유다")
+    void neverPicksARevisionPublishedAfterTheBar() {
+        // 공시일이 봉보다 뒤인 판 하나뿐이면 sharesOf는 **값을 안 낸다.** 그 판을 쓰면
+        // 미래를 알고 계산한 수가 되고, 그 자리가 있어야 shiftToBar가 한 방향으로 성립한다.
+        FinancialFigures q = quarter(
+                LocalDate.of(2024, 4, 28), LocalDate.of(2024, 6, 11), POST_SPLIT_SHARES);
         IndicatorContext context = context(BEFORE_SPLIT, q);
 
-        BigDecimal shares = FinancialMath.sharesOf(context, bar(BEFORE_SPLIT), List.of(q));
-
-        // 보정 없이는 24.53B이고, 분할 전 종가(1,208.88)와 곱하면 시가총액이 10배가 된다.
-        assertThat(shares).isEqualByComparingTo("2453000000");
+        assertThat(FinancialMath.sharesOf(context, bar(BEFORE_SPLIT), List.of(q))).isNull();
     }
 
     @Test
@@ -101,9 +130,9 @@ class FinancialSharesSplitTest {
                 .isEqualByComparingTo("777");
     }
 
-    private static IndicatorContext context(LocalDate barDate, FinancialFigures quarter) {
+    private static IndicatorContext context(LocalDate barDate, FinancialFigures... quarters) {
         return new IndicatorContext(
-                1L, null, List.of(bar(barDate)), List.of(), List.of(quarter),
+                1L, null, List.of(bar(barDate)), List.of(), List.of(quarters),
                 List.of(new ShareAdjustment(SPLIT, SPLIT, RATIO)),
                 List.of(), new TreeMap<>(), List.of(), Map.of());
     }
