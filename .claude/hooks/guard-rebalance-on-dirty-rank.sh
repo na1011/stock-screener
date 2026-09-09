@@ -11,12 +11,16 @@
 # **MUST NOT: 이 가드가 있으니 오염이 유니버스에 안 닿는다고 적지 않는다** — 자동 갈래는
 # ADR-0125의 `premise` 펜스가 세션 시작에 신고할 뿐 막지 않는다.
 #
-# 막는 대상이 `--job=universe` 하나인 것이 의도다. 이 저장소에서 되돌릴 수 없는 적재는
-# 그것뿐이다 — `universe_membership`의 편입 이력은 **사후 복원이 안 되고**(ADR-0086·0099)
-# 같은 날 두 번 돌리면 `ck_membership_period`의 0일 구간 금지에 걸려 **실행이 통째로
-# 되돌아간다.** 즉 잘못 돌리면 고치는 데 하루가 걸리고, 그 사이 잘못된 편입이 화면과
-# 이력에 남는다. `initial-load`·`financial-refill`은 멱등하거나 덤프로 돌아오므로
-# 여기서 막지 않는다(후자는 `guard-rebuild-without-dump.sh`가 본다).
+# 막는 대상이 `--job=universe*` 인 것이 의도다(`universe-restore`도 부분 문자열로 걸린다).
+# **MUST NOT: 그 근거를 「편입 이력은 사후 복원이 안 된다」로 적지 않는다 — 2026-09-10에
+# 거짓으로 판명됐다**(ADR-0135가 보존 창을 재현율 KR 0.995 · US 0.987로 복원했다).
+#
+# 남는 근거는 셋이고 전부 여전히 참이다. ① **같은 날 두 번 돌리면** `ck_membership_period`의
+# 0일 구간 금지에 걸려 **실행이 통째로 되돌아간다** — 고치는 데 하루가 걸린다. ② 그 사이
+# **잘못된 편입이 화면과 백분위 모집단에 실린다**(모집단이 그날 편입이라 과거 날짜까지 간다).
+# ③ 되돌리려면 **소스를 다시 불러야 하고** 그것은 콜이자 재현율 1이 아닌 재구성이다.
+# `initial-load`·`financial-refill`은 멱등하거나 덤프로 돌아오므로 여기서 막지 않는다
+# (후자는 `guard-rebuild-without-dump.sh`가 본다).
 #
 # **왜 알림이 아니라 차단인가** — `harness-hooks.md`가 못박듯 `PreToolUse`의
 # `additionalContext`도 **도구가 실행된 뒤에** 읽힌다. 실행 전에 무언가를 알리는 길은
@@ -123,7 +127,7 @@ jq -n --arg list "$outliers" --arg unjudged "$unjudged" \
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: ("순위 축에 오염이 있다 — 저장된 상장주식수가 같은 보고서의 `net_income / eps`가 함의하는 수와 100배 이상 갈리는 종목: " + $list + ". 시총 = 주식수 × 종가이므로 그 종목은 순위에서 **밀려나거나 밀어낸다**. 편입 이력은 사후 복원이 안 되고(ADR-0086·0099) 잘못 돌리면 다음 리밸런싱까지 화면에 남는다. **그 행들을 먼저 고쳐라** — 근거 둘을 세우는 절차는 ADR-0126 §규칙이고, 이력 전체가 오염된 종목은 세 번째 근거로 `SecEdgarSharesProbeLiveTest.probeCrossTagSpreadWithinOneFiling`을 쓴다. 이 축은 **0에 도달할 수 있다**(옛 축은 정당한 희석을 영구히 신고했다). 참고로 `eps`가 없어 판정하지 못한 편입 종목이 " + $unjudged + "개다 — 막지는 않지만 그만큼은 이 가드가 못 본다. 오염을 알면서 돌려야 하면 사용자에게 이 수를 보이고 승인을 받아라.")
+      permissionDecisionReason: ("순위 축에 오염이 있다 — 저장된 상장주식수가 같은 보고서의 `net_income / eps`가 함의하는 수와 100배 이상 갈리는 종목: " + $list + ". 시총 = 주식수 × 종가이므로 그 종목은 순위에서 **밀려나거나 밀어낸다**. 잘못 돌리면 같은 날 다시 못 돌리고(0일 구간 금지) 다음 리밸런싱까지 화면과 백분위 모집단에 남는다. **그 행들을 먼저 고쳐라** — 근거 둘을 세우는 절차는 ADR-0126 §규칙이고, 이력 전체가 오염된 종목은 세 번째 근거로 `SecEdgarSharesProbeLiveTest.probeCrossTagSpreadWithinOneFiling`을 쓴다. 이 축은 **0에 도달할 수 있다**(옛 축은 정당한 희석을 영구히 신고했다). 참고로 `eps`가 없어 판정하지 못한 편입 종목이 " + $unjudged + "개다 — 막지는 않지만 그만큼은 이 가드가 못 본다. 오염을 알면서 돌려야 하면 사용자에게 이 수를 보이고 승인을 받아라.")
     }
   }'
 exit 0
