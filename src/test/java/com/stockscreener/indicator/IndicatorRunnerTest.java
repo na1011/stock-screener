@@ -515,11 +515,18 @@ class IndicatorRunnerTest {
     }
 
     @Test
-    @DisplayName("마지막 산출 일자 앞의 구멍은 그대로 둔다 — 꼬리 걷기가 창 전체로 번지면 안 된다")
-    void keepsRowsBeforeTheLastProducedDate() {
+    @DisplayName("마지막 산출 일자 앞의 구멍도 걷는다 — 거기 남은 행은 어느 시점 규칙의 값도 아니다")
+    void cullsRowsInsideTheWindowThisRunDidNotProduce() {
         // 창 **안쪽**에 산출 구멍을 하나 뚫는다. 꼬리 뒤에 있는 행과 달리 이 행은 write가
-        // 다시 쓰지 않으므로, 후보가 「창 안에서 안 낸 날짜 전부」로 넓어지면 **여기서만**
-        // 드러난다. 꼬리 밖 행으로 단언하면 삭제 직후 write가 되살려 항등식이 된다.
+        // 다시 쓰지 않으므로, 후보가 꼬리로만 좁혀지면 **여기서만** 드러난다. 꼬리 밖 행으로
+        // 단언하면 삭제 직후 write가 되살려 항등식이 된다.
+        //
+        // 이 단언은 2026-09-09에 **뒤집혔다**(ADR-0130). 앞선 판은 ADR-0080 §버린 대안의
+        // "정상적으로 일부만 내는 계산기의 보존 창이 매 실행 깎인다"를 근거로 이 행을 지켰는데,
+        // 그 기각을 받치던 것 둘이 그 사이 무너졌다 — ADR-0079가 읽기 창을
+        // maxEffectiveLookback() + 보존 창으로 두어 **보존 창의 모든 날짜가 어떤 asOf에서든
+        // 최대 워밍업을 받고**, ADR-0128이 재무 지표를 asOf와 무관하게 만들었다. 그래서 지금
+        // 비는 자리는 창이 짧아서가 아니라 **그 날짜에 값이 성립하지 않아서**다.
         insertPriceHistoryWithSharesUntil(300, 290, 150);
         LocalDate hole = AS_OF.minusDays(150);
         insertIndicatorRow(MarketCapCalculator.CODE, hole, new BigDecimal("777"));
@@ -527,9 +534,9 @@ class IndicatorRunnerTest {
         runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         assertThat(storedValueOrNull(MarketCapCalculator.CODE, hole))
-                .as("「창 안에서 안 낸 날짜를 전부 지운다」로 넓히면 정상적으로 일부만 내는 "
-                        + "계산기들의 보존 창이 매 실행 깎인다(ADR-0080 §버린 대안)")
-                .isNotNull();
+                .as("이번 실행이 안 낸 날짜에 남은 행은 재현되지 않는 값이고, 과거 기준일 "
+                        + "조회가 그것을 판정에 싣는다")
+                .isNull();
         assertThat(storedDatesOf(MarketCapCalculator.CODE))
                 .doesNotContain(AS_OF.minusDays(10), AS_OF.minusDays(1));
     }

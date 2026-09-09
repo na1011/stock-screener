@@ -155,13 +155,14 @@ public class IndicatorRunner {
                 }
                 continue;
             }
-            // 꼬리 걷기(ADR-0085). 위 분기는 **창 전체가 빌 때만** 지우므로, 창의 앞쪽은
-            // 여전히 내면서 어느 시점부터 그만 내는 계산기의 옛 행은 지워지지도 덮이지도
-            // 않는다 — write가 UPSERT라 **산출한 날짜만** 덮기 때문이다. 006400 삼성SDI의
-            // 배당성향 112행이 그 모양이었다(앵커가 적자 연도로 옮겨가 분모 가드가 값을
-            // 안 내는데 FY2024로 계산된 11.63%가 남았다).
+            // 안 낸 날짜 걷기(ADR-0085 → ADR-0130). 위 분기는 **창 전체가 빌 때만** 지우므로,
+            // 창의 일부만 내는 계산기의 나머지 날짜에 있는 옛 행은 지워지지도 덮이지도 않는다 —
+            // write가 UPSERT라 **산출한 날짜만** 덮기 때문이다. 006400 삼성SDI의 배당성향
+            // 112행이 꼬리 쪽 사례였고(앵커가 적자 연도로 옮겨가 분모 가드가 값을 안 내는데
+            // FY2024로 계산된 11.63%가 남았다), **앞쪽에는 ADR-0128 이전 판의 값이 남아
+            // 과거 기준일 조회의 판정에 실리고 있었다.**
             long culled = writer.deleteAt(stockId, code,
-                    tailAfterLastProduced(windowDates, points, suppressed, calculator, base,
+                    windowDatesWithoutProduction(windowDates, points, suppressed, calculator, base,
                             raw.currencyMismatched()));
             if (culled > 0) {
                 stale += culled;
@@ -187,28 +188,45 @@ public class IndicatorRunner {
     }
 
     /**
-     * 마지막 산출 일자 <b>뒤에</b> 남은 창의 거래일. 여기 있는 옛 행이 낡은 것이다(ADR-0085).
+     * 이번 실행이 <b>안 낸</b> 창의 거래일. 거기 남은 옛 행이 낡은 것이다(ADR-0085 → ADR-0130).
      *
-     * <p>ADR-0080 §버린 대안이 기각한 <b>「창 안에서 안 낸 날짜를 전부 지운다」와 다르다</b> —
-     * 그 기각의 근거는 <b>정상적으로 일부만 내는 계산기</b>였는데, 열거된 넷이 비우는 곳이
-     * 전부 <b>앞쪽</b>이라 꼬리에는 걸리지 않는다({@code RETAINED_TO_MARKET_4Y}·
-     * {@code SHARES_GROWTH_3Y}는 앵커·워밍업 이후만 낸다). 백필의 날짜 바깥 루프도 안전하다 — 창이 {@code asOf}에서 끝나고
-     * {@code lastProduced <= asOf}라 삭제 상한이 구조적으로 묶인다.
+     * <p><b>꼬리만 보던 것을 창 전체로 넓혔다.</b> ADR-0080 §버린 대안이 「창 안에서 안 낸
+     * 날짜를 전부 지운다」를 기각했고 그 근거가 둘이었는데 <b>둘 다 그 뒤에 무너졌다.</b>
+     * <ol>
+     *   <li><i>"정상적으로 일부만 내는 계산기의 보존 창이 매 실행 깎인다"</i> —
+     *       <b>ADR-0079</b>가 읽기 창을 {@code maxEffectiveLookback() + RETAINED_TRADING_DAYS}로
+     *       두어 <b>보존 창의 모든 날짜가 어떤 {@code asOf}에서든 최대 워밍업을 받는다.</b>
+     *       그래서 지금 비는 자리는 「창이 짧아서」가 아니라 <b>그 날짜에 값이 성립하지 않아서</b>다.
+     *   <li><i>"뒤 날짜가 앞 날짜를 지운다"</i> — <b>ADR-0128</b>이 재무 지표를 봉마다
+     *       {@code KNOWN_ON}으로 내게 해 <b>날짜 d의 값이 {@code asOf}와 무관</b>해졌다.
+     * </ol>
+     *
+     * <p><b>왜 넓혀야 했나.</b> 꼬리만 보면 <b>앞쪽에 남은 잔재</b>를 원리적으로 못 본다.
+     * ADR-0128이 계산을 바꾸면서 값은 다시 썼지만 <b>새 규칙이 못 내는 날짜의 옛 행은 안 지웠고</b>
+     * ({@code write}가 UPSERT라 산출한 날짜만 덮는다), 그 행이 지금도 과거 기준일 조회의
+     * 판정에 실린다. 실측으로 그 행들은 {@code KNOWN_ON}으로도 {@code LATEST}로도 재현되지
+     * 않는다 — 즉 <b>어느 시점 규칙의 값도 아니다.</b>
+     *
+     * <p>백필의 날짜 바깥 루프는 여전히 안전하다 — 창이 {@code asOf}에서 끝나고 삭제 후보가
+     * 창의 거래일이라 <b>삭제 상한이 구조적으로 묶인다.</b>
      *
      * <p>MUST: <b>억제 일자를 뺀다.</b> 그 날짜는 위 억제 분기가 소유하고, 그쪽은 보존 창으로
      * 거른 범위만 지운다. 여기서 또 넣으면 소유가 둘이 되어 한쪽을 고칠 때 다른 쪽이 조용히 남는다.
      *
      * <p>MUST: <b>시장 지수를 쓰는 코드는 그 날짜에 지수가 있는 날짜만 후보로 둔다.</b>
      * {@code ExcessReturn.at}이 지수를 정확 일치로 묻고 없으면 그 날짜를 건너뛰므로,
-     * 창 <b>끝쪽</b>의 지수 결손은 {@code points}를 비우지 않으면서 {@code lastProduced}만
-     * 앞으로 당긴다 — 그대로 두면 지수 재적재가 실패한 날 {@code BETA_104W}·
-     * {@code EXCESS_RETURN_*}의 꼬리가 조용히 지워진다. {@code DataRequirement}의 축은
-     * 「통째로 없는가」만 가르므로 이 <b>부분 결손</b>은 거기서 못 잡는다.
+     * 지수 결손은 {@code points}를 비우지 않으면서 그 날짜만 「안 낸 날짜」로 만든다 —
+     * 그대로 두면 지수 재적재가 실패한 날 {@code BETA_104W}·{@code EXCESS_RETURN_*}의 행이
+     * 조용히 지워진다. {@code DataRequirement}의 축은 「통째로 없는가」만 가르므로 이
+     * <b>부분 결손</b>은 거기서 못 잡는다.
      *
      * <p>MUST NOT: 같은 필터를 거버넌스에 걸지 않는다. 앵커가 없어 값이 없는 것은 <b>결손이
      * 아니라 사실</b>이고, 그것이 정확히 이 걷기가 걷어야 하는 것이다.
+     *
+     * <p>MUST: {@code points}가 비면 여기서 아무것도 안 한다. 그 갈래는 호출부의 빈-목록
+     * 분기가 소유하며 {@code inputsWereReadable}로 「아직 모른다」를 이미 가른다.
      */
-    private static Collection<LocalDate> tailAfterLastProduced(
+    private static Collection<LocalDate> windowDatesWithoutProduction(
             Collection<LocalDate> windowDates,
             List<IndicatorPoint> points,
             Set<LocalDate> suppressed,
@@ -219,14 +237,12 @@ public class IndicatorRunner {
                 || !inputsWereReadable(calculator, base, currencyMismatched)) {
             return List.of();
         }
-        // 정렬을 가정하지 않는다. 삭제 범위를 정하는 값이라 순서가 어긋나면 창의 앞쪽이 날아간다.
-        LocalDate lastProduced = points.stream()
+        Set<LocalDate> produced = points.stream()
                 .map(IndicatorPoint::tradeDate)
-                .max(LocalDate::compareTo)
-                .orElseThrow();
+                .collect(java.util.stream.Collectors.toCollection(java.util.HashSet::new));
         boolean indexAware = calculator.dataRequirement().needsMarketIndex();
         return windowDates.stream()
-                .filter(date -> date.isAfter(lastProduced))
+                .filter(date -> !produced.contains(date))
                 .filter(date -> !suppressed.contains(date))
                 .filter(date -> !indexAware || base.marketIndex().containsKey(date))
                 .toList();
