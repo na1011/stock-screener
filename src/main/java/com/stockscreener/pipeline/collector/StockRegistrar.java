@@ -297,7 +297,22 @@ public class StockRegistrar {
      * <p>시장 코드를 요구하지 않는다. 국내 티커는 6자리 숫자로 시장 간에 겹치지 않으며,
      * 손으로 고르는 경로에서 시장까지 적게 하면 실수만 는다.
      *
-     * @return 편입 중인 활성 종목과의 <b>교집합</b>. 호출부가 개수 차이로 오타를 판별한다.
+     * <p><b>「지금 편입」이 아니라 「보존 창과 겹치는 편입」이다</b>(ADR-0135). 창이 곧 화면이
+     * 답할 수 있는 범위이므로, 그 안의 어느 날짜에든 편입이던 종목은 <b>수집 대상이다</b> —
+     * 그러지 않으면 복원한 과거 구성원에게 <b>어떤 잡으로도 데이터를 넣을 수 없다.</b>
+     * ADR-0071이 편출 6종목에 대해 <i>"세 잡 어느 것으로도 넣을 수 없다"</i>로 적은 그 자리다.
+     *
+     * <p><b>MUST: 열린 편입을 창 조건 밖에 둔다.</b> 지표 달력이 없는 시장에서는 창의 양 끝이
+     * {@code NULL}이라 비교가 전부 거짓이 되는데, 창 조건 안에 열린 행을 넣으면 <b>그 시장의
+     * 티커 조회가 통째로 0건</b>이 된다 — 이 작업이 없애려는 바로 그 「조용한 0건」이다.
+     * 지금 형태는 달력이 없으면 <b>옛 동작(지금 편입)으로 정확히 되돌아간다.</b>
+     *
+     * <p><b>MUST NOT: 같은 이유로 {@link #activeUniverseMemberIds}를 넓히지 않는다.</b> 그쪽은
+     * <b>매일 도는</b> 일일 갱신의 대상이라, 넓히면 대상이 1,350 → <b>1,709</b>가 되고
+     * (2026-09-10 실측 · +27%) 그 비용을 매일 문다. 이쪽은 <b>손으로 티커를 주는 경로</b>라
+     * 한 번의 선택이다.
+     *
+     * @return 창 안에 편입이 있던 활성 종목과의 <b>교집합</b>. 호출부가 개수 차이로 오타를 판별한다.
      */
     public List<Long> activeUniverseMemberIdsByTicker(List<String> tickers) {
         if (tickers.isEmpty()) {
@@ -311,8 +326,13 @@ public class StockRegistrar {
                 SELECT DISTINCT m.stock_id FROM universe_membership m
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
-                WHERE m.effective_to IS NULL AND s.is_active AND s.ticker IN (%s)
+                WHERE s.is_active AND s.ticker IN (%s)
                   AND s.market_code IN (%s)
+                  AND (m.effective_to IS NULL
+                       OR (m.effective_from <= (SELECT max(d.trade_date) FROM indicator_trade_date d
+                                                 WHERE d.market_code = s.market_code)
+                           AND m.effective_to > (SELECT min(d.trade_date) FROM indicator_trade_date d
+                                                  WHERE d.market_code = s.market_code)))
                 ORDER BY m.stock_id
                 """.formatted(placeholders, collectedMarketPlaceholders()), Long.class, args);
     }

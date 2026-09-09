@@ -199,6 +199,51 @@ class StockRegistrarLookupTest {
      * 여기서 실재 시장을 쓰면 목록이 자랄 때마다 이 테스트가 <b>의도한 동작에 붉어지고</b>,
      * 그러면 가드가 지워진다 — 실제로 미국을 더하면서 그렇게 될 뻔했다.
      */
+    /**
+     * <b>복원한 과거 구성원에게 데이터를 넣는 유일한 경로다</b>(ADR-0135). 편입 구간이 닫혀
+     * 있으면 {@code effective_to IS NULL}을 거는 잡 어느 것도 그 종목에 안 닿는다 —
+     * ADR-0071이 편출 6종목에 대해 <i>"세 잡 어느 것으로도 넣을 수 없다"</i>로 적은 그 자리다.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 보존 창 안에 편입이 있었으면 지금 빠졌어도 티커로 닿는다")
+    void reachesMembershipThatOverlapsTheRetentionWindow() {
+        jdbcTemplate.update("""
+                INSERT INTO indicator_trade_date (market_code, trade_date)
+                VALUES ('KOSPI', ?), ('KOSPI', ?) ON CONFLICT DO NOTHING
+                """, FROM.minusDays(1), FROM.plusDays(30));
+        long departed = member("100002", "창 안에서 편출", true, FROM.plusDays(10));
+
+        assertThat(registrar.activeUniverseMemberIdsByTicker(List.of("100002")))
+                .containsExactly(departed);
+    }
+
+    @Test
+    @DisplayName("보존 창 밖에서 끝난 편입은 안 닿는다 — 창이 곧 답할 수 있는 범위다")
+    void ignoresMembershipThatEndedBeforeTheRetentionWindow() {
+        jdbcTemplate.update("""
+                INSERT INTO indicator_trade_date (market_code, trade_date)
+                VALUES ('KOSPI', ?), ('KOSPI', ?) ON CONFLICT DO NOTHING
+                """, FROM.plusDays(100), FROM.plusDays(200));
+        member("100003", "창 전에 편출", true, FROM.plusDays(10));
+
+        assertThat(registrar.activeUniverseMemberIdsByTicker(List.of("100003"))).isEmpty();
+    }
+
+    /**
+     * 지표 달력이 없는 시장에서는 창의 양 끝이 {@code NULL}이라 비교가 전부 거짓이 된다.
+     * 열린 편입을 창 조건 안에 넣으면 <b>그 시장의 티커 조회가 통째로 0건</b>이 되는데,
+     * 그것이 이 저장소가 가장 싫어하는 「조용한 0건」이다.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 지표 달력이 없어도 지금 편입은 닿는다. 조용한 0건이 되면 안 된다")
+    void openMembershipIsReachableEvenWithoutAnIndicatorCalendar() {
+        jdbcTemplate.update("DELETE FROM indicator_trade_date WHERE market_code = 'KOSPI'");
+        long current = member("100004", "달력 없는 시장의 편입", true, null);
+
+        assertThat(registrar.activeUniverseMemberIdsByTicker(List.of("100004")))
+                .containsExactly(current);
+    }
+
     private long memberOfUncollectedMarket() {
         jdbcTemplate.update("""
                 INSERT INTO market (code, country_code, currency_code, timezone)
