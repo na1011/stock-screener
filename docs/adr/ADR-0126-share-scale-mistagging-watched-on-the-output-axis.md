@@ -229,10 +229,19 @@ ADR-0125 §규칙이 *"복수 클래스 발행사는 `StatementClassOfStockAxis`
 | 2026-09-08 ① | 60 | `EVER` `SENEA` `SENEB` | `share-scale-repair-20260908-before.psv` |
 | 2026-09-08 ② | **12** | `HUBG`(rev0만) | `share-scale-repair-20260908-hubg-before.psv` |
 | 2026-09-08 ③ | **31** | `TEM` `EH` `VTEX` `HUBG` `NTCL` | `share-scale-repair-20260908b-before.psv` |
+| 2026-09-09 | **2** | `BON`(id 26231·26230) | `bon-shares-repair-20260909T192715Z-before.psv` |
 
 **MUST: 되돌리기를 「÷ 1000」으로 적지 마라 — 행 id로 한다.** ②가 `HUBG`의 rev0 12행만 올려
 놓았으므로 같은 종목에 일괄 ÷1000을 걸면 **그 12행이 두 번 나뉜다.** ③의 `NTCL` 3행은 아예
 배수가 아니라 값 대체다.
+
+**2026-09-09 — ⓔ를 <b>기별로</b> 물어야 한다.** `BON`을 「수리값을 정할 수 없다」로 접었던 것이
+`dei:`의 **전 기간 범위**만 봤기 때문이다. 기별로 물으니 FY2025에는 그 태그가 아예 없었고,
+그 기의 유일한 팩트가 답이었다. **범위는 「어느 값이 있는가」를 답하지 「그 기의 값이
+무엇인가」를 답하지 않는다.** 수리 결과 함의 대비 배수가 **0.9997 · 1.0055**다.
+
+**다만 이 수리는 새 제출에 덮일 수 있다** — §규칙의 「정정 INSERT 갈래는 `overwritable()`을
+안 본다」가 그 자리다. `BON`은 20-F 연차 제출자라 다음 창구는 약 1년 뒤다.
 
 **2026-09-08 ③ — ⓔ를 처음 썼고, 그것이 갈래를 뒤집었다.**
 `SecEdgarSharesProbeLiveTest.probeSharesOutstanding`(`-Dprobe.tickers=` · 8콜)과 후보 태그 넷
