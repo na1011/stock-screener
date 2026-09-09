@@ -1,14 +1,16 @@
 ---
 id: ADR-0123
-status: 채택됨
+status: 대체됨(→ ADR-0131)
 date: 2026-09-04
 applies_to:
-  - "src/test/java/com/stockscreener/probe/backtest/Pit*.java"
   - "src/test/java/com/stockscreener/probe/backtest/CustomScreenSweepTest.java"
-  - "src/test/java/com/stockscreener/probe/backtest/StoreRoundTripProbeTest.java"
 ---
 
 # ADR-0123. 시점 재현 값을 파일로 남기고 스윕은 그것을 읽는다
+
+**이 결정은 2026-09-09에 폐기됐다(ADR-0131).** 저장할 근거 넷이 전부 무너졌고 스윕은
+`indicator_value`를 직접 읽는다. **아래는 그 저장소가 무엇을 지키려 했는지의 기록이고, 그중
+§규칙의 몇은 지금 코드에도 걸린다** — 어느 것이 살아남았는지는 ADR-0131 §규칙이 답한다.
 
 ## 결정
 
@@ -221,20 +223,6 @@ rg -n "screenAll\(" src/test/java/com/stockscreener/probe/backtest/CustomScreenS
 마지막 명령은 **아무것도 반환하지 않아야 한다.** 반환하면 스윕이 저장소를 우회해 직접
 계산하고 있고, 그 실행은 경고 없이 몇 시간짜리가 된다.
 
-이 펜스는 **DB에 안 붙는다** — 파일만 훑어 실측 **0.53초**다(전제 예산 36/45초, 여유 9초).
+**전제 둘은 2026-09-09에 걷었다**(ADR-0131) — 읽는 코드가 없어진 저장소를 재고 있었다.
 
-```premise 지문 식의 판이 저장본 전체에서 하나인가
-awk -F= '/^fpFormula=|^indexFpFormula=/{print $1"="$2}' ~/.stock-screener/pit-store/*.manifest \
-  2>/dev/null | sort -u | awk 'END{ if (NR==0) print "잴 것이 없었다 — 저장본이 없다"; \
-    else if (NR==2) print "OK 두 축의 판이 각각 하나"; \
-    else print "지문 식의 판이 섞여 있다(" NR "가지) — 옛 식으로 찍힌 날짜가 남아 있고, 그 날짜는 「쉬는 상태」로 위장한다" }'
-```
 
-```premise 저장본과 지금 계산기의 판이 같은가
-ls ~/.stock-screener/pit-store/*.manifest >/dev/null 2>&1 && \
-  awk -F= '/^calculatorFp=/{print $2}' ~/.stock-screener/pit-store/*.manifest | sort -u | \
-  awk 'END{ if (NR==0) print "잴 것이 없었다 — 저장본이 없다"; \
-            else if (NR==1) print "OK 판 하나 " $0; \
-            else print "저장본이 " NR "가지 계산기 판으로 만들어졌다 — 섞인 값으로 표가 나온다" }' \
-  || echo "잴 것이 없었다 — 저장본이 없다"
-```

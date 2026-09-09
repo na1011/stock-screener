@@ -52,7 +52,7 @@ import org.springframework.context.annotation.Import;
                 // @TestComponent를 스캔에서 뺀다. 여기에 없으면 평범한 @ComponentScan이라
                 // 그 보호가 통째로 빠진다 — IndicatorExtensibilityTest의 @TestConfiguration이
                 // 실제로 스캔되어 DUMMY_TEST_INDICATOR가 레지스트리에 들었고, 그것이
-                // PitFingerprint의 코드 목록과 시점 재현 저장본 512개에 전부 실렸다.
+                // 그 지표가 하네스의 코드 목록에 실려 저장본 512개에 전부 들어갔다.
                 //
                 // MUST NOT: @TestConfiguration 하나만 이름으로 빼지 않는다. 그러면 @TestComponent가
                 // 하나 생기는 날 같은 방식으로 다시 새는데, 그 누수는 저장본을 열어보기 전까지

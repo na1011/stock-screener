@@ -25,31 +25,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 사용자 커스텀 전략을 <b>시점 재현으로</b> 일별 스윕해 최초 통과일을 낸다.
  *
- * <p><b>왜 저장된 지표를 안 쓰는가.</b> 두 근거 중 둘 다 2026-09-08에 바뀌었다 — 저장 경로가
- * {@code KNOWN_ON}으로 옮겨졌고(ADR-0128) 보존 창이 255거래일이 되어 1년을 덮는다(ADR-0129).
- * <b>남는 이유는 하나뿐이다</b>: 엔진 전 구간이 as-of당 84~90ms라 510 as-of면 약 44초이고
- * 이 저장소의 약 25초와 같은 자릿수다(2026-09-09 실측). 창이 미끄러지는 것이 막는 것은
- * <b>옛 분석의 재현</b>이고 이 하네스가 답하는 물음은 롤링 1년이다.
- * <b>저장 경로로 옮길지는 별도 결정이다</b> — 여기서 조용히 바꾸지 않는다.
+ * <p><b>값은 저장된 지표에서 읽는다</b>({@link EngineSweep} · ADR-0131). 파일 저장소를 두던
+ * 근거 넷이 전부 무너져 폐기했다 — 창이 1년을 덮고(ADR-0129), 저장 경로가 {@code KNOWN_ON}이고
+ * (ADR-0128), 남아 있던 잔재는 걷혔으며(ADR-0130), 비용이 같은 자릿수다.
  *
- * <p><b>도달 범위는 시세 워밍업이 정한다.</b> {@code HarnessWindow.floorFor}가 재무 깊이로
- * 잡는 하한과 {@link AsOfCalendar#earliestComputableAsOf}가 시세로 잡는 하한 중 <b>늦은
- * 쪽</b>이 실제 하한이고, v12·v13처럼 {@code PROFIT_STREAK_Y}가 5년이면 시세 쪽이 이긴다.
+ * <p><b>도달 범위는 보존 창이 정한다.</b> 그전에는 시세 워밍업이 정했는데, 값을 직접 만들지
+ * 않으므로 이제 <b>저장된 지표 달력이 곧 범위</b>다.
  *
  * <p><b>남아 있는 편향</b>: 유니버스 편입을 as-of로 거르지 않는다
  * ({@code ScreeningTargets}가 {@code effective_to IS NULL}을 쓴다 — 라이브와 같은 모양이다).
- * 편입 이력이 2026-08-05/08-31부터라 고칠 수도 측정할 수도 없다. <b>절대 성공률을 전략
- * 성적으로 인용하지 않는다</b>는 뜻이고, v12 대 v13 비교에는 공통모드로 걸린다.
+ * <b>절대 성공률을 전략 성적으로 인용하지 않는다</b>는 뜻이고, v12 대 v13 비교에는 공통모드로
+ * 걸린다. 그 크기는 ADR-0129 §유니버스 축의 크기가 잰다.
  *
- * <p><b>값은 저장소에서 읽는다</b>({@link PitSweep}). 직접 계산하면 1년치가 약 4.5시간인데 —
- * KRW 모집단 350을 코스피·코스닥이 각각 한 번씩 돌아 두 배가 되기 때문이다 — 저장본을 읽으면
- * 날짜당 0.14초다(실측). 전략을 여러 번 고쳐 보는 것이 이 스윕의 용도이므로 그 차이가 곧
- * 쓸 수 있느냐를 가른다.
- *
- * <p>저장소가 비어 있으면 <b>던진다.</b> 조용히 직접 계산으로 떨어지면 몇 시간짜리 실행이
- * 아무 경고 없이 시작된다. 적재는 {@code PitLoadTest}가 진다:
- *
- * <pre>caffeinate -is ./gradlew backtestLoad</pre>
+ * <p><b>MUST NOT: 직접 계산으로 떨어지는 갈래를 만들지 않는다.</b> 저장 값이 곧 화면이 쓰는
+ * 값이라, 여기서 따로 계산하면 <b>표와 화면이 갈리는데 어느 쪽도 에러를 안 낸다.</b>
  */
 @Tag("backtest")
 @SpringBootTest(classes = BacktestHarnessContext.class,
@@ -85,13 +74,13 @@ class CustomScreenSweepTest {
     private IndicatorRegistry registry;
 
     @Autowired
-    private com.stockscreener.indicator.IndicatorRunner runner;
+    private StoredValueSource valueSource;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    @DisplayName("저장본으로 커스텀 전략을 일별 스윕해 종목별 최초 통과일을 낸다")
+    @DisplayName("저장 지표로 커스텀 전략을 일별 스윕해 종목별 최초 통과일을 낸다")
     void sweepCustomScreensDaily() throws Exception {
         // 시장을 좁혀 달라고 했으면 그것만 본다. **판정 모집단은 안 좁힌다** — 아래 참조.
         List<String> wanted = csv("sweep.targets", List.of());
@@ -113,19 +102,19 @@ class CustomScreenSweepTest {
                     name, screen.conditions(), screen.mode()));
         }
 
-        PitStore store = PitStore.fromEnvironment();
-        PitSweep sweep = new PitSweep(store, new PitChangeDetector(jdbcTemplate),
-                new PitFingerprint(jdbcTemplate), screener, runner, calendar, registry);
+        EngineSweep sweep =
+                new EngineSweep(screener, valueSource, calendar, registry, jdbcTemplate);
 
         long t0 = System.nanoTime();
-        PitSweep.Result result = sweep.sweep(requests, allTargets, MIN_SCORE_RATIO);
+        EngineSweep.Result result = sweep.sweep(requests, allTargets, MIN_SCORE_RATIO);
         long ms = (System.nanoTime() - t0) / 1_000_000;
 
         // MUST: 언제·무엇을 읽었는지를 표 안에 남긴다. 시간이 지나면 창 미완이 저절로 닫혀
         // 판정이 바뀌므로, 표만 보고는 그것이 언제 기준인지 알 수 없다.
-        System.out.printf("%n===== 저장본 스윕 %,dms · %s =====%n", ms, java.time.LocalDateTime.now()
-                .truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
-        System.out.printf("구간 %s · 다시 만든 칸 %d%n", result.rangeText(), result.repairedCells());
+        System.out.printf("%n===== 저장 지표 스윕 %,dms · %s =====%n", ms,
+                java.time.LocalDateTime.now()
+                        .truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
+        System.out.printf("구간 %s%n", result.rangeText());
 
         // MUST: 판정이 무엇 위에서 나왔는지 표와 함께 남긴다. 저장본은 안 낡았는데 이것들이
         // 바뀌면 표가 바뀌고, 어느 것도 이력 표가 없어 사후에 알 방법이 없다.
@@ -146,7 +135,7 @@ class CustomScreenSweepTest {
             result.rejections().forEach((k, v) -> System.out.printf("   %-32s %s%n", k, v));
         }
         HoldingOutcome holding = new HoldingOutcome(jdbcTemplate);
-        for (Map.Entry<String, Map<Long, PitSweep.FirstPass>> e
+        for (Map.Entry<String, Map<Long, EngineSweep.FirstPass>> e
                 : result.firstPasses().entrySet()) {
             System.out.printf("%n-- %s · 달성률 %s%% 이상 최초 통과 %d종목%n", e.getKey(),
                     MIN_SCORE_RATIO.movePointRight(2).stripTrailingZeros().toPlainString(),
@@ -196,7 +185,7 @@ class CustomScreenSweepTest {
 
         // 0 == 0으로 초록이 되는 것을 막는다. 읽은 날짜가 0이면 잰 것이 없다.
         assertThat(result.datesByCcy().values().stream().mapToInt(Integer::intValue).sum())
-                .as("어느 통화에서도 저장 날짜를 읽지 못했다 — 적재부터 돌린다")
+                .as("어느 통화에서도 지표 거래일을 읽지 못했다 — 보존 창이 비었는지 본다")
                 .isPositive();
     }
 
@@ -221,7 +210,7 @@ class CustomScreenSweepTest {
     }
 
     /** 규약 §2의 기록값이 아니라 **화면의 달성률**이다 — 진입 자격을 보이는 수다. */
-    private static BigDecimal ratioOf(PitSweep.FirstPass pass) {
+    private static BigDecimal ratioOf(EngineSweep.FirstPass pass) {
         return pass.maxScore().signum() == 0 ? BigDecimal.ONE
                 : pass.score().divide(pass.maxScore(), 4, java.math.RoundingMode.HALF_UP);
     }
