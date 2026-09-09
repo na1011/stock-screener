@@ -49,8 +49,8 @@ applies_to:
 **MUST: 이 발견을 볼 때 먼저 물을 것은 「리밸런싱이 있었는가」다.** 유니버스별로 갈라 세면
 한쪽만 걸리는지가 바로 드러난다. 진짜 낡음이면 `min`도 0이 아니다.
 
-```premise 백분위가 활성 유니버스 안에서만 매겨진다
-psql -d stock_screener -At -c "WITH t AS (SELECT count(*) n FROM indicator_value WHERE indicator_code = 'PER_PCTL'), g AS (SELECT iv.trade_date d, u.code, min(iv.value) mn, max(iv.value) mx FROM indicator_value iv JOIN universe_membership m ON m.stock_id = iv.stock_id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE iv.indicator_code = 'PER_PCTL' GROUP BY 1,2), bad AS (SELECT * FROM g WHERE mn <> 0 OR mx <> 1) SELECT CASE WHEN (SELECT n FROM t) = 0 THEN 'PER_PCTL이 한 행도 없다 — 잴 것이 없었다' WHEN (SELECT count(*) FROM g) = 0 THEN 'PER_PCTL은 ' || (SELECT n FROM t) || '행 있는데 활성 유니버스 편입 종목이 하나도 없다 — 모집단이 비어 잴 수 없었다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK ' || (SELECT count(DISTINCT d) FROM g) || '거래일 전부 유니버스별 0~1' ELSE (SELECT count(DISTINCT d) FROM bad) || '거래일이 유니버스 안에서 매겨지지 않았다(' || (SELECT min(d)||' ~ '||max(d) FROM bad) || ') — 그 구간의 백분위가 옛 기준이다' END"
+```premise 백분위가 그날의 유니버스 안에서만 매겨진다
+psql -d stock_screener -At -c "WITH t AS (SELECT count(*) n FROM indicator_value WHERE indicator_code = 'PER_PCTL'), g AS (SELECT iv.trade_date d, u.code, min(iv.value) mn, max(iv.value) mx FROM indicator_value iv JOIN universe_membership m ON m.stock_id = iv.stock_id AND m.effective_from <= iv.trade_date AND (m.effective_to IS NULL OR m.effective_to > iv.trade_date) JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE iv.indicator_code = 'PER_PCTL' GROUP BY 1,2), bad AS (SELECT * FROM g WHERE mn <> 0 OR mx <> 1) SELECT CASE WHEN (SELECT n FROM t) = 0 THEN 'PER_PCTL이 한 행도 없다 — 잴 것이 없었다' WHEN (SELECT count(*) FROM g) = 0 THEN 'PER_PCTL은 ' || (SELECT n FROM t) || '행 있는데 그날 편입 종목이 하나도 없다 — 모집단이 비어 잴 수 없었다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK ' || (SELECT count(DISTINCT d) FROM g) || '거래일 전부 유니버스별 0~1 (검사 범위가 줄면 이 수가 준다)' ELSE (SELECT count(DISTINCT d) FROM bad) || '/' || (SELECT count(DISTINCT d) FROM g) || '거래일이 유니버스 안에서 매겨지지 않았다(' || (SELECT min(d)||' ~ '||max(d) FROM bad) || ') — 그 구간의 백분위가 옛 기준이다' END"
 ```
 
 **보존된 전 구간을 본다. 최신 일자 한 장만 보면 안 된다** — 백필이 중간에 끊기면 최신일과 오래된 쪽은 맞고 **가운데만** 옛 기준으로 남는데, 화면이 최신일만 읽으므로 증상이 없다. 실제로 그 상태가 이 전제 검사를 통과했고, 과거 일자를 손으로 조회해서야 드러났다. 표본 한 장은 어느 장을 고르든 이것을 못 잡는다.
@@ -59,7 +59,11 @@ psql -d stock_screener -At -c "WITH t AS (SELECT count(*) n FROM indicator_value
 
 비용은 실측 **0.20초**다(`statement_timeout` 3초의 15배). **`PER_PCTL` 행만 읽어서 싼 것이 아니다** — `indicator_code` 선두 인덱스가 없어 힙을 전량 seq scan하고 97%를 버린다. 비용은 지표 행수가 아니라 **테이블 크기**를 따라가고, 그래서 검사 대상 지표를 늘려도 거의 안 는다. **ADR-0011의 힙 페치 함정은 여기 걸리지 않는다** — 그쪽은 Index Only Scan이라 visibility map에 물리지만 이 전제는 seq scan이라 그것을 아예 보지 않는다. 초 단위로 나오면 테이블이 커진 것이다.
 
-편입은 **현재** 시점(`effective_to IS NULL`)으로 본다. **MUST: 시점 조인으로 바꾸기 전에 `min(effective_from)`이 지표 보존 구간을 덮는지 먼저 확인한다.** 지금 바꾸면 검사 범위가 **229거래일에서 2거래일로 줄고 그러고도 OK가 뜬다**(실측) — 편입 이력이 2026-08-05부터만 있기 때문이다. 조용히 커버리지가 무너지는 쪽이 거짓 양성보다 나쁘다. 그리고 지금 거짓 양성이 없는 것은 **우연이다** — 빠진 두 종목이 179일치 값을 갖고도 극단(0·1)을 쥔 날이 하루도 없었을 뿐이고, 지수에서 빠지는 종목은 오히려 극단 쪽에 치우칠 소지가 있다.
+편입을 **그날 시점**으로 본다(2026-09-10 · ADR-0135). 계산기가 그렇게 바뀌었으므로 펜스도 같은 술어여야 한다 — **한쪽만 시점이면 구조적으로 붉는다**(실측: 옛 술어로 두니 46거래일이 0~1을 못 채웠다).
+
+**MUST: 「검사한 거래일 수」를 OK 문구에 싣는다.** 이 펜스의 실패 모양은 붉는 것이 아니라 **조용히 범위가 줄고 그러고도 OK가 뜨는 것**이다 — 편입 이력이 짧던 시절에 시점 조인으로 바꿨다면 검사 범위가 **229거래일에서 2거래일로 줄었을 것이다**(실측). 지금은 복원이 보존 창을 덮어 그 위험이 닫혔지만, **창이 복원 격자보다 앞으로 늘어나면 다시 열린다.** 그 수를 봐야 알아챈다.
+
+**시점화 전에는 거짓 양성이 없는 것이 우연이었다** — 빠진 두 종목이 179일치 값을 갖고도 극단(0·1)을 쥔 날이 하루도 없었을 뿐이고, 지수에서 빠지는 종목은 오히려 극단 쪽에 치우칠 소지가 있다.
 
 ## 배경
 
