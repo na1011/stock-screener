@@ -296,22 +296,22 @@ class UsMarketCapUniverseAdapterTest {
 
     private static StoredShareCounts shares(StoredShareCounts.ShareCount... counts) {
         List<StoredShareCounts.ShareCount> list = List.of(counts);
-        return (marketCode, oldestPeriodEnd) -> list;
+        return (marketCode, oldestPeriodEnd, asOf) -> list;
     }
 
     private static StoredShareCounts.ShareCount share(String ticker, String shares) {
         return new StoredShareCounts.ShareCount(
-                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), false);
+                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), false);
     }
 
     private static StoredShareCounts.ShareCount mismatched(String ticker, String shares) {
         return new StoredShareCounts.ShareCount(
-                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), true);
+                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), true);
     }
 
     private static StoredShareCounts.ShareCount sic(String ticker, String shares, String sicCode) {
         return new StoredShareCounts.ShareCount(
-                ticker, new BigDecimal(shares), sicCode, AS_OF.minusMonths(3), false);
+                ticker, new BigDecimal(shares), sicCode, AS_OF.minusMonths(3), AS_OF.minusMonths(1), false);
     }
 
     private static String asset(String symbol, String name) {

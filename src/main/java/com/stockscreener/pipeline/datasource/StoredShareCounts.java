@@ -24,21 +24,26 @@ public interface StoredShareCounts {
     /**
      * 그 시장에서 <b>주식수를 낼 수 있는</b> 종목 전부.
      *
-     * <p>기준은 <b>기(期)마다 하나</b>다 — {@code period_end}가 가장 늦은 행을 고르고, 같은
-     * 기가 여럿이면 개정 번호가 큰 것을 고른다. {@code is_latest}가 <b>「최신 기」가 아니라
-     * 「그 기의 최신 개정본」</b>이라 그것만으로는 기를 못 고른다: AAPL은 {@code is_latest} 행이
-     * 38개고 그중 주식수 최댓값이 옛 기의 17,001,802,000인데 최신기는 14,594,180,000이다
-     * (2026-08-31 실측). {@code max()}로 뽑으면 시총이 <b>약 1.165배</b> 크게 나온다.
+     * <p>기준은 <b>기(期)마다 하나</b>다 — {@code asOf}까지 공표된 것 중 {@code period_end}가
+     * 가장 늦은 행을 고르고, 같은 기가 여럿이면 그 시점의 최신 판을 고른다.
+     * <b>{@code max()}로 뽑으면 안 된다</b>: AAPL은 {@code is_latest} 행이 38개고 그중 주식수
+     * 최댓값이 옛 기의 17,001,802,000인데 최신기는 14,594,180,000이라 시총이 <b>약 1.165배</b>
+     * 크게 나온다(2026-08-31 실측).
+     *
+     * <p><b>MUST: 기를 고르는 첫 키는 {@code period_end}다.</b> 「가장 늦게 공시된 것」으로 바꾸면
+     * 뒤늦게 공시된 옛 기가 이겨 {@code NCRA}가 <b>7.16배</b>가 된다(실측 6종목).
      *
      * @param marketCode 시장 코드
      * @param oldestPeriodEnd 이 날짜보다 이른 기의 값은 낡은 것으로 보고 <b>내지 않는다.</b>
-     *                        경계가 없으면 십수 년 전 주식수가 오늘 종가에 곱해진다 —
+     *                        경계가 없으면 십수 년 전 주식수가 그날 종가에 곱해진다 —
      *                        {@code companyconcept}에서 {@code V}가 2010-01-27,
      *                        {@code BRK.A/B}가 2011-04-29로 멈춰 있던 것과 같은 병이다
      *                        ({@code docs/api-spec/sec-edgar-financial.md})
+     * @param asOf <b>그 시점에 공표돼 있던 것만</b> 낸다(ADR-0135). 공시일이 이보다 뒤인 판은
+     *             안 고르고, 기업행위 배수도 이 날짜까지만 곱한다. 라이브는 오늘을 준다
      * @return 티커 오름차순. <b>통화가 어긋난 종목도 함께 낸다</b> — 아래 계약을 보라
      */
-    List<ShareCount> activeByMarket(String marketCode, LocalDate oldestPeriodEnd);
+    List<ShareCount> activeByMarket(String marketCode, LocalDate oldestPeriodEnd, LocalDate asOf);
 
     /**
      * 종목 하나의 주식수와, 그것을 쓸 수 있는지에 대한 판정.
@@ -56,8 +61,10 @@ public interface StoredShareCounts {
      *
      * @param sicCode 미국은 SIC, 국내는 언제나 {@code null}이다(ADR-0092 — 체계가 시장에 묶여
      *                있고 {@code industry_code}는 KSIC 전용이다). 없을 수 있다
+     * @param publishedAt <b>어느 판을 골랐는지</b>를 호출자가 셀 수 있게 함께 낸다. 복원 대조가
+     *                    「빠진 것」만이 아니라 「왜 빠졌는지」를 내려면 이 값이 필요하다
      */
     record ShareCount(String ticker, BigDecimal shares, String sicCode,
-                      LocalDate periodEnd, boolean currencyMismatched) {
+                      LocalDate periodEnd, LocalDate publishedAt, boolean currencyMismatched) {
     }
 }

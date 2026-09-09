@@ -271,7 +271,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         Map<String, BigDecimal> sharesByTicker = new HashMap<>();
         Exclusions excluded = new Exclusions();
         for (StoredShareCounts.ShareCount count :
-                shareCounts.activeByMarket(UsMarket.CODE, asOf.minusYears(SHARES_MAX_AGE_YEARS))) {
+                shareCounts.activeByMarket(UsMarket.CODE, asOf.minusYears(SHARES_MAX_AGE_YEARS), asOf)) {
             if (count.currencyMismatched()) {
                 excluded.currency++;
                 continue;
