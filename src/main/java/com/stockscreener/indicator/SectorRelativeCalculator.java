@@ -58,6 +58,14 @@ public class SectorRelativeCalculator {
      * <p>업종이 NULL인 종목을 여기서 빼는 것이 곧 "업종이 비어 있으면 판정불가"의 구현이다.
      * 남겨 두면 NULL끼리 한 그룹이 되어 <b>업종 없는 종목끼리 순위가 매겨진다.</b>
      *
+     * <p><b>모집단이 「지금 편입」이 아니라 「그날 편입」이다</b>(ADR-0135) —
+     * {@code PercentileCalculator}와 같은 술어이고 같은 배포로 움직인다.
+     *
+     * <p><b>다만 「어느 층에 묶이는가」는 아직 오늘 기준이다.</b> {@code stock.industry_group_key}에
+     * 이력이 없어 그 종목의 <b>과거 업종을 모른다.</b> 창 안에 재분류가 몇 건인지도 <b>재보지
+     * 않았다</b> — 이력 자체가 DB에 없어 DB로는 못 재고 소스에 물어야 한다. 여는 것은
+     * {@code stock}에 시점 축을 더하는 별도 결정이다.
+     *
      * <p><b>키가 NULL인지로 묻는다.</b> 체계가 둘이므로 {@code industry_code IS NOT NULL}로
      * 물으면 SIC를 채운 종목이 통째로 빠진다 — 생성 컬럼이 두 원문 중 있는 쪽에서 만들어지므로
      * 키의 NULL 여부가 "업종을 아는가"의 유일한 답이다(ADR-0092).
@@ -75,7 +83,9 @@ public class SectorRelativeCalculator {
                       SELECT 1 FROM universe_membership m
                       JOIN universe u ON u.code = m.universe_code
                                      AND (u.is_active OR u.code = ?)
-                      WHERE m.stock_id = iv.stock_id AND m.effective_to IS NULL)
+                      WHERE m.stock_id = iv.stock_id
+                        AND m.effective_from <= ?
+                        AND (m.effective_to IS NULL OR m.effective_to > ?))
             )
             """;
 
@@ -282,8 +292,8 @@ public class SectorRelativeCalculator {
                        String targetCode, String column) {
         return jdbcTemplate.update(
                 UPSERT.formatted(chosen, column, column),
-                // 자리표시자 순서는 SQL 텍스트 순서다 — member(3) → chosen(2) → SELECT(2) → WHERE(1).
-                sourceCode, tradeDate, extraUniverse,
+                // 자리표시자 순서는 SQL 텍스트 순서다 — member(5) → chosen(2) → SELECT(2) → WHERE(1).
+                sourceCode, tradeDate, extraUniverse, tradeDate, tradeDate,
                 MIN_PEERS, MIN_PEERS,
                 tradeDate, targetCode,
                 MIN_PEERS);
@@ -293,8 +303,8 @@ public class SectorRelativeCalculator {
                                 String extraUniverse, String targetCode, String column) {
         return jdbcTemplate.update(
                 DELETE_UNWRITTEN.formatted(chosen, column),
-                // 자리표시자 순서가 upsert와 같다 — member(3) → chosen(2) → DELETE(3).
-                sourceCode, tradeDate, extraUniverse,
+                // 자리표시자 순서가 upsert와 같다 — member(5) → chosen(2) → DELETE(3).
+                sourceCode, tradeDate, extraUniverse, tradeDate, tradeDate,
                 MIN_PEERS, MIN_PEERS,
                 tradeDate, targetCode,
                 MIN_PEERS);

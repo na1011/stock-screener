@@ -384,6 +384,35 @@ public class StockReader {
 
     /** 주어진 유니버스가 스크리닝 대상으로 유효한가. */
     @Transactional(readOnly = true)
+    /**
+     * 그 조회 대상의 <b>편입 이력 하한</b> — 그보다 이전은 원장이 답할 수 없다.
+     *
+     * <p><b>이것이 배포 순서의 인터록이다</b>(ADR-0135). 편입 술어를 시점화하고 복원을 안
+     * 돌리면 보존 창의 <b>90~98%</b>가 <b>조용한 0건</b>이 된다(실측: 255일 중 국내 231 ·
+     * 미국 249). 그 상태를 200이 아니라 <b>400</b>으로 만드는 것이 이 값의 쓸모다 —
+     * 틀린 것이 즉시 보인다.
+     *
+     * <p>복원 뒤에도 영구히 옳다. 보존 창이 복원 격자보다 앞으로 늘어나는 날 같은 보호가
+     * 그대로 걸린다.
+     *
+     * @param universeCode {@code null}이면 활성 유니버스들의 하한 중 <b>가장 늦은 것</b> —
+     *                     「전체」는 그 모두를 답해야 하므로 하나라도 못 답하면 못 답한다
+     */
+    public Optional<LocalDate> membershipFloor(String universeCode) {
+        // 빈 문자열로 접는다. null을 그대로 바인딩하면 PostgreSQL이 타입을 못 정해 거절할 수
+        // 있고, ''는 어떤 유니버스 코드와도 같지 않다 — PercentileCalculator가 같은 관례를 쓴다.
+        String only = universeCode == null ? "" : universeCode;
+        return Optional.ofNullable(jdbcTemplate.queryForObject("""
+                SELECT max(floor) FROM (
+                    SELECT min(m.effective_from) AS floor
+                    FROM universe_membership m
+                    JOIN universe u ON u.code = m.universe_code AND u.is_active
+                    WHERE ? = '' OR m.universe_code = ?
+                    GROUP BY m.universe_code
+                ) t
+                """, LocalDate.class, only, only));
+    }
+
     public boolean isSelectableUniverse(String universeCode) {
         return selectableUniverses().stream().anyMatch(u -> u.code().equals(universeCode));
     }

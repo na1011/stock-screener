@@ -60,6 +60,16 @@ public class PercentileCalculator {
      * 선정되는 것이라 {@code population >= 2}로 거른다.
      *
      * <p>{@code WHERE ... IS DISTINCT FROM}의 이유는 {@code IndicatorValueWriter}와 같다.
+     *
+     * <p><b>모집단이 「지금 편입」이 아니라 「그날 편입」이다</b>(ADR-0135). 오늘 명부로 과거
+     * 날짜의 백분위를 매기면 <b>그 시점에 없던 종목이 분위를 정하고</b>, 값이 나오므로 화면에서
+     * 구별되지 않는다. <b>MUST: 이 술어와 {@code ScreeningRepository}의 편입 술어는 한 배포로
+     * 함께 움직인다</b> — 대상만 시점이고 모집단이 오늘이면 값이 나오고 틀린다.
+     *
+     * <p><b>여기에는 최신일 접기가 없다.</b> 그 접기는 원장과 <b>지표</b>의 시계가 다른 화면
+     * 경로의 문제인데, 이 계산기는 자기가 값을 내는 그 날짜를 그대로 쓰므로 두 시계가 같다 —
+     * 토요일 리밸런싱이 찍는 {@code effective_from}(금요일)과 이 계산기의 {@code trade_date}
+     * (금요일)가 같은 날이다.
      */
     private static final String UPSERT_PERCENTILES = """
             INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value, updated_at)
@@ -72,7 +82,9 @@ public class PercentileCalculator {
                        count(*) OVER (PARTITION BY m.universe_code)         AS population
                 FROM indicator_value iv
                 JOIN universe_membership m
-                  ON m.stock_id = iv.stock_id AND m.effective_to IS NULL
+                  ON m.stock_id = iv.stock_id
+                 AND m.effective_from <= ?
+                 AND (m.effective_to IS NULL OR m.effective_to > ?)
                 JOIN universe u
                   ON u.code = m.universe_code AND (u.is_active OR u.code = ?)
                 WHERE iv.indicator_code = ?
@@ -132,8 +144,10 @@ public class PercentileCalculator {
         long removed = 0;
         for (PercentileSpec spec : specs) {
             int rows = jdbcTemplate.update(
-                    // 자리표시자 순서는 SQL 텍스트 순서다 — SELECT(1) → JOIN(1) → WHERE(2).
-                    UPSERT_PERCENTILES, spec.code(), extra, spec.sourceCode(), tradeDate);
+                    // 자리표시자 순서는 SQL 텍스트 순서다 —
+                    // SELECT(1) → 편입 JOIN(2) → universe JOIN(1) → WHERE(2).
+                    UPSERT_PERCENTILES, spec.code(), tradeDate, tradeDate, extra,
+                    spec.sourceCode(), tradeDate);
             if (rows > 0) {
                 written += rows;
             }

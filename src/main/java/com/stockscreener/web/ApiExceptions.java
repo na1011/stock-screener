@@ -66,19 +66,42 @@ public final class ApiExceptions {
     }
 
     /**
-     * 보존 기간 밖의 일자다.
+     * 조회 가능 구간 밖의 일자다.
      *
-     * <p>보존 구간을 함께 실어야 화면이 "언제부터 조회할 수 있는지"를 말해줄 수 있다.
-     * 구간 없이 거절만 하면 사용자는 날짜를 하나씩 시도하게 된다.
+     * <p>구간을 함께 실어야 화면이 "언제부터 조회할 수 있는지"를 말해줄 수 있다. 구간 없이
+     * 거절만 하면 사용자는 날짜를 하나씩 시도하게 된다.
+     *
+     * <p><b>하한을 정하는 것이 둘이다</b>(ADR-0135) — 지표 보존 창과 <b>편입 이력의 하한</b>.
+     * <b>MUST: 어느 쪽에 걸렸는지를 문구가 말한다.</b> 편입 하한에 걸린 경우 <b>지표는 있으므로</b>
+     * "지표는 최근 구간만 보존한다"가 <b>거짓말이 된다</b> — 그것은
+     * {@code MarketCapUniverseAdapter}가 <i>"단정하는 로그는 읽는 쪽을 틀리게 만든다"</i>로
+     * 금지한 형태이고, 실제로 그 저장소에서 한 줄이 「휴장이다」의 근거로 인용돼 종가 결손이
+     * 사흘 방치된 적이 있다.
+     *
+     * <p>슬러그와 {@code retentionFrom}/{@code retentionTo}는 <b>그대로 둔다</b> — 프론트가
+     * 슬러그로 분기하고 그 둘로 날짜 선택기 범위를 정하므로, 값을 <b>두 하한의 늦은 쪽</b>으로
+     * 채우면 선택기는 그대로 옳다. enum 값이 안 늘어 {@code wire-contract.json}도 안 바뀐다.
      */
     public static class IndicatorHistoryUnavailableException extends ApiException {
+
+        /** 무엇이 하한을 정했는가. 화면은 문구로 읽고, 프로그램은 {@code boundBy}로 읽는다. */
+        public enum Bound { INDICATOR, MEMBERSHIP }
+
         public IndicatorHistoryUnavailableException(LocalDate requested, LocalDate from, LocalDate to) {
+            this(requested, from, to, Bound.INDICATOR);
+        }
+
+        public IndicatorHistoryUnavailableException(LocalDate requested, LocalDate from, LocalDate to,
+                                                    Bound boundBy) {
             super(HttpStatus.BAD_REQUEST, ApiProblemType.INDICATOR_HISTORY_UNAVAILABLE,
-                    "지표는 최근 구간만 보존한다. 요청한 일자(%s)는 보존 구간(%s ~ %s) 밖이다."
+                    (boundBy == Bound.MEMBERSHIP
+                            ? "그 조회 대상의 편입 이력이 %2$s부터라 더 이전은 답할 수 없다. 요청한 일자(%1$s)는 조회 가능 구간(%2$s ~ %3$s) 밖이다."
+                            : "지표는 최근 구간만 보존한다. 요청한 일자(%1$s)는 조회 가능 구간(%2$s ~ %3$s) 밖이다.")
                             .formatted(requested, from, to));
             with("requestedAsOf", requested);
             with("retentionFrom", from);
             with("retentionTo", to);
+            with("boundBy", boundBy.name());
         }
     }
 

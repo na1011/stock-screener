@@ -32,7 +32,7 @@ public enum ApiProblemType {
      * <p>IMPORTANT — 이것을 빈 결과로 돌려주면 안 된다. 사용자는 "조건에 맞는 종목이 없다"로
      * 읽고 조건을 계속 고치게 된다. 지표는 보존 창만큼만 남는다(ADR-0011).
      */
-    INDICATOR_HISTORY_UNAVAILABLE("indicator-history-unavailable", "해당 일자의 지표가 보존 기간 밖이다"),
+    INDICATOR_HISTORY_UNAVAILABLE("indicator-history-unavailable", "해당 일자는 조회 가능 구간 밖이다"),
 
     /** 지표가 아직 하나도 없다. 초기 적재 전이거나 배치가 실패했다. */
     INDICATOR_DATA_NOT_READY("indicator-data-not-ready", "지표 데이터가 아직 준비되지 않았다"),

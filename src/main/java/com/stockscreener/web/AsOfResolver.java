@@ -70,4 +70,17 @@ public class AsOfResolver {
     public Optional<LocalDate> earliest(Collection<String> marketCodes) {
         return calendar.earliestIndicatorDate(marketCodes);
     }
+
+    /**
+     * 그 시장들의 <b>지표 최신 일자</b>.
+     *
+     * <p>편입 술어가 이것을 필요로 한다(ADR-0135). 원장의 시계와 지표의 시계가 <b>다르기</b>
+     * 때문이다 — 토요일 20:00 리밸런싱이 {@code effective_from = 금요일}을 찍는데 그 금요일
+     * 지표는 <b>다음 평일에야</b> 생긴다. 그 사이에는 {@code effective_from > asOf}인 열린 행이
+     * 있고, 하한을 그대로 걸면 <b>신규 편입이 화면에서 조용히 사라진다</b>(실측: 지표 최신일이
+     * 2026-09-03이었다면 47행). 최신일 조회에서 열린 행의 하한을 접는 판단이 이 값에 기댄다.
+     */
+    public Optional<LocalDate> latest(Collection<String> marketCodes) {
+        return calendar.latestIndicatorDate(marketCodes);
+    }
 }

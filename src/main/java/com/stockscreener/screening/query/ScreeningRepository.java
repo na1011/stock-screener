@@ -59,7 +59,10 @@ public class ScreeningRepository {
     }
 
     /**
-     * 조건을 실행한다. 대상은 활성 종목 전체다.
+     * 조건을 실행한다. 대상은 <b>그 기준일에</b> 활성 유니버스에 편입돼 있던 종목이다.
+     *
+     * <p>{@code atLatest}를 안 받는 갈래이므로 <b>최신일 조회로 본다.</b> 배치·워치리스트가
+     * 언제나 그 시장의 최신 지표 일자로 부르기 때문이다.
      *
      * @param group 조건 그룹
      * @param mode  판정 방식
@@ -68,18 +71,40 @@ public class ScreeningRepository {
      */
     @Transactional(readOnly = true)
     public List<ScreeningResult> screen(ConditionGroup group, EvaluationMode mode, LocalDate asOf) {
-        return screen(group, mode, asOf, null);
+        return screen(group, mode, asOf, true, null);
+    }
+
+    /**
+     * 유니버스를 한정하되 <b>최신일 조회로</b> 실행한다.
+     *
+     * <p><b>백테스트 하네스가 이 갈래를 쓴다.</b> 과거 {@code asOf}를 주면서 편입은 「지금」으로
+     * 보는 것이 <b>그 하네스가 안고 가는 생존 편향</b>이고, ADR-0135가 그것을 <b>일부러 안
+     * 바꿨다</b> — {@code ConditionReturnTest}의 앵커 여덟 중 <b>일곱이 복원 창 밖</b>이라
+     * 시점 편입으로 바꾸면 그 일곱에서 대상이 0건이 된다. 넘기려면 복원 창을 백테스트 창까지
+     * 넓혀야 하고 그것은 P17 축이다.
+     *
+     * <p><b>MUST NOT: 화면 경로가 이 갈래를 쓰지 않는다.</b> 그쪽은 {@code atLatest}를 실제로
+     * 계산해 넘긴다({@code ScreeningService}).
+     */
+    @Transactional(readOnly = true)
+    public List<ScreeningResult> screen(ConditionGroup group, EvaluationMode mode, LocalDate asOf,
+                                        String universeCode) {
+        return screen(group, mode, asOf, true, universeCode);
     }
 
     /**
      * 유니버스를 한정해 조건을 실행한다.
      *
-     * @param universeCode 현재 이 유니버스에 편입된 종목만 대상으로 한다. {@code null}이면 전체.
+     * @param atLatest {@code asOf}가 그 시장의 <b>지표 최신 일자</b>인가. 원장과 지표의 시계가
+     *                 달라, 최신일 조회에서는 <b>열린 편입의 하한을 접어야</b> 토요일 리밸런싱
+     *                 직후의 신규 편입이 안 사라진다(ADR-0135). 과거 조회에서는 절대 안 접는다
+     * @param universeCode 그 기준일에 이 유니버스에 편입돼 있던 종목만 대상으로 한다.
+     *                     {@code null}이면 활성 유니버스 전체.
      */
     @Transactional(readOnly = true)
     public List<ScreeningResult> screen(ConditionGroup group, EvaluationMode mode, LocalDate asOf,
-                                        String universeCode) {
-        List<Long> stockIds = selectStockIds(group, mode, asOf, universeCode);
+                                        boolean atLatest, String universeCode) {
+        List<Long> stockIds = selectStockIds(group, mode, asOf, atLatest, universeCode);
         if (stockIds.isEmpty()) {
             return List.of();
         }
@@ -120,11 +145,20 @@ public class ScreeningRepository {
      * 전량을 내려보내므로(ADR-0016) 그대로 화면까지 간다.
      */
     private List<Long> selectStockIds(ConditionGroup group, EvaluationMode mode, LocalDate asOf,
-                                      String universeCode) {
+                                      boolean atLatest, String universeCode) {
         QStockEntity stock = QStockEntity.stockEntity;
 
-        var query = queryFactory.select(stock.id).from(stock).where(stock.active.isTrue());
-        query.where(universeCode != null ? currentlyIn(universeCode, stock) : inAnyActiveUniverse(stock));
+        var query = queryFactory.select(stock.id).from(stock);
+        // MUST: stock.active를 최신일에서만 건다. 「오늘 상장돼 있는가」는 오늘의 사실이라,
+        // 과거 기준일 질의에 끼우면 그 뒤 상장폐지된 종목이 조용히 빠진다 — 이 결정이 지우려는
+        // 편향과 같은 모양이다(ADR-0135). 과거에는 편입 구간이 그 보증을 대신한다: 그날 상위
+        // N이었다는 것은 그날 상장돼 있었다는 뜻이다.
+        if (atLatest) {
+            query.where(stock.active.isTrue());
+        }
+        query.where(universeCode != null
+                ? memberOn(universeCode, stock, asOf, atLatest)
+                : inAnyActiveUniverseOn(stock, asOf, atLatest));
         if (mode == EvaluationMode.FILTER) {
             query.where(translator.toPredicate(group, stock, asOf));
         }
@@ -132,40 +166,56 @@ public class ScreeningRepository {
     }
 
     /**
-     * 현재 이 유니버스에 편입되어 있는가.
+     * 그 기준일에 편입돼 있었는가 — {@code [effective_from, effective_to)} 포함 판정.
      *
-     * <p>{@code effective_to IS NULL}이 "현재 편입 중"이다(V1의 반열림 구간 설계).
-     * 기준 일자가 아니라 <b>지금</b>을 보는 이유는 스크리닝이 언제나 최신 일자 한 장을 읽고,
-     * 과거 시점의 지수 구성으로 되돌아가 조회하는 화면이 v1에 없기 때문이다. 그런 화면이
-     * 생기면 여기에 {@code asOf}를 넣어 {@code [from, to)} 포함 여부로 바꾼다.
+     * <p><b>{@code gt}이지 {@code goe}가 아니다.</b> 구간이 반열림이라 끝점은 배타이고,
+     * {@code goe}로 쓰면 <b>제외 당일이 편입으로 잡힌다</b> — 값이 그럴듯해 안 드러난다.
+     *
+     * <p><b>MUST: 최신일 조회에서는 열린 행의 하한을 접는다.</b> 원장의 시계와 지표의 시계가
+     * 다르기 때문이다 — 토요일 리밸런싱이 {@code effective_from = 금요일}을 찍는데 그 금요일
+     * 지표는 다음 평일에야 생긴다. 그 41시간 동안 {@code effective_from > asOf}인 열린 행이
+     * 생기고, 하한을 그대로 걸면 <b>신규 편입이 화면에서 조용히 사라진다</b>(실측: 지표
+     * 최신일이 2026-09-03이었다면 47행). <b>과거 조회에서는 절대 접지 않는다</b> — 접으면
+     * 오늘 편입 중인 종목이 과거 전 날짜에 실려 이 결정이 지우려는 편향 그 자체가 된다.
      */
-    private static BooleanExpression currentlyIn(String universeCode, QStockEntity stock) {
+    private static BooleanExpression memberOn(String universeCode, QStockEntity stock,
+                                              LocalDate asOf, boolean atLatest) {
         QUniverseMembershipEntity membership = QUniverseMembershipEntity.universeMembershipEntity;
         return JPAExpressions.selectOne()
                 .from(membership)
                 .where(membership.stockId.eq(stock.id)
                         .and(membership.universeCode.eq(universeCode))
-                        .and(membership.effectiveTo.isNull()))
+                        .and(covers(membership, asOf, atLatest)))
                 .exists();
     }
 
     /**
-     * 활성 유니버스 중 하나에라도 지금 편입되어 있는가.
+     * 활성 유니버스 중 하나에라도 그 기준일에 편입돼 있었는가.
      *
      * <p>{@code universe}를 조인하는 것이 요점이다. 편입 행은 유니버스를 비활성으로 내려도
      * 남으므로, {@code universe_membership}만 보면 <b>꺼 둔 유니버스의 종목이 계속 걸린다.</b>
-     * {@code PercentileCalculator}가 같은 조인을 갖고 있어 모집단이 그쪽과 어긋나지 않는다.
+     * {@code PercentileCalculator}가 같은 조인을 갖고 있어 모집단이 그쪽과 어긋나지 않는다 —
+     * <b>MUST: 그래서 이 술어와 그 계산기는 한 배포로 함께 움직인다</b>(ADR-0135).
      */
-    private static BooleanExpression inAnyActiveUniverse(QStockEntity stock) {
+    private static BooleanExpression inAnyActiveUniverseOn(QStockEntity stock, LocalDate asOf,
+                                                           boolean atLatest) {
         QUniverseMembershipEntity membership = QUniverseMembershipEntity.universeMembershipEntity;
         QUniverseEntity universe = QUniverseEntity.universeEntity;
         return JPAExpressions.selectOne()
                 .from(membership)
                 .join(universe).on(universe.code.eq(membership.universeCode))
                 .where(membership.stockId.eq(stock.id)
-                        .and(membership.effectiveTo.isNull())
+                        .and(covers(membership, asOf, atLatest))
                         .and(universe.active.isTrue()))
                 .exists();
+    }
+
+    private static BooleanExpression covers(QUniverseMembershipEntity membership,
+                                            LocalDate asOf, boolean atLatest) {
+        BooleanExpression open = membership.effectiveTo.isNull();
+        BooleanExpression within = membership.effectiveFrom.loe(asOf)
+                .and(open.or(membership.effectiveTo.gt(asOf)));
+        return atLatest ? within.or(open) : within;
     }
 
     /**

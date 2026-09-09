@@ -122,13 +122,23 @@ public class StockRegistrar {
      * @return 티커 → id. 없는 티커는 <b>키 자체가 없다</b> — {@code null}로 채우지 않는다
      */
     public Map<String, Long> existingIdsByTicker(String marketCode, List<String> tickers) {
-        Map<String, Long> found = new LinkedHashMap<>();
-        for (String ticker : tickers) {
-            Long id = findId(marketCode, ticker);
-            if (id != null) {
-                found.put(ticker, id);
-            }
+        if (tickers.isEmpty()) {
+            return Map.of();
         }
+        // MUST: 한 질의로 묻는다. 티커마다 findId를 부르면 격자 하나에 천 번이 나가고,
+        // 복원 대조가 격자 50점이라 오만 번이 된다 — 실측으로 격자점당 37초였다.
+        String holes = String.join(",", java.util.Collections.nCopies(tickers.size(), "?"));
+        Object[] params = new Object[tickers.size() + 1];
+        params[0] = marketCode;
+        for (int i = 0; i < tickers.size(); i++) {
+            params[i + 1] = tickers.get(i);
+        }
+        Map<String, Long> found = new LinkedHashMap<>();
+        jdbcTemplate.query(
+                "SELECT ticker, id FROM stock WHERE market_code = ? AND ticker IN (" + holes + ")",
+                rs -> {
+                    found.put(rs.getString("ticker"), rs.getLong("id"));
+                }, params);
         return found;
     }
 

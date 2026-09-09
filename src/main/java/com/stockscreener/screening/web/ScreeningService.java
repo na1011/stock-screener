@@ -20,8 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Set;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 실행 요청 하나를 처리한다 — 조건의 출처를 정하고, 검증하고, 기준일을 해석하고, 실행한다.
@@ -110,12 +110,26 @@ public class ScreeningService {
         }
 
         // 기준일은 시장마다 다르다(ADR-0095). 유니버스를 지정했으면 그 시장 하나,
-        // 안 했으면 활성 유니버스 전체 — 요청이 inAnyActiveUniverse로 도는 것과 짝이다.
-        LocalDate asOf = asOfResolver.resolve(
-                request.asOf(), marketScope.forScreening(universeCode));
+        // 안 했으면 활성 유니버스 전체 — 요청이 inAnyActiveUniverseOn으로 도는 것과 짝이다.
+        Set<String> markets = marketScope.forScreening(universeCode);
+        LocalDate asOf = asOfResolver.resolve(request.asOf(), markets);
+        LocalDate latestAsOf = asOfResolver.latest(markets).orElse(asOf);
 
+        // MUST: 편입 하한 이전은 빈 결과가 아니라 400이다(ADR-0135). 복원 없이 술어만
+        // 시점화하면 보존 창의 90~98%가 조용한 0건이 되는데(실측 255일 중 국내 231·미국 249),
+        // 200에 0행은 「조건이 빡빡하다」로 읽혀 사용자가 조건을 고치러 간다.
+        LocalDate membershipFloor = stockReader.membershipFloor(universeCode).orElse(null);
+        if (membershipFloor != null && asOf.isBefore(membershipFloor)) {
+            throw new ApiExceptions.IndicatorHistoryUnavailableException(
+                    request.asOf() == null ? asOf : request.asOf(), membershipFloor, latestAsOf,
+                    ApiExceptions.IndicatorHistoryUnavailableException.Bound.MEMBERSHIP);
+        }
+
+        // 원장과 지표의 시계가 다르다. 최신일 조회에서만 열린 편입의 하한을 접어야 토요일
+        // 리밸런싱 직후(다음 평일 지표가 생기기 전)의 신규 편입이 안 사라진다(ADR-0135).
+        boolean atLatest = asOf.equals(latestAsOf);
         List<ScreeningResult> results =
-                screeningRepository.screen(resolved.conditions(), mode, asOf, universeCode);
+                screeningRepository.screen(resolved.conditions(), mode, asOf, atLatest, universeCode);
 
         boolean truncated = results.size() > MAX_ROWS;
         List<ScreeningResult> page = truncated ? results.subList(0, MAX_ROWS) : results;

@@ -345,6 +345,97 @@ class ScreeningRepositoryTest {
     }
 
     /** 테스트 유니버스에 편입시킨다. {@code effective_to}가 NULL이면 현재 구성원이다. */
+    // ── 시점 편입 (ADR-0135) ─────────────────────────────────────────────────
+    //
+    // 이 넷이 「대상은 오늘 명부, 지표만 그날 것」이라는 결함을 잠근다. 그 결함은 값이
+    // 나오는 방향으로 틀리므로 화면에서 구별되지 않는다.
+
+    @Test
+    @DisplayName("IMPORTANT — 과거 기준일에는 그날 편입이던 종목만 나온다")
+    void pastAsOfUsesThatDaysMembership() {
+        // cheapStock은 그날 편입이었고 나중에 빠졌다. partialStock은 그 뒤에 들어왔다.
+        joinClosed(TEST_UNIVERSE, cheapStock, AS_OF.minusYears(1), AS_OF.plusDays(1));
+        joinUniverse(TEST_UNIVERSE, partialStock, AS_OF.plusDays(1));
+
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "100"));
+
+        assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, false, TEST_UNIVERSE))
+                .extracting(ScreeningResult::stockId)
+                .as("그날 편입이 아니던 종목이 실리면 생존 편향이 그대로 남는다")
+                .containsExactly(cheapStock);
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 제외 당일은 편입이 아니다. 끝점이 배타라 goe로 쓰면 하루가 샌다")
+    void exclusionDateIsNotAMemberDay() {
+        joinClosed(TEST_UNIVERSE, cheapStock, AS_OF.minusYears(1), AS_OF);
+
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "100"));
+
+        assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, false, TEST_UNIVERSE))
+                .isEmpty();
+    }
+
+    /**
+     * 원장과 지표의 시계가 다르다 — 토요일 리밸런싱이 {@code effective_from = 금요일}을 찍는데
+     * 그 금요일 지표는 다음 평일에야 생긴다. 그 창에서 하한을 그대로 걸면 <b>신규 편입이
+     * 화면에서 조용히 사라진다</b>(실측: 지표 최신일이 2026-09-03이었다면 47행).
+     */
+    @Test
+    @DisplayName("IMPORTANT — 최신일 조회는 편입일이 기준일보다 뒤인 열린 행도 담는다")
+    void latestQueryKeepsMembershipOpenedAfterTheIndicatorDate() {
+        joinUniverse(TEST_UNIVERSE, cheapStock, AS_OF.plusDays(2));
+
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "100"));
+
+        assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, true, TEST_UNIVERSE))
+                .extracting(ScreeningResult::stockId).containsExactly(cheapStock);
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 과거 조회에서는 그 접기를 안 한다. 접으면 오늘 명부가 과거에 실린다")
+    void pastQueryDoesNotFoldTheLowerBound() {
+        joinUniverse(TEST_UNIVERSE, cheapStock, AS_OF.plusDays(2));
+
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "100"));
+
+        assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, false, TEST_UNIVERSE))
+                .isEmpty();
+    }
+
+    /**
+     * <b>「오늘 상장돼 있는가」는 오늘의 사실이다.</b> 과거 기준일 질의에 끼우면 그 뒤 상장폐지된
+     * 종목이 조용히 빠지고, 그것이 이 결정이 지우려는 편향과 같은 모양이다. 편입 구간이
+     * 그 보증을 대신한다 — 그날 상위 N이었다는 것은 그날 상장돼 있었다는 뜻이다.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 과거 조회는 stock.is_active를 안 본다. 보면 폐지 종목이 조용히 빠진다")
+    void pastQueryIgnoresTodaysActiveFlag() {
+        joinClosed(TEST_UNIVERSE, cheapStock, AS_OF.minusYears(1), AS_OF.plusDays(1));
+        jdbcTemplate.update("UPDATE stock SET is_active = false WHERE id = ?", cheapStock);
+
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "100"));
+
+        assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, false, TEST_UNIVERSE))
+                .extracting(ScreeningResult::stockId).containsExactly(cheapStock);
+        assertThat(repository.screen(group, EvaluationMode.FILTER, AS_OF, true, TEST_UNIVERSE))
+                .as("최신일에서는 여전히 오늘의 사실을 본다").isEmpty();
+    }
+
+    private void joinUniverse(String universeCode, long stockId, LocalDate from) {
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+                """, universeCode, stockId, from);
+    }
+
+    private void joinClosed(String universeCode, long stockId, LocalDate from, LocalDate to) {
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from, effective_to)
+                VALUES (?, ?, ?, ?)
+                """, universeCode, stockId, from, to);
+    }
+
     private void joinUniverse(long stockId) {
         joinUniverse(TEST_UNIVERSE, stockId);
     }
