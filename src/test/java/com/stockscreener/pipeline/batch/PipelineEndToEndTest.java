@@ -389,6 +389,14 @@ class PipelineEndToEndTest {
         assertThat(members).hasSizeGreaterThan(1);
 
         LocalDate loaded = LocalDate.of(2026, 8, 4);
+        // 백분위 모집단이 「그날 편입」이라(ADR-0135) 명부가 계산일을 덮어야 한다. 리밸런싱이
+        // 방금 AS_OF로 편입을 열었는데 백분위는 그 하루 전으로 도니, 손대지 않으면 모집단이
+        // 비어 이 테스트가 「백분위가 0행」을 자기 픽스처로 만들어 놓고 검사한다.
+        //
+        // 운영에서는 명부가 연속이라 이 상태가 안 온다. 오는 유일한 경우는 **유니버스를 막
+        // 켠 직후**이고, 그때 화면은 편입 하한 인터록이 400으로 접는다 — 조용한 0행이 아니다.
+        jdbcTemplate.update("UPDATE universe_membership SET effective_from = ?",
+                loaded.minusDays(10));
         int price = 70000;
         for (Long member : members) {
             fakePriceSource.withBars(member, List.of(bar(loaded.toString(), String.valueOf(price))));

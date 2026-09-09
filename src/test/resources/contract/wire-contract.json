@@ -125,7 +125,8 @@
     "urn:stockscreener:indicator-history-unavailable": [
       "requestedAsOf",
       "retentionFrom",
-      "retentionTo"
+      "retentionTo",
+      "boundBy"
     ],
     "urn:stockscreener:invalid-condition": [
       "indicatorCode",
