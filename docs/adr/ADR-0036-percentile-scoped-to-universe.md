@@ -50,14 +50,16 @@ applies_to:
 한쪽만 걸리는지가 바로 드러난다. 진짜 낡음이면 `min`도 0이 아니다.
 
 ```premise 백분위가 그날의 유니버스 안에서만 매겨진다
-psql -d stock_screener -At -c "WITH t AS (SELECT count(*) n FROM indicator_value WHERE indicator_code = 'PER_PCTL'), g AS (SELECT iv.trade_date d, u.code, min(iv.value) mn, max(iv.value) mx FROM indicator_value iv JOIN universe_membership m ON m.stock_id = iv.stock_id AND m.effective_from <= iv.trade_date AND (m.effective_to IS NULL OR m.effective_to > iv.trade_date) JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE iv.indicator_code = 'PER_PCTL' GROUP BY 1,2), bad AS (SELECT * FROM g WHERE mn <> 0 OR mx <> 1) SELECT CASE WHEN (SELECT n FROM t) = 0 THEN 'PER_PCTL이 한 행도 없다 — 잴 것이 없었다' WHEN (SELECT count(*) FROM g) = 0 THEN 'PER_PCTL은 ' || (SELECT n FROM t) || '행 있는데 그날 편입 종목이 하나도 없다 — 모집단이 비어 잴 수 없었다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK ' || (SELECT count(DISTINCT d) FROM g) || '거래일 전부 유니버스별 0~1 (검사 범위가 줄면 이 수가 준다)' ELSE (SELECT count(DISTINCT d) FROM bad) || '/' || (SELECT count(DISTINCT d) FROM g) || '거래일이 유니버스 안에서 매겨지지 않았다(' || (SELECT min(d)||' ~ '||max(d) FROM bad) || ') — 그 구간의 백분위가 옛 기준이다' END"
+psql -d stock_screener -At -c "WITH t AS (SELECT count(*) n FROM indicator_value WHERE indicator_code = 'PER_PCTL'), g AS (SELECT iv.trade_date d, u.code, min(iv.value) mn, max(iv.value) mx, count(*) c FROM indicator_value iv JOIN universe_membership m ON m.stock_id = iv.stock_id AND m.effective_from <= iv.trade_date AND (m.effective_to IS NULL OR m.effective_to > iv.trade_date) JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE iv.indicator_code = 'PER_PCTL' GROUP BY 1,2), bad AS (SELECT * FROM g WHERE mn <> 0 OR mx <> 1), o AS (SELECT (SELECT n FROM t) - coalesce((SELECT sum(c) FROM g),0) n) SELECT CASE WHEN (SELECT n FROM t) = 0 THEN 'PER_PCTL이 한 행도 없다 — 잴 것이 없었다' WHEN (SELECT count(*) FROM g) = 0 THEN 'PER_PCTL은 ' || (SELECT n FROM t) || '행 있는데 그날 편입 종목이 하나도 없다 — 모집단이 비어 잴 수 없었다' WHEN (SELECT n FROM o) < 0 THEN '한 종목이 두 활성 유니버스에 걸렸다 — 모집단이 겹쳐 셀 수 없다' WHEN (SELECT n FROM o) > 0 THEN (SELECT n FROM o) || '행이 그날 모집단 밖에 있다 — 옛 명부로 매겨진 백분위가 남아 있다(ADR-0136)' WHEN (SELECT count(*) FROM bad) > 0 THEN (SELECT count(DISTINCT d) FROM bad) || '/' || (SELECT count(DISTINCT d) FROM g) || '거래일이 유니버스 안에서 매겨지지 않았다(' || (SELECT min(d)||' ~ '||max(d) FROM bad) || ') — 그 구간의 백분위가 옛 기준이다' ELSE 'OK ' || (SELECT count(DISTINCT d) FROM g) || '거래일 전부 유니버스별 0~1 · 모집단 밖 0행 (검사 범위가 줄면 이 수가 준다)' END"
 ```
+
+**「모집단 밖 행」을 함께 센다.** 이 질의는 편입을 `JOIN`으로 걸어 **모집단 밖 행을 조용히 떨어뜨린다** — 자기 이름이 「그날의 유니버스 안에서만 매겨진다」인데 밖에 있는 행을 원리적으로 못 본다. 실제로 2026-09-10에 `OK 269거래일`을 내면서 **18,552행**을 놓쳤고, 그것을 걷는 결정이 ADR-0136이다. 총행에서 모집단 안 행을 빼 그 수를 답한다. **음수는 겹침이다** — 한 종목이 두 활성 유니버스에 걸리면 조인이 행을 늘린다. **마진은 실측 노이즈 이내다**(강화 1.35~1.38초 vs 현행 1.32~1.38초, 3회).
 
 **보존된 전 구간을 본다. 최신 일자 한 장만 보면 안 된다** — 백필이 중간에 끊기면 최신일과 오래된 쪽은 맞고 **가운데만** 옛 기준으로 남는데, 화면이 최신일만 읽으므로 증상이 없다. 실제로 그 상태가 이 전제 검사를 통과했고, 과거 일자를 손으로 조회해서야 드러났다. 표본 한 장은 어느 장을 고르든 이것을 못 잡는다.
 
 **모집단이 비어 못 잰 것과 지표가 아예 없는 것을 가른다.** 둘을 한 갈래로 묶었더니 `PER_PCTL`이 63,198행 있는데도 "한 행도 없다"고 답했다(실측). 침묵이 아니라 **거짓 단정**이라 더 나쁘다 — 이 훅이 잡으려는 병에 이 전제가 걸린 자리였다.
 
-비용은 실측 **0.20초**다(`statement_timeout` 3초의 15배). **`PER_PCTL` 행만 읽어서 싼 것이 아니다** — `indicator_code` 선두 인덱스가 없어 힙을 전량 seq scan하고 97%를 버린다. 비용은 지표 행수가 아니라 **테이블 크기**를 따라가고, 그래서 검사 대상 지표를 늘려도 거의 안 는다. **ADR-0011의 힙 페치 함정은 여기 걸리지 않는다** — 그쪽은 Index Only Scan이라 visibility map에 물리지만 이 전제는 seq scan이라 그것을 아예 보지 않는다. 초 단위로 나오면 테이블이 커진 것이다.
+비용은 실측 **1.3~1.4초**다(3회 · 2026-09-10). `statement_timeout`의 정본은 `check-premises.sh`이고 지금 **6초**다. **`PER_PCTL` 행만 읽어서 싼 것이 아니다** — `indicator_code` 선두 인덱스가 없어 힙을 전량 seq scan하고 97%를 버린다. 비용은 지표 행수가 아니라 **테이블 크기**를 따라가고, 그래서 검사 대상 지표를 늘려도 거의 안 는다. **ADR-0011의 힙 페치 함정은 여기 걸리지 않는다** — 그쪽은 Index Only Scan이라 visibility map에 물리지만 이 전제는 seq scan이라 그것을 아예 보지 않는다. 초 단위로 나오면 테이블이 커진 것이다.
 
 편입을 **그날 시점**으로 본다(2026-09-10 · ADR-0135). 계산기가 그렇게 바뀌었으므로 펜스도 같은 술어여야 한다 — **한쪽만 시점이면 구조적으로 붉는다**(실측: 옛 술어로 두니 46거래일이 0~1을 못 채웠다).
 
@@ -87,7 +89,7 @@ psql -d stock_screener -At -c "WITH t AS (SELECT count(*) n FROM indicator_value
 
 **MUST: 화면이 이 문장을 그대로 말하게 두지 않는다.** `*_SECTOR_*` 조건에는 위 문장이 거짓이다 — 그쪽은 시장을 넘는다. 화면은 응답의 `relativePopulations`를 받아 모집단마다 다른 문장을 낸다.
 
-여기서 따라오는 것 둘을 적어 둔다. **한 번도 편입된 적이 없는 종목**은 백분위 행이 아예 없어 백분위 조건에서 조용히 빠진다 — 값이 없으면 행을 쓰지 않는다는 ADR-0002의 계약 그대로다. **MUST NOT: 그것을 「활성 유니버스 밖 종목은 행이 없다」로 넓혀 읽지 않는다.** **편입됐다가 빠진 종목은 편입 시절에 쓴 행을 그대로 들고 있다** — 두 계산기 다 그날 모집단으로만 쓰고 이탈을 계기로 걷는 경로가 없다(실측 2026-08-28: 15종목 28,704행, **전부 이탈 前 일자**). **그 행을 걷을지는 정해진 바 없다** — 저장된 과거 값의 시점성을 정한 결정이 이 문서에도 다른 곳에도 없다. 그리고 유니버스가 늘면 모집단이 갈라지므로, 종목 수가 적은 지수를 활성으로 올릴 때 `population >= 2` 경계를 함께 본다.
+여기서 따라오는 것 둘을 적어 둔다. **한 번도 편입된 적이 없는 종목**은 백분위 행이 아예 없어 백분위 조건에서 조용히 빠진다 — 값이 없으면 행을 쓰지 않는다는 ADR-0002의 계약 그대로다. **MUST NOT: 그것을 「활성 유니버스 밖 종목은 행이 없다」로 넓혀 읽지 않는다.** **편입됐다가 빠진 종목의 옛 행은 걷는다**(ADR-0136) — 두 계산기 다 그날 모집단으로 쓰고, **모집단 밖으로 나간 (종목,날짜)의 옛 행을 각자 날짜별로 지운다.** 「15종목 28,704행이 전부 이탈 前 일자라 그날 맞다」는 **오늘 명부를 모집단으로 쓰던 때의 판정**이라 더는 안 선다 — 모집단이 그날 편입으로 바뀌자(ADR-0135) 같은 술어로 **321종목 215,626행**(계산기 술어로는 349종목 216,752행)이 나왔다. 그리고 유니버스가 늘면 모집단이 갈라지므로, 종목 수가 적은 지수를 활성으로 올릴 때 `population >= 2` 경계를 함께 본다.
 
 ## 결과
 
