@@ -132,37 +132,6 @@ public class AsOfCalendar {
                 LocalDate.class, args);
     }
 
-    /**
-     * 워밍업을 채울 수 있는 <b>가장 이른 as-of</b>. 그 시장 시세의 {@code warmupBars}번째 거래일이다.
-     *
-     * <p><b>백테스트 구간의 실제 하한이 이것이다.</b> {@link HarnessWindow#floorFor}가 재무
-     * 깊이로 정하는 하한과 <b>둘 중 늦은 쪽</b>이 답이고, v12·v13처럼 {@code PROFIT_STREAK_Y}가
-     * 5년이면 <b>이쪽이 이긴다</b>.
-     *
-     * <p>실측 2026-09-04, {@code maxEffectiveLookback} = 1,261봉: <b>국내 2025-02-18 ·
-     * 미국 2024-09-05</b>. 앞선 판이 적어 둔 「미국 2025-03-20 · 국내 2025-03-06」은
-     * <b>어떤 warmupBars 값으로도 재현되지 않아</b> 고쳤다 — 1,441봉으로 재도 국내
-     * 2025-11-13 · 미국 2025-05-27이다. 결론(시세 쪽이 이긴다)은 그대로 성립한다:
-     * {@code HarnessWindow.floorFor}가 v12에서 잡는 재무 하한이 국내 2020-04 · 미국 2023-04다.
-     * 재무 하한만 보고 격자를 열면 앞쪽 날짜가 전 종목 판정불가가 되는데, 그 0은 게이트가
-     * 아니라 시세 깊이 탓이다.
-     */
-    public LocalDate earliestComputableAsOf(int warmupBars, Collection<String> marketCodes) {
-        Object[] args = new Object[marketCodes.size() + 1];
-        int i = 0;
-        for (String code : marketCodes) {
-            args[i++] = code;
-        }
-        args[i] = warmupBars - 1;
-        List<LocalDate> found = jdbcTemplate.queryForList(
-                "SELECT p.trade_date FROM (SELECT DISTINCT p.trade_date FROM price_daily p"
-                        + " JOIN stock s ON s.id = p.stock_id WHERE s.market_code IN ("
-                        + placeholders(marketCodes) + ") ORDER BY p.trade_date) p"
-                        + " OFFSET ? LIMIT 1",
-                LocalDate.class, args);
-        return found.isEmpty() ? null : found.get(0);
-    }
-
     /** {@code IN (?, ?, …)}. 빈 컬렉션은 SQL이 성립하지 않으므로 호출부의 계약 위반이다. */
     private static String placeholders(Collection<String> marketCodes) {
         if (marketCodes == null || marketCodes.isEmpty()) {

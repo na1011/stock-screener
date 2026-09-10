@@ -1,6 +1,8 @@
 package com.stockscreener.probe.backtest;
 
-import com.stockscreener.indicator.IndicatorRegistry;
+import com.stockscreener.indicator.IndicatorCalendar;
+import com.stockscreener.indicator.IndicatorCatalog;
+import com.stockscreener.screening.query.ScreeningRepository;
 import com.stockscreener.screening.store.ScreenDefinition;
 import com.stockscreener.screening.store.ScreenStore;
 import com.stockscreener.support.ReadOnlyDatabaseGuard;
@@ -23,22 +25,22 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 사용자 커스텀 전략을 <b>시점 재현으로</b> 일별 스윕해 최초 통과일을 낸다.
+ * 사용자 커스텀 전략을 일별로 스윕해 <b>종목별 최초 통과일</b>을 낸다.
  *
- * <p><b>값은 저장된 지표에서 읽는다</b>({@link EngineSweep} · ADR-0131). 파일 저장소를 두던
- * 근거 넷이 전부 무너져 폐기했다 — 창이 1년을 덮고(ADR-0129), 저장 경로가 {@code KNOWN_ON}이고
- * (ADR-0128), 남아 있던 잔재는 걷혔으며(ADR-0130), 비용이 같은 자릿수다.
+ * <p><b>판정은 화면과 같은 경로가 진다</b>({@link EngineSweep} → {@code ScreeningRepository.screen}
+ * · ADR-0137). 이 하네스가 값을 읽거나 다시 매기지 않으므로 <b>표와 화면이 같은 종목을
+ * 고른다</b> — 앞선 판이 파생 지표를 스스로 다시 매겨 같은 날 같은 종목에 다른 값을 냈다.
  *
- * <p><b>도달 범위는 보존 창이 정한다.</b> 그전에는 시세 워밍업이 정했는데, 값을 직접 만들지
- * 않으므로 이제 <b>저장된 지표 달력이 곧 범위</b>다.
+ * <p><b>도달 범위는 보존 창이 정한다.</b> 값을 직접 만들지 않으므로 <b>저장된 지표 달력이
+ * 곧 범위</b>다(통화당 255거래일 · ADR-0129).
  *
- * <p><b>남아 있는 편향</b>: 유니버스 편입을 as-of로 거르지 않는다
- * ({@code ScreeningTargets}가 {@code effective_to IS NULL}을 쓴다 — 라이브와 같은 모양이다).
- * <b>절대 성공률을 전략 성적으로 인용하지 않는다</b>는 뜻이고, v12 대 v13 비교에는 공통모드로
- * 걸린다. 그 크기는 ADR-0129 §유니버스 축의 크기가 잰다.
+ * <p><b>유니버스 생존 편향은 닫혔다</b>(ADR-0135·0137). 편입을 <b>그 기준일 기준으로</b>
+ * 판정하므로, 그 뒤 편출된 종목이 빠지지도 편입 전 날짜에 실리지도 않는다. <b>남는 구멍은
+ * 미국의 폐지 종목</b>이다 — 과거만 편입된 225종목 중 지표가 있는 것이 34뿐이라 나머지는
+ * 판정불가로 남는다(국내는 37/37 · 97/97로 전부 있다).
  *
- * <p><b>MUST NOT: 직접 계산으로 떨어지는 갈래를 만들지 않는다.</b> 저장 값이 곧 화면이 쓰는
- * 값이라, 여기서 따로 계산하면 <b>표와 화면이 갈리는데 어느 쪽도 에러를 안 낸다.</b>
+ * <p><b>MUST NOT: 직접 계산하거나 값을 다시 매기는 갈래를 만들지 않는다.</b> 그러면
+ * <b>표와 화면이 갈리는데 어느 쪽도 에러를 안 낸다.</b>
  */
 @Tag("backtest")
 @SpringBootTest(classes = BacktestHarnessContext.class,
@@ -59,22 +61,19 @@ class CustomScreenSweepTest {
     private static final BigDecimal MIN_SCORE_RATIO = new BigDecimal("0.80");
 
     @Autowired
-    private PointInTimeScreener screener;
+    private ScreeningRepository screeningRepository;
 
     @Autowired
-    private AsOfCalendar calendar;
+    private IndicatorCalendar calendar;
+
+    @Autowired
+    private IndicatorCatalog catalog;
 
     @Autowired
     private ScreeningTargets targets;
 
     @Autowired
     private ScreenStore screenStore;
-
-    @Autowired
-    private IndicatorRegistry registry;
-
-    @Autowired
-    private StoredValueSource valueSource;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -102,8 +101,7 @@ class CustomScreenSweepTest {
                     name, screen.conditions(), screen.mode()));
         }
 
-        EngineSweep sweep =
-                new EngineSweep(screener, valueSource, calendar, registry, jdbcTemplate);
+        EngineSweep sweep = new EngineSweep(screeningRepository, calendar, catalog);
 
         long t0 = System.nanoTime();
         EngineSweep.Result result = sweep.sweep(requests, allTargets, MIN_SCORE_RATIO);
@@ -111,7 +109,7 @@ class CustomScreenSweepTest {
 
         // MUST: 언제·무엇을 읽었는지를 표 안에 남긴다. 시간이 지나면 창 미완이 저절로 닫혀
         // 판정이 바뀌므로, 표만 보고는 그것이 언제 기준인지 알 수 없다.
-        System.out.printf("%n===== 저장 지표 스윕 %,dms · %s =====%n", ms,
+        System.out.printf("%n===== 스윕 %,dms · %s =====%n", ms,
                 java.time.LocalDateTime.now()
                         .truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
         System.out.printf("구간 %s%n", result.rangeText());

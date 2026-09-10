@@ -1,7 +1,6 @@
 package com.stockscreener.probe.backtest;
 
 import com.stockscreener.indicator.IndicatorDataReader.FinancialVisibility;
-import com.stockscreener.indicator.IndicatorRegistry;
 import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.PercentileSpec;
 import com.stockscreener.indicator.SectorMetricSpec;
@@ -27,7 +26,6 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.TreeSet;
 
 /**
  * as-of 하루의 지표를 <b>인메모리로 다시 계산해</b> 프리셋을 판정한다(P17, ADR-0071).
@@ -150,50 +148,6 @@ public class PointInTimeScreener {
         return out;
     }
 
-    /** 한 번의 값 계산으로 판정할 조건군 하나. {@code label}이 {@link #screenAll} 결과의 키다. */
-    /**
-     * 저장본이 담은 코드로 이 조건군을 판정할 수 있는가. 못 하면 <b>모자란 코드</b>를 돌려준다.
-     *
-     * <p>MUST NOT: {@code 참조 ⊆ 매니페스트}로 판정하지 않는다. {@code computeAt}은 교차단면
-     * 파생값을 <b>아예 내지 않으므로</b> 그 판정은 {@code _PCTL}·{@code _SECTOR_*}를 쓰는 전략을
-     * 전부 거절한다 — 저장소를 붙인 이유가 「어떤 전략이든 돌린다」인데 그 자리가 통째로 닫힌다.
-     * 파생값은 <b>원천 코드만 있으면 읽기 시점에 재구성된다.</b>
-     *
-     * <p>거절은 전략 단위다. 하나가 못 도는 것과 배치가 죽는 것은 다르다.
-     */
-    /**
-     * {@code computeAt}이 <b>낼 수 있는</b> 코드. 저장본이 담기로 선언하는 집합이 이것이다.
-     *
-     * <p>MUST NOT: 만들어진 값을 관찰해 선언하지 않는다. 관찰하면 <b>한 종목에만 있는 코드가
-     * 「저장본에 있다」로 통과</b>하고, 그 전략은 나머지 종목 전부에서 판정불가가 된다 —
-     * 거절도 아니고 예외도 아니라 그냥 조용히 안 걸린다.
-     *
-     * <p>빼는 것 둘: 하네스가 원리적으로 못 내는 것({@link #UNSERVABLE})과, 값이 아니라
-     * <b>읽기 시점에 재구성</b>되는 교차단면 파생값이다. 후자는 원천만 있으면
-     * {@link #missingCodesOf}가 통과시킨다.
-     */
-    public static Set<String> declaredCodesOf(IndicatorRegistry registry) {
-        Set<String> out = new TreeSet<>(registry.codes());
-        out.removeAll(UNSERVABLE);
-        out.removeIf(code -> reconstructionSourceOf(code) != null);
-        return out;
-    }
-
-    public static Set<String> missingCodesOf(ConditionGroup resolved, Set<String> storedCodes) {
-        Set<String> missing = new TreeSet<>();
-        for (String code : resolved.referencedIndicatorCodes()) {
-            if (storedCodes.contains(code)) {
-                continue;
-            }
-            String source = reconstructionSourceOf(code);
-            if (source != null && storedCodes.contains(source)) {
-                continue;
-            }
-            missing.add(code);
-        }
-        return missing;
-    }
-
     /**
      * 읽기 시점에 재구성되는 코드의 <b>원천</b>. 재구성 대상이 아니면 {@code null}.
      *
@@ -249,7 +203,7 @@ public class PointInTimeScreener {
      * 좁힌 것을 주면 업종 백분위의 동료 수가 달라져 조용히 다른 값이 나온다 — 라이브
      * {@code SectorRelativeCalculator}가 활성 유니버스 편입 전체에서 매기기 때문이다(ADR-0108).
      */
-    public Map<String, Outcome> screenAllFromValues(
+    private Map<String, Outcome> screenAllFromValues(
             LocalDate asOf, List<Request> requests, ScreeningTargets.Target target,
             Map<Long, Map<String, BigDecimal>> populationValues) {
         Map<String, ConditionGroup> resolvedByLabel = new LinkedHashMap<>();
@@ -319,11 +273,6 @@ public class PointInTimeScreener {
                     new Outcome(asOf, included, ofTarget, targetIds.size(), resolved));
         }
         return outcomes;
-    }
-
-    /** 그 통화의 값 계산 모집단. 저장소 적재가 이 목록으로 돈다. */
-    public List<Long> populationFor(String currencyCode) {
-        return selectSectorPopulationIds(currencyCode);
     }
 
     /**

@@ -87,6 +87,39 @@ public class IndicatorCalendar {
     }
 
     /**
+     * {@code from}부터 {@code to}까지 그 시장들에 지표가 있는 <b>모든 거래일</b>.
+     *
+     * <p>범위를 묻는 위의 셋과 <b>같은 표·같은 시장 술어</b>여야 해서 여기 둔다. 부르는 쪽이
+     * 스스로 {@code indicator_trade_date}를 훑으면 시장 한정이 조용히 갈리고, 그러면
+     * <b>국내 휴장·미국 개장일이 국내 as-of로 들어간다</b> — 그 실패가 값이 나오는 형태라
+     * 드러나지 않는 것이 이 클래스가 존재하는 이유 그대로다.
+     *
+     * <p><b>시세({@code price_daily})가 아니라 지표를 기준으로 잡는 것이 요점이다.</b> 시세는
+     * 들어왔는데 지표 배치가 아직 안 돈 날이 실재한다 — 일일 갱신과 지표 사슬이 다른 시각에
+     * 돌기 때문이고, 그 날짜를 기준일로 고르면 <b>전 조건이 판정불가인데 에러가 없다.</b>
+     *
+     * @return 오름차순. 그 구간에 지표가 없으면 빈 목록
+     */
+    @Transactional(readOnly = true)
+    public List<LocalDate> everyIndicatorDate(LocalDate from, LocalDate to,
+                                              Collection<String> marketCodes) {
+        if (marketCodes == null || marketCodes.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "거래일을 열거하려면 시장을 골라야 한다 — 빈 집합은 「전 시장」이 아니다");
+        }
+        List<Object> args = new ArrayList<>();
+        args.add(from);
+        args.add(to);
+        args.addAll(marketCodes);
+        String sql = ("SELECT DISTINCT trade_date FROM indicator_trade_date"
+                + " WHERE trade_date BETWEEN ? AND ? AND market_code IN (%s)"
+                + " ORDER BY trade_date")
+                .formatted(String.join(", ",
+                        java.util.Collections.nCopies(marketCodes.size(), "?")));
+        return jdbcTemplate.queryForList(sql, LocalDate.class, args.toArray());
+    }
+
+    /**
      * 시장 조건을 붙여 한 값을 읽는다.
      *
      * <p><b>빈 시장 집합은 예외다.</b> 「전 시장」으로 접으면 이 클래스가 존재하는 이유가
