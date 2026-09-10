@@ -17,6 +17,8 @@
 #
 # **대상이 둘인 이유** — 지우는 방식이 달라도 결과가 같다.
 #   * `adjustment-rebuild`(ADR-0049) — `adj_close`를 소급해 다시 써서 그 종목 지표를 지운다.
+#   * `backfill`(ADR-0085·0130·0136) — 파생층의 「그날 모집단 밖」과 러너의 「안 낸 날짜」를 걷는다.
+#     계산만 하는 잡으로 읽히기 쉬운데 실측으로 한 판이 285,498행을 지웠다.
 #   * `financial-refill`(ADR-0040) — 소스가 더 늦은 공시일을 주면 정정으로 판정하고
 #     `FinancialWriter`가 `invalidate`를 불러 그 종목 지표를 보존 창 전체에서 지운다.
 #     이쪽은 **원자료까지 영구히 바뀐다** — ADR-0071이 *"적재된 재무는 되돌리지 않는다"*로
@@ -45,6 +47,7 @@ echo "$cmd" | grep -qE '(^|[[:space:];|&])(\./)?gradlew?([[:space:]]|$)' || exit
 case "$cmd" in
   *--job=adjustment-rebuild*) job='adjustment-rebuild' ;;
   *--job=financial-refill*)   job='financial-refill' ;;
+  *--job=backfill*)           job='backfill' ;;
   *) exit 0 ;;
 esac
 
@@ -65,6 +68,8 @@ fi
 case "$job" in
   adjustment-rebuild)
     why="\`rebuild()\`의 첫 호출은 저장된 \`adj_close\`를 전 구간 소급해 다시 쓰고 그 종목의 \`indicator_value\`를 통째로 지운다(ADR-0049)." ;;
+  backfill)
+    why="이 잡은 계산만 하지 않는다. **돌린 날짜의 파생 행 중 「그날 모집단 밖」인 것을 지우고**(ADR-0085·0136), 러너가 「값을 그만 낸」 날짜의 옛 행도 걷는다(ADR-0130 — 전 종목 한 판이 실측 285,498행을 지웠다). \`--tickers\`로 좁혀도 **파생층은 전 종목이라 그날 것이 전부 걸린다.**" ;;
   financial-refill)
     why="이 잡은 결손만 채우는 것이 아니다. 소스가 더 늦은 공시일을 주면 **정정으로 판정해 개정본을 쌓고** 그 종목 지표를 보존 창 전체에서 지운다(ADR-0040). 게다가 적재된 원자료는 되돌리지 않는 것이 규칙이라(ADR-0071), 되돌릴 수 있는 것이 덤프뿐이다." ;;
 esac
