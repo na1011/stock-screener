@@ -209,20 +209,11 @@ id가 나와 그 종목이 낡는다. **앱 경로는 그 갈래가 없다**: `F
 
 ## 검증
 
-```bash
-# 저장본으로 낸 최초 통과일이 직접 계산과 같은가 (실측 4전략 × 3대상 12조합 일치)
-./gradlew backtestProbe --tests "*StoreRoundTripProbeTest*"
+**이 결정은 검증할 것이 없다 — 지배하던 코드가 전부 없다.** 옛 §검증이 부르던
+`StoreRoundTripProbeTest`·`PitLoadTest`는 ADR-0131이 지웠고 전제 둘도 그때 걷었다.
 
-# 재개가 배선돼 있는가 — API가 아니라 적재 경로가 부르는가
-rg -n "freshnessOf" src/test/java/com/stockscreener/probe/backtest/PitLoadTest.java
-
-# 스윕이 직접 계산으로 몰래 떨어지지 않는가
-rg -n "screenAll\(" src/test/java/com/stockscreener/probe/backtest/CustomScreenSweepTest.java
-```
-
-마지막 명령은 **아무것도 반환하지 않아야 한다.** 반환하면 스윕이 저장소를 우회해 직접
-계산하고 있고, 그 실행은 경고 없이 몇 시간짜리가 된다.
-
-**전제 둘은 2026-09-09에 걷었다**(ADR-0131) — 읽는 코드가 없어진 저장소를 재고 있었다.
+**지금 그 자리를 지키는 검사는 ADR-0137 §검증**이다 — 스윕이 값을 직접 만들거나 다시 매기지
+않는지를 `EngineSweep`에서 본다. 이 문서는 **그 저장소가 무엇을 지키려 했는지의 기록**으로만
+남는다.
 
 

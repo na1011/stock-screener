@@ -4,7 +4,6 @@ status: 채택됨
 date: 2026-09-09
 applies_to:
   - "src/test/java/com/stockscreener/probe/backtest/EngineSweep.java"
-  - "src/test/java/com/stockscreener/probe/backtest/StoredValueSource.java"
   - "src/test/java/com/stockscreener/probe/backtest/CustomScreenSweepTest.java"
 ---
 
@@ -69,7 +68,8 @@ ADR-0123 §왜 저장하는가가 근거 넷을 든다. 지금 서는 것이 하
 ./gradlew backtestSweep
 
 # 스윕이 직접 계산으로 몰래 떨어지지 않는가 — 아무것도 반환하지 않아야 한다
-rg -n "screenAll\(|computeAt\(" src/test/java/com/stockscreener/probe/backtest/EngineSweep.java
+# MUST: `screenAll\(` 만 쓰지 않는다 — `screenAllFromValues(` 에 안 걸린다
+rg -n "screenAllFromValues|screenAll\(|computeAt\(" src/test/java/com/stockscreener/probe/backtest/EngineSweep.java
 
 # 저장 지표가 과거 as-of에서도 시점 재현인가 — 이 결정이 서는 전제다
 ./gradlew backtestProbe --tests "*StoredAsOfParityProbeTest*"
@@ -117,15 +117,23 @@ rg -n "screenAll\(|computeAt\(" src/test/java/com/stockscreener/probe/backtest/E
   **사용자가 감수를 골랐다.**
 - **스윕의 정확성이 저장 값의 정확성에 얹힌다.** 그것을 재는 것이 `StoredAsOfParityProbeTest`
   하나이고, 지금 **통과 집합은 12조합 전부 일치하되 점수는 4건이 갈린다.**
-- **스윕의 `*_PCTL`·`*_SECTOR_*`는 화면의 것과 미세하게 다르다.** `screenAllFromValues`가
-  그 코드를 **원천에서 다시 매기고 저장값을 덮기** 때문이다(실측 `PER_SECTOR_PCTL`
-  0.50847458 대 저장 0.50000000). **MUST NOT: 저장값 우선으로 바꾸지 않는다** — 그
-  재구현이 **저장 값을 검사하는 유일한 독립 대조군**이고, 실제로 그것이 ADR-0130·0132의
-  결함 둘을 찾아냈다. 저장값을 쓰게 만들면 그 검사가 동어반복이 된다.
+- ~~**스윕의 `*_PCTL`·`*_SECTOR_*`는 화면의 것과 미세하게 다르다.** `screenAllFromValues`가
+  그 코드를 원천에서 다시 매기고 저장값을 덮기 때문이다(실측 `PER_SECTOR_PCTL`
+  0.50847458 대 저장 0.50000000). **MUST NOT: 저장값 우선으로 바꾸지 않는다**~~
+  → **2026-09-11에 열렸다**(ADR-0137). **갈리던 원인이 계산기가 아니라 재구성의 모집단이었다** —
+  재구성이 `effective_to IS NULL`(오늘의 편입)로 매기고 저장값은 그날의 편입으로 매긴다.
+  **그날의 편입으로 재구성하면 저장값과 완전히 일치한다**(727/727 · 최대차 4.9e-9). 스윕은
+  이제 화면과 같은 질의로 저장값을 읽는다.
+  - **대조군 논거는 그대로 산다.** `PointInTimeScreener.screenAll`이 값을 **직접 만들어**
+    라이브와 견주고, 그것이 ADR-0130·0132의 결함 둘을 찾았다. **MUST NOT: 그 대조군을 저장
+    값으로 갈아끼우지 않는다** — 그러면 검사가 동어반복이 된다.
 - **`~/.stock-screener/pit-store/`는 2026-09-09에 사람이 지웠다**(294MB · 1,032파일).
   **에이전트가 못 지운다** — `guard-destructive.sh`가 `rm -r`+`-f`를 하드 deny하고, 플래그를
   바꿔 통과시키는 것은 그 가드의 취지를 무력화하는 것이다. 다시 필요하면 그때 스크립트를
   만들어 사람에게 넘긴다.
 
-**되돌리려면** 이 커밋을 되돌린다. 저장소 파일은 그대로 있으나 **지문이 낡았을 것**이므로
-`-Dpit.recheck=calculator`부터 밟아야 한다.
+**되돌리려면** 이 커밋을 되돌린다. **저장소 파일은 사람이 지웠으므로 통째로 다시 만들어야
+한다**(옛 실측 3시간 41분) — 되살리는 스크립트는 남아 있지 않다.
+
+**이 결정은 2026-09-11에 한 걸음 더 갔다**(ADR-0137) — 스윕이 값을 스스로 읽고 파생 지표를
+다시 매기던 자리까지 걷혀 **화면과 같은 `ScreeningRepository.screen`을 부른다.**
