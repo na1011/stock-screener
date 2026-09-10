@@ -213,8 +213,10 @@ public class SectorRelativeCalculator {
      * {@code removeOrphans} 호출을 이것으로 갈음한다 — 같은 행의 소유가 둘이면 한쪽을 고칠 때
      * 다른 쪽이 조용히 남는다.
      *
-     * <p><b>지우는 것은 그날 하나뿐이다.</b> 과거 일자에 남은 것은
-     * {@link #removeOrphansInWindow}와 유니버스 이탈 정리가 본다.
+     * <p><b>지우는 것은 그날 하나뿐이다.</b> 과거 일자에 남은 것 중 <b>원본이 사라진</b> 자리는
+     * {@link #removeOrphansInWindow}가 보고, <b>모집단 밖으로 나간</b> 자리는 <b>그 날짜를 다시
+     * 도는 실행이 있어야</b> 걷힌다 — 창 전체 파생층 한 판이 그것이다(ADR-0136).
+     * 「유니버스 이탈 정리」라는 별도 기제는 <b>없다.</b>
      */
     private static final String DELETE_UNWRITTEN = """
             WITH %s

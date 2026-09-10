@@ -213,6 +213,114 @@ class PercentileCalculatorTest {
         assertThat(countPercentiles()).isEqualTo(afterFirst);
     }
 
+    @Test
+    @DisplayName("그날 편입이 아니었던 종목의 옛 백분위를 걷는다 — 원본이 그대로 있어도 걷는다")
+    void deletesRowsOfStocksThatWereNotMembersOnThatDay() {
+        // 시점화(ADR-0135) 전에는 「오늘 명부」로 과거 전 날짜에 백분위를 썼다. 그래서 편입
+        // 이전 날짜에 남은 행이 실측 216,752개였다(ADR-0136).
+        long joinedLater = memberWithPer("KOSPI", "KOSPI200", "100001", new BigDecimal("7"));
+        jdbcTemplate.update("""
+                UPDATE universe_membership SET effective_from = ? WHERE stock_id = ?
+                """, AS_OF.plusDays(1), joinedLater);
+        // MUST: 원본을 남겨 둔다. 원본까지 지우면 「원본이 없다」축이 삭제를 설명해 버려
+        // 편입 축을 재는 시험이 아니게 된다 — 실측으로 그 216,752행은 **전부 원본이 있었다.**
+        staleRow(joinedLater, PerCalculator.CODE + PercentileSpec.SUFFIX, "1", AS_OF);
+
+        calculator.calculate(AS_OF, null);
+
+        assertThat(valueAt(joinedLater, PerCalculator.CODE + PercentileSpec.SUFFIX, AS_OF))
+                .as("그날 명부에 없던 종목의 순위는 다른 명부의 것이다")
+                .isNull();
+        assertThat(valueAt(joinedLater, PerCalculator.CODE, AS_OF))
+                .as("원본은 이 삭제의 대상이 아니다 — 지우면 여집합을 잘못 잡은 것이다")
+                .isEqualByComparingTo("7");
+    }
+
+    @Test
+    @DisplayName("모집단이 하나로 줄어든 자리의 옛 행도 걷는다 — 배제 사유가 편입 하나가 아니다")
+    void deletesRowsWhenThePopulationFellBelowTwo() {
+        long lonely = memberWithPer("KOSDAQ", "KOSDAQ150", "100002", new BigDecimal("7"));
+        // 어제까지는 둘 이상이었다가 리밸런싱으로 하나가 된 상태다. 편입은 그날을 덮고 원본도
+        // 있으므로, 술어를 편입 축으로만 좁히면 이 행이 남는다.
+        staleRow(lonely, PerCalculator.CODE + PercentileSpec.SUFFIX, "0", AS_OF);
+
+        calculator.calculate(AS_OF, null);
+
+        assertThat(valueAt(lonely, PerCalculator.CODE + PercentileSpec.SUFFIX, AS_OF))
+                .as("0은 '가장 싸다'로 읽혀 조건을 충족시킨다")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("값이 안 바뀐 재실행에서 편입 종목의 멀쩡한 행은 남는다 — 「이번에 안 썼다」를 기준으로 삼으면 안 된다")
+    void keepsRowsOnRunsWhereTheUpsertWroteNothing() {
+        calculator.calculate(AS_OF, null);
+        assertThat(percentileOf(stockIds.get(2))).isEqualByComparingTo("0.5");
+
+        // 두 번째 실행은 IS DISTINCT FROM 때문에 0행을 쓴다. 삭제 술어를 「UPSERT가 반환한
+        // 행 수」로 잡으면 여기서 멀쩡한 행이 사라진다 — DerivedIndicatorCleanup의 javadoc이
+        // 그 함정을 적어 뒀고, 이 단언이 그 경계를 지킨다. 자리표시자가 밀려 모집단이 비는
+        // 사고도 여기서 드러난다.
+        calculator.calculate(AS_OF, null);
+
+        assertThat(percentileOf(stockIds.get(2)))
+                .as("집합의 소속으로 판정하므로 값이 안 바뀐 날에도 그 종목은 모집단에 있다")
+                .isEqualByComparingTo("0.5");
+        assertThat(countPercentiles()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("백필 유니버스를 준 실행은 그 비활성 유니버스 구성원의 행을 지우지 않는다")
+    void keepsRowsOfTheBackfillUniverseWhenItsCodeIsGiven() {
+        // 「켜야 지표가 생기고, 지표가 없으면 켜면 안 되는」 순환을 끊는 자리다. 삭제가 모집단을
+        // 계산과 같은 것으로 보지 않으면, 미리 백필해 둔 값을 같은 실행이 도로 지운다.
+        long backfilled = memberWithPer("KOSPI", "KOSPI_TOP200", "100003", BigDecimal.ONE);
+        memberWithPer("KOSPI", "KOSPI_TOP200", "100004", new BigDecimal("2"));
+
+        calculator.calculate(AS_OF, "KOSPI_TOP200");
+
+        assertThat(valueAt(backfilled, PerCalculator.CODE + PercentileSpec.SUFFIX, AS_OF))
+                .as("모집단에 넣기로 한 유니버스의 순위는 이 실행이 쓴 값이다")
+                .isEqualByComparingTo("0");
+        // 코드를 **안 주는** 실행은 이 행을 지운다. 그것이 지금 동작이고 ADR-0136 §결과가
+        // 남는 위험으로 적어 뒀다 — 여기서 단언하지 않는 이유는 그것을 원해서가 아니다.
+    }
+
+    @Test
+    @DisplayName("다른 거래일의 행은 건드리지 않는다")
+    void doesNotTouchOtherTradeDates() {
+        long outsider = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('KOSPI', '999998', '비편입')
+                RETURNING id
+                """, Long.class);
+        staleRow(outsider, PerCalculator.CODE + PercentileSpec.SUFFIX, "1", AS_OF);
+        staleRow(outsider, PerCalculator.CODE + PercentileSpec.SUFFIX, "1", AS_OF.minusDays(1));
+
+        calculator.calculate(AS_OF, null);
+
+        assertThat(valueAt(outsider, PerCalculator.CODE + PercentileSpec.SUFFIX, AS_OF))
+                .as("그날 모집단 밖이다")
+                .isNull();
+        assertThat(valueAt(outsider, PerCalculator.CODE + PercentileSpec.SUFFIX, AS_OF.minusDays(1)))
+                .as("삭제 상한이 trade_date 하나로 묶여 있다 — 그 날짜는 이 실행이 판정하지 않았다")
+                .isEqualByComparingTo("1");
+    }
+
+    /** 옛 규제로 쓰인 행을 흉내낸다. 계산기를 거치지 않고 직접 심는다. */
+    private void staleRow(long stockId, String code, String value, LocalDate tradeDate) {
+        jdbcTemplate.update("""
+                INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)
+                VALUES (?, ?, ?, ?)
+                """, stockId, tradeDate, code, new BigDecimal(value));
+    }
+
+    private BigDecimal valueAt(long stockId, String code, LocalDate tradeDate) {
+        return jdbcTemplate.queryForList("""
+                SELECT value FROM indicator_value
+                WHERE stock_id = ? AND trade_date = ? AND indicator_code = ?
+                """, BigDecimal.class, stockId, tradeDate, code).stream().findFirst().orElse(null);
+    }
+
     /** 지정한 유니버스에 편입된 종목 하나를 PER 값과 함께 만든다. */
     private long memberWithPer(String marketCode, String universeCode, String ticker,
                                BigDecimal per) {
