@@ -123,10 +123,13 @@ rg -n "screenAllFromValues|screenAll\(|computeAt\(|StoredValueSource" \
                         --tests "*UniversePercentileProbeTest*" \
                         --tests "*HarnessCoverageProbeTest*"
 
-# 없어진 기제의 잔재 — 전부 0건이어야 한다
+# 없어진 기제를 **처방**하는 자리가 남았는가 — 0건이어야 한다
+# MUST: 기록 둘(ADR-0123·0131)은 뺀다. 그 저장소가 무엇이었는지의 기록이라 원래 이름이 있고,
+#       안 빼면 이 검사가 영구 발견을 내며 「0건이어야 한다」가 거짓이 된다.
 # MUST: `rg -rn` 을 쓰지 않는다. `-r` 은 --replace 라 매치가 "n" 으로 치환돼 나온다
-rg -n --hidden --glob '!.git/**' --glob '!build/**' \
-   "pit-store|PIT_STORE|backtestLoad|pit\.days|pit\.recheck|sweep\.maxLag" .
+rg -n --hidden --glob '!.git/**' --glob '!build/**' --glob '!**/node_modules/**' \
+   --glob '!docs/adr/ADR-0123-*' --glob '!docs/adr/ADR-0131-*' --glob '!docs/adr/ADR-0137-*' \
+   "pit-store|PIT_STORE|backtestLoad|pit\.days|pit\.recheck|sweep\.maxLag|maxRecomputeDates" .
 ```
 
 **`premise` 블록을 새로 만들지 않는다.** 이 결정이 서는 축은 **저장 값이 시점 재현이고 그날의
