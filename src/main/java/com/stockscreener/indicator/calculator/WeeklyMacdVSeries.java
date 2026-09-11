@@ -88,28 +88,40 @@ public class WeeklyMacdVSeries {
     private record Key(long stockId, LocalDate first, LocalDate last, int bars) {
     }
 
-    private Key cachedKey;
-    private NavigableMap<LocalDate, Point> cachedValue;
+    /** 한 스레드가 들고 있는 마지막 계열. 키가 함께 살아야 창 판별이 성립한다. */
+    private static final class Memo {
+        private Key key;
+        private NavigableMap<LocalDate, Point> value;
+    }
+
+    private final ThreadLocal<Memo> memo = ThreadLocal.withInitial(Memo::new);
 
     /**
      * 이 종목·이 창에서 산출 가능한 모든 거래일의 주봉 MACD-V 계열.
      *
-     * <p>{@code synchronized}인 이유는 정확성이 아니라 캐시가 찢어지지 않게 하려는 것이다 —
-     * 배치는 순차지만 관리자 화면이 잡을 띄우는 경로가 있어(ADR-0029) 같은 JVM에서 겹칠 수 있다.
+     * <p>캐시가 <b>스레드별</b>인 이유는 {@code IndicatorBackfillJob}이 종목 루프를 팬아웃하기
+     * 때문이다(ADR-0138). 싱글턴 필드 하나로 두면 워커들이 서로 다른 종목을 돌며 키를 매번
+     * 어긋내 전부 캐시 미스가 되고, 계산이 락 안이라 그 재계산이 전 워커에 걸쳐 직렬화된다.
+     * 옛 {@code synchronized}가 지키려던 것(관리자 화면이 띄운 잡과의 겹침 · ADR-0029)은
+     * 스레드별 캐시가 <b>더 강하게</b> 만족시킨다 — 겹쳐도 서로를 밀어내지 않는다.
+     *
+     * <p><b>MUST: 키 대조를 빼지 않는다.</b> "한 스레드는 한 종목만 본다"에 기대면 ADR-0054
+     * §버린 대안이 기각한 그 물건이 되고, 증상은 <b>값이 하루 낡은 것</b>뿐이다.
      */
-    public synchronized NavigableMap<LocalDate, Point> of(IndicatorContext context) {
+    public NavigableMap<LocalDate, Point> of(IndicatorContext context) {
         List<PriceBar> bars = context.priceBars();
         if (bars.isEmpty()) {
             return Collections.emptyNavigableMap();
         }
         Key key = new Key(context.stockId(), bars.getFirst().tradeDate(),
                 bars.getLast().tradeDate(), bars.size());
-        if (key.equals(cachedKey)) {
-            return cachedValue;
+        Memo cached = memo.get();
+        if (key.equals(cached.key)) {
+            return cached.value;
         }
         NavigableMap<LocalDate, Point> value = compute(bars);
-        cachedKey = key;
-        cachedValue = value;
+        cached.key = key;
+        cached.value = value;
         return value;
     }
 
