@@ -130,5 +130,8 @@ rg -l "FinancialMath.sharesOf" src/main/java/com/stockscreener/indicator/calcula
 base만 돌리면 나머지 날짜가 옛 모집단으로 매겨진 채 남는다(ADR-0130 §규칙 · 실측 5분 17초).
 
 **되돌리려면** 네 계산기의 `calculate`를 `computeSegment` 본체로 되돌린다.
+대조군은 `~/Library/Application Support/stock-screener/dumps/bysegment-20260909-before.psv`다
+— `WAT`·`ANET`·`UI`의 **변경 직전** 지표 값 89,733행이고, ADR-0130 L136이 인용해 보존하는
+`cull-head-20260909-before.psv`와 같은 모집단·같은 형식이다.
 **되돌리는 순간 과거 일자 값이 다시 미래의 판으로 계산되고 아무 에러도 안 난다** —
 위 두 탐침만이 그것을 잡는다.
