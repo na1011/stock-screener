@@ -39,8 +39,12 @@ spring:
       # Boot 기본값 10이면 워커 상한이 8로 깎인다.
       #
       # IMPORTANT — 이 값은 **두 JVM에 걸린다.** 운영 앱(:8080)과 bootstrap 프로파일의 별도
-      # 프로세스(server.port: 0이라 8080에 안 부딪힌다)가 각각 이 크기의 풀을 연다. 둘이 다
-      # 차도 24이고 PostgreSQL max_connections가 100이라 여유가 크다(2026-09-11 실측: 사용 16).
+      # 프로세스(server.port: 0이라 8080에 안 부딪힌다)가 각각 이 크기의 풀을 연다.
+      #
+      # 그리고 **「쓸 때만 연다」가 아니다** — 이 프로파일에 minimum-idle이 없어 Hikari 기본이
+      # minimumIdle = maximumPoolSize다. 앱은 기동 직후부터 **12를 상시 유휴로 문다**
+      # (2026-09-11 배포 뒤 실측: application_name='PostgreSQL JDBC Driver' 12개 전부 idle).
+      # 적재 러너가 함께 돌면 24이고, PostgreSQL max_connections가 100이라 여유는 크다.
       #
       # MUST NOT: 워커 수를 이 값에 맞춰 올리지 않는다. 상한을 정하는 것은 코어 유보이고
       # (IndicatorBackfillJob.resolveWorkers), 이 기계에는 운영 앱이 온디바이스로 함께 산다.
