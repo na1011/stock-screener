@@ -155,6 +155,20 @@ ops/status.sh
 외부    : {"groups":["liveness","readiness"],"status":"UP"}
 빌드데몬: 없다                                    ← 있으면 ./gradlew --stop (운영과 무관)
 자동기동: 없다 (정상 — 부팅·로그인에 뜨는 등록이 하나도 없다)
+
+== 로그 ==
+  stdout.log       2.1M  임계의  26%  세대 3개
+  stderr.log       111B  임계의   0%  세대 0개
+  tunnel.log       442K  임계의  21%  세대 0개    ← 80%를 넘으면 그 줄이 알려준다
+```
+
+**로그는 저절로 걷히지 않는다.** 회전은 `ops/start.sh`가 기동 직전에, 또는 아래를 손으로
+칠 때만 돈다 — 앱과 터널이 손으로만 뜨는 것과 같은 이유다(ADR-0043). 위 `== 로그 ==` 절이
+**초과를 사람이 아는 유일한 경로**다.
+
+```bash
+ops/rotate-logs.sh            # 임계를 넘긴 것만 압축해 세대로 민다. 도는 중에도 안전하다
+ops/rotate-logs.sh --force    # 임계를 무시한다(확인을 묻는다)
 ```
 
 **로컬만 보고 판단하지 않는다** — `cloudflared`가 죽어도 로컬은 초록이다. **밖에서 무엇이 오는가가 앱과 터널을 가른다.**
@@ -162,21 +176,29 @@ ops/status.sh
 | 밖에서(`https://screener.na1011.net/actuator/health`) | 무엇이 문제인가 | 하는 일 |
 |---|---|---|
 | `{"status":"UP"}` | 정상 | — |
-| **502** | 터널은 살아 있고 **앱이 죽었다** | `ops/start.sh` (없는 쪽만 뜬다) · 원인은 `stderr.log` |
+| **502** | 터널은 살아 있고 **앱이 죽었다** | `ops/start.sh` (없는 쪽만 뜬다) · 원인은 `stdout.log` |
 | **`error code: 1033` / 응답 없음** | **터널이 죽었다** (앱은 모른다) | `ops/start.sh` · 원인은 `tunnel.log` |
 | **DNS·인증서 오류** | Cloudflare 쪽 설정 | [`docs/external-services-setup.md`](docs/external-services-setup.md) §2 |
 
 ```bash
-tail -50 ~/Library/Logs/stock-screener/stderr.log    # 앱 기동 실패
-tail -50 ~/Library/Logs/stock-screener/stdout.log    # 앱 로그
+tail -50 ~/Library/Logs/stock-screener/stdout.log    # 앱 로그 — **기동 실패도 여기다**
 tail -50 ~/Library/Logs/stock-screener/tunnel.log    # 터널
+tail -50 ~/Library/Logs/stock-screener/stderr.log    # JVM 이전의 셸 오류만 (.env 파싱 등)
+
+# 지난 이력은 압축 세대에 있다. 회전은 임계(stdout 8 MiB)를 넘길 때만 돈다.
+zgrep -A 20 '<문구>' ~/Library/Logs/stock-screener/stdout.log.*.gz
 ```
+
+**MUST: 기동 실패를 `stderr.log`에서 찾지 않는다.** Spring Boot의 `APPLICATION FAILED TO START`는
+logback 콘솔 appender를 타므로 **`stdout.log`로 간다** — 실측으로 `stdout.log`에 1건,
+`stderr.log`에 0건이었다. `stderr.log`가 받는 것은 `run-app.sh`가 `.env`를 source할 때 나는
+셸 오류뿐이고, 그래서 34일간 111바이트 한 줄이었다.
 
 **증상별로:**
 
 | 증상 | 원인과 처방 |
 |---|---|
-| `start.sh`가 **60초 안에 응답이 없다** | 기동 실패다. `stderr.log`를 본다. DB부터 의심한다 — `pg_isready` |
+| `start.sh`가 **60초 안에 응답이 없다** | 기동 실패다. **`stdout.log`를 본다**(`stderr.log`가 아니다 — 위 MUST). DB부터 의심한다 — `pg_isready` |
 | `stop.sh`가 **30초 안에 종료되지 않았다** | 종료 훅에서 멈춰 있다. 스크립트가 강제 종료하지 않는 것은 의도다(원인이 안 남는다). 원인을 본 뒤 안내대로 `kill -9 <PID>` |
 | `cloudflared가 이미 돌고 있다` | 우리가 띄운 것이 아니다. `ops/status.sh`의 **자동기동** 줄을 본다. `cloudflared-LaunchDaemon`이 뜨면 `sudo cloudflared service uninstall` |
 | `:8080을 아직 무언가 잡고 있다` | 대개 개발용 `./gradlew bootRun`이다. `lsof -nP -iTCP:8080 -sTCP:LISTEN` |

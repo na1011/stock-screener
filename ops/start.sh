@@ -63,7 +63,7 @@ start_app() {
   if wait_for "$HEALTH_LOCAL" 60; then
     echo "[start] 앱 OK — $(curl -s "$HEALTH_LOCAL")"
   else
-    echo "[start] 60초 안에 응답이 없다. $LOG_DIR/stderr.log를 본다." >&2
+    echo "[start] 60초 안에 응답이 없다. $LOG_DIR/stdout.log를 본다 — 기동 실패는 거기 있다." >&2
     return 1
   fi
 }

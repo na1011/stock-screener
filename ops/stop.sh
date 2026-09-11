@@ -49,7 +49,7 @@ stop_one() {
   # 여기서 kill -9를 자동으로 쏘지 않는다. 앱이 종료 훅에서 멈춰 있는 상태일 수 있고,
   # 그것을 조용히 강제 종료하면 왜 안 죽었는지가 영영 남지 않는다.
   echo "[stop] ${name}이 ${limit}초 안에 종료되지 않았다 (PID ${pid})." >&2
-  echo "       원인은 $LOG_DIR/stderr.log에 있다. 강제로 끄려면: kill -9 $pid" >&2
+  echo "       원인은 $LOG_DIR/stdout.log에 있다. 강제로 끄려면: kill -9 $pid" >&2
   return 1
 }
 
