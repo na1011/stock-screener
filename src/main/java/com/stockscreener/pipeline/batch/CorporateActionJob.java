@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
 
@@ -127,6 +128,7 @@ public class CorporateActionJob {
             // fatal()이 아니라, 루프 안에 두면 **전 종목이 같은 이유로 실패하고 배치는 끝까지
             // 돈다.** 키가 없으면 수정계수가 영영 1로 남는데 그것이 부분 성공으로 기록된다.
             requireSources(targets);
+            reportWindowCoverage(targets, earliestByMarket, from, asOf);
 
             execution.plan(CollectionPhase.ADJUSTMENT, targets.size());
             execution.stage("종목별 기업 행위 수집");
@@ -170,6 +172,34 @@ public class CorporateActionJob {
      * {@code NOT_FOUND}는 종목 실패로 기록될 뿐 배치를 멈추지 않는다. {@code DataSourceRegistry}가
      * 이 포트에 {@code Optional} 변형을 금지한 이유와 같은 자리다.
      */
+    /**
+     * 소스가 창의 뒤쪽을 못 덮으면 <b>시장마다 한 줄</b>로 적는다.
+     *
+     * <p>MUST: 종목 루프 <b>앞</b>에서 부른다. 커버리지는 창과 시장의 성질이라 종목 수만큼
+     * 되풀이해도 더해지는 정보가 0이다 — 어댑터 안에서 종목마다 찍던 때 한 판에 350줄이
+     * 티커만 다른 채 똑같이 나왔고 그것이 운영 로그의 12.7%였다(2026-09-11 실측).
+     *
+     * <p>MUST NOT: 이것을 실패나 경고로 올리지 않는다. 정기보고서가 아직 안 나온 것은
+     * 정상이고, 그 구간의 사건은 휴리스틱이 후보로 올린다. 여기서 하는 일은
+     * <b>무엇을 못 봤는지 말할 수 있게</b> 하는 것뿐이다(phase 기준 §P9).
+     */
+    private void reportWindowCoverage(List<SecurityRef> targets,
+                                      Map<String, LocalDate> earliestByMarket,
+                                      LocalDate from, LocalDate asOf) throws DataSourceException {
+        Set<String> markets = new LinkedHashSet<>();
+        for (SecurityRef target : targets) {
+            markets.add(target.marketCode());
+        }
+        for (String market : markets) {
+            LocalDate start = from != null ? from : earliestByMarket.get(market);
+            if (start == null) {
+                continue;
+            }
+            Optional<String> gap = registry.corporateActionSource(market).windowCoverage(start, asOf);
+            gap.ifPresent(text -> log.info("[{}] {}", market, text));
+        }
+    }
+
     private void requireSources(List<SecurityRef> targets) throws DataSourceException {
         Set<String> markets = new LinkedHashSet<>();
         for (SecurityRef target : targets) {

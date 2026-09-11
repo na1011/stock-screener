@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -43,6 +44,32 @@ public interface CorporateActionDataSource {
      *
      * <p>빈 목록은 "그 창에 사건이 없다"이지 실패가 아니다.
      */
+    /**
+     * 이 소스가 그 창의 <b>뒤쪽을 못 덮는다면</b> 그 사실을 한 문장으로 돌려준다.
+     * 덮으면 빈 값이다.
+     *
+     * <p>IMPORTANT — <b>커버리지를 성립으로 읽지 않는다</b>(phase 기준 §P9). 소스가 못 본
+     * 구간을 조용히 건너뛰면 호출자가 창 전체를 조회했다고 읽는다. 실제로는 정기보고서
+     * 제출 전 구간(최대 넉 달)이 빠져 있다.
+     *
+     * <p>실패가 아니다 — 그 구간의 불연속은 {@code AdjustmentRecalculator.detectCandidates}가
+     * 후보로 올린다. 여기서는 <b>무엇을 못 봤는지 말할 수 있게</b> 하는 것이 전부다.
+     *
+     * <p>MUST: 종목을 인자로 받지 않는다. 커버리지는 <b>창과 시장의 성질이지 종목의
+     * 성질이 아니다</b> — 종목 루프 안에서 찍던 때는 한 판에 350줄이 티커만 다른 채
+     * 똑같이 나왔다(2026-09-11 실측 · 운영 로그의 12.7%). 호출자가 루프 <b>앞에서</b>
+     * 한 번 부른다.
+     *
+     * <p>MUST NOT: 구현이 「직전에 답한 창과 같으면 침묵한다」식 상태를 갖지 않는다.
+     * 어댑터가 무상태 싱글턴인 것이 종목 루프를 나중에 워커로 흩어도 안전한 근거이고,
+     * 깨지면 증상이 "어느 종목의 줄이 다른 스레드 때문에 안 찍혔다"다.
+     *
+     * @return 못 덮는 구간이 있으면 그 설명, 없으면 빈 값
+     */
+    default Optional<String> windowCoverage(LocalDate from, LocalDate to) {
+        return Optional.empty();
+    }
+
     List<CorporateAction> fetchCorporateActions(SecurityRef security, LocalDate from, LocalDate to)
             throws DataSourceException;
 }

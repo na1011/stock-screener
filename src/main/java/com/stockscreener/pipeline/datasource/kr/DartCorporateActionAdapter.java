@@ -160,8 +160,6 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
             log.debug("조회 창을 덮는 정기보고서가 아직 없다. ticker={} {} ~ {}", security.ticker(), from, to);
             return List.of();
         }
-        warnOnPartialCoverage(security, reports, to);
-
         Set<IrdsRow> rows = new LinkedHashSet<>();
         for (DartIrdsReports.Report report : reports) {
             for (IrdsRow row : rowsOf(corpCode.get(), report, security)) {
@@ -191,26 +189,36 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
     }
 
     /**
-     * 창의 뒤쪽을 덮는 보고서가 아직 없으면 알린다.
+     * {@inheritDoc}
      *
-     * <p>IMPORTANT — <b>커버리지를 성립으로 읽지 않는다</b>(phase 기준 §P9). {@link DartIrdsReports}의
-     * 탐욕 알고리즘은 못 덮는 구간을 <b>조용히 건너뛰므로</b>, 이 한 줄이 없으면 호출자가 창
-     * 전체를 조회했다고 읽는다. 실제로는 정기보고서 제출 전 구간(최대 넉 달)이 빠져 있다.
+     * <p>DART는 정기보고서에만 실려 창의 뒤쪽 최대 넉 달이 비는 일이 있다.
+     * {@link DartIrdsReports}의 탐욕 알고리즘은 못 덮는 구간을 <b>조용히 건너뛰므로</b>,
+     * 이 답이 없으면 호출자가 창 전체를 조회했다고 읽는다 — <b>커버리지를 성립으로
+     * 읽지 않는다</b>(phase 기준 §P9).
      *
      * <p>실패가 아니다 — 그 구간의 불연속은 {@code AdjustmentRecalculator.detectCandidates}가
      * 후보로 올린다. 여기서는 <b>무엇을 못 봤는지 말할 수 있게</b> 하는 것이 전부다.
+     *
+     * <p>MUST: 종목을 안 본다. {@code covering}이 {@code (from, to, today)}만 받으므로
+     * 이 답은 한 판 안에서 모든 종목에 같다 — 종목 루프 안에서 찍던 때는 한 판에 350줄이
+     * 티커만 다른 채 똑같이 나왔다(2026-09-11 실측 · 운영 로그의 12.7%).
      */
-    private void warnOnPartialCoverage(SecurityRef security, List<DartIrdsReports.Report> reports,
-                                       LocalDate to) {
+    @Override
+    public Optional<String> windowCoverage(LocalDate from, LocalDate to) {
+        List<DartIrdsReports.Report> reports = DartIrdsReports.covering(from, to, LocalDate.now());
+        if (reports.isEmpty()) {
+            return Optional.of("창을 덮는 정기보고서가 하나도 없다. 창=%s~%s".formatted(from, to));
+        }
         LocalDate coveredThrough = reports.stream()
                 .map(DartIrdsReports.Report::coversTo)
                 .max(Comparator.naturalOrder())
                 .orElseThrow();
-        if (coveredThrough.isBefore(to)) {
-            log.info("조회 창의 뒤쪽을 덮는 정기보고서가 아직 없다. ticker={} 창={}~{} 덮은 데까지={}"
-                            + " — 그 뒤 구간의 사건은 소스가 원리적으로 답하지 못하며 휴리스틱이 후보로 올린다.",
-                    security.ticker(), reports.get(0).coversFrom(), to, coveredThrough);
+        if (!coveredThrough.isBefore(to)) {
+            return Optional.empty();
         }
+        return Optional.of(("조회 창의 뒤쪽을 덮는 정기보고서가 아직 없다. 창=%s~%s 덮은 데까지=%s"
+                + " — 그 뒤 구간의 사건은 소스가 원리적으로 답하지 못하며 휴리스틱이 후보로 올린다.")
+                .formatted(reports.get(0).coversFrom(), to, coveredThrough));
     }
 
     /**

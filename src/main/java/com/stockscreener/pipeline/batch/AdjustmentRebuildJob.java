@@ -124,6 +124,12 @@ public class AdjustmentRebuildJob {
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
         List<Rebuilt> rebuilt = new ArrayList<>();
         int appliedEvents = 0;
+        // 종목별 무변경 줄을 DEBUG로 내리면서 그 수가 갈 곳이 필요해졌다.
+        // MUST: 지역 변수로 센다 — RebuildResult에 필드를 더하면 그 record를 쓰는
+        // AdjustmentRecalculatorTest 13곳이 함께 깨진다.
+        // 이 루프는 순차라 평범한 int로 충분하다. 나중에 워커로 흩으면(ADR-0138이 지표
+        // 백필에 한 것처럼) 이 카운터는 **예외 없이 조용히 틀린다** — 그때 함께 고친다.
+        int alreadyMatching = 0;
 
         log.info("수정계수 재구축을 시작한다. 대상 {}종목 — 원장의 적용 대상에서 매번 다시 짓는다."
                 + " 갱신 0행이 정상이고 그 0이 멱등의 증거다.", targets.size());
@@ -149,10 +155,12 @@ public class AdjustmentRebuildJob {
                 if (result.changedRows() > 0) {
                     rebuilt.add(new Rebuilt(
                             target.ticker(), result.changedRows(), result.earliestChanged()));
+                } else {
+                    alreadyMatching++;
                 }
             }
 
-            alertOnInvalidation(execution, rebuilt, appliedEvents);
+            alertOnInvalidation(execution, rebuilt, appliedEvents, targets.size(), alreadyMatching);
         } catch (DataSourceException e) {
             // 외부 호출이 없으므로 정상적으로는 도달하지 않는다. StockTask의 시그니처가 이 예외를
             // 선언하고 있어 형식상 잡을 뿐이며, 실제로 온다면 그것 자체가 이상 신호다.
@@ -176,10 +184,14 @@ public class AdjustmentRebuildJob {
      * 이 잡의 성공은 "계수를 고쳤다"이고 그 상태는 아직 <b>일이 끝나지 않은</b> 상태다.
      */
     private void alertOnInvalidation(BatchExecutionContext execution, List<Rebuilt> rebuilt,
-                                     int appliedEvents) {
+                                     int appliedEvents, int targetCount, int alreadyMatching) {
+        // 종목별 무변경 줄이 DEBUG로 내려갔으므로 그 수가 여기서만 보인다.
+        // MUST: 양쪽 갈래에서 찍는다 — 한쪽에만 두면 「다시 지은 것이 있는 날」의 무변경 수가
+        // 어디에도 안 남고, 그 수가 곧 멱등의 증거다.
+        log.info("수정계수 재구축 끝. 대상 {}종목 · 이미 일치 {} · 다시 지음 {} · 적용 대상 사건 {}건"
+                        + " — 종목별 무변경은 DEBUG다(.env의 LOG_ADJUSTMENT=DEBUG).",
+                targetCount, alreadyMatching, rebuilt.size(), appliedEvents);
         if (rebuilt.isEmpty()) {
-            log.info("계수가 이미 원장과 일치한다. 적용 대상 사건 {}건 — 다시 쓸 것이 없었고"
-                    + " 지표도 지우지 않았다.", appliedEvents);
             return;
         }
         long changedRows = rebuilt.stream().mapToLong(Rebuilt::changedRows).sum();

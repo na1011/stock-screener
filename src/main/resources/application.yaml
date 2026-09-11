@@ -126,6 +126,19 @@ server:
   # localhost 직접 접속에는 이 헤더가 없으므로 로컬 개발 동작은 그대로다.
   forward-headers-strategy: framework
 
+# ── 로그 레벨 ───────────────────────────────────────────────────
+# 종목 루프 안에서 종목당 한 줄을 내던 로거를 DEBUG로 내렸다. 그 줄들은 지우지 않고
+# 레벨만 낮췄으므로 **다시 켤 수단이 있어야 「강등」이 「삭제」와 갈린다.**
+#
+# actuator의 loggers 엔드포인트는 안 연다(management.endpoints가 health 하나다 — ADR-0031).
+# 그래서 환경변수로 둔다. run-app.sh가 `set -a`로 .env를 export하므로
+# **.env에 한 줄 + 재기동**이면 켜진다. 재스테이징도 재빌드도 필요 없다.
+#
+#   LOG_ADJUSTMENT=DEBUG    # 종목별 「수정계수가 이미 원장과 일치한다」
+logging:
+  level:
+    com.stockscreener.pipeline.collector.AdjustmentRecalculator: ${LOG_ADJUSTMENT:INFO}
+
 # ── 에러 트래킹 ─────────────────────────────────────────────────
 # MUST NOT: 실제 DSN을 여기 넣지 않는다. 환경변수 참조만 둔다.
 #

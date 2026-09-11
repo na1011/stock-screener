@@ -100,7 +100,14 @@ public class AdjustmentRecalculator {
         RebuildResult result = assignFactors(stockId, segments, events.size());
 
         if (result.changedRows() == 0) {
-            log.info("수정계수가 이미 원장과 일치한다. stockId={} 사건={}건 — 다시 쓸 것이 없다.",
+            // DEBUG인 이유는 이 줄이 진단문이 아니라 **아무 일도 안 일어났다**를 종목 수만큼
+            // 되풀이하기 때문이다. 실측으로 무변경 10,797줄 대 실제 재작성 3줄(3,599:1)이었고,
+            // 그 하나가 운영 로그의 29.7%를 차지했다. 같은 사실을 AdjustmentRebuildJob이
+            // 실행당 요약으로 내고 corporate_action 원장이 SQL 한 줄로 답한다.
+            //
+            // MUST: 문구를 지우지 말고 레벨만 내린다 — 켰을 때 읽히는 것이 이 줄의 값이다.
+            // 켜는 법은 .env에 LOG_ADJUSTMENT=DEBUG 한 줄 + 재기동이다(application.yaml).
+            log.debug("수정계수가 이미 원장과 일치한다. stockId={} 사건={}건 — 다시 쓸 것이 없다.",
                     stockId, events.size());
         } else {
             log.info("수정계수를 원장에서 다시 지었다. stockId={} 사건={}건 갱신={}행 최초변경일={}",
