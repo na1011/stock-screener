@@ -7,4 +7,4 @@
  * `index.html`은 번들 밖이라 이 값을 import할 수 없다. 그래서 `appInfo.spec.ts`가 파일을 읽어
  * `<title>`이 이것을 담고 있는지 확인한다 — 공유할 수 없으면 최소한 어긋남을 잡는다.
  */
-export const APP_NAME = '주식 스크리너'
+export const APP_NAME = 'Screener'
