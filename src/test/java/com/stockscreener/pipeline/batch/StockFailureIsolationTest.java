@@ -24,6 +24,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -215,6 +220,63 @@ class StockFailureIsolationTest {
         // 이것이 REQUIRES_NEW가 실제로 걸려 있다는 증거다. 자기 호출로 프록시를 우회했다면
         // 이 값도 "변경됨"이 되거나, 반대로 성공 종목까지 되돌아간다.
         assertThat(nameOf(broken.stockId())).isEqualTo("실패");
+    }
+
+    @Test
+    @DisplayName("워커 둘이 동시에 돌아도 실패한 종목만 롤백되고 집계가 맞는다")
+    void isolatesFailureWhenStocksRunConcurrently() throws Exception {
+        SecurityRef ok = insertStock("000012", "정상");
+        SecurityRef broken = insertStock("000013", "실패");
+
+        BatchExecutionContext execution = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 2);
+
+        // MUST: 배리어로 **두 트랜잭션이 동시에 열려 있게** 만든다. 없으면 앞이 끝난 뒤 뒤가
+        // 도는 순차와 구분되지 않아 이 시험이 위의 것과 같은 것을 잰다.
+        CyclicBarrier bothInsideTransaction = new CyclicBarrier(2);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (SecurityRef security : List.of(ok, broken)) {
+                futures.add(pool.submit(() ->
+                        execution.process(security, CollectionPhase.PRICE, s -> {
+                            jdbcTemplate.update("UPDATE stock SET name = ? WHERE id = ?",
+                                    "변경됨", s.stockId());
+                            awaitQuietly(bothInsideTransaction);
+                            if (s.stockId() == broken.stockId()) {
+                                throw new DataSourceException(
+                                        DataSourceException.Kind.NOT_FOUND, "stub-source", "종목 없음");
+                            }
+                            return 1L;
+                        })));
+            }
+            for (Future<?> future : futures) {
+                future.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        BatchStatus status = execution.finish();
+
+        // ADR-0007의 성질이 병렬에서도 그대로 서는가 — REQUIRES_NEW는 스레드에 묶이므로
+        // 워커마다 자기 트랜잭션을 연다. 여기가 그것을 실제로 겹쳐서 확인하는 자리다.
+        assertThat(nameOf(ok.stockId())).isEqualTo("변경됨");
+        assertThat(nameOf(broken.stockId())).isEqualTo("실패");
+        assertThat(execution.successCount()).isEqualTo(1);
+        assertThat(execution.failureCount()).isEqualTo(1);
+        assertThat(status).isEqualTo(BatchStatus.PARTIAL_SUCCESS);
+    }
+
+    /** 배리어 대기. 깨지면 시험이 조용히 순차가 되므로 삼키지 않고 올린다. */
+    private static void awaitQuietly(CyclicBarrier barrier) {
+        try {
+            barrier.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("배리어 대기가 인터럽트됐다", e);
+        } catch (Exception e) {
+            throw new IllegalStateException("배리어가 깨졌다 — 두 워커가 겹치지 않았다", e);
+        }
     }
 
     @Test

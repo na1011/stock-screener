@@ -33,6 +33,18 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/stock_screener}
     username: ${DB_USERNAME:na1011}
     password: ${DB_PASSWORD:}
+    hikari:
+      # 지표 백필이 종목 루프를 팬아웃하고(ADR-0138) 워커 하나가 커넥션 하나를 계산하는 내내
+      # 쥔다 — IndicatorRunner.run이 통째로 REQUIRES_NEW 안에서 돌기 때문이다(ADR-0007).
+      # Boot 기본값 10이면 워커 상한이 8로 깎인다.
+      #
+      # IMPORTANT — 이 값은 **두 JVM에 걸린다.** 운영 앱(:8080)과 bootstrap 프로파일의 별도
+      # 프로세스(server.port: 0이라 8080에 안 부딪힌다)가 각각 이 크기의 풀을 연다. 둘이 다
+      # 차도 24이고 PostgreSQL max_connections가 100이라 여유가 크다(2026-09-11 실측: 사용 16).
+      #
+      # MUST NOT: 워커 수를 이 값에 맞춰 올리지 않는다. 상한을 정하는 것은 코어 유보이고
+      # (IndicatorBackfillJob.resolveWorkers), 이 기계에는 운영 앱이 온디바이스로 함께 산다.
+      maximum-pool-size: 12
 
   mvc:
     problemdetails:

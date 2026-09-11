@@ -9,17 +9,32 @@ import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 
+import com.zaxxer.hikari.HikariDataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import javax.sql.DataSource;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 이미 적재된 원자료로 지표를 소급 계산한다.
@@ -88,6 +103,23 @@ public class IndicatorBackfillJob {
 
     private static final Logger log = LoggerFactory.getLogger(IndicatorBackfillJob.class);
 
+    /**
+     * 화면·스케줄러·진척 기록 몫으로 남기는 커넥션.
+     *
+     * <p>워커 하나가 커넥션 하나를 <b>계산하는 내내</b> 쥔다 — {@code IndicatorRunner.run}이
+     * 통째로 {@code REQUIRES_NEW} 안에서 돌기 때문이다(ADR-0007). 그래서 워커 수의 상한이
+     * 풀 크기에 묶이고, 여기 남기는 만큼이 앱의 몫이다. <b>필요량을 잰 값이 아니라 예비다.</b>
+     */
+    private static final int RESERVED_CONNECTIONS = 2;
+
+    /**
+     * 워커가 끝나기를 기다리는 상한.
+     *
+     * <p>{@code spring.lifecycle.timeout-per-shutdown-phase}(15초) 안이어야 한다 — 넘으면
+     * {@code ops/stop.sh}의 앱 대기(45초)와의 짝이 깨져 배포가 조용히 실패한다(ADR-0078).
+     */
+    private static final int WORKER_SHUTDOWN_SECONDS = 10;
+
     private final StockRegistrar stockRegistrar;
     private final BatchExecutions batchExecutions;
     private final IndicatorRunner indicatorRunner;
@@ -96,6 +128,8 @@ public class IndicatorBackfillJob {
     private final IndicatorRetentionPolicy retentionPolicy;
     private final IndicatorTradeDateIndex tradeDateIndex;
     private final JdbcTemplate jdbcTemplate;
+    private final DataSource dataSource;
+    private final int configuredParallelism;
 
     public IndicatorBackfillJob(StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
                                 IndicatorRunner indicatorRunner,
@@ -103,7 +137,12 @@ public class IndicatorBackfillJob {
                                 SectorRelativeCalculator sectorRelativeCalculator,
                                 IndicatorRetentionPolicy retentionPolicy,
                                 IndicatorTradeDateIndex tradeDateIndex,
-                                JdbcTemplate jdbcTemplate) {
+                                JdbcTemplate jdbcTemplate,
+                                DataSource dataSource,
+                                @Value("${pipeline.indicator-backfill.parallelism:6}")
+                                int configuredParallelism) {
+        this.dataSource = dataSource;
+        this.configuredParallelism = configuredParallelism;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.indicatorRunner = indicatorRunner;
@@ -185,6 +224,10 @@ public class IndicatorBackfillJob {
                         ? ""
                         : " (티커로 좁혔다: " + tickers + " — 백분위·업종 상대값은 그래도 전 종목에서 낸다)");
 
+        // 풀은 잡 하나에 하나다. 날짜마다 만들면 269번 만들고, 워커의 ThreadLocal 메모이저
+        // (ADR-0138)가 날짜마다 버려져 첫 종목이 매번 다시 계산한다.
+        ExecutorService pool =
+                Executors.newFixedThreadPool(resolveWorkers(targets.size()), workerFactory());
         try {
             // 날짜가 바깥 루프인 이유는 백분위 때문이다. 백분위는 "그날 전 종목의 값"을
             // 요구하므로, 한 날짜를 전 종목에 대해 끝낸 뒤에야 그날의 순위를 낼 수 있다.
@@ -201,13 +244,9 @@ public class IndicatorBackfillJob {
                 Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes =
                         indicatorRunner.marketIndexesFor(tradeDate);
 
-                for (SecurityRef target : targets) {
-                    Optional<LocalDate> cutoff = retentionCutoffs
-                            .getOrDefault(target.marketCode(), Optional.empty());
-                    execution.process(target, CollectionPhase.INDICATOR,
-                            security -> indicatorRunner.run(
-                                    security.stockId(), tradeDate, cutoff, marketIndexes));
-                }
+                // 종목끼리 독립이라 여기만 팬아웃한다(ADR-0138). 아래 두 계산은 배리어
+                // 뒤라 그대로 직렬이고, 그 배리어가 곧 이 호출의 조인이다.
+                fanOutStocks(pool, execution, targets, tradeDate, retentionCutoffs, marketIndexes);
                 percentileCalculator.calculate(tradeDate, universeCode);
                 // 업종 상대값도 같은 자리다 — 그날 전 종목의 값이 있어야 정해진다.
                 // 백분위와 순서를 가릴 이유는 없다. 둘 다 원본 지표만 읽고 서로를 읽지 않는다.
@@ -237,8 +276,188 @@ public class IndicatorBackfillJob {
         } catch (RuntimeException e) {
             execution.failUnexpectedly(e);
             throw e;
+        } finally {
+            shutDown(pool);
         }
         return execution.finish();
+    }
+
+    /**
+     * 한 거래일의 종목을 워커에 흩고 <b>전부 돌아올 때까지 기다린다.</b>
+     *
+     * <p>이 조인이 곧 백분위·업종 상대값의 배리어다 — 둘은 「그날 전 종목의 값」을 요구한다.
+     *
+     * <p>{@code execution.process}가 스레드 안전하다는 것이 이 팬아웃의 전제다
+     * ({@code BatchExecutionContext}의 원자적 카운터와 종료 플래그). 종목별 격리와 실패 기록은
+     * 그 아래 {@code StockTaskExecutor}·{@code StockTaskRunner}가 그대로 진다(ADR-0007) —
+     * 워커 스레드에는 바깥 트랜잭션이 없으므로 {@code REQUIRES_NEW}가 새 트랜잭션을 연다.
+     */
+    private void fanOutStocks(ExecutorService pool, BatchExecutionContext execution,
+                              List<SecurityRef> targets, LocalDate tradeDate,
+                              Map<String, Optional<LocalDate>> retentionCutoffs,
+                              Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes)
+            throws DataSourceException {
+        List<Future<?>> futures = new ArrayList<>(targets.size());
+        for (SecurityRef target : targets) {
+            Optional<LocalDate> cutoff = retentionCutoffs
+                    .getOrDefault(target.marketCode(), Optional.empty());
+            futures.add(pool.submit(() -> execution.process(target, CollectionPhase.INDICATOR,
+                    security -> indicatorRunner.run(
+                            security.stockId(), tradeDate, cutoff, marketIndexes))));
+        }
+        awaitAll(futures);
+    }
+
+    /**
+     * 제출한 것을 <b>전부</b> 조인한다. 첫 실패에서 남은 것을 끊되, 이미 돌고 있던 것의 예외도
+     * 버리지 않는다.
+     *
+     * <p><b>MUST: 끊고 나서도 전부 조인한다.</b> {@code cancel(false)}는 <b>큐에 있는 것만</b>
+     * 떨어뜨리고 이미 실행 중인 태스크는 못 끊는다. 그 태스크의 예외는 {@code Future} 안에
+     * 남는데 아무도 꺼내지 않으면 그것이 silent fail이다. 첫 번째를 다시 던지고 나머지는
+     * {@code addSuppressed}로 싣는다.
+     *
+     * <p><b>MUST: 큐를 끊는다.</b> 안 끊으면 남은 1,300여 개가 다 돈 뒤에야 풀이 닫히고,
+     * 그 지연이 종료 예산(15초)을 통째로 넘겨 ADR-0078이 닫은 결함을 되살린다.
+     */
+    private void awaitAll(List<Future<?>> futures) throws DataSourceException {
+        Throwable first = null;
+        for (int i = 0; i < futures.size(); i++) {
+            try {
+                futures.get(i).get();
+            } catch (CancellationException e) {
+                // 우리가 끊은 것이다. 원인은 first가 이미 들고 있다.
+            } catch (ExecutionException e) {
+                if (first == null) {
+                    first = e.getCause();
+                    cancelFrom(futures, i + 1);
+                } else if (first != e.getCause()) {
+                    first.addSuppressed(e.getCause());
+                }
+            } catch (InterruptedException e) {
+                // 인터럽트는 이 저장소에서 종료 말고는 오지 않는다(ADR-0078 — 우리는 중단
+                // 신호로 쓰지 않는다). 상태를 복원하고 종료 신호로 올린다.
+                Thread.currentThread().interrupt();
+                cancelFrom(futures, i + 1);
+                throw new BatchShutdownException(
+                        "지표 백필의 종목 조인이 인터럽트됐다 — 프로세스가 내려가는 중이다.", e);
+            }
+        }
+        if (first != null) {
+            rethrow(first);
+        }
+    }
+
+    private static void cancelFrom(List<Future<?>> futures, int from) {
+        for (int i = from; i < futures.size(); i++) {
+            // false다 — 돌고 있는 것을 인터럽트하지 않는다(ADR-0078). 큐만 떨군다.
+            futures.get(i).cancel(false);
+        }
+    }
+
+    /**
+     * 워커에서 난 예외를 <b>원본 그대로</b> 잡 스레드에 되던진다.
+     *
+     * <p>MUST: 감싸지 않는다. {@link BatchShutdownException}을 감싸면
+     * {@code failUnexpectedly}의 {@code instanceof} 조기 반환이 안 걸려 <b>종료마다</b>
+     * "이미 마감된 …" 경고가 확정적으로 나고, 그러면 그 경고가 진짜 마감 경합을 가리키기를
+     * 그만둔다(ADR-0078). {@code DataSourceException}도 같다 — 감싸면 호출부의
+     * {@code catch}가 {@code failFatally}로 못 간다.
+     */
+    private static void rethrow(Throwable cause) throws DataSourceException {
+        switch (cause) {
+            case DataSourceException e -> throw e;
+            case RuntimeException e -> throw e;
+            case Error e -> throw e;
+            default -> throw new IllegalStateException(
+                    "종목 작업이 예상하지 못한 checked 예외를 냈다", cause);
+        }
+    }
+
+    /**
+     * 몇 개로 흩을 것인가. <b>설정값이 상한을 넘을 수 없다</b>(ADR-0138).
+     *
+     * <p><b>이 기계에 운영 앱이 온디바이스로 함께 산다</b>(2026-09-11 사용자 판단). 평일 14시
+     * 사슬은 아예 그 JVM 안에서 이 잡을 돈다. 가용 코어를 전부 끌어다 쓰면 화면이 느려지므로,
+     * 유보를 「기본값이 우연히 작은 것」에 맡기지 않고 <b>상한으로</b> 박는다 — 그래야
+     * {@code --pipeline.indicator-backfill.parallelism=99}를 줘도 못 넘는다.
+     *
+     * <p>MUST: 정한 수와 <b>어느 항이 이겼는지</b>를 찍는다. 이 클램프는 평소 아무것도 자르지
+     * 않으므로 <b>깎일 때가 조용하다</b> — 풀 설정이 빠졌거나 {@code DB_URL}이 다른 인스턴스를
+     * 물으면 워커가 1로 내려가고, 그러면 A/B가 「병렬이 안 빨라졌다」는 거짓 결론을 낸다.
+     */
+    private int resolveWorkers(int targetCount) {
+        int cores = Runtime.getRuntime().availableProcessors();
+        // 코어의 1/3(최소 2)을 서버·GC·OS에 남긴다. 코어가 적은 장비로 옮겨도 무너지지 않는다.
+        int coreCeiling = cores - Math.max(2, cores / 3);
+        int pool = maxPoolSize();
+        int poolCeiling = pool - RESERVED_CONNECTIONS;
+
+        // 가장 빡빡한 항과 **그 이름**을 함께 고른다. 이름을 사후에 맞히려 들면 하한 1이
+        // 걸릴 때 엉뚱한 항을 지목한다 — 그 로그가 진단의 유일한 단서인데 거짓이 된다.
+        List<Bound> bounds = List.of(
+                new Bound("설정", configuredParallelism),
+                new Bound("대상 수", targetCount),
+                new Bound("코어 유보", coreCeiling),
+                new Bound("커넥션 풀 여유", poolCeiling));
+        Bound tightest = bounds.stream().min(Comparator.comparingInt(Bound::value)).orElseThrow();
+        int workers = Math.max(1, tightest.value());
+
+        log.info("종목 루프를 {}워커로 돈다 — {}가 정했다({}). 설정={} 대상={}종목"
+                        + " 코어={}→상한{} 풀={}→상한{}",
+                workers, tightest.label(), tightest.value(), configuredParallelism, targetCount,
+                cores, coreCeiling, pool, poolCeiling);
+        return workers;
+    }
+
+    /** 워커 수를 묶는 항 하나. 값과 이름이 함께 다녀야 로그가 거짓말을 안 한다. */
+    private record Bound(String label, int value) {
+    }
+
+    /**
+     * 커넥션 풀의 최대 크기. 못 물으면 <b>이 항이 안 자르게</b> 둔다.
+     *
+     * <p>추측한 수를 넣으면 그 추측이 조용히 워커를 깎는다 — 「모른다」를 「작다」로 바꾸지 않는다.
+     */
+    private int maxPoolSize() {
+        if (dataSource instanceof HikariDataSource hikari) {
+            return hikari.getMaximumPoolSize();
+        }
+        return configuredParallelism + RESERVED_CONNECTIONS;
+    }
+
+    /** 로그와 시험이 워커를 세어볼 수 있게 이름을 준다. */
+    private static ThreadFactory workerFactory() {
+        AtomicInteger seq = new AtomicInteger();
+        return runnable -> {
+            Thread thread = new Thread(runnable, "indicator-backfill-" + seq.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        };
+    }
+
+    /**
+     * 워커 풀을 닫는다.
+     *
+     * <p>MUST NOT: {@code try (ExecutorService …)}로 대신하지 않는다. JDK 21의
+     * {@code ExecutorService.close()}는 {@code awaitTermination(1L, DAYS)}를 돌고, <b>호출
+     * 스레드가 인터럽트되면 {@code shutdownNow()}로 워커 전원을 인터럽트한다.</b> 관리자 화면
+     * 경로의 잡은 {@code applicationTaskExecutor} 풀 스레드에서 돌고 그 풀의
+     * {@code shutdown.await-termination}이 기본 {@code false}라 빈 파괴가 그 스레드를
+     * 인터럽트하므로, 그 인터럽트가 워커로 번진다 — ADR-0078이 기각한 축이다.
+     */
+    private static void shutDown(ExecutorService pool) {
+        pool.shutdown();
+        try {
+            if (!pool.awaitTermination(WORKER_SHUTDOWN_SECONDS, TimeUnit.SECONDS)) {
+                log.warn("워커가 {}초 안에 끝나지 않아 끊는다. 종료 예산을 넘기지 않는 것이 우선이다.",
+                        WORKER_SHUTDOWN_SECONDS);
+                pool.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            pool.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**

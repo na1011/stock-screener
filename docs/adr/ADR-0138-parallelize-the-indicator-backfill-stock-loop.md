@@ -62,7 +62,9 @@ grep -n 'RESERVED_CORES\|RESERVED_CONNECTIONS\|availableProcessors' \
   src/main/java/com/stockscreener/pipeline/batch/IndicatorBackfillJob.java
 
 # ④ try-with-resources가 되살아나지 않았는가 (0이어야 한다)
-grep -cE 'try \(\s*(var|ExecutorService)' \
+#    MUST: 행 머리로 센다. 낱말로 세면 **이 파일의 javadoc이 그것을 금지한다고 설명하고 있어**
+#    1이 나온다 — 결정이 지켜져도 우는 검사가 된다(ADR-0078 §검증이 같은 함정을 적었다).
+grep -cE '^\s*try \(' \
   src/main/java/com/stockscreener/pipeline/batch/IndicatorBackfillJob.java
 ```
 
