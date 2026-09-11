@@ -102,3 +102,36 @@ else
   echo "덤프: 이 대조는 이력 표만 본다 — 아카이브 온전성과 데이터 신선도는 안 본다"
   [[ "$same" -eq 0 ]] && echo "덤프: **바로 복원되는 것이 하나도 없다** — ops/dump-db.sh를 한 번 뜨거나, 되돌리는 법의 UPDATE를 함께 쓴다"
 fi
+
+# 로그가 얼마나 쌓였나. **아무것도 바꾸지 않는다 — 세고 찍기만 한다**(덤프 절과 같은 형태).
+#
+# 여기 두는 이유는 **회전이 사람의 명령에서만 돌기 때문**이다. `ops/start.sh`가 기동 직전에
+# 부르고 `ops/rotate-logs.sh`가 손으로 도는 입구인데, 둘 다 사람이 쳐야 한다(ADR-0043 —
+# 앱과 터널은 손으로만 뜨고 죽으면 죽은 채로 있다). 그래서 임계를 넘긴 채 오래 두는 갈래가
+# 구조적으로 열려 있고, **그것을 사람이 아는 유일한 경로가 이 절이다.**
+#
+# MUST NOT: 이것을 차단이나 자동 삭제로 승격하지 않는다. `ops/dump-db.sh`가 덤프에 대해
+# "자동으로 지우지 않는다. 지울 것은 사람이 고른다"로 정한 것과 같은 판단이다.
+echo
+echo "== 로그 =="
+if [[ ! -d "$LOG_DIR" ]]; then
+  echo "로그: $LOG_DIR이 없다 — 아직 앱을 띄운 적이 없다"
+else
+  log_line() {
+    local name="$1" max="$2" f="$LOG_DIR/$1" size pct gens
+    [[ -f "$f" ]] || { printf '  %-12s 없다\n' "$name"; return 0; }
+    size=$(stat -f%z "$f")
+    pct=$(awk -v s="$size" -v m="$max" 'BEGIN{printf "%d", s*100/m}')
+    gens=$(find "$LOG_DIR" -maxdepth 1 -name "$name.*.gz" | wc -l | tr -d ' ')
+    printf '  %-12s %8s  임계의 %3d%%  세대 %d개' "$name" \
+      "$(awk -v b="$size" 'BEGIN{if(b>=1048576)printf "%.1fM",b/1048576; else if(b>=1024)printf "%.0fK",b/1024; else printf "%dB",b}')" \
+      "$pct" "$gens"
+    # 80%는 경고선이다. 넘겨도 아무 일이 안 일어나므로 **말해 주는 것이 전부**다.
+    [[ "$pct" -ge 80 ]] && printf '  ← ops/rotate-logs.sh 를 한 번 돌린다'
+    printf '\n'
+  }
+  log_line stdout.log "$ROTATE_STDOUT_MAX"
+  log_line stderr.log "$ROTATE_STDERR_MAX"
+  log_line tunnel.log "$ROTATE_TUNNEL_MAX"
+  echo "  총량 $(du -sh "$LOG_DIR" 2>/dev/null | cut -f1) · 지난 이력: zgrep -A 20 '<문구>' $LOG_DIR/stdout.log.*.gz"
+fi

@@ -123,3 +123,74 @@ pg_bin() {
   done
   return 1
 }
+
+# ── 로그 회전 ────────────────────────────────────────────────────────────────
+#
+# 앱·터널은 셸 `>>`로 받은 fd를 죽을 때까지 붙들고 있다. 그래서 **rename 기반 회전이
+# 전부 실패한다** — fd가 경로가 아니라 inode를 따라가므로 새 파일은 0바이트로 남고
+# 앱은 사라진 옛 파일에 계속 쓴다(`docs/progress.md`가 `rm`에 대해 실측으로 적은 그대로).
+# `newsyslog`가 못 쓰이는 이유도 이것이다 — 그 플래그 집합에 copytruncate가 없다.
+#
+# 그래서 **언제나 제자리 truncate다.** 성립하는 근거는 fd가 O_APPEND라는 것이고
+# (`lsof +fg`가 `W,AP`를 찍는다), O_APPEND는 매 write마다 offset을 EOF로 재배치하므로
+# 자른 뒤 다음 쓰기가 0에서 시작한다 — sparse hole이 안 생긴다.
+#
+# **MUST NOT: 「프로세스가 살아 있으면 truncate, 아니면 mv」로 가르지 않는다.**
+# `lsof -t`가 「아무도 안 열었다」와 「판정 실패」를 **둘 다 종료코드 1 + 빈 출력**으로
+# 내서 구분할 수 없다(2026-09-11 실측). 갈래가 사는 유일한 값은 한 바이트 미만의 유실을
+# 0으로 만드는 것인데, 틀린 쪽으로 가면 링크 수 0인 inode에 계속 써서 **어떤 경로로도
+# 안 보이고 디스크도 JVM이 죽을 때까지 안 돌아온다.** 비대칭이 갈래를 없애라고 정한다.
+#
+# 임계와 보존 세대. **파일마다 다르다** — 하나로 묶으면 성장이 느린 둘은 영원히 안 걷힌다
+# (실측: stdout 1.02 MiB/거래일 · tunnel 14.4 KB/일 · stderr 34일간 0).
+ROTATE_STDOUT_MAX=$((8 * 1024 * 1024)); ROTATE_STDOUT_KEEP=10
+ROTATE_TUNNEL_MAX=$((2 * 1024 * 1024)); ROTATE_TUNNEL_KEEP=5
+ROTATE_STDERR_MAX=$((256 * 1024));      ROTATE_STDERR_KEEP=3
+
+# rotate_log <파일> <임계바이트> <보존세대>
+# 임계 미만이거나 파일이 없으면 조용히 통과한다. 실패해도 0으로 끝난다 — 호출자가
+# `set -e`인 기동 경로라 회전 실패가 기동 실패로 보이면 원인 추적이 통째로 어긋난다.
+rotate_log() {
+  local f="$1" max="$2" keep="$3" lock size i
+  [[ -f "$f" ]] || return 0
+  size=$(stat -f%z "$f" 2>/dev/null) || return 0
+  [[ "$size" -lt "$max" ]] && return 0
+
+  # `flock`이 이 기계에 없다. mkdir은 원자적이라 이것이 가장 싼 상호배제다.
+  # **획득 실패는 에러가 아니라 조용한 skip이다** — 다른 쪽이 이미 하고 있다는 뜻이다.
+  #
+  # MUST NOT: 해제를 `trap ... RETURN`에 맡기지 않는다. 그 시그널은 bash 전용이라
+  # 다른 셸에서 source하면 `undefined signal`로 죽고, **락이 남아 이후 회전이 영구히
+  # 조용히 skip된다**(2026-09-11에 실제로 그렇게 12회 중 11회가 넘어갔다). 명시적으로 푼다.
+  #
+  # 낡은 락도 같은 이유로 닫는다 — 회전 중 강제 종료되면 디렉터리가 남고, 그때부터
+  # 이 함수는 아무 말 없이 아무 일도 안 한다. gzip이 9 MiB에 0.04초이므로 5분이면
+  # 정상 실행과 겹칠 수 없다.
+  lock="$f.rotate.lock"
+  if ! mkdir "$lock" 2>/dev/null; then
+    if [[ -d "$lock" ]] && [[ -z "$(find "$lock" -maxdepth 0 -mmin -5 2>/dev/null)" ]]; then
+      rmdir "$lock" 2>/dev/null || true
+      mkdir "$lock" 2>/dev/null || return 0
+      echo "[rotate] $(basename "$f")의 낡은 회전 락을 걷었다(5분 초과)." >&2
+    else
+      return 0
+    fi
+  fi
+
+  rm -f "$f.$keep.gz"
+  for ((i = keep - 1; i >= 1; i--)); do
+    [[ -f "$f.$i.gz" ]] && mv "$f.$i.gz" "$f.$((i + 1)).gz"
+  done
+
+  # **MUST: `.tmp`에 쓴 뒤 원자적으로 옮긴다**(`ops/stage.sh`가 jar에 대해 하는 것과 같다).
+  # 이것이 ① 잘린 .gz가 세대 자리에 들어가는 갈래와 ② gzip 실패(ENOSPC 포함) 시 원본을
+  # 비우는 갈래를 **동시에** 닫는다 — `&&`가 끊기면 truncate에 못 간다.
+  if gzip -c "$f" > "$f.1.gz.tmp" 2>/dev/null && mv "$f.1.gz.tmp" "$f.1.gz"; then
+    : > "$f"
+  else
+    rm -f "$f.1.gz.tmp"
+    echo "[rotate] $(basename "$f") 압축에 실패해 자르지 않았다. 원본은 그대로다." >&2
+  fi
+  rmdir "$lock" 2>/dev/null || true
+  return 0
+}

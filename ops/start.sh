@@ -41,6 +41,13 @@ start_app() {
     return 1
   fi
 
+  # **회전은 조기 return 뒤에 둔다.** 위 두 갈래는 이미 도는 앱을 만나도 return 0으로
+  # 성공을 내므로, 앞에 두면 `ops/start.sh`를 한 번 더 친 것만으로 도는 앱의 로그가 잘린다.
+  # `|| true`인 이유는 이 스크립트가 `set -e`이기 때문이다 — 회전 실패가 기동 실패로
+  # 보이면 원인을 stderr.log에서 찾게 되고 거기엔 아무것도 없다.
+  rotate_log "$LOG_DIR/stdout.log" "$ROTATE_STDOUT_MAX" "$ROTATE_STDOUT_KEEP" || true
+  rotate_log "$LOG_DIR/stderr.log" "$ROTATE_STDERR_MAX" "$ROTATE_STDERR_KEEP" || true
+
   # nohup은 exec으로 넘기고 run-app.sh도 exec으로 java가 되므로, $!가 곧 JVM의 PID다.
   # caffeinate로 감싸지 않는 이유가 그것이다 — 감싸면 PID 파일이 caffeinate를 가리키는데
   # caffeinate는 시그널을 자식에게 넘기지 않아 stop.sh의 kill이 앱에 닿지 않는다.
@@ -82,6 +89,10 @@ start_tunnel() {
     echo "[start] ${TUNNEL_TOKEN_FILE}이 없다. .env에 CLOUDFLARE_TUNNEL_TOKEN을 넣고 ops/stage.sh를 돌려라." >&2
     return 1
   fi
+
+  # 앱과 같은 이유로 조기 return 뒤다. 터널은 재기동이 드물어(기간 내 10회) 기동 시점
+  # 회전만으로는 오래 안 걷히므로 `ops/rotate-logs.sh`가 따로 있다.
+  rotate_log "$LOG_DIR/tunnel.log" "$ROTATE_TUNNEL_MAX" "$ROTATE_TUNNEL_KEEP" || true
 
   # --token이 아니라 --token-file이다. 인자로 넘기면 ps에 토큰이 그대로 뜬다.
   nohup "$bin" tunnel run --token-file "$TUNNEL_TOKEN_FILE" >>"$LOG_DIR/tunnel.log" 2>&1 &
