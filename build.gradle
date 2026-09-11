@@ -574,17 +574,3 @@ tasks.named('test') { mustRunAfter 'checkDuplicateFiles' }
 // 프론트 단위 테스트를 check에 건다. 별도 명령으로 두면 ./gradlew build가 초록불인데
 // 재시도 판별·CSRF 헤더 같은 눈에 안 보이는 로직이 깨진 채로 남는다.
 tasks.named('check') { dependsOn 'frontendTest' }
-
-// ─── TEMP(계획서 §0단계) — 병렬화 배수를 구현 전에 재는 임시 태스크. 답이 나오면 지운다. ───
-// backtestProbe에 얹지 않는 이유는 그쪽이 @Tag("backtest") 전부를 돌아 37분 55초이기 때문이다.
-tasks.register('parallelismProbe', Test) {
-    group = 'verification'
-    description = 'TEMP — 지표 종목 루프가 스레드 수에 따라 얼마나 확장되는가를 잰다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'backtest' }
-    filter { includeTestsMatching '*IndicatorParallelismProbeTest*' }
-    maxHeapSize = '8g'
-    testLogging { events 'passed', 'failed'; showStandardStreams = true }
-    outputs.upToDateWhen { false }
-}
