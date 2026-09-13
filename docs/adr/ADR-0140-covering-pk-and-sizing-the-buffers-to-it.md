@@ -151,13 +151,29 @@ psql -d stock_screener -c "\d indicator_value"
 **바꾸기 전 설정값** — `shared_buffers` 128 MB · `effective_cache_size` 4 GB ·
 `random_page_cost` 4 · `max_wal_size` 1 GB · `maintenance_work_mem` 64 MB ·
 `log_temp_files` −1. 지금은 6 GB · 16 GB · 1.1 · 4 GB · 1 GB · 0이고, 원본은
-`postgresql.conf.bak-20260913`과 같은 파일의 주석 블록에 있다. `log_temp_files = 0`은
-**임시 파일의 귀속을 아직 못 찾아** 켜 둔 관측기다.
+`postgresql.conf.bak-20260913`과 같은 파일의 주석 블록에 있다. `work_mem`은 4 MB →
+**64 MB**이고, `log_temp_files = 0`이 그 근거를 냈다(아래).
 
 **MUST NOT: `pg_stat_database.temp_bytes`의 174 GB를 디스크 사용량으로 읽지 않는다.** 그것은
 `stats_reset`이 빈 **생애 누적 카운터**이고, PostgreSQL은 질의가 끝나면 그 파일을 지운다 —
-실측으로 `base/pgsql_tmp`가 **0개 · 0 B**다. **지울 것은 없다.** 그래도 재는 이유는 그 누적이
-곧 **낭비된 I/O**이고 `work_mem`을 정할 근거이기 때문이다.
+실측으로 `base/pgsql_tmp`가 **0개 · 0 B**다. **지울 것은 없다.**
+
+**주인은 배치가 아니라 전제 스윕이었다.** `log_temp_files = 0`이 잡은 43건이 전부 한 시각에
+몰려 있고 문장이 전제 질의다(`WITH cond AS (… FROM screen_condition …)` ·
+`WITH act AS (SELECT DISTINCT m.stock_id FROM universe_membership …)`). **스윕 한 판이 43파일 ·
+315 MB**를 흘렸고, 23,675 ÷ 43 ≈ 550판이 174 GB와 맞는다.
+
+**`work_mem` 4 → 64 MB가 그것을 닫았다**(실측):
+
+| | 전 | 후 |
+|---|---|---|
+| 스윕 한 판의 임시 파일 | 43건 · 315 MB | **1건 · 102.6 MB** |
+| 스윕 소요 | 40초/45초 | **37초/45초** |
+| 판정 | 참 111 · 발견 14 · 무판정 0 | 동일 |
+
+**남은 하나는 ADR-0126 펜스의 윈도 함수**(`lag(close) OVER w`)이고 **107.5 MB**다. 닫으려면
+`work_mem`이 128 MB 이상이어야 하는데, **세션당 한두 판을 위해 앱까지 걸리는 값을 두 배로
+올릴 근거가 약해 64 MB에서 멈췄다.** 더 올릴 일이 생기면 이 수가 기준선이다.
 
 **어려워지는 것**
 
