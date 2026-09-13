@@ -78,3 +78,31 @@ export function writeShowAllIndicators(showAll: boolean): void {
     // 저장만 못 할 뿐 이번 세션의 토글은 동작한다. 화면을 죽이지 않는다.
   }
 }
+
+/**
+ * 0건 진단을 접어 둔 자리(ADR-0142).
+ *
+ * **기본은 펼침이다.** 이 패널이 0건에서 사유에 닿는 유일한 경로라, 기본으로 감추면
+ * P27 축④가 요구한 「닿을 수 있다」가 클릭을 하나 더 요구하는 것을 넘어 **처음 보는
+ * 사용자에게는 없는 것과 같아진다.** 접기는 조건이 많아 스크롤이 길어지는 화면을 위한
+ * 것이고, 그 선택은 **지속 성향**이라 위 `SHOW_ALL_KEY`와 같은 이유로 `localStorage`에 둔다.
+ *
+ * **저장소를 못 쓰는 환경에서 던지지 않는다** — 기본값으로 돌아가면 되는 일이다.
+ */
+const DIAGNOSIS_COLLAPSED_KEY = 'stock-screener.result.diagnosis-collapsed'
+
+export function readDiagnosisCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(DIAGNOSIS_COLLAPSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function writeDiagnosisCollapsed(collapsed: boolean): void {
+  try {
+    window.localStorage.setItem(DIAGNOSIS_COLLAPSED_KEY, String(collapsed))
+  } catch {
+    // 저장만 못 할 뿐 이번 세션의 토글은 동작한다.
+  }
+}

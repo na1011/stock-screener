@@ -2,7 +2,7 @@ import { createPinia } from 'pinia'
 import PrimeVue from 'primevue/config'
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import type { ConditionTally, ScreeningResponse } from '@/api/types'
 
@@ -65,7 +65,40 @@ const render = (tallies: ConditionTally[], minimumBlocked: number | null): Promi
   return renderToString(app)
 }
 
+/** `localStorage`를 심어 접힘 상태를 만든다. 없으면 읽기가 기본값(펼침)으로 떨어진다. */
+const withCollapsed = (collapsed: boolean): void => {
+  const store = new Map([['stock-screener.result.diagnosis-collapsed', String(collapsed)]])
+  ;(globalThis as unknown as { window: unknown }).window = {
+    localStorage: {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    },
+  }
+}
+
+afterEach(() => {
+  delete (globalThis as unknown as { window?: unknown }).window
+})
+
 describe('0건 진단', () => {
+  it('기본은 펼침이다 — 감추면 0건에서 사유에 닿는 유일한 경로가 없는 것과 같아진다', async () => {
+    const html = await render([tally(0, 186, 3, 1)], 1)
+
+    expect(html).toContain('186')
+    expect(html).toContain('접기')
+  })
+
+  it('MUST: 접어도 모집단과 「한 조건만으로는 안 열린다」는 남는다', async () => {
+    withCollapsed(true)
+    const html = await render([tally(0, 190, 0, 0), tally(1, 180, 0, 0)], 3)
+
+    expect(html).toContain('판정 대상')
+    expect(html).toContain('한 조건만 풀어서는 열리지 않습니다')
+    expect(html).toContain('조건 2개 펼치기')
+    // 목록만 접힌다 — 접힌 상태가 「아무 말도 안 하는 상태」가 되면 축④를 되돌린 것이다.
+    expect(html).not.toContain('불충족')
+  })
+
   it('조건별로 몇 종목이 걸렸는지와 모집단을 말한다', async () => {
     const html = await render([tally(0, 186, 3, 1), tally(1, 148, 0, 2)], 1)
 

@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import Button from 'primevue/button'
 import Tag from 'primevue/tag'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import type { ConditionInfo, ScreeningResponse } from '@/api/types'
 import { splitCondition } from '@/lib/conditionText'
+import { readDiagnosisCollapsed, writeDiagnosisCollapsed } from '@/lib/detailVisibility'
 import { formatCount } from '@/lib/format'
 import { outcomeStyle } from '@/lib/outcome'
 
@@ -66,17 +68,37 @@ const text = (condition: ConditionInfo): string => {
 
 const missing = outcomeStyle('NOT_EVALUABLE')
 const unmatched = outcomeStyle('NOT_MATCHED')
+
+/**
+ * 조건이 많으면 이 목록만으로 화면이 길어진다. 접을 수 있게 하되 **기본은 펼침**이다 —
+ * 기본으로 감추면 0건에서 사유에 닿는 유일한 경로가 처음 보는 사용자에게는 없는 것과 같아진다.
+ *
+ * **접어도 요약 두 줄은 남긴다** — 모집단과 「한 조건만 풀어서는 안 열린다」가 그것이다.
+ * 접힌 상태가 「아무 말도 안 하는 상태」가 되면 접기가 축④를 되돌린 것이 된다.
+ */
+const collapsed = ref(readDiagnosisCollapsed())
+watch(collapsed, writeDiagnosisCollapsed)
 </script>
 
 <template>
   <section v-if="rows.length > 0" class="diagnosis">
-    <h3 class="diagnosis__title">조건별로 몇 종목이 걸렸는지</h3>
+    <div class="diagnosis__head">
+      <h3 class="diagnosis__title">조건별로 몇 종목이 걸렸는지</h3>
+      <Button
+        :label="collapsed ? `조건 ${rows.length}개 펼치기` : '접기'"
+        :icon="collapsed ? 'pi pi-chevron-down' : 'pi pi-chevron-up'"
+        size="small"
+        text
+        :aria-expanded="!collapsed"
+        @click="collapsed = !collapsed"
+      />
+    </div>
     <p class="diagnosis__lead">
       판정 대상 <strong class="tabular">{{ formatCount(result.populationCount) }}</strong
       >종목에 조건을 하나씩 대 본 결과입니다.
     </p>
 
-    <ul class="diagnosis__list">
+    <ul v-if="!collapsed" class="diagnosis__list">
       <li v-for="row in rows" :key="row.tally.conditionIndex" class="diagnosis__item">
         <span class="diagnosis__condition">{{ text(row.condition) }}</span>
         <span class="diagnosis__counts">
@@ -97,7 +119,7 @@ const unmatched = outcomeStyle('NOT_MATCHED')
     </ul>
 
     <p v-if="closestNote" class="diagnosis__note">{{ closestNote }}</p>
-    <p class="diagnosis__caveat">
+    <p v-if="!collapsed" class="diagnosis__caveat">
       「데이터 없음」은 그 회사에 대한 주장이 아니라 <strong>우리 데이터에 그 값이 없다</strong>는
       뜻입니다. 조건에 맞지 않았다는 뜻이 아닙니다.
     </p>
@@ -112,6 +134,13 @@ const unmatched = outcomeStyle('NOT_MATCHED')
   padding: 1rem;
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-content-border-radius);
+}
+
+.diagnosis__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .diagnosis__title {

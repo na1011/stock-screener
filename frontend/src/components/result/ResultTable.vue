@@ -420,7 +420,13 @@ function barRatio(row: ScreeningRow, code: string): number | null {
   background: var(--p-surface-950);
 }
 
+/* 표가 가로로 넓으면 이 칸도 그 폭만큼 늘어나, 가운데 정렬한 문구가 **기본 스크롤 위치에서
+   화면 밖**에 놓인다(실측: 2국면 돌파 0건 화면). 그러면 표가 이유 없이 비어 보인다.
+   `sticky`로 뷰포트에 붙여 가로로 어디를 보고 있든 읽히게 한다. */
 .result-table__empty {
+  position: sticky;
+  left: 0;
+  width: min(100%, 100vw);
   padding: 1.5rem;
   text-align: center;
   color: var(--p-text-muted-color);
