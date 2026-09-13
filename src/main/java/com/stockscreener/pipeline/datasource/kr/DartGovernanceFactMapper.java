@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -50,9 +51,34 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
     private static final Map<String, Integer> COLUMN_OFFSETS =
             Map.of("thstrm", 0, "frmtrm", 1, "lwfr", 2);
 
-    /** 기수 표기의 구분 토큰. 공백·개행 변형이 셋이라 걷어낸 뒤 견준다(dart-governance.md의 「회계감사인의 명칭 및 감사의견」 절). */
-    private static final Map<String, Integer> TERM_OFFSETS =
-            Map.of("(당기)", 0, "(전기)", 1, "(전전기)", 2);
+    /**
+     * 기수 표기의 구분 토큰. 공백·개행 변형이 셋이라 걷어낸 뒤 견준다(dart-governance.md의 「회계감사인의 명칭 및 감사의견」 절).
+     *
+     * <p><b>괄호 자리가 둘이다</b> — {@code 제7기(당기)}와 {@code 제7(당)기}가 실측으로 모두 온다.
+     *
+     * <p><b>순서를 고정한 것은 뜻이 아니라 재현성 때문이다.</b> 실측으로 한 표기에 토큰이 둘 이상
+     * 든 것은 <b>0개</b>라 어느 순서로 물어도 답이 같지만, {@code Map.of}는 순회 순서가 명세되지
+     * 않아 나중에 겹치는 표기가 오면 <b>판정이 실행마다 달라진다.</b>
+     */
+    private static final Map<String, Integer> TERM_OFFSETS = termOffsets();
+
+    private static Map<String, Integer> termOffsets() {
+        Map<String, Integer> offsets = new LinkedHashMap<>();
+        offsets.put("(전전기)", 2);
+        offsets.put("(전기)", 1);
+        offsets.put("(당기)", 0);
+        offsets.put("(전전)기", 2);
+        offsets.put("(전)기", 1);
+        offsets.put("(당)기", 0);
+        // MUST NOT: Map.copyOf로 감싸지 않는다 — 순회 순서를 보존하지 않아 위 근거가 무너진다.
+        return Collections.unmodifiableMap(offsets);
+    }
+
+    /** 기수 표기가 회계연도를 <b>직접</b> 말하는 자리. {@code 제18기(2024년)}·{@code 2024년(제21기)}. */
+    private static final Pattern EXPLICIT_YEAR = Pattern.compile("((?:19|20)\\d{2})년");
+
+    /** {@code 제42기}의 기수 번호. 종목의 기수↔회계연도 오프셋을 세우는 재료다. */
+    private static final Pattern TERM_ORDINAL = Pattern.compile("제(\\d+)기");
 
     /** {@code 2025년 03월 31일}. 이 엔드포인트만 한국어 날짜다(dart-governance.md의 「최대주주」 절). */
     private static final Pattern KOREAN_DATE =
@@ -122,9 +148,10 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
     private static final Set<String> CLEAN_OPINIONS = Set.of(
             "적정의견", "적정", "적정함", "적정*", "적정주)",
             "적정(감사)", "적정(감사의견)", "적정(검토)", "적정(주1)",
-            "적정(K-IFRS)", "적정(연결동일)",
+            "적정(K-IFRS)", "적정(K-GAAP)", "적정(연결동일)",
             "적정(별도,연결)", "적정(별도/연결)", "적정(연결/별도)",
-            "연결,별도:적정", "-연결:적정-별도:적정",
+            "연결,별도:적정", "-연결:적정-별도:적정", "공정(적정)", "\"적정\"",
+            "적정검토", "적정(K-IFRS)적정(K-IFRS)",
             "적정예외사항없음예외사항없음예외사항없음", "적정의견예외사항없음(반기)");
 
     /**
@@ -135,9 +162,12 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      * <b>「적정」이 아니라 판정불가</b>로 있었다.
      *
      * <p>MUST NOT: 각주 표기({@code (*)}·{@code (*1)}·{@code (주1)})를 여기에도
-     * {@link #CLEAN_OPINIONS}에도 더하지 않는다. 의견이 아니라 <b>주석 번호</b>이고, 그 행들은
-     * 기수 표기가 {@code TERM_OFFSETS}에 없어 {@code fiscalYearOfTerm}에서 이미 버려진다 —
-     * 더해도 효과가 0이다. 316140 FY2019의 {@code (*)} 하나만 살아남는데 <b>같은 회계연도에
+     * {@link #CLEAN_OPINIONS}에도 더하지 않는다. <b>의견이 아니라 주석 번호</b>라는 것이 사유다.
+     *
+     * <p><b>「기수를 못 읽어 어차피 버려진다」를 사유로 쓰지 않는다.</b> 한때 그렇게 적혀 있었는데
+     * 기수 파서를 넓히자 그 전제가 무너졌다 — {@code 제20기(전기)제20기반기(전반기)}처럼
+     * <b>끝이 아닌 자리</b>에 토큰이 있는 표기가 이제 읽히고, 그 행의 의견이 판정에 닿는다.
+     * 316140 FY2019의 {@code (*)}는 원래부터 {@code 제1기(당기)}라 읽혔고 <b>같은 회계연도에
      * 짝 행이 없어</b> 의견을 유추할 근거가 없다.
      */
     private static final Set<String> ADVERSE_OPINIONS = Set.of(
@@ -584,10 +614,20 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
         Map<Integer, Set<String>> auditorsByYear = new TreeMap<>();
         Map<Integer, GovernanceReportRow> anchorByYear = new LinkedHashMap<>();
         Set<String> unknownOpinions = new LinkedHashSet<>();
+        Set<String> unreadableTerms = new LinkedHashSet<>();
+
+        // 기수 오프셋은 이 종목의 행 전체에서 한 번 세운다 — 한 보고서가 아니라 종목이 단위다.
+        Integer ordinalOffset = ordinalOffset(rows);
 
         for (GovernanceReportRow row : rows) {
-            Integer fiscalYear = fiscalYearOfTerm(row.field("bsns_year"), row.bsnsYear());
+            Integer fiscalYear = fiscalYearOf(row, ordinalOffset);
             if (fiscalYear == null) {
+                // MUST: 삼키지 않는다. 여기서 버려지는 행은 의견 판정에 닿지도 못하므로
+                // unknownOpinions 경고에 안 걸린다 — 그래서 이 자리가 유일한 목격자다.
+                String term = normalize(row.field("bsns_year"));
+                if (!term.isEmpty() && !"-".equals(term)) {
+                    unreadableTerms.add(term);
+                }
                 continue;
             }
             // MUST NOT: core_adt_matter(핵심감사사항)를 여기 넣지 않는다. 감사기준의 필수
@@ -616,6 +656,14 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
             }
             // 같은 회계연도가 보고서 둘에서 오면 늦게 공시된 쪽이 정본이다.
             anchorByYear.merge(fiscalYear, row, DartGovernanceFactMapper::later);
+        }
+
+        if (!unreadableTerms.isEmpty()) {
+            // 회계연도를 못 매기면 그 해의 감사의견 사실이 통째로 안 생기고, 화면은 그 종목에
+            // 대해 **더 낡은 해의 의견**을 계속 말한다. 값이 틀리는 것이 아니라 낡는 것이라 무증상이다.
+            log.warn("기수 표기를 읽지 못해 회계연도를 못 매긴 감사의견 행이 있다: {} — 관측된 "
+                    + "표기면 TERM_OFFSETS나 기수 오프셋 규칙을 넓힌다(dart-governance.md의 "
+                    + "「회계감사인의 명칭 및 감사의견」 절).", unreadableTerms);
         }
 
         if (!unknownOpinions.isEmpty()) {
@@ -698,17 +746,76 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
     /**
      * {@code 제57기 \n(당기)}에서 회계연도를 낸다.
      *
-     * <p>MUST NOT: 기수 숫자를 쓰지 않는다. 회사마다 다르고 설립 연도에 걸려 있어 회계연도로
-     * 환산할 수 없다 — 요청한 {@code bsns_year}에서 구분 토큰만큼 뒤로 물리는 것이 유일한 길이다.
+     * <p>세 갈래를 순서대로 묻는다 — ① {@code (당기)}류 토큰이 <b>어디에 있든</b>(끝이 아니어도
+     * 된다) 요청 연도에서 그만큼 물린다 ② 표기가 {@code (2024년)}처럼 연도를 직접 말하면 그것을
+     * 쓴다. 실측으로 둘이 함께 든 53행이 <b>전부 일치</b>하므로 순서는 답을 안 바꾼다.
+     *
+     * <p><b>기수 숫자만 남은 표기는 여기서 풀지 않는다</b> — 회사마다 설립 연도가 달라 이 함수가
+     * 가진 정보로는 환산할 수 없다. 그것은 {@link #ordinalOffset}이 종목 단위로 푼다.
      */
     private static Integer fiscalYearOfTerm(String raw, int requestedYear) {
         String flat = normalize(raw);
+        if (flat.isEmpty()) {
+            return null;
+        }
         for (Map.Entry<String, Integer> term : TERM_OFFSETS.entrySet()) {
-            if (flat.endsWith(term.getKey())) {
+            if (flat.contains(term.getKey())) {
                 return requestedYear - term.getValue();
             }
         }
-        return null;
+        Matcher year = EXPLICIT_YEAR.matcher(flat);
+        return year.find() ? Integer.parseInt(year.group(1)) : null;
+    }
+
+    /** {@code 제42기} → 42. 없으면 null이다. */
+    private static Integer termOrdinal(String raw) {
+        Matcher ordinal = TERM_ORDINAL.matcher(normalize(raw));
+        return ordinal.find() ? Integer.parseInt(ordinal.group(1)) : null;
+    }
+
+    /**
+     * 이 종목의 <b>기수 − 회계연도</b> 오프셋. 표기가 스스로 말한 행들에서 세우고, <b>하나로
+     * 일관될 때만</b> 낸다.
+     *
+     * <p>기수는 설립 연도에 걸려 있어 회사마다 다르지만 <b>한 회사 안에서는 상수</b>다. 그래서
+     * {@code (당기)} 앵커 한 번이 그 종목의 모든 맨몸 {@code 제N기}를 푼다 — 실측으로 앵커를 가진
+     * 345종목 중 <b>335(97.1%)에서 오프셋이 하나</b>이고, 그것이 감사의견 <b>163행</b>을 살린다.
+     * {@code 017670}이 그 예다: 2019년 보고서의 {@code 제36기(당기)}가 오프셋 −17을 주고
+     * {@code 제42기 → FY2025}가 풀린다(그 전에는 최신 사실이 <b>FY2019</b>였다).
+     *
+     * <p><b>MUST NOT: 「보고서 안 최대 기수 = 당기」로 대신하지 않는다.</b> 지금 해석되는 3,504행에
+     * 대 보면 <b>26행이 어긋난다</b> — {@code 006730}의 한 보고서에 {@code 제45기(당기)}와
+     * {@code 제46기(당기)}가 <b>둘 다</b> 있다(소스가 자기모순이다). 어긋나는 방향이 <b>전기를
+     * 당기로 올려 읽는</b> 쪽이라 감사의견이 한 해 새것으로 보이고, 그것은 무증상이다.
+     *
+     * <p>오프셋이 모순인 종목은 <b>null을 낸다</b> — 그 종목의 맨몸 기수는 그냥 버린다.
+     */
+    private static Integer ordinalOffset(List<GovernanceReportRow> rows) {
+        Integer offset = null;
+        for (GovernanceReportRow row : rows) {
+            Integer stated = fiscalYearOfTerm(row.field("bsns_year"), row.bsnsYear());
+            Integer ordinal = termOrdinal(row.field("bsns_year"));
+            if (stated == null || ordinal == null) {
+                continue;
+            }
+            int candidate = stated - ordinal;
+            if (offset == null) {
+                offset = candidate;
+            } else if (offset != candidate) {
+                return null;
+            }
+        }
+        return offset;
+    }
+
+    /** 표기가 스스로 말하면 그것을, 아니면 종목의 기수 오프셋으로 민다. 둘 다 없으면 null이다. */
+    private static Integer fiscalYearOf(GovernanceReportRow row, Integer ordinalOffset) {
+        Integer stated = fiscalYearOfTerm(row.field("bsns_year"), row.bsnsYear());
+        if (stated != null) {
+            return stated;
+        }
+        Integer ordinal = termOrdinal(row.field("bsns_year"));
+        return ordinalOffset == null || ordinal == null ? null : ordinal + ordinalOffset;
     }
 
     /** {@code 2025년 03월 31일}. 실패하면 null이고 호출부가 그 행을 버린다. */

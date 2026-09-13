@@ -349,6 +349,69 @@ class DartGovernanceFactMapperTest {
     }
 
     @Test
+    @DisplayName("감사의견 — 관측된 적정 표기 다섯을 더 담는다 (2026-09-14 전수)")
+    void auditOpinionCoversFiveMoreObservedCleanWordings() {
+        // 허용목록 밖 34행 중 A갈래 9행 / 4종목이고 넷 다 현재 편입이다.
+        assertThat(opinionOf("적정\n검토")).as("278470 에이피알").isEqualByComparingTo("0");
+        assertThat(opinionOf("\"적정\"")).as("222800 심텍 3개년. 따옴표가 붙어 온다")
+                .isEqualByComparingTo("0");
+        assertThat(opinionOf("공정(적정)")).as("020150 롯데에너지머티리얼즈 3개년")
+                .isEqualByComparingTo("0");
+        assertThat(opinionOf("적정(K-GAAP)")).as("100790 미래에셋벤처투자")
+                .isEqualByComparingTo("0");
+        assertThat(opinionOf("적정(K-IFRS)\n적정(K-IFRS)"))
+                .as("같은 행에 두 번 적혀 온다. 기수 파서를 넓히기 전에는 이 행이 판정에 "
+                        + "닿지도 못했다 — 두 변경이 서로를 바꾼 자리다")
+                .isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("기수 — 토큰이 끝이 아니어도 읽고, 괄호 자리가 달라도 읽는다")
+    void termTokensAreFoundAnywhereInTheNotation() {
+        // endsWith였을 때 이 셋은 통째로 버려졌다.
+        assertThat(opinionOfTerm("제20기(전기)제20기반기(전반기)", "적정의견", 2019))
+                .as("토큰 뒤에 다른 표기가 붙는다").containsEntry(2018, ZERO);
+        assertThat(opinionOfTerm("제7(당)기", "적정의견", 2025))
+                .as("괄호가 기수 안에 든다").containsEntry(2025, ZERO);
+        assertThat(opinionOfTerm("제18기(2024년)", "적정의견", 2025))
+                .as("표기가 회계연도를 직접 말한다 — 요청 연도와 다르다").containsEntry(2024, ZERO);
+    }
+
+    @Test
+    @DisplayName("기수 — 종목의 (당기) 앵커 하나가 맨몸 「제N기」 전부를 푼다")
+    void bareOrdinalsResolveThroughTheStockOffset() {
+        // 017670 SK텔레콤 실측. 2019년 보고서만 앵커를 갖고, 2025년 보고서는 맨몸 기수뿐이다.
+        List<GovernanceReportRow> rows = List.of(
+                auditOpinionRow(2019, "제36기(당기)", "적정의견"),
+                auditOpinionRow(2019, "제35기(전기)", "적정의견"),
+                auditOpinionRow(2025, "제42기", "적정의견"),
+                auditOpinionRow(2025, "제41기", "적정의견"));
+
+        Map<Integer, BigDecimal> byYear = opinionsByYear(rows);
+
+        assertThat(byYear)
+                .as("오프셋 −17이 제42기를 FY2025로 민다. 그 전에는 최신 사실이 FY2019였다")
+                .containsEntry(2019, ZERO).containsEntry(2018, ZERO)
+                .containsEntry(2025, ZERO).containsEntry(2024, ZERO);
+    }
+
+    @Test
+    @DisplayName("기수 — 오프셋이 종목 안에서 모순이면 맨몸 기수를 풀지 않는다")
+    void contradictoryOffsetsLeaveBareOrdinalsUnresolved() {
+        // 006730 실측: 한 보고서에 제45기(당기)와 제46기(당기)가 둘 다 있다. 소스의 자기모순이다.
+        List<GovernanceReportRow> rows = List.of(
+                auditOpinionRow(2025, "제45기(당기)", "적정의견"),
+                auditOpinionRow(2025, "제46기(당기)", "적정의견"),
+                auditOpinionRow(2025, "제44기", "적정의견"));
+
+        Map<Integer, BigDecimal> byYear = opinionsByYear(rows);
+
+        assertThat(byYear).as("앵커 둘이 낸 오프셋이 갈리므로 맨몸 제44기는 버린다 — "
+                        + "「최대 기수 = 당기」로 풀면 전기가 당기로 올라가 의견이 한 해 새것이 된다")
+                .containsOnlyKeys(2025);
+    }
+
+    @Test
     @DisplayName("감사의견 — 한 해의 두 행 중 하나만 비적정이어도 비적정이다")
     void auditOpinionFoldsTwoRowsWithOr() {
         List<GovernanceReportRow> rows = List.of(
@@ -591,6 +654,28 @@ class DartGovernanceFactMapperTest {
                 RECEIPT, PUBLISHED, 0,
                 fields("bsns_year", term, "adtor", auditor, "adt_opinion", "적정의견",
                         "emphs_matter", emphasis, "core_adt_matter", keyMatter));
+    }
+
+    private static final BigDecimal ZERO = BigDecimal.ZERO;
+
+    /** 기수 표기와 요청 연도를 직접 주고 회계연도별 감사의견을 받는다. */
+    private static Map<Integer, BigDecimal> opinionOfTerm(String term, String opinion, int year) {
+        return opinionsByYear(List.of(auditOpinionRow(year, term, opinion)));
+    }
+
+    private static Map<Integer, BigDecimal> opinionsByYear(List<GovernanceReportRow> rows) {
+        Map<Integer, BigDecimal> byYear = new LinkedHashMap<>();
+        mapper().derive(GovernanceEndpoint.AUDIT_OPINION, rows, NO_CONTEXT).stream()
+                .filter(fact -> fact.metric() == GovernanceMetric.AUDIT_OPINION_ADVERSE)
+                .forEach(fact -> byYear.put(fact.fiscalYear(), fact.value()));
+        return byYear;
+    }
+
+    private static GovernanceReportRow auditOpinionRow(int bsnsYear, String term, String opinion) {
+        return new GovernanceReportRow(GovernanceEndpoint.AUDIT_OPINION, bsnsYear, "11011",
+                RECEIPT, PUBLISHED, 0,
+                fields("bsns_year", term, "adtor", "삼정회계법인", "adt_opinion", opinion,
+                        "emphs_matter", "해당사항 없음", "core_adt_matter", "핵심감사사항"));
     }
 
     private static BigDecimal opinionOf(String opinion) {
