@@ -94,6 +94,9 @@ applies_to:
 psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE m.effective_to IS NULL AND u.is_active), d AS (SELECT iv.stock_id, count(DISTINCT iv.value) n FROM indicator_value iv JOIN act ON act.stock_id = iv.stock_id WHERE iv.indicator_code = 'GROSS_MARGIN' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — 편입 종목의 GROSS_MARGIN 행이 하나도 없다' WHEN (SELECT count(*) FROM d WHERE n > 1) = 0 THEN '계단이 하나도 없다 — 저장 경로가 재무 스냅샷 하나를 창 전체에 펴는 상태로 돌아갔다(ADR-0128)' ELSE 'OK ' || (SELECT count(*) FROM d WHERE n > 1) || '/' || (SELECT count(*) FROM d) || '종목이 창 안에서 값이 둘 이상이다 — 공시일 계단이 있다' END"
 ```
 
+**이 펜스의 질의는 `ADR-0071`의 「저장된 지표에 시간축이 생겼다」와 **바이트 동일**하다
+(CASE 문구만 다르다 · 2026-09-13 md5 대조). **MUST: 한쪽을 고치면 다른 쪽도 같이 고친다.**
+
 ```premise 보존 창 안에 시세는 있는데 지표가 없는 거래일이 없다
 # MUST: 하한을 **시장마다** 잡는다. 전역 min을 쓰면 국내 하한(2025-12-10)이 미국(2025-12-16)에도
 # 걸려 미국 4일이 상시 거짓 발화한다 — 그 4일은 구멍이 아니라 미국의 보존 경계 밖이다.
