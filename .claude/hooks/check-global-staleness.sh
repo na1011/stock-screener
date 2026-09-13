@@ -38,7 +38,7 @@ elif ! command -v shasum >/dev/null 2>&1; then
   add "shasum이 없어 전역 가드의 드리프트를 판정하지 못했다."
 else
   drifted=""
-  # 전역에 있고 참조에도 같은 이름이 있는 것만 본다. 전역 전용 훅(데스크톱 알림 등)은
+  # 전역에 있고 참조에도 같은 이름이 있는 것만 본다. 전역 전용 훅은
   # 대조 대상이 아니고, 참조에만 있는 훅은 프로젝트 전용이라 전역에 없는 것이 정상이다.
   while IFS= read -r f; do
     [ -z "$f" ] && continue
