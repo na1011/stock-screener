@@ -316,6 +316,16 @@ spring:
     restart:
       enabled: false
 
+# BootstrapDatabaseGuard가 기동 시점에 **연결된** 데이터베이스와 대조한다. 기본값이 운영 이름이라
+# 아무것도 안 주면 「운영을 의도했다」를 단언하는 것이고 기존 명령은 그대로 돈다. 임시 DB로
+# 돌리려면 DB_URL과 BOOTSTRAP_DB를 **둘 다** 그 이름으로 맞춰야 하고, 한쪽만 주면 기동이 선다.
+#
+# MUST NOT: 이 자리에 DB_NAME을 쓰지 않는다. 그것은 `ops/`가 psql로 배치를 물을 때만 쓰는 값이고
+# (`.claude/rules/config.md`), 여기서 재사용하면 그 문장이 거짓이 된다.
+pipeline:
+  bootstrap:
+    expected-database: ${BOOTSTRAP_DB:stock_screener}
+
 # 운영 앱이 8080에 떠 있는 채로 적재·판정을 돌리는 것이 정상 사용 조건이라 포트를 비운다.
 # 손으로 `--server.port=0`을 주는 것으로는 안 된다 — 빠뜨리면 컨텍스트가 포트 충돌로 죽는데
 # **그때 BootstrapRunner는 아예 시작되지 않아** 그 실패 처리가 걸리지 않고, gradle은

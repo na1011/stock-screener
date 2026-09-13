@@ -5,6 +5,7 @@ date: 2026-08-25
 applies_to:
   - "src/main/java/**/pipeline/batch/CorporateActionJudgeJob.java"
   - "src/main/java/**/pipeline/batch/BootstrapRunner.java"
+  - "src/main/java/**/pipeline/batch/BootstrapDatabaseGuard.java"
 ---
 
 # ADR-0084. 원장 판정에 두 번째 문을 내되, 판정하는 것은 여전히 사람이다
@@ -61,6 +62,13 @@ V21의 `CHECK`가 보는 것은 그중 부호 하나뿐이다.
   명령이 통째로 막힌다. 그래서 백슬래시만 예외로 둔다.
 - **MUST NOT: 이 잡들을 `AdminJobLauncher` 카탈로그·스케줄러에 올리지 않는다.** `JobRequest`가
   날짜 셋뿐이라 판정값을 실을 수 없다. 스케줄러 등재는 ADR-0050이 이미 기각했다.
+- **MUST: bootstrap 기동이 **연결된** 데이터베이스를 기동 시점에 단언한다**(`BootstrapDatabaseGuard`).
+  기대값은 `${BOOTSTRAP_DB:stock_screener}`이고 **언제나** 대조한다 — 「선언했을 때만 대조」로
+  두면 잊고 안 선언한 실행이 지금과 똑같이 운영 DB에 붙는데 그것이 정확히 막으려던 사고다.
+  **MUST: `InitializingBean`으로 둔다** — 시더는 `ApplicationRunner`라 refresh가 전부 끝난 뒤에
+  돌므로, refresh 중에 도는 이 형태라야 앞선다. `@Order`로는 이 순서를 못 만든다.
+  **MUST NOT: 설정(`spring.datasource.url`)을 읽어 대조하지 않는다** — 그 문자열이 실제로 어디에
+  붙었는지는 아무것도 확인되지 않는다(`ReadOnlyDatabaseGuard`의 javadoc이 같은 함정을 적었다).
 - **MUST: 판정으로 `status IN ('OBSERVED','UNSUPPORTED')`인 종목 수가 바뀌면 ADR-0071의
   premise를 함께 고친다.** 그 전제가 그 수를 **7로 못박아** 두었고, 안 고치면 매 세션 거짓
   발견이 난다. **이 CLI의 존재 이유가 그 7건을 닫는 것이므로 첫 실사용에 걸린다.**
@@ -149,7 +157,13 @@ rg -n "formLogin|httpBasic" src/main/java
     (`IndicatorCatalogInitializer` `@Order(0)` · `PresetCatalogInitializer` `@Order(10)`, 둘 다
     `@Profile` 없음)을 러너보다 **먼저** 돌려 `indicator`·`screen_condition`에 쓴다 —
     실측으로 행 수는 안 바뀌고 `updated_at`이 갱신된다. **그러므로 「읽기 전용 잡」이라는 말은
-    잡에만 참이고 실행 전체에는 거짓이다.** DB를 바꿔 가며 관통 검증을 할 때 이것이 걸린다.
+    잡에만 참이고 실행 전체에는 거짓이다.**
+    **그래서 `BootstrapDatabaseGuard`가 붙었다**(2026-09-14) — 기동이 기대와 다른 DB에 붙으면
+    시더가 쓰기 전에 선다. 임시 DB로 관통 검증을 하려면 `DB_URL`과 `BOOTSTRAP_DB`를 **둘 다**
+    그 이름으로 맞춘다. **시더를 `@Profile("!bootstrap")`로 끄는 쪽은 안 골랐다** — ADR-0071
+    §규칙이 *"이름이 아니라 **타입으로** 뺀다 … 이름으로 지목하면 다음에 더해질 러너가 조용히
+    샌다"*로 이미 그 형태를 기각했고, `screen_condition.indicator_code → indicator(code)` FK가
+    실재해(`V3__condition.sql:90`) 시더를 끄면 새 지표가 생긴 뒤 카탈로그가 낡은 채로 남는다.
 - **되돌리려면**: 두 `case`와 `CorporateActionJudgeJob`을 걷고, `KNOWN_OPTIONS`의 `ca-*` 아홉과
   두 가드를 지우고, 거울 넷에서 이름을 뺀다. **판정 경로가 브라우저 콘솔 하나로 돌아가므로,
   되돌리기 전에 다음 리밸런싱의 판정을 누가 어떻게 할지 먼저 답한다.**
