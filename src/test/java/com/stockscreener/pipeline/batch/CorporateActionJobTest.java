@@ -10,6 +10,11 @@ import com.stockscreener.pipeline.datasource.RawPriceBar;
 import com.stockscreener.pipeline.support.FakeCorporateActionDataSource;
 import com.stockscreener.support.TestDatabaseGuard;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -212,6 +217,90 @@ class CorporateActionJobTest {
     }
 
     /** 불연속이 없는 봉 셋. 휴리스틱이 끼어들지 않아 공시 경로만 재게 된다. */
+    // ── 주식수가 없어 못 올린 후보: 시장별 한 줄 ──────────────────────────────
+    //
+    // MUST: 이 셋이 함께 있어야 뜻이 있다. 「줄이 뜬다」만 보면 **집계가 0을 찍어도 초록**이라
+    // 그 줄이 실제로 detectCandidates 경로를 태웠는지 알 수 없다 — 실제로 한 번 그 설계로
+    // 갈 뻔했고 컴파일도 테스트도 전부 초록이었다.
+
+    /** 로그를 문자열로 잡는다. 문구를 바꿔도 붉는 곳이 여기뿐이다. */
+    private ListAppender<ILoggingEvent> attach(Class<?> type, Level level) {
+        ch.qos.logback.classic.Logger logger =
+                (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(type);
+        logger.setLevel(level);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        return appender;
+    }
+
+    private List<String> linesContaining(ListAppender<ILoggingEvent> appender, String needle) {
+        return appender.list.stream()
+                .map(ILoggingEvent::getFormattedMessage)
+                .filter(m -> m.contains(needle))
+                .toList();
+    }
+
+    private void seedDiscontinuityWithoutShares() {
+        // 2.5배 점프라 PriceDiscontinuity의 1.30/0.70 밖이고, listed_shares가 없어
+        // 종류도 비율도 못 낸다 — 그것이 이 줄이 세는 대상이다.
+        writer.write(memberId, List.of(
+                barNoShares("2026-02-02", "1000"), barNoShares("2026-02-03", "2500")));
+    }
+
+    @Test
+    @DisplayName("주식수가 없어 못 올린 후보를 시장마다 한 줄로 적는다 — 종목마다가 아니다")
+    void reportsSkippedCandidatesOncePerMarket() {
+        ListAppender<ILoggingEvent> job_ = attach(CorporateActionJob.class, Level.INFO);
+        seedDiscontinuityWithoutShares();
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
+
+        assertThat(linesContaining(job_, "상장주식수가 없어 후보로 올리지 않은"))
+                .as("시장이 하나이므로 한 줄이어야 한다")
+                .singleElement()
+                .satisfies(line -> {
+                    assertThat(line).contains("[KOSPI]");
+                    // MUST: 수가 실제로 흘러왔는지 본다. 0이면 배선이 끊긴 것이고,
+                    // 그때도 「줄이 하나」는 참이라 이 단언이 없으면 못 잡는다.
+                    assertThat(line).contains("1건");
+                });
+    }
+
+    @Test
+    @DisplayName("결손이 없으면 그 줄이 아예 안 뜬다 — 신호의 형태가 「부재 → 출현」이다")
+    void staysSilentWhenNothingWasSkipped() {
+        ListAppender<ILoggingEvent> job_ = attach(CorporateActionJob.class, Level.INFO);
+        seedBars();
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
+
+        assertThat(linesContaining(job_, "상장주식수가 없어 후보로 올리지 않은"))
+                .as("0인 시장을 찍으면 「늘 있는 줄 안의 숫자 변화」가 되어 신호가 죽는다")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("종목별 줄은 지운 것이 아니라 내린 것이다 — DEBUG면 stockId가 돌아온다")
+    void perStockLineComesBackAtDebug() {
+        ListAppender<ILoggingEvent> recalc =
+                attach(com.stockscreener.pipeline.collector.AdjustmentRecalculator.class,
+                        Level.DEBUG);
+        seedDiscontinuityWithoutShares();
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
+
+        assertThat(linesContaining(recalc, "상장주식수가 없어 후보로 올리지 않은"))
+                .as("LOG_ADJUSTMENT=DEBUG가 종목 귀속을 되살리는 경로다")
+                .singleElement()
+                .satisfies(line -> assertThat(line).contains("stockId=" + memberId));
+    }
+
+    private static RawPriceBar barNoShares(String date, String close) {
+        BigDecimal c = new BigDecimal(close);
+        return new RawPriceBar(LocalDate.parse(date), c, c, c, c, 1_000_000L, null, null, false);
+    }
+
     private void seedBars() {
         writer.write(memberId, List.of(
                 bar("2026-02-02", "1000"), bar("2026-02-03", "1010"), bar("2026-02-04", "1020")));

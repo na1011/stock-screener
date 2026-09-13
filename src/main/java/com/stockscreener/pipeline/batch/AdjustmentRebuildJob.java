@@ -125,8 +125,12 @@ public class AdjustmentRebuildJob {
         List<Rebuilt> rebuilt = new ArrayList<>();
         int appliedEvents = 0;
         // 종목별 무변경 줄을 DEBUG로 내리면서 그 수가 갈 곳이 필요해졌다.
-        // MUST: 지역 변수로 센다 — RebuildResult에 필드를 더하면 그 record를 쓰는
-        // AdjustmentRecalculatorTest 13곳이 함께 깨진다.
+        // 지역 변수로 센다. **원래 근거였던 「RebuildResult에 필드를 더하면 테스트 13곳이
+        // 깨진다」는 거짓이다** — 그 record는 테스트에 0회 나오고 생성 자리가 main에 하나뿐이라
+        // 필드를 더해도 아무것도 안 깨진다(2026-09-13 컴파일로 확인). 13이라는 수는 **다른
+        // 메서드**(detectCandidates)에 붙어 있었고 그쪽은 실제로 12개소가 깨졌다.
+        // MUST NOT: 이 수를 RebuildResult로 올리지 않는다. 근거는 비용이 아니라 **경로**다 —
+        // rebuild()는 withoutUnjudgeable을 안 지나므로 그 record에 실으면 언제나 0이 된다.
         // 이 루프는 순차라 평범한 int로 충분하다. 나중에 워커로 흩으면(ADR-0138이 지표
         // 백필에 한 것처럼) 이 카운터는 **예외 없이 조용히 틀린다** — 그때 함께 고친다.
         int alreadyMatching = 0;

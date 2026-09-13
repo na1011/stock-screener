@@ -77,10 +77,10 @@ public class CorporateActionCollector {
      * @param pending        이번 실행이 새로 만든 판정 대기 후보. 잡이 요약해 알린다.
      */
     public record Result(long recorded, List<NearDuplicate> nearDuplicates,
-                         List<PendingCandidate> pending) {
+                         List<PendingCandidate> pending, int skippedNoShares) {
 
         static Result empty() {
-            return new Result(0L, List.of(), List.of());
+            return new Result(0L, List.of(), List.of(), 0);
         }
     }
 
@@ -121,7 +121,9 @@ public class CorporateActionCollector {
 
         // 휴리스틱은 외부 호출이 없다. 창 밖 후보를 거르는 이유는 포트 계약과 같은 창을 쓰기
         // 위해서다 — 안 거르면 --from을 좁힌 실행이 창 밖 사건까지 매번 다시 올린다.
-        List<CorporateAction> detected = recalculator.detectCandidates(security.stockId()).stream()
+        AdjustmentRecalculator.Detection detection =
+                recalculator.detectCandidates(security.stockId());
+        List<CorporateAction> detected = detection.candidates().stream()
                 .filter(action -> !action.effectiveDate().isBefore(from)
                         && !action.effectiveDate().isAfter(to))
                 .toList();
@@ -142,8 +144,11 @@ public class CorporateActionCollector {
                         action.source()));
             }
         }
+        // MUST: 창 필터 **앞의** 수를 싣는다. detectCandidates의 SQL에 날짜 경계가 없어
+        // 건너뛴 불연속은 실행 창과 무관하게 같은 수이고, 창으로 자르면 --from을 좁힌 실행이
+        // 「결손이 줄었다」로 읽힌다.
         return new Result(disclosed.recorded() + heuristic.recorded(), List.copyOf(conflicts),
-                List.copyOf(pending));
+                List.copyOf(pending), detection.skippedNoShares());
     }
 
     /**
@@ -185,6 +190,6 @@ public class CorporateActionCollector {
                         security.ticker(), action.effectiveDate(), action.source()));
             }
         }
-        return new Result(recorded, List.copyOf(conflicts), List.copyOf(pending));
+        return new Result(recorded, List.copyOf(conflicts), List.copyOf(pending), 0);
     }
 }

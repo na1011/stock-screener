@@ -134,7 +134,9 @@ server:
 # 그래서 환경변수로 둔다. run-app.sh가 `set -a`로 .env를 export하므로
 # **.env에 한 줄 + 재기동**이면 켜진다. 재스테이징도 재빌드도 필요 없다.
 #
-#   LOG_ADJUSTMENT=DEBUG    # 종목별 「수정계수가 이미 원장과 일치한다」
+#   LOG_ADJUSTMENT=DEBUG    # 종목별 두 줄 — 「수정계수가 이미 원장과 일치한다」와
+#                           # 「상장주식수가 없어 후보로 올리지 않았다」. 둘은 한 스위치에
+#                           # 묶인다(키가 클래스 단위라 하나만 못 켠다).
 logging:
   level:
     com.stockscreener.pipeline.collector.AdjustmentRecalculator: ${LOG_ADJUSTMENT:INFO}

@@ -108,6 +108,15 @@ public class CorporateActionJob {
 
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+        // 시장별로 접어 루프 뒤에 한 줄씩 낸다. 종목마다 찍던 때 한 판에 312줄이 stockId만
+        // 다른 채 나왔고(2026-09-13 실측 · 380 B/줄) 그 312가 전부 US라 **국내 신호가 원리적으로
+        // 묻혀 있었다** — 시장 축이 ADR-0100의 의도를 살리는 자리다.
+        // MUST: 시장 목록을 코드에 박지 않는다. Map의 키로 두면 새 시장이 저절로 들어온다 —
+        // ADR-0100 §규칙이 「시장으로 분기하면 고치지 않은 시장이 조용히 옛 임계를 쓴다」로
+        // 경계한 것이 그 하드코딩이다.
+        // 이 루프는 순차다(BatchExecutionContext.process에 병렬 없음). 워커로 흩으면 이
+        // 카운터는 예외 없이 조용히 틀린다 — 그때 함께 고친다(ADR-0138이 지표 백필에 한 것처럼).
+        Map<String, Integer> skippedNoSharesByMarket = new java.util.TreeMap<>();
         List<CorporateActionCollector.NearDuplicate> conflicts = new ArrayList<>();
         List<CorporateActionCollector.PendingCandidate> pending = new ArrayList<>();
 
@@ -148,10 +157,15 @@ public class CorporateActionJob {
                             collector.collect(security, windowStart, asOf);
                     conflicts.addAll(result.nearDuplicates());
                     pending.addAll(result.pending());
+                    if (result.skippedNoShares() > 0) {
+                        skippedNoSharesByMarket.merge(
+                                security.marketCode(), result.skippedNoShares(), Integer::sum);
+                    }
                     return result.recorded();
                 });
             }
 
+            reportSkippedNoShares(skippedNoSharesByMarket);
             alertOnConflicts(execution, conflicts);
             alertOnPendingJudgement(execution, pending);
         } catch (DataSourceException e) {
@@ -172,6 +186,25 @@ public class CorporateActionJob {
      * {@code NOT_FOUND}는 종목 실패로 기록될 뿐 배치를 멈추지 않는다. {@code DataSourceRegistry}가
      * 이 포트에 {@code Optional} 변형을 금지한 이유와 같은 자리다.
      */
+    /**
+     * 주식수가 없어 후보로 못 올린 불연속을 <b>시장마다 한 줄</b>로 적는다(ADR-0100 §규칙).
+     *
+     * <p>MUST: <b>0인 시장은 찍지 않는다.</b> 국내는 {@code listed_shares} 결손이 0행이라 이 줄이
+     * 안 뜨는 것이 정상이고, <b>뜨는 것 자체</b>가 V9 이전 형태의 행이 다시 들어왔다는 신호다
+     * ({@code AdjustmentRecalculator.withoutUnjudgeable} javadoc). 0을 늘 찍으면 그 신호가
+     * 「늘 있는 줄 안의 숫자 변화」가 되어 눈에 안 띈다.
+     *
+     * <p>MUST NOT: 이것을 실패나 경고로 올리지 않는다. 건너뛴 것은 <b>판정할 재료가 없는 것</b>이지
+     * 실패가 아니다 — 값은 그 수가 기본 레벨에서 읽힌다는 데 있다.
+     */
+    private void reportSkippedNoShares(Map<String, Integer> byMarket) {
+        byMarket.forEach((market, count) -> log.info(
+                "[{}] 상장주식수가 없어 후보로 올리지 않은 가격 불연속이 {}건이다 — 종류도 비율도"
+                        + " 못 내는 후보는 OBSERVED로 쌓여 그 효력일을 창에 삼키는 지표를 통째로"
+                        + " 억제한다. 종목별은 DEBUG다(.env의 LOG_ADJUSTMENT=DEBUG).",
+                market, count));
+    }
+
     /**
      * 소스가 창의 뒤쪽을 못 덮으면 <b>시장마다 한 줄</b>로 적는다.
      *

@@ -185,7 +185,7 @@ public class AdjustmentRecalculator {
      * 직접 주는 시장에서는 <b>그쪽이 정본</b>이고(ADR-0090), 이 휴리스틱은 <b>소스가 액면병합을
      * 안 싣는 국내를 위한 두 번째 그물</b>이다(ADR-0049).
      */
-    public List<CorporateAction> detectCandidates(long stockId) {
+    public Detection detectCandidates(long stockId) {
         return withoutUnjudgeable(stockId, jdbcTemplate.query("""
                 SELECT trade_date, close, prev_close, listed_shares, prev_listed_shares FROM (
                     SELECT trade_date, close, listed_shares,
@@ -231,21 +231,39 @@ public class AdjustmentRecalculator {
     }
 
     /**
-     * 주식수가 없어 판정할 수 없었던 불연속을 걸러 내고 <b>그 수를 남긴다.</b>
+     * 휴리스틱이 올린 후보와, <b>주식수가 없어 판정하지 못해 버린 수</b>.
      *
-     * <p>조용히 건너뛰면 이 저장소가 가장 싫어하는 형태가 된다 — 그래서 세어서 로그로 낸다.
-     * 국내에서는 {@code listed_shares} 결손이 0행이라 이 줄이 안 뜨고(실측), 뜨면 그것이
-     * <b>V9 이전 형태의 행이 다시 들어왔다</b>는 신호다.
+     * <p>수를 값으로 돌려주는 이유는 <b>세는 자리와 찍는 자리가 달라야 하기 때문</b>이다.
+     * 여기는 종목 하나만 알고 시장을 모른다 — 시장별로 접는 것은 {@code CorporateActionJob}이
+     * 한다. 어댑터·계산기에 누적 상태를 두지 않는 것은 종목 루프를 워커로 흩어도 안전해야
+     * 하기 때문이고, 그 근거는 {@code CorporateActionDataSource}의 {@code windowCoverage}
+     * javadoc에 같은 말로 적혀 있다.
      */
-    private List<CorporateAction> withoutUnjudgeable(long stockId, List<CorporateAction> rows) {
-        long skipped = rows.stream().filter(java.util.Objects::isNull).count();
+    public record Detection(List<CorporateAction> candidates, int skippedNoShares) {
+    }
+
+    /**
+     * 주식수가 없어 판정할 수 없었던 불연속을 걸러 내고 <b>그 수를 값으로 돌려준다.</b>
+     *
+     * <p>조용히 건너뛰면 이 저장소가 가장 싫어하는 형태가 된다 — 그래서 센다(ADR-0100 §규칙).
+     * 국내에서는 {@code listed_shares} 결손이 0행이라 <b>국내 줄이 안 뜨고</b>(실측), 뜨면 그것이
+     * <b>V9 이전 형태의 행이 다시 들어왔다</b>는 신호다. <b>그 신호의 형태가 「부재 → 출현」이므로
+     * 집계 쪽도 0인 시장은 찍지 않는다</b> — 0을 늘 찍으면 신호가 「늘 있는 줄 안의 숫자 변화」가
+     * 되어 눈에 안 띈다.
+     *
+     * <p>종목별 줄은 <b>DEBUG</b>다. 지운 것이 아니라 내린 것이고 {@code .env}의
+     * {@code LOG_ADJUSTMENT=DEBUG} + 재기동이면 되살아난다. 기본 레벨에서 <b>종목 귀속을
+     * 잃는 것</b>이 이 강등이 파는 대가다 — 되살리는 재실행은 외부 호출이 없어 쿼터를 안 태운다.
+     */
+    private Detection withoutUnjudgeable(long stockId, List<CorporateAction> rows) {
+        int skipped = (int) rows.stream().filter(java.util.Objects::isNull).count();
         if (skipped > 0) {
-            log.info("상장주식수가 없어 후보로 올리지 않은 가격 불연속이 {}건이다. stockId={} — "
+            log.debug("상장주식수가 없어 후보로 올리지 않은 가격 불연속이 {}건이다. stockId={} — "
                     + "종류도 비율도 못 내는 후보는 OBSERVED로 쌓여 그 효력일을 창에 삼키는 "
                     + "지표를 통째로 억제한다(AdjustmentRecalculator.detectCandidates javadoc).",
                     skipped, stockId);
         }
-        return rows.stream().filter(java.util.Objects::nonNull).toList();
+        return new Detection(rows.stream().filter(java.util.Objects::nonNull).toList(), skipped);
     }
 
     /**

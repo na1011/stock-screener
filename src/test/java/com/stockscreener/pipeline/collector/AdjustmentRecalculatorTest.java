@@ -70,7 +70,7 @@ class AdjustmentRecalculatorTest {
                 bar("2026-01-02", "1000", 1_000_000_000L),
                 bar("2026-02-02", "10000", 100_000_000L)));
 
-        List<CorporateAction> candidates = recalculator.detectCandidates(stockId);
+        List<CorporateAction> candidates = recalculator.detectCandidates(stockId).candidates();
         assertThat(candidates).hasSize(1);
         CorporateAction merge = candidates.get(0);
 
@@ -97,7 +97,7 @@ class AdjustmentRecalculatorTest {
                 bar("2023-04-27", "1492", 1_244_473_009L),
                 bar("2023-05-16", "15860", 124_447_300L)));
 
-        CorporateAction merge = recalculator.detectCandidates(stockId).get(0);
+        CorporateAction merge = recalculator.detectCandidates(stockId).candidates().get(0);
         assertThat(merge.ratio()).isEqualByComparingTo("0.1");
 
         approve(merge);
@@ -118,7 +118,7 @@ class AdjustmentRecalculatorTest {
                 bar("2026-01-02", "50000", 10_000_000L),
                 bar("2026-02-02", "1000", 500_000_000L)));
 
-        CorporateAction split = recalculator.detectCandidates(stockId).get(0);
+        CorporateAction split = recalculator.detectCandidates(stockId).candidates().get(0);
         assertThat(split.type()).isEqualTo(CorporateAction.Type.SPLIT);
         assertThat(split.ratio()).isEqualByComparingTo("50");
 
@@ -195,7 +195,7 @@ class AdjustmentRecalculatorTest {
     void observedCandidateIsNeverApplied() {
         writer.write(stockId, List.of(bar("2026-01-02", "50000"), bar("2026-02-02", "1000")));
         // 탐지 결과를 승인 없이 그대로 원장에 적는다 — 일일 갱신이 하는 일이다.
-        recalculator.detectCandidates(stockId).forEach(a -> ledger.record(stockId, a));
+        recalculator.detectCandidates(stockId).candidates().forEach(a -> ledger.record(stockId, a));
 
         recalculator.rebuild(stockId);
 
@@ -242,7 +242,7 @@ class AdjustmentRecalculatorTest {
                 bar("2026-01-07", "1266", 1_000_000L),   // −25% — 정상
                 bar("2026-01-08", "823", 1_000_000L)));  // −35% — 후보
 
-        assertThat(recalculator.detectCandidates(stockId))
+        assertThat(recalculator.detectCandidates(stockId).candidates())
                 .extracting(CorporateAction::effectiveDate)
                 .containsExactly(LocalDate.parse("2026-01-06"), LocalDate.parse("2026-01-08"));
     }
@@ -253,7 +253,7 @@ class AdjustmentRecalculatorTest {
         writer.write(stockId, List.of(
                 bar("2026-01-02", "10000"), bar("2026-01-05", "10500"), bar("2026-01-06", "9800")));
 
-        assertThat(recalculator.detectCandidates(stockId)).isEmpty();
+        assertThat(recalculator.detectCandidates(stockId).candidates()).isEmpty();
     }
 
     @Test
@@ -265,7 +265,7 @@ class AdjustmentRecalculatorTest {
                 bar("2023-11-08", "170500", 12_381_004L),
                 bar("2023-11-09", "90200", 12_381_004L)));
 
-        assertThat(recalculator.detectCandidates(stockId)).singleElement().satisfies(candidate -> {
+        assertThat(recalculator.detectCandidates(stockId).candidates()).singleElement().satisfies(candidate -> {
             assertThat(candidate.type()).isEqualTo(CorporateAction.Type.UNKNOWN);
             assertThat(candidate.ratio())
                     .as("관측된 가격 배수일 뿐 계수가 아니다")
@@ -286,7 +286,7 @@ class AdjustmentRecalculatorTest {
                 bar("2025-10-29", "1221000", 71_174_000L),
                 bar("2025-11-24", "1789000", 46_290_951L)));
 
-        assertThat(recalculator.detectCandidates(stockId))
+        assertThat(recalculator.detectCandidates(stockId).candidates())
                 .singleElement()
                 .extracting(CorporateAction::type)
                 .isEqualTo(CorporateAction.Type.UNKNOWN);
@@ -307,7 +307,7 @@ class AdjustmentRecalculatorTest {
     void missingShareCountYieldsNoCandidate() {
         writer.write(stockId, List.of(bar("2023-04-27", "1492"), bar("2023-05-16", "15860")));
 
-        assertThat(recalculator.detectCandidates(stockId)).isEmpty();
+        assertThat(recalculator.detectCandidates(stockId).candidates()).isEmpty();
     }
 
     @Test
@@ -318,7 +318,7 @@ class AdjustmentRecalculatorTest {
                 bar("2025-10-29", "1221000", 71_174_000L),
                 bar("2025-11-24", "1789000", 109_608_000L)));
 
-        assertThat(recalculator.detectCandidates(stockId))
+        assertThat(recalculator.detectCandidates(stockId).candidates())
                 .singleElement()
                 .extracting(CorporateAction::type)
                 .isEqualTo(CorporateAction.Type.UNKNOWN);
@@ -331,7 +331,7 @@ class AdjustmentRecalculatorTest {
                 bar("2026-01-02", "100000", 1_000_000L),
                 bar("2026-01-05", "2000", 50_000_000L)));
 
-        assertThat(recalculator.detectCandidates(stockId))
+        assertThat(recalculator.detectCandidates(stockId).candidates())
                 .isNotEmpty()
                 .allMatch(a -> a.source() == CorporateAction.DetectionSource.HEURISTIC);
     }
@@ -340,7 +340,7 @@ class AdjustmentRecalculatorTest {
 
     /** 후보를 전부 원장에 적고 그중 실제로 적용될 것을 낸다. */
     private List<CorporateActionLedger.Entry> ledgerAfterRecordingCandidates() {
-        recalculator.detectCandidates(stockId).forEach(a -> ledger.record(stockId, a));
+        recalculator.detectCandidates(stockId).candidates().forEach(a -> ledger.record(stockId, a));
         return ledger.findApplicable(stockId);
     }
 
