@@ -91,8 +91,12 @@ FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code = 'US'"
 ```premise 미국 지표가 미보정 시세 위에 서 있지 않다
 psql -d stock_screener -At -c "
 WITH scoped AS (
-  SELECT DISTINCT i.stock_id FROM indicator_value i
-  JOIN stock s ON s.id = i.stock_id WHERE s.market_code = 'US'),
+  -- 종목마다 EXISTS로 묻는다. DISTINCT i.stock_id 는 같은 집합을 내지만
+  -- indicator_value 전수를 훑는다(실측 1,519 ms vs 7.75 ms · 집합 동일성은
+  -- EXCEPT 양방향 0으로 확인). 미국 종목 수만큼 idx_iv_stock_date 를 찌르는 쪽이 싸다.
+  SELECT s.id AS stock_id FROM stock s
+  WHERE s.market_code = 'US'
+    AND EXISTS (SELECT 1 FROM indicator_value i WHERE i.stock_id = s.id)),
 t AS (
   SELECT (SELECT count(*) FROM price_daily p JOIN stock s ON s.id = p.stock_id
            WHERE s.market_code = 'US') AS bars,
