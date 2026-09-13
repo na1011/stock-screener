@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { IndicatorResponse, StockIndicatorValue } from '@/api/types'
 
-import { hiddenCount, isVisibleByDefault, missingCount } from './detailVisibility'
+import {
+  hiddenCount,
+  isVisibleByDefault,
+  missingCount,
+  readShowAllIndicators,
+  writeShowAllIndicators,
+} from './detailVisibility'
 
 function value(code: string, detailDefault: boolean): StockIndicatorValue {
   return {
@@ -84,5 +90,57 @@ describe('missingCount', () => {
 
   it('카탈로그가 없으면 0이다 — 분모를 모르는 채로 수를 지어내지 않는다', () => {
     expect(missingCount([], 5)).toBe(0)
+  })
+})
+
+/**
+ * 「전체 지표 보기」의 기억.
+ *
+ * 환경이 `node`라 `window`가 없다 — 그것이 오히려 이 시험의 요점이다. **저장소를 못 쓰는
+ * 환경에서 던지면 지표 구획이 통째로 죽는데**, 그것은 토글 하나가 치를 대가가 아니다.
+ */
+describe('전체 지표 보기 — 기억이 화면을 죽이지 않는다', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('저장소가 없으면 기본값으로 돌아간다. 던지지 않는다', () => {
+    vi.stubGlobal('window', undefined)
+
+    expect(() => readShowAllIndicators()).not.toThrow()
+    expect(readShowAllIndicators()).toBe(false)
+    expect(() => writeShowAllIndicators(true)).not.toThrow()
+  })
+
+  it('저장소가 막혀 있어도 던지지 않는다 — 비공개 모드가 그 자리다', () => {
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem() {
+          throw new Error('접근이 막혔다')
+        },
+        setItem() {
+          throw new Error('접근이 막혔다')
+        },
+      },
+    })
+
+    expect(readShowAllIndicators()).toBe(false)
+    expect(() => writeShowAllIndicators(true)).not.toThrow()
+  })
+
+  it('쓴 값을 그대로 읽는다', () => {
+    const store = new Map<string, string>()
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => void store.set(key, value),
+      },
+    })
+
+    writeShowAllIndicators(true)
+    expect(readShowAllIndicators()).toBe(true)
+
+    writeShowAllIndicators(false)
+    expect(readShowAllIndicators()).toBe(false)
   })
 })

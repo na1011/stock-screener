@@ -45,3 +45,36 @@ export function missingCount(
   const expected = catalogIndicators.filter((indicator) => indicator.detailDefault).length
   return Math.max(0, expected - shownCount)
 }
+
+/**
+ * 「전체 지표 보기」를 켠 채로 두는 자리.
+ *
+ * **`localStorage`를 고른 이유**는 이 토글이 한 번의 조작이 아니라 **지속 성향**이기
+ * 때문이다 — "나는 전체를 보는 사람이다"는 탭을 닫아도 유지되는 것이 맞다.
+ * `sessionStorage`는 탭마다 풀리고(그래서 `auth.ts`의 복귀 경로가 그것을 쓴다),
+ * URL 쿼리는 링크에 실려 **받는 사람의 화면까지 바꾼다.**
+ *
+ * **MUST NOT: 이 값으로 서버 요청을 가르지 않는다.** 서버는 언제나 전량을 주고 각 행이
+ * 자기 노출 정책을 들고 온다(ADR-0058 §규칙) — 거르는 것은 화면이다. 요청을 가르면
+ * 「내 조건」 구획이 감춘 지표의 값을 못 받는다.
+ *
+ * **저장소를 못 쓰는 환경에서 던지지 않는다.** 사파리 비공개 모드처럼 접근이 막히면
+ * 기본값으로 돌아가면 되는 일이고, 지표 화면이 통째로 죽을 이유가 아니다.
+ */
+const SHOW_ALL_KEY = 'stock-screener.detail.show-all-indicators'
+
+export function readShowAllIndicators(): boolean {
+  try {
+    return window.localStorage.getItem(SHOW_ALL_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function writeShowAllIndicators(showAll: boolean): void {
+  try {
+    window.localStorage.setItem(SHOW_ALL_KEY, String(showAll))
+  } catch {
+    // 저장만 못 할 뿐 이번 세션의 토글은 동작한다. 화면을 죽이지 않는다.
+  }
+}

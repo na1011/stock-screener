@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import { api } from '@/api/endpoints'
@@ -16,7 +16,13 @@ import { useAsync } from '@/composables/useAsync'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { readBand } from '@/lib/band'
 import { conditionIndicatorCodes } from '@/lib/draftIndicators'
-import { hiddenCount, isVisibleByDefault, missingCount as countMissing } from '@/lib/detailVisibility'
+import {
+  hiddenCount,
+  isVisibleByDefault,
+  missingCount as countMissing,
+  readShowAllIndicators,
+  writeShowAllIndicators,
+} from '@/lib/detailVisibility'
 import { MISSING, splitIndicatorValue } from '@/lib/format'
 import { DETAIL_CATEGORY_RANK, groupByCategory } from '@/lib/indicatorCategory'
 import { indicatorBriefOf } from '@/lib/resultRow'
@@ -82,7 +88,10 @@ function readingOf(indicator: StockIndicatorValue) {
 const groups = computed(() =>
   groupByCategory(
     // 감춘 지표는 여기서만 빠진다. 「내 조건」 구획은 이 필터를 타지 않는다(ADR-0058).
-    (detail.data.value?.indicators ?? []).filter(isVisibleByDefault),
+    // 토글을 켜면 거르지 않는다 — 서버는 늘 전량을 주므로 다시 요청하지 않는다.
+    showAllIndicators.value
+      ? (detail.data.value?.indicators ?? [])
+      : (detail.data.value?.indicators ?? []).filter(isVisibleByDefault),
     (indicator) => indicator.category,
     DETAIL_CATEGORY_RANK,
   ).map((group) => ({
@@ -188,6 +197,15 @@ const missingCount = computed(() =>
  */
 const hiddenIndicatorCount = computed(() => hiddenCount(detail.data.value?.indicators ?? []))
 
+/**
+ * 감춘 지표까지 펼쳐 볼 것인가.
+ *
+ * 전에는 이 값을 보려면 **스크리너에서 조건에 추가**하는 길뿐이었는데, 그 초안 스토어가
+ * 영속되지 않아 새로고침·링크 진입에서 끊겼다. 여기서 펼치면 그 경로에 안 기댄다.
+ */
+const showAllIndicators = ref(readShowAllIndicators())
+watch(showAllIndicators, (value) => writeShowAllIndicators(value))
+
 function percentileOf(code: string) {
   return catalog.byCode.get(code)?.percentile ?? null
 }
@@ -290,9 +308,18 @@ onMounted(() => {
             </ul>
           </section>
 
+          <!--
+            MUST: 감춘 수를 계속 알린다(ADR-0058 §규칙). 걸러내고 아무 말도 하지 않는 것이
+            던지는 것보다 나쁘다. 토글이 생겨도 그 고지는 남고, 여기서 문장이 곧 조작 수단이다.
+          -->
           <p v-if="hiddenIndicatorCount > 0" class="stock-detail__missing">
-            세부 지표 {{ hiddenIndicatorCount }}개는 기본 화면에서 감췄습니다. 스크리너에서 조건에
-            추가하면 맨 위 「내 조건」에 값이 나옵니다.
+            세부 지표 {{ hiddenIndicatorCount }}개는 기본 화면에서 감췄습니다.
+            <Button
+              :label="showAllIndicators ? '기본 지표만 보기' : '전체 지표 보기'"
+              size="small"
+              text
+              @click="showAllIndicators = !showAllIndicators"
+            />
           </p>
 
           <!--
