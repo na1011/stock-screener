@@ -405,8 +405,26 @@ export interface ScreeningResponse {
   conditions: ConditionInfo[]
   /** 결과 표의 기본 컬럼 — 카탈로그 기본 컬럼 ∪ 조건이 참조한 지표. */
   columns: string[]
-  /** 상한에 걸리기 전 평가한 총 종목 수. */
-  evaluatedCount: number
+  /**
+   * 그 기준일에 **판정 대상**이던 종목 수(ADR-0142). 조건을 안 건 수이고 **행이 0개여도 산다** —
+   * 0건 화면이 분모를 말할 수 있는 유일한 자리다.
+   *
+   * `universe.memberCount`와 **다른 것을 센다.** 저쪽은 「지금 편입」이고 대상을 안 좁히면
+   * `universe` 자체가 null이다. 이 수는 **그날의 모집단**이라 과거 기준일 조회에서 갈린다.
+   */
+  populationCount: number
+  /** 조건에 맞은 종목 수. **상한 절단 전**이라 `truncated`일 때만 `resultCount`와 다르다. */
+  includedCount: number
+  /**
+   * 조건 순서와 **같은 길이**. 귀속을 참으로 만들 수 없으면 비어 있다 — FILTER가 0건이
+   * 아닐 때가 그렇다(통과분만 보고 세면 「0종목이 걸렸다」는 거짓이 나온다).
+   */
+  conditionTallies: ConditionTally[]
+  /**
+   * 통과가 하나도 없을 때 **가장 적게 걸린 종목이 못 넘긴 관문 수**. 2 이상이면
+   * **한 조건만 풀어서는 안 열린다.** 통과가 있으면 null이다.
+   */
+  minimumBlocked: number | null
   resultCount: number
   /** 상한에 걸려 잘렸는가. 조용히 자르지 않는다. */
   truncated: boolean
@@ -415,6 +433,20 @@ export interface ScreeningResponse {
 
 
 // ── 종목 상세 ─────────────────────────────────────────────────────
+
+/**
+ * 조건 하나가 **무엇을 얼마나 잘랐는가**(ADR-0142).
+ *
+ * `notMatched`와 `notEvaluable`을 갈라 두는 것이 요점이다 — 합치면 사용자가 데이터 문제를
+ * 전략 문제로 읽는다. `wouldPassWithout`은 그 조건 하나만 뺐을 때의 통과 수이고, 관문이
+ * 아니면 null이다. **이것은 펜스 축이 아니다**(ADR-0070 §검증이 그 용도를 기각했다).
+ */
+export interface ConditionTally {
+  conditionIndex: number
+  notMatched: number
+  notEvaluable: number
+  wouldPassWithout: number | null
+}
 
 /** 검색 결과 한 건. 지표 값은 싣지 않는다 — 값이 필요하면 상세로 간다. */
 export interface StockSearchResult {

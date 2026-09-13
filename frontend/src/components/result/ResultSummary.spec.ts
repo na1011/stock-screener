@@ -30,7 +30,10 @@ const response = (adsSuspectCount: number): ScreeningResponse =>
     screen: { id: null, code: null, name: '즉석 조건', type: 'CUSTOM' },
     conditions: [],
     columns: [],
-    evaluatedCount: 1000,
+    populationCount: 1000,
+    includedCount: 12,
+    conditionTallies: [],
+    minimumBlocked: null,
     resultCount: 12,
     truncated: false,
     rows: [],
@@ -42,6 +45,21 @@ const render = (adsSuspectCount: number): Promise<string> => {
   app.use(PrimeVue)
   return renderToString(app)
 }
+
+describe('ResultSummary의 분모', () => {
+  /**
+   * IMPORTANT — 픽스처가 `as unknown as`로 캐스팅돼 있어 **타입검사가 필드 이름을 안 본다.**
+   * 실제로 이 파일에는 없는 필드(`evaluatedCount`)가 살아 있었고 아무도 못 잡았다.
+   * 그래서 **그려진 문구**를 단언한다 — 이름이 바뀌면 여기서 붉는다.
+   */
+  it('결과 옆에 「판정 대상」을 그린다 — 「평가」가 아니다', async () => {
+    const html = await render(0)
+
+    expect(html).toContain('판정 대상')
+    expect(html).toContain('1,000종목')
+    expect(html).not.toContain('평가 ')
+  })
+})
 
 describe('ResultSummary의 ADS 경고', () => {
   it('ADS 종목이 섞여 있으면 순위를 못 믿을 수 있다고 말한다', async () => {

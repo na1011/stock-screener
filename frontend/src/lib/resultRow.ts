@@ -70,7 +70,10 @@ export const SCORE_DECIMAL_SCALE = 2
  */
 export const RESULT_LABELS = {
   search: '종목명 · 티커 검색',
+  /** 서버가 0건을 줬을 때. **검색어가 걸러낸 것과 가른다** — 사용자가 할 일이 다르다. */
   empty: '조건에 맞는 종목이 없습니다.',
+  /** 표의 검색어가 전부 걸러냈을 때. 결과 자체는 있다. */
+  filteredEmpty: '검색어와 일치하는 종목이 없습니다.',
   /** 서버가 이름을 주지 않은 종목. 빈칸으로 두면 클릭할 것이 없어진다. */
   unnamed: '이름 없음',
   score: '점수',

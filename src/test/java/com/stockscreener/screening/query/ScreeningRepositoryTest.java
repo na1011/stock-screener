@@ -326,6 +326,105 @@ class ScreeningRepositoryTest {
                 .containsExactly(cheapStock);
     }
 
+    // --- ADR-0142: 0건의 사유 ---------------------------------------------
+
+    @Test
+    @DisplayName("모집단은 조건을 안 건 대상 수다 — FILTER에서 통과 수와 다르다")
+    void populationCountIsNotTheMatchCount() {
+        ConditionGroup group = ConditionGroup.and(
+                condition("PER", ComparisonOperator.LT, "10"),
+                condition("PBR", ComparisonOperator.LT, "1"));
+
+        ScreeningRepository.ScreeningOutcome outcome =
+                repository.diagnose(group, EvaluationMode.FILTER, AS_OF, true, null);
+
+        assertThat(outcome.results()).extracting(ScreeningResult::stockId)
+                .containsExactly(cheapStock);
+        assertThat(outcome.populationCount())
+                .as("옛 evaluatedCount는 여기서 1을 냈다 — 화면이 「평가 1종목」이라고 말하고 있었다")
+                .isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("FILTER가 0건이면 술어 없이 다시 돌아 조건별 귀속을 만든다")
+    void filterWithNoMatchesReconstructsTheAttribution() {
+        ConditionGroup group = ConditionGroup.and(
+                condition("PER", ComparisonOperator.LT, "1"),
+                condition("PBR", ComparisonOperator.LT, "0.1"));
+
+        ScreeningRepository.ScreeningOutcome outcome =
+                repository.diagnose(group, EvaluationMode.FILTER, AS_OF, true, null);
+
+        assertThat(outcome.results()).isEmpty();
+        assertThat(outcome.populationCount()).isEqualTo(4);
+        assertThat(outcome.tallies()).hasSize(2);
+        assertThat(outcome.tallies().get(0).notMatched())
+                .as("PER을 가진 셋이 못 넘겼다").isEqualTo(3);
+        assertThat(outcome.tallies().get(0).notEvaluable())
+                .as("값이 없는 종목은 「미충족」이 아니라 「판정불가」다 — 이 가름이 요점이다")
+                .isEqualTo(1);
+        assertThat(outcome.minimumBlocked())
+                .as("가장 가까운 종목도 둘을 못 넘겼다 — 한 조건만 풀어서는 안 열린다")
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("MUST NOT: FILTER가 0건이 아니면 귀속을 내지 않는다 — 통과분만 세면 거짓이다")
+    void filterWithMatchesEmitsNoAttribution() {
+        ConditionGroup group = ConditionGroup.and(condition("PER", ComparisonOperator.LT, "10"));
+
+        ScreeningRepository.ScreeningOutcome outcome =
+                repository.diagnose(group, EvaluationMode.FILTER, AS_OF, true, null);
+
+        assertThat(outcome.results()).isNotEmpty();
+        assertThat(outcome.tallies())
+                .as("통과분만 보고 세면 「이 조건에 걸린 종목이 0이다」가 나오는데 그것은 거짓이다")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("SCORING — 필수 게이트 0건의 사유가 「판정불가」에 귀속된다")
+    void scoringAttributesAnEmptyResultToTheBlockingGate() {
+        ConditionGroup group = ConditionGroup.and(
+                condition("SMA_200", ComparisonOperator.GT, "0").asRequired(),
+                condition("PER", ComparisonOperator.LT, "10").withWeight(new BigDecimal("3")));
+
+        ScreeningRepository.ScreeningOutcome outcome =
+                repository.diagnose(group, EvaluationMode.SCORING, AS_OF, true, null);
+
+        assertThat(outcome.results()).isEmpty();
+        assertThat(outcome.populationCount()).isEqualTo(4);
+        assertThat(outcome.tallies().get(0).notEvaluable())
+                .as("게이트 지표가 전 종목에 없다 — 「조건이 빡빡하다」가 아니라 데이터가 없는 것이다")
+                .isEqualTo(4);
+        assertThat(outcome.tallies().get(0).notMatched()).isZero();
+        assertThat(outcome.tallies().get(0).wouldPassWithout())
+                .as("이 게이트만 빼면 전 종목이 통과한다 — 한계 기여(ADR-0070)")
+                .isEqualTo(4);
+        assertThat(outcome.tallies().get(1).wouldPassWithout())
+                .as("배점 조건은 아무도 안 자르므로 한계 기여가 없다")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("MUST: 같은 지표의 상·하한 쌍을 인덱스로 가른다 — 코드로 세면 합쳐진다")
+    void sameIndicatorTwiceIsCountedPerCondition() {
+        ConditionGroup group = ConditionGroup.and(
+                condition("PER", ComparisonOperator.GTE, "20").asRequired(),
+                condition("PER", ComparisonOperator.LTE, "5").asRequired());
+
+        ScreeningRepository.ScreeningOutcome outcome =
+                repository.diagnose(group, EvaluationMode.SCORING, AS_OF, true, null);
+
+        assertThat(outcome.tallies()).hasSize(2);
+        assertThat(outcome.tallies().get(0).notMatched())
+                .as("PER 8·8·30 중 20 이상은 하나뿐이라 둘이 못 넘긴다").isEqualTo(2);
+        assertThat(outcome.tallies().get(1).notMatched())
+                .as("5 이하는 하나도 없어 셋이 못 넘긴다").isEqualTo(3);
+        assertThat(outcome.tallies().get(0).notMatched())
+                .isNotEqualTo(outcome.tallies().get(1).notMatched());
+    }
+
     private IndicatorCondition condition(String code, ComparisonOperator operator, String value) {
         return IndicatorCondition.of(code, operator, ConditionOperand.Literal.of(value));
     }

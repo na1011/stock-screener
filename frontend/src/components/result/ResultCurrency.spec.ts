@@ -25,7 +25,6 @@ const response = (currencyCode: string | null): ScreeningResponse =>
   ({
     asOf: '2026-08-05',
     asOfRequested: null,
-    totalCount: 1,
     truncated: false,
     evaluationMode: 'FILTER',
     sortedBy: 'STOCK',

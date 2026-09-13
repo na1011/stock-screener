@@ -44,6 +44,19 @@ import java.util.Map;
  *                      <p>{@code relativePopulations}와 <b>같은 이유로 여기 싣는다</b> — 화면이
  *                      카탈로그로 판단하면 그 요청만 실패했을 때 경고가 조용히 사라진다.
  *                      대상을 안 좁혔으면 활성 유니버스 전체의 합이다.
+ * @param populationCount 그 기준일에 <b>판정 대상</b>이던 종목 수(ADR-0142). 조건을 안 건 수이고
+ *                      <b>행이 0개여도 산다</b> — 0건 화면이 분모를 말할 수 있는 유일한 자리다.
+ *                      <p>{@code universe.memberCount}와 <b>다른 것을 센다.</b> 저쪽은
+ *                      「지금 편입」이고 대상을 안 좁히면 {@code universe} 자체가 null이다.
+ *                      이 수는 <b>그날의 모집단</b>이라 과거 기준일 조회에서 갈린다(ADR-0135).
+ *                      백테스트 하네스의 {@code PointInTimeScreener.Outcome.evaluated}와 같은 개념이다.
+ * @param includedCount 조건에 맞은 종목 수. <b>상한({@code MAX_ROWS}) 절단 전</b>이라
+ *                      {@code truncated}일 때만 {@code resultCount}와 다르다.
+ * @param conditionTallies 조건 순서와 <b>같은 길이</b>. 귀속을 참으로 만들 수 없으면 비어 있다 —
+ *                      FILTER가 0건이 아닐 때가 그렇다(통과분만 보고 세면 「0종목이 걸렸다」는
+ *                      거짓이 나온다).
+ * @param minimumBlocked 통과가 하나도 없을 때 <b>가장 적게 걸린 종목이 못 넘긴 관문 수</b>.
+ *                      2 이상이면 <b>한 조건만 풀어서는 안 열린다.</b> 통과가 있으면 null이다.
  */
 public record ScreeningResponse(
         LocalDate asOf,
@@ -57,7 +70,10 @@ public record ScreeningResponse(
         ScreenInfo screen,
         List<ConditionInfo> conditions,
         List<String> columns,
-        int evaluatedCount,
+        int populationCount,
+        int includedCount,
+        List<ConditionTally> conditionTallies,
+        Integer minimumBlocked,
         int resultCount,
         boolean truncated,
         List<Row> rows
@@ -76,6 +92,20 @@ public record ScreeningResponse(
      */
     public static final String SORTED_BY_SCORE = "SCORE_DESC";
     public static final String SORTED_BY_STOCK = "STOCK_ID_ASC";
+
+    /**
+     * 조건 하나가 <b>무엇을 얼마나 잘랐는가</b>(ADR-0142). 행이 0개여도 사는 자리다.
+     *
+     * @param conditionIndex   {@code conditions}의 자리. {@code Row.outcomes}의 것과 같은 인덱스다
+     * @param notMatched       조건을 못 넘긴 종목 수
+     * @param notEvaluable     <b>값이 없어</b> 판정하지 못한 종목 수. 위와 갈라 세는 것이 요점이다 —
+     *                         합치면 사용자가 데이터 문제를 전략 문제로 읽는다
+     * @param wouldPassWithout 이 조건 하나만 뺐을 때의 통과 수. 관문이 아니면 null이다.
+     *                         <b>이것은 펜스 축이 아니다</b> — ADR-0070 §검증이 그 용도를 기각했다
+     */
+    public record ConditionTally(int conditionIndex, int notMatched, int notEvaluable,
+                                 Integer wouldPassWithout) {
+    }
 
     /** @param memberCount 현재 편입 종목 수. 전체 유니버스면 null. */
     public record UniverseInfo(String code, String name, Integer memberCount) {

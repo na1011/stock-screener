@@ -1,0 +1,164 @@
+<script setup lang="ts">
+import Tag from 'primevue/tag'
+import { computed } from 'vue'
+
+import type { ConditionInfo, ScreeningResponse } from '@/api/types'
+import { splitCondition } from '@/lib/conditionText'
+import { formatCount } from '@/lib/format'
+import { outcomeStyle } from '@/lib/outcome'
+
+/**
+ * 결과가 0건일 때 **왜 0건인가**를 그린다(ADR-0142 · P27 축④).
+ *
+ * IMPORTANT — 이 자리는 `ResultSummary` 아래의 **머리말 층**이다. 표의 `#empty` 슬롯에 두면
+ * 안 된다 — 그 슬롯은 사용자의 검색어가 전부 걸러냈을 때도 뜨므로, 거기 두면 화면이 지금
+ * 보이는 것과 **다른 질문에 답한다.**
+ *
+ * 서버는 수만 주고 문구는 여기서 정한다. `adsSuspectCount`·`relativePopulations`가 이미 그
+ * 형태이고, enum을 만들면 `wire-contract.json`·`WireContractTest`·`contract.spec.ts` 셋을
+ * 함께 고쳐야 한다.
+ */
+const props = defineProps<{
+  result: ScreeningResponse
+  /** 지표 코드 → 이름. `ConditionOutcomes`와 같은 형태로 **주입받는다** — 화면이 카탈로그를
+   * 스스로 들면 그 요청만 실패했을 때 문구가 조용히 망가진다. */
+  indicatorName: (code: string) => string
+}>()
+
+const rows = computed(() =>
+  props.result.conditionTallies
+    .flatMap((tally) => {
+      const condition: ConditionInfo | undefined = props.result.conditions[tally.conditionIndex]
+      // 서버가 길이를 맞춰 주지만(조립자가 단언한다) 화면이 그것을 전제하지는 않는다.
+      return condition === undefined ? [] : [{ tally, condition }]
+    })
+    // 많이 자른 것부터. 사용자가 먼저 손볼 조건이 위에 온다.
+    .sort(
+      (a, b) =>
+        b.tally.notMatched + b.tally.notEvaluable - (a.tally.notMatched + a.tally.notEvaluable),
+    ),
+)
+
+/** 그 조건 하나만 풀면 열리는가. `wouldPassWithout`이 통과 수보다 클 때만 뜻이 있다. */
+const openers = computed(() =>
+  rows.value.filter(
+    (row) =>
+      row.tally.wouldPassWithout !== null && row.tally.wouldPassWithout > props.result.includedCount,
+  ),
+)
+
+/**
+ * 한 조건만 풀어서는 안 열리는 경우의 답.
+ *
+ * 이것이 없으면 진단이 **조건이 가장 빡빡할 때 정확히 입을 다문다** — 어느 종목도 정확히
+ * 하나만 실패하지 않으면 한계 기여가 전 조건에서 0이 되기 때문이다.
+ */
+const closestNote = computed(() => {
+  if (openers.value.length > 0 || props.result.minimumBlocked === null) return null
+  return `한 조건만 풀어서는 열리지 않습니다 — 가장 가까운 종목도 ${props.result.minimumBlocked}개를 넘기지 못했습니다.`
+})
+
+const text = (condition: ConditionInfo): string => {
+  // 이어 붙이면 원래 문장 그대로다 — `conditionText`의 계약이 그렇게 적혀 있다.
+  const parts = splitCondition(condition, props.indicatorName, props.result.currencyCode)
+  return `${parts.subject} ${parts.criterion}`
+}
+
+const missing = outcomeStyle('NOT_EVALUABLE')
+const unmatched = outcomeStyle('NOT_MATCHED')
+</script>
+
+<template>
+  <section v-if="rows.length > 0" class="diagnosis">
+    <h3 class="diagnosis__title">조건별로 몇 종목이 걸렸는지</h3>
+    <p class="diagnosis__lead">
+      판정 대상 <strong class="tabular">{{ formatCount(result.populationCount) }}</strong
+      >종목에 조건을 하나씩 대 본 결과입니다.
+    </p>
+
+    <ul class="diagnosis__list">
+      <li v-for="row in rows" :key="row.tally.conditionIndex" class="diagnosis__item">
+        <span class="diagnosis__condition">{{ text(row.condition) }}</span>
+        <span class="diagnosis__counts">
+          <Tag v-if="row.tally.notMatched > 0" :severity="unmatched.severity" :value="`${unmatched.label} ${formatCount(row.tally.notMatched)}`" />
+          <!--
+            MUST: 「불충족」과 「데이터 없음」을 갈라 그린다(P27 축④). 합치면 사용자가
+            데이터 문제를 전략 문제로 읽고, 조건을 고치러 간다.
+          -->
+          <Tag v-if="row.tally.notEvaluable > 0" :severity="missing.severity" :value="`${missing.label} ${formatCount(row.tally.notEvaluable)}`" />
+        </span>
+        <span
+          v-if="row.tally.wouldPassWithout !== null && row.tally.wouldPassWithout > result.includedCount"
+          class="diagnosis__opener"
+        >
+          이 조건만 빼면 {{ formatCount(row.tally.wouldPassWithout) }}종목
+        </span>
+      </li>
+    </ul>
+
+    <p v-if="closestNote" class="diagnosis__note">{{ closestNote }}</p>
+    <p class="diagnosis__caveat">
+      「데이터 없음」은 그 회사에 대한 주장이 아니라 <strong>우리 데이터에 그 값이 없다</strong>는
+      뜻입니다. 조건에 맞지 않았다는 뜻이 아닙니다.
+    </p>
+  </section>
+</template>
+
+<style scoped>
+.diagnosis {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-content-border-radius);
+}
+
+.diagnosis__title {
+  margin: 0;
+  font-size: var(--app-text-md);
+}
+
+.diagnosis__lead,
+.diagnosis__note,
+.diagnosis__caveat {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--p-text-muted-color);
+}
+
+.diagnosis__note {
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.diagnosis__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diagnosis__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.diagnosis__condition {
+  flex: 1 1 14rem;
+}
+
+.diagnosis__counts {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.diagnosis__opener {
+  font-size: var(--app-text-xs);
+  color: var(--p-text-muted-color);
+}
+</style>

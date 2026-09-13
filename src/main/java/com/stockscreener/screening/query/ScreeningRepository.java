@@ -6,7 +6,9 @@ import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.stockscreener.screening.ConditionEvaluator;
 import com.stockscreener.screening.ConditionGroup;
+import com.stockscreener.screening.ConditionOutcome;
 import com.stockscreener.screening.EvaluationMode;
+import com.stockscreener.screening.IndicatorCondition;
 import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.stock.QIndicatorValueEntity;
 import com.stockscreener.stock.QStockEntity;
@@ -15,6 +17,8 @@ import com.stockscreener.stock.QUniverseMembershipEntity;
 
 import jakarta.persistence.EntityManager;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,12 +43,48 @@ import java.util.Set;
  * SELECT 절에 조건 수만큼 CASE 컬럼을 붙이지 않는다 — 조건이 15개면 컬럼이 15개 늘어나고,
  * 그 SQL은 요청마다 모양이 달라져 계획 캐시도 못 탄다.
  *
+ * <p><b>ADR-0142가 그 불변식에 갈래 하나를 냈다.</b> {@link #diagnose}는 FILTER에서 모집단
+ * 질의를 하나 더 내고, <b>결과가 0건일 때만</b> 지표 질의를 하나 더 낸다. 둘 다 <b>조건 수와
+ * 무관한 상수</b>라 위 문장이 막으려던 것(조건 개수에 비례하는 증가)은 그대로 막힌다.
+ * <b>「항상 2개」를 근거로 이 갈래를 걷지 않는다</b> — 걷으면 0건 화면이 다시 아무 이유도
+ * 말하지 않는다.
+ *
  * <p>IMPORTANT — 선정 이유는 {@link ConditionEvaluator}가 만든다. SQL이 종목을 고른 근거와
  * 화면에 보여주는 설명이 같은 판정 로직({@code IndicatorCondition.evaluate})에서 나오므로
  * 어긋날 수 없다. 이 판정 로직은 Phase 6의 워치리스트 알림에서도 그대로 재사용된다.
  */
 @Repository
 public class ScreeningRepository {
+
+    private static final Logger log = LoggerFactory.getLogger(ScreeningRepository.class);
+
+    /**
+     * 실행 결과와 <b>왜 그 결과인가</b>를 함께 든다(ADR-0142).
+     *
+     * @param populationCount 그 기준일에 <b>판정 대상</b>이던 종목 수. 조건을 안 건 수이고,
+     *                        행이 0개여도 산다
+     * @param results         오늘 {@code screen}이 내던 그것
+     * @param tallies         조건 순서와 <b>같은 길이</b>. 귀속을 참으로 만들 수 없을 때는 비어 있다
+     * @param minimumBlocked  통과한 종목이 없을 때, <b>가장 적게 걸린 종목이 못 넘긴 관문 수</b>.
+     *                        한 조건만 풀어서는 안 열린다는 것을 이 수가 말한다. 통과가 있으면 null
+     */
+    public record ScreeningOutcome(int populationCount, List<ScreeningResult> results,
+                                   List<ConditionTally> tallies, Integer minimumBlocked) {
+    }
+
+    /**
+     * 조건 하나에 대한 귀속.
+     *
+     * @param conditionIndex    {@code ConditionGroup.flattenConditions()}의 자리. 지표 코드가 아니다 —
+     *                          같은 지표의 상·하한 쌍이 한 화면에 설 수 있고 코드로 세면 합쳐진다
+     * @param notMatched        조건을 못 넘긴 종목 수
+     * @param notEvaluable      <b>값이 없어</b> 판정하지 못한 종목 수. 위와 갈라 세는 것이 요점이다
+     * @param wouldPassWithout  이 조건 하나만 뺐을 때의 통과 수(ADR-0070의 한계 기여).
+     *                          관문이 아니거나 AND 트리가 아니면 null이다
+     */
+    public record ConditionTally(int conditionIndex, int notMatched, int notEvaluable,
+                                 Integer wouldPassWithout) {
+    }
 
     private final JPAQueryFactory queryFactory;
     private final ConditionTranslator translator;
@@ -104,28 +144,135 @@ public class ScreeningRepository {
     @Transactional(readOnly = true)
     public List<ScreeningResult> screen(ConditionGroup group, EvaluationMode mode, LocalDate asOf,
                                         boolean atLatest, String universeCode) {
-        List<Long> stockIds = selectStockIds(group, mode, asOf, atLatest, universeCode);
+        return diagnose(group, mode, asOf, atLatest, universeCode).results();
+    }
+
+    /**
+     * 조건을 실행하고 <b>왜 그 결과가 나왔는지</b>를 함께 낸다(ADR-0142).
+     *
+     * <p>{@link #screen}이 버리던 것을 줍는다 — 탈락 종목의 {@code outcomes}는 이미 계산돼 있고
+     * 루프 밖으로 한 바이트도 안 나가고 있었다. <b>SCORING에서는 추가 평가가 0회다.</b>
+     *
+     * <p>FILTER는 다르다. {@link #selectStockIds}가 조건을 SQL 술어로 내려 좁히므로 탈락 종목이
+     * {@code evaluate}에 도달조차 못 한다. 그래서 <b>결과가 0건일 때만</b> 술어 없이 모집단을
+     * 다시 돌아 귀속을 만든다.
+     *
+     * <p><b>MUST: FILTER가 0건이 아니면 귀속을 내지 않는다(빈 목록).</b> 통과분만 보고 세면
+     * 「이 조건에 걸린 종목이 0이다」가 나오는데 <b>그것은 거짓이다</b> — 탈락분을 안 봤을 뿐이다.
+     */
+    @Transactional(readOnly = true)
+    public ScreeningOutcome diagnose(ConditionGroup group, EvaluationMode mode, LocalDate asOf,
+                                     boolean atLatest, String universeCode) {
+        List<Long> matching = selectStockIds(group, mode, asOf, atLatest, universeCode);
+        // 모집단은 「조건을 안 걸었을 때의 대상」이다. SCORING은 그 자체이고, FILTER만 다시 묻는다.
+        List<Long> population = mode == EvaluationMode.FILTER
+                ? selectStockIds(group, EvaluationMode.SCORING, asOf, atLatest, universeCode)
+                : matching;
+        // FILTER 0건이면 귀속을 만들려고 모집단을 돈다. 그 외에는 오늘과 같은 집합을 돈다.
+        boolean secondPass = mode == EvaluationMode.FILTER && matching.isEmpty();
+        List<Long> stockIds = secondPass ? population : matching;
         if (stockIds.isEmpty()) {
-            return List.of();
+            return new ScreeningOutcome(population.size(), List.of(), List.of(), null);
         }
 
         Map<Long, Map<String, BigDecimal>> valuesByStock =
                 loadIndicatorValues(stockIds, group.referencedIndicatorCodes(), asOf);
 
+        List<IndicatorCondition> conditions = group.flattenConditions();
+        Tally tally = new Tally(conditions.size());
         List<ScreeningResult> results = new ArrayList<>(stockIds.size());
         for (Long stockId : stockIds) {
             Map<String, BigDecimal> values = valuesByStock.getOrDefault(stockId, Map.of());
             ScreeningResult result = evaluator.evaluate(stockId, group, mode, values);
+            tally.add(result, mode);
             if (result.included()) {
                 results.add(result);
             }
         }
 
+        if (secondPass && !results.isEmpty()) {
+            // MUST: 삼키지 않는다. SQL이 0건을 냈는데 인메모리가 통과분을 찾았다면 두 경로가
+            // 갈린 것이고, 그때 화면에 뜨는 진단은 사용자가 방금 본 결과를 설명하지 못한다.
+            log.warn("FILTER가 SQL로 0건인데 인메모리 재판정은 {}종목을 통과시켰다 — "
+                    + "ConditionTranslator와 IndicatorCondition.evaluate가 갈렸다.", results.size());
+        }
         if (mode == EvaluationMode.SCORING) {
             results.sort(Comparator.comparing(ScreeningResult::score).reversed()
                     .thenComparing(ScreeningResult::stockId));
         }
-        return results;
+        boolean tallyIsTrue = mode == EvaluationMode.SCORING || secondPass;
+        return new ScreeningOutcome(population.size(),
+                secondPass ? List.of() : results,
+                tallyIsTrue ? tally.toTallies(group, results.size()) : List.of(),
+                tallyIsTrue ? tally.minimumBlocked() : null);
+    }
+
+    /**
+     * 한 번의 판정 패스에서 조건별 귀속을 줍는다.
+     *
+     * <p><b>관문의 정의가 모드마다 다르다</b> — SCORING은 {@code required()}만, FILTER는
+     * {@code included}가 {@code passes}이므로 <b>전 조건</b>이다({@code ConditionEvaluator}).
+     * {@code GateDiagnosticsTest}는 언제나 {@code required}만 세므로 <b>두 수를 견주지 않는다.</b>
+     *
+     * <p><b>「정확히 하나」만 귀속한다.</b> 여럿에 걸린 종목은 어디에도 안 센다 — 그 종목에서
+     * 어느 쪽이 원인인지는 이 자료로 정해지지 않는다.
+     */
+    private static final class Tally {
+
+        private final int[] notMatched;
+        private final int[] notEvaluable;
+        private final int[] soleBlocker;
+        private int minimumBlocked = Integer.MAX_VALUE;
+
+        Tally(int conditionCount) {
+            this.notMatched = new int[conditionCount];
+            this.notEvaluable = new int[conditionCount];
+            this.soleBlocker = new int[conditionCount];
+        }
+
+        void add(ScreeningResult result, EvaluationMode mode) {
+            List<ConditionOutcome> outcomes = result.outcomes();
+            int blocked = 0;
+            int blockedAt = -1;
+            for (int i = 0; i < outcomes.size() && i < notMatched.length; i++) {
+                ConditionOutcome outcome = outcomes.get(i);
+                if (outcome.status() == ConditionOutcome.Status.NOT_MATCHED) {
+                    notMatched[i]++;
+                } else if (outcome.status() == ConditionOutcome.Status.NOT_EVALUABLE) {
+                    notEvaluable[i]++;
+                }
+                boolean gate = mode != EvaluationMode.SCORING || outcome.condition().required();
+                if (gate && !outcome.passesFilter()) {
+                    blocked++;
+                    blockedAt = i;
+                }
+            }
+            if (blocked == 1) {
+                soleBlocker[blockedAt]++;
+            }
+            if (blocked > 0) {
+                minimumBlocked = Math.min(minimumBlocked, blocked);
+            }
+        }
+
+        /** 통과가 하나도 없을 때만 뜻이 있다. 그 외에는 null이다. */
+        Integer minimumBlocked() {
+            return minimumBlocked == Integer.MAX_VALUE ? null : minimumBlocked;
+        }
+
+        List<ConditionTally> toTallies(ConditionGroup group, int includedCount) {
+            List<IndicatorCondition> conditions = group.flattenConditions();
+            // MUST: AND 트리에서만 한계 기여를 낸다. 「정확히 하나」는 논리곱에 대한 정리다.
+            boolean conjunctive = group.childGroups().isEmpty()
+                    && group.logicalOperator() == ConditionGroup.LogicalOperator.AND;
+            List<ConditionTally> tallies = new ArrayList<>(conditions.size());
+            for (int i = 0; i < conditions.size(); i++) {
+                boolean gate = conditions.get(i).required() || !conjunctive;
+                Integer marginal = conjunctive && gate ? includedCount + soleBlocker[i] : null;
+                tallies.add(new ConditionTally(i, notMatched[i], notEvaluable[i], marginal));
+            }
+            return tallies;
+        }
     }
 
     /**

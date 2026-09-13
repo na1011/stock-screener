@@ -118,8 +118,13 @@ const populationNotes = computed(() =>
         <dt>결과</dt>
         <dd>
           <strong class="tabular">{{ formatCount(result.resultCount) }}</strong
-          ><span class="summary__hint"
-            >/ 평가 {{ formatCount(result.evaluatedCount) }}종목</span
+          ><!--
+            「평가」가 아니라 「판정 대상」이다. 옛 필드는 **조건에 맞은 행 수**를 세면서
+            이름과 문구가 「평가한 종목 수」라고 말해, FILTER에서는 같은 수가 두 번 나왔다.
+          --><span class="summary__hint"
+            >/ 판정 대상 {{ formatCount(result.populationCount) }}종목</span
+          ><span v-if="result.truncated" class="summary__hint"
+            >· 조건 충족 {{ formatCount(result.includedCount) }}종목</span
           >
         </dd>
       </div>

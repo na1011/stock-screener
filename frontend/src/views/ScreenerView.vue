@@ -7,6 +7,7 @@ import AsyncPanel from '@/components/AsyncPanel.vue'
 import SaveScreenDialog from '@/components/SaveScreenDialog.vue'
 import ScreenPicker from '@/components/ScreenPicker.vue'
 import ConditionChipBar from '@/components/condition/ConditionChipBar.vue'
+import EmptyDiagnosis from '@/components/result/EmptyDiagnosis.vue'
 import ResultCards from '@/components/result/ResultCards.vue'
 import ResultSummary from '@/components/result/ResultSummary.vue'
 import ResultTable from '@/components/result/ResultTable.vue'
@@ -15,7 +16,15 @@ import { useBreakpoint } from '@/composables/useBreakpoint'
 import { disabledConditionNotice, incompleteConditionNotice } from '@/lib/conditionText'
 import { screenTypeLabel, staleReasonOf } from '@/lib/screen'
 import { useScreenDraftStore } from '@/stores/screenDraft'
+import { useCatalogStore } from '@/stores/catalog'
 import { useScreeningStore } from '@/stores/screening'
+
+const catalog = useCatalogStore()
+
+/** 코드 → 지표 이름. `ResultCards`와 같은 정의를 쓴다. */
+function indicatorName(code: string): string {
+  return catalog.byCode.get(code)?.name ?? code
+}
 
 const draft = useScreenDraftStore()
 const screening = useScreeningStore()
@@ -210,6 +219,17 @@ async function run(): Promise<void> {
 
         <template v-if="result">
           <ResultSummary :result="result" :stale-reason="staleReason" />
+
+          <!--
+            0건이면 표에는 클릭할 종목이 없어 사유에 원리적으로 못 닿는다(P27 축④).
+            그래서 진단은 **행이 아니라 머리말 층**에 둔다 — ADR-0142.
+          -->
+          <EmptyDiagnosis
+            v-if="result.rows.length === 0"
+            :result="result"
+            :indicator-name="indicatorName"
+            class="screener__rows"
+          />
           <!-- 모바일은 표를 좁힌 것이 아니라 카드 목록이다. 자세한 이유는 useBreakpoint에 있다. -->
           <ResultCards v-if="isMobile" :result="result" :as-of="result.asOf" class="screener__rows" />
           <ResultTable v-else :result="result" :as-of="result.asOf" class="screener__rows" />

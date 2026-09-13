@@ -75,6 +75,9 @@ onBeforeUnmount(() => {
 const expandedRows = ref<Record<string, boolean>>({})
 const filters = ref({ global: { value: null as string | null, matchMode: FilterMatchMode.CONTAINS } })
 
+/** 표가 빈 이유가 검색어인가. 서버가 0건을 준 것과 가르는 유일한 단서다. */
+const hasSearchTerm = computed(() => (filters.value.global.value ?? '').trim().length > 0)
+
 const isScoring = computed(() => props.result.evaluationMode === 'SCORING')
 
 /**
@@ -177,7 +180,14 @@ function barRatio(row: ScreeningRow, code: string): number | null {
     </template>
 
     <template #empty>
-      <p class="result-table__empty">{{ RESULT_LABELS.empty }}</p>
+      <!--
+        IMPORTANT — 이 슬롯은 **검색어가 전부 걸러냈을 때도** 뜬다. 병합이 우리 분기가 아니라
+        DataTable 안에서 일어나므로 무엇이 비웠는지는 필터 상태를 봐야 갈린다. 한 문구로 두면
+        사용자가 티커 오타를 「조건이 빡빡하다」로 읽는다.
+      -->
+      <p class="result-table__empty">
+        {{ hasSearchTerm ? RESULT_LABELS.filteredEmpty : RESULT_LABELS.empty }}
+      </p>
     </template>
 
     <Column expander style="width: 3rem" />

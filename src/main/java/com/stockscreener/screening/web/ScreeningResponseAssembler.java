@@ -73,9 +73,11 @@ public class ScreeningResponseAssembler {
     ScreeningResponse assemble(ScreeningService.Source source, EvaluationMode mode,
                                String universeCode, String currencyCode,
                                LocalDate asOf, LocalDate asOfRequested,
-                               int totalCount, List<ScreeningResult> results, boolean truncated) {
+                               ScreeningRepository.ScreeningOutcome outcome,
+                               List<ScreeningResult> results, boolean truncated) {
 
         List<IndicatorCondition> conditions = source.conditions().flattenConditions();
+        List<ScreeningResponse.ConditionTally> tallies = toTallies(outcome, conditions.size());
 
         // 표에 보일 컬럼 — 카탈로그의 기본 컬럼 ∪ 조건이 참조한 지표.
         // 조건에 쓰인 지표를 반드시 포함하는 이유는 "왜 걸렸는지"를 보려면 그 값이 보여야 하기 때문이다.
@@ -146,10 +148,45 @@ public class ScreeningResponseAssembler {
                         source.id(), source.code(), source.name(), source.type()),
                 conditionInfos,
                 List.copyOf(columnCodes),
-                totalCount,
+                outcome.populationCount(),
+                outcome.results().size(),
+                tallies,
+                outcome.minimumBlocked(),
                 rows.size(),
                 truncated,
                 rows);
+    }
+
+    /**
+     * 질의 계층의 귀속을 와이어 모양으로 옮긴다.
+     *
+     * <p><b>MUST: 가정하지 말고 단언한다.</b> {@code ConditionGroup.flattenConditions()}와
+     * {@code ConditionEvaluator.evaluateGroup}가 같은 전위 순회라는 것이 <b>어디에도 단언돼 있지
+     * 않다</b> — 두 구현이 우연히 발맞추고 있다. 그 우연이 깨지면 조건 목록과 귀속의 인덱스가
+     * 어긋나 <b>다른 조건의 수가 붙는데</b>, 값이 그럴듯해 화면으로는 안 드러난다.
+     * 이 클래스는 이미 「여기서 다시 판정하지 않는다」를 지키는 자리이고 이것도 같은 종류의 가드다.
+     */
+    private static List<ScreeningResponse.ConditionTally> toTallies(
+            ScreeningRepository.ScreeningOutcome outcome, int conditionCount) {
+        List<ScreeningRepository.ConditionTally> tallies = outcome.tallies();
+        if (tallies.isEmpty()) {
+            return List.of();
+        }
+        if (tallies.size() != conditionCount) {
+            throw new IllegalStateException("조건 귀속의 길이가 조건 수와 다르다: "
+                    + tallies.size() + " 대 " + conditionCount);
+        }
+        List<ScreeningResponse.ConditionTally> wire = new ArrayList<>(tallies.size());
+        for (int i = 0; i < tallies.size(); i++) {
+            ScreeningRepository.ConditionTally tally = tallies.get(i);
+            if (tally.conditionIndex() != i) {
+                throw new IllegalStateException("조건 귀속의 인덱스가 어긋났다: "
+                        + tally.conditionIndex() + " 자리에 " + i + "번 조건");
+            }
+            wire.add(new ScreeningResponse.ConditionTally(i, tally.notMatched(),
+                    tally.notEvaluable(), tally.wouldPassWithout()));
+        }
+        return wire;
     }
 
     /**

@@ -128,8 +128,10 @@ public class ScreeningService {
         // 원장과 지표의 시계가 다르다. 최신일 조회에서만 열린 편입의 하한을 접어야 토요일
         // 리밸런싱 직후(다음 평일 지표가 생기기 전)의 신규 편입이 안 사라진다(ADR-0135).
         boolean atLatest = asOf.equals(latestAsOf);
-        List<ScreeningResult> results =
-                screeningRepository.screen(resolved.conditions(), mode, asOf, atLatest, universeCode);
+        // ADR-0142 — 실행 결과와 함께 「왜 그 결과인가」를 받는다. 0건에서도 사는 수들이다.
+        ScreeningRepository.ScreeningOutcome outcome =
+                screeningRepository.diagnose(resolved.conditions(), mode, asOf, atLatest, universeCode);
+        List<ScreeningResult> results = outcome.results();
 
         boolean truncated = results.size() > MAX_ROWS;
         List<ScreeningResult> page = truncated ? results.subList(0, MAX_ROWS) : results;
@@ -138,7 +140,7 @@ public class ScreeningService {
         // 「선정 이유」에 원화 기준값이 뜨고, 조건이 하나라도 떨어지면 조건 목록과 판정의
         // 인덱스가 어긋나 다른 조건의 판정이 붙는다.
         return assembler.assemble(resolved, mode, universeCode, currency, asOf, request.asOf(),
-                results.size(), page, truncated);
+                outcome, page, truncated);
     }
 
     /**

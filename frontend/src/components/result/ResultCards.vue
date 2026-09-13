@@ -137,7 +137,9 @@ function toggle(stockId: number): void {
       <span class="cards__count tabular">{{ formatCount(visibleRows.length) }}종목</span>
     </div>
 
-    <p v-if="visibleRows.length === 0" class="cards__empty">{{ RESULT_LABELS.empty }}</p>
+    <p v-if="visibleRows.length === 0" class="cards__empty">
+      {{ query.trim() ? RESULT_LABELS.filteredEmpty : RESULT_LABELS.empty }}
+    </p>
 
     <article v-for="row in visibleRows" :key="row.stockId" class="card">
       <header class="card__header">

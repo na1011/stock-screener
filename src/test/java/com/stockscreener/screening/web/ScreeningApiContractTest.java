@@ -120,6 +120,57 @@ class ScreeningApiContractTest {
 
     @Test
     @WithMockUser(username = SUB)
+    @DisplayName("IMPORTANT — 0행 응답이 모집단과 조건별 귀속을 싣는다 (P27 축④)")
+    void emptyResultStillCarriesItsReason() throws Exception {
+        // 아무도 못 넘기는 필수 게이트. ADR-0106 §버린 대안이 「행이 0개가 되고 화면이 아무
+        // 이유도 말하지 않는다」로 기각했던 바로 그 상태이고, 그 근거를 이 단언이 무너뜨린다.
+        JsonNode response = run("""
+                {"conditions": {"logicalOperator":"AND","conditions":[
+                   {"indicatorCode":"PER","operator":"LT","operand":{"type":"LITERAL","value":1},"required":true}]},
+                 "evaluationMode":"SCORING","asOf":"2026-08-05"}
+                """);
+
+        assertThat(response.get("rows")).isEmpty();
+        assertThat(response.get("resultCount").asInt()).isZero();
+        assertThat(response.get("populationCount").asInt())
+                .as("행이 0개여도 분모는 산다 — 옛 evaluatedCount는 여기서 0을 냈다")
+                .isEqualTo(3);
+        assertThat(response.get("includedCount").asInt()).isZero();
+
+        JsonNode tallies = response.get("conditionTallies");
+        assertThat(tallies).hasSize(1);
+        assertThat(tallies.get(0).get("conditionIndex").asInt()).isZero();
+        assertThat(tallies.get(0).get("notMatched").asInt())
+                .as("PER 8·30이 못 넘겼다").isEqualTo(2);
+        assertThat(tallies.get(0).get("notEvaluable").asInt())
+                .as("MUST: 「조건 미충족」과 「원자료 결손」을 가른다 — 합치면 사용자가 "
+                        + "데이터 문제를 전략 문제로 읽는다")
+                .isEqualTo(1);
+        assertThat(response.get("minimumBlocked").asInt())
+                .as("가장 가까운 종목도 하나를 못 넘겼다").isEqualTo(1);
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
+    @DisplayName("MUST: 응답에 evaluatedCount가 없다 — 세는 것과 이름이 어긋났던 자리다")
+    void theMisnamedCountIsGone() throws Exception {
+        JsonNode response = run("""
+                {"conditions": {"logicalOperator":"AND","conditions":[
+                   {"indicatorCode":"PER","operator":"LT","operand":{"type":"LITERAL","value":10}}]},
+                 "evaluationMode":"FILTER","asOf":"2026-08-05"}
+                """);
+
+        assertThat(response.has("evaluatedCount"))
+                .as("이름을 두고 뜻만 고치면 프론트가 아무 신호 없이 컴파일된다 — 그래서 지웠다")
+                .isFalse();
+        assertThat(response.get("populationCount").asInt())
+                .as("FILTER에서 옛 필드는 통과 수와 글자 그대로 같은 수를 냈다")
+                .isEqualTo(3);
+        assertThat(response.get("resultCount").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    @WithMockUser(username = SUB)
     @DisplayName("IMPORTANT — HTTP 결과가 인메모리 판정과 완전히 일치한다")
     void httpResultEqualsInMemoryJudgement() throws Exception {
         ConditionGroup group = ConditionGroup.and(List.of(
