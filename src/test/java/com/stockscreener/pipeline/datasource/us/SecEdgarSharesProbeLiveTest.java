@@ -39,6 +39,10 @@ import java.util.TreeMap;
  *
  * <p><b>MUST NOT: {@code SEC_EDGAR_USER_AGENT}를 출력에 찍지 않는다</b> — 이메일이 들어 있다.
  *
+ * <p><b>MUST: 티커를 {@code SecTickerCikCache}와 같게 정규화한다</b>({@code '.' → '-'}).
+ * 2026-09-14까지 이 탐침은 그것을 빼먹어 기본 표본의 {@code BRK.A}·{@code BRK.B}가
+ * <b>「CIK 매핑 없음」으로 조용히 빠졌다</b> — 그 출력은 「소스에 개념이 없다」와 생김새가 같다.
+ *
  * <p>표본은 {@code -Dprobe.tickers=BRK.A,V,…}로 준다.
  */
 @Tag("live")
@@ -91,7 +95,7 @@ class SecEdgarSharesProbeLiveTest {
 
         for (String raw : tickers) {
             String t = raw.trim();
-            Long cik = cikOf.get(t);
+            Long cik = cikOf.get(t.replace('.', '-'));
             if (cik == null) {
                 System.out.printf("%n%-7s CIK 매핑 없음%n", t);
                 continue;
@@ -172,7 +176,7 @@ class SecEdgarSharesProbeLiveTest {
             // MUST: SEC 표기로 정규화한다 — 이 파일은 점 표기(BRK.A)를 그대로 물으면
             // 「CIK 매핑 없음」을 내는데, 적재는 SecTickerCikCache가 하이픈으로 바꿔 찾는다.
             // 안 맞추면 탐침의 결함을 대상의 결함으로 읽는다(2026-09-04에 실제로 그랬다).
-            Long cik = cikOf.get(t);
+            Long cik = cikOf.get(t.replace('.', '-'));
             if (cik == null) {
                 cik = cikOf.get(t.replace('.', '-'));
             }
@@ -470,7 +474,7 @@ class SecEdgarSharesProbeLiveTest {
         try (java.sql.Connection db = com.stockscreener.pipeline.support.ReadOnlyDb.open()) {
             for (int i = 0; i < tickers.size(); i++) {
                 String t = tickers.get(i);
-                Long cik = cikOf.get(t);
+                Long cik = cikOf.get(t.replace('.', '-'));
                 if (cik == null) {
                     cik = cikOf.get(t.replace('.', '-'));
                 }

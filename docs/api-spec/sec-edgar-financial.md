@@ -272,6 +272,25 @@ GET https://data.sec.gov/api/xbrl/companyconcept/CIK##########/dei/EntityCommonS
 **호출 비용**: 종목당 1콜 · `permits-per-minute: 300`(초당 5회)이면 145콜에 **약 31초**,
 8,504 전량이면 약 28분이다.
 
+**IMPORTANT — `companyconcept`는 `companyfacts`와 <u>같은 팩트</u>를 준다(2026-09-14 실측).**
+여섯 종목 × 네 태그에서 두 엔드포인트의 팩트 수가 **한 칸도 안 갈렸고**(AMZN 69·138·313·313 ·
+BRK.B 7·82 · AKTX 29·72·90 · V 2) **같은 `(start, end, accn)`에 값이 둘인 자리가 0**이다.
+즉 **축(`StatementClassOfStockAxis`)이 붙은 팩트를 주지 않는다** — 복수 클래스 발행사의
+클래스별 주식수는 **이 엔드포인트로도 못 가른다.** 정본 탐침은 `SecEdgarConceptProbeLiveTest`다.
+
+**그래서 「주식수 전량 NULL」의 원인이 한 갈래가 아니다.** `GEF`/`GEF.B`(같은 CIK 43920)는
+후보 태그 넷이 **전부 404이고 `companyfacts`에도 없다** — 클래스가 서로 덮는 것이 아니라
+**소스가 그 개념을 아예 안 낸다.** `V`는 팩트가 **2개뿐**이라 낡음이 원인이다(위 최신성 가드).
+
+### ADS 비율 — 개념은 있고, 내는 발행사가 거의 없다 (2026-09-14 · 16콜)
+
+`dei:EntityListingDepositoryReceiptRatio`(단위 `pure`)가 실재한다 — `BABA`가 **32팩트**를 낸다.
+
+**그러나 ADR·ADS 대표 16종목에 물으면 내는 것은 `BABA` 하나뿐이다**(6.3%).
+`AKTX`·`TSM`·`HSBC`·`NVS`·`SAP`·`UL`·`BP`·`TM`·`SONY`·`PDD`·`NIO`·`ASML`·`BIDU`·`GHG`·`FENG`가
+전부 **404**다. **「개념이 없다」와 「그 발행사가 안 낸다」를 갈라 적는다** — 앞은 거짓이고
+뒤가 참이며, 커버리지가 1/16이라 **ADS 비율의 일반 해법이 못 된다.**
+
 ### 실패 계약
 
 | 요청 | 응답 |

@@ -170,6 +170,12 @@ ADR-0125의 입력 축은 **원리적으로 못 본다**: `eps = 0`이라 `NULLI
 **Alpaca 자산 메타는 `symbol`·`name`·`exchange`·`status`·`tradable`뿐**이며(`AlpacaAsset`),
 `stock` 스키마에 담을 칼럼도 없다.
 
+**MUST: 그 「없다」를 「개념이 없다」로 읽지 않는다 — 2026-09-14에 갈랐다.**
+`dei:EntityListingDepositoryReceiptRatio`(단위 `pure`)는 **실재하고** `BABA`가 32팩트를 낸다.
+**`AKTX`가 안 내는 것**이고, ADR·ADS 대표 16종목에 물어도 내는 것은 **`BABA` 하나뿐**이다(1/16).
+**결론은 그대로 선다** — 이 종목의 비율은 못 얻고 커버리지가 1/16이라 일반 해법도 못 된다.
+계약은 `sec-edgar-financial.md` §ADS 비율, 잰 도구는 `SecEdgarConceptProbeLiveTest`다.
+
 | 안 | 실측 |
 |---|---|
 | **A) 이름 축을 후보 게이트로** | 이름에 `ADS`/`ADR`/`American Depositary`가 든 미국 종목 **273**. 통화 게이트를 통과하는 것 **57**이고 **그중 편입은 `AKTX` 하나**. **비용: 그 57에 `ARM`(10.6억주)·`TEVA`(11.7억주)처럼 비율 1:1이라 값이 옳은 종목이 섞여 있다** |
