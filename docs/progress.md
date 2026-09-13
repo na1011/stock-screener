@@ -37,8 +37,12 @@
   US 20-F 제출인이 622종목이다(165 중 11 · 매출 1B 이상 21 중 4).
   **②·③은 이 문에 안 걸린다**(2026-09-13 실측): `TXNM`의 함의/저장 비가 **FY 행에서 1.03~1.05**이고
   ADR-0126이 든 2.41은 `eps=0.03` 분기 행 하나이며, `AKTX` ADS 비율은 같은 문서가 이미 기각했다.
-  **여는 조건은 측정 둘이다** — `companyconcept`가 축 붙은 팩트를 주는가 · ADS 비율 태그가 있는가
-  (`SecEdgarSharesProbeLiveTest`는 `companyfacts`만 부른다).
+  **여는 조건은 측정 둘이다** — `companyconcept`가 축 붙은 팩트를 주는가 · ADS 비율 태그가 있는가.
+  **MUST: 그 둘을 재기 전에 선택지를 올리지 않는다**(CLAUDE.md — 재보지 않은 것을 선택지
+  설명에 적지 않는다). **지금 그것을 잴 탐침이 없다**(2026-09-13 확인): `SecEdgarSharesProbe`는
+  `companyfacts`만 부르고, `SecEdgarGovernanceProbe`는 **CIK가 Apple로 하드코딩**,
+  `SecEdgarIfrsAndBulkProbe`는 **태그가 `Assets` 고정**이다 — **종목과 태그를 함께 받는 탐침
+  하나가 선행 작업이다.**
 
 ### 바로 착수 가능한 것
 
