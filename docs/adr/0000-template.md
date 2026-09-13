@@ -51,7 +51,7 @@ psql -d db -At -c "SELECT CASE
 
 - **MUST NOT: 되돌릴 수 없는 명령을 넣지 않는다.** `guard-destructive.sh`가 심사해 거부하지만, 거부는 판정 불가이므로 그 전제는 영영 답을 주지 않는다.
 - **MUST NOT: 의도한 동작에 우는 펜스를 만들지 않는다.** 모집단을 좁히지 않으면 **일부러 값을 안 내기로 한 대상**까지 세어 매 세션 거짓 발견이 난다. 거짓 발견은 침묵보다 나쁘다 — 다음 세션이 그것을 회귀로 읽고 멀쩡한 결정을 되돌리러 간다. **모집단에서 뺀 근거를 쿼리 옆에 적는다.** 열거는 나중에 늘어나므로, 값 목록을 박아 넣었으면 **그 목록이 자라는 자리**도 함께 적는다.
-- 읽기 전용으로 붙는다(`PGOPTIONS`가 강제). 상한은 전제당 8초이고, 정본은 `check-premises.sh`의 `per_limit`이다 — 그 값은 `PGCONNECT_TIMEOUT + statement_timeout`보다 커야 해서 정해진 것이라 여기 숫자만 보고 바꾸지 않는다.
+- 읽기 전용으로 붙는다(`PGOPTIONS`가 강제). 상한은 **둘이고 질의를 실제로 자르는 것은 안쪽이다** — `statement_timeout`이 질의를 죽이고, `per_limit`의 alarm이 그 바깥에서 프로세스를 죽인다. **값은 여기 적지 않는다**(`check-premises.sh`가 정본이다). 그 둘은 `per_limit > PGCONNECT_TIMEOUT + statement_timeout`을 지켜야 해서 정해진 것이라 숫자만 보고 바꾸지 않는다.
 
 ## 배경
 
