@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import AsyncPanel from '@/components/AsyncPanel.vue'
 import SaveScreenDialog from '@/components/SaveScreenDialog.vue'
@@ -23,6 +23,23 @@ const { isMobile, isBuilderNarrow } = useBreakpoint()
 
 const result = computed(() => screening.result ?? null)
 const saveVisible = ref(false)
+
+/**
+ * 프리셋 설명을 펼쳤는가.
+ *
+ * 기본은 접힘이다 — `BUFFETT_QUALITY`가 2,089자라 그대로 두면 **조건 칩과 결과가 화면 밖으로
+ * 밀린다.** 접어도 첫 세 줄이 보이므로 **결손 고지가 사라지지는 않는다**(ADR-0039).
+ *
+ * 프리셋을 갈아타면 접은 상태로 돌린다. 안 돌리면 앞 프리셋에서 펼친 것이 다음 프리셋의
+ * 설명에 그대로 적용되어, 짧은 설명 하나 때문에 화면이 다시 길어진다.
+ */
+const presetNoteExpanded = ref(false)
+watch(
+  () => draft.presetDescription,
+  () => {
+    presetNoteExpanded.value = false
+  },
+)
 
 /**
  * 서버가 수정을 막는 전략은 저장 버튼을 주지 않는다(403이 날 것을 알면서 버튼을 주지 않는다).
@@ -157,9 +174,20 @@ async function run(): Promise<void> {
         치환했고 무엇을 버렸는지를 말한다. 목록에만 뜨고 불러오면 사라지던 것을 조건을 보는
         자리로 들고 온다. MUST NOT: 이 값을 저장 요청에 싣지 않는다(screenDraft의 DraftOrigin 주석).
       -->
-      <p v-if="draft.presetDescription" class="screener__preset-note">
-        {{ draft.presetDescription }}
-      </p>
+      <div v-if="draft.presetDescription" class="screener__preset">
+        <p
+          class="screener__preset-note"
+          :class="{ 'screener__preset-note--clamped': !presetNoteExpanded }"
+        >
+          {{ draft.presetDescription }}
+        </p>
+        <Button
+          :label="presetNoteExpanded ? '설명 접기' : '설명 더 보기'"
+          size="small"
+          text
+          @click="presetNoteExpanded = !presetNoteExpanded"
+        />
+      </div>
 
       <ConditionChipBar :retention="screening.retention" :invalid-key="invalidKey" />
     </AppViewHeader>
@@ -216,13 +244,25 @@ async function run(): Promise<void> {
  * 나눠 놓지 않으면 화면마다 머리 띠가 조금씩 달라지고, 그 차이가 좌측 레일의 선과 만나는
  * 자리에서 어긋남으로 드러난다.
  */
+.screener__preset {
+  margin: 0 0 0.5rem;
+}
+
 .screener__preset-note {
-  margin: 0 0 0.75rem;
+  margin: 0;
   color: var(--p-text-muted-color);
   font-size: var(--app-text-sm);
   line-height: 1.6;
   /* 시더가 줄바꿈으로 절을 나눈다. pre-line이 없으면 한 문단으로 뭉친다. */
   white-space: pre-line;
+}
+
+/* 세 줄만 보인다. 2,089자짜리 설명이 조건 칩과 결과를 화면 밖으로 밀어내지 않게 한다. */
+.screener__preset-note--clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .screener__title {
