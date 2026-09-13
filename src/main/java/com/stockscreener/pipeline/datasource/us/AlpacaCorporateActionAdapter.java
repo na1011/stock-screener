@@ -154,7 +154,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
     }
 
     @Override
-    public List<CorporateAction> fetchCorporateActions(SecurityRef security, LocalDate from,
+    public Fetched fetchCorporateActions(SecurityRef security, LocalDate from,
                                                        LocalDate to) throws DataSourceException {
         requireCredentials();
         if (from == null || to == null || from.isAfter(to)) {
@@ -202,13 +202,11 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             log.warn("처음 보는 기업 행위 타입이 왔다. ticker={} 타입={} — 담을지 판정해야 한다"
                     + "(지금은 안 담고 세기만 했다).", symbol, unknownTypes);
         }
-        if (!skipped.isEmpty()) {
-            // 「그런 사건이 없다」와 「우리가 안 담는다」를 가르는 유일한 흔적이다.
-            log.info("담지 않은 기업 행위. ticker={} {} — 계수를 낼 수 있는 것만 값으로 낸다.",
-                    symbol, skipped);
-        }
+        // MUST NOT: 여기서 찍지 않는다. 심볼마다 한 줄이면 한 판에 약 978줄(232 B/줄)이고
+        // 그 정보는 **타입별 분포**에 이미 다 있다. 「그런 사건이 없다」와 「우리가 안 담는다」를
+        // 가르는 것은 이 수이지 줄 수가 아니다 — 수는 Fetched로 나가 잡이 시장별로 접는다.
         actions.sort(Comparator.comparing(CorporateAction::effectiveDate));
-        return actions;
+        return new Fetched(actions, Map.copyOf(skipped));
     }
 
     /** 봉투의 타입 버킷 하나를 훑는다. */

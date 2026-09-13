@@ -44,7 +44,7 @@ class DartCorporateActionAdapterLiveTest {
     @DisplayName("[live] 실제 응답에서 카카오 2021 액면분할의 비율·효력일이 나온다")
     void derivesKakaoSplitFromLiveResponse() throws Exception {
         List<CorporateAction> actions = adapterWith(kakaoSeries()).fetchCorporateActions(
-                KAKAO, LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"));
+                KAKAO, LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions();
 
         System.out.println("\n===== 카카오 2021 액면분할 =====");
         actions.forEach(DartCorporateActionAdapterLiveTest::print);
@@ -66,7 +66,7 @@ class DartCorporateActionAdapterLiveTest {
     @DisplayName("[live] 실제 응답에서 루닛 2023 무상증자의 세 날짜가 갈린다")
     void derivesLunitBonusIssueFromLiveResponse() throws Exception {
         List<CorporateAction> actions = adapterWith(lunitSeries()).fetchCorporateActions(
-                LUNIT, LocalDate.parse("2023-11-01"), LocalDate.parse("2023-11-30"));
+                LUNIT, LocalDate.parse("2023-11-01"), LocalDate.parse("2023-11-30")).actions();
 
         System.out.println("\n===== 루닛 2023 무상증자 =====");
         actions.forEach(DartCorporateActionAdapterLiveTest::print);

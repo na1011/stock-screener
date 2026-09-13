@@ -117,6 +117,9 @@ public class CorporateActionJob {
         // 이 루프는 순차다(BatchExecutionContext.process에 병렬 없음). 워커로 흩으면 이
         // 카운터는 예외 없이 조용히 틀린다 — 그때 함께 고친다(ADR-0138이 지표 백필에 한 것처럼).
         Map<String, Integer> skippedNoSharesByMarket = new java.util.TreeMap<>();
+        // 시장 → (안 담은 이유 → 건수). **타입을 키로 남긴다** — phase 기준 P23 축③이
+        // 「안 담는 이유가 종류마다 따로」와 「합계로 적으면 그 구분이 사라진다」를 요구한다.
+        Map<String, Map<String, Integer>> notStoredByMarket = new java.util.TreeMap<>();
         List<CorporateActionCollector.NearDuplicate> conflicts = new ArrayList<>();
         List<CorporateActionCollector.PendingCandidate> pending = new ArrayList<>();
 
@@ -161,11 +164,15 @@ public class CorporateActionJob {
                         skippedNoSharesByMarket.merge(
                                 security.marketCode(), result.skippedNoShares(), Integer::sum);
                     }
+                    result.notStored().forEach((reason, count) -> notStoredByMarket
+                            .computeIfAbsent(security.marketCode(), m -> new java.util.TreeMap<>())
+                            .merge(reason, count, Integer::sum));
                     return result.recorded();
                 });
             }
 
             reportSkippedNoShares(skippedNoSharesByMarket);
+            reportNotStored(notStoredByMarket);
             alertOnConflicts(execution, conflicts);
             alertOnPendingJudgement(execution, pending);
         } catch (DataSourceException e) {
@@ -197,6 +204,22 @@ public class CorporateActionJob {
      * <p>MUST NOT: 이것을 실패나 경고로 올리지 않는다. 건너뛴 것은 <b>판정할 재료가 없는 것</b>이지
      * 실패가 아니다 — 값은 그 수가 기본 레벨에서 읽힌다는 데 있다.
      */
+    /**
+     * 소스가 줬지만 <b>담지 않기로 한 것</b>을 시장마다 한 줄로 적는다.
+     *
+     * <p>MUST: <b>종류를 키로 남긴다.</b> phase 기준 P23 축③이 「안 담는 이유가 종류마다 따로
+     * 적혀 있다」를 요구하고 「합계로 적으면 그 구분이 사라진다」고 못박는다 — 단일 총합으로
+     * 접으면 이 축이 무너진다.
+     *
+     * <p>MUST NOT: 빈 맵일 때 줄을 내지 않는다. 「안 담은 것이 없다」와 「사건 자체가 없다」는
+     * 다르고, 그 구분은 <b>수가 있을 때만</b> 뜻이 있다.
+     */
+    private void reportNotStored(Map<String, Map<String, Integer>> byMarket) {
+        byMarket.forEach((market, byReason) -> log.info(
+                "[{}] 담지 않은 기업 행위 {} — 계수를 낼 수 있는 것만 값으로 낸다."
+                        + " 종목별은 DEBUG다.", market, byReason));
+    }
+
     private void reportSkippedNoShares(Map<String, Integer> byMarket) {
         byMarket.forEach((market, count) -> log.info(
                 "[{}] 상장주식수가 없어 후보로 올리지 않은 가격 불연속이 {}건이다 — 종류도 비율도"

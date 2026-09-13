@@ -61,7 +61,7 @@ class AlpacaCorporateActionAdapterTest {
     void mapsForwardSplit() throws Exception {
         enqueue(200, fixture("ca-ok.json"));
 
-        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO);
+        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
 
         assertThat(actions).hasSize(1);
         CorporateAction split = actions.get(0);
@@ -84,7 +84,7 @@ class AlpacaCorporateActionAdapterTest {
     void mapsReverseSplitWithTheOppositeSign() throws Exception {
         enqueue(200, fixture("ca-reverse.json"));
 
-        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO);
+        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
 
         assertThat(actions).hasSize(1);
         assertThat(actions.get(0).type()).isEqualTo(CorporateAction.Type.REVERSE_SPLIT);
@@ -98,7 +98,7 @@ class AlpacaCorporateActionAdapterTest {
     void dividesWithAScaleSoAThirdDoesNotThrow() throws Exception {
         enqueue(200, fixture("ca-reverse-thirds.json"));
 
-        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO);
+        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
 
         assertThat(actions).hasSize(1);
         assertThat(actions.get(0).ratio())
@@ -112,7 +112,7 @@ class AlpacaCorporateActionAdapterTest {
     void doesNotRecordDividendsOrSpinOffs() throws Exception {
         enqueue(200, fixture("ca-ok.json"));
 
-        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO);
+        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
 
         assertThat(actions)
                 .as("같은 응답에 배당 1건·분사 1건이 함께 있는 픽스처다")
@@ -125,7 +125,7 @@ class AlpacaCorporateActionAdapterTest {
     void filtersByExDateNotProcessDate() throws Exception {
         enqueue(200, fixture("ca-out-of-window.json"));
 
-        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO);
+        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
 
         assertThat(actions)
                 .as("ex_date 2022-04-11 / process_date 2024-06-10인 사건이다. "
@@ -138,7 +138,7 @@ class AlpacaCorporateActionAdapterTest {
     void requestsAWiderProcessDateWindow() throws Exception {
         enqueue(200, fixture("ca-empty.json"));
 
-        adapter().fetchCorporateActions(NVDA, FROM, TO);
+        adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
 
         String query = query(server.takeRequest());
         assertThat(query)
@@ -160,7 +160,7 @@ class AlpacaCorporateActionAdapterTest {
         enqueue(200, fixture("ca-page1.json"));
         enqueue(200, fixture("ca-page2.json"));
 
-        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO);
+        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
 
         assertThat(actions).hasSize(2);
         assertThat(actions).extracting(CorporateAction::effectiveDate).isSorted();
@@ -174,7 +174,7 @@ class AlpacaCorporateActionAdapterTest {
         enqueue(200, fixture("ca-page1.json"));
         enqueue(200, fixture("ca-page1.json"));
 
-        assertThatThrownBy(() -> adapter(1).fetchCorporateActions(NVDA, FROM, TO))
+        assertThatThrownBy(() -> adapter(1).fetchCorporateActions(NVDA, FROM, TO).actions())
                 .isInstanceOf(DataSourceException.class)
                 .hasMessageContaining("부분 결과");
     }
@@ -184,7 +184,7 @@ class AlpacaCorporateActionAdapterTest {
     void emptyEnvelopeIsNotAFailure() throws Exception {
         enqueue(200, fixture("ca-empty.json"));
 
-        assertThat(adapter().fetchCorporateActions(NVDA, FROM, TO)).isEmpty();
+        assertThat(adapter().fetchCorporateActions(NVDA, FROM, TO).actions()).isEmpty();
     }
 
     @Test
@@ -192,7 +192,7 @@ class AlpacaCorporateActionAdapterTest {
     void missingEnvelopeKeyIsMalformed() {
         enqueue(200, "{\"next_page_token\":null}");
 
-        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO))
+        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO).actions())
                 .isInstanceOf(DataSourceException.class)
                 .extracting(e -> ((DataSourceException) e).kind())
                 .isEqualTo(DataSourceException.Kind.MALFORMED);
@@ -203,7 +203,7 @@ class AlpacaCorporateActionAdapterTest {
     void mapsForbiddenToAuth() {
         enqueue(403, "{\"message\":\"forbidden\"}");
 
-        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO))
+        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO).actions())
                 .isInstanceOf(DataSourceException.class)
                 .extracting(e -> ((DataSourceException) e).kind())
                 .as("AUTH는 fatal()이라 배치 전체를 세운다. 그것이 의도다")
@@ -223,7 +223,7 @@ class AlpacaCorporateActionAdapterTest {
                 .setBody("<html>\n<head><title>401 Authorization Required</title></head>\n"
                         + "<body><center><h1>401 Authorization Required</h1></center></body>\n</html>"));
 
-        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO))
+        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO).actions())
                 .isInstanceOf(DataSourceException.class)
                 .extracting(e -> ((DataSourceException) e).kind())
                 .as("TRANSIENT면 원인이 우리 키라는 사실이 종목별 실패에 묻힌다")
@@ -238,7 +238,7 @@ class AlpacaCorporateActionAdapterTest {
                 .setHeader("Content-Type", "text/html")
                 .setBody("<html><body>maintenance</body></html>"));
 
-        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO))
+        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO).actions())
                 .isInstanceOf(DataSourceException.class)
                 .extracting(e -> ((DataSourceException) e).kind())
                 .isEqualTo(DataSourceException.Kind.MALFORMED);
@@ -249,7 +249,7 @@ class AlpacaCorporateActionAdapterTest {
     void skipsRowsOfAnotherSymbol() throws Exception {
         enqueue(200, fixture("ca-other-symbol.json"));
 
-        assertThat(adapter().fetchCorporateActions(NVDA, FROM, TO)).isEmpty();
+        assertThat(adapter().fetchCorporateActions(NVDA, FROM, TO).actions()).isEmpty();
     }
 
     @Test
@@ -257,7 +257,7 @@ class AlpacaCorporateActionAdapterTest {
     void rejectsASignMismatch() {
         enqueue(200, fixture("ca-sign-mismatch.json"));
 
-        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO))
+        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO).actions())
                 .isInstanceOf(DataSourceException.class)
                 .hasMessageContaining("부호가 어긋난다");
     }
@@ -267,7 +267,7 @@ class AlpacaCorporateActionAdapterTest {
     void doesNotRecordUnknownTypes() throws Exception {
         enqueue(200, fixture("ca-unknown-type.json"));
 
-        assertThat(adapter().fetchCorporateActions(NVDA, FROM, TO))
+        assertThat(adapter().fetchCorporateActions(NVDA, FROM, TO).actions())
                 .as("16종 밖의 타입은 값으로 안 낸다. 어댑터가 WARN으로 알린다")
                 .isEmpty();
     }
@@ -275,7 +275,7 @@ class AlpacaCorporateActionAdapterTest {
     @Test
     @DisplayName("구간이 뒤집히면 부르기 전에 막는다 — 빈 결과가 「데이터 없음」과 같아진다")
     void rejectsAnInvertedWindow() {
-        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, TO, FROM))
+        assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, TO, FROM).actions())
                 .isInstanceOf(DataSourceException.class)
                 .hasMessageContaining("뒤집혔");
         assertThat(server.getRequestCount()).as("콜을 태우지 않는다").isZero();

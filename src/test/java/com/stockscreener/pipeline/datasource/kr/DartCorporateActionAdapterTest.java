@@ -67,7 +67,7 @@ class DartCorporateActionAdapterTest {
 
         List<CorporateAction> actions = adapterWith(kakaoSeries())
                 .fetchCorporateActions(KAKAO,
-                        LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"));
+                        LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions();
 
         assertThat(actions).singleElement().satisfies(action -> {
             assertThat(action.type()).isEqualTo(CorporateAction.Type.SPLIT);
@@ -94,7 +94,7 @@ class DartCorporateActionAdapterTest {
 
         List<CorporateAction> actions = adapterWith(daehanSeries())
                 .fetchCorporateActions(new SecurityRef(4L, "KOSPI", "001440"),
-                        LocalDate.parse("2023-05-01"), LocalDate.parse("2023-05-31"));
+                        LocalDate.parse("2023-05-01"), LocalDate.parse("2023-05-31")).actions();
 
         assertThat(actions).singleElement().satisfies(action -> {
             assertThat(action.type()).isEqualTo(CorporateAction.Type.REVERSE_SPLIT);
@@ -113,7 +113,7 @@ class DartCorporateActionAdapterTest {
 
         List<CorporateAction> actions = adapterWith(lunitSeries())
                 .fetchCorporateActions(LUNIT,
-                        LocalDate.parse("2023-11-01"), LocalDate.parse("2023-11-30"));
+                        LocalDate.parse("2023-11-01"), LocalDate.parse("2023-11-30")).actions();
 
         assertThat(actions).singleElement().satisfies(action -> {
             assertThat(action.type()).isEqualTo(CorporateAction.Type.BONUS_ISSUE);
@@ -137,7 +137,7 @@ class DartCorporateActionAdapterTest {
 
         List<CorporateAction> actions = adapterWith(seegeneSeries())
                 .fetchCorporateActions(SEEGENE,
-                        LocalDate.parse("2021-04-01"), LocalDate.parse("2021-05-31"));
+                        LocalDate.parse("2021-04-01"), LocalDate.parse("2021-05-31")).actions();
 
         assertThat(actions).singleElement()
                 .extracting(CorporateAction::ratio, BIG_DECIMAL)
@@ -151,7 +151,7 @@ class DartCorporateActionAdapterTest {
 
         List<CorporateAction> actions = adapterWith(kakaoSeries())
                 .fetchCorporateActions(KAKAO,
-                        LocalDate.parse("2020-01-01"), LocalDate.parse("2026-08-12"));
+                        LocalDate.parse("2020-01-01"), LocalDate.parse("2026-08-12")).actions();
 
         assertThat(server.getRequestCount())
                 .as("사업보고서 둘의 이력은 4년이 겹친다")
@@ -165,7 +165,7 @@ class DartCorporateActionAdapterTest {
         respondWith(row("2021.04.14", "주식분할", "355,047,444", "100"));
 
         assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
-                LocalDate.parse("2021-01-01"), LocalDate.parse("2021-03-31"))).isEmpty();
+                LocalDate.parse("2021-01-01"), LocalDate.parse("2021-03-31")).actions()).isEmpty();
     }
 
     @Test
@@ -179,7 +179,7 @@ class DartCorporateActionAdapterTest {
                 """);
 
         assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
-                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"))).isEmpty();
+                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions()).isEmpty();
     }
 
     @Test
@@ -195,7 +195,7 @@ class DartCorporateActionAdapterTest {
                 """);
 
         assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
-                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"))).isEmpty();
+                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions()).isEmpty();
     }
 
     @Test
@@ -208,7 +208,7 @@ class DartCorporateActionAdapterTest {
             respondWith(row("2021.04.14", form, "355,047,444", "100"));
 
             assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
-                    LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")))
+                    LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions())
                     .singleElement()
                     .satisfies(action -> {
                         assertThat(action.sourceForm()).isEqualTo(form);
@@ -233,7 +233,7 @@ class DartCorporateActionAdapterTest {
                 bar("2021-04-15", "552000", 88_746_712L));
 
         assertThat(adapterWith(flat).fetchCorporateActions(KAKAO,
-                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"))).isEmpty();
+                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions()).isEmpty();
     }
 
     @Test
@@ -242,7 +242,7 @@ class DartCorporateActionAdapterTest {
         respondWith(row("2021.04.14", "주식분할", "355,047,444", "100"));
 
         assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
-                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")))
+                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions())
                 .singleElement()
                 .satisfies(action -> assertThat(action.sourceForm()).isEqualTo("주식분할"));
     }
@@ -258,7 +258,7 @@ class DartCorporateActionAdapterTest {
                 bar("2021-04-15", "552000", 88_746_712L));
 
         assertThat(adapterWith(flat).fetchCorporateActions(KAKAO,
-                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"))).isEmpty();
+                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions()).isEmpty();
     }
 
     @Test
@@ -275,7 +275,7 @@ class DartCorporateActionAdapterTest {
                 bar("2023-12-01", "96300", 28_476_308L));
 
         assertThat(adapterWith(noGap).fetchCorporateActions(LUNIT,
-                LocalDate.parse("2023-11-01"), LocalDate.parse("2023-11-30"))).isEmpty();
+                LocalDate.parse("2023-11-01"), LocalDate.parse("2023-11-30")).actions()).isEmpty();
     }
 
     @Test
@@ -284,7 +284,7 @@ class DartCorporateActionAdapterTest {
         respondWith("{\"status\":\"013\",\"message\":\"조회된 데이터가 없습니다.\"}");
 
         assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
-                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"))).isEmpty();
+                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions()).isEmpty();
     }
 
     @Test
@@ -294,7 +294,7 @@ class DartCorporateActionAdapterTest {
         DartCorporateActionAdapter adapter = adapterWith(kakaoSeries());
 
         assertThatThrownBy(() -> adapter.fetchCorporateActions(KAKAO,
-                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")))
+                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions())
                 .isInstanceOf(DataSourceException.class)
                 .satisfies(e -> assertThat(((DataSourceException) e).kind())
                         .isEqualTo(DataSourceException.Kind.AUTH));
@@ -307,7 +307,7 @@ class DartCorporateActionAdapterTest {
                 adapterWith(kakaoSeries(), new StubCorpCodeCache(Optional.empty()));
 
         assertThat(adapter.fetchCorporateActions(new SecurityRef(9L, "KOSPI", "999999"),
-                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30"))).isEmpty();
+                LocalDate.parse("2021-04-01"), LocalDate.parse("2021-04-30")).actions()).isEmpty();
         assertThat(server.getRequestCount()).isZero();
     }
 
@@ -318,7 +318,7 @@ class DartCorporateActionAdapterTest {
         LocalDate today = LocalDate.now();
 
         assertThat(adapterWith(kakaoSeries()).fetchCorporateActions(KAKAO,
-                today.minusDays(10), today)).isEmpty();
+                today.minusDays(10), today).actions()).isEmpty();
         assertThat(server.getRequestCount()).isZero();
     }
 

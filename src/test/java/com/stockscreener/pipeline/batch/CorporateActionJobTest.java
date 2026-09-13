@@ -296,6 +296,39 @@ class CorporateActionJobTest {
                 .satisfies(line -> assertThat(line).contains("stockId=" + memberId));
     }
 
+    @Test
+    @DisplayName("담지 않은 기업 행위를 시장마다 한 줄로 적되 종류를 키로 남긴다 — 총합으로 접지 않는다")
+    void rollsUpNotStoredByTypePerMarket() {
+        ListAppender<ILoggingEvent> job_ = attach(CorporateActionJob.class, Level.INFO);
+        seedBars();
+        fakeSource.notStoredByStock.put(memberId,
+                java.util.Map.of("cash_dividend", 4, "spinoff", 1));
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
+
+        assertThat(linesContaining(job_, "담지 않은 기업 행위"))
+                .as("심볼마다가 아니라 시장마다 한 줄이어야 한다")
+                .singleElement()
+                .satisfies(line -> {
+                    assertThat(line).contains("[KOSPI]");
+                    // MUST: 종류가 키로 남아야 한다. phase 기준 P23 축③이 「합계로 적으면
+                    // 그 구분이 사라진다」고 못박으므로 단일 총합(=5)으로 접으면 이 단언이 붉는다.
+                    assertThat(line).contains("cash_dividend=4");
+                    assertThat(line).contains("spinoff=1");
+                });
+    }
+
+    @Test
+    @DisplayName("안 담은 것이 없으면 그 줄이 아예 안 뜬다 — 「사건이 없다」와 구분된다")
+    void staysSilentWhenNothingWasSkippedByType() {
+        ListAppender<ILoggingEvent> job_ = attach(CorporateActionJob.class, Level.INFO);
+        seedBars();
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
+
+        assertThat(linesContaining(job_, "담지 않은 기업 행위")).isEmpty();
+    }
+
     private static RawPriceBar barNoShares(String date, String close) {
         BigDecimal c = new BigDecimal(close);
         return new RawPriceBar(LocalDate.parse(date), c, c, c, c, 1_000_000L, null, null, false);

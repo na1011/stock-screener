@@ -41,7 +41,7 @@ class AlpacaCorporateActionLiveTest {
     @DisplayName("[live] NVDA 2024-06-10 분할의 비율과 효력일이 실제 응답에서 나온다")
     void fetchesTheNvidiaSplit() throws Exception {
         List<CorporateAction> actions = adapter().fetchCorporateActions(
-                NVDA, LocalDate.parse("2024-01-01"), LocalDate.parse("2024-12-31"));
+                NVDA, LocalDate.parse("2024-01-01"), LocalDate.parse("2024-12-31")).actions();
 
         System.out.println("\n===== NVDA 2024 =====");
         actions.forEach(a -> System.out.printf("  %s %s ratio=%s form=%s%n",
@@ -65,7 +65,7 @@ class AlpacaCorporateActionLiveTest {
     void recordsOnlySplitsEvenWhenTheSourceReturnsMuchMore() throws Exception {
         // T는 같은 창에서 배당 15건 + 분사 1건을 준다(실측). 그 창에 분할·병합은 없다.
         List<CorporateAction> actions = adapter().fetchCorporateActions(
-                ATT, LocalDate.parse("2023-12-01"), LocalDate.parse("2026-08-29"));
+                ATT, LocalDate.parse("2023-12-01"), LocalDate.parse("2026-08-29")).actions();
 
         assertThat(actions)
                 .as("types로 좁히지 않고 부르므로 배당·분사가 응답에 함께 온다. "

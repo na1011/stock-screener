@@ -29,6 +29,10 @@ public class FakeCorporateActionDataSource implements CorporateActionDataSource 
     /** 호출된 종목. "봉이 없으면 부르지 않는다"를 재는 데 쓴다. */
     public final List<Long> fetchedStockIds = new ArrayList<>();
 
+    /** 「안 담기로 해서 세기만 한 것」을 종목마다 주입한다. 키가 이유다. */
+    public final java.util.Map<Long, java.util.Map<String, Integer>> notStoredByStock =
+            new java.util.HashMap<>();
+
     public FakeCorporateActionDataSource(String... markets) {
         this.markets = Set.of(markets);
     }
@@ -54,7 +58,7 @@ public class FakeCorporateActionDataSource implements CorporateActionDataSource 
     }
 
     @Override
-    public List<CorporateAction> fetchCorporateActions(SecurityRef security,
+    public Fetched fetchCorporateActions(SecurityRef security,
                                                        LocalDate from, LocalDate to)
             throws DataSourceException {
         fetchedStockIds.add(security.stockId());
@@ -62,9 +66,10 @@ public class FakeCorporateActionDataSource implements CorporateActionDataSource 
         if (failure != null) {
             throw failure;
         }
-        return actionsByStock.getOrDefault(security.stockId(), List.of()).stream()
+        return new Fetched(actionsByStock.getOrDefault(security.stockId(), List.of()).stream()
                 .filter(action -> !action.effectiveDate().isBefore(from)
                         && !action.effectiveDate().isAfter(to))
-                .toList();
+                .toList(),
+                notStoredByStock.getOrDefault(security.stockId(), java.util.Map.of()));
     }
 }

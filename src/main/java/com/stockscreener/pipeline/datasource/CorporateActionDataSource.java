@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -70,6 +71,29 @@ public interface CorporateActionDataSource {
         return Optional.empty();
     }
 
-    List<CorporateAction> fetchCorporateActions(SecurityRef security, LocalDate from, LocalDate to)
+    Fetched fetchCorporateActions(SecurityRef security, LocalDate from, LocalDate to)
             throws DataSourceException;
+
+    /**
+     * 받은 사건과, <b>안 담기로 해서 세기만 한 것</b>.
+     *
+     * <p>수를 값으로 돌려주는 이유는 <b>세는 자리와 찍는 자리가 달라야 하기 때문</b>이다.
+     * 어댑터는 종목 하나만 알고 시장도 판 전체도 모른다 — 접는 것은 {@code CorporateActionJob}이
+     * 한다. <b>어댑터에 누적 상태를 두는 우회는 이 인터페이스가 이미 금지한다</b>
+     * ({@code windowCoverage} javadoc의 「직전에 답한 창과 같으면 침묵한다」 금지와 같은 근거 —
+     * 무상태 싱글턴인 것이 종목 루프를 워커로 흩어도 안전한 근거다).
+     *
+     * <p>{@code notStored}의 <b>키가 이유</b>다. phase 기준 P23 축③이 「안 담는 이유가 종류마다
+     * 따로 적혀 있다」와 「합계로 적으면 그 구분이 사라진다」를 요구하므로, <b>단일 총합으로
+     * 접지 않고 종류를 키로 남긴다.</b>
+     *
+     * <p>MUST NOT: 「그런 사건이 없다」와 「우리가 안 담는다」를 같은 값으로 만들지 않는다.
+     * 빈 맵은 <b>안 담은 것이 없다</b>는 뜻이고, 사건 자체가 없는 것과 다르다.
+     */
+    record Fetched(List<CorporateAction> actions, Map<String, Integer> notStored) {
+
+        public static Fetched of(List<CorporateAction> actions) {
+            return new Fetched(actions, Map.of());
+        }
+    }
 }

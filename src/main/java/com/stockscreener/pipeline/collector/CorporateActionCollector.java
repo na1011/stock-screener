@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 한 종목의 기업 행위를 모아 원장에 적는다. <b>계수는 건드리지 않는다</b>(ADR-0049).
@@ -77,10 +78,11 @@ public class CorporateActionCollector {
      * @param pending        이번 실행이 새로 만든 판정 대기 후보. 잡이 요약해 알린다.
      */
     public record Result(long recorded, List<NearDuplicate> nearDuplicates,
-                         List<PendingCandidate> pending, int skippedNoShares) {
+                         List<PendingCandidate> pending, int skippedNoShares,
+                         Map<String, Integer> notStored) {
 
         static Result empty() {
-            return new Result(0L, List.of(), List.of(), 0);
+            return new Result(0L, List.of(), List.of(), 0, Map.of());
         }
     }
 
@@ -106,7 +108,8 @@ public class CorporateActionCollector {
         }
 
         CorporateActionDataSource source = registry.corporateActionSource(security.marketCode());
-        List<CorporateAction> fromSource = source.fetchCorporateActions(security, from, to);
+        CorporateActionDataSource.Fetched fetched = source.fetchCorporateActions(security, from, to);
+        List<CorporateAction> fromSource = fetched.actions();
 
         // 소스가 종류를 확정하지 못한 사건은 값이 아니라 **이름만** 기여한다. 그것을 record로
         // 보내면 공시가 먼저 도는 이 순서 때문에 뒤에 올 휴리스틱의 확정된 종류·비율이
@@ -148,7 +151,7 @@ public class CorporateActionCollector {
         // 건너뛴 불연속은 실행 창과 무관하게 같은 수이고, 창으로 자르면 --from을 좁힌 실행이
         // 「결손이 줄었다」로 읽힌다.
         return new Result(disclosed.recorded() + heuristic.recorded(), List.copyOf(conflicts),
-                List.copyOf(pending), detection.skippedNoShares());
+                List.copyOf(pending), detection.skippedNoShares(), fetched.notStored());
     }
 
     /**
@@ -190,6 +193,6 @@ public class CorporateActionCollector {
                         security.ticker(), action.effectiveDate(), action.source()));
             }
         }
-        return new Result(recorded, List.copyOf(conflicts), List.copyOf(pending), 0);
+        return new Result(recorded, List.copyOf(conflicts), List.copyOf(pending), 0, Map.of());
     }
 }

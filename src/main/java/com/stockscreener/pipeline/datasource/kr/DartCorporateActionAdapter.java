@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * DART 「증자(감자) 현황」({@code irdsSttus.json}) 어댑터. 액면분할·병합과 무상증자를 받는다.
@@ -139,7 +140,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
     }
 
     @Override
-    public List<CorporateAction> fetchCorporateActions(SecurityRef security,
+    public Fetched fetchCorporateActions(SecurityRef security,
                                                        LocalDate from, LocalDate to)
             throws DataSourceException {
         if (apiKey == null || apiKey.isBlank()) {
@@ -150,7 +151,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
         if (corpCode.isEmpty()) {
             // DART가 모르는 종목코드다. 신규 상장 직후에 정상적으로 생긴다.
             log.info("DART에 등록되지 않은 종목코드라 기업 행위를 건너뛴다. ticker={}", security.ticker());
-            return List.of();
+            return Fetched.of(List.of());
         }
 
         List<DartIrdsReports.Report> reports = DartIrdsReports.covering(from, to, LocalDate.now());
@@ -158,11 +159,14 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
             // MUST NOT: 이것을 실패로 올리지 않는다. 소스가 정기보고서에만 실려 최대 넉 달
             // 늦는 것이고, 그 사이의 사건은 휴리스틱 탐지가 후보로 올린다.
             log.debug("조회 창을 덮는 정기보고서가 아직 없다. ticker={} {} ~ {}", security.ticker(), from, to);
-            return List.of();
+            return Fetched.of(List.of());
         }
+        // 호출마다의 지역 누적기다. 어댑터 필드로 두면 무상태 계약이 깨지고, 그 증상은
+        // 「어느 종목의 줄이 다른 스레드 때문에 안 찍혔다」다(이 포트의 windowCoverage javadoc).
+        Map<String, Integer> notStored = new TreeMap<>();
         Set<IrdsRow> rows = new LinkedHashSet<>();
         for (DartIrdsReports.Report report : reports) {
-            for (IrdsRow row : rowsOf(corpCode.get(), report, security)) {
+            for (IrdsRow row : rowsOf(corpCode.get(), report, security, notStored)) {
                 // 창과 무관한 옛 사건까지 시계열을 뒤지지 않는다. 여유는 일자 보정 폭보다 넓다.
                 if (row.sourceDate().isBefore(from.minusDays(SOURCE_DATE_MARGIN_DAYS))
                         || row.sourceDate().isAfter(to.plusDays(SOURCE_DATE_MARGIN_DAYS))) {
@@ -172,7 +176,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
             }
         }
         if (rows.isEmpty()) {
-            return List.of();
+            return new Fetched(List.of(), Map.copyOf(notStored));
         }
 
         CorporateActionEvidence evidence = evidenceFor(security, rows);
@@ -183,9 +187,9 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
                             && !action.effectiveDate().isAfter(to))
                     .ifPresent(action -> byEffectiveDate.putIfAbsent(action.effectiveDate(), action));
         }
-        return byEffectiveDate.values().stream()
+        return new Fetched(byEffectiveDate.values().stream()
                 .sorted(Comparator.comparing(CorporateAction::effectiveDate))
-                .toList();
+                .toList(), Map.copyOf(notStored));
     }
 
     /**
@@ -461,7 +465,8 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
     }
 
     /** 보고서 하나를 받아 쓸 만한 행으로 바꾼다. 데이터가 없으면 빈 목록이다. */
-    private List<IrdsRow> rowsOf(String corpCode, DartIrdsReports.Report report, SecurityRef security)
+    private List<IrdsRow> rowsOf(String corpCode, DartIrdsReports.Report report,
+                                 SecurityRef security, Map<String, Integer> notStored)
             throws DataSourceException {
         String context = "ticker=" + security.ticker() + " " + report.businessYear()
                 + "/" + report.reportCode();
@@ -518,7 +523,12 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
             // IMPORTANT — 회사가 표를 비워서 낼 수 있다. 삼성전자 2018은 status 000 + 모든
             // 필드가 '-'인 1행이라 오류로도 안 보이고, 행 수만 세면 "1건 있음"으로 읽힌다.
             // MUST NOT: 커버리지를 성립으로 읽지 않는다(phase 기준 §P9).
-            log.warn("증자(감자) 현황에 쓸 수 있는 행이 하나도 없다. {} 받은행={}"
+            //
+            // MUST NOT: 여기서 찍지 않는다. (종목, 연도)마다 한 줄이라 판당 수백 줄이 되는데
+            // 더해지는 정보는 **몇 건인가** 하나다. 세어서 올려 보내고 잡이 시장별로 접는다 —
+            // 「회사가 비워서 냈다」와 「사건이 없다」를 가르는 것은 이 수이지 줄 수가 아니다.
+            notStored.merge("증자(감자) 빈 표", 1, Integer::sum);
+            log.debug("증자(감자) 현황에 쓸 수 있는 행이 하나도 없다. {} 받은행={}"
                             + " — 회사가 표를 비워서 냈을 수 있고, 그것은 '사건이 없다'와 다르다.",
                     context, received);
         }
