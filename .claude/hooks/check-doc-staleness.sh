@@ -392,7 +392,8 @@ MUST NOT: 0건을 휴장으로 단정하지 않는다\.|docs/api-spec/data-go-kr
 규칙을 어기는 값과 깨지는 경로는 다르다|.claude/rules/harness-docs.md|docs/progress.md|수용 테스트 0단계
 각도를 좁히지 않고, 마지막 둘을.*으로 연다\.|.claude/hooks/remind-plan-obligations.sh|${mem_dir}/adversarial-review-before-executing.md|반증 각도
 쓰기 창 [0-9]*거래일 중 [0-9]*이 FY2025 공시일 중앙값 앞이다|src/main/java/com/stockscreener/indicator/calculator/GovernanceMath.java|docs/api-spec/dart-governance.md|공시일 계단의 대가
-국내 휴장 평일 [0-9]*일 중 미국 개장이 [0-9]*일이다|src/main/java/com/stockscreener/pipeline/collector/PriceCalendar.java|docs/api-spec/alpaca-bars.md|국내 휴장·미국 개장"
+국내 휴장 평일 [0-9]*일 중 미국 개장이 [0-9]*일이다|src/main/java/com/stockscreener/pipeline/collector/PriceCalendar.java|docs/api-spec/alpaca-bars.md|국내 휴장·미국 개장
+ARRAY.'ARCC','CBC','OBDC'.|src/main/java/com/stockscreener/pipeline/collector/KnownSourceGaps.java|docs/adr/ADR-0044-sector-axis.md|SIC 결손 허용목록"
 
 extract_mirror() {  # $1=파일 $2=정규식
   tr '\n' ' ' < "$1" | tr -s ' ' | sed -n "s/.*\($2\).*/\1/p"

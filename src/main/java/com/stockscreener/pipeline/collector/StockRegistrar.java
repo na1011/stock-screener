@@ -12,10 +12,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 티커를 {@code stock.id}로 해석하고, 없으면 종목 행을 만든다.
@@ -394,5 +396,137 @@ public class StockRegistrar {
                 (rs, rowNum) -> new SecurityRef(
                         rs.getLong("id"), rs.getString("market_code"), rs.getString("ticker")),
                 stockIds.toArray());
+    }
+
+    /**
+     * 최신 거래일 대비 이 비율 미만으로 봉이 찬 종목을 {@code PRICE_COVERAGE}로 본다.
+     *
+     * <p><b>이 값은 예산이지 분포에서 유도한 값이 아니다.</b> 2026-09-13 편입 1,350의 분포는
+     * {@code PPLC} 51.8% · {@code 440110} 88.7% · 나머지 전부 88.7% 이상이라 <b>관측된 빈 구간은
+     * (51.8, 88.7)</b>이고, 거기 두면 지표 10,892행을 내는 정상 종목 {@code PPLC}가 발화한다.
+     * 25%는 <b>관측된 결함 하나(코다코 0.4%)와 관측된 최솟값(51.8%)의 사이</b>이며, 모집단에
+     * 결함이 하나뿐이라 분포로는 못 정한다. 오늘 발화 0건이다.
+     */
+    private static final double COVERAGE_FLOOR = 0.25;
+
+    /** 직전 거래일 대비 지표 코드 수가 이 비율 미만이면 {@code INDICATOR_DROP}으로 본다. */
+    private static final double INDICATOR_FLOOR = 0.70;
+
+    /**
+     * 편입 계약이 깨진 종목을 <b>여섯 축으로 한 번에</b> 센다.
+     *
+     * <p>편입은 「스크리닝 대상」이라는 뜻인데, 축 하나만 비어도 지표가 판정불가가 되어
+     * <b>프리셋에서 조용히 빠지고 배치는 전부 SUCCESS다.</b> 그 침묵을 재는 유일한 자리다.
+     *
+     * <p><b>MUST: 여섯을 한 질의로 낸다.</b> 축마다 메서드를 만들면 셋은 안 만들어지고, 만들어도
+     * 「편입 중인 활성 종목」의 정의가 여섯 벌로 갈린다 — 이 클래스가 존재하는 이유가 그것이다
+     * ({@link #activeUniverseMemberIds()} javadoc). 실측 129~171 ms다.
+     *
+     * <p><b>MUST: 지표 달력을 {@code LEFT JOIN}으로 붙인다.</b> {@code INNER JOIN}이면
+     * {@code indicator_trade_date}가 빈 시장의 종목이 <b>여섯 축 전부에서 사라진다</b> —
+     * 실측으로 US를 빼면 대상이 1,350 → 350이 되고 US 1,000종목이 0건으로 접힌다.
+     * {@link #activeUniverseMemberIdsByTicker} javadoc이 같은 자리를 이름으로 금지한다.
+     * 창이 없으면 뒤의 두 축만 판정불가로 두고 나머지 넷은 그대로 판정한다.
+     *
+     * <p><b>MUST: 업종 축의 술어를 채우는 잡과 같게 둔다.</b> 여기 쓰는
+     * {@code industry_code IS NULL AND sic_code IS NULL}은
+     * {@link #activeUniverseMemberIdsWithoutIndustry()}와 같고 그것이
+     * {@code CompanyProfileJob}의 대상 술어다. ADR-0044 §펜스는 {@code industry_group_key IS NULL}로
+     * 재는데 <b>오늘 둘이 같은 셋을 낸다</b> — 갈리면 <b>「알렸는데 돌려도 안 채워지는」 종목</b>이
+     * 생기므로 <b>채우는 쪽</b>에 맞춘다. 거울 표는 티커 목록만 지키고 술어는 원리적으로 안 지킨다.
+     *
+     * <p><b>재무 0행 축은 {@link #activeUniverseMemberIdsNeedingHistory()}의 둘째 갈래와 다르다.</b>
+     * 저쪽은 <i>"미해결 {@code FINANCIAL} 실패가 있고 재무가 0행"</i>이라 <b>실패 기록이 있어야</b>
+     * 걸린다. 여기는 그 조건을 뺐다 — 한 번도 시도되지 않은 종목이 저쪽에 안 걸리기 때문이다.
+     */
+    public List<MembershipGap> membershipGaps() {
+        return jdbcTemplate.query("""
+                WITH mem AS (
+                  SELECT s.id, s.market_code, s.ticker, s.name,
+                         s.industry_code, s.sic_code,
+                         min(m.effective_from) AS joined,
+                         coalesce(bool_or(%s), false) AS exempt_industry,
+                         coalesce(bool_or((%s) OR (%s)), false) AS exempt_financial
+                  FROM universe_membership m
+                  JOIN stock s ON s.id = m.stock_id
+                  JOIN universe u ON u.code = m.universe_code AND u.is_active
+                  WHERE m.effective_to IS NULL AND s.is_active
+                    AND s.market_code IN (%s)
+                  GROUP BY s.id, s.market_code, s.ticker, s.name, s.industry_code, s.sic_code
+                ), win AS (
+                  SELECT t.market_code, min(t.trade_date) AS lo, max(t.trade_date) AS hi,
+                         (SELECT max(x.trade_date) FROM indicator_trade_date x
+                           WHERE x.market_code = t.market_code
+                             AND x.trade_date < max(t.trade_date)) AS prev
+                  FROM indicator_trade_date t GROUP BY t.market_code
+                ), g AS (
+                  SELECT mem.*, win.lo, win.hi, win.prev,
+                         (SELECT min(p.trade_date) FROM price_daily p
+                           WHERE p.stock_id = mem.id) AS first_bar,
+                         NOT EXISTS (SELECT 1 FROM financial_statement f
+                                      WHERE f.stock_id = mem.id) AS no_financial,
+                         NOT EXISTS (SELECT 1 FROM financial_statement f
+                                      WHERE f.stock_id = mem.id
+                                        AND f.operating_cash_flow IS NOT NULL) AS no_cash_flow
+                  FROM mem LEFT JOIN win ON win.market_code = mem.market_code
+                ), c AS (
+                  SELECT g.*,
+                         (SELECT count(*) FROM price_daily p
+                           WHERE p.stock_id = g.id
+                             AND p.trade_date BETWEEN greatest(g.lo, g.first_bar) AND g.hi) AS bars,
+                         (SELECT count(*) FROM indicator_trade_date d
+                           WHERE d.market_code = g.market_code
+                             AND d.trade_date BETWEEN greatest(g.lo, g.first_bar) AND g.hi) AS days,
+                         (SELECT count(*) FROM indicator_value iv
+                           WHERE iv.stock_id = g.id AND iv.trade_date = g.hi) AS codes_now,
+                         (SELECT count(*) FROM indicator_value iv
+                           WHERE iv.stock_id = g.id AND iv.trade_date = g.prev) AS codes_prev
+                  FROM g
+                )
+                SELECT id, market_code, ticker, name, exempt_industry, exempt_financial,
+                       (first_bar IS NULL OR first_bar > joined) AS gap_price_history,
+                       (industry_code IS NULL AND sic_code IS NULL) AS gap_industry,
+                       no_financial AS gap_financial,
+                       no_cash_flow AS gap_cash_flow,
+                       (days > 0 AND bars < days * %s) AS gap_price_coverage,
+                       (codes_prev > 0 AND codes_now < codes_prev * %s) AS gap_indicator_drop
+                FROM c
+                WHERE (first_bar IS NULL OR first_bar > joined)
+                   OR (industry_code IS NULL AND sic_code IS NULL)
+                   OR no_financial OR no_cash_flow
+                   OR (days > 0 AND bars < days * %s)
+                   OR (codes_prev > 0 AND codes_now < codes_prev * %s)
+                ORDER BY market_code, ticker
+                """.formatted(KnownSourceGaps.KNOWN_MISSING_SIC,
+                        KnownSourceGaps.INFRA_FUND, KnownSourceGaps.FINANCIAL_CURRENCY_MISMATCH,
+                        collectedMarketPlaceholders(),
+                        COVERAGE_FLOOR, INDICATOR_FLOOR, COVERAGE_FLOOR, INDICATOR_FLOOR),
+                (rs, rowNum) -> {
+                    Set<MembershipGap.Axis> missing = EnumSet.noneOf(MembershipGap.Axis.class);
+                    Set<MembershipGap.Axis> exempt = EnumSet.noneOf(MembershipGap.Axis.class);
+                    boolean industryExempt = rs.getBoolean("exempt_industry");
+                    boolean financialExempt = rs.getBoolean("exempt_financial");
+                    if (rs.getBoolean("gap_price_history")) {
+                        missing.add(MembershipGap.Axis.PRICE_HISTORY);
+                    }
+                    if (rs.getBoolean("gap_industry")) {
+                        (industryExempt ? exempt : missing).add(MembershipGap.Axis.INDUSTRY);
+                    }
+                    if (rs.getBoolean("gap_financial")) {
+                        (financialExempt ? exempt : missing).add(MembershipGap.Axis.FINANCIAL);
+                    }
+                    if (rs.getBoolean("gap_cash_flow")) {
+                        (financialExempt ? exempt : missing).add(MembershipGap.Axis.CASH_FLOW);
+                    }
+                    if (rs.getBoolean("gap_price_coverage")) {
+                        missing.add(MembershipGap.Axis.PRICE_COVERAGE);
+                    }
+                    if (rs.getBoolean("gap_indicator_drop")) {
+                        missing.add(MembershipGap.Axis.INDICATOR_DROP);
+                    }
+                    return new MembershipGap(rs.getLong("id"), rs.getString("market_code"),
+                            rs.getString("ticker"), rs.getString("name"), missing, exempt);
+                },
+                collectedMarkets());
     }
 }
