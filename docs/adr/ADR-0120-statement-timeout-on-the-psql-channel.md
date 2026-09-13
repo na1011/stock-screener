@@ -18,7 +18,8 @@ applies_to:
 - MUST NOT: `postgresql.conf`나 `ALTER ROLE`로 상한을 걸지 않는다. 앱과 에이전트가 **같은 롤 `na1011`**을 쓰므로 전역 설정은 앱까지 건다. 그러면 `IndicatorRetentionPolicy`의 수백만 행 `DELETE USING`과, **트랜잭션 안에서 60초 HTTP를 기다리는 수집기**(`PriceCollector`·`GovernanceCollector`·`MarketCalendarCollector`)가 먼저 깨진다.
 - MUST NOT: 사람 채널을 `export PGOPTIONS`로 바꾸지 않는다. `vacuumdb`·`reindexdb`·`clusterdb`는 `pg_dump`·`pg_restore`와 달리 **자기 `statement_timeout`을 안 푼다**(바이너리 `strings` 실측 0건). `export`하면 그 셋에도 실려 `REINDEX INDEX CONCURRENTLY`가 30초에 끊기고, 그때는 **INVALID 인덱스가 남아 손으로 `DROP INDEX`를 해야 한다.** alias가 비대화형 셸에 안 실리는 것이 여기서는 결함이 아니라 의도다.
 - MUST NOT: `check-premises.sh`의 지역 `export PGOPTIONS`(`statement_timeout=6s`)를 "전역에 생겼으니 중복"이라며 지우지 않는다. 그 파일의 `per_limit > PGCONNECT_TIMEOUT + statement_timeout` 부등식이 **11 > 4 + 30**으로 뒤집혀 전제 전부가 무판정이 된다.
-- 일부러 오래 걸릴 작업(`REINDEX CONCURRENTLY`·`EXPLAIN ANALYZE`)은 `PGOPTIONS='-c statement_timeout=0' psql ...`로 **명시적으로** 푼다. 푸는 것이 의식적 행위로 기록에 남는 것이 이 설계의 의도다.
+- 일부러 오래 걸릴 작업(`REINDEX`·`VACUUM`·`EXPLAIN ANALYZE`)은 **`PGOPTIONS='-c statement_timeout=0' command psql ...`**로 **명시적으로** 푼다. 푸는 것이 의식적 행위로 기록에 남는 것이 이 설계의 의도다.
+  - **MUST: `command`(또는 `\psql`·절대경로)를 쓴다. 맨 `psql`로는 안 풀린다** — `~/.zshrc`의 alias가 **비대화형 에이전트 셸에도 실려** `PGOPTIONS=X psql`이 `PGOPTIONS=X PGOPTIONS='-c statement_timeout=30s' psql`로 펼쳐지고 **뒤엣것이 이긴다.** 실측(2026-09-13): 맨 `psql` **30s** / `command psql` **0**. 이것을 모르고 VACUUM을 돌렸다가 `while vacuuming block 404376`에서 끊겼다(ADR-0140).
 
 ## 검증
 
@@ -68,6 +69,6 @@ psql -d stock_screener -At -c "SELECT CASE
 
 같은 실수를 해도 **4시간이 아니라 30초**에 끝난다. 저장소가 실제로 치는 가장 무거운 조회가 1.09초(`indicator_value` 25M 전량 `GROUP BY`는 693ms)라 상시 방해는 없다.
 
-**막지 못하는 것을 아는 채로 남긴다.** ① 에이전트가 자기 `PGOPTIONS`를 붙이면 상속 상한을 잃는다 — psql이 든 Bash 호출 3,386건 중 263건이 자기 값을 붙이고 그중 **48건에 `statement_timeout`이 없다.** ② 각 30초 미만인 psql을 도는 루프는 안 걸린다 — 상한은 문장 하나의 길이만 묶지 개수를 안 묶는다. ③ JDBC 채널(앱·DBeaver·IntelliJ)은 libpq 환경변수로 원리적으로 못 덮는다. ④ 고아를 만드는 기제(백그라운드 이관 → 턴 종료 → 클라이언트 사망)는 그대로이고, 상한은 그 창을 30초로 줄일 뿐이다. ⑤ `log_min_duration_statement`가 `-1`이라 **상한에 걸려 죽은 문장이 무엇이었는지 서버 로그로 되짚을 길이 없다.**
+**막지 못하는 것을 아는 채로 남긴다.** ① **에이전트가 자기 `PGOPTIONS`를 붙여도 상속 상한을 못 잃는다** — alias가 뒤에서 덮기 때문이다(위 §규칙). 즉 「자기 값을 붙인 263건 중 48건에 `statement_timeout`이 없다」는 **위험이 아니라 오히려 상한이 안 풀리는 쪽**이고, 실제 문제는 그 반대 방향이다: **풀려고 해도 안 풀린다.** ② 각 30초 미만인 psql을 도는 루프는 안 걸린다 — 상한은 문장 하나의 길이만 묶지 개수를 안 묶는다. ③ JDBC 채널(앱·DBeaver·IntelliJ)은 libpq 환경변수로 원리적으로 못 덮는다. ④ 고아를 만드는 기제(백그라운드 이관 → 턴 종료 → 클라이언트 사망)는 그대로이고, 상한은 그 창을 30초로 줄일 뿐이다. ⑤ `log_min_duration_statement`가 `-1`이라 **상한에 걸려 죽은 문장이 무엇이었는지 서버 로그로 되짚을 길이 없다.**
 
 되돌리려면 `.claude/settings.json`의 `env` 절, `~/.zshrc`의 alias, `check-premises.sh`의 주석 셋을 함께 건드린다.
