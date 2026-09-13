@@ -203,7 +203,7 @@ public class ScreeningRepository {
         boolean tallyIsTrue = mode == EvaluationMode.SCORING || secondPass;
         return new ScreeningOutcome(population.size(),
                 secondPass ? List.of() : results,
-                tallyIsTrue ? tally.toTallies(group, results.size()) : List.of(),
+                tallyIsTrue ? tally.toTallies(group, mode, results.size()) : List.of(),
                 tallyIsTrue ? tally.minimumBlocked() : null);
     }
 
@@ -241,8 +241,7 @@ public class ScreeningRepository {
                 } else if (outcome.status() == ConditionOutcome.Status.NOT_EVALUABLE) {
                     notEvaluable[i]++;
                 }
-                boolean gate = mode != EvaluationMode.SCORING || outcome.condition().required();
-                if (gate && !outcome.passesFilter()) {
+                if (isGate(outcome.condition(), mode) && !outcome.passesFilter()) {
                     blocked++;
                     blockedAt = i;
                 }
@@ -255,20 +254,35 @@ public class ScreeningRepository {
             }
         }
 
+        /**
+         * 이 조건이 <b>관문</b>인가 — 못 넘기면 결과에서 빠지는가.
+         *
+         * <p>SCORING은 {@code satisfiesRequired}가 정하므로 {@code required()}만 관문이고,
+         * FILTER는 {@code included}가 {@code passes}라 <b>전 조건</b>이 관문이다
+         * ({@code ConditionEvaluator}). <b>이 술어가 한 벌이어야 한다</b> — 세는 자리와
+         * 내는 자리가 갈리면 한쪽이 조용히 비어도 아무 시험이 안 붉는다.
+         */
+        private static boolean isGate(IndicatorCondition condition, EvaluationMode mode) {
+            return mode != EvaluationMode.SCORING || condition.required();
+        }
+
         /** 통과가 하나도 없을 때만 뜻이 있다. 그 외에는 null이다. */
         Integer minimumBlocked() {
             return minimumBlocked == Integer.MAX_VALUE ? null : minimumBlocked;
         }
 
-        List<ConditionTally> toTallies(ConditionGroup group, int includedCount) {
+        List<ConditionTally> toTallies(ConditionGroup group, EvaluationMode mode, int includedCount) {
             List<IndicatorCondition> conditions = group.flattenConditions();
             // MUST: AND 트리에서만 한계 기여를 낸다. 「정확히 하나」는 논리곱에 대한 정리다.
             boolean conjunctive = group.childGroups().isEmpty()
                     && group.logicalOperator() == ConditionGroup.LogicalOperator.AND;
             List<ConditionTally> tallies = new ArrayList<>(conditions.size());
             for (int i = 0; i < conditions.size(); i++) {
-                boolean gate = conditions.get(i).required() || !conjunctive;
-                Integer marginal = conjunctive && gate ? includedCount + soleBlocker[i] : null;
+                // MUST: add()와 **같은 술어**를 쓴다. 둘이 갈리면 FILTER에서 전 조건이
+                // 「관문이 아니다」가 되어 한계 기여가 통째로 null이 되는데, 화면에는 그 칸이
+                // 그냥 안 보일 뿐이라 시험도 타입검사도 안 붉는다(실측으로 그렇게 났다).
+                Integer marginal = conjunctive && isGate(conditions.get(i), mode)
+                        ? includedCount + soleBlocker[i] : null;
                 tallies.add(new ConditionTally(i, notMatched[i], notEvaluable[i], marginal));
             }
             return tallies;

@@ -375,6 +375,12 @@ class DartGovernanceFactMapperTest {
                 .as("괄호가 기수 안에 든다").containsEntry(2025, ZERO);
         assertThat(opinionOfTerm("제18기(2024년)", "적정의견", 2025))
                 .as("표기가 회계연도를 직접 말한다 — 요청 연도와 다르다").containsEntry(2024, ZERO);
+        assertThat(opinionOfTerm("제53기('25.01.01~'25.12.31)", "적정의견", 2025))
+                .as("009150 삼성전기 실측. 이 규칙이 없으면 그 종목은 앵커가 없어 사실이 통째로 안 생긴다")
+                .containsEntry(2025, ZERO);
+        assertThat(opinionOfTerm("제53기('24.04.01~'25.03.31)", "적정의견", 2025))
+                .as("MUST NOT: 역년이 아닌 범위를 받지 않는다 — 시작 연도가 회계연도라는 보장이 없다")
+                .isEmpty();
     }
 
     @Test

@@ -366,6 +366,28 @@ class ScreeningRepositoryTest {
         assertThat(outcome.minimumBlocked())
                 .as("가장 가까운 종목도 둘을 못 넘겼다 — 한 조건만 풀어서는 안 열린다")
                 .isEqualTo(2);
+        assertThat(outcome.tallies().get(0).wouldPassWithout())
+                .as("MUST: FILTER에서는 전 조건이 관문이다. 여기가 null이면 화면에 「이 조건만 "
+                        + "빼면」 칸이 통째로 안 뜨는데, 안 보이는 것뿐이라 아무 시험도 안 붉는다")
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("FILTER 0건 — 한 조건만 빼면 열리는 경우 그 수를 낸다")
+    void filterReportsTheGateThatAloneBlocks() {
+        // cheapStock(PER 8 · PBR 0.8)만 첫 조건에 걸리게 세운다.
+        ConditionGroup group = ConditionGroup.and(
+                condition("PER", ComparisonOperator.LT, "5"),
+                condition("PBR", ComparisonOperator.LT, "1"));
+
+        ScreeningRepository.ScreeningOutcome outcome =
+                repository.diagnose(group, EvaluationMode.FILTER, AS_OF, true, null);
+
+        assertThat(outcome.results()).isEmpty();
+        assertThat(outcome.tallies().get(0).wouldPassWithout())
+                .as("PER 조건만 빼면 cheapStock이 통과한다").isEqualTo(1);
+        assertThat(outcome.minimumBlocked())
+                .as("정확히 하나만 못 넘긴 종목이 있다").isEqualTo(1);
     }
 
     @Test

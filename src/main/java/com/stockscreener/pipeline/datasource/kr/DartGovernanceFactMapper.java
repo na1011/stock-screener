@@ -77,6 +77,19 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
     /** 기수 표기가 회계연도를 <b>직접</b> 말하는 자리. {@code 제18기(2024년)}·{@code 2024년(제21기)}. */
     private static final Pattern EXPLICIT_YEAR = Pattern.compile("((?:19|20)\\d{2})년");
 
+    /**
+     * {@code 제53기('25.01.01~'25.12.31)} — 두 자리 연도로 <b>온전한 역년</b>을 적은 표기.
+     *
+     * <p><b>MUST: 시작과 끝을 둘 다 묶어 역년인 것만 받는다.</b> 범위의 시작 연도가 곧
+     * 회계연도인 것은 <b>12월 결산일 때만</b> 참이고, 비12월 결산에서는 조용히 한 해 어긋난다.
+     * 이 좁힘이 없으면 「보고서 안 최대 기수 = 당기」를 기각한 것과 같은 종류의 추측이 된다.
+     *
+     * <p>실측(2026-09-14): 이 표기는 12행 / 1종목(`009150` 삼성전기)이고 <b>12행 전부 역년</b>이다.
+     * 그 종목은 이 규칙이 없으면 앵커가 하나도 없어 <b>감사의견 사실이 통째로 안 생긴다.</b>
+     */
+    private static final Pattern CALENDAR_YEAR_RANGE =
+            Pattern.compile("'(\\d{2})\\.01\\.01~'\\d{2}\\.12\\.31");
+
     /** {@code 제42기}의 기수 번호. 종목의 기수↔회계연도 오프셋을 세우는 재료다. */
     private static final Pattern TERM_ORDINAL = Pattern.compile("제(\\d+)기");
 
@@ -748,7 +761,8 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      *
      * <p>세 갈래를 순서대로 묻는다 — ① {@code (당기)}류 토큰이 <b>어디에 있든</b>(끝이 아니어도
      * 된다) 요청 연도에서 그만큼 물린다 ② 표기가 {@code (2024년)}처럼 연도를 직접 말하면 그것을
-     * 쓴다. 실측으로 둘이 함께 든 53행이 <b>전부 일치</b>하므로 순서는 답을 안 바꾼다.
+     * 쓴다 ③ {@code ('25.01.01~'25.12.31)}처럼 <b>온전한 역년 범위</b>면 그 연도를 쓴다.
+     * 실측으로 ①과 ②가 함께 든 53행이 <b>전부 일치</b>하므로 순서는 답을 안 바꾼다.
      *
      * <p><b>기수 숫자만 남은 표기는 여기서 풀지 않는다</b> — 회사마다 설립 연도가 달라 이 함수가
      * 가진 정보로는 환산할 수 없다. 그것은 {@link #ordinalOffset}이 종목 단위로 푼다.
@@ -764,7 +778,11 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
             }
         }
         Matcher year = EXPLICIT_YEAR.matcher(flat);
-        return year.find() ? Integer.parseInt(year.group(1)) : null;
+        if (year.find()) {
+            return Integer.parseInt(year.group(1));
+        }
+        Matcher range = CALENDAR_YEAR_RANGE.matcher(flat);
+        return range.find() ? 2000 + Integer.parseInt(range.group(1)) : null;
     }
 
     /** {@code 제42기} → 42. 없으면 null이다. */
