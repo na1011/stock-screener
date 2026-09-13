@@ -101,7 +101,7 @@ total_budget=45
 # MUST: 새 러너를 만들지 않고 여기에 갈래를 둔다. 파서·타임아웃·파괴적 명령 심사·예산이
 # 전부 이 파일에 있고, 사본을 만들면 둘이 갈린 채 한쪽만 고쳐진다.
 # 붙잡을 때는 예산을 넓힌다 — 이 경로는 SessionStart가 아니라 손으로 부르는 것이라
-# settings.json의 훅 timeout이 걸리지 않는다. 위 `total_budget + per_limit < 45` 부등식은
+# settings.json의 훅 timeout이 걸리지 않는다. 위 `total_budget + per_limit < 훅 timeout` 부등식은
 # 훅 경로에만 걸린다.
 capture="${PREMISE_CAPTURE:-}"
 if [ -n "$capture" ]; then
@@ -147,7 +147,7 @@ add_finding() { findings="${findings}- ${1}"$'\n'; n_findings=$((n_findings + 1)
 add_unknown() { unknowns="${unknowns}- ${1}"$'\n'; n_unknowns=$((n_unknowns + 1)); }
 
 # --- 본문 심사 ------------------------------------------------------------
-# **이 호출이 세션 시작에서 가장 비싼 반복이다** — 전제 하나에 약 29ms이고 지금 124개라 3.6초다.
+# **이 호출이 세션 시작에서 가장 비싼 반복이다** — 전제 하나에 25.8ms이고 지금 125개라 3.2초다(실측).
 # **SessionStart 셋은 병렬이라 벽시계를 max()가 정하는데, 그 max가 이 훅이다** — 유휴 실측
 # `inject-progress.sh` 0.04s · `check-doc-staleness.sh` 1.24s · **이 훅 9.53s**(2회 재현).
 # 즉 세션 시작 대기는 사실상 이 훅 하나다. **다른 둘을 빠르게 해도 이득이 0이다.**
