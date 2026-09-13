@@ -152,7 +152,12 @@ psql -d stock_screener -c "\d indicator_value"
 `random_page_cost` 4 · `max_wal_size` 1 GB · `maintenance_work_mem` 64 MB ·
 `log_temp_files` −1. 지금은 6 GB · 16 GB · 1.1 · 4 GB · 1 GB · 0이고, 원본은
 `postgresql.conf.bak-20260913`과 같은 파일의 주석 블록에 있다. `log_temp_files = 0`은
-**임시 파일 174 GB의 귀속을 아직 못 찾아** 켜 둔 관측기다.
+**임시 파일의 귀속을 아직 못 찾아** 켜 둔 관측기다.
+
+**MUST NOT: `pg_stat_database.temp_bytes`의 174 GB를 디스크 사용량으로 읽지 않는다.** 그것은
+`stats_reset`이 빈 **생애 누적 카운터**이고, PostgreSQL은 질의가 끝나면 그 파일을 지운다 —
+실측으로 `base/pgsql_tmp`가 **0개 · 0 B**다. **지울 것은 없다.** 그래도 재는 이유는 그 누적이
+곧 **낭비된 I/O**이고 `work_mem`을 정할 근거이기 때문이다.
 
 **어려워지는 것**
 
@@ -165,6 +170,12 @@ psql -d stock_screener -c "\d indicator_value"
 - **`shared_buffers` 6 GB는 온디바이스 앱과 같은 24 GB에서 떼어 온 것이다**(실측 여유:
   `memory_pressure` 90% free · 앱 JVM RSS 446 MB). macOS에 `O_DIRECT`가 없어 페이지가
   OS 캐시에도 사본으로 남으므로 **올린 만큼 새 캐시가 생기는 것이 아니다.**
+- **`pg_wal`이 1 GB에서 **3.9 GB**(248세그먼트)가 됐다** — `max_wal_size`를 올린 대가이고,
+  **DB가 줄인 5.7 GB 중 2.9 GB를 도로 먹는다.** 데이터 디렉토리 실측은 14 GB(base 10 + wal 3.9)다.
+  값은 하는 것으로 보인다 — 설정 변경 뒤 배포·빌드·테스트·백필 세 판 동안 **강제 체크포인트 0**
+  (직전 같은 길이의 창은 59였다). **다만 두 창의 작업이 달라 깨끗한 대조가 아니다**(앞쪽에
+  REINDEX가 있었다). **멱등 백필로는 못 잰다** — 저장 0행이라 WAL을 거의 안 만들어 체크포인트가
+  아예 안 일어난다(실측 timed=0 · req=0).
 - **중복 제거를 잃었다**(위 §규칙). 상쇄는 autovacuum 임계이고, 재발 감시는 `ADR-0045`의 펜스다.
 
 **되돌리려면** — 데이터는 안 건드렸다.

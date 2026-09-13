@@ -65,9 +65,10 @@
 
 - **[묶음 C] 관측기 둘을 켜 두고 아직 안 거뒀다.** 나머지는 ADR-0140이 닫았다
   (DB 13.1 GB → 7,424 MB · 백필 389.5초 → 60.5초 · 전제 예산 45/45 무판정 6 → 40/45 무판정 0).
-  - **임시 파일 174 GB의 귀속을 못 찾았다.** 파생층 질의도 `IndicatorTradeDateIndex`의 DISTINCT도
-    후보가 아니었다. **`log_temp_files = 0`을 켜 뒀으니** 배치가 한 판 돈 뒤 로그에서 거둬
-    `work_mem`을 정한다. **MUST NOT: 귀속 없이 `work_mem`을 올리지 않는다.**
+  - **임시 파일 누적 174 GB의 귀속을 못 찾았다** — 파생층 질의도 `IndicatorTradeDateIndex`의
+    DISTINCT도 후보가 아니었다. **`log_temp_files = 0`을 켜 뒀으니** 배치가 한 판 돈 뒤 로그에서
+    거둬 `work_mem`을 정한다. **MUST NOT: 귀속 없이 `work_mem`을 올리지 않는다.**
+    **MUST NOT: 그 수를 디스크 사용량으로 읽지 않는다** — 생애 누적이고 `pgsql_tmp`는 0 B다.
   - **전제 예산의 구조적 바닥은 그대로다** — 126개 중 42개가 `indicator_value`를 읽고
     **그중 19개에 `trade_date` 등치 술어가 없어 힙 3,689 MB를 훑는다.** 대형 순차 스캔은 링
     버퍼를 써 `shared_buffers`도 안 탄다. 여는 것은 **전제 질의에 날짜 술어를 넣는 별도 축**이다.
