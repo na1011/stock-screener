@@ -238,13 +238,25 @@ check 침묵 "gradle 이 아닌 명령"                 "psql -d stock_screener 
 check 침묵 "커밋 메시지의 --job= 은 기동이 아니다" \
   './gradlew build && git commit -m "chore: bootRun --job=universe 문서화"' load
 #
-# 프로세스 나이로 "방금 띄운 것"과 "이미 돌던 것"을 가른다. 그 판정이 없으면 적재를 띄울
-# 때마다 중복 경고가 뜬다. 나이 자체는 여기서 재고, 90초 경계를 넘는 중복 기동 시나리오는
-# 표에 넣지 않는다 — 픽스처 하나가 95초를 먹기 때문이다. **그 경로는 표가 보증하지 않는다.**
-if [ "$(. "$HOOKS/lib/load-process.sh"; load_process_age_seconds 1 2>/dev/null || echo 0)" -gt 3600 ]; then
+# 프로세스 나이로 "방금 띄운 것"과 "이미 돌던 것"을 가른다(경계는 warn-load-running.sh의 90초).
+# 그 판정이 없으면 적재를 띄울 때마다 중복 경고가 뜬다. 나이 자체는 여기서 재고, 90초 경계를
+# 넘는 중복 기동 시나리오는 표에 넣지 않는다 — 픽스처 하나가 95초를 먹기 때문이다.
+# **그 경로는 표가 보증하지 않는다.**
+#
+# MUST: 임계가 아니라 **독립 출처와 대조한다.** 전에는 `> 3600`이었는데 PID 1은 launchd이고
+# **그 나이는 곧 부팅 이후 시간**이라 부팅 후 1시간 동안 매 실행이 거짓 FAIL이었다(실측:
+# 부팅 23분째에 FAIL, 72분째에 같은 코드가 OK). 거짓 FAIL은 이 표에서 가장 나쁜 고장이다 —
+# 같은 파일이 위에서 적듯 "잘못 잡으면 첫 발화가 거짓이라 그 뒤의 참 발화도 무시된다".
+# `kern.boottime`은 `ps -o etime`과 **다른 출처**이므로 둘이 맞으면 파싱이 맞는 것이고,
+# 부팅 직후든 한 달 뒤든 성립한다. 허용 오차 2초는 두 번 읽는 사이의 초 넘어감이다.
+_boot=$(sysctl -n kern.boottime 2>/dev/null | sed 's/^{ sec = \([0-9][0-9]*\).*/\1/')
+_expected=$(( $(date +%s) - ${_boot:-0} ))
+_actual=$(. "$HOOKS/lib/load-process.sh"; load_process_age_seconds 1 2>/dev/null || echo -1)
+_diff=$(( _actual - _expected )); [ "$_diff" -lt 0 ] && _diff=$(( -_diff ))
+if [ -n "$_boot" ] && [ "$_actual" -ge 0 ] && [ "$_diff" -le 2 ]; then
   pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "확정" "오래된 PID의 나이를 잰다"
 else
-  fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s\n' "실패" "오래된 PID의 나이를 잰다"
+  fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s (etime=%s · boottime=%s)\n' "실패" "오래된 PID의 나이를 잰다" "$_actual" "$_expected"
 fi
 
 # 진짜 JVM을 띄워 분기 B를 확인한다. `comm`이 java여야 하므로 셸 프로세스로는 대신할 수 없다.
