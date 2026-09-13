@@ -13,14 +13,26 @@ import {
 const preset: ScreenRef = { id: 7, code: 'UNDERVALUED', type: 'PRESET' }
 const mine: ScreenRef = { id: 42, code: null, type: 'CUSTOM' }
 
-const presetOrigin: DraftOrigin = { kind: 'preset', code: 'UNDERVALUED', name: '저평가 가치주' }
+const presetOrigin: DraftOrigin = {
+  kind: 'preset',
+  code: 'UNDERVALUED',
+  name: '저평가 가치주',
+  description: null,
+}
 const mineOrigin: DraftOrigin = { kind: 'screen', id: 42, name: '내 전략' }
 const freshOrigin: DraftOrigin = { kind: 'custom' }
 
 describe('matchesOrigin — 레일 표시와 결과 신선도가 같은 규칙을 쓴다', () => {
   it('프리셋은 code로 대조한다', () => {
     expect(matchesOrigin(preset, presetOrigin)).toBe(true)
-    expect(matchesOrigin(preset, { kind: 'preset', code: 'MOMENTUM', name: '추세 상승' })).toBe(false)
+    expect(
+      matchesOrigin(preset, {
+        kind: 'preset',
+        code: 'MOMENTUM',
+        name: '추세 상승',
+        description: null,
+      }),
+    ).toBe(false)
   })
 
   it('내 전략은 id로 대조한다', () => {

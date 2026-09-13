@@ -69,8 +69,25 @@ export interface DraftCondition {
 /** 지금 편집 중인 것이 어디서 왔는가. 실행 요청의 형태가 여기서 갈린다. */
 export type DraftOrigin =
   | { kind: 'custom' }
-  | { kind: 'preset'; code: string; name: string }
+  | { kind: 'preset'; code: string; name: string; description: string | null }
   | { kind: 'screen'; id: number; name: string }
+
+/**
+ * IMPORTANT — 프리셋의 `description`은 **표시 전용**이다. 저장 요청에 실으면 안 된다.
+ *
+ * 그 문장이 지고 있는 것은 소개가 아니라 **결손 고지**다(ADR-0039) — 원본 명세에서 무엇을
+ * 치환했고 무엇을 버렸는지를 사용자에게 드러내려고 적은 것이라, 목록에만 뜨고 불러오면
+ * 사라지는 것이 결핍이었다.
+ *
+ * **MUST NOT: 이 값을 `ScreenRequest.description`으로 흘려보내지 않는다.** 시더가 심는
+ * 프리셋 설명이 상한 2,000자를 넘는다(`BUFFETT_QUALITY` 2,089자) — 그 경로가 생기는 순간
+ * 저장이 400으로 돌아온다. **MUST NOT: 그때 상한을 프리셋 길이에 맞춰 올리지 않는다.**
+ * 근거는 `ScreenRequest`의 javadoc이 정본이고, 그 상한은 `wire-contract.json`에 거울로
+ * 박혀 있다(ADR-0020).
+ *
+ * 지금 그 경로가 없는 이유는 `SaveScreenDialog`가 설명을 **저장된 내 전략**에서만 읽기
+ * 때문이다. 프리셋은 애초에 그 다이얼로그에 오지 않는다(서버가 403을 준다 · ADR-0017).
+ */
 
 /**
  * 서버에 **실제로 보낸 것**.
@@ -188,6 +205,16 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
   const title = computed(() => (origin.value.kind === 'custom' ? FRESH_DRAFT_TITLE : origin.value.name))
   /** 출처가 프리셋인가. **표시용**이다 — 권한 판단은 {@link editable}이 한다. */
   const isPreset = computed(() => origin.value.kind === 'preset')
+
+  /**
+   * 프리셋이 지고 있는 결손 고지. 프리셋이 아니면 `null`이다.
+   *
+   * 목록에만 뜨고 불러오면 사라지던 것을 편집기까지 들고 온다 — 그 문장이 **무엇을 치환했고
+   * 무엇을 버렸는지**를 말하므로, 조건을 보는 자리에서 함께 읽혀야 뜻이 있다(ADR-0039).
+   */
+  const presetDescription = computed(() =>
+    origin.value.kind === 'preset' ? origin.value.description : null,
+  )
   /** 편집기를 잠글 것인가. 손을 대면(dirty) 복제본을 만드는 중이므로 잠금이 풀린다. */
   const readOnly = computed(() => !editable.value && !dirty.value)
   const canAddCondition = computed(() => conditions.value.length < MAX_CONDITIONS)
@@ -389,7 +416,13 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     // 보내야 서버가 저장된 정의를 그대로 실행한다. 편집 권한과는 다른 질문이다.
     origin.value =
       screen.type === 'PRESET' && screen.code !== null
-        ? { kind: 'preset', code: screen.code, name: screen.name }
+        ? {
+            kind: 'preset',
+            code: screen.code,
+            name: screen.name,
+            // 표시 전용이다. 위 DraftOrigin의 주석이 그 계약의 정본이다.
+            description: screen.description,
+          }
         : { kind: 'screen', id: screen.id ?? 0, name: screen.name }
 
     editable.value = screen.editable
@@ -496,6 +529,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
 
   return {
     origin,
+    presetDescription,
     conditions,
     evaluationMode,
     universeCode,

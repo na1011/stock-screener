@@ -152,6 +152,15 @@ async function run(): Promise<void> {
         />
       </template>
 
+      <!--
+        프리셋의 설명은 **소개가 아니라 결손 고지**다(ADR-0039) — 원본 명세에서 무엇을
+        치환했고 무엇을 버렸는지를 말한다. 목록에만 뜨고 불러오면 사라지던 것을 조건을 보는
+        자리로 들고 온다. MUST NOT: 이 값을 저장 요청에 싣지 않는다(screenDraft의 DraftOrigin 주석).
+      -->
+      <p v-if="draft.presetDescription" class="screener__preset-note">
+        {{ draft.presetDescription }}
+      </p>
+
       <ConditionChipBar :retention="screening.retention" :invalid-key="invalidKey" />
     </AppViewHeader>
 
@@ -207,6 +216,15 @@ async function run(): Promise<void> {
  * 나눠 놓지 않으면 화면마다 머리 띠가 조금씩 달라지고, 그 차이가 좌측 레일의 선과 만나는
  * 자리에서 어긋남으로 드러난다.
  */
+.screener__preset-note {
+  margin: 0 0 0.75rem;
+  color: var(--p-text-muted-color);
+  font-size: var(--app-text-sm);
+  line-height: 1.6;
+  /* 시더가 줄바꿈으로 절을 나눈다. pre-line이 없으면 한 문단으로 뭉친다. */
+  white-space: pre-line;
+}
+
 .screener__title {
   margin: 0;
   /* 레일의 브랜드와 같은 크기다. 두 낱말이 같은 높이·같은 크기로 마주 보아야 한 화면이 된다. */

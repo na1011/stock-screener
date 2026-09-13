@@ -549,3 +549,33 @@ describe('시장별 임계는 왕복해도 살아 있어야 한다', () => {
     expect(operand.value).toBe(2000000000000)
   })
 })
+
+describe('프리셋 설명 — 표시 전용으로 편집기까지 따라온다', () => {
+  it('프리셋을 불러오면 설명이 따라온다 — 목록에만 뜨고 사라지던 결손 고지다', () => {
+    const draft = useScreenDraftStore()
+
+    draft.loadFrom(
+      screen({ code: 'BUFFETT_QUALITY', type: 'PRESET', description: '해자와 현금흐름을 본다' }),
+    )
+
+    expect(draft.presetDescription).toBe('해자와 현금흐름을 본다')
+  })
+
+  it('내 전략에는 설명이 없다 — 그 값은 저장 다이얼로그가 따로 읽는다', () => {
+    const draft = useScreenDraftStore()
+
+    draft.loadFrom(screen({ type: 'CUSTOM', description: '내가 쓴 메모' }))
+
+    expect(draft.presetDescription).toBeNull()
+  })
+
+  it('IMPORTANT — 설명이 조건 페이로드로 새지 않는다. 시더 값이 저장 상한 2,000자를 넘는다', () => {
+    const draft = useScreenDraftStore()
+
+    draft.loadFrom(
+      screen({ code: 'BUFFETT_QUALITY', type: 'PRESET', description: 'x'.repeat(2089) }),
+    )
+
+    expect(JSON.stringify(draft.toConditionGroup())).not.toContain('xxx')
+  })
+})
