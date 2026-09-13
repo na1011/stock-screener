@@ -153,9 +153,15 @@ class SecEdgarConceptProbeLiveTest {
         List<String> concepts = parameter("probe.concepts",
                 String.join(",", SecEdgarColumn.SHARES_OUTSTANDING.candidates()));
 
+        // companyfacts는 종목당 평균 3.4MB라(api-spec) 큰 표본에서는 대역폭이 소요를 정한다.
+        // 대조가 목적이 아니라 「그 개념이 오는가」만 물을 때는 끈다.
+        boolean compareFacts = Boolean.parseBoolean(
+                System.getProperty("probe.compareFacts", "true"));
+
         // MUST: 받은 값을 찍는다 — 오타는 「조용히 기본값으로 도는 것」으로만 나타난다.
-        System.out.println("\n표본(probe.tickers) = " + tickers);
+        System.out.println("\n표본(probe.tickers) = " + tickers.size() + "종목 " + tickers);
         System.out.println("개념(probe.concepts) = " + concepts);
+        System.out.println("facts 대조(probe.compareFacts) = " + compareFacts);
 
         RestClient www = client("https://www.sec.gov");
         RestClient data = client("https://data.sec.gov");
@@ -171,13 +177,17 @@ class SecEdgarConceptProbeLiveTest {
                 continue;
             }
 
-            pause();
-            Fetched factsBody = fetch(data, "/api/xbrl/companyfacts/CIK%010d.json".formatted(cik));
-            JsonNode facts = factsBody.json() == null
-                    ? MAPPER.nullNode() : factsBody.json().path("facts");
+            JsonNode facts = MAPPER.nullNode();
+            String factsNote = "건너뜀";
+            if (compareFacts) {
+                pause();
+                Fetched factsBody = fetch(data, "/api/xbrl/companyfacts/CIK%010d.json".formatted(cik));
+                facts = factsBody.json() == null ? MAPPER.nullNode() : factsBody.json().path("facts");
+                factsNote = factsBody.describe();
+            }
 
             System.out.printf("%n===== %s (CIK=%d) · companyfacts %s =====%n",
-                    ticker, cik, factsBody.describe());
+                    ticker, cik, factsNote);
 
             for (String concept : concepts) {
                 boolean dei = concept.startsWith("dei:");
@@ -201,7 +211,7 @@ class SecEdgarConceptProbeLiveTest {
                                 .formatted(ticker, concept, fromConcept.duplicatedSlots));
                     }
                 }
-                if (fromConcept.facts != fromFacts.facts) {
+                if (compareFacts && fromConcept.facts != fromFacts.facts) {
                     verdicts.add("%s %s — 팩트 수가 갈렸다: concept %d 대 facts %d"
                             .formatted(ticker, concept, fromConcept.facts, fromFacts.facts));
                 }
@@ -309,24 +319,28 @@ class SecEdgarConceptProbeLiveTest {
      * 낸다면 <b>같은 {@code (start, end, accn)}에 값이 둘 이상</b>으로 보여야 한다. 0이면 소스가
      * 축이 붙은 팩트를 빼고 준다는 뜻이고, 그러면 이 경로로 클래스를 가를 수 없다.
      */
-    private record Shape(int facts, int slots, int duplicatedSlots, Set<String> units) {
+    private record Shape(int facts, int slots, int duplicatedSlots, Set<String> units, String latestEnd) {
         @Override
         public String toString() {
             if (facts == 0) {
                 return "없음";
             }
-            return "팩트 %d · 칸 %d · 겹친 칸 %d · 단위 %s".formatted(facts, slots, duplicatedSlots, units);
+            // 최신 종료일을 함께 낸다 — 폴백의 조건이 「값이 있는가」가 아니라 「2년 이내인가」다
+            // (api-spec §companyconcept: V가 2010-01-27, BRK가 2011-04-29로 멈춰 있다).
+            return "팩트 %d · 칸 %d · 겹친 칸 %d · 최신 %s · 단위 %s"
+                    .formatted(facts, slots, duplicatedSlots, latestEnd, units);
         }
     }
 
     private static Shape shapeOf(JsonNode conceptNode) {
         if (conceptNode == null || conceptNode.isMissingNode() || conceptNode.isNull()) {
-            return new Shape(0, 0, 0, Set.of());
+            return new Shape(0, 0, 0, Set.of(), "-");
         }
         JsonNode units = conceptNode.path("units");
         if (units.isMissingNode()) {
-            return new Shape(0, 0, 0, Set.of());
+            return new Shape(0, 0, 0, Set.of(), "-");
         }
+        String latestEnd = "";
         int facts = 0;
         Map<String, Set<String>> valuesBySlot = new LinkedHashMap<>();
         Set<String> unitNames = new LinkedHashSet<>();
@@ -338,8 +352,12 @@ class SecEdgarConceptProbeLiveTest {
                 // MUST: start를 넣는다. 빼고 세면 **한 보고서가 같은 종료일에 싣는 3개월·6개월·
                 // 9개월 누적**이 전부 「겹친 칸」이 되어(api-spec: 72개 중 48개) 클래스 축과
                 // 구분되지 않는다 — 2026-09-14에 그렇게 재서 AMZN이 83칸으로 나왔다.
+                String end = fact.path("end").asString("");
+                if (end.compareTo(latestEnd) > 0) {
+                    latestEnd = end;
+                }
                 String slot = fact.path("start").asString("") + "|"
-                        + fact.path("end").asString("") + "|" + fact.path("accn").asString("");
+                        + end + "|" + fact.path("accn").asString("");
                 valuesBySlot.computeIfAbsent(slot, k -> new LinkedHashSet<>())
                         .add(fact.path("val").asString(""));
             }
@@ -350,7 +368,8 @@ class SecEdgarConceptProbeLiveTest {
                 duplicated++;
             }
         }
-        return new Shape(facts, valuesBySlot.size(), duplicated, unitNames);
+        return new Shape(facts, valuesBySlot.size(), duplicated, unitNames,
+                latestEnd.isEmpty() ? "-" : latestEnd);
     }
 
     /**
