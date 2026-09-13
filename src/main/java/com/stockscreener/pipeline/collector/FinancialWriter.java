@@ -145,6 +145,9 @@ public class FinancialWriter {
         }
         if (mode != WriteMode.APPEND_ONLY) {
             // 종목 단위로 한 줄만 남긴다. 행마다 찍으면 350종목 × 16행이라 읽을 수 없다.
+            // **이 줄은 평일 판당 부피 축이 아니다**(2026-09-13 실측 213 B/줄) — 일일 14:00
+            // 사슬은 APPEND_ONLY라 가드에 걸려 안 찍히고, FILL_MISSING·FILL_WITHOUT_REVISION인
+            // 주간 재적재(수·목)에서만 뜬다. 로그 소음을 줄일 때 여기를 후보로 세지 않는다.
             log.info("결손 보정. stockId={} 모드={} 신규={} 정정={} 채움={} 정정보류={} 교정={} 무변경={}",
                     stockId, mode, tally.inserted, tally.revised, tally.filled,
                     tally.deferredRevisions, tally.corrected, tally.untouched);

@@ -74,9 +74,11 @@ public class PriceCollector {
         }
 
         if (bars.isEmpty()) {
-            // MUST NOT: debug로 내리지 않는다. application.yaml에 logging.level 설정이 없어
-            // 기본이 INFO이고, debug면 이 줄은 **어디에도 안 찍힌다** — 종목 하나가 창 전체에서
-            // 빈 것을 볼 수 있는 자리가 여기뿐인데 그렇게 되면 그 상태가 통째로 무증상이 된다.
+            // MUST NOT: debug로 내리지 않는다. 종목 하나가 창 전체에서 빈 것을 볼 수 있는
+            // 자리가 여기뿐이라, 내리면 그 상태가 통째로 무증상이 된다.
+            // **원래 근거였던 「application.yaml에 logging.level 설정이 없어 debug면 어디에도
+            // 안 찍힌다」는 이제 거짓이다** — 그 블록이 생겼고 클래스마다 플래이스홀더를 둘 수
+            // 있다. 그래도 내리지 않는 이유는 위 한 줄이고, 아래 국내 달력 부재가 그것을 받친다.
             // DailyUpdateJob의 결손 알림은 **대상일 전 시장 합계가 0**일 때만 울어 종목 하나를
             // 못 본다.
             //
