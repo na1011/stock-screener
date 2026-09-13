@@ -60,6 +60,21 @@ const closestNote = computed(() => {
   return `한 조건만 풀어서는 열리지 않습니다 — 가장 가까운 종목도 ${props.result.minimumBlocked}개를 넘기지 못했습니다.`
 })
 
+/**
+ * 접혔을 때도 남는 한 줄. **접힌 화면이 침묵하지 않게 하는 것이 이 값의 일이다.**
+ *
+ * 한 조건만 풀면 열리는 경우가 있으면 **가장 많이 열어 주는 것 하나**를 이름으로 말하고,
+ * 없으면 `closestNote`가 대신한다. 목록이 아니라 한 줄이므로 접기의 목적(스크롤)을 안 깬다.
+ */
+const collapsedNote = computed(() => {
+  if (closestNote.value !== null) return null
+  const best = [...openers.value].sort(
+    (a, b) => (b.tally.wouldPassWithout ?? 0) - (a.tally.wouldPassWithout ?? 0),
+  )[0]
+  if (best === undefined) return null
+  return `${text(best.condition)} 하나만 빼면 ${formatCount(best.tally.wouldPassWithout ?? 0)}종목이 남습니다.`
+})
+
 const text = (condition: ConditionInfo): string => {
   // 이어 붙이면 원래 문장 그대로다 — `conditionText`의 계약이 그렇게 적혀 있다.
   const parts = splitCondition(condition, props.indicatorName, props.result.currencyCode)
@@ -70,11 +85,12 @@ const missing = outcomeStyle('NOT_EVALUABLE')
 const unmatched = outcomeStyle('NOT_MATCHED')
 
 /**
- * 조건이 많으면 이 목록만으로 화면이 길어진다. 접을 수 있게 하되 **기본은 펼침**이다 —
- * 기본으로 감추면 0건에서 사유에 닿는 유일한 경로가 처음 보는 사용자에게는 없는 것과 같아진다.
+ * **기본은 접힘이다**(2026-09-14 사용자 결정) — 조건이 많으면 목록만으로 화면이 길어진다.
  *
- * **접어도 요약 두 줄은 남긴다** — 모집단과 「한 조건만 풀어서는 안 열린다」가 그것이다.
- * 접힌 상태가 「아무 말도 안 하는 상태」가 되면 접기가 축④를 되돌린 것이 된다.
+ * **그래서 접힌 상태가 무엇을 말하는지가 이 컴포넌트의 계약이다.** 판정 대상 수와 요약
+ * 한 줄이 남고 버튼이 갯수를 밝힌다. P27 축④가 요구하는 것은 「0건일 때 사유에 **닿을 수
+ * 있다**」이므로 클릭 하나 뒤는 충족이지만, **접힌 화면이 아무 말도 안 하면 그때는 못 닿는
+ * 것**이 된다. 그 경계를 시험이 잠근다.
  */
 const collapsed = ref(readDiagnosisCollapsed())
 watch(collapsed, writeDiagnosisCollapsed)
@@ -119,6 +135,7 @@ watch(collapsed, writeDiagnosisCollapsed)
     </ul>
 
     <p v-if="closestNote" class="diagnosis__note">{{ closestNote }}</p>
+    <p v-if="collapsed && collapsedNote" class="diagnosis__note">{{ collapsedNote }}</p>
     <p v-if="!collapsed" class="diagnosis__caveat">
       「데이터 없음」은 그 회사에 대한 주장이 아니라 <strong>우리 데이터에 그 값이 없다</strong>는
       뜻입니다. 조건에 맞지 않았다는 뜻이 아닙니다.

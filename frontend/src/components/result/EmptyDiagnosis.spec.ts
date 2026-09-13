@@ -65,7 +65,12 @@ const render = (tallies: ConditionTally[], minimumBlocked: number | null): Promi
   return renderToString(app)
 }
 
-/** `localStorage`를 심어 접힘 상태를 만든다. 없으면 읽기가 기본값(펼침)으로 떨어진다. */
+/**
+ * `localStorage`를 심어 접힘 상태를 정한다.
+ *
+ * **없으면 기본값인 「접힘」으로 떨어진다** — 그래서 목록 내용을 보는 시험은 반드시
+ * `withCollapsed(false)`를 먼저 부른다. 안 부르면 초록인데 아무것도 안 본 시험이 된다.
+ */
 const withCollapsed = (collapsed: boolean): void => {
   const store = new Map([['stock-screener.result.diagnosis-collapsed', String(collapsed)]])
   ;(globalThis as unknown as { window: unknown }).window = {
@@ -81,11 +86,16 @@ afterEach(() => {
 })
 
 describe('0건 진단', () => {
-  it('기본은 펼침이다 — 감추면 0건에서 사유에 닿는 유일한 경로가 없는 것과 같아진다', async () => {
-    const html = await render([tally(0, 186, 3, 1)], 1)
+  it('기본은 접힘이다 — 다만 접힌 화면도 침묵하지 않는다', async () => {
+    // 저장된 값이 없는 상태. 조건이 많으면 목록만으로 화면이 길어져 기본을 접음으로 뒀다.
+    const html = await render([tally(0, 186, 3, 40)], null)
 
-    expect(html).toContain('186')
-    expect(html).toContain('접기')
+    expect(html).not.toContain('불충족')
+    expect(html).toContain('조건 1개 펼치기')
+    expect(html).toContain('판정 대상')
+    // 접힌 화면이 아무 말도 안 하면 축④의 「0건일 때 사유에 닿을 수 있다」가 깨진다.
+    expect(html).toContain('하나만 빼면')
+    expect(html).toContain('40')
   })
 
   it('MUST: 접어도 모집단과 「한 조건만으로는 안 열린다」는 남는다', async () => {
@@ -100,6 +110,7 @@ describe('0건 진단', () => {
   })
 
   it('조건별로 몇 종목이 걸렸는지와 모집단을 말한다', async () => {
+    withCollapsed(false)
     const html = await render([tally(0, 186, 3, 1), tally(1, 148, 0, 2)], 1)
 
     expect(html).toContain('판정 대상')
@@ -108,6 +119,7 @@ describe('0건 진단', () => {
   })
 
   it('MUST: 「불충족」과 「데이터 없음」을 갈라 그린다 — 합치면 데이터 문제를 전략 문제로 읽는다', async () => {
+    withCollapsed(false)
     const html = await render([tally(0, 0, 200, 200)], 1)
 
     expect(html).toContain('데이터 없음')
@@ -115,6 +127,7 @@ describe('0건 진단', () => {
   })
 
   it('한 조건만 빼면 열리는 경우 그 수를 말한다', async () => {
+    withCollapsed(false)
     const html = await render([tally(0, 199, 0, 40)], 1)
 
     expect(html).toContain('이 조건만 빼면')
@@ -122,6 +135,7 @@ describe('0건 진단', () => {
   })
 
   it('IMPORTANT — 한 조건만 풀어서 안 열리면 그 사실을 말한다 (안 그러면 가장 빡빡할 때 입을 다문다)', async () => {
+    withCollapsed(false)
     // 어느 종목도 정확히 하나만 실패하지 않으면 한계 기여가 전 조건에서 통과 수와 같아진다.
     const html = await render([tally(0, 190, 0, 0), tally(1, 180, 0, 0)], 3)
 

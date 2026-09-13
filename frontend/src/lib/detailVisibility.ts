@@ -82,20 +82,25 @@ export function writeShowAllIndicators(showAll: boolean): void {
 /**
  * 0건 진단을 접어 둔 자리(ADR-0142).
  *
- * **기본은 펼침이다.** 이 패널이 0건에서 사유에 닿는 유일한 경로라, 기본으로 감추면
- * P27 축④가 요구한 「닿을 수 있다」가 클릭을 하나 더 요구하는 것을 넘어 **처음 보는
- * 사용자에게는 없는 것과 같아진다.** 접기는 조건이 많아 스크롤이 길어지는 화면을 위한
- * 것이고, 그 선택은 **지속 성향**이라 위 `SHOW_ALL_KEY`와 같은 이유로 `localStorage`에 둔다.
+ * **기본은 접힘이다**(2026-09-14 사용자 결정). 조건이 많으면 목록만으로 화면이 길어진다.
  *
+ * **그래서 접힌 상태가 무엇을 말하는지가 계약이 된다** — 제목·판정 대상 수·요약 한 줄이
+ * 남고 버튼이 `조건 N개 펼치기`로 갯수를 밝힌다. P27 축④가 요구하는 것은 「0건일 때 사유에
+ * **닿을 수 있다**」이므로 클릭 하나 뒤에 있는 것은 충족이지만, **접힌 화면이 아무 말도 안 하면
+ * 그때는 못 닿는 것**이 된다. 그 경계를 `EmptyDiagnosis.spec.ts`가 잠근다.
+ *
+ * 선택은 **지속 성향**이라 위 `SHOW_ALL_KEY`와 같은 이유로 `localStorage`에 둔다.
  * **저장소를 못 쓰는 환경에서 던지지 않는다** — 기본값으로 돌아가면 되는 일이다.
  */
 const DIAGNOSIS_COLLAPSED_KEY = 'stock-screener.result.diagnosis-collapsed'
 
 export function readDiagnosisCollapsed(): boolean {
   try {
-    return window.localStorage.getItem(DIAGNOSIS_COLLAPSED_KEY) === 'true'
+    // 저장된 값이 없으면 접힘이다. `=== 'false'`로 물어야 「미설정」이 기본값을 타고,
+    // `!== 'true'`로 물으면 같은 결과지만 기본이 무엇인지가 코드에서 안 읽힌다.
+    return window.localStorage.getItem(DIAGNOSIS_COLLAPSED_KEY) !== 'false'
   } catch {
-    return false
+    return true
   }
 }
 
