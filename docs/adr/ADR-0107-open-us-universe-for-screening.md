@@ -148,6 +148,50 @@ rg -n "is_active = true WHERE code = 'US_TOP1000'" src/main/resources/db/migrati
 psql -d stock_screener -At -c "SELECT CASE WHEN count(*) FILTER (WHERE u.code = 'US_TOP1000') = 0 THEN 'US_TOP1000이 조회 대상에 없다 — 껐거나 편입이 비었다. ADR-0107을 되돌린 것이라면 그 경위를 적는다' WHEN count(*) FILTER (WHERE u.code = 'US_LISTED') > 0 THEN 'US_LISTED가 함께 켜졌다 — US_TOP1000과 겹쳐 PercentileCalculator의 UPSERT가 배치를 죽인다(ADR-0036)' ELSE 'OK 조회 대상 ' || count(DISTINCT u.code) || '개(' || string_agg(DISTINCT u.code, ' ') || ' · 편입 ' || count(*) || '종목)' END FROM universe u JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL WHERE u.is_active GROUP BY 1 = 1"
 ```
 
-```premise 미국 신규 편입이 봉 없이 남아 있지 않다 — 리밸런싱 뒤 채웠는가
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — US_TOP1000 편입이 없다' WHEN count(*) FILTER (WHERE b.bars IS NULL) = 0 THEN 'OK 미국 편입 ' || count(*) || '종목 전부에 시세가 있다' ELSE '봉이 없는 미국 편입 종목이 ' || count(*) FILTER (WHERE b.bars IS NULL) || '개다 — 리밸런싱이 새로 넣은 것이다. 결과에서 조용히 빠지므로 --job=initial-load --universe=US_TOP1000 으로 채운다' END FROM universe_membership m JOIN stock s ON s.id = m.stock_id LEFT JOIN (SELECT stock_id, count(*) AS bars FROM price_daily GROUP BY stock_id) b ON b.stock_id = s.id WHERE m.universe_code = 'US_TOP1000' AND m.effective_to IS NULL"
+```premise 편입 종목의 원자료가 비어 있지 않다 — 시세 이력·재무·시세 구멍
+psql -d stock_screener -At -c "
+WITH mem AS (
+  SELECT s.id, s.ticker, s.market_code, min(m.effective_from) AS joined,
+         coalesce(bool_or(s.industry_group_key = 'KSIC:642' OR EXISTS (
+           SELECT 1 FROM financial_statement mm JOIN market gm ON gm.code = s.market_code
+            WHERE mm.stock_id = s.id AND mm.currency_code <> gm.currency_code)), false) AS exempt_financial
+  FROM universe_membership m JOIN stock s ON s.id = m.stock_id
+  JOIN universe u ON u.code = m.universe_code AND u.is_active
+  WHERE m.effective_to IS NULL AND s.is_active AND s.market_code IN ('KOSPI','KOSDAQ','US')
+  GROUP BY s.id, s.ticker, s.market_code),
+win AS (SELECT market_code, min(trade_date) AS lo, max(trade_date) AS hi FROM indicator_trade_date GROUP BY 1),
+c AS (
+  SELECT mem.*, (SELECT min(p.trade_date) FROM price_daily p WHERE p.stock_id = mem.id) AS first_bar,
+         NOT EXISTS (SELECT 1 FROM financial_statement f WHERE f.stock_id = mem.id) AS no_financial,
+         (SELECT count(*) FROM price_daily p WHERE p.stock_id = mem.id AND p.trade_date BETWEEN
+            greatest(win.lo, (SELECT min(p2.trade_date) FROM price_daily p2 WHERE p2.stock_id = mem.id)) AND win.hi) AS bars,
+         (SELECT count(*) FROM indicator_trade_date d WHERE d.market_code = mem.market_code AND d.trade_date BETWEEN
+            greatest(win.lo, (SELECT min(p2.trade_date) FROM price_daily p2 WHERE p2.stock_id = mem.id)) AND win.hi) AS days
+  FROM mem LEFT JOIN win ON win.market_code = mem.market_code)
+SELECT CASE
+  WHEN (SELECT count(*) FROM mem) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 편입 종목이 하나도 없다'
+  WHEN count(*) = 0 THEN 'OK 편입 ' || (SELECT count(*) FROM mem) || '종목의 시세 이력·재무·시세 구멍이 온전하다 (면제 '
+       || (SELECT count(*) FROM mem WHERE exempt_financial) || ': 인프라 투자회사·통화 게이트)'
+  ELSE count(*) || '종목의 원자료가 비어 있다: ' || string_agg(t, ', ' ORDER BY t)
+       || ' — 그 종목은 지표가 판정불가가 되어 프리셋에서 조용히 빠지는데 배치는 전부 SUCCESS다.
+          앱이 떠 있으면 UniverseIntegrityAlerter 가 같은 것을 알리고 리밸런싱 꼬리가 채운다(ADR-0141).
+          안 채워지면 --job=initial-load --tickers= 로 손으로 채운다'
+  END
+FROM (SELECT ticker || '(' || concat_ws('+',
+        CASE WHEN first_bar IS NULL OR first_bar > joined THEN '시세이력' END,
+        CASE WHEN no_financial AND NOT exempt_financial THEN '재무' END,
+        CASE WHEN days > 0 AND bars < days * 0.25 THEN '시세구멍' END) || ')' AS t
+      FROM c WHERE (first_bar IS NULL OR first_bar > joined)
+         OR (no_financial AND NOT exempt_financial)
+         OR (days > 0 AND bars < days * 0.25)) z"
 ```
+
+**옛 술어를 갈아 썼다**(2026-09-13 · ADR-0141). 전에는 `NOT EXISTS (price_daily)`와 같은
+`LEFT JOIN … WHERE bars IS NULL`이었고 모집단이 `US_TOP1000`뿐이었다. **그 형태는 구조적으로
+영원히 초록이다** — 일일 갱신이 15일 창으로 봉을 몇 개만 남겨도 참이 되기 때문이고, 실제로
+봉이 2년 넘게 빈 종목(`046070`)이 최근 봉 하나로 통과했다. `StockRegistrar`의 javadoc이
+**「이 술어는 일일 갱신이 지운다. 감시에 쓰지 마라」**로 이미 기각해 둔 그것이다.
+
+**모집단을 편입 전체로 넓히고 축을 셋으로 늘렸다.** 축의 정본은 `MembershipGap.Axis`이고
+면제의 정본은 `KnownSourceGaps`다 — **여기는 앱이 안 떠 있을 때의 유일한 눈**이다(ADR-0043 —
+알림은 앱이 떠 있어야 돈다). 업종 축은 ADR-0044가, 영업활동현금흐름은 ADR-0056이 이미 잰다.
