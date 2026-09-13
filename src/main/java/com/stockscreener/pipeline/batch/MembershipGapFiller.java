@@ -1,0 +1,194 @@
+package com.stockscreener.pipeline.batch;
+
+import com.stockscreener.notification.AlertEvent;
+import com.stockscreener.notification.AlertPort;
+import com.stockscreener.notification.AlertSeverity;
+import com.stockscreener.pipeline.collector.MembershipGap;
+import com.stockscreener.pipeline.collector.StockRegistrar;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * 리밸런싱이 끝난 뒤 <b>새로 생긴 편입 결손을 채운다.</b> 감지는
+ * {@link StockRegistrar#membershipGaps()}, 통지는 {@link UniverseIntegrityAlerter}가 하고
+ * 여기서는 <b>무엇을 부를지</b>만 정한다.
+ *
+ * <h2>왜 리밸런싱 꼬리인가</h2>
+ * <p>결손이 생기는 유일한 순간이 <b>편입이 바뀌는 때</b>다. 그리고 그 창이 좁다 —
+ * 리밸런싱(토 20:00)부터 다음 일일 갱신(월 13:30)까지 약 41시간이고, 그 사이에 아무도 안
+ * 채우면 그 종목은 <b>지표가 대부분 판정불가인 채 유니버스에 남는다.</b>
+ *
+ * <p><b>다만 41시간에 매여 있지는 않다.</b> {@code InitialLoadJob}은 티커를 주면
+ * {@code NOT EXISTS}를 적용하지 않고(그 javadoc), 감지 술어도 일일 갱신이 안 지운다. 그래서
+ * 토요일 크론이 안 떠도 <b>평일 15:10 점검이 같은 결손을 신고</b>하고 사람이 같은 명령을 친다.
+ * ADR-0116 §버린 대안이 <i>"토요일 크론은 실측 발화가 2회다"</i>로 토요일 배정을 기각했는데,
+ * 다시 재니 <b>4/4</b>이고(2026-08-22·08-29·09-05·09-12) <b>안 떠도 무너지지 않는</b> 것이
+ * 여기에 거는 근거다.
+ *
+ * <h2>MUST: 축별로 갈라 부른다</h2>
+ * <p>한 번에 부르면 <b>이미 재무가 있는 종목에 정정본이 쌓여</b> 그 종목 지표가 보존 창
+ * 전체에서 지워지는데({@code InitialLoadJob}의 {@code revised} 경고) <b>꼬리에 백필이 없다.</b>
+ * 시세 결손은 {@code skipFinancial}, 재무 결손은 {@code skipPrice}로 간다 — 후자의 대상은
+ * 정의상 재무 0행이라 덮을 기존 행이 없다.
+ *
+ * <h2>MUST NOT: 여기에 기업 행위 수집·계수 재구축을 잇지 않는다</h2>
+ * <p>ADR-0116이 <b>수집 → 재구축 → 백필 셋을 한 사슬로</b> 묶었으므로(2026-09-01 사용자 결정)
+ * 앞의 둘만 부르면 <b>지운 지표를 사람에게 남기게 된다.</b> 그 사슬은 평일 14:00 자리다.
+ *
+ * <p><b>그 대가를 알고 쓴다</b>: 여기서 적재한 시세는 <b>미보정</b>이다
+ * ({@code DataGoKrPriceAdapter}·{@code AlpacaPriceAdapter} 둘 다 {@code fetchCorporateActions}를
+ * 오버라이드하지 않아 원장에 한 건도 안 적힌다). 월 13:30 일일 갱신이 그 미보정 봉으로 지표를
+ * 내고, 월 14:00 사슬이 바로잡는다 — <b>그 한 시간은 ADR-0055의 억제도 안 걸린다</b>(원장이
+ * 비어 있어 억제할 대상이 없다). 실측으로 최근 여섯 리밸런싱의 신규 편입 84종목 중 2년 안에
+ * 기업행위가 있는 것은 <b>5(6.0%)</b>라 {@code AUTO_BACKFILL_STOCK_LIMIT}(10) 안이지만
+ * <b>기댓값이지 보장이 아니다.</b>
+ *
+ * <p><b>적재한 티커를 로그에 남기는 이유</b>가 거기 있다. 이 적재가 굳힌 값이 ADR-0126의
+ * 시총 급변 축에 걸리는지는 <b>여기서 못 잰다</b> — {@code MARKET_CAP}은 다음 평일 지표 계산이
+ * 만들기 때문이다. 그 펜스가 다음 세션 시작에 신고하고, <b>이 로그가 귀속을 가능하게 한다.</b>
+ */
+@Component
+public class MembershipGapFiller {
+
+    /**
+     * 한 판에 자동으로 적재할 종목 수의 상한. 넘으면 <b>돌리지 않고 알린다.</b>
+     *
+     * <p>실측 근거: 보통 리밸런싱의 신규 편입이 <b>6·13·6·40·11·14</b>종목이다(2026-08-07·
+     * 08-21·08-28·09-04·09-07·09-11 — 350·8,504·1,000짜리 세 날은 일회성 부트스트랩이라 뺐다).
+     * 최대 40에 여유를 둔 값이고, 그보다 크면 리밸런싱이 아니라 <b>유니버스를 다시 그은 것</b>이라
+     * 사람이 봐야 한다.
+     *
+     * <p><b>이 값은 예산이지 실측이 아니다</b> — 이 경로의 소요 시간을 재본 적이 없다.
+     * {@code PipelineScheduler.AUTO_BACKFILL_STOCK_LIMIT}이 같은 문장을 쓴다.
+     */
+    private static final int AUTO_LOAD_STOCK_LIMIT = 50;
+
+    /**
+     * 시세를 받을 연수.
+     *
+     * <p><b>MUST NOT: {@code LoadRange.defaults()}의 2년을 쓰지 않는다.</b> 2년은 약 490봉인데
+     * 러너의 읽기 창은 {@code maxEffectiveLookback + 255}라, 기본값으로 채우면 <b>창이 긴 지표가
+     * 안 나는 종목을 매주 새로 만든다.</b> 실측으로 이미 편입 155종목(11.5%)이 1,441봉 미만이고
+     * 46종목이 500봉 미만이다.
+     *
+     * <p><b>소스가 긴 창을 거절하는 상태가 실재한다</b>({@code [05] SERVICETIMEOUT_ERROR}).
+     * 그때는 짧게 들어오고 {@code PRICE_COVERAGE} 축이 <b>못 잡는다</b> — 앵커가 첫 봉이라
+     * 충족률이 100%가 된다. 그것을 가르려면 상장일이 필요한데 소스가 없다.
+     */
+    private static final int PRICE_YEARS = 7;
+
+    private static final Logger log = LoggerFactory.getLogger(MembershipGapFiller.class);
+
+    private final StockRegistrar stockRegistrar;
+    private final InitialLoadJob initialLoadJob;
+    private final CompanyProfileJob companyProfileJob;
+    private final UniverseIntegrityAlerter alerter;
+    private final AlertPort alertPort;
+
+    public MembershipGapFiller(StockRegistrar stockRegistrar, InitialLoadJob initialLoadJob,
+                               CompanyProfileJob companyProfileJob,
+                               UniverseIntegrityAlerter alerter, AlertPort alertPort) {
+        this.stockRegistrar = stockRegistrar;
+        this.initialLoadJob = initialLoadJob;
+        this.companyProfileJob = companyProfileJob;
+        this.alerter = alerter;
+        this.alertPort = alertPort;
+    }
+
+    /**
+     * 감지 → 채운다 → 다시 감지 → 못 닫은 것만 알린다.
+     *
+     * <p><b>MUST: 다시 감지한다.</b> 채운 것을 그대로 「닫혔다」로 보고하면 <b>돌렸는데 소스가
+     * 안 준 경우</b>가 성공으로 접힌다 — 이 기제가 없애려는 조용한 0건과 같은 모양이다.
+     *
+     * <p><b>MUST NOT: 여기서 예외를 위로 올리지 않는다.</b> 호출자는 리밸런싱을 <b>이미 성공으로
+     * 끝낸 뒤</b>이고, 여기서 던지면 {@code @Scheduled} 밖으로 나가 Spring 기본 처리가 ERROR로
+     * 찍는다 — {@code sentry.logging.minimum-event-level}이 error라 <b>매주 이슈가 하나씩
+     * 쌓인다.</b> 그리고 그 로그가 리밸런싱까지 실패한 것처럼 보이게 만든다.
+     */
+    public void fillAndAlert(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        try {
+            fill(asOf, triggeredBy);
+            // MUST: 다시 잰 것으로 알린다. 이 두 줄이 try 밖에 있으면 재감지나 통지가 던질 때
+            // 예외가 @Scheduled 밖으로 나가고, 이 메서드의 「던지지 않는다」 계약이 조용히 깨진다.
+            alerter.alert(stockRegistrar.membershipGaps());
+        } catch (BatchShutdownException e) {
+            // 종료 신호다. 실패가 아니므로 알리지 않는다 — 다음 리밸런싱이나 평일 15:10 점검이
+            // 같은 결손을 다시 잰다. MUST: 리밸런싱이 중단됐다고 적지 않는다. 그것은 이미 끝났다.
+            log.info("편입 결손 보충이 종료로 중단됐다 — 리밸런싱은 이미 끝났다. "
+                    + "남은 결손은 평일 15:10 점검이 다시 신고한다.");
+            return;
+        } catch (RuntimeException e) {
+            // MUST NOT: 삼키지 않는다. 채우기가 실패한 것과 채울 것이 없던 것은 다르고,
+            // 둘을 구분할 수 있는 자리가 여기뿐이다.
+            log.error("편입 결손 보충·통지가 실패했다. 리밸런싱은 정상이며 되돌리지 않는다.", e);
+            alertPort.send(AlertEvent.toOperator(AlertSeverity.ERROR, "편입 결손 보충 실패",
+                    "유니버스 리밸런싱은 정상이다. 새 편입 종목의 원자료를 채우지 못했고 "
+                            + "그 종목은 지표가 판정불가인 채로 남는다. 평일 15:10 점검이 "
+                            + "무엇이 비었는지 다시 신고한다: " + e,
+                    "universe-integrity-fill"));
+        }
+    }
+
+    private void fill(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        List<MembershipGap> gaps = stockRegistrar.membershipGaps();
+        List<String> priceTickers = tickersOf(gaps, MembershipGap.Axis.PRICE_HISTORY);
+        List<String> financialTickers = tickersOf(gaps, MembershipGap.Axis.FINANCIAL);
+
+        Set<String> distinct = new LinkedHashSet<>(priceTickers);
+        distinct.addAll(financialTickers);
+        if (distinct.size() > AUTO_LOAD_STOCK_LIMIT) {
+            // MUST: 알리고 멈춘다. 자동으로 시간 단위 작업을 시작하면 그날의 다른 스케줄이
+            // 전부 밀리고, 이 크기는 리밸런싱이 아니라 유니버스를 다시 그은 것이다.
+            log.warn("편입 결손이 {}종목으로 자동 적재 상한({})을 넘는다. 돌리지 않는다. 종목={}",
+                    distinct.size(), AUTO_LOAD_STOCK_LIMIT, distinct);
+            alertPort.send(AlertEvent.toOperator(AlertSeverity.WARNING, "편입 결손이 상한을 넘는다",
+                    ("원자료가 빈 편입 종목이 %d개로 자동 적재 상한 %d를 넘어 돌리지 않았다. "
+                            + "이 크기는 정기 리밸런싱이 아니라 유니버스를 다시 그은 것이다 — "
+                            + "손으로 확인하고 적재한다. 종목=%s")
+                            .formatted(distinct.size(), AUTO_LOAD_STOCK_LIMIT, distinct),
+                    "universe-integrity-limit"));
+            return;
+        }
+
+        if (!priceTickers.isEmpty()) {
+            log.info("편입 결손 보충 — 시세 {}종목을 {}년으로 받는다. 종목={}",
+                    priceTickers.size(), PRICE_YEARS, priceTickers);
+            initialLoadJob.run(asOf, triggeredBy, new InitialLoadJob.LoadRange(
+                    PRICE_YEARS, 0, false, priceTickers, null, true, false));
+        }
+        if (!financialTickers.isEmpty()) {
+            log.info("편입 결손 보충 — 재무 {}종목을 받는다. 종목={}",
+                    financialTickers.size(), financialTickers);
+            initialLoadJob.run(asOf, triggeredBy, new InitialLoadJob.LoadRange(
+                    0, InitialLoadJob.LoadRange.defaults().financialYears(), false,
+                    financialTickers, null, false, true));
+        }
+
+        // MUST: 티커를 주지 않고, 결손이 0이어도 매주 부른다.
+        //
+        // ① 티커를 주면 CompanyProfileJob이 업종 유무를 아예 안 본다 — 선택 로직 사본이 생긴다.
+        //    인자 없는 기본 대상이 곧 업종 결손 집합이다.
+        // ② JobFreshnessPolicy가 company-profile에 12일 예산을 주며 "리밸런싱 뒤에 붙는다"고
+        //    적어 뒀는데 붙이는 코드가 없었다. 그리고 그 정책은 SCHEDULER 행이 하나라도 생기면
+        //    아무 트리거나 세던 폴백을 끄므로, **결손이 있는 주에만 부르면** 13일 뒤
+        //    "고칠 것이 없는데 붉는" 연체 알림이 된다. 매주면 7일 간격이라 예산 안이다.
+        //
+        // 대가는 원리적으로 안 채워지는 면제 종목에 대한 주당 몇 콜뿐이다(종목당 1콜).
+        companyProfileJob.run(asOf, triggeredBy, List.of(), null);
+    }
+
+    private static List<String> tickersOf(List<MembershipGap> gaps, MembershipGap.Axis axis) {
+        return gaps.stream()
+                .filter(gap -> gap.missing().contains(axis))
+                .map(MembershipGap::ticker)
+                .toList();
+    }
+}

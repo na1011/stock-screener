@@ -57,7 +57,11 @@ public class JobFreshnessPolicy {
      *       도구이지 신선도의 경로가 아니다(실측: 지수 최신이 일일 갱신 대상일과 같다).</li>
      *   <li>{@code indicator-backfill} — 다른 잡의 <b>꼬리</b>다. 무효화가 없으면 돌 이유가 없고,
      *       있으면 {@code PipelineScheduler}가 곧바로 이어 부른다.</li>
-     *   <li>{@code initial-load} — 1회성이다. 주기가 없다.</li>
+     *   <li>{@code initial-load} — <b>주기가 생겼지만 그 주기로 감시하지 않는다.</b>
+     *       {@code MembershipGapFiller}가 리밸런싱 꼬리에서 부르는데, <b>대상이 보통 0이라
+     *       안 도는 것이 정상</b>이다(ADR-0141). 예산을 주면 결손 없는 주마다 붉는다 —
+     *       이 잡이 안 돌았다는 것은 <b>채울 것이 없었다</b>는 뜻이고, 채울 것이 있는데 안 돈
+     *       상태는 {@code UniverseIntegrityAlerter}가 종목 이름으로 신고한다.</li>
      *   <li>{@code corporate-action-judge} — <b>사람의 판정</b>이다. 판정할 것이 없으면 안 도는
      *       것이 정상이고, 있으면 {@code CorporateActionJob}의 「판정 대기」 알림이 이미 말한다.</li>
      * </ul>

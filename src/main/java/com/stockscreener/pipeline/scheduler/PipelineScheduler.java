@@ -12,6 +12,8 @@ import com.stockscreener.pipeline.batch.GovernanceLoadJob;
 import com.stockscreener.pipeline.batch.IndicatorBackfillJob;
 import com.stockscreener.pipeline.batch.JobFreshnessAlerter;
 import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
+import com.stockscreener.pipeline.batch.MembershipGapFiller;
+import com.stockscreener.pipeline.batch.UniverseIntegrityAlerter;
 import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
 
@@ -31,8 +33,10 @@ import java.util.Optional;
 /**
  * 배치를 정해진 시각에 띄운다.
  *
- * <p>초기 적재는 여기 없다. 1회성 수동 작업이며, 스케줄에 걸면 애플리케이션 재시작마다
- * 850종목 수집이 시작된다.
+ * <p><b>초기 적재는 크론에 없다.</b> 스케줄에 걸면 애플리케이션 재시작마다 850종목 수집이
+ * 시작되기 때문이다. 다만 <b>리밸런싱 꼬리에서 티커를 줘 부르는 갈래는 있다</b>
+ * ({@link MembershipGapFiller} · ADR-0141) — 그것은 크론이 아니라 <b>편입이 바뀐 직후</b>가
+ * 트리거이고, 대상이 <b>새로 결손이 생긴 종목뿐</b>이라 위 근거가 걸리지 않는다.
  *
  * <p>{@code pipeline.scheduler.enabled}로 끌 수 있게 한 이유는 개발 중에 배치가 저절로
  * 도는 것을 막기 위해서다. 기본값은 꺼짐이다 — 어댑터가 없는 상태에서 켜두면 매일
@@ -80,6 +84,8 @@ public class PipelineScheduler {
     private final JobFreshnessAlerter freshnessAlerter;
     private final JobFreshnessPolicy freshnessPolicy;
     private final IndicatorRetentionPolicy retentionPolicy;
+    private final MembershipGapFiller membershipGapFiller;
+    private final UniverseIntegrityAlerter universeIntegrityAlerter;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
                              UniverseRebalanceJob universeRebalanceJob,
@@ -92,7 +98,9 @@ public class PipelineScheduler {
                              FinancialRefillJob financialRefillJob,
                              JobFreshnessAlerter freshnessAlerter,
                              JobFreshnessPolicy freshnessPolicy,
-                             IndicatorRetentionPolicy retentionPolicy) {
+                             IndicatorRetentionPolicy retentionPolicy,
+                             MembershipGapFiller membershipGapFiller,
+                             UniverseIntegrityAlerter universeIntegrityAlerter) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -105,6 +113,8 @@ public class PipelineScheduler {
         this.freshnessAlerter = freshnessAlerter;
         this.freshnessPolicy = freshnessPolicy;
         this.retentionPolicy = retentionPolicy;
+        this.membershipGapFiller = membershipGapFiller;
+        this.universeIntegrityAlerter = universeIntegrityAlerter;
     }
 
     /**
@@ -176,7 +186,14 @@ public class PipelineScheduler {
             // UniverseRebalanceJob의 지수 루프에 건 게이트가 살아 있어야 한다 — 그것을
             // 지우면 이 catch가 조용히 죽은 코드가 된다.
             log.info("유니버스 리밸런싱이 종료로 중단됐다. asOf={} — 다음 토요일에 다시 돈다.", asOf);
+            // MUST: 꼬리를 안 돈다. 편입이 끝까지 반영되지 않았으므로 지금 재는 결손은
+            // 「덜 반영된 명부」에 대한 것이고, 그것을 채우면 곧 편출될 종목에 콜을 태운다.
+            return;
         }
+        // 편입이 바뀐 직후가 결손이 생기는 유일한 순간이다. MUST: 이 호출은 던지지 않는다 —
+        // 리밸런싱은 이미 성공했고, 여기서 올라간 예외는 @Scheduled 밖으로 나가 Sentry 이슈를
+        // 매주 하나씩 쌓으며 리밸런싱까지 실패한 것처럼 보이게 만든다.
+        membershipGapFiller.fillAndAlert(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
     }
 
     /**
@@ -387,5 +404,15 @@ public class PipelineScheduler {
     public void checkJobFreshness() {
         boolean sent = freshnessAlerter.evaluateAndAlert();
         log.info("배치 신선도를 점검했다. 알림={}", sent ? "보냈다" : "없거나 이미 보냈다");
+
+        // 편입 계약도 같은 자리에서 잰다 — 읽기이고, batch_execution에 행을 만들지 않는다.
+        //
+        // MUST: 여기서는 채우지 않는다. 채우는 것은 편입이 바뀐 직후(토요일 꼬리)의 일이고,
+        // 매 평일 적재를 걸면 「돌렸는데 소스가 안 준」 종목에 콜이 매일 나간다.
+        //
+        // MUST: 13:30 일일 갱신 뒤여야 한다. 지표 축(INDICATOR_DROP)은 그날 지표가 쓰인 뒤에만
+        // 뜻이 있고, 토요일에는 잴 것이 없다.
+        boolean gapsSent = universeIntegrityAlerter.evaluateAndAlert();
+        log.info("편입 원자료를 점검했다. 알림={}", gapsSent ? "보냈다" : "없거나 이미 보냈다");
     }
 }

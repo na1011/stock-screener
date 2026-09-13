@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.scheduler;
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
+import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.pipeline.batch.BatchStatus;
 import com.stockscreener.pipeline.batch.CorporateActionJob;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
@@ -13,6 +14,8 @@ import com.stockscreener.pipeline.batch.GovernanceLoadJob;
 import com.stockscreener.pipeline.batch.IndicatorBackfillJob;
 import com.stockscreener.pipeline.batch.JobFreshnessAlerter;
 import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
+import com.stockscreener.pipeline.batch.MembershipGapFiller;
+import com.stockscreener.pipeline.batch.UniverseIntegrityAlerter;
 import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +36,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -65,6 +69,9 @@ class PipelineSchedulerChainTest {
     private FinancialRefillJob financialRefillJob;
     private JobFreshnessPolicy freshnessPolicy;
     private IndicatorRetentionPolicy retentionPolicy;
+    private UniverseRebalanceJob universeRebalanceJob;
+    private MembershipGapFiller membershipGapFiller;
+    private UniverseIntegrityAlerter universeIntegrityAlerter;
     private PipelineScheduler scheduler;
 
     @BeforeEach
@@ -78,16 +85,19 @@ class PipelineSchedulerChainTest {
         financialRefillJob = mock(FinancialRefillJob.class);
         freshnessPolicy = mock(JobFreshnessPolicy.class);
         retentionPolicy = mock(IndicatorRetentionPolicy.class);
+        universeRebalanceJob = mock(UniverseRebalanceJob.class);
+        membershipGapFiller = mock(MembershipGapFiller.class);
+        universeIntegrityAlerter = mock(UniverseIntegrityAlerter.class);
 
         when(retentionPolicy.writeCutoffs()).thenReturn(Map.of(
                 "KOSPI", Optional.of(KR_CUTOFF), "US", Optional.of(US_CUTOFF)));
 
         scheduler = new PipelineScheduler(
-                mock(DailyUpdateJob.class), mock(UniverseRebalanceJob.class),
+                mock(DailyUpdateJob.class), universeRebalanceJob,
                 corporateActionJob, adjustmentRebuildJob, indicatorBackfillJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob,
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
-                retentionPolicy);
+                retentionPolicy, membershipGapFiller, universeIntegrityAlerter);
     }
 
     @Test
@@ -241,6 +251,35 @@ class PipelineSchedulerChainTest {
         verify(governanceDeriveJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
                 anyList());
         verifyNoInteractions(fullStatementRefillJob, financialRefillJob);
+    }
+
+    @Test
+    @DisplayName("리밸런싱이 끝나면 꼬리가 결손을 채운다 — 편입이 바뀐 직후가 결손이 생기는 유일한 순간이다")
+    void fillsMembershipGapsAfterRebalancing() {
+        scheduler.runUniverseRebalance();
+
+        verify(universeRebalanceJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        verify(membershipGapFiller).fillAndAlert(any(),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+    }
+
+    @Test
+    @DisplayName("리밸런싱이 종료로 중단되면 꼬리를 안 돈다 — 덜 반영된 명부로 재면 곧 편출될 종목에 콜을 태운다")
+    void skipsTailWhenRebalancingWasAborted() {
+        doThrow(new BatchShutdownException("종료 중이다"))
+                .when(universeRebalanceJob).run(any(), any());
+
+        scheduler.runUniverseRebalance();
+
+        verifyNoInteractions(membershipGapFiller);
+    }
+
+    @Test
+    @DisplayName("15시 10분 점검이 편입 원자료도 잰다 — 지표 축은 일일 갱신 뒤에만 뜻이 있다")
+    void freshnessCheckAlsoMeasuresMembership() {
+        scheduler.checkJobFreshness();
+
+        verify(universeIntegrityAlerter).evaluateAndAlert();
     }
 
     private void givenInvalidation() {
