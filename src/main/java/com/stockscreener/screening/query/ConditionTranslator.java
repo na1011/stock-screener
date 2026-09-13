@@ -33,7 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>OR 그룹이 {@code (EXISTS(..) OR EXISTS(..))}로 자연스럽게 확장된다. JOIN은
  *       OUTER JOIN + null 검사로 변형되어야 하므로 트리로 확장할 수 없는 형태가 된다.
  *   <li>행 증식이 없어 {@code DISTINCT}가 불필요하다.
- *   <li>조건마다 독립적으로 인덱스({@code idx_iv_screen})를 타 가지치기된다.
+ *   <li>조건마다 독립적으로 커버링 인덱스를 타 가지치기된다 — 지금 그것은 PK 자신이고
+ *       {@code (trade_date, indicator_code, stock_id) INCLUDE (value)}다(ADR-0140).
+ *       {@code value}가 키가 아니라 INCLUDE라 Index Cond가 아니라 Filter로 걸리는데,
+ *       앞 두 키가 슬라이스를 1,500행 안으로 좁혀 유계다.
  * </ul>
  *
  * <p>재귀로 작성한다. v1은 깊이 1만 만들지만 v2의 OR 도입 시 이 클래스를 고치지 않는다.

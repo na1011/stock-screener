@@ -20,7 +20,15 @@ applies_to:
 - MUST: PER·PBR·시가총액·화면 표시가는 `close`로 계산한다. 시점의 발행주식수와 짝이 맞아야 하고 사용자가 실제 지불하는 가격이어야 한다.
 - MUST: 계산할 수 없으면 행을 쓰지 않는다. NULL 행을 만들지 않는다.
 - MUST: `indicator_value`의 PK 순서를 `(trade_date, indicator_code, stock_id)`로 유지한다.
-- MUST: `idx_iv_screen`(커버링 인덱스)을 유지한다. 스크리닝 성능이 여기에 달려 있다.
+- MUST: **커버링 인덱스를 유지한다.** 스크리닝 성능이 여기에 달려 있다. **담체는 2026-09-13에
+  바뀌었다**(ADR-0140) — `idx_iv_screen`을 PK에 접어 지금은 PK 자신이
+  `(trade_date, indicator_code, stock_id) INCLUDE (value)`다. **MUST NOT: 그 `INCLUDE`를 떼지
+  않는다.** 떼면 `(trade_date, indicator_code)` 슬라이스마다 약 1,500건의 무작위 힙 페치가
+  되살아나고, 그 슬라이스를 백필이 날짜마다 코드 수만큼 읽는다.
+  - **승계되지 않은 것을 적어 둔다**: `V2__indicator.sql`이 그 인덱스의 존재 이유를
+    *"value까지 인덱스에 있어 범위 술어가 인덱스 안에서 끝난다"*로 적었는데, **병합 PK에서는
+    `value`가 키가 아니라 INCLUDE라 Index Cond가 아니라 Filter가 된다.** 실측 손해는 다조건
+    화면에서 없었고(3,376 → 4,192버퍼 · 6.4 → 4.6ms) 그 수가 이 개정의 근거다.
 - MUST NOT: 폐기된 지표를 삭제하지 않는다. `is_active=false`로 둔다.
 - MUST: `screen_condition.indicator_code`에 FK를 유지한다. **(2026-08-06 정정 — 원문은 "FK를 걸지 않는다"였다.)** 실제 V3 스키마는 처음부터 FK를 걸었고, 그 근거가 V3 주석에 남아 있다 — jsonb 단일 컬럼 대안을 버린 이유가 "indicator FK를 잃어 '이 지표를 비활성화하면 어떤 화면이 깨지는가'를 물을 수 없게 된다"는 것이었다. 폐기 지표를 삭제하지 않고 `is_active=false`로 두는 위 규칙이 있어 FK가 화면을 깨뜨리지도 않는다. 두 문장이 공존할 수 없으므로 스키마와 일치하는 쪽으로 정정한다.
 
@@ -34,7 +42,8 @@ grep -rn 'adjClose\|adj_close' src/main/java/com/stockscreener/indicator/calcula
 ```bash
 psql -d stock_screener_test -c "\d indicator_value"
 ```
-PK가 `(trade_date, indicator_code, stock_id)` 순이고 `idx_iv_screen`이 존재해야 한다.
+PK가 `(trade_date, indicator_code, stock_id)` 순이고 `INCLUDE (value)`를 달고 있어야 한다
+(ADR-0140). `idx_iv_screen`은 더 이상 없다.
 
 ```bash
 ./gradlew test --tests "*IndicatorExtensibilityTest*"

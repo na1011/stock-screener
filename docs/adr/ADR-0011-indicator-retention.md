@@ -77,6 +77,11 @@ END"
 
 **이 전제가 `statement timeout`으로 판정 불가가 되면 인덱스/힙 비를 먼저 잰다 — 그 비가 2배를 넘을 때에 한해 인덱스 블로트다.**
 
+**이 순서가 2026-09-13에 다시 값을 냈다**(ADR-0140). 비가 2.48배였고 `allvisfrac`이 0.349였는데,
+**VACUUM 한 번(5.4초)이 힙 페치 22%를 0으로 만들고 전제 예산의 45초 소진·무판정 6을 통째로
+되돌렸다.** 그 뒤에야 REINDEX가 의미 있는 축이 됐다. **최적화 전에 이 둘을 먼저 보라는 것이
+이 절의 요지다.**
+
 ```bash
 psql -d stock_screener -At -F'|' -c "SELECT indexrelname, pg_size_pretty(pg_relation_size(indexrelid)) FROM pg_stat_user_indexes WHERE relname='indicator_value' ORDER BY pg_relation_size(indexrelid) DESC"
 ```

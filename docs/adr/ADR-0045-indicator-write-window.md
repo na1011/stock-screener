@@ -117,14 +117,22 @@ END"
 침묵으로 보인다.**
 
 ```premise 지표 인덱스에 블로트가 다시 쌓이지 않는다
-psql -d stock_screener -At -c "WITH i AS (SELECT sum(pg_relation_size(oid)) b FROM pg_class WHERE relname IN ('idx_iv_screen','indicator_value_pkey','idx_iv_stock_date')), r AS (SELECT count(*) n FROM indicator_value) SELECT CASE WHEN (SELECT n FROM r) = 0 THEN '잴 것이 없었다 — indicator_value가 비어 있다' WHEN (SELECT b FROM i) IS NULL THEN '잴 것이 없었다 — 세 인덱스가 조회되지 않는다' WHEN (SELECT b FROM i)/1048576.0 / ((SELECT n FROM r)/1000000.0) <= 250 THEN 'OK 인덱스 ' || round((SELECT b FROM i)/1048576.0) || 'MB / ' || (SELECT n FROM r) || '행 = 백만행당 ' || round((SELECT b FROM i)/1048576.0 / ((SELECT n FROM r)/1000000.0)) || 'MB' ELSE '인덱스가 백만행당 ' || round((SELECT b FROM i)/1048576.0 / ((SELECT n FROM r)/1000000.0)) || 'MB다(총 ' || round((SELECT b FROM i)/1048576.0) || 'MB / ' || (SELECT n FROM r) || '행). REINDEX 직후 기준선은 백만행당 101MB였다 — 블로트가 다시 쌓이고 있다. REINDEX 전에 매 실행 왕복이 되살아났는지 먼저 본다' END"
+psql -d stock_screener -At -c "WITH i AS (SELECT pg_indexes_size('indicator_value') b), r AS (SELECT count(*) n FROM indicator_value) SELECT CASE WHEN (SELECT n FROM r) = 0 THEN '잴 것이 없었다 — indicator_value가 비어 있다' WHEN (SELECT b FROM i) IS NULL OR (SELECT b FROM i) = 0 THEN '잴 것이 없었다 — 인덱스가 하나도 조회되지 않는다' WHEN (SELECT b FROM i)/1048576.0 / ((SELECT n FROM r)/1000000.0) <= 155 THEN 'OK 인덱스 ' || round((SELECT b FROM i)/1048576.0) || 'MB / ' || (SELECT n FROM r) || '행 = 백만행당 ' || round((SELECT b FROM i)/1048576.0 / ((SELECT n FROM r)/1000000.0)) || 'MB' ELSE '인덱스가 백만행당 ' || round((SELECT b FROM i)/1048576.0 / ((SELECT n FROM r)/1000000.0)) || 'MB다(총 ' || round((SELECT b FROM i)/1048576.0) || 'MB / ' || (SELECT n FROM r) || '행). 재생성 직후 기준선은 백만행당 63MB였다(ADR-0140) — 블로트가 다시 쌓이고 있다. REINDEX 전에 매 실행 왕복이 되살아났는지, 그리고 last_autovacuum이 마지막 쓰기보다 뒤인지 먼저 본다' END"
 ```
 
 **MUST: 절대 크기가 아니라 행당 크기로 묻는다.** 이 결정 뒤에도 **지표는 계속 늘고**(ADR-0046이
 일목 지표를 더했다), 그때 인덱스가 커지는 것은 블로트가 아니라 정상이다. 절대 MB로 물으면 그 순간부터
-거짓 발견이 상시화되고, 상시 발견은 곧 무시된다. **기준선은 2026-08-11 REINDEX 직후의
-202MB / 2,006,860행 = 백만행당 101MB이고, 임계 250은 거기 2.5배 여유다** — 직전 전례가
-하루 만에 199MB→803MB(4배)였으므로 그 크기의 재발은 임계 안에 못 숨는다.
+거짓 발견이 상시화되고, 상시 발견은 곧 무시된다.
+
+**MUST: 모집단을 `pg_indexes_size`로 묻는다 — 인덱스 이름을 열거하지 않는다.** 옛 판은 셋을
+`relname IN (...)`으로 박고 있었는데, **ADR-0140이 `idx_iv_screen`을 PK에 접자 합이 조용히 두 개
+기준이 되어 「좋아졌다」로 읽혔다.** `sum()`이 NULL이 아니라 *"조회되지 않는다"* 갈래도 안 탄다.
+이름을 박은 펜스는 **인덱스가 하나 사라지거나 늘어나는 날 아무 소리 없이 기반이 바뀐다.**
+
+**기준선과 임계는 ADR-0140의 재생성 직후 실측에서 다시 유도했다** — 병합·REINDEX 뒤
+**3,097MB / 49,203,731행 = 백만행당 63MB**이고, 임계 155는 거기 2.5배 여유다(옛 판의 101 대 250과
+같은 비율). **옛 기준선 101은 건전했다** — REINDEX만 한 중간 상태가 102로 나와 1% 안에서 맞았다.
+직전 전례가 하루 만에 199MB→803MB(4배)였으므로 그 크기의 재발은 임계 안에 못 숨는다.
 
 ## 배경
 
