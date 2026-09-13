@@ -6,6 +6,14 @@
 # 명령의 텍스트가 아니라 실행 구조를 본다. 원시 텍스트 정규식은 "이것이 argv[0]인가",
 # "이것이 따옴표 안인가"를 구분할 수 없어 `echo "rm -rf ..."` 같은 단순 언급까지 차단하고
 # 정작 `rm -rfd`는 놓친다. 그래서 따옴표를 걷어내고 명령 경계로 쪼갠 뒤 판정한다.
+#
+# 활성 등록은 `~/.claude/hooks/`의 사본 하나뿐이고, `.claude/hooks/`의 사본은 버전관리·드리프트
+# 대조용이며 등록하지 않는다. `~/.claude`는 git도 백업도 없어 전역 사본만 두면 파일이 날아갔을
+# 때 되살릴 곳이 없다. 등록 형태도 여기 적는다 — 파일과 등록이 같은 자리에 있으면 갈릴 수 없다.
+# `~/.claude/settings.json`의 `hooks`에:
+#
+#   "PreToolUse": [ { "matcher": "Bash",
+#     "hooks": [ { "type": "command", "command": "$HOME/.claude/hooks/guard-destructive.sh" } ] } ]
 set -euo pipefail
 
 # jq가 없으면 판정할 수 없다. 안전망이 워크플로우를 막지 않도록 조용히 통과시킨다.

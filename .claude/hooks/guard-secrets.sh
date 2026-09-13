@@ -2,6 +2,14 @@
 # PreToolUse guard: Read/Edit/Write 대상 경로가 시크릿을 담을 수 있는 파일이면 차단한다.
 # 매칭되지 않으면 exit 0으로 통과시킨다 (안전망 전용, 워크플로우를 막지 않는다).
 # 단 그것은 **판정한 뒤**의 이야기다 — 판정 자체를 못 했으면 조용히 나가지 않는다.
+#
+# 활성 등록은 `~/.claude/hooks/`의 사본 하나뿐이고, `.claude/hooks/`의 사본은 버전관리·드리프트
+# 대조용이며 등록하지 않는다. `~/.claude`는 git도 백업도 없어 전역 사본만 두면 파일이 날아갔을
+# 때 되살릴 곳이 없다. 등록 형태도 여기 적는다 — 파일과 등록이 같은 자리에 있으면 갈릴 수 없다.
+# `~/.claude/settings.json`의 `hooks`에:
+#
+#   "PreToolUse": [ { "matcher": "Read|Edit|Write",
+#     "hooks": [ { "type": "command", "command": "$HOME/.claude/hooks/guard-secrets.sh" } ] } ]
 set -euo pipefail
 
 # jq가 없으면 판정할 수 없다. 통과는 시키되 조용히 통과하지는 않는다.
