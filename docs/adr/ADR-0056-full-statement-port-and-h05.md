@@ -110,16 +110,23 @@ P20 축②가 *「편입 행은 유니버스의 활성 여부와 무관하게 �
 `--quarters=true`가 그 자리를 여는 명령이고 종목당 요청이 넷 배가 된다.
 
 ```premise 정정공시라 채우지 못한 연간 결손
-psql -d stock_screener -At -c "SELECT CASE
-  WHEN count(*) = 0 THEN '잴 것이 없었다 — 편입 활성 종목이 없다'
-  WHEN count(*) FILTER (WHERE miss > 0) = 0 THEN 'OK 결손 0종목'
-  ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '이다 — 정정공시로 단정하지 마라. 먼저 그 행의 revision_no를 본다: 0이면 리밸런싱 재편입이라 티커를 준 full-statement-refill 한 번이 닫고(2026-08-25에 넷이 그랬다), 1 이상이면 그때가 정정이라 batch-load skill의 128콜 스윕이다'
-  END FROM (SELECT s.id, count(*) FILTER (WHERE f.operating_cash_flow IS NULL) miss
+psql -d stock_screener -At -c "WITH x AS (
+    SELECT s.ticker, s.market_code, count(*) FILTER (WHERE f.operating_cash_flow IS NULL) miss
     FROM stock s JOIN universe_membership m ON m.stock_id=s.id AND m.effective_to IS NULL
     JOIN universe u ON u.code = m.universe_code AND u.is_active
     JOIN financial_statement f ON f.stock_id=s.id AND f.is_latest AND f.fiscal_period='FY'
-      AND f.fiscal_year BETWEEN 2021 AND 2025
-    WHERE s.is_active GROUP BY 1) t"
+      -- 연도를 박지 않는다. 2021~2025로 두면 해가 바뀔 때마다 창이 조용히 한 해씩 낡는다.
+      -- 하한은 이 지표를 읽는 계산기의 최대 창(OperatingCashFlow5ySum의 5년)이고
+      -- 상한은 「올해」다 — 올해분은 아직 공시 전일 수 있어 결손이 정상이므로 뺀다.
+      AND f.fiscal_year BETWEEN EXTRACT(year FROM current_date)::int - 5 AND EXTRACT(year FROM current_date)::int - 1
+    WHERE s.is_active GROUP BY 1, 2)
+  SELECT CASE
+  WHEN count(*) = 0 THEN '잴 것이 없었다 — 편입 활성 종목이 없다'
+  WHEN count(*) FILTER (WHERE miss > 0) = 0 THEN 'OK 결손 0종목'
+  ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '이다: '
+       || (SELECT string_agg(DISTINCT tk || '(' || mc || ')', ', ') FROM (SELECT ticker tk, market_code mc FROM x WHERE miss > 0) y)
+       || ' — 정정공시로 단정하지 마라. **시장부터 본다**: KOSPI·KOSDAQ이면 revision_no가 0일 때 티커를 준 full-statement-refill 한 번이 닫고(2026-08-25에 넷이 그랬다) 1 이상이면 batch-load skill의 128콜 스윕이다. **US면 그 잡이 안 닿는다**(DART 전용 · ADR-0056) — 미국 재무의 유일한 경로는 financial-refill이고, 그 전에 소스가 그 개념을 주는지 SecEdgarConceptProbeLiveTest로 먼저 묻는다'
+  END FROM x"
 ```
 
 ## 배경

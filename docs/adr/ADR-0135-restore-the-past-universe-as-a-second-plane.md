@@ -36,6 +36,20 @@ applies_to:
 
 ## 규칙
 
+- **MUST: 복원은 재무 적재와 기업행위 원장보다 뒤에 돌고, 그 둘이 바뀌면 다시 돈다.**
+  복원의 순위는 `StoredShareCounts.activeByMarket`이 정하는데 그 질의가
+  **`published_at <= asOf`**로 시점을 지키는 대신 **우리 DB에 그 시점 재무가 얼마나 들어와
+  있는지**에 그대로 의존한다. 주식수에는 `exp(sum(ln(ca.ratio)))`로 기업행위 보정이 걸려 있어
+  **원장이 비어 있으면 보정도 없다.**
+  **실측(2026-09-14)**: 2026-09-10 복원 뒤에 미국 재무를 창 11년으로 재적재하고(정정 7,741 ·
+  채움 1,623) 역분할 11종목이 원장에 들어온(2026-09-13) 상태에서 다시 돌리자
+  **1,740행 중 1,119행(64%)이 달라졌다.** 즉 앞선 복원은 그만큼 부정확했다.
+  **MUST NOT: 이것을 「복원이 틀렸다」로 읽지 않는다** — 복원은 그때 가진 것으로 옳게 지었고,
+  **가진 것이 늘면 다시 지어야 하는 것**이 이 결정의 성질이다. 순서는
+  **재적재 → `corporate-action` 사슬 → 복원 → 파생층 백필**이다.
+- **MUST: 복원 뒤 파생층을 다시 만든다.** 백분위·업종상대의 모집단이 편입 명부로 시점화돼
+  있으므로(§결정 4) 명부가 바뀌면 그 값이 낡는다. `--job=backfill --from=<보존 하한>
+  --tickers=<하나>`가 날짜만 전 구간을 돌아 전 종목 파생층을 다시 낸다.
 - **MUST: 복원 구간을 `origin = 'OBSERVED'`의 `min(effective_from)`에서 끊는다.** `origin` 조건이 빠지면
   재실행이 **자기 복원분을 하한으로 읽어** 격자가 통째로 빈다. 이것이 이 컬럼의 두 번째 존재 이유다.
 - **MUST: 구간을 메모리에서 완성해 닫힌 채로 INSERT한다.** `ck_restored_is_closed`가 「열어 두고 나중에
@@ -116,6 +130,34 @@ psql -d stock_screener -At -c "WITH l AS (SELECT market_code, max(trade_date) t 
 
 **전제 예산이 45/45초라 새로 더하지 않고 갈아끼운다** — `ADR-0071`의 `시점 유니버스가 DB에 여전히 없다`가
 이 결정으로 뜻을 잃으므로 그 자리를 위 첫 펜스가 받는다.
+
+```premise 복원이 재무·원장보다 먼저 돌아 낡지 않았다
+psql -d stock_screener -At -c "
+WITH r AS (
+  -- 유니버스마다 복원 시각이 다르다. 하나로 접으면 가장 오래된 것이 전부를 낡은 것으로 만든다.
+  SELECT universe_code uc, min(created_at) restored_at FROM universe_membership
+  WHERE origin = 'RESTORED' GROUP BY 1),
+mk AS (SELECT u.code uc, u.market_code mc FROM universe u),
+stale AS (
+  SELECT r.uc, r.restored_at::date d,
+    -- 복원의 순위 재료가 그 시점 재무(StoredShareCounts)와 기업행위 원장(주식수 보정)이다.
+    -- 그 둘이 복원 뒤에 늘면 같은 asOf로 다시 지어도 다른 명부가 나온다.
+    (SELECT count(*) FROM financial_statement f JOIN stock s ON s.id = f.stock_id
+     WHERE s.market_code = mk.mc AND f.created_at > r.restored_at) fin,
+    (SELECT count(*) FROM corporate_action ca JOIN stock s ON s.id = ca.stock_id
+     WHERE s.market_code = mk.mc AND ca.status = 'APPLIED'
+       AND ca.ratio IS NOT NULL AND ca.ratio <> 1 AND ca.created_at > r.restored_at) ledger
+  FROM r JOIN mk ON mk.uc = r.uc)
+SELECT CASE
+  WHEN (SELECT count(*) FROM r) = 0 THEN '잴 것이 없었다 — 복원 행이 하나도 없다'
+  WHEN (SELECT count(*) FROM stale WHERE fin > 0 OR ledger > 0) = 0
+    THEN 'OK 복원 ' || (SELECT count(*) FROM r) || '곳 전부 그 뒤에 들어온 재무·원장이 없다'
+  ELSE (SELECT string_agg(uc || '(' || d || ' 뒤 재무 ' || fin || '행·원장 ' || ledger || '건)', ', ' ORDER BY uc)
+        FROM stale WHERE fin > 0 OR ledger > 0)
+       || ' — 복원의 순위 재료가 그 둘이라 과거 명부가 실제와 갈린다. universe-restore를 '
+       || '다시 돌리고 파생층을 백필한다(§규칙).'
+  END"
+```
 
 ## 배경
 
@@ -200,6 +242,27 @@ psql -d stock_screener -At -c "WITH l AS (SELECT market_code, max(trade_date) t 
 
 **MUST: 활성 그림자를 빼고 센다.** 첫 판이 `_DELISTED` 접미만 떼고 세어 **22를 162로 일곱 배**
 부풀렸다 — 뗀 이름이 지금 활성인 심볼과 겹치면 그 봉은 **활성 종목의 것**이다.
+
+### 복원이 재무·원장보다 먼저 돌면 명부가 그만큼 틀린다 (2026-09-14)
+
+**실측: 미국 1,740행 중 1,119행(64%)이 달라졌다.** 2026-09-10 복원 뒤에 ①미국 재무를 창
+11년으로 재적재하고(정정 7,741 · 채움 1,623) ②역분할 11종목이 원장에 들어온(2026-09-13)
+상태에서 같은 잡을 다시 돌린 결과다. 국내도 같은 이유로 다시 돌렸다(KOSPI 301 · KOSDAQ 422).
+
+**왜 그런가 — 복원은 시점을 지키지만 「우리가 가진 것」에 의존한다.**
+`JdbcStoredShareCounts`의 질의가 `published_at <= asOf`로 **point-in-time을 제대로 지킨다.**
+그런데 그 시점에 공시된 행이 **우리 DB에 들어와 있어야** 보이고, 주식수에 걸린 기업행위 보정
+`exp(sum(ln(ca.ratio)))`은 **원장이 비어 있으면 곱할 것이 없다.** 그래서 적재와 원장이 늘면
+같은 `asOf`가 다른 순위를 낸다.
+
+**구체 사례 — LNZA.** 1:100 역분할(2025-08-19)이 원장에 들어온 것이 **2026-09-13**인데 복원은
+**2026-09-10**에 돌았다. 보정 없는 주식수(231,995,967)로 시총이 100배 부풀어
+**2025-09-26~11-07 구간에 `US_TOP1000` 편입**으로 기록됐다. 역분할 후 실제 시총은
+2,320,216주 × 약 $13 = **$30M**이라 상위 1000에 들 수 없다.
+
+**MUST NOT: 이것을 「복원 로직의 결함」으로 읽지 않는다.** 복원은 그때 가진 것으로 옳게
+지었다. **가진 것이 늘면 다시 지어야 하는 것이 이 결정의 성질**이고, 그 규칙이 §규칙에
+없었던 것이 결함이다. 이제 premise가 유니버스마다 그 상태를 잰다.
 
 ### 복원과 적재의 실측 (2026-09-10)
 
