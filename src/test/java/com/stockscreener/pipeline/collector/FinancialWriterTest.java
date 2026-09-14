@@ -447,6 +447,52 @@ class FinancialWriterTest {
      *
      * <p>V16이 컬럼을 더하기 전에 저장된 10,882행을 재현한다 — 그 결손이 ADR-0040의 출발점이다.
      */
+    @Test
+    @DisplayName("유도한 행은 새 규칙이 못 만든 컬럼을 지운다 — 소스가 준 행은 안 지운다")
+    void derivedRowClearsWhatTheNewRuleCannotMake() {
+        // 재적재 잡이 쓰는 모드다(FinancialRefillJob). APPEND_ONLY는 같은 공시일의 재수집을
+        // 아예 안 보므로 이 갈래에 못 닿는다.
+        writer.write(stockId, List.of(derivedQuarter("-100", true)), FinancialWriter.WriteMode.FILL_MISSING);
+        assertThat(storedCostOfSales()).isEqualByComparingTo("-100");
+
+        // 새 규칙이 「이 컬럼은 못 만든다」고 판정했다. 재수집 경로가 NULL만 채우면 옛 유도값이
+        // 영영 남는다 — 실측으로 미국 4분기 음수 매출 45행·매출원가 41행이 재적재 뒤에도
+        // 한 행도 안 줄었다.
+        writer.write(stockId, List.of(derivedQuarter(null, true)), FinancialWriter.WriteMode.FILL_MISSING);
+        assertThat(storedCostOfSales()).as("유도 행이면 지운다").isNull();
+
+        // 대조군 — 소스가 준 행에서 컬럼이 빠진 것은 「그 판이 안 실었다」이지 「값이 없다」가
+        // 아니다. 지우면 정정 하나가 그 기간의 손익을 통째로 날린다.
+        writer.write(stockId, List.of(derivedQuarter("-100", true)), FinancialWriter.WriteMode.FILL_MISSING);
+        writer.write(stockId, List.of(derivedQuarter(null, false)), FinancialWriter.WriteMode.FILL_MISSING);
+        assertThat(storedCostOfSales()).as("소스가 준 행이면 안 지운다").isEqualByComparingTo("-100");
+    }
+
+    private BigDecimal storedCostOfSales() {
+        return jdbcTemplate.queryForObject(
+                "SELECT cost_of_sales FROM financial_statement WHERE stock_id = ? AND is_latest",
+                BigDecimal.class, stockId);
+    }
+
+    /** 4분기 유도 행. {@code derived}가 그 행을 우리가 만들었는지 말한다. */
+    private static RawFinancialReport derivedQuarter(String costOfSales, boolean derived) {
+        return new RawFinancialReport(
+                2025, "Q4",
+                LocalDate.of(2025, 10, 1), LocalDate.of(2025, 12, 31),
+                LocalDate.parse("2026-03-15"),
+                "11011", "KRW",
+                new BigDecimal("5000"), new BigDecimal("1200"), new BigDecimal("900"),
+                new BigDecimal("20000"), new BigDecimal("12000"), new BigDecimal("8000"),
+                null, null, null,
+                null, new BigDecimal("100"),
+                null, null,
+                costOfSales == null ? null : new BigDecimal(costOfSales),
+                null, null, null,
+                null,
+                null, null, null, null, null, null, null, null, null, null,
+                derived);
+    }
+
     private static RawFinancialReport withoutBalanceDetail(int fiscalYear, String period,
                                                            String publishedAt, String netIncome) {
         return report(fiscalYear, period, publishedAt, netIncome, false);

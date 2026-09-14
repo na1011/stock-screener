@@ -271,7 +271,10 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 null,
                 null, null, null, null, null, null, null, null,
                 // 주요계정은 세율 재료를 주지 않는다 — 전체 재무제표 전용이다.
-                null, null));
+                null, null,
+                // 우리가 만든 행이다(사업보고서 − 3분기 누계). 저장이 이것을 알아야 유도
+                // 규칙을 고쳤을 때 옛 값을 지운다.
+                true));
     }
 
     /**

@@ -1030,7 +1030,10 @@ final class SecEdgarFacts {
                     agreed.on(SecEdgarColumn.COSTS_AND_EXPENSES, subtractable) ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
                             q2.costsAndExpenses(), q3.costsAndExpenses()) : null,
                     // 세율 재료는 annualOnly라 분기 판에 값이 없다 — 차감할 것이 없다.
-                    null, null));
+                    null, null,
+                    // 우리가 만든 행이다. 저장이 이것을 알아야 유도 규칙을 고쳤을 때 옛 값을
+                    // 지운다 — 재수집 경로는 NULL만 채우고 값을 NULL로 덮지 않기 때문이다.
+                    true));
         }
         return derived;
     }

@@ -253,11 +253,26 @@ public class FinancialWriter {
                              Tally tally) {
         List<Amount> toFill = new ArrayList<>();
         List<Amount> toCorrect = new ArrayList<>();
+        List<Amount> toClear = new ArrayList<>();
         List<String> corrections = new ArrayList<>();
 
         for (Amount amount : Amount.values()) {
             BigDecimal incoming = amount.of(report);
             if (incoming == null) {
+                // MUST: **우리가 만든 행에서만** 값을 지운다. 소스가 준 행에서 컬럼이 빠진 것은
+                // 「그 판이 그 컬럼을 안 실었다」이지 「그 값이 없다」가 아니라, 지우면 정정
+                // 하나가 그 기간의 손익을 통째로 날린다(SecEdgarFacts의 carryForward가 막는 자리).
+                //
+                // 유도 행은 다르다. 그것은 우리 계산이고, 새 규칙이 「못 만든다」고 판정했으면
+                // 옛 계산이 남아 있을 이유가 없다. 이 갈래가 없으면 **유도 규칙을 고쳐도 옛
+                // 값을 영영 못 지운다** — 실측(2026-09-14)으로 미국 4분기 음수 매출 45행·
+                // 매출원가 41행이 재적재 뒤에도 한 행도 안 줄었다.
+                if (report.derived() && amount.overwritable()
+                        && existing.amounts().get(amount) != null) {
+                    toClear.add(amount);
+                    corrections.add("%s %s -> (없음)".formatted(
+                            amount.column, existing.amounts().get(amount)));
+                }
                 continue;
             }
             BigDecimal stored = existing.amounts().get(amount);
@@ -270,13 +285,14 @@ public class FinancialWriter {
             }
         }
 
-        if (toFill.isEmpty() && toCorrect.isEmpty()) {
+        if (toFill.isEmpty() && toCorrect.isEmpty() && toClear.isEmpty()) {
             tally.untouched++;
             return;
         }
 
         List<Amount> columns = new ArrayList<>(toFill);
         columns.addAll(toCorrect);
+        columns.addAll(toClear);
         String setClause = columns.stream()
                 .map(amount -> amount.column + " = ?")
                 .collect(Collectors.joining(", "));
@@ -292,13 +308,13 @@ public class FinancialWriter {
         if (!toFill.isEmpty()) {
             tally.filled++;
         }
-        if (!toCorrect.isEmpty()) {
+        if (!toCorrect.isEmpty() || !toClear.isEmpty()) {
             // 무엇이 무엇으로 바뀌었는지를 반드시 남긴다. 이 경로의 위험은 갱신 자체가 아니라
             // 조용함이고, 그래서 규칙이 "덮되 남긴다"다.
             log.warn("우리 추출이 바뀌어 저장값을 덮는다. stockId={} {}/{} 공시일={} — {}",
                     stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt(),
                     String.join(" | ", corrections));
-            tally.corrected += toCorrect.size();
+            tally.corrected += toCorrect.size() + toClear.size();
             // 여기는 "행 없음 → 행 생김"이 아니라 "틀린 값 → 다른 값"이다. 그 값으로 계산된
             // 지표가 이미 저장돼 있으므로 지우지 않으면 낡은 값이 그대로 남는다.
             invalidationPort.invalidate(stockId, report.periodStart(),

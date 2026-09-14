@@ -101,8 +101,52 @@ public record RawFinancialReport(
         BigDecimal operatingExpenses,
         BigDecimal costsAndExpenses,
         BigDecimal incomeTaxExpense,
-        BigDecimal profitBeforeTax
+        BigDecimal profitBeforeTax,
+
+        /**
+         * <b>우리가 만든 행인가.</b> 소스가 준 것이면 {@code false}, {@code FY − Q1 − Q2 − Q3}처럼
+         * <b>우리가 유도한 것</b>이면 {@code true}다.
+         *
+         * <p>이 구분이 없으면 <b>유도 규칙을 고쳐도 옛 유도값을 영영 못 지운다.</b>
+         * {@code FinancialWriter}의 재수집 경로는 NULL만 채우고 값을 NULL로 덮지 않으므로,
+         * 새 규칙이 「이 컬럼은 못 만든다」고 판정해도 저장에는 옛 값이 그대로 남는다 —
+         * 실측(2026-09-14)으로 미국 4분기 음수 매출 45행·매출원가 41행이 재적재 뒤에도
+         * 한 행도 안 줄었다.
+         *
+         * <p><b>MUST: 유도한 행에는 반드시 {@code true}를 준다.</b> 기본값 {@code false}를 주는
+         * 호환 생성자가 있으므로 <b>컴파일러가 이것을 묻지 않는다.</b> 유도 자리는 둘이고
+         * 둘 다 이름이 {@code deriveFourthQuarter…}다.
+         */
+        boolean derived
 ) {
+
+    /**
+     * 소스가 준 행. <b>유도한 행에는 쓰지 않는다</b> — 위 {@code derived} javadoc.
+     */
+    public RawFinancialReport(int fiscalYear, String fiscalPeriod, LocalDate periodStart,
+                              LocalDate periodEnd, LocalDate publishedAt, String reportCode,
+                              String currencyCode, BigDecimal revenue, BigDecimal operatingIncome,
+                              BigDecimal netIncome, BigDecimal totalAssets, BigDecimal totalEquity,
+                              BigDecimal totalLiabilities, BigDecimal currentAssets,
+                              BigDecimal currentLiabilities, BigDecimal retainedEarnings,
+                              BigDecimal operatingCashFlow, BigDecimal sharesOutstanding,
+                              BigDecimal eps, BigDecimal bps, BigDecimal costOfSales,
+                              BigDecimal cashAndEquivalents, BigDecimal capex,
+                              BigDecimal inventories, BigDecimal netIncomeControlling,
+                              BigDecimal interestAndDividendIncome, BigDecimal noninterestIncome,
+                              BigDecimal interestExpense, BigDecimal noninterestExpense,
+                              BigDecimal benefitsLossesAndExpenses, BigDecimal grossProfit,
+                              BigDecimal operatingExpenses, BigDecimal costsAndExpenses,
+                              BigDecimal incomeTaxExpense, BigDecimal profitBeforeTax) {
+        this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
+                currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
+                totalLiabilities, currentAssets, currentLiabilities, retainedEarnings,
+                operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents,
+                capex, inventories, netIncomeControlling, interestAndDividendIncome,
+                noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
+                grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
+                profitBeforeTax, false);
+    }
 
     public RawFinancialReport {
         if (fiscalPeriod == null || fiscalPeriod.isBlank()) {
