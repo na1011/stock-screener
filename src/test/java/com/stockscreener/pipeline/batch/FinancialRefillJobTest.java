@@ -188,7 +188,7 @@ class FinancialRefillJobTest {
                 new BigDecimal("20000"), new BigDecimal("12000"), new BigDecimal("8000"),
                 new BigDecimal("9000"), new BigDecimal("4000"), new BigDecimal("6000"),
                 null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     private BigDecimal currentAssetsOf(long stockId) {

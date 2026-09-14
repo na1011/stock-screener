@@ -94,7 +94,8 @@ public class IndicatorDataReader {
             net_income_controlling,
             interest_and_dividend_income, noninterest_income, interest_expense,
             noninterest_expense, benefits_losses_and_expenses,
-            gross_profit, operating_expenses, costs_and_expenses
+            gross_profit, operating_expenses, costs_and_expenses,
+            income_tax_expense, profit_before_tax
             """;
 
     /**
@@ -512,6 +513,8 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("benefits_losses_and_expenses"),
                 rs.getBigDecimal("gross_profit"),
                 rs.getBigDecimal("operating_expenses"),
-                rs.getBigDecimal("costs_and_expenses"));
+                rs.getBigDecimal("costs_and_expenses"),
+                rs.getBigDecimal("income_tax_expense"),
+                rs.getBigDecimal("profit_before_tax"));
     }
 }

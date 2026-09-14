@@ -49,6 +49,8 @@ final class FinancialFiguresFixture {
     private BigDecimal grossProfit;
     private BigDecimal operatingExpenses;
     private BigDecimal costsAndExpenses;
+    private BigDecimal incomeTaxExpense;
+    private BigDecimal profitBeforeTax;
 
     private FinancialFiguresFixture() {
     }
@@ -109,6 +111,8 @@ final class FinancialFiguresFixture {
         fixture.grossProfit = source.grossProfit();
         fixture.operatingExpenses = source.operatingExpenses();
         fixture.costsAndExpenses = source.costsAndExpenses();
+        fixture.incomeTaxExpense = source.incomeTaxExpense();
+        fixture.profitBeforeTax = source.profitBeforeTax();
         return fixture;
     }
 
@@ -155,6 +159,16 @@ final class FinancialFiguresFixture {
 
     FinancialFiguresFixture operatingExpenses(BigDecimal v) {
         this.operatingExpenses = v;
+        return this;
+    }
+
+    FinancialFiguresFixture incomeTaxExpense(BigDecimal v) {
+        this.incomeTaxExpense = v;
+        return this;
+    }
+
+    FinancialFiguresFixture profitBeforeTax(BigDecimal v) {
+        this.profitBeforeTax = v;
         return this;
     }
 
@@ -257,6 +271,7 @@ final class FinancialFiguresFixture {
                 costOfSales, cashAndEquivalents, capex, inventories, netIncomeControlling,
                 interestAndDividendIncome, noninterestIncome, interestExpense,
                 noninterestExpense, benefitsLossesAndExpenses,
-                grossProfit, operatingExpenses, costsAndExpenses);
+                grossProfit, operatingExpenses, costsAndExpenses,
+                incomeTaxExpense, profitBeforeTax);
     }
 }

@@ -350,9 +350,10 @@ public class FinancialWriter {
                      net_income_controlling,
                      interest_and_dividend_income, noninterest_income, interest_expense,
                      noninterest_expense, benefits_losses_and_expenses,
-                     gross_profit, operating_expenses, costs_and_expenses, created_at)
+                     gross_profit, operating_expenses, costs_and_expenses,
+                     income_tax_expense, profit_before_tax, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
                 """,
                 stockId, report.fiscalYear(), report.fiscalPeriod(),
                 report.periodStart(), report.periodEnd(), report.publishedAt(),
@@ -367,7 +368,8 @@ public class FinancialWriter {
                 report.interestAndDividendIncome(), report.noninterestIncome(),
                 report.interestExpense(), report.noninterestExpense(),
                 report.benefitsLossesAndExpenses(),
-                report.grossProfit(), report.operatingExpenses(), report.costsAndExpenses());
+                report.grossProfit(), report.operatingExpenses(), report.costsAndExpenses(),
+                report.incomeTaxExpense(), report.profitBeforeTax());
     }
 
     /**
@@ -410,7 +412,9 @@ public class FinancialWriter {
                 RawFinancialReport::benefitsLossesAndExpenses),
         GROSS_PROFIT("gross_profit", RawFinancialReport::grossProfit),
         OPERATING_EXPENSES("operating_expenses", RawFinancialReport::operatingExpenses),
-        COSTS_AND_EXPENSES("costs_and_expenses", RawFinancialReport::costsAndExpenses);
+        COSTS_AND_EXPENSES("costs_and_expenses", RawFinancialReport::costsAndExpenses),
+        INCOME_TAX_EXPENSE("income_tax_expense", RawFinancialReport::incomeTaxExpense),
+        PROFIT_BEFORE_TAX("profit_before_tax", RawFinancialReport::profitBeforeTax);
 
         /**
          * 값이 달라졌을 때 <b>덮어도 되는가.</b>

@@ -59,6 +59,34 @@ final class DartFullAccountMapper {
     static final Set<String> ID_NET_INCOME = ordered("ifrs-full_ProfitLoss", "ifrs_ProfitLoss");
 
     /**
+     * 법인세비용. 세후 투하자본이익률의 유효세율에서 <b>분자</b>다.
+     *
+     * <p><b>표준 ID가 「계속영업」이다.</b> 그런데 {@link #ID_PROFIT_BEFORE_TAX}는 <b>총액</b>이라
+     * (계속영업 세전이익은 표본 0/8로 안 온다) <b>중단영업이 있는 해에는 분자와 분모의 기저가
+     * 어긋난다.</b> 그 빈도는 전수가 답한다.
+     *
+     * <p><b>MUST NOT: 음수를 크기(abs)로 읽지 않는다.</b> 자본적지출과 다르다 — 그쪽은
+     * 「취득」이라 한 방향이지만 <b>법인세는 환입이 실재한다.</b> 실측(8종목 × 5년)에서 음수
+     * 여섯 중 <b>넷이 진짜 환입이고 둘이 차감 항목 표기</b>였다. 크기로 읽으면 진짜 환입의
+     * 부호가 뒤집힌다. <b>가르는 것은 {@code 세전이익 − 순이익}과의 부호 대조</b>이고 그 판단은
+     * 지표 계층이 한다 — 적재 계층은 원자료를 그대로 담는다(ADR-0067 §규칙).
+     */
+    static final Set<String> ID_INCOME_TAX_EXPENSE = ordered(
+            "ifrs-full_IncomeTaxExpenseContinuingOperations",
+            "dart_IncomeTaxExpenseContinuingOperations");
+
+    /**
+     * 세전이익(법인세비용차감전순이익). 유효세율의 <b>분모</b>다.
+     *
+     * <p><b>계정명 폴백을 두지 않는다.</b> 실측에서 이름이 넷으로 갈렸고
+     * ({@code 법인세비용차감전순이익} · {@code …(손실)} · {@code 법인세비용차감전당기순이익} ·
+     * {@code 법인세차감전순이익}), 포괄손익계산서에는 <b>「법인세비용차감전기타포괄손익」</b>이
+     * 따로 있어 낱말을 공유한다. 감가상각비가 정확히 그 형태로 3/8 → 2/8 오진을 냈다.
+     */
+    static final Set<String> ID_PROFIT_BEFORE_TAX = ordered(
+            "ifrs-full_ProfitLossBeforeTax", "dart_ProfitLossBeforeTax");
+
+    /**
      * <b>지배기업 소유주 귀속</b> 당기순이익. 주당 지표의 분자다(K-IFRS 1033).
      *
      * <p>MUST NOT: 계정명 폴백을 두지 않는다. 실측에서 <b>한 계정을 여덟 회사가 일곱 가지

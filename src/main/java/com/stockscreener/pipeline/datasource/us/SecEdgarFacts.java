@@ -810,7 +810,10 @@ final class SecEdgarFacts {
                 v.get(SecEdgarColumn.BENEFITS_LOSSES_AND_EXPENSES),
                 v.get(SecEdgarColumn.GROSS_PROFIT),
                 v.get(SecEdgarColumn.OPERATING_EXPENSES),
-                v.get(SecEdgarColumn.COSTS_AND_EXPENSES));
+                v.get(SecEdgarColumn.COSTS_AND_EXPENSES),
+                // 세율 재료는 국내 전용이다. 미국은 컬럼을 SecEdgarColumn에 더하는 것이
+                // reporter 집합을 키워 값 소실을 만들 수 있어 별도 결정으로 미뤘다.
+                null, null);
     }
 
     // ---------- 4. Q4를 유도한다 ----------
@@ -912,7 +915,9 @@ final class SecEdgarFacts {
                     subtractable ? minus(fy.operatingExpenses(), q1.operatingExpenses(),
                             q2.operatingExpenses(), q3.operatingExpenses()) : null,
                     subtractable ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
-                            q2.costsAndExpenses(), q3.costsAndExpenses()) : null));
+                            q2.costsAndExpenses(), q3.costsAndExpenses()) : null,
+                    // 세율 재료는 국내 전용이다(위 toReport와 같은 이유).
+                    null, null));
         }
         return derived;
     }

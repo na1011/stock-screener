@@ -211,7 +211,7 @@ class FullStatementRefillJobTest {
                 new BigDecimal("9000"), new BigDecimal("4000"), new BigDecimal("6000"),
                 new BigDecimal(operatingCashFlow), null, null, null, null, null, null, null,
                 null,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     private BigDecimal operatingCashFlowOf(long stockId) {

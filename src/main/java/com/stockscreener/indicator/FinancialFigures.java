@@ -69,7 +69,9 @@ public record FinancialFigures(
         BigDecimal benefitsLossesAndExpenses,
         BigDecimal grossProfit,
         BigDecimal operatingExpenses,
-        BigDecimal costsAndExpenses
+        BigDecimal costsAndExpenses,
+        BigDecimal incomeTaxExpense,
+        BigDecimal profitBeforeTax
 ) {
 
     public enum FiscalPeriod {

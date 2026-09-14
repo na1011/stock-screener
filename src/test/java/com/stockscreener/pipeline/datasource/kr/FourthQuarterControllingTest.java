@@ -111,7 +111,7 @@ class FourthQuarterControllingTest {
                 base.publishedAt(), base.reportCode(), currency,
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, base.netIncomeControlling(),
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     private static RawFinancialReport report(int year, String period, String controlling) {
@@ -121,6 +121,6 @@ class FourthQuarterControllingTest {
                 null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null,
                 controlling == null ? null : new BigDecimal(controlling),
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 }

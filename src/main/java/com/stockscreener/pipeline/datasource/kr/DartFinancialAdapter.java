@@ -206,7 +206,9 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 // (dart-financial.md의 「숫자 파싱과 중복 행」 절), account_id가 없어 다른 길도 없다.
                 // 전체 재무제표가 채운다 — 여기서 null인 것은 결손이 아니라 이 소스의 경계다.
                 null,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null,
+                // 주요계정은 세율 재료를 주지 않는다 — 전체 재무제표 전용이다.
+                null, null);
     }
 
     /**
@@ -262,7 +264,9 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 null, null, null, null, null, null, null, null,
                 // 지배주주 귀속 순이익. 위와 같은 이유로 이 엔드포인트가 낼 수 없다.
                 null,
-                null, null, null, null, null, null, null, null));
+                null, null, null, null, null, null, null, null,
+                // 주요계정은 세율 재료를 주지 않는다 — 전체 재무제표 전용이다.
+                null, null));
     }
 
     /**

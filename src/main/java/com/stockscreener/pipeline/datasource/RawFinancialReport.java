@@ -52,6 +52,11 @@ import java.time.LocalDate;
  * @param grossProfit 매출총이익. 소스가 직접 낸 값이며 {@code revenue − costOfSales}와 다를 수 있다.
  * @param operatingExpenses 영업비용. {@code grossProfit}에서 빼면 영업이익이다.
  * @param costsAndExpenses 총원가·비용. {@code revenue}에서 빼면 영업이익이다.
+ * @param incomeTaxExpense 법인세비용(계속영업 기준). <b>음수가 두 뜻이다</b> —
+ *                         진짜 환입과 차감 항목 표기이며 {@code 세전이익 − 순이익}과
+ *                         부호를 대조해야 갈린다. 연간 행에만 있다
+ * @param profitBeforeTax  세전이익(총액). 분자가 계속영업 기준이라 중단영업이 있는
+ *                         해에는 기저가 어긋난다. 연간 행에만 있다
  * @param netIncomeControlling <b>지배기업 소유주에게 귀속되는</b> 당기순이익.
  *                           {@code netIncome}(연결 총액, 비지배지분 포함)과 <b>다른 값이고 둘 다
  *                           사실이다</b> — 어느 쪽을 쓸지는 짝이 정한다. 주당 지표는 이쪽이고
@@ -94,7 +99,9 @@ public record RawFinancialReport(
         BigDecimal benefitsLossesAndExpenses,
         BigDecimal grossProfit,
         BigDecimal operatingExpenses,
-        BigDecimal costsAndExpenses
+        BigDecimal costsAndExpenses,
+        BigDecimal incomeTaxExpense,
+        BigDecimal profitBeforeTax
 ) {
 
     public RawFinancialReport {

@@ -292,7 +292,10 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 // 앉아 값이 그럴듯하게 틀린다(ID_NET_INCOME_CONTROLLING javadoc).
                 DartFullAccountMapper.find(
                         income, DartFullAccountMapper.ID_NET_INCOME_CONTROLLING, null),
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null,
+                // 세율 재료 둘. 유량이라 연간에만 담는다 — 아래 가드 참조.
+                incomeTaxExpense(income, period),
+                profitBeforeTax(income, period));
     }
 
     /**
@@ -373,7 +376,10 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                         balance, DartFullAccountMapper.ID_INVENTORIES, null),
                 // 손익이지만 이것만 예외다 — 주요계정이 원리적으로 못 만든다(위 javadoc).
                 deriveFourthQuarterControlling(thisYear, year),
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null,
+                // 세율 재료는 유량이라 여기서 비운다. 세후 지표가 직전 회계연도 세율을 쓰므로
+                // Q4를 유도할 이유가 없다 — netIncomeControlling만 예외인 사정이 여기엔 없다.
+                null, null);
     }
 
     /**
@@ -426,6 +432,37 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 재무제표」 절)에
      * 적히면 그때 연다.
      */
+    /**
+     * 법인세비용. <b>연간만</b> 낸다.
+     *
+     * <p><b>MUST: 이 가드를 지우지 않는다.</b> {@code toReport}는 FY 전용이 아니라
+     * {@code for (StatementPeriod period : values())} 루프 안에서 <b>Q1~Q3에도 불리고</b>,
+     * 정기 재적재의 표준 명령이 {@code --all-quarters=true}다({@code JobFreshnessPolicy}).
+     * 가드가 없으면 <b>Q1~Q3에만 값이 들어가고 Q4가 NULL</b>이 되는데, 그것은
+     * {@code cost_of_sales}가 지금 있는 상태이고 그 컬럼을 TTM으로 합치는 쪽에서
+     * <b>한 칸이 비어 값이 통째로 안 난다.</b>
+     *
+     * <p>Q4를 유도하지 않는 이유는 <b>세후 지표가 직전 회계연도 유효세율을 쓰기 때문</b>이다.
+     * 분기 세율이 필요하지 않으므로 만들지 않는다 — 불가능해서가 아니다
+     * ({@code deriveFourthQuarterControlling}이 같은 산술을 이미 돌린다).
+     */
+    private static BigDecimal incomeTaxExpense(List<JsonNode> income, StatementPeriod period) {
+        if (period != StatementPeriod.FY) {
+            return null;
+        }
+        return DartFullAccountMapper.find(
+                income, DartFullAccountMapper.ID_INCOME_TAX_EXPENSE, null);
+    }
+
+    /** 세전이익. 법인세비용과 같은 이유로 <b>연간만</b> 낸다 — 둘이 같은 창에 있어야 세율이 선다. */
+    private static BigDecimal profitBeforeTax(List<JsonNode> income, StatementPeriod period) {
+        if (period != StatementPeriod.FY) {
+            return null;
+        }
+        return DartFullAccountMapper.find(
+                income, DartFullAccountMapper.ID_PROFIT_BEFORE_TAX, null);
+    }
+
     private static BigDecimal operatingCashFlow(List<JsonNode> cashFlow, StatementPeriod period) {
         if (period != StatementPeriod.FY) {
             return null;

@@ -468,7 +468,7 @@ class FinancialWriterTest {
                 base.interestAndDividendIncome(), base.noninterestIncome(),
                 base.interestExpense(), base.noninterestExpense(),
                 base.benefitsLossesAndExpenses(), base.grossProfit(),
-                base.operatingExpenses(), base.costsAndExpenses());
+                base.operatingExpenses(), base.costsAndExpenses(), null, null);
     }
 
     private static RawFinancialReport report(int fiscalYear, String period, String publishedAt,
@@ -487,6 +487,6 @@ class FinancialWriterTest {
                 new BigDecimal("10"), new BigDecimal("120"), null, null, null, null,
                 // 지배주주 귀속 순이익. 주요계정 어댑터가 낼 수 없는 값이라 null이 기본이다.
                 null,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 }
