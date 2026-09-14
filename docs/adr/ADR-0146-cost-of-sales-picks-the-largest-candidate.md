@@ -42,7 +42,9 @@ psql -d stock_screener -At -c "
 -- 모집단을 US_TOP1000 열린 편입 · FY · is_latest 로 박는다 — 창을 바꾸면 수가 갈린다.
 WITH us AS (SELECT DISTINCT m.stock_id FROM universe_membership m
             WHERE m.universe_code='US_TOP1000' AND m.effective_to IS NULL),
-v AS (SELECT f.stock_id FROM financial_statement f JOIN us ON us.stock_id=f.stock_id
+-- MUST: 종목으로 센다. 행으로 세면 한 종목의 여러 회계연도가 따로 세어져 기준선(종목 수)과
+-- 단위가 어긋난다 — 실제로 처음 이 펜스를 행으로 써서 「138 > 69」로 거짓 발화했다.
+v AS (SELECT DISTINCT f.stock_id FROM financial_statement f JOIN us ON us.stock_id=f.stock_id
       WHERE f.is_latest AND f.fiscal_period='FY'
         AND f.gross_profit IS NOT NULL AND f.cost_of_sales IS NOT NULL AND f.revenue IS NOT NULL
         AND abs((f.revenue-f.cost_of_sales)-f.gross_profit) > 0.10*abs(f.gross_profit)),
@@ -52,9 +54,9 @@ pop AS (SELECT count(*) n FROM financial_statement f JOIN us ON us.stock_id=f.st
 SELECT CASE
   WHEN (SELECT n FROM pop) = 0
     THEN '잴 것이 없었다 — 셋을 다 가진 행이 하나도 없다'
-  WHEN (SELECT count(*) FROM v) <= 69
-    THEN 'OK 항등식 위반 ' || (SELECT count(*) FROM v) || '종목 (기준선 69 이하)'
-  ELSE '항등식 위반이 ' || (SELECT count(*) FROM v) || '종목으로 늘었다 — 기준선은 69다.'
+  WHEN (SELECT count(*) FROM v) <= 66
+    THEN 'OK 항등식 위반 ' || (SELECT count(*) FROM v) || '종목 (기준선 66 이하)'
+  ELSE '항등식 위반이 ' || (SELECT count(*) FROM v) || '종목으로 늘었다 — 기준선은 66이다.'
        || ' 후보 목록이나 선택 규칙을 바꾼 뒤라면 그 변경이 원인이다(ADR-0146)'
   END"
 ```
@@ -134,6 +136,25 @@ FY2023의 42,767M과 자릿수가 맞는다.
 **`CNC`는 안 닫힌다 — 그것이 이 결정의 경계다.** 후보 넷 중 `CostOfGoodsAndServicesSold`
 하나만 오고 그 값이 매출의 **1.4%**(194,777M 대 2,670M)라 **고를 대상이 없다.** 그런 자리의
 처방은 ADR-0126 §규칙의 **손으로 고치되 근거를 둘 이상**이고, 이번에 안 했다.
+
+**같은 재적재를 한 번 더 돌려 멱등을 물었고, 답이 둘로 갈린다(P22 축①·⑤).**
+**값 기준으로는 멱등이다** — 두 번째 실행이 `정정 0 · 채움 0`이고, 문제가 된 12종목만
+세 번 연속 돌려 저장값의 md5를 세 번 찍으니 **셋이 완전히 같다.**
+**그런데 쓰기 기준으로는 아니다** — `교정`이 매번 정확히 **340**이고, 12종목만 돌려도 340이라
+**그 340 전부가 그 12종목에서 나온다.** 비결정이 아니라 **결정적인 반복 덮어쓰기**다.
+
+**그 340은 이 결정과 무관하다.** 흔들리는 컬럼이 **20개**이고 이 결정이 바꾼 것은 하나다
+(`cost_of_sales` 22건 · 최다는 `operating_income` 32 · `net_income` 30 · `eps` 28).
+**`cash_and_equivalents`도 흔들리는데 그 컬럼은 `Selection.FIRST` 그대로다.** 종목은 12
+(`AROC`·`BAX`·`LGND`·`ORA`·`PACS`·`PPG`·`QBTS`·`RGEN`·`SANM`·`SMCI`·`TVTX`·`WMS`)이고
+회계연도가 **2015~2018에 64/82**로 몰려 있다. 로그가 한 실행 안에서 같은 (종목, 기간, 공시일)의
+값을 **561,000 → 52,011,000 → 561,000**으로 오가게 찍는다 — 같은 라벨에 판이 여럿 나고 판마다
+다른 팩트를 골라 서로 덮는 것이다.
+
+**파급은 실재한다 — 매 재적재가 그 12종목의 지표를 지운다.** `FinancialWriter`가 교정마다
+`invalidate`를 부르므로, 실측으로 두 번 더 돌린 뒤 **그 12종목의 최신일 지표가 통째로 비었다.**
+**목요일마다 `financial-refill`이 돈다**(ADR-0116). **원인은 기간 재구성 축(`revisionsOf`)이고
+이 결정의 범위 밖이라 수만 남긴다.**
 
 **옆 컬럼은 안 움직였다.** 최신 FY의 매출·영업이익·총자산·총부채·유동부채·영업활동현금흐름
 non-null이 전부 전과 같다 — `reportEvidence` 경로로 판 선택이 갈릴 수 있다는 것이
