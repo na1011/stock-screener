@@ -2,6 +2,7 @@ package com.stockscreener.indicator;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -39,10 +40,42 @@ public record UnavailabilityRule(String code, Predicate<Context> when, String re
      * @param marketCode       그 종목의 시장. 소스가 그 시장을 덮는지 가르는 데 쓴다
      */
     public record Context(Map<String, BigDecimal> values, String industryDivisionKey,
-                          String marketCode) {
+                          String marketCode, Set<String> sourceAbsentColumns) {
+
+        /**
+         * 넷째가 없던 시절의 호출부용. <b>부재를 「모른다」로 둔다</b> — 빈 집합은
+         * 「그 종목을 그 축으로 안 훑었다」이지 「없는 것이 없다」가 아니다.
+         */
+        public Context(Map<String, BigDecimal> values, String industryDivisionKey,
+                       String marketCode) {
+            this(values, industryDivisionKey, marketCode, Set.of());
+        }
+
+        public Context {
+            sourceAbsentColumns = sourceAbsentColumns == null
+                    ? Set.of() : Set.copyOf(sourceAbsentColumns);
+        }
 
         public BigDecimal value(String code) {
             return values.get(code);
+        }
+
+        /**
+         * <b>소스가 이 회사에 대해 그 금액 항목을 한 번도 안 냈는가.</b>
+         *
+         * <p>담기는 것은 {@code financial_column_absence}의 {@code ABSENT} 행뿐이다 —
+         * {@code FILTERED}는 <b>우리 쪽 한계</b>라 그 회사에 대한 사실이 아니고, 그것으로
+         * 사유를 지으면 이 파일이 금지한 <b>그럴듯한데 틀린 사유</b>가 된다.
+         *
+         * <p><b>행이 없으면 거짓을 낸다 — 그것이 「모른다」이고 그때는 아무 말도 안 한다.</b>
+         */
+        public boolean sourceOmits(String... columnNames) {
+            for (String column : columnNames) {
+                if (!sourceAbsentColumns.contains(column)) {
+                    return false;
+                }
+            }
+            return columnNames.length > 0;
         }
     }
 }

@@ -3,6 +3,7 @@ package com.stockscreener.stock.web;
 import com.stockscreener.indicator.IndicatorCatalog;
 import com.stockscreener.indicator.IndicatorDataReader;
 import com.stockscreener.indicator.IndicatorDescriptor;
+import com.stockscreener.indicator.FinancialColumnAbsenceReader;
 import com.stockscreener.indicator.UnavailabilityRule;
 import com.stockscreener.screening.query.ScreeningRepository;
 import com.stockscreener.stock.PriceReference;
@@ -41,6 +42,7 @@ public class StockController {
     private final IndicatorDataReader priceReader;
     private final SupportResistanceAnalyzer analyzer;
     private final AsOfResolver asOfResolver;
+    private final FinancialColumnAbsenceReader absenceReader;
     private final MarketScope marketScope;
     private final StockFinancialsAssembler financialsAssembler;
     private final List<UnavailabilityRule> unavailabilityRules;
@@ -50,7 +52,9 @@ public class StockController {
                            SupportResistanceAnalyzer analyzer, AsOfResolver asOfResolver,
                            MarketScope marketScope,
                            StockFinancialsAssembler financialsAssembler,
-                           List<UnavailabilityRule> unavailabilityRules) {
+                           List<UnavailabilityRule> unavailabilityRules,
+                           FinancialColumnAbsenceReader absenceReader) {
+        this.absenceReader = absenceReader;
         this.stockReader = stockReader;
         this.indicatorCatalog = indicatorCatalog;
         this.screeningRepository = screeningRepository;
@@ -131,8 +135,16 @@ public class StockController {
         // 다만 **왜 없는지 말할 수 있는 것**은 사유와 함께 남긴다. 걸러내고 아무 말도 하지
         // 않는 것이 던지는 것보다 나쁘다(frontend.md). 사유를 모르는 나머지는 그대로 빠지고
         // 화면의 "값이 없어 표시하지 못한 지표 N개"가 그것을 센다.
+        // MUST: 소스 부재는 **최신 일자일 때만** 싣는다. 그 표는 (종목, 컬럼) 하나로 **오늘의
+        // 관측**만 들고 있어서, 과거 기준일 조회에 그대로 쓰면 **그때는 값이 있던 종목에도
+        // 오늘의 판정이 붙는다** — `.claude/rules/data-pipeline.md`가 같은 병을 「실행 시점
+        // 스냅샷 하나로 읽어 … 최신 일자 화면은 멀쩡하다」로 이미 이름 지었다(ADR-0128).
+        // 과거 일자에서는 빈 집합이고, 빈 집합은 「모른다」라 화면이 침묵한다.
+        boolean atLatest = asOfResolver.latest(marketScope.forStock(stockId))
+                .map(resolved::equals).orElse(false);
         UnavailabilityRule.Context ruleContext = new UnavailabilityRule.Context(
-                values, stockReader.industryDivisionKeyOf(stockId).orElse(null), row.marketCode());
+                values, stockReader.industryDivisionKeyOf(stockId).orElse(null), row.marketCode(),
+                atLatest ? absenceReader.absentColumnsOf(stockId) : java.util.Set.of());
 
         List<StockDetailResponse.IndicatorValue> indicators = new ArrayList<>();
         for (IndicatorDescriptor descriptor : catalog) {

@@ -10,6 +10,8 @@ import com.stockscreener.indicator.calculator.DirectorTurnover3yCalculator;
 import com.stockscreener.indicator.calculator.DividendPayoutCalculator;
 import com.stockscreener.indicator.calculator.DividendYieldCalculator;
 import com.stockscreener.indicator.calculator.ExecPayToNetIncomeCalculator;
+import com.stockscreener.indicator.calculator.GrossMarginCalculator;
+import com.stockscreener.indicator.calculator.GrossProfitToAssetsCalculator;
 import com.stockscreener.indicator.calculator.LargestHolderStakeCalculator;
 import com.stockscreener.indicator.calculator.MinorityHolderStakeCalculator;
 import com.stockscreener.indicator.calculator.OutsideDirectorRatioCalculator;
@@ -140,7 +142,12 @@ public class IndicatorUnavailabilityConfig {
                 // 비금융은 829 중 719다. ADR-0111이 막는 「그 시장에 거짓인 사유」가 아니다.
                 afterTaxFinancialDivision(RoicAfterTaxCalculator.CODE),
                 afterTaxFinancialDivision(RoicAfterTaxMin5yCalculator.CODE),
-                afterTaxFinancialDivision(RoicAfterTaxAvg5yCalculator.CODE)));
+                afterTaxFinancialDivision(RoicAfterTaxAvg5yCalculator.CODE),
+                // 매출총이익 축 둘. **업종이 아니라 종목별 사실**이 술어다 — 아래 javadoc.
+                sourceOmitsCostOfSales(GrossMarginCalculator.CODE, true),
+                sourceOmitsCostOfSales(GrossMarginCalculator.CODE, false),
+                sourceOmitsCostOfSales(GrossProfitToAssetsCalculator.CODE, true),
+                sourceOmitsCostOfSales(GrossProfitToAssetsCalculator.CODE, false)));
         // 거버넌스 사유는 코드마다 **둘**이다 — 술어가 서로 배타적이라 먼저 맞는 하나만 붙는다.
         rules.addAll(GOVERNANCE_CODES.stream().flatMap(
                 code -> java.util.stream.Stream.of(
@@ -177,6 +184,44 @@ public class IndicatorUnavailabilityConfig {
                 context -> isFinancialDivision(context.industryDivisionKey()),
                 "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
                         + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다.");
+    }
+
+    /**
+     * <b>소스가 이 회사에 대해 매출원가·매출총이익을 안 낸다.</b>
+     *
+     * <p><b>왜 업종이 술어가 아닌가</b>: 업종 축만으로는 설명력이 낮다. 실측(2026-09-14 ·
+     * {@code US_TOP1000})에서 {@code GROSS_MARGIN} 결측 <b>380 중 금융 업종이 143(37.6%)</b>
+     * 뿐이고, 이 파일의 가장 약한 기존 규칙({@code PSR} 64% — 그 자리에 이미 <i>"설명력이 낮다"</i>가
+     * 적혀 있다)보다도 낮다. 나머지 237은 「데이터 없음」 한마디로 남는다.
+     *
+     * <p><b>대신 적재가 관측한 사실을 쓴다.</b> 380 전수 탐침(2026-09-14 · 약 4,500콜)에서
+     * <b>(a) 소스가 후보 태그를 이름으로도 안 내는 것 239 · (b) 우리 후보 밖 태그를 쓰는 것 64 ·
+     * 태그는 최신인데 저장이 빈 것 75</b>로 갈렸다. {@code financial_column_absence}의
+     * {@code ABSENT} 행이 (a)이고 <b>그것만 이 문구를 받는다.</b>
+     *
+     * <p><b>MUST: 두 절을 한 문장에 둔다 — 규칙을 둘로 가르지 않는다.</b> {@code reasonFor}가
+     * {@code String} 하나를 내므로 앞 규칙이 이기면 뒤 문장은 <b>화면에 영영 안 나온다.</b>
+     * 그리고 가르면 술어가 겹쳐 ADR-0111 §규칙의 <i>"두 규칙의 술어를 서로 배타적으로 둔다 …
+     * 겹치면 등록 순서가 문구를 정한다"</i>에 걸린다.
+     *
+     * <p><b>MUST NOT: 행이 없을 때 말하지 않는다.</b> 행 없음은 「모른다」다 — 그 종목을 이
+     * 축으로 아직 안 훑었거나 그 시장의 소스가 이 축을 안 본다(지금 DART가 그렇다).
+     * <b>국내 54종목이 미국 380과 같은 상황인데 이번에 안 열었고</b>, DART로 낼 수 있다는 것과
+     * 그 수는 이 변경의 ADR §결과에 있다.
+     */
+    private static UnavailabilityRule sourceOmitsCostOfSales(String code, boolean financial) {
+        // MUST: 두 갈래의 술어를 배타적으로 둔다(ADR-0111 §규칙). 겹치면 등록 순서가 문구를
+        // 정하고, 그 의존은 코드 어디에도 안 드러난다. 그래서 업종 조건을 한쪽에 걸고
+        // 다른 쪽에 부정으로 건다 — 같은 사실에 붙는 문장이 둘일 뿐 규칙은 겹치지 않는다.
+        String base = "이 회사는 매출원가·매출총이익을 공시에 내지 않습니다. "
+                + "수집이 실패한 것이 아니라, 우리가 아는 계정 이름으로는 그 항목이 오지 않습니다.";
+        return new UnavailabilityRule(code,
+                context -> context.sourceOmits("cost_of_sales", "gross_profit")
+                        && isFinancialDivision(context.industryDivisionKey()) == financial,
+                financial
+                        ? base + " 금융업·보험업은 매출원가를 매출에 직접 대응시켜 표시하지 "
+                                + "않습니다."
+                        : base);
     }
 
     /** 미국에도 소스가 있는 거버넌스 지표. Alpaca {@code cash_dividends}가 그 원자료다. */
