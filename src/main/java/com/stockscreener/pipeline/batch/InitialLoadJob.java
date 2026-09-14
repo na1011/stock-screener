@@ -53,15 +53,17 @@ public class InitialLoadJob {
     private final StockRegistrar stockRegistrar;
     private final BatchExecutions batchExecutions;
     private final JdbcTemplate jdbcTemplate;
+    private final FinancialLoadWindow loadWindow;
 
     public InitialLoadJob(PriceCollector priceCollector, FinancialCollector financialCollector,
                           StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
-                          JdbcTemplate jdbcTemplate) {
+                          JdbcTemplate jdbcTemplate, FinancialLoadWindow loadWindow) {
         this.priceCollector = priceCollector;
         this.financialCollector = financialCollector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.jdbcTemplate = jdbcTemplate;
+        this.loadWindow = loadWindow;
     }
 
     /**
@@ -125,6 +127,9 @@ public class InitialLoadJob {
 
         LocalDate priceFrom = asOf.minusYears(range.priceYears());
         int fromFiscalYear = asOf.getYear() - range.financialYears();
+        if (!range.skipFinancial()) {
+            loadWindow.warnIfShorterThanIndicators(JOB_NAME, range.financialYears());
+        }
 
         // 이 잡은 APPEND_ONLY지만 그것이 정정공시를 막지는 않는다 — 막는 것은
         // FILL_WITHOUT_REVISION 하나뿐이다. --tickers로 이미 재무가 있는 종목을 다시 받으면

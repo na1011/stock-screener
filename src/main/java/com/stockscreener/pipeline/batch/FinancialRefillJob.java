@@ -48,12 +48,14 @@ public class FinancialRefillJob {
     private final FinancialCollector financialCollector;
     private final StockRegistrar stockRegistrar;
     private final BatchExecutions batchExecutions;
+    private final FinancialLoadWindow loadWindow;
 
     public FinancialRefillJob(FinancialCollector financialCollector, StockRegistrar stockRegistrar,
-                              BatchExecutions batchExecutions) {
+                              BatchExecutions batchExecutions, FinancialLoadWindow loadWindow) {
         this.financialCollector = financialCollector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
+        this.loadWindow = loadWindow;
     }
 
     /**
@@ -85,6 +87,7 @@ public class FinancialRefillJob {
         int estimatedCalls = targets.size() * (asOf.getYear() - fromFiscalYear + 1) * 4;
         log.info("재무 결손 보정을 시작한다. 대상 {}종목, {}년 이후, 예상 호출 약 {}회",
                 targets.size(), fromFiscalYear, estimatedCalls);
+        loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
 
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());

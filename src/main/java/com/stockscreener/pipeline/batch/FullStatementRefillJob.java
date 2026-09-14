@@ -49,12 +49,14 @@ public class FullStatementRefillJob {
     private final FullStatementCollector collector;
     private final StockRegistrar stockRegistrar;
     private final BatchExecutions batchExecutions;
+    private final FinancialLoadWindow loadWindow;
 
     public FullStatementRefillJob(FullStatementCollector collector, StockRegistrar stockRegistrar,
-                                  BatchExecutions batchExecutions) {
+                                  BatchExecutions batchExecutions, FinancialLoadWindow loadWindow) {
         this.collector = collector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
+        this.loadWindow = loadWindow;
     }
 
     /**
@@ -92,6 +94,7 @@ public class FullStatementRefillJob {
                         + "요청 보고서 {}건, 예상 호출 {}~{}회",
                 targets.size(), fromFiscalYear, toFiscalYear, periods,
                 requestedReports, requestedReports, requestedReports * 2);
+        loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
 
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
