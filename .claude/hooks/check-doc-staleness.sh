@@ -391,6 +391,7 @@ MUST NOT: 0건을 휴장으로 단정하지 않는다\.|docs/api-spec/data-go-kr
 끝난 뒤에 세운 기준은 이미 한 일을 정당화하는 쪽으로 기운다|docs/phase-criteria.md|.claude/hooks/remind-plan-obligations.sh|착수 전 기준 작성
 규칙을 어기는 값과 깨지는 경로는 다르다|.claude/rules/harness-docs.md|docs/progress.md|수용 테스트 0단계
 .PEG. 27\.4% · .PNW. 48\.5%|docs/adr/ADR-0146-cost-of-sales-picks-the-largest-candidate.md|docs/api-spec/sec-edgar-financial.md|D&A 제외 태그의 오차
+39종목이 갖는데 38이 상품원가|docs/adr/ADR-0150-tag-meaning-is-part-of-the-mapping-contract.md|docs/api-spec/sec-edgar-financial.md|CostOfServices의 동반 출현
 각도를 좁히지 않고, 마지막 둘을.*으로 연다\.|.claude/hooks/remind-plan-obligations.sh|${mem_dir}/adversarial-review-before-executing.md|반증 각도
 쓰기 창 [0-9]*거래일 중 [0-9]*이 FY2025 공시일 중앙값 앞이다|src/main/java/com/stockscreener/indicator/calculator/GovernanceMath.java|docs/api-spec/dart-governance.md|공시일 계단의 대가
 국내 휴장 평일 [0-9]*일 중 미국 개장이 [0-9]*일이다|src/main/java/com/stockscreener/pipeline/collector/PriceCalendar.java|docs/api-spec/alpaca-bars.md|국내 휴장·미국 개장

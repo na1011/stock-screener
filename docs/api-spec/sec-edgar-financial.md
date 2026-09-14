@@ -232,6 +232,22 @@ FY `is_latest` 6,568행)로 **영업이익 373행 · 매출 505행 · 총자산 
 `APPF` 5.1% · `ATR` 12.0% · `EAT` 14.7% · **`PEG` 27.4% · `PNW` 48.5%**(중앙 5.1%)다.
 **그래서 안 더했다**(ADR-0146 §버린 대안).
 
+**(b) 64를 만든 태그는 다섯이고 전부 부분 개념이다**(2026-09-14 · ADR-0150이 계약에 넣었다).
+
+| 종목 | 태그 | 왜 부분인가 |
+|---|---|---|
+| 51 | `CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization` | 정의상 D&A를 뺀 원가 |
+| 6 | `CostOfReimbursableExpense` | 청구대행 비용 — 9종목이 갖고 **6은 그것만 있다** |
+| 3 | `CostOfServicesExcludingDepreciationDepletionAndAmortization` | 〃 |
+| 3 | `CostOfServices` | **39종목이 갖는데 38이 상품원가 태그를 함께 가진다** — 용역 쪽 절반이다 |
+| 1 | `CostOfGoodsSoldExcludingDepreciationDepletionAndAmortization` | 〃 |
+
+**회사가 같은 태그에 담는 내용을 바꾼다 — 이것이 이 소스의 가장 어려운 성질이다.**
+`CNP`는 후보가 `CostOfGoodsAndServicesSold` **하나뿐**인데 원가율이 FY2017 **39.37%**에서
+FY2018 **0.64%**로 떨어지고 회복되지 않는다(FY2025 0.04%). 태그가 갈린 것이 아니라 **그 태그의
+내용이 갈렸다.** `JEF`·`MUR`·`AJG`·`WEX`가 같은 모양이고, **후보 선택 규칙으로는 원리적으로
+못 고친다** — 지표 쪽에서 전제를 검사한다(ADR-0149).
+
 **전기가스(`SIC:49`)는 원가를 성분으로 쪼개 낸다** — `CostOfPurchasedPower` ·
 `CostOfNaturalGasPurchases` · `CostOfDomesticRegulatedElectric` · `CostOfPurchasedOilAndGas`.
 **후보로는 안 열리고 유도가 필요한 별개 기제**다.
