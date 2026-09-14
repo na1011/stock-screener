@@ -148,6 +148,13 @@ public class IndicatorUnavailabilityConfig {
                 sourceOmitsCostOfSales(GrossMarginCalculator.CODE, false),
                 sourceOmitsCostOfSales(GrossProfitToAssetsCalculator.CODE, true),
                 sourceOmitsCostOfSales(GrossProfitToAssetsCalculator.CODE, false)));
+        // 매출총이익률의 **전제가 깨진** 자리. 위 넷과 배타적이다 — 저쪽은 소스가 매출원가를
+        // 한 번도 안 낸 종목이고(값이 없다), 이쪽은 값이 있는데 그 값이 매출에 대응하는 원가
+        // 전체가 아닌 종목이다. 갈래끼리도 배타적이다(Break가 하나만 난다).
+        for (GrossProfitPremise.Break kind : GrossProfitPremise.Break.values()) {
+            rules.add(grossProfitPremiseBroken(GrossMarginCalculator.CODE, kind));
+            rules.add(grossProfitPremiseBroken(GrossProfitToAssetsCalculator.CODE, kind));
+        }
         // 거버넌스 사유는 코드마다 **둘**이다 — 술어가 서로 배타적이라 먼저 맞는 하나만 붙는다.
         rules.addAll(GOVERNANCE_CODES.stream().flatMap(
                 code -> java.util.stream.Stream.of(
@@ -222,6 +229,30 @@ public class IndicatorUnavailabilityConfig {
                         ? base + " 금융업·보험업은 매출원가를 매출에 직접 대응시켜 표시하지 "
                                 + "않습니다."
                         : base);
+    }
+
+    /**
+     * <b>매출원가는 있는데 그것이 매출에 대응하는 원가 전체가 아니다.</b>
+     *
+     * <p>술어는 {@link GrossProfitPremise}이고 <b>계산기가 값을 지우는 술어와 같은 것</b>이다 —
+     * 두 곳에 따로 두면 갈리고, 갈린 쪽은 <b>값도 없고 사유도 없는</b> 자리를 만든다.
+     *
+     * <p>이 문구들은 「소스가 그 항목을 안 낸다」와 <b>말하는 바가 다르다.</b> 저쪽은 기다려도
+     * 안 오는 것이고 이쪽은 <b>값은 오는데 뜻이 다른</b> 것이다 — 사용자가 할 일이 갈린다.
+     */
+    private static UnavailabilityRule grossProfitPremiseBroken(String code,
+                                                               GrossProfitPremise.Break kind) {
+        String reason = switch (kind) {
+            case NEGATIVE_COST -> "이 회사의 최근 연간 매출원가가 음수로 들어와 있어 "
+                    + "매출총이익을 계산할 수 없습니다. 원자료가 고쳐지기 전에는 값을 내지 않습니다.";
+            case INSURANCE_FRAGMENT -> "이 회사는 보험 손익 구조라 매출에 대응하는 비용이 "
+                    + "매출원가가 아니라 보험금·손실·비용에 들어 있습니다. 표시된 매출원가는 "
+                    + "그 일부뿐이라 매출총이익률이 성립하지 않습니다.";
+            case COST_COLLAPSED -> "이 회사가 어느 회계연도부터 매출원가를 예전과 다른 기준으로 "
+                    + "표시해, 그 값이 매출에 대응하는 원가 전체가 아닙니다. 그대로 계산하면 "
+                    + "매출총이익률이 실제보다 훨씬 높게 나옵니다.";
+        };
+        return new UnavailabilityRule(code, context -> context.grossProfitPremiseBroke(kind), reason);
     }
 
     /** 미국에도 소스가 있는 거버넌스 지표. Alpaca {@code cash_dividends}가 그 원자료다. */

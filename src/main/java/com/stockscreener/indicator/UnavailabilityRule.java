@@ -40,7 +40,8 @@ public record UnavailabilityRule(String code, Predicate<Context> when, String re
      * @param marketCode       그 종목의 시장. 소스가 그 시장을 덮는지 가르는 데 쓴다
      */
     public record Context(Map<String, BigDecimal> values, String industryDivisionKey,
-                          String marketCode, Set<String> sourceAbsentColumns) {
+                          String marketCode, Set<String> sourceAbsentColumns,
+                          GrossProfitPremise.Break grossProfitPremise) {
 
         /**
          * 넷째가 없던 시절의 호출부용. <b>부재를 「모른다」로 둔다</b> — 빈 집합은
@@ -48,7 +49,12 @@ public record UnavailabilityRule(String code, Predicate<Context> when, String re
          */
         public Context(Map<String, BigDecimal> values, String industryDivisionKey,
                        String marketCode) {
-            this(values, industryDivisionKey, marketCode, Set.of());
+            this(values, industryDivisionKey, marketCode, Set.of(), null);
+        }
+
+        public Context(Map<String, BigDecimal> values, String industryDivisionKey,
+                       String marketCode, Set<String> sourceAbsentColumns) {
+            this(values, industryDivisionKey, marketCode, sourceAbsentColumns, null);
         }
 
         public Context {
@@ -58,6 +64,17 @@ public record UnavailabilityRule(String code, Predicate<Context> when, String re
 
         public BigDecimal value(String code) {
             return values.get(code);
+        }
+
+        /**
+         * <b>매출총이익률의 전제가 이 방식으로 깨졌는가.</b>
+         *
+         * <p>{@link GrossProfitPremise}가 <b>계산기와 이 자리 둘 다에서 같은 술어</b>로 돌아야
+         * 한다 — 값을 지우는 쪽과 사유를 내는 쪽이 갈리면 <b>값도 없고 사유도 없는</b> 자리가
+         * 생기고, 그것이 이 파일이 금지한 침묵이다.
+         */
+        public boolean grossProfitPremiseBroke(GrossProfitPremise.Break kind) {
+            return grossProfitPremise == kind;
         }
 
         /**

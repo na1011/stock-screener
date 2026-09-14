@@ -67,7 +67,7 @@ public class GrossProfitToAssetsCalculator implements IndicatorCalculator {
     /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
     private static BigDecimal valueOf(IndicatorContext context) {
         FinancialFigures latest = GrossProfit.latestAnnual(context.annualFigures());
-        BigDecimal grossProfit = GrossProfit.of(latest);
+        BigDecimal grossProfit = GrossProfit.of(context.annualFigures());
         if (grossProfit == null) {
             return null;
         }

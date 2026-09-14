@@ -1,6 +1,7 @@
 package com.stockscreener.indicator.calculator;
 
 import com.stockscreener.indicator.FinancialFigures;
+import com.stockscreener.indicator.GrossProfitPremise;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -46,6 +47,23 @@ final class GrossProfit {
      *
      * @return 신고값 또는 유도값. 둘 다 불가능하면 null
      */
+    /**
+     * <b>전제를 먼저 검사한다</b>({@link GrossProfitPremise}). 깨졌으면 값을 내지 않고, 화면은
+     * {@code IndicatorUnavailabilityConfig}가 같은 술어로 사유를 낸다.
+     *
+     * <p><b>MUST: 소비자 둘이 이 갈래를 쓴다</b> — {@code GROSS_MARGIN}과 {@code GP_TO_ASSETS}.
+     * 한쪽만 고치면 다른 쪽이 같은 결함을 그대로 안고 남고, 뒤엣것은 {@code 저평가 가치주}에서
+     * <b>백분위로 가중치 2</b>라 값 하나가 빠지면 나머지 전 종목의 순위가 밀린다.
+     *
+     * @param annual {@code period_end} 내림차순 연간 행(판 이력 포함)
+     */
+    static BigDecimal of(List<FinancialFigures> annual) {
+        if (GrossProfitPremise.of(annual) != null) {
+            return null;
+        }
+        return of(latestAnnual(annual));
+    }
+
     static BigDecimal of(FinancialFigures figures) {
         if (figures == null) {
             return null;

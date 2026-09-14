@@ -10,6 +10,7 @@ import com.stockscreener.stock.PriceReference;
 import com.stockscreener.stock.StockReader;
 import com.stockscreener.stock.SupportResistanceAnalyzer;
 import com.stockscreener.web.ApiExceptions;
+import com.stockscreener.indicator.GrossProfitPremiseReader;
 import com.stockscreener.web.AsOfResolver;
 import com.stockscreener.web.MarketScope;
 
@@ -43,6 +44,7 @@ public class StockController {
     private final SupportResistanceAnalyzer analyzer;
     private final AsOfResolver asOfResolver;
     private final FinancialColumnAbsenceReader absenceReader;
+    private final GrossProfitPremiseReader premiseReader;
     private final MarketScope marketScope;
     private final StockFinancialsAssembler financialsAssembler;
     private final List<UnavailabilityRule> unavailabilityRules;
@@ -53,8 +55,10 @@ public class StockController {
                            MarketScope marketScope,
                            StockFinancialsAssembler financialsAssembler,
                            List<UnavailabilityRule> unavailabilityRules,
-                           FinancialColumnAbsenceReader absenceReader) {
+                           FinancialColumnAbsenceReader absenceReader,
+                           GrossProfitPremiseReader premiseReader) {
         this.absenceReader = absenceReader;
+        this.premiseReader = premiseReader;
         this.stockReader = stockReader;
         this.indicatorCatalog = indicatorCatalog;
         this.screeningRepository = screeningRepository;
@@ -142,9 +146,12 @@ public class StockController {
         // 과거 일자에서는 빈 집합이고, 빈 집합은 「모른다」라 화면이 침묵한다.
         boolean atLatest = asOfResolver.latest(marketScope.forStock(stockId))
                 .map(resolved::equals).orElse(false);
+        // MUST: 전제 판정은 **과거 기준일에도 싣는다.** 소스 부재와 달리 이것은 최신 관측이
+        // 아니라 **그 시점 재무의 함수**라(ADR-0128) 그때의 판정이 그때 참이다.
         UnavailabilityRule.Context ruleContext = new UnavailabilityRule.Context(
                 values, stockReader.industryDivisionKeyOf(stockId).orElse(null), row.marketCode(),
-                atLatest ? absenceReader.absentColumnsOf(stockId) : java.util.Set.of());
+                atLatest ? absenceReader.absentColumnsOf(stockId) : java.util.Set.of(),
+                premiseReader.brokenAt(stockId, resolved));
 
         List<StockDetailResponse.IndicatorValue> indicators = new ArrayList<>();
         for (IndicatorDescriptor descriptor : catalog) {
