@@ -138,13 +138,9 @@ public class IndicatorUnavailabilityConfig {
                 // 미국 금융업이라 위 업종 사유가 두 시장에 그대로 참이다 —
                 // 실측(2026-09-14): 미국 금융업 168종목 중 값이 있는 것이 35뿐이고
                 // 비금융은 829 중 719다. ADR-0111이 막는 「그 시장에 거짓인 사유」가 아니다.
-                afterTaxOutOfMarket(RoicAfterTaxCalculator.CODE),
                 afterTaxFinancialDivision(RoicAfterTaxCalculator.CODE),
-                afterTaxOutOfMarket(RoicAfterTaxMin5yCalculator.CODE),
                 afterTaxFinancialDivision(RoicAfterTaxMin5yCalculator.CODE),
-                afterTaxOutOfMarket(RoicAfterTaxAvg5yCalculator.CODE),
-                afterTaxFinancialDivision(RoicAfterTaxAvg5yCalculator.CODE),
-                afterTaxOutOfMarket(EffectiveTaxRateCalculator.CODE)));
+                afterTaxFinancialDivision(RoicAfterTaxAvg5yCalculator.CODE)));
         // 거버넌스 사유는 코드마다 **둘**이다 — 술어가 서로 배타적이라 먼저 맞는 하나만 붙는다.
         rules.addAll(GOVERNANCE_CODES.stream().flatMap(
                 code -> java.util.stream.Stream.of(
@@ -166,28 +162,19 @@ public class IndicatorUnavailabilityConfig {
     private static final Set<String> KR_MARKETS = Set.of("KOSPI", "KOSDAQ");
 
     /**
-     * 세율 재료가 그 시장에 없다. <b>「기다리면 온다」가 아니라 「영영 안 온다」</b>이므로
-     * 문구가 그것을 말해야 한다(ADR-0111 §규칙 — 두 문장이 사용자가 할 일을 가른다).
+     * 금융업이라 분모의 재료가 없다. 세전 계열({@code ROIC_PRETAX}·{@code ROIC_MIN_3Y})이 쓰는
+     * 것과 <b>같은 술어이고 같은 문구</b>다 — 분모가 같으므로 같은 업종에서 같은 이유로 빈다.
      *
-     * <p>법인세비용·세전이익은 DART 전체 재무제표에서만 받는다. 미국 소스(SEC EDGAR)에도
-     * 태그가 있다는 것은 실측했지만(표본 10/10) <b>적재하지 않기로 한 것</b>이라, 그 결정이
-     * 바뀌면 이 규칙도 함께 걷는다.
-     */
-    private static UnavailabilityRule afterTaxOutOfMarket(String code) {
-        return new UnavailabilityRule(code,
-                context -> !KR_MARKETS.contains(context.marketCode()),
-                "세후 계산에 쓰는 법인세비용·세전이익을 국내 공시에서만 수집하고 있어 "
-                        + "이 시장의 종목에는 값이 나오지 않습니다.");
-    }
-
-    /**
-     * 국내 금융업이라 분모의 재료가 없다. <b>시장 검사가 앞에 붙어 있어야</b>
-     * 위 규칙과 배타적이다 — 없으면 미국 금융업에 두 사유가 겹친다.
+     * <p><b>시장 축 사유를 두지 않는다.</b> 한때 「세율 재료를 국내에서만 수집한다」를 붙였으나
+     * 미국을 열면서 걷었다(ADR-0143) — 미국 FY의 <b>98.5%</b>에 법인세비용이 있다.
+     *
+     * <p>{@code EFFECTIVE_TAX_RATE}에는 사유를 두지 않는다. 그 값이 없는 이유는
+     * 「세전이익이 적자」이거나 「재료 결손」인데 <b>이 설정은 둘을 가를 수 없고</b>,
+     * 같은 파일이 <b>추측을 문구로 쓰지 않는다</b>를 건다.
      */
     private static UnavailabilityRule afterTaxFinancialDivision(String code) {
         return new UnavailabilityRule(code,
-                context -> KR_MARKETS.contains(context.marketCode())
-                        && isFinancialDivision(context.industryDivisionKey()),
+                context -> isFinancialDivision(context.industryDivisionKey()),
                 "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
                         + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다.");
     }
