@@ -104,23 +104,23 @@ rg "NET_INCOME\).*subtract|subtract.*NET_INCOME\)" \
 ```
 
 <!-- 전제 후보. **아직 펜스가 아니다** — 전제 예산이 63/75초라 여유가 12초뿐이고,
-     올리려면 무엇을 뺄지 함께 정해야 한다. 기준선은 재적재 뒤에 조용한 기계에서 잰다. -->
+     올리려면 무엇을 뺄지 함께 정해야 한다. -->
 ```bash
-# 이 결정이 지키는 항등식: 자산 = 부채 + 자본. TOTAL_EQUITY가 지배주주분으로 떨어지면 깨진다.
-psql -d stock_screener -At -c "SET statement_timeout='60s';
-WITH us AS (
-  SELECT f.* FROM financial_statement f
-  JOIN universe_membership m ON m.stock_id = f.stock_id
-   AND m.effective_to IS NULL AND m.universe_code = 'US_TOP1000'
-  WHERE f.is_latest AND f.total_assets IS NOT NULL AND f.total_liabilities IS NOT NULL
-    AND f.total_equity IS NOT NULL AND f.total_assets <> 0)
-SELECT count(*) FROM us
-WHERE abs(total_assets - total_liabilities - total_equity) / abs(total_assets) > 0.01"
+# 재무상태표에서 **불가능한 방향**만 센다: 자산 − 부채 − 자본 < 0.
+# 실제 항등식은 자산 = 부채 + **중간지분** + 자본인데 중간지분을 저장하지 않으므로,
+# 「자산이 남는」 쪽은 정당하다. 모자라는 쪽만 결함이다.
+command psql -d stock_screener -At -c "SET statement_timeout='60s';
+WITH mem AS (SELECT DISTINCT stock_id FROM universe_membership
+             WHERE universe_code = 'US_TOP1000' AND effective_to IS NULL)
+SELECT count(*) FROM financial_statement f JOIN mem ON mem.stock_id = f.stock_id
+WHERE f.is_latest AND f.total_assets IS NOT NULL AND f.total_liabilities IS NOT NULL
+  AND f.total_equity IS NOT NULL AND f.total_assets <> 0
+  AND (f.total_assets - f.total_liabilities - f.total_equity) < -0.01 * abs(f.total_assets)"
 ```
 
-**MUST NOT: 「FY 순이익과 네 분기 합의 차이」를 이 결정의 펜스로 쓰지 않는다.** 재보니
-**315 종목연도**가 걸리는데 그 대부분은 기저가 아니라 **A7(분기 계열의 세대가 최신 FY와
-다르다)**이다. 두 축이 한 수에 섞이면 어느 쪽이 움직였는지 못 가른다.
+**기준선 229행 · 83종목**(2026-09-15 · 재적재·백필 뒤). **MUST NOT: 양방향으로 세지 않는다** —
+그렇게 세면 **2,475행이 나오는데 2,246(90.7%)이 중간지분 방향**이라 결함이 아니다. 처음에
+그렇게 짰다가 **이 분해로 기각했다.**
 
 ## 버린 대안
 
@@ -171,4 +171,22 @@ WHERE abs(total_assets - total_liabilities - total_equity) / abs(total_assets) >
 
 ## 결과
 
-(재적재 뒤에 채운다)
+**닫힌 것**
+
+- **순이익의 기저.** 재적재 실측(2026-09-15): `F` FY2022 **−2,152M → −1,981M**(포드 지배주주
+  순손실의 실제값) · `WEC` FY2025 **1,555.5M → 1,558.7M** · `MPLX` FY2025 **4,952M → 4,912M** ·
+  `CAT`·`EL`·`TEL`·`AVAV`·`AVGO`가 소폭. **전 종목 교정 4,118행 · 정정 650**이다.
+- **총자본의 기저.** `TOTAL_EQUITY`가 지배주주분으로 떨어지던 자리를 되돌렸다. **발화는
+  2종목**이고(폴백 17 중 비지배 태그까지 있는 것), 나머지 15는 **원장이 재료를 안 준다.**
+- **국내는 한 톨도 안 바뀌었다** — 재무행 **17,485** 그대로이고 `total_equity_controlling`이
+  **0행**이다(국내는 분자·분모가 둘 다 비지배 포함이라 지금 정합하다).
+
+**남는 것**
+
+- **지배주주 자본 폴백 36종목**은 그대로다(ADR-0153 §결과에 그 36의 분류가 있다 —
+  24는 비지배지분이 0이라 폴백이 정답이고 9만 오차 상한이 잡히며 그 최대가 `JNJ` 1.48%다).
+- **세 컬럼이 같은 뿌리로 남는다** — `PROFIT_BEFORE_TAX`·`OPERATING_CASH_FLOW`와,
+  **지금 아무 지표도 안 읽는** `CASH_AND_EQUIVALENTS`. 수는 위 표에 있다.
+- **두 시장의 `net_income`이 다른 개념을 담는다**(국내 총액 · 미국 지배주주). 각 시장 안에서는
+  맞으므로 지표는 옳지만, **같은 임계(예: `ROE` 15%)가 두 시장에서 다른 것을 뜻한다.**
+  고르게 하려면 국내를 옮겨야 하고 **분모 소스 확인이 먼저다**(`docs/progress.md` A1 꼬리).
