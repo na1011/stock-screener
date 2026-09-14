@@ -337,6 +337,34 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("같은 날 제출된 accn 둘은 한 판으로 접힌다 — 판 단위는 accn이 아니라 공시일이다")
+    void foldsTwoAccessionsFiledOnTheSameDay() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-same-day-two-accns.json"));
+
+        // 실측(AROC 2015/Q1)이 이 모양이다. 같은 날 제출된 accn 둘이 같은 창을 다르게 보고하면
+        // FinancialWriter는 publishedAt이 같다는 이유로 정정이 아니라 fillMissing으로 보내
+        // 덮고, 덮을 때마다 지표를 무효화한다. 값은 A→B→A로 제자리를 돌고 무효화만 남아
+        // 매주 목요일 재적재가 그 종목의 지표를 지웠다.
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
+
+        List<RawFinancialReport> fy = reports.stream()
+                .filter(r -> "FY".equals(r.fiscalPeriod())).toList();
+        assertThat(fy)
+                .as("공시일이 같으면 판도 하나다 — 둘이면 저장이 한 키에 번갈아 쓴다")
+                .hasSize(1);
+
+        RawFinancialReport only = fy.get(0);
+        assertThat(only.publishedAt()).isEqualTo(LocalDate.of(2024, 2, 20));
+        assertThat(only.cashAndEquivalents())
+                .as("묶음 안에서는 뒤 accn이 이긴다")
+                .isEqualByComparingTo("52011000");
+        assertThat(only.operatingIncome())
+                .as("앞 accn만 실은 컬럼은 살아남는다 — 접기는 값을 줄이지 않는다")
+                .isEqualByComparingTo("200000");
+    }
+
+    @Test
     @DisplayName("매핑 파일에 없는 티커는 NOT_FOUND다 — 조용한 0건이 아니다")
     void unknownTickerIsNotFound() {
         enqueue(200, fixture("tickers.json"));

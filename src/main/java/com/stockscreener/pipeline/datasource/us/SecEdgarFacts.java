@@ -562,11 +562,39 @@ final class SecEdgarFacts {
 
         List<RawFinancialReport> out = new ArrayList<>();
         Map<SecEdgarColumn, BigDecimal> baseline = null;
-        for (Anchor reporter : reporters) {
-            Map<SecEdgarColumn, BigDecimal> values =
-                    valuesOf(reporter, labelAnchor, label, window, tags, byColumn);
-            String currency = currencyOf(reporter, window, tags, byColumn);
-            if (currency == null) {
+        // MUST: 같은 날 제출된 판들을 **하나로 접는다.** 저장의 판 단위는 accn이 아니라
+        // 공시일이다 — FinancialWriter는 publishedAt이 같으면 정정이 아니라 fillMissing으로
+        // 보내 덮고, 덮을 때마다 지표를 무효화한다. 그래서 같은 날 제출된 accn 둘이 같은 창을
+        // 다르게 보고하면 두 보고서가 한 키에 번갈아 써서 값이 A→B→A로 제자리를 돌고,
+        // **매 실행 무효화만 남는다**(실측: 재적재 두 번째 실행에서 교정 340 · (종목,기간,공시일)
+        // 41개가 정확히 2번씩 · 저장값 md5는 3회 동일 · 그 12종목의 최신일 지표가 통째로 빈다).
+        // financial-refill은 매주 목요일 자동으로 돈다(ADR-0116).
+        for (int i = 0; i < reporters.size(); ) {
+            LocalDate filed = reporters.get(i).filed();
+            int end = i;
+            while (end < reporters.size() && reporters.get(end).filed().equals(filed)) {
+                end++;
+            }
+            // 묶음 안에서는 accn 오름차순으로 이어받는다 — 뒤 accn이 이기고, 앞 accn만 실은
+            // 컬럼은 살아남는다. 지금은 앞 accn이 conflicts 거짓으로 버려질 때 그 컬럼이
+            // 통째로 사라지므로, **접기는 값을 줄이지 않고 늘릴 수 있다.**
+            Map<SecEdgarColumn, BigDecimal> values = null;
+            Anchor reporter = null;
+            String currency = null;
+            for (int k = i; k < end; k++) {
+                Anchor candidate = reporters.get(k);
+                String candidateCurrency = currencyOf(candidate, window, tags, byColumn);
+                if (candidateCurrency == null) {
+                    // 통화를 못 읽는 판은 지금도 통째로 건너뛴다. 묶음에 섞으면 그 판의 값이
+                    // 통화 판정 없이 저장되므로 같은 술어를 유지한다(ADR-0094).
+                    continue;
+                }
+                values = carryForward(values, valuesOf(candidate, labelAnchor, label, window, tags, byColumn));
+                reporter = candidate;
+                currency = candidateCurrency;
+            }
+            i = end;
+            if (reporter == null) {
                 continue;
             }
             // 값이 하나도 없는 판은 보고서가 아니다. 담으면 공시일만 늦은 빈 정정본이 되어
