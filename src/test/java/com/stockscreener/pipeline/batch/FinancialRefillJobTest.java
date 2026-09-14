@@ -74,6 +74,8 @@ class FinancialRefillJobTest {
         // DELETE FROM stock이 FK 위반으로 실패하고, 정리가 중단되면 종목이 커밋된 채 남아
         // KOSPI/005930을 넣는 다른 테스트가 전부 깨진다 — 증상이 이 테스트와 무관해 보인다.
         // 같은 사고가 indicator_value로 이미 한 번 났다(.claude/rules/test.md).
+        // 부재 관측도 stock을 참조한다 — 같은 이유로 여기서 함께 지운다.
+        jdbcTemplate.update("DELETE FROM financial_column_absence");
         jdbcTemplate.update("DELETE FROM financial_statement");
         jdbcTemplate.update("DELETE FROM universe_membership");
         jdbcTemplate.update("DELETE FROM stock WHERE ticker IN ('005930', '035420')");

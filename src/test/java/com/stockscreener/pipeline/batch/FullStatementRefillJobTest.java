@@ -74,6 +74,8 @@ class FullStatementRefillJobTest {
         jdbcTemplate.update("DELETE FROM batch_execution");
         // MUST: financial_statement를 stock보다 먼저 지운다. 남으면 DELETE FROM stock이 FK로
         // 실패하고, 정리가 중단되면 KOSPI/005930을 넣는 다른 테스트가 전부 깨진다.
+        // 부재 관측도 stock을 참조한다 — 같은 이유로 여기서 함께 지운다.
+        jdbcTemplate.update("DELETE FROM financial_column_absence");
         jdbcTemplate.update("DELETE FROM financial_statement");
         jdbcTemplate.update("DELETE FROM universe_membership");
         jdbcTemplate.update("DELETE FROM stock WHERE ticker IN ('005930', '035420')");

@@ -54,7 +54,7 @@ class DartFinancialAdapterTest {
         respondByReportCode();
         DartFinancialAdapter adapter = newAdapter();
 
-        List<RawFinancialReport> reports = adapter.fetchReports(SAMSUNG, 2025);
+        List<RawFinancialReport> reports = adapter.fetchReports(SAMSUNG, 2025).reports();
         RawFinancialReport annual = findReport(reports, 2025, "FY");
 
         assertThat(annual.revenue()).isEqualByComparingTo("333605938000000");
@@ -72,7 +72,7 @@ class DartFinancialAdapterTest {
         respondByReportCode();
         DartFinancialAdapter adapter = newAdapter();
 
-        List<RawFinancialReport> reports = adapter.fetchReports(SAMSUNG, 2025);
+        List<RawFinancialReport> reports = adapter.fetchReports(SAMSUNG, 2025).reports();
         RawFinancialReport q4 = findReport(reports, 2025, "Q4");
 
         // 실측: 333,605,938 - 239,768,567 = 93,837,371 (백만원 단위 생략)
@@ -87,7 +87,7 @@ class DartFinancialAdapterTest {
         respondByReportCode();
         DartFinancialAdapter adapter = newAdapter();
 
-        List<RawFinancialReport> reports = adapter.fetchReports(SAMSUNG, 2025);
+        List<RawFinancialReport> reports = adapter.fetchReports(SAMSUNG, 2025).reports();
         RawFinancialReport q4 = findReport(reports, 2025, "Q4");
         RawFinancialReport annual = findReport(reports, 2025, "FY");
 
@@ -104,7 +104,7 @@ class DartFinancialAdapterTest {
         DartFinancialAdapter adapter = newAdapter();
 
         RawFinancialReport annual =
-                findReport(adapter.fetchReports(SAMSUNG, 2025), 2025, "FY");
+                findReport(adapter.fetchReports(SAMSUNG, 2025).reports(), 2025, "FY");
 
         assertThat(annual.publishedAt()).isNotNull();
         assertThat(annual.publishedAt().getYear()).isGreaterThanOrEqualTo(2025);
@@ -123,7 +123,7 @@ class DartFinancialAdapterTest {
         DartFinancialAdapter adapter = newAdapter();
 
         // 전 기간이 013이면 보고서가 하나도 없지만 예외는 아니다.
-        assertThat(adapter.fetchReports(SAMSUNG, 2025)).isEmpty();
+        assertThat(adapter.fetchReports(SAMSUNG, 2025).reports()).isEmpty();
     }
 
     @Test
@@ -184,7 +184,7 @@ class DartFinancialAdapterTest {
         DartFinancialAdapter adapter = newAdapter();
 
         RawFinancialReport annual =
-                findReport(adapter.fetchReports(SAMSUNG, 2025), 2025, "FY");
+                findReport(adapter.fetchReports(SAMSUNG, 2025).reports(), 2025, "FY");
 
         // RawFinancialReport에 PER·ROE 같은 필드가 아예 없다는 것이 구조적 보장이다.
         // 여기서는 원자료만 채워졌음을 확인한다.

@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.support;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FinancialDataSource;
+import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 
@@ -52,15 +53,15 @@ public class FakeFinancialDataSource implements FinancialDataSource {
     }
 
     @Override
-    public List<RawFinancialReport> fetchReports(SecurityRef security, int fromFiscalYear)
+    public FinancialFetch fetchReports(SecurityRef security, int fromFiscalYear)
             throws DataSourceException {
         fetchedStockIds.add(security.stockId());
         DataSourceException failure = failures.get(security.stockId());
         if (failure != null) {
             throw failure;
         }
-        return reportsByStock.getOrDefault(security.stockId(), List.of()).stream()
+        return FinancialFetch.of(reportsByStock.getOrDefault(security.stockId(), List.of()).stream()
                 .filter(report -> report.fiscalYear() >= fromFiscalYear)
-                .toList();
+                .toList());
     }
 }

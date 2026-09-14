@@ -55,7 +55,7 @@ class DartLiveTest {
     @Test
     @DisplayName("[live] 사업보고서에서 6개 계정을 모두 채운다 — 계정명이 바뀌면 여기서 드러난다")
     void fillsAllSixAccounts() throws Exception {
-        List<RawFinancialReport> reports = adapter().fetchReports(SAMSUNG, SETTLED_YEAR);
+        List<RawFinancialReport> reports = adapter().fetchReports(SAMSUNG, SETTLED_YEAR).reports();
 
         RawFinancialReport annual = reports.stream()
                 .filter(r -> r.fiscalYear() == SETTLED_YEAR && "FY".equals(r.fiscalPeriod()))
@@ -82,7 +82,7 @@ class DartLiveTest {
     @Test
     @DisplayName("[live] Q4를 유도하고 값이 온전하다 — FY보다 작고 양수여야 한다")
     void derivesSaneFourthQuarter() throws Exception {
-        List<RawFinancialReport> reports = adapter().fetchReports(SAMSUNG, SETTLED_YEAR);
+        List<RawFinancialReport> reports = adapter().fetchReports(SAMSUNG, SETTLED_YEAR).reports();
 
         Optional<RawFinancialReport> q4 = reports.stream()
                 .filter(r -> r.fiscalYear() == SETTLED_YEAR && "Q4".equals(r.fiscalPeriod()))
@@ -117,7 +117,7 @@ class DartLiveTest {
     void ancientYearYieldsNothing() throws Exception {
         // 2010년은 DART 재무 API 제공 범위(2015~) 밖이다.
         List<RawFinancialReport> reports = adapter().fetchReports(
-                new SecurityRef(1L, "KOSPI", "005930"), 2010).stream()
+                new SecurityRef(1L, "KOSPI", "005930"), 2010).reports().stream()
                 .filter(r -> r.fiscalYear() == 2010)
                 .toList();
 

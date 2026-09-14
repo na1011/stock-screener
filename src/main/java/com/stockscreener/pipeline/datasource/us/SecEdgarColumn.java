@@ -273,6 +273,15 @@ enum SecEdgarColumn {
         return !fallbackCandidates.contains(tag);
     }
 
+    /**
+     * {@code financial_statement}의 컬럼 이름. <b>상수 이름을 그대로 내린다</b> —
+     * 이 enum의 이름이 컬럼 이름과 일부러 같게 지어져 있고, 사본을 따로 두면 갈려도
+     * 컴파일이 통과한다. {@code FinancialColumnAbsenceWriter}가 이 값을 키로 쓴다.
+     */
+    String columnName() {
+        return name().toLowerCase(java.util.Locale.ROOT);
+    }
+
     boolean instant() {
         return kind != Kind.DURATION;
     }

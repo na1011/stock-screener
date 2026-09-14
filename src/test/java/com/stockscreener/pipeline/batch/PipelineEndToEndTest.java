@@ -131,6 +131,9 @@ class PipelineEndToEndTest {
         jdbcTemplate.update("DELETE FROM price_daily");
         jdbcTemplate.update("DELETE FROM market_index_daily");
         jdbcTemplate.update("DELETE FROM universe_membership");
+        // MUST: stock 을 지우기 전에 지운다 — FK로 정리가 중단되면 종목이 커밋된 채
+        // 남아 무관해 보이는 다른 시험들이 깨진다(.claude/rules/test.md).
+        jdbcTemplate.update("DELETE FROM financial_column_absence");
         jdbcTemplate.update("DELETE FROM stock");
         // reset()이 끈 것을 **관측한 값으로** 되돌린다. 이 클래스가 DB에 남기는 유일한
         // 전역 상태다. 아직 관측 전이면(첫 reset()의 cleanUp() 호출) 손대지 않는다.

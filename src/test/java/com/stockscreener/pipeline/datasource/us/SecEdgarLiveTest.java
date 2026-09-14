@@ -36,7 +36,7 @@ class SecEdgarLiveTest {
     @DisplayName("[live] 실제 companyfacts에서 기간이 겹치지 않는 보고서가 나온다")
     void reconstructsPeriods() throws DataSourceException {
         List<RawFinancialReport> reports = adapter()
-                .fetchReports(new SecurityRef(1L, UsMarket.CODE, "AAPL"), FROM_FISCAL_YEAR);
+                .fetchReports(new SecurityRef(1L, UsMarket.CODE, "AAPL"), FROM_FISCAL_YEAR).reports();
 
         assertThat(reports).as("0건이면 「없다」가 아니라 재구성이 깨진 것이다").isNotEmpty();
 
@@ -102,7 +102,7 @@ class SecEdgarLiveTest {
     @DisplayName("[live] 분기 넷이 회계연도를 이룬다 — Q4를 유도하지 않으면 TTM이 15개월이 된다")
     void quartersCoverTheYear() throws DataSourceException {
         List<RawFinancialReport> reports = adapter()
-                .fetchReports(new SecurityRef(1L, UsMarket.CODE, "MSFT"), FROM_FISCAL_YEAR);
+                .fetchReports(new SecurityRef(1L, UsMarket.CODE, "MSFT"), FROM_FISCAL_YEAR).reports();
         Map<Integer, java.util.Set<String>> quarters = new TreeMap<>();
         for (RawFinancialReport r : reports) {
             if (!"FY".equals(r.fiscalPeriod())) {
@@ -131,8 +131,8 @@ class SecEdgarLiveTest {
     void sameInputGivesSameReports() throws DataSourceException {
         SecEdgarFinancialAdapter adapter = adapter();
         SecurityRef nvda = new SecurityRef(3L, UsMarket.CODE, "NVDA");
-        List<RawFinancialReport> first = adapter.fetchReports(nvda, FROM_FISCAL_YEAR);
-        List<RawFinancialReport> second = adapter.fetchReports(nvda, FROM_FISCAL_YEAR);
+        List<RawFinancialReport> first = adapter.fetchReports(nvda, FROM_FISCAL_YEAR).reports();
+        List<RawFinancialReport> second = adapter.fetchReports(nvda, FROM_FISCAL_YEAR).reports();
         assertThat(second).as("두 번째가 다르면 재구성이 상태에 의존한다").isEqualTo(first);
     }
 

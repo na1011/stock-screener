@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.datasource.us;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.FinancialColumnAbsence;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import tools.jackson.databind.JsonNode;
 
@@ -113,8 +114,15 @@ final class SecEdgarFacts {
     private SecEdgarFacts() {
     }
 
-    /** 재구성 결과와, 만들지 못해 버린 수. 버린 수를 안 세면 결손 판정이 서지 않는다. */
-    record Result(List<RawFinancialReport> reports, int dropped) {
+    /**
+     * 재구성 결과와, 만들지 못해 버린 수, 그리고 <b>한 팩트도 못 얻은 컬럼</b>.
+     *
+     * <p>버린 수를 안 세면 결손 판정이 서지 않는다. 같은 이유로 <b>컬럼 축의 부재</b>도 낸다 —
+     * 팩트 수준에서는 「없다」와 「우리가 못 만들었다」를 갈라 왔는데(P22 축①) <b>컬럼 수준에서는
+     * 그 값이 쓰이고 사라지고 있었다.</b>
+     */
+    record Result(List<RawFinancialReport> reports, int dropped,
+                  List<FinancialColumnAbsence> absences) {
     }
 
     /** 팩트 하나. 소스가 준 그대로이고 해석은 아래에서 한다. */
@@ -172,7 +180,7 @@ final class SecEdgarFacts {
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
                 .thenComparing(RawFinancialReport::publishedAt));
-        return new Result(reports, dropped);
+        return new Result(reports, dropped, absencesOf(facts, byColumn));
     }
 
     // ---------- 1. 팩트를 컬럼별로 모은다 ----------
@@ -202,6 +210,46 @@ final class SecEdgarFacts {
             byColumn.put(column, byTag);
         }
         return byColumn;
+    }
+
+    /**
+     * <b>한 팩트도 못 얻은 컬럼</b>과 그 까닭.
+     *
+     * <p>{@link #collect}의 {@code byTag}가 비는 원인이 둘이고 <b>사용자가 할 일이 다르다</b> —
+     * 후보 태그가 소스에 이름으로도 없으면 그 회사가 그 항목을 공시하지 않는 것이고
+     * ({@code ABSENT}), 태그는 있는데 {@code readUnits}의 세 필터(단위·폼·필드)가 다 걸러
+     * 냈으면 <b>우리 쪽 한계</b>다({@code FILTERED}).
+     *
+     * <p><b>MUST: 둘을 갈라 낸다.</b> 하나로 뭉치면 화면이 <i>"소스에 그 항목이 없습니다"</i>를
+     * 우리 필터 탓인 자리에도 말하게 되고, 그것이 {@code IndicatorUnavailabilityConfig}가
+     * 금지한 <b>그럴듯한데 틀린 사유</b>다.
+     *
+     * <p><b>MUST NOT: {@code reportEvidence}가 거짓인 컬럼을 빼지 않는다.</b> 그 술어는
+     * 「보고서가 그 기간을 보고했다」의 증거 자격이지 <b>값의 유무가 아니다</b> — 주식수·세율
+     * 재료도 없으면 없는 것이고, 그 사실은 같은 자리에 담긴다.
+     */
+    private static List<FinancialColumnAbsence> absencesOf(
+            JsonNode facts, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        List<FinancialColumnAbsence> absences = new ArrayList<>();
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            if (!byColumn.getOrDefault(column, Map.of()).isEmpty()) {
+                continue;
+            }
+            boolean tagExists = false;
+            for (String candidate : column.candidates()) {
+                boolean dei = candidate.startsWith("dei:");
+                JsonNode tag = facts.path(dei ? "dei" : "us-gaap")
+                        .path(dei ? candidate.substring(4) : candidate);
+                if (!tag.isMissingNode() && tag.has("units")) {
+                    tagExists = true;
+                    break;
+                }
+            }
+            absences.add(new FinancialColumnAbsence(column.columnName(),
+                    tagExists ? FinancialColumnAbsence.State.FILTERED
+                              : FinancialColumnAbsence.State.ABSENT));
+        }
+        return absences;
     }
 
     /** 한 컬럼의 모든 팩트. 태그를 가리지 않는 순회가 필요한 자리에서 쓴다. */

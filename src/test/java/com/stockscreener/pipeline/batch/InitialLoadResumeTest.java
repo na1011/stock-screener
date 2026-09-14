@@ -97,6 +97,8 @@ class InitialLoadResumeTest {
         jdbcTemplate.update("DELETE FROM batch_execution");
         // MUST: 자식 테이블을 stock보다 먼저 지운다(.claude/rules/test.md).
         jdbcTemplate.update("DELETE FROM indicator_value");
+        // 부재 관측도 stock을 참조한다 — 같은 이유로 여기서 함께 지운다.
+        jdbcTemplate.update("DELETE FROM financial_column_absence");
         jdbcTemplate.update("DELETE FROM financial_statement");
         jdbcTemplate.update("DELETE FROM price_daily");
         jdbcTemplate.update("DELETE FROM universe_membership");

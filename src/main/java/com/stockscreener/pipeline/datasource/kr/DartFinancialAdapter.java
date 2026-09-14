@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource.kr;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FinancialDataSource;
+import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey;
@@ -71,7 +72,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
     }
 
     @Override
-    public List<RawFinancialReport> fetchReports(SecurityRef security, int fromFiscalYear)
+    public FinancialFetch fetchReports(SecurityRef security, int fromFiscalYear)
             throws DataSourceException {
         if (apiKey == null || apiKey.isBlank()) {
             throw new DataSourceException(DataSourceException.Kind.AUTH, DartResponse.SOURCE_NAME,
@@ -97,7 +98,11 @@ public class DartFinancialAdapter implements FinancialDataSource {
             }
             deriveFourthQuarter(byPeriod, year).ifPresent(reports::add);
         }
-        return reports;
+        // DART는 이 축을 안 본다 — 빈 목록은 「모른다」이지 「없다」가 아니다.
+        // 같은 판정을 낼 재료는 있다(DartFullAccountMapper.find가 후보 account_id가 손익 행에
+        // 하나도 없을 때 null을 낸다 · 추가 콜 0). 국내 54종목이 미국 380과 같은 상황인데
+        // 이번에 안 열었고, 그 사실과 수는 이 변경의 ADR §결과에 있다.
+        return FinancialFetch.of(reports);
     }
 
     /**

@@ -146,8 +146,8 @@ class DataSourceRegistryTest {
         }
 
         @Override
-        public List<RawFinancialReport> fetchReports(SecurityRef security, int fromFiscalYear) {
-            return List.of();
+        public FinancialFetch fetchReports(SecurityRef security, int fromFiscalYear) {
+            return FinancialFetch.of(List.of());
         }
     }
 

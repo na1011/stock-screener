@@ -185,7 +185,7 @@ class SecEdgarFinancialAdapterTest {
     void labelsQuartersOfTheYearInProgress() throws Exception {
         enqueue(200, fixture("tickers.json"));
         enqueue(200, fixture("companyfacts-in-progress-year.json"));
-        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         RawFinancialReport q1 = reports.stream()
                 .filter(r -> r.fiscalYear() == 2024 && "Q1".equals(r.fiscalPeriod()))
@@ -222,7 +222,7 @@ class SecEdgarFinancialAdapterTest {
         // 그 12개월 열은 그 10-Q의 앵커 종료일(분기말)과 같아 길이만 보는 판정을 통과한다.
         enqueue(200, fixture("companyfacts-trailing-twelve-months-in-10q.json"));
 
-        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         assertThat(reports).extracting(RawFinancialReport::fiscalPeriod)
                 .as("롤링 창이 회계연도가 되면 분기 번호가 밀리고 라벨이 겹친다")
@@ -246,7 +246,7 @@ class SecEdgarFinancialAdapterTest {
         // 2023-12-31에 끝나 end.getYear()로는 둘 다 2023/FY가 된다(실측: ILMN).
         enqueue(200, fixture("companyfacts-fiscal-year-crosses-new-year.json"));
 
-        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         assertThat(reports).extracting(RawFinancialReport::fiscalYear)
                 .as("회계연도는 달력 연도가 아니다 — 앞 해는 2022여야 한다")
@@ -262,7 +262,7 @@ class SecEdgarFinancialAdapterTest {
         // 라벨이 안 움직인다. 넓히려는 세션이 여기서 붉는 것을 보고 멈춘다.
         enqueue(200, fixture("companyfacts-late-january-fiscal-year.json"));
 
-        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         assertThat(reports).extracting(RawFinancialReport::fiscalYear)
                 .as("NVDA·WMT·RH는 스스로 그 해를 fiscal 2023이라 부른다 — 지금 라벨이 맞다")
@@ -281,7 +281,7 @@ class SecEdgarFinancialAdapterTest {
         // 이 픽스처를 그 이름으로 만들었다가 git이 추적하지 않는 것을 보고 고쳤다).
         enqueue(200, fixture("companyfacts-two-labels-before-load-window.json"));
 
-        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         assertThat(reports).extracting(RawFinancialReport::fiscalYear)
                 .as("창 안 두 해만 나온다 — 창 밖(2019)의 충돌은 종목을 죽이지 않는다")
@@ -296,7 +296,7 @@ class SecEdgarFinancialAdapterTest {
 
         // 실측(2026-08-31): 미국 재무가 거절된 236종목 중 93건이 이 모양이고 시작일 차이가
         // 전부 10일 이내다. 던지면 그 종목의 재무가 통째로 안 들어온다.
-        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         assertThat(reports).extracting(RawFinancialReport::fiscalPeriod).contains("Q1");
         RawFinancialReport q1 = of(reports, "Q1");
@@ -315,7 +315,7 @@ class SecEdgarFinancialAdapterTest {
         // 실측(AAON FY2022)이 이 모양이다. 10-K가 손익을 냈고, 8개월 뒤 10-Q가 비교
         // 재무상태표만 실으면서 retained_earnings를 정정했다. 그 한 컬럼 때문에 판이
         // 새로 나갔고 손익이 통째로 NULL인 행이 is_latest가 됐다.
-        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM);
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         List<RawFinancialReport> fy = reports.stream()
                 .filter(r -> "FY".equals(r.fiscalPeriod())).toList();
@@ -415,7 +415,7 @@ class SecEdgarFinancialAdapterTest {
         // 픽스처는 실제 결함의 모양이다: ASC606(제외) 200이 총계 Revenues 500의 40%이고,
         // 후보 순서로 첫값을 고르면 200이 총매출 자리에 앉는다. 실측에서 US_TOP1000
         // 970종목 중 92종목이 이 모양이었고 92 전부가 과소계상이었다.
-        assertThat(of(adapter().fetchReports(FIX, FROM), "FY").revenue())
+        assertThat(of(adapter().fetchReports(FIX, FROM).reports(), "FY").revenue())
                 .as("ASC606 부분값 200이 아니라 총계 500이어야 한다")
                 .isEqualByComparingTo(new BigDecimal("500"));
     }
@@ -429,7 +429,7 @@ class SecEdgarFinancialAdapterTest {
         // 이 시험이 없으면 「후보 순서만 바꾸면 된다」와 구분되지 않는다. 실측에서 OWL이
         // 이 모양이었다 — 저장값(ASC606) 2,870M이 Revenues 568M보다 크고 그쪽이 맞다.
         // 그래서 「Revenues를 앞세운다」는 처방은 기각됐고 최댓값이 남았다.
-        assertThat(of(adapter().fetchReports(FIX, FROM), "FY").revenue())
+        assertThat(of(adapter().fetchReports(FIX, FROM).reports(), "FY").revenue())
                 .as("Revenues 부분값 100이 아니라 총계 500이어야 한다")
                 .isEqualByComparingTo(new BigDecimal("500"));
     }
@@ -443,7 +443,7 @@ class SecEdgarFinancialAdapterTest {
         // Revenues가 없고 세 포함(650)과 제외(500)만 있는 회사다. 세 포함은 정의상 제외보다
         // 크므로 최댓값 경쟁에 넣으면 언제나 이겨 주세가 매출로 들어온다 — 실측에서
         // 브라운포먼(BF.A)이 순매출 3,928M 대신 총매출 5,082M을 받을 자리였다.
-        assertThat(of(adapter().fetchReports(FIX, FROM), "FY").revenue())
+        assertThat(of(adapter().fetchReports(FIX, FROM).reports(), "FY").revenue())
                 .as("주세 포함 650이 아니라 순매출 500이어야 한다")
                 .isEqualByComparingTo(new BigDecimal("500"));
     }
@@ -456,7 +456,7 @@ class SecEdgarFinancialAdapterTest {
 
         // 최댓값 경쟁에서 뺀 것이지 후보에서 뺀 것이 아니다. 실측으로 US_TOP1000의
         // 42종목(AKAM·BALL·CPRT·CRWD…)이 이 태그만 낸다.
-        assertThat(of(adapter().fetchReports(FIX, FROM), "FY").revenue())
+        assertThat(of(adapter().fetchReports(FIX, FROM).reports(), "FY").revenue())
                 .as("경쟁 후보가 하나도 없으면 마지막 수단이 남아야 한다")
                 .isEqualByComparingTo(new BigDecimal("500"));
     }
@@ -464,7 +464,7 @@ class SecEdgarFinancialAdapterTest {
     private List<RawFinancialReport> fetch() throws DataSourceException {
         enqueue(200, fixture("tickers.json"));
         enqueue(200, fixture("companyfacts.json"));
-        return adapter().fetchReports(FIX, FROM);
+        return adapter().fetchReports(FIX, FROM).reports();
     }
 
     private static RawFinancialReport of(List<RawFinancialReport> reports, String period) {

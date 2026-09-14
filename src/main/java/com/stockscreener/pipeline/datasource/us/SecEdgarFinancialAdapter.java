@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.datasource.us;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.FinancialDataSource;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.datasource.SecurityRef;
@@ -88,7 +89,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     }
 
     @Override
-    public List<RawFinancialReport> fetchReports(SecurityRef security, int fromFiscalYear)
+    public FinancialFetch fetchReports(SecurityRef security, int fromFiscalYear)
             throws DataSourceException {
         requireUserAgent();
         Optional<Long> cik = cikCache.findCik(security.ticker());
@@ -112,7 +113,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
             log.info("기간을 만들지 못한 팩트를 버렸다. ticker={} 버림={}건 만든 보고서={}건",
                     security.ticker(), result.dropped(), result.reports().size());
         }
-        return result.reports();
+        return new FinancialFetch(result.reports(), result.absences());
     }
 
     /**

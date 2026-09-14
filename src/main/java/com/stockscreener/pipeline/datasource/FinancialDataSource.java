@@ -28,6 +28,11 @@ public interface FinancialDataSource {
      * <b>Q4는 예외다</b> — 4분기 보고서가 어느 소스에도 없고, 그 행이 없으면 분기 TTM이
      * 다섯 분기에 걸친 구멍 난 합이 된다. 근거와 계약은 {@link RawFinancialReport}에 있다.
      */
-    List<RawFinancialReport> fetchReports(SecurityRef security, int fromFiscalYear)
+    /**
+     * <p><b>부재 축을 함께 낸다</b>({@link FinancialFetch}) — 「우리 후보로는 아무 팩트도 못 얻은
+     * 컬럼」이 있는 소스는 그것을 실어 보내고, 안 보는 소스는 <b>빈 목록</b>을 낸다.
+     * 빈 목록은 「모른다」이지 「없다」가 아니다.
+     */
+    FinancialFetch fetchReports(SecurityRef security, int fromFiscalYear)
             throws DataSourceException;
 }
