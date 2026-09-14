@@ -11,9 +11,16 @@ applies_to:
 
 ## 결정
 
-미국 `net_income`을 **지배주주 귀속으로 통일한다.** 소스가 `NetIncomeLoss`를 내면 그것을,
-안 내면 **`ProfitLoss` − 비지배 귀속 순이익**을 쓴다. 둘 다 안 되면 예전과 똑같이
-`NET_INCOME`의 첫값이 나간다 — **어느 갈래에서도 값을 잃지 않는다.**
+**뜻이 다른 후보들 위에서 첫값을 쓰지 않는다 — 컬럼을 갈라 들고 유도한다.** 두 자리에 건다.
+
+1. **미국 `net_income`을 지배주주 귀속으로 통일한다.** 소스가 `NetIncomeLoss`를 내면 그것을,
+   안 내면 **`ProfitLoss` − 비지배 귀속 순이익**을 쓴다.
+2. **미국 `total_equity`를 비지배 포함으로 통일한다.** 소스가
+   `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`를 내면 그것을,
+   안 내면 **`StockholdersEquity` + `MinorityInterest`**를 쓴다 — ADR-0153이 넣은
+   `controllingEquity`의 **정확한 역**이다.
+
+둘 다 안 되면 예전과 똑같이 그 컬럼의 첫값이 나간다 — **어느 갈래에서도 값을 잃지 않는다.**
 
 ## 왜 지금인가 — ADR-0153이 이 어긋남을 만들었다
 
@@ -31,6 +38,9 @@ applies_to:
 ## 규칙
 
 - MUST: **직접 낸 값이 언제나 이긴다**(ADR-0104). 유도는 없을 때만이다.
+- MUST: **`total_equity`는 `total_assets`·`total_liabilities`와 같은 기저로 둔다** —
+  `자산 = 부채 + 자본`이 서야 하고, 국내 `자본총계`와도 같은 것이라야 시장 간 계산 방식이
+  갈리지 않는다(spec §7).
 - MUST: **연간과 Q4가 같은 기저여야 한다.** `EPS_TTM`처럼 네 분기를 더하는 지표가 서로 다른
   기저를 더하면 합이 무엇도 아니게 된다. `controllingIncomeQ4`가 그 자리다.
 - MUST NOT: **`NetIncomeLossAvailableToCommonStockholdersBasic`에서 비지배분을 빼지 않는다.**
@@ -93,29 +103,24 @@ rg "NET_INCOME\).*subtract|subtract.*NET_INCOME\)" \
   src/main/java/com/stockscreener/pipeline/datasource/us/SecEdgarFacts.java
 ```
 
-<!-- 전제 후보. **아직 펜스가 아니다** — 기준선을 안 쟀고, 전제 예산이 63/75초라
-     여유가 12초뿐이라 무엇을 뺄지 함께 정해야 한다. 재적재 뒤 조용한 기계에서 잰다. -->
+<!-- 전제 후보. **아직 펜스가 아니다** — 전제 예산이 63/75초라 여유가 12초뿐이고,
+     올리려면 무엇을 뺄지 함께 정해야 한다. 기준선은 재적재 뒤에 조용한 기계에서 잰다. -->
 ```bash
-# 연간과 Q4의 순이익 기저가 갈리지 않는가.
-# FY 순이익과 네 분기 합의 어긋남이 1%를 넘는 stock-year를 센다. 기저가 갈리면 여기 걸린다.
-psql -d stock_screener -At -F'|' -c "
-WITH fy AS (
-  SELECT f.stock_id, f.fiscal_year, f.net_income n
-  FROM financial_statement f JOIN stock s ON s.id = f.stock_id
-  JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL
-  JOIN universe u ON u.id = m.universe_id AND u.code = 'US_TOP1000'
-  WHERE f.report_period = 'FY' AND f.is_latest AND f.net_income IS NOT NULL),
-q AS (
-  SELECT stock_id, fiscal_year, sum(net_income) n, count(*) c
-  FROM financial_statement
-  WHERE report_period IN ('Q1','Q2','Q3','Q4') AND is_latest AND net_income IS NOT NULL
-  GROUP BY 1,2)
-SELECT count(*) FROM fy JOIN q USING (stock_id, fiscal_year)
-WHERE q.c = 4 AND fy.n <> 0 AND abs(q.n - fy.n) / abs(fy.n) > 0.01" \
+# 이 결정이 지키는 항등식: 자산 = 부채 + 자본. TOTAL_EQUITY가 지배주주분으로 떨어지면 깨진다.
+psql -d stock_screener -At -c "SET statement_timeout='60s';
+WITH us AS (
+  SELECT f.* FROM financial_statement f
+  JOIN universe_membership m ON m.stock_id = f.stock_id
+   AND m.effective_to IS NULL AND m.universe_code = 'US_TOP1000'
+  WHERE f.is_latest AND f.total_assets IS NOT NULL AND f.total_liabilities IS NOT NULL
+    AND f.total_equity IS NOT NULL AND f.total_assets <> 0)
+SELECT count(*) FROM us
+WHERE abs(total_assets - total_liabilities - total_equity) / abs(total_assets) > 0.01"
 ```
 
-**기준선은 아직 없다.** 재적재 뒤 이 질의의 수를 재고, 그때 **펜스로 올릴지와 무엇을 뺄지를
-함께 정한다.** MUST NOT: 재보지 않은 수를 임계로 박지 않는다.
+**MUST NOT: 「FY 순이익과 네 분기 합의 차이」를 이 결정의 펜스로 쓰지 않는다.** 재보니
+**315 종목연도**가 걸리는데 그 대부분은 기저가 아니라 **A7(분기 계열의 세대가 최신 FY와
+다르다)**이다. 두 축이 한 수에 섞이면 어느 쪽이 움직였는지 못 가른다.
 
 ## 버린 대안
 
@@ -123,9 +128,16 @@ WHERE q.c = 4 AND fy.n <> 0 AND abs(q.n - fy.n) / abs(fy.n) > 0.01" \
   빈다. 표본 47에서 **13종목**이 그 자리다.
 - **`ProfitLoss`가 이긴 행을 버린다** — ADR-0126 §결정이 입력 값을 자동으로 버리는 게이트를
   금지한다. 그리고 오차가 대부분 0.25% 이하라 **버리는 쪽이 더 크게 틀린다.**
-- **`net_income_controlling` 컬럼을 미국에도 채워 지표가 고르게 한다** — 지표 계층 여섯 곳
-  (`PER`·`EPS_TTM`·`EPS_CAGR_5Y`·`EPS_GROWTH_TTM_YOY`·`PER_MEDIAN_5Y`·`NET_MARGIN`)이
-  분기점을 갖게 된다. **한 컬럼을 옳게 만드는 쪽이 읽는 곳을 안 늘린다.**
+- **국내와 같은 모양으로 둔다** — `net_income`에 연결 총액을, `net_income_controlling`에
+  지배주주분을. **분기점이 느는 게 아니라서 기각한 것이 아니다**(`FinancialMath`가 그 분기를
+  **이미 갖고 있다**). **미국에서 성립하지 않아서**다: 표본 47의 연간 **827칸 중 총액
+  태그(`ProfitLoss`)가 있는 것은 589(71.2%)**뿐이고 **9종목은 지배주주 태그만 낸다.**
+  그 모양으로 두면 `net_income`이 **28.8%의 기간에서 빈다** — `NET_MARGIN`·`PER`이 그만큼
+  꺼진다. 총액을 유도하려면 비지배 태그가 필요한데 그것이 없어서 이 갈래를 타는 것이다.
+- **두 시장의 `net_income`이 지금 다른 개념을 담는다**(국내 총액 · 미국 지배주주). **각
+  시장 안에서는 분자·분모가 맞으므로 지표는 옳다** — `ROE`가 국내는 총액/총자본, 미국은
+  지배주주/지배주주 자본이다(실측: 국내 `total_equity_controlling` **0행**). 고르게 하려면
+  **국내를 지배주주로 옮겨야** 하고 그것은 분모 소스 확인이 먼저다(`docs/progress.md` A1 꼬리).
 - **미국일 때만 적용한다** — ADR-0153이 같은 이유로 기각했다. 술어를 시장으로 두면 DART에
   지배주주 자본을 매핑하는 날 분자를 함께 안 바꾸는 실수가 난다. **값의 유무로 둔다.**
 
@@ -133,13 +145,14 @@ WHERE q.c = 4 AND fy.n <> 0 AND abs(q.n - fy.n) / abs(fy.n) > 0.01" \
 
 이 결함은 `NET_INCOME`만의 것이 아니다. **후보 목록의 members가 뜻이 다른데 첫값을 그대로
 쓰는 컬럼이 넷 더 있다.** 표본 47을 기간 맞춰 전수로 쟀다(2026-09-15).
+**그중 `TOTAL_EQUITY`를 이 결정이 함께 닫고, 셋이 남는다.**
 
 | 컬럼 | 2순위로 떨어지는 종목 | 다리 태그로 유도 가능 | 다리가 없을 때 실제로 차이가 나는 비율 | 읽는 지표 |
 |---|---|---|---|---|
 | `CASH_AND_EQUIVALENTS` | 17 | 2 | **47.7%** | **없다** |
 | `PROFIT_BEFORE_TAX` | 24 | 9 | 8.9% | 유효세율(ADR-0143·0144) |
 | `OPERATING_CASH_FLOW` | 17 | 3 | 21.9% | `ACCRUAL_RATIO`·`OCF_5Y_SUM`·`FCF` |
-| `TOTAL_EQUITY` | 17 | 2 | 15.8% | `PBR`·`DEBT_RATIO`·`ALTMAN_Z`·`ROIC` |
+| `TOTAL_EQUITY` **(이 결정이 닫음)** | 17 | 2 | 15.8% | `PBR`·`DEBT_RATIO`·`ALTMAN_Z`·`ROIC` |
 
 **MUST NOT: 「다리 태그가 없다 = 차이가 0이다」로 읽지 않는다.** 그렇게 추측했다가
 **대조군이 기각했다** — `CASH_AND_EQUIVALENTS`는 사용제한현금 태그가 없어도 두 태그가
