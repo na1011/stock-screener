@@ -65,6 +65,20 @@ public class PipelineScheduler {
     private static final int AUTO_BACKFILL_STOCK_LIMIT = 10;
 
     /**
+     * 재무 정정·교정으로 무효화된 종목의 자동 백필 상한. <b>위 상수와 따로 둔다.</b>
+     *
+     * <p>위 값 10의 근거는 <b>기업 행위 사건률</b>(월 2~3건)인데, 재무 정정은 분기 공시 뒤에
+     * 몰려 사건률이 다르다 — 실측으로 국내 표본 30종목 실행이 <b>2종목</b>을 무효화했고
+     * (350종목 외삽 ≈ 23) 미국 창 11년 전수 재적재는 <b>757종목</b>이었다. 10을 그대로 쓰면
+     * <b>정기 실행마다 상한을 넘어 자동 백필이 한 번도 안 돈다.</b>
+     *
+     * <p>비용 쪽 근거: 티커를 준 백필은 종목 수에 비례하고 전 종목(1,350) 단일 날짜가 실측
+     * <b>3분 45초</b>다. 100종목이면 그보다 훨씬 싸다. 그보다 많으면 전수 재적재 같은 예외적
+     * 상황이므로 사람이 창을 정해 손으로 도는 것이 맞다.
+     */
+    private static final int AUTO_BACKFILL_FINANCIAL_STOCK_LIMIT = 100;
+
+    /**
      * 무거운 잡을 다시 돌리기까지의 최소 간격(일).
      *
      * <p>{@code JobFreshnessPolicy}의 예산(40일)보다 <b>짧아야 한다.</b> 이쪽이 「돌린다」이고
@@ -282,6 +296,29 @@ public class PipelineScheduler {
     }
 
     /**
+     * 재무 정정·교정으로 지표를 잃은 종목을 다시 채운다.
+     *
+     * <p><b>무효화 시작일을 받지 않고 보존 경계부터 채운다.</b> 재무 정정은
+     * {@code report.periodStart()}부터 지우는데 사업보고서면 그것이 보존 창 전량이라,
+     * 더 좁게 잡을 이득이 없다. {@code clampToRetention(null)}이 그 경계를 낸다.
+     */
+    private void backfillFinancialInvalidated(List<String> tickers, LocalDate asOf) {
+        if (tickers.size() > AUTO_BACKFILL_FINANCIAL_STOCK_LIMIT) {
+            log.warn("재무 정정으로 무효화된 종목이 {}개로 자동 백필 상한({})을 넘는다. 돌리지 "
+                            + "않는다 — 그 종목들의 지표가 지워진 채로 남으므로 손으로 백필해야 "
+                            + "한다. 종목={}",
+                    tickers.size(), AUTO_BACKFILL_FINANCIAL_STOCK_LIMIT, tickers);
+            return;
+        }
+
+        LocalDate from = clampToRetention(null);
+        log.info("재무 정정으로 무효화된 {}종목을 다시 채운다. from={} asOf={} 종목={}",
+                tickers.size(), from, asOf, tickers);
+        indicatorBackfillJob.run(from, asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
+                tickers, null);
+    }
+
+    /**
      * 보존 경계보다 앞인 일자를 잘라 낸다.
      *
      * <p>MUST: 시장별 경계 중 <b>가장 이른 것</b>을 쓴다. 늦은 것을 쓰면 보존이 더 긴 시장의
@@ -381,7 +418,18 @@ public class PipelineScheduler {
             // 전 종목 분기가 필요하다 — 주당 지표가 분기 행을 읽는다(ADR-0098).
             fullStatementRefillJob.run(asOf, by, null, List.of(), false, true);
         } else if (FinancialRefillJob.JOB_NAME.equals(jobName)) {
-            financialRefillJob.run(asOf, by, null, List.of(), null);
+            // MUST: 백필까지 간다. 이 잡의 성공은 「정정을 반영했다」이고 그 상태는 아직
+            // 일이 끝나지 않은 상태다 — 무효화된 종목이 화면에서 통째로 사라지는데 에러도
+            // 경고도 나지 않는다(FinancialRefillJob.runAndReport javadoc의 실측).
+            // 기업 행위 사슬이 같은 자리에서 같은 결론에 도달했다 — runCorporateActionChain
+            // 의 「MUST NOT: 앞의 둘만 걸고 백필을 사람에게 남기지 않는다」와 같은 규칙이다.
+            FinancialRefillJob.Invalidation invalidation =
+                    financialRefillJob.runAndReport(asOf, by, null, List.of(), null);
+            if (invalidation.isEmpty()) {
+                log.info("재무 정정·교정이 없었다 — 지워진 지표가 없어 백필도 없다.");
+            } else {
+                backfillFinancialInvalidated(invalidation.tickers(), asOf);
+            }
         } else {
             throw new IllegalStateException("배정에 없는 잡을 고를 수 없다: " + jobName);
         }

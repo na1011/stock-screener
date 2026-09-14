@@ -67,13 +67,27 @@ public class FinancialRefillJob {
      * 편입 중인 활성 종목의 재무 결손을 채운다.
      *
      * @param asOf       기준일. 여기서 {@code yearsBack}만큼 거슬러 올라간다.
-     * @param yearsBack  몇 년 거슬러 받을지. null이면 기본 3년.
+     * @param yearsBack  몇 년 거슬러 받을지. null이면 {@link #DEFAULT_YEARS_BACK}.
      * @param tickers    비면 전 종목. 값이 있으면 <b>편입 종목과의 교집합</b>만 처리한다.
      * @param universeCode <b>비활성 유니버스를 대상으로 잡는 유일한 길이다.</b> null이면
      *                     활성 유니버스의 편입 종목이다 — 그 갈래는 미국에 한 건도 안 닿는다.
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            Integer yearsBack, List<String> tickers, String universeCode) {
+        return runAndReport(asOf, triggeredBy, yearsBack, tickers, universeCode).status();
+    }
+
+    /**
+     * 위와 같되 <b>지표가 지워진 종목을 함께 낸다.</b>
+     *
+     * <p><b>MUST: 스케줄러는 이쪽을 부르고 백필로 잇는다.</b> 정정·교정 반영은 그 종목의
+     * {@code indicator_value}를 회계기간 시작일 이후 전부 지우는데, 백필이 따라오지 않으면
+     * <b>그 종목이 화면에서 통째로 사라지고 에러도 경고도 나지 않는다.</b> 실측으로 표본
+     * 30종목 실행이 2종목을 145/256거래일로 떨어뜨렸고, 창 11년 전수 재적재는 <b>757종목</b>을
+     * 그렇게 만들었다. 기업 행위 사슬이 같은 자리에서 같은 결론에 도달했다(ADR-0116).
+     */
+    public Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                     Integer yearsBack, List<String> tickers, String universeCode) {
         int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
@@ -83,7 +97,8 @@ public class FinancialRefillJob {
                 stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
         if (targets.isEmpty()) {
             log.info("편입 중인 활성 종목이 없다. 채울 것이 없다.");
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
+            return new Invalidation(
+                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish(), List.of());
         }
 
         int fromFiscalYear = asOf.getYear() - years;
@@ -109,6 +124,9 @@ public class FinancialRefillJob {
         AtomicInteger filled = new AtomicInteger();
         AtomicInteger corrected = new AtomicInteger();
         List<String> invalidatedTickers = new ArrayList<>();
+        // MUST: 알림 문구와 백필 대상을 따로 모은다. 위 목록은 "005930(정정 1 · 교정 0)"
+        // 형태라 사람이 읽는 것이고, 백필에는 티커만 있어야 한다.
+        List<String> tickersToBackfill = new ArrayList<>();
 
         try {
             for (SecurityRef target : targets) {
@@ -120,6 +138,7 @@ public class FinancialRefillJob {
                     if (outcome.revised() > 0 || outcome.corrected() > 0) {
                         invalidatedTickers.add("%s(정정 %d · 교정 %d)".formatted(
                                 security.ticker(), outcome.revised(), outcome.corrected()));
+                        tickersToBackfill.add(security.ticker());
                     }
                     filled.addAndGet(outcome.filled());
                     return outcome.changed();
@@ -127,7 +146,7 @@ public class FinancialRefillJob {
             }
         } catch (DataSourceException e) {
             execution.failFatally(e);
-            return BatchStatus.FAILED;
+            return new Invalidation(BatchStatus.FAILED, List.of());
         } catch (RuntimeException e) {
             execution.failUnexpectedly(e);
             throw e;
@@ -138,7 +157,24 @@ public class FinancialRefillJob {
                         revised.get(), filled.get(), corrected.get());
         log.info("재무 결손 보정을 마쳤다. {}", note);
         alertOnInvalidation(execution, invalidatedTickers, revised.get() + corrected.get());
-        return execution.finish(note);
+        return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill));
+    }
+
+    /**
+     * 이 실행이 지표를 지운 종목. <b>호출부가 백필을 이어야 한다.</b>
+     *
+     * <p>{@code AdjustmentRebuildJob.Invalidation}과 같은 형태다 — 그쪽은 기업 행위 사슬이
+     * 받아서 백필로 잇고, 이쪽은 {@code PipelineScheduler.runHeavy}가 받는다.
+     *
+     * <p><b>무효화 시작일을 담지 않는다.</b> 재무 정정은 {@code report.periodStart()}부터
+     * 지우는데 사업보고서면 그것이 <b>보존 창 전량</b>이라, 호출부가 보존 경계부터 채우는 것이
+     * 언제나 옳고 더 좁게 잡을 이득이 없다.
+     */
+    public record Invalidation(BatchStatus status, List<String> tickers) {
+
+        public boolean isEmpty() {
+            return tickers.isEmpty();
+        }
     }
 
     /**

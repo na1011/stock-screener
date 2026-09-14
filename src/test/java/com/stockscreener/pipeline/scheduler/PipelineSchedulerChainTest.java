@@ -254,6 +254,38 @@ class PipelineSchedulerChainTest {
     }
 
     @Test
+    @DisplayName("재무 정정이 있으면 백필까지 간다 — 안 이으면 그 종목이 화면에서 통째로 사라진다")
+    void financialRefillIsFollowedByBackfill() {
+        overdue(FinancialRefillJob.JOB_NAME, 40);
+        fresh(GovernanceLoadJob.JOB_NAME, FullStatementRefillJob.JOB_NAME);
+        when(financialRefillJob.runAndReport(any(), any(), any(), anyList(), any()))
+                .thenReturn(new FinancialRefillJob.Invalidation(
+                        BatchStatus.SUCCESS, List.of("005930", "000660")));
+
+        scheduler.runHeavyJobOfTheDay();
+
+        // 정정 반영은 그 종목의 indicator_value를 회계기간 시작일 이후 전부 지운다. 실측으로
+        // 표본 30종목 실행이 2종목을 145/256거래일로 떨어뜨렸고, 에러도 경고도 나지 않았다.
+        ArgumentCaptor<List<String>> tickers = ArgumentCaptor.forClass(List.class);
+        verify(indicatorBackfillJob).run(any(), any(),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), tickers.capture(), eq(null));
+        assertThat(tickers.getValue()).containsExactly("005930", "000660");
+    }
+
+    @Test
+    @DisplayName("재무 정정이 없으면 백필을 안 부른다 — 평상시가 이쪽이다")
+    void skipsBackfillWhenNoFinancialRevision() {
+        overdue(FinancialRefillJob.JOB_NAME, 40);
+        fresh(GovernanceLoadJob.JOB_NAME, FullStatementRefillJob.JOB_NAME);
+        when(financialRefillJob.runAndReport(any(), any(), any(), anyList(), any()))
+                .thenReturn(new FinancialRefillJob.Invalidation(BatchStatus.SUCCESS, List.of()));
+
+        scheduler.runHeavyJobOfTheDay();
+
+        verifyNoInteractions(indicatorBackfillJob);
+    }
+
+    @Test
     @DisplayName("리밸런싱이 끝나면 꼬리가 결손을 채운다 — 편입이 바뀐 직후가 결손이 생기는 유일한 순간이다")
     void fillsMembershipGapsAfterRebalancing() {
         scheduler.runUniverseRebalance();
