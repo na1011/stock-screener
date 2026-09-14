@@ -137,6 +137,18 @@ enum SecEdgarColumn {
      */
     TOTAL_EQUITY_CONTROLLING(Kind.INSTANT, Unit.MONETARY, List.of("StockholdersEquity")),
 
+    /**
+     * <b>비지배지분.</b> {@link #TOTAL_EQUITY_CONTROLLING}을 <b>유도하는 재료</b>이지 저장되는
+     * 컬럼이 아니다 — 지배주주 자본 = 총자본 − 비지배지분.
+     *
+     * <p>이것이 필요한 이유는 <b>비지배지분이 0에 가까운 회사가 두 자본 태그 중 하나만 내기
+     * 때문</b>이다. 실측(2026-09-15): {@code CAT}·{@code ADM}은 {@code StockholdersEquity}를
+     * 아예 안 내고 {@code MinorityInterest}만 내며, {@code AVGO}(2019-11-03 이후)·
+     * {@code CPRT}(2023-07-31 이후)·{@code CAG}(2025-05-25 이후)는 <b>어느 해부터 그만 냈다.</b>
+     * <b>그래서 그 62종목은 원장의 한계가 아니라 우리가 유도를 안 한 자리였다.</b>
+     */
+    MINORITY_INTEREST(Kind.INSTANT, Unit.MONETARY, List.of("MinorityInterest")),
+
     CURRENT_ASSETS(Kind.INSTANT, Unit.MONETARY, List.of("AssetsCurrent")),
     CURRENT_LIABILITIES(Kind.INSTANT, Unit.MONETARY, List.of("LiabilitiesCurrent")),
     RETAINED_EARNINGS(Kind.INSTANT, Unit.MONETARY, List.of("RetainedEarningsAccumulatedDeficit")),

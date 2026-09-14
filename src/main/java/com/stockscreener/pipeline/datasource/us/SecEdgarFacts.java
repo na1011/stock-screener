@@ -888,7 +888,7 @@ final class SecEdgarFacts {
                 v.get(SecEdgarColumn.REVENUE), v.get(SecEdgarColumn.OPERATING_INCOME),
                 v.get(SecEdgarColumn.NET_INCOME), v.get(SecEdgarColumn.TOTAL_ASSETS),
                 v.get(SecEdgarColumn.TOTAL_EQUITY),
-                v.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING),
+                controllingEquity(v),
                 v.get(SecEdgarColumn.TOTAL_LIABILITIES),
                 v.get(SecEdgarColumn.CURRENT_ASSETS), v.get(SecEdgarColumn.CURRENT_LIABILITIES),
                 v.get(SecEdgarColumn.RETAINED_EARNINGS), v.get(SecEdgarColumn.OPERATING_CASH_FLOW),
@@ -917,6 +917,27 @@ final class SecEdgarFacts {
                 v.get(SecEdgarColumn.PROFIT_BEFORE_TAX),
                 // 소스가 준 행이다. 유도 행만 derived=true이고, 저장이 그것으로 판을 회수한다.
                 false);
+    }
+
+    /**
+     * <b>지배주주 자본 — 직접 낸 값이 없으면 비지배지분을 빼서 만든다.</b>
+     *
+     * <p>비지배지분이 0에 가까운 회사는 두 자본 태그 중 <b>하나만 낸다.</b> 실측(2026-09-15):
+     * {@code CAT}·{@code ADM}은 {@code StockholdersEquity}를 아예 안 내고
+     * {@code MinorityInterest}만 내며, {@code AVGO}·{@code CPRT}·{@code CAG}는 어느 해부터
+     * 그만 냈다. <b>그 62종목은 원장의 한계가 아니라 우리가 유도를 안 한 자리였다</b> —
+     * 유도하면 {@code ROE}의 분모가 분자와 같은 기저가 된다(ADR-0153).
+     *
+     * <p><b>MUST: 직접 낸 값이 언제나 이긴다</b>(ADR-0104). 유도는 없을 때만이다.
+     */
+    private static BigDecimal controllingEquity(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal direct = v.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING);
+        if (direct != null) {
+            return direct;
+        }
+        BigDecimal total = v.get(SecEdgarColumn.TOTAL_EQUITY);
+        BigDecimal minority = v.get(SecEdgarColumn.MINORITY_INTEREST);
+        return total != null && minority != null ? total.subtract(minority) : null;
     }
 
     // ---------- 4. Q4를 유도한다 ----------
