@@ -47,7 +47,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @IndicatorMeta(
-        name = "투하자본이익률(세후)",
+        name = "TTM 투하자본이익률(세후)",
         description = "최근 4개 분기 영업이익에서 법인세 몫을 뺀 뒤 영업에 묶인 자본"
                 + "(자산총계 − 유동부채)으로 나눈 비율. "
                 + "세율은 직전 회계연도의 유효세율을 쓰므로 분자와 세율의 기간이 다르다. "

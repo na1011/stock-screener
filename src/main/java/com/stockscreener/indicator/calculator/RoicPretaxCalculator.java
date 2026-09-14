@@ -22,6 +22,13 @@ import org.springframework.stereotype.Component;
  * 수 없다</b> — 분모가 자기자본이 아니라 영업에 묶인 자본이기 때문이고, 그것이 문서 0.3이
  * "부채 없이 좋은 ROE"를 한 문장으로 묶어 둔 이유와 같은 방향이다.
  *
+ * <h2>이름이 창을 밝힌다 — 같은 축에 다년 지표가 셋이다</h2>
+ *
+ * <p>{@code ROIC_MIN_3Y}·{@code ROIC_AFTERTAX_MIN_5Y}·{@code ROIC_AFTERTAX_AVG_5Y}가 옆에 있어
+ * <b>창이 없는 이름은 어느 기간인지 말하지 않는다.</b> {@code EPS_GROWTH_TTM_YOY}(「TTM
+ * 주당순이익 성장률」)가 같은 이유로 창을 이름에 넣은 선례다 — 그쪽도 {@code EPS_CAGR_5Y}가
+ * 옆에 있다. 짝이 없는 {@code PER}·{@code ROE}에 안 붙이는 것과 갈리는 자리가 그것이다.
+ *
  * <h2>MUST NOT: 이 값을 {@code ROIC}라 부르지 않는다 — 그 이름은 이제 임자가 있다</h2>
  *
  * <p>표준 ROIC는 <b>세후</b>(NOPAT) 기준이고, 그것은 {@link RoicAfterTaxCalculator}가 낸다
@@ -46,7 +53,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @IndicatorMeta(
-        name = "투하자본이익률(세전)",
+        name = "TTM 투하자본이익률(세전)",
         description = "최근 4개 분기 영업이익을 영업에 묶인 자본(자산총계 − 유동부채)으로 나눈 비율. "
                 + "법인세를 빼기 전 기준이다 — 세금까지 뺀 값은 투하자본이익률(세후)이 따로 있다. "
                 + "유동부채를 구분하지 않는 금융업에서는 값이 나오지 않는다.",
