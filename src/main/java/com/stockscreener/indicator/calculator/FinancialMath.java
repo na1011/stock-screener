@@ -468,6 +468,83 @@ final class FinancialMath {
      * (전부 null) 유도가 성립할 수 없고, 애초에 {@code operatingIncome}이 100% 차 있다.
      * 그 불변을 {@code OperatingIncomeDerivationTest}가 잠근다.
      */
+    /**
+     * 그 기(期)의 <b>유효세율</b>. 클램프하지 않은 관측값이며 {@code EFFECTIVE_TAX_RATE}가 쓴다.
+     *
+     * <p><b>부호를 항등식으로 판정한다.</b> 법인세비용의 음수가 두 뜻이기 때문이다 —
+     * <b>진짜 환입</b>(그 해 세금을 돌려받았다. 순이익 &gt; 세전이익)과 <b>차감 항목 표기</b>
+     * (비용인데 음수로 적었다. 순이익 &lt; 세전이익)다. 실측(8종목 × 5년)에서 음수 여섯 중
+     * <b>넷이 환입, 둘이 표기</b>였다.
+     *
+     * <p><b>MUST NOT: 자본적지출처럼 크기(abs)로 읽지 않는다.</b> capex는 「취득」이라 한
+     * 방향이지만 환입은 실재하므로, 크기로 읽으면 <b>진짜 환입의 부호가 뒤집힌다.</b>
+     * 가르는 것은 {@code 세전이익 − 순이익}과의 부호 대조이고 둘 다 실측값이다 —
+     * <b>「순이익에서 역산」이 아니라 부호 검증</b>이다.
+     *
+     * @return 백분율. 세전이익이 0 이하면 {@code null}이다 — 음수 분모는 부호를 뒤집어
+     *         세율이 뜻을 잃는다({@code RoicMin3yCalculator}가 투하자본에서 같은 처방을 쓴다)
+     */
+    static BigDecimal effectiveTaxRateOf(FinancialFigures figures) {
+        if (figures == null) {
+            return null;
+        }
+        BigDecimal tax = figures.incomeTaxExpense();
+        BigDecimal pretax = figures.profitBeforeTax();
+        BigDecimal net = figures.netIncome();
+        if (tax == null || pretax == null || pretax.signum() <= 0) {
+            return null;
+        }
+        if (tax.signum() < 0 && net != null && pretax.subtract(net).signum() > 0) {
+            // 순이익이 세전보다 작은데 법인세가 음수다 — 환입이 아니라 차감 항목 표기다.
+            tax = tax.negate();
+        }
+        return percentage(tax, pretax);
+    }
+
+    /**
+     * NOPAT에 쓰는 유효세율 <b>비율</b>(백분율이 아니다). <b>정의역을 {@code [0, 1]}로 자른다.</b>
+     *
+     * <p>둘을 자르는 이유가 다르다.
+     * <ul>
+     *   <li><b>{@code t > 1} → 1</b> — {@code (1 − t) < 0}이면 <b>영업흑자가 세후 적자로
+     *       뒤집힌다.</b> 부호 보존이다.
+     *   <li><b>{@code t < 0} → 0</b> — 뜻의 문제다. NOPAT이 재는 것은 <b>「이 영업이 지속되면
+     *       세후로 얼마가 남는가」</b>인데, 환입의 원인(이월결손금 인식·평가충당금 환입·
+     *       세무조사 종결)은 <b>과거 사건의 회계적 인식이고 영업과 무관하며 지속되지 않는다.</b>
+     *       그대로 두면 같은 지표가 어떤 해는 영업의 수익성을, 어떤 해는 그것에 과거 환입을
+     *       더한 것을 재게 되어 <b>값의 뜻이 해마다 흔들린다.</b>
+     * </ul>
+     *
+     * <p><b>MUST NOT: 이 클램프를 「없는 값을 만드는 것」으로 읽지 않는다.</b>
+     * {@code t ∈ [0, 1]}은 NOPAT 공식의 <b>전제</b>다 — 「세금은 이익의 일부를 가져간다」.
+     * 관측값 자체는 {@link #effectiveTaxRateOf}가 클램프 없이 그대로 낸다.
+     */
+    static BigDecimal taxRateForNopat(FinancialFigures figures) {
+        BigDecimal percent = effectiveTaxRateOf(figures);
+        if (percent == null) {
+            return null;
+        }
+        BigDecimal ratio = percent.divide(HUNDRED, SCALE, RoundingMode.HALF_UP);
+        if (ratio.signum() < 0) {
+            return BigDecimal.ZERO;
+        }
+        return ratio.compareTo(BigDecimal.ONE) > 0 ? BigDecimal.ONE : ratio;
+    }
+
+    /**
+     * 세후 영업이익(NOPAT) = {@code 영업이익 × (1 − 유효세율)}.
+     *
+     * @return 영업이익이나 세율을 못 내면 {@code null}
+     */
+    static BigDecimal nopatOf(FinancialFigures figures) {
+        BigDecimal operatingIncome = operatingIncomeOf(figures);
+        BigDecimal rate = taxRateForNopat(figures);
+        if (operatingIncome == null || rate == null) {
+            return null;
+        }
+        return operatingIncome.multiply(BigDecimal.ONE.subtract(rate));
+    }
+
     static BigDecimal operatingIncomeOf(FinancialFigures figures) {
         if (figures == null) {
             return null;

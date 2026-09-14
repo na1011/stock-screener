@@ -20,6 +20,10 @@ import com.stockscreener.indicator.calculator.NcavToMarketCalculator;
 import com.stockscreener.indicator.calculator.PerCalculator;
 import com.stockscreener.indicator.calculator.PsrCalculator;
 import com.stockscreener.indicator.calculator.RoicMin3yCalculator;
+import com.stockscreener.indicator.calculator.EffectiveTaxRateCalculator;
+import com.stockscreener.indicator.calculator.RoicAfterTaxAvg5yCalculator;
+import com.stockscreener.indicator.calculator.RoicAfterTaxCalculator;
+import com.stockscreener.indicator.calculator.RoicAfterTaxMin5yCalculator;
 import com.stockscreener.indicator.calculator.RoicPretaxCalculator;
 
 import org.springframework.context.annotation.Bean;
@@ -125,7 +129,22 @@ public class IndicatorUnavailabilityConfig {
                         // 틀린 이유를 붙이게 된다(ALTMAN_Z가 업종만 말하는 것과 같은 이유다).
                         context -> isFinancialDivision(context.industryDivisionKey()),
                         "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
-                                + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다.")));
+                                + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다."),
+                // 세후 계열 셋은 사유가 둘이고 술어가 배타적이다. reasonFor가 먼저 맞는
+                // 하나를 쓰므로 순서가 뜻을 정한다 — 시장 축을 먼저 본다.
+                //
+                // MUST: 세전 둘(ROIC_PRETAX·ROIC_MIN_3Y)에는 이 시장 축을 붙이지 않는다.
+                // 그 둘은 미국에서도 값이 나오고(최신일 754·743종목), 안 나오는 쪽은
+                // 미국 금융업이라 위 업종 사유가 두 시장에 그대로 참이다 —
+                // 실측(2026-09-14): 미국 금융업 168종목 중 값이 있는 것이 35뿐이고
+                // 비금융은 829 중 719다. ADR-0111이 막는 「그 시장에 거짓인 사유」가 아니다.
+                afterTaxOutOfMarket(RoicAfterTaxCalculator.CODE),
+                afterTaxFinancialDivision(RoicAfterTaxCalculator.CODE),
+                afterTaxOutOfMarket(RoicAfterTaxMin5yCalculator.CODE),
+                afterTaxFinancialDivision(RoicAfterTaxMin5yCalculator.CODE),
+                afterTaxOutOfMarket(RoicAfterTaxAvg5yCalculator.CODE),
+                afterTaxFinancialDivision(RoicAfterTaxAvg5yCalculator.CODE),
+                afterTaxOutOfMarket(EffectiveTaxRateCalculator.CODE)));
         // 거버넌스 사유는 코드마다 **둘**이다 — 술어가 서로 배타적이라 먼저 맞는 하나만 붙는다.
         rules.addAll(GOVERNANCE_CODES.stream().flatMap(
                 code -> java.util.stream.Stream.of(
@@ -145,6 +164,33 @@ public class IndicatorUnavailabilityConfig {
      * 거짓말을 계속한다. 그래서 축을 (지표, 시장)으로 내린다.
      */
     private static final Set<String> KR_MARKETS = Set.of("KOSPI", "KOSDAQ");
+
+    /**
+     * 세율 재료가 그 시장에 없다. <b>「기다리면 온다」가 아니라 「영영 안 온다」</b>이므로
+     * 문구가 그것을 말해야 한다(ADR-0111 §규칙 — 두 문장이 사용자가 할 일을 가른다).
+     *
+     * <p>법인세비용·세전이익은 DART 전체 재무제표에서만 받는다. 미국 소스(SEC EDGAR)에도
+     * 태그가 있다는 것은 실측했지만(표본 10/10) <b>적재하지 않기로 한 것</b>이라, 그 결정이
+     * 바뀌면 이 규칙도 함께 걷는다.
+     */
+    private static UnavailabilityRule afterTaxOutOfMarket(String code) {
+        return new UnavailabilityRule(code,
+                context -> !KR_MARKETS.contains(context.marketCode()),
+                "세후 계산에 쓰는 법인세비용·세전이익을 국내 공시에서만 수집하고 있어 "
+                        + "이 시장의 종목에는 값이 나오지 않습니다.");
+    }
+
+    /**
+     * 국내 금융업이라 분모의 재료가 없다. <b>시장 검사가 앞에 붙어 있어야</b>
+     * 위 규칙과 배타적이다 — 없으면 미국 금융업에 두 사유가 겹친다.
+     */
+    private static UnavailabilityRule afterTaxFinancialDivision(String code) {
+        return new UnavailabilityRule(code,
+                context -> KR_MARKETS.contains(context.marketCode())
+                        && isFinancialDivision(context.industryDivisionKey()),
+                "금융업은 재무상태표를 유동·비유동으로 나누지 않아 "
+                        + "투하자본(자산총계 − 유동부채)을 계산할 재료가 없습니다.");
+    }
 
     /** 미국에도 소스가 있는 거버넌스 지표. Alpaca {@code cash_dividends}가 그 원자료다. */
     private static final Set<String> US_BACKED_CODES = Set.of(
