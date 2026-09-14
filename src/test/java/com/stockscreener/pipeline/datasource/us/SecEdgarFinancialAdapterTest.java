@@ -427,6 +427,32 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("물러날 세대가 없으면 판은 내되 불가능한 컬럼만 비운다 — 안 내면 옛 값이 남는다")
+    void emitsVintageWithImpossibleColumnClearedWhenNoVintageHolds() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-q4-tag-switch.json"));
+
+        // FY 판이 하나뿐이고 매출 600,000에 분기 합 900,000이라 잔차가 성립하지 않는다.
+        // 그래도 판을 내야 한다 — 안 내면 이 라벨이 세트에 없어 회수가 안 돌고(ADR-0152)
+        // 옛 규칙이 만든 값이 is_latest인 채 남는다. 실측으로 KKR 2018 −178 · MSGS 2020 −7이
+        // 그 자리였다.
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
+
+        RawFinancialReport q4 = latestOf(reports, "Q4");
+
+        assertThat(q4.revenue())
+                .as("불가능한 컬럼은 비운다 — 한 분기 매출이 음수일 수는 없다")
+                .isNull();
+        assertThat(q4.costOfSales())
+                .as("매출원가는 성립하므로 그대로 낸다 — 컬럼 하나 때문에 나머지를 버리지 않는다")
+                .isEqualByComparingTo("800000");
+        assertThat(q4.netIncome())
+                .as("순이익은 한 분기에 정당하게 음수다")
+                .isEqualByComparingTo("-50000");
+        assertThat(q4.derived()).isTrue();
+    }
+
+    @Test
     @DisplayName("매핑 파일에 없는 티커는 NOT_FOUND다 — 조용한 0건이 아니다")
     void unknownTickerIsNotFound() {
         enqueue(200, fixture("tickers.json"));

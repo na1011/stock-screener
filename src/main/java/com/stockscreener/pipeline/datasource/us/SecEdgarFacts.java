@@ -1002,6 +1002,12 @@ final class SecEdgarFacts {
                     new Label(q1.fiscalYear(), q1.fiscalPeriod()),
                     new Label(q2.fiscalYear(), q2.fiscalPeriod()),
                     new Label(q3.fiscalYear(), q3.fiscalPeriod()));
+            boolean emitted = false;
+            RawFinancialReport fallback = null;
+            LocalDate fallbackStart = null;
+            RawFinancialReport f1 = null;
+            RawFinancialReport f2 = null;
+            RawFinancialReport f3 = null;
             for (RawFinancialReport vintage : byLabel.getOrDefault(label, List.of())) {
                 RawFinancialReport v1 = vintageOf(byLabel, quarterLabels.get(0), vintage.publishedAt());
                 RawFinancialReport v2 = vintageOf(byLabel, quarterLabels.get(1), vintage.publishedAt());
@@ -1013,6 +1019,11 @@ final class SecEdgarFacts {
                 if (!vintageStart.isBefore(vintage.periodEnd())) {
                     continue;
                 }
+                fallback = vintage;
+                fallbackStart = vintageStart;
+                f1 = v1;
+                f2 = v2;
+                f3 = v3;
                 if (!residualHolds(vintage, v1, v2, v3)) {
                     // **잔차가 정의역 밖이다.** 4분기는 정의상 잔차인데, 매출·매출원가처럼
                     // 음수일 수 없는 유량에서 음수가 나오면 그것은 「4분기가 음수다」가 아니라
@@ -1021,6 +1032,15 @@ final class SecEdgarFacts {
                     continue;
                 }
                 derived.add(buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3));
+                emitted = true;
+            }
+            if (!emitted && fallback != null) {
+                // 어느 세대에서도 잔차가 성립하지 않는다(FY 판이 하나뿐인 경우가 그렇다).
+                // **그래도 마지막 세대로 한 판을 낸다** — 불가능한 컬럼은 비운 채로.
+                // 안 내면 이 라벨이 이번 세트에 없어 **회수가 안 돌고**(ADR-0152), 옛 규칙이
+                // 만든 값이 is_latest인 채 영영 남는다. 실측으로 KKR 2018 −178 · MSGS 2020 −7 ·
+                // CYTK 2017이 그 자리였다.
+                derived.add(buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3));
             }
         }
         return derived;
@@ -1036,7 +1056,7 @@ final class SecEdgarFacts {
         return new RawFinancialReport(
                 fiscalYear, "Q4", start, fy.periodEnd(), fy.publishedAt(),
                 fy.reportCode(), fy.currencyCode(),
-                subtractable ? (minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())) : null,
+                subtractable ? nonNegative(minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())) : null,
                 subtractable ? minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
                         q3.operatingIncome()) : null,
                 subtractable ? minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()) : null,
@@ -1045,7 +1065,7 @@ final class SecEdgarFacts {
                 fy.currentAssets(), fy.currentLiabilities(), fy.retainedEarnings(),
                 // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
                 null, fy.sharesOutstanding(), null, null,
-                subtractable ? (minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales())) : null,
+                subtractable ? nonNegative(minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales())) : null,
                 fy.cashAndEquivalents(), null, fy.inventories(),
                 // 위 toReport와 같은 이유로 담지 않는다.
                 null,
@@ -1095,9 +1115,21 @@ final class SecEdgarFacts {
      */
     private static boolean residualHolds(RawFinancialReport fy, RawFinancialReport q1,
                                          RawFinancialReport q2, RawFinancialReport q3) {
-        return nonNegativeResidual(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())
-                && nonNegativeResidual(fy.costOfSales(), q1.costOfSales(),
-                        q2.costOfSales(), q3.costOfSales());
+        // MUST: **매출로만 세대를 고른다.** 컬럼 전부를 묶어 보면 한 컬럼 때문에 그 세대를
+        // 통째로 버리게 되고, 그러면 멀쩡한 나머지까지 못 낸다 — 실측으로 C 2020은 매출이
+        // 16,832로 정상인데 매출원가만 −46이었다. 컬럼별 불가능값은 buildQ4가 비운다.
+        return nonNegativeResidual(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue());
+    }
+
+    /**
+     * <b>세대를 고른 뒤에도 남는 불가능한 값은 그 컬럼만 비운다.</b>
+     *
+     * <p>세대 선택이 본 처방이고 이것은 <b>그 뒤에 남는 잔여</b>다 — 실측으로 세대를 맞추자
+     * 음수 매출이 45 → 4, 음수 매출원가가 41 → 1로 줄었다. 남는 것은 물러날 세대가 아예 없거나
+     * (FY 판이 하나) 매출은 성립하는데 그 컬럼만 안 맞는 경우다.
+     */
+    private static BigDecimal nonNegative(BigDecimal value) {
+        return value == null || value.signum() >= 0 ? value : null;
     }
 
     /** 넷이 다 있을 때만 본다. 하나라도 없으면 판정하지 않는다 — 모르는 것을 위반으로 읽지 않는다. */
