@@ -70,3 +70,6 @@ apiKey*
 ### 외부 API 원본 문서 ###
 # 배포처의 저작물이라 저장소에 넣지 않는다. 필요한 내용은 docs/api-spec/에 옮겨 적었다.
 docs/api-document/
+
+# 어댑터 리플레이용 companyfacts 캐시 — 빌드에 안 씻기게 build/ 밖에 둔다
+.factcache/

@@ -88,7 +88,8 @@ public class IndicatorDataReader {
     private static final String FINANCIAL_COLUMNS = """
             fiscal_year, fiscal_period, period_start, period_end, published_at,
             currency_code, revenue, operating_income, net_income, total_assets,
-            total_equity, total_liabilities, current_assets, current_liabilities,
+            total_equity, total_equity_controlling, total_liabilities,
+            current_assets, current_liabilities,
             retained_earnings, operating_cash_flow, shares_outstanding,
             eps, bps, cost_of_sales, cash_and_equivalents, capex, inventories,
             net_income_controlling,
@@ -493,6 +494,7 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("net_income"),
                 rs.getBigDecimal("total_assets"),
                 rs.getBigDecimal("total_equity"),
+                rs.getBigDecimal("total_equity_controlling"),
                 rs.getBigDecimal("total_liabilities"),
                 rs.getBigDecimal("current_assets"),
                 rs.getBigDecimal("current_liabilities"),

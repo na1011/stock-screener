@@ -28,6 +28,7 @@ final class FinancialFiguresFixture {
     private BigDecimal netIncome;
     private BigDecimal totalAssets;
     private BigDecimal totalEquity;
+    private BigDecimal totalEquityControlling;
     private BigDecimal totalLiabilities;
     private BigDecimal currentAssets;
     private BigDecimal currentLiabilities;
@@ -87,6 +88,7 @@ final class FinancialFiguresFixture {
         fixture.netIncome = source.netIncome();
         fixture.totalAssets = source.totalAssets();
         fixture.totalEquity = source.totalEquity();
+        fixture.totalEquityControlling = source.totalEquityControlling();
         fixture.totalLiabilities = source.totalLiabilities();
         fixture.currentAssets = source.currentAssets();
         fixture.currentLiabilities = source.currentLiabilities();
@@ -197,6 +199,11 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    FinancialFiguresFixture totalEquityControlling(BigDecimal value) {
+        this.totalEquityControlling = value;
+        return this;
+    }
+
     FinancialFiguresFixture totalEquity(BigDecimal value) {
         this.totalEquity = value;
         return this;
@@ -265,7 +272,8 @@ final class FinancialFiguresFixture {
     FinancialFigures build() {
         return new FinancialFigures(
                 fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
-                revenue, operatingIncome, netIncome, totalAssets, totalEquity, totalLiabilities,
+                revenue, operatingIncome, netIncome, totalAssets, totalEquity,
+                totalEquityControlling, totalLiabilities,
                 currentAssets, currentLiabilities, retainedEarnings,
                 operatingCashFlow, sharesOutstanding, eps, bps,
                 costOfSales, cashAndEquivalents, capex, inventories, netIncomeControlling,

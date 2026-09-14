@@ -94,7 +94,7 @@ public class RoeMin3yCalculator implements IndicatorCalculator {
         BigDecimal min = null;
         for (int i = 0; i < YEARS; i++) {
             FinancialFigures figures = annual.get(i);
-            BigDecimal equity = figures.totalEquity();
+            BigDecimal equity = FinancialMath.equityMatchingNetIncome(figures);
             if (figures.netIncome() == null || equity == null || equity.signum() <= 0) {
                 // 자본잠식이면 순손실이 양수 ROE로 나온다. 위 javadoc 참조.
                 return null;

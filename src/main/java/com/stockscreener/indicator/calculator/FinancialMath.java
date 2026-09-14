@@ -25,6 +25,31 @@ import java.util.function.Function;
  */
 final class FinancialMath {
 
+    /**
+     * <b>{@code ROE}의 분모 — 분자와 기저가 맞는 자본.</b>
+     *
+     * <p>{@code totalEquity}는 <b>비지배지분을 포함</b>한다(미국의 첫 후보가
+     * {@code StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest}다). 그런데
+     * {@code netIncome}은 미국에서 <b>지배주주 귀속</b>이다({@code NetIncomeLoss}). 그대로 나누면
+     * <b>남의 지분이 분모에만 들어간 수</b>가 된다.
+     *
+     * <p>실측(2026-09-15 · 표본 8): 대부분은 오차가 0이지만 지배구조가 있는 회사에서 거대하다 —
+     * <b>{@code LNG} 비지배 46.1%로 59.13% → 109.74%(+50.61%p)</b>,
+     * <b>{@code KKR} 59.9%로 3.06% → 7.63%(+4.57%p)</b>, {@code KMI} +0.37%p, {@code GM} +0.12%p.
+     * <b>{@code ROE}는 {@code 버핏 우량주}의 필수 게이트다.</b>
+     *
+     * <p><b>국내는 안 바뀐다.</b> DART의 분자가 {@code ifrs-full_ProfitLoss}(비지배 포함)이고
+     * 자본총계도 비지배 포함이라 <b>지금도 기저가 맞는다</b> — 그래서 지배주주 자본을 안 담았고,
+     * 여기서도 없으면 {@code totalEquity}로 물러난다.
+     *
+     * <p><b>MUST NOT: {@code ROIC}·{@code PBR}·{@code DEBT_RATIO}에 이것을 쓰지 않는다.</b>
+     * 그쪽 분자는 영업이익이거나 분모가 총자산·총부채와 짝이라 <b>총자본이 옳다.</b>
+     */
+    public static BigDecimal equityMatchingNetIncome(FinancialFigures figures) {
+        BigDecimal controlling = figures.totalEquityControlling();
+        return controlling != null ? controlling : figures.totalEquity();
+    }
+
     static final int SCALE = 8;
     static final int TTM_QUARTERS = 4;
     static final BigDecimal HUNDRED = BigDecimal.valueOf(100);

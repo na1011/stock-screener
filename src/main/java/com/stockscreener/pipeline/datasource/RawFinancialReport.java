@@ -79,6 +79,17 @@ public record RawFinancialReport(
         BigDecimal netIncome,
         BigDecimal totalAssets,
         BigDecimal totalEquity,
+
+        /**
+         * <b>지배주주 자본.</b> {@code totalEquity}는 비지배지분을 포함하고 {@code netIncome}은
+         * 미국에서 지배주주 귀속이라, {@code ROE}가 기저가 다른 채로 나간다 — 그것을 맞추려고
+         * 갈라 담는다(실측: {@code LNG} +50.61%p · {@code KKR} +4.57%p).
+         *
+         * <p><b>국내는 아직 비운다.</b> DART가 {@code ifrs-full_EquityAttributableToOwnersOfParent}로
+         * 주지만 매핑을 안 했다. 국내는 분자도 비지배 포함({@code ifrs-full_ProfitLoss})이라
+         * <b>지금도 기저가 맞으므로</b> 급하지 않다.
+         */
+        BigDecimal totalEquityControlling,
         BigDecimal totalLiabilities,
         BigDecimal currentAssets,
         BigDecimal currentLiabilities,
@@ -140,7 +151,7 @@ public record RawFinancialReport(
                               BigDecimal incomeTaxExpense, BigDecimal profitBeforeTax) {
         this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
                 currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
-                totalLiabilities, currentAssets, currentLiabilities, retainedEarnings,
+                null, totalLiabilities, currentAssets, currentLiabilities, retainedEarnings,
                 operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents,
                 capex, inventories, netIncomeControlling, interestAndDividendIncome,
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,

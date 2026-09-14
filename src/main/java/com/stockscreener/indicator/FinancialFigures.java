@@ -49,6 +49,13 @@ public record FinancialFigures(
         BigDecimal netIncome,
         BigDecimal totalAssets,
         BigDecimal totalEquity,
+
+        /**
+         * <b>지배주주 귀속 자본.</b> {@code totalEquity}는 비지배지분을 포함하므로, 분자가
+         * 지배주주 귀속인 지표({@code ROE})는 이 값을 분모로 써야 기저가 맞는다.
+         * <b>국내는 비어 있다</b> — 분자도 비지배 포함이라 지금도 맞는다.
+         */
+        BigDecimal totalEquityControlling,
         BigDecimal totalLiabilities,
         BigDecimal currentAssets,
         BigDecimal currentLiabilities,

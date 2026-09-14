@@ -149,6 +149,7 @@ class IndicatorContextCopyTest {
                 LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31), LocalDate.of(2026, 3, 10),
                 "KRW", BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
+                BigDecimal.ONE,
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
                 BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE,
                 null, null, null, null, null, null, null, null, null, null);

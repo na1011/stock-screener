@@ -887,7 +887,9 @@ final class SecEdgarFacts {
                 "%s:%s".formatted(anchor.form(), anchor.accn()), currency,
                 v.get(SecEdgarColumn.REVENUE), v.get(SecEdgarColumn.OPERATING_INCOME),
                 v.get(SecEdgarColumn.NET_INCOME), v.get(SecEdgarColumn.TOTAL_ASSETS),
-                v.get(SecEdgarColumn.TOTAL_EQUITY), v.get(SecEdgarColumn.TOTAL_LIABILITIES),
+                v.get(SecEdgarColumn.TOTAL_EQUITY),
+                v.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING),
+                v.get(SecEdgarColumn.TOTAL_LIABILITIES),
                 v.get(SecEdgarColumn.CURRENT_ASSETS), v.get(SecEdgarColumn.CURRENT_LIABILITIES),
                 v.get(SecEdgarColumn.RETAINED_EARNINGS), v.get(SecEdgarColumn.OPERATING_CASH_FLOW),
                 v.get(SecEdgarColumn.SHARES_OUTSTANDING), v.get(SecEdgarColumn.EPS),
@@ -912,7 +914,9 @@ final class SecEdgarFacts {
                 v.get(SecEdgarColumn.OPERATING_EXPENSES),
                 v.get(SecEdgarColumn.COSTS_AND_EXPENSES),
                 v.get(SecEdgarColumn.INCOME_TAX_EXPENSE),
-                v.get(SecEdgarColumn.PROFIT_BEFORE_TAX));
+                v.get(SecEdgarColumn.PROFIT_BEFORE_TAX),
+                // 소스가 준 행이다. 유도 행만 derived=true이고, 저장이 그것으로 판을 회수한다.
+                false);
     }
 
     // ---------- 4. Q4를 유도한다 ----------
@@ -1089,7 +1093,8 @@ final class SecEdgarFacts {
                 sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME, slot, subtractable, fy.netIncome(),
                             q1.netIncome(), q2.netIncome(), q3.netIncome()),
                 // 잔액은 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
-                fy.totalAssets(), fy.totalEquity(), fy.totalLiabilities(),
+                fy.totalAssets(), fy.totalEquity(), fy.totalEquityControlling(),
+                fy.totalLiabilities(),
                 fy.currentAssets(), fy.currentLiabilities(), fy.retainedEarnings(),
                 // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
                 null, fy.sharesOutstanding(), null, null,

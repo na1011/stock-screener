@@ -118,6 +118,25 @@ enum SecEdgarColumn {
     TOTAL_EQUITY(Kind.INSTANT, Unit.MONETARY, List.of(
             "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
             "StockholdersEquity")),
+
+    /**
+     * <b>지배주주 자본.</b> {@link #TOTAL_EQUITY}는 첫 후보가
+     * {@code …IncludingPortionAttributableToNoncontrollingInterest}라 <b>비지배지분을 포함</b>하는데,
+     * {@link #NET_INCOME}의 첫 후보 {@code NetIncomeLoss}는 <b>지배주주 귀속</b>이다. 그래서
+     * {@code ROE}가 <b>분자와 분모의 기저가 다른 채로</b> 나간다 — 그것이 이 컬럼이 생긴 이유다.
+     *
+     * <p>실측(2026-09-15 · 표본 8): 대부분은 오차가 0이지만 지배구조가 있는 회사에서 거대하다 —
+     * <b>{@code LNG} 비지배 46.1%로 ROE 59.13% → 109.74%(+50.61%p)</b>,
+     * <b>{@code KKR} 비지배 59.9%로 3.06% → 7.63%(+4.57%p)</b>, {@code KMI} +0.37%p,
+     * {@code GM} +0.12%p, {@code AIG}·{@code JNJ}·{@code F}·{@code BRK-B}는 0.
+     * <b>{@code ROE}는 {@code 버핏 우량주}의 필수 게이트다.</b>
+     *
+     * <p><b>MUST NOT: {@code TOTAL_EQUITY}의 후보 순서를 뒤집어 해결하지 않는다.</b> 그러면
+     * {@code PBR}·{@code DEBT_RATIO}·{@code ALTMAN_Z}의 분모가 함께 바뀐다 — 그쪽은
+     * <b>총자본이 옳다</b>(총자산·총부채와 같은 기저라야 항등식이 선다). 갈라 담는 것이 요점이다.
+     */
+    TOTAL_EQUITY_CONTROLLING(Kind.INSTANT, Unit.MONETARY, List.of("StockholdersEquity")),
+
     CURRENT_ASSETS(Kind.INSTANT, Unit.MONETARY, List.of("AssetsCurrent")),
     CURRENT_LIABILITIES(Kind.INSTANT, Unit.MONETARY, List.of("LiabilitiesCurrent")),
     RETAINED_EARNINGS(Kind.INSTANT, Unit.MONETARY, List.of("RetainedEarningsAccumulatedDeficit")),

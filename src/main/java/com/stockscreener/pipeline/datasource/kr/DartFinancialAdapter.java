@@ -262,6 +262,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 // BS는 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다. 통화가 갈려도 참이다.
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_ASSETS, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_EQUITY, false),
+                // 지배주주 자본은 아직 안 담는다 — 국내는 분자도 비지배 포함이라 기저가 맞는다.
+                null,
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_LIABILITIES, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.CURRENT_ASSETS, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.CURRENT_LIABILITIES, false),

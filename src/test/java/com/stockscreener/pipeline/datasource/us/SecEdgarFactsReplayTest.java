@@ -65,7 +65,8 @@ class SecEdgarFactsReplayTest {
                 .forEach(r -> System.out.println("REPLAY   " + r.fiscalYear() + "/" + r.fiscalPeriod()
                         + " pub=" + r.publishedAt() + " rc=" + r.reportCode()
                         + " rev=" + r.revenue() + " cos=" + r.costOfSales()
-                        + " derived=" + r.derived()));
+                        + " teq=" + r.totalEquity() + " teqc=" + r.totalEquityControlling()
+                        + " ni=" + r.netIncome() + " derived=" + r.derived()));
         result.absences().stream()
                 .filter(a -> a.state() != FinancialColumnAbsence.State.ABSENT)
                 .forEach(a -> System.out.println("REPLAY   부재 " + a.columnName() + "=" + a.state()));

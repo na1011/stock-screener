@@ -75,7 +75,7 @@ public class RoeCalculator implements IndicatorCalculator {
             return null;
         }
 
-        BigDecimal equity = quarters.get(0).totalEquity();
+        BigDecimal equity = FinancialMath.equityMatchingNetIncome(quarters.get(0));
         if (equity == null || equity.signum() <= 0) {
             // 자본잠식이거나 항목이 비었다.
             return null;
