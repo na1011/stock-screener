@@ -170,6 +170,27 @@ enum SecEdgarColumn {
 
     TOTAL_ASSETS(Kind.INSTANT, Unit.MONETARY, List.of("Assets")),
     TOTAL_LIABILITIES(Kind.INSTANT, Unit.MONETARY, List.of("Liabilities")),
+
+    /**
+     * <b>중간지분(메자닌).</b> {@link #TOTAL_LIABILITIES}를 <b>유도하는 재료</b>이지 저장되는
+     * 컬럼이 아니다 — 재무상태표는 {@code 자산 = 부채 + 중간지분 + 자본}이고, 상환가능
+     * 비지배지분·임시자본이 부채와 영구자본 <b>사이</b>에 앉는다.
+     *
+     * <p><b>빼지 않으면 부채가 그만큼 부풀어 항등식이 안 선다.</b> 실측(2026-09-15 · 표본 47 ·
+     * 셋이 다 오는 1,845칸): {@code 자산 − 총자본}만 쓰면 <b>87.0%</b>가 0.1% 이내인데
+     * 중간지분을 빼면 <b>93.7%</b>가 된다.
+     *
+     * <p><b>없으면 0으로 본다</b> — 위 수가 이미 그 가정 위에서 잰 것이다.
+     *
+     * <p><b>후보 순서는 표본에서 결과를 안 바꾼다</b>(넓은 {@code TemporaryEquity…}를 먼저
+     * 둬도 93.7%로 같다) — 네 태그가 <b>같은 기간에 함께 오지 않기 때문</b>이다. 그래도
+     * 좁은 것을 먼저 두는 이유는 그것이 <b>더 자주 오는 쪽</b>이라서다.
+     */
+    MEZZANINE_EQUITY(Kind.INSTANT, Unit.MONETARY, List.of(
+            "RedeemableNoncontrollingInterestEquityCarryingAmount",
+            "RedeemableNoncontrollingInterestEquityFairValue",
+            "TemporaryEquityCarryingAmountAttributableToParent",
+            "TemporaryEquityCarryingAmountIncludingPortionAttributableToNoncontrollingInterest")),
     /**
      * 자본총계. <b>비지배지분을 포함하는 쪽을 먼저 본다.</b>
      *
@@ -483,6 +504,7 @@ enum SecEdgarColumn {
      */
     private boolean derivationMaterial() {
         return this == MINORITY_INTEREST
+                || this == MEZZANINE_EQUITY
                 || this == NET_INCOME_NONCONTROLLING
                 || this == NET_INCOME_NONCONTROLLING_REDEEMABLE
                 || this == NET_INCOME_NONCONTROLLING_NONREDEEMABLE;

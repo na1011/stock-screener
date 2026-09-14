@@ -889,7 +889,7 @@ final class SecEdgarFacts {
                 controllingIncome(v), v.get(SecEdgarColumn.TOTAL_ASSETS),
                 totalEquity(v),
                 controllingEquity(v),
-                v.get(SecEdgarColumn.TOTAL_LIABILITIES),
+                totalLiabilities(v),
                 v.get(SecEdgarColumn.CURRENT_ASSETS), v.get(SecEdgarColumn.CURRENT_LIABILITIES),
                 v.get(SecEdgarColumn.RETAINED_EARNINGS), v.get(SecEdgarColumn.OPERATING_CASH_FLOW),
                 v.get(SecEdgarColumn.SHARES_OUTSTANDING), v.get(SecEdgarColumn.EPS),
@@ -978,16 +978,54 @@ final class SecEdgarFacts {
      * <b>지배주주 자본 + 비지배지분</b>으로 되돌린다. {@link #controllingEquity}의 정확한 역이다.
      */
     private static BigDecimal totalEquity(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal founded = foundedTotalEquity(v);
+        return founded != null ? founded : v.get(SecEdgarColumn.TOTAL_EQUITY);
+    }
+
+    /**
+     * <b>근거가 확실한 총자본만</b> — 소스가 직접 낸 값이거나 지배주주 자본 + 비지배지분이다.
+     *
+     * <p>{@link #totalEquity}의 마지막 폴백({@code TOTAL_EQUITY}의 첫값)과 갈라 두는 이유는
+     * 그 폴백이 <b>지배주주분일 수 있기 때문</b>이다. 그것으로 부채를 유도하면 비지배지분만큼
+     * 부채가 부풀고, <b>그 값은 그럴듯해서 화면에서 안 드러난다.</b>
+     */
+    private static BigDecimal foundedTotalEquity(Map<SecEdgarColumn, BigDecimal> v) {
         BigDecimal direct = v.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI);
         if (direct != null) {
             return direct;
         }
         BigDecimal controlling = v.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING);
         BigDecimal minority = v.get(SecEdgarColumn.MINORITY_INTEREST);
-        if (controlling != null && minority != null) {
-            return controlling.add(minority);
+        return controlling != null && minority != null ? controlling.add(minority) : null;
+    }
+
+    /**
+     * <b>총부채.</b> 소스가 {@code Liabilities}를 안 내면 <b>자산 − 총자본 − 중간지분</b>으로
+     * 유도한다.
+     *
+     * <p><b>왜</b>: 그 태그가 없는 것이 드물지 않다 — 재적재 뒤 {@code US_TOP1000} 최신 FY
+     * <b>1,000종목 중 225</b>가 비어 있었고, 그동안 {@code DEBT_RATIO}·{@code ALTMAN_Z}·
+     * {@code ALTMAN_Z_DOUBLE_PRIME}·{@code NCAV_TO_MARKET}이 <b>그 종목에서 통째로 꺼져
+     * 있었다.</b> 실측(표본 47): 부재 813칸 중 <b>611(75.2%)</b>이 닫히고, 답을 아는 1,845칸에서
+     * 이 산수가 <b>1,729(93.7%)</b>를 0.1% 이내로 맞힌다 — 벗어난 116 중 <b>76이 1% 이내</b>이고
+     * 5%를 넘는 것은 <b>7뿐</b>(6이 {@code YUM} — 자본잠식이라 분모가 작다).
+     *
+     * <p><b>MUST: 근거가 확실한 총자본으로만 유도한다</b>({@link #foundedTotalEquity}).
+     * 폴백 총자본은 지배주주분일 수 있어 부채를 부풀린다.
+     */
+    private static BigDecimal totalLiabilities(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal direct = v.get(SecEdgarColumn.TOTAL_LIABILITIES);
+        if (direct != null) {
+            return direct;
         }
-        return v.get(SecEdgarColumn.TOTAL_EQUITY);
+        BigDecimal assets = v.get(SecEdgarColumn.TOTAL_ASSETS);
+        BigDecimal equity = foundedTotalEquity(v);
+        if (assets == null || equity == null) {
+            return null;
+        }
+        BigDecimal mezzanine = v.get(SecEdgarColumn.MEZZANINE_EQUITY);
+        BigDecimal liabilities = assets.subtract(equity);
+        return mezzanine != null ? liabilities.subtract(mezzanine) : liabilities;
     }
 
     private static BigDecimal controllingEquity(Map<SecEdgarColumn, BigDecimal> v) {
