@@ -891,7 +891,7 @@ final class SecEdgarFacts {
                 controllingEquity(v),
                 totalLiabilities(v),
                 v.get(SecEdgarColumn.CURRENT_ASSETS), v.get(SecEdgarColumn.CURRENT_LIABILITIES),
-                v.get(SecEdgarColumn.RETAINED_EARNINGS), v.get(SecEdgarColumn.OPERATING_CASH_FLOW),
+                v.get(SecEdgarColumn.RETAINED_EARNINGS), operatingCashFlow(v),
                 v.get(SecEdgarColumn.SHARES_OUTSTANDING), v.get(SecEdgarColumn.EPS),
                 // bps는 소스가 주지 않는다. 자본총계/주식수로 지표 계층이 계산한다(spec §7).
                 null,
@@ -914,7 +914,7 @@ final class SecEdgarFacts {
                 v.get(SecEdgarColumn.OPERATING_EXPENSES),
                 v.get(SecEdgarColumn.COSTS_AND_EXPENSES),
                 v.get(SecEdgarColumn.INCOME_TAX_EXPENSE),
-                v.get(SecEdgarColumn.PROFIT_BEFORE_TAX),
+                profitBeforeTax(v),
                 // 소스가 준 행이다. 유도 행만 derived=true이고, 저장이 그것으로 판을 회수한다.
                 false);
     }
@@ -977,6 +977,46 @@ final class SecEdgarFacts {
      * <p>소스가 그 태그를 안 내면 {@code TOTAL_EQUITY}가 지배주주분으로 떨어지므로
      * <b>지배주주 자본 + 비지배지분</b>으로 되돌린다. {@link #controllingEquity}의 정확한 역이다.
      */
+    /**
+     * <b>영업활동현금흐름.</b> 소스가 총액 태그를 안 내면 <b>계속영업분 + 중단영업분</b>으로
+     * 유도한다. 둘 다 안 되면 예전과 같은 첫값이 나간다 — <b>값을 잃지 않는다.</b>
+     *
+     * <p>실측은 {@code OPERATING_CASH_FLOW_DISCONTINUED}의 javadoc에 있다(항등식 98.8% ·
+     * 절대오차 총합 −94.2%).
+     */
+    private static BigDecimal operatingCashFlow(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal total = v.get(SecEdgarColumn.OPERATING_CASH_FLOW_TOTAL);
+        if (total != null) {
+            return total;
+        }
+        BigDecimal continuing = v.get(SecEdgarColumn.OPERATING_CASH_FLOW_CONTINUING);
+        BigDecimal discontinued = v.get(SecEdgarColumn.OPERATING_CASH_FLOW_DISCONTINUED);
+        if (continuing != null && discontinued != null) {
+            return continuing.add(discontinued);
+        }
+        return v.get(SecEdgarColumn.OPERATING_CASH_FLOW);
+    }
+
+    /**
+     * <b>세전이익.</b> 소스가 지분법 포함 태그를 안 내면 <b>지분법 제외분 + 지분법손익</b>으로
+     * 유도한다. 둘 다 안 되면 예전과 같은 첫값이 나간다.
+     *
+     * <p>실측은 {@code EQUITY_METHOD_INCOME}의 javadoc에 있다(항등식 82.7% ·
+     * 절대오차 총합 −78.0% · 악화 13 중 11이 「제외 태그가 실제로 제외하지 않는」 자리).
+     */
+    private static BigDecimal profitBeforeTax(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal including = v.get(SecEdgarColumn.PROFIT_BEFORE_TAX_INCLUDING_EQUITY);
+        if (including != null) {
+            return including;
+        }
+        BigDecimal excluding = v.get(SecEdgarColumn.PROFIT_BEFORE_TAX_EXCLUDING_EQUITY);
+        BigDecimal equityMethod = v.get(SecEdgarColumn.EQUITY_METHOD_INCOME);
+        if (excluding != null && equityMethod != null) {
+            return excluding.add(equityMethod);
+        }
+        return v.get(SecEdgarColumn.PROFIT_BEFORE_TAX);
+    }
+
     private static BigDecimal totalEquity(Map<SecEdgarColumn, BigDecimal> v) {
         BigDecimal founded = foundedTotalEquity(v);
         return founded != null ? founded : v.get(SecEdgarColumn.TOTAL_EQUITY);

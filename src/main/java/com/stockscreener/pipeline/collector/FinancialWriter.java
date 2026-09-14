@@ -13,8 +13,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -185,12 +187,23 @@ public class FinancialWriter {
      * 하나 더 붙는다.
      */
     private void retractStaleDerived(long stockId, List<RawFinancialReport> reports, Tally tally) {
-        Map<DerivedLabel, List<RawFinancialReport>> byLabel = new LinkedHashMap<>();
+        // 라벨 자격은 「유도 행이 하나라도 있는가」이고, 보존 집합은 그 라벨로 **들어온 판 전부**다.
+        // 유도 행만 보존 집합에 넣으면, 같은 (연도,분기)에 소스가 직접 준 판이 함께 지워진다 —
+        // 미국에서 실제로 있는 형태다(다음 해 10-K가 전년 4분기를 비교로 낸다. 실측 2026-09-15:
+        // CAH 2016·MDLZ 2015가 그 자리이고 리플레이가 derived=false로 답한다).
+        // 지금은 같은 트랜잭션이 곧바로 다시 써서 값이 안 사라지지만, **이력과 created_at은
+        // 매 실행 지워지고**, 소스가 그 판을 그만 내는 순간 조용히 유실된다.
+        Set<DerivedLabel> derivedLabels = new LinkedHashSet<>();
         for (RawFinancialReport report : reports) {
             if (report.derived()) {
-                byLabel.computeIfAbsent(
-                        new DerivedLabel(report.fiscalYear(), report.fiscalPeriod()),
-                        key -> new ArrayList<>()).add(report);
+                derivedLabels.add(new DerivedLabel(report.fiscalYear(), report.fiscalPeriod()));
+            }
+        }
+        Map<DerivedLabel, List<RawFinancialReport>> byLabel = new LinkedHashMap<>();
+        for (RawFinancialReport report : reports) {
+            DerivedLabel label = new DerivedLabel(report.fiscalYear(), report.fiscalPeriod());
+            if (derivedLabels.contains(label)) {
+                byLabel.computeIfAbsent(label, key -> new ArrayList<>()).add(report);
             }
         }
         for (Map.Entry<DerivedLabel, List<RawFinancialReport>> entry : byLabel.entrySet()) {

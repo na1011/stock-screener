@@ -158,6 +158,32 @@ enum SecEdgarColumn {
             "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations")),
 
     /**
+     * <b>총 영업활동현금흐름.</b> {@link #OPERATING_CASH_FLOW}의 첫 후보만 따로 든다 — 그
+     * 태그가 이겼는지를 값만 보고는 알 수 없기 때문이다({@code NET_INCOME_TOTAL}과 같은 형태).
+     */
+    OPERATING_CASH_FLOW_TOTAL(Kind.DURATION, Unit.MONETARY, true, List.of(
+            "NetCashProvidedByUsedInOperatingActivities")),
+
+    /** 계속영업분. 유도의 피가산수다. */
+    OPERATING_CASH_FLOW_CONTINUING(Kind.DURATION, Unit.MONETARY, true, List.of(
+            "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations")),
+
+    /**
+     * <b>중단영업분.</b> {@link #OPERATING_CASH_FLOW}를 <b>유도하는 재료</b>다 —
+     * 총액 = 계속영업 + 중단영업.
+     *
+     * <p><b>실측(2026-09-15 · 표본 47)</b>: 답을 아는 82칸에서 항등식이 <b>81(98.8%)</b>
+     * 성립하고, 폴백과 견주면 <b>67칸이 가까워지고 1칸이 멀어지며 절대오차 총합이 94.2%
+     * 준다</b>(50,530M → 2,928M).
+     *
+     * <p><b>MUST: 「…ContinuingOperations」가 실제로 제외하는지는 회사마다 다르다.</b>
+     * 두 태그 값이 <b>이미 같은 칸이 18.3%</b>이고 거기에 더하면 없던 오차가 생긴다
+     * ({@code AIG} 2012가 그 자리다). 그래도 총오차는 위와 같이 크게 준다.
+     */
+    OPERATING_CASH_FLOW_DISCONTINUED(Kind.DURATION, Unit.MONETARY, true, List.of(
+            "CashProvidedByUsedInOperatingActivitiesDiscontinuedOperations")),
+
+    /**
      * 자본적지출. <b>연간만 담는다 — 현금흐름과 같은 창이어야 한다.</b>
      *
      * <p>잉여현금흐름이 둘의 차이인데 한쪽만 분기에 값이 있으면 <b>기간이 다른 두 수를 뺀다.</b>
@@ -334,7 +360,30 @@ enum SecEdgarColumn {
      */
     PROFIT_BEFORE_TAX(Kind.DURATION, Unit.MONETARY, true, List.of(
             "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
-            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"));
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments")),
+
+    /** 지분법을 포함한 세전이익. {@link #PROFIT_BEFORE_TAX}의 첫 후보만 따로 든다. */
+    PROFIT_BEFORE_TAX_INCLUDING_EQUITY(Kind.DURATION, Unit.MONETARY, true, List.of(
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest")),
+
+    /** 지분법을 제외한 세전이익. 유도의 피가산수다. */
+    PROFIT_BEFORE_TAX_EXCLUDING_EQUITY(Kind.DURATION, Unit.MONETARY, true, List.of(
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments")),
+
+    /**
+     * <b>지분법손익.</b> {@link #PROFIT_BEFORE_TAX}를 <b>유도하는 재료</b>다 —
+     * 포함 = 제외 + 지분법손익.
+     *
+     * <p><b>실측(2026-09-15 · 표본 47)</b>: 답을 아는 75칸에서 항등식이 <b>62(82.7%)</b>
+     * 성립하고, 폴백과 견주면 <b>60칸이 가까워지고 13칸이 멀어지며 절대오차 총합이 78.0%
+     * 준다</b>(48,981M → 10,773M).
+     *
+     * <p><b>악화 13 중 11이 「피감수 = 정답」인 칸</b>이다 — 그 회사들은 <i>"지분법 제외"</i>
+     * 태그에 <b>이미 지분법을 포함</b>해 낸다({@code F}·{@code GM}·{@code CACI}·{@code PNR}·
+     * {@code WEC} · 검증 칸의 <b>14.7%</b>). <b>이름이 계약이 아니다.</b>
+     */
+    EQUITY_METHOD_INCOME(Kind.DURATION, Unit.MONETARY, true, List.of(
+            "IncomeLossFromEquityMethodInvestments"));
 
     private enum Kind { DURATION, INSTANT, ANCHORED_INSTANT }
 
@@ -505,6 +554,12 @@ enum SecEdgarColumn {
     private boolean derivationMaterial() {
         return this == MINORITY_INTEREST
                 || this == MEZZANINE_EQUITY
+                || this == OPERATING_CASH_FLOW_DISCONTINUED
+                || this == EQUITY_METHOD_INCOME
+                // 부모 PROFIT_BEFORE_TAX가 이미 빠져 있다 — 갈래만 남겨 두면 세금만 든 얕은
+                // 보고서가 reporter가 되어 ADR-0143이 닫은 자리가 다시 열린다.
+                || this == PROFIT_BEFORE_TAX_INCLUDING_EQUITY
+                || this == PROFIT_BEFORE_TAX_EXCLUDING_EQUITY
                 || this == NET_INCOME_NONCONTROLLING
                 || this == NET_INCOME_NONCONTROLLING_REDEEMABLE
                 || this == NET_INCOME_NONCONTROLLING_NONREDEEMABLE;
