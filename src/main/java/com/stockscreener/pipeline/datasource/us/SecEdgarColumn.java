@@ -48,8 +48,71 @@ enum SecEdgarColumn {
                     "SalesRevenueNet", "SalesRevenueGoodsNet"),
             List.of("RevenueFromContractWithCustomerIncludingAssessedTax")),
     OPERATING_INCOME(Kind.DURATION, Unit.MONETARY, List.of("OperatingIncomeLoss")),
+    /**
+     * 순이익. <b>후보 셋의 뜻이 서로 다르다</b> — {@code NetIncomeLoss}는 지배주주 귀속,
+     * {@code ProfitLoss}는 비지배 포함, {@code …AvailableToCommonStockholdersBasic}은
+     * 우선주 배당까지 뺀 값이다. 그래서 이 컬럼은 <b>마지막 수단</b>이고, 실제로 저장되는
+     * 값은 {@code SecEdgarFacts.controllingIncome}이 고른다.
+     *
+     * <p><b>MUST NOT: 후보를 줄여 해결하지 않는다.</b> 줄이면 그 태그만 내는 종목의 순이익이
+     * 통째로 빈다 — ADR-0126 §결정이 <b>입력 값을 버리는 것을 금지</b>한다. 갈라 담고
+     * 유도하는 것이 요점이다.
+     */
     NET_INCOME(Kind.DURATION, Unit.MONETARY, List.of(
             "NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic")),
+
+    /**
+     * <b>지배주주 귀속 순이익.</b> {@link #NET_INCOME}의 첫 후보만 따로 든다 — 그 태그가
+     * 이겼는지를 값만 보고는 알 수 없기 때문이다.
+     */
+    NET_INCOME_CONTROLLING(Kind.DURATION, Unit.MONETARY, List.of("NetIncomeLoss")),
+
+    /**
+     * <b>비지배 포함 순이익.</b> {@link #NET_INCOME_CONTROLLING}이 없을 때 유도의 피감수다.
+     *
+     * <p>이것을 따로 드는 이유는 <b>셋째 후보에서 빼면 안 되기 때문</b>이다 —
+     * {@code …AvailableToCommonStockholdersBasic}은 이미 지배주주 기준이라, 거기서
+     * 비지배지분을 또 빼면 두 번 빠진다.
+     */
+    NET_INCOME_TOTAL(Kind.DURATION, Unit.MONETARY, List.of("ProfitLoss")),
+
+    /**
+     * <b>비지배 귀속 순이익.</b> {@link #NET_INCOME_CONTROLLING}을 <b>유도하는 재료</b>이지
+     * 저장되는 컬럼이 아니다 — 지배주주 순이익 = 비지배 포함 순이익 − 비지배 귀속분.
+     *
+     * <p><b>왜 필요한가</b>: ADR-0153이 {@code ROE}의 분모를 지배주주 자본으로 옮겼는데
+     * 분자를 그대로 두면 <b>분자만 비지배 포함</b>이 되어 전보다 더 어긋난다. 실측
+     * (2026-09-15 · 표본 47): {@code NetIncomeLoss}가 없어 {@code ProfitLoss}로 떨어지는
+     * 종목이 <b>13</b>이고 그중 <b>8</b>이 한 기간이라도 유도된다 — {@code CAT} 11/11 ·
+     * {@code WEC} 9/9 · {@code F} 6/6 · {@code EL} 4/6 · {@code TEL} 3/3 · {@code AVAV} 2/7 ·
+     * {@code AVGO} 2/4 · {@code MPLX} 2/2 기간.
+     *
+     * <p><b>레시피가 옳은지는 다른 표본으로 잰다</b> — 유도가 발화하는 칸은 답을 모르므로
+     * ({@code NetIncomeLoss}가 없어서 유도한다) <b>답을 아는 379칸</b>에 같은 산수를 태웠다:
+     * 유도가 <b>314칸에서 더 가깝고 19칸에서 멀어지며</b> 절대오차 총합이 <b>90.8% 준다</b>
+     * (100,352M → 9,234M). 항등식 자체는 <b>342/379(90.2%)</b>가 0.1% 이내이고, 이탈은
+     * {@code KKR}·{@code MPLX}·{@code FSV}·{@code GM}·{@code LNG} 같은 복합 지배구조에 몰린다.
+     */
+    NET_INCOME_NONCONTROLLING(Kind.DURATION, Unit.MONETARY, List.of(
+            "NetIncomeLossAttributableToNoncontrollingInterest",
+            "ProfitLossAttributableToNoncontrollingInterest")),
+
+    /**
+     * <b>상환가능 비지배 귀속 순이익.</b> {@link #NET_INCOME_NONCONTROLLING}의 <b>구성요소</b>라
+     * 그 태그가 없을 때만, 그리고 {@link #NET_INCOME_NONCONTROLLING_NONREDEEMABLE}과 <b>합해서</b>
+     * 쓴다. 합계 태그와 함께 더하면 두 번 센다.
+     *
+     * <p><b>표본 47에서 이 갈래가 답이 되는 칸은 0이다.</b> {@code FSV}를 보고 넣었는데
+     * 재보니 그 종목은 <b>두 태그가 같은 기간에 함께 오지 않아</b> 이 갈래로도 안 닫힌다.
+     * 그래도 남기는 이유는 둘뿐이다 — <b>정의상 옳은 분해</b>이고(검증 가능한 4칸에서 4/4),
+     * <b>표본이 1,000 중 47이라 나머지에서 안 뜬다고 못 말한다.</b> 전수로는 안 쟀다.
+     */
+    NET_INCOME_NONCONTROLLING_REDEEMABLE(Kind.DURATION, Unit.MONETARY, List.of(
+            "NetIncomeLossAttributableToRedeemableNoncontrollingInterest")),
+
+    /** {@link #NET_INCOME_NONCONTROLLING_REDEEMABLE}의 짝. 둘은 언제나 함께 쓴다. */
+    NET_INCOME_NONCONTROLLING_NONREDEEMABLE(Kind.DURATION, Unit.MONETARY, List.of(
+            "NetIncomeLossAttributableToNonredeemableNoncontrollingInterest")),
     /**
      * 매출원가. <b>{@link #REVENUE}와 같은 이유로 첫값이 아니라 가장 큰 값을 고른다.</b>
      *
@@ -136,6 +199,30 @@ enum SecEdgarColumn {
      * <b>총자본이 옳다</b>(총자산·총부채와 같은 기저라야 항등식이 선다). 갈라 담는 것이 요점이다.
      */
     TOTAL_EQUITY_CONTROLLING(Kind.INSTANT, Unit.MONETARY, List.of("StockholdersEquity")),
+
+    /**
+     * <b>비지배 포함 자본.</b> {@link #TOTAL_EQUITY}의 첫 후보만 따로 든다 — 그 태그가
+     * 이겼는지를 값만 보고는 알 수 없기 때문이다({@link #NET_INCOME_TOTAL}과 같은 형태).
+     *
+     * <p><b>왜 필요한가</b>: 소스가 그 태그를 안 내면 {@code TOTAL_EQUITY}가
+     * {@code StockholdersEquity}(지배주주분)로 떨어지는데, 그 값은 {@code TOTAL_ASSETS}·
+     * {@code TOTAL_LIABILITIES}와 <b>기저가 달라 {@code 자산 = 부채 + 자본}이 깨진다.</b>
+     * <p><b>두 수를 갈라 읽는다.</b> <i>얼마나 자주 발화하는가</i>와 <i>발화했을 때 얼마나
+     * 옳은가</i>는 다른 질문이고, 표본이 다르다(실측 2026-09-15 · 표본 47).
+     * <ul>
+     *   <li><b>발화</b>: 2순위로 떨어지는 종목이 <b>17</b>인데 그중 비지배지분 태그까지 있어
+     *       실제로 유도되는 것은 <b>2</b>다. 나머지 15는 <b>유도할 재료가 없어 그대로</b>다.</li>
+     *   <li><b>정확도</b>: 셋이 다 오는 1,042칸에서 항등식이 <b>997(95.7%)</b> 성립하고,
+     *       폴백과 견주면 <b>990칸이 가까워지고 19칸이 멀어지며 절대오차 총합이 96.4% 준다.</b>
+     *       <b>그 1,042칸은 유도가 발화하는 칸이 아니다</b> — 레시피가 옳은지를 재는 대조군이다.</li>
+     * </ul>
+     *
+     * <p><b>MUST NOT: 상환가능 비지배지분을 더하지 않는다.</b> 더하면 항등식이
+     * <b>85.5%로 나빠진다</b> — {@code …IncludingPortionAttributableToNoncontrollingInterest}는
+     * 정의상 영구자본 안의 비지배지분만 포함한다.
+     */
+    TOTAL_EQUITY_INCLUDING_NCI(Kind.INSTANT, Unit.MONETARY, List.of(
+            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest")),
 
     /**
      * <b>비지배지분.</b> {@link #TOTAL_EQUITY_CONTROLLING}을 <b>유도하는 재료</b>이지 저장되는
@@ -380,7 +467,25 @@ enum SecEdgarColumn {
     boolean reportEvidence() {
         return !anchoredInstant()
                 && this != INCOME_TAX_EXPENSE
-                && this != PROFIT_BEFORE_TAX;
+                && this != PROFIT_BEFORE_TAX
+                && !derivationMaterial();
+    }
+
+    /**
+     * <b>유도의 재료일 뿐 저장되지 않는 컬럼인가.</b>
+     *
+     * <p>{@link #reportEvidence}에서 빼는 이유는 세율 재료 둘과 같다 — <b>그 컬럼만 든 얕은
+     * 보고서가 baseline을 세우면 뒤따르는 진짜 10-K가 버려진다</b>(ADR-0143 §버린 대안).
+     * 비지배지분은 재무상태표·손익계산서의 말단 항목이라 그런 보고서가 실제로 있다.
+     *
+     * <p><b>{@code NET_INCOME_CONTROLLING}·{@code NET_INCOME_TOTAL}은 여기 없다</b> —
+     * 그 둘의 후보가 {@link #NET_INCOME}의 부분집합이라 증거 자격을 새로 만들지 않는다.
+     */
+    private boolean derivationMaterial() {
+        return this == MINORITY_INTEREST
+                || this == NET_INCOME_NONCONTROLLING
+                || this == NET_INCOME_NONCONTROLLING_REDEEMABLE
+                || this == NET_INCOME_NONCONTROLLING_NONREDEEMABLE;
     }
 
     boolean anchoredInstant() {

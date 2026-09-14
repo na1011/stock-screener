@@ -886,8 +886,8 @@ final class SecEdgarFacts {
                 // 정정 추적의 근거. DART 쪽이 rcept_no 컬럼이 없어 못 하던 것이다.
                 "%s:%s".formatted(anchor.form(), anchor.accn()), currency,
                 v.get(SecEdgarColumn.REVENUE), v.get(SecEdgarColumn.OPERATING_INCOME),
-                v.get(SecEdgarColumn.NET_INCOME), v.get(SecEdgarColumn.TOTAL_ASSETS),
-                v.get(SecEdgarColumn.TOTAL_EQUITY),
+                controllingIncome(v), v.get(SecEdgarColumn.TOTAL_ASSETS),
+                totalEquity(v),
                 controllingEquity(v),
                 v.get(SecEdgarColumn.TOTAL_LIABILITIES),
                 v.get(SecEdgarColumn.CURRENT_ASSETS), v.get(SecEdgarColumn.CURRENT_LIABILITIES),
@@ -930,6 +930,66 @@ final class SecEdgarFacts {
      *
      * <p><b>MUST: 직접 낸 값이 언제나 이긴다</b>(ADR-0104). 유도는 없을 때만이다.
      */
+    /**
+     * <b>지배주주 귀속 순이익.</b> 직접 낸 값 → 유도 → 마지막 수단 순이고, <b>어느 갈래에서도
+     * 값을 잃지 않는다</b> — 유도가 안 되면 예전과 똑같이 {@code NET_INCOME}의 첫값이 나간다.
+     *
+     * <p><b>왜 지금 필요한가</b>: ADR-0153이 {@code ROE}의 분모를 지배주주 자본으로 옮기면서
+     * {@code NetIncomeLoss}가 없는 종목은 <b>분자만 비지배 포함</b>으로 남았다. 그 전에는
+     * 분자·분모가 둘 다 비지배 포함이라 정합했으므로, <b>이것은 그 변경이 만든 어긋남</b>이다.
+     *
+     * <p><b>MUST: 직접 낸 값이 언제나 이긴다</b>(ADR-0104).
+     */
+    private static BigDecimal controllingIncome(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal direct = v.get(SecEdgarColumn.NET_INCOME_CONTROLLING);
+        if (direct != null) {
+            return direct;
+        }
+        BigDecimal total = v.get(SecEdgarColumn.NET_INCOME_TOTAL);
+        BigDecimal nonControlling = nonControllingIncome(v);
+        if (total != null && nonControlling != null) {
+            return total.subtract(nonControlling);
+        }
+        return v.get(SecEdgarColumn.NET_INCOME);
+    }
+
+    /**
+     * 비지배 귀속분. <b>합계 태그가 이기고, 없을 때만 상환가능·상환불능 둘을 더한다.</b>
+     * 합계와 구성요소를 함께 더하면 두 번 센다.
+     *
+     * <p>구성요소 갈래는 <b>둘 다 있을 때만</b> 성립한다 — 한쪽만 있는 것을 전체로 쓰면
+     * 과소 차감이 되어 지배주주 순이익이 실제보다 커진다.
+     */
+    private static BigDecimal nonControllingIncome(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal total = v.get(SecEdgarColumn.NET_INCOME_NONCONTROLLING);
+        if (total != null) {
+            return total;
+        }
+        BigDecimal redeemable = v.get(SecEdgarColumn.NET_INCOME_NONCONTROLLING_REDEEMABLE);
+        BigDecimal nonRedeemable = v.get(SecEdgarColumn.NET_INCOME_NONCONTROLLING_NONREDEEMABLE);
+        return redeemable != null && nonRedeemable != null ? redeemable.add(nonRedeemable) : null;
+    }
+
+    /**
+     * <b>비지배 포함 자본.</b> {@code TOTAL_ASSETS}·{@code TOTAL_LIABILITIES}와 같은 기저라야
+     * {@code 자산 = 부채 + 자본}이 선다(spec §7 · 국내 「자본총계」와 같은 것).
+     *
+     * <p>소스가 그 태그를 안 내면 {@code TOTAL_EQUITY}가 지배주주분으로 떨어지므로
+     * <b>지배주주 자본 + 비지배지분</b>으로 되돌린다. {@link #controllingEquity}의 정확한 역이다.
+     */
+    private static BigDecimal totalEquity(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal direct = v.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI);
+        if (direct != null) {
+            return direct;
+        }
+        BigDecimal controlling = v.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING);
+        BigDecimal minority = v.get(SecEdgarColumn.MINORITY_INTEREST);
+        if (controlling != null && minority != null) {
+            return controlling.add(minority);
+        }
+        return v.get(SecEdgarColumn.TOTAL_EQUITY);
+    }
+
     private static BigDecimal controllingEquity(Map<SecEdgarColumn, BigDecimal> v) {
         BigDecimal direct = v.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING);
         if (direct != null) {
@@ -1111,8 +1171,7 @@ final class SecEdgarFacts {
                             q1.revenue(), q2.revenue(), q3.revenue()),
                 sourceOrMinus(byColumn, SecEdgarColumn.OPERATING_INCOME, slot, subtractable, fy.operatingIncome(),
                             q1.operatingIncome(), q2.operatingIncome(), q3.operatingIncome()),
-                sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME, slot, subtractable, fy.netIncome(),
-                            q1.netIncome(), q2.netIncome(), q3.netIncome()),
+                controllingIncomeQ4(byColumn, slot, subtractable, fy, q1, q2, q3),
                 // 잔액은 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
                 fy.totalAssets(), fy.totalEquity(), fy.totalEquityControlling(),
                 fy.totalLiabilities(),
@@ -1225,15 +1284,61 @@ final class SecEdgarFacts {
      * 4분기가 일부 컬럼만 주면 <b>유도가 통째로 막혀 나머지 컬럼을 잃는다</b>
      * ({@code DLTR}이 매출원가를 잃었다).
      */
-    private static BigDecimal sourceOrMinus(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
-                                            SecEdgarColumn column, Slot slot,
-                                            boolean subtractable, BigDecimal annual,
-                                            BigDecimal... quarters) {
+    /**
+     * Q4 순이익. <b>연간 행과 같은 기저라야 한다</b> — 그렇지 않으면 한 종목의 시계열 안에서
+     * 분기만 비지배 포함이 되고, {@code EPS_TTM}처럼 네 분기를 더하는 지표가 서로 다른 기저를
+     * 더한다.
+     *
+     * <p>순서는 {@code controllingIncome}과 같다: 소스가 낸 지배주주 값 → 소스가 낸 비지배
+     * 포함에서 비지배분을 뺀 값 → 소스가 낸 것 무엇이든 → 우리 뺄셈. <b>마지막 갈래의 피감수는
+     * 이미 지배주주 기저</b>이므로(연간·분기 행이 {@code controllingIncome}을 거쳤다) 뺄셈은
+     * 기저를 섞지 않는다.
+     */
+    private static BigDecimal controllingIncomeQ4(
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, Slot slot,
+            boolean subtractable, RawFinancialReport fy, RawFinancialReport q1,
+            RawFinancialReport q2, RawFinancialReport q3) {
+        BigDecimal direct = sourceAt(byColumn, SecEdgarColumn.NET_INCOME_CONTROLLING, slot);
+        if (direct != null) {
+            return direct;
+        }
+        BigDecimal total = sourceAt(byColumn, SecEdgarColumn.NET_INCOME_TOTAL, slot);
+        if (total != null) {
+            BigDecimal nonControlling =
+                    sourceAt(byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING, slot);
+            if (nonControlling == null) {
+                BigDecimal redeemable = sourceAt(
+                        byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING_REDEEMABLE, slot);
+                BigDecimal nonRedeemable = sourceAt(
+                        byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING_NONREDEEMABLE, slot);
+                nonControlling = redeemable != null && nonRedeemable != null
+                        ? redeemable.add(nonRedeemable) : null;
+            }
+            return nonControlling != null ? total.subtract(nonControlling) : total;
+        }
+        return sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME, slot, subtractable,
+                fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome());
+    }
+
+    /** 그 칸에 소스가 낸 팩트. 없으면 null — 여기서는 유도하지 않는다. */
+    private static BigDecimal sourceAt(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                       SecEdgarColumn column, Slot slot) {
         for (Map<Slot, Fact> slots : byColumn.getOrDefault(column, Map.of()).values()) {
             Fact fact = slots.get(slot);
             if (fact != null) {
                 return fact.value();
             }
+        }
+        return null;
+    }
+
+    private static BigDecimal sourceOrMinus(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                            SecEdgarColumn column, Slot slot,
+                                            boolean subtractable, BigDecimal annual,
+                                            BigDecimal... quarters) {
+        BigDecimal source = sourceAt(byColumn, column, slot);
+        if (source != null) {
+            return source;
         }
         if (!subtractable) {
             return null;
