@@ -119,6 +119,27 @@ GET https://www.sec.gov/files/company_tickers_exchange.json
 | `cost_of_sales` | **14/19** | `CostOfGoodsAndServicesSold` · `CostOfRevenue` · `CostOfGoodsSold` |
 | `inventories` | **13/19** | `InventoryNet` |
 
+**세율 재료 둘은 다른 표본(10종목)으로 쟀다** — 2026-09-14 · `SecEdgarConceptProbeLiveTest`의
+낱말 스캔(`probe.conceptNeedles`). 업종 비중복으로 고르고 **금융업 다섯(SIC 60·61·62·63·67)을
+넣었다**(ABBV·AAON·ABCB·AFRM·AMG·ACGL·CBRE·DLB·ABNB·ADM).
+
+| 재료 | 태그 | 표본 | 읽는 법 |
+|---|---|---|---|
+| **법인세비용** | `IncomeTaxExpenseBenefit` | **10/10** | 금융업 다섯 포함이다 |
+| **세전이익** | `IncomeLossFromContinuingOperationsBeforeIncomeTaxes`⏎`ExtraordinaryItemsNoncontrollingInterest` | **10/10** | **계속영업 + 비지배 포함**이다 — 국내가 분자만 계속영업이고 분모가 총액인 것과 **기저가 다르다** |
+| 세전이익(지분법 변종) | `…BeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments` | 5/10 | 위 태그와 **배타적이 아니다** — 둘 다 가진 회사가 있다 |
+| 당기·이연 법인세 | `CurrentIncomeTaxExpenseBenefit` · `DeferredIncomeTaxExpenseBenefit` | 각 10/10 | 합이 `IncomeTaxExpenseBenefit`인지는 **재보지 않았다** |
+| 유효세율 | `EffectiveIncomeTaxRateContinuingOperations` | 10/10 | **MUST NOT: 이 값을 쓰지 않는다** — spec §7이 「지표는 원자료를 수집한 뒤 자체 계산」을 걸고 `data-pipeline.md`가 「외부 API가 계산해 주는 지표 값에 의존하지 않는다」를 건다. **대조군으로만 쓴다** |
+
+**MUST: 이 10/10을 US_TOP1000의 커버리지로 옮겨 적지 않는다.** 표본 열은 「닫히지 않았다」까지만
+낸다 — ADR-0104의 `117/119`가 **금융업 중 영업이익이 막힌 119**의 수였던 것과 같은 구분이다.
+
+**국내와 기저가 갈리는 자리를 함께 적는다.** 국내는 분자가 `…IncomeTaxExpenseContinuingOperations`
+(계속영업)이고 분모로 쓸 수 있는 것이 **총액뿐**이지만(계속영업 세전이익 0/8), 미국은 분모가
+**계속영업 + NCI**다. 그리고 미국 `net_income`은 `NetIncomeLoss`(**지배주주 귀속**)라
+**항등식 `세전 = 순이익 + 법인세`가 비지배지분만큼 항상 어긋난다** — 국내에서 쓰는 검산을
+미국에 그대로 옮기면 안 된다.
+
 **빈 것이 결손이 아니다.** 은행·REIT는 재무상태표를 유동/비유동으로 가르지 않아
 `AssetsCurrent`가 원리적으로 없고, 재고가 없는 업종도 마찬가지다 — 국내 금융업과 같은 성질이다.
 
