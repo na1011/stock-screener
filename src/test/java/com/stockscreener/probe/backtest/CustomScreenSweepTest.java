@@ -51,10 +51,14 @@ class CustomScreenSweepTest {
 
     /**
      * 스윕할 전략. 이름의 일부이며 사용자 소유 `CUSTOM` 화면을 가리킨다.
-     * {@code -Dsweep.screens=v12,v13}으로 갈아끼운다.
+     * {@code -Dsweep.screens=v14,v15}로 갈아끼운다.
+     *
+     * <p><b>MUST: 여기 적힌 이름이 DB에 실재해야 한다.</b> 없으면 {@link #screenIdOf}가 0건으로
+     * 던져 <b>무인자 실행이 통째로 선다.</b> 화면을 지울 때 이 기본값을 함께 옮긴다 —
+     * 실제로 v12를 폐기할 때 이 줄이 그 화면을 가리키고 있었다.
      */
     private static List<String> screenNames() {
-        return csv("sweep.screens", List.of("v12", "v13"));
+        return csv("sweep.screens", List.of("v14", "v15"));
     }
 
     /** 달성률 문턱. 커스텀 전략 백테스트 규약이 정한 값이고 이것을 빼고 결론을 내지 않는다. */
