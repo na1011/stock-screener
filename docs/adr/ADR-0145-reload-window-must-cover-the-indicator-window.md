@@ -68,6 +68,12 @@ gap AS (
   SELECT c.uc, c.col, string_agg(c.y::text, ',' ORDER BY c.y) AS years
   FROM cell c JOIN peak p ON p.uc = c.uc AND p.col = c.col
   WHERE c.filled = 0 AND p.best >= 0.3
+    -- FY2018 이하의 이 셋은 창이 아니라 네임스페이스다 — DART가 그 구간에서 'ifrs_'를 쓰는데
+    -- DartFullAccountMapper의 후보는 'ifrs-full_'과 'dart_'뿐이다(§결과의 탐침).
+    -- 그 연도를 읽는 지표가 없어 열지 않기로 했으므로, 세면 매 세션 조치 없는 발견이 난다.
+    -- MUST: 이 목록이 자라는 자리는 매핑에 'ifrs_' 후보를 더하는 커밋이다 — 더하고 전 창을
+    -- 재적재하면 이 예외를 함께 지운다. 다른 컬럼이나 FY2019 이상은 그대로 걸린다.
+    AND NOT (c.y <= 2018 AND c.col IN ('income_tax_expense','profit_before_tax','capex'))
   GROUP BY 1,2)
 SELECT CASE
   WHEN (SELECT count(*) FROM cell) = 0 THEN '잴 것이 없었다 — 창 안에 연간 재무가 한 행도 없다'
