@@ -394,6 +394,30 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("FY와 분기가 다른 태그에서 오면 그 컬럼만 Q4 뺄셈을 접는다")
+    void doesNotSubtractAcrossATagSwitch() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-q4-tag-switch.json"));
+
+        // chooseTags는 기간마다 태그를 고정하지만 기간이 다르면 다른 태그가 이길 수 있다.
+        // 여기서는 FY가 CostOfRevenue 1,000,000이고 분기가 CostOfGoodsSold 400,000 × 3이라
+        // 그냥 빼면 -200,000이 된다. 실측으로 미국 분기 매출이 253건, 매출원가가 131건
+        // 음수였고, 음수 매출은 결측처럼 보이지도 않은 채 TTM 합을 줄인다.
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
+
+        RawFinancialReport q4 = reports.stream()
+                .filter(r -> "Q4".equals(r.fiscalPeriod()) && r.fiscalYear() == 2023)
+                .findFirst().orElseThrow();
+
+        assertThat(q4.costOfSales())
+                .as("뜻이 다른 두 수를 빼느니 값을 안 내는 것이 옳다")
+                .isNull();
+        assertThat(q4.revenue())
+                .as("매출은 넷 다 Revenues에서 왔으므로 그대로 유도된다 — 판정은 컬럼별이다")
+                .isEqualByComparingTo("400000");
+    }
+
+    @Test
     @DisplayName("매핑 파일에 없는 티커는 NOT_FOUND다 — 조용한 0건이 아니다")
     void unknownTickerIsNotFound() {
         enqueue(200, fixture("tickers.json"));
