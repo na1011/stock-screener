@@ -397,59 +397,56 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
-    @DisplayName("FY만 다시 내고 분기는 안 낸 세대는 유도하지 않는다 — 앞 세대로 뺀다")
-    void matchesVintagesWhenDerivingFourthQuarter() throws Exception {
+    @DisplayName("분기 계열을 다시 낸 공시가 이 해의 분기는 안 냈으면 그 세대로 안 뺀다")
+    void skipsVintageThatRepresentedOtherYearsQuartersButNotThisOne() throws Exception {
         enqueue(200, fixture("tickers.json"));
         enqueue(200, fixture("companyfacts-q4-vintage-mismatch.json"));
 
-        // 실측(AIG 2022)이 이 모양이다. 사업을 팔면 FY를 계속영업 기준으로 다시 쓰는데 그해
-        // 분기는 이미 지나가서 다시 안 낸다. 라벨마다 최신 판을 골라 빼면 FY(2026년판)에서
-        // 분기(2023년판)를 빼게 되어 400,000 - 750,000 = -350,000이 나온다.
+        // 실측(AIG 2025-02-13 10-K)이 이 모양이다. 사업을 팔아 FY를 계속영업 기준으로 다시
+        // 쓰면서 **아직 비교분기로 실을 수 있는 해**(2023·2024)는 분기까지 다시 냈고, 너무
+        // 오래된 2022는 못 냈다 — 10-Q가 직전 연도 비교분기만 싣기 때문이다. 그래서 그 공시의
+        // FY2022는 그해 분기가 못 받은 기준이고, 둘을 빼면 -12,609가 나온다.
         //
-        // 세대를 맞추면 2024-02-20 판으로 1,000,000 - 750,000 = 250,000이다. 음수를 걸러 내는
-        // 처방은 이 250,000을 못 낸다 — 값이 사라질 뿐이다. 실측 25건 중 22건이 이 모양이고
-        // 22건 전부 더 이른 FY 판을 쓰면 음수가 아니다.
+        // 픽스처도 같은 모양이되 **잔차가 양수로 앉는다**: 2026 공시가 FY2023을 900,000으로
+        // 다시 쓰면 900,000 - 750,000 = 150,000이라 부호로는 아무것도 못 잡는다. 그런데 그
+        // 공시는 **2024 분기는 다시 냈고 2023 분기는 안 냈다** — 기준이 갈렸다는 직접 증거다.
+        // 그래서 FY2023은 2024-02-20 세대로 빼 250,000이 된다.
+        //
+        // **이것이 부호 규칙이 원리적으로 못 잡던 자리다**(ADR-0151 §결과의 「그럴듯한 양수」).
         List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
-        List<RawFinancialReport> q4 = reports.stream()
-                .filter(r -> "Q4".equals(r.fiscalPeriod()) && r.fiscalYear() == 2023).toList();
+        RawFinancialReport q4 = latestOf(reports.stream()
+                .filter(r -> r.fiscalYear() == 2023).toList(), "Q4");
 
-        assertThat(q4)
-                .as("분기가 따라오지 않은 재작성 세대는 유도하지 않는다")
-                .singleElement()
-                .satisfies(only -> {
-                    assertThat(only.publishedAt()).isEqualTo(LocalDate.of(2024, 2, 20));
-                    assertThat(only.revenue()).isEqualByComparingTo("250000");
-                    assertThat(only.derived())
-                            .as("우리가 만든 행이다 — 저장이 그것을 알아야 규칙 변경이 따라온다")
-                            .isTrue();
-                });
+        assertThat(q4.publishedAt())
+                .as("분기가 따라온 마지막 세대를 쓴다")
+                .isEqualTo(LocalDate.of(2024, 2, 20));
+        assertThat(q4.revenue()).isEqualByComparingTo("250000");
+        assertThat(q4.derived()).isTrue();
     }
 
     @Test
-    @DisplayName("물러날 세대가 없으면 판은 내되 불가능한 컬럼만 비운다 — 안 내면 옛 값이 남는다")
-    void emitsVintageWithImpossibleColumnClearedWhenNoVintageHolds() throws Exception {
+    @DisplayName("유도한 4분기 매출이 음수여도 낸다 — 한 분기 매출은 정당하게 음수일 수 있다")
+    void emitsNegativeDerivedRevenue() throws Exception {
         enqueue(200, fixture("tickers.json"));
         enqueue(200, fixture("companyfacts-q4-tag-switch.json"));
 
-        // FY 판이 하나뿐이고 매출 600,000에 분기 합 900,000이라 잔차가 성립하지 않는다.
-        // 그래도 판을 내야 한다 — 안 내면 이 라벨이 세트에 없어 회수가 안 돌고(ADR-0152)
-        // 옛 규칙이 만든 값이 is_latest인 채 남는다. 실측으로 KKR 2018 −178 · MSGS 2020 −7이
-        // 그 자리였다.
+        // MUST NOT: 부호로 자르지 않는다. KKR의 10-K가 2018 Q4 매출을 **-178.1M으로 직접
+        // 낸다**(자산운용사라 투자손익이 매출에 섞인다). 부호는 원인이 아니라 증상이고,
+        // 증상으로 자르면 정당한 값을 버린다 — 실제로 그 규칙을 만들었다가 걷었다.
+        //
+        // 이 픽스처는 FY 판이 하나이고 분기 합이 FY보다 크다. 재제출 증거가 없으므로
+        // 그 세대를 그대로 쓴다.
         List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         RawFinancialReport q4 = latestOf(reports, "Q4");
 
         assertThat(q4.revenue())
-                .as("불가능한 컬럼은 비운다 — 한 분기 매출이 음수일 수는 없다")
-                .isNull();
+                .as("음수 그대로 낸다 — 소스가 그런 분기를 직접 내기도 한다")
+                .isEqualByComparingTo("-300000");
         assertThat(q4.costOfSales())
-                .as("매출원가는 성립하므로 그대로 낸다 — 컬럼 하나 때문에 나머지를 버리지 않는다")
+                .as("태그 이름이 갈려도 결과가 성립하면 낸다")
                 .isEqualByComparingTo("800000");
-        assertThat(q4.netIncome())
-                .as("순이익은 한 분기에 정당하게 음수다")
-                .isEqualByComparingTo("-50000");
-        assertThat(q4.derived()).isTrue();
     }
 
     @Test

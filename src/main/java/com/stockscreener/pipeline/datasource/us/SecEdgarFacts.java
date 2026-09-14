@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -945,6 +946,14 @@ final class SecEdgarFacts {
             byLabel.computeIfAbsent(key, k -> new ArrayList<>()).add(report);
         }
         byLabel.values().forEach(판 -> 판.sort(Comparator.comparing(RawFinancialReport::publishedAt)));
+        // 공시(accn)마다 **분기를 낸 회계연도**. 재제출 판정의 재료다 — 아래 §.
+        Map<String, Set<Integer>> quarterYears = new HashMap<>();
+        for (RawFinancialReport report : existing) {
+            if (!"FY".equals(report.fiscalPeriod())) {
+                quarterYears.computeIfAbsent(report.reportCode(), key -> new HashSet<>())
+                        .add(report.fiscalYear());
+            }
+        }
 
         List<RawFinancialReport> derived = new ArrayList<>();
         for (Map.Entry<Label, RawFinancialReport> e : latest.entrySet()) {
@@ -1003,6 +1012,7 @@ final class SecEdgarFacts {
                     new Label(q2.fiscalYear(), q2.fiscalPeriod()),
                     new Label(q3.fiscalYear(), q3.fiscalPeriod()));
             boolean emitted = false;
+            RawFinancialReport lastUsed = null;
             RawFinancialReport fallback = null;
             LocalDate fallbackStart = null;
             RawFinancialReport f1 = null;
@@ -1024,15 +1034,28 @@ final class SecEdgarFacts {
                 f1 = v1;
                 f2 = v2;
                 f3 = v3;
-                if (!residualHolds(vintage, v1, v2, v3)) {
-                    // **잔차가 정의역 밖이다.** 4분기는 정의상 잔차인데, 매출·매출원가처럼
-                    // 음수일 수 없는 유량에서 음수가 나오면 그것은 「4분기가 음수다」가 아니라
-                    // **FY와 분기가 같은 것을 재고 있지 않다**는 뜻이다. 이 세대는 건너뛰고
-                    // 앞 세대로 간다 — 거기서는 잔차가 성립한다.
+                if (lastUsed != null && restated(lastUsed, vintage)
+                        && representedOtherYears(quarterYears, vintage, label.fiscalYear())) {
+                    // **이 공시는 분기 계열을 다시 냈는데 이 해의 분기는 안 냈다.**
+                    //
+                    // 사업을 팔면 FY를 계속영업 기준으로 다시 쓰고, 그때 **아직 비교분기로 실을
+                    // 수 있는 해**는 분기까지 다시 낸다. 실측(AIG 2025-02-13 10-K): FY를
+                    // 2022·2023·2024로 내면서 **분기는 2023·2024만** 냈다. 그러니 2022의 FY는
+                    // 그해 분기가 못 받은 기준이고, 그 둘을 빼면 뜻이 없다
+                    // (29,996 − 42,605 = −12,609. 2024-02-14 세대로 빼면 11,845다).
+                    //
+                    // MUST NOT: 부호로 판정하지 않는다 — **한 분기 매출은 정당하게 음수일 수
+                    // 있다.** KKR의 10-K가 2018 Q4 매출을 −178.1M으로 **직접 낸다**(자산운용사라
+                    // 투자손익이 매출에 섞인다). 부호는 원인이 아니라 증상이고, 증상으로 자르면
+                    // 정당한 값을 버린다.
+                    //
+                    // 분기를 하나도 안 낸 공시는 이 판정에 안 걸린다 — 재제출했다는 증거가
+                    // 없으므로 보수적으로 쓴다(10-K/A가 연간만 정정하는 경우가 그렇다).
                     continue;
                 }
                 derived.add(buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3));
                 emitted = true;
+                lastUsed = vintage;
             }
             if (!emitted && fallback != null) {
                 // 어느 세대에서도 잔차가 성립하지 않는다(FY 판이 하나뿐인 경우가 그렇다).
@@ -1056,7 +1079,7 @@ final class SecEdgarFacts {
         return new RawFinancialReport(
                 fiscalYear, "Q4", start, fy.periodEnd(), fy.publishedAt(),
                 fy.reportCode(), fy.currencyCode(),
-                subtractable ? nonNegative(minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())) : null,
+                subtractable ? (minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())) : null,
                 subtractable ? minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
                         q3.operatingIncome()) : null,
                 subtractable ? minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()) : null,
@@ -1065,7 +1088,7 @@ final class SecEdgarFacts {
                 fy.currentAssets(), fy.currentLiabilities(), fy.retainedEarnings(),
                 // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
                 null, fy.sharesOutstanding(), null, null,
-                subtractable ? nonNegative(minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales())) : null,
+                subtractable ? (minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales())) : null,
                 fy.cashAndEquivalents(), null, fy.inventories(),
                 // 위 toReport와 같은 이유로 담지 않는다.
                 null,
@@ -1113,29 +1136,45 @@ final class SecEdgarFacts {
      * <p><b>한계</b> — 같은 어긋남이 <b>그럴듯한 양수</b>로 앉으면 이 판정이 못 잡는다. 재작성이
      * 어느 분기에 귀속되는지는 소스가 말하지 않으므로 그것을 가를 재료가 지금 없다.
      */
-    private static boolean residualHolds(RawFinancialReport fy, RawFinancialReport q1,
-                                         RawFinancialReport q2, RawFinancialReport q3) {
-        // MUST: **매출로만 세대를 고른다.** 컬럼 전부를 묶어 보면 한 컬럼 때문에 그 세대를
-        // 통째로 버리게 되고, 그러면 멀쩡한 나머지까지 못 낸다 — 실측으로 C 2020은 매출이
-        // 16,832로 정상인데 매출원가만 −46이었다. 컬럼별 불가능값은 buildQ4가 비운다.
-        return nonNegativeResidual(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue());
-    }
-
     /**
-     * <b>세대를 고른 뒤에도 남는 불가능한 값은 그 컬럼만 비운다.</b>
+     * <b>이 공시가 분기 계열을 다시 냈는데 이 해의 분기는 안 냈는가.</b>
      *
-     * <p>세대 선택이 본 처방이고 이것은 <b>그 뒤에 남는 잔여</b>다 — 실측으로 세대를 맞추자
-     * 음수 매출이 45 → 4, 음수 매출원가가 41 → 1로 줄었다. 남는 것은 물러날 세대가 아예 없거나
-     * (FY 판이 하나) 매출은 성립하는데 그 컬럼만 안 맞는 경우다.
+     * <p>「기준이 바뀌었다」의 <b>직접 증거</b>다. 재제출 공시는 <b>아직 비교분기로 실을 수 있는
+     * 해</b>의 분기까지 다시 내고, 너무 오래된 해는 못 낸다 — 10-Q가 직전 연도 비교분기만 싣기
+     * 때문이다. 그래서 <b>「다른 해 분기는 냈는데 이 해는 안 냈다」</b>가 그 해의 FY와 분기가
+     * 서로 다른 기준이라는 뜻이 된다.
+     *
+     * <p><b>분기를 하나도 안 낸 공시는 걸리지 않는다.</b> 재제출했다는 증거가 없으므로 보수적으로
+     * 쓴다 — 10-K/A가 연간 총액만 정정하는 경우가 그렇고, 그때 그 차이를 4분기 잔차가 흡수하는
+     * 것이 내부적으로 정합적이다.
+     *
+     * <p><b>MUST NOT: 부호로 판정하지 않는다.</b> 한 분기 매출은 <b>정당하게 음수일 수 있다</b> —
+     * {@code KKR}의 10-K가 2018 Q4 매출을 <b>−178.1M으로 직접 낸다</b>(자산운용사라 투자손익이
+     * 매출에 섞인다). 부호는 원인이 아니라 증상이고, 증상으로 자르면 정당한 값을 버린다.
      */
-    private static BigDecimal nonNegative(BigDecimal value) {
-        return value == null || value.signum() >= 0 ? value : null;
+    private static boolean representedOtherYears(Map<String, Set<Integer>> quarterYears,
+                                                 RawFinancialReport vintage, int fiscalYear) {
+        Set<Integer> years = quarterYears.getOrDefault(vintage.reportCode(), Set.of());
+        return !years.isEmpty() && !years.contains(fiscalYear);
     }
 
-    /** 넷이 다 있을 때만 본다. 하나라도 없으면 판정하지 않는다 — 모르는 것을 위반으로 읽지 않는다. */
-    private static boolean nonNegativeResidual(BigDecimal annual, BigDecimal... quarters) {
-        BigDecimal residual = minus(annual, quarters);
-        return residual == null || residual.signum() >= 0;
+    /** 두 판의 <b>유량</b>이 하나라도 다른가. 잔액은 보지 않는다 — 뺄셈에 안 들어간다. */
+    private static boolean restated(RawFinancialReport a, RawFinancialReport b) {
+        return differs(a.revenue(), b.revenue())
+                || differs(a.operatingIncome(), b.operatingIncome())
+                || differs(a.netIncome(), b.netIncome())
+                || differs(a.costOfSales(), b.costOfSales())
+                || differs(a.grossProfit(), b.grossProfit())
+                || differs(a.operatingExpenses(), b.operatingExpenses())
+                || differs(a.costsAndExpenses(), b.costsAndExpenses())
+                || differs(a.benefitsLossesAndExpenses(), b.benefitsLossesAndExpenses());
+    }
+
+    private static boolean differs(BigDecimal a, BigDecimal b) {
+        if (a == null || b == null) {
+            return a != b;
+        }
+        return a.compareTo(b) != 0;
     }
 
     /** 그 라벨의 판 중 {@code at} 이하에서 가장 늦은 것. 없으면 {@code null}. */
