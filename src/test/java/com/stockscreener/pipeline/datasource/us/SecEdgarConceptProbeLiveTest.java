@@ -319,7 +319,8 @@ class SecEdgarConceptProbeLiveTest {
      * 낸다면 <b>같은 {@code (start, end, accn)}에 값이 둘 이상</b>으로 보여야 한다. 0이면 소스가
      * 축이 붙은 팩트를 빼고 준다는 뜻이고, 그러면 이 경로로 클래스를 가를 수 없다.
      */
-    private record Shape(int facts, int slots, int duplicatedSlots, Set<String> units, String latestEnd) {
+    private record Shape(int facts, int slots, int duplicatedSlots, Set<String> units, String latestEnd,
+                         String latestValue) {
         @Override
         public String toString() {
             if (facts == 0) {
@@ -327,20 +328,26 @@ class SecEdgarConceptProbeLiveTest {
             }
             // 최신 종료일을 함께 낸다 — 폴백의 조건이 「값이 있는가」가 아니라 「2년 이내인가」다
             // (api-spec §companyconcept: V가 2010-01-27, BRK가 2011-04-29로 멈춰 있다).
-            return "팩트 %d · 칸 %d · 겹친 칸 %d · 최신 %s · 단위 %s"
-                    .formatted(facts, slots, duplicatedSlots, latestEnd, units);
+            //
+            // MUST: 값도 함께 낸다. 후보를 더할지는 「그 태그가 오는가」가 아니라 <b>기존 후보와
+            // 뜻이 같은가</b>가 정하고(SecEdgarColumn javadoc), 그 판정은 <b>같은 기간을 덮는 두
+            // 태그의 값을 견주는 것</b>으로만 된다. 날짜만 찍으면 뜻이 다른 태그를 「온다」는
+            // 이유로 더하게 된다.
+            return "팩트 %d · 칸 %d · 겹친 칸 %d · 최신 %s = %s · 단위 %s"
+                    .formatted(facts, slots, duplicatedSlots, latestEnd, latestValue, units);
         }
     }
 
     private static Shape shapeOf(JsonNode conceptNode) {
         if (conceptNode == null || conceptNode.isMissingNode() || conceptNode.isNull()) {
-            return new Shape(0, 0, 0, Set.of(), "-");
+            return new Shape(0, 0, 0, Set.of(), "-", "-");
         }
         JsonNode units = conceptNode.path("units");
         if (units.isMissingNode()) {
-            return new Shape(0, 0, 0, Set.of(), "-");
+            return new Shape(0, 0, 0, Set.of(), "-", "-");
         }
         String latestEnd = "";
+        String latestValue = "-";
         int facts = 0;
         Map<String, Set<String>> valuesBySlot = new LinkedHashMap<>();
         Set<String> unitNames = new LinkedHashSet<>();
@@ -355,6 +362,7 @@ class SecEdgarConceptProbeLiveTest {
                 String end = fact.path("end").asString("");
                 if (end.compareTo(latestEnd) > 0) {
                     latestEnd = end;
+                    latestValue = fact.path("val").asString("-");
                 }
                 String slot = fact.path("start").asString("") + "|"
                         + end + "|" + fact.path("accn").asString("");
@@ -369,7 +377,7 @@ class SecEdgarConceptProbeLiveTest {
             }
         }
         return new Shape(facts, valuesBySlot.size(), duplicated, unitNames,
-                latestEnd.isEmpty() ? "-" : latestEnd);
+                latestEnd.isEmpty() ? "-" : latestEnd, latestValue);
     }
 
     /**
