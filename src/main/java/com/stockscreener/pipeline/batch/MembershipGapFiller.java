@@ -82,7 +82,7 @@ public class MembershipGapFiller {
      * 그때는 짧게 들어오고 {@code PRICE_COVERAGE} 축이 <b>못 잡는다</b> — 앵커가 첫 봉이라
      * 충족률이 100%가 된다. 그것을 가르려면 상장일이 필요한데 소스가 없다.
      */
-    private static final int PRICE_YEARS = 7;
+    static final int PRICE_YEARS = 7;
 
     private static final Logger log = LoggerFactory.getLogger(MembershipGapFiller.class);
 

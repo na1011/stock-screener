@@ -12,10 +12,17 @@ applies_to:
 
 ## 결정
 
-**적재 기본 창을 `IndicatorRegistry.maxFinancialYears()`보다 크게 두고, 그 부등식을 시험으로
-묶는다.** 세 잡의 기본값을 8로 올렸다(`financial-refill` 3 → 8 · `full-statement-refill`
-5 → 8 · `initial-load` 3 → 8). 지표가 더 깊은 재무를 요구하게 되면 `FinancialLoadWindowTest`가
-**빌드에서 붉는다.**
+**적재 기본 창을 지표가 선언한 요구보다 크게 두고, 그 부등식을 시험으로 묶는다.**
+축이 둘이고 둘 다 묶었다.
+
+| 축 | 지표 요구 | 정하는 자리 | 적재 기본값 |
+|---|---|---|---|
+| 재무 연수 | **7** (`maxFinancialYears()`) | `ProfitStreakYearsCalculator.YEARS` | 3·5·3 → **8** 셋 다 |
+| 시세 봉 | **1,261** (`maxEffectiveLookback()`) | `RetainedToMarket4yCalculator.LOOKBACK` | `initial-load` 2 → **7년** |
+
+지표가 더 깊은 재무·시세를 요구하게 되면 `FinancialLoadWindowTest`가 **빌드에서 붉는다.**
+(`MembershipGapFiller.PRICE_YEARS`는 이미 7이었지만 같은 시험에 함께 묶었다 — 그 값이 줄면
+**신규 편입 종목만 조용히 짧아진다.**)
 
 그 위에 사람이 읽는 자리를 둘 더 둔다 — 손으로 좁게 준 실행을 알리는 `FinancialLoadWindow`
 경고와, 이미 생긴 결손을 세션 시작에 신고하는 premise 펜스다. **MUST NOT: 그 둘을 방어선으로
@@ -24,7 +31,7 @@ applies_to:
 
 ## 규칙
 
-- **MUST: 적재 기본 창 셋을 `maxFinancialYears()`보다 크게 유지한다.**
+- **MUST: 적재 기본 창을 지표 요구보다 크게 유지한다 — 재무 연수도 시세 봉도.**
   같으면 안 된다 — 적재는 `asOf.year − N`이라 **역년**이고 지표는 **회계연도 행 수**라
   단위가 다르며, 비12월 결산(약 24%)은 같은 N이 한 해 적게 걸린다.
   `FinancialLoadWindowTest`가 이 부등식을 단언한다.
@@ -90,9 +97,11 @@ SELECT CASE
 「컬럼이 비었다」와 「그 해 재무를 한 종목도 안 받았다」는 다른 축이고, 뒤의 것은 각 시장의
 커버리지 펜스가 답한다.
 
-**시험이 실제로 붉는지 대조군으로 확인했다** — `FinancialRefillJob.DEFAULT_YEARS_BACK`을
+**시험이 실제로 붉는지 대조군을 둘 태웠다.** `FinancialRefillJob.DEFAULT_YEARS_BACK`을
 `maxFinancialYears()`와 같은 **7**로 낮추면 `적재_기본_창이_지표가_읽는_창보다_넓다()`가
-FAILED이고, 8로 되돌리면 통과한다.
+FAILED이고 8로 되돌리면 통과한다. `PRICE_HISTORY_YEARS`를 **5**(=1,200봉)로 낮추면
+`시세_적재_기본_창이_지표가_읽는_봉수보다_길다()`가 FAILED이고 7로 되돌리면 통과한다 —
+요구가 1,261봉이라 **경계에서 갈린다.**
 
 ```bash
 ./gradlew test --tests "*FinancialLoadWindowTest*"
@@ -197,6 +206,14 @@ FY2018 3/112 → FY2019 113/117). 창 11년으로 그 해를 실제로 요청했
 
 **재적재 전 지표 기준선을 안 찍었다.** 교정 864건이 지표 값을 얼마나 바꿨는지는 원리적으로
 못 잰다 — 바뀐 것을 세려면 **재적재 전에** 찍어야 했다. 같은 실패가 P27 축⑤①에도 있다.
+
+**같은 형태를 세 축 전부에서 찾았다.** 지표가 선언하는 요구는 셋이다 —
+`financialYearsNeeded` · `priceBarsNeeded` · `governanceYearsNeeded`.
+재무는 넷이 어긋나 있었고(고쳤다), 시세는 `MembershipGapFiller`가 이미 7년이라 실재 결손이
+없었으나 `initial-load` 기본값 2년이 같은 형태로 남아 있어 함께 묶었다.
+**1,261봉 미만인 종목을 전수로 세면 KOSPI 22 · KOSDAQ 27 · US 65인데, 그중 첫 봉이 5년 안인
+것(=최근 상장)을 빼면 KOSPI 3 · KOSDAQ 1 · US 2다.** 국내 넷은 2021년 8월 상장이고
+(크래프톤·카카오뱅크·HK이노엔·롯데렌탈) 미국 둘은 봉 자체에 구멍이 있어 이 축이 아니다.
 
 **같은 형태가 거버넌스 축에도 하나 있다(미조치).** `DIVIDEND` 표는 `bsns_year` 2024~2025
 **2년**만 적재돼 있는데 `DividendPayoutCalculator`·`DividendYieldCalculator`가

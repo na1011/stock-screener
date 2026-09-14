@@ -52,6 +52,24 @@ class FinancialLoadWindowTest {
                 .isGreaterThan(needed);
     }
 
+    /**
+     * 같은 부등식이 시세 축에도 걸린다. 단위가 <b>봉</b>과 <b>역년</b>이라 변환이 끼는데,
+     * 연 거래일을 <b>보수적으로</b> 잡아야 한다 — 크게 잡으면 모자란 창이 통과한다.
+     */
+    @Test
+    void 시세_적재_기본_창이_지표가_읽는_봉수보다_길다() {
+        int bars = registry.maxEffectiveLookback();
+        int tradingDaysPerYear = 240;   // 실측 1,643봉 / 2020-01-02~2026-09-10(약 6.7년) ≈ 245
+
+        assertThat(InitialLoadJob.LoadRange.defaults().priceYears() * tradingDaysPerYear)
+                .as("initial-load 기본 시세 창이 지표 요구(%d봉)를 못 덮는다", bars)
+                .isGreaterThan(bars);
+        assertThat(MembershipGapFiller.PRICE_YEARS * tradingDaysPerYear)
+                .as("리밸런싱 결손 보충의 시세 창이 지표 요구(%d봉)를 못 덮는다 — "
+                        + "신규 편입 종목만 조용히 짧아진다", bars)
+                .isGreaterThan(bars);
+    }
+
     @Test
     void 창이_좁으면_경고하고_넓으면_조용하다() {
         int needed = loadWindow.yearsNeededByIndicators();

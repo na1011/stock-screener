@@ -41,7 +41,11 @@ public class InitialLoadJob {
     public static final String JOB_NAME = "initial-load";
 
     /** spec §7 — 기술적 지표 계산을 위한 최소 시세 이력. */
-    private static final int PRICE_HISTORY_YEARS = 2;
+    // MUST: 이 값 × 연 거래일이 IndicatorRegistry.maxEffectiveLookback()(지금 1,261봉,
+    // RetainedToMarket4yCalculator.LOOKBACK이 정한다)보다 커야 한다 —
+    // FinancialLoadWindowTest가 그 부등식을 단언한다. 시세는 종목당 1콜(기간조회)이라
+    // 창을 넓혀도 콜이 안 늘고, MembershipGapFiller는 이미 7을 쓴다.
+    static final int PRICE_HISTORY_YEARS = 7;
 
     /** spec §7 — 성장률 계산을 위한 최소 재무 이력. */
     // MUST: 위 둘과 같은 부등식이 걸린다(FinancialLoadWindowTest). 여기가 특히 조용하다 —
