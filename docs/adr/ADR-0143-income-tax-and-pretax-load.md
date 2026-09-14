@@ -16,9 +16,9 @@ applies_to:
 
 ## 결정
 
-`financial_statement`에 `income_tax_expense`·`profit_before_tax` 두 컬럼을 더하고 **이미 쓰고
-있는** `fnlttSinglAcntAll`(전체 재무제표)에서 읽는다. **연간 행에만 담는다** — 어댑터가 기간
-가드로 분기를 막는다.
+`financial_statement`에 `income_tax_expense`·`profit_before_tax` 두 컬럼을 더하고 **두 시장의
+이미 쓰고 있는 엔드포인트**에서 읽는다 — 국내는 `fnlttSinglAcntAll`, 미국은 `companyfacts`다.
+**연간 행에만 담는다** — 국내는 어댑터의 기간 가드가, 미국은 `annualOnly`가 분기를 막는다.
 
 세후 투하자본이익률 계열 넷이 여기에 걸린다(ADR-0144). 유효세율이
 `법인세비용 ÷ 세전이익`이고, 저장소가 **분자만 8/8로 재 두고 분모는 한 번도 묻지 않았다.**
@@ -52,6 +52,14 @@ applies_to:
 - **MUST: `--financial-years=6`으로 재적재한다.** 기본값 5면 `asOf.year − 5`부터 올해까지라
   FY2021~2026인데, **보존 창이 255거래일**이라 창 앞머리 as-of에서는 5년 창이 **FY2020**을
   요구한다. 안 채우면 그 구간이 비는데 **최신 일자 화면은 멀쩡하다.**
+- **MUST: 미국 세율 컬럼 둘을 `SecEdgarColumn.reportEvidence()`에서 뺀다.**
+  안 빼면 `hasAnyValue`가 참이 되는 앵커가 늘어 **`reporters` 집합이 커지고**, **세금만 든
+  얕은 보고서가 `filed` 앞에 서면** baseline을 세운 뒤 진짜 10-K가 `conflicts` 거짓으로
+  `continue`되어 **버려진다** — 그 기간 행에 **세금만 남고 매출·영업이익·자산이 전부 NULL**이
+  된다. 더 나쁜 것은 `continue`가 `baseline = carried` **앞**이라 **그 상태가 영구히 고정**된다는
+  것이다. **값은 안 잃는다** — `valuesOf`가 컬럼을 독립적으로 순회한다.
+- **MUST: `empty` 판정도 같은 술어를 쓴다.** 갈리면 세금만 든 판이 reporter는 아닌데 `empty`도
+  아니게 되어 **그 자리가 다시 열린다.**
 - **MUST NOT: 플래그 이름을 `--years-back`으로 적지 않는다.** `BootstrapRunner.KNOWN_OPTIONS`에
   없어 `rejectUnknownOptions`가 **0콜에서 거절한다.** 실제 이름은 `--financial-years`다.
 
@@ -103,12 +111,11 @@ SELECT CASE
   **하루 약 20,500콜로 일일 한도 경계에 닿았다**고 실측했다.
 - **유효세율을 적재 계층에서 계산해 담기** — spec §7이 「지표는 원자료를 수집한 뒤 자체 계산」을
   걸고, 부호 판정을 미리 하면 소스의 표기 변화를 알아볼 수 없다(위 §규칙).
-- **미국까지 한 번에 열기** — 태그는 **10/10**으로 실측했다(`sec-edgar-financial.md`). 미룬
-  이유는 **`SecEdgarColumn`에 컬럼을 더하면 `hasAnyValue`가 참이 되는 앵커가 늘어 `reporters`
-  집합이 커지고**, 세금만 든 얕은 보고서가 `filed` 앞에 서면 뒤의 진짜 10-K가 `conflicts`
-  거짓으로 `continue`되어 **버려지기** 때문이다(그 기간 행에 세금만 남는다). 사용자가
-  2026-09-14에 「국내 먼저」를 골랐다. **재개 조건은 그 발화 규모를 먼저 재는 것**이다 —
-  ①`reporters`가 커지는 (종목, 기간) 수 ②그중 새 reporter가 맨 앞에 서는 수.
+- **미국의 값 소실을 「발화 규모를 재서」 다루기** — 처음에는 국내만 열고 미국을 미루며
+  ①`reporters`가 커지는 (종목, 기간) 수 ②그중 새 reporter가 맨 앞에 서는 수를 재기로 했다.
+  **그 측정을 버리고 원인을 없앴다** — `reportEvidence()`가 세율 컬럼 둘을 reporter 판정에서
+  빼면 **`reporters` 집합이 원리적으로 안 커진다.** 측정은 「지금 몇 건인가」를 답할 뿐
+  **다음 공시에 또 생기는 것을 막지 못한다.**
 
 ## 결과
 

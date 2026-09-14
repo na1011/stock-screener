@@ -137,7 +137,35 @@ enum SecEdgarColumn {
     COSTS_AND_EXPENSES(Kind.DURATION, Unit.MONETARY, List.of("CostsAndExpenses")),
 
     /** 주당순이익. <b>대조용이다</b> — 지표는 언제나 자체 계산이다(spec §7). */
-    EPS(Kind.DURATION, Unit.PER_SHARE, List.of("EarningsPerShareBasic", "EarningsPerShareDiluted"));
+    EPS(Kind.DURATION, Unit.PER_SHARE, List.of("EarningsPerShareBasic", "EarningsPerShareDiluted")),
+
+    /**
+     * 법인세비용. 세후 투하자본이익률의 유효세율에서 <b>분자</b>다(ADR-0144).
+     *
+     * <p><b>연간만 담는다</b> — 세후 지표가 직전 회계연도 세율을 쓰므로 분기 값이 필요 없고,
+     * 국내와 기저를 같게 두려면 창이 같아야 한다(ADR-0143).
+     *
+     * <p><b>MUST: {@link #reportEvidence}에서 빠진다.</b> 이 컬럼이 reporter 자격을 주면
+     * <b>세금만 든 얕은 보고서가 {@code filed} 앞에 서서</b> baseline을 세우고, 뒤따르는 진짜
+     * 10-K가 {@code conflicts} 거짓으로 버려진다 — 그 기간 행에 <b>세금만 남고 매출·영업이익·
+     * 자산이 전부 NULL</b>이 된다. 값은 {@code valuesOf}가 따로 뽑으므로 <b>제외해도 안 잃는다.</b>
+     */
+    INCOME_TAX_EXPENSE(Kind.DURATION, Unit.MONETARY, true, List.of("IncomeTaxExpenseBenefit")),
+
+    /**
+     * 세전이익. 유효세율의 <b>분모</b>이고 <b>계속영업 + 비지배 포함</b>이다.
+     *
+     * <p>국내({@code ifrs-full_ProfitLossBeforeTax} — 계속영업)와 <b>기저가 완전히 같지 않다</b> —
+     * 미국 태그는 비지배지분을 포함한다. 그 차이를 {@code description}이 말하게 둔다.
+     *
+     * <p>후보 둘은 <b>배타적이 아니다</b> — 표본 10종목에서 첫째가 10/10, 둘째가 5/10이고
+     * 둘 다 가진 회사가 있다. 첫값 규칙이므로 순서가 뜻을 정한다.
+     *
+     * <p>{@link #INCOME_TAX_EXPENSE}와 같은 이유로 {@link #reportEvidence}에서 빠진다.
+     */
+    PROFIT_BEFORE_TAX(Kind.DURATION, Unit.MONETARY, true, List.of(
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"));
 
     private enum Kind { DURATION, INSTANT, ANCHORED_INSTANT }
 
@@ -217,6 +245,22 @@ enum SecEdgarColumn {
 
     boolean instant() {
         return kind != Kind.DURATION;
+    }
+
+    /**
+     * 이 컬럼이 <b>「그 보고서가 그 기간을 보고했다」의 증거</b>가 되는가.
+     *
+     * <p>거짓이면 {@code hasAnyValue}가 그 컬럼을 세지 않아 <b>reporter 집합이 안 커진다.</b>
+     * 주식수가 그런 이유는 기간을 안 묻는 팩트라 모든 보고서가 모든 기간의 보고자가 되기
+     * 때문이고, 세율 재료 둘이 그런 이유는 <b>그 컬럼만 든 얕은 보고서가 baseline을 세우면
+     * 뒤따르는 진짜 10-K가 버려지기</b> 때문이다(ADR-0143 §버린 대안).
+     *
+     * <p><b>값을 잃지 않는다</b> — {@code valuesOf}가 컬럼을 독립적으로 순회한다.
+     */
+    boolean reportEvidence() {
+        return !anchoredInstant()
+                && this != INCOME_TAX_EXPENSE
+                && this != PROFIT_BEFORE_TAX;
     }
 
     boolean anchoredInstant() {

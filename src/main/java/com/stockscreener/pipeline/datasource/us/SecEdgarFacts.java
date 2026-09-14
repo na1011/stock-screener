@@ -526,7 +526,9 @@ final class SecEdgarFacts {
             // 그것만 있는 판은 「그 기간을 보고한 것」이 아니다.
             boolean empty = true;
             for (SecEdgarColumn column : SecEdgarColumn.values()) {
-                if (!column.anchoredInstant() && values.get(column) != null) {
+                // MUST: hasAnyValue와 같은 술어를 쓴다. 갈리면 세금만 든 판이 reporter는 아닌데
+                // empty도 아니게 되어, baseline을 세우고 뒤 10-K를 버리는 그 자리가 다시 열린다.
+                if (column.reportEvidence() && values.get(column) != null) {
                     empty = false;
                     break;
                 }
@@ -693,7 +695,7 @@ final class SecEdgarFacts {
             // MUST NOT: 주식수로 「그 기간을 보고했다」를 판정하지 않는다. 그 팩트는 기간을
             // 묻지 않고 아무 보고서에서나 받으므로, 세면 **모든 보고서가 모든 기간의
             // 보고자**가 되어 값 하나 없는 판이 라벨마다 쌓인다(실측에서 FY 하나에 10판).
-            if (!column.anchoredInstant()
+            if (column.reportEvidence()
                     && factFor(anchor, column, window, tags, byColumn) != null) {
                 return true;
             }
@@ -811,9 +813,8 @@ final class SecEdgarFacts {
                 v.get(SecEdgarColumn.GROSS_PROFIT),
                 v.get(SecEdgarColumn.OPERATING_EXPENSES),
                 v.get(SecEdgarColumn.COSTS_AND_EXPENSES),
-                // 세율 재료는 국내 전용이다. 미국은 컬럼을 SecEdgarColumn에 더하는 것이
-                // reporter 집합을 키워 값 소실을 만들 수 있어 별도 결정으로 미뤘다.
-                null, null);
+                v.get(SecEdgarColumn.INCOME_TAX_EXPENSE),
+                v.get(SecEdgarColumn.PROFIT_BEFORE_TAX));
     }
 
     // ---------- 4. Q4를 유도한다 ----------
@@ -916,7 +917,7 @@ final class SecEdgarFacts {
                             q2.operatingExpenses(), q3.operatingExpenses()) : null,
                     subtractable ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
                             q2.costsAndExpenses(), q3.costsAndExpenses()) : null,
-                    // 세율 재료는 국내 전용이다(위 toReport와 같은 이유).
+                    // 세율 재료는 annualOnly라 분기 판에 값이 없다 — 차감할 것이 없다.
                     null, null));
         }
         return derived;
