@@ -299,6 +299,18 @@ enum SecEdgarColumn {
      * {@code DepreciationDepletionAndAmortization}은 <b>판관비에 들어간 몫까지 포함한 총액</b>이라
      * 그냥 더하면 원가가 과대해진다. 그 오차를 실측하기 전에는 만들지 않는다.
      */
+    /**
+     * <b>한 기간에 음수일 수 없는 유량인가.</b> 유도 결과가 음수로 나오면 그것은 「그 분기가
+     * 음수다」가 아니라 <b>우리 뺄셈이 뜻이 다른 두 수를 뺐다</b>는 뜻이다(ADR-0151).
+     *
+     * <p><b>MUST NOT: 영업이익·순이익·매출총이익에 넣지 않는다.</b> 그 셋은 정당하게 음수다.
+     * <b>그리고 소스가 준 값에는 이 판정을 걸지 않는다</b> — {@code KKR}의 10-K가 2018 Q4
+     * 매출을 <b>−178.1M으로 직접 낸다</b>(자산운용사라 투자손익이 매출에 섞인다).
+     */
+    boolean nonNegativeFlow() {
+        return this == REVENUE || this == COST_OF_SALES;
+    }
+
     List<String> partialCandidates() {
         return this == COST_OF_SALES ? COST_OF_SALES_PARTIALS : List.of();
     }

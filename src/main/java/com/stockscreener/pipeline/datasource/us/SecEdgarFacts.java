@@ -179,7 +179,7 @@ final class SecEdgarFacts {
             reports.addAll(revisionsOf(label, e.getValue(), labelAnchors.get(label),
                     byColumn, anchors, tags));
         }
-        reports.addAll(deriveFourthQuarters(reports, windows, fromFiscalYear));
+        reports.addAll(deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn));
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
                 .thenComparing(RawFinancialReport::publishedAt));
@@ -937,7 +937,8 @@ final class SecEdgarFacts {
      * <b>잔액은 그대로 낸다</b> — FY의 연말 잔액이라 뺄셈을 거치지 않는다.
      */
     private static List<RawFinancialReport> deriveFourthQuarters(
-            List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear) {
+            List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear,
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
         Map<Label, RawFinancialReport> latest = new LinkedHashMap<>();
         Map<Label, List<RawFinancialReport>> byLabel = new LinkedHashMap<>();
         for (RawFinancialReport report : existing) {
@@ -1053,7 +1054,7 @@ final class SecEdgarFacts {
                     // 없으므로 보수적으로 쓴다(10-K/A가 연간만 정정하는 경우가 그렇다).
                     continue;
                 }
-                derived.add(buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3));
+                derived.add(buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn));
                 emitted = true;
                 lastUsed = vintage;
             }
@@ -1063,7 +1064,7 @@ final class SecEdgarFacts {
                 // 안 내면 이 라벨이 이번 세트에 없어 **회수가 안 돌고**(ADR-0152), 옛 규칙이
                 // 만든 값이 is_latest인 채 영영 남는다. 실측으로 KKR 2018 −178 · MSGS 2020 −7 ·
                 // CYTK 2017이 그 자리였다.
-                derived.add(buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3));
+                derived.add(buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3, byColumn));
             }
         }
         return derived;
@@ -1074,21 +1075,26 @@ final class SecEdgarFacts {
      */
     private static RawFinancialReport buildQ4(int fiscalYear, LocalDate start,
                                               RawFinancialReport fy, RawFinancialReport q1,
-                                              RawFinancialReport q2, RawFinancialReport q3) {
+                                              RawFinancialReport q2, RawFinancialReport q3,
+                                              Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
         boolean subtractable = sameCurrency(fy, q1, q2, q3);
+        Slot slot = new Slot(accnOf(fy.reportCode()), start, fy.periodEnd());
         return new RawFinancialReport(
                 fiscalYear, "Q4", start, fy.periodEnd(), fy.publishedAt(),
                 fy.reportCode(), fy.currencyCode(),
-                subtractable ? (minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())) : null,
-                subtractable ? minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
-                        q3.operatingIncome()) : null,
-                subtractable ? minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()) : null,
+                sourceOrMinus(byColumn, SecEdgarColumn.REVENUE, slot, subtractable, fy.revenue(),
+                            q1.revenue(), q2.revenue(), q3.revenue()),
+                sourceOrMinus(byColumn, SecEdgarColumn.OPERATING_INCOME, slot, subtractable, fy.operatingIncome(),
+                            q1.operatingIncome(), q2.operatingIncome(), q3.operatingIncome()),
+                sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME, slot, subtractable, fy.netIncome(),
+                            q1.netIncome(), q2.netIncome(), q3.netIncome()),
                 // 잔액은 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
                 fy.totalAssets(), fy.totalEquity(), fy.totalLiabilities(),
                 fy.currentAssets(), fy.currentLiabilities(), fy.retainedEarnings(),
                 // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
                 null, fy.sharesOutstanding(), null, null,
-                subtractable ? (minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales())) : null,
+                sourceOrMinus(byColumn, SecEdgarColumn.COST_OF_SALES, slot, subtractable, fy.costOfSales(),
+                            q1.costOfSales(), q2.costOfSales(), q3.costOfSales()),
                 fy.cashAndEquivalents(), null, fy.inventories(),
                 // 위 toReport와 같은 이유로 담지 않는다.
                 null,
@@ -1104,7 +1110,8 @@ final class SecEdgarFacts {
                         q2.noninterestExpense(), q3.noninterestExpense()) : null,
                 subtractable ? minus(fy.benefitsLossesAndExpenses(), q1.benefitsLossesAndExpenses(),
                         q2.benefitsLossesAndExpenses(), q3.benefitsLossesAndExpenses()) : null,
-                subtractable ? minus(fy.grossProfit(), q1.grossProfit(), q2.grossProfit(), q3.grossProfit()) : null,
+                sourceOrMinus(byColumn, SecEdgarColumn.GROSS_PROFIT, slot, subtractable, fy.grossProfit(),
+                            q1.grossProfit(), q2.grossProfit(), q3.grossProfit()),
                 subtractable ? minus(fy.operatingExpenses(), q1.operatingExpenses(),
                         q2.operatingExpenses(), q3.operatingExpenses()) : null,
                 subtractable ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
@@ -1170,6 +1177,61 @@ final class SecEdgarFacts {
         // 미만**이라 무해하다. **작은 불일치 744와 TTM을 오염시키는 음수 30을 맞바꾸는 것은
         // 잘못된 거래다** — 음수 한 분기는 OPERATING_MARGIN·PSR을 부풀린 채 그럴듯하게 나간다.
         return true;
+    }
+
+    /**
+     * <b>같은 공시가 그 4분기를 직접 냈으면 그 값을 쓴다.</b> 없을 때만 뺀다.
+     *
+     * <p>회사가 자기 보고서에 4분기를 안 태그해도 <b>뒤 공시의 비교표로 그것을 내는 일이 있다.</b>
+     * 실측(2026-09-15 · {@code DLTR}): FY2024 10-K는 4분기를 안 태그했고, 1년 뒤 10-K가
+     * Family Dollar를 중단영업으로 옮기며 <b>재작성 FY(16,781M)와 그 4분기(4,961M)를 함께</b> 냈다.
+     * 그런데 그 4분기는 <b>라벨이 안 생긴다</b> — {@code labelPeriods}가 자기 기간 팩트만 라벨을
+     * 만들기 때문이다. 그래서 유도가 대신 돌아 <b>−5,183M</b>이 저장됐다(FY는 재작성본, 분기는
+     * 원본이라 세대가 어긋난 뺄셈이다).
+     *
+     * <p><b>MUST: 같은 accn의 팩트만 쓴다.</b> 그러면 FY와 4분기가 <b>같은 공시에서 왔음이
+     * 보장되어</b> 세대가 원리적으로 맞는다. 다른 공시의 것을 끌어오면 지금 고친 세대 불일치를
+     * 다른 문으로 다시 들인다.
+     *
+     * <p><b>MUST NOT: 비교표로 라벨을 만들어 해결하지 않는다 — 만들어 보고 걷었다.</b>
+     * 라벨이 생기면 그 창을 비교표로 실은 <b>모든 공시가 보고자</b>가 되어 판이 폭증한다
+     * (실측: {@code BNY}가 보고서 91 → 158, 새 판 88 중 <b>79가 매출 null</b>). 그리고 소스
+     * 4분기가 일부 컬럼만 주면 <b>유도가 통째로 막혀 나머지 컬럼을 잃는다</b>
+     * ({@code DLTR}이 매출원가를 잃었다).
+     */
+    private static BigDecimal sourceOrMinus(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                            SecEdgarColumn column, Slot slot,
+                                            boolean subtractable, BigDecimal annual,
+                                            BigDecimal... quarters) {
+        for (Map<Slot, Fact> slots : byColumn.getOrDefault(column, Map.of()).values()) {
+            Fact fact = slots.get(slot);
+            if (fact != null) {
+                return fact.value();
+            }
+        }
+        if (!subtractable) {
+            return null;
+        }
+        BigDecimal residual = minus(annual, quarters);
+        if (residual != null && residual.signum() < 0 && column.nonNegativeFlow()) {
+            // **우리 뺄셈이 불가능한 답을 냈다.** 매출·매출원가는 한 분기에 음수일 수 없는데,
+            // FY는 재작성본이고 그 컬럼의 분기는 원본이면 음수가 나온다 — 실측(DLTR 2024):
+            // 같은 공시가 **매출은 다시 냈고 매출원가는 안 다시 냈다.** 세대 판정은 판 단위라
+            // 이 컬럼별 어긋남을 못 잡는다.
+            //
+            // **MUST: 소스가 준 값에는 이 가드를 걸지 않는다.** 위 갈래가 먼저 돌아 소스 팩트를
+            // 그대로 돌려주므로 여기 오는 것은 **우리 산수뿐**이다. 한 분기 매출은 정당하게
+            // 음수일 수 있고({@code KKR}의 10-K가 2018 Q4를 −178.1M으로 직접 낸다) 그것은
+            // 애초에 유도를 거치지 않는다.
+            return null;
+        }
+        return residual;
+    }
+
+    /** {@code form:accn}에서 accn만. {@link #toReport}가 그 형태로 만든다. */
+    private static String accnOf(String reportCode) {
+        int colon = reportCode.indexOf(':');
+        return colon < 0 ? reportCode : reportCode.substring(colon + 1);
     }
 
     /** 두 판의 <b>유량</b>이 하나라도 다른가. 잔액은 보지 않는다 — 뺄셈에 안 들어간다. */

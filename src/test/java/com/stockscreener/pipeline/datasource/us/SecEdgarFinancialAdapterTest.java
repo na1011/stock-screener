@@ -436,27 +436,40 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
-    @DisplayName("유도한 4분기 매출이 음수여도 낸다 — 한 분기 매출은 정당하게 음수일 수 있다")
-    void emitsNegativeDerivedRevenue() throws Exception {
+    @DisplayName("소스가 직접 낸 음수 4분기는 그대로 둔다 — 한 분기 매출은 정당하게 음수일 수 있다")
+    void keepsSourceReportedNegativeQuarter() throws Exception {
         enqueue(200, fixture("tickers.json"));
-        enqueue(200, fixture("companyfacts-q4-tag-switch.json"));
+        enqueue(200, fixture("companyfacts-source-negative-quarter.json"));
 
-        // MUST NOT: 부호로 자르지 않는다. KKR의 10-K가 2018 Q4 매출을 **-178.1M으로 직접
-        // 낸다**(자산운용사라 투자손익이 매출에 섞인다). 부호는 원인이 아니라 증상이고,
-        // 증상으로 자르면 정당한 값을 버린다 — 실제로 그 규칙을 만들었다가 걷었다.
-        //
-        // 이 픽스처는 FY 판이 하나이고 분기 합이 FY보다 크다. 재제출 증거가 없으므로
-        // 그 세대를 그대로 쓴다.
+        // KKR의 10-K가 2018 Q4 매출을 -178.1M으로 직접 낸다 — 자산운용사라 투자손익이 매출에
+        // 섞인다. 소스가 준 값에 부호 가드를 걸면 정당한 값을 버린다.
         List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         RawFinancialReport q4 = latestOf(reports, "Q4");
+        assertThat(q4.derived()).as("소스가 줬으므로 유도가 아니다").isFalse();
+        assertThat(q4.revenue()).isEqualByComparingTo("-100000");
+    }
 
-        assertThat(q4.revenue())
-                .as("음수 그대로 낸다 — 소스가 그런 분기를 직접 내기도 한다")
-                .isEqualByComparingTo("-300000");
+    @Test
+    @DisplayName("우리 뺄셈이 낸 음수 매출·매출원가는 안 낸다 — 뜻이 다른 두 수를 뺀 것이다")
+    void dropsImpossibleSubtraction() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-q4-tag-switch.json"));
+
+        // FY 600,000에 분기 합 900,000이라 뺄셈이 -300,000을 낸다. 「한 분기 매출이 음수일 수
+        // 없다」가 아니라 — 그 경우는 위 시험이 지킨다 — **우리가 뜻이 다른 두 수를 뺐다**는
+        // 뜻이다. 실측(DLTR 2024): 같은 공시가 매출은 다시 냈고 매출원가는 안 다시 내서,
+        // 재작성 FY 원가에서 원본 분기 원가를 빼 -4,649M이 나왔다.
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
+
+        RawFinancialReport q4 = latestOf(reports, "Q4");
+        assertThat(q4.revenue()).as("불가능한 뺄셈은 안 낸다").isNull();
         assertThat(q4.costOfSales())
-                .as("태그 이름이 갈려도 결과가 성립하면 낸다")
+                .as("성립하는 컬럼은 그대로 낸다 — 판정은 컬럼별이다")
                 .isEqualByComparingTo("800000");
+        assertThat(q4.netIncome())
+                .as("순이익은 한 분기에 정당하게 음수다 — 이 가드를 안 건다")
+                .isEqualByComparingTo("-50000");
     }
 
     @Test
