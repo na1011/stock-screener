@@ -50,8 +50,38 @@ enum SecEdgarColumn {
     OPERATING_INCOME(Kind.DURATION, Unit.MONETARY, List.of("OperatingIncomeLoss")),
     NET_INCOME(Kind.DURATION, Unit.MONETARY, List.of(
             "NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic")),
-    COST_OF_SALES(Kind.DURATION, Unit.MONETARY, List.of(
-            "CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfGoodsSold", "CostOfSales")),
+    /**
+     * 매출원가. <b>{@link #REVENUE}와 같은 이유로 첫값이 아니라 가장 큰 값을 고른다.</b>
+     *
+     * <p><b>왜</b>: 같은 회사가 후보 둘을 함께 내면서 <b>앞의 것에 훨씬 작은 뜻</b>을 담는
+     * 일이 있다. {@code CAT}은 {@code CostOfGoodsAndServicesSold}를 <b>8팩트</b>만 내고
+     * (최신 49M) 진짜 총원가는 {@code CostOfRevenue} <b>128팩트</b>(24.1B)인데, 첫값 규칙이
+     * 앞의 것을 집어 매출원가가 FY2023 <b>42,767M → FY2024 33M</b>이 됐다(세 해 다
+     * {@code revision_no=0} — 정정이 아니라 <b>연도별로 이긴 태그가 갈린 것</b>이다).
+     *
+     * <p><b>실측(2026-09-14 · {@code US_TOP1000} 최신 FY).</b> 소스가 매출·매출원가·매출총이익을
+     * 셋 다 주는 3,909행에서 항등식 {@code 매출 − 매출원가 = 매출총이익}이 <b>3,675(94.0%)에서
+     * 1% 이내</b>로 성립하고 <b>155행·69종목</b>이 10%를 넘게 어긋난다. 방향을 가르면
+     * <b>원가 과소 133행 · 과대 22행(16종목)</b>이다.
+     *
+     * <p><b>{@code LARGEST}가 악화시키는 자리를 전수로 물었다.</b> 과대 16종목 중 후보가 둘 이상
+     * 오는 것은 <b>6</b>이고, 그중 다섯({@code ATI}·{@code MELI}·{@code MSFT}·{@code NTNX}·
+     * {@code APTV})은 <b>지금 고르는 것이 이미 최댓값이거나 기간이 겹치지 않아</b> 선택이 안
+     * 바뀐다. 실제로 커지는 것은 {@code ENS} 하나인데 그 종목의 어긋남은 <b>매출 쪽</b>이다
+     * (FY2019 매출 187M에 원가 2,105M — {@code REVENUE}가 이미 {@code LARGEST}인데도 그렇다).
+     *
+     * <p><b>MUST NOT: 이것을 「값을 버리는 게이트」로 읽지 않는다.</b> ADR-0126 §결정이
+     * <b>입력 값을 자동으로 버리는 게이트를 금지</b>하고 ADR-0125가 그런 축 다섯을 실측으로
+     * 기각했다. 이것은 <b>이미 존재하는 후보들 중 하나를 고르는 규칙</b>이고, ADR-0089 §규칙이
+     * <i>"컬럼마다 후보 선택 전략을 정한다"</i>를 이미 요구한다.
+     *
+     * <p><b>후보가 하나뿐인 자리는 이것으로 안 고쳐진다.</b> {@code CNC}는 후보 넷 중
+     * {@code CostOfGoodsAndServicesSold} 하나만 오고 그 값이 매출의 <b>1.4%</b>(194,777M 대
+     * 2,670M)다. 그런 자리의 처방은 ADR-0126 §규칙의 <b>손으로 고치되 근거를 둘 이상</b>이다.
+     */
+    COST_OF_SALES(Kind.DURATION, Unit.MONETARY, Selection.LARGEST, List.of(
+            "CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfGoodsSold", "CostOfSales"),
+            List.of()),
 
     /**
      * 영업활동현금흐름. <b>연간만 담는다.</b>
