@@ -648,7 +648,8 @@ final class SecEdgarFacts {
                 continue;
             }
             baseline = carried;
-            out.add(toReport(label, window, reporter, currency, carried));
+            out.add(toReport(label, window, reporter, currency, carried,
+                    byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty()));
         }
         return out;
     }
@@ -880,7 +881,8 @@ final class SecEdgarFacts {
 
     private static RawFinancialReport toReport(Label label, Window window, Anchor anchor,
                                                String currency,
-                                               Map<SecEdgarColumn, BigDecimal> v) {
+                                               Map<SecEdgarColumn, BigDecimal> v,
+                                               boolean noNoncontrolling) {
         return new RawFinancialReport(
                 label.fiscalYear(), label.period(), window.start(), window.end(), anchor.filed(),
                 // 정정 추적의 근거. DART 쪽이 rcept_no 컬럼이 없어 못 하던 것이다.
@@ -889,7 +891,7 @@ final class SecEdgarFacts {
                 controllingIncome(v), v.get(SecEdgarColumn.TOTAL_ASSETS),
                 totalEquity(v),
                 controllingEquity(v),
-                totalLiabilities(v),
+                totalLiabilities(v, noNoncontrolling),
                 v.get(SecEdgarColumn.CURRENT_ASSETS), v.get(SecEdgarColumn.CURRENT_LIABILITIES),
                 v.get(SecEdgarColumn.RETAINED_EARNINGS), operatingCashFlow(v),
                 v.get(SecEdgarColumn.SHARES_OUTSTANDING), v.get(SecEdgarColumn.EPS),
@@ -1053,13 +1055,27 @@ final class SecEdgarFacts {
      * <p><b>MUST: 근거가 확실한 총자본으로만 유도한다</b>({@link #foundedTotalEquity}).
      * 폴백 총자본은 지배주주분일 수 있어 부채를 부풀린다.
      */
-    private static BigDecimal totalLiabilities(Map<SecEdgarColumn, BigDecimal> v) {
+    private static BigDecimal totalLiabilities(Map<SecEdgarColumn, BigDecimal> v,
+                                               boolean noNoncontrolling) {
         BigDecimal direct = v.get(SecEdgarColumn.TOTAL_LIABILITIES);
         if (direct != null) {
             return direct;
         }
         BigDecimal assets = v.get(SecEdgarColumn.TOTAL_ASSETS);
         BigDecimal equity = foundedTotalEquity(v);
+        if (equity == null && noNoncontrolling) {
+            // 그 회사가 **비지배지분 태그를 한 번도 안 낸다** — 비지배지분이 0이라는 뜻이고,
+            // 그러면 지배주주 자본이 곧 총자본이다(대조군: 그런 회사 93개에서 두 자본 태그가
+            // 같은 칸이 173/198 · 87.4%).
+            //
+            // MUST: 자본이 음수면 쓰지 않는다. 그 자리는 **상장 전 바이오의 전환우선주가
+            // 중간지분에 있는** 경우이고 태그가 우리 후보에 안 걸린다 — 실측으로 자본 ≥ 0에서는
+            // 97.2%가 정확한데(1% 이내 97.6%) 자본 < 0에서는 58.5%이고 최대 오차가 3,373%다.
+            BigDecimal controlling = v.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING);
+            if (controlling != null && controlling.signum() >= 0) {
+                equity = controlling;
+            }
+        }
         if (assets == null || equity == null) {
             return null;
         }
