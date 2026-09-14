@@ -161,6 +161,10 @@ GET https://www.sec.gov/files/company_tickers_exchange.json
 `OperatingIncomeLoss`를 아예 안 낸다. 대신 있는 것은 `GrossProfit`(표본 12 중 9종목·연간
 973팩트) · `CostsAndExpenses`(6종목) · `OperatingExpenses`(5종목)다.
 **MUST: 이것을 「동의어 태그를 더한다」로 읽지 않는다 — 더할 동의어가 없다.**
+**MUST: 그 문장의 모집단을 함께 읽는다 — 영업이익 결손 12종목이고 훑은 계열이 `Operating`·
+`GrossProfit`·`CostsAndExpenses` 셋이다.** `CostOf*` 계열은 그때 안 훑었으므로
+**`COST_OF_SALES`에 대한 주장이 아니다** — 그쪽은 아래 §매출원가 후보를 전수로 물었다 절이
+답한다.
 여는 길은 **유도**(`GrossProfit − OperatingExpenses` 또는 `Revenues − CostsAndExpenses`)이고,
 그것은 태그→컬럼 매핑이 아니라 **새 기제**다. **그 셋은 지금 수집조차 하지 않는다.**
 
@@ -209,6 +213,32 @@ FY `is_latest` 6,568행)로 **영업이익 373행 · 매출 505행 · 총자산 
 **남은 65종목은 재료 자체가 없다.** 그리고 한 종목의 5년 창에 신고값과 유도값이 섞이는 것이
 **13종목** 있다(전부 신고 714 · 전부 유도 62) — `OPM_MIN_5Y`가 최솟값을 쓰므로 그 13에서는
 최솟값이 정의 차이에서 나올 수 있다.
+
+### 매출원가 후보를 전수로 물었다 — 더할 것이 없다 (2026-09-14 · 약 4,500콜)
+
+`GROSS_MARGIN` 결측 **380**을 전 회계연도로 갈라 **278**(한 번도 없음) + **102**(과거엔 있었음)로
+나누고, 380 전량에 후보 아홉(기존 넷 + 낱말 스캔이 낸 다섯)을 `companyconcept`로 물었다.
+
+| | 종목 |
+|---|---|
+| **(a)** 아홉 태그가 전부 404 | **239** |
+| **(b)** 우리 후보 밖 태그만 있거나 그쪽이 더 최신 | **64** |
+| 우리 후보가 최신인데 저장은 빔 | **75** |
+
+**(b) 64의 51을 만드는 태그가
+`CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization`**이고 **정의상 D&A를 뺀
+원가**다. 그 51 중 **같은 기간에 D&A 조각을 함께 내는 회사는 10뿐**이고, 그 10에서
+**D&A ÷ 제외원가**가 `PACS` 1.8% · `MTZ` 2.4% · `CASY` 2.6% · `ARMK` 2.9% · `CCK` 4.2% ·
+`APPF` 5.1% · `ATR` 12.0% · `EAT` 14.7% · **`PEG` 27.4% · `PNW` 48.5%**(중앙 5.1%)다.
+**그래서 안 더했다**(ADR-0146 §버린 대안).
+
+**전기가스(`SIC:49`)는 원가를 성분으로 쪼개 낸다** — `CostOfPurchasedPower` ·
+`CostOfNaturalGasPurchases` · `CostOfDomesticRegulatedElectric` · `CostOfPurchasedOilAndGas`.
+**후보로는 안 열리고 유도가 필요한 별개 기제**다.
+
+**`LiabilitiesCurrent`도 같은 방법으로 물었다** — `current_liabilities` 결손 141종목 중
+**133(94.3%)이 404**다. 남는 8(`AMG`·`BEN`·`ENVA`·`FRHC`·`IVZ`·`JEF`·`OWL`·`SOFI`)은 소스는
+주는데 우리가 못 담은 것이다. **「금융업은 유동/비유동을 안 가른다」가 이제 종목별 실측이다.**
 
 ### 기간 재구성 — 이 축의 핵심
 
