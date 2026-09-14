@@ -245,11 +245,30 @@ final class SecEdgarFacts {
                     break;
                 }
             }
-            absences.add(new FinancialColumnAbsence(column.columnName(),
-                    tagExists ? FinancialColumnAbsence.State.FILTERED
-                              : FinancialColumnAbsence.State.ABSENT));
+            FinancialColumnAbsence.State state;
+            if (tagExists) {
+                state = FinancialColumnAbsence.State.FILTERED;
+            } else if (hasAny(facts, column.partialCandidates())) {
+                // 후보는 하나도 없는데 부분 개념 태그는 있다. 「안 낸다」가 아니라 「뜻이 다른
+                // 것만 낸다」이고, 둘을 뭉치면 화면이 거짓을 말한다(실측 20종목).
+                state = FinancialColumnAbsence.State.PARTIAL_ONLY;
+            } else {
+                state = FinancialColumnAbsence.State.ABSENT;
+            }
+            absences.add(new FinancialColumnAbsence(column.columnName(), state));
         }
         return absences;
+    }
+
+    /** 이 태그들 중 하나라도 소스의 팩트 목록에 있는가. 값이 아니라 <b>이름</b>만 본다. */
+    private static boolean hasAny(JsonNode facts, List<String> tags) {
+        for (String candidate : tags) {
+            JsonNode tag = facts.path("us-gaap").path(candidate);
+            if (!tag.isMissingNode() && tag.has("units")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 한 컬럼의 모든 팩트. 태그를 가리지 않는 순회가 필요한 자리에서 쓴다. */

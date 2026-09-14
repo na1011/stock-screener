@@ -45,6 +45,18 @@ public record FinancialColumnAbsence(String columnName, State state) {
          *
          * <p><b>이쪽이 크면 그것 자체가 다음 축이다</b> — 우리가 못 만든 것이지 없는 것이 아니다.
          */
-        FILTERED
+        FILTERED,
+
+        /**
+         * <b>소스가 그 컬럼의 부분 개념만 낸다.</b> 후보 태그는 하나도 없는데
+         * {@code SecEdgarColumn.partialCandidates}의 태그는 있다.
+         *
+         * <p>{@link #ABSENT}와 <b>사용자가 할 일이 다르다</b> — 저쪽은 그 회사가 그 항목을
+         * 아예 공시하지 않는 것이고, 이쪽은 <b>값은 오는데 뜻이 달라 못 쓰는</b> 것이다.
+         * 하나로 뭉치면 화면이 「공시에 내지 않습니다」라는 <b>거짓</b>을 말한다(실측 20종목).
+         *
+         * <p><b>이것도 화면 사유가 된다</b> — {@link #FILTERED}와 달리 그 회사에 대한 사실이다.
+         */
+        PARTIAL_ONLY
     }
 }

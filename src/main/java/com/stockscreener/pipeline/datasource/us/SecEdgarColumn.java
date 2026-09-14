@@ -278,6 +278,44 @@ enum SecEdgarColumn {
      * 이 enum의 이름이 컬럼 이름과 일부러 같게 지어져 있고, 사본을 따로 두면 갈려도
      * 컴파일이 통과한다. {@code FinancialColumnAbsenceWriter}가 이 값을 키로 쓴다.
      */
+    /**
+     * <b>그 컬럼의 부분집합인 태그들.</b> 후보가 아니다 — 이 태그가 값을 내도 컬럼을 채우지 않는다.
+     *
+     * <p>후보 목록은 지금까지 <b>「태그가 그 컬럼에 속하는가」만</b> 담았고 <b>그 태그의 뜻이
+     * 컬럼의 전체인지 부분인지는 어디에도 없었다.</b> 그래서 「우리 후보가 없다」와 「소스가
+     * 부분 개념만 낸다」가 한 상태로 뭉쳤고, 화면은 부분 개념을 내는 회사에도
+     * <i>"이 회사는 매출원가·매출총이익을 공시에 내지 않습니다"</i>라고 말했다.
+     * <b>실측(EDGAR 전수 탐침, 2026-09-14)으로 그 거짓 문장을 받는 종목이 20이다.</b>
+     *
+     * <p><b>MUST NOT: 낱말({@code Excluding})로 자동 분류하지 않는다.</b> 문자열 분류는 가짜
+     * 구성원을 만든다 — 목록은 탐침이 낸 태그를 하나씩 정의로 판정해 손으로 적는다.
+     *
+     * <p><b>MUST NOT: 이 태그들을 후보로 승격하지 않는다.</b> 실측이 그 위험을 이름 지었다 —
+     * {@code CostOfServices}는 39종목이 갖는데 <b>38이 상품원가 태그를 함께 가진다</b>(용역 쪽
+     * 절반이라는 뜻이다). {@code Selection.LARGEST}에서 후보로 넣으면 어느 해에는 전체 대신
+     * 조각이 이긴다.
+     *
+     * <p><b>D&amp;A 조각과 더해서 전체를 만들지 않는다 — 재보지 않았다.</b>
+     * {@code DepreciationDepletionAndAmortization}은 <b>판관비에 들어간 몫까지 포함한 총액</b>이라
+     * 그냥 더하면 원가가 과대해진다. 그 오차를 실측하기 전에는 만들지 않는다.
+     */
+    List<String> partialCandidates() {
+        return this == COST_OF_SALES ? COST_OF_SALES_PARTIALS : List.of();
+    }
+
+    /**
+     * 매출원가의 부분 개념. 앞 넷은 <b>정의상 감가상각을 뺀 원가</b>이고(태그 이름이 그렇게
+     * 말한다) 뒤 둘은 이름 그대로 구성요소다 — {@code CostOfServices}는 용역 쪽,
+     * {@code CostOfReimbursableExpense}는 청구대행 비용이다.
+     */
+    private static final List<String> COST_OF_SALES_PARTIALS = List.of(
+            "CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization",
+            "CostOfServicesExcludingDepreciationDepletionAndAmortization",
+            "CostOfGoodsSoldExcludingDepreciationDepletionAndAmortization",
+            "CostOfRevenueExcludingDepreciationDepletionAndAmortization",
+            "CostOfServices",
+            "CostOfReimbursableExpense");
+
     String columnName() {
         return name().toLowerCase(java.util.Locale.ROOT);
     }

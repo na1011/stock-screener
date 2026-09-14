@@ -65,7 +65,7 @@ class GrossProfitPremiseReasonTest {
         // 다르다」라 값이 있다. 둘은 원리적으로 같은 종목에서 동시에 참이 될 수 없지만,
         // Context는 그것을 강제하지 않으므로 겹쳤을 때 무엇이 나가는지를 시험이 고정한다.
         UnavailabilityRule.Context both = new UnavailabilityRule.Context(
-                Map.of(), null, "US", Set.of("cost_of_sales", "gross_profit"),
+                Map.of(), null, "US", Set.of("cost_of_sales", "gross_profit"), Set.of(),
                 GrossProfitPremise.Break.COST_COLLAPSED);
         assertThat(matchCount(GrossMarginCalculator.CODE, both))
                 .as("둘 다 맞으면 reasonFor가 먼저 맞는 하나를 쓰므로 등록 순서가 뜻을 정한다")
@@ -75,8 +75,22 @@ class GrossProfitPremiseReasonTest {
                 .contains("공시에 내지 않습니다");
     }
 
+    @Test
+    @DisplayName("소스가 부분 개념만 내면 「안 낸다」가 아니라 「부분만 낸다」고 말한다")
+    void partialOnlyIsNotAbsent() {
+        UnavailabilityRule.Context partial = new UnavailabilityRule.Context(
+                Map.of(), null, "US", Set.of("gross_profit"), Set.of("cost_of_sales"), null);
+        String reason = reasonFor(GrossMarginCalculator.CODE, partial);
+        assertThat(reason)
+                .as("EDGAR가 감가상각을 뺀 원가를 내는데 「공시에 내지 않습니다」는 거짓이다(실측 20종목)")
+                .isNotNull()
+                .contains("부분 항목만")
+                .doesNotContain("공시에 내지 않습니다");
+        assertThat(reasonFor(GrossProfitToAssetsCalculator.CODE, partial)).isNotNull();
+    }
+
     private static UnavailabilityRule.Context context(GrossProfitPremise.Break kind) {
-        return new UnavailabilityRule.Context(Map.of(), null, "US", Set.of(), kind);
+        return new UnavailabilityRule.Context(Map.of(), null, "US", Set.of(), Set.of(), kind);
     }
 
     private long matchCount(String code, UnavailabilityRule.Context context) {

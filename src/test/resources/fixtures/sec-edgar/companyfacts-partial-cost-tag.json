@@ -1,0 +1,28 @@
+{
+  "facts": {
+    "us-gaap": {
+      "Revenues": {
+        "units": {
+          "USD": [
+            {
+              "start": "2023-01-01", "end": "2023-12-31", "val": 1000000,
+              "accn": "0000000002-24-000001", "fy": 0, "fp": "", "form": "10-K",
+              "filed": "2024-02-20"
+            }
+          ]
+        }
+      },
+      "CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization": {
+        "units": {
+          "USD": [
+            {
+              "start": "2023-01-01", "end": "2023-12-31", "val": 700000,
+              "accn": "0000000002-24-000001", "fy": 0, "fp": "", "form": "10-K",
+              "filed": "2024-02-20"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

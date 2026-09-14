@@ -41,6 +41,7 @@ public record UnavailabilityRule(String code, Predicate<Context> when, String re
      */
     public record Context(Map<String, BigDecimal> values, String industryDivisionKey,
                           String marketCode, Set<String> sourceAbsentColumns,
+                          Set<String> sourcePartialColumns,
                           GrossProfitPremise.Break grossProfitPremise) {
 
         /**
@@ -49,17 +50,35 @@ public record UnavailabilityRule(String code, Predicate<Context> when, String re
          */
         public Context(Map<String, BigDecimal> values, String industryDivisionKey,
                        String marketCode) {
-            this(values, industryDivisionKey, marketCode, Set.of(), null);
+            this(values, industryDivisionKey, marketCode, Set.of(), Set.of(), null);
         }
 
         public Context(Map<String, BigDecimal> values, String industryDivisionKey,
                        String marketCode, Set<String> sourceAbsentColumns) {
-            this(values, industryDivisionKey, marketCode, sourceAbsentColumns, null);
+            this(values, industryDivisionKey, marketCode, sourceAbsentColumns, Set.of(), null);
         }
 
         public Context {
             sourceAbsentColumns = sourceAbsentColumns == null
                     ? Set.of() : Set.copyOf(sourceAbsentColumns);
+            sourcePartialColumns = sourcePartialColumns == null
+                    ? Set.of() : Set.copyOf(sourcePartialColumns);
+        }
+
+        /**
+         * <b>소스가 이 회사에 대해 그 항목의 부분 개념만 내는가.</b>
+         *
+         * <p>{@link #sourceOmits}와 <b>사용자가 할 일이 다르다</b> — 저쪽은 기다려도 안 오는
+         * 것이고 이쪽은 <b>값은 오는데 뜻이 달라 못 쓰는</b> 것이다. 한 문장으로 뭉치면
+         * 부분 개념을 내는 회사에 「공시에 내지 않습니다」라는 거짓이 나간다.
+         */
+        public boolean sourceOnlyPartial(String... columnNames) {
+            for (String columnName : columnNames) {
+                if (sourcePartialColumns.contains(columnName)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         public BigDecimal value(String code) {

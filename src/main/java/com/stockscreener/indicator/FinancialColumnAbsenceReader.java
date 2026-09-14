@@ -32,6 +32,17 @@ public class FinancialColumnAbsenceReader {
     }
 
     @Transactional(readOnly = true)
+    /**
+     * <b>소스가 부분 개념만 내는 컬럼.</b> 「안 낸다」와 갈라야 화면이 거짓을 안 말한다 —
+     * 실측으로 D&amp;A 제외 원가만 내는 20종목이 「공시에 내지 않습니다」를 받고 있었다.
+     */
+    public Set<String> partialOnlyColumnsOf(long stockId) {
+        return Set.copyOf(jdbcTemplate.queryForList(
+                "SELECT column_name FROM financial_column_absence "
+                        + "WHERE stock_id = ? AND state = 'PARTIAL_ONLY'",
+                String.class, stockId));
+    }
+
     public Set<String> absentColumnsOf(long stockId) {
         return Set.copyOf(jdbcTemplate.queryForList(
                 "SELECT column_name FROM financial_column_absence "

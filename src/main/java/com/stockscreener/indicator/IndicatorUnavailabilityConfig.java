@@ -148,6 +148,10 @@ public class IndicatorUnavailabilityConfig {
                 sourceOmitsCostOfSales(GrossMarginCalculator.CODE, false),
                 sourceOmitsCostOfSales(GrossProfitToAssetsCalculator.CODE, true),
                 sourceOmitsCostOfSales(GrossProfitToAssetsCalculator.CODE, false)));
+        // 소스가 부분 개념만 내는 자리. 위 넷과 배타적이다 — 저쪽은 state='ABSENT'를 요구하고
+        // 이쪽은 'PARTIAL_ONLY'라 한 (종목, 컬럼)에 동시에 설 수 없다.
+        rules.add(sourceOnlyPartialCostOfSales(GrossMarginCalculator.CODE));
+        rules.add(sourceOnlyPartialCostOfSales(GrossProfitToAssetsCalculator.CODE));
         // 매출총이익률의 **전제가 깨진** 자리. 위 넷과 배타적이다 — 저쪽은 소스가 매출원가를
         // 한 번도 안 낸 종목이고(값이 없다), 이쪽은 값이 있는데 그 값이 매출에 대응하는 원가
         // 전체가 아닌 종목이다. 갈래끼리도 배타적이다(Break가 하나만 난다).
@@ -229,6 +233,24 @@ public class IndicatorUnavailabilityConfig {
                         ? base + " 금융업·보험업은 매출원가를 매출에 직접 대응시켜 표시하지 "
                                 + "않습니다."
                         : base);
+    }
+
+    /**
+     * <b>소스가 매출원가의 부분 개념만 낸다.</b>
+     *
+     * <p>이 문장이 없던 동안 그 종목들은 <i>"이 회사는 매출원가·매출총이익을 공시에 내지
+     * 않습니다"</i>를 받았고 <b>그것은 거짓이었다</b> — EDGAR는 감가상각을 뺀 원가를 내고 있다.
+     * 실측(전수 탐침, 2026-09-14)으로 그 거짓 문장을 받는 종목이 <b>20</b>이다.
+     *
+     * <p><b>사용자가 할 일이 갈린다.</b> 「안 낸다」는 기다려도 안 오는 것이고 이쪽은
+     * <b>값은 오는데 뜻이 달라 우리가 안 쓰는</b> 것이다.
+     */
+    private static UnavailabilityRule sourceOnlyPartialCostOfSales(String code) {
+        return new UnavailabilityRule(code,
+                context -> context.sourceOnlyPartial("cost_of_sales"),
+                "이 회사는 매출원가를 전체 금액으로 공시하지 않고 부분 항목만 냅니다 "
+                        + "— 감가상각을 뺀 원가나 용역원가처럼 뜻이 좁은 계정입니다. "
+                        + "그 값으로 계산하면 매출총이익이 실제보다 크게 나오므로 값을 내지 않습니다.");
     }
 
     /**

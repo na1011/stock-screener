@@ -1,6 +1,8 @@
 package com.stockscreener.pipeline.datasource.us;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.FinancialColumnAbsence;
+import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
@@ -362,6 +364,33 @@ class SecEdgarFinancialAdapterTest {
         assertThat(only.operatingIncome())
                 .as("앞 accn만 실은 컬럼은 살아남는다 — 접기는 값을 줄이지 않는다")
                 .isEqualByComparingTo("200000");
+    }
+
+    @Test
+    @DisplayName("후보는 없고 부분 개념 태그만 있으면 「안 낸다」가 아니라 PARTIAL_ONLY다")
+    void reportsPartialOnlyWhenSourceGivesASubsetTag() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-partial-cost-tag.json"));
+
+        // EDGAR가 감가상각을 뺀 원가를 내는데 우리 후보 넷에는 없다. 갈라 담지 않으면 화면이
+        // "이 회사는 매출원가·매출총이익을 공시에 내지 않습니다"라는 거짓을 말한다 —
+        // 전수 탐침으로 그 문장을 받는 종목이 20이다.
+        FinancialFetch fetch = adapter().fetchReports(FIX, FROM);
+
+        assertThat(fetch.absences())
+                .filteredOn(absence -> "cost_of_sales".equals(absence.columnName()))
+                .singleElement()
+                .extracting(FinancialColumnAbsence::state)
+                .isEqualTo(FinancialColumnAbsence.State.PARTIAL_ONLY);
+        assertThat(fetch.absences())
+                .as("부분 개념도 없는 컬럼은 그대로 ABSENT다 — 셋을 가르는 것이 요점이다")
+                .filteredOn(absence -> "gross_profit".equals(absence.columnName()))
+                .singleElement()
+                .extracting(FinancialColumnAbsence::state)
+                .isEqualTo(FinancialColumnAbsence.State.ABSENT);
+        assertThat(fetch.reports())
+                .as("부분 개념 태그는 컬럼을 채우지 않는다 — 후보가 아니다")
+                .allSatisfy(report -> assertThat(report.costOfSales()).isNull());
     }
 
     @Test

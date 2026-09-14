@@ -151,6 +151,7 @@ public class StockController {
         UnavailabilityRule.Context ruleContext = new UnavailabilityRule.Context(
                 values, stockReader.industryDivisionKeyOf(stockId).orElse(null), row.marketCode(),
                 atLatest ? absenceReader.absentColumnsOf(stockId) : java.util.Set.of(),
+                atLatest ? absenceReader.partialOnlyColumnsOf(stockId) : java.util.Set.of(),
                 premiseReader.brokenAt(stockId, resolved));
 
         List<StockDetailResponse.IndicatorValue> indicators = new ArrayList<>();
