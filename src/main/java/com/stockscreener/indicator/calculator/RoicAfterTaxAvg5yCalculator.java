@@ -54,9 +54,10 @@ import org.springframework.stereotype.Component;
 @IndicatorMeta(
         name = "5년 평균 ROIC(세후)",
         description = "최근 5개 회계연도 각각의 세후 투하자본이익률 가운데 산술평균. "
-                + "다섯 해가 연속으로 있어야 하고, 세전이익이 적자인 해나 투하자본이 0 이하인 해가 "
-                + "하나라도 있으면 값을 내지 않는다. "
-                + "세율은 그 해의 것을 쓰므로 분자와 세율의 기간이 같다. "
+                + "다섯 해가 연속으로 있어야 하고, 투하자본이 0 이하인 해가 하나라도 있으면 "
+                + "값을 내지 않는다. "
+                + "세율은 그 회사의 5년 유효세율 중앙값 하나를 다섯 해에 똑같이 적용한다 — "
+                + "세전이익이 적자인 해도 영업이익이 있으면 값이 나온다. "
                 + "유동부채를 구분하지 않는 금융업에서는 값이 나오지 않는다.",
         interpretation = "다섯 해를 고르게 반영하므로 한 해의 부진이나 호조에 덜 흔들린다. "
                 + "다만 평균이라 한 해가 크게 튀면 그쪽으로 끌려가므로 최저값과 함께 보아야 한다. "
@@ -105,10 +106,15 @@ public class RoicAfterTaxAvg5yCalculator implements IndicatorCalculator {
         if (!FinancialMath.isConsecutiveAnnual(annual, YEARS)) {
             return null;
         }
+        // MUST: 세율은 그 회사의 정규화 세율 하나다 — 근거는 RoicAfterTaxMin5yCalculator와 같다.
+        BigDecimal rate = FinancialMath.normalizedTaxRate(annual, YEARS);
+        if (rate == null) {
+            return null;
+        }
         BigDecimal result = null;
         for (int i = 0; i < YEARS; i++) {
             FinancialFigures figures = annual.get(i);
-            BigDecimal nopat = FinancialMath.nopatOf(figures);
+            BigDecimal nopat = FinancialMath.nopatOf(figures, rate);
             BigDecimal assets = figures.totalAssets();
             BigDecimal currentLiabilities = figures.currentLiabilities();
             if (nopat == null || assets == null || currentLiabilities == null) {

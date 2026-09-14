@@ -38,14 +38,15 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @IndicatorMeta(
-        name = "유효세율",
-        description = "직전 회계연도에 회사가 실제로 부담한 법인세 비율. "
-                + "법인세비용을 세전이익으로 나눈 값이며, 세금을 돌려받은 해는 음수로 나온다. "
-                + "세전이익이 적자인 해는 비율이 뜻을 갖지 않아 값을 내지 않는다.",
+        name = "유효세율(5년 중앙값)",
+        description = "최근 5개 회계연도에 회사가 실제로 부담한 법인세 비율의 중앙값. "
+                + "해마다 법인세비용을 세전이익으로 나눈 뒤 0~100% 안으로 자르고 그 가운뎃값을 쓴다. "
+                + "세전이익이 적자인 해는 비율이 뜻을 갖지 않아 그 해를 빼고 센다. "
+                + "세후 투하자본이익률 세 지표가 모두 이 값을 쓴다.",
         interpretation = "세후 투하자본이익률이 세전과 얼마나 벌어지는지를 정하는 값이다. "
-                + "낮다고 무조건 좋은 것은 아니다 — 이월결손금이나 일회성 공제로 한 해만 낮아진 것일 수 있고, "
-                + "그런 해는 다음 해에 제자리로 돌아온다. 여러 해를 함께 보면 그 구분이 드러난다. "
-                + "음수는 그 해에 세금을 돌려받았다는 뜻이다.",
+                + "한 해 값이 아니라 여러 해의 가운뎃값이므로, 이월결손금이나 일회성 공제로 한 해만 "
+                + "낮아진 것에 끌려가지 않는다. 그래서 세후 값이 해마다 널뛰지 않는다. "
+                + "0%는 관측된 해가 모두 세금을 돌려받았거나 면제받았다는 뜻이다.",
         category = IndicatorCategory.FUNDAMENTAL,
         valueType = IndicatorValueType.PERCENT,
         unit = "%",
@@ -54,8 +55,7 @@ import org.springframework.stereotype.Component;
                 @IndicatorMeta.Band(label = "높음", from = 30),
                 @IndicatorMeta.Band(label = "보통", from = 20, to = 30),
                 @IndicatorMeta.Band(label = "낮음", from = 10, to = 20),
-                @IndicatorMeta.Band(label = "매우 낮음", from = 0, to = 10),
-                @IndicatorMeta.Band(label = "환급", to = 0)
+                @IndicatorMeta.Band(label = "매우 낮음", to = 10)
         }
 )
 public class EffectiveTaxRateCalculator implements IndicatorCalculator {
@@ -71,7 +71,9 @@ public class EffectiveTaxRateCalculator implements IndicatorCalculator {
     public DataRequirement dataRequirement() {
         // MUST NOT: financialYears만 선언하지 않는다. priceBarsNeeded가 0이면
         // UnadjustedActionGuard가 창 0으로 불려 미보정 기업행위 억제(ADR-0055)가 무효가 된다.
-        return DataRequirement.priceAndFinancial(1, 1);
+        // 정규화 세율이 보는 해와 같게 두고, +1은 창 앞머리에서 최신 FY가 아직 공시되지 않아
+        // 한 해가 미끄러지는 것을 받는다.
+        return DataRequirement.priceAndFinancial(1, RoicAfterTaxCalculator.TAX_RATE_YEARS + 1);
     }
 
     @Override
@@ -79,12 +81,20 @@ public class EffectiveTaxRateCalculator implements IndicatorCalculator {
         return FinancialMath.byPublication(context, EffectiveTaxRateCalculator::valueOf);
     }
 
-    /** 그 봉 시점에 공시돼 있던 직전 회계연도로 낸 값. 없으면 {@code null}이다(ADR-0128). */
+    /**
+     * 그 봉 시점에 공시돼 있던 최근 다섯 해의 정규화 세율. 없으면 {@code null}이다(ADR-0128).
+     *
+     * <p><b>MUST: 세후 지표가 실제로 쓰는 값과 같아야 한다.</b> 여기만 「직전 한 해의 관측값」을
+     * 내면 화면에서 {@code 세후 ≈ 세전 × (1 − 유효세율)}이 성립하지 않고, 사용자는 두 카드가
+     * 어긋난 이유를 알 길이 없다. 그래서 클램프까지 같은 것을 쓴다.
+     */
     private static BigDecimal valueOf(IndicatorContext context) {
         List<com.stockscreener.indicator.FinancialFigures> annual = context.annualFigures();
-        if (annual.isEmpty()) {
+        BigDecimal ratio =
+                FinancialMath.normalizedTaxRate(annual, RoicAfterTaxCalculator.TAX_RATE_YEARS);
+        if (ratio == null) {
             return null;
         }
-        return FinancialMath.effectiveTaxRateOf(annual.get(0));
+        return ratio.multiply(java.math.BigDecimal.valueOf(100));
     }
 }

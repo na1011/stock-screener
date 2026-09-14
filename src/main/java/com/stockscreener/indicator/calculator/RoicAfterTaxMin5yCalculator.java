@@ -17,16 +17,20 @@ import org.springframework.stereotype.Component;
 /**
  * 5년 최저 ROIC(세후) = 최근 5개 회계연도 세후 투하자본이익률의 가장 낮은 값.
  *
- * <p>한 해의 세후 투하자본이익률은 {@code 영업이익 × (1 − 그 해 유효세율) ÷ 그 해 기말
- * 투하자본}이다. {@link RoicAfterTaxCalculator}와 달리 <b>분자와 세율이 같은 회계연도</b>다 —
- * 연간 행에 법인세비용과 세전이익이 함께 있기 때문이고, 그래서 기간이 섞이지 않는다.
+ * <p>한 해의 세후 투하자본이익률은 {@code 영업이익 × (1 − 정규화 세율) ÷ 그 해 기말
+ * 투하자본}이다. <b>세율은 다섯 해에 걸쳐 하나</b>이고 {@link RoicAfterTaxCalculator}와 같은
+ * 값을 쓴다 — 그래야 TTM과 5년 계열이 같은 세율 위에 서고, 화면에서 나란히 볼 때 어긋나지
+ * 않는다.
  *
  * <h2>MUST: 다섯 해가 연속인지 {@code period_end} 간격으로 잰다</h2>
  *
  * <p>행 수만 세면 한 해 빠진 종목이 통과하고, 그 종목은 <b>이력이 짧아서가 아니라 구멍
- * 때문에</b> 좋은 값을 받는다. 그리고 <b>다섯 해 전부에 값이 있어야 한다</b> — 세전이익이 0
- * 이하인 해가 하나라도 있으면 세율이 뜻을 잃어 그 해 값이 없고, 그러면 이 지표도 없다.
- * 실측으로 그 조건이 커버리지를 크게 정한다.
+ * 때문에</b> 좋은 값을 받는다.
+ *
+ * <p><b>MUST NOT: 세전이익이 0 이하인 해를 결측으로 만들지 않는다.</b> 세율은 그 회사의
+ * 정규화 세율 하나이므로 <b>그 해에 없는 것은 세율이지 영업이익이 아니다.</b> 예전에 해마다
+ * 세율을 구하던 판에서는 그 조건 하나가 값이 없던 271종목 중 198을 만들었고, 그중 69는
+ * <b>딱 한 해</b>가 세전 적자였다. 근거는 {@code FinancialMath.normalizedTaxRate}에 있다.
  *
  * <p>MUST NOT: 연간 영업이익을 {@link FinancialMath#sumTrailingFourQuarters}로 합하지 않는다.
  * 연간 행의 영업이익은 <b>이미 그 회계연도 전체</b>이고 자산·유동부채는 <b>그 해 기말 잔액</b>
@@ -41,9 +45,10 @@ import org.springframework.stereotype.Component;
 @IndicatorMeta(
         name = "5년 최저 ROIC(세후)",
         description = "최근 5개 회계연도 각각의 세후 투하자본이익률 가운데 가장 낮은 값. "
-                + "다섯 해가 연속으로 있어야 하고, 세전이익이 적자인 해나 투하자본이 0 이하인 해가 "
-                + "하나라도 있으면 값을 내지 않는다. "
-                + "세율은 그 해의 것을 쓰므로 분자와 세율의 기간이 같다. "
+                + "다섯 해가 연속으로 있어야 하고, 투하자본이 0 이하인 해가 하나라도 있으면 "
+                + "값을 내지 않는다. "
+                + "세율은 그 회사의 5년 유효세율 중앙값 하나를 다섯 해에 똑같이 적용한다 — "
+                + "세전이익이 적자인 해도 영업이익이 있으면 값이 나온다. "
                 + "유동부채를 구분하지 않는 금융업에서는 값이 나오지 않는다.",
         interpretation = "높을수록 좋은 해뿐 아니라 나쁜 해에도 세금까지 내고 자본의 수익성을 "
                 + "유지했다는 뜻이다. 한 시점 값은 일회성 이익으로 한 해만 튄 회사를 걸러내지 못하는데, "
@@ -93,10 +98,18 @@ public class RoicAfterTaxMin5yCalculator implements IndicatorCalculator {
         if (!FinancialMath.isConsecutiveAnnual(annual, YEARS)) {
             return null;
         }
+        // MUST: 세율은 해마다 구하지 않고 그 회사의 정규화 세율 하나를 쓴다. 해마다 구하면
+        // 세전이익이 0 이하인 해에서 null이 되어 **다섯 해가 통째로 빠진다** — 실측으로 값이
+        // 없던 271종목 중 198이 그 갈래였고 69는 딱 한 해가 적자였다. 근거는
+        // FinancialMath.normalizedTaxRate의 javadoc에 있다.
+        BigDecimal rate = FinancialMath.normalizedTaxRate(annual, YEARS);
+        if (rate == null) {
+            return null;
+        }
         BigDecimal result = null;
         for (int i = 0; i < YEARS; i++) {
             FinancialFigures figures = annual.get(i);
-            BigDecimal nopat = FinancialMath.nopatOf(figures);
+            BigDecimal nopat = FinancialMath.nopatOf(figures, rate);
             BigDecimal assets = figures.totalAssets();
             BigDecimal currentLiabilities = figures.currentLiabilities();
             if (nopat == null || assets == null || currentLiabilities == null) {

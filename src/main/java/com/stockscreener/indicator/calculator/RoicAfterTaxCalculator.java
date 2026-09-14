@@ -50,8 +50,8 @@ import org.springframework.stereotype.Component;
         name = "TTM 투하자본이익률(세후)",
         description = "최근 4개 분기 영업이익에서 법인세 몫을 뺀 뒤 영업에 묶인 자본"
                 + "(자산총계 − 유동부채)으로 나눈 비율. "
-                + "세율은 직전 회계연도의 유효세율을 쓰므로 분자와 세율의 기간이 다르다. "
-                + "세금을 돌려받은 해는 세율을 0으로 본다. "
+                + "세율은 최근 5개 회계연도 유효세율의 중앙값을 쓰므로 분자와 세율의 기간이 다르다. "
+                + "세금을 돌려받은 해는 그 해 세율을 0으로 보고 중앙값에 넣는다. "
                 + "유동부채를 구분하지 않는 금융업에서는 값이 나오지 않는다.",
         interpretation = "높을수록 사업에 묶어 둔 자본 1원이 세금까지 내고 남기는 몫이 크다. "
                 + "자기자본이익률과 달리 빚을 늘려 부풀릴 수 없어, 둘을 함께 보면 "
@@ -72,6 +72,9 @@ import org.springframework.stereotype.Component;
 )
 public class RoicAfterTaxCalculator implements IndicatorCalculator {
 
+    /** 정규화 세율을 몇 해에서 구하는가. 5년 계열과 같게 두어 TTM과 5년 지표가 같은 세율을 쓴다. */
+    static final int TAX_RATE_YEARS = 5;
+
     public static final String CODE = "ROIC_AFTERTAX";
 
     @Override
@@ -82,8 +85,9 @@ public class RoicAfterTaxCalculator implements IndicatorCalculator {
     @Override
     public DataRequirement dataRequirement() {
         // 연간 2행을 받는다 — TTM 분자 외에 직전 회계연도 세율이 필요하고, 창 앞머리에서
-        // 최신 FY가 아직 공시되지 않았을 때 한 해 여유가 있어야 한다.
-        return DataRequirement.priceAndFinancial(1, 2);
+        // 정규화 세율이 TAX_RATE_YEARS개 연간을 보고, 창 앞머리에서 최신 FY가 아직 공시되지
+        // 않아 한 해가 미끄러지는 것을 +1이 받는다.
+        return DataRequirement.priceAndFinancial(1, TAX_RATE_YEARS + 1);
     }
 
     @Override
@@ -104,7 +108,10 @@ public class RoicAfterTaxCalculator implements IndicatorCalculator {
         if (annual.isEmpty()) {
             return null;
         }
-        BigDecimal rate = FinancialMath.taxRateForNopat(annual.get(0));
+        // MUST: 직전 한 해가 아니라 정규화 세율이다. 한 해에 매달리면 그 해가 이상치일 때
+        // TTM이 통째로 흔들린다 — 실측으로 직전 세율이 35% 이상인 미국 종목이 57, 0인 종목이
+        // 37인데 5년 중앙값으로는 35 · 20이다.
+        BigDecimal rate = FinancialMath.normalizedTaxRate(annual, TAX_RATE_YEARS);
         if (rate == null) {
             return null;
         }

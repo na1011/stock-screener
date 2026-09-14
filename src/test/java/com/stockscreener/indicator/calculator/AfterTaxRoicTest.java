@@ -45,15 +45,18 @@ class AfterTaxRoicTest {
         }
 
         @Test
-        @DisplayName("IMPORTANT — 진짜 환입은 음수 그대로 낸다. 크기로 읽으면 부호가 뒤집힌다")
-        void keepsGenuineRefundNegative() {
+        @DisplayName("IMPORTANT — 진짜 환입은 0%로 접힌다. 크기로 읽으면 +20%가 되어 부호가 반대다")
+        void clampsGenuineRefundToZero() {
             // 순이익 > 세전이익이면 그 해 세금을 돌려받은 것이다(삼성전자 2022가 그 모양).
             List<IndicatorPoint> points = calculator.calculate(
                     annualContext(List.of(taxFigures(yearEnd(2025), "-200", "1000", "1200"))));
 
+            // 이 지표는 세후 세 지표가 실제로 쓰는 값과 같아야 하므로 [0,1] 클램프까지 같다.
+            // 그래야 화면에서 세후 ≈ 세전 × (1 − 유효세율)이 성립한다.
             assertThat(points.get(0).value())
-                    .as("환입이므로 −20%다. abs로 읽으면 +20%가 되어 부호가 반대인 값이 된다")
-                    .isEqualByComparingTo("-20");
+                    .as("환입은 지속되지 않으므로 0%로 본다. 바로 아래 시험과 값이 갈리는 것이 "
+                            + "부호 판정이 살아 있다는 증거다 — abs로 읽으면 둘 다 같은 값이 된다")
+                    .isEqualByComparingTo("0");
         }
 
         @Test
@@ -153,16 +156,40 @@ class AfterTaxRoicTest {
         }
 
         @Test
-        @DisplayName("IMPORTANT — 세전 적자인 해가 하나라도 있으면 값을 내지 않는다")
-        void emitsNothingWhenAnyYearHasNonPositivePretax() {
+        @DisplayName("IMPORTANT — 세전 적자인 해가 있어도 값을 낸다. 그 해에 없는 것은 세율이다")
+        void emitsValueWhenSomeYearHasNonPositivePretax() {
             List<FinancialFigures> annual = new ArrayList<>();
             annual.add(roicFigures(yearEnd(2025), "300", "250", "1000", "750"));
+            // 영업은 흑자(300)인데 영업외손실로 세전이 적자인 해. 그 해 세율은 못 구한다.
             annual.add(roicFigures(yearEnd(2024), "300", "100", "-500", "-600"));
             for (int year : new int[] {2023, 2022, 2021}) {
                 annual.add(roicFigures(yearEnd(year), "300", "250", "1000", "750"));
             }
+
+            // 구할 수 있는 네 해의 세율은 전부 250/1000 = 25%이고 중앙값도 25%다.
+            // 다섯 해 모두 NOPAT = 300 × 0.75 = 225, 투하자본 = 3000 − 1000 = 2000 → 11.25%.
+            // 2024년은 그 해 세율을 못 구하지만 정규화 세율을 받아 같은 값을 낸다.
             assertThat(min.calculate(annualContext(annual)))
-                    .as("다섯 해 전부에 세율이 있어야 한다 — 그것이 커버리지를 정한다")
+                    .as("영업이익이 있는 해를 세율 하나 때문에 버리지 않는다")
+                    .isNotEmpty()
+                    .allSatisfy(point -> assertThat(point.value())
+                            .isEqualByComparingTo(new BigDecimal("11.25")));
+        }
+
+        @Test
+        @DisplayName("IMPORTANT — 다섯 해 모두 세율을 못 구하면 그때는 값이 없다")
+        void emitsNothingWhenNoYearYieldsTaxRate() {
+            List<FinancialFigures> annual = new ArrayList<>();
+            for (int year : new int[] {2025, 2024, 2023, 2022, 2021}) {
+                // 세전이익도 순이익도 없어 유도조차 못 한다.
+                annual.add(FinancialFiguresFixture.annual(yearEnd(year))
+                        .operatingIncome(new BigDecimal("300"))
+                        .totalAssets(new BigDecimal("1000"))
+                        .currentLiabilities(new BigDecimal("750"))
+                        .build());
+            }
+            assertThat(min.calculate(annualContext(annual)))
+                    .as("정규화 세율조차 못 구하면 값을 내지 않는다 — 거기가 진짜 결손이다")
                     .isEmpty();
         }
 
@@ -204,6 +231,19 @@ class AfterTaxRoicTest {
                 pretax.subtract(tax).toPlainString());
     }
 
+    /** 분기 넷(영업이익 100씩 · 투하자본 2000)과 연간 여럿. 정규화 세율을 재는 자리에 쓴다. */
+    private static IndicatorContext ttmContextWithAnnuals(List<FinancialFigures> annual) {
+        List<FinancialFigures> quarters = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            quarters.add(FinancialFiguresFixture.quarter(yearEnd(2025).minusMonths(3L * i))
+                    .operatingIncome(new BigDecimal("100"))
+                    .totalAssets(new BigDecimal("3000"))
+                    .currentLiabilities(new BigDecimal("1000"))
+                    .build());
+        }
+        return new IndicatorContext(1L, bars(), annual, quarters, Map.of());
+    }
+
     private static IndicatorContext ttmContextRaw(String tax, String pretax, String netIncome) {
         List<FinancialFigures> quarters = new ArrayList<>();
         for (int i = 0; i < 4; i++) {
@@ -229,6 +269,52 @@ class AfterTaxRoicTest {
     }
 
     /** 세율 재료 + 투하자본까지 채운 연간 재무. */
+    /**
+     * 정규화가 실제로 무엇을 고치는지를 재는 자리다. 위 시험들은 「값이 난다」까지만 답하고,
+     * <b>한 해의 이상치가 값을 통째로 정하지 않는다</b>는 것은 여기서만 갈린다.
+     */
+    @Nested
+    @DisplayName("정규화 세율")
+    class NormalizedRate {
+
+        private final RoicAfterTaxCalculator ttm = new RoicAfterTaxCalculator();
+
+        @Test
+        @DisplayName("IMPORTANT — 직전 한 해가 이상치여도 TTM이 그쪽으로 끌려가지 않는다")
+        void latestYearOutlierDoesNotDragTtm() {
+            // 직전 해만 세율 90%(소급 과세·일회성 추징이 그 모양이다). 나머지 넷은 25%.
+            List<FinancialFigures> annual = new ArrayList<>();
+            annual.add(taxFigures(yearEnd(2025), "900", "1000", "100"));
+            for (int year : new int[] {2024, 2023, 2022, 2021}) {
+                annual.add(taxFigures(yearEnd(year), "250", "1000", "750"));
+            }
+
+            // 중앙값 25% → NOPAT = 400 × 0.75 = 300, 투하자본 2000 → 15%.
+            // 직전 해 세율 90%를 그대로 쓰면 400 × 0.10 = 40 → 2%가 되어 7.5배 어긋난다.
+            assertThat(ttm.calculate(ttmContextWithAnnuals(annual)))
+                    .isNotEmpty()
+                    .allSatisfy(point -> assertThat(point.value())
+                            .isEqualByComparingTo(new BigDecimal("15.00")));
+        }
+
+        @Test
+        @DisplayName("환입 한 해가 중앙값을 0으로 끌어내리지 않는다")
+        void singleRefundYearDoesNotZeroTheRate() {
+            // 직전 해만 환입(순이익 > 세전). 클램프로 그 해는 0%가 되지만 중앙값은 25%다.
+            List<FinancialFigures> annual = new ArrayList<>();
+            annual.add(taxFigures(yearEnd(2025), "-200", "1000", "1200"));
+            for (int year : new int[] {2024, 2023, 2022, 2021}) {
+                annual.add(taxFigures(yearEnd(year), "250", "1000", "750"));
+            }
+
+            assertThat(ttm.calculate(ttmContextWithAnnuals(annual)))
+                    .isNotEmpty()
+                    .allSatisfy(point -> assertThat(point.value())
+                            .as("환입 해를 0%로 접되 중앙값이 25%라 NOPAT은 300이다")
+                            .isEqualByComparingTo(new BigDecimal("15.00")));
+        }
+    }
+
     private static FinancialFigures roicFigures(LocalDate periodEnd, String operatingIncome,
                                                 String tax, String pretax, String netIncome) {
         return FinancialFiguresFixture.annual(periodEnd)

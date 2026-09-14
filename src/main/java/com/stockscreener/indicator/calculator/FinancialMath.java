@@ -489,16 +489,118 @@ final class FinancialMath {
             return null;
         }
         BigDecimal tax = figures.incomeTaxExpense();
-        BigDecimal pretax = figures.profitBeforeTax();
         BigDecimal net = figures.netIncome();
-        if (tax == null || pretax == null || pretax.signum() <= 0) {
+        if (tax == null) {
             return null;
         }
-        if (tax.signum() < 0 && net != null && pretax.subtract(net).signum() > 0) {
+        if (tax.signum() < 0 && net != null && figures.profitBeforeTax() != null
+                && figures.profitBeforeTax().subtract(net).signum() > 0) {
             // 순이익이 세전보다 작은데 법인세가 음수다 — 환입이 아니라 차감 항목 표기다.
             tax = tax.negate();
         }
+        BigDecimal pretax = pretaxIncomeOf(figures, tax);
+        if (pretax == null || pretax.signum() <= 0) {
+            return null;
+        }
         return percentage(tax, pretax);
+    }
+
+    /**
+     * 세전이익. <b>태그가 없으면 {@code 순이익 + 법인세비용}으로 유도한다.</b>
+     *
+     * <p><b>왜 유도가 필요한가</b>: 미국은 `IncomeTaxExpenseBenefit`은 오는데 세전이익 태그가
+     * 안 오는 회사가 실측 <b>237건(FY2020~ 전수의 4.1%)</b>이다. 그 회사들은 세금이 있는데도
+     * 세율을 못 내어 세후 지표가 통째로 빠진다.
+     *
+     * <p><b>유도가 얼마나 정확한가</b>: 항등식 {@code 세전 = 순이익 + 법인세}는 <b>중단영업과
+     * 비지배지분이 없는 해에만</b> 정확하다(국내 표본 실측 34/38 = 89%). 그래서 <b>태그가 있으면
+     * 언제나 태그가 이긴다</b> — 유도는 태그가 없을 때만 탄다.
+     *
+     * <p>MUST NOT: 이 유도를 근거로 세전이익 컬럼을 안 받는 쪽으로 되돌리지 않는다.
+     * 그 둘은 다른 결정이고, 컬럼을 받는 근거는 ADR-0143에 있다.
+     */
+    static BigDecimal pretaxIncomeOf(FinancialFigures figures, BigDecimal signAdjustedTax) {
+        if (figures == null) {
+            return null;
+        }
+        if (figures.profitBeforeTax() != null) {
+            return figures.profitBeforeTax();
+        }
+        BigDecimal net = figures.netIncome();
+        if (net == null || signAdjustedTax == null) {
+            return null;
+        }
+        return net.add(signAdjustedTax);
+    }
+
+    /**
+     * <b>정규화 유효세율</b> — 최근 {@code years}개 연간에서 구할 수 있는 해의 유효세율을
+     * {@code [0, 1]}로 자른 뒤 <b>중앙값</b>을 낸다. 비율이지 백분율이 아니다.
+     *
+     * <h2>왜 「그 해 세율」이 아니라 정규화인가 — 재설계의 중심이다</h2>
+     *
+     * <p>처음에는 각 해의 관측 세율을 그 해에 그대로 썼고, 세전이익이 0 이하인 해는 값을 내지
+     * 않았다. <b>그 설계가 두 가지로 틀렸다</b>(2026-09-14 실측).
+     *
+     * <ul>
+     *   <li><b>멀쩡한 기업이 원천 배제된다.</b> 미국 최신 지표일에서 세전 ROIC는 나오는데 세후가
+     *       안 나오는 종목이 <b>139</b>였고 그중 <b>113이 「세전 ≤ 0」</b>이다 — <b>영업은
+     *       흑자인데</b> 영업외손실로 세전이 적자인 해다. 5년 계열은 더 심해서, 값이 없는
+     *       271종목 중 <b>198이 세전 적자 해를 가졌고 그중 69는 딱 한 해</b>였다.
+     *       같은 저장소의 {@code OPM_MIN_5Y}는 적자 해가 있어도 값을 낸다 — <b>대칭이 깨져
+     *       있었다.</b></li>
+     *   <li><b>자기모순이었다.</b> {@code t < 0}과 {@code t > 1}은 클램프해서 값을 내면서
+     *       {@code 세전 ≤ 0}만 배제했다. 셋 다 「그 해 t를 믿을 수 없다」인데 처리가 달랐다.</li>
+     * </ul>
+     *
+     * <p><b>그리고 TTM이 한 해에 매달려 있었다.</b> 직전 회계연도 세율이 35% 이상인 미국 종목이
+     * <b>57</b>, 0인 종목이 <b>37</b>인데, 5년 중앙값으로 바꾸면 각각 <b>35 · 20</b>이 된다.
+     * 정규화는 커버리지를 늘리면서 <b>왜곡을 함께 줄인다</b>(실측 회복: KOSPI 104 → 162 ·
+     * KOSDAQ 60 → 116 · US 476 → 639).
+     *
+     * <p><b>중앙값인 이유</b>는 {@code PerMedian5yCalculator}가 적은 것과 같다 — 평균은 한 점에
+     * 끌려가고, 세율에는 일회성 환입·소급 과세 같은 한 점이 실제로 있다.
+     *
+     * <p><b>MUST NOT: 이것을 「없는 값을 지어내는 것」으로 읽지 않는다.</b> 전부 <b>그 회사의
+     * 관측값</b>이고, 정규화가 고르는 것은 <b>어느 해의 관측을 쓰느냐</b>다. NOPAT이 재는 것이
+     * 「이 영업이 지속되면 세후로 얼마가 남는가」이므로 <b>지속되는 세율</b>을 쓰는 것이 정의에
+     * 더 맞다. 한 해도 못 구하면 {@code null}이고 그때는 값을 내지 않는다.
+     */
+    static BigDecimal normalizedTaxRate(List<FinancialFigures> annual, int years) {
+        if (annual == null || annual.isEmpty()) {
+            return null;
+        }
+        List<BigDecimal> rates = new ArrayList<>();
+        int limit = Math.min(years, annual.size());
+        for (int i = 0; i < limit; i++) {
+            BigDecimal ratio = clampedTaxRateOf(annual.get(i));
+            if (ratio != null) {
+                rates.add(ratio);
+            }
+        }
+        if (rates.isEmpty()) {
+            return null;
+        }
+        rates.sort(BigDecimal::compareTo);
+        int mid = rates.size() / 2;
+        if (rates.size() % 2 == 1) {
+            return rates.get(mid);
+        }
+        return rates.get(mid - 1).add(rates.get(mid))
+                .divide(BigDecimal.valueOf(2), SCALE, RoundingMode.HALF_UP);
+    }
+
+    /** 한 해의 유효세율을 비율로, {@code [0, 1]}로 잘라서. 못 구하면 {@code null}. */
+    private static BigDecimal clampedTaxRateOf(FinancialFigures figures) {
+        BigDecimal percent = effectiveTaxRateOf(figures);
+        if (percent == null) {
+            return null;
+        }
+        BigDecimal ratio = percent.divide(HUNDRED, SCALE, RoundingMode.HALF_UP);
+        if (ratio.signum() < 0) {
+            return BigDecimal.ZERO;
+        }
+        return ratio.compareTo(BigDecimal.ONE) > 0 ? BigDecimal.ONE : ratio;
     }
 
     /**
@@ -520,15 +622,7 @@ final class FinancialMath {
      * 관측값 자체는 {@link #effectiveTaxRateOf}가 클램프 없이 그대로 낸다.
      */
     static BigDecimal taxRateForNopat(FinancialFigures figures) {
-        BigDecimal percent = effectiveTaxRateOf(figures);
-        if (percent == null) {
-            return null;
-        }
-        BigDecimal ratio = percent.divide(HUNDRED, SCALE, RoundingMode.HALF_UP);
-        if (ratio.signum() < 0) {
-            return BigDecimal.ZERO;
-        }
-        return ratio.compareTo(BigDecimal.ONE) > 0 ? BigDecimal.ONE : ratio;
+        return clampedTaxRateOf(figures);
     }
 
     /**
@@ -537,8 +631,18 @@ final class FinancialMath {
      * @return 영업이익이나 세율을 못 내면 {@code null}
      */
     static BigDecimal nopatOf(FinancialFigures figures) {
+        return nopatOf(figures, taxRateForNopat(figures));
+    }
+
+    /**
+     * 세후 영업이익(NOPAT) = {@code 영업이익 × (1 − 세율)}. <b>세율을 밖에서 받는다.</b>
+     *
+     * <p>호출부가 {@link #normalizedTaxRate}를 넘기는 것이 기본이다 — 그래야 <b>세전이익이
+     * 0 이하인 해에도 그 회사의 통상 세율로 세후 영업이익이 나온다.</b> 그 해에 없는 것은
+     * 세율이지 영업이익이 아니다.
+     */
+    static BigDecimal nopatOf(FinancialFigures figures, BigDecimal rate) {
         BigDecimal operatingIncome = operatingIncomeOf(figures);
-        BigDecimal rate = taxRateForNopat(figures);
         if (operatingIncome == null || rate == null) {
             return null;
         }
