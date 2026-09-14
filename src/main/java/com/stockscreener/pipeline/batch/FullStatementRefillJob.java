@@ -42,7 +42,10 @@ public class FullStatementRefillJob {
      * 아직 사업보고서가 없어 {@code status 013}으로 버려지는데, 그래도 부르는 이유는 결산월이
      * 12월이 아닌 종목의 최신 회계연도가 거기 있을 수 있기 때문이다.
      */
-    private static final int DEFAULT_YEARS_BACK = 5;
+    // MUST: FinancialRefillJob과 같은 부등식이 걸린다(FinancialLoadWindowTest).
+    // 국내 전체본은 종목·연도당 1콜이라 350 × 9 = 3,150 요청이고, 오늘 실측(12개 연도
+    // 4,200 요청 → 실제콜 5,552 · 배수 1.32)에서 외삽하면 약 4,160콜 — 쿼터의 23%다.
+    static final int DEFAULT_YEARS_BACK = 8;
 
     private static final Logger log = LoggerFactory.getLogger(FullStatementRefillJob.class);
 

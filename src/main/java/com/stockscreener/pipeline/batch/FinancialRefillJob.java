@@ -41,7 +41,12 @@ public class FinancialRefillJob {
     public static final String JOB_NAME = "financial-refill";
 
     /** 기본 3년. 지표 리더가 읽는 12분기 창을 덮는 최소치다. */
-    private static final int DEFAULT_YEARS_BACK = 3;
+    // MUST: 이 값은 IndicatorRegistry.maxFinancialYears()(지금 7)보다 커야 한다 —
+    // FinancialLoadWindowTest가 그 부등식을 단언하므로, 지표가 창을 넓히면 시험이 붉는다.
+    // 8인 근거: 보존 창 앞머리(asOf − 약 1년)에서 7개 연간이 FY(asOf.year−8)부터 시작한다.
+    // 국내 콜은 350 × 9년 × 보고서 4종 = 12,600으로 dart.daily-quota 18,000의 70%이고
+    // 목요일에 이 잡만 돈다(ADR-0116). **그 수는 아직 실행으로 재지 않았다.**
+    static final int DEFAULT_YEARS_BACK = 8;
 
     private static final Logger log = LoggerFactory.getLogger(FinancialRefillJob.class);
 

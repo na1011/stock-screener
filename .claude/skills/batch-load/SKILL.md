@@ -233,16 +233,20 @@ WHERE prev > 0 AND close > 0;
 
 ## 매핑을 고친 뒤 — 절반만 고치는 조합 (ADR-0145)
 
-**`--financial-years`를 안 주면 그 앞 회계연도는 한 행도 안 바뀐다.** 기본값이
-`financial-refill` **3년** · `full-statement-refill` **5년**인데 지표는
-`IndicatorRegistry.maxFinancialYears()`가 내는 **10년**을 읽는다. 그 사이 연도에는 **옛 규칙의
-값이 남고** 새 컬럼은 NULL로 남는데 — **잡은 성공으로 끝나고 최신 일자 화면은 멀쩡하다.**
+**기본 창은 셋 다 8년이고 지표 요구(7년)를 덮는다**(ADR-0145 · `FinancialLoadWindowTest`가
+그 부등식을 단언한다). **그러니 이 절이 답하는 것은 「기본값이 모자란다」가 아니라 「정기 잡은
+다음 주에야 돈다」다** — 매핑을 고친 커밋 뒤에는 **손으로 한 번 더** 전 종목으로 돌려야
+그 구간이 고쳐진다.
 
 ```bash
-# 매핑·후보 목록·선택 규칙을 바꾼 뒤의 첫 재적재
---job=financial-refill --universe=US_TOP1000 --financial-years=11   # SEC는 종목당 1콜이라 창을 넓혀도 콜이 안 는다
---job=full-statement-refill --financial-years=11                    # DART는 종목·연도당 1콜이라 는다 — 쿼터를 먼저 센다
+# 매핑·후보 목록·선택 규칙을 바꾼 뒤의 첫 재적재 (기본 8년이면 생략 가능하지만, 옛 값이
+# 남은 구간이 더 앞이면 명시한다)
+--job=financial-refill --universe=US_TOP1000        # SEC는 종목당 1콜이라 창을 넓혀도 콜이 안 는다
+--job=full-statement-refill                          # 국내 전체본 · 8년이면 실제콜 약 4,200
 ```
+
+**MUST NOT: `--financial-years`를 기본값보다 작게 주지 않는다.** 로그가 경고를 찍지만
+잡은 성공으로 끝나고, 그 창 밖은 **옛 규칙의 값이 남은 채 최신 일자 화면만 멀쩡하다.**
 
 **MUST: 대상도 함께 본다 — 축이 둘이고 서로 독립이다.** 결함을 **최신 FY 단면**에서 세고 그
 종목만 다시 받으면, 같은 오염이 과거 연도·분기에 그대로 남는다(실측: 92종목만 받았는데 전수

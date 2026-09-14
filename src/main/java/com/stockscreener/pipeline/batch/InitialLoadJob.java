@@ -44,7 +44,10 @@ public class InitialLoadJob {
     private static final int PRICE_HISTORY_YEARS = 2;
 
     /** spec §7 — 성장률 계산을 위한 최소 재무 이력. */
-    private static final int FINANCIAL_HISTORY_YEARS = 3;
+    // MUST: 위 둘과 같은 부등식이 걸린다(FinancialLoadWindowTest). 여기가 특히 조용하다 —
+    // MembershipGapFiller가 LoadRange.defaults()로 신규 편입 종목을 채우므로, 이 값이
+    // 지표 요구보다 작으면 리밸런싱마다 이력이 짧은 종목이 새로 들어온다.
+    static final int FINANCIAL_HISTORY_YEARS = 8;
 
     private static final Logger log = LoggerFactory.getLogger(InitialLoadJob.class);
 

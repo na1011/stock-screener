@@ -49,9 +49,9 @@ applies_to:
   이고 그중 둘이 `SecEdgarFacts`다 — **미국을 안 켜도 컴파일이 깨진다.**
 - **MUST: `FinancialWriter.Amount` enum에도 더한다.** `findLatest`의 SELECT와 `fillMissing`의
   SET이 둘 다 그 목록에서 만들어지므로, 빠뜨리면 **그 컬럼이 영영 안 채워진다.**
-- **MUST: 재적재 창을 `IndicatorRegistry.maxFinancialYears()`(지금 10년)까지 준다**(ADR-0145).
+- **MUST: 재적재 창을 `IndicatorRegistry.maxFinancialYears()`(지금 7년)보다 넓게 준다**(ADR-0145).
   `--financial-years=6`으로 돌려 **FY2015~2019가 세 시장 모두 0건**으로 남았다. 세율 컬럼만의
-  문제가 아니다 — 같은 재무 행을 `ProfitStreakYearsCalculator`가 10년 창으로 읽고,
+  문제가 아니다 — 같은 재무 행을 `ProfitStreakYearsCalculator`가 7년 창으로 읽고,
   `net_income_controlling`·`capex`도 같은 자리에서 비어 있었다.
   **MUST NOT: 이 결손을 세후 지표 커버리지의 원인으로 적지 않는다 — 재보니 아니었다.**
   `RoicAfterTaxMin5yCalculator.YEARS`가 5라 **최근 5개 연간**만 쓰고, 보존 창 앞머리에서

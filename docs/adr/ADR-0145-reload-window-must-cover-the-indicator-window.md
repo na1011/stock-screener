@@ -12,23 +12,30 @@ applies_to:
 
 ## 결정
 
-재무의 **매핑·후보 목록·선택 규칙을 고치거나 컬럼을 더하면**, 그 뒤의 재적재를
-`IndicatorRegistry.maxFinancialYears()`가 내는 연수까지 넓혀 **전 종목**으로 돌린다.
-그것을 잊었을 때 드러나게 하는 자리를 둘 둔다 — 실행 시점의 `FinancialLoadWindow` 경고와,
-세션 시작의 premise 펜스다.
+**적재 기본 창을 `IndicatorRegistry.maxFinancialYears()`보다 크게 두고, 그 부등식을 시험으로
+묶는다.** 세 잡의 기본값을 8로 올렸다(`financial-refill` 3 → 8 · `full-statement-refill`
+5 → 8 · `initial-load` 3 → 8). 지표가 더 깊은 재무를 요구하게 되면 `FinancialLoadWindowTest`가
+**빌드에서 붉는다.**
+
+그 위에 사람이 읽는 자리를 둘 더 둔다 — 손으로 좁게 준 실행을 알리는 `FinancialLoadWindow`
+경고와, 이미 생긴 결손을 세션 시작에 신고하는 premise 펜스다. **MUST NOT: 그 둘을 방어선으로
+읽지 않는다** — 로그도 펜스도 사람이 읽어야 발화하고, 실측된 누수는 로그가 *"2020년 이후"*를
+정확히 찍었는데도 났다.
 
 ## 규칙
 
-- MUST: 매핑·후보 목록·선택 규칙을 바꾼 커밋 뒤의 첫 재적재는 `--financial-years`를
-  `maxFinancialYears()` 이상으로 준다. **기본값은 그보다 좁다** — `financial-refill` 3년 ·
-  `full-statement-refill` 5년 · 지표 10년.
+- **MUST: 적재 기본 창 셋을 `maxFinancialYears()`보다 크게 유지한다.**
+  같으면 안 된다 — 적재는 `asOf.year − N`이라 **역년**이고 지표는 **회계연도 행 수**라
+  단위가 다르며, 비12월 결산(약 24%)은 같은 N이 한 해 적게 걸린다.
+  `FinancialLoadWindowTest`가 이 부등식을 단언한다.
+  **MUST NOT: 그 시험의 기대값을 낮춰 통과시키지 않는다** — 고칠 것은 적재 기본값이다.
 - MUST NOT: 고칠 범위를 **결함을 센 단면**으로 잡지 않는다. 세는 자리는 대개 최신 FY 단면이고
-  오염은 창 전체에 있다.
-- MUST NOT: 정기 스케줄이 그것을 대신한다고 읽지 않는다. `PipelineScheduler.runHeavy`는
-  `financialRefillJob.run(asOf, by, null, List.of(), null)`로 **연수를 `null`로 넘겨 기본값**을
-  쓴다. 매주 돌아도 그 창 밖은 영원히 안 바뀐다.
+  오염은 창 전체에 있다. **종목 축과 연도 축이 서로 독립이라** 한쪽만 채우면 절반만 고쳐진다.
+- MUST: 매핑·후보 목록·선택 규칙을 바꾼 커밋 뒤에는 **전 종목·전 창으로 한 번 더 돌린다.**
+  기본값이 창을 덮어도 그 실행이 없으면 옛 값은 그대로다 — 정기 잡은 다음 주에야 돈다.
 - MUST: 창을 넓혀 돌린 뒤 **지표 백필을 잇는다.** 교정·정정은 그 종목의 지표를 보존 창에서
   지우고, 재적재 잡은 `indicator_value`를 다시 만들지 않는다.
+- **MUST: 재적재 전에 지표 기준선을 찍는다.** 교정이 값을 얼마나 바꿨는지는 **뒤에는 못 잰다.**
 
 ## 검증
 
@@ -42,9 +49,10 @@ WITH cur AS (
   WHERE m.effective_to IS NULL AND u.is_active),
 lo AS (
   -- 상한이 아니라 하한을 정한다. 지표가 읽는 창은 보존 창 앞머리에서 시작해
-  -- IndicatorRegistry.maxFinancialYears()(지금 10, ProfitStreakYearsCalculator가 정한다)만큼
-  -- 거슬러 간다. 그 수가 커지면 여기도 함께 커져야 한다.
-  SELECT EXTRACT(year FROM min(trade_date))::int - 10 AS y FROM indicator_trade_date),
+  -- IndicatorRegistry.maxFinancialYears()(지금 7, ProfitStreakYearsCalculator.YEARS가 정한다)
+  -- 만큼 거슬러 간다. SQL이 그 상수를 못 읽으므로 FinancialLoadWindowTest가 적재 기본값과
+  -- 그 수의 부등식을 단언한다 — 지표가 창을 넓히면 거기서 먼저 붉는다.
+  SELECT EXTRACT(year FROM min(trade_date))::int - 7 AS y FROM indicator_trade_date),
 fy AS (
   SELECT c.universe_code AS uc, f.fiscal_year AS y, to_jsonb(f) AS j
   FROM financial_statement f JOIN cur c ON c.stock_id = f.stock_id, lo
@@ -68,12 +76,6 @@ gap AS (
   SELECT c.uc, c.col, string_agg(c.y::text, ',' ORDER BY c.y) AS years
   FROM cell c JOIN peak p ON p.uc = c.uc AND p.col = c.col
   WHERE c.filled = 0 AND p.best >= 0.3
-    -- FY2018 이하의 이 셋은 창이 아니라 네임스페이스다 — DART가 그 구간에서 'ifrs_'를 쓰는데
-    -- DartFullAccountMapper의 후보는 'ifrs-full_'과 'dart_'뿐이다(§결과의 탐침).
-    -- 그 연도를 읽는 지표가 없어 열지 않기로 했으므로, 세면 매 세션 조치 없는 발견이 난다.
-    -- MUST: 이 목록이 자라는 자리는 매핑에 'ifrs_' 후보를 더하는 커밋이다 — 더하고 전 창을
-    -- 재적재하면 이 예외를 함께 지운다. 다른 컬럼이나 FY2019 이상은 그대로 걸린다.
-    AND NOT (c.y <= 2018 AND c.col IN ('income_tax_expense','profit_before_tax','capex'))
   GROUP BY 1,2)
 SELECT CASE
   WHEN (SELECT count(*) FROM cell) = 0 THEN '잴 것이 없었다 — 창 안에 연간 재무가 한 행도 없다'
@@ -87,6 +89,14 @@ SELECT CASE
 **이 펜스가 답하지 않는 것 하나** — **행이 아예 없는 회계연도**는 `cell`에 잡히지 않아 못 본다.
 「컬럼이 비었다」와 「그 해 재무를 한 종목도 안 받았다」는 다른 축이고, 뒤의 것은 각 시장의
 커버리지 펜스가 답한다.
+
+**시험이 실제로 붉는지 대조군으로 확인했다** — `FinancialRefillJob.DEFAULT_YEARS_BACK`을
+`maxFinancialYears()`와 같은 **7**로 낮추면 `적재_기본_창이_지표가_읽는_창보다_넓다()`가
+FAILED이고, 8로 되돌리면 통과한다.
+
+```bash
+./gradlew test --tests "*FinancialLoadWindowTest*"
+```
 
 `FinancialLoadWindow`가 세 잡 전부에서 불리는지는 정적으로 본다 — 아래가 **3건**이어야 한다.
 
@@ -127,12 +137,17 @@ US 358 → **359** · KOSDAQ 51 → **51**이었다. 그 지표가 쓰는 것은
 
 ## 버린 대안
 
-**정기 잡의 창을 `maxFinancialYears()`로 올린다.** 가장 근본적이고 실제로 이 결함을 영구히
-닫는다. 기각 근거는 쿼터다 — `financial-refill`을 10년으로 돌리면 국내가
-`350 × 11 × 4 = 15,400`콜이고 `dart.daily-quota`가 18,000이라 **한 번에 86%를 태운다.**
-그날 다른 DART 잡이 조금이라도 끼면 넘는다. **MUST NOT: 이 기각을 「불가능」으로 읽지 않는다** —
-막는 것은 쿼터 하나이고, 소스가 창을 한 응답에 주는 미국은 **창을 넓혀도 콜이 안 는다**(SEC
-`companyfacts`는 종목당 1콜이다).
+**경고만 두고 기본값은 그대로 둔다(처음에 그렇게 적었다가 철회했다).** 기각 근거였던
+*"`financial-refill`을 10년으로 돌리면 국내가 15,400콜이라 쿼터의 86%"*가 **잘못된 수 위에
+있었다.** `maxFinancialYears()`를 10으로 읽었는데 실제로는 **7**이고
+(`ProfitStreakYearsCalculator.YEARS`), 8년이면 `350 × 9 × 4 = 12,600`콜로 **70%**다.
+전체본은 `350 × 9 = 3,150` 요청이고 실측 배수 1.32를 곱하면 **약 4,160콜(23%)**이다.
+**쿼터가 기본값 상향을 막지 않는다.**
+
+**MUST: 국내 `financial-refill` 12,600콜은 아직 실행으로 재지 않았다.** 리미터
+`dart.daily-quota: 18000` 안이고 목요일에 그 잡만 돌지만(ADR-0116), 같은 잡이 미국 1,000종목도
+돌아 **소요가 약 21분 + 14분**이 된다 — 14:30 시작이면 15:05쯤이고 15:10 신선도 점검과
+가깝다. 첫 실행의 실제 콜과 소요를 여기 적는다.
 
 **결손 연도를 보고 창을 스스로 넓히는 잡을 만든다.** 정합적이지만 이 결함을 잡는 데 필요한
 것보다 크다 — 무엇이 결손인지는 위 펜스가 이미 답하고, 답을 받은 뒤 창을 주는 것은 사람의
