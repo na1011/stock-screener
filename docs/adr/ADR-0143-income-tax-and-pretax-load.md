@@ -49,9 +49,15 @@ applies_to:
   이고 그중 둘이 `SecEdgarFacts`다 — **미국을 안 켜도 컴파일이 깨진다.**
 - **MUST: `FinancialWriter.Amount` enum에도 더한다.** `findLatest`의 SELECT와 `fillMissing`의
   SET이 둘 다 그 목록에서 만들어지므로, 빠뜨리면 **그 컬럼이 영영 안 채워진다.**
-- **MUST: `--financial-years=6`으로 재적재한다.** 기본값 5면 `asOf.year − 5`부터 올해까지라
-  FY2021~2026인데, **보존 창이 255거래일**이라 창 앞머리 as-of에서는 5년 창이 **FY2020**을
-  요구한다. 안 채우면 그 구간이 비는데 **최신 일자 화면은 멀쩡하다.**
+- **MUST: 재적재 창을 `IndicatorRegistry.maxFinancialYears()`(지금 10년)까지 준다**(ADR-0145).
+  `--financial-years=6`으로 돌려 **FY2015~2019가 세 시장 모두 0건**으로 남았다. 세율 컬럼만의
+  문제가 아니다 — 같은 재무 행을 `ProfitStreakYearsCalculator`가 10년 창으로 읽고,
+  `net_income_controlling`·`capex`도 같은 자리에서 비어 있었다.
+  **MUST NOT: 이 결손을 세후 지표 커버리지의 원인으로 적지 않는다 — 재보니 아니었다.**
+  `RoicAfterTaxMin5yCalculator.YEARS`가 5라 **최근 5개 연간**만 쓰고, 보존 창 앞머리에서
+  그것은 FY2020~2024다. FY2015~2019를 채운 뒤 창 앞머리 5년 세후는 KOSPI **88 → 92** ·
+  US **358 → 359** · KOSDAQ **51 → 51**로 사실상 그대로였다. **창 앞머리가 최신 일자보다
+  낮은 진짜 원인은 아직 안 쟀다.**
 - **MUST: 미국 세율 컬럼 둘을 `SecEdgarColumn.reportEvidence()`에서 뺀다.**
   안 빼면 `hasAnyValue`가 참이 되는 앵커가 늘어 **`reporters` 집합이 커지고**, **세금만 든
   얕은 보고서가 `filed` 앞에 서면** baseline을 세운 뒤 진짜 10-K가 `conflicts` 거짓으로

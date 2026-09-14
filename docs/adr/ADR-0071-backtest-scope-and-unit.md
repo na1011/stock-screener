@@ -124,6 +124,10 @@ applies_to:
   결손이 곧 미충족이 되어 부호가 정해진 편향이 들어간다. **게이트의 취급(판정불가 ≠ 통과,
   `ConditionEvaluator.satisfiesRequired`)과 일부러 규칙이 다르다** — 축이 다르기 때문이며,
   as-of마다 커버리지를 표에 함께 낸다.
+- **MUST: 제외 목록을 `UNSUPPORTED`로만 센다 — `OBSERVED`를 함께 세지 않는다.** 뒤의 것은
+  **판정 대기**이고 시세 급변 휴리스틱이 새 건을 계속 만든다. 둘을 뭉치면 **정상 관측이
+  들어올 때마다 「목록이 낡았다」로 울어** 거짓 발견이 된다(실측: 2026-09-10 관측 1건이
+  7을 8로 만들었다).
 - **MUST: 수익률 제외를 종목이 아니라 종목·기간 단위로 한다.** `UNSUPPORTED` 7종목 중
   **3건(2020-08·2021-01·2021-11)은 백테스트 창 밖 사건**이라 그 종목이 창 안에서는 살아 있다.
   종목 통째로 빼면 표본이 조용히 좁아진다.
@@ -240,7 +244,7 @@ psql -d stock_screener -At -c "SELECT CASE WHEN count(*) FILTER (WHERE NOT is_ac
 ```
 
 ```premise 수익률에서 제외할 종목이 아직 7이다
-psql -d stock_screener -At -c "WITH bad AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status IN ('OBSERVED','UNSUPPORTED') AND effective_date >= DATE '2020-01-01') SELECT CASE WHEN (SELECT count(*) FROM corporate_action) = 0 THEN '잴 것이 없었다 — 기업행위 원장이 비었다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 미보정 기업행위가 없다 — 수익률 제외 목록이 비었다' WHEN (SELECT count(*) FROM bad) = 7 THEN 'OK 미보정 기업행위 7종목(계획 기준) — 수익률 제외 목록이 그대로다' ELSE '미보정 기업행위가 ' || (SELECT count(*) FROM bad) || '종목이다(계획 기준 7) — 수익률 제외 목록이 낡았다' END"
+psql -d stock_screener -At -c "WITH bad AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'UNSUPPORTED' AND effective_date >= DATE '2020-01-01'), pending AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'OBSERVED' AND effective_date >= DATE '2020-01-01') SELECT CASE WHEN (SELECT count(*) FROM corporate_action) = 0 THEN '잴 것이 없었다 — 기업행위 원장이 비었다' WHEN (SELECT count(*) FROM bad) = 7 THEN 'OK 미보정 기업행위 7종목(계획 기준)' || CASE WHEN (SELECT count(*) FROM pending) > 0 THEN ' · 판정 대기 ' || (SELECT count(*) FROM pending) || '종목' ELSE '' END ELSE '미보정 기업행위가 ' || (SELECT count(*) FROM bad) || '종목이다(계획 기준 7) — 수익률 제외 목록이 낡았다' END"
 ```
 
 ## 배경

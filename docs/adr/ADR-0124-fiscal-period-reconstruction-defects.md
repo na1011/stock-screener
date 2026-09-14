@@ -56,9 +56,15 @@ ADR-0101 §버린 대안과 ADR-0099 §미룬 문이 이것을 「`labelOf`의 �
   TTM이 같은 분기를 두 번 더한다. **술어로 좁히면 `projectYear`가 만든 라벨을 놓친다** —
   실측으로 `KBR`·`KLC`·`SHIM`·`SVV`에 FY 행이 없는 `2027` 라벨이 8행 있었고, 그 8만
   새로 매핑되는 것이 없어 자동 강등도 안 된다.
-- **MUST NOT: `--financial-years`를 키워 재적재하면서 이 수정을 믿지 않는다.**
-  결함 1 이후 **`fromFiscalYear`가 `MALFORMED` 판정의 인자**다. 기본 경로는 안전하지만
-  (`initial-load`·`financial-refill` 둘 다 기본 3년) 연수를 키우면 같은 종목이 다시 막힌다.
+- **MUST: `--financial-years`를 키워 재적재하면 그 실행에서 막힌 종목을 센다.**
+  결함 1 이후 **`fromFiscalYear`가 `MALFORMED` 판정의 인자**라 기본 경로는 안전하지만
+  (`initial-load`·`financial-refill` 둘 다 기본 3년) 연수를 키우면 창 안에 들어오는 라벨이
+  늘어 같은 종목이 다시 막힐 수 있다.
+  **다만 실측으로 발화하지 않았다** — 2026-09-14에 `financial-refill --universe=US_TOP1000
+  --financial-years=11`(FY2015~2026)을 돌린 결과 **`MALFORMED` 0건**이고 미국 1,000종목이
+  전부 재무를 가졌으며 연도별 행 수가 FY2015~2019 전 구간에서 늘었다.
+  **MUST NOT: 이 경고를 「창을 키우지 마라」로 읽지 않는다** — 창을 좁게 두면 그 앞
+  회계연도가 옛 규칙의 값으로 고정된다(ADR-0145). 키우고 나서 세는 것이 규칙이다.
 
 ## 검증
 
