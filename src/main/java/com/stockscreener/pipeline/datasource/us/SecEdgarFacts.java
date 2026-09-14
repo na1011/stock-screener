@@ -948,8 +948,11 @@ final class SecEdgarFacts {
         byLabel.values().forEach(판 -> 판.sort(Comparator.comparing(RawFinancialReport::publishedAt)));
         // 공시(accn)마다 **분기를 낸 회계연도**. 재제출 판정의 재료다 — 아래 §.
         Map<String, Set<Integer>> quarterYears = new HashMap<>();
+        Map<String, Integer> latestAnnualYear = new HashMap<>();
         for (RawFinancialReport report : existing) {
-            if (!"FY".equals(report.fiscalPeriod())) {
+            if ("FY".equals(report.fiscalPeriod())) {
+                latestAnnualYear.merge(report.reportCode(), report.fiscalYear(), Math::max);
+            } else {
                 quarterYears.computeIfAbsent(report.reportCode(), key -> new HashSet<>())
                         .add(report.fiscalYear());
             }
@@ -1035,7 +1038,8 @@ final class SecEdgarFacts {
                 f2 = v2;
                 f3 = v3;
                 if (lastUsed != null && restated(lastUsed, vintage)
-                        && representedOtherYears(quarterYears, vintage, label.fiscalYear())) {
+                        && representedPastQuarters(quarterYears, latestAnnualYear, vintage,
+                                label.fiscalYear())) {
                     // **이 공시는 분기 계열을 다시 냈는데 이 해의 분기는 안 냈다.**
                     //
                     // 사업을 팔면 FY를 계속영업 기준으로 다시 쓰고, 그때 **아직 비교분기로 실을
@@ -1152,10 +1156,30 @@ final class SecEdgarFacts {
      * {@code KKR}의 10-K가 2018 Q4 매출을 <b>−178.1M으로 직접 낸다</b>(자산운용사라 투자손익이
      * 매출에 섞인다). 부호는 원인이 아니라 증상이고, 증상으로 자르면 정당한 값을 버린다.
      */
-    private static boolean representedOtherYears(Map<String, Set<Integer>> quarterYears,
-                                                 RawFinancialReport vintage, int fiscalYear) {
+    private static boolean representedPastQuarters(Map<String, Set<Integer>> quarterYears,
+                                                   Map<String, Integer> latestAnnualYear,
+                                                   RawFinancialReport vintage, int fiscalYear) {
         Set<Integer> years = quarterYears.getOrDefault(vintage.reportCode(), Set.of());
-        return !years.isEmpty() && !years.contains(fiscalYear);
+        if (years.isEmpty() || years.contains(fiscalYear)) {
+            return false;
+        }
+        // MUST: **자기 해가 아닌 해의 분기**를 냈을 때만 재제출로 읽는다.
+        //
+        // 10-K가 자기 회계연도의 4분기를 함께 싣는 것은 **정상**이다. 그것을 재제출로 읽으면
+        // 앞 연도의 사소한 정정까지 물러나게 되고, 실측(2026-09-14)으로 세대가 뒤진
+        // 991 종목연도 중 **744(75%)가 분기 합과 FY의 차이 1% 미만**이었다 — 과잉이다.
+        // 진짜 재제출은 **지나간 해의 분기를 다시 낸다**(AIG 2025-02-13 10-K가 2023 분기를
+        // 다시 냈다).
+        Integer own = latestAnnualYear.get(vintage.reportCode());
+        if (own == null) {
+            return false;
+        }
+        for (Integer year : years) {
+            if (!year.equals(own)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 두 판의 <b>유량</b>이 하나라도 다른가. 잔액은 보지 않는다 — 뺄셈에 안 들어간다. */

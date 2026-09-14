@@ -407,22 +407,32 @@ class SecEdgarFinancialAdapterTest {
         // 오래된 2022는 못 냈다 — 10-Q가 직전 연도 비교분기만 싣기 때문이다. 그래서 그 공시의
         // FY2022는 그해 분기가 못 받은 기준이고, 둘을 빼면 -12,609가 나온다.
         //
-        // 픽스처도 같은 모양이되 **잔차가 양수로 앉는다**: 2026 공시가 FY2023을 900,000으로
-        // 다시 쓰면 900,000 - 750,000 = 150,000이라 부호로는 아무것도 못 잡는다. 그런데 그
-        // 공시는 **2024 분기는 다시 냈고 2023 분기는 안 냈다** — 기준이 갈렸다는 직접 증거다.
-        // 그래서 FY2023은 2024-02-20 세대로 빼 250,000이 된다.
+        // 픽스처도 같은 모양이되 **잔차가 양수로 앉는다**: 2026 공시가 FY2022를 900,000으로
+        // 다시 쓰면 900,000 - 750,000 = 150,000이라 **부호로는 아무것도 못 잡는다.** 그런데 그
+        // 공시는 자기 해가 2024인데 **지나간 해(2023)의 분기를 다시 냈고 2022 분기는 안 냈다**
+        // — 기준이 갈렸다는 직접 증거다. 그래서 FY2022는 2023-02-20 세대로 빼 250,000이 된다.
+        //
+        // 2023은 그 공시가 분기를 함께 냈으므로 **건너뛰지 않는다** — 아래 둘째 단언.
         //
         // **이것이 부호 규칙이 원리적으로 못 잡던 자리다**(ADR-0151 §결과의 「그럴듯한 양수」).
         List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         RawFinancialReport q4 = latestOf(reports.stream()
-                .filter(r -> r.fiscalYear() == 2023).toList(), "Q4");
+                .filter(r -> r.fiscalYear() == 2022).toList(), "Q4");
 
         assertThat(q4.publishedAt())
                 .as("분기가 따라온 마지막 세대를 쓴다")
-                .isEqualTo(LocalDate.of(2024, 2, 20));
+                .isEqualTo(LocalDate.of(2023, 2, 20));
         assertThat(q4.revenue()).isEqualByComparingTo("250000");
         assertThat(q4.derived()).isTrue();
+        assertThat(reports.stream()
+                .filter(r -> r.fiscalYear() == 2022 && "Q4".equals(r.fiscalPeriod())).count())
+                .as("건너뛴 세대는 판을 안 낸다")
+                .isEqualTo(1);
+        assertThat(reports.stream()
+                .filter(r -> r.fiscalYear() == 2023 && "Q4".equals(r.fiscalPeriod())).count())
+                .as("분기를 함께 낸 해는 세대마다 낸다 — 판정은 연도별이다")
+                .isEqualTo(2);
     }
 
     @Test
