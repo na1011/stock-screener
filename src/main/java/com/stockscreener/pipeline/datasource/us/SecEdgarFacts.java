@@ -168,9 +168,6 @@ final class SecEdgarFacts {
                 fromFiscalYear);
 
         List<RawFinancialReport> reports = new ArrayList<>();
-        // 기간마다 고른 태그를 들고 있는다. Q4 유도가 FY에서 분기를 뺄 때 **넷이 같은 태그에서
-        // 왔는지**를 물어야 하는데, 그 사실은 여기서만 알 수 있다.
-        Map<Label, Map<SecEdgarColumn, String>> chosenTags = new LinkedHashMap<>();
         for (Map.Entry<Label, Window> e : windows.entrySet()) {
             Label label = e.getKey();
             if (label.fiscalYear() < fromFiscalYear) {
@@ -178,11 +175,10 @@ final class SecEdgarFacts {
             }
             Map<SecEdgarColumn, String> tags =
                     chooseTags(labelAnchors.get(label), e.getValue(), byColumn);
-            chosenTags.put(label, tags);
             reports.addAll(revisionsOf(label, e.getValue(), labelAnchors.get(label),
                     byColumn, anchors, tags));
         }
-        reports.addAll(deriveFourthQuarters(reports, windows, fromFiscalYear, chosenTags));
+        reports.addAll(deriveFourthQuarters(reports, windows, fromFiscalYear));
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
                 .thenComparing(RawFinancialReport::publishedAt));
@@ -940,8 +936,7 @@ final class SecEdgarFacts {
      * <b>잔액은 그대로 낸다</b> — FY의 연말 잔액이라 뺄셈을 거치지 않는다.
      */
     private static List<RawFinancialReport> deriveFourthQuarters(
-            List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear,
-            Map<Label, Map<SecEdgarColumn, String>> chosenTags) {
+            List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear) {
         Map<Label, RawFinancialReport> latest = new LinkedHashMap<>();
         for (RawFinancialReport report : existing) {
             latest.merge(new Label(report.fiscalYear(), report.fiscalPeriod()), report,
@@ -986,48 +981,38 @@ final class SecEdgarFacts {
             RawFinancialReport q1 = inside.get(0);
             RawFinancialReport q2 = inside.get(1);
             boolean subtractable = sameCurrency(fy, q1, q2, q3);
-            // MUST: **컬럼마다** 넷이 같은 태그에서 왔는지 묻는다.
-            //
-            // chooseTags는 기간 단위로 태그를 고르므로 같은 컬럼이 FY와 분기에서 다른 태그로
-            // 뽑힐 수 있다. 그러면 이 뺄셈이 **뜻이 다른 두 수를 뺀다** — 실측(2026-09-14)으로
-            // 미국 분기 매출이 253건, 매출원가가 131건 음수였고, 음수 매출은 결측처럼 보이지도
-            // 않은 채 TTM 합을 줄여 OPERATING_MARGIN·PSR을 부풀린다.
-            //
-            // 통화 축(ADR-0110)과 같은 형태이되 축이 컬럼별이다 — 통화는 판 전체가 갈리지만
-            // 태그는 컬럼 하나만 갈릴 수 있어서, 한 컬럼 때문에 나머지 일곱을 버리면 안 된다.
-            TagAgreement agreed = new TagAgreement(chosenTags, label, q1, q2, q3);
             derived.add(new RawFinancialReport(
                     label.fiscalYear(), "Q4", start, fy.periodEnd(), fy.publishedAt(),
                     fy.reportCode(), fy.currencyCode(),
-                    agreed.on(SecEdgarColumn.REVENUE, subtractable) ? minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue()) : null,
-                    agreed.on(SecEdgarColumn.OPERATING_INCOME, subtractable) ? minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
+                    subtractable ? nonNegative(minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())) : null,
+                    subtractable ? minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
                             q3.operatingIncome()) : null,
-                    agreed.on(SecEdgarColumn.NET_INCOME, subtractable) ? minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()) : null,
+                    subtractable ? minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()) : null,
                     // 잔액은 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
                     fy.totalAssets(), fy.totalEquity(), fy.totalLiabilities(),
                     fy.currentAssets(), fy.currentLiabilities(), fy.retainedEarnings(),
                     // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
                     null, fy.sharesOutstanding(), null, null,
-                    agreed.on(SecEdgarColumn.COST_OF_SALES, subtractable) ? minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales()) : null,
+                    subtractable ? nonNegative(minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales())) : null,
                     fy.cashAndEquivalents(), null, fy.inventories(),
                     // 위 toReport와 같은 이유로 담지 않는다.
                     null,
                     // 유도 재료 여덟은 전부 유량이라 차감한다. 하나라도 없으면 minus가
                     // null을 내므로 Q4 영업이익이 지어지지 않는다 — 그것이 옳다.
-                    agreed.on(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME, subtractable) ? minus(fy.interestAndDividendIncome(), q1.interestAndDividendIncome(),
+                    subtractable ? minus(fy.interestAndDividendIncome(), q1.interestAndDividendIncome(),
                             q2.interestAndDividendIncome(), q3.interestAndDividendIncome()) : null,
-                    agreed.on(SecEdgarColumn.NONINTEREST_INCOME, subtractable) ? minus(fy.noninterestIncome(), q1.noninterestIncome(),
+                    subtractable ? minus(fy.noninterestIncome(), q1.noninterestIncome(),
                             q2.noninterestIncome(), q3.noninterestIncome()) : null,
-                    agreed.on(SecEdgarColumn.INTEREST_EXPENSE, subtractable) ? minus(fy.interestExpense(), q1.interestExpense(),
+                    subtractable ? minus(fy.interestExpense(), q1.interestExpense(),
                             q2.interestExpense(), q3.interestExpense()) : null,
-                    agreed.on(SecEdgarColumn.NONINTEREST_EXPENSE, subtractable) ? minus(fy.noninterestExpense(), q1.noninterestExpense(),
+                    subtractable ? minus(fy.noninterestExpense(), q1.noninterestExpense(),
                             q2.noninterestExpense(), q3.noninterestExpense()) : null,
-                    agreed.on(SecEdgarColumn.BENEFITS_LOSSES_AND_EXPENSES, subtractable) ? minus(fy.benefitsLossesAndExpenses(), q1.benefitsLossesAndExpenses(),
+                    subtractable ? minus(fy.benefitsLossesAndExpenses(), q1.benefitsLossesAndExpenses(),
                             q2.benefitsLossesAndExpenses(), q3.benefitsLossesAndExpenses()) : null,
-                    agreed.on(SecEdgarColumn.GROSS_PROFIT, subtractable) ? minus(fy.grossProfit(), q1.grossProfit(), q2.grossProfit(), q3.grossProfit()) : null,
-                    agreed.on(SecEdgarColumn.OPERATING_EXPENSES, subtractable) ? minus(fy.operatingExpenses(), q1.operatingExpenses(),
+                    subtractable ? minus(fy.grossProfit(), q1.grossProfit(), q2.grossProfit(), q3.grossProfit()) : null,
+                    subtractable ? minus(fy.operatingExpenses(), q1.operatingExpenses(),
                             q2.operatingExpenses(), q3.operatingExpenses()) : null,
-                    agreed.on(SecEdgarColumn.COSTS_AND_EXPENSES, subtractable) ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
+                    subtractable ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
                             q2.costsAndExpenses(), q3.costsAndExpenses()) : null,
                     // 세율 재료는 annualOnly라 분기 판에 값이 없다 — 차감할 것이 없다.
                     null, null,
@@ -1039,37 +1024,28 @@ final class SecEdgarFacts {
     }
 
     /**
-     * FY와 분기 셋이 <b>그 컬럼을 같은 태그에서 뽑았는가.</b>
+     * <b>정의상 음수가 될 수 없는 유량이 음수로 나왔으면 값을 내지 않는다.</b>
      *
-     * <p>{@code chooseTags}는 기간마다 태그를 고정하지만 <b>기간이 다르면 다른 태그가 이길 수
-     * 있다.</b> 그때 {@code FY − Q1 − Q2 − Q3}는 뜻이 다른 두 수를 빼고, 그 결과는 음수로
-     * 드러나기도 하지만 <b>그럴듯한 양수로 앉기도 한다.</b>
+     * <p>매출과 매출원가는 한 분기에 음수일 수 없다. 그런데 {@code FY − Q1 − Q2 − Q3}가 음수를
+     * 내는 일이 실재한다 — FY와 분기가 <b>다른 판</b>에서 오기 때문이다(실측: {@code AIG} 2022는
+     * FY 매출 29,996M인데 Q1~Q3 합이 42,605M이다 — 사업을 팔아 FY만 계속영업 기준으로 다시
+     * 냈고 분기는 원래대로 남았다).
      *
-     * <p><b>넷 중 하나라도 그 컬럼의 태그를 모르면 뺄셈을 접는다.</b> 모르는 것을 「같다」로
-     * 읽으면 이 판정이 아무것도 막지 않는다.
+     * <p><b>이것은 「소스 입력을 버리는 게이트」가 아니다</b>(ADR-0126 §결정). 버리는 것은
+     * 소스가 준 값이 아니라 <b>우리 산수가 낸 불가능한 답</b>이다. 그리고 그 답은 결측처럼
+     * 보이지도 않은 채 TTM 합을 줄여 {@code OPERATING_MARGIN}·{@code PSR}·{@code NET_MARGIN}을
+     * <b>부풀린 채 그럴듯하게</b> 내보낸다 — 실측으로 미국 4분기 음수 매출이 45행이었다.
+     *
+     * <p><b>MUST NOT: 영업이익·순이익·매출총이익에 이것을 걸지 않는다.</b> 그 셋은 한 분기에
+     * 정당하게 음수다.
+     *
+     * <p><b>MUST NOT: 태그 이름이 갈렸다는 이유로 뺄셈을 접지 않는다 — 재보고 기각했다.</b>
+     * 컬럼마다 FY와 분기가 같은 태그에서 왔는지 묻는 게이트를 넣어 전 종목을 재적재해 보니
+     * <b>Q4 매출 436개가 지워졌는데 그중 음수는 7뿐</b>이고 <b>397은 Q3의 0.5~2배 안에 드는
+     * 정상 분기값</b>이었다. 이름이 달라도 같은 총액인 경우가 대부분이다.
      */
-    private record TagAgreement(Map<Label, Map<SecEdgarColumn, String>> chosenTags,
-                                Label fy, RawFinancialReport q1, RawFinancialReport q2,
-                                RawFinancialReport q3) {
-
-        boolean on(SecEdgarColumn column, boolean subtractable) {
-            if (!subtractable) {
-                return false;
-            }
-            String tag = tagOf(fy, column);
-            return tag != null
-                    && tag.equals(tagOf(labelOf(q1), column))
-                    && tag.equals(tagOf(labelOf(q2), column))
-                    && tag.equals(tagOf(labelOf(q3), column));
-        }
-
-        private String tagOf(Label label, SecEdgarColumn column) {
-            return chosenTags.getOrDefault(label, Map.of()).get(column);
-        }
-
-        private static Label labelOf(RawFinancialReport report) {
-            return new Label(report.fiscalYear(), report.fiscalPeriod());
-        }
+    private static BigDecimal nonNegative(BigDecimal value) {
+        return value == null || value.signum() >= 0 ? value : null;
     }
 
     /**

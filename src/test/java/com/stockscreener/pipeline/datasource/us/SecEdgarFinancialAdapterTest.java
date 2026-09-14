@@ -394,27 +394,35 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
-    @DisplayName("FY와 분기가 다른 태그에서 오면 그 컬럼만 Q4 뺄셈을 접는다")
-    void doesNotSubtractAcrossATagSwitch() throws Exception {
+    @DisplayName("유도한 4분기 매출이 음수면 안 낸다 — 그러나 태그가 갈렸다는 이유로는 안 접는다")
+    void doesNotEmitNegativeDerivedRevenue() throws Exception {
         enqueue(200, fixture("tickers.json"));
         enqueue(200, fixture("companyfacts-q4-tag-switch.json"));
 
-        // chooseTags는 기간마다 태그를 고정하지만 기간이 다르면 다른 태그가 이길 수 있다.
-        // 여기서는 FY가 CostOfRevenue 1,000,000이고 분기가 CostOfGoodsSold 400,000 × 3이라
-        // 그냥 빼면 -200,000이 된다. 실측으로 미국 분기 매출이 253건, 매출원가가 131건
-        // 음수였고, 음수 매출은 결측처럼 보이지도 않은 채 TTM 합을 줄인다.
+        // 매출은 FY 600,000에 분기 합 900,000이라 뺄셈이 -300,000을 낸다. 한 분기 매출이
+        // 음수일 수는 없다 — FY와 분기가 다른 판에서 온 것이다(실측: AIG 2022는 FY 매출
+        // 29,996M인데 Q1~Q3 합이 42,605M이다). 음수 매출은 결측처럼 보이지도 않은 채 TTM 합을
+        // 줄여 OPERATING_MARGIN·PSR을 부풀린다.
+        //
+        // 매출원가는 FY가 CostOfRevenue 2,000,000이고 분기가 CostOfGoodsSold 400,000 × 3이라
+        // **태그 이름이 갈렸는데도** 800,000이 나온다. 이름이 달라도 같은 총액인 경우가
+        // 대부분이라 그것으로 접으면 안 된다 — 전 종목 실측에서 이름 일치를 요구하자
+        // Q4 매출 436개가 지워졌고 **그중 음수는 7뿐, 397은 Q3의 0.5~2배 안**이었다.
         List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
         RawFinancialReport q4 = reports.stream()
                 .filter(r -> "Q4".equals(r.fiscalPeriod()) && r.fiscalYear() == 2023)
                 .findFirst().orElseThrow();
 
-        assertThat(q4.costOfSales())
-                .as("뜻이 다른 두 수를 빼느니 값을 안 내는 것이 옳다")
-                .isNull();
         assertThat(q4.revenue())
-                .as("매출은 넷 다 Revenues에서 왔으므로 그대로 유도된다 — 판정은 컬럼별이다")
-                .isEqualByComparingTo("400000");
+                .as("정의상 음수일 수 없는 유량이 음수로 나오면 안 낸다")
+                .isNull();
+        assertThat(q4.costOfSales())
+                .as("태그 이름이 갈려도 결과가 성립하면 낸다 — 이름은 판정축이 아니다")
+                .isEqualByComparingTo("800000");
+        assertThat(q4.netIncome())
+                .as("순이익은 한 분기에 정당하게 음수다 — 이 규칙을 걸지 않는다")
+                .isEqualByComparingTo("-50000");
     }
 
     @Test
