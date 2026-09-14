@@ -938,10 +938,13 @@ final class SecEdgarFacts {
     private static List<RawFinancialReport> deriveFourthQuarters(
             List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear) {
         Map<Label, RawFinancialReport> latest = new LinkedHashMap<>();
+        Map<Label, List<RawFinancialReport>> byLabel = new LinkedHashMap<>();
         for (RawFinancialReport report : existing) {
-            latest.merge(new Label(report.fiscalYear(), report.fiscalPeriod()), report,
-                    (a, b) -> a.publishedAt().isAfter(b.publishedAt()) ? a : b);
+            Label key = new Label(report.fiscalYear(), report.fiscalPeriod());
+            latest.merge(key, report, (a, b) -> a.publishedAt().isAfter(b.publishedAt()) ? a : b);
+            byLabel.computeIfAbsent(key, k -> new ArrayList<>()).add(report);
         }
+        byLabel.values().forEach(판 -> 판.sort(Comparator.comparing(RawFinancialReport::publishedAt)));
 
         List<RawFinancialReport> derived = new ArrayList<>();
         for (Map.Entry<Label, RawFinancialReport> e : latest.entrySet()) {
@@ -980,72 +983,154 @@ final class SecEdgarFacts {
             }
             RawFinancialReport q1 = inside.get(0);
             RawFinancialReport q2 = inside.get(1);
-            boolean subtractable = sameCurrency(fy, q1, q2, q3);
-            derived.add(new RawFinancialReport(
-                    label.fiscalYear(), "Q4", start, fy.periodEnd(), fy.publishedAt(),
-                    fy.reportCode(), fy.currencyCode(),
-                    subtractable ? nonNegative(minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())) : null,
-                    subtractable ? minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
-                            q3.operatingIncome()) : null,
-                    subtractable ? minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()) : null,
-                    // 잔액은 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
-                    fy.totalAssets(), fy.totalEquity(), fy.totalLiabilities(),
-                    fy.currentAssets(), fy.currentLiabilities(), fy.retainedEarnings(),
-                    // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
-                    null, fy.sharesOutstanding(), null, null,
-                    subtractable ? nonNegative(minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales())) : null,
-                    fy.cashAndEquivalents(), null, fy.inventories(),
-                    // 위 toReport와 같은 이유로 담지 않는다.
-                    null,
-                    // 유도 재료 여덟은 전부 유량이라 차감한다. 하나라도 없으면 minus가
-                    // null을 내므로 Q4 영업이익이 지어지지 않는다 — 그것이 옳다.
-                    subtractable ? minus(fy.interestAndDividendIncome(), q1.interestAndDividendIncome(),
-                            q2.interestAndDividendIncome(), q3.interestAndDividendIncome()) : null,
-                    subtractable ? minus(fy.noninterestIncome(), q1.noninterestIncome(),
-                            q2.noninterestIncome(), q3.noninterestIncome()) : null,
-                    subtractable ? minus(fy.interestExpense(), q1.interestExpense(),
-                            q2.interestExpense(), q3.interestExpense()) : null,
-                    subtractable ? minus(fy.noninterestExpense(), q1.noninterestExpense(),
-                            q2.noninterestExpense(), q3.noninterestExpense()) : null,
-                    subtractable ? minus(fy.benefitsLossesAndExpenses(), q1.benefitsLossesAndExpenses(),
-                            q2.benefitsLossesAndExpenses(), q3.benefitsLossesAndExpenses()) : null,
-                    subtractable ? minus(fy.grossProfit(), q1.grossProfit(), q2.grossProfit(), q3.grossProfit()) : null,
-                    subtractable ? minus(fy.operatingExpenses(), q1.operatingExpenses(),
-                            q2.operatingExpenses(), q3.operatingExpenses()) : null,
-                    subtractable ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
-                            q2.costsAndExpenses(), q3.costsAndExpenses()) : null,
-                    // 세율 재료는 annualOnly라 분기 판에 값이 없다 — 차감할 것이 없다.
-                    null, null,
-                    // 우리가 만든 행이다. 저장이 이것을 알아야 유도 규칙을 고쳤을 때 옛 값을
-                    // 지운다 — 재수집 경로는 NULL만 채우고 값을 NULL로 덮지 않기 때문이다.
-                    true));
+            // MUST: **FY 판과 분기 판의 세대를 맞춘다.**
+            //
+            // 지금까지는 라벨마다 최신 판을 골라 뺐다. 그런데 회사가 **FY만 다시 내고 분기는
+            // 안 내는** 일이 실재한다 — 사업을 팔면 FY를 계속영업 기준으로 다시 쓰는데 그해
+            // 분기는 이미 지나가서 다시 안 낸다. 그러면 최신 FY와 최신 분기가 **서로 다른
+            // 세대**가 되고 뺄셈이 뜻을 잃는다.
+            //
+            // 실측(2026-09-14): 유도 4분기 매출이 음수인 25건 중 **22건이 이 모양**이고
+            // (FY 판이 여럿 · FY가 분기보다 늦게 재작성) **22건 전부 더 이른 FY 판을 쓰면
+            // 양수가 된다.** AIG 2022가 그것이다 — FY가 56,437 → 54,450 → **29,996**으로
+            // 세 번 바뀌는 동안 분기는 2023-11 이후 한 번도 안 바뀌었다. 최신끼리 빼면
+            // 29,996 − 42,605 = **−12,609**이고, 2024-02-14 판으로 빼면 **11,845**다.
+            //
+            // MUST NOT: 음수를 걸러 내는 것으로 대신하지 않는다 — 그것은 증상이다. 같은
+            // 어긋남이 **그럴듯한 양수**로 앉으면 못 잡고, 잡더라도 값이 사라질 뿐이다.
+            List<Label> quarterLabels = List.of(
+                    new Label(q1.fiscalYear(), q1.fiscalPeriod()),
+                    new Label(q2.fiscalYear(), q2.fiscalPeriod()),
+                    new Label(q3.fiscalYear(), q3.fiscalPeriod()));
+            for (RawFinancialReport vintage : byLabel.getOrDefault(label, List.of())) {
+                RawFinancialReport v1 = vintageOf(byLabel, quarterLabels.get(0), vintage.publishedAt());
+                RawFinancialReport v2 = vintageOf(byLabel, quarterLabels.get(1), vintage.publishedAt());
+                RawFinancialReport v3 = vintageOf(byLabel, quarterLabels.get(2), vintage.publishedAt());
+                if (v1 == null || v2 == null || v3 == null) {
+                    continue;
+                }
+                LocalDate vintageStart = v3.periodEnd().plusDays(1);
+                if (!vintageStart.isBefore(vintage.periodEnd())) {
+                    continue;
+                }
+                if (!residualHolds(vintage, v1, v2, v3)) {
+                    // **잔차가 정의역 밖이다.** 4분기는 정의상 잔차인데, 매출·매출원가처럼
+                    // 음수일 수 없는 유량에서 음수가 나오면 그것은 「4분기가 음수다」가 아니라
+                    // **FY와 분기가 같은 것을 재고 있지 않다**는 뜻이다. 이 세대는 건너뛰고
+                    // 앞 세대로 간다 — 거기서는 잔차가 성립한다.
+                    continue;
+                }
+                derived.add(buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3));
+            }
         }
         return derived;
     }
 
     /**
-     * <b>정의상 음수가 될 수 없는 유량이 음수로 나왔으면 값을 내지 않는다.</b>
-     *
-     * <p>매출과 매출원가는 한 분기에 음수일 수 없다. 그런데 {@code FY − Q1 − Q2 − Q3}가 음수를
-     * 내는 일이 실재한다 — FY와 분기가 <b>다른 판</b>에서 오기 때문이다(실측: {@code AIG} 2022는
-     * FY 매출 29,996M인데 Q1~Q3 합이 42,605M이다 — 사업을 팔아 FY만 계속영업 기준으로 다시
-     * 냈고 분기는 원래대로 남았다).
-     *
-     * <p><b>이것은 「소스 입력을 버리는 게이트」가 아니다</b>(ADR-0126 §결정). 버리는 것은
-     * 소스가 준 값이 아니라 <b>우리 산수가 낸 불가능한 답</b>이다. 그리고 그 답은 결측처럼
-     * 보이지도 않은 채 TTM 합을 줄여 {@code OPERATING_MARGIN}·{@code PSR}·{@code NET_MARGIN}을
-     * <b>부풀린 채 그럴듯하게</b> 내보낸다 — 실측으로 미국 4분기 음수 매출이 45행이었다.
-     *
-     * <p><b>MUST NOT: 영업이익·순이익·매출총이익에 이것을 걸지 않는다.</b> 그 셋은 한 분기에
-     * 정당하게 음수다.
-     *
-     * <p><b>MUST NOT: 태그 이름이 갈렸다는 이유로 뺄셈을 접지 않는다 — 재보고 기각했다.</b>
-     * 컬럼마다 FY와 분기가 같은 태그에서 왔는지 묻는 게이트를 넣어 전 종목을 재적재해 보니
-     * <b>Q4 매출 436개가 지워졌는데 그중 음수는 7뿐</b>이고 <b>397은 Q3의 0.5~2배 안에 드는
-     * 정상 분기값</b>이었다. 이름이 달라도 같은 총액인 경우가 대부분이다.
+     * 한 세대의 4분기 한 판. <b>FY와 분기 셋이 같은 세대여야 한다</b> — 그 판정은 호출부에 있다.
      */
-    private static BigDecimal nonNegative(BigDecimal value) {
-        return value == null || value.signum() >= 0 ? value : null;
+    private static RawFinancialReport buildQ4(int fiscalYear, LocalDate start,
+                                              RawFinancialReport fy, RawFinancialReport q1,
+                                              RawFinancialReport q2, RawFinancialReport q3) {
+        boolean subtractable = sameCurrency(fy, q1, q2, q3);
+        return new RawFinancialReport(
+                fiscalYear, "Q4", start, fy.periodEnd(), fy.publishedAt(),
+                fy.reportCode(), fy.currencyCode(),
+                subtractable ? (minus(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())) : null,
+                subtractable ? minus(fy.operatingIncome(), q1.operatingIncome(), q2.operatingIncome(),
+                        q3.operatingIncome()) : null,
+                subtractable ? minus(fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome()) : null,
+                // 잔액은 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
+                fy.totalAssets(), fy.totalEquity(), fy.totalLiabilities(),
+                fy.currentAssets(), fy.currentLiabilities(), fy.retainedEarnings(),
+                // 현금흐름·capex는 연간만 담으므로 Q4에도 담지 않는다.
+                null, fy.sharesOutstanding(), null, null,
+                subtractable ? (minus(fy.costOfSales(), q1.costOfSales(), q2.costOfSales(), q3.costOfSales())) : null,
+                fy.cashAndEquivalents(), null, fy.inventories(),
+                // 위 toReport와 같은 이유로 담지 않는다.
+                null,
+                // 유도 재료 여덟은 전부 유량이라 차감한다. 하나라도 없으면 minus가
+                // null을 내므로 Q4 영업이익이 지어지지 않는다 — 그것이 옳다.
+                subtractable ? minus(fy.interestAndDividendIncome(), q1.interestAndDividendIncome(),
+                        q2.interestAndDividendIncome(), q3.interestAndDividendIncome()) : null,
+                subtractable ? minus(fy.noninterestIncome(), q1.noninterestIncome(),
+                        q2.noninterestIncome(), q3.noninterestIncome()) : null,
+                subtractable ? minus(fy.interestExpense(), q1.interestExpense(),
+                        q2.interestExpense(), q3.interestExpense()) : null,
+                subtractable ? minus(fy.noninterestExpense(), q1.noninterestExpense(),
+                        q2.noninterestExpense(), q3.noninterestExpense()) : null,
+                subtractable ? minus(fy.benefitsLossesAndExpenses(), q1.benefitsLossesAndExpenses(),
+                        q2.benefitsLossesAndExpenses(), q3.benefitsLossesAndExpenses()) : null,
+                subtractable ? minus(fy.grossProfit(), q1.grossProfit(), q2.grossProfit(), q3.grossProfit()) : null,
+                subtractable ? minus(fy.operatingExpenses(), q1.operatingExpenses(),
+                        q2.operatingExpenses(), q3.operatingExpenses()) : null,
+                subtractable ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
+                        q2.costsAndExpenses(), q3.costsAndExpenses()) : null,
+                // 세율 재료는 annualOnly라 분기 판에 값이 없다 — 차감할 것이 없다.
+                null, null,
+                // 우리가 만든 행이다. 저장이 이것을 알아야 유도 규칙을 고쳤을 때 옛 값을
+                // 지운다 — 재수집 경로는 NULL만 채우고 값을 NULL로 덮지 않기 때문이다.
+                true);
+    }
+
+    /**
+     * <b>이 세대에서 잔차가 성립하는가.</b>
+     *
+     * <p>4분기는 정의상 <b>잔차</b>({@code FY − Q1 − Q2 − Q3})다. 그 산수가 뜻을 가지려면 넷이
+     * <b>같은 것을 재고 있어야</b> 하는데, 회사가 <b>FY만 다시 내고 분기는 안 내는</b> 일이
+     * 실재한다 — 사업을 팔면 FY를 계속영업 기준으로 다시 쓰고 그해 분기는 이미 지나가서 다시
+     * 안 낸다.
+     *
+     * <p><b>매출·매출원가처럼 음수일 수 없는 유량에서 잔차가 음수면 그것은 「4분기가 음수다」가
+     * 아니라 「FY와 분기가 같은 것을 재고 있지 않다」는 뜻이다</b> — 잔차의 정의역 밖이다.
+     * 그때는 <b>앞 세대로 물러난다</b>. 실측(2026-09-14)으로 음수 25건 중 <b>22건이 이 모양</b>이고
+     * <b>22건 전부 더 이른 FY 판을 쓰면 잔차가 성립한다</b>({@code AIG} 2022: 최신끼리 빼면
+     * 29,996 − 42,605 = −12,609이고 2024-02-14 세대로 빼면 <b>11,845</b>다).
+     *
+     * <p><b>MUST NOT: 이것을 「음수를 걸러 낸다」로 읽지 않는다.</b> 값을 버리는 것이 아니라
+     * <b>산수가 성립하는 세대를 고르는 것</b>이고, 그래서 결과는 결측이 아니라 <b>옳은 값</b>이다.
+     *
+     * <p><b>한계</b> — 같은 어긋남이 <b>그럴듯한 양수</b>로 앉으면 이 판정이 못 잡는다. 재작성이
+     * 어느 분기에 귀속되는지는 소스가 말하지 않으므로 그것을 가를 재료가 지금 없다.
+     */
+    private static boolean residualHolds(RawFinancialReport fy, RawFinancialReport q1,
+                                         RawFinancialReport q2, RawFinancialReport q3) {
+        return nonNegativeResidual(fy.revenue(), q1.revenue(), q2.revenue(), q3.revenue())
+                && nonNegativeResidual(fy.costOfSales(), q1.costOfSales(),
+                        q2.costOfSales(), q3.costOfSales());
+    }
+
+    /** 넷이 다 있을 때만 본다. 하나라도 없으면 판정하지 않는다 — 모르는 것을 위반으로 읽지 않는다. */
+    private static boolean nonNegativeResidual(BigDecimal annual, BigDecimal... quarters) {
+        BigDecimal residual = minus(annual, quarters);
+        return residual == null || residual.signum() >= 0;
+    }
+
+    /** 그 라벨의 판 중 {@code at} 이하에서 가장 늦은 것. 없으면 {@code null}. */
+    private static RawFinancialReport vintageOf(Map<Label, List<RawFinancialReport>> byLabel,
+                                                Label label, LocalDate at) {
+        RawFinancialReport found = null;
+        for (RawFinancialReport candidate : byLabel.getOrDefault(label, List.of())) {
+            if (!candidate.publishedAt().isAfter(at)) {
+                found = candidate;
+            }
+        }
+        return found;
+    }
+
+    /** 분기 셋 중 하나라도 {@code (after, until]} 사이에 다시 나왔는가. */
+    private static boolean quarterRefiledBetween(Map<Label, List<RawFinancialReport>> byLabel,
+                                                 List<Label> quarters, LocalDate after,
+                                                 LocalDate until) {
+        for (Label quarter : quarters) {
+            for (RawFinancialReport candidate : byLabel.getOrDefault(quarter, List.of())) {
+                if (candidate.publishedAt().isAfter(after)
+                        && !candidate.publishedAt().isAfter(until)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

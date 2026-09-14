@@ -61,7 +61,10 @@ class SecEdgarFinancialAdapterTest {
 
         assertThat(reports).extracting(RawFinancialReport::fiscalPeriod)
                 .as("9개월 누적이 Q3와 같은 종료일이지만 라벨이 되면 안 된다")
-                .containsExactlyInAnyOrder("Q1", "Q2", "Q3", "Q4", "FY", "FY");
+                // 4분기는 **FY 판마다** 하나씩 나온다(ADR-0151). 이 픽스처의 FY는 500과 505
+                // 두 판이라 4분기도 둘이다 — 2024-05 시점 봉에서 505판은 아직 없으므로,
+                // 판을 하나로 접으면 그때 알 수 있던 170이 화면에서 사라진다(ADR-0128).
+                .containsExactlyInAnyOrder("Q1", "Q2", "Q3", "Q4", "Q4", "FY", "FY");
         assertThat(reports).allSatisfy(r ->
                 assertThat(r.fiscalYear()).as("라벨의 회계연도는 보고서가 준다").isEqualTo(2023));
 
@@ -150,7 +153,7 @@ class SecEdgarFinancialAdapterTest {
     @Test
     @DisplayName("Q4를 유도한다 — 손익만 차감하고 잔액은 기말 값을 그대로 쓴다")
     void derivesFourthQuarter() throws Exception {
-        RawFinancialReport q4 = of(fetch(), "Q4");
+        RawFinancialReport q4 = latestOf(fetch(), "Q4");
 
         assertThat(q4.revenue()).as("정정된 연간에서 뺀다: 505 - (100+110+120)")
                 .isEqualByComparingTo(new BigDecimal("175"));
@@ -394,35 +397,33 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
-    @DisplayName("유도한 4분기 매출이 음수면 안 낸다 — 그러나 태그가 갈렸다는 이유로는 안 접는다")
-    void doesNotEmitNegativeDerivedRevenue() throws Exception {
+    @DisplayName("FY만 다시 내고 분기는 안 낸 세대는 유도하지 않는다 — 앞 세대로 뺀다")
+    void matchesVintagesWhenDerivingFourthQuarter() throws Exception {
         enqueue(200, fixture("tickers.json"));
-        enqueue(200, fixture("companyfacts-q4-tag-switch.json"));
+        enqueue(200, fixture("companyfacts-q4-vintage-mismatch.json"));
 
-        // 매출은 FY 600,000에 분기 합 900,000이라 뺄셈이 -300,000을 낸다. 한 분기 매출이
-        // 음수일 수는 없다 — FY와 분기가 다른 판에서 온 것이다(실측: AIG 2022는 FY 매출
-        // 29,996M인데 Q1~Q3 합이 42,605M이다). 음수 매출은 결측처럼 보이지도 않은 채 TTM 합을
-        // 줄여 OPERATING_MARGIN·PSR을 부풀린다.
+        // 실측(AIG 2022)이 이 모양이다. 사업을 팔면 FY를 계속영업 기준으로 다시 쓰는데 그해
+        // 분기는 이미 지나가서 다시 안 낸다. 라벨마다 최신 판을 골라 빼면 FY(2026년판)에서
+        // 분기(2023년판)를 빼게 되어 400,000 - 750,000 = -350,000이 나온다.
         //
-        // 매출원가는 FY가 CostOfRevenue 2,000,000이고 분기가 CostOfGoodsSold 400,000 × 3이라
-        // **태그 이름이 갈렸는데도** 800,000이 나온다. 이름이 달라도 같은 총액인 경우가
-        // 대부분이라 그것으로 접으면 안 된다 — 전 종목 실측에서 이름 일치를 요구하자
-        // Q4 매출 436개가 지워졌고 **그중 음수는 7뿐, 397은 Q3의 0.5~2배 안**이었다.
+        // 세대를 맞추면 2024-02-20 판으로 1,000,000 - 750,000 = 250,000이다. 음수를 걸러 내는
+        // 처방은 이 250,000을 못 낸다 — 값이 사라질 뿐이다. 실측 25건 중 22건이 이 모양이고
+        // 22건 전부 더 이른 FY 판을 쓰면 음수가 아니다.
         List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
 
-        RawFinancialReport q4 = reports.stream()
-                .filter(r -> "Q4".equals(r.fiscalPeriod()) && r.fiscalYear() == 2023)
-                .findFirst().orElseThrow();
+        List<RawFinancialReport> q4 = reports.stream()
+                .filter(r -> "Q4".equals(r.fiscalPeriod()) && r.fiscalYear() == 2023).toList();
 
-        assertThat(q4.revenue())
-                .as("정의상 음수일 수 없는 유량이 음수로 나오면 안 낸다")
-                .isNull();
-        assertThat(q4.costOfSales())
-                .as("태그 이름이 갈려도 결과가 성립하면 낸다 — 이름은 판정축이 아니다")
-                .isEqualByComparingTo("800000");
-        assertThat(q4.netIncome())
-                .as("순이익은 한 분기에 정당하게 음수다 — 이 규칙을 걸지 않는다")
-                .isEqualByComparingTo("-50000");
+        assertThat(q4)
+                .as("분기가 따라오지 않은 재작성 세대는 유도하지 않는다")
+                .singleElement()
+                .satisfies(only -> {
+                    assertThat(only.publishedAt()).isEqualTo(LocalDate.of(2024, 2, 20));
+                    assertThat(only.revenue()).isEqualByComparingTo("250000");
+                    assertThat(only.derived())
+                            .as("우리가 만든 행이다 — 저장이 그것을 알아야 규칙 변경이 따라온다")
+                            .isTrue();
+                });
     }
 
     @Test
@@ -554,6 +555,13 @@ class SecEdgarFinancialAdapterTest {
         enqueue(200, fixture("tickers.json"));
         enqueue(200, fixture("companyfacts.json"));
         return adapter().fetchReports(FIX, FROM).reports();
+    }
+
+    /** 그 기간의 <b>가장 늦은 판</b>. 4분기는 FY 판마다 하나씩 나온다(ADR-0151). */
+    private static RawFinancialReport latestOf(List<RawFinancialReport> reports, String period) {
+        return reports.stream().filter(r -> period.equals(r.fiscalPeriod()))
+                .max(java.util.Comparator.comparing(RawFinancialReport::publishedAt))
+                .orElseThrow(() -> new AssertionError(period + " 보고서가 없다"));
     }
 
     private static RawFinancialReport of(List<RawFinancialReport> reports, String period) {

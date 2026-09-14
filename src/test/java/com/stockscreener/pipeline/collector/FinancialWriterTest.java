@@ -468,6 +468,66 @@ class FinancialWriterTest {
         assertThat(storedCostOfSales()).as("소스가 준 행이면 안 지운다").isEqualByComparingTo("-100");
     }
 
+    @Test
+    @DisplayName("새 규칙이 더는 만들지 않는 유도 판은 회수된다 — 옛 규칙의 행이 최신으로 남지 않는다")
+    void retractsDerivedRevisionsThatTheNewRuleNoLongerMakes() {
+        // 옛 규칙이 두 세대를 만들어 뒀다.
+        writer.write(stockId, List.of(
+                derivedQuarterAt("2024-02-20", "250000", true),
+                derivedQuarterAt("2026-02-20", "-350000", true)),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        assertThat(storedLatestRevenue()).isEqualByComparingTo("-350000");
+
+        // 새 규칙은 2026 세대를 안 만든다. writeOne은 더 이른 공시본을 건너뛰므로, 회수가
+        // 없으면 틀린 행이 is_latest인 채 영영 남는다.
+        writer.write(stockId, List.of(derivedQuarterAt("2024-02-20", "250000", true)),
+                FinancialWriter.WriteMode.FILL_MISSING);
+
+        assertThat(storedLatestRevenue())
+                .as("세트에 없는 세대는 지워지고 남은 것이 최신이 된다")
+                .isEqualByComparingTo("250000");
+        assertThat(rowCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("소스가 준 판은 회수하지 않는다 — 적재된 원자료는 되돌리지 않는다")
+    void doesNotRetractSourceReportedRevisions() {
+        writer.write(stockId, List.of(
+                derivedQuarterAt("2024-02-20", "250000", false),
+                derivedQuarterAt("2026-02-20", "-350000", false)),
+                FinancialWriter.WriteMode.FILL_MISSING);
+
+        writer.write(stockId, List.of(derivedQuarterAt("2024-02-20", "250000", false)),
+                FinancialWriter.WriteMode.FILL_MISSING);
+
+        assertThat(rowCount()).as("판 둘이 그대로 남는다").isEqualTo(2);
+        assertThat(storedLatestRevenue()).isEqualByComparingTo("-350000");
+    }
+
+    private BigDecimal storedLatestRevenue() {
+        return jdbcTemplate.queryForObject(
+                "SELECT revenue FROM financial_statement WHERE stock_id = ? AND is_latest",
+                BigDecimal.class, stockId);
+    }
+
+    /** 공시일과 매출을 지정한 4분기 행. */
+    private static RawFinancialReport derivedQuarterAt(String publishedAt, String revenue,
+                                                       boolean derived) {
+        return new RawFinancialReport(
+                2025, "Q4",
+                LocalDate.of(2025, 10, 1), LocalDate.of(2025, 12, 31),
+                LocalDate.parse(publishedAt),
+                "11011", "KRW",
+                new BigDecimal(revenue), new BigDecimal("1200"), new BigDecimal("900"),
+                new BigDecimal("20000"), new BigDecimal("12000"), new BigDecimal("8000"),
+                null, null, null,
+                null, new BigDecimal("100"),
+                null, null, null, null, null, null,
+                null,
+                null, null, null, null, null, null, null, null, null, null,
+                derived);
+    }
+
     private BigDecimal storedCostOfSales() {
         return jdbcTemplate.queryForObject(
                 "SELECT cost_of_sales FROM financial_statement WHERE stock_id = ? AND is_latest",

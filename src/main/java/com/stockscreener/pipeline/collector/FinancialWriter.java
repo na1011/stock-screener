@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -140,6 +141,9 @@ public class FinancialWriter {
      */
     public Outcome writeDetailed(long stockId, List<RawFinancialReport> reports, WriteMode mode) {
         Tally tally = new Tally();
+        if (mode != WriteMode.APPEND_ONLY) {
+            retractStaleDerived(stockId, reports, tally);
+        }
         for (RawFinancialReport report : reports) {
             writeOne(stockId, report, mode, tally);
         }
@@ -154,6 +158,78 @@ public class FinancialWriter {
         }
         return new Outcome(tally.changed(), tally.inserted, tally.filled, tally.revised,
                 tally.deferredRevisions, tally.corrected);
+    }
+
+    /** 유도 라벨 하나. */
+    private record DerivedLabel(int fiscalYear, String fiscalPeriod) {
+    }
+
+    /**
+     * <b>유도한 라벨은 판을 세트째 바꾼다.</b>
+     *
+     * <p>저장은 판을 <b>공시일로</b> 식별하고 {@link #writeOne}은 <b>더 이른 공시본을 건너뛴다.</b>
+     * 그래서 유도 규칙이 「이 세대는 못 만든다」로 바뀌면 <b>이미 저장된 그 세대의 행을 회수할
+     * 길이 없다</b> — 옛 규칙이 만든 틀린 행이 {@code is_latest}인 채 영영 남고, 새 규칙이 낸
+     * 더 이른 세대는 「더 이른 공시본」으로 버려진다.
+     *
+     * <p>실측(2026-09-14 · {@code AIG} 2022): FY가 56,437 → 54,450 → <b>29,996</b>으로 세 번
+     * 바뀌는 동안 분기는 2023-11 이후 한 번도 안 바뀌었다. 옛 규칙이 최신끼리 빼 만든
+     * <b>−12,609</b>가 {@code is_latest}이고, 새 규칙이 내는 2024-02-14 세대의 11,845는
+     * 공시일이 더 일러서 저장에 닿지 못한다.
+     *
+     * <p><b>MUST: 유도 라벨에만 건다.</b> 소스가 준 판을 세트로 다루면 그 판의 이력이 사라진다 —
+     * 적재된 원자료는 되돌리지 않는 것이 규칙이다(ADR-0071).
+     *
+     * <p><b>MUST NOT: 적재 창을 좁힌 채 돌리지 않는다.</b> 창 밖의 세대는 이번 세트에 안 들어오고,
+     * 그러면 이 회수가 <b>멀쩡한 옛 세대를 지운다</b> — ADR-0145가 창을 안 좁히는 이유에 이 축이
+     * 하나 더 붙는다.
+     */
+    private void retractStaleDerived(long stockId, List<RawFinancialReport> reports, Tally tally) {
+        Map<DerivedLabel, List<RawFinancialReport>> byLabel = new LinkedHashMap<>();
+        for (RawFinancialReport report : reports) {
+            if (report.derived()) {
+                byLabel.computeIfAbsent(
+                        new DerivedLabel(report.fiscalYear(), report.fiscalPeriod()),
+                        key -> new ArrayList<>()).add(report);
+            }
+        }
+        for (Map.Entry<DerivedLabel, List<RawFinancialReport>> entry : byLabel.entrySet()) {
+            DerivedLabel label = entry.getKey();
+            List<LocalDate> keep = entry.getValue().stream()
+                    .map(RawFinancialReport::publishedAt).distinct().toList();
+            Object[] args = new Object[keep.size() + 3];
+            args[0] = stockId;
+            args[1] = label.fiscalYear();
+            args[2] = label.fiscalPeriod();
+            for (int i = 0; i < keep.size(); i++) {
+                args[i + 3] = keep.get(i);
+            }
+            String placeholders = keep.stream().map(date -> "?").collect(Collectors.joining(", "));
+            int removed = jdbcTemplate.update(
+                    "DELETE FROM financial_statement WHERE stock_id = ? AND fiscal_year = ? "
+                            + "AND fiscal_period = ? AND published_at NOT IN (" + placeholders + ")",
+                    args);
+            if (removed == 0) {
+                continue;
+            }
+            // 최신본이 지워졌을 수 있다. 부분 유니크 인덱스가 「정확히 하나」를 요구하므로
+            // 전부 내린 뒤 하나만 올린다 — 한 문장으로 바꾸면 중간 상태가 인덱스에 걸린다.
+            jdbcTemplate.update(
+                    "UPDATE financial_statement SET is_latest = false "
+                            + "WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND is_latest",
+                    stockId, label.fiscalYear(), label.fiscalPeriod());
+            jdbcTemplate.update(
+                    "UPDATE financial_statement SET is_latest = true WHERE id = ("
+                            + "SELECT id FROM financial_statement "
+                            + "WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? "
+                            + "ORDER BY published_at DESC, revision_no DESC LIMIT 1)",
+                    stockId, label.fiscalYear(), label.fiscalPeriod());
+            log.warn("유도 판을 회수한다. stockId={} {}/{} 지운 판={} 남긴 공시일={}",
+                    stockId, label.fiscalYear(), label.fiscalPeriod(), removed, keep);
+            tally.corrected += removed;
+            invalidationPort.invalidate(stockId, entry.getValue().get(0).periodStart(),
+                    IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+        }
     }
 
     private void writeOne(long stockId, RawFinancialReport report, WriteMode mode, Tally tally) {
