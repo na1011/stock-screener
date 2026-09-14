@@ -125,7 +125,7 @@ psql -d stock_screener -At -c "WITH x AS (
   WHEN count(*) FILTER (WHERE miss > 0) = 0 THEN 'OK 결손 0종목'
   ELSE 'OCF 결손 종목이 ' || count(*) FILTER (WHERE miss > 0) || '이다: '
        || (SELECT string_agg(DISTINCT tk || '(' || mc || ')', ', ') FROM (SELECT ticker tk, market_code mc FROM x WHERE miss > 0) y)
-       || ' — 정정공시로 단정하지 마라. **시장부터 본다**: KOSPI·KOSDAQ이면 revision_no가 0일 때 티커를 준 full-statement-refill 한 번이 닫고(2026-08-25에 넷이 그랬다) 1 이상이면 batch-load skill의 128콜 스윕이다. **US면 그 잡이 안 닿는다**(DART 전용 · ADR-0056). MUST NOT: 탐침부터 돌리지 마라 — 2026-09-14에 GLNG로 그렇게 했더니 소스는 NetCashProvidedByUsedInOperatingActivities를 멀쩡히 내고 있었고(우리 첫 후보다) 답이 안 나왔다. **먼저 financial_column_absence를 본다**(ADR-0147): ABSENT 행이 있으면 소스 부재이고, **행이 없으면 태그는 있는데 기간을 못 만든 것**이라 축이 다르다 — 그쪽은 유도 세대(ADR-0151)와 침묵 (종목,컬럼) 535쌍의 자리다'
+       || ' — 정정공시로 단정하지 마라. **시장부터 본다**: KOSPI·KOSDAQ이면 revision_no가 0일 때 티커를 준 full-statement-refill 한 번이 닫고(2026-08-25에 넷이 그랬다) 1 이상이면 batch-load skill의 128콜 스윕이다. **US면 그 잡이 안 닿는다**(DART 전용 · ADR-0056). MUST NOT: 탐침부터 돌리지 마라 — 2026-09-14에 GLNG로 그렇게 했더니 소스는 NetCashProvidedByUsedInOperatingActivities를 멀쩡히 내고 있었고(우리 첫 후보다) 답이 안 나왔다. **GLNG는 2026-09-15에 닫았다 — 원장의 한계다.** 최근 20-F(2025년 이후 제출)가 245종의 태그를 내면서 **영업현금흐름 계열은 하나도 안 낸다**(2022 이후 연간 팩트 937개 중 0). 우리 코드가 못 만든 것이 아니다. **그래서 이 전제는 US에서 다시 뜨면 종목을 보고 답한다.** MUST NOT: financial_column_absence에 행이 없다고 「기간 재구성 실패」로 단정하지 마라 — **그 판정은 종목 단위라 「어느 해부터 그만 냈다」를 원리적으로 못 본다.** GLNG가 정확히 그 자리였다(2018~2021은 있고 그 뒤가 없다). 전수로 US_TOP1000에서 **연중 결손이 생긴 종목이 매출 102 · 영업현금흐름 6 · 총자산 3**이고, **최신 FY가 빈 것은 GLNG 하나**다'
   END FROM x"
 ```
 
