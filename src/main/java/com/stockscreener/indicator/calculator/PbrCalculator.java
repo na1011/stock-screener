@@ -77,7 +77,8 @@ public class PbrCalculator implements IndicatorCalculator {
             return List.of();
         }
 
-        BigDecimal equity = quarters.get(0).totalEquity();
+        // MUST: 분자가 시가총액이므로 분모는 지배주주 자본이다(ADR-0159).
+        BigDecimal equity = FinancialMath.equityAttributableToShareholders(quarters.get(0));
         if (equity == null || equity.signum() <= 0) {
             // 자본잠식이면 음수 PBR이 나와 "저평가"로 보인다. 값을 내지 않는다.
             return List.of();

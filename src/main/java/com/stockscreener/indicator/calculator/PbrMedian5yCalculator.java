@@ -64,7 +64,9 @@ public class PbrMedian5yCalculator implements IndicatorCalculator {
     public List<IndicatorPoint> calculate(IndicatorContext context) {
         return ValuationHistory.median(context, (ctx, bar, quarters, published) -> {
             // 저량이다. 그 시점 잔액 하나를 쓴다 — 더하면 네 배가 된다.
-            BigDecimal equity = quarters.get(published).totalEquity();
+            // MUST: 분자가 시가총액이므로 분모는 지배주주 자본이다(ADR-0159).
+            BigDecimal equity =
+                    FinancialMath.equityAttributableToShareholders(quarters.get(published));
             if (equity == null || equity.signum() <= 0) {
                 // 자본잠식 구간의 음수 PBR은 중앙값을 끌어내려 「싸다」로 읽힌다.
                 return null;

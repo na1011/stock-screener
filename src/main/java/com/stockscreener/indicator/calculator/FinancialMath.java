@@ -93,12 +93,32 @@ final class FinancialMath {
     }
 
     /**
+     * <b>상장주식 보유자에게 귀속되는 자본.</b> 지배주주 자본이 있으면 그것, 없으면 총자본이다.
+     *
+     * <p><b>{@code PBR}의 분모가 이것이어야 한다</b> — 분자인 <b>시가총액은 상장주식에만</b>
+     * 값을 매기므로, 총자본을 쓰면 <b>비지배지분이 분모에만 들어간다.</b> 시가총액과 연결자본
+     * 사이에는 <b>어떤 회계 항등식도 없다</b>(ADR-0159).
+     *
+     * <p>실측(2026-09-15 · 미국 최신 분기 962종목): 지배주주자본 &lt; 총자본 × 0.9 인 종목 <b>76</b> ·
+     * × 0.5 미만 <b>21</b>. {@code IBKR} {@code PBR} <b>1.83 → 6.91</b> · {@code TPG} 4.94 → 14.96 ·
+     * {@code KKR} 1.19 → 2.96. {@code MAS}는 지배주주자본이 <b>음수</b>인데 총자본이 양수라
+     * <b>{@code PBR} 518.61</b>을 내고 있었다. <b>{@code 저평가 가치주}가 {@code PBR}·
+     * {@code PBR_PCTL}을 읽는다.</b>
+     *
+     * <p><b>MUST NOT: {@code DEBT_RATIO}·{@code ALTMAN_Z''}·{@code ROIC_PRETAX}에 쓰지 않는다</b> —
+     * 그쪽은 <b>양변이 다 연결 재무상태표</b>라 항등식이 서고, 총자본이 옳다.
+     */
+    static BigDecimal equityAttributableToShareholders(FinancialFigures figures) {
+        BigDecimal controlling = figures.totalEquityControlling();
+        return controlling != null ? controlling : figures.totalEquity();
+    }
+
+    /**
      * <b>분자와 기저가 맞는 자본 하나.</b> {@link #roeBasis}의 2·3순위가 고르는 것과 같다 —
      * 짝을 함께 고를 수 없는 자리에서만 쓴다.
      */
     public static BigDecimal equityMatchingNetIncome(FinancialFigures figures) {
-        BigDecimal controlling = figures.totalEquityControlling();
-        return controlling != null ? controlling : figures.totalEquity();
+        return equityAttributableToShareholders(figures);
     }
 
     static final int SCALE = 8;
