@@ -1112,6 +1112,67 @@ final class SecEdgarFacts {
         return founded != null ? founded : v.get(SecEdgarColumn.TOTAL_EQUITY);
     }
 
+    /** {@code |a − b| ≤ 1% × |b|}. */
+    private static boolean within(BigDecimal a, BigDecimal b) {
+        return a.subtract(b).abs().compareTo(b.abs().multiply(BALANCE_TOLERANCE)) <= 0;
+    }
+
+    private static final BigDecimal BALANCE_TOLERANCE = new BigDecimal("0.01");
+
+    /**
+     * <b>자본 후보를 재무상태표 증거로 고른다.</b>
+     *
+     * <p><b>왜</b>: {@code TOTAL_EQUITY}의 1순위
+     * ({@code …IncludingPortionAttributableToNoncontrollingInterest})를 <b>오태깅하는 회사가 있고</b>
+     * {@code Selection.FIRST}가 그것을 무조건 집는다. {@code A}(Agilent) 2026 Q3은 원장이
+     * {@code StockholdersEquity} <b>7,363M</b>을 정직하게 주고 같은 공시의 {@code 자산 − 부채}가
+     * 그것을 확증하는데, 1순위가 <b>−233M</b>이라 오늘 {@code DEBT_RATIO}·{@code PBR}이 안 난다
+     * ({@code DEBT_RATIO}는 활성 프리셋 다섯이 읽고 하나는 필수 게이트다).
+     *
+     * <p><b>증거는 {@code 자산 − 부채 − 중간지분}이다.</b> 중간지분을 빼지 않으면 뒤집힌다 —
+     * {@code WEX} 2014-12-31은 원장이 {@code 3,024.0 + 16.6 + 1,077.7 = 4,118.3}으로 정확히 서는데,
+     * 중간지분(16.6)과 {@code MinorityInterest}(17.4)가 우연히 거의 같아
+     * <b>{@code 자산 − 부채}만 쓰면 정답 1,077.7을 1.52%로 탈락시키고 틀린 1,095.1을 통과시킨다.</b>
+     * 이 보정으로 발화가 <b>319 → 336칸</b>이 되고 반대 방향 손해는 <b>0칸</b>이다(실측 436종목).
+     *
+     * <p><b>MUST: 정확히 하나만 맞을 때만 고른다.</b> 둘 다 맞으면 손댈 이유가 없고, 둘 다 안 맞으면
+     * 중간지분을 우리가 못 본 자리라 <b>증거가 아니다</b>(캐시 1,240칸).
+     *
+     * <p><b>MUST: 부채는 소스가 준 값만 쓴다.</b> {@link #totalLiabilities}가 자본으로 부채를
+     * 유도하므로, 유도된 부채를 증거로 쓰면 <b>순환</b>이 된다. 부채가 없으면 증거가 없으니
+     * 현행 규칙으로 떨어진다.
+     *
+     * <p><b>MUST NOT: 후보 순서를 뒤집어 해결하지 않는다.</b> 1순위가 옳은 칸이 <b>138칸 · 28종목</b>
+     * 이고({@code MS} 40 · {@code BNY} 25 · {@code ARES} 18), {@code ARES} 2016은 2순위가
+     * <b>4.7배</b> 틀리다. 대칭으로 고르는 것이 요점이다.
+     */
+    private static BigDecimal equityByBalanceEvidence(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal assets = v.get(SecEdgarColumn.TOTAL_ASSETS);
+        BigDecimal liabilities = v.get(SecEdgarColumn.TOTAL_LIABILITIES);
+        if (assets == null || liabilities == null) {
+            return null;
+        }
+        BigDecimal target = assets.subtract(liabilities);
+        BigDecimal mezzanine = v.get(SecEdgarColumn.MEZZANINE_EQUITY);
+        if (mezzanine != null) {
+            target = target.subtract(mezzanine);
+        }
+        if (target.signum() == 0) {
+            return null;
+        }
+        BigDecimal including = v.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI);
+        BigDecimal controlling = v.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING);
+        BigDecimal minority = v.get(SecEdgarColumn.MINORITY_INTEREST);
+        BigDecimal summed = controlling == null ? null
+                : (minority == null ? controlling : controlling.add(minority));
+        boolean okIncluding = including != null && within(including, target);
+        boolean okSummed = summed != null && within(summed, target);
+        if (okIncluding == okSummed) {
+            return null;
+        }
+        return okIncluding ? including : summed;
+    }
+
     /**
      * <b>근거가 확실한 총자본만</b> — 소스가 직접 낸 값이거나 지배주주 자본 + 비지배지분이다.
      *
@@ -1120,6 +1181,13 @@ final class SecEdgarFacts {
      * 부채가 부풀고, <b>그 값은 그럴듯해서 화면에서 안 드러난다.</b>
      */
     private static BigDecimal foundedTotalEquity(Map<SecEdgarColumn, BigDecimal> v) {
+        // 증거를 먼저 본다 — 「총자본」의 정의를 이 파일 안에서 하나로 유지한다.
+        // 부채가 없을 때만 이 함수가 totalLiabilities에 쓰이므로 그 경로에서는 증거가
+        // 원리적으로 안 켜진다(no-op). 정의가 갈리는 것을 막는 것이 목적이다.
+        BigDecimal evidence = equityByBalanceEvidence(v);
+        if (evidence != null) {
+            return evidence;
+        }
         BigDecimal direct = v.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI);
         if (direct != null) {
             return direct;
