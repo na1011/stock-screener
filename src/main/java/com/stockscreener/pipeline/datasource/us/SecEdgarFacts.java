@@ -777,10 +777,15 @@ final class SecEdgarFacts {
                 if (only != null && !fact.accn().equals(only.accn())) {
                     continue;
                 }
+                // MUST: `factFor`와 **같은 술어**를 쓴다. 여기서 정확 일치만 보면 52/53주 회계력의
+                // 태그가 아예 안 골라져 `factFor`의 허용오차까지 못 간다 — 실측으로 `ONTO`
+                // FY2021의 매출만 통과하고 원가·총이익·순이익·영업현금흐름·판관비·capex는
+                // 태그 선택에서 끊겼다.
                 boolean covers = column.anchoredInstant()
                         || (column.instant()
                         ? fact.end().equals(window.end())
-                        : fact.end().equals(window.end()) && window.start().equals(fact.start()));
+                        : fact.end().equals(window.end())
+                                && startMatches(window, fact.start(), fact.end()));
                 if (!covers) {
                     continue;
                 }
@@ -950,9 +955,80 @@ final class SecEdgarFacts {
                     .max(Comparator.comparing(Fact::end))
                     .orElse(null);
         }
-        return column.instant()
-                ? slots.get(new Slot(anchor.accn(), null, window.end()))
-                : slots.get(new Slot(anchor.accn(), window.start(), window.end()));
+        if (column.instant()) {
+            return slots.get(new Slot(anchor.accn(), null, window.end()));
+        }
+        Fact exact = slots.get(new Slot(anchor.accn(), window.start(), window.end()));
+        return exact != null ? exact : nearStart(slots, anchor, window);
+    }
+
+    /**
+     * <b>시작일이 창과 맞는가 — 52/53주 회계력의 며칠 어긋남을 받는다.</b>
+     * {@link #nearStart}와 같은 술어여야 한다(태그 선택과 값 조회가 갈리면 태그는 골라지는데
+     * 값이 null인 자리가 생긴다).
+     */
+    private static boolean startMatches(Window window, LocalDate start, LocalDate end) {
+        if (start == null) {
+            return false;
+        }
+        if (window.start().equals(start)) {
+            return true;
+        }
+        long shift = Math.abs(ChronoUnit.DAYS.between(window.start(), start));
+        if (shift > START_TOLERANCE_DAYS) {
+            return false;
+        }
+        long span = ChronoUnit.DAYS.between(window.start(), window.end());
+        long candidateSpan = ChronoUnit.DAYS.between(start, end);
+        return Math.abs(candidateSpan - span) <= START_TOLERANCE_DAYS + 3;
+    }
+
+    /** 52/53주 회계력이 창 시작일을 며칠 밀 수 있는 폭. */
+    private static final int START_TOLERANCE_DAYS = 7;
+
+    /**
+     * <b>기말이 같고 시작일만 며칠 어긋난 팩트.</b> 정확 일치가 없을 때만 본다.
+     *
+     * <p><b>왜</b>: 52/53주 회계력을 쓰는 회사는 <b>같은 회계연도를 두 창으로</b> 낸다.
+     * {@code ONTO} FY2021을 원장이 <b>{@code 2020-12-27~2022-01-01}(370일)</b>로 내는데 라벨 창은
+     * {@code 2021-01-02~2022-01-01}(364일)이라, {@code (start, end)} 정확 일치가 <b>매출·원가·
+     * 총이익·순이익·영업현금흐름·판관비·capex를 통째로 놓친다</b>(전부 −6일에 있다).
+     *
+     * <p><b>MUST: 값이 정확히 하나일 때만 쓴다.</b> 같은 태그가 창 하나에 값 둘을 내면
+     * <b>어느 것도 증거가 아니다</b> — {@code ONTO}의 {@code OperatingIncomeLoss}가
+     * <b>{@code +156,407,000}과 {@code −156,407,000}을 함께 낸다</b>(2024년 10-K가 부호를 뒤집었다).
+     * 그 자리는 비워 두는 것이 옳다.
+     *
+     * <p><b>MUST: 같은 공시(accn) 안에서만 찾는다.</b> 다른 판의 팩트를 끌어오면 한 행이 두 공시의
+     * 혼합이 된다 — {@code carryForward}가 판을 가로질러 하는 일과 뜻이 다르다.
+     *
+     * <p><b>MUST: 기간 길이도 함께 본다.</b> 시작일만 보면 분기 팩트가 연간 창에 걸릴 수 있다.
+     */
+    private static Fact nearStart(Map<Slot, Fact> slots, Anchor anchor, Window window) {
+        long span = ChronoUnit.DAYS.between(window.start(), window.end());
+        Fact found = null;
+        for (Map.Entry<Slot, Fact> entry : slots.entrySet()) {
+            Slot slot = entry.getKey();
+            if (!slot.accn().equals(anchor.accn()) || slot.start() == null
+                    || !slot.end().equals(window.end())) {
+                continue;
+            }
+            long shift = Math.abs(ChronoUnit.DAYS.between(window.start(), slot.start()));
+            if (shift == 0 || shift > START_TOLERANCE_DAYS) {
+                continue;
+            }
+            long candidateSpan = ChronoUnit.DAYS.between(slot.start(), slot.end());
+            if (Math.abs(candidateSpan - span) > START_TOLERANCE_DAYS + 3) {
+                continue;
+            }
+            Fact fact = entry.getValue();
+            if (found != null && (fact.value() == null || found.value() == null
+                    || fact.value().compareTo(found.value()) != 0)) {
+                return null;
+            }
+            found = fact;
+        }
+        return found;
     }
 
     /**
@@ -1014,7 +1090,7 @@ final class SecEdgarFacts {
                 label.fiscalYear(), label.period(), window.start(), window.end(), anchor.filed(),
                 // 정정 추적의 근거. DART 쪽이 rcept_no 컬럼이 없어 못 하던 것이다.
                 "%s:%s".formatted(anchor.form(), anchor.accn()), currency,
-                revenue(v), v.get(SecEdgarColumn.OPERATING_INCOME),
+                revenue(v), operatingIncome(v),
                 controllingIncome(v), v.get(SecEdgarColumn.TOTAL_ASSETS),
                 totalEquity(v),
                 controllingEquity(v),
@@ -1069,6 +1145,34 @@ final class SecEdgarFacts {
      *
      * <p><b>MUST: 직접 낸 값이 언제나 이긴다</b>(ADR-0104).
      */
+    /**
+     * <b>영업이익 — 크기가 같은데 부호가 반대면 원장 자신의 항등식을 쓴다.</b>
+     *
+     * <p><b>왜</b>: 제출본이 {@code OperatingIncomeLoss}의 <b>부호를 뒤집어 내는</b> 일이 있다.
+     * {@code ONTO} FY2021은 같은 공시가 {@code 총이익 429,086,000 − 판관비 272,679,000 =
+     * <b>+156,407,000</b>}을 내면서 영업이익을 <b>−156,407,000</b>으로 낸다(2020 FY도 같다).
+     *
+     * <p><b>MUST: 크기가 같을 때만 뒤집는다.</b> 「항등식과 다르면 항등식을 쓴다」로 넓히면
+     * 실측 <b>523칸</b>이 걸리는데 그것은 대부분 <b>영업이익의 정의가 회사마다 다른</b> 자리다
+     * (총이익·판관비의 범위가 갈린다). <b>크기가 같고 부호만 반대</b>인 것은 정의 차이로
+     * 설명되지 않는다 — 실측 <b>2칸 · 1종목</b>뿐이고 항등식 일치는 8,152칸이다.
+     *
+     * <p><b>MUST NOT: 부호만 보고 뒤집지 않는다.</b> 영업이익은 <b>정당하게 음수</b>다.
+     */
+    private static BigDecimal operatingIncome(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal direct = v.get(SecEdgarColumn.OPERATING_INCOME);
+        BigDecimal grossProfit = v.get(SecEdgarColumn.GROSS_PROFIT);
+        BigDecimal operatingExpenses = v.get(SecEdgarColumn.OPERATING_EXPENSES);
+        if (direct == null || grossProfit == null || operatingExpenses == null) {
+            return direct;
+        }
+        BigDecimal identity = grossProfit.subtract(operatingExpenses);
+        if (identity.signum() == 0 || identity.signum() == direct.signum()) {
+            return direct;
+        }
+        return direct.abs().compareTo(identity.abs()) == 0 ? identity : direct;
+    }
+
     private static BigDecimal controllingIncome(Map<SecEdgarColumn, BigDecimal> v) {
         BigDecimal direct = v.get(SecEdgarColumn.NET_INCOME_CONTROLLING);
         BigDecimal total = v.get(SecEdgarColumn.NET_INCOME_TOTAL);
