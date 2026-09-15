@@ -87,9 +87,45 @@ final class SecEdgarFacts {
     /** 12개월로 보는 폭. 회사마다 52/53주라 며칠씩 다르다. */
     private static final int ANNUAL_MIN = 350;
     private static final int ANNUAL_MAX = 380;
-    /** 3개월로 보는 폭. */
+    /**
+     * 3개월로 보는 폭.
+     *
+     * <p><b>상한이 100이던 동안 4-5-4 소매 회계력의 16주 분기가 통째로 버려졌다.</b>
+     * {@code KR}(Kroger)은 1분기가 <b>16주</b>(우리 셈으로 111일)인데 그 길이가 상한 밖이라
+     * {@link #labelOf}가 {@code null}을 냈고, 그래서 <b>12개 회계연도 전부 Q1이 없다.</b>
+     * Q1이 없으니 {@link #deriveFourthQuarters}의 {@code inside.size() != 3}에 걸려
+     * <b>FY2022부터는 Q4도 없다</b> — 분기가 연 둘뿐이다. 그 결과 TTM이 <b>17개월 창에
+     * 5개월 구멍 둘</b>이 되어 저장된 지표가 그대로 틀렸다(2026-09-14 기준
+     * {@code KR} PER <b>103.34</b> · NET_MARGIN <b>0.276%</b> · 실제 FY 순이익률 0.69%).
+     * <b>원장은 정직하게 준다</b> — 10-Q가 {@code 2025-02-02~2025-05-24}를 <b>67태그</b>로 낸다.
+     *
+     * <p><b>MUST NOT: 상한을 늘려서 열지 않는다 — 구간을 따로 둔다.</b> 101~110일이
+     * <b>전부 재편·IPO stub</b>이라 상한을 112로 올리면 그것들이 분기가 되고, 같은 종료일의
+     * 진짜 분기 창과 <b>같은 라벨에 기간을 둘</b> 만들어 {@link #labelPeriods}가 예외를 던진다.
+     * 드라이런에서 {@code AM}({@code 2019-03-13~2019-06-30}, 109일 · Antero Midstream 재편)이
+     * 정확히 그렇게 <b>종목을 죽였다.</b>
+     *
+     * <p><b>구간의 근거는 실측 분포다</b>(팩트 캐시 1,003종목 · accn 54,785 ·
+     * 「자기 기간」 전수). 101~132일 구간을 열어 보면:
+     * <ul>
+     *   <li>104 {@code RPRX} · 105 {@code BROS} · 108 {@code IONQ SYM} · 109 {@code AM SYM} ·
+     *       110 {@code LGN TKO} — <b>전부 재편·IPO stub</b>이다.
+     *   <li><b>111일(16주) 62건 · 9종목</b> — {@code KR ACI CAVA}는 <b>1분기</b>,
+     *       {@code AZO COST DPZ YUM PEP}는 <b>4분기</b>. 둘 다 진짜 분기다.
+     *   <li>114 {@code SCI} · 121 {@code YUMC MOS SHW TLN} · 125 {@code ASTS SAIC} —
+     *       <b>4개월 stub·결산월 변경 전환기</b>. 126~132일은 <b>0건</b>이다.
+     * </ul>
+     *
+     * <p><b>MUST NOT: 17주(118일)까지 넓히지 않는다.</b> 그 사이의 114일({@code SCI}
+     * {@code 2018-06-08~09-30}, 태그 2개)이 같은 종료일의 91일 창(태그 12개)과 충돌해 위와 같이
+     * 죽는다. 그리고 넓혀서 얻을 것이 없다 — 118일 라벨은 {@code AZO} 2019 · {@code COST} 2017 ·
+     * {@code DPZ} 2015 전부 <b>이미 유도로 채워져 있다</b>(스윕에서 {@code derived=true}).
+     */
     private static final int QUARTER_MIN = 80;
     private static final int QUARTER_MAX = 100;
+    /** 4-5-4 회계력의 16주 분기. 위 주석대로 <b>101~110을 비워 두려고</b> 구간을 따로 둔다. */
+    private static final int LONG_QUARTER_MIN = 111;
+    private static final int LONG_QUARTER_MAX = 112;
 
     /**
      * 회계연도 번호를 읽을 때 종료일에서 물러서는 일수. <b>회계연도는 달력 연도가 아니다.</b>
@@ -458,6 +494,20 @@ final class SecEdgarFacts {
                     if (window.start().isAfter(seen.start())) {
                         windows.put(label, window);
                     }
+                } else if (seen != null && shorterQuarterWins(seen, window)) {
+                    // 같은 종료일에 분기 길이 창이 둘이다. 짧은 쪽이 그 분기이고 긴 쪽은
+                    // **stub·누적**이다 — 16주 분기(LONG_QUARTER_*)를 연 뒤에 실재하는 형태다.
+                    //
+                    // 실측(2026-09-16 드라이런): PRMB 2024/Q3에 정규 분기 2024-07-01~09-30(91일)과
+                    // 합병 stub 2024-06-11~09-30(**111일**)이 함께 있어 아래 예외가 터졌고
+                    // **그 종목 11판·값칸 173이 통째로 사라졌다.**
+                    //
+                    // MUST: 종료일이 같을 때만이다. 종료일이 다른 두 창이 같은 라벨을 받는 것은
+                    // 여전히 이상 신호이고 아래에서 던진다. 그리고 고르는 규칙이 결정론이라
+                    // 아래 주석이 막으려는 「앞 기간의 최신 표시가 조용히 내려가는」 일은 안 생긴다.
+                    if (window.start().isAfter(seen.start())) {
+                        windows.put(label, window);
+                    }
                 } else if (seen != null && !seen.equals(window)
                         && label.fiscalYear() >= fromFiscalYear) {
                     // 저장 키에 기간이 없다. 라벨이 겹치면 uq_fs_latest가 걸리는 것이 아니라
@@ -518,6 +568,27 @@ final class SecEdgarFacts {
         return byEnd;
     }
 
+    /** 분기로 볼 길이인가. 두 구간이고 <b>그 사이는 일부러 비어 있다</b>({@link #QUARTER_MAX}). */
+    private static boolean isQuarterSpan(long days) {
+        return (days >= QUARTER_MIN && days <= QUARTER_MAX)
+                || (days >= LONG_QUARTER_MIN && days <= LONG_QUARTER_MAX);
+    }
+
+    /**
+     * 같은 종료일에 분기 길이 창이 둘인가. 그때는 <b>짧은 쪽</b>이 그 분기다.
+     *
+     * <p>{@link #sameWindowStatedDifferently}와 가르는 자리는 <b>시작일 차의 크기</b>다 —
+     * 저쪽은 「같은 기간을 며칠 달리 적었다」(≤10일)이고 이쪽은 「기간이 실제로 다르다」다.
+     * 긴 쪽은 합병·재편 stub이거나 누적이다.
+     */
+    private static boolean shorterQuarterWins(Window seen, Window window) {
+        if (!seen.end().equals(window.end()) || seen.equals(window)) {
+            return false;
+        }
+        return isQuarterSpan(ChronoUnit.DAYS.between(seen.start(), seen.end()))
+                && isQuarterSpan(ChronoUnit.DAYS.between(window.start(), window.end()));
+    }
+
     /**
      * 기간에 붙일 라벨. <b>소스의 {@code fy}/{@code fp}를 쓰지 않는다.</b>
      *
@@ -532,7 +603,7 @@ final class SecEdgarFacts {
     private static Label labelOf(Fact fact, NavigableMap<LocalDate, Window> fiscalYears) {
         long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
         boolean annual = days >= ANNUAL_MIN && days <= ANNUAL_MAX;
-        if (!annual && (days < QUARTER_MIN || days > QUARTER_MAX)) {
+        if (!annual && !isQuarterSpan(days)) {
             return null;
         }
         if (annual) {
