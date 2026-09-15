@@ -75,6 +75,15 @@ enum SecEdgarColumn {
      * 비지배지분을 또 빼면 두 번 빠진다.
      */
     NET_INCOME_TOTAL(Kind.DURATION, Unit.MONETARY, List.of("ProfitLoss")),
+    /**
+     * <b>보통주 귀속 순이익</b>({@code 지배주주 − 우선주배당}). <b>증인으로만 쓴다</b> —
+     * 이 값이 {@code NET_INCOME_TOTAL − 비지배}와 <b>정확히 같으면</b> 우선주배당이 0이라는 뜻이고,
+     * 그때 {@code NET_INCOME_CONTROLLING}이 그 값과 다르면 <b>그 태그가 틀린 것</b>이다.
+     * {@code ESI} 2019 Q2가 그 자리다 — 원장이 1.4M − (−0.1M) = 1.5M을 두 경로로 확증하는데
+     * 직접 태그가 <b>14.7M</b>이다.
+     */
+    NET_INCOME_AVAILABLE_TO_COMMON(Kind.DURATION, Unit.MONETARY,
+            List.of("NetIncomeLossAvailableToCommonStockholdersBasic")),
 
     /**
      * <b>비지배 귀속 순이익.</b> {@link #NET_INCOME_CONTROLLING}을 <b>유도하는 재료</b>이지
@@ -607,7 +616,8 @@ enum SecEdgarColumn {
      * 그 둘의 후보가 {@link #NET_INCOME}의 부분집합이라 증거 자격을 새로 만들지 않는다.
      */
     private boolean derivationMaterial() {
-        return this == MINORITY_INTEREST
+        return this == NET_INCOME_AVAILABLE_TO_COMMON
+                || this == MINORITY_INTEREST
                 || this == MEZZANINE_EQUITY
                 || this == OPERATING_CASH_FLOW_DISCONTINUED
                 || this == EQUITY_METHOD_INCOME

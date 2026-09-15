@@ -51,7 +51,8 @@ class SecEdgarFactsSweepTest {
             "currentAssets", "currentLiabilities", "profitBeforeTax", "operatingCashFlow",
             "costsAndExpenses", "operatingExpenses", "benefitsLossesAndExpenses",
             "interestAndDividendIncome", "noninterestIncome", "interestExpense", "noninterestExpense",
-            "incomeTaxExpense", "inventories", "capex", "cashAndEquivalents", "retainedEarnings");
+            "incomeTaxExpense", "inventories", "capex", "cashAndEquivalents", "retainedEarnings",
+            "sharesOutstanding", "eps", "bps");
 
     private static final List<Function<RawFinancialReport, BigDecimal>> MONEY = List.of(
             RawFinancialReport::revenue, RawFinancialReport::costOfSales,
@@ -67,7 +68,11 @@ class SecEdgarFactsSweepTest {
             RawFinancialReport::interestExpense, RawFinancialReport::noninterestExpense,
             RawFinancialReport::incomeTaxExpense, RawFinancialReport::inventories,
             RawFinancialReport::capex, RawFinancialReport::cashAndEquivalents,
-            RawFinancialReport::retainedEarnings);
+            RawFinancialReport::retainedEarnings,
+            // MUST: 이 셋을 빼면 「저장 행이 달라졌는가」를 스윕으로 못 본다. 실제로 그 사각
+            // 때문에 새 판 10,262 중 5,196이 「측정 컬럼 동일」로 보였고, 원인(주식수)이 안 보였다.
+            RawFinancialReport::sharesOutstanding, RawFinancialReport::eps,
+            RawFinancialReport::bps);
 
     @Test
     void sweep() throws Exception {

@@ -628,6 +628,7 @@ final class SecEdgarFacts {
 
         List<RawFinancialReport> out = new ArrayList<>();
         Map<SecEdgarColumn, BigDecimal> baseline = null;
+        RawFinancialReport last = null;
         // MUST: 같은 날 제출된 판들을 **하나로 접는다.** 저장의 판 단위는 accn이 아니라
         // 공시일이다 — FinancialWriter는 publishedAt이 같으면 정정이 아니라 fillMissing으로
         // 보내 덮고, 덮을 때마다 지표를 무효화한다. 그래서 같은 날 제출된 accn 둘이 같은 창을
@@ -688,13 +689,24 @@ final class SecEdgarFacts {
             // 그리고 **앞 판의 값을 이어받는다**(carryForward). 그러지 않으면 뒤 판이 안 실은
             // 컬럼이 null로 저장되어, 정정 하나가 그 기간의 손익을 통째로 지운다.
             Map<SecEdgarColumn, BigDecimal> carried = carryForward(baseline, values);
-            if (baseline != null && !conflicts(baseline, carried)) {
+            RawFinancialReport candidate = toReport(label, window, reporter, currency, carried,
+                    byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
+                    byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty());
+            // MUST: 「저장될 행이 달라지는가」로 판정한다. 원시 컬럼 맵으로 판정하면 안 된다 —
+            // 다리 컬럼(유도 재료)이 달라져도 유도 결과가 같으면 저장은 한 칸도 안 바뀌고,
+            // 반대로 reportEvidence()로 좁히면 income_tax_expense·profit_before_tax만 더하는
+            // 판이 버려진다(그 둘은 저장 컬럼인데 reportEvidence()가 제외한다).
+            // MUST: 옛 규칙이 내던 판을 하나도 버리지 않는다 — 원시 컬럼이 충돌하면 그대로 낸다.
+            // 저장 값이 같아도 그 판의 accn이 **4분기 유도에서 다른 슬롯을 연다**:
+            // CPNG FY2024의 두 판은 저장 값이 같은데 2026-02-26 판만 Q4 매출총이익
+            // 2,491,000,000을 연다. 그것까지 접으면 그 칸을 잃는다(실측 1칸).
+            if (baseline != null && last != null
+                    && !conflicts(baseline, carried) && !storedDiffers(last, candidate)) {
                 continue;
             }
             baseline = carried;
-            out.add(toReport(label, window, reporter, currency, carried,
-                    byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
-                    byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty()));
+            last = candidate;
+            out.add(candidate);
         }
         return out;
     }
@@ -815,6 +827,64 @@ final class SecEdgarFacts {
             }
         }
         return merged;
+    }
+
+    /**
+     * <b>저장될 행이 달라지는가.</b> 판을 새로 낼지는 이것 하나로 정한다.
+     *
+     * <p><b>왜 원시 컬럼 맵으로 판정하면 안 되는가</b> — 세 번 재고 세 번 틀렸다.
+     * <ol>
+     *   <li>{@code conflicts}만 보면 <b>뒤 판이 앞에 없던 컬럼만 더할 때</b> 충돌이 아니라
+     *       {@code continue}가 {@code baseline} 갱신까지 건너뛰어 <b>그 값이 통째로 버려진다.</b>
+     *       실측: {@code TGT} 2019/Q1의 {@code OperatingIncomeLoss} <b>1,041,000,000</b>이
+     *       10-K(2019-03-13)에만 있는데 스윕은 그 라벨을 판 하나만 내고 영업이익이 비어 있었다.</li>
+     *   <li>모든 컬럼의 추가를 세면 <b>주식수</b>가 켠다 — 표지 항목이라 기간을 안 묻고 아무
+     *       보고서에서나 오므로 <b>모든 보고서가 모든 기간의 보고자</b>가 된다
+     *       ({@code hasAnyValue}의 javadoc이 이미 이름 붙인 함정이다). 실측: 새 판 10,262 중
+     *       <b>5,196(50%)</b>이 금액 26컬럼이 직전 판과 완전히 같았고,
+     *       {@code Amount.SHARES_OUTSTANDING}은 {@code overwritable()}이 거짓이라 <b>저장도 안 된다.</b></li>
+     *   <li>{@code reportEvidence()}로 좁히면 <b>{@code income_tax_expense}·
+     *       {@code profit_before_tax}만 더하는 판이 버려진다</b> — 그 둘은 저장 컬럼인데
+     *       그 술어가 제외한다. 다리 컬럼(유도 재료)도 <b>유도 결과를 바꿀 수 있어</b> 원시 맵으로는
+     *       못 가른다. 실측: 그렇게 좁혀도 새 판 8,372 중 <b>3,528</b>이 여전히 저장값 동일이었다.</li>
+     * </ol>
+     *
+     * <p><b>MUST: 주식수는 보지 않는다.</b> {@code FinancialWriter}가 그 컬럼을 덮지 않으므로
+     * (커밋 {@code 06585a2}) 그것만 달라진 판은 <b>쓰기가 0인데 무효화만 부른다.</b>
+     *
+     * <p><b>MUST NOT: 「앞 판으로 되돌려 채운다」로 고치지 않는다.</b> 그 값은 뒤 공시일에
+     * 처음 공개된 것이라, 앞 판의 행에 넣으면 <b>그 시점에 없던 값을 그 시점 조회가 본다</b>
+     * (ADR-0128).
+     */
+    private static boolean storedDiffers(RawFinancialReport a, RawFinancialReport b) {
+        return differs(a.revenue(), b.revenue())
+                || differs(a.operatingIncome(), b.operatingIncome())
+                || differs(a.netIncome(), b.netIncome())
+                || differs(a.netIncomeControlling(), b.netIncomeControlling())
+                || differs(a.totalAssets(), b.totalAssets())
+                || differs(a.totalEquity(), b.totalEquity())
+                || differs(a.totalEquityControlling(), b.totalEquityControlling())
+                || differs(a.totalLiabilities(), b.totalLiabilities())
+                || differs(a.currentAssets(), b.currentAssets())
+                || differs(a.currentLiabilities(), b.currentLiabilities())
+                || differs(a.retainedEarnings(), b.retainedEarnings())
+                || differs(a.operatingCashFlow(), b.operatingCashFlow())
+                || differs(a.eps(), b.eps())
+                || differs(a.bps(), b.bps())
+                || differs(a.costOfSales(), b.costOfSales())
+                || differs(a.cashAndEquivalents(), b.cashAndEquivalents())
+                || differs(a.capex(), b.capex())
+                || differs(a.inventories(), b.inventories())
+                || differs(a.interestAndDividendIncome(), b.interestAndDividendIncome())
+                || differs(a.noninterestIncome(), b.noninterestIncome())
+                || differs(a.interestExpense(), b.interestExpense())
+                || differs(a.noninterestExpense(), b.noninterestExpense())
+                || differs(a.benefitsLossesAndExpenses(), b.benefitsLossesAndExpenses())
+                || differs(a.grossProfit(), b.grossProfit())
+                || differs(a.operatingExpenses(), b.operatingExpenses())
+                || differs(a.costsAndExpenses(), b.costsAndExpenses())
+                || differs(a.incomeTaxExpense(), b.incomeTaxExpense())
+                || differs(a.profitBeforeTax(), b.profitBeforeTax());
     }
 
     /** 둘 다 값이 있는 컬럼 중 하나라도 다른가. 한쪽이 null인 것은 다름이 아니다. */
@@ -990,15 +1060,58 @@ final class SecEdgarFacts {
      */
     private static BigDecimal controllingIncome(Map<SecEdgarColumn, BigDecimal> v) {
         BigDecimal direct = v.get(SecEdgarColumn.NET_INCOME_CONTROLLING);
-        if (direct != null) {
-            return direct;
-        }
         BigDecimal total = v.get(SecEdgarColumn.NET_INCOME_TOTAL);
         BigDecimal nonControlling = nonControllingIncome(v);
-        if (total != null && nonControlling != null) {
-            return total.subtract(nonControlling);
+        BigDecimal identity = total != null && nonControlling != null
+                ? total.subtract(nonControlling) : null;
+        if (direct != null) {
+            return mistaggedControlling(direct, total, nonControlling, identity,
+                    v.get(SecEdgarColumn.NET_INCOME_AVAILABLE_TO_COMMON)) ? identity : direct;
+        }
+        if (identity != null) {
+            return identity;
         }
         return v.get(SecEdgarColumn.NET_INCOME);
+    }
+
+    /**
+     * <b>직접 태그가 「지배주주 귀속」일 수 없는가.</b> 추측이 아니라 <b>원장 자신의 모순</b>만 본다.
+     *
+     * <p><b>왜 필요한가</b>: {@code NET_INCOME_CONTROLLING}({@code NetIncomeLoss})을 무조건
+     * 1순위로 쓰는데 <b>그 태그에 총액을 싣는 제출본이 실재한다.</b>
+     * {@code QSR} 2019 Q1은 원장이 {@code ProfitLoss} <b>246M</b> · 비지배 <b>111M</b> ·
+     * 보통주 귀속 <b>135M</b>을 내는데 2020년 10-K의 {@code NetIncomeLoss}가 <b>246M</b>이다 —
+     * 총액을 그대로 실었다. {@code ESI} 2019 Q2는 1.4M − (−0.1M) = 1.5M인데 <b>14.7M</b>이다.
+     *
+     * <p><b>규칙 둘 다 논리적으로 빈틈이 없다.</b>
+     * <ol>
+     *   <li><b>직접 == 총액이고 비지배 ≠ 0</b> — 지배주주는 정의상 {@code 총액 − 비지배}라
+     *       총액과 같을 수 없다. 실측 <b>163칸 · 45종목</b>.</li>
+     *   <li><b>보통주 귀속 == {@code 총액 − 비지배}가 정확히 일치</b> — 우선주배당이 0이라는
+     *       뜻이고, 그때 지배주주는 그 값이어야 한다. 실측 <b>114칸 · 34종목</b>(합집합 217).</li>
+     * </ol>
+     *
+     * <p><b>MUST NOT: 「직접 태그가 항등식과 다르면 항등식을 쓴다」로 넓히지 않는다.</b>
+     * 그 조건은 <b>1,147칸(4.9%)</b>에서 참인데 대부분은 <b>우선주배당이 있는 정상</b>이다 —
+     * {@code ACGL} 2017 Q2는 직접 185.2M · 항등식 171.2M · 보통주 귀속 173.8M이고
+     * <b>직접 태그가 옳다.</b> 넓히면 그런 회사의 지배주주 순이익을 우선주배당만큼 깎는다.
+     *
+     * <p><b>MUST NOT: {@code NetIncomeLossAvailableToCommonStockholdersBasic}을 「제3의 증인」으로
+     * 크기 비교에 쓰지 않는다.</b> 그것은 <b>지배주주 − 우선주배당</b>이라 비지배가 양수일 때
+     * <b>구조적으로 항등식 쪽에 가깝다</b> — 실측으로 「더 가까운 쪽」을 세면 456 대 198로
+     * 직접 태그가 이기는데 그 수는 뜻이 없다. <b>정확히 같을 때만</b> 증거가 된다.
+     */
+    private static boolean mistaggedControlling(BigDecimal direct, BigDecimal total,
+                                                BigDecimal nonControlling, BigDecimal identity,
+                                                BigDecimal availableToCommon) {
+        if (identity == null || direct.compareTo(identity) == 0) {
+            return false;
+        }
+        if (total != null && nonControlling != null
+                && direct.compareTo(total) == 0 && nonControlling.signum() != 0) {
+            return true;
+        }
+        return availableToCommon != null && availableToCommon.compareTo(identity) == 0;
     }
 
     /**
@@ -1349,6 +1462,7 @@ final class SecEdgarFacts {
                     new Label(q3.fiscalYear(), q3.fiscalPeriod()));
             boolean emitted = false;
             RawFinancialReport lastUsed = null;
+            RawFinancialReport lastQ4 = null;
             RawFinancialReport fallback = null;
             LocalDate fallbackStart = null;
             RawFinancialReport f1 = null;
@@ -1389,7 +1503,17 @@ final class SecEdgarFacts {
                     // 없으므로 보수적으로 쓴다(10-K/A가 연간만 정정하는 경우가 그렇다).
                     continue;
                 }
-                derived.add(buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn));
+                RawFinancialReport q4Report =
+                        buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn);
+                // MUST: 값이 같은 4분기 판을 세대마다 다시 내지 않는다. FY 판이 늘면 잔차가
+                // 같아도 Q4 판이 그만큼 늘고, 저장은 그것을 **정정으로 읽어 지표를 지운다** —
+                // 쓰기는 0인데 무효화만 남는다. 실측: 접기를 고쳐 FY 판이 늘자 이 자리에서
+                // **값이 같은 Q4 판 349개**가 덤으로 났다.
+                // 남기는 것은 **가장 이른 판**이다 — 그 값은 그때 이미 알 수 있었다(ADR-0128).
+                if (lastQ4 == null || storedDiffers(lastQ4, q4Report)) {
+                    derived.add(q4Report);
+                    lastQ4 = q4Report;
+                }
                 emitted = true;
                 lastUsed = vintage;
             }
