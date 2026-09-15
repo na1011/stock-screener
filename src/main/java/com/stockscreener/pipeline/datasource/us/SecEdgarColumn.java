@@ -560,7 +560,29 @@ enum SecEdgarColumn {
      * 매출을 <b>−178.1M으로 직접 낸다</b>(자산운용사라 투자손익이 매출에 섞인다).
      */
     boolean nonNegativeFlow() {
-        return this == REVENUE || this == COST_OF_SALES;
+        return this == REVENUE || this == COST_OF_SALES
+                // 비용 유량은 한 기간에 음수일 수 없다. 2026-09-16까지 이 목록에 없어서
+                // **가드가 매출·매출원가 둘에만 걸려 있었고**, 4분기 유도를 열자 그 구멍으로
+                // 불가능한 값이 들어왔다 — 실측 `is_latest` Q4 **44칸 · 41라벨 · 30종목**
+                // (`GE` 2022 총비용 **−14,222,000,000** · `ARW` 2016 **−9,348,304,000**(매출의
+                // 1.45배) · `CNX` 2016 −505,601,000(**8.74배**)). 뿌리는 `ARW`처럼 회사가
+                // **태그의 뜻을 갈았는데**(FY2016 총비용 22,966,722,000 → 2,285,660,000)
+                // 분기는 옛 기저인 자리이고, `representedOtherYears`는 그 공시가 분기를 하나도
+                // 안 태그하면 못 잡는다.
+                //
+                // **파급이 큰 이유**: 이 다섯이 `FinancialMath.operatingIncomeOf`의 폴백
+                // 사슬이다. 실측으로 `GE` 2022 TTM 영업이익률이 **51.1%**(그 해 FY 행은 2.4%),
+                // `CNX` 2015·2016은 **부호가 뒤집혀** +20.0% / +17.1%(FY는 −77.6% / −77.0%)로
+                // 나갔다. 전에는 `null`이었다 — **참인 침묵이 그럴듯한 오답으로 바뀌는 자리다.**
+                || this == OPERATING_EXPENSES
+                || this == COSTS_AND_EXPENSES
+                || this == INTEREST_EXPENSE
+                || this == NONINTEREST_EXPENSE
+                || this == BENEFITS_LOSSES_AND_EXPENSES
+                // 소스가 한 번도 음수를 안 낸다(실측 0 / 8,750).
+                || this == INTEREST_AND_DIVIDEND_INCOME;
+        // MUST NOT: NONINTEREST_INCOME을 넣지 않는다 — 트레이딩 손실로 **정당하게 음수**다
+        // (실측으로 소스가 0.24%에서 음수를 낸다).
     }
 
     List<String> partialCandidates() {

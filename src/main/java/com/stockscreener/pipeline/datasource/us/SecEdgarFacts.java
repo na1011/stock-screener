@@ -1571,9 +1571,11 @@ final class SecEdgarFacts {
      * 이하의 최신 판</b>이다 — 뒤 세대의 소스 값을 앞 세대 잔차에 얹으면 한 행이 두 공시의
      * 혼합이 된다.
      *
-     * <p><b>못 닫는 자리</b>: 소스 4분기 판이 FY 판보다 <b>늦은</b> 라벨이 <b>44개</b>다.
-     * 그때는 {@code revisionsOf}가 낸 그 소스 판이 {@code is_latest}가 되어 잔차가 못 닿는다.
-     * <b>수를 남긴다.</b>
+     * <p><b>못 닫는 자리 — 전수로 다시 쟀다.</b> 이 변경 뒤에도 「latest Q4의 칸이 비었는데
+     * FY와 분기 셋에는 있다」가 <b>460칸 / 347라벨</b> 남는다(변경 전 7,942칸 / 3,608라벨).
+     * 그중 <b>85칸 / 44라벨</b>만이 「소스 4분기 판이 FY 판보다 늦다」로 설명되고,
+     * <b>나머지 375칸 / 303라벨은 아직 사유를 안 댔다</b>
+     * (매출원가 146 · 이자비용 106 · 총비용 59 · 매출 42).
      */
     private static RawFinancialReport mergeQ4(RawFinancialReport source,
                                               RawFinancialReport residual) {
@@ -1615,13 +1617,20 @@ final class SecEdgarFacts {
                 pick(source.profitBeforeTax(), residual.profitBeforeTax()),
                 // MUST: 소스가 그 분기를 낸 라벨은 **유도가 아니다.**
                 //
-                // `derived`는 「우리가 만든 행」이라는 표시이고, 그것이 참이면
-                // `FinancialWriter.fillMissing`의 `toClear`가 그 행의 값을 지울 수 있고
-                // `V46__blank_currency_crossing_derived_q4_income.sql`이 손익을 비운다.
-                // **소스가 낸 3개월 값을 그 경로에 넣으면 안 된다.**
+                // `derived`는 「우리가 만든 행」이라는 표시이고, 참이면
+                // `FinancialWriter.fillMissing`의 `toClear`가 **그 행의 값을 지울 수 있다.**
+                // 소스가 낸 3개월 값을 그 경로에 넣으면 안 된다.
+                //
+                // **MUST NOT: 여기에 `V46` 마이그레이션을 근거로 대지 않는다 — 거짓이다.**
+                // 처음 그렇게 적었는데 재보니 **`financial_statement`에 `derived` 컬럼이 없고**
+                // (`information_schema` 실측 0) **V46은 그 값을 읽지 않는다**(술어는
+                // `fiscal_period = 'Q4'`와 통화가 갈린 FY뿐이다). 통화 방어는 `buildQ4`의
+                // `sameCurrency` 게이트가 한다. **근거는 `toClear` 하나다.**
                 //
                 // 잔차로 채운 칸은 그래서 지금 회수 대상이 아니다 — 컬럼 단위 출처가 생기기
-                // 전까지의 한계이고, 그것은 `net_income` 계열 전체에 이미 걸린 같은 한계다(A12).
+                // 전까지의 한계이고, `net_income` 계열 전체에 이미 걸린 같은 한계다(A12).
+                // 실측으로 회수 자격 라벨은 이 변경 전후 **5,499로 동일**하고 삭제 집합도
+                // **379행 / 371라벨로 완전히 같다** — 회귀는 없다.
                 false);
     }
 
@@ -1659,22 +1668,22 @@ final class SecEdgarFacts {
                 null,
                 // 유도 재료 여덟은 전부 유량이라 차감한다. 하나라도 없으면 minus가
                 // null을 내므로 Q4 영업이익이 지어지지 않는다 — 그것이 옳다.
-                subtractable ? minus(fy.interestAndDividendIncome(), q1.interestAndDividendIncome(),
-                        q2.interestAndDividendIncome(), q3.interestAndDividendIncome()) : null,
-                subtractable ? minus(fy.noninterestIncome(), q1.noninterestIncome(),
-                        q2.noninterestIncome(), q3.noninterestIncome()) : null,
-                subtractable ? minus(fy.interestExpense(), q1.interestExpense(),
-                        q2.interestExpense(), q3.interestExpense()) : null,
-                subtractable ? minus(fy.noninterestExpense(), q1.noninterestExpense(),
-                        q2.noninterestExpense(), q3.noninterestExpense()) : null,
-                subtractable ? minus(fy.benefitsLossesAndExpenses(), q1.benefitsLossesAndExpenses(),
-                        q2.benefitsLossesAndExpenses(), q3.benefitsLossesAndExpenses()) : null,
+                guardedMinus(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME, subtractable, fy.interestAndDividendIncome(),
+                        q1.interestAndDividendIncome(), q2.interestAndDividendIncome(), q3.interestAndDividendIncome()),
+                guardedMinus(SecEdgarColumn.NONINTEREST_INCOME, subtractable, fy.noninterestIncome(),
+                        q1.noninterestIncome(), q2.noninterestIncome(), q3.noninterestIncome()),
+                guardedMinus(SecEdgarColumn.INTEREST_EXPENSE, subtractable, fy.interestExpense(),
+                        q1.interestExpense(), q2.interestExpense(), q3.interestExpense()),
+                guardedMinus(SecEdgarColumn.NONINTEREST_EXPENSE, subtractable, fy.noninterestExpense(),
+                        q1.noninterestExpense(), q2.noninterestExpense(), q3.noninterestExpense()),
+                guardedMinus(SecEdgarColumn.BENEFITS_LOSSES_AND_EXPENSES, subtractable, fy.benefitsLossesAndExpenses(),
+                        q1.benefitsLossesAndExpenses(), q2.benefitsLossesAndExpenses(), q3.benefitsLossesAndExpenses()),
                 sourceOrMinus(byColumn, SecEdgarColumn.GROSS_PROFIT, slot, subtractable, fy.grossProfit(),
                             q1.grossProfit(), q2.grossProfit(), q3.grossProfit()),
-                subtractable ? minus(fy.operatingExpenses(), q1.operatingExpenses(),
-                        q2.operatingExpenses(), q3.operatingExpenses()) : null,
-                subtractable ? minus(fy.costsAndExpenses(), q1.costsAndExpenses(),
-                        q2.costsAndExpenses(), q3.costsAndExpenses()) : null,
+                guardedMinus(SecEdgarColumn.OPERATING_EXPENSES, subtractable, fy.operatingExpenses(),
+                        q1.operatingExpenses(), q2.operatingExpenses(), q3.operatingExpenses()),
+                guardedMinus(SecEdgarColumn.COSTS_AND_EXPENSES, subtractable, fy.costsAndExpenses(),
+                        q1.costsAndExpenses(), q2.costsAndExpenses(), q3.costsAndExpenses()),
                 // 세율 재료는 annualOnly라 분기 판에 값이 없다 — 차감할 것이 없다.
                 null, null,
                 // 우리가 만든 행이다. 저장이 이것을 알아야 유도 규칙을 고쳤을 때 옛 값을
@@ -1804,6 +1813,28 @@ final class SecEdgarFacts {
             }
         }
         return null;
+    }
+
+    /**
+     * <b>잔차 하나 — 불가능한 답은 안 낸다.</b> {@link #sourceOrMinus}의 가드와 같은 술어를 쓴다.
+     *
+     * <p><b>왜 따로 있는가</b>: {@code buildQ4}의 일곱 유량은 소스 슬롯을 안 보고 {@code minus}를
+     * 직접 불렀다. 그래서 <b>가드를 한 번도 안 거쳤고</b>, 4분기 유도를 연 순간 그 구멍으로
+     * 불가능한 값이 들어왔다({@link SecEdgarColumn#nonNegativeFlow}의 §에 수가 있다).
+     *
+     * <p><b>소스 값은 이 함수를 안 거친다</b> — {@code mergeQ4}가 그 위에 얹으므로,
+     * 회사가 직접 낸 음수 비용은 그대로 남는다.
+     */
+    private static BigDecimal guardedMinus(SecEdgarColumn column, boolean subtractable,
+                                           BigDecimal annual, BigDecimal... quarters) {
+        if (!subtractable) {
+            return null;
+        }
+        BigDecimal residual = minus(annual, quarters);
+        if (residual != null && residual.signum() < 0 && column.nonNegativeFlow()) {
+            return null;
+        }
+        return residual;
     }
 
     private static BigDecimal sourceOrMinus(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
