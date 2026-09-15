@@ -105,7 +105,12 @@ class SecEdgarFactsSweepTest {
                 try {
                     result = SecEdgarFacts.build(
                             mapper.readTree(Files.readString(file)).path("facts"), from);
-                } catch (RuntimeException | java.io.IOException e) {
+                } catch (RuntimeException | java.io.IOException
+                        | com.stockscreener.pipeline.datasource.DataSourceException e) {
+                    // MUST: DataSourceException도 잡는다. checked라 목록에 없던 탓에 한 종목의
+                    // 「같은 라벨에 기간이 둘이다」가 **스윕 전체를 죽여** 나머지 종목의 영향
+                    // 범위를 못 봤다(2026-09-16 실측: AM에서 끊겨 1,003 중 약 50종목만 찍혔다).
+                    // 적재는 종목 단위로 실패를 격리하므로 드라이런도 같아야 한다.
                     // MUST NOT: 조용히 넘기지 않는다. 한 종목이 못 읽히면 그 종목의 결함이
                     // 「없음」으로 보이고, 그 침묵이 곧 41% 표본을 전수라 믿게 만든 것이다.
                     failed++;
