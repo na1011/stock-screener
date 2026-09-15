@@ -29,9 +29,19 @@ import java.time.LocalDate;
  *       보통주 귀속 이익으로 정의하고, 분모인 발행주식수도 보통주만이다.
  *       {@code DIVIDEND_PAYOUT}·{@code EXEC_PAY_TO_NET_INCOME}처럼 <b>순이익이 분모</b>인
  *       것도 이쪽이다 — 배당과 임원보수를 받는 몫이 지배주주의 것이다.
- *   <li><b>비율 지표는 {@code netIncome}</b> — {@code ROE}·{@code ROA}·{@code NET_MARGIN}·
- *       {@code ACCRUAL_RATIO}의 분모(자본총계·자산총계·매출·영업현금흐름)가 전부 연결
- *       전체라, <b>여기서 분자만 바꾸면 짝이 깨진다.</b>
+ *   <li><b>분모가 연결 총량인 지표는 {@code netIncome}</b> — {@code ROA}(총자산)·
+ *       {@code NET_MARGIN}(연결 총매출)·{@code ACCRUAL_RATIO}(총자산·영업현금흐름)·
+ *       세율 가족({@code EFFECTIVE_TAX_RATE}·{@code ROIC_AFTERTAX*}). <b>여기서 분자만 바꾸면
+ *       짝이 깨진다.</b>
+ *   <li><b>{@code ROE}는 이 묶음이 아니다(2026-09-15 정정 · ADR-0159).</b> 위 셋의 분모는
+ *       <b>연결 변형밖에 없지만</b>({@code total_assets}·매출·OCF) <b>{@code ROE}의 분모는
+ *       자본이고 자본에는 지배주주 변형이 있다</b>({@code total_equity_controlling}).
+ *       그래서 {@code ROE}는 <b>분자·분모를 함께 지배주주로</b> 옮긴다 —
+ *       {@link com.stockscreener.indicator.calculator.FinancialMath}의 짝 선택을 거친다.
+ *       <b>{@code PBR}도 같다</b> — 분자가 시가총액이라 분모가 지배주주 자본이어야 한다.
+ *       <p><b>이 줄이 틀렸던 형태를 이름 짓는다 — 「분모가 같다」로 묶고 묶음에 근거 하나를
+ *       달았다.</b> 근거는 <b>구성원마다</b> 검사한다. ADR-0153이 {@code PBR}을 같은 방식으로
+ *       묶어 틀렸고, 여기가 {@code ROE}로 같은 실수를 했다.
  * </ul>
  * 실제 크기는 작지 않다 — 배당표 전수 대조 512쌍에서 <b>96쌍이 5% 초과, 65쌍이 20% 초과</b>이고
  * 지주회사에서 최대 5.48배다. <b>MUST: 직접 고르지 말고 {@code FinancialMath}의 창 단위
