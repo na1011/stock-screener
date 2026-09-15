@@ -179,7 +179,18 @@ final class SecEdgarFacts {
             reports.addAll(revisionsOf(label, e.getValue(), labelAnchors.get(label),
                     byColumn, anchors, tags));
         }
-        reports.addAll(deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn));
+        List<RawFinancialReport> fourthQuarters =
+                deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn);
+        // MUST: 같은 (회계연도, 기간, 공시일)이면 **병합본이 소스 판을 대체한다.**
+        // mergeQ4가 소스 값을 그대로 얹으므로 병합본은 소스 판의 상위집합이고, 둘을 함께 두면
+        // 저장이 같은 키에 두 번 써서 **무효화만 남는다.**
+        Set<String> replaced = new HashSet<>();
+        for (RawFinancialReport q4 : fourthQuarters) {
+            replaced.add(q4.fiscalYear() + "/" + q4.fiscalPeriod() + "@" + q4.publishedAt());
+        }
+        reports.removeIf(r -> replaced.contains(
+                r.fiscalYear() + "/" + r.fiscalPeriod() + "@" + r.publishedAt()));
+        reports.addAll(fourthQuarters);
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
                 .thenComparing(RawFinancialReport::publishedAt));
@@ -1412,9 +1423,16 @@ final class SecEdgarFacts {
             }
             RawFinancialReport fy = e.getValue();
             Label q4 = new Label(label.fiscalYear(), "Q4");
-            if (latest.containsKey(q4)) {
-                continue;   // 사업보고서가 3개월을 함께 실었다. 유도하지 않는다.
-            }
+            // MUST NOT: 소스가 4분기를 냈다고 유도를 통째로 건너뛰지 않는다.
+            //
+            // 사업보고서가 3개월을 함께 싣는 일은 실재하지만 **전 컬럼을 싣지는 않는다.**
+            // 잔액만으로 4분기 라벨이 생기거나 유량 일부만 실린 자리가 많고, 건너뛰면
+            // **나머지 컬럼이 영영 빈다.** 실측(캐시 1,003종목 · 2026-09-16):
+            // 소스 4분기가 유도를 막는 라벨 **3,430 · 633종목**이고 FY·Q1~Q3에는 다 있는데
+            // 그 라벨에서만 빈 유량 칸이 **7,503**이다(이자비용 2,202 · 매출원가 1,902 ·
+            // 영업이익 1,283 · 총비용 961 · 판관비 768 …).
+            //
+            // 대신 **소스가 낸 값이 언제나 이긴다**({@link #mergeQ4}). 잔차는 빈칸만 채운다.
 
             // MUST: 라벨이 아니라 **기간 포함관계**로 분기를 고른다.
             //
@@ -1424,6 +1442,13 @@ final class SecEdgarFacts {
             // 통째로 죽는다 — 실제로 그렇게 났다.
             List<RawFinancialReport> inside = new ArrayList<>();
             for (RawFinancialReport candidate : latest.values()) {
+                // MUST: **우리가 만들 라벨 자신은 빼고 센다.** 소스가 4분기를 냈으면 이 목록이
+                // 넷이 되어 아래 `size() != 3`에 걸리고, 그것이 유도를 막는 진짜 문턱이다.
+                // 위 §의 3,430 라벨이 여기서 끊겼다.
+                if (candidate.fiscalYear() == label.fiscalYear()
+                        && q4.period().equals(candidate.fiscalPeriod())) {
+                    continue;
+                }
                 if (!"FY".equals(candidate.fiscalPeriod())
                         && !candidate.periodStart().isBefore(fy.periodStart())
                         && !candidate.periodEnd().isAfter(fy.periodEnd())) {
@@ -1503,8 +1528,9 @@ final class SecEdgarFacts {
                     // 없으므로 보수적으로 쓴다(10-K/A가 연간만 정정하는 경우가 그렇다).
                     continue;
                 }
-                RawFinancialReport q4Report =
-                        buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn);
+                RawFinancialReport q4Report = mergeQ4(
+                        vintageOf(byLabel, q4, vintage.publishedAt()),
+                        buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn));
                 // MUST: 값이 같은 4분기 판을 세대마다 다시 내지 않는다. FY 판이 늘면 잔차가
                 // 같아도 Q4 판이 그만큼 늘고, 저장은 그것을 **정정으로 읽어 지표를 지운다** —
                 // 쓰기는 0인데 무효화만 남는다. 실측: 접기를 고쳐 FY 판이 늘자 이 자리에서
@@ -1523,10 +1549,84 @@ final class SecEdgarFacts {
                 // 안 내면 이 라벨이 이번 세트에 없어 **회수가 안 돌고**(ADR-0152), 옛 규칙이
                 // 만든 값이 is_latest인 채 영영 남는다. 실측으로 KKR 2018 −178 · MSGS 2020 −7 ·
                 // CYTK 2017이 그 자리였다.
-                derived.add(buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3, byColumn));
+                derived.add(mergeQ4(
+                        vintageOf(byLabel, q4, fallback.publishedAt()),
+                        buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3, byColumn)));
             }
         }
         return derived;
+    }
+
+    /**
+     * <b>소스가 낸 4분기 값을 잔차 위에 얹는다 — 소스가 이긴다.</b>
+     *
+     * <p><b>왜</b>: 사업보고서가 3개월을 함께 싣는 일은 실재하지만 <b>전 컬럼을 싣지는 않는다.</b>
+     * 그래서 「소스가 4분기를 냈으면 유도하지 않는다」로 두면 <b>나머지 컬럼이 영영 빈다</b> —
+     * 실측 <b>3,430 라벨 · 633종목 · 빈칸 7,503</b>.
+     *
+     * <p><b>MUST: 소스 값을 잔차로 덮지 않는다.</b> 회사가 직접 낸 3개월 값이 우리 뺄셈보다 앞선다.
+     * 잔차는 <b>소스가 안 낸 칸만</b> 채운다.
+     *
+     * <p><b>MUST: 세대를 맞춘다.</b> 얹는 소스 4분기는 {@code vintageOf}로 고른 <b>그 FY 세대
+     * 이하의 최신 판</b>이다 — 뒤 세대의 소스 값을 앞 세대 잔차에 얹으면 한 행이 두 공시의
+     * 혼합이 된다.
+     *
+     * <p><b>못 닫는 자리</b>: 소스 4분기 판이 FY 판보다 <b>늦은</b> 라벨이 <b>44개</b>다.
+     * 그때는 {@code revisionsOf}가 낸 그 소스 판이 {@code is_latest}가 되어 잔차가 못 닿는다.
+     * <b>수를 남긴다.</b>
+     */
+    private static RawFinancialReport mergeQ4(RawFinancialReport source,
+                                              RawFinancialReport residual) {
+        if (source == null) {
+            return residual;
+        }
+        return new RawFinancialReport(
+                residual.fiscalYear(), residual.fiscalPeriod(),
+                residual.periodStart(), residual.periodEnd(), residual.publishedAt(),
+                residual.reportCode(), residual.currencyCode(),
+                pick(source.revenue(), residual.revenue()),
+                pick(source.operatingIncome(), residual.operatingIncome()),
+                pick(source.netIncome(), residual.netIncome()),
+                pick(source.totalAssets(), residual.totalAssets()),
+                pick(source.totalEquity(), residual.totalEquity()),
+                pick(source.totalEquityControlling(), residual.totalEquityControlling()),
+                pick(source.totalLiabilities(), residual.totalLiabilities()),
+                pick(source.currentAssets(), residual.currentAssets()),
+                pick(source.currentLiabilities(), residual.currentLiabilities()),
+                pick(source.retainedEarnings(), residual.retainedEarnings()),
+                pick(source.operatingCashFlow(), residual.operatingCashFlow()),
+                pick(source.sharesOutstanding(), residual.sharesOutstanding()),
+                pick(source.eps(), residual.eps()),
+                pick(source.bps(), residual.bps()),
+                pick(source.costOfSales(), residual.costOfSales()),
+                pick(source.cashAndEquivalents(), residual.cashAndEquivalents()),
+                pick(source.capex(), residual.capex()),
+                pick(source.inventories(), residual.inventories()),
+                pick(source.netIncomeControlling(), residual.netIncomeControlling()),
+                pick(source.interestAndDividendIncome(), residual.interestAndDividendIncome()),
+                pick(source.noninterestIncome(), residual.noninterestIncome()),
+                pick(source.interestExpense(), residual.interestExpense()),
+                pick(source.noninterestExpense(), residual.noninterestExpense()),
+                pick(source.benefitsLossesAndExpenses(), residual.benefitsLossesAndExpenses()),
+                pick(source.grossProfit(), residual.grossProfit()),
+                pick(source.operatingExpenses(), residual.operatingExpenses()),
+                pick(source.costsAndExpenses(), residual.costsAndExpenses()),
+                pick(source.incomeTaxExpense(), residual.incomeTaxExpense()),
+                pick(source.profitBeforeTax(), residual.profitBeforeTax()),
+                // MUST: 소스가 그 분기를 낸 라벨은 **유도가 아니다.**
+                //
+                // `derived`는 「우리가 만든 행」이라는 표시이고, 그것이 참이면
+                // `FinancialWriter.fillMissing`의 `toClear`가 그 행의 값을 지울 수 있고
+                // `V46__blank_currency_crossing_derived_q4_income.sql`이 손익을 비운다.
+                // **소스가 낸 3개월 값을 그 경로에 넣으면 안 된다.**
+                //
+                // 잔차로 채운 칸은 그래서 지금 회수 대상이 아니다 — 컬럼 단위 출처가 생기기
+                // 전까지의 한계이고, 그것은 `net_income` 계열 전체에 이미 걸린 같은 한계다(A12).
+                false);
+    }
+
+    private static BigDecimal pick(BigDecimal source, BigDecimal residual) {
+        return source != null ? source : residual;
     }
 
     /**
