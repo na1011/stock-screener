@@ -183,7 +183,7 @@ final class SecEdgarFacts {
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
                 .thenComparing(RawFinancialReport::publishedAt));
-        return new Result(reports, dropped, absencesOf(facts, byColumn));
+        return new Result(reports, dropped, withoutDerived(absencesOf(facts, byColumn), reports));
     }
 
     // ---------- 1. 팩트를 컬럼별로 모은다 ----------
@@ -231,6 +231,50 @@ final class SecEdgarFacts {
      * 「보고서가 그 기간을 보고했다」의 증거 자격이지 <b>값의 유무가 아니다</b> — 주식수·세율
      * 재료도 없으면 없는 것이고, 그 사실은 같은 자리에 담긴다.
      */
+    /**
+     * <b>값이 난 컬럼의 부재 행을 뺀다.</b>
+     *
+     * <p>{@link #absencesOf}는 <b>태그의 유무</b>를 말하는데, 유도가 들어온 뒤로 그것이
+     * <b>저장된 값의 유무와 갈린다.</b> 그대로 두면 화면이 <i>"소스가 이 항목을 안 냅니다"</i>라고
+     * 말하면서 <b>그 수를 함께 보여 준다</b> — ADR-0147이 막으려던 「그럴듯한데 틀린 사유」다.
+     *
+     * <p><b>실측(2026-09-15)</b>: 이 필터가 없을 때 값과 모순되는 {@code ABSENT} 행이
+     * <b>226종목</b>이었다 — {@code total_liabilities} 199({@code ABBV}·{@code AMZN}·{@code KO}·
+     * {@code WMT}…) · {@code revenue} 19(은행) · {@code profit_before_tax} 8.
+     *
+     * <p><b>목록이 낡으면 ADR-0147의 전제가 다시 잡는다</b> — 그 펜스가 이 결함을 찾아낸
+     * 바로 그것이다. 그래서 여기 손으로 적는 대가가 작다.
+     */
+    private static List<FinancialColumnAbsence> withoutDerived(
+            List<FinancialColumnAbsence> absences, List<RawFinancialReport> reports) {
+        Set<String> filled = new HashSet<>();
+        for (RawFinancialReport report : reports) {
+            addIfPresent(filled, SecEdgarColumn.REVENUE, report.revenue());
+            addIfPresent(filled, SecEdgarColumn.NET_INCOME, report.netIncome());
+            addIfPresent(filled, SecEdgarColumn.TOTAL_EQUITY, report.totalEquity());
+            addIfPresent(filled, SecEdgarColumn.TOTAL_EQUITY_CONTROLLING, report.totalEquityControlling());
+            addIfPresent(filled, SecEdgarColumn.TOTAL_LIABILITIES, report.totalLiabilities());
+            addIfPresent(filled, SecEdgarColumn.OPERATING_CASH_FLOW, report.operatingCashFlow());
+            addIfPresent(filled, SecEdgarColumn.PROFIT_BEFORE_TAX, report.profitBeforeTax());
+        }
+        if (filled.isEmpty()) {
+            return absences;
+        }
+        List<FinancialColumnAbsence> kept = new ArrayList<>();
+        for (FinancialColumnAbsence absence : absences) {
+            if (!filled.contains(absence.columnName())) {
+                kept.add(absence);
+            }
+        }
+        return kept;
+    }
+
+    private static void addIfPresent(Set<String> filled, SecEdgarColumn column, BigDecimal value) {
+        if (value != null) {
+            filled.add(column.columnName());
+        }
+    }
+
     private static List<FinancialColumnAbsence> absencesOf(
             JsonNode facts, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
         List<FinancialColumnAbsence> absences = new ArrayList<>();
