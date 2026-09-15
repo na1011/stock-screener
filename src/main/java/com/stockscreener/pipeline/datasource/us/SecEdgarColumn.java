@@ -383,7 +383,33 @@ enum SecEdgarColumn {
      * {@code WEC} · 검증 칸의 <b>14.7%</b>). <b>이름이 계약이 아니다.</b>
      */
     EQUITY_METHOD_INCOME(Kind.DURATION, Unit.MONETARY, true, List.of(
-            "IncomeLossFromEquityMethodInvestments"));
+            "IncomeLossFromEquityMethodInvestments")),
+
+    /**
+     * <b>계속영업손익(비지배 포함).</b> 세전이익 유도의 피가산수 — 세전이익 = 계속영업손익 + 법인세.
+     *
+     * <p>실측(2026-09-15 · 표본 407): 셋이 다 오는 151칸에서 항등식이 <b>147(97.4%)</b> 성립한다.
+     */
+    INCOME_FROM_CONTINUING_OPERATIONS(Kind.DURATION, Unit.MONETARY, true, List.of(
+            "IncomeLossFromContinuingOperationsIncludingPortionAttributableToNoncontrollingInterest")),
+
+    /**
+     * <b>중단영업손익.</b> 값을 쓰려는 것이 아니라 <b>그 회사에 중단영업이 있는지</b>를 묻는
+     * 재료다 — {@code SecEdgarFacts.profitBeforeTax}의 둘째 갈래가 그것으로 갈린다.
+     *
+     * <p><b>왜 가드가 필요한가</b>: 세전이익 = 총액순이익 + 법인세는 <b>중단영업이 없을 때만</b>
+     * 선다. 실측(표본 407 · 답을 아는 2,320칸)으로 <b>중단영업이 없는 회사에서 95.9%가 정확하고
+     * 97.6%가 1% 이내(최대 137%)</b>인데, 있는 회사에서는 <b>55.9%로 떨어지고 최대 7,974%</b>다.
+     *
+     * <p><b>MUST: 네 태그를 다 본다.</b> 처음에 {@code IncomeLossFromDiscontinuedOperationsNetOfTax}
+     * 하나만 보고 <b>87%로 재서 유도를 기각할 뻔했다.</b> 계열을 다 넣자 95.9%가 됐다 —
+     * <b>이름이 계약이 아니듯, 태그 하나가 개념 전체도 아니다.</b>
+     */
+    DISCONTINUED_OPERATIONS(Kind.DURATION, Unit.MONETARY, true, List.of(
+            "IncomeLossFromDiscontinuedOperationsNetOfTax",
+            "IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToReportingEntity",
+            "DiscontinuedOperationIncomeLossFromDiscontinuedOperationNetOfTax",
+            "IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToNoncontrollingInterest"));
 
     private enum Kind { DURATION, INSTANT, ANCHORED_INSTANT }
 
@@ -560,6 +586,8 @@ enum SecEdgarColumn {
                 // 보고서가 reporter가 되어 ADR-0143이 닫은 자리가 다시 열린다.
                 || this == PROFIT_BEFORE_TAX_INCLUDING_EQUITY
                 || this == PROFIT_BEFORE_TAX_EXCLUDING_EQUITY
+                || this == INCOME_FROM_CONTINUING_OPERATIONS
+                || this == DISCONTINUED_OPERATIONS
                 || this == NET_INCOME_NONCONTROLLING
                 || this == NET_INCOME_NONCONTROLLING_REDEEMABLE
                 || this == NET_INCOME_NONCONTROLLING_NONREDEEMABLE;

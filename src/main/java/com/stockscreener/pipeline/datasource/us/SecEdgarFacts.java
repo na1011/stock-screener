@@ -649,7 +649,8 @@ final class SecEdgarFacts {
             }
             baseline = carried;
             out.add(toReport(label, window, reporter, currency, carried,
-                    byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty()));
+                    byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
+                    byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty()));
         }
         return out;
     }
@@ -882,7 +883,8 @@ final class SecEdgarFacts {
     private static RawFinancialReport toReport(Label label, Window window, Anchor anchor,
                                                String currency,
                                                Map<SecEdgarColumn, BigDecimal> v,
-                                               boolean noNoncontrolling) {
+                                               boolean noNoncontrolling,
+                                               boolean noDiscontinued) {
         return new RawFinancialReport(
                 label.fiscalYear(), label.period(), window.start(), window.end(), anchor.filed(),
                 // 정정 추적의 근거. DART 쪽이 rcept_no 컬럼이 없어 못 하던 것이다.
@@ -916,7 +918,7 @@ final class SecEdgarFacts {
                 v.get(SecEdgarColumn.OPERATING_EXPENSES),
                 v.get(SecEdgarColumn.COSTS_AND_EXPENSES),
                 v.get(SecEdgarColumn.INCOME_TAX_EXPENSE),
-                profitBeforeTax(v),
+                profitBeforeTax(v, noDiscontinued),
                 // 소스가 준 행이다. 유도 행만 derived=true이고, 저장이 그것으로 판을 회수한다.
                 false);
     }
@@ -1006,7 +1008,8 @@ final class SecEdgarFacts {
      * <p>실측은 {@code EQUITY_METHOD_INCOME}의 javadoc에 있다(항등식 82.7% ·
      * 절대오차 총합 −78.0% · 악화 13 중 11이 「제외 태그가 실제로 제외하지 않는」 자리).
      */
-    private static BigDecimal profitBeforeTax(Map<SecEdgarColumn, BigDecimal> v) {
+    private static BigDecimal profitBeforeTax(Map<SecEdgarColumn, BigDecimal> v,
+                                              boolean noDiscontinued) {
         BigDecimal including = v.get(SecEdgarColumn.PROFIT_BEFORE_TAX_INCLUDING_EQUITY);
         if (including != null) {
             return including;
@@ -1015,6 +1018,19 @@ final class SecEdgarFacts {
         BigDecimal equityMethod = v.get(SecEdgarColumn.EQUITY_METHOD_INCOME);
         if (excluding != null && equityMethod != null) {
             return excluding.add(equityMethod);
+        }
+        BigDecimal tax = v.get(SecEdgarColumn.INCOME_TAX_EXPENSE);
+        // 세전이익 = 계속영업손익 + 법인세. 항등식 147/151(97.4%)이고 중단영업과 무관하다 —
+        // 피가산수가 이미 「계속영업」이기 때문이다.
+        BigDecimal continuing = v.get(SecEdgarColumn.INCOME_FROM_CONTINUING_OPERATIONS);
+        if (continuing != null && tax != null) {
+            return continuing.add(tax);
+        }
+        // 세전이익 = 총액순이익 + 법인세. **중단영업이 없는 회사에서만** 선다
+        // (실측 95.9% 정확 · 97.6%가 1% 이내 · 최대 137%. 있는 회사는 55.9% · 최대 7,974%).
+        BigDecimal total = v.get(SecEdgarColumn.NET_INCOME_TOTAL);
+        if (noDiscontinued && total != null && tax != null) {
+            return total.add(tax);
         }
         return v.get(SecEdgarColumn.PROFIT_BEFORE_TAX);
     }
