@@ -80,9 +80,10 @@ applies_to:
 
 ```bash
 psql -d stock_screener -At -c "
-SELECT count(*) FROM financial_statement f
-  JOIN stock s ON s.id = f.stock_id
- WHERE f.is_latest AND s.market_code = 'US'
+WITH u AS (SELECT DISTINCT stock_id FROM universe_membership
+           WHERE universe_code = 'US_TOP1000' AND effective_to IS NULL)
+SELECT count(*) FROM financial_statement f JOIN u ON u.stock_id = f.stock_id
+ WHERE f.is_latest
    AND f.total_assets IS NOT NULL AND f.total_liabilities IS NOT NULL
    AND f.total_equity IS NOT NULL AND f.total_assets <> 0
    AND abs((f.total_assets - f.total_liabilities - f.total_equity)
@@ -92,9 +93,15 @@ SELECT count(*) FROM financial_statement f
 저장된 행 안에서 **`자산 − 부채 − 자본`이 자산의 5%를 넘게 어긋난 행**을 센다. 중간지분이
 있는 종목은 정당하게 잡히므로 0을 요구하지 않는다 — **재적재 전보다 늘면 회귀다.**
 
-**MUST: `market_code`는 `'US'` 하나다.** 처음 이 질의를 `IN ('NYSE','NASDAQ')`로 썼는데
-**그 코드는 `stock.market_code`에 존재하지 않아 0행을 돌려주고 초록으로 읽혔다.** 거래소 이름은
-`listing_exchange`에 있다. **0은 「깨끗하다」가 아니라 「한 행도 안 들어갔다」일 수 있다.**
+**감시선이 두 번 죽을 뻔했다 — 둘 다 「수가 나온다」로는 안 잡힌다.**
+
+1. 처음 이 질의를 `s.market_code IN ('NYSE','NASDAQ')`로 썼다. **그 코드는 `stock.market_code`에
+   없어서**(값은 `KOSPI`·`KOSDAQ`·`US` 셋뿐, 거래소 이름은 `listing_exchange`에 있다) **0행을
+   돌려주고 초록으로 읽혔다.** 0은 「깨끗하다」가 아니라 「한 행도 안 들어갔다」일 수 있다.
+2. 고쳐서 `s.market_code = 'US'`로 했더니 이번엔 **미국 전량 8,504종목을 세어 6,794**가 나왔다.
+   **아래 기준선(906)은 `US_TOP1000` 현재 편입 1,000종목에서 잰 것이라 비교가 안 된다.**
+   **MUST: 펜스의 모집단을 기준선을 잰 모집단과 같게 유지한다** — 수가 나온다고 비교
+   가능한 것이 아니다.
 
 **기준선(재적재 직전 · `US_TOP1000` 현재 편입 1,000종목 · `is_latest`)**: 항등식이탈 **964행** ·
 총자본 ≤ 0 **2,189행 / 168종목** · 총자본 NULL **442행**.
