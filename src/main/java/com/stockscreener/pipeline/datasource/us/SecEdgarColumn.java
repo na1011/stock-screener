@@ -323,7 +323,36 @@ enum SecEdgarColumn {
     INTEREST_AND_DIVIDEND_INCOME(Kind.DURATION, Unit.MONETARY, List.of(
             "InterestAndDividendIncomeOperating")),
     NONINTEREST_INCOME(Kind.DURATION, Unit.MONETARY, List.of("NoninterestIncome")),
-    INTEREST_EXPENSE(Kind.DURATION, Unit.MONETARY, List.of("InterestExpense")),
+    /**
+     * 이자비용. <b>{@code InterestExpense}는 2024년 US-GAAP 택소노미에서 사실상 퇴역했다</b> —
+     * 그 자리를 {@code InterestExpenseOperating}이 받았다.
+     *
+     * <p><b>후보가 하나뿐이라 조용히 무너져 있었다.</b> 실측(2026-09-15 · {@code US_TOP1000}
+     * 최신 판): 은행형 행의 이자비용 보유가 <b>FY2023 60/66 → FY2024 8/65 → FY2025 8/69</b>로
+     * 떨어졌고, 그래서 <b>영업이익 유도 재료 셋을 다 갖는 행이 44 → 5</b>가 됐다
+     * (ADR-0104의 은행형 갈래가 그만큼 죽어 있었다).
+     *
+     * <p><b>둘의 값은 같다</b> — 둘 다 오는 110칸에서 <b>109(99.1%)</b>가 1% 이내다.
+     * 후보만 더하면 재료 셋을 다 갖는 종목이 <b>5 → 46</b>이 된다.
+     */
+    INTEREST_EXPENSE(Kind.DURATION, Unit.MONETARY, List.of(
+            "InterestExpense", "InterestExpenseOperating")),
+
+    /**
+     * <b>순이자손익.</b> 은행형 매출을 <b>유도하는 재료</b>이지 저장되는 컬럼이 아니다 —
+     * 은행의 총수익 = 순이자손익 + 비이자수익.
+     *
+     * <p><b>왜 필요한가</b>: 은행은 {@code Revenues}를 안 내거나 <b>좁은 하위 항목에 쓴다.</b>
+     * 실측(2026-09-15 · {@code US_TOP1000} 최신 FY): 은행형 69종목 중 <b>매출 NULL 27 ·
+     * 비이자수익보다도 작은 명백한 과소 11</b>({@code WAL} 136M인데 실제 3,543M — <b>26.1배</b> ·
+     * {@code AX} 18.2배 · {@code COLB} 13.0배 · {@code ZION} 5.1배).
+     *
+     * <p><b>이 공식은 우리가 정한 정의가 아니다</b> — 소스가 이미 그렇게 쓴다. 제대로 신고하는
+     * 은행 15 중 <b>14가 저장/공식 = 1.00으로 정확히 일치</b>하고({@code BAC}·{@code C}·
+     * {@code JPM}·{@code USB}·{@code PNC}·{@code COF}…), 회사가 스스로 붙인
+     * {@code RevenuesNetOfInterestExpense} 태그와도 <b>95.8%가 일치</b>한다.
+     */
+    NET_INTEREST_INCOME(Kind.DURATION, Unit.MONETARY, List.of("InterestIncomeExpenseNet")),
     NONINTEREST_EXPENSE(Kind.DURATION, Unit.MONETARY, List.of("NoninterestExpense")),
     BENEFITS_LOSSES_AND_EXPENSES(Kind.DURATION, Unit.MONETARY, List.of(
             "BenefitsLossesAndExpenses")),
@@ -588,6 +617,7 @@ enum SecEdgarColumn {
                 || this == PROFIT_BEFORE_TAX_EXCLUDING_EQUITY
                 || this == INCOME_FROM_CONTINUING_OPERATIONS
                 || this == DISCONTINUED_OPERATIONS
+                || this == NET_INTEREST_INCOME
                 || this == NET_INCOME_NONCONTROLLING
                 || this == NET_INCOME_NONCONTROLLING_REDEEMABLE
                 || this == NET_INCOME_NONCONTROLLING_NONREDEEMABLE;

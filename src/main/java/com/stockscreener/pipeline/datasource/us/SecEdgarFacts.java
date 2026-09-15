@@ -889,7 +889,7 @@ final class SecEdgarFacts {
                 label.fiscalYear(), label.period(), window.start(), window.end(), anchor.filed(),
                 // 정정 추적의 근거. DART 쪽이 rcept_no 컬럼이 없어 못 하던 것이다.
                 "%s:%s".formatted(anchor.form(), anchor.accn()), currency,
-                v.get(SecEdgarColumn.REVENUE), v.get(SecEdgarColumn.OPERATING_INCOME),
+                revenue(v), v.get(SecEdgarColumn.OPERATING_INCOME),
                 controllingIncome(v), v.get(SecEdgarColumn.TOTAL_ASSETS),
                 totalEquity(v),
                 controllingEquity(v),
@@ -1033,6 +1033,34 @@ final class SecEdgarFacts {
             return total.add(tax);
         }
         return v.get(SecEdgarColumn.PROFIT_BEFORE_TAX);
+    }
+
+    /**
+     * <b>매출.</b> 은행은 <b>순이자손익 + 비이자수익</b>으로 유도하고, 나머지는 후보 태그를 쓴다.
+     *
+     * <p><b>왜 은행만 다른가</b>: 은행은 {@code Revenues}를 안 내거나 <b>좁은 하위 항목에 쓴다</b>
+     * ({@code ZION} 662M인데 실제 3,385M · {@code RF} 58M인데 5,409M). 실측
+     * (2026-09-15 · {@code US_TOP1000} 최신 FY): 은행형 69 중 <b>NULL 27 · 명백한 과소 11</b>.
+     *
+     * <p><b>MUST: 두 재료가 다 있을 때만 유도한다.</b> {@code NoninterestIncome}은 금융 전용
+     * 태그가 아니어서({@code MPLX}가 매출의 80%를 그것으로 낸다) 하나만 보면 비금융이 걸린다.
+     * 둘을 요구하면 전 유니버스에서 대상이 <b>정확히 53종목이고 전부 금융</b>이다(DB 전수).
+     *
+     * <p><b>MUST NOT: 소스가 준 값과 큰 쪽을 고르지 않는다.</b> {@code max}는 두 가지를 깨뜨린다 —
+     * {@code STT} FY2023은 같은 10-K 안에서 {@code Revenues} 11,945M인데 유도값이 12,239M이라
+     * <b>과대계상</b>이 되고({@code NII}·비이자 어디에도 안 드는 별도 라인 −294M),
+     * {@code IBKR}은 해마다 승자가 갈려 <b>매출성장률 부호가 −14.0% ↔ +14.5%로 뒤집힌다.</b>
+     * <b>스크리너는 성장률·5년 중앙값을 읽으므로 시계열 기저가 하나인 것이 셀 단위 충실도보다
+     * 앞선다</b> — 그래서 재료가 있으면 언제나 유도다. 소스가 제대로 신고하는 자리에서는
+     * 둘이 같다(같은 공시 안에서 <b>89.5%</b>가 1% 이내).
+     */
+    private static BigDecimal revenue(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal netInterest = v.get(SecEdgarColumn.NET_INTEREST_INCOME);
+        BigDecimal noninterest = v.get(SecEdgarColumn.NONINTEREST_INCOME);
+        if (netInterest != null && noninterest != null) {
+            return netInterest.add(noninterest);
+        }
+        return v.get(SecEdgarColumn.REVENUE);
     }
 
     private static BigDecimal totalEquity(Map<SecEdgarColumn, BigDecimal> v) {
