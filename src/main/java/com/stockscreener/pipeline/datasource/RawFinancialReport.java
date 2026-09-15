@@ -125,8 +125,19 @@ public record RawFinancialReport(
          * 한 행도 안 줄었다.
          *
          * <p><b>MUST: 유도한 행에는 반드시 {@code true}를 준다.</b> 기본값 {@code false}를 주는
-         * 호환 생성자가 있으므로 <b>컴파일러가 이것을 묻지 않는다.</b> 유도 자리는 둘이고
-         * 둘 다 이름이 {@code deriveFourthQuarter…}다.
+         * 호환 생성자가 있으므로 <b>컴파일러가 이것을 묻지 않는다.</b>
+         *
+         * <p><b>MUST NOT: 「유도 자리는 둘이고 둘 다 {@code deriveFourthQuarter…}다」로 읽지
+         * 않는다 — 2026-09-15에 거짓이 됐다.</b> 그날 {@code SecEdgarFacts.toReport} 안에
+         * <b>컬럼 유도 일곱</b>이 들어왔다(매출·순이익·총자본·지배주주 자본·총부채·
+         * 영업활동현금흐름·세전이익 — ADR-0153~0157). 그 경로는 FY·Q1~Q3를 만들므로
+         * {@code derived == false}다.
+         *
+         * <p><b>그래서 그 일곱은 되돌릴 수 없다.</b> {@code FinancialWriter.fillMissing}의 값
+         * 지우기 갈래가 이 필드를 요구하는데 일곱은 {@code false}라, <b>유도 규칙을 고쳐
+         * {@code null}을 내면 저장된 옛 유도값이 영영 안 지워진다.</b> 커밋 {@code cf474f0}이
+         * 닫은 결함이 새 축에서 다시 열린 것이다. <b>컬럼 단위 출처가 필요하다</b>
+         * (ADR-0157 §결과 · {@code SecEdgarFacts.withoutDerived}의 7컬럼 목록이 지금의 사실상 정본).
          */
         boolean derived
 ) {
