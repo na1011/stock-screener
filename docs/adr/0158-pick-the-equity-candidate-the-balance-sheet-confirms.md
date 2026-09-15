@@ -82,7 +82,7 @@ applies_to:
 psql -d stock_screener -At -c "
 SELECT count(*) FROM financial_statement f
   JOIN stock s ON s.id = f.stock_id
- WHERE f.is_latest AND s.market_code IN ('NYSE','NASDAQ')
+ WHERE f.is_latest AND s.market_code = 'US'
    AND f.total_assets IS NOT NULL AND f.total_liabilities IS NOT NULL
    AND f.total_equity IS NOT NULL AND f.total_assets <> 0
    AND abs((f.total_assets - f.total_liabilities - f.total_equity)
@@ -91,6 +91,13 @@ SELECT count(*) FROM financial_statement f
 
 저장된 행 안에서 **`자산 − 부채 − 자본`이 자산의 5%를 넘게 어긋난 행**을 센다. 중간지분이
 있는 종목은 정당하게 잡히므로 0을 요구하지 않는다 — **재적재 전보다 늘면 회귀다.**
+
+**MUST: `market_code`는 `'US'` 하나다.** 처음 이 질의를 `IN ('NYSE','NASDAQ')`로 썼는데
+**그 코드는 `stock.market_code`에 존재하지 않아 0행을 돌려주고 초록으로 읽혔다.** 거래소 이름은
+`listing_exchange`에 있다. **0은 「깨끗하다」가 아니라 「한 행도 안 들어갔다」일 수 있다.**
+
+**기준선(재적재 직전 · `US_TOP1000` 현재 편입 1,000종목 · `is_latest`)**: 항등식이탈 **964행** ·
+총자본 ≤ 0 **2,189행 / 168종목** · 총자본 NULL **442행**.
 
 ## 버린 대안
 
