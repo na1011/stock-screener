@@ -114,6 +114,32 @@ final class FinancialMath {
     }
 
     /**
+     * <b>이 창 전체에서 지배주주 자본이 서는가.</b> 집계값(중앙값·평균)은 <b>기저를 한 번 정해
+     * 창 전체에 적용해야 한다.</b>
+     *
+     * <p><b>왜</b>: {@code total_equity_controlling}의 유무는 <b>회사의 성질이 아니라 그 판의
+     * 성질</b>이라 분기마다 뒤집힌다. 실측(2026-09-15 · {@code US_TOP1000} 활성 982종목 ·
+     * 최근 20분기): <b>유무가 섞인 종목 74</b> · 전 분기 있음 884 · 전 분기 없음 24.
+     * 그중 {@code teqc/te} 괴리가 5%를 넘는 것이 <b>12종목</b>이고
+     * {@code LNG}는 <b>7,690.91%</b>다. 행마다 고르면 <b>한 중앙값 안에서 두 기저가 섞이고
+     * 그 값은 그럴듯하다.</b>
+     *
+     * <p>적재가 캐스케이드로 {@code teqc}를 거의 전 행에 채우면 이 갈래는 저절로 닫힌다
+     * (ADR-0159). 그때까지 <b>섞느니 연결로 통일한다.</b>
+     */
+    static boolean controllingEquityThroughout(List<FinancialFigures> quarters) {
+        if (quarters.isEmpty()) {
+            return false;
+        }
+        for (FinancialFigures figures : quarters) {
+            if (figures.totalEquityControlling() == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * <b>분자와 기저가 맞는 자본 하나.</b> {@link #roeBasis}의 2·3순위가 고르는 것과 같다 —
      * 짝을 함께 고를 수 없는 자리에서만 쓴다.
      */
