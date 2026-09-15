@@ -273,6 +273,25 @@ class FinancialWriterTest {
         }
 
         @Test
+        @DisplayName("더 이른 공시본이라도 그 판의 행이 있으면 그 행을 채운다 — 비-is_latest 행은 과거 기준일의 값이다")
+        void fillsTheOlderVintageRowWhenItExists() {
+            // 이른 판을 결손인 채로 넣고, 늦은 판으로 개정본을 쌓아 이른 판을 비-is_latest로 내린다.
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+
+            long changed = writer.write(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")), WriteMode.FILL_MISSING);
+
+            assertThat(changed).isEqualTo(1);
+            assertThat(rowCount()).isEqualTo(2);
+            // 그 공시일의 행이 채워졌다.
+            assertThat((BigDecimal) vintageRow("2026-03-15").get("current_assets"))
+                    .isEqualByComparingTo("9000");
+            // 최신본은 안 건드렸다.
+            assertThat((BigDecimal) latestRow().get("net_income")).isEqualByComparingTo("950");
+        }
+
+        @Test
         @DisplayName("소스가 값을 잃어도 저장된 값을 지우지 않는다")
         void neverClearsStoredValueWhenSourceIsNull() {
             writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
@@ -414,6 +433,20 @@ class FinancialWriterTest {
             assertThat(outcome.changed()).isZero();
             assertThat(latestRow().get("current_assets")).isNull();
         }
+
+        @Test
+        @DisplayName("더 이른 공시본의 행이 있어도 채우지 않는다 — 이 모드의 소스는 DART이고 판을 하나만 낸다")
+        void doesNotFillTheOlderVintageRow() {
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+
+            FinancialWriter.Outcome outcome = fillOnlyWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")),
+                    WriteMode.FILL_WITHOUT_REVISION);
+
+            assertThat(outcome.changed()).isZero();
+            assertThat(vintageRow("2026-03-15").get("current_assets")).isNull();
+        }
     }
 
     /** 무효화 호출을 그대로 적는다. 이 슬라이스의 기본 포트는 아무것도 기록하지 않는다. */
@@ -430,6 +463,13 @@ class FinancialWriterTest {
     private Map<String, Object> latestRow() {
         return jdbcTemplate.queryForMap(
                 "SELECT * FROM financial_statement WHERE stock_id = ? AND is_latest", stockId);
+    }
+
+    /** 공시일로 판 하나를 집는다. {@code is_latest}를 안 보는 자리를 검증하려면 이것이 필요하다. */
+    private Map<String, Object> vintageRow(String publishedAt) {
+        return jdbcTemplate.queryForMap(
+                "SELECT * FROM financial_statement WHERE stock_id = ? AND published_at = ?::date",
+                stockId, publishedAt);
     }
 
     private int rowCount() {

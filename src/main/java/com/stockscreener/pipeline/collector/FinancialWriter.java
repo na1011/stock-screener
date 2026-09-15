@@ -257,10 +257,36 @@ public class FinancialWriter {
         }
 
         if (report.publishedAt().isBefore(existing.publishedAt())) {
-            // 소스가 더 오래된 판을 줬다. 채우지도 않는다 — 그 시점에 없던 값이 현재
-            // 개정본 행에 섞이면 행 하나가 두 공시의 혼합이 되어 어느 시점의 값인지
-            // 물을 수 없게 된다. APPEND_ONLY에서는 조용했지만 흔적은 남긴다.
-            log.debug("소스가 더 이른 공시본을 줬다. 건너뛴다. stockId={} {}/{} 저장={} 소스={}",
+            // **그 공시일의 행이 DB에 있으면 그 행을 고친다.** 아래 「혼합」 논거가 막으려는 것은
+            // 「그 시점에 없던 값이 **다른 공시일의 행**에 섞이는 것」인데, 같은 공시일의 행을
+            // 찾아 고치면 섞이지 않는다. 그리고 그 행은 **지금 실제로 읽힌다** —
+            // IndicatorDataReader의 KNOWN_ON 질의에 is_latest도 revision_no 필터도 없고
+            // (published_at <= ? 뿐이다) IndicatorContext.visibleAt이 봉마다 다시 접으므로,
+            // 비-is_latest 행이 **과거 기준일의 값**이다. 여기를 안 열면 그 행은 쓰인 날의
+            // 추출 규칙에 **영구히 얼어 있다** — 어떤 재적재로도 못 고친다.
+            //
+            // 실측(2026-09-16 · 미국 캐시 1,001종목): 비-is_latest 16,376행 중
+            // **값이 다른 것 2,214행·330종목·2,390칸** · **비어 있는데 소스가 주는 것
+            // 15,636행·902종목·46,554칸**. 보존 창(256거래일) 안에서 폴드를 이기는 것만 세도
+            // **851행·248종목**(교정 139칸 · 채움 3,292칸)이고, 교정 139칸 중 41칸이 50% 넘게
+            // 어긋나며 최대는 UHAL 매출 **173배**다.
+            //
+            // MUST: FILL_MISSING에서만 연다. FILL_WITHOUT_REVISION을 쓰는 것은
+            // FullStatementCollector 하나이고 그 어댑터는 **DART 전용**인데(KOSPI·KOSDAQ),
+            // DART는 (corp_code, 연도, 보고서코드)마다 판을 하나만 낸다 — 미국의
+            // 「companyfacts가 판 집합을 전부 준다」를 그쪽에 이식하는 것이 된다.
+            // 실측으로 그 한정 때문에 잃는 표적은 **0행**이다(16,342행 전부 미국·refill 경로).
+            // APPEND_ONLY는 일일 갱신이라 판 이력을 다시 쓰면 안 된다.
+            Existing vintage = mode == WriteMode.FILL_MISSING
+                    ? findVintage(stockId, report) : null;
+            if (vintage != null) {
+                fillMissing(stockId, vintage, report, tally);
+                return;
+            }
+            // 그 공시일의 행이 아예 없다. **새로 넣지는 않는다** — 그것은 revision_no 배정과
+            // is_latest 관리가 따라붙는 별개 축이고, 실측으로 252판·128종목이다.
+            log.debug("소스가 더 이른 공시본을 줬는데 그 판의 행이 없다. 건너뛴다. "
+                            + "stockId={} {}/{} 저장={} 소스={}",
                     stockId, report.fiscalYear(), report.fiscalPeriod(),
                     existing.publishedAt(), report.publishedAt());
             tally.untouched++;
@@ -442,6 +468,42 @@ public class FinancialWriter {
                 stockId, report.fiscalYear(), report.fiscalPeriod());
         return found.isEmpty() ? null : found.get(0);
     }
+
+    /**
+     * 같은 회계기간의 <b>그 공시일 판</b>을 찾는다. {@link #findLatest}와 달리
+     * {@code is_latest}를 안 본다.
+     *
+     * <p><b>정렬을 박는 이유</b>: {@code (stock_id, fiscal_year, fiscal_period, published_at)}이
+     * 둘 이상인 행은 실측으로 <b>0건</b>이지만(2026-09-16 · 216,863행 전수)
+     * <b>그것을 강제하는 유니크 인덱스가 없다.</b> {@code uq_fs_revision}은 {@code revision_no}를
+     * 키에 두므로 같은 공시일에 판번호만 다른 행을 막지 않는다. 언젠가 둘이 되면 정렬이
+     * 없는 쪽은 <b>실행마다 다른 행을 고친다.</b>
+     */
+    private Existing findVintage(long stockId, RawFinancialReport report) {
+        String columns = Arrays.stream(Amount.values())
+                .map(amount -> amount.column)
+                .collect(Collectors.joining(", "));
+        List<Existing> found = jdbcTemplate.query(Q_FIND_VINTAGE.formatted(columns),
+                (rs, rowNum) -> {
+                    Map<Amount, BigDecimal> amounts = new EnumMap<>(Amount.class);
+                    for (Amount amount : Amount.values()) {
+                        amounts.put(amount, rs.getBigDecimal(amount.column));
+                    }
+                    return new Existing(
+                            rs.getLong("id"),
+                            rs.getObject("published_at", LocalDate.class),
+                            rs.getInt("revision_no"),
+                            amounts);
+                },
+                stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt());
+        return found.isEmpty() ? null : found.get(0);
+    }
+
+    private static final String Q_FIND_VINTAGE = """
+            SELECT id, published_at, revision_no, %s FROM financial_statement
+            WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND published_at = ?
+            ORDER BY revision_no DESC
+            """;
 
     private void insert(long stockId, RawFinancialReport report, int revisionNo) {
         jdbcTemplate.update("""
