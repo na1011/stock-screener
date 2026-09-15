@@ -94,12 +94,14 @@ public class RoeMin3yCalculator implements IndicatorCalculator {
         BigDecimal min = null;
         for (int i = 0; i < YEARS; i++) {
             FinancialFigures figures = annual.get(i);
-            BigDecimal equity = FinancialMath.equityMatchingNetIncome(figures);
-            if (figures.netIncome() == null || equity == null || equity.signum() <= 0) {
+            // MUST: 분자·분모의 기저를 한 번 정해 둘 다에 적용한다(ADR-0159).
+            FinancialMath.EquityBasis basis = FinancialMath.roeBasis(figures);
+            BigDecimal equity = basis.equity();
+            if (basis.income() == null || equity == null || equity.signum() <= 0) {
                 // 자본잠식이면 순손실이 양수 ROE로 나온다. 위 javadoc 참조.
                 return null;
             }
-            BigDecimal roe = FinancialMath.percentage(figures.netIncome(), equity);
+            BigDecimal roe = FinancialMath.percentage(basis.income(), equity);
             if (min == null || roe.compareTo(min) < 0) {
                 min = roe;
             }

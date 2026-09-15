@@ -26,24 +26,75 @@ import java.util.function.Function;
 final class FinancialMath {
 
     /**
-     * <b>{@code ROE}의 분모 — 분자와 기저가 맞는 자본.</b>
+     * <b>{@code ROE} 계열의 분자·분모 짝.</b> 기저를 <b>한 번 정해 둘 다에</b> 적용한다.
      *
-     * <p>{@code totalEquity}는 <b>비지배지분을 포함</b>한다(미국의 첫 후보가
-     * {@code StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest}다). 그런데
-     * {@code netIncome}은 미국에서 <b>지배주주 귀속</b>이다({@code NetIncomeLoss}). 그대로 나누면
-     * <b>남의 지분이 분모에만 들어간 수</b>가 된다.
+     * <p><b>왜 짝인가</b>: 분자가 <b>창 단위</b>(전부-아니면-전무)이고 분모가 <b>행 단위</b>
+     * ({@code controlling ?: total})이면 <b>둘이 서로를 모른다.</b> 그 상태에서 한쪽만 채우면
+     * <b>분자=연결총액 ÷ 분모=지배주주자본</b>이 된다 — 실측으로 미국
+     * {@code total_equity / total_equity_controlling}이 <b>최대 616.54배</b>,
+     * 국내 {@code 034730} SK가 <b>3.197배</b>다(ADR-0159).
      *
-     * <p>실측(2026-09-15 · 표본 8): 대부분은 오차가 0이지만 지배구조가 있는 회사에서 거대하다 —
-     * <b>{@code LNG} 비지배 46.1%로 59.13% → 109.74%(+50.61%p)</b>,
-     * <b>{@code KKR} 59.9%로 3.06% → 7.63%(+4.57%p)</b>, {@code KMI} +0.37%p, {@code GM} +0.12%p.
-     * <b>{@code ROE}는 {@code 버핏 우량주}의 필수 게이트다.</b>
+     * <p><b>3단이고, 오늘은 1순위가 원리적으로 안 켜져 값이 한 톨도 안 바뀐다</b> —
+     * {@code net_income_controlling}이 미국에 <b>0행</b>이기 때문이다. 적재가 그 컬럼을 채우는
+     * 순간 1순위로 옮겨 가고, 그때까지 2·3순위가 <b>지금의 동작을 그대로</b> 재현한다.
+     * <b>이것이 「무해한 선행 배포」다</b>(CLAUDE.md §판단 기준).
      *
-     * <p><b>국내는 안 바뀐다.</b> DART의 분자가 {@code ifrs-full_ProfitLoss}(비지배 포함)이고
-     * 자본총계도 비지배 포함이라 <b>지금도 기저가 맞는다</b> — 그래서 지배주주 자본을 안 담았고,
-     * 여기서도 없으면 {@code totalEquity}로 물러난다.
+     * <ol>
+     *   <li><b>지배주주 짝</b> — 창 전체의 {@code netIncomeControlling}과
+     *       {@code totalEquityControlling}이 <b>둘 다</b> 있을 때만.</li>
+     *   <li><b>다리</b> — {@code netIncome}이 그 시장에서 <b>이미 지배주주 기저</b>인 동안
+     *       (미국의 오늘). 분모는 지배주주 자본이다.</li>
+     *   <li><b>연결 짝</b> — 지배주주 자본이 없으면 분자·분모 <b>둘 다</b> 연결로 물러난다
+     *       (국내의 오늘).</li>
+     * </ol>
      *
-     * <p><b>MUST NOT: {@code ROIC}·{@code PBR}·{@code DEBT_RATIO}에 이것을 쓰지 않는다.</b>
-     * 그쪽 분자는 영업이익이거나 분모가 총자산·총부채와 짝이라 <b>총자본이 옳다.</b>
+     * <p><b>MUST NOT: 행마다 폴백하지 않는다.</b> {@link #sumControllingNetIncome}의 javadoc이
+     * 이미 적었다 — <i>"행마다 폴백하면 합계가 어느 쪽도 아닌 수가 되고, 값은 그럴듯하고
+     * 에러도 없다."</i> 엄격 짝으로 잃는 창은 실측 <b>0.9%p</b>뿐이다(US TTM 49,240 중 93.5%가 성립).
+     *
+     * <p><b>MUST NOT: {@code DEBT_RATIO}·{@code ALTMAN_Z''}·{@code ROIC_PRETAX}에 이것을 쓰지
+     * 않는다</b> — 그쪽은 분모가 총자산·총부채와 짝이라 <b>연결 총자본이 옳다.</b>
+     * <b>{@code PBR}은 반대다</b> — 분자가 시가총액이라 <b>지배주주 자본이 옳고</b>,
+     * ADR-0153이 그것을 이 묶음에 넣은 것은 틀렸다(ADR-0159 §규칙).
+     */
+    record EquityBasis(BigDecimal income, BigDecimal equity) {
+    }
+
+    /** 최근 4개 분기(TTM)의 짝. {@code quarters}는 {@code period_end} 내림차순이다. */
+    static EquityBasis roeBasis(List<FinancialFigures> quarters) {
+        if (quarters.isEmpty()) {
+            return null;
+        }
+        FinancialFigures latest = quarters.get(0);
+        BigDecimal controllingEquity = latest.totalEquityControlling();
+        BigDecimal controllingIncome =
+                sumFourQuarters(quarters, FinancialFigures::netIncomeControlling, 0);
+        if (controllingIncome != null && controllingEquity != null) {
+            return new EquityBasis(controllingIncome, controllingEquity);
+        }
+        BigDecimal income = sumTrailingFourQuarters(quarters, FinancialFigures::netIncome);
+        if (controllingEquity != null) {
+            return new EquityBasis(income, controllingEquity);
+        }
+        return new EquityBasis(income, latest.totalEquity());
+    }
+
+    /** 연간 한 행의 짝. {@code ROE_MIN_3Y}가 해마다 부른다. */
+    static EquityBasis roeBasis(FinancialFigures figures) {
+        BigDecimal controllingEquity = figures.totalEquityControlling();
+        BigDecimal controllingIncome = figures.netIncomeControlling();
+        if (controllingIncome != null && controllingEquity != null) {
+            return new EquityBasis(controllingIncome, controllingEquity);
+        }
+        if (controllingEquity != null) {
+            return new EquityBasis(figures.netIncome(), controllingEquity);
+        }
+        return new EquityBasis(figures.netIncome(), figures.totalEquity());
+    }
+
+    /**
+     * <b>분자와 기저가 맞는 자본 하나.</b> {@link #roeBasis}의 2·3순위가 고르는 것과 같다 —
+     * 짝을 함께 고를 수 없는 자리에서만 쓴다.
      */
     public static BigDecimal equityMatchingNetIncome(FinancialFigures figures) {
         BigDecimal controlling = figures.totalEquityControlling();
