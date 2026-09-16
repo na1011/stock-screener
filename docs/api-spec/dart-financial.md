@@ -116,6 +116,16 @@ Q4(손익) = 사업보고서 금액 − 3분기보고서의 thstrm_add_amount(�
   `account_nm` `account_detail` `thstrm_nm` **`thstrm_amount`** `thstrm_add_amount`
   `frmtrm_nm` `frmtrm_amount` **`frmtrm_q_nm`** **`frmtrm_q_amount`** `frmtrm_add_amount`
   `bfefrmtrm_nm` `bfefrmtrm_amount` `ord` `currency`
+- **`thstrm_dt`가 없다**(2026-09-16 실측 · `DartFiscalPeriodProbeLiveTest`). 위 목록에 원래
+  없었고 그것이 맞다 — 신영증권·비츠로셀 × 사업보고서·3분기 **4호출 전부 필드가 없다.**
+  **주요계정은 준다.** ADR-0056이 *"전체 재무제표는 `thstrm_dt`로 실제 기간을 준다"*고 적었던 것은
+  거짓이고 그 자리를 정정했다.
+- **회계연도의 정체는 `thstrm_nm`의 기수가 말한다 — 그것은 두 엔드포인트가 모두 준다.**
+  `bsns_year`는 **기간 종료일의 달력연도**라 비12월 결산에서는 같은 값이 **서로 다른 회계연도**를
+  가리킨다: 신영증권(3월 결산) `bsns_year=2024`가 사업보고서는 **제 70 기**
+  ({@code thstrm_dt=2024.03.31}), 3분기는 **제 71 기**({@code 2024.12.31})다.
+  비츠로셀(6월→12월 결산 변경) `bsns_year=2017`은 33기 대 32기다.
+  **`Q4 = FY − Q3누적`이 그 둘을 빼면 12개월 떨어진 두 기간을 뺀다.**
 - **응답 규모**: 229~349행(주요계정은 7~15행). `sj_div`가 다섯이다.
 
 | 회사 | 총 행 | BS | CF | CIS | IS | SCE |

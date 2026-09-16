@@ -193,6 +193,37 @@ class DartFinancialAdapterTest {
         assertThat(annual.bps()).isNull();
     }
 
+    @Test
+    @DisplayName("사업보고서와 3분기의 기수가 다르면 4분기 손익을 유도하지 않는다 — 12개월 떨어진 두 기간을 뺀다")
+    void doesNotDeriveFourthQuarterAcrossDifferentPeriodTerms() throws Exception {
+        // 3월 결산 회사에서 실제로 일어나는 모양이다. DART의 bsns_year는 **기간 종료일의
+        // 달력연도**라, 같은 해 값이어도 사업보고서는 제 70 기(2023-04~2024-03)이고
+        // 3분기는 제 71 기(2024-04~2024-12)다. 실측으로 신영증권 2024 Q4 매출
+        // 691,931,711,604가 정확히 그 뺄셈이고, 비츠로셀 2017 Q4는 매출이 음수다.
+        server.setDispatcher(new Dispatcher() {
+            @NotNull
+            @Override
+            public MockResponse dispatch(@NotNull RecordedRequest request) {
+                String path = request.getPath() == null ? "" : request.getPath();
+                if (path.contains("reprt_code=11011")) {
+                    return json(fixture("annual-2025-term70.json"));
+                }
+                if (path.contains("reprt_code=11014")) {
+                    return json(fixture("q3-2025-term71.json"));
+                }
+                return json(fixture("error-no-data.json"));
+            }
+        });
+
+        RawFinancialReport q4 =
+                findReport(newAdapter().fetchReports(SAMSUNG, 2025).reports(), 2025, "Q4");
+
+        assertThat(q4.revenue()).as("손익은 안 낸다").isNull();
+        assertThat(q4.operatingIncome()).isNull();
+        assertThat(q4.netIncome()).isNull();
+        assertThat(q4.totalAssets()).as("잔액은 연말 잔액이라 참이다 — 그대로 낸다").isNotNull();
+    }
+
     /** reprt_code에 따라 연간·3분기 fixture를 나눠 준다. 나머지 기간은 데이터 없음. */
     private void respondByReportCode() {
         server.setDispatcher(new Dispatcher() {

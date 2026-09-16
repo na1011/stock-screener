@@ -10,6 +10,8 @@ import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.RateLimiter;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -37,6 +39,8 @@ import java.util.Set;
 @ConditionalOnApiKey("dart")
 @Component
 public class DartFinancialAdapter implements FinancialDataSource {
+
+    private static final Logger log = LoggerFactory.getLogger(DartFinancialAdapter.class);
 
     /** 보고서 코드 → 우리 회계기간 라벨. Q4는 별도 보고서가 없어 유도한다. */
     private static final Map<String, String> REPORT_CODES = new LinkedHashMap<>(Map.of(
@@ -244,7 +248,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
 
         String annualCurrency = singleCurrency(annual.rows());
         boolean subtractable = annualCurrency != null
-                && annualCurrency.equals(singleCurrency(thirdQuarter.rows()));
+                && annualCurrency.equals(singleCurrency(thirdQuarter.rows()))
+                && samePeriodTerm(annual.rows(), thirdQuarter.rows());
 
         return Optional.of(new RawFinancialReport(
                 year, "Q4",
@@ -285,6 +290,59 @@ public class DartFinancialAdapter implements FinancialDataSource {
      * <p>「아무 행의 통화」를 라벨로 쓰지 않으려고 둔다 — 섞인 보고서에서 첫 행을 집으면
      * <b>라벨이 실제와 다른 값</b>이 되고, 그 오류는 값이 나오는 형태라 드러나지 않는다.
      */
+    /**
+     * <b>사업보고서와 3분기보고서가 같은 회계연도인가.</b> {@code thstrm_nm}의 <b>기수</b>로 판정한다.
+     *
+     * <p><b>같은 {@code bsns_year}가 같은 회계연도를 뜻하지 않는다.</b> DART의 그 필드는
+     * <b>기간 종료일의 달력연도</b>라, 결산월이 1~3월이면 사업보고서와 분기보고서가
+     * <b>서로 다른 회계연도</b>가 된다. 그런데 {@code Q4 = FY − Q3누적}은 둘이 같은 회계연도임을
+     * 전제한다 — <b>12개월 떨어진 두 기간을 빼면 값이 그럴듯한 채로 틀린다.</b>
+     *
+     * <p><b>실측(2026-09-16 · DART 직접 조회)</b>
+     * <ul>
+     *   <li>신영증권(3월 결산) {@code bsns_year=2024}: 사업보고서가 <b>제 70 기</b>
+     *       ({@code thstrm_dt=2024.03.31}), 3분기가 <b>제 71 기 3분기말</b>({@code 2024.12.31}).
+     *       저장된 Q4 매출 <b>691,931,711,604</b>가 정확히 그 뺄셈이다.
+     *   <li>비츠로셀(6월 → 12월 결산 변경) {@code bsns_year=2017}: 사업보고서 <b>제 33 기</b>,
+     *       3분기 <b>제 32 기</b>. 저장된 Q4 매출이 <b>−60,993,170,139</b>다.
+     * </ul>
+     *
+     * <p><b>MUST: 기수로 판정한다 — {@code thstrm_dt}로는 못 한다.</b> 전체 재무제표
+     * ({@code fnlttSinglAcntAll})는 <b>{@code thstrm_dt}를 아예 안 준다</b>(같은 날 실측:
+     * 4호출 전부 필드 없음 · {@code docs/api-spec/dart-financial.md}의 필드 목록이 맞고
+     * ADR-0056의 <i>"준다"</i>가 거짓이었다). <b>기수는 두 엔드포인트가 모두 준다.</b>
+     *
+     * <p>둘 중 하나라도 기수를 못 읽으면 <b>참을 낸다</b> — 12월 결산에서 지금 동작을 바꾸지
+     * 않는 쪽이 안전하다. 잔액은 이 게이트와 무관하게 그대로 낸다(연말 잔액은 참이다).
+     */
+    private static boolean samePeriodTerm(List<JsonNode> annualRows, List<JsonNode> quarterRows) {
+        Integer annualTerm = periodTerm(annualRows);
+        Integer quarterTerm = periodTerm(quarterRows);
+        if (annualTerm == null || quarterTerm == null) {
+            return true;
+        }
+        if (!annualTerm.equals(quarterTerm)) {
+            log.warn("사업보고서와 3분기보고서의 기수가 다르다 — 4분기 손익을 유도하지 않는다. "
+                    + "사업={}기 3분기={}기", annualTerm, quarterTerm);
+            return false;
+        }
+        return true;
+    }
+
+    private static final java.util.regex.Pattern TERM =
+            java.util.regex.Pattern.compile("제\\s*(\\d+)\\s*기");
+
+    /** {@code thstrm_nm}의 기수. 행마다 같으므로 첫 값을 쓴다. */
+    private static Integer periodTerm(List<JsonNode> rows) {
+        for (JsonNode row : rows) {
+            java.util.regex.Matcher m = TERM.matcher(row.path("thstrm_nm").asString(""));
+            if (m.find()) {
+                return Integer.valueOf(m.group(1));
+            }
+        }
+        return null;
+    }
+
     private static String singleCurrency(List<JsonNode> rows) {
         String found = null;
         for (JsonNode row : rows) {

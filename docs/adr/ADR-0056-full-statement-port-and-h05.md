@@ -43,8 +43,14 @@ applies_to:
   갈리면 나중에 온 쪽이 정정공시로 읽힌다. 테이블에 `rcept_no` 컬럼이 없어 판별 근거가
   `published_at` 하나뿐이기 때문이다.
 - **MUST: 새 행의 `period_start`·`period_end`를 기존 규약(합성 `01-01 ~ 12-31`)으로 쓴다.**
-  전체 재무제표는 `thstrm_dt`로 실제 기간을 주지만 쓰지 않는다 — 새 행만 다른 규약을 가지면
-  `ORDER BY period_end` 정렬과 연차 연속성 판정이 그 종목에서만 어긋난다.
+  ~~전체 재무제표는 `thstrm_dt`로 실제 기간을 주지만 쓰지 않는다~~ — **2026-09-16 실측으로
+  거짓이다. `fnlttSinglAcntAll`은 `thstrm_dt`를 아예 안 준다**(신영증권·비츠로셀 × 사업·3분기
+  4호출 전부 필드 없음 · `DartFiscalPeriodProbeLiveTest`). `docs/api-spec/dart-financial.md`의
+  전체 재무제표 응답 목록이 맞았다. **주요계정(`fnlttSinglAcnt`)만 준다.**
+  MUST 자체는 다른 근거로 선다 — 새 행만 다른 규약을 가지면 `ORDER BY period_end` 정렬과
+  연차 연속성 판정이 그 종목에서만 어긋나고, **두 어댑터가 서로 다른 기간을 쓰면 정기 배치가
+  매주 서로를 되돌린다**(수 `full-statement-refill` · 목 `financial-refill`).
+  **회계연도의 정체는 `thstrm_nm`의 기수가 말하고 그것은 두 엔드포인트가 모두 준다.**
 - **MUST NOT: 분기 보고서의 영업활동현금흐름을 저장하지 않는다.** 3개월인지 누적인지
   실측되지 않았다(`dart-financial.md`의 「전체 재무제표」 절). 개발가이드가 [3개월]이라 밝힌 것은
   **(포괄)손익계산서뿐**이다.

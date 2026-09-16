@@ -53,7 +53,21 @@ final class DartReportPeriods {
     }
 
     /**
-     * 회계기간. 12월 결산을 전제한 근사값이며, 정확한 기간은 소스가 주지 않는다.
+     * 회계기간. <b>12월 결산을 전제한 근사값이다.</b>
+     *
+     * <p><b>「정확한 기간은 소스가 주지 않는다」는 틀렸다</b>(2026-09-16 실측) —
+     * 주요계정({@code fnlttSinglAcnt})은 {@code thstrm_dt}로 <b>기간을 준다</b>
+     * (사업보고서 IS가 {@code 2025.01.01 ~ 2025.12.31} · BS가 {@code 2025.12.31 현재}).
+     * <b>안 주는 것은 전체 재무제표({@code fnlttSinglAcntAll})다</b> — 4호출 전부 필드가 없다.
+     *
+     * <p><b>그래서 아직 못 고친다.</b> 이 함수를 <b>두 어댑터가 공유하는데</b>
+     * ({@code DartFinancialAdapter} · {@code DartFullStatementAdapter}) 한쪽만 실제 기간을 쓰면
+     * <b>수요일 {@code full-statement-refill}과 목요일 {@code financial-refill}이 매주
+     * 서로를 되돌린다</b> — 그때마다 그 종목의 지표가 보존 창째 지워졌다 다시 채워진다.
+     *
+     * <p><b>그동안 값이 틀리는 것은 따로 막았다</b> — 유도 4분기가 회계연도를 건너뛰는 것은
+     * {@code DartFinancialAdapter.samePeriodTerm}이 <b>기수</b>로 판정한다(기수는 두
+     * 엔드포인트가 모두 준다).
      *
      * <p>MUST NOT: 전체 재무제표의 {@code thstrm_dt}(실제 기간)로 이 자리를 대체하지 않는다.
      * 이미 저장된 FY 행이 예외 없이 {@code 01-01 ~ 12-31}이므로, 새로 쓰는 행만 실제 기간을
