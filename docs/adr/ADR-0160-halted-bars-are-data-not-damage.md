@@ -1,0 +1,85 @@
+---
+id: ADR-0160
+status: 채택됨
+date: 2026-09-17
+applies_to:
+  - "src/main/java/com/stockscreener/pipeline/datasource/RawPriceBar.java"
+  - "src/main/java/com/stockscreener/pipeline/collector/PriceWriter.java"
+  - "src/main/resources/db/migration/V1__stock_and_price.sql"
+---
+
+# ADR-0160. 거래정지 봉은 손상이 아니라 데이터다 — 종가로 평탄화해 저장한다
+
+## 결정
+
+KRX가 거래정지 기간에 주는 봉(`o=h=l=0` · `close>0` · `volume=0`)을 **유효한 데이터로 받아들이고**,
+저장할 때 `o/h/l`을 `close`로 채운다. 거래대금은 0으로 둔다.
+
+## 규칙
+
+- **MUST: 거래정지 판정은 `RawPriceBar.isHalted()` 하나가 한다** — `volume == 0 ∧ close > 0 ∧ open·high·low가 모두 0`.
+  세 조건이 **전부** 필요하다: 거래량이 있는데 OHLC가 0이면 **정지가 아니라 손상**이고, 종가까지 0이면
+  **값이 통째로 없는 것**이다.
+- **MUST: 저장 시 `o/h/l`을 `close`로 채운다.** 선택이 아니다 — `ck_price_ohlc`가 `high >= close`를
+  요구하므로 원본 그대로는 **삽입이 거부되고**, 그러면 그 종목의 정상 봉까지 트랜잭션과 함께 사라진다.
+- **MUST NOT: 이 규칙을 「소스가 안 주는 것」을 메우는 데 쓰지 않는다.** 여기서 사는 것은 **소스가 줬는데
+  우리가 버리던 봉**뿐이다. 「마지막 봉 이후」·「첫 봉 이전」 결손은 소스가 아예 안 주는 별개 축이고
+  이 결정이 한 건도 안 닫는다.
+- **MUST NOT: `isHalted()`에 `null` 방어를 더하지 않는다.** `decimal()`이 `"-"`·공백에 `null`을 내면
+  `RawPriceBar`의 compact 생성자가 던지고 `toBar`의 `catch`가 `MALFORMED`로 올려 **그 종목 수집이
+  실패한다.** 즉 다른 표기는 결손이 아니라 **실패로 드러난다** — 없는 방어선을 보증하는 문장이 된다.
+- **MUST NOT: 계산기에 「진폭 0」 방어 코드를 새로 만들지 않는다.** 이미 돌고 있다 —
+  `Cmf21Calculator.multiplier`가 `range.signum()==0`에 0을 돌려주고 `StochasticK14`는 행을 안 쓰는
+  쪽으로 갈라져 있다. 보존 창 안 `o=h=l=c ∧ v=0` 봉 864개에서 `ADX_14`·`ATR_14`·`MACD_V`·`OBV_T_13`이
+  **99.4%** 값을 낸다.
+
+## 검증
+
+```premise 국내에 거래정지 봉이 저장돼 있다
+psql -d stock_screener -At -c "SELECT CASE
+  WHEN count(*) FILTER (WHERE s.market_code IN ('KOSPI','KOSDAQ')) = 0
+    THEN '국내 거래정지 봉이 0행이다 — isValid()가 다시 버리고 있는지 본다(ADR-0160)'
+  ELSE 'OK 국내 ' || count(*) FILTER (WHERE s.market_code IN ('KOSPI','KOSDAQ')) || '봉'
+  END FROM price_daily p JOIN stock s ON s.id = p.stock_id
+  WHERE p.volume = 0 AND p.open = p.high AND p.high = p.low AND p.low = p.close"
+```
+
+```premise 저장된 정지 봉이 평탄하다
+psql -d stock_screener -At -c "SELECT CASE
+  WHEN count(*) = 0 THEN '잴 것이 없었다 — volume=0 봉이 하나도 없다'
+  WHEN count(*) FILTER (WHERE NOT (open = high AND high = low AND low = close)) = 0
+    THEN 'OK ' || count(*) || '봉 전부 o=h=l=c'
+  ELSE count(*) FILTER (WHERE NOT (open = high AND high = low AND low = close))
+       || '봉이 volume=0인데 OHLC가 다르다 — 평탄화가 안 걸린 경로가 있다'
+  END FROM price_daily WHERE volume = 0"
+```
+
+**모집단을 시장으로 가르는 이유**: 미국은 소스가 처음부터 `o=h=l=c ∧ v=0`으로 주고 이 결정 **이전에도**
+68종목 14,884행이 저장돼 있었다. 전역으로 세면 그 기준선이 먼저 잡혀 국내가 0행이어도 초록이 된다.
+
+## 배경
+
+`RawPriceBar.isValid()`는 `ck_price_ohlc`와 같은 부등식으로 손상 봉을 삽입 **전에** 걸러 왔다. 그런데
+KRX는 정지 기간에 **기준가만 유지하고** 시·고·저가와 거래량을 0으로 주고, `0 >= 1221000`이 거짓이라
+그 봉이 통째로 버려졌다. 실측(2026-09-17 · 국내 27종목): 버려진 **1,185봉이 전부 이 형태**이고 그 밖의
+형태는 **0봉**이었다. 삼성바이오로직스는 2025-10-30~11-21의 **17거래일**이 그렇게 비어 있었고, 정지
+직전 종가(1,221,000)와 소스가 준 기준가가 **정확히 같았다.**
+
+봉이 없으면 백필이 그 날짜 지표를 못 만드는 것에서 그치지 않는다. 읽기 창이
+`IndicatorRegistry.readWindowBars() = maxEffectiveLookback + 255`이고 최대가
+`WeeklyMacdVSeries.LOOKBACK = 1100`이라 **1,355봉**이다 — **봉 하나가 빠지면 그 뒤 1,100거래일의 창이
+전부 한 칸씩 과거로 밀린다.** 보존 창(255일)의 4배라, 구멍이 보존 창 밖에 있어도 저장된 지표가
+**없는 값이 아니라 그럴듯하게 틀린 값**이 된다. 전 봉 이력 기준 내부 구멍은 국내 **80종목 3,443일**,
+그중 현재 편입이 **52종목**이다.
+
+채운 값이 사실인 근거는 둘이다. **거래가 없었으므로 그날의 진폭은 실제로 0이고**, 미국은 같은 사실을
+소스가 처음부터 `o=h=l=c ∧ v=0`으로 준다 — **소스의 표기가 다를 뿐 사실은 같다.**
+
+## 버린 대안
+
+- **원본 그대로(`o=h=l=0`) 저장** — `ck_price_ohlc`가 거부한다. 제약을 푸는 것은 그 제약이 막던
+  진짜 손상까지 함께 여는 것이라 기각.
+- **정지 구간을 건너뛴 채 두고 계산기에서 보간** — 봉 리스트를 **위치로** 읽는 계산기가 17개다.
+  보간은 그 위치를 맞춰 주지 않고, 창이 밀리는 문제를 그대로 둔다.
+- **`v=0`만으로 판정** — 미국의 정상 무거래 봉(14,884행)이 전부 걸린다. 그쪽은 이미 `o=h=l=c`로
+  저장돼 평탄화가 필요 없다.
