@@ -1666,14 +1666,22 @@ final class SecEdgarFacts {
                         && q4.period().equals(candidate.fiscalPeriod())) {
                     continue;
                 }
+                // **시작일에 허용오차를 준다.** 52/53주 회계력에서는 같은 회계연도의 창을
+                // 보고서마다 며칠 다르게 적어, FY가 `2024-01-01~`인데 그 해 1분기가
+                // `2023-12-31~`로 온다. 정확 일치를 요구하면 그 분기가 `inside`에서 빠져
+                // **`size() != 3`으로 4분기 유도가 통째로 막힌다** — 실측(2026-09-16)으로
+                // `FBIN` 2024/Q4가 그 자리다. A21-c가 값 조회 층에 건 것과 **같은 술어·같은 상수**다.
                 if (!"FY".equals(candidate.fiscalPeriod())
-                        && !candidate.periodStart().isBefore(fy.periodStart())
+                        && !candidate.periodStart().isBefore(
+                                fy.periodStart().minusDays(START_TOLERANCE_DAYS))
                         && !candidate.periodEnd().isAfter(fy.periodEnd())) {
                     inside.add(candidate);
                 }
             }
             inside.sort(Comparator.comparing(RawFinancialReport::periodEnd));
-            if (inside.size() != 3 || !inside.get(0).periodStart().equals(fy.periodStart())) {
+            if (inside.size() != 3
+                    || Math.abs(ChronoUnit.DAYS.between(
+                            inside.get(0).periodStart(), fy.periodStart())) > START_TOLERANCE_DAYS) {
                 continue;
             }
             RawFinancialReport q3 = inside.get(2);
