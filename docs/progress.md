@@ -443,8 +443,22 @@
         그 컬럼은 같은 호출의 다른 행에 값이 있다).
       - **MUST: 지워진 52종목을 `full-statement-refill --tickers=… --quarters=true`로 되채운다.**
         목록은 `tmp/cleared_tickers.txt`에 있다.
-    - 남은 것: KOSPI 200(A12 반영해 재시작) → KOSDAQ 150 → **지워진 52종목 복구** →
-      `governance-derive` → **전 종목 × 전 창 백필** → `ops/deploy.sh`.
+    - **국내 완료(12:38 KOSPI 202 · 12:51 KOSDAQ 150)** — A12 반영 뒤 **지운 칸이 전부 관할**이었다
+      (`retained_earnings` 30 · `total_equity` 5 · `total_liabilities` 2는 주요계정이 직접 내는
+      컬럼 · `revenue`/`operating_income`/`net_income` 11칸은 **A33이 낸 null**).
+      **A33이 정확히 4번 발화했다**(신영증권 2 · 비츠로셀 2).
+      **`비츠로셀` 2017/Q4 매출 −60,993,170,139 → NULL**(잔액은 남음) ·
+      2016/Q4는 **그대로**(그 해는 기수가 같아 정당) · 국내 Q4 음수 매출 **10 → 9**.
+    - **지워진 594칸은 덤프에서 되돌렸다(DART 콜 0).** 11:49 덤프의 `financial_statement`만
+      임시 DB(`stock_screener_restore`)로 복원해 `COALESCE`로 **NULL인 자리에만** 채웠다 —
+      237행 · `cash_and_equivalents` 226 · `inventories` 217 · `net_income_controlling` 205.
+      **`retained_earnings`는 안 되돌렸다** — 그것은 주요계정의 **관할**이라 지워진 것이 정당하다.
+      **MUST: 임시 DB는 확인 없이 안 지운다.**
+    - **오늘 DART 사용 추정 19,392콜**(실한도 20,000 · 2차 출처). **추가 DART 호출을 하지 않는다.**
+    - **`governance-derive` 완료(13:00 · SUCCESS · ERROR 0).**
+    - **백필 시작(13:01)** — `--from=2025-08-28 --as-of=2026-09-14` 전 종목.
+      무효화로 **미국 35,479,983 → 6,200,401행**(82.5%) · KOSPI 31% · KOSDAQ 6.7%가 지워졌다.
+    - 남은 것: 백필(전 종목) → **편출 214종목 `--tickers` 백필**(A19) → `ops/deploy.sh`.
   - **[재적재 순서] 이 묶음이 끝나면 아래를 한 번만 돈다. 각 줄에 근거가 있다.**
     1. **`ops/stop.sh --app`** — 평일 **13:30·14:00·14:30·15:10**(KST)에 배치가 돌고
        14:00 사슬이 `adj_close`를 다시 쓰고 지표를 지운다(`PipelineScheduler`의 cron 넷, 실측).
