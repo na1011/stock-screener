@@ -432,8 +432,19 @@
     - **MUST: `financial-refill`을 인자 없이 치지 않는다** — 활성 유니버스 전량이라
       **미국까지 다시 돈다**(ADR-0107). 국내만 돌리려면 `--universe=KOSPI_TOP200`·
       `KOSDAQ_TOP150`을 따로 준다. 이번에 그렇게 쳤다가 2종목 처리 뒤 끊고 다시 시작했다.
-    - 남은 것: KOSPI 200 → KOSDAQ 150 → `governance-derive` → **전 종목 × 전 창 백필** →
-      `ops/deploy.sh`.
+    - **[A12를 재적재 도중에 잡았다 — 커밋 `2f8047d`]** KOSPI 52종목까지 도는 동안
+      `toClear`가 **남의 값을 지웠다**: `cash_and_equivalents` **226** · `inventories` **217** ·
+      `net_income_controlling` **149** · `retained_earnings` 2 = **594칸**. 주요계정의 유도
+      4분기는 그 셋을 **언제나 null로 낸다**(생성자에 상수 `null`)인데 그 값을 채운 것은
+      **전체 재무제표**다 — **수요일이 채우고 목요일이 지우는 왕복**이다.
+      국내 Q4 전체 3,271행 중 그 셋이 NULL인 것이 1,901·2,011·2,230이라 **오래 돌았다.**
+      - **즉시 멈추고 고쳤다.** `managedColumns`가 「이 호출에서 한 행에서라도 값이 난 컬럼」을
+        모으고 `toClear`를 거기로 제한한다. **미국 65칸은 정당하다**(A23 가드가 낸 null이고
+        그 컬럼은 같은 호출의 다른 행에 값이 있다).
+      - **MUST: 지워진 52종목을 `full-statement-refill --tickers=… --quarters=true`로 되채운다.**
+        목록은 `tmp/cleared_tickers.txt`에 있다.
+    - 남은 것: KOSPI 200(A12 반영해 재시작) → KOSDAQ 150 → **지워진 52종목 복구** →
+      `governance-derive` → **전 종목 × 전 창 백필** → `ops/deploy.sh`.
   - **[재적재 순서] 이 묶음이 끝나면 아래를 한 번만 돈다. 각 줄에 근거가 있다.**
     1. **`ops/stop.sh --app`** — 평일 **13:30·14:00·14:30·15:10**(KST)에 배치가 돌고
        14:00 사슬이 `adj_close`를 다시 쓰고 지표를 지운다(`PipelineScheduler`의 cron 넷, 실측).
