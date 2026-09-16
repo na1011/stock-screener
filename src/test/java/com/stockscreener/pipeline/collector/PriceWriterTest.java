@@ -170,6 +170,40 @@ class PriceWriterTest {
                 .isTrue();
     }
 
+    @Test
+    @DisplayName("거래정지 봉을 종가로 평탄화해 저장한다 — ck_price_ohlc가 o=h=l=0을 거부한다")
+    void flattensHaltedBarToClose() {
+        long written = writer.write(stockId, List.of(
+                bar("2026-08-03", "100", "110", "95", "105"),
+                new RawPriceBar(LocalDate.parse("2026-08-04"),
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                        new BigDecimal("105"), 0L, null, null, false)));
+
+        assertThat(written).isEqualTo(2);
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT * FROM price_daily WHERE stock_id = ? AND trade_date = ?",
+                stockId, LocalDate.parse("2026-08-04"));
+        assertThat((BigDecimal) row.get("open")).isEqualByComparingTo("105");
+        assertThat((BigDecimal) row.get("high")).isEqualByComparingTo("105");
+        assertThat((BigDecimal) row.get("low")).isEqualByComparingTo("105");
+        assertThat((BigDecimal) row.get("close")).isEqualByComparingTo("105");
+        assertThat((Long) row.get("volume")).isZero();
+        assertThat((BigDecimal) row.get("trade_value")).isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("정지 봉 하나가 같은 배치의 정상 봉을 죽이지 않는다 — 제약 위반은 트랜잭션째로 날린다")
+    void haltedBarDoesNotKillSiblings() {
+        writer.write(stockId, List.of(
+                bar("2026-08-03", "100", "110", "95", "105"),
+                new RawPriceBar(LocalDate.parse("2026-08-04"),
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                        new BigDecimal("105"), 0L, null, null, false),
+                bar("2026-08-05", "105", "115", "100", "112")));
+
+        assertThat(rowCount()).isEqualTo(3);
+    }
+
     private static RawPriceBar bar(String date, String open, String high, String low, String close) {
         return new RawPriceBar(
                 LocalDate.parse(date),

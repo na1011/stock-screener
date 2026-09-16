@@ -67,11 +67,40 @@ public record RawPriceBar(
      * 손상된 봉만 버리고 나머지를 저장할 수 있다. 무료 API의 손상된 데이터는 드물지 않다.
      */
     public boolean isValid() {
+        if (isHalted()) {
+            return true;
+        }
         return volume >= 0
                 && high.compareTo(low) >= 0
                 && high.compareTo(open) >= 0
                 && high.compareTo(close) >= 0
                 && low.compareTo(open) <= 0
                 && low.compareTo(close) <= 0;
+    }
+
+    /**
+     * <b>거래정지 봉인가.</b> KRX는 정지 기간에 <b>기준가(종가)만 유지하고</b> 시·고·저가와
+     * 거래량을 0으로 준다 — 소스가 정직하게 주는 사실이지 손상이 아니다.
+     *
+     * <p>실측(2026-09-17 · 삼성바이오로직스 {@code 207940}):
+     * {@code 2025-10-30 o=0 h=0 l=0 c=1221000 v=0}. 국내 27종목을 다시 받아 버려진 봉을
+     * 패턴별로 세니 <b>이 형태가 1,185봉 · 그 밖의 형태가 0봉</b>이었다.
+     *
+     * <p><b>미국은 같은 사실을 {@code o=h=l=c ∧ v=0}으로 준다</b> — 그 형태는 원래 유효해서
+     * 이미 68종목 14,884행이 저장돼 있다. <b>소스의 표기가 다를 뿐 사실은 같다.</b>
+     *
+     * <p>MUST: 이 봉을 저장할 때는 {@code o/h/l}을 {@code close}로 채운다. DB 제약
+     * {@code ck_price_ohlc}가 {@code high >= close}를 요구하므로 원본 그대로는
+     * <b>삽입 자체가 거부되고</b>, 그러면 그 종목의 정상 봉까지 트랜잭션과 함께 사라진다.
+     * 채운 값은 사실에 부합한다 — <b>거래가 없었으므로 그날의 진폭은 실제로 0이다.</b>
+     */
+    public boolean isHalted() {
+        return volume == 0L
+                && close != null && close.signum() > 0
+                && isZero(open) && isZero(high) && isZero(low);
+    }
+
+    private static boolean isZero(java.math.BigDecimal value) {
+        return value != null && value.signum() == 0;
     }
 }

@@ -102,12 +102,37 @@ public class PriceWriter {
 
         List<RawPriceBar> valid = new ArrayList<>(bars.size());
         List<RawPriceBar> rejected = new ArrayList<>();
+        int halted = 0;
         for (RawPriceBar bar : bars) {
-            (bar.isValid() ? valid : rejected).add(bar);
+            if (!bar.isValid()) {
+                rejected.add(bar);
+                continue;
+            }
+            // MUST: 거래정지 봉은 o/h/l을 close로 채워 저장한다. ck_price_ohlc가
+            // high >= close를 요구하므로 원본(o=h=l=0)은 삽입이 거부되고, 그러면 그 종목의
+            // 정상 봉까지 트랜잭션과 함께 사라진다(RawPriceBar.isHalted()의 javadoc).
+            // 채운 값은 사실이다 — 거래가 없었으므로 그날 진폭은 0이다. 미국은 소스가
+            // 처음부터 이 형태로 주고 이미 14,884행이 그렇게 저장돼 있다.
+            valid.add(bar.isHalted() ? flattenToClose(bar) : bar);
+            if (bar.isHalted()) {
+                halted++;
+            }
+        }
+        if (halted > 0) {
+            log.info("거래정지 봉 {}봉을 종가로 평탄화해 저장한다. stockId={}", halted, stockId);
         }
         if (!rejected.isEmpty()) {
-            log.warn("OHLC 정합성 위반으로 {}봉을 건너뛴다. stockId={} 첫 위반일={}",
-                    rejected.size(), stockId, rejected.get(0).tradeDate());
+            // MUST: 버린 봉의 값을 함께 남긴다. 위 javadoc이 "대량 발생 시 소스 문제의
+            // 신호"라고 적었는데 수와 첫 날짜만으로는 그 신호를 읽을 수 없다 — 소스가 정말
+            // 불가능한 값을 주는지, 우리 파싱이 어긋났는지 가르는 재료가 이 표본이다.
+            // 실측(2026-09-17): 국내 27종목 재적재에서 23건·1,185봉이 버려졌고, 그것이
+            // 그대로 지표 결손이 됐는데 원인을 아무도 못 봤다.
+            log.warn("OHLC 정합성 위반으로 {}봉을 건너뛴다. stockId={} 첫 위반일={} 표본={}",
+                    rejected.size(), stockId, rejected.get(0).tradeDate(),
+                    rejected.stream().limit(3)
+                            .map(b -> b.tradeDate() + " o=" + b.open() + " h=" + b.high()
+                                    + " l=" + b.low() + " c=" + b.close() + " v=" + b.volume())
+                            .toList());
         }
         if (valid.isEmpty()) {
             return 0L;
@@ -150,6 +175,18 @@ public class PriceWriter {
     }
 
     /** 그 값이 {@code price_daily}에 실제로 저장될 모습. {@link #PRICE_SCALE} 참조. */
+    /**
+     * 거래정지 봉을 저장 형태로 접는다 — {@code o=h=l=close}, 거래대금 0.
+     *
+     * <p>{@code listedShares}와 {@code adjusted}는 그대로 둔다. 상장주식수는 정지 중에도
+     * 사실이고, 수정 여부는 이 함수가 판단할 것이 아니다.
+     */
+    private static RawPriceBar flattenToClose(RawPriceBar bar) {
+        return new RawPriceBar(bar.tradeDate(),
+                bar.close(), bar.close(), bar.close(), bar.close(),
+                bar.volume(), BigDecimal.ZERO, bar.listedShares(), bar.splitAdjustedBySource());
+    }
+
     private static BigDecimal stored(BigDecimal price) {
         return price.setScale(PRICE_SCALE, RoundingMode.HALF_UP);
     }

@@ -65,6 +65,40 @@ class RawPriceBarTest {
         assertThat(priceBar.isValid()).isTrue();
     }
 
+    @Test
+    @DisplayName("거래정지 봉을 통과시킨다 — KRX는 정지 기간에 기준가만 유지하고 OHLC·거래량을 0으로 준다")
+    void acceptsHaltedBar() {
+        RawPriceBar halted = bar("0", "0", "0", "1221000", 0);
+
+        assertThat(halted.isHalted()).isTrue();
+        assertThat(halted.isValid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("거래량이 있는데 OHLC가 0이면 거른다 — 그것은 정지가 아니라 손상이다")
+    void rejectsZeroOhlcWithVolume() {
+        RawPriceBar broken = bar("0", "0", "0", "1221000", 1000);
+
+        assertThat(broken.isHalted()).isFalse();
+        assertThat(broken.isValid()).isFalse();
+    }
+
+    @Test
+    @DisplayName("종가까지 0이면 거른다 — 값이 통째로 없는 것이지 정지가 아니다")
+    void rejectsAllZeroBar() {
+        RawPriceBar empty = bar("0", "0", "0", "0", 0);
+
+        assertThat(empty.isHalted()).isFalse();
+        assertThat(empty.isValid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("일부만 0이면 정지로 보지 않는다 — 부분 0은 손상이고 부등식이 판정한다")
+    void rejectsPartiallyZeroBar() {
+        assertThat(bar("0", "0", "95", "1221000", 0).isHalted()).isFalse();
+        assertThat(bar("0", "110", "0", "105", 0).isHalted()).isFalse();
+    }
+
     private static RawPriceBar bar(String open, String high, String low, String close, long volume) {
         return new RawPriceBar(
                 LocalDate.of(2026, 8, 5),
