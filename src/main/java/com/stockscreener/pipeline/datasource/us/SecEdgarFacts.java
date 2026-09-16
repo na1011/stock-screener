@@ -387,6 +387,25 @@ final class SecEdgarFacts {
                 if (end == null || filed == null || !node.has("val")) {
                     continue;
                 }
+                // **제출일보다 뒤에 끝나는 기간은 그 제출물이 보고할 수 없다.** 담으면
+                // 「그 시점에 없던 값」이 그 시점 조회에 보인다 — `IndicatorDataReader`의
+                // KNOWN_ON이 `published_at <= asOf`만 보므로 원리적으로 안 걸린다.
+                // 실측(2026-09-16): 저장된 `published_at < period_end` 행이
+                // **US 45(is_latest 20 · 31종목)**이고, `CREX`는 **2022-11-14 기준 조회가
+                // 2023년 FY 전체**를 본다. 스윕에서도 `MORN 2020/Q4` · `PEN 2021/Q3` ·
+                // `ROP 2015/FY`·`2015/Q4` 넷이 그 모양이었다.
+                //
+                // **MUST: 앵커 층이 아니라 여기서 막는다.** `anchorsOf`에 걸면 그 넷 중
+                // **하나만** 잡힌다 — 나머지 셋의 불가능 팩트가 전부 잔액(INSTANT)인데
+                // 앵커는 유량만 보기 때문이다. 여기 한 자리가 앵커·라벨·보고자·값을 함께 고친다.
+                //
+                // **MUST NOT: `ANCHORED_INSTANT`를 여기 걸지 않는다.** 표지 주식수의 `end`는
+                // 기간이 아니라 **「as of」**라 뜻이 다르고 제출일보다 뒤인 것이 정상이다
+                // (`AAL` end 2027-07-17 / filed 2026-07-23). 걸면 그 47칸의 주식수가 바뀐다.
+                // 반경: 전 컬럼 팩트 5,017,371 중 122팩트이고 주식수 47을 빼면 75 미만이다.
+                if (end.isAfter(filed) && !column.anchoredInstant()) {
+                    continue;
+                }
                 LocalDate start = date(node, "start");
                 Fact fact = new Fact(node.path("accn").asString(""), start, end,
                         new BigDecimal(node.path("val").asString("0")), filed, form,
