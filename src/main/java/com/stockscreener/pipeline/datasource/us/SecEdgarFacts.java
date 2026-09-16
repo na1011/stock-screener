@@ -3,6 +3,9 @@ package com.stockscreener.pipeline.datasource.us;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FinancialColumnAbsence;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
@@ -14,6 +17,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -53,6 +57,8 @@ import java.util.TreeMap;
  * {@link RawFinancialReport}의 생성자가 던지면 그 종목의 <b>다른 기간까지 전부</b> 못 담는다.
  */
 final class SecEdgarFacts {
+
+    private static final Logger log = LoggerFactory.getLogger(SecEdgarFacts.class);
 
     /**
      * 정기보고서만 쓴다.
@@ -490,6 +496,9 @@ final class SecEdgarFacts {
                                     Map<Label, Anchor> labelAnchors,
                                     int fromFiscalYear) throws DataSourceException {
         int dropped = 0;
+        // 기간이 둘인 라벨. 순회가 끝난 뒤 통째로 뺀다 — 뒤에 온 팩트가 그 라벨을 되살리면
+        // 「둘 중 무엇을 골랐는지」가 순서에 달리고, 그것이 막으려던 조용한 덮어쓰기다.
+        Set<Label> conflicted = new LinkedHashSet<>();
         for (Map<String, Map<Slot, Fact>> byTag : byColumn.values()) {
             for (Fact fact : allFacts(byTag)) {
                 if (fact.start() == null) {
@@ -531,20 +540,30 @@ final class SecEdgarFacts {
                         && label.fiscalYear() >= fromFiscalYear) {
                     // 저장 키에 기간이 없다. 라벨이 겹치면 uq_fs_latest가 걸리는 것이 아니라
                     // 앞 기간의 최신 표시가 조용히 내려간다 — FinancialWriter가 개정 갈래에서
-                    // UPDATE를 INSERT보다 먼저 돌리기 때문이다. 그래서 여기서 막는 것이
+                    // UPDATE를 INSERT보다 먼저 돌리기 때문이다. **그 라벨을 저장하지 않는 것**이
                     // 유일한 방어선이다.
                     //
+                    // **MUST: 그 라벨만 버리고 종목은 살린다.** 예전에는 여기서 던져
+                    // **그 종목의 재무가 통째로 안 바뀌었다** — 실측(2026-09-16)으로 `SENS`가
+                    // 결산월을 **6월 → 12월**로 바꿔 `2014-07-01~2015-06-30`과
+                    // `2015-01-01~2015-12-31`이 **둘 다 `2015/FY`**가 되는데, 그 한 라벨 때문에
+                    // 나머지 전 연도가 옛 값에 얼어붙었다(그 종목은 지표 253일을 들고
+                    // 백분위 모집단에 있다). **한 라벨의 모호함이 한 종목의 전 기간을 죽일
+                    // 이유가 없다.**
+                    //
+                    // **저장 키가 `(회계연도, 기간)`이라 한 해에 끝나는 회계연도 둘을 담을 수
+                    // 없다** — 그것은 모델의 한계이고, 담으려면 키에 기간이 들어가야 한다.
+                    // 여기서는 **버리고 센다**(`dropped`). 버린 라벨은 `windows`에서 빠지므로
+                    // `FinancialWriter`의 회수 안전장치가 **그 라벨의 저장 행을 안 건드린다.**
+                    //
                     // MUST: 판정을 적재 창 안으로 좁힌다. 지키려는 대상은 「저장되는 라벨」인데
-                    // 이 순회는 파싱된 전 기간에 걸려 있어서, 아래 build의 fromFiscalYear
-                    // 필터가 어차피 버릴 옛 연도의 충돌이 종목 전체를 죽였다. 실측(2026-09-04)
-                    // 으로 거절된 145종목 중 116이 2023년 미만에서 죽었고 거기에 AMZN(2019)이
-                    // 있다. 창 안의 충돌은 그대로 던진다 — 방어선을 낮추는 것이 아니라
-                    // 지키려던 범위에 맞추는 것이다.
-                    throw new DataSourceException(DataSourceException.Kind.MALFORMED,
-                            SecEdgarResponse.SOURCE_NAME,
-                            "같은 라벨에 기간이 둘이다: %d/%s → %s~%s vs %s~%s".formatted(
-                                    label.fiscalYear(), label.period(),
-                                    seen.start(), seen.end(), window.start(), window.end()));
+                    // 이 순회는 파싱된 전 기간에 걸려 있어서, 창 밖 옛 연도의 충돌까지 셌다.
+                    // 실측(2026-09-04)으로 거절된 145종목 중 116이 2023년 미만에서 죽었다.
+                    log.warn("같은 라벨에 기간이 둘이라 그 라벨을 버린다: {}/{} → {}~{} vs {}~{}",
+                            label.fiscalYear(), label.period(),
+                            seen.start(), seen.end(), window.start(), window.end());
+                    conflicted.add(label);
+                    dropped++;
                 }
                 // 앵커가 여럿이면(원본 10-K와 10-K/A) 공시일이 가장 이른 것으로 고정한다.
                 // 실행마다 같은 publishedAt이 나와야 FinancialWriter의 「공시일이 같으면
@@ -552,6 +571,10 @@ final class SecEdgarFacts {
                 labelAnchors.merge(label, anchor,
                         (a, b) -> a.filed().isAfter(b.filed()) ? b : a);
             }
+        }
+        for (Label label : conflicted) {
+            windows.remove(label);
+            labelAnchors.remove(label);
         }
         return dropped;
     }

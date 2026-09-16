@@ -203,20 +203,28 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
-    @DisplayName("한 해에 회계연도가 둘 끝나면 MALFORMED다 — 제약이 안 잡으므로 여기서 막는다")
-    void refusesTwoPeriodsUnderOneLabel() {
+    @DisplayName("한 해에 회계연도가 둘 끝나면 그 라벨만 버린다 — 종목을 죽이지는 않는다")
+    void dropsTheLabelWhenTwoPeriodsClaimIt() throws Exception {
         enqueue(200, fixture("tickers.json"));
         // 파일 이름에 conflict를 쓰지 않는다 — 전역 .gitignore의 `*CONFLICT*`가 삼켜
         // 저장소에 안 들어가고, 그러면 여기서는 통과하고 새로 클론한 곳에서만 깨진다.
         enqueue(200, fixture("companyfacts-two-years-one-label.json"));
 
-        // uq_fs_latest에 기간이 없어 라벨이 겹쳐도 제약이 걸리지 않는다. FinancialWriter가
-        // 개정 갈래에서 UPDATE를 INSERT보다 먼저 돌리므로, 앞 기간의 최신 표시가 조용히
-        // 내려가고 뒤 기간이 그 자리를 차지한다 — 어댑터의 자기 단언이 유일한 방어선이다.
-        assertThatThrownBy(() -> adapter().fetchReports(FIX, FROM))
-                .isInstanceOf(DataSourceException.class)
-                .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.MALFORMED)
-                .hasMessageContaining("같은 라벨에 기간이 둘이다");
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
+
+        // **보호는 그대로다.** uq_fs_latest에 기간이 없어 라벨이 겹쳐도 제약이 안 걸리고,
+        // FinancialWriter가 개정 갈래에서 UPDATE를 INSERT보다 먼저 돌리므로 앞 기간의 최신
+        // 표시가 조용히 내려간다 — 그것을 막는 것은 **그 라벨을 한 판도 안 내는 것**이다.
+        assertThat(reports)
+                .as("기간이 둘인 라벨은 한 판도 안 나온다 — 그것이 조용한 덮어쓰기를 막는다")
+                .noneMatch(r -> r.fiscalYear() == 2023 && "FY".equals(r.fiscalPeriod()));
+
+        // **예전에는 여기서 예외를 던져 그 종목의 재무가 통째로 안 바뀌었다.** 실측(2026-09-16)
+        // 으로 `SENS`가 결산월을 6월 → 12월로 바꿔 한 라벨에 창이 둘이 되는데, 그 하나 때문에
+        // 나머지 전 연도가 옛 값에 얼어붙었다(그 종목은 지표 253일을 들고 백분위 모집단에 있다).
+        // 스윕에서 그 종목이 판 115개·값칸 1,973을 되찾았고 다른 종목은 한 톨도 안 움직였다.
+        // **위 호출이 예외 없이 돌아온 것 자체가 그 증거다** — 목 서버의 응답을 하나만 큐에
+        // 넣으므로 여기서 다시 부르면 매핑 파일 호출이 실패해 다른 이유로 던진다.
     }
 
     @Test
