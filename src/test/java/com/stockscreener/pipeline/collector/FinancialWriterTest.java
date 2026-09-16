@@ -544,6 +544,43 @@ class FinancialWriterTest {
         assertThat(storedLatestRevenue()).isEqualByComparingTo("-350000");
     }
 
+    @Test
+    @DisplayName("같은 공시일에 기간이 달라지면 기간도 고쳐 쓰고 무효화한다 — 그 셋은 INSERT에만 있었다")
+    void rewritesThePeriodWhenTheSamePublicationNowSpansDifferentDates() {
+        RecordingInvalidationPort port = new RecordingInvalidationPort();
+        FinancialWriter w = new FinancialWriter(jdbcTemplate, port);
+        w.write(stockId, List.of(quarterSpanning("2025-10-01", "2025-12-31")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        port.calls.clear();
+
+        // 같은 공시일인데 우리 기간 규칙이 바뀌어 창이 며칠 앞으로 늘었다.
+        w.write(stockId, List.of(quarterSpanning("2025-09-28", "2025-12-31")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+
+        Map<String, Object> row = latestRow();
+        assertThat(row.get("period_start")).hasToString("2025-09-28");
+        assertThat(rowCount()).as("판을 새로 쌓지 않는다").isEqualTo(1);
+        assertThat(port.calls).as("기간이 바뀌면 값이 그대로여도 무효화한다")
+                .containsExactly(stockId + "@2025-09-28:FINANCIAL_REVISED");
+    }
+
+    /** 기간만 다른 같은 공시일의 분기 행. */
+    private static RawFinancialReport quarterSpanning(String start, String end) {
+        return new RawFinancialReport(
+                2025, "Q4",
+                LocalDate.parse(start), LocalDate.parse(end),
+                LocalDate.parse("2026-03-15"),
+                "11011", "KRW",
+                new BigDecimal("5000"), new BigDecimal("1200"), new BigDecimal("900"),
+                new BigDecimal("20000"), new BigDecimal("12000"), null, new BigDecimal("8000"),
+                null, null, null,
+                null, new BigDecimal("100"),
+                null, null, null, null, null, null,
+                null,
+                null, null, null, null, null, null, null, null, null, null,
+                false);
+    }
+
     private BigDecimal storedLatestRevenue() {
         return jdbcTemplate.queryForObject(
                 "SELECT revenue FROM financial_statement WHERE stock_id = ? AND is_latest",

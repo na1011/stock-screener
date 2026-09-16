@@ -400,7 +400,21 @@ public class FinancialWriter {
             }
         }
 
-        if (toFill.isEmpty() && toCorrect.isEmpty() && toClear.isEmpty()) {
+        // **기간과 보고서코드도 같은 공시의 산물이다.** 그 셋은 INSERT 한 자리에만 있어
+        // UPDATE 경로가 없었고, 그래서 **우리가 기간 규칙을 고쳐도 저장된 행은 안 바뀌었다** —
+        // 실측(2026-09-16): 같은 공시일인데 어댑터와 기간이 다른 행이 **미국 26(is_latest 18)**
+        // 이고, 국내는 비12월 결산 종목이 **3개월** 어긋난 채 얼어 있다.
+        // 그 결손을 안 열면 국내 회계기간을 고쳐도 **재적재가 0행을 바꾼다.**
+        //
+        // MUST NOT: `currency_code`는 여기 안 넣는다. 같은 공시일에 통화가 다른 행은
+        // **실측 0**이고, 그 컬럼은 ADR-0094의 읽기 게이트를 흔든다 — 근거 없이 건드릴 자리가 아니다.
+        boolean periodDiffers = !existing.periodStart().equals(report.periodStart())
+                || !existing.periodEnd().equals(report.periodEnd());
+        boolean reportCodeDiffers =
+                !java.util.Objects.equals(existing.reportCode(), report.reportCode());
+
+        if (toFill.isEmpty() && toCorrect.isEmpty() && toClear.isEmpty()
+                && !periodDiffers && !reportCodeDiffers) {
             tally.untouched++;
             return;
         }
@@ -408,17 +422,43 @@ public class FinancialWriter {
         List<Amount> columns = new ArrayList<>(toFill);
         columns.addAll(toCorrect);
         columns.addAll(toClear);
-        String setClause = columns.stream()
+        List<String> setParts = columns.stream()
                 .map(amount -> amount.column + " = ?")
-                .collect(Collectors.joining(", "));
-        Object[] args = new Object[columns.size() + 1];
-        for (int i = 0; i < columns.size(); i++) {
-            args[i] = columns.get(i).of(report);
+                .collect(Collectors.toCollection(ArrayList::new));
+        List<Object> values = new ArrayList<>();
+        for (Amount amount : columns) {
+            values.add(amount.of(report));
         }
-        args[columns.size()] = existing.id();
+        if (periodDiffers) {
+            setParts.add("period_start = ?");
+            values.add(report.periodStart());
+            setParts.add("period_end = ?");
+            values.add(report.periodEnd());
+        }
+        if (reportCodeDiffers) {
+            setParts.add("report_code = ?");
+            values.add(report.reportCode());
+        }
+        values.add(existing.id());
 
         jdbcTemplate.update(
-                "UPDATE financial_statement SET " + setClause + " WHERE id = ?", args);
+                "UPDATE financial_statement SET " + String.join(", ", setParts) + " WHERE id = ?",
+                values.toArray());
+
+        if (periodDiffers) {
+            // **기간이 바뀌면 값이 그대로여도 결과가 바뀐다** — `latestPerPeriod`가 `period_end`로
+            // 접고 TTM 창이 기간으로 정해진다. 무효화 하한은 **옛 시작일과 새 시작일 중 이른 쪽**이다:
+            // 창이 앞으로 늘어난 경우 새 시작일만 쓰면 덜 지워진다.
+            LocalDate from = existing.periodStart().isBefore(report.periodStart())
+                    ? existing.periodStart() : report.periodStart();
+            log.warn("기간을 고쳐 쓴다. stockId={} {}/{} 공시일={} {}~{} -> {}~{}",
+                    stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt(),
+                    existing.periodStart(), existing.periodEnd(),
+                    report.periodStart(), report.periodEnd());
+            tally.corrected++;
+            invalidationPort.invalidate(stockId, from,
+                    IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+        }
 
         if (!toFill.isEmpty()) {
             tally.filled++;
@@ -451,7 +491,8 @@ public class FinancialWriter {
                 .map(amount -> amount.column)
                 .collect(Collectors.joining(", "));
         List<Existing> found = jdbcTemplate.query("""
-                SELECT id, published_at, revision_no, %s FROM financial_statement
+                SELECT id, published_at, revision_no, period_start, period_end,
+                       report_code, %s FROM financial_statement
                 WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND is_latest
                 """.formatted(columns),
                 (rs, rowNum) -> {
@@ -463,6 +504,9 @@ public class FinancialWriter {
                             rs.getLong("id"),
                             rs.getObject("published_at", LocalDate.class),
                             rs.getInt("revision_no"),
+                            rs.getObject("period_start", LocalDate.class),
+                            rs.getObject("period_end", LocalDate.class),
+                            rs.getString("report_code"),
                             amounts);
                 },
                 stockId, report.fiscalYear(), report.fiscalPeriod());
@@ -493,6 +537,9 @@ public class FinancialWriter {
                             rs.getLong("id"),
                             rs.getObject("published_at", LocalDate.class),
                             rs.getInt("revision_no"),
+                            rs.getObject("period_start", LocalDate.class),
+                            rs.getObject("period_end", LocalDate.class),
+                            rs.getString("report_code"),
                             amounts);
                 },
                 stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt());
@@ -500,7 +547,8 @@ public class FinancialWriter {
     }
 
     private static final String Q_FIND_VINTAGE = """
-            SELECT id, published_at, revision_no, %s FROM financial_statement
+            SELECT id, published_at, revision_no, period_start, period_end,
+                   report_code, %s FROM financial_statement
             WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND published_at = ?
             ORDER BY revision_no DESC
             """;
@@ -622,6 +670,7 @@ public class FinancialWriter {
     }
 
     private record Existing(long id, LocalDate publishedAt, int revisionNo,
+                            LocalDate periodStart, LocalDate periodEnd, String reportCode,
                             Map<Amount, BigDecimal> amounts) {
     }
 
