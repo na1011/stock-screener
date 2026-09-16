@@ -581,6 +581,40 @@ class FinancialWriterTest {
                 false);
     }
 
+    @Test
+    @DisplayName("판 이력을 전부 내는 소스에서는 소스가 준 판도 회수한다 — 유령이 교정을 영구히 막는다")
+    void retractsSourceVintagesWhenTheFetchCarriesTheWholeHistory() {
+        writer.write(stockId, List.of(
+                derivedQuarterAt("2024-02-20", "250000", false),
+                derivedQuarterAt("2026-02-20", "-350000", false)),
+                FinancialWriter.WriteMode.FILL_MISSING);
+
+        // 계약이 참이면 「여기 없는 공시일」은 더 이상 그 라벨의 판이 아니다.
+        writer.writeDetailed(stockId, List.of(derivedQuarterAt("2024-02-20", "250000", false)),
+                FinancialWriter.WriteMode.FILL_MISSING, true);
+
+        assertThat(rowCount()).as("유령 판이 회수된다").isEqualTo(1);
+        assertThat(storedLatestRevenue()).isEqualByComparingTo("250000");
+    }
+
+    @Test
+    @DisplayName("어댑터가 그 라벨을 하나도 안 내면 계약이 참이어도 한 행도 안 건드린다")
+    void neverTouchesALabelTheFetchDidNotProduce() {
+        writer.write(stockId, List.of(
+                derivedQuarterAt("2024-02-20", "250000", false),
+                derivedQuarterAt("2026-02-20", "-350000", false)),
+                FinancialWriter.WriteMode.FILL_MISSING);
+
+        // 다른 라벨만 들어온다 — 그 라벨은 자격이 없으므로 보존 집합을 만들지 않는다.
+        writer.writeDetailed(stockId, List.of(report(2024, "FY", "2025-03-15", "10")),
+                FinancialWriter.WriteMode.FILL_MISSING, true);
+
+        assertThat(rowCount()).as("판 둘이 그대로 남고 새 라벨이 하나 는다").isEqualTo(3);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM financial_statement WHERE stock_id = ? AND fiscal_period = 'Q4'",
+                Integer.class, stockId)).isEqualTo(2);
+    }
+
     private BigDecimal storedLatestRevenue() {
         return jdbcTemplate.queryForObject(
                 "SELECT revenue FROM financial_statement WHERE stock_id = ? AND is_latest",

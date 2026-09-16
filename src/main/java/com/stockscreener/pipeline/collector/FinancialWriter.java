@@ -142,9 +142,22 @@ public class FinancialWriter {
      * 구분되지 않는다.
      */
     public Outcome writeDetailed(long stockId, List<RawFinancialReport> reports, WriteMode mode) {
+        return writeDetailed(stockId, reports, mode, false);
+    }
+
+    /**
+     * 위와 같되 <b>이 호출이 판 이력을 전부 냈는지</b>를 함께 받는다
+     * ({@code FinancialFetch.completeVintageHistory}).
+     *
+     * <p>참이면 회수 자격이 <b>어댑터가 낸 모든 라벨</b>로 넓어진다. 거짓이면 지금까지처럼
+     * <b>유도 라벨만</b>이다. <b>기본값이 거짓인 것이 계약의 핵심이다</b> — 선언하지 않은
+     * 소스에서 넓히면 그 소스가 다시 주지 않는 판을 지운다.
+     */
+    public Outcome writeDetailed(long stockId, List<RawFinancialReport> reports, WriteMode mode,
+                                 boolean completeVintageHistory) {
         Tally tally = new Tally();
         if (mode != WriteMode.APPEND_ONLY) {
-            retractStaleDerived(stockId, reports, tally);
+            retractStaleVintages(stockId, reports, completeVintageHistory, tally);
         }
         for (RawFinancialReport report : reports) {
             writeOne(stockId, report, mode, tally);
@@ -186,16 +199,26 @@ public class FinancialWriter {
      * 그러면 이 회수가 <b>멀쩡한 옛 세대를 지운다</b> — ADR-0145가 창을 안 좁히는 이유에 이 축이
      * 하나 더 붙는다.
      */
-    private void retractStaleDerived(long stockId, List<RawFinancialReport> reports, Tally tally) {
+    private void retractStaleVintages(long stockId, List<RawFinancialReport> reports,
+                                      boolean completeVintageHistory, Tally tally) {
         // 라벨 자격은 「유도 행이 하나라도 있는가」이고, 보존 집합은 그 라벨로 **들어온 판 전부**다.
         // 유도 행만 보존 집합에 넣으면, 같은 (연도,분기)에 소스가 직접 준 판이 함께 지워진다 —
         // 미국에서 실제로 있는 형태다(다음 해 10-K가 전년 4분기를 비교로 낸다. 실측 2026-09-15:
         // CAH 2016·MDLZ 2015가 그 자리이고 리플레이가 derived=false로 답한다).
         // 지금은 같은 트랜잭션이 곧바로 다시 써서 값이 안 사라지지만, **이력과 created_at은
         // 매 실행 지워지고**, 소스가 그 판을 그만 내는 순간 조용히 유실된다.
+        // **자격은 소스의 계약이 정한다.** 판 이력을 전부 내는 소스에서는 「여기 없는 공시일」이
+        // 곧 「더 이상 그 라벨의 판이 아니다」이므로 **모든 라벨**이 자격을 갖는다. 그렇지 않은
+        // 소스에서는 지금까지처럼 **유도 라벨만**이다 — 그 소스가 안 주는 판을 지우면
+        // 되돌릴 수 없다(FinancialFetch.completeVintageHistory의 DART 실측).
+        //
+        // **어댑터가 그 라벨을 하나도 안 내면 한 행도 안 건드린다** — 이것이 넓힌 자격의
+        // 유일한 안전장치다. 실측(2026-09-16)으로 `DSGX` 2020/FY · `LW` 2017/Q2
+        // **2라벨 3행**이 그 갈래로 보호된다(그 둘은 앵커 결함이라 따로 연다).
+        // 같은 이유로 적재 창을 좁혀 돌려도 창 밖 라벨은 안 지워진다.
         Set<DerivedLabel> derivedLabels = new LinkedHashSet<>();
         for (RawFinancialReport report : reports) {
-            if (report.derived()) {
+            if (completeVintageHistory || report.derived()) {
                 derivedLabels.add(new DerivedLabel(report.fiscalYear(), report.fiscalPeriod()));
             }
         }

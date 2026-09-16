@@ -70,7 +70,8 @@ public class FinancialCollector {
         // MUST: 보고서보다 먼저 쓰지 않는다 — 부재 판정은 이번 수집의 사실이고, 보고서 쓰기가
         // 실패해 롤백되면 그 판정도 함께 되돌아가야 한다. 같은 트랜잭션은 아니지만 순서가
         // 그 뜻을 지킨다(쓰기가 던지면 부재 행이 안 남는다).
-        FinancialWriter.Outcome outcome = writer.writeDetailed(security.stockId(), reports, mode);
+        FinancialWriter.Outcome outcome = writer.writeDetailed(security.stockId(), reports, mode,
+                fetch.completeVintageHistory());
         absenceWriter.write(security.stockId(), source.sourceName(), fetch.absences(),
                 LocalDate.now());
         return outcome;

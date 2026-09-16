@@ -15,15 +15,33 @@ import java.util.List;
  * 「이 소스는 그 축을 안 본다」이고, 그때 저장 계층이 <b>기존 행을 지우지 않는다.</b>
  * 「모른다」와 「없다」를 가르는 것이 이 축의 존재 이유다.
  */
-public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences) {
+public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
+                             boolean completeVintageHistory) {
 
     public FinancialFetch {
         reports = reports == null ? List.of() : List.copyOf(reports);
         absences = absences == null ? List.of() : List.copyOf(absences);
     }
 
-    /** 부재 축을 안 보는 소스용. */
+    /**
+     * <b>이 호출이 그 종목의 판 이력을 전부 냈는가.</b> 참이면 저장 계층이
+     * 「여기 없는 공시일은 더 이상 그 라벨의 판이 아니다」로 읽어도 된다.
+     *
+     * <p><b>MUST: 소스마다 다시 묻는다 — 이식하면 이력을 파괴한다.</b>
+     * SEC의 {@code companyfacts}는 한 콜에 <b>판 이력 전부</b>를 실어 주므로 참이다.
+     * DART는 {@code (corp_code, 연도, 보고서코드)}마다 <b>최신본 하나만</b> 내므로 거짓이다 —
+     * 실측(2026-09-16)으로 국내에 공시일이 둘 이상인 라벨이 <b>54 · 26종목</b>이고
+     * 전부 {@code revision_no} 0과 1을 가진 <b>진짜 정정공시</b>다. 참으로 읽으면
+     * 그 원본 판이 지워지고 <b>DART는 그것을 다시 주지 않는다.</b>
+     *
+     * <p>기본값이 거짓인 것도 그 때문이다 — 선언하지 않은 소스는 안전한 쪽에 선다.
+     */
+    public boolean completeVintageHistory() {
+        return completeVintageHistory;
+    }
+
+    /** 부재 축을 안 보고 판 이력도 전부 내지 않는 소스용. */
     public static FinancialFetch of(List<RawFinancialReport> reports) {
-        return new FinancialFetch(reports, List.of());
+        return new FinancialFetch(reports, List.of(), false);
     }
 }

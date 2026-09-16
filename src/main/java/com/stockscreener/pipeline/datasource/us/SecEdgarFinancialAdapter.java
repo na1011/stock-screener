@@ -113,7 +113,9 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
             log.info("기간을 만들지 못한 팩트를 버렸다. ticker={} 버림={}건 만든 보고서={}건",
                     security.ticker(), result.dropped(), result.reports().size());
         }
-        return new FinancialFetch(result.reports(), result.absences());
+        // companyfacts는 한 콜에 **판 이력 전부**를 싣는다 — 저장 계층이 「여기 없는 공시일은
+        // 더 이상 그 라벨의 판이 아니다」로 읽어도 되는 유일한 근거다(FinancialFetch 참조).
+        return new FinancialFetch(result.reports(), result.absences(), true);
     }
 
     /**
