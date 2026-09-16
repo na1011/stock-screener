@@ -492,19 +492,24 @@ class FinancialWriterTest {
     void derivedRowClearsWhatTheNewRuleCannotMake() {
         // 재적재 잡이 쓰는 모드다(FinancialRefillJob). APPEND_ONLY는 같은 공시일의 재수집을
         // 아예 안 보므로 이 갈래에 못 닿는다.
-        writer.write(stockId, List.of(derivedQuarter("-100", true)), FinancialWriter.WriteMode.FILL_MISSING);
+        // 운영에서는 FY·Q1~Q3가 함께 들어온다 — 그 형제 행이 이 호출의 **관할 컬럼**을 정한다.
+        writer.write(stockId, List.of(derivedQuarter("-100", true), siblingWithCostOfSales("500")),
+                FinancialWriter.WriteMode.FILL_MISSING);
         assertThat(storedCostOfSales()).isEqualByComparingTo("-100");
 
         // 새 규칙이 「이 컬럼은 못 만든다」고 판정했다. 재수집 경로가 NULL만 채우면 옛 유도값이
         // 영영 남는다 — 실측으로 미국 4분기 음수 매출 45행·매출원가 41행이 재적재 뒤에도
         // 한 행도 안 줄었다.
-        writer.write(stockId, List.of(derivedQuarter(null, true)), FinancialWriter.WriteMode.FILL_MISSING);
+        writer.write(stockId, List.of(derivedQuarter(null, true), siblingWithCostOfSales("500")),
+                FinancialWriter.WriteMode.FILL_MISSING);
         assertThat(storedCostOfSales()).as("유도 행이면 지운다").isNull();
 
         // 대조군 — 소스가 준 행에서 컬럼이 빠진 것은 「그 판이 안 실었다」이지 「값이 없다」가
         // 아니다. 지우면 정정 하나가 그 기간의 손익을 통째로 날린다.
-        writer.write(stockId, List.of(derivedQuarter("-100", true)), FinancialWriter.WriteMode.FILL_MISSING);
-        writer.write(stockId, List.of(derivedQuarter(null, false)), FinancialWriter.WriteMode.FILL_MISSING);
+        writer.write(stockId, List.of(derivedQuarter("-100", true), siblingWithCostOfSales("500")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        writer.write(stockId, List.of(derivedQuarter(null, false), siblingWithCostOfSales("500")),
+                FinancialWriter.WriteMode.FILL_MISSING);
         assertThat(storedCostOfSales()).as("소스가 준 행이면 안 지운다").isEqualByComparingTo("-100");
     }
 
@@ -639,9 +644,54 @@ class FinancialWriterTest {
                 derived);
     }
 
+    @Test
+    @DisplayName("유도 행이라도 이 호출이 안 다루는 컬럼은 안 지운다 — 다른 소스가 채운 값이다")
+    void neverClearsAColumnThisFetchDoesNotManage() {
+        // 전체 재무제표가 재고를 채워 뒀다.
+        writer.write(stockId, List.of(derivedQuarter("-100", true), siblingWithCostOfSales("500")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        jdbcTemplate.update(
+                "UPDATE financial_statement SET inventories = 777 WHERE stock_id = ? AND fiscal_period = 'Q4'",
+                stockId);
+
+        // 주요계정의 유도 4분기는 재고를 **언제나 null로 낸다** — 그 엔드포인트가 안 준다.
+        // 그것을 「새 규칙이 못 만든다」로 읽으면 남의 값을 지운다(실측: 국내 594칸).
+        writer.write(stockId, List.of(derivedQuarter(null, true), siblingWithCostOfSales("500")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+
+        assertThat((BigDecimal) jdbcTemplate.queryForObject(
+                "SELECT inventories FROM financial_statement WHERE stock_id = ? AND fiscal_period = 'Q4'",
+                BigDecimal.class, stockId))
+                .as("이 호출이 한 행에서도 값을 안 낸 컬럼은 관할이 아니다")
+                .isEqualByComparingTo("777");
+        assertThat(storedCostOfSales())
+                .as("같은 호출이 값을 낸 적 있는 컬럼은 그대로 지운다").isNull();
+    }
+
+    /** 같은 소스의 형제 행. 이 호출의 **관할 컬럼**을 정하는 것이 목적이다. */
+    private static RawFinancialReport siblingWithCostOfSales(String costOfSales) {
+        return new RawFinancialReport(
+                2025, "Q3",
+                LocalDate.of(2025, 7, 1), LocalDate.of(2025, 9, 30),
+                LocalDate.parse("2026-03-15"),
+                "11014", "KRW",
+                new BigDecimal("4000"), new BigDecimal("1000"), new BigDecimal("700"),
+                new BigDecimal("19000"), new BigDecimal("11000"), null, new BigDecimal("8000"),
+                null, null, null,
+                null, new BigDecimal("100"),
+                null, null,
+                new BigDecimal(costOfSales),
+                null, null, null,
+                null,
+                null, null, null, null, null, null, null, null, null, null,
+                false);
+    }
+
     private BigDecimal storedCostOfSales() {
+        // 형제 행이 함께 들어오므로 is_latest가 라벨마다 하나씩 있다 — 4분기 행을 집는다.
         return jdbcTemplate.queryForObject(
-                "SELECT cost_of_sales FROM financial_statement WHERE stock_id = ? AND is_latest",
+                "SELECT cost_of_sales FROM financial_statement "
+                        + "WHERE stock_id = ? AND is_latest AND fiscal_period = 'Q4'",
                 BigDecimal.class, stockId);
     }
 

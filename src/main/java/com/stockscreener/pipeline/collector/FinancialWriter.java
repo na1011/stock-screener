@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -159,8 +160,9 @@ public class FinancialWriter {
         if (mode != WriteMode.APPEND_ONLY) {
             retractStaleVintages(stockId, reports, completeVintageHistory, tally);
         }
+        Set<Amount> managed = managedColumns(reports);
         for (RawFinancialReport report : reports) {
-            writeOne(stockId, report, mode, tally);
+            writeOne(stockId, report, mode, managed, tally);
         }
         if (mode != WriteMode.APPEND_ONLY) {
             // 종목 단위로 한 줄만 남긴다. 행마다 찍으면 350종목 × 16행이라 읽을 수 없다.
@@ -268,7 +270,41 @@ public class FinancialWriter {
         }
     }
 
-    private void writeOne(long stockId, RawFinancialReport report, WriteMode mode, Tally tally) {
+    /**
+     * <b>이 호출이 다루는 컬럼.</b> 한 행에서라도 값이 난 컬럼만 든다.
+     *
+     * <p><b>왜 필요한가</b>: {@link #fillMissing}의 값 지우기 갈래는 「유도 행은 우리 계산이니
+     * 새 규칙이 못 만들면 옛 값이 남을 이유가 없다」에 기댄다. 그런데 <b>그 컬럼이 애초에
+     * 그 유도의 산물이 아닐 수 있다.</b> 국내 주요계정의 유도 4분기는
+     * {@code cash_and_equivalents}·{@code inventories}·{@code net_income_controlling}을
+     * <b>언제나 {@code null}로 낸다</b>(그 엔드포인트가 그 계정을 안 준다 — 생성자에 상수
+     * {@code null}이 박혀 있다). 그 값을 채운 것은 <b>전체 재무제표</b>인데, 지우기가
+     * 그것을 함께 지웠다 — 수요일이 채우고 목요일이 지우는 <b>왕복</b>이다.
+     *
+     * <p><b>실측(2026-09-16 재적재)</b>: KOSPI 52종목까지 도는 동안
+     * {@code cash_and_equivalents} <b>226</b> · {@code inventories} <b>217</b> ·
+     * {@code net_income_controlling} <b>149</b> · {@code retained_earnings} 2 —
+     * <b>594칸</b>이 지워졌다. 같은 실행의 미국 65칸은 <b>정당하다</b>(불가능한 음수 유량을
+     * 가드가 막아 낸 {@code null}이고, 그 컬럼들은 다른 행에 값이 있어 관할이다).
+     *
+     * <p><b>호출 단위로 근사하는 것이 맞다</b> — 컬럼마다 출처를 실으면 레코드가 커지는데,
+     * 「이 호출에서 한 번도 값이 안 난 컬럼」은 <b>그 소스가 안 다루는 컬럼</b>과 실질적으로
+     * 같고, 틀리는 쪽이 <b>안 지우는 쪽</b>이라 안전하다.
+     */
+    private static Set<Amount> managedColumns(List<RawFinancialReport> reports) {
+        Set<Amount> managed = EnumSet.noneOf(Amount.class);
+        for (RawFinancialReport report : reports) {
+            for (Amount amount : Amount.values()) {
+                if (amount.of(report) != null) {
+                    managed.add(amount);
+                }
+            }
+        }
+        return managed;
+    }
+
+    private void writeOne(long stockId, RawFinancialReport report, WriteMode mode,
+                          Set<Amount> managed, Tally tally) {
         Existing existing = findLatest(stockId, report);
 
         if (existing == null) {
@@ -303,7 +339,7 @@ public class FinancialWriter {
             Existing vintage = mode == WriteMode.FILL_MISSING
                     ? findVintage(stockId, report) : null;
             if (vintage != null) {
-                fillMissing(stockId, vintage, report, tally);
+                fillMissing(stockId, vintage, report, managed, tally);
                 return;
             }
             // 그 공시일의 행이 아예 없다. **새로 넣지는 않는다** — 그것은 revision_no 배정과
@@ -323,7 +359,7 @@ public class FinancialWriter {
                 tally.untouched++;
                 return;
             }
-            fillMissing(stockId, existing, report, tally);
+            fillMissing(stockId, existing, report, managed, tally);
             return;
         }
 
@@ -388,7 +424,7 @@ public class FinancialWriter {
      * 소스가 실제로 고쳐 낸 것은 공시일이 더 늦어 정정 갈래로 간다.
      */
     private void fillMissing(long stockId, Existing existing, RawFinancialReport report,
-                             Tally tally) {
+                             Set<Amount> managed, Tally tally) {
         List<Amount> toFill = new ArrayList<>();
         List<Amount> toCorrect = new ArrayList<>();
         List<Amount> toClear = new ArrayList<>();
@@ -405,7 +441,7 @@ public class FinancialWriter {
                 // 옛 계산이 남아 있을 이유가 없다. 이 갈래가 없으면 **유도 규칙을 고쳐도 옛
                 // 값을 영영 못 지운다** — 실측(2026-09-14)으로 미국 4분기 음수 매출 45행·
                 // 매출원가 41행이 재적재 뒤에도 한 행도 안 줄었다.
-                if (report.derived() && amount.overwritable()
+                if (report.derived() && amount.overwritable() && managed.contains(amount)
                         && existing.amounts().get(amount) != null) {
                     toClear.add(amount);
                     corrections.add("%s %s -> (없음)".formatted(
