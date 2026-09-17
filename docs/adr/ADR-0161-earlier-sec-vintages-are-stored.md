@@ -32,30 +32,53 @@ applies_to:
 - **MUST: 넣은 즉시 그 라벨을 재번호한다 — 호출 끝으로 미루지 않는다.** 소스가 라벨 안에서 공시일 오름차순으로 주므로
   같은 호출에서 뒤따르는 새 정정판이 `최신 번호 + 1`을 쓰는데, 그 번호가 임시 번호와 겹쳐 `uq_fs_revision` 위반으로 그 종목
   쓰기가 통째로 롤백된다(시험 `acceptsANewerRevisionInTheSameCallAfterAnEarlierInsert`가 수정 전에 붉었다).
+- **MUST: 이른 판의 주식수는 같은 라벨에 저장된 값을 잇는다.** SEC 주식수는 라벨 앵커의 표지라 소스가 같은 라벨의
+  모든 판에 같은 값을 주고, 저장값이 다르면 손 수리(ADR-0126)다 — 기존 행은 `Amount.overwritable()`이 지키지만 **새 행
+  삽입은 그 보호를 안 거친다**. 사본 재생에서 `RPAY` 2023 Q4가 90,048,638,000으로 되살아날 뻔했다(삽입 2,565판 중 그 1칸).
+  저장값이 둘 이상으로 갈리면 소스 값을 쓰고 경고를 남긴다.
+- **MUST: 펜스 예외는 증거와 두 공시일까지 고정한다.** `PACS` 2024 Q3는 SEC 제출 목록에 2024-11-15 `NT 10-Q` 뒤
+  2025-11-19 10-K 1·10-Q 4를 몰아 낸 것이라 「첫 판 = 이듬해 첫 판」이 소스 사실이다. 판정식 `>=`를 `>`로 바꾸면 결함의
+  주된 모양(원 공시 판이 빠져 첫 저장 판이 이듬해 비교 열인 것)을 함께 놓친다. 예외가 더는 안 걸리면 펜스가 「낡았다」를 낸다.
 - **MUST: 재번호도 켰을 때만 돈다.** 끈 채로 돌면 회수가 지운 라벨의 번호가 비는 지금의 동작이 남는다(실측 미국 33라벨).
 
 ## 검증
 
 ```premise 미국 현재 편입의 원 공시 판이 빠지지 않았다
-psql -d stock_screener -At -c "WITH firsts AS (SELECT f.stock_id, f.fiscal_year, f.fiscal_period, min(f.published_at) first_pub FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE s.market_code NOT IN ('KOSPI','KOSDAQ') AND EXISTS (SELECT 1 FROM universe_membership um WHERE um.stock_id = f.stock_id AND um.universe_code = 'US_TOP1000' AND um.effective_to IS NULL) GROUP BY 1,2,3), flagged AS (SELECT a.stock_id FROM firsts a JOIN firsts b ON b.stock_id = a.stock_id AND b.fiscal_period = a.fiscal_period AND b.fiscal_year = a.fiscal_year + 1 WHERE a.first_pub >= b.first_pub) SELECT CASE WHEN (SELECT count(*) FROM firsts) = 0 THEN '잴 것이 없었다 — 미국 현재 편입 재무가 0행이다' WHEN count(*) = 0 THEN 'OK 원 공시 판이 빠진 라벨 0' ELSE count(*) || '라벨·' || count(DISTINCT stock_id) || '종목의 첫 저장 판이 이듬해 같은 기간 첫 판보다 늦다 — 원 공시 판이 없다(재현율 약 30%의 하한). financial-refill --insert-earlier-vintages=true --financial-years=11(현재 편입 --universe=US_TOP1000 · 과거 편입 --tickers)과 그 종목 백필이 닫는다(ADR-0161)' END FROM flagged"
+psql -d stock_screener -At -c "WITH firsts AS (SELECT f.stock_id, f.fiscal_year, f.fiscal_period, min(f.published_at) first_pub FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE s.market_code NOT IN ('KOSPI','KOSDAQ') AND EXISTS (SELECT 1 FROM universe_membership um WHERE um.stock_id = f.stock_id AND um.universe_code = 'US_TOP1000' AND um.effective_to IS NULL) GROUP BY 1,2,3), flagged AS (SELECT s.ticker::text AS ticker, a.fiscal_year, a.fiscal_period::text AS fiscal_period, a.first_pub, b.first_pub AS next_first FROM firsts a JOIN firsts b ON b.stock_id = a.stock_id AND b.fiscal_period = a.fiscal_period AND b.fiscal_year = a.fiscal_year + 1 JOIN stock s ON s.id = a.stock_id WHERE a.first_pub >= b.first_pub), exc(ticker, fiscal_year, fiscal_period, first_pub, next_first) AS (VALUES ('PACS'::text, 2024, 'Q3'::text, DATE '2025-11-19', DATE '2025-11-19')), unexplained AS (SELECT * FROM flagged EXCEPT SELECT * FROM exc), stale AS (SELECT * FROM exc EXCEPT SELECT * FROM flagged) SELECT CASE WHEN (SELECT count(*) FROM firsts) = 0 THEN '잴 것이 없었다 — 미국 현재 편입 재무가 0행이다' WHEN (SELECT count(*) FROM unexplained) = 0 AND (SELECT count(*) FROM stale) = 0 THEN 'OK 원 공시 판이 빠진 라벨 0 (증거 예외 ' || (SELECT count(*) FROM exc) || ')' WHEN (SELECT count(*) FROM unexplained) > 0 THEN (SELECT count(*) FROM unexplained) || '라벨·' || (SELECT count(DISTINCT ticker) FROM unexplained) || '종목의 첫 저장 판이 이듬해 같은 기간 첫 판보다 늦다 — 원 공시 판이 없다(재현율 약 30%의 하한). financial-refill --insert-earlier-vintages=true --financial-years=11(현재 편입 --universe=US_TOP1000 · 과거 편입 --tickers)과 그 종목 백필이 닫는다(ADR-0161)' ELSE '예외가 낡았다 — ' || (SELECT string_agg(ticker || ' ' || fiscal_year || fiscal_period, ', ') FROM stale) || '가 더는 안 걸린다. ADR-0161 펜스의 예외에서 지운다' END"
 ```
 
-**시험**: `FinancialWriterTest$EarlierVintages` 7건 — 삽입·무효화 기점·재번호 셋이 **결함을 되살린 코드(`insertEarlier = false`)에서 붉었다**
+**시험**: `FinancialWriterTest$EarlierVintages` 9건 — 삽입·무효화 기점·재번호 셋이 **결함을 되살린 코드(`insertEarlier = false`)에서 붉었다**
 (2026-09-17 대조군).
 
 ## 결과
 
-- **코드는 들어갔고 배포도 값 반영도 아직이다(2026-09-17).** 위 펜스가 612라벨·326종목으로 붉고 **묶음 적용 전까지 붉은 것이 정상이다** — 반영은 E·L과 **한 창**에서 한다
-  (progress.md ①). Q4V만 먼저 반영하면 E와 겹치는 종목을 두 번 무효화·백필한다.
+- **코드는 들어갔고 배포도 값 반영도 아직이다(2026-09-17).** 운영 펜스는 611라벨·325종목으로 붉고(PACS 예외 뺀 수)
+  적용 전까지 붉은 것이 정상이다.
+- **반영은 Q4V 단독으로 한다 — E·L과 묶지 않는다.** 묶던 근거가 「겹치는 종목을 두 번 무효화·백필한다」라는 비용이었다.
+  Q4V는 읽기 코드 변경이 주석뿐이라 옛 jar의 13:30과 경쟁하지 않고, 순위 영향은 반증 둘이 따로 0이다(격자 36,960칸 · 54점).
+- **드라이런(사본 DB · 2026-09-17 22시 덤프)** — 재생 하네스 `EarlierVintageReplayHarnessTest`:
+  도달 675종목 삽입 2,565 = 행 증가 · 회수·정정·교정 0 · US `is_latest`·국내 행 불변 · 공시일–번호 역전 0 ·
+  live refill 6종목이 재생과 공시일·번호·주식수까지 같다. 같은 백필을 돈 대조 사본과의 지표 대조: 공시일 구간 계열 128,107행이
+  전부 [P1, P2) 안 · 5년 중앙값·할인 337,800행이 전부 [P1, P2+1,260봉] 안 · 675종목 밖과 국내 0. 화면(전 프리셋·저장 화면 21기준일):
+  편입 여부 18/624칸 · 전 열 46/624칸 — 전부 미국 · 최신일 0. EMAT 시총 계단 05-22 → **02-20**.
+- **사라지는 원본 지표 2,667행을 열었다**: 원 공시값으로 계산 규칙이 값을 안 냄 1,734행·23종목 · 5년 창 표본 287행·4종목 ·
+  유도 Q4 기준 섞임 의심 646행(`APLD`·`UWMC` — 재작성된 FY에서 옛 기준 1~3분기를 뺐다). 뒤의 것은 **기존 저장 유도 Q4에도
+  801판 중 81판(66종목)이 같은 모양**이라 이 결정이 만든 결함이 아니다 — 유도 축에서 따로 연다.
+- **ADR-0151 펜스는 179 → 97이고 적용 뒤에도 임계(60) 위다.** 남는 97행은 전부 소스가 그 공시일에 Q4를 직접 주고 FY는 안 주는
+  행이다(캐시 대조) — 그 펜스는 DB에 유도 여부가 없어 둘을 못 가른다.
 - **크기(캐시 1,214종목 스윕 대 DB)**: 빠진 판 **2,596·683종목**(유도 1,378 · 소스 1,218). 보존 창 안까지 비는 판 290·133종목 ·
   편입일 12,894(거의 복원 평면). **오늘 저장값에도 닿는다** — `ValuationHistory.median`이 봉마다 그때 보이던 판으로 배수를
   내 1,260봉 중앙값을 만들므로 `PER/PBR/PSR_MEDIAN_5Y`·`*_DISCOUNT_5Y`가 바뀐다. 활성 화면 중 읽는 것은 프리셋 `린치 고속성장주`
-  (`PER < PER_MEDIAN_5Y`)와 사용자 화면 v13~v16(`PER/PBR_DISCOUNT_5Y` · 가중치 조건)이다. 바뀌는 크기는 아직 안 쟀다(드라이런이 잰다).
+  (`PER < PER_MEDIAN_5Y`)와 사용자 화면 v13~v16(`PER/PBR_DISCOUNT_5Y` · 가중치 조건)이다. 바뀌는 크기는 위 드라이런이 쟀다.
 - **도달**: `financial-refill`의 기본 창이 8년이라 11년을 명시한다 · `--universe`는 현재 편입만이라 과거 편입은 `--tickers`다 ·
   `US_TOP1000` 이력 없는 8종목은 쓰기는 닿지만 백필이 안 닿아 넣지 않는다.
-- **순위는 안 움직인다(반증자 모의 · 재현하지 않았다)** — `JdbcStoredShareCounts` 규칙을 격자 54점에 모의해 주식수 1% 넘게 바뀐 칸 0
-  (유도 Q4가 같은 기말·공시일의 FY와 주식수가 같다). 적용 창에서 `universe-restore --dates` 전후 한 쌍으로 확인한다.
-- **어려워지는 것**: 「정정」 배지가 `revision_no > 0`이라 재번호 뒤 재게재에도 붙는다 — 배지의 뜻은 따로 고친다.
+- **순위는 안 움직인다(반증자 모의 둘 · 재현하지 않았다)** — `JdbcStoredShareCounts` 규칙을 격자에 모의해 주식수 1% 넘게 바뀐 칸 0
+  (유도 Q4가 같은 기말·공시일의 FY와 주식수가 같다). 적용 창에서는 외부 콜 없는 주식수 선택 질의를 전후로 대조한다 —
+  `universe-restore --dates`는 과거 날짜에도 오늘의 상장 목록을 써 판정 재료가 흔들린다.
+- **배지**: 「정정」 = `revision_no > 0`은 「공시일이 그 라벨의 첫 판보다 늦다」와 같은 뜻이라(표시행 3,207 = 3,207 — 반증 B 5차)
+  재번호 뒤에도 공시일 칸과 짝이 맞는다. 832라벨에 새로 붙는 것은 그 행의 공시일이 재게재일이기 때문이다. 뜻을 「숫자가 바뀌었다」로
+  바꾸는 안은 통화가 다른 판·유도 Q4·국내 회수 판에서 틀려 받지 않았고, 화면의 뜻이라 따로 정한다.
+- **어려워지는 것**:
   `guard-rebalance-on-dirty-rank.sh`와 ADR-0125 premise가 공시일 없이 `revision_no`로 행을 고른다(동률 결함 자체) — E와 함께 고친다.
 
 ## 배경
