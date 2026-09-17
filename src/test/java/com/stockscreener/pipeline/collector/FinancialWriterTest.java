@@ -589,6 +589,33 @@ class FinancialWriterTest {
         }
 
         @Test
+        @DisplayName("이른 판을 넣은 뒤 플래그 없이 다시 돌면 아무것도 안 바뀐다 — 스케줄러 refill이 그 경로다")
+        void aSecondPassWithoutTheFlagLeavesInsertedVintagesAlone() {
+            writer.write(stockId, List.of(report(2024, "FY", "2025-04-20", "900"),
+                    report(2025, "FY", "2026-04-20", "950")));
+            List<RawFinancialReport> source = List.of(
+                    report(2024, "FY", "2025-03-10", "880"),
+                    report(2024, "FY", "2025-04-20", "900"),
+                    report(2025, "FY", "2026-03-15", "1000"),
+                    report(2025, "FY", "2026-04-20", "950"));
+            recordingWriter.writeDetailed(stockId, source, WriteMode.FILL_MISSING, true, true);
+            List<Map<String, Object>> afterInsert = jdbcTemplate.queryForList(
+                    "SELECT * FROM financial_statement WHERE stock_id = ? ORDER BY id", stockId);
+            invalidations.calls.clear();
+
+            FinancialWriter.Outcome second = recordingWriter.writeDetailed(
+                    stockId, source, WriteMode.FILL_MISSING, true, false);
+
+            assertThat(second.changed()).isZero();
+            assertThat(second.corrected()).isZero();
+            assertThat(second.revised()).isZero();
+            assertThat(invalidations.calls).isEmpty();
+            assertThat(jdbcTemplate.queryForList(
+                    "SELECT * FROM financial_statement WHERE stock_id = ? ORDER BY id", stockId))
+                    .isEqualTo(afterInsert);
+        }
+
+        @Test
         @DisplayName("이른 판은 같은 라벨에 저장된 주식수를 이어받는다 — 손으로 고친 축척을 새 행이 되살리지 않는다")
         void insertedEarlierVintageInheritsTheStoredShareCountOfItsLabel() {
             // 저장본은 손 수리된 값이고(ADR-0126) 소스는 지금도 같은 라벨의 모든 판에 1000배 표지를 준다
