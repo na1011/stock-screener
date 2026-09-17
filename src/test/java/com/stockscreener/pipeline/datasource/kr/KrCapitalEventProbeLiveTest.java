@@ -131,6 +131,195 @@ class KrCapitalEventProbeLiveTest {
         }
     }
 
+    /**
+     * 종목마다 <b>기준가가 직전 종가와 다른 날</b>을 찍는다 — {@code 기준가 = clpr − vs}.
+     *
+     * <p>KRX는 권리락·배당락·분할·병합일에 기준가를 조정한다. 그 날이 원장의 {@code effective_date}이고
+     * {@code 직전 종가 / 기준가}가 가격 쪽 배수다. 주식배당처럼 배수가 하루 등락보다 작은 사건은
+     * 종가 배수로는 날짜가 안 갈리므로, 소스가 이 두 필드로 그 날을 주는지를 잰다.
+     * {@code -Dprobe.tickers=000670,068270 -Dprobe.from=2024-12-01 -Dprobe.to=2025-05-01}. 종목당 1콜.
+     */
+    @Test
+    @DisplayName("[live][probe] 기준가(clpr−vs)가 직전 종가와 다른 날을 찍는다")
+    void probeBasePriceAdjustments() {
+        LocalDate from = LocalDate.parse(System.getProperty("probe.from", "2024-12-01"));
+        LocalDate to = LocalDate.parse(System.getProperty("probe.to", LocalDate.now().toString()));
+        DataSourceProperties properties = new DataSourceProperties();
+        String key = System.getenv("DATA_GO_KR_SERVICE_KEY");
+        properties.getDataGoKr().setApiKey(key == null ? "" : key);
+        RestClient client = new ExternalApiClientFactory().create(properties.getDataGoKr());
+        String serviceKey = ExternalApiClientFactory.normalizeServiceKey(key == null ? "" : key);
+        for (String ticker : System.getProperty("probe.tickers", "000670").split(",")) {
+            JsonNode payload = priceRows(client, serviceKey, ticker.trim(), from, to);
+            List<JsonNode> rows = sortedRowsOf(payload, ticker.trim());
+            System.out.printf("%n--- %s totalCount=%s 행=%d%n", ticker.trim(),
+                    payload.path("totalCount").asString("?"), rows.size());
+            java.math.BigDecimal prevClose = null;
+            String prevShares = null;
+            int adjusted = 0;
+            for (JsonNode item : rows) {
+                java.math.BigDecimal close = decimalOf(item, "clpr");
+                java.math.BigDecimal base = close.subtract(decimalOf(item, "vs"));
+                String shares = item.path("lstgStCnt").asString("");
+                boolean baseMoved = prevClose != null && base.compareTo(prevClose) != 0;
+                boolean sharesMoved = prevShares != null && !shares.equals(prevShares);
+                if (baseMoved || sharesMoved) {
+                    if (baseMoved) {
+                        adjusted++;
+                    }
+                    System.out.printf("  %s clpr=%s vs=%s 기준가=%s 직전종가=%s 배수=%s trqu=%s 주식수 %s→%s%s%n",
+                            item.path("basDt").asString(""), close, item.path("vs").asString(""), base, prevClose,
+                            base.signum() == 0 ? "-" : prevClose.divide(base, 6, java.math.RoundingMode.HALF_UP),
+                            item.path("trqu").asString(""), prevShares, shares,
+                            baseMoved ? "  ← 기준가 조정" : "");
+                }
+                prevClose = close;
+                prevShares = shares;
+            }
+            System.out.printf("  기준가 조정 %d일 / %d행%n", adjusted, rows.size());
+        }
+    }
+
+    /**
+     * 기준가 조정일을 <b>종목 목록 전부</b>에 대해 TSV로 쓴다 — 원장과 SQL로 대조하려는 전수 측정.
+     *
+     * <p>{@code -Dprobe.tickersFile=/tmp/kr-tickers.txt -Dprobe.from=2020-01-01 -Dprobe.out=/tmp/base-adj.tsv}.
+     * 종목당 1콜(행이 2,000을 넘으면 잘렸다고 {@code TRUNCATED} 줄을 쓴다). 조정일마다 한 줄이고,
+     * 종목마다 {@code ROWS} 줄로 받은 행 수와 {@code totalCount}를 함께 남긴다 — 0건과 「못 받음」을 가르려고.
+     */
+    @Test
+    @DisplayName("[live][probe] 종목 목록 전부의 기준가 조정일을 TSV로 쓴다")
+    void sweepBasePriceAdjustments() throws Exception {
+        String tickersFile = System.getProperty("probe.tickersFile");
+        String out = System.getProperty("probe.out");
+        org.junit.jupiter.api.Assumptions.assumeTrue(tickersFile != null && out != null,
+                "probe.tickersFile·probe.out이 없어 건너뛴다");
+        LocalDate from = LocalDate.parse(System.getProperty("probe.from", "2020-01-01"));
+        LocalDate to = LocalDate.parse(System.getProperty("probe.to", LocalDate.now().toString()));
+        DataSourceProperties properties = new DataSourceProperties();
+        String key = System.getenv("DATA_GO_KR_SERVICE_KEY");
+        properties.getDataGoKr().setApiKey(key == null ? "" : key);
+        RestClient client = new ExternalApiClientFactory().create(properties.getDataGoKr());
+        String serviceKey = ExternalApiClientFactory.normalizeServiceKey(key == null ? "" : key);
+        List<String> tickers = java.nio.file.Files.readAllLines(java.nio.file.Path.of(tickersFile)).stream()
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
+        try (java.io.PrintWriter writer = new java.io.PrintWriter(
+                java.nio.file.Files.newBufferedWriter(java.nio.file.Path.of(out)))) {
+            writer.println("kind\tticker\tdate\tclose\tvs\tbase\tprev_close\ttrqu\tshares_prev\tshares");
+            for (String ticker : tickers) {
+                JsonNode payload = priceRows(client, serviceKey, ticker, from, to);
+                List<JsonNode> rows = sortedRowsOf(payload, ticker);
+                String totalCount = payload.path("totalCount").asString("?");
+                writer.printf("ROWS\t%s\t%s\t%d\t\t\t\t\t\t%n", ticker, totalCount, rows.size());
+                if (!totalCount.equals(String.valueOf(payload.path("items").path("item").size()))) {
+                    writer.printf("TRUNCATED\t%s\t%s\t%d\t\t\t\t\t\t%n", ticker, totalCount,
+                            payload.path("items").path("item").size());
+                }
+                java.math.BigDecimal prevClose = null;
+                String prevShares = null;
+                for (JsonNode item : rows) {
+                    java.math.BigDecimal close = decimalOf(item, "clpr");
+                    java.math.BigDecimal base = close.subtract(decimalOf(item, "vs"));
+                    String shares = item.path("lstgStCnt").asString("");
+                    if (prevClose != null && base.compareTo(prevClose) != 0) {
+                        writer.printf("ADJ\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%n", ticker,
+                                item.path("basDt").asString(""), close, item.path("vs").asString(""), base,
+                                prevClose, item.path("trqu").asString(""), prevShares, shares);
+                    }
+                    prevClose = close;
+                    prevShares = shares;
+                }
+                writer.flush();
+            }
+        }
+        System.out.printf("%n기준가 조정 스윕 %d종목 → %s%n", tickers.size(), out);
+    }
+
+    /**
+     * 기준가 조정일마다 <b>그 앞뒤 공시 제목</b>을 찍는다 — 조정이 무슨 사건인지 소스에게 묻는다.
+     *
+     * <p>{@code -Dprobe.events=005440:2026-05-01:2026-07-31,196170:2026-06-01:2026-08-31}.
+     * 사건마다 list.json 페이지 수만큼 콜이다. 자본·권리 사건 낱말이 든 제목만 찍고 전체 건수를 함께 남긴다 —
+     * 걸러진 제목이 0이어도 목록 자체가 비었는지 가를 수 있게.
+     */
+    @Test
+    @DisplayName("[live][probe] 기준가 조정일 앞뒤의 자본 사건 공시 제목을 찍는다")
+    void probeDisclosuresAround() throws Exception {
+        String events = System.getProperty("probe.events", "");
+        org.junit.jupiter.api.Assumptions.assumeFalse(events.isBlank(), "probe.events가 없어 건너뛴다");
+        java.util.regex.Pattern capital = java.util.regex.Pattern.compile(
+                "증자|배당|분할|합병|감자|병합|신주|권리|상장|정지|주식교환|주식이전|전환|자기주식|소각|공개매수|현물출자");
+        DartCorpCodeCache cache = DartProbeSupport.corpCodeCache();
+        RestClient dart = DartProbeSupport.client();
+        for (String event : events.split(",")) {
+            String[] parts = event.trim().split(":");
+            String ticker = parts[0];
+            LocalDate from = LocalDate.parse(parts[1]);
+            LocalDate to = LocalDate.parse(parts[2]);
+            String corpCode = cache.findCorpCode(ticker).orElse(null);
+            System.out.printf("%n===== %s %s ~ %s corp_code=%s%n", ticker, from, to, corpCode);
+            if (corpCode == null) {
+                continue;
+            }
+            int total = 0;
+            for (int page = 1; page <= 10; page++) {
+                final int pageNo = page;
+                JsonNode body = DartProbeSupport.get(dart, uri -> uri
+                        .path("/list.json")
+                        .queryParam("crtfc_key", DartProbeSupport.apiKey())
+                        .queryParam("corp_code", corpCode)
+                        .queryParam("bgn_de", from.format(BAS_DT))
+                        .queryParam("end_de", to.format(BAS_DT))
+                        .queryParam("page_no", pageNo)
+                        .queryParam("page_count", 100)
+                        .build());
+                for (JsonNode row : body.path("list")) {
+                    total++;
+                    String title = row.path("report_nm").asString("").trim();
+                    if (capital.matcher(title).find()) {
+                        System.out.printf("  %s %s %s%n", row.path("rcept_dt").asString(""),
+                                row.path("rcept_no").asString(""), title);
+                    }
+                }
+                if (page >= body.path("total_page").asInt(1)) {
+                    System.out.printf("  (status=%s 전체 %d건)%n", DartProbeSupport.describeStatus(body), total);
+                    break;
+                }
+            }
+        }
+    }
+
+    private static JsonNode priceRows(RestClient client, String serviceKey, String ticker,
+                                      LocalDate from, LocalDate to) {
+        JsonNode body = DartProbeSupport.get(client, uri -> uri
+                .path("/getStockPriceInfo")
+                .queryParam("serviceKey", serviceKey)
+                .queryParam("resultType", "json")
+                .queryParam("numOfRows", 2000)
+                .queryParam("pageNo", 1)
+                .queryParam("likeSrtnCd", ticker)
+                .queryParam("beginBasDt", from.format(BAS_DT))
+                .queryParam("endBasDt", to.plusDays(1).format(BAS_DT))
+                .build());
+        return body.path("response").path("body");
+    }
+
+    /** {@code likeSrtnCd}는 부분 일치라 다른 종목이 섞인다 — 단축코드가 정확히 같은 행만 남긴다. */
+    private static List<JsonNode> sortedRowsOf(JsonNode payload, String ticker) {
+        List<JsonNode> rows = new java.util.ArrayList<>();
+        payload.path("items").path("item").forEach(item -> {
+            if (ticker.equals(item.path("srtnCd").asString(""))) {
+                rows.add(item);
+            }
+        });
+        rows.sort(java.util.Comparator.comparing(n -> n.path("basDt").asString("")));
+        return rows;
+    }
+
+    private static java.math.BigDecimal decimalOf(JsonNode item, String field) {
+        return new java.math.BigDecimal(item.path(field).asString("0").replace(",", ""));
+    }
+
     /** 가격·주식수·시총·거래량이 바뀌는 행만 찍는다. 창 전체를 찍으면 수백 행이라 계단이 묻힌다. */
     private static void probePrices(String ticker, LocalDate from, LocalDate to) {
         DataSourceProperties properties = new DataSourceProperties();
