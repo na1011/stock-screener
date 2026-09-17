@@ -570,6 +570,24 @@ class FinancialWriterTest {
             assertThat(latestRow().get("published_at")).isEqualTo(java.sql.Date.valueOf("2026-05-20"));
         }
 
+        @Test
+        @DisplayName("이른 판을 넣은 같은 호출에 더 늦은 새 판이 와도 번호가 안 겹친다 — 겹치면 그 종목 쓰기가 통째로 롤백된다")
+        void acceptsANewerRevisionInTheSameCallAfterAnEarlierInsert() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+
+            // 소스는 라벨 안에서 공시일 오름차순으로 준다 — 이른 판 삽입이 정정보다 먼저 일어난다.
+            FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000"),
+                            report(2025, "FY", "2026-04-20", "950"),
+                            report(2025, "FY", "2026-06-01", "930")),
+                    WriteMode.FILL_MISSING, true, true);
+
+            assertThat(outcome.insertedEarlier()).isEqualTo(1);
+            assertThat(outcome.revised()).isEqualTo(1);
+            assertThat(revisionNumbers()).containsExactly(0, 1, 2);
+            assertThat(latestRow().get("published_at")).isEqualTo(java.sql.Date.valueOf("2026-06-01"));
+        }
+
         private List<Integer> revisionNumbers() {
             return jdbcTemplate.queryForList("""
                     SELECT revision_no FROM financial_statement WHERE stock_id = ?

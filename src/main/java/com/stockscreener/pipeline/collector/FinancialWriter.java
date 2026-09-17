@@ -237,19 +237,24 @@ public class FinancialWriter {
                 """, (rs, n) -> new DerivedLabel(rs.getInt("fiscal_year"), rs.getString("fiscal_period")),
                 stockId);
         for (DerivedLabel label : labels) {
-            jdbcTemplate.update("""
-                    UPDATE financial_statement SET revision_no = revision_no + 1000
-                    WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?
-                    """, stockId, label.fiscalYear(), label.fiscalPeriod());
-            jdbcTemplate.update("""
-                    UPDATE financial_statement f SET revision_no = r.expected
-                    FROM (SELECT id, row_number() OVER (ORDER BY published_at, revision_no, id) - 1 AS expected
-                          FROM financial_statement
-                          WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?) r
-                    WHERE f.id = r.id
-                    """, stockId, label.fiscalYear(), label.fiscalPeriod());
+            renumberLabel(stockId, label.fiscalYear(), label.fiscalPeriod());
         }
         return labels.size();
+    }
+
+    /** 한 라벨을 공시일 순 0..n으로. 두 문장인 이유는 {@link #renumberOutOfOrderLabels}에 있다. */
+    private void renumberLabel(long stockId, int fiscalYear, String fiscalPeriod) {
+        jdbcTemplate.update("""
+                UPDATE financial_statement SET revision_no = revision_no + 1000
+                WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?
+                """, stockId, fiscalYear, fiscalPeriod);
+        jdbcTemplate.update("""
+                UPDATE financial_statement f SET revision_no = r.expected
+                FROM (SELECT id, row_number() OVER (ORDER BY published_at, revision_no, id) - 1 AS expected
+                      FROM financial_statement
+                      WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?) r
+                WHERE f.id = r.id
+                """, stockId, fiscalYear, fiscalPeriod);
     }
 
     /** 유도 라벨 하나. */
@@ -425,9 +430,12 @@ public class FinancialWriter {
                         SELECT coalesce(max(revision_no), -1) + 1 FROM financial_statement
                         WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?
                         """, Integer.class, stockId, report.fiscalYear(), report.fiscalPeriod());
-                // 번호는 임시다 — 호출 끝의 재번호가 공시일 순으로 고친다. is_latest는 안 건드린다:
-                // 더 늦은 공시본이 이미 최신이다.
+                // is_latest는 안 건드린다: 더 늦은 공시본이 이미 최신이다.
                 insert(stockId, report, provisional, false);
+                // MUST: 넣은 즉시 그 라벨의 번호를 공시일 순으로 고친다. 호출 끝으로 미루면 같은 호출에서
+                // 더 늦은 새 판이 정정 갈래로 오며 `최신 번호 + 1`을 쓰는데, 그 번호가 방금 넣은 임시
+                // 번호와 같아 uq_fs_revision 위반으로 그 종목 쓰기가 통째로 롤백된다(시험이 재현한다).
+                renumberLabel(stockId, report.fiscalYear(), report.fiscalPeriod());
                 tally.insertedEarlier++;
                 if (tally.earliestInsertedPublication == null
                         || report.publishedAt().isBefore(tally.earliestInsertedPublication)) {
