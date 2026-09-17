@@ -204,6 +204,47 @@ class SecEdgarSubmissionsProbeLiveTest {
         return resolved;
     }
 
+    /**
+     * 한 CIK의 <b>창 안 제출물</b>(양식 · 제출일 · 항목 · 문서 설명)을 찍는다 — 사건의 뜻을 SEC에게 묻는다.
+     * {@code -Dprobe.ciks=101829:2020-03-01:2020-05-31,4457:2022-10-01:2022-12-31}. CIK당 1콜.
+     * {@code filings.recent}만 읽으므로 오래된 창은 {@code files}의 추가 묶음에 있을 수 있다 — 0건이면 그 수를 함께 찍는다.
+     */
+    @Test
+    @DisplayName("[live][probe] CIK의 창 안 제출물을 찍는다")
+    void probeFilingsInWindow() throws Exception {
+        String ciks = System.getProperty("probe.ciks", "");
+        org.junit.jupiter.api.Assumptions.assumeFalse(ciks.isBlank(), "probe.ciks가 없어 건너뛴다");
+        RestClient data = client(DATA_URL);
+        for (String spec : ciks.split(",")) {
+            String[] parts = spec.trim().split(":");
+            String cik = "%010d".formatted(Long.parseLong(parts[0]));
+            java.time.LocalDate from = java.time.LocalDate.parse(parts[1]);
+            java.time.LocalDate to = java.time.LocalDate.parse(parts[2]);
+            JsonNode root = MAPPER.readTree(body(data, "/submissions/CIK" + cik + ".json"));
+            JsonNode recent = root.path("filings").path("recent");
+            JsonNode dates = recent.path("filingDate");
+            int hits = 0;
+            System.out.printf("%n--- CIK %s %s tickers=%s 창 %s~%s recent=%d files=%d%n", cik,
+                    root.path("name").asString(""), root.path("tickers"), from, to, dates.size(),
+                    root.path("filings").path("files").size());
+            for (int i = 0; i < dates.size(); i++) {
+                java.time.LocalDate filed = java.time.LocalDate.parse(dates.get(i).asString(""));
+                if (filed.isBefore(from) || filed.isAfter(to)) {
+                    continue;
+                }
+                hits++;
+                System.out.printf("  %s %s items=%s acc=%s %s%n", filed, recent.path("form").get(i).asString(""),
+                        recent.path("items").get(i).asString(""), recent.path("accessionNumber").get(i).asString(""),
+                        recent.path("primaryDocDescription").get(i).asString(""));
+            }
+            if (hits == 0) {
+                System.out.printf("  recent에 창 안 제출물 0 — recent 첫 제출일=%s · files 묶음 %s%n",
+                        dates.isEmpty() ? "-" : dates.get(dates.size() - 1).asString(""),
+                        root.path("filings").path("files"));
+            }
+        }
+    }
+
     private static void head(String baseUrl, String path, String label) {
         throttle();
         ResponseEntity<Void> response =

@@ -46,18 +46,28 @@ class KrCapitalEventProbeLiveTest {
         LocalDate to = LocalDate.parse(System.getProperty("probe.to", LocalDate.now().toString()));
         System.out.printf("%n===== 표본 %s  창 %s ~ %s =====%n", ticker, from, to);
 
-        probePrices(ticker, from, to);
+        // 좁혀 물을 때 끈다 — 결정 엔드포인트 하나만 대조군으로 부를 때 시세·목록·현황까지 부르면 콜만 는다.
+        boolean withPrices = !"false".equals(System.getProperty("probe.prices"));
+        boolean withList = !"false".equals(System.getProperty("probe.list"));
+        boolean withIrds = !"false".equals(System.getProperty("probe.irds"));
+        if (withPrices) {
+            probePrices(ticker, from, to);
+        }
 
         DartCorpCodeCache cache = DartProbeSupport.corpCodeCache();
         RestClient dart = DartProbeSupport.client();
         String corpCode = cache.findCorpCode(ticker).orElseThrow();
         System.out.println("\ncorp_code=" + corpCode);
 
-        probeDisclosureList(dart, corpCode, from, to);
-        for (String endpoint : List.of("crDecsn", "piicDecsn", "fricDecsn", "pifricDecsn")) {
-            probeDecision(dart, corpCode, endpoint, from, to);
+        if (withList) {
+            probeDisclosureList(dart, corpCode, from, to);
         }
-        for (int year = from.getYear(); year <= to.getYear(); year++) {
+        // 엔드포인트 이름은 밖에서 준다 — 이름이 틀리면 status가 오류로 오고, 맞는데 없으면 013이다.
+        for (String endpoint : System.getProperty("probe.endpoints", "crDecsn,piicDecsn,fricDecsn,pifricDecsn")
+                .split(",")) {
+            probeDecision(dart, corpCode, endpoint.trim(), from, to);
+        }
+        for (int year = from.getYear(); withIrds && year <= to.getYear(); year++) {
             List<String> codes = year < to.getYear() ? List.of("11011")
                     : List.of("11013", "11012", "11014");
             for (String code : codes) {

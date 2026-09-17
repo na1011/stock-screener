@@ -334,6 +334,58 @@ class AlpacaBarsProbeLiveTest {
      * {@code bars} 키가 없는 JSON이라 <b>「봉 0개」로 접힌다</b> — 이 탐침을 쓰면서 실제로
      * 두 번 그렇게 읽었고, 한 번은 "미국도 휴장"이라는 정반대 결론이 나왔다.
      */
+    /**
+     * 심볼마다 <b>봉이 어디서부터 오는가</b>를 피드·조정 조합으로 찍고 자산 정보를 함께 찍는다 —
+     * 「과거를 안 준다」를 한 조합만 묻고 적지 않으려는 탐침이다.
+     * {@code -Dprobe.symbols=TEVA,AAPL -Dprobe.from=2025-01-01 -Dprobe.to=2026-09-15}. 심볼당 약 5콜.
+     */
+    @Test
+    @DisplayName("[live][probe] 심볼별 봉 커버리지를 피드·조정 조합으로 찍는다")
+    void probeSymbolCoverage() {
+        String symbols = System.getProperty("probe.symbols", "TEVA,AAPL");
+        String from = System.getProperty("probe.from", "2025-01-01");
+        String to = System.getProperty("probe.to", SAFE_END);
+        RestClient data = client(DATA_URL);
+        RestClient trading = client(TRADING_URL);
+        for (String symbol : symbols.split(",")) {
+            String sym = symbol.trim();
+            ResponseEntity<String> asset = trading.get().uri("/v2/assets/{s}", sym).retrieve().toEntity(String.class);
+            System.out.printf("%n--- %s asset http=%s %s%n", sym, asset.getStatusCode(),
+                    asset.getBody() == null ? "" : asset.getBody().replaceAll("\\s+", " "));
+            // asof는 심볼이 가리키는 실체를 고르는 날짜다(비우면 오늘). CUSIP이 바뀐 종목은 오늘의 실체로만 답한다.
+            String asof = System.getProperty("probe.asof", "");
+            for (String feed : List.of("sip", "iex")) {
+                for (String adjustment : List.of("raw", "all")) {
+                    ResponseEntity<String> response = data.get()
+                            .uri(uri -> {
+                                uri.path("/v2/stocks/bars")
+                                        .queryParam("symbols", sym).queryParam("timeframe", "1Day")
+                                        .queryParam("start", from).queryParam("end", to)
+                                        .queryParam("feed", feed).queryParam("adjustment", adjustment)
+                                        .queryParam("limit", 10000).queryParam("sort", "asc");
+                                if (!asof.isBlank()) {
+                                    uri.queryParam("asof", asof);
+                                }
+                                return uri.build();
+                            })
+                            .retrieve().toEntity(String.class);
+                    if (!response.getStatusCode().is2xxSuccessful()) {
+                        System.out.printf("  feed=%s adj=%s http=%s %s%n", feed, adjustment,
+                                response.getStatusCode(), response.getBody());
+                        continue;
+                    }
+                    JsonNode root = MAPPER.readTree(response.getBody());
+                    JsonNode bars = root.path("bars").path(sym);
+                    System.out.printf("  feed=%s adj=%s http=%s 봉=%d 첫=%s 끝=%s next=%s%n", feed, adjustment,
+                            response.getStatusCode(), bars.size(),
+                            bars.isEmpty() ? "-" : bars.get(0).path("t").asString(""),
+                            bars.isEmpty() ? "-" : bars.get(bars.size() - 1).path("t").asString(""),
+                            root.path("next_page_token").isNull() ? "null" : root.path("next_page_token").asString(""));
+                }
+            }
+        }
+    }
+
     private static JsonNode barsOf(RestClient data, String symbol, String from, String to,
                                    String adjustment) {
         ResponseEntity<String> response = data.get()
