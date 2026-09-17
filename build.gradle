@@ -440,7 +440,8 @@ tasks.register('liveTest', Test) {
 // MUST: **읽는 코드가 생긴 뒤에** 이름을 더한다. 미리 넣어 두면 그 스위치가 펜스를 통과하면서
 // 조용히 무시되는데, 그것이 이 펜스가 없애려는 바로 그 모양이다.
 def sweepSwitches = ['sweep.from', 'sweep.to',
-                     'sweep.targets', 'sweep.tickers', 'sweep.screens'] as Set
+                     'sweep.targets', 'sweep.tickers', 'sweep.screens',
+                     'sweep.dates', 'sweep.out'] as Set
 
 // MUST: 펜스와 전달을 **실제로 도는 태스크에** 건다. 예전에는 `backtestProbe` 블록 안에만
 // 있어서, 사람이 치는 `backtestSweep`는 오타를 그냥 통과시켰다
