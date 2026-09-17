@@ -98,6 +98,32 @@ GET https://data.alpaca.markets/v1/corporate-actions
 둘이다.** 뒤쪽을 집으면 **묻지도 않은 종목이 응답에 있는 것처럼 보인다** — 실제로 그렇게
 오독했다. 가격이 조정되는 쪽은 `source_symbol`이다.
 
+### 사건은 **그때의 심볼** 아래 있다 — 이름이 바뀐 종목은 옛 심볼로 물어야 온다 (2026-09-17 실측)
+
+`symbols=현재 심볼`로 물으면 이름 변경 **뒤**의 사건과 `name_changes` 레코드만 온다. 그 앞의
+분할·병합은 **옛 심볼로 물어야** 온다. 전 창(2019-09 ~) 실측:
+
+| 현재 | 현재 심볼로 물으면 | 옛 심볼로 물으면 |
+|---|---|---|
+| `FLG` | `name_changes` old `NYCB` → new `FLG` · process 2024-10-28 | `NYCB`: `reverse_splits` 3 → 1 · ex **2024-07-12** |
+| `DFTX` | `name_changes` old `MNMD` → new `DFTX` · process 2026-01-15 | `MNMD`: `reverse_splits` 15 → 1 · ex **2022-08-29** |
+| `QXO` | `name_changes` SSNT → QXO 2024-06-06 · **병합 8 → 1도 같은 날 QXO로 온다** | `SSNT`: 분할 0건 |
+| `SIRI` · `HUT` | 병합이 현재 심볼로 온다(CUSIP만 바뀐 신설 지주회사 · `name_changes` 없음) | `LSXMA`·`LSXMK`: `stock_mergers`만 |
+
+```json
+// name_changes — 옛·새 심볼 응답 양쪽에 **같은 id로** 온다
+{"id":"458870b2-…", "old_symbol":"NYCB", "new_symbol":"FLG",
+ "old_cusip":"649445400", "new_cusip":"649445400", "process_date":"2024-10-28"}
+```
+
+- **옛 심볼은 재사용된다**(이 DB의 `VG`: Vonage → Venture Global). 옛 심볼로 받은 사건은 **그 심볼이
+  우리 회사의 것이던 시절**([그 심볼로 바뀐 날, 다음 심볼로 바뀐 날])과 **CUSIP 계보**(분할의
+  `new_cusip` → `old_cusip`을 거슬러 잇는다)로 자른다. `AlpacaCorporateActionAdapter`의 `Era`가 그 자리다.
+- **같은 레코드가 두 응답에 온다** — 사건·제외 타입 수를 `id`로 한 번만 센다.
+- **`UHAL` 2022-11-10 비의결주식 배분(가격 ×1/9.87)은 어느 심볼(`UHAL`·`UHAL.B`)로도 안 온다.**
+  `UHALB`로는 안 물었고 SEC에도 안 물었다. 미국은 휴리스틱이 없어(`listed_shares` NULL) 원장 행을 만들
+  경로가 없다.
+
 ### 비율의 방향 — `new_rate / old_rate`
 
 `CorporateAction.ratio`의 계약이 *"1주가 몇 주가 되었는가"*이고, 그것이 `new_rate / old_rate`다.
