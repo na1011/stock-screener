@@ -88,6 +88,22 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
+    @DisplayName("적재 잡에서도 붙지 않은 낱말을 막는다 — 공백으로 펼친 티커 목록은 첫 티커만 남고 성공으로 끝난다")
+    void rejectsStrayWordsOnLoadJobs() {
+        assertThatThrownBy(() -> BootstrapRunner.rejectUnknownOptions(
+                new DefaultApplicationArguments(
+                        "--job=financial-refill", "--tickers=AAPL", "MSFT", "NVDA",
+                        "--financial-years=11", "--insert-earlier-vintages=true")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("MSFT");
+
+        // 문서화된 줄바꿈의 백슬래시는 여전히 통과한다.
+        assertThatCode(() -> BootstrapRunner.rejectUnknownOptions(
+                new DefaultApplicationArguments("--job=backfill", "\\", "--tickers=AAPL,MSFT")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     @DisplayName("같은 인자를 두 번 주면 막는다 — 러너가 첫 값만 읽어 두 번째 티커 목록이 조용히 빠진다")
     void rejectsRepeatedOptions() {
         ApplicationArguments args = new DefaultApplicationArguments(

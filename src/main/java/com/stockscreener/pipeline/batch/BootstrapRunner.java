@@ -550,9 +550,7 @@ public class BootstrapRunner implements ApplicationRunner {
      * {@code status = coalesce(?, status)}라 <b>상태를 안 바꾼 채 note만 덮고 SUCCESS로 끝난다.</b>
      */
     private static void requireCleanNote(ApplicationArguments args) {
-        List<String> strays = args.getNonOptionArgs().stream()
-                .filter(arg -> !LINE_CONTINUATION.equals(arg))
-                .toList();
+        List<String> strays = strayWords(args);
         if (!strays.isEmpty()) {
             throw new IllegalArgumentException(
                     "인자에 붙지 않은 낱말이 있다: " + strays + " — 공백이 든 값(대개 --ca-note)을"
@@ -576,8 +574,24 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     private static final java.util.Set<String> SPRING_FLAGS = java.util.Set.of("debug", "trace");
 
+    /** 어느 옵션에도 붙지 않은 낱말. 문서화된 줄바꿈의 백슬래시는 뺀다. */
+    private static List<String> strayWords(ApplicationArguments args) {
+        return args.getNonOptionArgs().stream()
+                .filter(arg -> !LINE_CONTINUATION.equals(arg))
+                .toList();
+    }
+
     /** 패키지 공개인 이유는 컨텍스트 없이 검사만 테스트하기 위해서다 — {@code run()}은 끝에서 JVM을 내린다. */
     static void rejectUnknownOptions(ApplicationArguments args) {
+        // 원장 잡만의 문제가 아니다. 공백·줄바꿈으로 펼친 티커 목록은 --tickers에 첫 티커만 남기고 나머지를
+        // non-option 인자로 떨어뜨리는데, 이름 검사는 그것을 못 봐 적재 잡이 첫 종목만 돌고 성공으로 끝난다.
+        List<String> strays = strayWords(args);
+        if (!strays.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "인자에 붙지 않은 낱말이 있다: " + strays.stream().limit(10).toList() + " — 목록을 공백이나 줄바꿈으로"
+                            + " 펼치면 첫 값만 남고 나머지는 조용히 버려진다. 쉼표로 이어 붙이고(--tickers=A,B,C),"
+                            + " 공백이 든 값은 따옴표로 감싼다.");
+        }
         List<String> unknown = args.getOptionNames().stream()
                 .filter(name -> !name.contains("."))
                 .filter(name -> !KNOWN_OPTIONS.contains(name))
