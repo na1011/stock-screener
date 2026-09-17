@@ -6,6 +6,7 @@ applies_to:
   - "src/main/java/com/stockscreener/pipeline/collector/FinancialWriter.java"
   - "src/main/java/com/stockscreener/pipeline/collector/FinancialCollector.java"
   - "src/main/java/com/stockscreener/pipeline/batch/FinancialRefillJob.java"
+  - "src/main/java/com/stockscreener/pipeline/batch/BootstrapRunner.java"
 ---
 
 # ADR-0161. 저장본보다 이른 SEC 판도 저장한다 — 손으로 켤 때만
@@ -44,7 +45,7 @@ psql -d stock_screener -At -c "WITH firsts AS (SELECT f.stock_id, f.fiscal_year,
 
 ## 결과
 
-- **코드는 들어갔고 값은 아직이다(2026-09-17).** 위 펜스가 612라벨·326종목으로 붉다 — 반영은 E·L과 **한 창**에서 한다
+- **코드는 들어갔고 배포도 값 반영도 아직이다(2026-09-17).** 위 펜스가 612라벨·326종목으로 붉고 **묶음 적용 전까지 붉은 것이 정상이다** — 반영은 E·L과 **한 창**에서 한다
   (progress.md ①). Q4V만 먼저 반영하면 E와 겹치는 종목을 두 번 무효화·백필한다.
 - **크기(캐시 1,214종목 스윕 대 DB)**: 빠진 판 **2,596·683종목**(유도 1,378 · 소스 1,218). 보존 창 안까지 비는 판 290·133종목 ·
   편입일 12,894(거의 복원 평면). **오늘 저장값에도 닿는다** — `ValuationHistory.median`이 봉마다 그때 보이던 판으로 배수를
