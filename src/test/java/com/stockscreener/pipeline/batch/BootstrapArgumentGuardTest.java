@@ -88,6 +88,19 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
+    @DisplayName("같은 인자를 두 번 주면 막는다 — 러너가 첫 값만 읽어 두 번째 티커 목록이 조용히 빠진다")
+    void rejectsRepeatedOptions() {
+        ApplicationArguments args = new DefaultApplicationArguments(
+                "--job=backfill", "--tickers=AAPL,MSFT", "--tickers=NVDA", "--as-of=2026-09-16");
+        // Spring은 둘 다 담는다 — 버리는 것은 러너의 value()다.
+        assertThat(args.getOptionValues("tickers")).containsExactly("AAPL,MSFT", "NVDA");
+
+        assertThatThrownBy(() -> BootstrapRunner.rejectUnknownOptions(args))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tickers");
+    }
+
+    @Test
     @DisplayName("--tickers의 오타를 실행 전에 막는다 — 무시하면 대상이 전 종목이 된다")
     void rejectsMisspelledTickersOption() {
         assertThatThrownBy(() -> BootstrapRunner.rejectUnknownOptions(

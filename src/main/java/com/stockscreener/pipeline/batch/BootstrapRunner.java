@@ -590,6 +590,20 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " 넓어져 쿼터를 태운다. 아는 인자: "
                             + KNOWN_OPTIONS.stream().sorted().toList());
         }
+        // Spring은 같은 이름을 두 번 받으면 값을 둘 다 담는데 value()는 첫 값만 읽는다. 티커 파일 둘을
+        // --tickers로 나눠 주면 두 번째 목록이 조용히 빠진 채 성공으로 끝난다.
+        List<String> repeated = args.getOptionNames().stream()
+                .filter(name -> {
+                    List<String> values = args.getOptionValues(name);
+                    return values != null && values.size() > 1;
+                })
+                .sorted()
+                .toList();
+        if (!repeated.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "같은 인자를 두 번 줬다: " + repeated + " — 러너는 첫 값만 읽으므로 나머지가 조용히"
+                            + " 버려진다. 값을 하나로 합쳐라(예: --tickers=A,B,C).");
+        }
     }
 
     /**
