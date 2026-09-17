@@ -21,7 +21,7 @@ class BootstrapArgumentGuardTest {
     @Test
     @DisplayName("값 없는 --skip-price를 막는다 — 그것은 건너뛰기가 아니라 false다")
     void rejectsValuelessSkipPrice() {
-        assertThatThrownBy(() -> BootstrapRunner.rejectValuelessBooleans(
+        assertThatThrownBy(() -> BootstrapRunner.rejectMalformedBooleans(
                 new DefaultApplicationArguments(
                         "--job=initial-load", "--universe=US_LISTED", "--skip-price",
                         "--reload-existing=true")))
@@ -39,13 +39,52 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
+    @DisplayName("값 없는 --insert-earlier-vintages를 막는다 — 거짓으로 읽혀 삽입 없이 교정·무효화만 돈다")
+    void rejectsValuelessInsertEarlierVintages() {
+        assertThatThrownBy(() -> BootstrapRunner.rejectMalformedBooleans(
+                new DefaultApplicationArguments(
+                        "--job=financial-refill", "--insert-earlier-vintages", "--financial-years=11")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("insert-earlier-vintages");
+    }
+
+    @Test
+    @DisplayName("true·false가 아닌 불리언 값을 막는다 — parseBoolean은 1·yes를 조용히 거짓으로 읽는다")
+    void rejectsBooleanValuesOtherThanTrueOrFalse() {
+        assertThatThrownBy(() -> BootstrapRunner.rejectMalformedBooleans(
+                new DefaultApplicationArguments(
+                        "--job=financial-refill", "--insert-earlier-vintages=1")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("insert-earlier-vintages");
+
+        assertThatThrownBy(() -> BootstrapRunner.rejectMalformedBooleans(
+                new DefaultApplicationArguments(
+                        "--job=universe-restore", "--universe=US_TOP1000", "--apply=yes")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("apply");
+    }
+
+    @Test
     @DisplayName("값이 붙은 불리언은 통과한다")
     void acceptsBooleansWithValues() {
-        assertThatCode(() -> BootstrapRunner.rejectValuelessBooleans(
+        assertThatCode(() -> BootstrapRunner.rejectMalformedBooleans(
                 new DefaultApplicationArguments(
                         "--job=initial-load", "--skip-price=true", "--skip-financial=false",
-                        "--reload-existing=true", "--all-quarters=true")))
+                        "--reload-existing=true", "--all-quarters=true",
+                        "--insert-earlier-vintages=TRUE")))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("불리언은 목록에 등록된 이름만 읽힌다 — 빠진 인자는 실행 전 검사를 조용히 비켜 간다")
+    void flagRefusesAnOptionMissingFromTheBooleanList() {
+        ApplicationArguments args = new DefaultApplicationArguments("--job=financial-refill");
+
+        assertThat(BootstrapRunner.BOOLEAN_OPTIONS).contains("insert-earlier-vintages");
+        assertThatThrownBy(() -> BootstrapRunner.flag(args, "not-registered"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("not-registered");
+        assertThat(BootstrapRunner.flag(args, "insert-earlier-vintages")).isFalse();
     }
 
     @Test

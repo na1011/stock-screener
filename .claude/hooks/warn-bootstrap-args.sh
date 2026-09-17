@@ -50,7 +50,7 @@ ctx="이 실행에는 \`--reload-existing=true\`가 없다. 대상 선정이 \`N
 case "$cmd" in
   *--universe=*) ctx="$ctx
 
-**\`--universe\`가 있으므로 \`--tickers\`를 줘도 이 필터를 피하지 못한다** — 유니버스 경로는 티커로 대상을 좁힌 **뒤에** 봉이 있는 종목을 걸러낸다. 재무만 받으려는 것이면 \`--reload-existing=true --skip-price=true\`가 그 조합이다. **값을 반드시 붙인다** — 값 없는 \`--skip-price\`는 \`false\`가 되어 시세가 함께 들어온다." ;;
+**\`--universe\`가 있으므로 \`--tickers\`를 줘도 이 필터를 피하지 못한다** — 유니버스 경로는 티커로 대상을 좁힌 **뒤에** 봉이 있는 종목을 걸러낸다. 재무만 받으려는 것이면 \`--reload-existing=true --skip-price=true\`가 그 조합이다. **값을 반드시 붙인다** — 값 없는 \`--skip-price\`는 러너가 실행 전에 거절한다." ;;
 esac
 
 jq -n --arg ctx "$ctx" \

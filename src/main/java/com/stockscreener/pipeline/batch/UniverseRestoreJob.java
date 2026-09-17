@@ -25,10 +25,9 @@ import java.util.TreeSet;
  * 보존 창 안의 과거 편입을 소스에서 복원한다(ADR-0135).
  *
  * <h2>기본이 쓰기가 아니다</h2>
- * <p>{@code --apply=true}가 없으면 <b>한 행도 안 쓴다.</b> 이 저장소의 CLI 관례가
- * {@code Boolean.parseBoolean(value(args, …, "false"))}라 <b>맨 플래그는 {@code false}가 되므로</b>
- * ({@code BootstrapRunner}가 그 함정을 적어 뒀다) {@code --dry-run}으로 두면 오타 한 번이
- * <b>되돌릴 수 없는 쓰기</b>가 된다. 되돌릴 수 없는 잡은 쓰기를 옵트인으로 둔다.
+ * <p>{@code --apply=true}가 없으면 <b>한 행도 안 쓴다.</b> 이 저장소의 CLI 불리언은 <b>빠지면
+ * {@code false}</b>이므로({@code BootstrapRunner.flag}) {@code --dry-run}으로 두면 그 인자를 빠뜨린 오타
+ * 한 번이 <b>되돌릴 수 없는 쓰기</b>가 된다. 되돌릴 수 없는 잡은 쓰기를 옵트인으로 둔다.
  *
  * <p>그래서 쓰기 없는 갈래가 <b>티커를 해석할 때도 행을 안 만든다</b> —
  * {@link StockRegistrar#existingIdsByTicker}를 쓰고, <b>못 찾은 티커의 수를 보고한다.</b>

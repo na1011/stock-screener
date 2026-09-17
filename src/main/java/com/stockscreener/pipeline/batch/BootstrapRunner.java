@@ -48,9 +48,9 @@ import java.util.List;
  *
  * # 재무만 받는다 — 시세가 과거 구간으로만 들어와 있는 시장에서 쓴다(미국이 그 상태다).
  * # --skip-price=true가 없으면 최근 봉이 함께 들어와 보존 경계가 밀리고, 그 어긋남은 자연
- * # 소멸하지 않는다(ADR-0088). **값을 반드시 붙인다** — 값 없는 --skip-price는
- * # getOptionValues가 빈 목록을 내 아래 parseBoolean의 폴백 "false"를 타므로,
- * # 건너뛰라고 적어 놓고 시세를 받는다. --reload-existing이 필요한 이유는 유니버스
+ * # 소멸하지 않는다(ADR-0088). **값을 반드시 붙인다** — 값 없는 --skip-price는 폴백 "false"가
+ * # 되어 건너뛰라고 적어 놓고 시세를 받으므로 실행 전에 거절된다(rejectMalformedBooleans).
+ * # --reload-existing이 필요한 이유는 유니버스
  * # 경로가 봉이 있는 종목을 걸러내 대상이 0건이 되고 잡이 **성공으로 끝나기** 때문이다.
  * ./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load \
  *     --universe=US_LISTED --skip-price=true --reload-existing=true --financial-years=3 \
@@ -260,7 +260,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private void runJob(ApplicationArguments args) {
         // 오타는 아무것도 하기 전에 막는다. 태운 외부 호출은 되돌릴 수 없다.
         rejectUnknownOptions(args);
-        rejectValuelessBooleans(args);
+        rejectMalformedBooleans(args);
 
         String job = required(args, "job");
         rejectLedgerOptionsOutsideLedgerJobs(args, job);
@@ -293,8 +293,8 @@ public class BootstrapRunner implements ApplicationRunner {
             // 두면 오타 한 번이 되돌릴 수 없는 쓰기가 된다(ADR-0135).
             case "universe-restore" -> {
                 universeRestoreJob.run(required(args, "universe"),
-                        Boolean.parseBoolean(value(args, "apply", "false")),
-                        Boolean.parseBoolean(value(args, "replace", "false")),
+                        flag(args, "apply"),
+                        flag(args, "replace"),
                         dates(args, "dates"));
                 yield BatchStatus.SUCCESS;
             }
@@ -304,14 +304,14 @@ public class BootstrapRunner implements ApplicationRunner {
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     optionalInteger(args, "financial-years"), csv(args, "tickers"),
                     value(args, "universe", null),
-                    Boolean.parseBoolean(value(args, "insert-earlier-vintages", "false")));
+                    flag(args, "insert-earlier-vintages"));
             // --quarters는 티커와 함께여야 하고, 전 종목 분기는 --all-quarters로 명시한다.
             // 잡이 거절하며, 그 근거는 거기 있다.
             case "full-statement-refill" -> fullStatementRefillJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     optionalInteger(args, "financial-years"), csv(args, "tickers"),
-                    Boolean.parseBoolean(value(args, "quarters", "false")),
-                    Boolean.parseBoolean(value(args, "all-quarters", "false")));
+                    flag(args, "quarters"),
+                    flag(args, "all-quarters"));
             case "company-profile" -> companyProfileJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
                     value(args, "universe", null));
@@ -385,11 +385,11 @@ public class BootstrapRunner implements ApplicationRunner {
         return new InitialLoadJob.LoadRange(
                 integer(args, "price-years", defaults.priceYears()),
                 integer(args, "financial-years", defaults.financialYears()),
-                Boolean.parseBoolean(value(args, "reload-existing", "false")),
+                flag(args, "reload-existing"),
                 csv(args, "tickers"),
                 value(args, "universe", null),
-                Boolean.parseBoolean(value(args, "skip-financial", "false")),
-                Boolean.parseBoolean(value(args, "skip-price", "false")));
+                flag(args, "skip-financial"),
+                flag(args, "skip-price"));
     }
 
     /**
@@ -593,7 +593,7 @@ public class BootstrapRunner implements ApplicationRunner {
     }
 
     /**
-     * 값이 붙지 않은 불리언 인자를 거절한다.
+     * 값이 붙지 않았거나 {@code true}·{@code false}가 아닌 불리언 인자를 거절한다.
      *
      * <p>IMPORTANT — <b>{@code --skip-price}는 「건너뛴다」가 아니라 {@code false}다.</b>
      * Spring의 {@code SimpleCommandLineArgsParser}는 값 없는 {@code --foo}를 <b>빈 목록</b>으로
@@ -604,33 +604,49 @@ public class BootstrapRunner implements ApplicationRunner {
      * <p>이 검사가 없으면 <b>실행은 성공으로 끝나고</b> 잘못된 것은 데이터에만 남는다.
      * 2026-09-04까지 이 클래스의 javadoc 예시와 {@code warn-bootstrap-args.sh}의 처방이 둘 다
      * 값 없이 적혀 있었다 — <b>문서를 고치는 것만으로는 다음 사람이 같은 자리를 밟는다.</b>
+     *
+     * <p>{@code =1}·{@code =yes}도 같은 자리다 — {@code Boolean.parseBoolean}이 {@code true} 말고는 전부
+     * 거짓으로 읽는다. {@code --insert-earlier-vintages=1}이면 이른 판을 안 넣은 채 교정·무효화만 도는
+     * 운영 쓰기가 성공으로 끝난다.
      */
-    static void rejectValuelessBooleans(ApplicationArguments args) {
-        List<String> bare = BOOLEAN_OPTIONS.stream()
+    static void rejectMalformedBooleans(ApplicationArguments args) {
+        List<String> malformed = BOOLEAN_OPTIONS.stream()
                 .filter(name -> args.containsOption(name))
                 .filter(name -> {
                     List<String> values = args.getOptionValues(name);
-                    return values == null || values.isEmpty();
+                    return values == null || values.size() != 1
+                            || !(values.get(0).equalsIgnoreCase("true")
+                                    || values.get(0).equalsIgnoreCase("false"));
                 })
                 .sorted()
                 .toList();
-        if (!bare.isEmpty()) {
+        if (!malformed.isEmpty()) {
             throw new IllegalArgumentException(
-                    "값이 붙지 않은 불리언 인자다: " + bare + " — 값 없는 --skip-price는 건너뛰기가"
-                            + " 아니라 false가 되어 정반대로 동작하고, 실행은 성공으로 끝난다."
-                            + " --skip-price=true 처럼 값을 붙여라.");
+                    "값이 없거나 true·false가 아닌 불리언 인자다: " + malformed + " — 값 없는 --skip-price나"
+                            + " --skip-price=1은 건너뛰기가 아니라 false가 되어 정반대로 동작하고, 실행은"
+                            + " 성공으로 끝난다. --skip-price=true 처럼 true·false를 붙여라.");
         }
     }
 
     /**
-     * {@code Boolean.parseBoolean(value(args, …))}로 읽는 인자 전부.
+     * 불리언으로 읽는 인자 전부 — {@link #rejectMalformedBooleans}가 실행 전에 이 목록을 검사한다.
      *
-     * <p><b>MUST: 새 불리언 인자를 더하면 여기도 더한다.</b> 빠지면 그 인자만 조용히 옛 함정으로
-     * 돌아간다 — {@code BootstrapArgumentGuardTest}가 이 목록과 실제 호출부를 대조한다.
+     * <p><b>MUST: 불리언은 {@link #flag}로만 읽는다.</b> {@code flag}가 이 목록에 없는 이름을 거절하므로
+     * 새 인자를 여기 안 더하면 그 잡이 첫 실행에서 멈춘다. 2026-09-17까지는 호출부가
+     * {@code Boolean.parseBoolean}을 직접 불렀고 javadoc이 「시험이 이 목록과 호출부를 대조한다」고 적었는데
+     * <b>그런 시험은 없었다</b> — 그래서 {@code insert-earlier-vintages}가 빠진 채 초록이었다.
      */
-    private static final java.util.Set<String> BOOLEAN_OPTIONS = java.util.Set.of(
+    static final java.util.Set<String> BOOLEAN_OPTIONS = java.util.Set.of(
             "skip-financial", "skip-price", "reload-existing", "quarters", "all-quarters",
-            "apply", "replace");
+            "apply", "replace", "insert-earlier-vintages");
+
+    static boolean flag(ApplicationArguments args, String name) {
+        if (!BOOLEAN_OPTIONS.contains(name)) {
+            throw new IllegalStateException("--" + name + "이 BOOLEAN_OPTIONS에 없다 — 실행 전 검사가 이"
+                    + " 인자의 값 없음·오타를 못 본다. 목록에 더하라.");
+        }
+        return Boolean.parseBoolean(value(args, name, "false"));
+    }
 
     private static String required(ApplicationArguments args, String name) {
         String value = value(args, name, null);
