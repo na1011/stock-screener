@@ -604,6 +604,20 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " 넓어져 쿼터를 태운다. 아는 인자: "
                             + KNOWN_OPTIONS.stream().sorted().toList());
         }
+        // 값이 빈 인자(--tickers=)는 셸 변수가 비었을 때 생긴다. csv()가 List.of()를 내고 잡은 그것을 「티커를 안 줬다」로
+        // 읽어 기본 대상 — 활성 유니버스 전량(국내+미국) — 으로 넓힌다. 쓰기 잡이면 엉뚱한 종목을 교정·무효화하고 성공으로 끝난다.
+        List<String> empty = args.getOptionNames().stream()
+                .filter(name -> {
+                    List<String> values = args.getOptionValues(name);
+                    return values != null && values.stream().anyMatch(String::isBlank);
+                })
+                .sorted()
+                .toList();
+        if (!empty.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "값이 빈 인자다: " + empty + " — 빈 --tickers·--universe는 「안 줬다」로 읽혀 대상이 활성 유니버스 전량으로"
+                            + " 넓어진다. 목록을 만든 변수·파일이 비지 않았는지 본다.");
+        }
         // Spring은 같은 이름을 두 번 받으면 값을 둘 다 담는데 value()는 첫 값만 읽는다. 티커 파일 둘을
         // --tickers로 나눠 주면 두 번째 목록이 조용히 빠진 채 성공으로 끝난다.
         List<String> repeated = args.getOptionNames().stream()

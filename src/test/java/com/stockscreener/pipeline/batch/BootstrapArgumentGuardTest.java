@@ -88,6 +88,24 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
+    @DisplayName("값이 빈 인자를 막는다 — 빈 --tickers는 「티커 없음」이 되어 대상이 활성 유니버스 전량으로 넓어진다")
+    void rejectsEmptyOptionValues() {
+        // 셸 변수가 비면 이 모양이 된다. csv()가 List.of()를 내고 잡이 기본 대상으로 간다.
+        ApplicationArguments args = new DefaultApplicationArguments(
+                "--job=financial-refill", "--tickers=", "--financial-years=11", "--insert-earlier-vintages=true");
+        assertThat(args.getOptionValues("tickers")).containsExactly("");
+
+        assertThatThrownBy(() -> BootstrapRunner.rejectUnknownOptions(args))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tickers");
+
+        assertThatThrownBy(() -> BootstrapRunner.rejectUnknownOptions(
+                new DefaultApplicationArguments("--job=backfill", "--universe=", "--as-of=2026-09-16")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("universe");
+    }
+
+    @Test
     @DisplayName("적재 잡에서도 붙지 않은 낱말을 막는다 — 공백으로 펼친 티커 목록은 첫 티커만 남고 성공으로 끝난다")
     void rejectsStrayWordsOnLoadJobs() {
         assertThatThrownBy(() -> BootstrapRunner.rejectUnknownOptions(
