@@ -94,6 +94,42 @@ class AlpacaCorporateActionProbeLiveTest {
                 .build();
     }
 
+    /**
+     * <b>심볼이 바뀐 종목의 옛 사건이 어느 심볼 아래 있는가</b>를 잰다.
+     *
+     * <p>어댑터는 현재 심볼 하나로 묻는다({@code AlpacaCorporateActionAdapter}). 우리 봉에
+     * 분할 모양 계단이 있는데 원장이 빈 종목이 실재하고(FLG 2024-07-12 · DFTX 2022-08-29), 그 날짜에
+     * 그 종목은 다른 심볼(NYCB · MNMD)이었다. 옛 심볼과 새 심볼을 <b>같은 창으로 나란히</b> 물어
+     * 사건과 {@code name_changes}가 어디에 실리는지 찍는다.
+     * {@code -Dprobe.symbols=FLG,NYCB -Dprobe.from=2024-06-01 -Dprobe.to=2024-12-31}.
+     */
+    @Test
+    @DisplayName("[live][probe] 심볼이 바뀐 종목의 옛 사건이 어느 심볼 아래 있는지 찍는다")
+    void probeRenamedSymbolHistory() {
+        String symbols = System.getProperty("probe.symbols", "FLG,NYCB");
+        String from = System.getProperty("probe.from", "2024-06-01");
+        String to = System.getProperty("probe.to", "2024-12-31");
+        RestClient data = client();
+        for (String symbol : symbols.split(",")) {
+            ResponseEntity<String> response = call(data, p -> {
+                p.put("symbols", symbol.trim());
+                p.put("start", from);
+                p.put("end", to);
+                p.put("limit", 1000);
+            });
+            System.out.printf("%n--- %s %s~%s HTTP %s%n", symbol, from, to, response.getStatusCode());
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                System.out.println("  본문: " + response.getBody());
+                continue;
+            }
+            List<Map.Entry<String, JsonNode>> events = flatten(MAPPER.readTree(response.getBody()));
+            System.out.println("  사건 " + events.size() + "건");
+            for (Map.Entry<String, JsonNode> e : events) {
+                System.out.println("  [" + e.getKey() + "] " + e.getValue());
+            }
+        }
+    }
+
     private static ResponseEntity<String> call(RestClient client, Consumer<UriParams> params) {
         return client.get()
                 .uri(uri -> {
