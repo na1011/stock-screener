@@ -13,8 +13,8 @@ applies_to:
 ## 결정
 
 판 이력을 전부 내는 소스(`FinancialFetch.completeVintageHistory` — SEC)에서 **저장된 최신본보다 이른 공시본이
-오고 그 공시일의 행이 없으면 새 행으로 넣는다.** 넣는 행은 `is_latest=false`이고, 호출이 끝나면 공시일 순서와
-`revision_no`가 어긋난 라벨을 `(published_at, revision_no, id)` 순으로 0..n 다시 매긴다. 지표 무효화 기점은
+오고 그 공시일의 행이 없으면 새 행으로 넣는다.** 넣는 행은 `is_latest=false`이고, **넣은 즉시 그 라벨을**, 호출 끝에는
+공시일 순서와 `revision_no`가 어긋난 라벨 전부를 `(published_at, revision_no, id)` 순으로 0..n 다시 매긴다. 지표 무효화 기점은
 **넣은 판의 공시일(P1)**이다. 이 갈래는 `financial-refill --insert-earlier-vintages=true`로만 켜진다.
 
 ## 규칙
@@ -28,6 +28,9 @@ applies_to:
   판을 하나만 내므로 「이른 판」이 오지 않고, 국내 `revision_no`는 ADR-0071·ADR-0098의 premise가 읽는다.
 - **MUST NOT: 이른 판을 `is_latest=true`로 넣지 않는다.** 더 늦은 공시본이 이미 최신이고 `uq_fs_latest`가 종목
   트랜잭션을 통째로 롤백한다.
+- **MUST: 넣은 즉시 그 라벨을 재번호한다 — 호출 끝으로 미루지 않는다.** 소스가 라벨 안에서 공시일 오름차순으로 주므로
+  같은 호출에서 뒤따르는 새 정정판이 `최신 번호 + 1`을 쓰는데, 그 번호가 임시 번호와 겹쳐 `uq_fs_revision` 위반으로 그 종목
+  쓰기가 통째로 롤백된다(시험 `acceptsANewerRevisionInTheSameCallAfterAnEarlierInsert`가 수정 전에 붉었다).
 - **MUST: 재번호도 켰을 때만 돈다.** 끈 채로 돌면 회수가 지운 라벨의 번호가 비는 지금의 동작이 남는다(실측 미국 33라벨).
 
 ## 검증
@@ -36,7 +39,7 @@ applies_to:
 psql -d stock_screener -At -c "WITH firsts AS (SELECT f.stock_id, f.fiscal_year, f.fiscal_period, min(f.published_at) first_pub FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE s.market_code NOT IN ('KOSPI','KOSDAQ') AND EXISTS (SELECT 1 FROM universe_membership um WHERE um.stock_id = f.stock_id AND um.universe_code = 'US_TOP1000' AND um.effective_to IS NULL) GROUP BY 1,2,3), flagged AS (SELECT a.stock_id FROM firsts a JOIN firsts b ON b.stock_id = a.stock_id AND b.fiscal_period = a.fiscal_period AND b.fiscal_year = a.fiscal_year + 1 WHERE a.first_pub >= b.first_pub) SELECT CASE WHEN (SELECT count(*) FROM firsts) = 0 THEN '잴 것이 없었다 — 미국 현재 편입 재무가 0행이다' WHEN count(*) = 0 THEN 'OK 원 공시 판이 빠진 라벨 0' ELSE count(*) || '라벨·' || count(DISTINCT stock_id) || '종목의 첫 저장 판이 이듬해 같은 기간 첫 판보다 늦다 — 원 공시 판이 없다(재현율 약 30%의 하한). financial-refill --insert-earlier-vintages=true --financial-years=11(현재 편입 --universe=US_TOP1000 · 과거 편입 --tickers)과 그 종목 백필이 닫는다(ADR-0161)' END FROM flagged"
 ```
 
-**시험**: `FinancialWriterTest$EarlierVintages` 6건 — 삽입·무효화 기점·재번호 셋이 **결함을 되살린 코드(`insertEarlier = false`)에서 붉었다**
+**시험**: `FinancialWriterTest$EarlierVintages` 7건 — 삽입·무효화 기점·재번호 셋이 **결함을 되살린 코드(`insertEarlier = false`)에서 붉었다**
 (2026-09-17 대조군).
 
 ## 결과
