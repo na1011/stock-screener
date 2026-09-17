@@ -118,9 +118,10 @@ public class IndicatorDataReader {
          * {@code asOf}에 <b>공시돼 있던 판</b>. 시점 재현이 쓴다.
          *
          * <p>{@code LATEST}와 두 곳이 다르다. {@code published_at <= asOf}로 <b>미래 공시</b>를
-         * 막고(실측 공시 지연 중앙값이 분기 45일·연간 80일, p90 152일), {@code is_latest} 대신
-         * 그 시점까지 나온 판 중 {@code revision_no}가 가장 큰 것을 고른다 — {@code is_latest}는
-         * <b>오늘의</b> 최신이라 과거 as-of에 정정 후 값이 샌다.
+         * 막고(실측 공시 지연 중앙값이 분기 45일·연간 80일, p90 152일), {@code is_latest}를 안 본다 —
+         * {@code is_latest}는 <b>오늘의</b> 최신이라 과거 as-of에 정정 후 값이 샌다. 판 이력을 통째로
+         * 주고({@code period_end DESC, published_at DESC}) 봉마다 공시일로 접는 것은
+         * {@link IndicatorContext}다.
          *
          * <p>{@code period_end <= asOf}는 <b>그대로 남긴다.</b> 기말 전에 공시된 행이 실제로
          * 있고(실측 5행) 그것을 들이면 완결되지 않은 기(期)를 확정 실적처럼 쓰게 된다.

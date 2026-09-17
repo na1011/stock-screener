@@ -113,7 +113,7 @@ public class FinancialWriter {
      * 것을 아무도 모른다.</b>
      */
     public record Outcome(long changed, int inserted, int filled, int revised,
-                          int deferredRevisions, int corrected) {
+                          int deferredRevisions, int corrected, int insertedEarlier) {
     }
 
     /**
@@ -156,25 +156,100 @@ public class FinancialWriter {
      */
     public Outcome writeDetailed(long stockId, List<RawFinancialReport> reports, WriteMode mode,
                                  boolean completeVintageHistory) {
+        return writeDetailed(stockId, reports, mode, completeVintageHistory, false);
+    }
+
+    /**
+     * 위와 같되 <b>저장본보다 이른 판을 새 행으로 넣을지</b>를 함께 받는다.
+     *
+     * <p>{@link #writeOne}은 소스가 최신본보다 이른 공시본을 주고 그 공시일의 행이 없으면
+     * 건너뛴다. 그런데 읽기는 봉마다 {@code published_at <= 봉}인 판으로 접으므로(ADR-0128) 그 판이
+     * 없으면 <b>그 공시일부터 다음 저장 판의 공시일까지 그 기(期)가 안 보이거나 옛 판 값을 쓴다</b>.
+     * 5년 중앙값({@code ValuationHistory.median})은 봉마다 그때 보이던 판으로 배수를 내므로
+     * <b>오늘의 저장값</b>까지 바뀐다. 실측(2026-09-17 · 팩트 캐시 1,214종목 스윕 대 DB):
+     * 미국 <b>2,596판·683종목</b>이 그렇게 빠져 있었다.
+     *
+     * <p><b>켜는 조건은 넷이 다 참일 때다</b> — {@link WriteMode#FILL_MISSING} ·
+     * {@code completeVintageHistory}(판 이력을 전부 내는 소스 — DART는 거짓이다) · 이 인자 ·
+     * 그 공시일의 행이 없음. 넣는 행은 {@code is_latest=false}이고, 호출이 끝나면 공시일 순서와
+     * {@code revision_no}가 어긋난 라벨을 {@code (published_at, revision_no, id)} 순으로 0..n
+     * 다시 매긴다 — 회수가 지워 번호가 빈 라벨도 그 자리에서 같이 고쳐진다.
+     *
+     * <p><b>MUST: 스케줄러 경로는 거짓을 넘긴다.</b> 참으로 돌면 정기 {@code financial-refill}이
+     * 수백 종목의 지표를 지우는데 자동 백필 상한({@code PipelineScheduler}의
+     * {@code AUTO_BACKFILL_FINANCIAL_STOCK_LIMIT})을 넘어 <b>지운 채로 남는다</b>. 손으로 켜는
+     * 경로는 {@code financial-refill --insert-earlier-vintages=true} 하나이고, 그 실행 뒤에는
+     * 무효화된 종목의 백필이 짝이다.
+     */
+    public Outcome writeDetailed(long stockId, List<RawFinancialReport> reports, WriteMode mode,
+                                 boolean completeVintageHistory, boolean insertEarlierVintages) {
         Tally tally = new Tally();
         if (mode != WriteMode.APPEND_ONLY) {
             retractStaleVintages(stockId, reports, completeVintageHistory, tally);
         }
+        boolean insertEarlier = mode == WriteMode.FILL_MISSING && completeVintageHistory
+                && insertEarlierVintages;
         Set<Amount> managed = managedColumns(reports);
         for (RawFinancialReport report : reports) {
-            writeOne(stockId, report, mode, managed, tally);
+            writeOne(stockId, report, mode, managed, insertEarlier, tally);
+        }
+        if (insertEarlier) {
+            tally.renumberedLabels = renumberOutOfOrderLabels(stockId);
+            if (tally.earliestInsertedPublication != null) {
+                // 이른 판은 그 공시일 전의 봉에는 원리적으로 안 보인다 — 기점이 회계기간 시작일이
+                // 아니라 공시일인 이유다. 한 종목에 여럿이면 가장 이른 공시일에서 한 번만 지운다.
+                invalidationPort.invalidate(stockId, tally.earliestInsertedPublication,
+                        IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+            }
         }
         if (mode != WriteMode.APPEND_ONLY) {
             // 종목 단위로 한 줄만 남긴다. 행마다 찍으면 350종목 × 16행이라 읽을 수 없다.
             // **이 줄은 평일 판당 부피 축이 아니다**(2026-09-13 실측 213 B/줄) — 일일 14:00
             // 사슬은 APPEND_ONLY라 가드에 걸려 안 찍히고, FILL_MISSING·FILL_WITHOUT_REVISION인
             // 주간 재적재(수·목)에서만 뜬다. 로그 소음을 줄일 때 여기를 후보로 세지 않는다.
-            log.info("결손 보정. stockId={} 모드={} 신규={} 정정={} 채움={} 정정보류={} 교정={} 무변경={}",
+            log.info("결손 보정. stockId={} 모드={} 신규={} 정정={} 채움={} 정정보류={} 교정={} 무변경={}"
+                            + " 이른판삽입={} 재번호라벨={}",
                     stockId, mode, tally.inserted, tally.revised, tally.filled,
-                    tally.deferredRevisions, tally.corrected, tally.untouched);
+                    tally.deferredRevisions, tally.corrected, tally.untouched,
+                    tally.insertedEarlier, tally.renumberedLabels);
         }
         return new Outcome(tally.changed(), tally.inserted, tally.filled, tally.revised,
-                tally.deferredRevisions, tally.corrected);
+                tally.deferredRevisions, tally.corrected, tally.insertedEarlier);
+    }
+
+    /**
+     * 공시일 순서와 {@code revision_no}가 어긋난 라벨을 0..n으로 다시 매긴다.
+     *
+     * <p><b>두 문장인 이유</b>: {@code uq_fs_revision}이 deferrable이 아니라 한 문장으로 옮기면
+     * 중간 상태가 인덱스에 걸린다. 먼저 전부 +1000으로 비키고(실측 최대 {@code revision_no}는 8)
+     * 목표 번호로 내린다. 둘째 문장의 정렬에 옛 번호가 들어가므로 비킨 뒤에도 순서가 같다.
+     *
+     * @return 다시 매긴 라벨 수
+     */
+    private int renumberOutOfOrderLabels(long stockId) {
+        List<DerivedLabel> labels = jdbcTemplate.query("""
+                SELECT DISTINCT fiscal_year, fiscal_period FROM (
+                    SELECT fiscal_year, fiscal_period, revision_no,
+                           row_number() OVER (PARTITION BY fiscal_year, fiscal_period
+                                              ORDER BY published_at, revision_no, id) - 1 AS expected
+                    FROM financial_statement WHERE stock_id = ?) t
+                WHERE revision_no <> expected
+                """, (rs, n) -> new DerivedLabel(rs.getInt("fiscal_year"), rs.getString("fiscal_period")),
+                stockId);
+        for (DerivedLabel label : labels) {
+            jdbcTemplate.update("""
+                    UPDATE financial_statement SET revision_no = revision_no + 1000
+                    WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?
+                    """, stockId, label.fiscalYear(), label.fiscalPeriod());
+            jdbcTemplate.update("""
+                    UPDATE financial_statement f SET revision_no = r.expected
+                    FROM (SELECT id, row_number() OVER (ORDER BY published_at, revision_no, id) - 1 AS expected
+                          FROM financial_statement
+                          WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?) r
+                    WHERE f.id = r.id
+                    """, stockId, label.fiscalYear(), label.fiscalPeriod());
+        }
+        return labels.size();
     }
 
     /** 유도 라벨 하나. */
@@ -304,13 +379,13 @@ public class FinancialWriter {
     }
 
     private void writeOne(long stockId, RawFinancialReport report, WriteMode mode,
-                          Set<Amount> managed, Tally tally) {
+                          Set<Amount> managed, boolean insertEarlier, Tally tally) {
         Existing existing = findLatest(stockId, report);
 
         if (existing == null) {
             // 아직 없는 기간이다. 모드와 무관하게 새로 쓴다 — 편입은 됐는데 재무를 한 번도
             // 받지 못한 종목이 실제로 있어(2026-08-10 기준 7종목) 이 경로로 처음 들어온다.
-            insert(stockId, report, 0);
+            insert(stockId, report, 0, true);
             tally.inserted++;
             return;
         }
@@ -342,8 +417,24 @@ public class FinancialWriter {
                 fillMissing(stockId, vintage, report, managed, tally);
                 return;
             }
-            // 그 공시일의 행이 아예 없다. **새로 넣지는 않는다** — 그것은 revision_no 배정과
-            // is_latest 관리가 따라붙는 별개 축이고, 실측으로 252판·128종목이다.
+            // 그 공시일의 행이 아예 없다. 판 이력을 전부 내는 소스에서 손으로 켰을 때만 넣는다
+            // (writeDetailed의 5-인자 javadoc). 그 밖에는 건너뛴다 — DART는 판을 하나만 내므로
+            // 「이른 판」이 오지 않고, 스케줄러 경로는 백필 상한 때문에 켜지 않는다.
+            if (insertEarlier && mode == WriteMode.FILL_MISSING) {
+                int provisional = jdbcTemplate.queryForObject("""
+                        SELECT coalesce(max(revision_no), -1) + 1 FROM financial_statement
+                        WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?
+                        """, Integer.class, stockId, report.fiscalYear(), report.fiscalPeriod());
+                // 번호는 임시다 — 호출 끝의 재번호가 공시일 순으로 고친다. is_latest는 안 건드린다:
+                // 더 늦은 공시본이 이미 최신이다.
+                insert(stockId, report, provisional, false);
+                tally.insertedEarlier++;
+                if (tally.earliestInsertedPublication == null
+                        || report.publishedAt().isBefore(tally.earliestInsertedPublication)) {
+                    tally.earliestInsertedPublication = report.publishedAt();
+                }
+                return;
+            }
             log.debug("소스가 더 이른 공시본을 줬는데 그 판의 행이 없다. 건너뛴다. "
                             + "stockId={} {}/{} 저장={} 소스={}",
                     stockId, report.fiscalYear(), report.fiscalPeriod(),
@@ -392,7 +483,7 @@ public class FinancialWriter {
         invalidationPort.invalidate(stockId, report.periodStart(),
                 IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
 
-        insert(stockId, report, existing.revisionNo() + 1);
+        insert(stockId, report, existing.revisionNo() + 1, true);
         tally.revised++;
     }
 
@@ -612,7 +703,7 @@ public class FinancialWriter {
             ORDER BY revision_no DESC
             """;
 
-    private void insert(long stockId, RawFinancialReport report, int revisionNo) {
+    private void insert(long stockId, RawFinancialReport report, int revisionNo, boolean isLatest) {
         jdbcTemplate.update("""
                 INSERT INTO financial_statement
                     (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
@@ -627,12 +718,12 @@ public class FinancialWriter {
                      noninterest_expense, benefits_losses_and_expenses,
                      gross_profit, operating_expenses, costs_and_expenses,
                      income_tax_expense, profit_before_tax, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, true, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
                 """,
                 stockId, report.fiscalYear(), report.fiscalPeriod(),
                 report.periodStart(), report.periodEnd(), report.publishedAt(),
-                revisionNo, report.reportCode(), report.currencyCode(),
+                revisionNo, isLatest, report.reportCode(), report.currencyCode(),
                 report.revenue(), report.operatingIncome(), report.netIncome(),
                 report.totalAssets(), report.totalEquity(), report.totalEquityControlling(),
                 report.totalLiabilities(),
@@ -741,9 +832,12 @@ public class FinancialWriter {
         private int deferredRevisions;
         private int corrected;
         private int untouched;
+        private int insertedEarlier;
+        private int renumberedLabels;
+        private LocalDate earliestInsertedPublication;
 
         long changed() {
-            return (long) inserted + revised + filled + corrected;
+            return (long) inserted + revised + filled + corrected + insertedEarlier;
         }
     }
 }

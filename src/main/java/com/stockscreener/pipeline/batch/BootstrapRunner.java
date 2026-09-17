@@ -303,7 +303,8 @@ public class BootstrapRunner implements ApplicationRunner {
             case "financial-refill" -> financialRefillJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     optionalInteger(args, "financial-years"), csv(args, "tickers"),
-                    value(args, "universe", null));
+                    value(args, "universe", null),
+                    Boolean.parseBoolean(value(args, "insert-earlier-vintages", "false")));
             // --quarters는 티커와 함께여야 하고, 전 종목 분기는 --all-quarters로 명시한다.
             // 잡이 거절하며, 그 근거는 거기 있다.
             case "full-statement-refill" -> fullStatementRefillJob.run(
@@ -406,7 +407,7 @@ public class BootstrapRunner implements ApplicationRunner {
             "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
             "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note",
-            "apply", "replace", "dates");
+            "apply", "replace", "dates", "insert-earlier-vintages");
 
     /**
      * {@code --universe}가 뜻을 갖는 잡. 나머지에서는 조용히 무시되므로 거절한다.
@@ -427,6 +428,12 @@ public class BootstrapRunner implements ApplicationRunner {
     private static final String INITIAL_LOAD_JOB = "initial-load";
 
     /** 초기 적재에서만 뜻이 있는 인자. 나머지 잡에서는 조용히 무시되므로 거절한다. */
+    /**
+     * {@code --insert-earlier-vintages}가 뜻을 갖는 잡. 다른 잡에 붙이면 조용히 무시되는데, 그 인자를
+     * 준 사람은 이른 판이 들어갔다고 믿는다 — 아래 거절이 막는 사고다.
+     */
+    private static final String FINANCIAL_REFILL_JOB = "financial-refill";
+
     private static final java.util.Set<String> INITIAL_LOAD_ONLY_OPTIONS =
             java.util.Set.of("skip-financial", "skip-price");
 
@@ -444,6 +451,11 @@ public class BootstrapRunner implements ApplicationRunner {
                     "--universe는 " + UNIVERSE_JOBS.stream().sorted().toList()
                             + "에서만 쓴다 — 지금 잡은 '" + job + "'이고, 그대로 두면 인자가 조용히"
                             + " 무시된 채 전 종목이 대상이 된다.");
+        }
+        if (!FINANCIAL_REFILL_JOB.equals(job) && args.getOptionNames().contains("insert-earlier-vintages")) {
+            throw new IllegalArgumentException(
+                    "--insert-earlier-vintages는 '" + FINANCIAL_REFILL_JOB + "'에서만 쓴다 — 지금 잡은 '"
+                            + job + "'이고, 그대로 두면 인자가 조용히 무시된다.");
         }
         if (!INITIAL_LOAD_JOB.equals(job)) {
             for (String option : INITIAL_LOAD_ONLY_OPTIONS) {

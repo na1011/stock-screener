@@ -64,6 +64,18 @@ public class FinancialCollector {
     public FinancialWriter.Outcome collectDetailed(SecurityRef security, int fromFiscalYear,
                                                    FinancialWriter.WriteMode mode)
             throws DataSourceException {
+        return collectDetailed(security, fromFiscalYear, mode, false);
+    }
+
+    /**
+     * 위와 같되 <b>저장본보다 이른 판을 넣을지</b>를 받는다
+     * ({@link FinancialWriter#writeDetailed(long, List, FinancialWriter.WriteMode, boolean, boolean)}).
+     * 소스가 판 이력을 전부 내지 않으면 참을 줘도 아무 일도 없다.
+     */
+    public FinancialWriter.Outcome collectDetailed(SecurityRef security, int fromFiscalYear,
+                                                   FinancialWriter.WriteMode mode,
+                                                   boolean insertEarlierVintages)
+            throws DataSourceException {
         FinancialDataSource source = registry.financialSource(security.marketCode());
         FinancialFetch fetch = source.fetchReports(security, fromFiscalYear);
         List<RawFinancialReport> reports = fetch.reports();
@@ -71,7 +83,7 @@ public class FinancialCollector {
         // 실패해 롤백되면 그 판정도 함께 되돌아가야 한다. 같은 트랜잭션은 아니지만 순서가
         // 그 뜻을 지킨다(쓰기가 던지면 부재 행이 안 남는다).
         FinancialWriter.Outcome outcome = writer.writeDetailed(security.stockId(), reports, mode,
-                fetch.completeVintageHistory());
+                fetch.completeVintageHistory(), insertEarlierVintages);
         absenceWriter.write(security.stockId(), source.sourceName(), fetch.absences(),
                 LocalDate.now());
         return outcome;

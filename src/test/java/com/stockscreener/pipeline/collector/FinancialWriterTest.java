@@ -450,6 +450,134 @@ class FinancialWriterTest {
     }
 
     /** 무효화 호출을 그대로 적는다. 이 슬라이스의 기본 포트는 아무것도 기록하지 않는다. */
+    @Nested
+    @DisplayName("저장본보다 이른 판 — 판 이력을 전부 내는 소스에서 손으로 켤 때만 넣는다")
+    class EarlierVintages {
+
+        private final RecordingInvalidationPort invalidations = new RecordingInvalidationPort();
+        private FinancialWriter recordingWriter;
+
+        @BeforeEach
+        void useRecordingPort() {
+            recordingWriter = new FinancialWriter(jdbcTemplate, invalidations);
+        }
+
+        @Test
+        @DisplayName("이른 판을 비-최신 행으로 넣고 공시일 순으로 번호를 다시 매긴다 — 그 공시일부터 지표를 지운다")
+        void insertsTheEarlierVintageAsNonLatestAndRenumbers() {
+            // 늦은 판만 저장된 상태 — 첫 적재가 최신 판만 봤을 때 생기는 모양이다(실측 2,596판).
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+
+            // 판 이력을 전부 내는 소스는 두 판을 함께 준다. 늦은 판을 빼고 주면 회수가 그 행을 지운다.
+            FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000"),
+                            report(2025, "FY", "2026-04-20", "950")),
+                    WriteMode.FILL_MISSING, true, true);
+
+            assertThat(outcome.insertedEarlier()).isEqualTo(1);
+            assertThat(outcome.changed()).isEqualTo(1);
+            assertThat(rowCount()).isEqualTo(2);
+            Map<String, Object> earlier = vintageRow("2026-03-15");
+            assertThat(earlier.get("is_latest")).isEqualTo(false);
+            assertThat(earlier.get("revision_no")).isEqualTo(0);
+            assertThat((BigDecimal) earlier.get("net_income")).isEqualByComparingTo("1000");
+            Map<String, Object> later = vintageRow("2026-04-20");
+            assertThat(later.get("is_latest")).isEqualTo(true);
+            assertThat(later.get("revision_no")).isEqualTo(1);
+            assertThat(invalidations.calls)
+                    .containsExactly(stockId + "@2026-03-15:FINANCIAL_REVISED");
+        }
+
+        @Test
+        @DisplayName("이른 판이 여럿이면 가장 이른 공시일에서 한 번만 지운다")
+        void invalidatesOnceFromTheEarliestInsertedPublication() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950"),
+                    report(2024, "FY", "2025-04-20", "900")));
+
+            FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId,
+                    List.of(report(2024, "FY", "2025-03-10", "880"),
+                            report(2024, "FY", "2025-04-20", "900"),
+                            report(2025, "FY", "2026-03-15", "1000"),
+                            report(2025, "FY", "2026-04-20", "950")),
+                    WriteMode.FILL_MISSING, true, true);
+
+            assertThat(outcome.insertedEarlier()).isEqualTo(2);
+            assertThat(invalidations.calls)
+                    .containsExactly(stockId + "@2025-03-10:FINANCIAL_REVISED");
+        }
+
+        @Test
+        @DisplayName("켜지 않으면 지금처럼 건너뛴다 — 스케줄러 경로가 이 갈래다")
+        void skipsWhenNotSwitchedOn() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+
+            FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000"),
+                            report(2025, "FY", "2026-04-20", "950")),
+                    WriteMode.FILL_MISSING, true, false);
+
+            assertThat(outcome.insertedEarlier()).isZero();
+            assertThat(rowCount()).isEqualTo(1);
+            assertThat(invalidations.calls).isEmpty();
+        }
+
+        @Test
+        @DisplayName("판 이력을 전부 내지 않는 소스에서는 켜도 건너뛴다 — DART는 판을 하나만 낸다")
+        void skipsWhenTheSourceDoesNotGiveTheWholeHistory() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+
+            FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")),
+                    WriteMode.FILL_MISSING, false, true);
+
+            assertThat(outcome.insertedEarlier()).isZero();
+            assertThat(rowCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("APPEND_ONLY에서는 켜도 건너뛴다 — 일일·초기 적재는 판 이력을 다시 쓰지 않는다")
+        void skipsInAppendOnly() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+
+            FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000"),
+                            report(2025, "FY", "2026-04-20", "950")),
+                    WriteMode.APPEND_ONLY, true, true);
+
+            assertThat(outcome.insertedEarlier()).isZero();
+            assertThat(rowCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("회수가 가운데 판을 지워 번호가 빈 라벨을 켰을 때만 0..n으로 고친다")
+        void renumbersALabelLeftWithAGapOnlyWhenSwitchedOn() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+            writer.write(stockId, List.of(report(2025, "FY", "2026-05-20", "940")));
+
+            // 끈 채로 돌면 회수만 일어나고 번호는 0·2로 남는다 — 지금의 동작이다.
+            recordingWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000"),
+                            report(2025, "FY", "2026-05-20", "940")),
+                    WriteMode.FILL_MISSING, true, false);
+            assertThat(revisionNumbers()).containsExactly(0, 2);
+
+            recordingWriter.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000"),
+                            report(2025, "FY", "2026-05-20", "940")),
+                    WriteMode.FILL_MISSING, true, true);
+            assertThat(revisionNumbers()).containsExactly(0, 1);
+            assertThat(latestRow().get("published_at")).isEqualTo(java.sql.Date.valueOf("2026-05-20"));
+        }
+
+        private List<Integer> revisionNumbers() {
+            return jdbcTemplate.queryForList("""
+                    SELECT revision_no FROM financial_statement WHERE stock_id = ?
+                    ORDER BY published_at
+                    """, Integer.class, stockId);
+        }
+    }
+
     private static final class RecordingInvalidationPort implements IndicatorInvalidationPort {
 
         private final List<String> calls = new java.util.ArrayList<>();

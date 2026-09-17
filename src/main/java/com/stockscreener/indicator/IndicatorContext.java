@@ -175,9 +175,10 @@ public final class IndicatorContext {
      *
      * <p>IMPORTANT — <b>고르는 축이 {@code published_at}인 것은 실측에 근거한다.</b>
      * {@code revision_no}가 {@link FinancialFigures}에 없어 공시일로 고르는데, 저장소 전체
-     * 32,198개 다판(多版) 행에서 <b>공시일이 판 번호와 역전되거나 같은 경우가 0</b>이다
-     * (2026-09-07 실측). {@code FinancialWriter}가 <b>더 늦은 공시일에만</b> 새 판을 만들기
-     * 때문이며({@code writeOne}의 정정 갈래) 그 성질이 깨지면 이 선택이 조용히 옛 판을 고른다.
+     * 다판(多版) 행 48,488개에서 <b>공시일이 판 번호와 역전되거나 같은 경우가 0</b>이다(2026-09-17 ·
+     * 미국·국내). 그 성질을 지키는 것은 {@code FinancialWriter}다 — 정정 갈래는 더 늦은 공시일에만
+     * 번호를 올리고, 저장본보다 이른 판을 넣는 갈래는 호출 끝에 공시일 순으로 번호를 다시 매긴다.
+     * 그 성질이 깨지면 이 선택이 조용히 옛 판을 고른다.
      *
      * <p>입력이 {@code period_end DESC, published_at DESC} 순이라 <b>먼저 만난 것이 그 기의
      * 최신 판</b>이다. 순서를 바꾸면 이 메서드가 조용히 옛 판을 남긴다.

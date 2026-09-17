@@ -239,4 +239,21 @@ class BootstrapArgumentGuardTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("universe");
     }
+
+    @Test
+    @DisplayName("--insert-earlier-vintages는 financial-refill에서만 통과한다 — 다른 잡에서는 조용히 무시된다")
+    void acceptsInsertEarlierVintagesOnlyOnFinancialRefill() {
+        // 그 인자를 준 사람은 이른 판이 들어갔다고 믿는다. backfill에 붙여 두면 아무 일도 안 하고
+        // 성공으로 끝나 그 믿음이 확인 없이 남는다.
+        assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=financial-refill", "--insert-earlier-vintages=true"),
+                "financial-refill"))
+                .doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=backfill", "--insert-earlier-vintages=true"),
+                "backfill"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("insert-earlier-vintages");
+    }
 }

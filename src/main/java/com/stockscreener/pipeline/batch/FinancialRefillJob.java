@@ -74,7 +74,19 @@ public class FinancialRefillJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            Integer yearsBack, List<String> tickers, String universeCode) {
-        return runAndReport(asOf, triggeredBy, yearsBack, tickers, universeCode).status();
+        return run(asOf, triggeredBy, yearsBack, tickers, universeCode, false);
+    }
+
+    /**
+     * 위와 같되 <b>저장본보다 이른 판을 넣을지</b>를 받는다. 손 실행
+     * ({@code --insert-earlier-vintages=true}) 전용이다 — {@link #runAndReport}의 5-인자 판이
+     * 스케줄러 경로이고 늘 거짓이다.
+     */
+    public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                           Integer yearsBack, List<String> tickers, String universeCode,
+                           boolean insertEarlierVintages) {
+        return runAndReport(asOf, triggeredBy, yearsBack, tickers, universeCode,
+                insertEarlierVintages).status();
     }
 
     /**
@@ -88,6 +100,18 @@ public class FinancialRefillJob {
      */
     public Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                                      Integer yearsBack, List<String> tickers, String universeCode) {
+        return runAndReport(asOf, triggeredBy, yearsBack, tickers, universeCode, false);
+    }
+
+    /**
+     * 위와 같되 <b>저장본보다 이른 판을 넣을지</b>를 받는다.
+     *
+     * <p><b>MUST NOT: 스케줄러에서 참으로 부르지 않는다.</b> 참이면 이른 판이 든 종목마다 지표가
+     * 그 공시일 이후 지워지는데(실측 수백 종목) 자동 백필 상한을 넘어 지운 채 남는다.
+     */
+    public Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                     Integer yearsBack, List<String> tickers, String universeCode,
+                                     boolean insertEarlierVintages) {
         int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
@@ -123,6 +147,7 @@ public class FinancialRefillJob {
         AtomicInteger revised = new AtomicInteger();
         AtomicInteger filled = new AtomicInteger();
         AtomicInteger corrected = new AtomicInteger();
+        AtomicInteger insertedEarlier = new AtomicInteger();
         List<String> invalidatedTickers = new ArrayList<>();
         // MUST: 알림 문구와 백필 대상을 따로 모은다. 위 목록은 "005930(정정 1 · 교정 0)"
         // 형태라 사람이 읽는 것이고, 백필에는 티커만 있어야 한다.
@@ -132,12 +157,17 @@ public class FinancialRefillJob {
             for (SecurityRef target : targets) {
                 execution.process(target, CollectionPhase.FINANCIAL, security -> {
                     FinancialWriter.Outcome outcome = financialCollector.collectDetailed(
-                            security, fromFiscalYear, FinancialWriter.WriteMode.FILL_MISSING);
+                            security, fromFiscalYear, FinancialWriter.WriteMode.FILL_MISSING,
+                            insertEarlierVintages);
                     revised.addAndGet(outcome.revised());
                     corrected.addAndGet(outcome.corrected());
-                    if (outcome.revised() > 0 || outcome.corrected() > 0) {
-                        invalidatedTickers.add("%s(정정 %d · 교정 %d)".formatted(
-                                security.ticker(), outcome.revised(), outcome.corrected()));
+                    insertedEarlier.addAndGet(outcome.insertedEarlier());
+                    // 이른 판 삽입도 그 공시일 이후의 지표를 지운다 — 정정·교정과 같이 세지 않으면
+                    // 그 종목이 백필 목록에서 빠져 지워진 채 남는다.
+                    if (outcome.revised() > 0 || outcome.corrected() > 0 || outcome.insertedEarlier() > 0) {
+                        invalidatedTickers.add("%s(정정 %d · 교정 %d · 이른 판 %d)".formatted(
+                                security.ticker(), outcome.revised(), outcome.corrected(),
+                                outcome.insertedEarlier()));
                         tickersToBackfill.add(security.ticker());
                     }
                     filled.addAndGet(outcome.filled());
@@ -152,11 +182,12 @@ public class FinancialRefillJob {
             throw e;
         }
 
-        String note = "연도=%d~%d 대상=%d종목 정정=%d 채움=%d 교정=%d"
+        String note = "연도=%d~%d 대상=%d종목 정정=%d 채움=%d 교정=%d 이른판=%d"
                 .formatted(fromFiscalYear, asOf.getYear(), targets.size(),
-                        revised.get(), filled.get(), corrected.get());
+                        revised.get(), filled.get(), corrected.get(), insertedEarlier.get());
         log.info("재무 결손 보정을 마쳤다. {}", note);
-        alertOnInvalidation(execution, invalidatedTickers, revised.get() + corrected.get());
+        alertOnInvalidation(execution, invalidatedTickers,
+                revised.get() + corrected.get() + insertedEarlier.get());
         return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill));
     }
 
@@ -199,7 +230,7 @@ public class FinancialRefillJob {
         String tickers = String.join(", ", invalidatedTickers);
         execution.alertOperator(AlertSeverity.WARNING, "재무 무효화 — 백필이 남았다",
                 ("""
-                %d종목의 재무를 정정·교정으로 다시 썼다(%d기간): %s
+                %d종목의 재무를 정정·교정·이른 판 삽입으로 다시 썼다(%d기간): %s
                 **그 종목의 지표가 보존 창 전체에서 지워졌다.** 백필이 따라오지 않으면 화면에서 \
                 통째로 사라지는데 에러도 경고도 나지 않는다. 영업활동현금흐름은 이 경로가 \
                 채우지 못하므로 전체 재무제표를 함께 돌린다:
