@@ -109,6 +109,13 @@ class KrCapitalEventProbeLiveTest {
             int limit = Math.min(rows.size(), (int) (topN * 1.2));
             System.out.printf("%n--- %s %s totalCount=%s 보통주후보=%d (상위 %d까지 본다)%n", date, market,
                     payload.path("totalCount").asString("?"), rows.size(), limit);
+            // 경계(N±5)를 함께 찍는다 — 합성 시총이 편입을 만들었을 때 **밀려난 종목**을 특정하는 자리다.
+            for (int i = Math.max(0, topN - 5); i < Math.min(rows.size(), topN + 5); i++) {
+                JsonNode n = rows.get(i);
+                System.out.printf("  경계 %3d %s %s trqu=%s mrktTotAmt=%s%n", i + 1, n.path("srtnCd").asString(""),
+                        n.path("itmsNm").asString(""), n.path("trqu").asString(""),
+                        n.path("mrktTotAmt").asString(""));
+            }
             int halted = 0;
             for (int i = 0; i < limit; i++) {
                 JsonNode n = rows.get(i);
