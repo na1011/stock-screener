@@ -22,7 +22,7 @@ import java.util.Optional;
  * 답한다. {@code universe-restore --dates}는 과거 날짜에도 오늘의 상장 목록을 써 같은 물음의 판정 재료가 흔들린다.
  * 질의를 다시 짜지 않고 운영 코드를 그대로 부른다 — 조건을 다시 쓰면 정상 경로가 차이로 신고된다.
  *
- * <p>격자는 복원과 같은 「그 주의 마지막 거래일」에 최신 거래일을 더한 것이고, 주식수 창은
+ * <p>격자는 복원({@code UniverseLedgerRestorer.weeklyGrid})과 같은 「그 주의 마지막 거래일 + 보존 창 첫날」이고, 주식수 창은
  * {@code UsMarketCapUniverseAdapter}의 2년이다. 접속은 읽기 전용이다.
  *
  * <pre>
@@ -49,9 +49,10 @@ class RankShareCountSnapshotTest {
         List<LocalDate> grid = jdbc.queryForList("""
                 SELECT trade_date FROM (
                     SELECT trade_date,
-                           row_number() OVER (PARTITION BY date_trunc('week', trade_date) ORDER BY trade_date DESC) AS rn
+                           row_number() OVER (PARTITION BY date_trunc('week', trade_date) ORDER BY trade_date DESC) AS rn,
+                           min(trade_date) OVER () AS earliest
                     FROM indicator_trade_date WHERE market_code = 'US') t
-                WHERE rn = 1 ORDER BY trade_date
+                WHERE rn = 1 OR trade_date = earliest ORDER BY trade_date
                 """, LocalDate.class);
 
         long rows = 0;
