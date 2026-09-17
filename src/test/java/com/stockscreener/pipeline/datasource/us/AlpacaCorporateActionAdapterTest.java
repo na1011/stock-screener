@@ -40,6 +40,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AlpacaCorporateActionAdapterTest {
 
     private static final SecurityRef NVDA = new SecurityRef(1L, "US", "NVDA");
+    private static final SecurityRef FLG = new SecurityRef(2L, "US", "FLG");
+    private static final SecurityRef CCC = new SecurityRef(3L, "US", "CCC");
     private static final LocalDate FROM = LocalDate.of(2024, 1, 1);
     private static final LocalDate TO = LocalDate.of(2024, 12, 31);
 
@@ -250,6 +252,95 @@ class AlpacaCorporateActionAdapterTest {
         enqueue(200, fixture("ca-other-symbol.json"));
 
         assertThat(adapter().fetchCorporateActions(NVDA, FROM, TO).actions()).isEmpty();
+    }
+
+    // ── 이름이 바뀐 종목(2026-09-17 실측: FLG←NYCB · DFTX←MNMD) ─────────────────────
+
+    @Test
+    @DisplayName("이름이 바뀐 종목은 옛 심볼로도 묻는다 — 옛 심볼 시절의 병합이 온다(FLG←NYCB 2024-07-12)")
+    void followsANameChangeToTheOldSymbol() throws Exception {
+        enqueue(200, fixture("ca-renamed-current.json"));
+        enqueue(200, fixture("ca-renamed-old.json"));
+
+        List<CorporateAction> actions = adapter().fetchCorporateActions(FLG, FROM, TO).actions();
+
+        assertThat(actions)
+                .as("NYCB로만 오는 1:3 병합이 FLG의 원장에 와야 한다. 변경일(10-28) 뒤 사건(11-15)과 "
+                        + "CUSIP이 계보 밖인 사건(03-15)은 그 심볼을 쓰던 다른 회사의 것일 수 있어 안 담는다")
+                .singleElement()
+                .satisfies(action -> {
+                    assertThat(action.effectiveDate()).isEqualTo(LocalDate.of(2024, 7, 12));
+                    assertThat(action.type()).isEqualTo(CorporateAction.Type.REVERSE_SPLIT);
+                    assertThat(action.ratio()).isEqualByComparingTo("0.3333333333");
+                });
+        assertThat(query(server.takeRequest())).contains("symbols=FLG");
+        assertThat(query(server.takeRequest())).contains("symbols=NYCB");
+    }
+
+    @Test
+    @DisplayName("이름 변경이 두 번이면 체인을 끝까지 따라가되 각 심볼은 자기 시절의 사건만 준다")
+    void followsANameChangeChain() throws Exception {
+        enqueue(200, fixture("ca-chain-current.json"));
+        enqueue(200, fixture("ca-chain-middle.json"));
+        enqueue(200, fixture("ca-chain-oldest.json"));
+
+        List<CorporateAction> actions = adapter().fetchCorporateActions(CCC, FROM, TO).actions();
+
+        assertThat(actions)
+                .as("BBB 03-01은 AAA→BBB(05-01) 전이라 그 심볼이 아직 우리 것이 아니었고(하한), "
+                        + "AAA 01-15는 CUSIP이 계보 밖이라 같은 심볼을 쓰던 다른 회사다")
+                .extracting(CorporateAction::effectiveDate)
+                .containsExactly(LocalDate.of(2024, 2, 1), LocalDate.of(2024, 7, 1));
+        assertThat(server.getRequestCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("옛 심볼의 사건이 이름 변경일과 같은 날이면 담는다 — 경계는 포함이고 재사용은 계보가 막는다")
+    void takesAnOldSymbolEventOnTheRenameDay() throws Exception {
+        enqueue(200, fixture("ca-renamed-current.json"));
+        enqueue(200, """
+                {"corporate_actions":{
+                  "name_changes":[{"id":"458870b2","new_cusip":"649445400","new_symbol":"FLG",
+                                   "old_cusip":"649445400","old_symbol":"NYCB","process_date":"2024-10-28"}],
+                  "reverse_splits":[{"symbol":"NYCB","ex_date":"2024-10-28","old_rate":2,"new_rate":1,
+                                     "new_cusip":"649445400","old_cusip":"649445111",
+                                     "payable_date":"2024-10-28","process_date":"2024-10-28","id":"sameday"}]},
+                 "next_page_token":null}""");
+
+        assertThat(adapter().fetchCorporateActions(FLG, FROM, TO).actions())
+                .extracting(CorporateAction::effectiveDate)
+                .containsExactly(LocalDate.of(2024, 10, 28));
+    }
+
+    @Test
+    @DisplayName("심볼이 그대로인 이름 변경(CUSIP만 바뀜)은 다시 묻지 않는다 — 무한 루프·헛콜")
+    void doesNotRequeryWhenTheSymbolDidNotChange() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{"name_changes":[
+                  {"id":"n0","new_cusip":"X2","new_symbol":"FLG","old_cusip":"X1","old_symbol":"FLG",
+                   "process_date":"2024-03-01"}]},"next_page_token":null}""");
+
+        assertThat(adapter().fetchCorporateActions(FLG, FROM, TO).actions()).isEmpty();
+        assertThat(server.getRequestCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("같은 사건 id가 두 심볼에서 오면 한 번만 담는다")
+    void countsTheSameEventOnce() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{
+                  "name_changes":[{"id":"n1","new_cusip":"B","new_symbol":"FLG","old_cusip":"A","old_symbol":"NYCB",
+                                   "process_date":"2024-10-28"}],
+                  "reverse_splits":[{"symbol":"FLG","ex_date":"2024-07-12","old_rate":3,"new_rate":1,
+                                     "payable_date":"2024-07-12","process_date":"2024-07-12","id":"same"}]},
+                 "next_page_token":null}""");
+        enqueue(200, """
+                {"corporate_actions":{
+                  "reverse_splits":[{"symbol":"NYCB","ex_date":"2024-07-12","old_rate":3,"new_rate":1,
+                                     "payable_date":"2024-07-12","process_date":"2024-07-12","id":"same"}]},
+                 "next_page_token":null}""");
+
+        assertThat(adapter().fetchCorporateActions(FLG, FROM, TO).actions()).hasSize(1);
     }
 
     @Test

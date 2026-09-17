@@ -73,6 +73,28 @@ class AlpacaCorporateActionLiveTest {
                 .isEmpty();
     }
 
+    /**
+     * 어댑터가 실제 소스에서 무엇을 내는지 <b>원장에 쓰지 않고</b> 찍는다 — 어댑터를 고친 뒤의 드라이런.
+     * {@code -Dprobe.symbols=FLG,DFTX,QXO -Dprobe.from=2019-09-03}. 창의 끝은 오늘이다.
+     */
+    @Test
+    @DisplayName("[live][dry-run] 어댑터가 종목마다 낸 분할·병합과 안 담은 타입 수를 찍는다")
+    void dryRunSymbols() throws Exception {
+        String symbols = System.getProperty("probe.symbols", "NVDA");
+        LocalDate from = LocalDate.parse(System.getProperty("probe.from", "2019-09-03"));
+        AlpacaCorporateActionAdapter adapter = adapter();
+        for (String symbol : symbols.split(",")) {
+            var fetched = adapter.fetchCorporateActions(
+                    new SecurityRef(0L, "US", symbol.trim()), from, LocalDate.now());
+            System.out.printf("%n--- %s 사건 %d · 안 담은 타입 %s%n", symbol, fetched.actions().size(),
+                    fetched.notStored());
+            for (CorporateAction action : fetched.actions()) {
+                System.out.printf("  %s %s ratio=%s form=%s%n", action.effectiveDate(), action.type(),
+                        action.ratio().toPlainString(), action.sourceForm());
+            }
+        }
+    }
+
     private AlpacaCorporateActionAdapter adapter() {
         DataSourceProperties properties = new DataSourceProperties();
         properties.getAlpaca().setApiKey(System.getenv("APCA_API_KEY_ID"));

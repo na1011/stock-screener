@@ -1,0 +1,4 @@
+{"corporate_actions":{
+  "name_changes":[
+    {"id":"nc2","new_cusip":"C2","new_symbol":"CCC","old_cusip":"B2","old_symbol":"BBB","process_date":"2024-09-02"}]},
+ "next_page_token":null}

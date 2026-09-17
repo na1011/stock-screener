@@ -1,0 +1,9 @@
+{"corporate_actions":{
+  "name_changes":[
+    {"id":"nc1","new_cusip":"B1","new_symbol":"BBB","old_cusip":"A1","old_symbol":"AAA","process_date":"2024-05-01"}],
+  "reverse_splits":[
+    {"symbol":"AAA","ex_date":"2024-02-01","old_rate":5,"new_rate":1,"new_cusip":"A1","old_cusip":"A0",
+     "payable_date":"2024-02-01","process_date":"2024-02-01","id":"splitA"},
+    {"symbol":"AAA","ex_date":"2024-01-15","old_rate":2,"new_rate":1,"new_cusip":"Z9","old_cusip":"Z8",
+     "payable_date":"2024-01-15","process_date":"2024-01-15","id":"anotherCompanyA"}]},
+ "next_page_token":null}

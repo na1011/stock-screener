@@ -1,0 +1,15 @@
+{"corporate_actions":{
+  "cash_dividends":[
+    {"symbol":"NYCB","cusip":"649445103","ex_date":"2024-06-07","rate":0.01,"record_date":"2024-06-07",
+     "payable_date":"2024-06-17","process_date":"2024-06-17","special":false,"foreign":false,"id":"d86bcce7"}],
+  "name_changes":[
+    {"id":"458870b2","new_cusip":"649445400","new_symbol":"FLG","old_cusip":"649445400","old_symbol":"NYCB",
+     "process_date":"2024-10-28"}],
+  "reverse_splits":[
+    {"ex_date":"2024-07-12","id":"7ba04205","new_cusip":"649445400","new_rate":1,"old_cusip":"649445103",
+     "old_rate":3,"payable_date":"2024-07-12","process_date":"2024-07-12","record_date":"2024-07-12","symbol":"NYCB"},
+    {"ex_date":"2024-03-15","id":"reuse02","new_cusip":"888888888","new_rate":1,"old_cusip":"888888887",
+     "old_rate":4,"payable_date":"2024-03-15","process_date":"2024-03-15","record_date":"2024-03-15","symbol":"NYCB"},
+    {"ex_date":"2024-11-15","id":"reuse01","new_cusip":"999999999","new_rate":1,"old_cusip":"999999998",
+     "old_rate":10,"payable_date":"2024-11-15","process_date":"2024-11-15","record_date":"2024-11-15","symbol":"NYCB"}]},
+ "next_page_token":null}

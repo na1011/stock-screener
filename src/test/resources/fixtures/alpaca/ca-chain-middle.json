@@ -1,0 +1,10 @@
+{"corporate_actions":{
+  "name_changes":[
+    {"id":"nc1","new_cusip":"B1","new_symbol":"BBB","old_cusip":"A1","old_symbol":"AAA","process_date":"2024-05-01"},
+    {"id":"nc2","new_cusip":"C2","new_symbol":"CCC","old_cusip":"B2","old_symbol":"BBB","process_date":"2024-09-02"}],
+  "forward_splits":[
+    {"symbol":"BBB","ex_date":"2024-07-01","old_rate":1,"new_rate":2,"new_cusip":"B2","old_cusip":"B1",
+     "payable_date":"2024-07-01","process_date":"2024-07-01","id":"splitB"},
+    {"symbol":"BBB","ex_date":"2024-03-01","old_rate":1,"new_rate":3,"new_cusip":"B1","old_cusip":"B0",
+     "payable_date":"2024-03-01","process_date":"2024-03-01","id":"beforeBBBwasOurs"}]},
+ "next_page_token":null}

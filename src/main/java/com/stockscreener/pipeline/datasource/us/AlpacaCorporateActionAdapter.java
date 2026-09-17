@@ -22,8 +22,12 @@ import tools.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -164,14 +168,77 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
                     "구간이 뒤집혔거나 비었다: " + from + " ~ " + to);
         }
 
-        String symbol = security.ticker();
-        // process_date 창이다. 아래에서 ex_date로 다시 거른다.
+        // process_date 창이다. 아래에서 ex_date로 다시 거른다. MUST: 옛 심볼에도 같은 창을 쓴다 —
+        // 이름 변경일로 끝을 줄이면 늦게 처리된 옛 레코드(실측 지연 최대 3년 3개월)를 잃는다.
         LocalDate requestStart = from.minusYears(REQUEST_LEAD_YEARS);
         LocalDate requestEnd = maxOf(to, LocalDate.now());
 
-        List<CorporateAction> actions = new ArrayList<>();
-        Map<String, Integer> skipped = new TreeMap<>();
-        Set<String> unknownTypes = new LinkedHashSet<>();
+        Harvest harvest = new Harvest();
+        Deque<Era> eras = new ArrayDeque<>();
+        eras.add(new Era(security.ticker(), null, null, 0));
+        Set<String> visited = new HashSet<>();
+        while (!eras.isEmpty()) {
+            Era era = eras.poll();
+            if (!visited.add(era.symbol())) {
+                continue;
+            }
+            Map<String, List<JsonNode>> buckets = fetchBuckets(era.symbol(), requestStart, requestEnd);
+            eras.addAll(harvest(era, buckets, from, to, harvest));
+        }
+
+        if (!harvest.unknownTypes.isEmpty()) {
+            // 소스의 스펙이 넓어졌다는 신호다. 조용히 넘기면 새 타입이 영영 안 보인다.
+            log.warn("처음 보는 기업 행위 타입이 왔다. ticker={} 타입={} — 담을지 판정해야 한다"
+                    + "(지금은 안 담고 세기만 했다).", security.ticker(), harvest.unknownTypes);
+        }
+        // MUST NOT: 여기서 찍지 않는다. 심볼마다 한 줄이면 한 판에 약 978줄(232 B/줄)이고
+        // 그 정보는 **타입별 분포**에 이미 다 있다. 「그런 사건이 없다」와 「우리가 안 담는다」를
+        // 가르는 것은 이 수이지 줄 수가 아니다 — 수는 Fetched로 나가 잡이 시장별로 접는다.
+        harvest.actions.sort(Comparator.comparing(CorporateAction::effectiveDate));
+        return new Fetched(harvest.actions, Map.copyOf(harvest.skipped));
+    }
+
+    /**
+     * 한 심볼이 <b>우리 회사의 것이던 시절</b>.
+     *
+     * <p><b>왜 옛 심볼을 따라가는가</b>: 이 소스는 사건을 <b>그때의 심볼</b> 아래 둔다. 실측(2026-09-17):
+     * {@code FLG}로 물으면 {@code name_changes}(NYCB → FLG · 2024-10-28)만 오고 1:3 병합(ex 2024-07-12)은
+     * {@code NYCB}로 물어야 온다 · {@code DFTX}의 1:15(2022-08-29)는 {@code MNMD} 아래 있다. 현재 심볼
+     * 하나로만 물으면 <b>그 병합이 원리적으로 원장에 안 오고</b> 수정주가가 그날 3배·15배로 끊긴다.
+     *
+     * <p><b>옛 심볼은 재사용된다</b>(이 DB의 {@code VG}: Vonage → Venture Global). 그래서 옛 시절은
+     * 양 끝과 계보로 자른다 — 상한 {@code until}(다음 심볼로 바뀐 날, 그날 포함) · 하한(이 심볼로 바뀐 날)
+     * · CUSIP 계보(분할의 {@code new_cusip}이 계보 안일 때만 받고 그 {@code old_cusip}을 계보에 더한다).
+     * 같은 날 경계를 포함으로 두는 것은 계보가 재사용을 막고 id가 중복을 막기 때문이다.
+     *
+     * @param until   이 심볼에서 다음 심볼로 바뀐 날. 현재 심볼이면 {@code null}
+     * @param lineage 이 시절 우리 회사의 CUSIP. 현재 심볼이면 {@code null} — <b>현재 심볼의 동작은
+     *                옛 판 그대로 둔다</b>(하한·계보를 걸었을 때 기존 사건이 몇 건 빠지는지 안 쟀다)
+     */
+    private record Era(String symbol, LocalDate until, Set<String> lineage, int depth) {
+    }
+
+    /** 체인 깊이 상한. 실측 체인은 한 단계다(FLG←NYCB · DFTX←MNMD). 넘으면 WARN으로 알린다. */
+    private static final int MAX_RENAME_DEPTH = 5;
+
+    /** 심볼 여럿에 걸쳐 모은 것. 사건 id로 한 번만 센다 — 같은 레코드가 옛·새 심볼 응답에 다 온다. */
+    private static final class Harvest {
+        final List<CorporateAction> actions = new ArrayList<>();
+        final Map<String, Integer> skipped = new TreeMap<>();
+        final Set<String> unknownTypes = new LinkedHashSet<>();
+        final Set<String> seenIds = new HashSet<>();
+
+        /** 처음 보는 id면 참. id가 없는 레코드는 늘 참이다(합칠 근거가 없다). */
+        boolean firstSighting(JsonNode node) {
+            String id = node.path("id").asString("");
+            return id.isBlank() || seenIds.add(id);
+        }
+    }
+
+    /** 한 심볼의 전 페이지를 타입별 레코드 목록으로 모은다. */
+    private Map<String, List<JsonNode>> fetchBuckets(String symbol, LocalDate requestStart,
+                                                     LocalDate requestEnd) throws DataSourceException {
+        Map<String, List<JsonNode>> buckets = new LinkedHashMap<>();
         String pageToken = null;
         int page = 0;
         do {
@@ -183,62 +250,149 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
                     response.getStatusCode(), response.getBody(), SOURCE_NAME, context);
 
             for (Map.Entry<String, JsonNode> bucket : envelope.value().properties()) {
-                collect(bucket, symbol, from, to, context, actions, skipped, unknownTypes);
+                if (!bucket.getValue().isArray()) {
+                    throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                            "타입 '" + bucket.getKey() + "'의 값이 배열이 아니다. " + context);
+                }
+                List<JsonNode> nodes = buckets.computeIfAbsent(bucket.getKey(), k -> new ArrayList<>());
+                bucket.getValue().forEach(nodes::add);
             }
 
             pageToken = envelope.nextPageToken();
             page++;
             if (page >= maxPages && pageToken != null) {
                 // MUST NOT: 부분 결과를 반환하지 않는다. 호출자가 반환 목록을 완전한 구간으로
-                // 취급하므로, 잘린 목록은 "그 기간에 사건이 없다"와 구별되지 않는다.
+                // 취급하므로, 잘린 목록은 "그 기간에 사건이 없다"와 구별되지 않는다. 옛 심볼에서
+                // 걸려도 같다 — 그 종목 전체가 실패한다.
                 throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                         "페이지가 %d를 넘는다 — 상한을 걸고 부분 결과를 버린다. %s"
                                 .formatted(maxPages, context));
             }
         } while (pageToken != null);
-
-        if (!unknownTypes.isEmpty()) {
-            // 소스의 스펙이 넓어졌다는 신호다. 조용히 넘기면 새 타입이 영영 안 보인다.
-            log.warn("처음 보는 기업 행위 타입이 왔다. ticker={} 타입={} — 담을지 판정해야 한다"
-                    + "(지금은 안 담고 세기만 했다).", symbol, unknownTypes);
-        }
-        // MUST NOT: 여기서 찍지 않는다. 심볼마다 한 줄이면 한 판에 약 978줄(232 B/줄)이고
-        // 그 정보는 **타입별 분포**에 이미 다 있다. 「그런 사건이 없다」와 「우리가 안 담는다」를
-        // 가르는 것은 이 수이지 줄 수가 아니다 — 수는 Fetched로 나가 잡이 시장별로 접는다.
-        actions.sort(Comparator.comparing(CorporateAction::effectiveDate));
-        return new Fetched(actions, Map.copyOf(skipped));
+        return buckets;
     }
 
-    /** 봉투의 타입 버킷 하나를 훑는다. */
-    private void collect(Map.Entry<String, JsonNode> bucket, String symbol, LocalDate from,
-                         LocalDate to, String context, List<CorporateAction> actions,
-                         Map<String, Integer> skipped, Set<String> unknownTypes)
-            throws DataSourceException {
-        String key = bucket.getKey();
-        if (!bucket.getValue().isArray()) {
-            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
-                    "타입 '" + key + "'의 값이 배열이 아니다. " + context);
-        }
-        CorporateAction.Type type = ADJUSTING.get(key);
-        if (type == null) {
-            if (!KNOWN_TYPES.contains(singular(key))) {
-                unknownTypes.add(key);
-            }
-            skipped.merge(key, bucket.getValue().size(), Integer::sum);
-            return;
-        }
-        for (JsonNode node : bucket.getValue()) {
-            CorporateAction action = toAction(node, type, key, symbol, context);
-            if (action == null) {
+    /**
+     * 한 시절의 레코드를 원장 사건으로 옮기고, <b>따라갈 옛 시절</b>을 돌려준다.
+     *
+     * <p>두 번 훑는다 — 계보가 분할을 받을 때마다 넓어지고(효력일 내림차순), 그 넓어진 계보로
+     * 「이 심볼로 들어온 이름 변경」을 고른 뒤에야 하한이 정해지기 때문이다.
+     */
+    private List<Era> harvest(Era era, Map<String, List<JsonNode>> buckets, LocalDate from,
+                              LocalDate to, Harvest harvest) throws DataSourceException {
+        String symbol = era.symbol();
+        String context = "corporate-actions " + symbol;
+        boolean current = era.until() == null;
+        Set<String> lineage = current ? null : new HashSet<>(era.lineage());
+
+        // 1) 값을 내는 타입 — 시절의 상한·계보로 거른 후보.
+        List<CorporateAction> candidates = new ArrayList<>();
+        List<JsonNode> candidateNodes = new ArrayList<>();
+        for (Map.Entry<String, List<JsonNode>> bucket : buckets.entrySet()) {
+            String key = bucket.getKey();
+            CorporateAction.Type type = ADJUSTING.get(key);
+            if (type == null) {
+                if (!KNOWN_TYPES.contains(singular(key))) {
+                    harvest.unknownTypes.add(key);
+                }
                 continue;
             }
-            // MUST: 포트가 [from, to]를 effectiveDate 기준으로 거르라고 요구한다. 요청 창은
-            // process_date 기준이라 이것을 안 하면 창 밖 사건이 매 실행 다시 올라온다.
-            if (action.effectiveDate().isBefore(from) || action.effectiveDate().isAfter(to)) {
+            List<JsonNode> nodes = new ArrayList<>(bucket.getValue());
+            nodes.sort(Comparator.comparing((JsonNode n) -> n.path("ex_date").asString("")).reversed());
+            for (JsonNode node : nodes) {
+                CorporateAction action = toAction(node, type, key, symbol, context);
+                if (action == null) {
+                    continue;
+                }
+                // MUST: 포트가 [from, to]를 effectiveDate 기준으로 거르라고 요구한다. 요청 창은
+                // process_date 기준이라 이것을 안 하면 창 밖 사건이 매 실행 다시 올라온다.
+                if (action.effectiveDate().isBefore(from) || action.effectiveDate().isAfter(to)) {
+                    continue;
+                }
+                if (!current) {
+                    if (action.effectiveDate().isAfter(era.until())) {
+                        continue; // 이 심볼이 우리 회사를 떠난 뒤 — 재배정받은 회사의 사건일 수 있다
+                    }
+                    String newCusip = node.path("new_cusip").asString("");
+                    if (!newCusip.isBlank() && !lineage.contains(newCusip)) {
+                        continue; // 계보 밖 CUSIP — 같은 심볼을 쓰던 다른 회사다
+                    }
+                    String oldCusip = node.path("old_cusip").asString("");
+                    if (!oldCusip.isBlank()) {
+                        lineage.add(oldCusip);
+                    }
+                }
+                candidates.add(action);
+                candidateNodes.add(node);
+            }
+        }
+
+        // 2) 이 심볼로 들어온 이름 변경 — 따라갈 옛 시절이자 이 시절의 하한.
+        List<JsonNode> renamesInto = new ArrayList<>();
+        for (JsonNode node : buckets.getOrDefault("name_changes", List.of())) {
+            String oldSymbol = node.path("old_symbol").asString("");
+            if (!symbol.equals(node.path("new_symbol").asString(""))
+                    || oldSymbol.isBlank() || oldSymbol.equals(symbol)) {
+                continue; // 심볼이 그대로인 변경(CUSIP만 바뀜)은 따라갈 곳이 없다
+            }
+            LocalDate changed = optionalDateOf(node, "process_date");
+            if (changed == null || (!current && changed.isAfter(era.until()))) {
                 continue;
             }
-            actions.add(action);
+            if (!current) {
+                String newCusip = node.path("new_cusip").asString("");
+                if (!newCusip.isBlank() && !lineage.contains(newCusip)) {
+                    continue;
+                }
+            }
+            renamesInto.add(node);
         }
+        renamesInto.sort(Comparator.comparing((JsonNode n) -> n.path("process_date").asString("")).reversed());
+        if (renamesInto.size() > 1) {
+            // 한 심볼로 들어온 변경이 여럿이면 가장 최근 것만 우리 회사의 것으로 본다 — 더 옛 것은
+            // 이 심볼이 재사용되기 전 다른 회사의 변경일 수 있다.
+            renamesInto = List.of(renamesInto.get(0));
+        }
+        LocalDate lowerBound = current || renamesInto.isEmpty() ? null
+                : optionalDateOf(renamesInto.get(0), "process_date");
+
+        // 3) 하한을 걸고 담는다. 제외 타입도 같은 id로 한 번만 센다.
+        for (int i = 0; i < candidates.size(); i++) {
+            CorporateAction action = candidates.get(i);
+            if (lowerBound != null && action.effectiveDate().isBefore(lowerBound)) {
+                continue; // 우리 회사가 이 심볼을 쓰기 전 — 그 시절 사건은 옛 심볼로 온다
+            }
+            if (harvest.firstSighting(candidateNodes.get(i))) {
+                harvest.actions.add(action);
+            }
+        }
+        for (Map.Entry<String, List<JsonNode>> bucket : buckets.entrySet()) {
+            if (ADJUSTING.containsKey(bucket.getKey())) {
+                continue;
+            }
+            for (JsonNode node : bucket.getValue()) {
+                if (harvest.firstSighting(node)) {
+                    harvest.skipped.merge(bucket.getKey(), 1, Integer::sum);
+                }
+            }
+        }
+
+        List<Era> next = new ArrayList<>();
+        for (JsonNode rename : renamesInto) {
+            String oldSymbol = rename.path("old_symbol").asString("");
+            if (era.depth() + 1 > MAX_RENAME_DEPTH) {
+                log.warn("이름 변경 체인이 {}단계를 넘어 더 따라가지 않는다. 현재={} 옛={} — 그 앞 시절의 "
+                        + "분할·병합이 원장에 안 온다.", MAX_RENAME_DEPTH, symbol, oldSymbol);
+                continue;
+            }
+            Set<String> oldLineage = new HashSet<>();
+            String oldCusip = rename.path("old_cusip").asString("");
+            if (!oldCusip.isBlank()) {
+                oldLineage.add(oldCusip);
+            }
+            next.add(new Era(oldSymbol, optionalDateOf(rename, "process_date"), oldLineage, era.depth() + 1));
+        }
+        return next;
     }
 
     /** 복수형 봉투 키에서 단수형 타입 이름을 낸다. */

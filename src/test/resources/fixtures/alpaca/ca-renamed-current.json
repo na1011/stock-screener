@@ -1,0 +1,8 @@
+{"corporate_actions":{
+  "cash_dividends":[
+    {"symbol":"FLG","cusip":"649445400","ex_date":"2024-12-06","rate":0.01,"record_date":"2024-12-06",
+     "payable_date":"2024-12-17","process_date":"2024-12-17","special":false,"foreign":false,"id":"43cfb714"}],
+  "name_changes":[
+    {"id":"458870b2","new_cusip":"649445400","new_symbol":"FLG","old_cusip":"649445400","old_symbol":"NYCB",
+     "process_date":"2024-10-28"}]},
+ "next_page_token":null}
