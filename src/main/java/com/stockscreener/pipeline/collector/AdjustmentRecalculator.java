@@ -52,6 +52,15 @@ public class AdjustmentRecalculator {
 
     private static final Logger log = LoggerFactory.getLogger(AdjustmentRecalculator.class);
 
+    /**
+     * 탐지 매퍼가 「거래재개 가격 발견이라 후보가 아니다」를 알리는 표식. {@code null}은 이미
+     * 「주식수가 없어 판정 불가」가 쓰고 있어 둘을 섞으면 그 수(ADR-0100)가 부풀어 오른다.
+     * 동일성으로만 비교하고 원장에 절대 닿지 않는다.
+     */
+    private static final CorporateAction RESUMED_AFTER_HALT = new CorporateAction(
+            LocalDate.EPOCH, CorporateAction.Type.UNKNOWN, BigDecimal.ONE,
+            CorporateAction.DetectionSource.HEURISTIC);
+
     /** {@code adj_factor numeric(18,10)}에 맞춘다. */
     private static final int FACTOR_SCALE = PriceDiscontinuity.RATIO_SCALE;
 
@@ -186,18 +195,28 @@ public class AdjustmentRecalculator {
      * 안 싣는 국내를 위한 두 번째 그물</b>이다(ADR-0049).
      */
     public Detection detectCandidates(long stockId) {
+        int resumptionFrame = PriceDiscontinuity.RESUMPTION_SHARE_WINDOW_BARS + 2;
         return withoutUnjudgeable(stockId, jdbcTemplate.query("""
-                SELECT trade_date, close, prev_close, listed_shares, prev_listed_shares FROM (
+                SELECT trade_date, close, prev_close, listed_shares, prev_listed_shares,
+                       prev_halted, forward_bars, forward_min_shares, forward_max_shares FROM (
                     SELECT trade_date, close, listed_shares,
                            lag(close) OVER w AS prev_close,
-                           lag(listed_shares) OVER w AS prev_listed_shares
+                           lag(listed_shares) OVER w AS prev_listed_shares,
+                           coalesce(lag(volume) OVER w = 0
+                                    AND lag(open) OVER w = lag(high) OVER w
+                                    AND lag(high) OVER w = lag(low) OVER w
+                                    AND lag(low) OVER w = lag(close) OVER w, false) AS prev_halted,
+                           count(*) OVER f AS forward_bars,
+                           min(listed_shares) OVER f AS forward_min_shares,
+                           max(listed_shares) OVER f AS forward_max_shares
                     FROM price_daily WHERE stock_id = ?
-                    WINDOW w AS (ORDER BY trade_date)
+                    WINDOW w AS (ORDER BY trade_date),
+                           f AS (ORDER BY trade_date ROWS BETWEEN 1 PRECEDING AND %d FOLLOWING)
                 ) t
                 WHERE prev_close IS NOT NULL AND close > 0 AND prev_close > 0
                   AND (close / prev_close > ? OR close / prev_close < ?)
                 ORDER BY trade_date
-                """,
+                """.formatted(PriceDiscontinuity.RESUMPTION_SHARE_WINDOW_BARS),
                 (rs, rowNum) -> {
                     LocalDate date = rs.getObject("trade_date", LocalDate.class);
                     BigDecimal close = rs.getBigDecimal("close");
@@ -207,6 +226,21 @@ public class AdjustmentRecalculator {
                             || rs.getBigDecimal("prev_listed_shares") == null) {
                         // 판정 재료가 없다. null은 아래에서 걸러지고 그 수가 로그로 남는다.
                         return null;
+                    }
+
+                    // 거래정지 뒤 첫 거래 봉의 가격 발견은 기업행위가 아니다 — 앞쪽 창에서 주식수가
+                    // 한 주도 안 바뀌었고 창이 다 찼을 때만(RESUMPTION_SHARE_WINDOW_BARS javadoc).
+                    // MUST: 조용히 버리지 않는다. 드물어서(국내 전 이력 7건) 종목마다 INFO로 남긴다.
+                    BigDecimal forwardMin = rs.getBigDecimal("forward_min_shares");
+                    BigDecimal forwardMax = rs.getBigDecimal("forward_max_shares");
+                    if (rs.getBoolean("prev_halted")
+                            && rs.getInt("forward_bars") == resumptionFrame
+                            && forwardMin != null && forwardMin.compareTo(forwardMax) == 0) {
+                        log.info("거래정지 뒤 첫 거래 봉의 가격 발견이라 기업행위 후보로 올리지 않는다. "
+                                        + "stockId={} 효력일={} 관측배수={} — 앞 {}거래일 동안 상장주식수가 그대로다.",
+                                stockId, date, PriceDiscontinuity.observedRatio(close, prevClose),
+                                PriceDiscontinuity.RESUMPTION_SHARE_WINDOW_BARS);
+                        return RESUMED_AFTER_HALT;
                     }
 
                     Optional<BigDecimal> fromShares = parValueRatio(
@@ -255,7 +289,12 @@ public class AdjustmentRecalculator {
      * {@code LOG_ADJUSTMENT=DEBUG} + 재기동이면 되살아난다. 기본 레벨에서 <b>종목 귀속을
      * 잃는 것</b>이 이 강등이 파는 대가다 — 되살리는 재실행은 외부 호출이 없어 쿼터를 안 태운다.
      */
-    private Detection withoutUnjudgeable(long stockId, List<CorporateAction> rows) {
+    private Detection withoutUnjudgeable(long stockId, List<CorporateAction> detected) {
+        // 거래재개 가격 발견은 탐지 매퍼가 이미 INFO로 남겼다. 여기서는 후보 목록에서만 뺀다 —
+        // 값 동등이 아니라 **동일성**으로 가른다(레코드 equals가 우연히 같은 행을 삼키지 않게).
+        List<CorporateAction> rows = detected.stream()
+                .filter(action -> action != RESUMED_AFTER_HALT)
+                .toList();
         int skipped = (int) rows.stream().filter(java.util.Objects::isNull).count();
         if (skipped > 0) {
             log.debug("상장주식수가 없어 후보로 올리지 않은 가격 불연속이 {}건이다. stockId={} — "

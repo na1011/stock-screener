@@ -376,6 +376,110 @@ class AdjustmentRecalculatorTest {
 
     /** OHLC를 종가 기준으로 만든 봉. 분할 계산은 종가만 쓰므로 나머지는 종가에 맞춘다. */
     /** 상장주식수가 없는 봉. 탐지는 이런 봉에서 <b>종류를 모르는 것으로 둔다.</b> */
+    // ── 거래정지 뒤 첫 거래 봉(RESUMPTION_SHARE_WINDOW_BARS) ─────────────────────
+
+    @Test
+    @DisplayName("거래정지 뒤 첫 거래 봉의 가격 발견은 앞쪽 창에서 주식수가 그대로면 후보가 아니다")
+    void priceDiscoveryAfterHaltIsNotACandidate() {
+        // 피노 2023-03-30 모양: 정지 봉 829 → 재개 1,273(×1.5356) · 주식수 그대로.
+        writer.write(stockId, resumption("829", "1273", 5_000_000L, 5_000_000L, 45));
+
+        assertThat(recalculator.detectCandidates(stockId).candidates())
+                .as("정지 봉 → 재개 봉 급등은 기업행위가 아니다 — OBSERVED로 쌓이면 장기창 지표가 억제된다")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("재개 뒤 앞쪽 창 안에서 주식수가 늘면 후보로 남긴다 — 권리락이 재개일에 걸린 모양이다")
+    void resumptionWithLaterShareIncreaseStaysACandidate() {
+        List<RawPriceBar> bars = new java.util.ArrayList<>(
+                resumption("20000", "10000", 5_000_000L, 5_000_000L, 45));
+        // 재개 20봉 뒤 신주상장(원장 무상증자 권리락→상장 간격 최대 34봉 안).
+        for (int i = 22; i < bars.size(); i++) {
+            RawPriceBar b = bars.get(i);
+            bars.set(i, bar(b.tradeDate().toString(), b.close().toPlainString(), 10_000_000L));
+        }
+        writer.write(stockId, bars);
+
+        assertThat(recalculator.detectCandidates(stockId).candidates())
+                .extracting(CorporateAction::effectiveDate)
+                .containsExactly(bars.get(1).tradeDate());
+    }
+
+    @Test
+    @DisplayName("재개 뒤 봉이 창만큼 안 쌓였으면 후보로 남긴다 — 신주가 아직 상장 안 된 권리락일 수 있다")
+    void resumptionTailStaysACandidate() {
+        writer.write(stockId, resumption("829", "1273", 5_000_000L, 5_000_000L, 10));
+
+        assertThat(recalculator.detectCandidates(stockId).candidates()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("정지 → 재개에서 주식수가 같은 날 바뀐 병합은 그대로 잡는다 — 대한전선 2023-05-16")
+    void mergeAtResumptionIsStillDetected() {
+        writer.write(stockId, resumption("1492", "15860", 1_244_473_009L, 124_447_300L, 45));
+
+        assertThat(recalculator.detectCandidates(stockId).candidates())
+                .singleElement()
+                .satisfies(candidate -> {
+                    assertThat(candidate.type()).isEqualTo(CorporateAction.Type.REVERSE_SPLIT);
+                    assertThat(candidate.ratio()).isEqualByComparingTo("0.1");
+                });
+    }
+
+    @Test
+    @DisplayName("정지 중의 주식수 변화는 재개 판정에 안 끼어든다 — 앞쪽 창만 본다(코오롱티슈진 2022-10-25)")
+    void shareChangeDuringHaltDoesNotKeepResumptionAlive() {
+        LocalDate day = LocalDate.parse("2022-08-01");
+        List<RawPriceBar> bars = new java.util.ArrayList<>();
+        bars.add(bar(day.toString(), "3000", 64_920_050L));
+        // 정지 30봉 — 재개 27봉 앞에서 주식수가 1.0612배로 는다(정지 봉 위).
+        for (int i = 1; i <= 30; i++) {
+            day = nextBusinessDay(day);
+            bars.add(halted(day.toString(), "3080", i < 4 ? 64_920_050L : 68_890_050L));
+        }
+        day = nextBusinessDay(day);
+        bars.add(bar(day.toString(), "8010", 68_890_050L));   // ×2.6006
+        for (int i = 0; i < 45; i++) {
+            day = nextBusinessDay(day);
+            bars.add(bar(day.toString(), "8010", 68_890_050L));
+        }
+        writer.write(stockId, bars);
+
+        assertThat(recalculator.detectCandidates(stockId).candidates()).isEmpty();
+    }
+
+    /**
+     * 정지 봉 하나 → 재개 봉 → 그 뒤 {@code after}봉. 정지 봉은 KRX 원형(o=h=l=0 · 거래량 0)으로
+     * 넣어 {@link PriceWriter}의 평탄화(ADR-0160)를 그대로 태운다.
+     */
+    private static List<RawPriceBar> resumption(String haltedClose, String resumedClose,
+                                                long sharesBefore, long sharesAfter, int after) {
+        LocalDate day = LocalDate.parse("2023-03-02");
+        List<RawPriceBar> bars = new java.util.ArrayList<>();
+        bars.add(halted(day.toString(), haltedClose, sharesBefore));
+        day = nextBusinessDay(day);
+        bars.add(bar(day.toString(), resumedClose, sharesAfter));
+        for (int i = 0; i < after; i++) {
+            day = nextBusinessDay(day);
+            bars.add(bar(day.toString(), resumedClose, sharesAfter));
+        }
+        return bars;
+    }
+
+    private static RawPriceBar halted(String date, String close, long listedShares) {
+        return new RawPriceBar(LocalDate.parse(date), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                new BigDecimal(close), 0L, null, BigDecimal.valueOf(listedShares), false);
+    }
+
+    private static LocalDate nextBusinessDay(LocalDate day) {
+        LocalDate next = day.plusDays(1);
+        while (next.getDayOfWeek().getValue() >= 6) {
+            next = next.plusDays(1);
+        }
+        return next;
+    }
+
     private static RawPriceBar bar(String date, String close) {
         return bar(date, close, null);
     }
