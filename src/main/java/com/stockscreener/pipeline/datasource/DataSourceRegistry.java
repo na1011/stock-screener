@@ -208,6 +208,10 @@ public class DataSourceRegistry {
         return financialByMarket.containsKey(marketCode);
     }
 
+    public boolean hasFullStatementSource(String marketCode) {
+        return fullStatementByMarket.containsKey(marketCode);
+    }
+
     public Optional<UniverseDataSource> findUniverseSource(String universeCode) {
         return Optional.ofNullable(universeByCode.get(universeCode));
     }

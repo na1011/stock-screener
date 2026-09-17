@@ -5,6 +5,7 @@ import com.stockscreener.pipeline.collector.FinancialCollector;
 import com.stockscreener.pipeline.collector.FinancialWriter;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.DataSourceRegistry;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 
 import org.slf4j.Logger;
@@ -54,13 +55,16 @@ public class FinancialRefillJob {
     private final StockRegistrar stockRegistrar;
     private final BatchExecutions batchExecutions;
     private final FinancialLoadWindow loadWindow;
+    private final DataSourceRegistry registry;
 
     public FinancialRefillJob(FinancialCollector financialCollector, StockRegistrar stockRegistrar,
-                              BatchExecutions batchExecutions, FinancialLoadWindow loadWindow) {
+                              BatchExecutions batchExecutions, FinancialLoadWindow loadWindow,
+                              DataSourceRegistry registry) {
         this.financialCollector = financialCollector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.loadWindow = loadWindow;
+        this.registry = registry;
     }
 
     /**
@@ -152,6 +156,8 @@ public class FinancialRefillJob {
         // MUST: 알림 문구와 백필 대상을 따로 모은다. 위 목록은 "005930(정정 1 · 교정 0)"
         // 형태라 사람이 읽는 것이고, 백필에는 티커만 있어야 한다.
         List<String> tickersToBackfill = new ArrayList<>();
+        // 전체 재무제표 소스가 있는 시장의 종목만 — 미국(SEC)은 영업활동현금흐름을 이 경로가 이미 채운다.
+        List<String> fullStatementTickers = new ArrayList<>();
 
         try {
             for (SecurityRef target : targets) {
@@ -169,6 +175,9 @@ public class FinancialRefillJob {
                                 security.ticker(), outcome.revised(), outcome.corrected(),
                                 outcome.insertedEarlier()));
                         tickersToBackfill.add(security.ticker());
+                        if (registry.hasFullStatementSource(security.marketCode())) {
+                            fullStatementTickers.add(security.ticker());
+                        }
                     }
                     filled.addAndGet(outcome.filled());
                     return outcome.changed();
@@ -187,7 +196,7 @@ public class FinancialRefillJob {
                         revised.get(), filled.get(), corrected.get(), insertedEarlier.get());
         log.info("재무 결손 보정을 마쳤다. {}", note);
         alertOnInvalidation(execution, invalidatedTickers,
-                revised.get() + corrected.get() + insertedEarlier.get());
+                revised.get() + corrected.get() + insertedEarlier.get(), fullStatementTickers);
         return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill));
     }
 
@@ -223,22 +232,39 @@ public class FinancialRefillJob {
      * 같은 결과를 만드는데 한쪽만 말하면, 말하지 않는 쪽으로 사고가 몰린다.
      */
     private void alertOnInvalidation(BatchExecutionContext execution, List<String> invalidatedTickers,
-                                     int invalidatedPeriods) {
+                                     int invalidatedPeriods, List<String> fullStatementTickers) {
         if (invalidatedTickers.isEmpty()) {
             return;
         }
-        String tickers = String.join(", ", invalidatedTickers);
         execution.alertOperator(AlertSeverity.WARNING, "재무 무효화 — 백필이 남았다",
-                ("""
+                invalidationAlertBody(invalidatedTickers, invalidatedPeriods, fullStatementTickers));
+    }
+
+    /** 알림 본문. 패키지 공개인 이유는 실행 컨텍스트 없이 문구를 시험하기 위해서다. */
+    static String invalidationAlertBody(List<String> invalidatedTickers, int invalidatedPeriods,
+                                        List<String> fullStatementTickers) {
+        StringBuilder body = new StringBuilder("""
                 %d종목의 재무를 정정·교정·이른 판 삽입으로 다시 썼다(%d기간): %s
                 **그 종목의 지표가 보존 창 전체에서 지워졌다.** 백필이 따라오지 않으면 화면에서 \
-                통째로 사라지는데 에러도 경고도 나지 않는다. 영업활동현금흐름은 이 경로가 \
-                채우지 못하므로 전체 재무제표를 함께 돌린다:
-                  ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
-                --job=full-statement-refill --tickers=<위 종목>'
-                  ./gradlew bootRun --args='--spring.profiles.active=bootstrap --server.port=0 \
-                --job=backfill --from=<보존 창 첫 거래일> --tickers=<위 종목>'
-                """).formatted(invalidatedTickers.size(), invalidatedPeriods, tickers));
+                통째로 사라지는데 에러도 경고도 나지 않는다.
+                """.formatted(invalidatedTickers.size(), invalidatedPeriods, String.join(", ", invalidatedTickers)));
+        // 전체 재무제표는 소스가 있는 시장(국내 DART)에만 시킨다 — 미국 티커로 돌리면 종목마다 실패한다.
+        if (!fullStatementTickers.isEmpty()) {
+            body.append("""
+                    영업활동현금흐름은 이 경로가 채우지 못하는 시장이 있어 그 종목은 전체 재무제표를 함께 돌린다:
+                      ./gradlew bootRun --args='--spring.profiles.active=bootstrap \
+                    --job=full-statement-refill --tickers=%s'
+                    """.formatted(String.join(",", fullStatementTickers)));
+        }
+        // 백필은 짝이다. 날짜 하나로 돌린 원본층은 보존 창 전체를 다시 쓰지만 백분위·업종 상대값은 그 날짜에만 낸다.
+        body.append("""
+                백필은 원본층 한 판과 파생층 루프를 잇는다(batch-load skill):
+                  ./gradlew bootRun --args='--spring.profiles.active=bootstrap \
+                --job=backfill --from=<최신 거래일> --as-of=<최신 거래일> --tickers=<위 종목>'
+                  ./gradlew bootRun --args='--spring.profiles.active=bootstrap \
+                --job=backfill --from=<보존 창 첫 거래일> --as-of=<최신 거래일> --tickers=<같은 시장 1종목>'
+                """);
+        return body.toString();
     }
 
     /**
