@@ -152,6 +152,9 @@ public class FinancialRefillJob {
         AtomicInteger filled = new AtomicInteger();
         AtomicInteger corrected = new AtomicInteger();
         AtomicInteger insertedEarlier = new AtomicInteger();
+        // 새 라벨 적재는 무효화를 안 걸지만 순위 재료(JdbcStoredShareCounts)와 과거 봉의 지표를 바꾼다.
+        // 세지 않으면 그 실행이 무엇을 움직였는지 note만 보고는 알 수 없다(리허설 EXE 2026 Q2).
+        AtomicInteger inserted = new AtomicInteger();
         List<String> invalidatedTickers = new ArrayList<>();
         // MUST: 알림 문구와 백필 대상을 따로 모은다. 위 목록은 "005930(정정 1 · 교정 0)"
         // 형태라 사람이 읽는 것이고, 백필에는 티커만 있어야 한다.
@@ -166,6 +169,7 @@ public class FinancialRefillJob {
                             security, fromFiscalYear, FinancialWriter.WriteMode.FILL_MISSING,
                             insertEarlierVintages);
                     revised.addAndGet(outcome.revised());
+                    inserted.addAndGet(outcome.inserted());
                     corrected.addAndGet(outcome.corrected());
                     insertedEarlier.addAndGet(outcome.insertedEarlier());
                     // 이른 판 삽입도 그 공시일 이후의 지표를 지운다 — 정정·교정과 같이 세지 않으면
@@ -191,8 +195,8 @@ public class FinancialRefillJob {
             throw e;
         }
 
-        String note = "연도=%d~%d 대상=%d종목 정정=%d 채움=%d 교정=%d 이른판=%d"
-                .formatted(fromFiscalYear, asOf.getYear(), targets.size(),
+        String note = "연도=%d~%d 대상=%d종목 신규=%d 정정=%d 채움=%d 교정=%d 이른판=%d"
+                .formatted(fromFiscalYear, asOf.getYear(), targets.size(), inserted.get(),
                         revised.get(), filled.get(), corrected.get(), insertedEarlier.get());
         log.info("재무 결손 보정을 마쳤다. {}", note);
         alertOnInvalidation(execution, invalidatedTickers,
