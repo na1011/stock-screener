@@ -588,6 +588,41 @@ class FinancialWriterTest {
             assertThat(latestRow().get("published_at")).isEqualTo(java.sql.Date.valueOf("2026-06-01"));
         }
 
+        @Test
+        @DisplayName("이른 판은 같은 라벨에 저장된 주식수를 이어받는다 — 손으로 고친 축척을 새 행이 되살리지 않는다")
+        void insertedEarlierVintageInheritsTheStoredShareCountOfItsLabel() {
+            // 저장본은 손 수리된 값이고(ADR-0126) 소스는 지금도 같은 라벨의 모든 판에 1000배 표지를 준다
+            // (실측 RPAY 2023 Q4 — 90,048,638 대 90,048,638,000).
+            writer.write(stockId, List.of(withShares(2025, "FY", "2026-04-20", "950", "90048638")));
+
+            FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId,
+                    List.of(withShares(2025, "FY", "2026-03-15", "1000", "90048638000"),
+                            withShares(2025, "FY", "2026-04-20", "950", "90048638000")),
+                    WriteMode.FILL_MISSING, true, true);
+
+            assertThat(outcome.insertedEarlier()).isEqualTo(1);
+            assertThat((BigDecimal) vintageRow("2026-03-15").get("shares_outstanding"))
+                    .isEqualByComparingTo("90048638");
+            assertThat((BigDecimal) vintageRow("2026-04-20").get("shares_outstanding"))
+                    .isEqualByComparingTo("90048638");
+        }
+
+        @Test
+        @DisplayName("저장된 주식수가 없으면 이른 판은 소스 값을 쓴다")
+        void insertedEarlierVintageKeepsTheSourceShareCountWhenNoneIsStored() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+            jdbcTemplate.update("UPDATE financial_statement SET shares_outstanding = NULL WHERE stock_id = ?",
+                    stockId);
+
+            recordingWriter.writeDetailed(stockId,
+                    List.of(withShares(2025, "FY", "2026-03-15", "1000", "15655000"),
+                            report(2025, "FY", "2026-04-20", "950")),
+                    WriteMode.FILL_MISSING, true, true);
+
+            assertThat((BigDecimal) vintageRow("2026-03-15").get("shares_outstanding"))
+                    .isEqualByComparingTo("15655000");
+        }
+
         private List<Integer> revisionNumbers() {
             return jdbcTemplate.queryForList("""
                     SELECT revision_no FROM financial_statement WHERE stock_id = ?

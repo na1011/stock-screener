@@ -431,7 +431,7 @@ public class FinancialWriter {
                         WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?
                         """, Integer.class, stockId, report.fiscalYear(), report.fiscalPeriod());
                 // is_latest는 안 건드린다: 더 늦은 공시본이 이미 최신이다.
-                insert(stockId, report, provisional, false);
+                insert(stockId, report, provisional, false, storedSharesOfLabel(stockId, report));
                 // MUST: 넣은 즉시 그 라벨의 번호를 공시일 순으로 고친다. 호출 끝으로 미루면 같은 호출에서
                 // 더 늦은 새 판이 정정 갈래로 오며 `최신 번호 + 1`을 쓰는데, 그 번호가 방금 넣은 임시
                 // 번호와 같아 uq_fs_revision 위반으로 그 종목 쓰기가 통째로 롤백된다(시험이 재현한다).
@@ -712,6 +712,44 @@ public class FinancialWriter {
             """;
 
     private void insert(long stockId, RawFinancialReport report, int revisionNo, boolean isLatest) {
+        insert(stockId, report, revisionNo, isLatest, report.sharesOutstanding());
+    }
+
+    /**
+     * 이른 판에 넣을 주식수 — 같은 라벨에 저장된 값이 하나로 모이면 그것, 아니면 소스 값.
+     *
+     * <p>주식수는 기간을 낸 보고서가 아니라 <b>라벨 앵커의 표지</b>에서 오므로({@link Amount#overwritable()})
+     * 소스는 같은 라벨의 모든 판에 같은 값을 준다. 저장된 값이 그것과 다르면 저장값이 손 수리(ADR-0126)이거나
+     * 옛 추출이 고른 축척이고, 기존 행은 {@code overwritable()}이 그 값을 지킨다. <b>새 행 삽입은 그 보호를 거치지
+     * 않으므로 여기서 같은 규칙을 건다</b> — 안 걸면 손으로 고친 축척이 이른 판으로 되살아난다
+     * (실측 2026-09-17 사본 재생: 삽입 2,565판 중 저장값과 다른 것이 `RPAY` 2023 Q4 하나 — 90,048,638,000 대 90,048,638).
+     *
+     * <p>저장된 값이 둘 이상으로 갈리면(손 수리가 일부 판에만 닿은 라벨 — 같은 날 US 12라벨) 어느 쪽도 정본이라
+     * 말할 수 없어 소스 값을 쓰고 경고로 남긴다. 그날 사본 재생에서 이 갈래에 걸린 삽입은 0이다.
+     */
+    private BigDecimal storedSharesOfLabel(long stockId, RawFinancialReport report) {
+        List<BigDecimal> stored = jdbcTemplate.queryForList("""
+                SELECT DISTINCT shares_outstanding FROM financial_statement
+                WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND shares_outstanding IS NOT NULL
+                """, BigDecimal.class, stockId, report.fiscalYear(), report.fiscalPeriod());
+        BigDecimal incoming = report.sharesOutstanding();
+        if (stored.size() == 1) {
+            BigDecimal kept = stored.get(0);
+            if (incoming == null || incoming.compareTo(kept) != 0) {
+                log.info("이른 판의 주식수를 저장값으로 잇는다. stockId={} {}/{} 공시일={} 소스={} 저장={}",
+                        stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt(), incoming, kept);
+            }
+            return kept;
+        }
+        if (stored.size() > 1) {
+            log.warn("이른 판의 주식수를 이을 저장값이 갈린다 — 소스 값을 쓴다. stockId={} {}/{} 공시일={} 소스={} 저장={}",
+                    stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt(), incoming, stored);
+        }
+        return incoming;
+    }
+
+    private void insert(long stockId, RawFinancialReport report, int revisionNo, boolean isLatest,
+                        BigDecimal sharesOutstanding) {
         jdbcTemplate.update("""
                 INSERT INTO financial_statement
                     (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
@@ -736,7 +774,7 @@ public class FinancialWriter {
                 report.totalAssets(), report.totalEquity(), report.totalEquityControlling(),
                 report.totalLiabilities(),
                 report.currentAssets(), report.currentLiabilities(), report.retainedEarnings(),
-                report.operatingCashFlow(), report.sharesOutstanding(),
+                report.operatingCashFlow(), sharesOutstanding,
                 report.eps(), report.bps(),
                 report.costOfSales(), report.cashAndEquivalents(), report.capex(),
                 report.inventories(), report.netIncomeControlling(),
