@@ -99,15 +99,18 @@ public class MembershipGapFiller {
     private final CompanyProfileJob companyProfileJob;
     private final UniverseIntegrityAlerter alerter;
     private final AlertPort alertPort;
+    private final BatchExecutionReader batchExecutionReader;
 
     public MembershipGapFiller(StockRegistrar stockRegistrar, InitialLoadJob initialLoadJob,
                                CompanyProfileJob companyProfileJob,
-                               UniverseIntegrityAlerter alerter, AlertPort alertPort) {
+                               UniverseIntegrityAlerter alerter, AlertPort alertPort,
+                               BatchExecutionReader batchExecutionReader) {
         this.stockRegistrar = stockRegistrar;
         this.initialLoadJob = initialLoadJob;
         this.companyProfileJob = companyProfileJob;
         this.alerter = alerter;
         this.alertPort = alertPort;
+        this.batchExecutionReader = batchExecutionReader;
     }
 
     /**
@@ -146,6 +149,9 @@ public class MembershipGapFiller {
     }
 
     private void fill(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        if (blockedByAnotherBatch()) {
+            return;
+        }
         loadMissingRawData(stockRegistrar.membershipGaps(), asOf, triggeredBy);
 
         // MUST: 티커를 주지 않고, 결손이 0이어도 매주 부른다. 그리고 위가 상한을 넘겨
@@ -162,6 +168,42 @@ public class MembershipGapFiller {
         //
         // 대가는 원리적으로 안 채워지는 면제 종목에 대한 주당 몇 콜뿐이다(종목당 1콜).
         companyProfileJob.run(asOf, triggeredBy, List.of(), null);
+    }
+
+    /**
+     * 지금 다른 배치가 돌고 있으면 꼬리를 통째로 건너뛴다.
+     *
+     * <h2>왜 필요한가</h2>
+     * <p>{@code application.yaml}의 {@code spring.task.scheduling.pool.size: 1}이
+     * <b>배치끼리 안 겹친다는 유일한 근거</b>라고 스스로 적어 뒀는데, 그 보장은
+     * {@code @Scheduled}끼리만이다. 이 꼬리가 {@code UniverseRebalanceJob} 안으로 들어오면서
+     * <b>관리자 화면</b>({@code applicationTaskExecutor} — 다른 풀)과 <b>CLI</b>
+     * ({@code BootstrapRunner} — 별도 JVM)도 꼬리를 끌게 됐고, 그 둘은 그 풀을 안 지난다.
+     * 리밸런싱 15회 중 손·관리자 실행이 11회이고 그중 평일이 여럿이다 — 지금까지 안 겹친
+     * 이유는 리밸런싱이 최장 26초였기 때문이지 막는 것이 있어서가 아니다.
+     *
+     * <p>겹치면 7년 시세 적재가 13:30 일일 갱신과 <b>같은 {@code price_daily}의 같은
+     * (종목, 날짜)에 동시에 쓴다.</b>
+     *
+     * <h2>MUST: 조용히 멈추지 않는다</h2>
+     * <p>{@link BatchExecutionSweeper}가 JVM 기동 때만 정리하므로 <b>죽은 프로세스가 남긴
+     * RUNNING 행</b>이 이 게이트를 막을 수 있다. 그때 로그만 남기면 꼬리가 영영 안 돈 채로
+     * 초록이 된다 — 막힌 것과 채울 것이 없던 것은 화면에서 구분되지 않는다.
+     */
+    private boolean blockedByAnotherBatch() {
+        List<String> running = batchExecutionReader.runningJobNames();
+        if (running.isEmpty()) {
+            return false;
+        }
+        log.warn("다른 배치가 도는 중이라 편입 결손 보충을 건너뛴다. 도는 잡={}", running);
+        alertPort.send(AlertEvent.toOperator(AlertSeverity.WARNING, "편입 결손 보충을 건너뛰었다",
+                ("다른 배치가 도는 중이라 새 편입 종목의 원자료를 안 채웠다(도는 잡=%s). "
+                        + "같은 price_daily에 동시에 쓰는 것을 피한 것이다 — 그 배치가 끝난 뒤 "
+                        + "손으로 리밸런싱을 다시 돌리거나 평일 15:10 점검의 신고를 따른다. "
+                        + "도는 잡이 없는데 이 알림이 계속 나오면 죽은 프로세스가 남긴 RUNNING 행이다.")
+                        .formatted(running),
+                "universe-integrity-busy"));
+        return true;
     }
 
     /** 원자료가 빈 편입 종목을 축별로 갈라 적재한다. <b>상한을 넘으면 적재만 건너뛴다.</b> */

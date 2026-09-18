@@ -86,7 +86,6 @@ class PipelineSchedulerChainTest {
         freshnessPolicy = mock(JobFreshnessPolicy.class);
         retentionPolicy = mock(IndicatorRetentionPolicy.class);
         universeRebalanceJob = mock(UniverseRebalanceJob.class);
-        membershipGapFiller = mock(MembershipGapFiller.class);
         universeIntegrityAlerter = mock(UniverseIntegrityAlerter.class);
 
         when(retentionPolicy.writeCutoffs()).thenReturn(Map.of(
@@ -97,7 +96,7 @@ class PipelineSchedulerChainTest {
                 corporateActionJob, adjustmentRebuildJob, indicatorBackfillJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob,
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
-                retentionPolicy, membershipGapFiller, universeIntegrityAlerter);
+                retentionPolicy, universeIntegrityAlerter);
     }
 
     @Test
@@ -286,24 +285,20 @@ class PipelineSchedulerChainTest {
     }
 
     @Test
-    @DisplayName("리밸런싱이 끝나면 꼬리가 결손을 채운다 — 편입이 바뀐 직후가 결손이 생기는 유일한 순간이다")
-    void fillsMembershipGapsAfterRebalancing() {
+    @DisplayName("리밸런싱은 잡에 맡기고 꼬리를 직접 안 부른다 — 꼬리가 잡 안으로 갔다(손·관리자 경로도 타야 한다)")
+    void delegatesRebalancingIncludingItsTail() {
         scheduler.runUniverseRebalance();
 
         verify(universeRebalanceJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
-        verify(membershipGapFiller).fillAndAlert(any(),
-                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
     }
 
     @Test
-    @DisplayName("리밸런싱이 종료로 중단되면 꼬리를 안 돈다 — 덜 반영된 명부로 재면 곧 편출될 종목에 콜을 태운다")
-    void skipsTailWhenRebalancingWasAborted() {
+    @DisplayName("리밸런싱이 종료로 중단돼도 스케줄러 밖으로 안 던진다 — @Scheduled 밖으로 나가면 Sentry 이슈가 쌓인다")
+    void swallowsShutdownFromRebalancing() {
         doThrow(new BatchShutdownException("종료 중이다"))
                 .when(universeRebalanceJob).run(any(), any());
 
         scheduler.runUniverseRebalance();
-
-        verifyNoInteractions(membershipGapFiller);
     }
 
     @Test

@@ -47,16 +47,19 @@ public class UniverseRebalanceJob {
     private final BatchExecutions batchExecutions;
     private final AlertPort alertPort;
     private final JdbcTemplate jdbcTemplate;
+    private final MembershipGapFiller membershipGapFiller;
 
     public UniverseRebalanceJob(DataSourceRegistry registry, UniverseReconciler reconciler,
                                 StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
-                                AlertPort alertPort, JdbcTemplate jdbcTemplate) {
+                                AlertPort alertPort, JdbcTemplate jdbcTemplate,
+                                MembershipGapFiller membershipGapFiller) {
         this.registry = registry;
         this.reconciler = reconciler;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.alertPort = alertPort;
         this.jdbcTemplate = jdbcTemplate;
+        this.membershipGapFiller = membershipGapFiller;
     }
 
     /**
@@ -152,7 +155,22 @@ public class UniverseRebalanceJob {
             throw e;
         }
 
-        return finish(execution, succeeded, failed, changedRows);
+        BatchStatus status = finish(execution, succeeded, failed, changedRows);
+
+        // 편입이 바뀐 직후가 결손이 생기는 유일한 순간이다.
+        //
+        // MUST: 이 호출이 여기 있는 이유는 「스케줄러 말고도 이 잡을 부르는 길이 있다」이다.
+        // 스케줄러에 걸어 뒀더니 리밸런싱 15회 중 손 9·관리자 2가 꼬리를 안 탔다 — 그 11회의
+        // 신규 편입은 원자료가 빈 채로 화면에 들어왔고, 아무 데도 안 떴다.
+        //
+        // MUST: finish() 뒤다. 앞에 두면 이 잡의 실행 행이 꼬리 내내 RUNNING으로 남고,
+        // ops/lib.sh가 그 행으로 「도는 배치가 있다」를 판정해 배포 창이 달라진다
+        // (실측 리밸런싱 소요는 15회 중 최장 26초인데 꼬리는 분 단위다).
+        //
+        // MUST NOT: 중단(BatchShutdownException) 때 돌지 않는다 — 위 지수 루프의 catch가
+        // 그대로 되던지므로 여기 못 온다. 덜 반영된 명부로 재면 곧 편출될 종목에 콜을 태운다.
+        membershipGapFiller.fillAndAlert(asOf, triggeredBy);
+        return status;
     }
 
     /**

@@ -152,6 +152,25 @@ public class BatchExecutionReader {
     }
 
     /**
+     * 지금 도는 배치의 잡 이름. <b>겹치면 안 되는 일을 시작하기 전에 묻는 자리다.</b>
+     *
+     * <p><b>잡 이름 목록으로 좁히지 않는다.</b> 「어느 잡과 겹치면 위험한가」를 상수로 들면
+     * 잡이 늘 때마다 그 목록이 낡고, 낡았다는 사실이 <b>겹친 뒤에야</b> 드러난다.
+     * 같은 판정을 {@code ops/lib.sh}가 {@code status = 'RUNNING'} 전량으로 하고 있다.
+     *
+     * <p><b>죽은 프로세스가 남긴 행이 섞일 수 있다.</b> {@link BatchExecutionSweeper}가
+     * <b>JVM 기동 때만</b> 정리하므로 그 사이에는 남는다. 그래서 이 값을 쓰는 쪽은
+     * <b>조용히 멈추지 말고 알려야 한다</b> — 막힌 것과 할 일이 없던 것이 구분되지 않으면
+     * 꼬리가 영영 안 돈 채로 초록이 된다.
+     */
+    @Transactional(readOnly = true)
+    public List<String> runningJobNames() {
+        return jdbcTemplate.queryForList(
+                "SELECT job_name FROM batch_execution WHERE status = 'RUNNING' ORDER BY started_at",
+                String.class);
+    }
+
+    /**
      * 운영 현황 요약 (spec §4).
      *
      * <p>잡별 <b>가장 최근 한 건</b>과 미해결 실패 총건수다. 전체 목록의 앞부분을 자르지 않는

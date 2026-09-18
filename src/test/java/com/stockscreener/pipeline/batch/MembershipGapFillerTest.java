@@ -44,6 +44,7 @@ class MembershipGapFillerTest {
     private CompanyProfileJob companyProfileJob;
     private UniverseIntegrityAlerter alerter;
     private AlertPort alertPort;
+    private BatchExecutionReader batchExecutionReader;
     private MembershipGapFiller filler;
 
     @BeforeEach
@@ -53,8 +54,10 @@ class MembershipGapFillerTest {
         companyProfileJob = mock(CompanyProfileJob.class);
         alerter = mock(UniverseIntegrityAlerter.class);
         alertPort = mock(AlertPort.class);
+        batchExecutionReader = mock(BatchExecutionReader.class);
+        when(batchExecutionReader.runningJobNames()).thenReturn(List.of());
         filler = new MembershipGapFiller(stockRegistrar, initialLoadJob, companyProfileJob,
-                alerter, alertPort);
+                alerter, alertPort, batchExecutionReader);
     }
 
     @Test
@@ -92,6 +95,34 @@ class MembershipGapFillerTest {
         verify(companyProfileJob).run(eq(AS_OF),
                 eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null));
         verify(initialLoadJob, never()).run(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("다른 배치가 돌고 있으면 아무것도 안 하고 알린다 — 스케줄러 풀 1이 관리자·CLI 경로를 원리적으로 못 본다")
+    void skipsEverythingWhileAnotherBatchIsRunning() {
+        when(batchExecutionReader.runningJobNames()).thenReturn(List.of("daily-update"));
+        given(gap("005930", MembershipGap.Axis.PRICE_HISTORY));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.ADMIN);
+
+        verify(initialLoadJob, never()).run(any(), any(), any());
+        verify(companyProfileJob, never()).run(any(), any(), any(), any());
+        AlertEvent alert = captureAlert();
+        assertThat(alert.severity()).isEqualTo(AlertSeverity.WARNING);
+        // 막힌 것과 할 일이 없던 것이 구분돼야 한다 — 어느 잡 때문인지까지 싣는다.
+        assertThat(alert.body()).contains("daily-update");
+    }
+
+    @Test
+    @DisplayName("도는 배치가 없으면 그대로 돈다 — 게이트가 상시로 막으면 꼬리가 영영 안 돈 채 초록이 된다")
+    void runsNormallyWhenNothingElseIsRunning() {
+        when(batchExecutionReader.runningJobNames()).thenReturn(List.of());
+        given(gap("005930", MembershipGap.Axis.PRICE_HISTORY));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        verify(initialLoadJob).run(any(), any(), any());
+        verify(companyProfileJob).run(any(), any(), any(), any());
     }
 
     @Test
