@@ -95,19 +95,33 @@ class MembershipGapFillerTest {
     }
 
     @Test
-    @DisplayName("상한을 넘으면 돌리지 않고 알린다 — 그 크기는 리밸런싱이 아니라 유니버스를 다시 그은 것이다")
+    @DisplayName("상한을 넘으면 적재를 안 한다 — 그 크기는 리밸런싱이 아니라 유니버스를 다시 그은 것이다")
     void alertsInsteadOfLoadingWhenOverTheLimit() {
-        List<MembershipGap> many = new ArrayList<>();
-        for (int i = 0; i < 51; i++) {
-            many.add(gap("T%03d".formatted(i), MembershipGap.Axis.PRICE_HISTORY));
-        }
-        given(many.toArray(new MembershipGap[0]));
+        given(overTheLimit());
 
         filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
 
         verify(initialLoadJob, never()).run(any(), any(), any());
-        verify(companyProfileJob, never()).run(any(), any(), any(), any());
         assertThat(captureAlert().severity()).isEqualTo(AlertSeverity.WARNING);
+    }
+
+    @Test
+    @DisplayName("상한을 넘긴 주에도 업종은 부른다 — 결손이 있는 주에만 부르면 신선도가 SCHEDULER 전용으로 갈아탄 뒤 가짜 연체가 뜬다")
+    void stillCallsCompanyProfileWhenTheLoadIsOverTheLimit() {
+        given(overTheLimit());
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        verify(companyProfileJob).run(eq(AS_OF),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null));
+    }
+
+    private static MembershipGap[] overTheLimit() {
+        List<MembershipGap> many = new ArrayList<>();
+        for (int i = 0; i < 51; i++) {
+            many.add(gap("T%03d".formatted(i), MembershipGap.Axis.PRICE_HISTORY));
+        }
+        return many.toArray(new MembershipGap[0]);
     }
 
     @Test

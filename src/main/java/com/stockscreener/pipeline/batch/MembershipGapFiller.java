@@ -138,7 +138,27 @@ public class MembershipGapFiller {
     }
 
     private void fill(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
-        List<MembershipGap> gaps = stockRegistrar.membershipGaps();
+        loadMissingRawData(stockRegistrar.membershipGaps(), asOf, triggeredBy);
+
+        // MUST: 티커를 주지 않고, 결손이 0이어도 매주 부른다. 그리고 위가 상한을 넘겨
+        // 아무것도 안 적재한 주에도 부른다 — 그래서 이 호출이 위 메서드 밖에 있다.
+        //
+        // ① 티커를 주면 CompanyProfileJob이 업종 유무를 아예 안 본다 — 선택 로직 사본이 생긴다.
+        //    인자 없는 기본 대상이 곧 업종 결손 집합이다.
+        // ② JobFreshnessPolicy가 company-profile에 12일 예산을 주며 "리밸런싱 뒤에 붙는다"고
+        //    적어 뒀는데 붙이는 코드가 없었다. 그리고 그 정책은 SCHEDULER 행이 하나라도 생기면
+        //    아무 트리거나 세던 폴백을 끄므로, **결손이 있는 주에만 부르면** 13일 뒤
+        //    "고칠 것이 없는데 붉는" 연체 알림이 된다. 매주면 7일 간격이라 예산 안이다.
+        //    적재 상한 초과도 그 "안 부르는 주"를 만든다 — 상한은 적재를 막는 것이지
+        //    업종 수집을 막는 것이 아니고, 대가는 종목당 1콜이다.
+        //
+        // 대가는 원리적으로 안 채워지는 면제 종목에 대한 주당 몇 콜뿐이다(종목당 1콜).
+        companyProfileJob.run(asOf, triggeredBy, List.of(), null);
+    }
+
+    /** 원자료가 빈 편입 종목을 축별로 갈라 적재한다. <b>상한을 넘으면 적재만 건너뛴다.</b> */
+    private void loadMissingRawData(List<MembershipGap> gaps, LocalDate asOf,
+                                    BatchExecutionRecorder.TriggeredBy triggeredBy) {
         List<String> priceTickers = tickersOf(gaps, MembershipGap.Axis.PRICE_HISTORY);
         List<String> financialTickers = tickersOf(gaps, MembershipGap.Axis.FINANCIAL);
 
@@ -155,6 +175,7 @@ public class MembershipGapFiller {
                             + "손으로 확인하고 적재한다. 종목=%s")
                             .formatted(distinct.size(), AUTO_LOAD_STOCK_LIMIT, distinct),
                     "universe-integrity-limit"));
+            // 적재만 건너뛴다. 호출자가 이어서 부르는 company-profile은 이 상한과 무관하다.
             return;
         }
 
@@ -171,18 +192,6 @@ public class MembershipGapFiller {
                     0, InitialLoadJob.LoadRange.defaults().financialYears(), false,
                     financialTickers, null, false, true));
         }
-
-        // MUST: 티커를 주지 않고, 결손이 0이어도 매주 부른다.
-        //
-        // ① 티커를 주면 CompanyProfileJob이 업종 유무를 아예 안 본다 — 선택 로직 사본이 생긴다.
-        //    인자 없는 기본 대상이 곧 업종 결손 집합이다.
-        // ② JobFreshnessPolicy가 company-profile에 12일 예산을 주며 "리밸런싱 뒤에 붙는다"고
-        //    적어 뒀는데 붙이는 코드가 없었다. 그리고 그 정책은 SCHEDULER 행이 하나라도 생기면
-        //    아무 트리거나 세던 폴백을 끄므로, **결손이 있는 주에만 부르면** 13일 뒤
-        //    "고칠 것이 없는데 붉는" 연체 알림이 된다. 매주면 7일 간격이라 예산 안이다.
-        //
-        // 대가는 원리적으로 안 채워지는 면제 종목에 대한 주당 몇 콜뿐이다(종목당 1콜).
-        companyProfileJob.run(asOf, triggeredBy, List.of(), null);
     }
 
     private static List<String> tickersOf(List<MembershipGap> gaps, MembershipGap.Axis axis) {
