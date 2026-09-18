@@ -16,6 +16,38 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FinancialRefillAlertTest {
 
     @Test
+    @DisplayName("note가 무효화 종목을 통째로 싣는다 — 알림과 채널 자르기가 둘 다 「전체는 note에 있다」고 말한다")
+    void noteCarriesEveryInvalidatedTicker() {
+        List<String> tickers = java.util.stream.IntStream.range(0, 574)
+                .mapToObj("TICK%d"::formatted).toList();
+
+        String note = FinancialRefillJob.note(2015, 2026, 1000, 1, 0, 0, 0, 2257, tickers);
+
+        assertThat(note).contains("무효화=574종목");
+        assertThat(note).contains("TICK0").contains("TICK573");
+        // 자른 목록을 되찾는 유일한 길이므로 한 종목이라도 빠지면 그 문장이 다시 거짓이 된다.
+        tickers.forEach(t -> assertThat(note).contains(t));
+    }
+
+    @Test
+    @DisplayName("무효화가 0이면 목록 토큰을 아예 안 붙인다 — 매 실행 빈 괄호가 붙으면 note가 읽히지 않는다")
+    void omitsTheTickerListWhenNothingWasInvalidated() {
+        String note = FinancialRefillJob.note(2019, 2026, 350, 0, 0, 12, 0, 0, List.of());
+
+        assertThat(note).contains("무효화=0종목");
+        assertThat(note).doesNotContain("무효화종목=");
+    }
+
+    @Test
+    @DisplayName("계수 토큰의 모양을 그대로 둔다 — ops/apply-window/07-judge.sh가 이 다섯을 정규식으로 합산한다")
+    void keepsTheCounterTokensTheJudgeScriptParses() {
+        String note = FinancialRefillJob.note(2015, 2026, 1000, 1, 2, 3, 4, 2257, List.of("AAPL"));
+
+        assertThat(note).contains("신규=1").contains("정정=2").contains("채움=3")
+                .contains("교정=4").contains("이른판=2257");
+    }
+
+    @Test
     @DisplayName("종목이 많으면 목록을 자르고 수와 실행 id를 싣는다 — 목록을 통째로 실어 웹훅이 400으로 거절했다")
     void capsTheTickerListSoTheAlertFitsTheChannel() {
         java.util.List<String> many = java.util.stream.IntStream.range(0, 574)

@@ -198,14 +198,46 @@ public class FinancialRefillJob {
         // MUST: 무효화 종목 수를 note에 남긴다. 정정·교정·이른 판은 저마다 그 종목의 지표를 보존 창에서 지우는데,
         // 계수만 보면 「몇 행을 썼나」로 읽힌다 — 2026-09-18 적용에서 이른 판 2,257을 넣는 동안 574종목의 지표가
         // 지워졌고 note에는 그 수가 없었다. 백필이 남았는지는 이 수가 답한다.
-        String note = "연도=%d~%d 대상=%d종목 신규=%d 정정=%d 채움=%d 교정=%d 이른판=%d 무효화=%d종목"
-                .formatted(fromFiscalYear, asOf.getYear(), targets.size(), inserted.get(),
-                        revised.get(), filled.get(), corrected.get(), insertedEarlier.get(),
-                        tickersToBackfill.size());
+        String note = note(fromFiscalYear, asOf.getYear(), targets.size(), inserted.get(),
+                revised.get(), filled.get(), corrected.get(), insertedEarlier.get(),
+                List.copyOf(tickersToBackfill));
         log.info("재무 결손 보정을 마쳤다. {}", note);
         alertOnInvalidation(execution, invalidatedTickers,
                 revised.get() + corrected.get() + insertedEarlier.get(), fullStatementTickers);
         return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill));
+    }
+
+    /**
+     * 이 실행이 무엇을 움직였는지 {@code batch_execution.note}에 남길 한 줄.
+     *
+     * <p><b>MUST: 계수 다섯의 모양을 그대로 둔다</b> — {@code ops/apply-window/07-judge.sh}가
+     * {@code (신규|정정|채움|교정|이른판)=} 정규식으로 합산해 운영과 사본의 실행을 대조한다.
+     *
+     * <h2>MUST: 무효화 종목을 통째로 싣는다 — 수만 적지 않는다</h2>
+     * <p>이 목록이 <b>그 실행이 지운 지표를 되찾는 유일한 내구 기록</b>이다. 두 자리가 이것을
+     * 가리킨다 — 알림 본문의 <i>"전체는 실행 id=%d의 로그"</i>와 {@code WebhookAlertChannel}이
+     * 자를 때 붙이는 <i>"전체는 실행 로그와 batch_execution의 note에 있다"</i>. 2026-09-18
+     * 적용에서 574종목이 무효화됐는데 <b>두 문장이 가리키는 곳에 그 목록이 없었다</b> — 로그 줄은
+     * {@code stockId}이고 실행 id가 없어, 되찾으려면 시각으로 로그를 자르고 stockId를 티커로
+     * 매핑해야 했다.
+     *
+     * <p><b>그리고 refill과 백필 사이에서 끊기면 어느 축도 안 붉는다</b> — 무효화가 보존 창
+     * 전체를 지우면 {@code MembershipGap}의 {@code INDICATOR_DROP}은 {@code codes_prev = 0}이라
+     * 술어가 거짓이고, 봉도 재무도 멀쩡해 나머지 축도 안 걸린다. 그때 남는 것이 이 줄뿐이다.
+     *
+     * <p>길이는 문제가 아니다 — {@code batch_execution.note}는 {@code text}이고(V5) 화면은
+     * 상세 시트에 {@code <p>}로 그린다. 574종목이 약 4KB다.
+     */
+    static String note(int fromFiscalYear, int toYear, int targets, int inserted, int revised,
+                       int filled, int corrected, int insertedEarlier,
+                       List<String> invalidatedTickers) {
+        String counters = "연도=%d~%d 대상=%d종목 신규=%d 정정=%d 채움=%d 교정=%d 이른판=%d 무효화=%d종목"
+                .formatted(fromFiscalYear, toYear, targets, inserted, revised, filled,
+                        corrected, insertedEarlier, invalidatedTickers.size());
+        if (invalidatedTickers.isEmpty()) {
+            return counters;
+        }
+        return counters + " 무효화종목=" + String.join(",", invalidatedTickers);
     }
 
     /**
