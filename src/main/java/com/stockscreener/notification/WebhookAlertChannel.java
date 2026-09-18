@@ -48,12 +48,33 @@ public class WebhookAlertChannel implements AlertChannel {
         return event.isForOperator() && event.severity().atLeast(properties.getMinSeverity());
     }
 
+    /**
+     * 본문 길이 상한.
+     *
+     * <p>IMPORTANT — <b>넘으면 그 알림은 아예 안 간다.</b> 2026-09-18 Q4V 적용에서 무효화 종목 목록이 실린 알림 둘이
+     * {@code 400 {"text": ["Must be 2000 or fewer in length."]}}로 거절됐다(574종목·102종목). 로그에는 남지만
+     * <b>운영자에게 가는 경로는 조용히 실패</b>했고, 그 알림이 바로 「백필이 남았다」였다.
+     *
+     * <p>Slack의 {@code text}도 실질 상한이 있고 채널마다 다르다. 가장 낮은 실측값(2,000자)에 맞추고,
+     * <b>자른 사실을 본문에 남긴다</b> — 잘렸다는 것을 모르면 목록이 짧다고 읽는다.
+     */
+    private static final int MAX_TEXT_LENGTH = 2000;
+
+    static String clamp(String text) {
+        if (text.length() <= MAX_TEXT_LENGTH) {
+            return text;
+        }
+        String suffix = "…(%d자 잘렸다 — 전체는 실행 로그와 batch_execution의 note에 있다)"
+                .formatted(text.length() - MAX_TEXT_LENGTH);
+        return text.substring(0, Math.max(0, MAX_TEXT_LENGTH - suffix.length())) + suffix;
+    }
+
     @Override
     public void deliver(AlertEvent event) {
         restClient.post()
                 .uri(properties.getUrl())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("text", AlertRendering.plainText(event)))
+                .body(Map.of("text", clamp(AlertRendering.plainText(event))))
                 .retrieve()
                 // 4xx·5xx면 예외가 올라간다. 그것이 이 채널의 계약이다 —
                 // Composite이 잡아 로그로 남기고 다른 채널을 계속 시도한다.

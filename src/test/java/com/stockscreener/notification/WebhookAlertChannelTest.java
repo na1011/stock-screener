@@ -61,6 +61,24 @@ class WebhookAlertChannelTest {
     }
 
     @Test
+    @DisplayName("긴 본문은 잘라서 보낸다 — 2026-09-18 적용에서 574종목 목록이 실린 알림이 400으로 거절됐다")
+    void truncatesLongBodySoTheAlertStillArrives() throws Exception {
+        server.enqueue(new MockResponse().setResponseCode(200).setBody("ok"));
+        WebhookAlertChannel channel = channel(AlertSeverity.WARNING);
+        String tickers = java.util.stream.IntStream.range(0, 600)
+                .mapToObj(i -> "TICK" + i).collect(java.util.stream.Collectors.joining(", "));
+
+        channel.deliver(AlertEvent.toOperator(AlertSeverity.WARNING, "재무 무효화 — 백필이 남았다",
+                "574종목의 재무를 다시 썼다: " + tickers, "financial-refill:invalidated"));
+
+        String body = server.takeRequest().getBody().readUtf8();
+        String text = body.substring(body.indexOf("\"text\"") + 8);
+        assertThat(text.length()).isLessThanOrEqualTo(2100);
+        assertThat(body).contains("재무 무효화");
+        assertThat(body).contains("잘렸다");
+    }
+
+    @Test
     @DisplayName("4xx·5xx면 던진다 — 삼키면 Composite이 '아무도 못 받았다'를 알 수 없다")
     void throwsOnErrorStatus() {
         server.enqueue(new MockResponse().setResponseCode(400).setBody("invalid_payload"));

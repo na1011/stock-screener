@@ -241,17 +241,33 @@ public class FinancialRefillJob {
             return;
         }
         execution.alertOperator(AlertSeverity.WARNING, "재무 무효화 — 백필이 남았다",
-                invalidationAlertBody(invalidatedTickers, invalidatedPeriods, fullStatementTickers));
+                invalidationAlertBody(invalidatedTickers, invalidatedPeriods, fullStatementTickers,
+                        execution.executionId()));
     }
 
     /** 알림 본문. 패키지 공개인 이유는 실행 컨텍스트 없이 문구를 시험하기 위해서다. */
+    /**
+     * 목록에 싣는 종목 수.
+     *
+     * <p>IMPORTANT — <b>전부 실으면 그 알림은 아예 안 간다.</b> 2026-09-18 Q4V 적용에서 574종목·102종목 목록이 실린
+     * 알림 둘이 웹훅에서 {@code 400 "Must be 2000 or fewer in length."}로 거절됐다. 채널이 자르기 전에
+     * <b>여기서 줄인다</b> — 전체 목록은 실행 로그와 {@code batch_execution}에 남고, 알림에는 실행 id로 찾아가는 길만 싣는다.
+     */
+    private static final int ALERT_TICKER_SAMPLE = 20;
+
     static String invalidationAlertBody(List<String> invalidatedTickers, int invalidatedPeriods,
-                                        List<String> fullStatementTickers) {
+                                        List<String> fullStatementTickers, long executionId) {
+        String sample = String.join(", ", invalidatedTickers.subList(
+                0, Math.min(ALERT_TICKER_SAMPLE, invalidatedTickers.size())));
+        if (invalidatedTickers.size() > ALERT_TICKER_SAMPLE) {
+            sample += " … 외 %d종목(전체는 실행 id=%d의 로그)".formatted(
+                    invalidatedTickers.size() - ALERT_TICKER_SAMPLE, executionId);
+        }
         StringBuilder body = new StringBuilder("""
-                %d종목의 재무를 정정·교정·이른 판 삽입으로 다시 썼다(%d기간): %s
+                %d종목의 재무를 정정·교정·이른 판 삽입으로 다시 썼다(%d기간 · 실행 id=%d): %s
                 **그 종목의 지표가 보존 창 전체에서 지워졌다.** 백필이 따라오지 않으면 화면에서 \
                 통째로 사라지는데 에러도 경고도 나지 않는다.
-                """.formatted(invalidatedTickers.size(), invalidatedPeriods, String.join(", ", invalidatedTickers)));
+                """.formatted(invalidatedTickers.size(), invalidatedPeriods, executionId, sample));
         // 전체 재무제표는 소스가 있는 시장(국내 DART)에만 시킨다 — 미국 티커로 돌리면 종목마다 실패한다.
         if (!fullStatementTickers.isEmpty()) {
             body.append("""
