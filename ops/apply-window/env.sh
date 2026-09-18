@@ -3,8 +3,12 @@
 # MUST: 잡은 하나씩 돌린다. 잡이 도는 중에 gradle 시험·컴파일을 띄우지 않는다 — devtools가 그 JVM을 재시작한다.
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-A="${Q4V_WORK:-$HOME/Library/Application Support/stock-screener/apply-window}"   # 산출물 폴더. 저장소 밖에 둔다(TSV가 수백 MB다)
+# 산출물 폴더. 저장소 밖에 둔다(TSV가 수백 MB다).
+# MUST: 공백 없는 경로여야 한다 — 스크립트가 $A를 따옴표 없이 리다이렉션에 쓰는 자리가 있어
+# 「ambiguous redirect」로 조용히 죽는다(2026-09-18 적용 창에서 실제로 났다).
+A="${Q4V_WORK:-$HOME/stock-screener-apply-window}"
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+case "$A" in *" "*) echo "[멈춤] 산출물 경로에 공백이 있다: $A" >&2; exit 1;; esac
 mkdir -p "$A"
 PGBIN=/opt/homebrew/opt/postgresql@16/bin
 LIVE=stock_screener                       # 진짜 운영 DB 이름 — 이 이름일 때만 알림을 켠 채 돈다
