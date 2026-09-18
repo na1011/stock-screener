@@ -195,9 +195,13 @@ public class FinancialRefillJob {
             throw e;
         }
 
-        String note = "연도=%d~%d 대상=%d종목 신규=%d 정정=%d 채움=%d 교정=%d 이른판=%d"
+        // MUST: 무효화 종목 수를 note에 남긴다. 정정·교정·이른 판은 저마다 그 종목의 지표를 보존 창에서 지우는데,
+        // 계수만 보면 「몇 행을 썼나」로 읽힌다 — 2026-09-18 적용에서 이른 판 2,257을 넣는 동안 574종목의 지표가
+        // 지워졌고 note에는 그 수가 없었다. 백필이 남았는지는 이 수가 답한다.
+        String note = "연도=%d~%d 대상=%d종목 신규=%d 정정=%d 채움=%d 교정=%d 이른판=%d 무효화=%d종목"
                 .formatted(fromFiscalYear, asOf.getYear(), targets.size(), inserted.get(),
-                        revised.get(), filled.get(), corrected.get(), insertedEarlier.get());
+                        revised.get(), filled.get(), corrected.get(), insertedEarlier.get(),
+                        tickersToBackfill.size());
         log.info("재무 결손 보정을 마쳤다. {}", note);
         alertOnInvalidation(execution, invalidatedTickers,
                 revised.get() + corrected.get() + insertedEarlier.get(), fullStatementTickers);
