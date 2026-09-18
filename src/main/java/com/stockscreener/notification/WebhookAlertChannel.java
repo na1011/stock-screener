@@ -60,13 +60,26 @@ public class WebhookAlertChannel implements AlertChannel {
      */
     private static final int MAX_TEXT_LENGTH = 2000;
 
+    /**
+     * <b>MUST: 잘라낸 글자 수를 실제로 잘라낸 만큼 센다.</b> 접미사도 상한 안에 들어가므로
+     * 남기는 글자는 {@code MAX_TEXT_LENGTH}보다 접미사 길이만큼 짧다 — {@code length - 상한}으로
+     * 세면 그만큼(약 51자) 적게 신고하고, 남은 글자를 찾으러 간 사람이 세다가 어긋난다.
+     * 접미사 길이가 자기 안의 수에 따라 바뀌므로 한 번 지어 재고 다시 짓는다.
+     */
     static String clamp(String text) {
         if (text.length() <= MAX_TEXT_LENGTH) {
             return text;
         }
-        String suffix = "…(%d자 잘렸다 — 전체는 실행 로그와 batch_execution의 note에 있다)"
-                .formatted(text.length() - MAX_TEXT_LENGTH);
-        return text.substring(0, Math.max(0, MAX_TEXT_LENGTH - suffix.length())) + suffix;
+        int kept = MAX_TEXT_LENGTH;
+        // kept는 단조 감소하고 접미사 길이는 자릿수만큼만 자라므로 둘째 판에서 멎는다.
+        while (kept > 0 && kept + suffix(text.length() - kept).length() > MAX_TEXT_LENGTH) {
+            kept = Math.max(0, MAX_TEXT_LENGTH - suffix(text.length() - kept).length());
+        }
+        return text.substring(0, kept) + suffix(text.length() - kept);
+    }
+
+    private static String suffix(int dropped) {
+        return "…(%d자 잘렸다 — 전체는 실행 로그와 batch_execution의 note에 있다)".formatted(dropped);
     }
 
     @Override

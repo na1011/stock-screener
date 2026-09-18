@@ -79,6 +79,20 @@ class WebhookAlertChannelTest {
     }
 
     @Test
+    @DisplayName("몇 자를 잘랐는지 실제로 잘라낸 만큼 적는다 — 접미사 길이만큼 적게 세면 남은 글자를 찾으러 간 사람이 못 찾는다")
+    void reportsTheNumberOfCharactersActuallyDropped() {
+        String text = "가".repeat(5_000);
+
+        String clamped = WebhookAlertChannel.clamp(text);
+
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("…\\((\\d+)자 잘렸다").matcher(clamped);
+        assertThat(m.find()).isTrue();
+        int kept = clamped.indexOf('…');
+        assertThat(Integer.parseInt(m.group(1))).isEqualTo(text.length() - kept);
+    }
+
+    @Test
     @DisplayName("4xx·5xx면 던진다 — 삼키면 Composite이 '아무도 못 받았다'를 알 수 없다")
     void throwsOnErrorStatus() {
         server.enqueue(new MockResponse().setResponseCode(400).setBody("invalid_payload"));
