@@ -70,8 +70,11 @@ public class MembershipGapFiller {
      * <b>뒤 셋(40·10·14)만 국내+미국</b>이다. 그래서 「미국이 켜진 뒤」의 표본은 <b>셋뿐</b>이고
      * 최댓값 40은 그 셋에서 나온 수다. 이 상한을 소요 기반으로 바꿀 때 <b>같은 기저로 다시 잰다.</b>
      *
-     * <p><b>세는 질의에 {@code JOIN universe u ON u.is_active}를 빼면 수가 배로 뛴다</b> —
-     * 비활성 {@code US_LISTED}의 편입 행이 섞인다(2026-09-18 실측: 08-21이 13 대신 28로 나왔다).
+     * <p><b>MUST: 세는 질의를 {@code origin = 'OBSERVED'}로 좁힌다 — {@code is_active}로는 못 가른다.</b>
+     * 안 좁히면 08-21이 13 대신 <b>28</b>로 나오는데, 늘어난 15는 {@code US_TOP1000}의
+     * {@code RESTORED} 행이다 — ADR-0135가 <b>2026-09-17 11:31에 사후로 복원한 둘째 평면</b>이지
+     * 그날 리밸런싱이 만든 편입이 아니다. 그 유니버스는 <b>지금 활성</b>이므로
+     * {@code u.is_active}는 그것을 원리적으로 못 거른다(있으나 없으나 28이다 · 2026-09-18 실측).
      *
      * <p><b>이 값은 예산이지 실측이 아니다</b> — 이 경로의 소요 시간을 재본 적이 없다.
      * {@code PipelineScheduler.AUTO_BACKFILL_STOCK_LIMIT}이 같은 문장을 쓴다.
@@ -149,10 +152,9 @@ public class MembershipGapFiller {
     }
 
     private void fill(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
-        if (blockedByAnotherBatch()) {
-            return;
+        if (!blockedByAnotherBatch()) {
+            loadMissingRawData(stockRegistrar.membershipGaps(), asOf, triggeredBy);
         }
-        loadMissingRawData(stockRegistrar.membershipGaps(), asOf, triggeredBy);
 
         // MUST: 티커를 주지 않고, 결손이 0이어도 매주 부른다. 그리고 위가 상한을 넘겨
         // 아무것도 안 적재한 주에도 부른다 — 그래서 이 호출이 위 메서드 밖에 있다.
@@ -171,7 +173,15 @@ public class MembershipGapFiller {
     }
 
     /**
-     * 지금 다른 배치가 돌고 있으면 꼬리를 통째로 건너뛴다.
+     * 지금 다른 배치가 돌고 있으면 <b>적재만</b> 건너뛴다.
+     *
+     * <h2>MUST NOT: 업종 수집까지 막지 않는다</h2>
+     * <p>막는 이유가 「같은 {@code price_daily}에 동시에 쓴다」인데 {@code company-profile}은
+     * 거기 안 쓴다(종목당 1콜 · {@code stock}의 업종 두 컬럼). 그리고 그것을 함께 막으면
+     * <b>「안 부르는 주」가 또 하나 생겨</b> {@code JobFreshnessPolicy}가 토요일 전용 시계로
+     * 갈아탄 뒤 가짜 연체를 낸다 — 적재 상한이 만들던 같은 결함을 다른 문으로 다시 여는 것이다.
+     *
+     * <h2>겹침을 막아야 하는 이유</h2>
      *
      * <h2>왜 필요한가</h2>
      * <p>{@code application.yaml}의 {@code spring.task.scheduling.pool.size: 1}이
@@ -185,22 +195,27 @@ public class MembershipGapFiller {
      * <p>겹치면 7년 시세 적재가 13:30 일일 갱신과 <b>같은 {@code price_daily}의 같은
      * (종목, 날짜)에 동시에 쓴다.</b>
      *
+     * <h2>MUST: 유령이 아니라 살아 있는 진척을 본다</h2>
+     * <p>{@code status = 'RUNNING'}만 보면 죽은 CLI가 남긴 {@code MANUAL} 행 하나가 이 갈래를
+     * <b>영구히</b> 끈다 — 웹을 재기동해도 그 행은 안 닫힌다({@link BatchExecutionSweeper}가
+     * 기동 때 {@code SCHEDULER}·{@code ADMIN}만 본다). 그래서
+     * {@link BatchExecutionReader#liveJobNames()}가 <b>진척이 살아 있는 것만</b> 돌려준다.
+     *
      * <h2>MUST: 조용히 멈추지 않는다</h2>
-     * <p>{@link BatchExecutionSweeper}가 JVM 기동 때만 정리하므로 <b>죽은 프로세스가 남긴
-     * RUNNING 행</b>이 이 게이트를 막을 수 있다. 그때 로그만 남기면 꼬리가 영영 안 돈 채로
-     * 초록이 된다 — 막힌 것과 채울 것이 없던 것은 화면에서 구분되지 않는다.
+     * <p>막힌 것과 채울 것이 없던 것은 화면에서 구분되지 않는다. 로그만 남기면 이 갈래가
+     * 안 돈 채로 초록이 된다.
      */
     private boolean blockedByAnotherBatch() {
-        List<String> running = batchExecutionReader.runningJobNames();
+        List<String> running = batchExecutionReader.liveJobNames();
         if (running.isEmpty()) {
             return false;
         }
-        log.warn("다른 배치가 도는 중이라 편입 결손 보충을 건너뛴다. 도는 잡={}", running);
-        alertPort.send(AlertEvent.toOperator(AlertSeverity.WARNING, "편입 결손 보충을 건너뛰었다",
+        log.warn("다른 배치가 도는 중이라 편입 원자료 적재를 건너뛴다. 도는 잡={}", running);
+        alertPort.send(AlertEvent.toOperator(AlertSeverity.WARNING, "편입 원자료 적재를 건너뛰었다",
                 ("다른 배치가 도는 중이라 새 편입 종목의 원자료를 안 채웠다(도는 잡=%s). "
-                        + "같은 price_daily에 동시에 쓰는 것을 피한 것이다 — 그 배치가 끝난 뒤 "
-                        + "손으로 리밸런싱을 다시 돌리거나 평일 15:10 점검의 신고를 따른다. "
-                        + "도는 잡이 없는데 이 알림이 계속 나오면 죽은 프로세스가 남긴 RUNNING 행이다.")
+                        + "같은 price_daily에 동시에 쓰는 것을 피한 것이다. 업종 수집은 그대로 돌았다. "
+                        + "남은 결손은 평일 15:10 점검이 다시 신고하고, 그 전에 채우려면 그 배치가 "
+                        + "끝난 뒤 리밸런싱을 다시 돌린다.")
                         .formatted(running),
                 "universe-integrity-busy"));
         return true;

@@ -55,7 +55,7 @@ class MembershipGapFillerTest {
         alerter = mock(UniverseIntegrityAlerter.class);
         alertPort = mock(AlertPort.class);
         batchExecutionReader = mock(BatchExecutionReader.class);
-        when(batchExecutionReader.runningJobNames()).thenReturn(List.of());
+        when(batchExecutionReader.liveJobNames()).thenReturn(List.of());
         filler = new MembershipGapFiller(stockRegistrar, initialLoadJob, companyProfileJob,
                 alerter, alertPort, batchExecutionReader);
     }
@@ -98,15 +98,14 @@ class MembershipGapFillerTest {
     }
 
     @Test
-    @DisplayName("다른 배치가 돌고 있으면 아무것도 안 하고 알린다 — 스케줄러 풀 1이 관리자·CLI 경로를 원리적으로 못 본다")
-    void skipsEverythingWhileAnotherBatchIsRunning() {
-        when(batchExecutionReader.runningJobNames()).thenReturn(List.of("daily-update"));
+    @DisplayName("다른 배치가 돌고 있으면 적재를 건너뛰고 알린다 — 스케줄러 풀 1이 관리자·CLI 경로를 원리적으로 못 본다")
+    void skipsTheLoadWhileAnotherBatchIsRunning() {
+        when(batchExecutionReader.liveJobNames()).thenReturn(List.of("daily-update"));
         given(gap("005930", MembershipGap.Axis.PRICE_HISTORY));
 
         filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.ADMIN);
 
         verify(initialLoadJob, never()).run(any(), any(), any());
-        verify(companyProfileJob, never()).run(any(), any(), any(), any());
         AlertEvent alert = captureAlert();
         assertThat(alert.severity()).isEqualTo(AlertSeverity.WARNING);
         // 막힌 것과 할 일이 없던 것이 구분돼야 한다 — 어느 잡 때문인지까지 싣는다.
@@ -114,9 +113,21 @@ class MembershipGapFillerTest {
     }
 
     @Test
+    @DisplayName("겹쳐서 적재를 건너뛴 주에도 업종은 부른다 — price_daily에 안 쓰는 잡까지 막으면 가짜 연체가 또 하나 생긴다")
+    void stillCallsCompanyProfileWhenTheLoadWasBlocked() {
+        when(batchExecutionReader.liveJobNames()).thenReturn(List.of("daily-update"));
+        given(gap("005930", MembershipGap.Axis.PRICE_HISTORY));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.ADMIN);
+
+        verify(companyProfileJob).run(eq(AS_OF),
+                eq(BatchExecutionRecorder.TriggeredBy.ADMIN), eq(List.of()), eq(null));
+    }
+
+    @Test
     @DisplayName("도는 배치가 없으면 그대로 돈다 — 게이트가 상시로 막으면 꼬리가 영영 안 돈 채 초록이 된다")
     void runsNormallyWhenNothingElseIsRunning() {
-        when(batchExecutionReader.runningJobNames()).thenReturn(List.of());
+        when(batchExecutionReader.liveJobNames()).thenReturn(List.of());
         given(gap("005930", MembershipGap.Axis.PRICE_HISTORY));
 
         filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);

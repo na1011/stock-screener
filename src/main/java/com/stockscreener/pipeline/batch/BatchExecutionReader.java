@@ -152,23 +152,44 @@ public class BatchExecutionReader {
     }
 
     /**
-     * 지금 도는 배치의 잡 이름. <b>겹치면 안 되는 일을 시작하기 전에 묻는 자리다.</b>
+     * 진척이 <b>살아 있는</b> 배치의 잡 이름. 겹치면 안 되는 일을 시작하기 전에 묻는 자리다.
      *
-     * <p><b>잡 이름 목록으로 좁히지 않는다.</b> 「어느 잡과 겹치면 위험한가」를 상수로 들면
-     * 잡이 늘 때마다 그 목록이 낡고, 낡았다는 사실이 <b>겹친 뒤에야</b> 드러난다.
-     * 같은 판정을 {@code ops/lib.sh}가 {@code status = 'RUNNING'} 전량으로 하고 있다.
+     * <h2>MUST NOT: {@code status = 'RUNNING'}만 보지 않는다 — 그 신호에는 유령이 섞인다</h2>
+     * <p>{@link BatchExecutionSweeper}는 <b>웹 기동 때 {@code SCHEDULER}·{@code ADMIN}만</b>,
+     * {@code BootstrapRunner} 기동 때 <b>{@code MANUAL}만</b> 닫는다. 그래서 CLI가 SIGKILL·전원
+     * 차단으로 죽으면 그 {@code MANUAL} 행은 <b>웹을 재기동해도 안 닫히고</b>, 다른 CLI 쓰기 잡이
+     * 돌 때까지 남는다. 실측으로 2026-08-06~09-08에 그런 행이 <b>12건</b> 생겼다(약 2.75일에 하나).
+     * {@code RUNNING}만 보고 무언가를 막으면 <b>그 하나가 기능을 영구히 끈다.</b>
+     * {@code ops/lib.sh}가 같은 질의를 쓰면서 <b>막지 않고 경고만</b> 하는 이유가 그것이다.
      *
-     * <p><b>죽은 프로세스가 남긴 행이 섞일 수 있다.</b> {@link BatchExecutionSweeper}가
-     * <b>JVM 기동 때만</b> 정리하므로 그 사이에는 남는다. 그래서 이 값을 쓰는 쪽은
-     * <b>조용히 멈추지 말고 알려야 한다</b> — 막힌 것과 할 일이 없던 것이 구분되지 않으면
-     * 꼬리가 영영 안 돈 채로 초록이 된다.
+     * <h2>가르는 신호는 진척이다 — 마감이 아니다</h2>
+     * <p>{@code progress_at}은 <b>전 잡이 갱신한다</b>(2026-09-01 이후 377건 전부). 그리고
+     * 실측으로 <b>마지막 갱신과 마감 사이가 최대 3초·평균 0초</b>다 — 6시간 52분짜리 백필도
+     * 그렇다. 죽은 프로세스는 그 시각이 얼어붙으므로 둘이 갈린다.
+     *
+     * <p><b>MUST NOT: 이것을 행을 닫는 근거로 쓰지 않는다.</b> {@link BatchExecutionSweeper}가
+     * 시간 임계값을 거부하는 이유가 그대로 선다 — 여기서는 <b>「지금 비켜야 하는가」</b>만 묻고
+     * 아무것도 안 고친다. 살아 있는 잡을 잘못 놓치면 겹치고, 유령을 잘못 믿으면 영구히 막힌다.
+     * {@link #LIVE_PROGRESS_WINDOW}는 실측 3초에 <b>100배</b> 여유를 둔 값이다.
      */
     @Transactional(readOnly = true)
-    public List<String> runningJobNames() {
-        return jdbcTemplate.queryForList(
-                "SELECT job_name FROM batch_execution WHERE status = 'RUNNING' ORDER BY started_at",
-                String.class);
+    public List<String> liveJobNames() {
+        return jdbcTemplate.queryForList("""
+                SELECT job_name FROM batch_execution
+                WHERE status = 'RUNNING' AND progress_at > now() - ?::interval
+                ORDER BY started_at
+                """, String.class, LIVE_PROGRESS_WINDOW.toSeconds() + " seconds");
     }
+
+    /**
+     * 이 시간 안에 진척이 있었으면 살아 있는 것으로 본다.
+     *
+     * <p>실측 근거는 {@link #liveJobNames()} javadoc에 있다 — 살아 있는 실행의 진척 간격이
+     * 최대 3초다. 100배를 둔 이유는 <b>틀리는 방향이 비대칭</b>이기 때문이다: 짧게 잡아
+     * 살아 있는 잡을 놓치면 <b>같은 행에 동시에 쓴다</b>(되돌리기 어렵다). 길게 잡아 유령을
+     * 잠깐 믿으면 <b>그 한 판을 미룰 뿐</b>이다.
+     */
+    private static final java.time.Duration LIVE_PROGRESS_WINDOW = java.time.Duration.ofMinutes(5);
 
     /**
      * 운영 현황 요약 (spec §4).
