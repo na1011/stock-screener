@@ -539,10 +539,10 @@ public class BootstrapRunner implements ApplicationRunner {
      * {@code --ca-note}가 쪼개졌거나 다른 플래그를 품었는지 본다.
      *
      * <p>IMPORTANT — <b>메모에 공백이 있는데 따옴표로 안 감싸면 첫 낱말만 남고 나머지는 조용히
-     * 사라진다.</b> gradle이 공백에서 쪼개고 남은 낱말은 non-option 인자가 되는데,
-     * {@link #rejectUnknownOptions}는 {@code getOptionNames()}만 보므로 그것을 <b>못 본다</b>
+     * 사라진다.</b> gradle이 공백에서 쪼개고 남은 낱말은 non-option 인자가 된다
      * (실측: {@code --ca-note=메모 두 낱말}이 성공으로 끝났다). 판정은 그 잘린 메모를 그대로
-     * 원장에 적는다.
+     * 원장에 적는다. <b>낱말 자체는 {@link #rejectUnknownOptions}가 전 잡에서 거절하므로</b>
+     * 여기 남은 몫은 아래 <b>따옴표가 뒤 플래그를 품은</b> 형태다.
      *
      * <p>따옴표를 <b>안 닫은</b> 경우는 여기까지 오지 않는다 — gradle이
      * {@code unbalanced quotes in …}로 빌드를 세운다(실측). 남는 위험은 <b>닫혀 있는데 그
