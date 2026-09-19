@@ -47,6 +47,33 @@ class AdminJobLauncherTest {
             marketCalendarJob, governanceDeriveJob);
 
     @Test
+    @DisplayName("리밸런싱의 콜 어림값이 그 꼬리가 부르는 잡보다 작지 않다 — 화면은 이 수로 승인을 받는다")
+    void rebalanceEstimateCoversWhatItsTailCalls() {
+        // 화면이 "외부 API를 약 N회 호출합니다. 실행할까요?"로 묻는다. 틀린 수 위에서 받은
+        // 승인은 승인이 아니다. 실제로 이 수가 1로 남아 있었다 — 2026-09-13에 결손 보충 꼬리가
+        // `company-profile`과 `initial-load`를 부르게 됐는데 아무도 이 수를 안 고쳤고,
+        // **진짜 카탈로그를 고정하는 시험이 하나도 없어** 20배까지 벌어졌다(2026-09-19).
+        //
+        // MUST: 이 시험이 그 사건을 재현하지 못한다는 것을 알고 둔다 — 그때 값이 1과 0이라
+        // 이 단언을 통과했을 것이다. 절대값을 고정할 길이 없어서(대상 수가 DB 상태다)
+        // 합성에서 강제되는 것만 건다. **절대값의 방어는 수 옆에 적어 둔 유도 근거이고,
+        // 낡음을 실제로 잡은 것은 세션 시작 문서 검사였다.**
+        int rebalance = estimateOf(UniverseRebalanceJob.JOB_NAME);
+        int companyProfile = estimateOf(CompanyProfileJob.JOB_NAME);
+
+        assertThat(rebalance)
+                .as("리밸런싱 꼬리가 company-profile을 부르므로 그보다 작을 수 없다")
+                .isGreaterThanOrEqualTo(companyProfile);
+    }
+
+    private int estimateOf(String jobName) {
+        return launcher.catalog().stream()
+                .filter(d -> d.name().equals(jobName))
+                .findFirst().orElseThrow(() -> new AssertionError("카탈로그에 없다: " + jobName))
+                .externalCallEstimate();
+    }
+
+    @Test
     @DisplayName("도는 중인 잡은 새로 띄우지 않는다")
     void doesNotLaunchWhileRunning() throws Exception {
         CountDownLatch hold = blockDailyUpdate();

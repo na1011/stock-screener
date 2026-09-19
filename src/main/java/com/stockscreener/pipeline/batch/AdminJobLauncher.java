@@ -168,21 +168,37 @@ public class AdminJobLauncher {
                         request.orDefault(request.to(), LocalDate.now()),
                         BatchExecutionRecorder.TriggeredBy.ADMIN, request.from()));
 
+        // MUST: 콜 어림값은 **화면이 승인을 받는 수**다(`AdminOverviewView`가
+        // "외부 API를 약 N회 호출합니다. 실행할까요?"로 묻는다). 틀린 수 위에서 받은 승인은
+        // 승인이 아니므로, 잡이 부르는 것이 늘면 **이 수도 같은 커밋에서 고친다.**
+        // 아래 셋이 실제로 그렇게 낡아 있었다(2026-09-19 실측).
         this.catalog = List.of(
+                // 종목당 1콜이고 대상이 `activeUniverseMemberIds()`다 — 실측 1,350(KR 350 + US 1,000).
+                // 350은 미국이 켜지기 전 수였다(ADR-0107).
                 new Descriptor(DailyUpdateJob.JOB_NAME, "일일 갱신",
                         "대상 일자의 시세를 모으고 지표를 계산한 뒤 워치리스트를 판정한다.",
-                        Parameters.TARGET_DATE, 350),
+                        Parameters.TARGET_DATE, 1350),
                 // 라벨은 화면에 그대로 뜬다. 한국어 표시어는 "유니버스"가 아니다 —
                 // `frontend/src/lib/universe.ts`가 그 판단의 정본이다.
+                //
+                // 1이었는데 2026-09-13에 결손 보충 꼬리가 붙어 거짓이 됐다. 기저: 미국 유니버스
+                // 갱신이 자산 1콜 + 종가 묶음 약 19(`batch-load` skill) · 국내 둘 · 꼬리의 업종 수집.
+                // 실측(2026-09-19 20:00): 편입 20종목 · 시세 결손 2 · 업종 4 → 약 27콜 · 20초.
+                // **꼬리 때문에 변동 폭이 크다** — 그 사실을 설명에 적는다.
                 new Descriptor(UniverseRebalanceJob.JOB_NAME, "지수 구성종목 갱신",
-                        "시가총액 상위 N을 다시 계산해 편입·편출을 반영한다.",
-                        Parameters.TARGET_DATE, 1),
+                        "시가총액 상위 N을 다시 계산해 편입·편출을 반영하고, 이어서 새 편입 종목의 "
+                                + "빈 원자료를 채운다(업종은 결손 종목당 1콜, 시세는 결손 종목당 "
+                                + "7년치이고 한 판 상한이 50종목이다). 결손이 많은 주에는 콜이 크게 는다.",
+                        Parameters.TARGET_DATE, 25),
                 new Descriptor(IndicatorBackfillJob.JOB_NAME, "지표 백필",
                         "이미 저장된 시세로 구간의 지표를 다시 계산한다. 외부 API를 부르지 않는다.",
                         Parameters.DATE_RANGE, 0),
+                // 0이 아니다 — 기본 대상이 「업종 두 컬럼이 다 NULL인 활성 편입 종목」이고
+                // 종목당 1콜이다. 실측 2026-09-19에 4콜(면제 셋 + 재편입 MAIN)이 돌았다.
                 new Descriptor(CompanyProfileJob.JOB_NAME, "업종 정보 수집",
-                        "업종이 비어 있는 편입 종목의 업종·결산월을 받는다. 종목당 1콜이다.",
-                        Parameters.TARGET_DATE, 0),
+                        "업종이 비어 있는 편입 종목의 업종·결산월을 받는다. 종목당 1콜이라 "
+                                + "결손 수만큼 든다. 소스가 끝내 안 주는 종목은 매번 다시 걸린다.",
+                        Parameters.TARGET_DATE, 5),
                 // 창을 받아야 하므로 DATE_RANGE다 — `to`가 곧 대상일이고, `from`을 비우면 잡이
                 // 저장된 시세의 첫 거래일부터 본다. 새 Parameters 값을 만들지 않는 이유는
                 // 그것이 wire-contract·types.ts·AdminOverviewView를 함께 끌고 오기 때문이다.
