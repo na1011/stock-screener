@@ -12,6 +12,7 @@ import com.stockscreener.pipeline.batch.FullStatementRefillJob;
 import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
 import com.stockscreener.pipeline.batch.GovernanceLoadJob;
 import com.stockscreener.pipeline.batch.IndicatorBackfillJob;
+import com.stockscreener.pipeline.batch.InvalidationBackfiller;
 import com.stockscreener.pipeline.batch.JobFreshnessAlerter;
 import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
 import com.stockscreener.pipeline.batch.MembershipGapFiller;
@@ -91,12 +92,16 @@ class PipelineSchedulerChainTest {
         when(retentionPolicy.writeCutoffs()).thenReturn(Map.of(
                 "KOSPI", Optional.of(KR_CUTOFF), "US", Optional.of(US_CUTOFF)));
 
+        // MUST: InvalidationBackfiller를 목으로 바꾸지 않는다. 백필 구간을 보존 경계로 자르는
+        // 것과 상한을 넘으면 안 도는 것을 단언하는 곳이 이 시험뿐인데, 목을 주면 그 단언이
+        // 전부 스케줄러 밖으로 나가 죽는다 — 초록은 그대로이고 검증만 사라진다.
         scheduler = new PipelineScheduler(
                 mock(DailyUpdateJob.class), universeRebalanceJob,
-                corporateActionJob, adjustmentRebuildJob, indicatorBackfillJob,
+                corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob,
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
-                retentionPolicy, universeIntegrityAlerter);
+                new InvalidationBackfiller(indicatorBackfillJob, retentionPolicy),
+                universeIntegrityAlerter);
     }
 
     @Test
