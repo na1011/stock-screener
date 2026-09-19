@@ -132,7 +132,13 @@ public class MembershipGapFiller {
             fill(asOf, triggeredBy);
             // MUST: 다시 잰 것으로 알린다. 이 두 줄이 try 밖에 있으면 재감지나 통지가 던질 때
             // 예외가 @Scheduled 밖으로 나가고, 이 메서드의 「던지지 않는다」 계약이 조용히 깨진다.
-            alerter.alert(stockRegistrar.membershipGaps());
+            boolean sent = alerter.alert(stockRegistrar.membershipGaps());
+            // MUST: 보냈는지를 찍는다. CompositeAlertPort는 성공 전달에 로그를 한 줄도 안 남긴다
+            // (억제·채널 예외·delivered==0 셋에서만 찍는다). 그래서 이 줄이 없으면 「발화했는가」를
+            // 사후에 원리적으로 못 가른다 — 침묵이 미발화와 구분되지 않는다. 2026-09-20에 그
+            // 침묵을 미발화로 읽고 한 시간을 태웠고, 15:10 갈래는 같은 줄이 있어서 갈렸다
+            // (PipelineScheduler.checkJobFreshness).
+            log.info("편입 결손을 다시 쟀다. 알림={}", sent ? "보냈다" : "없거나 이미 보냈다");
         } catch (BatchShutdownException e) {
             // 종료 신호다. 실패가 아니므로 알리지 않는다 — 다음 리밸런싱이나 평일 15:10 점검이
             // 같은 결손을 다시 잰다. MUST: 리밸런싱이 중단됐다고 적지 않는다. 그것은 이미 끝났다.
