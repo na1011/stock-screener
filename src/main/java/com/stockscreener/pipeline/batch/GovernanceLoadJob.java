@@ -98,7 +98,6 @@ public class GovernanceLoadJob {
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            Integer latestFiscalYear, Integer span,
                            List<GovernanceEndpoint> endpoints, List<String> tickers) {
-        int latest = latestFiscalYear != null ? latestFiscalYear : asOf.getYear() - 1;
         List<GovernanceEndpoint> targets = endpoints == null || endpoints.isEmpty()
                 ? List.of(GovernanceEndpoint.values()) : endpoints;
         List<SecurityRef> stocks = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
@@ -107,35 +106,54 @@ public class GovernanceLoadJob {
             return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
         }
 
-        Map<GovernanceEndpoint, List<Integer>> yearsByEndpoint = new EnumMap<>(GovernanceEndpoint.class);
-        for (GovernanceEndpoint endpoint : targets) {
-            yearsByEndpoint.put(endpoint, yearsFor(endpoint, latest, span));
-        }
-
-        // 시장마다 답하는 표가 다르다. 소스가 안 주는 표를 부르면 거짓 「데이터 없음」이 쌓인다.
+        // 시장마다 답하는 표가 다르고 <b>받을 역년도 다르다.</b> 표를 안 좁히면 소스가 안 주는
+        // 표에 거짓 「데이터 없음」이 쌓이고, 역년을 안 가르면 bsnsYear의 뜻이 다른 소스에
+        // 남의 규칙이 실린다(GovernanceDataSource.latestRequestableYear).
+        //
+        // MUST: 둘 다 종목 루프 밖에서 시장마다 한 번만 정한다. 종목마다 물으면 1,350번
+        // 같은 답을 받고, 소스가 없는 시장에서는 경고가 1,350줄 쌓여 진짜 장애가 묻힌다.
         Map<String, Set<GovernanceEndpoint>> endpointsByMarket = new LinkedHashMap<>();
+        Map<String, Map<GovernanceEndpoint, List<Integer>>> yearsByMarket = new LinkedHashMap<>();
         Map<String, Integer> callsByMarket = new LinkedHashMap<>();
         for (SecurityRef stock : stocks) {
-            Set<GovernanceEndpoint> supported = endpointsByMarket.computeIfAbsent(
-                    stock.marketCode(), market -> {
-                        try {
-                            return collector.supportedEndpoints(market);
-                        } catch (DataSourceException e) {
-                            // 소스가 없는 시장이다. 여기서 던지면 잡 전체가 죽으므로 비워 두고
-                            // 아래에서 수를 남긴다 — 종목마다 실패하면 부분 실패 알림이
-                            // 상시화되고 진짜 장애가 묻힌다.
-                            log.warn("거버넌스 소스가 없는 시장이라 건너뛴다. market={} 사유={}",
-                                    market, e.getMessage());
-                            return Set.of();
-                        }
-                    });
+            String market = stock.marketCode();
+            if (!endpointsByMarket.containsKey(market)) {
+                Set<GovernanceEndpoint> supported;
+                int latest;
+                try {
+                    supported = collector.supportedEndpoints(market);
+                    // MUST: 손으로 준 연도가 이긴다. 그때는 사람이 무엇을 받는지 알고 있고,
+                    // 소스 규칙으로 덮으면 「2019를 받아라」가 조용히 다른 해가 된다.
+                    latest = latestFiscalYear != null
+                            ? latestFiscalYear
+                            : collector.latestRequestableYear(market, asOf);
+                } catch (DataSourceException e) {
+                    // 소스가 없는 시장이다. 여기서 던지면 잡 전체가 죽으므로 비워 두고
+                    // 아래에서 수를 남긴다 — 종목마다 실패하면 부분 실패 알림이
+                    // 상시화되고 진짜 장애가 묻힌다.
+                    log.warn("거버넌스 소스가 없는 시장이라 건너뛴다. market={} 사유={}",
+                            market, e.getMessage());
+                    endpointsByMarket.put(market, Set.of());
+                    yearsByMarket.put(market, Map.of());
+                    continue;
+                }
+                endpointsByMarket.put(market, supported);
+                Map<GovernanceEndpoint, List<Integer>> years =
+                        new EnumMap<>(GovernanceEndpoint.class);
+                for (GovernanceEndpoint endpoint : targets) {
+                    years.put(endpoint, yearsFor(endpoint, latest, span));
+                }
+                yearsByMarket.put(market, years);
+            }
+            Set<GovernanceEndpoint> supported = endpointsByMarket.get(market);
+            Map<GovernanceEndpoint, List<Integer>> years = yearsByMarket.get(market);
             int calls = 0;
             for (GovernanceEndpoint endpoint : targets) {
-                if (supported.contains(endpoint)) {
-                    calls += yearsByEndpoint.get(endpoint).size();
+                if (supported.contains(endpoint) && years.containsKey(endpoint)) {
+                    calls += years.get(endpoint).size();
                 }
             }
-            callsByMarket.merge(stock.marketCode(), calls, Integer::sum);
+            callsByMarket.merge(market, calls, Integer::sum);
         }
 
         // MUST: 예산을 소스별로 센다. 한 수로 뭉쳐 「보수 예산 10,000의 N%」라고 적으면
@@ -149,13 +167,23 @@ public class GovernanceLoadJob {
         execution.plan(CollectionPhase.GOVERNANCE, stocks.size());
         execution.stage("종목별 정기보고서 주요정보 수집");
 
-        Set<Integer> touchedYears = new LinkedHashSet<>();
-        yearsByEndpoint.values().forEach(touchedYears::addAll);
+        // MUST: 시장별로 센다. 합집합을 쓰면 그 시장이 안 받은 역년에 0행 UPDATE가 종목마다
+        // 쌓인다 — 아래 「표가 하나뿐인 시장에는 형제가 없다」와 같은 이유다.
+        Map<String, Set<Integer>> touchedYearsByMarket = new LinkedHashMap<>();
+        yearsByMarket.forEach((market, years) -> {
+            Set<Integer> touched = new LinkedHashSet<>();
+            years.values().forEach(touched::addAll);
+            touchedYearsByMarket.put(market, touched);
+        });
 
         try {
             for (SecurityRef stock : stocks) {
                 Set<GovernanceEndpoint> supported =
                         endpointsByMarket.getOrDefault(stock.marketCode(), Set.of());
+                Map<GovernanceEndpoint, List<Integer>> years =
+                        yearsByMarket.getOrDefault(stock.marketCode(), Map.of());
+                Set<Integer> touchedYears =
+                        touchedYearsByMarket.getOrDefault(stock.marketCode(), Set.of());
                 execution.process(stock, CollectionPhase.GOVERNANCE, security -> {
                     long written = 0;
                     for (GovernanceEndpoint endpoint : targets) {
@@ -163,7 +191,7 @@ public class GovernanceLoadJob {
                             continue;
                         }
                         written += collector.collect(security, endpoint,
-                                yearsByEndpoint.get(endpoint), ANNUAL_REPORT);
+                                years.get(endpoint), ANNUAL_REPORT);
                     }
                     // 표를 다 받은 뒤라야 「비어 온 표」에 같은 보고서의 접수번호를 찍을 수 있다.
                     // 표가 하나뿐인 시장에는 형제가 없으므로 부르지 않는다 — 부르면 종목마다

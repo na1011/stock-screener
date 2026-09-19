@@ -109,6 +109,17 @@ public class GovernanceCollector {
         return registry.governanceSource(marketCode).supportedEndpoints();
     }
 
+    /**
+     * 그 시장의 소스에 지금 물어볼 수 있는 가장 늦은 {@code bsnsYear}.
+     *
+     * <p>{@link #supportedEndpoints}와 같은 자리다 — <b>시장마다 답이 다른 것을 잡이 정하지
+     * 않는다.</b> 근거는 {@link GovernanceDataSource#latestRequestableYear}에 있다.
+     */
+    public int latestRequestableYear(String marketCode, java.time.LocalDate asOf)
+            throws DataSourceException {
+        return registry.governanceSource(marketCode).latestRequestableYear(asOf);
+    }
+
     /** 잡이 「그 해의 다른 표」로 데이터 없음 행을 마저 채울 때 쓴다. */
     public long stampNoDataFromSiblings(long stockId, int bsnsYear, String reportCode) {
         return writer.stampNoData(stockId, bsnsYear, reportCode);

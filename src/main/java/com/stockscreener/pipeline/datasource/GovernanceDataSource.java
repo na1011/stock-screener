@@ -35,6 +35,30 @@ public interface GovernanceDataSource {
     }
 
     /**
+     * 이 소스에 <b>지금 물어볼 수 있는 가장 늦은 {@code bsnsYear}</b>.
+     *
+     * <h2>MUST: 소스가 답한다 — 잡이 정하지 않는다</h2>
+     * <p>{@code bsnsYear}의 <b>뜻이 소스마다 다르기 때문</b>이다. DART에서는 <b>사업보고서의
+     * 회계연도</b>라 올해분은 이듬해 3월에야 나오고, Alpaca 배당에서는 <b>{@code ex_date}의
+     * 역년</b>이라 <b>올해가 지금 답을 준다.</b>
+     *
+     * <p><b>이 메서드가 없던 동안 DART의 뜻이 미국으로 이식돼 있었다.</b> 잡이
+     * {@code asOf.getYear() - 1}을 전역으로 박아 <b>역년 {@code asOf.getYear()}를 영영 요청하지
+     * 않았고</b>, 그래서 회계연도가 역년 둘 이상에 걸치는 미국 종목은
+     * {@code AlpacaGovernanceFactMapper.coversWholeWindow}에 막혀 <b>매년 영구히 한 해
+     * 뒤처졌다</b> — 2026-09-20 실측으로 편입 1,000 중 <b>158종목</b>이 그 자리였고, 그 값은
+     * 결측이 아니라 <b>1년 낡은 배당을 오늘 종가로 나눈 그럴듯한 수</b>로 화면에 있었다.
+     * 12월 결산 723종목이 <b>100% 최신</b>이라 축이 정확히 갈렸다.
+     *
+     * <p><b>기본값은 DART 쪽이다</b> — 이 인터페이스가 먼저 국내를 위해 생겼고(ADR-0081),
+     * 새 소스가 말없이 붙었을 때 <b>덜 요청하는 쪽이 안전하다.</b> 더 요청하면 그 소스에
+     * 거짓 「데이터 없음」 행이 쌓이는데 그것은 커버리지 판정의 재료다.
+     */
+    default int latestRequestableYear(java.time.LocalDate asOf) {
+        return asOf.getYear() - 1;
+    }
+
+    /**
      * 표 하나를 받는다.
      *
      * <p>MUST: 소스가 «데이터 없음»으로 답하면 <b>빈 목록이 아니라</b>

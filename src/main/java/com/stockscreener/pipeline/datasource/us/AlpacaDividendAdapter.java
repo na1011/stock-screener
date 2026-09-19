@@ -143,6 +143,23 @@ public class AlpacaDividendAdapter implements GovernanceDataSource {
         return EnumSet.of(GovernanceEndpoint.DIVIDEND);
     }
 
+    /**
+     * <b>올해를 포함한다.</b> 여기서 {@code bsnsYear}는 회계연도가 아니라 <b>{@code ex_date}의
+     * 역년</b>이고({@code fetchReport}가 {@code [1/1, 12/31]} 창으로 묻는다) 배당은 그해에
+     * 이미 지급되므로 <b>올해가 지금 답을 준다.</b>
+     *
+     * <p><b>기본값(작년)을 쓰면 비12월 결산 종목이 매년 영구히 한 해 뒤처진다.</b>
+     * {@code AlpacaGovernanceFactMapper.coversWholeWindow}가 회계연도 창이 걸친 <b>모든 역년</b>을
+     * 요구하는데, 52/53주 회계연도는 그 창이 이듬해 1월 초까지 뻗는다 —
+     * {@code SNA}의 FY2025가 {@code 2024-12-29 ~ 2026-01-03}이라 역년 <b>2026</b>이 있어야
+     * 값이 난다. 2026-09-20 실측: 그 역년 하나를 더하니 최신 회계연도가 나오는 종목이
+     * <b>836 → 994</b>가 됐고, 반대로 과거로 {@code span}을 넓히는 것은 <b>+1종목</b>이었다.
+     */
+    @Override
+    public int latestRequestableYear(java.time.LocalDate asOf) {
+        return asOf.getYear();
+    }
+
     @Override
     public List<GovernanceReportRow> fetchReport(SecurityRef security, GovernanceEndpoint endpoint,
                                                  int bsnsYear, String reportCode)
