@@ -241,8 +241,17 @@ public class AlpacaPriceAdapter implements PriceDataSource {
     /**
      * 봉 하나를 옮긴다.
      *
-     * <p>{@code tradeValue}와 {@code listedShares}는 <b>null이다</b> — 소스가 주지 않는다.
+     * <p>{@code tradeValue}와 {@code listedShares}는 <b>null이다</b>.
      * MUST NOT: {@code close × volume}으로 거래대금을 합성하지 않는다(다른 값이다).
+     *
+     * <p><b>MUST: 그 이유를 「소스가 주지 않는다」로 줄여 적지 않는다 — 한 번 그렇게 읽혀
+     * 「원자료가 없다」는 오독을 낳았다</b>(2026-09-16). 정확히는 <b>이 엔드포인트(일봉)가</b>
+     * 거래대금을 안 준다는 것이고, {@code alpaca-bars.md} §거래대금·§`vw`는 왜 대용이 아닌가가
+     * 재 둔 결론은 셋이다 — ① {@code close × v}도 {@code vw × v}도 정규장 분봉 합 대비
+     * <b>+12.5%·+11.5%</b>(45/45 전부 과대) ② 그 편의는 가격이 아니라 <b>{@code v}가 전 세션
+     * 거래량</b>이라서 생긴다(정규장만 담는 KRX와 재는 창이 다르다) ③ <b>정규장 분봉의
+     * {@code vw × v} 합은 낼 수 있다 — 비용만 안 쟀다.</b>
+     * {@code listedShares}는 응답에 아예 없다(ADR-0013).
      *
      * <p>{@code splitAdjustedBySource = false}인 근거는 {@code adjustment=raw}다.
      * 그 파라미터를 바꾸면 이 값도 함께 바꿔야 하고, 안 바꾸면 원장 계수가 두 번 적용되어
