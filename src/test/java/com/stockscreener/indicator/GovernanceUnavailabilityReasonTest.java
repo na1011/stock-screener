@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p><b>축이 시장에서 (지표, 시장)으로 내려갔다</b>(P28). 미국에 배당 소스가 붙어 열셋 중
  * <b>둘만</b> 오게 되면서, 시장 하나로 열셋을 판정하던 형태가 깨졌다 — 그때 배당 둘에
- * 「국내 공시에서만 옵니다」는 거짓이고 나머지 열하나에 「수집되지 않았다」는 <b>기다리면
+ * 「국내 시장에서만 계산됩니다」는 거짓이고 나머지 열하나에 「수집되지 않았다」는 <b>기다리면
  * 온다는 거짓말</b>이다. 아래 시험은 그 둘을 <b>같은 시장 안에서</b> 가른다.
  */
 class GovernanceUnavailabilityReasonTest {
@@ -48,12 +48,15 @@ class GovernanceUnavailabilityReasonTest {
         // 미국은 배당 둘만 온다. 나머지는 기다려도 안 온다.
         assertThat(reasonFor(MinorityHolderStakeCalculator.CODE, "US"))
                 .isNotNull()
-                .contains("국내 공시에서만")
-                .doesNotContain("DART");
+                .contains("아직 국내 시장에서만 계산")
+                .doesNotContain("DART")
+                // MUST: 소스 한계를 주장하지 않는다. 자기주식·발행주식은 이미 받는
+                // companyfacts 안에 있다(2026-09-19 실측 · 편입 1,000 중 둘 다 599).
+                .doesNotContain("소스가").doesNotContain("공시에서만 옵니다");
         assertThat(reasonFor(DividendPayoutCalculator.CODE, "US"))
-                .as("미국에 배당 소스가 붙었으므로 「국내 공시에서만 옵니다」는 이제 거짓이다")
+                .as("미국에 배당 소스가 붙었으므로 「국내 시장에서만 계산됩니다」는 이제 거짓이다")
                 .isNotNull()
-                .doesNotContain("국내 공시에서만");
+                .doesNotContain("국내 시장에서만");
     }
 
     @Test
@@ -106,7 +109,7 @@ class GovernanceUnavailabilityReasonTest {
         // 그리고 그 종목의 국내 전용 지표는 여전히 「이 시장에는 없다」로 말해야 한다.
         assertThat(reasonFor(MinorityHolderStakeCalculator.CODE, us))
                 .isNotNull()
-                .contains("국내 공시에서만");
+                .contains("아직 국내 시장에서만 계산");
     }
 
     private String reasonFor(String code, String marketCode) {

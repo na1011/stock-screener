@@ -314,17 +314,31 @@ public class IndicatorUnavailabilityConfig {
     }
 
     /**
-     * 소스가 <b>그 지표를</b> 그 시장에서 안 준다. <b>기다려도 안 온다</b>는 것이 위 문장과
-     * 다른 점이고, 그 차이가 사용자가 할 일을 가른다.
+     * 그 지표를 <b>아직 그 시장에서 계산하지 않는다.</b> 수집이 안 된 것과 다른 점은
+     * <b>잡을 돌린다고 채워지지 않는다</b>는 것이고, 그 차이가 사용자가 할 일을 가른다.
      *
-     * <p>MUST NOT: 여기에 {@code governanceEmpty}를 걸지 않는다. 소스가 안 덮는다는 것은
+     * <h2>MUST NOT: 이 문구에 「소스가 안 준다」를 적지 않는다 — 재보니 거짓이었다</h2>
+     * <p>여기 있던 문장은 <i>"이 지표의 원자료는 <b>국내 공시에서만</b> 옵니다"</i>였고 javadoc은
+     * <i>"기다려도 안 온다"</i>였다. 2026-09-19에 팩트 캐시 1,214종목으로 재니 최소 한 축에서
+     * 거짓이다 — <b>자기주식과 발행주식은 이미 받는 {@code companyfacts} 안에 있다</b>:
+     * 현재 편입 1,000 중 자기주식 계열 <b>638</b>({@code TreasuryStockValue} 667 ·
+     * {@code TreasuryStockCommonShares} 608 · {@code TreasuryStockShares} 605 ·
+     * {@code TreasuryStockCommonValue} 414) · {@code dei:EntityCommonStockSharesOutstanding}
+     * <b>894</b> · <b>둘 다 가진 종목 599</b>. 즉 {@code TREASURY_SHARE_RATIO}는
+     * <b>새 콜 0으로 599종목에서 난다</b>(가짜 한계).
+     * <p>나머지 아홉(임원보수·사외이사·이사교체·최대주주·소액주주·경영권변동·감사 셋)은
+     * <b>재보지 않았다</b> — 그 원자료는 XBRL 재무 팩트가 아니라 위임장·감사보고서 계열이라
+     * {@code companyfacts}에 없는 것이 당연하고, <b>그것이 「SEC가 안 준다」를 뜻하지는 않는다.</b>
+     * 그래서 문구에서 소스 주장을 뺐다 — 재기 전에는 사용자에게 「기다려도 안 온다」고 말하지 않는다.
+     *
+     * <p>MUST NOT: 여기에 {@code governanceEmpty}를 걸지 않는다. 그 시장에서 계산하지 않는다는 것은
      * <b>그 종목에 다른 거버넌스 값이 있든 없든 참</b>이다 — 걸면 미국 종목이 배당 값을 가진
      * 순간 나머지 열하나가 <b>아무 사유도 없이</b> 비게 된다.
      */
     private static UnavailabilityRule governanceOutOfMarket(String code) {
         return new UnavailabilityRule(code,
                 context -> !marketsFor(code).contains(context.marketCode()),
-                "이 지표의 원자료는 국내 공시에서만 옵니다. 이 시장의 종목에는 "
+                "이 지표는 아직 국내 시장에서만 계산됩니다. 이 시장의 종목에는 "
                         + "값이 나오지 않습니다.");
     }
 

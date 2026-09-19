@@ -12,9 +12,25 @@ import java.util.List;
  *
  * <p>버핏 문서 3.3의 오너 어닝은 <b>순이익 + 감가상각·상각 − 자본적지출 − 추가 소요 운전자본</b>
  * 이며, 문서 자신이 <i>"잉여현금흐름과 유사하나 운전자본 증분까지 차감한다는 점이 다르다"</i>고
- * 적는다. 감가상각비는 후보를 넓혀 다시 재도 <b>3/8</b>이라
- * ({@code dart-financial.md}의 「계정별 가용성」 절 — 다섯은 낱말 자체가 본표에 없다)
- * 정확한 오너 어닝은 <b>열리지 않는다.</b> 문서가 지시한 <b>대체품</b>이고 그 이상이 아니다.
+ * 적는다. 이 클래스는 그 <b>대체품</b>이다.
+ *
+ * <h2>MUST: 「오너 어닝은 열리지 않는다」를 시장 없이 적지 않는다 — 미국에서 거짓이다</h2>
+ * <p>여기 있던 그 문장의 근거는 <b>DART 표본 8종목 중 3</b>({@code dart-financial.md}의
+ * 「계정별 가용성」 절)이었고 <b>시장을 안 밝혔다.</b> 2026-09-19에 팩트 캐시 1,214종목으로
+ * 미국을 직접 재니 갈렸다:
+ * <ul>
+ *   <li><b>감가상각·상각</b> — 현재 편입 1,000 중 <b>991</b>이 D&amp;A 계열 태그를 갖는다
+ *       ({@code DepreciationDepletionAndAmortization} 912 · {@code Depreciation} 893 ·
+ *       {@code DepreciationAndAmortization} 496 · {@code DepreciationAmortizationAndAccretionNet} 140).
+ *       무작위 표본 <b>12/12</b>가 10-K의 FY 12개월 값을 <b>7~17개년</b> 갖는다.
+ *       <b>안 갖는 아홉은 BDC·보험사다</b>(ARCC·OBDC·LNC·EG 등).</li>
+ *   <li><b>운전자본 증분</b> — <b>이미 저장돼 있다.</b> {@code current_assets}·
+ *       {@code current_liabilities}가 미국 편입 <b>862/1,000</b>에 있다.</li>
+ *   <li><b>자본적지출·순이익</b> — 이미 저장돼 있다.</li>
+ * </ul>
+ * <p>즉 미국에서 빠진 것은 <b>D&amp;A 컬럼 하나뿐이고 소스는 준다 — 가짜 한계다.</b>
+ * 국내는 그 3/8이 아직 유일한 근거이고 <b>다시 재려면 DART 콜이 든다</b>
+ * ({@code fnlttSinglAcntAll} 350종목 = 350콜). <b>재기 전에 「국내도 안 준다」를 적지 않는다.</b>
  *
  * <h2>연간만 낸다</h2>
  *
