@@ -24,9 +24,14 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 | US | 기업 행위 — 분할·병합 | Alpaca **Market Data** API | Alpaca와 같은 키 둘 | `datasource/us/AlpacaCorporateActionAdapter` | [`alpaca-corporate-action.md`](../../../docs/api-spec/alpaca-corporate-action.md) |
 | US | 세션 달력 — 봉 결측 판정의 근거 | Alpaca **Trading** API | Alpaca와 같은 키 둘 | `datasource/us/AlpacaMarketCalendarAdapter` | [`alpaca-calendar.md`](../../../docs/api-spec/alpaca-calendar.md) |
 | US | 업종(SIC)·결산월 | SEC EDGAR | `SEC_EDGAR_USER_AGENT` | `datasource/us/SecEdgarCompanyProfileAdapter` | [`sec-edgar-company-profile.md`](../../../docs/api-spec/sec-edgar-company-profile.md) |
+| US | 거버넌스 — **배당 둘뿐**(`DPS_COMMON`·`CASH_DIVIDEND_TOTAL`) | Alpaca **Market Data** API | Alpaca와 같은 키 둘 | `datasource/us/AlpacaDividendAdapter` | [`alpaca-corporate-action.md`](../../../docs/api-spec/alpaca-corporate-action.md) |
 
-**미국은 유니버스·시세·재무·기업행위·업종 다섯이 열려 있고 거버넌스가 남았다**
-(ADR-0086·0088·0089·0090·0092).
+**미국은 유니버스·시세·재무·기업행위·업종 다섯이 열려 있고 거버넌스는 배당만 열렸다**
+(ADR-0086·0088·0089·0090·0092·0113).
+**MUST: 「거버넌스가 남았다」로 적지 마라 — 2026-09-01에 `AlpacaDividendAdapter`가 들어왔다**
+(`c116110`). 실측(2026-09-19): `governance_fact`의 US가 **1,012종목 · 3,398행 · 지표 2종**이다
+(국내는 202·158종목 · 17종). 이 skill의 마지막 수정이 **그 커밋보다 이틀 앞서** 그대로 남아 있었다 —
+여기가 「무엇을 만들 수 있나」를 판정하는 정본이므로 그 낡음이 곧 「못 한다」의 재생산이다.
 **그래서 `US_LISTED`는 아직 못 켠다** — 다만 **이유가 계속 좁아졌다**. 배치를 죽이던 관문
 (`CorporateActionJob.requireSources`)은 ADR-0090이 닫았고, 업종은 ADR-0092가 닫았다.
 지금 남은 것은 **거버넌스·전체재무제표 어댑터가 없어 그 두 잡이 매 실행 8,504건 부분 실패를
