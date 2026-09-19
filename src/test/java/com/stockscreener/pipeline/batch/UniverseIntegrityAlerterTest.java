@@ -100,6 +100,21 @@ class UniverseIntegrityAlerterTest {
     }
 
     @Test
+    @DisplayName("시세 구멍에도 닫는 명령을 적는다 — 「소스가 안 준다」는 2026-09-18에 거짓으로 판명됐다")
+    void printsACommandForPriceCoverageBecauseTheSourceDoesGiveThoseBars() {
+        when(stockRegistrar.membershipGaps())
+                .thenReturn(List.of(gap("RH", "US", MembershipGap.Axis.PRICE_COVERAGE)));
+
+        alerter.evaluateAndAlert();
+
+        AlertEvent event = captureAlert();
+        assertThat(event.body()).contains("RH").contains("--job=initial-load");
+        // MUST: 처방이 소스의 한계를 주장하지 않는다. 그 주장은 외부 콜로만 갈리고,
+        // 한 번 적히면 아무도 다시 안 묻는다 — 실제로 RH·VTEX를 255봉씩 못 받고 있었다.
+        assertThat(event.body()).doesNotContain("소스가 그 구간을 안 준다");
+    }
+
+    @Test
     @DisplayName("영업활동현금흐름의 미국 갈래에는 닫는 명령을 적지 않는다 — full-statement-refill에 US 소스가 없다")
     void doesNotPrintACommandThatCannotClose() {
         when(stockRegistrar.membershipGaps())

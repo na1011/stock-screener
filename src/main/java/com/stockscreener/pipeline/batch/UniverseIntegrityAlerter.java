@@ -194,8 +194,15 @@ public class UniverseIntegrityAlerter {
             case FINANCIAL -> bootstrap(
                     "--job=initial-load --skip-price=true --tickers=" + tickers);
             case CASH_FLOW -> cashFlowHint(hits);
-            case PRICE_COVERAGE -> "없다 — 소스가 그 구간을 안 준다. 편입에서 빼야 하는지가 "
-                    + "판단이고, 그때까지 그 자리는 정상 종목 하나를 밀어낸 채 비어 있다.";
+            // MUST NOT: 여기에 「소스가 안 준다」를 적지 않는다 — 2026-09-18에 거짓으로 판명됐다.
+            // 그렇게 적혀 있던 동안 RH·VTEX는 우리 DB가 2024-12-31에서 멈춰 있었는데
+            // Alpaca는 2025-09-15~2026-09-18 구간에 255봉을 주고 있었다. 소스의 한계 주장은
+            // 외부 콜로만 갈리는데, 한 번 처방에 박히면 아무도 다시 안 묻는다.
+            case PRICE_COVERAGE -> bootstrap(
+                    "--job=initial-load --skip-financial=true --price-years=7 --tickers=" + tickers)
+                    + " 다시 받아 그대로면 그때가 소스에 물을 자리다 — 거래정지·상장폐지로 소스에도 "
+                    + "없는 구간이면 편입에서 빼야 하는지가 판단이고, 그때까지 그 자리는 "
+                    + "정상 종목 하나를 밀어낸 채 비어 있다.";
             case INDICATOR_DROP -> "없다 — 원인을 먼저 가른다. 기업행위 재구축이 지운 것이면 "
                     + "backfill이 짝이고, 재무 정정이면 그 종목의 단일 날짜 백필이다.";
         };
