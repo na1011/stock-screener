@@ -77,7 +77,7 @@ public class MembershipGapFiller {
      * {@code u.is_active}는 그것을 원리적으로 못 거른다(있으나 없으나 28이다 · 2026-09-18 실측).
      *
      * <p><b>이 값은 예산이지 실측이 아니다</b> — 이 경로의 소요 시간을 재본 적이 없다.
-     * {@code PipelineScheduler.AUTO_BACKFILL_STOCK_LIMIT}이 같은 문장을 쓴다.
+     * {@link InvalidationBackfiller#AUTO_BACKFILL_STOCK_LIMIT}이 같은 문장을 쓴다.
      */
     private static final int AUTO_LOAD_STOCK_LIMIT = 50;
 

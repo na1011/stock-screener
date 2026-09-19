@@ -343,7 +343,7 @@ LNZA = 공시일 당일 역분할의 반영 여부를 날짜로 판정. 독립�
      `Invalidation`을 **받지도 않는데**, `FILL_WITHOUT_REVISION`도 `fillMissing`의
      `toCorrect`/`toClear`에서 **`invalidate`를 부른다**(`FinancialWriter:525~534`).
      **무효화를 내는데 백필이 아예 없다.** **DART 전용이라 KR이고 한 번도 측정된 적이 없다.**
-   - **MUST: 처방 전에 `AUTO_BACKFILL_FINANCIAL_STOCK_LIMIT`(`PipelineScheduler:79` = 100)을
+   - **MUST: 처방 전에 `AUTO_BACKFILL_FINANCIAL_STOCK_LIMIT`(`InvalidationBackfiller` = 100)을
      먼저 본다.** 대상이 100을 넘으면 `:306`이 **경고만 찍고 return**한다. 「채움 종목을 백필에
      더한다」를 그대로 넣으면 대상이 **1,221종목**이 되어 **한 종목도 안 돌고, 지금 도는 무효화
      백필까지 함께 죽는다.** 대상을 「폴백 결과가 실제로 달라진 종목」으로 좁히거나 상한을

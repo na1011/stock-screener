@@ -212,6 +212,6 @@ ADR은 저장소에 **없었다.**
   스케줄러 스레드에는 남는다. **분석 하나의 크기는 재지 않았다.**
 - **되돌리려면**: `IndicatorBackfillJob`의 팬아웃과 메모이저 둘을 함께 되돌린다. 메모이저만
   되돌리면 값은 맞는데 확장이 2.56배에서 막힌다.
-- **다음 세션이 잴 거리**: `PipelineScheduler.AUTO_BACKFILL_STOCK_LIMIT = 10`의 근거가
+- **다음 세션이 잴 거리**: `InvalidationBackfiller.AUTO_BACKFILL_STOCK_LIMIT = 10`의 근거가
   *"자동으로 시간 단위 작업을 시작하면 그날의 다른 스케줄이 전부 밀린다"*인데 그 시간이 줄면
   근거가 약해진다. 그 상수는 이미 *"재본 적이 없다"*로 적혀 있다.
