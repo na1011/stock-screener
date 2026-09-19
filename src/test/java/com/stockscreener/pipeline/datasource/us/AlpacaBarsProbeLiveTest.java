@@ -381,6 +381,17 @@ class AlpacaBarsProbeLiveTest {
                             bars.isEmpty() ? "-" : bars.get(0).path("t").asString(""),
                             bars.isEmpty() ? "-" : bars.get(bars.size() - 1).path("t").asString(""),
                             root.path("next_page_token").isNull() ? "null" : root.path("next_page_token").asString(""));
+                    // 봉 수만으로는 「이어 붙여도 되는가」를 못 답한다. 리네임·CUSIP 변경 종목은
+                    // 겹치는 날짜의 값이 같은지가 그 답이고, 다르면 이어 붙일 때 없던 계단이 생긴다.
+                    int tail = Integer.getInteger("probe.tail", 0);
+                    for (int i = Math.max(0, bars.size() - tail); i < bars.size(); i++) {
+                        JsonNode b = bars.get(i);
+                        System.out.printf("      %s o=%s h=%s l=%s c=%s v=%s vw=%s%n",
+                                b.path("t").asString("").substring(0, 10), b.path("o").asString(""),
+                                b.path("h").asString(""), b.path("l").asString(""),
+                                b.path("c").asString(""), b.path("v").asString(""),
+                                b.path("vw").asString(""));
+                    }
                 }
             }
         }
