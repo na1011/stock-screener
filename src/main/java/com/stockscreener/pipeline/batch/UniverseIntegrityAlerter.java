@@ -209,9 +209,11 @@ public class UniverseIntegrityAlerter {
     }
 
     private static String cashFlowHint(List<MembershipGap> hits) {
-        List<String> kr = hits.stream().filter(gap -> !"US".equals(gap.marketCode()))
+        // MUST: 술어를 여기에 따로 쓰지 않는다. 꼬리가 실제로 부를 대상과 이 문장이 갈리면
+        // 「닫는 명령」을 적어 놓고 안 부르게 되는데, 그 어긋남은 양쪽 다 조용하다.
+        List<String> kr = hits.stream().filter(MembershipGap::refillableStatements)
                 .map(MembershipGap::ticker).toList();
-        List<String> us = hits.stream().filter(gap -> "US".equals(gap.marketCode()))
+        List<String> us = hits.stream().filter(gap -> !gap.refillableStatements())
                 .map(MembershipGap::ticker).toList();
         List<String> parts = new ArrayList<>();
         if (!kr.isEmpty()) {

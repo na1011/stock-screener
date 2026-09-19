@@ -79,4 +79,16 @@ public record MembershipGap(long stockId, String marketCode, String ticker, Stri
     public boolean hasActionable() {
         return !missing.isEmpty();
     }
+
+    /**
+     * {@code full-statement-refill}이 닿는 시장인가. 그 잡은 <b>DART 전용</b>이라
+     * 미국에는 한 행도 못 쓴다(ADR-0056).
+     *
+     * <p><b>MUST: 알림의 「닫는 법」과 실제 호출이 이 한 곳을 본다.</b> 두 곳에 따로 적으면
+     * 갈리는데, 그 증상이 양쪽 다 조용하다 — 닫는 명령이라 적어 놓고 그 종목을 안 부르거나,
+     * 반대로 안 닿는 시장에 콜을 태우고 매주 같은 결손을 다시 신고한다.
+     */
+    public boolean refillableStatements() {
+        return !"US".equals(marketCode);
+    }
 }

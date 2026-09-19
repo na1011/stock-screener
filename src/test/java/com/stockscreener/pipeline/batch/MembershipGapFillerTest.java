@@ -20,7 +20,10 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -42,6 +45,7 @@ class MembershipGapFillerTest {
     private StockRegistrar stockRegistrar;
     private InitialLoadJob initialLoadJob;
     private CompanyProfileJob companyProfileJob;
+    private FullStatementRefillJob fullStatementRefillJob;
     private UniverseIntegrityAlerter alerter;
     private AlertPort alertPort;
     private BatchExecutionReader batchExecutionReader;
@@ -52,12 +56,13 @@ class MembershipGapFillerTest {
         stockRegistrar = mock(StockRegistrar.class);
         initialLoadJob = mock(InitialLoadJob.class);
         companyProfileJob = mock(CompanyProfileJob.class);
+        fullStatementRefillJob = mock(FullStatementRefillJob.class);
         alerter = mock(UniverseIntegrityAlerter.class);
         alertPort = mock(AlertPort.class);
         batchExecutionReader = mock(BatchExecutionReader.class);
         when(batchExecutionReader.liveJobNames()).thenReturn(List.of());
         filler = new MembershipGapFiller(stockRegistrar, initialLoadJob, companyProfileJob,
-                alerter, alertPort, batchExecutionReader);
+                fullStatementRefillJob, alerter, alertPort, batchExecutionReader);
     }
 
     @Test
@@ -216,9 +221,39 @@ class MembershipGapFillerTest {
         return event.getValue();
     }
 
+    @Test
+    @DisplayName("영업활동현금흐름 결손을 전체 재무제표 보정으로 채운다 — 문장만 내면 영영 안 닫힌다")
+    void fillsCashFlowGapWithFullStatementRefill() {
+        given(gap("001820", MembershipGap.Axis.CASH_FLOW));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        // MUST: 분기를 함께 받는다(다섯째 인자). FY만 채우면 Q4 유도가 안 따라가
+        // 재고자산이 그 자리에서 새 결손이 된다(ADR-0069).
+        verify(fullStatementRefillJob).run(eq(AS_OF),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), isNull(),
+                eq(List.of("001820")), eq(true), eq(false));
+    }
+
+    @Test
+    @DisplayName("미국 영업활동현금흐름 결손에는 안 부른다 — 그 잡은 DART 전용이라 한 행도 못 쓴다")
+    void doesNotRefillStatementsForUsMarket() {
+        given(gap("US", "GLNG", MembershipGap.Axis.CASH_FLOW));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        // 이 음성이 없으면 위 양성은 「술어가 늘 참」이어도 통과한다.
+        verify(fullStatementRefillJob, never()).run(any(), any(), any(), anyList(),
+                anyBoolean(), anyBoolean());
+    }
+
     private static MembershipGap gap(String ticker, MembershipGap.Axis axis) {
+        return gap("KOSPI", ticker, axis);
+    }
+
+    private static MembershipGap gap(String market, String ticker, MembershipGap.Axis axis) {
         Set<MembershipGap.Axis> missing = EnumSet.of(axis);
-        return new MembershipGap(1L, "KOSPI", ticker, ticker + " 주식회사",
+        return new MembershipGap(1L, market, ticker, ticker + " 주식회사",
                 missing, EnumSet.noneOf(MembershipGap.Axis.class));
     }
 }

@@ -38,6 +38,15 @@ import java.util.Set;
  * 시세 결손은 {@code skipFinancial}, 재무 결손은 {@code skipPrice}로 간다 — 후자의 대상은
  * 정의상 재무 0행이라 덮을 기존 행이 없다.
  *
+ * <p><b>영업활동현금흐름 결손이 셋째 갈래다.</b> {@code full-statement-refill}은 <b>결손 컬럼만</b>
+ * 채우므로 기존 값을 덮지 않는다 — 실측(2026-09-20 {@code 001820})으로 <b>채움 53 · 정정 0 ·
+ * 교정 0 · 정정보류 0</b>이었고 FY 영업활동현금흐름이 0행에서 11행이 됐다. <b>국내만 부른다</b>
+ * ({@link MembershipGap#refillableStatements}) — 그 잡은 DART 전용이라 미국에는 한 행도 못 쓴다.
+ *
+ * <p><b>이 갈래가 없던 동안 그 결손은 영영 안 닫혔다.</b> {@code UniverseIntegrityAlerter}가
+ * 닫는 명령을 <b>문장으로만</b> 냈고 부르는 코드가 없었다 — 값이 없는 자리에 이유를 적는 것과
+ * 값을 만드는 것은 다르다.
+ *
  * <h2>MUST NOT: 여기에 기업 행위 수집·계수 재구축을 잇지 않는다</h2>
  * <p>ADR-0116이 <b>수집 → 재구축 → 백필 셋을 한 사슬로</b> 묶었으므로(2026-09-01 사용자 결정)
  * 앞의 둘만 부르면 <b>지운 지표를 사람에게 남기게 된다.</b> 그 사슬은 평일 14:00 자리다.
@@ -100,17 +109,20 @@ public class MembershipGapFiller {
     private final StockRegistrar stockRegistrar;
     private final InitialLoadJob initialLoadJob;
     private final CompanyProfileJob companyProfileJob;
+    private final FullStatementRefillJob fullStatementRefillJob;
     private final UniverseIntegrityAlerter alerter;
     private final AlertPort alertPort;
     private final BatchExecutionReader batchExecutionReader;
 
     public MembershipGapFiller(StockRegistrar stockRegistrar, InitialLoadJob initialLoadJob,
                                CompanyProfileJob companyProfileJob,
+                               FullStatementRefillJob fullStatementRefillJob,
                                UniverseIntegrityAlerter alerter, AlertPort alertPort,
                                BatchExecutionReader batchExecutionReader) {
         this.stockRegistrar = stockRegistrar;
         this.initialLoadJob = initialLoadJob;
         this.companyProfileJob = companyProfileJob;
+        this.fullStatementRefillJob = fullStatementRefillJob;
         this.alerter = alerter;
         this.alertPort = alertPort;
         this.batchExecutionReader = batchExecutionReader;
@@ -232,9 +244,15 @@ public class MembershipGapFiller {
                                     BatchExecutionRecorder.TriggeredBy triggeredBy) {
         List<String> priceTickers = tickersOf(gaps, MembershipGap.Axis.PRICE_HISTORY);
         List<String> financialTickers = tickersOf(gaps, MembershipGap.Axis.FINANCIAL);
+        List<String> cashFlowTickers = gaps.stream()
+                .filter(gap -> gap.missing().contains(MembershipGap.Axis.CASH_FLOW))
+                .filter(MembershipGap::refillableStatements)
+                .map(MembershipGap::ticker)
+                .toList();
 
         Set<String> distinct = new LinkedHashSet<>(priceTickers);
         distinct.addAll(financialTickers);
+        distinct.addAll(cashFlowTickers);
         if (distinct.size() > AUTO_LOAD_STOCK_LIMIT) {
             // MUST: 알리고 멈춘다. 자동으로 시간 단위 작업을 시작하면 그날의 다른 스케줄이
             // 전부 밀리고, 이 크기는 리밸런싱이 아니라 유니버스를 다시 그은 것이다.
@@ -262,6 +280,19 @@ public class MembershipGapFiller {
             initialLoadJob.run(asOf, triggeredBy, new InitialLoadJob.LoadRange(
                     0, InitialLoadJob.LoadRange.defaults().financialYears(), false,
                     financialTickers, null, false, true));
+        }
+        if (!cashFlowTickers.isEmpty()) {
+            log.info("편입 결손 보충 — 전체 재무제표 {}종목을 받는다. 종목={}",
+                    cashFlowTickers.size(), cashFlowTickers);
+            // MUST: 분기를 함께 받는다. FY만 채우면 Q4 유도가 안 따라가 재고자산이 그 자리에서
+            // 새 결손이 된다(ADR-0069) — 채우는 잡이 다음 결손을 만드는 자리다. 이 갈래는
+            // 티커로 좁혀져 있으므로 콜 4배가 전 종목이 아니라 그 몇 종목에만 붙는다.
+            //
+            // MUST NOT: 여기에 백필을 잇지 않는다. 이 잡은 indicator_value를 건드리지 않고,
+            // 실측(2026-09-20 001820)으로 정정 0·교정 0이라 지워지는 지표가 없다. 채운 값은
+            // 다음 평일 13:30 일일 갱신이 반영한다 — IndicatorRunner가 retain(points, cutoff)로
+            // 보존 창 전체를 다시 쓰기 때문이다. 백필을 붙이면 그 일을 두 번 한다.
+            fullStatementRefillJob.run(asOf, triggeredBy, null, cashFlowTickers, true, false);
         }
     }
 
