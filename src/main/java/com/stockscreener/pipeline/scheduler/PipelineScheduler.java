@@ -269,7 +269,7 @@ public class PipelineScheduler {
      *
      * <p>MUST: {@link #HEAVY_JOB_MIN_INTERVAL_DAYS} 안에 돈 잡은 고르지 않는다. 거버넌스·재무는
      * 공시일에 계단으로 바뀌므로 주 1회 돌면 <b>콜만 태운다</b> — 같은 값을 다시 받는 것이
-     * {@code governance-load}는 7,700콜이다.
+     * {@code governance-load}는 8,050콜이다.
      */
     // 패키지 가시성인 이유는 **요일을 이 클래스가 스스로 읽기 때문**이다. 호출부가
     // LocalDate.now()로 오늘을 정하므로, 이 판단을 밖에서 못 부르면 「화요일에 무엇이 도는가」를
@@ -303,9 +303,15 @@ public class PipelineScheduler {
         BatchExecutionRecorder.TriggeredBy by = BatchExecutionRecorder.TriggeredBy.SCHEDULER;
         if (GovernanceLoadJob.JOB_NAME.equals(jobName)) {
             // MUST: 유도를 이어 부른다. 적재만 하면 governance_fact가 안 바뀌고 화면은 옛 값
-            // 그대로인데 둘 다 성공으로 끝난다. span 2가 최소치다 — 회계연도가 역년 둘에
-            // 걸치는 종목(비12월 결산 약 24%)은 두 해를 다 받아야 사실이 난다.
-            governanceLoadJob.run(asOf, by, null, 2, List.of(), List.of());
+            // 그대로인데 둘 다 성공으로 끝난다.
+            //
+            // MUST: span을 주지 않는다. 표마다 필요한 해 수가 다른데(GovernanceLoadJob.YEARS_BACK)
+            // 스칼라 하나로 덮으면 SHARE_TOTALS의 3년 차분(끝점 Y-3·Y)과 OUTSIDE_DIRECTOR의
+            // 3년 합이 **원리적으로 불성립**한다 — 그래도 잡은 성공으로 끝난다.
+            // 여기 있던 2는 「회계연도가 역년 둘에 걸치니 두 해를 받는다」가 근거였는데,
+            // 그 문제는 요청 역년의 **위쪽 끝**(GovernanceDataSource.latestRequestableYear)이
+            // 풀었다. 뒤로 넓히는 것은 2026-09-20 실측으로 +1종목이었다.
+            governanceLoadJob.run(asOf, by, null, null, List.of(), List.of());
             governanceDeriveJob.run(asOf, by, List.of());
         } else if (FullStatementRefillJob.JOB_NAME.equals(jobName)) {
             // 전 종목 분기가 필요하다 — 주당 지표가 분기 행을 읽는다(ADR-0098).

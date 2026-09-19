@@ -74,7 +74,7 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | `xbrlTaxonomy.json` | 미착수 (계정 사전) | 〃 | `sj_div`당 1 |
 | `irdsSttus.json` | **사용 중** | `dart-corporate-action.md` | 창이 정한다 — 2020~2026 백필이 **종목당 2** |
 | `cmpMgDecsn.json` · `stkExtrDecsn.json` | 미착수 (U-06) | 〃 | 각 종목당 1 = 350 |
-| **거버넌스 여덟**(`alotMatter`·`hyslrSttus`·`outcmpnyDrctrNdChangeSttus`·`mrhlSttus`·`hyslrChgSttus`·`hmvAuditAllSttus`·`stockTotqySttus`·`accnutAdtorNmNdAdtOpinion`) | **사용 중**(ADR-0081) | `dart-governance.md` | 종목·연도당 1. 지금 배치가 **7,700** |
+| **거버넌스 여덟**(`alotMatter`·`hyslrSttus`·`outcmpnyDrctrNdChangeSttus`·`mrhlSttus`·`hyslrChgSttus`·`hmvAuditAllSttus`·`stockTotqySttus`·`accnutAdtorNmNdAdtOpinion`) | **사용 중**(ADR-0081) | `dart-governance.md` | 종목·연도당 1. 지금 배치가 **8,050** |
 | `elestock`·`majorstock`·`tesstkAcqsDspsSttus`·`list` | **미착수** — 넷의 사정이 다르다 | 아래 | — |
 | `/v2/assets` (Alpaca Trading) | **사용 중** | `alpaca-universe.md` | **전체 1** — 페이징이 없고 `exchange` 콤마 목록이 동작한다 |
 | `/v2/stocks/bars` (Alpaca Market Data) | **사용 중** | `alpaca-bars.md` | 종목당 1(구간조회). **묶지 않는다** — 실패 격리의 단위가 종목이 아니게 된다 |

@@ -249,9 +249,16 @@ class PipelineSchedulerChainTest {
 
         scheduler.runHeavyJobOfTheDay();
 
-        // span 2가 최소치다 — 회계연도가 역년 둘에 걸치는 종목은 두 해를 다 받아야 사실이 난다.
+        // MUST: span을 주지 않는다(넷째 인자 null). 표마다 필요한 해 수가 다른데 스칼라 하나로
+        // 덮으면 SHARE_TOTALS의 3년 차분과 OUTSIDE_DIRECTOR의 3년 합이 원리적으로 불성립한다.
+        //
+        // 여기 있던 eq(2)는 「회계연도가 역년 둘에 걸치니 두 해를 받는다」가 근거였는데,
+        // 그 근거가 2026-09-20에 무너졌다 — 52/53주 회계연도는 **세 역년**에 걸치고
+        // (SNA FY2025 = 2024-12-29~2026-01-03) 막고 있던 것은 span이 아니라 요청 역년의
+        // **위쪽 끝**이었다. 뒤로 넓히는 것은 실측 +1종목, 위로 올리는 것은 +158이었다.
+        // 그 시험이 오해를 잠가 두었으므로 주석까지 함께 고친다.
         verify(governanceLoadJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
-                eq(null), eq(2), anyList(), anyList());
+                eq(null), eq(null), anyList(), anyList());
         verify(governanceDeriveJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
                 anyList());
         verifyNoInteractions(fullStatementRefillJob, financialRefillJob);

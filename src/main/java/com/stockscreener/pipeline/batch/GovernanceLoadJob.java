@@ -48,17 +48,22 @@ public class GovernanceLoadJob {
     /**
      * 표마다 «최신 해에서 몇 해 뒤까지» 받는가. 근거는 dart-governance.md의 실측이다.
      *
-     * <p>MUST: 이 표를 바꾸면 콜 수가 함께 바뀐다. 지금 350종목 기준 <b>7,700콜</b>이고
-     * 보수 예산 10,000의 77%다.
+     * <p>MUST: 이 표를 바꾸면 콜 수가 함께 바뀐다. 지금 350종목 기준 <b>8,050콜</b>이고
+     * 보수 예산 10,000의 81%다.
      */
     private static final Map<GovernanceEndpoint, Integer> YEARS_BACK =
             new EnumMap<>(Map.of(
                     // 이익소각이 상장 이래 누적이라 3년 차분에 끝점 둘(Y-3·Y)이 필요하고,
                     // 창 앞부분에서도 그 차분이 서려면 한 해가 더 필요하다.
                     GovernanceEndpoint.SHARE_TOTALS, 5,
-                    // 한 응답이 3개년을 열로 주지만 **두 해를 부른다** — 한 번만 부르면 FY2024
-                    // 배당을 2026년 3월에야 알게 된 것이 되어 창 앞 137거래일이 통째로 빈다(2026-09-08 실측).
-                    GovernanceEndpoint.DIVIDEND, 2,
+                    // 한 응답이 3개년을 열로 주지만 **세 해를 부른다.**
+                    // 둘인 이유(국내): 한 번만 부르면 FY2024 배당을 2026년 3월에야 알게 된 것이
+                    // 되어 창 앞 137거래일이 통째로 빈다(2026-09-08 실측).
+                    // 셋인 이유(미국): 여기서 bsnsYear는 ex_date의 역년이라 52/53주 회계연도가
+                    // **세 역년에 걸친다** — SNA의 FY2025가 2024-12-29~2026-01-03이고
+                    // coversWholeWindow가 그 셋을 다 요구한다. 두 해면 최신 회계연도가 나오는
+                    // 종목이 879, 세 해면 994다(2026-09-20 실측 · 편입 1,000).
+                    GovernanceEndpoint.DIVIDEND, 3,
                     // 요청한 해만 준다(가이드의 fscl_year는 실측에서 '-'였다).
                     GovernanceEndpoint.EXEC_PAY, 2,
                     // 3년 합이 창 앞부분에서도 서려면 넉 해가 필요하다.

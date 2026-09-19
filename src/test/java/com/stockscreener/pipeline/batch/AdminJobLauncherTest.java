@@ -183,10 +183,10 @@ class AdminJobLauncherTest {
                         // EXCESS_RETURN_26W를 멈추므로 화면에서 다시 채울 수 있어야 한다.
                         MarketIndexJob.JOB_NAME,
                         // 외부 호출이 0이다. 이미 받아 둔 원문만 다시 읽는다 — 유도 규칙이
-                        // 틀린 것을 알았을 때 7,700콜을 다시 태우지 않게 하려고 잡을 가른 것이고,
+                        // 틀린 것을 알았을 때 8,050콜을 다시 태우지 않게 하려고 잡을 가른 것이고,
                         // 그 값어치가 화면에서 누를 수 있을 때 나온다.
                         //
-                        // 짝인 governance-load는 여기 없다. 전량 7,700콜로 보수 예산 10,000의
+                        // 짝인 governance-load는 여기 없다. 전량 8,050콜로 보수 예산 10,000의
                         // 절반을 넘어 initial-load를 뺀 근거에 정확히 걸린다.
                         GovernanceDeriveJob.JOB_NAME,
                         // 거래소당 1콜, 전부 2콜이다(창과 무관하다 — 11년치가 한 응답이다).
@@ -200,7 +200,7 @@ class AdminJobLauncherTest {
                         MarketCalendarJob.JOB_NAME);
 
         assertThat(launcher.isLaunchable(GovernanceLoadJob.JOB_NAME))
-                .as("governance-load는 한 번에 7,700콜이다 — 화면 버튼으로 두지 않는다")
+                .as("governance-load는 한 번에 8,050콜이다 — 화면 버튼으로 두지 않는다")
                 .isFalse();
 
         assertThatThrownBy(() ->

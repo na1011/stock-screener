@@ -82,7 +82,7 @@ public class JobFreshnessPolicy {
         map.put(CompanyProfileJob.JOB_NAME, new Budget(12, null));
         // 월 1회(화). 거버넌스 값은 공시일에 계단으로 바뀌므로 그보다 자주 볼 이유가 없다.
         map.put(GovernanceLoadJob.JOB_NAME, new Budget(40,
-                "--job=governance-load --governance-year=<연도> --governance-span=2"));
+                "--job=governance-load"));
         map.put(GovernanceDeriveJob.JOB_NAME, new Budget(40, null));
         // 월 1회(수).
         map.put(FullStatementRefillJob.JOB_NAME, new Budget(40,
