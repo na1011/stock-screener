@@ -40,6 +40,17 @@ applies_to:
   - **셋인 쪽이 52/53주 회계연도다.** 창이 이듬해 1월 초까지 뻗는다 — `SNA`의 FY2025가
     `2024-12-29 ~ 2026-01-03`이다. 실측(2026-09-20)으로 편입 미국 1,000 중
     **2개 역년 270 · 3개 역년 7**이다.
+  - **MUST: 요청 역년의 <b>아래쪽</b> 끝도 소스가 답하게 둔다**(`GovernanceDataSource.extraCalendarYears`).
+    위쪽 끝이 **최신 회계연도**를 열었다면 이쪽은 **보존 창 앞부분**을 연다 — 창 시작에서
+    `figuresOn`이 고르는 회계연도가 비12월 결산에서 역년 하나를 더 걸친다. 실측(2026-09-20 ·
+    편입 미국 1,000)으로 커버가 역년 셋에 **856** · 넷에 **970** · 다섯에도 **970**이라
+    **1이 정확한 값이고 2는 콜만 태운다.**
+    - **MUST NOT: 그 한 해를 `GovernanceLoadJob.YEARS_BACK`(시장 공용)에 더하지 않는다.**
+      국내에서는 **해로운 값**이 생긴다 — DART는 옛 역년을 물어도 **정정본의 접수번호**를 주고
+      (2026-09-21 탐침: `010130`·`000880`·`161580`), 정정이 **없던** 종목만 원본 공시일을
+      돌려준다(`006360`의 `bsns_year=2022` → `20230316001014`). 그러면 `figuresOn`이 창 앞에서
+      **두세 해 낡은 배당**을 고른다. 결측이 아니라 **그럴듯하게 틀린 값**이고, 이 ADR이
+      막으려는 것과 같은 형태다.
   - **MUST: 요청 역년의 위쪽 끝을 소스가 답하게 둔다**(`GovernanceDataSource.latestRequestableYear`).
     여기서 `bsnsYear`는 `ex_date`의 역년이라 **올해가 지금 답을 주는데**, 잡이 DART 규칙
     (`asOf.getYear() - 1`)을 전역으로 박으면 역년 `asOf.getYear()`가 영영 안 와서 이 게이트가
@@ -73,6 +84,14 @@ applies_to:
 ./gradlew test --tests "*AlpacaGovernanceFactMapperTest*" \
                --tests "*GovernanceUnavailabilityReasonTest*"
 ./gradlew liveTest --tests "*AlpacaDividendProbeLiveTest*"
+```
+
+```premise 보존 창 앞부분의 배당수익률이 창 끝만큼 차 있다
+psql -d stock_screener -At -c "WITH u(uc, d) AS (VALUES ('US_TOP1000', (SELECT min(trade_date) + 12 FROM indicator_trade_date WHERE market_code = 'US')), ('KOSPI_TOP200', (SELECT min(trade_date) + 30 FROM indicator_trade_date WHERE market_code = 'KOSPI')), ('KOSDAQ_TOP150', (SELECT min(trade_date) + 30 FROM indicator_trade_date WHERE market_code = 'KOSDAQ'))) , mem AS (SELECT u.uc, u.d, m.stock_id FROM u JOIN universe_membership m ON m.universe_code = u.uc AND m.effective_from <= u.d AND (m.effective_to IS NULL OR m.effective_to > u.d)) , cov AS (SELECT mem.uc, count(DISTINCT mem.stock_id) AS members, count(DISTINCT v.stock_id) AS dy FROM mem LEFT JOIN indicator_value v ON v.stock_id = mem.stock_id AND v.trade_date = mem.d AND v.indicator_code = 'DIVIDEND_YIELD' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM cov) = 0 THEN '잴 것이 없었다 — 보존 창에 편입 행이 없다' WHEN (SELECT count(*) FROM cov WHERE dy < members * 0.94) = 0 THEN 'OK 창 앞부분 배당수익률이 ' || (SELECT string_agg(uc || ' ' || dy || '/' || members, ' · ' ORDER BY uc) FROM cov) ELSE '창 앞부분이 비었다: ' || (SELECT string_agg(uc || ' ' || dy || '/' || members, ' · ' ORDER BY uc) FROM cov WHERE dy < members * 0.94) || ' — 요청 역년의 아래쪽 끝이 창을 못 덮는다(GovernanceDataSource.extraCalendarYears)' END"
+```
+
+```premise 창과 겹치는 편입에 거버넌스 원문이 한 행이라도 있다
+psql -d stock_screener -At -c "WITH reachable AS (SELECT DISTINCT s.id, s.market_code, s.ticker FROM universe_membership m JOIN stock s ON s.id = m.stock_id JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE s.is_active AND s.market_code IN ('KOSPI','KOSDAQ','US') AND (m.effective_to IS NULL OR (m.effective_from <= (SELECT max(d.trade_date) FROM indicator_trade_date d WHERE d.market_code = s.market_code) AND m.effective_to > (SELECT min(d.trade_date) FROM indicator_trade_date d WHERE d.market_code = s.market_code)))) , gap AS (SELECT * FROM reachable WHERE NOT EXISTS (SELECT 1 FROM governance_report_row r WHERE r.stock_id = reachable.id)) SELECT CASE WHEN (SELECT count(*) FROM reachable) = 0 THEN '잴 것이 없었다 — 창과 겹치는 편입이 없다' WHEN (SELECT count(*) FROM gap) = 0 THEN 'OK 창과 겹치는 편입 ' || (SELECT count(*) FROM reachable) || '종목 전부에 거버넌스 원문이 있다' ELSE (SELECT count(*) FROM gap) || '종목에 거버넌스 원문이 0행이다: ' || (SELECT string_agg(ticker, ' ' ORDER BY market_code, ticker) FROM gap) || ' — governance-load가 현재 편입만 돌아 과거 평면이 빠졌다. --tickers로 넘긴다' END"
 ```
 
 ```premise 미국에서 무배당과 미수집이 갈려 있다
@@ -155,6 +174,36 @@ EDGAR의 `shares_outstanding`이 유통주식수 계열이므로 뒤쪽을 쓴�
   나열해야 한다. 국내 700콜은 멱등이고 DART 예산의 7%다.
 
 ## 결과
+
+### 아래쪽 끝까지 닫았다 — 창 앞부분 (2026-09-21)
+
+위쪽 끝이 최신 회계연도를 연 뒤에도 **보존 창 앞부분**은 비어 있었다. 축이 갈린 자리는 같다 —
+`bsnsYear`가 역년이라 회계연도 하나가 역년 둘~셋에 걸친다.
+
+| 축 | 전 | 후 |
+|---|---|---|
+| 미국 as-of 편입 `DIVIDEND_YIELD`(창 안 2025-10-01) | 798 / 1,000 | **988** |
+| 국내 as-of 편입 `DIVIDEND_YIELD`(창 안 2025-10-02) | 293 / 350 | **340** |
+| 미국 `DIVIDEND_PAYOUT`(같은 날) | 674 | **857** |
+| 미국 `DPS_COMMON` 보유 종목 — FY2024 / FY2023 | 712 / 0 | **1,166 / 867** |
+| 창과 겹치는 편입 중 거버넌스 원문 0행 | US 167 · KOSPI 32 · KOSDAQ 82 | **0 · 0 · 0** |
+| 창과 겹치는 미국 편입 중 역년 2026 미관측 | 41 | **0** |
+| 최신일 미국 `DIVIDEND_YIELD` | 998 | **1,002**(안 줄었다) |
+
+**남은 22가 전부 이름으로 설명된다** — 미국 12는 **신규 상장 11**(2026년에야 첫 연차보고라
+그날 공시된 회계연도가 없다 · 원리적으로 못 닫는다)과 **`TEVA`**(봉 3개 · `asof` 축). 국내 10은
+**정정본이 옛 공시일을 덮은 다섯**(`000880`·`006360`·`010130`·`115180`·`161580`) ·
+**`088980`**(진짜 한계 — 여덟 표가 전부 `013`) · **신규 상장 넷**이다.
+
+**두 평면을 함께 받았다.** `governance-load`의 기본 대상이 현재 편입뿐이라 복원한 과거 평면
+337종목(US 208 · KOSPI 37 · KOSDAQ 92)이 한 번도 안 받아졌다. `--tickers`로 넘겨 닫았고
+(13분 46초 · 13,330행), **꼬리에 거버넌스 축이 생겨(ADR-0141) 재발하지 않는다.**
+
+**회귀는 없다.** 전 프리셋·저장 화면 14개 × 기준일 넷의 결과 집합과 점수가 **한 줄도 안 바뀌었다**
+(`PresetResultSnapshotTest` diff 0줄). 이 축은 **결과표의 빈칸을 채웠지 순위를 흔들지 않는다.**
+
+**소요 실측 54분 58초**(1,350종목 12,050콜 = 국내 8,050 + 미국 4,000). 그래서 무거운 잡을
+14:15로 당겼다(ADR-0116 §결과).
 
 **쉬워지는 것** — 미국 종목이 배당 지표를 갖는다(2026-09-01 적재 실측):
 
