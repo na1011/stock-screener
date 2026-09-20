@@ -245,6 +245,90 @@ class SecEdgarSubmissionsProbeLiveTest {
         }
     }
 
+    @Test
+    @DisplayName("[live][probe] submissions가 sic을 비워 주는 종목에 다른 경로도 물어본다 — 한 엔드포인트만 묻고 「없다」를 적지 않는다")
+    void probeOtherPathsForStocksWhoseSubmissionsSicIsEmpty() throws Exception {
+        // 왜 묻는가: SecEdgarCompanyProfileAdapter가 무는 SEC URL은 /submissions/{cik}.json
+        // **하나뿐**이다(코드 실측). 그 하나가 빈 값을 준다고 「SEC가 sic을 안 준다」로 적으면
+        // 이 저장소가 아홉 번 중 여덟 번 틀렸던 바로 그 형태다.
+        //
+        // 대조군을 함께 넣는다 — 정상 종목이 섞이지 않으면 「빈 응답」과 「탐침이 안 닿음」이
+        // 구분되지 않는다.
+        String tickers = System.getProperty("probe.tickers", "MAIN,ARCC,CBC,OBDC,AAPL,KO");
+        System.out.printf("%n===== sic 대체 경로 · tickers=%s =====%n", tickers);
+        List<String> wanted = new ArrayList<>();
+        for (String t : tickers.split(",")) {
+            wanted.add(t.trim());
+        }
+        Map<String, Long> ciks = resolveCiks(wanted);
+        assertThat(ciks).as("CIK를 하나도 못 풀면 아래 출력은 아무것도 답하지 않는다").isNotEmpty();
+
+        RestClient data = client(DATA_URL);
+        RestClient files = client(FILES_URL);
+        int answered = 0;
+        for (Map.Entry<String, Long> entry : ciks.entrySet()) {
+            String padded = "%010d".formatted(entry.getValue());
+            System.out.printf("%n--- %s CIK=%s%n", entry.getKey(), padded);
+
+            // ① 지금 쓰는 경로
+            throttle();
+            ResponseEntity<String> submissions = data.get()
+                    .uri("/submissions/CIK{cik}.json", padded).retrieve().toEntity(String.class);
+            String sic = "";
+            if (submissions.getStatusCode().is2xxSuccessful()) {
+                JsonNode root = MAPPER.readTree(submissions.getBody());
+                sic = root.path("sic").asString("");
+                System.out.printf("    submissions      HTTP %s sic=%s sicDescription=%s%n",
+                        submissions.getStatusCode(), sic.isEmpty() ? "(빈값)" : sic,
+                        root.path("sicDescription").asString(""));
+            } else {
+                System.out.printf("    submissions      HTTP %s %s%n",
+                        submissions.getStatusCode(), preview(submissions.getBody()));
+            }
+
+            // ② 한 번도 안 물어본 경로 — browse-edgar의 atom은 assigned-sic을 따로 준다
+            throttle();
+            ResponseEntity<String> atom = files.get()
+                    .uri(uri -> uri.path("/cgi-bin/browse-edgar")
+                            .queryParam("action", "getcompany")
+                            .queryParam("CIK", padded)
+                            .queryParam("type", "10-K")
+                            .queryParam("dateb", "")
+                            .queryParam("owner", "include")
+                            .queryParam("count", "1")
+                            .queryParam("output", "atom").build())
+                    .retrieve().toEntity(String.class);
+            String atomSic = between(atom.getBody(), "<assigned-sic>", "</assigned-sic>");
+            String atomDesc = between(atom.getBody(), "<assigned-sic-desc>", "</assigned-sic-desc>");
+            System.out.printf("    browse-edgar     HTTP %s assigned-sic=%s desc=%s%n",
+                    atom.getStatusCode(), atomSic.isEmpty() ? "(없음)" : atomSic, atomDesc);
+            if (!atomSic.isEmpty()) {
+                answered++;
+            }
+            if (!sic.isEmpty() && !atomSic.isEmpty() && !sic.equals(atomSic)) {
+                System.out.printf("    ※ 두 경로가 갈린다: submissions=%s browse-edgar=%s%n",
+                        sic, atomSic);
+            }
+        }
+        System.out.printf("%nbrowse-edgar가 sic을 준 종목 %d/%d%n", answered, ciks.size());
+        // 대조군이 있으므로 0이면 탐침이 안 닿은 것이다.
+        assertThat(answered).as("대조군(AAPL·KO)까지 0이면 이 경로가 아니라 탐침이 안 닿은 것이다")
+                .isPositive();
+    }
+
+    /** XML 한 조각. 파서를 끌어오지 않는 이유는 이 탐침이 **형태를 모르는 채** 묻기 때문이다. */
+    private static String between(String body, String open, String close) {
+        if (body == null) {
+            return "";
+        }
+        int from = body.indexOf(open);
+        if (from < 0) {
+            return "";
+        }
+        int to = body.indexOf(close, from + open.length());
+        return to < 0 ? "" : body.substring(from + open.length(), to).strip();
+    }
+
     private static void head(String baseUrl, String path, String label) {
         throttle();
         ResponseEntity<Void> response =

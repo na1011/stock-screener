@@ -98,18 +98,25 @@ rg -n "PARTITION BY|GROUP BY|JOIN stock|AS fine|AS broad" src/main/java/com/stoc
 정상 상태를 위반으로 신고한다.
 
 ```premise 업종 코드가 활성 편입 종목에 들어와 있다
-psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 종목이 하나도 없다' WHEN count(*) FILTER (WHERE s.industry_group_key IS NOT NULL) = 0 THEN '업종이 전량 비어 있다(' || count(*) || '종목) — company-profile 잡이 아직 돌지 않았다. 업종 조건은 전 종목 판정불가다' WHEN count(*) FILTER (WHERE s.industry_group_key IS NULL AND s.ticker <> ALL (ARRAY['ARCC','CBC','OBDC'])) > 0 THEN '업종이 비어 있는 종목에 알려진 결손 밖의 티커가 있다: ' || string_agg(s.ticker, ' ' ORDER BY s.ticker) FILTER (WHERE s.industry_group_key IS NULL AND s.ticker <> ALL (ARRAY['ARCC','CBC','OBDC'])) || ' — 그 종목은 업종 조건에서 조용히 빠진다. 신규 편입이면 company-profile로 채운다' WHEN count(*) FILTER (WHERE s.industry_group_key IS NULL) > 0 THEN 'OK 활성 편입 ' || count(*) || '종목 중 업종이 빈 것이 알려진 SIC 결손뿐이다(' || string_agg(s.ticker, ' ' ORDER BY s.ticker) FILTER (WHERE s.industry_group_key IS NULL) || ') — SEC submissions가 sic을 빈 값으로 줘서 company-profile로 안 채워진다(ADR-0099 실측). 그 종목은 업종 조건에서 빠진 채로 있다' ELSE 'OK 활성 편입 ' || count(*) || '종목 전부에 업종이 있다' END FROM stock s JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active"
+psql -d stock_screener -At -c "SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 종목이 하나도 없다' WHEN count(*) FILTER (WHERE s.industry_group_key IS NOT NULL) = 0 THEN '업종이 전량 비어 있다(' || count(*) || '종목) — company-profile 잡이 아직 돌지 않았다. 업종 조건은 전 종목 판정불가다' WHEN count(*) FILTER (WHERE s.industry_group_key IS NULL AND s.ticker <> ALL (ARRAY['ARCC','CBC','MAIN','OBDC'])) > 0 THEN '업종이 비어 있는 종목에 알려진 결손 밖의 티커가 있다: ' || string_agg(s.ticker, ' ' ORDER BY s.ticker) FILTER (WHERE s.industry_group_key IS NULL AND s.ticker <> ALL (ARRAY['ARCC','CBC','MAIN','OBDC'])) || ' — 그 종목은 업종 조건에서 조용히 빠진다. 신규 편입이면 company-profile로 채운다' WHEN count(*) FILTER (WHERE s.industry_group_key IS NULL) > 0 THEN 'OK 활성 편입 ' || count(*) || '종목 중 업종이 빈 것이 알려진 SIC 결손뿐이다(' || string_agg(s.ticker, ' ' ORDER BY s.ticker) FILTER (WHERE s.industry_group_key IS NULL) || ') — SEC submissions가 sic을 빈 값으로 줘서 company-profile로 안 채워진다(ADR-0099 실측). 그 종목은 업종 조건에서 빠진 채로 있다' ELSE 'OK 활성 편입 ' || count(*) || '종목 전부에 업종이 있다' END FROM stock s JOIN universe_membership m ON m.stock_id = s.id AND m.effective_to IS NULL JOIN universe u ON u.code = m.universe_code AND u.is_active"
 ```
 
-**알려진 SIC 결손 셋은 발화 판정에서 뺐다** — `ARCC` `CBC` `OBDC`는
+**알려진 SIC 결손 넷은 발화 판정에서 뺐다** — `ARCC` `CBC` `MAIN` `OBDC`는
 SEC submissions가 `sic`을 빈 값으로 주므로 `company-profile`로 **원리적으로 안 채워진다**
 (ADR-0099 실측). 안 빼면 이 펜스가 상시 경보가 되고, **상시 경보는 읽는 쪽을 훈련시켜
-새 결손까지 함께 놓치게 만든다.** 사실을 지운 것이 아니라 **OK 문장으로 옮겼다** — 그 셋은
-매번 이름으로 보고되고, 다른 티커가 섞이는 순간 발화한다. **그 셋이 편입에서 빠지면
+새 결손까지 함께 놓치게 만든다.** 사실을 지운 것이 아니라 **OK 문장으로 옮겼다** — 그 넷은
+매번 이름으로 보고되고, 다른 티커가 섞이는 순간 발화한다. **그 넷이 편입에서 빠지면
 목록도 함께 줄인다.**
 
-**`MAIN`·`OTF`가 2026-09-13에 빠졌다** — 같은 부류(BDC·비상장은행 계열)이지만 **편입이 아니게
-되어** 위 규칙대로 줄였다. 다시 편입되면 이 펜스가 이름으로 발화하므로 그때 되넣는다.
+**`MAIN`·`OTF`가 2026-09-13에 빠졌고, `MAIN`은 2026-09-21에 되넣었다** — 다시 편입돼 펜스가
+이름으로 발화했다. `OTF`는 아직 편입이 아니라 그대로 뺀 채 둔다.
+
+**되넣기 전에 한 엔드포인트가 아니라 둘에 물었다.** 이 저장소에서 「소스가 안 준다」는 아홉 중
+여덟이 거짓이었고, 그때마다 **한 엔드포인트만 물은 것**이 원인이었다. 실측(2026-09-21 ·
+`SecEdgarSubmissionsProbeLiveTest.probeOtherPathsForStocksWhoseSubmissionsSicIsEmpty`):
+`/submissions`의 `sic`과 `browse-edgar`의 `assigned-sic`이 `ARCC`·`CBC`·`MAIN`·`OBDC` 넷 모두
+**둘 다 빈 값**이고, 같은 실행의 **대조군 `AAPL` 3571 · `KO` 2080은 두 경로가 같은 값**을 준다.
+대조군이 값을 받았으므로 **탐침이 안 닿은 것이 아니라 SEC에 그 배정이 없다.** 진짜 한계다.
 
 **이 배열의 사본이 `KnownSourceGaps.java`에 있고 `check-doc-staleness.sh`의 거울 표가 둘을
 대조한다**(ADR-0141). 한쪽만 고치면 세션 시작에 발화한다 — **줄일 때도 늘릴 때도 함께 고친다.**

@@ -25,12 +25,18 @@ public final class KnownSourceGaps {
      * 시작에 발화한다. 사본을 없앨 수 없는 이유는 트리거가 서로 안 닿기 때문이다 — 펜스는
      * 세션 시작에 psql로 돌고 이 상수는 배치 런타임에 돈다.
      *
+     * <p><b>{@code MAIN}은 2026-09-21에 되넣었다</b> — 다시 편입됐고, 이번에는 한 엔드포인트가
+     * 아니라 <b>둘</b>에 물어 확인했다. {@code /submissions}와 {@code browse-edgar}의
+     * {@code assigned-sic}이 <b>둘 다 빈 값</b>이고, 같은 실행의 대조군({@code AAPL} 3571 ·
+     * {@code KO} 2080)은 두 경로가 같은 값을 준다 — 탐침이 안 닿은 것이 아니라 SEC에 그 배정이 없다
+     * ({@code SecEdgarSubmissionsProbeLiveTest.probeOtherPathsForStocksWhoseSubmissionsSicIsEmpty}).
+     *
      * <p><b>줄일 때도 늘릴 때도 함께 고친다.</b> ADR-0044가 <i>"그 셋이 편입에서 빠지면 목록도
      * 함께 줄인다"</i>고 정했고, 실제로 2026-09-13에 {@code MAIN}·{@code OTF}가 편입에서 빠져
      * 다섯에서 셋이 됐다.
      */
     public static final String KNOWN_MISSING_SIC =
-            "s.ticker = ANY (ARRAY['ARCC','CBC','OBDC'])";
+            "s.ticker = ANY (ARRAY['ARCC','CBC','MAIN','OBDC'])";
 
     /**
      * 재무 두 축(재무 0행 · 영업활동현금흐름 0행)의 면제 — <b>인프라 투자회사</b>.
