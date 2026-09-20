@@ -9,6 +9,8 @@ applies_to:
   - "src/main/java/com/stockscreener/pipeline/batch/UniverseIntegrityAlerter.java"
   - "src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java"
   - "src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java"
+  - "src/main/java/com/stockscreener/pipeline/batch/JobFreshnessPolicy.java"
+  - "src/main/java/com/stockscreener/pipeline/batch/BatchExecutionRecorder.java"
 ---
 
 # ADR-0141. 편입 계약을 여섯 축으로 감시하고, 채우는 것을 리밸런싱 꼬리에 잇는다
@@ -23,6 +25,22 @@ applies_to:
 
 ## 규칙
 
+- **MUST: 꼬리가 좁혀 부르는 실행을 `TriggeredBy.GAP_FILL`로 기록한다**(2026-09-20 · V56).
+  `JobFreshnessPolicy`의 연체 판정이 불변식 하나에 통째로 기대고 있다 —
+  **「스케줄러 실행은 언제나 전량이다」**. 그래야 좁은 실행이 시계를 되돌리지 못한다.
+  **꼬리가 그 불변식을 깰 수 있는 유일한 자리다**: 리밸런싱이 `SCHEDULER`로 돌면 꼬리도 그것을
+  물려받는데 꼬리는 **결손 티커로 좁혀** 부른다. 실측으로 `initial-load`의 SCHEDULER 행이
+  `target_count = 2`로 남아 있었고(2026-09-19 꼬리), 그 잡은 예산에서 일부러 빠져 있어 무해했다.
+  **`governance-load`에 같은 갈래를 더하는 순간 무해하지 않다** — 그 잡은 40일 예산의 대상이자
+  `PipelineScheduler.isOverdue`(25일)의 대상이라, 매주 토요일의 3종목짜리 실행이 시계를 0으로
+  되돌려 **화요일 전량 잡이 영영 안 돌고 연체 경보도 안 뜬다.** A41이 닫은 결손을 다시 여는
+  기제이고, 그것을 감시하던 장치 둘을 동시에 끈다.
+  - **MUST NOT: `target_count`로 가르지 않는다.** 그 축은 `JobFreshnessPolicy` javadoc이 이미
+    근거와 함께 기각했다 — **잡마다 「전량」의 크기가 다르다.** `company-profile`의 전량은
+    「업종이 빈 종목」이라 실측으로 **4**다(2026-09-19 SCHEDULER 행). 임계를 두면 그 잡이 상시 연체가 된다.
+  - **MUST: 가르는 축은 「좁혔는가」이지 「꼬리인가」가 아니다.** 같은 꼬리 실행 안에서도
+    `company-profile`은 전량을 돌므로 **물려받은 트리거를 그대로 쓴다.** 그 비대칭이 요점이고,
+    `MembershipGapFillerTest`가 한 실행 안에서 둘이 갈리는 것을 잠근다.
 - **MUST: 여섯을 한 질의로 낸다.** 축마다 메서드를 만들면 「편입 중인 활성 종목」의 정의가 여섯
   벌로 갈리는데 **갈려도 아무도 에러를 내지 않고**, 무엇보다 따로 만들면 나머지는 안 만들어진다.
 - **MUST NOT: 시세 이력을 `NOT EXISTS (price_daily)`로 재지 않는다.** 일일 갱신이 15일 창으로 봉을

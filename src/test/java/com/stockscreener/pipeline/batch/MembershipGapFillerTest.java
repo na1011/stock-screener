@@ -76,7 +76,7 @@ class MembershipGapFillerTest {
         ArgumentCaptor<InitialLoadJob.LoadRange> ranges =
                 ArgumentCaptor.forClass(InitialLoadJob.LoadRange.class);
         verify(initialLoadJob, times(2)).run(eq(AS_OF),
-                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), ranges.capture());
+                eq(BatchExecutionRecorder.TriggeredBy.GAP_FILL), ranges.capture());
 
         InitialLoadJob.LoadRange price = ranges.getAllValues().get(0);
         assertThat(price.tickers()).containsExactly("005930");
@@ -150,6 +150,23 @@ class MembershipGapFillerTest {
 
         verify(initialLoadJob, never()).run(any(), any(), any());
         assertThat(captureAlert().severity()).isEqualTo(AlertSeverity.WARNING);
+    }
+
+    @Test
+    @DisplayName("좁힌 적재는 GAP_FILL로, 전량인 업종은 물려받은 트리거로 기록한다 — 한 실행 안에서 갈린다")
+    void narrowedLoadsAreRecordedAsGapFillWhileFullScopeKeepsTheTrigger() {
+        // 이 비대칭이 JobFreshnessPolicy의 불변식(「스케줄러 실행은 언제나 전량이다」)을 세운다.
+        // 둘을 같게 만들면 꼬리의 3종목짜리 실행이 월 1회 전량 잡의 시계를 되돌리는데,
+        // 증상이 「연체 경보가 안 뜨는 것」이라 어디에도 안 붉는다.
+        when(stockRegistrar.membershipGaps()).thenReturn(List.of(
+                gap("KOSPI", "005930", MembershipGap.Axis.PRICE_HISTORY)));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        verify(initialLoadJob).run(eq(AS_OF),
+                eq(BatchExecutionRecorder.TriggeredBy.GAP_FILL), any());
+        verify(companyProfileJob).run(eq(AS_OF),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null));
     }
 
     @Test
@@ -231,7 +248,7 @@ class MembershipGapFillerTest {
         // MUST: 분기를 함께 받는다(다섯째 인자). FY만 채우면 Q4 유도가 안 따라가
         // 재고자산이 그 자리에서 새 결손이 된다(ADR-0069).
         verify(fullStatementRefillJob).run(eq(AS_OF),
-                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), isNull(),
+                eq(BatchExecutionRecorder.TriggeredBy.GAP_FILL), isNull(),
                 eq(List.of("001820")), eq(true), eq(false));
     }
 

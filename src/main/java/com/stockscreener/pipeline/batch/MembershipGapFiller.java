@@ -171,7 +171,7 @@ public class MembershipGapFiller {
 
     private void fill(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
         if (!blockedByAnotherBatch()) {
-            loadMissingRawData(stockRegistrar.membershipGaps(), asOf, triggeredBy);
+            loadMissingRawData(stockRegistrar.membershipGaps(), asOf);
         }
 
         // MUST: 티커를 주지 않고, 결손이 0이어도 매주 부른다. 그리고 위가 상한을 넘겨
@@ -240,8 +240,20 @@ public class MembershipGapFiller {
     }
 
     /** 원자료가 빈 편입 종목을 축별로 갈라 적재한다. <b>상한을 넘으면 적재만 건너뛴다.</b> */
-    private void loadMissingRawData(List<MembershipGap> gaps, LocalDate asOf,
-                                    BatchExecutionRecorder.TriggeredBy triggeredBy) {
+    /**
+     * 결손 원자료를 받는다. <b>전부 티커로 좁힌 실행이다.</b>
+     *
+     * <p><b>MUST: 물려받은 트리거를 쓰지 않고 {@link BatchExecutionRecorder.TriggeredBy#GAP_FILL}로
+     * 기록한다.</b> {@link JobFreshnessPolicy}가 「스케줄러 실행은 언제나 전량이다」라는 불변식에
+     * 기대고 있는데, 리밸런싱이 SCHEDULER로 돌면 꼬리도 그것을 물려받아 <b>좁은 실행이 전량 잡의
+     * 시계를 되돌린다.</b> 여기서 갈라 두지 않으면 증상이 「연체 경보가 안 뜨는 것」이라 어디에도 안 붉는다.
+     *
+     * <p>{@code companyProfileJob}은 이 메서드 밖에 있고 <b>물려받은 트리거를 그대로 쓴다</b> —
+     * 꼬리에서도 전량을 돌기 때문이다(전량이 「업종이 빈 종목」이라 실측 4). 가르는 축은
+     * <b>「좁혔는가」이지 「꼬리인가」가 아니다.</b>
+     */
+    private void loadMissingRawData(List<MembershipGap> gaps, LocalDate asOf) {
+        BatchExecutionRecorder.TriggeredBy triggeredBy = BatchExecutionRecorder.TriggeredBy.GAP_FILL;
         List<String> priceTickers = tickersOf(gaps, MembershipGap.Axis.PRICE_HISTORY);
         List<String> financialTickers = tickersOf(gaps, MembershipGap.Axis.FINANCIAL);
         List<String> cashFlowTickers = gaps.stream()
