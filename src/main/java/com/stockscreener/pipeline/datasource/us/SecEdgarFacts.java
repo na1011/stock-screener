@@ -506,7 +506,29 @@ final class SecEdgarFacts {
                 }
                 Anchor anchor = anchors.get(fact.accn());
                 if (anchor == null || !fact.end().equals(anchor.end())) {
-                    continue;   // 비교표다. 그 기간은 자기 보고서가 라벨을 준다.
+                    // 비교표다. 그 기간은 자기 보고서가 라벨을 준다.
+                    //
+                    // **MUST: 그 전제가 깨지는 자리를 알고 쓴다 — 자기 보고서가 원자료에
+                    // 없으면 아무도 그 라벨을 안 준다.** 실측(2026-09-20 · 편입 미국 1,000 ·
+                    // 전 구간)으로 **16종목 32회계연도**가 그렇게 사라진다: SFD·TLN 각 8 ·
+                    // DSGX 3 · AOS CHRD CIFR DY ELF EXE JEF KRYS ORKA SMCI SPGI VAL WULF 각 1
+                    // (KOSPI 1종목 2년 · KOSDAQ 1종목 1년도 같은 모양이다).
+                    //
+                    // 갈래가 둘이고 둘 다 실측이다. companyfacts에 그 보고서가 **아예 없거나**
+                    // (AOS·SPGI는 10-K가 2024-02와 2026-02 둘뿐이라 FY2024 보고서가 없다),
+                    // 실려 있는데 **연간 기간을 한 건도 안 싣는다**(ORKA의 2025-03-06 10-K ·
+                    // DSGX의 40-F 둘 2024-04-22·2025-04-22).
+                    //
+                    // **원자료에는 있다 — 가짜 한계다.** AOS의 2024-01-01~2024-12-31이 뒤
+                    // 공시 0000091142-26-000008의 비교표로 실려 있다. 0콜로 재현한다:
+                    // REPLAY_FACTS=build/factcache/AOS.json REPLAY_FROM=2022
+                    // ./gradlew test --tests "*SecEdgarFactsReplayTest*" → 2023/FY·2025/FY는
+                    // 나오고 2024/FY가 없다(출력은 build/test-results/test/*.xml의 system-out).
+                    //
+                    // **MUST: 처방을 올리기 전에 controllingIncomeQ4의 §버린 대안을 읽는다** —
+                    // 「비교표로 라벨을 만든다」가 거기서 실측으로 기각돼 있고, 그 기각 근거가
+                    // 이 좁힌 조건에도 서는지가 처방의 관문이다.
+                    continue;
                 }
                 Label label = labelOf(fact, fiscalYears);
                 if (label == null) {
@@ -1991,6 +2013,15 @@ final class SecEdgarFacts {
      * (실측: {@code BNY}가 보고서 91 → 158, 새 판 88 중 <b>79가 매출 null</b>). 그리고 소스
      * 4분기가 일부 컬럼만 주면 <b>유도가 통째로 막혀 나머지 컬럼을 잃는다</b>
      * ({@code DLTR}이 매출원가를 잃었다).
+     *
+     * <p><b>그 기각은 「전면 라벨 생성」에 붙는다 — 조건부 폴백까지 덮는지는 재지 않았다.</b>
+     * 폭증의 기제는 <b>한 창을 비교표로 실은 모든 공시가 보고자가 되는 것</b>이라,
+     * 「자기 보고서 앵커가 그 기간을 <b>끝내</b> 안 줄 때만」으로 좁히면 보고자가 원리적으로
+     * 하나다. 그 좁힌 조건에 걸리는 것이 <b>16종목 32회계연도</b>이고({@link #labelPeriods}의
+     * 비교표 갈래 주석 · 2026-09-20 실측), 지금 그 회계연도는 <b>통째로 없다.</b>
+     * <b>MUST: 그 폴백을 올리기 전에 {@code BNY} 실측(91 → 158)을 좁힌 조건으로 다시 낸다</b> —
+     * 안 내고 올리면 이 기각을 근거 없이 두 번째로 무시하는 것이고, 안 내고 접으면
+     * 「기각돼 있다」를 근거로 가짜 한계를 사는 것이다.
      */
     /**
      * Q4 순이익. <b>연간 행과 같은 기저라야 한다</b> — 그렇지 않으면 한 종목의 시계열 안에서

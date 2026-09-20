@@ -315,6 +315,24 @@ AAPL(9월 결산) · MSFT(6월 결산) · JPM(은행) 셋으로 쟀다.
 **현금흐름에도 3개월이 오지만 손익보다 훨씬 적다**(AAPL 28 대 208). 커버리지가 고르지 않아
 분기 현금흐름을 쓰지 않는 근거가 이 표다.
 
+**그 재구성이 회계연도를 통째로 떨어뜨리는 자리가 있다 — 소스 결손이 아니라 우리 구현이다.**
+`labelPeriods`가 `fact.end() != anchor.end()`인 팩트를 *"비교표다. 그 기간은 자기 보고서가
+라벨을 준다"*로 건너뛰는데, **자기 보고서가 원자료에 없으면 아무도 라벨을 안 준다.**
+실측(2026-09-20 · 편입 미국 1,000 · 전 구간): **16종목 32회계연도**가 그렇게 빈다
+(`SFD`·`TLN` 각 8 · `DSGX` 3 · `AOS` `CHRD` `CIFR` `DY` `ELF` `EXE` `JEF` `KRYS` `ORKA`
+`SMCI` `SPGI` `VAL` `WULF` 각 1). 갈래가 둘이다 — companyfacts에 그 보고서가 **아예 없거나**
+(`AOS`·`SPGI`는 10-K가 2024-02와 2026-02 둘뿐), 실려 있는데 **연간 기간을 한 건도 안 싣는다**
+(`ORKA`의 2025-03-06 10-K · `DSGX`의 40-F 둘).
+
+**MUST NOT: 이것을 「SEC가 안 준다」로 적지 않는다.** 원자료에는 있다 — `AOS`의
+`2024-01-01~2024-12-31`이 뒤 공시 `0000091142-26-000008`의 비교표로 실려 있다. 재적재 없이
+0콜로 재현한다:
+
+```bash
+REPLAY_FACTS=build/factcache/AOS.json REPLAY_FROM=2022 \
+  ./gradlew test --tests "*SecEdgarFactsReplayTest*"   # 2023/FY·2025/FY는 나오고 2024/FY가 없다
+```
+
 ### 적재 실측 (파일럿 10종목 · 재무 3년)
 
 `--job=initial-load --universe=US_LISTED --skip-price=true --reload-existing=true --financial-years=3`
