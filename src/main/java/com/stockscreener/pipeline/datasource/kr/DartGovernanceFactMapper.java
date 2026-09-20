@@ -312,7 +312,13 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      *       골라도 값이 0이라 모호하지 않다(실측 131건이 전부 2행 다 전열 {@code -}).
      *       <b>MUST NOT: 이것을 「{@code ordinal} 0이 보통주」로 읽지 않는다</b> — 값이 같아
      *       아무거나 되므로 고르는 것이지 종류를 판정한 것이 아니다.
-     *   <li><b>둘 이상</b> → 어느 쪽이 보통주인지 몰라 값을 내지 않는다.
+     *   <li><b>둘 이상인데 값이 전부 같음</b> → {@code ordinal}이 가장 작은 행을 쓴다.
+     *       <b>바로 위 갈래와 같은 논리다</b> — 어느 행을 골라도 값이 같아 모호하지 않다.
+     *       실측(2026-09-21 · 전 DB)으로 이 자리에 걸리던 종목이 {@code 214430} 아이쓰리시스템
+     *       하나였고, {@code 주당 현금배당금(원) = 400}인 행이 <b>둘 다 400</b>인데
+     *       {@code CASH_DIVIDEND_TOTAL}만 살아 <b>배당성향은 있고 배당수익률은 빈</b> 상태였다 —
+     *       005850 에스엘과 정확히 같은 증상이다.
+     *   <li><b>둘 이상이고 값이 다름</b> → 어느 쪽이 보통주인지 몰라 값을 내지 않는다.
      * </ul>
      *
      * <p><b>MUST NOT: 이 분기를 「값이 든 행」 조건의 완화로 바꾸지 않는다.</b> 전열 {@code -}
@@ -326,6 +332,19 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
      * <p>MUST NOT: {@code ordinal} 0을 보통주로 가정하지 않는다 — 순서가 그렇다는 것을
      * <b>재본 적이 없다</b>.
      */
+    /**
+     * 그 행이 실은 어떤 값들을 싣고 있는가. <b>값이 같은지</b>를 묻는 데만 쓴다.
+     *
+     * <p>{@link #hasAnyAmount}가 보는 열을 그대로 이어 붙인다 — 두 메서드가 다른 열을 보면
+     * 「값이 있다」와 「값이 같다」가 어긋나고, 그 어긋남은 <b>행 하나를 잘못 고르는 것</b>으로만
+     * 드러난다.
+     */
+    private static String amountSignature(GovernanceReportRow row) {
+        return COLUMN_OFFSETS.keySet().stream()
+                .map(column -> String.valueOf(DartAccountMapper.parseAmount(row.field(column))))
+                .collect(java.util.stream.Collectors.joining("|"));
+    }
+
     private static Set<String> unspecifiedDpsRows(List<GovernanceReportRow> rows) {
         // 보고서(사업연도 + 접수번호)마다 후보를 모은다. 같은 종목이라도 판이 다르면 별개다.
         Map<String, List<GovernanceReportRow>> candidates = new LinkedHashMap<>();
@@ -360,8 +379,14 @@ class DartGovernanceFactMapper implements GovernanceFactMapper {
                 // 뽑히도록 ordinal로 고른다 — 「ordinal 0이 보통주」라는 판정이 아니다.
                 rowsOfReport.stream().min(Comparator.comparingInt(GovernanceReportRow::ordinal))
                         .ifPresent(row -> accepted.add(rowKey(row)));
+            } else if (valued.stream().map(DartGovernanceFactMapper::amountSignature).distinct()
+                    .count() == 1) {
+                // 값이 전부 같으면 위 갈래와 같은 자리다 — 어느 행을 골라도 결과가 같다.
+                // 「둘이니 모호하다」로 버리면 배당을 하는데 배당수익률만 빈 종목이 생긴다.
+                valued.stream().min(Comparator.comparingInt(GovernanceReportRow::ordinal))
+                        .ifPresent(row -> accepted.add(rowKey(row)));
             }
-            // 값이 든 행이 둘 이상이면 어느 쪽이 보통주인지 모른다 — 값을 내지 않는다.
+            // 값이 든 행이 둘 이상이고 값이 다르면 어느 쪽이 보통주인지 모른다 — 값을 내지 않는다.
         });
         return accepted;
     }

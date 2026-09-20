@@ -479,6 +479,25 @@ class DartGovernanceFactMapperTest {
     }
 
     @Test
+    @DisplayName("배당 — '-'로 온 두 행의 값이 같으면 모호하지 않다 (214430 아이쓰리시스템 실측)")
+    void dividendReadsUnspecifiedRowsWhenTheirAmountsAreIdentical() {
+        // 바로 위 시험과 갈리는 것은 **값이 같은가**뿐이다. 어느 행을 골라도 결과가 같으므로
+        // 「둘이니 모호하다」로 버리면 배당을 하는데 배당수익률만 빈 종목이 생긴다 —
+        // 005850 에스엘과 같은 증상이고, 전 DB에서 이 자리에 걸리던 것이 214430 하나였다.
+        List<GovernanceReportRow> rows = List.of(
+                dividendRow(11, "주당 현금배당금(원)", "-", "400", "350", "300"),
+                dividendRow(12, "주당 현금배당금(원)", "-", "400", "350", "300"),
+                dividendRow(4, "현금배당금총액(백만원)", "-", "2,777", "2,430", "2,083"));
+
+        List<GovernanceFact> facts = mapper.derive(GovernanceEndpoint.DIVIDEND, rows, NO_CONTEXT);
+
+        assertThat(pick(facts, 2025, GovernanceMetric.DPS_COMMON))
+                .as("두 행이 다 400이므로 어느 쪽이 보통주인지 몰라도 답은 400이다")
+                .isEqualByComparingTo("400");
+        assertThat(pick(facts, 2024, GovernanceMetric.DPS_COMMON)).isEqualByComparingTo("350");
+    }
+
+    @Test
     @DisplayName("배당 — 종류를 밝힌 행이 있으면 '-' 행을 보통주로 읽지 않는다")
     void dividendPrefersNamedStockKindOverSentinel() {
         List<GovernanceReportRow> rows = List.of(
