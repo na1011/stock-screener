@@ -108,11 +108,11 @@ SEC submissions가 `sic`을 빈 값으로 주므로 `company-profile`로 **원�
 매번 이름으로 보고되고, 다른 티커가 섞이는 순간 발화한다. **그 넷이 편입에서 빠지면
 목록도 함께 줄인다.**
 
-**`MAIN`·`OTF`가 2026-09-13에 빠졌고, `MAIN`은 2026-09-21에 되넣었다** — 다시 편입돼 펜스가
+**`MAIN`·`OTF`가 2026-09-13에 빠졌고, `MAIN`은 2026-09-20에 되넣었다** — 다시 편입돼 펜스가
 이름으로 발화했다. `OTF`는 아직 편입이 아니라 그대로 뺀 채 둔다.
 
 **되넣기 전에 한 엔드포인트가 아니라 둘에 물었다.** 이 저장소에서 「소스가 안 준다」는 아홉 중
-여덟이 거짓이었고, 그때마다 **한 엔드포인트만 물은 것**이 원인이었다. 실측(2026-09-21 ·
+여덟이 거짓이었고, 그때마다 **한 엔드포인트만 물은 것**이 원인이었다. 실측(2026-09-20 ·
 `SecEdgarSubmissionsProbeLiveTest.probeOtherPathsForStocksWhoseSubmissionsSicIsEmpty`):
 `/submissions`의 `sic`과 `browse-edgar`의 `assigned-sic`이 `ARCC`·`CBC`·`MAIN`·`OBDC` 넷 모두
 **둘 다 빈 값**이고, 같은 실행의 **대조군 `AAPL` 3571 · `KO` 2080은 두 경로가 같은 값**을 준다.

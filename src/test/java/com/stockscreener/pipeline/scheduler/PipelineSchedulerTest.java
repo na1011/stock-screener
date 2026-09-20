@@ -184,7 +184,7 @@ class PipelineSchedulerTest {
         LocalTime freshness = cronOf("checkJobFreshness").next(base).toLocalTime();
 
         assertThat(heavy).isAfter(chain);
-        // governance-load의 실측이 **54분 58초**다(2026-09-21 · 1,350종목 12,050콜 = 국내 8,050 +
+        // governance-load의 실측이 **54분 58초**다(2026-09-20 · 1,350종목 12,050콜 = 국내 8,050 +
         // 미국 4,000). 스레드 풀이 1이라 그 전에는 신선도 점검이 밀리므로 여유를 그보다 크게 둔다.
         //
         // **소요는 콜 수가 아니라 소스별 리미터가 정한다**(dart 100ms · alpaca 600ms). 그 모델이

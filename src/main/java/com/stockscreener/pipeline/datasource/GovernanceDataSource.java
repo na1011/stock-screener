@@ -73,7 +73,7 @@ public interface GovernanceDataSource {
      *
      * <p><b>MUST NOT: 이것을 표별 기본 해 수({@code GovernanceLoadJob.YEARS_BACK})에 섞지 않는다.</b>
      * 그 표는 시장 공용이라 국내에도 같은 해가 붙는데, <b>국내에서는 해로운 값이 생긴다</b> —
-     * DART가 정정본으로 옛 공시일을 덮으므로(2026-09-21 탐침: {@code 010130}·{@code 000880}·
+     * DART가 정정본으로 옛 공시일을 덮으므로(2026-09-20 탐침: {@code 010130}·{@code 000880}·
      * {@code 161580}은 옛 역년을 물어도 정정본의 접수번호가 온다) 정정이 <b>없던</b> 종목만
      * 원본 공시일을 돌려주고({@code 006360}의 {@code bsns_year=2022} → {@code 20230316001014}),
      * 그러면 {@code figuresOn}이 창 앞에서 <b>두세 해 낡은 배당</b>을 고른다. 그것은

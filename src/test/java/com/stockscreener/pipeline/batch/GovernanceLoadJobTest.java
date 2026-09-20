@@ -43,7 +43,7 @@ class GovernanceLoadJobTest {
         // 회계연도가 나오는 종목이 879, 세 해면 994다(2026-09-20 실측 · 편입 1,000).
         // **미국이 창 앞부분에 더 쓰는 한 해는 여기 없다** — extraCalendarYears가 시장마다
         // 더한다. 국내에 같이 더하면 정정본이 옛 공시일을 덮은 종목에서 두세 해 낡은 배당이
-        // 창 앞에 뜬다(2026-09-21 탐침).
+        // 창 앞에 뜬다(2026-09-20 탐침).
         expected.put(GovernanceEndpoint.DIVIDEND, List.of(2025, 2024, 2023));
         // 개발가이드는 3개년을 준다고 적었으나 실측은 1행이고 fscl_year가 '-'였다.
         expected.put(GovernanceEndpoint.EXEC_PAY, List.of(2025, 2024));
