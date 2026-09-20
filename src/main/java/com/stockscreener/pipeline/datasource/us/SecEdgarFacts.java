@@ -1242,6 +1242,18 @@ final class SecEdgarFacts {
                 // (SecEdgarColumn.NET_INCOME) 폴백이 곧 옳은 값을 쓴다. 여기서 갈라 담으면
                 // 이미 적재된 행은 옛 정의, 새 행은 새 정의인 혼합물이 된다 —
                 // fillMissing이 stored == null일 때만 채우므로(ADR-0056) 되돌릴 길이 없다.
+                //
+                // **MUST: 「옳은 값」은 주당 지표에만 옳다 — 그 선택의 대가가 ADR-0159 §측정에
+                // 수로 있다.** net_income이 지배주주라서 ROA·NET_MARGIN·ACCRUAL_RATIO가
+                // **연결 분모에 지배주주 분자를 얹는다**: 618종목 중 118(19.1%)이 5% 초과 ·
+                // 43(7.0%)이 20% 초과이고 **부호가 뒤집히는 종목이 있다**(CWEN +169M ↔ −231M ·
+                // INTC −267M ↔ +26M). ACCRUAL_RATIO는 12개 조건·13개 프리셋에 들어 있다.
+                //
+                // **MUST NOT: 이 null을 「소스가 안 준다」로 읽지 않는다.** 원장은 준다 —
+                // SecEdgarColumn.NET_INCOME_TOTAL이 `ProfitLoss`를 이미 들고 있고
+                // controllingIncome()이 그것으로 항등식을 검산한다. 비어 있는 것은
+                // **담을 자리를 안 만든 것**이지 결손이 아니다. 여는 순서는 ADR-0159 §규칙이
+                // 정한다 — 계산기를 먼저 배포하고 적재를 나중에 바꾼다.
                 null,
                 // 영업이익 유도의 재료 여덟(V40). 여기서 계산하지 않는다 — 원자료만 담고
                 // 판단은 지표 계층이 한다(FinancialMath.operatingIncomeOf).

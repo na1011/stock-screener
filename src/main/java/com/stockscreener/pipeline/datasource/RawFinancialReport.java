@@ -85,9 +85,25 @@ public record RawFinancialReport(
          * 미국에서 지배주주 귀속이라, {@code ROE}가 기저가 다른 채로 나간다 — 그것을 맞추려고
          * 갈라 담는다(실측: {@code LNG} +50.61%p · {@code KKR} +4.57%p).
          *
-         * <p><b>국내는 아직 비운다.</b> DART가 {@code ifrs-full_EquityAttributableToOwnersOfParent}로
-         * 주지만 매핑을 안 했다. 국내는 분자도 비지배 포함({@code ifrs-full_ProfitLoss})이라
-         * <b>지금도 기저가 맞으므로</b> 급하지 않다.
+         * <p><b>국내는 아직 비운다 — DB 전수 0 / 20,154행</b>(2026-09-20). DART가
+         * {@code ifrs-full_EquityAttributableToOwnersOfParent}로 주는데 매핑을 안 했다.
+         *
+         * <p><b>MUST NOT: 「국내는 분자도 비지배 포함이라 기저가 맞으므로 급하지 않다」로 읽지
+         * 않는다 — 그 면제는 {@code ROE}에만 서고 {@code PBR}에는 안 선다.</b> 여기 있던 그
+         * 문장이 그것이었고 틀렸다. {@code PBR}의 분자는 <b>시가총액</b>이고 그것은 국내에서도
+         * <b>상장주식에만</b> 값을 매기므로, 분모가 연결자본이면 <b>비지배지분이 분모에만
+         * 들어간다</b>({@link com.stockscreener.indicator.calculator.FinancialMath}의
+         * {@code equityAttributableToShareholders} javadoc · ADR-0159). 지금 국내 전 종목의
+         * {@code PBR}이 그 폴백으로 돌고 있다.
+         *
+         * <p><b>크기는 두 시장 다 쟀다.</b> 국내는 DART 전수 305종목에서 비지배 비중이
+         * <b>1% 초과 169 · 10% 초과 82 · 30% 초과 34</b>이고, {@code 000150} 두산의 저장
+         * {@code PBR}이 <b>1.461</b>인데 지배주주 기저로는 <b>11.73</b>이다(<b>8.03배</b>) ·
+         * {@code 034730} SK 0.351 대 1.122. 미국은 최신 FY 987티커 중 괴리가 1% 초과 208 ·
+         * 20% 초과 54이고 {@code IBKR} 1.83 → 6.91 · {@code MAS} <b>518.61</b>(ADR-0159 §측정).
+         *
+         * <p><b>지금 닿는다</b> — {@code PBR_PCTL <= 0.30} 버킷에 KOSPI 60 + KOSDAQ 45 =
+         * <b>105종목</b>이 있고, {@code PBR}이 8배 낮게 잡히는 지주회사가 그 버킷을 점거한다.
          */
         BigDecimal totalEquityControlling,
         BigDecimal totalLiabilities,
