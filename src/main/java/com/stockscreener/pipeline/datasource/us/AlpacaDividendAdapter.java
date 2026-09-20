@@ -167,6 +167,19 @@ public class AlpacaDividendAdapter implements GovernanceDataSource {
         return asOf.getYear();
     }
 
+    /**
+     * 회계연도 하나가 역년 둘~셋에 걸치므로 <b>한 해가 더 필요하다.</b>
+     *
+     * <p>위쪽 끝이 최신 회계연도를 열었다면 이쪽은 <b>보존 창 앞부분</b>을 연다 —
+     * 창 시작에서 {@code figuresOn}이 고르는 회계연도가 비12월 결산에서 역년 하나를 더 걸친다.
+     * 실측으로 커버가 역년 셋에 856 · 넷에 <b>970</b> · 다섯에도 970이라(2026-09-20 · 편입 1,000)
+     * <b>1이 정확한 값이고 2는 콜만 태운다.</b>
+     */
+    @Override
+    public int extraCalendarYears() {
+        return 1;
+    }
+
     @Override
     public List<GovernanceReportRow> fetchReport(SecurityRef security, GovernanceEndpoint endpoint,
                                                  int bsnsYear, String reportCode)

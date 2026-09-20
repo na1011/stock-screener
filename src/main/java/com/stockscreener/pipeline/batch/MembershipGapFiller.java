@@ -337,7 +337,7 @@ public class MembershipGapFiller {
         if (governanceTickers.isEmpty()) {
             // MUST: 빈 목록이면 부르지 않는다. GovernanceLoadJob.resolveTargets의 else가
             // **활성 편입 전량**이라, 여기서 그냥 부르면 결손 0인 주마다 토요일 20시에
-            // 12,400콜짜리 전량 적재가 돈다 — 그리고 GAP_FILL이라 아무 데도 안 뜬다.
+            // 12,050콜짜리 전량 적재가 돈다 — 그리고 GAP_FILL이라 아무 데도 안 뜬다.
             return;
         }
         if (governanceTickers.size() > AUTO_GOVERNANCE_STOCK_LIMIT) {

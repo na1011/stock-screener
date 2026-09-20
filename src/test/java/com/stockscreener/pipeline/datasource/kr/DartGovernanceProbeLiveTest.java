@@ -240,6 +240,93 @@ class DartGovernanceProbeLiveTest {
     }
 
     @Test
+    @DisplayName("[live][probe] 정정본이 원본 공시일을 덮는가 — 옛 역년을 물어 정정 전 판이 오는지 본다")
+    void probeWhetherAnEarlierYearStillReturnsThePreRevisionReport() throws Exception {
+        // 왜 묻는가: 창 앞이 빈 국내 다섯(010130·000880·006360·439260·161580)은 원문의
+        // 접수번호가 전부 2026년 것이다. alotMatter가 **최신 정정본 하나만** 돌려주면 원본
+        // 공시일이 사라지고, 그러면 figuresOn이 창 앞에서 그 회계연도를 못 고른다.
+        //
+        // 이 탐침이 가르는 것: 옛 bsns_year를 물었을 때 (a) 정정 전 판이 그 시절 접수번호로
+        // 오는가, (b) 최신 정정본이 그대로 오는가. (a)면 DIVIDEND span을 국내에서도 넓히는 것이
+        // 다섯을 닫고, (b)면 「국내는 0종목」이 실측으로 확정된다.
+        String tickers = System.getProperty("probe.tickers", "010130,000880,006360,439260,161580");
+        String years = System.getProperty("probe.years", "2022,2023,2024,2025");
+        System.out.printf("%n===== 정정본과 원본 공시일 · tickers=%s years=%s =====%n", tickers, years);
+
+        DartCorpCodeCache cache = DartProbeSupport.corpCodeCache();
+        RestClient client = DartProbeSupport.client();
+        String apiKey = DartProbeSupport.apiKey();
+        int answered = 0;
+        for (String ticker : tickers.split(",")) {
+            String code = ticker.trim();
+            String corpCode = cache.findCorpCode(code).orElse(null);
+            if (corpCode == null) {
+                System.out.printf("%n--- %s corp_code를 못 찾았다%n", code);
+                continue;
+            }
+            System.out.printf("%n--- %s%n", code);
+            for (String year : years.split(",")) {
+                JsonNode body = fetch(client, apiKey, "/alotMatter.json", corpCode, year.trim());
+                JsonNode list = body == null ? null : body.get("list");
+                String receipts = list == null ? "(없음)"
+                        : list.valueStream().map(row -> row.path("rcept_no").asString(""))
+                                .distinct().limit(3).reduce("", (a, b) -> a.isEmpty() ? b : a + " " + b);
+                System.out.printf("    bsns_year=%s %s 행=%d 접수번호=%s%n", year.trim(),
+                        DartProbeSupport.describeStatus(body), list == null ? 0 : list.size(), receipts);
+                if (list != null && !list.isEmpty()) {
+                    answered++;
+                }
+            }
+        }
+        assertThat(answered).as("하나도 못 받으면 위 수는 전부 「잴 것이 없었다」다").isPositive();
+    }
+
+    @Test
+    @DisplayName("[live][probe] 빈 payload 두 종목 — 소스가 안 주는 것인가 파서 결함인가를 여덟 표에 직접 묻는다")
+    void probeStocksWhoseStoredPayloadsAreAllEmpty() throws Exception {
+        // 088980(맥쿼리인프라 · 인프라 펀드)과 950260(Reg.S 외국기업)은 저장된 원문 22행이
+        // 전부 payload={}다. 「데이터 없음」 표식의 모양이긴 하나 **아무도 소스에 직접 안 물었다.**
+        // 상태코드 013이면 진짜 한계, 000에 행이 오면 파서 결함이다.
+        String tickers = System.getProperty("probe.tickers", "088980,950260");
+        String year = System.getProperty("probe.year", "2025");
+        System.out.printf("%n===== 빈 payload · tickers=%s year=%s =====%n", tickers, year);
+
+        Map<String, String> endpoints = new LinkedHashMap<>();
+        endpoints.put("SHARE_TOTALS", "/stockTotqySttus.json");
+        endpoints.put("DIVIDEND", "/alotMatter.json");
+        endpoints.put("EXEC_PAY", "/hmvAuditAllSttus.json");
+        endpoints.put("OUTSIDE_DIRECTOR", "/outcmpnyDrctrNdChangeSttus.json");
+        endpoints.put("LARGEST_HOLDER", "/hyslrSttus.json");
+        endpoints.put("MINORITY_HOLDER", "/mrhlSttus.json");
+        endpoints.put("CONTROL_CHANGE", "/hyslrChgSttus.json");
+        endpoints.put("AUDIT_OPINION", "/accnutAdtorNmNdAdtOpinion.json");
+
+        DartCorpCodeCache cache = DartProbeSupport.corpCodeCache();
+        RestClient client = DartProbeSupport.client();
+        String apiKey = DartProbeSupport.apiKey();
+        int asked = 0;
+        for (String ticker : tickers.split(",")) {
+            String code = ticker.trim();
+            String corpCode = cache.findCorpCode(code).orElse(null);
+            System.out.printf("%n--- %s corp_code=%s%n", code, corpCode);
+            if (corpCode == null) {
+                continue;
+            }
+            for (Map.Entry<String, String> entry : endpoints.entrySet()) {
+                JsonNode body = fetch(client, apiKey, entry.getValue(), corpCode, year);
+                JsonNode list = body == null ? null : body.get("list");
+                asked++;
+                System.out.printf("    %-18s %s 행=%d%s%n", entry.getKey(),
+                        DartProbeSupport.describeStatus(body), list == null ? 0 : list.size(),
+                        list == null || list.isEmpty() ? ""
+                                : " 첫 행=" + list.get(0).toString()
+                                        .substring(0, Math.min(200, list.get(0).toString().length())));
+            }
+        }
+        assertThat(asked).as("한 번도 안 물었으면 위 출력은 아무것도 답하지 않는다").isPositive();
+    }
+
+    @Test
     @DisplayName("[live][probe] 배당에 관한 사항 — se 항목명 집합을 관측한다 (개발가이드가 답하지 못하는 자리)")
     void probeDividend() throws Exception {
         DartCorpCodeCache cache = DartProbeSupport.corpCodeCache();

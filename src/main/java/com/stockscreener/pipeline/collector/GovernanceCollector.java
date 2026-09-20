@@ -120,6 +120,16 @@ public class GovernanceCollector {
         return registry.governanceSource(marketCode).latestRequestableYear(asOf);
     }
 
+    /**
+     * 그 시장의 소스가 회계연도 하나를 덮는 데 <b>더 요구하는 역년 수</b>.
+     *
+     * <p>{@link #latestRequestableYear}의 대칭이다 — 근거는
+     * {@link GovernanceDataSource#extraCalendarYears}에 있다.
+     */
+    public int extraCalendarYears(String marketCode) throws DataSourceException {
+        return registry.governanceSource(marketCode).extraCalendarYears();
+    }
+
     /** 잡이 「그 해의 다른 표」로 데이터 없음 행을 마저 채울 때 쓴다. */
     public long stampNoDataFromSiblings(long stockId, int bsnsYear, String reportCode) {
         return writer.stampNoData(stockId, bsnsYear, reportCode);

@@ -41,10 +41,10 @@ class GovernanceLoadJobTest {
         // 137거래일이 빈다(2026-09-08 실측). 미국: bsnsYear가 ex_date의 역년이라 52/53주
         // 회계연도가 **세 역년에 걸친다**(SNA FY2025 = 2024-12-29~2026-01-03) — 두 해면 최신
         // 회계연도가 나오는 종목이 879, 세 해면 994다(2026-09-20 실측 · 편입 1,000).
-        // **넷인 이유는 최신 회계연도가 아니라 보존 창 앞부분이다** — 창 시작에서 고르는
-        // 회계연도가 비12월 결산에서 역년 2023에 걸린다. 커버가 span 3에 856 · 4에 970 ·
-        // **5에도 970**이다(2026-09-20 실측). 다섯째 해는 콜만 태운다.
-        expected.put(GovernanceEndpoint.DIVIDEND, List.of(2025, 2024, 2023, 2022));
+        // **미국이 창 앞부분에 더 쓰는 한 해는 여기 없다** — extraCalendarYears가 시장마다
+        // 더한다. 국내에 같이 더하면 정정본이 옛 공시일을 덮은 종목에서 두세 해 낡은 배당이
+        // 창 앞에 뜬다(2026-09-21 탐침).
+        expected.put(GovernanceEndpoint.DIVIDEND, List.of(2025, 2024, 2023));
         // 개발가이드는 3개년을 준다고 적었으나 실측은 1행이고 fscl_year가 '-'였다.
         expected.put(GovernanceEndpoint.EXEC_PAY, List.of(2025, 2024));
         // 3년 합이 창 앞부분에서도 서려면 넉 해가 필요하다.
@@ -62,35 +62,48 @@ class GovernanceLoadJobTest {
                 .containsExactlyInAnyOrder(GovernanceEndpoint.values());
 
         expected.forEach((endpoint, years) ->
-                assertThat(GovernanceLoadJob.yearsFor(endpoint, LATEST, null))
+                assertThat(GovernanceLoadJob.yearsFor(endpoint, LATEST, null, 0))
                         .as("%s가 받는 해", endpoint)
                         .containsExactlyElementsOf(years));
     }
 
     @Test
-    @DisplayName("전량 적재가 350종목 8,400콜이다 — 코드·시험·문서 열두 곳이 이 수를 인용한다")
+    @DisplayName("extra가 1이면 표마다 한 해씩 더 받는다 — 미국의 아래쪽 끝이고, 손으로 준 span에는 안 붙는다")
+    void extraCalendarYearsWidensTheLowerEndOnlyWhenSpanIsNotGiven() {
+        // 미국 bsnsYear는 ex_date의 역년이라 회계연도 하나가 역년 둘~셋에 걸친다.
+        // 커버가 역년 셋에 856 · 넷에 970 · 다섯에도 970이다(2026-09-20 실측 · 편입 1,000).
+        assertThat(GovernanceLoadJob.yearsFor(GovernanceEndpoint.DIVIDEND, LATEST, null, 1))
+                .containsExactly(2025, 2024, 2023, 2022);
+        // 손으로 준 span은 사람이 역년을 세고 있는 것이다 — 말없이 한 해를 더하면
+        // 「2019를 받아라」가 조용히 다른 범위가 된다.
+        assertThat(GovernanceLoadJob.yearsFor(GovernanceEndpoint.DIVIDEND, LATEST, 2, 1))
+                .containsExactly(2025, 2024);
+    }
+
+    @Test
+    @DisplayName("국내 전량 적재가 350종목 8,050콜이다 — 코드·시험·문서 열두 곳이 이 수를 인용한다")
     void fullLoadCostsTheDocumentedNumberOfCalls() {
         int pairs = 0;
         for (GovernanceEndpoint endpoint : GovernanceEndpoint.values()) {
-            pairs += GovernanceLoadJob.yearsFor(endpoint, LATEST, null).size();
+            pairs += GovernanceLoadJob.yearsFor(endpoint, LATEST, null, 0).size();
         }
 
-        assertThat(pairs).as("(엔드포인트, 연도) 쌍").isEqualTo(24);
+        assertThat(pairs).as("(엔드포인트, 연도) 쌍").isEqualTo(23);
         assertThat(pairs * UNIVERSE)
                 .as("이 수가 바뀌면 batch-load·api-sources skill, ADR-0081·ADR-0116, "
                         + "api-spec dart-governance.md, PipelineScheduler·AdminJobLauncher의 인용을 "
                         + "함께 고친다 — 한 번 갈린 적이 있다. 막는 값은 dart.daily-quota: 18000이고 "
                         + "10,000은 API당 계획값이다")
-                .isEqualTo(8400);
+                .isEqualTo(8050);
     }
 
     @Test
     @DisplayName("--governance-span이 표의 기본 해 수를 덮는다 — 없으면 한 해에 다섯 해를 받는다")
     void spanOverrideNarrowsToASingleYear() {
-        assertThat(GovernanceLoadJob.yearsFor(GovernanceEndpoint.SHARE_TOTALS, 2021, 1))
+        assertThat(GovernanceLoadJob.yearsFor(GovernanceEndpoint.SHARE_TOTALS, 2021, 1, 0))
                 .as("이미 받아 둔 해에 한 해만 얹을 때의 형태")
                 .containsExactly(2021);
-        assertThat(GovernanceLoadJob.yearsFor(GovernanceEndpoint.SHARE_TOTALS, 2021, null))
+        assertThat(GovernanceLoadJob.yearsFor(GovernanceEndpoint.SHARE_TOTALS, 2021, null, 0))
                 .as("덮지 않으면 그 표의 기본 다섯 해가 그대로 걸린다")
                 .hasSize(5);
     }
@@ -98,7 +111,7 @@ class GovernanceLoadJobTest {
     @Test
     @DisplayName("한 응답이 3개년을 주는 표는 세 해씩 건너뛴다")
     void multiYearEndpointStridesByThree() {
-        assertThat(GovernanceLoadJob.yearsFor(GovernanceEndpoint.AUDIT_OPINION, LATEST, null))
+        assertThat(GovernanceLoadJob.yearsFor(GovernanceEndpoint.AUDIT_OPINION, LATEST, null, 0))
                 .as("안 건너뛰면 같은 3개년을 세 번 받아 콜이 세 배가 되는데 결과가 같아 안 드러난다")
                 .containsExactly(2025, 2022, 2019);
     }

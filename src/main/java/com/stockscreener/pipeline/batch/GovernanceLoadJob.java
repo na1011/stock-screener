@@ -48,15 +48,15 @@ public class GovernanceLoadJob {
     /**
      * 표마다 «최신 해에서 몇 해 뒤까지» 받는가. 근거는 dart-governance.md의 실측이다.
      *
-     * <p>MUST: 이 표를 바꾸면 콜 수가 함께 바뀐다. 지금 350종목 기준 <b>8,400콜</b>이고
-     * 보수 예산 10,000의 84%다. **막는 값은 `dart.daily-quota: 18000`이고 10,000은 API당 계획값이다.**
+     * <p>MUST: 이 표를 바꾸면 콜 수가 함께 바뀐다. 지금 350종목 기준 <b>8,050콜</b>이고
+     * 보수 예산 10,000의 81%다. **막는 값은 `dart.daily-quota: 18000`이고 10,000은 API당 계획값이다.**
      */
     private static final Map<GovernanceEndpoint, Integer> YEARS_BACK =
             new EnumMap<>(Map.of(
                     // 이익소각이 상장 이래 누적이라 3년 차분에 끝점 둘(Y-3·Y)이 필요하고,
                     // 창 앞부분에서도 그 차분이 서려면 한 해가 더 필요하다.
                     GovernanceEndpoint.SHARE_TOTALS, 5,
-                    // 한 응답이 3개년을 열로 주지만 **넉 해를 부른다.**
+                    // 한 응답이 3개년을 열로 주지만 **세 해를 부른다.**
                     // 둘인 이유(국내): 한 번만 부르면 FY2024 배당을 2026년 3월에야 알게 된 것이
                     // 되어 창 앞 137거래일이 통째로 빈다(2026-09-08 실측).
                     // 셋인 이유(미국): 여기서 bsnsYear는 ex_date의 역년이라 52/53주 회계연도가
@@ -64,19 +64,15 @@ public class GovernanceLoadJob {
                     // coversWholeWindow가 그 셋을 다 요구한다. 두 해면 최신 회계연도가 나오는
                     // 종목이 879, 세 해면 994다(2026-09-20 실측 · 편입 1,000).
                     //
-                    // **넷인 이유(미국): 최신 회계연도가 아니라 보존 창 앞부분이다.**
-                    // figuresOn이 창 시작(2025-09-15)에서 고르는 회계연도는 비12월 결산에서
-                    // 역년 2023에 걸친다. 커버되는 편입 종목이 span 3에 856, span 4에 970,
-                    // **span 5에도 970**이다(2026-09-20 실측 · 편입 1,000). 즉 넷이 +114이고
-                    // 다섯은 +0이다 — 다섯째 해는 콜만 태운다. span 6의 +1(DSGX)은 FY2022가
-                    // 역년 2021에 걸친 것이고, 그 처방은 거버넌스가 아니라 재무 복원이다.
-                    //
-                    // **국내는 이 한 해가 무엇을 사는지 아직 안 쟀다.** 국내 bsnsYear는 회계연도
-                    // 자체이고 한 응답이 3개년을 주므로 역년 {2023,2024,2025}가 이미 FY2021~2025를
-                    // 덮는다(DB 실측). 창 앞이 빈 국내 다섯 종목(010130·000880·006360·439260·161580)은
-                    // DART가 **최신 정정본 하나만** 돌려주어 원본 공시일이 사라진 것이라 다른 기제다 —
-                    // 역년 2022를 더하면 정정 전 판이 와서 닫힐 **수도** 있고, 그것은 DART 5콜로 갈린다.
-                    GovernanceEndpoint.DIVIDEND, 4,
+                    // **MUST NOT: 미국이 창 앞부분에 더 필요한 한 해를 여기에 더하지 않는다.**
+                    // 이 표는 시장 공용이라 국내에도 같은 해가 붙는데, 국내에서는 **해로운 값**이
+                    // 생긴다 — 2026-09-21 탐침으로 DART는 옛 역년을 물어도 **정정본의 접수번호**를
+                    // 주고(010130·000880·161580), 정정이 없던 종목만 원본 공시일을 돌려준다
+                    // (006360의 bsns_year=2022 → 20230316001014). 그러면 figuresOn이 창 앞에서
+                    // **두세 해 낡은 배당**을 고른다. 결측이 아니라 그럴듯하게 틀린 값이고
+                    // A41이 방금 닫은 결손과 같은 형태다.
+                    // 미국 몫은 GovernanceDataSource.extraCalendarYears가 시장마다 더한다.
+                    GovernanceEndpoint.DIVIDEND, 3,
                     // 요청한 해만 준다(가이드의 fscl_year는 실측에서 '-'였다).
                     GovernanceEndpoint.EXEC_PAY, 2,
                     // 3년 합이 창 앞부분에서도 서려면 넉 해가 필요하다.
@@ -138,6 +134,7 @@ public class GovernanceLoadJob {
             if (!endpointsByMarket.containsKey(market)) {
                 Set<GovernanceEndpoint> supported;
                 int latest;
+                int extra;
                 try {
                     supported = collector.supportedEndpoints(market);
                     // MUST: 손으로 준 연도가 이긴다. 그때는 사람이 무엇을 받는지 알고 있고,
@@ -145,6 +142,9 @@ public class GovernanceLoadJob {
                     latest = latestFiscalYear != null
                             ? latestFiscalYear
                             : collector.latestRequestableYear(market, asOf);
+                    // 아래쪽 끝도 소스가 답한다 — 위쪽 끝과 같은 비대칭의 반대편이다.
+                    // MUST: span을 손으로 준 경우에는 안 더한다. 그때는 사람이 역년을 세고 있다.
+                    extra = span != null ? 0 : collector.extraCalendarYears(market);
                 } catch (DataSourceException e) {
                     // 소스가 없는 시장이다. 여기서 던지면 잡 전체가 죽으므로 비워 두고
                     // 아래에서 수를 남긴다 — 종목마다 실패하면 부분 실패 알림이
@@ -159,7 +159,7 @@ public class GovernanceLoadJob {
                 Map<GovernanceEndpoint, List<Integer>> years =
                         new EnumMap<>(GovernanceEndpoint.class);
                 for (GovernanceEndpoint endpoint : targets) {
-                    years.put(endpoint, yearsFor(endpoint, latest, span));
+                    years.put(endpoint, yearsFor(endpoint, latest, span, extra));
                 }
                 yearsByMarket.put(market, years);
             }
@@ -248,8 +248,10 @@ public class GovernanceLoadJob {
      * <p>안 건너뛰면 같은 3개년을 세 번 받아 콜이 세 배가 되는데, 결과가 같아 <b>어디에도 안 뜬다.</b>
      */
     static List<Integer> yearsFor(GovernanceEndpoint endpoint, int latestFiscalYear,
-                                  Integer override) {
-        int span = override != null ? override : YEARS_BACK.getOrDefault(endpoint, 1);
+                                  Integer override, int extra) {
+        int span = override != null
+                ? override
+                : YEARS_BACK.getOrDefault(endpoint, 1) + extra;
         int stride = YEAR_STRIDE.getOrDefault(endpoint, 1);
         List<Integer> years = new ArrayList<>();
         for (int offset = 0; offset < span; offset += stride) {
