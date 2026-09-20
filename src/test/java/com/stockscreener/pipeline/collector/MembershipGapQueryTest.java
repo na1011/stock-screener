@@ -16,7 +16,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 편입 계약의 여섯 축이 <b>걸릴 때 걸리고, 면제가 실제로 먹는가</b>.
+ * 편입 계약의 일곱 축이 <b>걸릴 때 걸리고, 면제가 실제로 먹는가</b>.
  *
  * <h2>MUST: 픽스처를 직접 심는다</h2>
  * <p>이 질의는 {@code u.is_active} · {@code m.effective_to IS NULL} · {@code s.is_active} ·
@@ -136,6 +136,34 @@ class MembershipGapQueryTest {
         assertThat(axesOf("005930"))
                 .as("창이 없다고 이 종목이 통째로 빠지면 이 기제가 없애려는 조용한 0건이 된다")
                 .contains(MembershipGap.Axis.PRICE_HISTORY, MembershipGap.Axis.FINANCIAL);
+    }
+
+    @Test
+    @DisplayName("거버넌스 원문이 0행이면 걸린다 — 팩트로 재면 무배당과 미완결이 결손으로 섞인다")
+    void governanceGapIsMeasuredOnRawRowsNotFacts() {
+        long covered = member("000660", "SK하이닉스");
+        governanceRow(covered);
+        member("005930", "삼성전자");
+
+        assertThat(gapOf("005930").orElseThrow().missing())
+                .contains(MembershipGap.Axis.GOVERNANCE);
+        assertThat(gapOf("000660").map(gap -> gap.missing().contains(MembershipGap.Axis.GOVERNANCE)))
+                .as("원문이 있는 종목은 이 축에 안 걸린다")
+                .hasValue(false);
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 그 시장에 거버넌스가 한 행도 없으면 아무도 안 걸린다. 상시 붉는 펜스가 상한을 밀어 시세 적재까지 멈춘다")
+    void governanceAxisIsSilentWhileTheMarketHasNoGovernanceAtAll() {
+        // 미국이 2026-09-01 전에 정확히 이 상태였다 — 편입 전원이 한꺼번에 붉으면
+        // AUTO_GOVERNANCE_STOCK_LIMIT을 넘겨 그 축이 통째로 막히고, 알림은 상시 경고가 된다.
+        usMember("AAPL", "Apple");
+        // 국내에만 원문을 심는다. 시장이 갈려 있어야 이 시험이 무엇을 재는지 분명하다.
+        governanceRow(member("000660", "SK하이닉스"));
+
+        assertThat(gapOf("AAPL").map(gap -> gap.missing().contains(MembershipGap.Axis.GOVERNANCE)))
+                .as("거버넌스를 한 번도 안 받은 시장에서 이 축이 울리면 안 된다")
+                .hasValue(false);
     }
 
     @Test
@@ -264,6 +292,15 @@ class MembershipGapQueryTest {
                     VALUES (?, ?, ?, 1) ON CONFLICT DO NOTHING
                     """, stockId, date, code);
         }
+    }
+
+    /** 거버넌스 원문 한 행. <b>내용은 상관없다</b> — 감지 술어가 존재 여부만 본다. */
+    private void governanceRow(long stockId) {
+        jdbcTemplate.update("""
+                INSERT INTO governance_report_row (stock_id, endpoint, bsns_year, reprt_code,
+                        receipt_no, published_at, row_ordinal, payload)
+                VALUES (?, 'DIVIDEND', 2025, '11011', '20260301000001', '2026-03-01', 0, '{}'::jsonb)
+                """, stockId);
     }
 
     private void financialRow(long stockId, String currency, Long operatingCashFlow) {

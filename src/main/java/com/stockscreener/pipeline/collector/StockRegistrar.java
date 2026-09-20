@@ -413,17 +413,17 @@ public class StockRegistrar {
     private static final double INDICATOR_FLOOR = 0.70;
 
     /**
-     * 편입 계약이 깨진 종목을 <b>여섯 축으로 한 번에</b> 센다.
+     * 편입 계약이 깨진 종목을 <b>일곱 축으로 한 번에</b> 센다.
      *
      * <p>편입은 「스크리닝 대상」이라는 뜻인데, 축 하나만 비어도 지표가 판정불가가 되어
      * <b>프리셋에서 조용히 빠지고 배치는 전부 SUCCESS다.</b> 그 침묵을 재는 유일한 자리다.
      *
-     * <p><b>MUST: 여섯을 한 질의로 낸다.</b> 축마다 메서드를 만들면 셋은 안 만들어지고, 만들어도
-     * 「편입 중인 활성 종목」의 정의가 여섯 벌로 갈린다 — 이 클래스가 존재하는 이유가 그것이다
+     * <p><b>MUST: 일곱을 한 질의로 낸다.</b> 축마다 메서드를 만들면 셋은 안 만들어지고, 만들어도
+     * 「편입 중인 활성 종목」의 정의가 일곱 벌로 갈린다 — 이 클래스가 존재하는 이유가 그것이다
      * ({@link #activeUniverseMemberIds()} javadoc). 실측 129~171 ms다.
      *
      * <p><b>MUST: 지표 달력을 {@code LEFT JOIN}으로 붙인다.</b> {@code INNER JOIN}이면
-     * {@code indicator_trade_date}가 빈 시장의 종목이 <b>여섯 축 전부에서 사라진다</b> —
+     * {@code indicator_trade_date}가 빈 시장의 종목이 <b>일곱 축 전부에서 사라진다</b> —
      * 실측으로 US를 빼면 대상이 1,350 → 350이 되고 US 1,000종목이 0건으로 접힌다.
      * {@link #activeUniverseMemberIdsByTicker} javadoc이 같은 자리를 이름으로 금지한다.
      * 창이 없으면 뒤의 두 축만 판정불가로 두고 나머지 넷은 그대로 판정한다.
@@ -467,7 +467,15 @@ public class StockRegistrar {
                                       WHERE f.stock_id = mem.id) AS no_financial,
                          NOT EXISTS (SELECT 1 FROM financial_statement f
                                       WHERE f.stock_id = mem.id
-                                        AND f.operating_cash_flow IS NOT NULL) AS no_cash_flow
+                                        AND f.operating_cash_flow IS NOT NULL) AS no_cash_flow,
+                         NOT EXISTS (SELECT 1 FROM governance_report_row r
+                                      WHERE r.stock_id = mem.id) AS no_governance,
+                         -- 그 시장에 거버넌스 원문이 하나라도 있는가. 소스를 아직 안 붙인
+                         -- 시장에서 편입 전원이 한꺼번에 붉는 것을 막는다 — 상시 붉는 펜스는
+                         -- 무시되고(§규칙), 합집합 상한을 밀어 시세·재무 적재까지 멈춘다.
+                         EXISTS (SELECT 1 FROM governance_report_row r2
+                                  JOIN stock s2 ON s2.id = r2.stock_id
+                                 WHERE s2.market_code = mem.market_code) AS market_has_governance
                   FROM mem LEFT JOIN win ON win.market_code = mem.market_code
                 ), c AS (
                   SELECT g.*,
@@ -488,12 +496,14 @@ public class StockRegistrar {
                        (industry_code IS NULL AND sic_code IS NULL) AS gap_industry,
                        no_financial AS gap_financial,
                        no_cash_flow AS gap_cash_flow,
+                       (no_governance AND market_has_governance) AS gap_governance,
                        (days > 0 AND bars < days * %s) AS gap_price_coverage,
                        (codes_prev > 0 AND codes_now < codes_prev * %s) AS gap_indicator_drop
                 FROM c
                 WHERE (first_bar IS NULL OR first_bar > joined)
                    OR (industry_code IS NULL AND sic_code IS NULL)
                    OR no_financial OR no_cash_flow
+                   OR (no_governance AND market_has_governance)
                    OR (days > 0 AND bars < days * %s)
                    OR (codes_prev > 0 AND codes_now < codes_prev * %s)
                 ORDER BY market_code, ticker
@@ -517,6 +527,9 @@ public class StockRegistrar {
                     }
                     if (rs.getBoolean("gap_cash_flow")) {
                         (financialExempt ? exempt : missing).add(MembershipGap.Axis.CASH_FLOW);
+                    }
+                    if (rs.getBoolean("gap_governance")) {
+                        missing.add(MembershipGap.Axis.GOVERNANCE);
                     }
                     if (rs.getBoolean("gap_price_coverage")) {
                         missing.add(MembershipGap.Axis.PRICE_COVERAGE);

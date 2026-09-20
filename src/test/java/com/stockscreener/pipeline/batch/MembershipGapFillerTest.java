@@ -19,6 +19,8 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import org.mockito.InOrder;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -28,6 +30,8 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -46,6 +50,8 @@ class MembershipGapFillerTest {
     private InitialLoadJob initialLoadJob;
     private CompanyProfileJob companyProfileJob;
     private FullStatementRefillJob fullStatementRefillJob;
+    private GovernanceLoadJob governanceLoadJob;
+    private GovernanceDeriveJob governanceDeriveJob;
     private UniverseIntegrityAlerter alerter;
     private AlertPort alertPort;
     private BatchExecutionReader batchExecutionReader;
@@ -57,12 +63,15 @@ class MembershipGapFillerTest {
         initialLoadJob = mock(InitialLoadJob.class);
         companyProfileJob = mock(CompanyProfileJob.class);
         fullStatementRefillJob = mock(FullStatementRefillJob.class);
+        governanceLoadJob = mock(GovernanceLoadJob.class);
+        governanceDeriveJob = mock(GovernanceDeriveJob.class);
         alerter = mock(UniverseIntegrityAlerter.class);
         alertPort = mock(AlertPort.class);
         batchExecutionReader = mock(BatchExecutionReader.class);
         when(batchExecutionReader.liveJobNames()).thenReturn(List.of());
         filler = new MembershipGapFiller(stockRegistrar, initialLoadJob, companyProfileJob,
-                fullStatementRefillJob, alerter, alertPort, batchExecutionReader);
+                fullStatementRefillJob, governanceLoadJob, governanceDeriveJob,
+                alerter, alertPort, batchExecutionReader);
     }
 
     @Test
@@ -150,6 +159,52 @@ class MembershipGapFillerTest {
 
         verify(initialLoadJob, never()).run(any(), any(), any());
         assertThat(captureAlert().severity()).isEqualTo(AlertSeverity.WARNING);
+    }
+
+    @Test
+    @DisplayName("거버넌스 결손을 적재+유도 한 쌍으로 채운다 — 적재만 하면 팩트가 안 바뀌는데 둘 다 성공이다")
+    void fillsGovernanceGapWithLoadThenDerive() {
+        when(stockRegistrar.membershipGaps()).thenReturn(List.of(
+                gap("KOSPI", "005930", MembershipGap.Axis.GOVERNANCE)));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        InOrder order = inOrder(governanceLoadJob, governanceDeriveJob);
+        // span(넷째 인자)은 null이다 — 표마다 필요한 해 수가 다른데 스칼라로 덮으면 나머지가 좁아진다.
+        order.verify(governanceLoadJob).run(eq(AS_OF),
+                eq(BatchExecutionRecorder.TriggeredBy.GAP_FILL), isNull(), isNull(),
+                eq(List.of()), eq(List.of("005930")));
+        order.verify(governanceDeriveJob).run(eq(AS_OF),
+                eq(BatchExecutionRecorder.TriggeredBy.GAP_FILL), eq(List.of("005930")));
+    }
+
+    @Test
+    @DisplayName("거버넌스 결손이 없으면 아예 안 부른다 — 빈 티커는 resolveTargets에서 활성 편입 전량이 된다")
+    void doesNotCallGovernanceWhenThereIsNoGap() {
+        when(stockRegistrar.membershipGaps()).thenReturn(List.of(
+                gap("KOSPI", "005930", MembershipGap.Axis.PRICE_HISTORY)));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        verifyNoInteractions(governanceLoadJob);
+        verifyNoInteractions(governanceDeriveJob);
+    }
+
+    @Test
+    @DisplayName("거버넌스가 상한을 넘겨도 시세 적재는 돈다 — 합집합에 넣으면 거버넌스가 시세를 막는다")
+    void governanceLimitDoesNotBlockPriceLoad() {
+        List<MembershipGap> gaps = new java.util.ArrayList<>();
+        gaps.add(gap("KOSPI", "005930", MembershipGap.Axis.PRICE_HISTORY));
+        for (int i = 0; i < 201; i++) {
+            gaps.add(gap("KOSPI", "G%05d".formatted(i), MembershipGap.Axis.GOVERNANCE));
+        }
+        when(stockRegistrar.membershipGaps()).thenReturn(List.copyOf(gaps));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        verify(initialLoadJob).run(eq(AS_OF),
+                eq(BatchExecutionRecorder.TriggeredBy.GAP_FILL), any());
+        verifyNoInteractions(governanceLoadJob);
     }
 
     @Test

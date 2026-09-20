@@ -171,6 +171,8 @@ public class UniverseIntegrityAlerter {
             case INDUSTRY -> "[업종] 업종 코드가 비어 업종 상대 조건이 전부 판정불가다.";
             case FINANCIAL -> "[재무] 재무가 한 행도 없다 — 재무 지표 전부가 안 난다.";
             case CASH_FLOW -> "[영업활동현금흐름] 재무는 있는데 현금흐름이 없다.";
+            case GOVERNANCE -> "[거버넌스] 거버넌스 원문이 한 행도 없다 — "
+                    + "배당·지배구조 지표가 전부 안 난다.";
             case PRICE_COVERAGE -> "[시세 구멍] 첫 봉 이후 보존 창에 봉이 거의 없다 — "
                     + "봉은 있으나 지표가 사실상 안 난다.";
             case INDICATOR_DROP -> "[지표 급감] 어제 나던 지표가 오늘 안 난다.";
@@ -194,6 +196,11 @@ public class UniverseIntegrityAlerter {
             case FINANCIAL -> bootstrap(
                     "--job=initial-load --skip-price=true --tickers=" + tickers);
             case CASH_FLOW -> cashFlowHint(hits);
+            // 시장을 가르지 않는다 — GovernanceLoadJob이 시장마다 표를 좁히므로 국내·미국 모두
+            // 이 한 쌍으로 닫힌다(CASH_FLOW와 다른 점이다). 유도를 함께 적는 이유는 적재만
+            // 하면 governance_fact가 안 바뀌는데 둘 다 성공으로 끝나기 때문이다.
+            case GOVERNANCE -> bootstrap("--job=governance-load --tickers=" + tickers)
+                    + " 그다음 " + bootstrap("--job=governance-derive --tickers=" + tickers);
             // MUST NOT: 여기에 「소스가 안 준다」를 적지 않는다 — 2026-09-18에 거짓으로 판명됐다.
             // 그렇게 적혀 있던 동안 RH·VTEX는 우리 DB가 2024-12-31에서 멈춰 있었는데
             // Alpaca는 2025-09-15~2026-09-18 구간에 255봉을 주고 있었다. 소스의 한계 주장은

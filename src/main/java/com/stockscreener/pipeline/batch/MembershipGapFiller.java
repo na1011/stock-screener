@@ -91,6 +91,24 @@ public class MembershipGapFiller {
     private static final int AUTO_LOAD_STOCK_LIMIT = 50;
 
     /**
+     * 거버넌스 갈래의 상한. <b>위 상한의 합집합에 넣지 않는다.</b>
+     *
+     * <p><b>왜 따로인가</b> — 거버넌스 축은 <b>신규 편입 전원</b>을 잡는다({@code governance-load}가
+     * 현재 편입만 도니 처음 편입되는 종목은 예외 없이 원문이 0행이다). 기존 세 축은 그중 일부만
+     * 잡았으므로, 합집합에 넣으면 그 수의 뜻이 「원자료가 빈 신규」에서 <b>「신규 전원」</b>으로
+     * 바뀐다. 리밸런싱 회차별 신규 편입을 다시 재니 <b>40 · 20 · 14 · 13 · 10 · 6</b>(2026-09-20 ·
+     * 부트스트랩 제외)이라 여유가 <b>10</b>뿐이고, 넘으면 {@code loadMissingRawData}가 앞에서
+     * 멈춰 <b>시세·재무 적재까지 통째로 건너뛴다.</b> 거버넌스 때문에 시세가 안 들어오는 것은
+     * 상한이 막으려던 것과 무관하다.
+     *
+     * <p><b>이 값은 소요로 잡았다</b>(위 상한과 달리 실측이 있다). 리미터가 국내 100ms · 미국
+     * 600ms이고 종목당 표가 국내 24 · 미국 4라 <b>양쪽 다 약 2.4초/종목</b>이다 — 200종목이면
+     * 약 8분이고, 토요일 20시 뒤에는 밀릴 다른 스케줄이 없다. 유니버스를 다시 그은 경우
+     * (2026-08-31 미국 1,000종목)는 그대로 막힌다.
+     */
+    private static final int AUTO_GOVERNANCE_STOCK_LIMIT = 200;
+
+    /**
      * 시세를 받을 연수.
      *
      * <p><b>MUST NOT: {@code LoadRange.defaults()}의 2년을 쓰지 않는다.</b> 2년은 약 490봉인데
@@ -110,6 +128,8 @@ public class MembershipGapFiller {
     private final InitialLoadJob initialLoadJob;
     private final CompanyProfileJob companyProfileJob;
     private final FullStatementRefillJob fullStatementRefillJob;
+    private final GovernanceLoadJob governanceLoadJob;
+    private final GovernanceDeriveJob governanceDeriveJob;
     private final UniverseIntegrityAlerter alerter;
     private final AlertPort alertPort;
     private final BatchExecutionReader batchExecutionReader;
@@ -117,12 +137,16 @@ public class MembershipGapFiller {
     public MembershipGapFiller(StockRegistrar stockRegistrar, InitialLoadJob initialLoadJob,
                                CompanyProfileJob companyProfileJob,
                                FullStatementRefillJob fullStatementRefillJob,
+                               GovernanceLoadJob governanceLoadJob,
+                               GovernanceDeriveJob governanceDeriveJob,
                                UniverseIntegrityAlerter alerter, AlertPort alertPort,
                                BatchExecutionReader batchExecutionReader) {
         this.stockRegistrar = stockRegistrar;
         this.initialLoadJob = initialLoadJob;
         this.companyProfileJob = companyProfileJob;
         this.fullStatementRefillJob = fullStatementRefillJob;
+        this.governanceLoadJob = governanceLoadJob;
+        this.governanceDeriveJob = governanceDeriveJob;
         this.alerter = alerter;
         this.alertPort = alertPort;
         this.batchExecutionReader = batchExecutionReader;
@@ -306,6 +330,40 @@ public class MembershipGapFiller {
             // 보존 창 전체를 다시 쓰기 때문이다. 백필을 붙이면 그 일을 두 번 한다.
             fullStatementRefillJob.run(asOf, triggeredBy, null, cashFlowTickers, true, false);
         }
+
+        // 거버넌스는 **위 합집합 밖**이다 — 이 축이 신규 편입 전원을 잡아 그 수의 뜻을 바꾸고,
+        // 합집합에 넣으면 거버넌스 때문에 시세 적재가 멈춘다(AUTO_GOVERNANCE_STOCK_LIMIT javadoc).
+        List<String> governanceTickers = tickersOf(gaps, MembershipGap.Axis.GOVERNANCE);
+        if (governanceTickers.isEmpty()) {
+            // MUST: 빈 목록이면 부르지 않는다. GovernanceLoadJob.resolveTargets의 else가
+            // **활성 편입 전량**이라, 여기서 그냥 부르면 결손 0인 주마다 토요일 20시에
+            // 12,400콜짜리 전량 적재가 돈다 — 그리고 GAP_FILL이라 아무 데도 안 뜬다.
+            return;
+        }
+        if (governanceTickers.size() > AUTO_GOVERNANCE_STOCK_LIMIT) {
+            log.warn("거버넌스 결손이 {}종목으로 상한({})을 넘는다. 돌리지 않는다. 종목={}",
+                    governanceTickers.size(), AUTO_GOVERNANCE_STOCK_LIMIT, governanceTickers);
+            alertPort.send(AlertEvent.toOperator(AlertSeverity.WARNING,
+                    "거버넌스 결손이 상한을 넘는다",
+                    ("거버넌스 원문이 빈 편입 종목이 %d개로 상한 %d를 넘어 돌리지 않았다. "
+                            + "이 크기는 정기 리밸런싱이 아니라 유니버스를 다시 그은 것이다 — "
+                            + "손으로 확인하고 적재한다. 종목=%s")
+                            .formatted(governanceTickers.size(), AUTO_GOVERNANCE_STOCK_LIMIT,
+                                    governanceTickers),
+                    "universe-integrity-governance-limit"));
+            return;
+        }
+        log.info("편입 결손 보충 — 거버넌스 {}종목을 받는다. 종목={}",
+                governanceTickers.size(), governanceTickers);
+        // MUST: span을 주지 않는다(넷째 인자). 표마다 필요한 해 수가 다른데 스칼라 하나로 덮으면
+        // 나머지 표가 조용히 좁아진다 — PipelineScheduler의 거버넌스 갈래와 같은 근거다.
+        governanceLoadJob.run(asOf, triggeredBy, null, null, List.of(), governanceTickers);
+        // MUST: 유도를 이어 부른다. 적재만 하면 governance_fact가 안 바뀌는데 둘 다 성공으로 끝난다.
+        //
+        // MUST NOT: 여기에 백필을 잇지 않는다. 신규 편입은 다음 평일 13:30 일일 갱신의 대상이고
+        // (activeUniverseMemberIds), IndicatorRunner가 retain(points, cutoff)로 보존 창 전체를
+        // 다시 쓰므로 저절로 반영된다 — CASH_FLOW 갈래와 같은 근거다.
+        governanceDeriveJob.run(asOf, triggeredBy, governanceTickers);
     }
 
     private static List<String> tickersOf(List<MembershipGap> gaps, MembershipGap.Axis axis) {
