@@ -5,7 +5,7 @@ echo "PROD=$PROD S1=$S1 S0=$S0 HEAD=$(cat $A/head.txt)"
 [ -z "$(cd $REPO && git status --porcelain --untracked-files=no)" ] || die "작업 트리에 추적 파일 변경이 있다"
 r=$(q $PROD "select count(*) from batch_execution where status='RUNNING'"); [ "$r" = 0 ] || die "RUNNING $r"
 if ps -Ao command | grep -E 'spring.profiles.active=bootstrap' | grep -v grep > /dev/null; then die "bootRun이 떠 있다"; fi
-# 창은 15:10 뒤에 열린다 — 그 전에는 오늘 13:30·14:00이 아직 안 돌았을 수 있어 검사하지 않는다.
+# 창은 15:30 뒤에 열린다 — 그 전에는 오늘 13:30·14:00이 아직 안 돌았을 수 있어 검사하지 않는다.
 if [ "$PROD" = "$LIVE" ] && [ "$(date +%u)" -le 5 ] && [ "$(date +%H%M)" -ge 1510 ]; then
   for job in daily-update corporate-action; do
     s=$(q $PROD "select status from batch_execution where job_name='$job' and started_at::date=current_date order by id desc limit 1")

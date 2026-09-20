@@ -314,7 +314,7 @@ class PipelineSchedulerChainTest {
     }
 
     @Test
-    @DisplayName("15시 10분 점검이 편입 원자료도 잰다 — 지표 축은 일일 갱신 뒤에만 뜻이 있다")
+    @DisplayName("15시 30분 점검이 편입 원자료도 잰다 — 지표 축은 일일 갱신 뒤에만 뜻이 있다")
     void freshnessCheckAlsoMeasuresMembership() {
         scheduler.checkJobFreshness();
 
