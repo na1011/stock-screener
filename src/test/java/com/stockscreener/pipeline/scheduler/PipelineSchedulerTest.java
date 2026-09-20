@@ -184,11 +184,15 @@ class PipelineSchedulerTest {
         LocalTime freshness = cronOf("checkJobFreshness").next(base).toLocalTime();
 
         assertThat(heavy).isAfter(chain);
-        // governance-load가 실측 1,290초(21분 30초)다. 스레드 풀이 1이라 그 전에는 신선도
-        // 점검이 밀리므로, 여유를 그보다 크게 둔다 — 밀려도 틀리지는 않지만 같은 날 안에
-        // 끝나는 것이 알림의 뜻을 지킨다.
+        // governance-load가 실측 **44분 52초**다(2026-09-20 · 1,350종목 11,050콜 = 국내 8,050 +
+        // 미국 3,000). 스레드 풀이 1이라 그 전에는 신선도 점검이 밀리므로 여유를 그보다 크게 둔다.
+        //
+        // 여기 있던 22는 「1,290초(21분 30초)」가 근거였는데 그 수는 `--governance-endpoints=DIVIDEND`로
+        // **좁힌 판**의 것이었다. 정기 실행은 표 여덟을 다 부르고, 2026-09-20에 표별 기본 해 수가
+        // 회복되면서(그전에는 span=2가 깎고 있었다) 소요가 배로 늘었다. **간격 40분으로는
+        // 부족해져 점검 시각을 15:30으로 옮겼다** — 시험이 초록인 채로 운영만 밀리던 자리다.
         assertThat(java.time.Duration.between(heavy, freshness).toMinutes())
-                .isGreaterThanOrEqualTo(22);
+                .isGreaterThanOrEqualTo(50);
     }
 
     @Test

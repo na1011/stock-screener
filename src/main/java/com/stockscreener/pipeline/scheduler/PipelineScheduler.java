@@ -347,7 +347,7 @@ public class PipelineScheduler {
      * <p>MUST NOT: {@code batch_execution}에 행을 만들지 않는다. 읽기이고, 실행 이력에 섞이면
      * <b>「잡이 돌았다」와 「잡이 안 돈 것을 확인했다」가 같은 목록에 뜬다.</b>
      */
-    @Scheduled(cron = "0 10 15 * * MON-FRI", zone = "Asia/Seoul")
+    @Scheduled(cron = "0 30 15 * * MON-FRI", zone = "Asia/Seoul")
     public void checkJobFreshness() {
         boolean sent = freshnessAlerter.evaluateAndAlert();
         log.info("배치 신선도를 점검했다. 알림={}", sent ? "보냈다" : "없거나 이미 보냈다");

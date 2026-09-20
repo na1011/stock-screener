@@ -142,8 +142,17 @@ stale AS (
   SELECT r.uc, r.restored_at::date d,
     -- 복원의 순위 재료가 그 시점 재무(StoredShareCounts)와 기업행위 원장(주식수 보정)이다.
     -- 그 둘이 복원 뒤에 늘면 같은 asOf로 다시 지어도 다른 명부가 나온다.
+    --
+    -- MUST: shares_outstanding이 있는 행만 센다. StoredShareCounts의 질의가
+    -- `f.shares_outstanding IS NOT NULL AND > 0`을 걸고, 국내 재무는 그 컬럼이 전량 NULL이다
+    -- (2026-09-20 실측 KOSPI 10,175행 중 0). 그래서 안 좁히면 국내가 원리적으로 오탐한다 —
+    -- 실제로 2026-09-20에 `001820`의 FY2015 Q4 한 행이 KOSPI_TOP200을 낡은 것으로 신고했는데,
+    -- 그 행은 주식수를 안 주고 복원 격자 상한(2026-08-05)보다 11년 앞이라 순위에 닿을 길이 없었다.
+    -- 소비자 전수로도 갈린다: StoredShareCounts를 읽는 유니버스 어댑터는 UsMarketCapUniverseAdapter
+    -- 하나이고 국내 MarketCapUniverseAdapter는 0건이다(소스가 시총을 직접 준다).
     (SELECT count(*) FROM financial_statement f JOIN stock s ON s.id = f.stock_id
-     WHERE s.market_code = mk.mc AND f.created_at > r.restored_at) fin,
+     WHERE s.market_code = mk.mc AND f.created_at > r.restored_at
+       AND f.shares_outstanding IS NOT NULL) fin,
     (SELECT count(*) FROM corporate_action ca JOIN stock s ON s.id = ca.stock_id
      WHERE s.market_code = mk.mc AND ca.status = 'APPLIED'
        AND ca.ratio IS NOT NULL AND ca.ratio <> 1 AND ca.created_at > r.restored_at) ledger
@@ -206,6 +215,20 @@ SELECT CASE
 것이 세션 시작에 보이게 한다.
 
 ## 결과
+
+### as-of 술어가 최신일에서 갈리는 것은 결함이 아니다 (2026-09-20)
+
+「as-of가 못 보는 열린 행 20」이 뜨면 **토요일 리밸런싱과 다음 평일 지표 계산 사이**다.
+그 20종목은 **그날 편입이 아니었으므로 그날 지표가 없는 것이 맞다** — 실측으로 편입일 ≤ 최신
+지표일인 **1,330종목은 최신일 지표 0행이 0건**이고, 0행인 20은 전부 편입일(09-18)이 최신
+지표일(09-17)보다 뒤다.
+
+**MUST NOT: 이것을 결손으로 읽고 그 날짜를 백필하지 마라.** 그날 모집단에 없던 종목의 파생
+행을 만드는 것이고, `batch-load` skill의 「주말 리밸런싱 기준일을 백필하지 마라」와 같은 자리다.
+**2026-09-20에 나와 독립반증 둘이 이것을 「전원이 프리셋에서 조용히 빠진 상태」로 읽었다** —
+수는 셋 다 맞게 쟀고 **시점 조건을 안 걸어 해석이 틀렸다.** 편입 축을 잴 때는
+`joined <= hi`를 먼저 건다.
+
 
 ### 재생 대조 — 사전등록한 합격선을 두 시장 다 넘었다 (2026-09-09)
 
