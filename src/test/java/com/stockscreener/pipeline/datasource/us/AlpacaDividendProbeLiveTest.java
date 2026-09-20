@@ -175,6 +175,58 @@ class AlpacaDividendProbeLiveTest {
     }
 
     /** 페이지를 끝까지 돈다. 중간에 멈추면 뒤쪽 심볼이 통째로 빈다. */
+    @Test
+    @DisplayName("[live][probe] 역년 하나짜리 요청 — 잡이 실제로 보낼 모양으로 그 해가 오는지 본다")
+    void probeOneCalendarYearTheWayTheJobAsksForIt() {
+        // 왜 묻는가: 「역년 2023을 더하면 +114종목」은 **우리 DB가 예측한 수**이지 소스가 그 해를
+        // 준다는 증거가 아니다. 적재를 켜기 전에 그 전제를 읽기만 해서 확인한다.
+        // 표본은 그 114 중 열둘이고 밖에서 갈아끼울 수 있다.
+        String symbols = System.getProperty("probe.symbols",
+                "A,AAPL,ACM,ACN,ADBE,ADI,AMAT,AMD,AOS,APD,ARMK,ARWR");
+        String year = System.getProperty("probe.year", "2023");
+        System.out.printf("%n===== 역년 하나 · symbols=%s year=%s =====%n", symbols, year);
+
+        RestClient client = RestClient.builder()
+                .baseUrl(DATA_URL)
+                .defaultHeader("APCA-API-KEY-ID", System.getenv("APCA_API_KEY_ID"))
+                .defaultHeader("APCA-API-SECRET-KEY", System.getenv("APCA_API_SECRET_KEY"))
+                .defaultStatusHandler(status -> true, (request, response) -> { })
+                .build();
+        ResponseEntity<String> response = client.get()
+                .uri(uri -> uri.path("/v1/corporate-actions")
+                        .queryParam("symbols", symbols)
+                        .queryParam("types", "cash_dividend")
+                        .queryParam("start", year + "-01-01")
+                        .queryParam("end", year + "-12-31")
+                        .queryParam("data_quality", "complete")
+                        .queryParam("region", "us")
+                        .queryParam("limit", PAGE_LIMIT)
+                        .queryParam("sort", "asc")
+                        .build())
+                .retrieve().toEntity(String.class);
+        System.out.printf("http=%s%n", response.getStatusCode());
+        assertThat(response.getStatusCode().is2xxSuccessful())
+                .as("상태코드를 안 보고 본문을 파싱하면 오류가 「0건」이 된다: %s", response.getBody())
+                .isTrue();
+
+        // MUST: 버킷 이름은 **복수**다. 요청의 types는 cash_dividend(단수)인데 응답 키는
+        // cash_dividends다 — 단수로 읽으면 200에 0건이 되어 「소스가 그 해를 안 준다」로 읽힌다.
+        // 정본은 AlpacaDividendAdapter.BUCKET이다.
+        JsonNode dividends = MAPPER.readTree(response.getBody())
+                .path("corporate_actions").path("cash_dividends");
+        TreeMap<String, Integer> bySymbol = new TreeMap<>();
+        for (JsonNode row : dividends) {
+            bySymbol.merge(row.path("symbol").asString(""), 1, Integer::sum);
+        }
+        System.out.printf("사건 %d건 · 배당이 온 종목 %d/%d%n", dividends.size(), bySymbol.size(),
+                symbols.split(",").length);
+        bySymbol.forEach((symbol, count) -> System.out.printf("    %-6s %d건%n", symbol, count));
+        // 「없다」와 「잴 것이 없었다」를 가른다.
+        assertThat(dividends.size())
+                .as("그 역년에 한 건도 안 오면 역년을 더하는 처방 자체가 무너진다")
+                .isPositive();
+    }
+
     private static List<JsonNode> fetchAll() {
         RestClient client = RestClient.builder()
                 .baseUrl(DATA_URL)
