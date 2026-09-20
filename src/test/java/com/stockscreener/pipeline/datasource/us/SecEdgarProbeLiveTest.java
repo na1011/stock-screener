@@ -140,6 +140,60 @@ class SecEdgarProbeLiveTest {
                 .build();
     }
 
+    @Test
+    @DisplayName("[live][probe] companyfacts에 그 회계연도의 연간 프레임이 있는가 — 「없다」를 적기 전에 한 콜 묻는다")
+    void probeWhetherCompanyFactsHasTheMissingAnnualPeriods() throws Exception {
+        // 왜 묻는가: AOS·SPGI·ORKA의 FY2024와 DSGX의 FY2023~2025가 우리 DB에 없다.
+        // financial-refill(결손 컬럼만)도 initial-load(재무 8년)도 한 행을 안 넣었다 —
+        // 원인이 쓰기 잡보다 위라는 뜻이고, 그것이 「소스가 안 준다」인지 「우리 재구성이
+        // 떨어뜨린다」인지는 소스에 직접 물어야 갈린다.
+        String symbols = System.getProperty("probe.symbols", "AOS,SPGI,ORKA,DSGX");
+        String tag = System.getProperty("probe.tag", "Assets");
+        System.out.printf("%n===== companyfacts 연간 프레임 · symbols=%s tag=%s =====%n", symbols, tag);
+        List<String> wanted = new ArrayList<>();
+        for (String t : symbols.split(",")) {
+            wanted.add(t.trim());
+        }
+        Map<String, Long> ciks = resolveCiks(wanted);
+        assertThat(ciks).as("CIK를 하나도 못 풀면 아래 출력은 아무것도 답하지 않는다").isNotEmpty();
+
+        RestClient data = client(DATA_URL);
+        int answered = 0;
+        for (Map.Entry<String, Long> entry : ciks.entrySet()) {
+            throttle();
+            String path = "/api/xbrl/companyconcept/CIK%010d/us-gaap/%s.json"
+                    .formatted(entry.getValue(), tag);
+            ResponseEntity<String> response =
+                    data.get().uri(path).retrieve().toEntity(String.class);
+            System.out.printf("%n--- %s HTTP %s%n", entry.getKey(), response.getStatusCode());
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                System.out.printf("    %s%n", preview(response.getBody()));
+                continue;
+            }
+            answered++;
+            // 연간 보고서(10-K)의 fy·fp·end만 추린다. 우리가 「그 회계연도가 없다」고 적은
+            // 자리에 소스는 무엇을 갖고 있는가가 이 표의 전부다.
+            TreeMap<String, String> annual = new TreeMap<>();
+            JsonNode units = MAPPER.readTree(response.getBody()).path("units");
+            for (JsonNode unit : units) {
+                for (JsonNode row : unit) {
+                    String form = row.path("form").asString("");
+                    if (!form.startsWith("10-K")) {
+                        continue;
+                    }
+                    annual.put(row.path("fy").asString("") + "/" + row.path("fp").asString("")
+                                    + " end=" + row.path("end").asString(""),
+                            "frame=" + row.path("frame").asString("(없음)") + " form=" + form);
+                }
+            }
+            annual.forEach((k, v) -> System.out.printf("    %-28s %s%n", k, v));
+            if (annual.isEmpty()) {
+                System.out.println("    10-K 행이 없다.");
+            }
+        }
+        assertThat(answered).as("한 종목도 못 받으면 위는 전부 「잴 것이 없었다」다").isPositive();
+    }
+
     private static void throttle() {
         try {
             Thread.sleep(THROTTLE_MS);
@@ -417,6 +471,10 @@ class SecEdgarProbeLiveTest {
 
     /** 파일럿과 확장 표본의 CIK. 안 붙는 티커는 이유와 함께 빠진다. */
     private Map<String, Long> resolveCiks() throws Exception {
+        return resolveCiks(concat(PILOT, EXTRA));
+    }
+
+    private Map<String, Long> resolveCiks(List<String> tickers) throws Exception {
         JsonNode root = MAPPER.readTree(body(client(FILES_URL), "/files/company_tickers_exchange.json"));
         Map<String, Integer> at = new LinkedHashMap<>();
         for (int i = 0; i < root.path("fields").size(); i++) {
@@ -428,7 +486,7 @@ class SecEdgarProbeLiveTest {
         }
         Map<String, Long> resolved = new LinkedHashMap<>();
         List<String> skipped = new ArrayList<>();
-        for (String t : concat(PILOT, EXTRA)) {
+        for (String t : tickers) {
             Long cik = byTicker.get(t);
             if (cik == null) {
                 cik = byTicker.get(t.replace('.', '-'));
