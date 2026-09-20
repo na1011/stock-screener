@@ -721,8 +721,13 @@ export const BATCH_STATUSES = [
 ] as const
 export type BatchStatus = (typeof BATCH_STATUSES)[number]
 
-/** 누가 띄웠는가. 쿼터를 태우는 실행이라 출처가 남아야 한다. */
-export const TRIGGERED_BY = ['SCHEDULER', 'ADMIN', 'MANUAL'] as const
+/**
+ * 누가 띄웠는가. 쿼터를 태우는 실행이라 출처가 남아야 한다.
+ *
+ * `GAP_FILL`은 리밸런싱 꼬리가 결손 티커로 **좁혀** 부른 것이다. 스케줄러와 갈라 두는 이유는
+ * 서버의 연체 판정이 「스케줄러 실행은 언제나 전량이다」에 기대기 때문이다(ADR-0141).
+ */
+export const TRIGGERED_BY = ['SCHEDULER', 'ADMIN', 'MANUAL', 'GAP_FILL'] as const
 export type TriggeredBy = (typeof TRIGGERED_BY)[number]
 
 /** 잡이 받는 입력. 화면이 날짜 칸을 몇 개 그릴지 정한다. */

@@ -83,7 +83,8 @@
     "TriggeredBy": [
       "SCHEDULER",
       "ADMIN",
-      "MANUAL"
+      "MANUAL",
+      "GAP_FILL"
     ],
     "JobParameters": [
       "TARGET_DATE",

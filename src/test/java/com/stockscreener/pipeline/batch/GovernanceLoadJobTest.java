@@ -36,12 +36,15 @@ class GovernanceLoadJobTest {
         // 이익소각이 상장 이래 누적이라 3년 차분에 끝점 둘이 필요하고, 창 앞에서도 그 차분이
         // 서려면 한 해가 더 필요하다.
         expected.put(GovernanceEndpoint.SHARE_TOTALS, List.of(2025, 2024, 2023, 2022, 2021));
-        // 셋인 이유가 시장마다 다르다. 국내: 한 응답이 3개년을 열로 주지만 그 셋이 **같은
+        // 시장마다 이유가 다르다. 국내: 한 응답이 3개년을 열로 주지만 그 셋이 **같은
         // 공시일**을 가져, 한 번만 부르면 FY2024 배당을 2026년 3월에야 알게 된 것이 되어 창 앞
         // 137거래일이 빈다(2026-09-08 실측). 미국: bsnsYear가 ex_date의 역년이라 52/53주
         // 회계연도가 **세 역년에 걸친다**(SNA FY2025 = 2024-12-29~2026-01-03) — 두 해면 최신
         // 회계연도가 나오는 종목이 879, 세 해면 994다(2026-09-20 실측 · 편입 1,000).
-        expected.put(GovernanceEndpoint.DIVIDEND, List.of(2025, 2024, 2023));
+        // **넷인 이유는 최신 회계연도가 아니라 보존 창 앞부분이다** — 창 시작에서 고르는
+        // 회계연도가 비12월 결산에서 역년 2023에 걸린다. 커버가 span 3에 856 · 4에 970 ·
+        // **5에도 970**이다(2026-09-20 실측). 다섯째 해는 콜만 태운다.
+        expected.put(GovernanceEndpoint.DIVIDEND, List.of(2025, 2024, 2023, 2022));
         // 개발가이드는 3개년을 준다고 적었으나 실측은 1행이고 fscl_year가 '-'였다.
         expected.put(GovernanceEndpoint.EXEC_PAY, List.of(2025, 2024));
         // 3년 합이 창 앞부분에서도 서려면 넉 해가 필요하다.
@@ -65,18 +68,20 @@ class GovernanceLoadJobTest {
     }
 
     @Test
-    @DisplayName("전량 적재가 350종목 8,050콜이다 — 문서 넷이 이 수를 인용한다")
+    @DisplayName("전량 적재가 350종목 8,400콜이다 — 코드·시험·문서 열두 곳이 이 수를 인용한다")
     void fullLoadCostsTheDocumentedNumberOfCalls() {
         int pairs = 0;
         for (GovernanceEndpoint endpoint : GovernanceEndpoint.values()) {
             pairs += GovernanceLoadJob.yearsFor(endpoint, LATEST, null).size();
         }
 
-        assertThat(pairs).as("(엔드포인트, 연도) 쌍").isEqualTo(23);
+        assertThat(pairs).as("(엔드포인트, 연도) 쌍").isEqualTo(24);
         assertThat(pairs * UNIVERSE)
-                .as("DART 보수 예산 10,000의 81%다. 이 수가 바뀌면 batch-load·api-sources skill과 "
-                        + "ADR-0081·api-spec dart-governance.md의 인용을 함께 고친다 — 한 번 갈린 적이 있다")
-                .isEqualTo(8050);
+                .as("이 수가 바뀌면 batch-load·api-sources skill, ADR-0081·ADR-0116, "
+                        + "api-spec dart-governance.md, PipelineScheduler·AdminJobLauncher의 인용을 "
+                        + "함께 고친다 — 한 번 갈린 적이 있다. 막는 값은 dart.daily-quota: 18000이고 "
+                        + "10,000은 API당 계획값이다")
+                .isEqualTo(8400);
     }
 
     @Test

@@ -153,7 +153,14 @@ public class AlpacaDividendAdapter implements GovernanceDataSource {
      * 요구하는데, 52/53주 회계연도는 그 창이 이듬해 1월 초까지 뻗는다 —
      * {@code SNA}의 FY2025가 {@code 2024-12-29 ~ 2026-01-03}이라 역년 <b>2026</b>이 있어야
      * 값이 난다. 2026-09-20 실측: 그 역년 하나를 더하니 최신 회계연도가 나오는 종목이
-     * <b>836 → 994</b>가 됐고, 반대로 과거로 {@code span}을 넓히는 것은 <b>+1종목</b>이었다.
+     * <b>836 → 994</b>가 됐다.
+     *
+     * <p><b>같은 날 적은 「과거로 {@code span}을 넓히는 것은 +1종목」은 최신일에서 잰 수다.</b>
+     * 보존 창 <b>앞부분</b>에서 다시 재면 다르다 — 창 시작에서 {@code figuresOn}이 고르는
+     * 회계연도가 비12월 결산에서 역년 2023에 걸리기 때문이다. 커버가 {@code span} 3에 856,
+     * <b>4에 970</b>, 5에도 970이다(2026-09-20 · 편입 1,000). 그래서 {@code YEARS_BACK}의
+     * {@code DIVIDEND}가 4다. <b>최신일에서 잰 수로 창 전체를 판정하지 않는다</b> —
+     * 위쪽 끝과 아래쪽 끝은 서로 다른 것을 막는다.
      */
     @Override
     public int latestRequestableYear(java.time.LocalDate asOf) {

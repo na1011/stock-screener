@@ -55,6 +55,8 @@ export function triggeredByLabel(triggeredBy: TriggeredBy): string {
       return '관리자'
     case 'MANUAL':
       return '직접 실행'
+    case 'GAP_FILL':
+      return '결손 보충'
     default:
       return assertNever(triggeredBy)
   }
