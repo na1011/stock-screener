@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -339,6 +340,91 @@ class AlpacaBarsProbeLiveTest {
      * 「과거를 안 준다」를 한 조합만 묻고 적지 않으려는 탐침이다.
      * {@code -Dprobe.symbols=TEVA,AAPL -Dprobe.from=2025-01-01 -Dprobe.to=2026-09-15}. 심볼당 약 5콜.
      */
+    /** 공표 200/분에 여유를 둔다. 탐침은 alpacaRateLimiter를 안 타므로 여기가 유일한 속도다. */
+    private static void throttleBars() {
+        try {
+            Thread.sleep(350);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("탐침이 인터럽트됐다", e);
+        }
+    }
+
+    @Test
+    @DisplayName("[live][probe] asof를 순회하며 겹치는 날짜의 값이 같은지 본다 — 이어 붙여도 되는가")
+    void probeAsofSweepAndOverlapAgreement() {
+        // 왜 묻는가: 어댑터가 asof를 안 보내고, TEVA는 그래서 봉이 3개다(2026-09-14 ADR → 보통주
+        // 전환으로 CUSIP이 바뀌어 Alpaca가 같은 심볼을 새 실체로 잡는다). 처방은 asof인데
+        // **여러 asof를 한 실행에서 순회하는 수단이 없었다** — probeSymbolCoverage는 한 값만 받는다.
+        //
+        // 이 탐침이 답하는 것 둘: ① asof 값마다 봉이 어디서부터 오는가 ② **겹치는 날짜의 종가가
+        // 같은가**. ②가 아니면 이어 붙일 때 없던 계단이 생기므로 asof를 전역으로 켜면 안 된다.
+        String symbols = System.getProperty("probe.symbols", "TEVA");
+        String asofs = System.getProperty("probe.asofs", ",-,2026-09-11,2025-06-02");
+        String from = System.getProperty("probe.from", "2025-01-01");
+        String to = System.getProperty("probe.to", SAFE_END);
+        System.out.printf("%n===== asof 순회 · symbols=%s asofs=[%s] %s~%s =====%n",
+                symbols, asofs, from, to);
+
+        RestClient data = client(DATA_URL);
+        int answered = 0;
+        for (String symbol : symbols.split(",")) {
+            String sym = symbol.trim();
+            System.out.printf("%n--- %s%n", sym);
+            // asof 값 → 날짜별 종가. 겹치는 날짜를 견주려고 들고 있는다.
+            Map<String, TreeMap<String, String>> closesByAsof = new LinkedHashMap<>();
+            for (String rawAsof : asofs.split(",", -1)) {
+                String asof = rawAsof.trim();
+                throttleBars();
+                ResponseEntity<String> response = data.get()
+                        .uri(uri -> {
+                            uri.path("/v2/stocks/bars")
+                                    .queryParam("symbols", sym).queryParam("timeframe", "1Day")
+                                    .queryParam("start", from).queryParam("end", to)
+                                    .queryParam("feed", "sip").queryParam("adjustment", "raw")
+                                    .queryParam("limit", 10000).queryParam("sort", "asc");
+                            if (!asof.isBlank()) {
+                                uri.queryParam("asof", asof);
+                            }
+                            return uri.build();
+                        })
+                        .retrieve().toEntity(String.class);
+                String label = asof.isBlank() ? "(안 보냄)" : asof;
+                if (!response.getStatusCode().is2xxSuccessful()) {
+                    System.out.printf("    asof=%-12s http=%s %s%n", label,
+                            response.getStatusCode(), response.getBody());
+                    continue;
+                }
+                JsonNode bars = MAPPER.readTree(response.getBody()).path("bars").path(sym);
+                TreeMap<String, String> closes = new TreeMap<>();
+                for (JsonNode bar : bars) {
+                    closes.put(bar.path("t").asString("").substring(0, 10), bar.path("c").asString(""));
+                }
+                closesByAsof.put(label, closes);
+                if (!closes.isEmpty()) {
+                    answered++;
+                }
+                System.out.printf("    asof=%-12s 봉=%d 첫=%s 끝=%s%n", label, closes.size(),
+                        closes.isEmpty() ? "-" : closes.firstKey(),
+                        closes.isEmpty() ? "-" : closes.lastKey());
+            }
+            // ② 겹치는 날짜의 값이 같은가. 「봉이 몇 개냐」로는 이어 붙여도 되는지 못 답한다.
+            List<String> labels = new ArrayList<>(closesByAsof.keySet());
+            for (int i = 0; i < labels.size(); i++) {
+                for (int j = i + 1; j < labels.size(); j++) {
+                    TreeMap<String, String> a = closesByAsof.get(labels.get(i));
+                    TreeMap<String, String> b = closesByAsof.get(labels.get(j));
+                    List<String> shared = a.keySet().stream().filter(b::containsKey).toList();
+                    long differ = shared.stream().filter(d -> !a.get(d).equals(b.get(d))).count();
+                    System.out.printf("    겹침 %s 대 %s: %d일 중 값이 다른 날 %d%s%n",
+                            labels.get(i), labels.get(j), shared.size(), differ,
+                            differ == 0 ? "" : " ← 이어 붙이면 계단이 생긴다");
+                }
+            }
+        }
+        assertThat(answered).as("한 조합도 못 받으면 위 수는 전부 「잴 것이 없었다」다").isPositive();
+    }
+
     @Test
     @DisplayName("[live][probe] 심볼별 봉 커버리지를 피드·조정 조합으로 찍는다")
     void probeSymbolCoverage() {

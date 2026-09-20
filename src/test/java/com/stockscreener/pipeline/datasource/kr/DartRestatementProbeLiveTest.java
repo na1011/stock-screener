@@ -193,6 +193,55 @@ class DartRestatementProbeLiveTest {
         return stored;
     }
 
+    @Test
+    @DisplayName("[live][probe] 옛 회계연도의 접수번호 — 소스가 원본 판을 주는가, 정정본만 주는가")
+    void probeWhetherOldFiscalYearsStillReturnTheOriginalFiling() throws Exception {
+        // 왜 묻는가: 연간 재무의 min(published_at)이 period_end + 180일보다 늦은 종목이 51개다
+        // (000880 한화는 FY2023·FY2024가 둘 다 2025-12-18에 revision_no=0). 그것이 우리가
+        // 원본을 못 받은 것인지 소스가 원본을 안 주는 것인지는 **소스에 물어야만** 갈린다.
+        //
+        // 거버넌스 쪽(alotMatter)에서는 정정본이 옛 접수번호를 덮는 것이 확인됐다. 재무 쪽
+        // (fnlttMultiAcnt)이 같은지를 여기서 본다.
+        String tickers = System.getProperty("probe.tickers", "000880,006360,010130");
+        String years = System.getProperty("probe.years", "2022,2023,2024");
+        System.out.printf("%n===== 옛 회계연도의 접수번호 · tickers=%s years=%s =====%n", tickers, years);
+
+        DartCorpCodeCache cache = DartProbeSupport.corpCodeCache();
+        Map<String, String> corpByTicker = new LinkedHashMap<>();
+        for (String ticker : tickers.split(",")) {
+            cache.findCorpCode(ticker.trim())
+                    .ifPresent(code -> corpByTicker.put(ticker.trim(), code));
+        }
+        assertThat(corpByTicker).as("corp_code를 하나도 못 풀면 아래 출력은 아무것도 답하지 않는다")
+                .isNotEmpty();
+
+        RestClient client = DartProbeSupport.client();
+        int answered = 0;
+        for (Map.Entry<String, String> entry : corpByTicker.entrySet()) {
+            System.out.printf("%n--- %s%n", entry.getKey());
+            for (String year : years.split(",")) {
+                JsonNode body = call(client, List.of(entry.getValue()),
+                        Integer.parseInt(year.trim()), "11011");
+                String status = body == null ? "(본문 없음)" : body.path("status").asString("");
+                Set<String> receipts = new TreeSet<>();
+                if (body != null) {
+                    for (JsonNode row : body.path("list")) {
+                        String receipt = row.path("rcept_no").asString("");
+                        if (receipt.length() >= 8) {
+                            receipts.add(receipt.substring(0, 8));
+                        }
+                    }
+                }
+                if (!receipts.isEmpty()) {
+                    answered++;
+                }
+                System.out.printf("    bsns_year=%s status=%s 접수일=%s%n",
+                        year.trim(), status, receipts.isEmpty() ? "(없음)" : receipts);
+            }
+        }
+        assertThat(answered).as("하나도 못 받으면 위는 전부 「잴 것이 없었다」다").isPositive();
+    }
+
     private static JsonNode call(RestClient client, List<String> corpCodes,
                                  int fiscalYear, String reportCode) {
         return DartProbeSupport.get(client, uri -> uri
