@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.JsonNode;
@@ -85,22 +86,13 @@ public class GovernanceFactDeriver {
      */
     @Transactional
     public long derive(long stockId) {
-        Map<GovernanceEndpoint, List<GovernanceReportRow>> byEndpoint = readRows(stockId);
-        String market = marketOf(stockId);
-        GovernanceFactMapper mapper = mappersByMarket.get(market);
-        if (mapper == null) {
-            // 원문은 받아 왔는데 유도할 매퍼가 없다. 조용히 0을 쓰면 「그 회사에 값이 없다」와
-            // 구별되지 않으므로 남긴다 — 원문이 없으면 아래 루프가 어차피 0이다.
-            if (!byEndpoint.isEmpty()) {
-                log.warn("거버넌스 원문이 있는데 그 시장의 매퍼가 없다. stockId={} market={} 표={}",
-                        stockId, market, byEndpoint.keySet());
-            }
+        Optional<List<GovernanceFact>> derived = factsFor(stockId);
+        if (derived.isEmpty()) {
+            // 매퍼가 없다. MUST NOT: 여기서 지우지 않는다 — 「유도할 수 없다」와 「유도해 보니
+            // 없다」는 다르고, 전자에서 지우면 매퍼가 붙기 전에 받아 둔 사실이 사라진다.
             return 0L;
         }
-        GovernanceDerivation context = derivationOf(stockId);
-        List<GovernanceFact> facts = new ArrayList<>();
-        byEndpoint.forEach((endpoint, rows) ->
-                facts.addAll(mapper.derive(endpoint, rows, context)));
+        List<GovernanceFact> facts = derived.get();
 
         jdbcTemplate.update("DELETE FROM governance_fact WHERE stock_id = ?", stockId);
         if (facts.isEmpty()) {
@@ -121,6 +113,40 @@ public class GovernanceFactDeriver {
             ps.setString(6, fact.receiptNo());
         });
         return facts.size();
+    }
+
+    /**
+     * 한 종목의 사실을 <b>짓기만 한다 — 아무것도 쓰지 않는다.</b>
+     *
+     * <p>{@link #derive}에서 뽑아낸 순수부다. 뽑은 이유는 <b>재적재 없이 유도 결과를 전/후로
+     * 대조할 도구</b>가 거버넌스에 없었기 때문이다({@code GovernanceFactSweepTest}가 이것을
+     * 읽기 전용 트랜잭션에서 전 종목에 돌려 TSV로 찍는다). 재무 쪽 {@code SecEdgarFactsSweepTest}와
+     * 같은 자리다.
+     *
+     * <p><b>MUST: 스윕이 질의를 따로 갖지 않게 이 메서드를 쓴다.</b> 복사하면 두 곳이 어긋나기
+     * 시작할 때까지 안 드러나고, 그때 스윕은 <b>실제로 저장될 것과 다른 것</b>을 보증한다.
+     *
+     * @return 유도한 사실. <b>매퍼가 없는 시장이면 빈 {@code Optional}</b>이며, 그것은
+     *         「사실이 0건」과 다르다 — 호출부가 그 둘을 갈라야 한다
+     */
+    public Optional<List<GovernanceFact>> factsFor(long stockId) {
+        Map<GovernanceEndpoint, List<GovernanceReportRow>> byEndpoint = readRows(stockId);
+        String market = marketOf(stockId);
+        GovernanceFactMapper mapper = mappersByMarket.get(market);
+        if (mapper == null) {
+            // 원문은 받아 왔는데 유도할 매퍼가 없다. 조용히 0을 쓰면 「그 회사에 값이 없다」와
+            // 구별되지 않으므로 남긴다 — 원문이 없으면 아래 루프가 어차피 0이다.
+            if (!byEndpoint.isEmpty()) {
+                log.warn("거버넌스 원문이 있는데 그 시장의 매퍼가 없다. stockId={} market={} 표={}",
+                        stockId, market, byEndpoint.keySet());
+            }
+            return Optional.empty();
+        }
+        GovernanceDerivation context = derivationOf(stockId);
+        List<GovernanceFact> facts = new ArrayList<>();
+        byEndpoint.forEach((endpoint, rows) ->
+                facts.addAll(mapper.derive(endpoint, rows, context)));
+        return Optional.of(facts);
     }
 
     /**
