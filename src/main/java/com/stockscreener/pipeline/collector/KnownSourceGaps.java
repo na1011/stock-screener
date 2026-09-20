@@ -44,6 +44,15 @@ public final class KnownSourceGaps {
      * <p>맥쿼리인프라({@code 088980} · KSIC {@code 64201})와 KB발해인프라({@code 415640} ·
      * {@code 642})가 여기다. 둘 다 재무제표를 우리 소스가 주지 않는다.
      *
+     * <p><b>MUST: 그 문장의 사정거리를 알고 쓴다 — 물어본 것은 거버넌스뿐이다.</b>
+     * {@code 088980}은 2026-09-20에 <b>거버넌스 여덟 표를 다 물어 전부 {@code status 013}</b>을
+     * 받았고(대조군은 행을 받았다) 그쪽은 <b>진짜 한계로 확정</b>됐다
+     * ({@code DartGovernanceProbeLiveTest.probeStocksWhoseStoredPayloadsAreAllEmpty}).
+     * <b>재무 엔드포인트({@code fnlttSinglAcnt}·{@code fnlttSinglAcntAll})에는 묻지 않았다</b> —
+     * 이 면제가 재무 두 축에 걸려 있는데도 그렇다. 이 저장소에서 「소스가 안 준다」는 아홉 중
+     * 여덟이 거짓이었고 그때마다 <b>한 엔드포인트만 물은 것</b>이 원인이었다. <b>MUST NOT:
+     * 「거버넌스가 013이니 재무도 없다」로 잇지 않는다 — 부재의 뜻은 소스마다 다시 묻는다.</b>
+     *
      * <p><b>티커 목록이 아니라 업종 키로 거는 이유</b>는 이 집합이 <b>실제로 자라기 때문</b>이다 —
      * 목록이면 새 인프라 펀드가 편입될 때마다 사람이 고쳐야 하고, 안 고치면 상시 경보가 된다.
      *
