@@ -11,6 +11,10 @@ import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -80,6 +84,34 @@ class DartControllingEquityProbeLiveTest {
     }
 
     /**
+     * 응답을 픽스처로 남긴다 — <b>국내에는 전체 재무제표의 드라이런 수단이 없다.</b>
+     *
+     * <p>미국은 {@code .factcache} 1,214종목을 {@code SecEdgarFactsSweepTest}에 먹여 재적재 없이
+     * 전/후를 대조하는데, 국내는 {@code fnlttSinglAcntAll} 응답 픽스처가 <b>0개</b>다
+     * (테스트 픽스처 여섯은 전부 요약본이라 {@code account_id}가 없다 · 2026-09-21 확인).
+     * 그래서 매퍼를 고칠 때마다 <b>소스를 다시 부르거나 재적재로 확인</b>하게 되는데,
+     * 재적재는 {@code invalidate}로 지표를 지우므로 검증 수단이 될 수 없다.
+     *
+     * <p><b>MUST: 대조군을 함께 남긴다.</b> 비지배가 큰 회사만 남기면 「부재」 갈래를 못 만든다.
+     *
+     * <pre>-Dprobe.saveFixture=src/test/resources/fixtures/dart/full-statement</pre>
+     */
+    private static void saveFixture(String dir, String ticker, JsonNode body) {
+        if (dir == null || body == null) {
+            return;
+        }
+        try {
+            Path target = Path.of(dir);
+            Files.createDirectories(target);
+            Files.writeString(target.resolve(ticker + "-equity.json"), body.toString(),
+                    StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            // 탐침의 본 일은 묻는 것이다. 저장 실패로 실측을 잃지 않는다 — 다만 삼키지 않고 찍는다.
+            System.out.printf("    [픽스처 저장 실패] %s: %s%n", ticker, e);
+        }
+    }
+
+    /**
      * 모집단. <b>기본은 편입 국내 전수다</b> — 표본으로는 커버리지를 못 답하고,
      * 이 축의 수용 기준이 「88% 이상」이라 분모가 필요하다(ADR-0159 §검증 6).
      *
@@ -130,6 +162,7 @@ class DartControllingEquityProbeLiveTest {
         List<String> tickers = population();
         String year = prop("probe.year", SETTLED_YEAR);
         String report = prop("probe.report", ANNUAL_REPORT);
+        String fixtureDir = prop("probe.saveFixture", null);
 
         System.out.println("\n===== 지배주주 귀속 자본 실측 =====");
         System.out.printf("모집단 %d종목 · bsns_year=%s · reprt_code=%s · fs_div=CFS%n",
@@ -165,6 +198,8 @@ class DartControllingEquityProbeLiveTest {
                     .queryParam("reprt_code", report)
                     .queryParam("fs_div", "CFS")
                     .build());
+
+            saveFixture(fixtureDir, ticker, body);
 
             JsonNode list = body == null ? null : body.get("list");
             if (list == null || list.isEmpty()) {
@@ -233,6 +268,13 @@ class DartControllingEquityProbeLiveTest {
         System.out.println("MUST: 이 출력을 docs/api-spec/dart-financial.md 「계정별 가용성」에 옮긴다");
         System.out.println("      — 그 표에 자본 행이 없다(2026-09-21 확인).");
         System.out.printf("콜 수: 종목당 1콜 = %d콜.%n", answered + noResponse);
+        if (fixtureDir != null) {
+            System.out.println("픽스처를 남겼다: " + fixtureDir
+                    + "  — 이것이 국내 전체 재무제표의 첫 드라이런 재료다.");
+        } else {
+            System.out.println("MUST: -Dprobe.saveFixture=<dir>로 몇 종목을 남긴다 —"
+                    + " 국내에는 전체 재무제표 픽스처가 0개라 매퍼 수정의 드라이런이 불가능하다.");
+        }
 
         assertThat(answered)
                 .as("한 종목도 응답하지 않았다 — 키·엔드포인트·연도를 먼저 의심한다")
