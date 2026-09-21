@@ -44,9 +44,14 @@ applies_to:
 | **지배주주** | `ROE` · `ROE_MIN_3Y` · `PER` · `PER_MEDIAN_5Y` · `EPS_TTM` · `EPS_CAGR_5Y` · `EPS_GROWTH_TTM_YOY` · `DIVIDEND_PAYOUT` · `EXEC_PAY_TO_NET_INCOME` · **`PBR`** · **`PBR_MEDIAN_5Y`** |
 | **연결 총액** | **`ROA`** · **`NET_MARGIN`** · **`ACCRUAL_RATIO`** · `DEBT_RATIO` · `ALTMAN_Z_DOUBLE_PRIME` · `ROIC_PRETAX` · `OPERATING_MARGIN` · `GROSS_MARGIN` · `GP_TO_ASSETS` · `FCF_MARGIN` |
 
-## 왜 `net_income`이 지배주주여야 하는가 — 커버리지가 정한다
+## 왜 연결총액에 **게이트가 필수인가** — 커버리지가 정한다
 
-처음에 **`net_income`을 연결총액으로 뒤집으려 했고, 독립반증이 실측으로 기각했다.**
+**MUST: 이 절을 「`net_income`은 지배주주로 둔다」로 읽지 않는다 — §결정은 연결총액이다.**
+여기서 기각된 것은 **게이트 없이 폴백하는 연결총액**이고, 게이트를 건 연결총액이 §결정이다
+(직접 54.6% + 유도 0.6% + 비지배 전무 게이트 36.1% + **NULL 8.7%**). 아래 표는
+**게이트를 안 걸면 무엇이 추정값이 되는가**를 재는 것이지 기저를 고르는 표가 아니다.
+
+처음에 **`net_income`을 게이트 없이 연결총액으로 뒤집으려 했고, 독립반증이 실측으로 기각했다.**
 
 **미국 창 60,054 기준(팩트 캐시 전수 × 스윕 창 정합)**
 
@@ -156,11 +161,14 @@ applies_to:
 
 **수용 기준**
 
-1. `net_income`·`net_income_total`·`total_equity_controlling`을 **직접 / 유도 / 폴백** 세 갈래로
-   **각각 수를 찍는다.** 단일 백분율은 기준이 아니다.
+1. `net_income`(연결총액)·`net_income_controlling`·`total_equity_controlling`을
+   **직접 / 유도 / 게이트 폴백 / NULL** 네 갈래로 **각각 수를 찍는다.** 단일 백분율은 기준이 아니다.
+   (**이 절이 한때 쓰던 `net_income_total`은 §버린 대안이 기각한 셋째 컬럼의 이름이다** —
+   그 개념은 `net_income`이 든다.)
 2. **폴백으로 채운 칸 중 「그 회사가 비지배를 한 번도 안 낸다」가 거짓인 것이 0**이다.
-3. **`net_income_total`이 못 만드는 칸은 NULL이고, `ROA`·`NET_MARGIN`·`ACCRUAL_RATIO`가 그 칸에서
-   값을 안 낸다.** 지어낸 값으로 채우지 않는다.
+3. **`net_income`(연결총액)이 못 만드는 칸은 NULL이고, `ROA`·`NET_MARGIN`·`ACCRUAL_RATIO`가
+   그 칸에서 값을 안 낸다.** 지어낸 값으로 채우지 않는다. 예상 크기는 **8.7%**(5,702창 · 306종목)이고,
+   **지금 그 칸에는 지배주주 분자로 계산된 「그럴듯하게 틀린 값」이 들어 있다.**
 4. **한 TTM 창 안에서 기저가 섞인 창이 0**이다(오늘 기준으로 `net_income`을 연결로 뒤집었다면
    **4,730창 18.51% · 352티커**가 섞였을 자리다). **Q4 유도의 기저 혼합도 0**이다(같은 조건에서
    회계연도 693개 12.6% · 214티커).

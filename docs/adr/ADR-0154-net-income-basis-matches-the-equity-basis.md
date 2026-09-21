@@ -207,5 +207,12 @@ WHERE f.is_latest AND f.total_assets IS NOT NULL AND f.total_liabilities IS NOT 
 - `FinancialMath.effectiveTaxRateOf`·`pretaxIncomeOf`가 `netIncome`을 읽어
   `EFFECTIVE_TAX_RATE`·`ROIC_AFTERTAX*`로 흐른다(**62티커**).
 
-**그 자리는 뜻을 뒤집어서가 아니라 `net_income_total` 컬럼을 새로 열어 닫는다**(ADR-0159).
 **MUST: 컬럼의 뜻을 바꾸는 결정은 그 컬럼을 읽는 소비자를 전수로 세고 짝을 다시 적는다.**
+
+**[2026-09-21] 처방이 바뀌었다 — 셋째 컬럼은 열지 않는다.** 이 줄은 한때
+*"`net_income_total` 컬럼을 새로 열어 닫는다"*라 적었는데, **ADR-0159 §버린 대안이 그 안을
+기각했다**(같은 개념에 세 자리를 주고 `net_income`은 시장마다 다른 뜻으로 남는다).
+§결정은 **`net_income`을 두 시장 공통 「연결 총액」으로 복원**하되 폴백에
+**「그 회사가 비지배를 한 번도 안 낸다」 게이트**를 걸고 못 만드는 8.7%는 **NULL**로 둔다.
+그래서 위 §결정 1(**미국 `net_income`을 지배주주로**)은 **ADR-0159가 대체한다** —
+지배주주 값은 `net_income_controlling`이 든다.
