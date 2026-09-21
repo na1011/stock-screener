@@ -42,11 +42,16 @@ final class FinancialMath {
      * <ol>
      *   <li><b>지배주주 짝</b> — 창 전체의 {@code netIncomeControlling}과
      *       {@code totalEquityControlling}이 <b>둘 다</b> 있을 때만.</li>
-     *   <li><b>다리</b> — {@code netIncome}이 그 시장에서 <b>이미 지배주주 기저</b>인 동안
-     *       (미국의 오늘). 분모는 지배주주 자본이다.</li>
-     *   <li><b>연결 짝</b> — 지배주주 자본이 없으면 분자·분모 <b>둘 다</b> 연결로 물러난다
-     *       (국내의 오늘).</li>
+     *   <li><b>연결 짝</b> — 지배주주 짝이 안 서면 분자·분모 <b>둘 다</b> 연결로 물러난다.</li>
      * </ol>
+     *
+     * <p><b>「다리」 갈래를 2026-09-21에 걷었다.</b> 그것은 <i>"{@code netIncome}이 그 시장에서
+     * 이미 지배주주 기저인 동안"</i>을 전제했는데 <b>코드에 그 조건이 없었다</b> — 술어가
+     * {@code controllingEquity != null} 하나뿐이라, 국내 {@code total_equity_controlling}을
+     * 채우는 순간 <b>연결 TTM ÷ 지배주주 자본</b>이 된다. 실측(2026-09-21): 최신 4분기 완비 창
+     * 기준 {@code nic}이 0칸인 종목이 <b>KOSPI 8 + KOSDAQ 26 = 34</b>다. ADR-0159 §규칙이
+     * {@code 034730} SK <b>3.197배</b>로 금지한 짝이고, ADR-0153 §결정도 같은 것을 적는다 —
+     * <i>"DART에 지배주주 자본을 매핑하는 날 국내는 <b>분자도 함께</b> 지배주주로 바꿔야 한다."</i>
      *
      * <p><b>MUST NOT: 행마다 폴백하지 않는다.</b> {@link #sumControllingNetIncome}의 javadoc이
      * 이미 적었다 — <i>"행마다 폴백하면 합계가 어느 쪽도 아닌 수가 되고, 값은 그럴듯하고
@@ -73,9 +78,6 @@ final class FinancialMath {
             return new EquityBasis(controllingIncome, controllingEquity);
         }
         BigDecimal income = sumTrailingFourQuarters(quarters, FinancialFigures::netIncome);
-        if (controllingEquity != null) {
-            return new EquityBasis(income, controllingEquity);
-        }
         return new EquityBasis(income, latest.totalEquity());
     }
 
@@ -85,9 +87,6 @@ final class FinancialMath {
         BigDecimal controllingIncome = figures.netIncomeControlling();
         if (controllingIncome != null && controllingEquity != null) {
             return new EquityBasis(controllingIncome, controllingEquity);
-        }
-        if (controllingEquity != null) {
-            return new EquityBasis(figures.netIncome(), controllingEquity);
         }
         return new EquityBasis(figures.netIncome(), figures.totalEquity());
     }
