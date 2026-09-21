@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Set;
 
 /**
  * 소스가 준 재무제표 한 건.
@@ -152,11 +153,57 @@ public record RawFinancialReport(
          * <p><b>그래서 그 일곱은 되돌릴 수 없다.</b> {@code FinancialWriter.fillMissing}의 값
          * 지우기 갈래가 이 필드를 요구하는데 일곱은 {@code false}라, <b>유도 규칙을 고쳐
          * {@code null}을 내면 저장된 옛 유도값이 영영 안 지워진다.</b> 커밋 {@code cf474f0}이
-         * 닫은 결함이 새 축에서 다시 열린 것이다. <b>컬럼 단위 출처가 필요하다</b>
-         * (ADR-0157 §결과 · {@code SecEdgarFacts.withoutDerived}의 7컬럼 목록이 지금의 사실상 정본).
+         * 닫은 결함이 새 축에서 다시 열린 것이다.
+         *
+         * <p><b>그 결손은 {@link #assertedAbsent}가 닫았다(2026-09-22).</b> 컬럼 단위 출처를
+         * 어댑터가 싣고 {@code fillMissing}이 그것을 본다.
+         *
+         * <p><b>MUST NOT: 이 자리의 옛 서술 「ADR-0157 §결과가 컬럼 단위 출처를 요구한다」를
+         * 근거로 쓰지 않는다 — 2026-09-22에 재보니 거짓이다.</b> 그 ADR 전문에
+         * <i>"컬럼 단위"</i>도 {@code derived}도 <b>한 번도 안 나온다</b>. 요구를 만든 것은
+         * ADR이 아니라 <b>이 javadoc 자신</b>이었고, 근거는 {@code withoutDerived}의 컬럼 목록이다.
          */
-        boolean derived
+        boolean derived,
+
+        /**
+         * <b>어댑터가 「이 기간에는 그 값이 없다」고 판정한 컬럼</b>의 DB 컬럼명.
+         *
+         * <p>{@link #derived}가 <b>행 단위</b> 출처라면 이것은 <b>컬럼 단위</b> 출처다.
+         * {@code derived}의 javadoc이 적은 <i>"그래서 그 일곱은 되돌릴 수 없다"</i>가 가리키는
+         * 결손을 닫는다.
+         *
+         * <p><b>왜 필요한가</b>: {@code FinancialWriter.fillMissing}은 소스 행({@code derived == false})에서
+         * {@code null}을 만나면 <b>안 지운다</b>. 그 규칙은 정당하다 — 소스가 준 판에서 컬럼이
+         * 빠진 것은 「그 판이 그 컬럼을 안 실었다」이지 「그 값이 없다」가 아니고, 지우면 정정
+         * 하나가 그 기간의 손익을 통째로 날린다.
+         *
+         * <p><b>그런데 유도 컬럼은 그 규칙의 전제가 안 선다.</b> {@code SecEdgarFacts}는
+         * {@code carryForward}로 <b>판을 가로질러</b> 값을 이어받은 뒤에 유도하므로, 그 결과가
+         * {@code null}이면 「이 판이 안 실었다」가 아니라 <b>「지금까지 본 모든 판을 합쳐도
+         * 재료가 없다」</b>이다. 그것은 판정이고, 저장에 반영돼야 한다.
+         *
+         * <p><b>실측(2026-09-22)</b>: ADR-0159로 {@code net_income}이 연결 총액이 되면서
+         * 어댑터가 <b>5,366칸 · 260종목</b>({@code is_latest} 2,578)에 「못 만든다」를 냈는데
+         * 저장에는 <b>옛 지배주주 값</b>이 그대로 남았다. 같은 대조를 <b>컬럼 열한 개에 따로</b>
+         * 돌리면 나머지는 0~2칸이라, 이 축은 <b>{@code net_income} 하나</b>가 지배한다.
+         *
+         * <p><b>MUST: 소스가 직접 준 컬럼을 여기 담지 않는다.</b> 담으면 그 소스의
+         * 「안 실었다」가 「없다」로 읽혀 멀쩡한 값이 지워진다 — 국내 {@code net_income}이
+         * {@code null}인 행이 <b>298개</b>(2026-09-22 실측) 있고, 그 소스에는 {@code carryForward}에
+         * 해당하는 기제가 없다. 담을 자격은 <b>어댑터가 여러 판을 합쳐 판정했는가</b>이다.
+         *
+         * <p>{@code null}이면 빈 집합으로 정규화한다 — 어댑터가 안 채우면 <b>지금까지와 똑같이</b>
+         * 동작한다.
+         */
+        Set<String> assertedAbsent
 ) {
+
+    /**
+     * {@code net_income}의 DB 컬럼명. {@link #assertedAbsent}에 담는 값과
+     * {@code FinancialWriter}의 {@code Amount} 컬럼명이 <b>문자열로 만나므로</b> 한 곳에 둔다.
+     * 오타는 조용히 0건이 되어 <b>결손을 고친 것처럼 보이게</b> 한다.
+     */
+    public static final String NET_INCOME = "net_income";
 
     /**
      * <b>지배주주 자본을 안 받는 옛 형태 — 시험 픽스처 전용이다.</b>
@@ -189,7 +236,7 @@ public record RawFinancialReport(
                 capex, inventories, netIncomeControlling, interestAndDividendIncome,
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
-                profitBeforeTax, false);
+                profitBeforeTax, false, Set.of());
     }
 
     /**
@@ -226,7 +273,7 @@ public record RawFinancialReport(
                 capex, inventories, netIncomeControlling, interestAndDividendIncome,
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
-                profitBeforeTax, false);
+                profitBeforeTax, false, Set.of());
     }
 
     public RawFinancialReport {
@@ -248,5 +295,8 @@ public record RawFinancialReport(
         if (currencyCode == null || currencyCode.isBlank()) {
             throw new IllegalArgumentException("currencyCode가 비어 있다.");
         }
+        // 안 채운 어댑터는 지금까지와 똑같이 동작한다. 복사본을 두는 것은 호출부가 뒤에
+        // 집합을 바꿔도 저장 판정이 안 흔들리게 하기 위해서다.
+        assertedAbsent = assertedAbsent == null ? Set.of() : Set.copyOf(assertedAbsent);
     }
 }

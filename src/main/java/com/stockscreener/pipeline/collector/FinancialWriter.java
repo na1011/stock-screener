@@ -557,7 +557,21 @@ public class FinancialWriter {
                 // 옛 계산이 남아 있을 이유가 없다. 이 갈래가 없으면 **유도 규칙을 고쳐도 옛
                 // 값을 영영 못 지운다** — 실측(2026-09-14)으로 미국 4분기 음수 매출 45행·
                 // 매출원가 41행이 재적재 뒤에도 한 행도 안 줄었다.
-                if (report.derived() && amount.overwritable() && managed.contains(amount)
+                // [2026-09-22] **행 단위 출처만으로는 못 닫는 자리가 있다.**
+                // ADR-0159로 net_income이 연결 총액이 되면서 어댑터가 「이 기간의 연결 총액은
+                // 못 만든다」로 null을 내기 시작했는데, 그 판이 **소스 행**(derived=false)이라
+                // 위 규칙이 안 지우고 **옛 지배주주 값**이 남았다 — 실측 5,366칸 · 260종목.
+                //
+                // assertedAbsent는 **어댑터가 컬럼마다 낸 판정**이다. SecEdgarFacts는
+                // carryForward로 판을 가로질러 값을 이어받은 **뒤에** 유도하므로, 그 결과의
+                // null은 「이 판이 안 실었다」가 아니라 「모든 판을 합쳐도 재료가 없다」이다.
+                //
+                // MUST: managed 가드는 그대로 태운다. 그 컬럼이 이 호출에서 한 번도 값이 안
+                // 났으면 **그 소스가 안 다루는 컬럼**이고, 지우면 다른 소스가 채운 값을
+                // 왕복으로 날린다(managedColumns의 594칸 실측).
+                boolean assertedByAdapter = report.assertedAbsent().contains(amount.column);
+                if ((report.derived() || assertedByAdapter)
+                        && amount.overwritable() && managed.contains(amount)
                         && existing.amounts().get(amount) != null) {
                     toClear.add(amount);
                     corrections.add("%s %s -> (없음)".formatted(

@@ -287,7 +287,13 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 null, null,
                 // 우리가 만든 행이다(사업보고서 − 3분기 누계). 저장이 이것을 알아야 유도
                 // 규칙을 고쳤을 때 옛 값을 지운다.
-                true));
+                true,
+                // **MUST: 국내는 컬럼 단위 부재 판정을 담지 않는다**(RawFinancialReport.assertedAbsent).
+                // 담을 자격은 「어댑터가 **여러 판을 합쳐** 판정했는가」인데, 이 경로에는
+                // SecEdgarFacts의 carryForward에 해당하는 기제가 없다 — 한 응답이 안 실은 계정은
+                // 그냥 안 실린 것이다. 담으면 「안 실었다」가 「없다」로 읽혀 멀쩡한 값이 지워진다
+                // (2026-09-22 실측: 국내 net_income이 null인 행 298개).
+                java.util.Set.of()));
     }
 
     /**

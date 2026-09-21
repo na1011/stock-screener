@@ -721,6 +721,71 @@ class FinancialWriterTest {
         assertThat(storedCostOfSales()).as("소스가 준 행이면 안 지운다").isEqualByComparingTo("-100");
     }
 
+    /**
+     * <b>행 단위 출처만으로는 못 닫는 자리.</b> 위 시험의 마지막 대조군(「소스가 준 행이면 안
+     * 지운다」)이 정당한 규칙인데, ADR-0159로 {@code net_income}의 뜻이 <b>지배주주 →
+     * 연결 총액</b>으로 바뀌면서 그 규칙이 <b>틀린 값을 지키게</b> 됐다.
+     *
+     * <p><b>실측(2026-09-22)</b>: 어댑터가 「이 기간의 연결 총액은 못 만든다」로 {@code null}을
+     * 낸 칸 중 저장이 <b>옛 지배주주 값</b>을 들고 있는 것이 <b>5,366칸 · 260종목</b>
+     * ({@code is_latest} 2,578)이었다. 같은 대조를 컬럼 열한 개로 갈라 돌리면 나머지는 0~2칸이라
+     * <b>이 축은 {@code net_income} 하나가 지배한다.</b>
+     *
+     * <p>가르는 것은 {@code RawFinancialReport.assertedAbsent}다 — {@code SecEdgarFacts}는
+     * {@code carryForward}로 <b>판을 가로질러</b> 값을 이어받은 뒤에 유도하므로 그 결과의
+     * {@code null}은 「모든 판을 합쳐도 재료가 없다」이고, 국내 어댑터에는 그 기제가 없어
+     * 빈 집합을 준다.
+     */
+    @Test
+    @DisplayName("소스가 준 행이라도 어댑터가 판정한 부재는 지운다 — 판정이 없으면 그대로 둔다")
+    void adapterAssertedAbsenceClearsEvenOnSourceRows() {
+        writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000"),
+                        report(2024, "FY", "2025-03-15", "900")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        assertThat(storedNetIncome()).isEqualByComparingTo("1000");
+
+        // 대조군 — **이것이 고치기 전의 동작이다.** 판정이 없는 null은 「그 판이 안 실었다」라
+        // 지우면 안 된다. 이 단언이 붉으면 처방이 carryForward 보호까지 깬 것이다.
+        writer.write(stockId, List.of(sourceRowWithoutNetIncome(java.util.Set.of()),
+                        report(2024, "FY", "2025-03-15", "900")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        assertThat(storedNetIncome())
+                .as("판정이 없는 null은 「안 실었다」이므로 옛 값을 지킨다")
+                .isEqualByComparingTo("1000");
+
+        // 어댑터가 판정하면 지운다.
+        writer.write(stockId, List.of(
+                        sourceRowWithoutNetIncome(
+                                java.util.Set.of(RawFinancialReport.NET_INCOME)),
+                        report(2024, "FY", "2025-03-15", "900")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        assertThat(storedNetIncome())
+                .as("판정이 있는 null은 「없다」이므로 반영한다")
+                .isNull();
+    }
+
+    /**
+     * 관할 가드가 <b>처방보다 먼저</b> 선다는 것. {@code managed}에 없는 컬럼은 판정이 있어도
+     * 안 지운다 — 그 컬럼을 채운 것이 <b>다른 소스</b>일 수 있고, 지우면 수요일이 채우고
+     * 목요일이 지우는 왕복이 된다({@code managedColumns}의 594칸 실측).
+     */
+    @Test
+    @DisplayName("판정이 있어도 이 호출의 관할이 아닌 컬럼은 안 지운다")
+    void assertedAbsenceStillRespectsManagedColumns() {
+        writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        assertThat(storedNetIncome()).isEqualByComparingTo("1000");
+
+        // 형제 행이 없다 — 이 호출에서 net_income이 한 번도 값이 안 났으므로 관할이 아니다.
+        writer.write(stockId, List.of(
+                        sourceRowWithoutNetIncome(
+                                java.util.Set.of(RawFinancialReport.NET_INCOME))),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        assertThat(storedNetIncome())
+                .as("관할 밖이면 판정이 있어도 안 지운다")
+                .isEqualByComparingTo("1000");
+    }
+
     @Test
     @DisplayName("새 규칙이 더는 만들지 않는 유도 판은 회수된다 — 옛 규칙의 행이 최신으로 남지 않는다")
     void retractsDerivedRevisionsThatTheNewRuleNoLongerMakes() {
@@ -791,7 +856,7 @@ class FinancialWriterTest {
                 null, null, null, null, null, null,
                 null,
                 null, null, null, null, null, null, null, null, null, null,
-                false);
+                false, java.util.Set.of());
     }
 
     @Test
@@ -849,7 +914,7 @@ class FinancialWriterTest {
                 null, null, null, null, null, null,
                 null,
                 null, null, null, null, null, null, null, null, null, null,
-                derived);
+                derived, java.util.Set.of());
     }
 
     @Test
@@ -892,7 +957,7 @@ class FinancialWriterTest {
                 null, null, null,
                 null,
                 null, null, null, null, null, null, null, null, null, null,
-                false);
+                false, java.util.Set.of());
     }
 
     private BigDecimal storedCostOfSales() {
@@ -919,7 +984,37 @@ class FinancialWriterTest {
                 null, null, null,
                 null,
                 null, null, null, null, null, null, null, null, null, null,
-                derived);
+                derived, java.util.Set.of());
+    }
+
+    /**
+     * 소스가 준 행인데 <b>순이익만 없는</b> 판. {@code assertedAbsent}가 그 {@code null}을
+     * 「어댑터의 판정」과 「그 판이 안 실은 것」으로 가른다.
+     */
+    private static RawFinancialReport sourceRowWithoutNetIncome(
+            java.util.Set<String> assertedAbsent) {
+        return new RawFinancialReport(
+                2025, "FY",
+                LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31),
+                LocalDate.parse("2026-03-15"),
+                "11011", "KRW",
+                new BigDecimal("5000"), new BigDecimal("1200"), null,
+                new BigDecimal("20000"), new BigDecimal("12000"), null, new BigDecimal("8000"),
+                null, null, null,
+                null, new BigDecimal("100"),
+                null, null,
+                null,
+                null, null, null,
+                null,
+                null, null, null, null, null, null, null, null, null, null,
+                false, assertedAbsent);
+    }
+
+    private BigDecimal storedNetIncome() {
+        return jdbcTemplate.queryForObject(
+                "SELECT net_income FROM financial_statement WHERE stock_id = ? AND is_latest "
+                        + "AND fiscal_year = 2025 AND fiscal_period = 'FY'",
+                BigDecimal.class, stockId);
     }
 
     private static RawFinancialReport withoutBalanceDetail(int fiscalYear, String period,

@@ -1266,7 +1266,26 @@ final class SecEdgarFacts {
                 v.get(SecEdgarColumn.INCOME_TAX_EXPENSE),
                 profitBeforeTax(v, noDiscontinued),
                 // 소스가 준 행이다. 유도 행만 derived=true이고, 저장이 그것으로 판을 회수한다.
-                false);
+                false,
+                // MUST: net_income이 여기서 null이면 그것은 **판정**이다 — 위 consolidatedIncome이
+                // 네 갈래를 다 태운 결과이고, 들어온 v는 carryForward가 **판을 가로질러** 이어받은
+                // 뒤의 맵이다. 그래서 「이 판이 안 실었다」가 아니라 「모든 판을 합쳐도 재료가
+                // 없다」이고, 저장이 옛 값을 들고 있으면 지워야 한다(RawFinancialReport.assertedAbsent).
+                assertedAbsentOf(consolidatedIncome(v, noNoncontrollingIncome)));
+    }
+
+    /**
+     * <b>어댑터가 「없다」고 판정한 컬럼.</b> 지금은 {@code net_income} 하나다.
+     *
+     * <p><b>MUST: 컬럼을 더하기 전에 그 컬럼만 따로 잰다.</b> 2026-09-22에 스윕과 DB를 컬럼
+     * 열한 개로 갈라 대조했더니 {@code net_income}이 <b>5,366칸</b>이고 나머지는
+     * {@code revenue} 2 · {@code operating_income} 1 · {@code cost_of_sales} 1 · 나머지 전부 0이었다.
+     * 묶어서 넣으면 근거 하나로 여럿을 판정하는 것이 된다.
+     */
+    private static java.util.Set<String> assertedAbsentOf(BigDecimal consolidatedIncome) {
+        return consolidatedIncome == null
+                ? java.util.Set.of(RawFinancialReport.NET_INCOME)
+                : java.util.Set.of();
     }
 
     /**
@@ -1994,15 +2013,40 @@ final class SecEdgarFacts {
                 // `fiscal_period = 'Q4'`와 통화가 갈린 FY뿐이다). 통화 방어는 `buildQ4`의
                 // `sameCurrency` 게이트가 한다. **근거는 `toClear` 하나다.**
                 //
-                // 잔차로 채운 칸은 그래서 지금 회수 대상이 아니다 — 컬럼 단위 출처가 생기기
-                // 전까지의 한계이고, `net_income` 계열 전체에 이미 걸린 같은 한계다(A12).
-                // 실측으로 회수 자격 라벨은 이 변경 전후 **5,499로 동일**하고 삭제 집합도
-                // **379행 / 371라벨로 완전히 같다** — 회귀는 없다.
-                false);
+                // **[2026-09-22] 위 마지막 문단의 「지금 회수 대상이 아니다」는 닫혔다.**
+                // 컬럼 단위 출처(`RawFinancialReport.assertedAbsent`)가 생겨, 행 전체를 유도로
+                // 돌리지 않고 **그 컬럼만** 회수할 수 있다. `derived`는 여전히 false다 —
+                // 소스가 낸 3개월 값을 유도 취급하지 않는다는 위 근거는 그대로 선다.
+                false,
+                // 합친 값이 null인데 **두 판 중 하나라도 「없다」고 판정했으면** 그것은 판정이다.
+                // 둘 다 그냥 안 실었을 뿐이면 빈 집합이 되어 지금까지와 똑같이 동작한다.
+                mergedAbsence(source, residual));
     }
 
     private static BigDecimal pick(BigDecimal source, BigDecimal residual) {
         return source != null ? source : residual;
+    }
+
+    /**
+     * 병합본의 <b>컬럼 단위 부재 판정.</b> 합친 값이 {@code null}이고 두 판 중 하나라도 그
+     * 컬럼을 「없다」고 판정했으면 판정을 잇는다.
+     *
+     * <p><b>MUST: 합친 값을 다시 본다.</b> 한쪽이 「없다」고 해도 다른 쪽이 값을 냈으면
+     * 병합본에는 값이 있고, 그때 부재를 이으면 <b>저장이 멀쩡한 값을 지운다.</b>
+     */
+    private static java.util.Set<String> mergedAbsence(RawFinancialReport source,
+                                                       RawFinancialReport residual) {
+        java.util.Set<String> merged = new java.util.LinkedHashSet<>(source.assertedAbsent());
+        merged.addAll(residual.assertedAbsent());
+        if (merged.isEmpty()) {
+            return java.util.Set.of();
+        }
+        java.util.Set<String> kept = new java.util.LinkedHashSet<>();
+        if (merged.contains(RawFinancialReport.NET_INCOME)
+                && pick(source.netIncome(), residual.netIncome()) == null) {
+            kept.add(RawFinancialReport.NET_INCOME);
+        }
+        return kept;
     }
 
     /**
@@ -2060,7 +2104,10 @@ final class SecEdgarFacts {
                 null, null,
                 // 우리가 만든 행이다. 저장이 이것을 알아야 유도 규칙을 고쳤을 때 옛 값을
                 // 지운다 — 재수집 경로는 NULL만 채우고 값을 NULL로 덮지 않기 때문이다.
-                true);
+                true,
+                // derived=true라 지우기는 이미 열려 있다. 그래도 같은 사실을 같은 자리에 싣는
+                // 이유는 mergeQ4가 이 판과 소스 판을 합치면서 **derived를 잃을 수 있기** 때문이다.
+                assertedAbsentOf(consolidatedIncomeQ4(byColumn, slot, subtractable, fy, q1, q2, q3)));
     }
 
     /**

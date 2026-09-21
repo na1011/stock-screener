@@ -116,6 +116,40 @@ class SecEdgarIncomeBasisTest {
         }
     }
 
+    /**
+     * <b>어댑터가 「비운다」를 저장에 전달하는가.</b> 값을 비우는 것만으로는 부족하다 —
+     * {@code FinancialWriter.fillMissing}은 소스 행에서 {@code null}을 만나면 <b>안 지우므로</b>,
+     * 어댑터가 <b>「이 null은 판정이다」</b>를 함께 실어야 저장에 닿는다.
+     *
+     * <p>이 시험이 없으면 writer만 고친 채 <b>어댑터가 안 싣는</b> 상태가 초록으로 남고,
+     * 그것은 재적재를 돌려야만 드러난다 — 실측으로 그 상태가 <b>5,366칸</b>을 살려 뒀다.
+     */
+    @Test
+    @DisplayName("연결 총액을 비울 때 그것이 판정임을 함께 싣는다 — 채울 때는 안 싣는다")
+    void carriesTheAbsenceAsAVerdict() throws Exception {
+        List<RawFinancialReport> blanked = annual(buildFrom("uhal-income-gate.json")).stream()
+                .filter(r -> r.netIncomeControlling() != null)
+                .toList();
+        assertThat(blanked).as("픽스처가 그 갈래를 안 태운다").isNotEmpty();
+        for (RawFinancialReport row : blanked) {
+            assertThat(row.assertedAbsent())
+                    .as("%d/FY — 비웠는데 판정을 안 실었다. 저장이 옛 값을 그대로 든다",
+                            row.fiscalYear())
+                    .contains(RawFinancialReport.NET_INCOME);
+        }
+
+        // 대조군 — 값을 채운 판에는 안 싣는다. 실으면 저장이 **멀쩡한 값을 지운다.**
+        List<RawFinancialReport> filled = annual(buildFrom("axs-income-gate.json")).stream()
+                .filter(r -> r.netIncome() != null)
+                .toList();
+        assertThat(filled).as("대조군이 그 갈래를 안 태운다").isNotEmpty();
+        for (RawFinancialReport row : filled) {
+            assertThat(row.assertedAbsent())
+                    .as("%d/FY — 값이 있는데 부재 판정을 실었다", row.fiscalYear())
+                    .doesNotContain(RawFinancialReport.NET_INCOME);
+        }
+    }
+
     @Test
     @DisplayName("비지배가 오래전에 끊겼으면 연결 총액을 채운다 — 옛 이력에 발목 잡히지 않는다")
     void fillsConsolidatedAfterNoncontrollingStopped() throws Exception {
