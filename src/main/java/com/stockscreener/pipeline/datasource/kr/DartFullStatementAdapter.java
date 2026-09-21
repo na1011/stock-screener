@@ -260,6 +260,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                         balance, DartFullAccountMapper.ID_TOTAL_ASSETS, DartAccountMapper.TOTAL_ASSETS),
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_TOTAL_EQUITY, DartAccountMapper.TOTAL_EQUITY),
+                DartFullAccountMapper.controllingEquity(balance),
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_TOTAL_LIABILITIES,
                         DartAccountMapper.TOTAL_LIABILITIES),
@@ -353,6 +354,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                         balance, DartFullAccountMapper.ID_TOTAL_ASSETS, DartAccountMapper.TOTAL_ASSETS),
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_TOTAL_EQUITY, DartAccountMapper.TOTAL_EQUITY),
+                DartFullAccountMapper.controllingEquity(balance),
                 DartFullAccountMapper.find(
                         balance, DartFullAccountMapper.ID_TOTAL_LIABILITIES,
                         DartAccountMapper.TOTAL_LIABILITIES),

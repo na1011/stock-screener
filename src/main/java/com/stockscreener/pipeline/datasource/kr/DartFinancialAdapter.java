@@ -196,6 +196,10 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 // 재무상태표는 시점 잔액이므로 누적 개념이 없다. 항상 당기 금액을 쓴다.
                 DartAccountMapper.find(balance, DartAccountMapper.TOTAL_ASSETS, false),
                 DartAccountMapper.find(balance, DartAccountMapper.TOTAL_EQUITY, false),
+                // 지배주주 자본은 **이 엔드포인트가 안 준다**(fnlttSinglAcnt 요약본). 전체
+                // 재무제표(fnlttSinglAcntAll)의 account_id로만 오고, 실측(2026-09-21 전수 탐침)
+                // 직접 태그 321/326이 거기서 왔다. 여기 null은 결손이 아니라 소스의 경계다.
+                null,
                 DartAccountMapper.find(balance, DartAccountMapper.TOTAL_LIABILITIES, false),
                 DartAccountMapper.find(balance, DartAccountMapper.CURRENT_ASSETS, false),
                 DartAccountMapper.find(balance, DartAccountMapper.CURRENT_LIABILITIES, false),
@@ -267,7 +271,9 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 // BS는 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다. 통화가 갈려도 참이다.
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_ASSETS, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_EQUITY, false),
-                // 지배주주 자본은 아직 안 담는다 — 국내는 분자도 비지배 포함이라 기저가 맞는다.
+                // 여기도 요약본이라 지배주주 자본이 안 온다(위와 같은 이유).
+                // **MUST NOT: 「국내는 분자도 비지배 포함이라 기저가 맞는다」를 근거로 적지 않는다**
+                // — 그 문장이 여기 있었고 틀렸다. 그것은 ROE에만 서고 PBR에는 안 선다.
                 null,
                 DartAccountMapper.find(annualBalance, DartAccountMapper.TOTAL_LIABILITIES, false),
                 DartAccountMapper.find(annualBalance, DartAccountMapper.CURRENT_ASSETS, false),

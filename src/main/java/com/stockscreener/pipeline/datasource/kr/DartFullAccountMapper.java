@@ -158,6 +158,52 @@ final class DartFullAccountMapper {
     static final Set<String> ID_TOTAL_ASSETS = ordered("ifrs-full_Assets", "ifrs_Assets");
     static final Set<String> ID_TOTAL_LIABILITIES = ordered("ifrs-full_Liabilities", "ifrs_Liabilities");
     static final Set<String> ID_TOTAL_EQUITY = ordered("ifrs-full_Equity", "ifrs_Equity");
+
+    /**
+     * <b>지배기업 소유주 귀속 자본.</b> {@code PBR}의 분모가 이것이어야 한다 — 분자인
+     * 시가총액은 <b>상장주식에만</b> 값을 매기므로 연결자본을 쓰면 비지배지분이 분모에만
+     * 들어간다(ADR-0159 §규칙).
+     *
+     * <p><b>실측(2026-09-21 · 편입 국내 전수 350콜 ·
+     * {@code DartControllingEquityProbeLiveTest})</b>: 응답 <b>326/350</b>(나머지 24는 전부
+     * {@code status 013}) 중 <b>직접 태그 321 = 98.5%</b>, 항등식
+     * {@code 자본총계 = 지배주주 + 비지배}가 <b>294/294 = 100%</b>, {@code sj_div}는 <b>BS 하나</b>.
+     * 지분 구분이 아예 없는 4종목은 비지배지분이 없는 회사이고 그때는 자본총계가 곧 이 값이다.
+     *
+     * <p><b>MUST NOT: 계정명으로 찾지 않는다 — 실측 계정명이 28가지다.</b>
+     * {@code 지배기업의 소유주지분} · {@code 지배기업소유주지분} · {@code 지배주주지분} ·
+     * {@code 지배기업 소유지본}(오타까지) … 지배주주 <b>순이익</b>이 일곱으로 갈린 것보다 넓다.
+     * 이름 폴백을 두면 어느 이름을 넣어도 새어 나간다.
+     *
+     * <p><b>MUST NOT: 부분일치로 맞추지 않는다</b> — {@code ifrs-full_Equity}가 이 ID의
+     * <b>접두사</b>다. {@link #findBy}가 완전일치라 지금은 안 걸리지만, 그 함수를 고치면 걸린다.
+     */
+    static final Set<String> ID_TOTAL_EQUITY_CONTROLLING = ordered(
+            "ifrs-full_EquityAttributableToOwnersOfParent",
+            "ifrs_EquityAttributableToOwnersOfParent");
+
+    /**
+     * <b>비지배지분(자본).</b> 유도와 항등식 검산의 재료다 — 지배주주 자본이 없어도
+     * {@code 자본총계 − 비지배}로 만들 수 있고, 둘 다 있으면 항등식이 선다.
+     *
+     * <p>이것이 <b>있는데</b> 지배주주 자본이 없으면 「계정 후보군이 좁다」는 신호이고,
+     * <b>둘 다 없으면</b> 비지배지분이 없는 회사라 자본총계가 곧 지배주주 자본이다.
+     * <b>그 둘을 가르는 것이 이 매핑의 목적이다</b> — NULL 하나로는 못 가른다.
+     */
+    static final Set<String> ID_NONCONTROLLING_INTERESTS = ordered(
+            "ifrs-full_NoncontrollingInterests", "ifrs_NoncontrollingInterests");
+
+    /**
+     * <b>비지배지분 귀속 순이익.</b> 실측 <b>연간 8/8 · 분기 8/8</b>이고 항등식
+     * {@code 연결총액 = 지배주주 + 비지배}가 <b>16/16</b>에서 맞았다
+     * ({@code docs/api-spec/dart-financial.md} 「계정별 가용성」).
+     *
+     * <p>2026-09-21 이전에는 <b>매퍼에 비지배 매핑이 0곳</b>이라 국내에서
+     * 「지배주주 자본이 없다」와 「비지배가 없는 회사다」를 가를 수단이 없었다.
+     */
+    static final Set<String> ID_NET_INCOME_NONCONTROLLING = ordered(
+            "ifrs-full_ProfitLossAttributableToNoncontrollingInterests",
+            "ifrs_ProfitLossAttributableToNoncontrollingInterests");
     static final Set<String> ID_CURRENT_ASSETS = ordered("ifrs-full_CurrentAssets", "ifrs_CurrentAssets");
     /**
      * 현금및현금성자산. <b>재무상태표에서만 읽는다</b> — 현금흐름표에도 같은 이름의 계정이
@@ -237,6 +283,29 @@ final class DartFullAccountMapper {
      *
      * @param nameCandidates null이면 계정명 폴백을 하지 않는다
      */
+    /**
+     * <b>지배기업 소유주 귀속 자본.</b> 직접 태그 → {@code 자본총계 − 비지배지분} → {@code null}.
+     *
+     * <p><b>MUST NOT: 「비지배 행이 없으니 자본총계가 곧 지배주주」로 폴백하지 않는다.</b>
+     * 그 판정은 <b>종목 단위 증거</b>를 요구하는데(ADR-0159 §결정 — *"그 종목이 비지배를
+     * 한 번도 안 내면"*) 이 함수는 보고서 하나만 본다. 행 단위로 폴백하면
+     * <b>어느 분기에 그 행이 없다는 것만으로 연결자본에 지배주주 이름표가 붙는다.</b>
+     * 실측(2026-09-21 전수 탐침)으로 그렇게 비는 종목은 <b>4</b>뿐이고, 그 넷을 NULL로 두는
+     * 것이 지어내는 것보다 정직하다.
+     *
+     * <p><b>MUST NOT: 계정명 후보를 주지 않는다</b> — 실측 계정명이 <b>28가지</b>다
+     * ({@link #ID_TOTAL_EQUITY_CONTROLLING}). 그래서 {@code find}의 셋째 인자가 {@code null}이다.
+     */
+    static BigDecimal controllingEquity(List<JsonNode> balance) {
+        BigDecimal direct = find(balance, ID_TOTAL_EQUITY_CONTROLLING, null);
+        if (direct != null) {
+            return direct;
+        }
+        BigDecimal total = find(balance, ID_TOTAL_EQUITY, DartAccountMapper.TOTAL_EQUITY);
+        BigDecimal noncontrolling = find(balance, ID_NONCONTROLLING_INTERESTS, null);
+        return total != null && noncontrolling != null ? total.subtract(noncontrolling) : null;
+    }
+
     static BigDecimal find(List<JsonNode> rows, Set<String> idCandidates, Set<String> nameCandidates) {
         BigDecimal byId = findBy(rows, idCandidates, "account_id");
         if (byId != null) {

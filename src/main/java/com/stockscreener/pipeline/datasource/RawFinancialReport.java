@@ -159,7 +159,13 @@ public record RawFinancialReport(
 ) {
 
     /**
-     * 소스가 준 행. <b>유도한 행에는 쓰지 않는다</b> — 위 {@code derived} javadoc.
+     * <b>지배주주 자본을 안 받는 옛 형태 — 시험 픽스처 전용이다.</b>
+     *
+     * <p><b>MUST NOT: 적재 어댑터에서 쓰지 않는다.</b> 이 생성자가 그 자리에 {@code null}을
+     * 박고 국내 네 생성 지점이 전부 이것을 쓰고 있었던 탓에, 국내 {@code total_equity_controlling}이
+     * <b>20,154행 전부 비어</b> {@code PBR}의 분모가 전 종목에서 연결자본으로 폴백했다.
+     * 적재 경로는 아래 {@code totalEquityControlling}을 받는 생성자를 쓴다 —
+     * <b>컴파일러가 그 자리를 강제로 드러내는 것이 이 분리의 목적이다.</b>
      */
     public RawFinancialReport(int fiscalYear, String fiscalPeriod, LocalDate periodStart,
                               LocalDate periodEnd, LocalDate publishedAt, String reportCode,
@@ -179,6 +185,43 @@ public record RawFinancialReport(
         this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
                 currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
                 null, totalLiabilities, currentAssets, currentLiabilities, retainedEarnings,
+                operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents,
+                capex, inventories, netIncomeControlling, interestAndDividendIncome,
+                noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
+                grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
+                profitBeforeTax, false);
+    }
+
+    /**
+     * 소스가 준 행. <b>유도한 행에는 쓰지 않는다</b> — 위 {@code derived} javadoc.
+     *
+     * <p><b>MUST: {@code totalEquityControlling}을 인자로 받는다 — 2026-09-21에 더했다.</b>
+     * 그 전에는 이 생성자가 그 자리에 <b>상수 {@code null}</b>을 박았고, 국내 네 생성 지점이
+     * 전부 이것을 쓰므로 <b>국내는 지배주주 자본을 담을 자리가 원리적으로 없었다.</b>
+     * 특히 {@code toFourthQuarterBalance}가 만드는 Q4가 국내 재무의 <b>18.86%</b>라,
+     * 그 자리를 안 고치면 커버리지 상한이 81.14%이고 {@code PBR_MEDIAN_5Y}는 5년 창에 Q4가
+     * 매년 들어가 <b>연결 기저에 남는다.</b>
+     */
+    public RawFinancialReport(int fiscalYear, String fiscalPeriod, LocalDate periodStart,
+                              LocalDate periodEnd, LocalDate publishedAt, String reportCode,
+                              String currencyCode, BigDecimal revenue, BigDecimal operatingIncome,
+                              BigDecimal netIncome, BigDecimal totalAssets, BigDecimal totalEquity,
+                              BigDecimal totalEquityControlling,
+                              BigDecimal totalLiabilities, BigDecimal currentAssets,
+                              BigDecimal currentLiabilities, BigDecimal retainedEarnings,
+                              BigDecimal operatingCashFlow, BigDecimal sharesOutstanding,
+                              BigDecimal eps, BigDecimal bps, BigDecimal costOfSales,
+                              BigDecimal cashAndEquivalents, BigDecimal capex,
+                              BigDecimal inventories, BigDecimal netIncomeControlling,
+                              BigDecimal interestAndDividendIncome, BigDecimal noninterestIncome,
+                              BigDecimal interestExpense, BigDecimal noninterestExpense,
+                              BigDecimal benefitsLossesAndExpenses, BigDecimal grossProfit,
+                              BigDecimal operatingExpenses, BigDecimal costsAndExpenses,
+                              BigDecimal incomeTaxExpense, BigDecimal profitBeforeTax) {
+        this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
+                currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
+                totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings,
                 operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents,
                 capex, inventories, netIncomeControlling, interestAndDividendIncome,
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
