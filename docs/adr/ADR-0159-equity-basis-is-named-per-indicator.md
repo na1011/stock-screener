@@ -6,7 +6,11 @@ applies_to:
   - "src/main/java/com/stockscreener/indicator/calculator/**"
   - "src/main/java/com/stockscreener/pipeline/datasource/us/SecEdgarFacts.java"
   - "src/main/java/com/stockscreener/pipeline/datasource/kr/DartFullAccountMapper.java"
+  - "src/main/java/com/stockscreener/pipeline/datasource/kr/DartFullStatementAdapter.java"
   - "src/main/java/com/stockscreener/pipeline/datasource/RawFinancialReport.java"
+  - "src/main/java/com/stockscreener/pipeline/collector/FinancialWriter.java"
+  - "src/main/java/com/stockscreener/pipeline/collector/GovernanceFactDeriver.java"
+  - "src/main/java/com/stockscreener/stock/web/**"
 ---
 
 # ADR-0159. 지분 기저를 컬럼에 박고 지표마다 이름으로 고른다 — 시장이 아니라 짝으로 가른다

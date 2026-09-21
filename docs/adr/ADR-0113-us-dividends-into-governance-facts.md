@@ -107,12 +107,18 @@ psql -d stock_screener -At -c "WITH win AS ( SELECT DISTINCT stock_id, fiscal_ye
 행에 닿고 있고 0건인 것이 필터 때문이라는 뜻이다.
 
 ```premise 총액이 빠진 미국 (종목,회계연도)가 전부 주식수 온전성 게이트로 설명된다
-psql -d stock_screener -At -c "WITH g AS ( SELECT f.stock_id, f.fiscal_year, (array_agg(f.shares_outstanding ORDER BY f.published_at) FILTER (WHERE f.shares_outstanding > 0))[1] AS shares, (array_agg(f.net_income / nullif(f.eps, 0) ORDER BY f.published_at) FILTER (WHERE f.net_income IS NOT NULL AND f.eps IS NOT NULL AND f.eps <> 0))[1] AS implied FROM financial_statement f JOIN stock s ON s.id = f.stock_id AND s.market_code = 'US' WHERE f.fiscal_period = 'FY' GROUP BY 1, 2) , gated AS ( SELECT stock_id, fiscal_year FROM g WHERE CASE WHEN implied IS NULL OR implied = 0 THEN shares WHEN abs(shares / implied - 1) > 0.20 THEN NULL ELSE shares END IS NULL) , missing AS ( SELECT d.stock_id, d.fiscal_year FROM governance_fact d JOIN stock s ON s.id = d.stock_id AND s.market_code = 'US' WHERE d.metric_key = 'DPS_COMMON' AND NOT EXISTS (SELECT 1 FROM governance_fact t WHERE t.stock_id = d.stock_id AND t.fiscal_year = d.fiscal_year AND t.metric_key = 'CASH_DIVIDEND_TOTAL')) , unexplained AS ( SELECT count(*) n FROM missing m WHERE NOT EXISTS (SELECT 1 FROM gated x WHERE x.stock_id = m.stock_id AND x.fiscal_year = m.fiscal_year)) SELECT CASE WHEN (SELECT count(*) FROM missing) = 0 THEN 'OK 총액이 빠진 미국 (종목,회계연도)가 하나도 없다' WHEN (SELECT n FROM unexplained) = 0 THEN 'OK 총액이 빠진 ' || (SELECT count(*) FROM missing) || '개 (종목,회계연도)가 전부 주식수 온전성 게이트로 설명된다' ELSE (SELECT n FROM unexplained) || '개 (종목,회계연도)가 주당배당금은 내면서 총액을 안 내는데 ' || '주식수 온전성 게이트로 설명되지 않는다 — 다른 사유가 총액을 조용히 지우고 있다' END"
+psql -d stock_screener -At -c "WITH g AS ( SELECT f.stock_id, f.fiscal_year, (array_agg(f.shares_outstanding ORDER BY f.published_at) FILTER (WHERE f.shares_outstanding > 0))[1] AS shares, (array_agg(coalesce(f.net_income_controlling, f.net_income) / nullif(f.eps, 0) ORDER BY f.published_at) FILTER (WHERE coalesce(f.net_income_controlling, f.net_income) IS NOT NULL AND f.eps IS NOT NULL AND f.eps <> 0))[1] AS implied FROM financial_statement f JOIN stock s ON s.id = f.stock_id AND s.market_code = 'US' WHERE f.fiscal_period = 'FY' GROUP BY 1, 2) , gated AS ( SELECT stock_id, fiscal_year FROM g WHERE CASE WHEN implied IS NULL OR implied = 0 THEN shares WHEN abs(shares / implied - 1) > 0.20 THEN NULL ELSE shares END IS NULL) , missing AS ( SELECT d.stock_id, d.fiscal_year FROM governance_fact d JOIN stock s ON s.id = d.stock_id AND s.market_code = 'US' WHERE d.metric_key = 'DPS_COMMON' AND NOT EXISTS (SELECT 1 FROM governance_fact t WHERE t.stock_id = d.stock_id AND t.fiscal_year = d.fiscal_year AND t.metric_key = 'CASH_DIVIDEND_TOTAL')) , unexplained AS ( SELECT count(*) n FROM missing m WHERE NOT EXISTS (SELECT 1 FROM gated x WHERE x.stock_id = m.stock_id AND x.fiscal_year = m.fiscal_year)) SELECT CASE WHEN (SELECT count(*) FROM missing) = 0 THEN 'OK 총액이 빠진 미국 (종목,회계연도)가 하나도 없다' WHEN (SELECT n FROM unexplained) = 0 THEN 'OK 총액이 빠진 ' || (SELECT count(*) FROM missing) || '개 (종목,회계연도)가 전부 주식수 온전성 게이트로 설명된다' ELSE (SELECT n FROM unexplained) || '개 (종목,회계연도)가 주당배당금은 내면서 총액을 안 내는데 ' || '주식수 온전성 게이트로 설명되지 않는다 — 다른 사유가 총액을 조용히 지우고 있다' END"
 ```
 
-**술어를 `GovernanceFactDeriver`에서 그대로 떠 왔다.** 베낀 것이 문제가 되는 자리이지만,
+**술어를 `GovernanceFactDeriver`에서 그대로 떠 왔다.** 2026-09-21에 분자를
+`coalesce(net_income_controlling, net_income)`으로 바꿨다 — `eps`가 지배주주 기준이라
+`net_income`이 연결 총액으로 복원되면(ADR-0159) 비지배가 있는 회사에서 게이트가 거짓
+발화한다. **MUST: 둘을 함께 고친다.** 베낀 것이 문제가 되는 자리이지만,
 **베끼지 않으면 「총액이 왜 없는가」에 답할 수단이 없다** — 유도 문맥은 저장되지 않는다.
-지금 108개가 그 게이트로 설명되고 **미설명 0**이며 **0.08초**다. 대조군으로 게이트 집합을
+2026-09-21에 **202개**가 그 게이트로 설명되고 **미설명 0**이다(옛 술어와 새 술어가 같은 수를
+낸다 — 미국 `nic`이 아직 0행이라 `coalesce`가 `net_income`을 쓴다).
+**MUST: 적재로 `net_income`이 연결 총액이 된 뒤 이 수를 다시 낸다** — 분자의 기저가
+바뀌므로 같은 수일 이유가 없다. 대조군으로 게이트 집합을
 비우면 108이 전부 미설명으로 뒤집힌다.
 
 **단위 시험이 규칙을 하나씩 잠근다** — 회계연도 버킷 · 최초 공시일 스탬프 · 무배당 0 ·
