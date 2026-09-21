@@ -304,6 +304,11 @@ final class SecEdgarFacts {
         for (RawFinancialReport report : reports) {
             addIfPresent(filled, SecEdgarColumn.REVENUE, report.revenue());
             addIfPresent(filled, SecEdgarColumn.NET_INCOME, report.netIncome());
+            // net_income이 연결 총액이 되면서 NET_INCOME_TOTAL·NET_INCOME_CONTROLLING으로도
+            // 유도가 돈다(2026-09-21). 목록에 없으면 「태그는 없다는데 값은 있다」가 다시 생긴다.
+            addIfPresent(filled, SecEdgarColumn.NET_INCOME_TOTAL, report.netIncome());
+            addIfPresent(filled, SecEdgarColumn.NET_INCOME_CONTROLLING,
+                    report.netIncomeControlling());
             addIfPresent(filled, SecEdgarColumn.TOTAL_EQUITY, report.totalEquity());
             addIfPresent(filled, SecEdgarColumn.TOTAL_EQUITY_CONTROLLING, report.totalEquityControlling());
             addIfPresent(filled, SecEdgarColumn.TOTAL_LIABILITIES, report.totalLiabilities());
@@ -837,6 +842,7 @@ final class SecEdgarFacts {
             Map<SecEdgarColumn, BigDecimal> carried = carryForward(baseline, values);
             RawFinancialReport candidate = toReport(label, window, reporter, currency, carried,
                     byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
+                    noNoncontrollingIncome(byColumn),
                     byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty());
             // MUST: 「저장될 행이 달라지는가」로 판정한다. 원시 컬럼 맵으로 판정하면 안 된다 —
             // 다리 컬럼(유도 재료)이 달라져도 유도 결과가 같으면 저장은 한 칸도 안 바뀌고,
@@ -1220,15 +1226,16 @@ final class SecEdgarFacts {
                                                String currency,
                                                Map<SecEdgarColumn, BigDecimal> v,
                                                boolean noNoncontrolling,
+                                               boolean noNoncontrollingIncome,
                                                boolean noDiscontinued) {
         return new RawFinancialReport(
                 label.fiscalYear(), label.period(), window.start(), window.end(), anchor.filed(),
                 // 정정 추적의 근거. DART 쪽이 rcept_no 컬럼이 없어 못 하던 것이다.
                 "%s:%s".formatted(anchor.form(), anchor.accn()), currency,
                 revenue(v), operatingIncome(v),
-                controllingIncome(v), v.get(SecEdgarColumn.TOTAL_ASSETS),
+                consolidatedIncome(v, noNoncontrollingIncome), v.get(SecEdgarColumn.TOTAL_ASSETS),
                 totalEquity(v),
-                controllingEquity(v),
+                controllingEquity(v, noNoncontrolling),
                 totalLiabilities(v, noNoncontrolling),
                 v.get(SecEdgarColumn.CURRENT_ASSETS), v.get(SecEdgarColumn.CURRENT_LIABILITIES),
                 v.get(SecEdgarColumn.RETAINED_EARNINGS), operatingCashFlow(v),
@@ -1237,24 +1244,11 @@ final class SecEdgarFacts {
                 null,
                 v.get(SecEdgarColumn.COST_OF_SALES), v.get(SecEdgarColumn.CASH_AND_EQUIVALENTS),
                 v.get(SecEdgarColumn.CAPEX), v.get(SecEdgarColumn.INVENTORIES),
-                // 지배주주 귀속 순이익을 따로 담지 않는다. 미국은 net_income이 이미
-                // `NetIncomeLoss`(us-gaap 정의상 지배주주 귀속)를 첫 후보로 쓰고 있어
-                // (SecEdgarColumn.NET_INCOME) 폴백이 곧 옳은 값을 쓴다. 여기서 갈라 담으면
-                // 이미 적재된 행은 옛 정의, 새 행은 새 정의인 혼합물이 된다 —
-                // fillMissing이 stored == null일 때만 채우므로(ADR-0056) 되돌릴 길이 없다.
-                //
-                // **MUST: 「옳은 값」은 주당 지표에만 옳다 — 그 선택의 대가가 ADR-0159 §측정에
-                // 수로 있다.** net_income이 지배주주라서 ROA·NET_MARGIN·ACCRUAL_RATIO가
-                // **연결 분모에 지배주주 분자를 얹는다**: 618종목 중 118(19.1%)이 5% 초과 ·
-                // 43(7.0%)이 20% 초과이고 **부호가 뒤집히는 종목이 있다**(CWEN +169M ↔ −231M ·
-                // INTC −267M ↔ +26M). ACCRUAL_RATIO는 12개 조건·13개 프리셋에 들어 있다.
-                //
-                // **MUST NOT: 이 null을 「소스가 안 준다」로 읽지 않는다.** 원장은 준다 —
-                // SecEdgarColumn.NET_INCOME_TOTAL이 `ProfitLoss`를 이미 들고 있고
-                // controllingIncome()이 그것으로 항등식을 검산한다. 비어 있는 것은
-                // **담을 자리를 안 만든 것**이지 결손이 아니다. 여는 순서는 ADR-0159 §규칙이
-                // 정한다 — 계산기를 먼저 배포하고 적재를 나중에 바꾼다.
-                null,
+                // 지배주주 귀속 순이익. **net_income은 위에서 연결 총액이 됐으므로 둘이 갈라졌다**
+                // (ADR-0159 §결정 — 두 컬럼의 뜻은 두 시장 공통이다). 2026-09-21 이전에는
+                // net_income에 이 값이 들어가고 여기가 상수 null이었는데, 그 때문에
+                // ROA·NET_MARGIN·ACCRUAL_RATIO가 연결 분모에 지배주주 분자를 얹고 있었다.
+                controllingIncome(v),
                 // 영업이익 유도의 재료 여덟(V40). 여기서 계산하지 않는다 — 원자료만 담고
                 // 판단은 지표 계층이 한다(FinancialMath.operatingIncomeOf).
                 v.get(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME),
@@ -1318,6 +1312,55 @@ final class SecEdgarFacts {
             return direct;
         }
         return direct.abs().compareTo(identity.abs()) == 0 ? identity : direct;
+    }
+
+    /**
+     * <b>그 종목이 손익의 비지배를 한 번도 안 내는가.</b> 티커 단위 증거이고, 연결 총액을
+     * 지배주주 값으로 채우는 폴백의 <b>유일한 근거</b>다(ADR-0159 §결정).
+     *
+     * <p><b>MUST NOT: {@code MINORITY_INTEREST}로 이 판정을 하지 않는다 — 축이 다르다.</b>
+     * 그 컬럼은 {@code MinorityInterest} 하나이고 <b>재무상태표 잔액</b>({@code Kind.INSTANT})인데,
+     * 상환가능 비지배지분은 중간지분에 실려 거기 안 나온다. 실측(2026-09-21 · 팩트 캐시 1,214):
+     * {@code MinorityInterest}가 없는 <b>536티커 중 54</b>가 손익 비지배 태그를 실제로 낸다
+     * (편입 998 중 <b>38</b> — {@code BX} FY2025 {@code ProfitLoss} 6,046M 대
+     * {@code NetIncomeLoss} 3,019M으로 <b>2.00배</b> · {@code ARES} 834M 대 527M).
+     * 그 게이트를 손익에 쓰면 <b>지배주주 값이 연결총액 이름으로 저장된다.</b>
+     *
+     * <p><b>이 교정은 커버리지로도 이긴다</b> — 손익 게이트가 편입 998 중 415를 덮어,
+     * 자본 게이트의 <b>정당한</b> 387(=425−38)보다 넓다. 잃는 칸이 0이다.
+     */
+    private static boolean noNoncontrollingIncome(
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        return byColumn.getOrDefault(SecEdgarColumn.NET_INCOME_NONCONTROLLING, Map.of()).isEmpty()
+                && byColumn.getOrDefault(
+                        SecEdgarColumn.NET_INCOME_NONCONTROLLING_REDEEMABLE, Map.of()).isEmpty()
+                && byColumn.getOrDefault(
+                        SecEdgarColumn.NET_INCOME_NONCONTROLLING_NONREDEEMABLE, Map.of()).isEmpty();
+    }
+
+    /**
+     * <b>연결 총액 순이익 — 비지배 포함.</b> {@code ROA}·{@code NET_MARGIN}·
+     * {@code ACCRUAL_RATIO}가 이것을 읽고, 그 분모는 전부 연결이다(ADR-0159 §지표표).
+     *
+     * <p>갈래가 넷이고 순서가 §결정 표 그대로다 — 직접 → {@code 지배주주 + 비지배} →
+     * <b>그 종목이 비지배를 한 번도 안 내면</b> 지배주주 → <b>NULL</b>.
+     *
+     * <p><b>MUST: 못 만드는 칸은 NULL로 둔다 — 지어내지 않는다.</b> 게이트 없이 폴백하면
+     * 미국 창의 42.84%가 추정값이 되고 그중 <b>32.5%가 비지배를 실제로 신고하는 회사</b>이며,
+     * 대조군에서 <b>그런 회사는 81.50%에서 두 값이 다르다</b>(ADR-0159 §커버리지).
+     */
+    private static BigDecimal consolidatedIncome(Map<SecEdgarColumn, BigDecimal> v,
+                                                 boolean noNoncontrollingIncome) {
+        BigDecimal total = v.get(SecEdgarColumn.NET_INCOME_TOTAL);
+        if (total != null) {
+            return total;
+        }
+        BigDecimal controlling = controllingIncome(v);
+        BigDecimal nonControlling = nonControllingIncome(v);
+        if (controlling != null && nonControlling != null) {
+            return controlling.add(nonControlling);
+        }
+        return noNoncontrollingIncome ? controlling : null;
     }
 
     private static BigDecimal controllingIncome(Map<SecEdgarColumn, BigDecimal> v) {
@@ -1615,14 +1658,38 @@ final class SecEdgarFacts {
         return mezzanine != null ? liabilities.subtract(mezzanine) : liabilities;
     }
 
-    private static BigDecimal controllingEquity(Map<SecEdgarColumn, BigDecimal> v) {
+    private static BigDecimal controllingEquity(Map<SecEdgarColumn, BigDecimal> v,
+                                                boolean noNoncontrolling) {
         BigDecimal direct = v.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING);
+        BigDecimal total = v.get(SecEdgarColumn.TOTAL_EQUITY);
         if (direct != null) {
+            // **MUST: 비지배를 한 번도 안 내는 회사인데 두 자본이 갈리면 직접 태그를 버린다**
+            // (ADR-0159 §규칙). 비지배가 없으면 두 값은 정의상 같아야 하므로, 갈리는 것은
+            // 회사가 `StockholdersEquity`에 다른 것을 실었다는 뜻이다. 실측 43행·6티커 —
+            // NKE 2017 Q1 총자본 85,000,000 대 직접 12,165,000,000 · UNM 2021 FY −5,164.6M 대
+            // 6,033.9M · NFG 2025 Q1 2,752.8M 대 −76.2M. 지금 순서는 직접이 언제나 이겨
+            // **그 쓰레기 값을 ROE·PBR 분모로 승격시킨다.**
+            if (noNoncontrolling && total != null && differsMaterially(direct, total)) {
+                return total;
+            }
             return direct;
         }
-        BigDecimal total = v.get(SecEdgarColumn.TOTAL_EQUITY);
         BigDecimal minority = v.get(SecEdgarColumn.MINORITY_INTEREST);
         return total != null && minority != null ? total.subtract(minority) : null;
+    }
+
+    /** 두 자본이 1% 넘게 갈리는가. 임계는 ADR-0159 §규칙의 실측(43행·6티커)이 쓴 것과 같다. */
+    private static boolean differsMaterially(BigDecimal a, BigDecimal b) {
+        if (a.signum() != b.signum()) {
+            return true;   // 부호가 다르면 크기와 무관하게 다른 개념이다
+        }
+        BigDecimal scale = b.abs().max(a.abs());
+        if (scale.signum() == 0) {
+            return false;
+        }
+        return a.subtract(b).abs()
+                .divide(scale, 6, java.math.RoundingMode.HALF_UP)
+                .compareTo(new BigDecimal("0.01")) > 0;
     }
 
     // ---------- 4. Q4를 유도한다 ----------
@@ -1913,7 +1980,13 @@ final class SecEdgarFacts {
                             q1.revenue(), q2.revenue(), q3.revenue()),
                 sourceOrMinus(byColumn, SecEdgarColumn.OPERATING_INCOME, slot, subtractable, fy.operatingIncome(),
                             q1.operatingIncome(), q2.operatingIncome(), q3.operatingIncome()),
-                controllingIncomeQ4(byColumn, slot, subtractable, fy, q1, q2, q3),
+                // **MUST: Q4도 두 컬럼을 다 만든다.** 여기가 한쪽만 채우면
+                // IndicatorDataReader의 TTM 창(분기 넷)에 Q4가 들어가는 순간
+                // sumControllingNetIncome이 **창 단위 전부-아니면-전무**라 통째로 netIncome
+                // 합으로 떨어진다 — 실측(2026-09-21) 편입 미국 983종목 중 **960(97.7%)**의
+                // 최신 TTM 창에 Q4 행이 든다. 그러면 PER·EPS_TTM의 분자가 연결이 되고
+                // roeBasis의 지배주주 짝이 **원리적으로 안 켜진다.**
+                consolidatedIncomeQ4(byColumn, slot, subtractable, fy, q1, q2, q3),
                 // 잔액은 차감하지 않는다 — 연말 잔액이 곧 Q4 말 잔액이다.
                 fy.totalAssets(), fy.totalEquity(), fy.totalEquityControlling(),
                 fy.totalLiabilities(),
@@ -1923,8 +1996,7 @@ final class SecEdgarFacts {
                 sourceOrMinus(byColumn, SecEdgarColumn.COST_OF_SALES, slot, subtractable, fy.costOfSales(),
                             q1.costOfSales(), q2.costOfSales(), q3.costOfSales()),
                 fy.cashAndEquivalents(), null, fy.inventories(),
-                // 위 toReport와 같은 이유로 담지 않는다.
-                null,
+                controllingIncomeQ4(byColumn, slot, subtractable, fy, q1, q2, q3),
                 // 유도 재료 여덟은 전부 유량이라 차감한다. 하나라도 없으면 minus가
                 // null을 내므로 Q4 영업이익이 지어지지 않는다 — 그것이 옳다.
                 guardedMinus(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME, subtractable, fy.interestAndDividendIncome(),
@@ -2045,6 +2117,40 @@ final class SecEdgarFacts {
      * 이미 지배주주 기저</b>이므로(연간·분기 행이 {@code controllingIncome}을 거쳤다) 뺄셈은
      * 기저를 섞지 않는다.
      */
+    /**
+     * Q4의 <b>연결 총액</b> 순이익. {@link #consolidatedIncome}과 같은 네 갈래이고
+     * 마지막 갈래만 다르다 — 소스가 그 분기를 안 내면 <b>FY − (Q1+Q2+Q3)</b>로 뺀다.
+     *
+     * <p><b>피감수와 감수가 같은 기저다</b> — 연간·분기 행이 모두 이 함수를 거쳤으므로
+     * 뺄셈이 기저를 섞지 않는다. {@code subtractable}이 거짓이면(통화가 갈리면) 빼지 않는다.
+     */
+    private static BigDecimal consolidatedIncomeQ4(
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, Slot slot,
+            boolean subtractable, RawFinancialReport fy, RawFinancialReport q1,
+            RawFinancialReport q2, RawFinancialReport q3) {
+        BigDecimal direct = sourceAt(byColumn, SecEdgarColumn.NET_INCOME_TOTAL, slot);
+        if (direct != null) {
+            return direct;
+        }
+        BigDecimal controlling = sourceAt(byColumn, SecEdgarColumn.NET_INCOME_CONTROLLING, slot);
+        BigDecimal nonControlling =
+                sourceAt(byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING, slot);
+        if (nonControlling == null) {
+            BigDecimal redeemable = sourceAt(
+                    byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING_REDEEMABLE, slot);
+            BigDecimal nonRedeemable = sourceAt(
+                    byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING_NONREDEEMABLE, slot);
+            nonControlling = redeemable != null && nonRedeemable != null
+                    ? redeemable.add(nonRedeemable) : null;
+        }
+        if (controlling != null && nonControlling != null) {
+            return controlling.add(nonControlling);
+        }
+        // 소스가 이 분기를 안 냈다. FY와 분기 셋이 이미 연결 기저이므로 뺄셈이 성립한다.
+        return sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME_TOTAL, slot, subtractable,
+                fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome());
+    }
+
     private static BigDecimal controllingIncomeQ4(
             Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, Slot slot,
             boolean subtractable, RawFinancialReport fy, RawFinancialReport q1,
