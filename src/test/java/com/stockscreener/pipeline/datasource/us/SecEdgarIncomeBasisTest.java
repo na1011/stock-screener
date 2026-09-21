@@ -86,39 +86,47 @@ class SecEdgarIncomeBasisTest {
     }
 
     /**
-     * <b>폴백 게이트가 손익 축인지를 잠근다 — 이 시험 하나가 그것을 잰다.</b>
+     * <b>폴백 게이트를 양방향으로 잠근다 — 픽스처 둘이 반대 갈래다.</b>
      *
-     * <p>{@code AXS}는 {@code ProfitLoss}를 <b>안 내고</b>, 손익 비지배 태그를 <b>2012~2016에만</b>
-     * 내며, {@code MinorityInterest}는 <b>없다.</b> 그래서 2023년 이후 칸에서 두 게이트가
-     * <b>정반대로 답한다</b>:
+     * <p>둘 다 {@code ProfitLoss}를 <b>안 내고</b> {@code MinorityInterest}도 <b>없다.</b>
+     * 갈리는 것은 <b>비지배 손익을 언제까지 냈는가</b> 하나다.
      * <ul>
-     *   <li><b>손익 게이트</b>(지금) — 그 티커가 비지배 손익을 <b>낸 적이 있으므로</b> 폴백을
-     *       안 건다. 그 기간에 비지배 값이 없으니 연결 총액을 못 만들고 <b>NULL</b>이다.</li>
-     *   <li><b>자본 게이트</b>(되돌리면) — {@code MinorityInterest}가 없으니 폴백을 걸어
-     *       <b>지배주주 값이 연결총액 이름으로 저장된다.</b></li>
+     *   <li>{@code UHAL} — <b>2026-06-30까지</b> 낸다. 지금도 비지배가 있으므로 연결 총액을
+     *       못 만들고 <b>NULL</b>이다. 자본 축으로 되돌리면({@code MinorityInterest}가 없으니)
+     *       폴백이 켜져 <b>지배주주 값이 연결총액 이름으로</b> 저장된다.</li>
+     *   <li>{@code AXS} — <b>2016-12-31에 끊겼다.</b> 그 뒤 기간은 폴백을 받아야 한다.
+     *       게이트를 「한 번도 안 냈는가」로 되돌리면 십 년 전 이력에 발목이 잡혀
+     *       <b>값을 만들 수 있는데 안 만든다</b> — 실측으로 그 형태가 89종목이었고
+     *       {@code BBY}는 최근 두 자본이 같아 원장이 비지배 0을 확인해 준다.</li>
      * </ul>
      *
-     * <p><b>MUST: 「지어내지 않는다」가 이 단언의 내용이다</b>(ADR-0159 §결정).
-     * 못 만드는 칸은 NULL이고 {@code ROA}·{@code NET_MARGIN}·{@code ACCRUAL_RATIO}가
-     * 그 칸에서 값을 안 낸다.
+     * <p><b>MUST: 두 시험을 함께 둔다.</b> 하나만 두면 게이트를 한쪽으로 밀어도 안 붉는다.
      */
     @Test
-    @DisplayName("연결 총액을 못 만들면 비운다 — 지배주주 값으로 채우지 않는다")
-    void leavesConsolidatedNullWhenItCannotBeBuilt() throws Exception {
-        List<RawFinancialReport> rows = annual(buildFrom("axs-income-gate.json"));
-        assertThat(rows).as("픽스처가 연간 행을 안 내면 이 시험은 아무것도 안 잰다").isNotEmpty();
-
-        List<RawFinancialReport> withControlling = rows.stream()
+    @DisplayName("비지배를 지금도 내면 연결 총액을 비운다 — 지배주주 값으로 채우지 않는다")
+    void leavesConsolidatedNullWhileNoncontrollingIsStillReported() throws Exception {
+        List<RawFinancialReport> rows = annual(buildFrom("uhal-income-gate.json")).stream()
                 .filter(r -> r.netIncomeControlling() != null)
                 .toList();
-        assertThat(withControlling)
-                .as("지배주주 값이 한 행도 없다 — 픽스처가 그 갈래를 안 태운다")
-                .isNotEmpty();
-        for (RawFinancialReport row : withControlling) {
+        assertThat(rows).as("픽스처가 그 갈래를 안 태운다").isNotEmpty();
+        for (RawFinancialReport row : rows) {
             assertThat(row.netIncome())
-                    .as("%d/FY — 연결 총액을 못 만드는데 값이 들어갔다. 폴백 게이트가 손익 축인가", 
-                            row.fiscalYear())
+                    .as("%d/FY — 비지배를 지금도 내는데 연결 총액에 값이 들어갔다", row.fiscalYear())
                     .isNull();
+        }
+    }
+
+    @Test
+    @DisplayName("비지배가 오래전에 끊겼으면 연결 총액을 채운다 — 옛 이력에 발목 잡히지 않는다")
+    void fillsConsolidatedAfterNoncontrollingStopped() throws Exception {
+        List<RawFinancialReport> rows = annual(buildFrom("axs-income-gate.json")).stream()
+                .filter(r -> r.netIncomeControlling() != null)
+                .toList();
+        assertThat(rows).as("픽스처가 그 갈래를 안 태운다").isNotEmpty();
+        for (RawFinancialReport row : rows) {
+            assertThat(row.netIncome())
+                    .as("%d/FY — 비지배가 2016에 끊겼는데 연결 총액이 비었다", row.fiscalYear())
+                    .isNotNull();
         }
     }
 

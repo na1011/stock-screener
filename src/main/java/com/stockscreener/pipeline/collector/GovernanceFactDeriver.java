@@ -198,7 +198,15 @@ public class GovernanceFactDeriver {
                        -- 주식수 온전성 게이트. 소스가 주는 후보가 넷인데 뒤 둘이 **가중평균
                        -- 주식수**라, 앞의 것이 없는 회사는 조용히 다른 것을 세고 있다
                        -- (어느 후보가 쓰였는지 저장하는 열이 없다). 실측으로 미국 997종목 중
-                       -- 66(6.6%)이 net_income/eps 함의값과 20% 넘게 어긋난다.
+                       -- 66(6.6%)이 함의값과 20% 넘게 어긋난다.
+                       -- **MUST: 분자를 eps와 같은 기저로 둔다.** eps는 지배주주 기준이므로
+                       -- 연결 총액을 쓰면 비지배가 있는 회사에서 implied가 과대해져 게이트가
+                       -- 거짓 발화한다. 2026-09-21에 net_income이 연결 총액으로 복원되면서
+                       -- 그 자리가 실제로 생겼고(ADR-0159), coalesce가 두 상태를 다 덮는다 —
+                       -- nic이 아직 0행인 동안에는 net_income이 곧 지배주주라 값이 안 바뀐다.
+                       -- **MUST: 펜스와 같은 술어를 쓴다** — ADR-0113 §검증이 이 질의를
+                       -- 그대로 떠 갔고(그 절이 그렇게 적는다), 한쪽만 고치면 펜스가 다른
+                       -- 것을 재면서 「전부 게이트로 설명된다」가 뜻을 잃는다.
                        -- 어긋나면 NULL로 두고, 매퍼가 그때 총액을 안 낸다.
                        -- **못 재는 것과 어긋난 것은 다르다** — eps가 없거나 0이면 검산이
                        -- 성립하지 않으므로 그대로 둔다.
@@ -211,9 +219,10 @@ public class GovernanceFactDeriver {
                                min(published_at) AS first_published_at,
                                (array_agg(shares_outstanding ORDER BY published_at)
                                 FILTER (WHERE shares_outstanding > 0))[1] AS shares,
-                               (array_agg(net_income / nullif(eps, 0) ORDER BY published_at)
-                                FILTER (WHERE net_income IS NOT NULL AND eps IS NOT NULL
-                                          AND eps <> 0))[1] AS implied
+                               (array_agg(coalesce(net_income_controlling, net_income)
+                                            / nullif(eps, 0) ORDER BY published_at)
+                                FILTER (WHERE coalesce(net_income_controlling, net_income) IS NOT NULL
+                                          AND eps IS NOT NULL AND eps <> 0))[1] AS implied
                           FROM financial_statement
                          WHERE stock_id = ? AND fiscal_period = 'FY'
                          GROUP BY fiscal_year

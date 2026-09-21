@@ -237,6 +237,24 @@ final class FinancialMath {
      * <p>여기는 행이 하나라 창 단위 문제가 없다. 그래도 같은 파일에 두는 이유는
      * <b>폴백 규칙이 한 곳에 있어야</b> 나중에 한쪽만 바뀌지 않기 때문이다.
      */
+    /**
+     * <b>[2026-09-21] ADR-0159 §결정은 이 폴백을 지표 계층에서 걷으라고 한다 — 아직 안 걷었다.</b>
+     * <i>"MUST: 기저 판정을 적재 계층에 둔다. 지표 계층에 폴백을 남기지 않는다."</i>
+     *
+     * <p><b>걷기 전에 배제되는 집합을 열었고, 지금 걷으면 안 된다는 답이 나왔다.</b>
+     * {@code net_income_controlling}이 비어 이 폴백이 도는 행(최신 판 기준):
+     * <b>KOSDAQ 분기 69.6% · FY 51.6% · KOSPI 분기 55.7% · FY 26.3%</b>(미국은 94~97%이지만
+     * 그쪽은 적재가 거의 다 채운다 — 스윕 85,441칸). 지금 걷으면 국내 분기의 절반 넘는 창에서
+     * {@code PER}·{@code EPS_TTM}·{@code DIVIDEND_PAYOUT}·{@code EXEC_PAY_TO_NET_INCOME}이
+     * <b>통째로 죽는다.</b>
+     *
+     * <p><b>MUST: 적재 뒤에 이 수를 다시 내고 그때 판정한다.</b> 국내는 전체 재무제표가
+     * {@code ifrs-full_ProfitLossAttributableToOwnersOfParent}를 <b>연간 8/8 · 분기 8/8</b>로
+     * 주므로({@code dart-financial.md}) {@code full-statement-refill --all-quarters=true}가
+     * 커버리지를 올린다. <b>그 뒤 폴백이 도는 비율이 한 자릿수로 떨어지면 걷는다.</b>
+     * 지금 이 폴백이 하는 일은 <b>연결 총액을 지배주주 자리에 쓰는 것</b>이고, 그것이
+     * 국내 {@code PER}·{@code EPS_TTM}이 지금 틀린 기제다.
+     */
     static BigDecimal controllingNetIncomeOf(FinancialFigures annual) {
         if (annual == null) {
             return null;

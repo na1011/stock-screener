@@ -762,6 +762,10 @@ final class SecEdgarFacts {
                                                         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
                                                         Map<String, Anchor> anchors,
                                                         Map<SecEdgarColumn, String> tags) {
+        // 손익 비지배의 마지막 관측. 이 기간보다 앞이면 「그 뒤로 비지배를 안 낸다」이고
+        // 연결 총액을 지배주주 값으로 채울 수 있다(noNoncontrollingIncomeBy).
+        LocalDate lastNoncontrolling = lastNoncontrollingIncome(byColumn);
+
         // MUST: 컬럼마다 태그를 **기간 단위로 하나** 고정한다.
         //
         // 같은 기간을 보고서마다 다른 후보 태그로 내는 일이 실재한다 — 현금이
@@ -842,7 +846,7 @@ final class SecEdgarFacts {
             Map<SecEdgarColumn, BigDecimal> carried = carryForward(baseline, values);
             RawFinancialReport candidate = toReport(label, window, reporter, currency, carried,
                     byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
-                    noNoncontrollingIncome(byColumn),
+                    noNoncontrollingIncomeBy(lastNoncontrolling, window),
                     byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty());
             // MUST: 「저장될 행이 달라지는가」로 판정한다. 원시 컬럼 맵으로 판정하면 안 된다 —
             // 다리 컬럼(유도 재료)이 달라져도 유도 결과가 같으면 저장은 한 칸도 안 바뀌고,
@@ -1329,13 +1333,50 @@ final class SecEdgarFacts {
      * <p><b>이 교정은 커버리지로도 이긴다</b> — 손익 게이트가 편입 998 중 415를 덮어,
      * 자본 게이트의 <b>정당한</b> 387(=425−38)보다 넓다. 잃는 칸이 0이다.
      */
-    private static boolean noNoncontrollingIncome(
+    private static LocalDate lastNoncontrollingIncome(
             Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
-        return byColumn.getOrDefault(SecEdgarColumn.NET_INCOME_NONCONTROLLING, Map.of()).isEmpty()
-                && byColumn.getOrDefault(
-                        SecEdgarColumn.NET_INCOME_NONCONTROLLING_REDEEMABLE, Map.of()).isEmpty()
-                && byColumn.getOrDefault(
-                        SecEdgarColumn.NET_INCOME_NONCONTROLLING_NONREDEEMABLE, Map.of()).isEmpty();
+        LocalDate last = null;
+        for (SecEdgarColumn column : List.of(
+                SecEdgarColumn.NET_INCOME_NONCONTROLLING,
+                SecEdgarColumn.NET_INCOME_NONCONTROLLING_REDEEMABLE,
+                SecEdgarColumn.NET_INCOME_NONCONTROLLING_NONREDEEMABLE)) {
+            for (Map<Slot, Fact> bySlot : byColumn.getOrDefault(column, Map.of()).values()) {
+                for (Slot slot : bySlot.keySet()) {
+                    if (last == null || slot.end().isAfter(last)) {
+                        last = slot.end();
+                    }
+                }
+            }
+        }
+        return last;
+    }
+
+    /**
+     * <b>이 기간에 비지배가 없다고 볼 수 있는가.</b> 연결 총액을 지배주주 값으로 채우는
+     * 폴백의 유일한 근거다(ADR-0159 §결정).
+     *
+     * <p><b>축은 손익이다 — {@code MINORITY_INTEREST}로 판정하지 않는다.</b> 그 컬럼은
+     * 재무상태표 잔액({@code Kind.INSTANT})이라 상환가능 비지배지분이 안 잡힌다. 실측
+     * (2026-09-21 · 팩트 캐시 1,214): 그 태그가 없는 <b>536티커 중 54</b>가 손익 비지배를
+     * 실제로 낸다({@code BX}는 {@code ProfitLoss}가 {@code NetIncomeLoss}의 <b>2.00배</b>).
+     *
+     * <p><b>그리고 「한 번도 안 냈는가」가 아니라 「이 기간 뒤로 안 냈는가」다.</b> 전자로
+     * 재면 <b>10~17년 전 이력에 발목이 잡힌다</b> — 실측으로 최신 TTM에서 세 지표를 잃는
+     * 종목이 <b>89</b>였고, 열어 보니 갈래가 둘이었다:
+     * <ul>
+     *   <li>{@code ACN} — 비지배 손익을 <b>2026-05-31까지</b> 내고 최근 두 자본이 1.0352배로
+     *       갈린다. <b>지금도 비지배가 있다</b> → NULL이 정당하다.</li>
+     *   <li>{@code AMD}(2009) · {@code ADI}(2009) · {@code AOS}(2010) · {@code BBY}(2011) —
+     *       십 년 넘게 안 낸다. {@code BBY}는 최근 두 자본이 <b>같아</b> 원장이 비지배 0을
+     *       확인해 준다. <b>값을 만들 수 있는데 안 만드는 자리였다.</b></li>
+     * </ul>
+     *
+     * <p><b>MUST: 「창 단위 부재를 회사 단위 부재로 읽지 않는다」는 그대로다</b>(ADR-0159).
+     * 이 술어는 그 기간 하나가 비었는지를 묻지 않는다 — <b>그 뒤로 한 번도 안 냈는지</b>를 묻고,
+     * 마지막 관측이 이 기간보다 뒤면(또는 같으면) 폴백을 <b>안</b> 건다.
+     */
+    private static boolean noNoncontrollingIncomeBy(LocalDate lastNoncontrolling, Window window) {
+        return lastNoncontrolling == null || lastNoncontrolling.isBefore(window.start());
     }
 
     /**

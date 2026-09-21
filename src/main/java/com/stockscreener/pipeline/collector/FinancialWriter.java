@@ -370,6 +370,23 @@ public class FinancialWriter {
      * <p><b>호출 단위로 근사하는 것이 맞다</b> — 컬럼마다 출처를 실으면 레코드가 커지는데,
      * 「이 호출에서 한 번도 값이 안 난 컬럼」은 <b>그 소스가 안 다루는 컬럼</b>과 실질적으로
      * 같고, 틀리는 쪽이 <b>안 지우는 쪽</b>이라 안전하다.
+     *
+     * <p><b>[2026-09-21] 위 「상수 {@code null}」 서술은 이제 국내 요약본 경로에만 참이다.</b>
+     * ADR-0159를 실행하면서 <b>미국 {@code toReport}·{@code buildQ4}가 둘 다
+     * {@code net_income_controlling}을 만들고</b>, 국내 전체 재무제표는 {@code FY}·분기와
+     * <b>{@code toFourthQuarterBalance}까지</b> {@code total_equity_controlling}을 만든다.
+     * 그래서 두 컬럼이 이 집합에 <b>들어오기 시작한다.</b>
+     *
+     * <p><b>그래도 왕복은 안 생긴다 — 유도 경로를 둘 다 채웠기 때문이다.</b> 관할 판정은
+     * 컬럼별이고 이 집합은 <b>한 호출</b>의 보고서만 본다:
+     * <ul>
+     *   <li>{@code financial-refill}(국내 요약본) — 두 컬럼이 전 행 {@code null}이라 관할이
+     *       아니고 지우지 않는다.</li>
+     *   <li>{@code full-statement-refill}(국내 전체본) — 유도 Q4도 값을 내므로 지울 칸이 없다.</li>
+     *   <li>미국 {@code financial-refill} — {@code buildQ4}가 값을 낸다.</li>
+     * </ul>
+     * <b>MUST: 유도 경로 하나라도 그 컬럼을 상수 {@code null}로 되돌리면 그 순간 왕복이
+     * 생긴다</b> — 수요일이 채우고 목요일이 지운다. 무증상이고 실측으로 594칸이 그렇게 사라졌다.
      */
     private static Set<Amount> managedColumns(List<RawFinancialReport> reports) {
         Set<Amount> managed = EnumSet.noneOf(Amount.class);
