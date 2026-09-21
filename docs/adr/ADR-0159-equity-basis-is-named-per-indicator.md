@@ -183,25 +183,43 @@ applies_to:
 6. 국내 `total_equity_controlling`이 **88% 이상** 차고 항등식
    `자본총계 = 지배주주자본 + 비지배지분`이 **1% 이내로 성립**한다.
 
+**MUST: 모집단을 편입으로 좁혀서 잰다 — 2026-09-22에 이 자리의 질의가 틀린 것을 찾았다.**
+아래 첫 판은 `f.is_latest`만 걸어 분모에 **`US_LISTED` 5,128종목**이 통째로 들어갔다.
+적재는 편입 1,000만 도는데 분모가 5,128이라 **미국 `ni`가 27~29%로 보인다** — 그 수를 보고
+*"적재가 의도대로 안 됐다"*로 읽을 뻔했다. 편입 기준으로는 같은 날 **ni 100% · teqc 96%**다.
+
 ```bash
 psql -d stock_screener -At -c "
-WITH m AS (SELECT CASE WHEN s.market_code='US' THEN 'US' ELSE 'KR' END mk, count(*) n,
-                  count(f.net_income) ni, count(f.total_equity_controlling) teqc
-           FROM financial_statement f JOIN stock s ON s.id=f.stock_id
-           WHERE f.is_latest GROUP BY 1)
+WITH mem AS (SELECT m.stock_id, u.market_code FROM universe_membership m
+             JOIN universe u ON u.code = m.universe_code AND u.is_active
+             WHERE u.code IN ('KOSPI_TOP200','KOSDAQ_TOP150','US_TOP1000')
+               AND m.effective_to IS NULL),
+m AS (SELECT CASE WHEN mem.market_code='US' THEN 'US' ELSE 'KR' END mk, count(*) n,
+             count(f.net_income) ni, count(f.total_equity_controlling) teqc
+      FROM financial_statement f JOIN mem ON mem.stock_id = f.stock_id
+      WHERE f.is_latest AND f.period_end >= date '2024-01-01' GROUP BY 1)
 SELECT string_agg(mk||' ni='||round(ni*100.0/n)||'% teqc='||round(teqc*100.0/n)||'%', ' | ') FROM m"
 ```
 
 두 시장의 `teqc`가 **둘 다 80% 이상**이어야 한다. 한쪽이 0%면 이 결정이 안 실행된 것이다.
+**`period_end` 하한을 두는 이유**는 지표가 읽는 창이 최근 몇 해뿐이고, 옛 판까지 넣으면
+소스가 그 계정을 안 주던 시절이 분모에 들어와 **닫을 수 없는 결손으로 보이기** 때문이다.
 
 **비용(실측 외삽)** — 무효화 **17,853,245행 · 578종목**, 백필 **약 3시간**, 국내는
 `full-statement-refill --all-quarters` **DART 15,400~16,600콜**(쿼터의 86~92%)이라 **이틀**이다.
 **비용은 기각 사유가 아니지만 일정에 적는다.**
 
-**MUST: 재적재·백필 대상에 편출 종목을 명시한다.** 오늘 편입이 아닌 미국 종목
-**195개 · 지표 4,965,542행**이 옛 뜻을 든 채 남으면 **한 결과표가 두 기저로 계산된다** —
-「시장으로 가르지 말라」가 **편입 상태**를 따라 다시 생긴다.
-`activeUniverseMemberIdsByTicker`가 `effective_to`를 안 보므로 `--tickers`로 닿는다.
+**MUST: 재적재·백필 대상에 편출 종목을 명시한다.** 오늘 편입이 아닌 종목이 옛 뜻을 든 채
+남으면 **한 결과표가 두 기저로 계산된다** — 「시장으로 가르지 말라」가 **편입 상태**를 따라
+다시 생긴다. `activeUniverseMemberIdsByTicker`가 `effective_to`를 안 보므로 `--tickers`로 닿는다.
+
+**MUST NOT: 이것을 「미국 195개」로 읽지 않는다 — 2026-09-22에 재서 틀렸다.**
+① 수가 **미국 208**이고 ② **국내가 빠져 있었다**(KOSDAQ 92 · KOSPI 37 = **129**).
+편출 전수는 **337종목**이고, 셋 다 `universe_membership`에서 같은 술어로 나온다.
+**국내 편출은 `total_equity_controlling`이 1,412행 전부 비어 있었다** — 1차 적재가
+편입 350만 돌았기 때문이고, 그것을 안 재고 넘겼으면 백필이 **옛 기저로 한 번 더** 돌았다.
+**MUST: 편출 목록을 뽑는 질의는 `US_LISTED`를 빼고 스크리닝 유니버스 셋으로만 만든다** —
+안 빼면 그 8,495행이 「지금 편입」으로 셈해져 **미국 편출이 0으로 나온다.**
 
 ## 버린 대안
 

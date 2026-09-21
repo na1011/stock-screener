@@ -248,12 +248,36 @@ final class FinancialMath {
      * {@code PER}·{@code EPS_TTM}·{@code DIVIDEND_PAYOUT}·{@code EXEC_PAY_TO_NET_INCOME}이
      * <b>통째로 죽는다.</b>
      *
-     * <p><b>MUST: 적재 뒤에 이 수를 다시 내고 그때 판정한다.</b> 국내는 전체 재무제표가
-     * {@code ifrs-full_ProfitLossAttributableToOwnersOfParent}를 <b>연간 8/8 · 분기 8/8</b>로
-     * 주므로({@code dart-financial.md}) {@code full-statement-refill --all-quarters=true}가
-     * 커버리지를 올린다. <b>그 뒤 폴백이 도는 비율이 한 자릿수로 떨어지면 걷는다.</b>
-     * 지금 이 폴백이 하는 일은 <b>연결 총액을 지배주주 자리에 쓰는 것</b>이고, 그것이
-     * 국내 {@code PER}·{@code EPS_TTM}이 지금 틀린 기제다.
+     * <p><b>[2026-09-22] 적재 뒤에 다시 쟀고, 「걷지 않는다」로 판정했다.</b>
+     * 모집단은 <b>편입 1,350 · {@code period_end >= 2024-01-01} · {@code is_latest}</b>다
+     * (앞 문단의 수는 이 좁힘이 없어 미국에 {@code US_LISTED} 5,128종목이 섞여 있었다 —
+     * 그 분모로는 미국이 72.8%로 보인다).
+     *
+     * <table><caption>폴백이 도는 비율</caption>
+     * <tr><th>시장</th><th>FY</th><th>분기</th></tr>
+     * <tr><td>US</td><td>0.0%</td><td>0.5%</td></tr>
+     * <tr><td>KOSPI</td><td>6.0%</td><td>8.2%</td></tr>
+     * <tr><td>KOSDAQ</td><td>24.0%</td><td>25.7%</td></tr>
+     * </table>
+     *
+     * <p><b>기준(한 자릿수)에 KOSDAQ만 걸린다. 그런데 걷으면 순손실이다</b> — 배제되는 집합을
+     * 열었더니 폴백이 도는 <b>678행</b>이 셋으로 갈린다.
+     * <ul>
+     *   <li><b>비지배 자본이 0인 256행</b> — 연결 총액 = 지배주주다. 폴백이 <b>정확한 값</b>을
+     *       낸다. 걷으면 맞는 값이 사라진다.</li>
+     *   <li><b>{@code total_equity_controlling}도 없는 337행</b> — 판정할 재료가 없다.
+     *       원장이 그 개념을 안 주는 쪽(단독 재무제표)일 가능성이 크지만 <b>안 물어봤다.</b></li>
+     *   <li><b>비지배가 실재하는 85행</b> — 여기서만 폴백이 틀린 값을 낸다.</li>
+     * </ul>
+     *
+     * <p><b>MUST: 폴백을 걷기 전에 국내 적재에 비지배 전무 게이트를 넣는다.</b> 미국
+     * {@code SecEdgarFacts.consolidatedIncome}이 이미 그 모양이고(ADR-0159 §결정은 두 시장
+     * 공통이다), {@code DartFullAccountMapper}에 {@code ID_NET_INCOME_NONCONTROLLING}이 이미
+     * 있다. 게이트가 256행의 {@code net_income_controlling}을 <b>실제로 채우면</b> 폴백이 그
+     * 자리에서 안 돌고, 그때 남는 것으로 다시 판정한다.
+     *
+     * <p><b>MUST NOT: 「한 자릿수」만 보고 걷지 않는다 — 그 수는 어느 집합이 죽는지를 안 말한다.</b>
+     * 2026-09-21에 내가 그 기준만 적어 뒀고, 열어 보니 걷는 쪽이 더 나빴다.
      */
     static BigDecimal controllingNetIncomeOf(FinancialFigures annual) {
         if (annual == null) {
