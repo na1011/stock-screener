@@ -79,6 +79,19 @@ final class DartProbeSupport {
     }
 
     /** 요청 하나. 호출부가 URI 조립만 신경 쓰도록 응답 본문까지 꺼내 준다. */
+    /**
+     * <b>MUST: 부르는 쪽이 속도를 감는다 — 이 메서드에는 리미터가 없다.</b>
+     *
+     * <p>2026-09-22에 18종목(약 900콜)을 42초에 던졌다가 {@code SocketException}으로 끊겼고,
+     * 그 뒤 <b>DART 호스트가 통째로 막혔다</b>(같은 시각 {@code google} 200 · {@code opendart}
+     * 연결 실패). 쿼터 초과({@code status 020})가 아니라 <b>서버가 IP를 일시 차단한 것</b>이다.
+     * 적재 경로는 어댑터가 {@code TokenBucketRateLimiter}를 타므로 이 실패가 안 생긴다 —
+     * <b>맨손인 것은 탐침뿐이다.</b>
+     *
+     * <p>표본이 수십 콜이면 문제가 없었다(같은 날 162콜 탐침은 통과). <b>수백 콜을 넘기면
+     * 부르는 쪽에서 {@code TokenBucketRateLimiter("dart", 300, 0)}을 감는다</b> —
+     * {@code DartGateDryRunLiveTest}가 그 본보기다.
+     */
     static JsonNode get(RestClient client,
                         Function<org.springframework.web.util.UriBuilder,
                                 java.net.URI> uri) {
