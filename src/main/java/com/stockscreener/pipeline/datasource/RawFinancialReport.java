@@ -188,9 +188,20 @@ public record RawFinancialReport(
          * 돌리면 나머지는 0~2칸이라, 이 축은 <b>{@code net_income} 하나</b>가 지배한다.
          *
          * <p><b>MUST: 소스가 직접 준 컬럼을 여기 담지 않는다.</b> 담으면 그 소스의
-         * 「안 실었다」가 「없다」로 읽혀 멀쩡한 값이 지워진다 — 국내 {@code net_income}이
-         * {@code null}인 행이 <b>298개</b>(2026-09-22 실측) 있고, 그 소스에는 {@code carryForward}에
-         * 해당하는 기제가 없다. 담을 자격은 <b>어댑터가 여러 판을 합쳐 판정했는가</b>이다.
+         * 「안 실었다」가 「없다」로 읽혀 멀쩡한 값이 지워진다. 담을 자격은
+         * <b>어댑터가 여러 판을 합쳐 판정했는가</b>이다.
+         *
+         * <p><b>그래서 자격은 시장이 아니라 컬럼마다 갈린다</b>(2026-09-22 실측):
+         * <ul>
+         *   <li><b>미국 {@code net_income}</b> — 담는다. {@code carryForward}가 판을 가로질러
+         *       이어받은 뒤의 {@code null}이라 「모든 판을 합쳐도 재료가 없다」이다.</li>
+         *   <li><b>국내 {@code net_income}</b> — 담지 않는다. 소스 직송이고 {@code null}인 행이
+         *       <b>320개</b>(KOSDAQ 137 · KOSPI 183)인데 그 부재는 판정이 아니다.</li>
+         *   <li><b>국내 {@code net_income_controlling}</b> — <b>담는다.</b> 어댑터가 2패스로
+         *       종목 단위 비지배 이력을 만들어 판정하므로 자격이 선다
+         *       ({@code DartFullStatementAdapter.assertedAbsence} — CFS로 물었고 손익은 왔는데
+         *       이 기간 뒤로 비지배를 내서 못 만드는 경우만).</li>
+         * </ul>
          *
          * <p>{@code null}이면 빈 집합으로 정규화한다 — 어댑터가 안 채우면 <b>지금까지와 똑같이</b>
          * 동작한다.

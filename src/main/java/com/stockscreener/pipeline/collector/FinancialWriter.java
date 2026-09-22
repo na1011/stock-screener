@@ -375,6 +375,8 @@ public class FinancialWriter {
      * ADR-0159를 실행하면서 <b>미국 {@code toReport}·{@code buildQ4}가 둘 다
      * {@code net_income_controlling}을 만들고</b>, 국내 전체 재무제표는 {@code FY}·분기와
      * <b>{@code toFourthQuarterBalance}까지</b> {@code total_equity_controlling}을 만든다.
+     * <b>[2026-09-22] 국내 전체 재무제표는 {@code net_income_controlling}도 만든다</b> —
+     * 직접 태그 → 「연결총액 − 비지배손익」 → 비지배 전무 게이트의 네 갈래다.
      * 그래서 두 컬럼이 이 집합에 <b>들어오기 시작한다.</b>
      *
      * <p><b>그래도 왕복은 안 생긴다 — 유도 경로를 둘 다 채웠기 때문이다.</b> 관할 판정은
@@ -387,6 +389,15 @@ public class FinancialWriter {
      * </ul>
      * <b>MUST: 유도 경로 하나라도 그 컬럼을 상수 {@code null}로 되돌리면 그 순간 왕복이
      * 생긴다</b> — 수요일이 채우고 목요일이 지운다. 무증상이고 실측으로 594칸이 그렇게 사라졌다.
+     *
+     * <p><b>반대 방향으로도 난다 — 2026-09-22에 실제로 겪었다.</b> 그날
+     * {@code DartFullStatementAdapter.toFourthQuarterBalance}에 {@code derived = true}를 넣었는데,
+     * 그 메서드는 <b>재무상태표 Q4</b>라 손익을 언제나 {@code null}로 낸다. 같은 호출의
+     * {@code FY}·{@code Q1~Q3}가 매출을 내서 이 집합이 그 컬럼을 <b>관할로 판정했고</b>,
+     * {@code fillMissing}의 {@code toClear}가 <b>주요계정 어댑터가 유도해 넣은 Q4 손익
+     * 975건 · 142종목</b>을 지웠다. <b>관할 판정은 「이 호출에서 값이 난 적 있는가」이지
+     * 「이 행이 그 컬럼을 만드는가」가 아니다</b> — 행 단위 출처만 보고 지우기를 열면
+     * 그 차이가 그대로 삭제가 된다.
      */
     private static Set<Amount> managedColumns(List<RawFinancialReport> reports) {
         Set<Amount> managed = EnumSet.noneOf(Amount.class);

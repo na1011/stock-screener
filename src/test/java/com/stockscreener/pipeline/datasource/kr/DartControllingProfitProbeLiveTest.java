@@ -33,7 +33,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>판정은 {@link DartMissingAccountProbeLiveTest}와 같은 이유로 <b>비대칭이다</b> — "닫혔다"는
  * 결론만 낼 수 있고 "열렸다"는 못 낸다. 표본 여덟은 「닫히지 않았다」까지이고 커버리지는 적재가 답한다.
  *
- * <p>호출 수는 <b>회사당 2콜(FY + 분기), 8개사 = 16콜</b>이다.
+ * <p>호출 수는 <b>회사당 2콜(FY + 분기)</b>이고 기본 표본 8개사면 16콜이다.
+ * <b>{@code -Dprobe.tickers}로 덮으면 그만큼 는다</b> — 2026-09-22에 결손 <b>81종목</b>을
+ * 겨냥해 <b>162콜</b>로 돌렸고, 그것이 「국내 결손은 파싱 결함이 아니다」를 갈랐다.
+ *
+ * <p><b>MUST: 수백 콜을 넘기면 부르는 쪽에서 리미터를 감는다.</b>
+ * {@code DartProbeSupport.get}은 속도 제한이 없고, 같은 날 다른 탐침이 약 765콜을 42초에
+ * 던져 <b>DART가 IP를 1시간 막았다</b>(분당 1,000회 초과 시 차단 ·
+ * {@code docs/api-spec/dart-financial.md}). 162콜은 안전했다.
  */
 @Tag("live")
 @EnabledIfEnvironmentVariable(named = "DART_API_KEY", matches = ".+",
