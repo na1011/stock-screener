@@ -27,7 +27,8 @@ case "${1:-}" in
 esac
 
 if [[ ! -d "$LOG_DIR" ]]; then
-  echo "[rotate] $LOG_DIR이 없다 — 아직 앱을 띄운 적이 없다. 할 일이 없다."
+  # MUST: 중괄호를 씌운다 — 한글 조사가 변수명에 붙어 `set -u`가 죽인다(status.sh와 같은 자리).
+  echo "[rotate] ${LOG_DIR}이 없다 — 아직 앱을 띄운 적이 없다. 할 일이 없다."
   exit 0
 fi
 
