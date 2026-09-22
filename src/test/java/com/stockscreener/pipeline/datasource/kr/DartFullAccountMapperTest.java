@@ -123,4 +123,83 @@ class DartFullAccountMapperTest {
         // 그 판정은 종목 단위 증거를 요구한다(ADR-0159 §결정). 실측으로 이렇게 비는 종목은 4뿐이다.
         assertThat(DartFullAccountMapper.controllingEquity(balanceSheet("100790"))).isNull();
     }
+
+    // ── 지배주주 순이익의 네 갈래 (2026-09-22) ───────────────────────────────
+
+    @Test
+    @DisplayName("직접 태그가 있으면 그것을 쓴다 — 게이트와 무관하다")
+    void usesDirectTagRegardlessOfGate() {
+        List<JsonNode> income = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"1000"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToOwnersOfParent","sj_div":"CIS","thstrm_amount":"900"}
+                """);
+        assertThat(DartFullAccountMapper.controllingIncome(income, false))
+                .isEqualByComparingTo("900");
+        assertThat(DartFullAccountMapper.controllingIncome(income, true))
+                .isEqualByComparingTo("900");
+    }
+
+    @Test
+    @DisplayName("비지배 손익 행이 있으면 연결총액에서 뺀다 — 산수라 게이트가 필요 없다")
+    void derivesBySubtractingNoncontrolling() {
+        List<JsonNode> income = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"1000"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"150"}
+                """);
+        assertThat(DartFullAccountMapper.controllingIncome(income, false))
+                .isEqualByComparingTo("850");
+    }
+
+    /**
+     * <b>이 시험이 치명 1의 잠금이다.</b> 게이트가 열리고 닫히는 두 상태에서 같은 응답이
+     * 다른 답을 내야 한다 — 닫힌 쪽이 {@code null}이 아니면 「비지배 전무」가
+     * <b>보고서 하나로</b> 판정되고 있다는 뜻이고, 그러면 별도재무제표(OFS)를 받은 기간에
+     * <b>별도 순이익이 지배주주 값으로 박힌다.</b> 실측으로 {@code 450080}은 FY의 CFS가
+     * {@code 013}이라 OFS만 오는데 <b>비지배 손익이 41.5%</b>인 회사다.
+     */
+    @Test
+    @DisplayName("지분 구분이 없을 때 게이트가 답을 가른다 — 닫히면 비운다")
+    void gateDecidesWhenNoEquitySplit() {
+        List<JsonNode> income = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"1000"}
+                """);
+        assertThat(DartFullAccountMapper.controllingIncome(income, true))
+                .as("게이트가 열리면 연결총액이 곧 지배주주 몫이다")
+                .isEqualByComparingTo("1000");
+        assertThat(DartFullAccountMapper.controllingIncome(income, false))
+                .as("게이트가 닫히면 지어내지 않고 비운다")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("연결총액도 없으면 게이트가 열려도 비운다")
+    void staysNullWithoutTotal() {
+        List<JsonNode> income = incomeRows("""
+                {"account_id":"ifrs-full_Revenue","sj_div":"IS","thstrm_amount":"5000"}
+                """);
+        assertThat(DartFullAccountMapper.controllingIncome(income, true)).isNull();
+    }
+
+    @Test
+    @DisplayName("비지배 행의 존재를 값이 아니라 행으로 센다 — 0도 증거다")
+    void countsNoncontrollingRowNotItsValue() {
+        assertThat(DartFullAccountMapper.hasNoncontrollingIncome(incomeRows("""
+                {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"0"}
+                """))).as("0으로 낸 것도 「낸 적 있다」다").isTrue();
+        assertThat(DartFullAccountMapper.hasNoncontrollingIncome(incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"1000"}
+                """))).isFalse();
+    }
+
+    /** 한 줄에 행 하나씩 적은 JSON을 손익 행 목록으로 만든다. */
+    private static List<JsonNode> incomeRows(String lines) {
+        tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();
+        List<JsonNode> rows = new java.util.ArrayList<>();
+        for (String line : lines.strip().split("\n")) {
+            if (!line.isBlank()) {
+                rows.add(mapper.readTree(line.strip()));
+            }
+        }
+        return rows;
+    }
 }

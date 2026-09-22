@@ -206,6 +206,17 @@ public record RawFinancialReport(
     public static final String NET_INCOME = "net_income";
 
     /**
+     * {@code net_income_controlling}의 DB 컬럼명.
+     *
+     * <p><b>국내가 이 컬럼을 담는 조건은 좁다</b>(2026-09-22): 연결재무제표(CFS) 응답이고,
+     * 손익은 실렸는데(연결 총액이 있다), <b>그 종목이 이 기간 뒤로 비지배를 냈기 때문에</b>
+     * 지배주주 값을 만들 수 없을 때만이다. 셋 중 하나라도 어긋나면 담지 않는다 —
+     * 별도재무제표(OFS)의 부재는 「물어본 적이 없다」이고, 손익을 안 실은 판의 부재는
+     * 「그 판이 안 실었다」이며, 둘 다 <b>지우면 멀쩡한 값을 날린다.</b>
+     */
+    public static final String NET_INCOME_CONTROLLING = "net_income_controlling";
+
+    /**
      * <b>지배주주 자본을 안 받는 옛 형태 — 시험 픽스처 전용이다.</b>
      *
      * <p><b>MUST NOT: 적재 어댑터에서 쓰지 않는다.</b> 이 생성자가 그 자리에 {@code null}을

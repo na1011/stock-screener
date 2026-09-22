@@ -112,16 +112,19 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                         DartResponse.SOURCE_NAME,
                         "DART에 등록되지 않은 종목코드다: " + security.ticker()));
 
-        List<RawFinancialReport> reports = new ArrayList<>();
+        // ── 1패스: 페치. **보고서를 아직 만들지 않는다.**
+        //
+        // MUST: 종목 단위 판정을 만들려면 그 종목의 응답이 **한자리에 다 있어야** 한다.
+        // 「비지배를 이 기간 뒤로 안 냈는가」는 한 보고서로 답할 수 없고, 행 단위로 답하면
+        // 어느 분기에 그 행이 없다는 것만으로 연결 순이익에 지배주주 이름표가 붙는다
+        // (DartFullAccountMapper.controllingEquity javadoc이 자본 축에서 같은 자리를 막는다).
+        List<Pending> pending = new ArrayList<>();
         int calls = 0;
         int missing = 0;
 
         for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
             // 선언 순서(FY, Q1..Q3)가 아니라 enum 순서로 돈다. 로그를 읽을 때 기간이 늘 같은
             // 순서로 나와야 종목 간 비교가 된다.
-            JsonNode annual = null;
-            // Q4의 지배주주 순이익을 유도하려면 그 해 FY와 Q1~Q3가 한자리에 있어야 한다.
-            List<RawFinancialReport> thisYear = new ArrayList<>();
             for (StatementPeriod period : StatementPeriod.values()) {
                 if (!periods.contains(period)) {
                     continue;
@@ -132,11 +135,39 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                     missing++;
                     continue;
                 }
-                RawFinancialReport report = toReport(fetched.list(), year, period, security);
+                pending.add(new Pending(year, period, fetched.list(), fetched.consolidated()));
+            }
+        }
+
+        // ── 2패스: 종목 단위 판정(순수). 외부 호출 0.
+        LocalDate lastNoncontrolling = lastNoncontrollingIncome(pending);
+        // MUST: 게이트가 몇 판에서 열렸는지 남긴다. 스윕이 이 축을 못 태우므로(픽스처가
+        // 종목당 한 기간뿐이다) **적재 직후 검침이 유일한 확인 수단**이고, 로그가 없으면
+        // 「게이트가 돌았는가」를 저장된 값으로만 추정하게 된다 — 그 값은 폴백이 쓰던 것과
+        // 같아서 구분되지 않는다.
+        long gated = pending.stream().filter(p -> gateOpen(p, lastNoncontrolling)).count();
+        long separate = pending.stream().filter(p -> !p.consolidated()).count();
+        if (gated > 0 || separate > 0) {
+            log.info("지배주주 손익 게이트. ticker={} 판={} 게이트열림={} 별도재무제표={} 마지막비지배={}",
+                    security.ticker(), pending.size(), gated, separate, lastNoncontrolling);
+        }
+
+        // ── 3패스: 보고서 생성.
+        List<RawFinancialReport> reports = new ArrayList<>();
+        for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
+            JsonNode annual = null;
+            // Q4의 지배주주 순이익을 유도하려면 그 해 FY와 Q1~Q3가 한자리에 있어야 한다.
+            List<RawFinancialReport> thisYear = new ArrayList<>();
+            for (Pending p : pending) {
+                if (p.year() != year) {
+                    continue;
+                }
+                RawFinancialReport report = toReport(p.list(), year, p.period(), security,
+                        gateOpen(p, lastNoncontrolling), p.consolidated());
                 reports.add(report);
                 thisYear.add(report);
-                if (period == StatementPeriod.FY) {
-                    annual = fetched.list();
+                if (p.period() == StatementPeriod.FY) {
+                    annual = p.list();
                 }
             }
             if (annual != null && periods.contains(StatementPeriod.Q3)) {
@@ -144,6 +175,60 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             }
         }
         return new FullStatementResult(reports, calls, missing);
+    }
+
+    /**
+     * <b>이 종목이 손익 비지배를 마지막으로 낸 기간의 종료일.</b> 없으면 {@code null}.
+     *
+     * <p><b>MUST: 연결재무제표(CFS) 응답만 증거로 센다.</b> 별도재무제표에는 지분 구분이
+     * <b>원리적으로</b> 없으므로 그 부재는 「비지배가 없다」가 아니라 「물어본 적이 없다」이다.
+     * 실측(2026-09-22 · 라이브 6콜)으로 {@code 450080}·{@code 195940}·{@code 323410}은
+     * FY의 CFS가 {@code 013}이고 OFS만 162~179행을 준다. 그런데 {@code 450080}은
+     * <b>비지배 자본 21.94% · 비지배 손익 41.5%</b>인 회사다 — OFS를 증거로 세면
+     * 게이트가 켜져 <b>별도 순이익이 지배주주 값으로 박힌다.</b>
+     *
+     * <p><b>값이 아니라 행의 존재</b>를 본다. 비지배가 정확히 0인 회사도 행은 내고,
+     * 그것이 「비지배를 낸 적 있다」의 증거다.
+     */
+    static LocalDate lastNoncontrollingIncome(List<Pending> pending) {
+        LocalDate last = null;
+        for (Pending p : pending) {
+            if (!p.consolidated()) {
+                continue;
+            }
+            List<JsonNode> income = DartFullAccountMapper.sections(p.list(),
+                    DartFullAccountMapper.SJ_INCOME,
+                    DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
+            if (!DartFullAccountMapper.hasNoncontrollingIncome(income)) {
+                continue;
+            }
+            LocalDate end = DartReportPeriods.periodRange(p.year(), p.period().label())[1];
+            if (last == null || end.isAfter(last)) {
+                last = end;
+            }
+        }
+        return last;
+    }
+
+    /**
+     * <b>이 보고서에서 「비지배 전무」 게이트를 켜도 되는가.</b>
+     *
+     * <p>둘을 함께 요구한다 — ① <b>이 응답이 CFS</b>여야 하고(OFS는 증거가 아니다)
+     * ② <b>이 기간 뒤로 비지배를 안 냈어야</b> 한다. 뒤의 것이 미국
+     * {@code SecEdgarFacts.noNoncontrollingIncomeBy}와 같은 술어다 —
+     * 「한 번도 안 냈는가」로 물으면 <b>옛 이력에 발목이 잡혀</b> 자회사를 판 회사가 영영 안 열린다.
+     *
+     * <p><b>같은 회계연도 안에서는 갈래가 안 섞인다.</b> FY가 비지배를 냈으면
+     * {@code lastNoncontrolling}이 그 해 종료일이고 Q1~Q3의 시작일은 그보다 이르므로
+     * {@code isBefore}가 거짓이 되어 <b>그 해 전체가 게이트 OFF</b>다. 그래서
+     * {@code deriveFourthQuarterControlling}의 뺄셈에 「직접 태그 − 게이트 값」이 섞이지 않는다.
+     */
+    static boolean gateOpen(Pending p, LocalDate lastNoncontrolling) {
+        if (!p.consolidated()) {
+            return false;
+        }
+        LocalDate start = DartReportPeriods.periodRange(p.year(), p.period().label())[0];
+        return lastNoncontrolling == null || lastNoncontrolling.isBefore(start);
     }
 
     /**
@@ -158,13 +243,13 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             throws DataSourceException {
         JsonNode consolidated = call(corpCode, year, period, CONSOLIDATED, security);
         if (consolidated != null && !consolidated.isEmpty()) {
-            return new Fetched(consolidated, 1);
+            return new Fetched(consolidated, 1, true);
         }
         JsonNode separate = call(corpCode, year, period, SEPARATE, security);
         if (separate != null && !separate.isEmpty()) {
-            return new Fetched(separate, 2);
+            return new Fetched(separate, 2, false);
         }
-        return new Fetched(null, 2);
+        return new Fetched(null, 2, false);
     }
 
     private JsonNode call(String corpCode, int year, StatementPeriod period, String fsDiv,
@@ -223,7 +308,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * {@code IS}에 있으므로 순서가 뜻을 정한다.
      */
     private RawFinancialReport toReport(JsonNode list, int year, StatementPeriod period,
-                                        SecurityRef security) {
+                                        SecurityRef security, boolean gateOpen,
+                                        boolean consolidated) {
         List<JsonNode> balance = DartFullAccountMapper.sections(
                 list, DartFullAccountMapper.SJ_BALANCE);
         List<JsonNode> income = DartFullAccountMapper.sections(
@@ -243,6 +329,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             retainedEarnings = DartFullAccountMapper.retainedEarningsFromEquityChanges(
                     list, security.ticker(), year, label);
         }
+
+        BigDecimal controllingIncome = DartFullAccountMapper.controllingIncome(income, gateOpen);
 
         return new RawFinancialReport(
                 year, label, range[0], range[1],
@@ -291,12 +379,43 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 // 지배기업 소유주 귀속 순이익. 계정명 폴백을 두지 않는 이유가 특히 강하다 —
                 // 한 계정을 회사마다 일곱 가지 이름으로 부르고, 새면 연결 총액이 그 자리에
                 // 앉아 값이 그럴듯하게 틀린다(ID_NET_INCOME_CONTROLLING javadoc).
-                DartFullAccountMapper.find(
-                        income, DartFullAccountMapper.ID_NET_INCOME_CONTROLLING, null),
+                //
+                // [2026-09-22] **직접 태그만 보던 것을 네 갈래로 넓힌다.** 같은 응답에서
+                // total_equity_controlling은 「자본총계 − 비지배지분」으로 유도하면서 이쪽만
+                // 직접 태그에 머물러 있었고, 그 비대칭이 teqc는 있고 nic는 없는 칸을 만들었다.
+                controllingIncome,
                 null, null, null, null, null, null, null, null,
                 // 세율 재료 둘. 유량이라 연간에만 담는다 — 아래 가드 참조.
                 incomeTaxExpense(income, period),
-                profitBeforeTax(income, period));
+                profitBeforeTax(income, period),
+                // 소스가 준 행이다.
+                false,
+                // MUST: **판정일 때만** 담는다. 담으면 FinancialWriter가 저장의 옛 값을 지우므로,
+                // 「물어본 적이 없다」(OFS)와 「그 판이 손익을 안 실었다」를 담으면 멀쩡한 값이
+                // 날아간다. 담는 것은 「CFS로 물었고 손익은 왔는데, 이 종목이 이 기간 뒤로
+                // 비지배를 내서 지배주주 몫을 만들 수 없다」 하나다.
+                assertedAbsence(controllingIncome, income, gateOpen, consolidated));
+    }
+
+    /**
+     * <b>지배주주 순이익의 부재가 판정인가.</b> 셋을 다 만족해야 참이다 —
+     * ① 값을 못 만들었고 ② <b>CFS로 물었고</b> ③ 그 응답에 <b>연결 총액은 있었다.</b>
+     *
+     * <p>②가 없으면 별도재무제표의 원리적 부재가 「없다」로 읽혀 저장을 지우고,
+     * ③이 없으면 손익을 아예 안 실은 판이 같은 일을 한다.
+     */
+    private static java.util.Set<String> assertedAbsence(BigDecimal controllingIncome,
+                                                         List<JsonNode> income,
+                                                         boolean gateOpen,
+                                                         boolean consolidated) {
+        if (controllingIncome != null || gateOpen || !consolidated) {
+            return java.util.Set.of();
+        }
+        BigDecimal total = DartFullAccountMapper.find(
+                income, DartFullAccountMapper.ID_NET_INCOME, DartAccountMapper.NET_INCOME);
+        return total == null
+                ? java.util.Set.of()
+                : java.util.Set.of(RawFinancialReport.NET_INCOME_CONTROLLING);
     }
 
     /**
@@ -381,7 +500,15 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 null, null, null, null, null, null, null, null,
                 // 세율 재료는 유량이라 여기서 비운다. 세후 지표가 직전 회계연도 세율을 쓰므로
                 // Q4를 유도할 이유가 없다 — netIncomeControlling만 예외인 사정이 여기엔 없다.
-                null, null);
+                null, null,
+                // **[2026-09-22] 우리가 만든 행이다.** 여기가 `derived` 인자를 안 주는 36인자
+                // 호환 생성자를 써서 저장에 `false`로 들어가고 있었다 — `RawFinancialReport.derived`
+                // javadoc의 *"기본값 false를 주는 호환 생성자가 있으므로 **컴파일러가 이것을
+                // 묻지 않는다**"*가 그대로 실현된 자리다. 그래서 유도 규칙을 고쳐도 저장된 옛
+                // 유도값이 안 지워졌다.
+                true,
+                // 컬럼 단위 판정은 안 싣는다 — `derived=true`가 이미 지우기를 연다.
+                java.util.Set.of());
     }
 
     /**
@@ -491,6 +618,17 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
     }
 
     /** 받은 행과 그것을 받는 데 든 호출 수. 연결이 비어 별도로 다시 부르면 2다. */
-    private record Fetched(JsonNode list, int calls) {
+    /**
+     * @param consolidated <b>연결재무제표(CFS)로 받았는가.</b> 지금까지 버리던 사실이다 —
+     *                     클래스 javadoc이 *"어느 쪽을 받았는지는 요청만 안다"*라 적었고,
+     *                     그 「요청만 안다」를 <b>여기에 실어야</b> 뒤 단계가 쓸 수 있다.
+     *                     별도재무제표(OFS)에는 비지배 행이 <b>원리적으로</b> 없으므로
+     *                     그 부재는 「비지배가 없다」의 증거가 아니다.
+     */
+    private record Fetched(JsonNode list, int calls, boolean consolidated) {
+    }
+
+    /** 1패스가 모은 응답 한 건. 2패스가 종목 단위 판정을 만들고 3패스가 보고서를 짓는다. */
+    record Pending(int year, StatementPeriod period, JsonNode list, boolean consolidated) {
     }
 }

@@ -306,6 +306,58 @@ final class DartFullAccountMapper {
         return total != null && noncontrolling != null ? total.subtract(noncontrolling) : null;
     }
 
+    /**
+     * <b>지배기업 소유주 귀속 순이익.</b> 네 갈래다 —
+     * 직접 태그 → {@code 연결총액 − 비지배손익} → <b>비지배 전무 게이트</b> → {@code null}.
+     *
+     * <p>미국 {@code SecEdgarFacts.consolidatedIncome}과 <b>같은 축</b>이다
+     * (ADR-0159 §결정은 두 컬럼의 뜻이 두 시장 공통이라 정했다).
+     *
+     * <p><b>MUST: 게이트 판정을 이 함수가 하지 않는다 — 호출부가 준다.</b> 그 판정은
+     * <b>종목 단위 증거</b>를 요구하는데(*"그 종목이 비지배를 한 번도 안 내면"*) 이 함수는
+     * 보고서 하나만 보기 때문이다. {@link #controllingEquity}가 같은 이유로 게이트를 아예
+     * 안 두는데, 이쪽은 <b>호출부가 여러 판을 모아 판정하도록 구조를 바꿔</b> 연다.
+     *
+     * <p><b>MUST NOT: 재무상태표 비지배지분으로 게이트를 켜지 않는다.</b> 답을 아는 칸에
+     * 그 산수를 태워 봤다(2026-09-22 · 편입 · {@code is_latest} ·
+     * {@code period_end >= 2024-01-01} · 네 컬럼이 다 있는 행):
+     * {@code total_equity_controlling = total_equity}로 발화한 <b>KOSPI 315 중 11 · KOSDAQ 315 중 11</b>에서
+     * {@code nic <> ni}였다(3.5%). 상대오차 {@code abs(1 - teqc/te) < 0.0001}로 느슨하게 잡으면
+     * <b>KOSPI 403 중 94(23%)</b>로 더 나빠진다 — 비지배 자본이 <b>작지만 0은 아닌</b> 회사가
+     * 그 차이를 만든다. 잔액은 손익을 말해 주지 않는다.
+     *
+     * @param gateOpen 호출부의 종목 단위 판정. <b>연결재무제표(CFS) 응답에서만 참일 수 있다</b> —
+     *                 별도재무제표(OFS)에는 비지배 행이 원리적으로 없어 그 부재가 증거가 아니다
+     */
+    static BigDecimal controllingIncome(List<JsonNode> income, boolean gateOpen) {
+        BigDecimal direct = find(income, ID_NET_INCOME_CONTROLLING, null);
+        if (direct != null) {
+            return direct;
+        }
+        BigDecimal total = find(income, ID_NET_INCOME, DartAccountMapper.NET_INCOME);
+        if (total == null) {
+            return null;
+        }
+        BigDecimal noncontrolling = find(income, ID_NET_INCOME_NONCONTROLLING, null);
+        if (noncontrolling != null) {
+            return total.subtract(noncontrolling);
+        }
+        return gateOpen ? total : null;
+    }
+
+    /**
+     * <b>손익 비지배 행이 이 응답에 있는가.</b> 값이 아니라 <b>행의 존재</b>를 묻는다 —
+     * 비지배가 정확히 0인 회사도 행은 내고, 그것이 「비지배를 낸 적 있다」의 증거다.
+     */
+    static boolean hasNoncontrollingIncome(List<JsonNode> income) {
+        for (JsonNode row : income) {
+            if (ID_NET_INCOME_NONCONTROLLING.contains(row.path("account_id").asString(""))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static BigDecimal find(List<JsonNode> rows, Set<String> idCandidates, Set<String> nameCandidates) {
         BigDecimal byId = findBy(rows, idCandidates, "account_id");
         if (byId != null) {
