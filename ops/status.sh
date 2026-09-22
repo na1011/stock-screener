@@ -115,7 +115,10 @@ fi
 echo
 echo "== 로그 =="
 if [[ ! -d "$LOG_DIR" ]]; then
-  echo "로그: $LOG_DIR이 없다 — 아직 앱을 띄운 적이 없다"
+  # MUST: 중괄호를 씌운다. 한글 조사가 변수명에 그대로 붙어 bash가 `LOG_DIR이`를 찾고,
+  # `set -u`가 그 자리에서 스크립트를 죽인다 — 앱을 한 번도 안 띄운 상태에서만 타는 줄이라
+  # 평소에 안 드러난다(2026-09-22 발견).
+  echo "로그: ${LOG_DIR}이 없다 — 아직 앱을 띄운 적이 없다"
 else
   log_line() {
     local name="$1" max="$2" f="$LOG_DIR/$1" size pct gens
