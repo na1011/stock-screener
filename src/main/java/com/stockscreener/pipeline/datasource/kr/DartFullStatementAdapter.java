@@ -501,13 +501,22 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 // 세율 재료는 유량이라 여기서 비운다. 세후 지표가 직전 회계연도 세율을 쓰므로
                 // Q4를 유도할 이유가 없다 — netIncomeControlling만 예외인 사정이 여기엔 없다.
                 null, null,
-                // **[2026-09-22] 우리가 만든 행이다.** 여기가 `derived` 인자를 안 주는 36인자
-                // 호환 생성자를 써서 저장에 `false`로 들어가고 있었다 — `RawFinancialReport.derived`
-                // javadoc의 *"기본값 false를 주는 호환 생성자가 있으므로 **컴파일러가 이것을
-                // 묻지 않는다**"*가 그대로 실현된 자리다. 그래서 유도 규칙을 고쳐도 저장된 옛
-                // 유도값이 안 지워졌다.
-                true,
-                // 컬럼 단위 판정은 안 싣는다 — `derived=true`가 이미 지우기를 연다.
+                // **MUST NOT: 여기에 `derived = true`를 주지 않는다 — 2026-09-22에 넣어 보고 되돌렸다.**
+                //
+                // 이 메서드는 이름 그대로 **재무상태표 Q4**다. 손익은
+                // `deriveFourthQuarterControlling` 하나뿐이고 매출·영업이익·순이익은 **언제나
+                // null**을 낸다. 그런데 그 칸을 채운 것은 **주요계정 어댑터의 유도 Q4**
+                // (`DartFinancialAdapter.deriveFourthQuarter`)다.
+                //
+                // `derived = true`를 주면 `FinancialWriter.fillMissing`의 `toClear`가 열리고,
+                // 이 호출의 FY·Q1~Q3가 매출을 냈으므로 `managedColumns`가 그 컬럼을 관할로
+                // 판정한다 → **Q4에서 null인 손익이 저장에서 지워진다.** 실측(2026-09-22 ·
+                // KOSDAQ 적재 중단 시점): **975건 · 142종목**의 매출·영업이익·순이익이 그렇게
+                // 날아갔다. `managedColumns` javadoc의 「수요일이 채우고 목요일이 지우는 왕복」이
+                // 방향만 바뀌어 재현된 것이다.
+                //
+                // **열려면 손익 컬럼을 이 메서드가 함께 만들어야 한다** — 그 전에는 못 연다.
+                false,
                 java.util.Set.of());
     }
 
