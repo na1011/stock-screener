@@ -87,7 +87,7 @@ applies_to:
 ```
 
 ```premise 보존 창 앞부분의 배당수익률이 창 끝만큼 차 있다
-psql -d stock_screener -At -c "WITH u(uc, d) AS (VALUES ('US_TOP1000', (SELECT min(trade_date) + 12 FROM indicator_trade_date WHERE market_code = 'US')), ('KOSPI_TOP200', (SELECT min(trade_date) + 30 FROM indicator_trade_date WHERE market_code = 'KOSPI')), ('KOSDAQ_TOP150', (SELECT min(trade_date) + 30 FROM indicator_trade_date WHERE market_code = 'KOSDAQ'))) , mem AS (SELECT u.uc, u.d, m.stock_id FROM u JOIN universe_membership m ON m.universe_code = u.uc AND m.effective_from <= u.d AND (m.effective_to IS NULL OR m.effective_to > u.d)) , cov AS (SELECT mem.uc, count(DISTINCT mem.stock_id) AS members, count(DISTINCT v.stock_id) AS dy FROM mem LEFT JOIN indicator_value v ON v.stock_id = mem.stock_id AND v.trade_date = mem.d AND v.indicator_code = 'DIVIDEND_YIELD' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM cov) = 0 THEN '잴 것이 없었다 — 보존 창에 편입 행이 없다' WHEN (SELECT count(*) FROM cov WHERE dy < members * 0.94) = 0 THEN 'OK 창 앞부분 배당수익률이 ' || (SELECT string_agg(uc || ' ' || dy || '/' || members, ' · ' ORDER BY uc) FROM cov) ELSE '창 앞부분이 비었다: ' || (SELECT string_agg(uc || ' ' || dy || '/' || members, ' · ' ORDER BY uc) FROM cov WHERE dy < members * 0.94) || ' — 요청 역년의 아래쪽 끝이 창을 못 덮는다(GovernanceDataSource.extraCalendarYears)' END"
+psql -d stock_screener -At -c "WITH u(uc, mkt, off) AS (VALUES ('US_TOP1000', 'US', 12), ('KOSPI_TOP200', 'KOSPI', 30), ('KOSDAQ_TOP150', 'KOSDAQ', 30)) , d AS (SELECT u.uc, (SELECT min(t.trade_date) FROM indicator_trade_date t WHERE t.market_code = u.mkt AND t.trade_date >= (SELECT min(x.trade_date) + u.off FROM indicator_trade_date x WHERE x.market_code = u.mkt)) AS d FROM u) , mem AS (SELECT d.uc, d.d, m.stock_id FROM d JOIN universe_membership m ON m.universe_code = d.uc AND m.effective_from <= d.d AND (m.effective_to IS NULL OR m.effective_to > d.d)) , cov AS (SELECT mem.uc, count(DISTINCT mem.stock_id) AS members, count(DISTINCT v.stock_id) AS dy FROM mem LEFT JOIN indicator_value v ON v.stock_id = mem.stock_id AND v.trade_date = mem.d AND v.indicator_code = 'DIVIDEND_YIELD' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM cov) = 0 THEN '잴 것이 없었다 — 보존 창에 편입 행이 없다' WHEN (SELECT count(*) FROM cov WHERE dy < members * 0.94) = 0 THEN 'OK 창 앞부분 배당수익률이 ' || (SELECT string_agg(uc || ' ' || dy || '/' || members, ' · ' ORDER BY uc) FROM cov) ELSE '창 앞부분이 비었다: ' || (SELECT string_agg(uc || ' ' || dy || '/' || members, ' · ' ORDER BY uc) FROM cov WHERE dy < members * 0.94) || ' — 요청 역년의 아래쪽 끝이 창을 못 덮는다(GovernanceDataSource.extraCalendarYears)' END"
 ```
 
 ```premise 창과 겹치는 편입에 거버넌스 원문이 한 행이라도 있다
@@ -180,6 +180,31 @@ EDGAR의 `shares_outstanding`이 유통주식수 계열이므로 뒤쪽을 쓴�
   나열해야 한다. 국내 700콜은 멱등이고 DART 예산의 7%다.
 
 ## 결과
+
+### 펜스가 주말을 재고 있었다 — 「0/1,000」은 오보였다 (2026-09-22)
+
+아래 표를 만든 그 펜스가 **매 세션 「창 앞부분이 비었다: KOSDAQ 0/150 · KOSPI 0/200 ·
+US 0/1000」을 신고하고 있었다.** 재보니 데이터가 아니라 **펜스가 틀렸다** — 날짜를
+`min(trade_date) + 12`(미국) · `+ 30`(국내)로 만드는데 그것이 **달력 덧셈**이라 주말에 떨어진다.
+2026-09-22에 미국은 **2025-09-28 일요일**, 국내는 **2025-10-04 토요일**이었고 그 날짜에는
+지표가 **한 행도 없다**(`indicator_trade_date`에 없는 날이다). 편입 종목은 날짜와 무관하게
+세지므로 분모만 남아 `dy < members * 0.94`가 **무조건 참**이 된다.
+
+| 축 | 펜스가 신고한 값 | 거래일로 스냅한 실측 |
+|---|---|---|
+| KOSDAQ_TOP150 | 0 / 150 | **145 / 150** |
+| KOSPI_TOP200 | 0 / 200 | **194 / 200** |
+| US_TOP1000 | 0 / 1,000 | **935 / 1,000** |
+
+- **처방**: 펜스가 `min + offset` **이상인 첫 거래일**을 `indicator_trade_date`에서 고르게 했다.
+  **임계 0.94는 안 건드렸다** — 낮추면 내 결론만 통과하는 임계를 고르는 것이 된다.
+- **고친 뒤 남는 것이 진짜 신호다**: 국내 둘은 통과하고 **US 935 / 1,000**만 운다. 그
+  **65종목 중 64종목이 `DPS_COMMON` 팩트를 이미 갖고 있어** 원인은 적재가 아니라 **지표
+  미생성**이고 **백필이 닫는다**(팩트가 없는 1종목은 그날 가격도 없다).
+- **같은 형태를 전수로 셌다** — `premise` 블록에서 날짜를 더해 만드는 펜스는 **이 ADR 하나뿐**이다.
+- **MUST: 펜스가 내는 수를 데이터의 상태로 읽기 전에 그 펜스가 무엇을 재는지 본다.** 이 오보는
+  아래 절이 **창 앞부분을 실제로 닫은 뒤에도** 계속 울어, 다음 세션이 「아직 안 닫혔다」로 읽고
+  같은 자리를 다시 파게 만들고 있었다.
 
 ### 아래쪽 끝까지 닫았다 — 창 앞부분 (2026-09-20)
 
