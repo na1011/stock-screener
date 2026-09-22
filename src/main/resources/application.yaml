@@ -238,7 +238,11 @@ stockscreener:
     dart:
       base-url: https://opendart.fss.or.kr/api
       api-key: ${DART_API_KEY:}
-      # 분당 제한이 공식 문서에 없어 보수적으로 잡는다.
+      # **분당 1,000회 이상이면 1시간 IP 차단**(2026-09-22 사용자가 알려준 오픈다트 안내).
+      # 같은 날 실측이 그것을 뒷받침한다 — 탐침이 리미터 없이 약 765콜을 42초에 던져
+      # **약 1,093 rpm**이 됐고 SocketException 뒤 호스트가 통째로 막혔다(google은 200).
+      # 600은 임계의 60%다. **MUST NOT: 1,000에 붙이지 않는다** — 차단의 대가가 1시간이고
+      # 그 사이 평일 배치 사슬이 통째로 실패한다.
       permits-per-minute: 600
       # 일 20,000건(2차 출처). 여유를 두고 잡는다.
       daily-quota: 18000
