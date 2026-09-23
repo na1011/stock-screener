@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|governance-load|governance-derive|market-calendar|bar-gap-review 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -25,6 +25,7 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 --job=backfill --from=2025-11-11 --as-of=2026-08-05 [--tickers=058470,086280]
 --job=governance-load [--governance-year=2025] [--governance-span=1] [--governance-endpoints=DIVIDEND,AUDIT_OPINION] [--tickers=…]
 --job=governance-derive [--tickers=005930]
+--job=share-basis-derive [--market=US]
 ```
 
 **아래는 원장을 보고 판정하는 잡들이다.** 접두는 위와 같다 — `bootstrap` 프로파일이
@@ -56,6 +57,7 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 | `adjustment-rebuild` | `adj_factor`·`adj_close`를 원장에서 다시 짓기 | **저장된 시세를 소급해 다시 쓰는 유일한 경로다.** 외부 호출 0. **첫 실행 전에 `ops/dump-db.sh`가 필요하고 훅이 그것을 막는다**(ADR-0049·0052). 값이 바뀐 종목의 지표가 **보존 창 전체에서 지워지므로 `backfill`이 짝이다** — **평일 14시 사슬이 `corporate-action` 뒤에 이것을 이어 부르고 무효화가 있으면 `backfill`까지 간다**(ADR-0116) — 손으로 도는 것은 `--universe`·`--tickers`로 좁힐 때다. 화면에는 없다(런처에서만 뺐다). 350종목 2초 |
 | `governance-load` | 정기보고서 주요정보 → `governance_report_row` | **원문만 담는다.** 지표용 값은 `governance-derive`가 따로 만든다(ADR-0081). 표마다 받을 해가 달라 **국내가 350종목 8,050콜**이다((엔드포인트, 연도) 23쌍) — **우리 리미터가 먼저 걸린다** — `dart.daily-quota: 18000`이 하나의 카운터로 DART 전체를 센다(api-sources의 10,000은 **API당** 계획값이다). 셋을 같은 날 돌리면 23,570으로 넘으므로 스케줄러가 **하루 하나**로 나눈다(ADR-0116). 화면에 버튼이 없다. **시장마다 답하는 표가 다르다** — 대상은 활성 유니버스 전체(지금 1,350종목)이고 잡이 소스별로 좁힌다. 미국은 **배당 하나**뿐이라 `--governance-endpoints=DIVIDEND`를 줘도 국내는 여덟 중 배당만 다시 받는다(멱등, 350종목 700콜) |
 | `governance-derive` | `governance_report_row` → `governance_fact` | **외부 호출 0.** 유도 규칙을 고친 뒤 이것만 다시 돌린다 — 표를 가른 이유가 이것이다. 종목을 **통째로** 다시 짓는다(회계연도로 좁히면 감사인 교체처럼 보고서 둘을 견줘 나오는 값이 빠진다). 화면에도 있다 |
+| `share-basis-derive` | 기업행위 원장 + 주식수 계열 → `financial_statement.share_basis_*` | **외부 호출 0 · 원자료 0행 수정.** 시총 = 주식수 × 종가의 두 기저가 어긋난 판을 판정한다(ADR-0162) — 맞출 수 있으면 배수를 달고(`SHIFTED`) 크기를 모르면 주식수를 안 낸다(`UNRESOLVED`). **재무·기업행위를 쓴 잡 뒤에는 러너와 스케줄러가 자동으로 잇는다** — 손으로 부를 일은 유도 규칙을 고쳤을 때뿐이다. **MUST: 판정이 바뀌면 백필이 짝이다** — 원본층은 날짜 하나로 창 전체가 다시 쓰이고(`AKTX` 8지표 2,040행이 그렇게 걷혔다) 파생층은 날짜마다 돌아야 한다 |
 | `corporate-action-review` | 원장 조회 — 대기열과 판정 증거 | **외부 호출 0, 원장을 한 글자도 안 고친다.** 상태별 집계를 언제나 찍고, 필터를 안 주면 `status=OBSERVED`로 좁힌다(무엇으로 좁혔는지 함께 찍는다). `--ca-id`를 주면 그 행 + 효력일 이후 상장주식수 점프 **전부**를 찍는다 — **하나를 고르는 것은 사람이다**(ADR-0050). `batch_execution`에 행을 안 만든다. ADR-0084 |
 | `corporate-action-judge` | 원장 판정 — 상태와 값을 사람이 준다 | **외부 호출 0.** `--ca-id` 필수. 검증은 전부 `CorporateActionLedger.judge`가 한다(HTTP 경로와 같은 문). **판정해도 계수는 안 바뀐다** — `adjustment-rebuild` → `backfill`이 뒤따라야 끝나고, 잡이 그 명령을 찍어 준다. 실패하면 실행 행을 아예 안 연다(사람의 오타가 운영자 알림을 타면 안 된다). ADR-0084 |
 | `backfill` | 지표 계산 | 지정한 구간을 **날짜별로 반복**한다. `--tickers`로 종목을 좁혀도 **백분위·업종 상대값은 전 종목에서 나온다.** 그리고 **백분위(`*_PCTL`)는 돌린 날짜에만 생긴다** — 원본 지표는 실행 한 번에 수백 일자를 채우는데 백분위는 그날 하루뿐이라, 새 백분위를 더한 뒤 과거 날짜를 열면 **원본은 있는데 순위가 없다**. **그리고 계산만 하는 잡이 아니다 — 돌린 날짜의 `*_PCTL`·`*_SECTOR_*` 중 「그날 모집단 밖」인 행을 지운다**(ADR-0085·0136). 모집단은 **그날 편입 + 원본 있음 + 표본 임계**이고, `--universe`를 안 주면 **비활성 유니버스 구성원이 모집단 밖**이다. **MUST: 편출 종목의 결손을 닫으려면 `--tickers`를 준다** — 티커 없는 기본 경로는 대상을 `activeUniverseMemberIds()`(`effective_to IS NULL`)로 고르므로 **과거에만 편입됐던 종목이 통째로 빠진다.** `--tickers` 경로만 보존 창과 겹치는 닫힌 편입까지 받는다. 실측(2026-09-11): 결손 261종목 중 **246이 편출 종목**이라, 티커 없이 17%를 돌고 닫힌 것이 **123칸뿐**이었다 |
