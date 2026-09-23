@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.scheduler;
 
+import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
@@ -73,6 +74,7 @@ class PipelineSchedulerChainTest {
     private UniverseRebalanceJob universeRebalanceJob;
     private MembershipGapFiller membershipGapFiller;
     private UniverseIntegrityAlerter universeIntegrityAlerter;
+    private ShareBasisDeriver shareBasisDeriver;
     private PipelineScheduler scheduler;
 
     @BeforeEach
@@ -88,6 +90,7 @@ class PipelineSchedulerChainTest {
         retentionPolicy = mock(IndicatorRetentionPolicy.class);
         universeRebalanceJob = mock(UniverseRebalanceJob.class);
         universeIntegrityAlerter = mock(UniverseIntegrityAlerter.class);
+        shareBasisDeriver = mock(ShareBasisDeriver.class);
 
         when(retentionPolicy.writeCutoffs()).thenReturn(Map.of(
                 "KOSPI", Optional.of(KR_CUTOFF), "US", Optional.of(US_CUTOFF)));
@@ -101,7 +104,7 @@ class PipelineSchedulerChainTest {
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob,
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new InvalidationBackfiller(indicatorBackfillJob, retentionPolicy),
-                universeIntegrityAlerter);
+                universeIntegrityAlerter, shareBasisDeriver);
     }
 
     @Test
@@ -294,6 +297,21 @@ class PipelineSchedulerChainTest {
         scheduler.runHeavyJobOfTheDay();
 
         verifyNoInteractions(indicatorBackfillJob);
+    }
+
+    @Test
+    @DisplayName("재무를 쓴 뒤에는 주식수 기저를 다시 판정한다 — 안 이으면 UNRESOLVED 종목이 조용히 값을 되찾는다")
+    void financialRefillIsFollowedByShareBasisDerive() {
+        overdue(FinancialRefillJob.JOB_NAME, 40);
+        fresh(GovernanceLoadJob.JOB_NAME, FullStatementRefillJob.JOB_NAME);
+        when(financialRefillJob.runAndReport(any(), any(), any(), anyList(), any()))
+                .thenReturn(new FinancialRefillJob.Invalidation(BatchStatus.SUCCESS, List.of()));
+
+        scheduler.runHeavyJobOfTheDay();
+
+        // 새 판은 판정이 NULL 로 들어오고 NULL 은 OK 로 읽힌다. 이 연쇄가 빠지면 증상이
+        // 「다음 리밸런싱에 다시 편입된다」라 재무 잡의 초록만 보면 드러나지 않는다.
+        verify(shareBasisDeriver).derive("US");
     }
 
     @Test
