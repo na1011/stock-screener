@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.scheduler;
 
+import com.stockscreener.pipeline.datasource.us.UsMarket;
+import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
@@ -68,6 +70,7 @@ public class PipelineScheduler {
     private final JobFreshnessAlerter freshnessAlerter;
     private final JobFreshnessPolicy freshnessPolicy;
     private final InvalidationBackfiller invalidationBackfiller;
+    private final ShareBasisDeriver shareBasisDeriver;
     private final UniverseIntegrityAlerter universeIntegrityAlerter;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
@@ -81,7 +84,8 @@ public class PipelineScheduler {
                              JobFreshnessAlerter freshnessAlerter,
                              JobFreshnessPolicy freshnessPolicy,
                              InvalidationBackfiller invalidationBackfiller,
-                             UniverseIntegrityAlerter universeIntegrityAlerter) {
+                             UniverseIntegrityAlerter universeIntegrityAlerter,
+                             ShareBasisDeriver shareBasisDeriver) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -93,6 +97,7 @@ public class PipelineScheduler {
         this.freshnessAlerter = freshnessAlerter;
         this.freshnessPolicy = freshnessPolicy;
         this.invalidationBackfiller = invalidationBackfiller;
+        this.shareBasisDeriver = shareBasisDeriver;
         this.universeIntegrityAlerter = universeIntegrityAlerter;
     }
 
@@ -335,6 +340,13 @@ public class PipelineScheduler {
             }
         } else {
             throw new IllegalStateException("배정에 없는 잡을 고를 수 없다: " + jobName);
+        }
+        // MUST: 재무를 쓴 뒤에는 주식수 기저를 다시 판정한다(ADR-0162). 새 판은 판정이
+        // NULL 로 들어오고 NULL 은 OK 로 읽히므로, 안 돌리면 UNRESOLVED 종목이 조용히 값을
+        // 되찾고 **토요일 리밸런싱이 그 시총으로 순위를 매긴다.**
+        if (FullStatementRefillJob.JOB_NAME.equals(jobName)
+                || FinancialRefillJob.JOB_NAME.equals(jobName)) {
+            shareBasisDeriver.derive(UsMarket.CODE);
         }
     }
 

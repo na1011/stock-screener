@@ -381,6 +381,17 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | market-calendar | bar-gap-review");
         };
 
+        // MUST: 재무나 기업행위를 쓴 잡 뒤에는 기저를 다시 판정한다(ADR-0162).
+        // 새 판은 판정이 NULL 로 들어오고 NULL 은 OK 로 읽히므로, 안 돌리면 UNRESOLVED 종목이
+        // **조용히 값을 되찾고** 다음 리밸런싱이 그 시총으로 순위를 매긴다 — 2026-09-04에
+        // AKTX 가 상위 10위에 편입된 것과 같은 경로다.
+        //
+        // MUST: 잡의 반환 지점이 아니라 **여기**에 건다. 세 잡이 각각 여러 곳에서 return 하고,
+        // 그중 하나를 빠뜨리면 증상이 「가끔 되살아난다」라 재현이 안 된다.
+        if (REDERIVE_SHARE_BASIS_AFTER.contains(job)) {
+            shareBasisDeriver.derive("US");
+        }
+
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);
         if (status == BatchStatus.FAILED) {
             throw new IllegalStateException(job + " 잡이 실패했다. 로그와 batch_execution을 확인하라.");
@@ -413,6 +424,14 @@ public class BootstrapRunner implements ApplicationRunner {
      * {@code --reload-existing=true}가 함께 있으면 {@code warn-bootstrap-args.sh}도 조용히
      * 통과시킨다. 태운 호출은 되돌릴 수 없으므로 실행 전에 막는 것이 유일한 방어다.
      */
+    /**
+     * 이 잡들이 끝나면 주식수 기저를 다시 판정한다 — 재무 판이나 기업행위 원장이 바뀌면
+     * 판정의 입력이 바뀌기 때문이다. 유도는 외부 호출 0이고 원자료를 한 행도 안 바꾼다.
+     */
+    private static final java.util.Set<String> REDERIVE_SHARE_BASIS_AFTER = java.util.Set.of(
+            "initial-load", "financial-refill", "full-statement-refill",
+            "corporate-action", "corporate-action-judge");
+
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
             "job", "as-of", "universe", "price-years", "financial-years", "reload-existing",
             "skip-financial", "skip-price", "tickers", "from",
@@ -420,7 +439,10 @@ public class BootstrapRunner implements ApplicationRunner {
             "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
             "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note",
-            "apply", "replace", "dates", "insert-earlier-vintages");
+            "apply", "replace", "dates", "insert-earlier-vintages",
+            // share-basis-derive 전용. 기본값 US다 — 국내는 봉의 listed_shares 를 쓰므로
+            // 이 축을 원리적으로 안 탄다(재무 shares_outstanding 이 KR 전량 NULL 이다).
+            "market");
 
     /**
      * {@code --universe}가 뜻을 갖는 잡. 나머지에서는 조용히 무시되므로 거절한다.
