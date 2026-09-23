@@ -88,8 +88,27 @@ public record FinancialFigures(
         BigDecimal operatingExpenses,
         BigDecimal costsAndExpenses,
         BigDecimal incomeTaxExpense,
-        BigDecimal profitBeforeTax
+        BigDecimal profitBeforeTax,
+
+        /**
+         * <b>이 판이 실은 주식수를 시세와 같은 기저로 옮기는 배수.</b> NULL은 1과 같다.
+         * {@code share-basis-derive}가 채우고 <b>적재는 안 건드린다</b>.
+         */
+        BigDecimal shareBasisMultiple,
+
+        /**
+         * <b>이 판의 주식수가 시세와 같은 기저인가</b>({@link ShareBasis}). NULL은
+         * {@link ShareBasis#OK}로 읽는다 — 아직 유도가 안 돈 판이고, 그때의 동작은 이 축이
+         * 생기기 전과 정확히 같아야 한다.
+         */
+        String shareBasisStatus
 ) {
+
+    /** 저장 문자열을 enum으로. NULL은 {@link ShareBasis#OK}다. */
+    public ShareBasis shareBasis() {
+        return ShareBasis.of(shareBasisStatus);
+    }
+
 
     public enum FiscalPeriod {
         FY, Q1, Q2, Q3, Q4;

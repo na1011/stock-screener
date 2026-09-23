@@ -1,6 +1,7 @@
 package com.stockscreener.indicator.calculator;
 
 import com.stockscreener.indicator.FinancialFigures;
+import com.stockscreener.indicator.ShareBasis;
 import com.stockscreener.indicator.IndicatorContext;
 import com.stockscreener.indicator.IndicatorPoint;
 import com.stockscreener.indicator.PriceBar;
@@ -472,6 +473,21 @@ final class FinancialMath {
             BigDecimal fromFinancials = asOf.sharesOutstanding();
             if (fromFinancials == null || fromFinancials.signum() <= 0) {
                 continue;
+            }
+            // MUST: 기저 판정을 **고른 판에서** 본다(ADR-0162). 이 수가 시세와 다른 기저이면
+            // 곱해서 맞추거나, 크기를 모르면 값을 안 낸다.
+            ShareBasis basis = asOf.shareBasis();
+            if (basis == ShareBasis.UNRESOLVED) {
+                // MUST NOT: continue로 옛 판에 내려가지 않는다. 기저가 어긋난 것은 **종목의
+                // 성질**이라 옛 판도 같은 기저이고, 내려가면 「같은 값을 다른 날짜로」 내는 것뿐이다.
+                // 값을 안 내는 것이 판정이다 — 사유는 IndicatorUnavailabilityConfig가 말한다.
+                return null;
+            }
+            if (basis == ShareBasis.SHIFTED && asOf.shareBasisMultiple() != null) {
+                // 배수는 **판마다** 다르다. 사건 전에 공시된 판은 유도가 배수를 안 달므로
+                // 여기서 1이 되고, 그 비대칭이 SharesGrowth3yCalculator처럼 분자·분모에 같은
+                // 수를 곱하는 지표를 실제로 고친다(상수로 두면 약분돼 안 고쳐진다).
+                fromFinancials = fromFinancials.multiply(asOf.shareBasisMultiple());
             }
             // MUST: 앵커는 **공시일**이다(ADR-0133). 이 수는 보고서 표지 기준이라 기말 이후
             // 공시 전에 일어난 기업행위가 **이미 반영돼 있고**, 기말에서 배수를 걸면 그

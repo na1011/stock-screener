@@ -96,7 +96,8 @@ public class IndicatorDataReader {
             interest_and_dividend_income, noninterest_income, interest_expense,
             noninterest_expense, benefits_losses_and_expenses,
             gross_profit, operating_expenses, costs_and_expenses,
-            income_tax_expense, profit_before_tax
+            income_tax_expense, profit_before_tax,
+            share_basis_multiple, share_basis_status
             """;
 
     /**
@@ -518,6 +519,8 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("operating_expenses"),
                 rs.getBigDecimal("costs_and_expenses"),
                 rs.getBigDecimal("income_tax_expense"),
-                rs.getBigDecimal("profit_before_tax"));
+                rs.getBigDecimal("profit_before_tax"),
+                rs.getBigDecimal("share_basis_multiple"),
+                rs.getString("share_basis_status"));
     }
 }

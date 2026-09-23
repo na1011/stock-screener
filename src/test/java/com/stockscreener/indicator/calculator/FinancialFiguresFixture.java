@@ -52,6 +52,8 @@ final class FinancialFiguresFixture {
     private BigDecimal costsAndExpenses;
     private BigDecimal incomeTaxExpense;
     private BigDecimal profitBeforeTax;
+    private BigDecimal shareBasisMultiple;
+    private String shareBasisStatus;
 
     private FinancialFiguresFixture() {
     }
@@ -115,6 +117,8 @@ final class FinancialFiguresFixture {
         fixture.costsAndExpenses = source.costsAndExpenses();
         fixture.incomeTaxExpense = source.incomeTaxExpense();
         fixture.profitBeforeTax = source.profitBeforeTax();
+        fixture.shareBasisMultiple = source.shareBasisMultiple();
+        fixture.shareBasisStatus = source.shareBasisStatus();
         return fixture;
     }
 
@@ -171,6 +175,13 @@ final class FinancialFiguresFixture {
 
     FinancialFiguresFixture profitBeforeTax(BigDecimal v) {
         this.profitBeforeTax = v;
+        return this;
+    }
+
+    /** 기저 판정을 그대로 실어 보낸다 — 유도 결과를 흉내 내는 시험이 이 자리를 쓴다. */
+    FinancialFiguresFixture shareBasis(String status, BigDecimal multiple) {
+        this.shareBasisStatus = status;
+        this.shareBasisMultiple = multiple;
         return this;
     }
 
@@ -280,6 +291,6 @@ final class FinancialFiguresFixture {
                 interestAndDividendIncome, noninterestIncome, interestExpense,
                 noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses,
-                incomeTaxExpense, profitBeforeTax);
+                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus);
     }
 }

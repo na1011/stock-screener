@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.collector.CorporateActionLedger;
 import com.stockscreener.pipeline.collector.CorporateActionStatus;
 import com.stockscreener.pipeline.datasource.CorporateAction;
@@ -174,6 +175,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final GovernanceDeriveJob governanceDeriveJob;
     private final MarketCalendarJob marketCalendarJob;
     private final CorporateActionJudgeJob corporateActionJudgeJob;
+    private final ShareBasisDeriver shareBasisDeriver;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
@@ -192,7 +194,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            MarketCalendarJob marketCalendarJob,
                            CorporateActionJudgeJob corporateActionJudgeJob,
                            BatchExecutionSweeper executionSweeper,
-                           ConfigurableApplicationContext context) {
+                           ConfigurableApplicationContext context,
+                           ShareBasisDeriver shareBasisDeriver) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.universeRestoreJob = universeRestoreJob;
         this.initialLoadJob = initialLoadJob;
@@ -207,6 +210,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.governanceDeriveJob = governanceDeriveJob;
         this.marketCalendarJob = marketCalendarJob;
         this.corporateActionJudgeJob = corporateActionJudgeJob;
+        this.shareBasisDeriver = shareBasisDeriver;
         this.executionSweeper = executionSweeper;
         this.context = context;
     }
@@ -344,6 +348,14 @@ public class BootstrapRunner implements ApplicationRunner {
             // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
             case "governance-derive" -> governanceDeriveJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
+            // 외부 호출이 0이고 저장된 원장·계열만 본다. 원자료는 한 행도 안 바꾼다 —
+            // 바꾸는 것은 `financial_statement`의 기저 판정 두 컬럼뿐이다(ADR-0162).
+            // MUST: 적재가 새 판을 넣은 뒤에는 이것을 다시 돌린다. 새 판은 판정이 NULL로
+            // 들어오고 NULL은 OK로 읽히므로, 안 돌리면 `UNRESOLVED` 종목이 조용히 값을 되찾는다.
+            case "share-basis-derive" -> {
+                shareBasisDeriver.derive(value(args, "market", "US"));
+                yield BatchStatus.SUCCESS;
+            }
             case "market-calendar" -> marketCalendarJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, date(args, "from", null));
             // 외부 호출이 0이고 읽기만 한다. 실행 행도 안 만든다 — 적재가 도는 중에 치게 되는
@@ -364,6 +376,7 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | full-statement-refill | company-profile | corporate-action"
                             + " | adjustment-rebuild | market-index | backfill"
                             + " | governance-load | governance-derive"
+                            + " | share-basis-derive"
                             + " | corporate-action-review | corporate-action-judge"
                             + " | market-calendar | bar-gap-review");
         };

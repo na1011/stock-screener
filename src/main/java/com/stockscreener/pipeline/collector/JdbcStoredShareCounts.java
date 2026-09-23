@@ -121,10 +121,24 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
      * <p>{@code shares_outstanding > 0}을 거는 이유는 0이 「작은 회사」와 구별되지 않기
      * 때문이다({@code MarketCapUniverseAdapter.toCandidate}가 같은 판단을 한다).
      */
+    /**
+     * <b>MUST: 기저 판정을 바깥 SELECT에서 건다</b>(ADR-0162). 안쪽 {@code WHERE}에
+     * {@code share_basis_status}를 넣으면 {@code DISTINCT ON}이 <b>옛 판으로 물러나는데</b>,
+     * 기저가 어긋난 것은 종목의 성질이라 그 판도 같은 기저다 — 값을 안 내려는 판정이
+     * 「같은 오염을 다른 날짜로 내기」가 된다.
+     *
+     * <p><b>MUST: {@code share_basis_multiple}을 기업행위 배수보다 먼저 곱한다.</b> 앞은 그 판이
+     * 실은 수를 시세 기저로 옮기는 것이고 뒤는 공시일에서 {@code asOf}까지 옮기는 것이라
+     * 구간이 겹치지 않는다(실측 2026-09-23: 겹치는 종목 0).
+     *
+     * <p>빠진 종목은 {@code UsMarketCapUniverseAdapter}가 {@code excluded.noShares}로 세어
+     * 후보에서 뺀다 — 시총을 못 내는 것과 같은 자리이고, 그래서 순위에 안 들어간다.
+     */
     private static final String SQL = """
             WITH latest AS (
                 SELECT DISTINCT ON (f.stock_id)
-                       f.stock_id, f.shares_outstanding, f.period_end, f.published_at
+                       f.stock_id, f.shares_outstanding, f.period_end, f.published_at,
+                       f.share_basis_multiple, f.share_basis_status
                 FROM financial_statement f
                 JOIN stock s ON s.id = f.stock_id
                 WHERE s.market_code = ?
@@ -136,11 +150,13 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                 ORDER BY f.stock_id, f.period_end DESC, f.published_at DESC, f.revision_no DESC
             )
             SELECT s.ticker,
-                   latest.shares_outstanding * %s AS shares_outstanding,
+                   latest.shares_outstanding
+                       * coalesce(latest.share_basis_multiple, 1) * %s AS shares_outstanding,
                    s.sic_code, latest.period_end, latest.published_at,
                    %s AS currency_mismatched
             FROM latest
             JOIN stock s ON s.id = latest.stock_id
+            WHERE latest.share_basis_status IS DISTINCT FROM 'UNRESOLVED'
             ORDER BY s.ticker
             """.formatted(SHIFT_TO_ASOF, CURRENCY_MISMATCHED);
 
