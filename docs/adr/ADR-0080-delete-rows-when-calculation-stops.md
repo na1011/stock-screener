@@ -66,8 +66,30 @@ applies_to:
 **같은 파일에 ADR-0085의 단언 여덟이 함께 있다** — 이 결정이 안 걸리는 세 자리를 그쪽이 소유한다.
 `--tests "*IndicatorRunnerTest*"` 한 번이 둘을 다 돌리므로 **명령은 그대로이고 세는 수만 다르다.**
 
-```premise 원본 없는 파생 행이 남아 있지 않다
-psql -d stock_screener -At -c "WITH o AS (SELECT d.indicator_code c, count(*) n FROM indicator_value d WHERE d.indicator_code LIKE '%\_PCTL' AND d.indicator_code NOT LIKE '%\_SECTOR\_PCTL' AND NOT EXISTS (SELECT 1 FROM indicator_value s WHERE s.stock_id = d.stock_id AND s.trade_date = d.trade_date AND s.indicator_code = left(d.indicator_code, length(d.indicator_code) - 5)) GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM indicator_value WHERE indicator_code LIKE '%\_PCTL' AND indicator_code NOT LIKE '%\_SECTOR\_PCTL') = 0 THEN '잴 것이 없었다 — 백분위가 한 행도 없다' WHEN (SELECT count(*) FROM o) = 0 THEN 'OK 고아 백분위가 없다' ELSE (SELECT sum(n)::text FROM o) || '행이 원본 없는 백분위다(' || (SELECT string_agg(c, ',' ORDER BY c) FROM o) || ') — 파생 정리가 보존 창을 안 덮고 있다(ADR-0080)' END"
+```premise 최신일에 원본 없는 파생 행이 남아 있지 않다
+# MUST: 최신일로 좁힌 것은 **창 전체 형태가 제한선 아래로 못 내려가기 때문**이다 —
+# 2026-09-25 실측으로 **7.633초**인데 훅 제한이 6초라 **여유가 -1.633초**다(2026-09-22에는
+# 5.147초로 +0.85였고 표가 자라 음수가 됐다). **아무것도 단언하지 못하는 펜스는 예산만 태운다** —
+# 그 6초가 뒤쪽 전제를 통째로 무판정으로 만든다. 최신일 형태는 **0.173초**다(44배).
+# 창 전체는 PercentileCalculator 가 백필마다 "보존 창의 고아 백분위를 정리했다"로 지키고,
+# 그 걷기가 깨지면 **다음 실행의 최신일에 나타나므로** 이 펜스가 하루 늦게 잡는다.
+psql -d stock_screener -At -c "
+WITH d AS (SELECT max(trade_date) t FROM indicator_value),
+o AS (SELECT dd.indicator_code c, count(*) n FROM indicator_value dd, d
+      WHERE dd.trade_date = d.t
+        AND dd.indicator_code LIKE '%\_PCTL' AND dd.indicator_code NOT LIKE '%\_SECTOR\_PCTL'
+        AND NOT EXISTS (SELECT 1 FROM indicator_value s2
+                        WHERE s2.stock_id = dd.stock_id AND s2.trade_date = dd.trade_date
+                          AND s2.indicator_code = left(dd.indicator_code, length(dd.indicator_code) - 5))
+      GROUP BY 1)
+SELECT CASE
+  WHEN (SELECT count(*) FROM indicator_value dd, d
+        WHERE dd.trade_date = d.t AND dd.indicator_code LIKE '%\_PCTL') = 0
+    THEN '잴 것이 없었다 — 최신일에 백분위가 한 행도 없다'
+  WHEN (SELECT count(*) FROM o) = 0 THEN 'OK 최신일 고아 백분위가 없다'
+  ELSE (SELECT sum(n)::text FROM o) || '행이 원본 없는 백분위다('
+       || (SELECT string_agg(c, ',' ORDER BY c) FROM o)
+       || ') — 파생 정리가 깨졌다(ADR-0080)' END"
 ```
 
 **백분위만 묻는 이유**는 규칙에서 파생 코드를 유도할 수 있는 것이 그쪽뿐이기 때문이다
