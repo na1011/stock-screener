@@ -4,6 +4,7 @@ status: 채택됨
 date: 2026-09-26
 applies_to:
   - "ops/**"
+  - "src/main/resources/application.yaml"
 ---
 
 # ADR-0163. stale한 postmaster 락은 명령줄로 판정한다
@@ -150,13 +151,16 @@ fi
 - **어려워지는 것**: `ops/`가 postgres의 내부 파일 형식에 의존하게 됐다. `postmaster.pid`의
   1·2행 뜻이 바뀌면 판정이 조용히 틀린다 — PG16 `pidfile.h`의 `LOCK_FILE_LINE_PID`·
   `LOCK_FILE_LINE_DATA_DIR`이 그 계약이고, 메이저 업그레이드 때 확인할 자리다.
-- **IMPORTANT — 열어 둔 것: 원인(사슬 1~3)은 안 닫혔다.** 이 결정은 **결과를 무해화할 뿐**
-  이고, 앱이 DB보다 늦게 죽는 것은 그대로다. 그래서 강제 종료는 계속 일어나고 위 `premise`가
-  그것을 센다. **가장 유망한 처방은 이 저장소 안에 있다** — `application.yaml`의
-  `spring.datasource.hikari`에 **`minimum-idle`이 없어** Hikari 기본이 `minimumIdle =
-  maximumPoolSize`가 되고, 같은 파일 44–46행 주석이 그 결과를 이미 실측으로 적어 뒀다
-  ("앱은 기동 직후부터 12를 상시 유휴로 문다"). **smart shutdown을 60초 동안 막은 12개가
-  정확히 그것이고, 사고 3회 모두 배치가 안 돌던 시각이라 전부 유휴였다.** 앱 동작을 바꾸고
-  재배포가 필요해 사용자 판단으로 남긴다. **사정거리: 배치가 도는 중의 종료는 여전히 막힌다.**
+- **원인(사슬 2)도 같은 날 닫았다 — `application.yaml`에 `minimum-idle: 0`**(사용자 승인
+  2026-09-26, 같은 날 배포). 그 값이 없으면 Hikari 기본이 `minimumIdle = maximumPoolSize`라
+  앱이 12를 상시 물고, smart shutdown은 그 12가 끊길 때까지 기다린다. **실측: 적용 전
+  `idle` 12개(10분 초과 0건) → 재배포 직후 2개.**
+  - **MUST NOT: 이 결정과 `maximum-pool-size`를 따로 다루지 않는다.** `minimum-idle`을 지우면
+    Hikari가 다시 `maximum-pool-size`만큼 상시 물고, **앱은 정상 기동하며 테스트도 통과한다.**
+    증상은 **다음 재부팅에서 DB가 안 뜨는 것**으로만 나온다.
+  - **사정거리: 배치가 도는 중의 종료는 이걸로 안 막는다** — 그때는 활성 커넥션이라
+    `idle-timeout`의 대상이 아니다. 그 갈래는 위 락 판정이 결과를 받는다. 관측된 사고 3회는
+    **모두 배치가 안 돌던 시각**이라 이 처방의 사정거리 안이지만, 3표본이다.
+  - 위 `premise`는 **그대로 둔다.** 그 갈래가 남아 있고, 강제 종료가 다시 나면 그것이 신호다.
 - **되돌리려면**: `ops/lib.sh`의 `classify_postmaster_lock`·`ensure_postgres_up`과
   `ops/start.sh`의 호출 한 곳, `ops/status.sh`의 `DB`·`DB자동기동` 두 줄을 걷는다.

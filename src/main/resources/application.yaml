@@ -41,14 +41,26 @@ spring:
       # IMPORTANT — 이 값은 **두 JVM에 걸린다.** 운영 앱(:8080)과 bootstrap 프로파일의 별도
       # 프로세스(server.port: 0이라 8080에 안 부딪힌다)가 각각 이 크기의 풀을 연다.
       #
-      # 그리고 **「쓸 때만 연다」가 아니다** — 이 프로파일에 minimum-idle이 없어 Hikari 기본이
-      # minimumIdle = maximumPoolSize다. 앱은 기동 직후부터 **12를 상시 유휴로 문다**
-      # (2026-09-11 배포 뒤 실측: application_name='PostgreSQL JDBC Driver' 12개 전부 idle).
-      # 적재 러너가 함께 돌면 24이고, PostgreSQL max_connections가 100이라 여유는 크다.
+      # **상한이지 상시값이 아니다** — 아래 `minimum-idle: 0`이 유휴를 걷는다. 적재 러너가
+      # 함께 돌면 두 JVM 합쳐 최대 24이고, PostgreSQL max_connections가 100이라 여유는 크다.
       #
       # MUST NOT: 워커 수를 이 값에 맞춰 올리지 않는다. 상한을 정하는 것은 코어 유보이고
       # (IndicatorBackfillJob.resolveWorkers), 이 기계에는 운영 앱이 온디바이스로 함께 산다.
       maximum-pool-size: 12
+
+      # **종료 순서 때문에 둔다.** 이 값이 없으면 Hikari 기본이 minimumIdle =
+      # maximumPoolSize라 위 주석대로 12를 상시 문다. postgres의 smart shutdown은 그 12가
+      # 끊길 때까지 기다리는데 **앱은 DB보다 늦게 SIGTERM을 받는다** — 2026-09-25에 앱이
+      # 풀을 닫은 것이 63.1초, launchd의 종료 예산이 60초라 3.1초가 모자랐고, postmaster가
+      # 강제 종료되며 남긴 postmaster.pid가 다음 부팅에서 PID 재사용을 만나 DB가 안 떴다
+      # (ADR-0163 §배경). 유휴가 0이면 기다릴 대상이 없어 smart shutdown이 즉시 끝난다.
+      #
+      # **사정거리: 배치가 도는 중의 종료는 이걸로 안 막는다** — 그때는 활성 커넥션이고
+      # idle-timeout의 대상이 아니다. 그 갈래는 ADR-0163의 락 판정이 결과를 받는다.
+      #
+      # MUST NOT: 이 값을 지우고 maximum-pool-size만 남기지 않는다. 지워도 앱은 정상
+      # 기동하고 테스트도 통과하며, 증상은 **다음 재부팅에서 DB가 안 뜨는 것**으로 나온다.
+      minimum-idle: 0
 
   mvc:
     problemdetails:
