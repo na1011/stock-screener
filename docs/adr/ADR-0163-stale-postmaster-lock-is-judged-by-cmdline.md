@@ -77,7 +77,11 @@ L=/opt/homebrew/var/log/postgresql@16.log
 if [ ! -r "$L" ]; then
   echo "잴 것이 없었다 — postgres 로그를 읽을 수 없다"
 else
-  last=$(grep -aE 'database system is shut down|unexpected postmaster exit' "$L" | tail -1)
+  # 끝 2MB만 먼저 본다. 이 로그는 59MB이고 전체 grep이 703ms라 전제 예산(75초)에서 무시할
+  # 수 없다. 못 찾으면 전체를 보므로 정확도는 안 잃는다.
+  pat='database system is shut down|unexpected postmaster exit'
+  last=$(tail -c 2000000 "$L" | grep -aE "$pat" | tail -1)
+  [ -z "$last" ] && last=$(grep -aE "$pat" "$L" | tail -1)
   if [ -z "$last" ]; then
     echo "잴 것이 없었다 — 로그에 종료 기록이 하나도 없다"
   elif echo "$last" | grep -q 'is shut down'; then
