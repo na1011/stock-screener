@@ -256,6 +256,12 @@ classify_postmaster_lock() {
 # 고칠 수 있으면 고치고, 아니면 **무엇이 막고 있는지 이름을 대고** 1을 반환한다.
 ensure_postgres_up() {
   local label="$1" isready rc verdict lock backup db_url i
+  # MUST: `-d`를 준다. 없으면 libpq가 **사용자명을 DB 이름으로** 써서 서버가 매 호출마다
+  # `FATAL: database "na1011" does not exist`를 로그에 남긴다(2026-09-26 대조군: 준 호출은
+  # 안 늘고, 안 준 호출은 1건 는다). 종료코드는 `-d` 유무로 안 바뀌므로 판정은 그대로다 —
+  # 없는 DB를 줘도 rc=0이고 서버가 무응답일 때만 rc=2다. 바뀌는 것은 **로그 오염**뿐이고,
+  # 그 노이즈가 진짜 FATAL과 섞여 사고 진단을 방해한다.
+  local db="${DB_NAME:-stock_screener}"
 
   # 사정거리 — 로컬 postgres에만 선다. DB_URL이 다른 호스트면 락 파일은 그 기계에 있고
   # 여기서 보는 것은 무관한 파일이다. 없으면 application.yaml의 기본값(localhost:5432)이다.
@@ -273,12 +279,12 @@ ensure_postgres_up() {
 
   # 종료코드를 가른다. 0 수락 · 1 거부(기동·복구 중) · 2 무응답 · 3 시도 안 함.
   # **1과 2를 뭉치면 정상 복구를 사고로 신고한다** — 크래시 뒤 redo는 크기에 따라 분 단위가 된다.
-  "$isready" -h localhost -p 5432 -q && return 0
+  "$isready" -h localhost -p 5432 -d "$db" -q && return 0
   rc=$?
   if [[ $rc -eq 1 ]]; then
     echo "[$label] DB가 기동·복구 중이다 — 최대 120초 기다린다."
     for ((i = 0; i < 120; i++)); do
-      "$isready" -h localhost -p 5432 -q && { echo "[$label] DB OK (${i}초)."; return 0; }
+      "$isready" -h localhost -p 5432 -d "$db" -q && { echo "[$label] DB OK (${i}초)."; return 0; }
       sleep 1
     done
     echo "[$label] DB가 120초 안에 복구를 끝내지 못했다. /opt/homebrew/var/log/postgresql@16.log를 본다." >&2
@@ -313,7 +319,7 @@ ensure_postgres_up() {
   # 게다가 이미 bootstrap된 라벨에 다시 bootstrap하면 `Bootstrap failed: 5: Input/output
   # error`로 brew가 비0으로 죽어, `set -e`인 start.sh가 여기서 끝난다.
   for ((i = 0; i < 40; i++)); do
-    "$isready" -h localhost -p 5432 -q && { echo "[$label] DB OK (${i}초)."; return 0; }
+    "$isready" -h localhost -p 5432 -d "$db" -q && { echo "[$label] DB OK (${i}초)."; return 0; }
     sleep 1
   done
   echo "[$label] 락을 걷었으나 DB가 40초 안에 뜨지 않았다 — 자동 재시도가 꺼져 있을 수 있다." >&2

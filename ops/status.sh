@@ -31,7 +31,10 @@ fi
 # 의존하므로(없으면 Flyway에서 2초 만에 죽는다) 무엇이 막고 있는지를 여기서 이름으로 댄다.
 echo -n "DB      : "
 if pg_isready_bin="$(pg_bin pg_isready 2>/dev/null)"; then
-  "$pg_isready_bin" -h localhost -p 5432 -q && db_rc=0 || db_rc=$?
+  # MUST: `-d`를 준다. 없으면 libpq가 사용자명을 DB 이름으로 써서 서버가 매 호출마다
+  # `FATAL: database "na1011" does not exist`를 남긴다. 종료코드는 안 바뀌고 로그만 더러워지는데,
+  # 그 노이즈가 진짜 FATAL과 섞여 사고 진단을 방해한다(2026-09-26에 실제로 그랬다).
+  "$pg_isready_bin" -h localhost -p 5432 -d "${DB_NAME:-stock_screener}" -q && db_rc=0 || db_rc=$?
   case "$db_rc" in
     0) echo "돈다 (localhost:5432)" ;;
     1) echo "기동·복구 중 — 아직 접속을 안 받는다" ;;

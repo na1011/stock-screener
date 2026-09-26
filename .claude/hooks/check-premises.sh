@@ -352,7 +352,7 @@ fi
 # DB가 안 떠 있으면 판정 불가가 무더기로 난다. 원인을 한 줄로 먼저 말한다.
 db_note=""
 if [ "$n_unknowns" -gt 0 ] && command -v pg_isready >/dev/null 2>&1; then
-  pg_isready -q >/dev/null 2>&1 || db_note="PostgreSQL이 응답하지 않는다 — 아래 판정 불가는 대부분 그 때문이다."$'\n'
+  pg_isready -d "${DB_NAME:-stock_screener}" -q >/dev/null 2>&1 || db_note="PostgreSQL이 응답하지 않는다 — 아래 판정 불가는 대부분 그 때문이다."$'\n'
 fi
 
 # 적재가 도는 중이면 접속·질의가 느려져 판정 불가가 난다. 그 원인을 **여기서** 말하는 이유는,
