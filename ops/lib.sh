@@ -194,3 +194,129 @@ rotate_log() {
   rmdir "$lock" 2>/dev/null || true
   return 0
 }
+
+# ── PostgreSQL stale 락 ──────────────────────────────────────────────────────
+#
+# **postgres는 자기 stale 락을 스스로 못 치울 때가 있다.** `postmaster.pid`의 PID가
+# 살아 있으면 "다른 postmaster가 돈다"고 판단해 그 자리에서 FATAL로 끝나는데, 그 판정이
+# **PID 재사용을 구분하지 못한다.** 2026-09-26에 실제로 그랬다 — 어제 죽은 postmaster의
+# PID 799를 부팅 직후 launchd가 iCloudNotificationAgent에 재할당했고, postgres가 89회
+# 연속으로 기동에 실패하는 동안 앱은 Flyway에서 2.1초 만에 죽었다.
+#
+# 이 파일 머리가 우리 앱·터널에 대해 적은 것과 **같은 판정이다**(ADR-0043) — 살아 있는지는
+# 언제나 "그 PID의 명령줄이 우리 것인가"까지 본다. postgres 락 파일만 그 판정 밖에 있었다.
+#
+# **MUST NOT: 부팅 시각(락 파일 3행)으로 stale을 판정하지 않는다.** 그 대조는 「부팅 뒤에
+# 죽은 postmaster」를 원리적으로 못 잡는다 — 2026-09-20이 그 형태였다(부팅 없이 죽어
+# 132분 동안 stale 락이 있었다). 게다가 이 기계는 부팅 후 약 70분이면 PID 공간이 한 바퀴
+# 돌아(실측 약 24 PID/초) 그 창 안에서도 재사용이 일어난다. **명령줄 대조가 양방향으로
+# 면역이고 부팅 시각은 사정거리만 좁힌다.**
+PG_DATADIR="/opt/homebrew/var/postgresql@16"
+
+# classify_postmaster_lock <락 파일 경로>
+# NONE(파일 없음) · UNREADABLE(형식이 깨짐) · LIVE(진짜 postmaster) · STALE 중 하나를 찍는다.
+#
+# **판정만 한다 — 아무것도 지우지 않고 pg_isready도 안 본다.** 갈라 둔 이유는 대조군 때문이다.
+# 제거까지 한 함수에 넣으면 시험이 DB를 끄지 않고는 판정을 태울 수 없고, 그러면 가장 위험한
+# 실패(판정이 「무조건 STALE」로 망가지는 것)를 어떤 대조군으로도 못 잡는다.
+classify_postmaster_lock() {
+  local lock="$1" pid datadir cmd
+  [[ -f "$lock" ]] || { echo "NONE"; return 0; }
+
+  pid="$(sed -n '1p' "$lock" 2>/dev/null || true)"
+  # MUST: 산술·비교에 쓰기 전에 숫자인지 본다. 기동 중 락은 8행이 `starting`이고, 잘린
+  # 파일은 1행이 비거나 문자열이다. bash 산술은 문자열을 변수명으로 읽어 `set -u`에서
+  # 죽으므로, 검사 없이 쓰면 이 함수가 start.sh를 그 자리에서 끝낸다.
+  # **그리고 읽을 수 없는 것은 STALE이 아니다** — 판정 못 한 것을 지우는 쪽으로 보내면
+  # 살아 있는 DB의 락을 지우고 같은 datadir에 두 번째 인스턴스가 뜬다.
+  [[ "$pid" =~ ^[0-9]+$ ]] || { echo "UNREADABLE"; return 0; }
+
+  datadir="$(sed -n '2p' "$lock" 2>/dev/null || true)"
+  [[ -n "$datadir" ]] || { echo "UNREADABLE"; return 0; }
+
+  cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  # PID 자체가 없다. postgres도 이 경우는 스스로 치운다.
+  [[ -n "$cmd" ]] || { echo "STALE"; return 0; }
+
+  # 살아 있다 — 그것이 **이 datadir의 postmaster인가**가 갈림길이다.
+  # postmaster는 argv를 안 바꾼다(자식만 `postgres: checkpointer`처럼 바꾼다). 그래서
+  # 이 대조가 선다. 끝 또는 공백까지 보는 이유는 `@16`이 `@16-test`에 걸리지 않게 하려는 것이다.
+  if [[ "$cmd" == *"postgres"* ]] && { [[ "$cmd" == *" -D $datadir" ]] || [[ "$cmd" == *" -D $datadir "* ]]; }; then
+    echo "LIVE"
+  else
+    # PID가 재사용됐다. 2026-09-26의 형태이고, **postgres가 스스로 못 고치는 유일한 갈래다.**
+    echo "STALE"
+  fi
+  return 0
+}
+
+# ensure_postgres_up <라벨>
+# DB가 뜰 때까지 손쓴다. 앱을 띄우기 **전에** 부른다 — 안 그러면 Flyway가 2초 만에 죽는데
+# start.sh는 60초를 기다린 뒤 "로그를 봐라"만 남긴다.
+# 고칠 수 있으면 고치고, 아니면 **무엇이 막고 있는지 이름을 대고** 1을 반환한다.
+ensure_postgres_up() {
+  local label="$1" isready rc verdict lock backup db_url i
+
+  # 사정거리 — 로컬 postgres에만 선다. DB_URL이 다른 호스트면 락 파일은 그 기계에 있고
+  # 여기서 보는 것은 무관한 파일이다. 없으면 application.yaml의 기본값(localhost:5432)이다.
+  db_url="$(grep -E '^DB_URL=' "$DEPLOY/.env" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+  if [[ -n "$db_url" && "$db_url" != *"//localhost:"* && "$db_url" != *"//127.0.0.1:"* ]]; then
+    echo "[$label] DB_URL이 로컬이 아니다 — postmaster 락 판정을 건너뛴다."
+    return 0
+  fi
+
+  # MUST: pg_bin으로 찾는다. postgresql@16은 keg-only라 **깨끗한 PATH에 pg_isready가 없다.**
+  isready="$(pg_bin pg_isready)" || {
+    echo "[$label] pg_isready가 없어 DB 상태를 확인하지 못했다 — 앱 기동을 그대로 시도한다." >&2
+    return 0
+  }
+
+  # 종료코드를 가른다. 0 수락 · 1 거부(기동·복구 중) · 2 무응답 · 3 시도 안 함.
+  # **1과 2를 뭉치면 정상 복구를 사고로 신고한다** — 크래시 뒤 redo는 크기에 따라 분 단위가 된다.
+  "$isready" -h localhost -p 5432 -q && return 0
+  rc=$?
+  if [[ $rc -eq 1 ]]; then
+    echo "[$label] DB가 기동·복구 중이다 — 최대 120초 기다린다."
+    for ((i = 0; i < 120; i++)); do
+      "$isready" -h localhost -p 5432 -q && { echo "[$label] DB OK (${i}초)."; return 0; }
+      sleep 1
+    done
+    echo "[$label] DB가 120초 안에 복구를 끝내지 못했다. /opt/homebrew/var/log/postgresql@16.log를 본다." >&2
+    return 1
+  fi
+
+  # 여기부터는 응답이 없다. 락 파일이 막고 있는지 본다.
+  lock="$PG_DATADIR/postmaster.pid"
+  verdict="$(classify_postmaster_lock "$lock")"
+  case "$verdict" in
+    NONE)
+      echo "[$label] DB가 응답하지 않는데 postmaster 락은 없다 — stale 락이 원인이 아니다." >&2
+      echo "        켜려면: brew services start postgresql@16" >&2
+      return 1
+      ;;
+    LIVE|UNREADABLE)
+      # **판정한 것만 지운다.** LIVE는 진짜 postmaster이고, UNREADABLE은 판정 자체가 안 된 것이다.
+      echo "[$label] DB가 응답하지 않지만 postmaster 락을 지울 근거가 없다 (판정: $verdict)." >&2
+      echo "        락: $lock" >&2
+      return 1
+      ;;
+  esac
+
+  # STALE이다. 옮겨 둔다 — 지우지 않는 이유는 무엇이 남아 있었는지가 사후에 유일한 증거라서다.
+  backup="$lock.stale-$(date '+%Y%m%d-%H%M%S')"
+  echo "[$label] stale한 postmaster 락을 걷는다 (PID $(sed -n '1p' "$lock")는 postgres가 아니거나 없다)."
+  mv "$lock" "$backup" || { echo "[$label] 락을 옮기지 못했다: $lock" >&2; return 1; }
+  echo "        옮긴 자리: $backup"
+
+  # **MUST NOT: 여기서 `brew services start`를 부르지 않는다.** KeepAlive=true라 launchd가
+  # 10초마다 스스로 재시도하고(사고 당일 89회가 그 증거다) 락이 걷히면 그 다음 시도가 뜬다.
+  # 게다가 이미 bootstrap된 라벨에 다시 bootstrap하면 `Bootstrap failed: 5: Input/output
+  # error`로 brew가 비0으로 죽어, `set -e`인 start.sh가 여기서 끝난다.
+  for ((i = 0; i < 40; i++)); do
+    "$isready" -h localhost -p 5432 -q && { echo "[$label] DB OK (${i}초)."; return 0; }
+    sleep 1
+  done
+  echo "[$label] 락을 걷었으나 DB가 40초 안에 뜨지 않았다 — 자동 재시도가 꺼져 있을 수 있다." >&2
+  echo "        켜려면: brew services start postgresql@16" >&2
+  return 1
+}

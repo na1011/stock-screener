@@ -26,6 +26,21 @@ else
   echo "터널    : 안 돈다"
 fi
 
+# **DB를 독립 항목으로 찍는다.** 아래 "덤프" 절도 psql로 붙지만 그것은 마이그레이션 대조의
+# 부산물이라, DB가 통째로 없는 것과 덤프가 없는 것이 같은 줄로 보인다. 앱이 전적으로 DB에
+# 의존하므로(없으면 Flyway에서 2초 만에 죽는다) 무엇이 막고 있는지를 여기서 이름으로 댄다.
+echo -n "DB      : "
+if pg_isready_bin="$(pg_bin pg_isready 2>/dev/null)"; then
+  "$pg_isready_bin" -h localhost -p 5432 -q && db_rc=0 || db_rc=$?
+  case "$db_rc" in
+    0) echo "돈다 (localhost:5432)" ;;
+    1) echo "기동·복구 중 — 아직 접속을 안 받는다" ;;
+    *) echo "응답 없음 — postmaster 락 판정: $(classify_postmaster_lock "$PG_DATADIR/postmaster.pid")" ;;
+  esac
+else
+  echo "판정 못 함 — pg_isready를 찾지 못했다"
+fi
+
 echo -n ":8080   : "
 lsof -nP -iTCP:8080 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $1" (PID "$2")"}' | paste -sd' ' - | grep . || echo "비어 있다"
 
@@ -55,7 +70,17 @@ found=""
 if [[ -n "$found" ]]; then
   echo "자동기동: 되살아났다 —$found  (ADR-0043은 0건을 전제한다)"
 else
-  echo "자동기동: 없다 (정상 — 부팅·로그인에 뜨는 등록이 하나도 없다)"
+  echo "자동기동: 없다 (정상 — 앱·터널 기준. DB는 아래 별도)"
+fi
+
+# **DB는 ADR-0043이 걷은 대상이 아니다** — 그 ADR은 앱의 LaunchAgent와 cloudflared의
+# LaunchDaemon을 해제했고 postgres는 brew가 관리하는 채로 남았다. 그런데 위 줄이 지위가
+# 다른 것을 "등록이 하나도 없다"로 뭉쳐, **사고 당일 10초마다 89회 재시도한 주체가
+# 여기 안 보였다**(2026-09-26). 갈라 찍는다 — 켜져 있는 것이 정상이다.
+if [[ -f "$HOME/Library/LaunchAgents/sh.brew.postgresql@16.plist" ]]; then
+  echo "DB자동기동: sh.brew.postgresql@16 (정상 — 부팅 시 뜨고, 죽으면 launchd가 되살린다)"
+else
+  echo "DB자동기동: 없다 — 부팅 뒤 DB를 손으로 띄워야 한다: brew services start postgresql@16"
 fi
 
 # 저장된 덤프가 지금 쓸 만한가. **아무것도 바꾸지 않는다 — 세고 찍기만 한다.**

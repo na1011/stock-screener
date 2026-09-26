@@ -48,7 +48,9 @@ cd frontend && npm run dev   # http://localhost:5173 — HMR. API는 :8080으로
 | 재부팅 | **안 뜬다.** FileVault 암호를 넣고 로그인한 뒤 `ops/start.sh` |
 | 잠자기 → 깨어남 | 프로세스가 그대로 살아 있다 (유일하게 저절로 돌아오는 것) |
 
-**PostgreSQL은 예외다.** Homebrew가 LaunchAgent로 등록해 두어 로그인하면 뜬다(`homebrew.mxcl.postgresql@16`). 이 앱이 아니라 DB이고, 그것까지 수동으로 만들지는 않았다. 끄려면 `brew services stop postgresql@16`.
+**PostgreSQL은 예외다.** Homebrew가 LaunchAgent로 등록해 두어 로그인하면 뜬다(`sh.brew.postgresql@16`). 이 앱이 아니라 DB이고, 그것까지 수동으로 만들지는 않았다. 끄려면 `brew services stop postgresql@16`.
+
+`KeepAlive=true`라 죽으면 10초마다 되살아난다 — **뜨는 데 실패해도 10초마다 다시 실패한다.** 2026-09-26에 stale한 `postmaster.pid` 때문에 89회 연속 실패했고, 그동안 앱은 Flyway에서 2초 만에 죽었다. 지금은 `ops/start.sh`가 앱을 띄우기 전에 그 락을 판정해 걷는다(ADR-0163).
 
 ---
 
@@ -76,7 +78,7 @@ ops/start.sh --app        # 앱만. 밖에서는 안 보인다 (로컬에서 확
 ops/start.sh --tunnel     # 터널만
 ```
 
-**안 뜨면** — 대개 DB다. `pg_isready`가 `accepting connections`가 아니면 `brew services start postgresql@16`. 그 밖의 원인은 아래 **문제 해결**.
+**안 뜨면** — 대개 DB다. `ops/start.sh`가 앱보다 먼저 DB를 묻고 무엇이 막는지 이름을 대므로 그 줄을 먼저 읽는다(`ops/status.sh`의 `DB :` 줄도 같은 것을 답한다). 그 밖의 원인은 아래 **문제 해결**.
 
 **절전 방지는 자동으로 걸린다.** `start.sh`가 `caffeinate -s -w <JVM PID>`를 함께 띄운다. `-s`는 **전원이 연결된 동안만** 유휴 절전을 막으므로 배터리로 도는 동안에는 평소대로 잠들고, `-w`로 앱에 묶여 있어 **앱이 끝나면 caffeinate도 함께 사라진다** — 따로 끌 것이 없다. 다만 **뚜껑을 닫으면 이것으로도 잠든다**(`sudo pmset -a disablesleep 1`이 필요하다, [`TODO.md`](TODO.md)).
 
