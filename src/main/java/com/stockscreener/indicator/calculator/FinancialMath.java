@@ -155,6 +155,171 @@ final class FinancialMath {
     }
 
     /**
+     * 유량 12개월 창을 만드는 <b>기간 계열</b>. 둘뿐이고 <b>창 단위로 한 번</b> 고른다.
+     *
+     * <p>왜 둘인가는 ADR-0164 §배경에 있다 — 활성 편입 중 **US 45 · KR 1**이 최신 4분기로
+     * 연속 12개월을 못 덮고, 그중 11종목은 <b>원장에 분기 손익이 0건</b>이다.
+     */
+    enum PeriodBasis {
+
+        /** 연속 네 분기의 합. 기(期) 하나가 한 분기이고 12개월은 넷이다. */
+        QUARTERLY,
+
+        /** 그 회계연도 한 행. 기(期) 하나가 한 해이고 12개월은 하나다. */
+        ANNUAL
+    }
+
+    /**
+     * 기저와 그 계열의 행. <b>행은 {@code period_end} 내림차순</b>이고 두 기저가 같은 인덱스
+     * 규약을 쓴다 — 인덱스는 <b>기(期)</b>이지 분기가 아니다.
+     *
+     * <p><b>MUST NOT: 두 목록을 한 리스트로 합치지 않는다.</b> {@code IndicatorContext}의 접는
+     * 키가 {@code periodEnd}이고 FY와 유도 Q4는 언제나 그것을 공유하므로(ADR-0124 §검증),
+     * 합치면 정상 종목에서 둘이 한 칸으로 접혀 TTM이 세 분기 합이 된다.
+     *
+     * <p><b>MUST NOT: 한 계산 안에서 기저를 바꾸지 않는다.</b> {@code EPS_CAGR_5Y}처럼 두 시점을
+     * 견주는 지표가 한쪽만 다른 기저로 채우면 <b>증감률이 기저 차이를 재게 되고 값은 그럴듯하다.</b>
+     * 그래서 {@link #ttm}은 요청한 기(期)를 이 기저로 못 내면 {@code null}이다.
+     */
+    record PeriodSeries(PeriodBasis basis, List<FinancialFigures> rows,
+                       List<FinancialFigures> pointRows) {
+
+        /**
+         * <b>그 시점 잔액·주식수를 읽을 판들</b> — 두 목록을 {@code period_end} 내림차순으로
+         * 합친 것이고 <b>유량 기저와 무관하다.</b>
+         *
+         * <p>IMPORTANT — 유량과 갈라 두는 이유가 실측에 있다. 2025년 신규 상장처럼 분기가
+         * 비연속인 종목은 유량 기저가 연간이 되는데, 그 FY 행은 <b>최신 분기보다 오래됐다.</b>
+         * 잔액까지 연간으로 읽으면 {@code MARKET_CAP}·{@code PBR}·{@code TURNOVER_RATIO}가
+         * <b>있던 자리에서 사라진다</b> — 0콜 스윕에서 {@code HNGE}·{@code CHYM} 두 종목이
+         * 70칸을 잃었다(2026-09-28). 잔액은 그 시점의 값이라 앞뒤가 이어지지 않아도 참이므로,
+         * 여기서는 <b>기저를 묻지 않고 가장 최근 판</b>을 쓴다.
+         *
+         * <p>합쳐도 안전한 이유: FY와 그 유도 Q4는 {@code period_end}를 공유하는데 유도가
+         * <b>잔액·주식수를 FY에서 그대로 복사</b>하므로(ADR-0151) 어느 쪽을 골라도 같은 값이다.
+         * <b>MUST NOT: 이 합친 목록으로 유량을 더하지 않는다</b> — 그때는 FY와 Q4가 이중 계산된다.
+         */
+        @Override
+        public List<FinancialFigures> pointRows() {
+            return pointRows;
+        }
+
+        /** 12개월이 몇 기(期)인가. */
+        int periodsPerYear() {
+            return basis == PeriodBasis.QUARTERLY ? TTM_QUARTERS : 1;
+        }
+
+        /**
+         * {@code offset}기(期)부터의 <b>12개월 유량 합</b>. 재료가 모자라면 null이다.
+         *
+         * <p>분기 기저는 {@link FinancialMath#sumFourQuarters}가 연속까지 본다. 연간 기저는
+         * <b>그 해와 요청 지점 사이가 연속인지</b>를 본다 — 안 보면 「5년 전」이 실제로 6년 전이
+         * 되고 {@code EPS_CAGR_5Y}가 조용히 다른 기간을 잰다.
+         */
+        BigDecimal ttm(Function<FinancialFigures, BigDecimal> field, int offset) {
+            if (basis == PeriodBasis.QUARTERLY) {
+                return sumFourQuarters(rows, field, offset);
+            }
+            return isConsecutiveAnnual(rows, offset + 1) ? field.apply(rows.get(offset)) : null;
+        }
+
+        /**
+         * {@code offset}기(期)의 <b>잔액을 읽을 한 행</b>. 없으면 null이다.
+         *
+         * <p>연속을 안 묻는다 — 잔액은 그 시점의 값이라 앞뒤가 이어지지 않아도 참이다.
+         * 유량과 갈라 두는 이유가 그것이고, 합치면 저량 호출부가 <b>잔액을 네 번 더한다.</b>
+         */
+        FinancialFigures balanceAt(int offset) {
+            return offset >= 0 && offset < rows.size() ? rows.get(offset) : null;
+        }
+
+        /** 잔액·주식수를 읽을 <b>가장 최근 판</b>. 없으면 null이다. */
+        FinancialFigures latestPoint() {
+            return pointRows.isEmpty() ? null : pointRows.get(0);
+        }
+
+        /** 그 기(期)의 <b>지배주주 귀속 12개월 순이익</b>. 창 단위 폴백은 기저마다 다르다. */
+        BigDecimal controllingTtm(int offset) {
+            if (basis == PeriodBasis.QUARTERLY) {
+                return sumControllingNetIncome(rows, offset);
+            }
+            FinancialFigures row = isConsecutiveAnnual(rows, offset + 1) ? rows.get(offset) : null;
+            return row == null ? null : controllingNetIncomeOf(row);
+        }
+
+        boolean isEmpty() {
+            return rows.isEmpty();
+        }
+    }
+
+    /**
+     * 이 종목의 기간 계열. <b>연속 네 분기가 서면 분기, 아니면 FY 계열이다.</b>
+     *
+     * <p><b>MUST: 방아쇠를 「분기가 0행일 때」로 두지 않는다.</b> 적재가 분기를 한두 행 만들면
+     * 그 방아쇠는 꺼지는데 네 분기 조건도 못 채워 <b>값이 오히려 사라진다</b> — 실측으로
+     * {@code 6-K}를 받으면 {@code AER BNT CAMT DSGX TSEM} 다섯이 정확히 그 자리다(ADR-0164).
+     *
+     * <p><b>MUST NOT: null을 내지 않는다.</b> 재무가 아예 없어도 빈 분기 계열을 돌려준다 —
+     * 호출부 19곳에 null 검사를 퍼뜨리면 하나만 빠뜨려도 {@code NullPointerException}이
+     * 「값이 없는 지표」가 아니라 <b>배치 실패</b>로 나타난다. 빈 계열의
+     * {@link PeriodSeries#ttm}은 null이고 {@link PeriodSeries#balanceAt}도 null이라
+     * 각 계산기의 기존 null 검사가 그대로 답한다.
+     */
+    static PeriodSeries seriesOf(IndicatorContext context) {
+        List<FinancialFigures> quarters = context.quarterlyFigures();
+        List<FinancialFigures> annual = context.annualFigures();
+        List<FinancialFigures> points = mergeByPeriodEndDesc(quarters, annual);
+        if (isConsecutiveQuarterly(quarters, 0)) {
+            return new PeriodSeries(PeriodBasis.QUARTERLY, quarters, points);
+        }
+        if (!annual.isEmpty()) {
+            return new PeriodSeries(PeriodBasis.ANNUAL, annual, points);
+        }
+        return new PeriodSeries(PeriodBasis.QUARTERLY, quarters, points);
+    }
+
+    /**
+     * 두 목록을 {@code period_end} 내림차순으로 합친다. 같은 기말은 <b>분기 쪽을 앞에</b> 둔다.
+     *
+     * <p>순서만 만든다 — 중복을 지우지 않는 이유는 {@link #sharesOf}가 목록을 내려가며
+     * <b>공시일과 주식수 유무를 판마다 다시 보기</b> 때문이고, 한쪽이 그 봉에 못 쓰이면
+     * 다른 쪽이 답이 되는 것이 옳다.
+     */
+    private static List<FinancialFigures> mergeByPeriodEndDesc(
+            List<FinancialFigures> quarters, List<FinancialFigures> annual) {
+        if (annual.isEmpty()) {
+            return quarters;
+        }
+        if (quarters.isEmpty()) {
+            return annual;
+        }
+        List<FinancialFigures> merged = new java.util.ArrayList<>(quarters.size() + annual.size());
+        merged.addAll(quarters);
+        merged.addAll(annual);
+        merged.sort(java.util.Comparator.comparing(
+                FinancialFigures::periodEnd,
+                java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
+        return java.util.Collections.unmodifiableList(merged);
+    }
+
+    /**
+     * 기간 계열에 맞는 <b>순이익·자본의 짝</b>. 기저마다 다른 판을 고른다.
+     *
+     * <p>분기 기저는 네 분기 합과 최신 분기 잔액을, 연간 기저는 <b>그 FY 한 행의 둘</b>을 쓴다 —
+     * 둘을 섞으면 분자와 분모의 기간이 갈리고 그 비율은 그럴듯하다.
+     */
+    static EquityBasis roeBasis(PeriodSeries series) {
+        if (series.isEmpty()) {
+            return null;
+        }
+        if (series.basis() == PeriodBasis.QUARTERLY) {
+            return roeBasis(series.rows());
+        }
+        FinancialFigures annual = series.balanceAt(0);
+        return annual == null ? null : roeBasis(annual);
+    }
+
+    /**
      * 최근 4개 분기의 항목을 합한다. 분기가 모자라거나 한 분기라도 값이 비면 null이다.
      *
      * <p>유량(flow) 항목에만 쓴다 — 매출·이익·현금흐름처럼 기간에 걸쳐 쌓이는 값이다.
@@ -445,6 +610,14 @@ final class FinancialMath {
      *
      * @return 양수인 주식수. 양쪽 모두 없거나 0 이하면 null이다.
      */
+    /**
+     * 기간 계열로 주식수를 고른다. <b>계열의 행 순서와 공시일 규약이 두 기저에서 같으므로</b>
+     * 리스트 판을 그대로 위임한다 — 연간 기저에서도 「그 봉 시점에 공시돼 있던 판」이 답이다.
+     */
+    static BigDecimal sharesOf(IndicatorContext context, PriceBar bar, PeriodSeries series) {
+        return series == null ? null : sharesOf(context, bar, series.pointRows());
+    }
+
     static BigDecimal sharesOf(IndicatorContext context, PriceBar bar,
                                List<FinancialFigures> quarters) {
         if (bar != null && bar.listedShares() != null && bar.listedShares().signum() > 0) {
@@ -555,6 +728,22 @@ final class FinancialMath {
     static BigDecimal trailingEpsOn(IndicatorContext context, PriceBar bar,
                                     BigDecimal ttmNetIncome, List<FinancialFigures> quarters) {
         return perShareOn(context, bar, ttmNetIncome, quarters);
+    }
+
+    /** 기간 계열 판. {@link #sharesOf(IndicatorContext, PriceBar, PeriodSeries)}를 탄다. */
+    static BigDecimal trailingEpsOn(IndicatorContext context, PriceBar bar,
+                                    BigDecimal ttmNetIncome, PeriodSeries series) {
+        return perShareOn(context, bar, ttmNetIncome, series);
+    }
+
+    /** 기간 계열 판. 유량·저량 구분은 {@code amount}를 만든 호출부가 이미 했다. */
+    static BigDecimal perShareOn(IndicatorContext context, PriceBar bar,
+                                 BigDecimal amount, PeriodSeries series) {
+        if (amount == null || series == null) {
+            return null;
+        }
+        BigDecimal shares = sharesOf(context, bar, series);
+        return shares == null ? null : amount.divide(shares, SCALE, RoundingMode.HALF_UP);
     }
 
     /**

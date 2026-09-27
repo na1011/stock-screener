@@ -96,12 +96,12 @@ public class NcavToMarketCalculator implements IndicatorCalculator {
      * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
      */
     private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
-        if (quarters.isEmpty()) {
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
+        if (series.isEmpty()) {
             return List.of();
         }
         // 저량이다. 최근 분기 잔액 하나를 쓴다 — 4분기를 더하면 4배가 된다.
-        FinancialFigures latest = quarters.get(0);
+        FinancialFigures latest = series.latestPoint();
         BigDecimal currentAssets = latest.currentAssets();
         BigDecimal totalLiabilities = FinancialMath.totalLiabilitiesOf(latest);
         if (currentAssets == null || totalLiabilities == null) {

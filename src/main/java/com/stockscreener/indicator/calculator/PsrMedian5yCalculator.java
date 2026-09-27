@@ -55,13 +55,12 @@ public class PsrMedian5yCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        return ValuationHistory.median(context, (ctx, bar, quarters, published) -> {
-            BigDecimal ttm = FinancialMath.sumFourQuarters(
-                    quarters, FinancialFigures::revenue, published);
+        return ValuationHistory.median(context, (ctx, bar, series, published) -> {
+            BigDecimal ttm = series.ttm(FinancialFigures::revenue, published);
             if (ttm == null || ttm.signum() <= 0) {
                 return null;
             }
-            return FinancialMath.perShareOn(ctx, bar, ttm, quarters);
+            return FinancialMath.perShareOn(ctx, bar, ttm, series);
         });
     }
 }

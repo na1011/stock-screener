@@ -72,13 +72,13 @@ public class PbrCalculator implements IndicatorCalculator {
      * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
      */
     private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
-        if (quarters.isEmpty()) {
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
+        if (series.isEmpty()) {
             return List.of();
         }
 
         // MUST: 분자가 시가총액이므로 분모는 지배주주 자본이다(ADR-0159).
-        BigDecimal equity = FinancialMath.equityAttributableToShareholders(quarters.get(0));
+        BigDecimal equity = FinancialMath.equityAttributableToShareholders(series.latestPoint());
         if (equity == null || equity.signum() <= 0) {
             // 자본잠식이면 음수 PBR이 나와 "저평가"로 보인다. 값을 내지 않는다.
             return List.of();
@@ -87,7 +87,7 @@ public class PbrCalculator implements IndicatorCalculator {
         // 주식수를 봉마다 읽는다 — 유상증자·분할 구간에서 BPS가 달라져야 한다.
         List<IndicatorPoint> points = new ArrayList<>(context.priceBars().size());
         for (PriceBar bar : context.priceBars()) {
-            BigDecimal shares = FinancialMath.sharesOf(context, bar, quarters);
+            BigDecimal shares = FinancialMath.sharesOf(context, bar, series);
             if (shares == null) {
                 continue;
             }

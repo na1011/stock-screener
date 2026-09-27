@@ -109,7 +109,7 @@ public class TurnoverRatio60Calculator implements IndicatorCalculator {
         BigDecimal[] daily = new BigDecimal[bars.size()];
         for (int i = 0; i < bars.size(); i++) {
             PriceBar bar = bars.get(i);
-            BigDecimal shares = FinancialMath.sharesOf(context, bar, context.quarterlyFigures());
+            BigDecimal shares = FinancialMath.sharesOf(context, bar, FinancialMath.seriesOf(context));
             if (shares == null || shares.signum() <= 0) {
                 continue;
             }

@@ -68,9 +68,9 @@ public class RoeCalculator implements IndicatorCalculator {
 
     /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
     private static BigDecimal valueOf(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
         // MUST: 분자·분모의 기저를 한 번 정해 둘 다에 적용한다(ADR-0159).
-        FinancialMath.EquityBasis basis = FinancialMath.roeBasis(quarters);
+        FinancialMath.EquityBasis basis = FinancialMath.roeBasis(series);
         if (basis == null || basis.income() == null) {
             return null;
         }

@@ -87,11 +87,10 @@ public class EpsGrowthTtmYoyCalculator implements IndicatorCalculator {
      * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
      */
     private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
-        BigDecimal recentTtm =
-                FinancialMath.sumControllingNetIncome(quarters, 0);
-        BigDecimal priorTtm =
-                FinancialMath.sumControllingNetIncome(quarters, 4);
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
+        BigDecimal recentTtm = series.controllingTtm(0);
+        // 직전 12개월은 **한 해 전**이다 — 기저가 분기면 4기, 연간이면 1기다(ADR-0164).
+        BigDecimal priorTtm = series.controllingTtm(series.periodsPerYear());
         // ③ 기저가 0 이하면 증감률이 뜻을 잃는다.
         if (recentTtm == null || priorTtm == null || priorTtm.signum() <= 0) {
             return List.of();
@@ -108,8 +107,8 @@ public class EpsGrowthTtmYoyCalculator implements IndicatorCalculator {
             PriceBar nowBar = bars.get(i);
 
             BigDecimal pastShares =
-                    FinancialMath.sharesOf(context, pastBar, context.quarterlyFigures());
-            BigDecimal nowShares = FinancialMath.sharesOf(context, nowBar, context.quarterlyFigures());
+                    FinancialMath.sharesOf(context, pastBar, FinancialMath.seriesOf(context));
+            BigDecimal nowShares = FinancialMath.sharesOf(context, nowBar, FinancialMath.seriesOf(context));
             if (pastShares == null || nowShares == null
                     || pastShares.signum() <= 0 || nowShares.signum() <= 0) {
                 continue;

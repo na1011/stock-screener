@@ -99,7 +99,7 @@ public class MarketCapCalculator implements IndicatorCalculator {
             // 결과다. 그 금지의 사유는 국내 무상증자 구간, 즉 「값이 있는데 짝이 안 맞아
             // 일부러 뺀 봉」인데, 미국 봉은 listed_shares가 전량 NULL이라 그 개념이 성립하지
             // 않는다 — 값이 없는 이유가 의도가 아니라 소스 부재다.
-            BigDecimal shares = FinancialMath.sharesOf(context, bar, context.quarterlyFigures());
+            BigDecimal shares = FinancialMath.sharesOf(context, bar, FinancialMath.seriesOf(context));
             // 소스가 주식수를 주지 않은 봉은 건너뛴다. 0으로 두면 시가총액 0인 회사가 되어
             // 어떤 하한 조건에도 걸리지 않고 조용히 결과에서 빠진다.
             if (shares == null || shares.signum() <= 0) {

@@ -48,12 +48,14 @@ final class ValuationHistory {
      * 그 봉 시점의 <b>주당 분모</b>. 양수가 아니면 그 봉을 표본에서 뺀다는 뜻으로 {@code null}을
      * 돌려준다.
      *
-     * @param publishedIndex 그 날짜에 이미 공시돼 있던 첫 분기의 인덱스.
-     *                       <b>유량이면 여기서부터 넷을 더하고, 저량이면 이 한 분기의 잔액을 쓴다</b>
+     * @param publishedIndex 그 날짜에 이미 공시돼 있던 첫 <b>기(期)</b>의 인덱스.
+     *                       <b>유량이면 {@code series.ttm(…, publishedIndex)}, 저량이면
+     *                       {@code series.balanceAt(publishedIndex)}다</b> — 기저가 분기냐 연간이냐에
+     *                       따라 「넷을 더할지 한 행을 쓸지」가 갈리고, 그 판단은 계열이 한다(ADR-0164)
      */
     interface PerShareDenominator {
         BigDecimal on(IndicatorContext context, PriceBar bar,
-                      List<FinancialFigures> quarters, int publishedIndex);
+                      FinancialMath.PeriodSeries series, int publishedIndex);
     }
 
     private ValuationHistory() {
@@ -81,7 +83,7 @@ final class ValuationHistory {
         Double[] ratios = new Double[bars.size()];
         List<LocalDate> cuts = context.financialPublicationDates();
         int cut = 0;
-        List<FinancialFigures> visible = null;
+        FinancialMath.PeriodSeries visible = null;
         for (int i = 0; i < bars.size(); i++) {
             PriceBar bar = bars.get(i);
             boolean crossed = false;
@@ -90,9 +92,12 @@ final class ValuationHistory {
                 crossed = true;
             }
             if (visible == null || crossed) {
-                visible = context.visibleAt(bar.tradeDate()).quarterlyFigures();
+                // MUST: 기저를 그 시점 컨텍스트로 고른다. 봉마다 보이는 판이 달라지면
+                // 연속 네 분기가 서는지도 달라지므로, 창 밖에서 한 번 고른 기저를 쓰면
+                // 과거 봉이 그때 성립하지 않던 기저로 계산된다(ADR-0164).
+                visible = FinancialMath.seriesOf(context.visibleAt(bar.tradeDate()));
             }
-            int published = FinancialMath.publishedIndexOn(visible, bar.tradeDate());
+            int published = FinancialMath.publishedIndexOn(visible.rows(), bar.tradeDate());
             if (published < 0) {
                 continue;
             }

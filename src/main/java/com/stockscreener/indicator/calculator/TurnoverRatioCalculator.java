@@ -93,7 +93,7 @@ public class TurnoverRatioCalculator implements IndicatorCalculator {
         List<PriceBar> bars = context.priceBars();
         List<IndicatorPoint> points = new ArrayList<>(bars.size());
         for (PriceBar bar : bars) {
-            BigDecimal shares = FinancialMath.sharesOf(context, bar, context.quarterlyFigures());
+            BigDecimal shares = FinancialMath.sharesOf(context, bar, FinancialMath.seriesOf(context));
             // MUST: 가드는 sharesOf **뒤**다. 앞에 두면 봉의 listedShares가 null인 순간
             // continue가 걸려 재무 폴백에 영영 도달하지 못한다 — 미국 봉이 전량 NULL이라
             // ADR-0097이 열었다고 적은 이 지표가 실제로는 0행이었다. MarketCapCalculator가

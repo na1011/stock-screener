@@ -76,8 +76,13 @@ public class EpsCagr5yCalculator implements IndicatorCalculator {
     /** 5년 전 주식수를 읽을 거리. 1년을 252거래일로 보는 저장소 관례를 따른다. */
     static final int LOOKBACK = 252 * YEARS;
 
-    /** {@code sumFourQuarters}의 오프셋. 4분기 × 5년이다. */
-    private static final int QUARTER_OFFSET = FinancialMath.TTM_QUARTERS * YEARS;
+    /**
+     * 5년 전 12개월 창의 <b>기(期) 오프셋</b>. 기저마다 다르다 — 분기 기저는 4×5 = 20기,
+     * 연간 기저는 1×5 = 5기다(ADR-0164).
+     */
+    private static int periodOffset(FinancialMath.PeriodSeries series) {
+        return series.periodsPerYear() * YEARS;
+    }
 
     /** 실제 기간이 5년에서 벗어나도 되는 한계. 한 분기다. */
     private static final long PERIOD_TOLERANCE_DAYS = 92;
@@ -111,14 +116,13 @@ public class EpsCagr5yCalculator implements IndicatorCalculator {
      * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
      */
     private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
-        BigDecimal recentTtm =
-                FinancialMath.sumControllingNetIncome(quarters, 0);
-        BigDecimal priorTtm = FinancialMath.sumControllingNetIncome(quarters, QUARTER_OFFSET);
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
+        BigDecimal recentTtm = series.controllingTtm(0);
+        BigDecimal priorTtm = series.controllingTtm(periodOffset(series));
         if (recentTtm == null || priorTtm == null || priorTtm.signum() <= 0) {
             return List.of();
         }
-        if (!spansFiveYears(quarters)) {
+        if (!spansFiveYears(series)) {
             return List.of();
         }
 
@@ -133,8 +137,8 @@ public class EpsCagr5yCalculator implements IndicatorCalculator {
             PriceBar nowBar = bars.get(i);
 
             BigDecimal pastShares =
-                    FinancialMath.sharesOf(context, pastBar, context.quarterlyFigures());
-            BigDecimal nowShares = FinancialMath.sharesOf(context, nowBar, context.quarterlyFigures());
+                    FinancialMath.sharesOf(context, pastBar, FinancialMath.seriesOf(context));
+            BigDecimal nowShares = FinancialMath.sharesOf(context, nowBar, FinancialMath.seriesOf(context));
             if (pastShares == null || nowShares == null
                     || pastShares.signum() <= 0 || nowShares.signum() <= 0) {
                 continue;
@@ -167,12 +171,15 @@ public class EpsCagr5yCalculator implements IndicatorCalculator {
      *
      * <p>인덱스만 믿으면 공시가 빠진 종목에서 <b>이름이 말하는 기간과 값이 재는 기간이 갈린다.</b>
      */
-    private static boolean spansFiveYears(List<FinancialFigures> quarters) {
-        if (quarters.size() <= QUARTER_OFFSET) {
+    private static boolean spansFiveYears(FinancialMath.PeriodSeries series) {
+        int offset = periodOffset(series);
+        FinancialFigures recent = series.balanceAt(0);
+        FinancialFigures prior = series.balanceAt(offset);
+        if (recent == null || prior == null) {
             return false;
         }
-        var recentEnd = quarters.get(0).periodEnd();
-        var priorEnd = quarters.get(QUARTER_OFFSET).periodEnd();
+        var recentEnd = recent.periodEnd();
+        var priorEnd = prior.periodEnd();
         if (recentEnd == null || priorEnd == null) {
             return false;
         }

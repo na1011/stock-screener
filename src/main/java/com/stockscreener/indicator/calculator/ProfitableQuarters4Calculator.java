@@ -70,10 +70,14 @@ public class ProfitableQuarters4Calculator implements IndicatorCalculator {
 
     /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
     private static BigDecimal valueOf(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
         // MUST: 행 수가 아니라 연속인지 묻는다. 「4분기 중 몇 분기」가 뜻을 가지려면 그 넷이
         // 실제로 이어지는 네 분기여야 한다 — 서로 다른 해의 분기 넷을 세면 값이 그럴듯하게
         // 틀린다(FinancialMath.sumFourQuarters의 javadoc에 그 실측이 있다).
+        //
+        // MUST NOT: 이 지표에 FY 기저 폴백을 걸지 않는다(ADR-0164 §규칙). 정의가 「4분기 중
+        // 몇 분기」라 FY 한 행으로는 0 또는 1만 나오고 **뜻이 다른 지표**가 된다. 그래서
+        // seriesOf가 아니라 분기 목록을 직접 본다 — 여기서만 그렇게 한다.
+        List<FinancialFigures> quarters = context.quarterlyFigures();
         if (!FinancialMath.isConsecutiveQuarterly(quarters, 0)) {
             return null;
         }

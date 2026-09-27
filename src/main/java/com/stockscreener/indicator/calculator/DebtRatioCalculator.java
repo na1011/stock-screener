@@ -68,11 +68,11 @@ public class DebtRatioCalculator implements IndicatorCalculator {
 
     /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
     private static BigDecimal valueOf(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
-        if (quarters.isEmpty()) {
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
+        if (series.isEmpty()) {
             return null;
         }
-        FinancialFigures latest = quarters.get(0);
+        FinancialFigures latest = series.latestPoint();
 
         BigDecimal equity = latest.totalEquity();
         if (equity == null || equity.signum() <= 0) {

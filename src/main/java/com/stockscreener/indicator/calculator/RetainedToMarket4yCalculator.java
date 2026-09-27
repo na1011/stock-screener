@@ -169,7 +169,7 @@ public class RetainedToMarket4yCalculator implements IndicatorCalculator {
 
         // 양 끝을 같은 주식수로 나눈다 — 축척이 adj_close와 맞고 분할이 약분된다.
         PriceBar lastBar = bars.get(bars.size() - 1);
-        BigDecimal shares = FinancialMath.sharesOf(context, lastBar, context.quarterlyFigures());
+        BigDecimal shares = FinancialMath.sharesOf(context, lastBar, FinancialMath.seriesOf(context));
         if (shares == null || shares.signum() <= 0) {
             return List.of();
         }

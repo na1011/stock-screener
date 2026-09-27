@@ -92,9 +92,9 @@ public class PsrCalculator implements IndicatorCalculator {
      * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
      */
     private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
         BigDecimal revenue =
-                FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue);
+                series.ttm(FinancialFigures::revenue, 0);
         if (revenue == null || revenue.signum() <= 0) {
             return List.of();
         }
@@ -103,7 +103,7 @@ public class PsrCalculator implements IndicatorCalculator {
         // 통째로 틀린다. 나눗셈은 PER·PBR과 공유한다(FinancialMath.perShareOn).
         List<IndicatorPoint> points = new ArrayList<>(context.priceBars().size());
         for (PriceBar bar : context.priceBars()) {
-            BigDecimal salesPerShare = FinancialMath.perShareOn(context, bar, revenue, quarters);
+            BigDecimal salesPerShare = FinancialMath.perShareOn(context, bar, revenue, series);
             if (salesPerShare == null || salesPerShare.signum() <= 0) {
                 continue;
             }

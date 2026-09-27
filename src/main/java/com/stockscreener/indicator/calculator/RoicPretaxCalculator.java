@@ -95,15 +95,15 @@ public class RoicPretaxCalculator implements IndicatorCalculator {
 
     /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
     private static BigDecimal valueOf(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
         BigDecimal operatingIncome =
-                FinancialMath.sumTrailingFourQuarters(quarters, FinancialMath::operatingIncomeOf);
+                series.ttm(FinancialMath::operatingIncomeOf, 0);
         if (operatingIncome == null) {
             return null;
         }
 
         // 잔액이므로 최근 분기 하나를 쓴다. 합산하면 네 배가 되는데 값이 그럴듯해 드러나지 않는다.
-        FinancialFigures latest = quarters.get(0);
+        FinancialFigures latest = series.latestPoint();
         BigDecimal assets = latest.totalAssets();
         BigDecimal currentLiabilities = latest.currentLiabilities();
         if (assets == null || currentLiabilities == null) {

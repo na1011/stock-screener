@@ -65,18 +65,21 @@ public class PbrMedian5yCalculator implements IndicatorCalculator {
         // MUST: 집계값이므로 기저를 **창 전체에서 한 번** 정한다. 행마다 고르면 한 중앙값
         // 안에서 지배주주와 연결이 섞이고(실측 74종목 · LNG 7,690.91%) 그 값은 그럴듯하다.
         boolean controlling =
-                FinancialMath.controllingEquityThroughout(context.quarterlyFigures());
-        return ValuationHistory.median(context, (ctx, bar, quarters, published) -> {
+                FinancialMath.controllingEquityThroughout(FinancialMath.seriesOf(context).rows());
+        return ValuationHistory.median(context, (ctx, bar, series, published) -> {
             // 저량이다. 그 시점 잔액 하나를 쓴다 — 더하면 네 배가 된다.
             // MUST: 분자가 시가총액이므로 분모는 지배주주 자본이다(ADR-0159).
-            FinancialFigures figures = quarters.get(published);
+            FinancialFigures figures = series.balanceAt(published);
+            if (figures == null) {
+                return null;
+            }
             BigDecimal equity = controlling
                     ? figures.totalEquityControlling() : figures.totalEquity();
             if (equity == null || equity.signum() <= 0) {
                 // 자본잠식 구간의 음수 PBR은 중앙값을 끌어내려 「싸다」로 읽힌다.
                 return null;
             }
-            return FinancialMath.perShareOn(ctx, bar, equity, quarters);
+            return FinancialMath.perShareOn(ctx, bar, equity, series);
         });
     }
 }

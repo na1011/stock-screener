@@ -160,11 +160,11 @@ public class AltmanZCalculator implements IndicatorCalculator {
             return List.of();
         }
 
-        List<FinancialFigures> quarters = context.quarterlyFigures();
-        if (quarters.isEmpty()) {
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
+        if (series.isEmpty()) {
             return List.of();
         }
-        FinancialFigures latest = quarters.get(0);
+        FinancialFigures latest = series.latestPoint();
 
         BigDecimal totalAssets = latest.totalAssets();
         BigDecimal totalLiabilities = FinancialMath.totalLiabilitiesOf(latest);
@@ -179,9 +179,8 @@ public class AltmanZCalculator implements IndicatorCalculator {
         // 유량 — 4분기 합.
         // 원시 영업이익이 없으면 유도한다(ADR-0104). 원시가 있으면 그것이 이기므로
         // 이미 나온 값은 바뀌지 않고 값이 없던 종목에만 새로 난다.
-        BigDecimal ebit = FinancialMath.sumTrailingFourQuarters(
-                quarters, FinancialMath::operatingIncomeOf);
-        BigDecimal sales = FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue);
+        BigDecimal ebit = series.ttm(FinancialMath::operatingIncomeOf, 0);
+        BigDecimal sales = series.ttm(FinancialFigures::revenue, 0);
 
         if (currentAssets == null || currentLiabilities == null
                 || retainedEarnings == null || ebit == null || sales == null) {

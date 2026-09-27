@@ -107,11 +107,11 @@ public class AltmanZDoublePrimeCalculator implements IndicatorCalculator {
             return null;
         }
 
-        List<FinancialFigures> quarters = context.quarterlyFigures();
-        if (quarters.isEmpty()) {
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
+        if (series.isEmpty()) {
             return null;
         }
-        FinancialFigures latest = quarters.get(0);
+        FinancialFigures latest = series.latestPoint();
 
         BigDecimal totalAssets = latest.totalAssets();
         BigDecimal totalLiabilities = FinancialMath.totalLiabilitiesOf(latest);
@@ -125,8 +125,7 @@ public class AltmanZDoublePrimeCalculator implements IndicatorCalculator {
         BigDecimal retainedEarnings = latest.retainedEarnings();
         BigDecimal equity = latest.totalEquity();
         // 유량 — 4분기 합. 원시 영업이익이 없으면 유도한다(ADR-0104).
-        BigDecimal ebit = FinancialMath.sumTrailingFourQuarters(
-                quarters, FinancialMath::operatingIncomeOf);
+        BigDecimal ebit = series.ttm(FinancialMath::operatingIncomeOf, 0);
 
         if (currentAssets == null || currentLiabilities == null
                 || retainedEarnings == null || equity == null || ebit == null) {

@@ -79,9 +79,9 @@ public class EpsTtmCalculator implements IndicatorCalculator {
      * 공시 구간에 대해 불리고, 구간 밖 봉의 값은 {@code bySegment}가 버린다.
      */
     private static List<IndicatorPoint> pointsFrom(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
         // PER과 같은 분자여야 한다 — 갈리면 화면에서 EPS x PER이 주가와 안 맞는다.
-        BigDecimal netIncome = FinancialMath.sumControllingNetIncome(quarters);
+        BigDecimal netIncome = series.controllingTtm(0);
         if (netIncome == null) {
             // 분기가 모자라거나 한 분기라도 순이익이 비면 계산하지 않는다. 부호는 보지 않는다.
             return List.of();
@@ -90,7 +90,7 @@ public class EpsTtmCalculator implements IndicatorCalculator {
         // 주식수를 봉마다 읽는 이유는 PER과 같다 — 유상증자·분할이 있으면 그날부터 값이 달라진다.
         List<IndicatorPoint> points = new ArrayList<>(context.priceBars().size());
         for (PriceBar bar : context.priceBars()) {
-            BigDecimal eps = FinancialMath.trailingEpsOn(context, bar, netIncome, quarters);
+            BigDecimal eps = FinancialMath.trailingEpsOn(context, bar, netIncome, series);
             if (eps == null) {
                 continue;
             }

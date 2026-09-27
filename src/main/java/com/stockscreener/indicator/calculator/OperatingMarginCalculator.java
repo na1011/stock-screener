@@ -66,11 +66,11 @@ public class OperatingMarginCalculator implements IndicatorCalculator {
 
     /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
     private static BigDecimal valueOf(IndicatorContext context) {
-        List<FinancialFigures> quarters = context.quarterlyFigures();
+        FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
         BigDecimal operatingIncome =
-                FinancialMath.sumTrailingFourQuarters(quarters, FinancialMath::operatingIncomeOf);
+                series.ttm(FinancialMath::operatingIncomeOf, 0);
         BigDecimal revenue =
-                FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue);
+                series.ttm(FinancialFigures::revenue, 0);
         if (operatingIncome == null || revenue == null || revenue.signum() <= 0) {
             return null;
         }

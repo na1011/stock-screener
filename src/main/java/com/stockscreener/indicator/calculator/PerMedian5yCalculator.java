@@ -74,14 +74,14 @@ public class PerMedian5yCalculator implements IndicatorCalculator {
 
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        return ValuationHistory.median(context, (ctx, bar, quarters, published) -> {
+        return ValuationHistory.median(context, (ctx, bar, series, published) -> {
             // PER과 같은 분자여야 한다 — 갈리면 PER_DISCOUNT_5Y가 두 기준의 비율이 된다.
-            BigDecimal ttm = FinancialMath.sumControllingNetIncome(quarters, published);
+            BigDecimal ttm = series.controllingTtm(published);
             if (ttm == null || ttm.signum() <= 0) {
                 // 적자 구간의 음수 PER은 중앙값을 끌어내려 「싸다」로 읽힌다.
                 return null;
             }
-            return FinancialMath.perShareOn(ctx, bar, ttm, quarters);
+            return FinancialMath.perShareOn(ctx, bar, ttm, series);
         });
     }
 }
