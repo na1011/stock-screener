@@ -171,13 +171,19 @@ final class FinancialMath {
      * <p>읽기가 {@code period_end} 내림차순이므로 인덱스가 클수록 과거다. 전년 대비 성장률을
      * 만들 때 이것과 {@code offset = 0}을 짝지어 쓴다.
      *
-     * <p>MUST NOT: 분기가 연속인지 여기서 검사한다고 믿지 않는다 — 세는 것은 <b>저장된 분기
-     * 여덟 개</b>이지 달력상 2년이 아니다. 공시가 빠진 종목에서는 두 구간이 겹치지 않을 뿐
-     * 값은 나온다. 그 판단은 호출부의 몫이다.
+     * <p><b>IMPORTANT — 그 넷이 연속인지 여기서 검사한다</b>({@link #isConsecutiveQuarterly}).
+     * 세는 것이 <b>저장된 행 수</b>이지 달력상 1년이 아니어서, 예전에는 공시가 빠진 종목에서
+     * <b>구멍 난 합이 그럴듯한 값으로 나왔다.</b> 2026-09-27 실측: 현 편입 미국 12종목이 그
+     * 상태였고 {@code DOX}는 최신 분기 행이 <b>매년 Q4 하나씩(2019~2024)</b>이라 서로 다른 네
+     * 해의 Q4를 더해 {@code PSR} 1.37을 냈다. 최신일에 그런 칸이 <b>153개</b>였다.
+     *
+     * <p>MUST NOT: 이 검사를 호출부로 되돌리지 않는다. 호출부가 11곳인데 <b>어느 하나도 하지
+     * 않았고</b>, 하나만 빠뜨려도 그 지표가 조용히 틀린다. 값이 나오지 않는 것으로 바뀌는 것이
+     * 이 변경의 의도다 — 「없는 값」은 사용자가 사유를 물을 수 있지만 틀린 값은 모르고 쓴다.
      */
     static BigDecimal sumFourQuarters(List<FinancialFigures> quarters,
                                       Function<FinancialFigures, BigDecimal> field, int offset) {
-        if (quarters.size() < offset + TTM_QUARTERS) {
+        if (!isConsecutiveQuarterly(quarters, offset)) {
             return null;
         }
         BigDecimal sum = BigDecimal.ZERO;
@@ -902,6 +908,49 @@ final class FinancialMath {
      */
     private static final long MIN_ANNUAL_GAP_DAYS = 300;
     private static final long MAX_ANNUAL_GAP_DAYS = 430;
+
+    /**
+     * 연속한 분기로 인정하는 {@code period_end} 간격.
+     *
+     * <p><b>임계는 실측으로 골랐다</b>(2026-09-27 · 활성 편입 전부의 최신 분기 넷, 간격 3,975개).
+     * 정상 쪽 최대는 <b>112일</b>이고 그것은 4-5-4 소매력의 16주 분기다
+     * ({@code ACI}·{@code CAVA}·{@code DPZ}·{@code KR}·{@code PEP} 5건 — 그 종목들의 계열에는
+     * 구멍이 없다). 결함 쪽 최소는 <b>151일</b>로 {@code FERG}의 빠진 2026 Q2다. 그 사이를
+     * 가르되 양쪽에 여유를 뒀다. 관측된 최소는 84일이다.
+     *
+     * <p>MUST NOT: 상한을 180 근처로 넓히지 않는다. 한 분기 건너뛴 구멍이 <b>151~189일</b>이라
+     * 정확히 그 구간에 들어온다 — 넓히면 이 검사가 있으나 마나가 된다.
+     */
+    private static final long MIN_QUARTER_GAP_DAYS = 75;
+    private static final long MAX_QUARTER_GAP_DAYS = 125;
+
+    /**
+     * {@code offset}부터 4개 분기가 <b>실제로 이어지는 네 분기</b>인가.
+     *
+     * <p>{@link #isConsecutiveAnnual}과 같은 이유로 {@code fiscalYear} 라벨이 아니라
+     * {@code periodEnd} 간격으로 잰다 — 라벨은 결산월이 12월이 아닌 회사에서 실제 기간과
+     * 어긋나고, 미국은 라벨 자체를 못 믿는다(ADR-0124).
+     *
+     * <p>행 수만 세면 안 되는 이유는 {@link #sumFourQuarters}의 javadoc에 수와 함께 있다.
+     */
+    static boolean isConsecutiveQuarterly(List<FinancialFigures> quarters, int offset) {
+        if (quarters.size() < offset + TTM_QUARTERS) {
+            return false;
+        }
+        for (int i = offset + 1; i < offset + TTM_QUARTERS; i++) {
+            // 읽기가 period_end 내림차순이므로 앞이 더 최근이다.
+            LocalDate newer = quarters.get(i - 1).periodEnd();
+            LocalDate older = quarters.get(i).periodEnd();
+            if (newer == null || older == null) {
+                return false;
+            }
+            long gap = ChronoUnit.DAYS.between(older, newer);
+            if (gap < MIN_QUARTER_GAP_DAYS || gap > MAX_QUARTER_GAP_DAYS) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     /**
      * 최근 {@code years}개 연간 재무가 <b>실제로 연속한 회계연도</b>인가.
