@@ -74,9 +74,16 @@ rg -n 'MIN_QUARTER_GAP_DAYS|MAX_QUARTER_GAP_DAYS' src/main/java/com/stockscreene
   -Dsweep.dates=2025-09-19,2026-02-12,2026-05-27,2026-08-17,2026-08-31,2026-09-22,2026-09-24
 ```
 
-**`premise` 펜스는 기저 선택이 배포된 뒤에 붙인다.** 지금 붙이면 커밋 1만 들어간 상태에서
-「값이 없다」로 붉는데, 그것은 의도한 중간 상태다 — **알면서 붉은 펜스를 두면 다음 세션이
-경보를 무시하는 습관을 배운다.**
+**펜스는 기저 선택이 배포된 뒤에 붙였다**(2026-09-28). 커밋 1만 들어간 중간 상태에서는
+「값이 없다」로 붉었을 것이고, 알면서 붉은 펜스를 두면 다음 세션이 경보를 무시하는 습관을 배운다.
+
+**모집단이 「최신일에 지표가 난 편입 종목」인 것이 이 펜스의 요점이다.** 봉이 없는 날의 종목까지
+세면 리밸런싱 신규 편입(실측 12종목)에 **의도한 동작으로 상시 발화**한다. 그 목록은 리밸런싱마다
+바뀌므로 티커를 박지 않고 **「그날 지표가 났는가」로 판정한다.** 소요 **0.604초**.
+
+```premise 기간 기저 — 분기 TTM이 안 서는 종목이 FY 기저로 값을 받는가
+psql -d stock_screener -At -c "WITH d AS (SELECT market_code mc, max(trade_date) t FROM indicator_trade_date GROUP BY 1), mem AS (SELECT DISTINCT m.stock_id, u.market_code mc FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE u.is_active AND m.effective_to IS NULL), computed AS (SELECT mem.stock_id, mem.mc FROM mem JOIN d ON d.mc = mem.mc WHERE EXISTS (SELECT 1 FROM indicator_value iv WHERE iv.stock_id = mem.stock_id AND iv.trade_date = d.t)), q AS (SELECT c.stock_id, f.period_start, f.period_end, row_number() OVER (PARTITION BY f.stock_id ORDER BY f.period_end DESC) rn FROM computed c JOIN d ON d.mc = c.mc LEFT JOIN financial_statement f ON f.stock_id = c.stock_id AND f.is_latest AND f.fiscal_period <> 'FY' AND f.period_end <= d.t), top4 AS (SELECT * FROM q WHERE rn <= 4), cls AS (SELECT c.stock_id, c.mc, count(t.period_end) n, max(t.period_end) - min(t.period_start) span, (SELECT count(*) FROM financial_statement f2 WHERE f2.stock_id = c.stock_id AND f2.is_latest AND f2.fiscal_period = 'FY') n_fy FROM computed c LEFT JOIN top4 t ON t.stock_id = c.stock_id GROUP BY 1, 2), fallback AS (SELECT * FROM cls WHERE NOT (n = 4 AND span BETWEEN 330 AND 400) AND n_fy > 0), silent AS (SELECT * FROM cls WHERE NOT (n = 4 AND span BETWEEN 330 AND 400) AND n_fy = 0), bad_fallback AS (SELECT s.ticker FROM fallback fb JOIN stock s ON s.id = fb.stock_id JOIN d ON d.mc = fb.mc WHERE NOT EXISTS (SELECT 1 FROM indicator_value iv WHERE iv.stock_id = fb.stock_id AND iv.trade_date = d.t AND iv.indicator_code = 'MARKET_CAP')), bad_silent AS (SELECT s.ticker FROM silent sl JOIN stock s ON s.id = sl.stock_id JOIN d ON d.mc = sl.mc WHERE EXISTS (SELECT 1 FROM indicator_value iv WHERE iv.stock_id = sl.stock_id AND iv.trade_date = d.t AND iv.indicator_code = 'PER')) SELECT CASE WHEN (SELECT count(*) FROM computed) = 0 THEN '잴 것이 없었다 — 최신일에 지표가 난 편입 종목이 하나도 없다' WHEN (SELECT count(*) FROM cls WHERE n = 4 AND span BETWEEN 330 AND 400) = 0 THEN '잴 것이 없었다 — 연속 4분기가 서는 종목이 하나도 없다(재무가 통째로 비었다)' WHEN (SELECT count(*) FROM bad_fallback) > 0 THEN 'FY 기저 폴백이 안 선 종목이 있다: ' || (SELECT string_agg(ticker, ' ' ORDER BY ticker) FROM bad_fallback) || ' — 분기 TTM이 안 서는데 FY 행이 있으면 MARKET_CAP이 나야 한다(ADR-0164)' WHEN (SELECT count(*) FROM bad_silent) > 0 THEN 'FY도 없는데 유량 TTM 값이 난 종목이 있다: ' || (SELECT string_agg(ticker, ' ' ORDER BY ticker) FROM bad_silent) || ' — 지어낸 값이다' ELSE 'OK 분기 TTM 불성립 ' || (SELECT count(*) FROM fallback) || '종목이 전부 FY 기저로 값을 받고, FY도 없는 ' || (SELECT count(*) FROM silent) || '종목은 침묵한다(연속 4분기 ' || (SELECT count(*) FROM cls WHERE n = 4 AND span BETWEEN 330 AND 400) || '종목)' END"
+```
 
 ## 배경
 
