@@ -144,9 +144,12 @@ stale AS (
     -- 그 둘이 복원 뒤에 늘면 같은 asOf로 다시 지어도 다른 명부가 나온다.
     --
     -- MUST: shares_outstanding이 있는 행만 센다. StoredShareCounts의 질의가
-    -- `f.shares_outstanding IS NOT NULL AND > 0`을 걸고, 국내 재무는 그 컬럼이 전량 NULL이다
+    -- 「f.shares_outstanding IS NOT NULL AND > 0」을 걸고, 국내 재무는 그 컬럼이 전량 NULL이다
+    -- MUST NOT: 이 주석에 역따옴표를 쓰지 않는다 — psql 인자가 큰따옴표라 bash가 그 안을
+    -- 명령 치환으로 실행한다. 실제로 위 구절의 부등호가 저장소 루트에 0이라는 이름의 파일을
+    -- 만들고 있었다(2026-09-23 생성 · 세션마다 다시 잘렸다). 전제 145개 중 이 자리 하나였다.
     -- (2026-09-20 실측 KOSPI 10,175행 중 0). 그래서 안 좁히면 국내가 원리적으로 오탐한다 —
-    -- 실제로 2026-09-20에 `001820`의 FY2015 Q4 한 행이 KOSPI_TOP200을 낡은 것으로 신고했는데,
+    -- 실제로 2026-09-20에 종목 001820의 FY2015 Q4 한 행이 KOSPI_TOP200을 낡은 것으로 신고했는데,
     -- 그 행은 주식수를 안 주고 복원 격자 상한(2026-08-05)보다 11년 앞이라 순위에 닿을 길이 없었다.
     -- 소비자 전수로도 갈린다: StoredShareCounts를 읽는 유니버스 어댑터는 UsMarketCapUniverseAdapter
     -- 하나이고 국내 MarketCapUniverseAdapter는 0건이다(소스가 시총을 직접 준다).
