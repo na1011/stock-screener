@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * as-of 하루의 지표를 <b>인메모리로 다시 계산해</b> 프리셋을 판정한다(P17, ADR-0071).
@@ -50,13 +51,14 @@ public class PointInTimeScreener {
     static final int MIN_PEERS = 5;
 
     /**
-     * 이 탐침이 인메모리로 다시 만드는 업종 상대값의 종류.
+     * 이 탐침이 인메모리로 다시 만드는 업종 상대값의 종류 — <b>셋 전부다.</b>
      *
-     * <p>{@link SectorMetricSpec.Kind#MEDIAN}과 표본 수는 빠져 있다 — 지금 어떤 조건도 그 둘을
-     * 참조하지 않기 때문이고, 참조가 생기면 {@link #addSectorRelatives}가 던진다.
+     * <p>표본 수({@link SectorMetricSpec#PEER_COUNT_SUFFIX})는 {@code Kind}가 아니라 접미사라
+     * 이 집합에 없고, {@link #addSectorRelatives}가 층을 고른 뒤 따로 넣는다.
      */
     private static final Set<SectorMetricSpec.Kind> RECONSTRUCTED_KINDS =
-            EnumSet.of(SectorMetricSpec.Kind.PERCENTILE, SectorMetricSpec.Kind.MEDIAN_RATIO);
+            EnumSet.of(SectorMetricSpec.Kind.PERCENTILE, SectorMetricSpec.Kind.MEDIAN_RATIO,
+                    SectorMetricSpec.Kind.MEDIAN);
 
     private final IndicatorRunner runner;
     private final ConditionEvaluator evaluator;
@@ -129,12 +131,15 @@ public class PointInTimeScreener {
     /**
      * 이 하네스가 <b>원리적으로 못 만드는</b> 코드. 계산기도 없고 재구성 규칙도 없다.
      *
-     * <p>실측(2026-09-03): 카탈로그 144개 중 계산기가 없는 것이 20개이고 그중 14개는 읽기 시점에
-     * 재구성한다(유니버스 백분위 10 + 업종 4). 남는 여섯이 이것이다.
+     * <p><b>지금은 비어 있다.</b> 예전에는 여섯이었고(업종 중앙값 둘 + 표본 수 넷)
+     * {@link #addSectorRelatives}가 그 둘을 재구성하지 않았다. 배포 전 드라이런이 그 여섯을
+     * 못 내면 <b>기간 기저 변경의 영향 범위를 0콜로 잴 수 없어</b> 재구성을 더했다(ADR-0164).
+     *
+     * <p><b>MUST NOT: 빈 집합이라고 이 갈래를 지우지 않는다.</b> 계산기 없는 코드가 다시 생기면
+     * {@link #unservableCodesOf}의 <b>전략 단위 거절</b>이 유일한 방어선이다 — 없으면 그런 전략
+     * 하나가 {@code addSectorRelatives}에서 던져 배치 전체를 죽인다.
      */
-    static final Set<String> UNSERVABLE = Set.of(
-            "PER_SECTOR_MEDIAN", "PSR_SECTOR_MEDIAN",
-            "PER_SECTOR_N", "PSR_SECTOR_N", "DEBT_RATIO_SECTOR_N", "OPERATING_MARGIN_SECTOR_N");
+    static final Set<String> UNSERVABLE = Set.of();
 
     /**
      * 그 조건군이 참조하는 <b>서비스 불가 코드</b>. 비어 있으면 판정할 수 있다.
@@ -181,6 +186,19 @@ public class PointInTimeScreener {
      */
     public Map<String, Outcome> screenAll(LocalDate asOf, List<Request> requests,
                                           ScreeningTargets.Target target) {
+        return screenAllFromValues(asOf, requests, target,
+                computePopulationValues(asOf, target));
+    }
+
+    /**
+     * 그 통화 모집단 전체의 <b>계산기 산출값</b>. 읽기 시점 재구성(업종·유니버스 백분위)은
+     * 아직 안 붙어 있다 — 그것은 {@link #reconstruct}가 참조 코드 집합을 받아서 한다.
+     *
+     * <p><b>MUST: 모집단을 대상으로 미리 좁히지 않는다.</b> 업종 백분위의 동료 수가 달라져
+     * 조용히 다른 값이 나온다(ADR-0108).
+     */
+    public Map<Long, Map<String, BigDecimal>> computePopulationValues(
+            LocalDate asOf, ScreeningTargets.Target target) {
         List<Long> populationIds = selectSectorPopulationIds(target.currency());
         // MUST: 종목 루프 밖에서 한 번 읽는다. 안에서 읽으면 종목 수만큼 같은 쿼리를 던진다.
         Map<String, NavigableMap<LocalDate, BigDecimal>> indexes = runner.marketIndexesFor(asOf);
@@ -189,7 +207,41 @@ public class PointInTimeScreener {
             values.put(stockId, new LinkedHashMap<>(
                     runner.computeAt(stockId, asOf, indexes, FinancialVisibility.KNOWN_ON)));
         }
-        return screenAllFromValues(asOf, requests, target, values);
+        return values;
+    }
+
+    /** 재구성까지 끝난 대상 종목의 값. {@link #reconstruct}의 산출이다. */
+    public record Reconstructed(Set<Long> targetIds,
+                                Map<Long, Map<String, BigDecimal>> ofTarget) {
+    }
+
+    /**
+     * 모집단 값에 <b>읽기 시점 재구성</b>을 붙이고 대상으로 좁힌다.
+     *
+     * <p><b>판정 경로와 스윕 경로가 이 한 벌을 공유한다.</b> 갈라 두면 스윕이 낸 값과 화면이
+     * 낼 값이 다를 수 있는데, 그 차이는 둘 다 그럴듯한 형태로만 나타난다.
+     *
+     * <p>순서가 뜻을 갖는다 — 업종은 <b>통화 모집단</b>에서, 유니버스 백분위는 <b>그 대상</b>
+     * 안에서 매겨지므로({@code PercentileCalculator}의 {@code PARTITION BY universe_code})
+     * 대상을 정한 뒤에 뒤쪽을 부른다.
+     */
+    public Reconstructed reconstruct(Map<Long, Map<String, BigDecimal>> populationValues,
+                                     Set<String> referenced, ScreeningTargets.Target target) {
+        // 저장본을 훼손하지 않으려고 복사한다 — addSectorRelatives가 맵에 써 넣는다.
+        Map<Long, Map<String, BigDecimal>> working = new LinkedHashMap<>();
+        populationValues.forEach((id, v) -> working.put(id, new LinkedHashMap<>(v)));
+        addSectorRelatives(working, referenced);
+
+        Set<Long> targetIds = new LinkedHashSet<>(selectStockIds(target.code()));
+
+        // MUST: 대상(=유니버스)을 정한 뒤에 부른다. 유니버스 백분위는 업종과 달리 통화 모집단이
+        // 아니라 **그 유니버스** 안에서 매겨진다(PercentileCalculator의 PARTITION BY universe_code).
+        addUniversePercentiles(working, referenced, targetIds);
+        Map<Long, Map<String, BigDecimal>> ofTarget = new LinkedHashMap<>();
+        for (Long stockId : targetIds) {
+            ofTarget.put(stockId, working.getOrDefault(stockId, Map.of()));
+        }
+        return new Reconstructed(targetIds, ofTarget);
     }
 
     /**
@@ -233,20 +285,9 @@ public class PointInTimeScreener {
             referenced.addAll(resolved.referencedIndicatorCodes());
         }
 
-        // 저장본을 훼손하지 않으려고 복사한다 — addSectorRelatives가 맵에 써 넣는다.
-        Map<Long, Map<String, BigDecimal>> working = new LinkedHashMap<>();
-        populationValues.forEach((id, v) -> working.put(id, new LinkedHashMap<>(v)));
-        addSectorRelatives(working, referenced);
-
-        Set<Long> targetIds = new LinkedHashSet<>(selectStockIds(target.code()));
-
-        // MUST: 대상(=유니버스)을 정한 뒤에 부른다. 유니버스 백분위는 업종과 달리 통화 모집단이
-        // 아니라 **그 유니버스** 안에서 매겨진다(PercentileCalculator의 PARTITION BY universe_code).
-        addUniversePercentiles(working, referenced, targetIds);
-        Map<Long, Map<String, BigDecimal>> ofTarget = new LinkedHashMap<>();
-        for (Long stockId : targetIds) {
-            ofTarget.put(stockId, working.getOrDefault(stockId, Map.of()));
-        }
+        Reconstructed reconstructed = reconstruct(populationValues, referenced, target);
+        Set<Long> targetIds = reconstructed.targetIds();
+        Map<Long, Map<String, BigDecimal>> ofTarget = reconstructed.ofTarget();
 
         Map<String, Outcome> outcomes = new LinkedHashMap<>();
         for (Request request : requests) {
@@ -354,15 +395,6 @@ public class PointInTimeScreener {
      */
     private void addSectorRelatives(Map<Long, Map<String, BigDecimal>> valuesByStock,
                                     Set<String> referencedCodes) {
-        for (String code : referencedCodes) {
-            if (code.endsWith(SectorMetricSpec.MEDIAN_SUFFIX)
-                    || code.endsWith(SectorMetricSpec.PEER_COUNT_SUFFIX)) {
-                // 조건이 이 둘을 참조하는 날이 오면 재구성 규칙을 여기 더해야 한다. 조용히
-                // 판정불가로 두면 위 배수와 똑같이 「원리적으로 못 얻는다」로 찍힌다.
-                throw new IllegalStateException(
-                        "업종 참조값을 쓰는 조건은 아직 재구성하지 않는다: " + code);
-            }
-        }
         Map<String, Set<SectorMetricSpec.Kind>> kindsBySource = new TreeMap<>();
         for (String code : referencedCodes) {
             for (SectorMetricSpec.Kind kind : RECONSTRUCTED_KINDS) {
@@ -372,6 +404,19 @@ public class PointInTimeScreener {
                                     k -> EnumSet.noneOf(SectorMetricSpec.Kind.class))
                             .add(kind);
                 }
+            }
+        }
+        // MUST: 표본 수만 참조하는 조건도 층 계산을 태운다. Kind가 아니라 접미사이므로 위
+        // 루프가 잡지 못하고, 빈 Kind 집합으로 원천을 등록하지 않으면 그 종목은 아래 루프에
+        // 아예 안 들어와 표본 수가 조용히 안 나간다.
+        Set<String> peerCountSources = new TreeSet<>();
+        for (String code : referencedCodes) {
+            if (code.endsWith(SectorMetricSpec.PEER_COUNT_SUFFIX)) {
+                String source = code.substring(
+                        0, code.length() - SectorMetricSpec.PEER_COUNT_SUFFIX.length());
+                peerCountSources.add(source);
+                kindsBySource.computeIfAbsent(
+                        source, k -> EnumSet.noneOf(SectorMetricSpec.Kind.class));
             }
         }
         if (kindsBySource.isEmpty()) {
@@ -421,6 +466,19 @@ public class PointInTimeScreener {
                         entry.getValue().put(sourceCode + SectorMetricSpec.MEDIAN_RATIO_SUFFIX,
                                 value.divide(median, 8, RoundingMode.HALF_UP));
                     }
+                }
+                // MUST NOT: 위 배수의 음수 분모 가드를 여기로 복사하지 않는다. 그 가드는 0으로
+                // 나누는 것이 뜻이 없어서 있는 것이고 중앙값 자체는 그때도 참이다 —
+                // SectorRelativeCalculator.MEDIAN_CHOSEN의 javadoc이 같은 금지를 적었다.
+                if (kinds.contains(SectorMetricSpec.Kind.MEDIAN)) {
+                    entry.getValue().put(sourceCode + SectorMetricSpec.MEDIAN_SUFFIX,
+                            medianOf(peers, valuesByStock, sourceCode));
+                }
+                if (peerCountSources.contains(sourceCode)) {
+                    // 라이브는 `chosen`이 고른 층의 n을 쓴다(fine이 MIN_PEERS 이상이면 fine).
+                    // 위에서 peers를 그 규칙으로 골랐으므로 그 크기가 곧 그 수다.
+                    entry.getValue().put(sourceCode + SectorMetricSpec.PEER_COUNT_SUFFIX,
+                            BigDecimal.valueOf(peers.size()));
                 }
             }
         }
