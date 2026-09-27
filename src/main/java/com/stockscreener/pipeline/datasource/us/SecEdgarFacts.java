@@ -67,10 +67,35 @@ final class SecEdgarFacts {
      * 그 팩트를 그대로 담으면 기간 계열이 오염된다 — 8-K는 회계기간을 대표하지 않는다.
      */
     private static final Set<String> PERIODIC_FORMS = Set.of(
-            "10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A");
+            "10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A",
+            "6-K", "6-K/A");
 
-    /** 중간보고서. {@link #ANNUAL_FORMS}를 이것의 여집합으로 유도한다. */
-    private static final Set<String> INTERIM_FORMS = Set.of("10-Q", "10-Q/A");
+    /**
+     * 중간보고서. {@link #ANNUAL_FORMS}를 이것의 여집합으로 유도한다.
+     *
+     * <p><b>{@code 6-K}가 여기 있는 것이 이 목록의 요점이다.</b> 외국 발행인은 분기 의무가
+     * 없어 중간보고를 {@code 6-K}로 내는데, {@link #PERIODIC_FORMS}에만 더하면 여집합 유도가
+     * 그것을 <b>연차로 분류한다</b> — 실측으로 {@code TSEM}의 6-K 앵커 종료일에 연차 길이
+     * span이 14개 있어 <b>거짓 회계연도 창 14개</b>가 생긴다(ADR-0164).
+     */
+    private static final Set<String> INTERIM_FORMS =
+            Set.of("10-Q", "10-Q/A", "6-K", "6-K/A");
+
+    /**
+     * 이 어댑터가 담는 유일한 통화. <b>미국 시장의 통화다.</b>
+     *
+     * <p>다른 통화로 보고한 판을 담지 않는 이유는 <b>담아도 읽히지 않고 종목을 끄기 때문</b>이다.
+     * {@code IndicatorDataReader}의 {@code CURRENCY_GATE}는 <b>종목 단위이고 기간 제한이 없어</b>
+     * 한 행만 달라도 그 종목의 재무를 한 행도 읽지 않는다(ADR-0094 — 환율 시계열이 없어
+     * 환산하지 않는 것이 그 결정이다). 실측으로 {@code SMMT}의 6-K 팩트가 <b>{@code GBP}
+     * 1,545건 · USD 0건</b>(2018~2020)이라, 폼만 더하면 <b>현 편입 종목의 93코드가 통째로
+     * 꺼진다</b> — 그리고 ADR-0080의 「입력을 못 읽었다」로 접혀 <b>옛 값이 얼어붙는다.</b>
+     *
+     * <p><b>이 필터는 예방적이다 — 이미 저장된 비-USD 행을 지우지 않는다.</b> 적재는
+     * {@code FILL_MISSING}이라 행을 삭제하지 않으므로, 통화가 섞인 기존 203종목의 게이트는
+     * 그대로 닫혀 있다. 그것을 여는 것은 환율 소스를 들이는 별개의 축이다.
+     */
+    private static final String MARKET_CURRENCY = "USD";
 
     /**
      * 연차보고서. <b>회계연도 창은 이 form에서만 나온다.</b>
@@ -809,6 +834,10 @@ final class SecEdgarFacts {
                 if (candidateCurrency == null) {
                     // 통화를 못 읽는 판은 지금도 통째로 건너뛴다. 묶음에 섞으면 그 판의 값이
                     // 통화 판정 없이 저장되므로 같은 술어를 유지한다(ADR-0094).
+                    continue;
+                }
+                if (!MARKET_CURRENCY.equals(candidateCurrency)) {
+                    // 시장 통화가 아닌 판은 담지 않는다 — 근거는 MARKET_CURRENCY의 javadoc이다.
                     continue;
                 }
                 values = carryForward(values, valuesOf(candidate, labelAnchor, label, window, tags, byColumn));
