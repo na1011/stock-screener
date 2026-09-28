@@ -22,6 +22,24 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface IndicatorMeta {
+    /**
+     * 유량 TTM의 기간 기저가 <b>분기가 아닐 수 있다</b>는 것을 화면에 밝히는 문구.
+     *
+     * <p>{@code FinancialMath.seriesOf}가 연속 4분기로 12개월을 못 덮으면 회계연도 한 판을 쓰는데,
+     * 그때 <b>"최근 4개 분기"라고 말하는 설명문은 거짓이 된다.</b> 실측으로 그 종목이
+     * 미국 45 + 국내 1이고, 사용자는 그 차이를 실적표의 연간·분기 탭으로만 볼 수 있다.
+     *
+     * <p>여기 한 곳에 두는 이유는 문구가 여섯 계산기에 흩어져 있어서다 —
+     * {@code IndicatorCopyGuardTest}가 <b>"4개 분기"를 말하면서 이 문구가 없는 설명문</b>을
+     * 전수로 잡는다. 예외는 {@code PROFITABLE_QUARTERS_4} 하나이고, 그것은 정의가
+     * 「4분기 중 몇 분기」라 폴백을 일부러 안 탄다.
+     *
+     * <p>사용자 문자열이므로 하네스 문체와 기록 낱말을 넣지 않는다(같은 시험이 막는다).
+     */
+    String PERIOD_BASIS_NOTE =
+            " 분기 공시가 연속 12개월을 덮지 못하는 종목은 그 회계연도 한 판으로 낸다.";
+
+
 
     /*
      * IMPORTANT — 아래 셋은 사용자가 읽는 문장이다. name은 카드 제목·표 머리글·조건 빌더 픽커·

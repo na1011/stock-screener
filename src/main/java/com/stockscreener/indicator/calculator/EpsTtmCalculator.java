@@ -35,7 +35,8 @@ import java.util.List;
 @Component
 @IndicatorMeta(
         name = "주당순이익(EPS)",
-        description = "최근 4개 분기 순이익을 발행주식수로 나눈 값. 1주가 벌어들인 이익이다.",
+        description = "최근 4개 분기 순이익을 발행주식수로 나눈 값. 1주가 벌어들인 이익이다."
+                + IndicatorMeta.PERIOD_BASIS_NOTE,
         interpretation = "높을수록 주식 한 주가 버는 이익이 크다. 적자면 음수가 된다. "
                 + "주가와 나란히 보면 PER이 왜 그 값인지 알 수 있다.",
         category = IndicatorCategory.FUNDAMENTAL,

@@ -30,7 +30,8 @@ import org.springframework.stereotype.Component;
 @IndicatorMeta(
         name = "순이익률",
         description = "최근 4개 분기 당기순이익을 같은 기간 매출로 나눈 비율. "
-                + "영업이익률과 달리 금융비용·영업외손익·법인세를 모두 뺀 뒤의 몫이다.",
+                + "영업이익률과 달리 금융비용·영업외손익·법인세를 모두 뺀 뒤의 몫이다."
+                + IndicatorMeta.PERIOD_BASIS_NOTE,
         interpretation = "높을수록 매출 1원이 실제로 주주 몫으로 남는 비율이 크다. "
                 + "영업이익률은 높은데 순이익률이 낮으면 이자비용이나 영업외손실이 이익을 "
                 + "먹고 있다는 뜻이다. 업종에 따라 정상 수준이 크게 다르므로 같은 업종끼리 견준다.",

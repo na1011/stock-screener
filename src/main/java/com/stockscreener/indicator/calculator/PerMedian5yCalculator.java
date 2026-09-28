@@ -41,7 +41,8 @@ import java.util.List;
 @IndicatorMeta(
         name = "5년 PER 중앙값",
         description = "지난 5년 동안 이 종목의 PER이 놓였던 자리의 한가운데 값. "
-                + "매 거래일의 주가를 그날 공시돼 있던 4개 분기 이익으로 나눠 모은 뒤 중앙값을 취한다.",
+                + "매 거래일의 주가를 그날 공시돼 있던 4개 분기 이익으로 나눠 모은 뒤 중앙값을 취한다."
+                + IndicatorMeta.PERIOD_BASIS_NOTE,
         interpretation = "지금 PER을 옆에 두고 읽는 참조값이다. 현재 PER이 이 값보다 낮으면 "
                 + "이 회사 기준으로 싼 구간에 있다는 뜻이다 — 업종 평균이 아니라 "
                 + "자기 과거와 견주는 것이라 업종이 특이한 종목에도 쓸 수 있다. "

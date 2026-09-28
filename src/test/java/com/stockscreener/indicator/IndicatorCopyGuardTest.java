@@ -105,6 +105,41 @@ class IndicatorCopyGuardTest {
                 .isEmpty();
     }
 
+    /**
+     * 「최근 4개 분기」를 말하면서 기간 기저 문구가 없는 설명문을 <b>전수로</b> 잡는다.
+     *
+     * <p>ADR-0164가 유량 TTM의 기저를 「연속 4분기 또는 회계연도 한 판」으로 바꿨는데
+     * 설명문 여섯이 그대로 남아 <b>46종목에 대해 거짓</b>이었다. 값은 옳고 문구만 틀렸으므로
+     * 어떤 계산 검사도 잡지 못한다 — 그래서 문구 쪽에 검사를 둔다.
+     *
+     * <p><b>목록을 손으로 들지 않는다.</b> 「그 낱말을 말하는가」로 물으면 새 계산기가
+     * 같은 문장을 쓰는 순간 걸리고, 유지할 목록이 없다.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 분기를 말하는 설명문은 기간 기저 폴백을 함께 말한다")
+    void quarterClaimsDisclosePeriodBasisFallback() {
+        List<String> offenders = new ArrayList<>();
+        for (Copy c : allCopy()) {
+            if (!"description".equals(c.field())) {
+                continue;
+            }
+            // PROFITABLE_QUARTERS_4는 정의가 「4분기 중 몇 분기」라 폴백을 일부러 안 탄다.
+            // 그 설명문의 「4개 분기」는 참이므로 예외다(IndicatorMeta.PERIOD_BASIS_NOTE의 javadoc).
+            if (c.owner().startsWith("ProfitableQuarters4")) {
+                continue;
+            }
+            boolean claimsQuarters = c.text().contains("4개 분기") || c.text().contains("4분기");
+            if (claimsQuarters && !c.text().contains(IndicatorMeta.PERIOD_BASIS_NOTE.trim())) {
+                offenders.add(c.owner() + " — " + c.text());
+            }
+        }
+        assertThat(offenders)
+                .as("분기 공시가 연속 12개월을 못 덮는 종목은 회계연도 한 판으로 값이 난다. "
+                        + "설명문이 분기라고만 말하면 그 종목의 사용자가 실적표와 대조하다 "
+                        + "어긋난 것으로 읽는다")
+                .isEmpty();
+    }
+
     @Test
     @DisplayName("IMPORTANT — 애너테이션 sortOrder가 전역에서 유일하다(ADR-0060이 이 위에 선다)")
     void sortOrderStaysGloballyUnique() {

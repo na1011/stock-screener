@@ -46,8 +46,9 @@ import java.util.List;
 @Component
 @IndicatorMeta(
         name = "5년 주당순이익 성장률(CAGR)",
-        description = "최근 4개 분기 주당순이익이 5년 전 같은 넉 달치와 견줘 해마다 평균 몇 퍼센트씩 "
-                + "늘었는지. 주식수를 양 끝에서 각각 읽어 희석까지 반영한다.",
+        description = "최근 4개 분기 주당순이익이 5년 전 같은 열두 달치와 견줘 해마다 평균 몇 퍼센트씩 "
+                + "늘었는지. 주식수를 양 끝에서 각각 읽어 희석까지 반영한다."
+                + IndicatorMeta.PERIOD_BASIS_NOTE,
         interpretation = "높을수록 오래 성장했다는 뜻이지만 무조건 높은 쪽이 좋지는 않다 — "
                 + "연 50%를 넘는 성장은 유지되기 어렵고 경쟁자를 불러들인다는 것이 "
                 + "이 지표를 상한으로 쓰는 이유다. "

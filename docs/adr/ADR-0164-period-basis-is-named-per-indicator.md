@@ -54,6 +54,15 @@ applies_to:
 
 ## 검증
 
+**MUST: 기저를 바꾸면 그 지표의 설명문도 바꾼다.** 값은 옳고 문구만 틀리는 형태라
+어떤 계산 검사도 잡지 못한다 — 실제로 여덟이 「최근 4개 분기」를 무조건 말한 채 남아 있었고
+그중 둘(`PER_MEDIAN_5Y`·`PSR_MEDIAN_5Y`)은 `ValuationHistory`를 거쳐서
+`seriesOf`를 직접 안 써 **소스 검색으로는 안 걸렸다.** 문구는
+`IndicatorMeta.PERIOD_BASIS_NOTE` 한 곳에 있고 `IndicatorCopyGuardTest`가
+**「4개 분기」를 말하면서 그 문구가 없는 설명문**을 전수로 잡는다.
+
+
+
 ```
 # 기저 선택이 한 곳인가 — 계산기가 annualFigures 로 직접 폴백하지 않는다.
 rg -n 'quarterlyFigures\(\).*isEmpty|quarters\.isEmpty\(\)' src/main/java/com/stockscreener/indicator/calculator/
