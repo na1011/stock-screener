@@ -88,7 +88,7 @@ psql -d stock_screener -At -F'|' -c "SELECT indexrelname, pg_size_pretty(pg_rela
 
 2026-08-10에 실제로 그랬다 — 힙 840MB에 인덱스 **2,348MB(2.8배)**였고 `REINDEX INDEX CONCURRENTLY` 셋이 199MB로 되돌렸다. **그것이 하루 만에 803MB가 된 이유는 ADR-0045가 정본이다**(일일 갱신이 읽기 창 전체를 다시 썼다). 재발 여부는 ADR-0045의 블로트 펜스가 상시로 잰다.
 
-**MUST: 그 비가 2배 아래면 REINDEX가 아니라 VACUUM이다.** 2026-08-19에 비가 **1.10배**(925MB / 840MB)인데 같은 무판정이 났다. 실체는 `ON CONFLICT DO UPDATE`가 쌓은 dead tuple이 visibility map을 무효화해 Index Only Scan이 힙을 랜덤으로 읽는 것이다(566만 중 **486만이 힙 페치**). **`last_autovacuum`이 마지막 쓰기보다 앞서고 `n_dead_tup`이 문턱(`0.2 × live`) 바로 아래 멎으면 아무도 청소하지 않는다** — 실제로 1,006,783 대 1,138,162였고, `VACUUM` 한 번(2.6초)에 3.79초가 **0.32초**가 됐다. 느리면 최적화 전에 `pg_stat_user_tables`의 그 둘을 먼저 본다.
+**MUST: 그 비가 2배 아래면 REINDEX가 아니라 VACUUM이다.** 2026-08-19에 비가 **1.10배**(925MB / 840MB)인데 같은 무판정이 났다. 실체는 `ON CONFLICT DO UPDATE`가 쌓은 dead tuple이 visibility map을 무효화해 Index Only Scan이 힙을 랜덤으로 읽는 것이다(566만 중 **486만이 힙 페치**). **`last_autovacuum`이 마지막 쓰기보다 앞서고 `n_dead_tup`이 문턱(`0.2 × live`) 바로 아래 멎으면 아무도 청소하지 않는다** — 실제로 1,006,783 대 1,138,162였고, `VACUUM` 한 번(2.6초)에 3.79초가 **0.32초**가 됐다. 느리면 최적화 전에 가시성 맵을 먼저 본다 — **`pgstattuple_approx('indicator_value')`의 `scanned_percent`로 잰다.** `pg_stat_user_tables`의 그 둘과 `relallvisible`은 VACUUM·ANALYZE 때만 갱신되는 대리값이라 낡은 맵을 「멀쩡」으로 보인다(2026-10-03: `relallvisible` 1.000 대 실제 not-all-visible 27.8%).
 
 **정리(purge) 직후가 그 상태의 최대 시점이다** — 삭제된 행의 자리는 인덱스에서 바로 회수되지 않는다. 그 사이 판정 불가는 침묵이 아니라 무판정이므로, "전제가 깨졌다"로도 "지켜진다"로도 읽지 않는다.
 

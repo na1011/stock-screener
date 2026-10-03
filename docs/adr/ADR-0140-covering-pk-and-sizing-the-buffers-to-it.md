@@ -32,9 +32,12 @@ applies_to:
 - **MUST: 이 넷의 몫을 뭉뚱그리지 않는다.** `ADR-0045`가 *"MUST NOT: 그 축소를 이 결정의
   성과로 읽지 않는다 — 줄인 것은 REINDEX이고 … 귀속은 그렇게 둘로 나눠야 성립한다"*를 이미
   적었다. §결과의 표가 그 이행이다.
-- **MUST: 느려졌으면 최적화 전에 `relallvisible/relpages`와 `n_dead_tup`을 먼저 본다**
-  (`ADR-0011` §검증이 가리키는 순서). **VACUUM 한 번이 전제 예산의 회귀분을 통째로 되돌렸다** —
-  45초/45초·무판정 6 → 43초/45초·**무판정 0**.
+- **MUST: 느려졌으면 최적화 전에 가시성 맵을 먼저 본다 — `pgstattuple_approx('indicator_value')`의
+  `scanned_percent`로**(`ADR-0011` §검증이 가리키는 순서). **VACUUM 한 번이 전제 예산의 회귀분을 통째로
+  되돌렸다** — 45초/45초·무판정 6 → 43초/45초·**무판정 0**. **`relallvisible/relpages`·`n_dead_tup`으로
+  재지 않는다** — VACUUM·ANALYZE 때만 갱신되는 대리값이라 2026-10-03에 1.000·48.5만으로 「멀쩡」을
+  가리켰는데 실제 not-all-visible은 **27.8%**였다. 그 상태를 매 평일 만드는 것은 보존 정리의 날짜
+  DELETE다(힙이 종목 순이라 국내 하루 58,963행이 힙의 6.8%에 흩어져 있다).
 - **MUST NOT: PK에서 `INCLUDE (value)`를 떼지 않는다.** 떼면 `(trade_date, indicator_code)`
   슬라이스마다 약 1,500건의 무작위 힙 페치가 되살아난다. 그 슬라이스를 읽는 것이
   `PercentileCalculator`·`SectorRelativeCalculator`이고 **백필의 날짜마다 코드 수만큼 돈다.**
@@ -59,10 +62,29 @@ psql -d stock_screener -c "\d indicator_value"
 ./gradlew test --tests "*Indicator*" --tests "*Screening*"
 ```
 
-**`premise` 펜스를 새로 만들지 않는다.** 전제 예산이 40초/45초이고 **그 예산이 이 결정이 고친
-축 자체**다. `ADR-0045`의 블로트 펜스가 이미 이 자리를 재므로 **그것을 고쳐 썼다** — 인덱스
-이름 목록을 `pg_indexes_size`로 바꾸고, 기준선을 재생성 직후 실측 **63 MB/백만행**으로,
-임계를 그 2.5배인 **155**로 다시 유도했다.
+**이 결정이 검증된 지점을 펜스로 묻는다**(2026-10-03). 처음에는 「전제 예산이 40초/45초이고 그 예산이 이
+결정이 고친 축 자체」라 펜스를 안 만들고 `ADR-0045`의 블로트 펜스에 맡겼는데, **그 펜스는 행당 인덱스 크기라
+행이 늘거나 힙이 부푸는 것을 원리적으로 못 본다.** 그 사이 표 총이 6,788 → 9,316MB가 됐고 그중 힙이
+3,689 → 5,004MB(+36%)인데 행은 약 5%만 늘었다 — `pgstattuple_approx`의 `approx_free_percent` 27.3%,
+살아 있는 힙은 검증 당시와 거의 같다. **즉 이 결정의 전제가 힙 블로트로 무너져 있었다.** 펜스는 지금
+발견을 내고, 그것이 가시성 맵 작업(보존 정리의 날짜 DELETE가 만든다)의 입력이다.
+
+```premise 표 총이 이 결정이 검증된 shared_buffers 비 안에 있다
+# 이 결정이 검증된 지점은 「표 총」(힙 + 인덱스)이 shared_buffers의 1.105배였을 때다(병합 뒤 6,788MB
+# 대 6,144MB · 그 상태에서 둘째 판의 블록 읽기가 0이었다). 「다 들어간다」는 경계가 아니라 그 지점이다.
+# 힙을 넣는 이유: 쓰기 경로(UPSERT의 IS DISTINCT FROM · DELETE_UNWRITTEN)는 VM과 무관하게 힙을 읽고,
+# 읽기 경로도 VM이 낡으면 힙을 읽는다.
+psql -d stock_screener -At -c "WITH x AS (SELECT pg_relation_size('indicator_value') heap, pg_indexes_size('indicator_value') idx, pg_size_bytes(current_setting('shared_buffers')) buf)
+SELECT CASE
+  WHEN (SELECT heap FROM x) = 0 THEN '잴 것이 없었다 — indicator_value가 비어 있다'
+  WHEN (SELECT heap + idx FROM x) <= 1.105 * (SELECT buf FROM x)
+    THEN 'OK 표 총 ' || pg_size_pretty((SELECT heap + idx FROM x)) || '(힙 ' || pg_size_pretty((SELECT heap FROM x)) || ' · 인덱스 ' || pg_size_pretty((SELECT idx FROM x)) || ')가 shared_buffers ' || pg_size_pretty((SELECT buf FROM x)) || '의 ' || round((SELECT (heap + idx)::numeric / buf FROM x), 2) || '배 — 결정이 검증된 1.105배 안이다'
+  ELSE '표 총 ' || pg_size_pretty((SELECT heap + idx FROM x)) || '(힙 ' || pg_size_pretty((SELECT heap FROM x)) || ' · 인덱스 ' || pg_size_pretty((SELECT idx FROM x)) || ')가 shared_buffers ' || pg_size_pretty((SELECT buf FROM x)) || '의 ' || round((SELECT (heap + idx)::numeric / buf FROM x), 2) || '배다 — 이 결정이 검증된 1.105배(6,788MB 대 6,144MB)를 넘었다. 행이 는 것인지 블로트인지 먼저 가른다: 인덱스는 ADR-0045 펜스, 힙은 pgstattuple_approx의 approx_free_percent'
+END"
+```
+
+`ADR-0045`의 블로트 펜스는 그대로 둔다 — 그쪽은 인덱스 밀도(재생성 기준선 63 → 지금 83 MB/백만행)를,
+이쪽은 버퍼 대비 부피를 묻는다. 둘은 다른 축이다.
 
 ## 배경
 
@@ -152,8 +174,9 @@ psql -d stock_screener -c "\d indicator_value"
 소비자 `ADR-0080`(4.00초)이 「밖」으로 분류됐는데, 그 전제의 바깥 스캔에는 날짜 제한이 없다.
 **여는 축은 날짜 술어가 아니라 전제마다의 모양이고, 처방이 갈린다** — 집합을 묻는데 행으로
 훑는 것은 뜻을 안 바꾸고 재작성되지만(`ADR-0088`: 1.42 → 0.23초), 전 구간을 정말로 봐야 하는
-것은 안 줄고(`ADR-0080`은 형태를 바꿔도 3,187 → 3,009 ms로 6%뿐이다) 모집단을 좁히는 것은
-감시 범위를 줄이는 별개의 결정이다.
+것도 형태를 찾으면 준다 — `ADR-0080`은 그때 시도한 형태로 3,187 → 3,009 ms(6%)였지만
+2026-10-03에 거래일 사다리 × (날짜, 짝)별 `EXCEPT`로 **창 전체가 1.2~1.3초**가 됐다. 모집단을 좁히는
+것은 감시 범위를 줄이는 별개의 결정이다.
 
 **바꾸기 전 설정값** — `shared_buffers` 128 MB · `effective_cache_size` 4 GB ·
 `random_page_cost` 4 · `max_wal_size` 1 GB · `maintenance_work_mem` 64 MB ·
