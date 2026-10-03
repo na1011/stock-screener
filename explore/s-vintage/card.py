@@ -19,7 +19,7 @@ INCOME_TAGS = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"
                "SalesRevenueGoodsNet", "RevenueFromContractWithCustomerIncludingAssessedTax",
                "CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfGoodsSold", "CostOfSales",
                "GrossProfit", "OperatingIncomeLoss", "OperatingExpenses", "CostsAndExpenses",
-               "BenefitsLossesAndExpenses", "NetIncomeLoss"]
+               "BenefitsLossesAndExpenses", "NetIncomeLoss", "ProfitLoss"]
 BALANCE_TAGS = ["Assets", "Liabilities", "LiabilitiesAndStockholdersEquity",
                 "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "StockholdersEquity",
                 "MinorityInterest", "RedeemableNoncontrollingInterestEquityCarryingAmount",
@@ -145,6 +145,11 @@ def main():
         windows = [(None, end)] if balance else [(start, end)]
         if col == "*":
             windows = [(start, end), (None, end)]
+        if fp in ("Q1", "Q2", "Q3") and not balance:
+            # 분기는 그 회계연도의 누계 창도 보인다 — 재작성이 누계 비교열에만 드러나는 일이 있다(BDX)
+            fyrows = base.get((t, fy, "FY"), []) or v7.get((t, fy, "FY"), [])
+            if fyrows:
+                windows.append((d(fyrows[-1]["start"]), end))
         if fp == "Q4" or (not balance and fp == "FY"):
             # Q4·FY는 그 회계연도의 FY 창과 분기·누계 창까지 보인다
             fyrows = base.get((t, fy, "FY"), []) or v7.get((t, fy, "FY"), [])
