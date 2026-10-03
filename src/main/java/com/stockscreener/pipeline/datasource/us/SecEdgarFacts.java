@@ -1046,8 +1046,105 @@ final class SecEdgarFacts {
         }
     }
 
+    private static boolean differsVal(BigDecimal x, BigDecimal y) {
+        return x != null && y != null && x.compareTo(y) != 0;
+    }
+
+    /** [탐색 v3] 항등식이 있는 자리만 한 공시로 맞춘다. 나머지는 지금처럼 이어받는다. */
+    private static Map<SecEdgarColumn, BigDecimal> carryForwardIdentity(
+            Map<SecEdgarColumn, BigDecimal> baseline, Map<SecEdgarColumn, BigDecimal> values) {
+        Map<SecEdgarColumn, BigDecimal> merged = carryForward(baseline, values);
+        if (baseline == null) {
+            return merged;
+        }
+        // 1. 매출이 재작성되면 범위가 바뀐 것이다 — 그 공시가 안 실은 손익은 이어받지 않는다.
+        boolean narrow = "identity2".equals(System.getenv("S_COHERENCE"));
+        boolean revenueRestated = narrow
+                ? differsVal(revenue(baseline), revenue(values))
+                : differsVal(baseline.get(SecEdgarColumn.REVENUE), values.get(SecEdgarColumn.REVENUE));
+        if (revenueRestated) {
+            for (SecEdgarColumn c : SecEdgarColumn.values()) {
+                boolean scoped = !narrow || c == SecEdgarColumn.COST_OF_SALES || c == SecEdgarColumn.GROSS_PROFIT
+                        || c == SecEdgarColumn.OPERATING_INCOME || c == SecEdgarColumn.OPERATING_EXPENSES
+                        || c == SecEdgarColumn.COSTS_AND_EXPENSES || c == SecEdgarColumn.BENEFITS_LOSSES_AND_EXPENSES;
+                if (groupOf(c) == Group.INCOME && scoped && values.get(c) == null) {
+                    merged.put(c, null);
+                }
+            }
+            if (narrow) {
+                BigDecimal vr = values.get(SecEdgarColumn.REVENUE), vc = values.get(SecEdgarColumn.COST_OF_SALES),
+                        vg = values.get(SecEdgarColumn.GROSS_PROFIT);
+                if (vr != null && vg != null && vc == null) {
+                    merged.put(SecEdgarColumn.COST_OF_SALES, vr.subtract(vg));
+                } else if (vr != null && vc != null && vg == null) {
+                    merged.put(SecEdgarColumn.GROSS_PROFIT, vr.subtract(vc));
+                }
+            }
+        }
+        // 2. 매출 − 원가 = 총이익
+        SecEdgarColumn[] gross = {SecEdgarColumn.REVENUE, SecEdgarColumn.COST_OF_SALES, SecEdgarColumn.GROSS_PROFIT};
+        BigDecimal rv = merged.get(gross[0]), cs = merged.get(gross[1]), gp = merged.get(gross[2]);
+        if (rv != null && cs != null && gp != null) {
+            BigDecimal diff = rv.subtract(cs).subtract(gp).abs();
+            BigDecimal tol = rv.abs().max(BigDecimal.ONE).multiply(new BigDecimal("0.01")).max(new BigDecimal("1000000"));
+            int reported = 0;
+            for (SecEdgarColumn c : gross) {
+                if (values.get(c) != null) {
+                    reported++;
+                }
+            }
+            if (diff.compareTo(tol) > 0 && reported > 0 && reported < 3) {
+                BigDecimal vr = values.get(gross[0]), vc = values.get(gross[1]), vg = values.get(gross[2]);
+                if (reported == 2) {
+                    if (vr != null && vg != null) {
+                        merged.put(gross[1], vr.subtract(vg));
+                    } else if (vr != null && vc != null) {
+                        merged.put(gross[2], vr.subtract(vc));
+                    } else {
+                        merged.put(gross[0], vc.add(vg));
+                    }
+                } else {
+                    for (SecEdgarColumn c : gross) {
+                        if (values.get(c) != null) {
+                            merged.put(c, baseline.get(c));
+                        }
+                    }
+                }
+            }
+        }
+        // 3. 자산 = 부채 + 자본 — 공시가 셋을 다 안 실었으면 그 공시가 실은 것을 앞 판으로 되돌린다.
+        SecEdgarColumn eqCol = merged.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI) != null
+                ? SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI : SecEdgarColumn.TOTAL_EQUITY;
+        SecEdgarColumn[] bal = {SecEdgarColumn.TOTAL_ASSETS, SecEdgarColumn.TOTAL_LIABILITIES, eqCol};
+        BigDecimal a = merged.get(bal[0]), l = merged.get(bal[1]), e = merged.get(bal[2]);
+        if (a != null && l != null && e != null
+                && a.subtract(l).subtract(e).compareTo(new BigDecimal("-1500000")) < 0) {
+            int reported = 0;
+            for (SecEdgarColumn c : bal) {
+                if (values.get(c) != null) {
+                    reported++;
+                }
+            }
+            if (reported > 0 && reported < 3) {
+                for (SecEdgarColumn c : bal) {
+                    if (values.get(c) != null && baseline.get(c) != null) {
+                        merged.put(c, baseline.get(c));
+                    }
+                }
+                if (eqCol == SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI && values.get(SecEdgarColumn.TOTAL_EQUITY) != null
+                        && baseline.get(SecEdgarColumn.TOTAL_EQUITY) != null) {
+                    merged.put(SecEdgarColumn.TOTAL_EQUITY, baseline.get(SecEdgarColumn.TOTAL_EQUITY));
+                }
+            }
+        }
+        return merged;
+    }
+
     private static Map<SecEdgarColumn, BigDecimal> carryForwardCoherent(
             Map<SecEdgarColumn, BigDecimal> baseline, Map<SecEdgarColumn, BigDecimal> values) {
+        if (System.getenv("S_COHERENCE").startsWith("identity")) {
+            return carryForwardIdentity(baseline, values);
+        }
         if (baseline == null) {
             return values;
         }
