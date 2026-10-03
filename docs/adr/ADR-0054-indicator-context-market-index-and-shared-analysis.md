@@ -59,8 +59,82 @@ applies_to:
 계약을 열었어도 지수를 쓰지 않는 새 지표는 여전히 파일 하나로 끝나야 한다. 아니면 ADR-0039가
 예고한 비용이 실현된 것이다.
 
-```premise 공유 분석 — ICHI_* 31개가 같은 분석에서 나오는가
-psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL), act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE m.effective_to IS NULL), codes AS (SELECT code FROM indicator WHERE code LIKE 'ICHI\_%'), t AS (SELECT iv.indicator_code AS c, count(*) AS n, (iv.indicator_code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_EXT_SIGNAL','ICHI_CONFIDENCE','ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR')) AS needs_index FROM days JOIN codes ON true JOIN indicator_value iv ON iv.trade_date = days.d AND iv.indicator_code = codes.code JOIN act ON act.stock_id = iv.stock_id GROUP BY 1, 3) SELECT CASE WHEN (SELECT count(*) FROM t) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 ICHI_* 가 한 행도 없다' WHEN (SELECT count(*) FROM t) <> 31 THEN '코드가 31개가 아니다(' || (SELECT count(*) FROM t) || '개) — 지표가 늘거나 줄었으면 이 펜스의 무리 나눔부터 다시 본다' WHEN (SELECT count(DISTINCT n) FROM t WHERE NOT needs_index) > 1 THEN '지수를 안 쓰는 스물넷의 행 수가 갈렸다 — 분석 하나를 나눠 쓰는 전제가 깨졌거나 일부 코드만 무효화됐다: ' || (SELECT string_agg(c || '=' || n, ' ' ORDER BY n) FROM t WHERE NOT needs_index) WHEN (SELECT count(DISTINCT n) FROM t WHERE needs_index) > 1 THEN '지수에 기대는 일곱끼리 갈렸다 — 이 일곱은 서로 같아야 한다: ' || (SELECT string_agg(c || '=' || n, ' ' ORDER BY n) FROM t WHERE needs_index) WHEN (SELECT max(n) FROM t WHERE needs_index) > (SELECT min(n) FROM t WHERE NOT needs_index) THEN '지수에 기대는 일곱이 나머지보다 많다 — 지수 없는 일자에 0을 채운 자리다' ELSE 'OK 스물넷 ' || (SELECT max(n) FROM t WHERE NOT needs_index) || '행 · 지수에 기대는 일곱 ' || (SELECT max(n) FROM t WHERE needs_index) || '행' END"
+**세 무리로 나눠 잰다**(2026-10-03). 한 문장으로는 PostgreSQL 재시작 직후 **6.53초**라 6초 제한에 잘렸다.
+**시장으로는 못 나눈다** — 거래일 사다리가 (날짜, 코드) 범위의 **모든 종목**을 읽고 나서 편입으로 거르므로
+국내 조각(행 25%)도 2.65초였다(나누기 전 3.96초). 대신 **코드로 나누고 앵커 하나를 모든 무리에 넣는다** —
+지수를 안 쓰는 스물넷을 이름순 반씩(A·B), 지수에 기대는 일곱(C), 그리고 스물넷의 첫 코드가 앵커다.
+A·B가 「앵커와 같다」를 서면 스물넷이 전부 같고, C의 「일곱 ≤ 앵커」가 원본의 「일곱 ≤ 스물넷의 최소」와
+같다. **세 무리의 `t`를 합치면 원본 `t`와 31행 전부 같았다.** 조각마다 자기 스냅숏이지만 판정이 조각 안에서
+닫히므로 조각 사이의 쓰기가 거짓 발견을 못 만든다. 원본은 카탈로그에만 있고 행이 없는 코드를 놓쳤는데
+(`count(t)`가 행 있는 코드만 셌다) 무리마다 「카탈로그의 내 코드가 다 행을 갖는가」를 물어 그것도 잡는다.
+
+```premise 공유 분석 — 지수를 안 쓰는 ICHI 코드가 같은 행 수다 (무리 A + 앵커)
+psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL),
+act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE m.effective_to IS NULL),
+codes AS (SELECT code, code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_EXT_SIGNAL','ICHI_CONFIDENCE','ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR') AS needs_index FROM indicator WHERE code LIKE 'ICHI\_%'),
+grp AS (SELECT code, needs_index, rn, CASE WHEN needs_index THEN 'C' WHEN rn <= cnt / 2 THEN 'A' ELSE 'B' END g
+        FROM (SELECT code, needs_index, row_number() OVER (PARTITION BY needs_index ORDER BY code) rn,
+                     count(*) OVER (PARTITION BY needs_index) cnt FROM codes) z),
+anchor AS (SELECT code FROM grp WHERE NOT needs_index AND rn = 1),
+mine AS (SELECT code FROM grp WHERE g = 'A' UNION SELECT code FROM anchor),
+t AS (SELECT iv.indicator_code AS c, count(*) AS n, (iv.indicator_code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_EXT_SIGNAL','ICHI_CONFIDENCE','ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR')) AS needs_index
+      FROM days JOIN mine ON true JOIN indicator_value iv ON iv.trade_date = days.d AND iv.indicator_code = mine.code
+      JOIN act ON act.stock_id = iv.stock_id GROUP BY 1, 3)
+SELECT CASE
+  WHEN (SELECT count(*) FROM t) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 이 무리의 ICHI_* 가 한 행도 없다'
+  WHEN (SELECT count(*) FROM t) <> (SELECT count(*) FROM mine)
+    THEN '행이 하나도 없는 코드가 있다 — 일부 코드만 무효화됐거나 새 코드가 백필되지 않았다: ' || (SELECT string_agg(code, ', ' ORDER BY code) FROM mine WHERE code NOT IN (SELECT c FROM t))
+  WHEN (SELECT count(DISTINCT n) FROM t) > 1
+    THEN '지수를 안 쓰는 스물넷의 행 수가 갈렸다 — 분석 하나를 나눠 쓰는 전제가 깨졌거나 일부 코드만 무효화됐다: ' || (SELECT string_agg(c || '=' || n, ' ' ORDER BY n, c) FROM t)
+  ELSE 'OK 지수를 안 쓰는 ' || (SELECT count(*) FROM t) || '코드(앵커 ' || (SELECT code FROM anchor) || ' 포함)가 모두 ' || (SELECT max(n) FROM t) || '행'
+END"
+```
+
+```premise 공유 분석 — 지수를 안 쓰는 ICHI 코드가 같은 행 수다 (무리 B + 앵커)
+psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL),
+act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE m.effective_to IS NULL),
+codes AS (SELECT code, code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_EXT_SIGNAL','ICHI_CONFIDENCE','ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR') AS needs_index FROM indicator WHERE code LIKE 'ICHI\_%'),
+grp AS (SELECT code, needs_index, rn, CASE WHEN needs_index THEN 'C' WHEN rn <= cnt / 2 THEN 'A' ELSE 'B' END g
+        FROM (SELECT code, needs_index, row_number() OVER (PARTITION BY needs_index ORDER BY code) rn,
+                     count(*) OVER (PARTITION BY needs_index) cnt FROM codes) z),
+anchor AS (SELECT code FROM grp WHERE NOT needs_index AND rn = 1),
+mine AS (SELECT code FROM grp WHERE g = 'B' UNION SELECT code FROM anchor),
+t AS (SELECT iv.indicator_code AS c, count(*) AS n, (iv.indicator_code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_EXT_SIGNAL','ICHI_CONFIDENCE','ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR')) AS needs_index
+      FROM days JOIN mine ON true JOIN indicator_value iv ON iv.trade_date = days.d AND iv.indicator_code = mine.code
+      JOIN act ON act.stock_id = iv.stock_id GROUP BY 1, 3)
+SELECT CASE
+  WHEN (SELECT count(*) FROM t) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 이 무리의 ICHI_* 가 한 행도 없다'
+  WHEN (SELECT count(*) FROM t) <> (SELECT count(*) FROM mine)
+    THEN '행이 하나도 없는 코드가 있다 — 일부 코드만 무효화됐거나 새 코드가 백필되지 않았다: ' || (SELECT string_agg(code, ', ' ORDER BY code) FROM mine WHERE code NOT IN (SELECT c FROM t))
+  WHEN (SELECT count(DISTINCT n) FROM t) > 1
+    THEN '지수를 안 쓰는 스물넷의 행 수가 갈렸다 — 분석 하나를 나눠 쓰는 전제가 깨졌거나 일부 코드만 무효화됐다: ' || (SELECT string_agg(c || '=' || n, ' ' ORDER BY n, c) FROM t)
+  ELSE 'OK 지수를 안 쓰는 ' || (SELECT count(*) FROM t) || '코드(앵커 ' || (SELECT code FROM anchor) || ' 포함)가 모두 ' || (SELECT max(n) FROM t) || '행'
+END"
+```
+
+```premise 공유 분석 — 지수에 기대는 ICHI 일곱이 서로 같고 앵커를 넘지 않는다
+psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL),
+act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code AND u.is_active WHERE m.effective_to IS NULL),
+codes AS (SELECT code, code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_EXT_SIGNAL','ICHI_CONFIDENCE','ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR') AS needs_index FROM indicator WHERE code LIKE 'ICHI\_%'),
+grp AS (SELECT code, needs_index, rn, CASE WHEN needs_index THEN 'C' WHEN rn <= cnt / 2 THEN 'A' ELSE 'B' END g
+        FROM (SELECT code, needs_index, row_number() OVER (PARTITION BY needs_index ORDER BY code) rn,
+                     count(*) OVER (PARTITION BY needs_index) cnt FROM codes) z),
+anchor AS (SELECT code FROM grp WHERE NOT needs_index AND rn = 1),
+mine AS (SELECT code FROM grp WHERE g = 'C' UNION SELECT code FROM anchor),
+t AS (SELECT iv.indicator_code AS c, count(*) AS n, (iv.indicator_code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_EXT_SIGNAL','ICHI_CONFIDENCE','ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR')) AS needs_index
+      FROM days JOIN mine ON true JOIN indicator_value iv ON iv.trade_date = days.d AND iv.indicator_code = mine.code
+      JOIN act ON act.stock_id = iv.stock_id GROUP BY 1, 3)
+SELECT CASE
+  WHEN (SELECT count(*) FROM codes) <> 31 THEN '코드가 31개가 아니다(' || (SELECT count(*) FROM codes) || '개) — 지표가 늘거나 줄었으면 이 펜스의 무리 나눔부터 다시 본다'
+  WHEN (SELECT count(*) FROM t) = 0 THEN '잴 것이 없었다 — 활성 유니버스에 이 무리의 ICHI_* 가 한 행도 없다'
+  WHEN (SELECT count(*) FROM t) <> (SELECT count(*) FROM mine)
+    THEN '행이 하나도 없는 코드가 있다 — 일부 코드만 무효화됐거나 새 코드가 백필되지 않았다: ' || (SELECT string_agg(code, ', ' ORDER BY code) FROM mine WHERE code NOT IN (SELECT c FROM t))
+  WHEN (SELECT count(DISTINCT n) FROM t WHERE needs_index) > 1
+    THEN '지수에 기대는 일곱끼리 갈렸다 — 이 일곱은 서로 같아야 한다: ' || (SELECT string_agg(c || '=' || n, ' ' ORDER BY n, c) FROM t WHERE needs_index)
+  WHEN (SELECT max(n) FROM t WHERE needs_index) > (SELECT n FROM t WHERE NOT needs_index)
+    THEN '지수에 기대는 일곱이 앵커 ' || (SELECT code FROM anchor) || '보다 많다 — 지수 없는 일자에 0을 채웠거나, 무리 A·B가 함께 울면 앵커 쪽이 결손이다'
+  ELSE 'OK 지수에 기대는 일곱 ' || (SELECT max(n) FROM t WHERE needs_index) || '행 · 앵커 ' || (SELECT code FROM anchor) || ' ' || (SELECT n FROM t WHERE NOT needs_index) || '행'
+END"
 ```
 
 **행 수가 같아야 하는 근거**는 31개가 같은 `NavigableMap`을 순회해 포인트를 만든다는 것이다.
