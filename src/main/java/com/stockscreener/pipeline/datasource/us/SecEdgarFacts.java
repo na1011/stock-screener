@@ -1589,7 +1589,8 @@ final class SecEdgarFacts {
                 // (ADR-0159 §결정 — 두 컬럼의 뜻은 두 시장 공통이다). 2026-09-21 이전에는
                 // net_income에 이 값이 들어가고 여기가 상수 null이었는데, 그 때문에
                 // ROA·NET_MARGIN·ACCRUAL_RATIO가 연결 분모에 지배주주 분자를 얹고 있었다.
-                controllingIncome(v),
+                System.getenv("S_NIFIX") != null
+                        ? controllingIncomeGated(v, noNoncontrollingIncome) : controllingIncome(v),
                 // 영업이익 유도의 재료 여덟(V40). 여기서 계산하지 않는다 — 원자료만 담고
                 // 판단은 지표 계층이 한다(FinancialMath.operatingIncomeOf).
                 v.get(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME),
@@ -1758,6 +1759,32 @@ final class SecEdgarFacts {
             return controlling.add(nonControlling);
         }
         return noNoncontrollingIncome ? controlling : null;
+    }
+
+    /**
+     * [탐색 S_NIFIX] 저장 지배주주 값. 직접 → 항등식까지는 {@link #controllingIncome}과 같고,
+     * 마지막 폴백({@code NET_INCOME} 첫 후보 — 직접 태그가 없으면 {@code ProfitLoss}=연결)을
+     * 비지배가 없다고 볼 수 있을 때만 건다. 아니면 보통주 귀속(이미 지배주주 기저 · ADR-0154).
+     */
+    private static BigDecimal controllingIncomeGated(Map<SecEdgarColumn, BigDecimal> v,
+                                                     boolean noNoncontrollingIncome) {
+        BigDecimal direct = v.get(SecEdgarColumn.NET_INCOME_CONTROLLING);
+        BigDecimal total = v.get(SecEdgarColumn.NET_INCOME_TOTAL);
+        BigDecimal nonControlling = nonControllingIncome(v);
+        BigDecimal identity = total != null && nonControlling != null
+                ? total.subtract(nonControlling) : null;
+        if (direct != null) {
+            return mistaggedControlling(direct, total, nonControlling, identity,
+                    v.get(SecEdgarColumn.NET_INCOME_AVAILABLE_TO_COMMON)) ? identity : direct;
+        }
+        if (identity != null) {
+            return identity;
+        }
+        if (noNoncontrollingIncome) {
+            return v.get(SecEdgarColumn.NET_INCOME);
+        }
+        return "null".equals(System.getenv("S_NIFIX"))
+                ? null : v.get(SecEdgarColumn.NET_INCOME_AVAILABLE_TO_COMMON);
     }
 
     private static BigDecimal controllingIncome(Map<SecEdgarColumn, BigDecimal> v) {
@@ -2641,7 +2668,20 @@ final class SecEdgarFacts {
                 nonControlling = redeemable != null && nonRedeemable != null
                         ? redeemable.add(nonRedeemable) : null;
             }
-            return nonControlling != null ? total.subtract(nonControlling) : total;
+            if (nonControlling != null) {
+                return total.subtract(nonControlling);
+            }
+            if (System.getenv("S_NIFIX") == null
+                    || noNoncontrollingIncomeBy(lastNoncontrollingIncome(byColumn),
+                            new Window(slot.start(), slot.end()))) {
+                return total;
+            }
+        }
+        if (System.getenv("S_NIFIX") != null) {
+            // [탐색] 피감수·감수를 지배주주 기저로 — net_income은 ADR-0159 뒤로 연결 총액이다.
+            return sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME_CONTROLLING, slot, subtractable,
+                    fy.netIncomeControlling(), q1.netIncomeControlling(), q2.netIncomeControlling(),
+                    q3.netIncomeControlling());
         }
         return sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME, slot, subtractable,
                 fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome());
