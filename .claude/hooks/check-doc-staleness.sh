@@ -396,7 +396,8 @@ MUST NOT: 0건을 휴장으로 단정하지 않는다\.|docs/api-spec/data-go-kr
 쓰기 창 [0-9]*거래일 중 [0-9]*이 FY2025 공시일 중앙값 앞이다|src/main/java/com/stockscreener/indicator/calculator/GovernanceMath.java|docs/api-spec/dart-governance.md|공시일 계단의 대가
 국내 휴장 평일 [0-9]*일 중 미국 개장이 [0-9]*일이다|src/main/java/com/stockscreener/pipeline/collector/PriceCalendar.java|docs/api-spec/alpaca-bars.md|국내 휴장·미국 개장
 ARRAY.'ARCC','CBC','MAIN','OBDC'.|src/main/java/com/stockscreener/pipeline/collector/KnownSourceGaps.java|docs/adr/ADR-0044-sector-axis.md|SIC 결손 허용목록
-선별자」다. 하한이 대부분을 통과시키는 것은 하한이 제 일을 하는 모양이다|docs/adr/ADR-0066-lynch-presets-and-read-window.md|docs/adr/ADR-0067-buffett-preset-and-capex.md|하한을 결함으로 읽지 않는 근거"
+선별자」다. 하한이 대부분을 통과시키는 것은 하한이 제 일을 하는 모양이다|docs/adr/ADR-0066-lynch-presets-and-read-window.md|docs/adr/ADR-0067-buffett-preset-and-capex.md|하한을 결함으로 읽지 않는 근거
+WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL), act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE m.effective_to IS NULL AND u.is_active), d AS (SELECT iv.stock_id, count(DISTINCT iv.value) n FROM days JOIN indicator_value iv ON iv.trade_date = days.d AND iv.indicator_code = 'GROSS_MARGIN' JOIN act ON act.stock_id = iv.stock_id GROUP BY 1) SELECT CASE|docs/adr/ADR-0071-backtest-scope-and-unit.md|docs/adr/ADR-0128-point-in-time-financials-in-stored-indicators.md|공시일 계단 펜스의 질의"
 
 extract_mirror() {  # $1=파일 $2=정규식
   tr '\n' ' ' < "$1" | tr -s ' ' | sed -n "s/.*\($2\).*/\1/p"

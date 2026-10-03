@@ -87,7 +87,7 @@ fi
 ```
 
 ```premise 무효화된 종목이 지표를 다시 갖고 있다
-psql -d stock_screener -At -c "WITH ev AS (
+psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL), ev AS (
   -- 모집단을 **활성 유니버스 편입 종목**으로 좁힌다. 이 전제가 묻는 것은 「재구축이 지운 뒤
   -- 백필이 안 따라왔는가」인데, 백필의 대상이 바로 그 집합이기 때문이다
   -- (IndicatorBackfillJob.resolveTargets). 안 좁히면 **지표를 아직 안 만들기로 한 시장**이
@@ -105,8 +105,9 @@ SELECT CASE
   ELSE count(*) FILTER (WHERE dates = 0)
        || '종목의 지표가 비어 있다 — 재구축이 지운 뒤 백필이 따라오지 않았다. 그 종목은 화면에서 통째로 사라지고 에러도 경고도 나지 않는다.'
   END FROM (
-    SELECT ev.stock_id, (SELECT count(DISTINCT trade_date) FROM indicator_value v
-                         WHERE v.stock_id = ev.stock_id) AS dates FROM ev) w"
+    SELECT ev.stock_id, (SELECT count(*) FROM days WHERE days.d IS NOT NULL AND EXISTS (
+                           SELECT 1 FROM indicator_value v
+                           WHERE v.stock_id = ev.stock_id AND v.trade_date = days.d)) AS dates FROM ev) w"
 ```
 
 ## 배경

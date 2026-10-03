@@ -66,11 +66,12 @@ scale="3" decimals="-3">89,213,394</ix:nonFraction>`). **`companyfacts`만 그 �
 
 ```premise 시총이 하루 사이 100배 뛰는 종목이 없다
 psql -d stock_screener -At -c "
-WITH mc AS (
+WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL),
+mc AS (
   SELECT s.ticker, iv.trade_date, iv.value v,
          lag(iv.value) OVER (PARTITION BY iv.stock_id ORDER BY iv.trade_date) p
-  FROM indicator_value iv JOIN stock s ON s.id = iv.stock_id
-  WHERE iv.indicator_code = 'MARKET_CAP')
+  FROM days JOIN indicator_value iv ON iv.trade_date = days.d AND iv.indicator_code = 'MARKET_CAP'
+  JOIN stock s ON s.id = iv.stock_id)
 SELECT CASE
   WHEN (SELECT count(*) FROM mc) = 0
     THEN '잴 것이 없었다 — MARKET_CAP 행이 하나도 없다'
@@ -95,7 +96,10 @@ psql -d stock_screener -At -c "WITH m AS (SELECT s.ticker FROM universe_membersh
 후보에서 빼는 안(A)으로 되돌아가는데, 그것은 위에서 반증과 함께 기각했다. 실측 0.05초.
 
 **양방향으로 센다** — 오염이 들어올 때와 정상으로 돌아올 때 둘 다 경계를 만든다.
-실측 비용 **0.62~0.87초**(전제 개당 상한 11초).
+실측 비용 **0.46초**(2026-10-03 · 거래일 사다리 — `MARKET_CAP`만 읽는다. 옛 전수 형태는 1.15~1.25초).
+**MUST: 사다리를 `indicator_value` 자신의 재귀로 둔다** — `indicator_trade_date` 같은 파생 색인에서
+날짜를 뽑으면 그 색인이 빠뜨린 날의 점프를 못 보는데, **이 펜스는 발화 중이라 출력이 글자까지
+같아 드러나지 않는다**(실측: KOSPI 255일로 짜도 같은 3건을 냈고 모집단만 426,242 → 407,314로 줄었다).
 
 **모집단을 함께 내는 이유**: `MARKET_CAP` 행이 통째로 비면 점프도 0이 되어 「깨끗하다」와
 구분되지 않는다. 실제로 **`MARKET_CAP`이 아예 없는 편입 종목이 17개** 있다(FY 행만 내는

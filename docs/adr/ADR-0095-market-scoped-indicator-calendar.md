@@ -65,9 +65,13 @@ applies_to:
 
 ```premise 화면 기준일 색인이 원본과 맞는가
 psql -d stock_screener -At -c "
-WITH src AS (
-  SELECT DISTINCT s.market_code, v.trade_date
-  FROM indicator_value v JOIN stock s ON s.id = v.stock_id),
+WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL),
+src AS (
+  SELECT mk.code AS market_code, days.d AS trade_date
+  FROM days CROSS JOIN market mk
+  WHERE days.d IS NOT NULL
+    AND EXISTS (SELECT 1 FROM stock s JOIN indicator_value v ON v.stock_id = s.id AND v.trade_date = days.d
+                WHERE s.market_code = mk.code)),
  missing AS (SELECT count(*) AS n FROM (SELECT * FROM src EXCEPT SELECT * FROM indicator_trade_date) a),
  extra   AS (SELECT count(*) AS n FROM (SELECT * FROM indicator_trade_date EXCEPT SELECT * FROM src) b)
 SELECT CASE

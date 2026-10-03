@@ -199,12 +199,13 @@ psql -d stock_screener -At -c "WITH seven AS (SELECT stock_id, max(published_at)
 ```
 
 ```premise 저장된 지표에 시간축이 생겼다 — 2026-09-08에 뜻이 뒤집힌 펜스다
-psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE m.effective_to IS NULL AND u.is_active), d AS (SELECT iv.stock_id, count(DISTINCT iv.value) n FROM indicator_value iv JOIN act ON act.stock_id = iv.stock_id WHERE iv.indicator_code = 'GROSS_MARGIN' GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — 편입 종목의 GROSS_MARGIN 행이 하나도 없다' WHEN (SELECT count(*) FROM d WHERE n > 1) = 0 THEN '계단이 하나도 없다 — 저장 지표가 다시 스냅샷 하나가 됐다(ADR-0128이 되돌려졌는지 본다)' ELSE 'OK ' || (SELECT count(*) FROM d WHERE n > 1) || '/' || (SELECT count(*) FROM d) || '종목에 공시일 계단이 있다 — 저장 값이 봉마다 그 시점 재무다' END"
+psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL), act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE m.effective_to IS NULL AND u.is_active), d AS (SELECT iv.stock_id, count(DISTINCT iv.value) n FROM days JOIN indicator_value iv ON iv.trade_date = days.d AND iv.indicator_code = 'GROSS_MARGIN' JOIN act ON act.stock_id = iv.stock_id GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM d) = 0 THEN '잴 것이 없었다 — 편입 종목의 GROSS_MARGIN 행이 하나도 없다' WHEN (SELECT count(*) FROM d WHERE n > 1) = 0 THEN '계단이 하나도 없다 — 저장 지표가 다시 스냅샷 하나가 됐다(ADR-0128이 되돌려졌는지 본다)' ELSE 'OK ' || (SELECT count(*) FROM d WHERE n > 1) || '/' || (SELECT count(*) FROM d) || '종목에 공시일 계단이 있다 — 저장 값이 봉마다 그 시점 재무다' END"
 ```
 
 **이 펜스의 질의는 `ADR-0128`의 「저장된 재무 지표에 공시일 계단이 있다」와 **바이트 동일**하다
-(CASE 문구만 다르다 · 2026-09-13 md5 대조). **매 세션 같은 스캔을 두 번 돈다**(둘 합쳐 1.5초).
+(CASE 문구만 다르다). **매 세션 같은 스캔을 두 번 돈다**(2026-10-03 사다리로 바꾼 뒤 둘 합쳐 0.3초).
 **MUST: 한쪽을 고치면 다른 쪽도 같이 고친다** — 갈리면 같은 데이터에 두 판정이 나온다.
+`check-doc-staleness.sh`의 거울 표가 `d` CTE를 앵커로 둘을 대조한다.
 **하나로 줄일지는 감시를 하나 없애는 것이라 별도 판단이다.**
 
 **MUST: 이 펜스를 「시간축이 없어야 한다」로 되돌리지 않는다.** ADR-0128이 저장 경로를 봉별

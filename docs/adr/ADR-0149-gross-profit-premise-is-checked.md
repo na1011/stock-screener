@@ -44,10 +44,11 @@ applies_to:
 그것을 잡은 것은 논증이 아니라 대조군이었다.
 
 ```premise 매출총이익률이 100%를 넘지 않는다
-psql -d stock_screener -At -c "SELECT CASE
+psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL)
+SELECT CASE
   WHEN count(*) = 0 THEN 'OK 매출총이익률 100% 초과 0행'
   ELSE '매출총이익률이 100%를 넘는 행 ' || count(*) || '건 · ' || count(DISTINCT stock_id) || '종목 — 매출원가가 음수이거나 매출과 다른 기간에서 왔다'
-  END FROM indicator_value WHERE indicator_code = 'GROSS_MARGIN' AND value > 100"
+  END FROM days JOIN indicator_value iv ON iv.trade_date = days.d AND iv.indicator_code = 'GROSS_MARGIN' AND iv.value > 100"
 ```
 
 ## 배경

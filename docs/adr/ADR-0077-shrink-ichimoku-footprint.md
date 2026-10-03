@@ -67,14 +67,15 @@ applies_to:
 ## 검증
 
 ```premise 일목 자국 — 관측 18개와 되살린 점수화 13개가 다 활성인가
-psql -d stock_screener -At -c "SELECT CASE
+psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL)
+SELECT CASE
   WHEN total = 0 THEN '잴 것이 없었다 — indicator에 ICHI_ 행이 하나도 없다'
   WHEN active <> 31 THEN '활성 ICHI_ 가 ' || active || '개다 — 31이 아니다'
   ELSE 'OK 활성 ' || active || ' / 비활성 ' || (total - active)
        || ' · 점수화 13코드 값 ' || scoring_rows || '행' END
 FROM (SELECT count(*) total, count(*) FILTER (WHERE is_active) active,
-             (SELECT count(*) FROM indicator_value
-               WHERE indicator_code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_PILLAR','ICHI_CONFIDENCE',
+             (SELECT count(*) FROM days JOIN indicator_value iv ON iv.trade_date = days.d
+               AND iv.indicator_code IN ('ICHI_TIER','ICHI_SIGNAL','ICHI_PILLAR','ICHI_CONFIDENCE',
                      'ICHI_CONCLUSION','ICHI_BULL','ICHI_BEAR','ICHI_EXT_SIGNAL','ICHI_STAGE',
                      'ICHI_LEAF','ICHI_FRESHNESS','ICHI_T3YEOK','ICHI_KAIZEN_MATCH')) scoring_rows
       FROM indicator WHERE code LIKE 'ICHI/_%' ESCAPE '/') s"
