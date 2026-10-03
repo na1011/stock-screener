@@ -2196,6 +2196,29 @@ final class SecEdgarFacts {
         if (source == null) {
             return residual;
         }
+        if ("1".equals(System.getenv("S_Q4ID"))) {
+            // [탐색] Q4 행의 매출 − 원가 = 총이익을 맞춘다. 소스 둘이면 셋째를 계산하고,
+            // 소스 하나가 잔차와 안 맞으면 잔차 셋을 쓴다. 매출은 유도하지 않는다.
+            BigDecimal sr = source.revenue(), sc = source.costOfSales(), sg = source.grossProfit();
+            BigDecimal rr = residual.revenue(), rc = residual.costOfSales(), rg = residual.grossProfit();
+            BigDecimal mr = pick(sr, rr), mc = pick(sc, rc), mg = pick(sg, rg);
+            if (mr != null && mc != null && mg != null) {
+                BigDecimal tol = mr.abs().max(BigDecimal.ONE).multiply(new BigDecimal("0.01")).max(new BigDecimal("1000000"));
+                if (mr.subtract(mc).subtract(mg).abs().compareTo(tol) > 0) {
+                    int n = (sr != null ? 1 : 0) + (sc != null ? 1 : 0) + (sg != null ? 1 : 0);
+                    if (n == 2 && sr != null && sg != null) {
+                        sc = sr.subtract(sg);
+                    } else if (n == 2 && sr != null && sc != null) {
+                        sg = sr.subtract(sc);
+                    } else if (n < 3) {
+                        sr = null;
+                        sc = null;
+                        sg = null;
+                    }
+                    source = withGross(source, sr, sc, sg);
+                }
+            }
+        }
         return new RawFinancialReport(
                 residual.fiscalYear(), residual.fiscalPeriod(),
                 residual.periodStart(), residual.periodEnd(), residual.publishedAt(),
@@ -2249,6 +2272,21 @@ final class SecEdgarFacts {
                 // 합친 값이 null인데 **두 판 중 하나라도 「없다」고 판정했으면** 그것은 판정이다.
                 // 둘 다 그냥 안 실었을 뿐이면 빈 집합이 되어 지금까지와 똑같이 동작한다.
                 mergedAbsence(source, residual));
+    }
+
+    /** [탐색] 매출·원가·총이익만 바꾼 사본. */
+    private static RawFinancialReport withGross(RawFinancialReport r, BigDecimal rev, BigDecimal cogs,
+                                                BigDecimal gp) {
+        return new RawFinancialReport(
+                r.fiscalYear(), r.fiscalPeriod(), r.periodStart(), r.periodEnd(), r.publishedAt(),
+                r.reportCode(), r.currencyCode(), rev, r.operatingIncome(), r.netIncome(),
+                r.totalAssets(), r.totalEquity(), r.totalEquityControlling(), r.totalLiabilities(),
+                r.currentAssets(), r.currentLiabilities(), r.retainedEarnings(), r.operatingCashFlow(),
+                r.sharesOutstanding(), r.eps(), r.bps(), cogs, r.cashAndEquivalents(), r.capex(),
+                r.inventories(), r.netIncomeControlling(), r.interestAndDividendIncome(),
+                r.noninterestIncome(), r.interestExpense(), r.noninterestExpense(),
+                r.benefitsLossesAndExpenses(), gp, r.operatingExpenses(), r.costsAndExpenses(),
+                r.incomeTaxExpense(), r.profitBeforeTax(), r.derived(), r.assertedAbsent());
     }
 
     private static BigDecimal pick(BigDecimal source, BigDecimal residual) {
