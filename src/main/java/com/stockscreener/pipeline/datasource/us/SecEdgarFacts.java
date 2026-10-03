@@ -1113,27 +1113,27 @@ final class SecEdgarFacts {
             }
         }
         // 3. 자산 = 부채 + 자본 — 공시가 셋을 다 안 실었으면 그 공시가 실은 것을 앞 판으로 되돌린다.
-        SecEdgarColumn eqCol = merged.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI) != null
-                ? SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI : SecEdgarColumn.TOTAL_EQUITY;
-        SecEdgarColumn[] bal = {SecEdgarColumn.TOTAL_ASSETS, SecEdgarColumn.TOTAL_LIABILITIES, eqCol};
-        BigDecimal a = merged.get(bal[0]), l = merged.get(bal[1]), e = merged.get(bal[2]);
+        SecEdgarColumn[] equityFamily = {SecEdgarColumn.TOTAL_EQUITY, SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI,
+                SecEdgarColumn.TOTAL_EQUITY_CONTROLLING, SecEdgarColumn.MINORITY_INTEREST, SecEdgarColumn.MEZZANINE_EQUITY};
+        BigDecimal a = merged.get(SecEdgarColumn.TOTAL_ASSETS), l = merged.get(SecEdgarColumn.TOTAL_LIABILITIES);
+        BigDecimal e = totalEquity(merged);
         if (a != null && l != null && e != null
                 && a.subtract(l).subtract(e).compareTo(new BigDecimal("-1500000")) < 0) {
-            int reported = 0;
-            for (SecEdgarColumn c : bal) {
-                if (values.get(c) != null) {
-                    reported++;
-                }
+            boolean ra = values.get(SecEdgarColumn.TOTAL_ASSETS) != null;
+            boolean rl = values.get(SecEdgarColumn.TOTAL_LIABILITIES) != null;
+            boolean re = false;
+            for (SecEdgarColumn c : equityFamily) {
+                re |= values.get(c) != null;
             }
+            int reported = (ra ? 1 : 0) + (rl ? 1 : 0) + (re ? 1 : 0);
             if (reported > 0 && reported < 3) {
-                for (SecEdgarColumn c : bal) {
-                    if (values.get(c) != null && baseline.get(c) != null) {
+                java.util.List<SecEdgarColumn> members = new java.util.ArrayList<>(java.util.List.of(equityFamily));
+                members.add(SecEdgarColumn.TOTAL_ASSETS);
+                members.add(SecEdgarColumn.TOTAL_LIABILITIES);
+                for (SecEdgarColumn c : members) {
+                    if (values.get(c) != null) {
                         merged.put(c, baseline.get(c));
                     }
-                }
-                if (eqCol == SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI && values.get(SecEdgarColumn.TOTAL_EQUITY) != null
-                        && baseline.get(SecEdgarColumn.TOTAL_EQUITY) != null) {
-                    merged.put(SecEdgarColumn.TOTAL_EQUITY, baseline.get(SecEdgarColumn.TOTAL_EQUITY));
                 }
             }
         }
