@@ -92,15 +92,15 @@ WITH applied AS (
   SELECT c.stock_id, s.ticker, c.effective_date
   FROM corporate_action c JOIN stock s ON s.id = c.stock_id
   WHERE s.market_code = 'US' AND c.status = 'APPLIED' AND c.note IS NULL),
-b AS (SELECT p.stock_id, p.trade_date, p.adj_close,
-             lag(p.adj_close) OVER (PARTITION BY p.stock_id ORDER BY p.trade_date) AS prev
-        FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code = 'US'),
 resid AS (
   SELECT DISTINCT a.ticker, b.trade_date
-  FROM applied a JOIN b ON b.stock_id = a.stock_id
+  FROM applied a JOIN price_daily b ON b.stock_id = a.stock_id
    AND b.trade_date BETWEEN a.effective_date - 3 AND a.effective_date + 3
-  WHERE b.prev IS NOT NULL AND b.prev > 0
-    AND (b.adj_close / b.prev > 1.30 OR b.adj_close / b.prev < 0.70))
+  CROSS JOIN LATERAL (SELECT p.adj_close AS prev FROM price_daily p
+                       WHERE p.stock_id = b.stock_id AND p.trade_date < b.trade_date
+                       ORDER BY p.trade_date DESC LIMIT 1) pv
+  WHERE pv.prev IS NOT NULL AND pv.prev > 0
+    AND (b.adj_close / pv.prev > 1.30 OR b.adj_close / pv.prev < 0.70))
 SELECT CASE
   WHEN (SELECT count(*) FROM applied) = 0
     THEN '잴 것이 없었다 — 계수가 반영된 미국 기업행위가 없다'

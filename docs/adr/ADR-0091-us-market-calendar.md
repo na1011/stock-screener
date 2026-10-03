@@ -102,11 +102,14 @@ scoped AS (SELECT s.id, s.ticker, s.listing_exchange ex,
              JOIN price_daily p ON p.stock_id = s.id
             GROUP BY s.id, s.ticker, s.listing_exchange, c.lo, c.hi
            HAVING greatest(min(p.trade_date), c.lo) <= least(max(p.trade_date), c.hi)),
-missing AS (SELECT sc.ticker, mc.session_date d FROM scoped sc
-              JOIN market_calendar mc ON mc.exchange_code = sc.ex
-               AND mc.session_date BETWEEN sc.lo AND sc.hi
-              LEFT JOIN price_daily p ON p.stock_id = sc.id AND p.trade_date = mc.session_date
-             WHERE p.stock_id IS NULL),
+-- 세션인데 봉 없음 = 창 안 세션 수 - 세션 위 봉 수. (거래소, 세션일)과 (종목, 거래일)이 둘 다 PK라
+-- 정확히 같다. 세션마다 봉을 찌르는 형태는 203만 번 탐침에 1.8초였다(2026-10-03).
+missing AS (SELECT (SELECT count(*) FROM scoped sc
+                      JOIN market_calendar mc ON mc.exchange_code = sc.ex
+                       AND mc.session_date BETWEEN sc.lo AND sc.hi)
+                 - (SELECT count(*) FROM scoped sc
+                      JOIN price_daily p ON p.stock_id = sc.id AND p.trade_date BETWEEN sc.lo AND sc.hi
+                      JOIN market_calendar mc ON mc.exchange_code = sc.ex AND mc.session_date = p.trade_date) AS n),
 extra AS (SELECT sc.ticker, p.trade_date d FROM scoped sc
             JOIN price_daily p ON p.stock_id = sc.id AND p.trade_date BETWEEN sc.lo AND sc.hi
             LEFT JOIN market_calendar mc ON mc.exchange_code = sc.ex AND mc.session_date = p.trade_date
@@ -121,7 +124,7 @@ SELECT CASE
          || (SELECT string_agg(ticker || ' ' || d, ', ') FROM (SELECT * FROM extra LIMIT 10) x)
          || ' — 달력이 세션을 빠뜨렸다. 이쪽이 먼저다: 열린 날을 닫혔다고 하면 수집 실패가 휴장으로 접혀 침묵한다'
   ELSE 'OK 달력이 세션을 빠뜨린 곳이 없다 — 판정 대상 ' || (SELECT count(*) FROM scoped)
-       || '종목 · 세션인데 봉 없음 ' || (SELECT count(*) FROM missing)
+       || '종목 · 세션인데 봉 없음 ' || (SELECT n FROM missing)
        || '행(무거래·비활성·거래정지·수집 실패가 안 갈린 수이고 발화 조건이 아니다)'
   END"
 ```

@@ -106,6 +106,15 @@ guard="$root/.claude/hooks/guard-destructive.sh"
 # 그 전제 단독은 **1.11초**다. 유휴 29초는 예산의 64%뿐이지만 위 3.5배가 걸리면 101초다.
 # **MUST: 무거운 gradle 작업 직후에 이 훅의 출력을 회귀로 읽지 않는다** — 그때의 무판정은
 # 전제의 결함이 아니라 경합의 산물이고, 판정하려면 유휴에서 다시 돌린다.
+#
+# 2026-10-03에 **네 번째 원인** — 전제가 판정에 필요한 행보다 훨씬 많이 읽었다. `indicator_value`
+# PK 선두가 `trade_date`라 `indicator_code`만으로 거르면 PK를 못 찔러 힙이나 PK 전체를 훑는다.
+# 유휴 76초·무판정 19(번호 역순) → 전제 16개를 ADR-0011의 거래일 사다리와 플래너 병리 수정으로
+# 고쳐 쓰고 **28~31초·무판정 0**(예산·상한은 그대로, 145개 출력 전문은 글자까지 같다). 그 밑에
+# **가시성 맵**이 깔려 있다 — 보존 정리의 날짜 DELETE가 매 평일 힙의 약 28%를 not-all-visible로
+# 만들어 Index Only Scan이 행의 약 36%를 힙에서 읽는다. **느려지면 먼저
+# `pgstattuple_approx('indicator_value')`의 `scanned_percent`를 본다** — `relallvisible`·`n_dead_tup`은
+# VACUUM·ANALYZE 때만 갱신되는 대리값이라 그 상태를 「멀쩡」으로 보인다(그날 1.000·48.5만 대 27.8%).
 per_limit=11
 total_budget=75
 
