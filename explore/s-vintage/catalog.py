@@ -150,7 +150,9 @@ def detect(ticker, data, emit):
     for (col, s, e), rows in data.items():
         if s is None or col not in INCOME or kind_of(s, e) not in ("Q", "H", "N"):
             continue
-        fy = [w for w in fy_windows if abs((w[0] - s).days) <= 7 and w[1] >= e and w in fy_filed]
+        # 52/53주 회사는 맞는 FY 창이 둘일 수 있다 — 집합 순서(날짜 해시는 실행마다 무작위)로 고르지 않는다
+        fy = sorted((w for w in fy_windows if abs((w[0] - s).days) <= 7 and w[1] >= e and w in fy_filed),
+                    key=lambda w: (abs((w[0] - s).days), w[1]))
         if not fy or e == fy[0][1]:
             continue
         t = fy_filed[fy[0]]
@@ -217,7 +219,7 @@ def detect(ticker, data, emit):
     for (col, s, e), rows in data.items():
         if s is None or kind_of(s, e) != "Q":
             continue
-        fyw = [w for w in fy_windows if w[1] == e]
+        fyw = sorted(w for w in fy_windows if w[1] == e)
         if not fyw:
             continue
         fyrows = {r[1]: r[4] for r in data.get((col, fyw[0][0], fyw[0][1]), [])}
@@ -234,6 +236,27 @@ def detect(ticker, data, emit):
         for (f1, a1, fm1, t1, v1), (f2, a2, fm2, t2, v2) in zip(rows, rows[1:]):
             if a2 not in assets and t1 == t2 and rel(v1, v2) > 0.01:
                 emit("K9_equity_only_restated", ticker, col, None, e, "I", f2, a2, f"{v1}>{v2}", "")
+
+    # K11 같은 공시 안에서 창 W의 값이 그 공시의 다른 기간 창 값과 같다(0.1%)이면서 W의 앞 게재값과 1% 초과 다름
+    #     (사례 카드 GPI 2019 FY ← 그 10-Q의 9개월 누계 · QLYS 2018 Q3 ← 그 10-Q의 당기 분기)
+    by_accn = collections.defaultdict(list)
+    for (col, s, e), rows in data.items():
+        if s is None or col not in INCOME:
+            continue
+        for filed, accn, form, tag, val in rows:
+            by_accn[(accn, col)].append((s, e, val, filed))
+    for (col, s, e), rows in data.items():
+        if s is None or col not in INCOME:
+            continue
+        for i, (filed, accn, form, tag, val) in enumerate(rows):
+            prev = [r for r in rows[:i] if r[1] != accn]
+            if not prev or val == 0 or rel(val, prev[-1][4]) <= 0.01:
+                continue
+            twins = [(s2, e2) for (s2, e2, v2, f2) in by_accn[(accn, col)]
+                     if (s2, e2) != (s, e) and abs((e2 - e).days) > 7 and rel(val, v2) <= 0.001]
+            if twins:
+                emit("K11_value_equals_other_window_in_same_filing", ticker, col, s, e, kind_of(s, e), filed, accn,
+                     f"{prev[-1][4]}>{val}", f"twin={twins[0][0]}~{twins[0][1]}")
 
     # K10 Q4 3개월 창(FY 끝과 같은 끝) — 끝 + 300일 뒤 공시가 다시 실었는가
     for (col, s, e), rows in data.items():
