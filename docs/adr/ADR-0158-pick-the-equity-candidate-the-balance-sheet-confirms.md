@@ -75,8 +75,9 @@ applies_to:
 
 ## 검증
 
-**premise로 태그하지 않는다** — 전제 예산이 79초/75초로 이미 넘어 있어, 더하면 뒤쪽 전제가
-조용히 무판정이 된다(2026-09-15 실측). 예산이 풀리면 이 질의를 premise로 올린다.
+**아래 질의는 premise가 아니라 적재 전후를 대조하는 도구다**(2026-10-03 판정). 예산은 풀렸지만 이 수는
+모집단을 따라 움직인다 — 오늘 911인데 그중 22행이 09-25 리밸런싱으로 새로 든 26종목에서 왔다. 상시 전제로
+올리면 **의도한 상태(리밸런싱)에 운다.** 이 결정의 상시 전제는 아래 「설 수 없는 대차대조표」 펜스가 묻는다.
 
 ```bash
 psql -d stock_screener -At -c "
@@ -92,6 +93,33 @@ SELECT count(*) FROM financial_statement f JOIN u ON u.stock_id = f.stock_id
 
 저장된 행 안에서 **`자산 − 부채 − 자본`이 자산의 5%를 넘게 어긋난 행**을 센다. 중간지분이
 있는 종목은 정당하게 잡히므로 0을 요구하지 않는다 — **재적재 전보다 늘면 회귀다.**
+
+**상시 전제 — 부채 + 자본이 자산을 넘는 대차대조표가 없다.** 정당한 잔차 `자산 − 부채 − 자본`은
+중간지분(메자닌)이라 **0 이상**이다 — 그래서 음의 잔차는 양의 잔차와 달리 저장 컬럼만으로 결함으로
+가를 수 있다. 허용은 반올림뿐이다(세 항목이 반 단위씩 어긋나도 1.5단위 · 미국 편입 종목의 보고
+단위는 100만 달러 이하). **위 §결정의 「둘 다 안 맞으면 못 본 중간지분」은 양의 잔차에만 선다** —
+못 본 중간지분은 잔차를 음으로 못 만든다. 세운 날 **340개 대차대조표 · 143종목**이 걸렸다
+(`MSFT` FY2016: 자산 − 부채 71,997M인데 저장 자본 83,090M — 소급 재작성 판의 자본이 원판의 자산·부채와
+섞인 모양). **이 결정이 안 닫은 자리이고 다음 작업의 입력이다.**
+
+```premise 미국 편입 재무에 부채 + 자본이 자산을 넘는 대차대조표가 없다
+# 정당한 잔차 「자산 - 부채 - 자본」은 중간지분(메자닌)이라 0 이상이다(SecEdgarFacts.equityByBalanceEvidence ·
+# 유도 부채 경로는 잔차가 정확히 중간지분이다). 그래서 음의 잔차는 어느 회계로도 설 수 없고, 양의 잔차와 달리
+# 저장 컬럼만으로 가를 수 있다. 허용은 반올림뿐이다 — 세 항목이 각각 반 단위씩 어긋나도 합이 1.5단위이고,
+# 미국 편입 종목의 보고 단위는 100만 달러를 넘지 않으므로 150만 달러 밖의 음수는 반올림이 만들 수 없다.
+# 모집단은 이 결정의 §검증 질의와 같다(US_TOP1000 현재 편입 · is_latest).
+psql -d stock_screener -At -c "WITH u AS (SELECT DISTINCT stock_id FROM universe_membership WHERE universe_code = 'US_TOP1000' AND effective_to IS NULL),
+r AS (SELECT s.ticker, f.period_end, f.total_assets - f.total_liabilities - f.total_equity AS res, f.total_assets AS a
+      FROM financial_statement f JOIN u ON u.stock_id = f.stock_id JOIN stock s ON s.id = f.stock_id
+      WHERE f.is_latest AND f.total_assets > 0 AND f.total_liabilities IS NOT NULL AND f.total_equity IS NOT NULL),
+bad AS (SELECT ticker, period_end, min(res / a) g FROM r WHERE res < -1500000 GROUP BY 1, 2),
+worst AS (SELECT ticker, min(g) g FROM bad GROUP BY 1 ORDER BY 2 LIMIT 15)
+SELECT CASE
+  WHEN (SELECT count(*) FROM r) = 0 THEN '잴 것이 없었다 — 자산·부채·자본이 다 있는 미국 편입 재무 행이 없다'
+  WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 미국 편입 재무 ' || (SELECT count(*) FROM r) || '행에 부채 + 자본이 자산을 반올림 밖으로 넘는 대차대조표가 없다'
+  ELSE (SELECT count(*) FROM bad) || '개 대차대조표 · ' || (SELECT count(DISTINCT ticker) FROM bad) || '종목에서 부채 + 자본이 자산을 150만 달러 넘게 넘는다(' || (SELECT count(*) FROM r) || '행 중) — 설 수 없는 상태다. 자본이나 부채 후보를 잘못 골랐거나 판이 섞였다. 잔차가 큰 순: ' || (SELECT string_agg(ticker, ' ' ORDER BY g) FROM worst)
+END"
+```
 
 **감시선이 두 번 죽을 뻔했다 — 둘 다 「수가 나온다」로는 안 잡힌다.**
 
