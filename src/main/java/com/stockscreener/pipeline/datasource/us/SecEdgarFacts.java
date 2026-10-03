@@ -1589,7 +1589,8 @@ final class SecEdgarFacts {
                 // (ADR-0159 §결정 — 두 컬럼의 뜻은 두 시장 공통이다). 2026-09-21 이전에는
                 // net_income에 이 값이 들어가고 여기가 상수 null이었는데, 그 때문에
                 // ROA·NET_MARGIN·ACCRUAL_RATIO가 연결 분모에 지배주주 분자를 얹고 있었다.
-                System.getenv("S_NIFIX") != null
+                System.getenv("S_NIFIX") != null && !"q4only".equals(System.getenv("S_NIFIX"))
+                        && !"q4guard".equals(System.getenv("S_NIFIX"))
                         ? controllingIncomeGated(v, noNoncontrollingIncome) : controllingIncome(v),
                 // 영업이익 유도의 재료 여덟(V40). 여기서 계산하지 않는다 — 원자료만 담고
                 // 판단은 지표 계층이 한다(FinancialMath.operatingIncomeOf).
@@ -2677,11 +2678,18 @@ final class SecEdgarFacts {
             if (nonControlling != null) {
                 return total.subtract(nonControlling);
             }
-            if (System.getenv("S_NIFIX") == null
+            if (System.getenv("S_NIFIX") == null || "q4only".equals(System.getenv("S_NIFIX"))
+                    || "q4guard".equals(System.getenv("S_NIFIX"))
                     || noNoncontrollingIncomeBy(lastNoncontrollingIncome(byColumn),
                             new Window(slot.start(), slot.end()))) {
                 return total;
             }
+        }
+        if ("q4guard".equals(System.getenv("S_NIFIX")) && mixedControllingBasis(fy, q1, q2, q3)) {
+            // [탐색] FY는 비지배가 있는데(지배 ≠ 연결) 어떤 분기는 지배 = 연결(폴백) — 빼면 기저가 섞여
+            // 그 분기들의 비지배가 Q4로 몰린다(ARES·FTAI 음수). 지금처럼 둔다.
+            return sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME, slot, subtractable,
+                    fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome());
         }
         if (System.getenv("S_NIFIX") != null) {
             // [탐색] 피감수·감수를 지배주주 기저로 — net_income은 ADR-0159 뒤로 연결 총액이다.
@@ -2691,6 +2699,23 @@ final class SecEdgarFacts {
         }
         return sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME, slot, subtractable,
                 fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome());
+    }
+
+    /** [탐색] FY는 지배 ≠ 연결(1% 초과)인데 분기 중 하나라도 지배 = 연결인가. */
+    private static boolean mixedControllingBasis(RawFinancialReport fy, RawFinancialReport q1,
+                                                 RawFinancialReport q2, RawFinancialReport q3) {
+        if (fy.netIncome() == null || fy.netIncomeControlling() == null
+                || !differsMaterially(fy.netIncomeControlling(), fy.netIncome())) {
+            return false;
+        }
+        for (RawFinancialReport q : List.of(q1, q2, q3)) {
+            if (q.netIncome() != null && q.netIncomeControlling() != null
+                    && q.netIncome().compareTo(q.netIncomeControlling()) == 0
+                    && q.netIncome().signum() != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 그 칸에 소스가 낸 팩트. 없으면 null — 여기서는 유도하지 않는다. */
