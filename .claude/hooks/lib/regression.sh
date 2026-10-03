@@ -887,6 +887,71 @@ check_preset_reg 발화 "같은 값 5곳 중 1곳만 바뀌어도 잡는다(개�
 check_preset_reg 침묵 "표에만 있고 열거에 없는 행은 안 본다" \
   "docs/phase-criteria.md" 's/^\| `ALTMAN_Z`/| `GHOST_METRIC` | >= 1 | x |\n| `ALTMAN_Z`/'
 
+echo "── 전제 러너 (check-premises) ──"
+#
+# 저장소의 ADR이 아니라 **임시 트리의 가짜 전제**로 돈다. DB가 필요 없고, 실제 전제의 발견이
+# 「전부 초록」 갈래를 가로막지 않는다(실제 트리는 늘 무언가 발화 중이라 그 갈래를 못 밟는다).
+# 가드는 진짜를 복사한다 — 심사할 수 없으면 run_one이 돌지 않는다.
+# 예산은 `SECONDS` 환경값으로 앞당긴다. bash 3.2가 그것을 환경에서 받는다(실측 SECONDS=70 → 70).
+#
+# $1 기대(포함/제외), $2 설명, $3 찾을 정규식(grep -E), $4 어디서 찾나(ctx/capture/first/stderr),
+# $5 전제 묶음(two/pgopts/sleep7), $6.. 환경 대입
+check_premise_runner() {
+  local want="$1" desc="$2" pat="$3" where="$4" set="$5" tmp got hay
+  shift 5
+  tmp=$(mktemp -d) || { fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %s (임시 디렉터리 실패)\n' "$desc"; return; }
+  mkdir -p "$tmp/.claude/hooks/lib" "$tmp/docs/adr"
+  cp "$HOOKS/check-premises.sh" "$HOOKS/guard-destructive.sh" "$tmp/.claude/hooks/"
+  cp "$HOOKS/lib/bash-text.sh" "$HOOKS/lib/load-process.sh" "$tmp/.claude/hooks/lib/"
+  case "$set" in
+    two)
+      hd '## 검증' '' '```premise 오래된 느린 전제' 'sleep 0.3; echo OK' '```' > "$tmp/docs/adr/ADR-0001-old.md"
+      hd '## 검증' '' '```premise 새 빠른 전제' 'echo OK' '```' > "$tmp/docs/adr/ADR-0002-new.md" ;;
+    pgopts)
+      hd '## 검증' '' '```premise 질의 상한' 'echo "$PGOPTIONS"' '```' > "$tmp/docs/adr/ADR-0001-opts.md" ;;
+    sleep7)
+      hd '## 검증' '' '```premise 상한을 넘는 전제' 'sleep 7; echo OK' '```' > "$tmp/docs/adr/ADR-0001-slow.md" ;;
+  esac
+  hay=$(cd "$tmp" && env CLAUDE_PROJECT_DIR="$tmp" PREMISE_CAPTURE= "$@" \
+          bash "$tmp/.claude/hooks/check-premises.sh" </dev/null 2>"$tmp/stderr")
+  case "$where" in
+    ctx)     hay=$(printf '%s' "$hay" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null) ;;
+    capture) hay=$(cat "$tmp/capture.tsv" 2>/dev/null) ;;
+    # 첫 줄만 — 순서를 물을 때. `^`는 모든 줄 머리에 걸려 전체 파일로는 「첫째」를 못 묻는다.
+    first)   hay=$(sed -n 1p "$tmp/capture.tsv" 2>/dev/null) ;;
+    stderr)  hay=$(cat "$tmp/stderr") ;;
+  esac
+  if printf '%s' "$hay" | grep -qE -- "$pat"; then got="포함"; else got="제외"; fi
+  rm -rf "$tmp"
+  if [ "$got" = "$want" ]; then
+    pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "$got" "$desc"
+  else
+    fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s  (기대: %s)\n' "$got" "$desc" "$want"
+  fi
+}
+
+# 캡처 경로는 `PREMISE_CAPTURE`를 임시 트리 안의 파일로 준다 — 상대 경로라 훅의 cd 뒤에 풀린다.
+check_premise_runner 제외 "전부 OK이고 예산이 넉넉하면 아무것도 안 낸다" \
+  '전제를 확인했다' ctx two
+check_premise_runner 포함 "예산 알림이 뜨면 가장 오래 걸린 것을 맨 앞에 이름으로 댄다" \
+  '가장 오래 걸린 다섯: ADR-0001-old\.md — 오래된 느린 전제 0\.[0-9]+초' ctx two SECONDS=70
+check_premise_runner 포함 "지명할 때 그 순간의 조건을 함께 낸다" \
+  '그때 조건: .*load' ctx two SECONDS=70
+check_premise_runner 포함 "새 ADR부터 돈다(번호 역순)" \
+  '^ADR-0002-new\.md' first two PREMISE_CAPTURE=capture.tsv
+check_premise_runner 포함 "경과 파일을 못 만들면 그렇다고 말한다" \
+  '시간을 재지 못했다' ctx two SECONDS=70 TMPDIR=/nonexistent-premise-dir
+check_premise_runner 포함 "캡처 손잡이가 질의 상한을 올린다" \
+  'statement_timeout=120s' capture pgopts PREMISE_CAPTURE=capture.tsv PREMISE_STATEMENT_TIMEOUT=120
+check_premise_runner 포함 "SessionStart 경로에서는 손잡이를 안 듣는다" \
+  'statement_timeout=6s' ctx pgopts PREMISE_STATEMENT_TIMEOUT=120
+check_premise_runner 포함 "손잡이가 숫자가 아니면 거부한다" \
+  '양의 정수' stderr pgopts PREMISE_CAPTURE=capture.tsv PREMISE_STATEMENT_TIMEOUT=abc
+# 손잡이를 1초로 내리면 alarm 상한이 4+1+1=6초가 된다 — 기본 11초였다면 7초 전제가 끝났을 것이다.
+# 같은 행이 **잘린 전제에도 경과가 남는지**(ALRM 경로)를 함께 본다. 6초가 걸린다.
+check_premise_runner 포함 "손잡이가 alarm 상한도 함께 옮기고, 잘린 전제도 경과가 남는다" \
+  $'\t6\\.[0-9]+\t<출력 없음 rc=142>' capture sleep7 PREMISE_CAPTURE=capture.tsv PREMISE_STATEMENT_TIMEOUT=1
+
 echo
 printf '통과 %d / 실패 %d / 건너뜀 %d / 알려진 구멍 %d\n' "$pass" "$fail" "$skipped" "$holes"
 # MUST: 건너뛴 수를 함께 낸다. 건너뛴 것이 통과로 읽히면 "덮여 있다"고 믿게 된다 —

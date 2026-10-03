@@ -149,35 +149,57 @@ export PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=6s'
 # MUST: 이 값을 다시 올리기 전에 그 줄이 떴는지부터 본다.
 export PGCONNECT_TIMEOUT=4
 
+# 붙잡는 갈래에서만 질의 상한을 올린다 — `PREMISE_STATEMENT_TIMEOUT`(초, 양의 정수).
+# 전/후 대조가 필요한 작업은 **고치려는 전제가 바로 느린 전제**라, 6초에 잘리면 「전」이 빈칸이
+# 되어 대조가 원리적으로 성립하지 않는다(2026-10-03: ADR-0054·0077이 늘 빈칸이었다).
+# per_limit도 위 부등식대로 함께 올린다 — 안 올리면 질의가 아니라 alarm이 먼저 자른다.
+# MUST NOT: SessionStart 경로에서 이 값을 받지 않는다. 거기서 올리면 예산 부등식이 깨진다.
+if [ -n "${PREMISE_STATEMENT_TIMEOUT:-}" ]; then
+  if [ -z "$capture" ]; then
+    echo "PREMISE_STATEMENT_TIMEOUT은 PREMISE_CAPTURE와 함께일 때만 듣는다 — 무시하고 6초로 돈다." >&2
+  else
+    case "$PREMISE_STATEMENT_TIMEOUT" in
+      ''|*[!0-9]*|0) echo "PREMISE_STATEMENT_TIMEOUT은 양의 정수(초)여야 한다: ${PREMISE_STATEMENT_TIMEOUT}" >&2; exit 2 ;;
+    esac
+    export PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=${PREMISE_STATEMENT_TIMEOUT}s"
+    per_limit=$(( PGCONNECT_TIMEOUT + PREMISE_STATEMENT_TIMEOUT + 1 ))
+  fi
+fi
+
 # 전제마다 만들지 않고 한 번만 만든다 — 위 run_one이 truncate해서 돌려 쓴다.
 outfile=$(mktemp 2>/dev/null) || outfile=/dev/null
 errfile=$(mktemp 2>/dev/null) || errfile=/dev/null
-trap 'rm -f "$outfile" "$errfile" 2>/dev/null || true' EXIT
+# 전제별 경과(초). 템플릿을 주는 이유는 실패를 시험할 수 있게 하려는 것이다 — 맨 `mktemp`는
+# `TMPDIR`이 틀려도 기본 경로로 떨어져 실패가 재현되지 않는다(실측). 실패하면 계측 없이 돌고
+# 그 사실을 아래 지명 줄이 드러낸다.
+timefile=$(mktemp "${TMPDIR:-/tmp}/premise-time.XXXXXX" 2>/dev/null) || timefile=/dev/null
+trap 'rm -f "$outfile" "$errfile" "$timefile" 2>/dev/null || true' EXIT
 
 findings=""
 unknowns=""
 n_findings=0
 n_unknowns=0
 n_ok=0
+# 「경과<TAB>어디」 줄들. 예산이 압박받을 때 어느 전제가 시간을 먹었는지 이름으로 대는 재료다.
+times=""
+n_untimed=0
 
 add_finding() { findings="${findings}- ${1}"$'\n'; n_findings=$((n_findings + 1)); }
 add_unknown() { unknowns="${unknowns}- ${1}"$'\n'; n_unknowns=$((n_unknowns + 1)); }
 
 # --- 본문 심사 ------------------------------------------------------------
-# **이 호출이 세션 시작에서 가장 비싼 반복이다** — 전제 하나에 25.8ms이고 지금 135개라 3.5초다(실측).
+# **이 호출이 세션 시작에서 가장 비싼 반복이다** — 전제 하나에 25.8ms라 전제 수에 그대로 비례한다(실측).
 # **SessionStart 셋은 병렬이라 벽시계를 max()가 정하는데, 그 max가 이 훅이다** — 유휴 실측
 # `inject-progress.sh` 0.04s · `check-doc-staleness.sh` 1.24s · **이 훅 9.53s**(2회 재현).
 # 즉 세션 시작 대기는 사실상 이 훅 하나다. **다른 둘을 빠르게 해도 이득이 0이다.**
-# **MUST: 전제를 더하거나 걷으면 이 수도 고친다.** 두 번 낡았다 — 처음 적을 때 66이었는데
-# 같은 세션이 23분 뒤에 갈아 놓고 안 고쳤고, 84로 고친 뒤 미국을 켠 세션이 셋을 더하며 또
-# 안 고쳤다. **세는 법: `grep -h '^```premise' docs/adr/*.md | wc -l`에서 1을 뺀다** —
-# `0000-template.md`의 예시 하나는 이 훅이 돌리지 않으므로 grep이 언제나 하나 더 센다.
-# 묶어 먹여 한 번에 판정받으면 그 1.9초가 거의 사라진다. **그래도 하지 않기로 했다**
+# **전제 수를 여기 숫자로 적지 않는다** — 세 번 적었고 세 번 다 낡았다(66 · 84 · 135).
+# 세는 법: `grep -h '^```premise' docs/adr/*.md | wc -l`에서 1을 뺀다 — `0000-template.md`의
+# 예시 하나는 이 훅이 돌리지 않으므로 grep이 언제나 하나 더 센다.
+# 묶어 먹여 한 번에 판정받으면 이 비용이 거의 사라진다. **그래도 하지 않기로 했다**
 # (2026-08-20 사용자 결정) — 가드가 명령 하나를 받아 판정 하나를 내는 계약을 바꾸면
 # 저장소 사본과 `~/.claude/hooks/`의 전역 사본, `lib/regression.sh`의 회귀표가 함께
-# 움직인다. **차단 가드는 새는 구멍에 증상이 없다.** 1.9초가 그 위험보다 싸다.
-# 여기 적는 이유는 이 수가 코드에 그대로 남아 있어, 안 적으면 다음 세션이 같은 계산을
-# 다시 하고 같은 제안을 다시 올리기 때문이다.
+# 움직인다. **차단 가드는 새는 구멍에 증상이 없다.** 몇 초가 그 위험보다 싸다.
+# 여기 적는 이유는 안 적으면 다음 세션이 같은 계산을 다시 하고 같은 제안을 다시 올리기 때문이다.
 #
 # 새 판정기를 만들지 않는다. "무엇이 파괴적인가"에 두 번째 답을 두면 둘이 갈리고,
 # 갈린 사실은 파괴적 명령이 실제로 도는 날에야 드러난다.
@@ -208,9 +230,10 @@ run_one() {
     return
   fi
 
-  local rc=0 out="" reason=""
+  local rc=0 out="" reason="" elapsed=""
   : >"$outfile" 2>/dev/null || true
   : >"$errfile" 2>/dev/null || true
+  : >"$timefile" 2>/dev/null || true
 
   # MUST: 출력을 **파일로 받는다.** 명령 치환을 쓰면 파이프가 닫힐 때까지 기다리는데,
   # `alarm`은 exec된 프로세스만 죽이고 손자는 fd를 쥔 채 남는다 — 상한이 5초라고 보고하면서
@@ -222,17 +245,32 @@ run_one() {
   # perl이 직접 자식을 거두고 **정상 종료**한다. `exec` 뒤 SIGALRM으로 죽게 두면 바깥 셸이
   # `Alarm clock:`을 자기 stderr에 찍고, 그것은 서브셸로 감싸도 막히지 않는다(실측).
   # 게다가 이 형태라야 시간이 다 됐을 때 자식을 실제로 죽인다.
-  ( perl -e '
+  # 경과도 여기서 잰다 — 이미 있는 fork라 전제당 더해지는 것은 파일 하나다(145개에 +0.29초, 실측).
+  # MUST: ALRM 경로에서도 적는다. 안 적으면 가장 느린 것(잘린 것)이 지명에서 빠진다.
+  ( perl -MTime::HiRes=time -e '
       my $limit = shift;
+      my $tf = shift;
+      my $t0 = time;
+      my $mark = sub { if (open(my $f, ">", $tf)) { printf $f "%.2f\n", time - $t0; close($f) } };
       my $pid = fork();
       if (!defined $pid) { exit 127 }
       if ($pid == 0) { exec("/bin/bash", "-c", $ARGV[0]); exit 127 }
-      $SIG{ALRM} = sub { kill("KILL", $pid); waitpid($pid, 0); exit 142 };
+      $SIG{ALRM} = sub { kill("KILL", $pid); waitpid($pid, 0); $mark->(); exit 142 };
       alarm $limit;
       waitpid($pid, 0);
+      my $st = $?;
       alarm 0;
-      exit($? >> 8);
-    ' "$per_limit" "$body" </dev/null >"${outfile:-/dev/null}" 2>"${errfile:-/dev/null}" ) || rc=$?
+      $mark->();
+      exit($st >> 8);
+    ' "$per_limit" "$timefile" "$body" </dev/null >"${outfile:-/dev/null}" 2>"${errfile:-/dev/null}" ) || rc=$?
+
+  # `read`는 내장이다 — bash 3.2의 `$(<f)`는 fork라 145번이면 그만큼 는다.
+  if [ -s "$timefile" ] && read -r elapsed <"$timefile"; then
+    times="${times}${elapsed}"$'\t'"${where}"$'\n'
+  else
+    elapsed=""
+    n_untimed=$((n_untimed + 1))
+  fi
 
   [ -s "$outfile" ] && out=$(<"$outfile")
   # stderr는 실패했을 때만 읽는다 — 성공한 전제에서 tr·cut을 돌릴 이유가 없다.
@@ -260,8 +298,9 @@ run_one() {
   fi
 
   # 붙잡기는 판정 **뒤**다 — 판정을 안 바꾸고 옆에 적기만 한다.
+  # 형식은 「어디<TAB>초<TAB>출력」이다. 전/후 대조는 초를 빼고(`cut -f1,3-`) 한다.
   if [ -n "$capture" ]; then
-    printf '%s\t%s\n' "$where" "${out:-<출력 없음 rc=$rc>}" >>"$capture"
+    printf '%s\t%s\t%s\n' "$where" "${elapsed:-?}" "${out:-<출력 없음 rc=$rc>}" >>"$capture"
   fi
 }
 
@@ -305,7 +344,17 @@ END { if (cap) print "E" }
 
 saw_any=0
 indented=""
-for adr in docs/adr/ADR-[0-9][0-9][0-9][0-9]-*.md; do
+# **새 ADR부터 돈다(번호 역순).** 예산이 바닥나면 잘리는 것은 언제나 순서의 꼬리인데, 번호순일 때
+# 그 꼬리가 가장 최근 결정들이었다 — 2026-10-03 재부팅 직후 컷 42개가 0116 이후 전부였고, 거기에
+# 「postgres가 마지막에 깨끗이 닫혔다」(ADR-0163)처럼 **재부팅 직후, 즉 컷이 나는 바로 그때**
+# 가장 필요한 전제가 들어 있었다. 오래된 결정일수록 전제가 여러 세션을 지나며 검증됐고,
+# 무거운 전창 펜스도 대부분 그쪽에 있어 컷이 나면 아래 지명 줄이 그것을 이름으로 댄다.
+# 순서는 결정적이라 전/후 대조를 깨지 않는다 — 섞으면 깨진다.
+adrs=(docs/adr/ADR-[0-9][0-9][0-9][0-9]-*.md)
+ai=${#adrs[@]}
+while [ "$ai" -gt 0 ]; do
+  ai=$((ai - 1))
+  adr="${adrs[$ai]}"
   [ -f "$adr" ] || continue
 
   # 들여쓴 `premise` 펜스는 파서가 못 본다. 못 봤다는 사실을 알린다.
@@ -342,7 +391,7 @@ fi
 # 최악이 42.6초이므로, 이 줄이 뜨면 **정말로 무언가 늘었거나 느려진 것**이다.
 budget_note=""
 if [ "$SECONDS" -ge "$(( total_budget * 4 / 5 ))" ]; then
-  budget_note="전제 예산이 ${SECONDS}초/${total_budget}초다 — 여유가 $(( total_budget - SECONDS ))초뿐이다. **새 전제를 더하기 전에 무엇을 뺄지 함께 정한다.** 넘기면 뒤쪽 전제가 조용히 무판정이 된다. 어느 하나가 튀는지는 전제마다 따로 재서 본다."$'\n'
+  budget_note="전제 예산이 ${SECONDS}초/${total_budget}초다 — 여유가 $(( total_budget - SECONDS ))초뿐이다. **새 전제를 더하기 전에 무엇을 뺄지 함께 정한다.** 넘기면 뒤쪽 전제가 조용히 무판정이 된다. 무엇이 시간을 먹었는지는 아래 「가장 오래 걸린 다섯」이 답한다."$'\n'
 fi
 
 # 선언이 하나도 없으면 조용히 나간다. 채택 초기의 비용이 0이다.
@@ -351,8 +400,12 @@ fi
 
 # DB가 안 떠 있으면 판정 불가가 무더기로 난다. 원인을 한 줄로 먼저 말한다.
 db_note=""
+pg_down=0
 if [ "$n_unknowns" -gt 0 ] && command -v pg_isready >/dev/null 2>&1; then
-  pg_isready -d "${DB_NAME:-stock_screener}" -q >/dev/null 2>&1 || db_note="PostgreSQL이 응답하지 않는다 — 아래 판정 불가는 대부분 그 때문이다."$'\n'
+  if ! pg_isready -d "${DB_NAME:-stock_screener}" -q >/dev/null 2>&1; then
+    pg_down=1
+    db_note="PostgreSQL이 응답하지 않는다 — 아래 판정 불가는 대부분 그 때문이다."$'\n'
+  fi
 fi
 
 # 적재가 도는 중이면 접속·질의가 느려져 판정 불가가 난다. 그 원인을 **여기서** 말하는 이유는,
@@ -380,10 +433,29 @@ if [ "$n_unknowns" -gt 0 ] && [ -r "$root/.claude/hooks/lib/load-process.sh" ]; 
   fi
 fi
 
+# 예산이 압박받거나 무판정이 있으면 **무엇이 시간을 먹었는지 이름으로 댄다.** 없으면 다음 세션이
+# 전제마다 따로 재는 루프를 손으로 다시 돈다(2026-10-03에 그렇게 했다 — 145개 두 바퀴).
+# 상시로 내지 않는다: 단독 시간은 콜드·경합에 3배 넘게 흔들려(머리 주석) 고정 임계는 배경 경보가
+# 되거나 늦는다. 위 예산 알림(80%)이 사전 경보다.
+# DB가 죽었으면 내지 않는다 — 접속 실패의 0초 다섯 줄은 잡음이다.
+# MUST: 조건(부하·가동시간)을 함께 낸다. 절대 초는 부하 없이 읽으면 「전제가 느려졌다」로 오독된다.
+slow_note=""
+if { [ -n "$budget_note" ] || [ "$n_unknowns" -gt 0 ]; } && [ "$pg_down" -eq 0 ]; then
+  if [ -n "$times" ]; then
+    # `head`를 쓰지 않는다 — 일찍 닫으면 sort가 SIGPIPE를 받고, pipefail + set -e가 훅을 죽인다.
+    top=$(printf '%s' "$times" | sort -rn | awk -F'\t' 'NR <= 5 { printf "%s%s %s초", (NR > 1 ? " · " : ""), $2, $1 }')
+    cond=$(uptime 2>/dev/null | sed 's/^ *//')
+    slow_note="가장 오래 걸린 다섯: ${top}. 그때 조건: ${cond:-uptime 없음}. 콜드·경합이면 유휴에서 다시 돌려 가른다."$'\n'
+  fi
+  if [ "$n_untimed" -gt 0 ]; then
+    slow_note="${slow_note}전제 ${n_untimed}개의 시간을 재지 못했다(경과 파일을 못 만들었거나 못 읽었다) — 위 순위는 그것을 뺀 것이다."$'\n'
+  fi
+fi
+
 ctx="ADR이 선언한 전제를 확인했다. 결정이 아직 옳은지에 대한 재료이며, 무엇을 할지는 정하지 않는다.
 (참 ${n_ok} · 발견 ${n_findings} · 판정 불가 ${n_unknowns})
 
-${budget_note}${db_note}"
+${budget_note}${db_note}${slow_note}"
 [ -n "$findings" ] && ctx="${ctx}**전제가 깨졌다:**
 ${findings}
 "
