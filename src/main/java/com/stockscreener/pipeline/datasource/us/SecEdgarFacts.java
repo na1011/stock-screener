@@ -808,6 +808,7 @@ final class SecEdgarFacts {
 
         List<RawFinancialReport> out = new ArrayList<>();
         Map<SecEdgarColumn, BigDecimal> baseline = null;
+        Map<SecEdgarColumn, String> baselineOrigin = new EnumMap<>(SecEdgarColumn.class);   // [탐색] S_ORIGIN
         RawFinancialReport last = null;
         // MUST: 같은 날 제출된 판들을 **하나로 접는다.** 저장의 판 단위는 accn이 아니라
         // 공시일이다 — FinancialWriter는 publishedAt이 같으면 정정이 아니라 fillMissing으로
@@ -826,6 +827,7 @@ final class SecEdgarFacts {
             // 컬럼은 살아남는다. 지금은 앞 accn이 conflicts 거짓으로 버려질 때 그 컬럼이
             // 통째로 사라지므로, **접기는 값을 줄이지 않고 늘릴 수 있다.**
             Map<SecEdgarColumn, BigDecimal> values = null;
+            Map<SecEdgarColumn, String> valuesOrigin = new EnumMap<>(SecEdgarColumn.class);   // [탐색] S_ORIGIN
             Anchor reporter = null;
             String currency = null;
             for (int k = i; k < end; k++) {
@@ -840,7 +842,14 @@ final class SecEdgarFacts {
                     // 시장 통화가 아닌 판은 담지 않는다 — 근거는 MARKET_CURRENCY의 javadoc이다.
                     continue;
                 }
-                values = carryForward(values, valuesOf(candidate, labelAnchor, label, window, tags, byColumn));
+                Map<SecEdgarColumn, BigDecimal> fresh =
+                        valuesOf(candidate, labelAnchor, label, window, tags, byColumn);
+                values = carryForward(values, fresh);
+                for (SecEdgarColumn column : SecEdgarColumn.values()) {   // [탐색] S_ORIGIN
+                    if (fresh.get(column) != null) {
+                        valuesOrigin.put(column, candidate.accn());
+                    }
+                }
                 reporter = candidate;
                 currency = candidateCurrency;
             }
@@ -872,8 +881,49 @@ final class SecEdgarFacts {
             //
             // 그리고 **앞 판의 값을 이어받는다**(carryForward). 그러지 않으면 뒤 판이 안 실은
             // 컬럼이 null로 저장되어, 정정 하나가 그 기간의 손익을 통째로 지운다.
+            TRACE_BRANCHES.clear();   // [탐색] S_ORIGIN
             Map<SecEdgarColumn, BigDecimal> carried = System.getenv("S_COHERENCE") != null
                     ? carryForwardCoherent(baseline, values) : carryForward(baseline, values);
+            // [탐색] S_ORIGIN — 컬럼마다 값이 어디서 왔나: 그 판 공시(accn) · 앞 판에서 이어받음(^accn) ·
+            // 규칙이 계산·되돌림(R). 같은 값이면 그 판 공시가 실은 것으로 본다.
+            Map<SecEdgarColumn, String> carriedOrigin = new EnumMap<>(SecEdgarColumn.class);
+            String traceLine = null;
+            if (originSink != null) {
+                Map<SecEdgarColumn, BigDecimal> plain = carryForward(baseline, values);
+                StringBuilder origins = new StringBuilder();
+                StringBuilder diffs = new StringBuilder();
+                for (SecEdgarColumn column : SecEdgarColumn.values()) {
+                    BigDecimal x = carried.get(column);
+                    if (x != null) {
+                        String shown;
+                        if (values.get(column) != null && values.get(column).compareTo(x) == 0) {
+                            carriedOrigin.put(column, valuesOrigin.get(column));
+                            shown = valuesOrigin.get(column);
+                        } else if (baseline != null && baseline.get(column) != null
+                                && baseline.get(column).compareTo(x) == 0) {
+                            carriedOrigin.put(column, baselineOrigin.get(column));
+                            shown = "^" + baselineOrigin.get(column);
+                        } else {
+                            carriedOrigin.put(column, "R");
+                            shown = "R";
+                        }
+                        origins.append(column.name()).append('=').append(shown).append(';');
+                    }
+                    BigDecimal p = plain.get(column);
+                    if ((p == null) != (x == null) || (p != null && p.compareTo(x) != 0)) {
+                        diffs.append(column.name()).append(':')
+                                .append(p == null ? "" : p.toPlainString()).append('>')
+                                .append(x == null ? "" : x.toPlainString()).append(';');
+                    }
+                }
+                BigDecimal revB = baseline == null ? null : revenue(baseline);
+                BigDecimal revV = revenue(values);
+                traceLine = "\t" + reporter.accn()
+                        + "\t" + (revB == null ? "" : revB.toPlainString())
+                        + "\t" + (revV == null ? "" : revV.toPlainString())
+                        + "\t" + String.join(",", TRACE_BRANCHES)
+                        + "\t" + diffs + "\t" + origins;
+            }
             RawFinancialReport candidate = toReport(label, window, reporter, currency, carried,
                     byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
                     noNoncontrollingIncomeBy(lastNoncontrolling, window),
@@ -888,13 +938,64 @@ final class SecEdgarFacts {
             // 2,491,000,000을 연다. 그것까지 접으면 그 칸을 잃는다(실측 1칸).
             if (baseline != null && last != null
                     && !conflicts(baseline, carried) && !storedDiffers(last, candidate)) {
+                trace(label.fiscalYear(), label.period(), reporter.filed(), "FOLD", traceLine);
                 continue;
             }
+            trace(label.fiscalYear(), label.period(), reporter.filed(), "ROW", traceLine);
+            baselineOrigin = carriedOrigin;
             baseline = carried;
             last = candidate;
             out.add(candidate);
         }
         return out;
+    }
+
+    // [탐색] S_ORIGIN — 스윕 테스트가 넘긴 싱크에 판·컬럼별 출처를 적는다. 판 조립 로직은 안 바꾼다.
+    static java.util.function.Consumer<String> originSink;
+    static String originTicker = "";
+    private static final List<String> TRACE_BRANCHES = new ArrayList<>();
+
+    private static void trace(int fiscalYear, String period, LocalDate published, String kind,
+                              String rest) {
+        if (originSink != null && rest != null) {
+            originSink.accept(originTicker + "\t" + fiscalYear + "\t" + period + "\t" + published
+                    + "\t" + kind + rest);
+        }
+    }
+
+    /** [탐색] S_ORIGIN — Q4 판이 어느 FY 판과 분기 판 셋, 어느 소스 Q4로 만들어졌나. */
+    private static void traceQ4(int fiscalYear, String kind, RawFinancialReport fy,
+                                RawFinancialReport q1, RawFinancialReport q2, RawFinancialReport q3,
+                                RawFinancialReport source) {
+        if (originSink == null) {
+            return;
+        }
+        StringBuilder sourceColumns = new StringBuilder();
+        if (source != null) {
+            String[] names = {"revenue", "costOfSales", "grossProfit", "operatingIncome", "netIncome",
+                    "netIncomeControlling", "operatingExpenses", "costsAndExpenses", "interestExpense"};
+            BigDecimal[] vals = {source.revenue(), source.costOfSales(), source.grossProfit(),
+                    source.operatingIncome(), source.netIncome(), source.netIncomeControlling(),
+                    source.operatingExpenses(), source.costsAndExpenses(), source.interestExpense()};
+            for (int n = 0; n < names.length; n++) {
+                if (vals[n] != null) {
+                    sourceColumns.append(names[n]).append(',');
+                }
+            }
+        }
+        trace(fiscalYear, "Q4", fy.publishedAt(), kind,
+                "\t" + fy.reportCode()
+                        + "\t" + q1.reportCode() + "@" + q1.publishedAt()
+                        + "," + q2.reportCode() + "@" + q2.publishedAt()
+                        + "," + q3.reportCode() + "@" + q3.publishedAt()
+                        + "\t" + (source == null ? "-" : source.reportCode() + "@" + source.publishedAt())
+                        + "\t" + sourceColumns);
+    }
+
+    private static void traceBranch(String branch) {
+        if (originSink != null) {
+            TRACE_BRANCHES.add(branch);
+        }
     }
 
     /**
@@ -1071,6 +1172,7 @@ final class SecEdgarFacts {
                 ? materiallyDiffers(revenue(baseline), revenue(values))
                 : differsVal(baseline.get(SecEdgarColumn.REVENUE), values.get(SecEdgarColumn.REVENUE));
         if (revenueRestated) {
+            traceBranch("1");
             for (SecEdgarColumn c : SecEdgarColumn.values()) {
                 boolean scoped = !narrow || c == SecEdgarColumn.COST_OF_SALES || c == SecEdgarColumn.GROSS_PROFIT
                         || c == SecEdgarColumn.OPERATING_INCOME || c == SecEdgarColumn.OPERATING_EXPENSES
@@ -1083,8 +1185,10 @@ final class SecEdgarFacts {
                 BigDecimal vr = values.get(SecEdgarColumn.REVENUE), vc = values.get(SecEdgarColumn.COST_OF_SALES),
                         vg = values.get(SecEdgarColumn.GROSS_PROFIT);
                 if (vr != null && vg != null && vc == null) {
+                    traceBranch("1c");
                     merged.put(SecEdgarColumn.COST_OF_SALES, vr.subtract(vg));
                 } else if (vr != null && vc != null && vg == null) {
+                    traceBranch("1g");
                     merged.put(SecEdgarColumn.GROSS_PROFIT, vr.subtract(vc));
                 }
             }
@@ -1105,15 +1209,19 @@ final class SecEdgarFacts {
                 BigDecimal vr = values.get(gross[0]), vc = values.get(gross[1]), vg = values.get(gross[2]);
                 if (reported == 2) {
                     if (vr != null && vg != null) {
+                        traceBranch("2a");
                         merged.put(gross[1], vr.subtract(vg));
                     } else if (vr != null && vc != null) {
+                        traceBranch("2b");
                         merged.put(gross[2], vr.subtract(vc));
                     } else {
+                        traceBranch("2c");
                         // 매출은 유도하지 않는다 — 총이익 태그를 매출 자리에 쓰는 회사가 있다(NI 2016).
                         merged.put(gross[1], baseline.get(gross[1]));
                         merged.put(gross[2], baseline.get(gross[2]));
                     }
                 } else {
+                    traceBranch("2d");
                     for (SecEdgarColumn c : gross) {
                         if (values.get(c) != null) {
                             merged.put(c, baseline.get(c));
@@ -1137,6 +1245,7 @@ final class SecEdgarFacts {
             }
             int reported = (ra ? 1 : 0) + (rl ? 1 : 0) + (re ? 1 : 0);
             if (reported > 0 && reported < 3) {
+                traceBranch("3");
                 java.util.List<SecEdgarColumn> members = new java.util.ArrayList<>(java.util.List.of(equityFamily));
                 members.add(SecEdgarColumn.TOTAL_ASSETS);
                 members.add(SecEdgarColumn.TOTAL_LIABILITIES);
@@ -2140,10 +2249,12 @@ final class SecEdgarFacts {
                     //
                     // 분기를 하나도 안 낸 공시는 이 판정에 안 걸린다 — 재제출했다는 증거가
                     // 없으므로 보수적으로 쓴다(10-K/A가 연간만 정정하는 경우가 그렇다).
+                    traceQ4(label.fiscalYear(), "Q4REGEN", vintage, v1, v2, v3, null);
                     continue;
                 }
+                RawFinancialReport q4Source = vintageOf(byLabel, q4, vintage.publishedAt());
                 RawFinancialReport q4Report = mergeQ4(
-                        vintageOf(byLabel, q4, vintage.publishedAt()),
+                        q4Source,
                         buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn));
                 // MUST: 값이 같은 4분기 판을 세대마다 다시 내지 않는다. FY 판이 늘면 잔차가
                 // 같아도 Q4 판이 그만큼 늘고, 저장은 그것을 **정정으로 읽어 지표를 지운다** —
@@ -2153,6 +2264,9 @@ final class SecEdgarFacts {
                 if (lastQ4 == null || storedDiffers(lastQ4, q4Report)) {
                     derived.add(q4Report);
                     lastQ4 = q4Report;
+                    traceQ4(label.fiscalYear(), "Q4", vintage, v1, v2, v3, q4Source);
+                } else {
+                    traceQ4(label.fiscalYear(), "Q4SAME", vintage, v1, v2, v3, q4Source);
                 }
                 emitted = true;
                 lastUsed = vintage;
@@ -2166,6 +2280,8 @@ final class SecEdgarFacts {
                 derived.add(mergeQ4(
                         vintageOf(byLabel, q4, fallback.publishedAt()),
                         buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3, byColumn)));
+                traceQ4(label.fiscalYear(), "Q4FB", fallback, f1, f2, f3,
+                        vintageOf(byLabel, q4, fallback.publishedAt()));
             }
         }
         return derived;

@@ -96,12 +96,27 @@ class SecEdgarFactsSweepTest {
         long absences = 0;
         int failed = 0;
         StringBuilder failures = new StringBuilder();
+        // [탐색] S_ORIGIN — 판·컬럼별 출처를 따로 적는다. 판 조립 로직은 안 바꾼다.
+        String originPath = System.getenv("S_ORIGIN");
+        BufferedWriter originWriter = originPath == null ? null
+                : Files.newBufferedWriter(Path.of(originPath), StandardCharsets.UTF_8);
+        if (originWriter != null) {
+            SecEdgarFacts.originSink = line -> {
+                try {
+                    originWriter.write(line);
+                    originWriter.newLine();
+                } catch (java.io.IOException e) {
+                    throw new java.io.UncheckedIOException(e);
+                }
+            };
+        }
         try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
             w.write(String.join("\t", HEADER));
             w.newLine();
             for (Path file : files) {
                 String ticker = file.getFileName().toString().replaceFirst("\\.json$", "");
                 SecEdgarFacts.Result result;
+                SecEdgarFacts.originTicker = ticker;
                 try {
                     result = SecEdgarFacts.build(
                             mapper.readTree(Files.readString(file)).path("facts"), from);
@@ -146,6 +161,10 @@ class SecEdgarFactsSweepTest {
                     rows++;
                 }
             }
+        }
+        if (originWriter != null) {
+            originWriter.close();
+            SecEdgarFacts.originSink = null;
         }
         System.out.println("SWEEP 파일=" + files.size() + " 종목=" + stocks + " 보고서=" + rows
                 + " 버린팩트=" + dropped + " 부재=" + absences + " 읽기실패=" + failed
