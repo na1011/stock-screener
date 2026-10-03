@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -277,6 +278,32 @@ class SectorRelativeCalculatorTest {
 
         assertThat(value(target, "DEBT_RATIO_SECTOR_REL")).isNotNull();
         assertThat(value(target, "DEBT_RATIO_SECTOR_N")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("창 정리가 원본이 사라진 업종 상대값과 그 표본 수를 함께 지운다(ADR-0080)")
+    void windowCleanupRemovesDerivedAndPeerCountWhoseSourceVanished() {
+        long target = member("26111", "10");
+        long other = member("26112", "20");
+        member("26113", "30");
+        member("26114", "40");
+        member("26115", "50");
+        SectorMetricSpec spec = medianRatio();
+        SectorRelativeCalculator calculator = new SectorRelativeCalculator(jdbcTemplate, List.of(spec));
+        calculator.calculate(AS_OF, null);
+        assertThat(value(target, "DEBT_RATIO_SECTOR_REL")).isNotNull();
+
+        // 러너가 그 종목의 원본을 그 날짜에서 지운 상태 — 파생 행은 그대로 남아 있다.
+        jdbcTemplate.update("""
+                DELETE FROM indicator_value WHERE stock_id = ? AND trade_date = ? AND indicator_code = ?
+                """, target, AS_OF, SOURCE);
+
+        calculator.removeOrphansInWindow(Optional.of(AS_OF.minusDays(1)));
+
+        assertThat(value(target, "DEBT_RATIO_SECTOR_REL")).as("원본 없는 상대값은 지운다").isNull();
+        assertThat(value(target, "DEBT_RATIO_SECTOR_N")).as("표본 수도 같은 축으로 지운다").isNull();
+        assertThat(value(other, "DEBT_RATIO_SECTOR_REL")).as("원본이 있으면 남긴다").isNotNull();
+        assertThat(value(other, "DEBT_RATIO_SECTOR_N")).isNotNull();
     }
 
     private void staleRow(long stockId, String code, String value) {

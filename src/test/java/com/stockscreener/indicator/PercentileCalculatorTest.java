@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -304,6 +305,43 @@ class PercentileCalculatorTest {
         assertThat(valueAt(outsider, PerCalculator.CODE + PercentileSpec.SUFFIX, AS_OF.minusDays(1)))
                 .as("삭제 상한이 trade_date 하나로 묶여 있다 — 그 날짜는 이 실행이 판정하지 않았다")
                 .isEqualByComparingTo("1");
+    }
+
+    @Test
+    @DisplayName("창 정리가 과거 날짜에서 원본이 사라진 백분위를 지운다 — 날짜별 정리로는 안 걸리는 자리다(ADR-0080)")
+    void windowCleanupRemovesPastRowsWhoseSourceVanished() {
+        LocalDate past = AS_OF.minusDays(10);
+        String pctl = PerCalculator.CODE + PercentileSpec.SUFFIX;
+        long kept = stockIds.get(0);
+        long orphaned = stockIds.get(1);
+        // 과거 날짜에 둘 다 백분위가 있고 원본은 kept에만 있다 — 러너가 orphaned의 원본을
+        // 그 날짜에서 지운 상태다(IndicatorValueWriter.DELETE_AT).
+        staleRow(kept, PerCalculator.CODE, "10", past);
+        staleRow(kept, pctl, "0", past);
+        staleRow(orphaned, pctl, "1", past);
+
+        calculator.calculate(AS_OF, null);
+        assertThat(valueAt(orphaned, pctl, past))
+                .as("날짜별 정리는 그날 하나만 본다 — 그래서 창 정리가 따로 있다")
+                .isNotNull();
+
+        calculator.removeOrphansInWindow(Optional.of(past.minusDays(1)));
+
+        assertThat(valueAt(orphaned, pctl, past)).as("원본이 없는 과거 백분위는 지운다").isNull();
+        assertThat(valueAt(kept, pctl, past)).as("원본이 있으면 남긴다").isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName("창 정리는 경계 날짜를 건드리지 않는다 — 경계 「뒤」만 본다")
+    void windowCleanupLeavesTheCutoffDateAlone() {
+        LocalDate boundary = AS_OF.minusDays(10);
+        String pctl = PerCalculator.CODE + PercentileSpec.SUFFIX;
+        long orphaned = stockIds.get(1);
+        staleRow(orphaned, pctl, "1", boundary);
+
+        calculator.removeOrphansInWindow(Optional.of(boundary));
+
+        assertThat(valueAt(orphaned, pctl, boundary)).isEqualByComparingTo("1");
     }
 
     /** 옛 규제로 쓰인 행을 흉내낸다. 계산기를 거치지 않고 직접 심는다. */

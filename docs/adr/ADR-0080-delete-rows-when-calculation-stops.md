@@ -66,37 +66,63 @@ applies_to:
 **같은 파일에 ADR-0085의 단언 여덟이 함께 있다** — 이 결정이 안 걸리는 세 자리를 그쪽이 소유한다.
 `--tests "*IndicatorRunnerTest*"` 한 번이 둘을 다 돌리므로 **명령은 그대로이고 세는 수만 다르다.**
 
-```premise 최신일에 원본 없는 파생 행이 남아 있지 않다
-# MUST: 최신일로 좁힌 것은 **창 전체 형태가 제한선 아래로 못 내려가기 때문**이다 —
-# 2026-09-25 실측으로 **7.633초**인데 훅 제한이 6초라 **여유가 -1.633초**다(2026-09-22에는
-# 5.147초로 +0.85였고 표가 자라 음수가 됐다). **아무것도 단언하지 못하는 펜스는 예산만 태운다** —
-# 그 6초가 뒤쪽 전제를 통째로 무판정으로 만든다. 최신일 형태는 **0.173초**다(44배).
-# 창 전체는 PercentileCalculator 가 백필마다 "보존 창의 고아 백분위를 정리했다"로 지키고,
-# 그 걷기가 깨지면 **다음 실행의 최신일에 나타나므로** 이 펜스가 하루 늦게 잡는다.
-psql -d stock_screener -At -c "
-WITH d AS (SELECT max(trade_date) t FROM indicator_value),
-o AS (SELECT dd.indicator_code c, count(*) n FROM indicator_value dd, d
-      WHERE dd.trade_date = d.t
-        AND dd.indicator_code LIKE '%\_PCTL' AND dd.indicator_code NOT LIKE '%\_SECTOR\_PCTL'
-        AND NOT EXISTS (SELECT 1 FROM indicator_value s2
-                        WHERE s2.stock_id = dd.stock_id AND s2.trade_date = dd.trade_date
-                          AND s2.indicator_code = left(dd.indicator_code, length(dd.indicator_code) - 5))
+```premise 보존 창에 원본 없는 백분위 행이 남아 있지 않다
+# 창 전체를 묻는다. 최신일로 좁힌 판(2026-09-25)은 **원리적으로 못 우는 펜스**였다 — DailyUpdateJob이
+# 그날 백분위·업종 계산(DELETE_UNWRITTEN이 그날의 원본 없는 행을 지운다)을 창 정리보다 먼저 돌려서,
+# 창 정리가 깨져도 최신일의 고아는 언제나 0이다. 과거 날짜에만 고아를 만드는 경로는 실재한다
+# (IndicatorValueWriter.DELETE_AT · 날짜 루프와 창 정리 사이에서 잡이 죽는 경우).
+# 거래일 사다리 × (날짜, 짝)별 EXCEPT로 창 전체가 1.2~1.4초다(옛 형태 7.6~10.2초).
+psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL),
+pairs AS (SELECT code AS derived, source_indicator_code AS source FROM indicator WHERE source_indicator_code IS NOT NULL AND code NOT LIKE '%\_SECTOR\_%'),
+unpaired AS (SELECT code FROM indicator WHERE code LIKE '%\_PCTL' AND code NOT LIKE '%\_SECTOR\_%' AND source_indicator_code IS NULL),
+o AS (SELECT p.derived c, count(*) n FROM days CROSS JOIN pairs p CROSS JOIN LATERAL (
+        SELECT stock_id FROM indicator_value WHERE trade_date = days.d AND indicator_code = p.derived
+        EXCEPT
+        SELECT stock_id FROM indicator_value WHERE trade_date = days.d AND indicator_code = p.source) x
       GROUP BY 1)
 SELECT CASE
-  WHEN (SELECT count(*) FROM indicator_value dd, d
-        WHERE dd.trade_date = d.t AND dd.indicator_code LIKE '%\_PCTL') = 0
-    THEN '잴 것이 없었다 — 최신일에 백분위가 한 행도 없다'
-  WHEN (SELECT count(*) FROM o) = 0 THEN 'OK 최신일 고아 백분위가 없다'
-  ELSE (SELECT sum(n)::text FROM o) || '행이 원본 없는 백분위다('
-       || (SELECT string_agg(c, ',' ORDER BY c) FROM o)
-       || ') — 파생 정리가 깨졌다(ADR-0080)' END"
+  WHEN (SELECT count(*) FROM pairs) = 0 THEN '잴 것이 없었다 — 원본을 아는 백분위 지표가 카탈로그에 없다'
+  WHEN (SELECT count(*) FROM unpaired) > 0
+    THEN '원본을 못 정한 백분위 코드가 있다 — 이 펜스가 그 코드를 못 본다: ' || (SELECT string_agg(code, ', ' ORDER BY code) FROM unpaired)
+  WHEN NOT EXISTS (SELECT 1 FROM days JOIN pairs p ON true JOIN indicator_value v ON v.trade_date = days.d AND v.indicator_code = p.derived)
+    THEN '잴 것이 없었다 — 보존 창에 백분위 행이 하나도 없다'
+  WHEN (SELECT count(*) FROM o) = 0
+    THEN 'OK 보존 창 거래일 ' || (SELECT count(*) FROM days WHERE d IS NOT NULL) || '일(시장 합집합) · 백분위 ' || (SELECT count(*) FROM pairs) || '개에 원본 없는 행이 없다'
+  ELSE (SELECT sum(n)::text FROM o) || '행이 원본 없는 백분위이다(' || (SELECT string_agg(c || ' ' || n, ', ' ORDER BY c) FROM o)
+       || ') — 창 정리(PercentileCalculator.removeOrphansInWindow)가 깨졌거나, 그것을 부르는 잡(백필·일일 갱신)이 날짜 루프 뒤 정리 전에 끝났거나 아직 돌고 있다. batch_execution의 RUNNING·ABORTED를 먼저 본다(ADR-0080)'
+END"
 ```
 
-**백분위만 묻는 이유**는 규칙에서 파생 코드를 유도할 수 있는 것이 그쪽뿐이기 때문이다
-(`_PCTL`을 떼면 원본 코드다). **업종 상대값은 그 규칙을 안 따르므로 이름으로 빼낸다** —
-`PER_SECTOR_PCTL`도 `_PCTL`로 끝나지만 떼면 `PER_SECTOR`라는 없는 코드가 나온다.
-**이 펜스를 처음 세웠을 때 그 둘이 85,830행짜리 거짓 발견을 냈다.** 업종 쪽까지 묻자면 짝을
-손으로 적어야 하고 **그 목록이 낡는다** — 그래서 안 묻는다.
+```premise 보존 창에 원본 없는 업종 파생 행이 남아 있지 않다
+# 업종 쪽 짝은 코드가 구성으로 정한다 — SectorMetricSpec.code() = 원본 + 접미사,
+# peerCountCode() = 원본 + _SECTOR_N. 그래서 _SECTOR_ 앞부분이 원본이다.
+psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL),
+pairs AS (SELECT code AS derived, left(code, strpos(code, '_SECTOR_') - 1) AS source FROM indicator WHERE code LIKE '%\_SECTOR\_%'),
+unpaired AS (SELECT p.derived AS code FROM pairs p WHERE NOT EXISTS (SELECT 1 FROM indicator i WHERE i.code = p.source)),
+o AS (SELECT p.derived c, count(*) n FROM days CROSS JOIN pairs p CROSS JOIN LATERAL (
+        SELECT stock_id FROM indicator_value WHERE trade_date = days.d AND indicator_code = p.derived
+        EXCEPT
+        SELECT stock_id FROM indicator_value WHERE trade_date = days.d AND indicator_code = p.source) x
+      GROUP BY 1)
+SELECT CASE
+  WHEN (SELECT count(*) FROM pairs) = 0 THEN '잴 것이 없었다 — 원본을 아는 업종 파생 지표가 카탈로그에 없다'
+  WHEN (SELECT count(*) FROM unpaired) > 0
+    THEN '원본을 못 정한 업종 파생 코드가 있다 — 이 펜스가 그 코드를 못 본다: ' || (SELECT string_agg(code, ', ' ORDER BY code) FROM unpaired)
+  WHEN NOT EXISTS (SELECT 1 FROM days JOIN pairs p ON true JOIN indicator_value v ON v.trade_date = days.d AND v.indicator_code = p.derived)
+    THEN '잴 것이 없었다 — 보존 창에 업종 파생 행이 하나도 없다'
+  WHEN (SELECT count(*) FROM o) = 0
+    THEN 'OK 보존 창 거래일 ' || (SELECT count(*) FROM days WHERE d IS NOT NULL) || '일(시장 합집합) · 업종 파생 ' || (SELECT count(*) FROM pairs) || '개에 원본 없는 행이 없다'
+  ELSE (SELECT sum(n)::text FROM o) || '행이 원본 없는 업종 파생이다(' || (SELECT string_agg(c || ' ' || n, ', ' ORDER BY c) FROM o)
+       || ') — 창 정리(SectorRelativeCalculator.removeOrphansInWindow)가 깨졌거나, 그것을 부르는 잡(백필·일일 갱신)이 날짜 루프 뒤 정리 전에 끝났거나 아직 돌고 있다. batch_execution의 RUNNING·ABORTED를 먼저 본다(ADR-0080)'
+END"
+```
+
+**짝의 원천이 둘이다.** 백분위는 카탈로그의 `source_indicator_code`(FK)가 주고, 업종 파생 열 개는
+카탈로그가 비어 있어 이름에서 유도한다 — 코드가 `원본 + 접미사`로 **짓기** 때문에 이름이 곧 계약이다.
+**둘 다 자기 검사를 한다** — 원본을 못 정한 백분위 코드, 유도한 원본이 카탈로그에 없는 업종 코드가
+있으면 그 사실을 발견으로 낸다(그 코드를 이 펜스가 못 보기 때문이다). 옛 판이 업종을 「짝을 손으로
+적어야 해서」 뺐던 것은 그 구성 규칙을 안 읽은 것이었다. 펜스를 처음 세웠을 때 `PER_SECTOR_PCTL`에서
+`_PCTL`을 떼어 낸 거짓 발견 85,830행은 그 규칙으로 원본을 정하지 않아서 난 것이다.
 
 ## 배경
 
@@ -212,4 +238,6 @@ SELECT CASE
   `idx_iv_stock_date`가 `indicator_code`를 안 덮어 필터가 heap에서 걸리기 때문이다.
   인덱스를 `(stock_id, indicator_code, trade_date)`로 바꾸면 없앨 수 있지만 **스키마 변경이라 안 했다.**
 - **되돌리려면** `IndicatorRunner.run`의 빈 목록 분기와 두 잡의 `removeOrphansInWindow` 호출.
-  **되돌리는 순간 옛 행이 다시 쌓이고 아무 에러도 안 난다** — 위 테스트 넷과 `premise`만이 그것을 잡는다.
+  **되돌리는 순간 옛 행이 다시 쌓이고 아무 에러도 안 난다** — `IndicatorRunnerTest`의 단언 다섯,
+  창 정리 시험 셋(`PercentileCalculatorTest` 둘 · `SectorRelativeCalculatorTest` 하나), 창 전체 `premise` 둘이
+  그것을 잡는다. **창 정리 시험은 2026-10-03까지 0건이었다** — 그 전의 이 문장은 사실이 아니었다.
