@@ -1783,6 +1783,12 @@ final class SecEdgarFacts {
         if (noNoncontrollingIncome) {
             return v.get(SecEdgarColumn.NET_INCOME);
         }
+        if ("v2".equals(System.getenv("S_NIFIX"))) {
+            // 비지배를 내는 회사 — 보통주 귀속이 연결보다 지배주주에 가깝다(답 아는 11,964칸: 1% 안 68.6% 대 49.4%).
+            // 그것도 없으면 지금처럼 NET_INCOME 첫값 — null은 소비자를 네 분기 연결로 떨어뜨린다(ADR-0154 §버린 대안).
+            BigDecimal common = v.get(SecEdgarColumn.NET_INCOME_AVAILABLE_TO_COMMON);
+            return common != null ? common : v.get(SecEdgarColumn.NET_INCOME);
+        }
         return "null".equals(System.getenv("S_NIFIX"))
                 ? null : v.get(SecEdgarColumn.NET_INCOME_AVAILABLE_TO_COMMON);
     }
