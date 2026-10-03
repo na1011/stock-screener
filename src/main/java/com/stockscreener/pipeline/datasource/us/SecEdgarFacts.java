@@ -872,7 +872,8 @@ final class SecEdgarFacts {
             //
             // 그리고 **앞 판의 값을 이어받는다**(carryForward). 그러지 않으면 뒤 판이 안 실은
             // 컬럼이 null로 저장되어, 정정 하나가 그 기간의 손익을 통째로 지운다.
-            Map<SecEdgarColumn, BigDecimal> carried = carryForward(baseline, values);
+            Map<SecEdgarColumn, BigDecimal> carried = System.getenv("S_COHERENCE") != null
+                    ? carryForwardCoherent(baseline, values) : carryForward(baseline, values);
             RawFinancialReport candidate = toReport(label, window, reporter, currency, carried,
                     byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
                     noNoncontrollingIncomeBy(lastNoncontrolling, window),
@@ -1003,6 +1004,97 @@ final class SecEdgarFacts {
      * 정정으로 판정되는 경우가 <b>늘거나 같다.</b> 가짜 정정 접기(실측 112 중 107)가 그대로인지는
      * <b>논증이 아니라 측정</b>이며 {@code SecEdgarLiveTest}의 멱등 검사가 그것을 본다.
      */
+    // [탐색] 묶음 단위 이어받기 — 한 공시가 어떤 묶음에서 앞 판과 다른 값을 내면 그 묶음의
+    // 안 실은 컬럼은 이어받지 않는다.
+    private enum Group { INCOME, CASHFLOW, BALANCE, SHARES }
+
+    private static Group groupOf(SecEdgarColumn c) {
+        if (c.anchoredInstant()) {
+            return Group.SHARES;
+        }
+        if (c.instant()) {
+            return Group.BALANCE;
+        }
+        if (c == SecEdgarColumn.OPERATING_CASH_FLOW || c == SecEdgarColumn.OPERATING_CASH_FLOW_TOTAL
+                || c == SecEdgarColumn.OPERATING_CASH_FLOW_CONTINUING
+                || c == SecEdgarColumn.OPERATING_CASH_FLOW_DISCONTINUED || c == SecEdgarColumn.CAPEX) {
+            return Group.CASHFLOW;
+        }
+        return Group.INCOME;
+    }
+
+    /** 그 묶음을 통째로 갈아끼울 만큼 실었는가 — 잔액은 자산·자본, 손익은 매출(또는 은행 재료)·순이익. */
+    private static boolean reportsAnchor(Group g, Map<SecEdgarColumn, BigDecimal> v) {
+        switch (g) {
+            case BALANCE:
+                return v.get(SecEdgarColumn.TOTAL_ASSETS) != null
+                        && (v.get(SecEdgarColumn.TOTAL_EQUITY) != null
+                        || v.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI) != null);
+            case INCOME:
+                boolean revenue = v.get(SecEdgarColumn.REVENUE) != null
+                        || (v.get(SecEdgarColumn.NET_INTEREST_INCOME) != null
+                        && v.get(SecEdgarColumn.NONINTEREST_INCOME) != null);
+                boolean income = v.get(SecEdgarColumn.NET_INCOME) != null
+                        || v.get(SecEdgarColumn.NET_INCOME_TOTAL) != null
+                        || v.get(SecEdgarColumn.NET_INCOME_CONTROLLING) != null;
+                return revenue && income;
+            case CASHFLOW:
+                return v.get(SecEdgarColumn.OPERATING_CASH_FLOW) != null
+                        || v.get(SecEdgarColumn.OPERATING_CASH_FLOW_TOTAL) != null;
+            default:
+                return true;
+        }
+    }
+
+    private static Map<SecEdgarColumn, BigDecimal> carryForwardCoherent(
+            Map<SecEdgarColumn, BigDecimal> baseline, Map<SecEdgarColumn, BigDecimal> values) {
+        if (baseline == null) {
+            return values;
+        }
+        java.util.EnumSet<Group> restated = java.util.EnumSet.noneOf(Group.class);
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            BigDecimal x = baseline.get(column);
+            BigDecimal y = values.get(column);
+            if (x != null && y != null && x.compareTo(y) != 0) {
+                restated.add(groupOf(column));
+            }
+        }
+        boolean anchorMode = "anchor".equals(System.getenv("S_COHERENCE"));
+        java.util.EnumSet<Group> ignored = java.util.EnumSet.noneOf(Group.class);
+        if (anchorMode) {
+            for (Group g : restated) {
+                if (!reportsAnchor(g, values)) {
+                    ignored.add(g);
+                }
+            }
+        }
+        Map<SecEdgarColumn, BigDecimal> merged = new EnumMap<>(SecEdgarColumn.class);
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            Group g = groupOf(column);
+            BigDecimal value = values.get(column);
+            if (ignored.contains(g)) {
+                merged.put(column, baseline.get(column));
+            } else if (value != null) {
+                merged.put(column, value);
+            } else if (!restated.contains(g)) {
+                merged.put(column, baseline.get(column));
+            } else {
+                merged.put(column, null);
+            }
+        }
+        if ("1".equals(System.getenv("S_IDENT")) && restated.contains(Group.INCOME)) {
+            BigDecimal rev = values.get(SecEdgarColumn.REVENUE);
+            BigDecimal cogs = values.get(SecEdgarColumn.COST_OF_SALES);
+            BigDecimal gp = values.get(SecEdgarColumn.GROSS_PROFIT);
+            if (rev != null && gp != null && cogs == null) {
+                merged.put(SecEdgarColumn.COST_OF_SALES, rev.subtract(gp));
+            } else if (rev != null && cogs != null && gp == null) {
+                merged.put(SecEdgarColumn.GROSS_PROFIT, rev.subtract(cogs));
+            }
+        }
+        return merged;
+    }
+
     private static Map<SecEdgarColumn, BigDecimal> carryForward(
             Map<SecEdgarColumn, BigDecimal> baseline, Map<SecEdgarColumn, BigDecimal> values) {
         if (baseline == null) {
