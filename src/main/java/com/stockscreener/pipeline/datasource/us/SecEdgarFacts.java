@@ -1046,6 +1046,14 @@ final class SecEdgarFacts {
         }
     }
 
+    /** 1%(저장소 표준 허용오차)를 넘게 다른가 — 10-K 분기 표의 백만 단위 반올림은 재작성이 아니다. */
+    private static boolean materiallyDiffers(BigDecimal x, BigDecimal y) {
+        if (x == null || y == null) {
+            return false;
+        }
+        return x.subtract(y).abs().compareTo(x.abs().max(y.abs()).multiply(new BigDecimal("0.01"))) > 0;
+    }
+
     private static boolean differsVal(BigDecimal x, BigDecimal y) {
         return x != null && y != null && x.compareTo(y) != 0;
     }
@@ -1060,7 +1068,7 @@ final class SecEdgarFacts {
         // 1. 매출이 재작성되면 범위가 바뀐 것이다 — 그 공시가 안 실은 손익은 이어받지 않는다.
         boolean narrow = "identity2".equals(System.getenv("S_COHERENCE"));
         boolean revenueRestated = narrow
-                ? differsVal(revenue(baseline), revenue(values))
+                ? materiallyDiffers(revenue(baseline), revenue(values))
                 : differsVal(baseline.get(SecEdgarColumn.REVENUE), values.get(SecEdgarColumn.REVENUE));
         if (revenueRestated) {
             for (SecEdgarColumn c : SecEdgarColumn.values()) {
@@ -1101,7 +1109,9 @@ final class SecEdgarFacts {
                     } else if (vr != null && vc != null) {
                         merged.put(gross[2], vr.subtract(vc));
                     } else {
-                        merged.put(gross[0], vc.add(vg));
+                        // 매출은 유도하지 않는다 — 총이익 태그를 매출 자리에 쓰는 회사가 있다(NI 2016).
+                        merged.put(gross[1], baseline.get(gross[1]));
+                        merged.put(gross[2], baseline.get(gross[2]));
                     }
                 } else {
                     for (SecEdgarColumn c : gross) {
