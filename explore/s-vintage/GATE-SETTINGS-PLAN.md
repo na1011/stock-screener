@@ -25,3 +25,15 @@
 ## 재지 않은 것
 - `${US_GATE_S0:${stockscreener.gate.us}}`의 중첩 자리표시자가 Spring Boot 4에서 이 꼴로 풀리는지 — 시험으로 잰다.
 - 운영 앱의 DB 이름이 정말 `stock_screener`인지 — `ops/status.sh`·배포 `.env`를 읽어야 하는데 `.env`는 읽지 않는다(시크릿). 기본값이 그 이름이고 `DB_URL` 기본값도 같다.
+
+## 반증 v1 판정 (2026-10-04 · 두 렌즈) — v2로 간다
+- **선 것**: 중첩 자리표시자는 Boot 4.1.0에서 의도대로 풀린다(16조합 실측) · yaml 키가 `@Value` 기본값을 이긴다 · 운영 DB 이름은 `stock_screener`(클러스터 DB 넷 · 운영 로그 Flyway 줄) · `getCatalog()`는 `select current_catalog`로 서버에 묻는다.
+- **깨진 것**
+  1. **「배포 `.env`는 저장소 `.env`와 따로다」가 거짓**(`ops/stage.sh:40`이 배포마다 복사) — 다섯 곳의 문장을 `b0df6ba`로 바로잡았다: 켜는 길은 코드 기본값을 뒤집은 jar 하나.
+  2. 수용 기준이 설정 배선(yaml → `@Value` → 어댑터)을 한 번도 안 태운다 — 어댑터는 `@ConditionalOnApiKey`라 시험 컨텍스트에 빈이 없다 · `@Value` 기본값이 키 오타를 삼킨다(`us-so` → 조용히 끔).
+  3. 스윕·하네스가 설정 해석을 손으로 복제한다(`"true".equals` 대 Spring의 TRUE·1·yes · 빈 값) · `EarlierVintageReplayHarnessTest`·`SecEdgarFactsReplayTest`는 2인자 진입점이라 늘 끔.
+  4. 다음 소비자가 미국 어댑터 밖에 있다(순서 1(c) `FinancialWriter.overwritable()` · 순서 7 `GovernanceMath.annualOf` — 두 시장 공용) → 관문 상태는 **중립 패키지의 단일 바인딩 빈**(시장 → 묶음)이어야 하고 「읽는 곳은 하나」는 「바인딩은 하나」로 바꾼다 · 이름 공간(`gate.us`가 스칼라)도 지금 정한다.
+  5. `US_GATE_S0` 같은 묶음 환경변수는 쓰는 곳이 없고 운영 부분 상태의 유일한 길이다 → 묶음은 환경변수 이름 없이 주 설정을 기본값으로(`${stockscreener.gate.us…}`) · 가드는 인자·relaxed 이름(`STOCKSCREENER_GATE_…`)을 막는 백스톱.
+  6. 가드: 선례 `BootstrapDatabaseGuard`는 `@Profile("bootstrap")`이라 그대로 따르면 운영이 빠진다 · bootstrap에서 서면 종료코드 0 · 유효 관문 상태를 찍는 곳이 0(기동 로그 · refill note)이라 「어느 상태로 돌았나」를 SELECT로 증명할 길이 없다 · `gateOffMatchesLegacyEntryPoint`는 항진명제.
+  7. 스윕 측정 함정: env만 바꾼 재실행은 `:test UP-TO-DATE`로 안 돈다 — `--rerun-tasks` + 새 출력 경로 + 그 실행 XML의 `SWEEP 관문=` 줄로 판정(기준선 EXTRA md5 끔 81bb1782 · 켬 6ddcc3e1).
+- **순위(반증 밖 렌즈 · 내 판단으로 받음)**: 지금 main의 묶음은 S0 하나라 `US_GATE=true` = 「S0만」이다 — **설정 분리는 다음 묶음이 main에 들어오기 전까지만 있으면 된다.** 그 전에 날짜가 박힌 축(재무 정정 자동 백필 상한 100 대 10월 말 첫 정기 refill — `BACKFILL-CAP-PLAN.md`)을 먼저 한다.
