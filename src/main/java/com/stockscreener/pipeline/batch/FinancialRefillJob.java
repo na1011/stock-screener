@@ -202,7 +202,7 @@ public class FinancialRefillJob {
                 revised.get(), filled.get(), corrected.get(), insertedEarlier.get(),
                 List.copyOf(tickersToBackfill));
         log.info("재무 결손 보정을 마쳤다. {}", note);
-        alertOnInvalidation(execution, invalidatedTickers,
+        alertOnInvalidation(execution, triggeredBy, invalidatedTickers,
                 revised.get() + corrected.get() + insertedEarlier.get(), fullStatementTickers);
         return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill));
     }
@@ -271,14 +271,18 @@ public class FinancialRefillJob {
      * <p>같은 이유로 {@link AdjustmentRebuildJob}이 이미 같은 형태의 알림을 낸다 — 두 잡이
      * 같은 결과를 만드는데 한쪽만 말하면, 말하지 않는 쪽으로 사고가 몰린다.
      */
-    private void alertOnInvalidation(BatchExecutionContext execution, List<String> invalidatedTickers,
+    private void alertOnInvalidation(BatchExecutionContext execution,
+                                     BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                     List<String> invalidatedTickers,
                                      int invalidatedPeriods, List<String> fullStatementTickers) {
         if (invalidatedTickers.isEmpty()) {
             return;
         }
-        execution.alertOperator(AlertSeverity.WARNING, "재무 무효화 — 백필이 남았다",
+        boolean scheduled = triggeredBy == BatchExecutionRecorder.TriggeredBy.SCHEDULER;
+        execution.alertOperator(AlertSeverity.WARNING,
+                scheduled ? "재무 무효화 — 14:20 화해가 채운다" : "재무 무효화 — 다음 화해까지 빈다",
                 invalidationAlertBody(invalidatedTickers, invalidatedPeriods, fullStatementTickers,
-                        execution.executionId()));
+                        execution.executionId(), scheduled));
     }
 
     /** 알림 본문. 패키지 공개인 이유는 실행 컨텍스트 없이 문구를 시험하기 위해서다. */
@@ -292,7 +296,8 @@ public class FinancialRefillJob {
     private static final int ALERT_TICKER_SAMPLE = 20;
 
     static String invalidationAlertBody(List<String> invalidatedTickers, int invalidatedPeriods,
-                                        List<String> fullStatementTickers, long executionId) {
+                                        List<String> fullStatementTickers, long executionId,
+                                        boolean scheduled) {
         String sample = String.join(", ", invalidatedTickers.subList(
                 0, Math.min(ALERT_TICKER_SAMPLE, invalidatedTickers.size())));
         if (invalidatedTickers.size() > ALERT_TICKER_SAMPLE) {
@@ -301,8 +306,7 @@ public class FinancialRefillJob {
         }
         StringBuilder body = new StringBuilder("""
                 %d종목의 재무를 정정·교정·이른 판 삽입으로 다시 썼다(%d기간 · 실행 id=%d): %s
-                **그 종목의 지표가 보존 창 전체에서 지워졌다.** 백필이 따라오지 않으면 화면에서 \
-                통째로 사라지는데 에러도 경고도 나지 않는다.
+                **그 종목의 지표가 보존 창 전체에서 지워졌다.** 화해가 채울 때까지 화면에서 빠진다.
                 """.formatted(invalidatedTickers.size(), invalidatedPeriods, executionId, sample));
         // 전체 재무제표는 소스가 있는 시장(국내 DART)에만 시킨다 — 미국 티커로 돌리면 종목마다 실패한다.
         if (!fullStatementTickers.isEmpty()) {
@@ -312,14 +316,19 @@ public class FinancialRefillJob {
                     --job=full-statement-refill --tickers=%s'
                     """.formatted(String.join(",", fullStatementTickers)));
         }
-        // 백필은 짝이다. 날짜 하나로 돌린 원본층은 보존 창 전체를 다시 쓰지만 백분위·업종 상대값은 그 날짜에만 낸다.
-        body.append("""
-                백필은 원본층 한 판과 파생층 루프를 잇는다(batch-load skill):
-                  ./gradlew bootRun --args='--spring.profiles.active=bootstrap \
-                --job=backfill --from=<최신 거래일> --as-of=<최신 거래일> --tickers=<위 종목>'
-                  ./gradlew bootRun --args='--spring.profiles.active=bootstrap \
-                --job=backfill --from=<보존 창 첫 거래일> --as-of=<최신 거래일> --tickers=<같은 시장 1종목>'
-                """);
+        // 채우는 것은 매 평일 화해다(14:20 · ① 원본층 + ② 창 전체 파생층). 정기 실행 뒤에 손으로 돌리면
+        // 같은 스케줄러 스레드가 곧바로 도는 14:18·14:20과 같은 행을 두 JVM이 쓴다(305 교착과 같은 모양).
+        if (scheduled) {
+            body.append("""
+                    같은 오후 14:20 화해가 이 종목들의 원본층과 창 전체 파생층을 다시 쓴다 — 손으로 돌리지 않는다.
+                    """);
+        } else {
+            body.append("""
+                    다음 평일 14:20 화해가 채운다. 그 전에 채우려면 평일 13:30~15:40 밖에서:
+                      ./gradlew bootRun --args='--spring.profiles.active=bootstrap \
+                    --job=indicator-reconcile --tickers=<위 종목>'
+                    """);
+        }
         return body.toString();
     }
 

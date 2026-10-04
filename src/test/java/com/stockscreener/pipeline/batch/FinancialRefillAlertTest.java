@@ -53,7 +53,7 @@ class FinancialRefillAlertTest {
         java.util.List<String> many = java.util.stream.IntStream.range(0, 574)
                 .mapToObj(i -> "TICK" + i + "(정정 0 · 교정 0 · 이른 판 2)").toList();
 
-        String body = FinancialRefillJob.invalidationAlertBody(many, 1148, java.util.List.of(), 601L);
+        String body = FinancialRefillJob.invalidationAlertBody(many, 1148, java.util.List.of(), 601L, false);
 
         assertThat(body.length()).isLessThan(1500);
         assertThat(body).contains("574종목");
@@ -66,10 +66,10 @@ class FinancialRefillAlertTest {
     @DisplayName("전체 재무제표 소스가 없는 시장의 종목에는 전체 재무제표를 시키지 않는다")
     void doesNotAskForFullStatementsWhenNoInvalidatedStockHasThatSource() {
         String body = FinancialRefillJob.invalidationAlertBody(
-                List.of("AAPL(정정 0 · 교정 0 · 이른 판 2)"), 2, List.of(), 1L);
+                List.of("AAPL(정정 0 · 교정 0 · 이른 판 2)"), 2, List.of(), 1L, false);
 
         assertThat(body).doesNotContain("full-statement-refill");
-        assertThat(body).contains("--job=backfill");
+        assertThat(body).contains("--job=indicator-reconcile");
     }
 
     @Test
@@ -77,18 +77,28 @@ class FinancialRefillAlertTest {
     void asksForFullStatementsOnlyForStocksWithThatSource() {
         String body = FinancialRefillJob.invalidationAlertBody(
                 List.of("005930(정정 1 · 교정 0 · 이른 판 0)", "AAPL(정정 0 · 교정 0 · 이른 판 2)"), 3,
-                List.of("005930"), 1L);
+                List.of("005930"), 1L, false);
 
         assertThat(body).contains("--job=full-statement-refill --tickers=005930'");
     }
 
     @Test
-    @DisplayName("백필은 원본층 날짜 하나와 파생층 1종목 루프의 짝으로 시킨다 — 날짜 하나만 돌면 백분위가 그날에만 생긴다")
-    void asksForTheBaseAndDerivedBackfillPair() {
+    @DisplayName("정기 실행이면 손으로 돌리지 말라고 한다 — 같은 오후 14:20 화해와 같은 행을 두 JVM이 쓴다")
+    void scheduledRunLeavesFillingToTheReconcile() {
         String body = FinancialRefillJob.invalidationAlertBody(
-                List.of("AAPL(정정 0 · 교정 0 · 이른 판 2)"), 2, List.of(), 1L);
+                List.of("AAPL(정정 0 · 교정 0 · 이른 판 2)"), 2, List.of(), 1L, true);
 
-        assertThat(body).contains("--from=<최신 거래일> --as-of=<최신 거래일> --tickers=<위 종목>");
-        assertThat(body).contains("--from=<보존 창 첫 거래일> --as-of=<최신 거래일> --tickers=<같은 시장 1종목>");
+        assertThat(body).contains("14:20 화해").contains("손으로 돌리지 않는다").doesNotContain("--job=");
+    }
+
+    @Test
+    @DisplayName("손 실행이면 화해를 시키되 정기 배치 창 밖에서 — 옛 날짜 루프 백필 두 판은 시키지 않는다")
+    void manualRunAsksForAReconcileOutsideTheBatchWindow() {
+        String body = FinancialRefillJob.invalidationAlertBody(
+                List.of("AAPL(정정 0 · 교정 0 · 이른 판 2)"), 2, List.of(), 1L, false);
+
+        assertThat(body).contains("--job=indicator-reconcile --tickers=<위 종목>")
+                .contains("13:30~15:40 밖")
+                .doesNotContain("--job=backfill");
     }
 }
