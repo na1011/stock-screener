@@ -214,8 +214,10 @@ stockscreener:
   # (CLAUDE.md 「재적재·백필」 · docs/reload-gate.md). 꺼진 상태의 출력은 설정이 생기기 전과 같다.
   # MUST NOT: 저장소 .env에 켜 두지 않는다 — 수동 bootRun으로 새고, 배포(ops/stage.sh)가 그 .env를 배포 디렉터리로 복사해 운영 jar에도 샌다.
   # 켜는 길은 하나 — 관문 날 이 기본값을 뒤집은 jar를 배포한다(재적재·백필은 앱을 내린 채 인자로 켠 bootRun). 사본 실행도 인자로만 켠다.
+  # MUST NOT: 환경변수 자리표시자(${...})로 되돌리지 않는다. GateSettingGuard가 출처를 classpath yaml과
+  # 명령줄 인자로만 허용하고, 그 밖의 출처나 옛 이름 US_GATE가 실효값과 다르면 기동을 세운다.
   gate:
-    us: ${US_GATE:false}
+    us: false
 
   # ── 알림 ──────────────────────────────────────────────────
   # spec §8이 "이메일과 메신저 두 채널 모두"를 요구한다. 값이 없으면 채널이 비활성이고

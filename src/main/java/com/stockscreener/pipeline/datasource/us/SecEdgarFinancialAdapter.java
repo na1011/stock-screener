@@ -68,7 +68,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                                     DataSourceProperties properties,
                                     @Qualifier("secEdgarRateLimiter") RateLimiter rateLimiter,
                                     SecTickerCikCache cikCache,
-                                    @Value("${stockscreener.gate.us:false}") boolean usGate) {
+                                    @Value("${stockscreener.gate.us}") boolean usGate) {
         this(clientFactory, properties, rateLimiter, cikCache,
                 properties.getSecEdgar().getBaseUrl(), usGate);
     }
