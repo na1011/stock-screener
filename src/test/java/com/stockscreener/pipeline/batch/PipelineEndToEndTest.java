@@ -20,8 +20,10 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -30,6 +32,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 
 /**
  * 유니버스 리밸런싱 → 초기 적재 → 일일 갱신의 전 과정을 Fake 소스로 검증한다.
@@ -78,6 +83,10 @@ class PipelineEndToEndTest {
 
     @Autowired
     private RecordingAlertPort alertPort;
+
+    /** 파생층 실패를 꾸민다. 기본은 실제 동작 그대로다. */
+    @MockitoSpyBean
+    private DerivedDayCalculator derivedDayCalculator;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -729,6 +738,35 @@ class PipelineEndToEndTest {
         } finally {
             f.cleanUp();
         }
+    }
+
+    @Test
+    @DisplayName("일일 갱신의 파생층이 실패해도 보존 정리·색인·워치리스트는 돌고 ERROR 알림이 간다 — 그날 파생층은 14:20 ②가 다시 쓴다")
+    void derivedFailureDoesNotStopTheRestOfTheDailyUpdate() {
+        universeRebalanceJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        for (Long member : allActiveMembers()) {
+            fakePriceSource.withBars(member, List.of(bar("2026-08-05", "1000")));
+        }
+        seedMarketIndexes(AS_OF);
+        jdbcTemplate.update("DELETE FROM indicator_trade_date WHERE trade_date = ?", AS_OF);
+        doThrow(new DataIntegrityViolationException("꾸민 실패")).when(derivedDayCalculator).calculate(eq(AS_OF), isNull());
+        alertPort.events.clear();
+
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        assertThat(alertPort.events).filteredOn(event -> event.title().contains("파생층 계산 실패"))
+                .as("기준일마다가 아니라 한 건이다 — 같은 키의 둘째는 억제기가 삼킨다")
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.severity()).isEqualTo(AlertSeverity.ERROR);
+                    assertThat(event.body()).contains(AS_OF.toString()).contains("판정 불가");
+                });
+        assertThat((String) latestExecution(DailyUpdateJob.JOB_NAME).get("note"))
+                .as("실행 기록에도 남는다 — 상태는 종목 단위 SUCCESS 그대로라 note가 유일한 흔적이다")
+                .contains("파생층 실패 거래일 1(" + AS_OF);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM indicator_trade_date WHERE trade_date = ?", Integer.class, AS_OF))
+                .as("파생층 뒤의 보존 정리·거래일 색인이 그대로 돌았다").isPositive();
     }
 
     /** 구멍 시험의 픽스처. 달력·편입·봉을 직접 심는다 — 리밸런싱 시드의 편입일이 {@code AS_OF}라 구멍이 안 생긴다. */

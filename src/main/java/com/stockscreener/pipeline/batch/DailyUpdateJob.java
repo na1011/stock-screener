@@ -103,6 +103,7 @@ public class DailyUpdateJob {
     private final IndicatorTradeDateIndex tradeDateIndex;
     private final WatchlistAlertRunner watchlistAlertRunner;
     private final IndicatorRegistry indicatorRegistry;
+    private final DerivedDayCalculator derivedDayCalculator;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
                           MarketCalendar marketCalendar, PriceCalendar priceCalendar,
@@ -113,7 +114,8 @@ public class DailyUpdateJob {
                           IndicatorRetentionPolicy retentionPolicy,
                           IndicatorTradeDateIndex tradeDateIndex,
                           WatchlistAlertRunner watchlistAlertRunner,
-                          IndicatorRegistry indicatorRegistry) {
+                          IndicatorRegistry indicatorRegistry,
+                          DerivedDayCalculator derivedDayCalculator) {
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
         this.marketCalendar = marketCalendar;
@@ -128,6 +130,7 @@ public class DailyUpdateJob {
         this.tradeDateIndex = tradeDateIndex;
         this.watchlistAlertRunner = watchlistAlertRunner;
         this.indicatorRegistry = indicatorRegistry;
+        this.derivedDayCalculator = derivedDayCalculator;
     }
 
     /**
@@ -267,6 +270,7 @@ public class DailyUpdateJob {
         }
         execution.plan(CollectionPhase.PRICE_GAP, gapRunsByStock.size());
         GapTally gapTally = new GapTally();
+        DerivedDayCalculator.Failures derivedFailures = new DerivedDayCalculator.Failures();
 
         // MUST: 지수를 종목 루프 **앞에서** 받는다. EXCESS_RETURN_26W가 그날 지수를 입력으로
         // 쓰므로 뒤에 두면 그날 그 지표가 안 써지고, 그 사실은 화면에서 "조건에 안 맞았다"와
@@ -370,11 +374,22 @@ public class DailyUpdateJob {
             // `trade_date = ?`로 정확히 일치시키므로, 한 날짜 실행은 그날 값이 있는 종목만
             // 건드린다 — 다른 시장의 종목은 애초에 걸리지 않는다. 그래서 날짜별로 나눠 도는 것이
             // 안전하고, 두 시장의 날짜가 같으면 집합이 하나라 실행도 한 번이다.
+            //
+            // 업종 상대값도 같은 이유로 루프 뒤다. 워치리스트보다 앞이어야 하는 것도 같다 —
+            // 업종 조건을 건 화면이 그 앞에서 판정되면 어제 값으로 오늘을 판정한다.
+            //
+            // 그날 파생층 하나 때문에 워치리스트 판정(사용자 알림의 유일한 경로)·보존 정리·색인까지 잃지
+            // 않는다 — 실패는 그 기준일에 가두고(종료 신호는 되던진다) 루프 뒤에 한 건으로 알린다.
             for (LocalDate date : asOfByMarket.values().stream().distinct().sorted().toList()) {
-                percentileCalculator.calculate(date, null);
-                // 업종 상대값도 같은 이유로 루프 뒤다. 워치리스트보다 앞이어야 하는 것도 같다 —
-                // 업종 조건을 건 화면이 그 앞에서 판정되면 어제 값으로 오늘을 판정한다.
-                sectorRelativeCalculator.calculate(date, null);
+                derivedDayCalculator.calculateIsolated(execution, date, null, derivedFailures);
+            }
+            if (!derivedFailures.isEmpty()) {
+                // MUST: 기준일마다 보내지 않는다 — 알림 키가 (잡, 대상일, 제목)이라 둘째 시장의 실패가 억제기에
+                // 조용히 삼켜진다(alertIfNothingArrived와 같은 이유로 한 건이다).
+                execution.alertOperator(AlertSeverity.ERROR, "파생층 계산 실패",
+                        ("%s — 그 기준일의 백분위·업종 상대값이 없어 그 조건은 판정 불가로 돈다(워치리스트 포함). "
+                                + "같은 날 14:20 화해 ②가 창 전체로 다시 쓴다(앱이 그때 떠 있어야 한다). 원인: %s")
+                                .formatted(derivedFailures.describe(), derivedFailures.first()));
             }
 
             // 러너가 「값을 그만 낸」 지표의 옛 행을 보존 창 전체에서 지웠을 수 있다(ADR-0080).
@@ -424,7 +439,10 @@ public class DailyUpdateJob {
                     + "수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
         }
 
-        return execution.finish(gapTally.note(gapRunsByStock.size(), gapRuns.size()));
+        String gapNote = gapTally.note(gapRunsByStock.size(), gapRuns.size());
+        String derivedNote = derivedFailures.isEmpty() ? null : "파생층 " + derivedFailures.describe();
+        return execution.finish(gapNote == null ? derivedNote
+                : derivedNote == null ? gapNote : gapNote + " · " + derivedNote);
     }
 
     /**

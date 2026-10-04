@@ -133,6 +133,7 @@ public class IndicatorBackfillJob {
     private final IndicatorRunner indicatorRunner;
     private final PercentileCalculator percentileCalculator;
     private final SectorRelativeCalculator sectorRelativeCalculator;
+    private final DerivedDayCalculator derivedDayCalculator;
     private final IndicatorRetentionPolicy retentionPolicy;
     private final IndicatorTradeDateIndex tradeDateIndex;
     private final JdbcTemplate jdbcTemplate;
@@ -143,6 +144,7 @@ public class IndicatorBackfillJob {
                                 IndicatorRunner indicatorRunner,
                                 PercentileCalculator percentileCalculator,
                                 SectorRelativeCalculator sectorRelativeCalculator,
+                                DerivedDayCalculator derivedDayCalculator,
                                 IndicatorRetentionPolicy retentionPolicy,
                                 IndicatorTradeDateIndex tradeDateIndex,
                                 JdbcTemplate jdbcTemplate,
@@ -156,6 +158,7 @@ public class IndicatorBackfillJob {
         this.indicatorRunner = indicatorRunner;
         this.percentileCalculator = percentileCalculator;
         this.sectorRelativeCalculator = sectorRelativeCalculator;
+        this.derivedDayCalculator = derivedDayCalculator;
         this.retentionPolicy = retentionPolicy;
         this.tradeDateIndex = tradeDateIndex;
         this.jdbcTemplate = jdbcTemplate;
@@ -236,6 +239,7 @@ public class IndicatorBackfillJob {
         // (ADR-0138)가 날짜마다 버려져 첫 종목이 매번 다시 계산한다.
         ExecutorService pool =
                 Executors.newFixedThreadPool(resolveWorkers(targets.size()), workerFactory());
+        DerivedDayCalculator.Failures derivedFailures = new DerivedDayCalculator.Failures();
         try {
             // 날짜가 바깥 루프인 이유는 백분위 때문이다. 백분위는 "그날 전 종목의 값"을
             // 요구하므로, 한 날짜를 전 종목에 대해 끝낸 뒤에야 그날의 순위를 낼 수 있다.
@@ -256,10 +260,9 @@ public class IndicatorBackfillJob {
                 // 뒤라 그대로 직렬이고, 그 배리어가 곧 이 호출의 조인이다.
                 fanOutStocks(pool, execution, targets, tradeDate, retentionCutoffs, marketIndexes,
                         new LongAdder());
-                percentileCalculator.calculate(tradeDate, universeCode);
-                // 업종 상대값도 같은 자리다 — 그날 전 종목의 값이 있어야 정해진다.
-                // 백분위와 순서를 가릴 이유는 없다. 둘 다 원본 지표만 읽고 서로를 읽지 않는다.
-                sectorRelativeCalculator.calculate(tradeDate, universeCode);
+                // 백분위·업종 상대값 — 그날 전 종목의 값이 있어야 정해진다. 날짜 하나의 실패는 그 날짜에
+                // 가둔다(DerivedDayCalculator.calculateIsolated) — 교착 하나가 나머지 날짜를 다 버리던 자리다(실행 318).
+                derivedDayCalculator.calculateIsolated(execution, tradeDate, universeCode, derivedFailures);
             }
 
             // MUST: 날짜 루프 **밖**이다(ADR-0080). 러너가 「값을 그만 낸」 지표의 옛 행을 보존 창
@@ -277,6 +280,13 @@ public class IndicatorBackfillJob {
             // (ADR-0095) 여기를 빠뜨리면 새로 채운 날짜가 화면에 영영 안 보인다.
             execution.stage("거래일 색인 갱신");
             log.info("지표 거래일 색인을 갱신했다. 색인={}건", tradeDateIndex.rebuild());
+
+            // 날짜 루프 백필의 작업 단위는 (거래일 × 종목)이라 날짜 실패를 같은 단계에 세지 않는다(ADR-0037) —
+            // 나머지 날짜와 정리·색인을 다 돈 뒤 잡을 실패로 끝내 그 날짜를 다시 돌리게 한다.
+            if (!derivedFailures.isEmpty()) {
+                throw new IllegalStateException("파생층 " + derivedFailures.describe()
+                        + " — 그 날짜로 다시 돌린다", derivedFailures.first());
+            }
         } catch (DataSourceException e) {
             // 외부 호출이 없으므로 정상적으로는 도달하지 않는다. StockTask의 시그니처가
             // 이 예외를 선언하고 있어 형식상 잡을 뿐이며, 실제로 온다면 그것 자체가 이상 신호다.
@@ -374,23 +384,34 @@ public class IndicatorBackfillJob {
         log.info("파생층을 다시 낸다. {} ~ {} 거래일={}일", from, asOf, tradeDates.size());
 
         LayerChange changed = LayerChange.NONE;
+        DerivedDayCalculator.Failures failures = new DerivedDayCalculator.Failures();
         try {
             for (int i = 0; i < tradeDates.size(); i++) {
                 LocalDate tradeDate = tradeDates.get(i);
                 execution.stage("%s · %d/%d거래일".formatted(tradeDate, i + 1, tradeDates.size()));
                 // MUST NOT: 유니버스를 좁히지 않는다 — 두 계산기는 그날 활성 편입 전량을 조인한다.
-                LayerChange day = percentileCalculator.calculate(tradeDate, null)
-                        .plus(sectorRelativeCalculator.calculate(tradeDate, null));
+                LayerChange day = derivedDayCalculator.calculateIsolated(execution, tradeDate, null, failures);
+                if (day == null) {
+                    // 작업 단위가 거래일이라 그대로 센다 — 하나라도 있으면 PARTIAL_SUCCESS와 「부분 실패」 경고.
+                    execution.countExternally(CollectionPhase.INDICATOR, 0, 1, 0);
+                    continue;
+                }
                 changed = changed.plus(day);
                 execution.countExternally(CollectionPhase.INDICATOR, 1, 0, day.written());
+            }
+            // MUST: 전 날짜가 실패하면 FAILED다. 부분 성공으로 두면 신선도가 PARTIAL_SUCCESS를 신선으로 세어
+            // (JobFreshnessPolicy) 결정적으로 깨진 SQL이 연체로 영영 안 뜬다.
+            if (!tradeDates.isEmpty() && failures.size() == tradeDates.size()) {
+                throw failures.first();
             }
             execution.stage("고아 파생값 정리");
             long orphans = percentileCalculator.removeOrphansInWindow(floor)
                     + sectorRelativeCalculator.removeOrphansInWindow(floor);
             execution.stage("거래일 색인 갱신");
             int indexed = tradeDateIndex.rebuild();
-            return execution.finish("파생층 %d거래일 · 쓴 %d · 지운 %d · 고아 정리 %d · 색인 %d"
-                    .formatted(tradeDates.size(), changed.written(), changed.deleted(), orphans, indexed));
+            return execution.finish("파생층 %d거래일 · 쓴 %d · 지운 %d · 고아 정리 %d · 색인 %d%s"
+                    .formatted(tradeDates.size(), changed.written(), changed.deleted(), orphans, indexed,
+                            failures.isEmpty() ? "" : " · " + failures.describe()));
         } catch (RuntimeException e) {
             execution.failUnexpectedly(e);
             throw e;

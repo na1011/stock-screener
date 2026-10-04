@@ -234,8 +234,13 @@ public final class BatchExecutionContext {
         return abandonedOnShutdown;
     }
 
-    /** 종료 중에 난 실패면 신호로 갈아 끼운다. 아니면 원본 그대로 — 진짜 버그는 드러나야 한다. */
-    private RuntimeException asShutdownSignalIfAbandoned(RuntimeException cause) {
+    /**
+     * 종료 중에 난 실패면 신호로 갈아 끼운다. 아니면 원본 그대로 — 진짜 버그는 드러나야 한다.
+     *
+     * <p>{@link #process} 밖에서 단위를 격리하는 잡(파생층 날짜 루프)도 부른다 — 그 catch가 종료 중의 풀 닫힘을
+     * 「그 날짜의 실패」로 삼키면 종료가 남은 단위만큼 늦어진다(ADR-0078 · {@code data-pipeline.md}).
+     */
+    RuntimeException asShutdownSignalIfAbandoned(RuntimeException cause) {
         if (!abandonedOnShutdown || cause instanceof BatchShutdownException) {
             return cause;
         }
@@ -386,13 +391,25 @@ public final class BatchExecutionContext {
                     // MUST NOT: 단위를 "종목"이라 쓰지 않는다. 한 종목이 여러 단계·여러 날짜로
                     // 처리되므로 이 수는 종목 수보다 크다. 실제로 350종목짜리 유니버스에서
                     // "84716종목 실패"라고 나간 알림이 있었다.
-                    "%d건 성공, %d건 실패 (대상일 %s)"
-                            .formatted(successCount.get(), failureCount.get(), targetDate),
+                    // note를 함께 싣는다 — 무엇이 실패했는지(파생층의 실패 거래일 등)가 note에만 있으면
+                    // 알림을 받은 사람이 관리 화면을 열기 전에는 모른다. 잘라서 싣는다 — 웹훅이 본문 뒤를 2,000자에서
+                    // 자르는데 실행 id가 본문 뒤에 그려지고, 무효화 종목 목록을 통째로 싣는 note(재무 refill)가 있다.
+                    "%d건 성공, %d건 실패 (대상일 %s)%s"
+                            .formatted(successCount.get(), failureCount.get(), targetDate, noteForAlert(note)),
                     dedupeKey(),
                     context()));
         }
         alertOnSuspectedSpecChange();
         return status;
+    }
+
+    /** 알림 본문에 실을 note — 길면 앞만 싣고 전체는 실행 기록에 있다고 적는다. */
+    static String noteForAlert(String note) {
+        if (note == null || note.isBlank()) {
+            return "";
+        }
+        int limit = 300;
+        return note.length() <= limit ? " — " + note : " — " + note.substring(0, limit) + "…(전체는 실행 기록 note)";
     }
 
     /**

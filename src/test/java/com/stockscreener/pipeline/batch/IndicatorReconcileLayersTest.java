@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.notification.AlertPort;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.support.TestDatabaseGuard;
 
@@ -11,8 +12,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -20,6 +23,14 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 /**
  * 매 평일 화해의 두 층을 실 DB로 고정한다 — ① 원본층({@link IndicatorBackfillJob#rewriteOriginLayer})과
@@ -54,6 +65,14 @@ class IndicatorReconcileLayersTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    /** 한 거래일의 실패를 꾸민다. 기본은 실제 동작 그대로다. */
+    @MockitoSpyBean
+    private DerivedDayCalculator derivedDayCalculator;
+
+    /** 「부분 실패」 알림 본문을 본다 — note에만 남으면 알림을 받은 사람은 무엇이 빠졌는지 모른다. */
+    @MockitoSpyBean
+    private AlertPort alertPort;
 
     private long current10;
     private long departedInside20;
@@ -138,6 +157,44 @@ class IndicatorReconcileLayersTest {
                 .contains("쓴 0 · 지운 0");
         assertThat((String) latestRun(IndicatorBackfillJob.DERIVED_JOB_NAME).get("note"))
                 .contains("쓴 0 · 지운 0");
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — ② 의 한 거래일이 실패해도 나머지 거래일은 돈다 — 교착 하나가 그날 전부를 버리던 자리(실행 318)")
+    void derivedLayerIsolatesAFailedDate() {
+        pctl(departedInside20, D1, "0.9");
+        doThrow(new DataIntegrityViolationException("꾸민 실패")).when(derivedDayCalculator).calculate(eq(D2), isNull());
+
+        BatchStatus status = job.rebuildDerived(D3, BatchExecutionRecorder.TriggeredBy.MANUAL);
+
+        assertThat(status).isEqualTo(BatchStatus.PARTIAL_SUCCESS);
+        assertThat(pctlOf(departedInside20, D1)).as("실패한 D2 뒤가 아니라 앞 날짜도 다시 매겨졌다").isEqualByComparingTo("0.5");
+        assertThat(pctlOf(current30, D3)).as("실패한 D2 뒤 날짜도 돈다").isEqualByComparingTo("1");
+        Map<String, Object> row = latestRun(IndicatorBackfillJob.DERIVED_JOB_NAME);
+        assertThat(((Number) row.get("failure_count")).intValue()).isEqualTo(1);
+        assertThat((String) row.get("note")).contains("실패 거래일 1(" + D2);
+        verify(alertPort).send(argThat(event -> event.body() != null
+                && event.body().contains("실패 거래일 1(" + D2)));
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — ② 의 전 거래일이 실패하면 FAILED다 — 부분 성공으로 두면 신선도가 연체를 영영 안 띄운다")
+    void derivedLayerFailsWhenEveryDateFails() {
+        doThrow(new DataIntegrityViolationException("꾸민 실패")).when(derivedDayCalculator).calculate(any(), isNull());
+
+        assertThatThrownBy(() -> job.rebuildDerived(D3, BatchExecutionRecorder.TriggeredBy.MANUAL))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(latestRun(IndicatorBackfillJob.DERIVED_JOB_NAME).get("status")).isEqualTo("FAILED");
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 종료 신호는 날짜 격리에 삼켜지지 않는다 — 남은 날짜를 돌지 않고 바로 끊긴다(ADR-0078)")
+    void derivedLayerPropagatesTheShutdownSignal() {
+        doThrow(new BatchShutdownException("꾸민 종료")).when(derivedDayCalculator).calculate(eq(D2), isNull());
+
+        assertThatThrownBy(() -> job.rebuildDerived(D3, BatchExecutionRecorder.TriggeredBy.MANUAL))
+                .isInstanceOf(BatchShutdownException.class);
+        verify(derivedDayCalculator, never()).calculate(eq(D3), isNull());
     }
 
     @Test
@@ -237,7 +294,7 @@ class IndicatorReconcileLayersTest {
 
     private Map<String, Object> latestRun(String jobName) {
         return jdbcTemplate.queryForMap("""
-                SELECT target_count, success_count, failure_count, note FROM batch_execution
+                SELECT status, target_count, success_count, failure_count, note FROM batch_execution
                 WHERE job_name = ? ORDER BY id DESC LIMIT 1
                 """, jobName);
     }
