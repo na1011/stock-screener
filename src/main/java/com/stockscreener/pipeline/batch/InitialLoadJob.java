@@ -172,10 +172,11 @@ public class InitialLoadJob {
         if (revised.get() > 0) {
             // 초기 적재에서 정정이 나오는 것은 --tickers로 기존 종목을 다시 받았을 때뿐이다.
             // 드물지만 결과는 결손 보정과 같으므로 같은 무게로 알린다.
-            execution.alertOperator(AlertSeverity.WARNING, "정정공시 반영 — 백필이 남았다",
+            execution.alertOperator(AlertSeverity.WARNING, "정정공시 반영 — 다음 화해까지 빈다",
                     ("초기 적재 중 정정공시 %d기간을 반영했다. **그 종목의 지표가 보존 창 전체에서 "
-                            + "지워졌다.** 백필이 따라오지 않으면 화면에서 통째로 사라지는데 에러도 "
-                            + "경고도 나지 않는다. 어느 종목인지는 로그의 '정정공시를 반영한다'가 답한다.")
+                            + "지워졌다.** 다음 평일 14:20 화해가 채우고, 그 전에 채우려면 평일 13:30~15:40 "
+                            + "밖에서 --job=indicator-reconcile --tickers=<그 종목>을 돌린다. 어느 종목인지는 "
+                            + "로그의 '정정공시를 반영한다'가 답한다.")
                             .formatted(revised.get()));
         }
         if (range.skipFinancial()) {

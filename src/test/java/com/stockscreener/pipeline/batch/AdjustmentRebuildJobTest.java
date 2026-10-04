@@ -156,7 +156,7 @@ class AdjustmentRebuildJobTest {
     }
 
     @Test
-    @DisplayName("지표를 지웠으면 백필이 남았다고 알린다 — 성공으로 끝나는 것이 일이 끝난 것이 아니다")
+    @DisplayName("지표를 지웠으면 무엇이 채우는지 알린다 — 성공으로 끝나는 것이 일이 끝난 것이 아니다")
     void alertsThatBackfillIsStillPending() {
         BatchStatus status = job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
                 List.of(TICKER), null);
@@ -173,7 +173,8 @@ class AdjustmentRebuildJobTest {
         assertThat(event.severity()).isEqualTo(AlertSeverity.WARNING);
         assertThat(event.body())
                 .as("무엇을 이어서 해야 하는지가 본문에 없으면 이 알림은 상태 보고일 뿐이다")
-                .contains("--job=backfill")
+                .contains("--job=indicator-reconcile")
+                .doesNotContain("--job=backfill")
                 .contains(TICKER);
     }
 

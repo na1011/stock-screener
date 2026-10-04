@@ -206,10 +206,11 @@ public class AdjustmentRebuildJob {
 
         StringBuilder body = new StringBuilder(
                 ("%d종목의 수정계수를 다시 지었다(갱신 %d행 · 적용 사건 %d건 · 최초 변경일 %s).\n"
-                        + "**그 %d종목의 지표가 보존 창 전체에서 지워졌다.** 백필이 따라오지 않으면"
-                        + " 화면에서 통째로 사라지는데 에러도 경고도 나지 않는다:\n"
+                        + "**그 %d종목의 지표가 보존 창 전체에서 지워졌다.** 정기 사슬(평일 14:00)이면"
+                        + " 같은 사슬이 곧바로 화해한다. 손 실행이면 다음 평일 14:20 화해가 채우고,"
+                        + " 그 전에 채우려면 평일 13:30~15:40 밖에서:\n"
                         + "  ./gradlew bootRun --args='--spring.profiles.active=bootstrap"
-                        + " --job=backfill --from=<보존 창 첫 거래일> --server.port=0'\n")
+                        + " --job=indicator-reconcile --tickers=<아래 종목>'\n")
                         .formatted(rebuilt.size(), changedRows, appliedEvents, earliest,
                                 rebuilt.size()));
         rebuilt.stream().limit(STOCKS_IN_ALERT).forEach(item -> body.append(
@@ -217,7 +218,7 @@ public class AdjustmentRebuildJob {
         if (rebuilt.size() > STOCKS_IN_ALERT) {
             body.append("나머지 %d종목은 로그에 있다.".formatted(rebuilt.size() - STOCKS_IN_ALERT));
         }
-        execution.alertOperator(AlertSeverity.WARNING, "수정계수 재구축 — 백필이 남았다",
+        execution.alertOperator(AlertSeverity.WARNING, "수정계수 재구축 — 화해가 채운다",
                 body.toString());
     }
 
