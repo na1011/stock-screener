@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.DefaultApplicationArguments;
 
+import java.time.LocalDate;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -362,5 +364,20 @@ class BootstrapArgumentGuardTest {
         assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(
                 new DefaultApplicationArguments("--job=backfill", "--from=2026-01-02"), "backfill"))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("indicator-reconcile의 기본 기준일은 오늘이 아니라 13:30의 대상일이다 — 정기 화해와 같은 규약")
+    void reconcileDefaultsToTheDailyUpdateTargetDate() {
+        LocalDate sunday = LocalDate.of(2026, 10, 4);
+        // 인자가 없으면 직전 평일(금요일). 오늘을 쓰면 asOf의 주식수를 따라가는 지표가 정기 화해와 갈린다.
+        assertThat(BootstrapRunner.reconcileAsOf(
+                new DefaultApplicationArguments("--job=indicator-reconcile"), sunday, sunday))
+                .isEqualTo(LocalDate.of(2026, 10, 2));
+        // 주면 준 값이다 — 사본 드라이런이 그 날짜를 고른다.
+        assertThat(BootstrapRunner.reconcileAsOf(
+                new DefaultApplicationArguments("--job=indicator-reconcile", "--as-of=2026-10-01"),
+                LocalDate.of(2026, 10, 1), sunday))
+                .isEqualTo(LocalDate.of(2026, 10, 1));
     }
 }
