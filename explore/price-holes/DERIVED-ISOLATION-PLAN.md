@@ -26,3 +26,13 @@
 5. 관문 대조군(`reload-gate.md` 순서 10 「두 번째 화해 쓴·지운 0」)에 `failure_count = 0`을 더한다 — 결정적 실패 날짜가 두 번 다 실패하면 쓴·지운 0으로 통과한다.
 6. `run`은 INDICATOR 계획이 (거래일 × 종목)이라 날짜 실패를 같은 단계에 세면 단위가 섞인다 → 다른 단위로(새 enum이면 `ck_failure_phase` 마이그레이션 · `CollectionPhaseConstraintTest`).
 - 통과: 커밋 단위(호출 경로에 트랜잭션 없음 · 자동 커밋) — 날짜를 건넌 섞임 없음 · 고아 정리·색인에 새 해악 없음.
+
+## 계획 v2 (반증 여섯을 받은 구현 모양)
+- `DerivedDayCalculator`(새 컴포넌트): 한 거래일의 백분위 → 업종 상대값. `TransientDataAccessException`(교착 등)만 최대 3번(대기 2초 · 5초) 그 날짜를 다시 계산 — 멱등(자동 커밋 UPSERT/DELETE). 비일시적 실패는 바로 던진다. 대기 중 인터럽트는 `BatchShutdownException`.
+- 세 호출부가 이것을 부른다:
+  - ② `rebuildDerived`: 날짜마다 격리(`deriveIsolated` — 종료 신호는 `asShutdownSignalIfAbandoned`로 되던짐) · 거래일 단위로 실패를 센다 · **전 날짜 실패면 첫 예외로 FAILED** · note에 「실패 거래일 N(앞 다섯)」.
+  - `run`(날짜 루프 백필): 날짜마다 격리하되 실패를 INDICATOR에 안 센다(단위가 거래일 × 종목) — 정리·색인까지 돈 뒤 실패 날짜가 있으면 `IllegalStateException`으로 FAILED(그 날짜로 다시 돌리라는 뜻).
+  - `DailyUpdateJob`(시장별 기준일): 실패하면 ERROR 알림 · 워치리스트·보존 정리·색인은 계속 — 그 날짜의 파생층은 같은 날 14:20 ②가 다시 쓴다.
+- `BatchExecutionContext.finish`의 「부분 실패」 알림 본문에 note를 싣는다(실패 거래일이 알림에 보이게 — 다른 잡의 note도 함께 실린다).
+- 관문 대조군 「두 번째 화해 쓴·지운 0」에 「실패 0」(`reload-gate.md` 순서 10 · ADR-0166).
+- 시험: 재시도 단위(교착 한 번 뒤 성공 · 상한 · 비일시적 즉시) · ② 한 날짜 실패 → 부분 성공 + 앞뒤 날짜 다시 매김 + note · 전 날짜 실패 → FAILED · 종료 신호 전파(다음 날짜 미호출) · 일일 갱신 파생 실패 → ERROR 알림 + 색인 갱신.
