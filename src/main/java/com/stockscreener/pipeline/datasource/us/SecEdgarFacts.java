@@ -2356,6 +2356,17 @@ final class SecEdgarFacts {
                 || !differsMaterially(fy.netIncomeControlling(), fy.netIncome())) {
             return merged;
         }
+        if ("2".equals(System.getenv("S_NIQ4SRC"))) {
+            // [탐색 S_NIQ4SRC=2] 그 Q4 창에 이 판 공시일 이하 **어느 공시에도** 지배주주 직접값이나 연결·비지배 짝이 없을 때만
+            // (반증: accn 하나만 보면 이어받은 직접값·같은 날 접힌 판을 폴백으로 오판한다 — PPG 2017).
+            LocalDate by = fy.publishedAt();
+            boolean anyDirect = hasFactIn(byColumn, SecEdgarColumn.NET_INCOME_CONTROLLING, source, by);
+            boolean anyIdentity = hasFactIn(byColumn, SecEdgarColumn.NET_INCOME_TOTAL, source, by)
+                    && (hasFactIn(byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING, source, by)
+                    || (hasFactIn(byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING_REDEEMABLE, source, by)
+                    && hasFactIn(byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING_NONREDEEMABLE, source, by)));
+            return anyDirect || anyIdentity ? merged : withNetIncomeControlling(merged, residual.netIncomeControlling());
+        }
         Slot slot = new Slot(accnOf(source.reportCode()), source.periodStart(), source.periodEnd());
         boolean direct = sourceAt(byColumn, SecEdgarColumn.NET_INCOME_CONTROLLING, slot) != null;
         boolean identity = sourceAt(byColumn, SecEdgarColumn.NET_INCOME_TOTAL, slot) != null
@@ -2464,6 +2475,21 @@ final class SecEdgarFacts {
                 r.noninterestIncome(), r.interestExpense(), r.noninterestExpense(),
                 r.benefitsLossesAndExpenses(), gp, r.operatingExpenses(), r.costsAndExpenses(),
                 r.incomeTaxExpense(), r.profitBeforeTax(), r.derived(), r.assertedAbsent());
+    }
+
+    /** [탐색 S_NIQ4SRC=2] 그 행의 창(±7일)에 {@code by} 이하로 공시된 그 컬럼의 팩트가 어느 태그·공시에든 있는가. */
+    private static boolean hasFactIn(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                     SecEdgarColumn column, RawFinancialReport row, LocalDate by) {
+        for (Map<Slot, Fact> slots : byColumn.getOrDefault(column, Map.of()).values()) {
+            for (Fact f : slots.values()) {
+                if (f.start() != null && !f.filed().isAfter(by)
+                        && Math.abs(java.time.temporal.ChronoUnit.DAYS.between(f.start(), row.periodStart())) <= 7
+                        && Math.abs(java.time.temporal.ChronoUnit.DAYS.between(f.end(), row.periodEnd())) <= 7) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** [탐색 S_NIQ4SRC] 지배주주 한 칸만 바꾼 사본. */
