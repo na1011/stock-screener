@@ -244,6 +244,62 @@ class StockRegistrarLookupTest {
                 .containsExactly(current);
     }
 
+    /**
+     * 매 평일 화해의 모집단이다. 지금 편입만 내면 과거 구성원의 지표가 마지막으로 그들을 쓴 실행의
+     * 코드에서 멈추고, 그날 편입으로 매기는 백분위가 두 계산기의 값을 섞는다.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 창 모집단은 지금 편입과 창 안의 과거 편입을 함께 내고, 창 밖·비활성은 뺀다")
+    void windowMembersAreCurrentPlusDepartedInsideTheWindow() {
+        jdbcTemplate.update("""
+                INSERT INTO indicator_trade_date (market_code, trade_date)
+                VALUES ('KOSPI', ?), ('KOSPI', ?) ON CONFLICT DO NOTHING
+                """, FROM.plusDays(5), FROM.plusDays(30));
+        long current = member("100011", "지금 편입", true, null);
+        long departedInside = member("100012", "창 안에서 편출", true, FROM.plusDays(10));
+        long departedBefore = member("100013", "창 전에 편출", true, FROM.plusDays(3));
+        long inactive = member("100014", "비활성", false, null);
+
+        assertThat(registrar.windowMemberIds())
+                .contains(current, departedInside)
+                .doesNotContain(departedBefore, inactive);
+    }
+
+    @Test
+    @DisplayName("창 모집단과 티커 조회는 같은 술어다 — 갈리면 손 실행과 정기 화해가 다른 종목을 돈다")
+    void windowMembersAgreeWithTickerLookup() {
+        jdbcTemplate.update("""
+                INSERT INTO indicator_trade_date (market_code, trade_date)
+                VALUES ('KOSPI', ?), ('KOSPI', ?) ON CONFLICT DO NOTHING
+                """, FROM.plusDays(5), FROM.plusDays(30));
+        member("100021", "지금 편입", true, null);
+        member("100022", "창 안에서 편출", true, FROM.plusDays(10));
+        member("100023", "창 전에 편출", true, FROM.plusDays(3));
+        List<String> tickers = List.of("100021", "100022", "100023");
+
+        List<Long> byTicker = registrar.activeUniverseMemberIdsByTicker(tickers);
+        List<Long> window = registrar.windowMemberIds();
+
+        assertThat(byTicker).isNotEmpty();
+        assertThat(window).containsAll(byTicker);
+        assertThat(window.stream().filter(id -> tickerOf(id).startsWith("10002")).toList())
+                .containsExactlyInAnyOrderElementsOf(byTicker);
+    }
+
+    @Test
+    @DisplayName("지표 달력이 없으면 창 모집단은 지금 편입으로 되돌아간다 — 조용한 0건이 되면 안 된다")
+    void windowMembersFallBackToCurrentWithoutAnIndicatorCalendar() {
+        jdbcTemplate.update("DELETE FROM indicator_trade_date WHERE market_code = 'KOSPI'");
+        long current = member("100031", "달력 없는 시장의 편입", true, null);
+        long departed = member("100032", "달력 없는 시장의 편출", true, FROM.plusDays(10));
+
+        assertThat(registrar.windowMemberIds()).contains(current).doesNotContain(departed);
+    }
+
+    private String tickerOf(long stockId) {
+        return jdbcTemplate.queryForObject("SELECT ticker FROM stock WHERE id = ?", String.class, stockId);
+    }
+
     private long memberOfUncollectedMarket() {
         jdbcTemplate.update("""
                 INSERT INTO market (code, country_code, currency_code, timezone)

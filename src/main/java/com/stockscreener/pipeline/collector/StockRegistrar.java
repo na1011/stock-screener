@@ -330,14 +330,55 @@ public class StockRegistrar {
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE s.is_active AND s.ticker IN (%s)
                   AND s.market_code IN (%s)
-                  AND (m.effective_to IS NULL
-                       OR (m.effective_from <= (SELECT max(d.trade_date) FROM indicator_trade_date d
-                                                 WHERE d.market_code = s.market_code)
-                           AND m.effective_to > (SELECT min(d.trade_date) FROM indicator_trade_date d
-                                                  WHERE d.market_code = s.market_code)))
+                  AND %s
                 ORDER BY m.stock_id
-                """.formatted(placeholders, collectedMarketPlaceholders()), Long.class, args);
+                """.formatted(placeholders, collectedMarketPlaceholders(), IN_RETENTION_WINDOW),
+                Long.class, args);
     }
+
+    /**
+     * 보존 창과 겹치는 편입 종목 <b>전부</b> — 지금 편입과, 창 안에서 편입이 끝난 과거 구성원(ADR-0135).
+     *
+     * <p>매 평일 지표 화해와 거버넌스 유도의 기본 모집단이다. 화면은 창 안의 어느 날짜든 답하고
+     * 백분위는 그날 편입으로 매기므로, <b>과거 구성원의 값도 지금 코드·지금 원자료로 써져 있어야
+     * 한다.</b> 지금 편입만 돌면 그들의 값은 마지막으로 그들을 쓴 실행의 코드에서 멈춘다 —
+     * 실행 이력으로 창 전원을 쓴 마지막 실행이 2026-09-23 00:38(실행 665)이었고 그 뒤 들어온
+     * 계산기 커밋 셋은 과거 편입(그날 333종목)에 안 닿았다(2026-10-04). 같은 날 순위가 두
+     * 계산기의 값으로 섞인다.
+     *
+     * <p>MUST NOT: {@link #activeUniverseMemberIds()}를 이것으로 바꾸지 않는다. 그쪽은 외부 호출을
+     * 태우는 일일 갱신의 대상이다(그 javadoc). 이쪽은 <b>호출 0인</b> 다시 계산의 대상이다.
+     *
+     * <p>술어는 {@link #activeUniverseMemberIdsByTicker}와 한 조각({@link #IN_RETENTION_WINDOW})이다.
+     * 둘이 갈리면 손으로 티커를 준 실행과 정기 화해가 서로 다른 「창 편입」을 돈다.
+     */
+    public List<Long> windowMemberIds() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                JOIN universe u ON u.code = m.universe_code AND u.is_active
+                WHERE s.is_active
+                  AND s.market_code IN (%s)
+                  AND %s
+                ORDER BY m.stock_id
+                """.formatted(collectedMarketPlaceholders(), IN_RETENTION_WINDOW),
+                Long.class, collectedMarkets());
+    }
+
+    /**
+     * 「보존 창과 겹치는 편입」의 술어. {@code m}이 {@code universe_membership}, {@code s}가
+     * {@code stock}이다.
+     *
+     * <p><b>MUST: 열린 편입을 창 조건 밖에 둔다</b> — {@link #activeUniverseMemberIdsByTicker}
+     * javadoc의 「조용한 0건」이 그 이유다. 지표 달력이 없는 시장에서는 창의 양 끝이 {@code NULL}이라
+     * 비교가 전부 거짓이 되고, 그때 이 술어는 지금 편입으로 정확히 되돌아간다.
+     */
+    private static final String IN_RETENTION_WINDOW = """
+            (m.effective_to IS NULL
+             OR (m.effective_from <= (SELECT max(d.trade_date) FROM indicator_trade_date d
+                                       WHERE d.market_code = s.market_code)
+                 AND m.effective_to > (SELECT min(d.trade_date) FROM indicator_trade_date d
+                                        WHERE d.market_code = s.market_code)))""";
 
     /**
      * <b>유니버스 하나</b>를 골라 그 편입 종목을 낸다. <b>활성 여부를 보지 않는다.</b>

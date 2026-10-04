@@ -84,6 +84,10 @@ public class GovernanceDeriveJob {
             }
             return matched;
         }
-        return stockRegistrar.activeUniverseMemberIds();
+        // 기본은 보존 창 편입이다 — 지표 화해(①)와 같은 모집단이어야 한다. 지금 편입만 유도하면
+        // 과거 구성원은 화해가 지표를 다시 쓰는데 그 입력인 거버넌스 사실은 옛 규칙·옛 원문의
+        // 유도에 멈춘다. 2026-10-04 사본에서 창 전원으로 다시 유도한 차이는 과거 편입 0칸이었다 —
+        // 지금 어긋난 것은 없고, 유도 규칙이나 원문이 바뀌는 다음 날부터 갈리는 것을 막는다.
+        return stockRegistrar.windowMemberIds();
     }
 }
