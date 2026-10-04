@@ -227,6 +227,17 @@ final class SecEdgarFacts {
      * @param fromFiscalYear 이 회계연도부터. 앞의 것은 만들지 않는다(버린 수에 안 든다)
      */
     static Result build(JsonNode facts, int fromFiscalYear) throws DataSourceException {
+        return build(facts, fromFiscalYear, false);
+    }
+
+    /**
+     * @param usGate <b>미국 재적재 관문 설정</b>({@code stockscreener.gate.us}). 켜지면 관문에서 함께 나갈
+     *               규칙 변경이 적용된다 — 지금은 {@link #controllingIncomeQ4}의 마지막 갈래 하나다.
+     *               <b>꺼진 상태의 출력은 이 설정이 생기기 전과 바이트까지 같아야 한다</b>(`docs/reload-gate.md`).
+     *               설정을 읽는 곳은 {@link SecEdgarFinancialAdapter} 하나다.
+     */
+    static Result build(JsonNode facts, int fromFiscalYear, boolean usGate)
+            throws DataSourceException {
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts);
         Map<String, Anchor> anchors = anchorsOf(byColumn);
         NavigableMap<LocalDate, Window> fiscalYears = annualWindows(byColumn, anchors);
@@ -247,7 +258,7 @@ final class SecEdgarFacts {
                     byColumn, anchors, tags));
         }
         List<RawFinancialReport> fourthQuarters =
-                deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn);
+                deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate);
         // MUST: 같은 (회계연도, 기간, 공시일)이면 **병합본이 소스 판을 대체한다.**
         // mergeQ4가 소스 값을 그대로 얹으므로 병합본은 소스 판의 상위집합이고, 둘을 함께 두면
         // 저장이 같은 키에 두 번 써서 **무효화만 남는다.**
@@ -1332,6 +1343,12 @@ final class SecEdgarFacts {
      * <b>지배주주 귀속 순이익.</b> 직접 낸 값 → 유도 → 마지막 수단 순이고, <b>어느 갈래에서도
      * 값을 잃지 않는다</b> — 유도가 안 되면 예전과 똑같이 {@code NET_INCOME}의 첫값이 나간다.
      *
+     * <p><b>마지막 수단이 연결을 집는 것은 재고 고른 것이다.</b> 그 판 공시일 이하에 0 아닌 비지배가 보이는 폴백 약
+     * 1,460행을 뒤 공시의 {@code NetIncomeLoss}(평가 전용)로 채점하면 연결이 맞음 87%(351/402) · 보통주 귀속(+우선주배당)
+     * 73%(151/208)였고, 좁힌 술어 둘(직전 FY의 {@code NetIncomeLoss} = 보통주 귀속 · 우선주 잔액 0)도 판정 가능 행에서
+     * 4 대 6 · 15 대 12로 서지 않았다 — {@code OXY}가 {@code NetIncomeLoss}에 우선주배당 뒤 값을 싣는다(2026-10-04).
+     * null로 두면 {@code sumControllingNetIncome}이 창 단위로 연결 합에 떨어져 더 틀린다(ADR-0154 §버린 대안).
+     *
      * <p><b>왜 지금 필요한가</b>: ADR-0153이 {@code ROE}의 분모를 지배주주 자본으로 옮기면서
      * {@code NetIncomeLoss}가 없는 종목은 <b>분자만 비지배 포함</b>으로 남았다. 그 전에는
      * 분자·분모가 둘 다 비지배 포함이라 정합했으므로, <b>이것은 그 변경이 만든 어긋남</b>이다.
@@ -1804,7 +1821,7 @@ final class SecEdgarFacts {
      */
     private static List<RawFinancialReport> deriveFourthQuarters(
             List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear,
-            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, boolean usGate) {
         Map<Label, RawFinancialReport> latest = new LinkedHashMap<>();
         Map<Label, List<RawFinancialReport>> byLabel = new LinkedHashMap<>();
         for (RawFinancialReport report : existing) {
@@ -1945,7 +1962,7 @@ final class SecEdgarFacts {
                 }
                 RawFinancialReport q4Report = mergeQ4(
                         vintageOf(byLabel, q4, vintage.publishedAt()),
-                        buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn));
+                        buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn, usGate));
                 // MUST: 값이 같은 4분기 판을 세대마다 다시 내지 않는다. FY 판이 늘면 잔차가
                 // 같아도 Q4 판이 그만큼 늘고, 저장은 그것을 **정정으로 읽어 지표를 지운다** —
                 // 쓰기는 0인데 무효화만 남는다. 실측: 접기를 고쳐 FY 판이 늘자 이 자리에서
@@ -1966,7 +1983,7 @@ final class SecEdgarFacts {
                 // CYTK 2017이 그 자리였다.
                 derived.add(mergeQ4(
                         vintageOf(byLabel, q4, fallback.publishedAt()),
-                        buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3, byColumn)));
+                        buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3, byColumn, usGate)));
             }
         }
         return derived;
@@ -2084,7 +2101,8 @@ final class SecEdgarFacts {
     private static RawFinancialReport buildQ4(int fiscalYear, LocalDate start,
                                               RawFinancialReport fy, RawFinancialReport q1,
                                               RawFinancialReport q2, RawFinancialReport q3,
-                                              Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+                                              Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                              boolean usGate) {
         boolean subtractable = sameCurrency(fy, q1, q2, q3);
         Slot slot = new Slot(accnOf(fy.reportCode()), start, fy.periodEnd());
         return new RawFinancialReport(
@@ -2110,7 +2128,7 @@ final class SecEdgarFacts {
                 sourceOrMinus(byColumn, SecEdgarColumn.COST_OF_SALES, slot, subtractable, fy.costOfSales(),
                             q1.costOfSales(), q2.costOfSales(), q3.costOfSales()),
                 fy.cashAndEquivalents(), null, fy.inventories(),
-                controllingIncomeQ4(byColumn, slot, subtractable, fy, q1, q2, q3),
+                controllingIncomeQ4(byColumn, slot, subtractable, fy, q1, q2, q3, usGate),
                 // 유도 재료 여덟은 전부 유량이라 차감한다. 하나라도 없으면 minus가
                 // null을 내므로 Q4 영업이익이 지어지지 않는다 — 그것이 옳다.
                 guardedMinus(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME, subtractable, fy.interestAndDividendIncome(),
@@ -2225,16 +2243,6 @@ final class SecEdgarFacts {
      * 「기각돼 있다」를 근거로 가짜 한계를 사는 것이다.
      */
     /**
-     * Q4 순이익. <b>연간 행과 같은 기저라야 한다</b> — 그렇지 않으면 한 종목의 시계열 안에서
-     * 분기만 비지배 포함이 되고, {@code EPS_TTM}처럼 네 분기를 더하는 지표가 서로 다른 기저를
-     * 더한다.
-     *
-     * <p>순서는 {@code controllingIncome}과 같다: 소스가 낸 지배주주 값 → 소스가 낸 비지배
-     * 포함에서 비지배분을 뺀 값 → 소스가 낸 것 무엇이든 → 우리 뺄셈. <b>마지막 갈래의 피감수는
-     * 이미 지배주주 기저</b>이므로(연간·분기 행이 {@code controllingIncome}을 거쳤다) 뺄셈은
-     * 기저를 섞지 않는다.
-     */
-    /**
      * Q4의 <b>연결 총액</b> 순이익. {@link #consolidatedIncome}과 같은 네 갈래이고
      * 마지막 갈래만 다르다 — 소스가 그 분기를 안 내면 <b>FY − (Q1+Q2+Q3)</b>로 뺀다.
      *
@@ -2268,10 +2276,31 @@ final class SecEdgarFacts {
                 fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome());
     }
 
+    /**
+     * Q4 <b>지배주주</b> 순이익. <b>연간 행과 같은 기저라야 한다</b>(ADR-0154 §규칙) — 그렇지 않으면
+     * 한 종목의 시계열 안에서 분기만 비지배 포함이 되고, {@code EPS_TTM}처럼 네 분기를 더하는 지표가
+     * 서로 다른 기저를 더한다.
+     *
+     * <p>순서: 소스가 낸 지배주주 값 → 소스가 낸 연결에서 비지배를 뺀 값 → 소스가 낸 연결 그대로 → 우리 뺄셈.
+     *
+     * <p><b>마지막 갈래는 미국 관문 설정({@code usGate})이 켜지면 지배주주끼리 뺀다.</b> 꺼진 상태(관문 전 운영)는
+     * {@code fy.netIncome() − Σq.netIncome()}인데 ADR-0159 뒤로 {@code net_income}이 연결이라 <b>Q4 지배주주 =
+     * Q4 연결</b>이 되고, 연결이 게이트에서 null이면 null이 된다 — 미국 편입 · Q4 끝 ≥ 2020-07에서 틀린 라벨
+     * 1,325·421종목 · 빈 칸 197·95(2026-10-04). 켜면 같은 해 네 분기의 지배주주 합이 FY 지배주주와 같아진다.
+     *
+     * <p><b>MUST NOT: 「FY는 비지배가 있는데 어떤 분기는 지배 = 연결」일 때 연결 뺄셈으로 되돌리는 가드를 두지 않는다.</b>
+     * 그 가드는 칸 하나의 음수(ARES 2024 Q4 −60.5)를 막지만 소비자 TTM에서는 더 틀린다 — 사후 진실 기준
+     * 틀림 셀-일이 창 5,282 대 4,133 · 1년 전 TTM 4,934 대 3,146 · 5년 전 TTM 7,818 대 6,929(2026-10-04).
+     * 그 분기들의 폴백이 뿌리이고 고칠 자리는 분기다.
+     *
+     * <p><b>소스 Q4가 연결만 실은 셋째 갈래는 이 설정이 안 바꾼다.</b> 그것을 잔차로 바꾸는 것은 소스 대 잔차를 고르는
+     * Q4 정책 결정이고, 바꿔 본 변형은 맞던 소스값 14칸을 잃었다(ACGL·CNX·STRL·WTM·JLL·MTCH) —
+     * 재적재 관문의 Q4 정책 설계가 다시 판정한다(`docs/reload-gate.md`).
+     */
     private static BigDecimal controllingIncomeQ4(
             Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, Slot slot,
             boolean subtractable, RawFinancialReport fy, RawFinancialReport q1,
-            RawFinancialReport q2, RawFinancialReport q3) {
+            RawFinancialReport q2, RawFinancialReport q3, boolean usGate) {
         BigDecimal direct = sourceAt(byColumn, SecEdgarColumn.NET_INCOME_CONTROLLING, slot);
         if (direct != null) {
             return direct;
@@ -2289,6 +2318,11 @@ final class SecEdgarFacts {
                         ? redeemable.add(nonRedeemable) : null;
             }
             return nonControlling != null ? total.subtract(nonControlling) : total;
+        }
+        if (usGate) {
+            return sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME_CONTROLLING, slot, subtractable,
+                    fy.netIncomeControlling(), q1.netIncomeControlling(), q2.netIncomeControlling(),
+                    q3.netIncomeControlling());
         }
         return sourceOrMinus(byColumn, SecEdgarColumn.NET_INCOME, slot, subtractable,
                 fy.netIncome(), q1.netIncome(), q2.netIncome(), q3.netIncome());

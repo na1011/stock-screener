@@ -81,6 +81,11 @@ class SecEdgarFactsSweepTest {
                 .orElse("build/sweep.tsv"));
         int from = Integer.parseInt(
                 Optional.ofNullable(System.getenv("REPLAY_SWEEP_FROM")).orElse("2015"));
+        // 미국 재적재 관문 설정. 어댑터와 같은 갈래를 태운다 — 꺼진 출력은 설정이 생기기 전과 같아야 한다.
+        boolean usGate = "true".equals(System.getenv("US_GATE"));
+        // TSV 밖의 출력(버린 팩트 수 · 컬럼 부재 · 행별 assertedAbsent). 「꺼진 출력이 같다」를 이것까지 대조한다 —
+        // TSV만 같아도 Writer가 읽는 부재 판정이 갈리면 저장이 갈린다.
+        Optional<Path> extra = Optional.ofNullable(System.getenv("REPLAY_SWEEP_EXTRA")).map(Path::of);
         Files.createDirectories(out.toAbsolutePath().getParent());
 
         ObjectMapper mapper = new ObjectMapper();
@@ -96,6 +101,7 @@ class SecEdgarFactsSweepTest {
         long absences = 0;
         int failed = 0;
         StringBuilder failures = new StringBuilder();
+        StringBuilder extraLines = new StringBuilder();
         try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
             w.write(String.join("\t", HEADER));
             w.newLine();
@@ -104,7 +110,7 @@ class SecEdgarFactsSweepTest {
                 SecEdgarFacts.Result result;
                 try {
                     result = SecEdgarFacts.build(
-                            mapper.readTree(Files.readString(file)).path("facts"), from);
+                            mapper.readTree(Files.readString(file)).path("facts"), from, usGate);
                 } catch (RuntimeException | java.io.IOException
                         | com.stockscreener.pipeline.datasource.DataSourceException e) {
                     // MUST: DataSourceException도 잡는다. checked라 목록에 없던 탓에 한 종목의
@@ -121,6 +127,11 @@ class SecEdgarFactsSweepTest {
                 stocks++;
                 dropped += result.dropped();
                 absences += result.absences().size();
+                if (extra.isPresent()) {
+                    extraLines.append(ticker).append("\tdropped\t").append(result.dropped()).append('\n');
+                    result.absences().stream().map(String::valueOf).sorted()
+                            .forEach(a -> extraLines.append(ticker).append("\tabsence\t").append(a).append('\n'));
+                }
                 List<RawFinancialReport> reports = result.reports().stream()
                         .sorted(Comparator.comparing(RawFinancialReport::fiscalYear)
                                 .thenComparing(RawFinancialReport::fiscalPeriod)
@@ -144,10 +155,20 @@ class SecEdgarFactsSweepTest {
                     w.write(line.toString());
                     w.newLine();
                     rows++;
+                    if (extra.isPresent() && !r.assertedAbsent().isEmpty()) {
+                        extraLines.append(ticker).append('\t').append(r.fiscalYear()).append('/')
+                                .append(r.fiscalPeriod()).append('@').append(r.publishedAt())
+                                .append("\tassertedAbsent\t")
+                                .append(String.join(",", new java.util.TreeSet<>(r.assertedAbsent())))
+                                .append('\n');
+                    }
                 }
             }
         }
-        System.out.println("SWEEP 파일=" + files.size() + " 종목=" + stocks + " 보고서=" + rows
+        if (extra.isPresent()) {
+            Files.writeString(extra.get(), extraLines.toString(), StandardCharsets.UTF_8);
+        }
+        System.out.println("SWEEP 관문=" + usGate + " 파일=" + files.size() + " 종목=" + stocks + " 보고서=" + rows
                 + " 버린팩트=" + dropped + " 부재=" + absences + " 읽기실패=" + failed
                 + " out=" + out.toAbsolutePath());
         if (failed > 0) {

@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -51,6 +52,12 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     private final RateLimiter rateLimiter;
     private final SecTickerCikCache cikCache;
     private final boolean userAgentPresent;
+    /**
+     * 미국 재적재 관문 설정({@code stockscreener.gate.us} · 기본 꺼짐). <b>이 설정을 읽는 곳은 여기 하나다</b> —
+     * 관문에서 함께 나갈 어댑터 규칙 변경을 {@link SecEdgarFacts#build(tools.jackson.databind.JsonNode, int, boolean)}에 넘긴다.
+     * 켜는 순서·설정 표면 둘(배포 디렉터리 {@code .env}와 {@code bootRun})은 {@code CLAUDE.md} 「재적재·백필」에 있다.
+     */
+    private final boolean usGate;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -60,22 +67,33 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     public SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
                                     DataSourceProperties properties,
                                     @Qualifier("secEdgarRateLimiter") RateLimiter rateLimiter,
-                                    SecTickerCikCache cikCache) {
+                                    SecTickerCikCache cikCache,
+                                    @Value("${stockscreener.gate.us:false}") boolean usGate) {
         this(clientFactory, properties, rateLimiter, cikCache,
-                properties.getSecEdgar().getBaseUrl());
+                properties.getSecEdgar().getBaseUrl(), usGate);
     }
 
-    /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. */
+    /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 관문 설정은 꺼진 채다. */
     SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
                              DataSourceProperties properties,
                              RateLimiter rateLimiter,
                              SecTickerCikCache cikCache,
                              String baseUrl) {
+        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, false);
+    }
+
+    SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
+                             DataSourceProperties properties,
+                             RateLimiter rateLimiter,
+                             SecTickerCikCache cikCache,
+                             String baseUrl,
+                             boolean usGate) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
         this.cikCache = cikCache;
         this.userAgentPresent = source.hasApiKey();
+        this.usGate = usGate;
     }
 
     @Override
@@ -106,7 +124,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         JsonNode facts = SecEdgarResponse.requireFacts(
                 response.getStatusCode(), response.getBody(), context);
 
-        SecEdgarFacts.Result result = SecEdgarFacts.build(facts, fromFiscalYear);
+        SecEdgarFacts.Result result = SecEdgarFacts.build(facts, fromFiscalYear, usGate);
         if (result.dropped() > 0) {
             // MUST NOT: 조용히 버리지 않는다. 「없다」와 「우리가 못 만들었다」는 다르고,
             // 그 구분이 없으면 결손 판정이 서지 않는다(P22 ①축).
