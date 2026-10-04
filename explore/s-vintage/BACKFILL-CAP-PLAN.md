@@ -180,7 +180,7 @@
   14. 드라이런에 원래 결함 대조군이 없었다(→ 위 09-28~30) · 허용 목록 예시 `RETAINED_TO_MARKET_4Y`는 파생 자식이 없어 허용 목록이 비어 있다 → 「차이 0」으로 커밋.
 
 # 계획 v6 (반증 전 — v5 + 위 판정)
-1. `IndicatorBackfillJob`: ① `rewriteOriginLayer(asOf, tickers, by)`(빈 tickers = 보존 창 편입 · 잡 `indicator-origin-rewrite`) · ② `rebuildDerived(asOf, by)`(경계 최솟값+1 또는 시세 첫 거래일 ~ asOf · 잡 `indicator-derived-rebuild` · **대상 = 거래일 수, 거래일마다 성공 1** · 백분위·업종 쓴 행 수를 합쳐 note) · 기존 `run`은 손 도구.
+1. `IndicatorBackfillJob`: ① `rewriteOriginLayer(asOf, tickers, by)`(빈 tickers = 보존 창 편입 · 잡 `indicator-origin-rewrite`) · ② `rebuildDerived(asOf, by)`(경계 최솟값+1 또는 시세 첫 거래일 ~ asOf · 잡 `indicator-derived-rebuild` · **대상 = 거래일 수, 거래일마다 성공 1** · 백분위·업종 쓴 행 수를 합쳐 note · **날짜 루프 뒤에 지금 `run`의 루프 밖 두 단계 — 고아 파생값 정리(`removeOrphansInWindow`, ADR-0080)와 거래일 색인 갱신(`tradeDateIndex.rebuild`, ADR-0095)** — 를 ②가 진다: ①이 FAILED라 ②를 건너뛴 날은 색인이 다음 평일까지 안 바뀐다) · 기존 `run`은 손 도구.
 2. `StockRegistrar.windowMemberIds()` — `activeUniverseMemberIdsByTicker`와 창 술어를 한 조각으로 공유 · `GovernanceDeriveJob` 기본 모집단 = 보존 창 편입.
 3. **`IndicatorReconciler`**(`InvalidationBackfiller` 대체 · 상한 없음): `deriveInputs(asOf, by)` = `share-basis-derive(US)` → `governance-derive(기본 모집단)` · `reconcile(asOf, tickers, by)` = ① → (예외 없이 끝나고 FAILED가 아니면) ② · FAILED면 ERROR 로그(다음 평일이 다시 돈다).
 4. `PipelineScheduler`: 14:00 `corporate-action → adjustment-rebuild → (무효화가 있으면) deriveInputs → reconcile(무효화 종목)` · 14:15 무거운 잡만 · **14:18 `deriveInputs`** · **14:20 `reconcile(전원)`** — 풀 1이라 예정 시각 순 · 유도 실패가 화해를 안 막는다.
