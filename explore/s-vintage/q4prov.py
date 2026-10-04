@@ -1,5 +1,6 @@
 """바뀐 Q4 지배주주 칸의 입력 출처 판정 — 자기 식이 아니라 원장 직접값과의 일치로."""
 import csv, json, collections, sys, datetime as dt
+PF = {'10-K', '10-K/A', '10-Q', '10-Q/A', '20-F', '20-F/A', '40-F', '40-F/A', '6-K', '6-K/A'}  # 어댑터 PERIODIC_FORMS와 같게 — DEF 14A 보수-성과 표가 NetIncomeLoss에 연결값을 싣는다
 S, base_p, var_p = sys.argv[1], sys.argv[2], sys.argv[3]
 mem = dict(l.strip().split('|') for l in open(f'{S}/members.txt'))
 def load(p):
@@ -17,7 +18,7 @@ def ledger(t):
     return cache[t]
 def direct(t, start, end, pub):
     xs = [x for x in ledger(t).get('NetIncomeLoss', {}).get('units', {}).get('USD', [])
-          if 'start' in x and abs((d(x['start']) - d(start)).days) <= 7 and abs((d(x['end']) - d(end)).days) <= 7 and x['filed'] <= pub]
+          if x.get('form') in PF and 'start' in x and abs((d(x['start']) - d(start)).days) <= 7 and abs((d(x['end']) - d(end)).days) <= 7 and x['filed'] <= pub]
     xs.sort(key=lambda x: x['filed'])
     return xs[-1]['val'] if xs else None
 def at(v, day):

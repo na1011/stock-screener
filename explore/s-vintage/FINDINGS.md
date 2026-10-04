@@ -258,11 +258,15 @@ Writer 층: Q4 파생 행 3,852칸은 덮이고, **소스 행 값 → null 339�
 **칸에서 정해져도 TTM에서 안 정해지는 수정이 있다**(FY 뒤 분기 판은 Q4를 다시 안 만들어 TTM이 F + (새 Q − 옛 Q)) — 그런 수정은 Q4 정책과 함께 조립층에서.
 
 **S0 — 순이익 기저 계열을 먼저(0절의 내 판단) · 계획의 정본은 `S0-PLAN.md`** — 재적재는 따로 안 돈다(0절 2026-10-04 원칙).
-1. 남은 실측(`S0-PLAN.md` 「다음 실측」) → 계획 v3 → 반증 두 렌즈 → 구현(별도 브랜치 · main에 안 넣는다).
+1. 계획 v3(`S0-PLAN.md` — 2026-10-04 실측 넷을 마쳤고 **소비자 평가기 `ttm.py`로 판정**: 기저 혼합 가드를 빼고 소스 Q4 「연결만」 두 경로를 더했다) →
+   반증 두 렌즈 → 구현(별도 브랜치 · main에 안 넣는다).
 2. 드라이런: 스윕 diff · 입력 출처 지표 · Writer 층 분류 · **DB 사본에서 표적 적재**(바뀌는 종목 ∪ 채움만 있는 종목) · **사본 표적 백필**(날짜 여럿) · 소비자 셀-일.
 3. 관문: [S]·[Z]까지 닫힌 뒤 미국 재적재·백필 한 번 → 판정.
 
 **[S] — S0와 독립이라 S0와 나란히 실측부터 진행한다**
+- **S0가 넘긴 것(`S0-PLAN.md` 「남는 것」)**: Q4 잔차 세대 어긋남(SIRI·TSLA·CNH·ECHO 2023 …) · 분기 3개월값 ≠ 원장 누계 차분(IVZ·D·CRWD …) ·
+  **누계 차분 갈래가 어댑터에 없다**(ONTO 2024 Q2·Q3 — 최신 판 7칸·2종목, 시점별 판 수는 안 쟀다) · 분기 지배주주 폴백(ARES 2024 — 공시 원문의 확장 태그를 물어야 판정이 선다) ·
+  TSCO 2025 Q4(소스 Q4 문맥에 FY 값) · UHAL FY2026 Q3(부호) · 지배주주 컬럼만 옛 판에서 이어받음(CR 2023 Q1).
 - **P0 결정을 가르는 측정(5년 범위 포함)**: 태그 전환 노출 90 카드 + K4 무작위 10 · 누계 재작성 카드 · 오태깅 의심 잔액 R페이지 ≤ 10콜 + K11 노출 카드 ·
   부분 원가 줄 크기 · 영업이익 NULL 소비자 × 종목 표(분기 포함 — 반증 보고 「분기 끝 ≥ 2024-07 651라벨 · 93종목」 재확인).
 - **P1 평가기**(DB 사본 · 실제 `FinancialWriter` · 사본 생성은 10-04 승인됨 · S0 드라이런과 같은 사본): 사본에 지금 코드로 다시 쌓은 판(드리프트 제거 대조군) 대 변형 → `IndicatorRunner.computeAt(KNOWN_ON)` 여러 날짜.
@@ -296,6 +300,11 @@ S_ORIGIN=/tmp/origin-base.tsv REPLAY_SWEEP_DIR=$PWD/.factcache REPLAY_SWEEP_OUT=
 # 바뀐 칸 표본 틀(원인 × 행 종류 × 편입 · 층마다 4 · 시드 20261004) → 값을 가린 카드 → 판정(키는 판정 커밋 뒤에)
 python3 explore/s-vintage/frame.py /tmp/base.tsv /tmp/v7.tsv /tmp/origin-base.tsv /tmp/origin-v7.tsv members.txt /tmp/frame
 python3 explore/s-vintage/card.py /tmp/frame/sample.tsv /tmp/base.tsv /tmp/v7.tsv /tmp/origin-base.tsv /tmp/origin-v7.tsv .factcache /tmp/cards --known known.tsv
+# [S0] 소비자 평가기 — 그날 보이는 판의 TTM 지배주주 대 원장 TTM(양식 필터 필수 · DEF 14A 제외). 두 TSV면 칸별 갈림까지
+python3 explore/s-vintage/ttm.py <스크래치> /tmp/base.tsv /tmp/variant.tsv            # 창 · 현 편입 · 최신 TTM
+TTM_POP=members.txt TTM_OFFSET=4 TTM_DAYS=explore/s-vintage/days_5y_monthly.txt python3 explore/s-vintage/ttm.py …   # 범위 바꾸기
+python3 explore/s-vintage/q4fb.py <스크래치> /tmp/base.tsv /tmp/variant.tsv /tmp/q4fb.tsv   # 바뀐 Q4 지배주주 칸 대 원장 지배(FY) − 지배(9개월)
+# 변형: S_NIFIX=q4only(최종 후보의 뼈대) · S_NITOTAL=1 · S_NIQ4SRC=1 · S_NIRESTATED=1(기각) · S_NIFIX=q4guard(기각)
 # 원장 현상 카탈로그(판정 없는 검출기 · 0콜 · 약 3분)
 python3 explore/s-vintage/catalog.py .factcache members.txt /tmp/cat
 ```

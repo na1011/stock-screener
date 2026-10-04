@@ -2287,9 +2287,10 @@ final class SecEdgarFacts {
                     continue;
                 }
                 RawFinancialReport q4Source = vintageOf(byLabel, q4, vintage.publishedAt());
-                RawFinancialReport q4Report = mergeQ4(
-                        q4Source,
-                        buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn));
+                RawFinancialReport q4Residual =
+                        buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn);
+                RawFinancialReport q4Report = preferResidualControlling(
+                        mergeQ4(q4Source, q4Residual), q4Source, q4Residual, vintage, byColumn);
                 // MUST: 값이 같은 4분기 판을 세대마다 다시 내지 않는다. FY 판이 늘면 잔차가
                 // 같아도 Q4 판이 그만큼 늘고, 저장은 그것을 **정정으로 읽어 지표를 지운다** —
                 // 쓰기는 0인데 무효화만 남는다. 실측: 접기를 고쳐 FY 판이 늘자 이 자리에서
@@ -2341,6 +2342,32 @@ final class SecEdgarFacts {
      * <b>나머지 375칸 / 303라벨은 아직 사유를 안 댔다</b>
      * (매출원가 146 · 이자비용 106 · 총비용 59 · 매출 42).
      */
+    /**
+     * [탐색 S_NIQ4SRC] 소스 Q4 행의 지배주주가 폴백(그 공시의 Q4 슬롯에 지배주주 직접 팩트도, 연결·비지배 짝도
+     * 없다)이고 같은 FY 판은 비지배를 냈으면 잔차의 지배주주를 쓴다 — 그 해 Q4에 비지배가 없다는 근거가 없다.
+     */
+    private static RawFinancialReport preferResidualControlling(
+            RawFinancialReport merged, RawFinancialReport source, RawFinancialReport residual,
+            RawFinancialReport fy, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        if (System.getenv("S_NIQ4SRC") == null || source == null
+                || source.netIncomeControlling() == null
+                || residual.netIncomeControlling() == null
+                || fy.netIncome() == null || fy.netIncomeControlling() == null
+                || !differsMaterially(fy.netIncomeControlling(), fy.netIncome())) {
+            return merged;
+        }
+        Slot slot = new Slot(accnOf(source.reportCode()), source.periodStart(), source.periodEnd());
+        boolean direct = sourceAt(byColumn, SecEdgarColumn.NET_INCOME_CONTROLLING, slot) != null;
+        boolean identity = sourceAt(byColumn, SecEdgarColumn.NET_INCOME_TOTAL, slot) != null
+                && (sourceAt(byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING, slot) != null
+                || (sourceAt(byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING_REDEEMABLE, slot) != null
+                && sourceAt(byColumn, SecEdgarColumn.NET_INCOME_NONCONTROLLING_NONREDEEMABLE, slot) != null));
+        if (direct || identity) {
+            return merged;
+        }
+        return withNetIncomeControlling(merged, residual.netIncomeControlling());
+    }
+
     private static RawFinancialReport mergeQ4(RawFinancialReport source,
                                               RawFinancialReport residual) {
         if (source == null) {
@@ -2436,6 +2463,20 @@ final class SecEdgarFacts {
                 r.inventories(), r.netIncomeControlling(), r.interestAndDividendIncome(),
                 r.noninterestIncome(), r.interestExpense(), r.noninterestExpense(),
                 r.benefitsLossesAndExpenses(), gp, r.operatingExpenses(), r.costsAndExpenses(),
+                r.incomeTaxExpense(), r.profitBeforeTax(), r.derived(), r.assertedAbsent());
+    }
+
+    /** [탐색 S_NIQ4SRC] 지배주주 한 칸만 바꾼 사본. */
+    private static RawFinancialReport withNetIncomeControlling(RawFinancialReport r, BigDecimal nic) {
+        return new RawFinancialReport(
+                r.fiscalYear(), r.fiscalPeriod(), r.periodStart(), r.periodEnd(), r.publishedAt(),
+                r.reportCode(), r.currencyCode(), r.revenue(), r.operatingIncome(), r.netIncome(),
+                r.totalAssets(), r.totalEquity(), r.totalEquityControlling(), r.totalLiabilities(),
+                r.currentAssets(), r.currentLiabilities(), r.retainedEarnings(), r.operatingCashFlow(),
+                r.sharesOutstanding(), r.eps(), r.bps(), r.costOfSales(), r.cashAndEquivalents(), r.capex(),
+                r.inventories(), nic, r.interestAndDividendIncome(),
+                r.noninterestIncome(), r.interestExpense(), r.noninterestExpense(),
+                r.benefitsLossesAndExpenses(), r.grossProfit(), r.operatingExpenses(), r.costsAndExpenses(),
                 r.incomeTaxExpense(), r.profitBeforeTax(), r.derived(), r.assertedAbsent());
     }
 
@@ -2678,7 +2719,12 @@ final class SecEdgarFacts {
             if (nonControlling != null) {
                 return total.subtract(nonControlling);
             }
-            if (System.getenv("S_NIFIX") == null || "q4only".equals(System.getenv("S_NIFIX"))
+            boolean fyHasNoncontrolling = fy.netIncome() != null && fy.netIncomeControlling() != null
+                    && differsMaterially(fy.netIncomeControlling(), fy.netIncome());
+            if (System.getenv("S_NITOTAL") != null && fyHasNoncontrolling) {
+                // [탐색 S_NITOTAL] 같은 FY 판이 비지배를 낸 해에는 소스 Q4 연결 총액을 지배주주로 쓰지 않고
+                // 아래 잔차로 간다 — 그 해 Q4에 비지배가 없다는 근거가 없다.
+            } else if (System.getenv("S_NIFIX") == null || "q4only".equals(System.getenv("S_NIFIX"))
                     || "q4guard".equals(System.getenv("S_NIFIX"))
                     || noNoncontrollingIncomeBy(lastNoncontrollingIncome(byColumn),
                             new Window(slot.start(), slot.end()))) {
@@ -2794,7 +2840,10 @@ final class SecEdgarFacts {
                 || differs(a.grossProfit(), b.grossProfit())
                 || differs(a.operatingExpenses(), b.operatingExpenses())
                 || differs(a.costsAndExpenses(), b.costsAndExpenses())
-                || differs(a.benefitsLossesAndExpenses(), b.benefitsLossesAndExpenses());
+                || differs(a.benefitsLossesAndExpenses(), b.benefitsLossesAndExpenses())
+                // [탐색 S_NIRESTATED] 지배주주 순이익만 다시 낸 FY 판도 재작성으로 본다.
+                || (System.getenv("S_NIRESTATED") != null
+                        && differs(a.netIncomeControlling(), b.netIncomeControlling()));
     }
 
     private static boolean differs(BigDecimal a, BigDecimal b) {
