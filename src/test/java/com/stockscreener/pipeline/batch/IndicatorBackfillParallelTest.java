@@ -157,8 +157,10 @@ class IndicatorBackfillParallelTest {
     @Test
     @DisplayName("종료가 시작되면 워커가 끊기고 실행이 ABORTED로 마감된다 — 신호는 감싸지 않는다")
     void stopsCooperativelyAndDoesNotWrapTheShutdownSignal() throws Exception {
-        // 루프를 길게 만든다. 짧으면 종료를 걸기 전에 끝나 시험이 종료 경로를 못 태운다.
-        LocalDate from = seedEarlierTradeDates(60);
+        // 루프를 길게 만든다. 짧으면 종료를 걸기 전에 끝나 시험이 종료 경로를 못 태운다 —
+        // 60거래일이었을 때 전체 시험 묶음에서 한 번 그렇게 붉었다(2026-10-04 · 단독으로는 4/4 초록).
+        // 시간으로 정해지는 시험이라 여유를 크게 둔다. 종료가 걸리면 다음 날짜에서 바로 끊기므로 길이는 비용이 아니다.
+        LocalDate from = seedEarlierTradeDates(600);
 
         AtomicReference<Throwable> thrown = new AtomicReference<>();
         Thread runner = new Thread(() -> {
@@ -180,6 +182,9 @@ class IndicatorBackfillParallelTest {
             assertThat(runner.isAlive())
                     .as("종료 신호 뒤에도 루프가 돌고 있다 — 협조적 정지가 워커에 안 닿았다")
                     .isFalse();
+            assertThat(thrown.get() != null || !BatchStatus.SUCCESS.name().equals(lastStatus()))
+                    .as("종료를 걸기 전에 잡이 이미 끝났다 — 이 시험은 종료 경로를 태우지 못했다(루프를 더 길게)")
+                    .isTrue();
         } finally {
             runner.interrupt();
         }
