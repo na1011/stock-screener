@@ -66,8 +66,9 @@ def stated(v, H, c):
         x = COLS[c](r)
         if x is not None: best = x
     return best
-def truth(lab, y, fp, c):
-    fyv = lab.get((y, 'FY'))
+def truth(lab, y, fp, c, hy=None):
+    """hy: H를 정할 회계연도(HMODE=current면 오프셋 0 창의 회계연도 — 성장률은 지금 창과 같은 기준으로 견준다)."""
+    fyv = lab.get((hy if hy is not None else y, 'FY'))
     if not fyv: return 'unsettled'
     H = fyv[0]['pub']
     if TRUTH is not None:
@@ -131,8 +132,12 @@ for t in sorted(data[0]):
             row.append(qs if ok else None)
         if row[0] is None: continue
         y, fp = row[0][0][1], row[0][0][2]
+        hy = None
+        if os.environ.get('HMODE') == 'current':
+            q0 = sorted(((r['end'], yy) for (yy, pp), v in lab0.items() if pp in ('Q1', 'Q2', 'Q3', 'Q4') for r in [at(v, day)] if r), reverse=True)
+            hy = q0[0][1] if q0 else None
         for c in list(COLS) + ['pq4']:
-            tr = truth(lab0, y, fp, c) if c != 'pq4' else pq4_truth(lab0, row[0])
+            tr = truth(lab0, y, fp, c, hy) if c != 'pq4' else pq4_truth(lab0, row[0])
             outs = []
             for i, qs in enumerate(row):
                 if qs is None: k = '네 분기 안 섬'; v = None

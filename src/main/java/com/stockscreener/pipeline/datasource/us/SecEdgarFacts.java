@@ -307,7 +307,100 @@ final class SecEdgarFacts {
             }
             byColumn.put(column, byTag);
         }
+        if (System.getenv("S_P1") != null) {
+            dropAnnualEqualToShorter(byColumn);
+        }
+        if (System.getenv("S_K8") != null) {
+            dropQuarterContextEqualToAnnual(byColumn);
+        }
         return byColumn;
+    }
+
+    /** [탐색 P2 S_8K] 8-K 팩트를 정기 공시가 만든 라벨의 보고자로 받는다(라벨·회계연도 창은 안 만든다). */
+    static final boolean EIGHT_K = System.getenv("S_8K") != null;
+
+    /**
+     * [탐색 P2 S_P1] 중간보고(10-Q·6-K)가 12개월 창에 실은 값이 <b>같은 공시의 더 짧은 창 값</b>(같은 컬럼 · 0.1%)과 같으면 버린다 —
+     * FIX FY2025(2026-04-23 10-Q가 FY 창에 Q1 값 1,831.3) · AXON · AA · GPI 형. K11 사건 중 「FY · 짧은 쌍둥이 · 10-Q」 19건에서 뒤 공시가
+     * 앞 값으로 돌아감 13 · 뒤 없음 4(FIX) · 제3 1 · 확인 1.
+     */
+    private static void dropAnnualEqualToShorter(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> e : byColumn.entrySet()) {
+            if (e.getKey().instant()) {
+                continue;
+            }
+            Map<String, List<Fact>> byAccn = new HashMap<>();
+            for (Fact f : allFacts(e.getValue())) {
+                if (f.start() != null) {
+                    byAccn.computeIfAbsent(f.accn(), k -> new ArrayList<>()).add(f);
+                }
+            }
+            for (Map<Slot, Fact> slots : e.getValue().values()) {
+                slots.values().removeIf(f -> {
+                    if (f.start() == null || !INTERIM_FORMS.contains(f.form()) || f.value().signum() == 0) {
+                        return false;
+                    }
+                    long days = ChronoUnit.DAYS.between(f.start(), f.end());
+                    if (days < ANNUAL_MIN || days > ANNUAL_MAX) {
+                        return false;
+                    }
+                    for (Fact o : byAccn.getOrDefault(f.accn(), List.of())) {
+                        long od = ChronoUnit.DAYS.between(o.start(), o.end());
+                        if (od < ANNUAL_MIN - 20 && o.value().subtract(f.value()).abs()
+                                .compareTo(f.value().abs().multiply(new BigDecimal("0.001"))) <= 0) {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+            }
+        }
+    }
+
+    /**
+     * [탐색 P2 S_K8] 연차보고서가 3개월 창(그 해 FY와 같은 끝)에 실은 값이 <b>같은 공시의 FY 값</b>(0.1%)과 같고, 그 해 다른 분기 값이
+     * FY의 1%를 넘으면(한 분기가 FY일 수 없다) 그 3개월 값을 버린다 — LHX FY2025 · NI · TSCO 형(K8).
+     */
+    private static void dropQuarterContextEqualToAnnual(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> e : byColumn.entrySet()) {
+            if (e.getKey().instant()) {
+                continue;
+            }
+            List<Fact> all = new ArrayList<>();
+            Map<String, List<Fact>> annualByAccnEnd = new HashMap<>();
+            for (Fact f : allFacts(e.getValue())) {
+                if (f.start() != null) {
+                    all.add(f);
+                    long d = ChronoUnit.DAYS.between(f.start(), f.end());
+                    if (d >= ANNUAL_MIN && d <= ANNUAL_MAX) {
+                        annualByAccnEnd.computeIfAbsent(f.accn() + "|" + f.end(), k -> new ArrayList<>()).add(f);
+                    }
+                }
+            }
+            for (Map<Slot, Fact> slots : e.getValue().values()) {
+                slots.values().removeIf(f -> {
+                    if (f.start() == null || !ANNUAL_FORMS.contains(f.form()) || f.value().signum() == 0
+                            || !isQuarterSpan(ChronoUnit.DAYS.between(f.start(), f.end()))) {
+                        return false;
+                    }
+                    for (Fact fy : annualByAccnEnd.getOrDefault(f.accn() + "|" + f.end(), List.of())) {
+                        if (fy.value().subtract(f.value()).abs()
+                                        .compareTo(f.value().abs().multiply(new BigDecimal("0.001"))) > 0) {
+                            continue;
+                        }
+                        BigDecimal floor = fy.value().abs().multiply(new BigDecimal("0.01"));
+                        for (Fact q : all) {
+                            long qd = ChronoUnit.DAYS.between(q.start(), q.end());
+                            if (isQuarterSpan(qd) && !q.start().isBefore(fy.start().minusDays(7))
+                                    && q.end().isBefore(f.start()) && q.value().abs().compareTo(floor) > 0) {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                });
+            }
+        }
     }
 
     /**
@@ -432,7 +525,8 @@ final class SecEdgarFacts {
             }
             for (JsonNode node : tag.path("units").path(unit)) {
                 String form = node.path("form").asString("");
-                if (!PERIODIC_FORMS.contains(form)) {
+                if (!PERIODIC_FORMS.contains(form)
+                        && !(EIGHT_K && ("8-K".equals(form) || "8-K/A".equals(form)))) {
                     continue;
                 }
                 LocalDate end = date(node, "end");
@@ -550,6 +644,9 @@ final class SecEdgarFacts {
             for (Fact fact : allFacts(byTag)) {
                 if (fact.start() == null) {
                     continue;   // 잔액은 라벨을 만들지 않는다. 기간을 만드는 것은 유량이다.
+                }
+                if (EIGHT_K && fact.form().startsWith("8-K")) {
+                    continue;   // [탐색 P2 S_8K] 8-K는 라벨을 만들지 않는다 — 정기 공시가 만든 라벨에 값만 낸다
                 }
                 Anchor anchor = anchors.get(fact.accn());
                 if (anchor == null || !fact.end().equals(anchor.end())) {
