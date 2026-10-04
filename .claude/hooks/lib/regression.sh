@@ -247,16 +247,20 @@ check 침묵 "커밋 메시지의 --job= 은 기동이 아니다" \
 # **그 나이는 곧 부팅 이후 시간**이라 부팅 후 1시간 동안 매 실행이 거짓 FAIL이었다(실측:
 # 부팅 23분째에 FAIL, 72분째에 같은 코드가 OK). 거짓 FAIL은 이 표에서 가장 나쁜 고장이다 —
 # 같은 파일이 위에서 적듯 "잘못 잡으면 첫 발화가 거짓이라 그 뒤의 참 발화도 무시된다".
-# `kern.boottime`은 `ps -o etime`과 **다른 출처**이므로 둘이 맞으면 파싱이 맞는 것이고,
-# 부팅 직후든 한 달 뒤든 성립한다. 허용 오차 2초는 두 번 읽는 사이의 초 넘어감이다.
-_boot=$(sysctl -n kern.boottime 2>/dev/null | sed 's/^{ sec = \([0-9][0-9]*\).*/\1/')
-_expected=$(( $(date +%s) - ${_boot:-0} ))
+# 대조값은 `ps -o lstart`(시작 시각 문자열)를 `date`로 푼 나이다 — etime과 **다른 형식을 다른
+# 파서로** 읽으므로 둘이 맞으면 etime 파싱이 맞는 것이고, 부팅 직후든 한 달 뒤든 성립한다.
+# MUST NOT: `kern.boottime`과 대조하지 않는다 — 시계 보정 때 그 값만 밀려 차이가 1~3초로 흔들렸다
+# (실측: launchd의 lstart 18:03:38이 boottime 18:03:39.28보다 앞섰다 — 보정 없이는 불가능한 순서).
+# 허용 오차 2초는 두 번 읽는 사이의 초 넘어감이다.
+_lstart=$(LC_ALL=C ps -o lstart= -p 1 2>/dev/null | sed 's/ *$//')
+_started=$(LC_ALL=C date -j -f '%a %b %e %T %Y' "$_lstart" +%s 2>/dev/null)
+_expected=$(( $(date +%s) - ${_started:-0} ))
 _actual=$(. "$HOOKS/lib/load-process.sh"; load_process_age_seconds 1 2>/dev/null || echo -1)
 _diff=$(( _actual - _expected )); [ "$_diff" -lt 0 ] && _diff=$(( -_diff ))
-if [ -n "$_boot" ] && [ "$_actual" -ge 0 ] && [ "$_diff" -le 2 ]; then
+if [ -n "$_started" ] && [ "$_actual" -ge 0 ] && [ "$_diff" -le 2 ]; then
   pass=$((pass+1)); printf '  \033[32mOK\033[0m   %-8s %s\n' "확정" "오래된 PID의 나이를 잰다"
 else
-  fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s (etime=%s · boottime=%s)\n' "실패" "오래된 PID의 나이를 잰다" "$_actual" "$_expected"
+  fail=$((fail+1)); printf '  \033[31mFAIL\033[0m %-8s %s (etime=%s · lstart=%s)\n' "실패" "오래된 PID의 나이를 잰다" "$_actual" "$_expected"
 fi
 
 # 진짜 JVM을 띄워 분기 B를 확인한다. `comm`이 java여야 하므로 셸 프로세스로는 대신할 수 없다.
