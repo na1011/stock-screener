@@ -4,8 +4,10 @@
 TTM(스윕) = 그날 보이는 판(pub ≤ day)의 최근 연속 네 분기 지배주주 합 — 하나라도 null이면 넷 다 연결 합(창 단위 폴백).
 TTM(원장) = 최근 분기가 Q4면 지배(FY) · Qk면 지배(작년 FY) − 지배(작년 k분기 누계) + 지배(올해 k분기 누계).
   지배(창) = NetIncomeLoss, 없으면 ProfitLoss − 비지배 — 그날 이하 공시된 최신 값(±7일 창).
+TTM_TRUTH=post면 원장 TTM을 「사후 진실」(캐시 시점까지의 최신 공시 — FINDINGS 3절 합의 평가 수단)로 짓는다.
 틀림 = |TTM − 원장| > max(1% · max(|둘|), 50만) · 빈 = TTM null인데 원장 있음 · 미정 = 원장 없음.
 네 분기가 안 서는 날(연속 아님 · 모자람)은 따로 센다 — 소비자는 그때 FY 계열로 간다(여기서 안 다룬다)."""
+ANNUAL = {'10-K', '10-K/A', '20-F', '20-F/A', '40-F', '40-F/A'}
 import bisect, collections, csv, datetime as dt, json, sys
 PF = {'10-K', '10-K/A', '10-Q', '10-Q/A', '20-F', '20-F/A', '40-F', '40-F/A', '6-K', '6-K/A'}  # 어댑터 PERIODIC_FORMS와 같게 — DEF 14A 보수-성과 표가 NetIncomeLoss에 연결값을 싣는다
 
@@ -27,7 +29,7 @@ def series(t, tag, s, e):
     if key not in cache:
         g = led(t)
         xs = sorted((x['filed'], x['accn'], x['val']) for x in g.get(tag, {}).get('units', {}).get('USD', [])
-                    if x.get('form') in PF and 'start' in x and abs((d(x['start']) - s).days) <= 7 and abs((d(x['end']) - e).days) <= 7)
+                    if x.get('form') in PF and 'start' in x and ((e - s).days < 300 or x.get('form') in ANNUAL) and abs((d(x['start']) - s).days) <= 7 and abs((d(x['end']) - e).days) <= 7)
         cache[key] = ([x[0] for x in xs], [x[2] for x in xs])
     return cache[key]
 
@@ -51,10 +53,16 @@ def asof(t, tag, s, e, day):
 
 def ctrl(t, s, e, day):
     x = asof(t, 'NetIncomeLoss', s, e, day)
-    if x is not None:
-        return x
     p, n = asof(t, 'ProfitLoss', s, e, day), asof(t, 'NetIncomeLossAttributableToNoncontrollingInterest', s, e, day)
-    return p - n if p is not None and n is not None else None
+    ident = p - n if p is not None and n is not None else None
+    if x is not None:
+        # 어댑터 mistaggedControlling과 같은 두 규칙: 직접 == 총액이고 비지배 ≠ 0 · 보통주 귀속 == 항등식(정확히)
+        if ident is not None and x != ident:
+            ac = asof(t, 'NetIncomeLossAvailableToCommonStockholdersBasic', s, e, day)
+            if (x == p and n != 0) or (ac is not None and ac == ident):
+                return ident
+        return x
+    return ident
 
 
 def load(p):
@@ -98,6 +106,7 @@ def truth(t, lab, fy, fp, day):
     return a - b + c if None not in (a, b, c) else None
 
 
+MAG = {'커짐': collections.Counter(), '작아짐': collections.Counter()}
 res = [collections.Counter() for _ in tsvs]
 wrong_st = [collections.defaultdict(set) for _ in tsvs]
 pair = collections.Counter()
@@ -109,6 +118,7 @@ for t in cur:
         continue
     for di, day in enumerate(days):
         outs = []
+        errs = []
         for i, by in enumerate(data):
             lab = by.get(t, {})
             qs = []
@@ -123,11 +133,12 @@ for t in cur:
             if not ok:
                 res[i]['네 분기 안 섬'] += 1
                 outs.append(None)
+                errs.append(None)
                 continue
             nic = [num(q[3]['netIncomeControlling']) for q in qs]
             ni = [num(q[3]['netIncome']) for q in qs]
             ttm = sum(nic) if None not in nic else (sum(ni) if None not in ni else None)
-            tr = truth(t, lab, int(qs[0][1]), qs[0][2], day)
+            tr = truth(t, lab, int(qs[0][1]), qs[0][2], '9999-12-31' if os.environ.get('TTM_TRUTH') == 'post' else day)
             if tr is None:
                 c = '미정(원장 없음)'
             elif ttm is None:
@@ -140,12 +151,17 @@ for t in cur:
             if c in ('틀림', '빈'):
                 wrong_st[i][c].add(t)
             outs.append(c)
+            errs.append(abs(ttm - tr) if (ttm is not None and tr is not None) else None)
+        if len(outs) == 2 and outs[0] == outs[1] == '틀림' and None not in errs and abs(errs[0] - errs[1]) > max(0.01 * max(errs), 5e5):
+            MAG['커짐' if errs[1] > errs[0] else '작아짐'][t] += 1
         if len(outs) == 2 and None not in outs and outs[0] != outs[1]:
             pair[(outs[0], outs[1])] += 1
             if True:
                 SAMPLE.append((t, day, outs[0], outs[1]))
 for p, r, w in zip(tsvs, res, wrong_st):
     print(p.split('/')[-1], dict(r), {k: len(v) for k, v in w.items()})
+for k, v in MAG.items():
+    if v: print(f'둘 다 틀림 중 오차 {k}: {sum(v.values())}셀-일 · {len(v)}종목', v.most_common(12))
 if pair:
     print('기준 → 변형 갈림(셀-일):', dict(pair))
     by_t = collections.Counter((s[0], s[2], s[3]) for s in SAMPLE)
