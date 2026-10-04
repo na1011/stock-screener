@@ -56,7 +56,8 @@ export function triggeredByLabel(triggeredBy: TriggeredBy): string {
     case 'MANUAL':
       return '직접 실행'
     case 'GAP_FILL':
-      return '결손 보충'
+      // 정기 경로가 티커로 좁혀 부른 실행 — 리밸런싱 꼬리와 14:00 사슬의 화해 ①(ADR-0166).
+      return '좁힌 정기 실행'
     default:
       return assertNever(triggeredBy)
   }
