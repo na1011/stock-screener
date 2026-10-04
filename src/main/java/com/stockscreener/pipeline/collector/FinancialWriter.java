@@ -175,11 +175,10 @@ public class FinancialWriter {
      * {@code revision_no}가 어긋난 라벨을 {@code (published_at, revision_no, id)} 순으로 0..n
      * 다시 매긴다 — 회수가 지워 번호가 빈 라벨도 그 자리에서 같이 고쳐진다.
      *
-     * <p><b>MUST: 스케줄러 경로는 거짓을 넘긴다.</b> 참으로 돌면 정기 {@code financial-refill}이
-     * 수백 종목의 지표를 지우는데 자동 백필 상한({@code PipelineScheduler}의
-     * {@code AUTO_BACKFILL_FINANCIAL_STOCK_LIMIT})을 넘어 <b>지운 채로 남는다</b>. 손으로 켜는
-     * 경로는 {@code financial-refill --insert-earlier-vintages=true} 하나이고, 그 실행 뒤에는
-     * 무효화된 종목의 백필이 짝이다.
+     * <p><b>MUST: 스케줄러 경로는 거짓을 넘긴다.</b> 이른 판 삽입은 판 집합을 바꾸는 적재라 관문의 한 번에
+     * 속한다(ADR-0161 · {@code CLAUDE.md} 「재적재·백필」). 손으로 켜는 경로는
+     * {@code financial-refill --insert-earlier-vintages=true} 하나이고, 지운 지표는 매 평일 화해가 채운다
+     * (ADR-0166).
      */
     public Outcome writeDetailed(long stockId, List<RawFinancialReport> reports, WriteMode mode,
                                  boolean completeVintageHistory, boolean insertEarlierVintages) {

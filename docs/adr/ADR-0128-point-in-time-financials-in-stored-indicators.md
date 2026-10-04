@@ -58,7 +58,7 @@ applies_to:
   ① 정정공시 무효화(`StoredIndicatorInvalidationPort`가 `trade_date >= ?`로 **상한 없이** 지우는데
   `PipelineScheduler.runHeavy`가 `financialRefillJob` 뒤에 **백필을 잇지 않는다**)
   ② 미보정 기업행위 억제(ADR-0055) ③ 꼬리 걷기(ADR-0085)
-  ④ `adj_close` 재작성 복구(`AUTO_BACKFILL_STOCK_LIMIT = 10`을 넘으면 자동 백필이 포기한다).
+  ④ `adj_close` 재작성 복구(14:00 사슬이 무효화 종목을 상한 없이 화해한다 — ADR-0166).
   지금 그 넷을 메우는 유일한 기제가 **다음 실행이 창 전체를 다시 쓰는 것**이다.
 - **MUST NOT: 연수나 행 수로 재무를 자르지 않는다.** `LIMIT`은 **행** 수라, 창 앞부분에서는 최신
   기(期)가 아직 공시되지 않아 **더 오래된 행으로 채워진다** — 요구한 연수가 조용히 한 해씩

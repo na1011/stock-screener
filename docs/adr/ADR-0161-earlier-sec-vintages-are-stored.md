@@ -20,9 +20,9 @@ applies_to:
 
 ## 규칙
 
-- **MUST: 스케줄러 경로는 거짓을 넘긴다**(`FinancialRefillJob.runAndReport`의 5-인자 판). 참으로 돌면 정기
-  `financial-refill`이 수백 종목의 지표를 지우는데 `AUTO_BACKFILL_FINANCIAL_STOCK_LIMIT`(100)을 넘어 **지운 채
-  남는다.** 스케줄러를 켜는 것은 그 상한이 종목 수가 아니라 예상 소요로 바뀐 뒤다(progress.md A35).
+- **MUST: 스케줄러 경로는 거짓을 넘긴다**(`FinancialRefillJob.runAndReport`의 5-인자 판). 이른 판 삽입은 **판 집합을
+  바꾸는 적재**라 관문의 한 번에 속한다(`CLAUDE.md` 「재적재·백필」). 지운 지표를 채우지 못하던 옛 사유(자동 백필
+  상한 100)는 ADR-0166의 매 평일 화해가 걷었다.
 - **MUST: 켠 refill 뒤에는 무효화된 종목의 백필이 짝이다.** 백필 대상은 **실행 전에 DB에서 정해 파일로 남긴다** —
   잡이 모으는 목록은 메모리에만 있어, 중단되면 다시 돌려도 이미 넣은 판이라 목록에 안 뜬다.
 - **MUST NOT: DART(`completeVintageHistory=false`)에 이식하지 않는다.** DART는 `(corp_code, 연도, 보고서코드)`마다
