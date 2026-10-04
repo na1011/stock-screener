@@ -124,3 +124,38 @@
 
 ## 재지 않은 것(v4)
 - 지금 블로트에서 ①·② 소요와 행 변화(드라이런 7이 잰다) · `share-basis-derive` 소요(행이 없다 — 로그로만) · 첫 정기 실행의 실제 무효화 수.
+
+## 계획 v4 반증 판정 (2026-10-04 · 두 렌즈 · 원문 scratch `bf4-rv-out/`) → v5
+- **선 것**: ① 한 판의 원본층 = 날짜 루프 최종 원본층(러너 입력에 asOf가 없다 · 봉 창과 KNOWN_ON만) · ① 모집단 1,683 = ②가 순위를 매기는 합집합 · ②가 부르는 함수·순서 = 날짜 루프의 파생층 · 10-29 전 배포 전제(세 잡 SCHEDULER 성공 0 · 마지막 성공 10-03 21:14~21:17) · 새 잡 이름이 깨는 훅·프런트 분기 0.
+- **깨진 것과 받는 것**
+  1. **「① 실패 0일 때만 ②」는 회귀** — 종목 단위 실패는 지금 날짜 루프에서도 삼켜지고(`StockTaskExecutor:84-95`) 그날 순위는 돈다. v3 판정은 ① 통째 실패의 근거를 종목 실패로 옮긴 것(폴백 근거의 이식) → **②는 ①이 예외 없이 끝나고 FAILED가 아니면 돈다**.
+  2. **기업 행위 사슬 「① = 무효화 종목」 근거가 구성원마다 안 선다** — 재구축에만 선다. `corporate-action`의 OBSERVED 삽입(9월 정기 사슬 3건 — id 218·287·288)은 억제를 바꾸고, 기저 판정·거버넌스 유도는 무효화 없이 값을 바꾼다(갱신 0행 APPLIED).
+  3. **[V]를 미룬 근거가 안 선다** — A56의 사유(즉시 연체 → 백필 상한)는 무거운 잡마다 ①②가 붙으면 사라진다 · G는 꼬리 GAP_FILL이 매주 시계를 되돌려 조용히 멈춰 있다 · **GAP_FILL만 폴백에서 빼면 즉시 연체가 안 생긴다**(잼: G 수동 09-20 16:14 → 10-19 · FS 수동 09-23 00:26 → 10-20 · FR 수동 10-03 21:17 → 10-30 — `toDays() > 25`).
+  4. **CA 사슬에서 좁힌 `governance-derive`를 SCHEDULER로 남기면 「스케줄러 실행은 언제나 전량」(`JobFreshnessPolicy:38-45`)이 깨진다.**
+  5. **관문 설정**: 스윕만 `US_GATE`를 읽게 되어 env로 켠 사본 bootRun은 조용히 꺼진 채 0으로 끝난다 · relaxed 이름이 남는다 · 어댑터가 `@ConditionalOnApiKey`라 어떤 시험도 배선을 안 태운다 → **유효값이 환경변수에서 오면 기동을 세운다**(경고는 수정이 아니다).
+  6. **CLI 선례 인용이 거짓** — `REDERIVE_SHARE_BASIS_AFTER`에 `adjustment-rebuild`가 없다(APPLIED는 재구축만 찍는다 · 실측 GOSS 09-28 APPLIED → 판정 10-03).
+  7. **해석 문장 사실 오류 둘**: 과거 편입 333의 원본층 마지막 쓰기는 09-23 00:46 이전이고 그 뒤 운영 jar에 계산기 커밋 셋(`d3dbae2`·`11afb2a`·`109e30f`)이 들어갔다 — **지금 같은 날 순위에 새 계산기(현 편입 · 13:30이 매일 씀)와 옛 계산기(과거 편입)가 섞여 있다**(이미 있는 결손) · 「09-01 자동 백필과 같은 경로」는 ②에만 선다.
+  8. 드라이런이 v3 판정에서 셋을 잃었다(무효화 술어로 지우기 · 표본 구성 · 전원 diff) · 소비자 누락(`data-pipeline.md` 14:15 줄 · `env.sh:37` · `FinancialRefillJob` 알림 · `JobFreshnessPolicy:66-67` · batch-load skill · `guard-rebuild-without-dump.sh` · `load-process.sh` · `MembershipGapFiller` 링크) · 앞단(기저 판정·거버넌스 유도) 예외 시 동작이 계획에 없다 · ② 보존 경계 밖 경고가 US로 매 실행 운다 · 15:30 수(CA 최악 12:44 · ② 최근 거래일당 약 2초 → 약 9분).
+- **v5로 가는 판단(내 것)**: 파생층·원본층 쓰기는 `IS DISTINCT FROM`이라 값이 같으면 0행이다(`PercentileCalculator:120` · `SectorRelativeCalculator:195` · `IndicatorValueWriter`) — **매 평일 무조건 화해(① 보존 창 편입 전원 + ② 창 전체)는 블로트 없이 시간만 쓴다.** 그 모양이면 2(CA 사슬 모집단) · 끊긴 사슬(다음 평일이 고친다) · 손 CLI 겹침 · [A30] 파생층 몫 · 과거 편입의 계산기 낡음(7)이 **한 자리에서** 닫힌다 — 무효화 감지를 늘리는 쪽은 감지 자체가 구멍을 가진다(v3 술어 구멍 일곱).
+
+# 계획 v5 (반증 전)
+**실측(10-04 · SELECT)**: 보존 창 편입 1,683 · ① 665 = 4분 8초 · ② 666·685·689·696 = 3분 54초~7분 57초(1종목 원본 포함) · 매일 유도의 쓰기 — 거버넌스 유도 `governance_fact` 43,660행 지우고 다시 씀(12MB) · 기저 판정 29행 · 파생층·원본층은 값이 같으면 0행.
+1. `IndicatorBackfillJob` 두 진입점(기존 `run`은 손 도구로 남김):
+   - **① `rewriteOriginLayer(asOf, tickers, by)`** — 대상 원본층을 `indicatorRunner.run(stock, asOf, 시장별 경계, marketIndexesFor(asOf))` 한 번씩 · 기존 풀·`resolveWorkers`·`awaitAll` 재사용 · `tickers`가 비면 **보존 창 편입 전원**(`StockRegistrar`의 창 술어를 `activeUniverseMemberIdsByTicker`와 한 SQL 조각으로 공유) · 잡 이름 `indicator-origin-rewrite`.
+   - **② `rebuildDerived(asOf, by)`** — from = 시장별 경계 최솟값 + 1(경계가 없으면 시세 첫 거래일 — 보존 창이 아직 안 찼다) · 합집합 거래일마다 `percentileCalculator.calculate(d, null)`·`sectorRelativeCalculator.calculate(d, null)` → 고아 정리 → 거래일 색인 · 원본층·시장별 경계 경고를 안 부른다 · 잡 이름 `indicator-derived-rebuild`(대상 0 · 계획 = 거래일 수).
+2. `InvalidationBackfiller` → **`IndicatorReconciler.reconcile(asOf, tickers, by)`**: ① → (예외 없이 끝나고 FAILED가 아니면) ② · FAILED면 ②를 안 돌고 ERROR 로그(다음 평일 화해가 다시 돈다) · **상한 둘을 없앤다.**
+3. `PipelineScheduler`
+   - 14:00 기업 행위 사슬: `corporate-action → adjustment-rebuild`(백필을 뗀다 — 같은 오후 14:20 화해가 잇는다).
+   - 14:15 무거운 잡: 잡만(기저 판정·백필을 뗀다).
+   - **신설 14:20 `runIndicatorReconcile`(평일)**: `share-basis-derive(US) → governance-derive(전 종목) → reconcile(asOf = targetDateFor(오늘), 전원)` — 무엇이 돌았든 늘 · 풀 1이라 앞 둘이 끝난 뒤 돈다 · 앞단 예외는 ①②를 막는다(판정 전 기저로 계산하지 않는다 — ADR-0162 · 다음 평일이 다시 돈다) · 2026-09-01 사용자 결정 「앞의 둘만 걸고 백필을 사람에게 남기지 않는다」는 같은 오후 자동 화해로 선다(손으로 남기지 않는다).
+4. [V] 좁게: `JobFreshnessPolicy.daysSinceLastSuccess`의 폴백(SCHEDULER 성공이 없을 때)에서 **GAP_FILL을 뺀다** — 꼬리가 매주 되돌리던 시계 · 남는 것: SCHEDULER 성공 전의 손 `--tickers`(첫 정기 성공 뒤엔 SCHEDULER 시계만 본다). 화해 ②에 신선도 예산(일일 갱신과 같은 값)을 준다 — 화해가 끊기면 그것이 운다.
+5. CLI `--job=indicator-reconcile [--tickers] [--as-of]` → `IndicatorReconciler.reconcile`(스케줄러와 같은 메서드) · `--from` 거절 · `guard-rebuild-without-dump.sh` 대상에 넣는다(②가 그날 모집단 밖 파생 행을 지운다 — backfill과 같은 사유) · `REDERIVE_SHARE_BASIS_AFTER`에 `adjustment-rebuild`를 더한다.
+6. 관문 설정(별도 커밋): `stockscreener.gate.us: false`(env 자리표시자 제거) · `@Value` 기본값 제거 · **항상 뜨는 빈 하나가 기동 시 유효값을 찍고, 그 값의 출처가 환경변수이거나 환경변수 `US_GATE`가 있으면 기동을 세운다**(스윕은 JUnit 단독이라 영향 없음) · 시험: 출처별(인자 · yaml · 환경변수) 기동 판정.
+7. 시험: 낡은 체인 시험 갱신 · 14:20 순서(`InOrder`: 기저 → 유도 → ① → ②) · 앞단 예외 시 ①② 안 돎 · ① FAILED면 ② 안 돎 · ① PARTIAL이면 ② 돎 · 상한 없음 · ① 모집단 = 보존 창 편입(실DB) · ②가 원본층을 안 부르고 모집단을 안 좁힘 · 휴장·주말 asOf(실DB) · 경계 없음 · CLI 별칭·`--from` 거절 · [V] GAP_FILL 제외 · 크론 간격(14:00 < 14:15 < 14:20 < 15:30) · 관문 설정.
+8. 드라이런(사본 둘 · `env.sh`의 `boot()`·`q()`·`new_exec()` · 작업 폴더 따로): 표본 = 억제 종목 · 정지 종목 · 과거 편입 · KR 휴장일에 걸친 US · 최근 무효화 종목 → 무효화 포트 술어(`stock_id=? AND trade_date>=?`)로 그 행을 지운 뒤 (가) `backfill --tickers=<표본> --from=<경계+1> --as-of=<최신>`(날짜 루프) (나) `indicator-reconcile --tickers=<표본> --as-of=<최신>` →
+   **판정 규칙(대조 전 커밋)**: 원본층(파생 코드 제외) 바이트 동일 · 파생층 (가) 대 (나) 차이는 asOf 의존 원본(목록을 grep으로 먼저 — `RETAINED_TO_MARKET_4Y` 등)의 파생 코드에만 · (가)+② 대 (나) 바이트 동일 · 그다음 (나′) 전원 `indicator-reconcile`로 과거 편입 333의 원본층이 몇 칸 바뀌는지(계산기 커밋 셋 몫)와 소요 · 복원 사본은 블로트가 없어 운영 소요는 첫 정기 실행이 잰다.
+9. 문서·독자: 위 8의 소비자 · ADR 신설(매 평일 화해 · ADR-0116의 사슬 백필·상한 절을 대체) · `CLAUDE.md` 「재적재·백필」 **내 해석** 줄에 「매 평일 화해는 그날 데이터 변경을 반영하는 유지이고 값을 바꾸는 코드는 꺼진 설정 뒤라 퍼뜨리지 않는다 — 관문의 「한 번」 대상이 아니다」 · `progress.md` 「재적재 관문」·`reload-gate.md`(상한 줄 · [A30] · [V] · 순서 8).
+10. 배포(사용자 확인): HEAD = main · 깨끗 · 창 · RUNNING 0 · 사용자 `.env` 확인(기동 가드가 생겨도 첫 배포는 확인) · 배포 뒤 기동 로그의 관문 줄 · 첫 14:20의 ①·② 두 행 · 10-19 G가 첫 무거운 잡 대조군.
+
+## 재지 않은 것(v5)
+- 14시대 부하에서 ①② 소요 · 과거 편입 333의 실제 변화 칸 수(드라이런 (나′)) · `share-basis-derive` 소요 · 손 CLI와 화해가 같은 날짜를 동시에 쓸 때의 교착(305 전례 — 다음 평일이 고치지만 그날 실패는 남는다).
