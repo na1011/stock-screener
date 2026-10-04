@@ -87,6 +87,38 @@ class JobFreshnessPolicyTest {
     }
 
     @Test
+    @DisplayName("스케줄러 실행이 없을 때도 리밸런싱 꼬리는 시계를 되돌리지 못한다 — 배너와 스케줄러가 같은 답")
+    void gapFillDoesNotResetTheFallbackClock() {
+        // 스케줄러 실행이 한 번도 없는 잡: 폴백이 손 실행을 센다. 그 손 실행은 오래전이고,
+        // 어제 꼬리가 결손 티커로 좁혀 돌았다(2026-10-03 governance-load·full-statement-refill의 모양).
+        assertNoSchedulerRun();
+        Instant now = Instant.parse("2026-09-01T05:00:00Z");
+        int budget = JobFreshnessPolicy.BUDGETS.get(PROBE_JOB).days();
+        insert(PROBE_JOB, "SUCCESS", "MANUAL", now.minus(Duration.ofDays(budget + 3L)));
+        insert(PROBE_JOB, "SUCCESS", "GAP_FILL", now.minus(Duration.ofDays(1)));
+
+        assertThat(names(policy.stale(now)))
+                .as("꼬리를 세면 좁은 실행이 전량 실행의 연체를 가린다")
+                .contains(PROBE_JOB);
+        assertThat(policy.daysSinceLastSuccess(PROBE_JOB, now))
+                .as("스케줄러가 묻는 경과일도 같은 실행을 센다")
+                .isEqualTo(budget + 3L);
+    }
+
+    @Test
+    @DisplayName("꼬리만 있으면 「한 번도 안 돌았다」다 — 0일로 접지 않는다")
+    void onlyGapFillMeansNeverRun() {
+        assertNoSchedulerRun();
+        Instant now = Instant.parse("2026-09-01T05:00:00Z");
+        insert(PROBE_JOB, "SUCCESS", "GAP_FILL", now.minus(Duration.ofDays(1)));
+
+        assertThat(policy.daysSinceLastSuccess(PROBE_JOB, now)).isEqualTo(Long.MAX_VALUE);
+        assertThat(policy.stale(now).stream()
+                .filter(item -> item.jobName().equals(PROBE_JOB))
+                .findFirst().orElseThrow().daysSince()).isEqualTo(-1L);
+    }
+
+    @Test
     @DisplayName("실패한 실행은 성공으로 안 센다 — 세면 실패가 신선도를 만든다")
     void failedRunDoesNotCount() {
         Instant now = Instant.parse("2026-09-01T05:00:00Z");
@@ -125,6 +157,20 @@ class JobFreshnessPolicyTest {
         // 술어 자체를 고정한다. 이 수가 0이 아닌 상태는 ADR-0049의 불변식도 · 원장 상태도 ·
         // 재실행 0행도 못 보므로, 여기서 세지 않으면 어디에서도 안 붉는다.
         assertThat(policy.approvedWithoutCoefficient()).isGreaterThanOrEqualTo(0);
+    }
+
+    /**
+     * 폴백 갈래를 탔는지의 전제. 다른 시험이 남긴 스케줄러 성공 행이 있으면 폴백을 안 타고도
+     * 초록이 된다 — 그때는 이 시험이 아무것도 검사하지 않은 것이다.
+     */
+    private void assertNoSchedulerRun() {
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM batch_execution
+                WHERE job_name = ? AND triggered_by = 'SCHEDULER'
+                  AND status IN ('SUCCESS', 'PARTIAL_SUCCESS')
+                """, Long.class, PROBE_JOB))
+                .as("스케줄러 성공 행이 있으면 폴백 갈래를 안 탄다")
+                .isZero();
     }
 
     private static List<String> names(List<JobFreshnessPolicy.Staleness> stale) {

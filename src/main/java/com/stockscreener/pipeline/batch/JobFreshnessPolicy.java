@@ -195,9 +195,18 @@ public class JobFreshnessPolicy {
      * @param schedulerOnly 스케줄러가 남긴 실행만 볼 것인가. {@code true}로 한 번 물어 없으면
      *                      호출부가 {@code false}로 다시 묻는다 — 아직 크론이 한 번도 발화하지
      *                      않은 잡을 <b>「한 번도 안 돌았다」로 신고하지 않기 위해서다.</b>
+     *
+     * <p><b>MUST: 폴백에서도 {@code GAP_FILL}은 안 센다.</b> 리밸런싱 꼬리는 결손 티커로 좁혀
+     * 부르는 실행이라(클래스 javadoc의 불변식) 전량이 아니다. 세면 스케줄러 실행이 아직 없는
+     * 잡의 시계를 꼬리가 되돌린다 — 2026-10-03 꼬리의 {@code governance-load}·
+     * {@code full-statement-refill}이 그 자리였고, 무거운 잡의 첫 정기 실행이 그만큼 밀렸다.
+     * 폴백 자체에 두므로 {@link #stale}(배너·알림)과 {@link #daysSinceLastSuccess}(스케줄러)가
+     * 같은 답을 낸다.
      */
     private Instant lastSuccessAt(String jobName, boolean schedulerOnly) {
-        String triggerClause = schedulerOnly ? " AND triggered_by = 'SCHEDULER'" : "";
+        String triggerClause = schedulerOnly
+                ? " AND triggered_by = 'SCHEDULER'"
+                : " AND triggered_by <> 'GAP_FILL'";
         return jdbcTemplate.queryForObject("""
                 SELECT max(started_at) FROM batch_execution
                 WHERE job_name = ? AND status IN ('SUCCESS', 'PARTIAL_SUCCESS')
