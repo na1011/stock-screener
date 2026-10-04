@@ -246,8 +246,25 @@ final class SecEdgarFacts {
             reports.addAll(revisionsOf(label, e.getValue(), labelAnchors.get(label),
                     byColumn, anchors, tags));
         }
-        List<RawFinancialReport> fourthQuarters =
-                deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn);
+        if (System.getenv("S_REPRAW") != null) {
+            // [탐색 P3 S_REPRAW] 「그 공시가 그 해 분기를 다시 실었나」를 접힌 판이 아니라 원자료 팩트로 센다
+            Map<String, Set<Integer>> raw = new HashMap<>();
+            for (Map<String, Map<Slot, Fact>> byTag : byColumn.values()) {
+                for (Fact fact : allFacts(byTag)) {
+                    if (fact.start() == null
+                            || !isQuarterSpan(ChronoUnit.DAYS.between(fact.start(), fact.end()))) {
+                        continue;
+                    }
+                    Label l = labelOf(fact, fiscalYears);
+                    if (l != null && !"FY".equals(l.period())) {
+                        raw.computeIfAbsent(fact.accn(), k -> new HashSet<>()).add(l.fiscalYear());
+                    }
+                }
+            }
+            RAW_QUARTER_YEARS.set(raw);
+        }
+        List<RawFinancialReport> fourthQuarters = TRUTH_MODE ? List.of()
+                : deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn);
         // MUST: 같은 (회계연도, 기간, 공시일)이면 **병합본이 소스 판을 대체한다.**
         // mergeQ4가 소스 값을 그대로 얹으므로 병합본은 소스 판의 상위집합이고, 둘을 함께 두면
         // 저장이 같은 키에 두 번 써서 **무효화만 남는다.**
@@ -561,6 +578,9 @@ final class SecEdgarFacts {
                     continue;
                 }
                 Label label = labelOf(fact, fiscalYears);
+                if (label == null && TRUTH_MODE) {
+                    label = ytdLabelOf(fact, fiscalYears);   // [탐색 P3 S_TRUTH] 누계 창(C2·C3)
+                }
                 if (label == null) {
                     dropped++;
                     continue;
@@ -694,6 +714,31 @@ final class SecEdgarFacts {
      *
      * <p>길이가 연도도 분기도 아닌 것(반기·9개월 누적)은 라벨을 만들지 않는다 — 버리고 센다.
      */
+    /**
+     * [탐색 P3 S_TRUTH] 진실 표 모드 — 공시마다 그 공시가 실은 값만(이어받기 없음 · 접기 없음 · Q4 유도 없음)과
+     * 누계 창 라벨(C2 = 반기 누계 · C3 = 9개월 누계)을 낸다. 컬럼 고르기·유도는 어댑터 그대로라 소비자와 같은 개념이다.
+     */
+    static final boolean TRUTH_MODE = System.getenv("S_TRUTH") != null;
+
+    private static Label ytdLabelOf(Fact fact, NavigableMap<LocalDate, Window> fiscalYears) {
+        long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
+        int k = (int) Math.round(days / 91.31);
+        if (k != 2 && k != 3 || Math.abs(days - k * 91.31) > 20) {
+            return null;
+        }
+        Window year = enclosingYear(fact.end(), fiscalYears);
+        if (year == null) {
+            year = projectYear(fact.end(), fiscalYears);
+            if (year == null) {
+                return null;
+            }
+        }
+        if (Math.abs(ChronoUnit.DAYS.between(year.start(), fact.start())) > START_TOLERANCE_DAYS) {
+            return null;   // 회계연도 첫날에서 시작하지 않는 누계는 쓰지 않는다
+        }
+        return new Label(fiscalYearOf(year.end()), "C" + k);
+    }
+
     private static Label labelOf(Fact fact, NavigableMap<LocalDate, Window> fiscalYears) {
         long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
         boolean annual = days >= ANNUAL_MIN && days <= ANNUAL_MAX;
@@ -882,7 +927,8 @@ final class SecEdgarFacts {
             // 그리고 **앞 판의 값을 이어받는다**(carryForward). 그러지 않으면 뒤 판이 안 실은
             // 컬럼이 null로 저장되어, 정정 하나가 그 기간의 손익을 통째로 지운다.
             TRACE_BRANCHES.clear();   // [탐색] S_ORIGIN
-            Map<SecEdgarColumn, BigDecimal> carried = System.getenv("S_COHERENCE") != null
+            Map<SecEdgarColumn, BigDecimal> carried = TRUTH_MODE ? values
+                    : System.getenv("S_COHERENCE") != null
                     ? carryForwardCoherent(baseline, values) : carryForward(baseline, values);
             // [탐색] S_ORIGIN — 컬럼마다 값이 어디서 왔나: 그 판 공시(accn) · 앞 판에서 이어받음(^accn) ·
             // 규칙이 계산·되돌림(R). 같은 값이면 그 판 공시가 실은 것으로 본다.
@@ -936,7 +982,7 @@ final class SecEdgarFacts {
             // 저장 값이 같아도 그 판의 accn이 **4분기 유도에서 다른 슬롯을 연다**:
             // CPNG FY2024의 두 판은 저장 값이 같은데 2026-02-26 판만 Q4 매출총이익
             // 2,491,000,000을 연다. 그것까지 접으면 그 칸을 잃는다(실측 1칸).
-            if (baseline != null && last != null
+            if (!TRUTH_MODE && baseline != null && last != null
                     && !conflicts(baseline, carried) && !storedDiffers(last, candidate)) {
                 trace(label.fiscalYear(), label.period(), reporter.filed(), "FOLD", traceLine);
                 continue;
@@ -2306,6 +2352,14 @@ final class SecEdgarFacts {
                 emitted = true;
                 lastUsed = vintage;
             }
+            if (emitted && System.getenv("S_Q4POL") != null) {
+                // [탐색 P3 S_Q4POL=always] FY 판 뒤에 그 해 분기가 새 판으로 나올 때마다 Q4를
+                // 그 공시일에 다시 낸다. FY 판 사건까지 시간순으로 다시 짓고 이 라벨의 Q4 판을 갈아 끼운다.
+                derived.removeIf(r -> r.fiscalYear() == label.fiscalYear() && "Q4".equals(r.fiscalPeriod())
+                        && r.publishedAt() != null && byLabel.getOrDefault(label, List.of()).stream()
+                                .anyMatch(f -> f.publishedAt().equals(r.publishedAt())));
+                derived.addAll(rederiveOnQuarterRefile(label, quarterLabels, byLabel, quarterYears, byColumn));
+            }
             if (!emitted && fallback != null) {
                 // 어느 세대에서도 잔차가 성립하지 않는다(FY 판이 하나뿐인 경우가 그렇다).
                 // **그래도 마지막 세대로 한 판을 낸다** — 불가능한 컬럼은 비운 채로.
@@ -2492,6 +2546,228 @@ final class SecEdgarFacts {
         return false;
     }
 
+    /**
+     * [탐색 P3 S_Q4POL=always] 분기 재발행 공시일마다 Q4를 다시 낸다. FY 판 고리와 같은 되돌림 규칙
+     * ({@code restated} ∧ {@code representedOtherYears})을 FY 판 사건에 다시 태워 「그 시점 쓸 FY 판」을 정하고,
+     * 분기 사건에서는 그 FY 판과 그때 최신 분기 셋으로 잔차를 낸다. 이미 낸 판(FY 판 고리)과 시간순으로 합쳐
+     * 직전 판과 값이 같으면 안 낸다.
+     */
+    private static List<RawFinancialReport> rederiveOnQuarterRefile(
+            Label label, List<Label> quarterLabels, Map<Label, List<RawFinancialReport>> byLabel,
+            Map<String, Set<Integer>> quarterYears,
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        Label q4 = new Label(label.fiscalYear(), "Q4");
+        List<RawFinancialReport> fyVintages = byLabel.getOrDefault(label, List.of());
+        // 사건: FY 판 공시일(참) ∪ 첫 FY 판 뒤 분기 판 공시일(거짓) — 같은 날이면 FY 사건이다
+        java.util.TreeMap<LocalDate, RawFinancialReport> events = new java.util.TreeMap<>();
+        for (RawFinancialReport vintage : fyVintages) {
+            events.put(vintage.publishedAt(), vintage);
+        }
+        LocalDate firstFy = fyVintages.get(0).publishedAt();
+        // S_Q4POL=srcmerge: 늦게 나온 소스 Q4 판에도 잔차를 합친다(재유도는 안 한다 — 분기는 그때 쓴 FY 판 시점 것).
+        // S_Q4POL=always: 위 + 분기 재발행 공시일마다 그때 최신 분기로 다시 뺀다.
+        String mode = System.getenv("S_Q4POL");
+        // always · fill(값→값 변화가 없는 재발행만) · gated(재발행 공시가 FY 기말 잔액을 고쳐 실었으면 다시 안 뺀다)
+        boolean always = "always".equals(mode) || "fill".equals(mode) || "gated".equals(mode)
+                || "gatedcw".equals(mode);
+        List<Label> eventLabels = always ? new ArrayList<>(quarterLabels) : new ArrayList<>();
+        eventLabels.add(q4);
+        for (Label quarter : eventLabels) {
+            for (RawFinancialReport candidate : byLabel.getOrDefault(quarter, List.of())) {
+                if (candidate.publishedAt().isAfter(firstFy)) {
+                    events.putIfAbsent(candidate.publishedAt(), candidate);
+                }
+            }
+        }
+        List<RawFinancialReport> out = new ArrayList<>();
+        RawFinancialReport lastUsed = null;
+        RawFinancialReport lastQ4 = null;
+        List<RawFinancialReport> lastQs = null;
+        RawFinancialReport flowsFy = null;   // 유량이 마지막으로 바뀐 FY 판 — B 신호의 기준 공시
+        Map<String, BigDecimal[]> base = new HashMap<>();   // gatedcw: 컬럼마다 마지막 잔차에 쓴 분기 셋 값
+        for (Map.Entry<LocalDate, RawFinancialReport> ev : events.entrySet()) {
+            LocalDate at = ev.getKey();
+            boolean fyEvent = "FY".equals(ev.getValue().fiscalPeriod());
+            RawFinancialReport fy = fyEvent ? ev.getValue() : lastUsed;
+            LocalDate quartersAt = fyEvent || always || fy == null ? at : fy.publishedAt();
+            RawFinancialReport v1 = vintageOf(byLabel, quarterLabels.get(0), quartersAt);
+            RawFinancialReport v2 = vintageOf(byLabel, quarterLabels.get(1), quartersAt);
+            RawFinancialReport v3 = vintageOf(byLabel, quarterLabels.get(2), quartersAt);
+            if (fy == null || v1 == null || v2 == null || v3 == null
+                    || !v3.periodEnd().plusDays(1).isBefore(fy.periodEnd())) {
+                continue;
+            }
+            if (fyEvent && lastUsed != null && restated(lastUsed, fy)
+                    && representedOtherYears(quarterYears, fy, label.fiscalYear())) {
+                continue;
+            }
+            if (lastQ4 != null && lastQs != null && (!fyEvent || !restated(lastUsed, fy))) {
+                String eventAccn = accnOf(ev.getValue().reportCode());
+                boolean keep = "fill".equals(mode) && quartersValueChanged(lastQs, v1, v2, v3)
+                        || "gated".equals(mode) && quartersValueChanged(lastQs, v1, v2, v3)
+                                && balanceRestated(byColumn, accnOf(flowsFy.reportCode()), eventAccn,
+                                        flowsFy.periodEnd());
+                if (keep) {
+                    // 다시 빼지 않는다 — 앞 판의 분기 셋을 그대로 쓴다(그날 소스 Q4 판이 있으면 그 위에 합친다).
+                    traceQ4(label.fiscalYear(), "Q4KEEP", fy, v1, v2, v3, null);
+                    v1 = lastQs.get(0);
+                    v2 = lastQs.get(1);
+                    v3 = lastQs.get(2);
+                }
+            }
+            LocalDate start = v3.periodEnd().plusDays(1);
+            RawFinancialReport residual = buildQ4(label.fiscalYear(), start, fy, v1, v2, v3, byColumn);
+            RawFinancialReport q4Source = vintageOf(byLabel, q4, at);
+            RawFinancialReport merged = preferResidualControlling(
+                    mergeQ4(q4Source, residual), q4Source, residual, fy, byColumn);
+            if (!fyEvent) {
+                merged = new RawFinancialReport(
+                        merged.fiscalYear(), merged.fiscalPeriod(), merged.periodStart(), merged.periodEnd(), at,
+                        ev.getValue().reportCode(), merged.currencyCode(), merged.revenue(), merged.operatingIncome(),
+                        merged.netIncome(), merged.totalAssets(), merged.totalEquity(), merged.totalEquityControlling(),
+                        merged.totalLiabilities(), merged.currentAssets(), merged.currentLiabilities(),
+                        merged.retainedEarnings(), merged.operatingCashFlow(), merged.sharesOutstanding(), merged.eps(),
+                        merged.bps(), merged.costOfSales(), merged.cashAndEquivalents(), merged.capex(),
+                        merged.inventories(), merged.netIncomeControlling(), merged.interestAndDividendIncome(),
+                        merged.noninterestIncome(), merged.interestExpense(), merged.noninterestExpense(),
+                        merged.benefitsLossesAndExpenses(), merged.grossProfit(), merged.operatingExpenses(),
+                        merged.costsAndExpenses(), merged.incomeTaxExpense(), merged.profitBeforeTax(),
+                        merged.derived(), merged.assertedAbsent());
+            } else {
+                if (flowsFy == null || restated(flowsFy, fy)) {
+                    flowsFy = fy;
+                }
+                lastUsed = fy;
+            }
+            if ("gatedcw".equals(mode)) {
+                boolean reset = lastQ4 == null || fyEvent && flowsFy == fy;   // 유량이 바뀐 FY 판이면 기준을 새로 잡는다
+                boolean b1 = !reset && balanceRestated(byColumn, accnOf(flowsFy.reportCode()),
+                        accnOf(ev.getValue().reportCode()), flowsFy.periodEnd());
+                Map<String, BigDecimal> override = new HashMap<>();
+                for (Map.Entry<String, java.util.function.Function<RawFinancialReport, BigDecimal>> c : FLOW_COLUMNS.entrySet()) {
+                    BigDecimal[] now = {c.getValue().apply(v1), c.getValue().apply(v2), c.getValue().apply(v3)};
+                    BigDecimal[] was = base.get(c.getKey());
+                    boolean changed = false;
+                    if (was != null) {
+                        for (int i = 0; i < 3; i++) {
+                            if (was[i] != null && now[i] != null && differsMaterially(was[i], now[i])) {
+                                changed = true;
+                            }
+                        }
+                    }
+                    if (b1 && changed) {
+                        BigDecimal src = q4Source == null ? null : c.getValue().apply(q4Source);
+                        override.put(c.getKey(), src != null ? src : c.getValue().apply(lastQ4));
+                    } else {
+                        base.put(c.getKey(), now);
+                    }
+                }
+                if (!override.isEmpty()) {
+                    merged = withFlows(merged, override);
+                    traceQ4(label.fiscalYear(), "Q4KEEPCOL" + override.keySet(), fy, v1, v2, v3, null);
+                }
+            }
+            lastQs = List.of(v1, v2, v3);
+            // 그날 실린 소스 Q4 판이 있으면 값이 앞 판과 같아도 낸다 — 안 내면 그 소스 판이 단독으로 남아
+            // (병합본이 대체하지 않아) 잔차로 채우던 칸이 빈 판이 최신이 된다(TSLA 2016 Q4 순이익).
+            boolean sourceToday = q4Source != null && q4Source.publishedAt().equals(at);
+            if (lastQ4 == null || sourceToday || storedDiffers(lastQ4, merged)) {
+                out.add(merged);
+                lastQ4 = merged;
+                traceQ4(label.fiscalYear(), fyEvent ? "Q4" : always ? "Q4REFILE" : "Q4SRCMERGE", fy, v1, v2, v3, q4Source);
+            }
+        }
+        return out;
+    }
+
+    /** [탐색 P3 gatedcw] Q4 유량 컬럼(잔차로 짓는 것) — 이름과 읽기. */
+    private static final Map<String, java.util.function.Function<RawFinancialReport, BigDecimal>> FLOW_COLUMNS;
+    static {
+        Map<String, java.util.function.Function<RawFinancialReport, BigDecimal>> m = new LinkedHashMap<>();
+        m.put("revenue", RawFinancialReport::revenue);
+        m.put("operatingIncome", RawFinancialReport::operatingIncome);
+        m.put("netIncome", RawFinancialReport::netIncome);
+        m.put("costOfSales", RawFinancialReport::costOfSales);
+        m.put("netIncomeControlling", RawFinancialReport::netIncomeControlling);
+        m.put("interestAndDividendIncome", RawFinancialReport::interestAndDividendIncome);
+        m.put("noninterestIncome", RawFinancialReport::noninterestIncome);
+        m.put("interestExpense", RawFinancialReport::interestExpense);
+        m.put("noninterestExpense", RawFinancialReport::noninterestExpense);
+        m.put("benefitsLossesAndExpenses", RawFinancialReport::benefitsLossesAndExpenses);
+        m.put("grossProfit", RawFinancialReport::grossProfit);
+        m.put("operatingExpenses", RawFinancialReport::operatingExpenses);
+        m.put("costsAndExpenses", RawFinancialReport::costsAndExpenses);
+        FLOW_COLUMNS = java.util.Collections.unmodifiableMap(m);
+    }
+
+    /** [탐색 P3 gatedcw] 유량 컬럼 몇 개만 갈아 끼운 사본. */
+    private static RawFinancialReport withFlows(RawFinancialReport r, Map<String, BigDecimal> o) {
+        java.util.function.BiFunction<String, BigDecimal, BigDecimal> v = (k, x) -> o.containsKey(k) ? o.get(k) : x;
+        return new RawFinancialReport(
+                r.fiscalYear(), r.fiscalPeriod(), r.periodStart(), r.periodEnd(), r.publishedAt(),
+                r.reportCode(), r.currencyCode(), v.apply("revenue", r.revenue()),
+                v.apply("operatingIncome", r.operatingIncome()), v.apply("netIncome", r.netIncome()),
+                r.totalAssets(), r.totalEquity(), r.totalEquityControlling(), r.totalLiabilities(),
+                r.currentAssets(), r.currentLiabilities(), r.retainedEarnings(), r.operatingCashFlow(),
+                r.sharesOutstanding(), r.eps(), r.bps(), v.apply("costOfSales", r.costOfSales()),
+                r.cashAndEquivalents(), r.capex(), r.inventories(),
+                v.apply("netIncomeControlling", r.netIncomeControlling()),
+                v.apply("interestAndDividendIncome", r.interestAndDividendIncome()),
+                v.apply("noninterestIncome", r.noninterestIncome()), v.apply("interestExpense", r.interestExpense()),
+                v.apply("noninterestExpense", r.noninterestExpense()),
+                v.apply("benefitsLossesAndExpenses", r.benefitsLossesAndExpenses()),
+                v.apply("grossProfit", r.grossProfit()), v.apply("operatingExpenses", r.operatingExpenses()),
+                v.apply("costsAndExpenses", r.costsAndExpenses()), r.incomeTaxExpense(), r.profitBeforeTax(),
+                r.derived(), r.assertedAbsent());
+    }
+
+    /** [탐색 P3 fill] 분기 셋 중 하나라도 유량이 값→값으로 1% 넘게 바뀌었나(null→값 채움은 안 센다). */
+    private static boolean quartersValueChanged(List<RawFinancialReport> before, RawFinancialReport... after) {
+        for (int i = 0; i < after.length; i++) {
+            RawFinancialReport a = before.get(i);
+            RawFinancialReport b = after[i];
+            java.util.List<java.util.function.Function<RawFinancialReport, BigDecimal>> flows = List.of(
+                    RawFinancialReport::revenue, RawFinancialReport::operatingIncome, RawFinancialReport::netIncome,
+                    RawFinancialReport::netIncomeControlling, RawFinancialReport::costOfSales,
+                    RawFinancialReport::grossProfit, RawFinancialReport::operatingExpenses,
+                    RawFinancialReport::costsAndExpenses, RawFinancialReport::benefitsLossesAndExpenses,
+                    RawFinancialReport::interestAndDividendIncome, RawFinancialReport::noninterestIncome,
+                    RawFinancialReport::interestExpense, RawFinancialReport::noninterestExpense);
+            for (var f : flows) {
+                BigDecimal x = f.apply(a);
+                BigDecimal y = f.apply(b);
+                if (x != null && y != null && differsMaterially(x, y)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** [탐색 P3 gated] 두 공시가 같은 기말 잔액(자산·부채·자본)을 0.1% 넘게 다르게 실었나 — FY 공시 뒤 기준 변경의 증거. */
+    private static boolean balanceRestated(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                           String fyAccn, String otherAccn, LocalDate end) {
+        if (fyAccn.equals(otherAccn)) {
+            return false;
+        }
+        for (SecEdgarColumn column : List.of(SecEdgarColumn.TOTAL_ASSETS, SecEdgarColumn.TOTAL_LIABILITIES,
+                SecEdgarColumn.TOTAL_EQUITY)) {
+            for (Map<Slot, Fact> slots : byColumn.getOrDefault(column, Map.of()).values()) {
+                Fact a = slots.get(new Slot(fyAccn, null, end));
+                Fact b = slots.get(new Slot(otherAccn, null, end));
+                if (a != null && b != null) {
+                    BigDecimal scale = a.value().abs().max(b.value().abs());
+                    if (scale.signum() != 0 && a.value().subtract(b.value()).abs()
+                            .divide(scale, 6, java.math.RoundingMode.HALF_UP)
+                            .compareTo(new BigDecimal("0.001")) > 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     /** [탐색 S_NIQ4SRC] 지배주주 한 칸만 바꾼 사본. */
     private static RawFinancialReport withNetIncomeControlling(RawFinancialReport r, BigDecimal nic) {
         return new RawFinancialReport(
@@ -2629,9 +2905,14 @@ final class SecEdgarFacts {
      * {@code KKR}의 10-K가 2018 Q4 매출을 <b>−178.1M으로 직접 낸다</b>(자산운용사라 투자손익이
      * 매출에 섞인다). 부호는 원인이 아니라 증상이고, 증상으로 자르면 정당한 값을 버린다.
      */
+    /** [탐색 P3 S_REPRAW] 공시(accn)마다 원자료에 분기 팩트가 있는 회계연도. */
+    static final ThreadLocal<Map<String, Set<Integer>>> RAW_QUARTER_YEARS = new ThreadLocal<>();
+
     private static boolean representedOtherYears(Map<String, Set<Integer>> quarterYears,
                                                  RawFinancialReport vintage, int fiscalYear) {
-        Set<Integer> years = quarterYears.getOrDefault(vintage.reportCode(), Set.of());
+        Set<Integer> years = System.getenv("S_REPRAW") != null
+                ? RAW_QUARTER_YEARS.get().getOrDefault(accnOf(vintage.reportCode()), Set.of())
+                : quarterYears.getOrDefault(vintage.reportCode(), Set.of());
         if (years.isEmpty() || years.contains(fiscalYear)) {
             return false;
         }
