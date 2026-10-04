@@ -45,6 +45,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>실행: {@code ./gradlew backtestProbe --tests '*PresetResultSnapshotTest*'
  * -Dsweep.dates=2026-09-14,2026-09-07 -Dsweep.out=<경로.tsv>}. 날짜를 안 주면 대상마다 최신일 하나다.
+ *
+ * <p>MUST: 운영 전후 대조라면 두 스냅숏 사이에 평일 14:20 화해가 끼었는지 본다. 앱이 떠 있으면 그 화해가
+ * <b>과거 기준일의 파생층까지</b> 다시 쓰므로(ADR-0166) 전후 차이에 화해 몫이 섞인다 — 앱을 내린 채 찍거나,
+ * 그 사이의 {@code indicator-origin-rewrite}·{@code indicator-derived-rebuild} 실행 기록으로 귀속한다.
  */
 @Tag("backtest")
 @SpringBootTest(classes = BacktestHarnessContext.class,
