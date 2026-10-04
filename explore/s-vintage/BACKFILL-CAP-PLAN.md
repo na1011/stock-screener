@@ -106,13 +106,21 @@
 - **미룬 것(관문 재고 C 항목으로 · 이 배포 밖)**: 끊긴 사슬을 원장으로 감지·재실행하는 술어(반증이 정의 구멍 일곱을 잡았다 — 비교 열 · 상태 · 닫힘 조건 · 원장에 안 보이는 쓰기(`universe-restore`·CLI `share-basis-derive`) · 보류와 MANUAL 고아 · ② 식별 · 슬롯) ·
   [V] 신선도 시계(이 배포 뒤) · `company-profile`·`universe-restore`·일일 갱신의 늦은 데이터가 남기는 파생층 과거 날짜 · 기업 행위 원장이 무효화 없이 억제만 바꾸는 경우(OBSERVED 0 · UNSUPPORTED 7 — 9월 전).
 
-# 계획 v4 — 이 배포의 범위
-1. `IndicatorBackfillJob`에 두 진입점: **① `rewriteOriginLayer(asOf, by)`** — 보존 창 편입 전원을 `runner(asOf)`로 잡의 새 풀에서 팬아웃(13:30과 같은 asOf 규약) · **② `rebuildDerived(from, asOf, by)`** — 거래일마다 백분위·업종(전 종목 · 유니버스 인자 그대로) → 고아 정리 → 거래일 색인. 둘 다 `batch_execution` 행을 따로 남긴다(잡 이름을 가른다 — 소비자 세고).
-2. `InvalidationBackfiller` → 「① 다음 ②(①이 SUCCESS · 실패 0일 때만) · 아니면 WARNING 알림」 · **상한 둘을 없앤다**.
-3. `PipelineScheduler.runHeavy`: `잡 → (FR·FS) 기저 판정 → governance-derive → ① → ②` — 무효화 여부와 무관하게 무거운 잡 뒤 늘 · 기업 행위 사슬: `수집 → 재구축 → 기저 판정 → (무효화가 있으면) ① → ②`.
-4. CLI `--job=indicator-rebuild`(①+② — 스케줄러와 같은 메서드 · `REDERIVE_SHARE_BASIS_AFTER`에 안 든다) — 사본 드라이런과 손 복구가 같은 경로를 탄다.
-5. 관문 설정 굳히기(같은 jar): `stockscreener.gate.us: false`(환경변수 바인딩 제거) · `@Value` 기본값 제거 · 기동 로그에 유효 관문 상태 한 줄.
-6. 시험: 낡은 시험 다섯 갱신 · 순서(`InOrder`) · ① 실패 시 ② 안 돎 · 상한 없음 · ① 모집단 = 보존 창 편입 · ② 모집단이 안 좁아짐 · CLI 별칭 · 관문 설정 기동 로그 · 15:30 예산을 실측 합으로.
-7. 드라이런(사본 둘) — 위 판정 규칙 · 소요와 `pg_stat_user_tables` 증분을 지금 블로트 상태에서.
-8. 문서 독자(src 5 · 규칙 1 · 문서 8)와 `invalidationAlertBody` · `insertEarlierVintages=false` 사유 · 15:30 javadoc 예산.
-9. 배포: 사용자 확인 · 전제(HEAD = main · 깨끗 · 창 · RUNNING 0) · 배포 뒤 기동 로그의 관문 줄 확인 · [V]는 그 뒤.
+# 계획 v4 — 이 배포의 범위 (반증 전)
+**실측(10-04 · SELECT)**: 보존 창 편입 1,683(현 편입 1,350 · 과거만 KOSDAQ 93 · KOSPI 37 외) · ① 모양 실측 `batch_execution` 665 = 1,687종목 4분 7초 · ② 모양 666 = 269일 5분 37초(1종목 원본 포함) · 434·435 = 214종목 1분 38초 · 4분 29초 — 전부 자정 실행(지금 블로트에서는 안 쟀다).
+1. `IndicatorBackfillJob`에 두 진입점(기존 `run(from,to,…)`은 손 경로로 그대로):
+   - **① `rewriteOriginLayer(asOf, tickers, by)`** — 대상의 원본층을 `indicatorRunner.run(stock, asOf, 시장별 경계, marketIndexesFor(asOf))` 한 번씩(13:30 `DailyUpdateJob`과 같은 asOf 규약 · 러너는 asOf가 거래일이기를 요구하지 않는다) · 기존 풀·`resolveWorkers`·`awaitAll` 재사용 · `tickers`가 비면 **보존 창 편입 전원**(`StockRegistrar`에 `activeUniverseMemberIdsByTicker`의 창 술어를 티커 없이 쓰는 질의 하나 — 같은 SQL을 공유하게 뗀다) · 잡 이름 `indicator-origin-rewrite`.
+   - **② `rebuildDerived(from, to, by)`** — `tradeDatesBetween`(합집합)마다 `percentileCalculator.calculate(d, null)`·`sectorRelativeCalculator.calculate(d, null)` → 고아 정리 → 거래일 색인 · 원본층은 안 부른다 · 잡 이름 `indicator-derived-rebuild` · 보존 경계 밖 경고는 기존 문장을 재사용.
+2. `InvalidationBackfiller.rebuild(asOf, tickers, by)` 하나로 모은다: ① → (①이 SUCCESS이고 실패 0일 때만) ②(from = 시장별 경계의 최솟값 + 1일 · to = asOf) · 아니면 ②를 안 돌고 WARNING 알림(이유 · ① 실행 id · 손 복구 명령 `--job=indicator-rebuild`). **상한 둘(10 · 100)을 없앤다** — 근거였던 비용이 날짜 루프의 중복이었다. `backfillFinancial`·`backfillAdjustment`는 지운다(호출부 둘뿐).
+3. `PipelineScheduler`
+   - `runHeavy`: `잡 → (FR·FS) share-basis-derive(US) → governance-derive(전 종목) → rebuild(asOf, 전원)` — 무효화 여부와 무관하게 늘(채움·새 라벨·거버넌스는 무효화를 안 건다 — v2 판정 1·4).
+   - 기업 행위 사슬: `corporate-action → adjustment-rebuild → share-basis-derive(US · 늘 — CLI `REDERIVE_SHARE_BASIS_AFTER`가 이미 그렇다) → (무효화가 있으면) governance-derive(무효화 종목) → rebuild(asOf, 무효화 종목)`. ① 모집단을 무효화 종목으로 두는 근거: 재구축은 채우지 않고 같은 날 13:30이 현 편입 전원의 원본층을 이미 다시 썼다(v3 반증 밖 렌즈 7). ②는 전 창(무효화 시작일이 보존 경계 앞이라 어차피 전 창이다 — `clampToRetention`).
+4. CLI `--job=indicator-rebuild [--tickers=…]` → `InvalidationBackfiller.rebuild`(스케줄러와 같은 메서드) — 사본 드라이런과 손 복구가 같은 경로를 탄다 · `REDERIVE_SHARE_BASIS_AFTER`에 안 든다.
+5. 관문 설정(같은 jar · 별도 커밋): `stockscreener.gate.us: false`(`${US_GATE:…}` 바인딩 제거 — relaxed 이름 `STOCKSCREENER_GATE_US`는 남는다) · `@Value` 기본값 제거(키 오타가 기동을 세운다) · 어댑터 생성 시 유효 상태 INFO 한 줄.
+6. 시험: 낡은 시험 다섯 갱신 · 순서(`InOrder` — 두 사슬) · ① 실패(부분 실패 포함) 시 ② 안 돎 · 상한 없음 · ① 모집단 = 보존 창 편입(실DB) · ②가 원본층을 안 부르고 모집단을 안 좁힌다 · CLI 별칭 · 관문 설정 · 15:30 시험 간격에 ①·② 실측을 더한다.
+7. 드라이런(사본 둘 · `ops/apply-window/env.sh`의 `boot()`·`q()`·`new_exec()` 재사용 — 비운영 DB면 `DB_URL`·`BOOTSTRAP_DB`·알림 변수를 이미 비운다 · `head.txt`는 그 작업 폴더에): 판정 규칙을 대조 전에 커밋 — (가) 지금 jar의 `backfill --tickers=<표본> --from=<경계> --as-of=<최신>`(날짜 루프) (나) `indicator-rebuild --tickers=<같은 표본>` → **원본층 `indicator_value`(파생 코드 제외) 바이트 동일** · 파생층은 (나) 대 「(가) + `rebuildDerived`만 다시」 바이트 동일 · 전원 모양은 (나′) `indicator-rebuild`(전원)로 소요·`pg_stat_user_tables` 증분을 잰다(지금 블로트).
+8. 문서: 상한·「백필이 남았다」 독자(src 5 · 규칙 1 · 문서 8) · `invalidationAlertBody` · `insertEarlierVintages=false` 사유 · 15:30 javadoc 예산 · `CLAUDE.md` 「재적재·백필」의 **내 해석** 줄에 「정기 잡 뒤 자동 재생성(①+②)은 데이터 변경을 반영하는 유지라 관문의 「한 번」 대상이 아니다 — 2026-09-01 사용자 결정의 자동 백필과 같은 경로」를 덧붙인다(사용자 문장과 갈라서).
+9. 배포: 사용자 확인 · 전제(HEAD = main · 깨끗 · 창 · RUNNING 0 · `.env` 확인) · 배포 뒤 기동 로그의 관문 줄과 첫 정기 실행의 ①·② 두 행 · **[V]는 다음 일**(같은 jar에 넣지 않는 이유: [V]를 고치면 세 무거운 잡이 즉시 연체가 되는데, 그 첫 실행을 이 배포의 첫 대조군과 겹치지 않게 — [V]는 이 배포의 첫 정기 실행 확인 뒤).
+
+## 재지 않은 것(v4)
+- 지금 블로트에서 ①·② 소요와 행 변화(드라이런 7이 잰다) · `share-basis-derive` 소요(행이 없다 — 로그로만) · 첫 정기 실행의 실제 무효화 수.
