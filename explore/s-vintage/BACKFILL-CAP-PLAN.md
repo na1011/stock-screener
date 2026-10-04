@@ -38,3 +38,35 @@
 
 **판정**: v1(상한 400)은 버린다. v2 = `backfillFinancial`·`backfillAdjustment`를 두 단계 모양으로 · 상한 제거(이상 반경은 알림으로만) · [A30](채움·새 라벨 종목도 백필 대상) 한 수정 · 15:30 점검에 「무효화 뒤 백필 SUCCESS 없음」 사슬 술어 · 사본에서 두 모양 바이트 대조.
 **사용자 판단**: 관문이 10-30 전에 안 열리면 그 사이 정기 무거운 잡(FR 두 시장 · FS · G — 지금 jar)을 돌게 둘지 멈출지 — 그 답이 관문 전 별도 배포를 정한다.
+
+# 계획 v2 (2026-10-04 · 반증 전) — 두 단계 백필 · 상한 제거 · 무거운 잡 뒤 파생층 창 재생성
+
+**전제(사용자가 판단을 맡겼고 내 판단 · main `docs/progress.md` 「재적재 관문」)**: 관문 전 정기 무거운 잡을 멈추지 않는다 → 첫 정기 실행(10-30~11-05) 전에 이 수정을 배포한다(배포 직전 사용자 확인).
+
+## 코드로 확인한 사실
+- `IndicatorRunner.run(stock, asOf, …)`는 계산한 점 전부를 `retain(points, cutoff)`로 써 **보존 창 전체**를 한 번에 쓴다 · 값은 `KNOWN_ON`이라 **날짜 d의 값이 asOf와 무관**하다(javadoc · ADR-0128).
+- `IndicatorBackfillJob.run(from, to, …, tickers, …)`은 날짜마다 ① 대상 종목 원본층(위 러너) ② 그날 백분위·업종(**전 종목** — 날짜만 받는다)을 돈다 → 원본층 계산이 날짜 수만큼 반복된다(앞 것은 다음 것에 덮인다).
+- 손 복구 절차(`FinancialRefillJob` 알림 본문 · batch-load skill · `ops/apply-window/05-backfill.sh`)가 이미 두 단계다 — 실측 665+666 = 1,687종목 9.7분.
+- 무효화를 거는 쓰기: `FinancialWriter`(정정·교정·이른 판 — FR·FS 둘 다) · `AdjustmentRecalculator`(기업 행위) · 러너 자신(값을 그만 낸 지표). 채움·새 라벨은 무효화를 안 건다([A30]) — 원본층은 다음 평일 13:30 일일 갱신이 현 편입 창 전체를 다시 쓰고 **파생층 과거 날짜만 남는다**.
+- 지금 FS(`full-statement-refill`) 뒤에는 백필이 아예 없다(`PipelineScheduler.runHeavy`).
+
+## 수정
+1. `IndicatorBackfillJob`에 **파생층만 창으로 다시 내는 진입점**(`rebuildDerived(from, to, by)`): 거래일마다 `percentileCalculator`·`sectorRelativeCalculator`(전 종목) → 창 밖 고아 정리 → 거래일 색인. 원본층은 안 돈다. `batch_execution`은 같은 잡 이름(`indicator-backfill`)에 note 「파생층만」.
+2. `InvalidationBackfiller`를 두 단계로: ① **원본층** — 대상 종목을 「asOf 이하 마지막 거래일」 하루로(`tradeDatesBetween(asOf, asOf)`가 휴장으로 비는 함정 — 마지막 거래일을 시세에서 찾는다) ② **파생층** — `rebuildDerived(경계, 그 거래일)`.
+   **상한 둘(재무 100 · 기업 행위 10)을 없앤다** — 근거였던 비용(「2시간」·「2.6~8시간」)이 날짜 루프의 중복이었다. 이상 반경(예: 한 실행이 편입의 절반 넘게 무효화)은 백필은 그대로 돌리고 알림만 낸다.
+3. **무거운 잡 셋(FR·FS·G) 뒤에는 무엇이든 썼으면 파생층 창을 다시 낸다** — 원본층 ① 대상은 그 잡이 무효화한 종목(FR은 `Invalidation.tickers` · FS는 같은 꼴의 보고를 새로 낸다), ②는 늘. 이것이 [A30]의 남는 몫(파생층 과거 날짜)을 닫는다 — 채움·새 라벨 종목의 원본층은 13:30이 다시 쓴다.
+4. 15:30 신선도 점검에 사슬 술어 하나: **최신 거래일에 시세가 있는 현 편입 종목인데 지표가 0행** — 무효화 뒤 백필이 끊겨도(앱 중단 · 예외) 상태로 잡힌다(지금 `INDICATOR_DROP`은 `codes_prev = 0`이라 거짓).
+5. 시험: ① 다음 ② 순서 · 휴장 asOf · 상한 없음(1,350종목도 돈다) · FS 뒤에도 돈다 · 파생층 진입점이 원본층을 안 부른다 · 사슬 술어.
+
+## 드라이런(사본 · 배포 전 · 0콜)
+- 운영 덤프에서 사본 둘 → 같은 종목 집합(예: 최근 refill의 무효화 목록 일부 + 기업 행위 1종목)의 `indicator_value`를 지운 뒤 (가) 지금 모양 (나) 두 단계로 백필 → **두 사본의 `indicator_value` 전량이 바이트까지 같은가**(코드·종목·날짜·값) · 소요.
+- `ops/apply-window`는 지금 멈춘다(00-precheck·boot()·02-snapshot) — 이 드라이런에 필요한 만큼(덤프 → createdb → `DB_URL`·`BOOTSTRAP_DB`·알림 변수 비움 → bootRun) 손으로 돈다.
+
+## 배포(사용자 확인)
+- 전제: HEAD = `main` · `git status --porcelain` 빈 상태 · SHA 기록 · 배포 시각은 평일 13:30·14:00·14:15·15:30 근처와 토 19:50~20:40을 피하고 stop 직전 RUNNING 0.
+- jar 차이를 그때 다시 잰다(지금: 서버 클래스는 S0 셋 · 프론트 청크 22개는 Sentry가 박는 git SHA 차이뿐 — 동작 같음 · 열린 탭은 새로고침 필요).
+- 사용자 확인 항목: 저장소 `.env`에 `^(US_GATE|STOCKSCREENER_GATE|PIPELINE_SCHEDULER)` 줄이 있는지(나는 `.env`를 안 읽는다).
+- 배포 뒤 대조군: 첫 정기 무거운 잡이 도는 날(10-30~11-05)의 `batch_execution`에 「원본층 하루 + 파생층 창」 두 행이 생기고 15:30 사슬 술어가 0.
+
+## 재지 않은 것
+- 두 모양의 바이트 동일(위 드라이런이 잰다) · 첫 정기 실행의 실제 무효화 수 · 8년 정기 창 대 11년 저장본 드리프트 · 거버넌스가 바꾸는 지표의 범위.
