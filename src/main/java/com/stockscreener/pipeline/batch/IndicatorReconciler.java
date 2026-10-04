@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.indicator.IndicatorCalendar;
+import com.stockscreener.pipeline.datasource.CollectedMarkets;
 import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.datasource.us.UsMarket;
 
@@ -36,13 +38,33 @@ public class IndicatorReconciler {
     private final IndicatorBackfillJob indicatorBackfillJob;
     private final ShareBasisDeriver shareBasisDeriver;
     private final GovernanceDeriveJob governanceDeriveJob;
+    private final IndicatorCalendar indicatorCalendar;
 
     public IndicatorReconciler(IndicatorBackfillJob indicatorBackfillJob,
                                ShareBasisDeriver shareBasisDeriver,
-                               GovernanceDeriveJob governanceDeriveJob) {
+                               GovernanceDeriveJob governanceDeriveJob,
+                               IndicatorCalendar indicatorCalendar) {
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.shareBasisDeriver = shareBasisDeriver;
         this.governanceDeriveJob = governanceDeriveJob;
+        this.indicatorCalendar = indicatorCalendar;
+    }
+
+    /**
+     * 화해의 기준일 — 13:30 일일 갱신의 대상일이되 <b>지표 달력의 최신일을 넘지 않는다.</b>
+     *
+     * <p>대상일과 같아야 하는 이유는 {@link IndicatorBackfillJob#rewriteOriginLayer}에 있다(asOf의 주식수를
+     * 따라가는 지표가 두 판 사이를 오간다). <b>넘지 않아야 하는 이유</b>는 거래일 색인이 지표 행이 하나라도
+     * 있는 날짜를 화면 기준일로 열기 때문이다({@code IndicatorTradeDateIndex}) — 13:30이 그날 안 돌았으면
+     * (앱이 13:30 뒤에 떴거나, 주말·월요일 오전의 손 실행) 대상일 봉은 토요일 꼬리가 넣은 몇 종목에만 있고,
+     * 화해가 그 날짜를 쓰면 <b>화면 최신일이 몇 종목짜리 날</b>이 된다. 실측: 2026-10-05 00시에 10-02 봉이
+     * IOVA·KOD 둘뿐이었다. 정상인 날은 13:30이 달력을 대상일까지 늘려 둘이 같다.
+     */
+    public LocalDate dataAsOf(LocalDate today) {
+        LocalDate target = DailyUpdateJob.targetDateFor(today);
+        return indicatorCalendar.latestIndicatorDate(CollectedMarkets.ALL)
+                .filter(latest -> latest.isBefore(target))
+                .orElse(target);
     }
 
     /**

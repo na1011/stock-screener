@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.scheduler;
 
+import com.stockscreener.indicator.IndicatorCalendar;
 import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
@@ -27,10 +28,12 @@ import org.mockito.InOrder;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -55,6 +58,10 @@ import static org.mockito.Mockito.when;
  */
 class PipelineSchedulerChainTest {
 
+    /** 오늘(KST)의 13:30 대상일 — 스케줄러가 쓰는 규약과 같다. */
+    private static final LocalDate TARGET_DATE =
+            DailyUpdateJob.targetDateFor(LocalDate.now(java.time.ZoneId.of("Asia/Seoul")));
+
     private CorporateActionJob corporateActionJob;
     private AdjustmentRebuildJob adjustmentRebuildJob;
     private IndicatorBackfillJob indicatorBackfillJob;
@@ -66,6 +73,7 @@ class PipelineSchedulerChainTest {
     private UniverseRebalanceJob universeRebalanceJob;
     private UniverseIntegrityAlerter universeIntegrityAlerter;
     private ShareBasisDeriver shareBasisDeriver;
+    private IndicatorCalendar indicatorCalendar;
     private PipelineScheduler scheduler;
 
     @BeforeEach
@@ -81,6 +89,9 @@ class PipelineSchedulerChainTest {
         universeRebalanceJob = mock(UniverseRebalanceJob.class);
         universeIntegrityAlerter = mock(UniverseIntegrityAlerter.class);
         shareBasisDeriver = mock(ShareBasisDeriver.class);
+        indicatorCalendar = mock(IndicatorCalendar.class);
+        // 평상시: 13:30이 지표 달력을 대상일까지 늘려 두었다.
+        when(indicatorCalendar.latestIndicatorDate(anyCollection())).thenReturn(Optional.of(TARGET_DATE));
 
         when(indicatorBackfillJob.rewriteOriginLayer(any(), any(), anyList())).thenReturn(BatchStatus.SUCCESS);
         when(indicatorBackfillJob.rebuildDerived(any(), any())).thenReturn(BatchStatus.SUCCESS);
@@ -93,7 +104,8 @@ class PipelineSchedulerChainTest {
                 corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob,
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
-                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob),
+                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob,
+                        indicatorCalendar),
                 universeIntegrityAlerter);
     }
 
@@ -187,6 +199,18 @@ class PipelineSchedulerChainTest {
         assertThat(asOf.getValue())
                 .isEqualTo(DailyUpdateJob.targetDateFor(LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))));
         verifyNoInteractions(shareBasisDeriver, governanceDeriveJob);
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 13:30이 안 돈 날은 지표 달력 최신일로 화해한다 — 대상일로 쓰면 몇 종목짜리 날이 화면 최신일이 된다")
+    void reconcileNeverRunsAheadOfTheIndicatorCalendar() {
+        LocalDate lastFilled = TARGET_DATE.minusDays(1);
+        when(indicatorCalendar.latestIndicatorDate(anyCollection())).thenReturn(Optional.of(lastFilled));
+
+        scheduler.reconcileIndicators();
+
+        verify(indicatorBackfillJob).rewriteOriginLayer(eq(lastFilled), any(), eq(List.of()));
+        verify(indicatorBackfillJob).rebuildDerived(eq(lastFilled), any());
     }
 
     @Test

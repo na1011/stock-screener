@@ -344,8 +344,8 @@ public class BootstrapRunner implements ApplicationRunner {
                 // MUST: --as-of가 없으면 오늘이 아니라 13:30 일일 갱신의 대상일(직전 평일)이다 —
                 // 정기 화해와 같은 규약이어야 asOf의 주식수를 따라가는 지표가 두 판 사이를 오가지 않고,
                 // 관문의 「두 번째 화해 = 0」 대조가 그 어긋남을 가리지 않는다.
-                LocalDate reconcileAsOf = reconcileAsOf(args, asOf,
-                        LocalDate.now(java.time.ZoneId.of("Asia/Seoul")));
+                LocalDate reconcileAsOf = reconcileAsOf(args, asOf, indicatorReconciler.dataAsOf(
+                        LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))));
                 indicatorReconciler.deriveInputs(reconcileAsOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
                 yield indicatorReconciler.reconcile(reconcileAsOf, csv(args, "tickers"),
                         BatchExecutionRecorder.TriggeredBy.MANUAL);
@@ -450,11 +450,13 @@ public class BootstrapRunner implements ApplicationRunner {
             "corporate-action", "corporate-action-judge", "adjustment-rebuild");
 
     /**
-     * 화해의 기준일. {@code --as-of}가 없으면 <b>13:30 일일 갱신의 대상일</b>(직전 평일)이다 — 오늘이 아니다.
+     * 화해의 기준일. {@code --as-of}가 없으면 정기 화해와 같은 규약({@link IndicatorReconciler#dataAsOf} —
+     * 13:30 대상일이되 지표 달력 최신일을 넘지 않음)이다. 오늘이 아니다 — 주말·월요일 오전에 치면 대상일 봉이
+     * 몇 종목에만 있어 그 날짜가 화면 최신일이 된다.
      * 패키지 공개인 이유는 {@code run()}이 끝에서 JVM을 내려 이 판단을 시험할 길이 이것뿐이기 때문이다.
      */
-    static LocalDate reconcileAsOf(ApplicationArguments args, LocalDate givenAsOf, LocalDate today) {
-        return args.containsOption("as-of") ? givenAsOf : DailyUpdateJob.targetDateFor(today);
+    static LocalDate reconcileAsOf(ApplicationArguments args, LocalDate givenAsOf, LocalDate reconcileDefault) {
+        return args.containsOption("as-of") ? givenAsOf : reconcileDefault;
     }
 
     /** 지표 화해. {@code --from}이 뜻이 없는 유일한 지표 잡이라 이름으로 둔다 — {@code switch}는 거울 검사(check-doc-staleness §5c)가 읽도록 문자열로 쓴다. */

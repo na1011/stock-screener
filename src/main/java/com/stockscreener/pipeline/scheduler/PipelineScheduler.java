@@ -224,13 +224,13 @@ public class PipelineScheduler {
                 log.info("계수가 원장과 이미 일치한다 — 지워진 지표가 없어 사슬 안 화해도 없다.");
                 return;
             }
-            // 화해의 asOf는 13:30 일일 갱신의 대상일이다(IndicatorBackfillJob.rewriteOriginLayer).
+            // 화해의 asOf는 13:30 일일 갱신의 대상일이고 지표 달력 최신일을 넘지 않는다(IndicatorReconciler.dataAsOf).
             //
             // MUST NOT: 여기서 입력 유도(deriveInputs)를 먼저 부르지 않는다. 재구축이 원장을 APPLIED로
             // 바꿔 기저 판정의 입력이 바뀐 것은 맞지만, 유도가 던지면 지워진 종목이 화해 없이 남아
             // 무거운 잡 날 한 시간을 빈다 — 이 자리를 둔 이유가 통째로 무너진다. 어제 판정으로 채워도
             // 13:30과 같은 의미이고(판정 NULL = OK), 같은 오후 14:18 유도 → 14:20 화해가 새 판정으로 덮는다.
-            LocalDate dataAsOf = DailyUpdateJob.targetDateFor(asOf);
+            LocalDate dataAsOf = indicatorReconciler.dataAsOf(asOf);
             indicatorReconciler.reconcile(dataAsOf, invalidation.tickers(),
                     BatchExecutionRecorder.TriggeredBy.SCHEDULER);
         } catch (BatchShutdownException e) {
@@ -377,12 +377,13 @@ public class PipelineScheduler {
      * 파생층을 최신일 하루만 쓰므로 그 둘이 못 닫는 것 — 과거 구성원의 원본층과 최신일 앞의 파생층 —
      * 이 이 자리의 몫이다.
      *
-     * <p><b>대상일은 일일 갱신과 같다</b>({@link DailyUpdateJob#targetDateFor}). 다르면 {@code asOf}의
-     * 주식수를 따라가는 지표가 지금 편입 종목에서 두 판 사이를 매일 오간다.
+     * <p><b>대상일은 일일 갱신과 같고 지표 달력 최신일을 넘지 않는다</b>({@link IndicatorReconciler#dataAsOf}).
+     * 다르면 {@code asOf}의 주식수를 따라가는 지표가 두 판 사이를 오가고, 넘으면 13:30이 안 돈 날 몇 종목짜리
+     * 날짜가 화면 최신일이 된다.
      */
     @Scheduled(cron = "0 20 14 * * MON-FRI", zone = "Asia/Seoul")
     public void reconcileIndicators() {
-        LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
+        LocalDate asOf = indicatorReconciler.dataAsOf(LocalDate.now(KR_ZONE));
         log.info("지표 화해를 시작한다. asOf={} — 원본층(보존 창 편입 전원) → 파생층(창 전체)", asOf);
         try {
             indicatorReconciler.reconcile(asOf, List.of(), BatchExecutionRecorder.TriggeredBy.SCHEDULER);

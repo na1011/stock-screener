@@ -367,17 +367,18 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
-    @DisplayName("indicator-reconcile의 기본 기준일은 오늘이 아니라 13:30의 대상일이다 — 정기 화해와 같은 규약")
-    void reconcileDefaultsToTheDailyUpdateTargetDate() {
+    @DisplayName("indicator-reconcile의 기본 기준일은 오늘이 아니라 정기 화해의 규약(dataAsOf)이다")
+    void reconcileDefaultsToTheScheduledRule() {
         LocalDate sunday = LocalDate.of(2026, 10, 4);
-        // 인자가 없으면 직전 평일(금요일). 오늘을 쓰면 asOf의 주식수를 따라가는 지표가 정기 화해와 갈린다.
+        LocalDate scheduledRule = LocalDate.of(2026, 10, 1);
+        // 인자가 없으면 정기 화해와 같은 값 — 오늘(일요일)을 쓰면 봉이 몇 종목에만 있는 날을 연다.
         assertThat(BootstrapRunner.reconcileAsOf(
-                new DefaultApplicationArguments("--job=indicator-reconcile"), sunday, sunday))
-                .isEqualTo(LocalDate.of(2026, 10, 2));
+                new DefaultApplicationArguments("--job=indicator-reconcile"), sunday, scheduledRule))
+                .isEqualTo(scheduledRule);
         // 주면 준 값이다 — 사본 드라이런이 그 날짜를 고른다.
         assertThat(BootstrapRunner.reconcileAsOf(
-                new DefaultApplicationArguments("--job=indicator-reconcile", "--as-of=2026-10-01"),
-                LocalDate.of(2026, 10, 1), sunday))
-                .isEqualTo(LocalDate.of(2026, 10, 1));
+                new DefaultApplicationArguments("--job=indicator-reconcile", "--as-of=2026-09-30"),
+                LocalDate.of(2026, 9, 30), scheduledRule))
+                .isEqualTo(LocalDate.of(2026, 9, 30));
     }
 }
