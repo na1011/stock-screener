@@ -17,3 +17,12 @@
 ## 시험
 - 계산기 하나를 특정 날짜에서 던지게 한 가짜로: 그 날짜만 실패 · 나머지 날짜 쓴 행 > 0 · 색인 갱신됨 · 상태 PARTIAL_SUCCESS · note에 날짜.
 - 대조군: 격리를 빼면 위 시험이 붉는다(지금 main의 모양).
+
+## v1 반증 판정 (계획 안 렌즈 · 「수정 후 진행」)
+1. **전 날짜 실패도 `PARTIAL_SUCCESS`(신선)** — `BatchExecutionRecorder:176` · `JobFreshnessPolicy:219` → 성공 0이면 첫 예외로 FAILED 마감 · 「부분 실패」 알림 본문에 실패 날짜.
+2. **종료 신호를 되던지는 갈래가 필수**(`data-pipeline.md` MUST) — 종료 중 `CannotGetJdbcConnectionException`이 계산기에서 날 수 있다 → catch 첫 줄에 `BatchShutdownException` 되던지기 + `abandonedOnShutdown()`이면 종료 신호로(`process()`의 `asShutdownSignalIfAbandoned`와 같은 모양).
+3. **교착은 상한 있는 재시도가 먼저** — 날짜 격리만 하면 그날 나머지 spec과 업종 상대값을 버린다 · `PessimisticLockingFailureException`은 일시적. **실행 318 인용 정정**: 한 종목 189거래일 백필이 100일째 업종 상대값 SQL에서 교착 · 2분 뒤 같은 모양 319가 189/189 성공(일시적) · 상대는 재지 않았다(305는 다른 날).
+4. **셋째 호출부** `DailyUpdateJob`(시장별 기준일 파생) — 던지면 워치리스트 판정·보존 정리·색인이 그날 안 돈다.
+5. 관문 대조군(`reload-gate.md` 순서 10 「두 번째 화해 쓴·지운 0」)에 `failure_count = 0`을 더한다 — 결정적 실패 날짜가 두 번 다 실패하면 쓴·지운 0으로 통과한다.
+6. `run`은 INDICATOR 계획이 (거래일 × 종목)이라 날짜 실패를 같은 단계에 세면 단위가 섞인다 → 다른 단위로(새 enum이면 `ck_failure_phase` 마이그레이션 · `CollectionPhaseConstraintTest`).
+- 통과: 커밋 단위(호출 경로에 트랜잭션 없음 · 자동 커밋) — 날짜를 건넌 섞임 없음 · 고아 정리·색인에 새 해악 없음.
