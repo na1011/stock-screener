@@ -79,7 +79,9 @@
 
 ## 순서 — 미국 관문이 한 번으로 서려면
 
-1. **Writer 계약**: (a) 소스 행 null — `assertedAbsent`는 `net_income`만 만든다(잼) → null을 만드는 어댑터 수정은 FILL_MISSING 재적재로 저장값이 안 바뀐다 · (b) 채움·새 라벨 무효화 · (c) `overwritable()` ≤ 0 예외(주식수 0).
+1. **Writer 계약**: (a) 소스 행 null — **계약은 이미 있다**: `RawFinancialReport.assertedAbsent`(컬럼 단위 · 담을 자격 = 어댑터가 여러 판을 합쳐 판정했는가 · `fillMissing`은 어떤 컬럼이든 지운다).
+   지금 미국 어댑터가 담는 컬럼은 `net_income` 하나(스윕 5,890행 · 2026-10-04)이고, **`mergeQ4`의 `mergedAbsence`가 `NET_INCOME`만 이어받는다** — 소스 행에 의도적으로 null을 내는 [S] 수정(K11 거르기 등)은
+   그 컬럼을 담고 `mergedAbsence`를 일반화하는 것까지가 한 수정이다(안 하면 FILL_MISSING 재적재가 옛 값을 지킨다) · (b) 채움·새 라벨 무효화([A30] — 정기 refill에서 파생층 과거 날짜) · (c) `overwritable()` ≤ 0 예외(주식수 0).
 2. **측정 도구**: `.factcache`를 그날 새로(약 1,208콜) · 사본 평가기 · `ops/apply-window`를 이 관문 기준으로 고쳐 쓰기(지금 `00-precheck`·`boot()`·`02-snapshot`이 멈춘다).
 3. **설계**: Q4 정책(P3 — S0의 `restated()`·[S] Q4 세대·A21-a·ADR-0151 2020+ 11행·누계 재작성이 매달림) · [Z] 칸 대 행 · 가격/주식수 배수 분리 · ADR-0133 값 규칙(L).
 4. **어댑터: 입력층 → 조립층 → 유도층**(입력이 판 집합을 바꾼다 — RTX 선례): P2(K4·K11·P1·새 원시 컬럼·매출 폴백·A43) → S0·P3·F1·[Z] → P4·P5.
