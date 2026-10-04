@@ -363,7 +363,8 @@ public class BatchExecutionRecorder {
         /** 사람이 직접 실행했다. 초기 적재가 여기 해당한다. */
         MANUAL,
         /**
-         * 리밸런싱 꼬리가 <b>결손 티커로 좁혀</b> 부른 실행이다.
+         * 정기 경로가 <b>티커로 좁혀</b> 부른 실행이다 — 리밸런싱 꼬리(결손 티커)와 14:00 기업 행위
+         * 사슬의 화해 ①(무효화 티커 · {@code IndicatorReconciler.originTrigger})이 그 자리다.
          *
          * <p>{@code SCHEDULER}와 갈라 두는 이유는 {@link JobFreshnessPolicy}의 불변식 때문이다 —
          * <i>"스케줄러는 언제나 기본 경로(활성 유니버스 전량)만 돈다"</i>가 성립해야 좁은 실행이

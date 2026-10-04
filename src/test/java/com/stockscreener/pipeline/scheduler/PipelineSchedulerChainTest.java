@@ -1,7 +1,6 @@
 package com.stockscreener.pipeline.scheduler;
 
 import com.stockscreener.pipeline.collector.ShareBasisDeriver;
-import com.stockscreener.indicator.IndicatorRetentionPolicy;
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
@@ -13,10 +12,9 @@ import com.stockscreener.pipeline.batch.FullStatementRefillJob;
 import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
 import com.stockscreener.pipeline.batch.GovernanceLoadJob;
 import com.stockscreener.pipeline.batch.IndicatorBackfillJob;
-import com.stockscreener.pipeline.batch.InvalidationBackfiller;
+import com.stockscreener.pipeline.batch.IndicatorReconciler;
 import com.stockscreener.pipeline.batch.JobFreshnessAlerter;
 import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
-import com.stockscreener.pipeline.batch.MembershipGapFiller;
 import com.stockscreener.pipeline.batch.UniverseIntegrityAlerter;
 import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
 
@@ -24,24 +22,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 import java.time.DayOfWeek;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -59,9 +55,6 @@ import static org.mockito.Mockito.when;
  */
 class PipelineSchedulerChainTest {
 
-    private static final LocalDate KR_CUTOFF = LocalDate.parse("2025-12-03");
-    private static final LocalDate US_CUTOFF = LocalDate.parse("2025-12-10");
-
     private CorporateActionJob corporateActionJob;
     private AdjustmentRebuildJob adjustmentRebuildJob;
     private IndicatorBackfillJob indicatorBackfillJob;
@@ -70,9 +63,7 @@ class PipelineSchedulerChainTest {
     private FullStatementRefillJob fullStatementRefillJob;
     private FinancialRefillJob financialRefillJob;
     private JobFreshnessPolicy freshnessPolicy;
-    private IndicatorRetentionPolicy retentionPolicy;
     private UniverseRebalanceJob universeRebalanceJob;
-    private MembershipGapFiller membershipGapFiller;
     private UniverseIntegrityAlerter universeIntegrityAlerter;
     private ShareBasisDeriver shareBasisDeriver;
     private PipelineScheduler scheduler;
@@ -87,24 +78,23 @@ class PipelineSchedulerChainTest {
         fullStatementRefillJob = mock(FullStatementRefillJob.class);
         financialRefillJob = mock(FinancialRefillJob.class);
         freshnessPolicy = mock(JobFreshnessPolicy.class);
-        retentionPolicy = mock(IndicatorRetentionPolicy.class);
         universeRebalanceJob = mock(UniverseRebalanceJob.class);
         universeIntegrityAlerter = mock(UniverseIntegrityAlerter.class);
         shareBasisDeriver = mock(ShareBasisDeriver.class);
 
-        when(retentionPolicy.writeCutoffs()).thenReturn(Map.of(
-                "KOSPI", Optional.of(KR_CUTOFF), "US", Optional.of(US_CUTOFF)));
+        when(indicatorBackfillJob.rewriteOriginLayer(any(), any(), anyList())).thenReturn(BatchStatus.SUCCESS);
+        when(indicatorBackfillJob.rebuildDerived(any(), any())).thenReturn(BatchStatus.SUCCESS);
 
-        // MUST: InvalidationBackfiller를 목으로 바꾸지 않는다. 백필 구간을 보존 경계로 자르는
-        // 것과 상한을 넘으면 안 도는 것을 단언하는 곳이 이 시험뿐인데, 목을 주면 그 단언이
-        // 전부 스케줄러 밖으로 나가 죽는다 — 초록은 그대로이고 검증만 사라진다.
+        // MUST: IndicatorReconciler를 목으로 바꾸지 않는다. 「① 실패면 ② 안 돎」·「상한 없음」·「유도가 먼저」를
+        // 단언하는 곳이 이 시험인데, 목을 주면 그 단언이 전부 스케줄러 밖으로 나가 죽는다 —
+        // 초록은 그대로이고 검증만 사라진다.
         scheduler = new PipelineScheduler(
                 mock(DailyUpdateJob.class), universeRebalanceJob,
                 corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob,
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
-                new InvalidationBackfiller(indicatorBackfillJob, retentionPolicy),
-                universeIntegrityAlerter, shareBasisDeriver);
+                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob),
+                universeIntegrityAlerter);
     }
 
     @Test
@@ -123,60 +113,135 @@ class PipelineSchedulerChainTest {
     }
 
     @Test
-    @DisplayName("계수가 안 바뀌면 백필을 안 부른다 — 평상시가 이쪽이고 여기서 도는 것이 낭비다")
-    void noBackfillWhenNothingWasInvalidated() {
+    @DisplayName("계수가 안 바뀌면 사슬 안 화해가 없다 — 평상시가 이쪽이고 14:20 화해가 따로 돈다")
+    void noReconcileInTheChainWhenNothingWasInvalidated() {
         givenInvalidation();
 
         scheduler.runCorporateActionChain();
 
-        verifyNoInteractions(indicatorBackfillJob);
+        verifyNoInteractions(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob);
     }
 
     @Test
-    @DisplayName("백필 구간을 보존 경계로 자른다 — 무효화는 첫 봉부터 지우므로 안 자르면 여덟 배를 돈다")
-    void backfillRangeIsClampedToRetention() {
-        // 무효화 시작일이 2020-01-02(그 종목의 첫 봉)인데 보존 경계는 2025-12-03이다.
-        // 경계 밖 일자는 계산해도 저장되지 않으므로(ADR-0011) 돌 이유가 없다.
+    @DisplayName("무효화가 있으면 사슬 안에서 ① 지운 종목 → ② 창 전체 — 무거운 잡 날 한 시간 공백을 막는다")
+    void invalidationIsReconciledInTheChain() {
         givenInvalidation("005440", LocalDate.parse("2020-01-02"));
 
         scheduler.runCorporateActionChain();
 
-        ArgumentCaptor<LocalDate> from = ArgumentCaptor.forClass(LocalDate.class);
-        verify(indicatorBackfillJob).run(from.capture(), any(),
-                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of("005440")), eq(null));
-        // MUST: 시장별 경계 중 **가장 이른 것**을 쓴다. 늦은 것을 쓰면 보존이 더 긴 시장의
-        // 저장 가능한 구간을 함께 잘라 그 시장 지표가 지워진 채로 남는다.
-        assertThat(from.getValue()).isEqualTo(KR_CUTOFF.plusDays(1));
+        InOrder order = inOrder(indicatorBackfillJob);
+        ArgumentCaptor<LocalDate> asOf = ArgumentCaptor.forClass(LocalDate.class);
+        // 좁힌 ① 은 GAP_FILL이다 — SCHEDULER로 남기면 14:20 전량 ① 이 실패해도 사슬이 돈 날마다
+        // 그 시계가 되돌아간다(JobFreshnessPolicy의 「스케줄러 실행은 언제나 전량」).
+        order.verify(indicatorBackfillJob).rewriteOriginLayer(asOf.capture(),
+                eq(BatchExecutionRecorder.TriggeredBy.GAP_FILL), eq(List.of("005440")));
+        // ② 는 언제나 창 전체라 SCHEDULER 그대로다.
+        order.verify(indicatorBackfillJob).rebuildDerived(eq(asOf.getValue()),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        // MUST: 화해의 asOf는 13:30 일일 갱신의 대상일이다. 다르면 asOf의 주식수를 따라가는 지표가
+        // 지금 편입 종목에서 두 판 사이를 매일 오간다.
+        assertThat(asOf.getValue())
+                .isEqualTo(DailyUpdateJob.targetDateFor(LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))));
+        // 옛 손 도구(날짜 루프 백필)는 정기 경로에서 안 부른다.
+        verify(indicatorBackfillJob, never()).run(any(), any(), any(), anyList(), any());
     }
 
     @Test
-    @DisplayName("무효화 시작일이 경계보다 늦으면 그대로 쓴다 — 경계로 넓히면 헛돈다")
-    void backfillRangeKeepsALaterStart() {
-        LocalDate later = LocalDate.parse("2026-05-01");
-        givenInvalidation("005440", later);
+    @DisplayName("IMPORTANT — 사슬은 입력 유도를 안 부른다 — 유도가 던지면 지운 종목이 화해 없이 한 시간 빈다")
+    void chainDoesNotDeriveBeforeReconciling() {
+        givenInvalidation("005440", LocalDate.parse("2020-01-02"));
+        doThrow(new IllegalStateException("기저 판정 실패")).when(shareBasisDeriver).derive(anyString());
 
         scheduler.runCorporateActionChain();
 
-        ArgumentCaptor<LocalDate> from = ArgumentCaptor.forClass(LocalDate.class);
-        verify(indicatorBackfillJob).run(from.capture(), any(), any(), anyList(), any());
-        assertThat(from.getValue()).isEqualTo(later);
+        // 유도는 14:18 크론의 몫이다. 여기서 부르면 위 예외가 화해 앞에서 사슬을 끊는다.
+        verifyNoInteractions(shareBasisDeriver, governanceDeriveJob);
+        verify(indicatorBackfillJob).rebuildDerived(any(), any());
     }
 
     @Test
-    @DisplayName("무효화가 상한을 넘으면 백필을 안 돌린다 — 자동으로 시간 단위 작업을 시작하면 그날이 밀린다")
-    void hugeInvalidationIsNotBackfilledAutomatically() {
-        String[] many = new String[11];
-        for (int i = 0; i < many.length; i++) {
-            many[i] = "T" + i;
-        }
+    @DisplayName("IMPORTANT — 무효화가 아무리 커도 화해한다 — 상한을 넘으면 지운 채 두던 것이 이 결함이었다")
+    void hugeInvalidationIsStillReconciled() {
+        List<String> many = java.util.stream.IntStream.range(0, 300).mapToObj(i -> "T" + i).toList();
         when(adjustmentRebuildJob.runAndReport(any(), any(), anyList(), any()))
                 .thenReturn(new AdjustmentRebuildJob.Invalidation(
-                        BatchStatus.SUCCESS, List.of(many), LocalDate.parse("2026-05-01")));
+                        BatchStatus.SUCCESS, many, LocalDate.parse("2026-05-01")));
 
         scheduler.runCorporateActionChain();
 
-        // 지운 채로 남는다. 그것이 **조용하지 않은** 상태이고, 로그가 종목을 이름으로 남긴다.
+        verify(indicatorBackfillJob).rewriteOriginLayer(any(), any(), eq(many));
+        verify(indicatorBackfillJob).rebuildDerived(any(), any());
+    }
+
+    @Test
+    @DisplayName("14:20 화해는 ① 보존 창 전원 → ② 창 전체이고 유도를 안 부른다 — 유도 실패가 화해를 못 막게 크론이 갈렸다")
+    void scheduledReconcileCoversEveryoneWithoutDeriving() {
+        scheduler.reconcileIndicators();
+
+        InOrder order = inOrder(indicatorBackfillJob);
+        ArgumentCaptor<LocalDate> asOf = ArgumentCaptor.forClass(LocalDate.class);
+        order.verify(indicatorBackfillJob).rewriteOriginLayer(asOf.capture(),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()));
+        order.verify(indicatorBackfillJob).rebuildDerived(eq(asOf.getValue()),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        assertThat(asOf.getValue())
+                .isEqualTo(DailyUpdateJob.targetDateFor(LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))));
+        verifyNoInteractions(shareBasisDeriver, governanceDeriveJob);
+    }
+
+    @Test
+    @DisplayName("14:18 유도는 기저 판정 → 거버넌스 유도(창 편입)이고 지표를 안 건드린다")
+    void scheduledDeriveRunsBothInputsOnly() {
+        scheduler.deriveReconcileInputs();
+
+        InOrder order = inOrder(shareBasisDeriver, governanceDeriveJob);
+        order.verify(shareBasisDeriver).derive("US");
+        // 빈 티커 = 기본 모집단(보존 창 편입) — GovernanceDeriveJobTest가 그 갈래를 고정한다.
+        order.verify(governanceDeriveJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
+                eq(List.of()));
         verifyNoInteractions(indicatorBackfillJob);
+    }
+
+    @Test
+    @DisplayName("① 이 FAILED면 ②를 안 돈다 — 잡 전체가 멈춘 날은 다음 평일에 맡긴다")
+    void derivedIsSkippedWhenOriginFailed() {
+        when(indicatorBackfillJob.rewriteOriginLayer(any(), any(), anyList())).thenReturn(BatchStatus.FAILED);
+
+        scheduler.reconcileIndicators();
+
+        verify(indicatorBackfillJob, never()).rebuildDerived(any(), any());
+    }
+
+    @Test
+    @DisplayName("① 이 부분 실패여도 ②는 돈다 — 종목 하나의 실패가 전 종목의 과거 순위를 낡게 두면 안 된다")
+    void derivedRunsAfterPartialOrigin() {
+        when(indicatorBackfillJob.rewriteOriginLayer(any(), any(), anyList()))
+                .thenReturn(BatchStatus.PARTIAL_SUCCESS);
+
+        scheduler.reconcileIndicators();
+
+        verify(indicatorBackfillJob).rebuildDerived(any(), any());
+    }
+
+    @Test
+    @DisplayName("① 이 던지면 ②를 안 돌고 예외가 스케줄러 밖으로 간다 — 삼키면 그날의 실패가 안 보인다")
+    void derivedIsSkippedWhenOriginThrows() {
+        when(indicatorBackfillJob.rewriteOriginLayer(any(), any(), anyList()))
+                .thenThrow(new IllegalStateException("원본층 실패"));
+
+        assertThatThrownBy(() -> scheduler.reconcileIndicators()).isInstanceOf(IllegalStateException.class);
+        verify(indicatorBackfillJob, never()).rebuildDerived(any(), any());
+    }
+
+    @Test
+    @DisplayName("화해·유도가 종료로 중단돼도 스케줄러 밖으로 안 던진다 — @Scheduled 밖으로 나가면 Sentry 이슈가 쌓인다")
+    void swallowsShutdownFromReconcile() {
+        when(indicatorBackfillJob.rewriteOriginLayer(any(), any(), anyList()))
+                .thenThrow(new BatchShutdownException("종료 중이다"));
+        doThrow(new BatchShutdownException("종료 중이다")).when(governanceDeriveJob).run(any(), any(), anyList());
+
+        scheduler.reconcileIndicators();
+        scheduler.deriveReconcileInputs();
     }
 
     @Test
@@ -245,8 +310,8 @@ class PipelineSchedulerChainTest {
     }
 
     @Test
-    @DisplayName("거버넌스는 적재 뒤 유도까지 간다 — 적재만 하면 화면이 옛 값 그대로인데 둘 다 성공한다")
-    void governanceLoadIsFollowedByDerive() {
+    @DisplayName("거버넌스 무거운 잡은 적재만 한다 — 유도는 14:18이 매 평일 창 편입 전원으로 돈다")
+    void governanceLoadLeavesDerivingTo1418() {
         overdue(GovernanceLoadJob.JOB_NAME, 40);
         fresh(FullStatementRefillJob.JOB_NAME, FinancialRefillJob.JOB_NAME);
 
@@ -262,14 +327,14 @@ class PipelineSchedulerChainTest {
         // 그 시험이 오해를 잠가 두었으므로 주석까지 함께 고친다.
         verify(governanceLoadJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
                 eq(null), eq(null), anyList(), anyList());
-        verify(governanceDeriveJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
-                anyList());
-        verifyNoInteractions(fullStatementRefillJob, financialRefillJob);
+        // 적재 뒤 유도가 빠지면 화면이 옛 값 그대로인데 둘 다 성공한다 — 그 연결은 이제 14:18 크론이다
+        // (scheduledDeriveRunsBothInputsOnly · PipelineSchedulerTest의 순서 시험).
+        verifyNoInteractions(governanceDeriveJob, fullStatementRefillJob, financialRefillJob);
     }
 
     @Test
-    @DisplayName("재무 정정이 있으면 백필까지 간다 — 안 이으면 그 종목이 화면에서 통째로 사라진다")
-    void financialRefillIsFollowedByBackfill() {
+    @DisplayName("재무 정정이 있어도 무거운 잡 안에서 백필하지 않는다 — 14:20 화해가 상한 없이 채운다")
+    void financialRefillLeavesBackfillTo1420() {
         overdue(FinancialRefillJob.JOB_NAME, 40);
         fresh(GovernanceLoadJob.JOB_NAME, FullStatementRefillJob.JOB_NAME);
         when(financialRefillJob.runAndReport(any(), any(), any(), anyList(), any()))
@@ -278,40 +343,10 @@ class PipelineSchedulerChainTest {
 
         scheduler.runHeavyJobOfTheDay();
 
-        // 정정 반영은 그 종목의 indicator_value를 회계기간 시작일 이후 전부 지운다. 실측으로
-        // 표본 30종목 실행이 2종목을 145/256거래일로 떨어뜨렸고, 에러도 경고도 나지 않았다.
-        ArgumentCaptor<List<String>> tickers = ArgumentCaptor.forClass(List.class);
-        verify(indicatorBackfillJob).run(any(), any(),
-                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), tickers.capture(), eq(null));
-        assertThat(tickers.getValue()).containsExactly("005930", "000660");
-    }
-
-    @Test
-    @DisplayName("재무 정정이 없으면 백필을 안 부른다 — 평상시가 이쪽이다")
-    void skipsBackfillWhenNoFinancialRevision() {
-        overdue(FinancialRefillJob.JOB_NAME, 40);
-        fresh(GovernanceLoadJob.JOB_NAME, FullStatementRefillJob.JOB_NAME);
-        when(financialRefillJob.runAndReport(any(), any(), any(), anyList(), any()))
-                .thenReturn(new FinancialRefillJob.Invalidation(BatchStatus.SUCCESS, List.of()));
-
-        scheduler.runHeavyJobOfTheDay();
-
-        verifyNoInteractions(indicatorBackfillJob);
-    }
-
-    @Test
-    @DisplayName("재무를 쓴 뒤에는 주식수 기저를 다시 판정한다 — 안 이으면 UNRESOLVED 종목이 조용히 값을 되찾는다")
-    void financialRefillIsFollowedByShareBasisDerive() {
-        overdue(FinancialRefillJob.JOB_NAME, 40);
-        fresh(GovernanceLoadJob.JOB_NAME, FullStatementRefillJob.JOB_NAME);
-        when(financialRefillJob.runAndReport(any(), any(), any(), anyList(), any()))
-                .thenReturn(new FinancialRefillJob.Invalidation(BatchStatus.SUCCESS, List.of()));
-
-        scheduler.runHeavyJobOfTheDay();
-
-        // 새 판은 판정이 NULL 로 들어오고 NULL 은 OK 로 읽힌다. 이 연쇄가 빠지면 증상이
-        // 「다음 리밸런싱에 다시 편입된다」라 재무 잡의 초록만 보면 드러나지 않는다.
-        verify(shareBasisDeriver).derive("US");
+        verify(financialRefillJob).runAndReport(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
+                eq(null), anyList(), eq(null));
+        // 정정 반영은 그 종목의 지표를 지운다. 채우는 것과 주식수 기저 재판정은 14:18·14:20이 한다.
+        verifyNoInteractions(indicatorBackfillJob, shareBasisDeriver);
     }
 
     @Test

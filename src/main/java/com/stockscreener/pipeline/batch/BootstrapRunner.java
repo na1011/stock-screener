@@ -176,6 +176,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final MarketCalendarJob marketCalendarJob;
     private final CorporateActionJudgeJob corporateActionJudgeJob;
     private final ShareBasisDeriver shareBasisDeriver;
+    private final IndicatorReconciler indicatorReconciler;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
@@ -195,7 +196,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            CorporateActionJudgeJob corporateActionJudgeJob,
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context,
-                           ShareBasisDeriver shareBasisDeriver) {
+                           ShareBasisDeriver shareBasisDeriver,
+                           IndicatorReconciler indicatorReconciler) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.universeRestoreJob = universeRestoreJob;
         this.initialLoadJob = initialLoadJob;
@@ -211,6 +213,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.marketCalendarJob = marketCalendarJob;
         this.corporateActionJudgeJob = corporateActionJudgeJob;
         this.shareBasisDeriver = shareBasisDeriver;
+        this.indicatorReconciler = indicatorReconciler;
         this.executionSweeper = executionSweeper;
         this.context = context;
     }
@@ -334,6 +337,14 @@ public class BootstrapRunner implements ApplicationRunner {
             // 이력의 시작을 쓴다 — 러너가 기본값을 정하면 두 번째 정본이 생긴다.
             case "market-index" -> marketIndexJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, date(args, "from", null));
+            // 매 평일 14:18·14:20과 같은 메서드다 — 유도 → ① 원본층 → ② 파생층(창 전체).
+            // --from을 안 받는다(rejectMisplacedLoadOptions): 파생층은 언제나 보존 창 전체이고,
+            // 원본층은 러너가 창 전체를 쓴다. 관문의 전체 백필도 이것이다(docs/reload-gate.md).
+            case "indicator-reconcile" -> {
+                indicatorReconciler.deriveInputs(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
+                yield indicatorReconciler.reconcile(asOf, csv(args, "tickers"),
+                        BatchExecutionRecorder.TriggeredBy.MANUAL);
+            }
             case "backfill" -> indicatorBackfillJob.run(
                     date(args, "from", asOf.minusYears(2)), asOf,
                     BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
@@ -374,7 +385,7 @@ public class BootstrapRunner implements ApplicationRunner {
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill"
                             + " | full-statement-refill | company-profile | corporate-action"
-                            + " | adjustment-rebuild | market-index | backfill"
+                            + " | adjustment-rebuild | market-index | backfill | indicator-reconcile"
                             + " | governance-load | governance-derive"
                             + " | share-basis-derive"
                             + " | corporate-action-review | corporate-action-judge"
@@ -428,9 +439,13 @@ public class BootstrapRunner implements ApplicationRunner {
      * 이 잡들이 끝나면 주식수 기저를 다시 판정한다 — 재무 판이나 기업행위 원장이 바뀌면
      * 판정의 입력이 바뀌기 때문이다. 유도는 외부 호출 0이고 원자료를 한 행도 안 바꾼다.
      */
+    // adjustment-rebuild도 원장을 APPLIED로 바꾸므로 판정의 입력이 바뀐다 — 빠져 있었다.
     private static final java.util.Set<String> REDERIVE_SHARE_BASIS_AFTER = java.util.Set.of(
             "initial-load", "financial-refill", "full-statement-refill",
-            "corporate-action", "corporate-action-judge");
+            "corporate-action", "corporate-action-judge", "adjustment-rebuild");
+
+    /** 지표 화해. {@code --from}이 뜻이 없는 유일한 지표 잡이라 이름으로 둔다 — {@code switch}는 거울 검사(check-doc-staleness §5c)가 읽도록 문자열로 쓴다. */
+    static final String RECONCILE_JOB = "indicator-reconcile";
 
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
             "job", "as-of", "universe", "price-years", "financial-years", "reload-existing",
@@ -491,6 +506,11 @@ public class BootstrapRunner implements ApplicationRunner {
             throw new IllegalArgumentException(
                     "--insert-earlier-vintages는 '" + FINANCIAL_REFILL_JOB + "'에서만 쓴다 — 지금 잡은 '"
                             + job + "'이고, 그대로 두면 인자가 조용히 무시된다.");
+        }
+        if (RECONCILE_JOB.equals(job) && args.getOptionNames().contains("from")) {
+            throw new IllegalArgumentException(
+                    "--from은 '" + RECONCILE_JOB + "'에서 뜻이 없다 — 파생층은 언제나 보존 창 전체를 다시 내고"
+                            + " 원본층은 러너가 창 전체를 쓴다. 구간을 좁히려던 것이면 '--job=backfill'이다.");
         }
         if (!INITIAL_LOAD_JOB.equals(job)) {
             for (String option : INITIAL_LOAD_ONLY_OPTIONS) {

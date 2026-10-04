@@ -101,6 +101,12 @@ public class IndicatorBackfillJob {
 
     public static final String JOB_NAME = "indicator-backfill";
 
+    /** 매 평일 화해의 ① — 원본층을 {@code asOf} 한 판으로 다시 쓴다({@link #rewriteOriginLayer}). */
+    public static final String ORIGIN_JOB_NAME = "indicator-origin-rewrite";
+
+    /** 매 평일 화해의 ② — 보존 창 전체의 파생층을 다시 낸다({@link #rebuildDerived}). */
+    public static final String DERIVED_JOB_NAME = "indicator-derived-rebuild";
+
     private static final Logger log = LoggerFactory.getLogger(IndicatorBackfillJob.class);
 
     /**
@@ -280,6 +286,114 @@ public class IndicatorBackfillJob {
             shutDown(pool);
         }
         return execution.finish();
+    }
+
+    /**
+     * 매 평일 화해의 ① — 종목마다 <b>{@code asOf} 한 판</b>으로 원본층을 보존 창 전체에 다시 쓴다.
+     *
+     * <p><b>한 판으로 충분한 이유</b>는 러너의 성질이다 — {@link IndicatorRunner#run}이 창 전체를 계산해
+     * 경계 뒤를 전부 쓰고, 재무 지표는 봉마다 {@code KNOWN_ON}이라 날짜 d의 값이 {@code asOf}와
+     * 무관하다(ADR-0128). 그래서 {@link #run}의 날짜 루프가 같은 종목을 거래일마다 다시 돌리던 것은
+     * 원본층에 대해서는 같은 값을 N번 쓰는 일이었다. 예외는 분모가 {@code asOf}의 주식수를 따라가는
+     * {@code RETAINED_TO_MARKET_4Y}이고(그 계산기 javadoc의 설계), 파생 자식이 없다.
+     *
+     * <p><b>MUST: {@code asOf}를 13:30 일일 갱신의 대상일과 같게 준다</b>(호출자의 몫). 다르면 위 예외가
+     * 지금 편입 종목에서 두 판 사이를 매일 오간다 — 일일 갱신이 쓰고 화해가 덮고 다음 날 다시 쓴다.
+     *
+     * @param tickers 비면 보존 창 편입 전원({@link StockRegistrar#windowMemberIds}). 주면 그 티커의 창 편입
+     */
+    public BatchStatus rewriteOriginLayer(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                          List<String> tickers) {
+        List<Long> ids = tickers == null || tickers.isEmpty()
+                ? stockRegistrar.windowMemberIds()
+                : resolveTargets(tickers, null);
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(ids);
+        Map<String, Optional<LocalDate>> retentionCutoffs = retentionPolicy.writeCutoffs();
+
+        BatchExecutionContext execution =
+                batchExecutions.start(ORIGIN_JOB_NAME, asOf, triggeredBy, targets.size());
+        execution.plan(CollectionPhase.INDICATOR, targets.size());
+        log.info("원본층을 다시 쓴다. asOf={} 종목={}개{}", asOf, targets.size(),
+                tickers == null || tickers.isEmpty() ? " (보존 창 편입 전원)" : " (티커로 좁혔다: " + tickers + ")");
+
+        ExecutorService pool =
+                Executors.newFixedThreadPool(resolveWorkers(targets.size()), workerFactory());
+        try {
+            execution.stage("원본층 · asOf " + asOf);
+            Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes =
+                    indicatorRunner.marketIndexesFor(asOf);
+            fanOutStocks(pool, execution, targets, asOf, retentionCutoffs, marketIndexes);
+        } catch (DataSourceException e) {
+            // run()과 같은 자리다 — 외부 호출이 없어 정상적으로는 오지 않는다.
+            execution.failFatally(e);
+            return BatchStatus.FAILED;
+        } catch (RuntimeException e) {
+            execution.failUnexpectedly(e);
+            throw e;
+        } finally {
+            shutDown(pool);
+        }
+        return execution.finish();
+    }
+
+    /**
+     * 매 평일 화해의 ② — <b>보존 창의 모든 거래일</b>에서 파생층(백분위·업종 상대값)을 다시 낸다.
+     * 원본층은 안 부른다.
+     *
+     * <p><b>왜 창 전체인가.</b> 13:30 일일 갱신은 파생층을 최신일 하루만 다시 낸다. 그래서 그보다 앞
+     * 날짜의 원본이 바뀌면(봉이 하루 늦은 클래스주 · 재무 정정 · 기업 행위 · ①이 다시 쓴 과거 구성원)
+     * 그날의 순위가 낡은 채 남는다 — 2026-10-04 사본에서 09-28·29·30의 백분위가 날짜마다
+     * 6,304·7,697·7,134칸 낡아 있었다. 날짜마다 그날 편입 전원을 다시 매기므로 원본을 다시 쓴 종목이
+     * 몇이든 이 한 판이 닫는다.
+     *
+     * <p>성공 단위는 <b>거래일</b>이다 — 대상 수가 거래일 수이고 거래일 하나를 끝낼 때마다 하나를 센다.
+     * 쓴 행 수(두 계산기의 반환값 합)는 마감 기록에 남긴다. 값이 같으면 0행이므로, 0이 아닌 날이
+     * 곧 무엇인가 바뀐 날이다.
+     *
+     * <p>MUST: 날짜 루프 뒤에 {@link #run}의 루프 밖 두 단계를 같이 진다 — 고아 파생값 정리(ADR-0080)와
+     * 거래일 색인 갱신(ADR-0095). 빼면 새로 채운 날짜가 화면에 안 보인다.
+     */
+    public BatchStatus rebuildDerived(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        Map<String, Optional<LocalDate>> retentionCutoffs = retentionPolicy.writeCutoffs();
+        // 경계는 시장별 최솟값이다 — run()의 고아 정리와 같은 이유로 넓은 쪽이 안전하다. 경계가 없는
+        // 시장만 있으면(시세가 보존 기간보다 적게 쌓인 초기) 시세의 첫 거래일부터 전부가 창이다.
+        Optional<LocalDate> floor = retentionCutoffs.values().stream()
+                .flatMap(Optional::stream).min(LocalDate::compareTo);
+        LocalDate from = floor.map(cutoff -> cutoff.plusDays(1)).orElseGet(this::firstPriceDate);
+        List<LocalDate> tradeDates = from == null ? List.of() : tradeDatesBetween(from, asOf);
+
+        BatchExecutionContext execution =
+                batchExecutions.start(DERIVED_JOB_NAME, asOf, triggeredBy, tradeDates.size());
+        execution.plan(CollectionPhase.INDICATOR, tradeDates.size());
+        log.info("파생층을 다시 낸다. {} ~ {} 거래일={}일", from, asOf, tradeDates.size());
+
+        long written = 0;
+        try {
+            for (int i = 0; i < tradeDates.size(); i++) {
+                LocalDate tradeDate = tradeDates.get(i);
+                execution.stage("%s · %d/%d거래일".formatted(tradeDate, i + 1, tradeDates.size()));
+                // MUST NOT: 유니버스를 좁히지 않는다 — 두 계산기는 그날 활성 편입 전량을 조인한다.
+                long rows = percentileCalculator.calculate(tradeDate, null)
+                        + sectorRelativeCalculator.calculate(tradeDate, null);
+                written += rows;
+                execution.countExternally(CollectionPhase.INDICATOR, 1, 0, rows);
+            }
+            execution.stage("고아 파생값 정리");
+            long orphans = percentileCalculator.removeOrphansInWindow(floor)
+                    + sectorRelativeCalculator.removeOrphansInWindow(floor);
+            execution.stage("거래일 색인 갱신");
+            int indexed = tradeDateIndex.rebuild();
+            return execution.finish("파생층 %d거래일 · 쓴 행 %d · 고아 정리 %d · 색인 %d"
+                    .formatted(tradeDates.size(), written, orphans, indexed));
+        } catch (RuntimeException e) {
+            execution.failUnexpectedly(e);
+            throw e;
+        }
+    }
+
+    /** 시세의 첫 거래일. 시세가 하나도 없으면 {@code null}이다. */
+    private LocalDate firstPriceDate() {
+        return jdbcTemplate.queryForObject("SELECT min(trade_date) FROM price_daily", LocalDate.class);
     }
 
     /**

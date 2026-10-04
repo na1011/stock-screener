@@ -63,8 +63,8 @@ public class JobFreshnessPolicy {
      * <ul>
      *   <li>{@code market-index} — 일일 갱신이 지수를 함께 받는다. 이 잡은 과거 구간을 채우는
      *       도구이지 신선도의 경로가 아니다(실측: 지수 최신이 일일 갱신 대상일과 같다).</li>
-     *   <li>{@code indicator-backfill} — 다른 잡의 <b>꼬리</b>다. 무효화가 없으면 돌 이유가 없고,
-     *       있으면 {@code PipelineScheduler}가 곧바로 이어 부른다.</li>
+     *   <li>{@code indicator-backfill} — <b>손 도구</b>다. 정기 경로는 매 평일 화해이고 그쪽의 ②
+     *       ({@code indicator-derived-rebuild})가 예산을 갖는다.</li>
      *   <li>{@code initial-load} — <b>주기가 생겼지만 그 주기로 감시하지 않는다.</b>
      *       {@code MembershipGapFiller}가 리밸런싱 꼬리에서 부르는데, <b>대상이 보통 0이라
      *       안 도는 것이 정상</b>이다(ADR-0141). 예산을 주면 결손 없는 주마다 붉는다 —
@@ -84,6 +84,13 @@ public class JobFreshnessPolicy {
         map.put(CorporateActionJob.JOB_NAME, new Budget(5, null));
         // 위와 한 사슬이라 같은 예산이다. 갈리면 사슬이 끊긴 것이다.
         map.put(AdjustmentRebuildJob.JOB_NAME, new Budget(5, null));
+        // 평일 14:20 화해의 ①·②. 일일 갱신과 같은 주기라 같은 예산이다. 둘 다 두는 이유: 14:00 사슬이
+        // 무효화가 있는 날 ②(창 전체)를 SCHEDULER로 돌리므로 ② 시계만 보면 14:20 ① 전량의 실패가
+        // 가려진다. 사슬의 좁힌 ①은 GAP_FILL로 남아(IndicatorReconciler.originTrigger) 여기서 안 센다.
+        map.put(IndicatorBackfillJob.ORIGIN_JOB_NAME,
+                new Budget(5, "--job=indicator-reconcile"));
+        map.put(IndicatorBackfillJob.DERIVED_JOB_NAME,
+                new Budget(5, "--job=indicator-reconcile"));
         // 주 1회(토) 크론. 토요일 크론은 평일보다 발화가 드물어 여유를 크게 둔다.
         map.put(UniverseRebalanceJob.JOB_NAME, new Budget(12, null));
         // 리밸런싱 뒤에 붙는다. 같은 이유로 같은 폭이다.

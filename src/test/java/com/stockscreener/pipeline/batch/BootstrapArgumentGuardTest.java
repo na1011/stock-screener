@@ -342,4 +342,25 @@ class BootstrapArgumentGuardTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("insert-earlier-vintages");
     }
+
+    @Test
+    @DisplayName("--from은 indicator-reconcile에서 거절된다 — 파생층은 언제나 창 전체라 구간이 조용히 무시된다")
+    void rejectsFromOnReconcile() {
+        // 구간을 좁힌 줄 아는 사람은 그 구간만 다시 썼다고 믿는다. 실제로는 창 전체를 돈다.
+        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=indicator-reconcile", "--from=2026-01-02"),
+                BootstrapRunner.RECONCILE_JOB))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("--from");
+        // 티커·기준일은 뜻이 있다 — 막으면 사본 드라이런과 관문의 명령이 안 선다.
+        assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=indicator-reconcile", "--tickers=005930",
+                        "--as-of=2026-10-02"),
+                BootstrapRunner.RECONCILE_JOB))
+                .doesNotThrowAnyException();
+        // 손 도구 backfill은 여전히 --from을 받는다.
+        assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(
+                new DefaultApplicationArguments("--job=backfill", "--from=2026-01-02"), "backfill"))
+                .doesNotThrowAnyException();
+    }
 }

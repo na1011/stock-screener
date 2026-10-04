@@ -1,7 +1,5 @@
 package com.stockscreener.pipeline.scheduler;
 
-import com.stockscreener.pipeline.datasource.us.UsMarket;
-import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
@@ -11,7 +9,7 @@ import com.stockscreener.pipeline.batch.FinancialRefillJob;
 import com.stockscreener.pipeline.batch.FullStatementRefillJob;
 import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
 import com.stockscreener.pipeline.batch.GovernanceLoadJob;
-import com.stockscreener.pipeline.batch.InvalidationBackfiller;
+import com.stockscreener.pipeline.batch.IndicatorReconciler;
 import com.stockscreener.pipeline.batch.JobFreshnessAlerter;
 import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
 import com.stockscreener.pipeline.batch.UniverseIntegrityAlerter;
@@ -69,8 +67,7 @@ public class PipelineScheduler {
     private final FinancialRefillJob financialRefillJob;
     private final JobFreshnessAlerter freshnessAlerter;
     private final JobFreshnessPolicy freshnessPolicy;
-    private final InvalidationBackfiller invalidationBackfiller;
-    private final ShareBasisDeriver shareBasisDeriver;
+    private final IndicatorReconciler indicatorReconciler;
     private final UniverseIntegrityAlerter universeIntegrityAlerter;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
@@ -83,9 +80,8 @@ public class PipelineScheduler {
                              FinancialRefillJob financialRefillJob,
                              JobFreshnessAlerter freshnessAlerter,
                              JobFreshnessPolicy freshnessPolicy,
-                             InvalidationBackfiller invalidationBackfiller,
-                             UniverseIntegrityAlerter universeIntegrityAlerter,
-                             ShareBasisDeriver shareBasisDeriver) {
+                             IndicatorReconciler indicatorReconciler,
+                             UniverseIntegrityAlerter universeIntegrityAlerter) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -96,8 +92,7 @@ public class PipelineScheduler {
         this.financialRefillJob = financialRefillJob;
         this.freshnessAlerter = freshnessAlerter;
         this.freshnessPolicy = freshnessPolicy;
-        this.invalidationBackfiller = invalidationBackfiller;
-        this.shareBasisDeriver = shareBasisDeriver;
+        this.indicatorReconciler = indicatorReconciler;
         this.universeIntegrityAlerter = universeIntegrityAlerter;
     }
 
@@ -177,7 +172,7 @@ public class PipelineScheduler {
     }
 
     /**
-     * 기업 행위 사슬. <b>평일 14시(KST)</b> — 수집 → 계수 재구축 → (무효화가 있으면) 백필.
+     * 기업 행위 사슬. <b>평일 14시(KST)</b> — 수집 → 계수 재구축 → (무효화가 있으면) 그 자리에서 화해.
      *
      * <h2>왜 셋을 한 자리에 묶는가</h2>
      * <p><b>수집만 걸면 지금 고치려는 결함을 매 평일 재생산한다.</b> 소스가 종류까지 준 사건은
@@ -196,6 +191,11 @@ public class PipelineScheduler {
      * 그래서 셋이 한 사슬이다. MUST NOT: 앞의 둘만 걸고 백필을 사람에게 남기지 않는다 —
      * 그 손이 빠지면 지운 채로 남는다(2026-09-01 사용자 결정).
      *
+     * <p><b>14:20 정기 화해가 있는데도 여기서 바로 화해하는 이유</b>는 무거운 잡 날의 공백이다. 14:15
+     * 잡이 한 시간 가까이 돌면(풀 1이라 14:20이 그 뒤로 밀린다) 지워진 종목이 그동안 화면에서 빠진다 —
+     * 옛 사슬 백필은 약 4분 뒤에 채웠다. 상한은 없다 — 원본층은 지운 종목만, 파생층은 창 전체다
+     * ({@link IndicatorReconciler#reconcile}).
+     *
      * <h2>왜 14시인가</h2>
      * <p>13시 30분 일일 갱신이 실측 13분 36초라 13시 44분에 끝난다. 그리고 스케줄러 스레드
      * 풀이 1이라 두 {@code @Scheduled}가 <b>원리적으로 동시에 돌지 않는다</b> — 앞이 길어지면
@@ -213,7 +213,7 @@ public class PipelineScheduler {
     @Scheduled(cron = "0 0 14 * * MON-FRI", zone = "Asia/Seoul")
     public void runCorporateActionChain() {
         LocalDate asOf = LocalDate.now(KR_ZONE);
-        log.info("기업 행위 사슬을 시작한다. asOf={} — 수집 → 재구축 → 백필까지 한 번에 간다.", asOf);
+        log.info("기업 행위 사슬을 시작한다. asOf={} — 수집 → 재구축 → 화해까지 한 번에 간다.", asOf);
         try {
             corporateActionJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
                     null, List.of(), null);
@@ -221,16 +221,23 @@ public class PipelineScheduler {
             AdjustmentRebuildJob.Invalidation invalidation = adjustmentRebuildJob.runAndReport(
                     asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null);
             if (invalidation.isEmpty()) {
-                log.info("계수가 원장과 이미 일치한다 — 지워진 지표가 없어 백필도 없다.");
+                log.info("계수가 원장과 이미 일치한다 — 지워진 지표가 없어 사슬 안 화해도 없다.");
                 return;
             }
-            invalidationBackfiller.backfillAdjustment(invalidation, asOf,
+            // 화해의 asOf는 13:30 일일 갱신의 대상일이다(IndicatorBackfillJob.rewriteOriginLayer).
+            //
+            // MUST NOT: 여기서 입력 유도(deriveInputs)를 먼저 부르지 않는다. 재구축이 원장을 APPLIED로
+            // 바꿔 기저 판정의 입력이 바뀐 것은 맞지만, 유도가 던지면 지워진 종목이 화해 없이 남아
+            // 무거운 잡 날 한 시간을 빈다 — 이 자리를 둔 이유가 통째로 무너진다. 어제 판정으로 채워도
+            // 13:30과 같은 의미이고(판정 NULL = OK), 같은 오후 14:18 유도 → 14:20 화해가 새 판정으로 덮는다.
+            LocalDate dataAsOf = DailyUpdateJob.targetDateFor(asOf);
+            indicatorReconciler.reconcile(dataAsOf, invalidation.tickers(),
                     BatchExecutionRecorder.TriggeredBy.SCHEDULER);
         } catch (BatchShutdownException e) {
             // 앞의 두 잡과 같은 이유다(runDailyUpdate 참조). 사슬 중간에 끊기면 다음 실행이
             // 이어받는다 — 수집은 전 구간 재조회라 멱등이고, 재구축도 원장에서 매번 다시 짓는다.
             log.info("기업 행위 사슬이 종료로 중단됐다. asOf={} — 다음 평일 실행이 다시 시도한다."
-                    + " 다만 백필까지 못 갔으면 그 종목의 지표는 지워진 채로 남는다.", asOf);
+                    + " 화해까지 못 갔으면 그 종목의 지표는 다음 화해까지 지워진 채로 남는다.", asOf);
         }
     }
 
@@ -320,33 +327,67 @@ public class PipelineScheduler {
             // **앞부분**에서 다시 재면 다르다 — 창 시작의 커버가 span 3에 856, span 4에 970,
             // span 5에도 970이다(2026-09-20 · 편입 1,000). 그래서 DIVIDEND의 기본값을 4로
             // 올렸고, 다섯째 해는 여전히 +0이다.
+            // 유도(governance-derive)는 여기서 안 부른다 — 14:18 deriveReconcileInputs가 매 평일
+            // 보존 창 편입 전원으로 돈다. 풀이 1이라 이 잡이 길어지면 그 뒤로 밀릴 뿐 건너뛰지 않는다.
             governanceLoadJob.run(asOf, by, null, null, List.of(), List.of());
-            governanceDeriveJob.run(asOf, by, List.of());
         } else if (FullStatementRefillJob.JOB_NAME.equals(jobName)) {
             // 전 종목 분기가 필요하다 — 주당 지표가 분기 행을 읽는다(ADR-0098).
             fullStatementRefillJob.run(asOf, by, null, List.of(), false, true);
         } else if (FinancialRefillJob.JOB_NAME.equals(jobName)) {
-            // MUST: 백필까지 간다. 이 잡의 성공은 「정정을 반영했다」이고 그 상태는 아직
-            // 일이 끝나지 않은 상태다 — 무효화된 종목이 화면에서 통째로 사라지는데 에러도
-            // 경고도 나지 않는다(FinancialRefillJob.runAndReport javadoc의 실측).
-            // 기업 행위 사슬이 같은 자리에서 같은 결론에 도달했다 — runCorporateActionChain
-            // 의 「MUST NOT: 앞의 둘만 걸고 백필을 사람에게 남기지 않는다」와 같은 규칙이다.
+            // 정정이 지운 지표는 14:20 화해가 채운다(상한 없음). 옛 모양은 여기서 무효화 종목만
+            // 백필하고 100종목을 넘으면 지운 채 두었다 — 미국 공시 시즌에 그 상한을 넘는다.
             FinancialRefillJob.Invalidation invalidation =
                     financialRefillJob.runAndReport(asOf, by, null, List.of(), null);
-            if (invalidation.isEmpty()) {
-                log.info("재무 정정·교정이 없었다 — 지워진 지표가 없어 백필도 없다.");
-            } else {
-                invalidationBackfiller.backfillFinancial(invalidation.tickers(), asOf, by);
-            }
+            log.info("재무 정정·교정으로 지표가 지워진 종목 {}개 — 14:20 화해가 다시 쓴다.",
+                    invalidation.tickers().size());
         } else {
             throw new IllegalStateException("배정에 없는 잡을 고를 수 없다: " + jobName);
         }
-        // MUST: 재무를 쓴 뒤에는 주식수 기저를 다시 판정한다(ADR-0162). 새 판은 판정이
-        // NULL 로 들어오고 NULL 은 OK 로 읽히므로, 안 돌리면 UNRESOLVED 종목이 조용히 값을
-        // 되찾고 **토요일 리밸런싱이 그 시총으로 순위를 매긴다.**
-        if (FullStatementRefillJob.JOB_NAME.equals(jobName)
-                || FinancialRefillJob.JOB_NAME.equals(jobName)) {
-            shareBasisDeriver.derive(UsMarket.CODE);
+        // 재무를 쓴 뒤의 주식수 기저 재판정(ADR-0162)도 14:18이 맡는다 — 매 평일 돌므로
+        // 재무를 쓴 날만 거는 것보다 넓고, 토요일 리밸런싱 전에 반드시 한 번 이상 돈다.
+    }
+
+    /**
+     * 화해의 입력 유도. <b>평일 14시 18분(KST)</b> — 주식수 기저(미국) → 거버넌스 사실(보존 창 편입).
+     *
+     * <p><b>화해(14:20)와 크론을 가르는 이유</b>는 실패가 서로를 막지 않게 하려는 것이다. 유도가 실패하면
+     * 어제 판정·유도가 남아 있고 화해는 그것으로 돈다 — 13:30 일일 갱신도 판정과 무관하게 매일
+     * 계산한다(판정 {@code NULL}은 OK로 읽힌다). 한 메서드에 묶으면 유도 실패 하루가 전 종목의
+     * 과거 순위를 하루 낡게 둔다.
+     *
+     * <p>14:15 무거운 잡 뒤인 이유: 재무·거버넌스 원문을 쓰는 것이 그 잡이고, 풀이 1이라 이 크론은
+     * 그 잡이 끝난 뒤에야 돈다 — 그날 새로 들어온 판을 그날 유도한다.
+     */
+    @Scheduled(cron = "0 18 14 * * MON-FRI", zone = "Asia/Seoul")
+    public void deriveReconcileInputs() {
+        LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
+        log.info("화해 입력을 유도한다. asOf={} — 주식수 기저 → 거버넌스 사실", asOf);
+        try {
+            indicatorReconciler.deriveInputs(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        } catch (BatchShutdownException e) {
+            log.info("화해 입력 유도가 종료로 중단됐다. asOf={} — 어제 판정으로 화해가 돈다.", asOf);
+        }
+    }
+
+    /**
+     * 지표 화해. <b>평일 14시 20분(KST)</b> — 보존 창 편입 전원의 원본층 한 판 → 창 전체의 파생층.
+     *
+     * <p>무엇이 지웠는지(기업 행위 · 재무 정정 · 새 라벨)를 묻지 않고 매 평일 전부를 맞춘다
+     * ({@link IndicatorReconciler} javadoc). 13:30 일일 갱신이 지금 편입의 원본층을 창 전체로,
+     * 파생층을 최신일 하루만 쓰므로 그 둘이 못 닫는 것 — 과거 구성원의 원본층과 최신일 앞의 파생층 —
+     * 이 이 자리의 몫이다.
+     *
+     * <p><b>대상일은 일일 갱신과 같다</b>({@link DailyUpdateJob#targetDateFor}). 다르면 {@code asOf}의
+     * 주식수를 따라가는 지표가 지금 편입 종목에서 두 판 사이를 매일 오간다.
+     */
+    @Scheduled(cron = "0 20 14 * * MON-FRI", zone = "Asia/Seoul")
+    public void reconcileIndicators() {
+        LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
+        log.info("지표 화해를 시작한다. asOf={} — 원본층(보존 창 편입 전원) → 파생층(창 전체)", asOf);
+        try {
+            indicatorReconciler.reconcile(asOf, List.of(), BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        } catch (BatchShutdownException e) {
+            log.info("지표 화해가 종료로 중단됐다. asOf={} — 다음 평일 화해가 다시 돈다.", asOf);
         }
     }
 
@@ -369,8 +410,14 @@ public class PipelineScheduler {
      * <p><b>그래서 무거운 잡을 14시 15분으로 당겼다</b>(2026-09-20). 14시 30분이면 15시 24분 58초에
      * 끝나 여유가 <b>5분</b>뿐이었다. 14시 사슬의 실측 최악이 {@code corporate-action} 12분 27초 +
      * {@code adjustment-rebuild} 2초 + {@code indicator-backfill} 4분 1초라 14시 16분 30초에 끝나고,
-     * 풀이 1이라 겹치면 <b>밀릴 뿐</b>이다 — 그 최악에서도 15시 11분 30초에 끝나 여유가 18분이다. 밀려도 틀리지는 않지만 <b>같은 날 안에 끝나는 것</b>이 알림의
+     * 풀이 1이라 겹치면 <b>밀릴 뿐</b>이다. 밀려도 틀리지는 않지만 <b>같은 날 안에 끝나는 것</b>이 알림의
      * 뜻을 지킨다.
+     *
+     * <p><b>매 평일 화해(14:18·14:20)가 들어온 뒤의 최악은 여유 약 2분이다</b>(2026-10-04 실행 이력):
+     * 사슬 끝 14:12:44(corporate-action 최악 12:44) → 사슬 안 화해 ② 최악 7:57 → G 54:58 → 유도 3.8초 +
+     * 기저 판정(사본 실측 0.1초) → ① 4:08 → ② 7:57 = <b>15시 27분 58초</b>. 무효화가 없는 G 날은
+     * 15시 22분 8초다. 이 수도 코드 변경 없이 자라므로(G가 그랬다) 넘으면 이 점검이 밀린다 — 값은
+     * 안 틀린다.
      *
      * <p><b>MUST: 이 시각을 앞당기려면 그 잡의 소요를 먼저 잰다.</b> 소요는 표별 기본 해 수와
      * 시장 수가 정하므로 <b>코드 변경 없이도 자란다</b> — 실제로 15시 10분이던 동안 소요가

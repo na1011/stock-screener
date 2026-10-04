@@ -203,10 +203,25 @@ class PipelineSchedulerTest {
     }
 
     @Test
+    @DisplayName("화해는 무거운 잡 뒤 · 신선도 점검 앞이고 유도가 화해보다 먼저다 — 풀 1이라 순서가 곧 입력의 신선도다")
+    void reconcileComesBetweenHeavyJobAndFreshness() {
+        // 유도(14:18)는 그날 무거운 잡이 쓴 재무·거버넌스 원문을 읽어야 하고, 화해(14:20)는 그 유도를
+        // 읽어야 한다. 신선도 점검(15:30)은 화해의 ② 실행 행을 센다. 풀이 1이라 앞이 길어지면 뒤가
+        // 밀릴 뿐 순서는 그대로다(Spring 7 ReschedulingRunnable — 예정 시각 순).
+        LocalDateTime base = LocalDate.of(2026, 9, 2).atStartOfDay();
+        List<LocalTime> order = List.of("runCorporateActionChain", "runHeavyJobOfTheDay",
+                        "deriveReconcileInputs", "reconcileIndicators", "checkJobFreshness").stream()
+                .map(method -> cronOf(method).next(base).toLocalTime())
+                .toList();
+
+        assertThat(order).isSorted().doesNotHaveDuplicates();
+    }
+
+    @Test
     @DisplayName("새 스케줄 셋이 전부 평일에만 돈다 — 주말에 돌면 대상일이 비어 헛돈다")
     void newSchedulesRunOnWeekdaysOnly() {
         for (String method : List.of("runCorporateActionChain", "runHeavyJobOfTheDay",
-                "checkJobFreshness")) {
+                "deriveReconcileInputs", "reconcileIndicators", "checkJobFreshness")) {
             CronExpression cron = cronOf(method);
             LocalDateTime at = LocalDate.of(2026, 9, 4).atStartOfDay();  // 금요일
             for (int i = 0; i < 10; i++) {
