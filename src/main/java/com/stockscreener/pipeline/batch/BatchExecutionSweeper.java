@@ -52,6 +52,16 @@ public class BatchExecutionSweeper {
     /** {@code BootstrapRunner}가 만드는 실행. */
     private static final Set<TriggeredBy> BOOTSTRAP_OWNED = Set.of(TriggeredBy.MANUAL);
 
+    /**
+     * {@code GAP_FILL}이지만 <b>웹 인스턴스만</b> 만드는 잡 — 14:00 사슬의 좁힌 화해 ①이다
+     * ({@code IndicatorReconciler.originTrigger}는 SCHEDULER만 GAP_FILL로 바꾸고 CLI 화해는 MANUAL로 남는다).
+     *
+     * <p>{@code GAP_FILL} 전체를 웹 소유로 두지 않는 이유: 리밸런싱 꼬리는 <b>두 JVM 모두</b>에서 돈다(토요일
+     * 크론 · CLI {@code --job=universe}). 그 행은 트리거만으로 소유자를 가를 수 없어 지금은 어느 스윕도
+     * 닫지 않는다 — 운영 고아는 0건이었다(2026-10-04). 잡 이름까지 보면 갈리는 것만 여기 둔다.
+     */
+    private static final Set<String> WEB_OWNED_GAP_FILL_JOBS = Set.of(IndicatorBackfillJob.ORIGIN_JOB_NAME);
+
     private final JdbcTemplate jdbcTemplate;
 
     /**
@@ -77,7 +87,7 @@ public class BatchExecutionSweeper {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void sweepOnStartup() {
-        sweep(WEB_OWNED, "웹 인스턴스");
+        sweep(WEB_OWNED, WEB_OWNED_GAP_FILL_JOBS, "웹 인스턴스");
     }
 
     /**
@@ -89,10 +99,10 @@ public class BatchExecutionSweeper {
      * 스키마 변경이라 이 결함의 크기에 맞지 않는다.
      */
     public void sweepBootstrapOrphans() {
-        sweep(BOOTSTRAP_OWNED, "부트스트랩");
+        sweep(BOOTSTRAP_OWNED, Set.of(), "부트스트랩");
     }
 
-    private void sweep(Set<TriggeredBy> owners, String label) {
+    private void sweep(Set<TriggeredBy> owners, Set<String> gapFillJobs, String label) {
         List<Object> args = new ArrayList<>();
         StringBuilder placeholders = new StringBuilder();
         for (TriggeredBy owner : owners) {
@@ -102,6 +112,17 @@ public class BatchExecutionSweeper {
             placeholders.append('?');
             args.add(owner.name());
         }
+        StringBuilder gapFillPlaceholders = new StringBuilder();
+        for (String job : gapFillJobs) {
+            if (!gapFillPlaceholders.isEmpty()) {
+                gapFillPlaceholders.append(", ");
+            }
+            gapFillPlaceholders.append('?');
+            args.add(job);
+        }
+        String gapFillClause = gapFillJobs.isEmpty()
+                ? ""
+                : " OR (triggered_by = 'GAP_FILL' AND job_name IN (" + gapFillPlaceholders + "))";
         args.add(Timestamp.from(startedAt));
 
         int closed = jdbcTemplate.update("""
@@ -111,9 +132,9 @@ public class BatchExecutionSweeper {
                        note        = COALESCE(note || ' ', '')
                                      || '프로세스가 사라져 마감되지 못한 실행을 정리했다.'
                  WHERE status = 'RUNNING'
-                   AND triggered_by IN (%s)
+                   AND (triggered_by IN (%s)%s)
                    AND started_at < ?
-                """.formatted(placeholders), args.toArray());
+                """.formatted(placeholders, gapFillClause), args.toArray());
 
         if (closed > 0) {
             log.info("마감되지 못한 배치 실행을 정리했다. {}건 ({} 소유, 기동 시각 {} 이전)",

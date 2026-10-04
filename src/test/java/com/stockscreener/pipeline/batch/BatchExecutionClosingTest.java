@@ -49,6 +49,8 @@ class BatchExecutionClosingTest {
     @AfterEach
     void cleanUp() {
         jdbcTemplate.update("DELETE FROM batch_execution WHERE job_name = ?", JOB_NAME);
+        jdbcTemplate.update("DELETE FROM batch_execution WHERE job_name = ? AND note = 'BatchExecutionClosingTest'",
+                IndicatorBackfillJob.ORIGIN_JOB_NAME);
     }
 
     @Test
@@ -194,6 +196,25 @@ class BatchExecutionClosingTest {
     }
 
     @Test
+    @DisplayName("웹 기동 스윕은 사슬의 좁힌 화해 ①(GAP_FILL)도 닫는다 — 리밸런싱 꼬리의 GAP_FILL은 소유가 갈리지 않아 안 닫는다")
+    void startupSweepClosesTheChainsNarrowedReconcile() {
+        long chainOrigin = insertRunning(IndicatorBackfillJob.ORIGIN_JOB_NAME, "GAP_FILL", "now() - interval '1 hour'");
+        long tail = insertRunning("GAP_FILL", "now() - interval '1 hour'");
+
+        sweeper.sweepOnStartup();
+        long bootstrapChainOrigin = insertRunning(IndicatorBackfillJob.ORIGIN_JOB_NAME, "GAP_FILL",
+                "now() - interval '1 hour'");
+        sweeper.sweepBootstrapOrphans();
+
+        assertThat(statusOf(chainOrigin)).as("크래시로 남은 사슬의 ①을 아무도 안 닫으면 영원히 RUNNING이다")
+                .isEqualTo("ABORTED");
+        assertThat(statusOf(tail)).as("꼬리는 CLI에서도 돌아 웹이 닫으면 살아 있는 행을 마감할 수 있다")
+                .isEqualTo("RUNNING");
+        assertThat(statusOf(bootstrapChainOrigin)).as("부트스트랩 스윕은 웹의 행을 안 닫는다")
+                .isEqualTo("RUNNING");
+    }
+
+    @Test
     @DisplayName("부트스트랩 스윕은 MANUAL 행만 닫는다")
     void bootstrapSweepClosesOnlyManualRows() {
         long manual = insertRunning("MANUAL", "now() - interval '1 hour'");
@@ -206,12 +227,16 @@ class BatchExecutionClosingTest {
     }
 
     private long insertRunning(String triggeredBy, String startedAtExpr) {
+        return insertRunning(JOB_NAME, triggeredBy, startedAtExpr);
+    }
+
+    private long insertRunning(String jobName, String triggeredBy, String startedAtExpr) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO batch_execution
-                    (job_name, target_date, status, triggered_by, target_count, started_at)
-                VALUES (?, ?, 'RUNNING', ?, 1, %s)
+                    (job_name, target_date, status, triggered_by, target_count, started_at, note)
+                VALUES (?, ?, 'RUNNING', ?, 1, %s, 'BatchExecutionClosingTest')
                 RETURNING id
-                """.formatted(startedAtExpr), Long.class, JOB_NAME, TARGET_DATE, triggeredBy);
+                """.formatted(startedAtExpr), Long.class, jobName, TARGET_DATE, triggeredBy);
     }
 
     private String statusOf(long executionId) {
