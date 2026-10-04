@@ -55,7 +55,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     /**
      * 미국 재적재 관문 설정({@code stockscreener.gate.us} · 기본 꺼짐). <b>이 설정을 읽는 곳은 여기 하나다</b> —
      * 관문에서 함께 나갈 어댑터 규칙 변경을 {@link SecEdgarFacts#build(tools.jackson.databind.JsonNode, int, boolean)}에 넘긴다.
-     * 켜는 순서·설정 표면 둘(배포 디렉터리 {@code .env}와 {@code bootRun})은 {@code CLAUDE.md} 「재적재·백필」에 있다.
+     * 켜는 길(코드 기본값을 뒤집은 jar 하나 — 배포 디렉터리 {@code .env}는 배포마다 저장소 {@code .env}로 덮인다)은 {@code CLAUDE.md} 「재적재·백필」에 있다.
      */
     private final boolean usGate;
 

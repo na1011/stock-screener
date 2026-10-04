@@ -94,7 +94,7 @@
 8. **재발원 차단**: [V] + F6(A56 · 「전량」) · 정기 refill 무변화 게이트 · **자동 백필 상한 대 시즌 반경** · `governance-derive` 사슬 · jar 배포 시점.
 9. **사본 드라이런**: 전 수정의 합집합으로 표적 적재·백필(날짜: 보존 경계 · 공시일 전후 · 리밸런싱일).
 10. **관문 실행**: VACUUM → `stop --app` → 덤프·기준선 → 미국 재적재(11년 · 이른 판 · 과거 편입 `--tickers`) → `governance-derive` → 격자 대조 → (필요하면) 복원 → 전체 백필 → VACUUM →
-    **코드 기본값을 뒤집은 jar 배포·재기동**(설정 표면이 배포 `.env`와 `bootRun` 둘) → 펜스·스냅숏 대조 → 설정과 꺼진 갈래를 걷는다. `share-basis-derive`는 수동 `financial-refill` 뒤 자동으로 돈다(`BootstrapRunner:431-433`).
+    **코드 기본값을 뒤집은 jar 배포·재기동**(켜는 길은 이것 하나 — 배포 `.env`는 배포마다 저장소 `.env`로 덮인다(`ops/stage.sh`) · 재적재·백필 동안 앱은 내려 있고 그 실행은 인자로 켠다) → 펜스·스냅숏 대조 → 설정과 꺼진 갈래를 걷는다. `share-basis-derive`는 수동 `financial-refill` 뒤 자동으로 돈다(`BootstrapRunner:431-433`).
 
 ## 관문을 안 막는 것
 
