@@ -120,6 +120,27 @@ class IndicatorReconcileLayersTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 같은 입력으로 다시 돌린 화해는 쓴·지운 0이다 — 관문 대조군과 매 평일 비용이 이것에 기댄다")
+    void secondReconcileChangesNothing() {
+        // 그날 편입이 아닌 자리의 옛 순위 — 첫 판이 지워야 하고, 그 지움이 note에 실려야 한다.
+        pctl(departedInside20, D3, "0.4");
+        job.rewriteOriginLayer(D3, BatchExecutionRecorder.TriggeredBy.MANUAL, List.of());
+        job.rebuildDerived(D3, BatchExecutionRecorder.TriggeredBy.MANUAL);
+        assertThat(pctlOf(departedInside20, D3)).isNull();
+        assertThat((String) latestRun(IndicatorBackfillJob.DERIVED_JOB_NAME).get("note"))
+                .as("지운 행이 note에 안 실리면 값이 빠진 날이 「변화 0」으로 적힌다")
+                .doesNotContain("지운 0 ");
+
+        job.rewriteOriginLayer(D3, BatchExecutionRecorder.TriggeredBy.MANUAL, List.of());
+        job.rebuildDerived(D3, BatchExecutionRecorder.TriggeredBy.MANUAL);
+
+        assertThat((String) latestRun(IndicatorBackfillJob.ORIGIN_JOB_NAME).get("note"))
+                .contains("쓴 0 · 지운 0");
+        assertThat((String) latestRun(IndicatorBackfillJob.DERIVED_JOB_NAME).get("note"))
+                .contains("쓴 0 · 지운 0");
+    }
+
+    @Test
     @DisplayName("② 의 성공 단위는 거래일이다 — 대상이 거래일 수이고 하나도 안 빠진다")
     void derivedLayerCountsTradeDates() {
         job.rebuildDerived(D3, BatchExecutionRecorder.TriggeredBy.MANUAL);

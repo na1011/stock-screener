@@ -199,9 +199,9 @@ public class PercentileCalculator {
      * @param backfillUniverseCode 모집단에 더할 <b>비활성</b> 유니버스. 없으면 {@code null}.
      *                             <b>호출부가 반드시 고른다</b> — 기본값을 주면 새 호출부가
      *                             활성만 보는 쪽을 골라도 아무 증상이 없다.
-     * @return <b>값이 실제로 달라진</b> 행 수. 같은 날을 다시 돌리면 0에 가깝다.
+     * @return <b>값이 실제로 달라진</b> 행 수 — 쓴 행과 그날 모집단 밖이라 지운 행. 같은 날을 다시 돌리면 둘 다 0이다.
      */
-    public long calculate(LocalDate tradeDate, String backfillUniverseCode) {
+    public LayerChange calculate(LocalDate tradeDate, String backfillUniverseCode) {
         // 빈 문자열로 접는다. null을 그대로 바인딩하면 PostgreSQL이 타입을 못 정해 거절할 수
         // 있고, ''는 어떤 유니버스 코드와도 같지 않아 「더할 것이 없다」와 정확히 같은 뜻이다.
         String extra = backfillUniverseCode == null ? "" : backfillUniverseCode;
@@ -225,7 +225,7 @@ public class PercentileCalculator {
         }
         log.info("백분위를 계산했다. tradeDate={} 지표={}개 저장={}행 정리={}행",
                 tradeDate, specs.size(), written, removed);
-        return written;
+        return new LayerChange(written, removed);
     }
 
     private int deleteUnwritten(PercentileSpec spec, LocalDate tradeDate, String extra) {

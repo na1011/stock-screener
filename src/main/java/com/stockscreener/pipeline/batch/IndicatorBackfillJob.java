@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.batch;
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
 import com.stockscreener.indicator.IndicatorTradeDateIndex;
 import com.stockscreener.indicator.IndicatorRunner;
+import com.stockscreener.indicator.LayerChange;
 import com.stockscreener.indicator.PercentileCalculator;
 import com.stockscreener.indicator.SectorRelativeCalculator;
 import com.stockscreener.pipeline.collector.StockRegistrar;
@@ -35,6 +36,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.LongAdder;
 
 /**
  * 이미 적재된 원자료로 지표를 소급 계산한다.
@@ -252,7 +254,8 @@ public class IndicatorBackfillJob {
 
                 // 종목끼리 독립이라 여기만 팬아웃한다(ADR-0138). 아래 두 계산은 배리어
                 // 뒤라 그대로 직렬이고, 그 배리어가 곧 이 호출의 조인이다.
-                fanOutStocks(pool, execution, targets, tradeDate, retentionCutoffs, marketIndexes);
+                fanOutStocks(pool, execution, targets, tradeDate, retentionCutoffs, marketIndexes,
+                        new LongAdder());
                 percentileCalculator.calculate(tradeDate, universeCode);
                 // 업종 상대값도 같은 자리다 — 그날 전 종목의 값이 있어야 정해진다.
                 // 백분위와 순서를 가릴 이유는 없다. 둘 다 원본 지표만 읽고 서로를 읽지 않는다.
@@ -318,11 +321,12 @@ public class IndicatorBackfillJob {
 
         ExecutorService pool =
                 Executors.newFixedThreadPool(resolveWorkers(targets.size()), workerFactory());
+        LongAdder deleted = new LongAdder();
         try {
             execution.stage("원본층 · asOf " + asOf);
             Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes =
                     indicatorRunner.marketIndexesFor(asOf);
-            fanOutStocks(pool, execution, targets, asOf, retentionCutoffs, marketIndexes);
+            fanOutStocks(pool, execution, targets, asOf, retentionCutoffs, marketIndexes, deleted);
         } catch (DataSourceException e) {
             // run()과 같은 자리다 — 외부 호출이 없어 정상적으로는 오지 않는다.
             execution.failFatally(e);
@@ -333,7 +337,9 @@ public class IndicatorBackfillJob {
         } finally {
             shutDown(pool);
         }
-        return execution.finish();
+        // 쓴·지운 행이 둘 다 0이면 이 판은 아무것도 안 바꿨다 — 관문 대조군(두 번째 화해 = 0)이 이것을 읽는다.
+        return execution.finish("원본층 %d종목 · 쓴 %d · 지운 %d"
+                .formatted(targets.size(), execution.writtenRowCount(), deleted.sum()));
     }
 
     /**
@@ -367,24 +373,24 @@ public class IndicatorBackfillJob {
         execution.plan(CollectionPhase.INDICATOR, tradeDates.size());
         log.info("파생층을 다시 낸다. {} ~ {} 거래일={}일", from, asOf, tradeDates.size());
 
-        long written = 0;
+        LayerChange changed = LayerChange.NONE;
         try {
             for (int i = 0; i < tradeDates.size(); i++) {
                 LocalDate tradeDate = tradeDates.get(i);
                 execution.stage("%s · %d/%d거래일".formatted(tradeDate, i + 1, tradeDates.size()));
                 // MUST NOT: 유니버스를 좁히지 않는다 — 두 계산기는 그날 활성 편입 전량을 조인한다.
-                long rows = percentileCalculator.calculate(tradeDate, null)
-                        + sectorRelativeCalculator.calculate(tradeDate, null);
-                written += rows;
-                execution.countExternally(CollectionPhase.INDICATOR, 1, 0, rows);
+                LayerChange day = percentileCalculator.calculate(tradeDate, null)
+                        .plus(sectorRelativeCalculator.calculate(tradeDate, null));
+                changed = changed.plus(day);
+                execution.countExternally(CollectionPhase.INDICATOR, 1, 0, day.written());
             }
             execution.stage("고아 파생값 정리");
             long orphans = percentileCalculator.removeOrphansInWindow(floor)
                     + sectorRelativeCalculator.removeOrphansInWindow(floor);
             execution.stage("거래일 색인 갱신");
             int indexed = tradeDateIndex.rebuild();
-            return execution.finish("파생층 %d거래일 · 쓴 행 %d · 고아 정리 %d · 색인 %d"
-                    .formatted(tradeDates.size(), written, orphans, indexed));
+            return execution.finish("파생층 %d거래일 · 쓴 %d · 지운 %d · 고아 정리 %d · 색인 %d"
+                    .formatted(tradeDates.size(), changed.written(), changed.deleted(), orphans, indexed));
         } catch (RuntimeException e) {
             execution.failUnexpectedly(e);
             throw e;
@@ -409,15 +415,21 @@ public class IndicatorBackfillJob {
     private void fanOutStocks(ExecutorService pool, BatchExecutionContext execution,
                               List<SecurityRef> targets, LocalDate tradeDate,
                               Map<String, Optional<LocalDate>> retentionCutoffs,
-                              Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes)
+                              Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes,
+                              LongAdder deleted)
             throws DataSourceException {
         List<Future<?>> futures = new ArrayList<>(targets.size());
         for (SecurityRef target : targets) {
             Optional<LocalDate> cutoff = retentionCutoffs
                     .getOrDefault(target.marketCode(), Optional.empty());
             futures.add(pool.submit(() -> execution.process(target, CollectionPhase.INDICATOR,
-                    security -> indicatorRunner.run(
-                            security.stockId(), tradeDate, cutoff, marketIndexes))));
+                    security -> {
+                        LayerChange change = indicatorRunner.run(
+                                security.stockId(), tradeDate, cutoff, marketIndexes);
+                        // 쓴 행은 실행 기록이 세고(process), 지운 행은 여기서 모은다 — 기록에 그 칸이 없다.
+                        deleted.add(change.deleted());
+                        return change.written();
+                    })));
         }
         awaitAll(futures);
     }

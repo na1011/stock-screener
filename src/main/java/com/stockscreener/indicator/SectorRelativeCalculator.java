@@ -237,9 +237,9 @@ public class SectorRelativeCalculator {
     }
 
     /**
-     * 해당 날짜의 업종 상대값과 표본 수를 전부 계산해 저장한다.
+     * 보존 창에서 원본이 사라진 업종 상대값과 표본 수를 지운다(ADR-0080).
      *
-     * @return <b>값이 실제로 달라진</b> 행 수. 같은 날을 다시 돌리면 0에 가깝다.
+     * @return 지운 행 수
      */
     public long removeOrphansInWindow(Optional<LocalDate> cutoff) {
         long removed = 0;
@@ -254,7 +254,12 @@ public class SectorRelativeCalculator {
         return removed;
     }
 
-    public long calculate(LocalDate tradeDate, String backfillUniverseCode) {
+    /**
+     * 해당 날짜의 업종 상대값과 표본 수를 전부 계산해 저장하고, 쓰지 않기로 한 자리의 옛 행을 걷는다.
+     *
+     * @return <b>값이 실제로 달라진</b> 행 수 — 쓴 행과 지운 행. 같은 날을 다시 돌리면 둘 다 0이다.
+     */
+    public LayerChange calculate(LocalDate tradeDate, String backfillUniverseCode) {
         // PercentileCalculator와 같은 이유로 빈 문자열로 접는다.
         String extra = backfillUniverseCode == null ? "" : backfillUniverseCode;
         long written = 0;
@@ -287,7 +292,7 @@ public class SectorRelativeCalculator {
         }
         log.info("업종 상대값을 계산했다. tradeDate={} 지표={}쌍 저장={}행 정리={}행",
                 tradeDate, specs.size(), written, removed);
-        return written;
+        return new LayerChange(written, removed);
     }
 
     private int upsert(String chosen, String sourceCode, LocalDate tradeDate, String extraUniverse,

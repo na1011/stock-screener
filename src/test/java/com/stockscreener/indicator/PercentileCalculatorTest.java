@@ -197,11 +197,12 @@ class PercentileCalculatorTest {
     @Test
     @DisplayName("값이 그대로면 다시 쓰지 않는다 — 재계산이 인덱스를 부풀리지 않는 근거다")
     void secondRunWritesNothingWhenValuesAreUnchanged() {
-        assertThat(calculator.calculate(AS_OF, null)).isPositive();
+        assertThat(calculator.calculate(AS_OF, null).written()).isPositive();
 
+        // 지운 행도 0이어야 한다 — 매 평일 화해의 「두 번째 판 = 쓴·지운 0」(관문 대조군)이 이것에 기댄다.
         assertThat(calculator.calculate(AS_OF, null))
                 .as("같은 값을 다시 쓰면 MVCC가 행 버전과 인덱스 엔트리를 새로 만든다")
-                .isZero();
+                .isEqualTo(LayerChange.NONE);
     }
 
     @Test
@@ -227,11 +228,14 @@ class PercentileCalculatorTest {
         // 편입 축을 재는 시험이 아니게 된다 — 실측으로 그 216,752행은 **전부 원본이 있었다.**
         staleRow(joinedLater, PerCalculator.CODE + PercentileSpec.SUFFIX, "1", AS_OF);
 
-        calculator.calculate(AS_OF, null);
+        LayerChange change = calculator.calculate(AS_OF, null);
 
         assertThat(valueAt(joinedLater, PerCalculator.CODE + PercentileSpec.SUFFIX, AS_OF))
                 .as("그날 명부에 없던 종목의 순위는 다른 명부의 것이다")
                 .isNull();
+        assertThat(change.deleted())
+                .as("지운 행이 반환값에 실린다 — 안 실리면 화해의 note가 값이 빠진 날을 「변화 0」으로 적는다")
+                .isEqualTo(1);
         assertThat(valueAt(joinedLater, PerCalculator.CODE, AS_OF))
                 .as("원본은 이 삭제의 대상이 아니다 — 지우면 여집합을 잘못 잡은 것이다")
                 .isEqualByComparingTo("7");

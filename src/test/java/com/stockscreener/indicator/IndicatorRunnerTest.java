@@ -72,7 +72,7 @@ class IndicatorRunnerTest {
     void computesAndStoresTechnicalIndicators() {
         insertPriceHistory(300);
 
-        long written = runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+        long written = runner.run(stockId, AS_OF, Optional.empty(), Map.of()).written();
 
         assertThat(written).isPositive();
         assertThat(storedCodes()).contains(
@@ -274,7 +274,7 @@ class IndicatorRunnerTest {
     @Test
     @DisplayName("시세가 없으면 아무것도 저장하지 않는다")
     void storesNothingWithoutPrices() {
-        assertThat(runner.run(stockId, AS_OF, Optional.empty(), Map.of())).isZero();
+        assertThat(runner.run(stockId, AS_OF, Optional.empty(), Map.of())).isEqualTo(LayerChange.NONE);
         assertThat(countIndicatorValues()).isZero();
     }
 

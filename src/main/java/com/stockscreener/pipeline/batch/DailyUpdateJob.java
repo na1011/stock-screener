@@ -263,7 +263,7 @@ public class DailyUpdateJob {
                             .getOrDefault(target.marketCode(), Optional.empty());
                     execution.process(target, CollectionPhase.INDICATOR,
                             security -> indicatorRunner.run(
-                                    security.stockId(), to, cutoff, marketIndexes));
+                                    security.stockId(), to, cutoff, marketIndexes).written());
                 }
             }
 

@@ -84,16 +84,16 @@ public class IndicatorRunner {
      * @param marketIndexes   지수 코드 → 종가 시계열. 잡이 <b>종목 루프 밖에서 한 번</b> 읽어
      *                        넘긴다({@link #marketIndexesFor}). 여기서 읽으면 350번 같은 쿼리를
      *                        던진다. 이 종목의 시장에 해당하는 것만 골라 컨텍스트에 담는다
-     * @return 저장한 행 수
+     * @return 값이 달라져 저장한 행과 지운 행(억제 · 안 낸 날짜 걷기)
      */
-    public long run(long stockId, LocalDate asOf, Optional<LocalDate> retentionCutoff,
+    public LayerChange run(long stockId, LocalDate asOf, Optional<LocalDate> retentionCutoff,
                     Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes) {
         RawData raw = readRawData(stockId, asOf, marketIndexes, FinancialVisibility.KNOWN_ON);
         IndicatorContext base = raw.context();
         if (base.priceBars().isEmpty()) {
             // 시세가 없으면 계산할 것이 없다. 신규 편입 직후나 거래정지 종목에서 정상적으로 생긴다.
             log.debug("시세가 없어 지표 계산을 건너뛴다. stockId={} asOf={}", stockId, asOf);
-            return 0L;
+            return LayerChange.NONE;
         }
 
         Computed computed = compute(base);
@@ -184,7 +184,7 @@ public class IndicatorRunner {
             log.info("미보정 기업 행위로 지표를 뺐다. stockId={} asOf={} 효력일={} 지표={}개 삭제={}행",
                     stockId, asOf, base.unadjustedActions(), suppressedCodes, deleted);
         }
-        return written;
+        return new LayerChange(written, deleted + stale);
     }
 
     /**
