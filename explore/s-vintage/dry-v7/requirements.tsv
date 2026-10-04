@@ -1,0 +1,129 @@
+ACCRUAL_RATIO	AccrualRatioCalculator	1	1	0	false	
+ADJ_CLOSE	AdjCloseCalculator	1	0	0	false	
+ADX_14	Adx14Calculator	28	0	0	false	
+MARKET_CAP	MarketCapCalculator	1	0	0	false	
+ALTMAN_Z	AltmanZCalculator	1	1	0	false	MARKET_CAP
+ALTMAN_Z_DOUBLE_PRIME	AltmanZDoublePrimeCalculator	1	1	0	false	
+ATR_14	Atr14Calculator	15	0	0	false	
+ATR_PCT_14	AtrPct14Calculator	0	0	0	false	ATR_14
+AUDIT_EMPHASIS	AuditEmphasisCalculator	1	0	1	false	
+AUDIT_OPINION_ADVERSE	AuditOpinionAdverseCalculator	1	0	1	false	
+AUDITOR_CHANGE_3Y	AuditorChange3yCalculator	1	0	4	false	
+BETA_104W	Beta104wCalculator	530	0	0	true	
+BOLLINGER_PCT_B	BollingerPercentBCalculator	20	0	0	false	
+CCI_20	Cci20Calculator	20	0	0	false	
+CMF_21	Cmf21Calculator	21	0	0	false	
+CONTROL_TRANSFER_3Y	ControlTransfer3yCalculator	1	0	1	false	
+DEBT_RATIO	DebtRatioCalculator	1	1	0	false	
+DIRECTOR_TURNOVER_3Y	DirectorTurnover3yCalculator	1	0	3	false	
+SMA_200	Sma200Calculator	200	0	0	false	
+DISPARITY_200	Disparity200Calculator	0	0	0	false	SMA_200
+DIVIDEND_PAYOUT	DividendPayoutCalculator	1	1	3	false	
+DIVIDEND_YIELD	DividendYieldCalculator	1	0	3	false	
+EFFECTIVE_TAX_RATE	EffectiveTaxRateCalculator	1	6	0	false	
+EPS_CAGR_5Y	EpsCagr5yCalculator	1261	6	0	false	
+EPS_GROWTH_TTM_YOY	EpsGrowthTtmYoyCalculator	253	2	0	false	
+EPS_TTM	EpsTtmCalculator	1	1	0	false	
+EXCESS_RETURN_26W	ExcessReturn26wCalculator	131	0	0	true	
+EXCESS_RETURN_52W	ExcessReturn52wCalculator	253	0	0	true	
+EXEC_PAY_TO_NET_INCOME	ExecPayToNetIncomeCalculator	1	1	2	false	
+FCF_MARGIN	FcfMarginCalculator	1	1	0	false	
+FCF_YIELD	FcfYieldCalculator	1	1	0	false	MARKET_CAP
+SMA_60	Sma60Calculator	60	0	0	false	
+GOLDEN_CROSS_AGE	GoldenCrossAgeCalculator	120	0	0	false	SMA_200,SMA_60
+GROSS_MARGIN	GrossMarginCalculator	1	1	0	false	
+GP_TO_ASSETS	GrossProfitToAssetsCalculator	1	1	0	false	
+INVENTORY_GROWTH_GAP	InventoryGrowthGapCalculator	1	2	0	false	
+LARGEST_HOLDER_STAKE	LargestHolderStakeCalculator	1	0	2	false	
+SMA_20	Sma20Calculator	20	0	0	false	
+SMA_120	Sma120Calculator	120	0	0	false	
+MA_ALIGN_SCORE	MaAlignScoreCalculator	0	0	0	false	SMA_60,SMA_200,SMA_20,SMA_120
+MACD	MacdCalculator	26	0	0	false	
+MACD_V	MacdVCalculator	0	0	0	false	ATR_14,MACD
+MACD_V_HIST	MacdVHistCalculator	8	0	0	false	MACD_V
+MACD_V_HIST_CHG_5	MacdVHistChange5Calculator	5	0	0	false	MACD_V_HIST
+MACD_V_HIST_CHG_W	MacdVHistChangeWeeklyCalculator	1100	0	0	false	
+MACD_V_HIST_W	MacdVHistWeeklyCalculator	1100	0	0	false	
+MACD_V_W	MacdVWeeklyCalculator	1100	0	0	false	
+MFI_14	Mfi14Calculator	15	0	0	false	
+MINORITY_HOLDER_STAKE	MinorityHolderStakeCalculator	1	0	2	false	
+NCAV_TO_MARKET	NcavToMarketCalculator	1	1	0	false	MARKET_CAP
+NET_MARGIN	NetMarginCalculator	1	1	0	false	
+OBV_T_13	ObvT13Calculator	14	0	0	false	
+OCF_SUM_5Y	OperatingCashFlow5ySumCalculator	1	5	0	false	
+OPERATING_INCOME_GROWTH	OperatingIncomeGrowthCalculator	1	2	0	false	
+OPERATING_MARGIN	OperatingMarginCalculator	1	1	0	false	
+OPM_MIN_5Y	OperatingMarginMin5yCalculator	1	6	0	false	
+OUTSIDE_DIRECTOR_RATIO	OutsideDirectorRatioCalculator	1	0	3	false	
+PBR	PbrCalculator	1	1	0	false	
+PBR_MEDIAN_5Y	PbrMedian5yCalculator	1261	6	0	false	
+PBR_DISCOUNT_5Y	PbrDiscount5yCalculator	0	6	0	false	PBR_MEDIAN_5Y,PBR
+PCT_FROM_52W_HIGH	PctFrom52wHighCalculator	252	0	0	false	
+PCT_FROM_52W_LOW	PctFrom52wLowCalculator	252	0	0	false	
+PER	PerCalculator	1	1	0	false	
+PEG	PegCalculator	0	0	0	false	EPS_GROWTH_TTM_YOY,PER
+PER_MEDIAN_5Y	PerMedian5yCalculator	1261	6	0	false	
+PER_DISCOUNT_5Y	PerDiscount5yCalculator	0	6	0	false	PER_MEDIAN_5Y,PER
+PROFIT_RETIREMENT_3Y	ProfitRetirement3yCalculator	1	0	4	false	
+PROFIT_STREAK_Y	ProfitStreakYearsCalculator	1	7	0	false	
+PROFITABLE_QUARTERS_4	ProfitableQuarters4Calculator	1	1	0	false	
+PSR	PsrCalculator	1	1	0	false	
+PSR_MEDIAN_5Y	PsrMedian5yCalculator	1261	6	0	false	
+PSR_DISCOUNT_5Y	PsrDiscount5yCalculator	0	6	0	false	PSR_MEDIAN_5Y,PSR
+RETAINED_TO_MARKET_4Y	RetainedToMarket4yCalculator	1261	5	0	false	
+RETURN_52W	Return52wCalculator	253	0	0	false	
+REVENUE_GROWTH	RevenueGrowthCalculator	1	2	0	false	
+ROA	RoaCalculator	1	1	0	false	
+ROC_12	Roc12Calculator	13	0	0	false	
+ROE	RoeCalculator	1	1	0	false	
+ROE_MIN_3Y	RoeMin3yCalculator	1	4	0	false	
+ROIC_AFTERTAX_AVG_5Y	RoicAfterTaxAvg5yCalculator	1	6	0	false	
+ROIC_AFTERTAX	RoicAfterTaxCalculator	1	6	0	false	
+ROIC_AFTERTAX_MIN_5Y	RoicAfterTaxMin5yCalculator	1	6	0	false	
+ROIC_MIN_3Y	RoicMin3yCalculator	1	4	0	false	
+ROIC_PRETAX	RoicPretaxCalculator	1	1	0	false	
+RSI_14	Rsi14Calculator	15	0	0	false	
+RSI_2	Rsi2Calculator	3	0	0	false	
+SHARES_GROWTH_3Y	SharesGrowth3yCalculator	751	0	0	false	
+SMA_150	Sma150Calculator	150	0	0	false	
+SMA_200_MOM_21	Sma200Momentum21Calculator	21	0	0	false	SMA_200
+SMA_200_SLOPE_60	Sma200Slope60Calculator	60	0	0	false	SMA_200
+STOCH_K_14	StochasticK14Calculator	16	0	0	false	
+STOCH_D_14	StochasticD14Calculator	2	0	0	false	STOCH_K_14
+TRADING_DAYS_750	TradingDays750Calculator	750	0	0	false	
+TREASURY_SHARE_RATIO	TreasuryShareRatioCalculator	1	0	4	false	
+TURNOVER_60	Turnover60Calculator	60	0	0	false	
+TURNOVER_RATIO_60	TurnoverRatio60Calculator	60	0	0	false	
+TURNOVER_RATIO	TurnoverRatioCalculator	1	0	0	false	
+VOLUME_RATIO_20	VolumeRatio20Calculator	20	0	0	false	
+ICHI_BEAR	IchimokuBearCalculator	1100	0	0	true	
+ICHI_BULL	IchimokuBullCalculator	1100	0	0	true	
+ICHI_CONCLUSION	IchimokuConclusionCalculator	1100	0	0	true	
+ICHI_CONFIDENCE	IchimokuConfidenceCalculator	1100	0	0	true	
+ICHI_DIVERGENCE	IchimokuDivergenceCalculator	1100	0	0	false	
+ICHI_EXT_SIGNAL	IchimokuExternalSignalCalculator	1100	0	0	true	
+ICHI_FRESHNESS	IchimokuFreshnessCalculator	1100	0	0	false	
+ICHI_KAIZEN_D	IchimokuKaizenDailyCalculator	1100	0	0	false	
+ICHI_KAIZEN_MATCH	IchimokuKaizenMatchCalculator	1100	0	0	false	
+ICHI_KAIZEN_W	IchimokuKaizenWeeklyCalculator	1100	0	0	false	
+ICHI_LEAF	IchimokuLeafCalculator	1100	0	0	false	
+ICHI_MOD_A	IchimokuModACalculator	1100	0	0	false	
+ICHI_MOD_B	IchimokuModBCalculator	1100	0	0	false	
+ICHI_MOD_C	IchimokuModCCalculator	1100	0	0	false	
+ICHI_MOD_D	IchimokuModDCalculator	1100	0	0	false	
+ICHI_MOD_E	IchimokuModECalculator	1100	0	0	false	
+ICHI_MOD_F	IchimokuModFCalculator	1100	0	0	false	
+ICHI_MOD_G	IchimokuModGCalculator	1100	0	0	false	
+ICHI_MOD_H	IchimokuModHCalculator	1100	0	0	false	
+ICHI_MOD_J	IchimokuModJCalculator	1100	0	0	false	
+ICHI_MOD_K	IchimokuModKCalculator	1100	0	0	false	
+ICHI_MOD_L	IchimokuModLCalculator	1100	0	0	false	
+ICHI_MOD_M	IchimokuModMCalculator	1100	0	0	false	
+ICHI_OBV_T	IchimokuObvTCalculator	1100	0	0	false	
+ICHI_PILLAR	IchimokuPillarCalculator	1100	0	0	false	
+ICHI_PRICE_VS_KUMO	IchimokuPriceVsKumoCalculator	1100	0	0	false	
+ICHI_SIGNAL	IchimokuSignalCalculator	1100	0	0	true	
+ICHI_STAGE	IchimokuStageCalculator	1100	0	0	false	
+ICHI_T3YEOK	IchimokuT3yeokCalculator	1100	0	0	false	
+ICHI_TIER	IchimokuTierCalculator	1100	0	0	true	
+ICHI_TK_CROSS	IchimokuTkCrossCalculator	1100	0	0	false	
