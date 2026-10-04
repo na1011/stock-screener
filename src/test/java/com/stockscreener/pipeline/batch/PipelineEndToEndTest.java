@@ -603,9 +603,10 @@ class PipelineEndToEndTest {
                 """, executionId);
 
         assertThat(phases).extracting(phase -> phase.get("phase"))
-                .as("일일 갱신은 지수·시세·지표 세 단계를 돈다. 지수는 종목 루프 **앞**이다 — "
-                        + "지표가 그날 지수를 입력으로 쓰기 때문이다(ADR-0053)")
-                .containsExactlyInAnyOrder("INDICATOR", "MARKET_INDEX", "PRICE");
+                .as("일일 갱신은 지수·시세·시세 구멍·지표 네 단계를 돈다. 지수는 종목 루프 **앞**이다 — "
+                        + "지표가 그날 지수를 입력으로 쓰기 때문이다(ADR-0053). 시세 구멍은 구간이 0이어도 "
+                        + "신고한다 — 매일 재므로 「재고 0」이지 「안 쟀다」가 아니다")
+                .containsExactlyInAnyOrder("INDICATOR", "MARKET_INDEX", "PRICE", "PRICE_GAP");
         Map<String, Object> price = phases.stream()
                 .filter(phase -> "PRICE".equals(phase.get("phase"))).findFirst().orElseThrow();
         assertThat(price.get("planned_count")).isEqualTo(members.size());
@@ -648,6 +649,194 @@ class PipelineEndToEndTest {
 
         assertThat(latestExecution(UniverseRebalanceJob.JOB_NAME).get("status"))
                 .isEqualTo(BatchStatus.SUCCESS.name());
+    }
+
+    /**
+     * 시세 구멍 구간(창 밖)을 창 콜과 따로 받는다 — 재편입 종목의 창 앞 구멍과 보존 창 안에서 편출된
+     * 종목의 마지막 편입일. 정의 자체는 {@code PriceGapRunsTest}가 잠그고, 여기는 <b>배선</b>이다:
+     * 어떤 범위로 몇 번 묻는가 · 과거 편입은 지표 단계를 안 탄다 · 실행 기록에 무엇이 남는가.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 일일 갱신이 창 콜은 그대로 두고 구멍 구간을 따로 받는다 · 과거 편입은 구간만")
+    void dailyUpdateFillsGapRunsSeparately() {
+        GapFixture f = gapFixture();
+        try {
+            BatchStatus status = dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+            assertThat(status).isEqualTo(BatchStatus.SUCCESS);
+            LocalDate windowStart = DailyUpdateJob.priceWindowStart(AS_OF);
+            assertThat(fakePriceSource.calls).containsExactlyInAnyOrder(
+                    new FakePriceDataSource.Call(f.readmitted, windowStart, AS_OF),
+                    new FakePriceDataSource.Call(f.readmitted, f.readmittedHoleFrom, f.readmittedHoleTo),
+                    new FakePriceDataSource.Call(f.complete, windowStart, AS_OF),
+                    new FakePriceDataSource.Call(f.departed, f.departedHole, f.departedHole));
+            assertThat(barsBetween(f.readmitted, f.readmittedHoleFrom, f.readmittedHoleTo))
+                    .isEqualTo(weekdays(f.readmittedHoleFrom, f.readmittedHoleTo).size());
+            assertThat(barsBetween(f.departed, f.departedHole, f.departedHole)).isEqualTo(1);
+            // 과거 편입은 지표 단계를 안 탄다 — 원본층은 14:20 화해가 창 편입 전원으로 다시 쓴다.
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM indicator_value WHERE stock_id = ?", Integer.class, f.departed))
+                    .isZero();
+            Map<String, Object> execution = latestExecution(DailyUpdateJob.JOB_NAME);
+            assertThat((String) execution.get("note")).startsWith("시세 구멍 2종목 · 2구간 중 2구간 받음");
+            assertThat(plannedCount((Long) execution.get("id"), CollectionPhase.INDICATOR)).isEqualTo(2);
+            assertThat(plannedCount((Long) execution.get("id"), CollectionPhase.PRICE_GAP)).isEqualTo(2);
+        } finally {
+            f.cleanUp();
+        }
+    }
+
+    @Test
+    @DisplayName("구멍 구간 콜이 실패해도 그날 창 수집과 지표는 돌고, 실패는 PRICE_GAP에 남는다")
+    void gapFailureDoesNotBlockTheWindowOrIndicators() {
+        GapFixture f = gapFixture();
+        try {
+            fakePriceSource.failingBefore(f.readmitted, DailyUpdateJob.priceWindowStart(AS_OF),
+                    new DataSourceException(DataSourceException.Kind.TRANSIENT, "fake-price", "일시적 오류"));
+
+            BatchStatus status = dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+            assertThat(status).isEqualTo(BatchStatus.PARTIAL_SUCCESS);
+            assertThat(jdbcTemplate.queryForList("""
+                    SELECT failed_phase FROM batch_execution_failure WHERE stock_id = ? AND NOT resolved
+                    """, String.class, f.readmitted)).containsExactly(CollectionPhase.PRICE_GAP.name());
+            assertThat(barsBetween(f.readmitted, AS_OF, AS_OF)).isEqualTo(1);
+            assertThat(jdbcTemplate.queryForObject("""
+                    SELECT count(*) FROM indicator_value WHERE stock_id = ? AND trade_date = ?
+                    """, Integer.class, f.readmitted, AS_OF)).isPositive();
+        } finally {
+            f.cleanUp();
+        }
+    }
+
+    @Test
+    @DisplayName("구멍이 사라진 종목의 미해결 PRICE_GAP 실패를 닫는다 — 성공 없이 사라진 구멍이 화면에 영구히 쌓이지 않게")
+    void closesGapFailuresWhoseGapVanished() {
+        GapFixture f = gapFixture();
+        try {
+            long previous = jdbcTemplate.queryForObject("""
+                    INSERT INTO batch_execution (job_name, target_date, status, triggered_by)
+                    VALUES ('daily-update', ?, 'PARTIAL_SUCCESS', 'SCHEDULER') RETURNING id
+                    """, Long.class, AS_OF.minusDays(1));
+            batchExecutions.recorder().recordFailure(previous, f.complete, CollectionPhase.PRICE_GAP,
+                    new DataSourceException(DataSourceException.Kind.TRANSIENT, "fake-price", "옛 구간 실패"));
+
+            dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+            assertThat(jdbcTemplate.queryForObject("""
+                    SELECT resolved FROM batch_execution_failure WHERE execution_id = ? AND stock_id = ?
+                    """, Boolean.class, previous, f.complete)).isTrue();
+        } finally {
+            f.cleanUp();
+        }
+    }
+
+    /** 구멍 시험의 픽스처. 달력·편입·봉을 직접 심는다 — 리밸런싱 시드의 편입일이 {@code AS_OF}라 구멍이 안 생긴다. */
+    private GapFixture gapFixture() {
+        LocalDate calendarFrom = LocalDate.of(2026, 6, 1);
+        for (LocalDate day : weekdays(calendarFrom, AS_OF)) {
+            jdbcTemplate.update("""
+                    INSERT INTO market_index_daily (index_code, trade_date, close) VALUES ('KOSPI', ?, 2500)
+                    ON CONFLICT (index_code, trade_date) DO NOTHING
+                    """, day);
+        }
+        LocalDate windowLo = LocalDate.of(2026, 7, 1);
+        for (LocalDate day : weekdays(windowLo, AS_OF.minusDays(1))) {
+            jdbcTemplate.update("""
+                    INSERT INTO indicator_trade_date (market_code, trade_date) VALUES ('KOSPI', ?)
+                    ON CONFLICT DO NOTHING
+                    """, day);
+        }
+        GapFixture f = new GapFixture();
+        f.readmitted = gapStock("990001");
+        gapMembership(f.readmitted, windowLo, LocalDate.of(2026, 7, 8));
+        gapMembership(f.readmitted, LocalDate.of(2026, 8, 3), null);
+        f.readmittedHoleFrom = LocalDate.of(2026, 7, 13);
+        f.readmittedHoleTo = LocalDate.of(2026, 7, 20);
+        storedBars(f.readmitted, calendarFrom, LocalDate.of(2026, 7, 10));
+        storedBars(f.readmitted, DailyUpdateJob.priceWindowStart(AS_OF), AS_OF.minusDays(1));
+
+        f.departed = gapStock("990002");
+        gapMembership(f.departed, windowLo, LocalDate.of(2026, 7, 24));
+        f.departedHole = LocalDate.of(2026, 7, 23);
+        storedBars(f.departed, calendarFrom, LocalDate.of(2026, 7, 22));
+
+        f.complete = gapStock("990003");
+        gapMembership(f.complete, windowLo, null);
+        storedBars(f.complete, calendarFrom, AS_OF.minusDays(1));
+
+        for (long id : List.of(f.readmitted, f.departed, f.complete)) {
+            List<RawPriceBar> source = new ArrayList<>();
+            for (LocalDate day : weekdays(calendarFrom, AS_OF)) {
+                source.add(bar(day.toString(), "1000"));
+            }
+            fakePriceSource.withBars(id, source);
+        }
+        f.calendarFrom = calendarFrom;
+        return f;
+    }
+
+    private final class GapFixture {
+        long readmitted;
+        long departed;
+        long complete;
+        LocalDate readmittedHoleFrom;
+        LocalDate readmittedHoleTo;
+        LocalDate departedHole;
+        LocalDate calendarFrom;
+
+        /** 심은 달력을 걷는다 — 다른 시험이 이 날짜를 지표 거래일로 보지 않게. */
+        void cleanUp() {
+            jdbcTemplate.update("DELETE FROM indicator_trade_date WHERE market_code = 'KOSPI' AND trade_date < ?",
+                    AS_OF);
+            jdbcTemplate.update("DELETE FROM market_index_daily WHERE index_code = 'KOSPI' AND trade_date >= ?",
+                    calendarFrom);
+        }
+    }
+
+    private long gapStock(String ticker) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, is_active) VALUES ('KOSPI', ?, ?, true) RETURNING id
+                """, Long.class, ticker, "구멍 " + ticker);
+    }
+
+    private void gapMembership(long stockId, LocalDate from, LocalDate to) {
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from, effective_to)
+                VALUES ('KOSPI200', ?, ?, ?)
+                """, stockId, from, to);
+    }
+
+    private void storedBars(long stockId, LocalDate from, LocalDate to) {
+        for (LocalDate day : weekdays(from, to)) {
+            jdbcTemplate.update("""
+                    INSERT INTO price_daily (stock_id, trade_date, open, high, low, close, adj_close, volume)
+                    VALUES (?, ?, 1000, 1000, 1000, 1000, 1000, 1)
+                    """, stockId, day);
+        }
+    }
+
+    private int barsBetween(long stockId, LocalDate from, LocalDate to) {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM price_daily WHERE stock_id = ? AND trade_date BETWEEN ? AND ?
+                """, Integer.class, stockId, from, to);
+    }
+
+    private int plannedCount(long executionId, CollectionPhase phase) {
+        return jdbcTemplate.queryForObject("""
+                SELECT planned_count FROM batch_execution_phase WHERE execution_id = ? AND phase = ?
+                """, Integer.class, executionId, phase.name());
+    }
+
+    private static List<LocalDate> weekdays(LocalDate from, LocalDate to) {
+        List<LocalDate> days = new ArrayList<>();
+        for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
+            if (day.getDayOfWeek() != java.time.DayOfWeek.SATURDAY
+                    && day.getDayOfWeek() != java.time.DayOfWeek.SUNDAY) {
+                days.add(day);
+            }
+        }
+        return days;
     }
 
     /** 잡들이 대상으로 삼는 모집단. 지수 하나가 아니라 편입 중인 전 지수다. */

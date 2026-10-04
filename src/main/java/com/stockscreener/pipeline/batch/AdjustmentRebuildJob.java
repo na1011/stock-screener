@@ -38,7 +38,7 @@ import java.util.List;
  *
  * <h2>왜 원장에 행이 있는 종목만 돌지 않는가</h2>
  * <p>{@link AdjustmentRecalculator#rebuild}는 적용 대상이 하나도 없으면 <b>계수를 전량 1로
- * 되돌린다</b> — 그것이 반영을 취소하는 방법이다. 그래서 활성 유니버스 전량을 도는 것이 곧
+ * 되돌린다</b> — 그것이 반영을 취소하는 방법이다. 그래서 보존 창 편입 전량을 도는 것이 곧
  * <i>"원장을 거치지 않은 계수가 없다"</i>의 검증이 된다. 원장에 없는 종목은 갱신 0행으로
  * 끝나므로 무효화도 일어나지 않는다.
  *
@@ -245,7 +245,11 @@ public class AdjustmentRebuildJob {
             return members;
         }
         if (tickers == null || tickers.isEmpty()) {
-            return stockRegistrar.activeUniverseMemberIds();
+            // 보존 창 편입 전원이다 — 지금 편입만이 아니다. 일일 갱신이 과거 편입의 시세 구멍도
+            // 채우는데(StockRegistrar.priceGapRuns) 새 봉은 계수 1로 들어간다. 지금 편입만 돌면 그
+            // 봉이 적용된 사건 앞에 놓여도 영영 안 바로잡힌다. 원장 수집은 지금 편입만 돌므로 과거
+            // 편입은 <b>저장된 원장</b>으로 다시 짓는다 — 편출 뒤 사건은 원래 안 묻는다.
+            return stockRegistrar.windowMemberIds();
         }
         List<Long> matched = stockRegistrar.activeUniverseMemberIdsByTicker(tickers);
         if (matched.isEmpty()) {

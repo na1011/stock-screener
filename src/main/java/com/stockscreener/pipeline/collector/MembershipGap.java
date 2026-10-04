@@ -38,6 +38,9 @@ public record MembershipGap(long stockId, String marketCode, String ticker, Stri
          * 뒤라 매 실행 다시 걸린다. 끄려면 상장일이 필요한데 <b>소스가 없다</b>
          * ({@code stock.listed_on} 양 시장 전량 NULL · DART {@code est_dt}는 설립일).
          * 2026-09-13 실측으로 해당 0건이다.
+         *
+         * <p><b>재편입 종목은 이 축에 안 걸린다</b> — 옛 봉이 있어 첫 봉이 편입일보다 앞이다. 편출 동안 빈
+         * 봉은 일일 갱신이 구멍 구간으로 받는다({@link StockRegistrar#priceGapRuns}).
          */
         PRICE_HISTORY,
 

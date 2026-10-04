@@ -33,6 +33,16 @@ public class FakePriceDataSource implements PriceDataSource {
     /** 마지막으로 요청된 조회 시작일. 적재 기간이 실제로 넓어졌는지 확인할 때 쓴다. */
     public LocalDate lastFrom;
 
+    /** 받은 호출 하나. 창 콜과 구멍 구간 콜이 정확히 어떤 범위로 나갔는지 볼 때 쓴다. */
+    public record Call(long stockId, LocalDate from, LocalDate to) {
+    }
+
+    /** 호출을 순서대로 기록한다. */
+    public final List<Call> calls = new ArrayList<>();
+
+    private final Map<Long, LocalDate> failingBefore = new HashMap<>();
+    private final Map<Long, DataSourceException> failingBeforeWith = new HashMap<>();
+
     public FakePriceDataSource(String... markets) {
         this.markets = Set.of(markets);
     }
@@ -52,6 +62,16 @@ public class FakePriceDataSource implements PriceDataSource {
         return this;
     }
 
+    /**
+     * {@code from}이 {@code before}보다 앞인 호출만 실패시킨다 — 창 콜은 성공하고 그 앞의 구멍 구간 콜만
+     * 실패하는 상황을 만든다.
+     */
+    public FakePriceDataSource failingBefore(long stockId, LocalDate before, DataSourceException exception) {
+        failingBefore.put(stockId, before);
+        failingBeforeWith.put(stockId, exception);
+        return this;
+    }
+
     /** 실패를 해제한다. 재실행이 이번엔 성공하는 상황을 만들 때 쓴다. */
     public FakePriceDataSource clearFailure(long stockId) {
         failures.remove(stockId);
@@ -63,7 +83,10 @@ public class FakePriceDataSource implements PriceDataSource {
         barsByStock.clear();
         actionsByStock.clear();
         failures.clear();
+        failingBefore.clear();
+        failingBeforeWith.clear();
         fetchedStockIds.clear();
+        calls.clear();
         lastFrom = null;
     }
 
@@ -81,10 +104,15 @@ public class FakePriceDataSource implements PriceDataSource {
     public List<RawPriceBar> fetchDailyBars(SecurityRef security, LocalDate from, LocalDate to)
             throws DataSourceException {
         fetchedStockIds.add(security.stockId());
+        calls.add(new Call(security.stockId(), from, to));
         lastFrom = from;
         DataSourceException failure = failures.get(security.stockId());
         if (failure != null) {
             throw failure;
+        }
+        LocalDate before = failingBefore.get(security.stockId());
+        if (before != null && from.isBefore(before)) {
+            throw failingBeforeWith.get(security.stockId());
         }
         return barsByStock.getOrDefault(security.stockId(), List.of()).stream()
                 .filter(bar -> !bar.tradeDate().isBefore(from) && !bar.tradeDate().isAfter(to))

@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.indicator.IndicatorRegistry;
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
 import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.IndicatorTradeDateIndex;
@@ -10,6 +11,7 @@ import com.stockscreener.pipeline.collector.MarketCalendar;
 import com.stockscreener.pipeline.collector.MarketIndexCalendar;
 import com.stockscreener.pipeline.collector.PriceCalendar;
 import com.stockscreener.pipeline.collector.PriceCollector;
+import com.stockscreener.pipeline.collector.PriceGapRun;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.MarketIndexCodes;
@@ -23,11 +25,16 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * 일일 갱신. 소스가 공개한 최근 거래일들의 종가를 수집하고 그것으로 지표를 계산한다.
@@ -44,6 +51,13 @@ import java.util.Optional;
  * 조회 기간(2년 vs 1일)과 쓰기 패턴이 다른 1회성 작업이므로 {@link InitialLoadJob}에 있다.
  * 분기를 섞으면 "오늘이 첫 실행인가"를 매일 판단하게 되고, 그 판단이 틀리면 850종목의
  * 2년치를 매일 다시 받는다.
+ *
+ * <p><b>창 밖 구멍 구간({@code PRICE_GAP})은 그 분기가 아니다.</b> 넓히는 것은 종목마다 <b>지표가 읽는
+ * 범위 안의 봉 없는 거래일</b>뿐이고({@link StockRegistrar#priceGapRuns}) 창 콜은 그대로다 — 「판단이
+ * 틀려 전 종목이 수년치」가 되려면 달력이 틀려야 하는데 달력은 지수 거래일(+ 편입 절반 이상의 봉)이다.
+ * 진짜 부재(정지·폐지·재사용 티커의 공백)는 매일 0행 콜 하나다. 예외는 첫 채움 하나다 — 소스가 실체를
+ * 바꿔 짧게 준 종목(TEVA)은 첫날 약 1,500봉을 받는데, 그것은 초기 적재 1회와 같은 크기이고 다음 날 구멍이
+ * 없어 끝난다.
  *
  * <p>재무는 여기서 받지 않는다. 재무제표는 분기에 한 번 공시되므로 매일 850종목을 조회하면
  * 쿼터만 태운다. 공시 시즌에 별도로 돌리는 것이 맞고, v1에서는 초기 적재 이후 수동으로
@@ -63,8 +77,13 @@ public class DailyUpdateJob {
      * <p>폭이 이 값이어야 하는 이유는 <b>대상 일자가 공휴일을 모르기 때문</b>이다(ADR-0042).
      * 거래일 T는 T의 다음 <b>영업일</b> 13시에 공개되는데, 대상 일자는 직전 <i>평일</i>만
      * 낼 수 있어 연휴를 건너뛰지 못한다. 창이 그 어긋남을 흡수한다 — 그리고 창은 곧
-     * <b>재시도 기제</b>다. 한 번 놓친 날짜를 이후 실행이 계속 다시 시도하므로 별도의 만회
-     * 배치가 필요 없다.
+     * <b>재시도 기제</b>다. 한 번 놓친 날짜를 이후 실행이 계속 다시 시도한다.
+     *
+     * <p><b>다만 창의 재시도는 「지금 편입」의 「15일」에만 선다.</b> 그 밖은 영영 다시 안 물었다 —
+     * 재편입 종목의 편출 동안 봉, 공개 지연(연휴) 중 편출된 종목의 마지막 편입일 봉(2026-09-23 국내
+     * 4종목), 소스가 실체를 바꿔 짧게 준 종목의 편입일 봉(TEVA 232일). 그 범위는
+     * {@link StockRegistrar#priceGapRuns}가 구멍 구간으로 따로 받는다. 앞선 재편입의 구멍은 손 전체
+     * 재적재가 가렸다(2026-09-10·09-11·09-17).
      */
     public static final int PRICE_LOOKBACK_DAYS = 15;
 
@@ -83,6 +102,7 @@ public class DailyUpdateJob {
     private final IndicatorRetentionPolicy retentionPolicy;
     private final IndicatorTradeDateIndex tradeDateIndex;
     private final WatchlistAlertRunner watchlistAlertRunner;
+    private final IndicatorRegistry indicatorRegistry;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
                           MarketCalendar marketCalendar, PriceCalendar priceCalendar,
@@ -92,7 +112,8 @@ public class DailyUpdateJob {
                           SectorRelativeCalculator sectorRelativeCalculator,
                           IndicatorRetentionPolicy retentionPolicy,
                           IndicatorTradeDateIndex tradeDateIndex,
-                          WatchlistAlertRunner watchlistAlertRunner) {
+                          WatchlistAlertRunner watchlistAlertRunner,
+                          IndicatorRegistry indicatorRegistry) {
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
         this.marketCalendar = marketCalendar;
@@ -106,6 +127,7 @@ public class DailyUpdateJob {
         this.retentionPolicy = retentionPolicy;
         this.tradeDateIndex = tradeDateIndex;
         this.watchlistAlertRunner = watchlistAlertRunner;
+        this.indicatorRegistry = indicatorRegistry;
     }
 
     /**
@@ -173,10 +195,23 @@ public class DailyUpdateJob {
 
         List<SecurityRef> targets =
                 stockRegistrar.toSecurityRefs(stockRegistrar.activeUniverseMemberIds());
+        LocalDate from = priceWindowStart(targetDate);
+        // 창 밖 구멍 구간(지금 편입 · 보존 창 과거 편입). 질의가 던지면 실행 행 없이 끝나지 않게
+        // start 뒤 try 안에서 잰다.
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, targetDate, triggeredBy, targets.size());
-
-        return collect(execution, targets, priceWindowStart(targetDate), targetDate);
+        List<PriceGapRun> gapRuns;
+        try {
+            gapRuns = stockRegistrar.priceGapRuns(targetDate, from, indicatorRegistry.readWindowBars());
+            // MUST: 구간을 도출한 이 경로에서만 닫는다. 재시도 경로는 구간을 안 도출하므로(빈 목록)
+            // 거기서 부르면 진짜 남은 구멍의 실패까지 닫힌다.
+            closeVanishedGapFailures(gapRuns.stream().map(PriceGapRun::stockId)
+                    .collect(Collectors.toSet()));
+        } catch (RuntimeException e) {
+            execution.failUnexpectedly(e);
+            throw e;
+        }
+        return collect(execution, targets, gapRuns, from, targetDate);
     }
 
     /**
@@ -197,7 +232,10 @@ public class DailyUpdateJob {
         BatchExecutionContext execution = batchExecutions.startRetry(
                 JOB_NAME, targetDate, targets.size(), previousExecutionId);
 
-        return collect(execution, targets, priceWindowStart(targetDate), targetDate);
+        // MUST NOT: 구멍 구간({@code PRICE_GAP}) 실패를 여기서 옛 범위로 재생하지 않는다. 구멍은
+        // 다음 정기 실행이 그날의 정의로 다시 도출한다 — 과거 편입 종목에 창 콜과 지표 단계를
+        // 돌리는 것도 이 경로가 아니다.
+        return collect(execution, targets, List.of(), priceWindowStart(targetDate), targetDate);
     }
 
     /**
@@ -213,7 +251,7 @@ public class DailyUpdateJob {
      * 이 지점에서 깨진다. 성공 여부로 가르는 것이 그 전제를 지킨다.
      */
     private BatchStatus collect(BatchExecutionContext execution, List<SecurityRef> targets,
-                                LocalDate from, LocalDate to) {
+                                List<PriceGapRun> gapRuns, LocalDate from, LocalDate to) {
         // 종목당 두 단계를 돌므로 작업 단위는 종목 수의 두 배다. 종목 수만 신고하면 화면이
         // 700/350으로 뜬다 — 지표 백필이 43400/350으로 뜨던 것과 같은 어긋남이다.
         //
@@ -222,6 +260,13 @@ public class DailyUpdateJob {
         // 않는 이유가 그것이다 — 덮어쓰면 그 신호가 사라진다.
         execution.plan(CollectionPhase.PRICE, targets.size());
         execution.plan(CollectionPhase.INDICATOR, targets.size());
+
+        Map<Long, List<PriceGapRun>> gapRunsByStock = new LinkedHashMap<>();
+        for (PriceGapRun run : gapRuns) {
+            gapRunsByStock.computeIfAbsent(run.stockId(), id -> new ArrayList<>()).add(run);
+        }
+        execution.plan(CollectionPhase.PRICE_GAP, gapRunsByStock.size());
+        GapTally gapTally = new GapTally();
 
         // MUST: 지수를 종목 루프 **앞에서** 받는다. EXCESS_RETURN_26W가 그날 지수를 입력으로
         // 쓰므로 뒤에 두면 그날 그 지표가 안 써지고, 그 사실은 화면에서 "조건에 안 맞았다"와
@@ -244,9 +289,20 @@ public class DailyUpdateJob {
                 indicatorRunner.marketIndexesFor(to);
 
         try {
+            Set<Long> currentIds = new HashSet<>();
             for (SecurityRef target : targets) {
+                currentIds.add(target.stockId());
                 boolean collected = execution.process(target, CollectionPhase.PRICE,
                         security -> priceCollector.collect(security, from, to));
+
+                // 창 밖 구멍 구간. 창 콜과 따로다 — 창 콜은 지금 그대로 바이트까지 같고, 구간 콜의
+                // 실패가 그날 창 수집과 지표 단계를 막지 않는다(실패는 PRICE_GAP에 남는다).
+                // 지표 단계보다 앞이어야 그날 지표가 채운 봉으로 나간다.
+                List<PriceGapRun> runs = gapRunsByStock.get(target.stockId());
+                if (runs != null) {
+                    execution.process(target, CollectionPhase.PRICE_GAP,
+                            security -> fillGaps(security, runs, gapTally));
+                }
 
                 // 수집이 예외 없이 끝난 종목만 지표를 계산한다. 실패한 종목은 계산할 새 원자료가
                 // 없으므로, 굳이 돌려서 실패를 하나 더 만들 이유가 없다.
@@ -265,6 +321,18 @@ public class DailyUpdateJob {
                             security -> indicatorRunner.run(
                                     security.stockId(), to, cutoff, marketIndexes).written());
                 }
+            }
+
+            // 보존 창의 과거 편입 — 구간만 받고 지표는 매 평일 화해(ADR-0166)가 다시 쓴다.
+            // MUST NOT: 여기서 지표 단계를 돌리지 않는다. 그 종목은 지금 편입이 아니라 그날 백분위
+            // 모집단에 없고, 원본층은 14:20 ①이 창 편입 전원으로 다시 쓴다.
+            for (Map.Entry<Long, List<PriceGapRun>> entry : gapRunsByStock.entrySet()) {
+                if (currentIds.contains(entry.getKey())) {
+                    continue;
+                }
+                PriceGapRun first = entry.getValue().get(0);
+                execution.process(new SecurityRef(first.stockId(), first.marketCode(), first.ticker()),
+                        CollectionPhase.PRICE_GAP, security -> fillGaps(security, entry.getValue(), gapTally));
             }
 
             // 대상 종목이 실제로 걸쳐 있는 시장들. 알림도 기준일도 이 축으로 나뉜다.
@@ -356,7 +424,63 @@ public class DailyUpdateJob {
                     + "수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
         }
 
-        return execution.finish();
+        return execution.finish(gapTally.note(gapRunsByStock.size(), gapRuns.size()));
+    }
+
+    /**
+     * 한 종목의 구멍 구간을 구간마다 정확히 그 범위로 받는다.
+     *
+     * <p>한 콜로 묶지 않는다 — 떨어진 두 구멍 사이의 멀쩡한 봉을 매일 다시 받고, 진짜 부재(정지·폐지·
+     * 재사용 티커의 공백) 구간이 섞이면 그 수년치를 매일 다시 받는다. 구간이 정확하면 진짜 부재는
+     * 매일 0행 콜 하나다.
+     */
+    private long fillGaps(SecurityRef security, List<PriceGapRun> runs, GapTally tally)
+            throws DataSourceException {
+        long written = 0;
+        for (PriceGapRun run : runs) {
+            long rows = priceCollector.collect(security, run.from(), run.to());
+            log.info("시세 구멍 구간을 받았다. {} {} {}~{} 구멍={}일 받은 봉={}{}", security.marketCode(),
+                    security.ticker(), run.from(), run.to(), run.days(), rows,
+                    run.currentMember() ? "" : " (과거 편입)");
+            written += rows;
+            tally.runs.incrementAndGet();
+            tally.days.addAndGet(run.days());
+        }
+        tally.bars.addAndGet(written);
+        return written;
+    }
+
+    /**
+     * 구멍이 더는 없는 종목의 미해결 {@code PRICE_GAP} 실패를 닫는다.
+     *
+     * <p>실패는 같은 (종목, 단계)가 뒤에 성공해야 닫히는데 구멍은 성공 없이도 사라진다 — 보존 창을
+     * 떠나거나, 읽기 창이 미끄러지거나, 다른 잡(초기 적재)이 채운다. 그대로 두면 관리자 화면의
+     * 미해결 수가 영구히 쌓인다.
+     */
+    private void closeVanishedGapFailures(Set<Long> stocksWithGaps) {
+        Set<Long> unresolved = batchExecutions.recorder().unresolvedStockPhases()
+                .getOrDefault(CollectionPhase.PRICE_GAP, Set.of());
+        for (Long stockId : unresolved) {
+            if (!stocksWithGaps.contains(stockId)) {
+                batchExecutions.recorder().resolveFailures(stockId, CollectionPhase.PRICE_GAP);
+            }
+        }
+    }
+
+    /** 구멍 구간 수집의 집계 — 실행 기록 note 한 줄이 된다. */
+    private static final class GapTally {
+        private final AtomicLong runs = new AtomicLong();
+        private final AtomicLong days = new AtomicLong();
+        private final AtomicLong bars = new AtomicLong();
+
+        /** 구멍이 없으면 {@code null} — 그날 note를 비워 둔다. */
+        String note(int stocks, int plannedRuns) {
+            if (plannedRuns == 0) {
+                return null;
+            }
+            return "시세 구멍 %d종목 · %d구간 중 %d구간 받음 · %d일 · 받은 봉 %d"
+                    .formatted(stocks, plannedRuns, runs.get(), days.get(), bars.get());
+        }
     }
 
     /**

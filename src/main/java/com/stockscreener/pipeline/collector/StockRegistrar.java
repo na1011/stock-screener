@@ -12,6 +12,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -363,6 +365,126 @@ public class StockRegistrar {
                 ORDER BY m.stock_id
                 """.formatted(collectedMarketPlaceholders(), IN_RETENTION_WINDOW),
                 Long.class, collectedMarkets());
+    }
+
+    /**
+     * 보존 창 편입의 <b>시세 구멍 구간</b> — 지표가 읽는 범위 안에서 소스에 다시 물을 날짜들.
+     *
+     * <h2>왜 일일 갱신의 15일 창만으로 안 되는가</h2>
+     * <p>창은 <b>지금 편입</b>에만 걸리고 15일 앞은 다시 안 묻는다. 그래서 재편입 종목의 편출 동안 봉,
+     * 공개 지연(연휴) 중 편출된 종목의 마지막 편입일 봉, 소스가 실체를 바꿔 짧게 준 종목(TEVA — CUSIP
+     * 전환)의 편입일 봉이 영영 안 들어온다. 소스는 그 봉을 준다(2026-10-05 탐침). 앞선 재편입은 손 전체
+     * 재적재가 가렸다 — 관문 원칙(2026-10-04)으로 그것이 멈추면 리밸런싱마다 쌓인다.
+     *
+     * <h2>정의</h2>
+     * <ul>
+     *   <li><b>모집단</b>: {@link #windowMemberIds()}와 같은 술어({@link #IN_RETENTION_WINDOW}).</li>
+     *   <li><b>달력</b>: 그 시장 지수의 거래일 ∪ 그 시장 지금 편입의 절반 이상이 봉을 가진 날. 지수만 빠진
+     *       날도, 봉 몇 개만 먼저 들어온 날(토요일 꼬리)도 거래일을 흔들지 않는다.</li>
+     *   <li><b>필요 범위</b>: [달력에서 대상일의 {@code readWindowBars - 1}번째 앞, 마지막 편입일] —
+     *       러너가 대상일에서 그만큼 거꾸로 읽는다({@code IndicatorDataReader.readPriceBars}).</li>
+     *   <li><b>첫 봉 앞은 그 앞에 편입일이 있을 때만 센다</b>(TEVA). 아니면 신규 상장과 못 가르고, 소스가
+     *       재사용 티커로 <b>다른 증권의 봉</b>을 준다(ACT·FIG·IOT·S·TLN — 2026-10-05 탐침).</li>
+     *   <li>지금 편입은 [{@code windowStart}, 대상일]을 뺀다 — 일일 갱신의 창 콜이 받는다.</li>
+     * </ul>
+     *
+     * <p><b>MUST: 종목 경계를 {@code MATERIALIZED}로 고정한다.</b> 풀어 두면 하한의 상관 부분질의가
+     * (종목, 날짜) 행마다 돌아 60초를 넘는다(2026-10-05 사본 실측 — 고정하면 3.5초).
+     *
+     * @param readWindowBars {@code IndicatorRegistry.readWindowBars()}
+     */
+    public List<PriceGapRun> priceGapRuns(LocalDate target, LocalDate windowStart,
+                                          int readWindowBars) {
+        Object[] markets = collectedMarkets();
+        List<Object> args = new ArrayList<>();
+        args.addAll(List.of(markets));
+        args.addAll(List.of(markets));
+        args.add(target);
+        args.addAll(List.of(markets));
+        args.add(target);
+        args.add(target);
+        args.add(readWindowBars);
+        args.add(windowStart);
+        String in = collectedMarketPlaceholders();
+        return jdbcTemplate.query("""
+                WITH members AS (
+                    SELECT m.stock_id, s.market_code, s.ticker, m.effective_from, m.effective_to
+                    FROM universe_membership m
+                    JOIN stock s ON s.id = m.stock_id
+                    JOIN universe u ON u.code = m.universe_code AND u.is_active
+                    WHERE s.is_active AND s.market_code IN (%s)
+                      AND %s
+                ),
+                current_counts AS MATERIALIZED (
+                    SELECT market_code, count(DISTINCT stock_id) AS n
+                    FROM members WHERE effective_to IS NULL GROUP BY market_code
+                ),
+                cal AS MATERIALIZED (
+                    SELECT market_code, trade_date,
+                           row_number() OVER (PARTITION BY market_code ORDER BY trade_date) AS seq
+                    FROM (SELECT index_code AS market_code, trade_date FROM market_index_daily
+                          WHERE index_code IN (%s) AND trade_date <= ?
+                          UNION
+                          SELECT s.market_code, p.trade_date
+                          FROM price_daily p
+                          JOIN stock s ON s.id = p.stock_id
+                          JOIN current_counts cm ON cm.market_code = s.market_code
+                          WHERE s.market_code IN (%s) AND p.trade_date <= ?
+                          GROUP BY s.market_code, p.trade_date
+                          HAVING count(*) * 2 >= max(cm.n)) d
+                ),
+                anchor AS (
+                    SELECT market_code, max(seq) AS t_seq FROM cal GROUP BY market_code
+                ),
+                spans AS MATERIALIZED (
+                    SELECT mb.stock_id, mb.market_code, mb.ticker,
+                           bool_or(mb.effective_to IS NULL) AS current_member,
+                           min(greatest(mb.effective_from, w.lo)) AS member_from,
+                           max(coalesce(mb.effective_to, CAST(? AS date) + 1)) AS member_until
+                    FROM members mb
+                    JOIN (SELECT market_code, min(trade_date) AS lo
+                          FROM indicator_trade_date GROUP BY market_code) w
+                      ON w.market_code = mb.market_code
+                    GROUP BY mb.stock_id, mb.market_code, mb.ticker
+                ),
+                ranges AS MATERIALIZED (
+                    SELECT b.stock_id, b.market_code, b.ticker, b.current_member,
+                           CASE WHEN b.first_member_day < b.first_bar THEN b.read_floor
+                                ELSE greatest(b.first_bar, b.read_floor) END AS lower_,
+                           b.member_until - 1 AS upper_
+                    FROM (SELECT sp.*,
+                                 (SELECT min(p.trade_date) FROM price_daily p
+                                   WHERE p.stock_id = sp.stock_id) AS first_bar,
+                                 (SELECT min(c.trade_date) FROM cal c
+                                   WHERE c.market_code = sp.market_code
+                                     AND c.trade_date >= sp.member_from) AS first_member_day,
+                                 (SELECT c.trade_date FROM cal c
+                                   WHERE c.market_code = sp.market_code
+                                     AND c.seq = greatest(1, a.t_seq - ? + 1)) AS read_floor
+                          FROM spans sp JOIN anchor a ON a.market_code = sp.market_code) b
+                    WHERE b.first_bar IS NOT NULL AND b.first_member_day IS NOT NULL
+                ),
+                holes AS (
+                    SELECT r.stock_id, r.market_code, r.ticker, r.current_member, c.trade_date, c.seq
+                    FROM ranges r
+                    JOIN cal c ON c.market_code = r.market_code
+                              AND c.trade_date BETWEEN r.lower_ AND r.upper_
+                    WHERE NOT (r.current_member AND c.trade_date >= ?)
+                      AND NOT EXISTS (SELECT 1 FROM price_daily p
+                                      WHERE p.stock_id = r.stock_id AND p.trade_date = c.trade_date)
+                )
+                SELECT stock_id, market_code, ticker, current_member,
+                       min(trade_date) AS gap_from, max(trade_date) AS gap_to, count(*) AS days
+                FROM (SELECT holes.*, seq - row_number() OVER (PARTITION BY stock_id ORDER BY seq) AS grp
+                      FROM holes) h
+                GROUP BY stock_id, market_code, ticker, current_member, grp
+                ORDER BY stock_id, gap_from
+                """.formatted(in, IN_RETENTION_WINDOW, in, in),
+                (rs, i) -> new PriceGapRun(rs.getLong("stock_id"), rs.getString("market_code"),
+                        rs.getString("ticker"), rs.getBoolean("current_member"),
+                        rs.getObject("gap_from", LocalDate.class),
+                        rs.getObject("gap_to", LocalDate.class), rs.getInt("days")),
+                args.toArray());
     }
 
     /**

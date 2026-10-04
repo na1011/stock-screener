@@ -6,13 +6,23 @@ package com.stockscreener.pipeline.batch;
  * <p>단계를 나누는 이유는 재실행 대상을 좁히기 위해서다. 한 종목이 시세는 성공하고 재무만
  * 실패할 수 있는데, 이를 구분하지 못하면 재실행이 이미 성공한 시세를 다시 받아 쿼터를 태운다.
  *
- * <p>MUST: 값을 추가하면 {@code V5__batch_execution.sql}의 {@code ck_failure_phase}도
- * 함께 늘려야 한다. 제약이 먼저 막으므로 조용히 어긋나지는 않는다.
+ * <p>MUST: 값을 추가하면 {@code ck_failure_phase}(V5 → 마지막은 V58)도 함께 늘린다. 안 늘리면 그
+ * 단계의 실패 기록이 제약에 막혀 <b>실패 하나가 배치 전체를 죽인다</b>({@code failUnexpectedly}) —
+ * {@code CollectionPhaseConstraintTest}가 enum과 제약을 대조한다.
  */
 public enum CollectionPhase {
 
     /** 일별 시세 수집. */
     PRICE,
+
+    /**
+     * 시세 구멍 구간 수집 — 일일 갱신의 15일 창 밖에서 지표가 읽는 범위의 빈 거래일
+     * ({@code StockRegistrar.priceGapRuns}).
+     *
+     * <p><b>{@link #PRICE}와 단계를 가르는 이유</b>: 실패는 같은 (종목, 단계)가 뒤에 성공해야 닫힌다.
+     * 한 단계로 두면 다음 날 창 수집의 성공이 구간 실패를 닫아 <b>안 받은 구간이 해결로 접힌다.</b>
+     */
+    PRICE_GAP,
 
     /** 재무제표 수집. */
     FINANCIAL,
