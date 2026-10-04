@@ -48,6 +48,7 @@ case "$cmd" in
   *--job=adjustment-rebuild*) job='adjustment-rebuild' ;;
   *--job=financial-refill*)   job='financial-refill' ;;
   *--job=backfill*)           job='backfill' ;;
+  *--job=indicator-reconcile*) job='indicator-reconcile' ;;
   *) exit 0 ;;
 esac
 
@@ -70,6 +71,8 @@ case "$job" in
     why="\`rebuild()\`의 첫 호출은 저장된 \`adj_close\`를 전 구간 소급해 다시 쓰고 그 종목의 \`indicator_value\`를 통째로 지운다(ADR-0049)." ;;
   backfill)
     why="이 잡은 계산만 하지 않는다. **돌린 날짜의 파생 행 중 「그날 모집단 밖」인 것을 지우고**(ADR-0085·0136), 러너가 「값을 그만 낸」 날짜의 옛 행도 걷는다(ADR-0130 — 전 종목 한 판이 실측 285,498행을 지웠다). \`--tickers\`로 좁혀도 **파생층은 전 종목이라 그날 것이 전부 걸린다.**" ;;
+  indicator-reconcile)
+    why="매 평일 화해와 같은 메서드다 — 보존 창 편입 전원의 원본층을 다시 쓰고 **창 전체 파생층의 「그날 모집단 밖」 행을 지운다.** \`--tickers\`로 좁혀도 파생층은 창 전체다." ;;
   financial-refill)
     why="이 잡은 결손만 채우는 것이 아니다. 소스가 더 늦은 공시일을 주면 **정정으로 판정해 개정본을 쌓고** 그 종목 지표를 보존 창 전체에서 지운다(ADR-0040). 게다가 적재된 원자료는 되돌리지 않는 것이 규칙이라(ADR-0071), 되돌릴 수 있는 것이 덤프뿐이다." ;;
 esac
