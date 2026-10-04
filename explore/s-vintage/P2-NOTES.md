@@ -36,3 +36,11 @@ P3a 반증이 「입력층 먼저」를 다시 확인해 P2를 연다(`P3-PLAN.m
 
 ## 평가기 고친 것
 - `HMODE=current`: 오프셋 창의 진실 기준 시점 H를 오프셋 0 창(지금 창)의 회계연도로 — 성장률 소비자는 지금 기준으로 다시 실린 비교값과 견준다. P3a(gatedcw)도 이 정의에서 이득이 크다(영업이익 오프셋4 2016~ 1,561+1,275 대 491+285).
+
+## P2-R 매출 폴백 층(`p2/revfb.py` · 원장 · 현 편입 · 2015~)
+- 지금 매출 후보 다섯(경쟁 넷 + 폴백 `RevenueFromContractWithCustomerIncludingAssessedTax`)이 그 창을 하나도 못 덮는데 새 태그가 값을 주는 창:
+  `RegulatedAndUnregulatedOperatingRevenue` 10종목(ATO AWK DTE DUK NEE NJR SRE SWX TLN XEL) FY 30 · 분기 143 · `OilAndGasRevenue` 5종목(CHRD EQT FANG KKR TRGP) 35 ·
+  `HealthCareOrganizationRevenue` 4종목(DVA EHC ENSG THC) 26 · `ElectricUtilityRevenue` 3종목(ETR POR TXNM) 18 · `RevenuesNetOfInterestExpense` 11종목 220(R3/P5 몫 — 은행·증권 순액).
+- **개념 확인**(같은 공시에 영업이익과 총비용이 있으면 폴백 ≈ 영업이익 + 총비용 · 1%): Regulated 115/122(어긋난 7은 ATO — `OperatingExpenses`가 가스 원가를 뺀 줄) · OilAndGas 21/21 · HealthCare 9/9 ·
+  **Electric 7/8 — ETR 2015는 전기 부문만(9,308.7 대 영업이익+총비용 11,667) → 부분값**. 다부문 유틸리티에서 `ElectricUtilityRevenue`를 그대로 쓰면 안 된다.
+- 지금 창 노출(반증 밖 렌즈 · DB 직접 확인): DTE·XEL·SWX의 `PSR`·`OPERATING_MARGIN`·`GROSS_MARGIN`·`REVENUE_GROWTH`가 2025-09-26 뒤 **0행**.
