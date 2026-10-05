@@ -23,7 +23,8 @@ import java.util.Optional;
  *
  * <h2>계산 모델</h2>
  * <pre>
- * adj_factor(d) = Π { 원장의 적용 대상 사건 e : e.effective_date &gt; d } (1 / ratio(e))
+ * adj_factor(d) = Π { 원장의 적용 대상 사건 e : e.effective_date &gt; d } (1 / 가격배수(e))
+ * 가격배수(e)   = e.price_ratio, 없으면 e.ratio(V60 — 분할·병합·무상증자는 주식수 배수와 같다)
  * adj_close(d)  = close(d) × adj_factor(d)
  *
  * 50:1 분할이 2018-05-04에 발생한 경우
@@ -97,9 +98,12 @@ public class AdjustmentRecalculator {
      * 취소하는 방법이다.
      *
      * <p>MUST: {@link CorporateAction.Type} 별 부호를 여기서 다시 정하지 않는다.
-     * {@code ratio}의 계약이 <i>"1주가 몇 주가 되었는가"</i>이므로 종류와 무관하게
-     * {@code 1/ratio}가 옳다. 종류를 읽어 분기하면 부호를 정하는 곳이 둘이 되고,
-     * <b>두 번 뒤집힌 값은 원래 값과 같아 보인다.</b>
+     * 가격 배수({@link CorporateActionLedger.Entry#priceMultiple()})의 계약이 <i>"사건 전 가격을 몇으로
+     * 나누는가"</i>이므로 종류와 무관하게 {@code 1/가격배수}가 옳다. 종류를 읽어 분기하면 부호를 정하는
+     * 곳이 둘이 되고, <b>두 번 뒤집힌 값은 원래 값과 같아 보인다.</b>
+     *
+     * <p>MUST NOT: 여기서 {@code ratio}(주식수 배수)를 직접 읽지 않는다. 분사는 두 배수가 갈리는
+     * 사건이라 주식수 배수를 가격에 실으면 분사 법인의 가치만큼 가짜 계단이 생긴다(ADR-0117 §규칙).
      */
     @Transactional
     public RebuildResult rebuild(long stockId) {
@@ -348,7 +352,7 @@ public class AdjustmentRecalculator {
         // 뒤에서부터 누적하면 구간 k의 분모가 "k번째 이후 모든 비율의 곱"이 된다.
         BigDecimal suffixProduct = BigDecimal.ONE;
         for (int k = events.size() - 1; k >= 0; k--) {
-            suffixProduct = suffixProduct.multiply(events.get(k).ratio());
+            suffixProduct = suffixProduct.multiply(events.get(k).priceMultiple());
             BigDecimal factor = BigDecimal.ONE.divide(suffixProduct, FACTOR_SCALE, RoundingMode.HALF_UP);
             if (factor.abs().compareTo(FACTOR_LIMIT) >= 0) {
                 throw new IllegalStateException(

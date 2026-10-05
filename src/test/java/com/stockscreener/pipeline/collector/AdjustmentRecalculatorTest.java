@@ -148,6 +148,40 @@ class AdjustmentRecalculatorTest {
     }
 
     @Test
+    @DisplayName("가격 배수가 따로 적힌 사건은 그것으로 짓고, 주식수 배수는 주식수 쪽에만 남는다 — 분사(V60)")
+    void priceRatioDrivesTheFactorWhileRatioStaysTheShareMultiple() {
+        // 한화 2026-08-25 모양: 주식수 ×0.7563532970 · 가치비 v 0.8816 → 가격 배수 s/v = 0.8580.
+        // 주식수 배수를 가격에 실으면 사건 전 봉이 ×1.3221로 오른다(ADR-0117 §규칙의 결함).
+        writer.write(stockId, List.of(bar("2026-07-29", "83800"), bar("2026-08-25", "118100")));
+        long id = approveDisclosed("2026-08-25", CorporateAction.Type.SPIN_OFF, "0.7563532970");
+        jdbcTemplate.update("UPDATE corporate_action SET price_ratio = 0.8580 WHERE id = ?", id);
+
+        recalculator.rebuild(stockId);
+
+        assertThat(adjFactor("2026-07-29"))
+                .as("1/0.8580 — 주식수 배수 0.756을 읽으면 1.3221이 나온다")
+                .isEqualByComparingTo(BigDecimal.ONE.divide(new BigDecimal("0.8580"), 10, java.math.RoundingMode.HALF_UP));
+        assertThat(ledger.findApplicable(stockId)).singleElement()
+                .satisfies(e -> {
+                    assertThat(e.ratio()).as("주식수 소비자가 읽는 값").isEqualByComparingTo("0.7563532970");
+                    assertThat(e.priceMultiple()).isEqualByComparingTo("0.8580");
+                });
+    }
+
+    @Test
+    @DisplayName("가격 배수가 비면 주식수 배수로 짓는다 — 분할·병합은 V60 앞과 한 칸도 안 바뀐다")
+    void missingPriceRatioFallsBackToRatio() {
+        writer.write(stockId, List.of(bar("2026-01-02", "1000"), bar("2026-02-02", "200")));
+        approveDisclosed("2026-02-02", CorporateAction.Type.SPLIT, "5");
+
+        recalculator.rebuild(stockId);
+
+        assertThat(adjFactor("2026-01-02")).isEqualByComparingTo("0.2");
+        assertThat(ledger.findApplicable(stockId)).singleElement()
+                .satisfies(e -> assertThat(e.priceRatio()).isNull());
+    }
+
+    @Test
     @DisplayName("몇 번을 다시 지어도 같고, 두 번째부터는 아무 행도 건드리지 않는다")
     void rebuildIsIdempotent() {
         writer.write(stockId, List.of(bar("2026-01-02", "1000"), bar("2026-02-02", "200")));

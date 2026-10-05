@@ -127,9 +127,20 @@ public class CorporateActionLedger {
      * <p>{@code listingDate}는 재구축이 쓰지 않는다 — 계수는 <b>권리락</b>에서 점프하기 때문이다.
      * 그것을 여기 싣는 이유는 지표 계층이 권리락과 신주상장 <b>사이</b>를 알아야 하기 때문이고
      * (ADR-0051), 그 구간에서만 상장주식수가 종가와 짝이 안 맞는다. 모르면 null이다.
+     *
+     * <p>{@code ratio}는 <b>주식수 배수</b>이고 {@code priceRatio}는 <b>가격 배수</b>다(V60). 분할·병합·무상증자는
+     * 둘이 같아 {@code priceRatio}가 null이고, 분사처럼 갈리는 사건만 채운다. 주식수를 읽는 쪽(지표의
+     * {@code sharesOn}·기업행위 배수 · 거버넌스 · 주식수 기저)은 {@code ratio}를, 가격을 다시 짓는 재구축은
+     * {@link #priceMultiple()}을 읽는다 — 섞으면 분사 모체의 주식수가 가격 배수만큼 늘거나 가격에
+     * 주식수 배수가 실린다(ADR-0117 §규칙의 그 결함).
      */
     public record Entry(long id, LocalDate effectiveDate, LocalDate listingDate,
-                        CorporateAction.Type type, BigDecimal ratio) {
+                        CorporateAction.Type type, BigDecimal ratio, BigDecimal priceRatio) {
+
+        /** 재구축이 쓰는 가격 배수. 따로 적힌 것이 없으면 주식수 배수와 같다. */
+        public BigDecimal priceMultiple() {
+            return priceRatio != null ? priceRatio : ratio;
+        }
     }
 
     /**
@@ -346,7 +357,7 @@ public class CorporateActionLedger {
     @Transactional(readOnly = true)
     public List<Entry> findApplicable(long stockId) {
         return jdbcTemplate.query("""
-                SELECT id, effective_date, listing_date, type, ratio FROM corporate_action
+                SELECT id, effective_date, listing_date, type, ratio, price_ratio FROM corporate_action
                 WHERE stock_id = ? AND status IN (?, ?) AND type <> ?
                 ORDER BY effective_date
                 """,
@@ -355,7 +366,8 @@ public class CorporateActionLedger {
                         rs.getObject("effective_date", LocalDate.class),
                         rs.getObject("listing_date", LocalDate.class),
                         CorporateAction.Type.valueOf(rs.getString("type")),
-                        rs.getBigDecimal("ratio")),
+                        rs.getBigDecimal("ratio"),
+                        rs.getBigDecimal("price_ratio")),
                 stockId, CorporateActionStatus.APPROVED.name(),
                 CorporateActionStatus.APPLIED.name(), CorporateAction.Type.UNKNOWN.name());
     }
