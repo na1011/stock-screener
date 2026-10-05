@@ -1,0 +1,28 @@
+RXO	RXO	{"bars":{"RXO":[{"c":19.06,"t":"2022-11-01T04:00:00Z",},{"c":16.1,"t":"2022-11-02T04:00:00Z",}]},"next_page_token":null}
+RXO	RXO.WI	{"bars":{"RXO.WI":[{"c":21,"t":"2022-10-27T04:00:00Z",},{"c":21.5,"t":"2022-10-28T04:00:00Z",},{"c":21,"t":"2022-10-31T04:00:00Z",}]},"next_page_token":null}
+RXO	RXOWI	{"bars":{},"next_page_token":null}
+RXO	RXO WI	ERR	400 Bad Request: "{"message":"invalid symbol: RXO WI"}<EOL>"
+FDXF	FDXF	{"bars":{"FDXF":[{"c":149.53,"t":"2026-06-01T04:00:00Z",},{"c":153.34,"t":"2026-06-02T04:00:00Z",}]},"next_page_token":null}
+FDXF	FDXF.WI	{"bars":{"FDXF.WI":[{"c":151,"t":"2026-05-27T04:00:00Z",},{"c":185,"t":"2026-05-28T04:00:00Z",},{"c":160.37,"t":"2026-05-29T04:00:00Z",}]},"next_page_token":null}
+FDXF	FDXFWI	{"bars":{},"next_page_token":null}
+FDXF	FDXF WI	ERR	400 Bad Request: "{"message":"invalid symbol: FDXF WI"}<EOL>"
+Q	Q	{"bars":{"Q":[{"c":97,"t":"2025-11-03T05:00:00Z",},{"c":100.91,"t":"2025-11-04T05:00:00Z",}]},"next_page_token":null}
+Q	Q.WI	{"bars":{"Q.WI":[{"c":95.3,"t":"2025-10-27T04:00:00Z",},{"c":94.74,"t":"2025-10-28T04:00:00Z",},{"c":94.04,"t":"2025-10-29T04:00:00Z",},{"c":93.4,"t":"2025-10-30T04:00:00Z",},{"c":95,"t":"2025-10-31T04:00:00Z",}]},"next_page_token":null}
+Q	QWI	{"bars":{},"next_page_token":null}
+Q	Q WI	ERR	400 Bad Request: "{"message":"invalid symbol: Q WI"}<EOL>"
+HONA	HONA	{"bars":{"HONA":[{"c":200,"t":"2026-06-15T04:00:00Z",},{"c":269.95,"t":"2026-06-16T04:00:00Z",},{"c":269.95,"t":"2026-06-17T04:00:00Z",},{"c":267.8,"t":"2026-06-18T04:00:00Z",},{"c":261.03,"t":"2026-06-22T04:00:00Z",},{"c":245,"t":"2026-06-23T04:00:00Z",},{"c":245,"t":"2026-06-24T04:00:00Z",},{"c":221.01,"t":"2026-06-25T04:00:00Z",},{"c":221.01,"t":"2026-06-26T04:00:00Z",},{"c":220.19,"t":"2026-06-29T04:00:00Z",},{"c":221.08,"t":"2026-06-30T04:00:00Z",}]},"next_page_token":null}
+HONA	HONA.WI	{"bars":{},"next_page_token":null}
+HONA	HONAWI	{"bars":{},"next_page_token":null}
+HONA	HONA WI	ERR	400 Bad Request: "{"message":"invalid symbol: HONA WI"}<EOL>"
+VYLR	VYLR	{"bars":{"VYLR":[{"c":68.26,"t":"2026-10-01T04:00:00Z",},{"c":67.26,"t":"2026-10-02T04:00:00Z",}]},"next_page_token":null}
+VYLR	VYLR.WI	{"bars":{},"next_page_token":null}
+VYLR	VYLRWI	{"bars":{},"next_page_token":null}
+VYLR	VYLR WI	ERR	400 Bad Request: "{"message":"invalid symbol: VYLR WI"}<EOL>"
+MBGL	MBGL	{"bars":{"MBGL":[{"c":21.19,"t":"2026-07-01T04:00:00Z",},{"c":19.8,"t":"2026-07-02T04:00:00Z",},{"c":19.26,"t":"2026-07-06T04:00:00Z",},{"c":21.2,"t":"2026-07-07T04:00:00Z",},{"c":21.5,"t":"2026-07-08T04:00:00Z",}]},"next_page_token":null}
+MBGL	MBGL.WI	{"bars":{"MBGL.WI":[{"c":20.995,"t":"2026-06-26T04:00:00Z",},{"c":23,"t":"2026-06-29T04:00:00Z",},{"c":22.05,"t":"2026-06-30T04:00:00Z",}]},"next_page_token":null}
+MBGL	MBGLWI	{"bars":{},"next_page_token":null}
+MBGL	MBGL WI	ERR	400 Bad Request: "{"message":"invalid symbol: MBGL WI"}<EOL>"
+RAL	RAL	{"bars":{"RAL":[{"c":48.49,"t":"2025-06-30T04:00:00Z",},{"c":47.52,"t":"2025-07-01T04:00:00Z",},{"c":45.75,"t":"2025-07-02T04:00:00Z",}]},"next_page_token":null}
+RAL	RAL.WI	{"bars":{"RAL.WI":[{"c":47.5,"t":"2025-06-25T04:00:00Z",},{"c":48,"t":"2025-06-26T04:00:00Z",},{"c":52.98,"t":"2025-06-27T04:00:00Z",}]},"next_page_token":null}
+RAL	RALWI	{"bars":{},"next_page_token":null}
+RAL	RAL WI	ERR	400 Bad Request: "{"message":"invalid symbol: RAL WI"}<EOL>"
