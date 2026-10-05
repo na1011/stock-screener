@@ -139,7 +139,7 @@ psql -d stock_screener -At -c "SELECT CASE
   - 재구축: 계수가 바뀐 51종목 = 오늘 원장 행이 바뀐 54종목 − DNTH · CNH(미표시라 계수 없음) − SYRE(가격 배수 1). 그 밖 0.
   - 화해: 원본층 쓴 1,448,247 · 지운 16,990(= 드라이런의 DNTH 9,560 + CNH 7,430 — 미표시) · 파생층 272거래일 쓴 550,323. 미해석 넷은 화해 전에 판정돼 지표를 잃지 않았다.
   - 값이 드라이런과 같다: CTVA 10-01 `RETURN_52W` +19.52 · DD +32.58 · 사건일 HON −3.54% · 000880 +20.91% · DD +1.89% · FDX +0.37% · 207940 +7.85%(최신일 지표 92 → 147행) · HON 06-29 `MARKET_CAP` 144.3 → 72.2B.
-  - 프리셋 결과(3기준일 · 저장 화면 포함): 포함 뒤집힘 0 · 새로 듦 6 · 빠짐 1 · 점수만 14. 전부 모체이거나 그 순위가 민 종목이다 — SCHW 07-01 `PER_PCTL` 0.3011(고친 HON PER 17.13이 그 아래로 들어옴) · DGX 10-02 MOMENTUM 탈락(`EXCESS_RETURN_52W_PCTL`).
+  - 프리셋 결과(3기준일 · 저장 화면 포함 · 전후 TSV는 `~/Library/Application Support/stock-screener/baselines/preset-results-20261005-{before,after}-spinoff.tsv`): 포함 뒤집힘 0 · 새로 듦 6 · 빠짐 1 · 점수만 14. 전부 모체이거나 그 순위가 민 종목이다 — SCHW 07-01 `PER_PCTL` 0.3011(고친 HON PER 17.13이 그 아래로 들어옴) · DGX 10-02 MOMENTUM 탈락(`EXCESS_RETURN_52W_PCTL`).
   - 다음 수집이 판정을 안 덮는다 — 같은 날짜에 사람이 판정한 행이 있으면 `record`가 IGNORED로 돌려준다(코드로 읽음 · 드라이런 둘째 수집이 HON `REJECTED` · FTV/DELL `APPLIED`에서 그 갈래를 탔다).
 - **콜이 는다**: 기업행위 수집 대상이 미국 +208 · KOSPI +36 · KOSDAQ +89이고, 분사마다 자식 봉 콜이 붙는다.
 - **되돌리려면**:
