@@ -330,10 +330,11 @@ class CorporateActionCollectorTest {
                 .withTickerBars("OPENL", List.of(bar("2025-11-24", "1.08", null)))
                 .withTickerBars("OPENZ", List.of(bar("2025-11-21", "0.60", null), bar("2025-11-24", "0.6506", null)));
         CorporateAction notice = CorporateAction.unresolvedSpinOff(LocalDate.parse("2025-11-18"), null, BigDecimal.ONE,
+                // CUSIP을 실은 채로 둔다 — 셋을 이은 29자가 varchar(16)을 넘어 수집이 롤백된 적이 있다(V62).
                 new Distribution(List.of(
-                        new Distribution.Child("OPENW", null, new BigDecimal("0.033333333")),
-                        new Distribution.Child("OPENL", null, new BigDecimal("0.033333333")),
-                        new Distribution.Child("OPENZ", null, new BigDecimal("0.033333333"))),
+                        new Distribution.Child("OPENW", "683712111", new BigDecimal("0.033333333")),
+                        new Distribution.Child("OPENL", "683712129", new BigDecimal("0.033333333")),
+                        new Distribution.Child("OPENZ", "683712137", new BigDecimal("0.033333333"))),
                         LocalDate.parse("2025-11-18"), null, null), "spin_off");
 
         usCollector(new FakeCorporateActionDataSource("US").with(open, notice), prices)
