@@ -114,3 +114,11 @@
 - 결정 12(새): ADR-0171에 premise 「OBSERVED 편출 중 DB 시총 > 남은 편입 하위 5% × 1.5」(설명 갈래: CIK 교대 · 마지막 봉 · ADR 배수).
 - 결정 11: `r0_diff.py`에 숨은 상장 갈래 + 「경계 밀림 수 = 경계 위 숨은 진입 수」 + A만 로그 대조군.
 - RA1에 「마지막 세션 제외가 `dropCikDuplicates` 앞」 시험.
+
+## A2 드라이런 결과 (2026-10-06 01시 · 사본 `_sc_a` · jar a = main(A만) · h = `wt-a2`(A + A2) · 결과 `dry-a2/`)
+- **RA1 단위 · 변이체**: 새 시험 15건 + 기존(`UsMarketCap` · `SecTickerCikCache` · `AlpacaUniverse`) 합 56건 초록 · 「마지막 세션 무시」 변이 → `dropsHiddenListingWithoutTheLastSessionBar` · `staleHiddenTickerDoesNotTakeTheCikSeat` 붉음 · 「최댓값」 변이 → `lastSessionIsTheMajorityDate` 붉음(쟀다 · 되돌림).
+- **RA0(10-02 재생 · 같은 사본에서 jar만 바꿈)** — `숨은 상장: 풀=17 마지막 세션=2026-10-02 받음=[DDS(inactive · NYSE), ET(inactive · NYSE), GWH, SUNC, USAC(inactive · NYSE), WALD(inactive · NASDAQ)] 마지막 세션 봉 없음=[AIXC(09-29), DBRG(09-29), DOMO(09-23), FGNX(09-25), FSEA(09-30), HWH(봉없음), NSTS(09-30), TBPH(09-23), VRME(09-30)] 단건 없음=[] 거래소 밖=[DRCT:OTC, GETY:OTC]` · 명부 차이(`r2_diff.py`): **+ DDS·ET(라 숨은 상장) · − OLLI·SHC(다 경계 — 숨은 상장이 밀어냄) · 미귀속 0**.
+  - 사전등록 대비: SIC 축 넷(COLA·COLAR·COLAU·TWOD) ✓ · DDT·WALDW 이름 축 ✓(이름 제외 399 → 407 · DDT는 혼성 목록에) · 단건 DDS·ET NYSE ✓ · DRCT·GETY 관측값 OTC → 제외 · GWH·SUNC·USAC NYSE · WALD NASDAQ → 경계 아래 후보 · **불일치 6: FGNXP·JSPRW·KLXER·NTRBW·PDYNW·RILYN은 「마지막 세션 봉 없음」으로 등록했는데 그보다 앞의 이름 축(저장 이름의 우선·워런트·권리·노트)에서 빠졌다** — 결과(제외)는 같고 갈래만 다르다(등록 때 저장 이름을 안 열었다).
+  - 단건 콜 8(생존자 중 이름 축 통과분) · DBRG가 생존 축 대조군으로 빠짐.
+- **분석기 대조군**: `r2_diff.py`(숨은 상장 갈래 + 「경계 밀림 수 ≤ 숨은 진입 수」)를 A의 R0 로그(`r0-a` · `r0-c`)에 다시 → 미귀속 0 유지.
+- RA2(9날짜) 진행 중.
