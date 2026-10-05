@@ -78,7 +78,7 @@ class FullStatementRefillJobTest {
         jdbcTemplate.update("DELETE FROM financial_column_absence");
         jdbcTemplate.update("DELETE FROM financial_statement");
         jdbcTemplate.update("DELETE FROM universe_membership");
-        jdbcTemplate.update("DELETE FROM stock WHERE ticker IN ('005930', '035420')");
+        jdbcTemplate.update("DELETE FROM stock WHERE ticker IN ('005930', '035420', 'ZZFSR')");
     }
 
     @Test
@@ -172,6 +172,30 @@ class FullStatementRefillJobTest {
     }
 
     @Test
+    @DisplayName("전 종목 실행은 전체재무제표 소스가 없는 시장을 안 부른다 — 09-14 두 실행이 미국 1,000을 NOT_FOUND로 남겼다")
+    void defaultTargetsSkipMarketsWithoutTheSource() {
+        long usMember = insertUsMember("ZZFSR", "Probe Inc.");
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of(), false, true);
+
+        assertThat(fakeSource.fetchedStockIds).containsExactly(memberId);
+        assertThat(failuresOf(usMember)).as("빼야 할 종목이 실패로 쌓이면 진짜 실패가 묻힌다").isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT target_count FROM batch_execution WHERE job_name = ? ORDER BY id DESC LIMIT 1",
+                Integer.class, FullStatementRefillJob.JOB_NAME)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("티커로 고른 종목은 소스가 없어도 조용히 안 뺀다 — 빼면 「돌렸는데 안 바뀌었다」가 된다")
+    void namedTickerWithoutTheSourceStillFails() {
+        long usMember = insertUsMember("ZZFSR", "Probe Inc.");
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 5, List.of("ZZFSR"), true, false);
+
+        assertThat(failuresOf(usMember)).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("티커가 하나도 매칭되지 않으면 조용히 성공하지 않고 실패한다")
     void failsLoudlyWhenNoTickerMatches() {
         assertThatThrownBy(() -> job.run(
@@ -180,6 +204,24 @@ class FullStatementRefillJobTest {
                 .hasMessageContaining("999999");
 
         assertThat(fakeSource.fetchedStockIds).isEmpty();
+    }
+
+    /** 활성 미국 유니버스의 편입 종목. 시험 DB에서 {@code US_TOP1000}이 활성이고 미국이 수집 시장이다. */
+    private long insertUsMember(String ticker, String name) {
+        long id = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('US', ?, ?) RETURNING id
+                """, Long.class, ticker, name);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from)
+                VALUES ('US_TOP1000', ?, ?)
+                """, id, AS_OF.minusYears(1));
+        return id;
+    }
+
+    private long failuresOf(long stockId) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM batch_execution_failure WHERE stock_id = ?", Long.class, stockId);
+        return count == null ? 0 : count;
     }
 
     private long insertStock(String ticker, String name) {
