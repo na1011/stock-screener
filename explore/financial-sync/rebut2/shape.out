@@ -1,0 +1,13 @@
+('10-Q', 'inline', '2026', 'cf-none') 78 ['ABT', 'AEP', 'AMKR', 'AVTR', 'AXS', 'AXTA']
+('10-K/A', 'inline', '2020-25', 'cf-dei') 3 ['GRMN', 'INCY', 'WES']
+('10-Q/A', 'inline', '2020-25', 'cf-dei') 2 ['DUK', 'KO']
+('10-Q/A', 'inline', '2026', 'cf-none') 1 ['BE']
+('10-K', 'inline', '2020-25', 'cf-dei') 1 ['GEHC']
+('10-K', 'inline', '2026', 'cf-none') 1 ['CLX']
+('10-K', 'inline', '2020-25', 'cf-none') 1 ['SPGI']
+ctrl ('10-K', 'inline', '2020-25') 453
+ctrl ('10-K', 'inline', '2026') 79
+ctrl ('10-K/A', 'inline', '2020-25') 4
+ctrl ('10-Q', 'inline', '2026') 88
+ctrl ('10-Q/A', 'inline', '2020-25') 5
+ctrl ('10-Q/A', 'inline', '2026') 0

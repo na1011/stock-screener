@@ -1,0 +1,18 @@
+1326160 0001326160-26-000040 incf=False keys=478 dupkeys=82 dupdiff=2 samedec_diff=0
+    Goodwill USD None 2026-06-30 inst= [('19010000000', -6), ('19000000000.0', -8)] most_precise= 19010000000 cf= None
+    Goodwill USD None 2025-12-31 inst= [('19010000000', -6), ('19000000000.0', -8)] most_precise= 19010000000 cf= None
+1800 0001628280-26-050134 incf=False keys=311 dupkeys=24 dupdiff=2 samedec_diff=0
+    Goodwill USD None 2026-06-30 inst= [('35244000000', -6), ('35200000000', -8)] most_precise= 35244000000 cf= None
+    Goodwill USD None 2025-12-31 inst= [('24035000000', -6), ('24000000000.0', -8)] most_precise= 24035000000 cf= None
+19617 0001628280-26-054343 incf=True keys=788 dupkeys=142 dupdiff=0 samedec_diff=0
+21076 0000021076-26-000034 incf=False keys=598 dupkeys=86 dupdiff=0 samedec_diff=0
+21344 0001628280-26-050503 incf=False keys=620 dupkeys=123 dupdiff=0 samedec_diff=0
+320193 0000320193-26-000020 incf=True keys=283 dupkeys=51 dupdiff=0 samedec_diff=0
+753308 0000753308-26-000060 incf=False keys=434 dupkeys=59 dupdiff=0 samedec_diff=0
+789019 0001193125-26-323660 incf=True keys=601 dupkeys=82 dupdiff=3 samedec_diff=0
+    UnrecognizedTaxBenefits USD None 2026-06-30 inst= [('25800000000', -8), ('25831000000', -6)] most_precise= 25831000000 cf= [Decimal('25831000000')]
+    UnrecognizedTaxBenefits USD None 2025-06-30 inst= [('24700000000', -8), ('24729000000', -6), ('24729000000', -6)] most_precise= 24729000000 cf= [Decimal('24729000000')]
+    UnrecognizedTaxBenefits USD None 2024-06-30 inst= [('22800000000', -8), ('22760000000', -6), ('22760000000', -6)] most_precise= 22760000000 cf= [Decimal('22760000000')]
+320193 0000320193-26-000020 reader 79 cf 79 same 79 diff 0 only_reader 0 only_cf 0
+19617 0001628280-26-054343 reader 65 cf 65 same 65 diff 0 only_reader 0 only_cf 0
+789019 0001193125-26-323660 reader 68 cf 68 same 68 diff 0 only_reader 0 only_cf 0
