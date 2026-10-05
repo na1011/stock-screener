@@ -49,7 +49,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </pre>
  *
  * <p><b>공시 보충(ADR-0173 · RS1)</b>: {@code Q4V_REPLAY_SUPPLEMENT_DIR}를 주면 같은 날 모은 보충 원자료로
- * {@link SecFilingSupplement}를 태우고 그 판 보호를 Writer에 넘긴다({@link SupplementReplay}). 그 캐시의 companyfacts는
+ * {@link SecFilingSupplement}를 태우고 그 판 보호를 Writer에 넘긴다({@link SupplementReplay}) — <b>그 변수는 필수다</b>(경로 또는
+ * {@code off}). {@code Q4V_REPLAY_SUPPLEMENT_STORE=db}면 사본의 저장 표를 원장으로 쓴다(V64가 그 사본에 있어야 한다). 그 캐시의 companyfacts는
  * {@code <dir>/companyfacts}이므로 {@code Q4V_REPLAY_CACHE}도 거기를 준다. {@code Q4V_REPLAY_INSERT_EARLIER=false}면
  * 정기 경로와 같은 플래그(이른 판 끔)로 돈다 — 안 주면 예전처럼 켠다.
  *
@@ -74,8 +75,7 @@ class EarlierVintageReplayHarnessTest {
         int from = Integer.parseInt(Optional.ofNullable(System.getenv("Q4V_REPLAY_FROM")).orElse("2015"));
         String user = Optional.ofNullable(System.getenv("DB_USERNAME")).orElse(System.getProperty("user.name"));
         boolean insertEarlier = !"false".equals(System.getenv("Q4V_REPLAY_INSERT_EARLIER"));
-        Optional<SupplementReplay> supplement = Optional.ofNullable(System.getenv("Q4V_REPLAY_SUPPLEMENT_DIR"))
-                .map(Path::of).map(SupplementReplay::start);
+        Optional<Path> supplementDir = SupplementReplay.requireSetting("Q4V_REPLAY_SUPPLEMENT_DIR");
 
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:postgresql://localhost:5432/" + db, user, "");
@@ -83,6 +83,12 @@ class EarlierVintageReplayHarnessTest {
             assertThat(connection.getCatalog()).startsWith("stock_screener_q4v").isEqualTo(db);
         }
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        // db면 사본의 sec_filing_supplement(V64)를 원장으로 쓴다 — 두 번째 재생이 저장분 경로(jsonb → 고르기 → 합치기)를
+        // 탄다. 문장마다 커밋되므로 Writer와의 트랜잭션 맞물림은 SecFilingSupplementWriteContractTest(RS2)가 묻는다.
+        boolean dbLedger = "db".equals(System.getenv("Q4V_REPLAY_SUPPLEMENT_STORE"));
+        Optional<SupplementReplay> supplement = supplementDir.map(dir -> dbLedger
+                ? SupplementReplay.start(dir, new SecFilingSupplementStore(jdbc))
+                : SupplementReplay.start(dir));
         FinancialWriter writer = new FinancialWriter(jdbc, new StoredIndicatorInvalidationPort(jdbc));
         TransactionTemplate tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
 
@@ -114,7 +120,7 @@ class EarlierVintageReplayHarnessTest {
                         SecFilingSupplement.Outcome outcome = supplement.get().supplement()
                                 .supplement(root.path("cik").asLong(), (ObjectNode) facts, from, ticker);
                         guard = new FinancialWriter.VintageGuard(outcome.unconfirmedVintages(),
-                                outcome.recoveredVintages(), outcome.vintagesUncertain());
+                                outcome.supplementedVintages(), outcome.vintagesUncertain());
                     }
                     reports = SecEdgarFacts.build(facts, from).reports();
                 } catch (Exception e) {
@@ -200,6 +206,7 @@ class EarlierVintageReplayHarnessTest {
         failures.forEach(f -> System.out.println("Q4V_REPLAY 실패 " + f));
         supplement.ifPresent(r -> System.out.println("Q4V_REPLAY 보충 원자료 없음(404)=" + r.missing()));
         supplement.ifPresent(SupplementReplay::close);
+        supplement.ifPresent(r -> assertThat(r.missing()).as("보충 원자료 없음(404) — 수집을 다시 한다").isZero());
         assertThat(failures).isEmpty();
     }
 

@@ -491,16 +491,16 @@ class FinancialWriterTest {
         }
 
         @Test
-        @DisplayName("실패였다가 회복한 공시의 판은 정기 경로에서도 이른 판으로 넣는다 — 실패가 먼저 온 순서가 그 판을 영영 빼지 않게")
-        void insertsTheRecoveredVintageEvenWithoutTheManualSwitch() {
-            // 보충이 실패한 동안 늦은 판만 들어왔다.
+        @DisplayName("보충으로 실은 공시의 판은 정기 경로에서도 이른 판으로 넣는다 — 늦은 판이 먼저 들어와 있어도 원장의 판 집합에 닿게")
+        void insertsTheSupplementedVintageEvenWithoutTheManualSwitch() {
+            // 집계 출처가 원본 공시를 빠뜨린 동안 늦은 판만 들어왔다.
             writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
             List<RawFinancialReport> both = List.of(report(2025, "FY", "2026-03-15", "1000"),
                     report(2025, "FY", "2026-04-20", "950"));
 
             FinancialWriter.Outcome skipped = recordingWriter.writeDetailed(stockId, both,
                     WriteMode.FILL_MISSING, true, false);
-            assertThat(skipped.insertedEarlier()).as("대조 — 회복 표지가 없으면 정기 경로는 건너뛴다").isZero();
+            assertThat(skipped.insertedEarlier()).as("대조 — 보충 표지가 없으면 정기 경로는 건너뛴다").isZero();
 
             FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId, both,
                     WriteMode.FILL_MISSING, true, false,
@@ -513,8 +513,8 @@ class FinancialWriterTest {
         }
 
         @Test
-        @DisplayName("회복 표지는 그 공시일의 판만 연다 — 같은 종목의 다른 이른 판은 여전히 정기 경로가 건너뛴다")
-        void recoveredOpensOnlyThatPublicationDate() {
+        @DisplayName("보충 표지는 그 공시일의 판만 연다 — 같은 종목의 다른 이른 판은 여전히 정기 경로가 건너뛴다")
+        void supplementedOpensOnlyThatPublicationDate() {
             writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950"),
                     report(2024, "FY", "2025-04-20", "900")));
 

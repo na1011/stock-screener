@@ -60,6 +60,8 @@ class SecFilingSupplementWriteContractTest {
     private MockWebServer server;
     private final Map<String, MockResponse> responses = new ConcurrentHashMap<>();
     private FinancialCollector collector;
+    /** 보충이 없는 옛 수집기 — 배포 전 운영이 쌓은 상태를 만든다. */
+    private FinancialCollector beforeSupplement;
     private SecurityRef fix;
 
     @BeforeEach
@@ -86,6 +88,10 @@ class SecFilingSupplementWriteContractTest {
         DataSourceRegistry registry = new DataSourceRegistry(List.of(), List.of(adapter), List.of(), List.of(),
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
         collector = new FinancialCollector(registry, writer, absenceWriter);
+        SecEdgarFinancialAdapter oldAdapter = new SecEdgarFinancialAdapter(factory, properties, limiter,
+                new SecTickerCikCache(factory, properties, limiter, base, 1), base);
+        beforeSupplement = new FinancialCollector(new DataSourceRegistry(List.of(), List.of(oldAdapter), List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of()), writer, absenceWriter);
         long stockId = jdbcTemplate.queryForObject(
                 "INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'FIX', '픽스처') RETURNING id", Long.class);
         fix = new SecurityRef(stockId, "US", "FIX");
@@ -119,9 +125,22 @@ class SecFilingSupplementWriteContractTest {
         ok(instancePath(X), instance(X_FILED));
         collect();
 
-        assertThat(rows()).as("회복 — X의 판이 이른 판으로 들어오고 번호가 공시일 순이다")
+        assertThat(rows()).as("성공 — X의 판이 이른 판으로 들어오고 번호가 공시일 순이다")
                 .containsExactly(X_FILED + "|950|false|0", Y_FILED + "|1000|true|1");
         assertThat(storeStatus(X)).isEqualTo("OK");
+    }
+
+    @Test
+    @DisplayName("배포 시점처럼 늦은 판이 이미 있어도 보충의 첫 성공이 원본 판을 넣는다 — 실패 먼저와 같은 판 집합")
+    void firstSuccessOverAPreloadedLaterVintage() throws Exception {
+        companyFacts(false);
+        beforeSupplement.collectDetailed(fix, FROM, FinancialWriter.WriteMode.FILL_MISSING, false);
+        assertThat(rows()).as("보충 없는 옛 코드가 쌓은 상태 — Y의 판만").containsExactly(Y_FILED + "|1000|true|0");
+
+        ok(instancePath(X), instance(X_FILED));
+        collect();
+
+        assertThat(rows()).containsExactly(X_FILED + "|950|false|0", Y_FILED + "|1000|true|1");
     }
 
     @Test
@@ -163,6 +182,21 @@ class SecFilingSupplementWriteContractTest {
         collect();
 
         assertThat(rows()).as("X의 판이 남는다").containsExactly(X_FILED + "|950|false|0", Y_FILED + "|1000|true|1");
+    }
+
+    @Test
+    @DisplayName("공시 목록을 못 받으면 회수를 멈추고 그 사실을 실행 결과로 낸다 — SUCCESS 뒤에 숨지 않게(실행 기록의 회수정지)")
+    void listFailureStopsRetractionAndSaysSo() throws Exception {
+        companyFacts(true);
+        collect();
+        status("/submissions/CIK0000000001.json", 503);
+        companyFacts(false);
+
+        FinancialWriter.Outcome outcome = collector.collectDetailed(fix, FROM, FinancialWriter.WriteMode.FILL_MISSING, false);
+
+        assertThat(outcome.retractionStopped()).isTrue();
+        assertThat(rows()).as("X의 판을 지운다는 근거가 없다 — 회수가 멈춘다")
+                .containsExactly(X_FILED + "|950|false|0", Y_FILED + "|1000|true|1");
     }
 
     private void collect() throws Exception {

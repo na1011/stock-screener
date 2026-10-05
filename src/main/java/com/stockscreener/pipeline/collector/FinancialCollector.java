@@ -84,7 +84,7 @@ public class FinancialCollector {
         // 그 뜻을 지킨다(쓰기가 던지면 부재 행이 안 남는다).
         FinancialWriter.Outcome outcome = writer.writeDetailed(security.stockId(), reports, mode,
                 fetch.completeVintageHistory(), insertEarlierVintages,
-                new FinancialWriter.VintageGuard(fetch.unconfirmedVintages(), fetch.recoveredVintages(),
+                new FinancialWriter.VintageGuard(fetch.unconfirmedVintages(), fetch.supplementedVintages(),
                         fetch.vintagesUncertain()));
         absenceWriter.write(security.stockId(), source.sourceName(), fetch.absences(),
                 LocalDate.now());

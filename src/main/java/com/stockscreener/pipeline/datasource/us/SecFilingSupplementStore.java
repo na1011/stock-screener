@@ -59,7 +59,7 @@ public class SecFilingSupplementStore implements SupplementLedger {
     }
 
     @Override
-    public Map<String, Row> find(Collection<String> accessions) {
+    public Map<String, Row> find(long cik, Collection<String> accessions) {
         if (accessions.isEmpty()) {
             return Map.of();
         }
@@ -68,17 +68,17 @@ public class SecFilingSupplementStore implements SupplementLedger {
         jdbcTemplate.query("""
                 SELECT accession, cik, form, filed, reader_version, status, fiscal_year_focus, fiscal_period_focus,
                        facts::text AS facts, failure_kind
-                FROM sec_filing_supplement WHERE accession IN (%s)
+                FROM sec_filing_supplement WHERE cik = ? AND accession IN (%s)
                 """.formatted(placeholders), rs -> {
             String json = rs.getString("facts");
             List<XbrlInstanceReader.RawFact> facts = json == null ? List.of()
                     : MAPPER.readValue(json, FACTS).stream().map(StoredFact::toRaw).toList();
             Row row = new Row(rs.getString("accession"), rs.getLong("cik"), rs.getString("form"),
                     rs.getObject("filed", LocalDate.class), rs.getInt("reader_version"),
-                    "OK".equals(rs.getString("status")), rs.getString("fiscal_year_focus"),
+                    !"FAILED".equals(rs.getString("status")), rs.getString("fiscal_year_focus"),
                     rs.getString("fiscal_period_focus"), facts, rs.getString("failure_kind"));
             out.put(row.accession(), row);
-        }, accessions.toArray());
+        }, java.util.stream.Stream.concat(java.util.stream.Stream.of((Object) cik), accessions.stream()).toArray());
         return out;
     }
 
@@ -93,8 +93,8 @@ public class SecFilingSupplementStore implements SupplementLedger {
                      fiscal_year_focus, fiscal_period_focus, us_gaap_facts, facts, failure_kind, failure_message,
                      fetched_at)
                 VALUES (?, ?, ?, ?, ?, 'OK', ?, ?, ?, ?, ?, ?, CAST(? AS jsonb), NULL, NULL, now())
-                ON CONFLICT (accession) DO UPDATE SET
-                    cik = EXCLUDED.cik, form = EXCLUDED.form, filed = EXCLUDED.filed,
+                ON CONFLICT (accession, cik) DO UPDATE SET
+                    form = EXCLUDED.form, filed = EXCLUDED.filed,
                     reader_version = EXCLUDED.reader_version, status = 'OK', file_name = EXCLUDED.file_name,
                     file_size = EXCLUDED.file_size, document_type = EXCLUDED.document_type,
                     fiscal_year_focus = EXCLUDED.fiscal_year_focus, fiscal_period_focus = EXCLUDED.fiscal_period_focus,
@@ -112,8 +112,8 @@ public class SecFilingSupplementStore implements SupplementLedger {
                     (accession, cik, form, filed, reader_version, status, facts, failure_kind, failure_message,
                      fetched_at)
                 VALUES (?, ?, ?, ?, ?, 'FAILED', NULL, ?, ?, now())
-                ON CONFLICT (accession) DO UPDATE SET
-                    cik = EXCLUDED.cik, form = EXCLUDED.form, filed = EXCLUDED.filed,
+                ON CONFLICT (accession, cik) DO UPDATE SET
+                    form = EXCLUDED.form, filed = EXCLUDED.filed,
                     reader_version = EXCLUDED.reader_version, status = 'FAILED', file_name = NULL, file_size = NULL,
                     document_type = NULL, fiscal_year_focus = NULL, fiscal_period_focus = NULL, us_gaap_facts = NULL,
                     facts = NULL, failure_kind = EXCLUDED.failure_kind, failure_message = EXCLUDED.failure_message,
@@ -122,12 +122,40 @@ public class SecFilingSupplementStore implements SupplementLedger {
                 XbrlInstanceReader.READER_VERSION, failureKind, message);
     }
 
+    @Override
+    public void saveNoXbrl(SecFilingClient.Filing filing, long cik) {
+        jdbcTemplate.update("""
+                INSERT INTO sec_filing_supplement
+                    (accession, cik, form, filed, reader_version, status, facts, failure_kind, failure_message, fetched_at)
+                VALUES (?, ?, ?, ?, ?, 'NO_XBRL', '[]'::jsonb, NULL, NULL, now())
+                ON CONFLICT (accession, cik) DO UPDATE SET
+                    form = EXCLUDED.form, filed = EXCLUDED.filed, reader_version = EXCLUDED.reader_version,
+                    status = 'NO_XBRL', file_name = NULL, file_size = NULL, document_type = NULL,
+                    fiscal_year_focus = NULL, fiscal_period_focus = NULL, us_gaap_facts = 0, facts = '[]'::jsonb,
+                    failure_kind = NULL, failure_message = NULL, fetched_at = now()
+                """, filing.accession(), cik, filing.form(), Date.valueOf(filing.filed()),
+                XbrlInstanceReader.READER_VERSION);
+    }
+
+    @Override
+    public Map<String, Row> failedRowsOf(long cik) {
+        List<String> accessions = jdbcTemplate.queryForList(
+                "SELECT accession FROM sec_filing_supplement WHERE cik = ? AND status = 'FAILED'", String.class, cik);
+        return find(cik, accessions);
+    }
+
+    @Override
+    public void delete(String accession, long cik) {
+        jdbcTemplate.update("DELETE FROM sec_filing_supplement WHERE accession = ? AND cik = ?", accession, cik);
+    }
+
     /**
      * 한 실행이 보충에서 무엇을 했는가 — FR 실행 기록(note)의 「보충」 칸.
      *
      * @param fetched     이 실행이 받아 저장한 공시
      * @param failed      이 실행이 실패로 남긴 공시
-     * @param outstanding 지금 실패로 남아 있는 공시 전부(이 실행 밖 포함) — 관문이 0을 단언한다(ADR-0173)
+     * @param outstanding 지금 판정이 남은 공시 전부(이 실행 밖 포함) — 실패 행과, 읽기 규칙의 판이 지금보다 낮은 행(새 규칙으로
+     *                    다시 읽지 못해 옛 판을 쓰는 것). 관문이 구성원마다 판정한다(ADR-0173)
      */
     public record Tally(long fetched, long failed, long outstanding) {
 
@@ -143,18 +171,18 @@ public class SecFilingSupplementStore implements SupplementLedger {
 
     public Tally tallySince(Instant since) {
         return jdbcTemplate.queryForObject("""
-                SELECT count(*) FILTER (WHERE fetched_at >= ? AND status = 'OK'),
+                SELECT count(*) FILTER (WHERE fetched_at >= ? AND status <> 'FAILED'),
                        count(*) FILTER (WHERE fetched_at >= ? AND status = 'FAILED'),
-                       count(*) FILTER (WHERE status = 'FAILED')
+                       count(*) FILTER (WHERE status = 'FAILED' OR reader_version < ?)
                 FROM sec_filing_supplement
                 """, (rs, rowNum) -> new Tally(rs.getLong(1), rs.getLong(2), rs.getLong(3)),
-                Timestamp.from(since), Timestamp.from(since));
+                Timestamp.from(since), Timestamp.from(since), XbrlInstanceReader.READER_VERSION);
     }
 
     @Override
     public Map<String, Row> okRowsOf(long cik) {
         List<String> accessions = jdbcTemplate.queryForList(
                 "SELECT accession FROM sec_filing_supplement WHERE cik = ? AND status = 'OK'", String.class, cik);
-        return find(accessions);
+        return find(cik, accessions);
     }
 }

@@ -145,16 +145,30 @@ class SecFilingSupplementTest {
     }
 
     @Test
-    @DisplayName("결정적 실패(404)는 그 공시의 제출일을 지키고, 읽기 규칙이 같으면 다시 받지 않는다")
-    void deterministicFailureProtectsItsDateWithoutRefetching() throws Exception {
+    @DisplayName("받지 못한 것(404)은 그 날짜를 지키고 다음 실행이 다시 받는다 — 일시 404 한 번을 영구로 만들지 않는다")
+    void notFoundProtectsItsDateAndIsRetriedNextRun() throws Exception {
         statusOf.put(indexPath(MISSING), 404);
 
         SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
 
         assertThat(outcome.failed()).containsExactly(MISSING);
         assertThat(outcome.unconfirmedVintages()).containsExactly(MISSING_FILED);
-        assertThat(outcome.vintagesUncertain()).isFalse();
+        assertThat(outcome.supplementedVintages()).isEmpty();
         assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+
+        paths.clear();
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(paths).contains(indexPath(MISSING));
+    }
+
+    @Test
+    @DisplayName("받은 파일을 해석하지 못한 것은 읽기 규칙이 같은 동안 다시 받지 않고 그 날짜만 지킨다")
+    void unreadableIsNotRefetchedWhileTheReaderIsTheSame() throws Exception {
+        bodyOf.put(indexPath(MISSING), index("a_htm.xml", "b.xml", "FilingSummary.xml"));
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(outcome.failed()).containsExactly(MISSING);
+        assertThat(failureKind(MISSING)).isEqualTo(SecFilingSupplement.UNREADABLE);
 
         paths.clear();
         SecFilingSupplement.Outcome again = supplement.supplement(CIK, companyFacts(), FROM, "t");
@@ -163,8 +177,8 @@ class SecFilingSupplementTest {
     }
 
     @Test
-    @DisplayName("일시 실패(5xx)는 두 번 다시 묻고, 다음 실행이 성공하면 회복으로 알린다")
-    void transientFailureIsRetriedAndRecoveryIsReported() throws Exception {
+    @DisplayName("일시 실패(5xx)는 두 번 다시 묻고, 다음 실행이 성공하면 그 판을 연다")
+    void transientFailureIsRetriedAndTheVintageOpensOnSuccess() throws Exception {
         statusOf.put(indexPath(MISSING), 503);
 
         SecFilingSupplement.Outcome failed = supplement.supplement(CIK, companyFacts(), FROM, "t");
@@ -175,9 +189,56 @@ class SecFilingSupplementTest {
         statusOf.remove(indexPath(MISSING));
         SecFilingSupplement.Outcome recovered = supplement.supplement(CIK, companyFacts(), FROM, "t");
 
-        assertThat(recovered.recoveredVintages()).containsExactly(MISSING_FILED);
+        assertThat(recovered.supplementedVintages()).containsExactly(MISSING_FILED);
         assertThat(recovered.unconfirmedVintages()).isEmpty();
         assertThat(storedStatus(MISSING)).isEqualTo("OK");
+    }
+
+    @Test
+    @DisplayName("보충한 공시의 판은 이력과 무관하게 매번 연다 — 첫 성공도 저장분도 같다(순서 무관)")
+    void supplementedVintageOpensEveryRunWithoutHistory() throws Exception {
+        SecFilingSupplement.Outcome first = supplement.supplement(CIK, companyFacts(), FROM, "t");
+        SecFilingSupplement.Outcome second = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(first.supplementedVintages()).containsExactly(MISSING_FILED);
+        assertThat(second.supplementedVintages()).containsExactly(MISSING_FILED);
+    }
+
+    @Test
+    @DisplayName("폴더에 XBRL 산출물이 없으면 실패가 아니다 — 원장의 「XBRL 없음」으로 남기고 날짜를 안 지킨다")
+    void noXbrlArtifactsIsALedgerFactNotAFailure() throws Exception {
+        bodyOf.put(indexPath(MISSING), index("0000001800-26-000077.txt", "abt-6k.htm", "FilingSummary.xml"));
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.failed()).isEmpty();
+        assertThat(outcome.unconfirmedVintages()).isEmpty();
+        assertThat(outcome.supplementedVintages()).as("더한 것이 없으면 열 것이 없다").isEmpty();
+        assertThat(storedStatus(MISSING)).isEqualTo("NO_XBRL");
+    }
+
+    @Test
+    @DisplayName("스키마·링크베이스는 있는데 인스턴스가 없으면 해석 실패다 — XBRL은 있는데 못 고른 것이다")
+    void artifactsWithoutAnInstanceIsUnreadable() throws Exception {
+        bodyOf.put(indexPath(MISSING), index("abt-20260630.xsd", "abt-20260630_lab.xml", "FilingSummary.xml"));
+
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(failureKind(MISSING)).isEqualTo(SecFilingSupplement.UNREADABLE);
+    }
+
+    @Test
+    @DisplayName("실패였다가 companyfacts가 그 공시를 실으면 실패 행을 걷고 그 판을 연다 — 실패 동안 늦은 판이 들어왔어도 같은 상태로")
+    void failedFilingLaterCoveredByCompanyFactsIsSettled() throws Exception {
+        statusOf.put(indexPath(MISSING), 503);
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFactsCovering(MISSING), FROM, "t");
+
+        assertThat(outcome.supplementedVintages()).containsExactly(MISSING_FILED);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM sec_filing_supplement WHERE accession = ?",
+                Long.class, MISSING)).isZero();
     }
 
     @Test
@@ -189,18 +250,7 @@ class SecFilingSupplementTest {
         SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
 
         assertThat(outcome.failed()).containsExactly(MISSING);
-        assertThat(jdbcTemplate.queryForObject("SELECT failure_kind FROM sec_filing_supplement WHERE accession = ?",
-                String.class, MISSING)).isEqualTo("MALFORMED");
-    }
-
-    @Test
-    @DisplayName("인스턴스 후보가 하나로 안 갈리면 그 공시의 실패다 — 고를 근거가 없다")
-    void ambiguousInstanceIsAFailure() throws Exception {
-        bodyOf.put(indexPath(MISSING), index("a_htm.xml", "b.xml", "FilingSummary.xml"));
-
-        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
-
-        assertThat(outcome.failed()).containsExactly(MISSING);
+        assertThat(failureKind(MISSING)).isEqualTo(SecFilingSupplement.UNREADABLE);
     }
 
     @Test
@@ -245,6 +295,20 @@ class SecFilingSupplementTest {
                 {"us-gaap":{"Revenues":{"units":{"USD":[
                   {"start":"2026-01-01","end":"2026-03-31","val":10000000000,"accn":"%s","fy":2026,"fp":"Q1","form":"10-Q","filed":"2026-05-01"}]}}}}"""
                 .formatted(COVERED));
+    }
+
+    /** companyfacts가 그 공시의 us-gaap까지 싣는 모양 — 나중에 SEC가 채운 경우. */
+    private ObjectNode companyFactsCovering(String accession) throws Exception {
+        return (ObjectNode) MAPPER.readTree("""
+                {"us-gaap":{"Revenues":{"units":{"USD":[
+                  {"start":"2026-01-01","end":"2026-03-31","val":10000000000,"accn":"%s","fy":2026,"fp":"Q1","form":"10-Q","filed":"2026-05-01"},
+                  {"start":"2026-04-01","end":"2026-06-30","val":11138000000,"accn":"%s","fy":2026,"fp":"Q2","form":"10-Q","filed":"%s"}]}}}}"""
+                .formatted(COVERED, accession, MISSING_FILED));
+    }
+
+    private String failureKind(String accession) {
+        return jdbcTemplate.queryForObject("SELECT failure_kind FROM sec_filing_supplement WHERE accession = ?",
+                String.class, accession);
     }
 
     private static List<String> accessionsIn(ObjectNode facts) {

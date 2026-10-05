@@ -94,13 +94,12 @@ class XbrlInstanceReaderTest {
     }
 
     @Test
-    @DisplayName("이 CIK의 컨텍스트가 하나도 없으면 다른 회사의 파일이다 — 그 공시의 보충 실패로 남는다")
-    void rejectsAnotherCompanysFile() throws Exception {
+    @DisplayName("이 CIK의 컨텍스트가 없으면 다른 등록자의 팩트만 실은 공시다 — 실패가 아니라 팩트 0(SWX FY2016 실측 모양)")
+    void anotherRegistrantsFactsOnlyMeansNoFactsForThisCik() throws Exception {
         XbrlInstanceReader.Instance instance = read(320193);
+        assertThat(instance.ownContexts()).isZero();
         assertThat(instance.facts()).isEmpty();
-        assertThatThrownBy(() -> XbrlInstanceReader.requireIdentity(instance, "10-Q", "t"))
-                .isInstanceOf(DataSourceException.class)
-                .hasMessageContaining("다른 회사");
+        assertThatCode(() -> XbrlInstanceReader.requireIdentity(instance, "10-Q", "t")).doesNotThrowAnyException();
     }
 
     @Test

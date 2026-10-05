@@ -164,16 +164,16 @@ final class XbrlInstanceReader {
     }
 
     /**
-     * 잘못 고른 파일을 막는다 — 그 공시의 인스턴스가 아니면 그 공시의 보충 실패로 남긴다.
-     *
-     * <p>둘을 다 본다: 이 CIK의 컨텍스트가 하나라도 있는가 · 문서 종류({@code dei:DocumentType})가 그 공시의 폼인가.
+     * 잘못 고른 파일을 막는다 — 문서 종류({@code dei:DocumentType})가 그 공시의 폼이 아니면 그 공시의 해석 실패다.
      * 정정본은 문서 종류에 {@code /A}를 붙이기도 안 붙이기도 해서(정정 여부는 {@code dei:AmendmentFlag}가 따로 말한다)
      * {@code /A}를 떼고 맞춘다.
+     *
+     * <p><b>이 CIK의 컨텍스트가 0인 것은 실패가 아니다.</b> 공시 폴더는 접수번호마다 하나라 남의 파일이 섞이지 않고, 0이면 그
+     * 공시가 <b>다른 등록자의 팩트만</b> 싣는다는 원장의 사실이다 — 2026-10-06 실측: SWX(Southwest Gas Holdings · CIK
+     * 1692115) FY2016 10-K의 컨텍스트 704개가 전부 전신 Southwest Gas Corp(CIK 92416)의 것이었고, companyfacts도 그 팩트를
+     * SWX에 안 싣는다. 그때 읽은 팩트는 0이다(남의 CIK 컨텍스트는 {@link #read}가 건너뛴다).
      */
     static void requireIdentity(Instance instance, String form, String context) throws DataSourceException {
-        if (instance.ownContexts() == 0) {
-            throw malformed("이 공시의 CIK 컨텍스트가 하나도 없다 — 다른 회사의 파일을 골랐다. " + context, null);
-        }
         if (instance.documentType() == null || !baseForm(instance.documentType()).equals(baseForm(form))) {
             throw malformed("문서 종류 %s가 공시 폼 %s가 아니다 — 다른 문서를 골랐다. %s"
                     .formatted(instance.documentType(), form, context), null);

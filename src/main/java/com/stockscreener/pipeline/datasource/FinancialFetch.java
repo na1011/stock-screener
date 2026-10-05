@@ -19,13 +19,13 @@ import java.util.Set;
  */
 public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
                              boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
-                             Set<LocalDate> recoveredVintages, boolean vintagesUncertain) {
+                             Set<LocalDate> supplementedVintages, boolean vintagesUncertain) {
 
     public FinancialFetch {
         reports = reports == null ? List.of() : List.copyOf(reports);
         absences = absences == null ? List.of() : List.copyOf(absences);
         unconfirmedVintages = unconfirmedVintages == null ? Set.of() : Set.copyOf(unconfirmedVintages);
-        recoveredVintages = recoveredVintages == null ? Set.of() : Set.copyOf(recoveredVintages);
+        supplementedVintages = supplementedVintages == null ? Set.of() : Set.copyOf(supplementedVintages);
     }
 
     /** 판 이력의 빈칸을 모르는 소스용 — 아래 셋이 비어 있다. */
@@ -63,11 +63,12 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
     }
 
     /**
-     * <b>전에 못 실었다가 이번에 실은 공시의 제출일.</b> 그 사이 같은 라벨에 늦은 판이 들어왔으면 이 판은 「이른 판」이라
-     * 정기 경로가 건너뛴다 — 실패가 먼저 왔을 때만 그 판이 영영 빠진다. 저장 계층은 이 날짜의 판을 이른 판이어도 넣는다.
+     * <b>집계 출처가 빠뜨려 보충으로 실은 공시의 제출일.</b> 그 판은 원장이 처음부터 준 판이라, 같은 라벨에 늦은 판이 이미
+     * 있어도 저장 계층이 이른 판으로 넣는다 — 보충의 성공·실패 순서나 배포 시점의 저장 상태에 무관하게 같은 판 집합에 닿게
+     * (SEC 공시 보충 · ADR-0173).
      */
-    public Set<LocalDate> recoveredVintages() {
-        return recoveredVintages;
+    public Set<LocalDate> supplementedVintages() {
+        return supplementedVintages;
     }
 
     /**

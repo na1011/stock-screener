@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -28,7 +29,7 @@ final class SupplementReplay implements AutoCloseable {
     private final SecFilingSupplement supplement;
     private final AtomicInteger missing = new AtomicInteger();
 
-    private SupplementReplay(Path dir) throws IOException {
+    private SupplementReplay(Path dir, SupplementLedger ledger) throws IOException {
         Path root = dir.resolve("sec");
         server = new MockWebServer();
         server.setDispatcher(new Dispatcher() {
@@ -56,15 +57,34 @@ final class SupplementReplay implements AutoCloseable {
         String base = server.url("/").toString();
         SecFilingClient client = new SecFilingClient(new ExternalApiClientFactory(), properties,
                 new TokenBucketRateLimiter("sec-edgar", 0, 0), base, base);
-        supplement = new SecFilingSupplement(client, new MemorySupplementLedger());
+        supplement = new SecFilingSupplement(client, ledger);
     }
 
+    /** 메모리 원장 — 한 JVM 안에서만 「한 번 받은 것」을 기억한다. */
     static SupplementReplay start(Path dir) {
+        return start(dir, new MemorySupplementLedger());
+    }
+
+    /** 주어진 원장 — 사본 DB의 {@code sec_filing_supplement}를 주면 두 번째 재생이 저장분 경로를 탄다. */
+    static SupplementReplay start(Path dir, SupplementLedger ledger) {
         try {
-            return new SupplementReplay(dir);
+            return new SupplementReplay(dir, ledger);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * 도구의 보충 설정을 읽는다 — <b>명시가 필수다</b>. 보충은 어댑터 출력의 일부라(ADR-0173) 안 주면 운영과 다른 출력을
+     * 조용히 낸다. 관문 재고의 수를 그 출력으로 재면 재적재와 갈린다. 그래서 경로나 {@code off}를 반드시 받는다.
+     */
+    static Optional<Path> requireSetting(String variable) {
+        String value = System.getenv(variable);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(variable + "가 없다 — 보충 원자료 경로(SecFilingSupplementCacheLiveTest가 모은 것)나 "
+                    + "off를 준다. 안 주면 운영 어댑터와 다른 출력(보충 전)을 조용히 낸다(ADR-0173).");
+        }
+        return "off".equals(value) ? Optional.empty() : Optional.of(Path.of(value));
     }
 
     SecFilingSupplement supplement() {

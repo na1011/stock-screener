@@ -28,25 +28,32 @@ import java.util.Set;
  * 말하고({@code isXBRL}) companyfacts에 그 접수번호의 us-gaap 팩트가 하나도 없는 것. 창을 한 해 앞까지 넓히는 이유는
  * 회계연도를 여기서 다시 매기지 않기 위해서다 — 라벨 회계연도의 정본은 {@code SecEdgarFacts.build}이고 거기서 자른다.
  *
+ * <p><b>보충한 공시의 판은 이른 판이어도 넣는다</b>({@link Outcome#supplementedVintages()}). 그 판은 원장이 처음부터 준
+ * 판인데 companyfacts가 빠뜨렸을 뿐이다. 「이번 실행에서 실었는가」만 보고 이력을 안 보므로, 성공·실패의 순서와 배포
+ * 시점의 저장 상태(늦은 판이 이미 있음)에 무관하게 같은 판 집합에 닿는다. 이미 있는 판이면 저장 계층이 채우기만 한다.
+ *
  * <p><b>실패 계약</b> — 보충 하나가 실패해도 종목을 세우지 않는다(main보다 후퇴하지 않는다).
  * <ul>
  *   <li>출력 = companyfacts + 쓸 수 있는 저장분(옛 판 포함).</li>
- *   <li>실패한 공시의 제출일을 {@link Outcome#unconfirmedVintages()}로 낸다 — 저장 계층이 그 날짜의 판을 회수에서 지킨다.
- *       그 공시를 못 실은 출력으로 「여기 없는 공시일」을 판단하면 멀쩡한 판이 지워진다.</li>
- *   <li>실패를 저장 표에 {@code FAILED}로 남긴다. 나중에 성공하면 {@link Outcome#recoveredVintages()}로 내고, 저장 계층이
- *       그 공시일의 판을 이른 판이어도 넣는다 — 실패가 먼저 왔든 성공이 먼저 왔든 같은 상태에 닿게 한다.</li>
+ *   <li>실패한 공시의 제출일을 {@link Outcome#unconfirmedVintages()}로 낸다 — 저장 계층이 그 날짜의 판을 회수에서 지킨다.</li>
+ *   <li>실패를 저장 표에 {@code FAILED}로 남긴다. 관문이 그것을 구성원마다 판정한다.</li>
  *   <li>공시 목록을 못 받으면 대상을 모른다 — 저장분만 합치고 {@link Outcome#vintagesUncertain()}으로 그 종목의 회수를
  *       통째로 멈춘다.</li>
  * </ul>
  *
- * <p><b>결정적 실패(MALFORMED · NOT_FOUND)는 읽기 규칙의 판이 같으면 다시 받지 않는다</b> — 같은 파일 · 같은 규칙이면
- * 같은 결과다. 일시 실패는 다음 실행이 다시 받는다.
+ * <p><b>다시 받을 가치는 실패의 층이 정한다.</b> 받은 바이트를 해석하지 못한 것(인스턴스를 못 고름 · 읽기 · 신원 ·
+ * 같은 정밀도 충돌 — {@link #UNREADABLE})은 같은 파일 · 같은 규칙이면 같은 결과라 읽기 규칙의 판이 같은 동안 다시 받지
+ * 않는다. 받지 못한 것(404 · 5xx · 본문 이상 · 한도)은 다음 실행이 다시 받는다 — 일시 404 한 번을 영구로 만들지 않는다.
+ * 폴더에 XBRL 산출물이 하나도 없으면 원장이 「XBRL 없음」을 확정한 것이라 실패가 아니다 — 팩트 0으로 끝낸다.
  */
 @Component
 @ConditionalOnApiKey("sec-edgar")
 public class SecFilingSupplement implements FilingSupplementer {
 
     private static final Logger log = LoggerFactory.getLogger(SecFilingSupplement.class);
+
+    /** 받은 바이트를 해석하지 못했다 — 읽기 규칙의 판이 같은 동안 다시 받지 않는 유일한 실패 종류다. */
+    static final String UNREADABLE = "UNREADABLE";
 
     /**
      * 보충하는 폼. <b>{@code SecEdgarFacts}의 정기보고서 목록과 따로 둔다</b> — 그쪽에 8-K를 더하는 변경(8-K 수용)이 이
@@ -59,20 +66,28 @@ public class SecFilingSupplement implements FilingSupplementer {
     /**
      * 보충의 결과.
      *
-     * @param merged             트리에 더한 팩트 노드 수
-     * @param fromStore          저장분으로 합친 공시 수
-     * @param fetched            이번에 받아 합친 공시 수
-     * @param failed             이번 실행에서 보충에 실패한 접수번호
-     * @param unconfirmedVintages 실패한 공시의 제출일 — 회수에서 지킨다
-     * @param recoveredVintages  실패였다가 이번에 성공한 공시의 제출일 — 이른 판이어도 넣는다
-     * @param vintagesUncertain  공시 목록을 못 받아 대상을 모른다 — 그 종목의 회수를 멈춘다
+     * @param merged               트리에 더한 팩트 노드 수
+     * @param fromStore            저장분으로 합친 공시 수
+     * @param fetched              이번에 받은 공시 수(XBRL 없음 포함)
+     * @param staleReused          읽기 규칙이 바뀌었는데 다시 받지 못해 옛 판 저장분을 쓴 공시 수 — 관문의 미해결이다
+     * @param failed               이번 실행에서 보충에 실패한 접수번호
+     * @param unconfirmedVintages  실패한 공시의 제출일 — 회수에서 지킨다
+     * @param supplementedVintages 보충으로 실은 공시의 제출일과, 실패였다가 companyfacts가 실은 공시의 제출일 — 이른 판이어도 넣는다
+     * @param vintagesUncertain    공시 목록을 못 받아 대상을 모른다 — 그 종목의 회수를 멈춘다
      */
-    public record Outcome(int merged, int fromStore, int fetched, List<String> failed,
-                          Set<LocalDate> unconfirmedVintages, Set<LocalDate> recoveredVintages,
+    public record Outcome(int merged, int fromStore, int fetched, int staleReused, List<String> failed,
+                          Set<LocalDate> unconfirmedVintages, Set<LocalDate> supplementedVintages,
                           boolean vintagesUncertain) {
 
         static Outcome none() {
-            return new Outcome(0, 0, 0, List.of(), Set.of(), Set.of(), false);
+            return new Outcome(0, 0, 0, 0, List.of(), Set.of(), Set.of(), false);
+        }
+    }
+
+    /** 받은 바이트를 해석하지 못했다. */
+    static final class UnreadableFiling extends Exception {
+        UnreadableFiling(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 
@@ -100,19 +115,23 @@ public class SecFilingSupplement implements FilingSupplementer {
             return fromStoreOnly(cik, facts, since, context, e);
         }
 
-        List<SecFilingClient.Filing> targets = targets(filings, usGaapAccessions(facts));
+        Set<String> covered = usGaapAccessions(facts);
+        List<SecFilingClient.Filing> targets = targets(filings, covered);
+        Set<String> targetAccessions = new HashSet<>();
+        targets.forEach(t -> targetAccessions.add(t.accession()));
+        Set<LocalDate> supplemented = new LinkedHashSet<>();
+        settleFailuresNoLongerTargeted(cik, covered, targetAccessions, supplemented, context);
         if (targets.isEmpty()) {
-            return Outcome.none();
+            return new Outcome(0, 0, 0, 0, List.of(), Set.of(), Set.copyOf(supplemented), false);
         }
 
-        Map<String, SecFilingSupplementStore.Row> stored =
-                store.find(targets.stream().map(SecFilingClient.Filing::accession).toList());
+        Map<String, SecFilingSupplementStore.Row> stored = store.find(cik, targetAccessions);
         int merged = 0;
         int fromStore = 0;
         int fetched = 0;
+        int staleReused = 0;
         List<String> failed = new ArrayList<>();
         Set<LocalDate> unconfirmed = new LinkedHashSet<>();
-        Set<LocalDate> recovered = new LinkedHashSet<>();
         for (SecFilingClient.Filing filing : targets) {
             String filingContext = "%s %s %s %s".formatted(context, filing.accession(), filing.form(), filing.filed());
             SecFilingSupplementStore.Row row = stored.get(filing.accession());
@@ -122,59 +141,142 @@ public class SecFilingSupplement implements FilingSupplementer {
                 if (added != null) {
                     merged += added;
                     fromStore++;
+                    openIfAdded(supplemented, filing, added);
                     continue;
                 }
-            } else if (current && isDeterministic(row.failureKind())) {
-                // 같은 파일 · 같은 규칙이면 같은 실패다 — 다시 받지 않고 그 날짜만 지킨다.
+            } else if (current && UNREADABLE.equals(row.failureKind())) {
+                // 같은 파일 · 같은 규칙이면 같은 해석 실패다 — 다시 받지 않고 그 날짜만 지킨다.
                 unconfirmed.add(filing.filed());
                 failed.add(filing.accession());
                 continue;
             }
             try {
                 Fetched result = fetch(cik, filing, filingContext);
-                merged += XbrlInstanceReader.mergeInto(facts, result.chosen(), filing.accession(), filing.form(),
+                int added = XbrlInstanceReader.mergeInto(facts, result.chosen(), filing.accession(), filing.form(),
                         filing.filed(), result.instance().fiscalYearFocus(), result.instance().fiscalPeriodFocus());
-                store.saveOk(filing, cik, result.fileName(), result.fileSize(), result.instance());
-                fetched++;
-                if (row != null && !row.ok()) {
-                    recovered.add(filing.filed());
+                merged += added;
+                if (result.fileName() == null) {
+                    store.saveNoXbrl(filing, cik);
+                } else {
+                    store.saveOk(filing, cik, result.fileName(), result.fileSize(), result.instance());
                 }
+                fetched++;
+                openIfAdded(supplemented, filing, added);
+            } catch (UnreadableFiling e) {
+                failed.add(filing.accession());
+                unconfirmed.add(filing.filed());
+                log.warn("보충 공시를 해석하지 못했다 — 그 공시일의 판을 회수에서 지킨다. {} — {}", filingContext, e.getMessage());
+                store.saveFailed(filing, cik, UNREADABLE, e.getMessage());
             } catch (DataSourceException e) {
                 if (row != null && row.ok()) {
-                    // 판을 올려 다시 읽다 실패했다 — 옛 판의 저장분은 여전히 그 공시의 값이다. 그것을 쓰고 행은 그대로 둔다.
+                    // 판을 올려 다시 읽다 받지 못했다 — 옛 판의 저장분은 여전히 그 공시의 값이다. 그것을 쓰고 행은 그대로
+                    // 둔다(옛 판이 남아 관문의 미해결로 센다).
                     Integer added = mergeStored(facts, filing, row, filingContext);
                     if (added != null) {
                         merged += added;
                         fromStore++;
-                        log.warn("보충 공시를 새 읽기 규칙으로 다시 읽지 못해 옛 판의 저장분을 쓴다. {} — {}",
+                        staleReused++;
+                        openIfAdded(supplemented, filing, added);
+                        log.warn("보충 공시를 새 읽기 규칙으로 다시 받지 못해 옛 판의 저장분을 쓴다. {} — {}",
                                 filingContext, e.getMessage());
                         continue;
                     }
                 }
-                log.warn("보충 공시를 받지 못했다 — 그 공시일의 판을 회수에서 지킨다. {} 종류={} — {}",
+                failed.add(filing.accession());
+                unconfirmed.add(filing.filed());
+                log.warn("보충 공시를 받지 못했다 — 그 공시일의 판을 회수에서 지키고 다음 실행이 다시 받는다. {} 종류={} — {}",
                         filingContext, e.kind(), e.getMessage());
                 store.saveFailed(filing, cik, e.kind().name(), e.getMessage());
-                unconfirmed.add(filing.filed());
-                failed.add(filing.accession());
             }
         }
-        return new Outcome(merged, fromStore, fetched, List.copyOf(failed), Set.copyOf(unconfirmed),
-                Set.copyOf(recovered), false);
+        // 같은 날 실은 공시와 실패한 공시가 겹치면 보호가 이긴다 — 그 날짜의 판은 출력에 일부만 있다.
+        supplemented.removeAll(unconfirmed);
+        return new Outcome(merged, fromStore, fetched, staleReused, List.copyOf(failed), Set.copyOf(unconfirmed),
+                Set.copyOf(supplemented), false);
+    }
+
+    /**
+     * 그 공시가 트리에 무언가를 더했으면 그 제출일의 판을 이른 판이어도 넣게 연다. 더한 것이 없으면(XBRL 없음 · companyfacts가
+     * 이미 실은 dei뿐) 그 공시의 판은 출력에 없으므로 열 것이 없다 — 열면 같은 날 다른 공시의 판까지 이른 판으로 들인다.
+     */
+    private static void openIfAdded(Set<LocalDate> supplemented, SecFilingClient.Filing filing, int added) {
+        if (added > 0) {
+            supplemented.add(filing.filed());
+        }
+    }
+
+    /**
+     * 더는 보충 대상이 아닌 이 발행사의 실패 행을 정리한다 — 남겨 두면 관문의 「미해결」에 영원히 걸린다.
+     * <ul>
+     *   <li>companyfacts가 그 공시를 실었다 — 판은 이제 companyfacts가 낸다. 실패 동안 늦은 판이 먼저 들어왔을 수 있으므로
+     *       그 제출일을 이른 판이어도 넣게 넘긴다(보충 성공과 같은 상태에 닿게).</li>
+     *   <li>받는 창 밖으로 나갔거나 목록에서 사라졌다 — 출력에 안 쓰인다.</li>
+     * </ul>
+     */
+    private void settleFailuresNoLongerTargeted(long cik, Set<String> covered, Set<String> targetAccessions,
+                                                Set<LocalDate> supplemented, String context) {
+        for (SecFilingSupplementStore.Row row : store.failedRowsOf(cik).values()) {
+            if (targetAccessions.contains(row.accession())) {
+                continue;
+            }
+            if (covered.contains(row.accession())) {
+                supplemented.add(row.filed());
+            }
+            store.delete(row.accession(), cik);
+            log.info("더는 보충 대상이 아닌 실패 행을 정리한다. {} {} companyfacts가 실음={}",
+                    context, row.accession(), covered.contains(row.accession()));
+        }
     }
 
     private record Fetched(String fileName, long fileSize, XbrlInstanceReader.Instance instance,
                            List<XbrlInstanceReader.Fact> chosen) {
+
+        static Fetched noXbrl() {
+            return new Fetched(null, 0, new XbrlInstanceReader.Instance(null, null, null, 0, List.of()), List.of());
+        }
     }
 
-    private Fetched fetch(long cik, SecFilingClient.Filing filing, String context) throws DataSourceException {
-        String name = client.instanceName(cik, filing.accession());
+    /**
+     * 받기(폴더 · 인스턴스)와 해석(고르기 · 읽기 · 신원 · 정밀도)을 가른다 — 앞은 {@link DataSourceException}, 뒤는
+     * {@link UnreadableFiling}이다.
+     */
+    private Fetched fetch(long cik, SecFilingClient.Filing filing, String context)
+            throws DataSourceException, UnreadableFiling {
+        List<String> names = client.folder(cik, filing.accession());
+        String name = pickInstance(names, context);
+        if (name == null) {
+            log.info("원장이 XBRL이 있다고 했지만 공시 폴더에 XBRL 산출물이 없다 — 팩트 0으로 끝낸다. {}", context);
+            return Fetched.noXbrl();
+        }
         byte[] bytes = client.instance(cik, filing.accession(), name);
-        XbrlInstanceReader.Instance instance =
-                XbrlInstanceReader.read(new ByteArrayInputStream(bytes), cik, context + " " + name);
-        XbrlInstanceReader.requireIdentity(instance, filing.form(), context + " " + name);
-        // 고르기를 저장 전에 한 번 돌려 본다 — 같은 정밀도 충돌은 그 공시의 실패로 남긴다(저장분이 늘 고를 수 있게).
-        List<XbrlInstanceReader.Fact> chosen = XbrlInstanceReader.choose(instance.facts(), context + " " + name);
-        return new Fetched(name, bytes.length, instance, chosen);
+        try {
+            XbrlInstanceReader.Instance instance =
+                    XbrlInstanceReader.read(new ByteArrayInputStream(bytes), cik, context + " " + name);
+            XbrlInstanceReader.requireIdentity(instance, filing.form(), context + " " + name);
+            // 고르기를 저장 전에 한 번 돌려 본다 — 같은 정밀도 충돌은 그 공시의 실패로 남긴다(저장분이 늘 고를 수 있게).
+            List<XbrlInstanceReader.Fact> chosen = XbrlInstanceReader.choose(instance.facts(), context + " " + name);
+            return new Fetched(name, bytes.length, instance, chosen);
+        } catch (DataSourceException e) {
+            throw new UnreadableFiling(e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 공시 폴더에서 인스턴스를 고른다. {@code .xml} 중 {@code FilingSummary.xml}과 링크베이스를 뺀 것이 하나면 그것이다.
+     *
+     * @return 폴더에 XBRL 산출물(인스턴스 후보 · 스키마 · 링크베이스)이 하나도 없으면 {@code null} — 원장이 「XBRL 없음」을
+     *         확정한 것이다(2026-10-06: 대상 242 중 15 · 6-K 2017 14 · ESLT 2025-06)
+     * @throws UnreadableFiling 후보가 둘 이상이거나, 스키마·링크베이스는 있는데 인스턴스가 없다 — 고를 근거가 없다
+     */
+    static String pickInstance(List<String> names, String context) throws UnreadableFiling {
+        List<String> candidates = names.stream().filter(SecFilingClient::isInstanceCandidate).toList();
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+        if (candidates.isEmpty() && names.stream().noneMatch(SecFilingClient::isXbrlArtifact)) {
+            return null;
+        }
+        throw new UnreadableFiling("인스턴스 후보가 하나가 아니다: %s %s".formatted(candidates, context), null);
     }
 
     /** 저장분을 합친다. 고르기가 실패하면(고르기 규칙이 바뀐 뒤) {@code null} — 호출부가 다시 받는다. */
@@ -198,6 +300,7 @@ public class SecFilingSupplement implements FilingSupplementer {
         Set<String> covered = usGaapAccessions(facts);
         int merged = 0;
         int fromStore = 0;
+        Set<LocalDate> supplemented = new LinkedHashSet<>();
         for (SecFilingSupplementStore.Row row : store.okRowsOf(cik).values()) {
             if (row.filed().isBefore(since) || covered.contains(row.accession())) {
                 continue;
@@ -208,9 +311,10 @@ public class SecFilingSupplement implements FilingSupplementer {
             if (added != null) {
                 merged += added;
                 fromStore++;
+                openIfAdded(supplemented, filing, added);
             }
         }
-        return new Outcome(merged, fromStore, 0, List.of(), Set.of(), Set.of(), true);
+        return new Outcome(merged, fromStore, 0, 0, List.of(), Set.of(), Set.copyOf(supplemented), true);
     }
 
     /** 받는 창의 시작 — 라벨 창(회계연도 ≥ from)보다 한 해 앞이다. 자르는 것은 {@code SecEdgarFacts.build}다. */
@@ -227,11 +331,6 @@ public class SecFilingSupplement implements FilingSupplementer {
             }
         }
         return out;
-    }
-
-    static boolean isDeterministic(String failureKind) {
-        return DataSourceException.Kind.MALFORMED.name().equals(failureKind)
-                || DataSourceException.Kind.NOT_FOUND.name().equals(failureKind);
     }
 
     /** companyfacts가 us-gaap 팩트를 하나라도 싣는 접수번호. */

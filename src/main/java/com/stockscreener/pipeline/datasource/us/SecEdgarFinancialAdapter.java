@@ -138,9 +138,9 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context);
         if (supplement.fromStore() + supplement.fetched() > 0 || !supplement.failed().isEmpty()
                 || supplement.vintagesUncertain()) {
-            log.info("공시 보충. ticker={} 받음={} 저장분={} 더한 팩트={} 실패={} 목록 모름={}",
-                    security.ticker(), supplement.fetched(), supplement.fromStore(), supplement.merged(),
-                    supplement.failed(), supplement.vintagesUncertain());
+            log.info("공시 보충. ticker={} 받음={} 저장분={} 옛 판 저장분={} 더한 팩트={} 실패={} 목록 모름={}",
+                    security.ticker(), supplement.fetched(), supplement.fromStore(), supplement.staleReused(),
+                    supplement.merged(), supplement.failed(), supplement.vintagesUncertain());
         }
 
         SecEdgarFacts.Result result = SecEdgarFacts.build(tree, fromFiscalYear, usGate);
@@ -154,7 +154,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // 아니다」로 읽어도 되는 근거다(FinancialFetch 참조). companyfacts 혼자로는 그렇지 않다: 정기 공시 일부의
         // us-gaap를 통째로 안 싣는다(ADR-0173 — 83 CIK 표본 87건). 보충이 못 실은 공시는 그 제출일을 따로 넘겨 지킨다.
         return new FinancialFetch(result.reports(), result.absences(), true,
-                supplement.unconfirmedVintages(), supplement.recoveredVintages(), supplement.vintagesUncertain());
+                supplement.unconfirmedVintages(), supplement.supplementedVintages(), supplement.vintagesUncertain());
     }
 
     /**

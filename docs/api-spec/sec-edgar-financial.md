@@ -1,6 +1,7 @@
 # SEC EDGAR — 재무 계정 (companyfacts)
 
-미국 재무의 원자료. **XBRL로 제출된 전 기간의 팩트를 기업당 한 콜**로 준다.
+미국 재무의 원자료. **XBRL로 제출된 전 기간의 팩트를 기업당 한 콜**로 준다 — 다만 정기 공시 일부의 us-gaap를
+통째로 빠뜨리고, 그 몫은 공시 보충이 그 공시의 인스턴스로 채운다(아래 「공시 보충」 · ADR-0173).
 재무를 EDGAR로 정한 근거는 ADR-0086에, 이 축의 결정은 ADR-0089에 있다.
 
 - 어댑터는 `pipeline/datasource/us/SecEdgarFinancialAdapter`, 포트는 `FinancialDataSource`,
@@ -22,6 +23,10 @@
 ```
 GET https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json
 GET https://www.sec.gov/files/company_tickers_exchange.json
+GET https://data.sec.gov/submissions/CIK##########.json                      # 공시 보충(ADR-0173)
+GET https://data.sec.gov/submissions/CIK##########-submissions-NNN.json     # 그 페이지
+GET https://www.sec.gov/Archives/edgar/data/{cik}/{접수번호 숫자만}/index.json
+GET https://www.sec.gov/Archives/edgar/data/{cik}/{접수번호 숫자만}/{인스턴스}
 ```
 
 **호스트가 둘이다.** JSON API는 `data.sec.gov`, 매핑 파일과 벌크는 `www.sec.gov`다.
@@ -486,6 +491,53 @@ BRK.B 7·82 · AKTX 29·72·90 · V 2) **같은 `(start, end, accn)`에 값이 �
 `AKTX`·`TSM`·`HSBC`·`NVS`·`SAP`·`UL`·`BP`·`TM`·`SONY`·`PDD`·`NIO`·`ASML`·`BIDU`·`GHG`·`FENG`가
 전부 **404**다. **「개념이 없다」와 「그 발행사가 안 낸다」를 갈라 적는다** — 앞은 거짓이고
 뒤가 참이며, 커버리지가 1/16이라 **ADS 비율의 일반 해법이 못 된다.**
+
+### 공시 보충 — companyfacts가 빠뜨린 정기 공시 (2026-10-06 실측)
+
+**companyfacts는 판 이력 전부가 아니다.** 정기 공시 일부의 us-gaap 팩트를 통째로 안 싣는다 — 83 CIK 표본의
+창 안 87건(2026 인라인 10-Q 78 · 정정 6 · 원본 3). 원장은 그 공시의 XBRL 인스턴스로 같은 값을 준다.
+어댑터는 그 공시를 보충한다(`SecFilingSupplement` · ADR-0173). 탐침과 수집 도구는 `SecFilingSupplementCacheLiveTest`다.
+
+**submissions의 공시 목록** — `filings.recent`가 **열 배열** 표다(행이 아니다).
+- 열 16개: `accessionNumber` · `filingDate` · `reportDate` · `acceptanceDateTime` · `act` · `form` · `fileNumber` ·
+  `filmNumber` · `items` · `core_type` · `size` · `isXBRL` · `isInlineXBRL` · `isXBRLNumeric` · `primaryDocument` ·
+  `primaryDocDescription`.
+- `recent`는 최근 1,000건 남짓이다. 더 오래된 공시는 `filings.files`의 페이지가 같은 열 배열로 싣는다.
+  - 페이지 항목: `name`(`CIK##########-submissions-001.json`) · `filingCount` · `filingFrom` · `filingTo`.
+  - 83 CIK에 페이지 176장(BTU: 1,631건 · 1998-07-14~2017-07-13 한 장).
+- `isXBRL`은 0·1이다. **`isXBRL=1`이어도 폴더에 XBRL이 없을 수 있다** — 모집단 대상 547 중 37(6-K 2017-07~08 36 · ESLT
+  2025-06 1)은 폴더에 인스턴스도 스키마도 링크베이스도 없다(어댑터는 `NO_XBRL`로 남긴다). 6-K는 83 CIK 표본에서 154건
+  전부 0이었지만, 모집단에는 us-gaap 인스턴스를 실은 6-K가 있다(AER·BNT·DSGX·ICLR — 외국 발행사의 분기 라벨).
+
+**공시 폴더** — `index.json`은 `directory.item[]`(`name` · `type` · `size` · `last-modified`)다. **인스턴스는 `.xml` 중
+`FilingSummary.xml`과 링크베이스(`_cal`·`_def`·`_lab`·`_pre`·`_ref`)를 뺀 하나다.**
+- 인라인 공시: `…_htm.xml`(표본 인라인 16/16). 주 문서 이름과 다를 수 있다(`main-20220630x10q_htm.xml`).
+- 비인라인 공시: `btu-20180331.xml` 꼴.
+- 하나로 안 갈리면 고를 근거가 없다(그 공시의 실패).
+
+**인스턴스와 companyfacts의 대응** — companyfacts는 공시의 축 없는 us-gaap·dei 수치를 (개념 · 단위 · 기간)마다
+하나씩 싣는다. 대조 결과는 아래와 같다.
+- AAPL `0000320193-26-000020`: 283/283
+- JPM: 787/788
+- MSFT: 597/601
+
+어긋남 다섯은 전부 companyfacts 쪽 정규화이고 `SecEdgarColumn` 매핑 밖이다. 하나는 유량을 시점으로 실은 것이고, 하나는 액면가
+0.00000625를 6e-06으로 반올림한 것이다.
+- 중복 키는 companyfacts도 가장 정밀한 쪽을 고른다(MSFT `UnrecognizedTaxBenefits` 3/3).
+- 같은 정밀도에 다른 값은 인스턴스 8개에서 0건이었다.
+- 컨텍스트 식별자는 표본에서 전부 그 공시의 CIK였다. 공동 등록(CEG)은 법인 축 아래에 싣는다.
+- **예외 하나(모집단)**: SWX(Southwest Gas Holdings · CIK 1692115)의 FY2016 10-K는 컨텍스트 704개가 전부 전신
+  Southwest Gas Corp(CIK 92416)의 것이다 — 그 공시는 다른 등록자의 팩트만 싣고, companyfacts도 그 팩트를 SWX에 안 싣는다.
+  폴더는 접수번호마다 하나라 「다른 회사의 파일」이 섞일 수 없으므로, 이 CIK의 컨텍스트 0은 실패가 아니라 팩트 0이다.
+
+**재무가 축에만 실린 공시** — 아래 공시는 companyfacts도 축 없는 리더도 재무를 못 낸다. 값은 원장에 있다.
+- BTU 2018 10-Q: 재무가 `us-gaap:StatementScenarioAxis` 아래 443개, 축 없는 us-gaap 0.
+- CEG FY2021 10-K: 재무가 `dei:LegalEntityAxis` 아래 659개, 축 없는 수치 6.
+
+그 축을 받는 규칙은 별개 질문이다(`docs/reload-gate.md` 「축에만 실린 미국 재무」). GEHC FY2022 10-K(19KB)는 표지만 있다
+— us-gaap 팩트 자체가 0이다.
+
+**재지 않은 것** — 스로틀 응답 · `xbrl.idx`(같은 경로로 303을 돌려준다).
 
 ### 실패 계약
 

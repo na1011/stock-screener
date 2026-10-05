@@ -113,8 +113,12 @@ public class FinancialWriter {
      * 잡이 "무효화가 일어났는가"를 물을 수 없고, 그 질문에 답하지 못하면 <b>백필이 남았다는
      * 것을 아무도 모른다.</b>
      */
+    /**
+     * @param retractionStopped 판 이력의 빈칸을 몰라 이 종목의 회수를 멈췄다({@link VintageGuard#uncertain()}) — 실행 기록이
+     *                          그 수를 싣는다. 안 실으면 「새 공시를 못 받고 낡은 판도 못 걷은 종목」이 SUCCESS 뒤에 숨는다.
+     */
     public record Outcome(long changed, int inserted, int filled, int revised,
-                          int deferredRevisions, int corrected, int insertedEarlier) {
+                          int deferredRevisions, int corrected, int insertedEarlier, boolean retractionStopped) {
     }
 
     /**
@@ -191,18 +195,19 @@ public class FinancialWriter {
      * ({@code FinancialFetch}의 세 칸 · SEC 공시 보충 ADR-0173).
      *
      * @param unconfirmed 못 실은 공시의 제출일. 회수가 그 날짜의 행을 안 지운다.
-     * @param recovered   전에 못 실었다가 이번에 실은 공시의 제출일. 그 날짜의 판은 이른 판이어도 넣는다 — 실패가 먼저
-     *                    왔을 때만 그 판이 영영 빠지는 순서 의존을 막는다. 켜는 조건은 이른 판 삽입과 같다
-     *                    ({@link WriteMode#FILL_MISSING} · 판 이력 전부).
+     * @param supplemented 집계 출처가 빠뜨려 보충으로 실은 공시의 제출일. 그 날짜의 판은 이른 판이어도 넣는다 — 원장이
+     *                    처음부터 준 판이라, 보충의 순서나 배포 시점 저장 상태에 무관하게 같은 판 집합에 닿게. 켜는 조건은
+     *                    이른 판 삽입과 같다({@link WriteMode#FILL_MISSING} · 판 이력 전부). 정기 경로의 이른 판 예외는 이것
+     *                    하나다(ADR-0173 §결과).
      * @param uncertain   못 실은 공시가 무엇인지조차 모른다 — 그 종목의 회수를 통째로 멈춘다.
      */
-    public record VintageGuard(Set<LocalDate> unconfirmed, Set<LocalDate> recovered, boolean uncertain) {
+    public record VintageGuard(Set<LocalDate> unconfirmed, Set<LocalDate> supplemented, boolean uncertain) {
 
         public static final VintageGuard NONE = new VintageGuard(Set.of(), Set.of(), false);
 
         public VintageGuard {
             unconfirmed = unconfirmed == null ? Set.of() : Set.copyOf(unconfirmed);
-            recovered = recovered == null ? Set.of() : Set.copyOf(recovered);
+            supplemented = supplemented == null ? Set.of() : Set.copyOf(supplemented);
         }
     }
 
@@ -222,7 +227,7 @@ public class FinancialWriter {
         Set<Amount> managed = managedColumns(reports);
         for (RawFinancialReport report : reports) {
             boolean insertThisEarlier = insertEarlier
-                    || (earlierAllowed && guard.recovered().contains(report.publishedAt()));
+                    || (earlierAllowed && guard.supplemented().contains(report.publishedAt()));
             writeOne(stockId, report, mode, managed, insertThisEarlier, tally);
         }
         if (insertEarlier || tally.insertedEarlier > 0) {
@@ -246,7 +251,8 @@ public class FinancialWriter {
                     tally.insertedEarlier, tally.renumberedLabels);
         }
         return new Outcome(tally.changed(), tally.inserted, tally.filled, tally.revised,
-                tally.deferredRevisions, tally.corrected, tally.insertedEarlier);
+                tally.deferredRevisions, tally.corrected, tally.insertedEarlier,
+                guard.uncertain() && mode != WriteMode.APPEND_ONLY);
     }
 
     /**

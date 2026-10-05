@@ -12,12 +12,22 @@ import java.util.Map;
  */
 interface SupplementLedger {
 
-    Map<String, SecFilingSupplementStore.Row> find(Collection<String> accessions);
+    /** 이 발행사의 행 중 그 접수번호들. 키가 (접수번호, CIK)다 — 공동 등록 공시는 CIK마다 팩트가 다르다. */
+    Map<String, SecFilingSupplementStore.Row> find(long cik, Collection<String> accessions);
 
     void saveOk(SecFilingClient.Filing filing, long cik, String fileName, long fileSize,
                 XbrlInstanceReader.Instance instance);
 
     void saveFailed(SecFilingClient.Filing filing, long cik, String failureKind, String message);
+
+    /** 원장이 XBRL이 있다고 했는데 공시 폴더에 XBRL 산출물이 없다 — 실패가 아니라 원장의 사실이다. */
+    void saveNoXbrl(SecFilingClient.Filing filing, long cik);
+
+    /** 이 발행사의 실패 행 전부. */
+    Map<String, SecFilingSupplementStore.Row> failedRowsOf(long cik);
+
+    /** 더는 보충 대상이 아닌 실패 행을 걷는다. */
+    void delete(String accession, long cik);
 
     /** 이 발행사의 OK 행 전부 — 공시 목록을 못 받은 실행이 쓸 수 있는 저장분이다. */
     Map<String, SecFilingSupplementStore.Row> okRowsOf(long cik);

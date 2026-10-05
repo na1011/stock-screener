@@ -40,9 +40,9 @@ import java.util.stream.Stream;
  * <p><b>환경변수로 받는다</b> — Gradle의 {@code -D}는 데몬 JVM에만 붙어 포크된 테스트에 안 닿는다.
  *
  * <h2>공시 보충(ADR-0173)</h2>
- * <p>{@code REPLAY_SUPPLEMENT_DIR}를 주면 운영 코드({@link SecFilingSupplement})를 <b>한 줄도 안 바꾸고</b> 태운다 — 공시
+ * <p><b>{@code REPLAY_SUPPLEMENT_DIR}는 필수다</b>(경로 또는 {@code off}). 경로를 주면 운영 코드({@link SecFilingSupplement})를 <b>한 줄도 안 바꾸고</b> 태운다 — 공시
  * 목록·색인·인스턴스를 그 디렉터리({@link SecFilingSupplementCacheLiveTest}가 같은 날 모은 것)에서 로컬 서버로 내주고,
- * 원장은 메모리다. 안 주면 출력이 보충 전과 바이트까지 같다. {@code REPLAY_REMOVE_ACCNS=티커:접수번호,…}는 제거 대조다 —
+ * 원장은 메모리다. {@code off}면 출력이 보충 전과 바이트까지 같다 — 운영 어댑터의 출력이 아니므로 관문 재고의 수를 이것으로 재지 않는다. {@code REPLAY_REMOVE_ACCNS=티커:접수번호,…}는 제거 대조다 —
  * companyfacts에서 그 공시의 us-gaap를 지운 뒤 보충한다(보충이 원래 트리와 같은 출력을 내는가).
  */
 @EnabledIfEnvironmentVariable(named = "REPLAY_SWEEP_DIR", matches = ".+")
@@ -95,8 +95,8 @@ class SecEdgarFactsSweepTest {
         Files.createDirectories(out.toAbsolutePath().getParent());
 
         ObjectMapper mapper = new ObjectMapper();
-        Optional<SupplementReplay> supplement = Optional.ofNullable(System.getenv("REPLAY_SUPPLEMENT_DIR"))
-                .map(Path::of).map(SupplementReplay::start);
+        Optional<SupplementReplay> supplement =
+                SupplementReplay.requireSetting("REPLAY_SUPPLEMENT_DIR").map(SupplementReplay::start);
         java.util.Map<String, java.util.Set<String>> removals = new java.util.HashMap<>();
         Optional.ofNullable(System.getenv("REPLAY_REMOVE_ACCNS")).ifPresent(v -> {
             for (String pair : v.split(",")) {
@@ -200,6 +200,9 @@ class SecEdgarFactsSweepTest {
         }
         supplement.ifPresent(r -> System.out.println("SWEEP 보충 원자료 없음(404)=" + r.missing()));
         supplement.ifPresent(SupplementReplay::close);
+        // 수집이 빠뜨린 원자료가 있으면 그 공시는 「받지 못함」으로 바뀌어 출력이 운영과 갈린다 — 조용히 넘기지 않는다.
+        supplement.ifPresent(r -> org.assertj.core.api.Assertions.assertThat(r.missing())
+                .as("보충 원자료 없음(404) — 수집을 다시 한다").isZero());
         System.out.println("SWEEP 관문=" + usGate + " 파일=" + files.size() + " 종목=" + stocks + " 보고서=" + rows
                 + " 버린팩트=" + dropped + " 부재=" + absences + " 읽기실패=" + failed
                 + " out=" + out.toAbsolutePath());

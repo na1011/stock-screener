@@ -104,33 +104,41 @@ public class SecFilingClient {
         return out;
     }
 
-    /** 공시 폴더에서 인스턴스 파일 이름을 고른다. 하나로 안 갈리면 MALFORMED — 고를 근거가 없다. */
-    public String instanceName(long cik, String accession) throws DataSourceException {
+    /**
+     * 공시 폴더의 파일 이름 전부. <b>받기만 한다</b> — 어느 파일이 인스턴스인지는 해석이라 호출부
+     * ({@link SecFilingSupplement#pickInstance})가 정한다. 받기 실패(404·5xx·본문 이상)와 해석 실패는 다시 받을 가치가 다르다.
+     */
+    public List<String> folder(long cik, String accession) throws DataSourceException {
         String folder = accession.replace("-", "");
         String context = "index %d/%s".formatted(cik, folder);
         JsonNode index = json(() -> files.get().uri("/Archives/edgar/data/{cik}/{folder}/index.json", cik, folder)
                 .retrieve().toEntity(String.class), context);
-        List<String> candidates = new ArrayList<>();
+        List<String> names = new ArrayList<>();
         for (JsonNode item : index.path("directory").path("item")) {
-            String name = item.path("name").asString("");
-            if (isInstanceCandidate(name)) {
-                candidates.add(name);
-            }
+            names.add(item.path("name").asString(""));
         }
-        if (candidates.size() != 1) {
-            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
-                    "인스턴스 후보가 하나가 아니다: %s %s".formatted(candidates, context));
-        }
-        return candidates.get(0);
+        return names;
     }
 
     static boolean isInstanceCandidate(String name) {
         if (!name.endsWith(".xml") || name.equalsIgnoreCase("FilingSummary.xml")) {
             return false;
         }
+        return !isLinkbase(name);
+    }
+
+    /** XBRL 산출물인가 — 스키마({@code .xsd})나 링크베이스. 인스턴스가 없는데 이것이 있으면 XBRL은 있는데 못 고른 것이다. */
+    static boolean isXbrlArtifact(String name) {
+        return name.endsWith(".xsd") || isLinkbase(name);
+    }
+
+    private static boolean isLinkbase(String name) {
+        if (!name.endsWith(".xml")) {
+            return false;
+        }
         String base = name.substring(0, name.length() - 4);
-        return !(base.endsWith("_cal") || base.endsWith("_def") || base.endsWith("_lab")
-                || base.endsWith("_pre") || base.endsWith("_ref"));
+        return base.endsWith("_cal") || base.endsWith("_def") || base.endsWith("_lab")
+                || base.endsWith("_pre") || base.endsWith("_ref");
     }
 
     /** 인스턴스 파일의 바이트. */
