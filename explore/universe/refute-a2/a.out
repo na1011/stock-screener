@@ -1,0 +1,44 @@
+alpaca all 33550
+active NYSE/NASDAQ 8535
+stock 8504
+active not in stock 134
+new tickers whose CIK is already in stock under other ticker: 36
+   ('AMAC', 2110119, ['AMACU', 'AMACU'], 'AMR Resources Acquisition Corp.')
+   ('AMACW', 2110119, ['AMACU', 'AMACU'], 'AMR Resources Acquisition Corp.')
+   ('BRTM', 2131350, ['BRTMU', 'BRTMU'], 'B&R Technology Merger Corp.')
+   ('BRTMW', 2131350, ['BRTMU', 'BRTMU'], 'B&R Technology Merger Corp.')
+   ('CATL', 2104391, ['CATLU', 'CATLU'], 'Catalyst Acquisition Corp.')
+   ('CATLR', 2104391, ['CATLU', 'CATLU'], 'Catalyst Acquisition Corp.')
+   ('CHAD', 1805526, ['DFDVW', 'DFDVW', 'DFDV', 'DFDV'], 'DeFi Development Corp.')
+   ('ESYN', 1897245, ['HWH', 'HWH'], 'HWH International Inc.')
+   ('FFR', 1460702, ['AIXC', 'AIXC'], 'FF EAI Robotics Ecosystem Inc.')
+   ('FGC', 1591890, ['FGNX', 'FGNX', 'FGNXP', 'FGNXP'], 'FG Nexus Inc.')
+   ('FGCPP', 1591890, ['FGNX', 'FGNX', 'FGNXP', 'FGNXP'], 'FG Nexus Inc.')
+   ('FJDI', 2094712, ['FJDIU', 'FJDIU'], 'ARC Group Securities Acquisition I')
+   ('FJDIR', 2094712, ['FJDIU', 'FJDIU'], 'ARC Group Securities Acquisition I')
+   ('FJDIW', 2094712, ['FJDIU', 'FJDIU'], 'ARC Group Securities Acquisition I')
+   ('HUCK', 1505952, ['DOMO', 'DOMO'], 'Huckleberry.ai, Inc.')
+   ('IPHX', 2146310, ['IPHXU', 'IPHXU'], 'Inflection Point Acquisition Corp. VIII')
+   ('JONE', 2129056, ['JONEU', 'JONEU'], 'Jones Ventures INTL Acquisition1 Corp')
+   ('JONER', 2129056, ['JONEU', 'JONEU'], 'Jones Ventures INTL Acquisition1 Corp')
+   ('MTAK', 2133136, ['MTAKU', 'MTAKU'], 'Market Technology Acquisition Corp')
+   ('MTAKW', 2133136, ['MTAKU', 'MTAKU'], 'Market Technology Acquisition Corp')
+   ('NFEGP', 1749723, ['NFE', 'NFE'], 'New Fortress Energy Inc.')
+   ('NSAI', 2133719, ['NSAIU', 'NSAIU'], 'NorthStrive Acquisition Corp I.')
+   ('NSAIR', 2133719, ['NSAIU', 'NSAIU'], 'NorthStrive Acquisition Corp I.')
+   ('NSAIW', 2133719, ['NSAIU', 'NSAIU'], 'NorthStrive Acquisition Corp I.')
+   ('OCLT', 2137679, ['OCLTU', 'OCLTU'], 'OceanLight Acquisition Corp')
+   ('OCLTR', 2137679, ['OCLTU', 'OCLTU'], 'OceanLight Acquisition Corp')
+   ('OCLTW', 2137679, ['OCLTU', 'OCLTU'], 'OceanLight Acquisition Corp')
+   ('ONEN', 1846416, ['HVII', 'HVII', 'HVIIR', 'HVIIR', 'HVIIU', 'HVIIU'], 'ONE Nuclear Energy Inc.')
+   ('OPNW', 1104038, ['VRME', 'VRME'], 'VerifyMe, Inc.')
+   ('RNAQ', 2147219, ['RNAQU', 'RNAQU'], 'Rainier Acquisition Corp')
+   ('RNAQW', 2147219, ['RNAQU', 'RNAQU'], 'Rainier Acquisition Corp')
+   ('SVIA', 2076163, ['BRR', 'BRR'], 'Silvia, Inc.')
+   ('SVIAW', 2076163, ['BRR', 'BRR'], 'Silvia, Inc.')
+   ('TBCV', 2140030, ['TBCVU', 'TBCVU'], 'Thunder Bridge Capital Partners V, Ltd.')
+   ('XIII', 2114229, ['XIIIU', 'XIIIU'], 'Churchill Capital Corp XIII')
+   ('XIIIW', 2114229, ['XIIIU', 'XIIIU'], 'Churchill Capital Corp XIII')
+--- removed members (observed) not in alpaca active now:
+   ['CRNX', '2026-08-31', '2026-09-04', 'OBSERVED'] cik None sec_alts [] alpaca []
+   ['APGE', '2026-08-31', '2026-09-07', 'OBSERVED'] cik None sec_alts [] alpaca []
