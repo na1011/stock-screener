@@ -1,0 +1,19 @@
+SET
+       job_name        | triggered_by | status  | n | avg_s | max_s |   first    |    last    
+-----------------------+--------------+---------+---+-------+-------+------------+------------
+ full-statement-refill | GAP_FILL     | SUCCESS | 1 |   4.0 |   4.0 | 2026-10-03 | 2026-10-03
+ governance-derive     | GAP_FILL     | SUCCESS | 2 |   0.1 |   0.1 | 2026-09-26 | 2026-10-03
+ governance-load       | GAP_FILL     | SUCCESS | 2 |   5.6 |   6.8 | 2026-09-26 | 2026-10-03
+ initial-load          | GAP_FILL     | SUCCESS | 3 |   4.0 |   5.3 | 2026-09-26 | 2026-10-03
+(4개 행)
+
+ triggered_by |   ym    | n  | in_weekday_window 
+--------------+---------+----+-------------------
+ MANUAL       | 2026-08 | 11 |                 0
+ MANUAL       | 2026-09 |  1 |                 0
+(2개 행)
+
+ id | job_name | triggered_by | started_at | progress_at 
+----+----------+--------------+------------+-------------
+(0개 행)
+

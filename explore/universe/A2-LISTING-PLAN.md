@@ -121,4 +121,4 @@
   - 사전등록 대비: SIC 축 넷(COLA·COLAR·COLAU·TWOD) ✓ · DDT·WALDW 이름 축 ✓(이름 제외 399 → 407 · DDT는 혼성 목록에) · 단건 DDS·ET NYSE ✓ · DRCT·GETY 관측값 OTC → 제외 · GWH·SUNC·USAC NYSE · WALD NASDAQ → 경계 아래 후보 · **불일치 6: FGNXP·JSPRW·KLXER·NTRBW·PDYNW·RILYN은 「마지막 세션 봉 없음」으로 등록했는데 그보다 앞의 이름 축(저장 이름의 우선·워런트·권리·노트)에서 빠졌다** — 결과(제외)는 같고 갈래만 다르다(등록 때 저장 이름을 안 열었다).
   - 단건 콜 8(생존자 중 이름 축 통과분) · DBRG가 생존 축 대조군으로 빠짐.
 - **분석기 대조군**: `r2_diff.py`(숨은 상장 갈래 + 「경계 밀림 수 ≤ 숨은 진입 수」)를 A의 R0 로그(`r0-a` · `r0-c`)에 다시 → 미귀속 0 유지.
-- RA2(9날짜) 진행 중.
+- **RA2 — 9날짜 재생 통과**(`dry-a2/ra2-diff.txt` · `ra2-hidden.lines`): 날짜마다 c − a = **+ DDS·ET(라)** · a − c = 경계 둘(다 — KNF·SLGN / DOCN·OPEN / BKH·WH / NXST·PIPR ×2 / PSMT·VIRT / GLNG·SPHR / BYD·TFX / OLLI·SHC) · **미귀속 0** · **외부 오라클**: 운영 관측 원장에 ET·DDS가 있던 9날짜 전부(03-03 ~ 10-02)에서 c 재생에 둘이 돌아온다(a는 R1에서 전부 빠짐) · 과거 날짜엔 그때 거래하던 DBRG·FGNX·FSEA·HWH·NSTS 등도 「받음」(경계 아래 · 명부 칸 0) — 그 날짜엔 실제 상장이었으므로 옳다(개명 라벨 FGNX는 INFO로만).

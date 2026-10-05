@@ -1,0 +1,31 @@
+SET
+ id  |       job_name        | triggered_by | status  | target_count | success_count | failure_count |  s   | s_per_stock |            kst             |                                                                                  note                                                                                   
+-----+-----------------------+--------------+---------+--------------+---------------+---------------+------+-------------+----------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 645 | financial-refill      | MANUAL       | SUCCESS |          200 |           200 |             0 |  820 |        4.10 | 2026-09-21 22:15:40.228813 | 연도=2018~2026 대상=200종목 신규=0 정정=1 채움=0 교정=0 이른판=0 무효화=1종목 무효화종목=000270
+ 646 | financial-refill      | MANUAL       | SUCCESS |          150 |           150 |             0 |  586 |        3.90 | 2026-09-21 22:29:23.652931 | 연도=2018~2026 대상=150종목 신규=0 정정=1 채움=0 교정=0 이른판=0 무효화=1종목 무효화종목=086520
+ 648 | full-statement-refill | MANUAL       | SUCCESS |          150 |           150 |             0 | 1035 |        6.90 | 2026-09-21 23:19:06.336469 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=5400건 실제콜=7012 쓴보고서=5446 공시없음=1002 정정보류=0 교정=0
+ 658 | financial-refill      | MANUAL       | SUCCESS |          150 |           150 |             0 |  594 |        3.96 | 2026-09-22 09:43:02.882759 | 연도=2018~2026 대상=150종목 신규=0 정정=0 채움=975 교정=18 이른판=0 무효화=9종목 무효화종목=086520,298380,319400,068760,140410,195940,347700,328130,222080
+ 659 | full-statement-refill | MANUAL       | SUCCESS |            8 |             8 |             0 |   42 |        5.20 | 2026-09-22 12:59:19.275464 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=288건 실제콜=384 쓴보고서=274 공시없음=67 정정보류=0 교정=0
+ 663 | full-statement-refill | MANUAL       | SUCCESS |          200 |           200 |             0 |  964 |        4.82 | 2026-09-23 00:09:45.619088 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=7200건 실제콜=8832 쓴보고서=7104 공시없음=1459 정정보류=0 교정=0
+ 683 | financial-refill      | MANUAL       | SUCCESS |         1000 |          1000 |             0 |  961 |        0.96 | 2026-09-28 01:14:23.31365  | 연도=2015~2026 대상=1000종목 신규=154 정정=239 채움=21486 교정=11656 이른판=0 무효화=466종목 무효화종목=AGCO,TAP.A,NRG,FRHC,NDAQ,IEX,AROC,G,BX,WSO.B,PEP,MOG.B,DLB,STM,
+ 706 | full-statement-refill | GAP_FILL     | SUCCESS |            1 |             1 |             0 |    4 |        3.98 | 2026-10-03 21:14:28.474012 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=36건 실제콜=38 쓴보고서=42 공시없음=2 정정보류=0 교정=0
+ 710 | financial-refill      | MANUAL       | SUCCESS |            1 |             1 |             0 |    1 |        1.37 | 2026-10-03 21:17:41.95126  | 연도=2015~2026 대상=1종목 신규=20 정정=30 채움=43 교정=1 이른판=2 무효화=1종목 무효화종목=IOVA
+(9개 행)
+
+         job_name          | triggered_by | n | max_s | avg_s 
+---------------------------+--------------+---+-------+-------
+ adjustment-rebuild        | SCHEDULER    | 6 |     1 |     1
+ company-profile           | SCHEDULER    | 1 |     1 |     1
+ corporate-action          | SCHEDULER    | 6 |   764 |   750
+ daily-update              | SCHEDULER    | 6 |  1431 |  1221
+ full-statement-refill     | GAP_FILL     | 1 |     4 |     4
+ governance-derive         | GAP_FILL     | 2 |     0 |     0
+ governance-derive         | SCHEDULER    | 1 |     2 |     2
+ governance-load           | GAP_FILL     | 2 |     7 |     6
+ indicator-backfill        | SCHEDULER    | 1 |   234 |   234
+ indicator-derived-rebuild | SCHEDULER    | 1 |   225 |   225
+ indicator-origin-rewrite  | SCHEDULER    | 1 |   148 |   148
+ initial-load              | GAP_FILL     | 3 |     5 |     4
+ universe-rebalance        | SCHEDULER    | 1 |    24 |    24
+(13개 행)
+
