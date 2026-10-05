@@ -450,7 +450,6 @@ class FinancialWriterTest {
         }
     }
 
-    /** 무효화 호출을 그대로 적는다. 이 슬라이스의 기본 포트는 아무것도 기록하지 않는다. */
     @Nested
     @DisplayName("판 보호 — 소스가 공시 하나를 못 실었을 때(SEC 공시 보충 · ADR-0173)")
     class VintageGuards {
@@ -532,6 +531,7 @@ class FinancialWriterTest {
         }
     }
 
+    /** 무효화 호출을 그대로 적는다. 이 슬라이스의 기본 포트는 아무것도 기록하지 않는다. */
     @Nested
     @DisplayName("저장본보다 이른 판 — 판 이력을 전부 내는 소스에서 손으로 켤 때만 넣는다")
     class EarlierVintages {
