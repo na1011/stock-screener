@@ -141,6 +141,9 @@ import java.util.List;
  *     --job=corporate-action-judge --ca-id=97 --ca-status=APPROVED \
  *     --ca-type=BONUS_ISSUE --ca-ratio=1.4699 --ca-listing-date=2021-12-20 \
  *     --ca-note="권리락 당일 주식수 배수 1.0, 창 안 정합 점프 하나"'
+ *
+ * # 분사는 가격 배수(s/v)를 함께 준다 — 없으면 원장이 승인을 거절한다(V61). --ca-ratio는 주식수 배수 s다.
+ * #   --ca-type=SPIN_OFF --ca-ratio=0.5 --ca-price-ratio=0.9833 --ca-note="v 0.5085 · 같은 날 종가"
  * </pre>
  *
  * <p><b>원장 잡 둘에는 {@code --server.port=0}이 사실상 필수다.</b> 그것이 대신하는 일이
@@ -468,7 +471,7 @@ public class BootstrapRunner implements ApplicationRunner {
             "quarters", "all-quarters", "governance-year", "governance-span",
             "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
-            "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note",
+            "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note", "ca-price-ratio",
             "apply", "replace", "dates", "insert-earlier-vintages",
             // share-basis-derive 전용. 기본값 US다 — 국내는 봉의 listed_shares 를 쓰므로
             // 이 축을 원리적으로 안 탄다(재무 shares_outstanding 이 KR 전량 NULL 이다).
@@ -807,7 +810,8 @@ public class BootstrapRunner implements ApplicationRunner {
                 optionalDecimal(args, "ca-ratio"),
                 date(args, "ca-effective-date", null),
                 date(args, "ca-listing-date", null),
-                value(args, "ca-note", null));
+                value(args, "ca-note", null),
+                optionalDecimal(args, "ca-price-ratio"));
     }
 
     private static java.math.BigDecimal optionalDecimal(ApplicationArguments args, String name) {

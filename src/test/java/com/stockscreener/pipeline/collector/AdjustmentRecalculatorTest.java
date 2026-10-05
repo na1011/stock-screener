@@ -153,8 +153,9 @@ class AdjustmentRecalculatorTest {
         // 한화 2026-08-25 모양: 주식수 ×0.7563532970 · 가치비 v 0.8816 → 가격 배수 s/v = 0.8580.
         // 주식수 배수를 가격에 실으면 사건 전 봉이 ×1.3221로 오른다(ADR-0117 §규칙의 결함).
         writer.write(stockId, List.of(bar("2026-07-29", "83800"), bar("2026-08-25", "118100")));
-        long id = approveDisclosed("2026-08-25", CorporateAction.Type.SPIN_OFF, "0.7563532970");
-        jdbcTemplate.update("UPDATE corporate_action SET price_ratio = 0.8580 WHERE id = ?", id);
+        ledger.record(stockId, new CorporateAction(LocalDate.parse("2026-08-25"), null, null,
+                CorporateAction.Type.SPIN_OFF, new BigDecimal("0.7563532970"),
+                CorporateAction.DetectionSource.SOURCE_DISCLOSURE, null, new BigDecimal("0.8580"), null));
 
         recalculator.rebuild(stockId);
 

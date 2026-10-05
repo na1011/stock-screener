@@ -22,10 +22,10 @@ import java.time.LocalDate;
 public record CorporateActionJudgementRequest(CorporateActionStatus status,
                                               CorporateAction.Type type, BigDecimal ratio,
                                               LocalDate effectiveDate, LocalDate listingDate,
-                                              String note) {
+                                              String note, BigDecimal priceRatio) {
 
     public CorporateActionLedger.Judgement toJudgement() {
         return new CorporateActionLedger.Judgement(status, type, ratio, effectiveDate,
-                listingDate, note);
+                listingDate, note, priceRatio);
     }
 }

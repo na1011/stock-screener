@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.CorporateAction;
+import com.stockscreener.pipeline.datasource.Distribution;
 import com.stockscreener.pipeline.datasource.PriceDiscontinuity;
 
 import org.slf4j.Logger;
@@ -150,11 +151,17 @@ public class CorporateActionLedger {
      */
     public record Judgement(CorporateActionStatus status, CorporateAction.Type type,
                             BigDecimal ratio, LocalDate effectiveDate, LocalDate listingDate,
-                            String note) {
+                            String note, BigDecimal priceRatio) {
+
+        /** 가격 배수를 따로 안 고치는 판정. 분사가 아니면 늘 이 모양이다. */
+        public Judgement(CorporateActionStatus status, CorporateAction.Type type, BigDecimal ratio,
+                         LocalDate effectiveDate, LocalDate listingDate, String note) {
+            this(status, type, ratio, effectiveDate, listingDate, note, null);
+        }
 
         boolean isEmpty() {
             return status == null && type == null && ratio == null
-                    && effectiveDate == null && listingDate == null && note == null;
+                    && effectiveDate == null && listingDate == null && note == null && priceRatio == null;
         }
     }
 
@@ -166,7 +173,7 @@ public class CorporateActionLedger {
      */
     private record Row(long id, long stockId, LocalDate effectiveDate, LocalDate listingDate,
                        LocalDate sourceDate, CorporateAction.Type type, BigDecimal ratio,
-                       CorporateActionStatus status) {
+                       CorporateActionStatus status, BigDecimal priceRatio, String note) {
     }
 
     private record ExistingRow(long id, LocalDate effectiveDate, String status,
@@ -271,16 +278,19 @@ public class CorporateActionLedger {
             }
             // 휴리스틱 후보를 공시가 덮는다. 창이 매일 도므로 휴리스틱이 대개 먼저 들어오고,
             // 그대로 두면 공시의 정확한 비율·일자가 흔적 없이 버려진다.
+            // MUST: 가격 배수와 분배 원자료를 같은 UPDATE에서 싣는다. 빠지면 해석이 끝난 분사가
+            // 가격 배수 없는 APPROVED가 되려다 ck_ca_spin_off_priced에 막혀 그 종목이 롤백된다.
             jdbcTemplate.update("""
                     UPDATE corporate_action SET
-                        listing_date = ?, source_date = ?, type = ?, ratio = ?,
+                        listing_date = ?, source_date = ?, type = ?, ratio = ?, price_ratio = ?,
                         detection_source = ?, status = ?,
                         source_form = coalesce(?, source_form), updated_at = now()
                     WHERE id = ?
                     """,
                     action.listingDate(), action.sourceDate(), action.type().name(),
-                    action.ratio(), action.source().name(), status.name(), action.sourceForm(),
-                    row.id());
+                    action.ratio(), action.priceRatio(), action.source().name(), status.name(),
+                    action.sourceForm(), row.id());
+            writeDistribution(row.id(), action.distribution());
             log.info("휴리스틱 후보를 공시로 덮었다. stockId={} id={} {} type={} ratio={}",
                     stockId, row.id(), action.effectiveDate(), action.type(), action.ratio());
             return new RecordResult(Outcome.UPGRADED, row.id(), action.effectiveDate(), null, status);
@@ -335,16 +345,39 @@ public class CorporateActionLedger {
     }
 
     private long insert(long stockId, CorporateAction action, CorporateActionStatus status) {
-        return jdbcTemplate.queryForObject("""
+        long id = jdbcTemplate.queryForObject("""
                 INSERT INTO corporate_action
                     (stock_id, effective_date, listing_date, source_date,
-                     type, ratio, detection_source, status, source_form)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     type, ratio, price_ratio, detection_source, status, source_form)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 """, Long.class,
                 stockId, action.effectiveDate(), action.listingDate(), action.sourceDate(),
-                action.type().name(), action.ratio(), action.source().name(), status.name(),
-                action.sourceForm());
+                action.type().name(), action.ratio(), action.priceRatio(), action.source().name(),
+                status.name(), action.sourceForm());
+        writeDistribution(id, action.distribution());
+        return id;
+    }
+
+    /**
+     * 분사의 원자료를 그 원장 행 옆에 둔다(V61). 원장 행의 쓰기 경로 셋(새로 적기 · 공시가 덮기 · 효력일 옮기기)이
+     * 모두 이것을 부른다 — 하나라도 빠지면 「가격 배수를 이 표에서 다시 낸다」가 그 행에서 깨진다.
+     */
+    private void writeDistribution(long corporateActionId, Distribution distribution) {
+        if (distribution == null) {
+            return;
+        }
+        jdbcTemplate.update("""
+                INSERT INTO corporate_action_distribution
+                    (corporate_action_id, new_symbol, new_cusip, rate, value_date, parent_value, child_value)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (corporate_action_id) DO UPDATE SET
+                    new_symbol = excluded.new_symbol, new_cusip = excluded.new_cusip, rate = excluded.rate,
+                    value_date = excluded.value_date, parent_value = excluded.parent_value,
+                    child_value = excluded.child_value, updated_at = now()
+                """,
+                corporateActionId, distribution.newSymbol(), distribution.newCusip(), distribution.rate(),
+                distribution.valueDate(), distribution.parentValue(), distribution.childValue());
     }
 
     /**
@@ -460,9 +493,11 @@ public class CorporateActionLedger {
                             + " UNSUPPORTED로 보내라.");
         }
         requireListingDateForBonusIssue(status, type, effectiveDate, listingDate);
-        // 컴팩트 생성자가 부호·양수를 함께 판정한다. V21의 ck_ca_ratio_sign과 같은 판정이다.
+        BigDecimal priceRatio = mergedPriceRatio(judgement, row, type);
+        requirePricedSpinOff(status, type, priceRatio, judgement.note() != null ? judgement.note() : row.note());
+        // 컴팩트 생성자가 부호·양수와 가격 배수의 자리를 함께 판정한다. V61의 제약들과 같은 판정이다.
         new CorporateAction(effectiveDate, listingDate, row.sourceDate(), type, ratio,
-                CorporateAction.DetectionSource.HEURISTIC, null);
+                CorporateAction.DetectionSource.HEURISTIC, null, priceRatio, null);
 
         if (!effectiveDate.equals(row.effectiveDate())) {
             requireFreeSlot(row, effectiveDate);
@@ -473,6 +508,7 @@ public class CorporateActionLedger {
                     status         = coalesce(?, status),
                     type           = ?,
                     ratio          = ?,
+                    price_ratio    = ?,
                     effective_date = ?,
                     listing_date   = coalesce(?, listing_date),
                     note           = coalesce(?, note),
@@ -480,10 +516,10 @@ public class CorporateActionLedger {
                 WHERE id = ?
                 """,
                 judgement.status() != null ? judgement.status().name() : null,
-                type.name(), ratio, effectiveDate, judgement.listingDate(), judgement.note(), id);
+                type.name(), ratio, priceRatio, effectiveDate, judgement.listingDate(), judgement.note(), id);
 
-        log.info("사람이 원장을 판정했다. id={} status={} type={} ratio={} 효력일={} 신주상장={}",
-                id, judgement.status(), type, ratio, effectiveDate, judgement.listingDate());
+        log.info("사람이 원장을 판정했다. id={} status={} type={} ratio={} 가격배수={} 효력일={} 신주상장={}",
+                id, judgement.status(), type, ratio, priceRatio, effectiveDate, judgement.listingDate());
     }
 
     /**
@@ -548,6 +584,52 @@ public class CorporateActionLedger {
         }
     }
 
+    /**
+     * 가격 배수는 분사에만 남는다. 종류를 분사 밖으로 바꾸면 비운다 — 남기면 V61 {@code ck_ca_price_ratio_scope}에
+     * 막혀 500이 된다. 분사가 아닌데 가격 배수를 보내면 400이다.
+     */
+    private static BigDecimal mergedPriceRatio(Judgement judgement, Row row, CorporateAction.Type type) {
+        if (type != CorporateAction.Type.SPIN_OFF) {
+            if (judgement.priceRatio() != null) {
+                throw new InvalidJudgementException("priceRatio",
+                        "가격 배수는 분사에만 싣는다(분할·병합·무상증자는 주식수 배수와 같다): type=" + type);
+            }
+            return null;
+        }
+        BigDecimal value = judgement.priceRatio() != null ? judgement.priceRatio() : row.priceRatio();
+        if (value == null) {
+            return null;
+        }
+        if (value.signum() <= 0 || value.compareTo(RATIO_LIMIT) >= 0) {
+            throw new InvalidJudgementException("priceRatio", "가격 배수가 범위 밖이다: " + value);
+        }
+        return value.setScale(PriceDiscontinuity.RATIO_SCALE, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * MUST: 분사를 승인하려면 가격 배수와 그 근거(note)가 있어야 한다.
+     *
+     * <p>가격 배수가 없으면 재구축이 주식수 배수를 가격에 싣는다 — 미국 분사(주식수 1)는 무보정이 되고
+     * ADR-0055 억제도 풀려 그럴듯한 틀린 값이 나간다. note가 없으면 왜 그 배수인지(같은 날 종가인지,
+     * 발행사 Form 8937 배분 비율인지) 다음 세션이 알 길이 없다(ADR-0117 premise가 그 자리를 센다).
+     * 모르면 {@code UNSUPPORTED}가 그 자리다 — 억제는 그대로 걸린다.
+     */
+    private static void requirePricedSpinOff(CorporateActionStatus status, CorporateAction.Type type,
+                                             BigDecimal priceRatio, String note) {
+        if (status != CorporateActionStatus.APPROVED || type != CorporateAction.Type.SPIN_OFF) {
+            return;
+        }
+        if (priceRatio == null) {
+            throw new InvalidJudgementException("priceRatio",
+                    "분사는 가격 배수 없이 승인할 수 없다 — 같은 날 존속·자식 가치나 발행사 배분 비율(Form 8937)로"
+                            + " s/v를 정하라. 모르면 UNSUPPORTED로 보내라.");
+        }
+        if (note == null || note.isBlank()) {
+            throw new InvalidJudgementException("note",
+                    "분사 승인에는 가격 배수의 근거(note)가 있어야 한다 — 어느 날 무엇의 값으로 v를 냈는가.");
+        }
+    }
+
     private static void requirePaired(Judgement judgement) {
         if ((judgement.type() == null) != (judgement.ratio() == null)) {
             throw new InvalidJudgementException("ratio",
@@ -604,12 +686,13 @@ public class CorporateActionLedger {
         jdbcTemplate.update("""
                 UPDATE corporate_action SET
                     effective_date = ?, listing_date = ?, source_date = ?, type = ?, ratio = ?,
-                    detection_source = ?, status = ?, updated_at = now()
+                    price_ratio = ?, detection_source = ?, status = ?, updated_at = now()
                 WHERE id = ?
                 """,
                 action.effectiveDate(), action.listingDate(), action.sourceDate(),
-                action.type().name(), action.ratio(), action.source().name(),
+                action.type().name(), action.ratio(), action.priceRatio(), action.source().name(),
                 CorporateActionStatus.APPROVED.name(), near.id());
+        writeDistribution(near.id(), action.distribution());
         log.info("휴리스틱 후보를 공시로 덮으며 효력일을 옮겼다. stockId={} id={} {} → {} type={} ratio={}",
                 stockId, near.id(), near.effectiveDate(), action.effectiveDate(),
                 action.type(), action.ratio());
@@ -620,7 +703,8 @@ public class CorporateActionLedger {
 
     private Optional<Row> findById(long id) {
         return jdbcTemplate.query("""
-                SELECT id, stock_id, effective_date, listing_date, source_date, type, ratio, status
+                SELECT id, stock_id, effective_date, listing_date, source_date, type, ratio, status,
+                       price_ratio, note
                 FROM corporate_action WHERE id = ?
                 """,
                 (rs, rowNum) -> new Row(
@@ -631,7 +715,9 @@ public class CorporateActionLedger {
                         rs.getObject("source_date", LocalDate.class),
                         CorporateAction.Type.valueOf(rs.getString("type")),
                         rs.getBigDecimal("ratio"),
-                        CorporateActionStatus.valueOf(rs.getString("status"))),
+                        CorporateActionStatus.valueOf(rs.getString("status")),
+                        rs.getBigDecimal("price_ratio"),
+                        rs.getString("note")),
                 id).stream().findFirst();
     }
 

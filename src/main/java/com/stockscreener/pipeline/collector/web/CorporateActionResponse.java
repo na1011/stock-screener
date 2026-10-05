@@ -21,6 +21,7 @@ import java.time.LocalDate;
  *
  * @param observedRatio     효력일에 관측된 가격 배수. {@code ratio}와 같은 방향이다.
  * @param sameDayShareRatio 효력일 당일 상장주식수 배수. <b>1이면 무상증자류 권리락이다.</b>
+ * @param priceRatio        가격 배수. 분사만 채운다 — 사람이 분사를 판정할 때 {@code ratio}(주식수 배수)와 갈라 본다.
  */
 public record CorporateActionResponse(
         long id, String ticker, String stockName,
@@ -30,7 +31,7 @@ public record CorporateActionResponse(
         String sourceForm, String note, Instant appliedAt, Instant updatedAt,
         BigDecimal prevClose, BigDecimal close, BigDecimal observedRatio,
         BigDecimal sameDayShareRatio, BigDecimal sameDaySnappedRatio,
-        Boolean sameDaySnapMatchesPrice) {
+        Boolean sameDaySnapMatchesPrice, BigDecimal priceRatio) {
 
     public static CorporateActionResponse of(CorporateActionReader.Row row) {
         return new CorporateActionResponse(
@@ -39,6 +40,6 @@ public record CorporateActionResponse(
                 row.type(), row.ratio(), row.detectionSource(), row.status(),
                 row.sourceForm(), row.note(), row.appliedAt(), row.updatedAt(),
                 row.prevClose(), row.close(), row.observedRatio(),
-                row.sameDayShareRatio(), row.sameDaySnapped(), row.sameDayMatchesPrice());
+                row.sameDayShareRatio(), row.sameDaySnapped(), row.sameDayMatchesPrice(), row.priceRatio());
     }
 }

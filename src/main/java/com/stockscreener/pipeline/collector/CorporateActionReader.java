@@ -65,7 +65,7 @@ public class CorporateActionReader {
     private static final String SELECT_WITH_OBSERVATION = """
             SELECT ca.id, ca.stock_id, s.ticker, s.name AS stock_name,
                    ca.effective_date, ca.listing_date, ca.source_date,
-                   ca.type, ca.ratio, ca.detection_source, ca.status, ca.source_form,
+                   ca.type, ca.ratio, ca.price_ratio, ca.detection_source, ca.status, ca.source_form,
                    ca.note, ca.applied_at, ca.created_at, ca.updated_at,
                    o.prev_close, o.close, o.prev_shares, o.listed_shares
             FROM corporate_action ca
@@ -98,10 +98,11 @@ public class CorporateActionReader {
      *                          (착수 시점 실측 64건 중 39건). 봉이 없으면 null.
      * @param sameDaySnapped    위 배수를 단순 유리수로 스냅한 값. 분할·병합이면 여기서 비율이 나온다.
      * @param sameDayMatchesPrice 스냅된 배수가 가격 움직임과 어긋나지 않는가.
+     * @param priceRatio        가격 배수(V60). 분사만 채운다 — {@code ratio}는 주식수 배수라 분사에서 둘이 갈린다.
      */
     public record Row(long id, long stockId, String ticker, String stockName,
                       LocalDate effectiveDate, LocalDate listingDate, LocalDate sourceDate,
-                      CorporateAction.Type type, BigDecimal ratio,
+                      CorporateAction.Type type, BigDecimal ratio, BigDecimal priceRatio,
                       CorporateAction.DetectionSource detectionSource,
                       CorporateActionStatus status, String sourceForm, String note,
                       Instant appliedAt, Instant createdAt, Instant updatedAt,
@@ -281,6 +282,7 @@ public class CorporateActionReader {
                 rs.getObject("source_date", LocalDate.class),
                 CorporateAction.Type.valueOf(rs.getString("type")),
                 rs.getBigDecimal("ratio"),
+                rs.getBigDecimal("price_ratio"),
                 CorporateAction.DetectionSource.valueOf(rs.getString("detection_source")),
                 CorporateActionStatus.valueOf(rs.getString("status")),
                 rs.getString("source_form"),

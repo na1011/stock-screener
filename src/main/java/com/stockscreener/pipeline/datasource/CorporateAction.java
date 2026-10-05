@@ -30,6 +30,11 @@ import java.time.LocalDate;
  *                      {@link Type#UNKNOWN}인데 이 값이 있으면 <b>"이름은 아는데 계수를 못
  *                      낸다"</b>는 뜻이고, 그 구분이 없으면 사람이 판정 화면에서 무상감자를
  *                      액면병합과 구별할 수 없다(ADR-0050).
+ * @param priceRatio    <b>가격 배수</b> — 재구축이 사건 전 봉에 {@code 1/priceRatio}를 곱한다(V60). {@code ratio}가
+ *                      주식수 배수이므로, 두 배수가 갈리는 {@link Type#SPIN_OFF}만 채운다. 나머지는 null이고 그때
+ *                      재구축은 {@code ratio}를 쓴다(분할·병합·무상증자는 두 배수가 같다).
+ * @param distribution  분사의 원자료(자식 · 배정 비율 · 같은 날 두 가치). 가격 배수를 다시 낼 수 있게 원장 옆에
+ *                      싣는다. 분사가 아니면 null.
  */
 public record CorporateAction(
         LocalDate effectiveDate,
@@ -38,7 +43,9 @@ public record CorporateAction(
         Type type,
         BigDecimal ratio,
         DetectionSource source,
-        String sourceForm
+        String sourceForm,
+        BigDecimal priceRatio,
+        Distribution distribution
 ) {
 
     public CorporateAction {
@@ -56,6 +63,21 @@ public record CorporateAction(
                     "type과 ratio의 부호가 어긋난다. type=" + type + " ratio=" + ratio
                             + " — ratio는 '1주가 몇 주가 되었는가'이고 병합이면 1보다 작다.");
         }
+        if (priceRatio != null && (priceRatio.signum() <= 0 || type != Type.SPIN_OFF)) {
+            // 가격 배수가 주식수 배수와 갈리는 종류는 분사뿐이다. 분할에 다른 가격 배수를 실으면
+            // 주식수와 가격이 서로 다른 사건을 보게 되고 어느 쪽도 에러를 내지 않는다(V61 ck_ca_price_ratio_scope).
+            throw new IllegalArgumentException("가격 배수는 분사에만, 양수로 싣는다. type=" + type
+                    + " priceRatio=" + priceRatio);
+        }
+        if (distribution != null && type != Type.SPIN_OFF && type != Type.UNKNOWN) {
+            throw new IllegalArgumentException("분배 원자료는 분사(또는 아직 해석 못 한 분사)에만 싣는다. type=" + type);
+        }
+    }
+
+    /** 가격 배수가 주식수 배수와 같은 사건(분할·병합·무상증자·종류 미상). */
+    public CorporateAction(LocalDate effectiveDate, LocalDate listingDate, LocalDate sourceDate,
+                           Type type, BigDecimal ratio, DetectionSource source, String sourceForm) {
+        this(effectiveDate, listingDate, sourceDate, type, ratio, source, sourceForm, null, null);
     }
 
     /** 날짜를 하나만 아는 소스용. 미국 어댑터(v1.1)와 휴리스틱 탐지가 이 자리다. */
@@ -76,6 +98,29 @@ public record CorporateAction(
                 DetectionSource.SOURCE_DISCLOSURE, sourceForm);
     }
 
+    /**
+     * 가격 배수를 정한 분사. {@code shareMultiple}은 존속 주식 배수 s(미국 1 · 같은 날 병합과 합치면 그 배수 ·
+     * 국내 감자 후 비율)이고, 가격 배수 s / v는 {@code distribution}의 두 가치에서 낸다.
+     */
+    public static CorporateAction spinOff(LocalDate effectiveDate, LocalDate sourceDate, BigDecimal shareMultiple,
+                                          Distribution distribution, String sourceForm) {
+        return new CorporateAction(effectiveDate, null, sourceDate, Type.SPIN_OFF, shareMultiple,
+                DetectionSource.SOURCE_DISCLOSURE, sourceForm, distribution.priceRatio(shareMultiple), distribution);
+    }
+
+    /**
+     * 소스가 분사를 알렸는데 가격 배수를 아직 못 낸 사건 — 자식의 그날 가격이나 모체의 그날 봉이 없다.
+     *
+     * <p>{@link Type#UNKNOWN}이라 재구축에서 빠지고 ADR-0055 억제에 걸린다. 다음 수집이 해석하면
+     * {@link #spinOff}로 같은 날 행을 덮고, 끝내 못 내면 사람이 발행사 배분 비율(Form 8937)로 판정한다.
+     */
+    public static CorporateAction unresolvedSpinOff(LocalDate effectiveDate, LocalDate sourceDate,
+                                                    BigDecimal shareMultiple, Distribution distribution,
+                                                    String sourceForm) {
+        return new CorporateAction(effectiveDate, null, sourceDate, Type.UNKNOWN, shareMultiple,
+                DetectionSource.SOURCE_DISCLOSURE, sourceForm, null, distribution);
+    }
+
     public enum Type {
         /** 액면분할. ratio > 1. */
         SPLIT,
@@ -84,7 +129,9 @@ public record CorporateAction(
         /** 무상증자. ratio > 1이며 1:1이면 2다. 상장주식수가 권리락보다 늦게 는다. */
         BONUS_ISSUE,
         /**
-         * 인적분할. <b>존속법인 기준</b>이라 ratio &lt; 1이고, 가격과 주식수가 같은 날 바뀐다.
+         * 분사·인적분할. {@code ratio}는 <b>존속 주식 배수 s</b>(미국 단순 분사 1 · 같은 날 병합과 합치면 그 배수 ·
+         * 국내 인적분할은 감자 후 비율 &lt; 1)이고, 가격 배수는 {@code priceRatio} = s / v가 따로 든다(V60·V61).
+         * 가격과 주식수는 같은 날 바뀐다 — 무상증자와 달리 {@code listingDate}를 요구하지 않는다.
          *
          * <p>낱말을 액면병합과 가르는 이유는 둘이 <b>서로 다른 사실</b>이기 때문이다. ADR-0050이 그 자리를
          * 이미 경고했다: 낱말이 원장에 없으면 사람이 그 행을 깨끗한 병합으로 읽고 승인한다.
@@ -94,9 +141,9 @@ public record CorporateAction(
          * 액면병합과 가르는 증거다. 스냅을 걸면 진짜 인적분할이 전부 거부된다.
          *
          * <p>IMPORTANT — <b>이 ratio는 주식수 배수로는 옳고 가격 계수로는 틀리다</b>(ADR-0117 §규칙 ·
-         * 2026-09-17 실측). 국내 인적분할은 주식수를 순자산 분할비율만큼 줄이므로 존속법인의 이론 주가가
-         * 분할 전 종가 그대로인데, 재구축이 1/ratio를 곱해 분할 법인의 가치만큼 가짜 하락을 만든다
-         * (한화 2026-08-25 원종가 +40.9% 대 수정 +6.6%).
+         * 2026-09-17 실측). 그래서 가격 배수를 따로 든다 — 재구축은 {@code priceRatio}를 읽는다. 장부 비율로
+         * 가격 배수를 대신하지 않는다: 국내 7건 모두 같은 날 시가총액으로 잰 v가 장부 비율 s와 달랐다
+         * (솔브레인홀딩스 s 0.55 대 v 0.22 — 탐색 브랜치 {@code explore/spin-off/PLAN.md} §0.5).
          */
         SPIN_OFF,
         /**
@@ -115,8 +162,9 @@ public record CorporateAction(
             int vsOne = ratio.compareTo(BigDecimal.ONE);
             return switch (this) {
                 case SPLIT, BONUS_ISSUE -> vsOne > 0;
-                case REVERSE_SPLIT, SPIN_OFF -> vsOne < 0;
-                case UNKNOWN -> true;
+                case REVERSE_SPLIT -> vsOne < 0;
+                // 존속 주식 배수다 — 미국 단순 분사는 1, 같은 날 액면분할과 합치면 1보다 크다(SK텔레콤 2021-11-29 3.04).
+                case SPIN_OFF, UNKNOWN -> true;
             };
         }
     }

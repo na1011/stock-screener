@@ -267,22 +267,23 @@ class CorporateActionLedgerTest {
     }
 
     @Test
-    @DisplayName("인적분할은 존속법인 기준이라 1보다 작다 — 방향이 뒤집히면 과거가 반대로 움직인다")
-    void spinOffRatioIsBelowOne() {
-        // 존속법인 1주가 0.7563532970주가 된 것이다(한화 2026-08-25 실측). 1보다 큰 값을 넣으면
-        // 계수가 역수로 들어가 과거 봉이 오를 자리에서 내려간다 — 값 자체는 그럴듯하다.
-        assertThatThrownBy(() -> new CorporateAction(
-                LocalDate.parse("2026-08-25"), CorporateAction.Type.SPIN_OFF,
-                new BigDecimal("1.3221334580"), CorporateAction.DetectionSource.HEURISTIC))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("부호가 어긋난다");
+    @DisplayName("분사의 주식수 배수는 1 이상도 받는다 — 미국 단순 분사는 1, 같은 날 액면분할과 합치면 1보다 크다")
+    void spinOffShareMultipleMayBeOneOrMore() {
+        // 가격의 방향은 이제 가격 배수(s/v)가 정한다(V60·V61). 주식수 배수 s는 미국 분사 1 ·
+        // SK텔레콤 2021-11-29(액면분할 5 × 인적분할) 3.0368125137처럼 1 이상이 정당하다.
+        ledger.record(stockId, CorporateAction.spinOff(LocalDate.parse("2021-11-29"), null,
+                new BigDecimal("3.0368125137"), new com.stockscreener.pipeline.datasource.Distribution(
+                        "402340", null, null, LocalDate.parse("2021-11-29"),
+                        new BigDecimal("12670439037600"), new BigDecimal("10751535396000")), "cmpDvDecsn"));
+        assertThat(ratio("2021-11-29")).isEqualByComparingTo("3.0368125137");
 
+        // 가격 배수가 분할에 실리는 것은 여전히 막는다 — 주식수와 가격이 다른 사건을 보게 된다.
         assertThatThrownBy(() -> jdbcTemplate.update("""
                 INSERT INTO corporate_action
-                    (stock_id, effective_date, type, ratio, detection_source, status)
-                VALUES (?, ?, 'SPIN_OFF', 1.3221334580, 'HEURISTIC', 'APPROVED')
+                    (stock_id, effective_date, type, ratio, price_ratio, detection_source, status)
+                VALUES (?, ?, 'SPLIT', 5, 4, 'SOURCE_DISCLOSURE', 'APPROVED')
                 """, stockId, LocalDate.parse("2026-08-25")))
-                .hasMessageContaining("ck_ca_ratio_sign");
+                .hasMessageContaining("ck_ca_price_ratio_scope");
     }
 
     @Test
@@ -547,6 +548,135 @@ class CorporateActionLedgerTest {
         return jdbcTemplate.queryForObject(
                 "SELECT type FROM corporate_action WHERE stock_id = ? AND effective_date = ?",
                 String.class, stockId, LocalDate.parse(date));
+    }
+
+    // ── 분사: 가격 배수와 분배 원자료(V60·V61) ─────────────────────────────────
+
+    @Test
+    @DisplayName("분사는 가격 배수와 분배 원자료를 함께 싣는다 — 계수를 원장 옆 원자료에서 다시 낼 수 있다")
+    void spinOffCarriesPriceRatioAndDistribution() {
+        // CTVA 2026-10-01 모양: 주식수 그대로(1) · 모체 12.57 · VYLR 1주 68.26 → v 0.1555 · 가격 배수 6.4304.
+        ledger.record(stockId, spinOff("2026-10-01", "1", "12.57", "68.26"));
+
+        assertThat(status("2026-10-01")).isEqualTo("APPROVED");
+        assertThat(ratio("2026-10-01")).as("주식수 배수 — 주식수 소비자가 읽는다").isEqualByComparingTo("1");
+        assertThat(priceRatio("2026-10-01")).isEqualByComparingTo("6.4303898170");
+        assertThat(distributionValues("2026-10-01")).containsExactly(
+                new BigDecimal("12.5700"), new BigDecimal("68.2600"));
+    }
+
+    @Test
+    @DisplayName("해석 못 한 분사는 종류 미상 OBSERVED로 들어가고, 다음 실행의 해석이 같은 행을 가격 배수와 함께 덮는다")
+    void unresolvedSpinOffIsUpgradedWithItsPriceOnceValued() {
+        ledger.record(stockId, CorporateAction.unresolvedSpinOff(LocalDate.parse("2026-10-01"), null,
+                BigDecimal.ONE, new com.stockscreener.pipeline.datasource.Distribution(
+                        "VYLR", null, BigDecimal.ONE, LocalDate.parse("2026-10-01"), null, null), "spin_off"));
+        assertThat(status("2026-10-01")).isEqualTo("OBSERVED");
+        assertThat(type("2026-10-01")).isEqualTo("UNKNOWN");
+        assertThat(priceRatio("2026-10-01")).isNull();
+
+        CorporateActionLedger.RecordResult result = ledger.record(stockId, spinOff("2026-10-01", "1", "12.57", "68.26"));
+
+        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.UPGRADED);
+        assertThat(status("2026-10-01")).isEqualTo("APPROVED");
+        assertThat(priceRatio("2026-10-01"))
+                .as("덮는 UPDATE가 가격 배수를 안 실으면 ck_ca_spin_off_priced에 막혀 롤백된다")
+                .isEqualByComparingTo("6.4303898170");
+        assertThat(distributionValues("2026-10-01")).containsExactly(
+                new BigDecimal("12.5700"), new BigDecimal("68.2600"));
+    }
+
+    @Test
+    @DisplayName("효력일을 옮기는 덮기도 가격 배수와 원자료를 싣는다 — 국내 휴리스틱 후보와 하루 어긋난 인적분할")
+    void relocationCarriesPriceRatio() {
+        writer.write(stockId, List.of(
+                bar("2026-08-21", "83800"), bar("2026-08-24", "83800"), bar("2026-08-25", "118100")));
+        ledger.record(stockId, unknown("2026-08-24", "0.7096", CorporateAction.DetectionSource.HEURISTIC));
+
+        CorporateActionLedger.RecordResult result = ledger.record(stockId, CorporateAction.spinOff(
+                LocalDate.parse("2026-08-25"), null, new BigDecimal("0.7563532970"),
+                new com.stockscreener.pipeline.datasource.Distribution("0220W0", null, null, LocalDate.parse("2026-08-25"),
+                        new BigDecimal("6298142735700"), new BigDecimal("846000505350")), "cmpDvDecsn"));
+
+        assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.UPGRADED);
+        assertThat(rowCountOn("2026-08-24")).isZero();
+        assertThat(priceRatio("2026-08-25")).isEqualByComparingTo("0.8579507517");
+        assertThat(distributionValues("2026-08-25")).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("분사 승인에는 가격 배수와 근거가 있어야 한다 — 없으면 재구축이 주식수 배수를 가격에 싣는다")
+    void approvingASpinOffNeedsAPriceRatioAndANote() {
+        long id = ledger.record(stockId, unknown("2026-06-29", "0.5",
+                CorporateAction.DetectionSource.HEURISTIC)).existingId();
+
+        assertThatThrownBy(() -> ledger.judge(id, new CorporateActionLedger.Judgement(
+                com.stockscreener.pipeline.collector.CorporateActionStatus.APPROVED,
+                CorporateAction.Type.SPIN_OFF, new BigDecimal("0.5"), null, null, "근거")))
+                .isInstanceOf(CorporateActionLedger.InvalidJudgementException.class)
+                .hasMessageContaining("가격 배수");
+        assertThatThrownBy(() -> ledger.judge(id, new CorporateActionLedger.Judgement(
+                com.stockscreener.pipeline.collector.CorporateActionStatus.APPROVED,
+                CorporateAction.Type.SPIN_OFF, new BigDecimal("0.5"), null, null, null, new BigDecimal("0.9833"))))
+                .isInstanceOf(CorporateActionLedger.InvalidJudgementException.class)
+                .hasMessageContaining("근거");
+
+        ledger.judge(id, new CorporateActionLedger.Judgement(
+                com.stockscreener.pipeline.collector.CorporateActionStatus.APPROVED,
+                CorporateAction.Type.SPIN_OFF, new BigDecimal("0.5"), null, null,
+                "병합 1:2 + HONA 분사 · v 0.5085(같은 날 종가)", new BigDecimal("0.9833")));
+        assertThat(status("2026-06-29")).isEqualTo("APPROVED");
+        assertThat(priceRatio("2026-06-29")).isEqualByComparingTo("0.9833");
+    }
+
+    @Test
+    @DisplayName("가격 배수는 분사에만 남는다 — 분할에 보내면 400, 분사를 다른 종류로 바꾸면 비운다")
+    void priceRatioStaysOnSpinOffsOnly() {
+        long split = ledger.record(stockId, disclosed("2026-02-02", "5")).existingId();
+        assertThatThrownBy(() -> ledger.judge(split, new CorporateActionLedger.Judgement(
+                null, null, null, null, null, null, new BigDecimal("2"))))
+                .isInstanceOf(CorporateActionLedger.InvalidJudgementException.class)
+                .hasMessageContaining("분사에만");
+
+        long spin = ledger.record(stockId, spinOff("2026-10-01", "1", "12.57", "68.26")).existingId();
+        ledger.judge(spin, new CorporateActionLedger.Judgement(
+                com.stockscreener.pipeline.collector.CorporateActionStatus.UNSUPPORTED,
+                CorporateAction.Type.UNKNOWN, BigDecimal.ONE, null, null, "다른 이유로 못 고친다"));
+        assertThat(priceRatio("2026-10-01")).isNull();
+    }
+
+    @Test
+    @DisplayName("원장이 가격 배수 없는 승인 분사를 거절한다 — 판정 API를 거치지 않은 쓰기도 막는다(V61)")
+    void databaseRejectsAnApprovedSpinOffWithoutPrice() {
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO corporate_action (stock_id, effective_date, type, ratio, detection_source, status)
+                VALUES (?, '2026-10-01', 'SPIN_OFF', 1, 'SOURCE_DISCLOSURE', 'APPROVED')
+                """, stockId))
+                .hasMessageContaining("ck_ca_spin_off_priced");
+    }
+
+    private BigDecimal priceRatio(String date) {
+        return jdbcTemplate.queryForObject(
+                "SELECT price_ratio FROM corporate_action WHERE stock_id = ? AND effective_date = ?",
+                BigDecimal.class, stockId, LocalDate.parse(date));
+    }
+
+    private List<BigDecimal> distributionValues(String date) {
+        return jdbcTemplate.query("""
+                SELECT d.parent_value, d.child_value FROM corporate_action_distribution d
+                JOIN corporate_action a ON a.id = d.corporate_action_id
+                WHERE a.stock_id = ? AND a.effective_date = ?
+                """, (rs, n) -> List.of(rs.getBigDecimal(1), rs.getBigDecimal(2)), stockId, LocalDate.parse(date))
+                .stream().flatMap(List::stream).toList();
+    }
+
+    /** 미국 모양 분사 — 옛 1주 기준 존속 가치 s × 모체 ex 종가, 자식 가치 rate × 자식 ex 종가. */
+    private static CorporateAction spinOff(String date, String shareMultiple, String parentClose, String childClose) {
+        BigDecimal s = new BigDecimal(shareMultiple);
+        return CorporateAction.spinOff(LocalDate.parse(date), LocalDate.parse(date), s,
+                new com.stockscreener.pipeline.datasource.Distribution("VYLR", "000000000", BigDecimal.ONE,
+                        LocalDate.parse(date), s.multiply(new BigDecimal(parentClose)), new BigDecimal(childClose)),
+                "spin_off");
     }
 
     private BigDecimal ratio(String date) {
