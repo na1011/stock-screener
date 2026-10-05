@@ -1,6 +1,6 @@
 # 시세 구멍 — 일일 갱신의 재시도가 편입 전환을 못 넘는다 · 계획 v1
 
-작성 2026-10-05 01시(KST, 월). 운영 DB SELECT만 · 소스 15콜(`HoleSourceProbeLiveTest`, 임시·미커밋).
+작성 2026-10-05 01시(KST, 월). 운영 DB SELECT만 · 소스 15콜(`probes/HoleSourceProbeLiveTest.java` — 접합 탐침 `ListingEvent*`도 같은 폴더).
 
 ## 1. 실측
 

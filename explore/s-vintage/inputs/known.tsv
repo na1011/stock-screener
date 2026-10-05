@@ -1,0 +1,9 @@
+ticker	group	fy	fp	pub	rowtype	cause	detail	column	base	v7
+HON	known	2025	Q1	2026-02-17	known	known		operatingIncome		
+MSFT	known	2016	FY	2018-08-03	known	known		revenue		
+MSFT	known	2016	FY	2018-08-03	known	known		totalEquity		
+ABT	known	2017	Q2	2018-02-16	known	known		costOfSales		
+ALB	known	2016	Q1	2017-02-28	known	known		costOfSales		
+BDX	known	2025	Q1	2025-02-06	known	known		revenue		
+BDX	known	2025	Q2	2026-05-07	known	known		revenue		
+MHK	known	2018	Q3	2019-02-28	known	known		grossProfit		

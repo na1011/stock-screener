@@ -7,7 +7,7 @@ main에 들어가지 않는다. `SecEdgarFacts.revisionsOf`의 이어받기 변�
       ./gradlew test --tests "*SecEdgarFactsSweepTest*" -x frontendTest --rerun-tasks
     python3 explore/s-vintage/inv.py base.tsv cur.txt --diff <out>.tsv
 
-`cur.txt`는 현 편입 티커 목록(`ticker|current` 한 줄씩). 검사기 술어는 DB 펜스와 맞췄다:
+`cur.txt`는 현 편입 티커 목록(`ticker|current` 한 줄씩). 2026-10-04에 쓴 `cur.txt` · `members.txt`와 FINDINGS가 인용한 작은 산출물(`known.tsv` · `k4exp.tsv` · `q4fb.tsv`)은 `inputs/`에 있다 — 명부가 매주 바뀌므로 다시 뽑으면 그날 값이 아니다. 큰 스윕 TSV(`base.tsv` · `v7.tsv` · `origin-*.tsv`)는 위 스윕으로 다시 낸다. 검사기 술어는 DB 펜스와 맞췄다:
 현 편입·같은 술어로 B = 436행·143종목(ADR-0158 펜스 339 대차대조표), L = 124칸·76종목(SQL 실측과 동일).
 
 - `S_COHERENCE=group` — 묶음(손익·현금흐름·잔액·주식수)을 재작성한 공시가 안 실은 컬럼은 이어받지 않는다.
