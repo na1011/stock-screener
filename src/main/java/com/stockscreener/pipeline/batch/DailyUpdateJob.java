@@ -202,7 +202,9 @@ public class DailyUpdateJob {
         // 창 밖 구멍 구간(지금 편입 · 보존 창 과거 편입). 질의가 던지면 실행 행 없이 끝나지 않게
         // start 뒤 try 안에서 잰다.
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, targetDate, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, targetDate, triggeredBy, targets.size(),
+                        // 인자로 좁힐 길이 없다 — 기준일과 꼬리는 기록 계층이 본다.
+                        BatchExecutionRecorder.Scope.FULL);
         List<PriceGapRun> gapRuns;
         try {
             gapRuns = stockRegistrar.priceGapRuns(targetDate, from, indicatorRegistry.readWindowBars());

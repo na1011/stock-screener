@@ -133,7 +133,9 @@ public class CorporateActionJudgeJob {
             throw e;
         }
 
-        BatchExecutionContext execution = batchExecutions.start(JOB_NAME, asOf, triggeredBy, 1);
+        // 원장 한 행의 판정이다 — 정기 실행이 없고 전량이라는 범위도 없다.
+        BatchExecutionContext execution = batchExecutions.start(JOB_NAME, asOf, triggeredBy, 1,
+                BatchExecutionRecorder.Scope.NARROW);
         // 분모를 신고한다. 안 하면 화면의 진행률이 `—`로 뜬다 — NPE가 나지는 않는다
         // (`byPhase`가 전 단계를 미리 채운다).
         execution.plan(CollectionPhase.ADJUSTMENT, 1);

@@ -72,6 +72,11 @@ public class UniverseRebalanceJob {
         return run(asOf, triggeredBy, null);
     }
 
+    /** 지수 하나를 손으로 고르면 정기 실행(활성 지수 전체)과 범위가 다르다. 기준일은 기록 계층이 본다. */
+    public static BatchExecutionRecorder.Scope scopeOf(String onlyCode) {
+        return BatchExecutionRecorder.Scope.of(onlyCode == null);
+    }
+
     /**
      * 지수 하나만 골라 리밸런싱한다. <b>비활성 지수도 고를 수 있다.</b>
      *
@@ -94,7 +99,7 @@ public class UniverseRebalanceJob {
         List<UniverseTarget> targets =
                 onlyCode == null ? activeUniverses() : oneUniverse(onlyCode);
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scopeOf(onlyCode));
 
         // 이 잡의 작업 단위는 지수다. 종목 격리를 쓰지 않으므로 process()를 부르지 않지만,
         // 계획은 똑같이 신고한다 — 안 하면 이 잡만 화면에서 분모 없이 뜬다.

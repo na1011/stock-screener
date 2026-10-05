@@ -86,6 +86,10 @@
       "MANUAL",
       "GAP_FILL"
     ],
+    "ExecutionScope": [
+      "FULL",
+      "NARROW"
+    ],
     "JobParameters": [
       "TARGET_DATE",
       "DATE_RANGE"

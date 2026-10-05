@@ -68,6 +68,17 @@ public class FinancialRefillJob {
     }
 
     /**
+     * 정기 실행(월 1회)은 티커·유니버스를 안 주고 연수가 기본이다. 기준일과 꼬리는 기록 계층이 본다.
+     *
+     * <p>이른 판 넣기는 범위가 아니라 쓰기 방식이라 안 본다. 연수를 기본보다 길게 주면 정기 실행을 덮으므로 {@code FULL}이다.
+     */
+    public static BatchExecutionRecorder.Scope scopeOf(Integer yearsBack, List<String> tickers, String universeCode) {
+        int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
+        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty())
+                && (universeCode == null || universeCode.isBlank()) && years >= DEFAULT_YEARS_BACK);
+    }
+
+    /**
      * 편입 중인 활성 종목의 재무 결손을 채운다.
      *
      * @param asOf       기준일. 여기서 {@code yearsBack}만큼 거슬러 올라간다.
@@ -120,13 +131,14 @@ public class FinancialRefillJob {
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
+        BatchExecutionRecorder.Scope scope = scopeOf(yearsBack, tickers, universeCode);
 
         List<SecurityRef> targets =
                 stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
         if (targets.isEmpty()) {
             log.info("편입 중인 활성 종목이 없다. 채울 것이 없다.");
             return new Invalidation(
-                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish(), List.of());
+                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish(), List.of());
         }
 
         int fromFiscalYear = asOf.getYear() - years;
@@ -138,7 +150,7 @@ public class FinancialRefillJob {
         loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 재무 결손 보정");
 

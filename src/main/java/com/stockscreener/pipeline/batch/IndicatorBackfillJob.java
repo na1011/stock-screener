@@ -222,8 +222,13 @@ public class IndicatorBackfillJob {
             }
         }
 
+        // 정기 경로가 없는 손 도구다. 「전 종목 · 보존 창 전체」일 때만 FULL로 적는다 — 창은 화해의 ②가 도는 것과 같다.
+        LocalDate windowStart = windowStart(retentionFloor(retentionCutoffs));
+        BatchExecutionRecorder.Scope scope = BatchExecutionRecorder.Scope.of(
+                (tickers == null || tickers.isEmpty()) && (universeCode == null || universeCode.isBlank())
+                        && windowStart != null && !from.isAfter(windowStart));
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, to, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, to, triggeredBy, targets.size(), scope);
 
         // MUST: 거래일 수를 곱한다. 이 잡은 종목 하나를 거래일마다 다시 처리하므로 작업 단위가
         // 종목 수가 아니다. 종목 수만 신고하던 시절에 화면이 43400/350으로 떴다 —
@@ -302,6 +307,14 @@ public class IndicatorBackfillJob {
     }
 
     /**
+     * 화해 ①의 범위. 정기 화해(14:20)는 티커를 안 준다 — 14:00 사슬의 좁힌 ①은 {@code GAP_FILL}이라 기록 계층이
+     * {@code NARROW}로 찍는다. ②({@link #rebuildDerived})는 좁힐 인자가 없어 언제나 {@code FULL}이다.
+     */
+    public static BatchExecutionRecorder.Scope originScopeOf(List<String> tickers) {
+        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty()));
+    }
+
+    /**
      * 매 평일 화해의 ① — 종목마다 <b>{@code asOf} 한 판</b>으로 원본층을 보존 창 전체에 다시 쓴다.
      *
      * <p><b>한 판으로 충분한 이유</b>는 러너의 성질이다 — {@link IndicatorRunner#run}이 창 전체를 계산해
@@ -323,8 +336,8 @@ public class IndicatorBackfillJob {
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(ids);
         Map<String, Optional<LocalDate>> retentionCutoffs = retentionPolicy.writeCutoffs();
 
-        BatchExecutionContext execution =
-                batchExecutions.start(ORIGIN_JOB_NAME, asOf, triggeredBy, targets.size());
+        BatchExecutionContext execution = batchExecutions.start(ORIGIN_JOB_NAME, asOf, triggeredBy,
+                targets.size(), originScopeOf(tickers));
         execution.plan(CollectionPhase.INDICATOR, targets.size());
         log.info("원본층을 다시 쓴다. asOf={} 종목={}개{}", asOf, targets.size(),
                 tickers == null || tickers.isEmpty() ? " (보존 창 편입 전원)" : " (티커로 좁혔다: " + tickers + ")");
@@ -370,16 +383,13 @@ public class IndicatorBackfillJob {
      * 거래일 색인 갱신(ADR-0095). 빼면 새로 채운 날짜가 화면에 안 보인다.
      */
     public BatchStatus rebuildDerived(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
-        Map<String, Optional<LocalDate>> retentionCutoffs = retentionPolicy.writeCutoffs();
-        // 경계는 시장별 최솟값이다 — run()의 고아 정리와 같은 이유로 넓은 쪽이 안전하다. 경계가 없는
-        // 시장만 있으면(시세가 보존 기간보다 적게 쌓인 초기) 시세의 첫 거래일부터 전부가 창이다.
-        Optional<LocalDate> floor = retentionCutoffs.values().stream()
-                .flatMap(Optional::stream).min(LocalDate::compareTo);
-        LocalDate from = floor.map(cutoff -> cutoff.plusDays(1)).orElseGet(this::firstPriceDate);
+        Optional<LocalDate> floor = retentionFloor(retentionPolicy.writeCutoffs());
+        LocalDate from = windowStart(floor);
         List<LocalDate> tradeDates = from == null ? List.of() : tradeDatesBetween(from, asOf);
 
-        BatchExecutionContext execution =
-                batchExecutions.start(DERIVED_JOB_NAME, asOf, triggeredBy, tradeDates.size());
+        // 언제나 창 전체다 — 좁힐 인자가 없다(① 을 티커로 좁혀도 ② 는 창 전체).
+        BatchExecutionContext execution = batchExecutions.start(DERIVED_JOB_NAME, asOf, triggeredBy,
+                tradeDates.size(), BatchExecutionRecorder.Scope.FULL);
         execution.plan(CollectionPhase.INDICATOR, tradeDates.size());
         log.info("파생층을 다시 낸다. {} ~ {} 거래일={}일", from, asOf, tradeDates.size());
 
@@ -416,6 +426,19 @@ public class IndicatorBackfillJob {
             execution.failUnexpectedly(e);
             throw e;
         }
+    }
+
+    /** 보존 경계. 시장별 최솟값이다 — {@link #run}의 고아 정리와 같은 이유로 넓은 쪽이 안전하다. */
+    private static Optional<LocalDate> retentionFloor(Map<String, Optional<LocalDate>> retentionCutoffs) {
+        return retentionCutoffs.values().stream().flatMap(Optional::stream).min(LocalDate::compareTo);
+    }
+
+    /**
+     * 보존 창의 첫날. 경계가 없는 시장만 있으면(시세가 보존 기간보다 적게 쌓인 초기) 시세의 첫 거래일부터 전부가 창이다.
+     * 시세가 없으면 {@code null}.
+     */
+    private LocalDate windowStart(Optional<LocalDate> floor) {
+        return floor.map(cutoff -> cutoff.plusDays(1)).orElseGet(this::firstPriceDate);
     }
 
     /** 시세의 첫 거래일. 시세가 하나도 없으면 {@code null}이다. */

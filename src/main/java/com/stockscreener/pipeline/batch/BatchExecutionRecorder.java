@@ -4,6 +4,7 @@ import com.stockscreener.pipeline.datasource.DataSourceException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -11,10 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -34,10 +38,28 @@ public class BatchExecutionRecorder {
     /** 스택트레이스 저장 상한. 이보다 길면 잘라낸다 — 원인 파악에 앞부분이면 충분하다. */
     private static final int MAX_STACK_TRACE_LENGTH = 8000;
 
-    private final JdbcTemplate jdbcTemplate;
+    /** 기준일이 「지금」인지 재는 날짜의 시간대. 정기 실행의 기준일이 한국 날짜다. */
+    private static final ZoneId KR_ZONE = ZoneId.of("Asia/Seoul");
 
+    /**
+     * 기준일이 이만큼 지난 실행은 정기 실행과 범위가 같지 않다. 정기 실행의 기준일은 당일이거나 직전 평일(최대 3일 전 ·
+     * {@code DailyUpdateJob.targetDateFor})이라 7일이면 연휴가 끼어도 안 걸린다.
+     */
+    private static final int CURRENT_TARGET_DAYS = 7;
+
+    private final JdbcTemplate jdbcTemplate;
+    private final Clock clock;
+
+    // MUST: @Autowired를 지우지 않는다. 생성자가 둘이면 Spring이 고르지 못해 컨텍스트가 기동에 실패한다.
+    @Autowired
     public BatchExecutionRecorder(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, Clock.systemUTC());
+    }
+
+    /** 테스트가 「지금」을 밀 수 있게 시계를 주입받는다. */
+    public BatchExecutionRecorder(JdbcTemplate jdbcTemplate, Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
+        this.clock = clock;
     }
 
     /**
@@ -47,23 +69,60 @@ public class BatchExecutionRecorder {
      * 실패 기록이 이 id를 FK로 참조하는데, 실행 행이 아직 커밋되지 않았으면 참조가 깨진다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public long start(String jobName, LocalDate targetDate, TriggeredBy triggeredBy, int targetCount) {
+    public long start(String jobName, LocalDate targetDate, TriggeredBy triggeredBy, int targetCount,
+                      Scope scope) {
+        // MUST: 새 행에 범위가 비지 않게 여기서 막는다 — DB는 이력 때문에 NULL을 허용하고 신선도 판정은 NULL을
+        // 전량으로 센다(실패 시 열리는 방향). 「필수 인자」라도 null은 컴파일된다.
+        Objects.requireNonNull(scope, "scope — 정기 실행과 같은 범위인지 잡이 정해 넘긴다(V63)");
+        Scope recorded = recordedScope(jobName, targetDate, triggeredBy, scope);
         return jdbcTemplate.queryForObject("""
                 INSERT INTO batch_execution
-                    (job_name, target_date, status, triggered_by, target_count, started_at)
-                VALUES (?, ?, 'RUNNING', ?, ?, now())
+                    (job_name, target_date, status, triggered_by, target_count, scope, started_at)
+                VALUES (?, ?, 'RUNNING', ?, ?, ?, now())
                 RETURNING id
-                """, Long.class, jobName, targetDate, triggeredBy.name(), targetCount);
+                """, Long.class, jobName, targetDate, triggeredBy.name(), targetCount, recorded.name());
+    }
+
+    /**
+     * 잡이 정한 범위에 <b>모든 잡에 같은 두 규칙</b>을 더한다. 잡마다 다시 적으면 한 곳이 빠지고, 빠진 자리는 좁힌 실행이
+     * 시계를 미는 [A56] 그대로다.
+     * <ul>
+     *   <li>{@link TriggeredBy#GAP_FILL}은 언제나 {@code NARROW}다 — 정의가 「티커로 좁힌 정기 경로」다.</li>
+     *   <li>기준일이 지금(오늘 기준 {@value #CURRENT_TARGET_DAYS}일 안 ~ 내일)이 아니면 {@code NARROW}다 — {@code --as-of}를
+     *       과거로 주면 창의 끝이 그 날짜라 정기 실행과 같은 범위가 아니다.</li>
+     * </ul>
+     *
+     * <p>공개인 이유: 스케줄러 시험이 정기 호출의 기준일을 <b>같은 규칙</b>으로 묻는다. 규칙을 시험에 옮겨 적으면 둘이 갈린다.
+     */
+    public Scope recordedScope(String jobName, LocalDate targetDate, TriggeredBy triggeredBy, Scope declared) {
+        if (triggeredBy == TriggeredBy.GAP_FILL) {
+            return Scope.NARROW;
+        }
+        LocalDate today = LocalDate.ofInstant(clock.instant(), KR_ZONE);
+        boolean current = targetDate != null
+                && !targetDate.isBefore(today.minusDays(CURRENT_TARGET_DAYS))
+                && !targetDate.isAfter(today.plusDays(1));
+        if (current) {
+            return declared;
+        }
+        if (triggeredBy == TriggeredBy.SCHEDULER) {
+            // 정기 경로가 NARROW로 찍히면 그 행이 시계에서 빠져 연체로 뜬다. 그 자체가 맞는 신호이지만(기준일이 일주일 넘게
+            // 밀렸다), 원인이 여기라는 것을 남긴다.
+            log.warn("정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job={} 기준일={} 오늘={}",
+                    jobName, targetDate, today);
+        }
+        return Scope.NARROW;
     }
 
     /** 재실행으로 시작한다. 어느 실행을 다시 돌린 것인지 남겨야 반복 실패가 보인다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public long startRetry(String jobName, LocalDate targetDate, int targetCount, long retriedFromId) {
+        // 실패분만 다시 도는 실행이라 언제나 NARROW다 — 정기 실행과 같은 범위가 아니다.
         return jdbcTemplate.queryForObject("""
                 INSERT INTO batch_execution
                     (job_name, target_date, status, triggered_by, target_count,
-                     retried_from_id, started_at)
-                VALUES (?, ?, 'RUNNING', 'ADMIN', ?, ?, now())
+                     retried_from_id, scope, started_at)
+                VALUES (?, ?, 'RUNNING', 'ADMIN', ?, ?, 'NARROW', now())
                 RETURNING id
                 """, Long.class, jobName, targetDate, targetCount, retriedFromId);
     }
@@ -352,6 +411,27 @@ public class BatchExecutionRecorder {
         return trace.length() <= MAX_STACK_TRACE_LENGTH
                 ? trace
                 : trace.substring(0, MAX_STACK_TRACE_LENGTH) + "\n... (잘림)";
+    }
+
+    /**
+     * {@code batch_execution.scope}의 값(V63) — 이 실행이 <b>정기 실행과 같은 범위</b>였는가.
+     *
+     * <p><b>정하는 것은 잡이다</b> — 티커·유니버스·연수·기간·엔드포인트로 좁혔는지는 잡만 안다. 기준일과 꼬리는
+     * 기록 계층이 모든 잡에 같게 더한다({@link BatchExecutionRecorder#recordedScope}). 신선도 판정
+     * ({@code JobFreshnessPolicy})이 {@code NARROW}를 시계에서 빼므로, 좁힌 손 실행이 무거운 잡의 첫 정기 실행을 미는 일([A56])이
+     * 없다. MUST: 정기 경로는 언제나 {@code FULL}로 찍힌다 — {@code NARROW}로 찍히면 그 SCHEDULER 행이 시계에서 빠져 폴백 시계가
+     * 남고 그 잡이 매 평일 다시 돈다.
+     */
+    public enum Scope {
+        FULL, NARROW;
+
+        /**
+         * 잡의 인자가 정기 실행과 같은 범위인가. 기준일과 {@code GAP_FILL}은 여기서 안 본다 —
+         * {@link BatchExecutionRecorder#recordedScope}가 모든 잡에 같게 더한다.
+         */
+        public static Scope of(boolean sameAsScheduled) {
+            return sameAsScheduled ? FULL : NARROW;
+        }
     }
 
     /** {@code batch_execution.triggered_by}의 값. */

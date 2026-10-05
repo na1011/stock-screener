@@ -62,6 +62,7 @@ class PipelineSchedulerChainTest {
     private static final LocalDate TARGET_DATE =
             DailyUpdateJob.targetDateFor(LocalDate.now(java.time.ZoneId.of("Asia/Seoul")));
 
+    private DailyUpdateJob dailyUpdateJob;
     private CorporateActionJob corporateActionJob;
     private AdjustmentRebuildJob adjustmentRebuildJob;
     private IndicatorBackfillJob indicatorBackfillJob;
@@ -78,6 +79,7 @@ class PipelineSchedulerChainTest {
 
     @BeforeEach
     void setUp() {
+        dailyUpdateJob = mock(DailyUpdateJob.class);
         corporateActionJob = mock(CorporateActionJob.class);
         adjustmentRebuildJob = mock(AdjustmentRebuildJob.class);
         indicatorBackfillJob = mock(IndicatorBackfillJob.class);
@@ -100,7 +102,7 @@ class PipelineSchedulerChainTest {
         // 단언하는 곳이 이 시험인데, 목을 주면 그 단언이 전부 스케줄러 밖으로 나가 죽는다 —
         // 초록은 그대로이고 검증만 사라진다.
         scheduler = new PipelineScheduler(
-                mock(DailyUpdateJob.class), universeRebalanceJob,
+                dailyUpdateJob, universeRebalanceJob,
                 corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob,
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
@@ -396,6 +398,120 @@ class PipelineSchedulerChainTest {
         scheduler.checkJobFreshness();
 
         verify(universeIntegrityAlerter).evaluateAndAlert();
+    }
+
+    @Test
+    @DisplayName("정기 호출은 전부 FULL로 찍힌다 — NARROW로 찍히면 그 SCHEDULER 행이 시계에서 빠져 같은 잡이 매 평일 다시 돈다")
+    @SuppressWarnings("unchecked")
+    void everyScheduledCallIsFullScope() {
+        // 스케줄러가 실제로 넘기는 인자를 잡아 잡의 범위 규칙에 그대로 먹인다 — 인자를 손으로 옮겨 적으면 스케줄러가 바뀌어도
+        // 이 시험이 초록이다. 기준일 규칙은 기록 계층이 모든 잡에 같게 더하므로 실제 시계로 함께 묻는다.
+        BatchExecutionRecorder recorder = new BatchExecutionRecorder(null, java.time.Clock.systemUTC());
+        java.util.function.Consumer<LocalDate> current = asOf -> assertThat(recorder.recordedScope(
+                "scheduled", asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, BatchExecutionRecorder.Scope.FULL))
+                .as("정기 호출의 기준일 %s가 「지금」이다", asOf)
+                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+        BatchExecutionRecorder.TriggeredBy scheduled = BatchExecutionRecorder.TriggeredBy.SCHEDULER;
+
+        // 13:30
+        scheduler.runDailyUpdate();
+        ArgumentCaptor<LocalDate> dailyDate = ArgumentCaptor.forClass(LocalDate.class);
+        verify(dailyUpdateJob).run(dailyDate.capture(), eq(scheduled));
+        current.accept(dailyDate.getValue());
+
+        // 14:00 사슬 — 무효화가 있는 날(사슬 안 화해까지 탄다)
+        givenInvalidation("005440", LocalDate.parse("2020-01-02"));
+        scheduler.runCorporateActionChain();
+        ArgumentCaptor<LocalDate> caDate = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<LocalDate> caFrom = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<List<String>> caTickers = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<String> caUniverse = ArgumentCaptor.forClass(String.class);
+        verify(corporateActionJob).run(caDate.capture(), eq(scheduled), caFrom.capture(), caTickers.capture(),
+                caUniverse.capture());
+        assertThat(CorporateActionJob.scopeOf(caFrom.getValue(), caTickers.getValue(), caUniverse.getValue()))
+                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+        current.accept(caDate.getValue());
+        ArgumentCaptor<LocalDate> adjDate = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<List<String>> adjTickers = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<String> adjUniverse = ArgumentCaptor.forClass(String.class);
+        verify(adjustmentRebuildJob).runAndReport(adjDate.capture(), eq(scheduled), adjTickers.capture(),
+                adjUniverse.capture());
+        assertThat(AdjustmentRebuildJob.scopeOf(adjTickers.getValue(), adjUniverse.getValue()))
+                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+        current.accept(adjDate.getValue());
+
+        // 14:15 무거운 잡 셋 — 하루에 하나라 연체를 하나씩 바꿔 가며 세 번 부른다
+        when(financialRefillJob.runAndReport(any(), any(), any(), anyList(), any()))
+                .thenReturn(new FinancialRefillJob.Invalidation(BatchStatus.SUCCESS, List.of()));
+        for (String heavy : List.of(GovernanceLoadJob.JOB_NAME, FullStatementRefillJob.JOB_NAME,
+                FinancialRefillJob.JOB_NAME)) {
+            fresh(GovernanceLoadJob.JOB_NAME, FullStatementRefillJob.JOB_NAME, FinancialRefillJob.JOB_NAME);
+            overdue(heavy, 40);
+            scheduler.runHeavyJobOfTheDay();
+        }
+        ArgumentCaptor<LocalDate> gDate = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<Integer> gYear = ArgumentCaptor.forClass(Integer.class);
+        ArgumentCaptor<Integer> gSpan = ArgumentCaptor.forClass(Integer.class);
+        ArgumentCaptor<List<com.stockscreener.pipeline.datasource.GovernanceEndpoint>> gEndpoints =
+                ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<String>> gTickers = ArgumentCaptor.forClass(List.class);
+        verify(governanceLoadJob).run(gDate.capture(), eq(scheduled), gYear.capture(), gSpan.capture(),
+                gEndpoints.capture(), gTickers.capture());
+        assertThat(GovernanceLoadJob.scopeOf(gYear.getValue(), gSpan.getValue(), gEndpoints.getValue(),
+                gTickers.getValue())).isEqualTo(BatchExecutionRecorder.Scope.FULL);
+        current.accept(gDate.getValue());
+        ArgumentCaptor<LocalDate> fsrDate = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<Integer> fsrYears = ArgumentCaptor.forClass(Integer.class);
+        ArgumentCaptor<List<String>> fsrTickers = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<Boolean> fsrAllQuarters = ArgumentCaptor.forClass(Boolean.class);
+        verify(fullStatementRefillJob).run(fsrDate.capture(), eq(scheduled), fsrYears.capture(),
+                fsrTickers.capture(), any(Boolean.class), fsrAllQuarters.capture());
+        assertThat(FullStatementRefillJob.scopeOf(fsrYears.getValue(), fsrTickers.getValue(),
+                fsrAllQuarters.getValue())).isEqualTo(BatchExecutionRecorder.Scope.FULL);
+        current.accept(fsrDate.getValue());
+        ArgumentCaptor<LocalDate> frDate = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<Integer> frYears = ArgumentCaptor.forClass(Integer.class);
+        ArgumentCaptor<List<String>> frTickers = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<String> frUniverse = ArgumentCaptor.forClass(String.class);
+        verify(financialRefillJob).runAndReport(frDate.capture(), eq(scheduled), frYears.capture(),
+                frTickers.capture(), frUniverse.capture());
+        assertThat(FinancialRefillJob.scopeOf(frYears.getValue(), frTickers.getValue(), frUniverse.getValue()))
+                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+        current.accept(frDate.getValue());
+
+        // 14:18 · 14:20
+        scheduler.deriveReconcileInputs();
+        scheduler.reconcileIndicators();
+        ArgumentCaptor<LocalDate> deriveDate = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<List<String>> deriveTickers = ArgumentCaptor.forClass(List.class);
+        verify(governanceDeriveJob).run(deriveDate.capture(), eq(scheduled), deriveTickers.capture());
+        assertThat(GovernanceDeriveJob.scopeOf(deriveTickers.getValue())).isEqualTo(BatchExecutionRecorder.Scope.FULL);
+        current.accept(deriveDate.getValue());
+        // ① 은 사슬 안(GAP_FILL · 좁힘)과 14:20(SCHEDULER · 전원) 두 번 불렸다. SCHEDULER로 찍히는 것만 FULL이어야 한다.
+        ArgumentCaptor<LocalDate> originDate = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<BatchExecutionRecorder.TriggeredBy> originTrigger =
+                ArgumentCaptor.forClass(BatchExecutionRecorder.TriggeredBy.class);
+        ArgumentCaptor<List<String>> originTickers = ArgumentCaptor.forClass(List.class);
+        verify(indicatorBackfillJob, org.mockito.Mockito.times(2)).rewriteOriginLayer(originDate.capture(),
+                originTrigger.capture(), originTickers.capture());
+        for (int i = 0; i < originTrigger.getAllValues().size(); i++) {
+            if (originTrigger.getAllValues().get(i) == scheduled) {
+                assertThat(IndicatorBackfillJob.originScopeOf(originTickers.getAllValues().get(i)))
+                        .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+                current.accept(originDate.getAllValues().get(i));
+            }
+        }
+        assertThat(originTrigger.getAllValues()).contains(scheduled);
+        ArgumentCaptor<LocalDate> derivedDate = ArgumentCaptor.forClass(LocalDate.class);
+        verify(indicatorBackfillJob, org.mockito.Mockito.times(2)).rebuildDerived(derivedDate.capture(),
+                eq(scheduled));
+        derivedDate.getAllValues().forEach(current);
+
+        // 토요일 리밸런싱 — 지수를 고르지 않는 겹이다(꼬리의 업종 호출은 MembershipGapFillerTest).
+        scheduler.runUniverseRebalance();
+        ArgumentCaptor<LocalDate> rebalanceDate = ArgumentCaptor.forClass(LocalDate.class);
+        verify(universeRebalanceJob).run(rebalanceDate.capture(), eq(scheduled));
+        current.accept(rebalanceDate.getValue());
     }
 
     private void givenInvalidation() {

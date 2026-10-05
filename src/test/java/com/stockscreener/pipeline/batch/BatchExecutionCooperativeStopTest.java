@@ -92,7 +92,7 @@ class BatchExecutionCooperativeStopTest {
         SecurityRef security = new SecurityRef(stockId, "KOSPI", TICKER);
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, TASK_COUNT);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, TASK_COUNT, BatchExecutionRecorder.Scope.FULL);
 
         AtomicInteger entries = new AtomicInteger();
         AtomicReference<Throwable> workerError = new AtomicReference<>();
@@ -154,7 +154,7 @@ class BatchExecutionCooperativeStopTest {
     @DisplayName("구간·계획 신고도 끊는다 — 종목 루프만 막으면 루프 뒤 단계가 그대로 돈다")
     void gatesStageAndPlanToo() {
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1, BatchExecutionRecorder.Scope.FULL);
 
         batchExecutions.closeOpenExecutions();
 
@@ -172,7 +172,7 @@ class BatchExecutionCooperativeStopTest {
     @DisplayName("종료 중 알림은 막지 않고 로그로 내린다 — 막기만 하면 기록이 아예 사라진다")
     void degradesOperatorAlertToLogWhileShuttingDown() {
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1, BatchExecutionRecorder.Scope.FULL);
 
         execution.alertOperator(AlertSeverity.WARNING, "종료 전", "이것은 나가야 한다");
         assertThat(alertPort.events)
@@ -209,7 +209,7 @@ class BatchExecutionCooperativeStopTest {
     @DisplayName("종료 신호는 예상하지 못한 실패로 세지 않는다 — 세면 이중 마감 경고가 종료마다 난다")
     void shutdownSignalIsNotAnUnexpectedFailure() {
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1, BatchExecutionRecorder.Scope.FULL);
         batchExecutions.closeOpenExecutions();
 
         // 잡 열한 개가 일반 catch (RuntimeException)에서 이렇게 부른다.

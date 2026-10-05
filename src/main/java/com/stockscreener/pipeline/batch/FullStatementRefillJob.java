@@ -69,6 +69,17 @@ public class FullStatementRefillJob {
     }
 
     /**
+     * 정기 실행(월 1회)은 티커를 안 주고 전 종목 분기를 승인하며 연수가 기본이다. 기준일과 꼬리는 기록 계층이 본다.
+     *
+     * <p>{@code --all-quarters} 없는 전 종목 실행은 FY만 받으므로 {@code NARROW}다 — 정기 실행이 받는 분기 행을 안 받는다.
+     */
+    public static BatchExecutionRecorder.Scope scopeOf(Integer yearsBack, List<String> tickers, boolean allQuarters) {
+        int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
+        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty()) && allQuarters
+                && years >= DEFAULT_YEARS_BACK);
+    }
+
+    /**
      * 편입 중인 활성 종목의 전체 재무제표 결손을 채운다.
      *
      * @param yearsBack       몇 년 거슬러 받을지. null이면 {@link #DEFAULT_YEARS_BACK}
@@ -85,6 +96,7 @@ public class FullStatementRefillJob {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
         Set<StatementPeriod> periods = resolvePeriods(includeQuarters, allQuarters, tickers);
+        BatchExecutionRecorder.Scope scope = scopeOf(yearsBack, tickers, allQuarters);
 
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
         if (tickers == null || tickers.isEmpty()) {
@@ -92,7 +104,7 @@ public class FullStatementRefillJob {
         }
         if (targets.isEmpty()) {
             log.info("편입 중인 활성 종목이 없다. 채울 것이 없다.");
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
+            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish();
         }
 
         int fromFiscalYear = asOf.getYear() - years;
@@ -110,7 +122,7 @@ public class FullStatementRefillJob {
         loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 전체 재무제표 보정");
 

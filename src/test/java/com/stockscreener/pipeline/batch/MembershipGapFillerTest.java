@@ -112,6 +112,23 @@ class MembershipGapFillerTest {
     }
 
     @Test
+    @DisplayName("꼬리의 업종 호출은 FULL이다 — 리밸런싱 꼬리가 업종 잡의 유일한 정기 경로다(ADR-0172)")
+    @SuppressWarnings("unchecked")
+    void companyProfileFromTheTailIsFullScope() {
+        given();
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        // 인자를 잡아 잡의 규칙에 먹인다 — NARROW로 찍히면 그 SCHEDULER 행이 시계에서 빠져 업종 잡이 연체로 뜬다.
+        org.mockito.ArgumentCaptor<List<String>> tickers = org.mockito.ArgumentCaptor.forClass(List.class);
+        org.mockito.ArgumentCaptor<String> universe = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(companyProfileJob).run(eq(AS_OF), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
+                tickers.capture(), universe.capture());
+        assertThat(CompanyProfileJob.scopeOf(tickers.getValue(), universe.getValue()))
+                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+    }
+
+    @Test
     @DisplayName("다른 배치가 돌고 있으면 적재를 건너뛰고 알린다 — 스케줄러 풀 1이 관리자·CLI 경로를 원리적으로 못 본다")
     void skipsTheLoadWhileAnotherBatchIsRunning() {
         when(batchExecutionReader.liveJobNames()).thenReturn(List.of("daily-update"));

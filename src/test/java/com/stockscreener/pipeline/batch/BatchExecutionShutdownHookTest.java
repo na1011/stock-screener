@@ -61,7 +61,7 @@ class BatchExecutionShutdownHookTest {
             password = context.getEnvironment().getProperty("spring.datasource.password", "");
 
             executionId = context.getBean(BatchExecutions.class)
-                    .start(JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1)
+                    .start(JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1, BatchExecutionRecorder.Scope.FULL)
                     .executionId();
         } catch (RuntimeException e) {
             context.close();

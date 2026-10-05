@@ -44,8 +44,16 @@ import java.util.Map;
  * SCHEDULER 행이 {@code target_count = 2}로 남아 있었다(2026-09-19 꼬리 · 그 잡은 아래에서
  * 일부러 빠져 있어 무해했다).
  *
- * <p><b>승인된 한계</b> — 스케줄에 없는 잡은 이 방어가 없다. 그런 잡은 아무 성공이나 세므로
- * 좁은 수동 실행이 시계를 되돌린다. 지금 그 자리는 {@code market-calendar} 하나다.
+ * <h2>MUST: 좁힌 실행은 어느 갈래에서도 안 센다 — {@code scope}(V63)</h2>
+ * <p>위 불변식은 스케줄러 실행이 <b>있는</b> 잡만 지킨다. 없으면 폴백이 손 실행을 세는데, 손 실행은 티커·연수·표로
+ * 좁혀져 있기 일쑤다 — 2026-10-06에 무거운 잡 셋의 시계가 전부 좁힌 손 실행이었고(FR #710 1종목 · FSR #664 ·
+ * G #633), 그 시계가 첫 정기 실행을 그만큼 밀었다([A56]). 그래서 실행마다 「정기 실행과 같은 범위였는가」를
+ * 잡이 적고({@link BatchExecutionRecorder.Scope} · ADR-0172), 여기서는 {@code NARROW}를 <b>두 갈래 모두에서</b> 뺀다.
+ *
+ * <p><b>표지 전 이력({@code scope IS NULL})은 범위를 모르고 센다</b> — 예전과 같은 답이다. 이력을 거슬러 재구성하지
+ * 않은 이유는 ADR-0172 §버린 대안에 있다(무거운 잡의 위상이 움직이고, 「요청」을 증명할 증거가 행에 없다). 그래서 이
+ * 방어는 <b>표지 뒤의 좁힌 실행</b>부터 선다. 표지 전 좁힌 실행이 남긴 시계는 그 잡의 첫 정기 실행이 SCHEDULER
+ * 행을 만들면 저절로 안 쓰인다.
  *
  * <h2>MUST NOT: 상시 붉을 것을 감시 대상에 넣지 않는다</h2>
  * <p>상시 붉은 펜스는 곧 무시되고, 그러면 <b>진짜 연체까지 함께 묻힌다.</b> 그래서 아래
@@ -203,6 +211,9 @@ public class JobFreshnessPolicy {
      *                      호출부가 {@code false}로 다시 묻는다 — 아직 크론이 한 번도 발화하지
      *                      않은 잡을 <b>「한 번도 안 돌았다」로 신고하지 않기 위해서다.</b>
      *
+     * <p><b>MUST: 두 갈래 모두 {@code NARROW}를 안 센다</b>(클래스 javadoc). {@code IS DISTINCT FROM}이라 표지 전
+     * 이력({@code NULL})은 센다 — {@code <> 'NARROW'}로 쓰면 NULL이 빠져 모든 잡이 「한 번도 안 돌았다」가 된다.
+     *
      * <p><b>MUST: 폴백에서도 {@code GAP_FILL}은 안 센다.</b> 리밸런싱 꼬리는 결손 티커로 좁혀
      * 부르는 실행이라(클래스 javadoc의 불변식) 전량이 아니다. 세면 스케줄러 실행이 아직 없는
      * 잡의 시계를 꼬리가 되돌린다 — 2026-10-03 꼬리의 {@code governance-load}·
@@ -217,6 +228,7 @@ public class JobFreshnessPolicy {
         return jdbcTemplate.queryForObject("""
                 SELECT max(started_at) FROM batch_execution
                 WHERE job_name = ? AND status IN ('SUCCESS', 'PARTIAL_SUCCESS')
+                  AND scope IS DISTINCT FROM 'NARROW'
                 """ + triggerClause, Instant.class, jobName);
     }
 }
