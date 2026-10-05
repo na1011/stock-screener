@@ -1,0 +1,96 @@
+  grp  |  origin  | ticker | cells  
+-------+----------+--------+--------
+ class | OBSERVED | BF.A   |   2814
+ class | OBSERVED | MKC.V  |   2700
+ class | OBSERVED | MOG.B  |   1755
+ class | OBSERVED | RUSHB  |   3192
+ class | OBSERVED | TAP.A  |   2952
+ class | OBSERVED | WSO.B  |   2546
+ class | OBSERVED | ZG     |   3072
+ class | OBSERVED |        |  19031
+ class | RESTORED | BF.A   |  22610
+ class | RESTORED | BIO.B  |  13101
+ class | RESTORED | GOOG   |  12803
+ class | RESTORED | LBTYB  |   4149
+ class | RESTORED | MKC.V  |   9825
+ class | RESTORED | MOG.B  |  22762
+ class | RESTORED | RUSHB  |   6426
+ class | RESTORED | TAP.A  |  22331
+ class | RESTORED | WSO.B  |  14598
+ class | RESTORED | ZG     |  11871
+ class | RESTORED |        | 140476
+ class |          |        | 159507
+ unit  | OBSERVED | BTSGU  |   2040
+ unit  | OBSERVED | PPLC   |   2087
+ unit  | OBSERVED |        |   4127
+ unit  | RESTORED | BTSGU  |  18376
+ unit  | RESTORED | PPLC   |  10569
+ unit  | RESTORED |        |  28945
+ unit  |          |        |  33072
+       |          |        | 192579
+(28개 행)
+
+ ticker | win_zero_vol 
+--------+--------------
+ BF.A   |            0
+ BIO.B  |          207
+ BTSGU  |           18
+ GOOG   |            0
+ LBTYB  |           65
+ MKC.V  |            2
+ MOG.B  |          143
+ PPLC   |            0
+ RUSHB  |            0
+ TAP.A  |          185
+ WSO.B  |          212
+ ZG     |            0
+(12개 행)
+
+ ticker | memb | fin | sh_rows 
+--------+------+-----+---------
+ AMZN   |    2 |  68 |       9
+ BRK.A  |    0 |  45 |       0
+ BRK.B  |    0 |  45 |       0
+ JNJ    |    2 |  85 |      13
+ V      |    0 |  37 |       0
+ XOM    |    0 |   0 |       0
+(6개 행)
+
+ ticker |  last_bar  | bars 
+--------+------------+------
+ BF.B   | 2026-09-10 | 1761
+ BTSG   |            |    1
+ FOX    |            |    1
+ GOOG   | 2026-09-10 | 1759
+ HEI.A  |            |    1
+ LBTYA  |            |    1
+ LBTYK  |            |    1
+ LEN.B  |            |    1
+ LLYVA  |            |    1
+ MKC    | 2026-09-16 | 1769
+ MOG.A  | 2026-09-24 | 1774
+ NWSA   |            |    1
+ PPL    | 2026-09-10 | 1759
+ RUSHA  | 2026-09-10 | 1759
+ TAP    | 2026-09-10 | 1759
+ UHAL.B |            |    1
+ WSO    | 2026-09-17 | 1764
+ Z      | 2026-09-10 | 1759
+(18개 행)
+
+ effective_from | count 
+----------------+-------
+ 2026-08-31     |  1000
+ 2026-09-04     |    32
+ 2026-09-07     |     7
+ 2026-09-11     |    11
+ 2026-09-18     |    15
+ 2026-09-25     |    14
+ 2026-10-02     |    13
+(7개 행)
+
+ count 
+-------
+     0
+(1개 행)
+

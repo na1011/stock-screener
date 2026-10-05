@@ -1,0 +1,4 @@
+CREATE TABLE
+COPY 10440
+cik	ticker	name	sic_code	donors
+(0개 행)
