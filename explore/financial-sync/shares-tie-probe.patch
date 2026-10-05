@@ -1,0 +1,46 @@
+--- a/src/main/java/com/stockscreener/pipeline/datasource/us/SecEdgarFacts.java	2026-10-06 08:11:11
++++ b/src/main/java/com/stockscreener/pipeline/datasource/us/SecEdgarFacts.java	2026-10-06 08:11:11
+@@ -1135,10 +1135,12 @@
+         if (column.anchoredInstant()) {
+             // 표지 항목이라 종료일이 기말이 아니다. 같은 보고서에서 왔으면 받는다 —
+             // 이것을 종료일로 거르면 미국 PER·PBR의 분모가 영영 빈다(ADR-0013).
+-            return slots.values().stream()
++            Fact picked = slots.values().stream()
+                     .filter(f -> f.accn().equals(anchor.accn()))
+                     .max(Comparator.comparing(Fact::end))
+                     .orElse(null);
++            TIE_PROBE(anchor, column, tag, window, slots, picked);
++            return picked;
+         }
+         if (column.instant()) {
+             return slots.get(new Slot(anchor.accn(), null, window.end()));
+@@ -1147,6 +1149,29 @@
+         return exact != null ? exact : nearStart(slots, anchor, window);
+     }
+ 
++    // TEMP PROBE — 동점 계측(커밋 금지 · ANCHOR_TIE_OUT=<tsv>)
++    private static final java.io.PrintWriter TIE_OUT;
++    static {
++        String path = System.getenv("ANCHOR_TIE_OUT");
++        java.io.PrintWriter w = null;
++        if (path != null) {
++            try { w = new java.io.PrintWriter(new java.io.FileWriter(path, true), true); }
++            catch (java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
++        }
++        TIE_OUT = w;
++    }
++    private static synchronized void TIE_PROBE(Anchor anchor, SecEdgarColumn column, String tag, Window window,
++                                               Map<Slot, Fact> slots, Fact picked) {
++        if (TIE_OUT == null || picked == null) return;
++        List<Fact> ties = slots.values().stream().filter(f -> f.accn().equals(anchor.accn()))
++                .filter(f -> f.end().equals(picked.end())).toList();
++        if (ties.size() < 2) return;
++        Fact match = ties.stream().filter(f -> window.start().equals(f.start())).findFirst().orElse(null);
++        TIE_OUT.println(String.join("\t", anchor.accn(), column.name(), tag, String.valueOf(window.start()),
++                String.valueOf(window.end()), String.valueOf(ties.size()), picked.start() + "~" + picked.end(),
++                picked.value().toPlainString(), match == null ? "-" : match.value().toPlainString()));
++    }
++
+     /**
+      * <b>시작일이 창과 맞는가 — 52/53주 회계력의 며칠 어긋남을 받는다.</b>
+      * {@link #nearStart}와 같은 술어여야 한다(태그 선택과 값 조회가 갈리면 태그는 골라지는데
