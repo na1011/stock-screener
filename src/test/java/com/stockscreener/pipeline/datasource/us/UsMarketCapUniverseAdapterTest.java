@@ -47,6 +47,9 @@ class UsMarketCapUniverseAdapterTest {
 
     private MockWebServer server;
     private SecurityNameCache nameCache;
+    /** 봉 조회 둘째 페이지 본문의 키. {@code page_token=P2}로 온 요청에 준다. */
+    private static final String PAGE2 = "PAGE2";
+
     private final Map<String, String> bodies = new LinkedHashMap<>();
     private final List<String> paths = new ArrayList<>();
 
@@ -67,6 +70,11 @@ class UsMarketCapUniverseAdapterTest {
             public MockResponse dispatch(RecordedRequest request) {
                 String path = request.getPath();
                 paths.add(path);
+                if (path.contains("page_token=P2") && bodies.containsKey(PAGE2)) {
+                    return new MockResponse().setResponseCode(200)
+                            .setHeader("Content-Type", "application/json;charset=UTF-8")
+                            .setBody(bodies.get(PAGE2));
+                }
                 for (Map.Entry<String, String> entry : bodies.entrySet()) {
                     if (path.startsWith(entry.getKey())) {
                         return new MockResponse().setResponseCode(200)
@@ -182,6 +190,121 @@ class UsMarketCapUniverseAdapterTest {
                 .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
 
         assertThat(snapshot.tickers()).containsExactly("BIG", "MID").doesNotContain("BIGO");
+    }
+
+    @Test
+    @DisplayName("같은 CIK의 대표는 가격이 아니라 거래대금이 고른다 — 같은 주식수를 나눠 쓰면 시총 최대가 곧 가격 최대다")
+    void picksTheMostTradedSecurityPerCik() throws Exception {
+        // MOG.B(거래 드문 클래스)가 가격이 더 높고 주식수는 같다 — 옛 규칙은 MOG.B를 뽑았다(2026-10-05 실측 0.09 대 106백만 달러).
+        bodies.put("/v2/assets", assets(
+                asset("MOG.A", "Moog Inc."), asset("MOG.B", "MOOG INC CL B"), asset("MID", "Mid Corp.")));
+        bodies.put("/files/company_tickers_exchange.json",
+                cikMap(Map.of("MOG-A", 1L, "MOG-B", 1L, "MID", 2L)));
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("MOG.A", bar("26", "100", 900_000L), bar("27", "100", 1_100_000L)),
+                series("MOG.B", bar("26", "120", 0L), bar("27", "120", 50L)),
+                series("MID", bar("26", "50", 1000L), bar("27", "50", 1000L))), null));
+
+        UniverseSnapshot snapshot = adapter(2, shares(
+                share("MOG.A", "10"), share("MOG.B", "10"), share("MID", "10")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).containsExactly("MOG.A", "MID").doesNotContain("MOG.B");
+    }
+
+    @Test
+    @DisplayName("거래대금은 창 안의 합이다 — 평균이면 봉이 띄엄띄엄인 클래스가 부푼다")
+    void comparesTheWindowSumNotTheAverage() throws Exception {
+        // X: 두 봉 10×1,000 = 합 20,000 · 평균 10,000 / Y: 한 봉 11×1,500 = 16,500 — 평균이면 Y, 합이면 X.
+        bodies.put("/v2/assets", assets(asset("X", "X Corp. Class A"), asset("Y", "X Corp. Class B"),
+                asset("MID", "Mid Corp.")));
+        bodies.put("/files/company_tickers_exchange.json", cikMap(Map.of("X", 1L, "Y", 1L, "MID", 2L)));
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("X", bar("26", "10", 1000L), bar("27", "10", 1000L)),
+                series("Y", bar("27", "11", 1500L)),
+                series("MID", bar("26", "50", 1000L), bar("27", "50", 1000L))), null));
+
+        UniverseSnapshot snapshot = adapter(2, shares(share("X", "10"), share("Y", "10"), share("MID", "10")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).contains("X").doesNotContain("Y");
+    }
+
+    @Test
+    @DisplayName("거래량이 없는 봉은 MALFORMED다 — 0으로 읽으면 전부 동률이 되어 기호순으로 대표가 조용히 정해진다")
+    void missingVolumeIsMalformed() {
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("BIG", bar("27", "100", null)), series("MID", bar("27", "50", 1000L))), null));
+
+        assertThatThrownBy(() -> adapter(2, shares(share("BIG", "10"), share("MID", "100")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF))
+                .isInstanceOf(DataSourceException.class)
+                .hasMessageContaining("거래량")
+                .extracting(e -> ((DataSourceException) e).kind())
+                .isEqualTo(DataSourceException.Kind.MALFORMED);
+    }
+
+    @Test
+    @DisplayName("페이지가 갈려도 거래대금은 누적한다 — 덮어쓰면 마지막 페이지의 봉만 센다")
+    void accumulatesVolumeAcrossPages() throws Exception {
+        // X의 봉이 두 페이지에 걸친다: 합 20,000 대 Y 10.5×1,400 = 14,700. 마지막 페이지만 세면 X 10,000으로 진다.
+        // Y의 가격이 더 높아 옛 규칙(가격 최대)도 Y를 고른다 — 동률이 기호순으로 X를 고르면 이 시험이 누적에 안 닿는다.
+        bodies.put("/v2/assets", assets(asset("X", "X Corp. Class A"), asset("Y", "X Corp. Class B"),
+                asset("MID", "Mid Corp.")));
+        bodies.put("/files/company_tickers_exchange.json", cikMap(Map.of("X", 1L, "Y", 1L, "MID", 2L)));
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("MID", bar("27", "50", 1000L)),
+                series("X", bar("26", "10", 1000L))), "P2"));
+        bodies.put(PAGE2, page(List.of(
+                series("X", bar("27", "10", 1000L)),
+                series("Y", bar("27", "10.5", 1400L))), null));
+
+        UniverseSnapshot snapshot = adapter(2, shares(share("X", "10"), share("Y", "10"), share("MID", "10")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).contains("X").doesNotContain("Y");
+    }
+
+    @Test
+    @DisplayName("거래대금이 같으면(둘 다 무거래) 시총 → 기호 순이다 — 대표가 실행마다 흔들리지 않는다")
+    void breaksTiesByMarketCapThenSymbol() throws Exception {
+        // P·Q는 같은 CIK · 둘 다 창 안 체결 0 — 시총은 P 10×20 = 200 대 Q 10×30 = 300이라 Q.
+        // R·S는 같은 CIK · 체결 0 · 시총도 같다 — 기호가 앞선 R.
+        bodies.put("/v2/assets", assets(asset("P", "P Corp. Class A"), asset("Q", "P Corp. Class B"),
+                asset("R", "R Corp. Class A"), asset("S", "R Corp. Class B")));
+        bodies.put("/files/company_tickers_exchange.json", cikMap(Map.of("P", 1L, "Q", 1L, "R", 2L, "S", 2L)));
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("P", bar("27", "20", 0L)), series("Q", bar("27", "30", 0L)),
+                series("R", bar("27", "5", 0L)), series("S", bar("27", "5", 0L))), null));
+
+        UniverseSnapshot snapshot = adapter(2, shares(share("P", "10"), share("Q", "10"), share("R", "10"), share("S", "10")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).containsExactly("Q", "R");
+    }
+
+    @Test
+    @DisplayName("혼성 단위·우선 주식·신탁증권은 이름으로 뺀다 — 발행사 주식수를 그대로 써서 시총이 부푼다")
+    void dropsHybridSecuritiesByName() throws Exception {
+        bodies.put("/v2/assets", assets(
+                asset("PPLC", "PPL Corporation Corporate Units"),
+                asset("BTSGU", "BrightSpring Health Services, Inc. Tangible Equity Unit"),
+                asset("LILAP", "Liberty Latin America Ltd. 8.5% Preference Shares"),
+                asset("DDT", "Dillard's Capital Trust I 7.50% Capital Securities"),
+                asset("ET", "Energy Transfer LP Common Units representing limited partner interests"),
+                asset("MID", "Mid Corp.")));
+        bodies.put("/files/company_tickers_exchange.json", cikMap(Map.of(
+                "PPLC", 1L, "BTSGU", 2L, "LILAP", 3L, "DDT", 4L, "ET", 5L, "MID", 6L)));
+        bodies.put("/v2/stocks/bars", bars(Map.of("PPLC", "6", "BTSGU", "5", "LILAP", "4", "DDT", "3",
+                "ET", "2", "MID", "1")));
+
+        UniverseSnapshot snapshot = adapter(2, shares(
+                share("PPLC", "1"), share("BTSGU", "1"), share("LILAP", "1"), share("DDT", "1"),
+                share("ET", "1"), share("MID", "1")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).as("MLP 보통 지분(Common Units)은 남는다")
+                .containsExactly("ET", "MID");
     }
 
     @Test
@@ -333,12 +456,29 @@ class UsMarketCapUniverseAdapterTest {
                 .formatted(String.join(",", rows));
     }
 
-    /** 심볼마다 봉 둘을 준다 — 마지막 봉을 쓰는지가 계약이다. */
+    /** 심볼마다 봉 둘을 준다 — 마지막 봉을 쓰는지가 계약이다. 거래량은 모두 같다(대표 선택에 안 끼게). */
     private static String bars(Map<String, String> closeBySymbol) {
         List<String> entries = new ArrayList<>();
         closeBySymbol.forEach((symbol, close) -> entries.add("""
-                "%s":[{"t":"2026-08-26T04:00:00Z","c":1.0},{"t":"2026-08-27T04:00:00Z","c":%s}]"""
+                "%s":[{"t":"2026-08-26T04:00:00Z","c":1.0,"v":1000},{"t":"2026-08-27T04:00:00Z","c":%s,"v":1000}]"""
                 .formatted(symbol, close)));
-        return "{\"bars\":{%s},\"next_page_token\":null}".formatted(String.join(",", entries));
+        return page(entries, null);
+    }
+
+    /** 봉을 그대로 적는다 — {@code "SYM":[{...},...]} 조각들. */
+    private static String page(List<String> entries, String nextPageToken) {
+        return "{\"bars\":{%s},\"next_page_token\":%s}".formatted(String.join(",", entries),
+                nextPageToken == null ? "null" : "\"" + nextPageToken + "\"");
+    }
+
+    /** 봉 하나. 거래량이 null이면 {@code v}를 아예 안 싣는다. */
+    private static String bar(String day, String close, Long volume) {
+        return volume == null
+                ? "{\"t\":\"2026-08-%sT04:00:00Z\",\"c\":%s}".formatted(day, close)
+                : "{\"t\":\"2026-08-%sT04:00:00Z\",\"c\":%s,\"v\":%d}".formatted(day, close, volume);
+    }
+
+    private static String series(String symbol, String... bars) {
+        return "\"%s\":[%s]".formatted(symbol, String.join(",", bars));
     }
 }

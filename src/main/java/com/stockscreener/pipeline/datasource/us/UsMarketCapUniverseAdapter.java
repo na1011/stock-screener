@@ -186,10 +186,26 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * <p><b>MUST: 이 목록을 넓히기 전에 그 낱말의 한계 기여를 잰다</b> — 「SIC 축이 이미 자른
      * 것을 빼고 무엇이 남는가」와 「그중 사업회사가 무엇인가」 둘이다.
      * ({@code docs/phase-criteria.md} P26 축①)
+     *
+     * <p><b>혼성 증권 문구 넷</b>({@code CORPORATE UNITS} · {@code EQUITY UNITS} · {@code PREFERENCE} ·
+     * {@code CAPITAL SECURITIES})의 한계 기여(2026-10-05 · 미국 상장 이름): 앞 둘에 9
+     * ({@code PPLC}·{@code DUKU}·{@code SOMN}·{@code NEE.PRS/PRT/PRV}·{@code BTSGU}·{@code NOVTU}·{@code VSECU}),
+     * 뒤 둘에 2({@code LILAP}·{@code DDT}) — <b>전부 사업회사 보통주가 아니다.</b> 이것들은 발행사 주식수를 그대로
+     * 써서 시총이 부풀고, 보통주보다 비싸면 CIK 대표를 빼앗았다({@code PPLC}가 {@code PPL}을 밀어냄).
+     * 대표는 {@link #dropCikDuplicates}가 거래대금으로 고르므로 이 문구는 <b>보통주가 후보가 아닐 때의 방어</b>다.
+     * {@code DEPOSITORY}는 안 넣는다 — 그 오철자를 쓰는 ADR 보통주({@code CMPS}·{@code SLN})를 자른다.
      */
-    private static final Pattern NON_COMMON_NAME = Pattern.compile(
+    private static final String SECURITY_KIND_WORDS =
             "\\bPREFERRED\\b|\\bPFD\\b|\\bWARRANTS?\\b|\\bRIGHTS?\\b|\\bDEPOSITARY\\b"
-                    + "|\\bNOTES?\\b|\\bDEBENTURES?\\b|\\bBONDS?\\b|\\bETFS?\\b|\\bFUNDS?\\b");
+                    + "|\\bNOTES?\\b|\\bDEBENTURES?\\b|\\bBONDS?\\b|\\bETFS?\\b|\\bFUNDS?\\b";
+
+    private static final String HYBRID_WORDS =
+            "\\bCORPORATE UNITS?\\b|\\bEQUITY UNITS?\\b|\\bPREFERENCE\\b|\\bCAPITAL SECURITIES\\b";
+
+    private static final Pattern NON_COMMON_NAME = Pattern.compile(SECURITY_KIND_WORDS + "|" + HYBRID_WORDS);
+
+    /** 혼성 문구에<b>만</b> 걸린 이름을 가려 로그로 남긴다 — 이 문구의 한계 기여를 실행마다 다시 잴 재료다. */
+    private static final Pattern SECURITY_KIND_ONLY = Pattern.compile(SECURITY_KIND_WORDS);
 
     private final AlpacaUniverseAdapter listing;
     private final StoredShareCounts shareCounts;
@@ -289,8 +305,12 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                 excluded.noShares++;
                 continue;
             }
-            if (NON_COMMON_NAME.matcher(asset.name().toUpperCase(java.util.Locale.ROOT)).find()) {
+            String upperName = asset.name().toUpperCase(java.util.Locale.ROOT);
+            if (NON_COMMON_NAME.matcher(upperName).find()) {
                 excluded.name++;
+                if (!SECURITY_KIND_ONLY.matcher(upperName).find()) {
+                    excluded.hybridOnly.add(asset.symbol());
+                }
                 continue;
             }
             candidates.add(asset);
@@ -302,7 +322,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                             + "제외 내역: %s").formatted(candidates.size(), topN, excluded));
         }
 
-        Map<String, BigDecimal> closes = fetchLatestCloses(candidates, asOf);
+        Map<String, Quote> closes = fetchLatestCloses(candidates, asOf);
         double coverage = (double) closes.size() / candidates.size();
         if (coverage < MIN_CLOSE_COVERAGE) {
             // 모르는 심볼은 응답에서 조용히 빠진다(실측). 묶음 조회의 유일한 방어선이 이 하한이다.
@@ -314,12 +334,13 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
 
         List<Ranked> ranked = new ArrayList<>(closes.size());
         for (AlpacaAsset asset : candidates) {
-            BigDecimal close = closes.get(asset.symbol());
-            if (close == null) {
+            Quote quote = closes.get(asset.symbol());
+            if (quote == null) {
                 excluded.noClose++;
                 continue;
             }
-            ranked.add(new Ranked(asset, sharesByTicker.get(asset.symbol()).multiply(close)));
+            ranked.add(new Ranked(asset, sharesByTicker.get(asset.symbol()).multiply(quote.close()),
+                    quote.dollarVolume()));
         }
         ranked.sort(Comparator.comparing(Ranked::marketCap).reversed()
                 .thenComparing(r -> r.asset().symbol()));
@@ -348,30 +369,67 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
     }
 
     /**
-     * 같은 CIK를 나눠 쓰는 티커 중 시총이 가장 큰 하나만 남긴다.
+     * 같은 CIK를 나눠 쓰는 티커 중 <b>창 안 거래대금이 가장 큰</b> 하나만 남긴다(ADR-0169).
      *
-     * <p>우선주·baby bond·유닛이 <b>발행사의 주식수를 그대로 쓰므로</b> 같은 회사가 여러 번
-     * 들어온다. 목록이 시총 내림차순이라 먼저 만난 것이 최대이고, 가격이 낮은 파생 증권은
-     * 뒤에서 걸린다. <b>CIK를 모르는 티커는 남긴다</b> — 우리 8,504 중 1,815가 SEC 매핑 파일에
-     * 없고 그것은 실패가 아니라 정상이다(ADR-0092 §규칙).
+     * <p>우선주·baby bond·유닛·의결권 클래스가 <b>발행사의 주식수를 그대로 쓰므로</b> 같은 회사가 여러 번
+     * 들어온다. 그 티커들끼리 「주식수 × 종가」는 사실상 <b>가격 순위</b>라, 예전처럼 시총 최대를 고르면
+     * <b>가장 비싼 증권</b>이 회사를 대표했다 — 거래 드문 클래스({@code MOG.B} 0.09 대 {@code MOG.A} 106백만
+     * 달러 · {@code TAP.A}·{@code WSO.B}·{@code BIO.B}·{@code LBTYB})와 혼성 단위({@code PPLC}·{@code BTSGU})가
+     * 그렇게 명부에 들었고, 시계열이 평봉으로 찼다(2026-10-05 실측). 거래대금은 시장이 그 회사의 지분을
+     * 실제로 거래하는 증권을 가리키고, 정렬 창 약 250거래일에서 대표가 쌍마다 0~1회만 바뀐다(가격 규칙은 12~100회).
+     *
+     * <p>{@code close × volume}은 장외 거래량 탓에 절대값이 계통 과대다({@code alpaca-bars.md} — 중앙 약 13%).
+     * 그 기각은 <b>절대값을 국내 거래대금과 견줄 때</b>의 것이고 같은 발행사 클래스끼리의 서열에서는 과대가 양쪽에
+     * 같은 방향으로 걸린다 — 서열 격차가 가장 좁은 쌍이 {@code Z}/{@code ZG} 0.899다(클래스별 장외 비중 차는 재지 않았다).
+     *
+     * <p>동률이면 시총 → 기호 순이다. 대표는 자기 시총 자리에 그대로 남는다. <b>CIK를 모르는 티커는 남긴다</b> —
+     * 우리 8,504 중 1,815가 SEC 매핑 파일에 없고 그것은 실패가 아니라 정상이다(ADR-0092 §규칙).
      */
     private List<Ranked> dropCikDuplicates(List<Ranked> ranked, Exclusions excluded)
             throws DataSourceException {
-        Map<Long, String> keptByCik = new HashMap<>();
-        List<Ranked> kept = new ArrayList<>(ranked.size());
+        Map<Long, List<Ranked>> byCik = new LinkedHashMap<>();
+        Map<Ranked, Long> cikOf = new HashMap<>();
         for (Ranked row : ranked) {
             Optional<Long> cik = cikCache.findCik(row.asset().symbol());
-            if (cik.isEmpty()) {
-                kept.add(row);
-                continue;
+            if (cik.isPresent()) {
+                byCik.computeIfAbsent(cik.get(), k -> new ArrayList<>()).add(row);
+                cikOf.put(row, cik.get());
             }
-            String winner = keptByCik.putIfAbsent(cik.get(), row.asset().symbol());
-            if (winner == null) {
+        }
+        Map<Ranked, Integer> rankOf = new HashMap<>();
+        for (int i = 0; i < ranked.size(); i++) {
+            rankOf.put(ranked.get(i), i + 1);
+        }
+        Map<Long, Ranked> representative = new HashMap<>();
+        byCik.forEach((cik, rows) -> {
+            Ranked best = rows.stream().max(Comparator.comparing(Ranked::dollarVolume)
+                    .thenComparing(Ranked::marketCap)
+                    .thenComparing(r -> r.asset().symbol(), Comparator.reverseOrder())).orElseThrow();
+            representative.put(cik, best);
+            // 시총 내림차순 목록에서 먼저 만난 것이 옛 규칙(시총 최대)의 승자다.
+            Ranked byMarketCap = rows.get(0);
+            if (byMarketCap != best) {
+                // 리밸런싱마다 이 줄이 명부 차이의 귀속 재료다 — 옛 규칙과 갈린 CIK만 찍는다.
+                // 순위는 CIK 중복 제거 전 후보 목록의 시총 순위다 — 혼성 단위는 이름 축에서 먼저 빠져 이 줄에 안 뜬다(제외 내역의 혼성 목록).
+                log.info("CIK 대표가 시총 최대와 갈렸다: cik={} 대표={}(중복 제거 전 시총 {}위 · 거래대금 {}) 시총 최대={}({}위 · 거래대금 {})",
+                        cik, best.asset().symbol(), rankOf.get(best), best.dollarVolume().toBigInteger(),
+                        byMarketCap.asset().symbol(), rankOf.get(byMarketCap),
+                        byMarketCap.dollarVolume().toBigInteger());
+            }
+            if (rows.size() > 1) {
+                // 드라이런·운영 대조의 재료다 — 대표가 왜 그 증권인지가 실행마다 남아야 다음 실행과 견줄 수 있다.
+                log.info("CIK 대표: cik={} 대표={} 후보={}", cik, best.asset().symbol(),
+                        rows.stream().map(r -> r.asset().symbol() + "=" + r.dollarVolume().toBigInteger())
+                                .toList());
+            }
+        });
+        List<Ranked> kept = new ArrayList<>(ranked.size());
+        for (Ranked row : ranked) {
+            Long cik = cikOf.get(row);
+            if (cik == null || representative.get(cik) == row) {
                 kept.add(row);
             } else {
                 excluded.cikDuplicate++;
-                log.debug("CIK 중복이라 뺀다: {} (같은 CIK {}를 {}가 먼저 차지했다)",
-                        row.asset().symbol(), cik.get(), winner);
             }
         }
         return kept;
@@ -383,24 +441,35 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 정의 자체가 흐려지고, 실제 유지 판정은 {@code UniverseReconciler}가 집합 차집합으로 한다.
      */
     private void logBoundary(List<Ranked> deduped) {
+        // INFO다 — 명부 차이의 「경계 밀림」을 귀속하려면 경계 양쪽의 이름과 시총이 실행마다 남아야 한다.
+        int from = Math.max(0, topN - 5);
         int end = Math.min(deduped.size(), topN + 20);
-        if (end > topN) {
-            log.debug("경계 구간({}~{}위): {}", topN + 1, end,
-                    deduped.subList(topN, end).stream().map(r -> r.asset().symbol()).toList());
+        if (end > from) {
+            log.info("경계 구간({}~{}위 · {}위까지 편입): {}", from + 1, end, topN,
+                    deduped.subList(from, end).stream()
+                            .map(r -> r.asset().symbol() + "=" + r.marketCap().toBigInteger()).toList());
         }
     }
 
     /**
-     * 후보의 최근 종가. 심볼을 묶어 묻고 <b>심볼마다 마지막 봉</b>을 쓴다.
+     * 후보마다 창 안 마지막 종가와 <b>창 안 거래대금 합</b>({@code Σ c × v})을 낸다. 심볼을 묶어 묻는다.
      *
      * <p>{@code adjustment=raw}인 것이 계약이다 — 소스가 계산한 수정주가를 받지 않는다
      * (ADR-0006). 순위에는 <b>보정하지 않은 오늘의 시장가</b>가 맞다.
+     *
+     * <p><b>합이다 — 평균이 아니다.</b> 거래 드문 클래스는 봉이 띄엄띄엄이라 있는 봉만 평균하면 희소한 쪽이
+     * 부푼다(실측 {@code WSO.B} 14세션 중 체결 봉 2). <b>페이지가 갈려도 누적한다</b> — 다중 심볼 응답은 심볼 우선
+     * 정렬이라 한 심볼의 봉이 두 페이지에 걸칠 수 있다.
+     *
+     * <p>MUST: 거래량({@code v})이 없는 봉은 MALFORMED로 세운다. 0으로 읽으면 전부 동률이 되어 대표가 기호순으로
+     * <b>조용히</b> 정해진다.
      */
-    private Map<String, BigDecimal> fetchLatestCloses(List<AlpacaAsset> candidates, LocalDate asOf)
+    private Map<String, Quote> fetchLatestCloses(List<AlpacaAsset> candidates, LocalDate asOf)
             throws DataSourceException {
         LocalDate from = asOf.minusDays(CLOSE_WINDOW_DAYS);
         Instant end = clampEnd(asOf);
         Map<String, BigDecimal> closes = new LinkedHashMap<>();
+        Map<String, BigDecimal> dollarVolumes = new HashMap<>();
 
         for (int offset = 0; offset < candidates.size(); offset += SYMBOLS_PER_CALL) {
             List<AlpacaAsset> chunk =
@@ -414,16 +483,23 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                 ResponseEntity<String> response = call(symbols, from, end, pageToken, context);
                 AlpacaResponse.Envelope envelope = AlpacaResponse.requireBars(
                         response.getStatusCode(), response.getBody(), SOURCE_NAME, context);
-                envelope.value().properties().forEach(entry -> {
+                for (Map.Entry<String, JsonNode> entry : envelope.value().properties()) {
                     // 정렬이 asc라 마지막 원소가 가장 늦은 봉이다. 페이지가 갈려도 뒤 페이지가
-                    // 언제나 더 늦으므로 덮어쓰기가 옳다.
+                    // 언제나 더 늦으므로 종가는 덮어쓰기가 옳다 — 거래대금은 누적한다.
                     for (JsonNode bar : entry.getValue()) {
+                        if (!bar.path("v").isNumber()) {
+                            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                                    "봉에 거래량(v)이 없다 — 0으로 읽으면 CIK 대표가 기호순으로 정해진다. symbol=%s %s"
+                                            .formatted(entry.getKey(), context));
+                        }
                         BigDecimal close = bar.path("c").decimalValue();
                         if (close != null && close.signum() > 0) {
                             closes.put(entry.getKey(), close);
+                            dollarVolumes.merge(entry.getKey(),
+                                    close.multiply(bar.path("v").decimalValue()), BigDecimal::add);
                         }
                     }
-                });
+                }
                 pageToken = envelope.nextPageToken();
                 page++;
                 if (page >= MAX_PAGES && pageToken != null) {
@@ -432,7 +508,14 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                 }
             } while (pageToken != null);
         }
-        return closes;
+        Map<String, Quote> quotes = new LinkedHashMap<>();
+        closes.forEach((symbol, close) ->
+                quotes.put(symbol, new Quote(close, dollarVolumes.getOrDefault(symbol, BigDecimal.ZERO))));
+        return quotes;
+    }
+
+    /** 창 안 마지막 종가와 창 안 거래대금 합. */
+    private record Quote(BigDecimal close, BigDecimal dollarVolume) {
     }
 
     /** {@code AlpacaPriceAdapter.clampEnd}와 같은 계약이다 — 15분 규칙을 구조적으로 못 넘는다. */
@@ -489,7 +572,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         }
     }
 
-    private record Ranked(AlpacaAsset asset, BigDecimal marketCap) {
+    private record Ranked(AlpacaAsset asset, BigDecimal marketCap, BigDecimal dollarVolume) {
     }
 
     /**
@@ -497,6 +580,8 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 구분되지 않는다({@code docs/phase-criteria.md} P26 축①).
      */
     private static final class Exclusions {
+        /** 혼성 문구({@link #HYBRID_WORDS})에만 걸려 빠진 티커. 수는 {@code name}에 이미 들어 있다. */
+        private final List<String> hybridOnly = new ArrayList<>();
         private int currency;
         private int nonOperating;
         private int noShares;
@@ -506,8 +591,8 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
 
         @Override
         public String toString() {
-            return "통화=%d · REIT/SPAC=%d · 주식수없음=%d · 이름=%d · 종가없음=%d · CIK중복=%d"
-                    .formatted(currency, nonOperating, noShares, name, noClose, cikDuplicate);
+            return "통화=%d · REIT/SPAC=%d · 주식수없음=%d · 이름=%d(혼성 문구에만 걸림 %s) · 종가없음=%d · CIK중복=%d"
+                    .formatted(currency, nonOperating, noShares, name, hybridOnly, noClose, cikDuplicate);
         }
     }
 }
