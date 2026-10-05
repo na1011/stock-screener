@@ -184,3 +184,14 @@ SEC 서류만으로는 시끄럽다(전수 1,563콜 · `splice-v2/sec-events.tsv
 11. 값으로 닫히는 머리 평봉은 6(ACT·DJT·LNZA·MBLY·OWL·SN) — SMCI·MIR도 읽기 창 밖 · SEZL 08-17 봉은 거래량 1,150인 같은 증권의 첫 관측이라 정의와 어긋남(정의를 고치거나 그 봉을 남김) · FIG·IOT·S·TLN의 실거래 다른 증권 봉은 규칙 2가 못 막는다(지금 닿는 경로 0 — 사정거리로) · CLI는 경계 앞 봉이 편입 구간과 겹치면 거부 · 실행은 13:30~15:40 밖 · 14:00 재구축과 안 겹치게.
 12. 하류: 백테스트 시험 7파일 · `StockReader.previousPrice`(PPLC 03-04 「전일 대비」 기준이 지금 2020-09-25) · `StockRegistrar.COVERAGE_FLOOR` javadoc(568~575)이 PPLC 51.8%를 「정상 종목」 근거로 삼음 — 그것은 접합이었다.
 **부딪히지 않음(두 렌즈 확인)**: ADR-0167(첫 편입일이 전부 경계 뒤 → 결정 5의 지금 효과 0) · 복원(소스 가격) · 수정계수 · ADR-0055 억제 · `SpinOffValuer`(27종목 원장 3행 모두 지울 구간 뒤 · SPIN_OFF 0) · 전제 펜스 20개.
+
+## v4 실측 — 파산 재편 다섯의 기존 지분 처리(2026-10-05 20시 · SEC submissions → 재편 8-K · 10-Q 원문 · 약 15콜)
+물은 것: `data.sec.gov/submissions/CIK…json`으로 재편일 전후 8-K(와 CRC는 재편 뒤 10-Q)를 골라 본문에서 기존 지분 문장을 찾았다. 전문 검색(`efts.sec.gov/LATEST/search-index`)은 **대조군 질의(CRC 「chapter 11」)까지 0건이라 탐침 결함으로 버렸다**(내 질의 형식 오류 — 결과가 아니다).
+| 회사 · 재편일 | 원문 | 판정 |
+|---|---|---|
+| CRC 2020-10-27 | 10-Q(2020-11-05): 「All existing equity interests were cancelled and their holders received no distributions」 · 「Holders of our pre-emergence … common stock … did not receive any recovery」 | **다른 증권 → 경계** |
+| EXE 2021-02-09 | 8-K: 「equity interests … were cancelled, released and extinguished without any distribution」 | **다른 증권 → 경계** |
+| VAL 2021-04-30 | 8-K: 기존 보통주 보유자는 「their pro rata share of the Warrants」만 받음 | **다른 증권 → 경계**(워런트는 별도 증권) |
+| CORZ 2024-01-23 | 8-K: 옛 보통주 1주당 「0.253244 Tranche 1 Warrants and 0.211037 Tranche 2 Warrants」 · 새 보통주는 채권자·권리공모 몫 | **다른 증권 → 경계 2024-01-24**(워런트는 CORZW·CORZZ 별도 티커) — v3 반증의 「경계 날짜 하나로 못 적는다」가 사라진다(실거래 427 · 평봉 265 모두 경계 앞) |
+| **WOLF 2025-09-29** | 8-K: 옛 보통주 소각 · 기존 보유자가 새 보통주 1,306,903주를 「exchange ratio of 0.008352」로 받음 · 규제 마일스톤 달성 시 0.005568 추가(조건부) | **같은 계보 + 배수 → 원장 사건**(병합 s = 0.008352 · 조건부 몫은 거래 안 되는 권리라 가치를 시장으로 못 잼 — DNTH·SYRE CVR과 같은 판정 문제) · 경계 파일에서 뺀다 · 원장 행 추가는 사용자 승인 |
+**v3의 「파산-신규출발 = 다른 증권」은 묶어서 판정이었다**(오류 ①) — 신규출발 태그가 아니라 기존 지분 처리가 가른다. WOLF의 재무 층 지적(경계 뒤 29일 옛 주식수)은 원장 사건이 되면 주식수 보정(`JdbcStoredShareCounts` 원장 보정 · 지표의 `shiftToBar`)이 닫는지 다시 잰다.
