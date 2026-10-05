@@ -46,7 +46,7 @@ CLI: `--job=corporate-action-judge --ca-id=<id> --ca-status=APPROVED --ca-type=S
 | FTV 2020-10-09 (id 183 · SPLIT 1.195) | SPIN_OFF APPROVED | 1 | 1.1610426812 | Fortive: 5주당 VNT 2주(0.4) · 같은 날 종가 VNT 28.11 · FTV 69.82 → v 0.861295 (벤더 계수 1.195를 대체) |
 | DELL 2021-11-02 (id 195 · SPLIT 1.973) | SPIN_OFF APPROVED | 1 | 2.0882114745 | Dell 8-K: 0.440626 VMW · 같은 날 종가 VMW 134.87 · DELL 54.61 → v 0.478879 · 보유자 그날 총수익 +2.27% |
 | FTI 2021-02-16 | SPIN_OFF APPROVED | 1 | 1.3789864030 | TechnipFMC: FTI 5주당 TE 1주 · 분배 FMV = 첫날 VWAP €12.67 = $15.33 · FTI 8.09 |
-| LEN 2025-01-21 | SPIN_OFF APPROVED | 1 | 1.0860448663 | NYSE ex 01-21(Lennar 공시) · 2주당 MRP 1주 · 자식 첫 관측 MRP.WI 2025-02-05 21.94 · 같은 날 LEN 127.49 → v 0.920773 · ex일 수정 수익률 +2.2% |
+| LEN 2025-01-21 | SPIN_OFF APPROVED | 1 | 1.0860459644 | NYSE ex 01-21(Lennar 공시) · 2주당 MRP 1주 · 자식 첫 관측 MRP.WI 2025-02-05 21.94 · 같은 날 LEN 127.49 → v 0.920771 · ex일 수정 수익률 +2.2% |
 | LBTYB 2024-11-13 | SPIN_OFF APPROVED | 1 | 1.7558528428 | Liberty Global 8-K: LBTYB 1주당 Sunrise B주 ADS 2주(액면 CHF 0.01 = A주 0.10의 1/10 → A주 0.2주 상당) · SNRE 45.20 ÷ 5 = 9.04 · LBTYB 11.96 · 같은 날 LBTYA·LBTYK·LBTYB 낙폭 8.84·8.89·8.86 |
 | SYRE 2023-07-03 | SPIN_OFF APPROVED | 1 | 1 | 양도 불가 CVR(Aeglea · 기준일 07-03) · ex일 +1.78% · 지수 +0.12% · 60봉 σ 43% → z 0.04, 바로잡을 불연속 없음 → 자식 가치 0 |
 | DNTH 2023-09-11 | UNSUPPORTED | — | — | 양도 불가 CVR(Magenta) · ex일 −7.74% · 지수 +0.66% · σ 2.61% → z −3.2. CVR 가치인지 합병 소식인지 가를 수 없다 → 진짜 한계, 미표시(사용자 결정 2026-10-05) |
