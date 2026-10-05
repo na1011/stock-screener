@@ -25,8 +25,11 @@ class DartListQueryProbeLiveTest {
         HttpClient http = HttpClient.newHttpClient();
         int i = 0;
         for (String query : System.getenv("PROBE_QUERIES").split(";")) {
-            String url = "https://opendart.fss.or.kr/api/list.json?crtfc_key="
-                    + URLEncoder.encode(System.getenv("DART_API_KEY"), StandardCharsets.UTF_8) + "&" + query;
+            // "경로?쿼리"면 그 엔드포인트, 아니면 list.json.
+            String path = query.contains("?") ? query.substring(0, query.indexOf('?')) : "list.json";
+            String rest = query.contains("?") ? query.substring(query.indexOf('?') + 1) : query;
+            String url = "https://opendart.fss.or.kr/api/" + path + "?crtfc_key="
+                    + URLEncoder.encode(System.getenv("DART_API_KEY"), StandardCharsets.UTF_8) + "&" + rest;
             HttpResponse<String> res = http.send(HttpRequest.newBuilder(URI.create(url)).GET().build(),
                     HttpResponse.BodyHandlers.ofString());
             Files.writeString(out.resolve("q" + (++i) + ".json"), res.body());
