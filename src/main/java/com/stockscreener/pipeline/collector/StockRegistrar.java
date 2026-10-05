@@ -348,8 +348,11 @@ public class StockRegistrar {
      * 계산기 커밋 셋은 과거 편입(그날 333종목)에 안 닿았다(2026-10-04). 같은 날 순위가 두
      * 계산기의 값으로 섞인다.
      *
-     * <p>MUST NOT: {@link #activeUniverseMemberIds()}를 이것으로 바꾸지 않는다. 그쪽은 외부 호출을
-     * 태우는 일일 갱신의 대상이다(그 javadoc). 이쪽은 <b>호출 0인</b> 다시 계산의 대상이다.
+     * <p>MUST NOT: {@link #activeUniverseMemberIds()}를 이것으로 바꾸지 않는다. 그쪽은 일일 갱신의 「전 종목」이다
+     * (그 javadoc) — 정의를 바꾸면 그것을 부르는 잡 전부의 대상이 말없이 넓어진다. 잡이 이 모집단을 고를 때는
+     * 사유를 든다: 지표 화해·거버넌스 유도·재구축은 호출 0인 다시 계산이고, <b>기업행위 수집은 외부 호출을
+     * 태운다</b> — 창 안에서 편출된 모체의 분사·분할이 원장에 안 들어오면 과거 기준일에 고친 모체와 안 고친
+     * 모체가 섞이기 때문이다(CorporateActionJob · 탐색 브랜치 explore/spin-off/PLAN.md §G).
      *
      * <p>술어는 {@link #activeUniverseMemberIdsByTicker}와 한 조각({@link #IN_RETENTION_WINDOW})이다.
      * 둘이 갈리면 손으로 티커를 준 실행과 정기 화해가 서로 다른 「창 편입」을 돈다.

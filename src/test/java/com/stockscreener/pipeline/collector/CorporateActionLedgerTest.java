@@ -272,7 +272,7 @@ class CorporateActionLedgerTest {
         // 가격의 방향은 이제 가격 배수(s/v)가 정한다(V60·V61). 주식수 배수 s는 미국 분사 1 ·
         // SK텔레콤 2021-11-29(액면분할 5 × 인적분할) 3.0368125137처럼 1 이상이 정당하다.
         ledger.record(stockId, CorporateAction.spinOff(LocalDate.parse("2021-11-29"), null,
-                new BigDecimal("3.0368125137"), new com.stockscreener.pipeline.datasource.Distribution(
+                new BigDecimal("3.0368125137"), com.stockscreener.pipeline.datasource.Distribution.of(
                         "402340", null, null, LocalDate.parse("2021-11-29"),
                         new BigDecimal("12670439037600"), new BigDecimal("10751535396000")), "cmpDvDecsn"));
         assertThat(ratio("2021-11-29")).isEqualByComparingTo("3.0368125137");
@@ -569,7 +569,7 @@ class CorporateActionLedgerTest {
     @DisplayName("해석 못 한 분사는 종류 미상 OBSERVED로 들어가고, 다음 실행의 해석이 같은 행을 가격 배수와 함께 덮는다")
     void unresolvedSpinOffIsUpgradedWithItsPriceOnceValued() {
         ledger.record(stockId, CorporateAction.unresolvedSpinOff(LocalDate.parse("2026-10-01"), null,
-                BigDecimal.ONE, new com.stockscreener.pipeline.datasource.Distribution(
+                BigDecimal.ONE, com.stockscreener.pipeline.datasource.Distribution.of(
                         "VYLR", null, BigDecimal.ONE, LocalDate.parse("2026-10-01"), null, null), "spin_off"));
         assertThat(status("2026-10-01")).isEqualTo("OBSERVED");
         assertThat(type("2026-10-01")).isEqualTo("UNKNOWN");
@@ -595,7 +595,7 @@ class CorporateActionLedgerTest {
 
         CorporateActionLedger.RecordResult result = ledger.record(stockId, CorporateAction.spinOff(
                 LocalDate.parse("2026-08-25"), null, new BigDecimal("0.7563532970"),
-                new com.stockscreener.pipeline.datasource.Distribution("0220W0", null, null, LocalDate.parse("2026-08-25"),
+                com.stockscreener.pipeline.datasource.Distribution.of("0220W0", null, null, LocalDate.parse("2026-08-25"),
                         new BigDecimal("6298142735700"), new BigDecimal("846000505350")), "cmpDvDecsn"));
 
         assertThat(result.outcome()).isEqualTo(CorporateActionLedger.Outcome.UPGRADED);
@@ -674,7 +674,7 @@ class CorporateActionLedgerTest {
     private static CorporateAction spinOff(String date, String shareMultiple, String parentClose, String childClose) {
         BigDecimal s = new BigDecimal(shareMultiple);
         return CorporateAction.spinOff(LocalDate.parse(date), LocalDate.parse(date), s,
-                new com.stockscreener.pipeline.datasource.Distribution("VYLR", "000000000", BigDecimal.ONE,
+                com.stockscreener.pipeline.datasource.Distribution.of("VYLR", "000000000", BigDecimal.ONE,
                         LocalDate.parse(date), s.multiply(new BigDecimal(parentClose)), new BigDecimal(childClose)),
                 "spin_off");
     }

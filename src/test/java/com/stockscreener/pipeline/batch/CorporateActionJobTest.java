@@ -99,7 +99,9 @@ class CorporateActionJobTest {
         jdbcTemplate.update("DELETE FROM corporate_action");
         jdbcTemplate.update("DELETE FROM price_daily");
         jdbcTemplate.update("DELETE FROM universe_membership");
-        jdbcTemplate.update("DELETE FROM stock WHERE ticker IN ('005930', 'NVDA')");
+        jdbcTemplate.update("DELETE FROM stock WHERE ticker IN ('005930', 'NVDA', '000660')");
+        jdbcTemplate.update("DELETE FROM indicator_trade_date WHERE market_code = 'KOSPI' AND trade_date IN (?, ?)",
+                AS_OF.minusMonths(6), AS_OF);
     }
 
     @Test
@@ -113,6 +115,31 @@ class CorporateActionJobTest {
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(ledgerRowCount()).isEqualTo(1);
         assertThat(statusOf("2026-02-04")).isEqualTo("APPROVED");
+    }
+
+    @Test
+    @DisplayName("보존 창 안에서 편출된 종목도 원장에 적는다 — 안 적으면 과거 기준일에 고친 모체와 안 고친 모체가 섞인다")
+    void recordsActionsOfPastMembersInsideTheRetentionWindow() {
+        // 창: 지표 거래일 [AS_OF − 6개월, AS_OF]. 편입 [AS_OF − 2년, AS_OF − 1개월)은 창과 겹친다 — 분사 설계 반증의
+        // MIDD(2026-07-07 분사 · 편입 [2025-09-24, 2026-08-14)) 모양이다.
+        jdbcTemplate.update("INSERT INTO indicator_trade_date (market_code, trade_date) VALUES ('KOSPI', ?), ('KOSPI', ?)"
+                + " ON CONFLICT DO NOTHING", AS_OF.minusMonths(6), AS_OF);
+        long pastId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name) VALUES ('KOSPI', '000660', 'SK하이닉스') RETURNING id
+                """, Long.class);
+        jdbcTemplate.update("""
+                INSERT INTO universe_membership (universe_code, stock_id, effective_from, effective_to)
+                VALUES (?, ?, ?, ?)
+                """, UNIVERSE, pastId, AS_OF.minusYears(2), AS_OF.minusMonths(1));
+        writer.write(pastId, List.of(bar("2026-02-02", "1000"), bar("2026-02-04", "1020")));
+        fakeSource.with(pastId, split("2026-02-04"));
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), null);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM corporate_action WHERE stock_id = ?", Integer.class, pastId))
+                .as("지금 편입만 물으면 0이다")
+                .isEqualTo(1);
     }
 
     @Test

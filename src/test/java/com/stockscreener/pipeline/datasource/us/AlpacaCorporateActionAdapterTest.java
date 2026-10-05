@@ -65,8 +65,8 @@ class AlpacaCorporateActionAdapterTest {
 
         List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
 
-        assertThat(actions).hasSize(1);
-        CorporateAction split = actions.get(0);
+        assertThat(actions).filteredOn(a -> a.distribution() == null).hasSize(1);
+        CorporateAction split = actions.stream().filter(a -> a.distribution() == null).findFirst().orElseThrow();
         assertThat(split.type()).isEqualTo(CorporateAction.Type.SPLIT);
         assertThat(split.ratio()).isEqualByComparingTo(new BigDecimal("10"));
         assertThat(split.effectiveDate()).isEqualTo(LocalDate.of(2024, 6, 10));
@@ -110,8 +110,8 @@ class AlpacaCorporateActionAdapterTest {
     }
 
     @Test
-    @DisplayName("배당·분사는 값으로 내지 않는다 — 담을 자리가 없는 것이지 사건이 없는 것이 아니다")
-    void doesNotRecordDividendsOrSpinOffs() throws Exception {
+    @DisplayName("배당은 값으로 내지 않고, 분사는 가격 배수 없는 원자료로 낸다 — 가치 비율은 수집기가 같은 날 종가로 정한다")
+    void dividendsStayOutAndSpinOffsComeAsRawDistributions() throws Exception {
         enqueue(200, fixture("ca-ok.json"));
 
         List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
@@ -119,7 +119,70 @@ class AlpacaCorporateActionAdapterTest {
         assertThat(actions)
                 .as("같은 응답에 배당 1건·분사 1건이 함께 있는 픽스처다")
                 .extracting(CorporateAction::sourceForm)
-                .containsExactly("forward_split");
+                .containsExactly("spin_off", "forward_split");
+        CorporateAction spin = actions.get(0);
+        assertThat(spin.type()).as("가격 배수를 아직 모른다 — 재구축에서 빠진다").isEqualTo(CorporateAction.Type.UNKNOWN);
+        assertThat(spin.priceRatio()).isNull();
+        assertThat(spin.ratio()).as("미국 분사는 주식수가 그대로다").isEqualByComparingTo("1");
+        assertThat(spin.distribution().newSymbol()).isEqualTo("ZZZZ");
+        assertThat(spin.distribution().rate()).isEqualByComparingTo("0.5");
+        assertThat(spin.distribution().valued()).isFalse();
+    }
+
+    @Test
+    @DisplayName("자식 쪽 응답은 담지 않는다 — new_symbol이 요청 심볼이면 그 종목이 받은 것이지 그 종목의 사건이 아니다")
+    void ignoresSpinOffsWhereTheSymbolIsTheChild() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{"spin_offs":[{"source_symbol":"T","new_symbol":"NVDA","source_rate":1,
+                "new_rate":0.24192,"ex_date":"2024-04-11","process_date":"2024-04-11"}]},"next_page_token":null}""");
+
+        assertThat(adapter().fetchCorporateActions(NVDA, FROM, TO).actions()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("자기 자신을 분배한 레코드는 담지 않는다 — 티커 재사용 겸 재조직이라 분사 식이 안 선다(CR 2023-04-04)")
+    void ignoresSelfDistribution() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{"spin_offs":[{"source_symbol":"NVDA","new_symbol":"NVDA","source_rate":1,
+                "new_rate":1,"ex_date":"2024-04-04","process_date":"2024-04-04"}]},"next_page_token":null}""");
+
+        assertThat(adapter().fetchCorporateActions(NVDA, FROM, TO).actions()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("같은 날 병합과 분사는 한 행이다 — HON 2026-06-29 병합 1:2 + HONA(원장은 한 날에 한 행)")
+    void mergesASameDayReverseSplitIntoTheSpinOff() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{
+                 "reverse_splits":[{"symbol":"NVDA","ex_date":"2024-06-28","old_rate":2,"new_rate":1,"id":"r1"}],
+                 "spin_offs":[{"source_symbol":"NVDA","new_symbol":"HONA","new_cusip":"000000001","source_rate":1,
+                  "new_rate":0.5,"ex_date":"2024-06-28","process_date":"2024-06-28","id":"p1"}]},
+                 "next_page_token":null}""");
+
+        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
+
+        assertThat(actions).singleElement().satisfies(a -> {
+            assertThat(a.ratio()).as("주식수 배수 s = 병합 비율").isEqualByComparingTo("0.5");
+            assertThat(a.sourceForm()).isEqualTo("reverse_split+spin_off");
+            assertThat(a.distribution().newSymbol()).isEqualTo("HONA");
+        });
+    }
+
+    @Test
+    @DisplayName("같은 날 여러 증권을 나눠 주면 자식을 합친다 — OPEN 2025-11-18 워런트 세 종")
+    void mergesSameDayDistributionsIntoOneRow() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{"spin_offs":[
+                 {"source_symbol":"NVDA","new_symbol":"OPENW","source_rate":1,"new_rate":0.033333333,"ex_date":"2024-11-18","id":"a"},
+                 {"source_symbol":"NVDA","new_symbol":"OPENL","source_rate":1,"new_rate":0.033333333,"ex_date":"2024-11-18","id":"b"},
+                 {"source_symbol":"NVDA","new_symbol":"OPENZ","source_rate":1,"new_rate":0.033333333,"ex_date":"2024-11-18","id":"c"}]},
+                 "next_page_token":null}""");
+
+        List<CorporateAction> actions = adapter().fetchCorporateActions(NVDA, FROM, TO).actions();
+
+        assertThat(actions).singleElement().satisfies(a ->
+                assertThat(a.distribution().children()).extracting(c -> c.symbol())
+                        .containsExactlyInAnyOrder("OPENW", "OPENL", "OPENZ"));
     }
 
     @Test

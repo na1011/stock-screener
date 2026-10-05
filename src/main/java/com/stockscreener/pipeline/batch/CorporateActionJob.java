@@ -345,7 +345,10 @@ public class CorporateActionJob {
             }
             return matched;
         }
-        return stockRegistrar.activeUniverseMemberIds();
+        // 보존 창 편입 전원 — 재구축(ADR-0167 · AdjustmentRebuildJob)과 같은 모집단이다. 지금 편입만 물으면 창 안에서
+        // 편출된 모체(MIDD 2026-07-07 분사 · 편입 [2025-09-24, 2026-08-14))의 사건이 원장에 영영 안 들어와, 과거 기준일
+        // 화면과 백분위 모집단에서 고친 모체와 안 고친 모체가 섞인다(분사 설계 반증 · explore/spin-off/PLAN.md §G).
+        return stockRegistrar.windowMemberIds();
     }
 
     /**

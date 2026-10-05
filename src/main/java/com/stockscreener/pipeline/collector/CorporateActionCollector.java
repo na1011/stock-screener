@@ -42,13 +42,16 @@ public class CorporateActionCollector {
     private final CorporateActionLedger ledger;
     private final AdjustmentRecalculator recalculator;
     private final PriceCalendar priceCalendar;
+    private final SpinOffValuer spinOffValuer;
 
     public CorporateActionCollector(DataSourceRegistry registry, CorporateActionLedger ledger,
-                                    AdjustmentRecalculator recalculator, PriceCalendar priceCalendar) {
+                                    AdjustmentRecalculator recalculator, PriceCalendar priceCalendar,
+                                    SpinOffValuer spinOffValuer) {
         this.registry = registry;
         this.ledger = ledger;
         this.recalculator = recalculator;
         this.priceCalendar = priceCalendar;
+        this.spinOffValuer = spinOffValuer;
     }
 
     /**
@@ -114,12 +117,21 @@ public class CorporateActionCollector {
         // 소스가 종류를 확정하지 못한 사건은 값이 아니라 **이름만** 기여한다. 그것을 record로
         // 보내면 공시가 먼저 도는 이 순서 때문에 뒤에 올 휴리스틱의 확정된 종류·비율이
         // IGNORED로 버려진다(ADR-0050). 주석은 두 패스가 끝난 뒤에 붙인다.
-        Result disclosed = recordAll(security, fromSource.stream()
-                .filter(action -> action.type() != CorporateAction.Type.UNKNOWN)
-                .toList());
+        //
+        // 분사는 원자료(자식 · 배정 비율)를 들고 오고 가격 배수는 여기서 같은 날 두 종가로 정한다. 못 정한 분사는
+        // 종류 미상으로 record에 간다 — annotate로 보내면 이웃 행에 낱말만 붙고 그 분사는 무보정·무억제로 남는다.
+        List<CorporateAction> disclosedActions = new ArrayList<>();
+        for (CorporateAction action : fromSource) {
+            if (action.distribution() != null) {
+                disclosedActions.add(spinOffValuer.value(security, action));
+            } else if (action.type() != CorporateAction.Type.UNKNOWN) {
+                disclosedActions.add(action);
+            }
+        }
+        Result disclosed = recordAll(security, disclosedActions);
         List<CorporateAction> nameOnly = fromSource.stream()
                 .filter(action -> action.type() == CorporateAction.Type.UNKNOWN
-                        && action.sourceForm() != null)
+                        && action.sourceForm() != null && action.distribution() == null)
                 .toList();
 
         // 휴리스틱은 외부 호출이 없다. 창 밖 후보를 거르는 이유는 포트 계약과 같은 창을 쓰기

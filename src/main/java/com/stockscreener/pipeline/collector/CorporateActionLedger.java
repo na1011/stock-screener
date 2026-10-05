@@ -44,7 +44,7 @@ public class CorporateActionLedger {
      * 절) 이 창이 없으면 같은
      * 사건이 두 행이 되고, <b>둘 다 승인되면 재구축이 두 계수를 곱해 정확히 두 번 적용한다.</b>
      */
-    private static final int NEAR_DUPLICATE_TRADING_DAYS = 5;
+    static final int NEAR_DUPLICATE_TRADING_DAYS = 5;
 
     /**
      * 거래일 창과 함께 걸리는 달력 상한.
@@ -378,6 +378,11 @@ public class CorporateActionLedger {
                 """,
                 corporateActionId, distribution.newSymbol(), distribution.newCusip(), distribution.rate(),
                 distribution.valueDate(), distribution.parentValue(), distribution.childValue());
+        // 사람이 남긴 note는 덮지 않는다. 자동 근거는 원자료가 바뀔 때(미측정 → 측정) 함께 바뀐다.
+        jdbcTemplate.update("""
+                UPDATE corporate_action SET note = ?, updated_at = now()
+                WHERE id = ? AND (note IS NULL OR note LIKE '분사 · 자식 %')
+                """, distribution.describe(), corporateActionId);
     }
 
     /**

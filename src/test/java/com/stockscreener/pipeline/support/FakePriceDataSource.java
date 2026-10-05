@@ -52,6 +52,14 @@ public class FakePriceDataSource implements PriceDataSource {
         return this;
     }
 
+    private final Map<String, List<RawPriceBar>> barsByTicker = new HashMap<>();
+
+    /** 원장에 없는 증권(분사 자식)의 봉. 그런 증권은 종목 id가 없어 심볼로 찾는다. */
+    public FakePriceDataSource withTickerBars(String ticker, List<RawPriceBar> bars) {
+        barsByTicker.put(ticker, bars);
+        return this;
+    }
+
     public FakePriceDataSource withCorporateAction(long stockId, CorporateAction action) {
         actionsByStock.computeIfAbsent(stockId, k -> new ArrayList<>()).add(action);
         return this;
@@ -114,7 +122,10 @@ public class FakePriceDataSource implements PriceDataSource {
         if (before != null && from.isBefore(before)) {
             throw failingBeforeWith.get(security.stockId());
         }
-        return barsByStock.getOrDefault(security.stockId(), List.of()).stream()
+        List<RawPriceBar> source = barsByTicker.containsKey(security.ticker())
+                ? barsByTicker.get(security.ticker())
+                : barsByStock.getOrDefault(security.stockId(), List.of());
+        return source.stream()
                 .filter(bar -> !bar.tradeDate().isBefore(from) && !bar.tradeDate().isAfter(to))
                 .toList();
     }

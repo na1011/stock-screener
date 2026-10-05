@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.datasource.us;
 import com.stockscreener.pipeline.datasource.CorporateAction;
 import com.stockscreener.pipeline.datasource.CorporateActionDataSource;
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.Distribution;
 import com.stockscreener.pipeline.datasource.PriceDiscontinuity;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey;
@@ -63,7 +64,8 @@ import java.util.TreeMap;
  * 심볼이 통째로 빈다.</b>
  *
  * <h2>담는 것과 안 담는 것</h2>
- * <p>계수를 낼 수 있는 <b>분할·병합만</b> 값으로 낸다(ADR-0090). 배당·분사·합병류는
+ * <p>계수를 낼 수 있는 <b>분할·병합</b>은 값으로 내고(ADR-0090), <b>분사</b>는 원자료(자식 · 배정 비율)로 낸다 —
+ * 가격 배수는 수집기가 같은 날 두 종가로 정한다({@link #SPIN_OFFS}). 배당·합병류는
  * <b>안 담고 세어서 로그로 남긴다</b> — 「그런 사건이 없다」와 「우리가 안 담는다」는 다르다.
  * 그리고 <b>16종 밖의 처음 보는 타입이 오면 WARN으로 알린다.</b> 안 알리면 소스가 새 타입을
  * 주기 시작해도 조용히 넘어간다({@code GovernanceDeriveJob}이 모르는 {@code metric_key}에
@@ -86,6 +88,23 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
     private static final Map<String, CorporateAction.Type> ADJUSTING = Map.of(
             "forward_splits", CorporateAction.Type.SPLIT,
             "reverse_splits", CorporateAction.Type.REVERSE_SPLIT);
+
+    /**
+     * 분사. 값(가격 배수)은 어댑터가 낼 수 없다 — 소스가 자식 심볼과 배정 비율만 주고, 가치 비율은 같은 날 두 종가로
+     * 수집기가 정한다({@code SpinOffValuer}). 그래서 여기서는 {@link CorporateAction#unresolvedSpinOff}로 원자료만 낸다.
+     *
+     * <p>ADR-0090이 이것을 「안 담고 센다」로 뒀던 근거(「{@code new_rate}는 배정 비율이지 가격계수가 아니다」)는 참이다 —
+     * 그 기각은 {@code new_rate}를 계수로 쓰는 처방에 붙어 있고, 자식 가격으로 가치 비율을 내는 처방은 재지 않았다
+     * (탐색 브랜치 {@code explore/spin-off/PLAN.md} §4).
+     */
+    static final String SPIN_OFFS = "spin_offs";
+
+    /**
+     * 분사와 분할·병합을 한 사건으로 합치는 달력 폭. 원장의 근접중복 창(5거래일 · 달력 상한)과 맞춘다 — 그 안의 두
+     * 사건은 원장에 따로 못 들어가고(하나가 NEAR_DUPLICATE로 버려진다), 실제로 HON 2026-06-29는 병합 1:2와 분사가
+     * 같은 날이다(병합 ×2와 분사 ×0.51이 상쇄돼 가격이 거의 안 움직였다).
+     */
+    static final int MERGE_CALENDAR_DAYS = 7;
 
     /**
      * 공급자가 문서로 밝힌 16종(단수형). <b>여기 없는 키가 오면 스펙이 넓어진 것</b>이므로
@@ -194,8 +213,9 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
         // MUST NOT: 여기서 찍지 않는다. 심볼마다 한 줄이면 한 판에 약 978줄(232 B/줄)이고
         // 그 정보는 **타입별 분포**에 이미 다 있다. 「그런 사건이 없다」와 「우리가 안 담는다」를
         // 가르는 것은 이 수이지 줄 수가 아니다 — 수는 Fetched로 나가 잡이 시장별로 접는다.
-        harvest.actions.sort(Comparator.comparing(CorporateAction::effectiveDate));
-        return new Fetched(harvest.actions, Map.copyOf(harvest.skipped));
+        List<CorporateAction> actions = mergeDistributions(harvest.actions);
+        actions.sort(Comparator.comparing(CorporateAction::effectiveDate));
+        return new Fetched(actions, Map.copyOf(harvest.skipped));
     }
 
     /**
@@ -327,6 +347,29 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             }
         }
 
+        // 1b) 분사 — 이 심볼이 모체(source_symbol)인 레코드만. 자식 쪽 응답(new_symbol = 요청 심볼)은 그 자식이
+        // 받은 것이지 이 종목의 사건이 아니다(api-spec의 「뒤쪽을 집으면」 함정).
+        for (JsonNode node : buckets.getOrDefault(SPIN_OFFS, List.of())) {
+            CorporateAction spin = toSpinOff(node, symbol, context);
+            if (spin == null) {
+                continue;
+            }
+            if (spin.effectiveDate().isBefore(from) || spin.effectiveDate().isAfter(to)) {
+                continue;
+            }
+            if (!current) {
+                if (spin.effectiveDate().isAfter(era.until())) {
+                    continue;
+                }
+                String sourceCusip = node.path("source_cusip").asString("");
+                if (!sourceCusip.isBlank() && !lineage.contains(sourceCusip)) {
+                    continue;
+                }
+            }
+            candidates.add(spin);
+            candidateNodes.add(node);
+        }
+
         // 2) 이 심볼로 들어온 이름 변경 — 따라갈 옛 시절이자 이 시절의 하한.
         List<JsonNode> renamesInto = new ArrayList<>();
         for (JsonNode node : buckets.getOrDefault("name_changes", List.of())) {
@@ -367,7 +410,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             }
         }
         for (Map.Entry<String, List<JsonNode>> bucket : buckets.entrySet()) {
-            if (ADJUSTING.containsKey(bucket.getKey())) {
+            if (ADJUSTING.containsKey(bucket.getKey()) || SPIN_OFFS.equals(bucket.getKey())) {
                 continue;
             }
             for (JsonNode node : bucket.getValue()) {
@@ -451,6 +494,83 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
         LocalDate payable = optionalDateOf(node, "payable_date");
         return new CorporateAction(exDate, payable, exDate, type, ratio,
                 CorporateAction.DetectionSource.SOURCE_DISCLOSURE, singular(bucketKey));
+    }
+
+    /**
+     * 분사 레코드 하나를 원자료로 옮긴다. 이 심볼이 모체가 아니거나 자기 자신을 분배한 레코드면 {@code null}.
+     *
+     * <p>자기 분배({@code source_symbol = new_symbol} — CR 2023-04-04)는 티커 재사용 겸 재조직이라 분사 식이 안 선다.
+     * 담지 않고 WARN으로 남긴다 — 접합 축(비증권 봉 · `docs/reload-gate.md`)이 판정한다.
+     */
+    private CorporateAction toSpinOff(JsonNode node, String symbol, String context) throws DataSourceException {
+        String source = node.path("source_symbol").asString("");
+        if (!symbol.equals(source)) {
+            return null;
+        }
+        String child = node.path("new_symbol").asString("");
+        if (child.isBlank() || child.equals(source)) {
+            log.warn("자식이 없거나 모체 자신인 분사 레코드라 담지 않는다. 모체={} 자식={} ex={}. {}",
+                    source, child, node.path("ex_date").asString(""), context);
+            return null;
+        }
+        LocalDate exDate = dateOf(node, "ex_date", context);
+        BigDecimal sourceRate = decimalOf(node, "source_rate", context);
+        BigDecimal newRate = decimalOf(node, "new_rate", context);
+        if (sourceRate.signum() <= 0 || newRate.signum() <= 0) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                    "분사 배정 비율이 양수가 아니다: source=%s new=%s. %s".formatted(sourceRate, newRate, context));
+        }
+        BigDecimal rate = newRate.divide(sourceRate, PriceDiscontinuity.RATIO_SCALE, RoundingMode.HALF_UP);
+        String cusip = node.path("new_cusip").asString("");
+        return CorporateAction.unresolvedSpinOff(exDate, exDate, BigDecimal.ONE,
+                Distribution.of(child, cusip.isBlank() ? null : cusip, rate, exDate, null, null),
+                singular(SPIN_OFFS));
+    }
+
+    /**
+     * 같은 사건을 한 행으로 모은다 — 원장은 (종목, 효력일)에 한 행이고 근접중복 창 안의 둘째 행을 버린다.
+     * <ul>
+     *   <li>같은 날 분배 여럿은 자식을 합친다(OPEN 2025-11-18 워런트 세 종).</li>
+     *   <li>{@value #MERGE_CALENDAR_DAYS}일 안의 분할·병합은 분사에 접는다 — 주식수 배수 s가 그 비율이 되고 날짜는 분사
+     *       ex다(HON 2026-06-29 병합 1:2 + HONA).</li>
+     * </ul>
+     */
+    static List<CorporateAction> mergeDistributions(List<CorporateAction> actions) {
+        Map<LocalDate, CorporateAction> spinsByDate = new TreeMap<>();
+        List<CorporateAction> others = new ArrayList<>();
+        for (CorporateAction action : actions) {
+            if (action.distribution() == null) {
+                others.add(action);
+                continue;
+            }
+            spinsByDate.merge(action.effectiveDate(), action, (a, b) -> CorporateAction.unresolvedSpinOff(
+                    a.effectiveDate(), a.sourceDate(), a.ratio(), a.distribution().plus(b.distribution()),
+                    a.sourceForm()));
+        }
+        List<CorporateAction> merged = new ArrayList<>();
+        for (CorporateAction spin : spinsByDate.values()) {
+            CorporateAction split = null;
+            for (CorporateAction other : others) {
+                boolean shareEvent = other.type() == CorporateAction.Type.SPLIT
+                        || other.type() == CorporateAction.Type.REVERSE_SPLIT;
+                long apart = Math.abs(java.time.temporal.ChronoUnit.DAYS.between(other.effectiveDate(),
+                        spin.effectiveDate()));
+                if (shareEvent && apart <= MERGE_CALENDAR_DAYS && (split == null || apart < Math.abs(
+                        java.time.temporal.ChronoUnit.DAYS.between(split.effectiveDate(), spin.effectiveDate())))) {
+                    split = other;
+                }
+            }
+            if (split == null) {
+                merged.add(spin);
+                continue;
+            }
+            others.remove(split);
+            merged.add(CorporateAction.unresolvedSpinOff(spin.effectiveDate(), spin.sourceDate(),
+                    split.ratio().multiply(spin.ratio()), spin.distribution(),
+                    split.sourceForm() + "+" + spin.sourceForm()));
+        }
+        merged.addAll(others);
+        return merged;
     }
 
     private static LocalDate maxOf(LocalDate a, LocalDate b) {
