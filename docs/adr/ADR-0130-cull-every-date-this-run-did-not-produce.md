@@ -133,8 +133,7 @@ psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM univ
 
 ### 적용 실측 — 3종목 대조군 (2026-09-09 · `--tickers=WAT,ANET,UI` 단일 날짜)
 
-되돌리기 파일: `~/Library/Application Support/stock-screener/dumps/cull-head-20260909-before.psv`
-(93,812행).
+되돌리기 파일 `cull-head-20260909-before.psv`(93,812행)는 2026-10-05에 지웠다(사용자가 직접 실행).
 
 | 종목 | 전 | 후 | 차 | 러너가 신고한 걷기 |
 |---|---|---|---|---|
