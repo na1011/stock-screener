@@ -128,8 +128,8 @@ applies_to:
   **판정 대기**이고 시세 급변 휴리스틱이 새 건을 계속 만든다. 둘을 뭉치면 **정상 관측이
   들어올 때마다 「목록이 낡았다」로 울어** 거짓 발견이 된다(실측: 2026-09-10 관측 1건이
   7을 8로 만들었다).
-- **MUST: 수익률 제외를 종목이 아니라 종목·기간 단위로 한다.** `UNSUPPORTED` 7종목 중
-  **3건(2020-08·2021-01·2021-11)은 백테스트 창 밖 사건**이라 그 종목이 창 안에서는 살아 있다.
+- **MUST: 수익률 제외를 종목이 아니라 종목·기간 단위로 한다.** `UNSUPPORTED` 4종목 중
+  **2건(2021-01·2022-01)은 백테스트 창(2022-04~) 밖 사건**이라 그 종목이 창 안에서는 살아 있다.
   종목 통째로 빼면 표본이 조용히 좁아진다.
 - **MUST: `RETAINED_TO_MARKET_4Y`를 수익률 축에서 빼고 「이 표본으로는 못 잰다」로 적는다.**
   가격 1,261봉이 필요해 값이 **2025-02-18**부터 나오고 아웃오브샘플 경계가 2025-04-01이라
@@ -244,8 +244,8 @@ psql -d stock_screener -At -c "SELECT CASE WHEN current_setting('default_transac
 psql -d stock_screener -At -c "SELECT CASE WHEN count(*) FILTER (WHERE NOT is_active) = 0 THEN 'OK stock ' || count(*) || '행이 전부 활성이다 — 폐지 종목이 없어 미충족 집단 평균이 위로 당겨진다(실측 편향 0.57~2.47%p/6개월, 임계 3.5%p)' ELSE '비활성 종목이 ' || count(*) FILTER (WHERE NOT is_active) || '행 생겼다 — 폐지 이력이 들어왔다면 생존편향 하한을 다시 재고 부호 서술을 고친다' END FROM stock"
 ```
 
-```premise 수익률에서 제외할 종목이 아직 7이다
-psql -d stock_screener -At -c "WITH bad AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'UNSUPPORTED' AND effective_date >= DATE '2020-01-01'), pending AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'OBSERVED' AND effective_date >= DATE '2020-01-01') SELECT CASE WHEN (SELECT count(*) FROM corporate_action) = 0 THEN '잴 것이 없었다 — 기업행위 원장이 비었다' WHEN (SELECT count(*) FROM bad) = 7 THEN 'OK 미보정 기업행위 7종목(계획 기준)' || CASE WHEN (SELECT count(*) FROM pending) > 0 THEN ' · 판정 대기 ' || (SELECT count(*) FROM pending) || '종목' ELSE '' END ELSE '미보정 기업행위가 ' || (SELECT count(*) FROM bad) || '종목이다(계획 기준 7) — 수익률 제외 목록이 낡았다' END"
+```premise 수익률에서 제외할 종목이 아직 4다
+psql -d stock_screener -At -c "WITH bad AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'UNSUPPORTED' AND effective_date >= DATE '2020-01-01'), pending AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'OBSERVED' AND effective_date >= DATE '2020-01-01') SELECT CASE WHEN (SELECT count(*) FROM corporate_action) = 0 THEN '잴 것이 없었다 — 기업행위 원장이 비었다' WHEN (SELECT count(*) FROM bad) = 4 THEN 'OK 미보정 기업행위 4종목(계획 기준)' || CASE WHEN (SELECT count(*) FROM pending) > 0 THEN ' · 판정 대기 ' || (SELECT count(*) FROM pending) || '종목' ELSE '' END ELSE '미보정 기업행위가 ' || (SELECT count(*) FROM bad) || '종목이다(계획 기준 4) — 수익률 제외 목록이 낡았다' END"
 ```
 
 ## 배경
@@ -360,11 +360,12 @@ ADR-0044의 *"손잡이를 푸는 것은 사용자 결정이다"*와 ADR-0061의
 KR 0.9950/0.9844 · US 0.9873이고 사전등록한 합격선(0.95 · 0.90)을 넘었다(ADR-0135 §결과).
 **창 밖(2022-04~)은 그대로 복원되지 않는다** — 이 하네스의 앵커 여덟 중 **일곱이 거기 있다.**
 
-**수익률의 정본에도 구멍이 있다.** 2020 이후 원장 사건 91건 중 `UNSUPPORTED` 7 · `REJECTED` 3.
-`UNSUPPORTED` 7종목은 인적분할·감자처럼 비율을 낼 수 없어 원장이 포기한 것이라 `adj_close`가
-실제로 끊겨 있다 — 아시아나항공 **+327.6%**, SK텔레콤 **−81.3%**, DN오토모티브 **−81.2%**,
-삼성바이오로직스 +46.5%, 현대지에프홀딩스·OCI홀딩스·솔브레인홀딩스 −40.3/−31.2/−37.6%.
-`REJECTED` 3은 휴리스틱 오탐이므로 실제 주가 변동이며 **제외 대상이 아니다.**
+**수익률의 정본에도 구멍이 있다.** 2020 이후 `UNSUPPORTED` 4종목(국내 2 · 미국 2)은 비율을 낼 수
+없어 원장이 포기한 것이라 `adj_close`가 실제로 끊겨 있다 — 아시아나항공 **+327.6%**(2021-01-15),
+DN오토모티브 **−81.2%**(2024-10-08), CNH −13.8%(2022-01-03 Iveco 분사 · 자식 값을 못 구함),
+DNTH −7.7%(2023-09-11 CVR)와 이튿날 **+1,472%**(원장에 없는 1:16 병합 — 억제 창이 함께 덮는다).
+국내 인적분할 5종목(SK텔레콤 등)은 ADR-0168로 가격 배수를 받아 더는 끊겨 있지 않다.
+`REJECTED`는 실제 주가 변동으로 판정한 것이라 **제외 대상이 아니다.**
 
 ## 측정 결과 (2026-08-18)
 

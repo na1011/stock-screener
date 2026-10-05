@@ -52,7 +52,7 @@ applies_to:
 - MUST NOT: 장부 비율(v = s)로 국내 가격 배수를 대신하지 않는다. 7건 모두 같은 날 시가총액의 v와 달랐다(솔브레인홀딩스 s 0.55 대 v 0.22).
 - MUST: 분사를 사람이 승인하면 `price_ratio`와 근거 note를 함께 준다(`judge`가 거절한다). ADR-0117 premise가 note를 센다.
   - 자동 행은 `Distribution.describe()`가 note를 쓴다.
-- MUST: 국내 인적분할 `UNSUPPORTED` 5행을 판정으로 `SPIN_OFF`로 바꾸는 날, ADR-0071 premise의 「미보정 7종목」 기준 수를 함께 고친다. 안 고치면 그 premise가 매 세션 「수익률 제외 목록이 낡았다」를 낸다.
+- MUST: 판정으로 `UNSUPPORTED` 종목 수가 바뀌면 ADR-0071 premise의 기준 수를 함께 고친다(2026-10-05 국내 인적분할 5행을 `SPIN_OFF`로 · DNTH · CNH를 `UNSUPPORTED`로 바꿔 7 → 4). 안 고치면 그 premise가 매 세션 「수익률 제외 목록이 낡았다」를 낸다.
 
 ## 검증
 
@@ -68,10 +68,7 @@ applies_to:
 - 5거래일 창 검사를 끈다.
 - 합치기를 끈다 · 수집 대상을 지금 편입으로 되돌린다.
 
-배포(V60·V61 적용) 뒤 아래 펜스를 `premise`로 태그한다 — 그 전에는 운영 DB에 컬럼이 없어 매 세션 무판정이 된다.
-
-```bash
-# premise 후보: 승인된 분사가 모두 가격 배수를 든다
+```premise 승인된 분사가 모두 가격 배수를 든다
 psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) FILTER (WHERE type = 'SPIN_OFF') = 0 THEN '잴 것이 없었다 — 원장에 분사가 없다'
   WHEN count(*) FILTER (WHERE type = 'SPIN_OFF' AND status IN ('APPROVED','APPLIED') AND price_ratio IS NULL) = 0
@@ -128,18 +125,22 @@ psql -d stock_screener -At -c "SELECT CASE
     - 207940(판정)의 최신일 지표 92 → 147행.
   - 비용: 수집 12.5 → 16분 · 화해 411 → 424초.
   - 드라이런이 찾은 결함: 다자식 분배의 CUSIP이 `varchar(16)`을 넘었다 → V62.
-  - **미해석 6(CNH · DNTH · FTI · LBTYB · LEN · SYRE)은 판정 전까지 지표 행을 잃는다**(LEN −11,761 등 · 합 49,187).
+  - 미해석 6(CNH · DNTH · FTI · LBTYB · LEN · SYRE)은 판정 전에 화해가 돌면 지표 행을 잃는다(LEN −11,761 등 · 합 49,187).
 
 - **분사일 ~ 첫 분사 뒤 공시 구간의 재무 × 시총 지표는 이 결정 밖이다.**
   - CTVA `PER_PCTL` 0.048 · `PBR_PCTL` 0.000이 그 자리다.
   - 사용자 결정(2026-10-05): *"`claude.md`의 판단기준에 정의된 진짜한계(원장이 뒤죽박죽 등)는 억지로 계산 표시하여 정합성을 떨어뜨리지 말고 미표시하는게 나음. 판단기준에 근거하여 너 스스로 판단하고 기록해둬."*
   - 경계가 TTM 구성 분기마다 갈려(재게재하지 않는 회사가 있다 — CMCSA) 별도 바퀴로 설계한다.
   - 중단영업이 PER에 섞이는 것은 분사만이 아니라 두 시장의 지표 정의 문제라 관문 재고에 있다(`docs/reload-gate.md`).
-- **판정 API로 고칠 원장 행** — 사용자 승인이 필요하다.
-  - HON 2026-06-29: `REJECTED` → 합친 `SPIN_OFF` s 0.5 · 가격 배수 0.983.
-  - 국내 7행(§0.5의 v).
-  - FTV 2020-10-09 · DELL 2021-11-02: 분할 배열로 온 분사라 s 1 · 가격 배수는 옛 `ratio`.
-  - 미해석(MRP · THNPF · SNRBY): Form 8937.
+- **운영 적용(2026-10-05)** — 덤프 → 배포 15:43(V60~V62) → 수집 → 판정 16행 → 재구축 → 화해(16:11 끝).
+  - 사용자 결정: 배포 시점은 「오늘 15:40 뒤 (Recommended)」 · 판정 첫 묶음 8행(HON · 국내 7)과 둘째 묶음 8행(FTV · DELL · FTI · LEN · LBTYB · SYRE는 가격 배수 · DNTH · CNH는 `UNSUPPORTED`)은 각각 「8행 승인 (Recommended)」. 행마다의 값과 근거는 탐색 브랜치 `explore/spin-off/JUDGE-PAYLOADS.md`에 있다.
+  - 수집(1,683종목 · 실패 0 · 16분): 새 행 50 = 분사 승인 44(드라이런 43 + V62 뒤 OPEN) · 미해석 6. 50행의 가격 배수가 드라이런 사본과 바이트까지 같다. 기존 행 변경 0.
+  - 판정 뒤: 승인 분사 58행 전부 가격 배수가 있다(위 premise) · 판정 대기 0 · `UNSUPPORTED` 4종목(국내 020560 · 007340 · 미국 DNTH · CNH — ADR-0071 premise 기준 수).
+  - 재구축: 계수가 바뀐 51종목 = 오늘 원장 행이 바뀐 54종목 − DNTH · CNH(미표시라 계수 없음) − SYRE(가격 배수 1). 그 밖 0.
+  - 화해: 원본층 쓴 1,448,247 · 지운 16,990(= 드라이런의 DNTH 9,560 + CNH 7,430 — 미표시) · 파생층 272거래일 쓴 550,323. 미해석 넷은 화해 전에 판정돼 지표를 잃지 않았다.
+  - 값이 드라이런과 같다: CTVA 10-01 `RETURN_52W` +19.52 · DD +32.58 · 사건일 HON −3.54% · 000880 +20.91% · DD +1.89% · FDX +0.37% · 207940 +7.85%(최신일 지표 92 → 147행) · HON 06-29 `MARKET_CAP` 144.3 → 72.2B.
+  - 프리셋 결과(3기준일 · 저장 화면 포함): 포함 뒤집힘 0 · 새로 듦 6 · 빠짐 1 · 점수만 14. 전부 모체이거나 그 순위가 민 종목이다 — SCHW 07-01 `PER_PCTL` 0.3011(고친 HON PER 17.13이 그 아래로 들어옴) · DGX 10-02 MOMENTUM 탈락(`EXCESS_RETURN_52W_PCTL`).
+  - 다음 수집이 판정을 안 덮는다 — 같은 날짜에 사람이 판정한 행이 있으면 `record`가 IGNORED로 돌려준다(코드로 읽음 · 드라이런 둘째 수집이 HON `REJECTED` · FTV/DELL `APPLIED`에서 그 갈래를 탔다).
 - **콜이 는다**: 기업행위 수집 대상이 미국 +208 · KOSPI +36 · KOSDAQ +89이고, 분사마다 자식 봉 콜이 붙는다.
 - **되돌리려면**:
   - 어댑터의 `spin_offs` 수확과 `SpinOffValuer`를 걷고, 수집 대상을 `activeUniverseMemberIds()`로 되돌린다.
