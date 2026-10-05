@@ -69,25 +69,26 @@ WITH lk(code,n) AS (VALUES
  ('SMA_200',200),('DISPARITY_200',200),('SMA_200_MOM_21',221),('PCT_FROM_52W_HIGH',252),
  ('PCT_FROM_52W_LOW',252),('SMA_200_SLOPE_60',260),('SHARES_GROWTH_3Y',751)),
 ca AS (SELECT stock_id, effective_date FROM corporate_action WHERE status IN ('UNSUPPORTED','OBSERVED')),
-latest AS (SELECT max(trade_date) d FROM indicator_trade_date WHERE market_code IN ('KOSPI','KOSDAQ')),
+latest AS (SELECT market_code, max(trade_date) d FROM indicator_trade_date GROUP BY market_code),
 bad AS (SELECT iv.stock_id, iv.indicator_code
-        FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv JOIN ca ON ca.stock_id=iv.stock_id
+        FROM indicator_value iv JOIN stock s ON s.id = iv.stock_id
+        JOIN latest l ON l.market_code = s.market_code AND iv.trade_date = l.d
+        JOIN ca ON ca.stock_id=iv.stock_id
         JOIN lk ON lk.code=iv.indicator_code
-        WHERE iv.trade_date = (SELECT d FROM latest)
-          AND iv.trade_date >= ca.effective_date
+        WHERE iv.trade_date >= ca.effective_date
           AND (SELECT count(*) FROM price_daily p WHERE p.stock_id=iv.stock_id
                  AND p.trade_date >= ca.effective_date AND p.trade_date <= iv.trade_date) < lk.n)
 SELECT CASE
   WHEN (SELECT count(*) FROM ca) = 0 THEN '잴 것이 없었다 — 미보정 기업행위가 원장에 하나도 없다'
-  WHEN (SELECT d FROM latest) IS NULL THEN '잴 것이 없었다 — indicator_value가 비어 있다'
-  WHEN count(*) = 0 THEN 'OK 최신 거래일에 보정 못 한 창으로 낸 값 0행'
+  WHEN NOT EXISTS (SELECT 1 FROM latest) THEN '잴 것이 없었다 — indicator_value가 비어 있다'
+  WHEN count(*) = 0 THEN 'OK 시장별 최신 거래일에 보정 못 한 창으로 낸 값 0행'
   ELSE '보정 안 된 계단을 넘는 창으로 낸 값이 ' || count(*) || '행 남아 있다'
   END FROM bad"
 ```
 
-**이 전제는 국내로 좁혀져 있다.** 재는 축 자체는 시장에 무관하지만 미국 지표가 아직
-0행이라 **미국 쪽을 오늘 검증할 수 없어** 넓히지 않았다 — 못 재는 보호막을 보증하지
-않으려는 것이다. **여는 조건은 미국 지표 백필**이고, 그때 시장별 최신일로 넓힌다.
+**시장별 최신일로 잰다.** 국내로만 좁혀 두었던 것은 미국 지표가 0행이라 미국 쪽을 검증할 수 없어서였다.
+미국 지표가 생겼고, 분사 설계(ADR-0168)부터 미국에도 미해석 분사가 `OBSERVED`로 들어와 억제가 걸린다
+(반증이 「미국 억제는 아무도 안 본다」를 짚었다).
 
 
 착수 시점 실측(2026-08-13, `max(trade_date)=2026-08-12`, 보존창 180일자). 이 결정이 지우는 양이며,
