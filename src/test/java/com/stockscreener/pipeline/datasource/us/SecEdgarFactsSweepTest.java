@@ -130,7 +130,7 @@ class SecEdgarFactsSweepTest {
                         removeUsGaap((tools.jackson.databind.node.ObjectNode) facts, removals.get(ticker));
                     }
                     if (supplement.isPresent()) {
-                        SecFilingSupplement.Outcome outcome = supplement.get().supplement.supplement(
+                        SecFilingSupplement.Outcome outcome = supplement.get().supplement().supplement(
                                 root.path("cik").asLong(), (tools.jackson.databind.node.ObjectNode) facts, from, ticker);
                         if (extra.isPresent() && (outcome.fetched() + outcome.fromStore() > 0
                                 || !outcome.failed().isEmpty() || outcome.vintagesUncertain())) {
@@ -198,7 +198,7 @@ class SecEdgarFactsSweepTest {
         if (extra.isPresent()) {
             Files.writeString(extra.get(), extraLines.toString(), StandardCharsets.UTF_8);
         }
-        supplement.ifPresent(r -> System.out.println("SWEEP 보충 원자료 없음(404)=" + r.missing.get()));
+        supplement.ifPresent(r -> System.out.println("SWEEP 보충 원자료 없음(404)=" + r.missing()));
         supplement.ifPresent(SupplementReplay::close);
         System.out.println("SWEEP 관문=" + usGate + " 파일=" + files.size() + " 종목=" + stocks + " 보고서=" + rows
                 + " 버린팩트=" + dropped + " 부재=" + absences + " 읽기실패=" + failed
@@ -220,64 +220,6 @@ class SecEdgarFactsSweepTest {
                         array.remove(i);
                     }
                 }
-            }
-        }
-    }
-
-    /** 모은 원자료를 SEC 두 호스트처럼 내주는 로컬 서버 + 메모리 원장. */
-    private static final class SupplementReplay {
-        private final okhttp3.mockwebserver.MockWebServer server;
-        private final SecFilingSupplement supplement;
-        private final java.util.concurrent.atomic.AtomicInteger missing = new java.util.concurrent.atomic.AtomicInteger();
-
-        private SupplementReplay(Path dir) throws java.io.IOException {
-            Path root = dir.resolve("sec");
-            server = new okhttp3.mockwebserver.MockWebServer();
-            server.setDispatcher(new okhttp3.mockwebserver.Dispatcher() {
-                @Override
-                public okhttp3.mockwebserver.MockResponse dispatch(okhttp3.mockwebserver.RecordedRequest request) {
-                    Path file = root.resolve(request.getPath().substring(1));
-                    Path status = file.resolveSibling(file.getFileName() + ".status");
-                    try {
-                        if (Files.exists(status)) {
-                            return new okhttp3.mockwebserver.MockResponse()
-                                    .setResponseCode(Integer.parseInt(Files.readString(status).trim()));
-                        }
-                        if (Files.exists(file)) {
-                            return new okhttp3.mockwebserver.MockResponse().setResponseCode(200)
-                                    .setBody(new okio.Buffer().write(Files.readAllBytes(file)));
-                        }
-                    } catch (java.io.IOException e) {
-                        throw new java.io.UncheckedIOException(e);
-                    }
-                    missing.incrementAndGet();
-                    return new okhttp3.mockwebserver.MockResponse().setResponseCode(404);
-                }
-            });
-            server.start();
-            com.stockscreener.pipeline.datasource.http.DataSourceProperties properties =
-                    new com.stockscreener.pipeline.datasource.http.DataSourceProperties();
-            properties.getSecEdgar().setApiKey("sweep");
-            String base = server.url("/").toString();
-            SecFilingClient client = new SecFilingClient(
-                    new com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory(), properties,
-                    new com.stockscreener.pipeline.datasource.http.TokenBucketRateLimiter("sec-edgar", 0, 0), base, base);
-            supplement = new SecFilingSupplement(client, new MemorySupplementLedger());
-        }
-
-        static SupplementReplay start(Path dir) {
-            try {
-                return new SupplementReplay(dir);
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
-        }
-
-        void close() {
-            try {
-                server.shutdown();
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
             }
         }
     }

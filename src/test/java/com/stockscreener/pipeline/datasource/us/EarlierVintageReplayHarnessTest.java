@@ -11,7 +11,9 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
@@ -46,6 +48,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   ./gradlew test --tests "*EarlierVintageReplayHarnessTest*" -PskipFrontend
  * </pre>
  *
+ * <p><b>공시 보충(ADR-0173 · RS1)</b>: {@code Q4V_REPLAY_SUPPLEMENT_DIR}를 주면 같은 날 모은 보충 원자료로
+ * {@link SecFilingSupplement}를 태우고 그 판 보호를 Writer에 넘긴다({@link SupplementReplay}). 그 캐시의 companyfacts는
+ * {@code <dir>/companyfacts}이므로 {@code Q4V_REPLAY_CACHE}도 거기를 준다. {@code Q4V_REPLAY_INSERT_EARLIER=false}면
+ * 정기 경로와 같은 플래그(이른 판 끔)로 돈다 — 안 주면 예전처럼 켠다.
+ *
  * <p>{@code Q4V_REPLAY_TARGETS}는 {@code stock_id<TAB>ticker} 줄이다(머리줄 없음). 캐시는 09-15 전후 단면이라
  * 그 뒤 공시된 DB 판은 회수 후보로 잡힌다 — 재생 <b>전에</b> 그 수를 종목마다 세어 함께 찍는다.
  */
@@ -66,6 +73,9 @@ class EarlierVintageReplayHarnessTest {
         Path out = Path.of(Optional.ofNullable(System.getenv("Q4V_REPLAY_OUT")).orElse("build/q4v-replay.tsv"));
         int from = Integer.parseInt(Optional.ofNullable(System.getenv("Q4V_REPLAY_FROM")).orElse("2015"));
         String user = Optional.ofNullable(System.getenv("DB_USERNAME")).orElse(System.getProperty("user.name"));
+        boolean insertEarlier = !"false".equals(System.getenv("Q4V_REPLAY_INSERT_EARLIER"));
+        Optional<SupplementReplay> supplement = Optional.ofNullable(System.getenv("Q4V_REPLAY_SUPPLEMENT_DIR"))
+                .map(Path::of).map(SupplementReplay::start);
 
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:postgresql://localhost:5432/" + db, user, "");
@@ -96,10 +106,17 @@ class EarlierVintageReplayHarnessTest {
                 long stockId = Long.parseLong(cols[0]);
                 String ticker = cols[1];
                 List<RawFinancialReport> reports;
+                FinancialWriter.VintageGuard guard = FinancialWriter.VintageGuard.NONE;
                 try {
-                    reports = SecEdgarFacts.build(
-                            mapper.readTree(Files.readString(cache.resolve(ticker + ".json"))).path("facts"), from)
-                            .reports();
+                    JsonNode root = mapper.readTree(Files.readString(cache.resolve(ticker + ".json")));
+                    JsonNode facts = root.path("facts");
+                    if (supplement.isPresent()) {
+                        SecFilingSupplement.Outcome outcome = supplement.get().supplement()
+                                .supplement(root.path("cik").asLong(), (ObjectNode) facts, from, ticker);
+                        guard = new FinancialWriter.VintageGuard(outcome.unconfirmedVintages(),
+                                outcome.recoveredVintages(), outcome.vintagesUncertain());
+                    }
+                    reports = SecEdgarFacts.build(facts, from).reports();
                 } catch (Exception e) {
                     failures.add(ticker + " 읽기=" + e.getClass().getSimpleName() + ":" + e.getMessage());
                     continue;
@@ -145,8 +162,9 @@ class EarlierVintageReplayHarnessTest {
                 FinancialWriter.Outcome outcome;
                 try {
                     List<RawFinancialReport> all = reports;
+                    FinancialWriter.VintageGuard vintageGuard = guard;
                     outcome = tx.execute(status -> writer.writeDetailed(
-                            stockId, all, FinancialWriter.WriteMode.FILL_MISSING, true, true));
+                            stockId, all, FinancialWriter.WriteMode.FILL_MISSING, true, insertEarlier, vintageGuard));
                 } catch (RuntimeException e) {
                     failures.add(ticker + " 쓰기=" + e.getClass().getSimpleName() + ":" + e.getMessage());
                     continue;
@@ -180,6 +198,8 @@ class EarlierVintageReplayHarnessTest {
                 + " 정정보류=" + sums[7] + " 교정=" + sums[8] + " 이른판=" + sums[9]
                 + " 전=" + before + " 후=" + after + " out=" + out.toAbsolutePath());
         failures.forEach(f -> System.out.println("Q4V_REPLAY 실패 " + f));
+        supplement.ifPresent(r -> System.out.println("Q4V_REPLAY 보충 원자료 없음(404)=" + r.missing()));
+        supplement.ifPresent(SupplementReplay::close);
         assertThat(failures).isEmpty();
     }
 
