@@ -163,6 +163,10 @@ final class XbrlInstanceReader {
             ObjectNode unitsNode = child(concept, "units");
             JsonNode existing = unitsNode.get(fact.unit());
             ArrayNode array = existing instanceof ArrayNode a ? a : unitsNode.putArray(fact.unit());
+            if (alreadyThere(array, accession, fact)) {
+                // companyfacts가 그 공시의 dei 몇 개를 이미 싣는 경우(GEHC 10-K FY2022 등) — 같은 슬롯을 두 번 넣지 않는다.
+                continue;
+            }
             ObjectNode node = array.addObject();
             if (fact.start() != null) {
                 node.put("start", fact.start().toString());
@@ -177,6 +181,18 @@ final class XbrlInstanceReader {
             added++;
         }
         return added;
+    }
+
+    private static boolean alreadyThere(ArrayNode array, String accession, Fact fact) {
+        String start = fact.start() == null ? "" : fact.start().toString();
+        for (JsonNode node : array) {
+            if (accession.equals(node.path("accn").asString(""))
+                    && fact.end().toString().equals(node.path("end").asString(""))
+                    && start.equals(node.path("start").asString(""))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static ObjectNode child(ObjectNode parent, String name) {

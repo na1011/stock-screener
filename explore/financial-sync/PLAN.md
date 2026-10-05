@@ -88,3 +88,7 @@
 - 미국 초기 표지 = NULL(보충 가능한 어댑터로 동기된 적 없음 — 정직한 초기값) → 첫 주에 상한으로 나눠 전원 → (가)를 10-30 전에 적용.
 - 시각: 시작 컷오프(14:40 넘으면 이월) · 실행 상한 · 15:30 문장들 다시 씀.
 - 따로 뺀 것: 배치 행 생존 판정(풀 `minimum-idle: 0` · ADR-0163 종료 대기 — 별도 루프 ⑥) · 후보 쪽 재무 낡음(별도 축) · 국내 동일값 정정 행 누적(`FinancialWriter:492-521` · 59 중 30 — 계획 밖 보고).
+
+## 1부 구현 진행 — 인스턴스 리더(2026-10-06 03시 · worktree `wt-sync` · 초안 사본 `draft/` · main 미반영)
+- `XbrlInstanceReader`(StAX · DTD·외부 엔티티 끔 · 네임스페이스 URI로 us-gaap·dei · `unitRef` 있는 것 · 축 없음 · 컨텍스트 CIK 단언 · 정밀도 고르기 · 같은 정밀도 다른 값 MALFORMED · 합칠 때 같은 accn·기간 슬롯 안 더함) · 단위 시험 5/5(러너 XML로 확인).
+- **실물 대조(0콜 · 저장 원자료 · Java)**: AAPL `…26-000020` 리더 팩트 283 = companyfacts 283 · **283/283** · JPM `…26-054343` 788 중 787 · MSFT `…26-323660` 601 중 597 + 다름 1 — 어긋남 다섯은 전부 companyfacts 쪽 정규화(JPM `PaymentsToAcquireBusinessesGross` · MSFT `GoodwillImpairmentLoss` 셋 = 유량을 시점으로 실은 것 · 인스턴스엔 그 날짜 키 없음 / MSFT dei 액면가 0.00000625 → companyfacts 6e-06 반올림) · **셋 다 `SecEdgarColumn` 매핑 밖**(grep 0) — 우리 출력에 닿지 않는다 · 결손 종목 ABT·KO·NEE·DUK·CLX 인스턴스는 오류 없이 읽힘(311~620팩트 · 같은 정밀도 충돌 0).
