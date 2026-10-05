@@ -1,0 +1,65 @@
+cik	ticker	name	shares	n_cand_same_cik	in_top	in_win
+28917	DDT	Dillard's Capital Trust I 7.50% Capital Securities	15617000	2	f	f
+65172	MSB	Mesabi Trust	13120010	1	f	f
+73124	NTRS	Northern Trust Corporation Common Stock	182955653	1	t	t
+92122	SOMN	The Southern Company 2025 Series A Corporate Units	1127301098	2	f	f
+102752	VSECU	VSE Corporation Tangible Equity Units	28064972	2	f	f
+278166	CVCO	Cavco Industries, Inc. Common Stock When Issued	7689402	1	f	t
+350852	CTBI	Community Trust Bancorp, Inc. Common Stock	18167954	1	f	f
+712534	FRMEP	First Merchants Corporation Depository Shares	63022741	2	f	f
+726601	CCBG	Capital City Bank Group Common Stock	17101409	1	f	f
+737468	WASH	Washington Trust Bancorp, Inc. Common Stock	19074321	1	f	f
+913353	CIGI	Colliers International Group Inc. Subordinate Voting Shares	51083417	1	f	t
+922224	PPLC	PPL Corporation Corporate Units	752350362	2	t	t
+1002590	SGU	Star Group, L.P. Common Units Representing Limited Partner Interest	32811216	1	f	f
+1015328	WTFC	Wintrust Financial Corporation Common Stock	67465967	1	t	t
+1042776	PDM	Piedmont Realty Trust, Inc.	125019003	1	f	f
+1043000	SNDA	Sonida Senior Living, Inc.	48047990	1	f	f
+1059142	GHI	Greystone Housing Impact Investors LP Beneficial Unit Certificates representing assignments of limited partnership interests	23562510	1	f	f
+1070423	PAA	Plains All American Pipeline, L.P. Common Units representing Limited Partner Interests	705566460	1	t	t
+1076930	NOVTU	Novanta Inc. Tangible Equity Units	37817770	2	f	f
+1086600	ARLP	Alliance Resource Partners, L.P. Common Units representing Limited Partners Interests	128658801	1	f	f
+1172358	DMLP	Dorchester Minerals, L.P. Common Units Representing Limited Partnership Interests	49091408	1	f	f
+1234006	GOOD	Gladstone Commercial Corporation Real Estate Investment Trust	48407501	1	f	f
+1276187	ET	Energy Transfer LP Common Units representing limited partner interests	3443299601	1	t	t
+1326160	DUKU	Duke Energy Corporation Corporate Units	779596217	2	f	f
+1332349	BKD	Brookdale Senior Living, Inc.	238817252	1	f	f
+1400118	SGMT	Sagimet Biosciences Inc. Series A Common Stock	42893900	1	f	f
+1437107	WBD	Warner Bros. Discovery, Inc. Series A Common Stock	2510703314	1	t	t
+1456772	OPI	Office Properties Income Trust Common shares of beneficial interest	73941128	1	f	f
+1479615	SLN	Silence Therapeutics Plc American Depository Share	141740037	1	f	f
+1504619	PFLT	PennantPark Floating Rate Capital Ltd.	99217896	1	f	f
+1506293	PINS	Pinterest, Inc. Class A Common Stock	599629000	1	t	t
+1538263	HTB	HomeTrust Bancshares, Inc.	16693180	1	f	f
+1538849	CAPL	CrossAmerica Partners LP Common units representing limited partner interests	38173255	1	f	f
+1569187	AHRT	AH Realty Trust, Inc.	74592992	1	f	f
+1581990	PAGP	Plains GP Holdings, L.P. Class A Units representing Limited Partner Interests	197904124	1	f	t
+1594805	SHOP	Shopify Inc. Class A subordinate voting shares	1302627927	1	t	t
+1626450	CMRC	Commerce.com, Inc. Series 1 Common Stock	82858991	1	f	f
+1628063	SRG	Seritage Growth Properties Class A common shares of beneficial interest, par value $0.01	56324000	1	f	f
+1666291	CMTG	Claros Mortgage Trust, Inc.	141084206	1	f	f
+1712184	LILAP	Liberty Latin America Ltd. 9.0% Fixed Rate Cumulative Perpetual Redeemable Series A Preference Shares	201100000	3	f	f
+1767057	OBTC	Osprey Bitcoin Trust Common Units of Beneficial Interest	2940535	1	f	f
+1789832	HESM	Hess Midstream LP Class A Share representing a limited partner Interest	128350881	1	f	t
+1811935	PTRN	Pattern Group Inc. Series A Common Stock	180327000	1	f	f
+1816590	CMPS	COMPASS Pathways Plc American Depository Shares	138476822	1	f	f
+1830033	PCTTU	PureCycle Technologies, Inc. Unit	200904810	2	f	f
+1854368	DGXX	Digi Power X Inc. Subordinate Voting Shares	101393355	1	f	f
+1865782	BTSGU	BrightSpring Health Services, Inc. Tangible Equity Unit	197864241	2	t	t
+1884046	SPKLU	Spark I Acquisition Corp. Unit	6422078	2	f	f
+1952853	MAMO	Massimo Group Common Stock	41640950	1	f	f
+1953366	STHO	Star Holdings Shares of Beneficial Interest	12081333	1	f	f
+1958140	BATRA	Atlanta Braves Holdings, Inc. Series A Common Stock	64685000	2	f	f
+1958140	BATRK	Atlanta Braves Holdings, Inc. Series C Common Stock	64685000	2	f	f
+1980088	MNR	Mach Natural Resources LP Common Units representing Limited Partner Interests	166948094	1	f	f
+2000775	BKHAU	Black Hawk Acquisition Corporation Units	4153577	2	f	f
+2010653	FVNNU	Future Vision II Acquisition Corporation Units	7544000	2	f	f
+2026767	ALISU	Calisa Acquisition Corp Units	8427500	2	f	f
+2051985	IRHOU	Iron Horse Acquisitions II Corp. Units	29320000	2	f	f
+2052162	DAAQU	Digital Asset Acquisition Corp. Units	5000000	2	f	f
+2053927	WTGUU	Wintergreen Acquisition Corp. Unit	1708575	2	f	f
+2057463	GLIBA	Liberty Capital Corporation Series A GCI Group Common Stock	40000000	2	f	f
+2057463	GLIBK	Liberty Capital Corporation Series C GCI Group Common Stock	40000000	2	f	f
+2078416	LLYVA	Liberty Live Holdings, Inc. Series A Liberty Live Group Common Stock	92550000	2	f	f
+2078416	LLYVK	Liberty Live Holdings, Inc. Series C Liberty Live Group Common Stock	92550000	2	t	t
+(63개 행)

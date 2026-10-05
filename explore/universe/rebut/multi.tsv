@@ -1,0 +1,99 @@
+cands	ciks	nocik
+3928	3866	14
+(1개 행)
+cik	ticker	name	shares	nshares	in_top	in_win	close_db	dv_db
+4457	UHAL	U-Haul Holding Company	195869719	1	t	t	61.8900	8.519
+4457	UHAL.B	U-Haul Holding Company	195869719	1	f	f		
+12208	BIO	Bio-Rad Laboratories, Inc.Class A	26814000	1	t	t	369.1400	101.826
+12208	BIO.B	Bio-Rad Laboratories, Inc. Class B	26814000	1	f	t	365.0800	
+14693	BF.A	Brown-Forman Corporation Class A	459518000	1	t	t	26.6700	3.292
+14693	BF.B	Brown-Forman Corporation Class B	459518000	1	f	t	26.5900	
+24545	TAP	Molson Coors Beverage Company Class B	187700000	1	f	t	38.4400	
+24545	TAP.A	Molson Coors Beverage Company Class A	187700000	1	t	t	39.5200	0.002
+28917	DDS	Dillards Inc.	15618000	2	t	t	654.1100	146.917
+28917	DDT	Dillard's Capital Trust I 7.50% Capital Securities	15617000	2	f	f		
+43196	GTN	Gray Media, Inc.	98000000	1	f	f		
+43196	GTN.A	Gray Media, Inc. Class A	98000000	1	f	f		
+46619	HEI	HEICO Corporation	55143000	1	t	t	302.4500	152.941
+46619	HEI.A	HEICO CORP CL A	55143000	1	f	f		
+55135	KELYA	Kelly Services, Inc. Class A Common Stock	35100000	1	f	f		
+55135	KELYB	Kelly Services, Inc. Class B Common Stock	35100000	1	f	f		
+63754	MKC	McCormick & Company, Incorporated Non-VTG CS	269300000	1	f	t	50.0600	
+63754	MKC.V	McCormick & Company, Incorporated Voting CS	269300000	1	t	t	46.2200	0.245
+67887	MOG.A	Moog Inc.	32075908	1	f	t	382.7500	82.927
+67887	MOG.B	MOOG INC CL B	32075908	1	t	t	394.4600	0.183
+88948	SENEA	Seneca Foods Corp. Class A Common Stock	6840000	1	f	f		
+88948	SENEB	Seneca Foods Corp. Class B Common Stock	6840000	1	f	f		
+92122	SO	The Southern Company	1127301098	1	t	t	83.7200	542.027
+92122	SOMN	The Southern Company 2025 Series A Corporate Units	1127301098	1	f	f		
+102752	VSEC	VSE Corporation Common Stock	28064972	1	f	t	175.0800	
+102752	VSECU	VSE Corporation Tangible Equity Units	28064972	1	f	f		
+105016	WSO	Watsco, Inc.	38079266	1	f	t	305.3600	
+105016	WSO.B	Watsco, Inc. Class B	38079266	1	t	t	310.9000	0.022
+107140	WLY	John Wiley & Sons, Inc. Class A	53247000	1	f	f		
+107140	WLYB	John Wiley & Sons, Inc. Class B	53247000	1	f	f		
+712534	FRME	First Merchants Corporation Common Stock	63022741	1	f	f		
+712534	FRMEP	First Merchants Corporation Depository Shares	63022741	1	f	f		
+716634	RDI	Reading International Inc Class A Common Stock	23842505	1	f	f		
+716634	RDIB	Reading International Inc Class B Common Stock	23842505	1	f	f		
+845877	AGM	Federal Agricultural Mortgage Corporation	10882000	1	f	f		
+845877	AGM.A	Federal Agricultural Mortgage Corporation Class A Voting	10882000	1	f	f		
+887733	CENT	Central Garden & Pet Company Common Stock	61947000	1	f	f		
+887733	CENTA	Central Garden & Pet Company Class A Common Stock Nonvoting	61947000	1	f	f		
+920760	LEN	Lennar Corporation Class A	240776000	1	t	t	79.8100	506.914
+920760	LEN.B	Lennar Corporation Class B	240776000	1	f	f		
+922224	PPL	PPL Corporation	752350362	1	f	t	34.2100	
+922224	PPLC	PPL Corporation Corporate Units	752350362	1	t	t	44.6750	5.723
+1012019	RUSHA	Rush Enterprises, Inc. Common Stock Cl A	120322500	1	f	t	48.1900	
+1012019	RUSHB	Rush Enterprises, Inc. Class B	120322500	1	t	t	56.7100	5.040
+1041657	UONE	Urban One, Inc. Class A Common Stock	4460275	1	f	f		
+1041657	UONEK	Urban One, Inc. Class D Common Stock	4460275	1	f	f		
+1076930	NOVT	Novanta Inc. Common Stock	37817770	1	t	t	149.2700	51.664
+1076930	NOVTU	Novanta Inc. Tangible Equity Units	37817770	1	f	f		
+1326160	DUK	Duke Energy Corporation	779596217	1	t	t	114.1300	464.963
+1326160	DUKU	Duke Energy Corporation Corporate Units	779596217	1	f	f		
+1336917	UA	Under Armour, Inc. Class C Common Stock, $0.0003 1/3 par value	431937000	1	f	f		
+1336917	UAA	Under Armour, Inc.	431937000	1	f	f		
+1412100	MHLA	Maiden Holdings, Ltd.	99682710	1	f	f		
+1412100	MHNC	MAIDEN HOLDINGS NORTH AMERICA, LTD	99682710	1	f	f		
+1564708	NWS	News Corporation Class B Common Stock	558400000	1	t	t	31.6500	30.237
+1564708	NWSA	News Corporation Class A Common Stock	558400000	1	f	f		
+1570585	LBTYA	Liberty Global Ltd. Class A Common Shares	337909892	1	f	f		
+1570585	LBTYB	Liberty Global Ltd. Class B Common Shares	337909892	1	f	t	12.4500	
+1570585	LBTYK	Liberty Global Ltd. Class C Common Shares	337909892	1	f	f		
+1617640	Z	Zillow Group, Inc. Class C Capital Stock	233891000	1	f	t	31.2500	
+1617640	ZG	Zillow Group, Inc. Class A Common Stock	233891000	1	t	t	28.0950	31.470
+1652044	GOOG	Alphabet Inc. Class C Capital Stock	12230000000	1	f	t	330.3900	
+1652044	GOOGL	Alphabet Inc. Class A Common Stock	12230000000	1	t	t	343.5000	9410.393
+1687187	METC	Ramaco Resources, Inc. Class A Common Stock	44752000	1	f	f		
+1687187	METCB	Ramaco Resources, Inc. Class B Common Stock	44752000	1	f	f		
+1712184	LILA	Liberty Latin America Ltd. Class A Common Stock	201100000	1	f	f		
+1712184	LILAK	Liberty Latin America Ltd. Class C Common Stock	201100000	1	f	f		
+1712184	LILAP	Liberty Latin America Ltd. 9.0% Fixed Rate Cumulative Perpetual Redeemable Series A Preference Shares	201100000	1	f	f		
+1754301	FOX	Fox Corporation Class B Common Stock	439000000	1	f	f		
+1754301	FOXA	Fox Corporation Class A Common Stock	439000000	1	t	t	62.2800	263.825
+1830033	PCT	PureCycle Technologies, Inc. Common stock	200904810	1	f	f		
+1830033	PCTTU	PureCycle Technologies, Inc. Unit	200904810	1	f	f		
+1865782	BTSG	BrightSpring Health Services, Inc. Common Stock	197864241	1	f	f		
+1865782	BTSGU	BrightSpring Health Services, Inc. Tangible Equity Unit	197864241	1	t	t	197.3500	0.487
+1884046	SPKL	Spark I Acquisition Corp. Class A Ordinary Share	6422078	1	f	f		
+1884046	SPKLU	Spark I Acquisition Corp. Unit	6422078	1	f	f		
+1958140	BATRA	Atlanta Braves Holdings, Inc. Series A Common Stock	64685000	1	f	f		
+1958140	BATRK	Atlanta Braves Holdings, Inc. Series C Common Stock	64685000	1	f	f		
+2000775	BKHA	Black Hawk Acquisition Corporation Class A Ordinary Shares	4153577	1	f	f		
+2000775	BKHAU	Black Hawk Acquisition Corporation Units	4153577	1	f	f		
+2010653	FVN	Future Vision II Acquisition Corporation Ordinary shares	7544000	1	f	f		
+2010653	FVNNU	Future Vision II Acquisition Corporation Units	7544000	1	f	f		
+2026767	ALIS	Calisa Acquisition Corp Ordinary shares	8427500	1	f	f		
+2026767	ALISU	Calisa Acquisition Corp Units	8427500	1	f	f		
+2051985	IRHO	Iron Horse Acquisitions II Corp. Common Stock	29320000	1	f	f		
+2051985	IRHOU	Iron Horse Acquisitions II Corp. Units	29320000	1	f	f		
+2052162	DAAQ	Digital Asset Acquisition Corp. Class A Ordinary shares	5000000	1	f	f		
+2052162	DAAQU	Digital Asset Acquisition Corp. Units	5000000	1	f	f		
+2053927	WTG	Wintergreen Acquisition Corp. Ordinary Shares	1708575	1	f	f		
+2053927	WTGUU	Wintergreen Acquisition Corp. Unit	1708575	1	f	f		
+2057463	GLIBA	Liberty Capital Corporation Series A GCI Group Common Stock	40000000	1	f	f		
+2057463	GLIBK	Liberty Capital Corporation Series C GCI Group Common Stock	40000000	1	f	f		
+2078416	LLYVA	Liberty Live Holdings, Inc. Series A Liberty Live Group Common Stock	92550000	1	f	f		
+2078416	LLYVK	Liberty Live Holdings, Inc. Series C Liberty Live Group Common Stock	92550000	1	t	t	97.8700	28.870
+(94개 행)
