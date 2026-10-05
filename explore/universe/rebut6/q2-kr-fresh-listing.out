@@ -1,0 +1,10 @@
+SET
+ universe_code | ticker | listed_on | effective_from | days_after_listing | effective_to 
+---------------+--------+-----------+----------------+--------------------+--------------
+(0개 행)
+
+ null_listed | kr_stocks 
+-------------+-----------
+         485 |       485
+(1개 행)
+
