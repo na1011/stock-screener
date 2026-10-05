@@ -43,6 +43,13 @@ class SecGapProbe2LiveTest {
                 Thread.sleep(250);
             }
         }
+        String idx = System.getProperty("probe.ga.xbrlidx", "");
+        for (String q : idx.split(",")) {
+            if (q.isBlank()) continue;
+            var r = www.get().uri("/Archives/edgar/full-index/{q}/xbrl.idx", q).retrieve().toEntity(String.class);
+            Files.writeString(out.resolve("xbrlidx-" + q.replace("/", "-") + ".txt"), r.getStatusCode() + "\n" + (r.getBody() == null ? "" : r.getBody()));
+            Thread.sleep(250);
+        }
         // 인스턴스 — cik:accession(대시 포함) 목록
         ObjectMapper mapper = new ObjectMapper();
         for (String spec : instances.split(",")) {
