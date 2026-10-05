@@ -32,18 +32,21 @@ import java.util.Objects;
  * <p><b>택소노미는 네임스페이스 URI로 가른다</b> — 접두어는 공시마다 마음대로다.
  *
  * <p><b>읽기와 고르기를 나눈다.</b> {@link #read}는 같은 (개념 · 단위 · 기간)의 중복을 <b>정밀도째 전부</b> 내고,
- * {@link #choose}가 가장 정밀한 것을 고른다. 저장 표({@code sec_filing_supplement})가 앞의 것을 담으므로, 고르기 규칙을
- * 고쳐도 공시를 다시 받지 않는다.
+ * {@link #choose}가 가장 정밀한 것을 고른다. 저장 표({@code sec_filing_supplement})가 앞의 것을 담으므로 저장분은 읽을
+ * 때마다 지금의 고르기를 탄다. 그래도 고르기를 바꾸면 {@link #READER_VERSION}을 올린다 — 고르기 충돌로 실패한 행은 원
+ * 팩트가 없어, 다시 받아야 고친 규칙이 닿는다.
  *
  * <p><b>MUST NOT: 고칠 일이 없는 것으로 공시 전체를 세우지 않는다.</b> 결정적 MALFORMED는 그 공시를 다시 받아도 같은
  * 실패라 매달 같은 칸이 빈다. 쓰지 않는 기간 없는 컨텍스트와 남의 CIK 컨텍스트(공동 등록)는 건너뛴다 — 남의 팩트를 우리
- * 행으로 안 들이는 것은 건너뛰기로 충분하다. 파일을 잘못 고른 것은 {@link #requireIdentity}가 따로 묻는다.
+ * 행으로 안 들이는 것은 건너뛰기로 충분하다. 다른 문서를 고른 것은 {@link #requireIdentity}가 문서 종류로 묻는다.
  */
 final class XbrlInstanceReader {
 
     /**
-     * 읽기 규칙의 판. <b>MUST: 무엇을 싣는지가 바뀌면 올린다</b> — 저장 표의 판이 다르면 그 공시를 다시 읽는다. 고르기만
-     * 바꾸면 안 올린다(원 팩트가 이미 다 있다).
+     * 해석 규칙의 판 — 읽기({@link #read}) · 고르기({@link #choose}) · 인스턴스 고르기({@code SecFilingSupplement.pickInstance}) ·
+     * 신원({@link #requireIdentity}) <b>전부</b>다. <b>MUST: 하나라도 바꾸면 올린다.</b> 해석 실패({@code UNREADABLE}) 행은
+     * 이 판이 같은 동안 다시 받지 않으므로, 안 올리면 고친 규칙이 그 행에 영영 안 닿는다(2026-10-06 구현 반증 — 신원 규칙을
+     * SWX 때문에 고치고도 판을 안 올렸다면 그 공시가 영구 실패로 남았다). 저장분(OK)도 판이 다르면 다시 읽는다.
      */
     static final int READER_VERSION = 1;
 
@@ -72,7 +75,7 @@ final class XbrlInstanceReader {
     /**
      * 인스턴스 하나에서 읽은 것.
      *
-     * @param ownContexts 식별자가 이 공시의 CIK인 컨텍스트 수 — 0이면 남의 파일이다({@link #requireIdentity})
+     * @param ownContexts 식별자가 이 공시의 CIK인 컨텍스트 수 — 0이면 그 공시가 다른 등록자의 팩트만 싣는다(팩트 0 · 실패 아님)
      */
     record Instance(String documentType, String fiscalYearFocus, String fiscalPeriodFocus, int ownContexts,
                     List<RawFact> facts) {

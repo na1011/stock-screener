@@ -228,17 +228,39 @@ class SecFilingSupplementTest {
     }
 
     @Test
-    @DisplayName("실패였다가 companyfacts가 그 공시를 실으면 실패 행을 걷고 그 판을 연다 — 실패 동안 늦은 판이 들어왔어도 같은 상태로")
-    void failedFilingLaterCoveredByCompanyFactsIsSettled() throws Exception {
+    @DisplayName("실패였다가 companyfacts가 그 공시를 실으면 COVERED로 남기고 매 실행 그 판을 연다 — 한 번만 열면 사라질 수 있다")
+    void failedFilingLaterCoveredByCompanyFactsStaysAndReopens() throws Exception {
         statusOf.put(indexPath(MISSING), 503);
         supplement.supplement(CIK, companyFacts(), FROM, "t");
         assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
 
-        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFactsCovering(MISSING), FROM, "t");
+        SecFilingSupplement.Outcome first = supplement.supplement(CIK, companyFactsCovering(MISSING), FROM, "t");
+        SecFilingSupplement.Outcome second = supplement.supplement(CIK, companyFactsCovering(MISSING), FROM, "t");
 
-        assertThat(outcome.supplementedVintages()).containsExactly(MISSING_FILED);
-        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM sec_filing_supplement WHERE accession = ?",
-                Long.class, MISSING)).isZero();
+        assertThat(first.supplementedVintages()).containsExactly(MISSING_FILED);
+        assertThat(second.supplementedVintages()).as("다음 실행도 연다").containsExactly(MISSING_FILED);
+        assertThat(storedStatus(MISSING)).isEqualTo("COVERED");
+    }
+
+    @Test
+    @DisplayName("실행 기록의 미해결은 이 실행이 본 행만 센다 — 기본 FR이 안 도는 종목의 실패 행은 표 전체 수에만 든다")
+    void unresolvedCountsOnlyRowsThisRunSaw() throws Exception {
+        SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
+        jdbcTemplate.update("""
+                INSERT INTO sec_filing_supplement (accession, cik, form, filed, reader_version, status, failure_kind,
+                    failure_message, fetched_at, last_seen_at)
+                VALUES ('0000001800-20-000001', ?, '10-Q', '2020-05-01', 1, 'FAILED', 'TRANSIENT', 'x',
+                    now() - interval '40 days', now() - interval '40 days')
+                """, CIK);
+        java.time.Instant since = store.now();
+        statusOf.put(indexPath(MISSING), 404);
+
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        SecFilingSupplementStore.Tally tally = store.tallySince(since);
+        assertThat(tally.failed()).isEqualTo(1);
+        assertThat(tally.unresolved()).as("이 실행이 본 실패 하나").isEqualTo(1);
+        assertThat(tally.allUnresolved()).as("표 전체 — 이 실행이 안 본 옛 실패 행까지").isEqualTo(2);
     }
 
     @Test

@@ -144,6 +144,22 @@ class SecFilingSupplementWriteContractTest {
     }
 
     @Test
+    @DisplayName("실패 뒤 companyfacts가 그 공시를 실었고 그 사이 APPEND_ONLY 실행이 끼어도 원본 판이 들어온다 — 열림이 한 번에 소비되지 않는다")
+    void coveredFilingStillOpensAfterAnAppendOnlyRun() throws Exception {
+        companyFacts(false);
+        status(instancePath(X), 503);
+        collect();
+        assertThat(rows()).containsExactly(Y_FILED + "|1000|true|0");
+
+        companyFacts(true);
+        // 수동 initial-load(APPEND_ONLY) — Writer가 이른 판 열림을 안 쓴다.
+        collector.collectDetailed(fix, FROM, FinancialWriter.WriteMode.APPEND_ONLY, false);
+        collect();
+
+        assertThat(rows()).containsExactly(X_FILED + "|950|false|0", Y_FILED + "|1000|true|1");
+    }
+
+    @Test
     @DisplayName("대조 — 성공이 먼저 오면 같은 판 집합이다(위 시험이 닿아야 할 곳)")
     void successOnce() throws Exception {
         companyFacts(false);

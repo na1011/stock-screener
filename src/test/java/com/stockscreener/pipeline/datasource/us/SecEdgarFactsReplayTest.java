@@ -33,9 +33,14 @@ import java.util.Optional;
  * UA=$(grep '^SEC_EDGAR_USER_AGENT=' .env | cut -d= -f2-)
  * curl -s -H "User-Agent: $UA" --compressed \
  *   https://data.sec.gov/api/xbrl/companyfacts/CIK0000935703.json -o build/factcache/DLTR.json
- * REPLAY_FACTS=build/factcache/DLTR.json REPLAY_PERIOD=Q4 \
+ * REPLAY_FACTS=build/factcache/DLTR.json REPLAY_PERIOD=Q4 REPLAY_SUPPLEMENT_DIR=off \
  *   ./gradlew test --tests "*SecEdgarFactsReplayTest*" -i | grep REPLAY
  * </pre>
+ *
+ * <p><b>{@code REPLAY_SUPPLEMENT_DIR}는 필수다</b>(경로 또는 {@code off} · ADR-0173). 어댑터 출력은 companyfacts + 공시 보충이라,
+ * {@code off}는 「companyfacts만으로는 무엇이 나오는가」이고 운영 어댑터의 출력이 아니다 — 예: AOS 2024/FY는 {@code off}에서
+ * 없고 보충에서 있다. 경로는 {@code SecFilingSupplementCacheLiveTest}가 같은 날 모은 디렉터리이고, 그 때 {@code REPLAY_FACTS}도
+ * 그 디렉터리의 {@code companyfacts/<티커>.json}을 준다(따로 받은 companyfacts와 섞으면 거짓 보충 대상이 생긴다).
  *
  * <p><b>환경변수로 받는다 — Gradle의 {@code -D}는 데몬 JVM에만 붙어 포크된 테스트에 안 닿는다.</b>
  * {@code build.gradle}이 전달하는 접두는 {@code probe.}·{@code sweep.} 둘뿐이고, 그 목록에
@@ -51,8 +56,18 @@ class SecEdgarFactsReplayTest {
                 Optional.ofNullable(System.getenv("REPLAY_FROM")).orElse("2015"));
         String period = System.getenv("REPLAY_PERIOD");
 
-        SecEdgarFacts.Result result = SecEdgarFacts.build(
-                new ObjectMapper().readTree(Files.readString(path)).path("facts"), from);
+        tools.jackson.databind.JsonNode root = new ObjectMapper().readTree(Files.readString(path));
+        tools.jackson.databind.JsonNode facts = root.path("facts");
+        Optional<Path> supplementDir = SupplementReplay.requireSetting("REPLAY_SUPPLEMENT_DIR");
+        if (supplementDir.isPresent()) {
+            try (SupplementReplay replay = SupplementReplay.start(supplementDir.get())) {
+                SecFilingSupplement.Outcome outcome = replay.supplement().supplement(root.path("cik").asLong(),
+                        (tools.jackson.databind.node.ObjectNode) facts, from, path.getFileName().toString());
+                System.out.println("REPLAY 보충 받음=" + outcome.fetched() + " 더한 팩트=" + outcome.merged()
+                        + " 실패=" + outcome.failed() + " 원자료 없음=" + replay.missing());
+            }
+        }
+        SecEdgarFacts.Result result = SecEdgarFacts.build(facts, from);
 
         System.out.println("REPLAY " + path.getFileName()
                 + " 보고서=" + result.reports().size() + " 버린팩트=" + result.dropped()

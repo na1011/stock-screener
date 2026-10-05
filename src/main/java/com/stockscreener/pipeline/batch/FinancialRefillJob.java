@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -172,7 +173,7 @@ public class FinancialRefillJob {
         AtomicInteger corrected = new AtomicInteger();
         AtomicInteger insertedEarlier = new AtomicInteger();
         // 공시 목록을 못 받아 판 회수를 멈춘 종목(ADR-0173). 실행은 SUCCESS로 끝나므로 이 수가 아니면 안 뜬다.
-        AtomicInteger retractionStopped = new AtomicInteger();
+        List<String> retractionStopped = Collections.synchronizedList(new ArrayList<>());
         // 새 라벨 적재는 무효화를 안 걸지만 순위 재료(JdbcStoredShareCounts)와 과거 봉의 지표를 바꾼다.
         // 세지 않으면 그 실행이 무엇을 움직였는지 note만 보고는 알 수 없다(리허설 EXE 2026 Q2).
         AtomicInteger inserted = new AtomicInteger();
@@ -194,7 +195,7 @@ public class FinancialRefillJob {
                     corrected.addAndGet(outcome.corrected());
                     insertedEarlier.addAndGet(outcome.insertedEarlier());
                     if (outcome.retractionStopped()) {
-                        retractionStopped.incrementAndGet();
+                        retractionStopped.add(security.ticker());
                     }
                     // 이른 판 삽입도 그 공시일 이후의 지표를 지운다 — 정정·교정과 같이 세지 않으면
                     // 그 종목이 백필 목록에서 빠져 지워진 채 남는다.
@@ -225,7 +226,7 @@ public class FinancialRefillJob {
         String note = note(fromFiscalYear, asOf.getYear(), targets.size(), inserted.get(),
                 revised.get(), filled.get(), corrected.get(), insertedEarlier.get(),
                 List.copyOf(tickersToBackfill))
-                + supplementNote(supplementStore.tallySince(supplementSince), retractionStopped.get());
+                + supplementNote(supplementStore.tallySince(supplementSince), retractionStopped);
         log.info("재무 결손 보정을 마쳤다. {}", note);
         alertOnInvalidation(execution, triggeredBy, invalidatedTickers,
                 revised.get() + corrected.get() + insertedEarlier.get(), fullStatementTickers);
@@ -237,14 +238,20 @@ public class FinancialRefillJob {
      * 이름이다. <b>판정이 남은 것을 늘 싣는다</b> — 보충 실패와 목록 실패는 그 종목을 세우지 않으므로(판 보호 · 회수 정지로만
      * 나간다) 실행이 SUCCESS로 끝나고, 이 칸이 아니면 어디에도 안 뜬다.
      *
-     * @param retractionStopped 공시 목록을 못 받아 판 회수를 멈춘 종목 수
+     * <p>미해결은 <b>이 실행이 본 공시</b>만 센다 — 표 전체를 세면 기본 FR이 안 도는 과거 편입의 행이 섞여 관문 사이에 0으로
+     * 못 내려온다. 표 전체는 괄호에 함께 싣는다(관문이 그 수를 구성원마다 판정한다). 회수를 멈춘 종목은 이름까지 싣는다 —
+     * 관문이 구성원마다 판정하는데, 종목 이름이 크기로 순환되는 로그에만 있으면 그 판정을 못 한다.
+     *
+     * @param retractionStopped 공시 목록을 못 받아 판 회수를 멈춘 종목
      */
-    static String supplementNote(SecFilingSupplementStore.Tally tally, int retractionStopped) {
-        if (tally.isEmpty() && retractionStopped == 0) {
+    static String supplementNote(SecFilingSupplementStore.Tally tally, List<String> retractionStopped) {
+        if (tally.isEmpty() && retractionStopped.isEmpty()) {
             return "";
         }
-        return " 보충받음=%d 보충실패=%d 미해결보충=%d 회수정지=%d종목".formatted(tally.fetched(), tally.failed(),
-                tally.outstanding(), retractionStopped);
+        String note = " 보충받음=%d 보충실패=%d 미해결보충=%d(표 전체 %d) 회수정지=%d종목".formatted(tally.fetched(),
+                tally.failed(), tally.unresolved(), tally.allUnresolved(), retractionStopped.size());
+        return retractionStopped.isEmpty() ? note
+                : note + " 회수정지종목=" + String.join(",", retractionStopped.stream().sorted().toList());
     }
 
     /**

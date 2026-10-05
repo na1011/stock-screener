@@ -120,7 +120,8 @@ public class SecFilingSupplement implements FilingSupplementer {
         Set<String> targetAccessions = new HashSet<>();
         targets.forEach(t -> targetAccessions.add(t.accession()));
         Set<LocalDate> supplemented = new LinkedHashSet<>();
-        settleFailuresNoLongerTargeted(cik, covered, targetAccessions, supplemented, context);
+        settle(cik, covered, targetAccessions, supplemented, context);
+        store.touch(cik, targetAccessions);
         if (targets.isEmpty()) {
             return new Outcome(0, 0, 0, 0, List.of(), Set.of(), Set.copyOf(supplemented), false);
         }
@@ -206,25 +207,25 @@ public class SecFilingSupplement implements FilingSupplementer {
     }
 
     /**
-     * 더는 보충 대상이 아닌 이 발행사의 실패 행을 정리한다 — 남겨 두면 관문의 「미해결」에 영원히 걸린다.
-     * <ul>
-     *   <li>companyfacts가 그 공시를 실었다 — 판은 이제 companyfacts가 낸다. 실패 동안 늦은 판이 먼저 들어왔을 수 있으므로
-     *       그 제출일을 이른 판이어도 넣게 넘긴다(보충 성공과 같은 상태에 닿게).</li>
-     *   <li>받는 창 밖으로 나갔거나 목록에서 사라졌다 — 출력에 안 쓰인다.</li>
-     * </ul>
+     * 실패였다가 companyfacts가 그 공시를 실은 행을 {@code COVERED}로 바꾸고, 그런 행의 제출일을 <b>매 실행</b> 연다 — 판은
+     * 이제 companyfacts가 내지만, 실패 동안 늦은 판이 먼저 들어왔을 수 있어 그 판을 이른 판이어도 넣어야 보충 성공과 같은
+     * 상태에 닿는다.
+     *
+     * <p><b>MUST NOT: 행을 지우지 않는다.</b> 한 번만 열면 그 실행이 APPEND_ONLY(Writer가 열림을 안 씀)거나 같은 날 다른
+     * 공시가 실패해(보호가 이김) 열림이 사라지고 다시 안 온다. 받는 창 밖으로 나간 실패 행도 그대로 둔다 — 창이 좁은 손
+     * 실행이 기본 창의 행을 지우면 안 된다. 실행 기록의 미해결은 그 실행이 본 행만 센다({@code last_seen_at}).
      */
-    private void settleFailuresNoLongerTargeted(long cik, Set<String> covered, Set<String> targetAccessions,
-                                                Set<LocalDate> supplemented, String context) {
-        for (SecFilingSupplementStore.Row row : store.failedRowsOf(cik).values()) {
-            if (targetAccessions.contains(row.accession())) {
+    private void settle(long cik, Set<String> covered, Set<String> targetAccessions, Set<LocalDate> supplemented,
+                        String context) {
+        for (SecFilingSupplementStore.Row row : store.settleRowsOf(cik).values()) {
+            if (targetAccessions.contains(row.accession()) || !covered.contains(row.accession())) {
                 continue;
             }
-            if (covered.contains(row.accession())) {
-                supplemented.add(row.filed());
+            if (row.failed()) {
+                store.markCovered(row.accession(), cik);
+                log.info("실패였던 보충 공시를 companyfacts가 실었다 — 그 판을 매 실행 연다. {} {}", context, row.accession());
             }
-            store.delete(row.accession(), cik);
-            log.info("더는 보충 대상이 아닌 실패 행을 정리한다. {} {} companyfacts가 실음={}",
-                    context, row.accession(), covered.contains(row.accession()));
+            supplemented.add(row.filed());
         }
     }
 
