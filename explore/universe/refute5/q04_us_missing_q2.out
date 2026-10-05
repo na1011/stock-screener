@@ -1,0 +1,6 @@
+SET
+ n  |            min_cr             |            max_cr             | pub_before_jun |                                                                                                                                                                       who                                                                                                                                                                       
+----+-------------------------------+-------------------------------+----------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 80 | 2026-08-30 05:09:42.553997+09 | 2026-09-28 01:25:40.335724+09 |             79 | ABT AEP AMKR AVTR AXS AXTA BE BG BIIB CARR CB CDNS CLH CLX CNP CTSH D DOW DTE DUK ED EIX ESI ETR EVRG EXC EXLS F FE FTV GD GEHC GRMN HBAN HCA HUBB HUM INCY IQV JCI KNSA KNX KO LFUS LII LNT LSTR MAS MDLZ NEE NOV NXPI OGE OMC OMF ONB OSK PFG PNR POOL PPG PPLC PYPL QRVO RMBS RS SO SPGI SRE TRU TXNM URI VFC VICR VLTO VMC VRSK WES WSE ZWS
+(1개 행)
+

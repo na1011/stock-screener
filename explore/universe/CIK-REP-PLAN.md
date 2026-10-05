@@ -228,3 +228,41 @@
   6. 첫 월요일 US 대상 = 13 + A의 새 stock 11(R5) + 10-10 정기 신규(7~32) = 31~58 — 상한 50을 넘을 수 있다 → 예측에 R5 사본의 수.
   7. 안 센 소비자: 새 표 FK와 시험 16파일의 `DELETE FROM stock`(CASCADE) · `BatchExecutionReader:202` 잡별 최신 1건이 좁은 GAP_FILL FR을 「FR 최근」으로 보임 · GAP_FILL FSR 유령 행은 여전히 안 닫힘 · 이른 판 켜면 `FinancialRefillJob:113` MUST NOT 갱신 · `SecTickerCikCache:124` JVM당 한 번 — 오래 사는 웹 JVM에서 NOT_FOUND의 뜻이 「낡은 스냅숏」으로 바뀐다(오류 형태 4).
 - 재지 않음(반증자): KR 초기값 독립 흔적 · `is_active` 복귀 수 · 지적 2의 발화 칸 수 · 기업행위 DART 실콜 · 신규 상장의 CIK 매핑 누락 빈도 · 09-18 뒤 편입 US 19종목의 이른 판 보유 수.
+
+## B v5 반증 판정 — 계획 밖 렌즈(2026-10-05 23시 · 「수정 후 진행」 · 질의 `refute5/`)
+- **순위 — 같은 하류에 B보다 큰 축 둘**: (가) 미국 현 편입 80종목의 재무가 2026 Q1에서 멈춤(6월 분기 행 0 · #683 뒤에도) · (나) 미국 새 공시는 FR로만 들어오는데 FR SCHEDULER 성공 0 → 첫 연체 10-30(자기 이력 모형으로 202종목이 10-05~10-29 공시 — 원장에 안 물음). **내가 쟀다(SEC 10콜 · 대조군 AAPL)**: ABT·KO·NEE·DUK의 submissions에는 6월 분기 10-Q가 있고(07-24~08-04 공시) **companyfacts에는 2026-06 이후 팩트가 0** — AAPL은 있다(`Assets`·`NetIncomeLoss`·매출 2026-06-27 10-Q). → (가)는 **가짜 한계**(원장은 공시로 준다 · 우리 경로가 companyfacts 하나) · 크기는 셀로 재지 않음. (나)의 기준은 「언제 실행해도 정합성」 — spec에 재무 갱신 주기 문장은 없다.
+- 결정 9(이른 판): 「14:20 상한 없음」은 선다 · 그러나 남은 금지 사유(판 집합을 바꾸는 적재 = 관문의 한 번 · ADR-0161:23-25 · `FinancialWriter:178-181`)를 안 답함 · 「다른 편입 = #601 켬」은 낡음(#643·#653·#683 끔) · 「1칸이라도 다르면 켬」은 결론만 통과하는 임계 · 표지가 이른 판 여부를 안 담아 14:15 FR(끔)이 먼저 표지를 씀 · 이른 판 언급 22파일이 소비자에 없음.
+- 국내 FSR 구멍이 꼬리 FSR(`MembershipGapFiller:329` · 8년 · 분기)과 수요일 FS로 다시 열림 → 「이번 FR의 신규 + 정정 > 0」을 FSR 대상에.
+- 드라이런 웹 프로필 = 가드 없는 경로(위 렌즈와 같은 지적) · 대안: 단계 메서드를 사본 DB 통합 시험에서 직접 부른다 · CLI를 안 만드는 사유([A56])의 사정거리는 첫 SCHEDULER FR(10-30)까지(`JobFreshnessPolicy:146-147`).
+- ADR-0135 펜스 「복원이 재무보다 먼저 돌아 낡지 않았다」 — 지금 붉음(IOVA 52행) · B는 매주 붉게 만든다(F6 대상에 경계를 드나드는 AGX·TFX) → 소비자로 세고 사정거리를 답한다.
+- 감시 사각: 14:17 무효화 뒤 14:20 안 돌면 지표 0행 — `INDICATOR_DROP`(codes_prev = 0)도 결정 8 축도 못 본다 → 15:30에 「FR 표지 뒤 지표 0행」 축 · 알림에서 「같은 오후 14:20이 채운다」를 단정하지 않는다.
+- 시장별 FR 실행 분리(DART 치명이 미국까지 FAILED) · FSR GAP_FILL 고아 → `00-precheck.sh:6`이 멈춘다 · 빠진 소비자: `frontend/src/lib/admin.ts:58-60` · `frontend/src/api/types.ts:727-728`(GAP_FILL 설명) · `00-precheck.sh`(V63) · `PipelineScheduler:437-438` · NOT_FOUND 종목은 표지가 영영 안 써져 평일마다 재시도(#602 APGE·CRNX).
+- 선다: GAP_FILL은 신선도 시계 밖(`JobFreshnessPolicy:213-221`) · 거버넌스의 F6 꼴은 지금 0(09-20 뒤 편입 31 전원 원문 09-20 이후).
+
+## B 계획 v6 (2026-10-06 00시 · v5 두 렌즈 반영)
+**순서 판단(내 판단 · 사용자에게 보고)**: (가)·(나)가 B보다 크다(종목 80 · 202 대 21). 그래도 B를 먼저 끝낸다 — B는 토요일 A 배포가 새로 들이는 대표 11종목의 재무를 받는 짝이라 월 10-12 13:30이 마감이고 설계가 두 바퀴로 수렴했다. (가)·(나)는 B 직후 별도 루프(A2-b·c보다 앞). **표지 표는 (나)의 술어(「원장 최신 공시 > 동기 시각」)를 같은 표로 받을 수 있게 짓는다** — 공시 신호는 (나)의 몫이고 표 모양은 안 바뀐다.
+
+1. **표지 표** `stock_financial_sync(stock_id FK ON DELETE CASCADE, job_name, synced_at, changed_at, PK(stock_id, job_name))`(V63 · ADR-0170). FR 람다: 연수 ≥ 8이면 `synced_at = now()` · 그 실행이 그 종목에 신규·정정·채움·교정·이른 판 중 하나라도 쓰면 `changed_at = now()`. FSR 람다: 연수 ≥ 8 ∧ 분기 포함 ∧ **정정보류 0**이면 `synced_at`. 초기 적재·시세·꼬리의 `initial-load`는 안 쓴다(꼬리 FSR은 위 조건이면 쓴다 — 아래 술어가 그 뒤 FR 변경을 잡는다).
+2. **초기값** = V63 안 재구성(`b5/targets.sql`의 marker — FR·FSR) · `changed_at` 초기값 NULL.
+3. **술어**(FR `activeUniverseMemberIds` 조각 · 시작 = 열린 행 max(effective_from)):
+   - FR 대상 = 시작 > FR `synced_at`의 KST 날짜 ∨ FR 표지 없음.
+   - 국내 FSR 대상 = KR ∧ FR 표지 날짜 ≥ 시작 ∧ (FSR 표지 없음 ∨ FSR `synced_at` < max(시작, FR `changed_at`)). → 목요일 정기 FR 뒤의 같은 구멍과 꼬리 FSR 경로도 14:17이 잇는다.
+4. **14:17 단계** — `FinancialSyncStep`(@Component · 조건 없음)이 본체, `PipelineScheduler`의 새 @Scheduled가 그것을 부른다. 시장마다 따로 FR 실행(미국 1 · 국내 1 — DART 치명이 미국을 안 죽임) → 국내 FSR 1. 전부 GAP_FILL · 0건이면 안 부름. 상한 한 실행 US FR 100 · KR FR 10 · KR FSR 10(DART: 10×36 + 10×49.4 = 854 ≤ 최악 여유 1,058 · 기업행위 700은 실측 아님 — 여유가 그 오차를 받는다) · 순서 시작 오름차순 · 넘으면 WARNING에 남은 수(다음 평일 수렴).
+5. **이른 판 = 끔**(정기 FR과 같음). 근거: 이른 판 삽입은 판 집합을 바꾸는 적재라 관문의 한 번에 속한다(ADR-0161) · 09-18 뒤 편입 US 19종목의 이른 판 결손은 그 펜스(지금 위반 0 · PACS 예외)가 관문에서 잡는다 · 표지에 이른 판 플래그 불필요.
+6. **드라이런 = `@Tag("live")` 통합 시험이 사본 DB에서 `FinancialSyncStep`을 직접 부른다** — 스케줄러 끔(`pipeline.scheduler.enabled=false`) · 알림 속성 비움 · 웹 포트 없음 · 시작 전에 `current_database()`가 `stock_screener_(sc|b)_`로 시작하는지 단언(아니면 실패). 웹 프로필 기동도, CLI 갈래도 만들지 않는다. CLI를 안 만드는 사유([A56])의 사정거리 = 첫 SCHEDULER FR 성공 전까지 — 그 뒤엔 사유가 안 선다(필요해지면 그때 연다).
+7. **배치 행 소유자** `batch_execution.process_kind`(WEB · BOOTSTRAP — V63) — 스위퍼가 트리거가 아니라 소유자로 가른다 → GAP_FILL 고아(꼬리 · F6 FSR)를 양쪽 JVM이 각자 닫는다(`00-precheck.sh:6`이 멈추던 것). 지금 `WEB_OWNED_GAP_FILL_JOBS`는 이것으로 대체.
+8. **감시(15:30 경로에서만 — 꼬리 경보엔 안 넣는다)**: ① 현 편입 ∧ 시작 < 오늘 ∧ FR 표지 날짜 < 시작 ② KR FSR 같은 꼴 ③ 「FR 표지 뒤 지표 최신일 0행」(14:20이 안 돈 날). 알림 문구는 「14:20 화해가 채운다 — 안 돌면 15:30이 알린다」.
+9. **알림 분기**: SCHEDULER ∨ GAP_FILL → 「14:20 화해가 채운다(단정 안 함)」 · GAP_FILL은 손 FSR 줄 없음 · SCHEDULER(목요일)의 손 FSR 줄도 뺀다(14:17이 `changed_at`으로 잇는다).
+10. **`SecTickerCikCache`에 하루 갱신**(받은 지 24시간 넘으면 다시) — 오래 사는 웹 JVM에서 NOT_FOUND가 「낡은 스냅숏」이 되지 않게(F6 · 토요일 리밸런싱 둘 다). NOT_FOUND 종목은 표지 없이 남아 평일마다 1콜 재시도 + 15:30 축 ①이 알린다(조용하지 않다).
+11. **소비자**: 14:17 문장 13곳 · `BatchExecutionReader:202` 요약(좁은 GAP_FILL을 「최근」으로 — 확인 후 고침) · `frontend` admin.ts·types.ts GAP_FILL 설명 · `00-precheck.sh`(V63) · `PipelineScheduler:437-438` · 15:30 javadoc 최악 시각(약 3.7분 + US 100) · 이른 판 MUST NOT 문장은 그대로(끔) · ADR-0135 「복원이 재무보다 먼저」 펜스: F6가 매주 붉게 만든다 → 사정거리를 「순위 재료(주식수)를 바꾼 적재」로 좁히거나 복원 재실행 시점을 답한다(구현 중 그 펜스를 연다).
+12. 첫 월요일 예측: US 13 + A의 새 stock 11 + 10-10 신규(7~32) = 31~56 ≤ 100.
+
+### B 드라이런 규칙 v6(대조 전 커밋 · 사본 a = main · b = B 코드 · 같은 덤프)
+- RB0: V63 뒤 표지 행 수 = 재구성 · **US FR 표지 vs `financial_column_absence.observed_at` 흔적 일치**(KR은 흔적 원장 없음 — 재지 않음).
+- RB1: 통합 시험으로 단계 1회(b): 대상 = FR 21 · FSR 8 · 표지 생김 · 실패 0 · **기말 오라클**(BB 최신 기말 05-31 → b에서 SEC가 준 최신 · a는 그대로) · 단계 소요 · DART 콜.
+- RB2: 2회째 = 대상 0 · 실행 행 0.
+- RB3: 화해 뒤 21종목 바뀐 칸 수(a 대조군).
+- RB4: 표지를 **시작 전 날짜로 UPDATE**(서로 다른 시작 섞기 · US 120) → 1회 = 100 처리(시작 오름차순) + WARNING · 다음 1회 = 20.
+- RB5: KR FSR `changed_at` 갈래 — b에서 KR 한 종목의 FSR `synced_at`을 과거로 두고 FR이 행을 바꾸게(표본 종목 FR) → 다음 단계 FSR 대상에 든다 · 정정보류 ≥ 1이면 FSR 표지 안 씀(단위 시험).
+- RB6: 단위·통합 시험 — 표지 불변 셋(시세만 · `APPEND_ONLY` · 연수 < 8) · 시장 분리 · 소유자 스위퍼(부트 전 RUNNING 행을 그 소유자만 닫음) · 15:30 축 셋(꼬리 경로 0) · 알림 문구 · 캐시 24시간.
+- RB7: A와 함께 — A + B 사본에서 10-02 리밸런싱 재연(R5) → 단계 1회에 새 대표 셋(BTSG·NWSA·UHAL.B)과 재편입 형제가 대상.
