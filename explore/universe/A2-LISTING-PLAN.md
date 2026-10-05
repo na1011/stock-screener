@@ -122,3 +122,4 @@
   - 단건 콜 8(생존자 중 이름 축 통과분) · DBRG가 생존 축 대조군으로 빠짐.
 - **분석기 대조군**: `r2_diff.py`(숨은 상장 갈래 + 「경계 밀림 수 ≤ 숨은 진입 수」)를 A의 R0 로그(`r0-a` · `r0-c`)에 다시 → 미귀속 0 유지.
 - **RA2 — 9날짜 재생 통과**(`dry-a2/ra2-diff.txt` · `ra2-hidden.lines`): 날짜마다 c − a = **+ DDS·ET(라)** · a − c = 경계 둘(다 — KNF·SLGN / DOCN·OPEN / BKH·WH / NXST·PIPR ×2 / PSMT·VIRT / GLNG·SPHR / BYD·TFX / OLLI·SHC) · **미귀속 0** · **외부 오라클**: 운영 관측 원장에 ET·DDS가 있던 9날짜 전부(03-03 ~ 10-02)에서 c 재생에 둘이 돌아온다(a는 R1에서 전부 빠짐) · 과거 날짜엔 그때 거래하던 DBRG·FGNX·FSEA·HWH·NSTS 등도 「받음」(경계 아래 · 명부 칸 0) — 그 날짜엔 실제 상장이었으므로 옳다(개명 라벨 FGNX는 INFO로만).
+- **커밋 전 고침(main `1002623b`)**: B v7 계획 안 반증이 `DartCorpCodeCache`에서 짚은 모양(「갱신 실패 시 던짐 + 실패를 기억 안 함」 → 종목 루프가 종목마다 다시 받고 전원 실패가 PARTIAL_SUCCESS로 시계를 되돌림)이 A2의 `SecTickerCikCache`에도 있었다 → 실패 계약을 소비자별로: 명부 `freshSnapshot()`은 던짐 · 종목 단위 `findCik`은 옛 판 + WARN · 실패 기억 10분. 성공 경로 코드는 같아 RA0·RA2 결과는 그대로 선다(실패 경로는 단위 시험 `refreshFailureContractDependsOnTheConsumer` · `firstLoadFailureThrowsForBoth`).
