@@ -238,3 +238,24 @@ v4에 더해: **실패 계약** = 보충 실패(처음 · 판 다시 읽기 둘 
 ## v6 고침(구현 반영 — 기제 불변 · 두 렌즈 수렴)
 - 0부: G FULL = 티커 없음 ∧ 엔드포인트 전부 ∧ span·year 기본 · 기록 계층 `requireNonNull` · 정기 호출 전부 FULL 시험 · 이력 API·`wire-contract.json`에 scope(NULL = 「기록 전」) · 화면 문구 「표지 전 이력은 범위를 모르고 센다」 · 날짜는 G 10-19 · FSR 10-20 · FR 10-30(#710 산물 — 대안 대비 수는 v5 계획 밖 판정 2) · **배포 10-07 15:40 뒤(A+A2 10-07 13:30·14:00 확인 뒤 · 사용자 확인)**.
 - 1부: 회수 건너뜀 = 「실패 공시 X의 filed 날짜 행이 그 종목에 있을 때만」 · 이른 판 운반 = `published_at ∈ 회복된 공시의 filed` · 상태 전이는 같은 REQUIRES_NEW · 결정적 실패 종료 상태 · 좁힌 손 FR 뒤 `indicator-reconcile`을 같은 승인에 · 관문 절차에 「보충 실패 accn 0」 · 2부 마감 ≤ 11-06(국내 갈래 병행).
+
+## 0부 드라이런 실행 규칙(2026-10-06 04시 · **대조 전 커밋** · 코드 = `wt-p0` 미커밋 작업 트리 · 시험 1,769/0)
+**RD0(0콜 · 운영 이력)** — 운영 `batch_execution`을 표 하나만 떠서 빈 사본(`stock_screener_sc_p0rd0`)에 넣고 V63을 그대로 적용한다. 코드의 질의 문자열(옛 = main `JobFreshnessPolicy.lastSuccessAt` · 새 = `wt-p0`)을 글자 그대로 옮겨 12잡 × 두 갈래를 잰다.
+- 기대: 12잡 전부 옛·새의 `lastSuccessAt`이 초 단위까지 같다(이력이 전부 NULL). 무거운 잡 선택 모사(10-07~11-06)가 같다 — G 10-19 · FSR 10-20 · FR 10-30.
+**RD1(대조군 · 사본 `stock_screener_sc_c` · 실키 · 순차 · 평일 13:20~15:45 밖)** — `boot2.sh <wt-p0> stock_screener_sc_c --job=...`. 실행마다 새 행의 `scope`와 그 잡의 새 술어 시계(위 질의)를 앞뒤로 잰다.
+| # | 인자 | 기대 scope | 기대 시계 |
+|---|---|---|---|
+| a | financial-refill `--tickers=IOVA` | NARROW | 안 움직임 |
+| b | financial-refill `--universe=US_TOP1000 --tickers=IOVA`(1부 적용 모양) | NARROW | 안 움직임 |
+| c | full-statement-refill `--tickers=005930 --quarters=true` | NARROW | 안 움직임 |
+| d | full-statement-refill(인자 없음 · `--all-quarters` 없음 · FY만) | NARROW | 안 움직임 · 대상 = 국내 활성 편입 수 · 미국 실패 0 |
+| e | governance-load `--tickers=005930` | NARROW | 안 움직임 |
+| f | governance-load `--governance-endpoints=DIVIDEND` | NARROW | 안 움직임 |
+| g | governance-derive `--tickers=005930` | NARROW | 안 움직임 |
+| h | governance-derive `--as-of=2026-09-01` | NARROW | 안 움직임 |
+| i | governance-derive(인자 없음) — 양성 대조 | FULL | 이 실행으로 움직임 |
+| j | company-profile(인자 없음) — 양성 대조 | FULL | 이 실행으로 움직임 |
+- 예산: DART 약 d 3,150 + f 1,400 + c·e 수십 · Alpaca f 약 1,000 · SEC a·b 수 콜. 운영은 오늘 무거운 잡이 없다(셋 다 연체 전) → 14:00 CA 약 700뿐.
+- 대조군이 원래 결함을 재현하는지: 옛 술어(main 질의)로 같은 표를 재면 a~h 중 SUCCESS인 것은 시계를 민다 — 그 수를 함께 적는다(안 밀면 대조군이 결함에 안 닿은 것).
+- 실패 처리: 잡이 FAILED면 scope 단언만 하고 시계 단언은 「SUCCESS 아님이라 원래 안 셈」으로 따로 적는다 · 기대와 다르면 멈추고 원인을 코드 결함/대조군 결함으로 가른다.
+**RD2(단위)** — 시험 1,769/0 · 변이체 9/9 붉음(ADR-0172 §검증) · ADR-0135 펜스 상한을 운영에 돌려 출력이 고치기 전과 같다(52행 · 빠지는 행 0).
