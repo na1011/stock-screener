@@ -332,7 +332,7 @@ FY2018 **0.64%**로 떨어지고 회복되지 않는다(FY2025 0.04%). 태그가
 
 **재는 법**(위 수를 다시 낼 때):
 ```
-REPLAY_SWEEP_DIR=.factcache REPLAY_SWEEP_OUT=<경로.tsv> \
+REPLAY_SWEEP_DIR=.factcache REPLAY_SWEEP_OUT=<경로.tsv> REPLAY_SUPPLEMENT_DIR=<같은 날 보충 원자료|off> \
   ./gradlew test --tests '*SecEdgarFactsSweepTest*' --rerun
 ```
 를 변경 전/후로 돌려 `(ticker, fy, fp, start, end, pub)` 키로 diff한다. **`-D`는 이 테스트에
@@ -389,9 +389,12 @@ AAPL(9월 결산) · MSFT(6월 결산) · JPM(은행) 셋으로 쟀다.
 0콜로 재현한다:
 
 ```bash
-REPLAY_FACTS=build/factcache/AOS.json REPLAY_FROM=2022 \
+REPLAY_FACTS=build/factcache/AOS.json REPLAY_FROM=2022 REPLAY_SUPPLEMENT_DIR=off \
   ./gradlew test --tests "*SecEdgarFactsReplayTest*"   # 2023/FY·2025/FY는 나오고 2024/FY가 없다
 ```
+
+**`off`일 때의 현상이다** — 공시 보충(ADR-0173)은 companyfacts가 빠뜨린 그 10-K(2025-02-11)의 인스턴스로 2024/FY를
+채운다(RS0 「HOLE 해」 4 = `AOS`·`SPGI`·`EMAT`). 보충 원자료 경로를 주면 이 명령은 반대 답을 낸다.
 
 ### 적재 실측 (파일럿 10종목 · 재무 3년)
 

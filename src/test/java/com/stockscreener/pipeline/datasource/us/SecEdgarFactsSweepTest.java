@@ -33,7 +33,7 @@ import java.util.stream.Stream;
  * 해친다</b>(2026-09-15 사용자 결정: <b>모든 수정이 끝난 뒤에 재적재·백필을 한 번</b>).
  *
  * <pre>
- * REPLAY_SWEEP_DIR=.factcache REPLAY_SWEEP_OUT=/tmp/sweep-before.tsv \
+ * REPLAY_SWEEP_DIR=.factcache REPLAY_SWEEP_OUT=/tmp/sweep-before.tsv REPLAY_SUPPLEMENT_DIR=&lt;같은 날 보충 원자료|off&gt; \
  *   ./gradlew test --tests "*SecEdgarFactsSweepTest*"
  * </pre>
  *
