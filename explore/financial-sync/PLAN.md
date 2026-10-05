@@ -278,3 +278,9 @@ v4에 더해: **실패 계약** = 보충 실패(처음 · 판 다시 읽기 둘 
 - **RD0**: 운영 `batch_execution` 738행을 빈 사본에 떠 V63 적용 · 코드 질의 문자열을 글자 그대로 옮겨 12잡 × 두 갈래 — **12/12 같다** · 음성 대조(NARROW 성공 행 하나 삽입) → 옛 술어 FR 시계가 그 행으로 · 새 술어 10-03 그대로(도구가 본체에 닿음) · 무거운 잡 모사 G 10-19 · FSR 10-20 · FR 10-30.
 - **RD1**(사본 `sc_c` · 실키 · 순차): a FR `--tickers=IOVA` · b FR `--universe=US_TOP1000 --tickers=IOVA` · c FSR `--tickers=005930 --quarters` · d FSR 인자 없음(FY만 · **대상 350 = 국내만 · 실패 0** — 소스 없는 미국이 실제 실행에서 빠짐) · e G `--tickers=005930` · f G `--governance-endpoints=DIVIDEND`(1,350 · 2,540초) · h governance-derive `--as-of=2026-09-01` · k market-calendar `--from=2026-09-01` — **전부 scope NARROW · 옛 술어는 시계를 그 실행으로 밀고 새 술어는 그대로**(대조군이 원래 결함을 재현) · l market-calendar 인자 없음 = FULL · **두 술어 다 그 실행으로 밂**(폴백 갈래 양성 대조) · g·i·j는 SCHEDULER 이력이 있는 잡이라 시계 단언은 정보 없음(04시 10분 등록 결함 정정 · scope는 g NARROW · i·j FULL로 기대대로).
 - **RD2**: 시험 1,769/0 · 변이체 9/9 붉음 · ADR-0135 펜스 상한 운영 출력 불변(52행 · 빠지는 행 0).
+
+## RS1 규칙(2026-10-06 05시 · **대조 전 커밋** · v5의 「라이브 FR 세 번」을 0콜 재생으로 바꿈)
+**바꾼 이유**: 라이브 FR 둘을 시간차로 돌리면 그 사이 companyfacts 변동이 보충의 몫과 섞인다(v3 반증 9 · v4 「a2는 중립 관측자가 아니다」). 같은 날 캐시(`p1rs/cache-1006`)를 같은 시작 상태의 사본 둘에 Writer째 재생하면 차이가 보충의 몫뿐이다. 라이브 경로(어댑터 → 저장 표 → 수집기 → Writer)의 맞물림은 `SecFilingSupplementWriteContractTest`(RS2)가 묻는다.
+- 사본: `stock_screener_q4v_rs1a`·`rs1b` = `sc_a` 복제(운영 10-05 단면 · 둘 다 같은 시작 상태).
+- 재생: `EarlierVintageReplayHarnessTest` · 대상 = 모집단 1,209 중 캐시에 companyfacts가 있는 미국 종목 · from 2018 · **이른 판 끔**(정기 플래그) · rs1a = 보충 없음 · rs1b = 보충(`Q4V_REPLAY_SUPPLEMENT_DIR`) · rs1b 두 번째 재생.
+- **기대(합격)**: ① 보충 활동이 없는 종목의 `financial_statement` 행은 rs1a = rs1b(값·번호·최신까지) ② rs1b에만 있는 판은 RS0 분류의 「새 라벨 · 늦은 판 · HOLE 해」로 전부 설명된다 · 「이른 판 · 사이 판」은 rs1b에 **없다**(정기 플래그가 건너뜀 · 회복 표지 없음) ③ 같은 판의 값 차이는 유도 행(Q4 등)이거나 RS0에서 연 「그 밖」 구성원뿐 ④ rs1a에만 있는 판(보충이 회수를 막은 것 또는 반대)은 하나씩 연다 ⑤ rs1b 두 번째 재생은 신규·정정·채움·교정·이른판 0.
