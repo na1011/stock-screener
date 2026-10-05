@@ -294,3 +294,30 @@
 - 끔 FR(23종목 · 2018~2026): 신규 4 · 정정 10 · 채움 37 · 이른판 0 · 무효화 KOD → 화해 뒤 지표 칸 **바뀜 161 · 생김 126 · 사라짐 0**(BB 154 · KOD 126 · ACMR 2 · MTRN 2 · GVA·KLIC·MOG.B 1 — 코드 상위 PROFIT_STREAK_Y 126 · ALTMAN_Z·DEBT_RATIO·EPS_TTM·FCF_YIELD·MARKET_CAP …) — **F6가 닫는 몫의 실측**(09-18 뒤 편입 23 · 133 날짜).
 - 켬 FR(같은 23 · 끔 뒤): 이른판 2(PSMT) · 무효화 PSMT → 화해 뒤 **끔 대비 지표 칸 차이 0**(바뀜 0 · 생김 0 · 사라짐 0).
 - **규칙대로 끔.** 이른 판 2행은 지표 창 밖이라 값을 안 바꾼다 — 표지에 이른 판 플래그를 두지 않는다(정기 FR(끔)이 쓴 표지로 충분).
+
+## B 계획 v7 (2026-10-06 01시 · v6 두 렌즈 + 이른 판 실측 반영)
+**순서(칸으로 · v6 계획 밖 반증의 수)**: (가) 136,638칸(이미 틀림 · 처방은 어댑터 변경이라 관문 몫일 가능성 — 그러면 순서가 바꾸는 것은 관문 시점뿐) · (나) 10-30까지 46,751칸-일 · 그 뒤 시즌 587,458칸-일 · B 13,216칸-일(상한). **B를 (나)의 부품으로 먼저 놓는다** — 14:17 단계 · stock_id 진입점 · 상한 · 스위퍼를 (나)가 그대로 쓴다. **(나) 마감 10-30**(시즌 시작). B의 표지는 (나)의 술어를 안 담는다 — (나)는 공시 접수번호 대조(US `report_code`의 `10-Q:<accession>` · KR은 접수번호 칸 신설)라 표 모양이 다르다(v6 반증 2).
+1. **표지 표** `stock_financial_sync(stock_id FK ON DELETE CASCADE, job_name, synced_at, PK(stock_id, job_name))`(V63 · ADR-0172) — `changed_at` 없음. FR 람다: 연수 ≥ 8 → `synced_at`. FSR 람다: 연수 ≥ 8 ∧ 분기 포함 ∧ **그 종목 정정보류 0** → `synced_at`. 초기 적재 · 시세 · 꼬리의 `initial-load`는 안 쓴다.
+2. **초기값**(V63 · 실행 id 없음): 재구성 그대로 — FR은 덮은 실행의 `started_at` · FSR은 `finished_at`(그 실행이 만든 행을 「뒤에 생긴 행」으로 안 잡게 · v6 반증 1).
+3. **술어**: FR 대상 = 현 편입(FR 조각) ∧ (FR 표지 없음 ∨ 시작 > FR 표지 KST 날짜). 국내 FSR 대상 = KR 현 편입 ∧ FR 표지 날짜 ≥ 시작 ∧ (**편입 갈래**: FSR 표지 없음 ∨ 시작 > FSR 표지 날짜 · **변경 갈래**: 그 종목에 `financial_statement.created_at > FSR synced_at`인 행) − 이번 단계 FR 실패.
+4. **14:17 단계**(`FinancialSyncStep` @Component · `PipelineScheduler` 새 @Scheduled가 부름 · 스케줄러 전용): 시장마다 FR 한 실행(GAP_FILL) → 국내 FSR 한 실행(GAP_FILL · 분기 포함) · 0건이면 안 부름. **상한**: US FR 100 · 국내는 **그날 DART 잔량**(`dart.daily-quota − dartLimiter.usedToday() − 여유 1,000`)을 FR 41콜 · FSR 49.4콜로 나눈 수(같은 웹 JVM이 14:00·14:15를 셈) + 재기동 과소계상 방어 상한(FR 150 · FSR 300). **순서**: FR 시작 오름차순 · FSR 편입 갈래 먼저(시작 오름차순) → 변경 갈래(오래된 행 먼저). 넘친 수는 WARNING(다음 평일 수렴).
+5. **이른 판 = 끔**(측정: 켬/끔 지표 칸 차이 0 · 위 「B 이른 판 측정 결과」). 표지에 플래그 없음.
+6. **드라이런 = `@Tag("live")` 통합 시험** — `-Dprobe.b.db`(필수 · 기본값 없음)로 데이터소스 URL · 시험용 `FlywayMigrationStrategy` 빈이 **마이그레이션 전에** `current_database()`가 `^stock_screener_(sc|b)_`인지 단언 · `pipeline.scheduler.enabled=false` · 알림 속성 비움 · 웹 없음. 대조군 RB: 사본 아닌 이름 → 컨텍스트가 마이그레이션 전에 선다(V63 안 들어감).
+7. **스위퍼**: `WEB_OWNED_GAP_FILL_JOBS` += `financial-refill`(GAP_FILL FR을 만드는 것은 14:17뿐 — 성질 시험). **FSR GAP_FILL 고아는 B가 닫지 않는다** — 꼬리와 같은 노출(웹이 14:17 FSR 중 죽으면 RUNNING이 남아 `00-precheck.sh:6`이 크게 멈춤 · 지금까지 운영 고아 0) · 뿌리 처방(JVM 토큰 + advisory lock 생존 판정 — v6 반증 4)은 ⑥ 재발원 차단의 별도 항목으로 올린다(`process_kind`는 인스턴스를 못 가려 버렸다).
+8. **감시(15:30 경로만)**: ① FR — 현 편입 ∧ (표지 없음 ∨ 표지 날짜 < 시작) ∧ 편입 행 `created_at` < 오늘 14:17 KST ② 국내 FSR 편입 갈래 같은 꼴 ③ 오늘 GAP_FILL FR로 표지가 쓰였는데 최신 지표일 지표 0행(14:20이 안 돈 날). 알림 문구 「14:20 화해가 채운다 — 안 돌면 15:30 점검이 알린다」.
+9. **알림**: SCHEDULER ∨ GAP_FILL → 위 문구 · 손 FSR 줄은 둘 다에서 뺀다(목요일 FR이 만든 행은 14:17 변경 갈래가 잇는다).
+10. **`DartCorpCodeCache`도 하루 갱신 · 실패 시 던짐**(A2가 SEC에 한 것과 같은 계약 · 국내 신규 상장 0~4일 편입 13개월 12건).
+11. **정기 FSR 대상을 전체 재무제표 소스가 있는 시장으로**(지금 US 1,000이 종목마다 NOT_FOUND — 첫 정기 FSR에 실패 1,000건 · v6 계획 안 반증 계획 밖 보고) — B의 FSR 경로라 함께 고친다.
+12. **소비자**: 14:17 문장 13곳 · `BatchExecutionReader:202` 요약(좁은 GAP_FILL을 「최근」으로 보이는지 열고 고침) · `frontend/src/lib/admin.ts:58-60`·`api/types.ts:727-728`(GAP_FILL 설명) · `00-precheck.sh`(V63 · 고정 기준 `8198fe0`) · `PipelineScheduler:437-438` · 15:30 javadoc 최악 시각 · ADR-0135 「복원이 재무보다 먼저」 펜스(B가 매주 붉게 만든다 — 사정거리를 정한다).
+13. **첫 평일 예측**(10-12): US = 13 + A의 새 stock 11 + 10-10 신규 · KR = 8 + 10-10 신규(p90 10 · 최대 13).
+
+### B 드라이런 규칙 v7(대조 전 커밋 · 사본 둘 = 같은 덤프 · a = main · b = B 코드 jar)
+- RB0: V63 표지 = 재구성 · US FR 표지 vs `financial_column_absence.observed_at` 흔적(987/987).
+- RB1: 통합 시험으로 b에서 단계 1회 → 대상 = 예측(종목까지) · **차분 오라클**: a에서 같은 대상에 손 `financial-refill --tickers`(시장별) + 국내 `full-statement-refill --tickers --quarters` → b와 a의 `financial_statement`가 행 단위로 같다(id·created_at 제외) · 단계 소요 · DART 콜.
+- RB2: 2회째 대상 = 1회째 실패 종목.
+- RB3: b 화해 뒤 대상 종목 지표 칸 변화 수(a 대조군 = 같은 화해만).
+- RB4: US 120종목 표지를 **시작 전 날짜로 UPDATE**(서로 다른 시작 섞기) → 1회 = 100(시작 오름차순) + WARNING · 2회 = 20 · 경계: 시작 = 표지 날짜 → 비대상 · 표지 01:00 KST의 날짜.
+- RB5: 국내 FSR — 변경 갈래(FSR 표지 뒤 생긴 행) 대상 · 편입 갈래 먼저 · 잔량 상한(가짜 리미터 단위 시험) · 정정보류 → 표지 안 씀(단위).
+- RB6: 단위 — 표지 불변 셋(시세만 · `APPEND_ONLY` · 연수 < 8) · 스위퍼 · 15:30 축 셋(꼬리 경로 0 · `created_at` 14:17 경계) · 알림 문구 · Dart 캐시 갱신·실패 · 정기 FSR 대상 = 국내만.
+- RB7: 가드 대조군(사본 아닌 이름 → 마이그레이션 전 실패).
+- RB8: A + A2 + B — 사본에서 10-02 리밸런싱 재연(R5 절차 · A + A2 jar) → 단계 1회 대상에 새 대표 셋(BTSG·NWSA·UHAL.B)과 재편입 형제.
