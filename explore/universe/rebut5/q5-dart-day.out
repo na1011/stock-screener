@@ -1,0 +1,14 @@
+ id  |     job_name     | triggered_by |     st      |  tc  | note 
+-----+------------------+--------------+-------------+------+------
+ 720 | corporate-action | MANUAL       | 10-05 15:44 | 1683 | 
+ 715 | corporate-action | SCHEDULER    | 10-05 13:59 | 1350 | 
+ 707 | governance-load  | GAP_FILL     | 10-03 21:14 |    3 | 
+ 701 | corporate-action | SCHEDULER    | 10-02 14:00 | 1350 | 
+ 698 | corporate-action | SCHEDULER    | 10-01 14:00 | 1350 | 
+ 694 | corporate-action | SCHEDULER    | 09-30 14:00 | 1350 | 
+ 691 | corporate-action | SCHEDULER    | 09-29 14:00 | 1350 | 
+ 687 | corporate-action | SCHEDULER    | 09-28 14:00 | 1350 | 
+ 680 | governance-load  | GAP_FILL     | 09-26 20:00 |    2 | 
+ 676 | corporate-action | SCHEDULER    | 09-25 13:59 | 1350 | 
+(10개 행)
+

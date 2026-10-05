@@ -1,0 +1,44 @@
+       job_name        | execution_id | ticker | market_code | failure_kind |                                  msg                                   | resolved | cur_member 
+-----------------------+--------------+--------+-------------+--------------+------------------------------------------------------------------------+----------+------------
+ financial-refill      |          506 | KMX    | US          | TRANSIENT    | 호출에 실패했다. companyfacts KMX CIK0001170010                        | t        | t
+ financial-refill      |          445 | CAMT   | US          | TRANSIENT    | 호출에 실패했다. companyfacts CAMT CIK0001109138                       | t        | t
+ financial-refill      |          436 | UNH    | US          | TRANSIENT    | 호출에 실패했다. companyfacts UNH CIK0000731766                        | t        | t
+ full-statement-refill |          415 | VAL    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | TTD    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | VEEV   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | PEP    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | PTGX   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | RPRX   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | SBUX   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | TEM    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | TPL    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | UBSI   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | SYF    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | NTSK   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | MDLN   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | PH     | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | POR    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | RF     | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | RIVN   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | BURL   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | RYTM   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | SMMT   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | STRL   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | TLN    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | STM    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | EPD    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | TW     | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | UNH    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | PHM    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | LTH    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | MLM    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | MSFT   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | MUR    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | ORI    | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | PCTY   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | NDAQ   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | PLTR   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | RBLX   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+ full-statement-refill |          415 | NXPI   | US          | NOT_FOUND    | 전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSDAQ, KOSPI] | t        | t
+(40개 행)
+

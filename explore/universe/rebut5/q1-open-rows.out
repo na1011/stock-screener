@@ -1,0 +1,41 @@
+ universe_code |  origin  | effective_from |    cmin     |    cmax     |  n  | dow 
+---------------+----------+----------------+-------------+-------------+-----+-----
+ KOSDAQ_TOP150 | OBSERVED | 2026-08-05     | 08-06 19:24 | 08-06 19:24 | 127 | Wed
+ KOSDAQ_TOP150 | OBSERVED | 2026-08-07     | 08-08 21:51 | 08-08 21:51 |   2 | Fri
+ KOSDAQ_TOP150 | OBSERVED | 2026-08-21     | 08-22 20:00 | 08-22 20:00 |   6 | Fri
+ KOSDAQ_TOP150 | OBSERVED | 2026-08-28     | 08-29 20:00 | 08-29 20:00 |   2 | Fri
+ KOSDAQ_TOP150 | OBSERVED | 2026-09-04     | 09-05 20:00 | 09-05 20:00 |   2 | Fri
+ KOSDAQ_TOP150 | OBSERVED | 2026-09-07     | 09-08 10:13 | 09-08 10:13 |   2 | Mon
+ KOSDAQ_TOP150 | OBSERVED | 2026-09-11     | 09-12 20:00 | 09-12 20:00 |   2 | Fri
+ KOSDAQ_TOP150 | OBSERVED | 2026-09-18     | 09-19 20:00 | 09-19 20:00 |   1 | Fri
+ KOSDAQ_TOP150 | OBSERVED | 2026-09-25     | 09-26 20:00 | 09-26 20:00 |   3 | Fri
+ KOSDAQ_TOP150 | OBSERVED | 2026-10-02     | 10-03 21:14 | 10-03 21:14 |   3 | Fri
+ KOSPI_TOP200  | OBSERVED | 2026-08-05     | 08-06 19:24 | 08-06 19:24 | 192 | Wed
+ KOSPI_TOP200  | OBSERVED | 2026-08-21     | 08-22 20:00 | 08-22 20:00 |   1 | Fri
+ KOSPI_TOP200  | OBSERVED | 2026-08-28     | 08-29 20:00 | 08-29 20:00 |   2 | Fri
+ KOSPI_TOP200  | OBSERVED | 2026-09-07     | 09-08 10:13 | 09-08 10:13 |   1 | Mon
+ KOSPI_TOP200  | OBSERVED | 2026-09-11     | 09-12 20:00 | 09-12 20:00 |   1 | Fri
+ KOSPI_TOP200  | OBSERVED | 2026-09-18     | 09-19 20:00 | 09-19 20:00 |   1 | Fri
+ KOSPI_TOP200  | OBSERVED | 2026-09-25     | 09-26 20:00 | 09-26 20:00 |   1 | Fri
+ KOSPI_TOP200  | OBSERVED | 2026-10-02     | 10-03 21:14 | 10-03 21:14 |   1 | Fri
+ US_TOP1000    | OBSERVED | 2026-08-31     | 08-31 08:29 | 08-31 08:29 | 930 | Mon
+ US_TOP1000    | OBSERVED | 2026-09-04     | 09-04 09:49 | 09-04 09:49 |  31 | Fri
+ US_TOP1000    | OBSERVED | 2026-09-07     | 09-08 10:14 | 09-08 10:14 |   2 | Mon
+ US_TOP1000    | OBSERVED | 2026-09-11     | 09-12 20:00 | 09-12 20:00 |   5 | Fri
+ US_TOP1000    | OBSERVED | 2026-09-18     | 09-19 20:00 | 09-19 20:00 |   9 | Fri
+ US_TOP1000    | OBSERVED | 2026-09-25     | 09-26 20:00 | 09-26 20:00 |  10 | Fri
+ US_TOP1000    | OBSERVED | 2026-10-02     | 10-03 21:14 | 10-03 21:14 |  13 | Fri
+(25개 행)
+
+ multi 
+-------
+     0
+(1개 행)
+
+ universe_code |  origin  | prev_origin | adjacent |    min     |    max     
+---------------+----------+-------------+----------+------------+------------
+ KOSDAQ_TOP150 | OBSERVED | RESTORED    |      127 | 2026-08-05 | 2026-08-05
+ KOSPI_TOP200  | OBSERVED | RESTORED    |      191 | 2026-08-05 | 2026-08-05
+ US_TOP1000    | OBSERVED | RESTORED    |      927 | 2026-08-31 | 2026-08-31
+(3개 행)
+

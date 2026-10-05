@@ -216,3 +216,15 @@
 - RB6: 이른 판 — 사본 둘에서 US 13종목을 켬/끔으로 FR → 화해 → 지표 칸 차이 수(위 9의 규칙).
 - RB7: 알림 문구 — GAP_FILL 갈래에 손 FSR 줄 없음 · 「같은 오후 14:20」.
 - RB8: A와 함께 — A 코드 + B 코드 사본에서 10-02 리밸런싱 재연(R5 절차) 뒤 단계 1회 = 새 대표(BTSG · NWSA · UHAL.B)가 대상에 든다.
+
+## B v5 반증 판정 — 계획 안 렌즈(2026-10-05 23시 · 「수정 후 진행」 · 질의 `rebut5/`)
+- **선다(쟀다)**: 표지 = 재무 쓰기와 한 트랜잭션(`StockTaskRunner:31` · 수집기·Writer에 자체 @Transactional 0 · 어댑터는 013 외 전부 던짐 → 실패·종료에서 표지 안 남음) · 초기값 재구성 = 독립 흔적 `financial_column_absence.observed_at`과 US 현 편입 987/987 일치 · 재구성 밖 09-28 관측 0(`q3`) · RESTORED는 열린 행이 못 됨(`ck_restored_is_closed`) · 날짜 경계 안전(F6·정기 FR은 현 편입만) · 스위퍼 근거(FR 호출자 둘 · GAP_FILL FR 이력 0).
+- **고칠 것**
+  1. 감시 축이 토요일 꼬리(`MembershipGapFiller:169` → `UniverseIntegrityAlerter:100` 전 Axis)에서 신규 전원으로 거짓 경보 · 7일 억제(`:49`)가 월 15:30 진짜 경보를 막는다 → 15:30 경로에서만 · 「시작 뒤 평일 14:17이 지남」 술어 · KR FSR 축도 · RB로 「토 경보 0 · 월 15:30만」.
+  2. 국내 FSR 대상 「FSR 술어 − FR 실패」가 FR 뒤 상태를 못 지킨다 — FSR은 정정 보류하고도 성공(`FinancialWriter:501`) · (가) 14:15 FSR 표지 → 14:17 FR 정정 행 (나) 상한으로 FR 안 탄 종목 (다) 토 꼬리 FSR(#706 GAP_FILL)도 표지 씀 → FSR 대상 = KR ∧ FR 표지 ≥ 시작 ∧ (FSR 표지 없음 ∨ FSR 표지 < max(시작, FR이 행을 바꾼 시각)) · 정정보류 ≥ 1이면 FSR 표지 안 씀(목요일 정기 FR 뒤 구멍도 14:17이 잇는다).
+  3. 드라이런 기제: `PipelineScheduler:44` `@ConditionalOnProperty(pipeline.scheduler.enabled)` — 켜면 크론 7개 함께 무장 · 웹 프로필엔 `BootstrapDatabaseGuard` 없음 · `env.sh boot()`는 bootstrap 전용 → 연결 카탈로그 단언 · 알림 3변수 비움 · `--server.port=0` · 평일 13:20~15:45·토 19:50~20:30 피한 기동 창을 RB로.
+  4. RB가 본체에 안 닿는다 — 21 전원·RB4·RB8이 「표지 없음」 갈래 · 「시작 > 표지 날짜」 비교를 태우는 RB 없음 · RB0은 같은 SQL끼리 · RB1·RB3에 결함 오라클 없음 → RB4 = 표지를 시작 전 날짜로 UPDATE(시작 섞기) · RB0에 `q3` 흔적 대조 · RB1에 기말 오라클(BB 최신 기말 05-31 → b에서 08-31? a는 그대로) · 단계 소요.
+  5. 예산: KOSDAQ FSR 실콜 46.7~49.4/종목(`q8`) · 기업행위 700은 실측 아님 → 49.4면 여유 1,058 = KR 12 < 상한 15(넘치면 RATE_LIMITED 롤백 → 다음 날 — 값은 안 틀림) · 시각 최악 약 3.7분.
+  6. 첫 월요일 US 대상 = 13 + A의 새 stock 11(R5) + 10-10 정기 신규(7~32) = 31~58 — 상한 50을 넘을 수 있다 → 예측에 R5 사본의 수.
+  7. 안 센 소비자: 새 표 FK와 시험 16파일의 `DELETE FROM stock`(CASCADE) · `BatchExecutionReader:202` 잡별 최신 1건이 좁은 GAP_FILL FR을 「FR 최근」으로 보임 · GAP_FILL FSR 유령 행은 여전히 안 닫힘 · 이른 판 켜면 `FinancialRefillJob:113` MUST NOT 갱신 · `SecTickerCikCache:124` JVM당 한 번 — 오래 사는 웹 JVM에서 NOT_FOUND의 뜻이 「낡은 스냅숏」으로 바뀐다(오류 형태 4).
+- 재지 않음(반증자): KR 초기값 독립 흔적 · `is_active` 복귀 수 · 지적 2의 발화 칸 수 · 기업행위 DART 실콜 · 신규 상장의 CIK 매핑 누락 빈도 · 09-18 뒤 편입 US 19종목의 이른 판 보유 수.

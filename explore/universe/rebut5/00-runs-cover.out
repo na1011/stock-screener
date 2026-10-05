@@ -1,0 +1,66 @@
+       job_name        | id  |     st      | yrs | target_count |                    open_counts                     |    covers     
+-----------------------+-----+-------------+-----+--------------+----------------------------------------------------+---------------
+ financial-refill      | 710 | 10-03 21:17 |  11 |            1 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 683 | 09-28 01:14 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 658 | 09-22 09:43 |   8 |          150 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | KOSDAQ_TOP150
+ financial-refill      | 655 | 09-22 01:43 |   8 |          129 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 653 | 09-22 00:57 |   8 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 646 | 09-21 22:29 |   8 |          150 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | KOSDAQ_TOP150
+ financial-refill      | 645 | 09-21 22:15 |   8 |          200 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | KOSPI_TOP200
+ financial-refill      | 643 | 09-21 21:48 |   8 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 630 | 09-20 15:15 |   8 |            4 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 601 | 09-18 17:48 |  11 |         1000 | KOSDAQ_TOP150=147 KOSPI_TOP200=198 US_TOP1000=985  | 
+ financial-refill      | 522 | 09-16 23:11 |  11 |          133 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 518 | 09-16 12:38 |  11 |          150 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | KOSDAQ_TOP150
+ financial-refill      | 517 | 09-16 12:20 |  11 |          200 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | KOSPI_TOP200
+ financial-refill      | 513 | 09-16 11:50 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 509 | 09-15 20:49 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 508 | 09-15 20:37 |  11 |           10 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 505 | 09-15 14:49 |  11 |            7 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 496 | 09-15 11:27 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 495 | 09-15 11:24 |  11 |           10 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 491 | 09-15 09:57 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 490 | 09-15 09:54 |  11 |           19 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 486 | 09-15 08:56 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 485 | 09-15 08:54 |  11 |            5 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 481 | 09-15 07:48 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 480 | 09-15 07:45 |  11 |            3 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 479 | 09-15 07:45 |  11 |            9 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 476 | 09-15 05:12 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 475 | 09-15 05:09 |  11 |            8 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 473 | 09-15 04:30 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 472 | 09-15 04:26 |  11 |            8 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 469 | 09-15 04:04 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 468 | 09-15 04:01 |  11 |           62 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 464 | 09-15 01:56 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 463 | 09-15 01:54 |  11 |            6 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 459 | 09-15 00:47 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 458 | 09-15 00:46 |  11 |           14 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 457 | 09-15 00:29 |  11 |           14 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 453 | 09-14 23:35 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 451 | 09-14 23:11 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 449 | 09-14 22:47 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 447 | 09-14 22:27 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 443 | 09-14 21:46 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 441 | 09-14 21:27 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 438 | 09-14 19:33 |  11 |           12 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 437 | 09-14 19:32 |  11 |           12 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 431 | 09-14 18:48 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 421 | 09-14 13:41 |   8 |           30 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ financial-refill      | 414 | 09-14 11:00 |  11 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 273 | 09-04 14:24 |   8 |            1 | KOSDAQ_TOP150=145 KOSPI_TOP200=197 US_TOP1000=1000 | 
+ financial-refill      | 224 | 08-31 16:58 |   8 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 223 | 08-31 16:11 |   8 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      | 222 | 08-31 15:51 |   8 |         1000 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | US_TOP1000
+ financial-refill      |  94 | 08-18 15:50 |  11 |          175 | KOSDAQ_TOP150=150 KOSPI_TOP200=200                 | 
+ financial-refill      |  93 | 08-18 14:58 |  11 |          175 | KOSDAQ_TOP150=150 KOSPI_TOP200=200                 | 
+ full-statement-refill | 706 | 10-03 21:14 |   8 |            1 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ full-statement-refill | 664 | 09-23 00:26 |   8 |          129 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ full-statement-refill | 663 | 09-23 00:09 |   8 |          200 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | KOSPI_TOP200
+ full-statement-refill | 659 | 09-22 12:59 |   8 |            8 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ full-statement-refill | 656 | 09-22 06:40 |   8 |          129 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+ full-statement-refill | 648 | 09-21 23:19 |   8 |          150 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | KOSDAQ_TOP150
+ full-statement-refill | 647 | 09-21 22:52 |   8 |          200 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | KOSPI_TOP200
+ full-statement-refill | 618 | 09-20 01:35 |  11 |            1 | KOSDAQ_TOP150=150 KOSPI_TOP200=200 US_TOP1000=1000 | 
+(62개 행)
+

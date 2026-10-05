@@ -1,0 +1,16 @@
+ id  |       job_name        |  tc  | calls | per_stock | sec_per_stock 
+-----+-----------------------+------+-------+-----------+---------------
+ 645 | financial-refill      |  200 |       |           |          4.10
+ 646 | financial-refill      |  150 |       |           |          3.90
+ 653 | financial-refill      | 1000 |       |           |          0.90
+ 658 | financial-refill      |  150 |       |           |          3.96
+ 683 | financial-refill      | 1000 |       |           |          0.96
+ 647 | full-statement-refill |  200 |  8832 |      44.2 |          7.58
+ 648 | full-statement-refill |  150 |  7012 |      46.7 |          6.90
+ 656 | full-statement-refill |  129 |  6374 |      49.4 |          5.31
+ 659 | full-statement-refill |    8 |   384 |      48.0 |          5.20
+ 663 | full-statement-refill |  200 |  8832 |      44.2 |          4.82
+ 664 | full-statement-refill |  129 |  6374 |      49.4 |          5.33
+ 706 | full-statement-refill |    1 |    38 |      38.0 |          3.98
+(12개 행)
+
