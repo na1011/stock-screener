@@ -153,7 +153,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                    latest.shares_outstanding
                        * coalesce(latest.share_basis_multiple, 1) * %s AS shares_outstanding,
                    s.sic_code, latest.period_end, latest.published_at,
-                   %s AS currency_mismatched
+                   %s AS currency_mismatched, s.name
             FROM latest
             JOIN stock s ON s.id = latest.stock_id
             WHERE latest.share_basis_status IS DISTINCT FROM 'UNRESOLVED'
@@ -176,7 +176,8 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                         rs.getString("sic_code"),
                         rs.getObject("period_end", LocalDate.class),
                         rs.getObject("published_at", LocalDate.class),
-                        rs.getBoolean("currency_mismatched")),
+                        rs.getBoolean("currency_mismatched"),
+                        rs.getString("name")),
                 marketCode, asOf, oldestPeriodEnd, asOf);
     }
 }

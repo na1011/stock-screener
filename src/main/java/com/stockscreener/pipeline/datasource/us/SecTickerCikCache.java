@@ -13,6 +13,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -49,6 +52,23 @@ import java.util.Optional;
  * <p><b>인메모리 + 지연 로딩이다.</b> 기동 시에 받으면 신원 표시가 없는 개발 환경에서 앱이
  * 안 뜬다({@code DartCorpCodeCache}와 같은 이유). {@code @ConditionalOnApiKey}를 걸지 않는
  * 것도 같다 — 없으면 조회 시점에 {@code AUTH}로 실패하는 편이 조용한 미등록보다 낫다.
+ *
+ * <h2>받은 지 {@link #MAX_AGE}가 지나면 다시 받는다 — 실패의 계약은 소비자가 고른다</h2>
+ * <p>웹 JVM은 몇 주씩 산다. 한 번만 받으면 그 사이 상장·개명·거래소 이전이 「CIK를 모른다」·
+ * 「옛 거래소」로 굳고, 그것은 정상(ETF·우선주의 빈 매핑)과 구분되지 않는다(ADR-0171).
+ * <ul>
+ *   <li><b>명부는 {@link #freshSnapshot()}</b> — 다시 받기에 실패하면 던진다. 낡은 거래소 라벨이 명부를
+ *       틀리게 만들고, 던지면 리밸런싱이 이전 구성을 지킨다(ADR-0008).</li>
+ *   <li><b>종목 단위 소비자({@link #findCik} — 재무·개황)는 {@link #snapshot()}</b> — 실패하면 옛 판을
+ *       나이와 함께 WARN하고 계속 쓴다. 낡은 맵은 <b>그 뒤의 새 티커만</b> 「모름」으로 만들고 그것은 종목
+ *       실패로 시끄럽다. 던지면 그 실행의 미국 전원이 실패하고, 그래도 {@code PARTIAL_SUCCESS}라 무거운 잡
+ *       시계가 다시 시작된다.</li>
+ * </ul>
+ * <p><b>실패한 시도는 {@link #RETRY_AFTER_FAILURE} 동안 기억한다</b> — 기억하지 않으면 종목 루프가 종목마다
+ * 다시 받는다(1,000종목 × 매핑 파일). 첫 적재 실패는 둘 다 던진다(옛 판이 없다).
+ *
+ * <p><b>MUST: 한 실행 안에서는 판 하나를 잡고 쓴다.</b> 행마다 {@link #findCik}를 부르면 경계가 실행
+ * 도중에 걸려 한 리밸런싱이 두 판을 섞는다 — 같은 CIK 묶음의 반은 옛 판, 반은 새 판으로 갈린다.
  */
 @Component
 public class SecTickerCikCache {
@@ -59,12 +79,22 @@ public class SecTickerCikCache {
     /** 실측 10,391행의 절반. 소스가 반쯤 준 날 울게 하려는 하한이다(2026-08-29 측정). */
     private static final int MIN_EXPECTED_ROWS = 5_195;
 
+    /** 이보다 오래된 판이면 다음 {@link #snapshot()}에서 다시 받는다. 리밸런싱이 주 1회라 하루면 그 주의 상장을 싣는다. */
+    static final Duration MAX_AGE = Duration.ofHours(24);
+
+    /** 다시 받기가 실패한 뒤 이만큼은 다시 부르지 않는다. 미국 FR 한 바퀴(약 16분) 안에 두세 번만 다시 묻는다. */
+    static final Duration RETRY_AFTER_FAILURE = Duration.ofMinutes(10);
+
     private final RestClient client;
     private final RateLimiter rateLimiter;
     private final boolean userAgentPresent;
     private final int minExpectedRows;
+    private final Clock clock;
 
-    private volatile Map<String, Long> byTicker;
+    private volatile Snapshot current;
+    /** 마지막 다시 받기 실패 — {@code this}로 잠근 자리에서만 읽고 쓴다. */
+    private Instant lastFailedAt;
+    private DataSourceException lastFailure;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -75,7 +105,7 @@ public class SecTickerCikCache {
                              DataSourceProperties properties,
                              @Qualifier("secEdgarRateLimiter") RateLimiter rateLimiter) {
         this(clientFactory, properties, rateLimiter, properties.getSecEdgarFilesBaseUrl(),
-                MIN_EXPECTED_ROWS);
+                MIN_EXPECTED_ROWS, Clock.systemUTC());
     }
 
     /** MockWebServer 테스트 전용 — base URL과 하한을 바꿔 끼운다. */
@@ -84,11 +114,22 @@ public class SecTickerCikCache {
                       RateLimiter rateLimiter,
                       String baseUrl,
                       int minExpectedRows) {
+        this(clientFactory, properties, rateLimiter, baseUrl, minExpectedRows, Clock.systemUTC());
+    }
+
+    /** 위와 같되 시계까지 바꿔 끼운다 — {@link #MAX_AGE} 경계를 시험한다. */
+    SecTickerCikCache(ExternalApiClientFactory clientFactory,
+                      DataSourceProperties properties,
+                      RateLimiter rateLimiter,
+                      String baseUrl,
+                      int minExpectedRows,
+                      Clock clock) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
         this.userAgentPresent = source.hasApiKey();
         this.minExpectedRows = minExpectedRows;
+        this.clock = clock;
     }
 
     /**
@@ -97,16 +138,120 @@ public class SecTickerCikCache {
      * @param ticker 시세 소스 표기 그대로({@code BRK.A}). 정규화는 여기서 한다.
      */
     public Optional<Long> findCik(String ticker) throws DataSourceException {
-        Map<String, Long> map = load();
-        Long direct = map.get(ticker);
-        if (direct != null) {
-            return Optional.of(direct);
-        }
-        return Optional.ofNullable(map.get(ticker.replace('.', '-')));
+        return snapshot().findCik(ticker);
     }
 
     public int size() throws DataSourceException {
-        return load().size();
+        return snapshot().size();
+    }
+
+    /**
+     * 명부가 쓰는 판. 받은 지 {@link #MAX_AGE}가 지났으면 다시 받고, <b>실패하면 던진다</b>(클래스 javadoc).
+     * 한 실행은 이것 하나를 잡고 쓴다.
+     */
+    public Snapshot freshSnapshot() throws DataSourceException {
+        return obtain(true);
+    }
+
+    /**
+     * 종목 단위 소비자가 쓰는 판. 다시 받기에 실패하면 옛 판을 WARN과 함께 낸다 — 첫 적재 실패만 던진다.
+     */
+    public Snapshot snapshot() throws DataSourceException {
+        return obtain(false);
+    }
+
+    private Snapshot obtain(boolean strict) throws DataSourceException {
+        Snapshot held = current;
+        if (held != null && !held.olderThan(MAX_AGE, clock.instant())) {
+            return held;
+        }
+        synchronized (this) {
+            held = current;
+            Instant now = clock.instant();
+            if (held != null && !held.olderThan(MAX_AGE, now)) {
+                return held;
+            }
+            if (lastFailedAt != null && lastFailedAt.plus(RETRY_AFTER_FAILURE).isAfter(now)) {
+                // 방금 실패했다 — 다시 안 부른다. 같은 실패를 그대로 낸다.
+                if (strict || held == null) {
+                    throw lastFailure;
+                }
+                return held;
+            }
+            try {
+                Snapshot fresh = new Snapshot(download(), now);
+                current = fresh;
+                lastFailedAt = null;
+                lastFailure = null;
+                if (held == null) {
+                    log.info("SEC 티커→CIK 매핑을 받았다. {}건", fresh.size());
+                } else {
+                    log.info("SEC 티커→CIK 매핑을 받았다. {}건 — 앞 판은 {}에 받은 {}건이었다",
+                            fresh.size(), held.loadedAt(), held.size());
+                }
+                return fresh;
+            } catch (DataSourceException e) {
+                lastFailedAt = now;
+                lastFailure = e;
+                if (strict || held == null) {
+                    throw e;
+                }
+                log.warn("SEC 티커→CIK 매핑을 다시 받지 못해 {}에 받은 판을 계속 쓴다 — 그 뒤의 상장·개명은 "
+                        + "「CIK 모름」으로 보인다. {}분 뒤 다시 묻는다. 원인={}", held.loadedAt(),
+                        RETRY_AFTER_FAILURE.toMinutes(), e.getMessage());
+                return held;
+            }
+        }
+    }
+
+    /** 한 줄의 CIK와 SEC가 적은 거래소. 거래소는 비어 있을 수 있다(실측 182행 — 파일이 {@code null}로 싣는다). */
+    public record Listing(long cik, String exchange) {
+    }
+
+    /**
+     * 한 번 받은 매핑. 불변이다.
+     *
+     * <p>{@code exchange}는 SEC의 표기({@code NYSE}·{@code Nasdaq}·{@code OTC}·{@code CBOE})다. <b>SEC는
+     * NYSE American·Arca도 「NYSE」로 적는다</b>(실측 UEC·SEB·PHYS) — 그 둘을 가르려면 시세 소스의
+     * 단건 조회가 필요하다(ADR-0171).
+     */
+    public static final class Snapshot {
+        private final Map<String, Listing> byTicker;
+        private final Instant loadedAt;
+
+        Snapshot(Map<String, Listing> byTicker, Instant loadedAt) {
+            this.byTicker = byTicker;
+            this.loadedAt = loadedAt;
+        }
+
+        public Optional<Long> findCik(String ticker) {
+            return find(ticker).map(Listing::cik);
+        }
+
+        /** SEC가 적은 거래소. 티커가 없거나 거래소가 비면 비어 있다. */
+        public Optional<String> exchangeOf(String ticker) {
+            return find(ticker).map(Listing::exchange);
+        }
+
+        public int size() {
+            return byTicker.size();
+        }
+
+        public Instant loadedAt() {
+            return loadedAt;
+        }
+
+        boolean olderThan(Duration age, Instant now) {
+            return !loadedAt.plus(age).isAfter(now);
+        }
+
+        private Optional<Listing> find(String ticker) {
+            Listing direct = byTicker.get(ticker);
+            if (direct != null) {
+                return Optional.of(direct);
+            }
+            return Optional.ofNullable(byTicker.get(ticker.replace('.', '-')));
+        }
     }
 
     /** URL에 쓰는 형태. 10자리 zero-padding이 없으면 404다. */
@@ -114,21 +259,7 @@ public class SecTickerCikCache {
         return "CIK%010d".formatted(cik);
     }
 
-    private Map<String, Long> load() throws DataSourceException {
-        Map<String, Long> cached = byTicker;
-        if (cached != null) {
-            return cached;
-        }
-        synchronized (this) {
-            if (byTicker == null) {
-                byTicker = download();
-                log.info("SEC 티커→CIK 매핑을 받았다. {}건", byTicker.size());
-            }
-            return byTicker;
-        }
-    }
-
-    private Map<String, Long> download() throws DataSourceException {
+    private Map<String, Listing> download() throws DataSourceException {
         if (!userAgentPresent) {
             throw new DataSourceException(DataSourceException.Kind.AUTH,
                     SecEdgarResponse.SOURCE_NAME,
@@ -163,7 +294,7 @@ public class SecTickerCikCache {
         return parse(response.getBody(), minExpectedRows);
     }
 
-    private static Map<String, Long> parse(JsonNode root, int minExpectedRows)
+    private static Map<String, Listing> parse(JsonNode root, int minExpectedRows)
             throws DataSourceException {
         if (root == null || !root.has("fields") || !root.path("data").isArray()) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED,
@@ -177,9 +308,11 @@ public class SecTickerCikCache {
         }
         Integer tickerAt = at.get("ticker");
         Integer cikAt = at.get("cik");
-        if (tickerAt == null || cikAt == null) {
+        Integer exchangeAt = at.get("exchange");
+        if (tickerAt == null || cikAt == null || exchangeAt == null) {
+            // 거래소는 상장 판정의 재료다(ADR-0171) — 빠지면 숨은 상장이 전부 「거래소 모름」으로 조용히 빠진다.
             throw new DataSourceException(DataSourceException.Kind.MALFORMED,
-                    SecEdgarResponse.SOURCE_NAME, "fields에 ticker·cik이 없다: " + at.keySet());
+                    SecEdgarResponse.SOURCE_NAME, "fields에 ticker·cik·exchange가 없다: " + at.keySet());
         }
 
         JsonNode data = root.path("data");
@@ -193,11 +326,13 @@ public class SecTickerCikCache {
                             .formatted(data.size(), minExpectedRows));
         }
 
-        Map<String, Long> map = new HashMap<>(data.size() * 2);
+        Map<String, Listing> map = new HashMap<>(data.size() * 2);
         for (JsonNode row : data) {
             String ticker = row.get(tickerAt).asString("");
             if (!ticker.isBlank()) {
-                map.put(ticker, row.get(cikAt).asLong());
+                JsonNode exchange = row.get(exchangeAt);
+                map.put(ticker, new Listing(row.get(cikAt).asLong(),
+                        exchange == null || exchange.isNull() ? null : exchange.asString("")));
             }
         }
         return Map.copyOf(map);

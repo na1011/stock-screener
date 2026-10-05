@@ -223,6 +223,47 @@ class AlpacaUniverseAdapterTest {
                 .isEqualTo(DataSourceException.Kind.NOT_FOUND);
     }
 
+    @Test
+    @DisplayName("단건은 404면 비어 있고, 2xx 아닌 나머지는 던진다 — 빼고 넘어가면 숨은 상장이 조용히 빠진다(ADR-0171)")
+    void fetchAssetContract() throws Exception {
+        enqueue(200, """
+                {"symbol":"ET","name":"Energy Transfer LP Common Units","exchange":"NYSE","status":"inactive","tradable":false}""");
+        enqueue(404, "{\"message\":\"not found\"}");
+        enqueue(503, "{}");
+        AlpacaUniverseAdapter adapter = adapter(1);
+
+        Optional<AlpacaAsset> et = adapter.fetchAsset("ET");
+        assertThat(et).get().extracting(AlpacaAsset::exchange, AlpacaAsset::status)
+                .containsExactly("NYSE", "inactive");
+        assertThat(adapter.fetchAsset("NOPE")).isEmpty();
+        assertThatThrownBy(() -> adapter.fetchAsset("DOWN"))
+                .isInstanceOf(DataSourceException.class)
+                .hasMessageContaining("HTTP 503");
+    }
+
+    @Test
+    @DisplayName("단건은 6시간 메모한다 — 복원 격자가 같은 심볼을 다시 물어도 0콜 · 지나면 다시 부른다")
+    void fetchAssetIsMemoizedForSixHours() throws Exception {
+        SecTickerCikCacheTest.MutableClock clock =
+                new SecTickerCikCacheTest.MutableClock(java.time.Instant.parse("2026-10-10T11:00:00Z"));
+        String body = """
+                {"symbol":"ET","name":"Energy Transfer LP Common Units","exchange":"NYSE","status":"inactive","tradable":false}""";
+        enqueue(200, body);
+        enqueue(200, body);
+        AlpacaUniverseAdapter adapter = new AlpacaUniverseAdapter(
+                new ExternalApiClientFactory(), properties("test-key-id", "test-secret"),
+                new TokenBucketRateLimiter("alpaca", 0, 0), nameCache,
+                server.url("/").toString(), 1, clock);
+
+        adapter.fetchAsset("ET");
+        clock.advance(java.time.Duration.ofHours(5));
+        adapter.fetchAsset("ET");
+        assertThat(server.getRequestCount()).as("6시간 안").isEqualTo(1);
+        clock.advance(java.time.Duration.ofHours(2));
+        adapter.fetchAsset("ET");
+        assertThat(server.getRequestCount()).as("6시간이 지나면 다시").isEqualTo(2);
+    }
+
     private AlpacaUniverseAdapter adapter(int minAssets) {
         return new AlpacaUniverseAdapter(
                 new ExternalApiClientFactory(), properties("test-key-id", "test-secret"),

@@ -29,6 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>{@code UsMarketCapUniverseAdapter}는 {@code listing.fetchActiveAssets()}로 <b>오늘의</b>
  * 활성 목록을 받으므로, 그 사이 상장폐지된 종목은 과거 명부에 <b>원리적으로 못 들어온다.</b>
+ * 숨은 상장 보완(ADR-0171)은 <b>오늘의 SEC 파일에 남은</b> 폐지 전 티커만 그 날짜의 봉으로 받는다 —
+ * SEC에서 빠진 폐지 종목은 여전히 못 들어오고, 결과가 실행 시각의 SEC 상태에 달린다.
  *
  * <p><b>MUST NOT: 그것을 「원리적으로 못 잰다」로 읽지 않는다.</b> 막는 것은 어댑터이지 소스가
  * 아니다 — {@code /v2/assets}에서 {@code status}를 빼면 비활성 종목이 함께 오고, 그 심볼의

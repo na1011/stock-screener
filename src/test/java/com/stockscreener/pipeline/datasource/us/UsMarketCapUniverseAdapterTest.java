@@ -51,6 +51,8 @@ class UsMarketCapUniverseAdapterTest {
     private static final String PAGE2 = "PAGE2";
 
     private final Map<String, String> bodies = new LinkedHashMap<>();
+    /** 경로별 응답 코드. 없으면 200 — 단건의 5xx 갈래를 시험한다. */
+    private final Map<String, Integer> statuses = new LinkedHashMap<>();
     private final List<String> paths = new ArrayList<>();
 
     @BeforeEach
@@ -58,6 +60,7 @@ class UsMarketCapUniverseAdapterTest {
         server = new MockWebServer();
         nameCache = new SecurityNameCache();
         bodies.clear();
+        statuses.clear();
         paths.clear();
         // 기본 픽스처. 시험마다 필요한 것만 덮어쓴다.
         bodies.put("/v2/assets", assets(
@@ -75,9 +78,11 @@ class UsMarketCapUniverseAdapterTest {
                             .setHeader("Content-Type", "application/json;charset=UTF-8")
                             .setBody(bodies.get(PAGE2));
                 }
+                // 경로가 같거나 그 뒤가 질의뿐일 때만 맞춘다 — 단건 /v2/assets/ET가 목록 /v2/assets에 걸리지 않게.
                 for (Map.Entry<String, String> entry : bodies.entrySet()) {
-                    if (path.startsWith(entry.getKey())) {
-                        return new MockResponse().setResponseCode(200)
+                    String key = entry.getKey();
+                    if (path.equals(key) || path.startsWith(key + "?")) {
+                        return new MockResponse().setResponseCode(statuses.getOrDefault(key, 200))
                                 .setHeader("Content-Type", "application/json;charset=UTF-8")
                                 .setBody(entry.getValue());
                     }
@@ -372,6 +377,193 @@ class UsMarketCapUniverseAdapterTest {
 
     // ── 조립 ───────────────────────────────────────────────────────────────
 
+    // ── 숨은 상장(ADR-0171) ─────────────────────────────────────────────────────────────
+
+    /** BIG·MID는 목록에 있고 ET는 목록에 없다 — 2026-10-05 실측의 모양. */
+    private void hiddenFixture(String etBars) {
+        bodies.put("/v2/assets", assets(asset("BIG", "Big Industries Inc."), asset("MID", "Mid Corp.")));
+        bodies.put("/files/company_tickers_exchange.json",
+                secRows(row("BIG", 1, "Nasdaq"), row("MID", 2, "Nasdaq"), row("ET", 3, "NYSE")));
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("BIG", bar("26", "1", 1000L), bar("27", "100", 1000L)),
+                series("MID", bar("26", "1", 1000L), bar("27", "50", 1000L)),
+                etBars), null));
+    }
+
+    @Test
+    @DisplayName("목록이 빠뜨린 상장도 마지막 세션에 봉이 있고 단건이 NYSE·NASDAQ면 후보다 — 목록은 상장 사실이 아니다")
+    void acceptsHiddenListingAliveOnTheLastSession() throws Exception {
+        hiddenFixture(series("ET", bar("26", "1", 1000L), bar("27", "20", 1000L)));
+        bodies.put("/v2/assets/ET", single("ET", "Energy Transfer LP Common Units", "NYSE", "inactive"));
+
+        // 시총 BIG 10×100=1,000 · MID 100×50=5,000 · ET 3,000×20=60,000
+        UniverseSnapshot snapshot = adapter(2, shares(share("BIG", "10"), share("MID", "100"), share("ET", "3000")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).as("옛 코드는 목록 밖 ET를 못 봐 MID·BIG을 낸다").containsExactly("ET", "MID");
+        assertThat(nameCache.find("US", "ET")).get()
+                .extracting(d -> d.name()).isEqualTo("Energy Transfer LP Common Units");
+    }
+
+    @Test
+    @DisplayName("숨은 상장이 마지막 세션에 봉이 없으면 뺀다 — SEC 파일은 폐지를 늦게 반영한다(DBRG 모양)")
+    void dropsHiddenListingWithoutTheLastSessionBar() throws Exception {
+        hiddenFixture(series("ET", bar("26", "20", 1000L)));
+        bodies.put("/v2/assets/ET", single("ET", "Energy Transfer LP Common Units", "NYSE", "inactive"));
+
+        UniverseSnapshot snapshot = adapter(2, shares(share("BIG", "10"), share("MID", "100"), share("ET", "3000")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).containsExactly("MID", "BIG");
+        assertThat(paths).as("봉으로 먼저 거르면 단건을 안 부른다").noneMatch(p -> p.startsWith("/v2/assets/ET"));
+    }
+
+    @Test
+    @DisplayName("마지막 세션은 후보 과반의 날짜다 — 이상봉 하나가 숨은 상장 전체를 떨어뜨리지 않는다")
+    void lastSessionIsTheMajorityDate() throws Exception {
+        bodies.put("/v2/assets", assets(asset("BIG", "Big Industries Inc."), asset("MID", "Mid Corp.")));
+        bodies.put("/files/company_tickers_exchange.json",
+                secRows(row("BIG", 1, "Nasdaq"), row("MID", 2, "Nasdaq"), row("ET", 3, "NYSE")));
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("BIG", bar("26", "1", 1000L), bar("27", "1", 1000L), bar("28", "100", 1000L)),
+                series("MID", bar("26", "1", 1000L), bar("27", "50", 1000L)),
+                series("ET", bar("26", "1", 1000L), bar("27", "20", 1000L))), null));
+        bodies.put("/v2/assets/ET", single("ET", "Energy Transfer LP Common Units", "NYSE", "inactive"));
+
+        UniverseSnapshot snapshot = adapter(2, shares(share("BIG", "10"), share("MID", "100"), share("ET", "3000")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).as("최댓값(28)이면 ET가 빠진다").contains("ET");
+    }
+
+    @Test
+    @DisplayName("단건이 404면 뺀다 · 거래소가 NYSE·NASDAQ가 아니면 뺀다")
+    void dropsHiddenListingUnknownOrOffExchange() throws Exception {
+        hiddenFixture(series("ET", bar("26", "1", 1000L), bar("27", "20", 1000L)));
+        UniverseSnapshot unknown = adapter(2, shares(share("BIG", "10"), share("MID", "100"), share("ET", "3000")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+        assertThat(unknown.tickers()).as("단건 404").containsExactly("MID", "BIG");
+
+        bodies.put("/v2/assets/ET", single("ET", "Energy Transfer LP Common Units", "AMEX", "active"));
+        UniverseSnapshot offExchange = adapter(2, shares(share("BIG", "10"), share("MID", "100"), share("ET", "3000")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+        assertThat(offExchange.tickers()).as("SEC는 NYSE American도 NYSE로 적는다 — 단건이 가른다")
+                .containsExactly("MID", "BIG");
+    }
+
+    @Test
+    @DisplayName("단건이 5xx면 던진다 — 빼고 넘어가면 상장 종목이 명부에서 빠지는 원래 결함이 재현된다(ADR-0008)")
+    void throwsWhenSingleAssetFails() {
+        hiddenFixture(series("ET", bar("26", "1", 1000L), bar("27", "20", 1000L)));
+        bodies.put("/v2/assets/ET", "{}");
+        statuses.put("/v2/assets/ET", 503);
+
+        assertThatThrownBy(() -> adapter(2, shares(share("BIG", "10"), share("MID", "100"), share("ET", "3000")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF))
+                .isInstanceOf(DataSourceException.class)
+                .hasMessageContaining("HTTP 503");
+    }
+
+    @Test
+    @DisplayName("이름 축은 숨은 상장에도 건다 — 저장된 이름이 먼저(단건 전) · 단건 이름이 비면 저장된 이름")
+    void appliesTheNameAxisToHiddenListings() throws Exception {
+        bodies.put("/v2/assets", assets(asset("BIG", "Big Industries Inc."), asset("MID", "Mid Corp.")));
+        bodies.put("/files/company_tickers_exchange.json", secRows(row("BIG", 1, "Nasdaq"), row("MID", 2, "Nasdaq"),
+                row("DDT", 3, "NYSE"), row("ET", 4, "NYSE")));
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("BIG", bar("26", "1", 1000L), bar("27", "100", 1000L)),
+                series("MID", bar("26", "1", 1000L), bar("27", "50", 1000L)),
+                series("DDT", bar("26", "1", 1000L), bar("27", "26", 1000L)),
+                series("ET", bar("26", "1", 1000L), bar("27", "20", 1000L))), null));
+        bodies.put("/v2/assets/ET", single("ET", "", "NYSE", "inactive"));
+
+        UniverseSnapshot snapshot = adapter(2, shares(share("BIG", "10"), share("MID", "100"),
+                named("DDT", "100000", "Dillard's Capital Trust I 7.50% Capital Securities"),
+                named("ET", "3000", "Energy Transfer LP")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).containsExactly("ET", "MID");
+        assertThat(paths).as("DDT는 저장된 이름에서 빠져 단건을 안 부른다").noneMatch(p -> p.startsWith("/v2/assets/DDT"));
+        assertThat(nameCache.find("US", "ET")).get().extracting(d -> d.name()).isEqualTo("Energy Transfer LP");
+    }
+
+    @Test
+    @DisplayName("점·하이픈 정규화가 숨은 상장에도 걸린다 — 시세는 BRK.B · SEC는 BRK-B")
+    void normalizesHiddenTickers() throws Exception {
+        bodies.put("/v2/assets", assets(asset("BIG", "Big Industries Inc."), asset("MID", "Mid Corp.")));
+        bodies.put("/files/company_tickers_exchange.json",
+                secRows(row("BIG", 1, "Nasdaq"), row("MID", 2, "Nasdaq"), row("BRK-B", 3, "NYSE")));
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("BIG", bar("26", "1", 1000L), bar("27", "100", 1000L)),
+                series("MID", bar("26", "1", 1000L), bar("27", "50", 1000L)),
+                series("BRK.B", bar("26", "1", 1000L), bar("27", "500", 1000L))), null));
+        bodies.put("/v2/assets/BRK.B", single("BRK.B", "Berkshire Hathaway Inc. Class B", "NYSE", "inactive"));
+
+        UniverseSnapshot snapshot = adapter(2, shares(share("BIG", "10"), share("MID", "100"), share("BRK.B", "1000")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).containsExactly("BRK.B", "MID");
+    }
+
+    @Test
+    @DisplayName("마지막 세션 제외가 CIK 중복 제거보다 앞이다 — 낡은 숨은 티커가 대표를 차지한 뒤 빠져 산 클래스까지 지우지 않는다")
+    void staleHiddenTickerDoesNotTakeTheCikSeat() throws Exception {
+        bodies.put("/v2/assets", assets(asset("BIG", "Big Industries Inc."), asset("LIVE", "Live Corp. Class A")));
+        bodies.put("/files/company_tickers_exchange.json",
+                secRows(row("BIG", 1, "Nasdaq"), row("LIVE", 9, "NYSE"), row("OLD", 9, "NYSE")));
+        bodies.put("/v2/stocks/bars", page(List.of(
+                series("BIG", bar("26", "1", 1000L), bar("27", "100", 1000L)),
+                series("LIVE", bar("26", "1", 10L), bar("27", "50", 10L)),
+                series("OLD", bar("26", "60", 1_000_000L))), null));
+        bodies.put("/v2/assets/OLD", single("OLD", "Old Corp. Class B", "NYSE", "inactive"));
+
+        UniverseSnapshot snapshot = adapter(2, shares(share("BIG", "10"), share("LIVE", "100"), share("OLD", "100")))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).containsExactly("LIVE", "BIG");
+    }
+
+    @Test
+    @DisplayName("숨은 생존자가 상한(200)을 넘으면 MALFORMED다 — 목록이 깨진 것이고 단건을 그만큼 부르지 않는다")
+    void rejectsWhenHiddenSurvivorsExceedTheLimit() {
+        List<String> secRowList = new ArrayList<>(List.of(row("BIG", 1, "Nasdaq"), row("MID", 2, "Nasdaq")));
+        List<String> barList = new ArrayList<>(List.of(
+                series("BIG", bar("26", "1", 1000L), bar("27", "100", 1000L)),
+                series("MID", bar("26", "1", 1000L), bar("27", "50", 1000L))));
+        List<StoredShareCounts.ShareCount> counts = new ArrayList<>(List.of(share("BIG", "10"), share("MID", "100")));
+        for (int i = 0; i < 201; i++) {
+            String symbol = "H" + i;
+            secRowList.add(row(symbol, 100 + i, "NYSE"));
+            barList.add(series(symbol, bar("26", "1", 1000L), bar("27", "5", 1000L)));
+            counts.add(share(symbol, "1"));
+        }
+        bodies.put("/v2/assets", assets(asset("BIG", "Big Industries Inc."), asset("MID", "Mid Corp.")));
+        bodies.put("/files/company_tickers_exchange.json", secRows(secRowList.toArray(String[]::new)));
+        bodies.put("/v2/stocks/bars", page(barList, null));
+
+        assertThatThrownBy(() -> adapter(2, shares(counts.toArray(StoredShareCounts.ShareCount[]::new)))
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF))
+                .isInstanceOf(DataSourceException.class)
+                .hasMessageContaining("상한 200");
+        assertThat(paths).noneMatch(p -> p.startsWith("/v2/assets/H"));
+    }
+
+    @Test
+    @DisplayName("같은 어댑터의 두 번째 호출은 단건을 다시 안 부른다 — 복원 격자 2회째 0콜")
+    void memoizesSingleAssetAcrossCalls() throws Exception {
+        hiddenFixture(series("ET", bar("26", "1", 1000L), bar("27", "20", 1000L)));
+        bodies.put("/v2/assets/ET", single("ET", "Energy Transfer LP Common Units", "NYSE", "inactive"));
+        UsMarketCapUniverseAdapter adapter =
+                adapter(2, shares(share("BIG", "10"), share("MID", "100"), share("ET", "3000")));
+
+        adapter.fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+        adapter.fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF.minusDays(1));
+
+        assertThat(paths.stream().filter(p -> p.startsWith("/v2/assets/ET")).count()).isEqualTo(1);
+        assertThat(paths.stream().filter(p -> p.startsWith("/files/company_tickers_exchange.json")).count())
+                .as("SEC 판은 하루 안이면 한 번").isEqualTo(1);
+    }
+
     private UsMarketCapUniverseAdapter adapter(int topN, StoredShareCounts counts) {
         return build(topN, counts);
     }
@@ -424,17 +616,20 @@ class UsMarketCapUniverseAdapterTest {
 
     private static StoredShareCounts.ShareCount share(String ticker, String shares) {
         return new StoredShareCounts.ShareCount(
-                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), false);
+                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), false,
+                ticker + " Stored Name");
     }
 
     private static StoredShareCounts.ShareCount mismatched(String ticker, String shares) {
         return new StoredShareCounts.ShareCount(
-                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), true);
+                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), true,
+                ticker + " Stored Name");
     }
 
     private static StoredShareCounts.ShareCount sic(String ticker, String shares, String sicCode) {
         return new StoredShareCounts.ShareCount(
-                ticker, new BigDecimal(shares), sicCode, AS_OF.minusMonths(3), AS_OF.minusMonths(1), false);
+                ticker, new BigDecimal(shares), sicCode, AS_OF.minusMonths(3), AS_OF.minusMonths(1), false,
+                ticker + " Stored Name");
     }
 
     private static String asset(String symbol, String name) {
@@ -445,6 +640,29 @@ class UsMarketCapUniverseAdapterTest {
 
     private static String assets(String... assets) {
         return "[" + String.join(",", assets) + "]";
+    }
+
+    /** SEC 매핑 한 줄 — 거래소를 직접 준다. */
+    private static String row(String ticker, long cik, String exchange) {
+        return "[%d,\"%s Inc.\",\"%s\",\"%s\"]".formatted(cik, ticker, ticker, exchange);
+    }
+
+    private static String secRows(String... rows) {
+        return """
+                {"fields":["cik","name","ticker","exchange"],"data":[%s]}""".formatted(String.join(",", rows));
+    }
+
+    /** 단건 {@code /v2/assets/{symbol}} 응답. */
+    private static String single(String symbol, String name, String exchange, String status) {
+        return """
+                {"symbol":"%s","name":"%s","exchange":"%s","status":"%s","tradable":false}"""
+                .formatted(symbol, name, exchange, status);
+    }
+
+    private static StoredShareCounts.ShareCount named(String ticker, String shares, String storedName) {
+        return new StoredShareCounts.ShareCount(
+                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), false,
+                storedName);
     }
 
     private static String cikMap(Map<String, Long> byTicker) {

@@ -19,11 +19,17 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 미국 유니버스를 Alpaca의 자산 마스터에서 만든다. 계약은
@@ -67,6 +73,20 @@ public class AlpacaUniverseAdapter implements UniverseDataSource {
     private final SecurityNameCache nameCache;
     private final boolean credentialsPresent;
     private final int minExpectedAssets;
+    private final Clock clock;
+
+    /**
+     * 단건 조회 메모의 수명. 복원은 격자점마다 같은 숨은 상장을 다시 묻는데(약 53점), 메모가 없으면 그
+     * 수만큼 콜이 나고 5xx 한 번이 복원 전체를 세운다. <b>실행 범위가 아니라 시각으로 끊는 이유</b>는 포트
+     * ({@code fetchConstituents(code, asOf)})에 실행이 안 실리고 이 빈이 싱글턴이라서다 — 수명이 없으면
+     * 웹 JVM의 다음 주 리밸런싱이 지난주 응답을 쓴다.
+     */
+    static final Duration ASSET_MEMO_TTL = Duration.ofHours(6);
+
+    private final Map<String, AssetMemo> assetMemo = new ConcurrentHashMap<>();
+
+    private record AssetMemo(Optional<AlpacaAsset> asset, Instant fetchedAt) {
+    }
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -79,7 +99,7 @@ public class AlpacaUniverseAdapter implements UniverseDataSource {
                                  @Qualifier("alpacaRateLimiter") RateLimiter rateLimiter,
                                  SecurityNameCache nameCache) {
         this(clientFactory, properties, rateLimiter, nameCache,
-                properties.getAlpaca().getBaseUrl(), MIN_EXPECTED_ASSETS);
+                properties.getAlpaca().getBaseUrl(), MIN_EXPECTED_ASSETS, Clock.systemUTC());
     }
 
     /**
@@ -95,12 +115,25 @@ public class AlpacaUniverseAdapter implements UniverseDataSource {
                           SecurityNameCache nameCache,
                           String baseUrl,
                           int minExpectedAssets) {
+        this(clientFactory, properties, rateLimiter, nameCache, baseUrl, minExpectedAssets,
+                Clock.systemUTC());
+    }
+
+    /** 위와 같되 시계까지 바꿔 끼운다 — {@link #ASSET_MEMO_TTL} 경계를 시험한다. */
+    AlpacaUniverseAdapter(ExternalApiClientFactory clientFactory,
+                          DataSourceProperties properties,
+                          RateLimiter rateLimiter,
+                          SecurityNameCache nameCache,
+                          String baseUrl,
+                          int minExpectedAssets,
+                          Clock clock) {
         DataSourceProperties.Source source = properties.getAlpaca();
         this.client = clientFactory.create(source, baseUrl, AlpacaHeaders.of(source));
         this.rateLimiter = rateLimiter;
         this.nameCache = nameCache;
         this.credentialsPresent = source.hasApiKey() && source.hasSecretKey();
         this.minExpectedAssets = minExpectedAssets;
+        this.clock = clock;
     }
 
     @Override
@@ -165,6 +198,10 @@ public class AlpacaUniverseAdapter implements UniverseDataSource {
      * <p>MUST: {@code status=active}를 명시한다. 기본값이 "모든 상태 포함"이라 빠뜨리면
      * 상장폐지 종목이 섞인다 — 실측에서 2,163개가 더 왔다.
      *
+     * <p><b>이 목록은 상장 사실이 아니다</b>(ADR-0171) — 단건이 NYSE·NASDAQ로 아는 자산 일부(ET·DDS·SUN ·
+     * 2026-10-05 실측)를 <b>상태 인자와 무관하게</b> 뺀다. {@code US_TOP1000}은 그 몫을 「숨은 상장」으로
+     * 보완한다({@link #fetchAsset}). {@code US_LISTED}는 비활성이라 보완하지 않는다.
+     *
      * <p><b>패키지 접근인 이유</b>: {@link UsMarketCapUniverseAdapter}가 같은 목록을 필요로
      * 하는데, 그쪽이 {@code /v2/assets}를 <b>또 알게 되면</b> 벤더 지식이 두 곳으로 갈린다
      * (ADR-0006). {@code fetchConstituents}를 대신 부를 수 없는 것은 그것이 티커만 담은
@@ -216,6 +253,61 @@ public class AlpacaUniverseAdapter implements UniverseDataSource {
             assets.add(asset);
         }
         return assets;
+    }
+
+    /**
+     * 자산 하나. <b>목록이 빠뜨린 상장을 확인하는 자리다</b>(ADR-0171) — {@link #fetchActiveAssets()}의
+     * 목록은 단건이 아는 자산 일부(ET·DDS·SUN …)를 상태 인자와 무관하게 뺀다(2026-10-05 실측).
+     *
+     * <p><b>계약</b>: 404면 비어 있다(그 심볼을 모른다). 2xx가 아닌 나머지와 전송 실패는 <b>던진다</b> —
+     * 숨은 상장을 빼고 넘어가면 원래 결함(상장 종목이 명부에서 빠짐)이 그대로 재현되고, 던지면
+     * 리밸런싱이 이전 구성을 지킨다(ADR-0008). <b>필수 필드가 비어도 던지지 않는다</b> — 판정은
+     * 호출자가 한다(이름은 저장된 이름으로 대신할 수 있다). 그래서
+     * {@code AlpacaSecurityMasterAdapter.fetchOne}(빈 필드면 MALFORMED)을 재사용하지 않는다.
+     *
+     * <p>{@link #ASSET_MEMO_TTL} 동안 같은 심볼은 다시 안 부른다(404도 메모한다).
+     */
+    Optional<AlpacaAsset> fetchAsset(String symbol) throws DataSourceException {
+        Instant now = clock.instant();
+        AssetMemo memo = assetMemo.get(symbol);
+        if (memo != null && memo.fetchedAt().plus(ASSET_MEMO_TTL).isAfter(now)) {
+            return memo.asset();
+        }
+        String context = "asset " + symbol;
+        if (!rateLimiter.hasDailyQuota()) {
+            throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED, SOURCE_NAME,
+                    "일일 호출 한도를 소진했다(사용 " + rateLimiter.usedToday() + "회). " + context);
+        }
+        try {
+            rateLimiter.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
+                    "호출 대기 중 인터럽트됐다. " + context, e);
+        }
+
+        ResponseEntity<String> response;
+        try {
+            response = client.get().uri("/v2/assets/{symbol}", symbol)
+                    // MUST: 문자열로 받는다 — 404가 정상 갈래라 상태코드를 보기 전에 변환이 터지면 안 된다.
+                    .retrieve().toEntity(String.class);
+        } catch (RuntimeException e) {
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
+                    "호출에 실패했다. " + context, e);
+        }
+        Optional<AlpacaAsset> asset;
+        int status = response.getStatusCode().value();
+        if (status == 404) {
+            asset = Optional.empty();
+        } else if (!response.getStatusCode().is2xxSuccessful()) {
+            throw new DataSourceException(AlpacaResponse.kindOf(status), SOURCE_NAME,
+                    "HTTP %d. %s".formatted(status, context));
+        } else {
+            asset = Optional.of(AlpacaAsset.from(AlpacaResponse.requireObject(
+                    response.getStatusCode(), response.getBody(), SOURCE_NAME, context)));
+        }
+        assetMemo.put(symbol, new AssetMemo(asset, now));
+        return asset;
     }
 
     /**

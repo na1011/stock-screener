@@ -24,14 +24,18 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 /**
@@ -150,6 +154,24 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 소수의 결측이 아니라 <b>묶음 조회가 통째로 조용히 빈 경우</b>다.
      */
     private static final double MIN_CLOSE_COVERAGE = 0.95;
+
+    /**
+     * 「숨은 상장」으로 받을 SEC 거래소 표기(ADR-0171). SEC는 NYSE American·Arca도 「NYSE」로 적으므로
+     * 이것만으로는 거래소를 확정하지 못한다 — 생존자마다 {@link #LISTED_EXCHANGES}로 시세 소스 단건을 다시 본다.
+     */
+    private static final Set<String> SEC_LISTED_LABELS = Set.of("NYSE", "Nasdaq");
+
+    /** 시세 소스 단건 응답에서 상장으로 받는 거래소. 목록 조회의 {@code exchange} 인자와 같다(ADR-0086). */
+    private static final Set<String> LISTED_EXCHANGES = Set.of("NYSE", "NASDAQ");
+
+    /**
+     * 숨은 생존자 상한. 2026-10-02 실측 생존 10의 20배다 — 넘으면 시세 소스 목록이 거래 중인 상장의 2% 넘게를
+     * 잃은 것이라 목록 자체가 깨진 것으로 본다(ADR-0008). 단건을 그만큼 부르는 것이 아니라 <b>멈춘다.</b>
+     */
+    private static final int HIDDEN_SURVIVOR_LIMIT = 200;
+
+    /** 봉 시각({@code t})을 거래일로 바꾸는 시간대. 일봉의 {@code t}는 그 날 미국 동부 자정이다. */
+    private static final ZoneId MARKET_ZONE = ZoneId.of("America/New_York");
 
     /**
      * 사업회사가 아닌 SIC. <b>코드로 판정한다</b>(ADR-0092의 체계 접두는 파티션 키의 것이고,
@@ -282,9 +304,17 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         // 상장 목록은 소스에서 새로 받는다. US_LISTED 편입 원장을 쓰지 않는 이유는 그 유니버스가
         // 비활성이라 주간 스케줄러가 돌지 않고, 그러면 그 스냅샷이 마지막으로 갱신된 날짜가
         // 이 유니버스의 신선도를 조용히 정하게 되기 때문이다.
+        // 이 목록은 상장 사실이 아니다 — 빠뜨린 상장은 아래 「숨은 상장」이 보완한다(ADR-0171).
         List<AlpacaAsset> assets = listing.fetchActiveAssets();
+        // MUST: 이 호출 안에서 SEC 판 하나만 쓴다 — 숨은 상장의 거래소와 CIK 중복 제거가 같은 판을 본다(ADR-0171).
+        SecTickerCikCache.Snapshot sec = cikCache.freshSnapshot();
+        Set<String> listed = new HashSet<>();
+        for (AlpacaAsset asset : assets) {
+            listed.add(asset.symbol());
+        }
 
         Map<String, BigDecimal> sharesByTicker = new HashMap<>();
+        Map<String, String> storedNames = new HashMap<>();
         Exclusions excluded = new Exclusions();
         for (StoredShareCounts.ShareCount count :
                 shareCounts.activeByMarket(UsMarket.CODE, asOf.minusYears(SHARES_MAX_AGE_YEARS), asOf)) {
@@ -297,6 +327,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                 continue;
             }
             sharesByTicker.put(count.ticker(), count.shares());
+            storedNames.put(count.ticker(), count.name());
         }
 
         List<AlpacaAsset> candidates = new ArrayList<>();
@@ -305,16 +336,12 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                 excluded.noShares++;
                 continue;
             }
-            String upperName = asset.name().toUpperCase(java.util.Locale.ROOT);
-            if (NON_COMMON_NAME.matcher(upperName).find()) {
-                excluded.name++;
-                if (!SECURITY_KIND_ONLY.matcher(upperName).find()) {
-                    excluded.hybridOnly.add(asset.symbol());
-                }
+            if (excludedByName(asset.symbol(), asset.name(), excluded)) {
                 continue;
             }
             candidates.add(asset);
         }
+        List<AlpacaAsset> hiddenPool = hiddenPool(sharesByTicker, storedNames, listed, sec, excluded);
         if (candidates.size() < topN) {
             // MUST(ADR-0008): 부분 목록을 스냅샷으로 만들지 않는다.
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
@@ -322,15 +349,23 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                             + "제외 내역: %s").formatted(candidates.size(), topN, excluded));
         }
 
-        Map<String, Quote> closes = fetchLatestCloses(candidates, asOf);
-        double coverage = (double) closes.size() / candidates.size();
+        List<AlpacaAsset> quoted = new ArrayList<>(candidates.size() + hiddenPool.size());
+        quoted.addAll(candidates);
+        quoted.addAll(hiddenPool);
+        Map<String, Quote> closes = fetchLatestCloses(quoted, asOf);
+        long listedQuoted = candidates.stream().filter(a -> closes.containsKey(a.symbol())).count();
+        double coverage = (double) listedQuoted / candidates.size();
         if (coverage < MIN_CLOSE_COVERAGE) {
             // 모르는 심볼은 응답에서 조용히 빠진다(실측). 묶음 조회의 유일한 방어선이 이 하한이다.
+            // 목록 후보로만 잰다 — 숨은 풀은 봉이 끊긴 폐지 티커가 섞여 있는 것이 정상이다.
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                     "종가가 온 후보가 %d/%d(%.1f%%)로 하한 %.0f%% 미만이다 — 부분 목록을 반영하지 않는다."
-                            .formatted(closes.size(), candidates.size(), coverage * 100,
+                            .formatted(listedQuoted, candidates.size(), coverage * 100,
                                     MIN_CLOSE_COVERAGE * 100));
         }
+        // MUST: 숨은 상장 판정을 CIK 중복 제거 앞에 둔다 — 뒤면 거래대금 큰 낡은 숨은 티커가 대표를 차지한 뒤
+        // 빠져 같은 CIK의 산 클래스까지 사라진다.
+        candidates.addAll(acceptHidden(hiddenPool, closes, storedNames, listed, sec, excluded));
 
         List<Ranked> ranked = new ArrayList<>(closes.size());
         for (AlpacaAsset asset : candidates) {
@@ -345,7 +380,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         ranked.sort(Comparator.comparing(Ranked::marketCap).reversed()
                 .thenComparing(r -> r.asset().symbol()));
 
-        List<Ranked> deduped = dropCikDuplicates(ranked, excluded);
+        List<Ranked> deduped = dropCikDuplicates(ranked, excluded, sec);
         if (deduped.size() < topN) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                     ("CIK 중복을 걷고 나니 %d종목뿐이라 상위 %d를 채우지 못한다. 제외 내역: %s")
@@ -385,12 +420,12 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * <p>동률이면 시총 → 기호 순이다. 대표는 자기 시총 자리에 그대로 남는다. <b>CIK를 모르는 티커는 남긴다</b> —
      * 우리 8,504 중 1,815가 SEC 매핑 파일에 없고 그것은 실패가 아니라 정상이다(ADR-0092 §규칙).
      */
-    private List<Ranked> dropCikDuplicates(List<Ranked> ranked, Exclusions excluded)
-            throws DataSourceException {
+    private List<Ranked> dropCikDuplicates(List<Ranked> ranked, Exclusions excluded,
+                                           SecTickerCikCache.Snapshot sec) {
         Map<Long, List<Ranked>> byCik = new LinkedHashMap<>();
         Map<Ranked, Long> cikOf = new HashMap<>();
         for (Ranked row : ranked) {
-            Optional<Long> cik = cikCache.findCik(row.asset().symbol());
+            Optional<Long> cik = sec.findCik(row.asset().symbol());
             if (cik.isPresent()) {
                 byCik.computeIfAbsent(cik.get(), k -> new ArrayList<>()).add(row);
                 cikOf.put(row, cik.get());
@@ -436,6 +471,126 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
     }
 
     /**
+     * 이름 축. 걸리면 세고 참을 낸다 — 목록 후보와 숨은 상장이 같은 축을 탄다.
+     */
+    private static boolean excludedByName(String symbol, String name, Exclusions excluded) {
+        String upperName = name.toUpperCase(java.util.Locale.ROOT);
+        if (!NON_COMMON_NAME.matcher(upperName).find()) {
+            return false;
+        }
+        excluded.name++;
+        if (!SECURITY_KIND_ONLY.matcher(upperName).find()) {
+            excluded.hybridOnly.add(symbol);
+        }
+        return true;
+    }
+
+    /**
+     * 시세 소스 목록이 빠뜨린 상장 후보(ADR-0171). <b>그 목록은 상장 사실이 아니다</b> — 단건 조회가 아는 자산
+     * 일부(ET·DDS·SUN …)를 상태 인자와 무관하게 뺀다(2026-10-05 실측 · 전 상태 33,550건에도 없음).
+     *
+     * <p>풀 = 우리 주식수가 있고(통화·SIC 축 뒤) SEC가 NYSE·Nasdaq로 적었는데 목록에 없는 티커. 이름은 저장된
+     * 이름으로 이름 축을 먼저 태운다(0콜). 살아 있는지는 여기서 안 본다 — {@link #acceptHidden}이 봉으로 본다.
+     */
+    private static List<AlpacaAsset> hiddenPool(Map<String, BigDecimal> sharesByTicker,
+                                                Map<String, String> storedNames, Set<String> listed,
+                                                SecTickerCikCache.Snapshot sec, Exclusions excluded) {
+        List<AlpacaAsset> pool = new ArrayList<>();
+        for (String ticker : new TreeMap<>(sharesByTicker).keySet()) {
+            if (listed.contains(ticker)
+                    || !SEC_LISTED_LABELS.contains(sec.exchangeOf(ticker).orElse(""))) {
+                continue;
+            }
+            String stored = storedNames.getOrDefault(ticker, "");
+            if (excludedByName(ticker, stored == null ? "" : stored, excluded)) {
+                continue;
+            }
+            pool.add(new AlpacaAsset(ticker, stored == null ? "" : stored, "", "", false));
+        }
+        return pool;
+    }
+
+    /**
+     * 숨은 풀에서 받을 것을 고른다. 차례가 계약이다.
+     * <ol>
+     *   <li><b>마지막 세션에 봉이 있어야 한다</b> — SEC 파일은 폐지·개명을 늦게 반영하고(DBRG 마지막 봉 09-29 ·
+     *       DOMO 09-23인데 SEC엔 남음) 시세 소스 단건의 {@code status}는 ET와 폐지 종목 둘 다 {@code inactive}라
+     *       살아 있음의 증거가 봉뿐이다.</li>
+     *   <li>생존자가 {@link #HIDDEN_SURVIVOR_LIMIT}를 넘으면 목록이 깨진 것으로 보고 멈춘다.</li>
+     *   <li><b>단건으로 거래소를 확인한다</b> — NYSE·NASDAQ만. 404는 빼고, 2xx 아닌 나머지는 던진다(빼고 넘어가면
+     *       원래 결함이 재현된다).</li>
+     *   <li>이름은 단건 이름(증권 수준)으로 이름 축을 다시 — 비면 저장된 이름.</li>
+     * </ol>
+     * <p><b>개명 판정은 하지 않는다</b> — 같은 CIK의 다른 티커가 목록에 있는지는 귀속용 라벨로만 남긴다. 그 목록이
+     * 상장 사실이 아니라고 판정해 놓고 개명의 증거로 다시 쓰면, 보통주만 빠지고 우선주가 남은 발행사에서 원래
+     * 결함이 그대로 재현된다(현 편입 45가 그 모양).
+     */
+    private List<AlpacaAsset> acceptHidden(List<AlpacaAsset> pool, Map<String, Quote> closes,
+                                           Map<String, String> storedNames, Set<String> listed,
+                                           SecTickerCikCache.Snapshot sec, Exclusions excluded)
+            throws DataSourceException {
+        if (pool.isEmpty()) {
+            return List.of();
+        }
+        LocalDate lastSession = majoritySession(closes.values());
+        List<AlpacaAsset> survivors = new ArrayList<>();
+        for (AlpacaAsset asset : pool) {
+            Quote quote = closes.get(asset.symbol());
+            if (quote != null && quote.lastDate().equals(lastSession)) {
+                survivors.add(asset);
+            } else {
+                excluded.hiddenStale.add(asset.symbol() + "(" + (quote == null ? "봉없음" : quote.lastDate()) + ")");
+            }
+        }
+        if (survivors.size() > HIDDEN_SURVIVOR_LIMIT) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                    ("목록 밖인데 마지막 세션에 봉이 있는 상장이 %d종목으로 상한 %d를 넘는다 — 시세 소스 목록이 "
+                            + "깨진 것으로 보고 반영하지 않는다(ADR-0008).").formatted(survivors.size(), HIDDEN_SURVIVOR_LIMIT));
+        }
+        Set<Long> listedCiks = new HashSet<>();
+        for (String symbol : listed) {
+            sec.findCik(symbol).ifPresent(listedCiks::add);
+        }
+        List<AlpacaAsset> accepted = new ArrayList<>();
+        for (AlpacaAsset survivor : survivors) {
+            String symbol = survivor.symbol();
+            Optional<AlpacaAsset> single = listing.fetchAsset(symbol);
+            if (single.isEmpty()) {
+                excluded.hiddenUnknown.add(symbol);
+                continue;
+            }
+            AlpacaAsset found = single.get();
+            if (!LISTED_EXCHANGES.contains(found.exchange())) {
+                excluded.hiddenOffExchange.add(symbol + ":" + found.exchange());
+                continue;
+            }
+            String name = found.name().isBlank() ? storedNames.getOrDefault(symbol, "") : found.name();
+            if (excludedByName(symbol, name, excluded)) {
+                continue;
+            }
+            accepted.add(new AlpacaAsset(symbol, name, found.exchange(), found.status(), found.tradable()));
+            boolean sharesCik = sec.findCik(symbol).map(listedCiks::contains).orElse(false);
+            excluded.hiddenAccepted.add(symbol + "(" + found.status() + " · " + found.exchange()
+                    + (sharesCik ? " · 같은 CIK 목록에 있음" : "") + ")");
+        }
+        // 귀속 재료다 — 리밸런싱마다 목록이 무엇을 빠뜨렸고 그중 무엇을 받았는지가 남아야 명부 차이를 설명한다.
+        log.info("숨은 상장: 풀={} 마지막 세션={} 받음={} 마지막 세션 봉 없음={} 단건 없음={} 거래소 밖={}",
+                pool.size(), lastSession, excluded.hiddenAccepted, excluded.hiddenStale,
+                excluded.hiddenUnknown, excluded.hiddenOffExchange);
+        return accepted;
+    }
+
+    /**
+     * 후보 과반이 닿은 가장 늦은 거래일. 최댓값이 아닌 이유는 이상봉 하나가 숨은 상장 전체를 떨어뜨리지
+     * 않게 하려는 것이다.
+     */
+    static LocalDate majoritySession(Collection<Quote> quotes) {
+        List<LocalDate> dates = quotes.stream().map(Quote::lastDate)
+                .sorted(Comparator.reverseOrder()).toList();
+        return dates.get(dates.size() / 2);
+    }
+
+    /**
      * 경계 구간을 로그로 남긴다. <b>밴드를 실제로 넓히지 않는다</b> —
      * {@code MarketCapUniverseAdapter.select}와 같은 판단이다. 넓히면 「N종목 유니버스」라는
      * 정의 자체가 흐려지고, 실제 유지 판정은 {@code UniverseReconciler}가 집합 차집합으로 한다.
@@ -469,6 +624,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         LocalDate from = asOf.minusDays(CLOSE_WINDOW_DAYS);
         Instant end = clampEnd(asOf);
         Map<String, BigDecimal> closes = new LinkedHashMap<>();
+        Map<String, LocalDate> lastDates = new HashMap<>();
         Map<String, BigDecimal> dollarVolumes = new HashMap<>();
 
         for (int offset = 0; offset < candidates.size(); offset += SYMBOLS_PER_CALL) {
@@ -495,6 +651,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                         BigDecimal close = bar.path("c").decimalValue();
                         if (close != null && close.signum() > 0) {
                             closes.put(entry.getKey(), close);
+                            lastDates.put(entry.getKey(), barDate(bar, entry.getKey(), context));
                             dollarVolumes.merge(entry.getKey(),
                                     close.multiply(bar.path("v").decimalValue()), BigDecimal::add);
                         }
@@ -510,12 +667,22 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         }
         Map<String, Quote> quotes = new LinkedHashMap<>();
         closes.forEach((symbol, close) ->
-                quotes.put(symbol, new Quote(close, dollarVolumes.getOrDefault(symbol, BigDecimal.ZERO))));
+                quotes.put(symbol, new Quote(close, dollarVolumes.getOrDefault(symbol, BigDecimal.ZERO),
+                        lastDates.get(symbol))));
         return quotes;
     }
 
-    /** 창 안 마지막 종가와 창 안 거래대금 합. */
-    private record Quote(BigDecimal close, BigDecimal dollarVolume) {
+    private static LocalDate barDate(JsonNode bar, String symbol, String context) throws DataSourceException {
+        try {
+            return Instant.parse(bar.path("t").asString("")).atZone(MARKET_ZONE).toLocalDate();
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                    "봉 시각(t)을 읽지 못했다. symbol=%s %s".formatted(symbol, context), e);
+        }
+    }
+
+    /** 창 안 마지막 종가 · 창 안 거래대금 합 · 마지막 봉의 거래일. */
+    record Quote(BigDecimal close, BigDecimal dollarVolume, LocalDate lastDate) {
     }
 
     /** {@code AlpacaPriceAdapter.clampEnd}와 같은 계약이다 — 15분 규칙을 구조적으로 못 넘는다. */
@@ -588,11 +755,17 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         private int name;
         private int noClose;
         private int cikDuplicate;
+        /** 숨은 상장(ADR-0171) — 받은 것과 갈래별로 뺀 것. 수가 아니라 이름을 남긴다(명부 차이 귀속 재료). */
+        private final List<String> hiddenAccepted = new ArrayList<>();
+        private final List<String> hiddenStale = new ArrayList<>();
+        private final List<String> hiddenUnknown = new ArrayList<>();
+        private final List<String> hiddenOffExchange = new ArrayList<>();
 
         @Override
         public String toString() {
-            return "통화=%d · REIT/SPAC=%d · 주식수없음=%d · 이름=%d(혼성 문구에만 걸림 %s) · 종가없음=%d · CIK중복=%d"
-                    .formatted(currency, nonOperating, noShares, name, hybridOnly, noClose, cikDuplicate);
+            return ("통화=%d · REIT/SPAC=%d · 주식수없음=%d · 이름=%d(혼성 문구에만 걸림 %s) · 종가없음=%d · CIK중복=%d"
+                    + " · 숨은상장 받음=%d").formatted(currency, nonOperating, noShares, name, hybridOnly, noClose,
+                    cikDuplicate, hiddenAccepted.size());
         }
     }
 }

@@ -63,8 +63,11 @@ public interface StoredShareCounts {
      *                있고 {@code industry_code}는 KSIC 전용이다). 없을 수 있다
      * @param publishedAt <b>어느 판을 골랐는지</b>를 호출자가 셀 수 있게 함께 낸다. 복원 대조가
      *                    「빠진 것」만이 아니라 「왜 빠졌는지」를 내려면 이 값이 필요하다
+     * @param name 저장된 종목 이름({@code stock.name}). 시세 소스 목록이 그 종목을 빠뜨렸을 때 이름 축을
+     *             태울 재료다(ADR-0171) — 소스에서 온 이름이 있으면 그쪽이 먼저다
      */
     record ShareCount(String ticker, BigDecimal shares, String sicCode,
-                      LocalDate periodEnd, LocalDate publishedAt, boolean currencyMismatched) {
+                      LocalDate periodEnd, LocalDate publishedAt, boolean currencyMismatched,
+                      String name) {
     }
 }

@@ -78,7 +78,8 @@ public class MarketCapUniverseAdapter implements UniverseDataSource {
      * <p>그 오독이 <b>문서 일곱 곳에 퍼져</b> 「과거 유니버스는 경로 의존이라 as-of 1콜로 복원
      * 안 된다」의 근거로 인용됐고, 그 위에서 복원이 **1년 넘게 막혀 있었다**(ADR-0135가 그것을
      * 걷었다). 실제 경로 의존은 {@code UniverseReconciler}(실행일 스탬프 · 제외 비율 거부 ·
-     * 같은 날 DELETE 갈래)와 미국의 {@code fetchActiveAssets()}에 있다.
+     * 같은 날 DELETE 갈래)와 미국의 {@code fetchActiveAssets()}(오늘의 목록 — 숨은 상장 보완은
+     * 오늘의 SEC 파일에 남은 것만 받는다 · ADR-0171)에 있다.
      *
      * <p>밴드를 <b>실제로</b> 걸고 싶으면 여기가 아니라 {@code UniverseReconciler}다 — 어댑터는
      * 현재 편입 목록을 모르므로 유지 판정을 할 수 없다({@link #select}의 javadoc이 그 이유를 적는다).
