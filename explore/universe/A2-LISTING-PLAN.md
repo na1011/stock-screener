@@ -64,3 +64,15 @@
 - RA0(종목별 기대 · 10-02 재생 c 대 A만 사본): **들어옴** ET·DDS(경계 위 → 명부) · GWH·SUNC·USAC·WALD(새 봉 · 경계 아래) / **빠짐 + INFO** AIXC·DBRG·DOMO·FGNX·FSEA·NSTS·TBPH·VRME(마지막 세션 봉 없음 또는 개명) · GETY·DRCT·TWOD(단건 OTC) · DDT는 들어오되 이름 축(`Capital Securities`)에서 빠짐 · 명부 차이 = ET·DDS 둘 + 경계 밀림 둘.
 - RA1(단위): 숨은 상장 합류 · 마지막 세션 봉 없음 제외(DBRG 모양 — v1 코드에선 들어옴 · 대조군) · 같은 CIK 활성 티커 → 제외 · 단건 404 제외 · 5xx 던짐(잡 수준 명부 불변) · 이름 빔 제외 · 거래소 AMEX 제외 · `.`/`-` 정규화 · 상한 초과 MALFORMED.
 - RA2: 9날짜 재생을 A + A2로 — 미귀속 0(갈래 하나 더: 「숨은 상장」).
+
+## v2 반증 판정 — 렌즈 A·B 한 반증자(2026-10-06 00시 · 둘 다 「수정 후 진행」 · `review-a2v2/`)
+- **A1 개명 규칙은 뺀다**(오류 4): 지금 숨은 29(SIC 전) 중 그 규칙에 걸리는 11(AIXC·DOMO·FGNX·FGNXP·HWH·JSPRW·KLXER·NTRBW·PDYNW·RILYN·VRME)은 **전부 10-02 봉이 없다** — 마지막 세션 규칙이 이미 다 뺀다(이 규칙만의 몫 0) · 위험: 현 편입 45(CHTR·CMCSA·T·TMUS·DUK·SO·MSTR·KKR·PRU·HBAN …)는 같은 CIK의 활성 기호가 baby bond·우선주·워런트뿐 — Alpaca가 보통주만 빼면 원래 결함 재현 · 클래스 쌍 17은 A의 대표 선택을 덮음 · 복원의 개명 전 날짜엔 옛 티커가 실제 상장(AIXC 09-22~29 6봉) · 뿌리 = 「활성 목록 ≠ 상장」이라 해 놓고 개명 판정에 그 목록을 다시 씀 → 귀속용 INFO 라벨로만.
+- **A2** 단건을 봉 판정 뒤로 → 25콜이 10콜(DDS·DDT·DRCT·ET·GETY·GWH·SUNC·USAC·WALD·WALDW) · 상한은 근거 없는 100 대신 **생존자 수**에(필터 전 수는 SEC에 늦게 남는 폐지 티커로 떠다님).
+- **A3** 이름 빔 → 제외는 원래 결함을 다시 만든다 → `stock.name`(08-29 같은 벤더 목록) 폴백 0콜 · 생존 10 전부 이름 있음 · DDT는 「…Capital Securities」로 저장 · `AlpacaSecurityMasterAdapter.fetchOne`(:94 private)은 `!isUsable()`이면 MALFORMED(:136-138) — 재사용하면 반대 계약 → 새 메서드 · `StockRegistrar.describe`(:91-104)는 안 건드림.
+- **A4** 복원의 「실행 안에서 단건 한 번」을 받칠 기제가 없다(포트 `fetchConstituents(code, asOf)`에 실행 범위 없음 · 어댑터 싱글턴 · 필드 메모면 앱 JVM 토요일 실행이 지난주 결과를 씀) → 시각 경계 메모(TTL) 또는 포트에 세션 · 시험 「같은 실행 2회째 0콜 · TTL 뒤 다시」 · 한 호출 안 SEC 맵 참조 한 번.
+- **A5** 「마지막 세션 = 후보 봉 최대 날짜」는 대부분 맞다(`clampEnd` :522-526 · 토 20:00 실행 asOf = 금 · 복원 격자는 `indicator_trade_date`) — 다만 이상봉 하나가 전체를 떨군다 → **후보 과반이 가진 최신 날짜**(0콜 · 이상봉 빈도 재지 않음).
+- **A6** RA0 미등록 8(FGNXP·HWH·JSPRW·KLXER·NTRBW·PDYNW·RILYN·WALDW) · TWOD(SIC 6798)·COLA 셋(6770)은 단건 전에 SIC로 빠짐 — 「단건 OTC」 귀속은 틀림 · 종목마다 축 하나 · GETY·DRCT OTC와 DDT 이름은 실행 때 관측값 기록 · RA2에 외부 오라클(관측 원장 대비 ET·DDS가 9날짜 전부 돌아오는가 — A의 R1이 「모든 날짜에 빠진다」를 잼).
+- **A7** 「활성 목록 = 상장」 전제 문장 15파일(main 3 · 시험 6 · 문서 6 — ADR-0135·0071 · `reload-gate.md` · `api-spec/alpaca-universe.md` · `UsDelistedUniverseGapProbeLiveTest` …) — v1 반증 #5 목록이 v2에서 빠짐.
+- **B1 결정 6은 묶어서 판정(오류 1) · 사용자 결정 범위를 넘김**: ADR-0099 §미룬 문(:334-375)이 닫은 것은 「주식수 폴백」뿐 · MUST NOT(:366-368)은 ②복수 클래스 · ③ADS가 그 문에 안 걸린다고 적음 · 250의 원인(이름 패턴 대략): 비보통주 101 · 외국/ADS 78 · 클래스 25(BRK.B·ERIE·WMG) · LP 6(SUN·KRP·BSM) · 기타 39(V·BAM·STZ) · 같은 묶음 안 모양도 다름(ARGX 재무 1행 2019 · V 37행 주식수만 NULL) · 순서 근거 없음 → 구성원마다 원인 · 경계 위 수로 순서.
+- **B2 하류는 선다**: 13:30 · 14:00 · 배당은 현상 유지 · 시세가 끊기면 마지막 세션 규칙이 스스로 뺀다 · ADR-0099 premise는 ET를 대조군으로 든다(A2 없이 토요일을 넘기면 붉어지는 카나리) · SEC 거래소 라벨 기준은 선다(상장 pool 커버 4,821/4,822 · 활성 목록의 현 편입 998 전부 NYSE/Nasdaq 라벨).
+- **B3 결합**: 24시간 갱신은 A2가 B보다 먼저 나가므로 구현·시험을 A2가 든다 · A의 토요일 오라클은 jar가 A+A2라 차이에 ET·DDS + 경계 밀림이 섞임 → `r0_diff`에 「숨은 상장」 갈래 또는 jar 셋 · 복원 평면을 다시 쓸 땐 A2 jar(main jar는 전환 뒤 ET·DDS를 과거 전 날짜에서 지운다).

@@ -1,0 +1,64 @@
+----
+Counter({'only-noncommon-sibling': 45, 'has-common-class-sibling': 17})
+has-common-class-sibling	BF.A	BF.B		
+has-common-class-sibling	BIO	BIO.B		
+has-common-class-sibling	BTSGU	BTSG		
+has-common-class-sibling	FOXA	FOX		
+has-common-class-sibling	GOOGL	GOOG	GOOGN,GOOGM	Alphabet Inc. Depositary Sha|Alphabet Inc. Depositary Sha
+has-common-class-sibling	HEI	HEI.A		
+has-common-class-sibling	LEN	LEN.B		
+has-common-class-sibling	LLYVK	LLYVA		
+has-common-class-sibling	MKC.V	MKC		
+has-common-class-sibling	MOG.B	MOG.A		
+has-common-class-sibling	NWS	NWSA		
+has-common-class-sibling	PPLC	PPL		
+has-common-class-sibling	RUSHB	RUSHA		
+has-common-class-sibling	TAP.A	TAP		
+has-common-class-sibling	UHAL	UHAL.B		
+has-common-class-sibling	WSO.B	WSO		
+has-common-class-sibling	ZG	Z		
+only-noncommon-sibling	ACGL		ACGLO,ACGLN	Arch Capital Group Ltd. Depo|Arch Capital Group Ltd. Depo
+only-noncommon-sibling	AFG		AFGD,AFGB,AFGE,AFGC	American Financial Group, In|American Financial Group, In|American Financial Group, In|American Financial Group, In
+only-noncommon-sibling	AIZ		AIZN	Assurant, Inc. 5.25% Subordi
+only-noncommon-sibling	AMG		MGRD,MGR,MGRE,MGRB	Affiliated Managers Group, I|Affiliated Managers Group, I|Affiliated Managers Group, I|Affiliated Managers Group, I
+only-noncommon-sibling	APO		APOS	Apollo Global Management, In
+only-noncommon-sibling	ASB		ASBA	Associated Banc-Corp 6.625% 
+only-noncommon-sibling	AUR		AUROW	Aurora Innovation, Inc. Warr
+only-noncommon-sibling	BMNR		BMNP	BitMine Immersion Technologi
+only-noncommon-sibling	BPOP		BPOPM	Popular, Inc. Popular Capita
+only-noncommon-sibling	BRKR		BRKRP	Bruker Corporation 6.375% Ma
+only-noncommon-sibling	CG		CGABL	The Carlyle Group Inc. 4.625
+only-noncommon-sibling	CHTR		CHTRP	Charter Communications, Inc.
+only-noncommon-sibling	CMCSA		CCZ	Comcast Holdings Corp. 2.0% 
+only-noncommon-sibling	CMS		CMSC,CMSA,CMSD	CMS Energy Corporation 5.875|CMS Energy Corporation 5.625|CMS Energy Corporation 5.875
+only-noncommon-sibling	CORZ		CORZZ,CORZW	Core Scientific, Inc. Tranch|Core Scientific, Inc. Tranch
+only-noncommon-sibling	CRBG		CRBD	Corebridge Financial, Inc. 6
+only-noncommon-sibling	DTE		DTK,DTG,DTB,DTW	DTE Energy Company 2025 Seri|DTE Energy Company 2021 Seri|DTE Energy Company 2020 Seri|DTE Energy Company 2017 Seri
+only-noncommon-sibling	DUK		DUKU,DUKB	Duke Energy Corporation Corp|Duke Energy Corporation 5.62
+only-noncommon-sibling	FCNCA		FCNCO,FCNCP,FCNCN	First Citizens BancShares, I|First Citizens BancShares, I|First Citizens BancShares, I
+only-noncommon-sibling	FTAI		FTAIM	FTAI Aviation Ltd. 9.500% Fi
+only-noncommon-sibling	GEN		GENVR	Gen Digital Inc. Contingent 
+only-noncommon-sibling	HBAN		HBANZ,HBANL,HBANP,HBANM	Huntington Bancshares Incorp|Huntington Bancshares Incorp|Huntington Bancshares Incorp|Huntington Bancshares Incorp
+only-noncommon-sibling	HWC		HWCPZ	Hancock Whitney Corporation 
+only-noncommon-sibling	KKR		KKRT,KKRS	KKR & Co. Inc. 6.875% Subord|KKR Group Finance Co. IX LLC
+only-noncommon-sibling	MCHP		MCHPP	Microchip Technology Incorpo
+only-noncommon-sibling	MSTR		STRK,STRF,STRD,STRC	Strategy Inc 8.00% Series A |Strategy Inc 10.00% Series A|Strategy Inc 10.00% Series A|Strategy Inc Variable Rate S
+only-noncommon-sibling	NOVT		NOVTU	Novanta Inc. Tangible Equity
+only-noncommon-sibling	NTRS		NTRSO	Northern Trust Corporation D
+only-noncommon-sibling	ONB		ONBPP,ONBPO	Old National Bancorp Deposit|Old National Bancorp Deposit
+only-noncommon-sibling	PRU		PRH,PFH,PRS	Prudential Financial, Inc. 5|Prudential Financial, Inc. 4|Prudential Financial, Inc. 5
+only-noncommon-sibling	RGA		RZC	Reinsurance Group of America
+only-noncommon-sibling	RVMD		RVMDW	Revolution Medicines, Inc. W
+only-noncommon-sibling	SF		SFB	Stifel Financial Corp.5.20 p
+only-noncommon-sibling	SMCI		SMCIP	Super Micro Computer, Inc. D
+only-noncommon-sibling	SO		SOJD,SOJC,SOJE,SOJF,SOMN	The Southern Company Series |The Southern Company Series |The Southern Company Series |The Southern Company Series |The Southern Company 2025 Se
+only-noncommon-sibling	SRE		SREA	Sempra 5.750% Junior Subordi
+only-noncommon-sibling	T		TBB	AT&T Inc. 5.350 Percent Glob
+only-noncommon-sibling	TMUS		TMUSL,TMUSI,TMUSZ	T-Mobile US, Inc. 6.250% Sen|T-Mobile US, Inc. 5.500% Sen|T-Mobile US, Inc. 5.500% Sen
+only-noncommon-sibling	TPG		TPGXL	TPG Operating Group II, L.P.
+only-noncommon-sibling	UMBF		UMBFO	UMB Financial Corporation De
+only-noncommon-sibling	UNM		UNMA	Unum Group 6.250% Junior Sub
+only-noncommon-sibling	VLY		VLYPP,VLYPO,VLYPN	Valley National Bancorp 6.25|Valley National Bancorp 5.50|Valley National Bancorp 8.25
+only-noncommon-sibling	WTFC		WTFCN	Wintrust Financial Corporati
+only-noncommon-sibling	XEL		XELLL	Xcel Energy Inc. 6.25% Junio
+only-noncommon-sibling	ZION		ZIONP	Zions Bancorporation, N.A. D
