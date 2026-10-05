@@ -1,0 +1,31 @@
+    kind     |  origin  | count |         min         |         max         
+-------------+----------+-------+---------------------+---------------------
+ opened_1002 | OBSERVED |    13 | 2026-10-03 21:14:17 | 2026-10-03 21:14:17
+ closed_1002 | OBSERVED |    13 | 2026-08-31 08:29:03 | 2026-09-26 20:00:26
+(2개 행)
+
+        kind        | count 
+--------------------+-------
+ stock_created_1003 |     1
+(1개 행)
+
+ universe_code | opened | closed 
+---------------+--------+--------
+ KOSDAQ_TOP150 |      3 |      3
+ KOSPI_TOP200  |      1 |      1
+ US_LISTED     |      0 |      0
+ US_TOP1000    |     13 |     13
+(4개 행)
+
+ id  |       job_name        | triggered_by | status  | target_count |     started_at      |                                                left                                                 
+-----+-----------------------+--------------+---------+--------------+---------------------+-----------------------------------------------------------------------------------------------------
+ 703 | universe-rebalance    | MANUAL       | SUCCESS |            3 | 2026-10-03 21:14:00 | 
+ 704 | initial-load          | GAP_FILL     | SUCCESS |            3 | 2026-10-03 21:14:18 | 재무 건너뜀 (그 시장에 재무 소스가 없다)
+ 705 | initial-load          | GAP_FILL     | SUCCESS |            1 | 2026-10-03 21:14:23 | 시세 건너뜀 · 정정=0
+ 706 | full-statement-refill | GAP_FILL     | SUCCESS |            1 | 2026-10-03 21:14:28 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=36건 실제콜=38 쓴보고서=42 공시없음=2 정정보류=0 교정=0
+ 707 | governance-load       | GAP_FILL     | SUCCESS |            3 | 2026-10-03 21:14:32 | 
+ 708 | governance-derive     | GAP_FILL     | SUCCESS |            3 | 2026-10-03 21:14:39 | 
+ 709 | company-profile       | MANUAL       | SUCCESS |            3 | 2026-10-03 21:14:39 | 
+ 710 | financial-refill      | MANUAL       | SUCCESS |            1 | 2026-10-03 21:17:42 | 연도=2015~2026 대상=1종목 신규=20 정정=30 채움=43 교정=1 이른판=2 무효화=1종목 무효화종목=IOVA
+(8개 행)
+

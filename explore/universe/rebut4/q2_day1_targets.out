@@ -1,0 +1,25 @@
+ universe_code | ticker | effective_from |  origin  | synced_at | why  
+---------------+--------+----------------+----------+-----------+------
+ KOSDAQ_TOP150 | 077360 | 2026-09-25     | OBSERVED |           | NULL
+ KOSDAQ_TOP150 | 126340 | 2026-09-25     | OBSERVED |           | NULL
+ KOSDAQ_TOP150 | 253590 | 2026-09-25     | OBSERVED |           | NULL
+ KOSDAQ_TOP150 | 092870 | 2026-10-02     | OBSERVED |           | NULL
+ KOSDAQ_TOP150 | 456160 | 2026-10-02     | OBSERVED |           | NULL
+ KOSDAQ_TOP150 | 490470 | 2026-10-02     | OBSERVED |           | NULL
+ KOSPI_TOP200  | 007810 | 2026-09-25     | OBSERVED |           | NULL
+ KOSPI_TOP200  | 001740 | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | AGX    | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | AXTI   | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | BB     | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | FTDR   | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | GVA    | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | IOVA   | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | KLIC   | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | KOD    | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | LAUR   | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | NAVN   | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | NJR    | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | TFX    | 2026-10-02     | OBSERVED |           | NULL
+ US_TOP1000    | VSH    | 2026-10-02     | OBSERVED |           | NULL
+(21개 행)
+
