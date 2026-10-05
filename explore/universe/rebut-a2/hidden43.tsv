@@ -1,0 +1,44 @@
+ticker	sec_exch	sec_name	alpaca_list	stock_exch	sic	pool_shares	bars_0922_1002	last_bar	last_close	cap_usd_m	session_1002
+AIXC	Nasdaq	FF EAI Robotics Ecosystem Inc.	absent	NASDAQ	6199	20234993.00	6	2026-09-29	1.01	20	N
+ASND	Nasdaq	Ascendis Pharma A/S	absent	NASDAQ	2834		9	2026-10-02	227.87		Y
+BRR	Nasdaq	Silvia, Inc.	absent	NASDAQ	6199		0				N
+COLA	Nasdaq	Columbus Acquisition Corp/Caym	absent	NASDAQ	6770	4494439.00	8	2026-10-01	2.86	13	N
+COLAR	Nasdaq	Columbus Acquisition Corp/Caym	absent	NASDAQ	6770	4494439.00	8	2026-10-01	0.3999	2	N
+COLAU	Nasdaq	Columbus Acquisition Corp/Caym	absent	NASDAQ	6770	4494439.00	8	2026-10-01	3.78	17	N
+DBRG	NYSE	DigitalBridge Group, Inc.	absent	NYSE	6282	187495281.00	6	2026-09-29	16	3000	N
+DDS	NYSE	DILLARD'S, INC.	absent	NYSE	5311	15618000.00	9	2026-10-02	654.11	10216	Y
+DDT	NYSE	DILLARD'S, INC.	absent	NYSE	5311	15617000.00	9	2026-10-02	26.38	412	Y
+DOMO	Nasdaq	Huckleberry.ai, Inc.	absent	NASDAQ	7372	43415000.00	2	2026-09-23	3.55	154	N
+DRCT	Nasdaq	Direct Digital Holdings, Inc.	active/OTC	NASDAQ	7310	643000.00	9	2026-10-02	0.91	1	Y
+ET	NYSE	Energy Transfer LP	absent	NYSE	4922	3443299601.00	9	2026-10-02	20.47	70484	Y
+FGNX	Nasdaq	FG Nexus Inc.	absent	NASDAQ	6199	5095688.00	4	2026-09-25	7.8	40	N
+FGNXP	Nasdaq	FG Nexus Inc.	absent	NASDAQ	6199	5095688.00	4	2026-09-25	25.99	132	N
+FSEA	Nasdaq	First Seacoast Bancorp, Inc.	absent	NASDAQ	6035	4704425.00	7	2026-09-30	17.25	81	N
+GETY	NYSE	Getty Images Holdings, Inc.	active/OTC	NYSE	7389	421018476.00	9	2026-10-02	0.0829	35	Y
+GFAIW	Nasdaq	Guardforce AI Co., Ltd.	absent	NASDAQ	7381		8	2026-10-01	0.0005		N
+GWH	NYSE	ESS Tech, Inc.	absent	NYSE	3690	32970025.00	9	2026-10-02	0.1567	5	Y
+HVII	Nasdaq	ONE Nuclear Energy Inc.	absent	NASDAQ	4911		2	2026-09-23	4.46		N
+HVIIR	Nasdaq	ONE Nuclear Energy Inc.	absent	NASDAQ	4911		2	2026-09-23	0.3575		N
+HVIIU	Nasdaq	ONE Nuclear Energy Inc.	absent	NASDAQ	4911		2	2026-09-23	4.6499		N
+HWH	Nasdaq	HWH International Inc.	absent	NASDAQ	5122	7726400.00	0				N
+IPEX	Nasdaq	Inflection Point Acquisition C	absent	NASDAQ	6770		4	2026-09-25	3.16		N
+IPEXR	Nasdaq	Inflection Point Acquisition C	absent	NASDAQ	6770		4	2026-09-25	0.6		N
+IPEXU	Nasdaq	Inflection Point Acquisition C	absent	NASDAQ	6770		4	2026-09-25	3.54		N
+JSPRW	Nasdaq	Jasper Therapeutics, Inc.	absent	NASDAQ	2836	33274561.00	3	2026-09-24	0.0002	0	N
+KLXER	Nasdaq	KLX Energy Services Holdings, 	absent	NASDAQ	1389	21273059.00	2	2026-09-23	0.0016	0	N
+NHIC	Nasdaq	NewHold Investment Corp. III	absent	NASDAQ	6770		0				N
+NSTS	Nasdaq	NSTS Bancorp, Inc.	absent	NASDAQ	6035	5253131.00	7	2026-09-30	14.26	75	N
+NTRBW	Nasdaq	NutriBand Inc.	absent	NASDAQ	3842	12155983.00	7	2026-09-30	0.55	7	N
+PDYNW	Nasdaq	Palladyne AI Corp.	absent	NASDAQ	7372	49338510.00	4	2026-09-25	0.0012	0	N
+RILYN	Nasdaq	BRC Group Holdings, Inc.	absent	NASDAQ	6282	40199755.00	5	2026-09-28	25.2531	1015	N
+SBXD	NYSE	SilverBox Corp IV	absent	NYSE	6770		4	2026-09-25	11.39		N
+SUN	NYSE	Sunoco LP	absent	NYSE	2911		9	2026-10-02	74.73		Y
+SUNC	NYSE	SunocoCorp LLC	absent	NYSE	2911	51517198.00	9	2026-10-02	75.87	3909	Y
+TBPH	Nasdaq	Theravance Biopharma, Inc.	absent	NASDAQ	2834	51918754.00	2	2026-09-23	17.03	884	N
+TWOD	NYSE	TWO HARBORS INVESTMENT CORP.	active/OTC	NYSE	6798	105046333.00	9	2026-10-02	26.33	2766	Y
+USAC	NYSE	USA Compression Partners, LP	absent	NYSE	4922	144943345.00	9	2026-10-02	25.42	3684	Y
+VACI	NYSE	Viking Acquisition Corp I	absent	NYSE	4899		8	2026-10-01	7.7199		N
+VRME	Nasdaq	VerifyMe, Inc.	absent	NASDAQ	6199	13165196.00	7	2026-09-30	8.98	118	N
+WALD	Nasdaq	Waldencast plc	absent	NASDAQ	2844	114070225.00	9	2026-10-02	0.8794	100	Y
+WALDW	Nasdaq	Waldencast plc	absent	NASDAQ	2844	114070225.00	9	2026-10-02	0.0067	1	Y
+WKEY	Nasdaq	Wisekey International Holding 	absent	NASDAQ	7374		9	2026-10-02	6.09		Y

@@ -22,3 +22,12 @@
 - RA0: c(A + A2-a) 사본에서 `universe-restore --dates=2026-10-02` 쓰기 없는 재생 → ET·DDS가 후보(종가·주식수) · 숨은 상장 INFO 43 근처 · DDT는 이름 축 · c 대 A만 사본의 명부 차이 = ET·DDS + 경계 밀림(밀려난 둘을 경계 로그로).
 - RA1: 단위 시험 — 숨은 상장 합류 · AMEX 이전 제외 · 단건 404 처리(제외 + 로그 · 던지지 않음? 반증으로 정한다) · 상한 초과 MALFORMED · SEC 파일에 없는 티커는 안 붙음.
 - RA2: R0의 9날짜 재생을 A+A2로 다시 — 미귀속 0(새 귀속 갈래 「숨은 상장」).
+
+## v1 반증 판정 — 계획 안 렌즈(2026-10-05 23시 · 「수정 후 진행」 · `rebut-a2/`)
+1. **생존 판정이 없다**(오류 4): 「창 안 종가」는 휴장 완충 10일 창(`UsMarketCapUniverseAdapter:121,469`) · 단건 `status`는 ET와 폐지 종목 둘 다 `inactive` · SEC 파일도 늦게 빠짐(DBRG 마지막 봉 09-29인데 SEC엔 NYSE) · 43 중 10-02 봉 있음 14 · 없음 29(`hidden43.tsv`) · 실제 토요일 asOf 10-09 → DBRG·AIXC·FSEA·NSTS·VRME가 낡은 종가로 후보 · 이력 사례 CRNX(마지막 봉 08-31)·APGE(09-02) → **숨은 상장엔 「asOf 이하 마지막 세션에 봉」을 요구 · 빠진 것 로그.**
+2. **뿌리 문장이 틀렸다**: 상태 인자 없는 목록에도 없다 — 43 중 40은 모든 목록에 없음 · 3은 활성 OTC · 원인은 `status=active`가 아니다(빼도 ET는 안 돌아옴) · ET·DDS는 10-03 21:13(#703) 뒤에도 편입 — 목록에서 빠진 시점은 10-03~10-05 · 같은 PTP EPD·MPLX·PAA는 활성 목록에 있음 · **「시세는 나온다」는 그 변화 전 봉(≤ 10-02)만 잰 것** — 10-06 13:30 뒤 `price_daily`의 ET·DDS `2026-10-05`로 콜 0으로 잰다.
+3. **실패 갈래**: 5xx·429·타임아웃은 **던진다**(리밸런싱 catch `UniverseRebalanceJob:126-138`이 이전 구성을 지킨다 — 빼고 넘어가면 원래 결함 재현) · 404는 빼고 로그(`AlpacaSecurityMasterAdapter:124`와 같은 계약) · 비활성 기록 2,166 중 이름 빈 것 386 → `isUsable()` MALFORMED면 매주 리밸런싱·복원이 멈춘다 · 기록 둘 이상 심볼 251(단건이 어느 것을 주는지 재지 않음) · `findByTicker` 재사용 금지(JVM 수명 캐시가 ET·DDS를 옛 거래소로 담음 `:86`·`UsMarketCap:359`) · 상한값 없음 · `is_active`는 거르는 것이 없다(미국 8,504 전부 참 · `delisted_on` 0) · 콜 수 43 → 정의대로면 31 → 29(`activeByMarket`) → SIC 뒤 25.
+4. **SEC 라벨 실제 어긋남**: GETY·DRCT·TWOD = SEC NYSE/Nasdaq · Alpaca 활성 OTC · DOMO = SEC 이름 Huckleberry.ai · Alpaca엔 HUCK 활성 · DOMO 봉 09-23 끊김 · `SecTickerCikCache.load()` JVM당 한 번(운영 라벨 = JVM 뜬 날 파일 · 사본 드라이런은 새 파일) · 거래소 조회에도 `.`→`-` 정규화.
+5. **파급**: 복원은 격자점마다 단건(약 53점 × 25) — 5xx 한 번이면 복원 전체 정지 · 과거 명부가 복원 시점의 SEC 지연에 따라 달라짐(ADR-0135:89 「폐지 종목이 안 들어온다」가 일부 바뀜) · 같이 고칠 곳 `UsMarketCap:282-285,365` · `AlpacaUniverseAdapter:162-172` · ADR-0135:89·195 · ADR-0071:353 · `UsDelistedUniverseGapProbeLiveTest:30` · `reload-gate.md:60` · `MarketCapUniverseAdapter:81` · 영향 없음: 시세·CA·배당은 심볼로 묻는다.
+6. **RA**: 「43 근처」는 사전등록이 아니다 — 종목별 기대(10-02 재생: 새 봉 있는 DDS·ET·GWH·SUNC·USAC·WALD · 낡은 종가 AIXC·DBRG·DOMO·FGNX·FSEA·NSTS·TBPH·VRME) · 생존 축 대조군 = DBRG(v1 들어옴 → 고친 뒤 빠짐) · RA1에 5xx 시 명부 불변 · 빈 이름 · 다중 기록 · 정규화 · 상한.
+- 재지 않음(반증자): 단건 38의 이름·거래소·404 · 상태 변화 뒤 ET·DDS 봉과 CA · 09-04·09-07 SEC 파일 · `stock`에 있고 활성 목록 밖이며 SEC 라벨 None/OTC인 60(GBTG 등) · 상태 변화가 일시적인지.
