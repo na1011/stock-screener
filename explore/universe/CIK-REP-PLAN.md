@@ -156,3 +156,16 @@
 3. 무효화 알림 분기를 「같은 오후 화해가 뒤따르는가」로.
 4. 이른 판: F6 FR은 기본(끔) — 옛 대표에만 있던 이른 판 20행은 관문 몫으로 명시(사유: 관문의 한 번).
 5. 국내 포함(DART: 지금 2종목 × 36 = 72콜/일 — 표지가 있으면 대상은 편입이 바뀐 주에만 생긴다).
+
+## A 드라이런 결과 (진행 중 · 2026-10-05 22시 · 사본 `_sc_a`/`_sc_c` · 결과 `dry-a/`)
+- **R0 · R2 — 미귀속 0(9날짜)** (`dry-a/r0-diff.txt` · 분석기 `r0_diff.py`): 날짜마다 c 대 a 차이가 (가) 혼성 → 같은 CIK 보통주(PPLC → PPL · BTSGU → BTSG) · (나) 대표 교체(BF.A → BF.B · MKC.V → MKC · MOG.B → MOG.A · NWS → NWSA · RUSHB → RUSHA · TAP.A → TAP · UHAL → UHAL.B · WSO.B → WSO · ZG → Z · 03-05에 BIO.B → BIO · GOOG → GOOGL)뿐 · **(다) 경계 밀림 0**(들고 난 수가 같다 — 회사는 남고 대표만 바뀜) · 03-03(PPLC 재상장 전)은 PPL 쌍이 차이에 없다(자연 대조군). 분석기 첫 판의 미귀속 36은 내 분석기 결함이었다(「갈렸다」 줄이 그 날짜의 「만들었다」 줄보다 앞에 찍힘 · 혼성의 보통주를 (가)로 안 셈 · 「잴 것이 없었다」 정규식).
+- **R1 — a(main) 재생이 관측 명부를 재현율 0.968~0.998로 재현** · 원래 결함(PPLC · BTSGU · TAP.A · MOG.B · WSO.B)이 a에 있다(대조군 섬) · 나머지 차이는 소스 표류(오늘의 목록·이름)라 c에도 같다.
+- **R3 — c가 새 문구로만 뺀 티커 7**(9날짜 같음: NOVTU · BTSGU · LILAP · VSECU · PPLC · DUKU · SOMN) — 기대 8 중 **DDT는 그날 후보가 아니었다**(아래 A2 — Alpaca 목록에 없음).
+
+## 새 발견 — A2: 상장 목록이 Alpaca 「거래 가능」에 묶였다 (2026-10-05 22시 · Alpaca 5콜)
+- R1의 소스 표류 중 **DDS · ET가 관측 명부에는 있는데 재생에서 모든 날짜에 빠진다**(a·c 둘 다).
+- 물은 것: `/v2/assets?status=active&asset_class=us_equity&exchange=NYSE,NASDAQ`(어댑터와 같은 인자) 8,534 · `status=inactive` 2,166 · 상태 없음 10,700 — **세 목록 어디에도 ET · DDS · DDT가 없다** · 단건 `/v2/assets/ET`는 `status: inactive · tradable: false · exchange: NYSE · attributes: [ptp_no_exception, …]`(공개거래 파트너십 — 브로커 거래 제한) · DDS도 `inactive`(그런 속성 없음) · 대조군 TAP은 활성 목록에 있고 단건 `active`.
+- 그런데 **시세는 나온다** — `/v2/stocks/bars`가 DDS · ET · DDT에 09-22~10-02 9봉씩(R4 탐침) · DB 마지막 봉 10-02.
+- **지금 편입인데 활성 목록에 없는 종목 = 정확히 DDS · ET**(현 US_TOP1000 대 활성 목록 전수). 비활성 목록에 보이는 현 편입 16(COR·LHX 등)은 같은 심볼의 옛 자산 기록 겹침이다(그들은 활성 목록에도 있다).
+- **뿌리**: 명부 어댑터가 「Alpaca 활성 자산」을 「상장」으로 쓴다(`AlpacaUniverseAdapter.fetchActiveAssets` · `status=active`) — 그것은 브로커의 거래 가능 여부이지 상장 사실이 아니다(가짜 한계 — SEC `company_tickers_exchange.json`이 거래소 칸과 함께 ET · DDS를 준다). → **토 10-10 리밸런싱이 규칙과 무관하게 ET(시총 약 580억 달러) · DDS를 명부에서 뺀다**(소스 상태가 그대로면).
+- 별도 루프로(같은 마감 · 같은 어댑터 · 상장 목록의 출처를 정하는 설계). A 드라이런에는 영향 없음(a·c 같은 목록).
