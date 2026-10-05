@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * 수집한 재무제표를 {@code financial_statement}에 쓴다.
@@ -182,17 +183,49 @@ public class FinancialWriter {
      */
     public Outcome writeDetailed(long stockId, List<RawFinancialReport> reports, WriteMode mode,
                                  boolean completeVintageHistory, boolean insertEarlierVintages) {
+        return writeDetailed(stockId, reports, mode, completeVintageHistory, insertEarlierVintages, VintageGuard.NONE);
+    }
+
+    /**
+     * 소스가 판 이력의 <b>빈칸</b>을 알려 줄 때 — 판 이력을 전부 내는 소스라도 공시 하나를 못 받았을 수 있다
+     * ({@code FinancialFetch}의 세 칸 · SEC 공시 보충 ADR-0173).
+     *
+     * @param unconfirmed 못 실은 공시의 제출일. 회수가 그 날짜의 행을 안 지운다.
+     * @param recovered   전에 못 실었다가 이번에 실은 공시의 제출일. 그 날짜의 판은 이른 판이어도 넣는다 — 실패가 먼저
+     *                    왔을 때만 그 판이 영영 빠지는 순서 의존을 막는다. 켜는 조건은 이른 판 삽입과 같다
+     *                    ({@link WriteMode#FILL_MISSING} · 판 이력 전부).
+     * @param uncertain   못 실은 공시가 무엇인지조차 모른다 — 그 종목의 회수를 통째로 멈춘다.
+     */
+    public record VintageGuard(Set<LocalDate> unconfirmed, Set<LocalDate> recovered, boolean uncertain) {
+
+        public static final VintageGuard NONE = new VintageGuard(Set.of(), Set.of(), false);
+
+        public VintageGuard {
+            unconfirmed = unconfirmed == null ? Set.of() : Set.copyOf(unconfirmed);
+            recovered = recovered == null ? Set.of() : Set.copyOf(recovered);
+        }
+    }
+
+    public Outcome writeDetailed(long stockId, List<RawFinancialReport> reports, WriteMode mode,
+                                 boolean completeVintageHistory, boolean insertEarlierVintages,
+                                 VintageGuard guard) {
         Tally tally = new Tally();
         if (mode != WriteMode.APPEND_ONLY) {
-            retractStaleVintages(stockId, reports, completeVintageHistory, tally);
+            if (guard.uncertain()) {
+                log.warn("판 이력의 빈칸을 몰라 이 종목의 판 회수를 멈춘다. stockId={}", stockId);
+            } else {
+                retractStaleVintages(stockId, reports, completeVintageHistory, guard.unconfirmed(), tally);
+            }
         }
-        boolean insertEarlier = mode == WriteMode.FILL_MISSING && completeVintageHistory
-                && insertEarlierVintages;
+        boolean earlierAllowed = mode == WriteMode.FILL_MISSING && completeVintageHistory;
+        boolean insertEarlier = earlierAllowed && insertEarlierVintages;
         Set<Amount> managed = managedColumns(reports);
         for (RawFinancialReport report : reports) {
-            writeOne(stockId, report, mode, managed, insertEarlier, tally);
+            boolean insertThisEarlier = insertEarlier
+                    || (earlierAllowed && guard.recovered().contains(report.publishedAt()));
+            writeOne(stockId, report, mode, managed, insertThisEarlier, tally);
         }
-        if (insertEarlier) {
+        if (insertEarlier || tally.insertedEarlier > 0) {
             tally.renumberedLabels = renumberOutOfOrderLabels(stockId);
             if (tally.earliestInsertedPublication != null) {
                 // 이른 판은 그 공시일 전의 봉에는 원리적으로 안 보인다 — 기점이 회계기간 시작일이
@@ -281,7 +314,7 @@ public class FinancialWriter {
      * 하나 더 붙는다.
      */
     private void retractStaleVintages(long stockId, List<RawFinancialReport> reports,
-                                      boolean completeVintageHistory, Tally tally) {
+                                      boolean completeVintageHistory, Set<LocalDate> unconfirmed, Tally tally) {
         // 라벨 자격은 「유도 행이 하나라도 있는가」이고, 보존 집합은 그 라벨로 **들어온 판 전부**다.
         // 유도 행만 보존 집합에 넣으면, 같은 (연도,분기)에 소스가 직접 준 판이 함께 지워진다 —
         // 미국에서 실제로 있는 형태다(다음 해 10-K가 전년 4분기를 비교로 낸다. 실측 2026-09-15:
@@ -312,8 +345,11 @@ public class FinancialWriter {
         }
         for (Map.Entry<DerivedLabel, List<RawFinancialReport>> entry : byLabel.entrySet()) {
             DerivedLabel label = entry.getKey();
-            List<LocalDate> keep = entry.getValue().stream()
-                    .map(RawFinancialReport::publishedAt).distinct().toList();
+            // 못 실은 공시의 제출일은 출력에 없어도 지킨다 — 그 판이 「더 이상 그 라벨의 판이 아니다」인지 이번 출력으로는
+            // 모른다(VintageGuard.unconfirmed).
+            List<LocalDate> keep = Stream.concat(
+                            entry.getValue().stream().map(RawFinancialReport::publishedAt), unconfirmed.stream())
+                    .distinct().toList();
             Object[] args = new Object[keep.size() + 3];
             args[0] = stockId;
             args[1] = label.fiscalYear();

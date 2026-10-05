@@ -7,11 +7,13 @@ import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
 import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.pipeline.datasource.us.SecFilingSupplementStore;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -56,15 +58,17 @@ public class FinancialRefillJob {
     private final BatchExecutions batchExecutions;
     private final FinancialLoadWindow loadWindow;
     private final DataSourceRegistry registry;
+    private final SecFilingSupplementStore supplementStore;
 
     public FinancialRefillJob(FinancialCollector financialCollector, StockRegistrar stockRegistrar,
                               BatchExecutions batchExecutions, FinancialLoadWindow loadWindow,
-                              DataSourceRegistry registry) {
+                              DataSourceRegistry registry, SecFilingSupplementStore supplementStore) {
         this.financialCollector = financialCollector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.loadWindow = loadWindow;
         this.registry = registry;
+        this.supplementStore = supplementStore;
     }
 
     /**
@@ -153,6 +157,7 @@ public class FinancialRefillJob {
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 재무 결손 보정");
+        Instant supplementSince = supplementStore.now();
 
         // 정정을 반영하면 그 종목의 지표가 보존 창 전체에서 지워진다. 그 수를 세지 않으면
         // 백필이 남았다는 것을 알릴 수 없고, 그러면 그 종목이 화면에서 조용히 사라진다.
@@ -212,11 +217,22 @@ public class FinancialRefillJob {
         // 지워졌고 note에는 그 수가 없었다. 백필이 남았는지는 이 수가 답한다.
         String note = note(fromFiscalYear, asOf.getYear(), targets.size(), inserted.get(),
                 revised.get(), filled.get(), corrected.get(), insertedEarlier.get(),
-                List.copyOf(tickersToBackfill));
+                List.copyOf(tickersToBackfill))
+                + supplementNote(supplementStore.tallySince(supplementSince));
         log.info("재무 결손 보정을 마쳤다. {}", note);
         alertOnInvalidation(execution, triggeredBy, invalidatedTickers,
                 revised.get() + corrected.get() + insertedEarlier.get(), fullStatementTickers);
         return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill));
+    }
+
+    /**
+     * SEC 공시 보충(ADR-0173)이 이 실행에서 한 일. 다섯 계수 뒤에 붙인다 — {@code 07-judge.sh}의 합산 정규식이 안 읽는
+     * 이름이다. <b>미해결 실패를 늘 싣는다</b> — 실패한 공시는 그 종목을 세우지 않으므로(판 보호로만 나간다) 실행이
+     * SUCCESS로 끝나고, 이 칸이 아니면 어디에도 안 뜬다.
+     */
+    static String supplementNote(SecFilingSupplementStore.Tally tally) {
+        return tally.isEmpty() ? ""
+                : " 보충받음=%d 보충실패=%d 미해결보충실패=%d".formatted(tally.fetched(), tally.failed(), tally.outstanding());
     }
 
     /**

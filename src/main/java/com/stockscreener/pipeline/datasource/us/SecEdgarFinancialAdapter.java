@@ -18,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
 import java.util.Optional;
@@ -58,6 +59,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
      * 켜는 길(코드 기본값을 뒤집은 jar 하나 — 배포 디렉터리 {@code .env}는 배포마다 저장소 {@code .env}로 덮인다)은 {@code CLAUDE.md} 「재적재·백필」에 있다.
      */
     private final boolean usGate;
+    /** companyfacts가 빠뜨린 공시를 인스턴스로 채운다(ADR-0173). */
+    private final FilingSupplementer supplementer;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -68,18 +71,19 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                                     DataSourceProperties properties,
                                     @Qualifier("secEdgarRateLimiter") RateLimiter rateLimiter,
                                     SecTickerCikCache cikCache,
+                                    SecFilingSupplement supplement,
                                     @Value("${stockscreener.gate.us}") boolean usGate) {
         this(clientFactory, properties, rateLimiter, cikCache,
-                properties.getSecEdgar().getBaseUrl(), usGate);
+                properties.getSecEdgar().getBaseUrl(), usGate, supplement);
     }
 
-    /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 관문 설정은 꺼진 채다. */
+    /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 관문 설정은 꺼진 채이고 보충하지 않는다. */
     SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
                              DataSourceProperties properties,
                              RateLimiter rateLimiter,
                              SecTickerCikCache cikCache,
                              String baseUrl) {
-        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, false);
+        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, false, FilingSupplementer.NONE);
     }
 
     SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
@@ -87,13 +91,15 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              RateLimiter rateLimiter,
                              SecTickerCikCache cikCache,
                              String baseUrl,
-                             boolean usGate) {
+                             boolean usGate,
+                             FilingSupplementer supplementer) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
         this.cikCache = cikCache;
         this.userAgentPresent = source.hasApiKey();
         this.usGate = usGate;
+        this.supplementer = supplementer;
     }
 
     @Override
@@ -123,17 +129,32 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         ResponseEntity<String> response = call(cik.get(), context);
         JsonNode facts = SecEdgarResponse.requireFacts(
                 response.getStatusCode(), response.getBody(), context);
+        if (!(facts instanceof ObjectNode tree)) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                    "facts가 객체가 아니다. " + context);
+        }
 
-        SecEdgarFacts.Result result = SecEdgarFacts.build(facts, fromFiscalYear, usGate);
+        // companyfacts가 빠뜨린 정기 공시를 그 공시의 인스턴스로 채운다(ADR-0173). 실패는 종목을 세우지 않고 판 보호로 낸다.
+        SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context);
+        if (supplement.fromStore() + supplement.fetched() > 0 || !supplement.failed().isEmpty()
+                || supplement.vintagesUncertain()) {
+            log.info("공시 보충. ticker={} 받음={} 저장분={} 더한 팩트={} 실패={} 목록 모름={}",
+                    security.ticker(), supplement.fetched(), supplement.fromStore(), supplement.merged(),
+                    supplement.failed(), supplement.vintagesUncertain());
+        }
+
+        SecEdgarFacts.Result result = SecEdgarFacts.build(tree, fromFiscalYear, usGate);
         if (result.dropped() > 0) {
             // MUST NOT: 조용히 버리지 않는다. 「없다」와 「우리가 못 만들었다」는 다르고,
             // 그 구분이 없으면 결손 판정이 서지 않는다(P22 ①축).
             log.info("기간을 만들지 못한 팩트를 버렸다. ticker={} 버림={}건 만든 보고서={}건",
                     security.ticker(), result.dropped(), result.reports().size());
         }
-        // companyfacts는 한 콜에 **판 이력 전부**를 싣는다 — 저장 계층이 「여기 없는 공시일은
-        // 더 이상 그 라벨의 판이 아니다」로 읽어도 되는 유일한 근거다(FinancialFetch 참조).
-        return new FinancialFetch(result.reports(), result.absences(), true);
+        // companyfacts + 보충이 판 이력 전부를 싣는다 — 저장 계층이 「여기 없는 공시일은 더 이상 그 라벨의 판이
+        // 아니다」로 읽어도 되는 근거다(FinancialFetch 참조). companyfacts 혼자로는 그렇지 않다: 정기 공시 일부의
+        // us-gaap를 통째로 안 싣는다(ADR-0173 — 83 CIK 표본 87건). 보충이 못 실은 공시는 그 제출일을 따로 넘겨 지킨다.
+        return new FinancialFetch(result.reports(), result.absences(), true,
+                supplement.unconfirmedVintages(), supplement.recoveredVintages(), supplement.vintagesUncertain());
     }
 
     /**

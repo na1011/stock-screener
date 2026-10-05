@@ -1,0 +1,34 @@
+-- companyfacts가 빠뜨린 공시를 XBRL 인스턴스로 보충한 결과 — 접수번호마다 한 행(ADR-0173).
+--
+-- 공시는 한 번 나오면 안 바뀌므로 평생 한 번 받는다. 그래서 매달 FR이 같은 인스턴스를 다시 받지 않고(실패 표면도 그만큼
+-- 준다), 보충에 실패한 공시를 다음 실행이 알아본다(status = FAILED → 회수에서 그 공시일의 행을 지키고, 나중에 성공하면
+-- 그 공시일의 판을 이른 판이어도 넣는다).
+--
+-- MUST: facts는 「고르기 전」의 원 팩트다(같은 개념·단위·기간의 중복을 정밀도째 · XbrlInstanceReader.RawFact). 고르기를
+-- 고쳐도 다시 받지 않는다. 무엇을 싣는지(읽기 규칙)를 바꾸면 reader_version을 올리고, 판이 다른 행은 다시 읽는다.
+-- MUST NOT: 이 표의 행을 손으로 고치지 않는다 — 상태(OK·FAILED)는 종목 쓰기와 같은 트랜잭션에서만 바뀐다.
+CREATE TABLE sec_filing_supplement (
+    accession           varchar(20)  PRIMARY KEY,
+    cik                 bigint       NOT NULL,
+    form                varchar(10)  NOT NULL,
+    filed               date         NOT NULL,
+    reader_version      integer      NOT NULL,
+    status              varchar(8)   NOT NULL,
+    file_name           text,
+    file_size           bigint,
+    document_type       varchar(20),
+    fiscal_year_focus   varchar(8),
+    fiscal_period_focus varchar(8),
+    us_gaap_facts       integer,
+    facts               jsonb,
+    failure_kind        varchar(20),
+    failure_message     text,
+    fetched_at          timestamptz  NOT NULL DEFAULT now(),
+    CONSTRAINT ck_sec_filing_supplement_status CHECK (status IN ('OK', 'FAILED')),
+    CONSTRAINT ck_sec_filing_supplement_shape CHECK (
+        (status = 'OK' AND facts IS NOT NULL AND failure_kind IS NULL)
+        OR (status = 'FAILED' AND facts IS NULL AND failure_kind IS NOT NULL))
+);
+CREATE INDEX ix_sec_filing_supplement_cik ON sec_filing_supplement (cik);
+COMMENT ON TABLE sec_filing_supplement IS
+    'companyfacts가 빠뜨린 정기 공시를 XBRL 인스턴스로 보충한 결과(ADR-0173). 접수번호마다 평생 한 행. FAILED는 그 공시일의 판을 회수에서 지키는 표지다';

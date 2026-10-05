@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -450,6 +451,87 @@ class FinancialWriterTest {
     }
 
     /** 무효화 호출을 그대로 적는다. 이 슬라이스의 기본 포트는 아무것도 기록하지 않는다. */
+    @Nested
+    @DisplayName("판 보호 — 소스가 공시 하나를 못 실었을 때(SEC 공시 보충 · ADR-0173)")
+    class VintageGuards {
+
+        private final RecordingInvalidationPort invalidations = new RecordingInvalidationPort();
+        private FinancialWriter recordingWriter;
+
+        @BeforeEach
+        void useRecordingPort() {
+            recordingWriter = new FinancialWriter(jdbcTemplate, invalidations);
+        }
+
+        @Test
+        @DisplayName("못 실은 공시의 제출일 행은 회수하지 않는다 — 보호가 없으면 멀쩡한 판이 지워진다(대조)")
+        void keepsTheVintageOfAnUnconfirmedFiling() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+            // 이번 출력에 03-15 판이 없다 — 그 공시의 보충이 실패했다.
+            List<RawFinancialReport> withoutIt = List.of(report(2025, "FY", "2026-04-20", "950"));
+
+            recordingWriter.writeDetailed(stockId, withoutIt, WriteMode.FILL_MISSING, true, false,
+                    new FinancialWriter.VintageGuard(Set.of(LocalDate.parse("2026-03-15")), Set.of(), false));
+            assertThat(rowCount()).as("보호한 공시일은 남는다").isEqualTo(2);
+
+            recordingWriter.writeDetailed(stockId, withoutIt, WriteMode.FILL_MISSING, true, false);
+            assertThat(rowCount()).as("대조 — 보호가 없으면 회수가 그 판을 지운다").isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("못 실은 공시가 무엇인지 모르면 그 종목의 회수를 통째로 멈춘다")
+        void stopsRetractionWhenTheGapIsUnknown() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+
+            recordingWriter.writeDetailed(stockId, List.of(report(2025, "FY", "2026-04-20", "950")),
+                    WriteMode.FILL_MISSING, true, false, new FinancialWriter.VintageGuard(Set.of(), Set.of(), true));
+
+            assertThat(rowCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("실패였다가 회복한 공시의 판은 정기 경로에서도 이른 판으로 넣는다 — 실패가 먼저 온 순서가 그 판을 영영 빼지 않게")
+        void insertsTheRecoveredVintageEvenWithoutTheManualSwitch() {
+            // 보충이 실패한 동안 늦은 판만 들어왔다.
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+            List<RawFinancialReport> both = List.of(report(2025, "FY", "2026-03-15", "1000"),
+                    report(2025, "FY", "2026-04-20", "950"));
+
+            FinancialWriter.Outcome skipped = recordingWriter.writeDetailed(stockId, both,
+                    WriteMode.FILL_MISSING, true, false);
+            assertThat(skipped.insertedEarlier()).as("대조 — 회복 표지가 없으면 정기 경로는 건너뛴다").isZero();
+
+            FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId, both,
+                    WriteMode.FILL_MISSING, true, false,
+                    new FinancialWriter.VintageGuard(Set.of(), Set.of(LocalDate.parse("2026-03-15")), false));
+
+            assertThat(outcome.insertedEarlier()).isEqualTo(1);
+            assertThat(vintageRow("2026-03-15").get("revision_no")).isEqualTo(0);
+            assertThat(vintageRow("2026-04-20").get("is_latest")).isEqualTo(true);
+            assertThat(invalidations.calls).containsExactly(stockId + "@2026-03-15:FINANCIAL_REVISED");
+        }
+
+        @Test
+        @DisplayName("회복 표지는 그 공시일의 판만 연다 — 같은 종목의 다른 이른 판은 여전히 정기 경로가 건너뛴다")
+        void recoveredOpensOnlyThatPublicationDate() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950"),
+                    report(2024, "FY", "2025-04-20", "900")));
+
+            FinancialWriter.Outcome outcome = recordingWriter.writeDetailed(stockId,
+                    List.of(report(2024, "FY", "2025-03-10", "880"),
+                            report(2024, "FY", "2025-04-20", "900"),
+                            report(2025, "FY", "2026-03-15", "1000"),
+                            report(2025, "FY", "2026-04-20", "950")),
+                    WriteMode.FILL_MISSING, true, false,
+                    new FinancialWriter.VintageGuard(Set.of(), Set.of(LocalDate.parse("2026-03-15")), false));
+
+            assertThat(outcome.insertedEarlier()).isEqualTo(1);
+            assertThat(rowCount()).isEqualTo(3);
+        }
+    }
+
     @Nested
     @DisplayName("저장본보다 이른 판 — 판 이력을 전부 내는 소스에서 손으로 켤 때만 넣는다")
     class EarlierVintages {
