@@ -1,0 +1,43 @@
+ id  | target_count | written_row_count |     endpoint     | count 
+-----+--------------+-------------------+------------------+-------
+ 115 |          350 |             25239 | AUDIT_OPINION    |  3012
+ 115 |          350 |             25239 | CONTROL_CHANGE   |  1080
+ 115 |          350 |             25239 | DIVIDEND         |  5137
+ 115 |          350 |             25239 | EXEC_PAY         |   684
+ 115 |          350 |             25239 | LARGEST_HOLDER   |  8396
+ 115 |          350 |             25239 | MINORITY_HOLDER  |   684
+ 115 |          350 |             25239 | OUTSIDE_DIRECTOR |  1026
+ 115 |          350 |             25239 | SHARE_TOTALS     |  5220
+ 119 |          350 |              5208 | DIVIDEND         |  5208
+ 120 |          350 |              1283 | SHARE_TOTALS     |  1283
+ 121 |          350 |               350 | OUTSIDE_DIRECTOR |   350
+ 122 |          350 |              1712 | CONTROL_CHANGE   |  1712
+ 123 |          350 |               948 | AUDIT_OPINION    |   948
+ 234 |         1350 |              5864 | DIVIDEND         |  5864
+ 626 |         1350 |              4092 | AUDIT_OPINION    |    12
+ 626 |         1350 |              4092 | CONTROL_CHANGE   |     2
+ 626 |         1350 |              4092 | DIVIDEND         |  4030
+ 626 |         1350 |              4092 | EXEC_PAY         |     2
+ 626 |         1350 |              4092 | LARGEST_HOLDER   |    18
+ 626 |         1350 |              4092 | MINORITY_HOLDER  |     2
+ 626 |         1350 |              4092 | OUTSIDE_DIRECTOR |     4
+ 626 |         1350 |              4092 | SHARE_TOTALS     |    20
+ 632 |         1350 |              2807 | DIVIDEND         |  2805
+ 633 |          337 |             13330 | AUDIT_OPINION    |  1243
+ 633 |          337 |             13330 | CONTROL_CHANGE   |   572
+ 633 |          337 |             13330 | DIVIDEND         |  6526
+ 633 |          337 |             13330 | EXEC_PAY         |   228
+ 633 |          337 |             13330 | LARGEST_HOLDER   |  2082
+ 633 |          337 |             13330 | MINORITY_HOLDER  |   228
+ 633 |          337 |             13330 | OUTSIDE_DIRECTOR |   458
+ 633 |          337 |             13330 | SHARE_TOTALS     |  1990
+(31개 행)
+
+ id  |     status      | target_count | success_count | failure_count |                                       left                                       
+-----+-----------------+--------------+---------------+---------------+----------------------------------------------------------------------------------
+ 190 | SUCCESS         |          350 |           350 |             0 | 보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=8400건 실제콜=10270 쓴보고서=86
+ 191 | SUCCESS         |          350 |           350 |             0 | 보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=8400건 실제콜=10270 쓴보고서=86
+ 410 | PARTIAL_SUCCESS |         1350 |           350 |          1000 | 보고서=[FY] 연도=2020~2026 요청=9450건 실제콜=3154 쓴보고서=1885 공시없음=565 정
+ 415 | PARTIAL_SUCCESS |         1350 |           350 |          1000 | 보고서=[FY] 연도=2015~2026 요청=16200건 실제콜=5552 쓴보고서=3105 공시없음=1095
+(4개 행)
+
