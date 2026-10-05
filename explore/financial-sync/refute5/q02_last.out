@@ -1,0 +1,97 @@
+         job_name          | rn | id  | triggered_by |     status      |             st             |  t   |  s   | f |                                               note                                                
+---------------------------+----+-----+--------------+-----------------+----------------------------+------+------+---+---------------------------------------------------------------------------------------------------
+ adjustment-rebuild        |  1 | 737 | MANUAL       | SUCCESS         | 2026-10-05 16:02:11.82429  | 1683 | 1683 | 0 | 
+ adjustment-rebuild        |  2 | 716 | SCHEDULER    | SUCCESS         | 2026-10-05 14:12:20.287773 | 1683 | 1683 | 0 | 
+ adjustment-rebuild        |  3 | 702 | SCHEDULER    | SUCCESS         | 2026-10-02 14:12:29.631199 | 1350 | 1350 | 0 | 
+ adjustment-rebuild        |  4 | 699 | SCHEDULER    | SUCCESS         | 2026-10-01 14:12:31.331118 | 1350 | 1350 | 0 | 
+ adjustment-rebuild        |  5 | 695 | SCHEDULER    | SUCCESS         | 2026-09-30 14:12:45.308193 | 1350 | 1350 | 0 | 
+ adjustment-rebuild        |  6 | 692 | SCHEDULER    | SUCCESS         | 2026-09-29 14:12:31.521749 | 1350 | 1350 | 0 | 
+ company-profile           |  1 | 709 | MANUAL       | SUCCESS         | 2026-10-03 21:14:39.310379 |    3 |    3 | 0 | 
+ company-profile           |  2 | 682 | SCHEDULER    | SUCCESS         | 2026-09-26 20:00:32.298094 |    3 |    3 | 0 | 
+ company-profile           |  3 | 610 | SCHEDULER    | SUCCESS         | 2026-09-19 20:00:19.186277 |    4 |    4 | 0 | 
+ company-profile           |  4 | 607 | MANUAL       | SUCCESS         | 2026-09-18 23:24:34.129462 |    3 |    3 | 0 | 
+ company-profile           |  5 | 383 | MANUAL       | SUCCESS         | 2026-09-12 20:14:09.880919 |    3 |    3 | 0 | 
+ company-profile           |  6 | 361 | MANUAL       | SUCCESS         | 2026-09-10 00:49:36.536643 |  109 |  109 | 0 | 
+ corporate-action          |  1 | 720 | MANUAL       | SUCCESS         | 2026-10-05 15:44:07.422649 | 1683 | 1683 | 0 | 
+ corporate-action          |  2 | 715 | SCHEDULER    | SUCCESS         | 2026-10-05 13:59:59.044166 | 1350 | 1350 | 0 | 
+ corporate-action          |  3 | 701 | SCHEDULER    | SUCCESS         | 2026-10-02 14:00:01.320189 | 1350 | 1350 | 0 | 
+ corporate-action          |  4 | 698 | SCHEDULER    | SUCCESS         | 2026-10-01 14:00:01.221333 | 1350 | 1350 | 0 | 
+ corporate-action          |  5 | 694 | SCHEDULER    | SUCCESS         | 2026-09-30 14:00:01.306871 | 1350 | 1350 | 0 | 
+ corporate-action          |  6 | 691 | SCHEDULER    | SUCCESS         | 2026-09-29 14:00:01.104464 | 1350 | 1350 | 0 | 
+ daily-update              |  1 | 714 | SCHEDULER    | SUCCESS         | 2026-10-05 13:30:00.129996 | 1350 | 2727 | 0 | 시세 구멍 24종목 · 24구간 중 24구간 받음 · 5327일 · 받은 봉 1524
+ daily-update              |  2 | 700 | SCHEDULER    | SUCCESS         | 2026-10-02 13:29:59.858712 | 1350 | 2703 | 0 | 
+ daily-update              |  3 | 697 | SCHEDULER    | SUCCESS         | 2026-10-01 13:30:00.025359 | 1350 | 2703 | 0 | 
+ daily-update              |  4 | 693 | SCHEDULER    | SUCCESS         | 2026-09-30 13:29:59.865607 | 1350 | 2703 | 0 | 
+ daily-update              |  5 | 690 | SCHEDULER    | SUCCESS         | 2026-09-29 13:29:59.934791 | 1350 | 2703 | 0 | 
+ daily-update              |  6 | 686 | SCHEDULER    | SUCCESS         | 2026-09-28 13:29:59.933061 | 1350 | 2703 | 0 | 
+ financial-refill          |  1 | 710 | MANUAL       | SUCCESS         | 2026-10-03 21:17:41.95126  |    1 |    1 | 0 | 연도=2015~2026 대상=1종목 신규=20 정정=30 채움=43 교정=1 이른판=2 무효화=1종목 무효화종목=IOVA
+ financial-refill          |  2 | 683 | MANUAL       | SUCCESS         | 2026-09-28 01:14:23.31365  | 1000 | 1000 | 0 | 연도=2015~2026 대상=1000종목 신규=154 정정=239 채움=21486 교정=11656 이른판=0 무효화=466종목
+ financial-refill          |  3 | 658 | MANUAL       | SUCCESS         | 2026-09-22 09:43:02.882759 |  150 |  150 | 0 | 연도=2018~2026 대상=150종목 신규=0 정정=0 채움=975 교정=18 이른판=0 무효화=9종목 무효화종목=08652
+ financial-refill          |  4 | 655 | MANUAL       | SUCCESS         | 2026-09-22 01:43:02.113923 |  129 |  129 | 0 | 연도=2018~2026 대상=129종목 신규=0 정정=0 채움=0 교정=0 이른판=0 무효화=0종목
+ financial-refill          |  5 | 654 | MANUAL       | PARTIAL_SUCCESS | 2026-09-22 01:12:49.72121  |  208 |  206 | 2 | 연도=2018~2026 대상=208종목 신규=0 정정=0 채움=0 교정=612 이른판=0 무효화=43종목 무효화종목=MOG.B
+ financial-refill          |  6 | 653 | MANUAL       | SUCCESS         | 2026-09-22 00:57:20.501096 | 1000 | 1000 | 0 | 연도=2018~2026 대상=1000종목 신규=0 정정=0 채움=0 교정=1842 이른판=0 무효화=156종목 무효화종목=FR
+ full-statement-refill     |  1 | 664 | MANUAL       | SUCCESS         | 2026-09-23 00:26:25.366603 |  129 |  129 | 0 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=4644건 실제콜=6374 쓴보고서=4065 공시없음=136
+ full-statement-refill     |  2 | 663 | MANUAL       | SUCCESS         | 2026-09-23 00:09:45.619088 |  200 |  200 | 0 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=7200건 실제콜=8832 쓴보고서=7104 공시없음=145
+ full-statement-refill     |  3 | 659 | MANUAL       | SUCCESS         | 2026-09-22 12:59:19.275464 |    8 |    8 | 0 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=288건 실제콜=384 쓴보고서=274 공시없음=67 정정보
+ full-statement-refill     |  4 | 656 | MANUAL       | SUCCESS         | 2026-09-22 06:40:13.755624 |  129 |  129 | 0 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=4644건 실제콜=6374 쓴보고서=4065 공시없음=136
+ full-statement-refill     |  5 | 648 | MANUAL       | SUCCESS         | 2026-09-21 23:19:06.336469 |  150 |  150 | 0 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=5400건 실제콜=7012 쓴보고서=5446 공시없음=100
+ full-statement-refill     |  6 | 647 | MANUAL       | SUCCESS         | 2026-09-21 22:52:46.442426 |  200 |  200 | 0 | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=7200건 실제콜=8832 쓴보고서=7104 공시없음=145
+ governance-derive         |  1 | 738 | MANUAL       | SUCCESS         | 2026-10-05 16:02:49.983412 | 1683 | 1683 | 0 | 
+ governance-derive         |  2 | 717 | SCHEDULER    | SUCCESS         | 2026-10-05 14:17:58.192511 | 1683 | 1683 | 0 | 
+ governance-derive         |  3 | 711 | MANUAL       | SUCCESS         | 2026-10-05 00:29:02.32089  | 1683 | 1683 | 0 | 
+ governance-derive         |  4 | 649 | MANUAL       | SUCCESS         | 2026-09-21 23:37:08.69733  | 1350 | 1350 | 0 | 
+ governance-derive         |  5 | 638 | MANUAL       | SUCCESS         | 2026-09-20 16:39:47.130357 |    1 |    1 | 0 | 
+ governance-derive         |  6 | 635 | MANUAL       | SUCCESS         | 2026-09-20 16:28:57.908651 |  337 |  337 | 0 | 
+ governance-load           |  1 | 633 | MANUAL       | SUCCESS         | 2026-09-20 16:14:41.571862 |  337 |  337 | 0 | 
+ governance-load           |  2 | 632 | MANUAL       | SUCCESS         | 2026-09-20 15:18:55.30564  | 1350 | 1350 | 0 | 
+ governance-load           |  3 | 626 | MANUAL       | SUCCESS         | 2026-09-20 02:41:49.303528 | 1350 | 1350 | 0 | 
+ governance-load           |  4 | 623 | MANUAL       | SUCCESS         | 2026-09-20 02:15:32.787221 |    2 |    2 | 0 | 
+ governance-load           |  5 | 621 | MANUAL       | SUCCESS         | 2026-09-20 01:49:34.537535 |   29 |   29 | 0 | 
+ governance-load           |  6 | 619 | MANUAL       | SUCCESS         | 2026-09-20 01:47:28.473595 |    2 |    2 | 0 | 
+ indicator-derived-rebuild |  1 | 740 | MANUAL       | SUCCESS         | 2026-10-05 16:07:49.780943 |  272 |  272 | 0 | 파생층 272거래일 · 쓴 550323 · 지운 0 · 고아 정리 0 · 색인 765
+ indicator-derived-rebuild |  2 | 719 | SCHEDULER    | SUCCESS         | 2026-10-05 14:22:26.65697  |  272 |  272 | 0 | 파생층 272거래일 · 쓴 1766216 · 지운 0 · 고아 정리 0 · 색인 765
+ indicator-derived-rebuild |  3 | 713 | MANUAL       | SUCCESS         | 2026-10-05 00:34:14.058929 |  271 |  271 | 0 | 파생층 271거래일 · 쓴 1189439 · 지운 412 · 고아 정리 0 · 색인 765
+ market-calendar           |  1 | 172 | MANUAL       | SUCCESS         | 2026-08-29 20:02:29.338359 |    2 |    2 | 0 | 
+ market-calendar           |  2 | 171 | MANUAL       | SUCCESS         | 2026-08-29 20:02:12.932012 |    2 |    2 | 0 | 
+ universe-rebalance        |  1 | 703 | MANUAL       | SUCCESS         | 2026-10-03 21:13:59.511807 |    3 |    3 | 0 | 
+ universe-rebalance        |  2 | 678 | SCHEDULER    | SUCCESS         | 2026-09-26 20:00:01.943883 |    3 |    3 | 0 | 
+ universe-rebalance        |  3 | 608 | SCHEDULER    | SUCCESS         | 2026-09-19 19:59:59.960742 |    3 |    3 | 0 | 
+ universe-rebalance        |  4 | 380 | SCHEDULER    | SUCCESS         | 2026-09-12 19:59:59.810401 |    3 |    3 | 0 | 
+ universe-rebalance        |  5 | 328 | ADMIN        | SUCCESS         | 2026-09-08 10:13:45.124491 |    3 |    3 | 0 | 
+ universe-rebalance        |  6 | 278 | SCHEDULER    | PARTIAL_SUCCESS | 2026-09-05 19:59:59.912128 |    3 |    2 | 1 | 
+(59개 행)
+
+         job_name          |         last_sched         
+---------------------------+----------------------------
+ adjustment-rebuild        | 2026-10-05 14:12:20.287773
+ company-profile           | 2026-09-26 20:00:32.298094
+ corporate-action          | 2026-10-05 13:59:59.044166
+ daily-update              | 2026-10-05 13:30:00.129996
+ governance-derive         | 2026-10-05 14:17:58.192511
+ indicator-backfill        | 2026-09-28 14:12:28.291737
+ indicator-derived-rebuild | 2026-10-05 14:22:26.65697
+ indicator-origin-rewrite  | 2026-10-05 14:19:58.389562
+ initial-load              | 2026-09-19 20:00:18.25978
+ universe-rebalance        | 2026-09-26 20:00:01.943883
+(10개 행)
+
+         job_name          
+---------------------------
+ adjustment-rebuild
+ company-profile
+ corporate-action
+ corporate-action-judge
+ daily-update
+ financial-refill
+ full-statement-refill
+ governance-derive
+ governance-load
+ indicator-backfill
+ indicator-derived-rebuild
+ indicator-origin-rewrite
+ initial-load
+ market-calendar
+ market-index
+ universe-rebalance
+(16개 행)
+
