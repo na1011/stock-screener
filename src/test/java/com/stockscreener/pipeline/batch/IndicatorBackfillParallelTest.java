@@ -219,14 +219,22 @@ class IndicatorBackfillParallelTest {
         return from;
     }
 
+    /**
+     * 잡의 실행이 <b>종료 신호가 닿는 자리</b>(등록부)에 오를 때까지 기다린다.
+     *
+     * <p>MUST NOT: DB의 RUNNING 행만 보고 참을 내지 않는다. 행은 {@code recorder.start}가 커밋하는 순간 보이고 등록부
+     * ({@code track})는 그 뒤에 오른다 — 그 틈에 종료를 걸면 신호가 비어 있는 등록부를 지나가고 잡은 창 전체를 돈다.
+     * 전체 시험 묶음에서 그렇게 붉었다(2026-10-06 · 15초 뒤에도 루프가 돎 · 단독으로는 3/3 초록 · 등록 직전에 200ms를
+     * 끼운 변이가 같은 실패를 재현).
+     */
     private boolean awaitRunning(long budgetMillis) throws InterruptedException {
         long deadline = System.nanoTime() + budgetMillis * 1_000_000L;
         while (System.nanoTime() < deadline) {
-            Integer running = jdbcTemplate.queryForObject("""
-                    SELECT count(*) FROM batch_execution
+            List<Long> running = jdbcTemplate.queryForList("""
+                    SELECT id FROM batch_execution
                     WHERE job_name = ? AND status = 'RUNNING'
-                    """, Integer.class, IndicatorBackfillJob.JOB_NAME);
-            if (running != null && running > 0) {
+                    """, Long.class, IndicatorBackfillJob.JOB_NAME);
+            if (running.stream().anyMatch(batchExecutions::isOpen)) {
                 return true;
             }
             Thread.sleep(5);
