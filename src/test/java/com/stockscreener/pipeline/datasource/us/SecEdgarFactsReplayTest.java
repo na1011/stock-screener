@@ -13,6 +13,8 @@ import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
  * 저장해 둔 {@code companyfacts} JSON을 <b>어댑터에 그대로 먹여 보고서를 찍는다.</b>
  * DB도 배치도 외부 호출도 없다.
@@ -65,6 +67,8 @@ class SecEdgarFactsReplayTest {
                         (tools.jackson.databind.node.ObjectNode) facts, from, path.getFileName().toString());
                 System.out.println("REPLAY 보충 받음=" + outcome.fetched() + " 더한 팩트=" + outcome.merged()
                         + " 실패=" + outcome.failed() + " 원자료 없음=" + replay.missing());
+                // 원자료가 빠지면 목록이 404로 떨어져 저장분만 쓰는 갈래를 탄다 — 보충 전 출력이 조용히 나온다.
+                assertThat(replay.missing()).as("수집이 빠뜨린 원자료 — 같은 날 모은 디렉터리인가").isZero();
             }
         }
         SecEdgarFacts.Result result = SecEdgarFacts.build(facts, from);

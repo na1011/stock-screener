@@ -243,6 +243,77 @@ class SecFilingSupplementTest {
     }
 
     @Test
+    @DisplayName("받은 공시를 companyfacts가 나중에 실어도 COVERED로 남기고 매 실행 그 판을 연다 — 실패였던 공시와 같게")
+    void receivedFilingLaterCoveredByCompanyFactsAlsoReopens() throws Exception {
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(storedStatus(MISSING)).isEqualTo("OK");
+
+        SecFilingSupplement.Outcome first = supplement.supplement(CIK, companyFactsCovering(MISSING), FROM, "t");
+        SecFilingSupplement.Outcome second = supplement.supplement(CIK, companyFactsCovering(MISSING), FROM, "t");
+
+        assertThat(first.supplementedVintages()).containsExactly(MISSING_FILED);
+        assertThat(second.supplementedVintages()).containsExactly(MISSING_FILED);
+        assertThat(storedStatus(MISSING)).isEqualTo("COVERED");
+    }
+
+    @Test
+    @DisplayName("이 실행이 다시 본 해석 실패 행은 이 실행의 미해결이다 — 저장 없이 건너뛰어도 본 것으로 찍는다")
+    void unreadableRowSeenAgainCountsInThatRun() throws Exception {
+        SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
+        bodyOf.put(indexPath(MISSING), index("a_htm.xml", "b.xml", "FilingSummary.xml"));
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        java.time.Instant second = store.now();
+
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(store.tallySince(second).unresolved()).as("둘째 실행은 저장 없이 건너뛴다 — 본 것으로 찍혀야 센다")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("미해결은 실패와 옛 판을 실제로 쓴 행뿐이다 — 판이 낮아도 안 쓰이는 행(COVERED · 대상 밖)은 안 센다")
+    void unresolvedCountsStaleOnlyWhenUsed() throws Exception {
+        SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        // 판을 올린 뒤의 모양 — 저장 행이 전부 옛 판이다.
+        jdbcTemplate.update("UPDATE sec_filing_supplement SET reader_version = 0 WHERE cik = ?", CIK);
+        jdbcTemplate.update("""
+                INSERT INTO sec_filing_supplement (accession, cik, form, filed, reader_version, status, facts)
+                VALUES ('0000001800-20-000002', ?, '10-Q', '2020-05-01', 0, 'COVERED', NULL),
+                       ('0000001800-20-000003', ?, '10-Q', '2020-08-01', 0, 'OK', '[]'::jsonb)
+                """, CIK, CIK);
+        assertThat(store.tallySince(store.now()).allUnresolved()).as("아직 아무도 옛 판을 안 썼다").isZero();
+
+        statusOf.put(instancePath(MISSING, "abt-20260630_htm.xml"), 503);
+        java.time.Instant since = store.now();
+        SecFilingSupplement.Outcome stale = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(stale.staleReused()).isEqualTo(1);
+        assertThat(store.tallySince(since).unresolved()).isEqualTo(1);
+        assertThat(store.tallySince(since).allUnresolved()).as("COVERED와 대상 밖 OK는 판이 낮아도 안 센다").isEqualTo(1);
+
+        statusOf.remove(instancePath(MISSING, "abt-20260630_htm.xml"));
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(store.tallySince(store.now()).allUnresolved()).as("다시 받으면 풀린다").isZero();
+    }
+
+    @Test
+    @DisplayName("공시 목록을 못 받은 실행이 옛 판 저장분을 쓰면 미해결이다 — 다시 받을지조차 못 정했다")
+    void listFailureUsingAnOldVersionIsUnresolved() throws Exception {
+        SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        jdbcTemplate.update("UPDATE sec_filing_supplement SET reader_version = 0 WHERE cik = ?", CIK);
+        statusOf.put(submissionsPath(), 500);
+        java.time.Instant since = store.now();
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.vintagesUncertain()).isTrue();
+        assertThat(outcome.staleReused()).isEqualTo(1);
+        assertThat(store.tallySince(since).unresolved()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("실행 기록의 미해결은 이 실행이 본 행만 센다 — 기본 FR이 안 도는 종목의 실패 행은 표 전체 수에만 든다")
     void unresolvedCountsOnlyRowsThisRunSaw() throws Exception {
         SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);

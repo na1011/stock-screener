@@ -197,6 +197,8 @@ class SecEdgarLabelDiffProbeLiveTest {
         List<String> tickers = List.of(
                 System.getProperty("probe.tickers", DEFAULT_TICKERS).split(","));
         int fromFiscalYear = Integer.parseInt(System.getProperty("probe.fromFiscalYear", "2019"));
+        // 「우리 코드가 무엇을 만드는가」는 보충까지다 — 설정을 명시해야 돈다(ADR-0173).
+        java.util.Optional<SecFilingSupplement> supplement = ProbeSupplement.fromEnv();
 
         RestClient www = client("https://www.sec.gov");
         RestClient data = client("https://data.sec.gov");
@@ -233,8 +235,11 @@ class SecEdgarLabelDiffProbeLiveTest {
                 Map<String, String> rebuilt = new LinkedHashMap<>();
                 int dropped = -1;
                 try {
-                    SecEdgarFacts.Result result =
-                            SecEdgarFacts.build(MAPPER.readTree(body).path("facts"), fromFiscalYear);
+                    tools.jackson.databind.node.ObjectNode facts =
+                            (tools.jackson.databind.node.ObjectNode) MAPPER.readTree(body).path("facts");
+                    long cikValue = cik;
+                    supplement.ifPresent(s -> s.supplement(cikValue, facts, fromFiscalYear, t));
+                    SecEdgarFacts.Result result = SecEdgarFacts.build(facts, fromFiscalYear);
                     dropped = result.dropped();
                     for (var r : result.reports()) {
                         rebuilt.put(r.periodStart() + "~" + r.periodEnd(),

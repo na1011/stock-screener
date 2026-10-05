@@ -44,9 +44,15 @@ final class XbrlInstanceReader {
 
     /**
      * 해석 규칙의 판 — 읽기({@link #read}) · 고르기({@link #choose}) · 인스턴스 고르기({@code SecFilingSupplement.pickInstance}) ·
-     * 신원({@link #requireIdentity}) <b>전부</b>다. <b>MUST: 하나라도 바꾸면 올린다.</b> 해석 실패({@code UNREADABLE}) 행은
-     * 이 판이 같은 동안 다시 받지 않으므로, 안 올리면 고친 규칙이 그 행에 영영 안 닿는다(2026-10-06 구현 반증 — 신원 규칙을
-     * SWX 때문에 고치고도 판을 안 올렸다면 그 공시가 영구 실패로 남았다). 저장분(OK)도 판이 다르면 다시 읽는다.
+     * 후보 파일 규칙({@code SecFilingClient.isInstanceCandidate}·{@code isXbrlArtifact}·{@code isLinkbase}) · 신원
+     * ({@link #requireIdentity}) <b>전부</b>다. <b>MUST: 하나라도 바꾸면 올린다</b> — {@code ReaderVersionPinTest}가 출력을 판에
+     * 묶어 묻는다. 해석 실패({@code UNREADABLE}) 행은 이 판이 같은 동안 다시 받지 않으므로, 안 올리면 고친 규칙이 그 행에 영영
+     * 안 닿는다(2026-10-06 구현 반증 — 신원 규칙을 SWX 때문에 고치고도 판을 안 올렸다면 그 공시가 영구 실패로 남았다). 보충
+     * 대상인 저장분(OK)도 판이 다르면 다시 받는다.
+     *
+     * <p><b>MUST: 관문 설정 뒤에 두는 해석 규칙은 판을 그 설정의 함수로 둔다</b>(설정을 보충까지 잇는다). 상수 하나로 두면
+     * 꺼진 정기 FR이 옛 규칙으로 다시 읽고 새 판 도장을 찍어, 켠 관문 실행이 그 행을 지금 판으로 보고 안 다시 받는다 —
+     * 안 올리면 그 규칙이 저장 행에 영영 안 닿는다. 지금 그런 규칙은 없다(축에만 실린 재무가 첫 후보 · `reload-gate.md`).
      */
     static final int READER_VERSION = 1;
 

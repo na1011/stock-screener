@@ -69,7 +69,8 @@ public class SecFilingSupplement implements FilingSupplementer {
      * @param merged               트리에 더한 팩트 노드 수
      * @param fromStore            저장분으로 합친 공시 수
      * @param fetched              이번에 받은 공시 수(XBRL 없음 포함)
-     * @param staleReused          읽기 규칙이 바뀌었는데 다시 받지 못해 옛 판 저장분을 쓴 공시 수 — 관문의 미해결이다
+     * @param staleReused          해석 규칙의 판이 바뀌었는데 다시 받지 못했거나(받기 실패 · 공시 목록 실패) 옛 판 저장분을 쓴
+     *                             공시 수 — 미해결이다({@code stale_used_at})
      * @param failed               이번 실행에서 보충에 실패한 접수번호
      * @param unconfirmedVintages  실패한 공시의 제출일 — 회수에서 지킨다
      * @param supplementedVintages 보충으로 실은 공시의 제출일과, 실패였다가 companyfacts가 실은 공시의 제출일 — 이른 판이어도 넣는다
@@ -177,6 +178,7 @@ public class SecFilingSupplement implements FilingSupplementer {
                         merged += added;
                         fromStore++;
                         staleReused++;
+                        store.markStaleUsed(filing.accession(), cik);
                         openIfAdded(supplemented, filing, added);
                         log.warn("보충 공시를 새 읽기 규칙으로 다시 받지 못해 옛 판의 저장분을 쓴다. {} — {}",
                                 filingContext, e.getMessage());
@@ -207,23 +209,25 @@ public class SecFilingSupplement implements FilingSupplementer {
     }
 
     /**
-     * 실패였다가 companyfacts가 그 공시를 실은 행을 {@code COVERED}로 바꾸고, 그런 행의 제출일을 <b>매 실행</b> 연다 — 판은
-     * 이제 companyfacts가 내지만, 실패 동안 늦은 판이 먼저 들어왔을 수 있어 그 판을 이른 판이어도 넣어야 보충 성공과 같은
-     * 상태에 닿는다.
+     * companyfacts가 나중에 실은 공시의 행을 상태와 무관하게(OK·NO_XBRL·FAILED) {@code COVERED}로 바꾸고, 그런 행의 제출일을
+     * <b>매 실행</b> 연다 — 판은 이제 companyfacts가 내지만, 그 전에 늦은 판이 먼저 들어왔을 수 있어 그 판을 이른 판이어도
+     * 넣어야 「처음부터 companyfacts가 실었을 때」와 같은 상태에 닿는다.
      *
-     * <p><b>MUST NOT: 행을 지우지 않는다.</b> 한 번만 열면 그 실행이 APPEND_ONLY(Writer가 열림을 안 씀)거나 같은 날 다른
-     * 공시가 실패해(보호가 이김) 열림이 사라지고 다시 안 온다. 받는 창 밖으로 나간 실패 행도 그대로 둔다 — 창이 좁은 손
-     * 실행이 기본 창의 행을 지우면 안 된다. 실행 기록의 미해결은 그 실행이 본 행만 센다({@code last_seen_at}).
+     * <p><b>MUST NOT: 행을 지우지 않는다 · 실패 행만 고르지 않는다.</b> 한 번만 열면 그 실행이 APPEND_ONLY(Writer가 열림을 안
+     * 씀)거나 같은 날 다른 공시가 실패해(보호가 이김) 열림이 사라지고 다시 안 온다. 받았던 공시(OK)도 같다 — 받은 실행의
+     * 열림이 그렇게 사라졌으면, 실패였던 공시와 다른 판 집합에 닿는다(2026-10-06 v3 반증 · 실측 전이 EXE 1건). 받는 창 밖으로
+     * 나간 행도 그대로 둔다 — 창이 좁은 손 실행이 기본 창의 행을 지우면 안 된다.
      */
     private void settle(long cik, Set<String> covered, Set<String> targetAccessions, Set<LocalDate> supplemented,
                         String context) {
-        for (SecFilingSupplementStore.Row row : store.settleRowsOf(cik).values()) {
+        for (SecFilingSupplementStore.Row row : store.rowsOf(cik).values()) {
             if (targetAccessions.contains(row.accession()) || !covered.contains(row.accession())) {
                 continue;
             }
-            if (row.failed()) {
+            if (!"COVERED".equals(row.status())) {
                 store.markCovered(row.accession(), cik);
-                log.info("실패였던 보충 공시를 companyfacts가 실었다 — 그 판을 매 실행 연다. {} {}", context, row.accession());
+                log.info("보충 공시를 companyfacts가 실었다 — 그 판을 매 실행 연다. {} {} 이전 상태={}", context,
+                        row.accession(), row.status());
             }
             supplemented.add(row.filed());
         }
@@ -301,6 +305,7 @@ public class SecFilingSupplement implements FilingSupplementer {
         Set<String> covered = usGaapAccessions(facts);
         int merged = 0;
         int fromStore = 0;
+        int staleReused = 0;
         Set<LocalDate> supplemented = new LinkedHashSet<>();
         for (SecFilingSupplementStore.Row row : store.okRowsOf(cik).values()) {
             if (row.filed().isBefore(since) || covered.contains(row.accession())) {
@@ -312,10 +317,15 @@ public class SecFilingSupplement implements FilingSupplementer {
             if (added != null) {
                 merged += added;
                 fromStore++;
+                if (row.readerVersion() < XbrlInstanceReader.READER_VERSION) {
+                    // 목록이 없어 다시 받을지조차 못 정했다 — 옛 판을 쓴 것이다. 미해결로 센다.
+                    staleReused++;
+                    store.markStaleUsed(row.accession(), cik);
+                }
                 openIfAdded(supplemented, filing, added);
             }
         }
-        return new Outcome(merged, fromStore, 0, 0, List.of(), Set.of(), Set.copyOf(supplemented), true);
+        return new Outcome(merged, fromStore, 0, staleReused, List.of(), Set.of(), Set.copyOf(supplemented), true);
     }
 
     /** 받는 창의 시작 — 라벨 창(회계연도 ≥ from)보다 한 해 앞이다. 자르는 것은 {@code SecEdgarFacts.build}다. */

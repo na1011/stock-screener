@@ -96,6 +96,33 @@ class FinancialRefillJobTest {
     }
 
     @Test
+    @DisplayName("실행 기록이 보충 칸을 낸다 — 미해결은 이 실행이 본 것만(표 전체는 괄호) · 회수를 멈춘 종목은 이름으로(ADR-0173)")
+    void noteCarriesSupplementCountsAndRetractionStoppedTickers() {
+        jdbcTemplate.update("DELETE FROM sec_filing_supplement");
+        try {
+            // 이 실행 전에 본 실패 행 — 기본 FR이 안 도는 종목의 것이다. 표 전체에만 든다.
+            jdbcTemplate.update("""
+                    INSERT INTO sec_filing_supplement (accession, cik, form, filed, reader_version, status,
+                        failure_kind, failure_message, fetched_at, last_seen_at)
+                    VALUES ('0000999999-20-000001', 999999, '10-Q', '2020-05-01', 1, 'FAILED', 'TRANSIENT', 'x',
+                        now() - interval '40 days', now() - interval '40 days')
+                    """);
+            fakeFinancialSource.withReports(memberId, List.of(report())).uncertainFor(memberId);
+
+            job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of(), null);
+
+            String note = jdbcTemplate.queryForObject(
+                    "SELECT note FROM batch_execution WHERE job_name = ? ORDER BY id DESC LIMIT 1",
+                    String.class, FinancialRefillJob.JOB_NAME);
+            assertThat(note).contains("미해결보충=0(표 전체 1)").contains("회수정지=1종목")
+                    .contains("회수정지종목=005930");
+        } finally {
+            jdbcTemplate.update("DELETE FROM sec_filing_supplement");
+            fakeFinancialSource.reset();
+        }
+    }
+
+    @Test
     @DisplayName("편입 중인 활성 종목만 대상으로 삼는다")
     void targetsOnlyActiveUniverseMembers() {
         job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL, 3, List.of(), null);

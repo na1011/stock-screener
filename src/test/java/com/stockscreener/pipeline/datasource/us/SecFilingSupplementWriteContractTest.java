@@ -160,6 +160,24 @@ class SecFilingSupplementWriteContractTest {
     }
 
     @Test
+    @DisplayName("받은 공시를 companyfacts가 나중에 실어도 원본 판이 들어온다 — 받은 실행이 APPEND_ONLY뿐이었어도(실패였던 공시와 같은 판 집합)")
+    void receivedFilingLaterCoveredStillOpensAfterAnAppendOnlyOnlyReceipt() throws Exception {
+        companyFacts(false);
+        beforeSupplement.collectDetailed(fix, FROM, FinancialWriter.WriteMode.FILL_MISSING, false);
+        assertThat(rows()).containsExactly(Y_FILED + "|1000|true|0");
+
+        // 보충으로 X를 받은 실행이 수동 initial-load(APPEND_ONLY)뿐이다 — Writer가 그 열림을 안 썼다.
+        ok(instancePath(X), instance(X_FILED));
+        collector.collectDetailed(fix, FROM, FinancialWriter.WriteMode.APPEND_ONLY, false);
+        assertThat(rows()).as("APPEND_ONLY는 이른 판을 안 넣는다").containsExactly(Y_FILED + "|1000|true|0");
+
+        companyFacts(true);
+        collect();
+
+        assertThat(rows()).containsExactly(X_FILED + "|950|false|0", Y_FILED + "|1000|true|1");
+    }
+
+    @Test
     @DisplayName("대조 — 성공이 먼저 오면 같은 판 집합이다(위 시험이 닿아야 할 곳)")
     void successOnce() throws Exception {
         companyFacts(false);

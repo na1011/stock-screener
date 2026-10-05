@@ -20,9 +20,9 @@ import java.util.stream.Collectors;
  * {@code sec_filing_supplement}(V64 · ADR-0173) — 보충한 공시를 접수번호마다 한 행으로 든다.
  *
  * <p><b>MUST: 호출자의 트랜잭션에 그대로 참여한다</b>(전파 지정 없음). 보충은 종목별 {@code REQUIRES_NEW} 안에서 돌고
- * ({@code StockTaskRunner}), 상태 전이(OK·FAILED)가 그 종목의 재무 쓰기와 <b>함께 커밋되거나 함께 롤백돼야</b> 한다.
- * 따로 커밋되면 쓰기가 롤백된 뒤에도 「FAILED → OK」만 남아, 다음 실행이 그 공시를 회복으로 알아보지 못하고 이른 판을
- * 건너뛴다 — 성공과 실패의 순서가 결과를 바꾸는 꼴이 돌아온다.
+ * ({@code StockTaskRunner}), 원장 행이 그 종목의 재무 쓰기와 <b>함께 커밋되거나 함께 롤백돼야</b> 실행 기록의 보충 수
+ * (받음·실패·미해결)가 실제로 쓴 것과 맞는다. 판 열기는 원장 상태에 기대지 않는다 — 그 실행에서 실은 공시와 COVERED 행을
+ * 매번 다시 본다(무상태).
  */
 @Repository
 public class SecFilingSupplementStore implements SupplementLedger {
@@ -108,7 +108,7 @@ public class SecFilingSupplementStore implements SupplementLedger {
                     file_size = EXCLUDED.file_size, document_type = EXCLUDED.document_type,
                     fiscal_year_focus = EXCLUDED.fiscal_year_focus, fiscal_period_focus = EXCLUDED.fiscal_period_focus,
                     us_gaap_facts = EXCLUDED.us_gaap_facts, facts = EXCLUDED.facts, failure_kind = NULL,
-                    failure_message = NULL, fetched_at = now(), last_seen_at = now()
+                    failure_message = NULL, fetched_at = now(), last_seen_at = now(), stale_used_at = NULL
                 """, filing.accession(), cik, filing.form(), Date.valueOf(filing.filed()),
                 XbrlInstanceReader.READER_VERSION, fileName, fileSize, instance.documentType(),
                 instance.fiscalYearFocus(), instance.fiscalPeriodFocus(), usGaap, json);
@@ -126,7 +126,7 @@ public class SecFilingSupplementStore implements SupplementLedger {
                     reader_version = EXCLUDED.reader_version, status = 'FAILED', file_name = NULL, file_size = NULL,
                     document_type = NULL, fiscal_year_focus = NULL, fiscal_period_focus = NULL, us_gaap_facts = NULL,
                     facts = NULL, failure_kind = EXCLUDED.failure_kind, failure_message = EXCLUDED.failure_message,
-                    fetched_at = now(), last_seen_at = now()
+                    fetched_at = now(), last_seen_at = now(), stale_used_at = NULL
                 """, filing.accession(), cik, filing.form(), Date.valueOf(filing.filed()),
                 XbrlInstanceReader.READER_VERSION, failureKind, message);
     }
@@ -141,26 +141,32 @@ public class SecFilingSupplementStore implements SupplementLedger {
                     form = EXCLUDED.form, filed = EXCLUDED.filed, reader_version = EXCLUDED.reader_version,
                     status = 'NO_XBRL', file_name = NULL, file_size = NULL, document_type = NULL,
                     fiscal_year_focus = NULL, fiscal_period_focus = NULL, us_gaap_facts = 0, facts = '[]'::jsonb,
-                    failure_kind = NULL, failure_message = NULL, fetched_at = now(), last_seen_at = now()
+                    failure_kind = NULL, failure_message = NULL, fetched_at = now(), last_seen_at = now(),
+                    stale_used_at = NULL
                 """, filing.accession(), cik, filing.form(), Date.valueOf(filing.filed()),
                 XbrlInstanceReader.READER_VERSION);
     }
 
     @Override
-    public Map<String, Row> settleRowsOf(long cik) {
+    public Map<String, Row> rowsOf(long cik) {
         List<String> accessions = jdbcTemplate.queryForList(
-                "SELECT accession FROM sec_filing_supplement WHERE cik = ? AND status IN ('FAILED', 'COVERED')",
-                String.class, cik);
+                "SELECT accession FROM sec_filing_supplement WHERE cik = ?", String.class, cik);
         return find(cik, accessions);
     }
 
     @Override
     public void markCovered(String accession, long cik) {
         jdbcTemplate.update("""
-                UPDATE sec_filing_supplement SET status = 'COVERED', failure_kind = NULL, failure_message = NULL,
-                       last_seen_at = now()
-                WHERE accession = ? AND cik = ? AND status = 'FAILED'
+                UPDATE sec_filing_supplement SET status = 'COVERED', facts = NULL, us_gaap_facts = NULL,
+                       failure_kind = NULL, failure_message = NULL, stale_used_at = NULL, last_seen_at = now()
+                WHERE accession = ? AND cik = ? AND status <> 'COVERED'
                 """, accession, cik);
+    }
+
+    @Override
+    public void markStaleUsed(String accession, long cik) {
+        jdbcTemplate.update("UPDATE sec_filing_supplement SET stale_used_at = now() WHERE accession = ? AND cik = ?",
+                accession, cik);
     }
 
     @Override
@@ -179,9 +185,10 @@ public class SecFilingSupplementStore implements SupplementLedger {
      *
      * @param fetched    이 실행이 받아 저장한 공시
      * @param failed     이 실행이 실패로 남긴 공시
-     * @param unresolved 이 실행이 본 행 중 판정이 남은 것 — 실패 행과, 해석 규칙의 판이 지금보다 낮은 행(새 규칙으로 다시 받지
-     *                   못해 옛 판을 쓰는 것)
-     * @param allUnresolved 표 전체의 같은 수 — 기본 FR이 안 도는 과거 편입의 행까지. 관문이 구성원마다 판정한다(ADR-0173)
+     * @param unresolved 이 실행이 본 행 중 판정이 남은 것 — 이 실행이 대상으로 본 실패 행과, 이 실행이 옛 판 저장분을 쓴 행
+     *                   (새 규칙으로 다시 받지 못했거나 공시 목록을 못 받았다)
+     * @param allUnresolved 표 전체의 같은 수 — 실패 행과 옛 판을 쓴 적이 있는 행 전부(기본 FR이 안 도는 과거 편입까지).
+     *                      관문이 구성원마다 판정한다(ADR-0173). 「판이 낮다」만으로는 안 센다 — 안 쓰이는 행은 판정할 것이 없다
      */
     public record Tally(long fetched, long failed, long unresolved, long allUnresolved) {
 
@@ -199,12 +206,11 @@ public class SecFilingSupplementStore implements SupplementLedger {
         return jdbcTemplate.queryForObject("""
                 SELECT count(*) FILTER (WHERE fetched_at >= ? AND status IN ('OK', 'NO_XBRL')),
                        count(*) FILTER (WHERE fetched_at >= ? AND status = 'FAILED'),
-                       count(*) FILTER (WHERE last_seen_at >= ? AND (status = 'FAILED' OR reader_version < ?)),
-                       count(*) FILTER (WHERE status = 'FAILED' OR reader_version < ?)
+                       count(*) FILTER (WHERE (last_seen_at >= ? AND status = 'FAILED') OR stale_used_at >= ?),
+                       count(*) FILTER (WHERE status = 'FAILED' OR stale_used_at IS NOT NULL)
                 FROM sec_filing_supplement
                 """, (rs, rowNum) -> new Tally(rs.getLong(1), rs.getLong(2), rs.getLong(3), rs.getLong(4)),
-                Timestamp.from(since), Timestamp.from(since), Timestamp.from(since),
-                XbrlInstanceReader.READER_VERSION, XbrlInstanceReader.READER_VERSION);
+                Timestamp.from(since), Timestamp.from(since), Timestamp.from(since), Timestamp.from(since));
     }
 
     @Override

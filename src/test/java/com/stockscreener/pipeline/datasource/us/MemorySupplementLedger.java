@@ -43,20 +43,24 @@ final class MemorySupplementLedger implements SupplementLedger {
     }
 
     @Override
-    public Map<String, SecFilingSupplementStore.Row> settleRowsOf(long cik) {
+    public Map<String, SecFilingSupplementStore.Row> rowsOf(long cik) {
         Map<String, SecFilingSupplementStore.Row> out = new HashMap<>();
-        rows.values().stream().filter(r -> r.cik() == cik && ("FAILED".equals(r.status()) || "COVERED".equals(r.status())))
-                .forEach(r -> out.put(r.accession(), r));
+        rows.values().stream().filter(r -> r.cik() == cik).forEach(r -> out.put(r.accession(), r));
         return out;
     }
 
     @Override
     public void markCovered(String accession, long cik) {
         SecFilingSupplementStore.Row r = rows.get(key(accession, cik));
-        if (r != null && r.failed()) {
+        if (r != null && !"COVERED".equals(r.status())) {
             rows.put(key(accession, cik), new SecFilingSupplementStore.Row(r.accession(), r.cik(), r.form(), r.filed(),
                     r.readerVersion(), "COVERED", null, null, List.of(), null));
         }
+    }
+
+    @Override
+    public void markStaleUsed(String accession, long cik) {
+        // 메모리 원장은 실행 기록을 안 낸다 — 시각을 안 든다.
     }
 
     @Override

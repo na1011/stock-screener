@@ -23,15 +23,18 @@ interface SupplementLedger {
     /** 원장이 XBRL이 있다고 했는데 공시 폴더에 XBRL 산출물이 없다 — 실패가 아니라 원장의 사실이다. */
     void saveNoXbrl(SecFilingClient.Filing filing, long cik);
 
-    /** 이 발행사의 실패 행과 COVERED 행(실패였다가 companyfacts가 실은 것). */
-    Map<String, SecFilingSupplementStore.Row> settleRowsOf(long cik);
+    /** 이 발행사의 행 전부(상태 무관) — 정리가 companyfacts가 덮은 공시를 고른다. */
+    Map<String, SecFilingSupplementStore.Row> rowsOf(long cik);
 
-    /** 실패 행을 COVERED로 바꾼다 — 지우지 않는다(그 판을 매 실행 연다). */
+    /** companyfacts가 실은 공시의 행을 COVERED로 바꾼다(OK·NO_XBRL·FAILED 어느 것이든 · 팩트를 비움) — 지우지 않는다(그 판을 매 실행 연다). */
     void markCovered(String accession, long cik);
+
+    /** 판이 지금보다 낮은 저장분을 합쳤다 — 미해결로 센다. 다시 저장하거나 COVERED가 되면 지워진다. */
+    void markStaleUsed(String accession, long cik);
 
     /** 이 실행이 대상으로 본 행에 시각을 찍는다 — 실행 기록의 미해결이 이 실행이 본 행만 세게. */
     void touch(long cik, Collection<String> accessions);
 
-    /** 이 발행사의 OK 행 전부 — 공시 목록을 못 받은 실행이 쓸 수 있는 저장분이다. */
+    /** 이 발행사의 OK·NO_XBRL 행 전부 — 공시 목록을 못 받은 실행이 쓸 수 있는 저장분이다. */
     Map<String, SecFilingSupplementStore.Row> okRowsOf(long cik);
 }
