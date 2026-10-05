@@ -204,13 +204,16 @@ class SecTickerCikCacheTest {
     }
 
     @Test
-    @DisplayName("첫 적재 실패는 둘 다 던진다 — 옛 판이 없다")
-    void firstLoadFailureThrowsForBoth() {
+    @DisplayName("첫 적재 실패는 둘 다 던지되 기억하지 않는다 — 기억하면 10분 동안 미국 재무가 네트워크 없이 전원 실패한다")
+    void firstLoadFailureThrowsButIsNotRemembered() throws Exception {
         enqueue(503, "{}");
+        enqueue(503, "{}");
+        enqueue(200, fixture());
         SecTickerCikCache cache = cache(1, new MutableClock(Instant.parse("2026-10-10T11:00:00Z")));
         assertThatThrownBy(() -> cache.findCik("FIX")).hasMessageContaining("HTTP 503");
         assertThatThrownBy(cache::freshSnapshot).hasMessageContaining("HTTP 503");
-        assertThat(server.getRequestCount()).isEqualTo(1);
+        assertThat(cache.findCik("FIX")).as("순간 실패 뒤 다음 호출이 바로 다시 받는다 — A2 전의 동작").contains(1L);
+        assertThat(server.getRequestCount()).isEqualTo(3);
     }
 
     private SecTickerCikCache cache(int minRows, Clock clock) {

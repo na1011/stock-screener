@@ -64,8 +64,10 @@ import java.util.Optional;
  *       실패로 시끄럽다. 던지면 그 실행의 미국 전원이 실패하고, 그래도 {@code PARTIAL_SUCCESS}라 무거운 잡
  *       시계가 다시 시작된다.</li>
  * </ul>
- * <p><b>실패한 시도는 {@link #RETRY_AFTER_FAILURE} 동안 기억한다</b> — 기억하지 않으면 종목 루프가 종목마다
- * 다시 받는다(1,000종목 × 매핑 파일). 첫 적재 실패는 둘 다 던진다(옛 판이 없다).
+ * <p><b>다시 받기 실패는 {@link #RETRY_AFTER_FAILURE} 동안 기억한다</b> — 기억하지 않으면 종목 루프가 종목마다
+ * 다시 받는다(1,000종목 × 매핑 파일). <b>첫 적재 실패는 기억하지 않는다</b> — 옛 판이 없어 기억하면 그 10분 동안
+ * 미국 종목이 네트워크 없이 전원 실패한다(재무 1,000종목이 몇 초 만에). 기억하지 않으면 다음 호출이 다시 받으므로 순간적인
+ * 실패가 그 뒤 종목을 안 막는다 — A2 전의 동작이다. 첫 적재 실패는 둘 다 던진다(옛 판이 없다).
  *
  * <p><b>MUST: 한 실행 안에서는 판 하나를 잡고 쓴다.</b> 행마다 {@link #findCik}를 부르면 경계가 실행
  * 도중에 걸려 한 리밸런싱이 두 판을 섞는다 — 같은 CIK 묶음의 반은 옛 판, 반은 새 판으로 갈린다.
@@ -171,7 +173,7 @@ public class SecTickerCikCache {
             if (held != null && !held.olderThan(MAX_AGE, now)) {
                 return held;
             }
-            if (lastFailedAt != null && lastFailedAt.plus(RETRY_AFTER_FAILURE).isAfter(now)) {
+            if (held != null && lastFailedAt != null && lastFailedAt.plus(RETRY_AFTER_FAILURE).isAfter(now)) {
                 // 방금 실패했다 — 다시 안 부른다. 같은 실패를 그대로 낸다.
                 if (strict || held == null) {
                     throw lastFailure;
@@ -191,9 +193,13 @@ public class SecTickerCikCache {
                 }
                 return fresh;
             } catch (DataSourceException e) {
+                if (held == null) {
+                    // 첫 적재 실패 — 기억하지 않는다(클래스 javadoc).
+                    throw e;
+                }
                 lastFailedAt = now;
                 lastFailure = e;
-                if (strict || held == null) {
+                if (strict) {
                     throw e;
                 }
                 log.warn("SEC 티커→CIK 매핑을 다시 받지 못해 {}에 받은 판을 계속 쓴다 — 그 뒤의 상장·개명은 "
