@@ -1,0 +1,13 @@
+HON ex=2025-10-30 cache=2026-09-15 pre_q=2025-09-30 orig=10408 gap_filings=[] first_post=2026-02-17 post_val=9437
+DD ex=2025-11-03 cache=2026-09-15 pre_q=2025-09-30 orig=None gap_filings=[('10-Q', '2025-11-06', 3072)] first_post=2026-02-17 post_val=1795
+FNF ex=2025-12-17 cache=2026-09-15 pre_q=2025-09-30 orig=553 gap_filings=[] first_post=2026-05-08 post_val=None
+CMCSA ex=2026-01-05 cache=2026-09-15 pre_q=2025-09-30 orig=31198 gap_filings=[] first_post=2026-04-23 post_val=None
+BDX ex=2026-02-10 cache=2026-09-15 pre_q=2025-12-31 orig=5252 gap_filings=[] first_post=2026-05-07 post_val=None
+APTV ex=2026-04-01 cache=2026-09-15 pre_q=2026-03-31 orig=None gap_filings=[('10-Q', '2026-05-05', 5086)] first_post=2026-08-04 post_val=None
+FDX ex=2026-06-01 cache=2026-09-15 pre_q=2026-02-28 orig=24000 gap_filings=[] first_post=None post_val=None
+HON ex=2026-06-29 cache=2026-09-15 pre_q=2026-03-31 orig=9143 gap_filings=[] first_post=2026-07-23 post_val=None
+SPGI ex=2026-07-01 cache=2026-09-15 pre_q=2026-03-31 orig=4171 gap_filings=[] first_post=None post_val=None
+MIDD ex=2026-07-07 cache=2026-09-16 pre_q=2026-07-04 orig=None gap_filings=[('10-Q', '2026-08-13', 876)] first_post=None post_val=None
+REZI ex=2026-08-04 cache=2026-09-16 pre_q=2026-07-04 orig=None gap_filings=[('10-Q', '2026-08-12', 1981)] first_post=None post_val=None
+CTVA ex=2026-10-01 cache=2026-09-15 pre_q=2026-06-30 orig=6379 gap_filings=[] first_post=None post_val=None
+MOD ex=2026-10-02 cache=2026-09-15 pre_q=2026-06-30 orig=874 gap_filings=[] first_post=None post_val=None
