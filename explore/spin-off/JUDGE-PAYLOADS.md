@@ -19,6 +19,11 @@ CLI: `--job=corporate-action-judge --ca-id=<id> --ca-status=APPROVED --ca-type=S
 - **FTV 183 (2020-10-09 SPLIT 1.195) · DELL 195 (2021-11-02 SPLIT 1.973)**
   - 분할 배열로 온 분사라 s 1로 바꾼다.
   - 가격 배수를 옛 `ratio`(벤더 계수)로 둘지, 같은 날 종가(VNT · VMW와 배정 비율 — 소스 `spin_offs`에 없음 → 8-K/8937)로 다시 낼지 정한다.
-- **미해석(배포 뒤 첫 사슬이 OBSERVED로 낸다)**: LEN → MRP · FTI → THNPF · LBTYB → SNRBY
-  - 발행사 Form 8937의 배분 비율과 분배일로 판정한다. 없으면 `UNSUPPORTED`로 보낸다.
+- **미해석(배포 뒤 첫 사슬이 OBSERVED로 낸다)** — 발행사 공시로 판정한다. 없으면 `UNSUPPORTED`로 보낸다.
+
+  | 모체 → 자식 | 찾은 것(웹 · 2026-10-05) | 판정 후보 |
+  |---|---|---|
+  | FTI → THNPF | TechnipFMC: FTI 5주당 TE 1주(rate 0.2) · ex 2021-02-16 · 분배 FMV = 첫날 VWAP €12.67 = **$15.33**(technipfmc.com Technip Energies FAQ) | v = 8.09 / (8.09 + 0.2 × 15.33) = 0.7252 → 가격 배수 1.3790. 다만 보유자 그날 총수익 +8.2%라 더 본다 |
+  | LEN → MRP | 분배일 **2025-02-07**(Millrose S-4/A) — 소스 ex 01-21은 틀렸다 · 과세 분사(basis = 분배일 FMV) · Lennar가 약 80% 분배 | 효력일·v를 더 잰다 — 01-21 · 02-07 · 02-10 어느 날에도 LEN에 분배만큼(약 10%)의 하루 낙폭이 없다 |
+  | LBTYB → SNRBY | LBTYB 1주당 Sunrise B주 ADS 2주(Liberty Global 8-K 2024-11-08) — 의결권 우선 주식이고 거래 가격이 관측되지 않는다 | 진짜 한계 후보(과거 편입) — 판정 전에 B주 경제적 지분을 8-K로 확인한다 |
 - **국내 5행을 바꾸는 날**: ADR-0071 premise의 「미보정 7종목」 기준 수를 함께 고친다(ADR-0168 §규칙).
