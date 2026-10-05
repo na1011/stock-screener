@@ -1,0 +1,14 @@
+         job_name          | min  | max  | count | runs_with_fail_rows | runs_fc 
+---------------------------+------+------+-------+---------------------+---------
+ adjustment-rebuild        | 1350 | 1683 |    23 |                   0 |       0
+ company-profile           |    3 |    4 |     2 |                   0 |       0
+ corporate-action          | 1350 | 1350 |    23 |                   0 |       0
+ daily-update              |  350 | 1350 |    37 |                   1 |       1
+ governance-derive         | 1683 | 1683 |     1 |                   0 |       0
+ indicator-backfill        |    1 |    2 |     3 |                   0 |       0
+ indicator-derived-rebuild |  272 |  272 |     1 |                   0 |       0
+ indicator-origin-rewrite  | 1683 | 1683 |     1 |                   0 |       0
+ initial-load              |    2 |    2 |     1 |                   0 |       0
+ universe-rebalance        |    2 |    3 |     6 |                   0 |       1
+(10개 행)
+

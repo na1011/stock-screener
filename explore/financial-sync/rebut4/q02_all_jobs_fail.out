@@ -1,0 +1,33 @@
+         job_name          | triggered_by | runs | runs_with_fail | max_fail_pct | runs_fail_ge_half | zero_target 
+---------------------------+--------------+------+----------------+--------------+-------------------+-------------
+ adjustment-rebuild        | MANUAL       |   20 |              0 |          0.0 |                 0 |           0
+ adjustment-rebuild        | SCHEDULER    |   23 |              0 |          0.0 |                 0 |           0
+ company-profile           | MANUAL       |    7 |              0 |          0.0 |                 0 |           0
+ company-profile           | SCHEDULER    |    2 |              0 |          0.0 |                 0 |           0
+ corporate-action          | MANUAL       |   17 |              0 |          0.0 |                 0 |           0
+ corporate-action          | SCHEDULER    |   23 |              0 |          0.0 |                 0 |           0
+ corporate-action-judge    | MANUAL       |   62 |              0 |          0.0 |                 0 |           0
+ daily-update              | SCHEDULER    |   25 |              1 |          0.9 |                 0 |           0
+ financial-refill          | MANUAL       |   84 |             26 |          9.9 |                 0 |           0
+ full-statement-refill     | GAP_FILL     |    1 |              0 |          0.0 |                 0 |           0
+ full-statement-refill     | MANUAL       |   18 |              3 |         74.1 |                 3 |           0
+ governance-derive         | GAP_FILL     |    2 |              0 |          0.0 |                 0 |           0
+ governance-derive         | MANUAL       |   23 |              0 |          0.0 |                 0 |           0
+ governance-derive         | SCHEDULER    |    1 |              0 |          0.0 |                 0 |           0
+ governance-load           | GAP_FILL     |    2 |              0 |          0.0 |                 0 |           0
+ governance-load           | MANUAL       |   11 |              0 |          0.0 |                 0 |           0
+ indicator-backfill        | MANUAL       |  142 |              2 |          0.3 |                 0 |           0
+ indicator-backfill        | SCHEDULER    |    3 |              0 |          0.0 |                 0 |           0
+ indicator-derived-rebuild | MANUAL       |    2 |              0 |          0.0 |                 0 |           0
+ indicator-derived-rebuild | SCHEDULER    |    1 |              0 |          0.0 |                 0 |           0
+ indicator-origin-rewrite  | MANUAL       |    2 |              0 |          0.0 |                 0 |           0
+ indicator-origin-rewrite  | SCHEDULER    |    1 |              0 |          0.0 |                 0 |           0
+ initial-load              | GAP_FILL     |    3 |              0 |          0.0 |                 0 |           0
+ initial-load              | MANUAL       |   34 |              8 |        100.0 |                 8 |           1
+ initial-load              | SCHEDULER    |    1 |              0 |          0.0 |                 0 |           0
+ market-index              | MANUAL       |    4 |              2 |         33.3 |                 0 |           0
+ universe-rebalance        | ADMIN        |    1 |              0 |          0.0 |                 0 |           0
+ universe-rebalance        | MANUAL       |    7 |              1 |        100.0 |                 1 |           0
+ universe-rebalance        | SCHEDULER    |    4 |              1 |         33.3 |                 0 |           0
+(29개 행)
+

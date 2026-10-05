@@ -1,0 +1,17 @@
+       job_name        |     status      | failure_kind | runs | rows | max_tc 
+-----------------------+-----------------+--------------+------+------+--------
+ company-profile       | PARTIAL_SUCCESS | UNEXPECTED   |    1 |   52 |    350
+ daily-update          | PARTIAL_SUCCESS | TRANSIENT    |    2 |   13 |   1350
+ financial-refill      | PARTIAL_SUCCESS | MALFORMED    |   19 |   33 |    214
+ financial-refill      | PARTIAL_SUCCESS | NOT_FOUND    |    9 |   18 |    214
+ financial-refill      | PARTIAL_SUCCESS | TRANSIENT    |    4 |    4 |   1000
+ full-statement-refill | PARTIAL_SUCCESS | NOT_FOUND    |    3 | 2002 |   1350
+ governance-load       | ABORTED         | UNEXPECTED   |    1 |    1 |   1350
+ indicator-backfill    | PARTIAL_SUCCESS | UNEXPECTED   |    3 |  355 |   1350
+ initial-load          | ABORTED         | UNEXPECTED   |    1 |    3 |    223
+ initial-load          | PARTIAL_SUCCESS | MALFORMED    |    3 |  388 |   8504
+ initial-load          | PARTIAL_SUCCESS | NOT_FOUND    |    7 | 1984 |   8504
+ initial-load          | PARTIAL_SUCCESS | TRANSIENT    |    7 |   13 |      8
+ initial-load          | PARTIAL_SUCCESS | UNEXPECTED   |    1 |    1 |     11
+(13개 행)
+
