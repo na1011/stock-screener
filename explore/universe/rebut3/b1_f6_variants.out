@@ -1,0 +1,11 @@
+ market_code | ticker | universe_code | effective_from |  origin  | n_prior_any | n_prior_obs | n_prior_res | n_all_rows_any_universe | other_rows 
+-------------+--------+---------------+----------------+----------+-------------+-------------+-------------+-------------------------+------------
+ KOSDAQ      | 950260 | KOSDAQ_TOP150 | 2026-08-21     | OBSERVED |           0 |           0 |           0 |                       0 | 
+ KOSDAQ      | 092870 | KOSDAQ_TOP150 | 2026-10-02     | OBSERVED |           0 |           0 |           0 |                       0 | 
+ US          | CVI    | US_TOP1000    | 2026-09-18     | OBSERVED |           0 |           0 |           0 |                       1 | 
+ US          | INSW   | US_TOP1000    | 2026-09-18     | OBSERVED |           0 |           0 |           0 |                       1 | 
+ US          | GRAL   | US_TOP1000    | 2026-09-25     | OBSERVED |           0 |           0 |           0 |                       1 | 
+ US          | IOVA   | US_TOP1000    | 2026-10-02     | OBSERVED |           0 |           0 |           0 |                       1 | 
+ US          | KOD    | US_TOP1000    | 2026-10-02     | OBSERVED |           0 |           0 |           0 |                       1 | 
+(7개 행)
+

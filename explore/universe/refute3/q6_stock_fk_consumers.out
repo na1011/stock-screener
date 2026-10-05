@@ -1,0 +1,14 @@
+           tbl            |                conname                 
+--------------------------+----------------------------------------
+ universe_membership      | universe_membership_stock_id_fkey
+ price_daily              | price_daily_stock_id_fkey
+ financial_statement      | financial_statement_stock_id_fkey
+ indicator_value          | indicator_value_stock_id_fkey
+ watchlist_item           | watchlist_item_stock_id_fkey
+ batch_execution_failure  | batch_execution_failure_stock_id_fkey
+ corporate_action         | corporate_action_stock_id_fkey
+ governance_report_row    | governance_report_row_stock_id_fkey
+ governance_fact          | governance_fact_stock_id_fkey
+ financial_column_absence | financial_column_absence_stock_id_fkey
+(10개 행)
+

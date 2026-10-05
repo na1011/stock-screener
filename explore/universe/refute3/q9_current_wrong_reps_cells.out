@@ -1,0 +1,19 @@
+ ticker | current_member | codes_latest 
+--------+----------------+--------------
+ BF.A   | t              |          134
+ BTSGU  | t              |           85
+ LLYVK  | t              |           59
+ MKC.V  | t              |          135
+ MOG.B  | t              |          135
+ NWS    | t              |          108
+ PPLC   | t              |           87
+ RUSHB  | t              |          133
+ TAP.A  | t              |          123
+ UHAL   | t              |          104
+ WSO.B  | t              |          134
+ ZG     | t              |          128
+ BIO.B  | f              |            0
+ GOOG   | f              |            0
+ LBTYB  | f              |            0
+(15개 행)
+

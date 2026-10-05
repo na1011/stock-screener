@@ -1,0 +1,31 @@
+ id  |         job_name          | triggered_by | status  | target_count |    st    |   fin    |   dur    
+-----+---------------------------+--------------+---------+--------------+----------+----------+----------
+ 714 | daily-update              | SCHEDULER    | SUCCESS |         1350 | 13:30:00 | 13:53:51 | 00:23:51
+ 715 | corporate-action          | SCHEDULER    | SUCCESS |         1350 | 13:59:59 | 14:12:20 | 00:12:21
+ 716 | adjustment-rebuild        | SCHEDULER    | SUCCESS |         1683 | 14:12:20 | 14:12:21 | 00:00:01
+ 717 | governance-derive         | SCHEDULER    | SUCCESS |         1683 | 14:17:58 | 14:18:00 | 00:00:02
+ 718 | indicator-origin-rewrite  | SCHEDULER    | SUCCESS |         1683 | 14:19:58 | 14:22:26 | 00:02:28
+ 719 | indicator-derived-rebuild | SCHEDULER    | SUCCESS |          272 | 14:22:27 | 14:26:11 | 00:03:45
+ 720 | corporate-action          | MANUAL       | SUCCESS |         1683 | 15:44:07 | 16:00:02 | 00:15:54
+ 721 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:00:46 | 16:00:46 | 00:00:00
+ 722 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:00:50 | 16:00:50 | 00:00:00
+ 723 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:00:53 | 16:00:53 | 00:00:00
+ 724 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:00:56 | 16:00:56 | 00:00:00
+ 725 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:00 | 16:01:00 | 00:00:00
+ 726 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:03 | 16:01:03 | 00:00:00
+ 727 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:06 | 16:01:06 | 00:00:00
+ 728 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:10 | 16:01:10 | 00:00:00
+ 729 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:13 | 16:01:13 | 00:00:00
+ 730 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:16 | 16:01:16 | 00:00:00
+ 731 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:20 | 16:01:20 | 00:00:00
+ 732 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:23 | 16:01:23 | 00:00:00
+ 733 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:26 | 16:01:26 | 00:00:00
+ 734 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:30 | 16:01:30 | 00:00:00
+ 735 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:52 | 16:01:52 | 00:00:00
+ 736 | corporate-action-judge    | MANUAL       | SUCCESS |            1 | 16:01:56 | 16:01:56 | 00:00:00
+ 737 | adjustment-rebuild        | MANUAL       | SUCCESS |         1683 | 16:02:12 | 16:02:21 | 00:00:09
+ 738 | governance-derive         | MANUAL       | SUCCESS |         1683 | 16:02:50 | 16:02:52 | 00:00:02
+ 739 | indicator-origin-rewrite  | MANUAL       | SUCCESS |         1683 | 16:02:52 | 16:07:48 | 00:04:56
+ 740 | indicator-derived-rebuild | MANUAL       | SUCCESS |          272 | 16:07:50 | 16:11:01 | 00:03:11
+(27개 행)
+

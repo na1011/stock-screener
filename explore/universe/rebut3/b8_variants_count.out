@@ -1,0 +1,7 @@
+ market_code | current_total | v1_plan | v2_observed_only | v3_incl_inactive_universes | v4_no_window | v5_same_universe | v1_and_entry_in_window 
+-------------+---------------+---------+------------------+----------------------------+--------------+------------------+------------------------
+ KOSDAQ      |           150 |       2 |              141 |                          2 |            2 |                2 |                      2
+ KOSPI       |           200 |       0 |              195 |                          0 |            0 |                0 |                      0
+ US          |          1000 |       5 |              978 |                          0 |            5 |                5 |                      5
+(3개 행)
+

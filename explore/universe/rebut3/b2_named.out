@@ -1,0 +1,19 @@
+ ticker | market_code | is_active |                    name                    | universe_code |  origin  | effective_from | effective_to |     created_at      
+--------+-------------+-----------+--------------------------------------------+---------------+----------+----------------+--------------+---------------------
+ 092870 | KOSDAQ      | t         | 엑시콘                                     | KOSDAQ_TOP150 | OBSERVED | 2026-10-02     |              | 2026-10-03 21:14:00
+ 280360 | KOSPI       | t         | 롯데웰푸드                                 | KOSPI_TOP200  | OBSERVED | 2026-09-04     | 2026-09-18   | 2026-09-05 20:00:01
+ 950260 | KOSDAQ      | t         | 인제니아테라퓨틱스(Reg.S)                  | KOSDAQ_TOP150 | OBSERVED | 2026-08-21     |              | 2026-08-22 20:00:00
+ BETA   | US          | t         | Beta Technologies, Inc.                    | US_TOP1000    | RESTORED | 2026-08-14     | 2026-08-28   | 2026-10-01 08:56:56
+ BETA   | US          | t         | Beta Technologies, Inc.                    | US_TOP1000    | OBSERVED | 2026-09-25     | 2026-10-02   | 2026-09-26 20:00:26
+ BLLN   | US          | t         | BillionToOne, Inc. Class A Common Stock    | US_TOP1000    | RESTORED | 2026-05-29     | 2026-08-07   | 2026-10-01 08:56:56
+ BLLN   | US          | t         | BillionToOne, Inc. Class A Common Stock    | US_TOP1000    | OBSERVED | 2026-09-11     |              | 2026-09-12 20:00:24
+ CVI    | US          | t         | CVR ENERGY, INC.                           | US_TOP1000    | OBSERVED | 2026-09-18     |              | 2026-09-19 20:00:18
+ GOSS   | US          | t         | Gossamer Bio, Inc. Common Stock            | US_TOP1000    | OBSERVED | 2026-09-25     | 2026-10-02   | 2026-09-26 20:00:26
+ GRAL   | US          | t         | GRAIL, Inc. Common Stock                   | US_TOP1000    | OBSERVED | 2026-09-25     |              | 2026-09-26 20:00:26
+ INSW   | US          | t         | International Seaways, Inc. Common Stock   | US_TOP1000    | OBSERVED | 2026-09-18     |              | 2026-09-19 20:00:18
+ IOVA   | US          | t         | Iovance Biotherapeutics, Inc. Common Stock | US_TOP1000    | OBSERVED | 2026-10-02     |              | 2026-10-03 21:14:17
+ KOD    | US          | t         | Kodiak Sciences Inc Common Stock           | US_TOP1000    | OBSERVED | 2026-10-02     |              | 2026-10-03 21:14:17
+ TEM    | US          | t         | Tempus AI, Inc. Class A Common Stock       | US_TOP1000    | RESTORED | 2025-09-24     | 2026-08-31   | 2026-10-01 08:56:56
+ TEM    | US          | t         | Tempus AI, Inc. Class A Common Stock       | US_TOP1000    | OBSERVED | 2026-09-07     |              | 2026-09-08 10:14:03
+(15개 행)
+

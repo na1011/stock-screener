@@ -1,0 +1,11 @@
+ ticker | market_code |                    name                    | fin_rows | max_period_end | max_created | first_bar  
+--------+-------------+--------------------------------------------+----------+----------------+-------------+------------
+ 092870 | KOSDAQ      | 엑시콘                                     |       42 | 2026-06-30     | 2026-10-03  | 2020-01-02
+ 950260 | KOSDAQ      | 인제니아테라퓨틱스(Reg.S)                  |        1 | 2026-06-30     | 2026-08-24  | 2026-08-18
+ CVI    | US          | CVR ENERGY, INC.                           |      114 | 2026-06-30     | 2026-09-28  | 2019-09-18
+ GRAL   | US          | GRAIL, Inc. Common Stock                   |       10 | 2026-06-30     | 2026-08-30  | 2024-06-12
+ INSW   | US          | International Seaways, Inc. Common Stock   |       72 | 2026-06-30     | 2026-09-28  | 2019-09-18
+ IOVA   | US          | Iovance Biotherapeutics, Inc. Common Stock |       95 | 2026-06-30     | 2026-10-03  | 2019-10-02
+ KOD    | US          | Kodiak Sciences Inc Common Stock           |       37 | 2026-06-30     | 2026-08-30  | 2019-10-02
+(7개 행)
+

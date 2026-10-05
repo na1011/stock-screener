@@ -1,0 +1,11 @@
+ newrep | only_in_old | missing_period | earlier_vintage | later_or_mid_vintage 
+--------+-------------+----------------+-----------------+----------------------
+ BTSG   |           3 |              0 |               1 |                    2
+ FOX    |          15 |              0 |               0 |                   15
+ HEI.A  |          14 |              8 |               0 |                    6
+ LBTYA  |          31 |             14 |               3 |                   14
+ LEN.B  |          28 |             13 |               0 |                   15
+ NWSA   |          17 |              7 |               2 |                    8
+ UHAL.B |          36 |             12 |               7 |                   17
+(7개 행)
+

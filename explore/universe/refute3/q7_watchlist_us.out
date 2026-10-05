@@ -1,0 +1,12 @@
+ market_code | count 
+-------------+-------
+ KOSPI       |     2
+(1개 행)
+
+          relname           | n_live_tup 
+----------------------------+------------
+ screen                     |         18
+ screen_condition           |        252
+ screen_condition_threshold |         26
+(3개 행)
+
