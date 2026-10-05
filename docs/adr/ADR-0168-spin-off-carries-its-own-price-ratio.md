@@ -11,6 +11,7 @@ applies_to:
   - "src/main/java/**/pipeline/datasource/us/AlpacaCorporateActionAdapter.java"
   - "src/main/resources/db/migration/V60__corporate_action_price_ratio.sql"
   - "src/main/resources/db/migration/V61__corporate_action_spin_off_price.sql"
+  - "src/main/resources/db/migration/V62__distribution_symbol_width.sql"
 ---
 
 # ADR-0168. 분사는 원장 행이 가격 배수를 따로 들고, 그 값은 같은 날 두 종가로 정한다
@@ -113,6 +114,21 @@ psql -d stock_screener -At -c "SELECT CASE
 - **설정 뒤에 두고 관문에서 켠다**: 그 규칙의 사유(옛 규칙과 새 규칙의 값이 섞여 전체 백필로만 풀리는 상태)가 여기 안 선다 — 위 §결정의 수렴 경로다. 반증 두 렌즈가 지금 편입에는 「선다」, 과거 편입에는 「깨진다」로 답했고, 수집 대상을 넓혀 뒤의 것을 닫았다.
 
 ## 결과
+
+- **드라이런**(2026-10-05 · 사본 a = 배포 코드 · b = 이 결정 · 사전 규칙과 결과 표는 탐색 브랜치 `explore/spin-off/PLAN.md` §3)
+  - 원장
+    - 새 행 49: 분사 승인 43 · 미해석 6.
+    - 수정계수가 바뀐 39종목이 전부 모체다. 모체 밖 원본층 변화와 국내 변화는 0이다.
+    - ex 뒤 계수는 불변이다.
+    - 가격 배수가 독립 계산과 43/43 일치했다.
+    - 둘째 수집의 변경은 0이다.
+  - 값
+    - CTVA 10-01 `RETURN_52W` −81.41 → +19.52.
+    - 사건일 수정 수익률: DD +1.89% · FDX +0.37% · HON(판정) −3.54% · 000880(판정) +20.91%.
+    - 207940(판정)의 최신일 지표 92 → 147행.
+  - 비용: 수집 12.5 → 16분 · 화해 411 → 424초.
+  - 드라이런이 찾은 결함: 다자식 분배의 CUSIP이 `varchar(16)`을 넘었다 → V62.
+  - **미해석 6(CNH · DNTH · FTI · LBTYB · LEN · SYRE)은 판정 전까지 지표 행을 잃는다**(LEN −11,761 등 · 합 49,187).
 
 - **분사일 ~ 첫 분사 뒤 공시 구간의 재무 × 시총 지표는 이 결정 밖이다.**
   - CTVA `PER_PCTL` 0.048 · `PBR_PCTL` 0.000이 그 자리다.
