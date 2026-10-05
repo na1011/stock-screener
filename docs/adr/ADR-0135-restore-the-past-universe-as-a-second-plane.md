@@ -136,7 +136,10 @@ psql -d stock_screener -At -c "WITH l AS (SELECT market_code, max(trade_date) t 
 psql -d stock_screener -At -c "
 WITH r AS (
   -- 유니버스마다 복원 시각이 다르다. 하나로 접으면 가장 오래된 것이 전부를 낡은 것으로 만든다.
-  SELECT universe_code uc, min(created_at) restored_at FROM universe_membership
+  -- grid_to는 복원 격자의 끝이다. 그 뒤에 공시·효력이 생긴 재료는 어느 격자 날짜에도 안 보인다
+  -- (StoredShareCounts가 published_at과 effective_date를 asOf 이하로 자른다). 안 자르면 실적 시즌의
+  -- 새 분기 보고서가 복원과 무관한데도 이 펜스를 붉힌다(2026-10-06 실측: 그날 US 52행은 전부 격자 안 · 빠지는 행 0).
+  SELECT universe_code uc, min(created_at) restored_at, max(effective_to) grid_to FROM universe_membership
   WHERE origin = 'RESTORED' GROUP BY 1),
 mk AS (SELECT u.code uc, u.market_code mc FROM universe u),
 stale AS (
@@ -156,14 +159,16 @@ stale AS (
     -- 하나이고 국내 MarketCapUniverseAdapter는 0건이다(소스가 시총을 직접 준다).
     (SELECT count(*) FROM financial_statement f JOIN stock s ON s.id = f.stock_id
      WHERE s.market_code = mk.mc AND f.created_at > r.restored_at
-       AND f.shares_outstanding IS NOT NULL) fin,
-    -- 사정거리: 복원 뒤에 생긴 행만 센다. 판정이 옛 행의 상태를 APPLIED로 바꾼 것은 못 센다
+       AND f.shares_outstanding IS NOT NULL AND f.published_at <= r.grid_to) fin,
+    -- 사정거리: 복원 뒤에 생긴 행만 센다. 재무에 갱신 시각 컬럼이 없어 옛 행을 제자리에서 채운 것(FILL_MISSING이
+    -- 주식수를 채운 행)은 못 센다 — 그래서 fin은 하한이다. 판정이 옛 행의 상태를 APPLIED로 바꾼 것도 못 센다
     -- (2026-10-05 HON 2026-06-29 병합 0.5 · 국내 인적분할 5행). 그날 HON의 고친 시총 순위는
     -- 168~175이고 경계(1,000위)가 약 55억 달러라 미국 명부는 안 바뀐다. 국내 복원은 원장을
     -- 안 읽는다(원장 보정은 JdbcStoredShareCounts 안에 있고 그것을 읽는 것은 미국 어댑터 하나다).
     (SELECT count(*) FROM corporate_action ca JOIN stock s ON s.id = ca.stock_id
      WHERE s.market_code = mk.mc AND ca.status = 'APPLIED'
-       AND ca.ratio IS NOT NULL AND ca.ratio <> 1 AND ca.created_at > r.restored_at) ledger
+       AND ca.ratio IS NOT NULL AND ca.ratio <> 1 AND ca.created_at > r.restored_at
+       AND ca.effective_date <= r.grid_to) ledger
   FROM r JOIN mk ON mk.uc = r.uc)
 SELECT CASE
   WHEN (SELECT count(*) FROM r) = 0 THEN '잴 것이 없었다 — 복원 행이 하나도 없다'
