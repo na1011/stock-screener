@@ -156,6 +156,10 @@ stale AS (
     (SELECT count(*) FROM financial_statement f JOIN stock s ON s.id = f.stock_id
      WHERE s.market_code = mk.mc AND f.created_at > r.restored_at
        AND f.shares_outstanding IS NOT NULL) fin,
+    -- 사정거리: 복원 뒤에 생긴 행만 센다. 판정이 옛 행의 상태를 APPLIED로 바꾼 것은 못 센다
+    -- (2026-10-05 HON 2026-06-29 병합 0.5 · 국내 인적분할 5행). 그날 HON의 고친 시총 순위는
+    -- 168~175이고 경계(1,000위)가 약 55억 달러라 미국 명부는 안 바뀐다. 국내 복원은 원장을
+    -- 안 읽는다(원장 보정은 JdbcStoredShareCounts 안에 있고 그것을 읽는 것은 미국 어댑터 하나다).
     (SELECT count(*) FROM corporate_action ca JOIN stock s ON s.id = ca.stock_id
      WHERE s.market_code = mk.mc AND ca.status = 'APPLIED'
        AND ca.ratio IS NOT NULL AND ca.ratio <> 1 AND ca.created_at > r.restored_at) ledger
