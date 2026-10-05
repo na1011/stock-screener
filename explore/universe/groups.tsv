@@ -1,0 +1,885 @@
+CREATE TABLE
+COPY 10440
+5513	UNM	Unum Group	6321	158306798.00	88.5700	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+5513	UNMA	Unum Group 6.250% Junior Subordinated Notes due 2058	6321	158306798.00		
+7789	ASB	Associated Banc-Corp	6022	188849659.00	29.0000	RESTORED:2026-08-07~2026-08-31 OBSERVED:2026-08-31~
+7789	ASBA	Associated Banc-Corp 6.625% Fixed-Rate Reset Subordinated Notes due 2033	6022	188849659.00		
+28917	DDS	Dillards Inc.	5311	15618000.00	654.1100	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+28917	DDT	Dillard's Capital Trust I 7.50% Capital Securities	5311	15617000.00		
+49196	HBAN	Huntington Bancshares Incorporated Common Stock	6021	2027130587.00	15.3300	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+49196	HBANL	Huntington Bancshares Incorporated Depositary Shares, Each Representing a 1/40th Interest in a Share of 6.875% Series J Non-Cumulative Perpetual Preferred Stock	6021	2027130587.00		
+49196	HBANM	Huntington Bancshares Incorporated Depositary Shares each representing a 1/1000th interest in a share of Huntington Series I Preferred Stock	6021	2027130587.00		
+49196	HBANP	Huntington Bancshares Incorporated Depositary Shares 4.500% Series H Non-Cumulative Perpetual Preferred Stock	6021	2027130587.00		
+49196	HBANZ	Huntington Bancshares Incorporated Depositary Shares, Each Representing a 1/1000th Interest in a Share of 5.50% Series L Non-Cumulative Perpetual Preferred Stock	6021	2027130587.00		
+55135	KELYA	Kelly Services, Inc. Class A Common Stock	7363	35100000.00		
+55135	KELYB	Kelly Services, Inc. Class B Common Stock	7363	35100000.00		
+64463	SLNH	Soluna Holdings, Inc. Common Stock	6199	244590575.00		
+64463	SLNHP	Soluna Holdings, Inc 9.0% Series A Cumulative Perpetual Preferred Stock	6199	244590575.00		
+72903	XEL	Xcel Energy Inc. Common Stock	4931	624634306.00	71.4000	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+72903	XELLL	Xcel Energy Inc. 6.25% Junior Subordinated Notes, Series due 2085	4931	624634306.00		
+73124	NTRS	Northern Trust Corporation Common Stock	6022	182955653.00	171.4000	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+73124	NTRSO	Northern Trust Corporation Depositary Shares Each Representing a 1/1,000th Interest in a Share of Series E Non-Cumulative Perpetual Preferred Stock	6022	182955653.00		
+88948	SENEA	Seneca Foods Corp. Class A Common Stock	2033	6840000.00		
+88948	SENEB	Seneca Foods Corp. Class B Common Stock	2033	6840000.00		
+92122	SO	The Southern Company	4911	1127301098.00	83.7200	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+92122	SOJC	The Southern Company Series 2017B 5.25% Junior Subordinated Notes due December 1, 2077	4911	1127301098.00		
+92122	SOJD	The Southern Company Series 2020A 4.95% Junior Subordinated Notes due January 30, 2080	4911	1127301098.00		
+92122	SOJE	The Southern Company Series 2020C 4.20% Junior Subordinated Notes due October 15, 2060	4911	1127301098.00		
+92122	SOJF	The Southern Company Series 2025A 6.50% Junior Subordinated Notes due March 15, 2085	4911	1127301098.00		
+92122	SOMN	The Southern Company 2025 Series A Corporate Units	4911	1127301098.00		
+101382	UMBF	UMB Financial Corporation Common Stock	6021	75950030.00	130.9400	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+101382	UMBFO	UMB Financial Corporation Depositary Shares Each Representing a 1/400th Interest in a Share of 7.750% Fixed-Rate Reset Non-Cumulative Perpetual Preferred Stock, Series B	6021	75950030.00		
+102752	VSEC	VSE Corporation Common Stock	8711	28064972.00	175.0800	RESTORED:2026-02-27~2026-04-24 RESTORED:2026-05-08~2026-05-15 RESTORED:2026-06-12~2026-08-31 OBSERVED:2026-08-31~2026-09-18
+102752	VSECU	VSE Corporation Tangible Equity Units	8711	28064972.00		
+107140	WLY	John Wiley & Sons, Inc. Class A	2731	53247000.00		
+107140	WLYB	John Wiley & Sons, Inc. Class B	2731	53247000.00		
+109380	ZION	Zions Bancorporation N.A. Common Stock	6021	145953355.00	63.1700	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+109380	ZIONP	Zions Bancorporation, N.A. Depositary Shares (Each representing 1/40th Interest in a Share of Series A Floating-Rate Non-Cumulative Perpetual Preferred Stock)	6021	145953355.00		
+203596	WSBC	WesBanco, Inc. Common Stock	6021	95905889.00		
+203596	WSBCO	WesBanco, Inc. Depositary Shares each representing 1/40th interest in a share of 7.375% Fixed-Rate Reset Non-Cumulative Perpetual Preferred Stock, Series B	6021	95905889.00		
+230557	SIGI	Selective Insurance Group, Inc. Common Stock	6331	59569119.00	87.1200	RESTORED:2025-09-24~2025-10-24 RESTORED:2025-11-07~2025-12-05 RESTORED:2025-12-12~2026-01-16 RESTORED:2026-01-30~2026-03-06 RESTORED:2026-05-15~2026-05-29 RESTORED:2026-06-05~2026-08-14 OBSERVED:2026-08-31~2026-09-18
+230557	SIGIP	Selective Insurance Group, Inc. Depositary Shares, each representing a 1/1,000th interest in a share of 4.60% Non-Cumulative Preferred Stock, Series B	6331	59569119.00		
+314489	BUSE	First Busey Corporation Class A Common Stock	6022	82576956.00		
+314489	BUSEP	First Busey Corporation Depositary Shares, Each Representing a 1/40thInterest in a Share of 8.25% Fixed-Rate Series B Non-Cumulative Perpetual Preferred Stock, $0.001 par value	6022	82576956.00		
+353184	AIRT	Air T, Inc. Common Stock	4513	2681748.00		
+353184	AIRTP	Air T, Inc. Air T Funding Alpha Income Trust Preferred Securities	4513	2681748.00		
+357294	HOV	Hovnanian Enterprises, Inc. Class A	1531	6412000.00		
+357294	HOVNP	Hovnanian Enterprises Inc Dep Shr Srs A Pfd	1531	6412000.00		
+700564	FULT	Fulton Financial Corporation Common Stock	6021	190914563.00		
+700564	FULTP	Fulton Financial Corporation Depositary Shares, Each Representing a 1/40th Interest in a Share of Fixed Rate Non-Cumulative Perpetual Preferred Stock, Series A	6021	190914563.00		
+707179	ONB	Old National Bancorp Common Stock	6021	386373000.00	24.9600	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+707179	ONBPO	Old National Bancorp Depositary Shares, Each Representing a 1/40th Interest in a Share of Series C Preferred Stock	6021	386373000.00		
+707179	ONBPP	Old National Bancorp Depositary Shares, Each Representing a 1/40th Interest in a Share of Series A Preferred Stock	6021	386373000.00		
+712534	FRME	First Merchants Corporation Common Stock	6021	63022741.00		
+712534	FRMEP	First Merchants Corporation Depository Shares	6021	63022741.00		
+712771	CNOB	ConnectOne Bancorp, Inc. Common Stock	6022	54295380.00		
+712771	CNOBP	ConnectOne Bancorp, Inc. Depositary Shares, each representing a 1/40th interest in a share of 5.25% Fixed-Rate Reset Non-Cumulative Perpetual Preferred Stock, Series A	6022	54295380.00		
+714310	VLY	Valley National Bancorp Common Stock	6021	552605226.00	12.8200	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+714310	VLYPN	Valley National Bancorp 8.250% Fixed-Rate Reset Non-Cumulative Perpetual Preferred Stock, Series C	6021	552605226.00		
+714310	VLYPO	Valley National Bancorp 5.50% Fixed-to-Floating Rate Non-Cumulative Perpetual Preferred Stock, Series B	6021	552605226.00		
+714310	VLYPP	Valley National Bancorp 6.25% Fixed-to-Floating Rate Non-Cumulative Perpetual Preferred Stock, Series A	6021	552605226.00		
+716634	RDI	Reading International Inc Class A Common Stock	7830	23842505.00		
+716634	RDIB	Reading International Inc Class B Common Stock	7830	23842505.00		
+720672	SF	Stifel Financial Corp.	6211	162556000.00	70.2800	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+720672	SFB	Stifel Financial Corp.5.20 percent Senior Notes due 2047	6211	162556000.00		
+727273	CDZI	CADIZ, Inc. Common Stock	4941	84677075.00		
+727273	CDZIP	Cadiz, Inc. Depositary Shares	4941	84677075.00		
+732717	T	AT&T Inc.	4813	6852385650.00	24.3000	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+732717	TBB	AT&T Inc. 5.350 Percent Global Notes due 2066	4813	6852385650.00		
+736772	CCNE	CNB Financial Corporation Common Stock	6022	29620885.00		
+736772	CCNEP	CNB Financial Corporation Depositary Shares, each representing a 1/40th ownership interest in a share of 7.125% Series A Fixed-Rate Non-Cumulative Perpetual Preferred Stock	6022	29620885.00		
+748592	ERNA	Ernexa Therapeutics Inc. Common Stock	2834	1632411.00		
+748592	ERNAW	Ernexa Therapeutics Inc. Warrants	2834	1632411.00		
+750577	HWC	Hancock Whitney Corporation Common Stock	6022	80223058.00	73.0900	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+750577	HWCPZ	Hancock Whitney Corporation 6.25% Subordinated Notes due 2060	6022	80223058.00		
+760498	BANF	BancFirst Corporation Common Stock	6021	33598745.00		
+760498	BANFP	BancFirst Corporation - BFC Capital Trust II Cumulative Trust Preferred Securities	6021	33598745.00		
+763901	BPOP	Popular, Inc. Common Stock	6022	63778501.00	158.1400	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+763901	BPOPM	Popular, Inc. Popular Capital Trust II - 6.125% Cumulative Monthly Income Trust Preferred Securities	6022	63778501.00		
+798941	FCNCA	First Citizens BancShares, Inc. Class A Common Stock	6022	11535792.00	2073.4600	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+798941	FCNCN	First Citizens BancShares, Inc. Depositary Shares, each representing a 1/40th interest in a share of 6.625% Non-Cumulative Perpetual Preferred Stock, Series E	6022	11535792.00		
+798941	FCNCO	First Citizens BancShares, Inc. 5.625% Non-Cumulative Perpetual Preferred Stock, Series C	6022	11535792.00		
+798941	FCNCP	First Citizens BancShares, Inc. Depositary Shares	6022	11535792.00		
+811156	CMS	CMS Energy Corporation	4931	313577136.00	63.7400	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+811156	CMSA	CMS Energy Corporation 5.625% Junior Subordinated Notes due 2078	4931	313577136.00		
+811156	CMSC	CMS Energy Corporation 5.875% Junior Subordinated Notes due 2078	4931	313577136.00		
+811156	CMSD	CMS Energy Corporation 5.875% Junior Subordinated Notes due 2079	4931	313577136.00		
+821130	AD	Array Digital Infrastructure, Inc.	4812	86479000.00		
+821130	UZD	Array Digital Infrastructure, Inc. 6.250% Senior Notes due 2069	4812	86479000.00		
+821130	UZE	Array Digital Infrastructure, Inc. 5.500% Senior Notes due 2070	4812	86479000.00		
+821130	UZF	Array Digital Infrastructure, Inc. 5.500% Senior Notes due 2070	4812	86479000.00		
+827054	MCHP	Microchip Technology Incorporated Common Stock	3674	543008691.00	81.3200	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+827054	MCHPP	Microchip Technology Incorporated Depositary Shares Each Representing a 1/20th Interest in a Share of 7.50% Series A Mandatory Convertible Preferred Stock	3674	543008691.00		
+827876	CLSK	CleanSpark, Inc. Common Stock	6199	256817073.00	12.8000	RESTORED:2025-10-10~2025-11-07
+827876	CLSKW	CleanSpark, Inc. Warrant	6199	256817073.00		
+838875	WVVI	Willamette Valley Vineyards, Inc. Common Stock	2080	4979529.00		
+838875	WVVIP	Willamette Valley Vineyards, Inc. Series A Redeemable Preferred Stock	2080	4979529.00		
+846617	DCBG	Dime Commercial Bancshares, Inc. 9.000% Junior Subordinated Notes	6021	44156595.00		
+846617	DCOM	Dime Commercial Bancshares, Inc.	6021	44156595.00		
+849399	GEN	Gen Digital Inc. Common Stock	7372	598587032.00	21.9900	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+849399	GENVR	Gen Digital Inc. Contingent Value Rights	7372	598587032.00		
+860748	KMPB	Kemper Corporation 5.875% Fixed-Rate Reset Junior Subordinated Debentures due 2062	6331	58923154.00		
+860748	KMPR	Kemper Corporation	6331	58923154.00		
+887733	CENT	Central Garden & Pet Company Common Stock	5190	61947000.00		
+887733	CENTA	Central Garden & Pet Company Class A Common Stock Nonvoting	5190	61947000.00		
+898174	RGA	Reinsurance Group of America, Incorporated	6311	65301665.00	249.4100	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+898174	RZC	Reinsurance Group of America, Incorporated 7.125% Fixed-Rate Reset Subordinated Debentures due 2052	6311	65301665.00		
+910606	REG	Regency Centers Corporation Common Stock	6798	183096790.00		
+910606	REGCO	Regency Centers Corporation 5.875% Series B Cumulative Redeemable Preferred Stock	6798	183096790.00		
+910606	REGCP	Regency Centers Corporation 6.25% Series A Cumulative Redeemable Preferred Stock	6798	183096790.00		
+922224	PPL	PPL Corporation	4911	752350362.00	34.2100	RESTORED:2025-09-24~2026-03-06
+922224	PPLC	PPL Corporation Corporate Units	4911	752350362.00	44.6750	RESTORED:2026-03-06~2026-08-31 OBSERVED:2026-08-31~
+930236	RWT	Redwood Trust, Inc.	6798	125612432.00		
+930236	RWTN	Redwood Trust, Inc. 9.125% Senior Notes Due 2029	6798	125612432.00		
+930236	RWTO	Redwood Trust, Inc. 9.00% Senior Notes Due 2029	6798	125612432.00		
+930236	RWTP	Redwood Trust, Inc. 9.125% Senior Notes Due 2030	6798	125612432.00		
+930236	RWTQ	Redwood Trust, Inc. 9.500% Senior Notes Due 2030	6798	125612432.00		
+930236	RWTS	Redwood Trust, Inc. 9.75% Senior Notes Due 2031	6798	125612432.00		
+936340	DTB	DTE Energy Company 2020 Series G 4.375% Junior Subordinated Debentures due 2080	4911	208028313.00		
+936340	DTE	DTE Energy Company	4911	208028313.00	124.4500	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+936340	DTG	DTE Energy Company 2021 Series E 4.375% Junior Subordinated Debentures	4911	208028313.00		
+936340	DTK	DTE Energy Company 2025 Series H 6.25% Junior Subordinated Debentures due 2085	4911	208028313.00		
+936340	DTW	DTE Energy Company 2017 Series E 5.25% Junior Subordinated Debentures due 2077	4911	208028313.00		
+936528	WAFD	WaFd, Inc. Common Stock	6021	73995238.00		
+936528	WAFDP	WaFd, Inc. Depositary Shares	6021	73995238.00		
+947484	ACGL	Arch Capital Group Ltd. Common Stock	6331	341229126.00	93.6000	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+947484	ACGLN	Arch Capital Group Ltd. Depositary Shares, each Representing a 1/1,000th Interest in a 4.550% Non-Cumulative Preferred Share, Series G	6331	341229126.00		
+947484	ACGLO	Arch Capital Group Ltd. Depositary Shares Each Representing 1/1,000th Interest in a Share of 5.45% Non-Cumulative Preferred Shares, Series F	6331	341229126.00		
+948320	LFMD	LifeMD, Inc. Common Stock	8011	48200837.00		
+948320	LFMDP	LifeMD, Inc. 8.875% Series A Cumulative Perpetual Preferred Stock	8011	48200837.00		
+1000209	MBNKO	Medallion Bank Fixed-Rate Reset Non-Cumulative Perpetual Preferred Stock, Series G, par value $1.00 per share	6199	22960249.00		
+1000209	MFIN	Medallion Financial Corp. Common Stock	6199	22960249.00		
+1004434	AMG	Affiliated Managers Group	6282	25859933.00	371.4300	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1004434	MGR	Affiliated Managers Group, Inc. 5.875% Junior Subordinated Notes due 2059	6282	25859933.00		
+1004434	MGRB	Affiliated Managers Group, Inc. 4.750% Junior Subordinated Notes due 2060	6282	25859933.00		
+1004434	MGRD	Affiliated Managers Group, Inc. 4.200% Junior Subordinated Notes due 2061	6282	25859933.00		
+1004434	MGRE	Affiliated Managers Group, Inc. 6.750% Junior Subordinated Notes due 2064	6282	25859933.00		
+1012019	RUSHA	Rush Enterprises, Inc. Common Stock Cl A	5500	80215000.00	48.1900	RESTORED:2026-01-23~2026-04-10 RESTORED:2026-05-01~2026-06-12 RESTORED:2026-07-17~2026-08-21
+1012019	RUSHB	Rush Enterprises, Inc. Class B	5500	80215000.00	56.7100	RESTORED:2025-09-24~2025-10-03 RESTORED:2026-04-10~2026-05-01 RESTORED:2026-06-12~2026-07-17 RESTORED:2026-08-21~2026-08-31 OBSERVED:2026-08-31~
+1014763	AIMD	Ainos, Inc. Common Stock	3577	7384073.00		
+1014763	AIMDW	Ainos, Inc. Warrants	3577	7384073.00		
+1015328	WTFC	Wintrust Financial Corporation Common Stock	6022	67465967.00	145.0200	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1015328	WTFCN	Wintrust Financial Corporation Depositary Shares, Each Representing a 1/1,000th Interest in a Share of 7.875% Fixed-Rate Reset Non-Cumulative Perpetual Preferred StocK	6022	67465967.00		
+1015383	POWW	Outdoor Holding Company Common Stock	7389	116015357.00		
+1015383	POWWP	Outdoor Holding Company 8.75% Series A Cumulative Redeemable Perpetual Preferred Stock	7389	116015357.00		
+1025835	EFSC	Enterprise Financial Services Corporation Common Stock	6022	36192520.00		
+1025835	EFSCP	Enterprise Financial Services Corporation Depositary Shares Each Representing a 1/40th Interest in a Share of 5% Fixed Rate Non-Cumulative Perpetual Preferred Stock, Series A	6022	36192520.00		
+1032033	SLM	SLM Corporation Common Stock	6141	187946958.00	25.5800	RESTORED:2025-09-24~2026-02-13
+1032033	SLMBP	SLM Corporation Floating Rate Non-Cumulative Preferred Stock, Series B	6141	187946958.00		
+1032208	SRE	Sempra	4932	653690046.00	78.3800	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1032208	SREA	Sempra 5.750% Junior Subordinated Notes due 2079	4932	653690046.00		
+1041657	UONE	Urban One, Inc. Class A Common Stock	4832	4460275.00		
+1041657	UONEK	Urban One, Inc. Class D Common Stock	4832	4460275.00		
+1042046	AFG	American Financial Group, Inc.	6331	82921466.00	139.1000	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1042046	AFGB	American Financial Group, Inc. 5.875% Subordinated Debentures due 2059	6331	82921466.00		
+1042046	AFGC	American Financial Group, Inc. 5.125% Subordinated Debentures due 2059	6331	82921466.00		
+1042046	AFGD	American Financial Group, Inc. 5.625% Subordinated Debentures due 2060	6331	82921466.00		
+1042046	AFGE	American Financial Group, Inc. 4.500% Subordinated Debentures due 2060	6331	82921466.00		
+1050446	MSTR	Strategy Inc Common Stock Class A	6199	343275000.00	160.0100	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1050446	STRC	Strategy Inc Variable Rate Series A Perpetual Stretch Preferred Stock	6199	343275000.00		
+1050446	STRD	Strategy Inc 10.00% Series A Perpetual Stride Preferred Stock	6199	343275000.00		
+1050446	STRF	Strategy Inc 10.00% Series A Perpetual Strife Preferred Stock	6199	343275000.00		
+1050446	STRK	Strategy Inc 8.00% Series A Perpetual Strike Preferred Stock	6199	343275000.00		
+1055160	MFA	MFA Financial, Inc	6798	101087938.00		
+1055160	MFAN	MFA Financial Inc	6798	101087938.00		
+1055160	MFAO	MFA Financial, Inc. 9.000% Senior Notes due 2029	6798	101087938.00		
+1075415	DHC	Diversified Healthcare Trust Common Shares of Beneficial Interest	6798	242128988.00		
+1075415	DHCNI	Diversified Healthcare Trust 5.625% Senior Notes due 2042	6798	242128988.00		
+1075415	DHCNL	Diversified Healthcare Trust 6.25% Senior Notes Due 2046	6798	242128988.00		
+1076930	NOVT	Novanta Inc. Common Stock	3690	37817770.00	149.2700	RESTORED:2026-02-06~2026-02-27 RESTORED:2026-05-15~2026-07-17 RESTORED:2026-08-07~2026-08-21 OBSERVED:2026-08-31~2026-09-18 OBSERVED:2026-09-25~
+1076930	NOVTU	Novanta Inc. Tangible Equity Units	3690	37817770.00		
+1077428	TCBI	Texas Capital Bancshares, Inc. Common Stock	6022	43474369.00		
+1077428	TCBIO	Texas Capital Bancshares, Inc. Depositary Shares 5.75% Fixed Rate Non-Cumulative Perpetual Preferred Stock Series B	6022	43474369.00		
+1080657	SQFT	Presidio Property Trust, Inc. Class A Common Stock	6798	1434432.00		
+1080657	SQFTP	Presidio Property Trust, Inc. 9.375% Series D Cumulative Redeemable Perpetual Preferred Stock, $0.01 par value per share	6798	1434432.00		
+1080657	SQFTW	Presidio Property Trust, Inc. Series A Common Stock Purchase Warrants	6798	1434432.00		
+1091667	CHTR	Charter Communications, Inc. Class A Common Stock New	4841	123969262.00	109.2900	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1091667	CHTRP	Charter Communications, Inc. Series A Cumulative Redeemable Preferred Stock	4841	123969262.00		
+1109354	BRKR	Bruker Corporation Common Stock	3826	152352967.00	63.2400	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1109354	BRKRP	Bruker Corporation 6.375% Mandatory Convertible Preferred Stock, Series A	3826	152352967.00		
+1126956	SR	Spire Inc.	4924	59116792.00	81.4700	RESTORED:2025-09-26~2026-01-09 RESTORED:2026-01-30~2026-05-08 RESTORED:2026-05-15~2026-05-22
+1126956	SRJN	Spire Inc. 6.375% Junior Subordinated Notes due 2086	4924	59116792.00		
+1130713	BBBYW	Neighborhood Intelligence, Inc. Warrants	5961	95330379.00		
+1130713	NXH	Neighborhood Intelligence, Inc. Common Stock	5961	95330379.00		
+1137774	PFH	Prudential Financial, Inc. 4.125% Junior Subordinated Notes due 2060	6311	345000000.00		
+1137774	PRH	Prudential Financial, Inc. 5.950% Junior Subordinated Notes due 2062	6311	345000000.00		
+1137774	PRS	Prudential Financial, Inc. 5.625% Junior Subordinated Notes due 2058	6311	345000000.00		
+1137774	PRU	Prudential Financial, Inc.	6311	345000000.00	112.6000	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1166691	CCZ	Comcast Holdings Corp. 2.0% Exchangeable Subordinated Debentures due October 15, 2029 (ZONES)	4841	3593000000.00		
+1166691	CMCSA	Comcast Corporation Class A Common Stock	4841	3593000000.00	21.5700	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1174169	AQN	Algonquin Power & Utilities Corp	4911	768351419.00	5.4300	
+1174169	AQNB	Algonquin Power & Utilities Corp. 6.20% Fixed-to-Floating Subordinated Notes Series 2019-A due July 1, 2079	4911	768351419.00		
+1210708	STRR	Star Equity Holdings, Inc. Common Stock	7363	3689403.00		
+1210708	STRRP	Star Equity Holdings, Inc. 10% Series A Cumulative Perpetual Preferred Stock	7363	3689403.00		
+1234006	GOOD	Gladstone Commercial Corporation Real Estate Investment Trust	6519	48407501.00		
+1234006	GOODN	Gladstone Commercial Corporation 6.625% Series E Cumulative Redeemable Preferred Stock	6519	48407501.00		
+1234006	GOODO	Gladstone Commercial Corporation 6.00% Series G Cumulative Redeemable Preferred Stock, par value $0.001 per share	6519	48407501.00		
+1259429	OXSQ	Oxford Square Capital Corp. Common Stock		107707775.00		
+1259429	OXSQG	Oxford Square Capital Corp. 5.50% Notes due 2028		107707775.00		
+1259429	OXSQH	Oxford Square Capital Corp. 7.75% Notes due 2030		107707775.00		
+1267238	AIZ	Assurant, Inc.	6399	49323767.00	267.3200	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1267238	AIZN	Assurant, Inc. 5.25% Subordinated Notes due 2061	6399	49323767.00		
+1273685	ADAM	Adamas Trust, Inc. Common Stock	6798	89879786.00		
+1273685	ADAMG	Adamas Trust, Inc. 9.125% Senior Notes Due 2030	6798	89879786.00		
+1273685	ADAMH	Adamas Trust, Inc. 9.875% Senior Notes Due 2030	6798	89879786.00		
+1273685	ADAMI	Adamas Trust, Inc. 9.125% Senior Notes Due 2029	6798	89879786.00		
+1273685	ADAMK	Adamas Trust, Inc. 9.600% Senior Notes Due 2031	6798	89879786.00		
+1273685	ADAML	Adamas Trust, Inc. 6.875% Series F Fixed-to-Floating Rate Cumulative Redeemable Preferred Stock, $0.01 par value per share	6798	89879786.00		
+1273685	ADAMM	Adamas Trust, Inc. 7.875% Series E Fixed-to-Floating Rate Cumulative Redeemable Preferred Stock	6798	89879786.00		
+1273685	ADAMN	Adamas Trust, Inc. 8.00% Series D Fixed-to-Floating Rate Cumulative Redeemable Preferred Stock	6798	89879786.00		
+1273685	ADAMO	Adamas Trust, Inc. 9.250% Senior Notes Due 2031	6798	89879786.00		
+1273685	ADAMZ	Adamas Trust, Inc. 7.000% Series G Cumulative Redeemable Preferred Stock, $0.01 par value per share	6798	89879786.00		
+1278752	MFIC	MidCap Financial Investment Corporation Common Stock		82372628.00		
+1278752	MFICL	MidCap Financial Investment Corporation 8.00% Notes due 2028		82372628.00		
+1280784	HCXY	Hercules Capital, Inc. 6.25% Notes due 2033		187164000.00		
+1280784	HTGC	Hercules Capital, Inc.		187164000.00		
+1283699	TMUS	T-Mobile US, Inc. Common Stock	4812	1072671613.00	163.6400	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1283699	TMUSI	T-Mobile US, Inc. 5.500% Senior Notes due June 2070	4812	1072671613.00		
+1283699	TMUSL	T-Mobile US, Inc. 6.250% Senior Notes due 2069	4812	1072671613.00		
+1283699	TMUSZ	T-Mobile US, Inc. 5.500% Senior Notes due March 2070	4812	1072671613.00		
+1321741	GAIN	Gladstone Investment Corporation Business Development Company		39821967.00		
+1321741	GAING	Gladstone Investment Corporation 7.125% Notes due 2031		39821967.00		
+1321741	GAINI	Gladstone Investment Corporation 7.875% Notes due 2030		39821967.00		
+1321741	GAINZ	Gladstone Investment Corporation 4.875% Notes due 2028		39821967.00		
+1326160	DUK	Duke Energy Corporation	4931	779596217.00	114.1300	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1326160	DUKB	Duke Energy Corporation 5.625% Junior Subordinated Debentures due 2078	4931	779596217.00		
+1326160	DUKU	Duke Energy Corporation Corporate Units	4931	779596217.00		
+1336917	UA	Under Armour, Inc. Class C Common Stock, $0.0003 1/3 par value	2300	431937000.00		
+1336917	UAA	Under Armour, Inc.	2300	431937000.00		
+1341317	BWB	Bridgewater Bancshares, Inc. Common Stock	6022	27883823.00		
+1341317	BWBBP	Bridgewater Bancshares, Inc. Depositary Shares, Each Representing a 1/100th Interest in a Share of 5.875% Non-Cumulative Perpetual Preferred Stock, Series A	6022	27883823.00		
+1375365	SMCI	Super Micro Computer, Inc. Common Stock	3571	656965384.00	43.6900	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1375365	SMCIP	Super Micro Computer, Inc. Depositary Shares representing a 1/20th Interest in a Share of 7% Series A Mandatory Convertible Preferred Stock	3571	601418482.00		
+1377936	SAJ	Saratoga Investment Corp. 8.00% Notes due 2027		16310601.00		
+1377936	SAR	SARATOGA INVESTMENT CORP. NEW		16310601.00		
+1377936	SAV	Saratoga Investment Corp. 7.50% Notes due 2031		16310601.00		
+1377936	SAX	Saratoga Investment Corp. 8.00% Notes due 2031				
+1377936	SAY	Saratoga Investment Corp. 8.125% Notes due 2027		16310601.00		
+1377936	SAZ	Saratoga Investment Corp. 8.50% Notes due 2028		16310601.00		
+1397183	IVDA	Iveda Solutions, Inc. Common Stock	7372	12519027.00		
+1397183	IVDAW	Iveda Solutions, Inc. Warrant	7372	12519027.00		
+1402328	SBFM	Sunshine Biopharma Inc. Common Stock	2834	3877337.00		
+1402328	SBFMW	Sunshine Biopharma Inc. Warrant	2834	3877337.00		
+1404912	KKR	KKR & Co. Inc.	6282	897635601.00	90.2900	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1404912	KKRS	KKR Group Finance Co. IX LLC 4.625% Subordinated Notes due 2061	6282	897635601.00		
+1404912	KKRT	KKR & Co. Inc. 6.875% Subordinated Notes due 2065	6282	897635601.00		
+1408534	FGBI	First Guaranty Bancshares, Inc. Common Stock	6035	16539094.00		
+1408534	FGBIP	First Guaranty Bancshares, Inc. 6.75% Series A Fixed-Rate Non-Cumulative Perpetual Preferred Stock	6035	16539094.00		
+1409493	CIM	Chimera Investment Corp.	6798	83711818.00		
+1409493	CIMN	Chimera Investment Corporation 9.000% Senior Notes due 2029	6798	83711818.00		
+1409493	CIMO	Chimera Investment Corporation 9.250% Senior Notes due 2029	6798	83711818.00		
+1409493	CIMP	Chimera Investment Corporation 8.875% Senior Notes due 2030	6798	83711818.00		
+1412100	MHLA	Maiden Holdings, Ltd.	6331	99682710.00		
+1412100	MHNC	MAIDEN HOLDINGS NORTH AMERICA, LTD	6331	99682710.00		
+1414767	NCPL	Netcapital Inc. Common Stock	6199	7847899.00		
+1414767	NCPLW	Netcapital Inc. Warrants	6199	7847899.00		
+1419554	BBLG	Bone Biologics Corp Common Stock	3842	2756057.00		
+1419554	BBLGW	Bone Biologics Corp Warrants	3842	2756057.00		
+1423689	AGNC	AGNC Investment Corp. Common Stock	6798	1185481447.00		
+1423689	AGNCL	AGNC Investment Corp. Depositary Shares Each Representing a 1/1,000th Interest in a Share of 7.75% Series G Fixed-Rate Reset Cumulative Redeemable Preferred Stock	6798	1185481447.00		
+1423689	AGNCM	AGNC Investment Corp. Depositary Shares rep 6.875% Series D Fixed-to-Floating Cumulative Redeemable Preferred Stock	6798	1185481447.00		
+1423689	AGNCN	AGNC Investment Corp. Depositary Shares Each Representing a 1/1,000th Interest in a Share of 7.00% Series C Fixed-To-Floating Rate Cumulative Redeemable Preferred Stock	6798	1185481447.00		
+1423689	AGNCO	AGNC Investment Corp. Depositary Shares, each representing a 1/1,000th interest in a share of 6.50% Series E Fixed-to-Floating Cumulative Redeemable Preferred Stock	6798	1185481447.00		
+1423689	AGNCP	AGNC Investment Corp. Depositary Shares Each Representing a 1/1,000th Interest in a Share of 6.125% Series F Fixed-to-Floating Rate Cumulative Redeemable Preferred Stock	6798	1185481447.00		
+1423689	AGNCZ	AGNC Investment Corp. Depositary Shares Each Representing a 1/1,000th Interest in a Share of 8.75% Series H Fixed-Rate Cumulative Redeemable Preferred Stock	6798	1185481447.00		
+1429260	FBIO	Fortress Biotech, Inc. Common Stock	2834	33311012.00		
+1429260	FBIOP	Fortress Biotech, Inc. 9.375% Series A Cumulative Redeemable Perpetual Preferred Stock	2834	33311012.00		
+1462418	ASPS	Altisource Portfolio Solutions S.A. Common Stock	7380	11420206.00		
+1462418	ASPSW	Altisource Portfolio Solutions S.A. Net Settle Stakeholder Warrants	7380	11420206.00		
+1462418	ASPSZ	Altisource Portfolio Solutions S.A. Cash Exercise Stakeholder Warrants	7380	11420206.00		
+1464343	ATLC	Atlanticus Holdings Corporation Common Stock	6141	15170038.00		
+1464343	ATLCL	Atlanticus Holdings Corporation 6.125% Senior Notes due 2026	6141	15170038.00		
+1464343	ATLCP	Atlanticus Holdings Corporation 7.625% Series B Cumulative Perpetual Preferred Stock, no par value per share	6141	15170038.00		
+1464343	ATLCZ	Atlanticus Holdings Corporation 9.25% Senior Notes due 2029	6141	15170038.00		
+1464423	PMT	PennyMac Mortgage Investment Trust	6798	87202362.00		
+1464423	PMTU	PennyMac Mortgage Investment Trust 8.50% Senior Notes due 2028	6798	87202362.00		
+1464423	PMTV	PennyMac Mortgage Investment Trust 9.00% Senior Notes due 2030	6798	87202362.00		
+1464423	PMTW	PennyMac Mortgage Investment Trust 9.00% Senior Notes due 2030	6798	87202362.00		
+1464790	RILY	BRC Group Holdings, Inc. Common Stock	6282	40199755.00		
+1464790	RILYG	BRC Group Holdings, Inc. 5.00% Senior Notes due 2026	6282	40199755.00		
+1464790	RILYL	BRC Group Holdings, Inc. Depositary Shares each representing 1/1000th in a share of 7.375% Series B Cumulative Perpetual Preferred Stock, par value $0.0001	6282	40199755.00		
+1464790	RILYN	BRC Group Holdings, Inc. 6.50% Senior Notes Due 2026	6282	40199755.00		
+1464790	RILYP	BRC Group Holdings, Inc. Depositary Shares, each representing a 1/1000th fractional interest in a share of Series A Cumulative Perpetual Preferred Stock	6282	40199755.00		
+1464790	RILYT	BRC Group Holdings, Inc. 6.00% Senior Notes Due 2028	6282	40199755.00		
+1464790	RILYZ	BRC Group Holdings, Inc. 5.25% Senior Notes due 2028	6282	40199755.00		
+1466026	MSBI	Midland States Bancorp, Inc. Common Stock	6022	20752112.00		
+1466026	MSBIP	Midland States Bancorp, Inc. Depositary Shares Each Representing a 1/40th Interest in a Share of 7.750% Fixed-Rate Reset Non-Cumulative Perpetual Preferred Stock, Series A	6022	20752112.00		
+1468492	HSCS	HeartSciences Inc. Common Stock	6199	3899491.00		
+1468492	HSCSW	HeartSciences Inc. Warrant	6199	3899491.00		
+1468929	NXGL	NexGel, Inc Common Stock	3841	9747663.00		
+1468929	NXGLW	NexGel, Inc Warrant	3841	9747663.00		
+1482541	BNC	CEA Industries Inc. Common Stock	0700	42895841.00		
+1482541	BNCWW	CEA Industries Inc. Warrant	0700	42895841.00		
+1482541	BNCWZ	CEA Industries Inc. Warrant	0700	42895841.00		
+1487428	HRZN	Horizon Technology Finance Corporation Common Stock		67033909.00		
+1487428	HTFC	Horizon Technology Finance Corporation 6.25% Notes due 2027		67033909.00		
+1487918	OFS	OFS Capital Corporation Common Stock		13398078.00		
+1487918	OFSSH	OFS Capital Corporation 4.95% Notes due 2028		13398078.00		
+1487918	OFSSO	OFS Capital Corporation 7.50% Notes due 2028		13398078.00		
+1488813	CUBB	Customers Bancorp, Inc. 5.375% Subordinated Notes Due 2034	6022	33783799.00		
+1488813	CUBI	CUSTOMERS BANCORP INC	6022	33783799.00		
+1490349	PFX	PhenixFIN Corporation Common Stock		1931273.00		
+1490349	PFXNZ	PhenixFIN Corporation 5.25% Notes due 2028		1931273.00		
+1495240	LAND	Gladstone Land Corporation Common Stock	6798	43136573.00		
+1495240	LANDO	Gladstone Land Corporation 6.00% Series B Cumulative Redeemable Preferred Stock	6798	43136573.00		
+1495240	LANDP	Gladstone Land Corporation 6.00% Series C Cumulative Redeemable Preferred Stock	6798	43136573.00		
+1496099	NMFC	New Mountain Finance Corporation Common Stock		94452390.00		
+1496099	NMFCZ	New Mountain Finance Corporation 8.250% Notes due 2028		94452390.00		
+1502292	PRHI	Presurance Holdings, Inc. Common Stock	6331	3746092.00		
+1502292	PRHIZ	Presurance Holdings, Inc. 9.75% Senior Unsecured Notes due 2028	6331	3746092.00		
+1504619	PFLA	PennantPark Floating Rate Capital Ltd. 7.375% Notes Due 2031		99217896.00		
+1504619	PFLT	PennantPark Floating Rate Capital Ltd.		99217896.00		
+1509470	NSLR	Neostellar Capital Corp. Common Stock		26473222.00		
+1509470	NSLRL	Neostellar Capital Corp. 6.00% Notes due 2026		26473222.00		
+1512228	NB	NioCorp Developments Ltd. Common Stock	1000	145587048.00		
+1512228	NIOBW	NioCorp Developments Ltd. Warrant	1000	145587048.00		
+1514281	MITN	TPG Mortgage Investment Trust, Inc. 9.500% Senior Notes due 2029	6798	31803475.00		
+1514281	MITP	TPG Mortgage Investment Trust, Inc. 9.500% Senior Notes due 2029	6798	31803475.00		
+1514281	MITT	TPG Mortgage Investment Trust, Inc.	6798	31803475.00		
+1518461	AMPG	Amplitech Group, Inc. Common Stock	3669	30043887.00		
+1518461	AMPGZ	Amplitech Group, Inc. Series B Right	3669	30043887.00		
+1527166	CG	The Carlyle Group Inc. Common Stock	6282	356332798.00	39.8200	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1527166	CGABL	The Carlyle Group Inc. 4.625% Subordinated Notes due 2061	6282	356332798.00		
+1527541	WHLR	Wheeler Real Estate Investment Trust, Inc. Common Stock	6798	1931568.00		
+1527541	WHLRD	Wheeler Real Estate Investment Trust, Inc. Series D Cumulative Preferred Stock	6798	1931568.00		
+1527541	WHLRL	Wheeler Real Estate Investment Trust, Inc. 7.00% Senior Subordinated Convertible Notes Due 2031	6798	1931568.00		
+1527541	WHLRP	Wheeler Real Estate Investment Trust, Inc. Class B Preferred Stock	6798	1931568.00		
+1527590	RC	Ready Capital Corporation	6798	165190992.00		
+1527590	RCD	Ready Capital Corporation 9.00% Senior Notes due 2029	6798	165190992.00		
+1534254	CICB	CION Investment Corporation 7.50% Notes due 2029		49202704.00		
+1534254	CICC	CION Investment Corporation 7.50% Notes due 2031		49202704.00		
+1534254	CION	CION Investment Corporation		49202704.00		
+1552198	WHF	WhiteHorse Finance, Inc. Common Stock		21476471.00		
+1552198	WHFCL	WhiteHorse Finance, Inc. 7.875% Notes due 2028		21476471.00		
+1560293	TNON	Tenon Medical, Inc. Common Stock	3841	667047.00		
+1560293	TNONW	Tenon Medical, Inc. Warrant	3841	667047.00		
+1560672	EARN	Ellington Credit Company	6798	37559195.00		
+1560672	ELLA	Ellington Credit Company 8.50% Notes due 2031	6798	37559195.00		
+1561032	NHP	National Healthcare Properties, Inc. Class A Common Stock	6798	45059000.00		
+1561032	NHPBP	National Healthcare Properties, Inc. 7.125% Series B Cumulative Redeemable Perpetual Preferred Stock	6798	45059000.00		
+1562463	INBK	First Internet Bancorp Common Stock	6022	8733574.00		
+1562463	INBKZ	First Internet Bancorp 6.0% Fixed-to-Floating Rate Subordinated Notes Due 2029	6022	8733574.00		
+1564708	NWS	News Corporation Class B Common Stock	2711	558400000.00	31.6500	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1564708	NWSA	News Corporation Class A Common Stock	2711	558400000.00		
+1570585	LBTYA	Liberty Global Ltd. Class A Common Shares	4841	337909892.00		
+1570585	LBTYB	Liberty Global Ltd. Class B Common Shares	4841	337909892.00	12.4500	RESTORED:2026-02-06~2026-02-20 RESTORED:2026-03-20~2026-03-27 RESTORED:2026-04-24~2026-05-22
+1570585	LBTYK	Liberty Global Ltd. Class C Common Shares	4841	337909892.00		
+1580149	BIVI	BioVie Inc. Class A Common Stock	2834	7542638.00		
+1580149	BIVIW	BioVie Inc. Warrant	2834	7542638.00		
+1584831	OXBR	Oxbridge Re Holdings Limited Ordinary Shares	6331	8138577.00		
+1584831	OXBRW	Oxbridge Re Holdings Limited Warrant expiring 3/26/2029	6331	8138577.00		
+1587987	NEWT	NewtekOne, Inc. Common Stock	6021	28884731.00		
+1587987	NEWTG	NewtekOne, Inc. 8.50% Fixed Rate Senior Notes due 2029	6021	28884731.00		
+1587987	NEWTH	NewtekOne, Inc. 8.625% Fixed Rate Senior Notes due 2029	6021	28884731.00		
+1587987	NEWTI	NewtekOne, Inc. 8.00% Fixed Rate Senior Notes due 2028	6021	28884731.00		
+1587987	NEWTO	NewtekOne, Inc. 8.50% Fixed Rate Senior Notes due 2031	6021	28884731.00		
+1587987	NEWTP	NewtekOne, Inc. Depositary Shares, Non-Cumulative Perpetual Preferred Stock, Series B	6021	28884731.00		
+1590364	FTAI	FTAI Aviation Ltd. Common Stock	7350	102707091.00	167.0300	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1590364	FTAIM	FTAI Aviation Ltd. 9.500% Fixed-Rate Reset Series D Cumulative Perpetual Redeemable Preferred Shares	7350	102707091.00		
+1591890	FGNX	FG Nexus Inc. Common Stock	6199	5095688.00		
+1591890	FGNXP	FG Nexus Inc. 8.00% Cumulative Preferred Stock	6199	5095688.00		
+1593538	JSM	Navient Corporation 6% Senior Notes due December 15, 2043	6211	93783828.00		
+1593538	NAVI	Navient Corporation Common Stock	6211	93783828.00		
+1610820	BCTX	BriaCell Therapeutics Corp. Common Shares	2834	8699787.00		
+1610820	BCTXL	BriaCell Therapeutics Corp. Warrant expiring 2031	2834	8699787.00		
+1610820	BCTXZ	BriaCell Therapeutics Corp. Warrant expiring 2030	2834	8699787.00		
+1617640	Z	Zillow Group, Inc. Class C Capital Stock	7389	233891000.00	31.2500	RESTORED:2025-09-24~2026-02-27 RESTORED:2026-03-13~2026-04-02 RESTORED:2026-07-02~2026-07-31
+1617640	ZG	Zillow Group, Inc. Class A Common Stock	7389	233891000.00	28.0950	RESTORED:2026-02-27~2026-03-13 RESTORED:2026-04-02~2026-07-02 RESTORED:2026-07-31~2026-08-31 OBSERVED:2026-08-31~
+1628171	RVMD	Revolution Medicines, Inc. Common Stock	2836	214336418.00	206.6400	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1628171	RVMDW	Revolution Medicines, Inc. Warrant	2836	214336418.00		
+1629019	MBIN	Merchants Bancorp Common Stock	6022	45938075.00		
+1629019	MBINL	Merchants Bancorp Depositary Shares, Each Representing a 1/40thInterest in a Share of 7.25% Fixed Rate Series E Non-CumulativePerpetual Preferred Stock, without par value	6022	45938075.00		
+1629019	MBINM	Merchants Bancorp Depositary Shares, Each Representing a 1/40th Interest in a Share of 8.25% Fixed-Rate Reset Series D Non-Cumulative Perpetual Preferred Stock	6022	45938075.00		
+1629019	MBINN	Merchants Bancorp Depositary Shares Preferred Series C	6022	45938075.00		
+1635077	ACON	Aclarion, Inc. Common Stock	8071	2882371.00		
+1635077	ACONW	Aclarion, Inc. Warrant	8071	2882371.00		
+1638911	DUKR	DUKE Robotics Corp. Common Stock	3721	3425978.00		
+1638911	DUKRW	DUKE Robotics Corp. Warrant	3721	3425978.00		
+1652044	GOOG	Alphabet Inc. Class C Capital Stock	7370	12230000000.00	330.3900	RESTORED:2025-09-24~2025-11-21 RESTORED:2025-12-05~2026-02-20 RESTORED:2026-07-31~2026-08-07
+1652044	GOOGL	Alphabet Inc. Class A Common Stock	7370	12230000000.00	343.5000	RESTORED:2025-11-21~2025-12-05 RESTORED:2026-02-20~2026-07-31 RESTORED:2026-08-07~2026-08-31 OBSERVED:2026-08-31~
+1652044	GOOGM	Alphabet Inc. Depositary Shares representing a 1/20th Interest in a Share of Series A Mandatory Convertible Preferred Stock	7370	12230000000.00		
+1652044	GOOGN	Alphabet Inc. Depositary Shares representing a 1/20th Interest in a Share of Series B Mandatory Convertible Preferred Stock	7370	12230000000.00		
+1653384	RWAY	Runway Growth Finance Corp. Common Stock		41909904.00		
+1653384	RWAYI	Runway Growth Finance Corp. 7.25% Notes due 2031		41909904.00		
+1653384	RWAYL	Runway Growth Finance Corp. 7.50% Notes due 2027		41909904.00		
+1657853	HTZ	Hertz Global Holdings, Inc Common Stock	7510	315764523.00		
+1657853	HTZWW	Hertz Global Holdings, Inc Warrant	7510	315764523.00		
+1673481	LTRYW	Sports Entertainment Gaming Global Corporation Warrants	7372	22816406.00		
+1673481	SEGG	Sports Entertainment Gaming Global Corporation Common Stock	7372	22816406.00		
+1675033	GECC	Great Elm Capital Corp. Common Stock		13889750.00		
+1675033	GECCG	Great Elm Capital Corp. 7.75% Notes Due 2030		13889750.00		
+1675033	GECCH	Great Elm Capital Corp. 8.125% Notes Due 2029		13889750.00		
+1675033	GECCI	Great Elm Capital Corp. 8.50% NOTES DUE 2029		13889750.00		
+1676047	NTRB	Nutriband Inc. Common Stock	3842	12155983.00		
+1676047	NTRBW	Nutriband Inc. Warrant	3842	12155983.00		
+1685040	BHF	Brighthouse Financial, Inc. Common Stock	6311	57511563.00		
+1685040	BHFAL	Brighthouse Financial, Inc. 6.25% Junior Subordinated Debentures due 2058	6311	57511563.00		
+1685040	BHFAM	Brighthouse Financial, Inc. Depositary shares each representing a 1/1,000th Interest in a Share of 4.625% Non-Cumulative Preferred Stock, Series D	6311	57511563.00		
+1685040	BHFAN	Brighthouse Financial, Inc. Depositary shares, each representing a 1/1,000th interest in a share of 5.375% Non-Cumulative Preferred Stock, Series C	6311	57511563.00		
+1685040	BHFAO	Brighthouse Financial, Inc. Depositary Shares 6.75% Non-Cumulative Preferred Stock, Series B	6311	57511563.00		
+1685040	BHFAP	Brighthouse Financial, Inc. Depositary Shares 6.6% Non-Cumulative Preferred Stock, Series A	6311	57511563.00		
+1687187	METC	Ramaco Resources, Inc. Class A Common Stock	1220	44752000.00		
+1687187	METCB	Ramaco Resources, Inc. Class B Common Stock	1220	44752000.00		
+1687187	METCI	Ramaco Resources, Inc. 8.250% Senior Notes due 2030	1220	44752000.00		
+1687187	METCZ	Ramaco Resources, Inc. 8.375% Senior Notes due 2029	1220	44752000.00		
+1693577	MNSB	MainStreet Bancshares, Inc. Common Stock	6022	7121076.00		
+1693577	MNSBP	MainStreet Bancshares, Inc. Depositary Shares	6022	7121076.00		
+1712184	LILA	Liberty Latin America Ltd. Class A Common Stock	4841	201100000.00		
+1712184	LILAK	Liberty Latin America Ltd. Class C Common Stock	4841	201100000.00		
+1712184	LILAP	Liberty Latin America Ltd. 9.0% Fixed Rate Cumulative Perpetual Redeemable Series A Preference Shares	4841	201100000.00		
+1712762	BIAF	bioAffinity Technologies, Inc. Common Stock	8731	8101725.00		
+1712762	BIAFW	bioAffinity Technologies, Inc. Warrant	8731	8101725.00		
+1737995	SKYA	SkyAI, Inc. Common Stock	6199	42982506.00		
+1737995	SKYAW	SkyAI, Inc. Warrant	6199	42982506.00		
+1738827	KLXE	KLX Energy Services Holdings, Inc. Common Stock	1389	21273059.00		
+1738827	KLXER	KLX Energy Services Holdings, Inc. Rights	1389	21273059.00		
+1743905	RVSN	Rail Vision Ltd. Ordinary Share	3743	2192186.00		
+1743905	RVSNW	Rail Vision Ltd. Warrant	3743	2192186.00		
+1748137	NEOV	NeoVolta Inc. Common Stock	3690	42711301.00		
+1748137	NEOVW	NeoVolta Inc. Warrant	3690	42711301.00		
+1754301	FOX	Fox Corporation Class B Common Stock	4833	439000000.00		
+1754301	FOXA	Fox Corporation Class A Common Stock	4833	439000000.00	62.2800	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1766478	AOMD	Angel Oak Mortgage REIT, Inc. 9.750% Senior Notes due 2030	6500	23214877.00		
+1766478	AOMN	Angel Oak Mortgage REIT, Inc. 9.500% Senior Notes due 2029	6500	23214877.00		
+1766478	AOMR	Angel Oak Mortgage REIT, Inc.	6500	23214877.00		
+1769624	ILLR	Triller Group Inc. Common Stock	6282	20487382.00		
+1769624	ILLRW	Triller Group Inc. Warrant	6282	20487382.00		
+1770450	XRX	Xerox Holdings Corporation Common Stock	3577	131314511.00		
+1770450	XRXDW	Xerox Holdings Corporation Warrants	3577	131314511.00		
+1779372	BEAT	Heartbeam, Inc. Common Stock	3841	56349171.00		
+1779372	BEATW	Heartbeam, Inc. Warrant	3841	56349171.00		
+1786108	TRIN	Trinity Capital Inc.		94693574.00		
+1786108	TRNI	Trinity Capital Inc. 7.875% Notes Due 2029		94693574.00		
+1786108	TRNZ	Trinity Capital Inc. 7.875% Notes due 2029		94693574.00		
+1787518	DFNS	T3 Defense Inc. Common Stock	8742	1663806.00		
+1787518	DFNSW	T3 Defense Inc. Warrants	8742	1663806.00		
+1788028	JSPR	Jasper Therapeutics, Inc. Common Stock	2836	33274561.00		
+1788028	JSPRW	Japer Therapeutics, Inc. Warrants	2836	33274561.00		
+1799191	STLN	Starling Oncology, Inc. Common Stock	8011	101916115.00		
+1799191	STLNW	Starling Oncology, Inc. Warrant	8011	101916115.00		
+1801169	OPEN	Opendoor Technologies Inc Common Stock	6531	971091050.00	2.8000	RESTORED:2025-09-24~2025-12-26 RESTORED:2026-01-02~2026-01-23 RESTORED:2026-02-27~2026-03-06 RESTORED:2026-03-13~2026-03-27 RESTORED:2026-04-24~2026-05-08
+1801169	OPENL	Opendoor Technologies Inc Series A Warrants, each whole warrant exercisable to purchase one share of Common Stock at an exercise price of $13.00 per warrant	6531	971091050.00		
+1801169	OPENW	Opendoor Technologies Inc Series K Warrants, each whole warrant exercisable to purchase one share of Common Stock at an exercise price of $9.00 per warrant	6531	971091050.00		
+1801169	OPENZ	Opendoor Technologies Inc Series Z Warrants, each whole warrant exercisable to purchase one share of Common Stock at an exercise price of $17.00 per warrant	6531	971091050.00		
+1805526	DFDV	DeFi Development Corp. Common Stock	6199	30997790.00		
+1805526	DFDVW	DeFi Development Corp. Warrant	6199	30997790.00		
+1808377	LUCY	Innovative Eyewear, Inc. Common Stock	3851	8609196.00		
+1808377	LUCYW	Innovative Eyewear, Inc. Series A Warrants 8/16/27	3851	8609196.00		
+1809750	EDBL	Edible Garden AG Incorporated Common Stock	0100	1951509.00		
+1809750	EDBLW	Edible Garden AG Incorporated Warrant	0100	1951509.00		
+1814287	ABX	Abacus Global Management, Inc.	6282	97792249.00		
+1814287	ABXL	Abacus Global Management, Inc. 9.875% Fixed Rate Senior Notes due 2028	6282	97792249.00		
+1820190	SCLX	Scilex Holding Company Common Stock	2836	8493000.00		
+1820190	SCLXW	Scilex Holding Company Warrant	2836	8493000.00		
+1820875	CXAI	CXApp Inc. Class A Common Stock	7372	116870315.00		
+1820875	CXAIW	CXApp Inc. Warrant	7372	116870315.00		
+1823584	AENT	Alliance Entertainment Holding Corporation Class A Common Stock	5099	50974630.00		
+1823584	AENTW	Alliance Entertainment Holding Corporation Warrant	5099	50974630.00		
+1825452	ONFO	Onfolio Holdings Inc. Common Stock	7374	2452712.00		
+1825452	ONFOW	Onfolio Holdings Inc. Warrant	7374	2452712.00		
+1826011	PARA	Banzai International, Inc. Class A Common Stock	7372	2690579.00		
+1826011	PARAW	Banzai International, Inc. Warrant	7372	2690579.00		
+1826667	TLSI	TriSalus Life Sciences, Inc. Common Stock	3841	61574600.00		
+1826667	TLSIW	TriSalus Life Sciences, Inc. Warrant	3841	61574600.00		
+1826681	PDYN	Palladyne AI Corp. Common Stock	7372	49338510.00		
+1826681	PDYNW	Palladyne AI Corp Warrants	7372	49338510.00		
+1828108	AUR	Aurora Innovation, Inc. Class A Common Stock	7373	1998000000.00	5.6700	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1828108	AUROW	Aurora Innovation, Inc. Warrant	7373	1998000000.00		
+1828972	BZFD	BuzzFeed, Inc. Class A Common Stock	4899	46404000.00		
+1828972	BZFDW	BuzzFeed, Inc. Warrant	4899	46404000.00		
+1829247	BFRG	Bullfrog AI Holdings, Inc. Common Stock	2834	18541651.00		
+1829247	BFRGW	Bullfrog AI Holdings, Inc. Warrants	2834	18541651.00		
+1829311	BMNP	BitMine Immersion Technologies, Inc. 9.5% Series A Perpetual Preferred Stock	6199	603226394.00		
+1829311	BMNR	BitMine Immersion Technologies, Inc.	6199	603226394.00	26.2700	RESTORED:2025-11-21~2026-08-31 OBSERVED:2026-08-31~
+1830033	PCT	PureCycle Technologies, Inc. Common stock	2821	200904810.00		
+1830033	PCTTU	PureCycle Technologies, Inc. Unit	2821	200904810.00		
+1830033	PCTTW	PureCycle Technologies, Inc. Warrant	2821	200904810.00		
+1830081	RUM	RUM Group Inc. Class A Common Stock	7370	283916343.00		
+1830081	RUMBW	RUM Group Inc. Warrant	7370	283916343.00		
+1831096	GEG	Great Elm Group, Inc. Common Stock	7372	31094890.00		
+1831096	GEGGL	Great Elm Group, Inc. 7.25% Notes due 2027	7372	31094890.00		
+1831868	ICU	SeaStar Medical Holding Corporation Common Stock	3841	4406841.00		
+1831868	ICUCW	SeaStar Medical Holding Corporation Warrant	3841	4406841.00		
+1831979	SDST	Stardust Power Inc. Common Stock	3330	14049388.00		
+1831979	SDSTW	Stardust Power Inc. Warrant	3330	14049388.00		
+1832511	PIII	P3 Health Partners Inc. Class A Common Stock	8000	3362000.00		
+1832511	PIIIW	P3 Health Partners Inc. Warrant	8000	3362000.00		
+1833214	SABS	SAB Biotherapeutics, Inc. Common Stock	2836	90986368.00		
+1833214	SABSW	SAB Biotherapeutics, Inc. Warrant	2836	90986368.00		
+1833498	MDAI	Spectral AI, Inc. Class A Common Stock	3841	32184928.00		
+1833498	MDAIW	Spectral AI, Inc. Warrants	3841	32184928.00		
+1835856	BETR	Better Home & Finance Holding Company Class A Common Stock	6163	18981789.00		
+1835856	BETRW	Better Home & Finance Holding Company Warrant	6163	18981789.00		
+1838163	BNAI	Brand Engagement Network Inc. Common Stock	7373	7488046.00		
+1838163	BNAIW	Brand Engagement Network Inc. Warrant	7373	7488046.00		
+1838359	RGTI	Rigetti Computing, Inc. Common Stock	7371	333768747.00	15.6200	RESTORED:2025-09-24~2026-03-27 RESTORED:2026-04-17~2026-07-17 RESTORED:2026-08-07~2026-08-28 OBSERVED:2026-08-31~2026-09-04 OBSERVED:2026-09-18~2026-10-02
+1838359	RGTIW	Rigetti Computing, Inc. Warrants	7371	333768747.00		
+1838987	SPWR	SunPower Inc. Common Stock	1700	208796937.00		
+1838987	SPWRW	SunPower Inc. Warrants	1700	208796937.00		
+1839341	CORZ	Core Scientific, Inc. Common Stock	6199	321340441.00	16.4500	RESTORED:2025-09-24~2025-12-26 RESTORED:2026-01-02~2026-03-06 RESTORED:2026-03-13~2026-08-28 OBSERVED:2026-08-31~
+1839341	CORZW	Core Scientific, Inc. Tranche 1 Warrants	6199	321340441.00		
+1839341	CORZZ	Core Scientific, Inc. Tranche 2 Warrants	6199	321340441.00		
+1839530	XBP	XBP Global Holdings, Inc. Common Stock	7389	11881339.00		
+1839530	XBPEW	XBP Europe Holdings, Inc. Warrant	7389	11881339.00		
+1840199	WALD	Waldencast plc Class A Ordinary Share	2844	114070225.00		
+1840199	WALDW	Waldencast plc Warrant	2844	114070225.00		
+1840856	SOUN	SoundHound AI, Inc Class A Common Stock	7372	438648450.00	6.2800	RESTORED:2025-09-24~2025-12-12
+1840856	SOUNW	SoundHound AI, Inc. Warrant	7372	438648450.00		
+1840877	COCH	Envoy Medical, Inc. Class A Common Stock	3842	77194595.00		
+1840877	COCHW	Envoy Medical, Inc Warrant	3842	77194595.00		
+1841209	HOLO	MicroCloud Hologram Inc. Ordinary Shares	7370	22512360.00		
+1841209	HOLOW	MicroCloud Hologram Inc. Warrant	7370	22512360.00		
+1841408	DAVE	Dave Inc. Class A Common Stock	6199	13679803.00	378.5500	RESTORED:2026-07-02~2026-08-07
+1841408	DAVEW	Dave Inc. Warrants	6199	13679803.00		
+1841425	VGAS	Verde Clean Fuels, Inc. Class A Common Stock	2860	22070453.00		
+1841425	VGASW	Verde Clean Fuels, Inc. Warrant	2860	22070453.00		
+1842566	AISP	Airship AI Holdings, Inc. Class A Common Stock	7372	34439562.00		
+1842566	AISPW	Airship AI Holdings, Inc. Warrants	7372	34439562.00		
+1843656	RMCO	Royalty Management Holding Corporation Class A Common Stock	6794	15172708.00		
+1843656	RMCOW	Royalty Management Holding Corporation Warrant	6794	15172708.00		
+1843724	LNZA	LanzaTech Global, Inc. Common Stock	2860	13089163.00	5.8800	RESTORED:2025-09-24~2025-11-07
+1843724	LNZAW	LanzaTech Global, Inc. Warrant	2860	13089163.00		
+1844417	ESLA	Estrella Immunopharma, Inc. Common Stock	2836	43497864.00		
+1844417	ESLAW	Estrella Immunopharma, Inc. Warrant	2836	43497864.00		
+1844862	SLDP	Solid Power, Inc. Class A Common Stock	3690	228181212.00		
+1844862	SLDPW	Solid Power, Inc. Warrant	3690	228181212.00		
+1844971	GREEL	Vulcan Infrastructure and Power Inc. 8.50% Senior Notes due 2026	6199	18019743.00		
+1844971	VIP	Vulcan Infrastructure and Power Inc. Class A Common Stock	6199	18019743.00		
+1845123	ANNA	AleAnna, Inc. Class A Common Stock	1311	40781367.00		
+1845123	ANNAW	AleAnna, Inc. Warrant	1311	40781367.00		
+1846253	OABI	OmniAb, Inc. Common Stock	8731	145390398.00		
+1846253	OABIW	OmniAb, Inc. Warrant	8731	145390398.00		
+1847075	SAIH	SAIHEAT Limited Class A Ordinary Shares	6199	1836330.00		
+1847075	SAIHW	SAIHEAT Limited Warrant	6199	1836330.00		
+1847345	ASBP	Aspire Biopharma Holdings, Inc. Common Stock	2834	1402557.00		
+1847345	ASBPW	Aspire Biopharma Holdings, Inc. Warrant	2834	1402557.00		
+1847986	DFLI	Dragonfly Energy Holdings Corp. Common Stock (NV)	3690	14978803.00		
+1847986	DFLIW	Dragonfly Energy Holdings Corp. Warrant	3690	14978803.00		
+1849380	ONMD	OneMedNet Corp Class A Common Stock	8731	59286450.00		
+1849380	ONMDW	OneMedNet Corp Warrant	8731	59286450.00		
+1849635	DJT	Trump Media & Technology Group Corp. Common Stock	7370	277941274.00	8.7800	RESTORED:2025-09-24~2025-10-10
+1849635	DJTWW	Trump Media & Technology Group Corp. Warrants	7370	277941274.00		
+1849820	KITT	Nauticus Robotics, Inc. Common stock	3569	7471960.00		
+1849820	KITTW	Nauticus Robotics, Inc. Warrant	3569	7471960.00		
+1850059	FSHP	Flag Ship Acquisition Corp. Ordinary Shares	6770	3518260.00		
+1850059	FSHPR	Flag Ship Acquisition Corp. Right	6770	3518260.00		
+1850059	FSHPU	Flag Ship Acquisition Corp. Unit	6770	3518260.00		
+1852973	BRLS	Borealis Foods Inc. Class A Common Shares	2000	21463306.00		
+1852973	BRLSW	Borealis Foods Inc. Warrant	2000	21463306.00		
+1853044	AERT	Aeries Technology, Inc. Class A Ordinary Share	8742	6576986.00		
+1853044	AERTW	Aeries Technology, Inc. Warrant	8742	6576986.00		
+1853138	KDK	Kodiak AI, Inc. Common Stock	7373	200618170.00		
+1853138	KDKRW	Kodiak AI, Inc. Warrants	7373	200618170.00		
+1854963	SHFS	SHF Holdings, Inc. Class A Common Stock	6199	12332955.00		
+1854963	SHFSW	SHF Holdings, Inc. Warrants	6199	12332955.00		
+1855467	MOBX	Mobix Labs, Inc. Class A Common Stock	3674	9683935.00		
+1855467	MOBXW	Mobix Labs, Inc Warrants	3674	9683935.00		
+1855474	AIRJ	AirJoule Technologies Corporation Class A Common Stock	3585	73347394.00		
+1855474	AIRJW	AirJoule Technologies Corporation Warrant	3585	73347394.00		
+1856031	SEAT	Vivid Seats Inc. Class A Common Stock	7990	11241195.00		
+1856031	SEATW	Vivid Seats Inc. Warrant	7990	11241195.00		
+1858681	APO	Apollo Global Management, Inc.	6282	590543159.00	114.0200	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1858681	APOS	Apollo Global Management, Inc. 7.625% Fixed-Rate Resettable Junior Subordinated Notes due 2053	6282	590543159.00		
+1858685	BFRI	Biofrontera Inc. Common Stock	2834	14852359.00		
+1858685	BFRIW	Biofrontera Inc. Warrants	2834	14852359.00		
+1860871	TVGN	Tevogen Inc. Common Stock	2836	6511540.00		
+1860871	TVGNW	Tevogen Inc. Warrant	2836	6511540.00		
+1861841	ARBE	Arbe Robotics Ltd. Ordinary Shares	7373	122649743.00		
+1861841	ARBEW	Arbe Robotics Ltd. Warrant	7373	122649743.00		
+1861974	ECX	ECARX Holdings Inc. Class A Ordinary shares	7373	338659826.00		
+1861974	ECXWW	ECARX Holdings Inc. Warrants	7373	338659826.00		
+1862150	CING	Cingulate Inc. Common Stock	2834	14541826.00		
+1862150	CINGW	Cingulate Inc. Warrants	2834	14541826.00		
+1862463	AMOD	Alpha Modus Holdings, Inc. Class A Common Stock	6794	4966818.00		
+1862463	AMODW	Alpha Modus Holdings, Inc. Warrant	6794	4966818.00		
+1863990	MSAI	MultiSensor AI Holdings, Inc. Common Stock	3827	2205648.00		
+1863990	MSAIW	MultiSensor AI Holdings, Inc. Warrant	3827	2205648.00		
+1864943	FGI	FGI Industries Ltd. Ordinary Shares	3430	1931271.00		
+1864943	FGIWW	FGI Industries Ltd. Warrant	3430	1931271.00		
+1865506	ZEO	Zeo Energy Corporation Class A Common Stock	1700	13252964.00		
+1865506	ZEOWW	Zeo Energy Corporation Warrants	1700	13252964.00		
+1865782	BTSG	BrightSpring Health Services, Inc. Common Stock	8082	197864241.00		
+1865782	BTSGU	BrightSpring Health Services, Inc. Tangible Equity Unit	8082	197864241.00	197.3500	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1866364	BULL	Webull Corporation Class A Ordinary Shares	6211	396999679.00		
+1866364	BULLW	Webull Corporation Warrants	6211	396999679.00		
+1866816	OPTX	Syntec Optics Holdings, Inc. Class A Common Stock	3827	40279878.00		
+1866816	OPTXW	Syntec Optics Holdings, Inc. Warrant	3827	40279878.00		
+1868419	CYCU	Cycurion, Inc. Common Stock	7371	25840335.00		
+1868419	CYCUW	Cycurion, Inc. Warrant	7371	25840335.00		
+1868640	RDZN	Roadzen, Inc. Ordinary Shares	6411	85165063.00		
+1868640	RDZNW	Roadzen, Inc. Warrants	6411	85165063.00		
+1870144	CDIO	Cardio Diagnostics Holdings Inc. Common stock	2835	2959469.00		
+1870144	CDIOW	Cardio Diagnostics Holdings Inc. Warrant	2835	2959469.00		
+1871321	DRTS	Alpha Tau Medical Ltd. Ordinary Shares	3841	88009737.00		
+1871321	DRTSW	Alpha Tau Medical Ltd. Warrant	3841	88009737.00		
+1871638	BZAI	Blaize Holdings, Inc. Common Stock	3674	144832039.00		
+1871638	BZAIW	Blaize Holdings, Inc. Warrants	3674	144832039.00		
+1872228	TVAI	Thayer Ventures Acquisition Corporation II Class A Ordinary Shares	6770	875000.00		
+1872228	TVAIR	Thayer Ventures Acquisition Corporation II Rights	6770	875000.00		
+1872228	TVAIU	Thayer Ventures Acquisition Corporation II Unit	6770	875000.00		
+1872525	SWAG	Stran & Company, Inc. Common Stock	7311	18639589.00		
+1872525	SWAGW	Stran & Company, Inc. Warrant	7311	18639589.00		
+1872964	MTEK	Maris-Tech Ltd. Ordinary Shares	3669	8073591.00		
+1872964	MTEKW	Maris-Tech Ltd. Warrants	3669	8073591.00		
+1874315	SATL	Satellogic Inc. Class A Common Stock	3663	145794960.00		
+1874315	SATLW	Satellogic Inc. Warrant	3663	145794960.00		
+1875091	NRSN	NeuroSense Therapeutics Ltd. Ordinary Shares	2834	32557174.00		
+1875091	NRSNW	NeuroSense Therapeutics Ltd. Warrant	2834	32557174.00		
+1876581	IMPP	Imperial Petroleum Inc. Common Shares	4412	44648737.00		
+1876581	IMPPP	Imperial Petroleum Inc. 8.75% Series A Cumulative Redeemable Perpetual Preferred Shares	4412	44648737.00		
+1880661	TPG	TPG Inc. Class A Common Stock	6282	385468150.00	44.6700	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1880661	TPGXL	TPG Operating Group II, L.P. 6.950% Fixed-Rate Junior Subordinated Notes due 2064	6282	385468150.00		
+1883085	PGY	Pagaya Technologies Ltd. Class A Ordinary Shares	6199	96963421.00		
+1883085	PGYWW	Pagaya Technologies Ltd. Warrants	6199	96963421.00		
+1884046	SPKL	Spark I Acquisition Corp. Class A Ordinary Share	3690	6422078.00		
+1884046	SPKLU	Spark I Acquisition Corp. Unit	3690	6422078.00		
+1884046	SPKLW	Spark I Acquisition Corp. Warrant	3690	6422078.00		
+1885408	NEXR	Nexera Technologies Ltd Ordinary Shares	5900	250727.00		
+1885408	NEXRW	Nexera Technologies Ltd Warrant	5900	250727.00		
+1887673	WLDS	Wearable Devices Ltd. Ordinary Share	3576	2882802.00		
+1887673	WLDSW	Wearable Devices Ltd. Warrant	3576	2882802.00		
+1889123	FLD	Fold Holdings, Inc. Class A Common Stock	6199	55077187.00		
+1889123	FLDDW	Fold Holdings, Inc. Warrant	6199	55077187.00		
+1889539	CRBD	Corebridge Financial, Inc. 6.375% Junior Subordinated Notes due 2064	6311	445772522.00		
+1889539	CRBG	Corebridge Financial, Inc.	6311	445772522.00	34.0300	RESTORED:2025-09-24~2026-08-31 OBSERVED:2026-08-31~
+1896212	CDT	CDT Equity Inc. Common Stock	2834	786670.00		
+1896212	CDTTW	CDT Equity Inc. Warrant	2834	786670.00		
+1901203	UCFI	CN Healthy Food Tech Group Corp. Common Stock	2000	52234983.00		
+1901203	UCFIW	CN Healthy Food Tech Group Corp. Warrant	2000	52234983.00		
+1903870	AFRI	Forafric Global PLC Ordinary Shares	2040	26917597.00		
+1903870	AFRIW	Forafric Global PLC Warrants	2040	26917597.00		
+1907223	GRML	Greenland Mines Ltd. Common Stock	2836	158850637.00		
+1907223	GRMLW	Greenland Mines Ltd Warrant	2836	158850637.00		
+1913510	VFS	VinFast Auto Ltd. Ordinary Shares	3711	2338812496.00		
+1913510	VFSWW	VinFast Auto Ltd. Warrant	3711	2338812496.00		
+1918414	NBRG	Newbridge Acquisition Limited Class A Ordinary Share	6770	1553253.00		
+1918414	NBRGR	Newbridge Acquisition Limited Rights	6770	1553253.00		
+1918414	NBRGU	Newbridge Acquisition Limited Unit	6770	1553253.00		
+1920294	RZLV	Rezolve AI PLC Ordinary Shares	7370	336327587.00		
+1920294	RZLVW	Rezolve AI PLC Warrants	7370	336327587.00		
+1920406	ASST	Strive, Inc. Class A Common Stock	6199	68490600.00		
+1920406	SATA	Strive, Inc. Variable Rate Series A Perpetual Preferred Stock	6199	68490600.00		
+1921158	FUFU	BitFuFu Inc. Class A Ordinary Shares	6199	166613948.00		
+1921158	FUFUW	BitFuFu Inc. Warrant	6199	166613948.00		
+1930021	HOVR	New Horizon Aircraft Ltd. Class A Ordinary Share	3721	66825837.00		
+1930021	HOVRW	New Horizon Aircraft Ltd. Warrant	3721	66825837.00		
+1930313	SBC	SBC Medical Group Holdings Incorporated Common Stock	8011	102846943.00		
+1930313	SBCWW	SBC Medical Group Holdings Incorporated Warrants	8011	102846943.00		
+1932737	AIIO	Robo.ai Inc. Class B Ordinary Shares	3711	15795362.00		
+1932737	AIIOW	Robo.ai Inc. Warrant	3711	15795362.00		
+1934850	FG	F&G Annuities & Life, Inc.	6311	130935209.00	23.5700	
+1934850	FGN	F&G Annuities & Life, Inc. 7.950% Senior Notes due 2053	6311	130935209.00		
+1934850	FGSN	F&G Annuities & Life, Inc. 7.300% Junior Subordinated Notes due 2065	6311	130935209.00		
+1936258	NAMS	NewAmsterdam Pharma Company N.V. Ordinary Shares	2834	119537169.00		
+1936258	NAMSW	NewAmsterdam Pharma Company N.V. Warrant	2834	119537169.00		
+1936804	SDA	SunCar Technology Group Inc. Class A Ordinary Shares	7500	95996861.00		
+1936804	SDAWW	SunCar Technology Group Inc. Warrant	7500	95996861.00		
+1937987	FBYD	Falcon's Beyond Global, Inc. Class A Common Stock	7990	49527876.00		
+1937987	FBYDP	Falcon's Beyond Global, Inc. 11% Series B Cumulative Convertible Preferred Stock	7990	49527876.00		
+1937987	FBYDW	Falcon's Beyond Global, Inc. Warrants	7990	49527876.00		
+1941536	BAER	Bridger Aerospace Group Holdings, Inc. Common Stock	7389	58826140.00		
+1941536	BAERW	Bridger Aerospace Group Holdings, Inc. Warrant	7389	58826140.00		
+1946563	SXTP	60 Degrees Pharmaceuticals, Inc. Common Stock	2834	3516988.00		
+1946563	SXTPW	60 Degrees Pharmaceuticals, Inc. Warrant	2834	3516988.00		
+1953984	BCG	Binah Capital Group, Inc. Common Stock	6199	17060131.00		
+1953984	BCGWW	Binah Capital Group, Inc. Warrants	6199	17060131.00		
+1956648	NOEM	CO2 Energy Transition Corp. Common Stock	6770	3716465.00		
+1956648	NOEMR	CO2 Energy Transition Corp. Right	6770	3716465.00		
+1956648	NOEMU	CO2 Energy Transition Corp. Unit	6770	3716465.00		
+1956648	NOEMW	CO2 Energy Transition Corp. Warrant	6770	3716465.00		
+1957489	ABLV	Able View Global Inc. Class B Ordinary Shares	5960	49389922.00		
+1957489	ABLVW	Able View Global Inc. Warrant	5960	49389922.00		
+1958140	BATRA	Atlanta Braves Holdings, Inc. Series A Common Stock	7900	64685000.00		
+1958140	BATRK	Atlanta Braves Holdings, Inc. Series C Common Stock	7900	64685000.00		
+1962746	LOT	Lotus Technology Inc. American Depositary Shares	3711	642089875.00		
+1962746	LOTWW	Lotus Technology Inc. Warrants	3711	642089875.00		
+1965473	CCG	Cheche Group Inc. Class A Ordinary Shares	6411	80321873.00		
+1965473	CCGWW	Cheche Group Inc. Warrant	6411	80321873.00		
+1971387	LIMN	Liminatus Pharma, Inc. Class A Common Stock	2836	67160362.00		
+1971387	LIMNW	Liminatus Pharma, Inc. Warrants	2836	67160362.00		
+1978528	QETA	Quetta Acquisition Corporation Common Stock	6770	3747748.00		
+1978528	QETAR	Quetta Acquisition Corporation Right	6770	3747748.00		
+1978528	QETAU	Quetta Acquisition Corporation Unit	6770	3747748.00		
+1979005	AFJK	Aimei Health Technology Co., Ltd Ordinary Share	6770	3166332.00		
+1979005	AFJKR	Aimei Health Technology Co., Ltd Right	6770	3166332.00		
+1979005	AFJKU	Aimei Health Technology Co., Ltd Unit	6770	3166332.00		
+1980845	ENGN	enGene Therapeutics Inc. Common Stock	2836	66989466.00		
+1980845	ENGNW	enGene Therapeutics Inc. Warrants	2836	66989466.00		
+1981662	NIVF	NewGenIvf Group Limited Class A Ordinary Shares	8090	240622.00		
+1981662	NIVFW	NewGenIvf Group Limited Warrants	8090	240622.00		
+1982444	BDMD	Baird Medical Investment Holdings Ltd Ordinary Share	3841	40979382.00		
+1982444	BDMDW	Baird Medical Investment Holdings Ltd Warrant	3841	40979382.00		
+1983324	RMSG	Real Messenger Corporation Ordinary Shares	7370	8908040.00		
+1983324	RMSGW	Real Messenger Corporation Warrants	7370	8908040.00		
+1986817	GTEN	Gores Holdings X, Inc. Class A ordinary shares	6770	8970000.00		
+1986817	GTENU	Gores Holdings X, Inc. Units	6770	8970000.00		
+1986817	GTENW	Gores Holdings X, Inc. Warrants	6770	8970000.00		
+1991332	MKDW	MKDWELL Tech Inc. Ordinary Share	3600	141039933.00		
+1991332	MKDWW	MKDWELL Tech Inc. Warrants	3600	141039933.00		
+1992818	ZOOZ	ZOOZ Strategy Ltd. Ordinary Shares	3590	161995282.00		
+1992818	ZOOZW	ZOOZ Strategy Ltd. Warrant	3590	161995282.00		
+1997296	MDCX	Medicus Pharma Ltd. Common Stock	2834	63180610.00		
+1997296	MDCXW	Medicus Pharma Ltd. Warrant	2834	63180610.00		
+1998781	IBAC	IB Acquisition Corp. Common Stock	8731	5008229.00		
+1998781	IBACR	IB Acquisition Corp. Right	8731	5008229.00		
+1999297	DSY	Big Tree Cloud Holdings Limited Class A Ordinary Shares	2670	86972928.00		
+1999297	DSYWW	Big Tree Cloud Holdings Limited Warrants	2670	86972928.00		
+2000366	SCAG	Scage Future American Depositary Shares	3713	72243992.00		
+2000366	SCAGW	Scage Future Warrants	3713	72243992.00		
+2000775	BKHA	Black Hawk Acquisition Corporation Class A Ordinary Shares	2836	4153577.00		
+2000775	BKHAR	Black Hawk Acquisition Corporation Rights	2836	4153577.00		
+2000775	BKHAU	Black Hawk Acquisition Corporation Units	2836	4153577.00		
+2001699	HPAI	Helport AI Limited Ordinary Shares	7372	37430968.00		
+2001699	HPAIW	Helport AI Limited Warrants	7372	37430968.00		
+2002045	GCL	GCL Global Holdings Ltd Ordinary Shares	7372	128008703.00		
+2002045	GCLWW	GCL Global Holdings Ltd Warrants	7372	128008703.00		
+2010653	FVN	Future Vision II Acquisition Corporation Ordinary shares	7373	7544000.00		
+2010653	FVNNR	Future Vision II Acquisition Corporation Right	7373	7544000.00		
+2010653	FVNNU	Future Vision II Acquisition Corporation Units	7373	7544000.00		
+2010930	ALF	Centurion Acquisition Corp. Class A Ordinary Shares	6770	12134657.00		
+2010930	ALFUU	Centurion Acquisition Corp. Unit	6770	12134657.00		
+2010930	ALFUW	Centurion Acquisition Corp. Warrant	6770	12134657.00		
+2011674	YDES	YD Bio Limited Ordinary Shares	8071	70789261.00		
+2011674	YDESW	YD Bio Limited Warrants	8071	70789261.00		
+2012807	RFAI	RF Acquisition Corp II Ordinary Shares	6770	3512500.00		
+2012807	RFAIR	RF Acquisition Corp II Right	6770	3512500.00		
+2012807	RFAIU	RF Acquisition Corp II Unit	6770	3512500.00		
+2013807	FOXX	Foxx Development Holdings Inc. Common Stock	3576	7041192.00		
+2013807	FOXXW	Foxx Development Holdings Inc. Warrant	3576	7041192.00		
+2017950	DTSQ	DT Cloud Star Acquisition Corporation Ordinary Shares	6770	3653409.00		
+2017950	DTSQR	DT Cloud Star Acquisition Corporation Right	6770	3653409.00		
+2017950	DTSQU	DT Cloud Star Acquisition Corporation Units	6770	3653409.00		
+2018145	RDAC	Rising Dragon Acquisition Corp. Ordinary Shares	6770	3435357.00		
+2018145	RDACR	Rising Dragon Acquisition Corp. Rights	6770	3435357.00		
+2018145	RDACU	Rising Dragon Acquisition Corp. Unit	6770	3435357.00		
+2019435	BGL	Blue Gold Limited Class A Ordinary Shares	1000	14071660.00		
+2019435	BGLWW	Blue Gold Limited Warrant	1000	14071660.00		
+2019804	IMSR	Terrestrial Energy Inc. Common Stock	3443	105935254.00		
+2019804	IMSRW	Terrestrial Energy Inc. Warrant	3443	105935254.00		
+2020385	TAVI	Tavia Acquisition Corp. Ordinary Shares	6770	8753608.00		
+2020385	TAVIR	Tavia Acquisition Corp. Right	6770	8753608.00		
+2020385	TAVIU	Tavia Acquisition Corp. Unit	6770	8753608.00		
+2020987	YHNA	YHN Acquisition I Limited Ordinary Shares	6770	4285821.00		
+2020987	YHNAR	YHN Acquisition I Limited Right	6770	4285821.00		
+2020987	YHNAU	YHN Acquisition I Limited Unit	6770	4285821.00		
+2022308	KIDZ	KIDZ AI Inc. Class B Common Stock	8200	1174718.00		
+2022308	KIDZW	KIDZ AI Inc. Warrants	8200	1174718.00		
+2022416	SLXN	Silexion Therapeutics Corp Ordinary Shares	2836	5560256.00		
+2022416	SLXNW	Silexion Therapeutics Corp Warrant	2836	5560256.00		
+2023730	HDRN	Hadron Energy, Inc. Common Stock	4911	71498842.00		
+2023730	HDRNW	Hadron Energy, Inc. Warrant	4911	71498842.00		
+2024203	CAPN	Cayson Acquisition Corp Ordinary shares	6770	5288092.00		
+2024203	CAPNR	Cayson Acquisition Corp Right	6770	5288092.00		
+2024203	CAPNU	Cayson Acquisition Corp Unit	6770	5288092.00		
+2024460	CHPG	ChampionsGate Acquisition Corporation Class A Ordinary Share	6770	1887097.00		
+2024460	CHPGR	ChampionsGate Acquisition Corporation Rights	6770	1887097.00		
+2024460	CHPGU	ChampionsGate Acquisition Corporation Unit	6770	1887097.00		
+2026767	ALIS	Calisa Acquisition Corp Ordinary shares	7374	8427500.00		
+2026767	ALISR	Calisa Acquisition Corp Right	7374	8427500.00		
+2026767	ALISU	Calisa Acquisition Corp Units	7374	8427500.00		
+2028027	NTWO	Newbury Street II Acquisition Corp Class A Ordinary Shares	6770	6866375.00		
+2028027	NTWOU	Newbury Street II Acquisition Corp Unit	6770	6866375.00		
+2028027	NTWOW	Newbury Street II Acquisition Corp Warrant	6770	6866375.00		
+2028201	COLA	Columbus Acquisition Corp Ordinary Shares	6770	4494439.00		
+2028201	COLAR	Columbus Acquisition Corp Rights	6770	4494439.00		
+2028201	COLAU	Columbus Acquisition Corp Unit	6770	4494439.00		
+2028336	NUAI	New Era Energy & Digital, Inc. Common Stock	1311	106559339.00		
+2028336	NUAIW	New Era Energy & Digital, Inc. Warrants	1311	106559339.00		
+2028516	ATII	Archimedes Tech SPAC Partners II Co. Ordinary Shares	6770	29590000.00		
+2028516	ATIIU	Archimedes Tech SPAC Partners II Co. Unit	6770	29590000.00		
+2028516	ATIIW	Archimedes Tech SPAC Partners II Co. Warrant	6770	29590000.00		
+2028614	DMAA	Drugs Made In America Acquisition Corp. Ordinary Shares	6770	24276913.00		
+2028614	DMAAR	Drugs Made In America Acquisition Corp. Rights	6770	24276913.00		
+2028614	DMAAU	Drugs Made In America Acquisition Corp. Units	6770	24276913.00		
+2028735	SPEG	Silver Pegasus Acquisition Corp Class A Ordinary Shares	6770	3333333.00		
+2028735	SPEGR	Silver Pegasus Acquisition Corp Rights.	6770	3333333.00		
+2028735	SPEGU	Silver Pegasus Acquisition Corp Unit	6770	3333333.00		
+2030663	SZZL	Sizzle Acquisition Corp. II Class A ordinary shares	6770	6666667.00		
+2030663	SZZLR	Sizzle Acquisition Corp. II Right	6770	6666667.00		
+2030663	SZZLU	Sizzle Acquisition Corp. II Unit	6770	6666667.00		
+2031561	ALDF	Aldel Financial II Inc. Class A Ordinary Shares	6770	29868214.00		
+2031561	ALDFU	Aldel Financial II Inc. Units	6770	29868214.00		
+2031561	ALDFW	Aldel Financial II Inc. Warrants	6770	29868214.00		
+2033122	TACO	Berto Acquisition Corp. Ordinary Shares	6770	37518750.00		
+2033122	TACOU	Berto Acquisition Corp. Unit	6770	37518750.00		
+2033122	TACOW	Berto Acquisition Corp. Warrant	6770	37518750.00		
+2033383	FUSE	Fusemachines Inc. Common stock	7373	28985302.00		
+2033383	FUSEW	Fusemachines Inc. Warrants	7373	28985302.00		
+2033770	DAIC	CID HoldCo, Inc. Common Stock	7373	30259579.00		
+2033770	DAICW	CID HoldCo, Inc. Warrants	7373	30259579.00		
+2033991	TVA	Texas Ventures Acquisition III Corp Class A Ordinary Share	6770	6666667.00		
+2033991	TVACU	Texas Ventures Acquisition III Corp Unit	6770	6666667.00		
+2033991	TVACW	Texas Ventures Acquisition III Corp Warrants	6770	6666667.00		
+2034037	SDHI	Siddhi Acquisition Corp Class A Common stock	6770	6900000.00		
+2034037	SDHIR	Siddhi Acquisition Corp Right	6770	6900000.00		
+2034037	SDHIU	Siddhi Acquisition Corp Unit	6770	6900000.00		
+2034520	GIBO	GIBO Holdings Limited Class A Ordinary Shares	7372	3755397.00		
+2034520	GIBOW	GIBO Holdings Limited Warrants	7372	3755397.00		
+2035016	RIBB	Ribbon Acquisition Corp Class A Ordinary Shares	6770	5013446.00		
+2035016	RIBBR	Ribbon Acquisition Corp Rights	6770	5013446.00		
+2035016	RIBBU	Ribbon Acquisition Corp Unit	6770	5013446.00		
+2035173	RTAC	Renatus Tactical Acquisition Corp I Class A Ordinary Shares	6770	7001288.00		
+2035173	RTACU	Renatus Tactical Acquisition Corp I Unit	6770	7001288.00		
+2035173	RTACW	Renatus Tactical Acquisition Corp I Warrant	6770	7001288.00		
+2035644	RANG	Range Capital Acquisition Corp. Ordinary Shares	6770	6697971.00		
+2035644	RANGR	Range Capital Acquisition Corp. Rights	6770	6697971.00		
+2035644	RANGU	Range Capital Acquisition Corp. Units	6770	6697971.00		
+2036973	UYSC	UY Scuti Acquisition Corp. Ordinary Shares	6770	5221060.00		
+2036973	UYSCR	UY Scuti Acquisition Corp. Rights	6770	5221060.00		
+2036973	UYSCU	UY Scuti Acquisition Corp. Units	6770	5221060.00		
+2038439	VWAV	VisionWave Holdings, Inc. Common Stock	7372	28842069.00		
+2038439	VWAVW	VisionWave Holdings, Inc. Warrant	7372	28842069.00		
+2040475	DMII	Drugs Made In America Acquisition II Corp. Ordinary Shares	6770	63700000.00		
+2040475	DMIIR	Drugs Made In America Acquisition II Corp. Right	6770	63700000.00		
+2040475	DMIIU	Drugs Made In America Acquisition II Corp. Unit	6770	63700000.00		
+2042292	BDCI	BTC Development Corp. Class A Ordinary Shares	6770	1394609.00		
+2042292	BDCIU	BTC Development Corp. Unit	6770	1394609.00		
+2042292	BDCIW	BTC Development Corp. Warrant	6770	1394609.00		
+2042460	HAVA	Harvard Ave Acquisition Corporation Class A Ordinary Share	6770	4833333.00		
+2042460	HAVAR	Harvard Ave Acquisition Corporation Rights that convert on a 1/10th of 1 basis to Class A ordinary Shares	6770	4833333.00		
+2042460	HAVAU	Harvard Ave Acquisition Corporation Unit	6770	4833333.00		
+2043508	LKSP	Lake Superior Acquisition Corp. Class A Ordinary Shares	6770	15693333.00		
+2043508	LKSPR	Lake Superior Acquisition Corp. Rights	6770	15693333.00		
+2043508	LKSPU	Lake Superior Acquisition Corp. Units	6770	15693333.00		
+2043766	GTERA	Globa Terra Acquisition Corporation Class A Ordinary Shares	6770	5072333.00		
+2043766	GTERR	Globa Terra Acquisition Corporation Rights	6770	5072333.00		
+2043766	GTERU	Globa Terra Acquisition Corporation Units	6770	5072333.00		
+2043766	GTERW	Globa Terra Acquisition Corporation Warrants	6770	5072333.00		
+2044523	ORIQ	Origin Investment Corp I Ordinary Shares	6770	8625000.00		
+2044523	ORIQU	Origin Investment Corp I Units	6770	8625000.00		
+2044523	ORIQW	Origin Investment Corp I Warrant.	6770	8625000.00		
+2047455	QSEA	Quartzsea Acquisition Corporation Ordinary Shares	6770	10134518.00		
+2047455	QSEAR	Quartzsea Acquisition Corporation Rights	6770	10134518.00		
+2047455	QSEAU	Quartzsea Acquisition Corporation Units	6770	10134518.00		
+2048948	NPAC	New Providence Acquisition Corp. III Class A Ordinary Shares	6770	6525000.00		
+2048948	NPACU	New Providence Acquisition Corp. III Units	6770	6525000.00		
+2048948	NPACW	New Providence Acquisition Corp. III Warrants	6770	6525000.00		
+2048951	TMS	Teamshares Inc. Common Stock	5900	73660516.00		
+2048951	TMSWW	Teamshares Inc. Warrants	5900	73660516.00		
+2049248	LCCC	Lakeshore Acquisition III Corp. Ordinary Shares	6770	3822787.00		
+2049248	LCCCR	Lakeshore Acquisition III Corp. Rights	6770	3822787.00		
+2049248	LCCCU	Lakeshore Acquisition III Corp. Unit	6770	3822787.00		
+2049662	FAC	Factorial Energy Inc. Class A Common Stock	3690	107023243.00		
+2049662	FACWW	Factorial Energy Inc. Warrant	3690	107023243.00		
+2051820	MLCI	Mount Logan Capital Inc. Common Stock	6282	11188768.00		
+2051820	MLCIL	Mount Logan Capital Inc. 8.00% Notes Due 2031	6282	11188768.00		
+2051985	IRHO	Iron Horse Acquisitions II Corp. Common Stock	7389	29320000.00		
+2051985	IRHOR	Iron Horse Acquisitions Corp. II Rights	7389	29320000.00		
+2051985	IRHOU	Iron Horse Acquisitions II Corp. Units	7389	29320000.00		
+2052162	DAAQ	Digital Asset Acquisition Corp. Class A Ordinary shares	6022	5000000.00		
+2052162	DAAQU	Digital Asset Acquisition Corp. Units	6022	5000000.00		
+2052162	DAAQW	Digital Asset Acquisition Corp. Warrant	6022	5000000.00		
+2053927	WTG	Wintergreen Acquisition Corp. Ordinary Shares	7370	1708575.00		
+2053927	WTGUR	Wintergreen Acquisition Corp. Rights	7370	1708575.00		
+2053927	WTGUU	Wintergreen Acquisition Corp. Unit	7370	1708575.00		
+2054272	ONCH	1RT Acquisition Corp. Class A Ordinary Share	6770	3750000.00		
+2054272	ONCHU	1RT Acquisition Corp. Units	6770	3750000.00		
+2054272	ONCHW	1RT Acquisition Corp. Warrant	6770	3750000.00		
+2054876	NMP	NMP Acquisition Corp. Class A Ordinary Shares	6770	3111111.00		
+2054876	NMPAR	NMP Acquisition Corp. Right	6770	3111111.00		
+2054876	NMPAU	NMP Acquisition Corp. Units	6770	3111111.00		
+2057463	GLIBA	Liberty Capital Corporation Series A GCI Group Common Stock	4841	40000000.00		
+2057463	GLIBK	Liberty Capital Corporation Series C GCI Group Common Stock	4841	40000000.00		
+2059165	SSEA	Starry Sea Acquisition Corp Ordinary Shares	6770	7635871.00		
+2059165	SSEAR	Starry Sea Acquisition Corp Rights	6770	7635871.00		
+2059165	SSEAU	Starry Sea Acquisition Corp Unit	6770	7635871.00		
+2063816	INAC	Indigo Acquisition Corp. Ordinary Shares	6770	14755000.00		
+2063816	INACR	Indigo Acquisition Corp. Right	6770	14755000.00		
+2063816	INACU	Indigo Acquisition Corp. Unit	6770	14755000.00		
+2064177	BPAC	Blueport Acquisition Ltd Class A Ordinary Shares	6770	1437500.00		
+2064177	BPACR	Blueport Acquisition Ltd Rights	6770	1437500.00		
+2064177	BPACU	Blueport Acquisition Ltd Units	6770	1437500.00		
+2064683	CCII	Cohen Circle Acquisition Corp. II Class A Ordinary Shares	6770	7573333.00		
+2064683	CCIIU	Cohen Circle Acquisition Corp. II Unit	6770	7573333.00		
+2064683	CCIIW	Cohen Circle Acquisition Corp. II Warrant	6770	7573333.00		
+2070900	QUMS	Quantumsphere Acquisition Corp. Ordinary Shares	6770	11406650.00		
+2070900	QUMSR	Quantumsphere Acquisition Corp. Rights	6770	11406650.00		
+2070900	QUMSU	Quantumsphere Acquisition Corp. Units	6770	11406650.00		
+2077954	EVOX	Evolution Global Acquisition Corp Class A Ordinary Shares	6770	7000000.00		
+2077954	EVOXU	Evolution Global Acquisition Corp Units	6770	7000000.00		
+2077954	EVOXW	Evolution Global Acquisition Corp Warrants	6770	7000000.00		
+2078416	LLYVA	Liberty Live Holdings, Inc. Series A Liberty Live Group Common Stock	7900	92550000.00		
+2078416	LLYVK	Liberty Live Holdings, Inc. Series C Liberty Live Group Common Stock	7900	92550000.00	97.8700	RESTORED:2026-02-27~2026-08-31 OBSERVED:2026-08-31~
+2079106	LAFA	LaFayette Acquisition Corp. Ordinary Share	6770	15713333.00		
+2079106	LAFAR	LaFayette Acquisition Corp. Rights	6770	15713333.00		
+2079106	LAFAU	LaFayette Acquisition Corp. Unit	6770	15713333.00		
