@@ -103,3 +103,35 @@
 7. ADR-0135 펜스 고침은 옳게 뺀다(새 조건이 빼는 행은 복원 순위 `published_at ≤ asOf`에 닿을 수 없음) · 다만 적용 뒤 80 + SPGI·AOS 행이 관문 복원까지 계속 붉어 지금 52행과 한 수로 합쳐짐 → 「알려진 대기」를 따로 표시.
 - 재봤더니 문제 없음: ADR-0162 하류((가) 79종목 6,124행 `share_basis_status` 전부 NULL · 미국 전체 NULL 아닌 종목 2) · ADR-0071 펜스(국내 전용) · V63은 `00-precheck.sh`를 새로 안 깸(이미 V56~V62가 `8198fe0..HEAD`) · 10-30 시각 모형(US FR 16분 + 보충 약 4,100콜 13.7분 + KR FR 23.4분 → 약 15:08 · 화해까지 약 15:21 · DART FR KR 약 14,000/18,000).
 - **내가 잼(03시 · 코드)**: `JobFreshnessPolicy.lastSuccessAt`(`:205-221`)의 폴백은 `triggered_by <> 'GAP_FILL'`인 SUCCESS·PARTIAL_SUCCESS의 `max(started_at)` — 범위(티커·유니버스 좁힘)를 안 본다 · `batch_execution`에 실행 인자가 없어 이력의 범위는 target_count로만 짐작된다(FR 전량 기본 경로 = 수집 시장 활성 편입 1,350인데 이력의 MANUAL FR은 1,000·200·150 유니버스별뿐).
+
+## v2 1부 반증 판정 — 계획 안 렌즈(2026-10-06 03시 · 「수정 후 진행」 · `rebut2/`)
+- 선다(0콜): 매핑 태그 68만 대조하면 리더 = companyfacts — AAPL 79/79 · JPM 65/65 · MSFT 68/68(`ident_mapped.py`) · 중복 키는 companyfacts도 가장 정밀한 쪽(MSFT `UnrecognizedTaxBenefits` 3/3 · `dup_choice.py`) — 인라인 10-Q·10-K 모양에서 「나중에 채우면」 전환 때 값이 안 갈림 · 인스턴스 8개 같은 정밀도 다른 값 0 · 컨텍스트 식별자 전부 자기 CIK · 「같은 키면 안 더함」은 us-gaap엔 해당 없음(보충은 그 accn us-gaap 0일 때만 · 키에 accn).
+1. **[오류 4] 실패 계약의 근거가 꼬리 `initial-load`에 없다** — `FinancialWriter:186`은 `APPEND_ONLY`에서 `retractStaleVintages`를 안 부름 → 새 편입 영구 실패면 main의 「공시 하나 빠진 재무」가 「재무 0행」이 됨 → `StockRegistrar:280-288` 둘째 갈래·`MembershipGapFiller:311-316`이 매주 다시 돌려도 같은 실패 · 15:30 매일 붉힘(코드로 읽음) · 꼬리 모집단 08-31 뒤 미국 편입 92 중 캐시 밖 2(IOVA·KOD) — RS0 「전 모집단 1,218」 밖이라 결정 5①은 거짓 → **쓰기 모드마다 계약**: `FILL_MISSING` = 종목 실패 · `APPEND_ONLY` = companyfacts 몫만 쓰고 실패 기록(main과 같은 출력) · RS2에 그 갈래.
+2. **RS2 대조군이 원리적으로 못 붉음** — BE `-050247`·`-050325` 둘 다 companyfacts·DB에 없고 BE 최신 행 2026/Q1 · 회수는 출력에 있는 라벨의 keep 밖 행만(`:313-328`) → 「건너뜀」으로 돌려도 지울 행 없음 → 두 단계: FR#1 보충 성공 → 판 저장 → FR#2 404 주입 · 그 판이 안 접혀야(`SecEdgarFacts:899-902`) · HOLE(SPGI 2024)은 건너뛰면 출력에서 사라져 회수가 안 닿음 → 대조군은 RS0 (b) 종목 · 선택 계약 쪽 단언 = 「FAILED · 신규·정정·교정 0 · 실패 기록 · 재시도 성공 시 FR#1 상태와 같음」.
+3. **저장 내용이 「규칙 적용 뒤」라 판 표시 필요** — 리더 규칙이 바뀌면 옛 규칙 저장분과 새 규칙 신규분이 섞임(관문 규칙이 막는 형태) · 「0건도 평생 저장」은 잘못 고른 인스턴스·리더 결함을 영구화 → `reader_version` 컬럼(다르면 다시 읽음) 또는 축 없는 원 팩트를 `decimals`째 저장하고 고르기는 읽을 때 · 읽은 파일명·크기 저장 · 불변식: 원본 10-K·10-Q의 us-gaap 0은 MALFORMED로 저장 안 함 · 83 표본 companyfacts에 dei만 있는 6건(GRMN·INCY·WES 10-K/A · DUK·KO 10-Q/A · GEHC 원본 10-K) 중 GEHC는 인스턴스에 us-gaap이 있어야 함.
+4. **창 술어와 라벨 창 어긋남(기제 있음 · 지금 적중 0)** — 라벨 창은 회계연도 ≥ `from`(`SecEdgarFacts:252`) · 술어는 `filingDate ≥ from-01-01` → 놓침 from=2018에서 3(VFC 2017-08·11 · CLX 2017-11) · 2019에서 5(QRVO) — 전부 companyfacts에 있어 지금 0 · 넘침 40(출력에 안 쓰이는데 실패 표면) → `reportDate`·`fiscalYearEnd`로 회계연도(`edge.py`).
+5. **RS1이 차분 오라클(a1→b→a2)을 버림** — 마지막 전량 FR 09-28(#683) 뒤 companyfacts 변화가 새 코드 FR에 같이 실림 → 보충 때문인지 못 가름 · 스케줄러는 이른 판 안 넣음(`FinancialWriter:189`) → 기대값은 스윕이 아니라 `EarlierVintageReplayHarnessTest`로 · 2회째 FR(저장분 · 0콜) 멱등성 단언.
+6. **[오류 1] RS0은 귀속만 하고 반증 안 함** — (a)~(c)는 정의상 통과 · 값 대조는 RS0'뿐 · 83 표본 보충 대상 87 = 2026 인라인 10-Q 78 · 10-K/A 3 · 10-Q/A 2 · BE /A 1 · GEHC 1 · CLX 1 · SPGI 1 · 정정 쌍·10-K/A 모양에 제거 대조 없음 → companyfacts에 있는 같은 모양 10-Q/A 5 · 10-K/A 4가 후보 · GEHC는 companyfacts에 원래 행이 없어 제거 대조도 오라클도 아님 · (d) 판정 기준 없음 → 기계적 분류 규칙을 대조 전 커밋 · 실행 조건: `from` = FR과 같은 asOf−8(스윕 기본 2015 `SecEdgarFactsSweepTest:83`) · companyfacts를 submissions와 같은 날 새로(캐시 09-15·16 1,214 · 09-27 4 → 그 뒤 제출분이 거짓 보충 대상).
+7. **페이지가 실패 표면** — 종목당 콜 1 → 1 + submissions + 페이지(JPM 52) + 대상×2 · FR에 재시도 없음(`AdminJobLauncher:266-267`) → 보충 대상 0 종목도 5xx 한 번이면 그 달 FR을 잃음 → TRANSIENT 한정 재시도 · RS0에서 콜당 실패율 · 감시 「보충 실패 종목」.
+8. **[오류 2] 소비자** — `SecEdgarFactsReplayTest` · AOS 재현 javadoc(`SecEdgarFacts:563-567`) · 「companyfacts가 판 이력 전부」 문장 두 곳(`FinancialFetch:31` · 어댑터 `:134-135`) — 80종목이 반례 · ADR-0135 펜스는 `created_at`으로 세고 미국 복원 상한 08-31(1,684행) → 80종목 행이 펜스를 붉힘 · 그 처방(universe-restore + 파생층 백필)이 결정 5② 사정거리에 없음 · 전환 감시는 「교정 수」 대신 저장분과 companyfacts에 둘 다 있는 accn의 매핑 태그 직접 대조.
+
+# 계획 v3 (2026-10-06 03시 30분)
+## 0부 — [A56] 범위 표지(1부 앞 · 별도 배포 가능)
+- **뿌리(쟀다)**: `JobFreshnessPolicy.lastSuccessAt`의 폴백(`:205-221`)이 GAP_FILL만 빼고 MANUAL·ADMIN 성공을 범위와 무관하게 센다 — #710(IOVA 1종목)이 FR 연체일을 10-26 → 10-30으로 밀었다 · 스케줄러 성공 0인 잡(FR·FSR·G·시장 달력)만 폴백을 탄다.
+- **결정**: `batch_execution.scope`(`FULL`·`NARROW` · NULL = 모름 · V63) — 시작 호출 25곳 중 **티커·유니버스로 좁힐 수 있는 잡**이 시작 때 스스로 찍는다(좁힘을 아는 것은 잡뿐) · 폴백은 `scope = 'NARROW'`를 뺀다(NULL은 센다 — 이력 보존) · **이력은 V63 안에서 재구성**: FR·FSR·G의 MANUAL·ADMIN 행 중 `target_count` < 그 시각 열린 활성 편입 수(수집 시장 합 · `created_at ≤ started_at`) → `NARROW`, 같으면 `FULL`(재구성 방식은 B v5·v6 반증이 검증 · #683 1,000 < 1,350 → NARROW).
+- **예측**(드라이런이 잰다): FR·FSR·G의 폴백 시계가 바뀐다 — FR은 미국 활성 뒤 전량 MANUAL이 없어 「한 번도 안 돎」 → 다음 평일 14:15 연체 · FSR(#415 09-14 1,350 = FULL?) · G(09-20 1,350 = FULL?) — 각 잡의 첫 정기 실행일을 대조 전에 적는다.
+- **반증·드라이런**: 두 렌즈 · 사본에서 V63 → `JobFreshnessPolicy.stale`·`daysSinceLastSuccess`·`heavyJobDueToday`를 요일별로 · 15:30 배너 변화 · 손 좁힌 실행 뒤 시계 불변(대조군 = 고치기 전 코드에서 같은 실행이 시계를 민다).
+
+## 1부 — (가) 공시 보충 어댑터 v3 (v2 두 렌즈 반영 · 이름: 「무해한 선행 배포」가 아니라 **FR마다 값을 바꾸는 어댑터 변경 · 관문 규칙 밖(근거 v2 결정 5)**)
+1. 보충 폼 집합 = **정기 원본·정정(10-K · 10-Q · /A · 20-F · 40-F)만 · `PERIODIC_FORMS`와 따로 두고 독립을 시험으로 단언**(8-K 수용 P2와 안 엮임).
+2. 창 = 라벨 창과 같게 — submissions `reportDate`·`fiscalYearEnd`로 회계연도 ≥ `from`.
+3. 저장 표 `sec_filing_supplement`: accn · cik · form · filed · 파일명 · 크기 · `reader_version` · 축 없는 원 팩트(`decimals`째 · 고르기는 읽을 때) · us-gaap 수 — **원본 10-K·10-Q의 us-gaap 0은 MALFORMED · 저장 안 함** · 판이 다르면 다시 읽음.
+4. 실패 계약 = **쓰기 모드마다**: `FILL_MISSING` → 종목 실패(아무것도 안 씀) · `APPEND_ONLY`(꼬리) → companyfacts 몫만 쓰고 실패 기록 · TRANSIENT 한정 재시도(2회) · 감시 「보충 실패 종목」.
+5. 적용: **0부 배포 뒤** 1부 배포 → 결손 종목(80 + SPGI·AOS + RS0이 찾은 것)에 좁힌 손 FR(`NARROW` → 시계 안 밂) · 정기 FR은 insertEarlier=false라 **새 라벨만** 들인다(기존 라벨의 이른 판은 관문의 `--insert-earlier-vintages`) · 과거 편입·후보는 사정거리 밖(재고 행).
+6. 「companyfacts가 판 이력 전부」 문장 두 곳(`FinancialFetch:31` · 어댑터 `:134-135`) 고침 · ADR-0135 펜스 = `published_at ≤ max(RESTORED effective_to)` + 「알려진 대기」(보충 적용으로 생긴 행) 따로 · 그 처방(복원 재실행 · 파생층 백필)은 관문 몫으로 명시 · 관문 재고의 수(S0·[S]·P3a·ADR-0151)는 1부 뒤 다시 잼(소비자).
+7. 스윕 원천 = **파일 캐시**(companyfacts · submissions · 인스턴스 · 같은 날 수집) · 합치기는 (companyfacts, 저장분)만의 순수 함수 · 소비자 `SecEdgarFactsSweepTest` · `EarlierVintageReplayHarnessTest` · `SecEdgarFactsReplayTest` · AOS javadoc.
+### 1부 드라이런 규칙 v3(대조 전 커밋)
+- **RS0 반증형(0콜 · 파일 캐시 · `from` = asOf−8 · companyfacts·submissions 같은 날 새로)**: (i) 제거 대조 — companyfacts에 있는 공시에서 그 accn us-gaap 제거 + 보충 = 원래 출력 · 모양마다(인라인 10-Q · 10-K · 10-Q/A 5 · 10-K/A 4 · 비교열 판 GOOGL·HIG · 비인라인 하나) (ii) 전 모집단 보충 전/후 출력 차이를 **대조 전 커밋한 기계 규칙**으로 분류(새 기간 · 늦은 판 · 이른 판 · HOLE 해 · 그 밖) · 「그 밖」 0이 합격 · 보충 0 종목 바이트 같음 (iii) 콜당 실패율 · 같은 정밀도 충돌 수 · GEHC us-gaap 존재.
+- **RS1 차분(사본)**: a1(main FR) → b(새 코드 FR · 정기와 같은 플래그) → a2(main FR) · a1 = a2 종목만 · 기대값 = `EarlierVintageReplayHarnessTest` · b 2회째(저장분 · 0콜) 멱등.
+- **RS2 실패 계약**: 두 단계(FR#1 성공 → FR#2 404 주입 · RS0 (b) 종목 · 안 접히는 판) — FILL_MISSING 단언 「FAILED · 신규·정정·교정 0 · 실패 기록 · 재시도 성공 시 FR#1과 같음」 · 대조군 「건너뜀」 계약 → 삭제 > 0 · APPEND_ONLY 갈래(companyfacts 몫 씀 · 실패 기록).
+- **RS3 단위**: 폼 집합 독립 · 창(reportDate·fiscalYearEnd) · 페이지 · 인스턴스 찾기(인라인·비인라인) · 저장 판 · 원본 us-gaap 0 MALFORMED · 재시도 · 쓰기 모드별 계약.
