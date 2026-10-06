@@ -1,0 +1,66 @@
+근거 메모 — 2부 v8 계획 안 렌즈(0콜 · main 70e10d57 읽기만 · 운영 DB SELECT만)
+
+[N1] 끝 시각과 벽시계 창(결정 1·8)
+  실측(q01·q02): daily-update SCHEDULER 38회 med 14.9 · p90 20.8 · 최대 26.6(PARTIAL 09-15) · 정상 최대 23.9(10-05) · 09-01 13.6 → 10-05 23.9 상승
+  corporate-action 최대 15.9(10-05 · 10-06 1,683종목) · 14:20 화해 ① 2.5~5.1 · ② 3.1~3.8 · governance-derive 0.03
+  결정 1의 합(13:30+42+22+55=15:29)은 13:30 메서드 끝까지만. 그 뒤 사슬(≤15.9분) → 14:18 → 14:20(6~9분)이 풀 1로 붙는다
+   → 계획 자기 수로 14:20 화해 끝 ≈ 15:51~15:58(사슬 안 화해 없음) · 사슬 안 화해가 붙으면 ≈16:00+
+   → 사슬의 국내 irdsSttus(DART)는 메서드 끝 + ≤15.9분까지(10-06 로그: 국내 줄이 사슬 끝 16:10:44까지 · 과거 편입이 뒤에 섞임)
+  ADR-0166:39 「손 쓰기 잡을 평일 13:30~15:40에 돌리지 않는다 — 이 규칙이 지금 유일한 방어」 · 결정 8은 「문구는 바뀌지 않는다」
+  DART로 묶인 현실 최악(G 날 단계 ≈ (18,000−8,050−950)/84 ≈ 107짝 ≈ 21분): 13:30+23+24+55 ≈ 15:12 → 사슬 15:28 → 화해 ≈15:35(사슬 안 화해 없음)~15:44(있음)
+  v7 계획 밖 7(사슬 안 화해·1부 보충 몫 빠짐)을 v8도 안 넣음.
+
+[N2] 크론 사이 순서(결정 1 「14:00·14:18·14:20·15:30은 풀 1 순서대로 그 뒤」)
+  cronsim/CronSleepSimV8 — Spring 7.0.8 CronTrigger·ConcurrentTaskScheduler · 가상 단조 시계 · 풀 1
+  heavy-day: 목 메서드 15:29 끝 → 15:34부터 2시간 수면(사슬 도는 중) → 금 14:00 사슬 · 14:18 · 14:20(14:20~14:27)이 먼저 · 13:30 메서드 15:30
+  after-method-55: 월 14:10부터 55분 → 화 14:00·14:18·14:20 먼저 · 메서드 14:27 · after-method-45 → 사슬만 먼저(14:18·14:20은 뒤) · night(18:55) 대조군 순서 보존
+  문턱 = 50분(14:20 − 13:30) · 노출 창 = 메서드 끝 ~ 14:20 끝(≈23분/일)
+  비교: 지금 main은 14:15 무거운 잡 → 14:20 문턱 5분(같은 결함이 더 쉽게) — v8이 악화시킨 것은 아님 · 다만 단계가 매 공시일 쓰므로 노출 날이 「무거운 잡 날」에서 「공시가 있는 평일」로 넓어짐
+
+[N3] 결정 6 술어 — 「재무 유래」를 입력 표로 유도
+  DataRequirement로 유도하면 MARKET_CAP·SHARES_GROWTH_3Y·TURNOVER_RATIO·TURNOVER_RATIO_60이 priceBars만 선언하는데 FinancialMath.sharesOf로 재무 주식수를 읽음(미국 봉 listed_shares NULL → 재무 폴백 · MarketCapCalculator:63-72·94-102)
+  거버넌스: DIVIDEND_YIELD governance(1,0,3)인데 미국 DPS_COMMON·CASH_DIVIDEND_TOTAL이 financial_statement FY 기간(first_published_at·shares)에서 유도(AlpacaGovernanceFactMapper:117-160 · GovernanceFactDeriver:195-233)
+  프리셋 PresetCatalog가 MARKET_CAP(required)·SHARES_GROWTH_3Y(weighted)를 씀
+
+[N4] 13:30 계산이 새 판을 유도 전에 읽는 자리가 하나 더(결정 1)
+  미국 배당 사실(DPS_COMMON·CASH_DIVIDEND_TOTAL)은 새 10-K의 FY 기간이 생겨야 유도 · 유도는 14:18 governance-derive(IndicatorReconciler.deriveInputs:76-79)
+  v8은 주식수 기저만 갱신 앞으로 → 단계가 10-K를 소비하면 보류가 풀리고 13:30 워치리스트가 DIVIDEND_YIELD·DIVIDEND_PAYOUT을 옛 FY 배당으로 판정 → 14:20 화해가 화면만 고침
+  ShareBasisDeriver 입력 = corporate_action APPLIED(14:00 사슬이 씀) + 재무 판 → 14:18의 기저 유도는 남아야 함(무거운 잡의 새 판 · 사슬의 새 APPLIED가 13:30 유도 뒤)
+
+[N5] 보류의 끝 상태가 없는 갈래(결정 6 「보류가 영구가 되지 않는다」)
+  미국: 미소비 = 보충 FAILED·옛 판·목록 실패(v4 결정 2) · UNREADABLE은 출구 없음(v4 결정 9) · V64 FAILED+UNREADABLE은 같은 reader_version에서 다시 안 받음(V64:6) → 미국 전 시장 재무 항목 무기한 보류
+  국내 (a) FSR 미반영 표지: 상한 없음(v7 결정 3 · v8 끝 상태는 (b)·(d)만) · (c) 조인 불가 등록이 미소비 집합에서 빠지는지 안 적힘
+  목록 실패·단계 예외가 이어지는 날도 끝 상태 없음(운영자 알림만)
+
+[N6] 미표시/표지 null → 워치리스트 엣지 트리거가 뒤집힘
+  ConditionEvaluator는 값 없음을 불충족으로 접음 → recordEvaluation(false) → 값이 돌아오면 「새로 충족」 알림(WatchlistAlertRunner:186-209·295-300 · WatchlistStore:189-195)
+  (a) 표지 null(PBR·ROE…) · (b)(d) 미표시 둘 다 · 알림 걸린 항목 1(005930 · 조건 8 중 PBR_PCTL·ROA·ACCRUAL_RATIO·DEBT_RATIO 등 재무)
+  미표시의 날짜 범위가 안 적힘(봉 ≥ 공시일만이어야 — 전 창이면 과거 정답 값을 지움)
+
+[N7] 공시일 정의 둘(결정 6 술어 「공시일 ≤ asOf」)
+  KNOWN_ON의 published_at = rcept_no 앞 8자리(DartReportPeriods.publishedAt:42-53) · 단계의 filed = rcept_dt(v5 결정 10 · v6 결정 9)
+  저장 list.json 고유 475건 중 4건이 rcept_dt = 앞 8자리 + 1일(950210 사업보고서 2026.06 · 299480 · 368030 · 케이솔루션) — 지금 우리 종목은 아님(stock 행 0)
+  → asOf = 앞 8자리 날에 보류가 안 걸리고(rcept_dt > asOf), 단계도 그날 판정 안 함(어제까지 = rcept_dt ≤ asOf) → 그 봉 값은 공시 없이 판정 → 다음 날 소급 변경
+
+[N8] 무거운 잡 시장별 실행(결정 2)
+  신선도는 잡 이름 단위(JobFreshnessPolicy.daysSinceLastSuccess:178-183 · lastSuccessAt:221-232) · 정기 FR은 두 시장 한 실행(PipelineScheduler:363-369 · universeCode null)
+  p0(hold/p0-run-scope)의 scopeOf: tickers·universeCode가 있으면 NARROW → 시계에 안 셈 → 한 시장만 돈 FR은 이튿날 다시 「연체」 → 그 시장 DART 12,600 중복 · 다른 길(시장 인자를 FULL로)은 반대로 못 돈 시장의 시계를 되돌림
+
+[N9] 예약이 단계에만 걸림(결정 3)
+  모든 DART 어댑터는 hasDailyQuota()(usedToday < 18,000)만 봄(git grep 22곳) → 무거운 잡이 자기 몫을 넘으면 사슬 몫을 먹음 · 사슬은 메서드 뒤
+  무거운 잡 국내 실제콜 기록 없음(PipelineScheduler:269-271 javadoc · batch_execution note 빈칸)
+  기업 행위 대상 = windowMemberIds(보존 창 편입) — 지금 국내 475(현 350 + 과거 125 · q03) → covering 2 × 475 = 950(700 아님) · 실제 콜 수는 실행 기록에 없음(note 빈칸 · q 기록)
+
+[N10] 「종료」 뒤 일일 갱신이 도는 표(결정 2)
+  종료 게이트는 실행마다의 플래그(BatchExecutionContext.abortIfAbandoned:219-224) · ContextClosedEvent 때 열린 실행만 표시(BatchExecutions:94-127 · open.clear())
+  → 단계가 BatchShutdownException으로 끝난 뒤 시작한 일일 갱신·무거운 잡은 게이트가 없다 → 종료 중에 수집·쓰기(ADR-0078 · data-pipeline.md 「삼키지 않는다」)
+
+[N11] 결정 4 보강(0콜)
+  불변성 1차 수집 60라벨: FR 응답에 CFS 행이 있으면 FSR CFS 000(48/48) · FR이 OFS뿐이면 FSR CFS 013(12/12) → 「라벨의 성질」을 FR 탐침의 fs_div로 0콜 판정 가능
+  결정 4(「CFS 013이면 OFS ≥ R이면 반영」)는 연결 공시사의 CFS가 늦게 뜨는 순간에도 OFS로 소비 판정 — 그 지연이 실재하는지는 안 잼(피크 전 원장에 없음)
+
+[선다]
+  decision 5: FR이 쓰는 칸 9(DartFinancialAdapter:189-224) · FSR이 더 쓰는 칸 9(지배자본·OCF·매출원가·현금·capex·재고·지배순이익·법인세·세전이익 · DartFullStatementAdapter:340-395) → 생성자 인자 비교로 유도 가능
+  업종 상대 층 키는 체계 접두(KSIC:/SIC:)라 시장을 안 섞음 → 결정 6의 시장 단위와 맞음
+  미국 색인 13:30 여유 ≥ 68분(EST 12:08 게시)
+  stage → watchlist 순서는 한 메서드 안이라 수면에 안 뒤집힘(cronsim 전 시나리오)

@@ -1,0 +1,7 @@
+fields 38 args 36 38 38 38
+FR(분기) 값 칸: ['currentAssets', 'currentLiabilities', 'netIncome', 'operatingIncome', 'retainedEarnings', 'revenue', 'totalAssets', 'totalEquity', 'totalLiabilities']
+FR(Q4 유도) 값 칸: ['assertedAbsent', 'currentAssets', 'currentLiabilities', 'derived', 'netIncome', 'operatingIncome', 'retainedEarnings', 'revenue', 'totalAssets', 'totalEquity', 'totalLiabilities']
+FSR(340) 값 칸: ['assertedAbsent', 'capex', 'cashAndEquivalents', 'costOfSales', 'currentAssets', 'currentLiabilities', 'derived', 'incomeTaxExpense', 'inventories', 'netIncome', 'netIncomeControlling', 'operatingCashFlow', 'operatingIncome', 'profitBeforeTax', 'retainedEarnings', 'revenue', 'totalAssets', 'totalEquity', 'totalEquityControlling', 'totalLiabilities']
+FSR(470) 값 칸: ['assertedAbsent', 'cashAndEquivalents', 'currentAssets', 'currentLiabilities', 'derived', 'inventories', 'netIncomeControlling', 'retainedEarnings', 'totalAssets', 'totalEquity', 'totalEquityControlling', 'totalLiabilities']
+FSR 전용 = FSR ∖ FR: ['capex', 'cashAndEquivalents', 'costOfSales', 'incomeTaxExpense', 'inventories', 'netIncomeControlling', 'operatingCashFlow', 'profitBeforeTax', 'totalEquityControlling']
+FR 전용 = FR ∖ FSR: []
