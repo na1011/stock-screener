@@ -423,6 +423,106 @@ class ReaderVersionPinTest {
         assertThat(offenders).as("범위 인터페이스를 빈 배선에 쓰면 범위 밖 구현이 주입될 수 있다 — 범위 클래스를 구체형으로 받는다").isEmpty();
     }
 
+    /** 범위 빈의 주입 자리에 와도 되는 범위 밖 형 — 범위 형과 {@link #OUTSIDE_SCOPE} 말고는 이것뿐이다. */
+    private static final Map<String, String> INJECTABLE_LIBRARY = Map.of(
+            "org.springframework.jdbc.core.JdbcTemplate", "원장 표의 읽기·쓰기 통로 — 저장 형태는 범위 안 SQL이 정한다");
+
+    @Test
+    @DisplayName("범위 빈의 주입 자리 형은 범위 형 · 사유가 적힌 범위 밖 형 · 허용 라이브러리뿐이다 — JDK 함수형을 받으면 그 구현이 폐포 밖이다")
+    void scopeBeansInjectOnlyKnownTypes() throws Exception {
+        // v14 반증 e5: 범위 클라이언트의 운영 생성자가 UnaryOperator<String>을 받게 하고 그 구현(새 빈)의 본문만 바꾸자, 폐포는 JDK
+        // 형에서 멈추고 배선 검사는 범위 인터페이스 둘만 봐 전부 초록인데 같은 색인이 OK → UNREADABLE이 됐다.
+        Set<String> offenders = new TreeSet<>();
+        for (String file : SOURCE_SCOPE) {
+            Class<?> type = Class.forName("com.stockscreener.pipeline.datasource.us." + file.substring(0, file.length() - 5));
+            if (!AnnotatedElementUtils.hasAnnotation(type, Component.class)) {
+                continue;
+            }
+            List<Class<?>> taken = new ArrayList<>();
+            for (Constructor<?> constructor : type.getDeclaredConstructors()) {
+                if (constructor.isAnnotationPresent(Autowired.class) || type.getDeclaredConstructors().length == 1) {
+                    taken.addAll(List.of(constructor.getParameterTypes()));
+                }
+            }
+            for (Field field : type.getDeclaredFields()) {
+                if (field.isAnnotationPresent(Autowired.class)) {
+                    taken.add(field.getType());
+                }
+            }
+            for (Method method : type.getDeclaredMethods()) {
+                if (method.isAnnotationPresent(Autowired.class)) {
+                    taken.addAll(List.of(method.getParameterTypes()));
+                }
+            }
+            for (Class<?> t : taken) {
+                String name = t.getName();
+                Class<?> top = t;
+                while (top.getEnclosingClass() != null) {
+                    top = top.getEnclosingClass();
+                }
+                boolean inScope = top.getPackageName().equals(SecFilingClient.class.getPackageName())
+                        && SOURCE_SCOPE.contains(top.getSimpleName() + ".java");
+                if (!inScope && !OUTSIDE_SCOPE.containsKey(top.getName()) && !INJECTABLE_LIBRARY.containsKey(name)) {
+                    offenders.add(type.getSimpleName() + " — " + name);
+                }
+            }
+        }
+        assertThat(offenders).as("범위 빈이 모르는 형을 주입받으면 그 구현이 판 고정 밖에서 저장을 바꾼다 — 범위에 넣거나 사유를 적는다")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("범위 소스는 리플렉션 · ServiceLoader · 동적 클래스 로딩을 쓰지 않는다 — 폐포가 그 대상을 정적으로 못 본다")
+    void scopeSourcesDoNotLoadCodeDynamically() throws Exception {
+        Set<String> offenders = new TreeSet<>();
+        Set<String> bannedTypes = Set.of("java.util.ServiceLoader", "java.lang.ClassLoader");
+        Set<String> bannedPackages = Set.of("java.lang.reflect", "java.lang.invoke");
+        Set<String> bannedClassMethods = Set.of("forName", "getMethod", "getDeclaredMethod", "getConstructor",
+                "getDeclaredConstructor", "getField", "getDeclaredField", "newInstance");
+        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        try (StandardJavaFileManager files = javac.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
+            JavacTask task = (JavacTask) javac.getTask(null, files, diagnostics,
+                    List.of("-proc:none", "-classpath", System.getProperty("java.class.path")), null,
+                    files.getJavaFileObjectsFromPaths(SOURCE_SCOPE.stream().map(SOURCE_DIR::resolve).toList()));
+            Iterable<? extends CompilationUnitTree> units = task.parse();
+            task.analyze();
+            Trees trees = Trees.instance(task);
+            for (CompilationUnitTree unit : units) {
+                new TreePathScanner<Void, Void>() {
+                    @Override
+                    public Void visitIdentifier(IdentifierTree node, Void unused) {
+                        check();
+                        return super.visitIdentifier(node, unused);
+                    }
+
+                    @Override
+                    public Void visitMemberSelect(MemberSelectTree node, Void unused) {
+                        check();
+                        return super.visitMemberSelect(node, unused);
+                    }
+
+                    private void check() {
+                        Element element = trees.getElement(getCurrentPath());
+                        TypeElement top = topLevel(element);
+                        if (element == null || top == null) {
+                            return;
+                        }
+                        String topName = top.getQualifiedName().toString();
+                        String pkg = topName.contains(".") ? topName.substring(0, topName.lastIndexOf('.')) : "";
+                        boolean banned = bannedTypes.contains(topName) || bannedPackages.contains(pkg)
+                                || (topName.equals("java.lang.Class") && element.getKind() == ElementKind.METHOD
+                                && bannedClassMethods.contains(element.getSimpleName().toString()));
+                        if (banned) {
+                            offenders.add(unit.getSourceFile().getName() + " — " + topName + "#" + element.getSimpleName());
+                        }
+                    }
+                }.scan(unit, null);
+            }
+        }
+        assertThat(offenders).as("동적으로 들인 코드는 판 고정 폐포가 못 본다(v14 반증 처방 c)").isEmpty();
+    }
+
     @Test
     @DisplayName("받기 실패의 종류에 UNREADABLE이 없다 — 있으면 받기 실패가 다시 받지 않는 종료 상태로 저장된다")
     void fetchFailureKindsNeverCollideWithTheTerminalKind() {
@@ -766,10 +866,28 @@ class ReaderVersionPinTest {
                     for (String subtype : projectSubtypes(task.getElements().getBinaryName(owner).toString())) {
                         TypeElement sub = task.getElements().getTypeElement(subtype.replace('$', '.'));
                         if (sub == null || sub.getNestingKind().isNested() && sub.getSimpleName().isEmpty()) {
-                            out.put("하위형 " + subtype, "이름 없음");
+                            // 이름 없는 하위형(익명 · 지역)은 본문을 따로 못 집으므로 감싼 최상위 클래스를 통째로 싣는다 — 이름만 실으면
+                            // 그 본문만 바꾼 변이가 초록이었다(v14 반증 e1 · @Bean @Primary 익명 하위형).
+                            out.put("하위형 " + subtype, "이름 없음 — 감싼 최상위 클래스 전체로");
+                            int dollar = subtype.indexOf('$');
+                            TypeElement enclosing = dollar < 0 ? null
+                                    : task.getElements().getTypeElement(subtype.substring(0, dollar));
+                            if (enclosing != null) {
+                                whole.add(enclosing);
+                            }
                             continue;
                         }
                         whole.add(sub);
+                    }
+                    // 통째로 싣는 클래스의 프로젝트 상위 클래스 사슬도 통째로 — 상속받은 구현이 하위형 밖에 있을 수 있다(v14 반증 처방 d).
+                    for (int i = 0; i < whole.size(); i++) {
+                        javax.lang.model.type.TypeMirror sup = whole.get(i).getSuperclass();
+                        if (sup instanceof javax.lang.model.type.DeclaredType declared
+                                && declared.asElement() instanceof TypeElement superType
+                                && superType.getQualifiedName().toString().startsWith("com.stockscreener.")
+                                && !whole.contains(superType)) {
+                            whole.add(superType);
+                        }
                     }
                     for (TypeElement type : whole) {
                         String name = type.getQualifiedName().toString();

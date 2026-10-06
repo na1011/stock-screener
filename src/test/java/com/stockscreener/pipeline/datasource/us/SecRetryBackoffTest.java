@@ -128,6 +128,23 @@ class SecRetryBackoffTest {
         assertThat(calls).hasValue(0);
     }
 
+    @Test
+    @DisplayName("운영 생성자는 호스트마다 다른 차단을 둔다 — 하나를 나누면 공시 목록의 성공이 Archives 차단을 닫는다")
+    void productionConstructorKeepsOneBackoffPerHost() throws Exception {
+        // 행동 시험(교차 시나리오)은 패키지 생성자로 차단 둘을 직접 넣어, 운영 생성자를 하나 공유로 되돌린 변이에 51개가 다
+        // 초록이었다(v14 반증 · 사본 ms). 그래서 운영 배선 자체를 묻는다.
+        com.stockscreener.pipeline.datasource.http.DataSourceProperties properties =
+                new com.stockscreener.pipeline.datasource.http.DataSourceProperties();
+        properties.getSecEdgar().setApiKey("Test Runner test@example.com");
+        SecFilingClient client = new SecFilingClient(new com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory(),
+                properties, limiter(true, () -> { }));
+        java.lang.reflect.Field data = SecFilingClient.class.getDeclaredField("dataBackoff");
+        java.lang.reflect.Field files = SecFilingClient.class.getDeclaredField("filesBackoff");
+        data.setAccessible(true);
+        files.setAccessible(true);
+        assertThat(data.get(client)).isNotNull().isNotSameAs(files.get(client));
+    }
+
     private SecFilingClient.Backoff recording() {
         return new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, pauses::add);
     }

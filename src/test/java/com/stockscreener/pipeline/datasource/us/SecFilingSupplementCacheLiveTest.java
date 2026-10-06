@@ -43,8 +43,14 @@ import java.util.function.Function;
  *
  * <p><b>받기는 운영과 같은 자리({@link SecFilingClient#fetch})다</b> — 대기 · 호스트별 차단 · 덜 온 2xx(JSON으로 안 읽힘 ·
  * 인스턴스 길이 ≠ 색인 크기)를 다시 받는 규칙까지. 따로 짠 재시도는 대기도 길이 대조도 없이 끊긴 본문을 그대로 저장해, 재생이
- * 보충 실패로 읽고 손 FR 2-5가 거짓으로 멈췄다(2026-10-06 v12 반증). 끝까지 못 받은 것은 {@code .status}에 503을 적어 재생이
- * 같은 받기 실패로 재현하고, 출력의 {@code failures=}가 0이 아니면 손 FR 2-2가 멈춘다.
+ * 보충 실패로 읽고 손 FR 2-5가 거짓으로 멈췄다(2026-10-06 v12 반증). 끝까지 못 받은 것은 {@code .status}에 503을 적는다 —
+ * 재생은 그것을 받기 실패로 재현하지만 <b>종류까지는 아니다</b>(운영이 MALFORMED인 잘린 인스턴스도 재생에선 TRANSIENT · v14
+ * 반증). 그래서 출력의 {@code failures=}가 0이 아니면 손 FR 2-2가 멈추고, 그 디렉터리를 재생에 쓰지 않는다.
+ *
+ * <p><b>같은 디렉터리에 다시 모아도 된다</b> — 2xx를 저장할 때 그 경로의 낡은 {@code .status}를 지운다. 재생은 {@code .status}를
+ * 본문보다 먼저 보므로, 안 지우면 다시 모아 {@code failures=0}인데도 재생이 그 공시를 받기 실패로 읽었다(v14 반증 재현).
+ *
+ * <p>{@code SUPP_DATA_BASE}·{@code SUPP_FILES_BASE}를 주면 두 호스트를 바꿔 끼운다 — 가짜 서버로 0콜 연습할 때만.
  */
 @Tag("live")
 @EnabledIfEnvironmentVariable(named = "SUPP_CACHE_DIR", matches = ".+")
@@ -75,6 +81,12 @@ class SecFilingSupplementCacheLiveTest {
         ExternalApiClientFactory factory = new ExternalApiClientFactory();
         // 운영과 같은 간격(초당 5회).
         limiter = new TokenBucketRateLimiter("sec-edgar", 300, 0);
+        if (System.getenv("SUPP_DATA_BASE") != null) {
+            properties.getSecEdgar().setBaseUrl(System.getenv("SUPP_DATA_BASE"));
+        }
+        if (System.getenv("SUPP_FILES_BASE") != null) {
+            properties.setSecEdgarFilesBaseUrl(System.getenv("SUPP_FILES_BASE"));
+        }
         DataSourceProperties.Source source = properties.getSecEdgar();
         data = factory.create(source, source.getBaseUrl(), SecEdgarHeaders.of(source));
         files = factory.create(source, properties.getSecEdgarFilesBaseUrl(), SecEdgarHeaders.of(source));
@@ -181,6 +193,17 @@ class SecFilingSupplementCacheLiveTest {
                 tickers.size(), noCik, targetsTotal, calls, failures, dir);
     }
 
+    /** 본문을 쓰고 그 경로의 낡은 {@code .status}를 지운다 — 재생이 {@code .status}를 본문보다 먼저 본다. */
+    static void saveBody(Path save, byte[] body) throws java.io.IOException {
+        Files.createDirectories(save.getParent());
+        Files.write(save, body);
+        Files.deleteIfExists(statusOf(save));
+    }
+
+    static Path statusOf(Path save) {
+        return save.resolveSibling(save.getFileName() + ".status");
+    }
+
     /** JSON 본문(companyfacts · 공시 목록 · 색인)의 덜 온 2xx 판정 — 운영과 같다. */
     private static final Function<ResponseEntity<byte[]>, String> JSON = received -> SecEdgarResponse.unreadableJson(
             received.getBody() == null ? null : new String(received.getBody(), StandardCharsets.UTF_8));
@@ -201,8 +224,7 @@ class SecFilingSupplementCacheLiveTest {
             status = response.getStatusCode().value();
             if (response.getStatusCode().is2xxSuccessful()) {
                 if (save != null) {
-                    Files.createDirectories(save.getParent());
-                    Files.write(save, response.getBody());
+                    saveBody(save, response.getBody());
                 }
                 return response.getBody();
             }
@@ -213,7 +235,7 @@ class SecFilingSupplementCacheLiveTest {
         failures++;
         if (save != null) {
             Files.createDirectories(save.getParent());
-            Files.writeString(save.resolveSibling(save.getFileName() + ".status"), Integer.toString(status));
+            Files.writeString(statusOf(save), Integer.toString(status));
         }
         System.out.printf("supplement.cache failed status=%d path=%s %s%n", status, path, reason);
         return null;
