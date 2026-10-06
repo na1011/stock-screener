@@ -60,4 +60,16 @@ fi
 cp "$JAR" "$DEPLOY/app.jar.tmp"
 mv "$DEPLOY/app.jar.tmp" "$DEPLOY/app.jar"
 
+# 이 jar가 어느 커밋에서 나왔는지 남긴다 — 손 쓰기 절차가 「지금 도는 코드」에 뜬 worktree에서 bootRun을 돌릴 때
+# 읽는다(ADR-0173 첫 손 FR 0단계). main 작업 트리는 배포 뒤에도 움직이므로 「HEAD = 배포 커밋」은 금방 거짓이 된다.
+# 커밋 안 된 코드가 있으면 커밋으로 가리킬 수 없어 그 사실을 함께 적는다(읽는 쪽이 멈춘다).
+# 못 적어도 배포는 막지 않는다 — 대신 조용히 넘기지 않고 알리고, 읽는 쪽이 멈추게 unknown을 남긴다.
+if commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)" && dirty="$(git -C "$ROOT" status --porcelain -- src build.gradle settings.gradle 2>/dev/null)"; then
+  { echo "commit=$commit"; echo "dirty=$([[ -n "$dirty" ]] && echo true || echo false)"; echo "staged_at=$(date '+%F %T')"; } \
+    >"$DEPLOY/app.jar.commit"
+else
+  echo "[stage] 배포 커밋을 못 읽었다 — $DEPLOY/app.jar.commit에 unknown을 남긴다(손 쓰기 절차가 멈춘다)." >&2
+  { echo "commit=unknown"; echo "dirty=unknown"; echo "staged_at=$(date '+%F %T')"; } >"$DEPLOY/app.jar.commit"
+fi
+
 echo "[stage] $(basename "$JAR") → $DEPLOY/app.jar"
