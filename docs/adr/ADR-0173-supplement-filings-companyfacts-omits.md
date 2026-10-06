@@ -123,7 +123,7 @@ applies_to:
        - (다) 그 밖 → **멈추고 그 종목마다 원장에 물어 판정한다** · 결함으로 판정된 종목만 아래로 되돌린다.
     6. `select count(*) from batch_execution where status='RUNNING'` = 0 → `$R/ops/start.sh --app`.
   - **되돌리는 법(종목 단위 · 원시 SQL이라 따로 사용자 승인 · 앱을 내린 채)** — 표째 `pg_restore -t`는 쓰지 않는다: 표 정의만 다시 만들어 identity · pkey · unique · index를 잃고(Writer INSERT와 보충 저장의 `ON CONFLICT`가 깨진다), 덤프 뒤의 다른 종목·다른 시장 쓰기까지 지운다(반증 실측 · `ops/dump-db.sh`가 찍는 좁힌 복원도 같은 형태). `$T/rollback.tsv` = 되돌릴 종목의 `stock_id<TAB>ticker`(targets.tsv의 부분집합) · `IDS=$(cut -f1 $T/rollback.tsv | paste -sd, -)` · `S` = 3의 `started_at`:
-    1. 사본에서 꺼낸다: `psql -X -v ON_ERROR_STOP=1 -d stock_screener_q4v_fr1_base -c "\copy (select * from financial_statement where stock_id in ($IDS)) to '$T/fs.copy'" -c "\copy (select * from financial_column_absence where stock_id in ($IDS)) to '$T/fca.copy'"`.
+    1. 사본에서 꺼내고 행 수를 잰다: `psql -X -v ON_ERROR_STOP=1 -d stock_screener_q4v_fr1_base -c "\copy (select * from financial_statement where stock_id in ($IDS)) to '$T/fs.copy'" -c "\copy (select * from financial_column_absence where stock_id in ($IDS)) to '$T/fca.copy'"` · `N_FS=$(psql -X -At -d stock_screener_q4v_fr1_base -c "select count(*) from financial_statement where stock_id in ($IDS)")` · `N_FCA`도 같은 꼴(`financial_column_absence`).
     2. 운영 한 트랜잭션 — 파일을 지어(`$$`는 셸이 펼치지 않게 `\$\$`) `psql -X -v ON_ERROR_STOP=1 -1 -d stock_screener -f $T/rollback.sql`:
        ```bash
        cat > $T/rollback.sql <<EOF
@@ -137,14 +137,17 @@ applies_to:
        insert into financial_column_absence select * from r_fca;
        delete from sec_filing_supplement where fetched_at >= '$S';
        do \$\$ begin
-         if (select count(*) from financial_statement where stock_id in ($IDS)) <> (select count(*) from r_fs)
-            or (select count(*) from financial_column_absence where stock_id in ($IDS)) <> (select count(*) from r_fca)
-         then raise exception '되돌린 행 수가 사본과 다르다'; end if;
+         if (select count(*) from r_fs) <> $N_FS or (select count(*) from r_fca) <> $N_FCA
+            or (select count(*) from financial_statement where stock_id in ($IDS)) <> $N_FS
+            or (select count(*) from financial_column_absence where stock_id in ($IDS)) <> $N_FCA
+         then raise exception '되돌린 행 수가 사본(%, %)과 다르다', $N_FS, $N_FCA; end if;
        end \$\$;
        EOF
        ```
+       행 수는 **사본에서 잰 수와** 비교한다 — 「넣은 수 = 임시 표에 읽은 수」는 늘 참이라 짧게 끊긴 복사 파일을 못 잡는다(2026-10-06 연습: 그 꼴은 한 줄 뺀 파일로 8,116행을 커밋했고, 이 꼴은 예외로 트랜잭션째 되돌렸다). 커밋 뒤 두 표의 서명(`select count(*), md5(string_agg(t::text, '|' order by t::text)) from (select * from <표> where stock_id in ($IDS)) t`)이 운영과 `_base`에서 같은지 본다.
        `sec_filing_supplement`는 0단계에서 비어 있었고 앱이 내려가 있었으므로 `S` 뒤 행은 전부 이 절차의 것이다 — 되돌리지 않은 종목의 행도 지워지지만 다음 FR이 다시 받는다(못 받으면 실패 행이 그 날짜를 지킨다 · 목록을 못 받으면 회수가 선다).
     3. `share-basis-derive` → `indicator-reconcile --tickers=<되돌린 티커>`(각각 DB 단언 · 지표·거버넌스는 복원하지 않고 다시 계산한다) → `$R/ops/start.sh --app`.
+    - **연습(2026-10-06 · 사본)**: `_base` 자리에 `stock_screener_sc_a`, 운영 자리에 RS1 재생을 마친 그 복제(`stock_screener_q4v_rs1c`)를 두고 1·2를 글자 그대로 돌렸다 — 109종목 두 표의 서명이 `sc_a`와 md5까지 같아졌고(재무 8,117행 · 부재 1,528행) 나머지 종목은 그대로였다 · 보충 545행이 지워졌다.
   - **둘째 손 FR**: 10-10 20:00 리밸런싱의 첫 편입 전원 — 목록은 리밸런싱 뒤 FR 술어(`StockRegistrar.IN_RETENTION_WINDOW`)를 그대로 쓴 질의로 내고, note의 `대상=`이 그 수와 같은지 단언한다 · 창 편입이 아닌 A 새 대표(BTSG·NWSA·UHAL.B)는 `--tickers`가 WARN 한 줄로 버리므로 넣지 않는다(「후보 쪽 재무 낡음」 재고로) · 0·3·4·5·6단계(앱을 내린 채 · 단언 포함)는 첫 손 FR과 같다 — 다만 0단계의 「보충 표 0행」은 첫 손 FR에만 선다. 둘째는 첫 손 FR의 행이 있고, 되돌리기는 `S` 뒤에 받은 행만 지운다(같은 CIK를 나눠 쓴 앞 종목의 행이 그 안에 들면 다음 FR이 다시 받는다).
     - **MUST NOT: `--universe`를 붙이지 않는다** — 붙이면 열린 편입만 잡는다(`StockRegistrar.oneUniverseMemberIds`). `--tickers`만 주면 보존 창 편입(닫힌 편입 포함 · 화해와 같은 술어)을 잡는다. 붙였다면 (가)가 이미 쫓아낸 종목을 못 잡는다 — DOX는 FY2025 20-F를 companyfacts가 안 실어 최신 기말이 2024-09-30에 멈췄고, 주식수 나이 거름(2년)에 걸려 10-02에 편출됐다.
     - 첫 손 FR = RS1 Writer 차이 종목(창 편입) · 토 10-10 낮의 두 jar `universe-restore --dates` 재생 **전**(금요일 밤까지)에 끝낸다 — 그 재생이 주식수를 읽어 A의 귀속과 섞인다.
