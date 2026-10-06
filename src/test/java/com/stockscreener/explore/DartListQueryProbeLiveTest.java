@@ -30,10 +30,12 @@ class DartListQueryProbeLiveTest {
             String rest = query.contains("?") ? query.substring(query.indexOf('?') + 1) : query;
             String url = "https://opendart.fss.or.kr/api/" + path + "?crtfc_key="
                     + URLEncoder.encode(System.getenv("DART_API_KEY"), StandardCharsets.UTF_8) + "&" + rest;
-            HttpResponse<String> res = http.send(HttpRequest.newBuilder(URI.create(url)).GET().build(),
-                    HttpResponse.BodyHandlers.ofString());
-            Files.writeString(out.resolve("q" + (++i) + ".json"), res.body());
-            String head = res.body().length() > 160 ? res.body().substring(0, 160) : res.body();
+            HttpResponse<byte[]> res = http.send(HttpRequest.newBuilder(URI.create(url)).GET().build(),
+                    HttpResponse.BodyHandlers.ofByteArray());
+            Files.write(out.resolve("q" + (++i) + (path.endsWith(".xml") ? ".zip" : ".json")), res.body());
+            String text = new String(res.body(), StandardCharsets.UTF_8);
+            String head = path.endsWith(".xml") ? "bytes=" + res.body().length
+                    : text.length() > 160 ? text.substring(0, 160) : text;
             System.out.printf("PROBE q%d %d %s :: %s%n", i, res.statusCode(), query, head.replace('\n', ' '));
             Thread.sleep(700);
         }
