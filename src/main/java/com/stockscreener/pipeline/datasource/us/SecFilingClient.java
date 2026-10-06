@@ -291,7 +291,7 @@ public class SecFilingClient {
     /**
      * 인스턴스 파일의 바이트.
      *
-     * <p><b>MUST: 받은 길이가 색인의 크기와 다르면 다시 받고, 끝까지 다르면 받기 실패(MALFORMED)다</b> — 지금 전송(HttpURLConnection)은 고정 길이
+     * <p><b>MUST: 받은 길이가 색인의 크기와 다르면 다시 받고, 끝까지 다르면 받기 실패(TRANSIENT)다</b> — 지금 전송(HttpURLConnection)은 고정 길이
      * 본문이 도중에 끊겨도 예외 없이 받은 만큼 넘기고, 200 오류 페이지도 본문이다. 길이를 안 맞추면 둘 다 해석 실패
      * ({@code UNREADABLE})로 접혀 판이 같은 동안 다시 받지 않는 종료 상태가 된다(2026-10-06 v8 반증 — 끊김 · 짧은 본문 ·
      * 200 HTML · XHTML 네 꼴 전부). 원장은 길이를 정직하게 준다(같은 날 캐시 인스턴스 530/530이 크기와 바이트 일치).
@@ -378,7 +378,7 @@ public class SecFilingClient {
      * companyfacts 쪽 복제가 인터럽트를 TRANSIENT로 받아 다시 리미터를 지나 HTTP를 쳤다). companyfacts도 이 자리로 받는다.
      *
      * @param incomplete 2xx인데 덜 온 응답이면 그 사유, 아니면 {@code null} — 덜 온 응답은 일시 실패처럼 다시 받고, 끝까지 그러면
-     *                   그 사유의 MALFORMED로 던진다
+     *                   그 사유의 TRANSIENT로 던진다 — 덜 온 것은 받기 실패이지 소스의 답이 아니다(ADR-0174)
      */
     static <T> ResponseEntity<T> fetch(RateLimiter rateLimiter, Backoff backoff, Supplier<ResponseEntity<T>> call,
                                        Function<ResponseEntity<T>, String> incomplete, String context)
@@ -406,7 +406,7 @@ public class SecFilingClient {
             }
             String why = response.getStatusCode().is2xxSuccessful() ? incomplete.apply(response) : null;
             if (why != null) {
-                last = new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                last = new DataSourceException(DataSourceException.Kind.TRANSIENT, SecEdgarResponse.SOURCE_NAME,
                         why + " 다음 실행이 다시 받는다. " + context);
                 continue;
             }

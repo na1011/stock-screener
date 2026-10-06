@@ -28,11 +28,13 @@ import tools.jackson.databind.ObjectMapper;
  *   <caption>HTTP → {@link DataSourceException.Kind}</caption>
  *   <tr><th>코드</th><th>Kind</th><th>근거</th></tr>
  *   <tr><td>200 + 기대한 봉투</td><td>—</td><td>정상</td></tr>
- *   <tr><td>200인데 JSON이 아니거나 봉투가 다름</td><td>MALFORMED</td><td>스펙 변경 신호다</td></tr>
+ *   <tr><td>200인데 본문이 없거나 JSON이 아님</td><td>TRANSIENT</td><td>받기 실패다 — 끊긴 전송 · 오류 페이지(ADR-0174)</td></tr>
+ *   <tr><td>200 JSON인데 봉투·모양이 다름</td><td>MALFORMED</td><td>스펙 변경 신호다 — 파싱된 JSON의 모양 이상만 여기다</td></tr>
  *   <tr><td>400</td><td>MALFORMED</td><td><b>실측</b>: 캘린더의 모르는 거래소·뒤집힌 창이 여기다</td></tr>
  *   <tr><td>401</td><td>AUTH</td><td><b>실측</b>: 엔드포인트마다 본문이 JSON이거나 HTML이다(위 참조)</td></tr>
  *   <tr><td>403</td><td>AUTH</td><td>권한 부족. 시세의 "subscription does not permit …"도 여기다</td></tr>
  *   <tr><td>404</td><td>NOT_FOUND</td><td><b>실측</b>: base URL을 섞으면 여기다</td></tr>
+ *   <tr><td>408</td><td>TRANSIENT</td><td>요청 시간 초과 — 우리 요청의 문제가 아니라 일시 실패다</td></tr>
  *   <tr><td>422</td><td>MALFORMED</td><td>우리 요청이 틀린 것이라 재시도가 무의미하다</td></tr>
  *   <tr><td>429</td><td>RATE_LIMITED</td><td></td></tr>
  *   <tr><td>그 외 4xx</td><td>MALFORMED</td><td>우리 요청 문제로 본다</td></tr>
@@ -203,6 +205,11 @@ final class AlpacaResponse {
      * (위 javadoc), 파싱을 먼저 하면 <b>인증 오류가 「호출 실패」로 접힌다.</b>
      * 403 본문에 키가 없어 「0건」으로 읽히던 옛 오독도 같은 자리다
      * ({@code .claude/rules/data-pipeline.md}).
+     *
+     * <p><b>2xx인데 본문이 없거나 JSON이 아니면 {@code TRANSIENT}다</b> — 끊긴 전송(본문 전 끊김은 본문 없음 · 고정 길이 도중
+     * 끊김은 잘린 JSON)과 오류 페이지가 이 모양이다. 예전에는 「스펙 변경」(MALFORMED)으로 봤는데, 그 사유는 <b>파싱된 JSON의
+     * 모양이 다를 때</b>에만 선다(호출부의 봉투 검사). 받기 실패를 소스의 답으로 섞으면 시장 판정이 못 받은 시장을 끝난 것으로
+     * 읽는다(ADR-0174).
      */
     private static JsonNode decode(HttpStatusCode status, String body, String sourceName,
                                    String context) throws DataSourceException {
@@ -211,15 +218,15 @@ final class AlpacaResponse {
                     "HTTP %d — %s. %s".formatted(status.value(), message(body), context));
         }
         try {
-            JsonNode parsed = body == null ? null : MAPPER.readTree(body);
-            if (parsed == null) {
-                throw new DataSourceException(DataSourceException.Kind.MALFORMED, sourceName,
+            JsonNode parsed = body == null || body.isBlank() ? null : MAPPER.readTree(body);
+            if (parsed == null || parsed.isMissingNode()) {
+                throw new DataSourceException(DataSourceException.Kind.TRANSIENT, sourceName,
                         "200인데 본문이 없다. " + context);
             }
             return parsed;
         } catch (RuntimeException e) {
-            throw new DataSourceException(DataSourceException.Kind.MALFORMED, sourceName,
-                    "200인데 JSON이 아니다 — %s. %s".formatted(message(body), context), e);
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, sourceName,
+                    "200인데 JSON이 아니다(끊긴 전송이거나 오류 페이지) — %s. %s".formatted(message(body), context), e);
         }
     }
 
@@ -227,6 +234,8 @@ final class AlpacaResponse {
         return switch (status) {
             case 401, 403 -> DataSourceException.Kind.AUTH;
             case 404 -> DataSourceException.Kind.NOT_FOUND;
+            // 요청 시간 초과는 일시 실패다 — 「그 밖 4xx = 우리 요청 문제」에 넣으면 재시도 대상에서 빠진다.
+            case 408 -> DataSourceException.Kind.TRANSIENT;
             case 422 -> DataSourceException.Kind.MALFORMED;
             case 429 -> DataSourceException.Kind.RATE_LIMITED;
             default -> status >= 400 && status < 500

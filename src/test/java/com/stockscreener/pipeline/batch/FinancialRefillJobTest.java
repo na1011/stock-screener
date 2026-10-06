@@ -218,7 +218,7 @@ class FinancialRefillJobTest {
         try {
             fakeFinancialSource.reset();
             fakeFinancialSource.failingWith(memberId,
-                    com.stockscreener.pipeline.datasource.SourceAnswer.answered(DataSourceException.Kind.NOT_FOUND, "fake-financial", "013"));
+                    DataSourceException.answered(DataSourceException.Kind.NOT_FOUND, "fake-financial", "013"));
 
             job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
 
@@ -249,6 +249,25 @@ class FinancialRefillJobTest {
         assertThat(latest("target_count")).isEqualTo("0");
         assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
         assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("US");
+    }
+
+    @Test
+    @DisplayName("종목이 성공해도 보충을 받지 못했으면 그 시장은 미완료다 — 보충 계약은 종목을 안 세우므로 이 길이 아니면 안 보인다")
+    void unfetchedSupplementMakesTheMarketIncomplete() {
+        try {
+            fakeFinancialSource.reset();
+            fakeFinancialSource.withReports(memberId, List.of(report()))
+                    .unfetchedFor(memberId, List.of(DataSourceException.Kind.TRANSIENT));
+
+            BatchStatus status = job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+            assertThat(status).as("종목은 성공 — 실패 수는 그대로다").isEqualTo(BatchStatus.SUCCESS);
+            assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("KOSPI,US");
+            assertThat(latest("note")).contains("KOSPI 보충 일시 1");
+        } finally {
+            fakeFinancialSource.reset();
+        }
     }
 
     /** 정기 실행의 기준일 — 지금이 아니면 기록 계층이 PAST_DATE로 찍어 시장 판정과 무관하게 NARROW다. */

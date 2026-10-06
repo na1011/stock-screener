@@ -92,7 +92,8 @@ class ReaderVersionPinTest {
             "7d27b748e3ffb6c804a9fb0c963e3b0d1a241b1676d74277d1a46bb919a92efc",
             "0e1038c9921de8acebeefdc8cd55aaa8b6e197c021a63d9cd91267f3d518af40",
             "e8bf8893ee9c89efc789f6258e79ba09aa2403adc897a424e5232be3e1294550",
-            "883f9182385814ed3d8665a6f11e8a8527997a254ba81d2a71cd4f2cf1390dfa");
+            "883f9182385814ed3d8665a6f11e8a8527997a254ba81d2a71cd4f2cf1390dfa",
+            "40730ea9623554de8a283f275345861cc5fb6a82d94477df2027fd2a17c24d5a");
 
     /**
      * 판 범위 — 저장되는 것(상태 · 원 팩트 · 머리 · 실패 종류)을 정하는 파일 전부, 파일 전체다({@code READER_VERSION} 선언만
@@ -124,6 +125,7 @@ class ReaderVersionPinTest {
     /** 판 1, 2, …의 출력 해시. 끝에만 더한다. */
     private static final List<String> PINNED = List.of(
             "c8e8a6e90b0cf4786efd0fc10bacee5099b4babeb6cdd2f61666f43bb53ee982",
+            "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",

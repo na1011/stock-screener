@@ -47,6 +47,12 @@ public final class BatchExecutionContext {
      */
     private static final double MALFORMED_ALERT_RATIO = 0.2;
 
+    /**
+     * 비율 경보를 내는 최소 처리 수. 이보다 적은 실행(리밸런싱 꼬리 1~3종목 · 손 단건)에서는 한 건이 33~100%라 「스펙 변경」을
+     * 오보한다(재생: #161 initial-load 3/11). 그 실행의 실패는 부분 실패 알림이 이미 하나씩 말한다.
+     */
+    static final int MALFORMED_ALERT_MIN_PROCESSED = 20;
+
     /** {@code batch_execution_failure.failure_kind}의 MALFORMED — 종목 실패에서 다발 경보를 셀 때 쓴다. */
     private static final String MALFORMED = DataSourceException.Kind.MALFORMED.name();
 
@@ -217,7 +223,8 @@ public final class BatchExecutionContext {
                 counters.failure.incrementAndGet();
                 // MUST: 실패를 세는 이 자리에서 MALFORMED를 함께 센다. 잡마다 부르게 두었을 때 호출자가 0이라
                 // 「응답 해석 실패 다발」 알림이 한 번도 못 났다 — 소스 스펙 변경이 부분 실패 알림에 묻혔다.
-                if (MALFORMED.equals(outcome.failureKind())) {
+                // 소스가 결정적으로 답한 실패는 「스펙 변경」 신호가 아니다 — 세지 않는다(ADR-0174).
+                if (MALFORMED.equals(outcome.failureKind()) && !outcome.sourceAnswered()) {
                     countMalformed();
                 }
             }
@@ -360,6 +367,18 @@ public final class BatchExecutionContext {
         }
         alertPort.send(AlertEvent.toOperator(
                 severity, jobName + " — " + title, body, dedupeKey() + ':' + title, context()));
+    }
+
+    /**
+     * 종목은 성공했지만 그 아래 층이 <b>받지 못한 것</b>을 그 시장의 미완료 재료로 센다(ADR-0174 · 미국 공시 보충). 시장 판정을
+     * 하지 않는 실행이면 아무 일도 안 한다 — 그 실행의 보충 실패는 note의 보충 칸이 말한다.
+     *
+     * @param kinds 받지 못한 것의 종류 — 해석 실패({@code UNREADABLE})는 안 든다
+     */
+    public void recordUnfetchedSupplements(String marketCode, List<DataSourceException.Kind> kinds) {
+        if (completeness != null) {
+            completeness.recordUnfetchedLayer(marketCode, "보충", kinds);
+        }
     }
 
     /**
@@ -598,7 +617,8 @@ public final class BatchExecutionContext {
     private void alertOnSuspectedSpecChange() {
         int malformed = malformedCount.get();
         int processed = successCount.get() + failureCount.get();
-        if (malformed > 0 && processed > 0 && (double) malformed / processed >= MALFORMED_ALERT_RATIO) {
+        if (malformed > 0 && processed >= MALFORMED_ALERT_MIN_PROCESSED
+                && (double) malformed / processed >= MALFORMED_ALERT_RATIO) {
             alertPort.send(AlertEvent.toOperator(
                     AlertSeverity.ERROR,
                     jobName + " 소스 응답 해석 실패 다발",

@@ -123,7 +123,7 @@ public class DartGovernanceAdapter implements GovernanceDataSource {
                     DartResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
         }
 
-        ResponseEntity<JsonNode> response;
+        ResponseEntity<byte[]> response;
         try {
             response = client.get().uri(uri -> uri
                             .path(path)
@@ -135,7 +135,8 @@ public class DartGovernanceAdapter implements GovernanceDataSource {
                             .queryParam("reprt_code", reportCode)
                             .build())
                     .retrieve()
-                    .toEntity(JsonNode.class);
+                    // 본문을 바이트로 받는다 — 상태를 먼저 보고 UTF-8로 판다(DartResponse.read · 문자열로 받으면 한글이 깨진다).
+                    .toEntity(byte[].class);
         } catch (RuntimeException e) {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
                     DartResponse.SOURCE_NAME, "호출에 실패했다. " + context, e);
@@ -143,9 +144,9 @@ public class DartGovernanceAdapter implements GovernanceDataSource {
 
         JsonNode list;
         try {
-            list = DartResponse.requireList(response.getBody(), context);
+            list = DartResponse.requireList(DartResponse.read(response, context), context);
         } catch (DataSourceException e) {
-            if (e.kind() == DataSourceException.Kind.NOT_FOUND) {
+            if (DartResponse.isNoData(e)) {
                 // status 013 — 그 회사에 그 표가 없다. 종목 실패가 아니며, 「아직 안 받았다」와
                 // 갈라야 하므로 빈 목록이 아니라 흔적을 남긴다.
                 return List.of(GovernanceReportRow.noData(endpoint, bsnsYear, reportCode));

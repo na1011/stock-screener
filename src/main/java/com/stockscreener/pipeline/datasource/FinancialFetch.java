@@ -19,13 +19,23 @@ import java.util.Set;
  */
 public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
                              boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
-                             Set<LocalDate> supplementedVintages, boolean vintagesUncertain) {
+                             Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
+                             List<DataSourceException.Kind> unfetchedSupplements) {
 
     public FinancialFetch {
         reports = reports == null ? List.of() : List.copyOf(reports);
         absences = absences == null ? List.of() : List.copyOf(absences);
         unconfirmedVintages = unconfirmedVintages == null ? Set.of() : Set.copyOf(unconfirmedVintages);
         supplementedVintages = supplementedVintages == null ? Set.of() : Set.copyOf(supplementedVintages);
+        unfetchedSupplements = unfetchedSupplements == null ? List.of() : List.copyOf(unfetchedSupplements);
+    }
+
+    /** 보충 층이 없는 소스용 — 받지 못한 보충이 없다. */
+    public FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
+                          boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
+                          Set<LocalDate> supplementedVintages, boolean vintagesUncertain) {
+        this(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages, vintagesUncertain,
+                List.of());
     }
 
     /** 판 이력의 빈칸을 모르는 소스용 — 아래 셋이 비어 있다. */
@@ -76,6 +86,14 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
      */
     public boolean vintagesUncertain() {
         return vintagesUncertain;
+    }
+
+    /**
+     * <b>이 호출이 받지 못한 보충의 종류</b>(SEC 공시 보충 — 받기 실패 · 목록 실패 · 해석 실패는 빼고). 종목은 성공으로 끝나지만
+     * 그 시장은 이번 실행에서 끝까지 받지 못했다 — 잡이 실행 안 시장 판정에 싣는다(ADR-0174).
+     */
+    public List<DataSourceException.Kind> unfetchedSupplements() {
+        return unfetchedSupplements;
     }
 
     /** 부재 축을 안 보고 판 이력도 전부 내지 않는 소스용. */

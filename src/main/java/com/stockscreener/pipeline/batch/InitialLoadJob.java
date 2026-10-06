@@ -167,6 +167,8 @@ public class InitialLoadJob {
                         FinancialWriter.Outcome outcome = financialCollector.collectDetailed(
                                 security, fromFiscalYear, FinancialWriter.WriteMode.APPEND_ONLY);
                         revised.addAndGet(outcome.revised());
+                        // 이 잡은 시장 판정을 안 한다(무거운 잡이 아니다) — 컨텍스트가 받기만 하고 버린다. 길을 하나로 둔다.
+                        execution.recordUnfetchedSupplements(security.marketCode(), outcome.unfetchedSupplements());
                         return outcome.changed();
                     });
                 }

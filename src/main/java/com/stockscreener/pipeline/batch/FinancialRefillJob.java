@@ -206,6 +206,8 @@ public class FinancialRefillJob {
                     if (outcome.retractionStopped()) {
                         retractionStopped.add(security.ticker());
                     }
+                    // 보충을 받지 못한 종목은 성공으로 끝나도 그 시장은 이번 실행에서 끝나지 않았다(ADR-0174).
+                    execution.recordUnfetchedSupplements(security.marketCode(), outcome.unfetchedSupplements());
                     // 이른 판 삽입도 그 공시일 이후의 지표를 지운다 — 정정·교정과 같이 세지 않으면
                     // 그 종목이 백필 목록에서 빠져 지워진 채 남는다.
                     if (outcome.revised() > 0 || outcome.corrected() > 0 || outcome.insertedEarlier() > 0) {

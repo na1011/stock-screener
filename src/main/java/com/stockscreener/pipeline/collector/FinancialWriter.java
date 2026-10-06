@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.collector;
 
+import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 
 import org.slf4j.Logger;
@@ -116,9 +117,29 @@ public class FinancialWriter {
     /**
      * @param retractionStopped 판 이력의 빈칸을 몰라 이 종목의 회수를 멈췄다({@link VintageGuard#uncertain()}) — 실행 기록이
      *                          그 수를 싣는다. 안 실으면 「새 공시를 못 받고 낡은 판도 못 걷은 종목」이 SUCCESS 뒤에 숨는다.
+     * @param unfetchedSupplements 받지 못한 보충의 종류({@code FinancialFetch.unfetchedSupplements}) — 쓰기와 무관한 수집의
+     *                          사실이지만 잡이 받는 결과가 이것 하나라 수집기가 실어 넘긴다. 잡이 그 종목의 시장을 미완료로 센다
+     *                          (ADR-0174). 쓰기 계층은 비워서 낸다.
      */
     public record Outcome(long changed, int inserted, int filled, int revised,
-                          int deferredRevisions, int corrected, int insertedEarlier, boolean retractionStopped) {
+                          int deferredRevisions, int corrected, int insertedEarlier, boolean retractionStopped,
+                          List<DataSourceException.Kind> unfetchedSupplements) {
+
+        public Outcome {
+            unfetchedSupplements = List.copyOf(unfetchedSupplements);
+        }
+
+        public Outcome(long changed, int inserted, int filled, int revised, int deferredRevisions, int corrected,
+                       int insertedEarlier, boolean retractionStopped) {
+            this(changed, inserted, filled, revised, deferredRevisions, corrected, insertedEarlier, retractionStopped,
+                    List.of());
+        }
+
+        /** 같은 쓰기 결과에 받지 못한 보충을 싣는다. */
+        public Outcome withUnfetchedSupplements(List<DataSourceException.Kind> kinds) {
+            return new Outcome(changed, inserted, filled, revised, deferredRevisions, corrected, insertedEarlier,
+                    retractionStopped, kinds);
+        }
     }
 
     /**

@@ -9,7 +9,6 @@ import com.stockscreener.notification.LoggingAlertPort;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceException.Kind;
 import com.stockscreener.pipeline.datasource.SecurityRef;
-import com.stockscreener.pipeline.datasource.SourceAnswer;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,14 +58,14 @@ class MarketCompletenessTest {
     @Test
     @DisplayName("「답함」 표지는 NOT_FOUND·MALFORMED에만 달린다 — 한도·일시 장애는 정의상 답을 못 받은 것이다")
     void answeredFactoryRefusesUnansweredKinds() {
-        DataSourceException answered = SourceAnswer.answered(Kind.NOT_FOUND, "dart", "013");
-        assertThat(SourceAnswer.isAnswered(answered)).isTrue();
+        DataSourceException answered = DataSourceException.answered(Kind.NOT_FOUND, "dart", "미매핑");
+        assertThat(answered.sourceAnswered()).isTrue();
         assertThat(answered.kind()).as("종류·메시지는 그대로다").isEqualTo(Kind.NOT_FOUND);
-        assertThat(answered.getMessage()).isEqualTo("013");
-        assertThat(SourceAnswer.isAnswered(new DataSourceException(Kind.NOT_FOUND, "dart", "013"))).isFalse();
-        assertThatThrownBy(() -> SourceAnswer.answered(Kind.TRANSIENT, "dart", "5xx"))
+        assertThat(answered.getMessage()).isEqualTo("미매핑");
+        assertThat(new DataSourceException(Kind.NOT_FOUND, "dart", "013").sourceAnswered()).isFalse();
+        assertThatThrownBy(() -> DataSourceException.answered(Kind.TRANSIENT, "dart", "5xx"))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> SourceAnswer.answered(Kind.RATE_LIMITED, "dart", "020"))
+        assertThatThrownBy(() -> DataSourceException.answered(Kind.RATE_LIMITED, "dart", "020"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -109,6 +108,20 @@ class MarketCompletenessTest {
     }
 
     @Test
+    @DisplayName("(라) 종목은 성공해도 보충을 받지 못했으면 그 시장은 미완료다 — 비어 있으면(UNREADABLE만 있었던 것 포함) 끝난 것이다")
+    void unfetchedLayerMakesTheMarketIncomplete() {
+        MarketCompleteness completeness = new MarketCompleteness(ALL_SOURCES);
+        completeness.record("US", true, null, false);
+        completeness.recordUnfetchedLayer("US", "보충", List.of(Kind.TRANSIENT, Kind.NOT_FOUND, Kind.TRANSIENT));
+        completeness.record("KOSPI", true, null, false);
+        completeness.recordUnfetchedLayer("KOSPI", "보충", List.of());
+
+        assertThat(MarketCompleteness.markets(completeness.judge())).containsExactly("US");
+        assertThat(MarketCompleteness.noteTail(completeness.judge()))
+                .isEqualTo("시장 미완료 US 보충 없음(답 미확인) 1 보충 일시 2");
+    }
+
+    @Test
     @DisplayName("시장이 다 끝나면 미완료가 없다 — 대상이 없는 시장도 소스만 있으면 끝난 것이다")
     void completeRunHasNothingIncomplete() {
         MarketCompleteness completeness = new MarketCompleteness(ALL_SOURCES);
@@ -139,55 +152,45 @@ class MarketCompletenessTest {
     }
 
     @Test
-    @DisplayName("MALFORMED 종목 실패가 20%를 넘으면 「응답 해석 실패 다발」 ERROR 알림이 한 통 난다 — 실패 기록 자리가 세므로 잡이 안 불러도")
+    @DisplayName("MALFORMED 종목 실패가 처리 20건 이상에서 20%를 넘으면 「응답 해석 실패 다발」 ERROR 한 통 — 실패 기록 자리가 센다")
     void malformedSurgeAlertsOnce() throws Exception {
-        List<AlertEvent> delivered = new ArrayList<>();
-        AlertChannel channel = recordingChannel(delivered);
-        CompositeAlertPort alertPort = new CompositeAlertPort(List.of(channel),
-                new AlertSuppressor(Duration.ofMinutes(10)), new LoggingAlertPort());
-        StockTaskRunner runner = mock(StockTaskRunner.class);
-        BatchExecutionRecorder recorder = mock(BatchExecutionRecorder.class);
-        when(recorder.finish(anyLong(), any(), any(), any())).thenReturn(BatchStatus.PARTIAL_SUCCESS);
-        SecurityRef ok = new SecurityRef(1, "KOSPI", "005930");
-        SecurityRef garbled = new SecurityRef(2, "KOSPI", "000660");
-        when(runner.runInNewTransaction(eq(ok), any())).thenReturn(1L);
-        when(runner.runInNewTransaction(eq(garbled), any()))
-                .thenThrow(new DataSourceException(Kind.MALFORMED, "dart", "필드 없음"));
-        // 시장 판정은 끈다(coverage null) — 이 시험은 다발 경보 하나만 본다.
-        BatchExecutionContext context = new BatchExecutionContext(8L, "governance-load",
-                LocalDate.of(2026, 10, 29), new StockTaskExecutor(runner, recorder), recorder, alertPort, id -> { });
-
-        context.process(ok, CollectionPhase.GOVERNANCE, security -> 1L);
-        context.process(garbled, CollectionPhase.GOVERNANCE, security -> 1L);
-        context.finish();
-
-        assertThat(delivered).filteredOn(event -> event.severity() == AlertSeverity.ERROR)
-                .extracting(AlertEvent::title).containsExactly("governance-load 소스 응답 해석 실패 다발");
+        assertThat(malformedAlerts(16, 4, false)).containsExactly("governance-load 소스 응답 해석 실패 다발");
     }
 
     @Test
-    @DisplayName("MALFORMED가 20% 미만이면 다발 알림이 없다 — 한 종목의 데이터 문제는 부분 실패 알림이 말한다")
-    void fewMalformedDoNotAlert() throws Exception {
+    @DisplayName("다발 경보가 안 나는 셋 — 20% 미만 · 처리 20건 미만(1건이 50%) · 소스가 답한(표지) MALFORMED")
+    void malformedAlertGuards() throws Exception {
+        assertThat(malformedAlerts(19, 1, false)).as("5%").isEmpty();
+        assertThat(malformedAlerts(1, 1, false)).as("처리 2건 — 리밸런싱 꼬리 꼴의 오보").isEmpty();
+        assertThat(malformedAlerts(16, 4, true)).as("표지 단 MALFORMED는 스펙 변경 신호가 아니다").isEmpty();
+    }
+
+    /** 성공 {@code ok}건과 MALFORMED {@code garbled}건을 처리하고 마감한 뒤 나간 ERROR 알림 제목. */
+    private static List<String> malformedAlerts(int ok, int garbled, boolean answered) throws Exception {
         List<AlertEvent> delivered = new ArrayList<>();
         CompositeAlertPort alertPort = new CompositeAlertPort(List.of(recordingChannel(delivered)),
                 new AlertSuppressor(Duration.ofMinutes(10)), new LoggingAlertPort());
         StockTaskRunner runner = mock(StockTaskRunner.class);
         BatchExecutionRecorder recorder = mock(BatchExecutionRecorder.class);
         when(recorder.finish(anyLong(), any(), any(), any())).thenReturn(BatchStatus.PARTIAL_SUCCESS);
-        SecurityRef garbled = new SecurityRef(99, "KOSPI", "999999");
-        when(runner.runInNewTransaction(any(), any())).thenReturn(1L);
-        when(runner.runInNewTransaction(eq(garbled), any()))
-                .thenThrow(new DataSourceException(Kind.MALFORMED, "dart", "필드 없음"));
-        BatchExecutionContext context = new BatchExecutionContext(9L, "governance-load",
+        when(runner.runInNewTransaction(any(), any())).thenAnswer(call -> {
+            SecurityRef security = call.getArgument(0);
+            if (security.stockId() > ok) {
+                throw answered ? DataSourceException.answered(Kind.MALFORMED, "dart", "필드 없음")
+                        : new DataSourceException(Kind.MALFORMED, "dart", "필드 없음");
+            }
+            return 1L;
+        });
+        // 시장 판정은 끈다(coverage null) — 이 시험은 다발 경보 하나만 본다.
+        BatchExecutionContext context = new BatchExecutionContext(8L, "governance-load",
                 LocalDate.of(2026, 10, 29), new StockTaskExecutor(runner, recorder), recorder, alertPort, id -> { });
-
-        for (int i = 1; i <= 5; i++) {
-            context.process(new SecurityRef(i, "KOSPI", "00000" + i), CollectionPhase.GOVERNANCE, security -> 1L);
+        for (int i = 1; i <= ok + garbled; i++) {
+            context.process(new SecurityRef(i, "KOSPI", "%06d".formatted(i)), CollectionPhase.GOVERNANCE,
+                    security -> 1L);
         }
-        context.process(garbled, CollectionPhase.GOVERNANCE, security -> 1L);
         context.finish();
-
-        assertThat(delivered).noneMatch(event -> event.severity() == AlertSeverity.ERROR);
+        return delivered.stream().filter(event -> event.severity() == AlertSeverity.ERROR)
+                .map(AlertEvent::title).toList();
     }
 
     private static AlertChannel recordingChannel(List<AlertEvent> delivered) {

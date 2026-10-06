@@ -296,17 +296,19 @@ class AlpacaCorporateActionAdapterTest {
     }
 
     @Test
-    @DisplayName("200인데 JSON이 아니면 MALFORMED다 — 재시도해도 안 되는 것을 재시도로 적지 않는다")
-    void mapsNonJsonSuccessBodyToMalformed() {
+    @DisplayName("200인데 JSON이 아니면 TRANSIENT다 — 점검 페이지·끊긴 전송은 받기 실패이지 스펙 변경이 아니다(ADR-0174)")
+    void mapsNonJsonSuccessBodyToTransient() {
         server.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "text/html")
                 .setBody("<html><body>maintenance</body></html>"));
 
+        // 옛 단언(MALFORMED · 「재시도해도 안 된다」)은 그 사유가 자기 재료에서 안 섰다 — 이 본문이 점검 페이지다. 스펙 변경
+        // (MALFORMED)은 파싱된 JSON의 모양이 다를 때뿐이다.
         assertThatThrownBy(() -> adapter().fetchCorporateActions(NVDA, FROM, TO).actions())
                 .isInstanceOf(DataSourceException.class)
                 .extracting(e -> ((DataSourceException) e).kind())
-                .isEqualTo(DataSourceException.Kind.MALFORMED);
+                .isEqualTo(DataSourceException.Kind.TRANSIENT);
     }
 
     @Test

@@ -494,7 +494,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
                     DartResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
         }
 
-        ResponseEntity<JsonNode> response;
+        ResponseEntity<byte[]> response;
         try {
             response = client.get().uri(uri -> uri
                             .path("/irdsSttus.json")
@@ -504,7 +504,8 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
                             .queryParam("reprt_code", report.reportCode())
                             .build())
                     .retrieve()
-                    .toEntity(JsonNode.class);
+                    // 본문을 바이트로 받는다 — 상태를 먼저 보고 UTF-8로 판다(DartResponse.read · 문자열로 받으면 한글이 깨진다).
+                    .toEntity(byte[].class);
         } catch (RuntimeException e) {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
                     DartResponse.SOURCE_NAME, "호출에 실패했다. " + context, e);
@@ -512,9 +513,9 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
 
         JsonNode list;
         try {
-            list = DartResponse.requireList(response.getBody(), context);
+            list = DartResponse.requireList(DartResponse.read(response, context), context);
         } catch (DataSourceException e) {
-            if (e.kind() == DataSourceException.Kind.NOT_FOUND) {
+            if (DartResponse.isNoData(e)) {
                 // 그 보고서에 이 표가 없다. 정상이므로 조용히 건너뛴다.
                 return List.of();
             }

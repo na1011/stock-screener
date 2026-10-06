@@ -2,7 +2,6 @@ package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
-import com.stockscreener.pipeline.datasource.SourceAnswer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,7 +82,7 @@ public class StockTaskExecutor {
             log.warn("종목 수집 실패. stockId={} ticker={} phase={} source={} kind={} message={}",
                     security.stockId(), security.ticker(), phase, e.sourceName(), e.kind(),
                     e.getMessage());
-            return Outcome.failure(e.kind().name(), SourceAnswer.isAnswered(e));
+            return Outcome.failure(e.kind().name(), e.sourceAnswered());
 
         } catch (RuntimeException e) {
             if (shuttingDown) {
@@ -135,7 +134,7 @@ public class StockTaskExecutor {
      * @param failureKind  실패면 그 종류 — {@code batch_execution_failure.failure_kind}에 적은 것과 같은 문자열이다. 성공이면
      *                     {@code null}. 마감 때 시장 미완료 판정({@link MarketCompleteness})이 이것을 실행 안에서 센다 —
      *                     실패 행을 SQL로 다시 읽으면 다른 실행이 그 사이 해결로 표시한 행이 빠진다.
-     * @param sourceAnswered 실패가 소스의 결정적 답인가({@link SourceAnswer}). 실패 행에는 안 적는다 —
+     * @param sourceAnswered 실패가 소스의 결정적 답인가({@link DataSourceException#sourceAnswered}). 실패 행에는 안 적는다 —
      *                     종류만으로는 못 가르는 사실이라 예외에서 컨텍스트 계수까지만 운반한다.
      */
     public record Outcome(boolean succeeded, long writtenRows, String failureKind, boolean sourceAnswered) {

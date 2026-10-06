@@ -136,7 +136,9 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         requireUserAgent();
         Optional<Long> cik = cikCache.findCik(security.ticker());
         if (cik.isEmpty()) {
-            throw new DataSourceException(DataSourceException.Kind.NOT_FOUND,
+            // 신선한 매핑 판에 없다 — 소스가 결정적으로 답했다(ADR-0174 · 상장폐지 종목은 그 파일에서 빠진다). 낡은 판의 부재는
+            // findCik가 TRANSIENT로 던진다.
+            throw DataSourceException.answered(DataSourceException.Kind.NOT_FOUND,
                     SecEdgarResponse.SOURCE_NAME,
                     "SEC 매핑 파일에 없는 티커다: " + security.ticker()
                             + " — ETF·펀드·우선주·워런트·유닛이 여기 든다.");
@@ -170,7 +172,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // 아니다」로 읽어도 되는 근거다(FinancialFetch 참조). companyfacts 혼자로는 그렇지 않다: 정기 공시 일부의
         // us-gaap를 통째로 안 싣는다(ADR-0173 — 83 CIK 표본 87건). 보충이 못 실은 공시는 그 제출일을 따로 넘겨 지킨다.
         return new FinancialFetch(result.reports(), result.absences(), true,
-                supplement.unconfirmedVintages(), supplement.supplementedVintages(), supplement.vintagesUncertain());
+                supplement.unconfirmedVintages(), supplement.supplementedVintages(), supplement.vintagesUncertain(),
+                supplement.unfetched());
     }
 
     /**
