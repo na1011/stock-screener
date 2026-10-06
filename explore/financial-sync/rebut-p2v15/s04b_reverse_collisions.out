@@ -1,0 +1,6 @@
+09-04 Fri 14:12 MANUAL 272 adjustment-rebuild ← 살아 있던 SCHEDULER [('271', 'indicator-backfill', '14:11', '14:15')]
+09-14 Mon 13:41 MANUAL 421 financial-refill ← 살아 있던 SCHEDULER [('420', 'daily-update', '13:30', '13:45')]
+09-14 Mon 13:44 MANUAL 422 indicator-backfill ← 살아 있던 SCHEDULER [('420', 'daily-update', '13:30', '13:45')]
+09-14 Mon 14:00 MANUAL 425 full-statement-refill ← 살아 있던 SCHEDULER [('424', 'corporate-action', '14:00', '14:11')]
+09-14 Mon 14:03 MANUAL 426 full-statement-refill ← 살아 있던 SCHEDULER [('424', 'corporate-action', '14:00', '14:11')]
+합계 5
