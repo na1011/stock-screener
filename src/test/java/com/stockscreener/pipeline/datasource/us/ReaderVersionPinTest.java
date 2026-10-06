@@ -32,14 +32,37 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 재료마다 그 자리에 닿는지 묻는다. 자리를 더하면 이 시험이 먼저 붉다(2026-10-06 v4 반증 — 재료가 인스턴스 하나뿐이라 같은
  * 정밀도 충돌·수가 아닌 값을 바꾼 변이가 살아남았다).
  *
- * <p><b>규칙을 바꿔 이 시험이 붉으면</b>: {@code READER_VERSION}을 올리고 새 해시를 {@link #PINNED} 끝에 더한다.
- * MUST NOT: 이미 박힌 해시를 고치지 않는다 — 그것이 「판을 안 올리고 규칙을 바꾼 것」이다.
+ * <p><b>출력 해시와 소스 해시를 함께 박는다.</b> 재료는 손으로 고른 목록이라 끝내 모든 분기를 덮지 못한다(2026-10-06 v6
+ * 반증 — 재료 밖 변이 12개가 살았다 · 실물 영향은 0). 그래서 판 범위 메서드의 소스(주석을 걷은 정규형)를 판마다 박아,
+ * 소스를 건드리면 붉게 한다 — 목록을 늘리는 경쟁을 끝내고 「판 올림 / 행동 불변 재고정」을 같은 커밋에서 사람이 고르게 한다.
+ *
+ * <p><b>붉으면</b>:
+ * <ul>
+ *   <li>규칙(행동)을 바꿨다 → {@code READER_VERSION}을 올리고 두 해시를 {@link #PINNED}·{@link #SOURCE_PINNED} 끝에 더한다.</li>
+ *   <li>리팩터라 행동이 그대로다 → {@link #SOURCE_PINNED}의 지금 판 값만 새 해시로 고치고 커밋 메시지에 「행동 불변
+ *       재고정」과 근거(출력 해시가 그대로)를 적는다.</li>
+ *   <li>재료만 더했다 → {@link #PINNED}의 지금 판 값만 고친다 — 소스 해시가 그대로인 것이 규칙 불변의 증거다.</li>
+ * </ul>
+ * MUST NOT: 소스 해시와 출력 해시를 한 커밋에서 같이 고치면서 판을 안 올리지 않는다 — 그것이 「판을 안 올리고 규칙을 바꾼 것」이다.
  */
 class ReaderVersionPinTest {
 
+    /** 판 1, 2, …의 판 범위 소스 해시(주석을 걷은 정규형). */
+    private static final List<String> SOURCE_PINNED = List.of(
+            "d1361d139cdfa74bb695997d9fea491ba9af9f3be6f5cebcd0cc9459f698b18c");
+
+    /** 판 범위 — 파일과, 그 파일에서 범위인 메서드의 머리(없으면 파일 전체 · {@code READER_VERSION} 선언 줄은 뺀다). */
+    private static final Map<String, List<String>> SOURCE_SCOPE = Map.of(
+            "XbrlInstanceReader.java", List.of(),
+            "SecFilingClient.java", List.of("static boolean isInstanceCandidate(", "static boolean isXbrlArtifact(",
+                    "private static boolean isLinkbase("),
+            "SecFilingSupplement.java", List.of("static String pickInstance(", "static Fetched interpret("));
+
+    private static final Path SOURCE_DIR = Path.of("src/main/java/com/stockscreener/pipeline/datasource/us");
+
     /** 판 1, 2, …의 출력 해시. 끝에만 더한다. */
     private static final List<String> PINNED = List.of(
-            "b95d6d2de7f06b18cfdd5ff94ccc26dc3f3754a044457a684314b9975fa08ec6");
+            "c8e8a6e90b0cf4786efd0fc10bacee5099b4babeb6cdd2f61666f43bb53ee982");
 
     private static final Path READER_SOURCE =
             Path.of("src/main/java/com/stockscreener/pipeline/datasource/us/XbrlInstanceReader.java");
@@ -141,6 +164,7 @@ class ReaderVersionPinTest {
             List.of("R1.htm", "Financial_Report.xlsx"),
             List.of("fix-20251231.xsd", "fix-20251231_lab.xml"),
             List.of("a_htm.xml", "b_htm.xml", "fix-20251231.xsd"),
+            List.of("a_htm.xml", "b_htm.xml"),
             List.of("x_htm.xml", "x.xml", "x.xsd"),
             List.of());
 
@@ -153,6 +177,16 @@ class ReaderVersionPinTest {
         assertThat(digest(canonicalOutput()))
                 .as("해석 규칙의 출력이 바뀌었다 — READER_VERSION을 올리고 새 해시를 PINNED 끝에 더한다(ADR-0173)")
                 .isEqualTo(PINNED.get(XbrlInstanceReader.READER_VERSION - 1));
+    }
+
+    @Test
+    @DisplayName("판 범위의 소스가 지금 판에 박힌 해시와 같다 — 소스를 건드리면 판 올림과 행동 불변 재고정 중 하나를 고른다")
+    void ruleSourcesArePinnedToTheReaderVersion() throws Exception {
+        assertThat(SOURCE_PINNED).as("판 번호와 박힌 소스 해시 수가 같아야 한다").hasSize(XbrlInstanceReader.READER_VERSION);
+        assertThat(digest(scopeSource()))
+                .as("판 범위의 소스가 바뀌었다 — 행동이 바뀌었으면 READER_VERSION을 올리고 두 해시를 끝에 더한다. 리팩터면 "
+                        + "SOURCE_PINNED의 지금 판 값만 고치고 커밋에 「행동 불변 재고정」을 적는다(ADR-0173)")
+                .isEqualTo(SOURCE_PINNED.get(XbrlInstanceReader.READER_VERSION - 1));
     }
 
     @Test
@@ -282,6 +316,95 @@ class ReaderVersionPinTest {
                 %s
                 </xbrl>
                 """.formatted(extraContexts, body);
+    }
+
+    /** 판 범위 소스 — 파일 순서·메서드 순서를 고정하고, 주석을 걷고 공백을 접는다. */
+    private static String scopeSource() throws Exception {
+        StringBuilder out = new StringBuilder();
+        for (String file : new java.util.TreeSet<>(SOURCE_SCOPE.keySet())) {
+            String code = stripComments(Files.readString(SOURCE_DIR.resolve(file)));
+            List<String> heads = SOURCE_SCOPE.get(file);
+            if (heads.isEmpty()) {
+                code = code.replaceAll("static final int READER_VERSION = \\d+;", "");
+                out.append("== ").append(file).append('\n').append(collapse(code)).append('\n');
+                continue;
+            }
+            for (String head : heads) {
+                int at = code.indexOf(head);
+                assertThat(at).as("판 범위 메서드를 못 찾았다 — 이름을 바꿨으면 SOURCE_SCOPE도 고친다: " + file + " " + head)
+                        .isGreaterThanOrEqualTo(0);
+                out.append("== ").append(file).append(' ').append(head).append('\n')
+                        .append(collapse(methodAt(code, at))).append('\n');
+            }
+        }
+        return out.toString();
+    }
+
+    /** 머리부터 짝이 맞는 닫는 중괄호까지 — 주석은 이미 걷혔고 문자열·문자 리터럴 안의 중괄호는 안 센다. */
+    private static String methodAt(String code, int start) {
+        int depth = 0;
+        boolean seenBody = false;
+        for (int i = start; i < code.length(); i++) {
+            char c = code.charAt(i);
+            if (c == '"' || c == '\'') {
+                i = skipLiteral(code, i);
+                continue;
+            }
+            if (c == '{') {
+                depth++;
+                seenBody = true;
+            } else if (c == '}') {
+                depth--;
+                if (seenBody && depth == 0) {
+                    return code.substring(start, i + 1);
+                }
+            }
+        }
+        throw new IllegalStateException("메서드 끝을 못 찾았다: " + code.substring(start, Math.min(code.length(), start + 80)));
+    }
+
+    /** 리터럴의 끝 인덱스. 텍스트 블록({@code """})·문자열·문자 리터럴과 이스케이프를 안다. */
+    private static int skipLiteral(String code, int i) {
+        char quote = code.charAt(i);
+        if (quote == '"' && code.startsWith("\"\"\"", i)) {
+            int end = code.indexOf("\"\"\"", i + 3);
+            return end < 0 ? code.length() - 1 : end + 2;
+        }
+        for (int j = i + 1; j < code.length(); j++) {
+            char c = code.charAt(j);
+            if (c == '\\') {
+                j++;
+            } else if (c == quote) {
+                return j;
+            }
+        }
+        return code.length() - 1;
+    }
+
+    /** 줄 주석·블록 주석을 걷는다 — 문자열 안의 {@code //}(URL)는 남긴다. */
+    private static String stripComments(String code) {
+        StringBuilder out = new StringBuilder(code.length());
+        for (int i = 0; i < code.length(); i++) {
+            char c = code.charAt(i);
+            if (c == '"' || c == '\'') {
+                int end = skipLiteral(code, i);
+                out.append(code, i, end + 1);
+                i = end;
+            } else if (c == '/' && i + 1 < code.length() && code.charAt(i + 1) == '/') {
+                int end = code.indexOf('\n', i);
+                i = end < 0 ? code.length() : end - 1;
+            } else if (c == '/' && i + 1 < code.length() && code.charAt(i + 1) == '*') {
+                int end = code.indexOf("*/", i + 2);
+                i = end < 0 ? code.length() : end + 1;
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    private static String collapse(String code) {
+        return code.replaceAll("\\s+", " ").trim();
     }
 
     private static String digest(String text) throws Exception {

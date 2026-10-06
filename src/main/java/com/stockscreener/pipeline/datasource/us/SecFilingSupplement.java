@@ -212,9 +212,9 @@ public class SecFilingSupplement implements FilingSupplementer {
     /**
      * companyfacts가 나중에 실은 공시의 행을 상태와 무관하게(OK·NO_XBRL·FAILED) {@code COVERED}로 바꾸고, 그런 행의 제출일을
      * <b>매 실행</b> 연다 — 판은 이제 companyfacts가 내지만, 그 전에 늦은 판이 먼저 들어왔을 수 있어 그 판을 이른 판이어도
-     * 넣어야 「처음부터 companyfacts가 실었을 때」와 같은 상태에 닿는다. 여는 날짜는 목록의 제출일과 <b>companyfacts가 그
-     * 공시에 붙인 {@code filed}</b> 둘 다다 — companyfacts가 하루 이틀 늦게 매기는 공시가 있고(17:30 ET 뒤 접수 · 15 / 55,736
-     * 접수번호 · 미리 못 가른다), 덮인 뒤의 판은 그 날짜로 나온다.
+     * 넣어야 「처음부터 companyfacts가 실었을 때」와 같은 상태에 닿는다. 여는 날짜는 <b>companyfacts가 그 공시에 붙인
+     * {@code filed}</b>뿐이다 — 덮인 뒤 그 공시의 판은 그 날짜로만 나오고(17:30 ET 뒤 접수면 목록 날짜보다 하루 이틀 늦다 ·
+     * 15 / 55,736 접수번호 · 미리 못 가른다), 목록 날짜를 열면 그날 다른 공시의 판만 이른 판으로 들어온다.
      *
      * <p><b>MUST NOT: 행을 지우지 않는다 · 실패 행만 고르지 않는다.</b> 한 번만 열면 그 실행이 APPEND_ONLY(Writer가 열림을 안
      * 씀)거나 같은 날 다른 공시가 실패해(보호가 이김) 열림이 사라지고 다시 안 온다. 받았던 공시(OK)도 같다 — 받은 실행의
@@ -326,11 +326,15 @@ public class SecFilingSupplement implements FilingSupplementer {
         // 같은 날 보호도 정상 갈래와 같게 — 창 안의 덮이지 않은 실패 행은 그 제출일의 판이 일부만 있다(목록이 없어 다시
         // 받지도 못했다). 열면 그 날짜의 부분 판이 이른 판으로 들어온다(2026-10-06 v5 반증).
         Set<LocalDate> unconfirmed = new LinkedHashSet<>();
+        Set<String> protectedFailures = new HashSet<>();
         for (SecFilingSupplementStore.Row row : store.rowsOf(cik).values()) {
             if (row.failed() && !row.filed().isBefore(since) && !covered.contains(row.accession())) {
                 unconfirmed.add(row.filed());
+                protectedFailures.add(row.accession());
             }
         }
+        // 이 실행이 그 실패 행을 보고 날짜를 지켰다 — 실행 기록의 미해결에 든다.
+        store.touch(cik, protectedFailures);
         for (SecFilingSupplementStore.Row row : store.okRowsOf(cik).values()) {
             if (row.filed().isBefore(since) || covered.contains(row.accession())) {
                 continue;

@@ -401,11 +401,31 @@ class SecFilingSupplementTest {
         assertThat(normal.supplementedVintages()).as("정상 갈래 — 보호가 이긴다").isEmpty();
 
         statusOf.put(submissionsPath(), 500);
+        SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
+        java.time.Instant since = store.now();
         SecFilingSupplement.Outcome listFailed = supplement.supplement(CIK, companyFacts(), FROM, "t");
 
         assertThat(listFailed.vintagesUncertain()).isTrue();
         assertThat(listFailed.unconfirmedVintages()).containsExactly(MISSING_FILED);
         assertThat(listFailed.supplementedVintages()).doesNotContain(MISSING_FILED);
+        assertThat(store.tallySince(since).unresolved()).as("보호에 쓴 실패 행은 이 실행이 본 미해결이다").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("항목이 없는 폴더 색인은 XBRL 없음이 아니라 받기 실패다 — 다음 실행이 다시 받는다")
+    void emptyFolderIndexIsAFetchFailureNotNoXbrl() throws Exception {
+        bodyOf.put(indexPath(MISSING), "{\"directory\":{\"item\":[]}}");
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.failed()).containsExactly(MISSING);
+        assertThat(outcome.unconfirmedVintages()).containsExactly(MISSING_FILED);
+        assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
+
+        paths.clear();
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(paths).as("해석 실패가 아니라 다시 받는다").contains(indexPath(MISSING));
     }
 
     @Test
