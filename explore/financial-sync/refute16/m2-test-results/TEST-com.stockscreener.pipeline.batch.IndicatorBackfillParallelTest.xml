@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.IndicatorBackfillParallelTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:58.513Z" hostname="MacBook-Pro.local" time="0.869">
+  <properties/>
+  <testcase name="종료가 시작되면 워커가 끊기고 실행이 ABORTED로 마감된다 — 신호는 감싸지 않는다" classname="com.stockscreener.pipeline.batch.IndicatorBackfillParallelTest" time="0.359"/>
+  <testcase name="워커 둘로 흩어 돌아도 종목마다 제 값이 저장되고 집계가 계획과 맞는다" classname="com.stockscreener.pipeline.batch.IndicatorBackfillParallelTest" time="0.112"/>
+  <system-out><![CDATA[2026-10-06T19:23:58.514+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.IndicatorBackfillParallelTest]: IndicatorBackfillParallelTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:58.514+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.IndicatorBackfillParallelTest
+2026-10-06T19:23:58.514+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.IndicatorBackfillParallelTest]: IndicatorBackfillParallelTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:58.515+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.IndicatorBackfillParallelTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:23:58.521+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.b.IndicatorBackfillParallelTest    : Starting IndicatorBackfillParallelTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:23:58.521+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.b.IndicatorBackfillParallelTest    : The following 1 profile is active: "test"
+2026-10-06T19:23:58.627+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:23:58.638+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:23:58.663+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-16 - Starting...
+2026-10-06T19:23:58.670+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-16 - Start completed.
+2026-10-06T19:23:58.676+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:23:58.690+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.007s)
+2026-10-06T19:23:58.719+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:23:58.719+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:23:58.719+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:23:58.734+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:23:58.739+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:23:58.745+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:23:58.758+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:23:58.758+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:23:58.772+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:23:58.780+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:23:58.785+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.AlertConfig             : 알림 채널이 하나도 구성되지 않아 로그 기반 기본 구현을 쓴다. ALERT_WEBHOOK_URL·MAIL_USERNAME을 채우면 실제 통지가 나간다.
+2026-10-06T19:23:58.787+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=stock-alias/us-ko.csv 별칭=860개
+2026-10-06T19:23:58.825+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:23:58.855+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:23:58.860+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.b.IndicatorBackfillParallelTest    : Started IndicatorBackfillParallelTest in 0.344 seconds (process running for 32.075)
+2026-10-06T19:23:58.891+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 149개
+2026-10-06T19:23:58.909+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+2026-10-06T19:23:59.243+09:00  WARN 33006 --- [stock-screener] [fill-under-test] c.s.pipeline.batch.IndicatorBackfillJob  : KOSPI: 요청 구간의 346/601거래일이 보존 경계(2025-11-23) 밖이라 계산해도 저장되지 않는다. 남은 255거래일만 반영된다.
+2026-10-06T19:23:59.245+09:00  INFO 33006 --- [stock-screener] [fill-under-test] c.s.pipeline.batch.IndicatorBackfillJob  : 지표 백필을 시작한다. 거래일=601일 종목=6개 (티커로 좁혔다: [910001, 910002, 910003, 910004, 910005, 910006] — 백분위·업종 상대값은 그래도 전 종목에서 낸다)
+2026-10-06T19:23:59.245+09:00  INFO 33006 --- [stock-screener] [fill-under-test] c.s.pipeline.batch.IndicatorBackfillJob  : 종목 루프를 2워커로 돈다 — 설정가 정했다(2). 설정=2 대상=6종목 코어=12→상한8 풀=4→상한2
+2026-10-06T19:23:59.253+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.BatchExecutions       : 내려가면서 열린 배치 실행을 마감했다. id=95372 job=indicator-backfill
+2026-10-06T19:23:59.256+09:00  INFO 33006 --- [stock-screener] [fill-under-test] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2024-12-13 지표=10개 저장=0행 정리=0행
+2026-10-06T19:23:59.263+09:00  INFO 33006 --- [stock-screener] [fill-under-test] c.s.indicator.SectorRelativeCalculator   : 업종 상대값을 계산했다. tradeDate=2024-12-13 지표=6쌍 저장=0행 정리=0행
+2026-10-06T19:23:59.277+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.IndicatorBackfillJob  : 지표 백필을 시작한다. 거래일=1일 종목=6개 (티커로 좁혔다: [910001, 910002, 910003, 910004, 910005, 910006] — 백분위·업종 상대값은 그래도 전 종목에서 낸다)
+2026-10-06T19:23:59.277+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.IndicatorBackfillJob  : 종목 루프를 2워커로 돈다 — 설정가 정했다(2). 설정=2 대상=6종목 코어=12→상한8 풀=4→상한2
+2026-10-06T19:23:59.295+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=0행 정리=0행
+2026-10-06T19:23:59.301+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.SectorRelativeCalculator   : 업종 상대값을 계산했다. tradeDate=2026-08-05 지표=6쌍 저장=0행 정리=0행
+2026-10-06T19:23:59.334+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 보존 창의 고아 백분위를 정리했다. 지표=10개 정리=0행
+2026-10-06T19:23:59.372+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.SectorRelativeCalculator   : 보존 창의 고아 업종 상대값을 정리했다. 지표=6쌍 정리=0행
+2026-10-06T19:23:59.378+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.IndicatorBackfillJob  : 지표 거래일 색인을 갱신했다. 색인=1건
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

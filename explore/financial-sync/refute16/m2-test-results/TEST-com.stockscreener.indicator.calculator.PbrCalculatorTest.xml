@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.PbrCalculatorTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.464Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="자기자본이 비어 있으면 계산하지 않는다 — 0으로 대체하지 않는다" classname="com.stockscreener.indicator.calculator.PbrCalculatorTest" time="0.0"/>
+  <testcase name="자기자본이 0이면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.PbrCalculatorTest" time="0.0"/>
+  <testcase name="재무가 없으면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.PbrCalculatorTest" time="0.0"/>
+  <testcase name="자본잠식이면 값을 내지 않는다 — 음수 PBR이 저평가로 보이면 안 된다" classname="com.stockscreener.indicator.calculator.PbrCalculatorTest" time="0.0"/>
+  <testcase name="수정주가가 아니라 원주가를 쓴다 — 시점의 발행주식수와 짝이 맞아야 한다" classname="com.stockscreener.indicator.calculator.PbrCalculatorTest" time="0.0"/>
+  <testcase name="주가를 주당순자산으로 나눈다" classname="com.stockscreener.indicator.calculator.PbrCalculatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

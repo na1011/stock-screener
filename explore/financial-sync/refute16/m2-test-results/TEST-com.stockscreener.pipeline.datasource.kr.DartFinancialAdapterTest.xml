@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.020Z" hostname="MacBook-Pro.local" time="0.056">
+  <properties/>
+  <testcase name="연간 보고서를 파싱한다 — 6개 계정이 모두 채워진다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.011"/>
+  <testcase name="재무상태표는 Q4에서 차감하지 않는다 — 시점 잔액이라 빼면 음수가 된다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.007"/>
+  <testcase name="DART가 모르는 종목코드는 NOT_FOUND다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.001"/>
+  <testcase name="사업보고서와 3분기의 기수가 다르면 4분기 손익을 유도하지 않는다 — 12개월 떨어진 두 기간을 뺀다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.007"/>
+  <testcase name="잘못된 키는 AUTH다 — DART는 인증 실패도 HTTP 200으로 준다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.002"/>
+  <testcase name="비율 필드를 만들지 않는다 — 외부 계산값 의존이 타입 수준에서 불가능하다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.007"/>
+  <testcase name="요청 제한 초과(020)는 RATE_LIMITED다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.002"/>
+  <testcase name="데이터 없음(013)은 예외가 아니다 — 아직 공시되지 않은 분기가 정상이다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.006"/>
+  <testcase name="rcept_no 앞 8자리에서 공시일을 얻는다 — 정정공시 판별의 근거다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.006"/>
+  <testcase name="Q4를 FY − 3Q누적으로 유도한다 — 4분기 보고서는 존재하지 않는다" classname="com.stockscreener.pipeline.datasource.kr.DartFinancialAdapterTest" time="0.007"/>
+  <system-out><![CDATA[2026-10-06T19:24:11.043+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.DartFinancialAdapter          : 사업보고서와 3분기보고서의 기수가 다르다 — 4분기 손익을 유도하지 않는다. 사업=70기 3분기=71기
+2026-10-06T19:24:11.046+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.DartFinancialAdapter          : 사업보고서와 3분기보고서의 기수가 다르다 — 4분기 손익을 유도하지 않는다. 사업=70기 3분기=71기
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

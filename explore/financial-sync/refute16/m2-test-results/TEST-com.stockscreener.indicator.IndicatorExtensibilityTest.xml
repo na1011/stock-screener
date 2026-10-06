@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.IndicatorExtensibilityTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:31.243Z" hostname="MacBook-Pro.local" time="0.571">
+  <properties/>
+  <testcase name="메타데이터가 카탈로그 테이블로 투영되어 UI가 평범한 쿼리로 읽는다" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.021"/>
+  <testcase name="백분위도 파생 지표 코드일 뿐이라 스키마 변경이 없다" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.015"/>
+  <testcase name="실제 지표 두 개도 함께 등록되어 있다" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.001"/>
+  <testcase name="IMPORTANT — 계산기 없는 파생의 노출 정책이 **이미 있는 행에도** 반영된다" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.01"/>
+  <testcase name="종목 상세 기본 노출 여부가 계산 클래스에서 카탈로그로 흘러간다" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.01"/>
+  <testcase name="IMPORTANT — 축척에 의존하는 지표에는 구간이 붙지 않는다(ADR-0023)" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.009"/>
+  <testcase name="백분위 행의 분류가 원본을 따라간다 — 두 곳에 적으면 갈린다" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.01"/>
+  <testcase name="계산기 클래스 하나를 추가하면 레지스트리가 자동으로 인식한다" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.001"/>
+  <testcase name="새 지표의 값을 저장하는 데 스키마 변경이 필요 없다 — EAV의 핵심 성질" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.011"/>
+  <testcase name="백분위 행이 원본 지표를 가리킨다 — 부등호 방향 판단이 여기 의존한다" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.008"/>
+  <testcase name="결과 표의 기본 컬럼 여부가 계산 클래스에서 카탈로그로 흘러간다" classname="com.stockscreener.indicator.IndicatorExtensibilityTest" time="0.008"/>
+  <system-out><![CDATA[2026-10-06T19:23:31.244+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorExtensibilityTest
+2026-10-06T19:23:31.244+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorExtensibilityTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:23:31.252+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorExtensibilityTest         : Starting IndicatorExtensibilityTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:23:31.252+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorExtensibilityTest         : The following 1 profile is active: "test"
+2026-10-06T19:23:31.369+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:23:31.380+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 10 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:23:31.412+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-5 - Starting...
+2026-10-06T19:23:31.417+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-5 - Start completed.
+2026-10-06T19:23:31.423+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:23:31.439+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.007s)
+2026-10-06T19:23:31.468+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:23:31.468+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:23:31.468+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:23:31.481+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:23:31.488+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:23:31.494+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:23:31.510+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:23:31.511+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:23:31.530+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:23:31.542+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:23:31.548+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.AlertConfig             : 알림 채널이 하나도 구성되지 않아 로그 기반 기본 구현을 쓴다. ALERT_WEBHOOK_URL·MAIL_USERNAME을 채우면 실제 통지가 나간다.
+2026-10-06T19:23:31.552+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=stock-alias/us-ko.csv 별칭=860개
+2026-10-06T19:23:31.599+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:23:31.647+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:23:31.653+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorExtensibilityTest         : Started IndicatorExtensibilityTest in 0.408 seconds (process running for 4.868)
+2026-10-06T19:23:31.685+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 150개
+2026-10-06T19:23:31.707+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

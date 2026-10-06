@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.950Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="음수를 파싱한다 — 적자 기업이 있다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.001"/>
+  <testcase name="누적 금액을 요청하면 thstrm_add_amount를 쓴다 — Q4 유도의 근거다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <testcase name="일치하는 계정이 없으면 null이다 — 호출부가 집계해 로그로 남긴다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <testcase name="중복 계정은 ord가 작은 첫 행을 쓴다 — 당기순이익이 실제로 두 번 나온다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <testcase name="유동/비유동을 구분하지 않는 재무상태표에서는 null이다 — 금융업이 그렇다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <testcase name="해석할 수 없는 값은 null이다 — 예외로 종목 전체를 잃지 않는다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <testcase name="후보군 순서대로 매칭한다 — 업종마다 계정명이 다를 수 있다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <testcase name="재무상태표의 유동항목과 이익잉여금을 매핑한다 — 총계와 함께 이미 오던 것들이다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <testcase name="콤마 포함 문자열을 파싱한다 — 실측 형태가 그렇다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <testcase name="빈 값은 null이다 — 0으로 대체하면 '값이 0'이라는 다른 사실이 된다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <testcase name="사업보고서는 누적 컬럼이 비어 있어 당기 금액으로 대체한다" classname="com.stockscreener.pipeline.datasource.kr.DartAccountMapperTest" time="0.0"/>
+  <system-out><![CDATA[2026-10-06T19:24:10.952+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.kr.DartAccountMapper    : 금액을 해석할 수 없다: 'N/A'
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

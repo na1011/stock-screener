@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.auth.web.AdminAllowlistApiTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:30.715Z" hostname="MacBook-Pro.local" time="0.111">
+  <properties/>
+  <testcase name="관리자가 둘이면 한쪽을 강등할 수 있다 — 막는 것은 마지막 한 명뿐이다" classname="com.stockscreener.auth.web.AdminAllowlistApiTest" time="0.039"/>
+  <testcase name="일반 사용자는 허용목록에 손댈 수 없다" classname="com.stockscreener.auth.web.AdminAllowlistApiTest" time="0.003"/>
+  <testcase name="형식이 아닌 이메일은 400이고 어느 필드인지 알려준다 — 오타는 조용히 통과한다" classname="com.stockscreener.auth.web.AdminAllowlistApiTest" time="0.016"/>
+  <testcase name="없는 항목은 404다" classname="com.stockscreener.auth.web.AdminAllowlistApiTest" time="0.005"/>
+  <testcase name="이미 있는 이메일은 409다 — 추가를 눌렀는데 기존 권한이 조용히 바뀌면 안 된다" classname="com.stockscreener.auth.web.AdminAllowlistApiTest" time="0.008"/>
+  <testcase name="추가·조회·수정·삭제가 왕복한다" classname="com.stockscreener.auth.web.AdminAllowlistApiTest" time="0.014"/>
+  <testcase name="IMPORTANT — 마지막 관리자를 삭제할 수도 없다" classname="com.stockscreener.auth.web.AdminAllowlistApiTest" time="0.004"/>
+  <testcase name="IMPORTANT — 마지막 관리자의 권한은 회수할 수 없다. 회수되면 복구 수단이 SQL뿐이다" classname="com.stockscreener.auth.web.AdminAllowlistApiTest" time="0.004"/>
+  <system-out><![CDATA[2026-10-06T19:23:30.716+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.auth.web.AdminAllowlistApiTest]: AdminAllowlistApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:30.725+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.auth.web.AdminAllowlistApiTest
+2026-10-06T19:23:30.726+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.auth.web.AdminAllowlistApiTest]: AdminAllowlistApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:30.726+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.auth.web.AdminAllowlistApiTest
+2026-10-06T19:23:30.727+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:30.727+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:30.727+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:23:30.767+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:30.767+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:30.767+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:23:30.770+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:30.770+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:30.771+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:23:30.787+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:30.787+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:30.788+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:23:30.793+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:30.793+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:30.794+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:23:30.802+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:30.802+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:30.802+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:23:30.816+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:30.816+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:30.817+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:23:30.822+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:30.822+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:30.822+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.GovernanceRawWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:08.839Z" hostname="MacBook-Pro.local" time="0.224">
+  <properties/>
+  <testcase name="접수번호가 아직 없으면 데이터 없음 행을 그대로 둔다 — 지어내지 않는다" classname="com.stockscreener.pipeline.collector.GovernanceRawWriterTest" time="0.008"/>
+  <testcase name="같은 해를 두 번 적재해도 데이터 없음 행 찍기가 터지지 않는다" classname="com.stockscreener.pipeline.collector.GovernanceRawWriterTest" time="0.005"/>
+  <testcase name="접수번호가 다른 판이 오면 데이터 없음 행을 지우지 않고 새 값을 찍는다" classname="com.stockscreener.pipeline.collector.GovernanceRawWriterTest" time="0.004"/>
+  <system-out><![CDATA[2026-10-06T19:24:08.840+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.GovernanceRawWriterTest]: GovernanceRawWriterTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.842+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.GovernanceRawWriterTest
+2026-10-06T19:24:08.842+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.GovernanceRawWriterTest]: GovernanceRawWriterTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.844+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.GovernanceRawWriterTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:08.850+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.GovernanceRawWriterTest  : Starting GovernanceRawWriterTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:08.850+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.GovernanceRawWriterTest  : The following 1 profile is active: "test"
+2026-10-06T19:24:08.910+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:08.920+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 9 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:08.930+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-27 - Starting...
+2026-10-06T19:24:08.939+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-27 - Start completed.
+2026-10-06T19:24:08.945+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:08.958+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.006s)
+2026-10-06T19:24:08.990+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:08.990+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:08.990+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:09.002+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:09.007+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:09.013+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:09.025+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:09.025+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:09.043+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:09.046+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.GovernanceRawWriterTest  : Started GovernanceRawWriterTest in 0.201 seconds (process running for 42.261)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

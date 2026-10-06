@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="52주 고·저 대비" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.471Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="IMPORTANT — 고가·저가를 수정 축척으로 맞춘다. 분할 구간에 가짜 극값이 생기면 안 된다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$FiftyTwoWeek" time="0.0"/>
+  <testcase name="창을 벗어난 극값은 잊는다 — 앞에서 버리지 않으면 영원히 저점이 남는다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$FiftyTwoWeek" time="0.0"/>
+  <testcase name="창을 채우지 못하면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$FiftyTwoWeek" time="0.0"/>
+  <testcase name="창 안의 최저·최고를 찾는다 — 덱이 미끄러져도 결과가 전수 탐색과 같아야 한다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$FiftyTwoWeek" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

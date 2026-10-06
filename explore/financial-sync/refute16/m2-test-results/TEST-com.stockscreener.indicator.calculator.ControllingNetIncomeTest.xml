@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.ControllingNetIncomeTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.380Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="네 분기 모두 지배주주 값이 있으면 그것으로 계산한다 — 연결 총액이 아니다" classname="com.stockscreener.indicator.calculator.ControllingNetIncomeTest" time="0.0"/>
+  <testcase name="한 분기라도 지배주주 값이 비면 네 분기 다 연결 총액으로 간다 — 섞어 더하지 않는다" classname="com.stockscreener.indicator.calculator.ControllingNetIncomeTest" time="0.0"/>
+  <testcase name="지배주주 이익이 적자면 PER은 값을 내지 않고 EPS는 음수를 낸다" classname="com.stockscreener.indicator.calculator.ControllingNetIncomeTest" time="0.0"/>
+  <testcase name="지배주주 값이 한 분기도 없으면 연결 총액으로 폴백한다 — 비지배지분이 없는 회사다" classname="com.stockscreener.indicator.calculator.ControllingNetIncomeTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

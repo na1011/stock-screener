@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.JdbcStoredPriceSeriesTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:09.064Z" hostname="MacBook-Pro.local" time="0.219">
+  <properties/>
+  <testcase name="양끝을 포함하고 거래일 오름차순으로 준다" classname="com.stockscreener.pipeline.collector.JdbcStoredPriceSeriesTest" time="0.005"/>
+  <testcase name="상장주식수가 없는 옛 행은 null로 나온다 — 0으로 채우면 배수가 0이나 무한대가 된다" classname="com.stockscreener.pipeline.collector.JdbcStoredPriceSeriesTest" time="0.001"/>
+  <testcase name="봉이 없는 구간은 빈 목록이다 — 상장 전·거래정지에서 정상이다" classname="com.stockscreener.pipeline.collector.JdbcStoredPriceSeriesTest" time="0.002"/>
+  <testcase name="거래정지 구간을 달력으로 세지 않는다 — 이웃한 두 원소가 곧 이웃한 두 거래일이다" classname="com.stockscreener.pipeline.collector.JdbcStoredPriceSeriesTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:24:09.065+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.JdbcStoredPriceSeriesTest]: JdbcStoredPriceSeriesTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.067+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.JdbcStoredPriceSeriesTest
+2026-10-06T19:24:09.067+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.JdbcStoredPriceSeriesTest]: JdbcStoredPriceSeriesTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.069+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.JdbcStoredPriceSeriesTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:09.074+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.JdbcStoredPriceSeriesTest        : Starting JdbcStoredPriceSeriesTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:09.074+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.JdbcStoredPriceSeriesTest        : The following 1 profile is active: "test"
+2026-10-06T19:24:09.131+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:09.141+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 9 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:09.147+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-28 - Starting...
+2026-10-06T19:24:09.155+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-28 - Start completed.
+2026-10-06T19:24:09.161+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:09.174+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.006s)
+2026-10-06T19:24:09.212+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:09.212+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:09.212+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:09.224+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:09.229+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:09.236+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:09.247+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:09.248+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:09.265+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:09.268+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.JdbcStoredPriceSeriesTest        : Started JdbcStoredPriceSeriesTest in 0.198 seconds (process running for 42.483)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

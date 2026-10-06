@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="3년 주식수 증가율" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.477Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="이력이 3년에 못 미치면 값을 내지 않는다 — 상장 3년 미만이 여기서 빠진다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$SharesGrowth" time="0.0"/>
+  <testcase name="750거래일 전과 비교한다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$SharesGrowth" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

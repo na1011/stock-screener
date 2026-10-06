@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.AlpacaSecurityMasterAdapterTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.203Z" hostname="MacBook-Pro.local" time="0.005">
+  <properties/>
+  <testcase name="404는 예외가 아니라 빈 결과다 — 포트 계약이 「소스가 모른다」로 정의한다" classname="com.stockscreener.pipeline.datasource.us.AlpacaSecurityMasterAdapterTest" time="0.001"/>
+  <testcase name="담당 시장은 US 하나다 — 거래소는 listing_exchange가 가른다" classname="com.stockscreener.pipeline.datasource.us.AlpacaSecurityMasterAdapterTest" time="0.0"/>
+  <testcase name="캐시에 없으면 단건 조회로 내려간다 — 손으로 티커를 준 경로다" classname="com.stockscreener.pipeline.datasource.us.AlpacaSecurityMasterAdapterTest" time="0.001"/>
+  <testcase name="IMPORTANT — 캐시가 차 있으면 호출이 0건이다. 유니버스 응답이 이미 이름을 줬다" classname="com.stockscreener.pipeline.datasource.us.AlpacaSecurityMasterAdapterTest" time="0.001"/>
+  <testcase name="401은 AUTH로 던진다 — 빈 결과로 접으면 이름이 티커로 굳는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaSecurityMasterAdapterTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

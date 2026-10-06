@@ -1,0 +1,18 @@
+         job_name          | triggered_by | n  | first | last  |       p50       |       max       
+---------------------------+--------------+----+-------+-------+-----------------+-----------------
+ adjustment-rebuild        | SCHEDULER    | 24 | 09-02 | 10-06 | 00:00:00.690395 | 00:00:01.870505
+ company-profile           | SCHEDULER    |  2 | 09-19 | 09-26 | 00:00:01.108942 | 00:00:01.274698
+ corporate-action          | SCHEDULER    | 24 | 09-02 | 10-06 | 00:12:21.645281 | 00:15:56.580059
+ daily-update              | SCHEDULER    | 38 | 08-10 | 10-06 | 00:14:52.672488 | 00:26:36.035405
+ full-statement-refill     | GAP_FILL     |  1 | 10-03 | 10-03 | 00:00:03.977386 | 00:00:03.977386
+ governance-derive         | GAP_FILL     |  2 | 09-26 | 10-03 | 00:00:00.059297 | 00:00:00.071212
+ governance-derive         | SCHEDULER    |  2 | 10-05 | 10-06 | 00:00:01.679295 | 00:00:01.684098
+ governance-load           | GAP_FILL     |  2 | 09-26 | 10-03 | 00:00:05.634614 | 00:00:06.770611
+ indicator-backfill        | SCHEDULER    |  3 | 09-03 | 09-28 | 00:03:53.916884 | 00:04:01.190926
+ indicator-derived-rebuild | SCHEDULER    |  2 | 10-05 | 10-06 | 00:03:26.164219 | 00:03:44.808164
+ indicator-origin-rewrite  | SCHEDULER    |  2 | 10-05 | 10-06 | 00:02:31.043923 | 00:02:34.554916
+ initial-load              | GAP_FILL     |  3 | 09-26 | 10-03 | 00:00:05.327337 | 00:00:05.334829
+ initial-load              | SCHEDULER    |  1 | 09-19 | 09-19 | 00:00:00.923632 | 00:00:00.923632
+ universe-rebalance        | SCHEDULER    |  6 | 08-22 | 09-26 | 00:00:20.883822 | 00:00:26.336068
+(14개 행)
+

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="CCI(20)" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.459Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="고가·저가를 보정해 쓴다 — 축척이 섞이면 벗어난 정도가 통째로 어긋난다" classname="com.stockscreener.indicator.calculator.MomentumOscillatorsTest$Cci" time="0.0"/>
+  <testcase name="전형가격은 고가·저가·종가의 평균이다 — 종가만 보지 않는다" classname="com.stockscreener.indicator.calculator.MomentumOscillatorsTest$Cci" time="0.0"/>
+  <testcase name="20일간 전형가격이 같으면 값을 내지 않는다 — 나눌 수 없다" classname="com.stockscreener.indicator.calculator.MomentumOscillatorsTest$Cci" time="0.0"/>
+  <testcase name="평균 위로 벗어나면 양수, 아래면 음수다" classname="com.stockscreener.indicator.calculator.MomentumOscillatorsTest$Cci" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.interaction.web.AdminInteractionApiTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.736Z" hostname="MacBook-Pro.local" time="0.152">
+  <properties/>
+  <testcase name="limit 상한을 넘겨도 그 위로는 오지 않는다" classname="com.stockscreener.interaction.web.AdminInteractionApiTest" time="0.025"/>
+  <testcase name="필터 선택지는 기록에 등장한 사용자만 준다" classname="com.stockscreener.interaction.web.AdminInteractionApiTest" time="0.013"/>
+  <testcase name="일반 사용자는 로그를 볼 수 없다 — 남이 무엇을 했는지 드러난다" classname="com.stockscreener.interaction.web.AdminInteractionApiTest" time="0.009"/>
+  <testcase name="detail이 객체로 온다 — 문자열로 주면 화면이 다시 파싱해야 한다" classname="com.stockscreener.interaction.web.AdminInteractionApiTest" time="0.012"/>
+  <testcase name="사용자와 행위로 좁혀진다" classname="com.stockscreener.interaction.web.AdminInteractionApiTest" time="0.014"/>
+  <testcase name="최근 순으로 오고 사용자 이메일이 함께 온다 — id만으로는 누구인지 모른다" classname="com.stockscreener.interaction.web.AdminInteractionApiTest" time="0.012"/>
+  <testcase name="IMPORTANT — to에 오늘을 넣으면 오늘 것이 나온다. 경계를 잘못 잡으면 통째로 빠진다" classname="com.stockscreener.interaction.web.AdminInteractionApiTest" time="0.014"/>
+  <system-out><![CDATA[2026-10-06T19:23:36.738+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.interaction.web.AdminInteractionApiTest]: AdminInteractionApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:36.767+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.interaction.web.AdminInteractionApiTest
+2026-10-06T19:23:36.768+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.interaction.web.AdminInteractionApiTest]: AdminInteractionApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:36.769+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.interaction.web.AdminInteractionApiTest
+2026-10-06T19:23:36.772+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:36.772+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:36.775+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 3 ms
+2026-10-06T19:23:36.801+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:36.802+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:36.803+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:23:36.817+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:36.817+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:36.818+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:23:36.828+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:36.828+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:36.829+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:23:36.842+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:36.842+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:36.844+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:23:36.859+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:36.859+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:36.861+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms
+2026-10-06T19:23:36.872+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:23:36.873+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:23:36.874+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

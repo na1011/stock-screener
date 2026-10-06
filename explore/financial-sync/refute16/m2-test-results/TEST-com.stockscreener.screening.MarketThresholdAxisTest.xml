@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.screening.MarketThresholdAxisTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:17.988Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="시장 중립 조건은 어느 통화에서도 그대로다 — 부호·개수·백분위가 그 근거다" classname="com.stockscreener.screening.MarketThresholdAxisTest" time="0.0"/>
+  <testcase name="그 시장의 임계를 고른다 — 해석 뒤에는 평범한 리터럴이라 아래 계층이 축을 모른다" classname="com.stockscreener.screening.MarketThresholdAxisTest" time="0.0"/>
+  <testcase name="해석하지 않은 시장별 임계로 판정하면 던진다 — 조용히 통과시키지 않는다" classname="com.stockscreener.screening.MarketThresholdAxisTest" time="0.0"/>
+  <testcase name="사용자가 쓴 평범한 리터럴은 축 없이 그대로 돌아온다" classname="com.stockscreener.screening.MarketThresholdAxisTest" time="0.001"/>
+  <testcase name="그 시장의 임계가 없으면 다른 통화의 값으로 대신하지 않고 요청 단위로 거절한다" classname="com.stockscreener.screening.MarketThresholdAxisTest" time="0.001"/>
+  <testcase name="응답으로 나갔다 요청으로 돌아와도 시장 축이 살아 있다 — 복제본이 원본과 같은 판정을 한다" classname="com.stockscreener.screening.MarketThresholdAxisTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

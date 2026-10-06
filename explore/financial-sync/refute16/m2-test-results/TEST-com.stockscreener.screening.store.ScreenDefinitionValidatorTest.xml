@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.screening.store.ScreenDefinitionValidatorTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:19.076Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="BETWEEN + 지표 참조는 저장 시점에 막는다 — 실행할 때만 깨지는 화면을 만들지 않는다" classname="com.stockscreener.screening.store.ScreenDefinitionValidatorTest" time="0.0"/>
+  <testcase name="조건 개수 상한을 넘으면 거절한다" classname="com.stockscreener.screening.store.ScreenDefinitionValidatorTest" time="0.001"/>
+  <testcase name="IMPORTANT — 폐기된 지표를 참조하면 조건 인덱스와 함께 거절한다" classname="com.stockscreener.screening.store.ScreenDefinitionValidatorTest" time="0.0"/>
+  <testcase name="OR 결합은 거절한다 — v2의 범위다" classname="com.stockscreener.screening.store.ScreenDefinitionValidatorTest" time="0.0"/>
+  <testcase name="지표 참조 조건도 정상이면 통과한다" classname="com.stockscreener.screening.store.ScreenDefinitionValidatorTest" time="0.0"/>
+  <testcase name="중첩 그룹은 거절한다 — 로더가 조용히 누락시키는 형태다" classname="com.stockscreener.screening.store.ScreenDefinitionValidatorTest" time="0.0"/>
+  <testcase name="우변 지표도 검사한다 — 좌변만 보면 참조가 뚫린다" classname="com.stockscreener.screening.store.ScreenDefinitionValidatorTest" time="0.0"/>
+  <testcase name="깊이 1의 AND 목록은 통과한다" classname="com.stockscreener.screening.store.ScreenDefinitionValidatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

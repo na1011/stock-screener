@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="200일선 60일 기울기 — 정규화가 이 지표의 존재 이유다" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.472Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="완전한 횡보는 0이다 — 노이즈 없는 구간에서 우상향으로 읽히면 안 된다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$Slope" time="0.0"/>
+  <testcase name="창을 채우지 못하면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$Slope" time="0.0"/>
+  <testcase name="상승 추세는 양수, 하락 추세는 음수 — 부호가 게이트 조건의 전부다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$Slope" time="0.001"/>
+  <testcase name="IMPORTANT — 주가 수준이 달라도 같은 값이다. 원시 기울기를 내면 여기서 깨진다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$Slope" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

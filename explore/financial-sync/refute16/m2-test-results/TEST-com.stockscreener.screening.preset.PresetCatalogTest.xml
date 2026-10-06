@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.screening.preset.PresetCatalogTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:17.990Z" hostname="MacBook-Pro.local" time="0.021">
+  <properties/>
+  <testcase name="IMPORTANT — 프리셋마다 조건의 출처가 javadoc에 갈려 적혀 있다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.001"/>
+  <testcase name="참조하는 지표가 모두 실재한다 — 오타는 기동 시 FK 위반이 된다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.002"/>
+  <testcase name="spec §9가 요구한 「최소 1개 이상의 사전정의 전략 프리셋」이 있다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.0"/>
+  <testcase name="백분위 조건의 경계값이 0~1 안에 있다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.001"/>
+  <testcase name="게이트를 가진 프리셋은 점수 조건도 함께 갖는다 — 전부 필수면 점수가 0점 만점이 된다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.003"/>
+  <testcase name="모든 프리셋이 v1 형태다 — 깊이 1, AND 결합" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.0"/>
+  <testcase name="가장 큰 프리셋의 조건 수가 숫자로 못박혀 있다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.001"/>
+  <testcase name="프리셋 코드가 중복되지 않는다 — uq_screen_code가 기동을 막기 전에 잡는다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.0"/>
+  <testcase name="IMPORTANT — 선언한 프리셋이 시더의 검증을 실제로 통과한다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.0"/>
+  <testcase name="IMPORTANT — 상대 지표 조건의 부등호가 원본 지표의 유불리와 맞는다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.0"/>
+  <testcase name="두 판정 방식이 모두 시딩된다 — 판정 방식은 조건이 아니라 실행의 속성이다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.001"/>
+  <testcase name="상대 지표를 조건으로 쓰면 그 값이 실제로 계산되는 지표여야 한다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.0"/>
+  <testcase name="점수형 프리셋의 점수 조건에 가중치가 있다 — 없으면 1로 취급되어 균형이 조용히 어긋난다" classname="com.stockscreener.screening.preset.PresetCatalogTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:24:17.990+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.screening.preset.PresetCatalogTest]: PresetCatalogTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:17.999+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.screening.preset.PresetCatalogTest
+2026-10-06T19:24:17.999+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.screening.preset.PresetCatalogTest]: PresetCatalogTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:17.999+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.screening.preset.PresetCatalogTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

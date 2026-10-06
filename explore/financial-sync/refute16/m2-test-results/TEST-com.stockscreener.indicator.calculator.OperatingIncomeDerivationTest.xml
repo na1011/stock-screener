@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.OperatingIncomeDerivationTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.461Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="비금융 — 매출총이익 − 영업비용이 매출 − 총원가보다 먼저다" classname="com.stockscreener.indicator.calculator.OperatingIncomeDerivationTest" time="0.0"/>
+  <testcase name="아무 재료도 없으면 null이다 — 침묵이 거짓보다 낫다" classname="com.stockscreener.indicator.calculator.OperatingIncomeDerivationTest" time="0.001"/>
+  <testcase name="소스가 낸 영업이익이 언제나 이긴다 — 국내가 이 갈래이고 값이 안 바뀐다" classname="com.stockscreener.indicator.calculator.OperatingIncomeDerivationTest" time="0.0"/>
+  <testcase name="재료가 하나라도 없으면 그 갈래를 건너뛴다 — 0으로 대체하지 않는다" classname="com.stockscreener.indicator.calculator.OperatingIncomeDerivationTest" time="0.0"/>
+  <testcase name="은행 — (이자·배당수익 + 비이자수익) − (이자비용 + 비이자비용)" classname="com.stockscreener.indicator.calculator.OperatingIncomeDerivationTest" time="0.0"/>
+  <testcase name="보험 — 영업수익 − 보험금·손실·비용" classname="com.stockscreener.indicator.calculator.OperatingIncomeDerivationTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

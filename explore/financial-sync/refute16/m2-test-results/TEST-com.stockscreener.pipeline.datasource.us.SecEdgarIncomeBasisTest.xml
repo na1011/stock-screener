@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.SecEdgarIncomeBasisTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:16.209Z" hostname="MacBook-Pro.local" time="0.01">
+  <properties/>
+  <testcase name="지배주주 자본은 비지배를 뺀 값이라 연결 자본보다 작다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarIncomeBasisTest" time="0.001"/>
+  <testcase name="유도한 4분기도 두 컬럼을 다 만든다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarIncomeBasisTest" time="0.001"/>
+  <testcase name="연결 총액을 비울 때 그것이 판정임을 함께 싣는다 — 채울 때는 안 싣는다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarIncomeBasisTest" time="0.003"/>
+  <testcase name="두 컬럼이 갈라져 담기고, 연결이 지배주주보다 크다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarIncomeBasisTest" time="0.001"/>
+  <testcase name="비지배를 지금도 내면 연결 총액을 비운다 — 지배주주 값으로 채우지 않는다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarIncomeBasisTest" time="0.001"/>
+  <testcase name="비지배가 오래전에 끊겼으면 연결 총액을 채운다 — 옛 이력에 발목 잡히지 않는다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarIncomeBasisTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

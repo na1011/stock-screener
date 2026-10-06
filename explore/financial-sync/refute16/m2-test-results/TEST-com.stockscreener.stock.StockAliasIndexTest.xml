@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.stock.StockAliasIndexTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:19.880Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="주석과 헤더를 건너뛰고 한 종목의 별칭 여럿을 담는다" classname="com.stockscreener.stock.StockAliasIndexTest" time="0.0"/>
+  <testcase name="NFD로 친 검색어도 같은 별칭에 맞는다 — 안 맞으면 조용히 0건이다" classname="com.stockscreener.stock.StockAliasIndexTest" time="0.0"/>
+  <testcase name="접두와 포함을 갈라 낸다 — 검색의 정렬 등급이 둘을 다르게 다룬다" classname="com.stockscreener.stock.StockAliasIndexTest" time="0.001"/>
+  <testcase name="파일이 없으면 조용히 비우지 않고 실패한다" classname="com.stockscreener.stock.StockAliasIndexTest" time="0.0"/>
+  <testcase name="빈 검색어는 아무것도 안 낸다" classname="com.stockscreener.stock.StockAliasIndexTest" time="0.0"/>
+  <system-out><![CDATA[2026-10-06T19:24:19.880+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=fixtures/stock-alias/test-alias.csv 별칭=4개
+2026-10-06T19:24:19.881+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=fixtures/stock-alias/test-alias.csv 별칭=4개
+2026-10-06T19:24:19.881+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=fixtures/stock-alias/test-alias.csv 별칭=4개
+2026-10-06T19:24:19.882+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=fixtures/stock-alias/test-alias.csv 별칭=4개
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

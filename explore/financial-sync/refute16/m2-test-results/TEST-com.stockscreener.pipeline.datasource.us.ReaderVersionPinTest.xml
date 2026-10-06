@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.ReaderVersionPinTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.231Z" hostname="MacBook-Pro.local" time="4.815">
+  <properties/>
+  <testcase name="박힌 해시는 덧붙이기만 한다 — 판 번호가 같은 채 값이 바뀐 커밋이 없다(v8부터 · git 메인라인 이력)" classname="com.stockscreener.pipeline.datasource.us.ReaderVersionPinTest" time="0.083"/>
+  <testcase name="정규형은 주석과 서식만 버린다 — 리터럴 안 공백 · 텍스트 블록 · 문자열 안 // 뒤의 코드는 갈린다" classname="com.stockscreener.pipeline.datasource.us.ReaderVersionPinTest" time="0.339"/>
+  <testcase name="판 범위 파일이 쓰는 프로젝트 형은 범위 안이거나, 저장을 못 바꾸는 사유가 적힌 예외다 — javac 속성 분석으로 센다" classname="com.stockscreener.pipeline.datasource.us.ReaderVersionPinTest" time="0.3"/>
+  <testcase name="판 범위의 소스가 지금 판에 박힌 해시와 같다 — 소스를 한 토큰이라도 바꾸면 판을 올린다" classname="com.stockscreener.pipeline.datasource.us.ReaderVersionPinTest" time="0.137"/>
+  <testcase name="해석 규칙의 출력이 지금 판에 박힌 해시와 같다 — 재료 · 환경 · 규칙이 바뀌고 판을 안 올리면 붉다" classname="com.stockscreener.pipeline.datasource.us.ReaderVersionPinTest" time="0.019"/>
+  <testcase name="해석 실패의 자리마다 재료가 하나씩 있고 그 자리에 닿는다 — 자리를 더하면 재료부터 더한다" classname="com.stockscreener.pipeline.datasource.us.ReaderVersionPinTest" time="0.001"/>
+  <testcase name="판 범위의 형을 범위 밖에서 상속·구현하지 않는다 — 주입되는 구현은 javac 참조 분석에 안 보인다" classname="com.stockscreener.pipeline.datasource.us.ReaderVersionPinTest" time="3.936"/>
+  <testcase name="받기 실패의 종류에 UNREADABLE이 없다 — 있으면 받기 실패가 다시 받지 않는 종료 상태로 저장된다" classname="com.stockscreener.pipeline.datasource.us.ReaderVersionPinTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

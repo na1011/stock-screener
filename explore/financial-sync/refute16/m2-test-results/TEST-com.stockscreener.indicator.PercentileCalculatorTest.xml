@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.PercentileCalculatorTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:35.864Z" hostname="MacBook-Pro.local" time="0.154">
+  <properties/>
+  <testcase name="백필 유니버스를 준 실행은 그 비활성 유니버스 구성원의 행을 지우지 않는다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.009"/>
+  <testcase name="한 종목이 두 유니버스에 걸리면 조용히 한쪽을 버리지 않고 깨진다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.006"/>
+  <testcase name="가장 낮은 값이 0, 가장 높은 값이 1이다 — 항상 오름차순 기준이다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.006"/>
+  <testcase name="편입되지 않은 종목은 모집단에서 빠진다 — 순위의 기준이 유니버스여야 한다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.009"/>
+  <testcase name="두 번 실행해도 행이 늘지 않는다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.014"/>
+  <testcase name="값이 안 바뀐 재실행에서 편입 종목의 멀쩡한 행은 남는다 — 「이번에 안 썼다」를 기준으로 삼으면 안 된다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.011"/>
+  <testcase name="중간값은 순위에 비례한다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.005"/>
+  <testcase name="모집단이 하나로 줄어든 자리의 옛 행도 걷는다 — 배제 사유가 편입 하나가 아니다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.006"/>
+  <testcase name="모집단이 하나면 백분위를 만들지 않는다 — 0은 '가장 싸다'로 읽힌다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.008"/>
+  <testcase name="다른 거래일의 행은 건드리지 않는다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.007"/>
+  <testcase name="그날 편입이 아니었던 종목의 옛 백분위를 걷는다 — 원본이 그대로 있어도 걷는다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.006"/>
+  <testcase name="창 정리가 과거 날짜에서 원본이 사라진 백분위를 지운다 — 날짜별 정리로는 안 걸리는 자리다(ADR-0080)" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.023"/>
+  <testcase name="비활성 유니버스는 모집단이 아니다 — 폐기된 지수의 편입 이력이 순위를 만들면 안 된다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.011"/>
+  <testcase name="값이 그대로면 다시 쓰지 않는다 — 재계산이 인덱스를 부풀리지 않는 근거다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.013"/>
+  <testcase name="창 정리는 경계 날짜를 건드리지 않는다 — 경계 「뒤」만 본다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.007"/>
+  <testcase name="유니버스마다 따로 매긴다 — 합치면 코스피 최고값이 1이 되지 못한다" classname="com.stockscreener.indicator.PercentileCalculatorTest" time="0.007"/>
+  <system-out><![CDATA[2026-10-06T19:23:35.865+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.PercentileCalculatorTest]: PercentileCalculatorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:35.865+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.PercentileCalculatorTest
+2026-10-06T19:23:35.865+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.PercentileCalculatorTest]: PercentileCalculatorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:35.865+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.PercentileCalculatorTest
+2026-10-06T19:23:35.874+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=7행 정리=0행
+2026-10-06T19:23:35.887+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=0행
+2026-10-06T19:23:35.894+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=0행
+2026-10-06T19:23:35.903+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=0행
+2026-10-06T19:23:35.909+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=0행 정리=0행
+2026-10-06T19:23:35.917+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=0행
+2026-10-06T19:23:35.921+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=0행 정리=0행
+2026-10-06T19:23:35.929+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=0행
+2026-10-06T19:23:35.935+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=1행
+2026-10-06T19:23:35.940+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=0행
+2026-10-06T19:23:35.950+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=1행
+2026-10-06T19:23:35.956+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=1행
+2026-10-06T19:23:35.961+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=0행
+2026-10-06T19:23:35.978+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 보존 창의 고아 백분위를 정리했다. 지표=10개 정리=1행
+2026-10-06T19:23:35.986+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=0행
+2026-10-06T19:23:35.999+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=5행 정리=0행
+2026-10-06T19:23:36.003+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=0행 정리=0행
+2026-10-06T19:23:36.011+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 보존 창의 고아 백분위를 정리했다. 지표=10개 정리=0행
+2026-10-06T19:23:36.018+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=8행 정리=0행
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.002Z" hostname="MacBook-Pro.local" time="0.063">
+  <properties/>
+  <testcase name="보존 창 밖에서 끝난 편입은 안 닿는다 — 창이 곧 답할 수 있는 범위다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.002"/>
+  <testcase name="IMPORTANT — 창 모집단은 지금 편입과 창 안의 과거 편입을 함께 내고, 창 밖·비활성은 뺀다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.002"/>
+  <testcase name="봉이 하나라도 있으면 초기 적재 대상에서 빠진다 — 재개 가능성의 근거다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.003"/>
+  <testcase name="한 종목이 두 지수에 편입돼 있어도 한 번만 낸다 — 중복은 곧 쿼터 낭비다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.003"/>
+  <testcase name="창 모집단과 티커 조회는 같은 술어다 — 갈리면 손 실행과 정기 화해가 다른 종목을 돈다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.006"/>
+  <testcase name="빈 목록은 빈 결과다 — IN () 조립으로 문법 오류가 나면 안 된다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.001"/>
+  <testcase name="IMPORTANT — 보존 창 안에 편입이 있었으면 지금 빠졌어도 티커로 닿는다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.003"/>
+  <testcase name="편입 중인 활성 종목만 낸다 — 편입 종료·비활성은 빠진다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.003"/>
+  <testcase name="티커로 고르면 편입 종목과의 교집합만 낸다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.003"/>
+  <testcase name="지표 달력이 없으면 창 모집단은 지금 편입으로 되돌아간다 — 조용한 0건이 되면 안 된다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.003"/>
+  <testcase name="IMPORTANT — 수집하기로 하지 않은 시장은 활성 유니버스에 있어도 대상이 아니다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.005"/>
+  <testcase name="IMPORTANT — 이력이 없어도 두 조건 밖의 종목은 초기 적재 대상이 아니다(ADR-0087)" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.006"/>
+  <testcase name="IMPORTANT — 손으로 고른 유니버스는 비활성이어도 낸다. 다만 시장 게이트는 남는다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.004"/>
+  <testcase name="모르는 티커로 조회해도 종목을 만들지 않는다 — resolveOrCreate와 갈라놓은 이유다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.003"/>
+  <testcase name="IMPORTANT — 지표 달력이 없어도 지금 편입은 닿는다. 조용한 0건이 되면 안 된다" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.003"/>
+  <testcase name="IMPORTANT — 비활성 유니버스에만 편입된 종목은 대상이 아니다(ADR-0087)" classname="com.stockscreener.pipeline.collector.StockRegistrarLookupTest" time="0.004"/>
+  <system-out><![CDATA[2026-10-06T19:24:10.002+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.StockRegistrarLookupTest]: StockRegistrarLookupTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:10.004+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.StockRegistrarLookupTest
+2026-10-06T19:24:10.004+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.StockRegistrarLookupTest]: StockRegistrarLookupTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:10.006+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.StockRegistrarLookupTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

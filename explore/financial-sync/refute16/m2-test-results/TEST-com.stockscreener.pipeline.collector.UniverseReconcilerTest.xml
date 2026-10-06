@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.UniverseReconcilerTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.316Z" hostname="MacBook-Pro.local" time="0.252">
+  <properties/>
+  <testcase name="같은 기준일에 목록이 바뀌면 그날 편입된 것을 지운다 — 닫으면 유니버스가 통째로 거부된다" classname="com.stockscreener.pipeline.collector.UniverseReconcilerTest" time="0.011"/>
+  <testcase name="제외 후 재편입이 가능하다 — 반열림 구간이라 EXCLUDE 제약을 위반하지 않는다" classname="com.stockscreener.pipeline.collector.UniverseReconcilerTest" time="0.004"/>
+  <testcase name="교집합은 건드리지 않는다 — 같은 날 제외·재편입은 0일 구간이 되어 거부된다" classname="com.stockscreener.pipeline.collector.UniverseReconcilerTest" time="0.003"/>
+  <testcase name="최초 반영 시 전 종목을 편입한다" classname="com.stockscreener.pipeline.collector.UniverseReconcilerTest" time="0.002"/>
+  <testcase name="정상 규모의 교체는 통과한다 — 비율 검사가 실제 리밸런싱을 막으면 안 된다" classname="com.stockscreener.pipeline.collector.UniverseReconcilerTest" time="0.012"/>
+  <testcase name="같은 스냅샷을 두 번 반영해도 행이 늘지 않는다 — 멱등해야 한다" classname="com.stockscreener.pipeline.collector.UniverseReconcilerTest" time="0.002"/>
+  <testcase name="제외가 지나치게 많으면 거부한다 — 소스의 부분 목록이 유니버스를 비우면 안 된다" classname="com.stockscreener.pipeline.collector.UniverseReconcilerTest" time="0.009"/>
+  <testcase name="편입과 제외가 시간 구간으로 기록된다 — 무엇이 언제 바뀌었는지 남아야 한다" classname="com.stockscreener.pipeline.collector.UniverseReconcilerTest" time="0.003"/>
+  <system-out><![CDATA[2026-10-06T19:24:10.316+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.UniverseReconcilerTest]: UniverseReconcilerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:10.319+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.UniverseReconcilerTest
+2026-10-06T19:24:10.319+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.UniverseReconcilerTest]: UniverseReconcilerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:10.320+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.UniverseReconcilerTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:10.325+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconcilerTest   : Starting UniverseReconcilerTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:10.325+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconcilerTest   : The following 1 profile is active: "test"
+2026-10-06T19:24:10.383+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:10.395+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 12 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:10.405+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-32 - Starting...
+2026-10-06T19:24:10.411+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-32 - Start completed.
+2026-10-06T19:24:10.418+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:10.432+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.007s)
+2026-10-06T19:24:10.462+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:10.462+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:10.463+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:10.473+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:10.479+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:10.485+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:10.498+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:10.498+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:10.516+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:10.519+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconcilerTest   : Started UniverseReconcilerTest in 0.198 seconds (process running for 43.735)
+2026-10-06T19:24:10.529+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-06-12 편입=3 제외=0 유지=0 소스=test-seed
+2026-10-06T19:24:10.530+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-06-12 편입=1 제외=1 유지=2 소스=test-seed
+2026-10-06T19:24:10.534+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-06-12 편입=2 제외=0 유지=0 소스=test-seed
+2026-10-06T19:24:10.535+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-12-11 편입=0 제외=1 유지=1 소스=test-seed
+2026-10-06T19:24:10.535+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2027-06-11 편입=1 제외=0 유지=1 소스=test-seed
+2026-10-06T19:24:10.538+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-06-12 편입=2 제외=0 유지=0 소스=test-seed
+2026-10-06T19:24:10.541+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-06-12 편입=3 제외=0 유지=0 소스=test-seed
+2026-10-06T19:24:10.553+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-06-12 편입=20 제외=0 유지=0 소스=test-seed
+2026-10-06T19:24:10.554+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-12-11 편입=3 제외=3 유지=17 소스=test-seed
+2026-10-06T19:24:10.556+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-06-12 편입=2 제외=0 유지=0 소스=test-seed
+2026-10-06T19:24:10.565+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-06-12 편입=20 제외=0 유지=0 소스=test-seed
+2026-10-06T19:24:10.567+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-06-12 편입=3 제외=0 유지=0 소스=test-seed
+2026-10-06T19:24:10.568+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseReconciler       : 유니버스를 갱신했다. KOSPI200 기준일=2026-12-11 편입=1 제외=1 유지=2 소스=test-seed
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculatorTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.381Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="주식수가 늘면 순이익 성장률보다 낮게 나온다 — 주식수가 약분되지 않는다" classname="com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculatorTest" time="0.0"/>
+  <testcase name="분기가 여덟 개에 모자라면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculatorTest" time="0.0"/>
+  <testcase name="직전 4개 분기가 적자면 값을 내지 않는다 — 적자 축소를 성장으로 읽지 않는다" classname="com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculatorTest" time="0.0"/>
+  <testcase name="주식수가 그대로면 순이익 성장률과 같다" classname="com.stockscreener.indicator.calculator.EpsGrowthTtmYoyCalculatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

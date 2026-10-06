@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.PriceCollectorTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:09.622Z" hostname="MacBook-Pro.local" time="0.023">
+  <properties/>
+  <testcase name="담당 소스가 없는 시장은 예외다 — 조용히 건너뛰면 그 시장이 통째로 누락된다" classname="com.stockscreener.pipeline.collector.PriceCollectorTest" time="0.002"/>
+  <testcase name="조회 창 밖의 기업 행위는 원장에 적히지 않는다 — 1콜이 5년 이력을 준다" classname="com.stockscreener.pipeline.collector.PriceCollectorTest" time="0.003"/>
+  <testcase name="빈 결과는 예외가 아니다 — 휴장·거래정지에서 정상적으로 발생한다" classname="com.stockscreener.pipeline.collector.PriceCollectorTest" time="0.002"/>
+  <testcase name="소스 실패는 DataSourceException으로 전파된다 — 배치가 종목 단위로 격리한다" classname="com.stockscreener.pipeline.collector.PriceCollectorTest" time="0.002"/>
+  <testcase name="소스에서 받은 시세를 저장한다" classname="com.stockscreener.pipeline.collector.PriceCollectorTest" time="0.002"/>
+  <testcase name="소스가 공시한 기업 행위는 원장에 적힌다 — 신뢰할 수 있으므로 승인 상태로 들어간다" classname="com.stockscreener.pipeline.collector.PriceCollectorTest" time="0.002"/>
+  <testcase name="수집은 계수를 건드리지 않는다 — 창이 같은 날짜를 매일 다시 보므로 그만큼 곱해진다" classname="com.stockscreener.pipeline.collector.PriceCollectorTest" time="0.003"/>
+  <system-out><![CDATA[2026-10-06T19:24:09.623+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.PriceCollectorTest]: PriceCollectorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.625+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.PriceCollectorTest
+2026-10-06T19:24:09.625+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.PriceCollectorTest]: PriceCollectorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.627+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.PriceCollectorTest
+2026-10-06T19:24:09.633+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796550 id=53349 2026-08-10 type=SPLIT ratio=50 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:09.635+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceCollector    : 수집된 시세가 없다. stockId=796551 2026-08-01 ~ 2026-08-31 — 휴장이거나 거래정지일 수 있다.
+2026-10-06T19:24:09.642+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796554 id=53350 2026-08-10 type=SPLIT ratio=50 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:09.644+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796555 id=53351 2026-08-10 type=SPLIT ratio=50 status=APPROVED source=SOURCE_DISCLOSURE
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

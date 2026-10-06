@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.109Z" hostname="MacBook-Pro.local" time="0.015">
+  <properties/>
+  <testcase name="다른 시장 종목을 제외한다" classname="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" time="0.004"/>
+  <testcase name="휴장일이면 직전 거래일로 거슬러 올라간다" classname="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="종목명을 캐시에 넣는다 — 등록 시 마스터 API를 다시 부르지 않게 한다" classname="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" time="0.001"/>
+  <testcase name="스팩·리츠를 제외한다 — 사업회사가 아니라 재무 지표가 성립하지 않는다" classname="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" time="0.002"/>
+  <testcase name="시가총액 내림차순 상위 N을 고른다" classname="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" time="0.001"/>
+  <testcase name="상위 N을 채우지 못하면 부분 목록을 내지 않고 실패한다" classname="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" time="0.001"/>
+  <testcase name="시장 필터 파라미터를 보낸다 — 전 시장을 받아 거르면 페이지가 두 배가 된다" classname="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" time="0.002"/>
+  <testcase name="우선주를 제외한다 — 끝자리가 0이 아니면 보통주가 아니다" classname="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" time="0.001"/>
+  <testcase name="담당하지 않는 유니버스는 NOT_FOUND다" classname="com.stockscreener.pipeline.datasource.kr.MarketCapUniverseAdapterTest" time="0.0"/>
+  <system-out><![CDATA[2026-10-06T19:24:11.111+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.MarketCapUniverseAdapter      : 시총 상위 유니버스를 만들었다. KOSPI_TOP200 기준일=2026-08-05 후보=2종목 → 편입=2종목
+2026-10-06T19:24:11.116+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.MarketCapUniverseAdapter      : 2026-08-05에 시세가 없어 2026-08-04의 시세로 유니버스를 만든다. 휴장인지 아직 공개되지 않은 것인지는 응답으로 구분할 수 없다.
+2026-10-06T19:24:11.116+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.MarketCapUniverseAdapter      : 시총 상위 유니버스를 만들었다. KOSPI_TOP200 기준일=2026-08-05 후보=2종목 → 편입=2종목
+2026-10-06T19:24:11.117+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.MarketCapUniverseAdapter      : 시총 상위 유니버스를 만들었다. KOSPI_TOP200 기준일=2026-08-05 후보=2종목 → 편입=2종목
+2026-10-06T19:24:11.119+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.MarketCapUniverseAdapter      : 시총 상위 유니버스를 만들었다. KOSPI_TOP200 기준일=2026-08-05 후보=2종목 → 편입=2종목
+2026-10-06T19:24:11.120+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.MarketCapUniverseAdapter      : 시총 상위 유니버스를 만들었다. KOSPI_TOP200 기준일=2026-08-05 후보=3종목 → 편입=2종목
+2026-10-06T19:24:11.123+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.MarketCapUniverseAdapter      : 시총 상위 유니버스를 만들었다. KOSPI_TOP200 기준일=2026-08-05 후보=2종목 → 편입=2종목
+2026-10-06T19:24:11.124+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.kr.MarketCapUniverseAdapter      : 시총 상위 유니버스를 만들었다. KOSPI_TOP200 기준일=2026-08-05 후보=2종목 → 편입=2종목
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

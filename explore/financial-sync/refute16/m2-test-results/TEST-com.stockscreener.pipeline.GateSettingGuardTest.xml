@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.GateSettingGuardTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:38.602Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="작업 디렉터리 config/application.yaml로 켜면 기동을 세운다 — classpath가 아니다" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.0"/>
+  <testcase name="명령줄 인자는 허용이다 — 관문 날 bootRun과 사본 실행이 켜는 길" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.0"/>
+  <testcase name="옛 이름 US_GATE가 실효값과 같으면 둔다 — 배포 .env의 US_GATE=false가 운영 기동을 세우면 안 된다" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.001"/>
+  <testcase name="시스템 속성(JAVA_TOOL_OPTIONS -D)으로 켜면 기동을 세운다" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.0"/>
+  <testcase name="옛 이름 US_GATE가 실효값과 다르면 기동을 세운다 — 켰다고 믿는데 꺼진 채 돈다" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.0"/>
+  <testcase name="프로파일 yaml(application-bootstrap.yaml)도 classpath면 허용이다" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.001"/>
+  <testcase name="어디에도 없으면 기동을 세운다 — yaml 기본값이 빠진 것이다" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.0"/>
+  <testcase name="SPRING_APPLICATION_JSON으로 켜면 기동을 세운다" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.0"/>
+  <testcase name="IMPORTANT — 환경변수(relaxed binding)로 켜면 기동을 세운다 — .env가 운영 jar로 새는 길" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.0"/>
+  <testcase name="classpath application.yaml의 기본값은 허용이다 — 운영 jar가 뜨는 길" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.0"/>
+  <testcase name="관문 날 인자로 켰는데 .env에 US_GATE=false가 남아 있으면 선다 — 그 줄을 걷고 띄운다" classname="com.stockscreener.pipeline.GateSettingGuardTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:40.395Z" hostname="MacBook-Pro.local" time="0.047">
+  <properties/>
+  <testcase name="마감은 남아 있던 사유를 지운다 — SUCCESS인데 중단 사유가 붙어 있으면 안 된다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.007"/>
+  <testcase name="마감된 행에는 늦은 진척이 닿지 않는다 — 스위퍼가 닫은 뒤 원 프로세스가 살아 있는 경로가 있다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.004"/>
+  <testcase name="웹 기동 스윕은 사슬의 좁힌 화해 ①(GAP_FILL)도 닫는다 — 리밸런싱 꼬리의 GAP_FILL은 소유가 갈리지 않아 안 닫는다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.005"/>
+  <testcase name="IMPORTANT — 종단 플래그: 뒤늦은 마감은 DB도 알림도 건드리지 않는다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.004"/>
+  <testcase name="프로세스가 내려가면 열려 있던 실행이 ABORTED로 마감된다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.004"/>
+  <testcase name="마감하면 열린 목록에서 빠진다 — 안 빠지면 종료 훅이 성공한 실행을 덮으려 든다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.004"/>
+  <testcase name="웹 기동 스윕은 이전 인스턴스의 ADMIN·SCHEDULER 행만 닫는다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.004"/>
+  <testcase name="도는 중에도 진척이 보인다 — 마감 때만 쓰면 56분짜리 배치가 내내 0으로 보인다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.004"/>
+  <testcase name="부트스트랩 스윕은 MANUAL 행만 닫는다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.003"/>
+  <testcase name="IMPORTANT — DB 가드: 다른 프로세스가 마감된 행을 다시 마감하지 못한다" classname="com.stockscreener.pipeline.batch.BatchExecutionClosingTest" time="0.004"/>
+  <system-out><![CDATA[2026-10-06T19:23:40.396+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.BatchExecutionClosingTest]: BatchExecutionClosingTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:40.397+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.BatchExecutionClosingTest
+2026-10-06T19:23:40.397+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.BatchExecutionClosingTest]: BatchExecutionClosingTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:40.398+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.BatchExecutionClosingTest
+2026-10-06T19:23:40.412+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionSweeper        : 마감되지 못한 배치 실행을 정리했다. 1건 (웹 인스턴스 소유, 기동 시각 2026-10-06T10:23:29.146970Z 이전)
+2026-10-06T19:23:40.418+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.BatchExecutions       : 내려가면서 열린 배치 실행을 마감했다. id=95322 job=test-closing
+2026-10-06T19:23:40.418+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionContext        : 이미 마감된 배치 실행을 다시 마감하려 했다. 기록도 알림도 건너뛴다. id=95322 이미=ABORTED 시도=정상 마감
+2026-10-06T19:23:40.422+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.BatchExecutions       : 내려가면서 열린 배치 실행을 마감했다. id=95323 job=test-closing
+2026-10-06T19:23:40.429+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionSweeper        : 마감되지 못한 배치 실행을 정리했다. 2건 (웹 인스턴스 소유, 기동 시각 2026-10-06T10:23:29.146970Z 이전)
+2026-10-06T19:23:40.437+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionSweeper        : 마감되지 못한 배치 실행을 정리했다. 1건 (부트스트랩 소유, 기동 시각 2026-10-06T10:23:29.146970Z 이전)
+2026-10-06T19:23:40.441+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 이미 마감된 배치 실행을 다시 마감하려 했다. 기존 기록을 유지한다. id=95332 시도한 상태=ABORTED
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

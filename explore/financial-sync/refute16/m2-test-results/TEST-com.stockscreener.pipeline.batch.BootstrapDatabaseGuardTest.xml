@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.BootstrapDatabaseGuardTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:56.890Z" hostname="MacBook-Pro.local" time="0.004">
+  <properties/>
+  <testcase name="IMPORTANT — DB_URL만 바꾸고 BOOTSTRAP_DB를 안 바꾸면 선다" classname="com.stockscreener.pipeline.batch.BootstrapDatabaseGuardTest" time="0.003"/>
+  <testcase name="반대로 BOOTSTRAP_DB만 바꾸고 DB_URL을 안 바꿔도 선다" classname="com.stockscreener.pipeline.batch.BootstrapDatabaseGuardTest" time="0.0"/>
+  <testcase name="카탈로그가 null이어도 삼키지 않는다" classname="com.stockscreener.pipeline.batch.BootstrapDatabaseGuardTest" time="0.0"/>
+  <testcase name="연결된 데이터베이스가 기대와 다르면 기동을 세운다" classname="com.stockscreener.pipeline.batch.BootstrapDatabaseGuardTest" time="0.0"/>
+  <testcase name="연결된 데이터베이스가 기대와 같으면 통과한다" classname="com.stockscreener.pipeline.batch.BootstrapDatabaseGuardTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:23:56.894+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BootstrapDatabaseGuard       : bootstrap이 데이터베이스 stock_screener에 붙었다.
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Altman Z''-Score — 수정모델" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.475Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="원시 영업이익이 없어도 유도 재료가 있으면 값이 난다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$AltmanZDoublePrime" time="0.0"/>
+  <testcase name="자기자본이 없으면 값을 내지 않는다 — 0으로 두면 X4가 사라져 낮게 나온다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$AltmanZDoublePrime" time="0.0"/>
+  <testcase name="총자산·총부채가 0 이하면 값을 내지 않는다 — 분모가 성립하지 않는다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$AltmanZDoublePrime" time="0.001"/>
+  <testcase name="거래일 전체에 같은 값이 펼쳐지고 스케일이 저장 컬럼과 맞는다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$AltmanZDoublePrime" time="0.0"/>
+  <testcase name="네 항을 가중합한다 — 매출 항이 없고 시가총액 자리에 자기자본이 들어간다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$AltmanZDoublePrime" time="0.0"/>
+  <testcase name="업종 정의역이 원본과 같다 — 판정을 복사하지 않고 원본의 것을 부른다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$AltmanZDoublePrime" time="0.0"/>
+  <testcase name="IMPORTANT — 매출도 시가총액도 없이 값이 난다. 원본과 갈리는 지점이 여기다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$AltmanZDoublePrime" time="0.0"/>
+  <testcase name="총부채를 안 낸 회사도 자산 − 자기자본으로 값이 나온다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$AltmanZDoublePrime" time="0.001"/>
+  <testcase name="분기가 넷에 못 미치면 값을 내지 않는다 — TTM이 성립하지 않는다" classname="com.stockscreener.indicator.calculator.SwingIndicatorsTest$AltmanZDoublePrime" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.RawPriceBarTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.727Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="종가까지 0이면 거른다 — 값이 통째로 없는 것이지 정지가 아니다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="거래량이 음수면 거른다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="시가가 저가보다 낮으면 거른다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="정상 봉을 통과시킨다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="고가가 저가보다 낮으면 거른다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="종가가 고가를 넘으면 거른다 — 통과하면 ATR·지지저항이 조용히 망가진다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="거래량이 있는데 OHLC가 0이면 거른다 — 그것은 정지가 아니라 손상이다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="일부만 0이면 정지로 보지 않는다 — 부분 0은 손상이고 부등식이 판정한다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="거래정지 봉을 통과시킨다 — KRX는 정지 기간에 기준가만 유지하고 OHLC·거래량을 0으로 준다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="거래대금은 없어도 된다 — 합성하지 않고 null로 둔다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <testcase name="고가·저가·시가·종가가 모두 같은 봉을 허용한다 — 상한가 직행이 실제로 있다" classname="com.stockscreener.pipeline.datasource.RawPriceBarTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

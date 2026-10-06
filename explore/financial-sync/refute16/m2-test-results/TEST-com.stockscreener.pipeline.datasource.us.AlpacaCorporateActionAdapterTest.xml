@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" tests="26" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.125Z" hostname="MacBook-Pro.local" time="0.044">
+  <properties/>
+  <testcase name="이름 변경이 두 번이면 체인을 끝까지 따라가되 각 심볼은 자기 시절의 사건만 준다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.004"/>
+  <testcase name="처음 보는 타입이 와도 값은 안 만들고 조용히 넘기지도 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.002"/>
+  <testcase name="401 본문이 HTML이어도 AUTH다 — JsonNode로 받으면 상태코드를 보기 전에 터져 TRANSIENT가 된다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.005"/>
+  <testcase name="200인데 JSON이 아니면 MALFORMED다 — 재시도해도 안 되는 것을 재시도로 적지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="병합의 부호가 분할과 반대다 — 한쪽만 재는 테스트는 항등식이다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="배당은 값으로 내지 않고, 분사는 가격 배수 없는 원자료로 낸다 — 가치 비율은 수집기가 같은 날 종가로 정한다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.003"/>
+  <testcase name="소스의 낱말과 비율의 부호가 어긋나면 지어내지 않고 종목 실패로 남긴다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="심볼이 그대로인 이름 변경(CUSIP만 바뀜)은 다시 묻지 않는다 — 무한 루프·헛콜" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="옛 심볼의 사건이 이름 변경일과 같은 날이면 담는다 — 경계는 포함이고 재사용은 계보가 막는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.002"/>
+  <testcase name="구간이 뒤집히면 부르기 전에 막는다 — 빈 결과가 「데이터 없음」과 같아진다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="이름이 바뀐 종목은 옛 심볼로도 묻는다 — 옛 심볼 시절의 병합이 온다(FLG←NYCB 2024-07-12)" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.002"/>
+  <testcase name="corporate_actions 키가 없으면 0건이 아니라 스펙 변경이다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="분할을 옮긴다 — ratio는 new_rate/old_rate이고 날짜 셋을 갈라 싣는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.002"/>
+  <testcase name="ex_date로 거른다 — process_date가 창 안이어도 효력일이 밖이면 안 담는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="403은 AUTH다 — MALFORMED로 낮추면 종목마다 조용히 실패하고 부분 성공으로 끝난다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="페이지 상한을 넘으면 부분 결과를 버린다 — 잘린 목록은 0건과 구별되지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.002"/>
+  <testcase name="다른 심볼의 사건은 붙이지 않는다 — 붙이면 엉뚱한 종목의 계수가 틀린다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="같은 사건 id가 두 심볼에서 오면 한 번만 담는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.002"/>
+  <testcase name="3:1 병합에서 나눗셈이 죽지 않는다 — 스케일이 없으면 배치 전체가 죽는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="자식 쪽 응답은 담지 않는다 — new_symbol이 요청 심볼이면 그 종목이 받은 것이지 그 종목의 사건이 아니다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="요청 창을 필터 창보다 넓게 보낸다 — 소스가 process_date로 거르기 때문이다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.002"/>
+  <testcase name="같은 날 여러 증권을 나눠 주면 자식을 합친다 — OPEN 2025-11-18 워런트 세 종" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="자기 자신을 분배한 레코드는 담지 않는다 — 티커 재사용 겸 재조직이라 분사 식이 안 선다(CR 2023-04-04)" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <testcase name="페이지를 끝까지 돈다 — 정렬이 심볼 우선이라 중간에 멈추면 뒤가 통째로 빈다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.002"/>
+  <testcase name="같은 날 병합과 분사는 한 행이다 — HON 2026-06-29 병합 1:2 + HONA(원장은 한 날에 한 행)" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.002"/>
+  <testcase name="빈 봉투는 실패가 아니다 — 그 창에 사건이 없다는 뜻이다" classname="com.stockscreener.pipeline.datasource.us.AlpacaCorporateActionAdapterTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:24:11.131+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.AlpacaCorporateActionAdapter  : 처음 보는 기업 행위 타입이 왔다. ticker=NVDA 타입=[quantum_conversions] — 담을지 판정해야 한다(지금은 안 담고 세기만 했다).
+2026-10-06T19:24:11.156+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.AlpacaCorporateActionAdapter  : 요청한 종목과 다른 심볼의 사건이라 건너뛴다. 요청=NVDA 응답=AAPL 타입=forward_splits. corporate-actions NVDA
+2026-10-06T19:24:11.164+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.AlpacaCorporateActionAdapter  : 자식이 없거나 모체 자신인 분사 레코드라 담지 않는다. 모체=NVDA 자식=NVDA ex=2024-04-04. corporate-actions NVDA
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

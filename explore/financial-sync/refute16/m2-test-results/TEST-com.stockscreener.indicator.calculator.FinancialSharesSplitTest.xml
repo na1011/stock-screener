@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.FinancialSharesSplitTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.390Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="봉이 보고 종료일보다 뒤면 그 사이 분할을 곱한다" classname="com.stockscreener.indicator.calculator.FinancialSharesSplitTest" time="0.0"/>
+  <testcase name="기말과 공시일 사이의 분할은 한 번만 센다 — 공시일 주식수에 이미 들어 있다" classname="com.stockscreener.indicator.calculator.FinancialSharesSplitTest" time="0.0"/>
+  <testcase name="두 시점 사이에 사건이 없으면 그대로다 — 곱셈이 스케일을 흔들지 않는다" classname="com.stockscreener.indicator.calculator.FinancialSharesSplitTest" time="0.0"/>
+  <testcase name="주식수 없는 판에서 내려갈 때도 공시일을 본다 — 비교열이 미래에서 새어 든다" classname="com.stockscreener.indicator.calculator.FinancialSharesSplitTest" time="0.001"/>
+  <testcase name="봉보다 뒤에 공시된 판은 애초에 안 골라진다 — 그것이 나눗셈이 없는 이유다" classname="com.stockscreener.indicator.calculator.FinancialSharesSplitTest" time="0.0"/>
+  <testcase name="봉에 상장주식수가 있으면 폴백을 타지 않는다 — 국내가 이 갈래다" classname="com.stockscreener.indicator.calculator.FinancialSharesSplitTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

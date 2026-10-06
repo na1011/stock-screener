@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.stock.web.StockFinancialsAssemblerTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:20.494Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="IMPORTANT — 통화가 갈린 해의 유도 4분기는 손익을 내보내지 않는다" classname="com.stockscreener.stock.web.StockFinancialsAssemblerTest" time="0.001"/>
+  <testcase name="통화가 한 번도 안 갈린 종목의 유도 4분기는 그대로 나온다 — 게이트가 국내를 안 건드린다" classname="com.stockscreener.stock.web.StockFinancialsAssemblerTest" time="0.0"/>
+  <testcase name="통화가 같은 전년 동기에는 증감률이 난다 — 게이트가 전부를 접지 않는다" classname="com.stockscreener.stock.web.StockFinancialsAssemblerTest" time="0.0"/>
+  <testcase name="통화가 갈린 전년 동기와는 증감률을 내지 않는다 — 환산 없이 뺀 값이다" classname="com.stockscreener.stock.web.StockFinancialsAssemblerTest" time="0.0"/>
+  <testcase name="IMPORTANT — 오염된 유도 4분기를 다음 해가 분모로 쓰지 않는다" classname="com.stockscreener.stock.web.StockFinancialsAssemblerTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

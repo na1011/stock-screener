@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="FILL_WITHOUT_REVISION — 정정공시 가지에 도달하지 않는다" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:08.667Z" hostname="MacBook-Pro.local" time="0.026">
+  <properties/>
+  <testcase name="대조군 — 같은 입력에 FILL_MISSING은 무효화를 부른다" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision" time="0.003"/>
+  <testcase name="더 늦은 공시본을 만나도 무효화를 부르지 않고 개정본도 쌓지 않는다" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision" time="0.003"/>
+  <testcase name="더 이른 공시본의 행이 있어도 채우지 않는다 — 이 모드의 소스는 DART이고 판을 하나만 낸다" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision" time="0.003"/>
+  <testcase name="행이 없으면 새로 쓴다 — 상장 이력은 있는데 그 해 재무가 없는 종목이 이 경로로 온다" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision" time="0.002"/>
+  <testcase name="공시일이 같으면 NULL 컬럼을 채운다 — 결손 보충이라는 목적은 그대로다" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision" time="0.003"/>
+  <testcase name="더 이른 공시본으로는 채우지 않는다 — 한 행이 두 공시의 혼합이 되면 안 된다" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision" time="0.003"/>
+  <system-out><![CDATA[2026-10-06T19:24:08.668+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision]: FillWithoutRevision does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.670+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision
+2026-10-06T19:24:08.670+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision]: FillWithoutRevision does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.670+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.FinancialWriterTest]: FinancialWriterTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.672+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.FinancialWriterTest$FillWithoutRevision
+2026-10-06T19:24:08.677+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시를 반영한다. stockId=796475 2025/FY 기존공시일=2026-03-15 새공시일=2026-04-20
+2026-10-06T19:24:08.678+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796475 모드=FILL_MISSING 신규=0 정정=1 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:08.680+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시라 채우지 않고 남긴다. stockId=796476 2025/FY 저장공시일=2026-03-15 소스공시일=2026-04-20
+2026-10-06T19:24:08.680+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796476 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=0 정정보류=1 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:08.683+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시를 반영한다. stockId=796477 2025/FY 기존공시일=2026-03-15 새공시일=2026-04-20
+2026-10-06T19:24:08.684+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796477 fromDate=2025-01-01 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:08.684+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796477 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:08.687+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796478 모드=FILL_WITHOUT_REVISION 신규=1 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:08.689+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796479 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=1 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:08.692+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796480 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=0 재번호라벨=0
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

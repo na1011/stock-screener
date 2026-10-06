@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.ichimoku.IchimokuAnalyzerTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.490Z" hostname="MacBook-Pro.local" time="0.02">
+  <properties/>
+  <testcase name="이탈 1 — 207 주봉을 못 채우면 한 행도 내지 않는다" classname="com.stockscreener.indicator.calculator.ichimoku.IchimokuAnalyzerTest" time="0.001"/>
+  <testcase name="207 주봉째부터 값이 나오고, 그 앞 일자에는 없다" classname="com.stockscreener.indicator.calculator.ichimoku.IchimokuAnalyzerTest" time="0.006"/>
+  <testcase name="지수가 없으면 D5에 기댄 일곱만 null이고 나머지는 그대로 나온다" classname="com.stockscreener.indicator.calculator.ichimoku.IchimokuAnalyzerTest" time="0.008"/>
+  <testcase name="분할은 수정 축척으로 흡수된다 — 26주 초과 수익률이 절벽을 갖지 않는다" classname="com.stockscreener.indicator.calculator.ichimoku.IchimokuAnalyzerTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

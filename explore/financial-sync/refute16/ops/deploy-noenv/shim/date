@@ -1,0 +1,9 @@
+#!/bin/bash
+# 가짜 date — FAKE_NOW("YYYY-mm-dd HH:MM:SS")가 있으면 「지금」을 그것으로. -f(문자열 해석)·-r(초 지정)은 진짜 date 그대로.
+for a in "$@"; do case "$a" in -f|-r) exec /bin/date "$@";; esac; done
+if [[ -n "${FAKE_NOW:-}" ]]; then
+  t=$(/bin/date -j -f "%Y-%m-%d %H:%M:%S" "$FAKE_NOW" +%s)
+  args=(); for a in "$@"; do [[ "$a" == "-j" ]] || args+=("$a"); done
+  exec /bin/date -j -r "$t" "${args[@]}"
+fi
+exec /bin/date "$@"

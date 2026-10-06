@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="PROFIT_STREAK_Y" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.377Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="직전 해가 적자면 0이다 — 값이 없는 것과 다르다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$ProfitStreak" time="0.0"/>
+  <testcase name="적자를 만나면 거기서 끊는다 — 그 뒤 흑자는 세지 않는다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$ProfitStreak" time="0.0"/>
+  <testcase name="영업이익이 비어 있으면 값을 내지 않는다 — 결손을 짧은 연수로 말하지 않는다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$ProfitStreak" time="0.001"/>
+  <testcase name="IMPORTANT — 일곱 해가 없으면 값을 내지 않는다. 있는 만큼 세면 이력이 짧은 종목이 유리해진다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$ProfitStreak" time="0.0"/>
+  <testcase name="일곱 해가 모두 흑자면 7이다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$ProfitStreak" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

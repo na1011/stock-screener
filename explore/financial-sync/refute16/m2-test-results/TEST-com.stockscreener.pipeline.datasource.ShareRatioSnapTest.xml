@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.727Z" hostname="MacBook-Pro.local" time="0.007">
+  <properties/>
+  <testcase name="1/3은 스케일 10에서 접히고 그 한계가 javadoc에 적혀 있다" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.0"/>
+  <testcase name="IMPORTANT — 스냅만으로는 인적분할을 못 거른다. 삼바 0.650은 13/20이라 통과한다" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.001"/>
+  <testcase name="&quot;대한전선 2023 10:1 병합&quot;: &quot;0.0999999992770&quot; → &quot;0.1000000000&quot;" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.001"/>
+  <testcase name="&quot;휴림로봇 2024 5:2 병합&quot;: &quot;0.3999999977400&quot; → &quot;0.4000000000&quot;" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.0"/>
+  <testcase name="&quot;아시아나항공 2021 3:1 감자&quot;: &quot;0.3333333330000&quot; → &quot;0.3333333333&quot;" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.0"/>
+  <testcase name="&quot;카카오 2021 1:5 분할&quot;: &quot;5.0000000000000&quot; → &quot;5.0000000000&quot;" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.0"/>
+  <testcase name="&quot;1:2 분할&quot;: &quot;2.0000000000000&quot; → &quot;2.0000000000&quot;" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.0"/>
+  <testcase name="&quot;대한전선 가격 배수의 역수 — 종가는 그날 시장이 움직인 만큼 흐려진다&quot;: &quot;0.0940731400&quot;" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.001"/>
+  <testcase name="&quot;카카오 2021-04-09 — 분할 6일 전의 전환권행사류 변동&quot;: &quot;1.0001706930&quot;" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.0"/>
+  <testcase name="&quot;OCI 인적분할 — 86/125라 분모 상한 밖이다&quot;: &quot;0.6880000000&quot;" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.0"/>
+  <testcase name="&quot;씨젠 2021 무상증자 — 편차가 단수주가 아니라 자사주다&quot;: &quot;1.9907735833&quot;" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.0"/>
+  <testcase name="양수가 아닌 배수는 데이터 손상이므로 조용히 비우지 않는다" classname="com.stockscreener.pipeline.datasource.ShareRatioSnapTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:09.283Z" hostname="MacBook-Pro.local" time="0.036">
+  <properties/>
+  <testcase name="IMPORTANT — 옛 기가 나중에 공시돼도 최신 기가 이긴다. 순위 축이 기말이다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.004"/>
+  <testcase name="주식수가 NULL이거나 0이면 내지 않는다 — 0은 「작은 회사」와 구별되지 않는다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.004"/>
+  <testcase name="IMPORTANT — 기말과 공시일 사이의 사건은 이미 반영돼 있어 다시 곱하지 않는다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.002"/>
+  <testcase name="IMPORTANT — 기준일 뒤에 공시된 정정본은 안 고른다. 고르면 과거가 미래를 본다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.003"/>
+  <testcase name="SIC를 함께 낸다 — REIT·SPAC 배제가 이름이 아니라 코드로 판정된다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.002"/>
+  <testcase name="사건이 여럿이면 곱해서 옮긴다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.002"/>
+  <testcase name="IMPORTANT — 공시일 뒤의 분할만큼 주식수를 옮긴다. 안 옮기면 시총이 배수로 틀린다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.003"/>
+  <testcase name="경계보다 이른 기만 있으면 내지 않는다 — 없으면 십수 년 전 값이 오늘 종가에 곱해진다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.001"/>
+  <testcase name="개정 전 판에만 통화가 다르면 여기서도 걸린다 — CURRENCY_GATE와 안 갈린다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.002"/>
+  <testcase name="미국 시장의 USD는 정상이다 — 판정 축은 「USD인가」가 아니라 「시장 통화와 같은가」다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.001"/>
+  <testcase name="같은 기에 판이 여럿이면 기준일까지 공시된 것 중 나중 판을 고른다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.001"/>
+  <testcase name="IMPORTANT — 기준일 뒤의 사건은 안 곱한다. 안 막으면 과거 시총이 미래를 본다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.001"/>
+  <testcase name="보고 종료일 이전의 사건은 이미 주식수에 반영돼 있어 다시 곱하지 않는다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.002"/>
+  <testcase name="같은 기에 개정본이 여럿이면 나중 판을 쓴다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.001"/>
+  <testcase name="다른 시장의 종목은 내지 않는다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.001"/>
+  <testcase name="IMPORTANT — is_latest가 아니라 최신 기의 주식수를 낸다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.002"/>
+  <testcase name="판정되지 않은 사건은 주식수를 안 옮긴다 — 그 비율은 계수가 아니다" classname="com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:24:09.284+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest]: JdbcStoredShareCountsTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.284+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest
+2026-10-06T19:24:09.284+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest]: JdbcStoredShareCountsTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.284+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.JdbcStoredShareCountsTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

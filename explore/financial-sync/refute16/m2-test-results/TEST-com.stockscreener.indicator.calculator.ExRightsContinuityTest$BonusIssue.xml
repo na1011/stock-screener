@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="무상증자 — 가격은 권리락에, 주식수는 신주상장에 바뀐다" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.382Z" hostname="MacBook-Pro.local" time="0.005">
+  <properties/>
+  <testcase name="보정하지 않으면 154%가 되어 필수 게이트를 못 넘는다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$BonusIssue" time="0.001"/>
+  <testcase name="시가총액이 권리락에서 절벽을 갖지 않는다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$BonusIssue" time="0.0"/>
+  <testcase name="PBR이 권리락에서 절벽을 갖지 않는다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$BonusIssue" time="0.001"/>
+  <testcase name="무상증자로 는 주식수는 희석이 아니다 — 전환권행사분만 남는다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$BonusIssue" time="0.0"/>
+  <testcase name="PER이 권리락에서 절벽을 갖지 않는다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$BonusIssue" time="0.001"/>
+  <testcase name="보정하지 않으면 셋 다 절반이 된다 — 이 테스트가 항등식이 아니라는 증거" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$BonusIssue" time="0.001"/>
+  <testcase name="권리락 구간에 낀 전환권행사는 살아남는다 — 그것은 진짜 희석이다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$BonusIssue" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

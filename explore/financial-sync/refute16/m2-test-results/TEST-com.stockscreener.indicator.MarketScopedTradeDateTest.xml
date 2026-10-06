@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.MarketScopedTradeDateTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:35.808Z" hostname="MacBook-Pro.local" time="0.055">
+  <properties/>
+  <testcase name="국내가 쉬고 미국만 연 날의 국내 봉 수는 0이다 — 결손 판정이 여기 걸려 있다" classname="com.stockscreener.indicator.MarketScopedTradeDateTest" time="0.022"/>
+  <testcase name="미국 봉이 더 최근이어도 국내 보존 경계가 밀리지 않는다" classname="com.stockscreener.indicator.MarketScopedTradeDateTest" time="0.018"/>
+  <testcase name="첫 거래일도 시장 안에서만 센다 — 기업 행위 조회 창의 기본값이다" classname="com.stockscreener.indicator.MarketScopedTradeDateTest" time="0.012"/>
+  <system-out><![CDATA[2026-10-06T19:23:35.809+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.MarketScopedTradeDateTest]: MarketScopedTradeDateTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:35.809+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.MarketScopedTradeDateTest
+2026-10-06T19:23:35.809+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.MarketScopedTradeDateTest]: MarketScopedTradeDateTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:35.810+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.MarketScopedTradeDateTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

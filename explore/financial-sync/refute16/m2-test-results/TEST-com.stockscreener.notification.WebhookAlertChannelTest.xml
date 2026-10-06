@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.notification.WebhookAlertChannelTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:37.826Z" hostname="MacBook-Pro.local" time="0.057">
+  <properties/>
+  <testcase name="몇 자를 잘랐는지 실제로 잘라낸 만큼 적는다 — 접미사 길이만큼 적게 세면 남은 글자를 찾으러 간 사람이 못 찾는다" classname="com.stockscreener.notification.WebhookAlertChannelTest" time="0.027"/>
+  <testcase name="4xx·5xx면 던진다 — 삼키면 Composite이 '아무도 못 받았다'를 알 수 없다" classname="com.stockscreener.notification.WebhookAlertChannelTest" time="0.022"/>
+  <testcase name="긴 본문은 잘라서 보낸다 — 2026-09-18 적용에서 574종목 목록이 실린 알림이 400으로 거절됐다" classname="com.stockscreener.notification.WebhookAlertChannelTest" time="0.003"/>
+  <testcase name="Slack 형식으로 보낸다 — 본문 키가 text이고 제목·본문·컨텍스트가 함께 실린다" classname="com.stockscreener.notification.WebhookAlertChannelTest" time="0.002"/>
+  <testcase name="URL이 비어 있으면 비활성이다" classname="com.stockscreener.notification.WebhookAlertChannelTest" time="0.0"/>
+  <testcase name="임계 미만은 받지 않는다 — INFO 성공 통지가 매일 채널을 덮으면 실패도 함께 묻힌다" classname="com.stockscreener.notification.WebhookAlertChannelTest" time="0.001"/>
+  <testcase name="사용자 대상 알림은 받지 않는다 — 메신저 채널이 하나뿐이라 지인의 관심종목이 운영자 채널에 뜬다" classname="com.stockscreener.notification.WebhookAlertChannelTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

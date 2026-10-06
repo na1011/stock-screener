@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="5년 주당순이익 성장률" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.394Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="IMPORTANT — 분기가 빠져 실제 기간이 5년이 아니면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$EpsCagr" time="0.0"/>
+  <testcase name="5년에 주당순이익이 두 배면 연평균 14.87%다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$EpsCagr" time="0.001"/>
+  <testcase name="봉이 1,260개 이하면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$EpsCagr" time="0.0"/>
+  <testcase name="5년 전이 적자면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$EpsCagr" time="0.001"/>
+  <testcase name="IMPORTANT — 주식수가 늘면 순이익 CAGR보다 낮다. 양 끝 주식수가 약분되지 않는다는 증거다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$EpsCagr" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

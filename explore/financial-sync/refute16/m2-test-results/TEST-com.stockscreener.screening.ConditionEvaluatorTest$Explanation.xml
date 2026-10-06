@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="선정 이유" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:17.988Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="조건별 실제 값과 획득 점수가 함께 나온다" classname="com.stockscreener.screening.ConditionEvaluatorTest$Explanation" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

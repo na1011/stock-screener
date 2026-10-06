@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="5년 PER 중앙값" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.396Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="IMPORTANT — 봉마다 그때 공시돼 있던 이익을 쓴다. 오늘 이익을 과거에 소급하지 않는다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$PerMedian5y" time="0.001"/>
+  <testcase name="재무가 없으면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$PerMedian5y" time="0.001"/>
+  <testcase name="표본이 절반에 못 미치면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$PerMedian5y" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="채널이 구성됐을 때" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.889Z" hostname="MacBook-Pro.local" time="0.91">
+  <properties/>
+  <testcase name="팬아웃 포트가 AlertPort가 된다" classname="com.stockscreener.notification.AlertConfigTest$WithChannels" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:23:36.891+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.notification.AlertConfigTest$WithChannels]: WithChannels does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:36.906+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.notification.AlertConfigTest$WithChannels
+2026-10-06T19:23:36.907+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.notification.AlertConfigTest$WithChannels]: WithChannels does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:36.907+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.notification.AlertConfigTest]: AlertConfigTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:36.908+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.notification.AlertConfigTest$WithChannels
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:23:36.934+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.n.AlertConfigTest$WithChannels       : Starting AlertConfigTest.WithChannels using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:23:36.934+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.n.AlertConfigTest$WithChannels       : The following 1 profile is active: "test"
+2026-10-06T19:23:37.172+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:23:37.187+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 14 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:23:37.272+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-7 - Starting...
+2026-10-06T19:23:37.278+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-7 - Start completed.
+2026-10-06T19:23:37.284+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:23:37.309+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.014s)
+2026-10-06T19:23:37.325+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:23:37.325+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:23:37.325+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:23:37.346+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:23:37.359+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:23:37.364+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:23:37.390+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:23:37.390+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:23:37.408+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:23:37.443+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:23:37.456+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.AlertConfig             : 알림 채널 2개를 구성했다: [webhook, mail]
+2026-10-06T19:23:37.467+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=stock-alias/us-ko.csv 별칭=860개
+2026-10-06T19:23:37.614+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:23:37.718+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:23:37.731+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.n.AlertConfigTest$WithChannels       : Started AlertConfigTest.WithChannels in 0.82 seconds (process running for 10.946)
+2026-10-06T19:23:37.771+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 149개
+2026-10-06T19:23:37.796+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:08.057Z" hostname="MacBook-Pro.local" time="0.251">
+  <properties/>
+  <testcase name="IMPORTANT — 소스가 이름만 아는 사건은 휴리스틱이 확정한 종류·비율을 밀어내지 않는다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.009"/>
+  <testcase name="두 번 돌려도 행이 늘지 않고 두 번째 실행은 0을 낸다 — 그 0이 멱등의 증거다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.005"/>
+  <testcase name="뒤늦게 온 공시가 먼저 들어간 후보를 제자리로 옮긴다 — 소스가 최대 넉 달 늦어 이 순서가 정상이다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.003"/>
+  <testcase name="자식 시세의 일시 장애는 미해석으로 접지 않는다 — 접으면 거짓 판정 대기가 가고 종목이 억제된다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.002"/>
+  <testcase name="근접중복은 결과에 실려 나온다 — 조용히 버리면 사람이 갈라야 할 것이 사라진다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.003"/>
+  <testcase name="분사는 ex일 자식 종가와 모체 종가로 가격 배수를 정해 승인된다 — CTVA 2026-10-01" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.004"/>
+  <testcase name="같은 날 나눠 준 자식 여럿은 모두 거래된 첫 날의 종가 합으로 잰다 — OPEN 워런트 세 종" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.004"/>
+  <testcase name="붙일 행이 없으면 이름만으로 후보를 만든다 — 사건이 있었다는 사실이 사라지면 안 된다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.002"/>
+  <testcase name="창 밖 휴리스틱 후보는 적지 않는다 — 포트 계약과 같은 창을 써야 --from이 뜻을 갖는다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.003"/>
+  <testcase name="공시는 APPROVED로, 휴리스틱이 올린 후보는 OBSERVED로 들어간다 — 이것이 승인 게이트다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.002"/>
+  <testcase name="IMPORTANT — 사람이 판정한 행과의 충돌은 알리지 않는다. 영구적이라 매 실행 같은 알림이 나간다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.003"/>
+  <testcase name="봉이 없는 종목은 소스를 부르지 않는다 — 어댑터가 우리 시계열에서 값을 유도한다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.001"/>
+  <testcase name="자식이 ex 며칠 뒤에야 거래되면 그 첫 날의 두 종가로 잰다 — 분배 워런트(GME.WS +3거래일)" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.003"/>
+  <testcase name="공시가 못 주는 액면병합을 휴리스틱이 올린다 — 그 경로가 없으면 하락형 사건이 하나도 안 들어온다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.002"/>
+  <testcase name="자식 첫 봉이 근접중복 창(5거래일) 밖이면 해석하지 않고 판정 대기로 남긴다 — 소스 날짜를 의심한다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.003"/>
+  <testcase name="담당 소스가 없는 시장은 예외다 — 0건으로 성공하면 계수가 영영 1로 남는다" classname="com.stockscreener.pipeline.collector.CorporateActionCollectorTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:24:08.058+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.CorporateActionCollectorTest]: CorporateActionCollectorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.060+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.CorporateActionCollectorTest
+2026-10-06T19:24:08.060+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.CorporateActionCollectorTest]: CorporateActionCollectorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.061+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.CorporateActionCollectorTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:08.066+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.CorporateActionCollectorTest     : Starting CorporateActionCollectorTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:08.066+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.CorporateActionCollectorTest     : The following 1 profile is active: "test"
+2026-10-06T19:24:08.131+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:08.142+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 9 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:08.149+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-25 - Starting...
+2026-10-06T19:24:08.157+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-25 - Start completed.
+2026-10-06T19:24:08.164+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:08.177+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.006s)
+2026-10-06T19:24:08.204+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:08.204+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:08.204+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:08.214+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:08.220+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:08.226+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:08.236+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:08.237+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:08.252+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:08.255+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.CorporateActionCollectorTest     : Started CorporateActionCollectorTest in 0.193 seconds (process running for 41.471)
+2026-10-06T19:24:08.262+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796403 id=53286 2021-01-15 type=REVERSE_SPLIT ratio=0.3333333333 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:08.263+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 원장 행에 소스의 낱말을 붙였다. stockId=796403 id=53286 2021-01-15 형태='무상감자'
+2026-10-06T19:24:08.267+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796404 id=53287 2021-04-15 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:08.268+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796404 id=53288 2023-05-16 type=REVERSE_SPLIT ratio=0.1000000000 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:08.272+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796405 id=53289 2026-02-03 type=REVERSE_SPLIT ratio=0.1 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:08.272+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 휴리스틱 후보를 공시로 덮으며 효력일을 옮겼다. stockId=796405 id=53289 2026-02-03 → 2026-02-04 type=REVERSE_SPLIT ratio=0.1
+2026-10-06T19:24:08.278+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796408 id=53290 2026-02-03 type=UNKNOWN ratio=2.5000000000 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:08.279+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위가 기존 행과 5거래일 안에 있어 적지 않았다. stockId=796408 새 일자=2026-02-04 기존 일자=2026-02-03 id=53290 — 같은 사건의 일자 보정이 어긋났거나 진짜 별개 사건이다. 사람이 갈라야 한다.
+2026-10-06T19:24:08.282+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796410 id=53291 2026-10-01 type=SPIN_OFF ratio=1 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:08.287+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796412 id=53292 2025-11-18 type=SPIN_OFF ratio=1 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:08.289+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 소스가 이름만 아는 사건을 원장에 적었다. stockId=796413 id=53293 2021-01-15 형태='무상감자' — 종류와 비율은 사람이 정해야 한다.
+2026-10-06T19:24:08.294+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796415 id=53294 2021-04-15 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:08.294+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796415 id=53295 2023-05-16 type=REVERSE_SPLIT ratio=0.1000000000 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:08.296+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796416 id=53296 2026-02-03 type=REVERSE_SPLIT ratio=0.1 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:08.297+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53296 status=REJECTED type=REVERSE_SPLIT ratio=0.1000000000 가격배수=null 효력일=2026-02-03 신주상장=null
+2026-10-06T19:24:08.297+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위가 기존 행과 5거래일 안에 있어 적지 않았다. stockId=796416 새 일자=2026-02-04 기존 일자=2026-02-03 id=53296 — 같은 사건의 일자 보정이 어긋났거나 진짜 별개 사건이다. 사람이 갈라야 한다.
+2026-10-06T19:24:08.297+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.CorporateActionCollector         : 사람이 판정한 행과 겹쳐 적지 않았다. ticker=001440 새 일자=2026-02-04 기존 일자=2026-02-03 기존 상태=REJECTED — 판정이 남아 있으므로 알리지 않는다.
+2026-10-06T19:24:08.298+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.CorporateActionCollector         : 저장된 봉이 없어 기업 행위를 건너뛴다. ticker=001440 — 소스가 우리 시계열에서 일자와 비율을 유도하므로 부를 근거가 없다.
+2026-10-06T19:24:08.301+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796419 id=53297 2025-10-03 type=SPIN_OFF ratio=1 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:08.303+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796420 id=53298 2023-05-16 type=REVERSE_SPLIT ratio=0.1000000000 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:08.306+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.SpinOffValuer     : 분사 자식의 첫 봉이 ex 뒤 7거래일이라 같은 사건의 값으로 쓰지 않는다 — 소스 날짜를 의심한다. ticker=LEN 자식=MRP ex=2025-01-06 첫 봉=2025-01-15
+2026-10-06T19:24:08.306+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796422 id=53299 2025-01-06 type=UNKNOWN ratio=1 status=OBSERVED source=SOURCE_DISCLOSURE
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

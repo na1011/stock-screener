@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.GovernanceUnavailabilityReasonTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:30.901Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="거버넌스 지표 전부가 두 시장에서 사유를 갖는다 — 하나가 빠지면 그것만 침묵한다" classname="com.stockscreener.indicator.GovernanceUnavailabilityReasonTest" time="0.001"/>
+  <testcase name="소스가 안 덮는 지표만 「이 시장에는 없다」로 말한다 — 같은 시장 안에서 갈린다" classname="com.stockscreener.indicator.GovernanceUnavailabilityReasonTest" time="0.0"/>
+  <testcase name="그 시장에서 값이 날 수 있는 지표에 값이 있으면 아무 말도 하지 않는다" classname="com.stockscreener.indicator.GovernanceUnavailabilityReasonTest" time="0.0"/>
+  <testcase name="소스가 덮는 시장의 지표는 문구가 벤더 이름을 말하지 않는다" classname="com.stockscreener.indicator.GovernanceUnavailabilityReasonTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="지표 대 지표 비교" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:17.986Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="참조 지표가 없으면 판정 불가다" classname="com.stockscreener.screening.ConditionEvaluatorTest$IndicatorReference" time="0.0"/>
+  <testcase name="다른 지표를 기준으로 비교한다 — 종가 &gt; SMA200" classname="com.stockscreener.screening.ConditionEvaluatorTest$IndicatorReference" time="0.0"/>
+  <testcase name="계수를 적용한다 — 종가 &gt; SMA200 × 1.05 (여유를 둔 돌파)" classname="com.stockscreener.screening.ConditionEvaluatorTest$IndicatorReference" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

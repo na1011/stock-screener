@@ -1,0 +1,8 @@
+위반 항목
+위반 항목
+위반 항목
+행 수 merged/main/p1: 72 69 62 · (가) 행 수 1 · 위반 3
+M2: B=4d0d2a47 feat(batch): 실행마다 범위를 적고 좁힌 실행은 연체 시계에 세지 않는다 |P|=39 |M|=17 Q=[docs/reload-gate.md src/test/java/com/stockscreener/pipeline/batch/IndicatorBackfillParallelTest.java]
+  단언 위반=0 · 충돌표지 파일=0
+목록 비교(순서 포함): merged == main에서 (가)만 p1판: True 72 72
+HEAD=p1? 같음 · HEAD=main? 같음

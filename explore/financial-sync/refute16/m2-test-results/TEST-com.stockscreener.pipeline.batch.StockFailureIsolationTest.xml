@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.StockFailureIsolationTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:06.672Z" hostname="MacBook-Pro.local" time="0.433">
+  <properties/>
+  <testcase name="IMPORTANT — 알림의 단위는 종목이 아니라 건이다. 한 종목이 여러 번 세어진다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.007"/>
+  <testcase name="쿼터 소진 중단은 ABORTED다 — 실패가 아니라 정상적인 일시정지다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.003"/>
+  <testcase name="다른 실행이 같은 단계를 성공시키면 앞선 실패가 해결로 닫힌다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.004"/>
+  <testcase name="한 종목이 실패해도 나머지는 저장되고, 실패한 종목을 나중에 식별할 수 있다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.003"/>
+  <testcase name="예상하지 못한 예외는 UNEXPECTED로 구분해 기록한다 — 버그가 수집 실패에 묻히면 안 된다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.003"/>
+  <testcase name="실패한 부분만 재실행 대상으로 읽고, 성공하면 해결로 표시한다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.004"/>
+  <testcase name="워커 둘이 동시에 돌아도 실패한 종목만 롤백되고 집계가 맞는다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.005"/>
+  <testcase name="실패한 종목의 쓰기는 롤백되고 성공한 종목의 쓰기는 커밋된다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.003"/>
+  <testcase name="인증 실패는 배치를 중단시킨다 — 키가 틀렸는데 850종목을 시도할 이유가 없다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.004"/>
+  <testcase name="IMPORTANT — 다른 단계의 성공은 남의 실패를 닫지 않는다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.003"/>
+  <testcase name="실패가 많아도 알림은 요약 한 건이다 — 건마다 보내면 알림이 무의미해진다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.003"/>
+  <testcase name="전 종목이 성공하면 SUCCESS이고 알림을 보내지 않는다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.002"/>
+  <testcase name="같은 종목이 여러 번 실패해도 기록이 부풀지 않는다 — 재시도 루프가 행을 늘리면 안 된다" classname="com.stockscreener.pipeline.batch.StockFailureIsolationTest" time="0.003"/>
+  <system-out><![CDATA[2026-10-06T19:24:06.674+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.StockFailureIsolationTest
+2026-10-06T19:24:06.674+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.StockFailureIsolationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:06.682+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.StockFailureIsolationTest    : Starting StockFailureIsolationTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:06.682+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.StockFailureIsolationTest    : The following 1 profile is active: "test"
+2026-10-06T19:24:06.784+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:06.794+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 9 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:06.814+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-22 - Starting...
+2026-10-06T19:24:06.817+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-22 - Start completed.
+2026-10-06T19:24:06.819+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:06.828+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.005s)
+2026-10-06T19:24:06.864+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:06.864+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:06.864+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:06.875+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:06.881+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:06.884+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:06.896+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:06.896+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:06.906+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:06.913+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:24:06.917+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=stock-alias/us-ko.csv 별칭=860개
+2026-10-06T19:24:06.958+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.AlertConfig             : 알림 채널이 하나도 구성되지 않아 로그 기반 기본 구현을 쓴다. ALERT_WEBHOOK_URL·MAIL_USERNAME을 채우면 실제 통지가 나간다.
+2026-10-06T19:24:06.961+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:24:06.995+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:24:07.001+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.StockFailureIsolationTest    : Started StockFailureIsolationTest in 0.325 seconds (process running for 40.216)
+2026-10-06T19:24:07.034+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 149개
+2026-10-06T19:24:07.056+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+2026-10-06T19:24:07.058+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.061+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796309 ticker=000033 phase=PRICE source=stub-source kind=TRANSIENT message=실패
+2026-10-06T19:24:07.061+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796309 ticker=000033 phase=FINANCIAL source=stub-source kind=TRANSIENT message=실패
+2026-10-06T19:24:07.064+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.067+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.068+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796311 ticker=000020 phase=SECURITY_MASTER source=stub-source kind=TRANSIENT message=일시적 오류
+2026-10-06T19:24:07.068+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.071+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.072+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796313 ticker=000002 phase=PRICE source=stub-source kind=TRANSIENT message=일시적 오류
+2026-10-06T19:24:07.075+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.076+09:00 ERROR 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 처리 중 예상하지 못한 오류. stockId=796315 ticker=000050 phase=FINANCIAL
+
+java.lang.IllegalStateException: 계산 로직 버그
+	at com.stockscreener.pipeline.batch.StockFailureIsolationTest.lambda$recordsUnexpectedExceptionsSeparately$13(StockFailureIsolationTest.java:375) ~[test/:na]
+	at com.stockscreener.pipeline.batch.StockTaskRunner.runInNewTransaction(StockTaskRunner.java:33) ~[main/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:359) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.invokeJoinpoint(ReflectiveMethodInvocation.java:190) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:158) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.transaction.interceptor.TransactionInterceptor$1.proceedWithInvocation(TransactionInterceptor.java:133) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:371) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:130) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:179) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:719) ~[spring-aop-7.0.8.jar:7.0.8]
+	at com.stockscreener.pipeline.batch.StockTaskRunner$$SpringCGLIB$$0.runInNewTransaction(<generated>) ~[main/:na]
+	at com.stockscreener.pipeline.batch.StockTaskExecutor.execute(StockTaskExecutor.java:63) ~[main/:na]
+	at com.stockscreener.pipeline.batch.BatchExecutionContext.process(BatchExecutionContext.java:181) ~[main/:na]
+	at com.stockscreener.pipeline.batch.StockFailureIsolationTest.recordsUnexpectedExceptionsSeparately(StockFailureIsolationTest.java:374) ~[test/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:701) ~[junit-platform-commons-6.0.3.jar:6.0.3]
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:502) ~[junit-platform-commons-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.support.MethodReflectionUtils.invoke(MethodReflectionUtils.java:45) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:61) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:124) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:163) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:148) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:123) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:105) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:99) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:66) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:47) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:39) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:104) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:98) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invokeVoid(InterceptingExecutableInvoker.java:71) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$0(TestMethodTestDescriptor.java:219) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:215) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:157) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:70) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:176) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:36) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:52) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:58) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.executeEngine(EngineExecutionOrchestrator.java:246) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.failOrExecuteEngine(EngineExecutionOrchestrator.java:218) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:179) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:108) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:66) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:157) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:65) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:125) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:114) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:93) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:48) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$0(InterceptingLauncher.java:41) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:40) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:48) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestDefinitionProcessor$CollectThenExecuteTestDefinitionConsumer.processAllTestDefinitions(JUnitPlatformTestDefinitionProcessor.java:179) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestDefinitionProcessor$CollectThenExecuteTestDefinitionConsumer.access$000(JUnitPlatformTestDefinitionProcessor.java:122) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestDefinitionProcessor.stop(JUnitPlatformTestDefinitionProcessor.java:116) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.SuiteTestDefinitionProcessor.stop(SuiteTestDefinitionProcessor.java:63) ~[na:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.gradle.internal.dispatch.MethodInvocation.invokeOn(MethodInvocation.java:77) ~[na:na]
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:28) ~[na:na]
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:19) ~[na:na]
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33) ~[na:na]
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:88) ~[na:na]
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:195) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:126) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63) ~[na:na]
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56) ~[na:na]
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122) ~[na:na]
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72) ~[na:na]
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69) ~[gradle-worker.jar:na]
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74) ~[gradle-worker.jar:na]
+
+2026-10-06T19:24:07.079+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.080+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796317 ticker=000061 phase=PRICE source=stub-source kind=TRANSIENT message=일시적 오류
+2026-10-06T19:24:07.084+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.086+09:00  WARN 33006 --- [stock-screener] [pool-4-thread-2] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796319 ticker=000013 phase=PRICE source=stub-source kind=NOT_FOUND message=종목 없음
+2026-10-06T19:24:07.088+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.090+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796321 ticker=000011 phase=PRICE source=stub-source kind=NOT_FOUND message=종목 없음
+2026-10-06T19:24:07.091+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.092+09:00 ERROR 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 배치를 중단한다 — 복구 불가능한 수집 실패. stockId=796322 ticker=000040 source=stub-source kind=AUTH
+
+com.stockscreener.pipeline.datasource.DataSourceException: 키가 유효하지 않다
+	at com.stockscreener.pipeline.batch.StockFailureIsolationTest.lambda$abortsEntireBatchOnAuthFailure$11(StockFailureIsolationTest.java:352) ~[test/:na]
+	at com.stockscreener.pipeline.batch.StockTaskRunner.runInNewTransaction(StockTaskRunner.java:33) ~[main/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:359) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.invokeJoinpoint(ReflectiveMethodInvocation.java:190) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:158) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.transaction.interceptor.TransactionInterceptor$1.proceedWithInvocation(TransactionInterceptor.java:133) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:371) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:130) ~[spring-tx-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:179) ~[spring-aop-7.0.8.jar:7.0.8]
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:719) ~[spring-aop-7.0.8.jar:7.0.8]
+	at com.stockscreener.pipeline.batch.StockTaskRunner$$SpringCGLIB$$0.runInNewTransaction(<generated>) ~[main/:na]
+	at com.stockscreener.pipeline.batch.StockTaskExecutor.execute(StockTaskExecutor.java:63) ~[main/:na]
+	at com.stockscreener.pipeline.batch.BatchExecutionContext.process(BatchExecutionContext.java:181) ~[main/:na]
+	at com.stockscreener.pipeline.batch.StockFailureIsolationTest.lambda$abortsEntireBatchOnAuthFailure$12(StockFailureIsolationTest.java:351) ~[test/:na]
+	at org.assertj.core.api.ThrowableAssert.catchThrowable(ThrowableAssert.java:66) ~[assertj-core-3.27.7.jar:na]
+	at org.assertj.core.api.AssertionsForClassTypes.catchThrowable(AssertionsForClassTypes.java:908) ~[assertj-core-3.27.7.jar:na]
+	at org.assertj.core.api.Assertions.catchThrowable(Assertions.java:1476) ~[assertj-core-3.27.7.jar:na]
+	at org.assertj.core.api.Assertions.assertThatThrownBy(Assertions.java:1319) ~[assertj-core-3.27.7.jar:na]
+	at com.stockscreener.pipeline.batch.StockFailureIsolationTest.abortsEntireBatchOnAuthFailure(StockFailureIsolationTest.java:351) ~[test/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:701) ~[junit-platform-commons-6.0.3.jar:6.0.3]
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:502) ~[junit-platform-commons-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.support.MethodReflectionUtils.invoke(MethodReflectionUtils.java:45) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:61) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:124) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:163) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:148) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:123) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:105) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:99) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:66) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:47) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:39) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:104) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:98) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invokeVoid(InterceptingExecutableInvoker.java:71) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$0(TestMethodTestDescriptor.java:219) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:215) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:157) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:70) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:176) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:36) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:52) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:58) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.executeEngine(EngineExecutionOrchestrator.java:246) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.failOrExecuteEngine(EngineExecutionOrchestrator.java:218) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:179) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:108) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:66) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:157) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:65) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:125) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:114) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:93) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:48) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$0(InterceptingLauncher.java:41) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:40) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:48) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestDefinitionProcessor$CollectThenExecuteTestDefinitionConsumer.processAllTestDefinitions(JUnitPlatformTestDefinitionProcessor.java:179) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestDefinitionProcessor$CollectThenExecuteTestDefinitionConsumer.access$000(JUnitPlatformTestDefinitionProcessor.java:122) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestDefinitionProcessor.stop(JUnitPlatformTestDefinitionProcessor.java:116) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.SuiteTestDefinitionProcessor.stop(SuiteTestDefinitionProcessor.java:63) ~[na:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.gradle.internal.dispatch.MethodInvocation.invokeOn(MethodInvocation.java:77) ~[na:na]
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:28) ~[na:na]
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:19) ~[na:na]
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33) ~[na:na]
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:88) ~[na:na]
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:195) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:126) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63) ~[na:na]
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56) ~[na:na]
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122) ~[na:na]
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72) ~[na:na]
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69) ~[gradle-worker.jar:na]
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74) ~[gradle-worker.jar:na]
+
+2026-10-06T19:24:07.095+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.096+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796323 ticker=000021 phase=SECURITY_MASTER source=stub-source kind=TRANSIENT message=일시적 오류
+2026-10-06T19:24:07.096+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.098+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.099+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796324 ticker=000030 phase=PRICE source=stub-source kind=TRANSIENT message=실패
+2026-10-06T19:24:07.100+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796325 ticker=000031 phase=PRICE source=stub-source kind=TRANSIENT message=실패
+2026-10-06T19:24:07.100+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796326 ticker=000032 phase=PRICE source=stub-source kind=TRANSIENT message=실패
+2026-10-06T19:24:07.102+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.104+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionRecorder       : 정기 실행인데 기준일이 지금이 아니라 범위를 NARROW로 찍는다. job=test-collection 기준일=2026-08-05 오늘=2026-10-06
+2026-10-06T19:24:07.104+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796328 ticker=000070 phase=PRICE source=stub-source kind=TRANSIENT message=실패
+2026-10-06T19:24:07.105+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796328 ticker=000070 phase=PRICE source=stub-source kind=TRANSIENT message=실패
+2026-10-06T19:24:07.105+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=796328 ticker=000070 phase=PRICE source=stub-source kind=TRANSIENT message=실패
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

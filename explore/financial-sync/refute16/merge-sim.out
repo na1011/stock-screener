@@ -1,0 +1,10 @@
+main=70e10d57 p0=f6a2ecb8 p1=56a97d3d
+m1 rc=0
+M1: B=547d88e0 docs(adr): 복원 낡음 펜스를 복원 격자 안의 재료로 좁힌다 |P|=40 |M|=16 Q=[]
+  단언 위반=0 · 충돌표지 파일=0
+Auto-merging docs/reload-gate.md
+CONFLICT (content): Merge conflict in docs/reload-gate.md
+Automatic merge failed; fix conflicts and then commit the result.
+m2 rc=1
+충돌 경로: docs/reload-gate.md 
+(충돌 — 커밋 안 함 · 단언 생략)

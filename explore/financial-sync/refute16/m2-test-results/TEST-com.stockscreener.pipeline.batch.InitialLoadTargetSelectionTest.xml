@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:01.528Z" hostname="MacBook-Pro.local" time="0.47">
+  <properties/>
+  <testcase name="IMPORTANT — 재무를 건너뛰면 그 단계의 계획도 함께 빠진다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.014"/>
+  <testcase name="티커가 하나도 매칭되지 않으면 조용히 성공하지 않고 실패한다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.006"/>
+  <testcase name="IMPORTANT — 시세를 건너뛰면 그 단계의 계획도 함께 빠진다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.009"/>
+  <testcase name="유니버스에 대상이 없으면 조용히 성공하지 않고 실패한다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.005"/>
+  <testcase name="유니버스 경로에서 --skip-price가 무력화되지 않는다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.007"/>
+  <testcase name="티커를 주면 봉이 이미 있어도 대상이 된다 — NOT EXISTS를 교집합으로 걸지 않는다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.007"/>
+  <testcase name="시세와 재무를 둘 다 건너뛰면 만들 때 막는다 — 아무것도 안 하고 성공하지 않는다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.004"/>
+  <testcase name="실행 기록이 보충 칸을 낸다 — 리밸런싱 꼬리가 공시 보충을 타는 정기 경로라 실패가 여기 아니면 안 뜬다(ADR-0173)" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.008"/>
+  <testcase name="IMPORTANT — 유니버스를 손으로 고르면 비활성이어도 대상이 된다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.007"/>
+  <testcase name="티커를 주면 그 종목만 받는다 — 나머지 편입 종목은 건드리지 않는다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.008"/>
+  <testcase name="티커가 없으면 기본 경로 그대로다 — 봉이 있는 종목은 건너뛴다" classname="com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest" time="0.008"/>
+  <system-out><![CDATA[2026-10-06T19:24:01.529+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest
+2026-10-06T19:24:01.529+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.InitialLoadTargetSelectionTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:01.535+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.b.InitialLoadTargetSelectionTest   : Starting InitialLoadTargetSelectionTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:01.535+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.b.InitialLoadTargetSelectionTest   : The following 1 profile is active: "test"
+2026-10-06T19:24:01.630+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:01.640+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 9 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:01.663+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-19 - Starting...
+2026-10-06T19:24:01.670+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-19 - Start completed.
+2026-10-06T19:24:01.676+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:01.691+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.010s)
+2026-10-06T19:24:01.721+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:01.721+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:01.721+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:01.733+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:01.738+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:01.744+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:01.757+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:01.757+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:01.773+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:01.781+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:24:01.785+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.AlertConfig             : 알림 채널이 하나도 구성되지 않아 로그 기반 기본 구현을 쓴다. ALERT_WEBHOOK_URL·MAIL_USERNAME을 채우면 실제 통지가 나간다.
+2026-10-06T19:24:01.787+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=stock-alias/us-ko.csv 별칭=860개
+2026-10-06T19:24:01.826+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:24:01.856+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:24:01.861+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.b.InitialLoadTargetSelectionTest   : Started InitialLoadTargetSelectionTest in 0.331 seconds (process running for 35.076)
+2026-10-06T19:24:01.892+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 149개
+2026-10-06T19:24:01.909+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+2026-10-06T19:24:01.919+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.InitialLoadJob        : 초기 적재를 시작한다. 대상 1종목, 시세 1년·재무 건너뜀 (대상 선정: 지정한 티커 1개)
+2026-10-06T19:24:01.920+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceCollector    : 수집된 시세가 없다. stockId=795947 2025-08-11 ~ 2026-08-11 — 휴장이거나 거래정지일 수 있다.
+2026-10-06T19:24:01.935+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.InitialLoadJob        : 초기 적재를 시작한다. 대상 1종목, 시세 건너뜀·재무 1년 (대상 선정: 지정한 티커 1개)
+2026-10-06T19:24:01.937+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=initial-load 적재=1년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:24:01.949+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.InitialLoadJob        : 초기 적재를 시작한다. 대상 2종목, 시세 건너뜀·재무 1년 (대상 선정: 유니버스 KOSPI200)
+2026-10-06T19:24:01.950+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=initial-load 적재=1년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:24:01.957+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.InitialLoadJob        : 초기 적재를 시작한다. 대상 1종목, 시세 7년·재무 3년 (대상 선정: 지정한 티커 1개)
+2026-10-06T19:24:01.958+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=initial-load 적재=3년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:24:01.958+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceCollector    : 수집된 시세가 없다. stockId=795956 2019-08-11 ~ 2026-08-11 — 휴장이거나 거래정지일 수 있다.
+2026-10-06T19:24:01.970+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.InitialLoadJob        : 초기 적재를 시작한다. 대상 1종목, 시세 7년·재무 3년 (대상 선정: 지정한 티커 1개)
+2026-10-06T19:24:01.971+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=initial-load 적재=3년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:24:01.971+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceCollector    : 수집된 시세가 없다. stockId=795960 2019-08-11 ~ 2026-08-11 — 휴장이거나 거래정지일 수 있다.
+2026-10-06T19:24:01.979+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.InitialLoadJob        : 유니버스 KOSPI200 편입 2종목 중 시세가 없는 1종목이 대상이다.
+2026-10-06T19:24:01.979+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.InitialLoadJob        : 초기 적재를 시작한다. 대상 1종목, 시세 1년·재무 건너뜀 (대상 선정: 유니버스 KOSPI200)
+2026-10-06T19:24:01.980+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceCollector    : 수집된 시세가 없다. stockId=795963 2025-08-11 ~ 2026-08-11 — 휴장이거나 거래정지일 수 있다.
+2026-10-06T19:24:01.986+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.InitialLoadJob        : 초기 적재를 시작한다. 대상 1종목, 시세 7년·재무 3년 (대상 선정: 지정한 티커 1개)
+2026-10-06T19:24:01.987+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=initial-load 적재=3년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:24:01.987+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceCollector    : 수집된 시세가 없다. stockId=795964 2019-08-11 ~ 2026-08-11 — 휴장이거나 거래정지일 수 있다.
+2026-10-06T19:24:01.994+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.InitialLoadJob        : 초기 적재를 시작한다. 대상 1종목, 시세 7년·재무 8년 (대상 선정: 이력이 없는 종목만)
+2026-10-06T19:24:01.995+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceCollector    : 수집된 시세가 없다. stockId=795967 2019-08-11 ~ 2026-08-11 — 휴장이거나 거래정지일 수 있다.
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.MembershipGapQueryTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:09.336Z" hostname="MacBook-Pro.local" time="0.285">
+  <properties/>
+  <testcase name="시세에 구멍이 뚫리면 걸리고, 첫 봉이 늦은 신규 상장은 안 걸린다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.023"/>
+  <testcase name="IMPORTANT — 지표 달력이 없어도 나머지 네 축은 판정된다. INNER JOIN이면 그 시장이 통째로 사라진다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.005"/>
+  <testcase name="인프라 투자회사의 재무 결손은 면제다 — 소스가 재무제표를 주지 않는다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.005"/>
+  <testcase name="대조군이 질의에 실제로 닿는다 — 안 닿으면 아래 시험 전부가 0행으로 초록이 된다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.006"/>
+  <testcase name="IMPORTANT — 그 시장에 거버넌스가 한 행도 없으면 아무도 안 걸린다. 상시 붉는 펜스가 상한을 밀어 시세 적재까지 멈춘다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.006"/>
+  <testcase name="아무것도 없는 편입 종목은 네 축에 한꺼번에 걸린다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.005"/>
+  <testcase name="영업활동현금흐름이 차 있으면 그 축만 빠진다 — 재무 축과 따로 판정한다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.008"/>
+  <testcase name="어제 나던 지표가 오늘 안 나면 걸린다 — 시장 중앙값이 아니라 그 종목 자신이 기준선이다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.016"/>
+  <testcase name="IMPORTANT — 재무 통화가 시장 통화와 다르면 면제다. 채워도 지표 계층이 재무를 통째로 안 준다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.003"/>
+  <testcase name="IMPORTANT — 봉이 있어도 편입일 뒤에서 시작하면 걸린다. NOT EXISTS였다면 지워질 신호다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.002"/>
+  <testcase name="업종 결손이 알려진 SIC 결손이면 면제로 간다 — 신고가 아니라 OK 문장으로 옮긴다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.002"/>
+  <testcase name="거버넌스 원문이 0행이면 걸린다 — 팩트로 재면 무배당과 미완결이 결손으로 섞인다" classname="com.stockscreener.pipeline.collector.MembershipGapQueryTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:24:09.337+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.MembershipGapQueryTest]: MembershipGapQueryTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.339+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.MembershipGapQueryTest
+2026-10-06T19:24:09.339+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.MembershipGapQueryTest]: MembershipGapQueryTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.341+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.MembershipGapQueryTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:09.346+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.MembershipGapQueryTest   : Starting MembershipGapQueryTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:09.346+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.MembershipGapQueryTest   : The following 1 profile is active: "test"
+2026-10-06T19:24:09.407+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:09.416+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 9 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:09.424+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-29 - Starting...
+2026-10-06T19:24:09.430+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-29 - Start completed.
+2026-10-06T19:24:09.436+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:09.448+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.006s)
+2026-10-06T19:24:09.482+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:09.482+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:09.482+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:09.493+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:09.499+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:09.505+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:09.516+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:09.517+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:09.528+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:09.531+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.MembershipGapQueryTest   : Started MembershipGapQueryTest in 0.189 seconds (process running for 42.746)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

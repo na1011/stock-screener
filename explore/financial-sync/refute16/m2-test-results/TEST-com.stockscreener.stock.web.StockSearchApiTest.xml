@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.stock.web.StockSearchApiTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:20.495Z" hostname="MacBook-Pro.local" time="0.442">
+  <properties/>
+  <testcase name="일치가 없으면 404가 아니라 빈 배열이다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.008"/>
+  <testcase name="limit이 범위를 벗어나면 400이다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.007"/>
+  <testcase name="대소문자를 가리지 않는다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.004"/>
+  <testcase name="IMPORTANT — 편입되지 않은 종목은 결과에 없다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.003"/>
+  <testcase name="종목명 접두 일치가 부분 일치보다 앞에 온다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.003"/>
+  <testcase name="limit이 결과 수를 제한한다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.003"/>
+  <testcase name="별칭은 마지막 등급이다 — 이름으로 걸린 국내 종목을 밀어내지 않는다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.002"/>
+  <testcase name="티커 완전일치가 첫 줄에 온다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.002"/>
+  <testcase name="빈 검색어는 우리 규약의 400이다 — about:blank가 아니다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.002"/>
+  <testcase name="한국어 별칭으로 찾는다 — 미국 종목의 name은 영문이라 이름 매칭에 안 걸린다" classname="com.stockscreener.stock.web.StockSearchApiTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:24:20.496+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.stock.web.StockSearchApiTest]: StockSearchApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:20.496+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.stock.web.StockSearchApiTest
+2026-10-06T19:24:20.497+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.stock.web.StockSearchApiTest]: StockSearchApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:20.497+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.stock.web.StockSearchApiTest
+2026-10-06T19:24:20.498+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:20.498+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-7 - Shutdown initiated...
+2026-10-06T19:24:20.498+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-7 - Shutdown completed.
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:20.503+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.stock.web.StockSearchApiTest         : Starting StockSearchApiTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:20.503+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.stock.web.StockSearchApiTest         : The following 1 profile is active: "test"
+2026-10-06T19:24:20.608+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:20.619+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 10 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:20.658+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-39 - Starting...
+2026-10-06T19:24:20.662+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-39 - Start completed.
+2026-10-06T19:24:20.665+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:20.676+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.005s)
+2026-10-06T19:24:20.708+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:20.708+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:20.708+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:20.719+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:20.724+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:20.731+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:20.743+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:20.743+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:20.760+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:20.768+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:24:20.771+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.AlertConfig             : 알림 채널이 하나도 구성되지 않아 로그 기반 기본 구현을 쓴다. ALERT_WEBHOOK_URL·MAIL_USERNAME을 채우면 실제 통지가 나간다.
+2026-10-06T19:24:20.773+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=fixtures/stock-alias/test-alias.csv 별칭=4개
+2026-10-06T19:24:20.812+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:24:20.841+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:24:20.846+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.stock.web.StockSearchApiTest         : Started StockSearchApiTest in 0.347 seconds (process running for 54.061)
+2026-10-06T19:24:20.877+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 149개
+2026-10-06T19:24:20.895+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+2026-10-06T19:24:20.896+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.896+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.896+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.904+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.904+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.905+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:20.912+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.912+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.912+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.916+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.916+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.916+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.920+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.920+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.920+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.923+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.923+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.923+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.926+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.926+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.926+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.929+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.929+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.929+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.932+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.932+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.932+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.935+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.935+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.935+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

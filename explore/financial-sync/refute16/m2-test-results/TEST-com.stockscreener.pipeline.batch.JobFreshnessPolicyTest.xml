@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:01.998Z" hostname="MacBook-Pro.local" time="0.031">
+  <properties/>
+  <testcase name="좁힌 손 실행은 폴백에서도 시계를 밀지 않는다 — [A56] 무거운 잡 셋의 첫 정기 실행이 그렇게 밀렸다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.005"/>
+  <testcase name="상시 붉을 잡은 감시 대상이 아니다 — 넣으면 진짜 연체까지 함께 묻힌다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.0"/>
+  <testcase name="무거운 잡의 재실행 간격이 연체 예산보다 짧다 — 뒤집히면 정상 운영에서 알림이 뜬다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.001"/>
+  <testcase name="사슬이 끊긴 것을 센다 — APPROVED인데 계수가 없는 행은 억제에도 알림에도 안 걸린다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.001"/>
+  <testcase name="예산을 넘기면 연체다 — 예산을 무한대로 키우면 이 시험이 실패해야 한다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.003"/>
+  <testcase name="스케줄러 실행이 없을 때도 리밸런싱 꼬리는 시계를 되돌리지 못한다 — 배너와 스케줄러가 같은 답" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.003"/>
+  <testcase name="꼬리만 있으면 「한 번도 안 돌았다」다 — 0일로 접지 않는다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.003"/>
+  <testcase name="전량 손 실행은 센다 — 표지가 손 실행을 통째로 버리는 것이 아니다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.001"/>
+  <testcase name="예산 안에서 돈 잡은 연체가 아니다 — 평시에 붉으면 아무도 배너를 안 본다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.002"/>
+  <testcase name="좁은 수동 실행은 시계를 되돌리지 못한다 — 08-24의 9종목 실행이 그 자리였다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.002"/>
+  <testcase name="표지 전 이력은 예전처럼 센다 — 배포가 무거운 잡의 위상을 안 옮긴다(ADR-0172)" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.003"/>
+  <testcase name="기준일이 지난 정기 실행은 시계를 밀지 않는다 — 스케줄러 갈래에서도 NARROW를 뺀다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.001"/>
+  <testcase name="실패한 실행은 성공으로 안 센다 — 세면 실패가 신선도를 만든다" classname="com.stockscreener.pipeline.batch.JobFreshnessPolicyTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:24:01.999+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.JobFreshnessPolicyTest]: JobFreshnessPolicyTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:01.999+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.JobFreshnessPolicyTest
+2026-10-06T19:24:01.999+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.JobFreshnessPolicyTest]: JobFreshnessPolicyTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:01.999+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.JobFreshnessPolicyTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

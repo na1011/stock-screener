@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.AdjustmentRebuildJobTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:38.605Z" hostname="MacBook-Pro.local" time="0.758">
+  <properties/>
+  <testcase name="두 번째 실행은 아무 행도 건드리지 않고 알리지도 않는다 — 알림이 매번 오면 아무도 안 본다" classname="com.stockscreener.pipeline.batch.AdjustmentRebuildJobTest" time="0.026"/>
+  <testcase name="유니버스를 손으로 주면 비활성이어도 계수를 다시 짓는다 — 활성 조인을 안 탄다" classname="com.stockscreener.pipeline.batch.AdjustmentRebuildJobTest" time="0.012"/>
+  <testcase name="고른 유니버스에 대상이 0건이면 예외다 — 안 막으면 SUCCESS로 끝난다" classname="com.stockscreener.pipeline.batch.AdjustmentRebuildJobTest" time="0.005"/>
+  <testcase name="지표를 지웠으면 무엇이 채우는지 알린다 — 성공으로 끝나는 것이 일이 끝난 것이 아니다" classname="com.stockscreener.pipeline.batch.AdjustmentRebuildJobTest" time="0.009"/>
+  <testcase name="티커가 하나도 안 맞으면 0종목 성공이 아니라 예외다 — 재실행에서 0행이 정상이라 구분되지 않는다" classname="com.stockscreener.pipeline.batch.AdjustmentRebuildJobTest" time="0.006"/>
+  <system-out><![CDATA[2026-10-06T19:23:38.621+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.AdjustmentRebuildJobTest
+2026-10-06T19:23:38.622+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.AdjustmentRebuildJobTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:23:38.633+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.AdjustmentRebuildJobTest     : Starting AdjustmentRebuildJobTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:23:38.633+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.AdjustmentRebuildJobTest     : The following 1 profile is active: "test"
+2026-10-06T19:23:38.797+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:23:38.811+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:23:38.869+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-9 - Starting...
+2026-10-06T19:23:38.875+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-9 - Start completed.
+2026-10-06T19:23:38.881+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:23:38.900+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.011s)
+2026-10-06T19:23:38.928+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:23:38.928+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:23:38.928+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:23:38.945+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:23:38.953+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:23:38.959+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:23:38.982+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:23:38.982+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:23:39.001+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:23:39.023+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:23:39.035+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=stock-alias/us-ko.csv 별칭=860개
+2026-10-06T19:23:39.139+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.AlertConfig             : 알림 채널이 하나도 구성되지 않아 로그 기반 기본 구현을 쓴다. ALERT_WEBHOOK_URL·MAIL_USERNAME을 채우면 실제 통지가 나간다.
+2026-10-06T19:23:39.146+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:23:39.234+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:23:39.247+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.AdjustmentRebuildJobTest     : Started AdjustmentRebuildJobTest in 0.624 seconds (process running for 12.462)
+2026-10-06T19:23:39.285+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 149개
+2026-10-06T19:23:39.301+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+2026-10-06T19:23:39.310+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795807 id=53261 2026-02-04 type=SPLIT ratio=5 status=OBSERVED source=HEURISTIC
+2026-10-06T19:23:39.312+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53261 status=APPROVED type=SPLIT ratio=5.0000000000 가격배수=null 효력일=2026-02-04 신주상장=null
+2026-10-06T19:23:39.316+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.AdjustmentRebuildJob  : 수정계수 재구축을 시작한다. 대상 1종목 — 원장의 적용 대상에서 매번 다시 짓는다. 갱신 0행이 정상이고 그 0이 멱등의 증거다.
+2026-10-06T19:23:39.320+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=795807 사건=1건 갱신=2행 최초변경일=2026-02-02
+2026-10-06T19:23:39.320+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.StoredIndicatorInvalidationPort    : 지표를 무효화했다. stockId=795807 fromDate=2026-02-02 reason=PRICE_ADJUSTED 삭제=0행
+2026-10-06T19:23:39.320+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.AdjustmentRebuildJob  : 수정계수 재구축 끝. 대상 1종목 · 이미 일치 0 · 다시 지음 1 · 적용 대상 사건 1건 — 종목별 무변경은 DEBUG다(.env의 LOG_ADJUSTMENT=DEBUG).
+2026-10-06T19:23:39.323+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.AdjustmentRebuildJob  : 수정계수 재구축을 시작한다. 대상 1종목 — 원장의 적용 대상에서 매번 다시 짓는다. 갱신 0행이 정상이고 그 0이 멱등의 증거다.
+2026-10-06T19:23:39.325+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.AdjustmentRebuildJob  : 수정계수 재구축 끝. 대상 1종목 · 이미 일치 1 · 다시 지음 0 · 적용 대상 사건 1건 — 종목별 무변경은 DEBUG다(.env의 LOG_ADJUSTMENT=DEBUG).
+2026-10-06T19:23:39.332+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795808 id=53262 2026-02-04 type=SPLIT ratio=5 status=OBSERVED source=HEURISTIC
+2026-10-06T19:23:39.333+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53262 status=APPROVED type=SPLIT ratio=5.0000000000 가격배수=null 효력일=2026-02-04 신주상장=null
+2026-10-06T19:23:39.335+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795809 id=53263 2026-02-04 type=SPLIT ratio=10 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:23:39.337+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.AdjustmentRebuildJob  : 수정계수 재구축을 시작한다. 대상 1종목 — 원장의 적용 대상에서 매번 다시 짓는다. 갱신 0행이 정상이고 그 0이 멱등의 증거다.
+2026-10-06T19:23:39.338+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=795809 사건=1건 갱신=1행 최초변경일=2026-02-02
+2026-10-06T19:23:39.338+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.StoredIndicatorInvalidationPort    : 지표를 무효화했다. stockId=795809 fromDate=2026-02-02 reason=PRICE_ADJUSTED 삭제=0행
+2026-10-06T19:23:39.338+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.AdjustmentRebuildJob  : 수정계수 재구축 끝. 대상 1종목 · 이미 일치 0 · 다시 지음 1 · 적용 대상 사건 1건 — 종목별 무변경은 DEBUG다(.env의 LOG_ADJUSTMENT=DEBUG).
+2026-10-06T19:23:39.345+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795810 id=53264 2026-02-04 type=SPLIT ratio=5 status=OBSERVED source=HEURISTIC
+2026-10-06T19:23:39.345+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53264 status=APPROVED type=SPLIT ratio=5.0000000000 가격배수=null 효력일=2026-02-04 신주상장=null
+2026-10-06T19:23:39.351+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795811 id=53265 2026-02-04 type=SPLIT ratio=5 status=OBSERVED source=HEURISTIC
+2026-10-06T19:23:39.351+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53265 status=APPROVED type=SPLIT ratio=5.0000000000 가격배수=null 효력일=2026-02-04 신주상장=null
+2026-10-06T19:23:39.353+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.AdjustmentRebuildJob  : 수정계수 재구축을 시작한다. 대상 1종목 — 원장의 적용 대상에서 매번 다시 짓는다. 갱신 0행이 정상이고 그 0이 멱등의 증거다.
+2026-10-06T19:23:39.354+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=795811 사건=1건 갱신=2행 최초변경일=2026-02-02
+2026-10-06T19:23:39.354+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.StoredIndicatorInvalidationPort    : 지표를 무효화했다. stockId=795811 fromDate=2026-02-02 reason=PRICE_ADJUSTED 삭제=0행
+2026-10-06T19:23:39.355+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.AdjustmentRebuildJob  : 수정계수 재구축 끝. 대상 1종목 · 이미 일치 0 · 다시 지음 1 · 적용 대상 사건 1건 — 종목별 무변경은 DEBUG다(.env의 LOG_ADJUSTMENT=DEBUG).
+2026-10-06T19:23:39.360+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795812 id=53266 2026-02-04 type=SPLIT ratio=5 status=OBSERVED source=HEURISTIC
+2026-10-06T19:23:39.361+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53266 status=APPROVED type=SPLIT ratio=5.0000000000 가격배수=null 효력일=2026-02-04 신주상장=null
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

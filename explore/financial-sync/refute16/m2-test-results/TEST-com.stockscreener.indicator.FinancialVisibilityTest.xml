@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.FinancialVisibilityTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:30.879Z" hostname="MacBook-Pro.local" time="0.02">
+  <properties/>
+  <testcase name="계산기가 보는 것은 기(期)마다 한 판이다 — TTM이 중복 합산되지 않는다" classname="com.stockscreener.indicator.FinancialVisibilityTest" time="0.003"/>
+  <testcase name="LATEST는 같은 자리에서 미래 공시를 준다 — 그것이 이 모드를 저장 경로에서 뺀 이유다" classname="com.stockscreener.indicator.FinancialVisibilityTest" time="0.002"/>
+  <testcase name="KNOWN_ON은 아직 공시되지 않은 재무를 주지 않는다" classname="com.stockscreener.indicator.FinancialVisibilityTest" time="0.002"/>
+  <testcase name="KNOWN_ON은 그 시점에 유효했던 판을 고른다 — 정정 후 값이 아니다" classname="com.stockscreener.indicator.FinancialVisibilityTest" time="0.005"/>
+  <testcase name="리더는 판 이력을 통째로 준다 — 접는 자리가 봉으로 내려갔다는 것의 실동작" classname="com.stockscreener.indicator.FinancialVisibilityTest" time="0.003"/>
+  <testcase name="KNOWN_ON도 기말이 지나지 않은 기(期)는 주지 않는다" classname="com.stockscreener.indicator.FinancialVisibilityTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:23:30.879+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.FinancialVisibilityTest]: FinancialVisibilityTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:30.880+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.FinancialVisibilityTest
+2026-10-06T19:23:30.880+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.FinancialVisibilityTest]: FinancialVisibilityTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:30.880+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.FinancialVisibilityTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

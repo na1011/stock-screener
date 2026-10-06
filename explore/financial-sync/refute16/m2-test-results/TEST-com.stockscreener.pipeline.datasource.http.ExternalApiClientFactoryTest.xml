@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.http.ExternalApiClientFactoryTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.735Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="인코딩된 키를 디코딩한다 — 빌더가 다시 인코딩해야 원래 값이 된다" classname="com.stockscreener.pipeline.datasource.http.ExternalApiClientFactoryTest" time="0.0"/>
+  <testcase name="빈 키는 빈 문자열이다 — 키 없이도 기동해야 하므로 예외를 던지지 않는다" classname="com.stockscreener.pipeline.datasource.http.ExternalApiClientFactoryTest" time="0.0"/>
+  <testcase name="실제 발급 키 형태를 디코딩한다" classname="com.stockscreener.pipeline.datasource.http.ExternalApiClientFactoryTest" time="0.0"/>
+  <testcase name="이미 디코딩된 키는 그대로 둔다 — 어느 형태로 넣어도 안전해야 한다" classname="com.stockscreener.pipeline.datasource.http.ExternalApiClientFactoryTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

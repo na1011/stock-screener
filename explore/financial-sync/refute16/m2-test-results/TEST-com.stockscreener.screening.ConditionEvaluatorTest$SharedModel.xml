@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="하나의 조건 집합이 두 판정 방식을 모두 지탱한다" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:17.987Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="SCORING — 같은 조건 집합으로 가중 점수를 낸다" classname="com.stockscreener.screening.ConditionEvaluatorTest$SharedModel" time="0.0"/>
+  <testcase name="FILTER — 모든 조건을 만족해야 통과한다" classname="com.stockscreener.screening.ConditionEvaluatorTest$SharedModel" time="0.0"/>
+  <testcase name="SCORING은 일부만 만족해도 결과에 남는다 — 순위를 매기는 것이 목적이기 때문" classname="com.stockscreener.screening.ConditionEvaluatorTest$SharedModel" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

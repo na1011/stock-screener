@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.Beta104wCalculatorTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.367Z" hostname="MacBook-Pro.local" time="0.007">
+  <properties/>
+  <testcase name="104주를 채우지 못하면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.Beta104wCalculatorTest" time="0.001"/>
+  <testcase name="지수와 같은 비율로 움직이면 베타가 1이다" classname="com.stockscreener.indicator.calculator.Beta104wCalculatorTest" time="0.002"/>
+  <testcase name="지수와 반대로 움직이면 베타가 음수다" classname="com.stockscreener.indicator.calculator.Beta104wCalculatorTest" time="0.002"/>
+  <testcase name="지수가 없으면 한 행도 내지 않는다" classname="com.stockscreener.indicator.calculator.Beta104wCalculatorTest" time="0.0"/>
+  <testcase name="지수의 두 배로 움직이면 베타가 2다" classname="com.stockscreener.indicator.calculator.Beta104wCalculatorTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

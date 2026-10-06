@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.AdminJobLauncherTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:39.364Z" hostname="MacBook-Pro.local" time="1.03">
+  <properties/>
+  <testcase name="도는 중인 잡은 새로 띄우지 않는다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.217"/>
+  <testcase name="IMPORTANT — 잡이 터져도 이름이 풀리고, 예외는 스레드 경계에서 로그로 남는다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.223"/>
+  <testcase name="부분 재실행은 실패 단위가 종목인 잡만 지원한다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.0"/>
+  <testcase name="날짜를 비운 일일 갱신·유니버스 갱신의 기본 대상일이 주말이 아니다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.111"/>
+  <testcase name="리밸런싱의 콜 어림값이 그 꼬리가 부르는 잡보다 작지 않다 — 화면은 이 수로 승인을 받는다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.0"/>
+  <testcase name="기동은 잡을 기다리지 않는다 — 850종목 수집이 HTTP 응답을 붙잡으면 안 된다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.0"/>
+  <testcase name="다른 잡은 동시에 돌 수 있다 — 가드는 잡 이름 단위다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.107"/>
+  <testcase name="잡이 끝나면 다시 띄울 수 있다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.105"/>
+  <testcase name="IMPORTANT — 초기 적재는 목록에 없다. 버튼 하나가 DART 일일 한도의 절반을 태운다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.001"/>
+  <testcase name="파라미터를 비우면 잡마다 정한 기본값으로 돈다" classname="com.stockscreener.pipeline.batch.AdminJobLauncherTest" time="0.105"/>
+  <system-out><![CDATA[2026-10-06T19:23:39.629+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.AdminJobLauncher      : 이미 도는 중이라 새로 띄우지 않는다. jobName=daily-update
+2026-10-06T19:23:39.630+09:00  INFO 33006 --- [stock-screener] [cTaskExecutor-1] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 끝났다. jobName=daily-update status=SUCCESS
+2026-10-06T19:23:39.740+09:00 ERROR 33006 --- [stock-screener] [cTaskExecutor-1] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 기록 바깥에서 터졌다. jobName=universe-rebalance — 실행 행은 마감되지만 이 예외 자체는 여기 말고 어디에도 없다.
+
+java.lang.IllegalStateException: 터짐
+	at com.stockscreener.pipeline.batch.UniverseRebalanceJob.run(UniverseRebalanceJob.java:72) ~[main/:na]
+	at com.stockscreener.pipeline.batch.AdminJobLauncher.lambda$new$1(AdminJobLauncher.java:99) ~[main/:na]
+	at com.stockscreener.pipeline.batch.AdminJobLauncher.lambda$launch$8(AdminJobLauncher.java:249) ~[main/:na]
+	at com.stockscreener.pipeline.batch.AdminJobLauncher.lambda$submit$10(AdminJobLauncher.java:290) ~[main/:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
+
+2026-10-06T19:23:39.963+09:00  INFO 33006 --- [stock-screener] [cTaskExecutor-2] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 끝났다. jobName=universe-rebalance status=SUCCESS
+2026-10-06T19:23:39.963+09:00  INFO 33006 --- [stock-screener] [cTaskExecutor-1] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 끝났다. jobName=daily-update status=SUCCESS
+2026-10-06T19:23:40.075+09:00  INFO 33006 --- [stock-screener] [cTaskExecutor-1] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 끝났다. jobName=daily-update status=SUCCESS
+2026-10-06T19:23:40.182+09:00  INFO 33006 --- [stock-screener] [cTaskExecutor-1] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 끝났다. jobName=daily-update status=SUCCESS
+2026-10-06T19:23:40.182+09:00  INFO 33006 --- [stock-screener] [cTaskExecutor-2] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 끝났다. jobName=universe-rebalance status=SUCCESS
+2026-10-06T19:23:40.183+09:00  INFO 33006 --- [stock-screener] [cTaskExecutor-1] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 끝났다. jobName=universe-rebalance status=SUCCESS
+2026-10-06T19:23:40.288+09:00  INFO 33006 --- [stock-screener] [cTaskExecutor-2] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 끝났다. jobName=universe-rebalance status=SUCCESS
+2026-10-06T19:23:40.290+09:00  INFO 33006 --- [stock-screener] [cTaskExecutor-1] c.s.pipeline.batch.AdminJobLauncher      : 관리자가 띄운 잡이 끝났다. jobName=indicator-backfill status=SUCCESS
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

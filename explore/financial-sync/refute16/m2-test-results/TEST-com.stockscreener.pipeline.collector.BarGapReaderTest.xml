@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.BarGapReaderTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:07.984Z" hostname="MacBook-Pro.local" time="0.036">
+  <properties/>
+  <testcase name="--from은 판정 구간을 더 좁힐 뿐 넓히지 않는다" classname="com.stockscreener.pipeline.collector.BarGapReaderTest" time="0.007"/>
+  <testcase name="국내 종목은 달력에 원리적으로 안 걸린다 — listing_exchange가 NULL이라 조인이 없다" classname="com.stockscreener.pipeline.collector.BarGapReaderTest" time="0.004"/>
+  <testcase name="비세션인데 봉이 있으면 잡는다 — 달력이 세션을 빠뜨린 유일한 신호다" classname="com.stockscreener.pipeline.collector.BarGapReaderTest" time="0.005"/>
+  <testcase name="세션인데 봉이 없으면 잡고, 휴장은 안 잡는다" classname="com.stockscreener.pipeline.collector.BarGapReaderTest" time="0.004"/>
+  <testcase name="마지막 봉 이후의 세션은 결측이 아니다 — 안 좁히면 첫 실행이 오탐만 낸다" classname="com.stockscreener.pipeline.collector.BarGapReaderTest" time="0.005"/>
+  <testcase name="첫 봉 이전의 세션도 결측이 아니다 — 상장 전을 결측으로 부르지 않는다" classname="com.stockscreener.pipeline.collector.BarGapReaderTest" time="0.004"/>
+  <testcase name="봉이 한 행도 없는 종목은 결측이 아니라 미적재이고, 그래도 수로 신고한다" classname="com.stockscreener.pipeline.collector.BarGapReaderTest" time="0.003"/>
+  <system-out><![CDATA[2026-10-06T19:24:07.985+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.BarGapReaderTest]: BarGapReaderTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:07.986+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.BarGapReaderTest
+2026-10-06T19:24:07.986+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.BarGapReaderTest]: BarGapReaderTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:07.986+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.BarGapReaderTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

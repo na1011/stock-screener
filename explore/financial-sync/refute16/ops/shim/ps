@@ -1,0 +1,9 @@
+#!/bin/bash
+# 가짜 ps — 더미 PID(FAKE_APP_PID)에 한해: command=면 앱 명령줄(살아 있을 때만), etime=면 FAKE_JVM_START 기동으로 계산한 경과. 그 밖은 진짜 ps.
+args="$*"
+if [[ -n "${FAKE_APP_PID:-}" && "$args" == *"-p $FAKE_APP_PID"* ]]; then
+  if ! /bin/ps -p "$FAKE_APP_PID" -o pid= >/dev/null 2>&1; then exit 1; fi
+  if [[ "$args" == *"command="* ]]; then echo "/usr/bin/java -jar /fake/app.jar"; exit 0; fi
+  if [[ "$args" == *"etime="* ]]; then now=$(date +%s); st=$(date -j -f "%Y-%m-%d %H:%M:%S" "$FAKE_JVM_START" +%s); e=$((now-st)); printf "%d-%02d:%02d:%02d\n" $((e/86400)) $((e%86400/3600)) $((e%3600/60)) $((e%60)); exit 0; fi
+fi
+exec /bin/ps "$@"

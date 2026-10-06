@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.EpsTtmCalculatorTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.381Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="순이익이 비어 있으면 0으로 대체하지 않고 계산을 포기한다" classname="com.stockscreener.indicator.calculator.EpsTtmCalculatorTest" time="0.001"/>
+  <testcase name="PER과 같은 EPS를 쓴다 — 주가 ÷ EPS가 PER과 맞아야 한다" classname="com.stockscreener.indicator.calculator.EpsTtmCalculatorTest" time="0.0"/>
+  <testcase name="분기가 4개 미만이면 계산하지 않는다 — TTM을 만들 수 없다" classname="com.stockscreener.indicator.calculator.EpsTtmCalculatorTest" time="0.0"/>
+  <testcase name="IMPORTANT — 적자여도 값을 낸다. PER의 부호 가지를 복사하면 그 종목들이 조용히 사라진다" classname="com.stockscreener.indicator.calculator.EpsTtmCalculatorTest" time="0.0"/>
+  <testcase name="TTM 순이익 ÷ 발행주식수로 계산한다" classname="com.stockscreener.indicator.calculator.EpsTtmCalculatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

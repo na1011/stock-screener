@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.IndicatorRunnerTest" tests="30" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:31.872Z" hostname="MacBook-Pro.local" time="3.927">
+  <properties/>
+  <testcase name="시세가 없으면 아무것도 저장하지 않는다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.004"/>
+  <testcase name="꼬리 걷기도 읽은 창 밖은 안 지운다 — 상한이 asOf로 묶여 있어야 한다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.185"/>
+  <testcase name="이미 저장된 행을 실제로 지운다 — 안 쓰는 것만으로는 제외가 성립하지 않는다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.198"/>
+  <testcase name="보정 못 한 기업 행위가 창 안이면 그 지표의 값을 내지 않는다 — 창 밖 지표는 그대로다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.114"/>
+  <testcase name="통화가 안 맞아 우리가 막은 것은 지운다 — 「모른다」가 아니라 「값이 없다」다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.157"/>
+  <testcase name="이력이 부족한 지표는 행을 만들지 않는다 — NULL 행 대신 부재로 표현한다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.015"/>
+  <testcase name="신주상장일이 빈 행은 효력일로 접혀 구간이 공집합이 된다 — NPE도 보정도 없다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.028"/>
+  <testcase name="기술적 지표는 수정주가로 계산한다 — 분할 구간에서 원주가를 쓰면 값이 튄다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.102"/>
+  <testcase name="경계를 걸어도 남는 값은 창 전체로 계산한 값과 같다 — 자르는 것은 저장뿐이다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.21"/>
+  <testcase name="억제로 빈 것은 이 경로가 지우지 않는다 — 억제 창 밖까지 번지면 안 된다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.107"/>
+  <testcase name="억제가 보존 창 아래로만 있으면 걷는다 — 삭제 0행인데 게이트만 막히면 안 된다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.104"/>
+  <testcase name="두 번 실행해도 행이 늘지 않는다 — 멱등해야 한다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.221"/>
+  <testcase name="재무가 없으면 재무 지표는 저장하지 않고 기술적 지표는 정상 저장한다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.153"/>
+  <testcase name="판정 전 후보(OBSERVED)도 같다 — 보정되지 않았다는 사실이 판정 여부보다 앞선다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.114"/>
+  <testcase name="마지막 산출 일자 앞의 구멍도 걷는다 — 거기 남은 행은 어느 시점 규칙의 값도 아니다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.153"/>
+  <testcase name="꼬리에 지수가 없는 날짜는 안 지운다 — 부분 결손은 DataRequirement 축이 못 가른다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.16"/>
+  <testcase name="오탐으로 판정된 사건은 억제하지 않는다 — 그런 일이 없었으므로 값이 맞다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.116"/>
+  <testcase name="시장 지수를 통째로 못 읽었으면 안 지운다 — 재무·거버넌스와 같은 판정이다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.14"/>
+  <testcase name="파생 지표는 부모의 계산을 재구현하지 않고 이미 계산된 시계열을 받는다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.142"/>
+  <testcase name="대조군 — 공시일을 넘는 봉에서 재무 지표에 계단이 생긴다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.177"/>
+  <testcase name="권리락 구간의 시가총액이 원장의 비율만큼 보정된다 — 러너가 원장을 함께 읽는다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.025"/>
+  <testcase name="재무를 한 행도 못 읽었으면 안 지운다 — 「값이 없다」와 「모른다」는 다르다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.14"/>
+  <testcase name="마지막 산출 일자 뒤에 남은 행을 지운다 — 창의 앞쪽을 아직 내면 빈-목록 분기가 안 걸린다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.149"/>
+  <testcase name="시세가 충분하면 기술적 지표를 계산해 저장한다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.139"/>
+  <testcase name="보정된 사건은 억제하지 않는다 — 계수가 이미 축척을 하나로 만들었다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.113"/>
+  <testcase name="보존 경계 이하는 저장하지 않는다 — 경계일 자신도 뺀다(purge와 같은 부등호)" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.075"/>
+  <testcase name="계산이 그만 나면 옛 행을 지운다 — UPSERT만으로는 사라진 값이 사라지지 않는다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.163"/>
+  <testcase name="대조군 — 봉 루프를 스스로 도는 계산기도 봉마다 그 시점 재무를 쓴다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.209"/>
+  <testcase name="읽은 창 밖은 안 지운다 — 과거 일자 백필이 그 뒤의 라이브 행을 건드리면 안 된다" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.138"/>
+  <testcase name="대조군 — 정정 전 봉은 그때 유효했던 판으로 계산한다(KNOWN_ON)" classname="com.stockscreener.indicator.IndicatorRunnerTest" time="0.162"/>
+  <system-out><![CDATA[2026-10-06T19:23:31.873+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.IndicatorRunnerTest]: IndicatorRunnerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:31.873+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorRunnerTest
+2026-10-06T19:23:31.873+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.IndicatorRunnerTest]: IndicatorRunnerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:31.874+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorRunnerTest
+2026-10-06T19:23:32.258+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 미보정 기업 행위로 지표를 뺐다. stockId=795597 asOf=2026-08-05 효력일=[2026-01-27] 지표=28개 삭제=960행
+2026-10-06T19:23:32.373+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 미보정 기업 행위로 지표를 뺐다. stockId=795598 asOf=2026-08-05 효력일=[2026-01-27] 지표=23개 삭제=0행
+2026-10-06T19:23:32.529+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 계산이 그만 난 지표의 옛 행을 걷었다. stockId=795599 asOf=2026-08-05 지표=1개 삭제=1행
+2026-10-06T19:23:32.997+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 미보정 기업 행위로 지표를 뺐다. stockId=795604 asOf=2026-08-05 효력일=[2026-01-27] 지표=23개 삭제=0행
+2026-10-06T19:23:33.100+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 계산이 그만 난 지표의 옛 행을 걷었다. stockId=795605 asOf=2026-08-05 지표=1개 삭제=1행
+2026-10-06T19:23:33.100+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 미보정 기업 행위로 지표를 뺐다. stockId=795605 asOf=2026-08-05 효력일=[2025-07-02] 지표=32개 삭제=0행
+2026-10-06T19:23:33.589+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 미보정 기업 행위로 지표를 뺐다. stockId=795608 asOf=2026-08-05 효력일=[2026-01-27] 지표=23개 삭제=0행
+2026-10-06T19:23:33.744+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 계산이 그만 난 지표의 옛 행을 걷었다. stockId=795609 asOf=2026-08-05 지표=1개 삭제=1행
+2026-10-06T19:23:34.796+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 계산이 그만 난 지표의 옛 행을 걷었다. stockId=795617 asOf=2026-08-05 지표=1개 삭제=1행
+2026-10-06T19:23:35.287+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRunner            : 계산이 그만 난 지표의 옛 행을 걷었다. stockId=795621 asOf=2026-08-05 지표=1개 삭제=1행
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="할인율 — (중앙값 − 현재) ÷ 중앙값" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.485Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="중앙값 20, 현재 15면 25% 싸다" classname="com.stockscreener.indicator.calculator.ValuationDiscountIndicatorsTest$Discount" time="0.0"/>
+  <testcase name="중앙값이 0 이하면 계산하지 않는다 — 나눗셈이 뜻을 잃는다" classname="com.stockscreener.indicator.calculator.ValuationDiscountIndicatorsTest$Discount" time="0.0"/>
+  <testcase name="현재가 중앙값보다 높으면 음수 — 자기 과거보다 비싸다" classname="com.stockscreener.indicator.calculator.ValuationDiscountIndicatorsTest$Discount" time="0.0"/>
+  <testcase name="부모가 있는 봉에만 낸다 — 없는 봉을 채우면 그 값은 그 뒤의 것이다" classname="com.stockscreener.indicator.calculator.ValuationDiscountIndicatorsTest$Discount" time="0.0"/>
+  <testcase name="한쪽만 있으면 계산하지 않는다" classname="com.stockscreener.indicator.calculator.ValuationDiscountIndicatorsTest$Discount" time="0.0"/>
+  <testcase name="최신 봉에 값이 없으면 그 앞의 봉으로 거슬러 올라간다" classname="com.stockscreener.indicator.calculator.ValuationDiscountIndicatorsTest$Discount" time="0.0"/>
+  <testcase name="IMPORTANT — 봉마다 자기 배수로 낸다. 마지막 봉의 값을 펴면 과거가 미래를 본다" classname="com.stockscreener.indicator.calculator.ValuationDiscountIndicatorsTest$Discount" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

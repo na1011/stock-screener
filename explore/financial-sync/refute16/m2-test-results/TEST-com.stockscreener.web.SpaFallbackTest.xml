@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.web.SpaFallbackTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:21.445Z" hostname="MacBook-Pro.local" time="0.038">
+  <properties/>
+  <testcase name="없는 API 경로는 404다 — 폴백이 삼키지 않는다" classname="com.stockscreener.web.SpaFallbackTest" time="0.002"/>
+  <testcase name="없는 서체는 404다 — index.html을 주면 브라우저가 HTML을 서체로 파싱한다" classname="com.stockscreener.web.SpaFallbackTest" time="0.001"/>
+  <testcase name="[1] path = &quot;/login&quot;" classname="com.stockscreener.web.SpaFallbackTest" time="0.002"/>
+  <testcase name="[2] path = &quot;/screens&quot;" classname="com.stockscreener.web.SpaFallbackTest" time="0.001"/>
+  <testcase name="[3] path = &quot;/stocks/42&quot;" classname="com.stockscreener.web.SpaFallbackTest" time="0.001"/>
+  <testcase name="[4] path = &quot;/stocks/42/무언가&quot;" classname="com.stockscreener.web.SpaFallbackTest" time="0.001"/>
+  <testcase name="루트는 Boot의 welcome page가 index.html로 forward한다" classname="com.stockscreener.web.SpaFallbackTest" time="0.001"/>
+  <testcase name="본문 서체는 익명에게도 나가고 영구 캐시가 붙는다" classname="com.stockscreener.web.SpaFallbackTest" time="0.013"/>
+  <testcase name="없는 정적 자산은 404다 — index.html을 주면 브라우저가 HTML을 JS로 실행한다" classname="com.stockscreener.web.SpaFallbackTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:24:21.446+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.web.SpaFallbackTest]: SpaFallbackTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:21.456+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.web.SpaFallbackTest
+2026-10-06T19:24:21.456+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.web.SpaFallbackTest]: SpaFallbackTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:21.456+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.web.SpaFallbackTest
+2026-10-06T19:24:21.458+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:21.458+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:21.458+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:21.461+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:21.461+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:21.461+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:21.463+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:21.463+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:21.463+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:21.465+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:21.465+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:21.465+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:21.466+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:21.466+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:21.467+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:21.468+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:21.468+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:21.468+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:21.469+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:21.469+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:21.469+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:21.470+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:21.470+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:21.470+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:21.482+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:21.482+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:21.483+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

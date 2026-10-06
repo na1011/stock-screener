@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.IndicatorInvalidationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:31.814Z" hostname="MacBook-Pro.local" time="0.009">
+  <properties/>
+  <testcase name="기준일 이후의 지표를 지운다 — 그날 하루가 아니라 이후 전체다" classname="com.stockscreener.indicator.IndicatorInvalidationTest" time="0.002"/>
+  <testcase name="Phase 3 구현이 No-Op을 대체한다 — 실제로 지우는 구현이 등록되어야 한다" classname="com.stockscreener.indicator.IndicatorInvalidationTest" time="0.001"/>
+  <testcase name="다른 종목의 지표는 건드리지 않는다" classname="com.stockscreener.indicator.IndicatorInvalidationTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:23:31.815+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.IndicatorInvalidationTest]: IndicatorInvalidationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:31.815+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorInvalidationTest
+2026-10-06T19:23:31.815+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.IndicatorInvalidationTest]: IndicatorInvalidationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:31.815+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorInvalidationTest
+2026-10-06T19:23:31.819+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.StoredIndicatorInvalidationPort    : 지표를 무효화했다. stockId=795588 fromDate=2026-08-03 reason=PRICE_ADJUSTED 삭제=3행
+2026-10-06T19:23:31.823+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.StoredIndicatorInvalidationPort    : 지표를 무효화했다. stockId=795590 fromDate=2026-07-26 reason=PRICE_ADJUSTED 삭제=5행
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

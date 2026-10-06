@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.notification.MailAlertChannelTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:37.822Z" hostname="MacBook-Pro.local" time="0.003">
+  <properties/>
+  <testcase name="운영자 알림은 운영자 주소로 간다" classname="com.stockscreener.notification.MailAlertChannelTest" time="0.002"/>
+  <testcase name="사용자 알림은 그 사용자의 주소로 간다" classname="com.stockscreener.notification.MailAlertChannelTest" time="0.0"/>
+  <testcase name="운영자 주소를 비우면 발신 주소로 대체한다" classname="com.stockscreener.notification.MailAlertChannelTest" time="0.0"/>
+  <testcase name="사용자 알림은 심각도 임계를 받지 않는다 — 걸면 INFO인 워치리스트 알림이 통째로 사라진다" classname="com.stockscreener.notification.MailAlertChannelTest" time="0.001"/>
+  <testcase name="발신 주소가 없거나 JavaMailSender가 없으면 비활성이다" classname="com.stockscreener.notification.MailAlertChannelTest" time="0.0"/>
+  <testcase name="수신자를 못 찾으면 던진다 — 조용히 건너뛰면 알림이 흔적 없이 사라진다" classname="com.stockscreener.notification.MailAlertChannelTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

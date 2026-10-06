@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="OBV 추세 강도" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.462Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="계속 내리면 분산이 뚜렷하다 — 부호가 뒤집힌다" classname="com.stockscreener.indicator.calculator.OscillatorIndicatorsTest$ObvT" time="0.0"/>
+  <testcase name="거래량을 보정해 쓴다 — 분할을 대량 매집으로 읽지 않는다" classname="com.stockscreener.indicator.calculator.OscillatorIndicatorsTest$ObvT" time="0.001"/>
+  <testcase name="계속 오르면 매집이 통계적으로 뚜렷하다" classname="com.stockscreener.indicator.calculator.OscillatorIndicatorsTest$ObvT" time="0.0"/>
+  <testcase name="봉이 14개 미만이면 값이 없다" classname="com.stockscreener.indicator.calculator.OscillatorIndicatorsTest$ObvT" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

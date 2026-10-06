@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="추세 강도(ADX)" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.487Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="완전한 단조 추세는 100이다 — DM·TR·DI·DX가 전부 맞아야 나온다" classname="com.stockscreener.indicator.calculator.VolumeAndTrendOscillatorsTest$Adx" time="0.0"/>
+  <testcase name="값이 언제나 0~100 안에 있다" classname="com.stockscreener.indicator.calculator.VolumeAndTrendOscillatorsTest$Adx" time="0.001"/>
+  <testcase name="한 방향으로만 가면 강도가 높고, 오르내리면 낮다" classname="com.stockscreener.indicator.calculator.VolumeAndTrendOscillatorsTest$Adx" time="0.0"/>
+  <testcase name="와일더 평활이 식 그대로다 — SMA로 바꾸면 여기서 깨진다" classname="com.stockscreener.indicator.calculator.VolumeAndTrendOscillatorsTest$Adx" time="0.0"/>
+  <testcase name="방향을 말하지 않는다 — 하락 추세도 강도가 높다" classname="com.stockscreener.indicator.calculator.VolumeAndTrendOscillatorsTest$Adx" time="0.001"/>
+  <testcase name="첫 값이 28번째 봉에서 선다 — 평활이 두 단계다" classname="com.stockscreener.indicator.calculator.VolumeAndTrendOscillatorsTest$Adx" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

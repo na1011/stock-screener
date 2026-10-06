@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.SecEdgarControllingQ4GateTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:16.046Z" hostname="MacBook-Pro.local" time="0.048">
+  <properties/>
+  <testcase name="비지배 회사(ACM형): 꺼지면 Q4 지배주주 = Q4 연결, 켜면 지배주주끼리 뺀다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarControllingQ4GateTest" time="0.017"/>
+  <testcase name="분기 폴백 섞인 해(ARES형): Q4가 음수여도 FY 지배주주와 네 분기 합이 맞는다 — 가드를 두지 않는다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarControllingQ4GateTest" time="0.003"/>
+  <testcase name="비지배가 없는 회사: 켜도 바뀌지 않는다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarControllingQ4GateTest" time="0.006"/>
+  <testcase name="설정을 끄면 기존 진입점과 출력이 같다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarControllingQ4GateTest" time="0.019"/>
+  <testcase name="연결이 비는 회사(CCL형): 꺼지면 Q4 지배주주도 비고, 켜면 채워진다" classname="com.stockscreener.pipeline.datasource.us.SecEdgarControllingQ4GateTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

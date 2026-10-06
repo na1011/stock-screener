@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.SeriesMathTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.469Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="길이가 13이 아니어도 같은 규칙이 선다 — 일봉 OBV가 이것에 기댄다" classname="com.stockscreener.indicator.calculator.SeriesMathTest" time="0.0"/>
+  <testcase name="13점 기울기가 손으로 푼 값과 같다 — 일반화가 옛 상수를 재현한다" classname="com.stockscreener.indicator.calculator.SeriesMathTest" time="0.0"/>
+  <testcase name="짝수 개의 중앙값은 가운데 둘의 평균이다 — Pine array.median" classname="com.stockscreener.indicator.calculator.SeriesMathTest" time="0.0"/>
+  <testcase name="부호는 0을 0으로 둔다 — 그때 OBV는 그대로다" classname="com.stockscreener.indicator.calculator.SeriesMathTest" time="0.0"/>
+  <testcase name="t의 부호가 기울기를 따르고 잡음이 크면 임계 아래로 떨어진다" classname="com.stockscreener.indicator.calculator.SeriesMathTest" time="0.0"/>
+  <testcase name="점이 셋 미만이면 던진다 — 조용히 앞부분만 읽지 않는다" classname="com.stockscreener.indicator.calculator.SeriesMathTest" time="0.0"/>
+  <testcase name="완전 직선의 t는 0이다 — 잔차가 없으면 SE가 0이고 원본이 t를 0으로 둔다" classname="com.stockscreener.indicator.calculator.SeriesMathTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

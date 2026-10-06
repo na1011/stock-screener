@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.TurnoverRatioFallbackTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.481Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="봉에 상장주식수가 없으면 재무에서 폴백한다 — 미국이 이 갈래이고 그전엔 0행이었다" classname="com.stockscreener.indicator.calculator.TurnoverRatioFallbackTest" time="0.0"/>
+  <testcase name="봉에도 재무에도 주식수가 없으면 값을 안 낸다 — 0으로 두면 회전율이 무한이 된다" classname="com.stockscreener.indicator.calculator.TurnoverRatioFallbackTest" time="0.0"/>
+  <testcase name="봉에 상장주식수가 있으면 그것이 이긴다 — 국내 동작은 안 바뀐다" classname="com.stockscreener.indicator.calculator.TurnoverRatioFallbackTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

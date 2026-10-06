@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.GrossProfitIndicatorsTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.391Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="원가가 매출을 넘으면 음수다 — 부호를 거르지 않는다" classname="com.stockscreener.indicator.calculator.GrossProfitIndicatorsTest" time="0.0"/>
+  <testcase name="총자산이 0 이하면 총이익성만 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.GrossProfitIndicatorsTest" time="0.0"/>
+  <testcase name="매출이 0 이하면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.GrossProfitIndicatorsTest" time="0.0"/>
+  <testcase name="매출원가가 없어도 신고 매출총이익이 있으면 값이 나온다" classname="com.stockscreener.indicator.calculator.GrossProfitIndicatorsTest" time="0.0"/>
+  <testcase name="회사가 신고한 매출총이익이 유도값을 이긴다" classname="com.stockscreener.indicator.calculator.GrossProfitIndicatorsTest" time="0.0"/>
+  <testcase name="매출원가가 없으면 값을 내지 않는다 — 0으로 읽으면 마진이 100%가 된다" classname="com.stockscreener.indicator.calculator.GrossProfitIndicatorsTest" time="0.0"/>
+  <testcase name="매출총이익률은 매출로, 총이익성은 총자산으로 나눈다" classname="com.stockscreener.indicator.calculator.GrossProfitIndicatorsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

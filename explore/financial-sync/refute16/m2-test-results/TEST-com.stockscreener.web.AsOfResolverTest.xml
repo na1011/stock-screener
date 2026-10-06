@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.web.AsOfResolverTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:21.444Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="IMPORTANT — 지표가 하나도 없으면 503이고 재시도 대상이다" classname="com.stockscreener.web.AsOfResolverTest" time="0.0"/>
+  <testcase name="일자를 비우면 최신 지표 일자로 정해진다" classname="com.stockscreener.web.AsOfResolverTest" time="0.001"/>
+  <testcase name="휴장일은 그 이하 가장 가까운 거래일로 해석된다" classname="com.stockscreener.web.AsOfResolverTest" time="0.0"/>
+  <testcase name="IMPORTANT — 보존 구간 밖은 빈 결과가 아니라 400이고, 조회 가능한 구간을 알려준다" classname="com.stockscreener.web.AsOfResolverTest" time="0.0"/>
+  <testcase name="IMPORTANT — 배치가 밀려 오늘 지표가 없어도 거절하지 않고 최신으로 내린다" classname="com.stockscreener.web.AsOfResolverTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

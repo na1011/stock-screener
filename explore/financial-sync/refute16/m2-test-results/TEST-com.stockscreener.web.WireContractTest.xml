@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.web.WireContractTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:21.483Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="problem+json의 type URN이 프론트의 분기 대상과 같다" classname="com.stockscreener.web.WireContractTest" time="0.0"/>
+  <testcase name="연산자 목록은 픽스처에 넣지 않는다 — 정본이 서버 응답이다" classname="com.stockscreener.web.WireContractTest" time="0.0"/>
+  <testcase name="프론트가 나열하는 enum이 서버와 같은 값 집합이다" classname="com.stockscreener.web.WireContractTest" time="0.0"/>
+  <testcase name="IMPORTANT — 보존 구간 오류의 추가 속성 이름이 고정되어 있다" classname="com.stockscreener.web.WireContractTest" time="0.001"/>
+  <testcase name="프론트가 거울로 든 상수가 서버 값과 같다" classname="com.stockscreener.web.WireContractTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="이평선 정배열" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.481Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="200일선이 없는 날짜는 값을 내지 않는다 — 0으로 메우면 늘 정배열이 된다" classname="com.stockscreener.indicator.calculator.TrendSignalIndicatorsTest$MaAlign" time="0.0"/>
+  <testcase name="이웃 쌍만 센다 — 건너뛴 쌍까지 세면 같은 사실을 두 번 센다" classname="com.stockscreener.indicator.calculator.TrendSignalIndicatorsTest$MaAlign" time="0.0"/>
+  <testcase name="짧은 것이 전부 위면 3, 전부 아래면 0이다" classname="com.stockscreener.indicator.calculator.TrendSignalIndicatorsTest$MaAlign" time="0.0"/>
+  <testcase name="중간이 어긋난 상태가 2로 구분된다 — 이진으로 접으면 사라지는 정보다" classname="com.stockscreener.indicator.calculator.TrendSignalIndicatorsTest$MaAlign" time="0.0"/>
+  <testcase name="같으면 성립하지 않는다 — 부등호는 strict다" classname="com.stockscreener.indicator.calculator.TrendSignalIndicatorsTest$MaAlign" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

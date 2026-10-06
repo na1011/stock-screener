@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" tests="22" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:09.998Z" hostname="MacBook-Pro.local" time="0.004">
+  <properties/>
+  <testcase name="가격계수라 기각한다: &quot;1.9730000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="가격계수라 기각한다: &quot;1.2890000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="가격계수라 기각한다: &quot;0.8824000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="가격계수라 기각한다: &quot;1.1950000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.001"/>
+  <testcase name="가격계수라 기각한다: &quot;0.4725000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="가격계수라 기각한다: &quot;0.9700000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;0.0050000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;0.0083333333&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;0.0100000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;0.0250000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.001"/>
+  <testcase name="선언된 주식 교환이다: &quot;0.0500000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;0.0833333333&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;0.1250000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;0.3333333333&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;1.5000000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;2.0000000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;3.0000000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;10.0000000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;15.0000000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;38.0000000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="선언된 주식 교환이다: &quot;50.0000000000&quot;" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <testcase name="[단위] 임계가 빈 구간에 앉아 있다 — 3~96 어디를 골라도 답이 같다" classname="com.stockscreener.pipeline.collector.ShareBasisDeriverTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

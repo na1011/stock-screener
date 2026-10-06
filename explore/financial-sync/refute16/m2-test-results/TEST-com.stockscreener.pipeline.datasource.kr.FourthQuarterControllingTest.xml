@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.kr.FourthQuarterControllingTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.108Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="사업보고서가 없으면 유도하지 않는다" classname="com.stockscreener.pipeline.datasource.kr.FourthQuarterControllingTest" time="0.001"/>
+  <testcase name="다른 회계연도의 행은 섞지 않는다" classname="com.stockscreener.pipeline.datasource.kr.FourthQuarterControllingTest" time="0.0"/>
+  <testcase name="한 분기의 지배주주 값이 비면 유도하지 않는다 — null은 0이 아니다" classname="com.stockscreener.pipeline.datasource.kr.FourthQuarterControllingTest" time="0.0"/>
+  <testcase name="FY − (Q1+Q2+Q3)로 유도한다 — 주요계정의 「FY − 3분기 누적」과 같은 값이다" classname="com.stockscreener.pipeline.datasource.kr.FourthQuarterControllingTest" time="0.0"/>
+  <testcase name="회계연도 안에서 통화가 갈리면 유도하지 않는다 — 뺄셈이 통화를 건너뛴다" classname="com.stockscreener.pipeline.datasource.kr.FourthQuarterControllingTest" time="0.0"/>
+  <testcase name="한 분기만 통화가 갈려도 유도하지 않는다 — Q3만 보면 안 갈린 것으로 읽힌다" classname="com.stockscreener.pipeline.datasource.kr.FourthQuarterControllingTest" time="0.0"/>
+  <testcase name="분기가 셋에 못 미치면 유도하지 않는다 — 빠진 것을 0으로 보면 Q4가 부푼다" classname="com.stockscreener.pipeline.datasource.kr.FourthQuarterControllingTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

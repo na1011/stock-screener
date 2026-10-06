@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.FinancialLoadWindowTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:57.501Z" hostname="MacBook-Pro.local" time="0.003">
+  <properties/>
+  <testcase name="시세_적재_기본_창이_지표가_읽는_봉수보다_길다()" classname="com.stockscreener.pipeline.batch.FinancialLoadWindowTest" time="0.001"/>
+  <testcase name="적재_기본_창이_지표가_읽는_창보다_넓다()" classname="com.stockscreener.pipeline.batch.FinancialLoadWindowTest" time="0.0"/>
+  <testcase name="창이_좁으면_경고하고_넓으면_조용하다()" classname="com.stockscreener.pipeline.batch.FinancialLoadWindowTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:23:57.501+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.FinancialLoadWindowTest]: FinancialLoadWindowTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:57.501+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.FinancialLoadWindowTest
+2026-10-06T19:23:57.502+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.FinancialLoadWindowTest]: FinancialLoadWindowTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:57.502+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.FinancialLoadWindowTest
+2026-10-06T19:23:57.504+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=test 적재=6년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

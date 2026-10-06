@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.PerCalculatorTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.464Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="순이익이 비어 있으면 0으로 대체하지 않고 계산을 포기한다" classname="com.stockscreener.indicator.calculator.PerCalculatorTest" time="0.0"/>
+  <testcase name="주가 ÷ TTM 주당순이익으로 계산한다" classname="com.stockscreener.indicator.calculator.PerCalculatorTest" time="0.001"/>
+  <testcase name="시세에 주식수가 없으면 재무로 폴백한다 — 소스마다 주는 쪽이 다르다" classname="com.stockscreener.indicator.calculator.PerCalculatorTest" time="0.0"/>
+  <testcase name="분기가 4개 미만이면 계산하지 않는다 — TTM을 만들 수 없다" classname="com.stockscreener.indicator.calculator.PerCalculatorTest" time="0.0"/>
+  <testcase name="시세의 상장주식수를 재무보다 우선한다 — 날짜별 값이라 증자·분할이 바로 반영된다" classname="com.stockscreener.indicator.calculator.PerCalculatorTest" time="0.0"/>
+  <testcase name="IMPORTANT — 원주가(close)를 쓴다. 수정주가는 시점의 발행주식수와 짝이 맞지 않는다" classname="com.stockscreener.indicator.calculator.PerCalculatorTest" time="0.0"/>
+  <testcase name="적자면 계산하지 않는다 — 음수 PER은 '싼 종목' 조건에 적자기업을 최상위로 올린다" classname="com.stockscreener.indicator.calculator.PerCalculatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

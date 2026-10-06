@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.MarketIndexCollectorTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:09.320Z" hostname="MacBook-Pro.local" time="0.016">
+  <properties/>
+  <testcase name="받은 봉을 적재하고, 같은 구간을 다시 받으면 0행이다" classname="com.stockscreener.pipeline.collector.MarketIndexCollectorTest" time="0.004"/>
+  <testcase name="결손 판정은 쓴 행 수가 아니라 대상일 행 수로 한다 — 창이 과거를 채워도 답이 같다" classname="com.stockscreener.pipeline.collector.MarketIndexCollectorTest" time="0.002"/>
+  <testcase name="CHECK가 모르는 지수 코드를 막는다 — 리더와 갈리면 0행이 '지수 결손'으로 접힌다" classname="com.stockscreener.pipeline.collector.MarketIndexCollectorTest" time="0.002"/>
+  <testcase name="종가가 0 이하인 봉은 버린다 — 저장되면 26주 수익률의 분모가 되어 조용히 0%가 된다" classname="com.stockscreener.pipeline.collector.MarketIndexCollectorTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:24:09.320+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.MarketIndexCollectorTest]: MarketIndexCollectorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.323+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.MarketIndexCollectorTest
+2026-10-06T19:24:09.323+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.MarketIndexCollectorTest]: MarketIndexCollectorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.324+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.MarketIndexCollectorTest
+2026-10-06T19:24:09.327+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.MarketIndexCollector     : 지수를 적재했다. index=KOSPI 2026-08-10~2026-08-11 수신=2봉 반영=2행
+2026-10-06T19:24:09.328+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.MarketIndexCollector     : 지수를 적재했다. index=KOSPI 2026-08-10~2026-08-11 수신=2봉 반영=0행
+2026-10-06T19:24:09.330+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.MarketIndexCollector     : 지수를 적재했다. index=KOSPI 2026-08-10~2026-08-11 수신=1봉 반영=1행
+2026-10-06T19:24:09.335+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.collector.MarketIndexCollector     : 지수 봉 2개 중 1개가 정합성 위반이라 버렸다. index=KOSDAQ 2026-08-10~2026-08-11
+2026-10-06T19:24:09.335+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.MarketIndexCollector     : 지수를 적재했다. index=KOSDAQ 2026-08-10~2026-08-11 수신=1봉 반영=1행
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

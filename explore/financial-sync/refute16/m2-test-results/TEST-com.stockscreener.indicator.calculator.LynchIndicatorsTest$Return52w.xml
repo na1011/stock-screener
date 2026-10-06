@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="52주 수익률" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.393Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="봉이 252개 이하면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$Return52w" time="0.0"/>
+  <testcase name="IMPORTANT — 수정종가를 쓴다. 원주가를 쓰면 5:1 분할이 −80%가 된다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$Return52w" time="0.0"/>
+  <testcase name="지수가 없어도 값이 난다 — 초과 수익률과 재는 대상이 다르다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$Return52w" time="0.0"/>
+  <testcase name="252거래일 전 대비 두 배면 100%다" classname="com.stockscreener.indicator.calculator.LynchIndicatorsTest$Return52w" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

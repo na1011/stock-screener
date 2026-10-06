@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.stock.web.ReadApiTest" tests="27" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:19.884Z" hostname="MacBook-Pro.local" time="0.609">
+  <properties/>
+  <testcase name="이름 안에 우연히 adr/ads가 든 것은 세지 않는다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.04"/>
+  <testcase name="운영자의 판정 기록(note)은 사용자에게 나가지 않는다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.029"/>
+  <testcase name="IMPORTANT — 적자로 PER이 없으면 카드를 지우지 않고 사유와 함께 남긴다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.03"/>
+  <testcase name="종목 상세가 메타·시세·지표를 준다. 거래대금이 없어도 200이다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.028"/>
+  <testcase name="상세 응답에 지지·저항이 없다 — 다른 엔드포인트다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.023"/>
+  <testcase name="없는 종목은 404다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.018"/>
+  <testcase name="IMPORTANT — 한계 표시가 페이로드의 필수 필드다. 프론트가 빠뜨릴 수 없다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.021"/>
+  <testcase name="없는 경로는 404다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.019"/>
+  <testcase name="IMPORTANT — 4분기가 유도값임을 응답이 말한다. 없으면 공시된 실적으로 읽힌다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.023"/>
+  <testcase name="사유를 말할 수 없는 지표는 그대로 빠진다 — 빈 카드를 깔지 않는다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.027"/>
+  <testcase name="ADS를 표방하는 편입 종목을 센다 — 「시총 상위 N」이 사실이 아닐 수 있다는 신호다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.018"/>
+  <testcase name="편입 종목이 없는 유니버스는 선택지에 나오지 않는다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.019"/>
+  <testcase name="IMPORTANT — 백분위의 유리한 방향을 서버가 계산해서 준다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.021"/>
+  <testcase name="전년 동기와 비교한다 — 직전 분기와 비교하면 계절성 업종에서 뜻이 없다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.019"/>
+  <testcase name="연산자 목록을 함께 준다 — 프론트가 한글 라벨을 복제하지 않게 한다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.02"/>
+  <testcase name="보정 못 한 기업 행위 자리가 항상 실린다 — 프론트가 문구를 스스로 들지 못한다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.024"/>
+  <testcase name="잘못된 JSON은 problem+json으로 400이고 스택트레이스를 담지 않는다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.019"/>
+  <testcase name="값이 있으면 사유를 붙이지 않는다 — 사유는 부재의 설명이지 값의 주석이 아니다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.021"/>
+  <testcase name="미보정 기업 행위를 지나면 등락을 내지 않는다 — 계수가 없으면 수정종가가 원주가와 같다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.021"/>
+  <testcase name="보험·금융서비스의 Altman 두 지표 부재는 결손이 아니라 설계라고 말한다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.021"/>
+  <testcase name="IMPORTANT — 업종 표본이 모자라면 그 사실이 상세에 남는다. 없으면 수집 실패와 구분되지 않는다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.018"/>
+  <testcase name="IMPORTANT — 구간에 지표 코드가 없다. 근거(터치 수)는 항상 함께 온다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.018"/>
+  <testcase name="IMPORTANT — 카탈로그에 지지·저항 코드가 없다. 조건의 좌변이 될 수 없다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.02"/>
+  <testcase name="IMPORTANT — 합성 기간(period_start/end)을 내보내지 않는다. 미래 기간이 표에 뜬다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.017"/>
+  <testcase name="실적은 상세에 실리지 않는다 — 별도 요청이라 한쪽이 실패해도 다른 쪽이 산다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.019"/>
+  <testcase name="지표의 의미와 유리한 방향이 함께 실린다 — 값만 나열하지 않는다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.017"/>
+  <testcase name="진입가·손절가에 해당하는 단일 값을 내지 않는다" classname="com.stockscreener.stock.web.ReadApiTest" time="0.014"/>
+  <system-out><![CDATA[2026-10-06T19:24:19.885+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.stock.web.ReadApiTest]: ReadApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:19.894+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.stock.web.ReadApiTest
+2026-10-06T19:24:19.894+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.stock.web.ReadApiTest]: ReadApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:19.894+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.stock.web.ReadApiTest
+2026-10-06T19:24:19.895+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:19.895+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:19.895+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:19.934+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:19.934+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:19.935+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:19.958+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:19.964+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:19.964+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:19.965+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:19.992+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:19.995+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:19.995+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:19.995+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.015+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.024+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.024+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.024+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.044+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.047+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.047+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.047+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.066+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.066+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.066+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.088+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.088+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.088+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.107+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.107+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.108+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:20.131+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.131+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.131+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.155+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.158+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.158+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.158+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.177+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.177+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.177+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.197+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.197+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.197+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.219+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.219+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.219+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.238+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.238+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.238+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.258+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.258+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.259+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:20.277+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.281+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.283+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.283+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.283+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.302+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.302+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.303+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:20.321+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.324+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.324+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.324+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.343+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.346+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.346+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.347+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:20.365+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.367+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.367+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.368+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:20.384+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.386+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.386+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.386+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.404+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.404+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.404+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.425+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.425+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.425+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.443+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.443+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.443+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:20.461+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select ive1_0.stock_id,ive1_0.indicator_code,ive1_0.value from indicator_value ive1_0 where ive1_0.trade_date=? and ive1_0.stock_id=? and ive1_0.indicator_code in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+2026-10-06T19:24:20.462+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.462+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.463+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:20.479+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:20.479+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:20.480+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

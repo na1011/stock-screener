@@ -1,0 +1,9 @@
+결정 2(단계 결과마다 무엇이 도는가) × 0부(hold/p0-run-scope · ADR-0172 · V63 scope) — 코드로 읽음(0콜)
+
+- v8 결정 2: 「국내 FR·FSR은 그 시장 단계가 성공일 때만 · 미국 FR은 미국 단계가 성공일 때만」.
+- FR은 잡 하나가 두 시장을 덮는다: FinancialRefillJob.resolveTargets(null 유니버스) = 활성 유니버스 편입 = 국내 350 + 미국 1,000(main FinancialRefillJob.java:343-360 javadoc · #515 대상 1,350).
+- 한 시장만 돌리려면 universeCode(또는 tickers)를 줘야 한다 → 0부 FinancialRefillJob.scopeOf(hold/p0 :75-79) = NARROW.
+- 0부 JobFreshnessPolicy.lastSuccessAt(hold/p0 :228-231)는 두 갈래 모두 NARROW를 안 센다 · 0부 수용 시험 PipelineSchedulerChainTest.everyScheduledCallIsFullScope(hold/p0 :404-470)는 「정기 호출은 전부 FULL — NARROW면 그 SCHEDULER 행이 시계에서 빠져 같은 잡이 매 평일 다시 돈다」를 단언.
+- 따라서 결정 2의 한 시장 FR은 (i) NARROW로 찍히면 시계가 안 가 FR이 다음 평일에 또 돌고(다른 시장 단계가 다시 실패하면 매일 · 미국 1,000 SEC 실콜 + 보충) (ii) FULL로 찍으면 안 돈 시장의 시계까지 감아 그 시장 FR(공시 없는 정정의 그물)이 26일 더 밀린다 — 어느 쪽도 계획에 없다.
+- 첫 노출: 2부 배포(≤ 10-26) 뒤 첫 정기 FR = 10-30(progress ⓪) — 이 앱의 첫 SCHEDULER FR이다.
+- 처방 후보(계획이 고른다): ① FR은 두 시장 단계가 다 성공한 날만(한 시장 실패면 FR 통째로 미룸 · 미룸 사유를 결과 행에) ② 시장별 잡 이름(financial-refill-kr/us)으로 갈라 시계·예산·관리 화면·ADR-0172 범위를 시장마다 ③ scope에 「그 시장 FULL」 값을 더해 시계를 (잡, 시장)으로 — 시험은 0부의 FULL 단언을 결정 2의 표 전 칸으로 넓힌다.

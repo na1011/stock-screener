@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:57.963Z" hostname="MacBook-Pro.local" time="0.462">
+  <properties/>
+  <testcase name="티커로 고른 종목은 소스가 없어도 조용히 안 뺀다 — 빼면 「돌렸는데 안 바뀌었다」가 된다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.012"/>
+  <testcase name="이미 저장된 행의 영업활동현금흐름을 채운다 — 이 잡의 존재 이유다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.007"/>
+  <testcase name="티커가 하나도 매칭되지 않으면 조용히 성공하지 않고 실패한다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.003"/>
+  <testcase name="종목을 지정하면 분기까지 받는다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.004"/>
+  <testcase name="전 종목 실행은 전체재무제표 소스가 없는 시장을 안 부른다 — 09-14 두 실행이 미국 1,000을 NOT_FOUND로 남겼다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.005"/>
+  <testcase name="분기는 종목을 지정하거나 --all-quarters로 명시해야 받을 수 있다 — 콜이 4배다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.002"/>
+  <testcase name="편입 중인 활성 종목만 대상으로 삼는다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.005"/>
+  <testcase name="기본은 사업보고서만 부른다 — 보고서 넷을 다 부르면 호출이 4배다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.004"/>
+  <testcase name="--all-quarters면 티커 없이도 전 종목 분기를 받는다 — 명시가 유일한 예산 통제다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.003"/>
+  <testcase name="실제 호출 수와 받지 못한 보고서 수가 실행 기록에 남는다" classname="com.stockscreener.pipeline.batch.FullStatementRefillJobTest" time="0.004"/>
+  <system-out><![CDATA[2026-10-06T19:23:57.964+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.FullStatementRefillJobTest
+2026-10-06T19:23:57.964+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.FullStatementRefillJobTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:23:57.970+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJobTest   : Starting FullStatementRefillJobTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:23:57.970+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJobTest   : The following 1 profile is active: "test"
+2026-10-06T19:23:58.078+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:23:58.090+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:23:58.118+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-15 - Starting...
+2026-10-06T19:23:58.123+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-15 - Start completed.
+2026-10-06T19:23:58.128+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:23:58.141+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.006s)
+2026-10-06T19:23:58.166+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:23:58.166+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:23:58.166+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:23:58.179+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:23:58.185+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:23:58.191+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:23:58.206+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:23:58.206+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:23:58.222+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:23:58.232+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:23:58.237+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.AlertConfig             : 알림 채널이 하나도 구성되지 않아 로그 기반 기본 구현을 쓴다. ALERT_WEBHOOK_URL·MAIL_USERNAME을 채우면 실제 통지가 나간다.
+2026-10-06T19:23:58.239+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=stock-alias/us-ko.csv 별칭=860개
+2026-10-06T19:23:58.284+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:23:58.320+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:23:58.325+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJobTest   : Started FullStatementRefillJobTest in 0.36 seconds (process running for 31.54)
+2026-10-06T19:23:58.357+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 149개
+2026-10-06T19:23:58.374+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+2026-10-06T19:23:58.380+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 시작한다. 대상 1종목, 2021~2026 회계연도, 기간 [FY, Q1, Q2, Q3], 요청 보고서 24건, 예상 호출 24~48회
+2026-10-06T19:23:58.380+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=full-statement-refill 적재=5년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:23:58.383+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.StockTaskExecutor     : 종목 수집 실패. stockId=795854 ticker=ZZFSR phase=FINANCIAL source=registry kind=NOT_FOUND message=전체재무제표 소스가 등록되지 않았다: US — 등록된 코드: [KOSPI, KOSDAQ]
+2026-10-06T19:23:58.384+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 마쳤다. 보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=24건 실제콜=0 쓴보고서=0 공시없음=0 정정보류=0 교정=0
+2026-10-06T19:23:58.384+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/WARNING] full-statement-refill 부분 실패 — 0건 성공, 1건 실패 (대상일 2026-08-13) — 보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=24건 실제콜=0 쓴보고서=0 공시없음=0 정정보류=0 교정=0 (key=full-statement-refill:2026-08-13) {targetDate=2026-08-13, executionId=95364, jobName=full-statement-refill}
+2026-10-06T19:23:58.390+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 시작한다. 대상 1종목, 2021~2026 회계연도, 기간 [FY], 요청 보고서 6건, 예상 호출 6~12회
+2026-10-06T19:23:58.390+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=full-statement-refill 적재=5년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:23:58.392+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=795855 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=1 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:23:58.392+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 마쳤다. 보고서=[FY] 연도=2021~2026 요청=6건 실제콜=6 쓴보고서=1 공시없음=5 정정보류=0 교정=0
+2026-10-06T19:23:58.398+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 시작한다. 대상 1종목, 2021~2026 회계연도, 기간 [FY, Q1, Q2, Q3], 요청 보고서 24건, 예상 호출 24~48회
+2026-10-06T19:23:58.399+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=full-statement-refill 적재=5년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:23:58.400+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=795859 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:23:58.400+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 마쳤다. 보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=24건 실제콜=24 쓴보고서=0 공시없음=24 정정보류=0 교정=0
+2026-10-06T19:23:58.403+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체재무제표 소스가 없는 시장의 종목을 뺀다(시장별 수): {US=1}
+2026-10-06T19:23:58.403+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 시작한다. 대상 1종목, 2021~2026 회계연도, 기간 [FY, Q1, Q2, Q3], 요청 보고서 24건, 예상 호출 24~48회
+2026-10-06T19:23:58.403+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=full-statement-refill 적재=5년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:23:58.404+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=795861 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:23:58.404+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 마쳤다. 보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=24건 실제콜=24 쓴보고서=0 공시없음=24 정정보류=0 교정=0
+2026-10-06T19:23:58.410+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 시작한다. 대상 1종목, 2021~2026 회계연도, 기간 [FY], 요청 보고서 6건, 예상 호출 6~12회
+2026-10-06T19:23:58.410+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=full-statement-refill 적재=5년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:23:58.411+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=795866 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:23:58.411+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 마쳤다. 보고서=[FY] 연도=2021~2026 요청=6건 실제콜=6 쓴보고서=0 공시없음=6 정정보류=0 교정=0
+2026-10-06T19:23:58.414+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 시작한다. 대상 1종목, 2021~2026 회계연도, 기간 [FY], 요청 보고서 6건, 예상 호출 6~12회
+2026-10-06T19:23:58.414+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=full-statement-refill 적재=5년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:23:58.415+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=795868 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:23:58.415+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 마쳤다. 보고서=[FY] 연도=2021~2026 요청=6건 실제콜=6 쓴보고서=0 공시없음=6 정정보류=0 교정=0
+2026-10-06T19:23:58.418+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 시작한다. 대상 1종목, 2021~2026 회계연도, 기간 [FY, Q1, Q2, Q3], 요청 보고서 24건, 예상 호출 24~48회
+2026-10-06T19:23:58.418+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=full-statement-refill 적재=5년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:23:58.419+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=795870 모드=FILL_WITHOUT_REVISION 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:23:58.419+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 마쳤다. 보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=24건 실제콜=24 쓴보고서=0 공시없음=24 정정보류=0 교정=0
+2026-10-06T19:23:58.422+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 시작한다. 대상 1종목, 2021~2026 회계연도, 기간 [FY], 요청 보고서 6건, 예상 호출 6~12회
+2026-10-06T19:23:58.422+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.FinancialLoadWindow   : 적재 창이 지표 창보다 좁다. 잡=full-statement-refill 적재=5년 지표=7년 — 그보다 앞선 회계연도는 이 실행이 한 행도 건드리지 않는다. 매핑·후보 목록·선택 규칙을 바꾼 뒤라면 --financial-years=7로 다시 돌려야 그 구간이 고쳐진다.
+2026-10-06T19:23:58.423+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=795872 모드=FILL_WITHOUT_REVISION 신규=1 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:23:58.424+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.FullStatementRefillJob       : 전체 재무제표 결손 보정을 마쳤다. 보고서=[FY] 연도=2021~2026 요청=6건 실제콜=6 쓴보고서=1 공시없음=5 정정보류=0 교정=0
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

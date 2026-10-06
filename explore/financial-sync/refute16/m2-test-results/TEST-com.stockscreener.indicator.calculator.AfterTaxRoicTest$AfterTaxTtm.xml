@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="ROIC_AFTERTAX (TTM)" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.366Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="IMPORTANT — 환입 해는 세율을 0으로 자른다. 안 자르면 NOPAT이 영업이익보다 커진다" classname="com.stockscreener.indicator.calculator.AfterTaxRoicTest$AfterTaxTtm" time="0.0"/>
+  <testcase name="세후가 세전보다 낮다 — 정상 세율에서" classname="com.stockscreener.indicator.calculator.AfterTaxRoicTest$AfterTaxTtm" time="0.0"/>
+  <testcase name="IMPORTANT — 세율이 1을 넘으면 1로 자른다. 안 자르면 영업흑자가 세후 적자가 된다" classname="com.stockscreener.indicator.calculator.AfterTaxRoicTest$AfterTaxTtm" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

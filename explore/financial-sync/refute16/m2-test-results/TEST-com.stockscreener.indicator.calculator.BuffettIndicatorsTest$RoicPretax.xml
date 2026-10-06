@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="ROIC_PRETAX" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.378Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="영업이익을 (자산총계 − 유동부채)로 나눈다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RoicPretax" time="0.0"/>
+  <testcase name="영업이익을 안 낸 회사도 유도 재료가 있으면 값이 나온다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RoicPretax" time="0.0"/>
+  <testcase name="IMPORTANT — 유동부채가 없으면 값을 내지 않는다. 자산총계로 대체하면 ROA가 된다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RoicPretax" time="0.0"/>
+  <testcase name="잔액을 네 분기 합산하지 않는다 — 합산하면 투하자본이 네 배가 된다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RoicPretax" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

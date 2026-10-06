@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="정규화 세율" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.364Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="IMPORTANT — 직전 한 해가 이상치여도 TTM이 그쪽으로 끌려가지 않는다" classname="com.stockscreener.indicator.calculator.AfterTaxRoicTest$NormalizedRate" time="0.0"/>
+  <testcase name="환입 한 해가 중앙값을 0으로 끌어내리지 않는다" classname="com.stockscreener.indicator.calculator.AfterTaxRoicTest$NormalizedRate" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

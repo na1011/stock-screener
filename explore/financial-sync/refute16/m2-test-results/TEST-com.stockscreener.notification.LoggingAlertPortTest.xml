@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.notification.LoggingAlertPortTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:37.819Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="알림을 조용히 버리지 않고 로그로 남긴다" classname="com.stockscreener.notification.LoggingAlertPortTest" time="0.001"/>
+  <testcase name="부가 정보를 함께 남긴다 — 실행 id 없이는 어느 배치인지 알 수 없다" classname="com.stockscreener.notification.LoggingAlertPortTest" time="0.0"/>
+  <testcase name="심각도를 로그 레벨에 대응시킨다 — Phase 6의 Sentry가 레벨로 거른다" classname="com.stockscreener.notification.LoggingAlertPortTest" time="0.001"/>
+  <testcase name="사용자 대상 알림은 수신자를 남긴다 — 배치와 워치리스트가 같은 포트를 쓴다" classname="com.stockscreener.notification.LoggingAlertPortTest" time="0.0"/>
+  <testcase name="제목 없는 알림은 만들 수 없다 — 읽히지 않는 알림은 없는 것과 같다" classname="com.stockscreener.notification.LoggingAlertPortTest" time="0.0"/>
+  <system-out><![CDATA[2026-10-06T19:23:37.820+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/WARNING] 일일 갱신 부분 실패 — 850종목 중 2종목 실패 (key=daily:2026-08-05)
+2026-10-06T19:23:37.821+09:00 ERROR 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/ERROR] 수집 실패 — 본문 (key=key) {executionId=17}
+2026-10-06T19:23:37.821+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/INFO] 완료 (key=k1)
+2026-10-06T19:23:37.821+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/WARNING] 부분 실패 (key=k2)
+2026-10-06T19:23:37.821+09:00 ERROR 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/ERROR] 실패 (key=k3)
+2026-10-06T19:23:37.821+09:00 ERROR 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/CRITICAL] 인증 실패 (key=k4)
+2026-10-06T19:23:37.822+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/INFO] 조건 충족 — 삼성전자 (key=wl:42:1) (userId=42)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

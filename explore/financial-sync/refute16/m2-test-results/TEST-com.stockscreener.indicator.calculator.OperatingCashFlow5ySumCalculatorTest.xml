@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculatorTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.461Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="여섯 해가 있어도 최근 다섯 해만 더한다" classname="com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculatorTest" time="0.0"/>
+  <testcase name="한 해라도 값이 비면 값을 내지 않는다 — 0으로 접지 않는다" classname="com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculatorTest" time="0.0"/>
+  <testcase name="네 해뿐이면 값을 내지 않는다 — 네 해 합으로 접지 않는다" classname="com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculatorTest" time="0.0"/>
+  <testcase name="연도에 구멍이 있으면 값을 내지 않는다 — 더 오래된 해가 대신 채운 것이다" classname="com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculatorTest" time="0.0"/>
+  <testcase name="결산월이 12월이 아니어도 연속이면 값을 낸다 — fiscalYear 라벨이 아니라 기간으로 잰다" classname="com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculatorTest" time="0.0"/>
+  <testcase name="다섯 해가 연속하면 그 합을 낸다" classname="com.stockscreener.indicator.calculator.OperatingCashFlow5ySumCalculatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

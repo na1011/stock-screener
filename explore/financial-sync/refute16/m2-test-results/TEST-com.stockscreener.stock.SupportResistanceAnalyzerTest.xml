@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.stock.SupportResistanceAnalyzerTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:19.881Z" hostname="MacBook-Pro.local" time="0.003">
+  <properties/>
+  <testcase name="IMPORTANT — 연속으로 머문 봉은 터치 1회다. 5일 눌림목이 5회가 되면 안 된다" classname="com.stockscreener.stock.SupportResistanceAnalyzerTest" time="0.001"/>
+  <testcase name="봉이 모자라면 값을 지어내지 않는다" classname="com.stockscreener.stock.SupportResistanceAnalyzerTest" time="0.0"/>
+  <testcase name="IMPORTANT — 분석 구간에 액면분할이 있어도 분할 전 가격대에 가짜 구간이 생기지 않는다" classname="com.stockscreener.stock.SupportResistanceAnalyzerTest" time="0.0"/>
+  <testcase name="한 번만 스친 가격은 구간이 되지 않는다" classname="com.stockscreener.stock.SupportResistanceAnalyzerTest" time="0.0"/>
+  <testcase name="수정종가가 없는 봉이 섞여도 깨지지 않는다" classname="com.stockscreener.stock.SupportResistanceAnalyzerTest" time="0.001"/>
+  <testcase name="같은 가격대를 반복해서 두드리면 하나의 구간으로 묶이고 터치 수가 센다" classname="com.stockscreener.stock.SupportResistanceAnalyzerTest" time="0.0"/>
+  <testcase name="마지막 종가를 기준으로 지지·저항·구간내가 갈린다" classname="com.stockscreener.stock.SupportResistanceAnalyzerTest" time="0.0"/>
+  <testcase name="결과가 결정적이다 — 같은 봉이면 언제나 같은 값이다" classname="com.stockscreener.stock.SupportResistanceAnalyzerTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

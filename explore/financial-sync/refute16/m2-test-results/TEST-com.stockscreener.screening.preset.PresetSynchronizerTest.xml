@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.screening.preset.PresetSynchronizerTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:18.011Z" hostname="MacBook-Pro.local" time="0.272">
+  <properties/>
+  <testcase name="조건을 바꿔 다시 돌리면 조건이 통째로 교체된다 — 배포로 반영된다는 뜻이다" classname="com.stockscreener.screening.preset.PresetSynchronizerTest" time="0.016"/>
+  <testcase name="IMPORTANT — 사용자의 커스텀 화면을 건드리지 않는다" classname="com.stockscreener.screening.preset.PresetSynchronizerTest" time="0.005"/>
+  <testcase name="IMPORTANT — 선언에서 사라진 프리셋은 비활성이 될 뿐 행이 남는다" classname="com.stockscreener.screening.preset.PresetSynchronizerTest" time="0.007"/>
+  <testcase name="두 번 실행해도 결과가 같다 — 재기동마다 프리셋이 늘어나지 않는다" classname="com.stockscreener.screening.preset.PresetSynchronizerTest" time="0.006"/>
+  <testcase name="프리셋은 소유자 없이 저장되고 code로 찾을 수 있다" classname="com.stockscreener.screening.preset.PresetSynchronizerTest" time="0.003"/>
+  <testcase name="사라졌다 돌아온 프리셋은 다시 활성이 된다" classname="com.stockscreener.screening.preset.PresetSynchronizerTest" time="0.005"/>
+  <system-out><![CDATA[2026-10-06T19:24:18.011+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.screening.preset.PresetSynchronizerTest]: PresetSynchronizerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:18.014+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.screening.preset.PresetSynchronizerTest
+2026-10-06T19:24:18.014+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.screening.preset.PresetSynchronizerTest]: PresetSynchronizerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:18.015+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.screening.preset.PresetSynchronizerTest
+2026-10-06T19:24:18.016+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:18.016+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Shutdown initiated...
+2026-10-06T19:24:18.017+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Shutdown completed.
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:18.022+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetSynchronizerTest      : Starting PresetSynchronizerTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:18.022+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetSynchronizerTest      : The following 1 profile is active: "test"
+2026-10-06T19:24:18.091+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:18.103+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:18.125+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-35 - Starting...
+2026-10-06T19:24:18.129+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-35 - Start completed.
+2026-10-06T19:24:18.133+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:18.144+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.006s)
+2026-10-06T19:24:18.180+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:18.180+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:18.180+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:18.192+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:18.197+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:18.203+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:18.215+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:18.215+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:18.233+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:18.238+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetSynchronizerTest      : Started PresetSynchronizerTest in 0.221 seconds (process running for 51.454)
+2026-10-06T19:24:18.250+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.screening.preset.PresetSynchronizer  : 선언에서 사라진 프리셋 9건을 비활성으로 내렸다(삭제하지 않았다).
+2026-10-06T19:24:18.260+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.screening.preset.PresetSynchronizer  : 선언에서 사라진 프리셋 9건을 비활성으로 내렸다(삭제하지 않았다).
+2026-10-06T19:24:18.265+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.screening.preset.PresetSynchronizer  : 선언에서 사라진 프리셋 9건을 비활성으로 내렸다(삭제하지 않았다).
+2026-10-06T19:24:18.267+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.screening.preset.PresetSynchronizer  : 선언에서 사라진 프리셋 1건을 비활성으로 내렸다(삭제하지 않았다).
+2026-10-06T19:24:18.271+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.screening.preset.PresetSynchronizer  : 선언에서 사라진 프리셋 9건을 비활성으로 내렸다(삭제하지 않았다).
+2026-10-06T19:24:18.276+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.screening.preset.PresetSynchronizer  : 선언에서 사라진 프리셋 9건을 비활성으로 내렸다(삭제하지 않았다).
+2026-10-06T19:24:18.280+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.screening.preset.PresetSynchronizer  : 선언에서 사라진 프리셋 9건을 비활성으로 내렸다(삭제하지 않았다).
+2026-10-06T19:24:18.280+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.screening.preset.PresetSynchronizer  : 선언에서 사라진 프리셋 1건을 비활성으로 내렸다(삭제하지 않았다).
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

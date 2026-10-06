@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.208Z" hostname="MacBook-Pro.local" time="0.022">
+  <properties/>
+  <testcase name="IMPORTANT — 하한 미만이면 부분 목록으로 보고 거부한다(ADR-0008)" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.002"/>
+  <testcase name="단건은 6시간 메모한다 — 복원 격자가 같은 심볼을 다시 물어도 0콜 · 지나면 다시 부른다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.002"/>
+  <testcase name="IMPORTANT — tradable=false로 거르지 않는다. 데이터 조회 전용 자산이 그 값으로 온다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.001"/>
+  <testcase name="이름이 빈 자산은 건너뛰지 않고 실패한다 — 벤더 스펙 변경의 신호다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.002"/>
+  <testcase name="빈 배열은 실패다 — 전 종목 제외로 읽히므로 반영하지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.001"/>
+  <testcase name="429는 RATE_LIMITED, 500은 TRANSIENT — 재시도 가능 여부가 갈린다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.002"/>
+  <testcase name="시크릿이 비면 부르기 전에 AUTH다 — 조건은 api-key 하나만 보므로 어댑터는 등록된다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.001"/>
+  <testcase name="status=active와 두 거래소를 명시해 부른다 — 기본값은 상장폐지까지 포함한다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.001"/>
+  <testcase name="229자짜리 증권명이 잘리지 않는다 — 자르면 서로 다른 우선주가 같은 이름이 된다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.001"/>
+  <testcase name="401은 AUTH다 — 실측한 인증 실패 모양이다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.002"/>
+  <testcase name="단건은 404면 비어 있고, 2xx 아닌 나머지는 던진다 — 빼고 넘어가면 숨은 상장이 조용히 빠진다(ADR-0171)" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.002"/>
+  <testcase name="인증 헤더 둘을 붙인다 — 하나를 빠뜨리면 401이고 그것은 키가 틀린 것처럼 보인다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.002"/>
+  <testcase name="활성 종목을 티커 목록으로 내고 이름·거래소를 캐시에 심는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.001"/>
+  <testcase name="중복 심볼은 실패다 — EXCLUDE 제약에서 뒤늦게 터지는 것보다 낫다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.001"/>
+  <testcase name="담당하지 않는 유니버스는 NOT_FOUND다" classname="com.stockscreener.pipeline.datasource.us.AlpacaUniverseAdapterTest" time="0.0"/>
+  <system-out><![CDATA[2026-10-06T19:24:11.214+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.AlpacaUniverseAdapter         : 미국 상장 유니버스를 만들었다. US_LISTED 기준일=2026-08-28 편입=3종목 (거래불가 1종목 포함 — 데이터 조회 전용이라 거르지 않는다)
+2026-10-06T19:24:11.221+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.AlpacaUniverseAdapter         : 미국 상장 유니버스를 만들었다. US_LISTED 기준일=2026-08-28 편입=3종목 (거래불가 1종목 포함 — 데이터 조회 전용이라 거르지 않는다)
+2026-10-06T19:24:11.223+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.AlpacaUniverseAdapter         : 미국 상장 유니버스를 만들었다. US_LISTED 기준일=2026-08-28 편입=3종목 (거래불가 1종목 포함 — 데이터 조회 전용이라 거르지 않는다)
+2026-10-06T19:24:11.228+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.AlpacaUniverseAdapter         : 미국 상장 유니버스를 만들었다. US_LISTED 기준일=2026-08-28 편입=3종목 (거래불가 1종목 포함 — 데이터 조회 전용이라 거르지 않는다)
+2026-10-06T19:24:11.229+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.AlpacaUniverseAdapter         : 미국 상장 유니버스를 만들었다. US_LISTED 기준일=2026-08-28 편입=3종목 (거래불가 1종목 포함 — 데이터 조회 전용이라 거르지 않는다)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

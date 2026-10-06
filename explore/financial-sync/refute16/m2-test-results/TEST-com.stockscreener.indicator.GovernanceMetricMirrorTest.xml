@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.GovernanceMetricMirrorTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:30.900Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="ADR-0081의 premise SQL이 GovernanceMetric 전체와 정확히 같다" classname="com.stockscreener.indicator.GovernanceMetricMirrorTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

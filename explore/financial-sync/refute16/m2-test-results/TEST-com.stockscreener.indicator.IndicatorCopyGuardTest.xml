@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.IndicatorCopyGuardTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:31.195Z" hostname="MacBook-Pro.local" time="0.048">
+  <properties/>
+  <testcase name="빈 설명을 만들지 않는다 — 값만 나열하면 초보 사용자가 읽을 수 없다" classname="com.stockscreener.indicator.IndicatorCopyGuardTest" time="0.012"/>
+  <testcase name="IMPORTANT — 애너테이션 sortOrder가 전역에서 유일하다(ADR-0060이 이 위에 선다)" classname="com.stockscreener.indicator.IndicatorCopyGuardTest" time="0.014"/>
+  <testcase name="IMPORTANT — 사용자에게 보이는 지표 문구에 하네스·코드 낱말이 없다" classname="com.stockscreener.indicator.IndicatorCopyGuardTest" time="0.011"/>
+  <testcase name="IMPORTANT — 분기를 말하는 설명문은 기간 기저 폴백을 함께 말한다" classname="com.stockscreener.indicator.IndicatorCopyGuardTest" time="0.01"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

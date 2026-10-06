@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:57.431Z" hostname="MacBook-Pro.local" time="0.024">
+  <properties/>
+  <testcase name="조회는 원장을 한 글자도 고치지 않고 실행 행도 안 만든다" classname="com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest" time="0.007"/>
+  <testcase name="없는 id도 예외이고 실행 행이 없다" classname="com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest" time="0.002"/>
+  <testcase name="없는 id를 조회해도 죽지 않는다 — 대기열을 훑는 도중 흔한 오타다" classname="com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest" time="0.003"/>
+  <testcase name="판정이 원장을 고치고, 무엇을 판정했는지가 실행 행에 남는다" classname="com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest" time="0.005"/>
+  <testcase name="불변식을 깬 판정은 예외로 나오고 실행 행을 만들지 않는다 — 사람의 오타가 알림을 타면 안 된다" classname="com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest" time="0.003"/>
+  <system-out><![CDATA[2026-10-06T19:23:57.431+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest]: CorporateActionJudgeJobTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:57.432+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest
+2026-10-06T19:23:57.432+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest]: CorporateActionJudgeJobTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:57.432+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.CorporateActionJudgeJobTest
+2026-10-06T19:23:57.435+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795833 id=53270 2026-02-04 type=SPLIT ratio=5 status=OBSERVED source=HEURISTIC
+2026-10-06T19:23:57.436+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 원장 집계 — OBSERVED 1행 (그중 종류 미상 0행)
+2026-10-06T19:23:57.436+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 조회 필터 — status=OBSERVED(기본값) type=null ticker=null limit=100
+2026-10-06T19:23:57.437+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : id=53270 900102 판정종목 효력일=2026-02-04 신주상장=null type=SPLIT ratio=5.0000000000 status=OBSERVED 관측배수=5.0000000000 당일주식수배수=5.0000000000 소스낱말=null
+2026-10-06T19:23:57.437+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 1행을 찍었다. 상한에 닿았으면 --ca-limit으로 넓힌다(최대 500).
+2026-10-06T19:23:57.438+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 원장 집계 — OBSERVED 1행 (그중 종류 미상 0행)
+2026-10-06T19:23:57.438+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : id=53270 900102 판정종목 — 효력일=2026-02-04 신주상장=null 소스일자=null type=SPLIT ratio=5.0000000000 status=OBSERVED 탐지=HEURISTIC 낱말=null
+2026-10-06T19:23:57.439+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      :   효력일 관측 — 전일종가=50000.0000 종가=10000.0000 관측배수=5.0000000000 당일주식수배수=5.0000000000 스냅=5.0000000000 가격과맞는가=true
+2026-10-06T19:23:57.439+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      :   효력일 이후 창에 상장주식수 점프가 없다 — 분할·병합이면 당일 배수가 정본이고, 무상증자면 신주상장을 못 찾은 것이다.
+2026-10-06T19:23:57.442+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 판정할 내용 — id=-1 status=APPROVED type=null ratio=null 효력일=null 신주상장=null note=없는 행
+2026-10-06T19:23:57.445+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 원장에 그 행이 없다: id=-1
+2026-10-06T19:23:57.447+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795836 id=53271 2026-02-04 type=SPLIT ratio=5 status=OBSERVED source=HEURISTIC
+2026-10-06T19:23:57.448+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 판정할 내용 — id=53271 status=APPROVED type=null ratio=null 효력일=null 신주상장=null note=5:1 분할. 주식수 배수로 확인했다.
+2026-10-06T19:23:57.448+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53271 status=APPROVED type=SPLIT ratio=5.0000000000 가격배수=null 효력일=2026-02-04 신주상장=null
+2026-10-06T19:23:57.450+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : id=53271 900102 판정종목 — 효력일=2026-02-04 신주상장=null 소스일자=null type=SPLIT ratio=5.0000000000 status=APPROVED 탐지=HEURISTIC 낱말=null
+2026-10-06T19:23:57.450+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      :   효력일 관측 — 전일종가=50000.0000 종가=10000.0000 관측배수=5.0000000000 당일주식수배수=5.0000000000 스냅=5.0000000000 가격과맞는가=true
+2026-10-06T19:23:57.450+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      :   기존 note — 5:1 분할. 주식수 배수로 확인했다.
+2026-10-06T19:23:57.450+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      :   효력일 이후 창에 상장주식수 점프가 없다 — 분할·병합이면 당일 배수가 정본이고, 무상증자면 신주상장을 못 찾은 것이다.
+2026-10-06T19:23:57.450+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 판정은 계수를 바꾸지 않는다. 다음 평일 14:00 사슬이 재구축과 화해를 둘 다 한다 — 그 전에 반영하려면 평일 13:30~15:40 밖에서 --job=adjustment-rebuild --tickers=900102 뒤에 --job=indicator-reconcile --tickers=900102 (재구축이 그 종목의 지표를 보존 창 전체에서 지운다)
+2026-10-06T19:23:57.453+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795837 id=53272 2026-02-04 type=UNKNOWN ratio=0.2 status=OBSERVED source=HEURISTIC
+2026-10-06T19:23:57.454+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 판정할 내용 — id=53272 status=APPROVED type=null ratio=null 효력일=null 신주상장=null note=종류를 모르는 채 승인해 본다
+2026-10-06T19:23:57.454+09:00 ERROR 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJudgeJob      : 판정이 원장의 불변식을 깼다. id=53272 항목=type — 종류를 모르는 행은 승인할 수 없다. 종류와 비율을 함께 정하거나 UNSUPPORTED로 보내라.
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

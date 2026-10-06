@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.kr.DartIrdsReportsTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.087Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="사흘만 지나 반기보고서가 제출되면 같은 창이 열린다 — 빈 집합의 원인이 지연임을 고정한다" classname="com.stockscreener.pipeline.datasource.kr.DartIrdsReportsTest" time="0.0"/>
+  <testcase name="과거 한 달 창은 그 해의 사업보고서 하나로 끝난다" classname="com.stockscreener.pipeline.datasource.kr.DartIrdsReportsTest" time="0.0"/>
+  <testcase name="2015년 이전은 부르지 않는다 — DART가 bsns_year를 그때부터만 받는다" classname="com.stockscreener.pipeline.datasource.kr.DartIrdsReportsTest" time="0.0"/>
+  <testcase name="최근 며칠짜리 창은 빈 집합이다 — 그 기간을 담는 보고서가 아직 제출되지 않았다" classname="com.stockscreener.pipeline.datasource.kr.DartIrdsReportsTest" time="0.0"/>
+  <testcase name="2020~2026 전량 백필이 종목당 2콜로 끝난다" classname="com.stockscreener.pipeline.datasource.kr.DartIrdsReportsTest" time="0.0"/>
+  <testcase name="고른 보고서의 합집합이 창의 덮인 부분을 빠짐없이 덮는다" classname="com.stockscreener.pipeline.datasource.kr.DartIrdsReportsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

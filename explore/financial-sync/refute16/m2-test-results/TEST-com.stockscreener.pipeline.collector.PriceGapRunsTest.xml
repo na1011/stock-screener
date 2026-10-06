@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.PriceGapRunsTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:09.646Z" hostname="MacBook-Pro.local" time="0.107">
+  <properties/>
+  <testcase name="IMPORTANT — 첫 봉 앞에 편입일이 있으면 읽기 창 하한부터 묻는다(TEVA형 — 소스가 짧게 준 것)" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.012"/>
+  <testcase name="IMPORTANT — 재편입 종목의 창 앞 구멍을 한 구간으로 낸다 — 창 안은 일일 갱신의 창 콜이 받는다" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.011"/>
+  <testcase name="구멍 없는 지금 편입은 구간이 없다 — 창 콜만 나간다" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.009"/>
+  <testcase name="한 종목의 떨어진 두 구멍은 두 구간이다 — 한 콜로 묶으면 사이의 봉을 매일 다시 받는다" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.01"/>
+  <testcase name="창 시작일의 구멍은 구간에 안 든다 — 창 콜이 받는다 · 하루 앞은 든다" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.011"/>
+  <testcase name="IMPORTANT — 첫 봉 앞에 편입일이 없으면 첫 봉 앞을 안 묻는다 — 소스가 재사용 티커로 다른 증권 봉을 준다(FIG형)" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.008"/>
+  <testcase name="지수만 빠진 날도 지금 편입 절반 이상이 봉을 가졌으면 거래일이다 — 지수 수집 실패가 구멍을 숨기지 않는다" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.012"/>
+  <testcase name="IMPORTANT — 보존 창 안에서 편출된 종목의 마지막 편입일 구멍을 낸다 — 15일 창에 묶이지 않는다" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.007"/>
+  <testcase name="읽기 창 하한 앞의 구멍은 안 묻는다 — 지표가 안 읽는다" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.007"/>
+  <testcase name="봉이 한 개도 없는 편입은 여기서 안 낸다 — 편입 결손 꼬리(PRICE_HISTORY)가 7년을 받는다" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.005"/>
+  <testcase name="지수도 없고 지금 편입 절반 미만만 봉을 가진 날은 거래일이 아니다 — 토요일 꼬리의 몇 종목 봉" classname="com.stockscreener.pipeline.collector.PriceGapRunsTest" time="0.01"/>
+  <system-out><![CDATA[2026-10-06T19:24:09.647+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.PriceGapRunsTest]: PriceGapRunsTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.649+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.PriceGapRunsTest
+2026-10-06T19:24:09.649+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.PriceGapRunsTest]: PriceGapRunsTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.650+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.PriceGapRunsTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

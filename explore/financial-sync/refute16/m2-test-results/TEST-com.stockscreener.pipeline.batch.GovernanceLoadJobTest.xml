@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.GovernanceLoadJobTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:58.513Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="한 응답이 3개년을 주는 표는 세 해씩 건너뛴다" classname="com.stockscreener.pipeline.batch.GovernanceLoadJobTest" time="0.0"/>
+  <testcase name="--governance-span이 표의 기본 해 수를 덮는다 — 없으면 한 해에 다섯 해를 받는다" classname="com.stockscreener.pipeline.batch.GovernanceLoadJobTest" time="0.0"/>
+  <testcase name="국내 전량 적재가 350종목 8,050콜이다 — 코드·시험·문서 열두 곳이 이 수를 인용한다" classname="com.stockscreener.pipeline.batch.GovernanceLoadJobTest" time="0.0"/>
+  <testcase name="extra가 1이면 표마다 한 해씩 더 받는다 — 미국의 아래쪽 끝이고, 손으로 준 span에는 안 붙는다" classname="com.stockscreener.pipeline.batch.GovernanceLoadJobTest" time="0.0"/>
+  <testcase name="표마다 받는 회계연도가 실측이 정한 대로인가" classname="com.stockscreener.pipeline.batch.GovernanceLoadJobTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

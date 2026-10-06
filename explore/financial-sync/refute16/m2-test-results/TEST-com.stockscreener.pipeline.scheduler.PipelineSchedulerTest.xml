@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:17.309Z" hostname="MacBook-Pro.local" time="0.004">
+  <properties/>
+  <testcase name="일일 갱신은 소스 공개 시각(13시) 이후에 돌고, 대상은 실행일보다 앞이다" classname="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" time="0.002"/>
+  <testcase name="일일 갱신이 월~금 다섯 거래일을 모두 덮는다 — 금요일 종가가 새던 자리다" classname="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" time="0.0"/>
+  <testcase name="무거운 잡과 신선도 점검이 사슬 뒤에 온다 — 순서가 뒤집히면 그날의 판정이 낡는다" classname="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" time="0.001"/>
+  <testcase name="리밸런싱은 토요일에만 돌아 일일 갱신과 겹치지 않는다" classname="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" time="0.0"/>
+  <testcase name="새 스케줄 셋이 전부 평일에만 돈다 — 주말에 돌면 대상일이 비어 헛돈다" classname="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" time="0.0"/>
+  <testcase name="화해는 무거운 잡 뒤 · 신선도 점검 앞이고 유도가 화해보다 먼저다 — 풀 1이라 순서가 곧 입력의 신선도다" classname="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" time="0.001"/>
+  <testcase name="조회 창이 장기 연휴를 건너뛴다 — 좁으면 연휴 앞 거래일이 영구히 샌다" classname="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" time="0.0"/>
+  <testcase name="공휴일이 낀 주에도 모든 거래일이 어느 실행엔가 덮인다 — 공휴일 앞 거래일이 새던 자리다" classname="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" time="0.0"/>
+  <testcase name="기업 행위 사슬이 일일 갱신 뒤에 돈다 — 앞이 끝나기 전에 시작하면 같은 봉을 함께 쓴다" classname="com.stockscreener.pipeline.scheduler.PipelineSchedulerTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

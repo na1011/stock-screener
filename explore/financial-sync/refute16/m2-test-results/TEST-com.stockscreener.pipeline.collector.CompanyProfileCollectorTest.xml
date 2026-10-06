@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:08.020Z" hostname="MacBook-Pro.local" time="0.036">
+  <properties/>
+  <testcase name="반대 방향도 막는다 — 미국 종목에 KSIC를 선언하면 industry_code 쪽 제약이 걸린다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.004"/>
+  <testcase name="소스가 종목을 모르면 0행이고 예외가 아니다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.002"/>
+  <testcase name="IMPORTANT — 국내 종목에 SIC를 선언하면 그 종목만 실패한다. 컬럼 선택으로는 못 막는다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.002"/>
+  <testcase name="3자리 코드는 소분류가 자기 자신이고 중분류가 앞 2자리다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.002"/>
+  <testcase name="2자리 이하는 제약이 막는다 — 중분류를 소분류라 부르게 된다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.001"/>
+  <testcase name="같은 값을 다시 받으면 0행이다 — 그 0이 멱등의 증거다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.002"/>
+  <testcase name="체계가 SIC면 sic_code에 담긴다 — 어느 컬럼인지는 어댑터가 아니라 체계가 정한다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.003"/>
+  <testcase name="SIC는 네 자리만 통과한다 — 소스가 앞자리 0을 채워 주므로 가공할 일이 없다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.002"/>
+  <testcase name="5자리 코드도 같은 규칙으로 갈린다 — 앞 3자리가 소분류다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.003"/>
+  <testcase name="4자리(세분류)도 같은 규칙으로 갈린다 — 350종목 실측에서 52종목이 이 형태다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.002"/>
+  <testcase name="세 자리 SIC는 제약이 막는다 — 잘려 온 것을 담으면 중분류를 소분류라 부른다" classname="com.stockscreener.pipeline.collector.CompanyProfileCollectorTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:24:08.022+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.CompanyProfileCollectorTest]: CompanyProfileCollectorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.024+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.CompanyProfileCollectorTest
+2026-10-06T19:24:08.024+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.CompanyProfileCollectorTest]: CompanyProfileCollectorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.026+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.CompanyProfileCollectorTest
+2026-10-06T19:24:08.037+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CompanyProfileCollector  : 업종을 채웠다. ticker=005930 scheme=KSIC code=264 acc_mt=12
+2026-10-06T19:24:08.042+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CompanyProfileCollector  : 업종을 채웠다. ticker=005930 scheme=KSIC code=264 acc_mt=12
+2026-10-06T19:24:08.045+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CompanyProfileCollector  : 업종을 채웠다. ticker=AAPL scheme=SIC code=3571 acc_mt=9
+2026-10-06T19:24:08.048+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CompanyProfileCollector  : 업종을 채웠다. ticker=LMNR scheme=SIC code=0100 acc_mt=10
+2026-10-06T19:24:08.051+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CompanyProfileCollector  : 업종을 채웠다. ticker=005930 scheme=KSIC code=64992 acc_mt=12
+2026-10-06T19:24:08.053+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CompanyProfileCollector  : 업종을 채웠다. ticker=005930 scheme=KSIC code=2612 acc_mt=12
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

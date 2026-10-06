@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.948Z" hostname="MacBook-Pro.local" time="0.002">
+  <properties/>
+  <testcase name="신주 수 정수 완전 일치로 상장일을 집는다 — 사이에 낀 별개 증가에 걸리지 않는다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.001"/>
+  <testcase name="수량이 맞으면 줄어든 날도 찾는다 — 인적분할·감자는 늘지 않는다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.0"/>
+  <testcase name="거래정지 19일을 넘어 병합일을 집고 배수를 정확히 0.1로 되돌린다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.0"/>
+  <testcase name="시계열의 첫 봉에는 직전이 없으므로 배수도 없다 — 창 앞쪽 여유가 필요한 이유다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.0"/>
+  <testcase name="권리락은 소스 원값 직전 거래일이고, 그날 종가 배수로 교차확인한다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.0"/>
+  <testcase name="수량이 안 맞으면 상장일을 집지 않는다 — 우선주 배정 행이 여기서 걸린다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.001"/>
+  <testcase name="분할 엿새 전의 잔변동을 건너뛰고 분할일을 집는다 — 카카오 2021은 그 간격이 이틀 차다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.0"/>
+  <testcase name="수량이 한 주라도 어긋나면 안 찾는다 — 근사로 열면 효력일이 애매해진다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.0"/>
+  <testcase name="주식수 배수가 단순 유리수가 아니면 효력일을 집지 않는다 — 근사로 메우지 않는다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.0"/>
+  <testcase name="자사주 때문에 안 떨어지는 무상증자 배수를 그대로 낸다 — 여기에 스냅을 걸면 안 된다" classname="com.stockscreener.pipeline.datasource.kr.CorporateActionEvidenceTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

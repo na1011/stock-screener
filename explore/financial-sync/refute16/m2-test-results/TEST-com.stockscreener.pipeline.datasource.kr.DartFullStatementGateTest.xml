@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.kr.DartFullStatementGateTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.081Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="OFS 응답에서는 게이트가 절대 안 열린다 — 이력이 비어 있어도" classname="com.stockscreener.pipeline.datasource.kr.DartFullStatementGateTest" time="0.001"/>
+  <testcase name="FY가 비지배를 내면 그 해 분기도 전부 닫힌다 — Q4 뺄셈이 안 섞인다" classname="com.stockscreener.pipeline.datasource.kr.DartFullStatementGateTest" time="0.0"/>
+  <testcase name="이 기간 뒤로 비지배를 냈으면 닫힌다 — 옛 이력에는 발목 잡히지 않는다" classname="com.stockscreener.pipeline.datasource.kr.DartFullStatementGateTest" time="0.0"/>
+  <testcase name="CFS 응답의 비지배 행만 증거로 센다 — OFS의 부재는 증거가 아니다" classname="com.stockscreener.pipeline.datasource.kr.DartFullStatementGateTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="정상 매매로 설명되지 않는 하루 변동인가" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.727Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="결손은 불연속이 아니다 — 나눗셈에 넣으면 예외가 된다" classname="com.stockscreener.pipeline.datasource.PriceDiscontinuityTest$Discontinuous" time="0.0"/>
+  <testcase name="실측 표본이 잡힌다 — 대한전선 ×10.63, 아시아나 ×4.28, 루닛 ×0.50" classname="com.stockscreener.pipeline.datasource.PriceDiscontinuityTest$Discontinuous" time="0.0"/>
+  <testcase name="IMPORTANT — 비대칭이다. 한쪽 값을 양방향에 쓰면 +30~42.9%가 그물을 빠져나간다" classname="com.stockscreener.pipeline.datasource.PriceDiscontinuityTest$Discontinuous" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

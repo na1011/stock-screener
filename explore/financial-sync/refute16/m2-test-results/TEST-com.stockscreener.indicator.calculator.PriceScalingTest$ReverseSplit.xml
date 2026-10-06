@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="액면병합 — 대한전선 2023-05-16 실측 10:1" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.466Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="가격은 올라간다 — 병합 전 1,492원짜리 고가가 수정 축척에서 10배다" classname="com.stockscreener.indicator.calculator.PriceScalingTest$ReverseSplit" time="0.0"/>
+  <testcase name="거래량은 내려간다 — 같은 봉에서 가격의 역수다" classname="com.stockscreener.indicator.calculator.PriceScalingTest$ReverseSplit" time="0.0"/>
+  <testcase name="역수를 뒤집으면 250,000이 2,500,000이 되어 이 단언이 깨진다" classname="com.stockscreener.indicator.calculator.PriceScalingTest$ReverseSplit" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

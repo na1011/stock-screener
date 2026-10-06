@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.GovernanceRequestableYearTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.626Z" hostname="MacBook-Pro.local" time="0.1">
+  <properties/>
+  <testcase name="둘이 정확히 한 해 갈린다 — 그 한 해가 52/53주 회계연도를 통째로 가른다" classname="com.stockscreener.pipeline.datasource.GovernanceRequestableYearTest" time="0.099"/>
+  <testcase name="기본은 작년이다 — DART의 bsnsYear는 사업보고서의 회계연도이고 올해분은 이듬해 3월에야 나온다" classname="com.stockscreener.pipeline.datasource.GovernanceRequestableYearTest" time="0.0"/>
+  <testcase name="Alpaca 배당은 올해다 — 거기서 bsnsYear는 ex_date의 역년이고 배당은 그해에 이미 지급됐다" classname="com.stockscreener.pipeline.datasource.GovernanceRequestableYearTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

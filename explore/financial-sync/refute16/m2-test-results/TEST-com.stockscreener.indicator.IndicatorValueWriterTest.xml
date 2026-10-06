@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.IndicatorValueWriterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:35.800Z" hostname="MacBook-Pro.local" time="0.008">
+  <properties/>
+  <testcase name="건드리지 않은 행은 updated_at도 그대로다 — 무엇이 언제 바뀌었는지의 근거가 된다" classname="com.stockscreener.indicator.IndicatorValueWriterTest" time="0.004"/>
+  <testcase name="같은 값을 다시 쓰면 0행이다 — 재계산이 인덱스를 부풀리지 않는 근거다" classname="com.stockscreener.indicator.IndicatorValueWriterTest" time="0.001"/>
+  <testcase name="값이 달라진 행만 쓴다 — 원자료 정정이 반영되지 않으면 안 된다" classname="com.stockscreener.indicator.IndicatorValueWriterTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:23:35.801+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.IndicatorValueWriterTest]: IndicatorValueWriterTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:35.801+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorValueWriterTest
+2026-10-06T19:23:35.801+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.IndicatorValueWriterTest]: IndicatorValueWriterTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:35.802+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorValueWriterTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

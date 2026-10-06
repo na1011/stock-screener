@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.UnadjustedActionGuardTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.362Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="창 시작이 정확히 효력일이면 빼지 않는다 — 부등호를 뒤집으면 이 단언이 깨진다" classname="com.stockscreener.indicator.UnadjustedActionGuardTest" time="0.001"/>
+  <testcase name="사건이 없으면 아무 일자도 빼지 않는다 — 전 종목의 99%가 이 경로다" classname="com.stockscreener.indicator.UnadjustedActionGuardTest" time="0.0"/>
+  <testcase name="창이 길수록 더 많은 일자가 빠진다 — 창 길이가 판정에 실제로 쓰인다" classname="com.stockscreener.indicator.UnadjustedActionGuardTest" time="0.0"/>
+  <testcase name="사건이 여럿이면 어느 하나라도 창에 들면 뺀다" classname="com.stockscreener.indicator.UnadjustedActionGuardTest" time="0.0"/>
+  <testcase name="창이 시세보다 길면 잘린 창으로 판정한다 — 없는 봉을 있다고 치지 않는다" classname="com.stockscreener.indicator.UnadjustedActionGuardTest" time="0.0"/>
+  <testcase name="거래정지로 봉이 비어도 날짜로 판정한다 — 인덱스 산술이면 창이 어긋난다" classname="com.stockscreener.indicator.UnadjustedActionGuardTest" time="0.0"/>
+  <testcase name="창이 사건을 삼키는 일자만 뺀다 — 사건 이전 일자는 그대로 남는다" classname="com.stockscreener.indicator.UnadjustedActionGuardTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

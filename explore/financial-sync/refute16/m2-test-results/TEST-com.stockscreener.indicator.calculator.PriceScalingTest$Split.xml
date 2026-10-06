@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="액면분할 5:1" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.466Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="가격은 내려가고 거래량은 올라간다 — 분할 전 1주가 분할 후 5주다" classname="com.stockscreener.indicator.calculator.PriceScalingTest$Split" time="0.0"/>
+  <testcase name="adj_factor로 검산하면 volume ÷ adj_factor다" classname="com.stockscreener.indicator.calculator.PriceScalingTest$Split" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

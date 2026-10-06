@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.066Z" hostname="MacBook-Pro.local" time="0.249">
+  <properties/>
+  <testcase name="관측 하한을 origin으로 좁힌다 — 안 좁히면 재실행이 자기 복원분을 하한으로 읽는다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.011"/>
+  <testcase name="제외가 임계 미만이면 통과한다 — 가드가 정상 교체를 막지 않는다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.003"/>
+  <testcase name="격자점 사이 제외가 임계를 넘으면 그 유니버스를 통째로 중단한다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.002"/>
+  <testcase name="replace는 관측 행을 안 건드린다 — 지우는 것은 복원 평면뿐이다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.004"/>
+  <testcase name="격자가 비면 구간도 비고 던지지 않는다 — 창이 미끄러져 대상이 없는 날이 온다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.002"/>
+  <testcase name="관측이 없으면 하한이 없다 — 복원이 무엇을 상한으로 삼을지 스스로 못 정한다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.002"/>
+  <testcase name="중간에 빠졌다 돌아오면 구간이 둘이고 그 사이가 공백이다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.002"/>
+  <testcase name="계속 편입이면 구간 하나로 접히고 관측 하한에서 닫힌다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.002"/>
+  <testcase name="복원 구간이 관측 구간의 시작에 붙어도 DB가 받는다 — 이 결정이 서 있는 자리다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.004"/>
+  <testcase name="replace는 옛 복원분을 지우고 다시 넣는다 — 구간이 달라진 경우가 그 자리다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.003"/>
+  <testcase name="replace 없이 두 번 돌려도 행이 안 늘어난다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.003"/>
+  <testcase name="마지막 격자일 전에 빠지면 그 격자일로 닫힌다 — 하한까지 늘리지 않는다" classname="com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:24:10.066+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest]: UniverseLedgerRestorerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:10.068+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest
+2026-10-06T19:24:10.068+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest]: UniverseLedgerRestorerTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:10.070+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.UniverseLedgerRestorerTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:10.075+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.UniverseLedgerRestorerTest       : Starting UniverseLedgerRestorerTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:10.075+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.UniverseLedgerRestorerTest       : The following 1 profile is active: "test"
+2026-10-06T19:24:10.133+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:10.146+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 12 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:10.153+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-31 - Starting...
+2026-10-06T19:24:10.161+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-31 - Start completed.
+2026-10-06T19:24:10.168+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:10.180+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.006s)
+2026-10-06T19:24:10.217+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:10.217+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:10.217+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:10.228+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:10.234+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:10.240+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:10.251+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:10.251+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:10.269+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:10.272+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.UniverseLedgerRestorerTest       : Started UniverseLedgerRestorerTest in 0.201 seconds (process running for 43.488)
+2026-10-06T19:24:10.282+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseLedgerRestorer   : 과거 편입을 복원했다. KOSPI200 구간=1 삽입=1 하한=2026-08-05
+2026-10-06T19:24:10.292+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseLedgerRestorer   : 복원분을 지우고 다시 넣는다. KOSPI200 지운 행=0
+2026-10-06T19:24:10.292+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseLedgerRestorer   : 과거 편입을 복원했다. KOSPI200 구간=1 삽입=1 하한=2026-08-05
+2026-10-06T19:24:10.306+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseLedgerRestorer   : 과거 편입을 복원했다. KOSPI200 구간=1 삽입=1 하한=2026-08-05
+2026-10-06T19:24:10.310+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseLedgerRestorer   : 과거 편입을 복원했다. KOSPI200 구간=1 삽입=1 하한=2026-08-05
+2026-10-06T19:24:10.310+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseLedgerRestorer   : 복원분을 지우고 다시 넣는다. KOSPI200 지운 행=1
+2026-10-06T19:24:10.310+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseLedgerRestorer   : 과거 편입을 복원했다. KOSPI200 구간=1 삽입=1 하한=2026-08-05
+2026-10-06T19:24:10.312+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseLedgerRestorer   : 과거 편입을 복원했다. KOSPI200 구간=1 삽입=1 하한=2026-08-05
+2026-10-06T19:24:10.313+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.UniverseLedgerRestorer   : 과거 편입을 복원했다. KOSPI200 구간=1 삽입=0 하한=2026-08-05
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

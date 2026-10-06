@@ -1,0 +1,23 @@
+v8 결정 8의 「14:15」 소비자 목록(ADR-0116:23·230·241 · ADR-0166:26 · ADR-0113:241 · PipelineScheduler javadoc · data-pipeline 표 · PipelineSchedulerTest 순서 시험 둘)
+대 grep(g01_1415_consumers.txt — main · origin/hold/p0-run-scope · origin/hold/p1-filing-supplement · 패턴 14:15|14시 15분|14:1x|runHeavyJobOfTheDay|0 15 14)
+
+목록에 없는 것 — 코드·시험(지우면 붉거나 컴파일·리플렉션이 깨진다)
+  ops/crons-done.sh:38            "runHeavyJobOfTheDay 1-5 14:15:00" 줄 — CronsDoneTableTest가 표 전체를 @Scheduled와 대조하므로 같이 지워야 초록
+  CronsDoneTableTest              PipelineScheduler.class만 훑는다 — 2부가 @Scheduled를 다른 빈에 두면 표·판정이 못 본다(성질로: src/main 전체의 @Scheduled)
+  PipelineSchedulerTest:223       newSchedulesRunOnWeekdaysOnly가 runHeavyJobOfTheDay를 이름으로 듦(cronOf 리플렉션 → 실행 시 실패)
+  PipelineSchedulerChainTest:332·342·368(main)  scheduler.runHeavyJobOfTheDay() 직접 호출 셋(거버넌스 적재만 · FR 무효화는 14:20이 채움 단언)
+  PipelineSchedulerChainTest:443-450(hold/p0 · hold/p1)  0부 수용 시험 everyScheduledCallIsFullScope — 「14:15 무거운 잡 셋」을 runHeavyJobOfTheDay로 세 번 부름 → 메서드가 사라지면 0부의 FULL 단언 갈래가 같이 사라질 자리
+목록에 없는 것 — 문서·설정·화면
+  src/main/resources/application.yaml:21   풀 1 근거 주석의 여섯 스케줄 목록
+  .claude/rules/data-pipeline.md:182      크론 목록(13:30·14:00·14:15·14:18·14:20·15:30) + 손 쓰기 창 13:30~15:40
+  .claude/skills/batch-load/SKILL.md:582  「평일 크론 여섯(…14:15…)을 피한다 — 13:30~15:40 밖」
+  docs/progress.md:218 · 820 · 1533 · 1818   14:15 서술 · 크론 목록 둘
+  docs/reload-gate.md:56                  「평일 14:15 단계」 + v2 설계(「표지 = 소비한 공시 · 표지 없음 = 전 창 FR」) — 2026-10-06 09:22 커밋 55f21828(이번 세션) · v4가 버린 설계
+  docs/adr/ADR-0116-…:26 · ADR-0166-…:20·79  14:18·14:20이 「무거운 잡(14:15) 뒤」라는 서술
+  PipelineScheduler.java:207 · 385 · 448-455   사슬 javadoc(「14:15 잡이 한 시간 가까이」) · 14:18 javadoc(「14:15 무거운 잡 뒤인 이유」) · 15:30 javadoc 최악 모형
+  PipelineScheduler.java:33 · 127         「초기 적재는 크론에 없다」 · runDailyUpdate의 「MUST NOT: 여기서 초기 적재 여부를 분기하지 않는다」 — v8은 이 규칙을 「DailyUpdateJob 안」이라 읽었으나 글자는 이 메서드에 있다(사유 = 「재시작마다 850종목 수집」 — 단계는 상태로 고르므로 사유가 안 선다 → 사유로 답하고 문장을 고친다)
+  frontend/src/views/AdminOverviewView.vue:318   「기업 행위 사슬이 다음 평일 14시에 닫습니다」 — v8에서 사슬은 13:30 메서드 뒤(최악 15:14 시작)
+  PLAN 2부 v4 결정 14의 CLAUDE.md 제안문   「평일 14:15 단계」 → 13:30
+「13:30~15:40 밖」 문장(v8은 「바뀌지 않는다」) — 끝이 바뀐다(m01: G 날 단계 예산을 다 쓰면 화해 끝 15:50)
+  FinancialRefillJob.java:327 · InitialLoadJob.java:177 · AdjustmentRebuildJob.java:211 · CorporateActionJudgeJob.java:153(운영자 알림 본문) · FinancialRefillAlertTest:101(그 글자를 단언)
+  data-pipeline.md:182 · batch-load/SKILL.md:582 · ADR-0166:39 · progress.md:93(이미 「근사」라 적음 — 정본 술어는 crons-done = 0)

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="액면병합 — 두 날짜가 같아 구간이 공집합이다" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.387Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="걷어내지 않으면 −90%다 — 자사주 소각으로 읽힌다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$ReverseSplit" time="0.0"/>
+  <testcase name="주식수가 준 것은 희석의 반대가 아니다 — 걷어내면 0이다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$ReverseSplit" time="0.0"/>
+  <testcase name="두 날짜가 같으면 시가총액 보정이 걸리지 않는다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$ReverseSplit" time="0.001"/>
+  <testcase name="나눗셈을 곱셈으로 뒤집으면 −99%가 되어 위 단언이 깨진다" classname="com.stockscreener.indicator.calculator.ExRightsContinuityTest$ReverseSplit" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

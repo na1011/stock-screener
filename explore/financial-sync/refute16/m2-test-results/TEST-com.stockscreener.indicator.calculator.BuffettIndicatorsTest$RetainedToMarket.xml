@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="RETAINED_TO_MARKET_4Y" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.379Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="IMPORTANT — 이익잉여금이 줄었으면 값을 내지 않는다. 음수 분모는 오른 주가를 최하위로 민다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RetainedToMarket" time="0.0"/>
+  <testcase name="다섯 해가 연속이 아니면 값을 내지 않는다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RetainedToMarket" time="0.0"/>
+  <testcase name="주가가 내렸으면 음수를 낸다 — 유보를 헛되이 썼다는 뜻이다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RetainedToMarket" time="0.0"/>
+  <testcase name="주가 증가분을 주당 이익잉여금 증가분으로 나눈다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RetainedToMarket" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

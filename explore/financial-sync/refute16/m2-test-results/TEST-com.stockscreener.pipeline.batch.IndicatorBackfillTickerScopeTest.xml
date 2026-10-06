@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.IndicatorBackfillTickerScopeTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:59.382Z" hostname="MacBook-Pro.local" time="0.224">
+  <properties/>
+  <testcase name="한 종목만 백필해도 대상 밖 종목의 백분위가 다시 매겨진다" classname="com.stockscreener.pipeline.batch.IndicatorBackfillTickerScopeTest" time="0.104"/>
+  <testcase name="다른 활성 유니버스와 겹치면 여전히 거절한다 — 자기 제외가 가드를 무력화하지 않는다" classname="com.stockscreener.pipeline.batch.IndicatorBackfillTickerScopeTest" time="0.005"/>
+  <testcase name="대상 유니버스가 활성이어도 자기 자신과 겹친 것으로 거절하지 않는다" classname="com.stockscreener.pipeline.batch.IndicatorBackfillTickerScopeTest" time="0.108"/>
+  <testcase name="티커가 하나도 안 맞으면 0종목 성공이 아니라 예외다" classname="com.stockscreener.pipeline.batch.IndicatorBackfillTickerScopeTest" time="0.004"/>
+  <system-out><![CDATA[2026-10-06T19:23:59.383+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.IndicatorBackfillTickerScopeTest]: IndicatorBackfillTickerScopeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:59.383+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.IndicatorBackfillTickerScopeTest
+2026-10-06T19:23:59.383+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.IndicatorBackfillTickerScopeTest]: IndicatorBackfillTickerScopeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:59.384+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.IndicatorBackfillTickerScopeTest
+2026-10-06T19:23:59.390+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.IndicatorBackfillJob  : 지표 백필을 시작한다. 거래일=1일 종목=1개 (티커로 좁혔다: [900001] — 백분위·업종 상대값은 그래도 전 종목에서 낸다)
+2026-10-06T19:23:59.390+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.IndicatorBackfillJob  : 종목 루프를 1워커로 돈다 — 커넥션 풀 여유가 정했다(0). 설정=6 대상=1종목 코어=12→상한8 풀=2→상한0
+2026-10-06T19:23:59.398+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=3행 정리=0행
+2026-10-06T19:23:59.404+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.SectorRelativeCalculator   : 업종 상대값을 계산했다. tradeDate=2026-08-05 지표=6쌍 저장=0행 정리=0행
+2026-10-06T19:23:59.444+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 보존 창의 고아 백분위를 정리했다. 지표=10개 정리=0행
+2026-10-06T19:23:59.480+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.SectorRelativeCalculator   : 보존 창의 고아 업종 상대값을 정리했다. 지표=6쌍 정리=0행
+2026-10-06T19:23:59.486+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.IndicatorBackfillJob  : 지표 거래일 색인을 갱신했다. 색인=1건
+2026-10-06T19:23:59.498+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.IndicatorBackfillJob  : 지표 백필을 시작한다. 거래일=1일 종목=3개
+2026-10-06T19:23:59.498+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.IndicatorBackfillJob  : 종목 루프를 1워커로 돈다 — 커넥션 풀 여유가 정했다(0). 설정=6 대상=3종목 코어=12→상한8 풀=2→상한0
+2026-10-06T19:23:59.511+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 백분위를 계산했다. tradeDate=2026-08-05 지표=10개 저장=3행 정리=0행
+2026-10-06T19:23:59.518+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.SectorRelativeCalculator   : 업종 상대값을 계산했다. tradeDate=2026-08-05 지표=6쌍 저장=0행 정리=0행
+2026-10-06T19:23:59.556+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.PercentileCalculator       : 보존 창의 고아 백분위를 정리했다. 지표=10개 정리=0행
+2026-10-06T19:23:59.593+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.SectorRelativeCalculator   : 보존 창의 고아 업종 상대값을 정리했다. 지표=6쌍 정리=0행
+2026-10-06T19:23:59.599+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.IndicatorBackfillJob  : 지표 거래일 색인을 갱신했다. 색인=1건
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

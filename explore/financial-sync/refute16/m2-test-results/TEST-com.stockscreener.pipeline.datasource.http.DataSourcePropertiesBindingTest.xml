@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.http.DataSourcePropertiesBindingTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.734Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="소스 블록 안에 둔 두 번째 base URL은 조용히 무시된다" classname="com.stockscreener.pipeline.datasource.http.DataSourcePropertiesBindingTest" time="0.0"/>
+  <testcase name="최상위 이름으로 두면 바인딩된다 — 고쳐야 할 때 여기로 준다" classname="com.stockscreener.pipeline.datasource.http.DataSourcePropertiesBindingTest" time="0.0"/>
+  <testcase name="소스 블록의 키는 그대로 바인딩된다 — 위 함정이 중첩 자체의 문제가 아니다" classname="com.stockscreener.pipeline.datasource.http.DataSourcePropertiesBindingTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

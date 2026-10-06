@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.IndicatorRetentionTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:31.829Z" hostname="MacBook-Pro.local" time="0.043">
+  <properties/>
+  <testcase name="보존 기간을 넘긴 지표만 지운다" classname="com.stockscreener.indicator.IndicatorRetentionTest" time="0.014"/>
+  <testcase name="원자료는 지우지 않는다 — 지표는 재생성되지만 원자료는 되돌릴 수 없다" classname="com.stockscreener.indicator.IndicatorRetentionTest" time="0.025"/>
+  <testcase name="보존 기간보다 적게 쌓여 있으면 아무것도 지우지 않는다" classname="com.stockscreener.indicator.IndicatorRetentionTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:23:31.829+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.IndicatorRetentionTest]: IndicatorRetentionTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:31.830+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorRetentionTest
+2026-10-06T19:23:31.830+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.indicator.IndicatorRetentionTest]: IndicatorRetentionTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:31.830+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.indicator.IndicatorRetentionTest
+2026-10-06T19:23:31.843+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRetentionPolicy   : 보존 기간을 넘긴 지표를 정리했다. 시장=KOSPI 기준일=2025-11-23 삭제=20행 (보존 255거래일)
+2026-10-06T19:23:31.869+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.indicator.IndicatorRetentionPolicy   : 보존 기간을 넘긴 지표를 정리했다. 시장=KOSPI 기준일=2025-11-23 삭제=20행 (보존 255거래일)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

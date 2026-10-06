@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.MembershipGapFillerTest" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:02.463Z" hostname="MacBook-Pro.local" time="0.135">
+  <properties/>
+  <testcase name="축별로 갈라 부른다 — 한 번에 부르면 재무가 있는 종목에 정정본이 쌓여 지표가 지워진다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.121"/>
+  <testcase name="영업활동현금흐름 결손을 전체 재무제표 보정으로 채운다 — 문장만 내면 영영 안 닫힌다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <testcase name="좁힌 적재는 GAP_FILL로, 전량인 업종은 물려받은 트리거로 기록한다 — 한 실행 안에서 갈린다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <testcase name="꼬리가 터져도 위로 안 올린다 — 예외가 @Scheduled 밖으로 나가면 리밸런싱까지 실패한 것으로 기록된다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <testcase name="상한을 넘으면 적재를 안 한다 — 그 크기는 리밸런싱이 아니라 유니버스를 다시 그은 것이다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <testcase name="종료 신호는 실패가 아니다 — 알리지 않고 다음 점검에 맡긴다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <testcase name="상한을 넘긴 주에도 업종은 부른다 — 결손이 있는 주에만 부르면 신선도가 SCHEDULER 전용으로 갈아탄 뒤 가짜 연체가 뜬다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.0"/>
+  <testcase name="업종은 티커를 주지 않고 결손이 0이어도 부른다 — 티커를 주면 업종 유무를 아예 안 본다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <testcase name="도는 배치가 없으면 그대로 돈다 — 게이트가 상시로 막으면 꼬리가 영영 안 돈 채 초록이 된다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.0"/>
+  <testcase name="채운 뒤 다시 재서 알린다 — 채운 것을 그대로 닫혔다고 보고하면 소스가 안 준 경우가 성공으로 접힌다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <testcase name="다른 배치가 돌고 있으면 적재를 건너뛰고 알린다 — 스케줄러 풀 1이 관리자·CLI 경로를 원리적으로 못 본다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.0"/>
+  <testcase name="거버넌스 결손을 적재+유도 한 쌍으로 채운다 — 적재만 하면 팩트가 안 바뀌는데 둘 다 성공이다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.003"/>
+  <testcase name="꼬리의 업종 호출은 FULL이다 — 리밸런싱 꼬리가 업종 잡의 유일한 정기 경로다(ADR-0172)" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <testcase name="거버넌스 결손이 없으면 아예 안 부른다 — 빈 티커는 resolveTargets에서 활성 편입 전량이 된다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.0"/>
+  <testcase name="거버넌스가 상한을 넘겨도 시세 적재는 돈다 — 합집합에 넣으면 거버넌스가 시세를 막는다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <testcase name="미국 영업활동현금흐름 결손에는 안 부른다 — 그 잡은 DART 전용이라 한 행도 못 쓴다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.0"/>
+  <testcase name="겹쳐서 적재를 건너뛴 주에도 업종은 부른다 — price_daily에 안 쓰는 잡까지 막으면 가짜 연체가 또 하나 생긴다" classname="com.stockscreener.pipeline.batch.MembershipGapFillerTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:24:02.585+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 시세 1종목을 7년으로 받는다. 종목=[005930]
+2026-10-06T19:24:02.585+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 재무 1종목을 받는다. 종목=[035420]
+2026-10-06T19:24:02.585+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.586+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 전체 재무제표 1종목을 받는다. 종목=[001820]
+2026-10-06T19:24:02.586+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.587+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 시세 1종목을 7년으로 받는다. 종목=[005930]
+2026-10-06T19:24:02.587+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.588+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 시세 1종목을 7년으로 받는다. 종목=[005930]
+2026-10-06T19:24:02.588+09:00 ERROR 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충·통지가 실패했다. 리밸런싱은 정상이며 되돌리지 않는다.
+
+java.lang.IllegalStateException: 소스가 죽었다
+	at com.stockscreener.pipeline.batch.InitialLoadJob.run(InitialLoadJob.java:101) ~[main/:na]
+	at com.stockscreener.pipeline.batch.MembershipGapFiller.loadMissingRawData(MembershipGapFiller.java:308) ~[main/:na]
+	at com.stockscreener.pipeline.batch.MembershipGapFiller.fill(MembershipGapFiller.java:196) ~[main/:na]
+	at com.stockscreener.pipeline.batch.MembershipGapFiller.fillAndAlert(MembershipGapFiller.java:166) ~[main/:na]
+	at com.stockscreener.pipeline.batch.MembershipGapFillerTest.lambda$neverThrowsSoTheRebalancingStaysSuccessful$0(MembershipGapFillerTest.java:283) ~[test/:na]
+	at org.assertj.core.api.ThrowableAssert.catchThrowable(ThrowableAssert.java:66) ~[assertj-core-3.27.7.jar:na]
+	at org.assertj.core.api.AssertionsForClassTypes.catchThrowable(AssertionsForClassTypes.java:908) ~[assertj-core-3.27.7.jar:na]
+	at org.assertj.core.api.AssertionsForClassTypes.assertThatCode(AssertionsForClassTypes.java:879) ~[assertj-core-3.27.7.jar:na]
+	at org.assertj.core.api.Assertions.assertThatCode(Assertions.java:1396) ~[assertj-core-3.27.7.jar:na]
+	at com.stockscreener.pipeline.batch.MembershipGapFillerTest.neverThrowsSoTheRebalancingStaysSuccessful(MembershipGapFillerTest.java:283) ~[test/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:701) ~[junit-platform-commons-6.0.3.jar:6.0.3]
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:502) ~[junit-platform-commons-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.support.MethodReflectionUtils.invoke(MethodReflectionUtils.java:45) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:61) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:124) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:163) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:148) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:123) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:105) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:99) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:66) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:47) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:39) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:104) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:98) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invokeVoid(InterceptingExecutableInvoker.java:71) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$0(TestMethodTestDescriptor.java:219) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:215) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:157) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:70) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:176) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:36) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:52) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:58) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.executeEngine(EngineExecutionOrchestrator.java:246) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.failOrExecuteEngine(EngineExecutionOrchestrator.java:218) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:179) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:108) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:66) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:157) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:65) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:125) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:114) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:93) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:48) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$0(InterceptingLauncher.java:41) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:40) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:48) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestDefinitionProcessor$CollectThenExecuteTestDefinitionConsumer.processAllTestDefinitions(JUnitPlatformTestDefinitionProcessor.java:179) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestDefinitionProcessor$CollectThenExecuteTestDefinitionConsumer.access$000(JUnitPlatformTestDefinitionProcessor.java:122) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestDefinitionProcessor.stop(JUnitPlatformTestDefinitionProcessor.java:116) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.SuiteTestDefinitionProcessor.stop(SuiteTestDefinitionProcessor.java:63) ~[na:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.gradle.internal.dispatch.MethodInvocation.invokeOn(MethodInvocation.java:77) ~[na:na]
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:28) ~[na:na]
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:19) ~[na:na]
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33) ~[na:na]
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:88) ~[na:na]
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:195) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:126) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103) ~[na:na]
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63) ~[na:na]
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56) ~[na:na]
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122) ~[na:na]
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72) ~[na:na]
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69) ~[gradle-worker.jar:na]
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74) ~[gradle-worker.jar:na]
+
+2026-10-06T19:24:02.589+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손이 51종목으로 자동 적재 상한(50)을 넘는다. 돌리지 않는다. 종목=[T000, T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014, T015, T016, T017, T018, T019, T020, T021, T022, T023, T024, T025, T026, T027, T028, T029, T030, T031, T032, T033, T034, T035, T036, T037, T038, T039, T040, T041, T042, T043, T044, T045, T046, T047, T048, T049, T050]
+2026-10-06T19:24:02.590+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.590+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 시세 1종목을 7년으로 받는다. 종목=[005930]
+2026-10-06T19:24:02.590+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충이 종료로 중단됐다 — 리밸런싱은 이미 끝났다. 남은 결손은 평일 15:30 점검이 다시 신고한다.
+2026-10-06T19:24:02.591+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손이 51종목으로 자동 적재 상한(50)을 넘는다. 돌리지 않는다. 종목=[T000, T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014, T015, T016, T017, T018, T019, T020, T021, T022, T023, T024, T025, T026, T027, T028, T029, T030, T031, T032, T033, T034, T035, T036, T037, T038, T039, T040, T041, T042, T043, T044, T045, T046, T047, T048, T049, T050]
+2026-10-06T19:24:02.591+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.591+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.592+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 시세 1종목을 7년으로 받는다. 종목=[005930]
+2026-10-06T19:24:02.592+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.592+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 시세 1종목을 7년으로 받는다. 종목=[005930]
+2026-10-06T19:24:02.592+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.593+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 다른 배치가 도는 중이라 편입 원자료 적재를 건너뛴다. 도는 잡=[daily-update]
+2026-10-06T19:24:02.593+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.593+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 거버넌스 1종목을 받는다. 종목=[005930]
+2026-10-06T19:24:02.594+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.596+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.596+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 시세 1종목을 7년으로 받는다. 종목=[005930]
+2026-10-06T19:24:02.596+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.597+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손 보충 — 시세 1종목을 7년으로 받는다. 종목=[005930]
+2026-10-06T19:24:02.597+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 거버넌스 결손이 201종목으로 상한(200)을 넘는다. 돌리지 않는다. 종목=[G00000, G00001, G00002, G00003, G00004, G00005, G00006, G00007, G00008, G00009, G00010, G00011, G00012, G00013, G00014, G00015, G00016, G00017, G00018, G00019, G00020, G00021, G00022, G00023, G00024, G00025, G00026, G00027, G00028, G00029, G00030, G00031, G00032, G00033, G00034, G00035, G00036, G00037, G00038, G00039, G00040, G00041, G00042, G00043, G00044, G00045, G00046, G00047, G00048, G00049, G00050, G00051, G00052, G00053, G00054, G00055, G00056, G00057, G00058, G00059, G00060, G00061, G00062, G00063, G00064, G00065, G00066, G00067, G00068, G00069, G00070, G00071, G00072, G00073, G00074, G00075, G00076, G00077, G00078, G00079, G00080, G00081, G00082, G00083, G00084, G00085, G00086, G00087, G00088, G00089, G00090, G00091, G00092, G00093, G00094, G00095, G00096, G00097, G00098, G00099, G00100, G00101, G00102, G00103, G00104, G00105, G00106, G00107, G00108, G00109, G00110, G00111, G00112, G00113, G00114, G00115, G00116, G00117, G00118, G00119, G00120, G00121, G00122, G00123, G00124, G00125, G00126, G00127, G00128, G00129, G00130, G00131, G00132, G00133, G00134, G00135, G00136, G00137, G00138, G00139, G00140, G00141, G00142, G00143, G00144, G00145, G00146, G00147, G00148, G00149, G00150, G00151, G00152, G00153, G00154, G00155, G00156, G00157, G00158, G00159, G00160, G00161, G00162, G00163, G00164, G00165, G00166, G00167, G00168, G00169, G00170, G00171, G00172, G00173, G00174, G00175, G00176, G00177, G00178, G00179, G00180, G00181, G00182, G00183, G00184, G00185, G00186, G00187, G00188, G00189, G00190, G00191, G00192, G00193, G00194, G00195, G00196, G00197, G00198, G00199, G00200]
+2026-10-06T19:24:02.597+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.598+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+2026-10-06T19:24:02.598+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 다른 배치가 도는 중이라 편입 원자료 적재를 건너뛴다. 도는 잡=[daily-update]
+2026-10-06T19:24:02.598+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.MembershipGapFiller   : 편입 결손을 다시 쟀다. 알림=없거나 이미 보냈다
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

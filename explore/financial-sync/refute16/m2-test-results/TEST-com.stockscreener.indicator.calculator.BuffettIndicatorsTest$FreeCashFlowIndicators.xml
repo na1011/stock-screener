@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="FCF_MARGIN · FCF_YIELD" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.375Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="자본적지출이 영업현금흐름을 넘으면 음수를 낸다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$FreeCashFlowIndicators" time="0.0"/>
+  <testcase name="시가총액이 없는 날은 건너뛴다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$FreeCashFlowIndicators" time="0.0"/>
+  <testcase name="영업활동현금흐름에서 자본적지출을 뺀다 — 더하지 않는다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$FreeCashFlowIndicators" time="0.0"/>
+  <testcase name="수익률은 시가총액으로 나눈다 — 다시 계산하지 않고 MARKET_CAP에 의존한다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$FreeCashFlowIndicators" time="0.0"/>
+  <testcase name="IMPORTANT — 자본적지출이 없으면 값을 내지 않는다. 0으로 보면 자본집약 기업이 우량해 보인다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$FreeCashFlowIndicators" time="0.0"/>
+  <testcase name="IMPORTANT — 자본적지출이 음수로 와도 유출로 읽는다. 부호 규약이 회사마다 갈린다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$FreeCashFlowIndicators" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.170Z" hostname="MacBook-Pro.local" time="0.016">
+  <properties/>
+  <testcase name="세션을 그대로 옮긴다 — 조기폐장일은 core_end가 앞당겨진 채로 온다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.002"/>
+  <testcase name="세션 날짜를 시각에서 유도하지 않는다 — UTC로 환산하면 뉴욕 오후가 다음 날로 밀린다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.002"/>
+  <testcase name="date가 없으면 MALFORMED다 — 시각에서 만들어 채우지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.001"/>
+  <testcase name="calendar가 배열이 아니면 MALFORMED다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.002"/>
+  <testcase name="빈 배열은 정상이다 — 휴일만 든 구간이 실재한다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.001"/>
+  <testcase name="calendar 키가 없으면 MALFORMED다 — 0건과 스펙 변경은 다른 사건이다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.001"/>
+  <testcase name="뒤집힌 창은 콜을 태우지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.001"/>
+  <testcase name="모르는 거래소는 콜을 태우지 않고 NOT_FOUND다 — 소문자도 소스가 400을 준다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.0"/>
+  <testcase name="401 본문이 HTML이어도 AUTH다 — 이 엔드포인트는 JSON을 주지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.001"/>
+  <testcase name="소스가 400을 주면 MALFORMED다 — 재시도해도 안 되는 것을 재시도로 적지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.002"/>
+  <testcase name="정규장 종료가 개장보다 이르면 종목 실패로 접는다 — 던져 올리면 잡이 죽는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.001"/>
+  <testcase name="start·end를 둘 다 실어 보낸다 — end를 빼면 절단이 아니라 1주짜리 정상 응답이 온다" classname="com.stockscreener.pipeline.datasource.us.AlpacaMarketCalendarAdapterTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

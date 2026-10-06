@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="PSR — 주가 ÷ 주당매출(TTM)" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.486Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="분기 매출 4개를 더해 주당매출을 만들고 주가로 나눈다" classname="com.stockscreener.indicator.calculator.ValuationIndicatorsTest$Psr" time="0.0"/>
+  <testcase name="매출이 0 이하면 값을 내지 않는다 — 매출 개념이 없는 업종이 그 자리다" classname="com.stockscreener.indicator.calculator.ValuationIndicatorsTest$Psr" time="0.0"/>
+  <testcase name="분기가 4개 미만이면 계산하지 않는다" classname="com.stockscreener.indicator.calculator.ValuationIndicatorsTest$Psr" time="0.0"/>
+  <testcase name="적자여도 값을 낸다 — PER이 값을 못 내는 구간을 메우는 것이 이 지표의 존재 이유다" classname="com.stockscreener.indicator.calculator.ValuationIndicatorsTest$Psr" time="0.0"/>
+  <testcase name="IMPORTANT — 원주가(close)를 쓴다. 수정주가는 시점의 발행주식수와 짝이 맞지 않는다" classname="com.stockscreener.indicator.calculator.ValuationIndicatorsTest$Psr" time="0.0"/>
+  <testcase name="PER·PBR과 같은 주식수 경로를 쓴다 — 시세를 우선하고 재무로 폴백한다" classname="com.stockscreener.indicator.calculator.ValuationIndicatorsTest$Psr" time="0.0"/>
+  <testcase name="IMPORTANT — 매출은 유량이라 4분기를 더한다. 한 분기만 쓰면 4배로 비싸 보인다" classname="com.stockscreener.indicator.calculator.ValuationIndicatorsTest$Psr" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

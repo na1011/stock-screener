@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.UsSharesResolutionTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.482Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="대조군 — 봉이 상장주식수를 들면 같은 계산기가 실제 희석을 잰다" classname="com.stockscreener.indicator.calculator.UsSharesResolutionTest" time="0.0"/>
+  <testcase name="봉에 상장주식수가 없어도 분기마다 다른 수를 골라 실제 희석을 잰다 — 상수가 아니다" classname="com.stockscreener.indicator.calculator.UsSharesResolutionTest" time="0.001"/>
+  <testcase name="그 봉 시점에 공시된 분기가 없으면 값을 안 낸다 — 최신 분기를 되돌려 쓰지 않는다" classname="com.stockscreener.indicator.calculator.UsSharesResolutionTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

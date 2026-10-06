@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.ExcessReturn26wCalculatorTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.388Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="지수에 구멍이 있으면 그 날짜만 빠진다 — 직전 값으로 채우지 않는다" classname="com.stockscreener.indicator.calculator.ExcessReturn26wCalculatorTest" time="0.001"/>
+  <testcase name="지수가 아예 없으면 한 행도 내지 않는다 — 0으로 메우지 않는다" classname="com.stockscreener.indicator.calculator.ExcessReturn26wCalculatorTest" time="0.0"/>
+  <testcase name="종목과 지수가 같은 비율로 오르면 초과 수익률이 0이다" classname="com.stockscreener.indicator.calculator.ExcessReturn26wCalculatorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

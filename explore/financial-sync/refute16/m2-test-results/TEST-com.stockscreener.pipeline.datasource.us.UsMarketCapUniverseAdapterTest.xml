@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" tests="27" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:17.019Z" hostname="MacBook-Pro.local" time="0.087">
+  <properties/>
+  <testcase name="마지막 세션 제외가 CIK 중복 제거보다 앞이다 — 낡은 숨은 티커가 대표를 차지한 뒤 빠져 산 클래스까지 지우지 않는다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.005"/>
+  <testcase name="단건이 5xx면 던진다 — 빼고 넘어가면 상장 종목이 명부에서 빠지는 원래 결함이 재현된다(ADR-0008)" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.004"/>
+  <testcase name="CIK를 모르는 티커는 남긴다 — 우리 8,504 중 1,815가 매핑 파일에 없고 정상이다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="종가 커버리지가 하한 미만이면 부분 목록이다 — 모르는 심볼은 조용히 빠진다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="시총 내림차순으로 상위 N을 낸다 — 주식수는 우리 DB, 종가는 소스다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="IMPORTANT — 이름축이 토큰 경계다. Netflix·Curtiss-Wright가 남는다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="점·하이픈 정규화가 숨은 상장에도 걸린다 — 시세는 BRK.B · SEC는 BRK-B" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.004"/>
+  <testcase name="같은 어댑터의 두 번째 호출은 단건을 다시 안 부른다 — 복원 격자 2회째 0콜" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.005"/>
+  <testcase name="같은 CIK의 대표는 가격이 아니라 거래대금이 고른다 — 같은 주식수를 나눠 쓰면 시총 최대가 곧 가격 최대다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="통화가 어긋난 종목은 후보가 아니다 — 환산 없이 넣으면 상단이 오염된다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.002"/>
+  <testcase name="같은 CIK를 나눠 쓰면 시총이 큰 하나만 남는다 — 우선주가 발행사 주식수를 쓴다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.002"/>
+  <testcase name="주식수가 없는 종목은 후보가 아니고, 그 수를 축별로 신고한다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.002"/>
+  <testcase name="거래량이 없는 봉은 MALFORMED다 — 0으로 읽으면 전부 동률이 되어 기호순으로 대표가 조용히 정해진다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.002"/>
+  <testcase name="목록이 빠뜨린 상장도 마지막 세션에 봉이 있고 단건이 NYSE·NASDAQ면 후보다 — 목록은 상장 사실이 아니다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.004"/>
+  <testcase name="페이지가 갈려도 거래대금은 누적한다 — 덮어쓰면 마지막 페이지의 봉만 센다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="유니버스 코드의 N과 상위 N 상수가 같다 — 갈리면 이름이 내용과 어긋난다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.001"/>
+  <testcase name="거래대금은 창 안의 합이다 — 평균이면 봉이 띄엄띄엄인 클래스가 부푼다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="이름 축은 숨은 상장에도 건다 — 저장된 이름이 먼저(단건 전) · 단건 이름이 비면 저장된 이름" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="거래대금이 같으면(둘 다 무거래) 시총 → 기호 순이다 — 대표가 실행마다 흔들리지 않는다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.002"/>
+  <testcase name="단건이 404면 뺀다 · 거래소가 NYSE·NASDAQ가 아니면 뺀다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.005"/>
+  <testcase name="마지막 세션은 후보 과반의 날짜다 — 이상봉 하나가 숨은 상장 전체를 떨어뜨리지 않는다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.003"/>
+  <testcase name="묶음 조회의 파라미터를 명시하고 end를 시각으로 보낸다 — 날짜만 주면 어제도 403이다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.002"/>
+  <testcase name="숨은 생존자가 상한(200)을 넘으면 MALFORMED다 — 목록이 깨진 것이고 단건을 그만큼 부르지 않는다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.006"/>
+  <testcase name="숨은 상장이 마지막 세션에 봉이 없으면 뺀다 — SEC 파일은 폐지를 늦게 반영한다(DBRG 모양)" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.007"/>
+  <testcase name="혼성 단위·우선 주식·신탁증권은 이름으로 뺀다 — 발행사 주식수를 그대로 써서 시총이 부푼다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.004"/>
+  <testcase name="담당하지 않는 유니버스는 NOT_FOUND다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.0"/>
+  <testcase name="REIT·SPAC은 이름이 아니라 SIC로 뺀다" classname="com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapterTest" time="0.002"/>
+  <system-out><![CDATA[2026-10-06T19:24:17.022+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.024+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[] 마지막 세션 봉 없음=[OLD(2026-08-26)] 단건 없음=[] 거래소 밖=[]
+2026-10-06T19:24:17.024+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=2 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=0
+2026-10-06T19:24:17.024+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [LIVE=5000, BIG=1000]
+2026-10-06T19:24:17.027+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.031+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:17.032+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=2 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=0
+2026-10-06T19:24:17.032+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [MID=5000, BIG=1000]
+2026-10-06T19:24:17.034+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 2건
+2026-10-06T19:24:17.036+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.037+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=3 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=0
+2026-10-06T19:24:17.037+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~3위 · 2위까지 편입): [MID=5000, BIG=1000, SML=1]
+2026-10-06T19:24:17.040+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 7건
+2026-10-06T19:24:17.041+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=7 후보=6 편입=6 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=1(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=0
+2026-10-06T19:24:17.041+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(2~6위 · 6위까지 편입): [CW=6, BFAM=5, FUNC=4, ET=3, NTRS=2]
+2026-10-06T19:24:17.043+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.045+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[BRK.B(inactive · NYSE)] 마지막 세션 봉 없음=[] 단건 없음=[] 거래소 밖=[]
+2026-10-06T19:24:17.045+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=1
+2026-10-06T19:24:17.045+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~3위 · 2위까지 편입): [BRK.B=500000, MID=5000, BIG=1000]
+2026-10-06T19:24:17.047+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.048+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[ET(inactive · NYSE)] 마지막 세션 봉 없음=[] 단건 없음=[] 거래소 밖=[]
+2026-10-06T19:24:17.048+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=1
+2026-10-06T19:24:17.048+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~3위 · 2위까지 편입): [ET=60000, MID=5000, BIG=1000]
+2026-10-06T19:24:17.050+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[ET(inactive · NYSE)] 마지막 세션 봉 없음=[] 단건 없음=[] 거래소 밖=[]
+2026-10-06T19:24:17.050+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-27 상장=2 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=1
+2026-10-06T19:24:17.050+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~3위 · 2위까지 편입): [ET=60000, MID=5000, BIG=1000]
+2026-10-06T19:24:17.052+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.053+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : CIK 대표가 시총 최대와 갈렸다: cik=1 대표=MOG.A(중복 제거 전 시총 2위 · 거래대금 200000000) 시총 최대=MOG.B(1위 · 거래대금 6000)
+2026-10-06T19:24:17.053+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : CIK 대표: cik=1 대표=MOG.A 후보=[MOG.B=6000, MOG.A=200000000]
+2026-10-06T19:24:17.053+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=3 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=1 · 숨은상장 받음=0
+2026-10-06T19:24:17.053+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [MOG.A=1000, MID=500]
+2026-10-06T19:24:17.055+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 2건
+2026-10-06T19:24:17.056+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.057+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : CIK 대표: cik=1 대표=BIG 후보=[BIG=101000, BIGO=26000]
+2026-10-06T19:24:17.057+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=3 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=1 · 숨은상장 받음=0
+2026-10-06T19:24:17.057+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [BIG=1000, MID=500]
+2026-10-06T19:24:17.059+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 2건
+2026-10-06T19:24:17.061+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 2건
+2026-10-06T19:24:17.063+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.064+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[ET(inactive · NYSE)] 마지막 세션 봉 없음=[] 단건 없음=[] 거래소 밖=[]
+2026-10-06T19:24:17.064+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=1
+2026-10-06T19:24:17.064+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~3위 · 2위까지 편입): [ET=60000, MID=5000, BIG=1000]
+2026-10-06T19:24:17.066+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.067+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : CIK 대표가 시총 최대와 갈렸다: cik=1 대표=X(중복 제거 전 시총 3위 · 거래대금 20000) 시총 최대=Y(2위 · 거래대금 14700)
+2026-10-06T19:24:17.067+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : CIK 대표: cik=1 대표=X 후보=[Y=14700, X=20000]
+2026-10-06T19:24:17.067+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=3 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=1 · 숨은상장 받음=0
+2026-10-06T19:24:17.067+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [MID=500, X=100]
+2026-10-06T19:24:17.069+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 2건
+2026-10-06T19:24:17.071+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.072+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : CIK 대표가 시총 최대와 갈렸다: cik=1 대표=X(중복 제거 전 시총 3위 · 거래대금 20000) 시총 최대=Y(2위 · 거래대금 16500)
+2026-10-06T19:24:17.072+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : CIK 대표: cik=1 대표=X 후보=[Y=16500, X=20000]
+2026-10-06T19:24:17.072+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=3 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=1 · 숨은상장 받음=0
+2026-10-06T19:24:17.072+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [MID=500, X=100]
+2026-10-06T19:24:17.073+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 4건
+2026-10-06T19:24:17.074+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[ET(inactive · NYSE)] 마지막 세션 봉 없음=[] 단건 없음=[] 거래소 밖=[]
+2026-10-06T19:24:17.074+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=1(혼성 문구에만 걸림 [DDT]) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=1
+2026-10-06T19:24:17.074+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~3위 · 2위까지 편입): [ET=60000, MID=5000, BIG=1000]
+2026-10-06T19:24:17.076+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 4건
+2026-10-06T19:24:17.077+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : CIK 대표: cik=1 대표=Q 후보=[Q=0, P=0]
+2026-10-06T19:24:17.077+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : CIK 대표: cik=2 대표=R 후보=[R=0, S=0]
+2026-10-06T19:24:17.077+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=4 후보=4 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=2 · 숨은상장 받음=0
+2026-10-06T19:24:17.077+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [Q=300, R=50]
+2026-10-06T19:24:17.079+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.080+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[] 마지막 세션 봉 없음=[] 단건 없음=[ET] 거래소 밖=[]
+2026-10-06T19:24:17.080+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=2 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=0
+2026-10-06T19:24:17.080+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [MID=5000, BIG=1000]
+2026-10-06T19:24:17.081+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.082+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[] 마지막 세션 봉 없음=[] 단건 없음=[] 거래소 밖=[ET:AMEX]
+2026-10-06T19:24:17.082+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=2 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=0
+2026-10-06T19:24:17.082+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [MID=5000, BIG=1000]
+2026-10-06T19:24:17.084+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.085+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[ET(inactive · NYSE)] 마지막 세션 봉 없음=[] 단건 없음=[] 거래소 밖=[]
+2026-10-06T19:24:17.085+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=3 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=1
+2026-10-06T19:24:17.085+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~3위 · 2위까지 편입): [ET=60000, MID=5000, BIG=1000]
+2026-10-06T19:24:17.087+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 2건
+2026-10-06T19:24:17.087+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=2 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=0
+2026-10-06T19:24:17.087+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [MID=5000, BIG=1000]
+2026-10-06T19:24:17.090+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 203건
+2026-10-06T19:24:17.095+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 3건
+2026-10-06T19:24:17.096+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 숨은 상장: 풀=1 마지막 세션=2026-08-27 받음=[] 마지막 세션 봉 없음=[ET(2026-08-26)] 단건 없음=[] 거래소 밖=[]
+2026-10-06T19:24:17.096+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=2 후보=2 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=0(혼성 문구에만 걸림 []) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=0
+2026-10-06T19:24:17.096+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [MID=5000, BIG=1000]
+2026-10-06T19:24:17.103+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 6건
+2026-10-06T19:24:17.104+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 미국 시총 상위 유니버스를 만들었다. US_TOP1000 기준일=2026-08-28 상장=6 후보=2 편입=2 · 제외 통화=0 · REIT/SPAC=0 · 주식수없음=0 · 이름=4(혼성 문구에만 걸림 [PPLC, BTSGU, LILAP, DDT]) · 종가없음=0 · CIK중복=0 · 숨은상장 받음=0
+2026-10-06T19:24:17.104+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.UsMarketCapUniverseAdapter    : 경계 구간(1~2위 · 2위까지 편입): [ET=2, MID=1]
+2026-10-06T19:24:17.106+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 2건
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

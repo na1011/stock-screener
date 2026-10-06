@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.BatchAlertNoteTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:40.394Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="IMPORTANT — 긴 note는 앞만 싣고 전체는 실행 기록에 있다고 적는다 — 실행 id가 잘리지 않게" classname="com.stockscreener.pipeline.batch.BatchAlertNoteTest" time="0.001"/>
+  <testcase name="note가 없으면 아무것도 안 붙인다" classname="com.stockscreener.pipeline.batch.BatchAlertNoteTest" time="0.0"/>
+  <testcase name="짧은 note는 그대로 싣는다" classname="com.stockscreener.pipeline.batch.BatchAlertNoteTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

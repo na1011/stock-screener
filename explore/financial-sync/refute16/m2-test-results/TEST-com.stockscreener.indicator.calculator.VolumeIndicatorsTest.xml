@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.489Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="상장주식수가 없으면 계산하지 않는다 — 0으로 두면 회전율이 무한이 된다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.0"/>
+  <testcase name="종가가 늘 고가에 닫히면 CMF가 +1이다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.001"/>
+  <testcase name="거래량이 일정하면 비율이 1.0이다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.0"/>
+  <testcase name="회전율은 거래량 ÷ 상장주식수다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.0"/>
+  <testcase name="창이 덜 차면 값을 내지 않는다 — 짧은 창으로 지어내지 않는다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.0"/>
+  <testcase name="IMPORTANT — 분할 구간에서 거래량 비율이 튀지 않는다. 수정 축척을 쓴다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.0"/>
+  <testcase name="종가가 늘 저가에 닫히면 CMF가 −1이다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.0"/>
+  <testcase name="IMPORTANT — 회전율은 원 거래량을 쓴다. 수정 거래량을 쓰면 분할 이전이 배수만큼 커진다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.0"/>
+  <testcase name="오늘 거래량이 평소의 세 배면 비율이 3에 가깝다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.0"/>
+  <testcase name="IMPORTANT — 고가와 저가가 같은 봉은 기여 0이다. 그 봉 때문에 21일치를 잃지 않는다" classname="com.stockscreener.indicator.calculator.VolumeIndicatorsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

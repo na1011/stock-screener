@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:10.568Z" hostname="MacBook-Pro.local" time="0.057">
+  <properties/>
+  <testcase name="없는 id는 404이고 프론트가 분기할 수 있는 type을 준다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.008"/>
+  <testcase name="IMPORTANT — 증거가 점프를 셋 다 주고 하나만 일치로 표시한다. 고르는 것은 사람이다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.005"/>
+  <testcase name="판정이 종류와 비율을 고치고 갱신된 증거를 그대로 돌려준다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.004"/>
+  <testcase name="IMPORTANT — 음수 비율은 400이다. DB 제약까지 가면 500이 된다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.003"/>
+  <testcase name="관리자가 아니면 403이다 — 원장 판정은 저장된 시세를 소급해 바꾸는 근거다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.002"/>
+  <testcase name="사람이 APPLIED를 찍을 수 없다 — 계수는 그대로인데 원장이 반영됐다고 말하게 된다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.002"/>
+  <testcase name="종류를 모르는 채로 승인하면 400이고 필드가 지목된다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.002"/>
+  <testcase name="요약이 종류를 모르는 행 수를 따로 센다 — 그 수가 이 phase의 성공을 가른다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.002"/>
+  <testcase name="목록이 종목명과 효력일의 관측값을 함께 준다 — 티커만으로는 판정할 수 없다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.003"/>
+  <testcase name="IMPORTANT — type으로 좁힐 수 있다. 값을 지어내야 하는 행과 예·아니오만 답할 행은 다른 일이다" classname="com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest" time="0.005"/>
+  <system-out><![CDATA[2026-10-06T19:24:10.569+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest]: AdminCorporateActionApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:10.582+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest
+2026-10-06T19:24:10.582+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest]: AdminCorporateActionApiTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:10.582+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.web.AdminCorporateActionApiTest
+2026-10-06T19:24:10.583+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.583+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.584+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:10.592+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.592+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.592+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:10.597+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.597+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.598+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-10-06T19:24:10.600+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53354 status=APPROVED type=BONUS_ISSUE ratio=2.0000000000 가격배수=null 효력일=2026-05-04 신주상장=2026-05-26
+2026-10-06T19:24:10.602+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.602+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.602+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:10.605+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.605+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.605+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:10.607+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.607+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.607+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:10.610+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.610+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.610+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:10.613+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.613+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.613+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:10.616+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.616+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.616+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-06T19:24:10.620+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-06T19:24:10.620+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-06T19:24:10.620+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" tests="24" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:07.667Z" hostname="MacBook-Pro.local" time="0.317">
+  <properties/>
+  <testcase name="정상적인 등락은 후보로 잡지 않는다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.006"/>
+  <testcase name="재개 뒤 봉이 창만큼 안 쌓였으면 후보로 남긴다 — 신주가 아직 상장 안 된 권리락일 수 있다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.003"/>
+  <testcase name="탐지 결과는 전부 HEURISTIC이다 — 원장이 그것으로 승인 게이트를 건다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.002"/>
+  <testcase name="가격 배수가 비면 주식수 배수로 짓는다 — 분할·병합은 V60 앞과 한 칸도 안 바뀐다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.007"/>
+  <testcase name="사람이 확인하지 않은 후보는 계수에 닿지 않는다 — 오탐의 대가가 너무 크다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.003"/>
+  <testcase name="가격 배수가 따로 적힌 사건은 그것으로 짓고, 주식수 배수는 주식수 쪽에만 남는다 — 분사(V60)" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.004"/>
+  <testcase name="KRX 가격제한폭을 넘는 변동만 후보다 — 임계가 비대칭이다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.002"/>
+  <testcase name="주식수가 없으면 후보로 올리지 않는다 — 판정할 수 없는 후보가 지표를 억제한다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.001"/>
+  <testcase name="대한전선 2023-05-16 실측값 왕복 — 비율이 종가가 아니라 주식수에서 나온다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.005"/>
+  <testcase name="바뀐 행이 없으면 지표를 무효화하지 않는다 — 무효화는 그 종목 지표를 전량 지운다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.006"/>
+  <testcase name="정지 중의 주식수 변화는 재개 판정에 안 끼어든다 — 앞쪽 창만 본다(코오롱티슈진 2022-10-25)" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.008"/>
+  <testcase name="거래정지 뒤 첫 거래 봉의 가격 발견은 앞쪽 창에서 주식수가 그대로면 후보가 아니다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.005"/>
+  <testcase name="주식수가 그대로인 급락은 SPLIT이 아니라 UNKNOWN이다 — 무상증자 권리락이 그 모양이다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.003"/>
+  <testcase name="주식수 배수가 단순 유리수가 아니면 UNKNOWN이다 — 인적분할이 그 모양이다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.002"/>
+  <testcase name="원주가는 보존된다 — PER·시가총액이 이것을 쓴다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.003"/>
+  <testcase name="분할 왕복 — 탐지가 내는 비율이 두 방향 모두 계약을 지킨다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.004"/>
+  <testcase name="적용 대상이 원장에 들어오면 APPLIED로 표시된다 — 조정할 봉이 없어도 마찬가지다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.003"/>
+  <testcase name="사건이 둘이면 구간마다 계수가 다르다 — 곱해 쌓지 않고 원장 전체에서 짓는다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.004"/>
+  <testcase name="병합 왕복 — 탐지가 낸 비율을 그대로 승인해도 과거 가격이 올라간다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.004"/>
+  <testcase name="몇 번을 다시 지어도 같고, 두 번째부터는 아무 행도 건드리지 않는다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.004"/>
+  <testcase name="재개 뒤 앞쪽 창 안에서 주식수가 늘면 후보로 남긴다 — 권리락이 재개일에 걸린 모양이다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.004"/>
+  <testcase name="정지 → 재개에서 주식수가 같은 날 바뀐 병합은 그대로 잡는다 — 대한전선 2023-05-16" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.005"/>
+  <testcase name="주식수가 있는데 비율이 가격을 설명하지 못하면 여전히 UNKNOWN이다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.002"/>
+  <testcase name="반영을 되돌리면 계수가 1로 돌아온다 — 되돌리기 수단이 DB 덤프뿐이 아니다" classname="com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest" time="0.004"/>
+  <system-out><![CDATA[2026-10-06T19:24:07.668+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest]: AdjustmentRecalculatorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:07.682+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest
+2026-10-06T19:24:07.682+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest]: AdjustmentRecalculatorTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:07.684+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.AdjustmentRecalculatorTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:07.690+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.AdjustmentRecalculatorTest       : Starting AdjustmentRecalculatorTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:07.690+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.AdjustmentRecalculatorTest       : The following 1 profile is active: "test"
+2026-10-06T19:24:07.755+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:07.766+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:07.775+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-24 - Starting...
+2026-10-06T19:24:07.782+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-24 - Start completed.
+2026-10-06T19:24:07.791+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:07.805+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.007s)
+2026-10-06T19:24:07.831+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:07.832+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:07.832+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:07.844+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:07.849+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:07.855+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:07.867+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:07.867+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:07.887+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:07.890+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.AdjustmentRecalculatorTest       : Started AdjustmentRecalculatorTest in 0.205 seconds (process running for 41.105)
+2026-10-06T19:24:07.897+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceWriter       : 거래정지 봉 1봉을 종가로 평탄화해 저장한다. stockId=796358
+2026-10-06T19:24:07.904+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796360 id=53273 2026-02-02 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:07.906+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796360 사건=1건 갱신=1행 최초변경일=2026-01-02
+2026-10-06T19:24:07.912+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796362 id=53274 2026-08-25 type=SPIN_OFF ratio=0.7563532970 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:07.913+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796362 사건=1건 갱신=1행 최초변경일=2026-07-29
+2026-10-06T19:24:07.921+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796365 id=53275 2023-05-16 type=REVERSE_SPLIT ratio=0.1000000000 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:07.922+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53275 status=APPROVED type=REVERSE_SPLIT ratio=0.1000000000 가격배수=null 효력일=2023-05-16 신주상장=null
+2026-10-06T19:24:07.923+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796365 사건=1건 갱신=1행 최초변경일=2023-04-27
+2026-10-06T19:24:07.926+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796366 id=53276 2026-02-02 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:07.927+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796366 사건=1건 갱신=1행 최초변경일=2026-01-02
+2026-10-06T19:24:07.931+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceWriter       : 거래정지 봉 30봉을 종가로 평탄화해 저장한다. stockId=796367
+2026-10-06T19:24:07.938+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 거래정지 뒤 첫 거래 봉의 가격 발견이라 기업행위 후보로 올리지 않는다. stockId=796367 효력일=2022-09-13 관측배수=0.3845193508 — 앞 45거래일 동안 상장주식수가 그대로다.
+2026-10-06T19:24:07.939+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceWriter       : 거래정지 봉 1봉을 종가로 평탄화해 저장한다. stockId=796368
+2026-10-06T19:24:07.943+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 거래정지 뒤 첫 거래 봉의 가격 발견이라 기업행위 후보로 올리지 않는다. stockId=796368 효력일=2023-03-03 관측배수=0.6512175962 — 앞 45거래일 동안 상장주식수가 그대로다.
+2026-10-06T19:24:07.946+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796369 id=53277 2023-11-09 type=UNKNOWN ratio=1.8902439024 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:07.949+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796371 id=53278 2018-05-04 type=SPLIT ratio=50 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:07.950+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796371 사건=1건 갱신=1행 최초변경일=2018-05-02
+2026-10-06T19:24:07.953+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796372 id=53279 2026-02-02 type=SPLIT ratio=50.0000000000 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:07.953+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53279 status=APPROVED type=SPLIT ratio=50.0000000000 가격배수=null 효력일=2026-02-02 신주상장=null
+2026-10-06T19:24:07.954+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796372 사건=1건 갱신=1행 최초변경일=2026-01-02
+2026-10-06T19:24:07.956+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796373 id=53280 2026-01-04 type=SPLIT ratio=2 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:07.959+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796374 id=53281 2021-01-04 type=SPLIT ratio=2 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:07.960+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796374 id=53282 2022-01-03 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:07.960+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796374 사건=2건 갱신=2행 최초변경일=2020-01-02
+2026-10-06T19:24:07.963+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796375 id=53283 2026-02-02 type=REVERSE_SPLIT ratio=0.1000000000 status=OBSERVED source=HEURISTIC
+2026-10-06T19:24:07.964+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53283 status=APPROVED type=REVERSE_SPLIT ratio=0.1000000000 가격배수=null 효력일=2026-02-02 신주상장=null
+2026-10-06T19:24:07.965+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796375 사건=1건 갱신=1행 최초변경일=2026-01-02
+2026-10-06T19:24:07.967+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796376 id=53284 2026-02-02 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:07.968+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796376 사건=1건 갱신=1행 최초변경일=2026-01-02
+2026-10-06T19:24:07.970+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceWriter       : 거래정지 봉 1봉을 종가로 평탄화해 저장한다. stockId=796377
+2026-10-06T19:24:07.975+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.PriceWriter       : 거래정지 봉 1봉을 종가로 평탄화해 저장한다. stockId=796378
+2026-10-06T19:24:07.982+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=796380 id=53285 2026-02-02 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:24:07.982+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796380 사건=1건 갱신=1행 최초변경일=2026-01-02
+2026-10-06T19:24:07.983+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 사람이 원장을 판정했다. id=53285 status=REJECTED type=SPLIT ratio=5.0000000000 가격배수=null 효력일=2026-02-02 신주상장=null
+2026-10-06T19:24:07.984+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 수정계수를 원장에서 다시 지었다. stockId=796380 사건=0건 갱신=1행 최초변경일=2026-01-02
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

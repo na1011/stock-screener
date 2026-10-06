@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="OPM_MIN_5Y" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.379Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="다섯 해 중 가장 낮은 이익률을 낸다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$OperatingMarginMin5y" time="0.0"/>
+  <testcase name="매출이 0 이하인 해가 있으면 값을 내지 않는다 — 절댓값 분모는 적자를 흑자로 만든다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$OperatingMarginMin5y" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

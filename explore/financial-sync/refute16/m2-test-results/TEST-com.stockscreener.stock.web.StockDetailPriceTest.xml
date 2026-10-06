@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.stock.web.StockDetailPriceTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:20.494Z" hostname="MacBook-Pro.local" time="0.0">
+  <properties/>
+  <testcase name="효력일이 직전 거래일과 같은 날이면 억제하지 않는다 — 두 봉이 같은 축척이다" classname="com.stockscreener.stock.web.StockDetailPriceTest" time="0.0"/>
+  <testcase name="직전 거래일이 인접하지 않으면 그 날짜를 함께 낸다 — 화면이 라벨을 정할 수 있어야 한다" classname="com.stockscreener.stock.web.StockDetailPriceTest" time="0.0"/>
+  <testcase name="보정된 액면분할 당일은 −50%가 아니다 — 원주가끼리 빼지 않는다는 것이 이 값이다" classname="com.stockscreener.stock.web.StockDetailPriceTest" time="0.0"/>
+  <testcase name="전일 봉이 없으면 0%가 아니라 아무 값도 내지 않는다" classname="com.stockscreener.stock.web.StockDetailPriceTest" time="0.0"/>
+  <testcase name="미보정 사건이 두 거래일 사이에 있으면 셋 다 내지 않는다 — 007340이 −81.2%로 나오던 자리" classname="com.stockscreener.stock.web.StockDetailPriceTest" time="0.0"/>
+  <testcase name="분모가 0이면 어느 쪽이든 내지 않는다 — 비의 분모는 오늘, 등락률의 분모는 어제다" classname="com.stockscreener.stock.web.StockDetailPriceTest" time="0.0"/>
+  <testcase name="평상시에는 원주가 뺄셈과 같은 값이 나온다" classname="com.stockscreener.stock.web.StockDetailPriceTest" time="0.0"/>
+  <testcase name="몫이 무한소수여도 던지지 않는다 — MathContext가 없으면 여기서 500이 난다" classname="com.stockscreener.stock.web.StockDetailPriceTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

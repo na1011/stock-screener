@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.169Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="special·foreign을 둘 다 더한다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.001"/>
+  <testcase name="배당이 없던 회계연도는 0을 낸다 — 짝은 연간 재무다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.0"/>
+  <testcase name="수집일을 모르면 아무것도 내지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.0"/>
+  <testcase name="회계연도가 걸친 역년 중 하나라도 안 받았으면 부분 합을 내지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.0"/>
+  <testcase name="주식수가 없으면 총액을 안 내고 주당배당금은 낸다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.0"/>
+  <testcase name="배당 말고 다른 표를 물으면 아무것도 내지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.0"/>
+  <testcase name="역년이 아니라 그 회사의 회계연도로 자른다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.0"/>
+  <testcase name="회계연도가 끝난 지 얼마 안 되면 값을 내지 않는다 — 처리 지연이 남아 있다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.0"/>
+  <testcase name="회계연도 안에 분할이 있으면 공시일 기준 주식수로 환산한다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.0"/>
+  <testcase name="공시일은 그 회계연도 연간 재무의 최초 공시일이고, 접수번호가 그 날짜다" classname="com.stockscreener.pipeline.datasource.us.AlpacaGovernanceFactMapperTest" time="0.0"/>
+  <system-out><![CDATA[2026-10-06T19:24:11.170+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.AlpacaGovernanceFactMapper    : 수집일을 몰라 배당 사실을 유도하지 않는다. 원문 1행
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

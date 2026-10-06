@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="판 보호 — 소스가 공시 하나를 못 실었을 때(SEC 공시 보충 · ADR-0173)" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:08.741Z" hostname="MacBook-Pro.local" time="0.032">
+  <properties/>
+  <testcase name="보충 표지는 그 공시일의 판만 연다 — 같은 종목의 다른 이른 판은 여전히 정기 경로가 건너뛴다" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$VintageGuards" time="0.008"/>
+  <testcase name="못 실은 공시가 무엇인지 모르면 그 종목의 회수를 통째로 멈춘다" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$VintageGuards" time="0.003"/>
+  <testcase name="보충으로 실은 공시의 판은 정기 경로에서도 이른 판으로 넣는다 — 늦은 판이 먼저 들어와 있어도 원장의 판 집합에 닿게" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$VintageGuards" time="0.008"/>
+  <testcase name="못 실은 공시의 제출일 행은 회수하지 않는다 — 보호가 없으면 멀쩡한 판이 지워진다(대조)" classname="com.stockscreener.pipeline.collector.FinancialWriterTest$VintageGuards" time="0.005"/>
+  <system-out><![CDATA[2026-10-06T19:24:08.742+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.FinancialWriterTest$VintageGuards]: VintageGuards does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.745+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.FinancialWriterTest$VintageGuards
+2026-10-06T19:24:08.745+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.FinancialWriterTest$VintageGuards]: VintageGuards does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.745+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.FinancialWriterTest]: FinancialWriterTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:08.747+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.FinancialWriterTest$VintageGuards
+2026-10-06T19:24:08.754+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796491 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=3 이른판삽입=1 재번호라벨=0
+2026-10-06T19:24:08.758+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시를 반영한다. stockId=796492 2025/FY 기존공시일=2026-03-15 새공시일=2026-04-20
+2026-10-06T19:24:08.759+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796492 fromDate=2025-01-01 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:08.759+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 판 이력의 빈칸을 몰라 이 종목의 판 회수를 멈춘다. stockId=796492
+2026-10-06T19:24:08.759+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796492 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:08.763+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796493 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=2 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:08.766+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796493 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=1 재번호라벨=0
+2026-10-06T19:24:08.771+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시를 반영한다. stockId=796494 2025/FY 기존공시일=2026-03-15 새공시일=2026-04-20
+2026-10-06T19:24:08.771+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796494 fromDate=2025-01-01 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:08.772+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796494 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:08.773+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 유도 판을 회수한다. stockId=796494 2025/FY 지운 판=1 남긴 공시일=[2026-04-20]
+2026-10-06T19:24:08.773+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796494 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=1 무변경=1 이른판삽입=0 재번호라벨=0
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

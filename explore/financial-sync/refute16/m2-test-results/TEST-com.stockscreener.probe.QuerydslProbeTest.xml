@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.probe.QuerydslProbeTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:17.742Z" hostname="MacBook-Pro.local" time="0.242">
+  <properties/>
+  <testcase name="where 술어가 SQL로 번역되어 실행된다" classname="com.stockscreener.probe.QuerydslProbeTest" time="0.193"/>
+  <testcase name="상관 서브쿼리 EXISTS가 실행된다 — 조건 번역이 이 형태에 의존한다" classname="com.stockscreener.probe.QuerydslProbeTest" time="0.03"/>
+  <testcase name="QueryDSL이 생성된 Q클래스로 실제 쿼리를 실행한다" classname="com.stockscreener.probe.QuerydslProbeTest" time="0.006"/>
+  <system-out><![CDATA[2026-10-06T19:24:17.743+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.probe.QuerydslProbeTest]: QuerydslProbeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:17.752+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.probe.QuerydslProbeTest
+2026-10-06T19:24:17.752+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.probe.QuerydslProbeTest]: QuerydslProbeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:17.754+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.probe.QuerydslProbeTest
+2026-10-06T19:24:17.763+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : insert into querydsl_probe (label) values (?)
+Hibernate: insert into querydsl_probe (label) values (?)
+2026-10-06T19:24:17.773+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : insert into querydsl_probe (label) values (?)
+Hibernate: insert into querydsl_probe (label) values (?)
+2026-10-06T19:24:17.943+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select qpe1_0.id,qpe1_0.label from querydsl_probe qpe1_0 where qpe1_0.label=?
+Hibernate: select qpe1_0.id,qpe1_0.label from querydsl_probe qpe1_0 where qpe1_0.label=?
+2026-10-06T19:24:17.949+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : insert into querydsl_probe (label) values (?)
+Hibernate: insert into querydsl_probe (label) values (?)
+2026-10-06T19:24:17.976+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select qpe1_0.id,qpe1_0.label from querydsl_probe qpe1_0 where exists(select 1 from querydsl_probe qpe2_0 where qpe2_0.id=qpe1_0.id and qpe2_0.label=?)
+Hibernate: select qpe1_0.id,qpe1_0.label from querydsl_probe qpe1_0 where exists(select 1 from querydsl_probe qpe2_0 where qpe2_0.id=qpe1_0.id and qpe2_0.label=?)
+2026-10-06T19:24:17.979+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : insert into querydsl_probe (label) values (?)
+Hibernate: insert into querydsl_probe (label) values (?)
+2026-10-06T19:24:17.980+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : insert into querydsl_probe (label) values (?)
+Hibernate: insert into querydsl_probe (label) values (?)
+2026-10-06T19:24:17.983+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] org.hibernate.SQL                        : select qpe1_0.id,qpe1_0.label from querydsl_probe qpe1_0 order by qpe1_0.label
+Hibernate: select qpe1_0.id,qpe1_0.label from querydsl_probe qpe1_0 order by qpe1_0.label
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.CorporateActionJobTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:56.912Z" hostname="MacBook-Pro.local" time="0.518">
+  <properties/>
+  <testcase name="공시를 원장에 적는다 — 창 기본값이 저장된 시세 전 구간이라 옛 사건도 든다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.012"/>
+  <testcase name="결손이 없으면 그 줄이 아예 안 뜬다 — 신호의 형태가 「부재 → 출현」이다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.006"/>
+  <testcase name="봉이 없는 종목에는 콜을 태우지 않는다 — 어댑터가 우리 시계열에서 값을 유도한다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.006"/>
+  <testcase name="안 담은 것이 없으면 그 줄이 아예 안 뜬다 — 「사건이 없다」와 구분된다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.005"/>
+  <testcase name="저장된 시세가 하나도 없으면 소스를 부르지 않고 끝낸다 — 시세가 먼저다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.004"/>
+  <testcase name="티커가 하나도 매칭되지 않으면 조용히 성공하지 않고 실패한다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.003"/>
+  <testcase name="보존 창 안에서 편출된 종목도 원장에 적는다 — 안 적으면 과거 기준일에 고친 모체와 안 고친 모체가 섞인다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.008"/>
+  <testcase name="창의 시작이 대상일보다 늦으면 즉시 실패하고 그 실패가 기록된다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.005"/>
+  <testcase name="고른 유니버스에 대상이 0건이면 예외다 — 조용한 0건은 「적재할 것이 없다」와 같다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.004"/>
+  <testcase name="이 잡은 수정계수를 건드리지 않는다 — rebuild()는 되돌릴 수 없는 유일한 지점이다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.006"/>
+  <testcase name="담지 않은 기업 행위를 시장마다 한 줄로 적되 종류를 키로 남긴다 — 총합으로 접지 않는다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.005"/>
+  <testcase name="종목별 줄은 지운 것이 아니라 내린 것이다 — DEBUG면 stockId가 돌아온다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.006"/>
+  <testcase name="주식수가 없어 못 올린 후보를 시장마다 한 줄로 적는다 — 종목마다가 아니다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.005"/>
+  <testcase name="유니버스를 손으로 주면 비활성이어도 그 종목을 고른다 — 활성 조인을 안 탄다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.005"/>
+  <testcase name="담당 소스가 없으면 종목 루프를 돌기 전에 실패한다 — 0건 성공이면 계수가 영영 1로 남는다" classname="com.stockscreener.pipeline.batch.CorporateActionJobTest" time="0.003"/>
+  <system-out><![CDATA[2026-10-06T19:23:56.913+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.CorporateActionJobTest
+2026-10-06T19:23:56.914+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.CorporateActionJobTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:23:56.921+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJobTest       : Starting CorporateActionJobTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:23:56.921+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJobTest       : The following 1 profile is active: "test"
+2026-10-06T19:23:57.046+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:23:57.057+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 9 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:23:57.087+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-13 - Starting...
+2026-10-06T19:23:57.093+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-13 - Start completed.
+2026-10-06T19:23:57.098+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:23:57.113+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.007s)
+2026-10-06T19:23:57.138+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:23:57.138+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:23:57.139+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:23:57.150+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:23:57.156+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:23:57.163+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:23:57.177+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:23:57.177+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:23:57.194+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:23:57.204+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:23:57.208+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.notification.AlertConfig             : 알림 채널이 하나도 구성되지 않아 로그 기반 기본 구현을 쓴다. ALERT_WEBHOOK_URL·MAIL_USERNAME을 채우면 실제 통지가 나간다.
+2026-10-06T19:23:57.211+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=stock-alias/us-ko.csv 별칭=860개
+2026-10-06T19:23:57.253+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:23:57.287+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:23:57.292+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.batch.CorporateActionJobTest       : Started CorporateActionJobTest in 0.377 seconds (process running for 30.508)
+2026-10-06T19:23:57.326+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 149개
+2026-10-06T19:23:57.344+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+2026-10-06T19:23:57.350+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.353+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795815 id=53267 2026-02-04 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:23:57.360+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.366+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.368+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.CorporateActionCollector         : 저장된 봉이 없어 기업 행위를 건너뛴다. ticker=005930 — 소스가 우리 시계열에서 일자와 비율을 유도하므로 부를 근거가 없다.
+2026-10-06T19:23:57.372+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.377+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위를 모을 대상이 없다. 대상=1종목 저장된 시세=없음 — 시세를 먼저 적재한다.
+2026-10-06T19:23:57.386+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 2종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.387+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.CorporateActionCollector         : 저장된 봉이 없어 기업 행위를 건너뛴다. ticker=005930 — 소스가 우리 시계열에서 일자와 비율을 유도하므로 부를 근거가 없다.
+2026-10-06T19:23:57.388+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795823 id=53268 2026-02-04 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:23:57.393+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 2026-08-13 ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.394+09:00 ERROR 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/ERROR] corporate-action 실패 — 예상하지 못한 오류로 중단했다: java.lang.IllegalArgumentException: 조회 창의 시작이 대상일보다 늦다: KOSPI 2026-08-13 > 2026-08-12 (key=corporate-action:2026-08-12) {targetDate=2026-08-12, executionId=95350, jobName=corporate-action}
+2026-10-06T19:23:57.401+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.403+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.collector.CorporateActionLedger    : 기업 행위를 원장에 적었다. stockId=795826 id=53269 2026-02-04 type=SPLIT ratio=5 status=APPROVED source=SOURCE_DISCLOSURE
+2026-10-06T19:23:57.407+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.409+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : [KOSPI] 담지 않은 기업 행위 {cash_dividend=4, spinoff=1} — 계수를 낼 수 있는 것만 값으로 낸다. 종목별은 DEBUG다.
+2026-10-06T19:23:57.412+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.414+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 상장주식수가 없어 후보로 올리지 않은 가격 불연속이 1건이다. stockId=795828 — 종류도 비율도 못 내는 후보는 OBSERVED로 쌓여 그 효력일을 창에 삼키는 지표를 통째로 억제한다(AdjustmentRecalculator.detectCandidates javadoc).
+2026-10-06T19:23:57.414+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : [KOSPI] 상장주식수가 없어 후보로 올리지 않은 가격 불연속이 1건이다 — 종류도 비율도 못 내는 후보는 OBSERVED로 쌓여 그 효력일을 창에 삼키는 지표를 통째로 억제한다. 종목별은 DEBUG다(.env의 LOG_ADJUSTMENT=DEBUG).
+2026-10-06T19:23:57.418+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.419+09:00 DEBUG 33006 --- [stock-screener] [    Test worker] c.s.p.collector.AdjustmentRecalculator   : 상장주식수가 없어 후보로 올리지 않은 가격 불연속이 1건이다. stockId=795829 — 종류도 비율도 못 내는 후보는 OBSERVED로 쌓여 그 효력일을 창에 삼키는 지표를 통째로 억제한다(AdjustmentRecalculator.detectCandidates javadoc).
+2026-10-06T19:23:57.420+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : [KOSPI] 상장주식수가 없어 후보로 올리지 않은 가격 불연속이 1건이다 — 종류도 비율도 못 내는 후보는 OBSERVED로 쌓여 그 효력일을 창에 삼키는 지표를 통째로 억제한다. 종목별은 DEBUG다(.env의 LOG_ADJUSTMENT=DEBUG).
+2026-10-06T19:23:57.423+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 유니버스 US_LISTED 편입 1종목이 대상이다. 활성 여부는 보지 않았다.
+2026-10-06T19:23:57.424+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 2020-01-02 ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.428+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.CorporateActionJob    : 기업 행위 수집을 시작한다. 대상 1종목, 창 시장별 첫 거래일 {KOSPI=2026-02-02} ~ 2026-08-12 — 종목당 콜 수는 창을 덮는 정기보고서의 최소 집합이 정한다.
+2026-10-06T19:23:57.429+09:00 ERROR 33006 --- [stock-screener] [    Test worker] c.s.notification.LoggingAlertPort        : [ALERT/CRITICAL] corporate-action 실패 — 복구 불가능한 오류로 중단했다: NOT_FOUND (registry) — 기업행위 소스가 등록되지 않았다: KOSPI — 등록된 코드: [] (key=corporate-action:2026-08-12) {targetDate=2026-08-12, executionId=95356, jobName=corporate-action}
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

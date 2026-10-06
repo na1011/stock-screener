@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" tests="24" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:56.882Z" hostname="MacBook-Pro.local" time="0.008">
+  <properties/>
+  <testcase name="--ca-*는 원장 잡에서만 통과한다 — 수집 잡이 접두어라 -judge를 빠뜨리면 쿼터를 태운다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.002"/>
+  <testcase name="--tickers의 오타를 실행 전에 막는다 — 무시하면 대상이 전 종목이 된다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="따옴표가 뒤의 플래그를 품었으면 막는다 — 그 플래그는 적용되지 않는데 잡은 성공으로 끝난다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.001"/>
+  <testcase name="값 없는 --insert-earlier-vintages를 막는다 — 거짓으로 읽혀 삽입 없이 교정·무효화만 돈다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="아는 인자만 있으면 통과한다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="Spring 자신의 인자는 통과한다 — 점을 포함한 이름과 점 없는 플래그 둘 다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="값이 빈 인자를 막는다 — 빈 --tickers는 「티커 없음」이 되어 대상이 활성 유니버스 전량으로 넓어진다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="적재 잡에서도 붙지 않은 낱말을 막는다 — 공백으로 펼친 티커 목록은 첫 티커만 남고 성공으로 끝난다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="따옴표 없이 쪼개진 메모를 막는다 — 옵션 이름 검사는 사라진 낱말을 못 본다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="값 없는 --skip-price가 실제로 false로 읽힌다 — 가드가 지키는 사실" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="--universe·--skip-*는 뜻이 있는 잡에서만 통과한다 — 아니면 조용히 무시된다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="indicator-reconcile의 기본 기준일은 오늘이 아니라 정기 화해의 규약(dataAsOf)이다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="원장·재구축·업종 잡은 --universe를 받는다 — 비활성 유니버스를 손으로 고르는 경로다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.001"/>
+  <testcase name="true·false가 아닌 불리언 값을 막는다 — parseBoolean은 1·yes를 조용히 거짓으로 읽는다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="값이 붙은 불리언은 통과한다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="--from은 indicator-reconcile에서 거절된다 — 파생층은 언제나 창 전체라 구간이 조용히 무시된다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="--insert-earlier-vintages는 financial-refill에서만 통과한다 — 다른 잡에서는 조용히 무시된다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="문서화된 줄바꿈의 백슬래시는 통과한다 — 막으면 정상 명령이 통째로 멈춘다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="같은 인자를 두 번 주면 막는다 — 러너가 첫 값만 읽어 두 번째 티커 목록이 조용히 빠진다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="불리언은 목록에 등록된 이름만 읽힌다 — 빠진 인자는 실행 전 검사를 조용히 비켜 간다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="--ca-*는 읽기 전용이어도 원장 잡 밖에서 거절된다 — 두 집합은 다른 질문에 답한다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="--universe는 캘린더 잡에서 거절된다 — 대상이 종목이 아니라 거래소다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <testcase name="읽기 전용 잡은 고아 실행 스위퍼를 안 돌린다 — 돌리면 지금 도는 적재의 실행 행을 닫는다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.001"/>
+  <testcase name="값 없는 --skip-price를 막는다 — 그것은 건너뛰기가 아니라 false다" classname="com.stockscreener.pipeline.batch.BootstrapArgumentGuardTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

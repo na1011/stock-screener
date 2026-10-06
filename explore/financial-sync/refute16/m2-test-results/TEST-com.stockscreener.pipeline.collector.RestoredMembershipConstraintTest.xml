@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:09.978Z" hostname="MacBook-Pro.local" time="0.019">
+  <properties/>
+  <testcase name="하루라도 겹치면 거절된다 — 인접이 통과하는 것이 제약이 느슨해서가 아니다" classname="com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest" time="0.003"/>
+  <testcase name="열린 OBSERVED 행은 그대로 들어간다 — 라이브 경로가 안 막힌다" classname="com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest" time="0.002"/>
+  <testcase name="복원 구간이 관측 구간의 시작에 딱 붙어도 겹침이 아니다" classname="com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest" time="0.002"/>
+  <testcase name="열린 RESTORED 행은 거절된다 — 복원분이 「지금 편입」으로 새지 않는다" classname="com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest" time="0.002"/>
+  <testcase name="닫힌 RESTORED 행은 들어간다" classname="com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest" time="0.002"/>
+  <testcase name="기본값이 OBSERVED다 — 기존 행과 리밸런싱이 컬럼을 몰라도 된다" classname="com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest" time="0.002"/>
+  <testcase name="모르는 origin 값은 거절된다 — 오타가 조용한 셋째 평면을 만들지 않는다" classname="com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest" time="0.001"/>
+  <system-out><![CDATA[2026-10-06T19:24:09.979+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest]: RestoredMembershipConstraintTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.981+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest
+2026-10-06T19:24:09.981+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest]: RestoredMembershipConstraintTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:09.983+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.collector.RestoredMembershipConstraintTest
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:16.558Z" hostname="MacBook-Pro.local" time="0.433">
+  <properties/>
+  <testcase name="실패가 먼저 오고 나중에 성공해도, 성공 한 번과 같은 판 집합에 닿는다 — 회복 표지가 그 판을 정기 경로에서 넣는다" classname="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" time="0.041"/>
+  <testcase name="companyfacts가 실었던 공시를 빼고 보충도 실패하면 그 판을 지킨다 — 회수가 「여기 없는 공시일」로 읽지 않게" classname="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" time="0.024"/>
+  <testcase name="저장분을 새 읽기 규칙으로 다시 읽다 실패해도 옛 저장분을 쓴다 — 아무것도 안 지운다" classname="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" time="0.024"/>
+  <testcase name="공시 목록을 못 받으면 회수를 멈추고 그 사실을 실행 결과로 낸다 — SUCCESS 뒤에 숨지 않게(실행 기록의 회수정지)" classname="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" time="0.018"/>
+  <testcase name="대조 — 성공이 먼저 오면 같은 판 집합이다(위 시험이 닿아야 할 곳)" classname="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" time="0.014"/>
+  <testcase name="배포 시점처럼 늦은 판이 이미 있어도 보충의 첫 성공이 원본 판을 넣는다 — 실패 먼저와 같은 판 집합" classname="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" time="0.021"/>
+  <testcase name="companyfacts가 덮은 공시에 하루 늦은 filed를 붙여도 그 판이 들어온다 — 목록 날짜만 열면 뒤 판에 밀려 빠진다" classname="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" time="0.024"/>
+  <testcase name="실패 뒤 companyfacts가 그 공시를 실었고 그 사이 APPEND_ONLY 실행이 끼어도 원본 판이 들어온다 — 열림이 한 번에 소비되지 않는다" classname="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" time="0.028"/>
+  <testcase name="받은 공시를 companyfacts가 나중에 실어도 원본 판이 들어온다 — 받은 실행이 APPEND_ONLY뿐이었어도(실패였던 공시와 같은 판 집합)" classname="com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest" time="0.03"/>
+  <system-out><![CDATA[2026-10-06T19:24:16.559+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest]: SecFilingSupplementWriteContractTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:16.561+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest
+2026-10-06T19:24:16.561+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest]: SecFilingSupplementWriteContractTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:24:16.563+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.datasource.us.SecFilingSupplementWriteContractTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:24:16.570+09:00  INFO 33006 --- [stock-screener] [    Test worker] d.u.SecFilingSupplementWriteContractTest : Starting SecFilingSupplementWriteContractTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:24:16.570+09:00  INFO 33006 --- [stock-screener] [    Test worker] d.u.SecFilingSupplementWriteContractTest : The following 1 profile is active: "test"
+2026-10-06T19:24:16.635+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:24:16.647+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 10 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:24:16.656+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-33 - Starting...
+2026-10-06T19:24:16.662+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-33 - Start completed.
+2026-10-06T19:24:16.668+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:24:16.683+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.007s)
+2026-10-06T19:24:16.713+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:24:16.713+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:24:16.713+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:24:16.724+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:24:16.729+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:24:16.734+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:24:16.746+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:24:16.746+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:24:16.762+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:24:16.765+09:00  INFO 33006 --- [stock-screener] [    Test worker] d.u.SecFilingSupplementWriteContractTest : Started SecFilingSupplementWriteContractTest in 0.201 seconds (process running for 49.981)
+2026-10-06T19:24:16.771+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.780+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecFilingSupplement  : 보충 공시를 받지 못했다 — 그 공시일의 판을 회수에서 지키고 다음 실행이 다시 받는다. companyfacts FIX CIK0000000001 0000000001-26-000020 10-K 2026-02-20 종류=TRANSIENT — HTTP 503. instance 1/000000000126000020/fix-20251231_htm.xml
+2026-10-06T19:24:16.780+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=0 저장분=0 옛 판 저장분=0 더한 팩트=0 실패=[0000000001-26-000020] 목록 모름=false
+2026-10-06T19:24:16.784+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796802 모드=FILL_MISSING 신규=1 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.797+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=1 저장분=0 옛 판 저장분=0 더한 팩트=1 실패=[] 목록 모름=false
+2026-10-06T19:24:16.802+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796802 fromDate=2026-02-20 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.802+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796802 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=1 재번호라벨=0
+2026-10-06T19:24:16.810+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.814+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시를 반영한다. stockId=796803 2025/FY 기존공시일=2026-02-20 새공시일=2026-04-20
+2026-10-06T19:24:16.814+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796803 fromDate=2025-01-01 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.815+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796803 모드=FILL_MISSING 신규=1 정정=1 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.826+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecFilingSupplement  : 보충 공시를 받지 못했다 — 그 공시일의 판을 회수에서 지키고 다음 실행이 다시 받는다. companyfacts FIX CIK0000000001 0000000001-26-000020 10-K 2026-02-20 종류=TRANSIENT — HTTP 503. instance 1/000000000126000020/fix-20251231_htm.xml
+2026-10-06T19:24:16.826+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=0 저장분=0 옛 판 저장분=0 더한 팩트=0 실패=[0000000001-26-000020] 목록 모름=false
+2026-10-06T19:24:16.827+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796803 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.834+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.840+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=1 저장분=0 옛 판 저장분=0 더한 팩트=1 실패=[] 목록 모름=false
+2026-10-06T19:24:16.841+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시를 반영한다. stockId=796804 2025/FY 기존공시일=2026-02-20 새공시일=2026-04-20
+2026-10-06T19:24:16.841+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796804 fromDate=2025-01-01 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.842+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796804 모드=FILL_MISSING 신규=1 정정=1 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.850+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecFilingSupplement  : 보충 공시를 새 읽기 규칙으로 다시 받지 못해 옛 판의 저장분을 쓴다. companyfacts FIX CIK0000000001 0000000001-26-000020 10-K 2026-02-20 — HTTP 404. instance 1/000000000126000020/fix-20251231_htm.xml
+2026-10-06T19:24:16.850+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=0 저장분=1 옛 판 저장분=1 더한 팩트=1 실패=[] 목록 모름=false
+2026-10-06T19:24:16.851+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796804 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=2 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.859+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.862+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시를 반영한다. stockId=796805 2025/FY 기존공시일=2026-02-20 새공시일=2026-04-20
+2026-10-06T19:24:16.862+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796805 fromDate=2025-01-01 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.862+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796805 모드=FILL_MISSING 신규=1 정정=1 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.870+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecFilingSupplement  : 공시 목록을 받지 못해 저장분만 합치고 이 종목의 판 회수를 멈춘다. companyfacts FIX CIK0000000001 종류=TRANSIENT — HTTP 503. submissions CIK0000000001
+2026-10-06T19:24:16.870+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=0 저장분=0 옛 판 저장분=0 더한 팩트=0 실패=[] 목록 모름=true
+2026-10-06T19:24:16.870+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 판 이력의 빈칸을 몰라 이 종목의 판 회수를 멈춘다. stockId=796805
+2026-10-06T19:24:16.870+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796805 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.877+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.882+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=1 저장분=0 옛 판 저장분=0 더한 팩트=1 실패=[] 목록 모름=false
+2026-10-06T19:24:16.883+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시를 반영한다. stockId=796806 2025/FY 기존공시일=2026-02-20 새공시일=2026-04-20
+2026-10-06T19:24:16.884+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796806 fromDate=2025-01-01 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.884+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796806 모드=FILL_MISSING 신규=1 정정=1 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.891+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.893+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796807 모드=FILL_MISSING 신규=1 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.897+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.902+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=1 저장분=0 옛 판 저장분=0 더한 팩트=1 실패=[] 목록 모름=false
+2026-10-06T19:24:16.905+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796807 fromDate=2026-02-20 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.905+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796807 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=1 재번호라벨=0
+2026-10-06T19:24:16.912+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.917+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=1 저장분=0 옛 판 저장분=0 더한 팩트=1 실패=[] 목록 모름=false
+2026-10-06T19:24:16.918+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 정정공시를 반영한다. stockId=796808 2025/FY 기존공시일=2026-02-20 새공시일=2026-04-20
+2026-10-06T19:24:16.918+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796808 fromDate=2025-01-01 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.919+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796808 모드=FILL_MISSING 신규=1 정정=1 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.925+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecFilingSupplement  : 보충 공시를 companyfacts가 실었다 — 그 판을 매 실행 연다. companyfacts FIX CIK0000000001 0000000001-26-000020 이전 상태=OK
+2026-10-06T19:24:16.926+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 유도 판을 회수한다. stockId=796808 2025/FY 지운 판=1 남긴 공시일=[2026-02-21, 2026-04-20]
+2026-10-06T19:24:16.926+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796808 fromDate=2025-01-01 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.928+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796808 fromDate=2026-02-21 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.928+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796808 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=1 무변경=1 이른판삽입=1 재번호라벨=0
+2026-10-06T19:24:16.936+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.942+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecFilingSupplement  : 보충 공시를 받지 못했다 — 그 공시일의 판을 회수에서 지키고 다음 실행이 다시 받는다. companyfacts FIX CIK0000000001 0000000001-26-000020 10-K 2026-02-20 종류=TRANSIENT — HTTP 503. instance 1/000000000126000020/fix-20251231_htm.xml
+2026-10-06T19:24:16.943+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=0 저장분=0 옛 판 저장분=0 더한 팩트=0 실패=[0000000001-26-000020] 목록 모름=false
+2026-10-06T19:24:16.943+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796809 모드=FILL_MISSING 신규=1 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.949+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecFilingSupplement  : 보충 공시를 companyfacts가 실었다 — 그 판을 매 실행 연다. companyfacts FIX CIK0000000001 0000000001-26-000020 이전 상태=FAILED
+2026-10-06T19:24:16.958+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796809 fromDate=2026-02-20 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.958+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796809 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=1 재번호라벨=0
+2026-10-06T19:24:16.965+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.967+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796810 모드=FILL_MISSING 신규=1 정정=0 채움=0 정정보류=0 교정=0 무변경=0 이른판삽입=0 재번호라벨=0
+2026-10-06T19:24:16.971+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecTickerCikCache    : SEC 티커→CIK 매핑을 받았다. 1건
+2026-10-06T19:24:16.978+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.d.us.SecEdgarFinancialAdapter      : 공시 보충. ticker=FIX 받음=1 저장분=0 옛 판 저장분=0 더한 팩트=1 실패=[] 목록 모름=false
+2026-10-06T19:24:16.985+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.datasource.us.SecFilingSupplement  : 보충 공시를 companyfacts가 실었다 — 그 판을 매 실행 연다. companyfacts FIX CIK0000000001 0000000001-26-000020 이전 상태=OK
+2026-10-06T19:24:16.987+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.p.c.NoOpIndicatorInvalidationPort    : 지표 무효화 요청. stockId=796810 fromDate=2026-02-20 reason=FINANCIAL_REVISED — 지표 계산은 Phase 3이므로 지금은 지울 대상이 없다.
+2026-10-06T19:24:16.987+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.collector.FinancialWriter   : 결손 보정. stockId=796810 모드=FILL_MISSING 신규=0 정정=0 채움=0 정정보류=0 교정=0 무변경=1 이른판삽입=1 재번호라벨=0
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

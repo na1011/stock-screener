@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="ROIC_MIN_3Y" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:36.376Z" hostname="MacBook-Pro.local" time="0.001">
+  <properties/>
+  <testcase name="세 해 중 가장 낮은 해를 낸다 — 단년 TTM이 놓치는 그 해다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RoicMin3y" time="0.001"/>
+  <testcase name="유동부채가 없는 해가 있으면 값을 내지 않는다 — 금융업이 여기 온다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RoicMin3y" time="0.0"/>
+  <testcase name="IMPORTANT — 투하자본이 음수인 해가 있으면 값을 내지 않는다. 영업적자가 양수가 된다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RoicMin3y" time="0.0"/>
+  <testcase name="IMPORTANT — 한 해가 빠지면 값을 내지 않는다. 행 수만 세면 구멍이 안 보인다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RoicMin3y" time="0.0"/>
+  <testcase name="IMPORTANT — 연간 영업이익을 합산하지 않는다. 합하면 세 배가 된다" classname="com.stockscreener.indicator.calculator.BuffettIndicatorsTest$RoicMin3y" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.batch.BatchExecutionCooperativeStopTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:23:40.443Z" hostname="MacBook-Pro.local" time="0.553">
+  <properties/>
+  <testcase name="구간·계획 신고도 끊는다 — 종목 루프만 막으면 루프 뒤 단계가 그대로 돈다" classname="com.stockscreener.pipeline.batch.BatchExecutionCooperativeStopTest" time="0.004"/>
+  <testcase name="종료 중 알림은 막지 않고 로그로 내린다 — 막기만 하면 기록이 아예 사라진다" classname="com.stockscreener.pipeline.batch.BatchExecutionCooperativeStopTest" time="0.002"/>
+  <testcase name="종료가 시작되면 종목 루프가 다음 종목으로 넘어가지 않는다" classname="com.stockscreener.pipeline.batch.BatchExecutionCooperativeStopTest" time="0.006"/>
+  <testcase name="종료 신호는 예상하지 못한 실패로 세지 않는다 — 세면 이중 마감 경고가 종료마다 난다" classname="com.stockscreener.pipeline.batch.BatchExecutionCooperativeStopTest" time="0.003"/>
+  <system-out><![CDATA[2026-10-06T19:23:40.444+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.BatchExecutionCooperativeStopTest]: BatchExecutionCooperativeStopTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:40.444+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.BatchExecutionCooperativeStopTest
+2026-10-06T19:23:40.444+09:00  INFO 33006 --- [stock-screener] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.stockscreener.pipeline.batch.BatchExecutionCooperativeStopTest]: BatchExecutionCooperativeStopTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-10-06T19:23:40.445+09:00  INFO 33006 --- [stock-screener] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.stockscreener.StockScreenerApplication for test class com.stockscreener.pipeline.batch.BatchExecutionCooperativeStopTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-10-06T19:23:40.455+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.p.b.BatchExecutionCooperativeStopTest : Starting BatchExecutionCooperativeStopTest using Java 21.0.8 with PID 33006 (started by na1011 in /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/refute16/sim)
+2026-10-06T19:23:40.455+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.p.b.BatchExecutionCooperativeStopTest : The following 1 profile is active: "test"
+2026-10-06T19:23:40.595+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-06T19:23:40.607+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-10-06T19:23:40.645+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-10 - Starting...
+2026-10-06T19:23:40.651+09:00  INFO 33006 --- [stock-screener] [    Test worker] com.zaxxer.hikari.HikariDataSource       : HikariPool-10 - Start completed.
+2026-10-06T19:23:40.657+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:5432/stock_screener_r16b_test (PostgreSQL 16.14)
+2026-10-06T19:23:40.674+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbValidate     : Successfully validated 65 migrations (execution time 00:00.009s)
+2026-10-06T19:23:40.698+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 900
+2026-10-06T19:23:40.698+09:00  WARN 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+2026-10-06T19:23:40.698+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-10-06T19:23:40.712+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-06T19:23:40.719+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-06T19:23:40.725+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/stock_screener_r16b_test]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: stock_screener_r16b_test/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-10-06T19:23:40.743+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-06T19:23:40.743+09:00  INFO 33006 --- [stock-screener] [    Test worker] org.hibernate.orm.jdbc.batch             : HHH100501: Automatic JDBC statement batching enabled (maximum batch size 100)
+2026-10-06T19:23:40.760+09:00  INFO 33006 --- [stock-screener] [    Test worker] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-06T19:23:40.775+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.GateSettingGuard            : 관문 설정 stockscreener.gate.us=false (출처: Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' (document #0))
+2026-10-06T19:23:40.783+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.stockscreener.stock.StockAliasIndex    : 종목 별칭을 읽었다. path=stock-alias/us-ko.csv 별칭=860개
+2026-10-06T19:23:40.859+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.w.a.WelcomePageHandlerMapping      : Adding welcome page: class path resource [static/index.html]
+2026-10-06T19:23:40.917+09:00  INFO 33006 --- [stock-screener] [    Test worker] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-10-06T19:23:40.925+09:00  INFO 33006 --- [stock-screener] [    Test worker] .s.p.b.BatchExecutionCooperativeStopTest : Started BatchExecutionCooperativeStopTest in 0.479 seconds (process running for 14.14)
+2026-10-06T19:23:40.960+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.i.IndicatorCatalogInitializer        : 지표 카탈로그를 동기화했다. 활성 지표 149개
+2026-10-06T19:23:40.978+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.s.preset.PresetCatalogInitializer    : 프리셋을 동기화했다. 활성 프리셋 9개
+2026-10-06T19:23:40.982+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.BatchExecutions       : 내려가면서 열린 배치 실행을 마감했다. id=95333 job=test-cooperative-stop
+2026-10-06T19:23:40.986+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.BatchExecutions       : 내려가면서 열린 배치 실행을 마감했다. id=95334 job=test-cooperative-stop
+2026-10-06T19:23:40.986+09:00  WARN 33006 --- [stock-screener] [    Test worker] c.s.p.batch.BatchExecutionContext        : 종료 중이라 알림을 보내지 않는다 — 이 로그가 유일한 기록이다. id=95334 job=test-cooperative-stop 심각도=WARNING 제목=기업 행위 판정 대기 본문=후보 3건
+2026-10-06T19:23:40.990+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.BatchExecutions       : 내려가면서 열린 배치 실행을 마감했다. id=95335 job=test-cooperative-stop
+2026-10-06T19:23:40.995+09:00  INFO 33006 --- [stock-screener] [    Test worker] c.s.pipeline.batch.BatchExecutions       : 내려가면서 열린 배치 실행을 마감했다. id=95336 job=test-cooperative-stop
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

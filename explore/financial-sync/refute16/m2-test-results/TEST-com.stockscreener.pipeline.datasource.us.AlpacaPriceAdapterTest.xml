@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-06T10:24:11.186Z" hostname="MacBook-Pro.local" time="0.017">
+  <properties/>
+  <testcase name="담당 시장은 US 하나다 — 거래소는 stock.listing_exchange가 가른다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.001"/>
+  <testcase name="뒤집힌 구간은 호출 전에 막는다 — 빈 결과와 구별되지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.0"/>
+  <testcase name="IMPORTANT — 상한을 넘으면 예외다. 받은 만큼 돌려주면 「데이터 없음」과 같아진다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.003"/>
+  <testcase name="IMPORTANT — 403은 AUTH다. 15분 규칙 위반이 종목 실패로 묻히면 안 된다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.001"/>
+  <testcase name="next_page_token이 null이 될 때까지 순회한다 — 멈추면 뒤쪽이 조용히 빈다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.002"/>
+  <testcase name="모르는 심볼은 빈 목록이다 — 이 소스는 「봉 없음」과 「종목 모름」을 갈라 주지 않는다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.001"/>
+  <testcase name="bars 키가 없으면 MALFORMED다 — 「봉 0개」로 접으면 오류 본문이 정상이 된다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.002"/>
+  <testcase name="봉을 날짜 오름차순으로 옮기고, 소스가 주지 않는 값은 null로 둔다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.001"/>
+  <testcase name="429는 RATE_LIMITED, 500은 TRANSIENT — 재시도 가능 여부가 갈린다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.002"/>
+  <testcase name="시크릿이 비면 부르기 전에 AUTH다 — @ConditionalOnApiKey는 api-key만 본다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.0"/>
+  <testcase name="IMPORTANT — feed·adjustment·limit을 명시한다. 기본값에 기대면 조용히 다른 값이 온다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.001"/>
+  <testcase name="인증 헤더 둘을 붙인다 — 하나를 빠뜨리면 401이고 그것은 키가 틀린 것처럼 보인다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.001"/>
+  <testcase name="IMPORTANT — end를 날짜로 보내지 않는다. 날짜만 주면 어제도 403이다" classname="com.stockscreener.pipeline.datasource.us.AlpacaPriceAdapterTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
