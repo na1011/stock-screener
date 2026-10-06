@@ -643,3 +643,18 @@ v4에 더해: **실패 계약** = 보충 실패(처음 · 판 다시 읽기 둘 
 - **RF4 단위 + 주입**: 소비 판정(미국 1부 술어 · 국내 `rcept_no` · `[첨부정정]` · 창 밖) · 짝 롤백(FSR 013 · 옛 번호 · 정정보류) · 공시별 재시도 간격 · 기준점 · 출구와 면제 낡음 · 대조군 = 「FR 성공이면 소비」 규칙.
 - **RF5 가드** · **RF6 비용 실측**(짝 초·콜 · 미국 FR 초).
 - **RF7 소비 재연**: 실제 `list.json`(2026-03-01~06-30 — 신영 사업보고서 06-11 포함) ∩ 편입 × API `rcept_no` → 미소비를 원인별로 0까지.
+
+## 1부 v6 확인 반증 — 두 렌즈 「수정 후 진행」(2026-10-06 · `rebut11/` · `refute11/` · v7 처방 대기 · 세션 한도로 여기서 멈춤)
+- 안 1: 판 고정이 아직 손 목록 — 새 변이 20 중 12 생존(실물 영향 0) → **판 범위 메서드의 소스 해시**(정규형)를 출력 해시 옆에 박아 「판 올림 / 행동 불변 재고정」을 같은 커밋에서 고르게 · FOLDERS에 「후보 둘 · 산출물 없음」.
+- 안 2: `SecFilingClient.folder`가 `directory.item` 없음·빈 응답을 빈 목록으로 → 영구 `NO_XBRL`(캐시 567개 전부 항목 ≥ 1이라 빈 목록은 응답 이상) → MALFORMED로 던져 다음 실행이 다시 받게 + 시험.
+- 안 3·4 / 밖 2: 첫 손 FR 2단계(사본 재생) 명령이 없고 하네스 기본값(`Q4V_REPLAY_FROM=2015` · `INSERT_EARLIER` 기본 참)이 운영과 다름 · 보충실패·회수정지·회수를 하네스가 안 냄 → `p1rs/rs1.sh` 꼴 글자 명령(FROM=2018 · INSERT_EARLIER=false · STORE=db · `stock_id<TAB>ticker` 대상) · 하네스에 세 합계.
+- 안 5 / 밖 3: 사후 대조에 `share_basis_*`가 들고 운영만 유도가 돎 → 사본에도 `share-basis-derive` · 수집 뒤 공시 설명 조항 · 차이를 셋으로 가름.
+- 안 6: 되돌리는 표에 `indicator_trade_date` 없음 · 안 7: 목록 실패 실행이 FAILED 행을 `touch` 안 함(작음).
+- 밖 1: **표째 `pg_restore -t`는 identity·pkey·unique·index를 잃고 남의 쓰기까지 지움** → 종목 단위 되돌리기(덤프 → scratch DB → 한 트랜잭션에서 109 stock_id의 세 표 지우고 `OVERRIDING SYSTEM VALUE`로 다시 넣기 → `share-basis-derive` → `indicator-reconcile --tickers`) · 원시 SQL이라 별도 승인 · `ops/dump-db.sh`의 P9 좁힌 복원도 같은 형태(남의 결함 · 보고).
+- 밖 4: progress의 합치기 단언(`git diff HEAD origin/hold -- src …` 비었음)이 지금 거짓(main 7b0a0ff3·600ad83f 몫) → 경로별 단언(P = merge-base..hold 경로는 hold와 같고 그 밖은 HEAD^1과 같음).
+- 밖 5: reload-gate 충돌을 「양쪽 다」로 하면 행 중복·낡은 문구 부활 → 행마다 출처((가) p1 · (나)·관측 평면 main).
+- 밖 6: 둘째 손 FR — ADR 두 문장과 progress:56이 갈림(A 새 대표 포함 여부) → 하나로.
+- 밖 7: 운영 명령이 무엇을 컴파일하는지 단언 없음 → HEAD = 배포 커밋 · `git status --porcelain -- src` 빔 · V64 적용 확인.
+- 밖 8: `SecFilingSupplement.settle` javadoc이 아직 「목록 날짜와 filed 둘 다」(코드는 filed만) → 같은 브랜치에서 고침.
+- 밖 9: `p1-fr1/`은 이 탐색 브랜치에만 · `.sql` 재현에 사본 rs1a·rs1b(각 7.4GB) 필요 → 보존 조건을 적음.
+- 대기: 2부 v4 두 렌즈(`rebut-p2v4/` · `refute-p2v4/`)는 세션 한도 때 아직 도는 중이었다 — 다음 세션이 그 산출물을 읽는다.
