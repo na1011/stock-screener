@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.datasource.us;
 
+import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.TokenBucketRateLimiter;
@@ -20,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * 공시 보충의 <b>같은 날 원자료</b>를 파일로 모은다 — companyfacts · 공시 목록(+페이지) · 보충 대상의 색인·인스턴스
@@ -38,6 +40,11 @@ import java.util.Set;
  * </pre>
  *
  * <p>{@code SUPP_CONTROLS}는 제거 대조용이다 — companyfacts에 <b>있는</b> 공시의 인스턴스도 받아 둔다.
+ *
+ * <p><b>받기는 운영과 같은 자리({@link SecFilingClient#fetch})다</b> — 대기 · 호스트별 차단 · 덜 온 2xx(JSON으로 안 읽힘 ·
+ * 인스턴스 길이 ≠ 색인 크기)를 다시 받는 규칙까지. 따로 짠 재시도는 대기도 길이 대조도 없이 끊긴 본문을 그대로 저장해, 재생이
+ * 보충 실패로 읽고 손 FR 2-5가 거짓으로 멈췄다(2026-10-06 v12 반증). 끝까지 못 받은 것은 {@code .status}에 503을 적어 재생이
+ * 같은 받기 실패로 재현하고, 출력의 {@code failures=}가 0이 아니면 손 FR 2-2가 멈춘다.
  */
 @Tag("live")
 @EnabledIfEnvironmentVariable(named = "SUPP_CACHE_DIR", matches = ".+")
@@ -48,6 +55,8 @@ class SecFilingSupplementCacheLiveTest {
     private RestClient data;
     private RestClient files;
     private TokenBucketRateLimiter limiter;
+    private final SecFilingClient.Backoff dataBackoff = SecFilingClient.Backoff.standard();
+    private final SecFilingClient.Backoff filesBackoff = SecFilingClient.Backoff.standard();
     private Path dir;
     private int calls;
     private int failures;
@@ -84,7 +93,7 @@ class SecFilingSupplementCacheLiveTest {
                 continue;
             }
             String padded = SecTickerCikCache.padded(cik.get());
-            byte[] facts = get(data, "/api/xbrl/companyfacts/" + padded + ".json", null);
+            byte[] facts = get(data, dataBackoff, "/api/xbrl/companyfacts/" + padded + ".json", null, JSON);
             if (facts == null) {
                 report.append(ticker).append("\tcompanyfacts-failed\n");
                 continue;
@@ -93,7 +102,7 @@ class SecFilingSupplementCacheLiveTest {
             JsonNode factsTree = MAPPER.readTree(facts).path("facts");
 
             String subsPath = "/submissions/" + padded + ".json";
-            byte[] subs = get(data, subsPath, dir.resolve("sec").resolve(subsPath.substring(1)));
+            byte[] subs = get(data, dataBackoff, subsPath, dir.resolve("sec").resolve(subsPath.substring(1)), JSON);
             if (subs == null) {
                 report.append(ticker).append("\tsubmissions-failed\n");
                 continue;
@@ -108,7 +117,7 @@ class SecFilingSupplementCacheLiveTest {
                     continue;
                 }
                 String pagePath = "/submissions/" + name;
-                byte[] body = get(data, pagePath, dir.resolve("sec").resolve(pagePath.substring(1)));
+                byte[] body = get(data, dataBackoff, pagePath, dir.resolve("sec").resolve(pagePath.substring(1)), JSON);
                 if (body != null) {
                     filings.addAll(SecFilingClient.parseFilings(MAPPER.readTree(body), since, ticker + " " + name));
                 }
@@ -129,15 +138,17 @@ class SecFilingSupplementCacheLiveTest {
             for (String accession : wanted) {
                 String folder = accession.replace("-", "");
                 String indexPath = "/Archives/edgar/data/%d/%s/index.json".formatted(cik.get(), folder);
-                byte[] index = get(files, indexPath, dir.resolve("sec").resolve(indexPath.substring(1)));
+                byte[] index = get(files, filesBackoff, indexPath, dir.resolve("sec").resolve(indexPath.substring(1)), JSON);
                 if (index == null) {
                     continue;
                 }
                 List<String> candidates = new ArrayList<>();
+                List<String> sizes = new ArrayList<>();
                 for (JsonNode item : MAPPER.readTree(index).path("directory").path("item")) {
                     String name = item.path("name").asString("");
                     if (SecFilingClient.isInstanceCandidate(name)) {
                         candidates.add(name);
+                        sizes.add(item.path("size").asString(""));
                     }
                 }
                 if (candidates.size() != 1) {
@@ -147,7 +158,21 @@ class SecFilingSupplementCacheLiveTest {
                     continue;
                 }
                 String instancePath = "/Archives/edgar/data/%d/%s/%s".formatted(cik.get(), folder, candidates.get(0));
-                get(files, instancePath, dir.resolve("sec").resolve(instancePath.substring(1)));
+                long expected;
+                try {
+                    expected = new SecFilingClient.FolderItem(candidates.get(0), sizes.get(0)).expectedSize(instancePath);
+                } catch (DataSourceException e) {
+                    // 운영도 여기서 받기 실패다(크기 없는 색인 항목) — 그 공시만 실패로 세고 나머지는 계속 모은다.
+                    failures++;
+                    report.append(ticker).append('\t').append(accession).append("\tno-size\n");
+                    continue;
+                }
+                get(files, filesBackoff, instancePath, dir.resolve("sec").resolve(instancePath.substring(1)),
+                        received -> {
+                            byte[] got = received.getBody();
+                            return got != null && got.length == expected ? null
+                                    : "받은 길이가 색인 크기 %d와 다르다.".formatted(expected);
+                        });
             }
             report.append(ticker).append("\tok\ttargets=").append(wanted.size()).append('\n');
         }
@@ -156,43 +181,41 @@ class SecFilingSupplementCacheLiveTest {
                 tickers.size(), noCik, targetsTotal, calls, failures, dir);
     }
 
+    /** JSON 본문(companyfacts · 공시 목록 · 색인)의 덜 온 2xx 판정 — 운영과 같다. */
+    private static final Function<ResponseEntity<byte[]>, String> JSON = received -> SecEdgarResponse.unreadableJson(
+            received.getBody() == null ? null : new String(received.getBody(), StandardCharsets.UTF_8));
+
     /**
-     * 한 콜. 2xx면 본문을 {@code save}에 쓰고 돌려준다. 아니면 {@code <save>.status}에 상태코드를 적고 {@code null}.
-     * 5xx·전송 실패는 운영 코드({@link SecFilingClient})처럼 두 번 다시 묻는다.
+     * 한 콜 — 운영 받기 자리({@link SecFilingClient#fetch})로. 2xx면 본문을 {@code save}에 쓰고 돌려준다. 아니면
+     * {@code <save>.status}에 상태코드(끝까지 못 받은 일시 실패 · 덜 온 본문은 503)를 적고 {@code null}.
      */
-    private byte[] get(RestClient client, String path, Path save) throws Exception {
-        int status = -1;
-        String lastError = "";
-        for (int attempt = 0; attempt <= SecFilingClient.TRANSIENT_RETRIES; attempt++) {
-            limiter.acquire();
-            calls++;
-            ResponseEntity<byte[]> response;
-            try {
-                response = client.get().uri(path).retrieve().toEntity(byte[].class);
-            } catch (RuntimeException e) {
-                status = -1;
-                lastError = e.getClass().getSimpleName() + ": " + e.getMessage();
-                continue;
-            }
+    private byte[] get(RestClient client, SecFilingClient.Backoff backoff, String path, Path save,
+                       Function<ResponseEntity<byte[]>, String> incomplete) throws Exception {
+        int status;
+        String reason = "";
+        try {
+            ResponseEntity<byte[]> response = SecFilingClient.fetch(limiter, backoff, () -> {
+                calls++;
+                return client.get().uri(path).retrieve().toEntity(byte[].class);
+            }, incomplete, path);
             status = response.getStatusCode().value();
-            if (response.getStatusCode().is5xxServerError()) {
-                continue;
-            }
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            if (response.getStatusCode().is2xxSuccessful()) {
                 if (save != null) {
                     Files.createDirectories(save.getParent());
                     Files.write(save, response.getBody());
                 }
                 return response.getBody();
             }
-            break;
+        } catch (DataSourceException e) {
+            status = 503;
+            reason = e.kind() + ": " + e.getMessage();
         }
         failures++;
         if (save != null) {
             Files.createDirectories(save.getParent());
             Files.writeString(save.resolveSibling(save.getFileName() + ".status"), Integer.toString(status));
         }
-        System.out.printf("supplement.cache failed status=%d path=%s %s%n", status, path, lastError);
+        System.out.printf("supplement.cache failed status=%d path=%s %s%n", status, path, reason);
         return null;
     }
 }
