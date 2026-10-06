@@ -105,6 +105,52 @@ test_db_guard() {
 }
 test_db_guard
 
+# 운영 DB와 이 트리의 마이그레이션 순서를 빌드 전에 맞춘다 — 운영은 out-of-order가 꺼져 있어(시험 프로파일만 켬)
+# 운영 최대보다 낮은 번호가 뒤늦게 오면 Flyway 검증이 기동을 세우고, 앱이 내려간 채 그날 크론이 빠진다. 보류 브랜치가
+# 여럿(0부 V63 · 1부 V64 · 시계 · 잠금 · 2부)이라 계획에 적은 번호와 실제 배포 순서가 갈릴 수 있다(2026-10-07 반증:
+# 뒤 번호를 먼저 적용한 사본에 앞 번호를 넣자 `Detected resolved migration not applied to database`). 시험은 out-of-order가
+# 켜져 이것을 못 잡는다. 반대로 운영에 적용됐는데 이 트리에 없는 번호가 이 트리 최대보다 낮으면 「missing」으로 같은 검증이 선다.
+prod_migration_guard() {
+  local db="${DB_NAME:-stock_screener}" psql applied v max_applied=0 max_local=0 late="" missing=""
+  psql="$(pg_bin psql)" || { echo "[deploy] psql을 못 찾아 운영 마이그레이션 순서를 판정하지 못했다 — 멈춘다." >&2; exit 1; }
+  if ! applied="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select version from flyway_schema_history where version is not null and success" 2>&1)"; then
+    echo "[deploy] 운영 DB(${db})의 마이그레이션 이력을 읽지 못했다 — 멈춘다: ${applied}" >&2
+    exit 1
+  fi
+  local -a locals=()
+  local f
+  for f in "$ROOT"/src/main/resources/db/migration/V*__*.sql; do
+    v="${f##*/V}"; v="${v%%__*}"
+    [[ "$v" =~ ^[0-9]+$ ]] || { echo "[deploy] 수가 아닌 마이그레이션 번호다: ${f##*/} — 순서를 판정하지 못했다. 멈춘다." >&2; exit 1; }
+    locals+=("$v")
+    (( v > max_local )) && max_local=$v
+  done
+  while IFS= read -r v; do
+    [[ -z "$v" ]] && continue
+    (( v > max_applied )) && max_applied=$v
+  done <<< "$applied"
+  for v in "${locals[@]}"; do
+    if ! grep -qx "$v" <<< "$applied" && (( v < max_applied )); then late="${late} V${v}"; fi
+  done
+  while IFS= read -r v; do
+    [[ -z "$v" ]] && continue
+    if ! compgen -G "$ROOT/src/main/resources/db/migration/V${v}__*.sql" >/dev/null && (( v < max_local )); then
+      missing="${missing} V${v}"
+    fi
+  done <<< "$applied"
+  if [[ -n "$late" ]]; then
+    echo "[deploy] 이 트리의 미적용 마이그레이션이 운영 최대(V${max_applied})보다 낮다:${late} — 운영은 out-of-order가 꺼져 있어 기동이 Flyway 검증에서 선다." >&2
+    echo "         번호를 운영 최대보다 크게 다시 매긴 뒤(배포 직전 merge에서) 다시 친다. 아무것도 바꾸지 않았다." >&2
+    exit 1
+  fi
+  if [[ -n "$missing" ]]; then
+    echo "[deploy] 운영에 적용됐는데 이 트리에 없는 마이그레이션이 이 트리 최대(V${max_local})보다 낮다:${missing} — 기동이 「missing」으로 선다." >&2
+    echo "         그 번호를 든 브랜치를 먼저 합친다. 아무것도 바꾸지 않았다." >&2
+    exit 1
+  fi
+}
+prod_migration_guard
+
 echo "== 빌드 =="
 ./gradlew clean build
 BUILD_STATE_AFTER="$(build_state)"
