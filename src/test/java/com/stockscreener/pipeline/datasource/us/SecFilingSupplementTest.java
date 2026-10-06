@@ -358,6 +358,59 @@ class SecFilingSupplementTest {
         assertThat(outcome.vintagesUncertain()).isTrue();
         assertThat(outcome.fromStore()).isEqualTo(1);
         assertThat(accessionsIn(facts)).contains(MISSING);
+        assertThat(outcome.staleReused()).as("지금 판의 저장분은 옛 판이 아니다").isZero();
+        assertThat(new SecFilingSupplementStore(jdbcTemplate).tallySince(java.time.Instant.EPOCH).allUnresolved())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("공시 목록을 못 받은 실행도 companyfacts가 덮은 공시를 COVERED로 바꾸고 그 판을 연다 — 정리는 목록이 필요 없다")
+    void listFailureStillSettlesCoveredFilings() throws Exception {
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        statusOf.put(submissionsPath(), 500);
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFactsCovering(MISSING), FROM, "t");
+
+        assertThat(outcome.vintagesUncertain()).isTrue();
+        assertThat(outcome.supplementedVintages()).contains(MISSING_FILED);
+        assertThat(storedStatus(MISSING)).isEqualTo("COVERED");
+    }
+
+    @Test
+    @DisplayName("덮인 공시는 companyfacts가 붙인 filed 날짜도 연다 — 하루 늦게 매기는 공시가 있다")
+    void coveredFilingOpensCompanyFactsFiledDateToo() throws Exception {
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK,
+                companyFactsCovering(MISSING, MISSING_FILED.plusDays(1)), FROM, "t");
+
+        assertThat(outcome.supplementedVintages()).containsExactlyInAnyOrder(MISSING_FILED, MISSING_FILED.plusDays(1));
+    }
+
+    @Test
+    @DisplayName("옛 판을 쓴 행이 COVERED가 되거나 XBRL 없음으로 다시 받아지면 미해결에서 빠진다")
+    void staleMarkClearsWhenCoveredOrRefetchedAsNoXbrl() throws Exception {
+        SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        jdbcTemplate.update("UPDATE sec_filing_supplement SET reader_version = 0 WHERE cik = ?", CIK);
+        statusOf.put(instancePath(MISSING, "abt-20260630_htm.xml"), 503);
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(store.tallySince(java.time.Instant.EPOCH).allUnresolved()).isEqualTo(1);
+
+        supplement.supplement(CIK, companyFactsCovering(MISSING), FROM, "t");
+        assertThat(store.tallySince(java.time.Instant.EPOCH).allUnresolved()).as("COVERED가 지운다").isZero();
+
+        // 다시 대상이 되고(companyfacts가 다시 뺌) 옛 판 → 받기 실패 → XBRL 없음으로 다시 받음.
+        jdbcTemplate.update("""
+                UPDATE sec_filing_supplement SET status = 'OK', facts = '[]'::jsonb, reader_version = 0
+                WHERE cik = ? AND accession = ?""", CIK, MISSING);
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(store.tallySince(java.time.Instant.EPOCH).allUnresolved()).isEqualTo(1);
+        statusOf.remove(instancePath(MISSING, "abt-20260630_htm.xml"));
+        bodyOf.put(indexPath(MISSING), index("0000001800-26-000077.txt", "abt-6k.htm", "FilingSummary.xml"));
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(storedStatus(MISSING)).isEqualTo("NO_XBRL");
+        assertThat(store.tallySince(java.time.Instant.EPOCH).allUnresolved()).as("XBRL 없음 저장이 지운다").isZero();
     }
 
     @Test
@@ -392,11 +445,15 @@ class SecFilingSupplementTest {
 
     /** companyfacts가 그 공시의 us-gaap까지 싣는 모양 — 나중에 SEC가 채운 경우. */
     private ObjectNode companyFactsCovering(String accession) throws Exception {
+        return companyFactsCovering(accession, MISSING_FILED);
+    }
+
+    private ObjectNode companyFactsCovering(String accession, LocalDate filed) throws Exception {
         return (ObjectNode) MAPPER.readTree("""
                 {"us-gaap":{"Revenues":{"units":{"USD":[
                   {"start":"2026-01-01","end":"2026-03-31","val":10000000000,"accn":"%s","fy":2026,"fp":"Q1","form":"10-Q","filed":"2026-05-01"},
                   {"start":"2026-04-01","end":"2026-06-30","val":11138000000,"accn":"%s","fy":2026,"fp":"Q2","form":"10-Q","filed":"%s"}]}}}}"""
-                .formatted(COVERED, accession, MISSING_FILED));
+                .formatted(COVERED, accession, filed));
     }
 
     private String failureKind(String accession) {

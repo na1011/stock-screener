@@ -116,12 +116,13 @@ public class SecFilingSupplement implements FilingSupplementer {
             return fromStoreOnly(cik, facts, since, context, e);
         }
 
-        Set<String> covered = usGaapAccessions(facts);
+        Map<String, Set<LocalDate>> coveredFiled = usGaapFilings(facts);
+        Set<String> covered = coveredFiled.keySet();
         List<SecFilingClient.Filing> targets = targets(filings, covered);
         Set<String> targetAccessions = new HashSet<>();
         targets.forEach(t -> targetAccessions.add(t.accession()));
         Set<LocalDate> supplemented = new LinkedHashSet<>();
-        settle(cik, covered, targetAccessions, supplemented, context);
+        settle(cik, coveredFiled, targetAccessions, supplemented, context);
         store.touch(cik, targetAccessions);
         if (targets.isEmpty()) {
             return new Outcome(0, 0, 0, 0, List.of(), Set.of(), Set.copyOf(supplemented), false);
@@ -211,17 +212,19 @@ public class SecFilingSupplement implements FilingSupplementer {
     /**
      * companyfacts가 나중에 실은 공시의 행을 상태와 무관하게(OK·NO_XBRL·FAILED) {@code COVERED}로 바꾸고, 그런 행의 제출일을
      * <b>매 실행</b> 연다 — 판은 이제 companyfacts가 내지만, 그 전에 늦은 판이 먼저 들어왔을 수 있어 그 판을 이른 판이어도
-     * 넣어야 「처음부터 companyfacts가 실었을 때」와 같은 상태에 닿는다.
+     * 넣어야 「처음부터 companyfacts가 실었을 때」와 같은 상태에 닿는다. 여는 날짜는 목록의 제출일과 <b>companyfacts가 그
+     * 공시에 붙인 {@code filed}</b> 둘 다다 — companyfacts가 하루 이틀 늦게 매기는 공시가 있고(17:30 ET 뒤 접수 · 15 / 55,736
+     * 접수번호 · 미리 못 가른다), 덮인 뒤의 판은 그 날짜로 나온다.
      *
      * <p><b>MUST NOT: 행을 지우지 않는다 · 실패 행만 고르지 않는다.</b> 한 번만 열면 그 실행이 APPEND_ONLY(Writer가 열림을 안
      * 씀)거나 같은 날 다른 공시가 실패해(보호가 이김) 열림이 사라지고 다시 안 온다. 받았던 공시(OK)도 같다 — 받은 실행의
      * 열림이 그렇게 사라졌으면, 실패였던 공시와 다른 판 집합에 닿는다(2026-10-06 v3 반증 · 실측 전이 EXE 1건). 받는 창 밖으로
      * 나간 행도 그대로 둔다 — 창이 좁은 손 실행이 기본 창의 행을 지우면 안 된다.
      */
-    private void settle(long cik, Set<String> covered, Set<String> targetAccessions, Set<LocalDate> supplemented,
-                        String context) {
+    private void settle(long cik, Map<String, Set<LocalDate>> coveredFiled, Set<String> targetAccessions,
+                        Set<LocalDate> supplemented, String context) {
         for (SecFilingSupplementStore.Row row : store.rowsOf(cik).values()) {
-            if (targetAccessions.contains(row.accession()) || !covered.contains(row.accession())) {
+            if (targetAccessions.contains(row.accession()) || !coveredFiled.containsKey(row.accession())) {
                 continue;
             }
             if (!"COVERED".equals(row.status())) {
@@ -230,10 +233,11 @@ public class SecFilingSupplement implements FilingSupplementer {
                         row.accession(), row.status());
             }
             supplemented.add(row.filed());
+            supplemented.addAll(coveredFiled.get(row.accession()));
         }
     }
 
-    private record Fetched(String fileName, long fileSize, XbrlInstanceReader.Instance instance,
+    record Fetched(String fileName, long fileSize, XbrlInstanceReader.Instance instance,
                            List<XbrlInstanceReader.Fact> chosen) {
 
         static Fetched noXbrl() {
@@ -254,10 +258,18 @@ public class SecFilingSupplement implements FilingSupplementer {
             return Fetched.noXbrl();
         }
         byte[] bytes = client.instance(cik, filing.accession(), name);
+        return interpret(bytes, cik, filing.form(), name, context);
+    }
+
+    /**
+     * 받은 인스턴스를 해석한다 — 읽기 · 신원 · 고르기. 여기서 난 실패는 전부 해석 실패({@link UnreadableFiling})이고 판이
+     * 같은 동안 다시 받지 않는다. 판 범위의 일부라 {@code ReaderVersionPinTest}가 이것을 직접 부른다.
+     */
+    static Fetched interpret(byte[] bytes, long cik, String form, String name, String context) throws UnreadableFiling {
         try {
             XbrlInstanceReader.Instance instance =
                     XbrlInstanceReader.read(new ByteArrayInputStream(bytes), cik, context + " " + name);
-            XbrlInstanceReader.requireIdentity(instance, filing.form(), context + " " + name);
+            XbrlInstanceReader.requireIdentity(instance, form, context + " " + name);
             // 고르기를 저장 전에 한 번 돌려 본다 — 같은 정밀도 충돌은 그 공시의 실패로 남긴다(저장분이 늘 고를 수 있게).
             List<XbrlInstanceReader.Fact> chosen = XbrlInstanceReader.choose(instance.facts(), context + " " + name);
             return new Fetched(name, bytes.length, instance, chosen);
@@ -302,11 +314,14 @@ public class SecFilingSupplement implements FilingSupplementer {
                                   DataSourceException cause) {
         log.warn("공시 목록을 받지 못해 저장분만 합치고 이 종목의 판 회수를 멈춘다. {} 종류={} — {}",
                 context, cause.kind(), cause.getMessage());
-        Set<String> covered = usGaapAccessions(facts);
+        Map<String, Set<LocalDate>> coveredFiled = usGaapFilings(facts);
+        Set<String> covered = coveredFiled.keySet();
         int merged = 0;
         int fromStore = 0;
         int staleReused = 0;
         Set<LocalDate> supplemented = new LinkedHashSet<>();
+        // 정리는 목록이 필요 없다 — 대상은 companyfacts가 안 싣는 공시뿐이라 덮인 공시는 어느 쪽이든 대상이 아니다.
+        settle(cik, coveredFiled, Set.of(), supplemented, context);
         for (SecFilingSupplementStore.Row row : store.okRowsOf(cik).values()) {
             if (row.filed().isBefore(since) || covered.contains(row.accession())) {
                 continue;
@@ -346,15 +361,25 @@ public class SecFilingSupplement implements FilingSupplementer {
 
     /** companyfacts가 us-gaap 팩트를 하나라도 싣는 접수번호. */
     static Set<String> usGaapAccessions(JsonNode facts) {
-        Set<String> out = new HashSet<>();
+        return usGaapFilings(facts).keySet();
+    }
+
+    /** companyfacts가 us-gaap 팩트를 싣는 접수번호와, 그 접수번호에 companyfacts가 붙인 {@code filed} 날짜들. */
+    static Map<String, Set<LocalDate>> usGaapFilings(JsonNode facts) {
+        Map<String, Set<LocalDate>> out = new java.util.HashMap<>();
         JsonNode usGaap = facts.path("us-gaap");
         for (String concept : usGaap.propertyNames()) {
             JsonNode units = usGaap.path(concept).path("units");
             for (String unit : units.propertyNames()) {
                 for (JsonNode node : units.path(unit)) {
                     String accn = node.path("accn").asString("");
-                    if (!accn.isEmpty()) {
-                        out.add(accn);
+                    if (accn.isEmpty()) {
+                        continue;
+                    }
+                    Set<LocalDate> dates = out.computeIfAbsent(accn, a -> new java.util.TreeSet<>());
+                    String filed = node.path("filed").asString("");
+                    if (!filed.isEmpty()) {
+                        dates.add(LocalDate.parse(filed));
                     }
                 }
             }

@@ -178,6 +178,20 @@ class SecFilingSupplementWriteContractTest {
     }
 
     @Test
+    @DisplayName("companyfacts가 덮은 공시에 하루 늦은 filed를 붙여도 그 판이 들어온다 — 목록 날짜만 열면 뒤 판에 밀려 빠진다")
+    void coveredFilingOpensTheDateCompanyFactsGivesIt() throws Exception {
+        companyFacts(false);
+        ok(instancePath(X), instance(X_FILED));
+        collect();
+        assertThat(rows()).containsExactly(X_FILED + "|950|false|0", Y_FILED + "|1000|true|1");
+
+        companyFacts(true, "2026-02-21");
+        collect();
+
+        assertThat(rows()).containsExactly("2026-02-21|950|false|0", Y_FILED + "|1000|true|1");
+    }
+
+    @Test
     @DisplayName("대조 — 성공이 먼저 오면 같은 판 집합이다(위 시험이 닿아야 할 곳)")
     void successOnce() throws Exception {
         companyFacts(false);
@@ -254,12 +268,17 @@ class SecFilingSupplementWriteContractTest {
 
     /** companyfacts — Y는 늘 싣고, {@code withX}면 X도 싣는다. */
     private void companyFacts(boolean withX) {
+        companyFacts(withX, X_FILED);
+    }
+
+    /** companyfacts가 X에 붙이는 {@code filed}를 따로 준다 — 17:30 ET 뒤 접수면 목록 제출일보다 하루 늦다. */
+    private void companyFacts(boolean withX, String xFiled) {
         String y = """
                 {"start":"2025-01-01","end":"2025-12-31","val":1000,"accn":"%s","fy":2025,"fp":"FY","form":"10-K/A","filed":"%s"}"""
                 .formatted(Y, Y_FILED);
         String x = """
                 {"start":"2025-01-01","end":"2025-12-31","val":950,"accn":"%s","fy":2025,"fp":"FY","form":"10-K","filed":"%s"}"""
-                .formatted(X, X_FILED);
+                .formatted(X, xFiled);
         ok("/api/xbrl/companyfacts/CIK0000000001.json", """
                 {"cik":1,"entityName":"픽스처","facts":{"us-gaap":{"Revenues":{"units":{"USD":[%s]}}}}}"""
                 .formatted(withX ? x + "," + y : y));
