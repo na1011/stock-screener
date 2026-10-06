@@ -24,6 +24,9 @@ import java.time.LocalDate;
  *                               메우지 않는다 — 0이면 화면이 분모 0의 진행률을 그린다.
  * @param progressAt             마지막 진척 반영 시각. 화면이 "돌고 있는가 멎었는가"를 이걸로 가른다.
  * @param stageLabel             지금 어느 구간인가. 서버가 준 문자열을 화면이 해석 없이 보인다.
+ * @param scope                  정기 실행과 같은 범위였는가(V63). 표지 전 실행은 {@code null}이다 — 「모름」이고 FULL로 접지 않는다.
+ *                               MUST NOT: 빼지 않는다 — 화면의 {@code scopeNote}가 모르는 값(undefined 포함)에 던져 이력 표가
+ *                               통째로 깨진다.
  */
 public record BatchExecutionResponse(
         long id,
@@ -41,6 +44,7 @@ public record BatchExecutionResponse(
         String stageLabel,
         Long retriedFromId,
         String triggeredBy,
+        String scope,
         String note,
         int unresolvedFailureCount) {
 
@@ -61,6 +65,7 @@ public record BatchExecutionResponse(
                 execution.stageLabel(),
                 execution.retriedFromId(),
                 execution.triggeredBy(),
+                execution.scope(),
                 execution.note(),
                 execution.unresolvedFailureCount());
     }
