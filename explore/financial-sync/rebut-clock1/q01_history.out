@@ -1,0 +1,5 @@
+(1) 성공0·실패>0 = initial-load PARTIAL MANUAL 6 (#286~#292 · 각 1/1 TRANSIENT) + universe-rebalance PARTIAL MANUAL 1 (#207) — 계획과 같음
+(2) NOT_FOUND 4004 (sec-edgar 2002 · registry 2002) · MALFORMED 421 · UNEXPECTED 412 · TRANSIENT 30 (data-go-kr 26 · sec-edgar 4) · RATE_LIMITED 0
+(3) #410·#415 full-statement-refill PARTIAL 350/1000 — 실패 1000 전부 US NOT_FOUND (시장 통째) · 국내 350 성공
+(4) SCHEDULER 실행: financial-refill 0/91 · full-statement-refill 0/40 · governance-load 0/22
+(5) 국내 rn 1~1350 중 대부분 1~339 · 미국 rn 340~1339 → FR 기본 경로는 DART(국내) 먼저, SEC(미국) 뒤

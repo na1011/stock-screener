@@ -1,0 +1,16 @@
+무거운 잡 시계 고침 계획 v1 — 반증 (두 렌즈) · 판정: 다시 짠다
+(전문은 SubagentHandback 보고와 같다 · 근거 파일: notes1.txt · q01_history.sql/.out · PipelineScheduler.p0.java · URJ.p0.java · ReaderVersionPinTest.p1.java)
+
+계획 안
+A1 결정1의 판정 단위가 「실행 합계」라 기록된 결함의 큰 쪽(시장·소스 통째 실패)을 못 닫는다 — FR·G·CP·CA는 한 실행이 DART(국내 350)+SEC/Alpaca(미국 1000) · #410/#415 실례 · reload-gate 행이 이미 「시장 통째」를 같은 결함으로 적음 · 결정1이 닫는 것은 단일 소스 잡(FSR)과 두 소스 동시 사망뿐
+A2 결정2의 술어가 실제 한도 신호를 못 본다 — DART 020(서버 일일 한도 · api-sources SKILL:210)·data-go-kr 22는 리미터 hasDailyQuota()==true · 리미터는 JVM 인메모리라 손 bootRun·liveTest 몫을 모름 · 앱 JVM이 18,000을 혼자 쓸 때만 발화(FSR 실측 15,844+CA 700=16,544라 지금은 거의 안 남)
+A3 결정2의 「남은 종목을 안 돈다」에 기제가 없다 — abort()는 claimTerminal만 · abortIfAbandoned는 abandonedOnShutdown만 봄 → 루프 계속 · 남은 DART 종목마다 recordFailure(드라이런 「실패 행 0」 거짓) · 행이 abort 시점에 닫혀 FR finish(note)의 무효화 목록(유일한 내구 기록)이 DB에 안 남음 · Outcome에 종류·소스 없음
+A4 결정2의 실행 단위 중단이 소스를 묶는다 — FR 순서는 국내 먼저(rn 1~339) 미국 뒤(340~1339) → DART 소진 ABORT가 미국 1000을 버림 · 다음 정기는 처음부터(이어받기 없음) → 하루 예산 < 필요 콜이면 머리만 반복(livelock) · abort 알림 「다음 실행이 이어서 처리한다」 거짓
+A5 결정3 후순위 근거가 서지 않는다 — 「TRANSIENT 30」은 기회 0의 수(무거운 잡 SCHEDULER 실행 0/91·0/40·0/22) · 2부는 미배포·뒤 순서·G는 주인 없음(reload-gate) · 「더 크게 틀어진 축」 주장 없음
+A6 (작음) 소스 이름 ≠ 리미터 이름(alpaca:* · data-go-kr:market-cap) · 지금은 quota 0이거나 process 밖이라 무해하나 문자열 결합
+
+계획 밖
+B1 소비자 미집계: IndicatorReconciler:96(① FAILED면 ② 안 돎 — 14:00 좁힌 ① 1~3티커 전부 실패 시 동작 바뀜) · BootstrapRunner:415(FAILED → 종료코드 1) · SecEdgarResponse javadoc(403→RATE_LIMITED가 「실행이 우아하게 멈춘다」에 기댐 — v1 뒤에도 거짓) · BatchExecutionContext.finish에 FAILED 알림 갈래 없음(「기존 FAILED 경로」는 failUnexpectedly 문구)
+B2 1부 하류: p1 FR은 보충·목록 실패를 종목 성공으로 셈(「실행은 SUCCESS로 끝나므로」) → 1부 배포 뒤 「성공인데 불완전」이 시계를 민다 · 크기 재지 않음
+B3 빈 대상·소스 빈 시장의 공허한 성공: FSR withFullStatementSource가 0이면 start(…,0).finish() SUCCESS FULL · G는 소스 없는 시장을 0행 성공으로 셈 → DART 키 빠진 배포면 시계 전진 · 발생 재지 않음
+B4 순서: 고침은 p0 위(BatchExecutions.start 시그니처) · p1과 충돌 자리 없음(Recorder·Context·Executor를 p1이 안 건드림) · 판 고정 폐포는 DataSourceException을 OUTSIDE_SCOPE로 두고 「종류는 전부 다시 받는다」만 요구 — 하위형 추가는 폐포 밖(단 SecFilingClient:421은 범위 파일이라 건드리면 판 8)

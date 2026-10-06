@@ -1,0 +1,11 @@
+rebut-clock1 중간 메모 (2026-10-07 01:2x)
+- 운영 SELECT: 성공0·실패>0 행 7 (initial-load MANUAL 6: 286~292 · universe-rebalance MANUAL 207) — 계획 실측과 같음
+- failure_kind 분포: NOT_FOUND 4004 (sec-edgar 2002 · registry 2002) · MALFORMED 421 · UNEXPECTED 412 · TRANSIENT 30 (data-go-kr 26 · sec-edgar 4) · RATE_LIMITED 0 — 같음
+- FR·G·CP·CA 한 실행이 두 시장(DART 350 + SEC/Alpaca 1000)을 함께 돈다(FinancialRefillJob.runAndReport: resolveTargets 전 시장 · 스케줄러 market null)
+  -> 한 소스 전멸이면 성공 >0 -> 결정1 미발화 -> PARTIAL -> 시계 전진. 실례: FSR #410/#415 = KR 350 성공 · US 1000 NOT_FOUND 전멸 · PARTIAL (p0 96493885가 그 대상만 고침)
+- 리미터 이름: dart / sec-edgar / data-go-kr / alpaca. 예외 sourceName: dart · sec-edgar · data-go-kr · data-go-kr:market-cap · alpaca:price · alpaca:corporate-action · alpaca:cash-dividend · alpaca:market-cap · alpaca:calendar · alpaca:master · alpaca
+- daily-quota 설정: data-go-kr 9000 · dart 18000 · alpaca 0 · sec 0 → hasDailyQuota()==false는 data-go-kr·dart에서만 가능 · 카운터는 JVM 인메모리
+- DART 020 = 서버 일일 한도(api-sources SKILL:210 「20,000건 이상의 요청」) → RATE_LIMITED인데 우리 리미터는 hasDailyQuota()==true → 결정2 미발화
+- data-go-kr 22 = 서비스 요청 초과(RATE_LIMITED) · SEC 403/429 RATE_LIMITED · Alpaca 429 RATE_LIMITED — 모두 리미터 quota 0 또는 미소진
+- BatchExecutionContext.abort()는 claimTerminal만 — abandonedOnShutdown을 안 켠다 → 잡 루프는 계속 process를 부르고 StockTaskExecutor가 종목마다 recordFailure → 「남은 종목 실패 행 0」 거짓 + claimTerminal warn N번
+- 소비자 중 계획 목록 밖: IndicatorReconciler:96 (① FAILED면 ② 안 돎) · BootstrapRunner:415 (FAILED면 IllegalStateException → 종료코드 1)
