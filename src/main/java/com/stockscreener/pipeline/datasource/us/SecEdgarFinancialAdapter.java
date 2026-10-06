@@ -25,11 +25,13 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 미국 재무를 SEC EDGAR {@code companyfacts}로 받는다(ADR-0089).
+ * 미국 재무를 SEC EDGAR {@code companyfacts}로 받고, 거기 빠진 정기 공시는 그 공시의 XBRL 인스턴스로 보충한다
+ * (ADR-0089 · ADR-0173).
  *
- * <p><b>종목당 1콜</b>이다. DART가 (연도·보고서코드)로 4콜을 나눠 받는 것과 달리 전 기간
+ * <p>{@code companyfacts}는 <b>종목당 1콜</b>이다. DART가 (연도·보고서코드)로 4콜을 나눠 받는 것과 달리 전 기간
  * 팩트가 한 응답에 통째로 온다 — 대신 <b>기간·회계연도·정정 여부를 우리가 재구성</b>해야 하고,
- * 그 규칙과 근거는 {@link SecEdgarFacts}에 있다.
+ * 그 규칙과 근거는 {@link SecEdgarFacts}에 있다. 보충이 공시 목록(submissions · 페이지)과 빠진 공시마다 색인·인스턴스를
+ * 더 받으므로 종목당 콜은 1보다 많다(2026-10-06 RS0: 1,209종목 4,102콜).
  *
  * <p><b>호스트가 둘이다.</b> 이 어댑터는 {@code data.sec.gov}를 쓰고, 티커→CIK 매핑 파일은
  * {@code www.sec.gov}라 {@link SecTickerCikCache}가 따로 연다. <b>리미터는 공유한다</b> —

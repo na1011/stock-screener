@@ -103,9 +103,11 @@ class SecFilingSupplementWriteContractTest {
                   "accessionNumber":["%s","%s"],"form":["10-K","10-K/A"],"filingDate":["%s","%s"],
                   "reportDate":["2025-12-31","2025-12-31"],"isXBRL":[1,1]},"files":[]}}"""
                 .formatted(X, Y, X_FILED, Y_FILED));
+        // 인스턴스 크기는 받은 본문과 맞춰 보는 원장의 값이다(ADR-0173 판 3) — 시험이 내는 본문의 바이트 수를 싣는다.
         ok(indexPath(X), """
-                {"directory":{"item":[{"name":"fix-20251231_htm.xml"},{"name":"fix-20251231_lab.xml"},
-                  {"name":"FilingSummary.xml"}]}}""");
+                {"directory":{"item":[{"name":"fix-20251231_htm.xml","size":"%d"},{"name":"fix-20251231_lab.xml","size":"1"},
+                  {"name":"FilingSummary.xml","size":"1"}]}}"""
+                .formatted(instance(X_FILED).getBytes(java.nio.charset.StandardCharsets.UTF_8).length));
     }
 
     @AfterEach

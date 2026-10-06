@@ -65,6 +65,8 @@ class SecFilingSupplementTest {
     /** 경로마다 돌려줄 상태코드. 없으면 200. */
     private final Map<String, Integer> statusOf = new ConcurrentHashMap<>();
     private final Map<String, String> bodyOf = new ConcurrentHashMap<>();
+    /** 경로마다 전송을 끊는 방식(없으면 정상). */
+    private final Map<String, okhttp3.mockwebserver.SocketPolicy> policyOf = new ConcurrentHashMap<>();
     private SecFilingSupplement supplement;
 
     @BeforeEach
@@ -82,7 +84,9 @@ class SecFilingSupplementTest {
                     return new MockResponse().setResponseCode(status == 200 ? 404 : status)
                             .setBody("<Error><Code>NoSuchKey</Code></Error>");
                 }
-                return new MockResponse().setResponseCode(200).setBody(body);
+                MockResponse ok = new MockResponse().setResponseCode(200).setBody(body);
+                okhttp3.mockwebserver.SocketPolicy policy = policyOf.get(path);
+                return policy == null ? ok : ok.setSocketPolicy(policy);
             }
         });
         server.start();
@@ -314,6 +318,22 @@ class SecFilingSupplementTest {
     }
 
     @Test
+    @DisplayName("공시 목록을 못 받은 실행이 더 높은 판의 저장분을 써도 미해결이다 — 지금 규칙의 저장분이 아니다")
+    void listFailureUsingANewerVersionIsUnresolved() throws Exception {
+        SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        jdbcTemplate.update("UPDATE sec_filing_supplement SET reader_version = ? WHERE cik = ?",
+                XbrlInstanceReader.READER_VERSION + 1, CIK);
+        statusOf.put(submissionsPath(), 500);
+        java.time.Instant since = store.now();
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.staleReused()).isEqualTo(1);
+        assertThat(store.tallySince(since).unresolved()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("실행 기록의 미해결은 이 실행이 본 행만 센다 — 기본 FR이 안 도는 종목의 실패 행은 표 전체 수에만 든다")
     void unresolvedCountsOnlyRowsThisRunSaw() throws Exception {
         SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
@@ -461,6 +481,65 @@ class SecFilingSupplementTest {
     }
 
     @Test
+    @DisplayName("받은 길이가 색인 크기와 다르면 해석 실패가 아니라 받기 실패다 — 끊긴 본문이 영구 UNREADABLE로 굳지 않는다")
+    void bodyShorterThanTheIndexSizeIsAFetchFailure() throws Exception {
+        byte[] full = instanceBytes();
+        bodyOf.put(instancePath(MISSING, INSTANCE), new String(full, 0, full.length / 2, StandardCharsets.UTF_8));
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.failed()).containsExactly(MISSING);
+        assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
+
+        paths.clear();
+        bodyOf.put(instancePath(MISSING, INSTANCE), instanceXml());
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(paths).as("다음 실행이 다시 받는다").contains(instancePath(MISSING, INSTANCE));
+        assertThat(storedStatus(MISSING)).isEqualTo("OK");
+    }
+
+    @Test
+    @DisplayName("본문 도중 끊긴 전송은 다시 받는다 — 지금 전송이 끊긴 본문을 예외 없이 넘겨도 색인 크기가 가른다")
+    void transportDisconnectedMidBodyIsRetried() throws Exception {
+        policyOf.put(instancePath(MISSING, INSTANCE), okhttp3.mockwebserver.SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY);
+
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+        assertThat(failureKind(MISSING)).as("해석 실패(UNREADABLE)면 다시 받지 않는 종료 상태다").isNotEqualTo("UNREADABLE");
+
+        paths.clear();
+        policyOf.clear();
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(paths).as("다음 실행이 다시 받는다").contains(instancePath(MISSING, INSTANCE));
+        assertThat(storedStatus(MISSING)).isEqualTo("OK");
+    }
+
+    @Test
+    @DisplayName("200 오류 페이지는 해석 실패가 아니라 받기 실패다 — 길이가 색인 크기와 다르다")
+    void errorPageWithStatus200IsAFetchFailure() throws Exception {
+        bodyOf.put(instancePath(MISSING, INSTANCE), "<html><body>Request Rate Threshold Exceeded</body></html>");
+
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
+    }
+
+    @Test
+    @DisplayName("색인에 인스턴스 크기가 없으면 받지 않고 받기 실패로 둔다 — 맞춰 볼 수 없는 본문을 해석하지 않는다")
+    void instanceWithoutIndexSizeIsAFetchFailure() throws Exception {
+        bodyOf.put(indexPath(MISSING), "{\"directory\":{\"item\":[{\"name\":\"" + INSTANCE + "\",\"size\":\"\"}]}}");
+
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
+        assertThat(paths).as("크기를 모르면 인스턴스를 받지 않는다").doesNotContain(instancePath(MISSING, INSTANCE));
+    }
+
+    @Test
     @DisplayName("옛 판을 쓴 행이 COVERED가 되거나 XBRL 없음으로 다시 받아지면 미해결에서 빠진다")
     void staleMarkClearsWhenCoveredOrRefetchedAsNoXbrl() throws Exception {
         SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
@@ -588,12 +667,24 @@ class SecFilingSupplementTest {
         return cols;
     }
 
+    /** 인스턴스의 크기는 그 본문의 바이트 수다(ADR-0173 판 3 — 받은 본문을 색인 크기와 맞춘다). 나머지는 1. */
     private static String index(String... names) {
         List<Map<String, String>> items = new ArrayList<>();
         for (String name : names) {
-            items.add(Map.of("name", name, "type", "text.gif", "size", "1"));
+            String size = name.equals(INSTANCE) ? String.valueOf(instanceBytes().length) : "1";
+            items.add(Map.of("name", name, "type", "text.gif", "size", size));
         }
         return MAPPER.writeValueAsString(Map.of("directory", Map.of("item", items)));
+    }
+
+    private static final String INSTANCE = "abt-20260630_htm.xml";
+
+    private static byte[] instanceBytes() {
+        try {
+            return instanceXml().getBytes(StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private static String instanceXml() throws IOException {

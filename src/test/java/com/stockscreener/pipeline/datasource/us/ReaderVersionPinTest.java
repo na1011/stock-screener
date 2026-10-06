@@ -1,18 +1,29 @@
 package com.stockscreener.pipeline.datasource.us;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.MemberReferenceTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.NewClassTree;
 import com.sun.source.util.JavacTask;
+import com.sun.source.util.TreePathScanner;
 import com.sun.source.util.TreeScanner;
+import com.sun.source.util.Trees;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.TypeElement;
+import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.IOException;
 import java.io.InputStream;
@@ -47,43 +58,52 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li><b>출력 해시</b> — 고정 재료(해석 실패 자리마다 하나 · 특성 · 신원 · 이름 · 폴더)를 먹인 출력과 읽기 구현 · JDK 판.</li>
  * </ul>
  *
- * <p><b>붉으면</b>:
- * <ul>
- *   <li>소스 해시가 붉다 → <b>언제나</b> {@code READER_VERSION}을 올리고 두 해시를 {@link #SOURCE_PINNED}·{@link #PINNED} 끝에
- *       더한다. 리팩터여도 올린다 — 출력이 그대로인 것은 행동이 그대로라는 증거가 아니다(v6 반증 — 출력 해시를 지난 행동 변경이
- *       20개 중 12개 · v7 반증이 재현). 해시 방법(정규형)을 바꾼 것도 같다.</li>
- *   <li>소스 해시는 그대로이고 출력 해시만 붉다 → 재료를 더했으면 {@link #PINNED}의 지금 판 값만 고친다(같은 커밋에 재료 변경이
- *       있어야 한다). 재료가 그대로면 환경(JDK · 의존성)이 행동을 바꾼 것이라 판을 올린다.</li>
- * </ul>
- * 판을 올리는 대가는 저장 행을 다시 받는 것뿐이다(셈 — 사본 545행이면 색인·인스턴스 약 1,053콜).
- * MUST NOT: 박힌 해시를 고쳐 판을 안 올리지 않는다 — 그것이 「판을 안 올리고 규칙을 바꾼 것」이다.
+ * <p><b>붉으면 판을 올린다 — 언제나.</b> 두 목록({@link #SOURCE_PINNED}·{@link #PINNED})은 덧붙이기만 한다: 소스든 재료든 환경
+ * (JDK · 의존성)이든 지금 판 값과 다르면 {@code READER_VERSION}을 올리고 두 해시를 끝에 더한다. 리팩터여도 올린다 — 출력이
+ * 그대로인 것은 행동이 그대로라는 증거가 아니다(v6 반증 — 출력 해시를 지난 행동 변경이 20개 중 12개 · v7 반증이 재현).
+ * 재료만 더했어도 올린다 — 지금 판 값을 고치는 갈래를 두면 「재료를 바꿨다」를 사람이 판정하게 되고 그것을 기계가 못 막는다
+ * (v8 반증). 덧붙이기만 했는지는 {@link #pinnedListsOnlyGrow}가 git 이력으로 묻는다. 판을 올리는 대가는 저장 행을 다시
+ * 받는 것뿐이다(셈 — 사본 545행이면 색인·인스턴스 약 1,053콜).
  */
 class ReaderVersionPinTest {
 
-    /** 판 1, 2, …의 판 범위 소스 해시. 끝에만 더한다(판 1은 옛 정규형 · 메서드 범위). */
+    /** 판 1, 2, …의 판 범위 소스 해시. 끝에만 더한다(판 1은 옛 정규형 · 메서드 범위 · 판 2는 형 종류 없는 정규형). */
     private static final List<String> SOURCE_PINNED = List.of(
             "d1361d139cdfa74bb695997d9fea491ba9af9f3be6f5cebcd0cc9459f698b18c",
-            "c713c64d6a4a6dd9e4e6f04267463b2877dde8ea6eeac50b46ee8847d182423f");
+            "c713c64d6a4a6dd9e4e6f04267463b2877dde8ea6eeac50b46ee8847d182423f",
+            "e44657c52f69e940e9a083e0d76801aea8f561cb218e67be3509d1761c002bb7");
 
     /**
      * 판 범위 — 저장되는 것(상태 · 원 팩트 · 머리 · 실패 종류)을 정하는 파일 전부, 파일 전체다({@code READER_VERSION} 선언만
-     * 뺀다). 받기(이름 목록 · 바이트) → 읽기 → 고르기 · 신원 · 상태 분류 → 저장 형태.
+     * 뺀다). 받기(이름 목록 · 크기 · 바이트 · 색인 JSON) → 읽기 → 고르기 · 신원 · 상태 분류 → 저장 형태.
      */
     private static final List<String> SOURCE_SCOPE = List.of(
-            "FilingSupplementer.java", "SecFilingClient.java", "SecFilingSupplement.java",
+            "FilingSupplementer.java", "SecEdgarResponse.java", "SecFilingClient.java", "SecFilingSupplement.java",
             "SecFilingSupplementStore.java", "SupplementLedger.java", "XbrlInstanceReader.java");
 
-    /** 범위 파일이 코드로 부르는 같은 패키지 형 중 범위 밖인 것과 그 사유 — 셋 다 다시 받는 실패만 낼 수 있다. */
+    /**
+     * 범위 파일이 쓰는 프로젝트 형({@code com.stockscreener.*}) 중 범위 밖인 것과 그 사유 — 종료 상태(OK · NO_XBRL ·
+     * UNREADABLE · COVERED)나 저장 내용을 못 바꾼다는 근거다. javac 속성 분석으로 센다(static import · 완전한 이름 포함).
+     */
     private static final Map<String, String> OUTSIDE_SCOPE = Map.of(
-            "SecEdgarResponse", "비2xx의 실패 종류 · JSON 요건 — 종료 상태(OK · NO_XBRL · UNREADABLE)를 못 만든다",
-            "SecEdgarHeaders", "요청 머리 — 틀리면 403이라 다시 받는다",
-            "SecTickerCikCache", "CIK 0 채우기 — 틀리면 404라 다시 받는다");
+            "com.stockscreener.pipeline.datasource.DataSourceException",
+            "실패 운반체 — 종료(UNREADABLE)는 범위 안이 정하고 이 형의 종류는 전부 다시 받는다(Kind에 UNREADABLE 없음 · 아래 시험)",
+            "com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey", "빈 등록 조건 — 키가 없으면 보충 자체가 안 돈다",
+            "com.stockscreener.pipeline.datasource.http.DataSourceProperties",
+            "주소 · 머리 · 속도 설정 — 틀리면 받기 실패이고 받은 본문은 색인 크기로 맞춘다",
+            "com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory",
+            "전송 — 끊긴 본문 · 오류 본문은 색인 크기 대조가 받기 실패로 돌리고, 깨진 색인 JSON은 MALFORMED다",
+            "com.stockscreener.pipeline.datasource.http.RateLimiter", "호출 간격",
+            "com.stockscreener.pipeline.datasource.us.SecEdgarHeaders",
+            "요청 머리 — 틀리면 403이거나 본문 인코딩이 달라지는데 받은 본문은 색인 크기로 맞춘다",
+            "com.stockscreener.pipeline.datasource.us.SecTickerCikCache", "CIK 0 채우기 — 틀리면 공시 목록 404라 다시 받는다");
 
     private static final Path SOURCE_DIR = Path.of("src/main/java/com/stockscreener/pipeline/datasource/us");
 
     /** 판 1, 2, …의 출력 해시. 끝에만 더한다. */
     private static final List<String> PINNED = List.of(
             "c8e8a6e90b0cf4786efd0fc10bacee5099b4babeb6cdd2f61666f43bb53ee982",
+            "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1");
 
     private static final Path READER_SOURCE =
@@ -191,13 +211,12 @@ class ReaderVersionPinTest {
             List.of());
 
     @Test
-    @DisplayName("해석 규칙의 출력이 지금 판에 박힌 해시와 같다 — 환경이나 규칙이 바뀌고 판을 안 올리면 붉다")
+    @DisplayName("해석 규칙의 출력이 지금 판에 박힌 해시와 같다 — 재료 · 환경 · 규칙이 바뀌고 판을 안 올리면 붉다")
     void rulesArePinnedToTheReaderVersion() throws Exception {
         assertThat(PINNED).as("판 번호와 박힌 해시 수가 같아야 한다 — 판을 올리면 해시를 끝에 더한다")
                 .hasSize(XbrlInstanceReader.READER_VERSION);
         assertThat(digest(canonicalOutput()))
-                .as("판 범위의 출력이 바뀌었다 — 재료를 더했으면 PINNED의 지금 판 값만 고치고, 재료가 그대로면(환경이 바뀜) "
-                        + "READER_VERSION을 올리고 새 해시를 끝에 더한다(ADR-0173)")
+                .as("판 범위의 출력이 바뀌었다(재료 · 환경 · 규칙) — READER_VERSION을 올리고 두 해시를 끝에 더한다(ADR-0173)")
                 .isEqualTo(PINNED.get(XbrlInstanceReader.READER_VERSION - 1));
     }
 
@@ -211,27 +230,119 @@ class ReaderVersionPinTest {
     }
 
     @Test
-    @DisplayName("판 범위 파일이 코드로 부르는 같은 패키지 형은 범위 안이거나, 종료 상태를 못 만드는 사유가 적힌 예외다")
-    void everyPackageTypeTheScopeCallsIsInScopeOrExcused() throws Exception {
-        Set<String> packageTypes;
-        try (Stream<Path> files = Files.list(SOURCE_DIR)) {
-            packageTypes = files.map(f -> f.getFileName().toString()).filter(n -> n.endsWith(".java"))
-                    .map(n -> n.substring(0, n.length() - 5)).collect(Collectors.toCollection(TreeSet::new));
+    @DisplayName("판 범위 파일이 쓰는 프로젝트 형은 범위 안이거나, 저장을 못 바꾸는 사유가 적힌 예외다 — javac 속성 분석으로 센다")
+    void everyProjectTypeTheScopeUsesIsInScopeOrExcused() throws Exception {
+        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        Set<String> used = new TreeSet<>();
+        try (StandardJavaFileManager files = javac.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
+            JavacTask task = (JavacTask) javac.getTask(null, files, diagnostics,
+                    List.of("-proc:none", "-classpath", System.getProperty("java.class.path")), null,
+                    files.getJavaFileObjectsFromPaths(SOURCE_SCOPE.stream().map(SOURCE_DIR::resolve).toList()));
+            Iterable<? extends CompilationUnitTree> units = task.parse();
+            task.analyze();
+            assertThat(diagnostics.getDiagnostics()).as("판 범위 소스를 속성 분석하지 못했다")
+                    .noneMatch(d -> d.getKind() == Diagnostic.Kind.ERROR);
+            Trees trees = Trees.instance(task);
+            for (CompilationUnitTree unit : units) {
+                new TreePathScanner<Void, Void>() {
+                    @Override
+                    public Void visitIdentifier(IdentifierTree node, Void unused) {
+                        record();
+                        return super.visitIdentifier(node, unused);
+                    }
+
+                    @Override
+                    public Void visitMemberSelect(MemberSelectTree node, Void unused) {
+                        record();
+                        return super.visitMemberSelect(node, unused);
+                    }
+
+                    @Override
+                    public Void visitNewClass(NewClassTree node, Void unused) {
+                        record();
+                        return super.visitNewClass(node, unused);
+                    }
+
+                    @Override
+                    public Void visitMemberReference(MemberReferenceTree node, Void unused) {
+                        record();
+                        return super.visitMemberReference(node, unused);
+                    }
+
+                    private void record() {
+                        TypeElement top = topLevel(trees.getElement(getCurrentPath()));
+                        if (top != null) {
+                            used.add(top.getQualifiedName().toString());
+                        }
+                    }
+                }.scan(unit, null);
+            }
         }
-        Set<String> called = new TreeSet<>();
-        for (String file : SOURCE_SCOPE) {
-            new TreeScanner<Void, Void>() {
-                @Override
-                public Void visitIdentifier(IdentifierTree node, Void unused) {
-                    called.add(node.getName().toString());
-                    return null;
-                }
-            }.scan(parse(SOURCE_DIR.resolve(file)), null);
-        }
-        called.retainAll(packageTypes);
-        SOURCE_SCOPE.forEach(f -> called.remove(f.substring(0, f.length() - 5)));
-        assertThat(called).as("범위 밖 형을 새로 부르면 범위에 넣거나, 종료 상태를 못 만드는 사유를 OUTSIDE_SCOPE에 적는다")
+        String scopePackage = "com.stockscreener.pipeline.datasource.us.";
+        used.removeIf(name -> !name.startsWith("com.stockscreener."));
+        SOURCE_SCOPE.forEach(f -> used.remove(scopePackage + f.substring(0, f.length() - 5)));
+        assertThat(used).as("범위 밖 프로젝트 형을 새로 쓰면 범위에 넣거나, 저장을 못 바꾸는 사유를 OUTSIDE_SCOPE에 적는다")
                 .isEqualTo(new TreeSet<>(OUTSIDE_SCOPE.keySet()));
+    }
+
+    @Test
+    @DisplayName("받기 실패의 종류에 UNREADABLE이 없다 — 있으면 받기 실패가 다시 받지 않는 종료 상태로 저장된다")
+    void fetchFailureKindsNeverCollideWithTheTerminalKind() {
+        assertThat(java.util.Arrays.stream(DataSourceException.Kind.values()).map(Enum::name))
+                .doesNotContain(SecFilingSupplement.UNREADABLE);
+    }
+
+    @Test
+    @DisplayName("박힌 해시는 덧붙이기만 한다 — 판 번호가 같은 채 값이 바뀐 커밋이 없다(v8부터 · git 이력)")
+    void pinnedListsOnlyGrow() throws Exception {
+        String path = "src/test/java/com/stockscreener/pipeline/datasource/us/ReaderVersionPinTest.java";
+        List<String> commits = new ArrayList<>(git("log", "--format=%H", APPEND_ONLY_SINCE + "^..HEAD", "--", path)
+                .lines().filter(l -> !l.isBlank()).toList());
+        java.util.Collections.reverse(commits);
+        assertThat(commits).as("덧붙이기 검사의 시작 커밋이 이력에 있어야 한다").isNotEmpty();
+        List<String> versions = new ArrayList<>();
+        for (String commit : commits) {
+            versions.add(git("show", commit + ":" + path));
+        }
+        versions.add(Files.readString(Path.of(path)));
+        for (int i = 1; i < versions.size(); i++) {
+            for (String list : List.of("SOURCE_PINNED", "PINNED")) {
+                List<String> before = pinned(versions.get(i - 1), list);
+                List<String> after = pinned(versions.get(i), list);
+                String where = i < commits.size() ? commits.get(i) : "작업 트리";
+                assertThat(after).as(list + "은 덧붙이기만 한다 — 지금 판 값을 고치지 말고 판을 올린다: " + where)
+                        .startsWith(before.toArray(String[]::new));
+            }
+        }
+    }
+
+    /** 덧붙이기 검사를 시작하는 커밋 — 이 앞은 배포 전이라 지금 판 값을 고치던 시기다(v8 · 2026-10-06). */
+    private static final String APPEND_ONLY_SINCE = "066c325a";
+
+    private static List<String> pinned(String source, String list) {
+        Matcher m = Pattern.compile("\\b" + list + " = List\\.of\\(([^;]*?)\\);", Pattern.DOTALL).matcher(source);
+        assertThat(m.find()).as(list + " 선언을 못 찾았다").isTrue();
+        return Pattern.compile("\"([0-9a-fA-Z]+)\"").matcher(m.group(1)).results().map(r -> r.group(1)).toList();
+    }
+
+    private static String git(String... args) throws Exception {
+        List<String> command = new ArrayList<>(List.of("git"));
+        command.addAll(List.of(args));
+        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        String out = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(process.waitFor()).as("git " + String.join(" ", args) + " → " + out).isZero();
+        return out;
+    }
+
+    private static TypeElement topLevel(Element element) {
+        TypeElement top = null;
+        for (Element e = element; e != null && e.getKind() != ElementKind.PACKAGE; e = e.getEnclosingElement()) {
+            if (e instanceof TypeElement type) {
+                top = type;
+            }
+        }
+        return top;
     }
 
     @Test
@@ -262,6 +373,9 @@ class ReaderVersionPinTest {
             assertThat(changed).isNotEqualTo(base);
             assertThat(canonicalSource("X.java", changed)).as("코드 한 토큰").isNotEqualTo(canonicalSource("X.java", base));
         }
+        // 트리 출력만으로는 같은 글이다(성분 0 레코드 · 내부 클래스 — 둘 다 「class R { }」) — 형 종류가 가른다.
+        assertThat(canonicalSource("Y.java", "package p;\nclass Y {\n    record R() { }\n}\n")).as("레코드와 내부 클래스")
+                .isNotEqualTo(canonicalSource("Y.java", "package p;\nclass Y {\n    class R { }\n}\n"));
     }
 
     @Test
@@ -433,6 +547,15 @@ class ReaderVersionPinTest {
             }
         }
         assertThat(inDoc).as("문서 주석이 안 닫혔다 — 트리 출력의 문서 주석 꼴이 바뀌었다: " + name).isFalse();
+        // 트리 출력은 레코드를 class로 찍는다 — 형 종류를 따로 싣는다(v8 반증: 명시 정규 생성자 레코드와 같은 생성자의
+        // 내부 클래스가 같은 글로 찍혔다).
+        new TreeScanner<Void, Void>() {
+            @Override
+            public Void visitClass(ClassTree node, Void unused) {
+                out.append("kind ").append(node.getSimpleName()).append(' ').append(node.getKind()).append('\n');
+                return super.visitClass(node, unused);
+            }
+        }.scan(parse(name, source), null);
         return out.toString();
     }
 

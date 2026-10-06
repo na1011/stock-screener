@@ -43,10 +43,10 @@ import java.util.Objects;
 final class XbrlInstanceReader {
 
     /**
-     * 저장되는 것을 정하는 규칙의 판 — 받기({@code SecFilingClient}) · 읽기({@link #read}) · 고르기({@link #choose}) · 인스턴스
+     * 저장되는 것을 정하는 규칙의 판 — 받기({@code SecFilingClient} · {@code SecEdgarResponse}) · 읽기({@link #read}) · 고르기({@link #choose}) · 인스턴스
      * 고르기와 상태 분류({@code SecFilingSupplement}) · 저장 형태({@code SecFilingSupplementStore}) <b>전부</b>다. 그 파일들
      * 전체가 판 범위다(이 선언 줄만 뺀다 · 목록과 근거는 {@code ReaderVersionPinTest.SOURCE_SCOPE}). <b>MUST: 범위 소스를 한
-     * 토큰이라도 바꾸면 올린다</b> — 리팩터여도 올린다. 해석 실패({@code UNREADABLE})와 XBRL 없음({@code NO_XBRL}) 행은 이 판이
+     * 토큰이라도 바꾸면 올린다</b> — 리팩터여도, 시험 재료만 바꿨어도 올린다(박힌 해시는 덧붙이기만 한다). 해석 실패({@code UNREADABLE})와 XBRL 없음({@code NO_XBRL}) 행은 이 판이
      * 같은 동안 다시 받지 않으므로, 안 올리면 고친 규칙이 그 행에 영영 안 닿는다(2026-10-06 구현 반증 — 신원 규칙을 SWX 때문에
      * 고치고도 판을 안 올렸다면 그 공시가 영구 실패로 남았다). 「출력이 그대로이니 리팩터다」는 증거가 아니다 — 고정 재료의 출력이
      * 같은 행동 변경이 v6 반증에서 20개 중 12개였다(v7 반증이 v7에서도 재현). 올리는 대가는 저장 행을 다시 받는 것뿐이다.
@@ -56,8 +56,10 @@ final class XbrlInstanceReader {
      * 안 올리면 그 규칙이 저장 행에 영영 안 닿는다. 지금 그런 규칙은 없다(축에만 실린 재무가 첫 후보 · `reload-gate.md`).
      *
      * <p>판 2(2026-10-06): 판 범위를 파일 전체로 넓혔다 · StAX 구현을 JDK 기본으로 고정 · 이름 없는 색인 항목을 받기 실패로.
+     * 판 3(같은 날): 받은 인스턴스 길이를 색인 크기와 맞춘다(끊긴 본문 · 200 오류 본문이 해석 실패로 굳던 것) · 범위에
+     * {@code SecEdgarResponse}(색인 JSON의 200 갈래)를 더했다.
      */
-    static final int READER_VERSION = 2;
+    static final int READER_VERSION = 3;
 
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
     private static final String XBRLDI = "http://xbrl.org/2006/xbrldi";

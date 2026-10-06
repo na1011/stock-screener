@@ -114,10 +114,13 @@ public class SecFilingClient {
      * 응답 이상이다. 받기 실패라 다음 실행이 다시 받는다. 이름 없는 항목도 같다(같은 캐시 0개) — 빈 이름은 후보도 산출물도 아니라
      * 그 항목만 빠진 목록이 {@code NO_XBRL}로 읽힐 수 있다.
      *
+     * <p>항목마다 원장이 적은 바이트 수({@code size})를 함께 낸다 — {@link #instance}가 받은 본문을 그것과 맞춘다. 색인
+     * html·묶음 {@code .txt}는 크기가 비어 있어(같은 캐시 1,701항목) 비면 {@code null}로 두고, 수가 아니면 응답 이상이다.
+     *
      * <p>이 파일 전체가 판 범위다({@link XbrlInstanceReader#READER_VERSION}) — 이름 목록이 인스턴스 고르기의 입력이고, 그 결과
      * {@code null}이 다시 받지 않는 {@code NO_XBRL}이다.
      */
-    public List<String> folder(long cik, String accession) throws DataSourceException {
+    public List<FolderItem> folder(long cik, String accession) throws DataSourceException {
         String folder = accession.replace("-", "");
         String context = "index %d/%s".formatted(cik, folder);
         JsonNode index = json(() -> files.get().uri("/Archives/edgar/data/{cik}/{folder}/index.json", cik, folder)
@@ -127,16 +130,21 @@ public class SecFilingClient {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
                     "공시 폴더 색인에 항목이 없다 — 응답 이상이라 다음 실행이 다시 받는다. " + context);
         }
-        List<String> names = new ArrayList<>();
+        List<FolderItem> out = new ArrayList<>();
         for (JsonNode item : items) {
             String name = item.path("name").asString("");
             if (name.isEmpty()) {
                 throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
                         "공시 폴더 색인에 이름 없는 항목이 있다 — 응답 이상이라 다음 실행이 다시 받는다. " + context);
             }
-            names.add(name);
+            String size = item.path("size").asString("").trim();
+            if (!size.isEmpty() && !size.chars().allMatch(Character::isDigit)) {
+                throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                        "공시 폴더 색인의 크기가 수가 아니다: " + name + "=" + size + " — 다음 실행이 다시 받는다. " + context);
+            }
+            out.add(new FolderItem(name, size.isEmpty() ? null : Long.parseLong(size)));
         }
-        return names;
+        return out;
     }
 
     static boolean isInstanceCandidate(String name) {
@@ -160,10 +168,27 @@ public class SecFilingClient {
                 || base.endsWith("_pre") || base.endsWith("_ref");
     }
 
-    /** 인스턴스 파일의 바이트. */
-    public byte[] instance(long cik, String accession, String name) throws DataSourceException {
+    /** 공시 폴더 색인의 한 항목 — 이름과 원장이 적은 바이트 수(비어 있으면 {@code null}). */
+    public record FolderItem(String name, Long size) {
+    }
+
+    /**
+     * 인스턴스 파일의 바이트.
+     *
+     * <p><b>MUST: 받은 길이가 색인의 크기와 다르면 받기 실패(MALFORMED)다</b> — 지금 전송(HttpURLConnection)은 고정 길이
+     * 본문이 도중에 끊겨도 예외 없이 받은 만큼 넘기고, 200 오류 페이지도 본문이다. 길이를 안 맞추면 둘 다 해석 실패
+     * ({@code UNREADABLE})로 접혀 판이 같은 동안 다시 받지 않는 종료 상태가 된다(2026-10-06 v8 반증 — 끊김 · 짧은 본문 ·
+     * 200 HTML · XHTML 네 꼴 전부). 원장은 길이를 정직하게 준다(같은 날 캐시 인스턴스 530/530이 크기와 바이트 일치).
+     * 크기가 빈 항목은 맞춰 볼 수 없어 받지 않는다(같은 캐시의 인스턴스 0개).
+     */
+    public byte[] instance(long cik, String accession, FolderItem item) throws DataSourceException {
         String folder = accession.replace("-", "");
+        String name = item.name();
         String context = "instance %d/%s/%s".formatted(cik, folder, name);
+        if (item.size() == null) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                    "색인에 인스턴스 크기가 없다 — 받은 본문을 맞춰 볼 수 없어 다음 실행이 다시 받는다. " + context);
+        }
         ResponseEntity<byte[]> response = withRetry(() -> files.get()
                 .uri("/Archives/edgar/data/{cik}/{folder}/{name}", cik, folder, name)
                 .retrieve().toEntity(byte[].class), context);
@@ -175,6 +200,11 @@ public class SecFilingClient {
         if (body == null || body.length == 0) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
                     "200인데 본문이 없다. " + context);
+        }
+        if (body.length != item.size()) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                    "받은 길이 %d가 색인 크기 %d와 다르다 — 받다 만 본문이거나 오류 본문이라 다음 실행이 다시 받는다. %s"
+                            .formatted(body.length, item.size(), context));
         }
         return body;
     }

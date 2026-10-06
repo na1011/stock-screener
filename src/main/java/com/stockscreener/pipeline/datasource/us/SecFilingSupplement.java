@@ -252,13 +252,14 @@ public class SecFilingSupplement implements FilingSupplementer {
      */
     private Fetched fetch(long cik, SecFilingClient.Filing filing, String context)
             throws DataSourceException, UnreadableFiling {
-        List<String> names = client.folder(cik, filing.accession());
-        String name = pickInstance(names, context);
+        List<SecFilingClient.FolderItem> items = client.folder(cik, filing.accession());
+        String name = pickInstance(items.stream().map(SecFilingClient.FolderItem::name).toList(), context);
         if (name == null) {
             log.info("원장이 XBRL이 있다고 했지만 공시 폴더에 XBRL 산출물이 없다 — 팩트 0으로 끝낸다. {}", context);
             return Fetched.noXbrl();
         }
-        byte[] bytes = client.instance(cik, filing.accession(), name);
+        SecFilingClient.FolderItem item = items.stream().filter(i -> i.name().equals(name)).findFirst().orElseThrow();
+        byte[] bytes = client.instance(cik, filing.accession(), item);
         return interpret(bytes, cik, filing.form(), name, context);
     }
 
@@ -345,8 +346,9 @@ public class SecFilingSupplement implements FilingSupplementer {
             if (added != null) {
                 merged += added;
                 fromStore++;
-                if (row.readerVersion() < XbrlInstanceReader.READER_VERSION) {
-                    // 목록이 없어 다시 받을지조차 못 정했다 — 옛 판을 쓴 것이다. 미해결로 센다.
+                if (row.readerVersion() != XbrlInstanceReader.READER_VERSION) {
+                    // 목록이 없어 다시 받을지조차 못 정했다 — 지금 판이 아닌 저장분을 쓴 것이다. 미해결로 센다. 「낮다」가 아니라
+                    // 「다르다」다 — 더 새 코드(배포 전 main의 손 실행)가 쓴 높은 판도 지금 규칙의 저장분이 아니다(v8 반증).
                     staleReused++;
                     store.markStaleUsed(row.accession(), cik);
                 }
