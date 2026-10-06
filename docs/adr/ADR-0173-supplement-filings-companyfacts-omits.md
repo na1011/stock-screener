@@ -37,11 +37,16 @@ applies_to:
 ## 규칙
 
 - MUST: 보충 폼 목록을 `SecEdgarFacts`의 정기보고서 목록과 **따로** 둔다. 그쪽에 8-K를 더하는 변경이 보충을 따라 넓히면 대상이 약 81배가 된다(83 CIK 실측: 8-K XBRL 8,315 중 companyfacts us-gaap 0이 7,012). 이 목록은 그쪽의 부분집합이어야 한다 — 여기만 넓히면 보충해도 버려진다. 시험이 둘 다 단언한다.
-- MUST: 저장 표의 팩트는 **고르기 전**의 원 팩트다. 해석 규칙(읽기 · 고르기 · 인스턴스 고르기 · 후보 파일 규칙 · 신원)을 **하나라도** 바꾸면 `XbrlInstanceReader.READER_VERSION`을 올린다 — 해석 실패 행은 판이 같은 동안 다시 받지 않으므로, 안 올리면 고친 규칙이 그 행에 영영 안 닿는다(SWX의 신원 규칙을 고치고도 판을 안 올렸다면 영구 실패였다). `ReaderVersionPinTest`가 받은 바이트의 해석(`SecFilingSupplement.interpret` — 읽기 · 신원 · 고르기 · 해석 실패 분류)과 후보 파일 규칙·인스턴스 고르기의 출력을 판마다 박아 묻는다 — 재료는 해석 실패 자리(`throw malformed(`)마다 하나(그 수를 소스에서 세어 단언) · 건너뛰는 조건마다(네임스페이스 · 차원 · 기간 · CIK) · 고르기 키 구성요소마다 그 요소만 다른 쌍 · 공백 · 자기 컨텍스트 0이고, 신원은 보충 폼 × (보충 폼 · 전환 보고서 · 다른 공시 · 없음) 행렬이다. 판 범위의 분기를 더하면 재료를 함께 더한다 — 2026-10-06 반증 변이 19개(규칙마다 하나)가 전부 붉다.
+- MUST: 저장 표의 팩트는 **고르기 전**의 원 팩트다. 저장되는 것(상태 · 원 팩트 · 머리 · 실패 종류)을 정하는 코드를 **한 토큰이라도** 바꾸면 `XbrlInstanceReader.READER_VERSION`을 올린다 — 리팩터여도, 시험 재료만 바꿨어도 올린다. 해석 실패·XBRL 없음 행은 판이 같은 동안 다시 받지 않으므로, 안 올리면 고친 규칙이 그 행에 영영 안 닿는다(SWX의 신원 규칙을 고치고도 판을 안 올렸다면 영구 실패였다). `ReaderVersionPinTest`가 묻는다:
+  - **판 범위 = 파일 전체**(받기 · 색인 JSON · 읽기 · 고르기 · 신원 · 분류 · 저장 형태 — 목록은 그 시험의 `SOURCE_SCOPE`) · 정규형은 javac가 파싱한 트리를 다시 찍고 형 종류를 실은 것이다(주석·서식만 버린다). 메서드 목록이던 범위는 종료 상태를 정하는 자리 셋을 빠뜨렸고 손으로 짠 주석 걷기는 리터럴·텍스트 블록에서 샜다(2026-10-06 v7·v8 반증).
+  - 범위 파일이 쓰는 프로젝트 형은 범위 안이거나 「저장을 못 바꾼다」는 사유가 적힌 예외다(javac 속성 분석 — static import · 완전한 이름 포함).
+  - 고정 재료의 출력(해석 실패 자리마다 하나 · 특성 · 신원 행렬 · 이름 · 폴더)과 읽기 구현 · JDK 판을 판마다 박는다. **출력이 그대로라는 것은 행동이 그대로라는 증거가 아니다** — 반증 변이 20개 중 12개가 출력 해시를 지났다(v6). 그래서 소스 해시가 있다.
+  - **박힌 해시는 덧붙이기만 한다** — 지금 판 값을 고치는 갈래가 없다. git 이력으로 묻는다(v8 `066c325a`부터).
   - 보충 대상인 행은 판이 다르면 다시 받는다.
   - 다시 받지 못하면(또는 공시 목록을 못 받으면) 옛 판의 저장분을 쓰고 그 사실을 남긴다(`stale_used_at`). 그 행은 미해결이다.
 - MUST: **관문 설정 뒤에 두는 해석 규칙은 판을 그 설정의 함수로 둔다**(설정을 보충까지 잇는다). 상수 하나면 꺼진 정기 FR이 옛 규칙으로 다시 읽고 새 판 도장을 찍어, 켠 관문 실행이 그 행을 다시 안 받는다. 지금 그런 규칙은 없다 — 첫 후보는 「축에만 실린 미국 재무」다.
 - MUST: 결정적 실패는 **받은 파일을 해석하지 못한 것**(`UNREADABLE` — 인스턴스 후보 둘 이상 · 스키마는 있는데 인스턴스 없음 · 읽기 · 문서 종류 불일치 · 같은 정밀도 충돌)뿐이다. 해석 규칙의 판이 같은 동안은 다시 받지 않는다. 받지 못한 것(404 · 5xx · 본문 이상 · 한도)은 다음 실행이 다시 받는다 — 일시 404 한 번을 영구로 만들지 않는다.
+  - **「받았다」는 길이가 색인 크기와 같다는 뜻이다.** 지금 전송은 본문 도중 끊겨도 받은 만큼 예외 없이 넘기고, 200 오류 페이지도 본문이다 — 길이를 안 맞추면 둘 다 해석 실패로 접혀 영구가 된다(v8 반증 네 꼴 · 전송 끊김은 시험으로 재현). 원장은 길이를 준다(같은 날 캐시 인스턴스 530/530 일치 · 색인의 빈 크기 1,701항목은 전부 색인 html·묶음 `.txt`).
 - MUST: 저장 표의 상태 전이는 **종목 쓰기와 같은 트랜잭션**에서 일어난다(`StockTaskRunner`의 `REQUIRES_NEW` 안에서 호출자 트랜잭션에 참여).
 - MUST NOT: 보충 하나의 실패로 종목을 세우지 않는다. 세우면 companyfacts 몫까지 못 써서 보충이 없던 때보다 후퇴한다. 종목이 실패하는 것은 저장 표 쓰기 자체가 실패할 때뿐이다.
 - MUST NOT: 원장 행을 지우지 않는다 · 덮인 공시를 실패 행만 고르지 않는다. companyfacts가 그 공시를 나중에 실으면 상태와 무관하게 `COVERED`로 남기고 **매 실행** 그 판을 연다 — 그 전에 늦은 판이 먼저 들어왔어도 「처음부터 companyfacts가 실었을 때」와 같은 상태에 닿게. 한 번만 열면 그 실행이 APPEND_ONLY이거나 같은 날 다른 공시가 실패할 때 열림이 효과 없이 사라지고, 받았던 공시와 실패였던 공시가 다른 판 집합에 닿는다(실측 전이 EXE 1건 · 09-15→10-06). 받는 창 밖으로 나간 행도 그대로 둔다 — 창이 좁은 손 실행이 기본 창의 행을 지우면 안 된다.
@@ -98,33 +103,51 @@ applies_to:
   - 결손 종목은 그 전에 좁힌 손 FR과 `indicator-reconcile`을 한 승인·한 번에 적용한다(사용자 승인 · FR과 화해 사이엔 무효화된 종목의 지표가 0행이다). 0부(ADR-0172) 뒤라 그 실행은 FR 시계를 안 민다.
     - **화해는 FR과 같은 `--tickers`(또는 인자 없이)** — FR 알림 문구의 「위 종목」은 무효화된 종목뿐이라, 새 라벨만 받은 종목(RS1 94)의 지표가 다음 정기 화해까지 낡는다.
     - **손 FR 직전마다 `ops/dump-db.sh`** — FR 쓰기를 되돌리는 길은 덤프뿐이고(ADR-0071), 덤프 가드는 덤프가 하나라도 있으면 통과한다.
-  - **첫 손 FR 절차(글자 그대로 · 사용자 승인 · 앱을 내린 채 · 실키는 평일 13:20~15:45 밖 · 토 10-10 낮 두 jar 재생 전)** — 셸 변수 `R`=main 작업 트리 · `T`=작업 폴더 · `D`=1부를 배포한 커밋(배포 직후 `docs/progress.md` 1부 줄에 적은 해시) · `TICKERS=$(cut -f2 $T/targets.tsv | paste -sd, -)`:
-    - **앱을 내리는 이유**: 운영 쓰기 잡 사이의 배타는 「평일 13:30~15:40 밖」이라는 시각 창 하나뿐인데, 앱 크론은 기계가 잠든 만큼 밀려 그 창 밖에서도 돈다(2026-10-06 +1:55 · `docs/reload-gate.md` 「앱 크론이 기계 수면만큼 밀린다」). 겹치면 화해끼리 교착하고(#305), 덤프 뒤 앱의 쓰기가 사후 대조를 오판시키며 되돌리기가 그 쓰기까지 지운다. 관문과 같은 꼴이다.
-    - **`bootRun`마다 붙은 DB를 글자로 단언한다** — 출력을 `2>&1 | tee $T/<단계>.log`로 받고 `grep -c "bootstrap이 데이터베이스 <기대 DB>에 붙었다." $T/<단계>.log` = 1 · `grep -c "부트스트랩 러너가 끝났다. job=<잡> status=SUCCESS" $T/<단계>.log` = 1. 가드가 서도 gradle은 종료코드 0이다(`BootstrapDatabaseGuard`). 같은 셸에서 사본 → 운영을 이어 치므로, 환경이 이월되면 운영 명령이 사본에 붙는다(Gradle 데몬의 환경 이월은 재보지 않았다).
+  - **손 FR 절차(글자 그대로 · `N`=1 첫 손 FR · `N`=2 둘째 손 FR · 사용자 승인 · 앱을 내린 채 · 실키는 평일 13:20~15:45 밖)** — 셸 변수 `R`=main 작업 트리 · `T`=작업 폴더(FR마다 새로) · `N` · `A="$HOME/Library/Application Support/stock-screener/app.jar.commit"` · `D`=그 파일의 커밋 · `W=$T/wt`(D에 뜬 worktree) · `TICKERS=$(cut -f2 $T/targets.tsv | paste -sd, -)`. **아래 `./gradlew …`는 전부 `cd $W && caffeinate -is ./gradlew …`로 친다**:
+    - **언제**: 첫 손 FR = RS1 Writer 차이 종목(창 편입) · 토 10-10 낮의 두 jar `universe-restore --dates` 재생 **전**(금요일 밤까지) — 그 재생이 주식수를 읽어 A의 귀속과 섞인다. 둘째 손 FR = 10-10 리밸런싱의 편입 전원 · 그 리밸런싱의 꼬리가 끝난 뒤(0단계 1이 기록으로 가른다 — 크론이 밀리면 20:00이 아니다).
+    - **앱을 내리는 이유**: 운영 쓰기 잡 사이의 배타는 「평일 13:30~15:40 밖」이라는 시각 창 하나뿐인데, 앱 크론은 기계가 잠든 만큼 밀려 그 창 밖에서도 돈다(2026-10-06: 13:30 크론이 15:24:51에 돌았다 · `docs/reload-gate.md` 「앱 크론이 기계 수면만큼 밀린다」). 겹치면 화해끼리 교착하고(#305), 덤프 뒤 앱의 쓰기가 사후 대조를 오판시키며 되돌리기가 그 쓰기까지 지운다. 관문과 같은 꼴이다.
+    - **잠들지 않게 감싼다**: 앱을 내리면 앱의 `caffeinate -s -w <앱 PID>`도 끝나고 이 기계는 `pmset` sleep=1(AC·배터리)이다 — 잠들어 끊긴 전송은 색인 크기 대조가 받기 실패로 돌리지만 실행 자체가 멈춘다.
+    - **`bootRun`마다 붙은 DB를 글자로 단언한다** — 출력을 `2>&1 | tee $T/<단계>.log`로 받고 `grep -c "bootstrap이 데이터베이스 <기대 DB>에 붙었다." $T/<단계>.log` = 1 · `grep -c "부트스트랩 러너가 끝났다. job=<잡> status=SUCCESS" $T/<단계>.log` = 1. 기동이 실패해도 gradle은 「BUILD SUCCESSFUL」과 종료코드 0이다(2026-10-06 연습: Flyway 밖에서 V64를 넣은 사본에 bootRun → V64 「이미 있다」로 죽었는데 종료코드 0 · 두 줄 0건이 그것을 잡았다). 같은 셸에서 사본 → 운영을 이어 치므로, 환경이 이월되면 운영 명령이 사본에 붙는다(Gradle 데몬의 환경 이월은 재보지 않았다).
     0. **전제**(하나라도 아니면 멈춘다):
-       1. 오늘 크론이 다 돌았다 — 시계가 아니라 기록으로(밀린 날은 15:40 뒤에도 13:30 잡이 안 돌았을 수 있다): 평일이면 `psql -d stock_screener -Atc "select count(*) from batch_execution where job_name='indicator-derived-rebuild' and triggered_by='SCHEDULER' and started_at::date = current_date and finished_at is not null"` ≥ 1 · `grep -c "^$(date +%F).*편입 원자료를 점검했다" ~/Library/Logs/stock-screener/stdout.log` ≥ 1 · `select count(*) from batch_execution where status='RUNNING'` = 0 → `$R/ops/stop.sh --app`.
-       2. 무엇을 컴파일하는가(`bootRun`은 작업 트리를 컴파일한다): `git -C $R diff --quiet $D HEAD -- src build.gradle settings.gradle` · `git -C $R status --porcelain -- src build.gradle settings.gradle` 비어 있음.
-       3. 운영: `select 1 from flyway_schema_history where version='64' and success` = 1 · `select count(*) from sec_filing_supplement` = 0(되돌리기가 거기 기댄다) · `select max(id) from batch_execution` → `E0`.
-       4. 목록 파일(탐색 브랜치는 작업 트리에 없을 수 있다): `git -C $R show 8e8f8484:explore/financial-sync/p1-fr1/fr1_tickers.txt > $T/fr1_tickers.txt` · 같은 꼴로 `fr1_tickers.sql`(서명 질의).
-    1. 대상: `psql -d stock_screener -AtF $'\t' -c "select id, ticker from stock where market_code='US' and ticker = any(string_to_array('$(paste -sd, $T/fr1_tickers.txt)', ','))" > $T/targets.tsv` — 109행이 아니면 멈춘다.
-    2. **사본 재생(사전 기대 · 중단 조건)**:
-       1. `$R/ops/dump-db.sh` → 그 덤프를 새 DB 둘에 복원한다: `createdb stock_screener_q4v_fr1_base && pg_restore -d stock_screener_q4v_fr1_base <덤프>` · 같은 것을 `stock_screener_q4v_fr1`로(앞의 것은 되돌리기용 · 손대지 않는다).
-       2. 같은 날 보충 원자료(운영 FR 직전에): `cd $R && SUPP_CACHE_DIR=$T/cache SUPP_TICKERS=$T/fr1_tickers.txt SUPP_FROM=2018 ./gradlew liveTest -PskipFrontend --tests "*SecFilingSupplementCacheLiveTest*"` — 수집 시각을 적는다.
-       3. 재생: `cd $R && Q4V_REPLAY_DB=stock_screener_q4v_fr1 Q4V_REPLAY_CACHE=$T/cache/companyfacts Q4V_REPLAY_TARGETS=$T/targets.tsv Q4V_REPLAY_OUT=$T/replay.tsv Q4V_REPLAY_FROM=2018 Q4V_REPLAY_INSERT_EARLIER=false Q4V_REPLAY_SUPPLEMENT_DIR=$T/cache Q4V_REPLAY_SUPPLEMENT_STORE=db TEST_DB_URL=jdbc:postgresql://localhost:5432/stock_screener_test ./gradlew test -PskipFrontend --tests "*EarlierVintageReplayHarnessTest*" --rerun` — 출력 줄 `Q4V_REPLAY …`.
-       4. 사본 주식수 기저(운영 FR 뒤에 도는 것과 같게 · `ops/apply-window/env.sh` `boot()`의 사본 갈래와 같은 꼴 — 알림 변수를 비워야 사본의 알림이 운영 채널로 안 간다): `cd $R && DB_URL=jdbc:postgresql://localhost:5432/stock_screener_q4v_fr1 BOOTSTRAP_DB=stock_screener_q4v_fr1 ALERT_WEBHOOK_URL= MAIL_USERNAME= SENTRY_DSN= ./gradlew bootRun -PskipFrontend --args='--spring.profiles.active=bootstrap --job=share-basis-derive' 2>&1 | tee $T/2-4.log` · 기대 DB `stock_screener_q4v_fr1`.
-       5. **사전 기대**(RS1의 109 몫): 대상 109 · 신규 128 · 정정 28 · 교정 3 · 이른판 0 · 회수 3 · 보충실패 0 · 목록실패종목 0 · 회수정지 0종목 · 실패 0. **이른판 · 보충실패 · 목록실패종목 · 회수정지 중 하나라도 > 0이면 운영 FR을 안 한다.** 신규·정정·교정·회수의 차이는 10-06 뒤 공시(`published_at` > 2026-10-06)로 구성원마다 설명돼야 하고, **설명이 안 되는 차이가 하나라도 있으면 운영 FR을 안 하고 그 구성원마다 원장에 물어 판정한다.** 이 수는 1부 코드로 다시 잰 것이다(2026-10-06 · `sc_a` 사본 · v7과 v8 둘 다 — 종목 표 1,207행이 처음 잰 RS1 b1과 같다).
-    3. 운영 FR: `cd $R && ./gradlew bootRun -PskipFrontend --args="--spring.profiles.active=bootstrap --job=financial-refill --tickers=$TICKERS" 2>&1 | tee $T/3.log` · 기대 DB `stock_screener` — **`--universe`·`--financial-years`·`--insert-earlier-vintages`를 붙이지 않는다**(`--financial-years=3`이면 RS0 차이 6행이 빠지고, `--insert-earlier-vintages=true`면 이른 판 5개가 들어가며, 11이면 보충 창이 2014로 넓어진다).
-       - 실행 행 단언: `select id, triggered_by, status, failure_count, started_at, note from batch_execution where id > $E0 and job_name='financial-refill'` — 정확히 한 행 · MANUAL · 그 `started_at`을 `S`로 적는다(DB 시계 · 되돌리기 기준) · note `연도=2018~2026 대상=109종목` · `이른판=0`.
-       - `status`가 SUCCESS가 아니거나 · `failure_count` > 0이거나 · note의 `보충실패`·`회수정지`가 > 0이면 5의 (나)다(보충실패는 수만 싣고 티커를 안 싣는다 — 그래서 (나)는 같은 109로 다시 돈다).
-    4. 화해: `cd $R && ./gradlew bootRun -PskipFrontend --args="--spring.profiles.active=bootstrap --job=indicator-reconcile --tickers=$TICKERS" 2>&1 | tee $T/4.log` · 기대 DB `stock_screener`(①은 109 · ②는 창 전체 · 유도 입력 포함).
-    5. **사후 대조**: `fr1_tickers.sql`을 운영과 `stock_screener_q4v_fr1`에 돌려 109 종목 서명을 비교한다. 먼저 `select job_name, triggered_by from batch_execution where id > $E0`가 이 절차가 친 잡뿐인지 본다 — 앱이 내려가 있으므로 「덤프 뒤 남의 쓰기」는 원인 후보가 아니어야 한다. 차이는 셋으로 가른다:
+       1. `$R/ops/crons-done.sh` = 0 — 앱을 내려도 그날 크론이 안 빠진다(시계가 아니라 기록 · 그 스크립트 머리) → `$R/ops/stop.sh --app`. 그 출력의 「다음 명목 발화」 전에 6을 끝낸다.
+       2. **지금 도는 jar의 코드로 돈다**: `grep -qx 'dirty=false' "$A"` · `D=$(sed -n 's/^commit=//p' "$A")`가 `unknown`이 아님 · `git -C $R worktree add --detach $W $D` · `ln -s $R/.env $W/.env`(값은 읽지 않는다). main HEAD와 같을 필요는 없다 — main은 배포 뒤에도 움직인다(9-20 뒤 17일 중 11일에 src 커밋 · 1부 v8 계획 밖 반증). 2026-10-06 연습: worktree의 bootRun이 운영 덤프 사본에 V63·V64를 적용하고 잡을 돌렸다(두 단언 줄 각 1).
+       3. 운영: `select 1 from flyway_schema_history where version='64' and success` = 1 · **`N`=1이면** `select count(*) from sec_filing_supplement` = 0 · `select max(id) from batch_execution` → `E0`.
+       4. 서명 질의(미국 전 종목 · 비교는 대상 티커만): `git -C $R show 8e8f8484:explore/financial-sync/p1-fr1/fr1_tickers.sql > $T/signature.sql`(탐색 브랜치는 작업 트리에 없을 수 있다).
+    1. **대상** `$T/targets.tsv`(`stock_id<TAB>ticker`):
+       - `N`=1: `git -C $R show 8e8f8484:explore/financial-sync/p1-fr1/fr1_tickers.txt > $T/tickers.txt` → `psql -d stock_screener -AtF $'\t' -c "select id, ticker from stock where market_code='US' and ticker = any(string_to_array('$(paste -sd, $T/tickers.txt)', ','))" > $T/targets.tsv` — 109행이 아니면 멈춘다.
+       - `N`=2: 그 리밸런싱의 편입 전원 — 재편입도 넣는다(보존 창 밖에서 돌아온 종목은 첫 손 FR 범위가 아니라 아무도 1부 코드로 갱신하지 않았고, 이미 갱신된 종목은 같은 원장이면 쓰기 0이다). `--tickers`의 술어(`StockRegistrar.activeUniverseMemberIdsByTicker`)와 같은 조건이라 note의 `대상=`이 행 수와 같아야 한다 · 창 편입이 아닌 A 새 대표(BTSG·NWSA·UHAL.B)는 여기서 빠진다(「후보 쪽 재무 낡음」 재고로). 10-02 리밸런싱에 대어 13 = 그날 편입 13(2026-10-06):
+         ```sql
+         with r as (select max(effective_from) d from universe_membership where universe_code = 'US_TOP1000')
+         select distinct s.id, s.ticker from universe_membership m
+         join stock s on s.id = m.stock_id
+         join universe u on u.code = m.universe_code and u.is_active
+         cross join r
+         where m.effective_from = r.d and s.is_active and s.market_code = 'US'
+           and (m.effective_to is null
+                or (m.effective_from <= (select max(d.trade_date) from indicator_trade_date d where d.market_code = s.market_code)
+                    and m.effective_to > (select min(d.trade_date) from indicator_trade_date d where d.market_code = s.market_code)))
+         order by s.ticker
+         ```
+         → `> $T/targets.tsv` · `cut -f2 $T/targets.tsv > $T/tickers.txt`.
+    2. **사본 재생(사전 기대 · 중단 조건)** — 이름은 `N`을 단다:
+       1. `$R/ops/dump-db.sh` → 그 덤프를 새 DB 둘에 복원한다: `createdb stock_screener_q4v_fr${N}_base && pg_restore -d stock_screener_q4v_fr${N}_base <덤프>` · 같은 것을 `stock_screener_q4v_fr${N}`로(앞의 것은 되돌리기용 · 손대지 않는다).
+       2. 같은 날 보충 원자료(운영 FR 직전에): `SUPP_CACHE_DIR=$T/cache SUPP_TICKERS=$T/tickers.txt SUPP_FROM=2018 ./gradlew liveTest -PskipFrontend --tests "*SecFilingSupplementCacheLiveTest*"` — 수집 시각을 적는다.
+       3. 재생: `Q4V_REPLAY_DB=stock_screener_q4v_fr${N} Q4V_REPLAY_CACHE=$T/cache/companyfacts Q4V_REPLAY_TARGETS=$T/targets.tsv Q4V_REPLAY_OUT=$T/replay.tsv Q4V_REPLAY_FROM=2018 Q4V_REPLAY_INSERT_EARLIER=false Q4V_REPLAY_SUPPLEMENT_DIR=$T/cache Q4V_REPLAY_SUPPLEMENT_STORE=db TEST_DB_URL=jdbc:postgresql://localhost:5432/stock_screener_test ./gradlew test -PskipFrontend --tests "*EarlierVintageReplayHarnessTest*" --rerun` — 출력 줄 `Q4V_REPLAY …`.
+       4. 사본 주식수 기저(운영 FR 뒤에 도는 것과 같게 · `ops/apply-window/env.sh` `boot()`의 사본 갈래와 같은 꼴 — 알림 변수를 비워야 사본의 알림이 운영 채널로 안 간다): `DB_URL=jdbc:postgresql://localhost:5432/stock_screener_q4v_fr${N} BOOTSTRAP_DB=stock_screener_q4v_fr${N} ALERT_WEBHOOK_URL= MAIL_USERNAME= SENTRY_DSN= ./gradlew bootRun -PskipFrontend --args='--spring.profiles.active=bootstrap --job=share-basis-derive' 2>&1 | tee $T/2-4.log` · 기대 DB `stock_screener_q4v_fr${N}`.
+       5. **중단 조건**: 이른판 · 보충실패 · 목록실패종목 · 회수정지 중 하나라도 > 0이면 운영 FR을 안 한다. **`N`=1의 사전 기대**(RS1의 109 몫): 대상 109 · 신규 128 · 정정 28 · 교정 3 · 이른판 0 · 회수 3 · 보충실패 0 · 목록실패종목 0 · 회수정지 0종목 · 실패 0 — 신규·정정·교정·회수의 차이는 10-06 뒤 공시(`published_at` > 2026-10-06)로 구성원마다 설명돼야 하고, **설명이 안 되는 차이가 하나라도 있으면 운영 FR을 안 하고 그 구성원마다 원장에 물어 판정한다.** 이 수는 1부 코드로 다시 잰 것이다(2026-10-06 · `sc_a` 사본 · v7 · v8 · v9 — 종목 표가 처음 잰 RS1 b1과 같다). `N`=2는 사전 기대가 없다 — 이 재생이 5의 비교 상대다.
+    3. 운영 FR: `./gradlew bootRun -PskipFrontend --args="--spring.profiles.active=bootstrap --job=financial-refill --tickers=$TICKERS" 2>&1 | tee $T/3.log` · 기대 DB `stock_screener` — **`--universe`·`--financial-years`·`--insert-earlier-vintages`를 붙이지 않는다**(`--financial-years=3`이면 RS0 차이 6행이 빠지고, `--insert-earlier-vintages=true`면 이른 판 5개가 들어가며, 11이면 보충 창이 2014로 넓어진다).
+       - 실행 행 단언: `select id, triggered_by, status, failure_count, started_at, note from batch_execution where id > $E0 and job_name='financial-refill' order by id` — 행 수 = 3을 친 횟수 · 전부 MANUAL · **가장 이른 행의 `started_at`을 `S`로 적는다**(DB 시계 · 되돌리기 기준 — (나)로 다시 쳐도 `S`는 안 바뀐다) · 마지막 행의 note `연도=2018~2026 대상=<targets.tsv 행 수>종목` · `이른판=0`.
+       - 마지막 행의 `status`가 SUCCESS가 아니거나 · `failure_count` > 0이거나 · note의 `보충실패`·`미해결보충`·`회수정지`가 > 0이면 5의 (나)다(보충실패는 수만 싣고 티커를 안 싣는다 — 그래서 (나)는 같은 대상으로 다시 돈다). 다만 `select count(*) from sec_filing_supplement where status='FAILED' and failure_kind='UNREADABLE'` > 0이면 (다)다 — 해석 실패는 판이 같은 동안 다시 받지 않아 다시 돌아도 안 닫힌다.
+    4. 화해: `./gradlew bootRun -PskipFrontend --args="--spring.profiles.active=bootstrap --job=indicator-reconcile --tickers=$TICKERS" 2>&1 | tee $T/4.log` · 기대 DB `stock_screener`(①은 대상 · ②는 창 전체 · 유도 입력 포함).
+    5. **사후 대조**: `$T/signature.sql`을 운영과 `stock_screener_q4v_fr${N}`에 돌려 대상 티커의 서명을 비교한다. 먼저 `select job_name, triggered_by from batch_execution where id > $E0`가 이 절차가 친 잡뿐인지 본다 — 앱이 내려가 있으므로 「덤프 뒤 남의 쓰기」는 원인 후보가 아니어야 한다. 차이는 셋으로 가른다:
        - (가) 2-2 수집 시각 뒤 공시로 설명됨 → 받아들인다.
-       - (나) 3의 단언이 (나)였다 → 3·4를 같은 109로 다시 돌고(저장된 보충은 다시 쓰고 실패한 공시만 다시 받는다) 다시 5 · 두 번 다시 돌아도 (나)면 (다)로.
+       - (나) 3의 단언이 (나)였다 → 3·4를 같은 대상으로 다시 돌고(저장된 보충은 다시 쓰고 받기 실패한 공시만 다시 받는다 · Writer는 같은 원장이면 쓰기 0 — 2026-10-06 사본 재실행) 다시 5 · 두 번 다시 돌아도 (나)면 (다)로.
        - (다) 그 밖 → **멈추고 그 종목마다 원장에 물어 판정한다** · 결함으로 판정된 종목만 아래로 되돌린다.
-    6. `select count(*) from batch_execution where status='RUNNING'` = 0 → `$R/ops/start.sh --app`.
-  - **되돌리는 법(종목 단위 · 원시 SQL이라 따로 사용자 승인 · 앱을 내린 채)** — 표째 `pg_restore -t`는 쓰지 않는다: 표 정의만 다시 만들어 identity · pkey · unique · index를 잃고(Writer INSERT와 보충 저장의 `ON CONFLICT`가 깨진다), 덤프 뒤의 다른 종목·다른 시장 쓰기까지 지운다(반증 실측 · `ops/dump-db.sh`가 찍는 좁힌 복원도 같은 형태). `$T/rollback.tsv` = 되돌릴 종목의 `stock_id<TAB>ticker`(targets.tsv의 부분집합) · `IDS=$(cut -f1 $T/rollback.tsv | paste -sd, -)` · `S` = 3의 `started_at`:
-    1. 사본에서 꺼내고 행 수를 잰다: `psql -X -v ON_ERROR_STOP=1 -d stock_screener_q4v_fr1_base -c "\copy (select * from financial_statement where stock_id in ($IDS)) to '$T/fs.copy'" -c "\copy (select * from financial_column_absence where stock_id in ($IDS)) to '$T/fca.copy'"` · `N_FS=$(psql -X -At -d stock_screener_q4v_fr1_base -c "select count(*) from financial_statement where stock_id in ($IDS)")` · `N_FCA`도 같은 꼴(`financial_column_absence`).
-    2. 운영 한 트랜잭션 — 파일을 지어(`$$`는 셸이 펼치지 않게 `\$\$`) `psql -X -v ON_ERROR_STOP=1 -1 -d stock_screener -f $T/rollback.sql`:
+    6. `select count(*) from batch_execution where status='RUNNING'` = 0 → `$R/ops/start.sh --app` → `git -C $R worktree remove $W`(사용자 확인 뒤 · 지우는 일이다).
+  - **되돌리는 법(종목 단위 · 원시 SQL이라 따로 사용자 승인 · 앱을 내린 채)** — 표째 `pg_restore -t`는 쓰지 않는다: 표 정의만 다시 만들어 identity · pkey · unique · index를 잃고(Writer INSERT와 보충 저장의 `ON CONFLICT`가 깨진다), 덤프 뒤의 다른 종목·다른 시장 쓰기까지 지운다(반증 실측 · `ops/dump-db.sh`가 찍던 좁힌 복원도 같은 형태였고 main `09120ba3`이 데이터만 되돌리는 꼴로 고쳤다 — 그 꼴도 표 단위라 종목 단위 되돌리기에는 못 쓴다). `$T/rollback.tsv` = 되돌릴 종목의 `stock_id<TAB>ticker`(targets.tsv의 부분집합) · `IDS=$(cut -f1 $T/rollback.tsv | paste -sd, -)` · `S` = 3의 가장 이른 `started_at` · `BASE=stock_screener_q4v_fr${N}_base`:
+    1. **보충 행은 되돌린 종목의 것만 지운다**(원장 행을 지우지 않는다는 MUST NOT — 남의 행을 지우면 그 사이 companyfacts가 그 공시를 실은 갈래에서 COVERED도 열림도 없다): CIK는 같은 날 캐시에서 0콜로 — `CIKS=$(for t in $(cut -f2 $T/rollback.tsv); do jq -r .cik $T/cache/companyfacts/$t.json; done | sort -u | paste -sd, -)`. **CIK를 나눠 쓰는 대상(PPL·PPLC · TAP·TAP.A 꼴)은 함께 되돌린다** — `for t in $(cut -f2 $T/targets.tsv); do echo "$t $(jq -r .cik $T/cache/companyfacts/$t.json)"; done`에서 CIK가 `CIKS`에 드는데 rollback.tsv에 없는 티커가 있으면 더하고 다시 시작한다.
+    2. 사본에서 꺼내고 행 수를 잰다: `psql -X -v ON_ERROR_STOP=1 -d $BASE -c "\copy (select * from financial_statement where stock_id in ($IDS)) to '$T/fs.copy'" -c "\copy (select * from financial_column_absence where stock_id in ($IDS)) to '$T/fca.copy'"` · `N_FS=$(psql -X -At -d $BASE -c "select count(*) from financial_statement where stock_id in ($IDS)")` · `N_FCA`도 같은 꼴(`financial_column_absence`).
+    3. 운영 한 트랜잭션 — 파일을 지어(`$$`는 셸이 펼치지 않게 `\$\$` · heredoc은 들여쓰기를 걷고 친다 — 들여쓴 채면 종결자 `EOF`가 안 서서 psql이 실패하고 트랜잭션째 되돌린다) `psql -X -v ON_ERROR_STOP=1 -1 -d stock_screener -f $T/rollback.sql`:
        ```bash
        cat > $T/rollback.sql <<EOF
        create temp table r_fs (like financial_statement);
@@ -135,7 +158,7 @@ applies_to:
        delete from financial_column_absence where stock_id in ($IDS);
        insert into financial_statement overriding system value select * from r_fs;
        insert into financial_column_absence select * from r_fca;
-       delete from sec_filing_supplement where fetched_at >= '$S';
+       delete from sec_filing_supplement where fetched_at >= '$S' and cik in ($CIKS);
        do \$\$ begin
          if (select count(*) from r_fs) <> $N_FS or (select count(*) from r_fca) <> $N_FCA
             or (select count(*) from financial_statement where stock_id in ($IDS)) <> $N_FS
@@ -144,14 +167,10 @@ applies_to:
        end \$\$;
        EOF
        ```
-       행 수는 **사본에서 잰 수와** 비교한다 — 「넣은 수 = 임시 표에 읽은 수」는 늘 참이라 짧게 끊긴 복사 파일을 못 잡는다(2026-10-06 연습: 그 꼴은 한 줄 뺀 파일로 8,116행을 커밋했고, 이 꼴은 예외로 트랜잭션째 되돌렸다). 커밋 뒤 두 표의 서명(`select count(*), md5(string_agg(t::text, '|' order by t::text)) from (select * from <표> where stock_id in ($IDS)) t`)이 운영과 `_base`에서 같은지 본다.
-       `sec_filing_supplement`는 0단계에서 비어 있었고 앱이 내려가 있었으므로 `S` 뒤 행은 전부 이 절차의 것이다 — 되돌리지 않은 종목의 행도 지워지지만 다음 FR이 다시 받는다(못 받으면 실패 행이 그 날짜를 지킨다 · 목록을 못 받으면 회수가 선다).
-    3. `share-basis-derive` → `indicator-reconcile --tickers=<되돌린 티커>`(각각 DB 단언 · 지표·거버넌스는 복원하지 않고 다시 계산한다) → `$R/ops/start.sh --app`.
-    - **연습(2026-10-06 · 사본)**: `_base` 자리에 `stock_screener_sc_a`, 운영 자리에 RS1 재생을 마친 그 복제(`stock_screener_q4v_rs1c`)를 두고 1·2를 글자 그대로 돌렸다 — 109종목 두 표의 서명이 `sc_a`와 md5까지 같아졌고(재무 8,117행 · 부재 1,528행) 나머지 종목은 그대로였다 · 보충 545행이 지워졌다.
-  - **둘째 손 FR**: 10-10 20:00 리밸런싱의 첫 편입 전원 — 목록은 리밸런싱 뒤 FR 술어(`StockRegistrar.IN_RETENTION_WINDOW`)를 그대로 쓴 질의로 내고, note의 `대상=`이 그 수와 같은지 단언한다 · 창 편입이 아닌 A 새 대표(BTSG·NWSA·UHAL.B)는 `--tickers`가 WARN 한 줄로 버리므로 넣지 않는다(「후보 쪽 재무 낡음」 재고로) · 0·3·4·5·6단계(앱을 내린 채 · 단언 포함)는 첫 손 FR과 같다 — 다만 0단계의 「보충 표 0행」은 첫 손 FR에만 선다. 둘째는 첫 손 FR의 행이 있고, 되돌리기는 `S` 뒤에 받은 행만 지운다(같은 CIK를 나눠 쓴 앞 종목의 행이 그 안에 들면 다음 FR이 다시 받는다).
+       행 수는 **사본에서 잰 수와** 비교한다 — 「넣은 수 = 임시 표에 읽은 수」는 늘 참이라 짧게 끊긴 복사 파일을 못 잡는다(2026-10-06 연습: 그 꼴은 한 줄 뺀 파일로 8,116행을 커밋했고, 이 꼴은 예외로 트랜잭션째 되돌렸다). 커밋 뒤 두 표의 서명(`select count(*), md5(string_agg(t::text, '|' order by t::text)) from (select * from <표> where stock_id in ($IDS)) t`)이 운영과 `$BASE`에서 같은지 본다. 보충 행의 기준이 `S`(이 절차의 첫 FR 시작)인 것은 (나)로 다시 친 FR의 시작으로 두면 첫 실행의 행이 남기 때문이다(v8 반증 — 두 번 재생한 사본에서 161행).
+    4. `share-basis-derive` → `indicator-reconcile --tickers=<되돌린 티커>`(각각 DB 단언 · 지표·거버넌스는 복원하지 않고 다시 계산한다) → `$R/ops/start.sh --app`.
+    - **연습(2026-10-06 · 사본)**: `$BASE` 자리에 `stock_screener_sc_a`, 운영 자리에 RS1 재생을 마친 그 복제(`stock_screener_q4v_rs1c`)를 두고 2·3을 글자 그대로 돌렸다(보충 delete는 그때 `cik` 조건 없이) — 109종목 두 표의 서명이 `sc_a`와 md5까지 같아졌고(재무 8,117행 · 부재 1,528행) 나머지 종목은 그대로였다.
     - **MUST NOT: `--universe`를 붙이지 않는다** — 붙이면 열린 편입만 잡는다(`StockRegistrar.oneUniverseMemberIds`). `--tickers`만 주면 보존 창 편입(닫힌 편입 포함 · 화해와 같은 술어)을 잡는다. 붙였다면 (가)가 이미 쫓아낸 종목을 못 잡는다 — DOX는 FY2025 20-F를 companyfacts가 안 실어 최신 기말이 2024-09-30에 멈췄고, 주식수 나이 거름(2년)에 걸려 10-02에 편출됐다.
-    - 첫 손 FR = RS1 Writer 차이 종목(창 편입) · 토 10-10 낮의 두 jar `universe-restore --dates` 재생 **전**(금요일 밤까지)에 끝낸다 — 그 재생이 주식수를 읽어 A의 귀속과 섞인다.
-    - 둘째 손 FR = 10-10 20:00 리밸런싱의 첫 편입 전원(창 편입만 — 위) · 리밸런싱 행과 그 꼬리 행이 끝난 것을 기록으로 본 뒤(크론이 밀리면 20:00이 아니다) · 21시 확인 뒤.
 - **정기 경로의 이른 판 예외 하나**: 이른 판 넣기는 관문의 한 번에 속한다(ADR-0161). 다만 **보충으로 실은 공시의 판**은 정기 경로에서도 넣는다. 그 판은 원장이 처음부터 준 판이고, 넣지 않으면 순서 의존이 남는다. 크기: RS1(1,207종목)에서 이 예외는 **한 번도 안 터졌다**(이른 판 넣기 0 · 그 갈래는 통합 시험만 묻는다). 보충 몫으로 지표가 무효화되는 종목은 15(현 편입 10: AEP·ALNY·AOS·ED·FTV·GD·JCI·LII·RRC·SPGI)다. 새 라벨을 받은 108종목 중 94는 새 라벨만(무효화 없음)이고 14는 무효화도 있다 · 무효화만 있는 것 1. 무효화된 날짜는 14:20 화해가 채운다.
 - **사정거리**:
   - 보존 창 밖 과거 편입(1,209 중 1)만 관문 재적재에서 고쳐진다. 창 안 과거 편입은 위 손 FR이 닿는다.
