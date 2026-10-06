@@ -889,3 +889,14 @@ v4에 더해: **실패 계약** = 보충 실패(처음 · 판 다시 읽기 둘 
 - 위 2·4·5·6·7·8 + v9 계획 밖 3(`--first-parent` · git 없는 사본은 건너뜀 표시).
 - 대조(내가 잼): 같은 실행 재시도를 뺀 변이 → 「받다 만 본문은 같은 실행 안에서」 시험 붉음 · 새 시험 셋(재시도 · 남의 항목 크기 · 20자리 크기) 초록.
 - 되돌리기 연습(지금 꼴 · `p1v8/drill10.sh`): `$BASE` = `rs1e`(V64 Flyway · 보충 0) · 운영 자리 = `rs1c`(v9 재생) → 109 두 표 서명 = `$BASE` · 107 CIK 보충 161 → 0 · 다른 CIK 384 그대로.
+
+## 1부 v10 확인 반증 — 계획 안 렌즈(2026-10-06 밤 · 「수정 후 진행」 · `rebut15/` · 0콜 · 첫 에이전트는 세션 한도로 끊김 — 다시 띄운 에이전트가 앞 결과를 전부 다시 잼(M2 붉음은 javadoc 글자에 걸린 거짓 붉음))
+1. **「덜 온 2xx」가 받기 길 셋 중 하나에만** — `index.json` 끊김 → 1콜 FAILED/MALFORMED(세 번 끊겨도 1콜 · 200 HTML도) · submissions 끊김 → 1콜에 그 종목 보충 0 · 회수정지 · 대조 503 → 둘 다 2콜 OK · 뿌리 `json()`이 `incomplete = r -> null`(`SecFilingClient:256-258`) → 깨진 JSON은 재시도 밖 MALFORMED → 「2xx인데 JSON으로 안 읽힘」을 덜 온 응답으로 · 판 5 · 덤: companyfacts 본 호출(`SecEdgarFinancialAdapter:131-133`)도 한 번 받고 MALFORMED(코드로만 읽음).
+2. **범위 밖 구현 성질 시험이 `implements X` 글자만 봄**(잠복 · 실물 0) — 하위 인터페이스 · `extends SecFilingSupplementStore`+`@Primary` · `@Bean` 익명 하위 클래스 · `extends SecFilingSupplement`/`SecFilingClient` 다섯 변이가 판 고정 7 ok / 1 skip · 다섯 다 주입 · X1~X3은 TRANSIENT를 UNREADABLE로 저장 → javac 속성 분석으로 「src/main 모든 형 중 범위 형의 하위형은 범위 파일 안」 · Spring 컨텍스트에서 `AopUtils.getTargetClass`로 세 빈이 범위 클래스인지 · 정규식은 주석에 반응(거짓 붉음).
+3. **`crons-done.sh` RUNNING 검사가 MANUAL 유령 행까지 셈** — 스위퍼가 닫은 MANUAL 유령 12건(08-06~09-08 · 평균 33.7시간 · 최대 76.2시간 RUNNING) · 가짜 홈 G1에서 stop rc 1 · `--force`는 끝 줄 판정까지 통째로 건너뜀 → 앱 소유 행(SCHEDULER·ADMIN)만 · MANUAL은 살아 있는 bootstrap JVM이 있을 때만.
+4. **`deploy.sh`가 판정(stop) 앞에서 스테이징** — 거절된 배포가 `app.jar`·`.env`·`app.jar.commit`을 새것으로 바꿔 둠 → 다음 기동이 말없이 그 jar를 띄움 · ADR 0-2 「지금 도는 jar」 거짓 → 판정을 스테이징 앞으로(또는 임시 이름 → stop 성공 뒤 교체) · `start.sh`가 실제로 띄운 jar의 커밋을 기록.
+5. (작음) ADR 0단계 순서 — 읽기 전용 검사(0-2 · 0-3 · 0-4)를 stop 앞으로 · `E0`은 stop 뒤 · 멈출 때 `start.sh --app` 명시.
+6. (작음) `crons-done.sh` psql에 연결 시간 제한 없음(말 없는 DB에 16초 넘게) · rc 2를 stop이 「크론이 남았다」로 찍음 · 인자 없는 stop의 안내 `ops/stop.sh  --force`는 사용법 오류.
+7. (작음) 되돌리기 CIK 줄이 조용히 줄어듦(파일 없음 → rc 0 · `cik` 없음 → `null`) → CIK 수 = 행 수 · 전부 수 단언 · 2-5에 「2-3 종료코드 0 · 실패=0」.
+8. (잠복) main에 합친 뒤 `--first-parent`는 merge 커밋 M 하나만 냄(M^1에 파일 없음 → M이 기준선) → M을 M^2와 비교.
+- 선다(쟀다): `instance` 같은 실행 재시도(끊김→정상 2콜 OK · chunked 예외 → TRANSIENT → OK · 404 2콜에서 멈춤) · 실패 종류 섞임은 마지막 시도가 이김(소비자는 UNREADABLE 비교 하나라 행동에 안 닿음) · 재생 하네스가 실제 `SecFilingClient`를 거쳐 길이 대조를 탐 · `run-app.sh`는 늘 스케줄러 켬 · 앱이 죽고 PID 파일만 남으면 0 · 토요일 20:40 끝 줄 없음 1 · 21:30 있음 0 · 14:16 기동 14:17 판정 0 · 앱 기동 2.7~3.0초.
