@@ -43,18 +43,21 @@ import java.util.Objects;
 final class XbrlInstanceReader {
 
     /**
-     * 해석 규칙의 판 — 읽기({@link #read}) · 고르기({@link #choose}) · 인스턴스 고르기({@code SecFilingSupplement.pickInstance}) ·
-     * 후보 파일 규칙({@code SecFilingClient.isInstanceCandidate}·{@code isXbrlArtifact}·{@code isLinkbase}) · 신원
-     * ({@link #requireIdentity}) <b>전부</b>다. <b>MUST: 하나라도 바꾸면 올린다</b> — {@code ReaderVersionPinTest}가 출력을 판에
-     * 묶어 묻는다. 해석 실패({@code UNREADABLE}) 행은 이 판이 같은 동안 다시 받지 않으므로, 안 올리면 고친 규칙이 그 행에 영영
-     * 안 닿는다(2026-10-06 구현 반증 — 신원 규칙을 SWX 때문에 고치고도 판을 안 올렸다면 그 공시가 영구 실패로 남았다). 보충
-     * 대상인 저장분(OK)도 판이 다르면 다시 받는다.
+     * 저장되는 것을 정하는 규칙의 판 — 받기({@code SecFilingClient}) · 읽기({@link #read}) · 고르기({@link #choose}) · 인스턴스
+     * 고르기와 상태 분류({@code SecFilingSupplement}) · 저장 형태({@code SecFilingSupplementStore}) <b>전부</b>다. 그 파일들
+     * 전체가 판 범위다(이 선언 줄만 뺀다 · 목록과 근거는 {@code ReaderVersionPinTest.SOURCE_SCOPE}). <b>MUST: 범위 소스를 한
+     * 토큰이라도 바꾸면 올린다</b> — 리팩터여도 올린다. 해석 실패({@code UNREADABLE})와 XBRL 없음({@code NO_XBRL}) 행은 이 판이
+     * 같은 동안 다시 받지 않으므로, 안 올리면 고친 규칙이 그 행에 영영 안 닿는다(2026-10-06 구현 반증 — 신원 규칙을 SWX 때문에
+     * 고치고도 판을 안 올렸다면 그 공시가 영구 실패로 남았다). 「출력이 그대로이니 리팩터다」는 증거가 아니다 — 고정 재료의 출력이
+     * 같은 행동 변경이 v6 반증에서 20개 중 12개였다(v7 반증이 v7에서도 재현). 올리는 대가는 저장 행을 다시 받는 것뿐이다.
      *
      * <p><b>MUST: 관문 설정 뒤에 두는 해석 규칙은 판을 그 설정의 함수로 둔다</b>(설정을 보충까지 잇는다). 상수 하나로 두면
      * 꺼진 정기 FR이 옛 규칙으로 다시 읽고 새 판 도장을 찍어, 켠 관문 실행이 그 행을 지금 판으로 보고 안 다시 받는다 —
      * 안 올리면 그 규칙이 저장 행에 영영 안 닿는다. 지금 그런 규칙은 없다(축에만 실린 재무가 첫 후보 · `reload-gate.md`).
+     *
+     * <p>판 2(2026-10-06): 판 범위를 파일 전체로 넓혔다 · StAX 구현을 JDK 기본으로 고정 · 이름 없는 색인 항목을 받기 실패로.
      */
-    static final int READER_VERSION = 1;
+    static final int READER_VERSION = 2;
 
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
     private static final String XBRLDI = "http://xbrl.org/2006/xbrldi";
@@ -385,8 +388,15 @@ final class XbrlInstanceReader {
         }
     }
 
+    /** 읽기에 쓰는 StAX 구현의 클래스 이름 — 판 고정 시험이 출력에 싣는다. */
+    static String parserImplementation() {
+        return factory().getClass().getName();
+    }
+
     private static XMLInputFactory factory() {
-        XMLInputFactory f = XMLInputFactory.newFactory();
+        // MUST: newFactory()가 아니라 newDefaultFactory()다 — 서비스 조회는 클래스패스의 구현(Woodstox 등)을 고르므로 의존성 하나가
+        // 읽기 규칙을 소스 변경 없이 바꾼다(v7 반증). 지금은 배포 jar·시험 클래스패스에 대체 구현이 0이라 둘의 결과가 같다.
+        XMLInputFactory f = XMLInputFactory.newDefaultFactory();
         // 외부 엔티티·DTD를 끈다 — 소스가 보내는 XML을 그대로 신뢰하지 않는다.
         f.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         f.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);

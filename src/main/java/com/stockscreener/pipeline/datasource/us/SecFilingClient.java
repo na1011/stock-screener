@@ -111,7 +111,11 @@ public class SecFilingClient {
      * <p><b>MUST: 항목이 없거나 빈 색인은 본문 이상(MALFORMED)이다</b> — 빈 목록으로 내면 「XBRL 산출물 없음」으로 읽혀
      * {@code NO_XBRL}이 되고, 그것은 다시 받지 않는 종료 상태다. 실물 색인은 늘 파일이 있다(2026-10-06 같은 날 캐시
      * {@code index.json} 567개 전부 항목 ≥ 1 · {@code .txt} 포함 · NO_XBRL 37도 각 5개 이상) — 빈 목록은 원장의 사실이 아니라
-     * 응답 이상이다. 받기 실패라 다음 실행이 다시 받는다(판 범위 밖이라 판을 올릴 일이 아니다).
+     * 응답 이상이다. 받기 실패라 다음 실행이 다시 받는다. 이름 없는 항목도 같다(같은 캐시 0개) — 빈 이름은 후보도 산출물도 아니라
+     * 그 항목만 빠진 목록이 {@code NO_XBRL}로 읽힐 수 있다.
+     *
+     * <p>이 파일 전체가 판 범위다({@link XbrlInstanceReader#READER_VERSION}) — 이름 목록이 인스턴스 고르기의 입력이고, 그 결과
+     * {@code null}이 다시 받지 않는 {@code NO_XBRL}이다.
      */
     public List<String> folder(long cik, String accession) throws DataSourceException {
         String folder = accession.replace("-", "");
@@ -125,7 +129,12 @@ public class SecFilingClient {
         }
         List<String> names = new ArrayList<>();
         for (JsonNode item : items) {
-            names.add(item.path("name").asString(""));
+            String name = item.path("name").asString("");
+            if (name.isEmpty()) {
+                throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                        "공시 폴더 색인에 이름 없는 항목이 있다 — 응답 이상이라 다음 실행이 다시 받는다. " + context);
+            }
+            names.add(name);
         }
         return names;
     }

@@ -429,6 +429,38 @@ class SecFilingSupplementTest {
     }
 
     @Test
+    @DisplayName("이름 없는 색인 항목은 그 항목만 빠진 목록이 아니라 받기 실패다 — XBRL 없음으로 굳지 않는다")
+    void namelessIndexItemIsAFetchFailure() throws Exception {
+        bodyOf.put(indexPath(MISSING), "{\"directory\":{\"item\":[{\"name\":\"abt-20260630.htm\"},{\"type\":\"text.gif\"}]}}");
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.failed()).containsExactly(MISSING);
+        assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
+    }
+
+    @Test
+    @DisplayName("200인데 본문이 빈 인스턴스는 해석 실패가 아니라 받기 실패다 — 다음 실행이 다시 받는다(빈 색인의 짝)")
+    void emptyInstanceBodyIsAFetchFailureNotUnreadable() throws Exception {
+        // RestClient는 빈 200 본문을 null로 낸다 — 가드의 `body == null`이 받는다. `length == 0` 갈래는 이 길로 안 닿는다
+        // (2026-10-06 변이: 그 갈래만 빼면 초록 · 가드를 통째로 빼면 NPE로 붉다).
+        bodyOf.put(instancePath(MISSING, "abt-20260630_htm.xml"), "");
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.failed()).containsExactly(MISSING);
+        assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
+
+        paths.clear();
+        bodyOf.put(instancePath(MISSING, "abt-20260630_htm.xml"), instanceXml());
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(paths).as("해석 실패가 아니라 다시 받는다").contains(instancePath(MISSING, "abt-20260630_htm.xml"));
+        assertThat(storedStatus(MISSING)).isEqualTo("OK");
+    }
+
+    @Test
     @DisplayName("옛 판을 쓴 행이 COVERED가 되거나 XBRL 없음으로 다시 받아지면 미해결에서 빠진다")
     void staleMarkClearsWhenCoveredOrRefetchedAsNoXbrl() throws Exception {
         SecFilingSupplementStore store = new SecFilingSupplementStore(jdbcTemplate);
