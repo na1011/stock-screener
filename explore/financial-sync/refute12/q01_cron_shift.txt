@@ -1,0 +1,9 @@
+app PID 14154 lstart=2026-10-05 15:43:37 · jcmd VM.uptime=72661.983s at 2026-10-06 13:49:28 · wall=79551s · lag=6889s
+crons scheduled at app start (10-05 15:43:40) -> 10-06 fire = cron + lag (no further sleep assumed; PREDICTION)
+  13:30 daily-update                                       -> 15:24:49
+  14:00 corporate-action chain                             -> 15:54:49
+  14:15 heavy (none due: G 09-20 · FSR 10-03 · FR 10-03)   -> 16:09:49
+  14:18 derive inputs (share-basis · governance)           -> 16:12:49
+  14:20 reconcile ① ②                                      -> 16:14:49
+  15:30 freshness check (read)                             -> 17:24:49
+pool size 1: 10-05 daily-update took 23:51 (#714) -> chain ends ~16:27~16:31 if reconcile ② 4~8min

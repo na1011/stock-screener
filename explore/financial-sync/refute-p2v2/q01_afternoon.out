@@ -1,0 +1,29 @@
+BEGIN
+2026-08-18	financial-refill/MANUAL/14:58:35-15:14:40
+2026-08-21	daily-update/ADMIN/13:56:04-13:58:04 | indicator-backfill/MANUAL/15:25:24-15:27:04 | indicator-backfill/MANUAL/15:35:01-15:36:49
+2026-08-28	daily-update/ADMIN/15:21:35-15:24:39
+2026-09-01	governance-load/MANUAL/14:18:16-14:18:21 | governance-derive/MANUAL/14:18:43-14:18:43 | governance-load/MANUAL/14:34:46-14:56:16 | governance-derive/MANUAL/14:56:43-14:56:46 | indicator-backfill/MANUAL/14:57:56-15:03:48 | indicator-backfill/MANUAL/15:05:03-15:10:45
+2026-09-02	corporate-action/SCHEDULER/14:00:00-14:11:23 | adjustment-rebuild/SCHEDULER/14:11:23-14:11:24
+2026-09-03	corporate-action/SCHEDULER/14:00:00-14:11:24 | adjustment-rebuild/SCHEDULER/14:11:24-14:11:26 | indicator-backfill/SCHEDULER/14:11:26-14:13:16
+2026-09-04	corporate-action/SCHEDULER/14:00:00-14:11:22 | adjustment-rebuild/SCHEDULER/14:11:22-14:11:24 | indicator-backfill/SCHEDULER/14:11:24-14:15:25 | adjustment-rebuild/MANUAL/14:12:28-14:12:29 | financial-refill/MANUAL/14:24:53-14:24:54 | indicator-backfill/MANUAL/14:25:24-14:28:40
+2026-09-07	corporate-action/SCHEDULER/13:59:58-14:11:25 | adjustment-rebuild/SCHEDULER/14:11:25-14:11:27
+2026-09-08	corporate-action/SCHEDULER/14:00:00-14:11:24 | adjustment-rebuild/SCHEDULER/14:11:24-14:11:25
+2026-09-09	corporate-action/SCHEDULER/14:00:00-14:11:26 | adjustment-rebuild/SCHEDULER/14:11:26-14:11:26 | indicator-backfill/MANUAL/14:43:07-14:44:04 | indicator-backfill/MANUAL/14:44:33-14:45:30 | indicator-backfill/MANUAL/15:16:48-15:39:03
+2026-09-10	corporate-action/SCHEDULER/14:00:00-14:11:25 | adjustment-rebuild/SCHEDULER/14:11:25-14:11:26
+2026-09-11	corporate-action/SCHEDULER/14:00:00-14:11:25 | adjustment-rebuild/SCHEDULER/14:11:25-14:11:26 | indicator-backfill/MANUAL/14:33:21-14:43:08 | indicator-backfill/MANUAL/14:45:41-14:46:50
+2026-09-14	corporate-action/SCHEDULER/14:00:00-14:11:22 | full-statement-refill/MANUAL/14:00:42-14:00:49 | full-statement-refill/MANUAL/14:03:38-14:03:44 | adjustment-rebuild/SCHEDULER/14:11:22-14:11:23 | indicator-backfill/MANUAL/14:35:24-14:39:14 | indicator-backfill/MANUAL/14:40:09-14:43:21 | indicator-backfill/MANUAL/14:46:33-14:49:10
+2026-09-15	corporate-action/SCHEDULER/14:00:01-14:11:26 | adjustment-rebuild/SCHEDULER/14:11:26-14:11:28 | initial-load/MANUAL/14:43:47-14:43:57 | indicator-backfill/MANUAL/14:44:24-14:45:17 | financial-refill/MANUAL/14:49:33-14:49:39 | financial-refill/MANUAL/14:51:16-15:04:20 | financial-refill/MANUAL/15:04:25-15:07:14
+2026-09-17	corporate-action/SCHEDULER/14:00:01-14:11:25 | adjustment-rebuild/SCHEDULER/14:11:25-14:11:26 | corporate-action-judge/MANUAL/14:56:08-14:56:08 | corporate-action-judge/MANUAL/14:56:11-14:56:11 | indicator-backfill/MANUAL/14:56:26-14:57:55 | corporate-action/MANUAL/15:09:13-15:21:36 | corporate-action/MANUAL/15:21:40-15:24:11 | corporate-action-judge/MANUAL/15:25:20-15:25:20 | adjustment-rebuild/MANUAL/15:26:17-15:26:18 | indicator-backfill/MANUAL/15:26:33-15:28:04 | indicator-backfill/MANUAL/15:28:10-15:33:03
+2026-09-18	corporate-action/SCHEDULER/13:59:59-14:12:26 | adjustment-rebuild/SCHEDULER/14:12:26-14:12:26
+2026-09-21	corporate-action/SCHEDULER/14:00:01-14:12:27 | adjustment-rebuild/SCHEDULER/14:12:27-14:12:28
+2026-09-22	corporate-action/SCHEDULER/13:59:59-14:12:22 | adjustment-rebuild/SCHEDULER/14:12:22-14:12:23
+2026-09-23	corporate-action/SCHEDULER/14:00:03-14:12:27 | adjustment-rebuild/SCHEDULER/14:12:27-14:12:28
+2026-09-24	corporate-action/SCHEDULER/14:00:01-14:12:24 | adjustment-rebuild/SCHEDULER/14:12:24-14:12:25
+2026-09-25	corporate-action/SCHEDULER/13:59:59-14:12:21 | adjustment-rebuild/SCHEDULER/14:12:21-14:12:22
+2026-09-28	corporate-action/SCHEDULER/14:00:01-14:12:26 | adjustment-rebuild/SCHEDULER/14:12:26-14:12:27 | indicator-backfill/SCHEDULER/14:12:28-14:16:22
+2026-09-29	corporate-action/SCHEDULER/14:00:01-14:12:31 | adjustment-rebuild/SCHEDULER/14:12:31-14:12:32
+2026-09-30	corporate-action/SCHEDULER/14:00:01-14:12:45 | adjustment-rebuild/SCHEDULER/14:12:45-14:12:45
+2026-10-01	corporate-action/SCHEDULER/14:00:01-14:12:31 | adjustment-rebuild/SCHEDULER/14:12:31-14:12:31
+2026-10-02	corporate-action/SCHEDULER/14:00:01-14:12:29 | adjustment-rebuild/SCHEDULER/14:12:29-14:12:30
+2026-10-05	corporate-action/SCHEDULER/13:59:59-14:12:20 | adjustment-rebuild/SCHEDULER/14:12:20-14:12:21 | governance-derive/SCHEDULER/14:17:58-14:17:59 | indicator-origin-rewrite/SCHEDULER/14:19:58-14:22:25 | indicator-derived-rebuild/SCHEDULER/14:22:26-14:26:11 | corporate-action/MANUAL/15:44:07-16:00:01
+COMMIT

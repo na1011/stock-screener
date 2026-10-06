@@ -1,0 +1,4 @@
+# items · alerting · alerting_kr · ever_notified
+2	1	1	0
+# 알림 화면의 조건 지표
+1	8	ACCRUAL_RATIO,ADJ_CLOSE,DEBT_RATIO,GP_TO_ASSETS_PCTL,PBR_PCTL,PER_PCTL,ROA,SHARES_GROWTH_3Y

@@ -1,0 +1,54 @@
+근거 메모 — 2부 v7 계획 안 렌즈(0콜 · main 0d389eb7)
+
+[N1] 결정 6의 술어는 「단계가 이미 목록에서 본 공시」만 본다
+  - 공시 행은 단계가 원장 목록에서 처음 볼 때 생긴다(v4 결정 1 「원장 목록에서 처음 본 정기 공시가 행이 되고」) → 단계가 asOf까지 목록을 확인하기 전에
+    13:30이 판정하면 그 공시는 행이 없어 미소비로 안 잡힌다 → 보류 0 → 낡은 값으로 판정.
+  - 그 갈래 넷: (i) 수면 역전 — cronsim B(13:20부터 70분) 다음 날 13:30 13:30:00 · 12:30 단계 13:43:36(rerun.out = sim.out) · 조건 = 단계 끝 뒤 ~ 13:30 끝 전에
+    60분 넘게 잠듦(D: 50분이면 순서 보존) · caffeinate -s는 AC에서만(reload-gate.md:67 → ops/start.sh:66-68) · 빈도는 재지 않음(pmset 1주: 참 수면 2 — 10-03 14:57 토 ·
+    10-05 18:55 — 둘 다 창 밖 · batch_execution 13:30 지연 2/37일)
+    (ii) 12:30~13:30 사이 냉기동 — Spring CronTrigger는 기동 뒤 첫 일치 시각으로 잡는다 → 12:30은 다음 날 · 13:30은 오늘 · crons-done.sh 판정 2는 「JVM이 t 뒤에 떴다」면 그 발화를
+    빠질 것으로 안 셈(스크립트 헤더 13~14행) — 기동은 판정 대상도 아니다 · 앱 기동 로그 4일 6회(10-03 21:11 · 10-04 23:50 · 10-05 00:47 · 10:27 · 15:43 · 10-06 18:44 — 창 안 0)
+    (iii) 단계 예외 — PipelineScheduler의 @Scheduled는 BatchShutdownException만 잡는다(129~147 · 281~304)
+    (iv) 목록 실패 — v2 결정 2 「목록에 있는 날짜의 403·5xx = 실패 → 그 시장의 공시 판정을 그날 하지 않고」 · 미국 EST 색인 게시 12:03~12:21 KST(38일 · 12:30까지 여유 최소 8.3분 2025-11-25)
+  - 같은 asOf 재판정은 처방이 못 된다: 알림 키 "watchlist:%d:%s"(user, asOf) — WatchlistAlertRunner.notify(「같은 사용자·같은 날의 판정은 한 번만 나간다」) → 둘째 판정의 새 충족은
+    억제기에 삼켜지고 recordEvaluation이 last_satisfied=true를 적어 그 알림은 영영 안 나간다.
+
+[N2] 백분위 오염 — 보류 안 된 종목의 순위가 미소비 종목의 낡은 값으로 움직인다
+  - PercentileCalculator RANKED: PERCENT_RANK() OVER (PARTITION BY m.universe_code ORDER BY iv.value) · 그날 편입.
+  - 알림 걸린 항목 1 = 005930 · 화면 1 「저평가 가치주」(활성) · 조건 8 중 단면 3: PER_PCTL<=0.30 · PBR_PCTL<=0.30 · GP_TO_ASSETS_PCTL>=0.50.
+  - indicator.population: UNIVERSE 10 · SECTOR 10(= 단면 지표 20 · 성질 칸이 이미 있다).
+  - 모의(q01 재실행 · 2026-08-14 · 그날 Q2 낸 현 편입 283): 보류 k=40 → 보류 안 된 종목 중 PBR_PCTL<=0.30 뒤집힘 평균 0.8 · 최대 4(200 시드) · k=76 → 1.4 · 4 · |Δpct| 최대 0.041.
+    005930 뒤집힘 0/200(이 단면에선). 모의는 PBR 하나 — PER·GP/A·SECTOR는 안 잼.
+
+[N3] 결정 1 × 결정 2 — 12:30의 usedToday에는 14:00 사슬 몫이 없다
+  - TokenBucketRateLimiter: 인메모리 usedToday · hasDailyQuota = usedToday < 18,000 · 재기동 0.
+  - DartCorporateActionAdapter:484 — hasDailyQuota 거짓이면 RATE_LIMITED 던짐 · fatal()은 AUTH만(DataSourceException:60) → 종목 실패로 쌓이고 사슬은 끝까지 돈다.
+  - 사슬 국내 몫 = 종목당 irdsSttus 2콜(covering · 창 시작 2020-01-02 = 시장 최초 봉) × 국내 350 = 700(ca_calls_per_stock.py · PipelineScheduler javadoc 「700」과 같음).
+  - 결정 2: 짝마다 usedToday + need <= 18,000 − 예약(그날 무거운 잡 몫) → 단계가 18,000 − 예약까지 쓸 수 있다 → 무거운 잡이 예약을 쓰면 14:00엔 need−1 이하가 남는다.
+    사슬이 굶는 단계 사용량: 무거운 잡 없음 > 17,300(약 213짝 = 몰린 날) · FSR 날(15,844 · #647+#648 실측) > 1,456(약 18짝) · G 날(국내 8,050) > 9,250(약 114짝) · FR 날(요청 12,600 · 실제콜 미기록) > 4,700(약 58짝).
+  - v6(단계 14:15 · 사슬 14:00 뒤)에서는 usedToday가 사슬 몫을 담았다 — v6 계획 안 6의 「700 대신 usedToday」가 맞던 전제를 결정 1이 없앴다.
+
+[N4] 결정 1 — 한 메서드라 단계 예외가 무거운 잡을 지운다
+  - 지금 크론들은 BatchShutdownException만 잡는다 → 단계의 RuntimeException이면 같은 메서드의 무거운 잡(강제일 G·FSR·FR 포함)이 그날 안 돈다.
+  - 반대로 돌리면(finally 등) v5 결정 5 「목록을 못 받은 날은 국내 정기 FR·FSR을 미룸」과 「진단 전 미소비 제외」가 단계 결과에 기댄다 → 예외 갈래마다 무엇이 도는지 표가 없다.
+
+[N5] 결정 9 — FSR CFS 탐침의 013 뜻이 없다(OFS 전용)
+  - 현 편입 OFS 전용 후보 20(rebut-p2v6/q07 — 최근 6라벨 지배자본 0 · FSR 채움) · DartFullStatementAdapter.fetchOne(247~257)은 CFS 비면 OFS로 간다(짝은 소비함).
+  - 원장(rebut-p2v6 원시 JSON): 에코프로머티 2025/11014 CFS 013 · OFS 000 rcept 20251114002547 · HK이노엔 2025/11011 CFS 013 · OFS 000 20260318000705 ·
+    376180 2026/11012 CFS 013 · OFS 000 20261006000199(같은 날) · 리노공업 2026/11012 CFS 013(dart1/q10).
+  - 탐침이 CFS 013을 「미반영」으로 읽으면 그 20종목의 매 공시가 반영 대기 → N=5평일 → 진단 → (a) 표지(지표 null) → OFS 탐침으로 해제. 짝을 돌았으면 첫날 소비.
+
+[N6] RF7은 실패할 수 없는 표본
+  - 10-06 목록 4건(전부 [기재정정]) 중 3건을 16:19~16:27에 물었더니 FR·FSR CFS(또는 OFS)가 그 rcept_no를 이미 줌(rebut-p2v6/dart2.log q1~q9) → 10-07 12:00에 재면 반영돼 있다.
+  - 결정 1이 기대는 경우(몰린 날 다음 12:30)는 11-17 전에 원장에 없다.
+
+[N7] 결정 3 성질 시험의 문구
+  - 「표지 행을 넣은 컨텍스트에서 출력이 바뀌는 계산기는 null」 — 표지 행은 FR 칸(공유 칸 revenue·영업이익·순이익·자산·자본·부채… v6 결정 6)이 새 값이다 → PSR·매출 성장 등 공유 칸만 읽는 계산기도 출력이 바뀐다 → 글자대로면 null.
+  - 표지 해제 「FSR이 그 라벨을 rcept_no >= R로 쓰는」 — FSR 전용 칸이 원래 다 빈 라벨(카카오뱅크 10행 · rebut-p2v6/q03)이면 FSR이 쓸 칸이 없을 수 있다(재지 않음).
+
+[선다]
+  - CronsDoneTableTest가 @Scheduled를 리플렉션으로 읽어 crons-done.sh 표와 대조(29~46행) → 12:30 크론을 표에 안 넣으면 붉다.
+  - 풀 1 큐는 기한 순 → 무거운 잡이 길어도 13:30 → 14:00 → 14:18 → 14:20 순서는 보존(cronsim A·D).
+  - 새 라벨 행 삽입은 무효화하지 않음(FinancialWriter 188~203 · 518/658/674는 고침) → 둘째 날 몫의 bar D 값은 13:30 원본층 창 전체가 다시 씀(v6 판정이 잰 자가 치유와 같음).
+  - 미국 미소비가 영구로 남을 FAILED 행: rs1c sec_filing_supplement OK 351 · NO_XBRL 33 · FAILED 0.
+  - 2026-11-14 토 · 11-16 월(요일 산수).

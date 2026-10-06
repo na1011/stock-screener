@@ -1,0 +1,73 @@
+2부 v6 계획 안 반증 — 근거 메모 (2026-10-06 · main 01c885b7 읽기 · DB SELECT만 · DART 21콜 · SEC 0)
+
+[N1] (a)·(b)·(d)의 끝 상태 — 계획 글
+  v6 결정 3(a): 「FR 커밋 + 그 라벨 행에 FSR 미반영 표지 → 11 폴백 계산기·GovernanceFactDeriver:222는 표지가 있으면 null」
+  표지를 지우는 주체·시점 문장 0 · 결정 4: 「둘 다 찼을 때만 consumed_at」 → (a) 뒤 FSR 칸 빈 채 = 미소비 유지
+  v5 결정 5: runHeavy가 국내 미소비 종목을 정기 FR·FSR에서 뺌 · v5 결정 4의 「출구 등록」은 v6 결정 3이 대체((c)·(d)만 등록)
+  → (a): 매 평일 짝 81콜 재시도 + 정기 제외가 FSR 도착까지 · 도착해도 표지가 남으면 지표 11(+N2의 4) 영구 null
+  → (b): 「커밋 안 함 · 판정 요청」 뒤 상태 없음 · 정기 제외 유지(v5 계획 밖 4 「상한 뒤 해제」가 미답)
+  현 편입에서 FR은 있고 FSR이 그 라벨을 안 채운 경우: 카카오뱅크 10행뿐(은행 매핑 · FSR 번호는 옴) — q03
+  → (a)는 지금 자료에선 일시 지연에서만 생긴다(영구 013 실물 0) = 표지는 거의 언제나 「나중에 지워져야 할」 표지다.
+
+[N2] 표지 소비자 — 계획의 12자리 밖
+  grep(FinancialMath 폴백 함수 호출부) = Roe · RoeMin3y · Pbr · PbrMedian5y · Per · PerMedian5y · EpsTtm · EpsCagr5y
+    · EpsGrowthTtmYoy · DividendPayout · ExecPayToNetIncome = 11 + GovernanceFactDeriver:222 → 계획의 수와 같음(선다)
+  빠진 넷: FinancialMath.normalizedTaxRate(:943)가 세율 NULL인 해를 건너뛰고 남은 해의 중앙값
+    소비: RoicAfterTaxCalculator:115 · RoicAfterTaxAvg5yCalculator:110 · RoicAfterTaxMin5yCalculator:105 · EffectiveTaxRateCalculator:94
+    income_tax_expense·profit_before_tax는 FSR 전용(DartFinancialAdapter:223 「주요계정은 세율 재료를 주지 않는다」)
+  q06(0콜 모의 · 현 편입 국내 348 · 최신 FY 5행): 최신 FY 세율이 정의되는 273 중 그 행 세율을 NULL로 두면
+    null이 아니라 값이 나오는 종목 262 · 그 값이 원래와 다른 종목 252 · 최대 차 46.60%p · p90 6.17%p
+  → (a)가 사업보고서(FY 라벨)에서 일어나면 ROIC_AFTER_TAX 3종·EFFECTIVE_TAX_RATE가 「미표시」가 아니라 4년 세율로 값을 낸다.
+
+[N3] 「폴백은 원장이 그 개념을 안 주는 종목에만 남는다」 — 지금 거짓
+  q08: 현 편입 국내 · is_latest · period_end>=2024 · nic NULL ∧ tec/te < 0.9 = 15행 4종목
+       (솔브레인홀딩스 2025 FY·Q4 · NHN 2024 Q2~Q4 · 펌텍코리아 2024 FY~2025 Q4 · SK바이오팜 2024 Q1)
+  원장(dart3): 펌텍코리아 2025/11014 CFS — 「-표준계정코드 미사용-」 지배기업소유주지분 11,236,968,772 (당기순이익 13,171,775,355)
+              솔브레인홀딩스 2025/11011 CFS — 계속영업 지배 42,116,726,969 + 중단영업 지배 445,245,906,229 (당기순이익 495,558,016,939)
+  매퍼 ID_NET_INCOME_CONTROLLING = ProfitLossAttributableToOwnersOfParent 두 ID뿐(DartFullAccountMapper:106-108)
+  → 2/2가 원장이 주는데 매퍼가 못 집는 것(가짜 한계 후보 · 남의 결함) · 표지는 (a) 행만 덮어 이 15행은 계속 연결 순이익으로 폴백.
+
+[N4] 불변성 관찰 규칙
+  a. 신영증권(3월 결산) 2026/11012 FR → 013 (dart1/q8) — 반기보고서 (2026.09)는 11-14 마감 전 · 2026/11013 = 분기 (2026.06) 20260810000423(q9)
+     → 유일한 3월 결산 층의 라벨 셋 중 하나가 1차 수집에서 빈 응답 · 2차(11-16 뒤)엔 값 → 「다름」 또는 판정 불가
+  b. 어댑터가 읽는 응답 칸(grep): account_nm · account_id · account_detail · ord · thstrm_amount · thstrm_add_amount
+     · thstrm_nm · currency · fs_div · sj_div · rcept_no · reprt_code
+     DartAccountMapper:66-71 같은 account_nm 여러 행이면 ord가 작은 첫 행 — dart1/q2·q5에 당기순이익(손실) 두 행(ord 30 · 62)
+     DartAccountMapper:95 누적이면 thstrm_add_amount · DartFullAccountMapper:466,478 account_detail로 이익잉여금·지배 자본
+     계획의 비교 키 「계정 · 금액 · 기간 · rcept_no」 집합은 ord(순서) · account_detail · currency · sj_div · fs_div · 누적 칸을 안 본다
+     응답에 조회 시각 같은 「정상적으로 바뀌는 칸」은 없다(두 엔드포인트 필드 목록 — 선다)
+  c. OFS 전용은 라벨 성질: 에코프로머티 2025/11014 FSR CFS 013 → OFS(q3·q4) · 같은 종목 2026 Q1·Q2는 지배자본 있음(CFS)
+     DB 대리 표지(q07): FSR이 채운 행은 있는데 지배자본 0인 현 편입 20 · 리노공업 2026/11012 CFS → 013 (q10 · 1/1)
+  d. 라벨은 종목 안에서 묶인다(회사 단위 재처리) → 회사 단위 무사건 상한 3/20 = 15% · 층 크기가 모집단 비율과 다름(3월 1/20 대 1/350)
+
+[N5] 결정 6 표본의 탐지력
+  모집단 ≈ 350 × 36라벨(9년 × 4) ≈ 12,600라벨 · 표본 60라벨 → 불일치 라벨 하나를 표본이 볼 확률 ≈ 0.5%
+  귀속 안 된 실행 교정: FSR #647(KOSPI 200 · FR #645 37분 뒤) 교정 4 · FR #658(KOSDAQ 150 · FSR #657 뒤) 교정 18 · FSR #648·#663·#664 교정 0
+  저장 응답 5라벨 FR 대 FSR 공유 9칸(fr_fsr_shared.out) 0/45 · fs_div 선택도 5/5 같음(에코프로머티·HK이노엔은 FR도 OFS)
+  → 18라벨이 갈려도 60라벨 표본이 하나라도 볼 확률 약 8% — 「표본 0 → 소유자 불필요」는 표본이 말할 수 없는 결론
+
+[N6] 결정 2의 수
+  짝 콜: FR = 9년 × 4 = 36(어댑터가 013 기간도 부름) · FSR = 라벨마다 CFS 1 · CFS 013이면 OFS +1 (DartFullStatementAdapter:247-257)
+  실행 기록 FSR: #647 8,832/200 = 44.2 · #648 7,012/150 = 46.7 · #663 = 44.2 · #664 6,374/129 = 49.4 → 평균 45.3 → 짝 81.3(9월 · 미공시 라벨 2)
+  종목마다: CFS · 2018 전 상장 · 11월(미공시 1) → 36+37 = 73 · OFS 전용 → 36+72 = 108 · 상장 전 연도는 라벨당 +1
+  OFS 전용 후보 20(q07) · 정적 N = 잔량/81 → OFS 20이 앞 N에 다 들면 +540콜 → 우리 가드(hasDailyQuota · DartFinancialAdapter:121 ·
+    DartFullStatementAdapter:268)가 RATE_LIMITED를 짝 도중 던짐
+  현 편입만의 몰린 날(q05): 2026-08-14 287 · 2025-08-14 278 · 2025-11-14 256 · 2026-05-15 256 → 계획 실측 341·380은 과거 편입 포함
+  잔량 17,300 − 탐침 ≤ 290 − 목록 쪽 ≈ 30 → 약 209/일 → 287이면 이틀(무거운 잡 없음) · G 강제일(8,050)이면 114/일 → 사흘
+  2026-11-14는 토요일(법정 마감 11-16 월) — 결정 2 예시 「11-14(금)」는 2025년 달력
+
+[N7] 결정 7 · 결정 4 · 결정 8
+  v5 결정 4: 「정기 FR·FSR이 뺀 종목 수를 note에」 — 종목 목록이 아니라 수 → 「정기 FULL 대상 재구성」이 제외 종목을 대상으로 셈
+  v5 결정 1: 소비 = FR·FSR이 받은 rcept_no를 「같은 실행의 list.json」에서 찾아 이름 조인 → 손 FR은 list를 안 받음
+    오늘 정기공시 4건이 전부 같은 날 [기재정정](dart1/q1) — 공시 표에 아직 없는 번호를 손 FR이 받는 날이 실제로 있다
+  asOf: targetDateFor는 주말만 건너뜀(DailyUpdateJob:171-178) · 화해 dataAsOf도 같은 함수 → 정렬은 선다
+  FR 연도 창 끝 = LocalDate.now().getYear()(DartFinancialAdapter:90) · FSR 끝 = asOf.getYear()(FullStatementRefillJob:89)
+    → 1월 첫 평일들(asOf가 전해)엔 FR 10년 · FSR 9년(같은 짝 안에서 창이 1년 다름 · 새해 4라벨은 013 · 짝 85콜)
+
+[N8] 탐침 = FR 1콜만
+  같은 날 반영(dart2): 시알홀딩스 · 청보 · 피코그램 오늘 [기재정정]반기를 FR · FSR 둘 다 그 번호로 줌(16:20) — 3/3 · v5의 이지스 포함 4/4
+  → FSR만 늦는 실물은 비시즌에 0 · 피크일 반영 지연은 과거 재연(RF7)으로 못 잼
+
+[덤 — 남의 결함 · 보고] 연결 전환 종목의 창 혼합
+  에코프로머티 2025 라벨은 FR·FSR 모두 OFS(dart1/q2·q4 · 자본총계 1,252,503,478,277 같음) · 2026 Q1·Q2는 CFS(지배자본 있음)
+  q07: 현 편입 중 지배자본이 라벨마다 있다 없다 하는 종목 19 → TTM·5년 창이 OFS 분기와 CFS 분기를 섞는 자리(2부 밖)

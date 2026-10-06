@@ -1,0 +1,6 @@
+ ticker | share_basis_status | rows_flagged |    min     |    max     | current_member 
+--------+--------------------+--------------+------------+------------+----------------
+ AKTX   | UNRESOLVED         |           22 | 2024-03-29 | 2026-08-13 | f
+ AMRN   | SHIFTED            |            7 | 2025-05-07 | 2026-07-29 | f
+(2개 행)
+

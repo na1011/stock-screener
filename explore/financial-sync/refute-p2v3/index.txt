@@ -1,0 +1,12 @@
+refute-p2v3 산출물 색인(2026-10-06 · 운영 DB READ ONLY · 외부 콜 0 · gradle 0)
+q.sh                       운영 DB SELECT 전용 래퍼(BEGIN READ ONLY)
+q01_heavy_success.out      무거운 잡 셋 최근 성공 30행 — SCHEDULER 0 · 「최근 3회」 = FR #710/#683/#658(최대 16:00) · FSR #706/#664/#663(16:03) · G #707/#680/#633(13:45)
+q02_recent_entries.out     현 편입의 09-01 뒤 편입일별 수 — 국내 주 3~4 · 미국 주 9~13
+q03_entries_after_0921.out 09-21 뒤 편입한 현 편입(국내 8 · 미국 23)의 마지막 재무 적재·공시일·이전 편입 구간
+q04_fr_notes.out           FR 실행 note(무효화 종목 수)
+q05_kr_ipo_entries.out     국내 상장 90일 안 편입 — 최근 12개월 13(대부분 상장 1~4일 뒤)
+q06_transition_forms.py/.out  로컬 캐시 p1rs/cache-1006 submissions(1,788 CIK)의 2024-10 뒤 10-KT·10-QT — 2건
+q07_ksic642.out            KSIC:642 종목(088980 현 편입 · 415640 비편입 · 둘 다 재무 0행)
+q08_revision_days.out      현 편입 미국 revision_no>0 행의 공시일별 종목 수(2025-10-01~12-15) — 33일 180종목-일 · 최대 22 · p90 15 · 국내 0
+코드 읽기: FullStatementRefillJob:48(DEFAULT_YEARS_BACK=8)·:68(javadoc 「기본 5년」 낡음)·PipelineScheduler:339(null → 8년) · StoredIndicatorInvalidationPort:35(DELETE ≥ 시작일) · DartCorpCodeCache:87-97(JVM당 1회 적재) · DartFinancialAdapter:85-88·DartFullStatementAdapter:115-118(NOT_FOUND) · FinancialWriter:493-502(FSR 정정보류) · wt-p1 V64:6·:37 · SecFilingSupplementStore:207-210(미해결 = FAILED ∪ stale_used_at) · KnownSourceGaps 소비자 StockRegistrar:676-677 · UniverseIntegrityAlerter:143 · check-doc-staleness.sh:398 · ADR-0107:201
+앱 로그 ~/Library/Logs/stock-screener/stdout.log: 기동 10-03 21:11 · 10-04 23:50 · 10-05 00:47 · 10:27 · 15:43

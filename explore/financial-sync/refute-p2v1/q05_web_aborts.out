@@ -1,0 +1,3 @@
+BEGIN
+indicator-backfill	ADMIN	ABORTED	2026-08-21 02:05:12	2026-08-21 02:06:24	프로세스가 종료돼 중단됐다. 이 실행은 저절로 이어지지 않는다 — 필요하면 다시 띄운다.
+COMMIT

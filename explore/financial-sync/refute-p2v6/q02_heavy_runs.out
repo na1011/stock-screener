@@ -1,0 +1,175 @@
+88	full-statement-refill	MANUAL	SUCCESS	08-18 Tue 02:09	350	0	보고서=[FY] 연도=2021~2026 요청=2100건 실제콜=2714 쓴보고서=1596 공시없음=504 정정보류=4 불일치=0
+90	full-statement-refill	MANUAL	SUCCESS	08-18 Tue 09:00	350	0	보고서=[FY] 연도=2021~2026 요청=2100건 실제콜=2714 쓴보고서=1596 공시없음=504 정정보류=4 불일치=0
+93	financial-refill	MANUAL	SUCCESS	08-18 Tue 14:58	175	0	연도=2015~2026 대상=175종목 정정=5 채움=2811 불일치=0
+94	financial-refill	MANUAL	SUCCESS	08-18 Tue 15:50	175	0	연도=2015~2026 대상=175종목 정정=5 채움=2034 불일치=0
+95	full-statement-refill	MANUAL	SUCCESS	08-18 Tue 16:06	350	0	보고서=[FY] 연도=2015~2026 요청=4200건 실제콜=5543 쓴보고서=3090 공시없음=1110 정정보류=0 불일치=0
+112	governance-load	MANUAL	SUCCESS	08-23 Sun 17:36	8	0	
+113	governance-derive	MANUAL	SUCCESS	08-23 Sun 17:37	8	0	
+114	governance-derive	MANUAL	SUCCESS	08-23 Sun 17:38	8	0	
+115	governance-load	MANUAL	SUCCESS	08-23 Sun 17:38	350	0	
+116	governance-derive	MANUAL	SUCCESS	08-23 Sun 17:50	350	0	
+117	governance-derive	MANUAL	SUCCESS	08-23 Sun 18:12	350	0	
+119	governance-load	MANUAL	SUCCESS	08-23 Sun 18:16	350	0	
+120	governance-load	MANUAL	SUCCESS	08-23 Sun 18:20	350	0	
+121	governance-load	MANUAL	SUCCESS	08-23 Sun 18:20	350	0	
+122	governance-load	MANUAL	SUCCESS	08-23 Sun 18:21	350	0	
+123	governance-load	MANUAL	SUCCESS	08-23 Sun 18:22	350	0	
+124	governance-derive	MANUAL	SUCCESS	08-23 Sun 18:23	350	0	
+127	governance-derive	MANUAL	SUCCESS	08-23 Sun 18:29	350	0	
+129	governance-derive	MANUAL	SUCCESS	08-23 Sun 20:42	350	0	
+131	governance-derive	MANUAL	SUCCESS	08-23 Sun 23:29	350	0	
+132	governance-derive	MANUAL	SUCCESS	08-23 Sun 23:32	350	0	
+138	full-statement-refill	MANUAL	SUCCESS	08-24 Mon 18:47	9	0	보고서=[FY] 연도=2019~2026 요청=72건 실제콜=111 쓴보고서=50 공시없음=22 정정보류=0 불일치=0
+141	governance-derive	MANUAL	SUCCESS	08-24 Mon 18:48	350	0	
+145	full-statement-refill	MANUAL	SUCCESS	08-25 Tue 02:16	4	0	보고서=[FY] 연도=2019~2026 요청=32건 실제콜=47 쓴보고서=23 공시없음=9 정정보류=0 불일치=0
+179	full-statement-refill	MANUAL	SUCCESS	08-30 Sun 02:41	3	0	보고서=[FY] 연도=2021~2026 요청=18건 실제콜=22 쓴보고서=14 공시없음=4 정정보류=0 불일치=0
+188	full-statement-refill	MANUAL	SUCCESS	08-30 Sun 22:54	1	0	보고서=[FY] 연도=2025~2026 요청=2건 실제콜=3 쓴보고서=1 공시없음=1 정정보류=0 불일치=0
+190	full-statement-refill	MANUAL	SUCCESS	08-30 Sun 22:58	350	0	보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=8400건 실제콜=10270 쓴보고서=8601 공시없음=1405 정정보류=10 불일치=4
+191	full-statement-refill	MANUAL	SUCCESS	08-30 Sun 23:19	350	0	보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=8400건 실제콜=10270 쓴보고서=8601 공시없음=1405 정정보류=10 불일치=4
+193	full-statement-refill	MANUAL	SUCCESS	08-31 Mon 00:21	1	0	보고서=[FY, Q1, Q2, Q3] 연도=2026~2026 요청=4건 실제콜=6 쓴보고서=2 공시없음=2 정정보류=1 불일치=0
+194	financial-refill	MANUAL	SUCCESS	08-31 Mon 00:23	10	0	연도=2024~2026 대상=10종목 정정=10 채움=0 불일치=0
+195	full-statement-refill	MANUAL	SUCCESS	08-31 Mon 00:24	10	0	보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=240건 실제콜=285 쓴보고서=242 공시없음=43 정정보류=0 불일치=0
+197	full-statement-refill	MANUAL	SUCCESS	08-31 Mon 00:33	3	0	보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=72건 실제콜=122 쓴보고서=69 공시없음=16 정정보류=0 불일치=0
+222	financial-refill	MANUAL	SUCCESS	08-31 Mon 15:51	1000	0	연도=2018~2026 대상=1000종목 정정=2452 채움=4250 불일치=68
+223	financial-refill	MANUAL	SUCCESS	08-31 Mon 16:11	1000	0	연도=2018~2026 대상=1000종목 정정=0 채움=0 불일치=70
+224	financial-refill	MANUAL	SUCCESS	08-31 Mon 16:58	1000	0	연도=2018~2026 대상=1000종목 정정=507 채움=34806 불일치=76
+232	governance-load	MANUAL	SUCCESS	09-01 Tue 14:18	4	0	
+233	governance-derive	MANUAL	SUCCESS	09-01 Tue 14:18	4	0	
+234	governance-load	MANUAL	SUCCESS	09-01 Tue 14:34	1350	0	
+235	governance-derive	MANUAL	SUCCESS	09-01 Tue 14:56	1350	0	
+261	financial-refill	MANUAL	PARTIAL_SUCCESS	09-04 Fri 09:46	151	15	연도=2019~2026 대상=151종목 정정=1136 채움=0 불일치=29
+264	governance-load	MANUAL	ABORTED	09-04 Fri 09:50	1350	1	프로세스가 종료돼 중단됐다. 이 실행은 저절로 이어지지 않는다 — 필요하면 다시 띄운다.
+265	governance-load	MANUAL	SUCCESS	09-04 Fri 10:01	32	0	
+266	governance-derive	MANUAL	SUCCESS	09-04 Fri 10:02	32	0	
+273	financial-refill	MANUAL	SUCCESS	09-04 Fri 14:24	1	0	연도=2018~2026 대상=1종목 정정=14 채움=38 불일치=0
+276	governance-derive	MANUAL	SUCCESS	09-05 Sat 00:01	5	0	
+296	full-statement-refill	MANUAL	SUCCESS	09-06 Sun 19:52	8	0	보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=192건 실제콜=244 쓴보고서=186 공시없음=41 정정보류=0 불일치=0
+297	governance-load	MANUAL	SUCCESS	09-06 Sun 19:53	6	0	
+298	governance-derive	MANUAL	SUCCESS	09-06 Sun 19:54	6	0	
+300	financial-refill	MANUAL	SUCCESS	09-07 Mon 09:18	12	0	연도=2023~2026 대상=12종목 정정=0 채움=0 불일치=77
+301	financial-refill	MANUAL	SUCCESS	09-07 Mon 10:04	3	0	연도=2023~2026 대상=3종목 정정=0 채움=0 교정=29
+302	financial-refill	MANUAL	SUCCESS	09-07 Mon 10:05	92	0	연도=2023~2026 대상=92종목 정정=6 채움=0 교정=1241
+333	full-statement-refill	MANUAL	SUCCESS	09-08 Tue 10:39	1	0	보고서=[FY] 연도=2021~2026 요청=6건 실제콜=7 쓴보고서=5 공시없음=1 정정보류=0 교정=0
+334	full-statement-refill	MANUAL	SUCCESS	09-08 Tue 10:41	1	0	보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=24건 실제콜=26 쓴보고서=27 공시없음=2 정정보류=0 교정=0
+398	full-statement-refill	MANUAL	PARTIAL_SUCCESS	09-13 Sun 15:52	4	2	보고서=[FY, Q1, Q2, Q3] 연도=2021~2026 요청=96건 실제콜=74 쓴보고서=54 공시없음=4 정정보류=0 교정=0
+399	financial-refill	MANUAL	SUCCESS	09-13 Sun 15:55	2	0	연도=2021~2026 대상=2종목 정정=0 채움=30 교정=14
+405	governance-derive	MANUAL	SUCCESS	09-14 Mon 02:29	1350	0	
+407	governance-derive	MANUAL	SUCCESS	09-14 Mon 04:47	1	0	
+410	full-statement-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 09:38	1350	1000	보고서=[FY] 연도=2020~2026 요청=9450건 실제콜=3154 쓴보고서=1885 공시없음=565 정정보류=0 교정=0
+412	financial-refill	MANUAL	SUCCESS	09-14 Mon 10:12	1000	0	연도=2020~2026 대상=1000종목 정정=54 채움=5796 교정=1359
+414	financial-refill	MANUAL	SUCCESS	09-14 Mon 11:00	1000	0	연도=2015~2026 대상=1000종목 정정=7741 채움=1623 교정=864
+415	full-statement-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 11:15	1350	1000	보고서=[FY] 연도=2015~2026 요청=16200건 실제콜=5552 쓴보고서=3105 공시없음=1095 정정보류=0 교정=0
+421	financial-refill	MANUAL	SUCCESS	09-14 Mon 13:41	30	0	연도=2018~2026 대상=30종목 정정=2 채움=0 교정=0
+425	full-statement-refill	MANUAL	SUCCESS	09-14 Mon 14:00	3	0	보고서=[FY] 연도=2015~2026 요청=36건 실제콜=39 쓴보고서=33 공시없음=3 정정보류=0 교정=0
+426	full-statement-refill	MANUAL	SUCCESS	09-14 Mon 14:03	2	0	보고서=[FY, Q1, Q2, Q3] 연도=2024~2026 요청=24건 실제콜=28 쓴보고서=24 공시없음=4 정정보류=0 교정=0
+431	financial-refill	MANUAL	SUCCESS	09-14 Mon 18:48	1000	0	연도=2015~2026 대상=1000종목 정정=5 채움=0 교정=442
+432	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 19:01	214	1	연도=2015~2026 대상=214종목 정정=1505 채움=5209 교정=467
+436	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 19:18	1000	1	연도=2015~2026 대상=1000종목 정정=0 채움=0 교정=340
+437	financial-refill	MANUAL	SUCCESS	09-14 Mon 19:32	12	0	연도=2015~2026 대상=12종목 정정=0 채움=0 교정=340
+438	financial-refill	MANUAL	SUCCESS	09-14 Mon 19:33	12	0	연도=2015~2026 대상=12종목 정정=0 채움=0 교정=340
+441	financial-refill	MANUAL	SUCCESS	09-14 Mon 21:27	1000	0	연도=2015~2026 대상=1000종목 정정=0 채움=0 교정=0
+442	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 21:38	214	1	연도=2015~2026 대상=214종목 정정=0 채움=0 교정=0
+443	financial-refill	MANUAL	SUCCESS	09-14 Mon 21:46	1000	0	연도=2015~2026 대상=1000종목 정정=0 채움=0 교정=732
+444	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 21:59	214	1	연도=2015~2026 대상=214종목 정정=0 채움=0 교정=120
+445	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 22:07	1000	1	연도=2015~2026 대상=1000종목 정정=0 채움=661 교정=70
+446	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 22:20	214	1	연도=2015~2026 대상=214종목 정정=31 채움=125 교정=242
+447	financial-refill	MANUAL	SUCCESS	09-14 Mon 22:27	1000	0	연도=2015~2026 대상=1000종목 정정=25 채움=10 교정=664
+448	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 22:40	214	1	연도=2015~2026 대상=214종목 정정=77 채움=1 교정=14
+449	financial-refill	MANUAL	SUCCESS	09-14 Mon 22:47	1000	0	연도=2015~2026 대상=1000종목 정정=14 채움=0 교정=19
+450	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 23:00	214	1	연도=2015~2026 대상=214종목 정정=7 채움=0 교정=6
+451	financial-refill	MANUAL	SUCCESS	09-14 Mon 23:11	1000	0	연도=2015~2026 대상=1000종목 정정=59 채움=64 교정=122
+452	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 23:24	214	1	연도=2015~2026 대상=214종목 정정=11 채움=12 교정=20
+453	financial-refill	MANUAL	SUCCESS	09-14 Mon 23:35	1000	0	연도=2015~2026 대상=1000종목 정정=29 채움=0 교정=0
+454	financial-refill	MANUAL	PARTIAL_SUCCESS	09-14 Mon 23:48	214	1	연도=2015~2026 대상=214종목 정정=4 채움=0 교정=0
+457	financial-refill	MANUAL	SUCCESS	09-15 Tue 00:29	14	0	연도=2015~2026 대상=14종목 정정=0 채움=0 교정=0
+458	financial-refill	MANUAL	SUCCESS	09-15 Tue 00:46	14	0	연도=2015~2026 대상=14종목 정정=0 채움=0 교정=14
+459	financial-refill	MANUAL	SUCCESS	09-15 Tue 00:47	1000	0	연도=2015~2026 대상=1000종목 정정=0 채움=4 교정=109
+460	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 01:00	213	1	연도=2015~2026 대상=213종목 정정=0 채움=0 교정=37
+463	financial-refill	MANUAL	SUCCESS	09-15 Tue 01:54	6	0	연도=2015~2026 대상=6종목 정정=0 채움=274 교정=0
+464	financial-refill	MANUAL	SUCCESS	09-15 Tue 01:56	1000	0	연도=2015~2026 대상=1000종목 정정=120 채움=45174 교정=2
+465	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 02:08	213	2	연도=2015~2026 대상=213종목 정정=8 채움=8370 교정=0
+468	financial-refill	MANUAL	SUCCESS	09-15 Tue 04:01	62	0	연도=2015~2026 대상=62종목 정정=0 채움=939 교정=0
+469	financial-refill	MANUAL	SUCCESS	09-15 Tue 04:04	1000	0	연도=2015~2026 대상=1000종목 정정=6 채움=135 교정=0
+470	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 04:17	213	1	연도=2015~2026 대상=213종목 정정=33 채움=191 교정=90
+472	financial-refill	MANUAL	SUCCESS	09-15 Tue 04:26	8	0	연도=2015~2026 대상=8종목 정정=0 채움=0 교정=140
+473	financial-refill	MANUAL	SUCCESS	09-15 Tue 04:30	1000	0	연도=2015~2026 대상=1000종목 정정=319 채움=4 교정=1969
+474	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 04:42	213	1	연도=2015~2026 대상=213종목 정정=6 채움=0 교정=90
+475	financial-refill	MANUAL	SUCCESS	09-15 Tue 05:09	8	0	연도=2015~2026 대상=8종목 정정=0 채움=256 교정=0
+476	financial-refill	MANUAL	SUCCESS	09-15 Tue 05:12	1000	0	연도=2015~2026 대상=1000종목 정정=5 채움=7849 교정=2
+477	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 05:25	213	1	연도=2015~2026 대상=213종목 정정=4 채움=1001 교정=1
+479	financial-refill	MANUAL	SUCCESS	09-15 Tue 07:45	9	0	연도=2015~2026 대상=9종목 정정=4 채움=0 교정=13
+480	financial-refill	MANUAL	SUCCESS	09-15 Tue 07:45	3	0	연도=2015~2026 대상=3종목 정정=0 채움=0 교정=6
+481	financial-refill	MANUAL	SUCCESS	09-15 Tue 07:48	1000	0	연도=2015~2026 대상=1000종목 정정=86 채움=4 교정=1124
+482	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 08:00	213	3	연도=2015~2026 대상=213종목 정정=9 채움=0 교정=100
+483	governance-derive	MANUAL	SUCCESS	09-15 Tue 08:17	1350	0	
+485	financial-refill	MANUAL	SUCCESS	09-15 Tue 08:54	5	0	연도=2015~2026 대상=5종목 정정=0 채움=148 교정=0
+486	financial-refill	MANUAL	SUCCESS	09-15 Tue 08:56	1000	0	연도=2015~2026 대상=1000종목 정정=0 채움=3168 교정=0
+487	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 09:08	213	3	연도=2015~2026 대상=213종목 정정=0 채움=774 교정=0
+488	governance-derive	MANUAL	SUCCESS	09-15 Tue 09:24	1350	0	
+490	financial-refill	MANUAL	SUCCESS	09-15 Tue 09:54	19	0	연도=2015~2026 대상=19종목 정정=0 채움=65 교정=0
+491	financial-refill	MANUAL	SUCCESS	09-15 Tue 09:57	1000	0	연도=2015~2026 대상=1000종목 정정=5 채움=74 교정=28
+492	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 10:10	213	3	연도=2015~2026 대상=213종목 정정=4 채움=25 교정=4
+493	governance-derive	MANUAL	SUCCESS	09-15 Tue 10:26	1350	0	
+495	financial-refill	MANUAL	SUCCESS	09-15 Tue 11:24	10	0	연도=2015~2026 대상=10종목 정정=0 채움=246 교정=147
+496	financial-refill	MANUAL	SUCCESS	09-15 Tue 11:27	1000	0	연도=2015~2026 대상=1000종목 정정=38 채움=1920 교정=438
+497	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 11:40	213	3	연도=2015~2026 대상=213종목 정정=29 채움=279 교정=12
+498	governance-derive	MANUAL	SUCCESS	09-15 Tue 11:56	1350	0	
+505	financial-refill	MANUAL	SUCCESS	09-15 Tue 14:49	7	0	연도=2015~2026 대상=7종목 정정=0 채움=0 교정=0
+506	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 14:51	1000	1	연도=2015~2026 대상=1000종목 정정=0 채움=0 교정=0
+507	financial-refill	MANUAL	PARTIAL_SUCCESS	09-15 Tue 15:04	213	3	연도=2015~2026 대상=213종목 정정=0 채움=0 교정=0
+508	financial-refill	MANUAL	SUCCESS	09-15 Tue 20:37	10	0	연도=2015~2026 대상=10종목 정정=0 채움=0 교정=87
+509	financial-refill	MANUAL	SUCCESS	09-15 Tue 20:49	1000	0	연도=2015~2026 대상=1000종목 정정=0 채움=0 교정=286
+513	financial-refill	MANUAL	SUCCESS	09-16 Wed 11:50	1000	0	연도=2015~2026 대상=1000종목 정정=5274 채움=19452 교정=3222
+514	financial-refill	MANUAL	PARTIAL_SUCCESS	09-16 Wed 12:06	214	2	연도=2015~2026 대상=214종목 정정=963 채움=3927 교정=636
+515	financial-refill	MANUAL	ABORTED	09-16 Wed 12:10	1350	0	프로세스가 종료돼 중단됐다. 이 실행은 저절로 이어지지 않는다 — 필요하면 다시 띄운다.
+516	financial-refill	MANUAL	ABORTED	09-16 Wed 12:11	200	0	프로세스가 종료돼 중단됐다. 이 실행은 저절로 이어지지 않는다 — 필요하면 다시 띄운다.
+517	financial-refill	MANUAL	SUCCESS	09-16 Wed 12:20	200	0	연도=2015~2026 대상=200종목 정정=2 채움=8 교정=37
+518	financial-refill	MANUAL	SUCCESS	09-16 Wed 12:38	150	0	연도=2015~2026 대상=150종목 정정=0 채움=16 교정=21
+519	governance-derive	MANUAL	SUCCESS	09-16 Wed 13:00	1350	0	
+522	financial-refill	MANUAL	SUCCESS	09-16 Wed 23:11	133	0	연도=2015~2026 대상=133종목 정정=1 채움=56 교정=5
+601	financial-refill	MANUAL	SUCCESS	09-18 Fri 17:48	1000	0	연도=2015~2026 대상=1000종목 신규=1 정정=0 채움=0 교정=0 이른판=2257
+602	financial-refill	MANUAL	PARTIAL_SUCCESS	09-18 Fri 17:59	206	2	연도=2015~2026 대상=206종목 신규=0 정정=2 채움=36 교정=35 이른판=310
+611	governance-load	MANUAL	SUCCESS	09-19 Sat 22:02	4	0	
+612	governance-derive	MANUAL	SUCCESS	09-19 Sat 22:02	4	0	
+618	full-statement-refill	MANUAL	SUCCESS	09-20 Sun 01:35	1	0	보고서=[FY, Q1, Q2, Q3] 연도=2015~2026 요청=48건 실제콜=53 쓴보고서=54 공시없음=5 정정보류=0 교정=0
+619	governance-load	MANUAL	SUCCESS	09-20 Sun 01:47	2	0	
+620	governance-derive	MANUAL	SUCCESS	09-20 Sun 01:48	2	0	
+621	governance-load	MANUAL	SUCCESS	09-20 Sun 01:49	29	0	
+622	governance-derive	MANUAL	SUCCESS	09-20 Sun 01:50	29	0	
+623	governance-load	MANUAL	SUCCESS	09-20 Sun 02:15	2	0	
+624	governance-derive	MANUAL	SUCCESS	09-20 Sun 02:16	2	0	
+625	governance-load	MANUAL	ABORTED	09-20 Sun 02:31	1350	0	프로세스가 종료돼 중단됐다. 이 실행은 저절로 이어지지 않는다 — 필요하면 다시 띄운다.
+626	governance-load	MANUAL	SUCCESS	09-20 Sun 02:41	1350	0	
+627	governance-derive	MANUAL	SUCCESS	09-20 Sun 03:26	1350	0	
+630	financial-refill	MANUAL	SUCCESS	09-20 Sun 15:15	4	0	연도=2018~2026 대상=4종목 신규=0 정정=0 채움=0 교정=0 이른판=0 무효화=0종목
+632	governance-load	MANUAL	SUCCESS	09-20 Sun 15:18	1350	0	
+633	governance-load	MANUAL	SUCCESS	09-20 Sun 16:14	337	0	
+634	governance-derive	MANUAL	SUCCESS	09-20 Sun 16:28	1350	0	
+635	governance-derive	MANUAL	SUCCESS	09-20 Sun 16:28	337	0	
+638	governance-derive	MANUAL	SUCCESS	09-20 Sun 16:39	1	0	
+643	financial-refill	MANUAL	SUCCESS	09-21 Mon 21:48	1000	0	연도=2018~2026 대상=1000종목 신규=13 정정=301 채움=50762 교정=21143 이른판=0 무효화=552종목 무효화종목=AGCO,MMED,TAP.A,NRG,FRHC,BTSGU,NDAQ,IEX,AROC
+644	financial-refill	MANUAL	PARTIAL_SUCCESS	09-21 Mon 22:10	208	2	연도=2018~2026 대상=208종목 신규=0 정정=67 채움=10046 교정=3686 이른판=0 무효화=112종목 무효화종목=RGC,AMTM,BCO,EMAT,POST,SOUN,GLNG,KBR,FMC,MOG.B,O
+645	financial-refill	MANUAL	SUCCESS	09-21 Mon 22:15	200	0	연도=2018~2026 대상=200종목 신규=0 정정=1 채움=0 교정=0 이른판=0 무효화=1종목 무효화종목=000270
+646	financial-refill	MANUAL	SUCCESS	09-21 Mon 22:29	150	0	연도=2018~2026 대상=150종목 신규=0 정정=1 채움=0 교정=0 이른판=0 무효화=1종목 무효화종목=086520
+647	full-statement-refill	MANUAL	SUCCESS	09-21 Mon 22:52	200	0	보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=7200건 실제콜=8832 쓴보고서=7104 공시없음=1459 정정보류=0 교정=4
+648	full-statement-refill	MANUAL	SUCCESS	09-21 Mon 23:19	150	0	보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=5400건 실제콜=7012 쓴보고서=5446 공시없음=1002 정정보류=0 교정=0
+649	governance-derive	MANUAL	SUCCESS	09-21 Mon 23:37	1350	0	
+653	financial-refill	MANUAL	SUCCESS	09-22 Tue 00:57	1000	0	연도=2018~2026 대상=1000종목 신규=0 정정=0 채움=0 교정=1842 이른판=0 무효화=156종목 무효화종목=FRHC,NDAQ,IEX,MKC.V,U,L,RTX,STE,ALL,ROK,EME,ED,WEX,N
+654	financial-refill	MANUAL	PARTIAL_SUCCESS	09-22 Tue 01:12	208	2	연도=2018~2026 대상=208종목 신규=0 정정=0 채움=0 교정=612 이른판=0 무효화=43종목 무효화종목=MOG.B,ONDS,ENVA,MARA,CNX,MKC,ACHR,GPGI,BAM,CAR,CCC,CENX
+655	financial-refill	MANUAL	SUCCESS	09-22 Tue 01:43	129	0	연도=2018~2026 대상=129종목 신규=0 정정=0 채움=0 교정=0 이른판=0 무효화=0종목
+656	full-statement-refill	MANUAL	SUCCESS	09-22 Tue 06:40	129	0	보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=4644건 실제콜=6374 쓴보고서=4065 공시없음=1364 정정보류=0 교정=0
+657	full-statement-refill	MANUAL	ABORTED	09-22 Tue 09:29	150	0	프로세스가 종료돼 중단됐다. 이 실행은 저절로 이어지지 않는다 — 필요하면 다시 띄운다.
+658	financial-refill	MANUAL	SUCCESS	09-22 Tue 09:43	150	0	연도=2018~2026 대상=150종목 신규=0 정정=0 채움=975 교정=18 이른판=0 무효화=9종목 무효화종목=086520,298380,319400,068760,140410,195940,347700,328130
+659	full-statement-refill	MANUAL	SUCCESS	09-22 Tue 12:59	8	0	보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=288건 실제콜=384 쓴보고서=274 공시없음=67 정정보류=0 교정=0
+663	full-statement-refill	MANUAL	SUCCESS	09-23 Wed 00:09	200	0	보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=7200건 실제콜=8832 쓴보고서=7104 공시없음=1459 정정보류=0 교정=0
+664	full-statement-refill	MANUAL	SUCCESS	09-23 Wed 00:26	129	0	보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=4644건 실제콜=6374 쓴보고서=4065 공시없음=1364 정정보류=0 교정=0
+680	governance-load	GAP_FILL	SUCCESS	09-26 Sat 20:00	2	0	
+681	governance-derive	GAP_FILL	SUCCESS	09-26 Sat 20:00	2	0	
+683	financial-refill	MANUAL	SUCCESS	09-28 Mon 01:14	1000	0	연도=2015~2026 대상=1000종목 신규=154 정정=239 채움=21486 교정=11656 이른판=0 무효화=466종목 무효화종목=AGCO,TAP.A,NRG,FRHC,NDAQ,IEX,AROC,G,BX,WSO.
+706	full-statement-refill	GAP_FILL	SUCCESS	10-03 Sat 21:14	1	0	보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=36건 실제콜=38 쓴보고서=42 공시없음=2 정정보류=0 교정=0
+707	governance-load	GAP_FILL	SUCCESS	10-03 Sat 21:14	3	0	
+708	governance-derive	GAP_FILL	SUCCESS	10-03 Sat 21:14	3	0	
+710	financial-refill	MANUAL	SUCCESS	10-03 Sat 21:17	1	0	연도=2015~2026 대상=1종목 신규=20 정정=30 채움=43 교정=1 이른판=2 무효화=1종목 무효화종목=IOVA
+711	governance-derive	MANUAL	SUCCESS	10-05 Mon 00:29	1683	0	
+717	governance-derive	SCHEDULER	SUCCESS	10-05 Mon 14:17	1683	0	
+738	governance-derive	MANUAL	SUCCESS	10-05 Mon 16:02	1683	0	

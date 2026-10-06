@@ -1,0 +1,8 @@
+ ticker | share_basis_status | universe_code | effective_from | effective_to 
+--------+--------------------+---------------+----------------+--------------
+ AKTX   | UNRESOLVED         | US_LISTED     | 2026-08-29     | 
+ AKTX   | UNRESOLVED         | US_TOP1000    | 2026-08-31     | 2026-09-25
+ AMRN   | SHIFTED            | US_LISTED     | 2026-08-29     | 
+ AMRN   | SHIFTED            | US_TOP1000    | 2026-08-31     | 2026-09-25
+(4개 행)
+

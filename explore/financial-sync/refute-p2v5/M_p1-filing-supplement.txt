@@ -1,0 +1,6 @@
+.claude/skills/batch-load/SKILL.md
+docs/adr/ADR-0135-restore-the-past-universe-as-a-second-plane.md
+docs/progress.md
+docs/reload-gate.md
+src/main/java/com/stockscreener/pipeline/collector/KnownSourceGaps.java
+src/test/java/com/stockscreener/pipeline/batch/IndicatorBackfillParallelTest.java

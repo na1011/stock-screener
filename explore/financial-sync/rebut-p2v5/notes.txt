@@ -1,0 +1,54 @@
+2부 v5 계획 안 반증 — 근거 메모 (2026-10-06 · DB SELECT만 · 코드 main 544f82e0 · 0부 origin/hold/p0-run-scope · 1부 wt-p1)
+
+[M1] 탐침 (연도, 코드) 규칙의 대조 — 0콜 (probe_map_check.tsv)
+  재료: 저장된 list.json 571건(p2/ · rebut-p2v2~v4) 중 국내 stock 행이 있는 95건 · 73종목
+  규칙: Y = 「(YYYY.MM)」의 YYYY · 사업→FY · 반기→Q2 · 분기→(MM−결산월) mod 12 (3→Q1 · 9→Q3)
+  대조: 그 라벨의 DB is_latest published_at ≥ R의 rcept_no 앞 8자리
+  결과: ok 89 (신영증권 3월 결산 6건 포함) · 첨부정정 2 · 결산월 NULL 2(056080·399720 — 지금 비편입) · 기준점 뒤 미소비 3
+        미소비 3 = 원익홀딩스 030530 09-23 · 보로노이 310210 10-02 · 현대바이오 048410 10-02 ([기재정정]반기 (2026.06) · 둘 다 현 편입 08-05~)
+  → 규칙 자체는 이 표본에서 오판 0/89. 오판 갈래는 결산월 NULL·변경뿐.
+
+[M2] 같은 이름 원본 둘 — 0/571 (corp_code × 접두 뗀 이름에 접두 없는 원본이 둘 이상인 묶음 0)
+  [첨부추가]는 원본 번호의 표시 이름이 바뀐 것(87 묶음이 [첨부추가]만) — 이름은 시간에 따라 바뀐다(접두를 떼면 같다)
+  rcept_dt ≠ rcept_no 앞 8자리 4/571 (창대정밀 [첨부추가] 0407→0408 · 지앤이헬스케어 · 케이솔루션 · 프레스티지바이오파마)
+
+[M3] 출구의 「FSR 칸 미표시」가 실제로 내는 것 — 코드
+  FinancialMath.equityAttributableToShareholders: 지배 null → 총자본 (PbrCalculator:81)
+  FinancialMath.roeBasis(분기·연간): 지배 짝 없으면 (순이익, 총자본) (RoeCalculator:73 · RoeMin3yCalculator:98)
+  FinancialMath.controllingEquityThroughout: 창 안 한 행이라도 null이면 창 전체 연결 (PbrMedian5yCalculator:68,77)
+  FinancialMath.controllingNetIncomeOf: 행마다 null → net_income (PER · PER_MEDIAN_5Y · EPS_TTM · EPS_CAGR_5Y · EPS_GROWTH_TTM_YOY · DIVIDEND_PAYOUT · EXEC_PAY_TO_NET_INCOME)
+  GovernanceFactDeriver:222 coalesce(net_income_controlling, net_income)
+  → 폴백 11계산기 + 거버넌스 유도. null 전파(미표시)는 OCF·FCF·발생액·매출총이익 계열뿐.
+  국내 현 편입 최신 행 349: 지배 < 총 × 0.9 = 86 · × 0.95 = 108 · 지배 null 22.
+  FR 정정 행의 FSR 칸: FILL_WITHOUT_REVISION에서 FSR 응답이 더 이른 공시일이면 findVintage를 안 타 건너뜀 → 새 개정본의 FSR 칸 NULL (FinancialWriter:425-479)
+
+[M4] FR↔FSR 공유 컬럼 덮기 — 코드 + 실행 기록
+  fillMissing의 toCorrect는 모드 무관(FILL_WITHOUT_REVISION도) · 덮으면 periodStart부터 무효화(FinancialWriter:595-674)
+  FSR이 쓰는 공유 컬럼: revenue · operating_income · net_income · total_assets · total_equity · total_liabilities · current_* · retained_earnings (DartFullStatementAdapter:340-379)
+  #647 FSR(KOSPI 200 · 09-21 22:52) 교정=4 — FR #645(22:15) 값을 FSR이 덮은 칸. 그 뒤 KOSPI에 FR 없음(반대 방향 미측정)
+  ADR-0056 「덮지 않는다」와 코드가 갈림(기록 층).
+
+[M5] 시각 — PipelineScheduler javadoc 실측값
+  G 54:58 · 뒤 사슬 12:09 → G 최종 시작 = 15:28 − 12:09 − 54:58 = 14:20:53
+  v5 결정 8: 단계 상한 = (그 시작) − 사슬 안 화해 7:57 = 14:12:56 < 14:15 → G가 도는 날 단계 창 음수
+  14:00 사슬 최악 끝 14:12:44 (+ 그 사슬 안 ② 7:57 = 14:20:41)
+  FSR 42:31 → 최종 시작 14:33:20 → 단계 끝 ≤ 14:25:23 · FR(결정 9 모형 약 47분) → 14:28:51 → 단계 끝 ≤ 14:20:54
+  대상 있는 평일(현 편입 · 2025-10-01~2026-09-30 · XBRL 행을 만든 공시만 = 하한): 평일 261 · 미국 0인 날 45 · 두 시장 0인 날 37(14%)
+  PERIODIC_FORMS에 6-K·6-K/A 포함(wt-p1 SecEdgarFacts:69-71) → 비XBRL 6-K도 대상 → 0인 날은 더 적다
+
+[M6] 실패 해결
+  resolveFailures(stock, phase) — 잡을 안 가림 (BatchExecutionRecorder:323-328) · 소비자: BatchExecutionReader:146(미해결 수) · DailyUpdateJob:228,479 · BatchExecutionContext:159,659
+  0부 96493885: FSR 기본 대상 = 소스 있는 시장(미국 NOT_FOUND 1,000행/실행은 0부가 닫음 · #410·#415 실측)
+  SCHEDULER FR·FSR 행 0 (오늘)
+
+[M7] 쓰기 경로(저장 응답의 갱신 주체 후보)
+  국내 FR·FSR 라이브 호출 경로: 정기(runHeavy) · 손 CLI · 관문 · B 꼬리 GAP_FILL(#706 FSR) · initial-load · 단계
+
+[M8] DART 6콜 (15:46~15:47 · 순차 · DartListQueryProbeLiveTest)
+  dart1/q1~q3 fnlttSinglAcntAll CFS FY2025 — 000150 · 100790 · 207940: 09-21 픽스처(fixtures/dart/full-statement/*-bs-2025.json)와 같은 rcept_no · BS 행 64/22/49 전부 같음(15일) — 3/3
+  dart1/q4 list.json 20261005 pblntf_ty=A → 013(그날 정기공시 0 — 반영 시각 표본 없음)
+  dart2/q1 list.json 비츠로셀(00154718) 2017-01~2018-06: 「사업보고서 (2017.06)」 20170928000526 · 「사업보고서 (2017.12)」 20180329000609(결산월 6→12 변경)
+  dart2/q2 fnlttSinglAcnt 2017/11011 → 20180329000609 하나(제33기 2017.07.01~12.31) — 같은 (연도, 코드)에 사업보고서 둘 · API는 늦은 하나만
+  → 결산월 변경 연도의 앞 보고서는 목록 조인으로 영영 소비 안 됨(이름이 다름) · 탐침은 통과(번호 ≥ R) → 짝 → 롤백 → 출구 경로
+
+[M9] 국내 재편입(KOSPI_TOP200·KOSDAQ_TOP150 · 전 이력): 재편입 298회 · 146종목 · 빈 구간 중앙 14일 · 최대 287일 · 빈 구간에 공시 있던 것 88 (30%)

@@ -1,0 +1,12 @@
+ item | ticker | market_code |  indicator_code   | operator | operand_type | operand_indicator_code | literal_value 
+------+--------+-------------+-------------------+----------+--------------+------------------------+---------------
+    1 | 005930 | KOSPI       | PER_PCTL          | LTE      | LITERAL      |                        |    0.30000000
+    1 | 005930 | KOSPI       | PBR_PCTL          | LTE      | LITERAL      |                        |    0.30000000
+    1 | 005930 | KOSPI       | GP_TO_ASSETS_PCTL | GTE      | LITERAL      |                        |    0.50000000
+    1 | 005930 | KOSPI       | ACCRUAL_RATIO     | LTE      | LITERAL      |                        |    0.00000000
+    1 | 005930 | KOSPI       | ROA               | GTE      | LITERAL      |                        |    0.00000000
+    1 | 005930 | KOSPI       | SHARES_GROWTH_3Y  | LTE      | LITERAL      |                        |    0.00000000
+    1 | 005930 | KOSPI       | DEBT_RATIO        | LTE      | LITERAL      |                        |  150.00000000
+    1 | 005930 | KOSPI       | ADJ_CLOSE         | GTE      | INDICATOR    | SMA_200                |              
+(8개 행)
+

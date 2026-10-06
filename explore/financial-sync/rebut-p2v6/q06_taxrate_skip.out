@@ -1,0 +1,5 @@
+ stocks | latest_rate_defined | value_not_null_when_latest_nulled | differs | max_diff_pp | p90_diff_pp 
+--------+---------------------+-----------------------------------+---------+-------------+-------------
+    348 |                 273 |                               262 |     252 |       46.60 |        6.17
+(1개 행)
+

@@ -1,0 +1,8 @@
+      16: invokeinterface #35,  2           // InterfaceMethod org/springframework/scheduling/Trigger.nextExecution:(Lorg/springframework/scheduling/TriggerContext;)Ljava/time/Instant;
+      39: invokevirtual #45                 // Method org/springframework/scheduling/support/SimpleTriggerContext.getClock:()Ljava/time/Clock;
+      42: invokevirtual #49                 // Method java/time/Clock.instant:()Ljava/time/Instant;
+      49: invokestatic  #55                 // Method java/time/Duration.between:(Ljava/time/temporal/Temporal;Ljava/time/temporal/Temporal;)Ljava/time/Duration;
+      60: invokevirtual #61                 // Method java/time/Duration.toNanos:()J
+      63: getstatic     #65                 // Field java/util/concurrent/TimeUnit.NANOSECONDS:Ljava/util/concurrent/TimeUnit;
+      66: invokeinterface #71,  5           // InterfaceMethod java/util/concurrent/ScheduledExecutorService.schedule:(Ljava/lang/Runnable;JLjava/util/concurrent/TimeUnit;)Ljava/util/concurrent/ScheduledFuture;
+      14: invokestatic  #83                 // Method org/springframework/util/Assert.state:(ZLjava/lang/String;)V

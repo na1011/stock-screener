@@ -1,0 +1,25 @@
+2부 v4 계획 밖 반증 — 근거 메모 (0콜 · DB SELECT만 · 코드는 main f41b651e · 0부 origin/hold/p0-run-scope · 1부 wt-p1 47372ac4)
+
+[T] 시각 산수 (PipelineScheduler.java:405-415 javadoc 실측값)
+  사슬 끝 14:12:44 + 사슬 안 ② 7:57 = 14:20:41
+  v4 결정 7 상한(G 날) = 15:28 − 12:09(유도+①4:08+②7:57) − G 54:58 = 14:20:53
+  단계가 하나라도 무효화하면 사슬 안 화해 ② (IndicatorReconciler:90 「②는 언제나 창 전체」) 최악 7:57
+  → G 시작 14:28:50 → 끝 15:23:48 → +12:09 = 15:35:57 (15:30 점검 · data-pipeline.md:182 손 쓰기 창 15:40 경계)
+  상한 식에 단계 자신의 사슬 안 화해가 없다.
+
+[D] DART 순환 (결정 7·8)
+  FSR 필요 15,844 (#647+#648) · 보통 잔량 16,300 → 여유 456콜 ≈ 짝 5.6개(81콜)
+  단계 상한은 시작 때 「무거운 잡이 돌 예정」으로 정하고, 무거운 잡의 DART 판정은 단계 뒤(14:16)에 한다
+  → 국내 철 FSR 연체 평일(10-20 + 26일 = 11-16~ · 우선 38일 = 11-27)에 단계는 FSR 몫으로 잘리고 FSR은 DART로 미뤄진다.
+
+[R] 실패 해결 공유 (BatchExecutionContext:653-663 · BatchExecutionRecorder:323-328 · FR·FSR 둘 다 CollectionPhase.FINANCIAL)
+  q01: FSR 실패 2,002행 전부 미국 · 전부 resolved=true — FSR은 미국에서 성공한 적이 없다 → FR/initial-load 성공이 해결로 찍었다.
+
+[X] 짝 롤백 신호 (StockTaskExecutor:84-95 · V5 ck_failure_kind 6종 · application.yaml:179 sentry minimum-event-level error)
+  RuntimeException → recordUnexpectedFailure(UNEXPECTED) + log.error → Sentry 이벤트.
+
+[B] 재편입 (q02)
+  미국 주별 편입 중 재편입: 09-18 13/15 · 09-25 12/14 · 10-02 11/13 (빈 구간 7~77일)
+  빈 구간(앞 구간 종료~재편입) 안에 공시가 있던 재편입: 2025-11 13/31 · 2026-02 12/45 · 03 12/46 · 05 13/42 · 06 9/39 · 07 8/51
+
+[Q] 합치기 단언 (q03): main이 보류 브랜치 base 547d88e0 뒤 src를 바꾼 커밋 둘(7b0a0ff3 · 600ad83f) → 합친 뒤 `git diff HEAD origin/hold/<b> -- src frontend ops` = 2파일(비지 않음).

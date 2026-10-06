@@ -1,0 +1,8 @@
+members 1000 cik mapped 1000 no cache 0 []
+index periodic rows datefiled {'20251114': 747}
+member hits 11 {'6-K': 5, '10-K': 5, '10-Q': 3}
+db stocks pub= 2025-11-14 8
+index&db 8 index-only 3 db-only 0
+  IDX-ONLY BNT [('6-K', '20251114', '0001837429-25-000026')]
+  IDX-ONLY JHX [('6-K', '20251114', '0001159152-25-000058')]
+  IDX-ONLY SOBO [('6-K', '20251114', '0001171843-25-007305'), ('6-K', '20251114', '0002019061-25-000011'), ('6-K', '20251114', '0002019061-25-000014')]

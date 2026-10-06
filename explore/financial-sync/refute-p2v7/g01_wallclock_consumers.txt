@@ -1,0 +1,37 @@
+# 13:30~15:40 벽시계 손 쓰기 창 (main)
+.claude/rules/data-pipeline.md:182:**앱이 떠 있으면 평일 13:30·14:00·14:15·14:18·14:20·15:30에 배치가 저절로 돈다**(ADR-0116 · ADR-0166). **JVM을 건너는 배타는 없다** — 손 쓰기 잡은 그 창(13:30~15:40) 밖에서 돈다(실행 305가 13:30과 교착했다). 두 시간짜리
+.claude/skills/batch-load/SKILL.md:582:- **MUST: 평일 크론 여섯(13:30·14:00·14:15·14:18·14:20·15:30)을 피한다 — 평일 13:30~15:40 밖에서 돌린다**(ADR-0116 · ADR-0166).
+docs/adr/ADR-0166-daily-indicator-reconcile.md:39:- MUST NOT: 손 쓰기 잡을 평일 13:30~15:40에 돌리지 않는다. **JVM을 건너는 배타가 아직 없다**(실행 305가 13:30과 `indicator_value`에서 교착했다) — 이 규칙이 지금 유일한 방어이고, 배타는 열린 결함이다(`docs/progress.md`).
+docs/progress.md:93:  **열린 결함 — JVM을 건너는 쓰기 배타가 없다**(실행 305가 13:30과 `indicator_value`에서 교착 · 09-17 뒤 겹침 0은 습관). 잠금 설계는 계획 v7 반증 두 렌즈가 깼다(스윕이 잠금 앞 · 재진입 · 6시간 대기가 풀 1을 굶김 · 실측 최장 손 실행 6:51:56 · 관리 화면 실패가 안 보임 · 세션 잠금이 풀로 샘 — 브랜치 계획 문서 「v7 반증」). 화해가 겹침의 뒤끝을 다음 평일에 닫으므로 화해 배포 뒤 따로 설계한다 · 그때까지 손 쓰기 잡은 `ops/crons-done.sh` = 0일 때 시작해 그 출력의 다음 명목 발화 전에 끝낸다(「평일 13:30~15:40 밖」은 크론이 안 밀린 날의 근사다 — 크론은 늦게만 돈다).
+src/main/java/com/stockscreener/pipeline/batch/AdjustmentRebuildJob.java:211:                        + " 그 전에 채우려면 평일 13:30~15:40 밖에서:\n"
+src/main/java/com/stockscreener/pipeline/batch/CorporateActionJudgeJob.java:153:                        + "그 전에 반영하려면 평일 13:30~15:40 밖에서 --job=adjustment-rebuild --tickers={} 뒤에 "
+src/main/java/com/stockscreener/pipeline/batch/FinancialRefillJob.java:327:                    다음 평일 14:20 화해가 채운다. 그 전에 채우려면 평일 13:30~15:40 밖에서:
+src/main/java/com/stockscreener/pipeline/batch/InitialLoadJob.java:177:                            + "지워졌다.** 다음 평일 14:20 화해가 채우고, 그 전에 채우려면 평일 13:30~15:40 "
+src/test/java/com/stockscreener/pipeline/batch/FinancialRefillAlertTest.java:101:                .contains("13:30~15:40 밖")
+# 실키 13:20~15:45 (hold/p1)
+origin/hold/p1-filing-supplement:docs/adr/ADR-0173-supplement-filings-companyfacts-omits.md:106:  - **손 FR 절차(글자 그대로 · `N`=1 첫 손 FR · `N`=2 둘째 손 FR · 사용자 승인 · 앱을 내린 채 · 실키는 평일 13:20~15:45 밖)** — 셸 변수 `R`=main 작업 트리 · `T`=작업 폴더(FR마다 새로) · `N` · `A="$HOME/Library/Application Support/stock-screener/app.jar.commit"` · `D`=그 파일의 커밋 · `W=$T/wt`(D에 뜬 worktree) · `TICKERS=$(cut -f2 $T/targets.tsv | paste -sd, -)`. **아래 `./gradlew …`는 전부 `cd $W && caffeinate -is ./gradlew …`로 친다**:
+# 크론 목록 13:30·14:00·14:15
+.claude/rules/data-pipeline.md:182:**앱이 떠 있으면 평일 13:30·14:00·14:15·14:18·14:20·15:30에 배치가 저절로 돈다**(ADR-0116 · ADR-0166). **JVM을 건너는 배타는 없다** — 손 쓰기 잡은 그 창(13:30~15:40) 밖에서 돈다(실행 305가 13:30과 교착했다). 두 시간짜리
+.claude/skills/batch-load/SKILL.md:582:- **MUST: 평일 크론 여섯(13:30·14:00·14:15·14:18·14:20·15:30)을 피한다 — 평일 13:30~15:40 밖에서 돌린다**(ADR-0116 · ADR-0166).
+docs/progress.md:1533:    1. **`ops/stop.sh --app`** — 평일 **13:30·14:00·14:15·14:18·14:20·15:30**(KST · 토 20:00)에 배치가 돌고
+docs/progress.md:1818:- **앱·터널은 손으로만 뜨고 죽으면 죽은 채로 있다**(ADR-0043). 띄우기·상태·반영은 `ops/`의 `start`·`status`·`deploy`가 답한다(ADR-0034). **다만 앱이 떠 있는 동안에는 평일 13:30·14:00·14:15·14:18·14:20·15:30 · 토 20:00에 배치가 저절로 돈다**(ADR-0116 · 기계가 잠든 만큼 늦게 — `ops/crons-done.sh`) — 그중 14:00 사슬은 `adj_close`를 다시 쓰고 지표를 지운다.
+# 14:15 (main · ADR 포함)
+.claude/rules/data-pipeline.md:182:**앱이 떠 있으면 평일 13:30·14:00·14:15·14:18·14:20·15:30에 배치가 저절로 돈다**(ADR-0116 · ADR-0166). **JVM을 건너는 배타는 없다** — 손 쓰기 잡은 그 창(13:30~15:40) 밖에서 돈다(실행 305가 13:30과 교착했다). 두 시간짜리
+.claude/rules/data-pipeline.md:189:| 14:15 무거운 잡 | **표가 달라 안전** | 요일별 하나(화 `governance-load` · 수 `full-statement-refill` · 목 `financial-refill`). **목요일만 재무를 건드린다** |
+.claude/skills/batch-load/SKILL.md:582:- **MUST: 평일 크론 여섯(13:30·14:00·14:15·14:18·14:20·15:30)을 피한다 — 평일 13:30~15:40 밖에서 돌린다**(ADR-0116 · ADR-0166).
+docs/adr/ADR-0113-us-dividends-into-governance-facts.md:241:14:15로 당겼다(ADR-0116 §결과).
+docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:23:2. **평일 14:15 — 무거운 DART 잡 하나.** 화=`governance-load` · 수=`full-statement-refill` ·
+docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:230:### 무거운 잡을 14:15로 당겼다 (2026-09-20)
+docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:241:**14:15가 안전한 근거는 14:00 사슬의 실측이다** — `corporate-action` 최악 12분 27초 +
+docs/adr/ADR-0166-daily-indicator-reconcile.md:26:  무거운 잡(14:15)은 적재만 하고, 그 뒤의 유도·기저 판정·지표 채우기는 14:18·14:20이 진다.
+docs/progress.md:218:  되돌려 **첫 연체가 10-30(금) 14:15다**(`isOverdue`가 `toDays() > 25`). 같은 날 21:14의 꼬리
+docs/progress.md:820:  미국 600ms) — 두 실측을 오차 3% 안으로 재현한다. 그래서 무거운 잡을 **14:15**로 당겼다.
+docs/progress.md:1533:    1. **`ops/stop.sh --app`** — 평일 **13:30·14:00·14:15·14:18·14:20·15:30**(KST · 토 20:00)에 배치가 돌고
+docs/progress.md:1818:- **앱·터널은 손으로만 뜨고 죽으면 죽은 채로 있다**(ADR-0043). 띄우기·상태·반영은 `ops/`의 `start`·`status`·`deploy`가 답한다(ADR-0034). **다만 앱이 떠 있는 동안에는 평일 13:30·14:00·14:15·14:18·14:20·15:30 · 토 20:00에 배치가 저절로 돈다**(ADR-0116 · 기계가 잠든 만큼 늦게 — `ops/crons-done.sh`) — 그중 14:00 사슬은 `adj_close`를 다시 쓰고 지표를 지운다.
+docs/reload-gate.md:56:| F6 신규 편입 refill 미도달 · [V] 신선도 시계 | C · [V] 닫힘(`dc82081` · 폴백에서 GAP_FILL 제외 · 10-04 23:50 배포) · **F6는 재무 동기 2부가 처방 중(표지 = 소비한 공시 · 표지 없음 = 전 창 FR · 평일 14:15 단계 · 브랜치 `explore/financial-sync/PLAN.md` 「2부 계획」)** · **[A56] 남음 — 좁은 MANUAL이 무거운 잡 시계를 되돌린다(FR 스케줄러 성공 0회라 폴백이 MANUAL을 셈 · 10-03 IOVA 1종목이 첫 정기 FR을 10-26 → 10-30으로) · 실행 기록에 범위 표지가 없어 스키마가 필요** | 기록 09-04 편입 32 중 22·99판 · 잼 무거운 잡 셋 SCHEDULER 0회 | [V] 뒤 첫 연체 G 10-19 · FS 10-20 · FR 10-30 — 배포 즉시 연체 0(v6 반증) · F6 「전량」 정의 |
+ops/crons-done.sh:33:  "runHeavyJobOfTheDay 1-5 14:15:00"
+src/main/resources/application.yaml:21:        # 스케줄(13:30 일일 갱신 · 14:00 기업 행위 사슬 · 14:15 무거운 잡 · 14:18 화해 입력 유도 ·
+src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:195:        // 여유가 5분뿐이라 무거운 잡을 **14시 15분**으로 당겼고, 그래서 간격이 75분이다.
+# 시험이 박은 순서
+186:        assertThat(heavy).isAfter(chain);
+217:        assertThat(order).isSorted().doesNotHaveDuplicates();

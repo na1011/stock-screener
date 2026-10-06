@@ -1,0 +1,6 @@
+## q01 FINANCIAL 실패 행의 해결 — FR·FSR이 한 단계(FINANCIAL)를 공유
+financial-refill	MANUAL	55	22
+full-statement-refill	MANUAL	2002	2002
+initial-load	MANUAL	2373	352
+## FSR 실패 2,002행의 시장(FSR은 미국에서 성공한 적이 없다 → FR/initial-load 성공이 해결로 찍음)
+US	2002	2002

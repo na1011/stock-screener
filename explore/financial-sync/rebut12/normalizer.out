@@ -1,0 +1,14 @@
+문자열 안 /* 뒤의 코드 변경                                          다름=true  기대=true  OK
+문자열 안 // 뒤의 코드 변경                                          다름=true  기대=true  OK
+'"' 뒤의 코드 변경                                               다름=true  기대=true  OK
+'\'' 뒤의 주석만 변경                                             다름=false 기대=false OK
+'\\' 뒤의 주석만 변경                                             다름=false 기대=false OK
+텍스트 블록 안 // 와 그 뒤 코드                                       다름=true  기대=true  OK
+텍스트 블록 안 이스케이프 \""" 뒤 코드 변경                                다름=false 기대=true  **어긋남**
+\u0022 로 연 문자열 안 // 뒤 코드 변경                                다름=false 기대=true  **어긋남**
+리터럴 안 공백 하나 → 둘                                            다름=false 기대=true  **어긋남**
+리터럴 안 공백 → 탭 문자                                            다름=false 기대=true  **어긋남**
+텍스트 블록 들여쓰기 변경                                             다름=false 기대=true  **어긋남**
+코드 공백만(a+b → a + b)                                        다름=true  기대=false **어긋남**
+javadoc만 변경                                                다름=false 기대=false OK
+오버로드 앞에 두면 잡는 몸통 = static String pickInstance(List<String> n) { return null; }

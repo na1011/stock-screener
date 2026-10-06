@@ -1,0 +1,6 @@
+members 1000 cik mapped 1000 no cache 0 []
+index periodic rows datefiled {'20251030': 505}
+member hits 114 {'10-Q': 112, '6-K': 1, '10-K': 1}
+db stocks pub= 2025-10-30 113
+index&db 113 index-only 1 db-only 0
+  IDX-ONLY ESLT [('6-K', '20251030', '0001178913-25-003603')]

@@ -1,0 +1,29 @@
+2부 v5 계획 밖 반증 — 근거 메모 (0콜 · DB SELECT만 · main 544f82e0 · 10-06 13:44~14:00 KST)
+(sc/ 는 app.jar에서 꺼낸 spring-context 클래스 — 바이트코드 확인용 · 지워도 된다)
+
+[S] 스케줄러 밀림
+  q01: SCHEDULER 실행 30일 — 13:30·14:00 사슬 전부 ±3초(10-05까지).
+  q02: daily-update SCHEDULER 37회 중 시각 밖 2(08-10 20:00 = 옛 시각 · 08-19 13:37:39 +7:39 원인 안 잼).
+  q03·q06: 오늘 13:59:48까지 오늘 행 0. 앱 JVM 14154 시작 10-05 15:43:37(오늘 크론 전부 그 시각 한 번에 예약 → 오늘은 밀림이 고르다).
+  q04: pmset 「Entering Sleep state」(덮개 닫힘 · 배터리) 10-05 18:55:52~20:51:43 합 6,912초 — 호출자 실측 6,890초와 맞음.
+       그 뒤 AC의 Idle Sleep은 DarkWake(caffeinate -s 단언 유지 · 단조 시계 안 멈춤).
+  q07: Spring 7.0.8 ReschedulingRunnable.schedule() = Duration.between(clock.instant(), next).toNanos() → executor.schedule(NANOSECONDS);
+       run()은 본체가 끝난 뒤 schedule()을 다시 부름 → 다음 발화 = 「직전 본체 끝」 뒤 쌓인 실제 수면만큼 늦음 · 작업마다 따로.
+       → 수면이 두 작업의 재예약 시각 사이에 끼면 다음 날 순서가 뒤집힌다(기제는 바이트코드 · 실제 역전은 이력에 없음 — 재지 않음).
+  재시작은 오늘 남은 발화를 지운다(다음 슬롯 = 내일) — Spring CronTrigger 기본(바이트코드로 안 잼).
+
+[E] 출구 미표시의 소비자
+  PbrCalculator:81 equityAttributableToShareholders = controlling ?: total (FinancialMath:111-113) · PbrMedian5yCalculator:68 · RoeCalculator:73 · RoeMin3yCalculator:98.
+  q05: 국내 현 편입 최신 분기 349 중 지배 < 총 × 0.9 = 86 · × 0.5 미만 14 → 출구 라벨에서 PBR 분모가 총자본으로 물러나는 노출 집합.
+
+[O] ops·하네스 시각 창: batch-load SKILL.md:582 「평일 13:30~15:40 밖 — 이 규칙이 지금 유일한 방어」 · data-pipeline.md:182 ·
+    00-precheck.sh:9-13(15:10 뒤 daily-update·corporate-action만 · 화해·무거운 잡 안 봄) · deploy.sh:28-30·stop.sh:61(warn만).
+    DART 분당 1,000 초과 = 1시간 IP 차단(api-spec/dart-financial.md:173-187) · 앱 600/분 · usedToday는 JVM 메모리.
+
+[R] 회귀: progress.md:56(55f21828) 「v3: 보고서코드는 결산월로 · 판정 출구 공시 단위 + KnownSourceGaps · 무거운 잡 미룸은 잡별 소요 모델」 — 셋 다 v3·v4 반증이 버림
+    · :146 「표지 = 소비한 공시」(v4가 공시별 상태 표 + 기준점으로 바꿈).
+  544f82e0 합치기 단언 — P_p1 ∩ main 변경 = reload-gate.md(14줄 다름) · IndicatorBackfillParallelTest(같음) → 「P 안 = HEAD^2」가 자기 「행마다 출처」 지시와 reload-gate.md에서 충돌.
+
+[G] 0부 이월: 「G 실패 재시도 = 별도 항목(재고)」 — reload-gate.md·progress.md에 그 행 0 · reload-gate.md:70 PARTIAL 행은 「0부와 독립 · ?」 그대로.
+[D] DB에 국내 rcept_no 저장 0(information_schema) · 국내 report_code = reprt_code(11011…) · published_at = rcept_no 앞 8자리(DartReportPeriods:42-46).
+[C] 국내 현 편입 accounting_month 350/350 · NULL 둘(056080·399720)은 현 편입 아님 · acc_mt는 이미 DartCompanyProfileAdapter:145가 받는다.
