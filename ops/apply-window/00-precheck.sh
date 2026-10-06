@@ -18,6 +18,8 @@ fi
 # 낡아 이 점검이 늘 멈췄다(2026-10-07 반증). 커밋을 못 가리키면(unknown · 파일 없음) 멈춘다.
 JARC=$(sed -n 's/^commit=//p' "$HOME/Library/Application Support/stock-screener/app.jar.commit" 2>/dev/null)
 [ -n "$JARC" ] && [ "$JARC" != unknown ] || die "app.jar.commit이 커밋을 가리키지 않는다 — 운영 jar를 모른다"
+# 저장소가 모르는 커밋이면 아래 git diff가 실패해 빈 출력이 「변화 없음」으로 통과한다(2026-10-07 반증) — 먼저 묻는다.
+(cd $REPO && git cat-file -e "$JARC^{commit}") 2>/dev/null || die "운영 jar 커밋($JARC)을 저장소가 모른다"
 [ -z "$(cd $REPO && git diff --stat "$JARC"..HEAD -- src/main/resources/db)" ] || die "운영 jar($JARC) 뒤 마이그레이션 변화가 있다"
 LATEST=$(q $PROD "select max(trade_date) from indicator_trade_date where market_code='US'"); [ -n "$LATEST" ] || die "LATEST가 비었다"; echo "LATEST=$LATEST" > $A/latest.txt
 TICK="select distinct m.stock_id from universe_membership m join stock s on s.id=m.stock_id join universe u on u.code=m.universe_code and u.is_active where s.is_active and s.market_code='US' and (m.effective_to is null or (m.effective_from <= (select max(trade_date) from indicator_trade_date where market_code='US') and m.effective_to > (select min(trade_date) from indicator_trade_date where market_code='US')))"
