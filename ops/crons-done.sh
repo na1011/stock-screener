@@ -81,6 +81,7 @@ next_fire() {
 }
 
 # shellcheck source=.claude/hooks/lib/load-process.sh
+[ -r "$HERE/../.claude/hooks/lib/load-process.sh" ] || { echo "[crons] 적재 JVM 판정 함수를 못 읽었다(.claude/hooks/lib) — 판정하지 못했다." >&2; exit 2; }
 . "$HERE/../.claude/hooks/lib/load-process.sh"
 boot_rc=0
 boots=$(stray_load_pids) || boot_rc=$?

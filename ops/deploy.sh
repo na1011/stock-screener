@@ -77,20 +77,29 @@ test_db_guard() {
     exit 1
   fi
   [[ "$versions" == "f" ]] && return 0   # 빈 시험 DB — 시험이 첫 실행에 마이그레이션을 적용한다
-  if ! versions="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select version from flyway_schema_history where success and version is not null" 2>&1)"; then
+  if ! versions="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select version || '|' || success from flyway_schema_history where version is not null" 2>&1)"; then
     echo "[deploy] 시험 DB(${db})를 읽지 못했다 — 멈춘다: ${versions}" >&2
     exit 1
   fi
+  local failed=""
   while IFS= read -r v; do
     [[ -z "$v" ]] && continue
+    # 불리언을 글자와 이으면 true/false로 나온다(t/f가 아니다 — 처음에 t와 비교해 모든 DB를 막았다 · 연습).
+    if [[ "${v#*|}" != "true" ]]; then failed="${failed} V${v%%|*}"; fi
+    v="${v%%|*}"
     if ! compgen -G "$ROOT/src/main/resources/db/migration/V${v}__*.sql" >/dev/null \
         && ! compgen -G "$ROOT/src/test/resources/db/testmigration/V${v}__*.sql" >/dev/null; then
       extra="${extra} V${v}"
     fi
   done <<< "$versions"
+  if [[ -n "$failed" ]]; then
+    echo "[deploy] 시험 DB(${db})에 실패한 마이그레이션 행이 있다:${failed} — 빌드가 Flyway 검증에서 멈춘다. 이름을 바꿔 보존하고 새로 만든 뒤 다시 친다." >&2
+    exit 1
+  fi
   if [[ -n "$extra" ]]; then
     echo "[deploy] 시험 DB(${db})에 이 트리에 없는 마이그레이션이 적용돼 있다:${extra} — 다른 브랜치 시험이 남긴 것이다." >&2
     echo "         빌드가 Flyway 검증에서 멈춘다. 그 DB를 이름을 바꿔 보존하고 같은 이름으로 새로 만든 뒤(또는 TEST_DB_URL을 깨끗한 DB로) 다시 친다." >&2
+    echo "         (버전 유무만 본다 — 같은 버전의 내용이 달라진 체크섬 불일치는 못 잡는다. 빌드가 「checksum mismatch」로 멈추면 같은 처방이다.)" >&2
     exit 1
   fi
 }
