@@ -69,6 +69,9 @@ BUILD_STATE_AFTER="$(build_state)"
 export BUILD_STATE_BEFORE BUILD_STATE_AFTER
 
 echo "== 앱 재기동 =="
+# 스테이징의 전제(jar · .env · 배포 폴더)를 종료 **전에** 묻는다 — 스테이징은 종료 뒤라, 여기서 걸릴 것이 종료 뒤에 걸리면
+# 사이트가 내려간 채 남는다. 여기서 멈추면 아직 아무것도 안 바꿨다.
+"$HERE/stage.sh" --check
 # 빌드 사이에 명목 시각이 지났을 수 있다 — 종료 직전에 다시 묻는다. 여기서 멈추면 아직 아무것도 안 바꿨다.
 crons_gate
 # 돌고 있지 않아도 실패로 다루지 않는다. 배포는 "지금 도는 것을 새것으로 바꾼다"이고,
@@ -77,10 +80,16 @@ if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
   "$HERE/stop.sh" --app --force
 fi
 
+# 여기부터 실패하면 앱은 내려간 채다 — 조용히 rc 1로 끝내지 않고 그 상태와 되살리는 명령을 찍는다.
+app_down() {
+  echo "[deploy] $1 — 앱이 내려간 채다(위 사유). 원인을 고친 뒤 ${2}." >&2
+  echo "         배포 폴더의 app.jar.commit이 없거나 이번 커밋이 아니면 jar도 이번 것이 아니다 — 스테이징부터 다시 한다." >&2
+  exit 1
+}
 echo "== 스테이징 =="
 # 종료가 끝난 뒤에만 배포 폴더를 바꾼다 — 그래야 「app.jar.commit = 지금 도는(또는 곧 뜰) jar」가 선다.
-"$HERE/stage.sh"
-"$HERE/start.sh" --app
+"$HERE/stage.sh" || app_down "스테이징이 실패했다" "ops/stage.sh → ops/start.sh --app"
+"$HERE/start.sh" --app || app_down "앱이 뜨지 않았다" "ops/start.sh --app"
 
 echo "== 터널 =="
 if running_pid "$TUNNEL_PID_FILE" "$TUNNEL_PATTERN" >/dev/null; then

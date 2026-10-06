@@ -19,12 +19,16 @@ WANT_APP=1
 WANT_TUNNEL=1
 MODE=""
 FORCE=""
+usage() { echo "용법: ops/stop.sh [--app|--tunnel] [--force]" >&2; exit 2; }
 for arg in "$@"; do
   case "$arg" in
-    --app)    WANT_TUNNEL=0; MODE="--app" ;;
-    --tunnel) WANT_APP=0; MODE="--tunnel" ;;
+    --app|--tunnel)
+      # 둘을 함께 주면 둘 다 끄는 것으로 읽히지만 아래 두 갈래는 서로를 끈다 — 아무것도 안 내리고 0을 내던 자리다(2026-10-06 반증).
+      if [[ -n "$MODE" && "$MODE" != "$arg" ]]; then usage; fi
+      MODE="$arg"
+      if [[ "$arg" == "--app" ]]; then WANT_TUNNEL=0; else WANT_APP=0; fi ;;
     --force)  FORCE="--force" ;;
-    *)        echo "용법: ops/stop.sh [--app|--tunnel] [--force]" >&2; exit 2 ;;
+    *)        usage ;;
   esac
 done
 
