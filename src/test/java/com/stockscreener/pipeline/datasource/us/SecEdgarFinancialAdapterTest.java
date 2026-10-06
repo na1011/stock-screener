@@ -76,6 +76,55 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("끊겨 JSON으로 안 읽히는 companyfacts는 같은 실행 안에서 다시 받는다 — 한 번 끊겼다고 다음 FR까지 비우지 않는다")
+    void truncatedCompanyFactsIsRetriedWithinTheRun() throws Exception {
+        String full = fixture("companyfacts.json");
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, full.substring(0, full.length() / 2));
+        enqueue(200, full);
+
+        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
+
+        assertThat(reports).isNotEmpty();
+        assertThat(server.getRequestCount()).as("매핑 1 + 끊긴 companyfacts 1 + 다시 받은 1").isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("companyfacts 5xx는 같은 실행 안에서 다시 받고, 404는 다시 묻지 않는다")
+    void companyFactsRetriesServerErrorsButNotMissing() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(503, "{}");
+        enqueue(200, fixture("companyfacts.json"));
+        assertThat(adapter().fetchReports(FIX, FROM).reports()).isNotEmpty();
+
+        server.shutdown();
+        server = new MockWebServer();
+        server.start();
+        enqueue(200, fixture("tickers.json"));
+        enqueue(404, "<Error><Code>NoSuchKey</Code></Error>");
+        enqueue(200, fixture("companyfacts.json"));
+        assertThatThrownBy(() -> adapter().fetchReports(FIX, FROM))
+                .isInstanceOfSatisfying(DataSourceException.class,
+                        e -> assertThat(e.kind()).isEqualTo(DataSourceException.Kind.NOT_FOUND));
+        assertThat(server.getRequestCount()).as("매핑 1 + 404 1 — 다시 안 묻는다").isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("끝까지 JSON으로 안 읽히는 companyfacts는 받기 실패(MALFORMED)다")
+    void companyFactsStillUnreadableAfterRetriesIsMalformed() throws Exception {
+        String full = fixture("companyfacts.json");
+        enqueue(200, fixture("tickers.json"));
+        for (int i = 0; i <= SecFilingClient.TRANSIENT_RETRIES; i++) {
+            enqueue(200, full.substring(0, full.length() / 2));
+        }
+
+        assertThatThrownBy(() -> adapter().fetchReports(FIX, FROM))
+                .isInstanceOfSatisfying(DataSourceException.class,
+                        e -> assertThat(e.kind()).isEqualTo(DataSourceException.Kind.MALFORMED));
+        assertThat(server.getRequestCount()).isEqualTo(2 + SecFilingClient.TRANSIENT_RETRIES);
+    }
+
+    @Test
     @DisplayName("값이 그대로인 재보고는 정정이 아니다 — 접지 않으면 지표가 보존 창째 지워진다")
     void foldsUnchangedRestatements() throws Exception {
         List<RawFinancialReport> reports = fetch();

@@ -128,9 +128,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
 
         String context = "companyfacts %s %s".formatted(
                 security.ticker(), SecTickerCikCache.padded(cik.get()));
-        ResponseEntity<String> response = call(cik.get(), context);
-        JsonNode facts = SecEdgarResponse.requireFacts(
-                response.getStatusCode(), response.getBody(), context);
+        JsonNode facts = fetchFacts(cik.get(), context);
         if (!(facts instanceof ObjectNode tree)) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
                     "facts가 객체가 아니다. " + context);
@@ -167,6 +165,42 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
      * 그 예외가 아래 {@code catch}에 걸려 404가 {@code TRANSIENT}가 된다 — 재시도해도
      * 영원히 안 되는 것을 재시도 대상으로 기록하게 된다. 실제로 그렇게 났다.
      */
+    /**
+     * companyfacts를 받는다 — 전송 실패 · 5xx · JSON으로 안 읽히는 2xx는 같은 실행 안에서
+     * {@link SecFilingClient#TRANSIENT_RETRIES}번 다시 받는다. 한 번에 끝내면 끊긴 전송 하나가 그 종목의 재무를 다음 FR(25일
+     * 뒤)까지 비운다 — 원장은 그 파일을 정직하게 주는데 우리 받기가 한 번만 물은 것이다(2026-10-06 반증 · 보충의 받기 길과 같은 꼴).
+     * 404(매핑 · 미등록)와 한도는 다시 묻지 않는다.
+     */
+    private JsonNode fetchFacts(long cik, String context) throws DataSourceException {
+        DataSourceException last = null;
+        for (int attempt = 0; attempt <= SecFilingClient.TRANSIENT_RETRIES; attempt++) {
+            ResponseEntity<String> response;
+            try {
+                response = call(cik, context);
+            } catch (DataSourceException e) {
+                if (e.kind() != DataSourceException.Kind.TRANSIENT) {
+                    throw e;
+                }
+                last = e;
+                continue;
+            }
+            if (response.getStatusCode().is5xxServerError()) {
+                last = new DataSourceException(DataSourceException.Kind.TRANSIENT, SecEdgarResponse.SOURCE_NAME,
+                        "HTTP %d. %s".formatted(response.getStatusCode().value(), context));
+                continue;
+            }
+            String why = response.getStatusCode().is2xxSuccessful()
+                    ? SecEdgarResponse.unreadableJson(response.getBody()) : null;
+            if (why != null) {
+                last = new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                        why + " 다음 실행이 다시 받는다. " + context);
+                continue;
+            }
+            return SecEdgarResponse.requireFacts(response.getStatusCode(), response.getBody(), context);
+        }
+        throw last;
+    }
+
     private ResponseEntity<String> call(long cik, String context) throws DataSourceException {
         if (!rateLimiter.hasDailyQuota()) {
             throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED,

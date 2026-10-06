@@ -253,8 +253,13 @@ public class SecFilingClient {
         return out;
     }
 
+    /**
+     * 색인·공시 목록처럼 JSON을 받는다. 2xx인데 JSON으로 안 읽히면 인스턴스의 길이 대조처럼 같은 실행 안에서 다시 받는다 — 한 번
+     * 끊긴 색인이 그 공시를, 끊긴 공시 목록이 그 종목의 보충 전부를 다음 FR까지 비우지 않게(v10 반증: 셋 다 1콜로 끝났다).
+     */
     private JsonNode json(Supplier<ResponseEntity<String>> call, String context) throws DataSourceException {
-        ResponseEntity<String> response = withRetry(call, context);
+        ResponseEntity<String> response = withRetry(call, received -> SecEdgarResponse.unreadableJson(received.getBody()),
+                context);
         return SecEdgarResponse.requireJson(response.getStatusCode(), response.getBody(), context);
     }
 

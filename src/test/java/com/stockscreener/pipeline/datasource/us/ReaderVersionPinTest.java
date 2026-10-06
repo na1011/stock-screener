@@ -4,9 +4,13 @@ import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.VariableTree;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.TreePathScanner;
 import com.sun.source.util.TreeScanner;
@@ -72,7 +76,8 @@ class ReaderVersionPinTest {
             "d1361d139cdfa74bb695997d9fea491ba9af9f3be6f5cebcd0cc9459f698b18c",
             "c713c64d6a4a6dd9e4e6f04267463b2877dde8ea6eeac50b46ee8847d182423f",
             "e44657c52f69e940e9a083e0d76801aea8f561cb218e67be3509d1761c002bb7",
-            "7d27b748e3ffb6c804a9fb0c963e3b0d1a241b1676d74277d1a46bb919a92efc");
+            "7d27b748e3ffb6c804a9fb0c963e3b0d1a241b1676d74277d1a46bb919a92efc",
+            "0e1038c9921de8acebeefdc8cd55aaa8b6e197c021a63d9cd91267f3d518af40");
 
     /**
      * 판 범위 — 저장되는 것(상태 · 원 팩트 · 머리 · 실패 종류)을 정하는 파일 전부, 파일 전체다({@code READER_VERSION} 선언만
@@ -104,6 +109,7 @@ class ReaderVersionPinTest {
     /** 판 1, 2, …의 출력 해시. 끝에만 더한다. */
     private static final List<String> PINNED = List.of(
             "c8e8a6e90b0cf4786efd0fc10bacee5099b4babeb6cdd2f61666f43bb53ee982",
+            "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1");
@@ -289,20 +295,70 @@ class ReaderVersionPinTest {
     }
 
     @Test
-    @DisplayName("판 범위의 인터페이스를 범위 밖에서 구현하지 않는다 — 주입되는 구현은 javac 참조 분석에 안 보인다")
-    void scopeInterfacesAreImplementedOnlyInScope() throws Exception {
-        Pattern implementsScope = Pattern.compile(
-                "implements[^{]*\\b(SupplementLedger|FilingSupplementer)\\b|@Bean[\\s\\S]{0,300}?\\b(SupplementLedger|FilingSupplementer)\\s+\\w+\\s*\\(");
+    @DisplayName("판 범위의 형을 범위 밖에서 상속·구현하지 않는다 — 주입되는 구현은 javac 참조 분석에 안 보인다")
+    void scopeTypesAreSubtypedOnlyInScope() throws Exception {
+        // 파싱 트리로 묻는다(주석에 안 걸린다 · 어노테이션 처리기 없이 선다). v10 반증의 변이 다섯 — 하위 인터페이스 · 범위 클래스
+        // 상속 + @Primary · @Bean이 범위 형의 익명 하위 클래스를 돌려줌 · 보충 · 받기 상속 — 이 다 이 꼴이다.
+        Set<String> scopeTypes = new TreeSet<>();
+        SOURCE_SCOPE.forEach(f -> scopeTypes.add(f.substring(0, f.length() - 5)));
+        Set<String> scopeInterfaces = Set.of("SupplementLedger", "FilingSupplementer");
         Set<String> offenders = new TreeSet<>();
-        try (Stream<Path> files = Files.walk(Path.of("src/main/java"))) {
-            for (Path file : files.filter(f -> f.toString().endsWith(".java")).toList()) {
-                boolean inScope = file.getParent().equals(SOURCE_DIR) && SOURCE_SCOPE.contains(file.getFileName().toString());
-                if (!inScope && implementsScope.matcher(Files.readString(file)).find()) {
-                    offenders.add(file.toString());
-                }
-            }
+        List<Path> files;
+        try (Stream<Path> walk = Files.walk(Path.of("src/main/java"))) {
+            files = walk.filter(f -> f.toString().endsWith(".java")).toList();
         }
-        assertThat(offenders).as("범위 밖에서 저장·보충을 구현하면 판 고정이 그 행동을 못 본다 — 그 파일을 범위에 넣는다").isEmpty();
+        for (Path file : files) {
+            if (file.getParent().equals(SOURCE_DIR) && SOURCE_SCOPE.contains(file.getFileName().toString())) {
+                continue;
+            }
+            new TreeScanner<Void, Void>() {
+                @Override
+                public Void visitClass(ClassTree node, Void unused) {
+                    List<Tree> supers = new ArrayList<>(node.getImplementsClause());
+                    if (node.getExtendsClause() != null) {
+                        supers.add(node.getExtendsClause());
+                    }
+                    supers.forEach(t -> flag(t, scopeTypes, "상속·구현"));
+                    return super.visitClass(node, unused);
+                }
+
+                @Override
+                public Void visitNewClass(NewClassTree node, Void unused) {
+                    if (node.getClassBody() != null) {
+                        flag(node.getIdentifier(), scopeTypes, "익명 하위 클래스");
+                    }
+                    return super.visitNewClass(node, unused);
+                }
+
+                @Override
+                public Void visitMethod(MethodTree node, Void unused) {
+                    if (node.getReturnType() != null) {
+                        flag(node.getReturnType(), scopeInterfaces, "범위 인터페이스를 돌려주는 메서드");
+                    }
+                    return super.visitMethod(node, unused);
+                }
+
+                @Override
+                public Void visitVariable(VariableTree node, Void unused) {
+                    if (node.getInitializer() instanceof LambdaExpressionTree
+                            || node.getInitializer() instanceof MemberReferenceTree) {
+                        flag(node.getType(), scopeInterfaces, "범위 인터페이스 람다");
+                    }
+                    return super.visitVariable(node, unused);
+                }
+
+                private void flag(Tree type, Set<String> names, String how) {
+                    String text = type.toString();
+                    int generic = text.indexOf('<');
+                    String raw = generic < 0 ? text : text.substring(0, generic);
+                    String simple = raw.substring(raw.lastIndexOf('.') + 1).strip();
+                    if (names.contains(simple)) {
+                        offenders.add(file + " — " + how + " " + simple);
+                    }
+                }
+            }.scan(parse(file), null);
+        }
+        assertThat(offenders).as("범위 밖에서 받기·저장·보충을 바꾸면 판 고정이 그 행동을 못 본다 — 그 파일을 범위에 넣는다").isEmpty();
     }
 
     @Test
@@ -325,15 +381,25 @@ class ReaderVersionPinTest {
         java.util.Collections.reverse(commits);
         assertThat(commits).as("덧붙이기 검사의 시작 커밋이 이력에 있어야 한다").isNotEmpty();
         List<String> versions = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        // main에 merge 커밋으로 합친 뒤에는 그 merge가 메인라인의 첫 커밋이고 첫 부모에 이 파일이 없다 — 그러면 둘째 부모(합친
+        // 가지 끝)의 판을 기준선으로 둔다. 안 그러면 merge 안에서 생긴 제자리 수정이 어느 쪽에서도 안 보인다(v10 반증).
+        String first = commits.get(0);
+        if (!gitOk("cat-file", "-e", first + "^1:" + path) && gitOk("cat-file", "-e", first + "^2:" + path)) {
+            versions.add(git("show", first + "^2:" + path));
+            labels.add(first + "^2");
+        }
         for (String commit : commits) {
             versions.add(git("show", commit + ":" + path));
+            labels.add(commit);
         }
         versions.add(Files.readString(Path.of(path)));
+        labels.add("작업 트리");
         for (int i = 1; i < versions.size(); i++) {
             for (String list : List.of("SOURCE_PINNED", "PINNED")) {
                 List<String> before = pinned(versions.get(i - 1), list);
                 List<String> after = pinned(versions.get(i), list);
-                String where = i < commits.size() ? commits.get(i) : "작업 트리";
+                String where = labels.get(i);
                 assertThat(after).as(list + "은 덧붙이기만 한다 — 지금 판 값을 고치지 말고 판을 올린다: " + where)
                         .startsWith(before.toArray(String[]::new));
             }
@@ -360,6 +426,14 @@ class ReaderVersionPinTest {
         } catch (IOException | InterruptedException e) {
             return false;
         }
+    }
+
+    private static boolean gitOk(String... args) throws Exception {
+        List<String> command = new ArrayList<>(List.of("git"));
+        command.addAll(List.of(args));
+        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        process.getInputStream().readAllBytes();
+        return process.waitFor() == 0;
     }
 
     private static String git(String... args) throws Exception {

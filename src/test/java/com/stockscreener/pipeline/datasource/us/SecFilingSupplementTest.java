@@ -535,6 +535,23 @@ class SecFilingSupplementTest {
     }
 
     @Test
+    @DisplayName("끊긴 색인 · 끊긴 공시 목록도 같은 실행 안에서 다시 받는다 — 인스턴스만 다시 받으면 앞 두 길이 한 번에 끝난다")
+    void truncatedIndexAndSubmissionsAreRetriedWithinTheSameRun() throws Exception {
+        String index = bodyOf.get(indexPath(MISSING));
+        String submissions = bodyOf.get(submissionsPath());
+        sequenceOf.put(indexPath(MISSING), new java.util.ArrayDeque<>(List.of(index.substring(0, index.length() / 2))));
+        sequenceOf.put(submissionsPath(),
+                new java.util.ArrayDeque<>(List.of(submissions.substring(0, submissions.length() / 2))));
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.vintagesUncertain()).as("공시 목록을 다시 받아 확정했다").isFalse();
+        assertThat(storedStatus(MISSING)).isEqualTo("OK");
+        assertThat(paths).filteredOn(indexPath(MISSING)::equals).hasSize(2);
+        assertThat(paths).filteredOn(submissionsPath()::equals).hasSize(2);
+    }
+
+    @Test
     @DisplayName("고르지 않은 항목의 크기가 수가 아니어도 그 공시는 선다 — 크기는 고른 인스턴스에서만 읽는다")
     void nonNumericSizeOfAnotherItemDoesNotFailTheFiling() throws Exception {
         bodyOf.put(indexPath(MISSING), "{\"directory\":{\"item\":[{\"name\":\"" + INSTANCE + "\",\"size\":\""

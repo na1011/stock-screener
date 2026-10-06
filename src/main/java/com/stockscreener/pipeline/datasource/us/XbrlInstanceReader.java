@@ -58,9 +58,9 @@ final class XbrlInstanceReader {
      * <p>판 2(2026-10-06): 판 범위를 파일 전체로 넓혔다 · StAX 구현을 JDK 기본으로 고정 · 이름 없는 색인 항목을 받기 실패로.
      * 판 3(같은 날): 받은 인스턴스 길이를 색인 크기와 맞춘다(끊긴 본문 · 200 오류 본문이 해석 실패로 굳던 것) · 범위에
      * {@code SecEdgarResponse}(색인 JSON의 200 갈래)를 더했다. 판 4(같은 날): 길이가 다르면 같은 실행 안에서 다시 받는다 ·
-     * 크기는 고른 인스턴스에서만 읽는다.
+     * 크기는 고른 인스턴스에서만 읽는다. 판 5(같은 날): 색인·공시 목록도 JSON으로 안 읽히면 같은 실행 안에서 다시 받는다.
      */
-    static final int READER_VERSION = 4;
+    static final int READER_VERSION = 5;
 
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
     private static final String XBRLDI = "http://xbrl.org/2006/xbrldi";
