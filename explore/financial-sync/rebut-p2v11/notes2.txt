@@ -1,0 +1,12 @@
+둘째 에이전트 재측(2026-10-06 23시대)
+- M1 다시 잼: #500(09-15 13:30 · T 09-14) KOSDAQ 12 TRANSIENT · 그 봉은 14:43 #503 손 initial-load · #504 손 backfill — 확인.
+  더해: US는 SUCCESS · failure_count 0인 실행에서도 편입 1~3종목의 D 봉이 다음 날 13:3x ③에서 들어온다(TAP.A·WSO.B·MOG.B·BTSGU · q08) —
+  08-31 뒤 US 실행 중 15회 이상 · 실패 행 0 → 첫 에이전트 처방(batch_execution_failure로 표지)은 이것을 못 본다.
+  DailyUpdateJob:383-385는 종목 실패와 무관하게 asOf 파생층을 쓴다 · IndicatorReconciler.reconcile은 ① PARTIAL에서도 ②(창 전체).
+- M2(장부 DB 단위)는 계획 밖 1과 같다 → 판정에서 뺌.
+- q05 정정 → q09: 편출 꼬리 영구 구멍 6종목(335890 · 010620 · 012510 · 042670 · APGE · CRNX) — (ii)가 「일시」로 부르는 것이 영구.
+- M3 확인: 09-07 #305 13:16~18:42 세 발화 전부 · 08-31 #224 financial-refill(DART) 16:58~17:10 17:00 발화에 산 것 · 리미터 JVM당 600/분 · 차단 1,000/분.
+- M5 확인: 09-23 00:09~00:37 손 FSR 실제콜 8,832+6,374=15,206(#663·#664) → 그날 18,000 중 2,794.
+- M6 확인: 저장 목록 475 중 rcept_no 앞 8자리 ≠ rcept_dt 4(전부 +1일) · FR published_at = rcept_no 앞 8자리(DartReportPeriods:42-53).
+- RF9 재실행 같은 수(sim.rerun.out).
+- corporate-action SCHEDULER 실패 행 0/24(한도 소진 ④ 실패는 기제만).
