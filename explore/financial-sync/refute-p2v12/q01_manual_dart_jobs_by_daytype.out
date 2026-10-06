@@ -1,0 +1,26 @@
+       job_name        | triggered_by | daytype |   slot   | runs | targets 
+-----------------------+--------------+---------+----------+------+---------
+ company-profile       | MANUAL       | weekday | after13  |    4 |      68
+ company-profile       | MANUAL       | weekday | before13 |    5 |    1515
+ company-profile       | MANUAL       | weekend | after13  |    6 |    8524
+ company-profile       | SCHEDULER    | weekend | after13  |    2 |       7
+ corporate-action      | MANUAL       | weekday | after13  |    9 |    4605
+ corporate-action      | MANUAL       | weekday | before13 |   10 |    1720
+ corporate-action      | MANUAL       | weekend | after13  |    6 |    1396
+ corporate-action      | MANUAL       | weekend | before13 |    1 |       3
+ corporate-action      | SCHEDULER    | weekday | after13  |   24 |   32733
+ financial-refill      | MANUAL       | weekday | after13  |   41 |   19600
+ financial-refill      | MANUAL       | weekday | before13 |   47 |   18944
+ financial-refill      | MANUAL       | weekend | after13  |    3 |       7
+ full-statement-refill | GAP_FILL     | weekend | after13  |    1 |       1
+ full-statement-refill | MANUAL       | weekday | after13  |   17 |    1447
+ full-statement-refill | MANUAL       | weekday | before13 |   15 |    4036
+ full-statement-refill | MANUAL       | weekend | after13  |    5 |     713
+ full-statement-refill | MANUAL       | weekend | before13 |    2 |       4
+ governance-load       | GAP_FILL     | weekend | after13  |    2 |       5
+ governance-load       | MANUAL       | weekday | after13  |    2 |    1354
+ governance-load       | MANUAL       | weekday | before13 |    2 |    1382
+ governance-load       | MANUAL       | weekend | after13  |   11 |    3805
+ governance-load       | MANUAL       | weekend | before13 |    5 |    2733
+(22개 행)
+

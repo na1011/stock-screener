@@ -1,0 +1,6 @@
+# spring-boot-jdbc-4.1.0.jar (gradle cache) javap
+  2: #95(#87=[c#96])
+    org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(
+      value=[class Ljavax/sql/DataSource;]
+    )
+  3: #97(#98=[s#99],#100=s#101,#102=Z#103)

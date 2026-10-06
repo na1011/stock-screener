@@ -1,0 +1,24 @@
+# DART liveTest 파일별 경로(main 15f51e86)
+DartGovernanceProbeLiveTest probeSupport=41 tokenBucket=0
+DartCompanyProfileProbeLiveTest probeSupport=5 tokenBucket=0
+DartAccountNameProbeLiveTest probeSupport=2 tokenBucket=0
+DartCorporateEventProbeLiveTest probeSupport=11 tokenBucket=0
+DartInventoryProbeLiveTest probeSupport=4 tokenBucket=0
+DartCorporateActionWordProbeLiveTest probeSupport=6 tokenBucket=0
+PastUniverseProbeLiveTest probeSupport=1 tokenBucket=2
+KrCapitalEventProbeLiveTest probeSupport=19 tokenBucket=0
+DartRestatementProbeLiveTest probeSupport=6 tokenBucket=0
+DartPretaxIncomeProbeLiveTest probeSupport=5 tokenBucket=0
+DartOldFiscalYearProbeLiveTest probeSupport=5 tokenBucket=0
+DartBulkAndTaxonomyProbeLiveTest probeSupport=9 tokenBucket=0
+DartCorporateActionAdapterLiveTest probeSupport=7 tokenBucket=2
+DartLiveTest probeSupport=0 tokenBucket=3
+DartCapexProbeLiveTest probeSupport=4 tokenBucket=0
+DartControllingEquityProbeLiveTest probeSupport=5 tokenBucket=0
+DartShareChangeProbeLiveTest probeSupport=11 tokenBucket=0
+DartFiscalPeriodProbeLiveTest probeSupport=2 tokenBucket=0
+DartControllingProfitProbeLiveTest probeSupport=6 tokenBucket=0
+DartDepreciationProbeLiveTest probeSupport=4 tokenBucket=0
+DartFullStatementProbeLiveTest probeSupport=2 tokenBucket=0
+DartMissingAccountProbeLiveTest probeSupport=3 tokenBucket=0
+DartGateDryRunLiveTest probeSupport=5 tokenBucket=3

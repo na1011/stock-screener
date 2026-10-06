@@ -1,0 +1,20 @@
+refute-p2v12 중간 메모(2026-10-07 · 계획 밖 렌즈)
+
+A. 결정 1 예약 술어 「오늘 T의 사슬이 끝나기 전」 — v11 계획 밖 6이 실키 문에서 깬 것과 같은 술어가 예산 상한에 남음
+   - targetDateFor(PipelineScheduler→DailyUpdateJob:171-178): 토·일·월의 T = 금 · 금 T 사슬은 월 13:30 → 토·일 내내 「안 끝남」
+   - 주말 운영 MANUAL DART 잡 실재(q01): governance-load 16회(대상 6,538) · company-profile 6 · FSR 7 · corporate-action 7 · FR 3
+   - 앱이 내린 평일(관문 · 노트북 꺼짐)도 「안 끝남」이 하루 종일 → 관문 bootRun이 18,000 − 950 − (강제일이면 무거운 잡 몫)으로 깎임
+   - 술어를 어느 DB에서 읽나: 사본 JVM은 DB B → 사본 드라이런의 FR·FSR SUCCESS 행이 B의 「강제일」을 끈다(refute-p2v11 q01: 사본 전용 실행 행 실재)
+     → 사본이 강제일 몫을 예약 안 하고 운영 강제일 무거운 잡을 굶긴다(v11 계획 밖 1·3과 같은 꼴: 키 단위 자원에 DB 단위 술어)
+B. 시험·liveTest JVM이 「모든 JVM 공통 기본값」 장부에 닿는다
+   - application-test.yaml에 장부 설정 없음 · TestDatabaseGuard는 주 DataSource 연결 URL의 `_test`만 본다
+   - 계획 자신의 시험(N콜 뒤 던지는 작업 → 장부 N)이 기본값이면 운영 장부에 오늘 날짜 N과 「최근 영속」 행을 쓴다 → 결정 2(A)가 사슬 DART 단계를 미룸 + 예산 차감
+   - 행 열쇠 (KST 날짜, JVM, 콜 수)에 키가 없다 — 「키 단위」인데 키 지문이 없다(빈 키·가짜 키 JVM · 키 교체)
+C. 장부 연결을 DataSource 빈으로 노출하면 주 DataSource 자동 구성이 물러난다
+   - spring-boot-jdbc 4.1.0 DataSourceConfiguration$Hikari: @ConditionalOnMissingBean(javax.sql.DataSource) (javap)
+   - 코드베이스에 자체 DataSource 빈 0 · 가드 둘은 DataSource를 형으로 주입
+D. 원시 탐침이 「뿐」이 아니다 — DART liveTest 23파일 중 19가 DartProbeSupport.get(리미터 없음)만 · 한 자리(DartProbeSupport.client/get)
+E. 결정 7 「(가) V65~」 — (가)에서 그림자 행을 걷었고 장부는 별도 DB라 (가)에 주 DB 마이그레이션이 없다 → 번호 문장 낡음 · 장부 DB 스키마 길(Flyway 둘째 인스턴스?) 미정 · deploy.sh/start.sh에 createdb 없음
+F. 근거 폴더 미추적: rebut-p2v1~7 · refute-p2v1~7 추적 0(PLAN이 14폴더 인용) · main reload-gate.md:68·100·101과 progress.md:308이 미추적 폴더(rebut-p2v5 · refute-p2v6 · rebut-p2v6 · refute12)를 인용 — /private/tmp는 재부팅에 사라진다
+G. 결정 2(B) 실례: rebut-p2v11 q02 15행 중 12가 indicator-backfill(DART 아님) · 세 발화 모두 막힌 날 2(09-07 #305 · 09-16 #520) 둘 다 indicator-backfill → 그날 ③ 시세 · ⑦ · ⑧이 안 돎 — 사용자 질문 머리는 「손 DART 잡」
+H. ③ 실패 → 재시도 ⑧ → 하루 한 통 이월: 08-31 뒤 정기 일일 갱신 26 중 실패 1(#500) — 드묾(q02)

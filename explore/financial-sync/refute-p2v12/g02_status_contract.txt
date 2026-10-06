@@ -1,0 +1,14 @@
+# ck_batch_status
+CHECK (((status)::text = ANY ((ARRAY['RUNNING'::character varying, 'SUCCESS'::character varying, 'PARTIAL_SUCCESS'::character varying, 'FAILED'::character varying, 'ABORTED'::character varying])::text[])))
+# BatchExecutionReader:246
+            BatchStatus.valueOf(rs.getString("status")),
+# frontend BATCH_STATUSES
+ */
+export const BATCH_STATUSES = [
+  'RUNNING',
+  'SUCCESS',
+  'PARTIAL_SUCCESS',
+  'FAILED',
+  'ABORTED',
+] as const
+export type BatchStatus = (typeof BATCH_STATUSES)[number]
