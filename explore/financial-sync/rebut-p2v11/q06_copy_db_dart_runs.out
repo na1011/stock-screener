@@ -1,0 +1,18 @@
+사본에만 있는 DART 가능 실행(서로 다른 행): 17
+2026-10-05 22:06:53 company-profile SUCCESS MANUAL target 2 q4v_r13a,q4v_r13b,q4v_rs1a,q4v_rs1b,q4v_rs1c,q4v_rs1d,q4v_rs1e,r15b,sc_a | 
+2026-10-05 22:07:27 initial-load SUCCESS GAP_FILL target 3 sc_c | 재무 건너뜀 (그 시장에 재무 소스가 없다)
+2026-10-05 22:07:29 governance-load SUCCESS GAP_FILL target 3 sc_c | 
+2026-10-05 22:07:36 company-profile SUCCESS MANUAL target 2 sc_c | 
+2026-10-05 22:15:31 financial-refill SUCCESS MANUAL target 3 sc_c | 연도=2018~2026 대상=3종목 신규=11 정정=34 채움=111 교정=159 이른판=0 무효화=3종목 무효화종목=BTSG,NWSA,UHAL.B
+2026-10-05 22:22:54 financial-refill SUCCESS MANUAL target 2 sc_c | 연도=2018~2026 대상=2종목 신규=0 정정=0 채움=0 교정=0 이른판=0 무효화=0종목
+2026-10-05 22:40:29 corporate-action SUCCESS MANUAL target 11 sc_c | 
+2026-10-05 22:43:04 corporate-action SUCCESS MANUAL target 11 q4v_r13a,q4v_r13b,q4v_rs1a,q4v_rs1b,q4v_rs1c,q4v_rs1d,q4v_rs1e,r15b,sc_a | 
+2026-10-05 23:21:07 financial-refill SUCCESS MANUAL target 23 q4v_r13a,q4v_r13b,q4v_rs1a,q4v_rs1b,q4v_rs1c,q4v_rs1d,q4v_rs1e,r15b,sc_a | 연도=2018~2026 대상=23종목 신규=4 정정=10 채움=37 교정=0 이른판=0 무효화=1종목 무효화종목=KOD
+2026-10-05 23:23:51 financial-refill SUCCESS MANUAL target 23 q4v_r13a,q4v_r13b,q4v_rs1a,q4v_rs1b,q4v_rs1c,q4v_rs1d,q4v_rs1e,r15b,sc_a | 연도=2018~2026 대상=23종목 신규=0 정정=0 채움=0 교정=0 이른판=2 무효화=1종목 무효화종목=PSMT
+2026-10-06 04:09:44 financial-refill SUCCESS MANUAL target 1 sc_c | 연도=2018~2026 대상=1종목 신규=0 정정=0 채움=0 교정=0 이른판=0 무효화=0종목
+2026-10-06 04:09:49 financial-refill SUCCESS MANUAL target 1 sc_c | 연도=2018~2026 대상=1종목 신규=0 정정=0 채움=0 교정=0 이른판=0 무효화=0종목
+2026-10-06 04:09:53 full-statement-refill SUCCESS MANUAL target 1 sc_c | 보고서=[FY, Q1, Q2, Q3] 연도=2018~2026 요청=36건 실제콜=38 쓴보고서=42 공시없음=2 정정보류=0 교정=0
+2026-10-06 04:10:17 company-profile SUCCESS MANUAL target 2 sc_c | 
+2026-10-06 04:10:21 governance-load SUCCESS MANUAL target 1 sc_c | 
+2026-10-06 04:10:28 governance-load SUCCESS MANUAL target 1350 sc_c | 
+2026-10-06 04:52:50 full-statement-refill SUCCESS MANUAL target 350 sc_c | 보고서=[FY] 연도=2018~2026 요청=3150건 실제콜=4077 쓴보고서=2406 공시없음=744 정정보류=4 교정=0

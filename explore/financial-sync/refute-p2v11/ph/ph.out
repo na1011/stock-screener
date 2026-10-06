@@ -1,0 +1,17 @@
+pid=82334 self=true nargs=1 match=false head=PH.java
+pid=80683 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=78605 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=63390 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=42125 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=15406 self=false nargs=4 match=false head=-jar /Users/na1011/Library/Application Support/stock-screener/app.jar --pipeline.scheduler.enabled=true --sentry.environ
+pid=12549 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=91790 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=30319 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=36875 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=24681 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=92027 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=49847 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=58542 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=51144 self=false nargs=10 match=false head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-U
+pid=87372 self=false nargs=25 match=false head=--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/jav
+all=551 commandEmpty=229 java=16 argsEmpty=0 jobMatch=0

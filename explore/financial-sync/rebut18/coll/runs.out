@@ -1,0 +1,14 @@
+== s0new rc=0 · supplement.cache tickers=2 noCik=0 targets=1 calls=7 failures=0 dir=/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut18/coll/out/s0new
+   요청 수        8 · 경로별 최대 시도 2
+== s0old rc=0 · supplement.cache tickers=2 noCik=0 targets=1 calls=7 failures=0 dir=/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut18/coll/out/s0old
+   요청 수        8 · 경로별 최대 시도 2
+== s1new rc=0 · supplement.cache tickers=2 noCik=0 targets=1 calls=8 failures=0 dir=/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut18/coll/out/s1new
+   요청 수        9 · 경로별 최대 시도 2
+== s1old rc=0 · supplement.cache tickers=2 noCik=0 targets=1 calls=7 failures=0 dir=/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut18/coll/out/s1old
+   요청 수        8 · 경로별 최대 시도 2
+== s2new rc=0 · supplement.cache tickers=2 noCik=0 targets=1 calls=9 failures=1 dir=/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut18/coll/out/s2new
+       supplement.cache failed status=503 path=/Archives/edgar/data/1800/000162828026050134/abt-20260630_htm.xml MALFORMED: 받은 길이가 색인 크기 1850578와 다르다. 다음 실행이 다시 받는다. /Archives/edgar/data/1800/000162828026050134/abt-20260
+   요청 수       10 · 경로별 최대 시도 3
+== s3new rc=0 · supplement.cache tickers=2 noCik=0 targets=1 calls=8 failures=1 dir=/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut18/coll/out/s3new
+       supplement.cache failed status=503 path=/Archives/edgar/data/1800/000162828026050134/index.json TRANSIENT: HTTP 503. /Archives/edgar/data/1800/000162828026050134/index.json
+   요청 수        9 · 경로별 최대 시도 3

@@ -1,0 +1,13 @@
+ok e1 a
+== e1-a gradle rc=1
+  ReaderVersionPinTest tests 9 fail 1 err 0 skip 1
+  RED 판 범위의 소스가 지금 판에 박힌 해시와 같다 — 소스를 한 토큰이라도 바꾸면 판을 올린다 :: org.opentest4j.AssertionFailedError: [판 범위의 소스가 바뀌었다 — 리팩터여도 READER_VERSION을 올리고 두 해시를 끝에 더한다(ADR-0173)]  | expected: "883f9182385814ed3d8665a6f11e8a8527997a254ba81d2a71cd4f2cf1390dfa" |  but was: "8b5c57f6c0ae6c680e973a6b65f692e624a0b2bd5345c00586a050560074281a"
+  HASH 8b5c57f6c0ae6c680e973a6b65f692e624a0b2bd5345c00586a050560074281a
+a hash=8b5c57f6c0ae6c680e973a6b65f692e624a0b2bd5345c00586a050560074281a
+bumped to 8
+== e1-b gradle rc=0
+  ReaderVersionPinTest tests 9 fail 0 err 0 skip 1
+ok e1 c
+== e1-c gradle rc=0
+  ReaderVersionPinTest tests 9 fail 0 err 0 skip 1
+== e1 끝

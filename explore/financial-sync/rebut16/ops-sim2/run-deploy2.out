@@ -1,0 +1,58 @@
+=== E0-control · RUNNING 차례=[0 0] · TERM 무시=0 · 빌드 중 커밋=0 · 앱 자리 PID 71966
+[crons] 앱 PID 71966 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+== 빌드 ==
+[sim-gradlew] clean build
+== 앱 재기동 ==
+[crons] 앱 PID 71966 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+[stop] 앱 종료 (PID 71966).
+== 스테이징 ==
+[stage] .env에 CLOUDFLARE_TUNNEL_TOKEN이 없다(또는 자리표시자 그대로다) — 터널은 뜨지 않는다.
+[stage] sim-0.0.1.jar → /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim2/home-E0-control-71957/Library/Application Support/stock-screener/app.jar
+[sim-start] (자리표시) start.sh --app — 아무것도 띄우지 않는다
+== 터널 ==
+[sim-start] (자리표시) start.sh --tunnel — 아무것도 띄우지 않는다
+== 확인 ==
+외부: 응답 없음 — 앱은 위에서 떴으니 터널 쪽이다. /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim2/home-E0-control-71957/Library/Logs/stock-screener/tunnel.log를 본다.
+/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim2/run-deploy.sh: line 6: 71966 Terminated: 15          bash -c 'exec -a "java -jar /sim/app.jar --pipeline.scheduler.enabled=true" /bin/sleep 600'
+deploy rc=1 · 32초
+--- 뒤: 앱 자리 PID 71966 살아 있나: 아니오 · app.pid 파일: 없음
+--- 뒤: app.jar = NEW-JAR 1791283512 · .env = SIM_ONLY=1
+--- 뒤: app.jar.commit:
+    commit=2c8dc077228cb6ac5f385e6fc190cf04ef49c694
+    dirty=false
+    captured=build
+    staged_at=2026-10-06 16:00:00
+--- sim repo HEAD = 2c8dc07
+(내가 띄운 PID 71966 정리: 끝)
+=== E2-moved-during-build · RUNNING 차례=[0 0] · TERM 무시=0 · 빌드 중 커밋=1 · 앱 자리 PID 73663
+[crons] 앱 PID 73663 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+== 빌드 ==
+[sim-gradlew] 빌드 중 커밋
+[sim-gradlew] clean build
+== 앱 재기동 ==
+[crons] 앱 PID 73663 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+[stop] 앱 종료 (PID 73663).
+== 스테이징 ==
+[stage] .env에 CLOUDFLARE_TUNNEL_TOKEN이 없다(또는 자리표시자 그대로다) — 터널은 뜨지 않는다.
+[stage] 빌드 중에 작업 트리가 움직였다 — 이 jar의 커밋을 가리킬 수 없어 unknown을 남긴다.
+[stage] sim-0.0.1.jar → /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim2/home-E2-moved-during-build-71957/Library/Application Support/stock-screener/app.jar
+[sim-start] (자리표시) start.sh --app — 아무것도 띄우지 않는다
+== 터널 ==
+[sim-start] (자리표시) start.sh --tunnel — 아무것도 띄우지 않는다
+== 확인 ==
+외부: 응답 없음 — 앱은 위에서 떴으니 터널 쪽이다. /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim2/home-E2-moved-during-build-71957/Library/Logs/stock-screener/tunnel.log를 본다.
+/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim2/run-deploy.sh: line 6: 73663 Terminated: 15          bash -c 'exec -a "java -jar /sim/app.jar --pipeline.scheduler.enabled=true" /bin/sleep 600'
+deploy rc=1 · 31초
+--- 뒤: 앱 자리 PID 73663 살아 있나: 아니오 · app.pid 파일: 없음
+--- 뒤: app.jar = NEW-JAR 1791283545 · .env = SIM_ONLY=1
+--- 뒤: app.jar.commit:
+    commit=unknown
+    dirty=unknown
+    captured=build
+    staged_at=2026-10-06 16:00:00
+--- sim repo HEAD = a7ee6e7
+(내가 띄운 PID 73663 정리: 끝)

@@ -1,0 +1,38 @@
+R16 facts S01 200 calls=1 acquires=2 interruptedAfter=false -> OK reports=7
+R16 facts S02 404 calls=1 acquires=2 interruptedAfter=false -> THROW NOT_FOUND msg=HTTP 404. companyfacts FIX CIK0000000001 — <Error/>
+R16 facts S03 429 calls=1 acquires=2 interruptedAfter=false -> THROW RATE_LIMITED msg=HTTP 429. companyfacts FIX CIK0000000001 — (본문 없음)
+R16 facts S04 403 calls=1 acquires=2 interruptedAfter=false -> THROW RATE_LIMITED msg=HTTP 403. companyfacts FIX CIK0000000001 — <html/>
+R16 facts S05 400 calls=1 acquires=2 interruptedAfter=false -> THROW MALFORMED msg=HTTP 400. companyfacts FIX CIK0000000001 — (본문 없음)
+R16 facts S06 503x3 calls=3 acquires=4 interruptedAfter=false -> THROW TRANSIENT msg=HTTP 503. companyfacts FIX CIK0000000001
+R16 facts S07 503,200 calls=2 acquires=3 interruptedAfter=false -> OK reports=7
+R16 facts S08 half,200 calls=2 acquires=3 interruptedAfter=false -> OK reports=7
+R16 facts S09 half x3 calls=3 acquires=4 interruptedAfter=false -> THROW MALFORMED msg=200인데 JSON이 아니다(끊긴 전송일 수 있다). 다음 실행이 다시 받는다. companyfacts FIX CIK0000000001
+R16 facts S10 {} (no facts),200 calls=1 acquires=2 interruptedAfter=false -> THROW MALFORMED msg=200인데 facts 키가 없다. companyfacts FIX CIK0000000001 — {}
+R16 facts S11 empty,200 calls=2 acquires=3 interruptedAfter=false -> OK reports=7
+R16 facts S12 spaces,200 calls=1 acquires=2 interruptedAfter=false -> THROW MALFORMED msg=200인데 facts 키가 없다. companyfacts FIX CIK0000000001 — (본문 없음)
+R16 facts S13 html,200 calls=2 acquires=3 interruptedAfter=false -> OK reports=7
+R16 facts S14 half,503,503 calls=3 acquires=4 interruptedAfter=false -> THROW TRANSIENT msg=HTTP 503. companyfacts FIX CIK0000000001
+R16 facts S15 503,503,half calls=3 acquires=4 interruptedAfter=false -> THROW MALFORMED msg=200인데 JSON이 아니다(끊긴 전송일 수 있다). 다음 실행이 다시 받는다. companyfacts FIX CIK0000000001
+R16 facts S16 quota3 503,503,200 calls=2 acquires=3 interruptedAfter=false -> THROW RATE_LIMITED msg=일일 호출 한도를 소진했다(사용 3회). companyfacts FIX CIK0000000001
+R16 facts S17 interrupt@cf1 (fake limiter) calls=1 acquires=2 interruptedAfter=true -> OK reports=7
+R16 facts S18 reset,200 calls=2 acquires=3 interruptedAfter=false -> OK reports=7
+R16 facts S19 cut-mid-body(fixed length),200 calls=2 acquires=3 interruptedAfter=false -> OK reports=7
+R16 facts S20 404 x1 only calls=1 acquires=2 interruptedAfter=false -> THROW NOT_FOUND msg=HTTP 404. companyfacts FIX CIK0000000001 — <Error/>
+R16 json index J01 200 calls=1 acquires=1 -> OK items=1
+R16 json index J02 404,200 calls=1 acquires=1 -> THROW NOT_FOUND
+R16 json index J03 429,200 calls=1 acquires=1 -> THROW RATE_LIMITED
+R16 json index J04 403,200 calls=1 acquires=1 -> THROW RATE_LIMITED
+R16 json index J05 half,200 calls=2 acquires=2 -> OK items=1
+R16 json index J06 half x3 calls=3 acquires=3 -> THROW MALFORMED
+R16 json index J07 spaces,200 calls=1 acquires=1 -> THROW MALFORMED
+R16 json index J08 {} ,200 calls=1 acquires=1 -> THROW MALFORMED
+R16 json submissions J01 200 calls=1 acquires=1 -> OK filings=0
+R16 json submissions J02 404,200 calls=1 acquires=1 -> THROW NOT_FOUND
+R16 json submissions J03 429,200 calls=1 acquires=1 -> THROW RATE_LIMITED
+R16 json submissions J04 403,200 calls=1 acquires=1 -> THROW RATE_LIMITED
+R16 json submissions J05 half,200 calls=2 acquires=2 -> OK filings=0
+R16 json submissions J06 half x3 calls=3 acquires=3 -> THROW MALFORMED
+R16 json submissions J07 spaces,200 calls=1 acquires=1 -> THROW MALFORMED
+R16 json submissions J08 {} ,200 calls=1 acquires=1 -> THROW MALFORMED
+R16 facts S21 interrupt during real-limiter sleep calls=0 acquires=1 interruptedAfter=true -> THROW TRANSIENT msg=호출 대기 중 인터럽트됐다. companyfacts FIX CIK0000000001 cause=InterruptedException
+R16 facts S21 elapsedMs=403

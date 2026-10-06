@@ -1,0 +1,15 @@
+     job_name     |       st_kst        | dow | late_min 
+------------------+---------------------+-----+----------
+ daily-update     | 2026-08-10 20:00:00 |   1 |      390
+ daily-update     | 2026-08-19 13:37:40 |   3 |        8
+ daily-update     | 2026-10-06 15:24:52 |   2 |      115
+ corporate-action | 2026-10-06 15:54:53 |   2 |      115
+(4개 행)
+
+      job_name      | total 
+--------------------+-------
+ daily-update       |    38
+ universe-rebalance |     6
+ corporate-action   |    24
+(3개 행)
+

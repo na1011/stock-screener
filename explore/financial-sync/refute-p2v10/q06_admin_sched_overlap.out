@@ -1,0 +1,9 @@
+ admin_id | admin_job | a_st | a_fin | sched_id | sched_job | triggered_by | s_st | s_fin 
+----------+-----------+------+-------+----------+-----------+--------------+------+-------
+(0개 행)
+
+ admin_runs | admin_daily_update 
+------------+--------------------
+         11 |                  7
+(1개 행)
+

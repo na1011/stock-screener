@@ -1,0 +1,67 @@
+=== E0-control · RUNNING 차례=[0 0] · TERM 무시=0 · 빌드 중 커밋=0 · 앱 자리 PID 68414
+[crons] 앱 PID 68414 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+== 빌드 ==
+[sim-gradlew] clean build
+== 앱 재기동 ==
+[crons] 앱 PID 68414 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+[stop] 앱 종료 (PID 68414).
+[stop] :8080을 아직 무언가 잡고 있다:
+COMMAND   PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+java    15406 na1011   28u  IPv6 0x8bb7aa238f421366      0t0  TCP *:8080 (LISTEN)
+/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim2/run-deploy.sh: line 6: 68414 Terminated: 15          bash -c 'exec -a "java -jar /sim/app.jar --pipeline.scheduler.enabled=true" /bin/sleep 600'
+deploy rc=1 · 3초
+--- 뒤: 앱 자리 PID 68414 살아 있나: 아니오 · app.pid 파일: 없음
+--- 뒤: app.jar = OLD-JAR · .env = OLD_ENV=1
+--- 뒤: app.jar.commit:
+    commit=OLDCOMMIT0000
+    dirty=false
+    captured=build
+    staged_at=2026-10-05 15:43:00
+--- sim repo HEAD = 9ad6bbe
+(내가 띄운 PID 68414 정리: 끝)
+=== E2-moved-during-build · RUNNING 차례=[0 0] · TERM 무시=0 · 빌드 중 커밋=1 · 앱 자리 PID 69024
+[crons] 앱 PID 69024 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+== 빌드 ==
+[sim-gradlew] 빌드 중 커밋
+[sim-gradlew] clean build
+== 앱 재기동 ==
+[crons] 앱 PID 69024 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+[stop] 앱 종료 (PID 69024).
+[stop] :8080을 아직 무언가 잡고 있다:
+COMMAND   PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+java    15406 na1011   28u  IPv6 0x8bb7aa238f421366      0t0  TCP *:8080 (LISTEN)
+/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim2/run-deploy.sh: line 6: 69024 Terminated: 15          bash -c 'exec -a "java -jar /sim/app.jar --pipeline.scheduler.enabled=true" /bin/sleep 600'
+deploy rc=1 · 1초
+--- 뒤: 앱 자리 PID 69024 살아 있나: 아니오 · app.pid 파일: 없음
+--- 뒤: app.jar = OLD-JAR · .env = OLD_ENV=1
+--- 뒤: app.jar.commit:
+    commit=OLDCOMMIT0000
+    dirty=false
+    captured=build
+    staged_at=2026-10-05 15:43:00
+--- sim repo HEAD = 2c8dc07
+(내가 띄운 PID 69024 정리: 끝)
+=== E1-stop-times-out · RUNNING 차례=[0 0] · TERM 무시=1 · 빌드 중 커밋=0 · 앱 자리 PID 69643
+[crons] 앱 PID 69643 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+== 빌드 ==
+[sim-gradlew] clean build
+== 앱 재기동 ==
+[crons] 앱 PID 69643 · 뜬 시각 2026-10-05 15:43:37 · 지연 L=0초(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1290분 뒤) — 그 전에 다시 올린다.
+[stop] 앱이 45초 안에 종료되지 않았다 (PID 69643).
+       원인은 /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim2/home-E1-stop-times-out-68407/Library/Logs/stock-screener/stdout.log에 있다. 강제로 끄려면: kill -9 69643
+deploy rc=1 · 47초
+--- 뒤: 앱 자리 PID 69643 살아 있나: 예 · app.pid 파일: 69643
+--- 뒤: app.jar = OLD-JAR · .env = OLD_ENV=1
+--- 뒤: app.jar.commit:
+    commit=OLDCOMMIT0000
+    dirty=false
+    captured=build
+    staged_at=2026-10-05 15:43:00
+--- sim repo HEAD = 2c8dc07
+(내가 띄운 PID 69643 정리: 끝)

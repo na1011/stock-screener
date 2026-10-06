@@ -1,0 +1,19 @@
+ id  |         job_name          | triggered_by | status  | target_date |         kst         | target_count | failure_count |                              note                               
+-----+---------------------------+--------------+---------+-------------+---------------------+--------------+---------------+-----------------------------------------------------------------
+ 260 | indicator-backfill        | SCHEDULER    | SUCCESS | 2026-09-03  | 2026-09-03 14:11:27 |            1 |             0 | 
+ 271 | indicator-backfill        | SCHEDULER    | SUCCESS | 2026-09-04  | 2026-09-04 14:11:25 |            2 |             0 | 
+ 689 | indicator-backfill        | SCHEDULER    | SUCCESS | 2026-09-28  | 2026-09-28 14:12:28 |            1 |             0 | 
+ 718 | indicator-origin-rewrite  | SCHEDULER    | SUCCESS | 2026-10-02  | 2026-10-05 14:19:58 |         1683 |             0 | 원본층 1683종목 · 쓴 1054 · 지운 0
+ 719 | indicator-derived-rebuild | SCHEDULER    | SUCCESS | 2026-10-02  | 2026-10-05 14:22:27 |          272 |             0 | 파생층 272거래일 · 쓴 1766216 · 지운 0 · 고아 정리 0 · 색인 765
+ 745 | indicator-origin-rewrite  | SCHEDULER    | SUCCESS | 2026-10-05  | 2026-10-06 16:14:52 |         1683 |             0 | 원본층 1683종목 · 쓴 0 · 지운 0
+ 746 | indicator-derived-rebuild | SCHEDULER    | SUCCESS | 2026-10-05  | 2026-10-06 16:17:27 |          272 |             0 | 파생층 272거래일 · 쓴 0 · 지운 0 · 고아 정리 0 · 색인 765
+(7개 행)
+
+     status      | count 
+-----------------+-------
+ FAILED          |     1
+ ABORTED         |    25
+ PARTIAL_SUCCESS |     3
+ SUCCESS         |   217
+(4개 행)
+

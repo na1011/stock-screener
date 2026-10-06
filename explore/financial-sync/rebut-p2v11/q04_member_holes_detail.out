@@ -1,0 +1,7 @@
+SET
+ticker | trade_date | has_bar | last_adj | adj_after
+BTSGU | 2026-10-05 | f | 2026-10-02 | 0
+QRVO | 2026-10-05 | f | 2026-10-02 | 0
+TAP.A | 2026-10-05 | f | 2026-10-02 | 0
+WSO.B | 2026-10-05 | f | 2026-10-02 | 0
+(4개 행)

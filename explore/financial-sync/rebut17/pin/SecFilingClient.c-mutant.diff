@@ -1,0 +1,5 @@
+232,233c232
+<         return base.endsWith("_cal") || base.endsWith("_def") || base.endsWith("_lab")
+<                 || base.endsWith("_pre") || base.endsWith("_ref");
+---
+>         return SecTickerCikCache.LINKBASE_STEM.test(base);

@@ -1,0 +1,4 @@
+R16PM abc-20180331_LAB.xml candidate=true artifact=false
+R16PM abc-20180331_lab.xml candidate=false artifact=true
+R16PM abc-20180331.xml candidate=true artifact=false
+R16PM folder [abc-20180331.xml, abc-20180331_LAB.xml] -> throws UnreadableFiling

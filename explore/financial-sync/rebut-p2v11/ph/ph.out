@@ -1,0 +1,18 @@
+전체 568 · command 없음 246 · arguments 없음 251 · user 없음 0
+내 사용자(na1011) 322 · 그중 command 없음 0 · arguments 없음 5
+java(자기 제외) 15 · arguments 없음 0 · --job=/bootstrap 매치 0
+  80683 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  78605 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  63390 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  42125 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  15406 user=na1011 hit=false argsLen=4 head=-jar /Users/na1011/Library/Application Support/stock-screener/app.jar --pipeline.scheduler.enabled=true --sentry.environment=production
+  12549 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  91790 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  30319 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  36875 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  24681 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  92027 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  49847 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  58542 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  51144 user=na1011 hit=false argsLen=10 head=--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED @/Users/na101
+  87372 user=na1011 hit=false argsLen=25 head=--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED -

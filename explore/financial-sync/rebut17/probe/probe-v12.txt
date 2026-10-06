@@ -1,0 +1,21 @@
+split-interleaved ticker1 targets=2 failed=2 pauses=[2000, 10000, 2000, 10000] waited_ms=24000
+split-interleaved ticker2 targets=2 failed=2 pauses=[2000, 10000, 2000, 10000] waited_ms=24000
+split-interleaved ticker3 targets=2 failed=2 pauses=[2000, 10000, 2000, 10000] waited_ms=24000
+split-interleaved ticker4 targets=2 failed=2 pauses=[2000, 10000, 2000, 10000] waited_ms=24000
+split-interleaved ticker5 targets=2 failed=2 pauses=[2000, 10000, 2000, 10000] waited_ms=24000
+split-interleaved TOTAL waited_ms=120000 files_requests=30
+split-interleaved NEXT_RUN_FIRST_FAIL pauses=[2000, 10000]
+split-interleaved ticker1 targets=4 failed=4 pauses=[2000, 10000, 2000, 10000, 2000, 10000] waited_ms=36000
+split-interleaved ticker2 targets=4 failed=4 pauses=[2000, 10000, 2000, 10000, 2000, 10000] waited_ms=36000
+split-interleaved ticker3 targets=4 failed=4 pauses=[2000, 10000, 2000, 10000, 2000, 10000] waited_ms=36000
+split-interleaved ticker4 targets=4 failed=4 pauses=[2000, 10000, 2000, 10000, 2000, 10000] waited_ms=36000
+split-interleaved ticker5 targets=4 failed=4 pauses=[2000, 10000, 2000, 10000, 2000, 10000] waited_ms=36000
+split-interleaved TOTAL waited_ms=180000 files_requests=60
+split-interleaved NEXT_RUN_FIRST_FAIL pauses=[]
+control-files-only ticker1 targets=2 failed=2 pauses=[2000, 10000, 2000, 10000] waited_ms=24000
+control-files-only ticker2 targets=2 failed=2 pauses=[2000, 10000] waited_ms=12000
+control-files-only ticker3 targets=2 failed=2 pauses=[] waited_ms=0
+control-files-only ticker4 targets=2 failed=2 pauses=[] waited_ms=0
+control-files-only ticker5 targets=2 failed=2 pauses=[] waited_ms=0
+control-files-only TOTAL waited_ms=36000 files_requests=30
+control-files-only NEXT_RUN_FIRST_FAIL pauses=[]

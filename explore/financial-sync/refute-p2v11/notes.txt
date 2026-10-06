@@ -1,0 +1,81 @@
+refute-p2v11 — 2부 계획 v11 「계획 밖」 렌즈 메모(2026-10-06 밤 · 0콜 · 운영 SELECT만)
+
+A. [폴백 근거의 이식] 결정 3의 장부는 「JVM이 붙은 DB」 단위인데 한도는 「키」 단위다
+  - 결정 3: 리미터가 (KST 날짜, JVM 식별자)별 콜 수를 영속 · hasDailyQuota = 이 JVM + 다른 JVM들의 영속 수.
+  - 결정 4: 「기록되는 손 잡」은 평일 오전도 열림(콜이 3의 DB에 남는다) · 사슬 뒤는 「기록 안 되는 실키(에이전트 탐침의 원시 HTTP)」만.
+  - 사실(코드): ops/apply-window/env.sh boot() — 사본 bootRun은 DB를 환경변수 DB_URL·BOOTSTRAP_DB로만 받는다 → 그 JVM의 장부는 사본 DB에 쌓인다.
+    운영 앱은 그 콜을 못 본다. CLAUDE.md는 드라이런을 사본에서 돌라고 한다(MUST).
+  - 사실(코드): liveTest 48파일 중 SpringBootTest 0 · DART 어댑터를 쓰는 6파일이 new TokenBucketRateLimiter("dart", 300, 0)(일일 0 = 무제한)을 직접 만든다
+    → DB 없음 → 기록 0. DartListProbeLiveTest는 RestClient 원시 HTTP.
+  - 사실(DB): 국내 FSR 전량 = #647 실제콜 8,832 + #648 7,012 = 15,844(09-21 MANUAL) — PLAN의 RF2(사본 a에서 0부+1부 jar의 정기 인자 손 FR·FSR)가 그 꼴.
+  - 사실(코드): DataSourceHttpConfig javadoc 「같은 계정이면 쿼터도 같기 때문이다」(alpacaRateLimiter) — 코드베이스가 이미 쿼터를 계정·키 단위로 본다.
+  - 결과: 평일 오전 사본 FSR 드라이런 15,844 + 그날 앱 사슬(장부엔 0으로 보임 → 18,000까지) = 키 20,000 초과 → 020 → RATE_LIMITED.
+  - RF12(v11)는 「두 JVM(앱 · bootRun 사본)이 같은 날 DART를 쓰는 사본에서」 — 두 JVM이 같은 사본을 보면 실제 위상(앱=운영 DB · 드라이런=사본 DB)을 복제 못 한다 → 초록이 도달 증거가 아니다.
+  - 처방: 장부를 키 단위 한 자리로(DB 이름과 무관한 고정 위치 — 별도 작은 DB 또는 파일+잠금 · 사본·시험 JVM도 거기 씀 · liveTest의 리미터 생성도 그 장부를 거치게) ·
+    결정 4의 「기록 안 되는」 분류를 「운영 장부에 안 닿는 모든 DART 콜」로(사본 bootRun · liveTest · 원시 HTTP) · RF12를 앱=DB A · bootRun=DB B로.
+
+B. [소비자를 안 셈 · 중복 구현] 결정 2의 ProcessHandle 술어는 DB를 모른다
+  - 사본 bootRun과 운영 bootRun의 argv가 같다(boot()의 두 갈래 모두 --args="--spring.profiles.active=bootstrap $*" · DB는 환경변수) → ProcessHandle(=훅 stray_load_pids와 같은 술어)이 사본 드라이런을 「적재 JVM」으로 읽는다
+    → 운영 사슬 전체가 다음 발화로 · 17:00에도 살아 있으면 단계 미룸 → 그 시장 FR·FSR 안 돎 · 재무 항목 워터마크 멈춤. 사본 드라이런이 운영 값을 움직인다.
+  - ph/PH.java·ph.out(이 기계 · 같은 사용자 JVM 16개 argv 전부 읽힘 · 빈 arguments 0) — 「판정 불가」 갈래는 이 기계에서 안 생김(살아 있는 갈래만 문제).
+  - 이미 있는 DB 단위 생존 판정: BatchExecutionReader.liveJobNames()(progress_at 5분 · 유령 배제 · MembershipGapFiller가 씀) — 결정 2는 셋째 구현(셸 훅 · liveJobNames · 새 Java ProcessHandle).
+    훅의 잡 이름 목록은 BootstrapRunner switch와 check-doc-staleness §5c 거울로만 묶여 있다 — Java 복제는 그 거울 밖.
+  - q02: 최근 60일 평일 운영 MANUAL이 13:30을 덮은 날 6(08-14·08-21·09-07·09-11·09-15·09-16) · 17:00을 덮은 날 3(08-31·09-07·09-16) · 09-17 뒤 0(습관) — 사본 실행은 사본마다 다시 떠 이력이 없어 못 셈.
+
+C. [순서 · 안 본 하류] (나) → (다) 순서가 옛 워치리스트에 새 null을 먹인다
+  - 옛 러너(main WatchlistAlertRunner:209-213): 값 없는 조건은 불충족으로 접힘 → recordEvaluation(false) → 값이 돌아오면 「새로 충족」 재알림(그 클래스 javadoc이 스스로 경고).
+  - (나)가 들이는 새 null: v6 결정 3(a) 「FSR 미반영」 표지 → 계산기 11종 null · v11 결정 6 끝 상태 넓은 미표시 — 둘 다 진단 N=5 시도일 뒤.
+  - v8 결정 6 「끝 상태 … 보류가 풀린다」는 보류와 짝으로 설계됐다 — 묶음을 가르면 짝이 깨진다.
+  - 운영 워치리스트: 항목 2 · 알림 항목 1(005930 · 「저평가 가치주」 · last_satisfied f) — 크기는 셀 수로 · 기제는 사용자 수와 무관.
+  - 처방: (다)의 「새 null = 보류(기록 없음)」를 (나)와 같은 jar에 · 아니면 ①의 표지·끝 상태 전이를 (다) 배포까지 끈다(설정 뒤) · 아니면 「(다) ≤ (나) + 4 시도일」을 문으로.
+
+D. 마이그레이션 번호·순서
+  - Flyway outOfOrder 기본 false(application.yaml:86-88에 설정 없음) · 0부 V63 · 1부 V64는 보류 브랜치 · PLAN v4 결정 1·10과 RF0은 2부 공시 표를 「V65」로 부른다.
+  - v11 (가)가 장부·완료 표지·워터마크 칸 마이그레이션을 먼저 내면 (나)의 「V65」는 V66+ · (가)가 1부보다 먼저 배포되면 1부 V64가 ignored → 기동 시 validate 실패.
+  - 시험 프로파일 V900(progress:56)이 future 무시를 막는다 — 2부 시험도 전용 시험 DB.
+
+E. [소비자를 안 셈] (가)의 「그림자 기록(쓰기만 · 아무도 안 읽음)」
+  - 사슬 행은 batch_execution 행이다 — 읽는 것: 관리 화면 요약(잡별 최근 한 건 · BatchExecutionReader) · ops/lib.sh 종료 경고(RUNNING 나열) · crons-done RUNNING 셈 · BatchExecutionSweeper · 0부 V63 이후 scope 필수(Objects.requireNonNull) · JobFreshnessPolicy(BUDGETS에 없으면 안 봄).
+  - (가)에는 사슬이 없다 — 무엇이 weekday-chain 행을 쓰는지 정의가 없다. 옛 13:30 메서드가 쓰면 SUCCESS의 뜻이 (나)의 문과 다르다(14:00~15:30 크론 미포함).
+  - 워터마크 씨값 「배포 때」: (가) 때 심고 (다) 때 읽으면, 그 사이 옛 러너가 판정한 D들을 (다)의 첫 ⑧이 같은 last_satisfied 위에서 다시 판정 → 거짓 엣지. 씨값은 (다) 전환 순간의 옛 러너 마지막 asOf여야 한다.
+
+F. 결정 5 「한 실행에 사용자당 한 통」 대 ADR-0026 §결정 「사용자당 하루 한 통」
+  - main notify()가 이미 실행당 사용자 한 통 · 키 watchlist:%d:<asOf들 '/' 이음> · AlertSuppressor 10분.
+  - 사슬 ⑧ 외에 관리자 일일 갱신(AdminJobLauncher:90)·retryFailures(:262)도 ⑧을 부른다(v10 결정 4 · v11 유지) → 같은 날 둘째 통 가능(사슬에서 보류였던 시장이 관리자 경로에서 풀릴 때).
+  - 따라잡기 여러 D에서 같은 항목이 F→T 두 번이면 한 통에 같은 종목 두 줄 · 「관심종목 %d개」가 항목 수가 아니라 엣지 수.
+  - 화면 소비자: watchlist.ts 네 상태(Record<AlertState> — 컴파일이 다섯째를 강제) · WatchlistResponse.java · WatchlistApiTest · watchlist.spec.ts · WatchButton · WatchlistView — PLAN은 watchlist.ts:48-61만.
+
+G. [안 본 하류] 장부 쓰기가 종목 트랜잭션과 함께 롤백된다 — 「간격 = 오차 상한」은 거짓
+  - StockTaskRunner.runInNewTransaction(:31) = REQUIRES_NEW · rollbackFor = Exception · FR 종목 몸통(FinancialRefillJob:167-187 → financialCollector.collectDetailed = DART 콜)이 그 안.
+  - 리미터의 acquire()는 그 스레드·그 트랜잭션 안에서 불린다 → 「100콜마다 영속」을 트랜잭션에 묶인 JdbcTemplate로 쓰면 그 종목이 실패할 때 같이 롤백.
+  - 2부 국내 짝은 설계상 롤백이 정상 경로(v4 결정 5 — FSR이 못 소비하면 짝 81콜 전부 롤백 · 013 · 반영 대기) → 피크에 체계적 과소 계수 · 시장 통째 RATE_LIMITED(종목마다 실패)일 때 가장 크다.
+  - 처방: 장부 쓰기를 자기 트랜잭션(REQUIRES_NEW 또는 별도 연결·자동 커밋)으로 · synchronized acquire 밖에서 · 쓰기 실패 정책을 글자로(조용히 삼키지 않음) · 시험: N콜 뒤 던지는 종목 작업 → 장부에 N.
+
+H. 결정 4 실키 문 「그날 T의 사슬 행이 끝난 뒤」가 주말을 통째로 닫는다
+  - DailyUpdateJob.targetDateFor(:171-178): 토·일·월 → 금. 금요일 T의 사슬은 월요일 13:30에야 돈다(주말 무동작 · 결정 1).
+  - → 토 00:00부터 월 사슬 끝까지 「T(=금)의 사슬 행」이 없어 기록 안 되는 실키(원시 HTTP·liveTest)가 막힌다. 그 날들엔 앱이 DART를 거의 안 쓰고(토 20:00 리밸런싱 꼬리 정도) 다른 KST 날짜라 한도도 따로다.
+  - 처방: 문을 「오늘(KST 실행일) 앱이 DART를 쓸 사슬 발화가 남았나」로 — 주말·사슬 끝난 평일은 열림 · 앱이 내려 있는 평일은 「그날 늦게 뜰 수 있다」를 어떻게 답할지 글자로.
+
+I. [이번 세션 회귀] 2부 v9~v11의 근거 폴더가 커밋 안 됨 · 정본 위치 이름이 브랜치가 아니다
+  - wt-explore(브랜치 explore/s-vintage-coherence)에서 git status: explore/financial-sync 아래 미추적 45폴더 — refute-p2v9·rebut-p2v9·refute-p2v10·rebut-p2v10 포함(추적 0파일).
+    refute-p2v8·rebut-p2v8은 07ff41f4로 커밋됐다 → v9부터 끊김.
+  - v10 결정 9(v11 유지): 「refute-p2v9/g01·g03의 209줄을 구현 첫 단계의 재고로 쓴다」 — 구현의 소비자 재고가 세션 스크래치패드의 미추적 파일에만 있다.
+    RF9 「시뮬레이터는 시험으로 옮긴다」의 시뮬레이터(rebut-p2v10/cronsim · refute-p2v10/cronsim)도 미추적.
+  - progress:146 「설계는 브랜치 `explore/financial-sync/PLAN.md`」 · reload-gate:56 「설계의 정본은 브랜치 `explore/financial-sync/PLAN.md`」 — 그런 브랜치는 없다(로컬·원격 explore 헤드: price-holes · s-vintage-coherence).
+    파일은 explore/s-vintage-coherence 브랜치의 경로다. progress:56은 「계획 … v6」(같은 줄 뒤에 v11)로 판이 섞여 있다.
+  - 처방: 근거 폴더(최소 v9~v11 · g01·g03 · cronsim)를 탐색 브랜치에 커밋·푸시 · progress·reload-gate에 「브랜치 explore/s-vintage-coherence의 explore/financial-sync/PLAN.md」로.
+
+J. [소비자를 안 셈] 화면 보류 표시의 소비자
+  - satisfied를 읽는 프런트: lib/watchlist.ts(네 상태 · Record 강제) · stores/watchlist.ts:28 satisfiedCount → components/AppRail.vue:157 배지 · WatchButton.vue · WatchlistView.vue · api/types.ts · lib/watchlist.spec.ts
+    · 서버 WatchlistResponse.java · WatchlistApiTest. PLAN은 watchlist.ts:48-61만.
+  - 보류 항목의 last_satisfied가 true로 남으면 목록은 「보류」인데 레일 배지는 「충족」으로 센다 — 같은 사실이 두 곳에 갈려 그려진다.
+
+선다(쟀다)
+  - batch_execution.job_name은 varchar(60) · CHECK 없음 → 새 잡 이름 weekday-chain에 마이그레이션 불요(\d batch_execution).
+  - ops/dump-db.sh는 public 표 수 = TOC 표 데이터 수로 검증 → 새 표가 자동으로 덤프·검증에 든다(부분 복원 안내 넷은 그 phase 표만).
+  - 시험 픽스처에 표 목록(TRUNCATE) 없음 — 새 표가 시험 정리 목록을 깨지 않는다.
+  - ProcessHandle은 이 기계에서 같은 사용자 JVM argv를 전부 읽음(ph.out · 16/16) — 결정 2의 「판정 불가면 산 것」 갈래는 막힘을 안 만든다.
+  - main notify()는 이미 「실행당 사용자 요약 한 통」 — v11 결정 5는 v10의 (사용자, 시장, D) 키를 걷고 기존 꼴로 돌아왔다(남은 틈은 F).
+  - 운영 MANUAL이 평일 13:30을 덮은 날 09-17 뒤 0(q02) — 결정 2의 미룸은 규칙 준수 아래 운영 손 잡으로는 거의 안 걸리고, 걸리는 쪽은 사본 드라이런(B).
+  - 「2부 사슬 형태 — 사용자 결정 다시 받음」 절은 사용자가 고른 것과 설명을 갈라 적었다 · v11 결정 4는 그 ③(평일 오전 손 작업을 사슬 뒤로 미는 안을 걷음)과 맞다.
+  - progress:56·146 · reload-gate:56·65가 설계를 옮겨 적지 않고 PLAN만 가리킨다(다만 위치 이름은 I).

@@ -1,0 +1,12 @@
+SET
+market_code | exited_now_out | days_after_exit | adj_close_rows_after_exit
+KOSDAQ | 21 | 346 | 167
+KOSPI | 7 | 100 | 31
+US | 73 | 1155 | 210
+(3개 행)
+?column? | count
+watchlist items on non-member stocks | 0
+(1개 행)
+?column? | count | alerting
+watchlist items total | 2 | 1
+(1개 행)

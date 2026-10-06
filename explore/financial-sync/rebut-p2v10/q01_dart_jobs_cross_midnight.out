@@ -1,0 +1,27 @@
+SET
+id | job_name | triggered_by | status | started_at | finished_at
+2 | initial-load | MANUAL | ABORTED | 2026-08-06 19:32:53 | 2026-08-09 23:47:46
+3 | initial-load | MANUAL | ABORTED | 2026-08-06 19:39:28 | 2026-08-09 23:47:46
+7 | initial-load | MANUAL | ABORTED | 2026-08-06 20:20:58 | 2026-08-09 23:47:46
+(3개 행)
+?column? | count
+total DART-capable runs since 2026-08-01 | 296
+(1개 행)
+job_name
+adjustment-rebuild
+company-profile
+corporate-action
+corporate-action-judge
+daily-update
+financial-refill
+full-statement-refill
+governance-derive
+governance-load
+indicator-backfill
+indicator-derived-rebuild
+indicator-origin-rewrite
+initial-load
+market-calendar
+market-index
+universe-rebalance
+(16개 행)

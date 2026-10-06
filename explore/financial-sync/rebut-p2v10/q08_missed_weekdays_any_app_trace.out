@@ -1,0 +1,7 @@
+SET
+dd | app_rows | manual_rows
+2026-08-11 | daily-update#44@14:16/ADMIN | 10
+2026-08-17 |  | 0
+2026-08-21 | indicator-backfill#102@02:05/ADMIN indicator-backfill#103@02:09/ADMIN daily-update#108@13:56/ADMIN | 6
+2026-09-16 |  | 11
+(4개 행)

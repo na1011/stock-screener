@@ -1,0 +1,29 @@
+가짜 앱 PID 29865 · 홈 /private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut16/ops-sim/home-gf-29859 · 지금 2026-10-06 19:36:52
+--- 대조: RUNNING 표
+=== K0 RUNNING 없음
+[crons] 앱 PID 29865 · 뜬 시각 2026-10-06 19:36:51 · 지연 L=못 읽음(jcmd)(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1073분 뒤) — 그 전에 다시 올린다.
+rc=0
+=== K1 MANUAL 유령(id 95313)
+[crons] 앱 PID 29865 · 뜬 시각 2026-10-06 19:36:51 · 지연 L=못 읽음(jcmd)(참고)
+[crons] 내려도 된다. 다음 명목 발화: 2026-10-07 13:30:00(1073분 뒤) — 그 전에 다시 올린다.
+rc=0
+=== K2 bootstrap 꼬리 GAP_FILL 유령(id 95314 · 10-03 703→704 꼴)
+[crons] 앱 PID 29865 · 뜬 시각 2026-10-06 19:36:51 · 지연 L=못 읽음(jcmd)(참고)
+[crons] 앱이 돌리는 배치가 1개다 — 아직 안 된다.
+rc=1
+=== K3 stop.sh --app(가짜 홈)
+[stop] 도는 배치가 있다 (DB stock_screener_r16a_test) — 지금 끄면 중단된다:
+         initial-load [GAP_FILL · 10-03 19:37 시작 · 3 days 00:00:05 경과]
+         indicator-backfill [MANUAL · 10-04 19:36 시작 · 2 days 00:00:11 경과] — 적재 JVM의 것. 도는 적재가 없으면 유령이다.
+[crons] 앱 PID 29865 · 뜬 시각 2026-10-06 19:36:51 · 지연 L=못 읽음(jcmd)(참고)
+[crons] 앱이 돌리는 배치가 1개다 — 아직 안 된다.
+[stop] 앱 크론이 아직 남았다(위 목록) — 앱을 내리지 않는다.
+       기다렸다 다시 친다. 사람이 판정을 넘기려면: ops/stop.sh --app --force
+stop rc=1 · 가짜 앱: 살아 있음
+=== K4 어느 스윕이 이 행을 닫나(술어를 SELECT로 · BatchExecutionSweeper 글자)
+웹(SCHEDULER·ADMIN + GAP_FILL∧indicator-origin-rewrite): 0
+bootstrap(MANUAL): 0
+=== K5 이 JVM 뒤에 시작된 행만 세는 대안 술어(started_at >= 앱 기동) — 같은 상태
+0
+가짜 앱 끔: 끝

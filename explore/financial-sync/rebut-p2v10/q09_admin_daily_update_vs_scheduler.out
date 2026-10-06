@@ -1,0 +1,10 @@
+SET
+id | job_name | status | st | fin | target_date | retried_from_id | overlapping_scheduler
+14 | daily-update | PARTIAL_SUCCESS | 2026-08-08 21:46:17 | 2026-08-08 21:47:41 | 2026-08-07 |  | 
+16 | daily-update | SUCCESS | 2026-08-08 21:55:17 | 2026-08-08 21:55:17 | 2026-08-07 | 14 | 
+17 | daily-update | SUCCESS | 2026-08-08 21:58:33 | 2026-08-08 21:59:48 | 2026-08-06 |  | 
+34 | daily-update | SUCCESS | 2026-08-10 20:38:34 | 2026-08-10 20:42:25 | 2026-08-07 |  | 
+44 | daily-update | SUCCESS | 2026-08-11 14:16:49 | 2026-08-11 14:19:42 | 2026-08-10 |  | 
+108 | daily-update | SUCCESS | 2026-08-21 13:56:04 | 2026-08-21 13:58:05 | 2026-08-20 |  | 
+155 | daily-update | SUCCESS | 2026-08-28 15:21:36 | 2026-08-28 15:24:40 | 2026-08-27 |  | 
+(7개 행)

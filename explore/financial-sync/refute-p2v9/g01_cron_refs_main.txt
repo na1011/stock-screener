@@ -1,0 +1,209 @@
+main:.claude/rules/data-pipeline.md:182:**앱이 떠 있으면 평일 13:30·14:00·14:15·14:18·14:20·15:30에 배치가 저절로 돈다**(ADR-0116 · ADR-0166). **JVM을 건너는 배타는 없다** — 손 쓰기 잡은 그 창(13:30~15:40) 밖에서 돈다(실행 305가 13:30과 교착했다). 두 시간짜리
+main:.claude/rules/data-pipeline.md:188:| 14:00 기업행위 사슬 | **대개 안전** | `adjustment-rebuild`가 계수를 안 바꾸면 2초에 끝나고 화해가 안 붙는다. 무효화가 있으면 **사슬 안에서 곧바로 화해한다**(① 무효화 종목 · ② 창 전체 파생층 — 상한 없음) |
+main:.claude/rules/data-pipeline.md:189:| 14:15 무거운 잡 | **표가 달라 안전** | 요일별 하나(화 `governance-load` · 수 `full-statement-refill` · 목 `financial-refill`). **목요일만 재무를 건드린다** |
+main:.claude/rules/data-pipeline.md:190:| 14:18 화해 입력 유도 | 표가 달라 대개 안전 | 주식수 기저 판정(미국) → 거버넌스 사실(보존 창 편입 전원 · 지우고 다시 넣기 43,242행) |
+main:.claude/rules/data-pipeline.md:191:| 14:20 지표 화해 | **안전하지 않다** | **보존 창 편입 전원의 원본층(asOf = 13:30 대상일)과 창 전체 파생층을 쓴다**(사본 실측 ① 4~5분 · ② 2~2.5분) — 손 백필과 같은 `(종목,날짜)`를 두 JVM이 쓴다 |
+main:.claude/rules/data-pipeline.md:192:| 15:30 신선도 점검 | 안전 | 읽기 전용 |
+main:.claude/skills/batch-load/SKILL.md:57:| `corporate-action` | 기업 행위 → `corporate_action` 원장 | **계수를 바꾸지 않는다**(`rebuild()` 미호출). 공시 + 시세 급변 휴리스틱 둘을 함께 적는다. `--from` 기본값은 **시장별** 첫 거래일이다(전역 최솟값이 아니다). **인자 없는 기본 경로의 대상이 1,350종목**이고 — 국내 350(DART 700콜·79초) + 미국 1,000(Alpaca 1,000콜·606초) — 전량 **실측 678초**다. **평일 14시에 스케줄러가 이것을 돌고 `adjustment-rebuild`·`backfill`을 이어 부른다**(ADR-0116). ADR-0049 |
+main:.claude/skills/batch-load/SKILL.md:58:| `adjustment-rebuild` | `adj_factor`·`adj_close`를 원장에서 다시 짓기 | **저장된 시세를 소급해 다시 쓰는 유일한 경로다.** 외부 호출 0. **첫 실행 전에 `ops/dump-db.sh`가 필요하고 훅이 그것을 막는다**(ADR-0049·0052). 값이 바뀐 종목의 지표가 **보존 창 전체에서 지워지므로 화해가 짝이다**(정기 사슬이면 곧바로 · 손 실행이면 다음 평일 14:20 또는 `indicator-reconcile --tickers`) — **평일 14시 사슬이 `corporate-action` 뒤에 이것을 이어 부르고 무효화가 있으면 `backfill`까지 간다**(ADR-0116) — 손으로 도는 것은 `--universe`·`--tickers`로 좁힐 때다. 화면에는 없다(런처에서만 뺐다). 350종목 2초 |
+main:.claude/skills/batch-load/SKILL.md:61:| `share-basis-derive` | 기업행위 원장 + 주식수 계열 → `financial_statement.share_basis_*` | **외부 호출 0 · 원자료 0행 수정.** 시총 = 주식수 × 종가의 두 기저가 어긋난 판을 판정한다(ADR-0162) — 맞출 수 있으면 배수를 달고(`SHIFTED`) 크기를 모르면 주식수를 안 낸다(`UNRESOLVED`). **재무·기업행위를 쓴 잡 뒤에는 러너가 자동으로 잇고(`adjustment-rebuild` 포함), 스케줄러는 매 평일 14:18에 돈다** — 손으로 부를 일은 유도 규칙을 고쳤을 때뿐이다. **MUST: 판정이 바뀌면 백필이 짝이다** — 원본층은 날짜 하나로 창 전체가 다시 쓰이고(`AKTX` 8지표 2,040행이 그렇게 걷혔다) 파생층은 날짜마다 돌아야 한다 |
+main:.claude/skills/batch-load/SKILL.md:63:| `corporate-action-judge` | 원장 판정 — 상태와 값을 사람이 준다 | **외부 호출 0.** `--ca-id` 필수. 검증은 전부 `CorporateActionLedger.judge`가 한다(HTTP 경로와 같은 문). **판정해도 계수는 안 바뀐다** — `adjustment-rebuild` → 화해가 뒤따라야 끝나고(다음 평일 14:00 사슬이 둘 다 한다), 잡이 그 명령을 찍어 준다. 실패하면 실행 행을 아예 안 연다(사람의 오타가 운영자 알림을 타면 안 된다). ADR-0084 |
+main:.claude/skills/batch-load/SKILL.md:153:**`--universe`로 손수 돌릴 때는 두 잡을 이어 돌려야 끝난다.** 원장만 채우면 계수는 그대로인데 **둘 다 성공으로 끝난다.** 인자 없는 기본 경로는 평일 14시 사슬이 이어 준다(ADR-0116).
+main:.claude/skills/batch-load/SKILL.md:401:같으므로 **화해가 짝이고**(정기 refill이면 같은 오후 14:20 · 손 실행이면 다음 평일 또는 `indicator-reconcile --tickers` — 알림 본문이 가른다). **영업활동현금흐름은 이
+main:.claude/skills/batch-load/SKILL.md:525:평일 14시 사슬이 집어 간다**(ADR-0116 · ADR-0166) — 그날 안에 반영하려면 판정 잡이 찍어 주는 명령을 친다.
+main:.claude/skills/batch-load/SKILL.md:582:- **MUST: 평일 크론 여섯(13:30·14:00·14:15·14:18·14:20·15:30)을 피한다 — 평일 13:30~15:40 밖에서 돌린다**(ADR-0116 · ADR-0166).
+main:.claude/skills/batch-load/SKILL.md:583:  14:00 사슬은 `adj_close`를 다시 쓰고 지표를 지우며, 14:20 화해는 창 편입 전원의 원본층과 창 전체 파생층을 쓴다.
+main:CLAUDE.md:94:  **켜는 길은 하나 — 코드 기본값을 뒤집은 jar다.** 배포 디렉터리 `.env`는 따로 켤 표면이 아니다 — 배포마다 저장소 `.env`로 덮인다(`ops/stage.sh`). 관문 날은 앱을 내린 채 인자로 켠 `bootRun`으로 재적재·백필하고, 기본값을 뒤집은 jar로만 다시 띄운다 — 꺼진 jar가 그 사이 뜨면 정기 refill과 매 평일 화해(14:20)가 되돌린다 · 관문 전 사본 실행도 인자로만 켠다(`.env`·환경변수·시스템 속성으로는 못 켠다 — `GateSettingGuard`가 기동을 세운다) · 관문 뒤 설정과 꺼진 갈래를 걷는다 · **마이그레이션은 설정 뒤에 못 둔다** — 관문 직전에 넣는다.
+main:docs/adr/ADR-0113-us-dividends-into-governance-facts.md:241:14:15로 당겼다(ADR-0116 §결과).
+main:docs/adr/ADR-0115-shareholder-return-as-one-instrument.md:149:| 〃 미국(린치 14시점) | 12,065 | **24,130** |
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:21:1. **평일 14:00 — 기업행위 사슬.** `corporate-action` → `adjustment-rebuild` →
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:23:2. **평일 14:15 — 무거운 DART 잡 하나.** 화=`governance-load` · 수=`full-statement-refill` ·
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:26:   판정·지표 채우기는 매 평일 14:18·14:20이 진다(ADR-0166).
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:27:3. **평일 15:30 — 신선도 점검.** 예산을 넘겨 안 돈 잡과 **끊긴 사슬**을 재서 알린다.
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:30:> **사용자가 고른 문장(2026-09-01):** *"평일 매일 14:00"* · *"요일을 나눠 자동으로 걸고,
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:50:- **MUST: `financial-refill`이 지운 지표를 채우는 것이 일의 끝이다 — 14시 사슬과 같은 규칙이다.** 채우는 것은 같은 오후 14:20 화해다(ADR-0166).
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:58:  `PipelineSchedulerChainTest`가 무거운 잡 안에서는 채우지 않고 14:20 화해가 상한 없이 채우는 것을 단언한다.
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:68:  `dart.daily-quota: 18000`을 넘는다. 하나 + 14시의 700이면 그 안이다 — 잰 것 중 가장 무거운 하루는 전 종목 분기의
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:115:       || 'adjustment-rebuild만이 닫는다. 평일 14시 사슬이 돌았는지 먼저 본다.'
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:133:    THEN '기업 행위 사슬의 스케줄 실행이 아직 없다 — 이 결정의 14시 크론이 한 번도 발화하지 '
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:134:      || '않았다. 평일 14시에 앱이 떠 있어야 한다(ADR-0043).'
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:150:그래도 뜬다면 앱이 평일 14시에 안 떠 있었거나 배선이 끊긴 것이다.
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:154:이 세 크론(14:00·14:30·15:10)은 **2026-09-01 20:27에
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:155:코드에 들어왔다**(`0 0 14 * * MON-FRI`를 만든 커밋). 그 뒤로 평일 14시가 아직 안 왔으므로 첫
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:215:### 신선도 점검을 15:30으로 옮겼다 (2026-09-20)
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:223:가드 22분을 넘었기 때문이고, 그 가드의 근거 수가 낡은 것이었다. 점검을 15:30으로 옮기고
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:230:### 무거운 잡을 14:15로 당겼다 (2026-09-20)
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:232:**실측 54분 58초**(1,350종목 12,050콜). 14:30 시작이면 15시 24분 58초에 끝나 15:30 점검까지
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:241:**14:15가 안전한 근거는 14:00 사슬의 실측이다** — `corporate-action` 최악 12분 27초 +
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:242:`adjustment-rebuild` 2초 + `indicator-backfill` 4분 1초 = 14시 16분 30초. 풀이 1이라 겹치면
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:248:  - 사람이 판정한 뒤의 복구도 자동이다 — `judge`가 `APPROVED`로 올리면 **다음 평일 14시 사슬이
+main:docs/adr/ADR-0116-scheduled-chain-and-job-freshness.md:257:    되고, 평일 14:00~15:30에 손으로 적재를 돌리면 실제 콜이 설계값의 두 배가 된다.
+main:docs/adr/ADR-0121-triple-screen-rebound-preset.md:292:  기업행위가 반영돼 있다(평일 14:00 사슬이 `adj_close`를 다시 쓴다).
+main:docs/adr/ADR-0128-point-in-time-financials-in-stored-indicators.md:61:  ④ `adj_close` 재작성 복구(14:00 사슬이 무효화 종목을 상한 없이 화해한다 — ADR-0166).
+main:docs/adr/ADR-0137-sweep-runs-the-live-screening-path.md:98:  안 돈 날이 있으면(일일 갱신 13:30 · 지표 사슬 14:00) 그날은 **전 조건이 판정불가인데 에러가
+main:docs/adr/ADR-0139-log-rotation-is-always-in-place-truncate.md:71:못 쓴다 — 14:00~14:12 밖에는 하루 종일 60~80줄이라 멀쩡해도 0이 나온다.
+main:docs/adr/ADR-0139-log-rotation-is-always-in-place-truncate.md:122:  평일 평균 12 B/초, gzip 0.04초 기준이고 **14:00~14:12 배치 구간은 순간 ~1.4 KB/s라 그때
+main:docs/adr/ADR-0141-watch-the-membership-contract-and-fill-at-the-rebalance-tail.md:21:나눈다.** 통지는 평일 15:30과 리밸런싱 꼬리에서 돌고, 보충은 **리밸런싱 꼬리에서만** 돈다.
+main:docs/adr/ADR-0141-watch-the-membership-contract-and-fill-at-the-rebalance-tail.md:146:  그 금지에 걸리지 않는다"*로 허용하지만, 15:30이 **이미 읽어서 알리는 자리**이고 억제 형태가
+main:docs/adr/ADR-0141-watch-the-membership-contract-and-fill-at-the-rebalance-tail.md:151:  평일 15:30 감지가 같은 결손을 신고하고, 티커를 주면 `initial-load`가 `NOT EXISTS`를 안 보므로
+main:docs/adr/ADR-0141-watch-the-membership-contract-and-fill-at-the-rebalance-tail.md:216:> 월 14:00 사슬이 수집·재구축·백필로 바로잡는다(**무효화 10종목 이하일 때만**).
+main:docs/adr/ADR-0145-reload-window-must-cover-the-indicator-window.md:164:소요를 여기 적는다. (신선도 점검은 2026-09-20에 15:30으로 옮겼다 — `governance-load`가
+main:docs/adr/ADR-0166-daily-indicator-reconcile.md:20:- **14:18 화해 입력 유도** — 주식수 기저 판정(미국 · ADR-0162) → 거버넌스 사실(보존 창 편입 전원).
+main:docs/adr/ADR-0166-daily-indicator-reconcile.md:21:- **14:20 지표 화해** — ① 보존 창 편입 전원의 원본층을 asOf 한 판으로 다시 쓴다(`indicator-origin-rewrite`) →
+main:docs/adr/ADR-0166-daily-indicator-reconcile.md:24:- **14:00 기업 행위 사슬** — 무효화가 있으면 사슬 안에서 곧바로 화해한다(① 무효화 티커 · ② 창 전체). 유도는 안 부른다.
+main:docs/adr/ADR-0166-daily-indicator-reconcile.md:26:  무거운 잡(14:15)은 적재만 하고, 그 뒤의 유도·기저 판정·지표 채우기는 14:18·14:20이 진다.
+main:docs/adr/ADR-0166-daily-indicator-reconcile.md:34:- MUST NOT: 14:00 사슬에서 입력 유도를 부르지 않는다. 유도가 던지면 지워진 종목이 화해 없이 무거운 잡 날 한 시간을 빈다.
+main:docs/adr/ADR-0166-daily-indicator-reconcile.md:39:- MUST NOT: 손 쓰기 잡을 평일 13:30~15:40에 돌리지 않는다. **JVM을 건너는 배타가 아직 없다**(실행 305가 13:30과 `indicator_value`에서 교착했다) — 이 규칙이 지금 유일한 방어이고, 배타는 열린 결함이다(`docs/progress.md`).
+main:docs/adr/ADR-0166-daily-indicator-reconcile.md:44:- 운영: 평일 14:20 뒤 `batch_execution`의 `indicator-origin-rewrite`·`indicator-derived-rebuild` SCHEDULER 행과 note.
+main:docs/adr/ADR-0166-daily-indicator-reconcile.md:78:- 15:30 신선도 점검까지의 여유는 최악(G 날 + 사슬 무효화)에서 약 2분이다. 밀릴 뿐 값은 안 틀린다.
+main:docs/adr/ADR-0166-daily-indicator-reconcile.md:79:- **되돌리려면**: `PipelineScheduler`의 14:18·14:20 크론과 사슬의 화해를 걷고 상한 백필을 되살린다. 그러면 위 배경의 결손이 돌아온다.
+main:docs/adr/ADR-0167-daily-update-fills-price-gap-runs.md:24:- **과거 편입은 구간만 받는다** — 지표 단계 없이 14:20 화해(ADR-0166)가 원본층·파생층을 다시 쓴다.
+main:docs/adr/ADR-0167-daily-update-fills-price-gap-runs.md:26:- **설정 뒤에 두지 않는다** — 매핑·계산을 안 바꾸고 소스가 이미 주는 봉 중 안 받은 날을 받는다. 같은 날 13:30 지표 단계·14:00 재구축·14:20 ①②가 덮어 **한 평일 순환에 수렴한다** — `CLAUDE.md` 설정 규칙이 막는 「옛 규칙과 새 규칙의 값이 섞여 전체 백필로만 풀리는 상태」가 안 생긴다.
+main:docs/adr/ADR-0167-daily-update-fills-price-gap-runs.md:68:- **별도 잡(토요일 꼬리 · 14:18)**: 일일 갱신만큼 덮지 못한다(편출 직전 · 15일 넘는 정지 · 반복 실패). 같은 날 13:30 지표가 구멍 난 계열로 한 번 나간다.
+main:docs/adr/ADR-0168-spin-off-carries-its-own-price-ratio.md:39:  - 효과가 `price_ratio`가 있는 원장 행의 종목에만 미치고, 새 분할 하나가 들어올 때와 같은 경로(14:00 사슬: 수집 → 재구축 → 무효화 → 사슬 안 화해 ①②)로 한 평일에 수렴한다.
+main:docs/adr/ADR-0168-spin-off-carries-its-own-price-ratio.md:136:  - 사용자 결정: 배포 시점은 「오늘 15:40 뒤 (Recommended)」 · 판정 첫 묶음 8행(HON · 국내 7)과 둘째 묶음 8행(FTV · DELL · FTI · LEN · LBTYB · SYRE는 가격 배수 · DNTH · CNH는 `UNSUPPORTED`)은 각각 「8행 승인 (Recommended)」. 행마다의 값과 근거는 탐색 브랜치 `explore/spin-off/JUDGE-PAYLOADS.md`에 있다.
+main:docs/api-spec/alpaca-corporate-action.md:239:| `process_date` | 최근 20건 중 18건이 ex일과 같다 — KST 14:00(미국 개장 전)에는 그날 행이 아직 없다 |
+main:"docs/external/\354\273\244\354\212\244\355\205\200\354\240\204\353\236\265-\353\260\261\355\205\214\354\212\244\355\212\270.md":84:**「최신봉이 전 거래일」은 정상이다.** `daily-update`가 13:30에 도는데 국내장 마감이 15:30이고
+main:"docs/external/\354\273\244\354\212\244\355\205\200\354\240\204\353\236\265-\353\260\261\355\205\214\354\212\244\355\212\270.md":87:**평일 13:30·14:00·14:30·15:30에 앱이 떠 있어야 배치가 돈다**(ADR-0116). 앱을 띄우고 내리는
+main:docs/reload-gate.md:54:| `governance-derive`가 refill 뒤 자동으로 안 돎 | C · **구현됨(ADR-0166 — 매 평일 14:18 · 보존 창 편입 전원)** | 코드 `PipelineScheduler.deriveReconcileInputs` | 관문에서는 `indicator-reconcile`이 유도를 먼저 한다 |
+main:docs/reload-gate.md:59:| TEVA 시세 14봉 | R시세(표적) · **편입일 봉은 ADR-0167이 받는다**(범위 끝을 CUSIP 전환 09-14 앞에 두면 ADR 시절 봉이 온다 · 드라이런 1,502봉 · 접합 +1.5%) — 10-05 10:27 배포 · 그날 14:20 ②가 편입 창 파생층 1,744,921행 | 잼: 창 안 233거래일 지표 0행 | `AlpacaPriceAdapter`가 `asof`를 안 보냄 · 가짜 한계 — 뿌리(전환 **뒤** 처음 편입되는 종목)는 남는다 |
+main:docs/reload-gate.md:61:| **상장 목록이 Alpaca 「거래 가능」에 묶임 — 거래되는 종목이 명부 후보에서 빠진다**(A2-a) | C · 명부(관문 안 기다림 · 다음 리밸런싱 전) | 잼(10-05 · Alpaca 목록 2 · 단건 9 · 봉 6): 상태·거래소 인자 없는 전 목록 33,550과 비활성 19,169 **어디에도 ET · DDS · SUN · USAC · ASND가 없다** — 단건은 NYSE·NASDAQ `inactive`로 주고 시세도 나온다(대조군 TAP은 둘 다 active) · 우리 `stock` ∩ SEC NYSE·Nasdaq ∩ Alpaca 활성 밖 = **43**(주식수 있음 31) · 순위 경계(1000위 약 52억 달러) 위는 **ET 705억 · DDS 102억**(지금 편입) | `fetchActiveAssets`의 `status=active`는 브로커 거래 허용이지 상장이 아니다 — 가짜 한계(SEC `company_tickers_exchange.json`이 거래소와 함께 준다) · 토 10-10 리밸런싱이 ET · DDS를 뺀다(소스 상태가 그대로면) · **처방 main(ADR-0171 · 숨은 상장) · 드라이런 RA0·RA1·RA2 통과(9날짜 명부 차이 = +ET·DDS ↔ 경계 둘 · 미귀속 0) · 배포 대기**(10-06 13:30 뒤 `price_daily` ET·DDS `2026-10-05` 확인 → 15:40 뒤 A와 함께 · 사용자 확인) · 계획 브랜치 `explore/universe/A2-LISTING-PLAN.md` |
+main:docs/reload-gate.md:67:| **앱 크론이 기계 수면만큼 밀린다 — 손 쓰기 창·배포·실키 창이 벽시계 기준이라 그날 방어가 빈다** | ? · 운영(관문 밖) · 2부 시각 모형의 전제 | 잼(10-06): 13:30 크론이 13:59에도 안 돎 · JVM 단조 가동 시간이 벽시계보다 6,890초 뒤짐(`jcmd VM.uptime` 대 기동 시각) · 원인 = 10-05 18:55~20:51 덮개를 닫은 배터리 수면 합 6,912초(pmset · 2부 v5 계획 밖 반증) — `caffeinate -s`는 AC에서만 막는다(`ops/start.sh:66-68`) · Spring 스케줄러는 크론마다 자기 본체가 끝난 순간(첫 발화는 기동 때) 「다음 목표 − 벽시계」를 단조 지연으로 고정해 그 뒤 잠든 만큼 늦게 돈다 — 그래서 크론마다 밀림이 다를 수 있다(1부 v9 반증 두 렌즈 · 실제 Spring 스케줄러를 가상 시계로 돌린 재현) · **확인(10-06): 13:30 크론이 15:24:51.5에 돌았다**(단조 차이로 낸 예측 15:24:51 · 건너뛰지 않고 늦게 돈다) · 이력: 정기 실행이 발화한 37일 중 정시 35(08-19 +7:39 · 오늘 +1:55) · 08-10 뒤 정기 실행 없는 평일 4(08-11 더함 · 1부 v8 계획 밖 반증 q09 — 원인 재지 않음) · 밀림으로 틀린 값 관측 0 | 크론은 건너뛰지 않고 늦게 돈다(`PipelineScheduler` javadoc은 10-06에 고침) · 그사이 재기동하면 그날 남은 발화가 사라진다 · 벽시계 창을 쓰는 소비자: 잡 알림 넷(`FinancialRefillJob` · `InitialLoadJob` · `AdjustmentRebuildJob` · `CorporateActionJudgeJob`) · `FinancialRefillAlertTest` · `.claude/rules/data-pipeline.md` · batch-load 스킬 · ADR-0166 · `ops/apply-window/00-precheck.sh` — 판정은 `ops/crons-done.sh` 하나(크론마다 끝 줄 · 373dc2b1)이고 `ops/stop.sh --app`·`ops/deploy.sh`가 부르며 아니면 멈춘다(8f72ddc8 · 관문 10 · 브라우저 기동 스킬 · 덤프 복원 안내는 stop.sh를 거친다) · progress(배포 · 손 쓰기 잡)와 ADR-0173(1부 손 FR)도 그것을 가리킨다 · ADR-0168:136은 지난 사용자 결정 기록이라 그대로 · ADR-0173의 「실키는 평일 13:20~15:45 밖」은 출처가 저장소에 없는 앞 세션 제약이라 그대로 · 처방 후보: 남은 벽시계 소비자를 그 판정으로 · 늦게 시작한 날의 행동 · 수면 자체(전원 설정은 사람 몫) |
+main:docs/reload-gate.md:78:| **분사 — 원장에 0행 · 가격 낙폭이 수정주가에 남음**(CTVA 10-01 `RETURN_52W` −81.41 · DD · FDX …) · HON 2026-06-29 병합 `REJECTED`가 거짓(같은 날 분사가 상쇄 · 17봉 시총 약 2배) | **C · 닫힘**(ADR-0168 · 10-05 15:43 배포 → 수집 · 판정 16행(사용자 승인) · 재구축 · 화해 — 수는 ADR-0168 §결과) · 관문 밖 | 잼(10-05): Alpaca `spin_offs` 창 편입 1,208 현재 심볼(이름 체인 없음) 76행 → 실제 분사 53(보존 창 13) — 14:00 수집 로그의 「분사 67」은 지금 편입 · 이름 체인 · 워런트 포함이라 모집단이 다르다 | 원장이 주식수 배수(`ratio`)와 가격 배수(`price_ratio` = s/v · v = 같은 날 종가 가치비)를 따로 든다 · 수집 대상을 창 편입으로 · HON·FTV·DELL·미해석 6은 판정 API로 닫음(FTI·LEN·LBTYB·SYRE 가격 배수 · DNTH·CNH `UNSUPPORTED`로 미표시) · 정본: 브랜치 `explore/spin-off/PLAN.md` |
+main:docs/reload-gate.md:124:    **펜스·스냅숏 대조**(앱이 내려 있는 동안 — 재기동 뒤에는 13:30·14:20이 과거 날짜를 바꾼다) → **코드 기본값을 뒤집은 jar 배포·재기동**(켜는 길은 이것 하나 — 배포 `.env`는 배포마다 저장소 `.env`로 덮인다(`ops/stage.sh`)) →
+main:docs/reload-gate.md:125:    첫 14:20은 「변화 0」이 아니라 **귀속**으로 판정(그 사이 들어온 봉·재무·원장) → 설정과 꺼진 갈래를 걷는다. 그 전에 `.env`에 `US_GATE` 줄이 없는지 확인한다(인자와 다르면 `GateSettingGuard`가 기동을 세운다). `share-basis-derive`는 수동 `financial-refill` 뒤 자동으로 돈다(`BootstrapRunner:431-433`).
+main:frontend/src/lib/admin.ts:59:      // 정기 경로가 티커로 좁혀 부른 실행 — 리밸런싱 꼬리와 14:00 사슬의 화해 ①(ADR-0166).
+main:frontend/src/views/AdminOverviewView.vue:318:        14시에 닫습니다.
+main:ops/apply-window/00-precheck.sh:8:# 창은 15:30 뒤에 열린다 — 그 전에는 오늘 13:30·14:00이 아직 안 돌았을 수 있어 검사하지 않는다.
+main:ops/apply-window/README.md:32:0. `00-precheck.sh` — HEAD 기록·작업 트리 깨끗·RUNNING 0·bootRun 0·오늘 13:30·14:00 완료·마이그레이션 0·대상 파일(전체=현재+과거)·LATEST.
+main:ops/apply-window/restore-runbook.md:1:# 과거 유니버스 재복원 절차서 (2026-09-19 작성 · 실행은 2026-09-21 월 14:00 이후)
+main:ops/apply-window/restore-runbook.md:43:0. **선행 조건 확인** — 월 13:30 `daily-update`와 14:00 `corporate-action` 사슬이 **끝난 뒤**. `RUNNING` 0.
+main:ops/apply-window/restore-runbook.md:49:   **이상치 0**이지만 14:00 사슬이 재무를 건드리므로 **그날 다시 잰다**(가드가 알아서 막지만, 막히면
+main:ops/crons-done.sh:6:# 지금 뒤로 잡아 그날 남은 발화가 통째로 빠진다. 그래서 「15:40 뒤」 같은 벽시계 창은 그날 방어가 안 된다.
+main:ops/crons-done.sh:9:# 고정하므로, 화해가 끝난 뒤 15:30 점검 전에 잠들면 다음 날 13:30~14:20은 밀리고 15:30 점검만 정시에 돈다
+main:ops/crons-done.sh:16:#      60초를 빼는 것은 크론이 명목보다 조금 일찍 발화하기 때문이다(운영 기록 13:30·14:00 첫 잡 62건 중 21건이 명목 전 ·
+main:ops/crons-done.sh:43:  "runCorporateActionChain 1-5 14:00:00"
+main:ops/crons-done.sh:44:  "runHeavyJobOfTheDay 1-5 14:15:00"
+main:ops/crons-done.sh:45:  "deriveReconcileInputs 1-5 14:18:00"
+main:ops/crons-done.sh:46:  "reconcileIndicators 1-5 14:20:00"
+main:ops/crons-done.sh:47:  "checkJobFreshness 1-5 15:30:00"
+main:src/main/java/com/stockscreener/pipeline/batch/AdjustmentRebuildJob.java:209:                        + "**그 %d종목의 지표가 보존 창 전체에서 지워졌다.** 정기 사슬(평일 14:00)이면"
+main:src/main/java/com/stockscreener/pipeline/batch/AdjustmentRebuildJob.java:210:                        + " 같은 사슬이 곧바로 화해한다. 손 실행이면 다음 평일 14:20 화해가 채우고,"
+main:src/main/java/com/stockscreener/pipeline/batch/AdjustmentRebuildJob.java:211:                        + " 그 전에 채우려면 평일 13:30~15:40 밖에서:\n"
+main:src/main/java/com/stockscreener/pipeline/batch/BatchExecutionRecorder.java:366:         * 정기 경로가 <b>티커로 좁혀</b> 부른 실행이다 — 리밸런싱 꼬리(결손 티커)와 14:00 기업 행위
+main:src/main/java/com/stockscreener/pipeline/batch/BatchExecutionSweeper.java:56:     * {@code GAP_FILL}이지만 <b>웹 인스턴스만</b> 만드는 잡 — 14:00 사슬의 좁힌 화해 ①이다
+main:src/main/java/com/stockscreener/pipeline/batch/BootstrapRunner.java:343:            // 매 평일 14:18·14:20과 같은 메서드다 — 유도 → ① 원본층 → ② 파생층(창 전체).
+main:src/main/java/com/stockscreener/pipeline/batch/CorporateActionJudgeJob.java:152:        log.info("판정은 계수를 바꾸지 않는다. 다음 평일 14:00 사슬이 재구축과 화해를 둘 다 한다 — "
+main:src/main/java/com/stockscreener/pipeline/batch/CorporateActionJudgeJob.java:153:                        + "그 전에 반영하려면 평일 13:30~15:40 밖에서 --job=adjustment-rebuild --tickers={} 뒤에 "
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:332:            // 모집단에 없고, 원본층은 14:20 ①이 창 편입 전원으로 다시 쓴다.
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:391:                                + "같은 날 14:20 화해 ②가 창 전체로 다시 쓴다(앱이 그때 떠 있어야 한다). 원인: %s")
+main:src/main/java/com/stockscreener/pipeline/batch/FinancialRefillJob.java:283:                scheduled ? "재무 무효화 — 14:20 화해가 채운다" : "재무 무효화 — 다음 화해까지 빈다",
+main:src/main/java/com/stockscreener/pipeline/batch/FinancialRefillJob.java:319:        // 채우는 것은 매 평일 화해다(14:20 · ① 원본층 + ② 창 전체 파생층). 정기 실행 뒤에 손으로 돌리면
+main:src/main/java/com/stockscreener/pipeline/batch/FinancialRefillJob.java:320:        // 같은 스케줄러 스레드가 곧바로 도는 14:18·14:20과 같은 행을 두 JVM이 쓴다(305 교착과 같은 모양).
+main:src/main/java/com/stockscreener/pipeline/batch/FinancialRefillJob.java:323:                    같은 오후 14:20 화해가 이 종목들의 원본층과 창 전체 파생층을 다시 쓴다 — 손으로 돌리지 않는다.
+main:src/main/java/com/stockscreener/pipeline/batch/FinancialRefillJob.java:327:                    다음 평일 14:20 화해가 채운다. 그 전에 채우려면 평일 13:30~15:40 밖에서:
+main:src/main/java/com/stockscreener/pipeline/batch/IndicatorBackfillJob.java:527:     * <p><b>이 기계에 운영 앱이 온디바이스로 함께 산다</b>(2026-09-11 사용자 판단). 평일 14시
+main:src/main/java/com/stockscreener/pipeline/batch/IndicatorReconciler.java:108:     * <p>{@link JobFreshnessPolicy}의 판정이 「스케줄러 실행은 언제나 전량」에 기댄다. 14:00 사슬이
+main:src/main/java/com/stockscreener/pipeline/batch/IndicatorReconciler.java:109:     * 무효화 종목만 다시 쓴 ① 을 {@code SCHEDULER}로 남기면 14:20 전량 ① 이 며칠 실패해도 사슬이
+main:src/main/java/com/stockscreener/pipeline/batch/InitialLoadJob.java:177:                            + "지워졌다.** 다음 평일 14:20 화해가 채우고, 그 전에 채우려면 평일 13:30~15:40 "
+main:src/main/java/com/stockscreener/pipeline/batch/JobFreshnessPolicy.java:83:        // 평일 14:00 크론. 금→월이 3일이라 그 위로 이틀 여유를 둔다.
+main:src/main/java/com/stockscreener/pipeline/batch/JobFreshnessPolicy.java:87:        // 평일 14:20 화해의 ①·②. 일일 갱신과 같은 주기라 같은 예산이다. 둘 다 두는 이유: 14:00 사슬이
+main:src/main/java/com/stockscreener/pipeline/batch/JobFreshnessPolicy.java:88:        // 무효화가 있는 날 ②(창 전체)를 SCHEDULER로 돌리므로 ② 시계만 보면 14:20 ① 전량의 실패가
+main:src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java:30: * 토요일 크론이 안 떠도 <b>평일 15:30 점검이 같은 결손을 신고</b>하고 사람이 같은 명령을 친다.
+main:src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java:52: * 앞의 둘만 부르면 <b>지운 지표를 사람에게 남기게 된다.</b> 그 사슬은 평일 14:00 자리다.
+main:src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java:57: * 내고, 월 14:00 사슬이 바로잡는다 — <b>그 한 시간은 ADR-0055의 억제도 안 걸린다</b>(원장이
+main:src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java:173:            // 침묵을 미발화로 읽고 한 시간을 태웠고, 15:30 갈래는 같은 줄이 있어서 갈렸다
+main:src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java:174:            // (PipelineScheduler.checkJobFreshness).
+main:src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java:177:            // 종료 신호다. 실패가 아니므로 알리지 않는다 — 다음 리밸런싱이나 평일 15:30 점검이
+main:src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java:180:                    + "남은 결손은 평일 15:30 점검이 다시 신고한다.");
+main:src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java:188:                            + "그 종목은 지표가 판정불가인 채로 남는다. 평일 15:30 점검이 "
+main:src/main/java/com/stockscreener/pipeline/batch/MembershipGapFiller.java:257:                        + "남은 결손은 평일 15:30 점검이 다시 신고하고, 그 전에 채우려면 그 배치가 "
+main:src/main/java/com/stockscreener/pipeline/collector/FinancialWriter.java:206:            // **이 줄은 평일 판당 부피 축이 아니다**(2026-09-13 실측 213 B/줄) — 일일 14:00
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:112:     * <p>IMPORTANT — 13시 30분은 <b>국내 장 마감(15:30) 전</b>이다. 그래도 옳다: <b>당일 종가를
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:188:     * 기업 행위 사슬. <b>평일 14시(KST)</b> — 수집 → 계수 재구축 → (무효화가 있으면) 그 자리에서 화해.
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:207:     * <p><b>14:20 정기 화해가 있는데도 여기서 바로 화해하는 이유</b>는 무거운 잡 날의 공백이다. 14:15
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:208:     * 잡이 한 시간 가까이 돌면(풀 1이라 14:20이 그 뒤로 밀린다) 지워진 종목이 그동안 화면에서 빠진다 —
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:212:     * <h2>왜 14시인가</h2>
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:226:    @Scheduled(cron = "0 0 14 * * MON-FRI", zone = "Asia/Seoul")
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:227:    public void runCorporateActionChain() {
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:246:                // 13:30과 같은 의미이고(판정 NULL = OK), 같은 오후 14:18 유도 → 14:20 화해가 새 판정으로 덮는다.
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:258:            log.info("크론 발화를 마쳤다. 크론={}", "runCorporateActionChain");
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:263:     * 무거운 잡 하나. <b>평일 14시 15분(KST)</b> — 요일로 나누되 <b>연체를 보정한다.</b>
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:267:     * 넘는다. 하루 하나 + 14시의 기업 행위 수집(700)이면 그 안이다. 잰 것 중 가장 무거운 하루는 전 종목 분기의
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:281:    @Scheduled(cron = "0 15 14 * * MON-FRI", zone = "Asia/Seoul")
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:282:    public void runHeavyJobOfTheDay() {
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:302:            log.info("크론 발화를 마쳤다. 크론={}", "runHeavyJobOfTheDay");
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:357:            // 유도(governance-derive)는 여기서 안 부른다 — 14:18 deriveReconcileInputs가 매 평일
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:364:            // 정정이 지운 지표는 14:20 화해가 채운다(상한 없음). 옛 모양은 여기서 무효화 종목만
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:368:            log.info("재무 정정·교정으로 지표가 지워진 종목 {}개 — 14:20 화해가 다시 쓴다.",
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:373:        // 재무를 쓴 뒤의 주식수 기저 재판정(ADR-0162)도 14:18이 맡는다 — 매 평일 돌므로
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:378:     * 화해의 입력 유도. <b>평일 14시 18분(KST)</b> — 주식수 기저(미국) → 거버넌스 사실(보존 창 편입).
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:380:     * <p><b>화해(14:20)와 크론을 가르는 이유</b>는 실패가 서로를 막지 않게 하려는 것이다. 유도가 실패하면
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:385:     * <p>14:15 무거운 잡 뒤인 이유: 재무·거버넌스 원문을 쓰는 것이 그 잡이고, 풀이 1이라 이 크론은
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:388:    @Scheduled(cron = "0 18 14 * * MON-FRI", zone = "Asia/Seoul")
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:389:    public void deriveReconcileInputs() {
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:400:            log.info("크론 발화를 마쳤다. 크론={}", "deriveReconcileInputs");
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:405:     * 지표 화해. <b>평일 14시 20분(KST)</b> — 보존 창 편입 전원의 원본층 한 판 → 창 전체의 파생층.
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:416:    @Scheduled(cron = "0 20 14 * * MON-FRI", zone = "Asia/Seoul")
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:417:    public void reconcileIndicators() {
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:428:            log.info("크론 발화를 마쳤다. 크론={}", "reconcileIndicators");
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:433:     * 신선도 점검. <b>평일 15시 30분(KST)</b> — 안 돈 잡과 끊긴 사슬을 재서 알린다.
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:438:     * <p>15시 30분인 근거는 앞선 무거운 잡이다. {@code governance-load}의 실측이
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:448:     * <p><b>그래서 무거운 잡을 14시 15분으로 당겼다</b>(2026-09-20). 14시 30분이면 15시 24분 58초에
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:449:     * 끝나 여유가 <b>5분</b>뿐이었다. 14시 사슬의 실측 최악이 {@code corporate-action} 12분 27초 +
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:450:     * {@code adjustment-rebuild} 2초 + {@code indicator-backfill} 4분 1초라 14시 16분 30초에 끝나고,
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:454:     * <p><b>매 평일 화해(14:18·14:20)가 들어온 뒤의 최악은 여유 약 2분이다</b>(2026-10-04 실행 이력):
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:467:    @Scheduled(cron = "0 30 15 * * MON-FRI", zone = "Asia/Seoul")
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:468:    public void checkJobFreshness() {
+main:src/main/java/com/stockscreener/pipeline/scheduler/PipelineScheduler.java:484:            log.info("크론 발화를 마쳤다. 크론={}", "checkJobFreshness");
+main:src/main/resources/application.yaml:21:        # 스케줄(13:30 일일 갱신 · 14:00 기업 행위 사슬 · 14:15 무거운 잡 · 14:18 화해 입력 유도 ·
+main:src/main/resources/application.yaml:22:        # 14:20 지표 화해 · 15:30 신선도)은
+main:src/main/resources/db/migration/V59__gap_fill_comment.sql:3:-- V56은 「리밸런싱 꼬리가 결손 티커로 좁혀 부른 것」으로 적었는데, ADR-0166부터 14:00 기업 행위 사슬이
+main:src/main/resources/db/migration/V59__gap_fill_comment.sql:9:    '14:00 사슬의 무효화 종목 원본층), 신선도 판정에서 전량 실행으로 세지 않는다(JobFreshnessPolicy)';
+main:src/test/java/com/stockscreener/pipeline/batch/FinancialRefillAlertTest.java:86:    @DisplayName("정기 실행이면 손으로 돌리지 말라고 한다 — 같은 오후 14:20 화해와 같은 행을 두 JVM이 쓴다")
+main:src/test/java/com/stockscreener/pipeline/batch/FinancialRefillAlertTest.java:91:        assertThat(body).contains("14:20 화해").contains("손으로 돌리지 않는다").doesNotContain("--job=");
+main:src/test/java/com/stockscreener/pipeline/batch/FinancialRefillAlertTest.java:101:                .contains("13:30~15:40 밖")
+main:src/test/java/com/stockscreener/pipeline/batch/PipelineEndToEndTest.java:685:            // 과거 편입은 지표 단계를 안 탄다 — 원본층은 14:20 화해가 창 편입 전원으로 다시 쓴다.
+main:src/test/java/com/stockscreener/pipeline/batch/PipelineEndToEndTest.java:744:    @DisplayName("일일 갱신의 파생층이 실패해도 보존 정리·색인·워치리스트는 돌고 ERROR 알림이 간다 — 그날 파생층은 14:20 ②가 다시 쓴다")
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:117:        scheduler.runCorporateActionChain();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:128:    @DisplayName("계수가 안 바뀌면 사슬 안 화해가 없다 — 평상시가 이쪽이고 14:20 화해가 따로 돈다")
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:132:        scheduler.runCorporateActionChain();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:142:        scheduler.runCorporateActionChain();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:146:        // 좁힌 ① 은 GAP_FILL이다 — SCHEDULER로 남기면 14:20 전량 ① 이 실패해도 사슬이 돈 날마다
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:167:        scheduler.runCorporateActionChain();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:169:        // 유도는 14:18 크론의 몫이다. 여기서 부르면 위 예외가 화해 앞에서 사슬을 끊는다.
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:182:        scheduler.runCorporateActionChain();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:189:    @DisplayName("14:20 화해는 ① 보존 창 전원 → ② 창 전체이고 유도를 안 부른다 — 유도 실패가 화해를 못 막게 크론이 갈렸다")
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:191:        scheduler.reconcileIndicators();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:210:        scheduler.reconcileIndicators();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:217:    @DisplayName("14:18 유도는 기저 판정 → 거버넌스 유도(창 편입)이고 지표를 안 건드린다")
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:219:        scheduler.deriveReconcileInputs();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:234:        scheduler.reconcileIndicators();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:245:        scheduler.reconcileIndicators();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:256:        assertThatThrownBy(() -> scheduler.reconcileIndicators()).isInstanceOf(IllegalStateException.class);
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:267:        scheduler.reconcileIndicators();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:268:        scheduler.deriveReconcileInputs();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:332:        scheduler.runHeavyJobOfTheDay();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:337:    @DisplayName("거버넌스 무거운 잡은 적재만 한다 — 유도는 14:18이 매 평일 창 편입 전원으로 돈다")
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:342:        scheduler.runHeavyJobOfTheDay();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:354:        // 적재 뒤 유도가 빠지면 화면이 옛 값 그대로인데 둘 다 성공한다 — 그 연결은 이제 14:18 크론이다
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:360:    @DisplayName("재무 정정이 있어도 무거운 잡 안에서 백필하지 않는다 — 14:20 화해가 상한 없이 채운다")
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:368:        scheduler.runHeavyJobOfTheDay();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:372:        // 정정 반영은 그 종목의 지표를 지운다. 채우는 것과 주식수 기저 재판정은 14:18·14:20이 한다.
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:394:    @DisplayName("15시 30분 점검이 편입 원자료도 잰다 — 지표 축은 일일 갱신 뒤에만 뜻이 있다")
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerChainTest.java:396:        scheduler.checkJobFreshness();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:167:        LocalDateTime chain = cronOf("runCorporateActionChain").next(base);
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:182:        LocalTime chain = cronOf("runCorporateActionChain").next(base).toLocalTime();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:183:        LocalTime heavy = cronOf("runHeavyJobOfTheDay").next(base).toLocalTime();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:184:        LocalTime freshness = cronOf("checkJobFreshness").next(base).toLocalTime();
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:194:        // **이 수는 코드 변경 없이도 자란다** — 21분 30초 → 44분 52초 → 54분 58초. 14시 30분이면
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:195:        // 여유가 5분뿐이라 무거운 잡을 **14시 15분**으로 당겼고, 그래서 간격이 75분이다.
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:200:        // 부족해져 점검 시각을 15:30으로 옮겼다** — 시험이 초록인 채로 운영만 밀리던 자리다.
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:208:        // 유도(14:18)는 그날 무거운 잡이 쓴 재무·거버넌스 원문을 읽어야 하고, 화해(14:20)는 그 유도를
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:209:        // 읽어야 한다. 신선도 점검(15:30)은 화해의 ② 실행 행을 센다. 풀이 1이라 앞이 길어지면 뒤가
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:212:        List<LocalTime> order = List.of("runCorporateActionChain", "runHeavyJobOfTheDay",
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:213:                        "deriveReconcileInputs", "reconcileIndicators", "checkJobFreshness").stream()
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:223:        for (String method : List.of("runCorporateActionChain", "runHeavyJobOfTheDay",
+main:src/test/java/com/stockscreener/pipeline/scheduler/PipelineSchedulerTest.java:224:                "deriveReconcileInputs", "reconcileIndicators", "checkJobFreshness")) {
+main:src/test/java/com/stockscreener/probe/backtest/EngineSweep.java:237:     * 아직 안 돈 날이 실재한다(일일 갱신 13:30 · 지표 사슬 14:00). 그날을 as-of로 잡으면 전
+main:src/test/java/com/stockscreener/probe/backtest/PresetResultSnapshotTest.java:49: * <p>MUST: 운영 전후 대조라면 두 스냅숏 사이에 평일 14:20 화해가 끼었는지 본다. 앱이 떠 있으면 그 화해가

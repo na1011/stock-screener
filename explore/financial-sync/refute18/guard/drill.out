@@ -1,0 +1,15 @@
+tm	v62	rc=1	build호출=1	
+tm	v63	rc=1	build호출=0	[deploy] 시험 DB(stock_screener_r18g_v63_test)에 이 트리에 없는 마이그레이션이 적용돼 있다: V63 — 다른 브랜치 시험이 남긴 것이다.
+tm	v64	rc=1	build호출=0	[deploy] 시험 DB(stock_screener_r18g_v64_test)에 이 트리에 없는 마이그레이션이 적용돼 있다: V63 V64 — 다른 브랜치 시험이 남긴 것이다.
+tm	empty	rc=1	build호출=1	
+tm	old64	rc=1	build호출=0	[deploy] 시험 DB(stock_screener_r18g_old64_test)에 이 트리에 없는 마이그레이션이 적용돼 있다: V63 V64 — 다른 브랜치 시험이 남긴 것이다.
+t0	v62	rc=1	build호출=1	
+t0	v63	rc=1	build호출=1	
+t0	v64	rc=1	build호출=0	[deploy] 시험 DB(stock_screener_r18g_v64_test)에 이 트리에 없는 마이그레이션이 적용돼 있다: V64 — 다른 브랜치 시험이 남긴 것이다.
+t0	empty	rc=1	build호출=1	
+t0	old64	rc=1	build호출=0	[deploy] 시험 DB(stock_screener_r18g_old64_test)에 이 트리에 없는 마이그레이션이 적용돼 있다: V64 — 다른 브랜치 시험이 남긴 것이다.
+t1	v62	rc=1	build호출=1	
+t1	v63	rc=1	build호출=1	
+t1	v64	rc=1	build호출=1	
+t1	empty	rc=1	build호출=1	
+t1	old64	rc=1	build호출=1	

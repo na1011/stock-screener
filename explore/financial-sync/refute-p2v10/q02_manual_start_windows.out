@@ -1,0 +1,9 @@
+       win        | runs | days | max_min |                                                                                                                jobs                                                                                                                 
+------------------+------+------+---------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 주말             |  145 |   11 |     393 | adjustment-rebuild,company-profile,corporate-action,financial-refill,full-statement-refill,governance-derive,governance-load,indicator-backfill,initial-load,market-calendar,universe-rebalance
+ 평일 00:00-06:00 |  109 |   15 |     145 | adjustment-rebuild,company-profile,corporate-action,financial-refill,full-statement-refill,governance-derive,indicator-backfill,indicator-derived-rebuild,indicator-origin-rewrite,initial-load,universe-rebalance
+ 평일 06:00-13:30 |  140 |   20 |     412 | adjustment-rebuild,company-profile,corporate-action,corporate-action-judge,financial-refill,full-statement-refill,governance-derive,governance-load,indicator-backfill,initial-load,market-index,universe-rebalance
+ 평일 13:30-17:00 |   84 |   15 |      23 | adjustment-rebuild,corporate-action,corporate-action-judge,financial-refill,full-statement-refill,governance-derive,governance-load,indicator-backfill,indicator-derived-rebuild,indicator-origin-rewrite,initial-load,market-index
+ 평일 17:00-24:00 |  130 |   19 |     162 | adjustment-rebuild,company-profile,corporate-action,corporate-action-judge,financial-refill,full-statement-refill,governance-derive,indicator-backfill,initial-load,market-index
+(5개 행)
+

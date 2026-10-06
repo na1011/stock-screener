@@ -1,0 +1,1 @@
+R16 spacing attempts=3 gapsMs=204 209 span=414ms -> THROW TRANSIENT

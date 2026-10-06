@@ -1,0 +1,6 @@
+src/main/java/com/stockscreener/indicator/IndicatorRunner.java
+src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java
+src/main/java/com/stockscreener/pipeline/batch/IndicatorBackfillJob.java
+src/test/java/com/stockscreener/indicator/IndicatorRunnerTest.java
+src/test/java/com/stockscreener/probe/backtest/PointInTimeScreener.java
+src/test/java/com/stockscreener/probe/backtest/StoredCoverageBoundaryProbeTest.java

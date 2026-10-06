@@ -1,0 +1,28 @@
+SET
+job_name | triggered_by | status | count | min | max | weekday_runs
+company-profile | MANUAL | PARTIAL_SUCCESS | 1 | 2026-08-11 | 2026-08-11 | 1
+company-profile | MANUAL | SUCCESS | 14 | 2026-08-11 | 2026-10-03 | 8
+company-profile | SCHEDULER | SUCCESS | 2 | 2026-09-19 | 2026-09-26 | 0
+corporate-action | MANUAL | SUCCESS | 26 | 2026-08-12 | 2026-10-05 | 19
+corporate-action | SCHEDULER | SUCCESS | 24 | 2026-09-02 | 2026-10-06 | 24
+financial-refill | MANUAL | ABORTED | 2 | 2026-09-16 | 2026-09-16 | 2
+financial-refill | MANUAL | PARTIAL_SUCCESS | 26 | 2026-09-04 | 2026-09-22 | 26
+financial-refill | MANUAL | SUCCESS | 63 | 2026-08-10 | 2026-10-03 | 60
+full-statement-refill | GAP_FILL | SUCCESS | 1 | 2026-10-03 | 2026-10-03 | 0
+full-statement-refill | MANUAL | ABORTED | 1 | 2026-09-22 | 2026-09-22 | 1
+full-statement-refill | MANUAL | PARTIAL_SUCCESS | 3 | 2026-09-13 | 2026-09-14 | 2
+full-statement-refill | MANUAL | SUCCESS | 35 | 2026-08-13 | 2026-09-23 | 29
+governance-load | GAP_FILL | SUCCESS | 2 | 2026-09-26 | 2026-10-03 | 0
+governance-load | MANUAL | ABORTED | 2 | 2026-09-04 | 2026-09-20 | 1
+governance-load | MANUAL | SUCCESS | 18 | 2026-08-23 | 2026-09-20 | 3
+initial-load | GAP_FILL | SUCCESS | 3 | 2026-09-26 | 2026-10-03 | 0
+initial-load | MANUAL | ABORTED | 1 | 2026-09-10 | 2026-09-10 | 1
+initial-load | MANUAL | PARTIAL_SUCCESS | 15 | 2026-08-29 | 2026-09-06 | 1
+initial-load | MANUAL | SUCCESS | 32 | 2026-08-11 | 2026-09-20 | 21
+initial-load | SCHEDULER | SUCCESS | 1 | 2026-09-19 | 2026-09-19 | 0
+universe-rebalance | ADMIN | SUCCESS | 1 | 2026-09-08 | 2026-09-08 | 1
+universe-rebalance | MANUAL | PARTIAL_SUCCESS | 1 | 2026-08-31 | 2026-08-31 | 1
+universe-rebalance | MANUAL | SUCCESS | 8 | 2026-08-29 | 2026-10-03 | 5
+universe-rebalance | SCHEDULER | PARTIAL_SUCCESS | 1 | 2026-09-05 | 2026-09-05 | 0
+universe-rebalance | SCHEDULER | SUCCESS | 5 | 2026-08-22 | 2026-09-26 | 0
+(25개 행)

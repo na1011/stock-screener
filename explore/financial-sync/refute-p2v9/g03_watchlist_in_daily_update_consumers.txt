@@ -1,0 +1,22 @@
+## 워치리스트 판정이 DailyUpdateJob 안에 있다는 것에 기대는 소비자(main · grep 'watchlist|워치리스트' 중 DailyUpdate·Admin·spec·rules·ADR)
+main:.claude/skills/browser-driving/SKILL.md:71:워치리스트 판정을 마쳤다. asOf=…, 판정 N건, 새로 충족 N건, 통지 N명, 실패 화면 N개
+main:docs/adr/ADR-0026-watchlist-edge-trigger.md:26:- MUST: 워치리스트 판정을 **백분위 계산 뒤에** 돌린다. "PER 하위 20%" 같은 조건이 그 앞에서 판정되면 어제 백분위로 오늘을 판정하게 되고, 그것은 조용히 그럴듯하다.
+main:docs/adr/ADR-0038-required-conditions.md:91:  모드가 늘면 `wire-contract.json`·`lib/evaluationMode`·워치리스트 판정(ADR-0026)이 함께 늘어난다.
+main:docs/adr/ADR-0093-market-scoped-trade-dates.md:35:- **MUST: 워치리스트 판정은 시장별 기준일을 받는다.** 하나로 판정하면 그날 쉰 시장의 종목이
+main:docs/phase-criteria.md:85:- **워치리스트 판정이 스크리닝과 같은 코드에서 나온다.** `ConditionEvaluator`를 재사용하고 별도 판정 로직을 만들지 않는다. 화면이 "충족"이라 말한 종목과 알림이 온 종목이 갈리면, 그 차이는 사용자가 손으로 대조하기 전까지 드러나지 않는다.
+main:src/main/java/com/stockscreener/notification/CompositeAlertPort.java:65:                // 채널 하나가 죽었다고 배치나 워치리스트 판정이 실패해서는 안 된다.
+main:src/main/java/com/stockscreener/pipeline/batch/BatchExecutionContext.java:309:     * <p>마감({@link #finish()})에 실리지 않는 사건이 있다. 워치리스트 판정 실패가 그렇다 —
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:104:    private final WatchlistAlertRunner watchlistAlertRunner;
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:116:                          WatchlistAlertRunner watchlistAlertRunner,
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:131:        this.watchlistAlertRunner = watchlistAlertRunner;
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:381:            // 그날 파생층 하나 때문에 워치리스트 판정(사용자 알림의 유일한 경로)·보존 정리·색인까지 잃지
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:406:            execution.stage("워치리스트 판정");
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:407:            // 워치리스트 판정은 백분위 뒤여야 한다. 백분위 조건("PER 하위 20%")을 건 화면이
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:409:            evaluateWatchlist(execution, asOfByMarket);
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:610:     * 저장 공간 문제일 뿐이지만, 워치리스트 판정이 며칠 조용히 안 돌면 사용자는 알림이
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:613:    private void evaluateWatchlist(BatchExecutionContext execution,
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:616:            WatchlistAlertRunner.Result result = watchlistAlertRunner.run(asOfByMarket);
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:618:                execution.alertOperator(AlertSeverity.WARNING, "워치리스트 판정 부분 실패",
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:624:            log.error("워치리스트 판정에 실패했다. 수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
+main:src/main/java/com/stockscreener/pipeline/batch/DailyUpdateJob.java:625:            execution.alertOperator(AlertSeverity.ERROR, "워치리스트 판정 실패",
+main:src/main/resources/db/migration/V2__indicator.sql:76:-- Phase 6 워치리스트 판정(소수 종목 × 전체 지표). 이 인덱스가 없으면 경로가 없다.

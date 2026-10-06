@@ -1,0 +1,16 @@
+ triggered_by |       job_name        | runs | cross_midnight | which 
+--------------+-----------------------+------+----------------+-------
+ GAP_FILL     | full-statement-refill |    1 |              0 | 
+ GAP_FILL     | governance-load       |    2 |              0 | 
+ GAP_FILL     | initial-load          |    3 |              0 | 
+ MANUAL       | company-profile       |   15 |              0 | 
+ MANUAL       | corporate-action      |   26 |              0 | 
+ MANUAL       | financial-refill      |   91 |              0 | 
+ MANUAL       | full-statement-refill |   39 |              0 | 
+ MANUAL       | governance-load       |   20 |              0 | 
+ MANUAL       | initial-load          |   48 |              0 | 
+ SCHEDULER    | company-profile       |    2 |              0 | 
+ SCHEDULER    | corporate-action      |   24 |              0 | 
+ SCHEDULER    | initial-load          |    1 |              0 | 
+(12개 행)
+

@@ -1,0 +1,5 @@
+v12 rc=0
+v12 tests=1 fail=0 err=0 ['SWEEP 보충 원자료 없음(404)=0', 'SWEEP 관문=false 파일=1207 종목=1207 보고서=62031 버린팩트=589429 부재=18329 읽기실패=0 out=/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut17/sweep/A-v12.tsv']
+v11 rc=0
+v11 tests=1 fail=0 err=0 ['SWEEP 보충 원자료 없음(404)=0', 'SWEEP 관문=false 파일=1207 종목=1207 보고서=62031 버린팩트=589429 부재=18329 읽기실패=0 out=/private/tmp/claude-501/-Users-na1011-dev-stock-screener/542f2076-f436-4591-9e74-12b004e1f464/scratchpad/wt-explore/explore/financial-sync/rebut17/sweep/A-v11.tsv']
+DONE

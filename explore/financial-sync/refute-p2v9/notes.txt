@@ -1,0 +1,53 @@
+refute-p2v9 중간 메모(계획 밖 렌즈 · 2026-10-06 밤 · 외부 API 0 · 운영 DB stock_screener SELECT만)
+
+[F1] 한 발화가 하루 전부를 쥔다 — 13:30을 놓친 날(앱이 그 뒤에 뜸)은 사슬·무거운 잡·유도·화해·워치리스트·신선도가 다 빠진다
+  - 실측 q02: 08-10~10-06 평일 41 중 SCHEDULER daily-update 없는 날 4(08-11 · 08-17 · 08-21 · 09-16)
+    · 그중 2일(08-11 14:16 · 08-21 13:56)은 앱이 13:30 뒤에 떠 있었고 사람이 관리 화면 ADMIN daily-update로 그날을 되살렸다(그 경로가 워치리스트를 판정 — AdminJobLauncher:178-179 · DailyUpdateJob.collect → evaluateWatchlist)
+    · 09-02 이후 25평일은 0(q01) — 빈도는 낮다 · 기제는 v9가 새로 만든다(main에서는 13:30만 빠지고 14:00~15:30은 돈다)
+  - ADR-0116 사용자 문장(2026-09-01): 「평일 매일 14:00」 · 「노트북 종료 등으로 안 돌았을 때를 위해 알림까지 추가. 관리 페이지 … 상단에 경고」
+    v9는 14:00 크론을 없애고 신선도 점검(안 돈 것을 알리는 자리)을 그 「안 돈 것」과 같은 메서드 끝(⑨)에 둔다 — PLAN에 이 사용자 문장 인용 0(grep '평일 매일' PLAN.md → 0)
+  - 신선도 예산은 전부 ≥ 5일(JobFreshnessPolicy:82-110) → ⑨를 사슬 밖 별도 크론으로 둬도 수면 역전이 판정을 못 틀린다(순서 근거가 ⑨에는 안 선다)
+  - v5 「단계가 안 돈 날을 아무도 신고 안 함 → 감시 max(run_date)」(PLAN:680·696)가 ⑨ 안에 들어가 단계와 같은 발화에 묶인다
+
+[F2] 워치리스트를 DailyUpdateJob 밖(⑧)으로 빼는 것의 안 센 소비자 + 결정 2 「갱신이 던져도 ④~⑨는 돈다(서로 입력이 아니다)」
+  - ③은 ⑧의 입력이다(WatchlistAlertRunner.run(asOfByMarket) javadoc · ADR-0026 · ADR-0093) — main은 일일 갱신이 던지면 워치리스트를 안 돈다(try 안 · DailyUpdateJob:409-417)
+  - 관리 화면 「일일 갱신」 설명 「…뒤 워치리스트를 판정한다」(AdminJobLauncher:179) · retryFailures(부분 재실행 · DailyUpdateJob:226-242 → collect)도 판정 · BatchExecutionContext:309(판정 실패 알림이 daily-update 실행에 붙음) · PipelineEndToEndTest:744
+  - spec:83 「일일 갱신 배치는 … 함께 확인」 vs spec:79 「초기 적재는 일일 갱신 배치와 별개」 — v9는 같은 낱말을 둘로 읽는다(83은 13:30 메서드, 79의 MUST NOT은 「일일 갱신 잡」으로 좁힘)
+
+[F3] 따라잡기가 「보류 행」에만 걸린다 — 같은 꼴(그날 D 값이 안 닫혀 null → 불충족 → recordEvaluation(false) → 재알림 / 또는 D를 아예 안 판정)의 다른 원인
+  - 종목 시세 실패: SCHEDULER daily-update 38회 중 1회(#500 · 09-15 · 12종목 · q05)
+  - ⑦ 실패 → ⑧: ⑤(FR)가 지운 종목은 ⑦만 채운다(③이 앞) — SCHEDULER 화해 실패 0/2(q04) · 기제만
+  - ③ 예외 → ⑧(v9 신설 갈래) · ⑧ 예외 날 · 앱이 안 뜬 날(08-17 · 09-16) · ADMIN 복구 날
+  - 처방 후보: 시장별 「판정 완료 D」 워터마크로 따라잡기(보류 행은 그 위의 항목 단위 예외)
+
+[F4] 배포 순간의 표/jar 어긋남 — crons-done.sh 표는 저장소 커밋 것, 판정 대상은 지금 도는 jar
+  - 2부 배포 때 deploy.sh(새 커밋)가 새 표(13:30 + 토)로 옛 jar(여섯 크론)를 판정 → 예: 평일 14:13 옛 사슬이 끝난 뒤 · 새 표엔 14:15가 없어 「다음 명목 5분」 문이 안 걸림 → rc 0 → 옛 jar의 14:15·14:18·14:20·15:30이 그날 빠짐(새 jar의 첫 13:30은 이튿날)
+  - 코드로 읽음(ops/crons-done.sh:41-49 CRONS · :105-122 끝 줄 · :142-147 다음 명목) · 실행으로 안 잼
+  - 처방: 표를 app.jar.commit의 커밋에서 읽는다(676a58e6이 그 파일을 jar 교체 직전에 씀) 또는 그 배포 하나는 두 표의 합집합
+
+[F5] 0부 수용 시험이 부르는 메서드 넷 — v9 목록은 runHeavyJobOfTheDay만
+  - origin/hold/p0-run-scope · p1: runCorporateActionChain · runHeavyJobOfTheDay ×3 · deriveReconcileInputs · reconcileIndicators (g04) + scopeOf javadoc 넷(14:00·14:18·14:20)
+
+[F6] 결정 8 소비자 목록 「알림 본문 넷」은 수가 틀리다 — 시각을 박은 운영자 알림·로그 본문 ≥ 11
+  - FinancialRefillJob:283(제목)·323 · AdjustmentRebuildJob:209-210 · CorporateActionJudgeJob:152 · InitialLoadJob:177 · DailyUpdateJob:391 · MembershipGapFiller:177-180·188·257 · FinancialRefillAlertTest:86·91
+  - 행동 소비자: ops/apply-window/00-precheck.sh:8-14(15:10 벽시계 + daily-update·corporate-action 오늘 행) — 미국 관문 측정 도구
+  - 저장 소비자: V59 COMMENT(DB 칸 주석 「14:00 사슬의 무효화 종목 원본층」 — 고치려면 마이그레이션)
+  - 문서: batch-load SKILL:57·58·61·63·153·401·525 · ADR-0141:21·146·151 · reload-gate:124-125(관문 절차 「첫 14:20」) · CLAUDE.md:94 · docs/external/커스텀전략-백테스트.md:87(이미 낡은 14:30) · JobFreshnessPolicy:83·87-88 · IndicatorReconciler:108-109 · BatchExecutionRecorder:366 · BatchExecutionSweeper:56 · BootstrapRunner:343 · admin.ts:59 · AdminJobLauncher:179
+
+[F7] 결정 2(FR은 두 시장 단계가 다 성공한 날만) × 결정 3(강제일 38일) — 강제일에 단계 실패면? 표에 칸이 없다 · 한 시장 단계의 지속 실패가 다른 시장 FR까지 무기한 막는다(시장 결합)
+
+[F8] reload-gate.md:65 둘째 칸 「소비한 공시까지만 표지가 간다」 — v4가 버린 날짜 표지 설계 어휘가 남음(676a58e6은 넷째 칸만 고침)
+
+[F9] 미표시는 값을 바꾸는 계산기 갈래 — 설정 뒤/관문 입장이 없다(ADR-0166 §규칙 MUST) · 소비자: DailyUpdateJob · IndicatorBackfillJob(화해·손 백필) · PointInTimeScreener(백테스트 탐침 — 「기준일=오늘 통과 집합이 화면과 같은가」)
+
+[정정 F1] 08-11은 늦은 기동이 아니다 — 13:30 크론이 그날 15:51 커밋(225f1fa6)으로 생겼다. 13:30 크론 시대(08-12~10-06 평일 39) 중 늦은 기동 1(08-21 · 02:05 ADMIN 뒤 낮 MANUAL 작업 · 13:56 ADMIN daily-update로 복구) · 종일 꺼짐 2(08-17 · 09-16 — 그 D 08-14·09-15는 워치리스트가 끝내 판정 안 함) · SCHEDULER ABORTED 0(q06)
+
+[F10] DART 예산의 모집단에 다른 JVM이 없다(결정 3) + 결정 8이 손·실키 문을 「crons-done = 0」(오전 내내 참)으로 넓힌다
+  - usedToday는 앱 JVM 메모리(TokenBucketRateLimiter:32·65·94 — 재기동이면 0 · bootRun·실키 콜 안 셈) · 실제 키 한도 20,000(application.yaml:270 「2차 출처」) − 우리 18,000 = 여유 2,000
+  - q07: 9월 이후 평일 26 중 15일에 MANUAL DART 가능 잡 · 09-21 국내 FSR #647+#648 실제 15,844콜(PipelineScheduler:268-269)
+  - 020 → RATE_LIMITED(DartResponse:105) · v9 끝 상태 「원인 무관 · 시도한 날 수 N=2」 → 손 세션 이틀이 그 종목을 미표시로 민다
+  - progress:93 손 쓰기 문 「… 시작해 그 출력의 다음 명목 발화 전에 끝낸다」의 끝 조건이 v9 결정 8의 술어에서 빠졌다
+
+[F12] 「중복 방지 키 watchlist:%d:%s는 (항목, D)」는 사실과 다르다 — WatchlistAlertRunner:271은 (userId, 그 실행의 기준일 문자열) · 억제는 메모리 10분 · 기록은 억제와 무관하게 남는다(run:118-121) → 같은 ⑧ 안의 따라잡기와 오늘 판정이 같은 기준일 문자열을 내면 뒤 알림이 억제되고 last_satisfied만 참이 된다(시장 휴장이 갈린 날 · 구성만 · 재지 않음)
+
+[F13] 따라잡기가 오늘의 화면 조건으로 지난 D를 판정 — 항목의 화면이 바뀌면 last_satisfied를 NULL로(WatchlistStore.update:155-171) 하는데 보류 행은 그대로 → 그 D에 없던 조건으로 「D 기준 충족」 알림

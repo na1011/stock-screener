@@ -1,0 +1,11 @@
+ id  | triggered_by |     status      | target_date |         kst         | target_count | failure_count 
+-----+--------------+-----------------+-------------+---------------------+--------------+---------------
+  14 | ADMIN        | PARTIAL_SUCCESS | 2026-08-07  | 2026-08-08 21:46:17 |          350 |             1
+ 500 | SCHEDULER    | PARTIAL_SUCCESS | 2026-09-14  | 2026-09-15 13:30:00 |         1350 |            12
+(2개 행)
+
+ runs_with_stock_failures | runs 
+--------------------------+------
+                        1 |   38
+(1개 행)
+

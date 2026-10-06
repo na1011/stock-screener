@@ -1,0 +1,6 @@
+K0 아무것도 안 띄움 | crons-done 줄: [] | 기존 도우미 stray_load_pids: rc=1 []
+K1 SPRING_PROFILES_ACTIVE=bootstrap java … --job=financial-refill (PID 32612) | crons-done 줄: [] | 기존 도우미 stray_load_pids: rc=0 [32612]
+K2 --spring.profiles.active=local,bootstrap (PID 32627) | crons-done 줄: [] | 기존 도우미 stray_load_pids: rc=0 [32627]
+K3 zsh -c '…--spring.profiles.active=bootstrap' (PID 32907 · java 아님) | crons-done 줄: [32907 ] | 기존 도우미 stray_load_pids: rc=1 []
+K4 java … --spring.profiles.active=bootstrap --job=share-basis-derive (PID 33273 · 대조군) | crons-done 줄: [33273 ] | 기존 도우미 stray_load_pids: rc=0 [33273]
+K5 다 끈 뒤 | crons-done 줄: [] | 기존 도우미 stray_load_pids: rc=1 []

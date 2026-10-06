@@ -1,0 +1,18 @@
+SET
+d | fire | alive
+2026-08-10 | 15:00 | 32:indicator-backfill 14:56~15:00
+2026-08-14 | 13:30 | 79:indicator-backfill 12:24~16:52
+2026-08-14 | 15:00 | 79:indicator-backfill 12:24~16:52
+2026-08-18 | 15:00 | 93:financial-refill 14:58~15:14
+2026-08-21 | 13:30 | 106:indicator-backfill 13:28~13:30
+2026-08-31 | 17:00 | 224:financial-refill 16:58~17:10
+2026-09-01 | 15:00 | 236:indicator-backfill 14:57~15:03
+2026-09-07 | 13:30 | 305:indicator-backfill 13:16~18:42
+2026-09-07 | 15:00 | 305:indicator-backfill 13:16~18:42
+2026-09-07 | 17:00 | 305:indicator-backfill 13:16~18:42
+2026-09-15 | 13:30 | 499:indicator-backfill 11:56~14:43
+2026-09-15 | 15:00 | 506:financial-refill 14:51~15:04
+2026-09-16 | 13:30 | 520:indicator-backfill 13:01~19:53
+2026-09-16 | 15:00 | 520:indicator-backfill 13:01~19:53
+2026-09-16 | 17:00 | 520:indicator-backfill 13:01~19:53
+(15개 행)
