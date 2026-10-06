@@ -16,9 +16,14 @@
 #      60초를 빼는 것은 크론이 명목보다 조금 일찍 발화하기 때문이다(운영 기록 13:30·14:00 첫 잡 62건 중 21건이 명목 전 ·
 #      최대 −2.189초) — 할 일이 없어 바로 끝나는 크론은 끝 줄도 명목 전에 찍힌다. 같은 크론의 앞 발화는 하루 전이라 안 겹친다.
 #      끝 줄은 회전된 로그(stdout.log.N.gz)까지 찾는다.
-#   3. batch_execution에 RUNNING이 없다.
+#   3. batch_execution에 앱이 가진(SCHEDULER · ADMIN · GAP_FILL) RUNNING이 없다 — MANUAL은 다른 JVM(bootRun)이라 앱을 내려도
+#      안 끊기고, 스위퍼가 다음 bootstrap 때에야 닫는 유령 행(08-06~09-08에 12건 · 최대 76시간)이 판정을 막는다.
 # 지연 L(벽시계 경과 − JVM 가동 시간)은 참고로만 찍는다 — 크론마다의 밀림이 아니다.
 # 다음 명목 발화 시각을 함께 찍는다 — 앱을 내렸으면 그 전에 다시 올린다.
+#
+#   5. 다음 명목 발화가 5분 넘게 남았다 — 재기동 창(실측 약 4초)이 명목 시각에 걸치면 새 JVM이 그 발화를 다음 날로 잡는다.
+# 0의 뜻은 「지금 내려도 빠질 발화가 없다」다 — 「그날 크론이 다 끝났다」가 아니다(오전 · 리밸런싱 전 토요일에도 0이다).
+# 「그날 무엇이 돌았나」를 물을 때는 batch_execution과 끝 줄을 따로 본다.
 #
 # 종료코드: 0 내려도 된다 · 1 아직 안 된다 · 2 판정하지 못했다(psql 실패).
 set -euo pipefail
@@ -108,19 +113,26 @@ for c in "${CRONS[@]}"; do
 done
 if [ "$pending" -gt 0 ]; then
   if ! zgrep -a -q " INFO $pid --- .*크론 발화를 마쳤다" "${logs[@]}" 2>/dev/null; then
-    echo "[crons] 이 JVM은 끝 줄을 한 번도 안 찍었다 — 끝 줄을 넣기 전 코드다. 크론마다 시작·끝 로그를 손으로 본다."
+    echo "[crons] 이 JVM의 끝 줄이 아직 하나도 없다 — 기동 뒤 첫 발화가 안 끝났거나, 끝 줄을 찍기 전 jar다(배포 폴더의"
+    echo "        app.jar.commit 커밋에 PipelineScheduler의 「크론 발화를 마쳤다」가 있는지로 가른다)."
   fi
   echo "[crons] 남은 발화 ${pending}개 — 아직 안 된다."
   exit 1
 fi
 
 psql=$(pg_bin psql) || { echo "[crons] psql을 못 찾았다 — 판정하지 못했다." >&2; exit 2; }
-if ! running=$("$psql" -X -At -d "$DB" -c "select count(*) from batch_execution where status='RUNNING'" 2>/dev/null); then
+if ! running=$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$DB" -c "select count(*) from batch_execution where status='RUNNING' and triggered_by in ('SCHEDULER','ADMIN','GAP_FILL')" 2>/dev/null); then
   echo "[crons] batch_execution을 못 읽었다 — 판정하지 못했다." >&2
   exit 2
 fi
 if [ "$running" -ne 0 ]; then
-  echo "[crons] 도는 배치가 ${running}개다 — 아직 안 된다."
+  echo "[crons] 앱이 돌리는 배치가 ${running}개다 — 아직 안 된다."
   exit 1
 fi
-echo "[crons] 내려도 된다. 다음 명목 발화: $(next_fire) — 그 전에 다시 올린다."
+next=$(next_fire)
+left=$(( $(epoch "$next") - now ))
+if [ "$left" -lt 300 ]; then
+  echo "[crons] 다음 명목 발화(${next})가 $((left / 60))분 $((left % 60))초 뒤다 — 재기동 창이 걸칠 수 있다. 지나간 뒤 다시 묻는다."
+  exit 1
+fi
+echo "[crons] 내려도 된다. 다음 명목 발화: ${next}($((left / 60))분 뒤) — 그 전에 다시 올린다."

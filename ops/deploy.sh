@@ -12,6 +12,9 @@
 #
 # 그래서 이 스크립트는 **어느 상태에서 실행해도 같은 곳에 도착한다** — 새 jar가 돌고
 # 밖에서 보인다. 둘 다 켜져 있든, 앱만 켜져 있든, 아무것도 안 돌든 그대로 실행하면 된다.
+# **예외는 하나다 — 앱 크론이 남았으면 아무것도 바꾸지 않고 멈춘다**(ops/crons-done.sh). 판정은 빌드 앞과 종료 직전
+# 두 번 묻고, 스테이징은 종료가 끝난 뒤에만 한다 — 멈춘 배포가 배포 폴더(jar · app.jar.commit)를 새것으로 바꿔 두면
+# 다음 기동이 말없이 그 jar를 띄운다(2026-10-06 반증). 사람이 판정을 넘기려면 ops/deploy.sh --force.
 
 set -euo pipefail
 
@@ -29,13 +32,29 @@ if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
   warn_running_batches "deploy"
 fi
 
-# 앱을 내려도 그날 크론이 안 빠지는가를 빌드(분 단위) 전에 먼저 묻는다 — 정본은 stop.sh 쪽 판정이다(kill 직전에 다시 묻는다).
-FORCE="${1:-}"
-[[ -z "$FORCE" || "$FORCE" == "--force" ]] || { echo "용법: ops/deploy.sh [--force]" >&2; exit 2; }
-if [[ "$FORCE" != "--force" ]] && running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null && ! "$HERE/crons-done.sh"; then
-  echo "[deploy] 그날 크론이 아직 남았다 — 배포하지 않는다. 사람이 판정을 넘기려면 ops/deploy.sh --force" >&2
+# 앱을 내려도 그날 크론이 안 빠지는가 — 빌드(분 단위) 전에 한 번, 종료 직전에 한 번 묻는다.
+FORCE=""
+for arg in "$@"; do
+  case "$arg" in
+    --force) FORCE="--force" ;;
+    *)       echo "용법: ops/deploy.sh [--force]" >&2; exit 2 ;;
+  esac
+done
+crons_gate() {
+  local judged=0
+  [[ "$FORCE" == "--force" ]] && return 0
+  running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null || return 0
+  "$HERE/crons-done.sh" || judged=$?
+  [[ $judged -eq 0 ]] && return 0
+  if [[ $judged -eq 2 ]]; then
+    echo "[deploy] 앱 크론이 남았는지 판정하지 못했다(위 사유) — 아무것도 바꾸지 않고 멈춘다." >&2
+  else
+    echo "[deploy] 앱 크론이 아직 남았다(위 목록) — 아무것도 바꾸지 않고 멈춘다." >&2
+  fi
+  echo "         기다렸다 다시 친다. 사람이 판정을 넘기려면: ops/deploy.sh --force" >&2
   exit 1
-fi
+}
+crons_gate
 
 # jar가 나온 커밋을 빌드 전후로 잡는다 — 빌드(약 1분) 사이에 공유 작업 트리로 커밋이 들어오면 「스테이징 순간의 HEAD」는
 # 다른 코드를 가리킨다. 둘이 같고 빌드 입력에 커밋 안 된 것이 없을 때만 stage.sh가 커밋을 적는다.
@@ -49,15 +68,18 @@ echo "== 빌드 =="
 BUILD_STATE_AFTER="$(build_state)"
 export BUILD_STATE_BEFORE BUILD_STATE_AFTER
 
-echo "== 스테이징 =="
-"$HERE/stage.sh"
-
 echo "== 앱 재기동 =="
+# 빌드 사이에 명목 시각이 지났을 수 있다 — 종료 직전에 다시 묻는다. 여기서 멈추면 아직 아무것도 안 바꿨다.
+crons_gate
 # 돌고 있지 않아도 실패로 다루지 않는다. 배포는 "지금 도는 것을 새것으로 바꾼다"이고,
-# 꺼져 있었으면 새것으로 켜는 것이 같은 의도다.
+# 꺼져 있었으면 새것으로 켜는 것이 같은 의도다. 판정은 위에서 했으므로 stop.sh에는 --force를 넘긴다.
 if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
-  "$HERE/stop.sh" --app $FORCE
+  "$HERE/stop.sh" --app --force
 fi
+
+echo "== 스테이징 =="
+# 종료가 끝난 뒤에만 배포 폴더를 바꾼다 — 그래야 「app.jar.commit = 지금 도는(또는 곧 뜰) jar」가 선다.
+"$HERE/stage.sh"
 "$HERE/start.sh" --app
 
 echo "== 터널 =="
