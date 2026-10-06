@@ -71,7 +71,8 @@ class ReaderVersionPinTest {
     private static final List<String> SOURCE_PINNED = List.of(
             "d1361d139cdfa74bb695997d9fea491ba9af9f3be6f5cebcd0cc9459f698b18c",
             "c713c64d6a4a6dd9e4e6f04267463b2877dde8ea6eeac50b46ee8847d182423f",
-            "e44657c52f69e940e9a083e0d76801aea8f561cb218e67be3509d1761c002bb7");
+            "e44657c52f69e940e9a083e0d76801aea8f561cb218e67be3509d1761c002bb7",
+            "7d27b748e3ffb6c804a9fb0c963e3b0d1a241b1676d74277d1a46bb919a92efc");
 
     /**
      * 판 범위 — 저장되는 것(상태 · 원 팩트 · 머리 · 실패 종류)을 정하는 파일 전부, 파일 전체다({@code READER_VERSION} 선언만
@@ -103,6 +104,7 @@ class ReaderVersionPinTest {
     /** 판 1, 2, …의 출력 해시. 끝에만 더한다. */
     private static final List<String> PINNED = List.of(
             "c8e8a6e90b0cf4786efd0fc10bacee5099b4babeb6cdd2f61666f43bb53ee982",
+            "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1");
 
@@ -287,6 +289,23 @@ class ReaderVersionPinTest {
     }
 
     @Test
+    @DisplayName("판 범위의 인터페이스를 범위 밖에서 구현하지 않는다 — 주입되는 구현은 javac 참조 분석에 안 보인다")
+    void scopeInterfacesAreImplementedOnlyInScope() throws Exception {
+        Pattern implementsScope = Pattern.compile(
+                "implements[^{]*\\b(SupplementLedger|FilingSupplementer)\\b|@Bean[\\s\\S]{0,300}?\\b(SupplementLedger|FilingSupplementer)\\s+\\w+\\s*\\(");
+        Set<String> offenders = new TreeSet<>();
+        try (Stream<Path> files = Files.walk(Path.of("src/main/java"))) {
+            for (Path file : files.filter(f -> f.toString().endsWith(".java")).toList()) {
+                boolean inScope = file.getParent().equals(SOURCE_DIR) && SOURCE_SCOPE.contains(file.getFileName().toString());
+                if (!inScope && implementsScope.matcher(Files.readString(file)).find()) {
+                    offenders.add(file.toString());
+                }
+            }
+        }
+        assertThat(offenders).as("범위 밖에서 저장·보충을 구현하면 판 고정이 그 행동을 못 본다 — 그 파일을 범위에 넣는다").isEmpty();
+    }
+
+    @Test
     @DisplayName("받기 실패의 종류에 UNREADABLE이 없다 — 있으면 받기 실패가 다시 받지 않는 종료 상태로 저장된다")
     void fetchFailureKindsNeverCollideWithTheTerminalKind() {
         assertThat(java.util.Arrays.stream(DataSourceException.Kind.values()).map(Enum::name))
@@ -294,11 +313,15 @@ class ReaderVersionPinTest {
     }
 
     @Test
-    @DisplayName("박힌 해시는 덧붙이기만 한다 — 판 번호가 같은 채 값이 바뀐 커밋이 없다(v8부터 · git 이력)")
+    @DisplayName("박힌 해시는 덧붙이기만 한다 — 판 번호가 같은 채 값이 바뀐 커밋이 없다(v8부터 · git 메인라인 이력)")
     void pinnedListsOnlyGrow() throws Exception {
+        // git 저장소가 아니면(git archive 사본) 이력이 없어 물을 수 없다 — 건너뛴 것으로 드러나게 둔다.
+        org.junit.jupiter.api.Assumptions.assumeTrue(isGitWorkTree(), "git 작업 트리가 아니다 — 덧붙이기 검사를 못 한다");
         String path = "src/test/java/com/stockscreener/pipeline/datasource/us/ReaderVersionPinTest.java";
-        List<String> commits = new ArrayList<>(git("log", "--format=%H", APPEND_ONLY_SINCE + "^..HEAD", "--", path)
-                .lines().filter(l -> !l.isBlank()).toList());
+        // --first-parent: 메인라인만 걷는다. 날짜 순으로 두 가지를 섞으면 따로 판을 올린 두 가지를 merge한 뒤 영영 붉다
+        // (v9 반증 — 같은 트리를 한 줄 이력으로 두면 초록 · merge면 붉음 · --first-parent면 초록).
+        List<String> commits = new ArrayList<>(git("log", "--first-parent", "--format=%H", APPEND_ONLY_SINCE + "^..HEAD",
+                "--", path).lines().filter(l -> !l.isBlank()).toList());
         java.util.Collections.reverse(commits);
         assertThat(commits).as("덧붙이기 검사의 시작 커밋이 이력에 있어야 한다").isNotEmpty();
         List<String> versions = new ArrayList<>();
@@ -317,13 +340,26 @@ class ReaderVersionPinTest {
         }
     }
 
-    /** 덧붙이기 검사를 시작하는 커밋 — 이 앞은 배포 전이라 지금 판 값을 고치던 시기다(v8 · 2026-10-06). */
+    /**
+     * 덧붙이기 검사를 시작하는 커밋 — 이 앞은 배포 전이라 지금 판 값을 고치던 시기다(v8 · 2026-10-06). MUST: 이 브랜치는 main에
+     * merge 커밋으로 합친다 — 리베이스·체리픽은 이 앞의 커밋 사본(제자리 수정 · 선언 없음)을 범위에 넣어 이 시험이 영구 붉다.
+     */
     private static final String APPEND_ONLY_SINCE = "066c325a";
 
     private static List<String> pinned(String source, String list) {
         Matcher m = Pattern.compile("\\b" + list + " = List\\.of\\(([^;]*?)\\);", Pattern.DOTALL).matcher(source);
         assertThat(m.find()).as(list + " 선언을 못 찾았다").isTrue();
         return Pattern.compile("\"([0-9a-fA-Z]+)\"").matcher(m.group(1)).results().map(r -> r.group(1)).toList();
+    }
+
+    private static boolean isGitWorkTree() {
+        try {
+            Process process = new ProcessBuilder("git", "rev-parse", "--is-inside-work-tree").redirectErrorStream(true).start();
+            String out = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
+            return process.waitFor() == 0 && out.equals("true");
+        } catch (IOException | InterruptedException e) {
+            return false;
+        }
     }
 
     private static String git(String... args) throws Exception {

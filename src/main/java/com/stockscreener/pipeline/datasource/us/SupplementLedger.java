@@ -29,7 +29,7 @@ interface SupplementLedger {
     /** companyfacts가 실은 공시의 행을 COVERED로 바꾼다(OK·NO_XBRL·FAILED 어느 것이든 · 팩트를 비움) — 지우지 않는다(그 판을 매 실행 연다). */
     void markCovered(String accession, long cik);
 
-    /** 판이 지금보다 낮은 저장분을 합쳤다 — 미해결로 센다. 다시 저장하거나 COVERED가 되면 지워진다. */
+    /** 판이 지금과 다른(낮든 높든) 저장분을 합쳤다 — 미해결로 센다. 다시 저장하거나 COVERED가 되면 지워진다. */
     void markStaleUsed(String accession, long cik);
 
     /** 이 실행이 대상으로 본 행에 시각을 찍는다 — 실행 기록의 미해결이 이 실행이 본 행만 세게. */

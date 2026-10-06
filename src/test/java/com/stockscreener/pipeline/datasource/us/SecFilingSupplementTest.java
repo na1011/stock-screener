@@ -65,6 +65,8 @@ class SecFilingSupplementTest {
     /** 경로마다 돌려줄 상태코드. 없으면 200. */
     private final Map<String, Integer> statusOf = new ConcurrentHashMap<>();
     private final Map<String, String> bodyOf = new ConcurrentHashMap<>();
+    /** 경로마다 차례로 낼 본문(있으면 bodyOf보다 먼저 · 다 쓰면 bodyOf). */
+    private final Map<String, java.util.Deque<String>> sequenceOf = new ConcurrentHashMap<>();
     /** 경로마다 전송을 끊는 방식(없으면 정상). */
     private final Map<String, okhttp3.mockwebserver.SocketPolicy> policyOf = new ConcurrentHashMap<>();
     private SecFilingSupplement supplement;
@@ -79,7 +81,9 @@ class SecFilingSupplementTest {
                 String path = request.getPath();
                 paths.add(path);
                 int status = statusOf.getOrDefault(path, 200);
-                String body = bodyOf.get(path);
+                java.util.Deque<String> sequence = sequenceOf.get(path);
+                String next = sequence == null ? null : sequence.pollFirst();
+                String body = next != null ? next : bodyOf.get(path);
                 if (status != 200 || body == null) {
                     return new MockResponse().setResponseCode(status == 200 ? 404 : status)
                             .setBody("<Error><Code>NoSuchKey</Code></Error>");
@@ -514,6 +518,43 @@ class SecFilingSupplementTest {
         supplement.supplement(CIK, companyFacts(), FROM, "t");
         assertThat(paths).as("다음 실행이 다시 받는다").contains(instancePath(MISSING, INSTANCE));
         assertThat(storedStatus(MISSING)).isEqualTo("OK");
+    }
+
+    @Test
+    @DisplayName("받다 만 본문은 같은 실행 안에서 다시 받는다 — 한 번 끊겼다고 다음 FR까지 비우지 않는다")
+    void truncatedBodyIsRetriedWithinTheSameRun() throws Exception {
+        byte[] full = instanceBytes();
+        sequenceOf.put(instancePath(MISSING, INSTANCE),
+                new java.util.ArrayDeque<>(List.of(new String(full, 0, full.length / 2, StandardCharsets.UTF_8))));
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.failed()).isEmpty();
+        assertThat(storedStatus(MISSING)).isEqualTo("OK");
+        assertThat(paths).filteredOn(instancePath(MISSING, INSTANCE)::equals).as("잘린 본문 1 + 다시 받은 1").hasSize(2);
+    }
+
+    @Test
+    @DisplayName("고르지 않은 항목의 크기가 수가 아니어도 그 공시는 선다 — 크기는 고른 인스턴스에서만 읽는다")
+    void nonNumericSizeOfAnotherItemDoesNotFailTheFiling() throws Exception {
+        bodyOf.put(indexPath(MISSING), "{\"directory\":{\"item\":[{\"name\":\"" + INSTANCE + "\",\"size\":\""
+                + instanceBytes().length + "\"},{\"name\":\"abt-20260630.htm\",\"size\":\"n/a\"}]}}");
+
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(storedStatus(MISSING)).isEqualTo("OK");
+    }
+
+    @Test
+    @DisplayName("인스턴스 크기가 수가 아니거나 너무 길면 받기 실패다 — 런타임 예외로 새지 않는다")
+    void unparsableInstanceSizeIsAFetchFailure() throws Exception {
+        bodyOf.put(indexPath(MISSING), "{\"directory\":{\"item\":[{\"name\":\"" + INSTANCE
+                + "\",\"size\":\"99999999999999999999\"}]}}");
+
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
+        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
     }
 
     @Test
