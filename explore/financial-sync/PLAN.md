@@ -751,3 +751,10 @@ v4에 더해: **실패 계약** = 보충 실패(처음 · 판 다시 읽기 둘 
 6. 두 MUST NOT(박힌 해시를 고쳐 판을 안 올림 · 재료 변경 동반)이 산문뿐(구조로 확인 · 변이로는 안 잼) → 재료 입력 해시 · 기존 항목 수정 금지 훅.
 7. (작음) 예외 셋: `SecTickerCikCache` 섬 · `SecEdgarResponse`는 비2xx 갈래만 서고 `requireJson`의 200 갈래(트리 → 이름 목록 → NO_XBRL 입력)를 안 덮음 · `SecEdgarHeaders`의 「틀리면 403」은 좁음(재보지 않음) · heredoc을 들여쓰기째 복사하면 종결자가 안 섬(실패 → 트랜잭션째 되돌림 · 안전).
 - 선다(쟀다): 새·바뀐 시험이 자기 코드에 닿음(base 79/0 · C0 초록 · 항목 검사 제거 붉음 · 문서 주석 걷기 끄기/탐욕 붉음 · 범위 밖 단순 이름 붉음 · `newFactory()`는 소스 해시만 붉음 · 배포 jar 113개에 대체 StAX 0) · JAXP 한도(120MB · 엔티티 다량 무사 · 캐시 최대 23.9MB) · v8 109 재생 = ADR 2-5 수 · 같은 109 재실행은 쓰기 0(Writer 수준 멱등) · 되돌리기 SQL 글자대로 md5 같음 · 절차 글자(1단계 109행 · `8e8f8484` 닿음 · 빈 `--tickers=` 거절 · 로그 두 줄 코드에 있음 · `^$(date +%F)` 맞음 · DB 시간대 Asia/Seoul · note 꼴 · `liveTest`에 `.env`) · 평일 저녁 크론 없음 · 14:53 오늘 실행 행 0(밀림 실재).
+
+## 1부 v9(2026-10-06 · 작업 트리 `wt-p1v9` · 계획 밖 v8 판정 대기 · 시험 1,828/0)
+- **받기**: `folder()`가 항목마다 `size`(빈 칸은 null · 수가 아니면 MALFORMED) · `instance()`가 받은 길이 ≠ 색인 크기면 MALFORMED · 크기 없는 인스턴스는 받지 않고 MALFORMED · 판 3 · 범위에 `SecEdgarResponse`(색인 JSON 200 갈래).
+- **판 고정**: 정규형에 형 종류(`ClassTree.getKind()`) · 범위 밖 프로젝트 형을 javac 속성 분석으로(`com.stockscreener.*` · 일곱 형 사유 — `DataSourceException`(Kind에 UNREADABLE 없음을 시험으로) · `ConditionalOnApiKey` · `DataSourceProperties` · `ExternalApiClientFactory` · `RateLimiter` · `SecEdgarHeaders` · `SecTickerCikCache`) · 두 목록 덧붙이기만(git 이력 · `066c325a`부터 · 재료만 바꿔도 판을 올림 · 중복 허용).
+- **ADR·V64**: §규칙의 판 범위·「받았다 = 길이가 색인 크기와 같다」 · V64 주석(체크섬 바뀜 → 시험 DB `stock_screener_p1v9_test`) · 절차: `caffeinate -is` · `S` = 이 절차의 첫 FR 시작 · 3의 단언 = 행 수 = 친 횟수 · (나)에 `미해결보충` · UNREADABLE이면 (다) · heredoc 들여쓰기.
+- **대조(내가 잼)**: 길이 대조를 빼면 새 시험 셋(잘린 본문 · 200 HTML · **MockWebServer 본문 도중 끊김** — 지금 전송이 끊긴 본문을 넘기는 원래 결함을 재현)이 붉음 · 박힌 값 하나를 고치면 덧붙이기 검사 붉음 · 범위 밖 형을 완전한 이름·static import로 부르면 성질 시험 붉음(식별자만 보던 v8 시험은 둘 다 초록이었다) · 성분 0 레코드와 내부 클래스는 트리 출력이 같고(`class R { }`) 형 종류가 가름.
+- **v9 재생(0콜 · `p1rs/rs1c-v9.sh`)**: 109를 sc_a 상태로 되돌린 `rs1c` 위 — 109 몫 신규 128 · 정정 28 · 교정 3 · 이른판 0 · 회수 3 · 나머지 변화 0 · **보충실패 0(1,207종목 전부 — 길이 대조의 오탐 0)** · 109 재무 서명이 v8 재생(`rs1d`)과 md5 같음 · 보충 NO_XBRL 37 · OK 508.
