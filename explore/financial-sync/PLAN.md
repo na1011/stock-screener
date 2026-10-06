@@ -1322,3 +1322,18 @@ v4에 더해: **실패 계약** = 보충 실패(처음 · 판 다시 읽기 둘 
 
 ## 1부 v17(보류 브랜치 `03b1542f` · ADR만)
 - 2-3에 `-i | tee` + `Q4V_REPLAY` 줄 1개 단언 · 되돌리기 CIK 단언을 문자열·수 모두로 · 5의 `ciks` 글자 명령 · CIK 공유 점검과 `CIKS`를 `tonumber`로(0 채운 문자열과 수가 같은 CIK로 모이게).
+
+# 무거운 잡 시계 고침 계획 v1 (2026-10-07 새벽 · main · 마감 10-19 첫 정기 G 전 · 0부(시계 표지) 배포 뒤)
+## 실측(내가 잼)
+- `BatchExecutionRecorder.finish`: `failureCount() == 0 ? SUCCESS : PARTIAL_SUCCESS` — 성공 0 · 실패 > 0도 PARTIAL · 0부 `JobFreshnessPolicy.lastSuccessAt`은 SUCCESS·PARTIAL을 센다 → **전 종목 실패가 무거운 잡 시계를 25일 넘게 민다**(v15 계획 안 3 사본 #757: 1350/1350 실패 PARTIAL · 폴백 시계 10-05 → 10-07).
+- `BatchExecutionContext.abort(reason)`(→ ABORTED · javadoc 「일일 쿼터 소진은 일시정지 · 다음 실행이 이어서」)는 **부르는 곳이 0**(git grep) → 한도가 실행 중 바닥나면 남은 종목이 종목별 RATE_LIMITED 실패로 쌓이고 PARTIAL로 닫혀 **반만 갱신된 실행도 시계를 민다**.
+- 운영 이력: `batch_execution_failure` 종류 = NOT_FOUND 4,004 · MALFORMED 421 · UNEXPECTED 412 · TRANSIENT 30 · **RATE_LIMITED 0** · 성공 0 · 실패 > 0인 PARTIAL 행 = initial-load MANUAL 6 · universe-rebalance MANUAL 1(무거운 잡 0) → 기제는 잠복 · 노출은 10-19 G · 10-20 FSR · 10-30 FR 첫 정기와 그 뒤 매달(2부 단계가 DART 예산을 한도 근처까지 쓰면 늘어난다).
+## 결정
+1. **성공 0 · 실패 > 0 = FAILED**(`finish` 한 자리 · 모든 잡) — 시계가 안 감 · 알림은 기존 FAILED 경로(ERROR).
+2. **일일 한도 소진 = 그 자리에서 ABORTED**: 종목 실패가 RATE_LIMITED이고 그 소스의 리미터가 `hasDailyQuota() == false`면(소스 이름으로 리미터를 찾음 — 새 실패 종류·마이그레이션 없음 · 1부 판 범위의 `DataSourceException.Kind`를 안 건드림) `context.abort("일일 한도 소진")` → 남은 종목을 안 돈다 · ABORTED는 시계가 안 감 → 다음 정기가 전량을 다시 돈다(이미 받은 종목은 같은 원장이면 쓰기 0).
+3. **남는 틈(기록)**: 소스 장애가 실행 도중 일부만 끊으면(성공 > 0) PARTIAL로 시계가 간다 — 실패 종목은 다음 정기까지 낡는다 · 이력 TRANSIENT 30(전체) · 2부의 매일 단계가 재무의 새 공시를 매일 다시 묻는 것이 그 몫을 줄인다.
+## 소비자(구현 첫 단계에서 grep으로 다시 센다)
+- `JobFreshnessPolicy`(FAILED·ABORTED 안 셈 — 의도) · 알림(`BatchExecutionContext`의 FAILED/PARTIAL 알림) · 관리 화면 상태 · `ops/apply-window/env.sh:35`(PARTIAL을 성공으로 받음 — FAILED면 멈춤) · `crons-done`(RUNNING만) · `UniverseRebalanceJob.finish`(지수별 · 전 지수 실패면 FAILED가 맞는가) · 시험(상태를 단언하는 것).
+## 드라이런(대조 전 커밋)
+- 사본에서 손 FR(인자 없음 · 외부 호스트 127.0.0.1:9) → FAILED · 시계 불변(대조군 = 지금 코드 PARTIAL · 시계 전진 — v15 #757 재현).
+- 사본에서 DART 한도를 작게(시험 설정 `daily-quota`) 둔 FSR → 한도 지점에서 ABORTED · 남은 종목 실패 행 0 · 시계 불변.
