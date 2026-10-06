@@ -1,0 +1,28 @@
+# DART 리미터를 Spring 빈 밖에서 직접 만드는 자리(src/test · main 15f51e86+ = 52dd4f20)
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartFinancialAdapterTest.java:256:                new TokenBucketRateLimiter("dart", 0, 0), corpCodes);
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartFinancialAdapterTest.java:291:                    new TokenBucketRateLimiter("dart", 0, 0));
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartCorporateActionAdapterLiveTest.java:145:                new TokenBucketRateLimiter("dart", 300, 0),
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartCompanyProfileAdapterTest.java:170:                new TokenBucketRateLimiter("dart", 0, 0), corpCodes);
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartCompanyProfileAdapterTest.java:179:                    new TokenBucketRateLimiter("dart", 0, 0));
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartLiveTest.java:134:                new TokenBucketRateLimiter("dart", 300, 0), corpCodeCache());
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartLiveTest.java:141:                new TokenBucketRateLimiter("dart", 300, 0));
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartCorporateActionAdapterTest.java:418:                new TokenBucketRateLimiter("dart", 0, 0), corpCodes, series);
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartCorporateActionAdapterTest.java:427:                    new TokenBucketRateLimiter("dart", 0, 0));
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartProbeSupport.java:69:                new TokenBucketRateLimiter("dart", 300, 0));
+src/test/java/com/stockscreener/pipeline/datasource/kr/DartGateDryRunLiveTest.java:55:            new TokenBucketRateLimiter("dart-dryrun", 300, 0);
+
+# @Tag(live) 48파일 중 @SpringBootTest 0 — liveTest는 시험 프로파일을 안 탄다
+      48
+       0
+
+# application.yaml dart 분당 한도 주석
+      base-url: https://opendart.fss.or.kr/api
+      api-key: ${DART_API_KEY:}
+      # **분당 1,000회 이상이면 1시간 IP 차단**(2026-09-22 사용자가 알려준 오픈다트 안내).
+      # 같은 날 실측이 그것을 뒷받침한다 — 탐침이 리미터 없이 약 765콜을 42초에 던져
+      # **약 1,093 rpm**이 됐고 SocketException 뒤 호스트가 통째로 막혔다(google은 200).
+      # 600은 임계의 60%다. **MUST NOT: 1,000에 붙이지 않는다** — 차단의 대가가 1시간이고
+      # 그 사이 평일 배치 사슬이 통째로 실패한다.
+      permits-per-minute: 600
+      # 일 20,000건(2차 출처). 여유를 두고 잡는다.
+      daily-quota: 18000

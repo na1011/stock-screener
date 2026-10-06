@@ -1,0 +1,72 @@
+# 실패 행 · 마감 상태 · 알림 계약
+    public void recordFailure(long executionId, long stockId, CollectionPhase phase,
+                              String failureKind, String sourceName, String message,
+                              Throwable cause) {
+        jdbcTemplate.update("""
+                INSERT INTO batch_execution_failure
+                    (execution_id, stock_id, failed_phase, source_name, failure_kind,
+                     message, stack_trace, resolved, occurred_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, false, now())
+                ON CONFLICT (execution_id, stock_id, failed_phase) DO UPDATE SET
+                    source_name  = EXCLUDED.source_name,
+                    failure_kind = EXCLUDED.failure_kind,
+                    message      = EXCLUDED.message,
+                    stack_trace  = EXCLUDED.stack_trace,
+                    resolved     = false,
+                    occurred_at  = now()
+                """,
+                executionId, stockId, phase.name(), sourceName, failureKind,
+                describe(message, cause), stackTraceOf(cause));
+    public BatchStatus finish(long executionId, BatchProgress progress, String note) {
+        BatchStatus status =
+                progress.failureCount() == 0 ? BatchStatus.SUCCESS : BatchStatus.PARTIAL_SUCCESS;
+        updateTerminalState(executionId, status, progress, note);
+        return status;
+    public BatchStatus finish(String note) {
+        if (!claimTerminal("정상 마감")) {
+            return recordedStatus;
+        }
+        BatchStatus status = recorder.finish(executionId, snapshot(), note);
+        recordedStatus = status;
+        onTerminal.accept(executionId);
+
+        if (status == BatchStatus.PARTIAL_SUCCESS) {
+            alertPort.send(AlertEvent.toOperator(
+                    AlertSeverity.WARNING,
+                    jobName + " 부분 실패",
+                    // MUST NOT: 단위를 "종목"이라 쓰지 않는다. 한 종목이 여러 단계·여러 날짜로
+                    // 처리되므로 이 수는 종목 수보다 크다. 실제로 350종목짜리 유니버스에서
+                    // "84716종목 실패"라고 나간 알림이 있었다.
+                    // note를 함께 싣는다 — 무엇이 실패했는지(파생층의 실패 거래일 등)가 note에만 있으면
+                    // 알림을 받은 사람이 관리 화면을 열기 전에는 모른다. 잘라서 싣는다 — 웹훅이 본문 뒤를 2,000자에서
+                    // 자르는데 실행 id가 본문 뒤에 그려지고, 무효화 종목 목록을 통째로 싣는 note(재무 refill)가 있다.
+                    "%d건 성공, %d건 실패 (대상일 %s)%s"
+                            .formatted(successCount.get(), failureCount.get(), targetDate, noteForAlert(note)),
+                    dedupeKey(),
+                    context()));
+     */
+    public boolean process(SecurityRef security, CollectionPhase phase, StockTask task)
+            throws DataSourceException {
+        abortIfAbandoned();
+        try {
+            StockTaskExecutor.Outcome outcome =
+                    executor.execute(executionId, security, phase, task, abandonedOnShutdown);
+            PhaseCounters counters = byPhase.get(phase);
+
+            boolean succeeded = outcome.succeeded();
+            if (succeeded) {
+                successCount.incrementAndGet();
+                writtenRowCount.addAndGet(outcome.writtenRows());
+                counters.success.incrementAndGet();
+                counters.writtenRows.addAndGet(outcome.writtenRows());
+                resolveIfPreviouslyFailed(security.stockId(), phase);
+            } else {
+                failureCount.incrementAndGet();
+                counters.failure.incrementAndGet();
+            }
+            flushIfDue();
+
+# batch_execution_failure: stock_id NOT NULL · uq (execution_id, stock_id, failed_phase) · ck_failure_kind 여섯 값(운영 \d)
+
+# 0부 시계(hold/p0-run-scope JobFreshnessPolicy.lastSuccessAt): status IN (SUCCESS, PARTIAL_SUCCESS)
+# 무거운 잡 FAILED는 failFatally(escape한 DataSourceException)뿐: GovernanceLoadJob:227 FullStatementRefillJob:131 FinancialRefillJob:191 CompanyProfileJob:86 CorporateActionJob:179 · RATE_LIMITED는 종목 실패(DartFinancialAdapter:121)
