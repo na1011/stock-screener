@@ -1,0 +1,40 @@
+SET
+SET
+ id  |     d      |   run_end   | ticker |     arrived     | h_after_run |   kind   |     cls     
+-----+------------+-------------+--------+-----------------+-------------+----------+-------------
+ 231 | 2026-08-31 | 09-01 13:43 | WSO.B  | 09-02 Wed 13:32 |        23.8 | LATER    | CIKREP_CAND
+ 254 | 2026-09-01 | 09-02 13:43 | CRNX   |                 |             | NEVER    | plain
+ 254 | 2026-09-01 | 09-02 13:43 | TAP.A  | 09-03 Thu 13:32 |        23.8 | LATER    | CIKREP_CAND
+ 254 | 2026-09-01 | 09-02 13:43 | WSO.B  | 09-03 Thu 13:32 |        23.8 | LATER    | CIKREP_CAND
+ 257 | 2026-09-02 | 09-03 13:44 | CRNX   |                 |             | NEVER    | plain
+ 257 | 2026-09-02 | 09-03 13:44 | TAP.A  | 09-04 Fri 13:32 |        23.8 | LATER    | CIKREP_CAND
+ 257 | 2026-09-02 | 09-03 13:44 | WSO.B  | 09-04 Fri 13:32 |        23.8 | LATER    | CIKREP_CAND
+ 268 | 2026-09-03 | 09-04 13:43 | APGE   |                 |             | NEVER    | plain
+ 268 | 2026-09-03 | 09-04 13:43 | TAP.A  | 09-07 Mon 13:32 |        71.8 | LATER    | CIKREP_CAND
+ 268 | 2026-09-03 | 09-04 13:43 | WSO.B  | 09-07 Mon 13:32 |        71.8 | LATER    | CIKREP_CAND
+ 344 | 2026-09-08 | 09-09 13:46 | TAP.A  | 09-10 Thu 13:34 |        23.8 | LATER    | CIKREP_CAND
+ 366 | 2026-09-09 | 09-10 13:48 | WSO.B  | 09-11 Fri 13:33 |        23.7 | LATER    | CIKREP_CAND
+ 500 | 2026-09-14 | 09-15 13:56 | TAP.A  | 09-17 Thu 10:44 |        44.8 | LATER    | CIKREP_CAND
+ 567 | 2026-09-16 | 09-17 13:49 | TAP.A  | 09-18 Fri 13:34 |        23.8 | LATER    | CIKREP_CAND
+ 598 | 2026-09-17 | 09-18 13:49 | TAP.A  | 09-18 Fri 22:43 |         8.9 | SAME_DAY | CIKREP_CAND
+ 660 | 2026-09-21 | 09-22 13:47 | WSO.B  | 09-23 Wed 13:33 |        23.8 | LATER    | CIKREP_CAND
+ 667 | 2026-09-22 | 09-23 13:48 | TAP.A  | 09-24 Thu 13:33 |        23.8 | LATER    | CIKREP_CAND
+ 667 | 2026-09-22 | 09-23 13:48 | WSO.B  | 09-24 Thu 13:33 |        23.8 | LATER    | CIKREP_CAND
+ 672 | 2026-09-23 | 09-24 13:47 | BTSGU  | 09-25 Fri 13:34 |        23.8 | LATER    | CIKREP_CAND
+ 672 | 2026-09-23 | 09-24 13:47 | TAP.A  | 09-25 Fri 13:34 |        23.8 | LATER    | CIKREP_CAND
+ 675 | 2026-09-24 | 09-25 13:49 | TAP.A  | 09-28 Mon 13:33 |        71.7 | LATER    | CIKREP_CAND
+ 675 | 2026-09-24 | 09-25 13:49 | WSO.B  | 09-28 Mon 13:33 |        71.7 | LATER    | CIKREP_CAND
+ 690 | 2026-09-28 | 09-29 13:49 | TAP.A  | 09-30 Wed 13:34 |        23.7 | LATER    | CIKREP_CAND
+ 693 | 2026-09-29 | 09-30 13:50 | MOG.B  | 10-01 Thu 13:34 |        23.7 | LATER    | CIKREP_CAND
+ 693 | 2026-09-29 | 09-30 13:50 | TAP.A  | 10-01 Thu 13:33 |        23.7 | LATER    | CIKREP_CAND
+ 693 | 2026-09-29 | 09-30 13:50 | WSO.B  | 10-01 Thu 13:33 |        23.7 | LATER    | CIKREP_CAND
+ 697 | 2026-09-30 | 10-01 13:49 | TAP.A  | 10-02 Fri 13:34 |        23.8 | LATER    | CIKREP_CAND
+ 697 | 2026-09-30 | 10-01 13:49 | WSO.B  | 10-02 Fri 13:34 |        23.8 | LATER    | CIKREP_CAND
+ 700 | 2026-10-01 | 10-02 13:51 | TAP.A  | 10-05 Mon 13:35 |        71.7 | LATER    | CIKREP_CAND
+ 700 | 2026-10-01 | 10-02 13:51 | WSO.B  | 10-05 Mon 13:35 |        71.7 | LATER    | CIKREP_CAND
+ 741 | 2026-10-05 | 10-06 15:46 | BTSGU  |                 |             | NEVER    | CIKREP_CAND
+ 741 | 2026-10-05 | 10-06 15:46 | QRVO   |                 |             | NEVER    | plain
+ 741 | 2026-10-05 | 10-06 15:46 | TAP.A  |                 |             | NEVER    | CIKREP_CAND
+ 741 | 2026-10-05 | 10-06 15:46 | WSO.B  |                 |             | NEVER    | CIKREP_CAND
+(34개 행)
+

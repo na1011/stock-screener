@@ -1,0 +1,14 @@
+SET
+ bucket  |  n  | weekday_n 
+---------+-----+-----------
+ overlap |   5 |         0
+ <60s    | 287 |       220
+ 60-120s |  60 |        44
+ 2-5m    |  61 |        42
+ 5-10m   |  30 |        25
+ >=10m   | 175 |       139
+(6개 행)
+
+psql:q02_manual_seq_gaps.sql:19: ERROR:  relation "g" does not exist
+줄 2: from g where gap_s between 0 and 120 and extract(isodow from...
+           ^

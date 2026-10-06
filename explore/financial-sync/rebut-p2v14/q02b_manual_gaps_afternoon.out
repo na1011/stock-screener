@@ -1,0 +1,24 @@
+SET
+     d     | pairs_lt120s | first_ | last_ |                                                                                                     transitions                                                                                                      
+-----------+--------------+--------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 08-10 Mon |            3 | 14:41  | 14:56 | financial-refill>indicator-backfill
+ 08-13 Thu |            8 | 13:33  | 22:22 | financial-refill>full-statement-refill full-statement-refill>indicator-backfill market-index>indicator-backfill
+ 08-14 Fri |            1 | 18:52  | 18:52 | 
+ 08-18 Tue |            2 | 16:06  | 16:18 | financial-refill>full-statement-refill full-statement-refill>indicator-backfill
+ 08-21 Fri |            1 | 13:31  | 13:31 | 
+ 08-24 Mon |            6 | 18:35  | 22:46 | adjustment-rebuild>indicator-backfill company-profile>governance-derive corporate-action>company-profile full-statement-refill>corporate-action initial-load>corporate-action
+ 08-31 Mon |            3 | 17:18  | 19:52 | 
+ 09-01 Tue |           11 | 14:18  | 21:09 | adjustment-rebuild>indicator-backfill corporate-action-judge>adjustment-rebuild governance-derive>indicator-backfill governance-load>governance-derive
+ 09-04 Fri |            1 | 14:25  | 14:25 | financial-refill>indicator-backfill
+ 09-09 Wed |            4 | 14:44  | 17:41 | 
+ 09-11 Fri |            3 | 14:33  | 16:30 | 
+ 09-14 Mon |           14 | 13:44  | 22:40 | financial-refill>indicator-backfill
+ 09-15 Tue |            5 | 14:43  | 21:36 | indicator-backfill>initial-load initial-load>indicator-backfill
+ 09-16 Wed |            2 | 13:01  | 19:53 | governance-derive>indicator-backfill
+ 09-17 Thu |           23 | 14:56  | 18:43 | adjustment-rebuild>indicator-backfill corporate-action-judge>adjustment-rebuild corporate-action-judge>indicator-backfill corporate-action>corporate-action-judge
+ 09-18 Fri |            4 | 17:59  | 22:43 | financial-refill>indicator-backfill initial-load>indicator-backfill
+ 09-21 Mon |            2 | 22:15  | 22:29 | 
+ 09-23 Wed |            1 | 18:53  | 18:53 | 
+ 10-05 Mon |           20 | 16:00  | 16:07 | adjustment-rebuild>governance-derive corporate-action-judge>adjustment-rebuild corporate-action>corporate-action-judge governance-derive>indicator-origin-rewrite indicator-origin-rewrite>indicator-derived-rebuild
+(19개 행)
+
