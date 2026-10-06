@@ -1830,3 +1830,14 @@ v3 목록 + 세션 TTL 만료 · `end` 거절(산 합류 JVM) · V66 앞 덤프 
 2. **`crons-done.sh` CRONS**: (나)가 15:00·17:00을 더하면 `CronsDoneTableTest`가 강제 → progress:93 손 쓰기 문의 「다음 명목 발화」가 15:00·17:00이 된다 — (나) 배포 커밋에서 같이 고친다.
 3. **장부 시험 DB**: 이름을 `TEST_DB_URL`에서 유도(`<시험 DB>_quota`) · `deploy.sh` `test_db_guard`가 둘 다 점검 · 반증·구현 에이전트 규칙에 같이.
 4. 나머지(v18 결정 2~5)는 그대로.
+
+## 시계 고침 뼈대 구현 보고(2026-10-07 아침 · `hold/p2-clock` · 구현 에이전트)
+- 커밋 `5347f31d`(시장 미완료 실행은 시계에 안 셈 — 코드·시험·화면) · `2dcda1b3`(MALFORMED 다발 경보 배선 · v8 결정 8) · `78fa7e30`(ADR-0174 신설 · ADR-0172·0116 · reload-gate 고침) · 백엔드 1879/0/0/5(기준 1853) · 프런트 41파일 439 · `vue-tsc` 통과 · 변이 대조(미완료 키 = PARTIAL 키 → 붉음 · MALFORMED 배선 뺌 → 붉음) · 시험 DB `stock_screener_p2clock_test`.
+- **계획과 다르게 한 것**: (1) 답함 표지를 `DataSourceException` 필드가 아니라 별도 형 `SourceAnswer`로 `addSuppressed`에 붙여 운반 — `DataSourceException`은 `OUTSIDE_SCOPE`지만 범위 소스가 그 생성자를 불러 판 폐포가 클래스 전체를 해시에 실음(필드 추가·팩터리만 추가 둘 다 `ruleSourcesArePinnedToTheReaderVersion` 붉음 · 원복 후 초록) · 부작용: 실패 행 스택에 「Suppressed: …」 한 줄 (2) **0부 결함을 이 판에서 고침** — `BatchExecutionResponse`에 `scope`가 없어 이력 API가 키를 안 보냄 → 화면 `scopeNote(undefined)`가 `assertNever`로 던짐 (3) 분류에서 UNREADABLE 뺌(보충 층 종료 상태 — 결정 5 몫) (4) 커밋 셋(와이어 계약이 한 커밋을 강제).
+- **배포 제약**: 표지 판정표 전에는 NOT_FOUND·MALFORMED가 전부 미완료 — 60일 FR·FSR·G SUCCESS·PARTIAL 148 중 26실행이 그런 실패(정기·손 섞임) → ADR-0174 §결과 「배포는 표지 판정표와 함께」.
+- **재보지 않음**: 사본 드라이런 · 브라우저로 화면 · `SourceAnswer`가 예외 재포장 경로에서 사라지는지(다음 판 판정표 몫).
+
+## 0부 결함 — 이력 API에 `scope` 없음(주인이 잼 · 10-07 아침)
+- `hold/p0-run-scope`(f6a2ecb8): `BatchExecutionReader.Execution`은 `scope`를 읽는데 `BatchExecutionResponse`에 칸이 없음 → JSON에 키 없음 → 화면 `types.ts:780 scope: ExecutionScope | null`인데 실제 undefined → `admin.ts:78 scopeNote`의 switch가 `default: assertNever` → **관리 화면 실행 이력 표가 행마다 던짐**(정적 읽기 · 브라우저로는 안 몰아 봄) · 0부의 시험·반증·드라이런(RD0~RD2)이 화면을 안 몰아 못 잡음([[audit-by-tests-misses-wiring]]).
+- 고침: 0부 브랜치에 `BatchExecutionResponse.scope` + API 시험 `executionCarriesScope`(목록 NARROW·FULL · 표지 전 행은 `"scope":null` 키 · summary · detail) · **대조군**(고침 걷음) 15 중 1 붉음 · 고침 뒤 전체 빌드는 배경으로.
+- 0부 배포 뒤 관리 화면을 브라우저로 직접 몬다(이력 표 · 연체 배너 · 범위 덧말).
