@@ -490,3 +490,17 @@ v4에 더해: **실패 계약** = 보충 실패(처음 · 판 다시 읽기 둘 
 - **RF4 단위 + 주입 대조**: 소비 판정(보충 FAILED → 표지 그 제출일 − 1에 멈춤 · uncertain → 안 감 · 국내 013 → 안 감 · 다음 날 다시 대상 · 정정본 `rcept_no` ≥ → 소비) — **대조군 = 「FR 성공이면 전진」 규칙으로 돌리면 넘어간다(원래 결함 재현)** · 표지는 앞으로만 · 초기 90일 · 폼 집합 = `PERIODIC_FORMS` · 판정된 한계 출구 · 감시 다섯 · 짝의 FSR 실패 → 미소비.
 - **RF5 가드**: 사본 아닌 이름 → 마이그레이션 전 실패(B v7 RB7).
 - **RF6 비용 실측**: 좁힌 국내 짝의 콜·초(사본 · 10종목) · 미국 FR 1,000의 초(초기 판정 하루치).
+
+## 1부 v4 확인 반증 — 계획 안 렌즈(2026-10-06 · 「수정 후 진행」 · `rebut9/` · 0콜 · 변이는 `git archive` 사본에서)
+1. **[시험 미도달] 판 고정 시험이 해석 실패를 만드는 갈래에 안 닿는다** — 재료가 `instance-mini.xml` 하나라 같은 정밀도 충돌·수가 아닌 값·없는 컨텍스트·단위·날짜 오류·깨진 XML·문서 종류 없음·unitRef 있는 dei·`INF`·decimals 없음·`scenario`가 없고 신원은 폼 넷만 · 변이 P1(정밀도 충돌 안 던짐)·P2(수가 아닌 값 건너뜀)·P3(dei 뺌)·P4(20-F·40-F 신원 생략)·P5(`scenario` 안 봄)·P6(decimals 없음 처리) 전부 생존 · 저장 행 크기(rs1b OK 508): dei 든 행 420(주식수 377팩트) · `INF` 1,927팩트·321행 · 신원 밖 폼 10-K/A 244·20-F 27·40-F 9 · `fetch()` 분류(`:248-267`)도 해시 밖.
+2. **[④] `settle`이 목록 날짜만 연다 — COVERED 뒤의 판은 companyfacts `filed`로 매겨진다** — companyfacts `filed` ≠ submissions `filingDate` 15 / 55,736(CIK 기준 · 전부 companyfacts가 1~3일 늦음 · 17:30 ET 뒤 접수로 설명되지만 같은 모양 427건은 그대로라 미리 모름) · 운영 `published_at`이 companyfacts 날짜(IBM 2019 Q3 · KLAC 2020) → 보충 판 D가 회수되고 D′는 이른 판으로 버려질 수 있음 · 지금 기대 약 0.17건.
+3. **[①] 목록 실패 실행이 `settle`을 건너뛴다** — 대상은 `!covered`일 때만이라 `settle`은 목록이 필요 없다.
+4. **[시험 미도달] `stale_used_at` 지우기 두 자리와 목록 실패 갈래** — S1(`markCovered`가 안 지움)·S2(`saveNoXbrl`이 안 지움)·S3(목록 실패가 지금 판까지 찍음) 생존.
+- 선다(쟀다): 찍기 두 길 · 상태 전이 닫힘 · 대상 밖 FAILED·stale은 M에 남음(관문 판정과 맞음) · COVERED의 팩트 비우기 안전(EXE 301팩트 · 실림→빠짐 0/41,197) · `mergeInto`·`targets`·창은 판 밖이 맞음 · 해시 흔들림은 안전 방향(레코드 `toString`) · 후보 파일 이름 567개 모양 전부 덮음.
+
+## v5 처방(계획 밖 렌즈를 받은 뒤 한 번에)
+- **해석을 정적 메서드로 뗀다**(`SecFilingSupplement.interpret(bytes, cik, form, name)` — 읽기 · 신원 · 고르기 · 해석 실패 분류) · `fetch`는 받기만 · 판 고정 시험이 `interpret`를 부른다.
+- **판 고정 재료**: `malformed(` 자리마다 인스턴스 하나(일곱) — 재료 수 = 소스의 그 자리 수를 단언(새 자리가 생기면 붉다) · 특성 재료(unitRef 있는 dei · `INF` · decimals 없음 · `scenario` · CIK 아닌 식별자 · 문서 종류 없음 · 깨진 XML) · 신원 = `SUPPLEMENT_FORMS` × (각 폼 · 정정 · null) · 그 뒤 P1~P6이 붉은지 다시 잰다.
+- **`settle`이 그 접수번호에 companyfacts가 붙인 `filed` 날짜들도 연다**(`usGaapAccessions` → 접수번호 → 날짜 집합) · 통합 시험: companyfacts `filed` = `X_FILED` + 1 · 뒤 판 있음.
+- **목록 실패에서도 `settle`**(대상 = 빈 집합).
+- **시험**: stale 행을 companyfacts가 실으면 M = 0 · 옛 판 OK를 다시 받아 NO_XBRL이면 M = 0 · 목록 실패의 지금 판 저장분은 `staleReused` = 0 · M = 0.
