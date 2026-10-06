@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.scheduler;
 
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
+import com.stockscreener.pipeline.batch.BatchExecutions;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.pipeline.batch.CorporateActionJob;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
@@ -22,10 +23,13 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 배치를 정해진 시각에 띄운다.
@@ -69,6 +73,7 @@ public class PipelineScheduler {
     private final JobFreshnessPolicy freshnessPolicy;
     private final IndicatorReconciler indicatorReconciler;
     private final UniverseIntegrityAlerter universeIntegrityAlerter;
+    private final BatchExecutions batchExecutions;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
                              UniverseRebalanceJob universeRebalanceJob,
@@ -81,7 +86,8 @@ public class PipelineScheduler {
                              JobFreshnessAlerter freshnessAlerter,
                              JobFreshnessPolicy freshnessPolicy,
                              IndicatorReconciler indicatorReconciler,
-                             UniverseIntegrityAlerter universeIntegrityAlerter) {
+                             UniverseIntegrityAlerter universeIntegrityAlerter,
+                             BatchExecutions batchExecutions) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -94,6 +100,7 @@ public class PipelineScheduler {
         this.freshnessPolicy = freshnessPolicy;
         this.indicatorReconciler = indicatorReconciler;
         this.universeIntegrityAlerter = universeIntegrityAlerter;
+        this.batchExecutions = batchExecutions;
     }
 
     /**
@@ -273,19 +280,49 @@ public class PipelineScheduler {
         }
         log.info("무거운 잡을 하나 돌린다. job={} today={} — 하루에 하나만 돌려 DART 한도를 지킨다.",
                 due, today);
+        // 잡이 실행 행을 만들기 전에 던지면 그 시도가 어디에도 안 남는다 — 그러면 연체 보정 순서의 키(마지막 정기 시도)가
+        // 그 잡에서 멈춰, 그 잡이 매 평일 맨 앞에 서고 다른 연체 잡의 차례를 빼앗는다. 행이 새로 생겼는지는 「마지막 정기
+        // 시도」가 바뀌었는가로 가른다 — 두 시계(JVM·DB)를 비교하지 않는다.
+        Instant attemptBefore = freshnessPolicy.lastScheduledAttemptAt(due);
         try {
             runHeavy(due, asOf);
         } catch (BatchShutdownException e) {
             log.info("무거운 잡이 종료로 중단됐다. job={} — 연체로 남아 다음 평일 실행이 집어 간다.", due);
+        } catch (RuntimeException e) {
+            if (Objects.equals(attemptBefore, freshnessPolicy.lastScheduledAttemptAt(due))) {
+                recordStartFailure(due, asOf, e);
+            }
+            throw e;
         }
     }
 
     /**
-     * 오늘 돌 잡을 고른다. <b>배정 요일이 먼저이고, 없으면 가장 오래 밀린 것</b>이다.
+     * 잡이 시작하기 전에 던진 것을 <b>FAILED 시도 행</b>으로 남긴다(ADR-0174).
      *
-     * <p>MUST: {@link #HEAVY_JOB_MIN_INTERVAL_DAYS} 안에 돈 잡은 고르지 않는다. 거버넌스·재무는
+     * <p>잡 안에서 던진 것은 잡이 {@code failUnexpectedly}로 이미 마감하므로 여기 안 온다(행이 생겼다). 범위는 정기 경로의
+     * 선언 그대로({@code FULL})다 — FAILED는 어차피 시계에 안 세고, 이 행이 하는 일은 「시도했다」를 남기는 것뿐이다.
+     */
+    private void recordStartFailure(String jobName, LocalDate asOf, RuntimeException cause) {
+        batchExecutions.start(jobName, asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 0,
+                        BatchExecutionRecorder.DeclaredScope.FULL)
+                .failUnexpectedly("시작 실패", cause);
+    }
+
+    /**
+     * 오늘 돌 잡을 고른다. <b>배정 요일이 먼저이고, 없으면 연체 잡 중 가장 오래 정기 시도를 못 받은 것</b>이다.
+     *
+     * <p>MUST: {@link #HEAVY_JOB_MIN_INTERVAL_DAYS} 안에 <b>시계에 센 성공</b>이 있는 잡은 고르지 않는다. 거버넌스·재무는
      * 공시일에 계단으로 바뀌므로 주 1회 돌면 <b>콜만 태운다</b> — 같은 값을 다시 받는 것이
-     * {@code governance-load}는 국내 8,050 + 미국 4,000 = 12,050콜이다.
+     * {@code governance-load}는 국내 8,050 + 미국 4,000 = 12,050콜이다. 시장 미완료로 끝난 정기 실행은 시계에 안 세므로
+     * (ADR-0174) 그 잡은 연체로 남아 다시 고를 수 있다 — 그것이 의도다.
+     *
+     * <h2>연체가 둘 이상이면 — 키는 「마지막 정기 시도」다(ADR-0174)</h2>
+     * <p>키 = 그 잡의 마지막 SCHEDULER 행 {@code started_at}(상태·범위 무관) · 없으면 가장 오래된 것으로 친다 · 같으면
+     * 마지막 성공에서 오래된 것부터. 「마지막 성공」만 키로 쓰면 매번 미완료로 끝나는 잡(예: 한 시장 소스가 계속 죽은 G)이
+     * 늘 가장 오래 밀린 것으로 남아 <b>다른 연체 잡의 차례를 영영 빼앗는다</b> — 운영 시계를 재생하면 10-22~10-29 G가
+     * 매일 미완료일 때 옛 키로는 FR이 배정 요일(11-05 목)까지 밀리고, 이 키로는 10-30에 돈다
+     * ({@code PipelineSchedulerChainTest}). 잡이 시작 전에 던져도 시도 행을 남기는 것({@link #recordStartFailure})이
+     * 이 키가 멈추지 않게 한다.
      */
     // 패키지 가시성인 이유는 **요일을 이 클래스가 스스로 읽기 때문**이다. 호출부가
     // LocalDate.now()로 오늘을 정하므로, 이 판단을 밖에서 못 부르면 「화요일에 무엇이 도는가」를
@@ -300,10 +337,14 @@ public class PipelineScheduler {
         if (assigned != null && isOverdue(assigned)) {
             return assigned;
         }
-        // 연체 보정. 배정 요일을 놓친 잡을 가장 오래 밀린 것부터 집는다.
+        // 연체 보정. 정기 시도가 가장 오래된 것(없음이 맨 앞) → 마지막 성공이 가장 오래된 것.
+        Comparator<String> byLastAttempt = Comparator.comparing(
+                freshnessPolicy::lastScheduledAttemptAt, Comparator.nullsFirst(Comparator.naturalOrder()));
+        Comparator<String> byStaleness = Comparator.comparingLong(this::daysSinceSuccess).reversed();
         return assignment.values().stream()
                 .filter(this::isOverdue)
-                .min((a, b) -> Long.compare(daysSinceSuccess(b), daysSinceSuccess(a)))
+                .sorted() // Map.of의 순회 순서는 정해져 있지 않다 — 키가 전부 같을 때도 답이 하나이게.
+                .min(byLastAttempt.thenComparing(byStaleness))
                 .orElse(null);
     }
 
@@ -312,7 +353,7 @@ public class PipelineScheduler {
     }
 
     private long daysSinceSuccess(String jobName) {
-        return freshnessPolicy.daysSinceLastSuccess(jobName, java.time.Instant.now());
+        return freshnessPolicy.daysSinceLastSuccess(jobName, Instant.now());
     }
 
     private void runHeavy(String jobName, LocalDate asOf) {

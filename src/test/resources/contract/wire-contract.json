@@ -90,6 +90,14 @@
       "FULL",
       "NARROW"
     ],
+    "ExecutionScopeReason": [
+      "ARGS",
+      "RERUN",
+      "GAP_FILL",
+      "PAST_DATE",
+      "NO_SCHEDULED_RANGE",
+      "MARKET_INCOMPLETE"
+    ],
     "JobParameters": [
       "TARGET_DATE",
       "DATE_RANGE"

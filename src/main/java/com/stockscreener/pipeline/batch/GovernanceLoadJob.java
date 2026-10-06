@@ -43,6 +43,12 @@ public class GovernanceLoadJob {
     /** 사업보고서. 보고서 코드를 이 하나로 좁히는 근거는 {@code batch-load} skill에 있다(넷을 다 부르면 콜이 4배다). */
     public static final String ANNUAL_REPORT = "11011";
 
+    /**
+     * 이 잡이 다루는 시장 — 마감 때 시장마다 끝까지 마쳤는지 판정한다(ADR-0174 · {@link MarketCompleteness}). 국내는 DART,
+     * 미국은 Alpaca(배당)가 답한다. 순서가 판정·기록 순서다.
+     */
+    static final List<String> MARKETS = List.of("KOSPI", "KOSDAQ", "US");
+
     private static final Logger log = LoggerFactory.getLogger(GovernanceLoadJob.class);
 
     /**
@@ -106,11 +112,11 @@ public class GovernanceLoadJob {
      * <p>연도·해 수를 기본값과 같은 수로 손으로 줘도 {@code NARROW}다 — 기본값이 시장·표마다 달라 「같은가」를 여기서
      * 다시 계산하면 그 계산이 낡는다. 틀리는 방향은 정기 실행이 한 번 더 도는 쪽이다.
      */
-    public static BatchExecutionRecorder.Scope scopeOf(Integer latestFiscalYear, Integer span,
+    public static BatchExecutionRecorder.DeclaredScope scopeOf(Integer latestFiscalYear, Integer span,
                                                        List<GovernanceEndpoint> endpoints, List<String> tickers) {
         boolean allEndpoints = endpoints == null || endpoints.isEmpty()
                 || endpoints.containsAll(List.of(GovernanceEndpoint.values()));
-        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty()) && latestFiscalYear == null
+        return BatchExecutionRecorder.DeclaredScope.byArgs((tickers == null || tickers.isEmpty()) && latestFiscalYear == null
                 && span == null && allEndpoints);
     }
 
@@ -128,11 +134,13 @@ public class GovernanceLoadJob {
                            List<GovernanceEndpoint> endpoints, List<String> tickers) {
         List<GovernanceEndpoint> targets = endpoints == null || endpoints.isEmpty()
                 ? List.of(GovernanceEndpoint.values()) : endpoints;
-        BatchExecutionRecorder.Scope scope = scopeOf(latestFiscalYear, span, endpoints, tickers);
+        BatchExecutionRecorder.DeclaredScope scope = scopeOf(latestFiscalYear, span, endpoints, tickers);
+        // 시작 때 소스 유무를 묻는다 — 소스 없는 시장은 아래 루프가 건너뛰고 빈 성공으로 끝나 실패 행이 안 남는다.
+        MarketCompleteness.Coverage coverage = MarketCompleteness.Coverage.of(MARKETS, collector::hasSource);
         List<SecurityRef> stocks = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
         if (stocks.isEmpty()) {
             log.info("거버넌스를 받을 종목이 없다.");
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish();
+            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope, coverage).finish();
         }
 
         // 시장마다 답하는 표가 다르고 <b>받을 역년도 다르다.</b> 표를 안 좁히면 소스가 안 주는
@@ -196,7 +204,7 @@ public class GovernanceLoadJob {
                 stocks.size(), targets.size(), callsByMarket);
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, stocks.size(), scope);
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, stocks.size(), scope, coverage);
         execution.plan(CollectionPhase.GOVERNANCE, stocks.size());
         execution.stage("종목별 정기보고서 주요정보 수집");
 

@@ -212,6 +212,10 @@ public class DataSourceRegistry {
         return fullStatementByMarket.containsKey(marketCode);
     }
 
+    public boolean hasGovernanceSource(String marketCode) {
+        return governanceByMarket.containsKey(marketCode);
+    }
+
     public Optional<UniverseDataSource> findUniverseSource(String universeCode) {
         return Optional.ofNullable(universeByCode.get(universeCode));
     }

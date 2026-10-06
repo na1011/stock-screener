@@ -52,6 +52,12 @@ public class FinancialRefillJob {
     // 목요일에 이 잡만 돈다(ADR-0116). **그 수는 아직 실행으로 재지 않았다.**
     static final int DEFAULT_YEARS_BACK = 8;
 
+    /**
+     * 이 잡이 다루는 시장 — 마감 때 시장마다 끝까지 마쳤는지 판정한다(ADR-0174 · {@link MarketCompleteness}). 국내는 DART,
+     * 미국은 SEC EDGAR가 답한다. 순서가 판정·기록 순서다.
+     */
+    static final List<String> MARKETS = List.of("KOSPI", "KOSDAQ", "US");
+
     private static final Logger log = LoggerFactory.getLogger(FinancialRefillJob.class);
 
     private final FinancialCollector financialCollector;
@@ -77,9 +83,9 @@ public class FinancialRefillJob {
      *
      * <p>이른 판 넣기는 범위가 아니라 쓰기 방식이라 안 본다. 연수를 기본보다 길게 주면 정기 실행을 덮으므로 {@code FULL}이다.
      */
-    public static BatchExecutionRecorder.Scope scopeOf(Integer yearsBack, List<String> tickers, String universeCode) {
+    public static BatchExecutionRecorder.DeclaredScope scopeOf(Integer yearsBack, List<String> tickers, String universeCode) {
         int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
-        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty())
+        return BatchExecutionRecorder.DeclaredScope.byArgs((tickers == null || tickers.isEmpty())
                 && (universeCode == null || universeCode.isBlank()) && years >= DEFAULT_YEARS_BACK);
     }
 
@@ -138,14 +144,17 @@ public class FinancialRefillJob {
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
-        BatchExecutionRecorder.Scope scope = scopeOf(yearsBack, tickers, universeCode);
+        BatchExecutionRecorder.DeclaredScope scope = scopeOf(yearsBack, tickers, universeCode);
 
         List<SecurityRef> targets =
                 stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
+        // 소스 유무는 시작 때 한 번 묻는다 — 소스가 없는 시장의 종목은 종목마다 registry NOT_FOUND(「답함」)로 남아
+        // 실패 종류만으로는 그 시장을 못 끝낸 것이 안 보인다.
+        MarketCompleteness.Coverage coverage = MarketCompleteness.Coverage.of(MARKETS, registry::hasFinancialSource);
         if (targets.isEmpty()) {
             log.info("편입 중인 활성 종목이 없다. 채울 것이 없다.");
             return new Invalidation(
-                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish(), List.of());
+                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope, coverage).finish(), List.of());
         }
 
         int fromFiscalYear = asOf.getYear() - years;
@@ -157,7 +166,7 @@ public class FinancialRefillJob {
         loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope, coverage);
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 재무 결손 보정");
         Instant supplementSince = supplementStore.now();

@@ -224,7 +224,7 @@ public class IndicatorBackfillJob {
 
         // 정기 경로가 없는 손 도구다. 「전 종목 · 보존 창 전체」일 때만 FULL로 적는다 — 창은 화해의 ②가 도는 것과 같다.
         LocalDate windowStart = windowStart(retentionFloor(retentionCutoffs));
-        BatchExecutionRecorder.Scope scope = BatchExecutionRecorder.Scope.of(
+        BatchExecutionRecorder.DeclaredScope scope = BatchExecutionRecorder.DeclaredScope.byArgs(
                 (tickers == null || tickers.isEmpty()) && (universeCode == null || universeCode.isBlank())
                         && windowStart != null && !from.isAfter(windowStart));
         BatchExecutionContext execution =
@@ -310,8 +310,8 @@ public class IndicatorBackfillJob {
      * 화해 ①의 범위. 정기 화해(14:20)는 티커를 안 준다 — 14:00 사슬의 좁힌 ①은 {@code GAP_FILL}이라 기록 계층이
      * {@code NARROW}로 찍는다. ②({@link #rebuildDerived})는 좁힐 인자가 없어 언제나 {@code FULL}이다.
      */
-    public static BatchExecutionRecorder.Scope originScopeOf(List<String> tickers) {
-        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty()));
+    public static BatchExecutionRecorder.DeclaredScope originScopeOf(List<String> tickers) {
+        return BatchExecutionRecorder.DeclaredScope.byArgs((tickers == null || tickers.isEmpty()));
     }
 
     /**
@@ -389,7 +389,7 @@ public class IndicatorBackfillJob {
 
         // 언제나 창 전체다 — 좁힐 인자가 없다(① 을 티커로 좁혀도 ② 는 창 전체).
         BatchExecutionContext execution = batchExecutions.start(DERIVED_JOB_NAME, asOf, triggeredBy,
-                tradeDates.size(), BatchExecutionRecorder.Scope.FULL);
+                tradeDates.size(), BatchExecutionRecorder.DeclaredScope.FULL);
         execution.plan(CollectionPhase.INDICATOR, tradeDates.size());
         log.info("파생층을 다시 낸다. {} ~ {} 거래일={}일", from, asOf, tradeDates.size());
 

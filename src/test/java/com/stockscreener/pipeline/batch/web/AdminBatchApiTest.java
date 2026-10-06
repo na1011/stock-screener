@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.batch.web;
 import com.stockscreener.auth.AllowlistOidcUserService;
 import com.stockscreener.pipeline.batch.AdminJobLauncher;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
+import com.stockscreener.pipeline.batch.FinancialRefillJob;
 import com.stockscreener.pipeline.batch.IndicatorBackfillJob;
 import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
 import com.stockscreener.support.TestDatabaseGuard;
@@ -202,6 +203,30 @@ class AdminBatchApiTest {
                 .andExpect(jsonPath("$.failureSummary[0].failureKind").value("TRANSIENT"))
                 .andExpect(jsonPath("$.failureSummary[0].sourceName").value("data-go-kr"))
                 .andExpect(jsonPath("$.failureSummary[0].unresolvedCount").value(1));
+    }
+
+    @Test
+    @DisplayName("실행이 범위·사유·미완료 시장을 싣는다 — 화면 덧말이 note가 아니라 이것을 읽는다(V63 · V65)")
+    void executionCarriesScopeReasonAndIncompleteMarkets() throws Exception {
+        long incomplete = insertExecution(FinancialRefillJob.JOB_NAME, "PARTIAL_SUCCESS", 1);
+        jdbcTemplate.update("""
+                UPDATE batch_execution SET scope = 'NARROW', scope_reason = 'MARKET_INCOMPLETE',
+                    incomplete_markets = '{KOSPI,US}' WHERE id = ?
+                """, incomplete);
+        long legacy = insertExecution(DailyUpdateJob.JOB_NAME, "SUCCESS", 0);
+
+        mockMvc.perform(get("/api/admin/batches/{id}", incomplete))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.execution.scope").value("NARROW"))
+                .andExpect(jsonPath("$.execution.scopeReason").value("MARKET_INCOMPLETE"))
+                .andExpect(jsonPath("$.execution.incompleteMarkets[0]").value("KOSPI"))
+                .andExpect(jsonPath("$.execution.incompleteMarkets[1]").value("US"));
+        // 표지 전 이력: 범위·사유는 null로 실어 보낸다(키가 없으면 화면의 덧말 함수가 모르는 값으로 던진다).
+        mockMvc.perform(get("/api/admin/batches/{id}", legacy))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.execution.scope").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.execution.scopeReason").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.execution.incompleteMarkets").isEmpty());
     }
 
     @Test

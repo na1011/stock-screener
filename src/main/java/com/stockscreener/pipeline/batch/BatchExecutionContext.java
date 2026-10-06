@@ -146,9 +146,26 @@ public final class BatchExecutionContext {
      */
     private final Map<CollectionPhase, Set<Long>> unresolvedAtStart;
 
+    /**
+     * 시장마다 끝까지 마쳤는가를 세는 자리(ADR-0174). 시장 집합을 선언한 잡(FR·FSR·G)만 있고 나머지는 {@code null}이다.
+     *
+     * <p>판정 재료를 실행 안에서 센다 — 마감 때 실패 행을 SQL로 다시 읽으면 다른 실행이 그 사이 해결로 표시한
+     * ({@code resolveFailures}는 실행 id로 안 좁힌다) 행이 빠져 못 받은 시장이 끝난 것으로 읽힌다.
+     */
+    private final MarketCompleteness completeness;
+
     public BatchExecutionContext(long executionId, String jobName, LocalDate targetDate,
                                  StockTaskExecutor executor, BatchExecutionRecorder recorder,
                                  AlertPort alertPort, LongConsumer onTerminal) {
+        this(executionId, jobName, targetDate, executor, recorder, alertPort, onTerminal, null);
+    }
+
+    /** 위와 같되 마감 때 시장 미완료를 판정한다. {@code coverage}가 {@code null}이면 판정하지 않는다. */
+    public BatchExecutionContext(long executionId, String jobName, LocalDate targetDate,
+                                 StockTaskExecutor executor, BatchExecutionRecorder recorder,
+                                 AlertPort alertPort, LongConsumer onTerminal,
+                                 MarketCompleteness.Coverage coverage) {
+        this.completeness = coverage == null ? null : new MarketCompleteness(coverage);
         this.executionId = executionId;
         this.jobName = jobName;
         this.targetDate = targetDate;
@@ -182,6 +199,10 @@ public final class BatchExecutionContext {
             PhaseCounters counters = byPhase.get(phase);
 
             boolean succeeded = outcome.succeeded();
+            if (completeness != null) {
+                completeness.record(security.marketCode(), succeeded, outcome.failureKind(),
+                        outcome.sourceAnswered());
+            }
             if (succeeded) {
                 successCount.incrementAndGet();
                 writtenRowCount.addAndGet(outcome.writtenRows());
@@ -380,7 +401,11 @@ public final class BatchExecutionContext {
         if (!claimTerminal("정상 마감")) {
             return recordedStatus;
         }
-        BatchStatus status = recorder.finish(executionId, snapshot(), note);
+        List<MarketCompleteness.Incomplete> incomplete =
+                completeness == null ? List.of() : completeness.judge();
+        String recordedNote = withIncompleteTail(note, incomplete);
+        BatchStatus status = recorder.finish(executionId, snapshot(), recordedNote,
+                MarketCompleteness.markets(incomplete));
         recordedStatus = status;
         onTerminal.accept(executionId);
 
@@ -395,12 +420,47 @@ public final class BatchExecutionContext {
                     // 알림을 받은 사람이 관리 화면을 열기 전에는 모른다. 잘라서 싣는다 — 웹훅이 본문 뒤를 2,000자에서
                     // 자르는데 실행 id가 본문 뒤에 그려지고, 무효화 종목 목록을 통째로 싣는 note(재무 refill)가 있다.
                     "%d건 성공, %d건 실패 (대상일 %s)%s"
-                            .formatted(successCount.get(), failureCount.get(), targetDate, noteForAlert(note)),
+                            .formatted(successCount.get(), failureCount.get(), targetDate,
+                                    noteForAlert(recordedNote)),
                     dedupeKey(),
                     context()));
         }
         alertOnSuspectedSpecChange();
+        alertOnIncompleteMarkets(incomplete);
         return status;
+    }
+
+    /** note 앞머리는 그대로 두고 꼬리에 미완료 시장을 붙인다. 앞머리 형식은 잡이 정하고 운영 정규식이 읽는다. */
+    private static String withIncompleteTail(String note, List<MarketCompleteness.Incomplete> incomplete) {
+        String tail = MarketCompleteness.noteTail(incomplete);
+        if (tail.isEmpty()) {
+            return note;
+        }
+        return note == null || note.isBlank() ? tail : note + " " + tail;
+    }
+
+    /**
+     * 시장 미완료를 <b>따로 한 통</b> 알린다(ADR-0174).
+     *
+     * <p>부분 실패 알림에 기대지 않는 이유가 둘이다. 그 알림은 note를 300자에서 자르는데 무효화 종목 목록을 싣는 note는 꼬리가
+     * 잘린다. 그리고 실패가 0인 미완료(시작 때 소스 없음)는 부분 실패 알림이 아예 안 난다.
+     *
+     * <p>MUST: 키를 {@code dedupeKey() + ":incomplete"}로 가른다 — 같은 키면 {@code AlertSuppressor}가 10분 안의 두 번째를
+     * 버려, 부분 실패 알림 바로 뒤의 이 알림이 사라진다. {@code :malformed}와 같은 자리다. 심각도는 {@code WARNING}이다 —
+     * 웹훅의 최소 심각도가 그것이라 그 아래면 채널이 받지 않는다.
+     */
+    private void alertOnIncompleteMarkets(List<MarketCompleteness.Incomplete> incomplete) {
+        if (incomplete.isEmpty()) {
+            return;
+        }
+        alertPort.send(AlertEvent.toOperator(
+                AlertSeverity.WARNING,
+                jobName + " 시장 미완료",
+                ("%s (대상일 %s · 실행 id=%d) — 이 실행은 신선도 시계에 세지 않는다. 정기 실행이면 그 잡이 연체로 남아 "
+                        + "다음 무거운 잡 차례에 다시 돈다 — 같은 사유가 되풀이되면 원인(소스 장애·한도·우리 코드)을 먼저 본다.")
+                        .formatted(MarketCompleteness.noteTail(incomplete), targetDate, executionId),
+                dedupeKey() + ":incomplete",
+                context()));
     }
 
     /** 알림 본문에 실을 note — 길면 앞만 싣고 전체는 실행 기록에 있다고 적는다. */
@@ -464,20 +524,31 @@ public final class BatchExecutionContext {
      * 그만두는데, 그 구분이 가능해야 한다는 것이 {@link #claimTerminal}의 존재 이유다.
      */
     public void failUnexpectedly(Throwable cause) {
+        failUnexpectedly(null, cause);
+    }
+
+    /**
+     * 위와 같되 <b>어디서</b> 실패했는지를 앞에 붙인다. 스케줄러가 잡이 실행 행을 만들기 전에 던진 것을 「시작 실패」로
+     * 남길 때 쓴다 — 그 행이 없으면 연체 보정 순서의 키(마지막 시도)가 그 잡에서 멈춘다({@code PipelineScheduler}).
+     *
+     * @param where {@code null}이면 붙이지 않는다
+     */
+    public void failUnexpectedly(String where, Throwable cause) {
         if (cause instanceof BatchShutdownException) {
             return;
         }
         if (!claimTerminal("예상하지 못한 실패")) {
             return;
         }
+        String prefix = where == null ? "" : where + " — ";
         recordedStatus = BatchStatus.FAILED;
         recorder.fail(executionId, snapshot(),
-                cause.getClass().getSimpleName() + ": " + cause.getMessage());
+                prefix + cause.getClass().getSimpleName() + ": " + cause.getMessage());
         onTerminal.accept(executionId);
         alertPort.send(AlertEvent.toOperator(
                 AlertSeverity.ERROR,
                 jobName + " 실패",
-                "예상하지 못한 오류로 중단했다: %s".formatted(cause),
+                "%s예상하지 못한 오류로 중단했다: %s".formatted(prefix, cause),
                 dedupeKey(),
                 context()));
     }

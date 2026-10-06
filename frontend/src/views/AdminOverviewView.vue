@@ -274,7 +274,11 @@ function formatTime(value: string | null): string {
         :closable="false"
         class="admin__stale"
       >
-        <strong>{{ admin.summary.staleJobs.length }}개 배치가 예산을 넘겨 안 돌았습니다.</strong>
+        <!--
+          「안 돌았다」만 말하면 정기 실행이 돌았지만 시장 미완료로 시계에 안 센 잡에서 거짓이 된다(ADR-0174) —
+          그래서 제목은 「시계가 안 움직였다」이고, 줄마다 정기 시도 수와 미완료 시장을 서버 값 그대로 붙인다.
+        -->
+        <strong>{{ admin.summary.staleJobs.length }}개 배치가 예산을 넘겨 신선도가 갱신되지 않았습니다.</strong>
         <ul class="admin__stale-list">
           <li v-for="job in admin.summary.staleJobs" :key="job.jobName">
             <code>{{ job.jobName }}</code>
@@ -287,6 +291,12 @@ function formatTime(value: string | null): string {
               — {{ job.daysSince }}일째 (마지막 성공 {{ formatTime(job.lastSuccessAt) }},
               예산 {{ job.budgetDays }}일)
             </span>
+            <span v-if="job.scheduledAttempts > 0">
+              · 정기 {{ job.scheduledAttempts }}번 시도
+              <template v-if="job.incompleteMarkets.length > 0">
+                · {{ job.incompleteMarkets.join(', ') }} 미완료
+              </template>
+            </span>
             <span v-if="!job.scheduledOnly" class="admin__stale-note">
               스케줄 실행이 아직 없어 수동 실행을 셉니다. 범위 표지 전 실행은 좁힌 것인지 몰라 함께 셉니다.
             </span>
@@ -294,6 +304,10 @@ function formatTime(value: string | null): string {
               버튼이 있는 잡에는 명령을 안 적는다. 둘 다 적으면 어느 쪽이 맞는지 묻게 된다.
               무엇에 버튼이 있는지는 서버가 정한다(AdminJobLauncher 카탈로그).
             -->
+            <span v-if="job.incompleteMarkets.length > 0" class="admin__stale-note">
+              손으로 다시 돌리기 전에 그 실행의 기록·실패 요약에서 미완료 원인(소스 장애·한도·우리 코드)을 먼저 봅니다 —
+              다음 정기 차례가 어차피 다시 돕니다.
+            </span>
             <code v-if="job.howToRun" class="admin__stale-cmd">{{ job.howToRun }}</code>
             <span v-else class="admin__stale-note">아래 「배치 실행」에서 띄울 수 있습니다.</span>
           </li>
@@ -572,12 +586,13 @@ function formatTime(value: string | null): string {
           <Column header="실행 주체">
             <template #body="{ data }: { data: BatchExecution }">
               {{ triggeredByLabel(data.triggeredBy) }}
+              <!-- 툴팁도 사유마다 다르다 — 「시장 미완료」는 범위가 달라서가 아니라 시장을 못 끝내서 안 센다. -->
               <span
-                v-if="scopeNote(data.scope)"
+                v-if="scopeNote(data) !== null"
                 class="admin__scope-note"
-                title="정기 실행과 범위가 달라 연체 판정에 세지 않습니다"
+                :title="scopeNote(data)?.title"
               >
-                · {{ scopeNote(data.scope) }}
+                · {{ scopeNote(data)?.label }}
               </span>
             </template>
           </Column>

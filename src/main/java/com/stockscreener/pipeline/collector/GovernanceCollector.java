@@ -97,6 +97,11 @@ public class GovernanceCollector {
         return stamped;
     }
 
+    /** 그 시장의 소스가 등록돼 있는가. 잡이 시작 때 시장 미완료 판정의 재료로 한 번 묻는다(ADR-0174). */
+    public boolean hasSource(String marketCode) {
+        return registry.hasGovernanceSource(marketCode);
+    }
+
     /**
      * 그 시장의 소스가 <b>실제로 답하는</b> 표. 잡이 이것으로 좁힌다.
      *

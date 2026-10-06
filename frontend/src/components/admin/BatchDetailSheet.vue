@@ -10,7 +10,7 @@ import { computed } from 'vue'
 import type { BatchExecutionDetail } from '@/api/types'
 import RatioBar from '@/components/ui/RatioBar.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
-import { canRetry } from '@/lib/admin'
+import { canRetry, scopeNote } from '@/lib/admin'
 import {
   formatCount,
   formatDuration,
@@ -65,6 +65,9 @@ const elapsed = computed(() =>
 )
 
 const stalled = computed(() => execution.value !== null && isStalled(execution.value, props.now))
+
+/** 연체 시계에 안 세는 실행이면 그 사유. 서버의 구조화된 칸에서 고른다 — note를 파싱하지 않는다. */
+const scope = computed(() => (execution.value === null ? null : scopeNote(execution.value)))
 
 /**
  * 분모를 그릴 문자열.
@@ -139,6 +142,10 @@ function percentText(value: number | null): string {
           <div v-if="remaining !== null" class="fact">
             <dt>남은 시간(어림)</dt>
             <dd class="tabular">{{ formatDuration(remaining) }}</dd>
+          </div>
+          <div v-if="scope !== null" class="fact">
+            <dt>연체 판정</dt>
+            <dd :title="scope.title">세지 않음 · {{ scope.label }}</dd>
           </div>
           <div v-if="execution.failureCount > 0" class="fact fact--alert">
             <dt>실패</dt>

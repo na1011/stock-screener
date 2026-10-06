@@ -73,8 +73,8 @@ public class UniverseRebalanceJob {
     }
 
     /** 지수 하나를 손으로 고르면 정기 실행(활성 지수 전체)과 범위가 다르다. 기준일은 기록 계층이 본다. */
-    public static BatchExecutionRecorder.Scope scopeOf(String onlyCode) {
-        return BatchExecutionRecorder.Scope.of(onlyCode == null);
+    public static BatchExecutionRecorder.DeclaredScope scopeOf(String onlyCode) {
+        return BatchExecutionRecorder.DeclaredScope.byArgs(onlyCode == null);
     }
 
     /**

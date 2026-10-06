@@ -69,7 +69,7 @@ public class MarketIndexJob {
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, codes.size(),
                         // 창의 시작을 손으로 주면 소스 이력 전체를 받는 기본 실행과 범위가 다르다.
-                        BatchExecutionRecorder.Scope.of(from == null));
+                        BatchExecutionRecorder.DeclaredScope.byArgs(from == null));
         if (codes.isEmpty()) {
             // 키가 없어 어댑터가 등록조차 되지 않은 상태다. 0건 성공으로 끝내지 않는다 —
             // 그대로 두면 지수가 영영 안 들어오는데 잡은 초록이다.

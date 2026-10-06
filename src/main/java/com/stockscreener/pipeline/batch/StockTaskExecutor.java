@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.pipeline.datasource.SourceAnswer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +31,9 @@ import org.springframework.stereotype.Component;
 public class StockTaskExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(StockTaskExecutor.class);
+
+    /** 예상하지 못한 실패의 종류 이름 — {@code BatchExecutionRecorder.recordUnexpectedFailure}가 적는 값과 같다. */
+    static final String UNEXPECTED = "UNEXPECTED";
 
     private final StockTaskRunner runner;
     private final BatchExecutionRecorder recorder;
@@ -79,7 +83,7 @@ public class StockTaskExecutor {
             log.warn("종목 수집 실패. stockId={} ticker={} phase={} source={} kind={} message={}",
                     security.stockId(), security.ticker(), phase, e.sourceName(), e.kind(),
                     e.getMessage());
-            return Outcome.failure();
+            return Outcome.failure(e.kind().name(), SourceAnswer.isAnswered(e));
 
         } catch (RuntimeException e) {
             if (shuttingDown) {
@@ -92,7 +96,7 @@ public class StockTaskExecutor {
             recorder.recordUnexpectedFailure(executionId, security.stockId(), phase, e);
             log.error("종목 처리 중 예상하지 못한 오류. stockId={} ticker={} phase={}",
                     security.stockId(), security.ticker(), phase, e);
-            return Outcome.failure();
+            return Outcome.failure(UNEXPECTED, false);
         }
     }
 
@@ -128,15 +132,20 @@ public class StockTaskExecutor {
      *
      * @param succeeded    성공 여부
      * @param writtenRows  저장한 행 수. 실패면 0이다.
+     * @param failureKind  실패면 그 종류 — {@code batch_execution_failure.failure_kind}에 적은 것과 같은 문자열이다. 성공이면
+     *                     {@code null}. 마감 때 시장 미완료 판정({@link MarketCompleteness})이 이것을 실행 안에서 센다 —
+     *                     실패 행을 SQL로 다시 읽으면 다른 실행이 그 사이 해결로 표시한 행이 빠진다.
+     * @param sourceAnswered 실패가 소스의 결정적 답인가({@link SourceAnswer}). 실패 행에는 안 적는다 —
+     *                     종류만으로는 못 가르는 사실이라 예외에서 컨텍스트 계수까지만 운반한다.
      */
-    public record Outcome(boolean succeeded, long writtenRows) {
+    public record Outcome(boolean succeeded, long writtenRows, String failureKind, boolean sourceAnswered) {
 
         static Outcome success(long writtenRows) {
-            return new Outcome(true, writtenRows);
+            return new Outcome(true, writtenRows, null, false);
         }
 
-        static Outcome failure() {
-            return new Outcome(false, 0L);
+        static Outcome failure(String failureKind, boolean sourceAnswered) {
+            return new Outcome(false, 0L, failureKind, sourceAnswered);
         }
     }
 }

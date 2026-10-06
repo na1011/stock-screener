@@ -86,8 +86,8 @@ public class AdjustmentRebuildJob {
     }
 
     /** 정기 실행(14:00 사슬)은 티커·유니버스를 안 준다. 기준일과 꼬리는 기록 계층이 본다. */
-    public static BatchExecutionRecorder.Scope scopeOf(List<String> tickers, String universeCode) {
-        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty())
+    public static BatchExecutionRecorder.DeclaredScope scopeOf(List<String> tickers, String universeCode) {
+        return BatchExecutionRecorder.DeclaredScope.byArgs((tickers == null || tickers.isEmpty())
                 && (universeCode == null || universeCode.isBlank()));
     }
 
@@ -117,7 +117,7 @@ public class AdjustmentRebuildJob {
      */
     public Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                                      List<String> tickers, String universeCode) {
-        BatchExecutionRecorder.Scope scope = scopeOf(tickers, universeCode);
+        BatchExecutionRecorder.DeclaredScope scope = scopeOf(tickers, universeCode);
         List<SecurityRef> targets =
                 stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
         if (targets.isEmpty()) {

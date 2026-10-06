@@ -66,8 +66,8 @@ public class CorporateActionJob {
     }
 
     /** 정기 실행(14:00 사슬)은 창·티커·유니버스를 안 준다. 기준일과 꼬리는 기록 계층이 본다. */
-    public static BatchExecutionRecorder.Scope scopeOf(LocalDate from, List<String> tickers, String universeCode) {
-        return BatchExecutionRecorder.Scope.of(from == null && (tickers == null || tickers.isEmpty())
+    public static BatchExecutionRecorder.DeclaredScope scopeOf(LocalDate from, List<String> tickers, String universeCode) {
+        return BatchExecutionRecorder.DeclaredScope.byArgs(from == null && (tickers == null || tickers.isEmpty())
                 && (universeCode == null || universeCode.isBlank()));
     }
 
@@ -84,7 +84,7 @@ public class CorporateActionJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LocalDate from, List<String> tickers, String universeCode) {
-        BatchExecutionRecorder.Scope scope = scopeOf(from, tickers, universeCode);
+        BatchExecutionRecorder.DeclaredScope scope = scopeOf(from, tickers, universeCode);
         List<SecurityRef> targets =
                 stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
 

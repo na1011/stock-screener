@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.support.FakeFinancialDataSource;
 import com.stockscreener.support.TestDatabaseGuard;
@@ -185,6 +186,79 @@ class FinancialRefillJobTest {
                 List.of("005930", "035420"), null);
 
         assertThat(fakeFinancialSource.fetchedStockIds).containsExactly(memberId);
+    }
+
+    @Test
+    @DisplayName("정기 범위 FR이 한 시장의 소스 답을 못 받으면 마감에서 NARROW·MARKET_INCOMPLETE — 표지 없는 NOT_FOUND도 같다(ADR-0174)")
+    void unansweredFailureMakesTheMarketIncomplete() {
+        try {
+            for (DataSourceException failure : List.of(
+                    new DataSourceException(DataSourceException.Kind.TRANSIENT, "fake-financial", "503"),
+                    new DataSourceException(DataSourceException.Kind.NOT_FOUND, "fake-financial", "답 미확인"))) {
+                fakeFinancialSource.reset();
+                fakeFinancialSource.failingWith(memberId, failure);
+
+                BatchStatus status = job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+                assertThat(status).as(failure.kind().name()).isEqualTo(BatchStatus.PARTIAL_SUCCESS);
+                assertThat(latest("scope")).isEqualTo("NARROW");
+                assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
+                // 시험 컨텍스트에는 미국 재무 소스가 없다 — US는 (가) 「소스 없음」으로 늘 함께 뜬다.
+                assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("KOSPI,US");
+                assertThat(latest("note")).contains("시장 미완료 KOSPI");
+            }
+        } finally {
+            fakeFinancialSource.reset();
+        }
+    }
+
+    @Test
+    @DisplayName("소스가 결정적으로 답한 NOT_FOUND(표지)는 그 시장을 끝낸 것이다 — 남는 미완료는 소스 없는 US뿐")
+    void answeredFailureCompletesTheMarket() {
+        try {
+            fakeFinancialSource.reset();
+            fakeFinancialSource.failingWith(memberId,
+                    com.stockscreener.pipeline.datasource.SourceAnswer.answered(DataSourceException.Kind.NOT_FOUND, "fake-financial", "013"));
+
+            job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+            // KOSPI는 성공 0 · 실패 1이라 (나)로 미완료다 — 표지가 끝내는 것은 (다)다. 성공이 하나 있으면 끝난다.
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("KOSPI,US");
+            assertThat(latest("note")).contains("KOSPI 성공 0 실패 1").doesNotContain("없음(답 미확인)");
+
+            long second = insertStock("000660", "SK하이닉스");
+            jdbcTemplate.update("""
+                    INSERT INTO universe_membership (universe_code, stock_id, effective_from) VALUES (?, ?, ?)
+                    """, UNIVERSE, second, AS_OF.minusYears(1));
+            job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("US");
+        } finally {
+            fakeFinancialSource.reset();
+            jdbcTemplate.update("DELETE FROM universe_membership");
+            jdbcTemplate.update("DELETE FROM stock WHERE ticker = '000660'");
+        }
+    }
+
+    @Test
+    @DisplayName("대상 0건으로 곧장 마감하는 갈래도 같은 판정을 지난다 — 소스 없는 시장은 대상이 없어도 미완료다")
+    void earlyReturnAlsoJudgesMarkets() {
+        jdbcTemplate.update("DELETE FROM universe_membership");
+
+        job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+        assertThat(latest("target_count")).isEqualTo("0");
+        assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
+        assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("US");
+    }
+
+    /** 정기 실행의 기준일 — 지금이 아니면 기록 계층이 PAST_DATE로 찍어 시장 판정과 무관하게 NARROW다. */
+    private static LocalDate today() {
+        return LocalDate.now(java.time.ZoneId.of("Asia/Seoul"));
+    }
+
+    private String latest(String column) {
+        return jdbcTemplate.queryForObject("SELECT " + column + "::text FROM batch_execution WHERE job_name = ? "
+                + "ORDER BY id DESC LIMIT 1", String.class, FinancialRefillJob.JOB_NAME);
     }
 
     private long insertStock(String ticker, String name) {

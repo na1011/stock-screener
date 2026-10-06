@@ -93,7 +93,7 @@ class StockFailureIsolationTest {
         SecurityRef third = insertStock("000003", "정상2");
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 3, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 3, BatchExecutionRecorder.DeclaredScope.FULL);
 
         for (SecurityRef security : List.of(first, broken, third)) {
             execution.process(security, CollectionPhase.PRICE, s -> {
@@ -139,7 +139,7 @@ class StockFailureIsolationTest {
         SecurityRef broken = insertStock("000020", "먼저실패");
 
         BatchExecutionContext first = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
         first.process(broken, CollectionPhase.SECURITY_MASTER, s -> {
             throw new DataSourceException(
                     DataSourceException.Kind.TRANSIENT, "stub-source", "일시적 오류");
@@ -148,7 +148,7 @@ class StockFailureIsolationTest {
         assertThat(unresolved(broken)).as("1차 직후 미해결").isEqualTo(1);
 
         BatchExecutionContext second = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
         second.process(broken, CollectionPhase.SECURITY_MASTER, s -> 1L);
         second.finish();
 
@@ -170,7 +170,7 @@ class StockFailureIsolationTest {
         SecurityRef broken = insertStock("000021", "업종실패");
 
         BatchExecutionContext first = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
         first.process(broken, CollectionPhase.SECURITY_MASTER, s -> {
             throw new DataSourceException(
                     DataSourceException.Kind.TRANSIENT, "stub-source", "일시적 오류");
@@ -178,7 +178,7 @@ class StockFailureIsolationTest {
         first.finish();
 
         BatchExecutionContext second = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
         second.process(broken, CollectionPhase.PRICE, s -> 500L);
         second.finish();
 
@@ -201,7 +201,7 @@ class StockFailureIsolationTest {
         SecurityRef broken = insertStock("000011", "실패");
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 2, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 2, BatchExecutionRecorder.DeclaredScope.FULL);
 
         // 각 작업이 자기 종목의 이름을 바꾼다. 실패 종목의 변경만 되돌아가야 한다.
         for (SecurityRef security : List.of(ok, broken)) {
@@ -229,7 +229,7 @@ class StockFailureIsolationTest {
         SecurityRef broken = insertStock("000013", "실패");
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 2, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 2, BatchExecutionRecorder.DeclaredScope.FULL);
 
         // MUST: 배리어로 **두 트랜잭션이 동시에 열려 있게** 만든다. 없으면 앞이 끝난 뒤 뒤가
         // 도는 순차와 구분되지 않아 이 시험이 위의 것과 같은 것을 잰다.
@@ -285,7 +285,7 @@ class StockFailureIsolationTest {
         SecurityRef security = insertStock("000020", "정상");
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
         execution.process(security, CollectionPhase.PRICE, s -> 10L);
         BatchStatus status = execution.finish();
 
@@ -300,7 +300,7 @@ class StockFailureIsolationTest {
                 insertStock("000030", "A"), insertStock("000031", "B"), insertStock("000032", "C"));
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 3, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 3, BatchExecutionRecorder.DeclaredScope.FULL);
         for (SecurityRef security : securities) {
             execution.process(security, CollectionPhase.PRICE, s -> {
                 throw new DataSourceException(
@@ -325,7 +325,7 @@ class StockFailureIsolationTest {
         SecurityRef security = insertStock("000033", "두 단계");
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
         for (CollectionPhase phase : List.of(CollectionPhase.PRICE, CollectionPhase.FINANCIAL)) {
             execution.process(security, phase, s -> {
                 throw new DataSourceException(
@@ -346,7 +346,7 @@ class StockFailureIsolationTest {
         SecurityRef security = insertStock("000040", "종목");
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
 
         assertThatThrownBy(() -> execution.process(security, CollectionPhase.PRICE, s -> {
             throw new DataSourceException(
@@ -370,7 +370,7 @@ class StockFailureIsolationTest {
         SecurityRef security = insertStock("000050", "종목");
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
         execution.process(security, CollectionPhase.FINANCIAL, s -> {
             throw new IllegalStateException("계산 로직 버그");
         });
@@ -391,7 +391,7 @@ class StockFailureIsolationTest {
         SecurityRef broken = insertStock("000061", "실패");
 
         BatchExecutionContext first = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 2, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 2, BatchExecutionRecorder.DeclaredScope.FULL);
         for (SecurityRef security : List.of(ok, broken)) {
             first.process(security, CollectionPhase.PRICE, s -> {
                 if (s.stockId() == broken.stockId()) {
@@ -427,7 +427,7 @@ class StockFailureIsolationTest {
         SecurityRef security = insertStock("000070", "종목");
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
         for (int attempt = 0; attempt < 3; attempt++) {
             execution.process(security, CollectionPhase.PRICE, s -> {
                 throw new DataSourceException(
@@ -447,7 +447,7 @@ class StockFailureIsolationTest {
         SecurityRef security = insertStock("000080", "종목");
 
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 100, BatchExecutionRecorder.Scope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 100, BatchExecutionRecorder.DeclaredScope.FULL);
         execution.process(security, CollectionPhase.PRICE, s -> 1L);
         execution.abort("일일 호출 한도 소진");
 

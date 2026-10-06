@@ -204,7 +204,7 @@ public class DailyUpdateJob {
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, targetDate, triggeredBy, targets.size(),
                         // 인자로 좁힐 길이 없다 — 기준일과 꼬리는 기록 계층이 본다.
-                        BatchExecutionRecorder.Scope.FULL);
+                        BatchExecutionRecorder.DeclaredScope.FULL);
         List<PriceGapRun> gapRuns;
         try {
             gapRuns = stockRegistrar.priceGapRuns(targetDate, from, indicatorRegistry.readWindowBars());
