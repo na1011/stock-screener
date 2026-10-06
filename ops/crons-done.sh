@@ -22,8 +22,10 @@
 #      GAP_FILL 유령(어느 스윕도 안 닫는다)이 이 판정을 영구히 1로 만든다(2026-10-06 반증 · 사본 재현). MANUAL은 다른 JVM(bootRun)이라
 #      앱을 내려도 안 끊기고, 그 유령은 스위퍼가 다음 bootstrap 때에야 닫는다(08-06~09-08에 12건 · 최대 76시간).
 #      기동 뒤 GAP_FILL이 손 리밸런싱의 꼬리여도 1을 낸다(막히는 쪽 — 그 꼬리도 끝나야 앱을 내릴 이유가 없다).
-#   4. (판정 밖 · 참고) bootstrap 프로파일로 뜬 프로세스를 찍는다 — 손 쓰기 잡을 **새로 시작하는** 문은 이 판정 0에 더해 그것이
-#      0이어야 한다(JVM을 건너는 쓰기 배타가 없다 · progress). MANUAL RUNNING 행으로 묻지 않는 것은 유령을 못 가르기 때문이다.
+#   4. (판정 밖 · 참고) 적재 JVM(bootRun)을 찍는다 — 손 쓰기 잡을 **새로 시작하는** 문은 이 판정 0에 더해 그것이 없어야 한다
+#      (JVM을 건너는 쓰기 배타가 없다 · progress). MANUAL RUNNING 행으로 묻지 않는 것은 유령을 못 가르기 때문이다. 판정은 훅과
+#      같은 함수(`.claude/hooks/lib/load-process.sh`의 `stray_load_pids`)다 — 따로 짠 grep은 `SPRING_PROFILES_ACTIVE=bootstrap`
+#      ·`local,bootstrap`을 놓치고 그 문구를 실은 셸을 잘못 잡았다(2026-10-06 반증 · 더미 넷).
 # 지연 L(벽시계 경과 − JVM 가동 시간)은 참고로만 찍는다 — 크론마다의 밀림이 아니다.
 # 다음 명목 발화 시각을 함께 찍는다 — 앱을 내렸으면 그 전에 다시 올린다.
 #
@@ -78,8 +80,16 @@ next_fire() {
   echo "$best"
 }
 
-boots=$(ps -Ao pid=,command= | grep -E 'spring\.profiles\.active=bootstrap' | grep -v -e ' grep ' | awk '{print $1}' | tr '\n' ' ' || true)
-echo "[crons] bootstrap 프로파일 프로세스(참고 · 판정 밖): ${boots:-없음} — 손 쓰기 잡을 새로 시작하려면 이것도 없어야 한다."
+# shellcheck source=.claude/hooks/lib/load-process.sh
+. "$HERE/../.claude/hooks/lib/load-process.sh"
+boot_rc=0
+boots=$(stray_load_pids) || boot_rc=$?
+case $boot_rc in
+  0) boots_msg="$boots" ;;
+  1) boots_msg="없음" ;;
+  *) boots_msg="판정하지 못했다(pgrep·ps 없음) — 없다로 읽지 않는다" ;;
+esac
+echo "[crons] 적재 JVM(bootRun · 참고 · 판정 밖): ${boots_msg} — 손 쓰기 잡을 새로 시작하려면 이것도 없어야 한다."
 
 if ! pid=$(running_pid "$APP_PID_FILE" "$APP_PATTERN"); then
   echo "[crons] 앱이 안 떠 있다 — 빠질 발화가 없다. 다음 명목 발화: $(next_fire)"

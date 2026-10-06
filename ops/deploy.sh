@@ -63,6 +63,39 @@ build_state() {
 }
 BUILD_STATE_BEFORE="$(build_state)"
 
+# 시험 DB에 이 트리에 없는 마이그레이션이 있으면 빌드 전에 멈춘다 — 시험 프로파일의 V900 때문에 그 버전은 future로
+# 안 무시되고 「적용됐는데 코드에 없음」으로 Flyway 검증이 서서, 시험 수백 개가 코드 결함처럼 붉는다(2026-10-06: 다른
+# 브랜치 시험이 기본 시험 DB에 V63·V64를 넣어 main 빌드가 736 실패 · 빈 DB 대조군은 통과). 기본 시험 DB는 공유라 막을 수 없고,
+# 배포 빌드 앞에서 사유로 멈추는 것이 이 자리의 몫이다.
+test_db_guard() {
+  local url="${TEST_DB_URL:-jdbc:postgresql://localhost:5432/stock_screener_test}" db psql versions v extra=""
+  db="${url##*/}"; db="${db%%\?*}"
+  psql="$(pg_bin psql)" || { echo "[deploy] psql을 못 찾아 시험 DB(${db})를 판정하지 못했다 — 멈춘다." >&2; exit 1; }
+  # 서버 메시지는 로캘을 따라 한국어로 오므로 문구로 가르지 않는다 — 표가 있는지를 먼저 묻는다.
+  if ! versions="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select to_regclass('flyway_schema_history') is not null" 2>&1)"; then
+    echo "[deploy] 시험 DB(${db})를 읽지 못했다 — 멈춘다: ${versions}" >&2
+    exit 1
+  fi
+  [[ "$versions" == "f" ]] && return 0   # 빈 시험 DB — 시험이 첫 실행에 마이그레이션을 적용한다
+  if ! versions="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select version from flyway_schema_history where success and version is not null" 2>&1)"; then
+    echo "[deploy] 시험 DB(${db})를 읽지 못했다 — 멈춘다: ${versions}" >&2
+    exit 1
+  fi
+  while IFS= read -r v; do
+    [[ -z "$v" ]] && continue
+    if ! compgen -G "$ROOT/src/main/resources/db/migration/V${v}__*.sql" >/dev/null \
+        && ! compgen -G "$ROOT/src/test/resources/db/testmigration/V${v}__*.sql" >/dev/null; then
+      extra="${extra} V${v}"
+    fi
+  done <<< "$versions"
+  if [[ -n "$extra" ]]; then
+    echo "[deploy] 시험 DB(${db})에 이 트리에 없는 마이그레이션이 적용돼 있다:${extra} — 다른 브랜치 시험이 남긴 것이다." >&2
+    echo "         빌드가 Flyway 검증에서 멈춘다. 그 DB를 이름을 바꿔 보존하고 같은 이름으로 새로 만든 뒤(또는 TEST_DB_URL을 깨끗한 DB로) 다시 친다." >&2
+    exit 1
+  fi
+}
+test_db_guard
+
 echo "== 빌드 =="
 ./gradlew clean build
 BUILD_STATE_AFTER="$(build_state)"
