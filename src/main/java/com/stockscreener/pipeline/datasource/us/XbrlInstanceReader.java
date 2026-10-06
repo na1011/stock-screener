@@ -59,8 +59,10 @@ final class XbrlInstanceReader {
      * 판 3(같은 날): 받은 인스턴스 길이를 색인 크기와 맞춘다(끊긴 본문 · 200 오류 본문이 해석 실패로 굳던 것) · 범위에
      * {@code SecEdgarResponse}(색인 JSON의 200 갈래)를 더했다. 판 4(같은 날): 길이가 다르면 같은 실행 안에서 다시 받는다 ·
      * 크기는 고른 인스턴스에서만 읽는다. 판 5(같은 날): 색인·공시 목록도 JSON으로 안 읽히면 같은 실행 안에서 다시 받는다.
+     * 판 6(같은 날): 다시 받기 사이에 대기(2초 · 10초)와 연속 소진 차단 · companyfacts와 한 자리 · 공백 본문도 다시 받는다 ·
+     * 판 범위 소스에 범위가 닿는 범위 밖 멤버의 선언을 싣는다.
      */
-    static final int READER_VERSION = 5;
+    static final int READER_VERSION = 6;
 
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
     private static final String XBRLDI = "http://xbrl.org/2006/xbrldi";

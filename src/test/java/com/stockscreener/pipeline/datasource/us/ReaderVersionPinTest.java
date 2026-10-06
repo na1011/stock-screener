@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.datasource.us;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.IdentifierTree;
@@ -12,15 +13,21 @@ import com.sun.source.tree.NewClassTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.source.util.JavacTask;
+import com.sun.source.util.TreePath;
 import com.sun.source.util.TreePathScanner;
 import com.sun.source.util.TreeScanner;
 import com.sun.source.util.Trees;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Component;
 
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -31,17 +38,23 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -77,7 +90,8 @@ class ReaderVersionPinTest {
             "c713c64d6a4a6dd9e4e6f04267463b2877dde8ea6eeac50b46ee8847d182423f",
             "e44657c52f69e940e9a083e0d76801aea8f561cb218e67be3509d1761c002bb7",
             "7d27b748e3ffb6c804a9fb0c963e3b0d1a241b1676d74277d1a46bb919a92efc",
-            "0e1038c9921de8acebeefdc8cd55aaa8b6e197c021a63d9cd91267f3d518af40");
+            "0e1038c9921de8acebeefdc8cd55aaa8b6e197c021a63d9cd91267f3d518af40",
+            "e8bf8893ee9c89efc789f6258e79ba09aa2403adc897a424e5232be3e1294550");
 
     /**
      * 판 범위 — 저장되는 것(상태 · 원 팩트 · 머리 · 실패 종류)을 정하는 파일 전부, 파일 전체다({@code READER_VERSION} 선언만
@@ -109,6 +123,7 @@ class ReaderVersionPinTest {
     /** 판 1, 2, …의 출력 해시. 끝에만 더한다. */
     private static final List<String> PINNED = List.of(
             "c8e8a6e90b0cf4786efd0fc10bacee5099b4babeb6cdd2f61666f43bb53ee982",
+            "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
@@ -359,6 +374,51 @@ class ReaderVersionPinTest {
             }.scan(parse(file), null);
         }
         assertThat(offenders).as("범위 밖에서 받기·저장·보충을 바꾸면 판 고정이 그 행동을 못 본다 — 그 파일을 범위에 넣는다").isEmpty();
+    }
+
+    @Test
+    @DisplayName("스프링 빈은 판 범위 인터페이스를 받지도 내지도 않는다 — 운영 배선은 범위 클래스를 구체형으로 잇는다")
+    void noBeanConsumesOrProducesAScopeInterface() throws Exception {
+        // 구문 검사(위)는 범위 인터페이스를 범위 밖에서 구현하는 람다 · 조건식 람다 · Proxy · 생성자 인자 람다를 못 본다(v11 반증 —
+        // 네 꼴이 지났다). 그 구현이 운영에 닿는 길은 주입뿐이므로 길을 닫는다: 빈의 생성자 · @Autowired 필드 · @Bean 메서드가
+        // 범위 인터페이스를 받거나 내면 붉다. 그러면 범위 형을 바꿀 길은 범위 클래스의 하위 클래스뿐이고 위 검사가 그것을 막는다.
+        Set<String> scopeInterfaces = Set.of("SupplementLedger", "FilingSupplementer");
+        Path classes = Path.of(SecFilingClient.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Set<String> offenders = new TreeSet<>();
+        int beans = 0;
+        try (Stream<Path> walk = Files.walk(classes)) {
+            for (Path file : walk.filter(f -> f.toString().endsWith(".class")).toList()) {
+                String name = classes.relativize(file).toString().replace('/', '.').replaceAll("\\.class$", "");
+                Class<?> type = Class.forName(name, false, getClass().getClassLoader());
+                List<Class<?>> taken = new ArrayList<>();
+                if (AnnotatedElementUtils.hasAnnotation(type, Component.class)) {
+                    beans++;
+                    for (Constructor<?> constructor : type.getDeclaredConstructors()) {
+                        if (constructor.isAnnotationPresent(Autowired.class) || type.getDeclaredConstructors().length == 1) {
+                            taken.addAll(List.of(constructor.getParameterTypes()));
+                        }
+                    }
+                    for (Field field : type.getDeclaredFields()) {
+                        if (field.isAnnotationPresent(Autowired.class)) {
+                            taken.add(field.getType());
+                        }
+                    }
+                }
+                for (Method method : type.getDeclaredMethods()) {
+                    if (AnnotatedElementUtils.hasAnnotation(method, Bean.class) || method.isAnnotationPresent(Autowired.class)) {
+                        taken.add(method.getReturnType());
+                        taken.addAll(List.of(method.getParameterTypes()));
+                    }
+                }
+                for (Class<?> t : taken) {
+                    if (t.getPackageName().equals(SecFilingClient.class.getPackageName()) && scopeInterfaces.contains(t.getSimpleName())) {
+                        offenders.add(name + " — " + t.getSimpleName());
+                    }
+                }
+            }
+        }
+        assertThat(beans).as("빈을 하나도 못 찾았다면 이 검사가 아무것도 안 본 것이다").isGreaterThan(50);
+        assertThat(offenders).as("범위 인터페이스를 빈 배선에 쓰면 범위 밖 구현이 주입될 수 있다 — 범위 클래스를 구체형으로 받는다").isEmpty();
     }
 
     @Test
@@ -630,6 +690,188 @@ class ReaderVersionPinTest {
                 code = version.matcher(code).replaceAll("static final int READER_VERSION = _;");
             }
             out.append("== ").append(file).append('\n').append(code);
+        }
+        out.append(outsideMemberSource());
+        return out.toString();
+    }
+
+    /**
+     * 판 범위가 닿는 범위 밖 프로젝트 멤버의 정규형 — 범위 소스에서 시작해, 그 멤버의 선언이 다시 부르는 프로젝트 멤버까지 닫는다.
+     *
+     * <p>면제({@link #OUTSIDE_SCOPE})를 형 단위로만 주면 면제된 형에 새 멤버를 만들어 규칙을 옮긴 뒤 그것만 바꿔도 소스 해시가
+     * 그대로였다(v11 반증 — {@code isLinkbase} 본문을 {@code SecTickerCikCache}로 옮기고 도우미만 바꾸자 고정 시험이 전부 초록인데
+     * {@code pickInstance}의 결과가 종료 상태에서 OK로 바뀌었다). 그래서 닿는 멤버의 선언 전체(본문 · 초기값)를 싣는다. 형을
+     * 참조하면 그 형의 머리(종류 · 수식어 · 상위 형 · 열거 상수 · 레코드 성분 · 초기화 블록)를 싣는다 — 다른 멤버는 닿을 때만.
+     * 인터페이스 메서드의 구현({@code RateLimiter} → {@code TokenBucketRateLimiter})은 정적으로 안 닿는다 — 그 자리가
+     * {@link #OUTSIDE_SCOPE}의 사유다(호출 간격 · 받은 본문은 색인 크기로 맞춘다).
+     */
+    private static String outsideMemberSource() throws IOException {
+        Path main = Path.of("src/main/java");
+        Set<String> scopeTypes = new TreeSet<>();
+        SOURCE_SCOPE.forEach(f -> scopeTypes.add("com.stockscreener.pipeline.datasource.us." + f.substring(0, f.length() - 5)));
+        Set<Path> files = new TreeSet<>(SOURCE_SCOPE.stream().map(SOURCE_DIR::resolve).toList());
+        for (int round = 0; ; round++) {
+            assertThat(round).as("범위 밖 멤버 폐포가 수렴하지 않는다").isLessThan(20);
+            JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+            DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+            Map<String, String> out = new TreeMap<>();
+            Set<Path> missing = new TreeSet<>();
+            try (StandardJavaFileManager fm = javac.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
+                JavacTask task = (JavacTask) javac.getTask(null, fm, diagnostics,
+                        List.of("-proc:none", "-classpath", System.getProperty("java.class.path")), null,
+                        fm.getJavaFileObjectsFromPaths(files));
+                Iterable<? extends CompilationUnitTree> units = task.parse();
+                task.analyze();
+                assertThat(diagnostics.getDiagnostics()).as("범위 밖 멤버 폐포를 속성 분석하지 못했다")
+                        .noneMatch(d -> d.getKind() == Diagnostic.Kind.ERROR);
+                Trees trees = Trees.instance(task);
+                Deque<Element> work = new ArrayDeque<>();
+                for (CompilationUnitTree unit : units) {
+                    if (scopeTypes.contains(topLevelName(unit))) {
+                        collectReferences(trees, new TreePath(unit), work);
+                    }
+                }
+                Set<String> seen = new TreeSet<>();
+                while (!work.isEmpty()) {
+                    Element element = work.pop();
+                    TypeElement top = topLevel(element);
+                    String topName = top == null ? "" : top.getQualifiedName().toString();
+                    if (!topName.startsWith("com.stockscreener.") || scopeTypes.contains(topName)) {
+                        continue;
+                    }
+                    String key = memberKey(element);
+                    if (!seen.add(key)) {
+                        continue;
+                    }
+                    Path file = main.resolve(topName.replace('.', '/') + ".java");
+                    if (!files.contains(file)) {
+                        missing.add(file);
+                        continue;
+                    }
+                    if (!(element instanceof TypeElement)) {
+                        work.push(element.getEnclosingElement());
+                    }
+                    TreePath path = trees.getPath(element);
+                    if (path == null) {
+                        out.put(key, "합성 " + element.getKind());
+                        continue;
+                    }
+                    if (element instanceof TypeElement type && path.getLeaf() instanceof ClassTree declaration) {
+                        out.put(key, typeHeader(trees, path, type, declaration));
+                        for (Tree member : declaration.getMembers()) {
+                            if (member instanceof BlockTree || isConstantOrComponent(trees, new TreePath(path, member))) {
+                                collectReferences(trees, new TreePath(path, member), work);
+                            }
+                        }
+                        if (declaration.getExtendsClause() != null) {
+                            collectReferences(trees, new TreePath(path, declaration.getExtendsClause()), work);
+                        }
+                        for (Tree implemented : declaration.getImplementsClause()) {
+                            collectReferences(trees, new TreePath(path, implemented), work);
+                        }
+                    } else {
+                        out.put(key, withoutDocComments(path.getLeaf().toString()));
+                        collectReferences(trees, path, work);
+                    }
+                }
+            }
+            if (missing.isEmpty()) {
+                StringBuilder text = new StringBuilder("== 범위 밖 멤버\n");
+                out.forEach((key, value) -> text.append("-- ").append(key).append('\n').append(value).append('\n'));
+                return text.toString();
+            }
+            files.addAll(missing);
+        }
+    }
+
+    private static void collectReferences(Trees trees, TreePath root, Deque<Element> work) {
+        new TreePathScanner<Void, Void>() {
+            @Override
+            public Void visitIdentifier(IdentifierTree node, Void unused) {
+                add();
+                return super.visitIdentifier(node, unused);
+            }
+
+            @Override
+            public Void visitMemberSelect(MemberSelectTree node, Void unused) {
+                add();
+                return super.visitMemberSelect(node, unused);
+            }
+
+            @Override
+            public Void visitNewClass(NewClassTree node, Void unused) {
+                add();
+                return super.visitNewClass(node, unused);
+            }
+
+            @Override
+            public Void visitMemberReference(MemberReferenceTree node, Void unused) {
+                add();
+                return super.visitMemberReference(node, unused);
+            }
+
+            private void add() {
+                Element element = trees.getElement(getCurrentPath());
+                if (element != null && element.getKind() != ElementKind.PACKAGE
+                        && element.getKind() != ElementKind.LOCAL_VARIABLE && element.getKind() != ElementKind.PARAMETER
+                        && element.getKind() != ElementKind.EXCEPTION_PARAMETER
+                        && element.getKind() != ElementKind.RESOURCE_VARIABLE
+                        && element.getKind() != ElementKind.TYPE_PARAMETER
+                        && element.getKind() != ElementKind.BINDING_VARIABLE) {
+                    work.push(element);
+                }
+            }
+        }.scan(root, null);
+    }
+
+    private static boolean isConstantOrComponent(Trees trees, TreePath member) {
+        Element element = trees.getElement(member);
+        return element != null && (element.getKind() == ElementKind.ENUM_CONSTANT
+                || (element.getKind() == ElementKind.FIELD && element.getEnclosingElement().getKind() == ElementKind.RECORD
+                && !element.getModifiers().contains(javax.lang.model.element.Modifier.STATIC)));
+    }
+
+    private static String typeHeader(Trees trees, TreePath path, TypeElement type, ClassTree declaration) {
+        StringBuilder header = new StringBuilder();
+        header.append(declaration.getModifiers().toString().strip()).append(' ').append(declaration.getKind()).append(' ')
+                .append(type.getQualifiedName()).append(declaration.getTypeParameters())
+                .append(" extends ").append(declaration.getExtendsClause())
+                .append(" implements ").append(declaration.getImplementsClause()).append('\n');
+        for (Tree member : declaration.getMembers()) {
+            if (member instanceof BlockTree || isConstantOrComponent(trees, new TreePath(path, member))) {
+                header.append(withoutDocComments(member.toString())).append('\n');
+            }
+        }
+        return header.toString();
+    }
+
+    private static String memberKey(Element element) {
+        if (element instanceof TypeElement type) {
+            return type.getQualifiedName() + " 형";
+        }
+        Element owner = element.getEnclosingElement();
+        String ownerName = owner instanceof TypeElement type ? type.getQualifiedName().toString() : String.valueOf(owner);
+        return ownerName + "#" + (element instanceof ExecutableElement ? element.toString() : element.getSimpleName().toString())
+                + " " + element.getKind();
+    }
+
+    private static String topLevelName(CompilationUnitTree unit) {
+        String file = Path.of(unit.getSourceFile().toUri()).getFileName().toString();
+        return unit.getPackageName() + "." + file.substring(0, file.length() - 5);
+    }
+
+    private static String withoutDocComments(String printed) {
+        StringBuilder out = new StringBuilder();
+        boolean inDoc = false;
+        for (String line : printed.split("\n", -1)) {
+            String trimmed = line.strip();
+            if (inDoc) {
+                inDoc = !trimmed.equals("*/");
+            } else if (trimmed.equals("/**")) {
+                inDoc = true;
+            } else {
+                out.append(line).append('\n');
+            }
         }
         return out.toString();
     }

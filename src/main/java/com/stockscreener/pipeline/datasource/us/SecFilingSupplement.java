@@ -4,6 +4,7 @@ import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
@@ -95,7 +96,18 @@ public class SecFilingSupplement implements FilingSupplementer {
     private final SecFilingClient client;
     private final SupplementLedger store;
 
-    public SecFilingSupplement(SecFilingClient client, SupplementLedger store) {
+    /**
+     * 운영 배선은 원장을 <b>구체형</b>으로 받는다 — 인터페이스로 받으면 다른 {@code SupplementLedger} 빈(람다 · 프록시 · 조건식
+     * 람다 · 생성자 인자 람다 어느 꼴이든)이 판 범위 밖에서 저장을 바꿔도 판 고정이 못 본다(v11 반증 — 네 꼴이 구문 검사를
+     * 지났다). 구체형이면 바꿀 길이 하위 클래스뿐이고 그것은 {@code ReaderVersionPinTest}가 막는다.
+     */
+    @Autowired
+    public SecFilingSupplement(SecFilingClient client, SecFilingSupplementStore store) {
+        this(client, (SupplementLedger) store);
+    }
+
+    /** 스윕 · 시험 전용 — 메모리 원장을 끼운다. */
+    SecFilingSupplement(SecFilingClient client, SupplementLedger store) {
         this.client = client;
         this.store = store;
     }

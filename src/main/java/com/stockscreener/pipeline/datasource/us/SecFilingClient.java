@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -37,14 +38,73 @@ import java.util.function.Supplier;
  * <p><b>리미터는 companyfacts와 공유한다</b> — SEC의 초당 한도는 사용자 단위로 두 호스트에 함께 걸린다.
  *
  * <p><b>{@code TRANSIENT}만 두 번 다시 묻는다.</b> 공시 하나에 콜이 둘(색인 · 인스턴스)이고 종목마다 목록 콜이 붙으므로,
- * 다시 묻지 않으면 5xx 한 번이 그 종목의 그 달 보충을 잃는다. 404·403은 다시 물어도 같다.
+ * 다시 묻지 않으면 5xx 한 번이 그 종목의 그 달 보충을 잃는다. 404·403은 다시 물어도 같다. companyfacts도 같은 자리
+ * ({@link #fetch})로 받는다 — 둘이 따로 짜여 있다가 인터럽트 처리가 갈렸다(2026-10-06 v11 반증).
  */
 @Component
 @ConditionalOnApiKey("sec-edgar")
 public class SecFilingClient {
 
-    /** 다시 묻는 횟수(처음 한 번을 빼고). */
+    /** 다시 묻는 횟수(처음 한 번을 빼고). {@link Backoff#STANDARD_MILLIS}의 길이와 같다. */
     static final int TRANSIENT_RETRIES = 2;
+
+    /**
+     * 같은 실행 안 재시도 사이의 대기와 그 차단.
+     *
+     * <p><b>왜 기다리는가</b>: 대기 없이 다시 물으면 세 시도가 약 0.4초 안에 끝나 그보다 긴 끊김(운영 companyfacts 전송 실패
+     * 4건 중 「Connect timed out」·「Network is down」)은 그대로 그 종목을 다음 FR까지 비운다(2026-10-06 v11 반증 · 운영 리미터로
+     * 잰 간격 204·209ms). <b>왜 차단하는가</b>: 소스가 통째로 내려가면 콜마다 12초를 기다려 종목 수만큼 실행이 늘어난다
+     * (1,000종목이면 3시간 넘게 — 그 뒤 잡이 그만큼 밀린다). 그래서 다시 묻기를 다 쓰고도 실패한 콜이 연달아
+     * {@link #OPEN_AFTER}번이면 대기를 건너뛴다(다시 묻기는 그대로) — 응답 하나(성공이든 4xx든)가 다시 닫는다.
+     */
+    static final class Backoff {
+
+        /** 시도 사이 대기 — 첫 실패 뒤 2초 · 둘째 실패 뒤 10초. */
+        static final long[] STANDARD_MILLIS = {2_000, 10_000};
+        static final int OPEN_AFTER = 3;
+
+        @FunctionalInterface
+        interface Pause {
+            void sleep(long millis) throws InterruptedException;
+        }
+
+        private final long[] millis;
+        private final Pause pause;
+        private final AtomicInteger exhaustedInARow = new AtomicInteger();
+
+        Backoff(long[] millis, Pause pause) {
+            if (millis.length != TRANSIENT_RETRIES) {
+                throw new IllegalArgumentException("대기는 다시 묻는 횟수만큼이다: " + millis.length);
+            }
+            this.millis = millis.clone();
+            this.pause = pause;
+        }
+
+        static Backoff standard() {
+            return new Backoff(STANDARD_MILLIS, Thread::sleep);
+        }
+
+        private void beforeRetry(int retry, String context) throws DataSourceException {
+            if (exhaustedInARow.get() >= OPEN_AFTER) {
+                return;
+            }
+            try {
+                pause.sleep(millis[retry]);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SecEdgarResponse.SOURCE_NAME,
+                        "다시 받기를 기다리는 중 인터럽트됐다. " + context, e);
+            }
+        }
+
+        private void answered() {
+            exhaustedInARow.set(0);
+        }
+
+        private void exhausted() {
+            exhaustedInARow.incrementAndGet();
+        }
+    }
 
     /**
      * 공시 하나.
@@ -57,22 +117,30 @@ public class SecFilingClient {
     private final RestClient data;
     private final RestClient files;
     private final RateLimiter rateLimiter;
+    private final Backoff backoff;
 
     @Autowired
     public SecFilingClient(ExternalApiClientFactory clientFactory,
                            DataSourceProperties properties,
                            @Qualifier("secEdgarRateLimiter") RateLimiter rateLimiter) {
         this(clientFactory, properties, rateLimiter,
-                properties.getSecEdgar().getBaseUrl(), properties.getSecEdgarFilesBaseUrl());
+                properties.getSecEdgar().getBaseUrl(), properties.getSecEdgarFilesBaseUrl(), Backoff.standard());
     }
 
-    /** MockWebServer 시험 전용 — 두 호스트를 바꿔 끼운다. */
+    /** MockWebServer 시험 전용 — 두 호스트를 바꿔 끼운다. 대기는 기다리지 않는다(대기 자체는 {@code SecRetryBackoffTest}가 묻는다). */
     SecFilingClient(ExternalApiClientFactory clientFactory, DataSourceProperties properties,
                     RateLimiter rateLimiter, String dataBaseUrl, String filesBaseUrl) {
+        this(clientFactory, properties, rateLimiter, dataBaseUrl, filesBaseUrl,
+                new Backoff(Backoff.STANDARD_MILLIS, millis -> { }));
+    }
+
+    SecFilingClient(ExternalApiClientFactory clientFactory, DataSourceProperties properties,
+                    RateLimiter rateLimiter, String dataBaseUrl, String filesBaseUrl, Backoff backoff) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.data = clientFactory.create(source, dataBaseUrl, SecEdgarHeaders.of(source));
         this.files = clientFactory.create(source, filesBaseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
+        this.backoff = backoff;
     }
 
     /**
@@ -263,25 +331,30 @@ public class SecFilingClient {
         return SecEdgarResponse.requireJson(response.getStatusCode(), response.getBody(), context);
     }
 
-    /**
-     * 한 콜을 리미터 뒤에서 부르고, 전송 실패와 5xx만 {@link #TRANSIENT_RETRIES}번 다시 부른다. 4xx는 그대로 돌려준다 —
-     * 상태코드의 판정은 호출부가 한다({@link SecEdgarResponse#kindOf}).
-     */
-    private <T> ResponseEntity<T> withRetry(Supplier<ResponseEntity<T>> call, String context)
-            throws DataSourceException {
-        return withRetry(call, received -> null, context);
-    }
-
-    /**
-     * @param incomplete 2xx인데 덜 온 응답이면 그 사유, 아니면 {@code null} — 덜 온 응답은 일시 실패처럼 다시 받고, 끝까지 그러면
-     *                   그 사유의 MALFORMED로 던진다
-     */
     private <T> ResponseEntity<T> withRetry(Supplier<ResponseEntity<T>> call,
                                             Function<ResponseEntity<T>, String> incomplete, String context)
             throws DataSourceException {
+        return fetch(rateLimiter, backoff, call, incomplete, context);
+    }
+
+    /**
+     * 한 콜을 리미터 뒤에서 부르고, 전송 실패 · 5xx · 덜 온 2xx만 {@link #TRANSIENT_RETRIES}번 다시 부른다(사이에
+     * {@link Backoff} 대기). 4xx는 그대로 돌려준다 — 상태코드의 판정은 호출부가 한다({@link SecEdgarResponse#kindOf}).
+     * <b>한도와 리미터 대기의 인터럽트는 다시 묻지 않는다</b> — 리미터는 시도마다 다시 지나되 그 실패는 곧장 던진다(v11 반증:
+     * companyfacts 쪽 복제가 인터럽트를 TRANSIENT로 받아 다시 리미터를 지나 HTTP를 쳤다). companyfacts도 이 자리로 받는다.
+     *
+     * @param incomplete 2xx인데 덜 온 응답이면 그 사유, 아니면 {@code null} — 덜 온 응답은 일시 실패처럼 다시 받고, 끝까지 그러면
+     *                   그 사유의 MALFORMED로 던진다
+     */
+    static <T> ResponseEntity<T> fetch(RateLimiter rateLimiter, Backoff backoff, Supplier<ResponseEntity<T>> call,
+                                       Function<ResponseEntity<T>, String> incomplete, String context)
+            throws DataSourceException {
         DataSourceException last = null;
         for (int attempt = 0; attempt <= TRANSIENT_RETRIES; attempt++) {
-            acquire(context);
+            if (attempt > 0) {
+                backoff.beforeRetry(attempt - 1, context);
+            }
+            acquire(rateLimiter, context);
             ResponseEntity<T> response;
             try {
                 response = call.get();
@@ -302,12 +375,14 @@ public class SecFilingClient {
                         why + " 다음 실행이 다시 받는다. " + context);
                 continue;
             }
+            backoff.answered();
             return response;
         }
+        backoff.exhausted();
         throw last;
     }
 
-    private void acquire(String context) throws DataSourceException {
+    private static void acquire(RateLimiter rateLimiter, String context) throws DataSourceException {
         if (!rateLimiter.hasDailyQuota()) {
             throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED, SecEdgarResponse.SOURCE_NAME,
                     "일일 호출 한도를 소진했다(사용 " + rateLimiter.usedToday() + "회). " + context);

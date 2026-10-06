@@ -125,6 +125,31 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("companyfacts 429는 다시 묻지 않는다 — 한 콜로 RATE_LIMITED")
+    void companyFactsDoesNotRetryRateLimit() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(429, "<Error>slow down</Error>");
+        enqueue(200, fixture("companyfacts.json"));
+
+        assertThatThrownBy(() -> adapter().fetchReports(FIX, FROM))
+                .isInstanceOfSatisfying(DataSourceException.class,
+                        e -> assertThat(e.kind()).isEqualTo(DataSourceException.Kind.RATE_LIMITED));
+        assertThat(server.getRequestCount()).as("매핑 1 + 429 1 — 다시 안 묻는다(v11 반증: 다시 묻게 바꾼 변이에 시험이 다 초록이었다)")
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("공백만 든 companyfacts 2xx도 본문이 없는 것이다 — 같은 실행 안에서 다시 받는다")
+    void blankCompanyFactsIsRetriedLikeAnEmptyOne() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, "   ");
+        enqueue(200, fixture("companyfacts.json"));
+
+        assertThat(adapter().fetchReports(FIX, FROM).reports()).isNotEmpty();
+        assertThat(server.getRequestCount()).as("매핑 1 + 공백 1 + 다시 1").isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("값이 그대로인 재보고는 정정이 아니다 — 접지 않으면 지표가 보존 창째 지워진다")
     void foldsUnchangedRestatements() throws Exception {
         List<RawFinancialReport> reports = fetch();

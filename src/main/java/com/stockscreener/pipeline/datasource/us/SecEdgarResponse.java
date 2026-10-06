@@ -102,7 +102,8 @@ final class SecEdgarResponse {
      * 전송이다. 끝까지 안 읽히면 {@link #requireJson}이 MALFORMED로 던진다.
      */
     static String unreadableJson(String body) {
-        if (body == null || body.isEmpty()) {
+        // 공백만 든 본문도 본문이 없는 것이다 — isEmpty로 물으면 그것만 다시 안 받고 바로 MALFORMED로 끝났다(v11 반증).
+        if (body == null || body.isBlank()) {
             return "200인데 본문이 없다.";
         }
         try {

@@ -63,6 +63,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     private final boolean usGate;
     /** companyfacts가 빠뜨린 공시를 인스턴스로 채운다(ADR-0173). */
     private final FilingSupplementer supplementer;
+    /** 같은 실행 안 재시도 대기 — 보충의 받기와 같은 규칙, 상태(연속 소진 차단)는 이 어댑터 몫이다. */
+    private final SecFilingClient.Backoff backoff;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -76,7 +78,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                                     SecFilingSupplement supplement,
                                     @Value("${stockscreener.gate.us}") boolean usGate) {
         this(clientFactory, properties, rateLimiter, cikCache,
-                properties.getSecEdgar().getBaseUrl(), usGate, supplement);
+                properties.getSecEdgar().getBaseUrl(), usGate, supplement, SecFilingClient.Backoff.standard());
     }
 
     /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 관문 설정은 꺼진 채이고 보충하지 않는다. */
@@ -88,6 +90,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         this(clientFactory, properties, rateLimiter, cikCache, baseUrl, false, FilingSupplementer.NONE);
     }
 
+    /** 시험 전용 — 재시도 대기는 기다리지 않는다(대기 자체는 {@code SecRetryBackoffTest}가 묻는다). */
     SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
                              DataSourceProperties properties,
                              RateLimiter rateLimiter,
@@ -95,6 +98,18 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              String baseUrl,
                              boolean usGate,
                              FilingSupplementer supplementer) {
+        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, usGate, supplementer,
+                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }));
+    }
+
+    SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
+                             DataSourceProperties properties,
+                             RateLimiter rateLimiter,
+                             SecTickerCikCache cikCache,
+                             String baseUrl,
+                             boolean usGate,
+                             FilingSupplementer supplementer,
+                             SecFilingClient.Backoff backoff) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
@@ -102,6 +117,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         this.userAgentPresent = source.hasApiKey();
         this.usGate = usGate;
         this.supplementer = supplementer;
+        this.backoff = backoff;
     }
 
     @Override
@@ -158,74 +174,25 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     }
 
     /**
-     * MUST: 본문을 <b>문자열로</b> 받는다.
+     * companyfacts를 받는다 — 보충의 받기와 같은 자리({@link SecFilingClient#fetch})로: 전송 실패 · 5xx · JSON으로 안 읽히는
+     * 2xx는 같은 실행 안에서 대기를 두고 {@link SecFilingClient#TRANSIENT_RETRIES}번 다시 받는다. 한 번에 끝내면 끊긴 전송
+     * 하나가 그 종목의 재무를 다음 FR(25일 뒤)까지 비운다 — 원장은 그 파일을 정직하게 주는데 우리 받기가 한 번만 물은 것이다
+     * (2026-10-06 반증). 404(매핑 · 미등록) · 403 · 429와 한도는 다시 묻지 않는다.
      *
-     * <p>오류 본문이 JSON이 아니라 XML이다(실측: {@code <Error><Code>NoSuchKey</Code>…}).
-     * {@code toEntity(JsonNode.class)}로 받으면 <b>상태코드를 보기도 전에 파싱이 터지고</b>,
-     * 그 예외가 아래 {@code catch}에 걸려 404가 {@code TRANSIENT}가 된다 — 재시도해도
-     * 영원히 안 되는 것을 재시도 대상으로 기록하게 된다. 실제로 그렇게 났다.
-     */
-    /**
-     * companyfacts를 받는다 — 전송 실패 · 5xx · JSON으로 안 읽히는 2xx는 같은 실행 안에서
-     * {@link SecFilingClient#TRANSIENT_RETRIES}번 다시 받는다. 한 번에 끝내면 끊긴 전송 하나가 그 종목의 재무를 다음 FR(25일
-     * 뒤)까지 비운다 — 원장은 그 파일을 정직하게 주는데 우리 받기가 한 번만 물은 것이다(2026-10-06 반증 · 보충의 받기 길과 같은 꼴).
-     * 404(매핑 · 미등록)와 한도는 다시 묻지 않는다.
+     * <p>MUST: 본문을 <b>문자열로</b> 받는다. 오류 본문이 JSON이 아니라 XML이다(실측:
+     * {@code <Error><Code>NoSuchKey</Code>…}). {@code toEntity(JsonNode.class)}로 받으면 <b>상태코드를 보기도 전에 파싱이
+     * 터지고</b>, 그 예외가 전송 실패로 감싸져 404가 {@code TRANSIENT}가 된다 — 재시도해도 영원히 안 되는 것을 재시도 대상으로
+     * 기록하게 된다. 실제로 그렇게 났다.
      */
     private JsonNode fetchFacts(long cik, String context) throws DataSourceException {
-        DataSourceException last = null;
-        for (int attempt = 0; attempt <= SecFilingClient.TRANSIENT_RETRIES; attempt++) {
-            ResponseEntity<String> response;
-            try {
-                response = call(cik, context);
-            } catch (DataSourceException e) {
-                if (e.kind() != DataSourceException.Kind.TRANSIENT) {
-                    throw e;
-                }
-                last = e;
-                continue;
-            }
-            if (response.getStatusCode().is5xxServerError()) {
-                last = new DataSourceException(DataSourceException.Kind.TRANSIENT, SecEdgarResponse.SOURCE_NAME,
-                        "HTTP %d. %s".formatted(response.getStatusCode().value(), context));
-                continue;
-            }
-            String why = response.getStatusCode().is2xxSuccessful()
-                    ? SecEdgarResponse.unreadableJson(response.getBody()) : null;
-            if (why != null) {
-                last = new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
-                        why + " 다음 실행이 다시 받는다. " + context);
-                continue;
-            }
-            return SecEdgarResponse.requireFacts(response.getStatusCode(), response.getBody(), context);
-        }
-        throw last;
-    }
-
-    private ResponseEntity<String> call(long cik, String context) throws DataSourceException {
-        if (!rateLimiter.hasDailyQuota()) {
-            throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED,
-                    SecEdgarResponse.SOURCE_NAME,
-                    "일일 호출 한도를 소진했다(사용 " + rateLimiter.usedToday() + "회). " + context);
-        }
-        try {
-            rateLimiter.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
-                    SecEdgarResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
-        }
-        try {
-            // MUST: CIK를 10자리 zero-padding한다. 안 하면 404이고, 개발가이드가 그것을
-            // 404의 최다 원인으로 적었다. 실측에서도 CIK320193.json이 404였다.
-            return client.get()
-                    .uri("/api/xbrl/companyfacts/{cik}.json", SecTickerCikCache.padded(cik))
-                    .retrieve()
-                    .toEntity(String.class);
-        } catch (RuntimeException e) {
-            // 벤더 예외가 상위로 새지 않게 여기서 감싼다(ADR-0006).
-            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
-                    SecEdgarResponse.SOURCE_NAME, "호출에 실패했다. " + context, e);
-        }
+        // MUST: CIK를 10자리 zero-padding한다. 안 하면 404이고, 개발가이드가 그것을
+        // 404의 최다 원인으로 적었다. 실측에서도 CIK320193.json이 404였다.
+        ResponseEntity<String> response = SecFilingClient.fetch(rateLimiter, backoff, () -> client.get()
+                        .uri("/api/xbrl/companyfacts/{cik}.json", SecTickerCikCache.padded(cik))
+                        .retrieve()
+                        .toEntity(String.class),
+                received -> SecEdgarResponse.unreadableJson(received.getBody()), context);
+        return SecEdgarResponse.requireFacts(response.getStatusCode(), response.getBody(), context);
     }
 
     /**
