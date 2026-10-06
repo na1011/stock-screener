@@ -15,3 +15,19 @@ refute18 — 1부 v14(hold/p1 e341c70c) + main 운영 676a58e6·3cdca953·072e0b
   staleness-{mainonly,sim}.out  check-doc-staleness.sh를 두 트리에서 — 차이는 크기 줄(ADR-0173 · data-pipeline · sec-edgar-financial)뿐 · §5c 잡 이름 어긋남 0
   progress:93 「그 출력의 bootstrap 프로파일 프로세스가 없을 때」 — crons-done 출력은 3cdca953부터 「적재 JVM(bootRun …)」 줄(progress:306만 고쳐짐)
   p1v14 실키 연습 산출(scratchpad/p1v14-cache) 확인: calls=7 = companyfacts 2 + submissions 2 + 페이지 1 + 색인 1 + 인스턴스 1 · 인스턴스 1,850,578바이트 = 색인 size
+
+--- 이어 쓴 에이전트(2026-10-06 23:4x~) — 앞 산출물을 다시 잼 ---
+  빌드 로그 다섯 끝까지 감(rc=0 · BUILD SUCCESSFUL) · 러너 XML 다시 셈: p1only 1,848/0/0/5 · mainonly 1,754/0/0/5 · seq0(main+p0 · r18d) 1,770/0/0/5 · seq1(+p1) 1,849/0/0/5
+     sim/의 XML은 old64 단발 시험이 덮어 1/1 — 합친 트리 수는 seq1로 읽는다 · READER_VERSION=7(판 7) 확인
+  merge-sim2.out  main 현재 HEAD feec8639(+docs 2줄)로 다시: M1 Q 0 위반 0 · M2 충돌 reload-gate 한 덩어리 그대로 · sim(eb792189)의 해소 = (가) 행만 p1 · IndicatorBackfillParallelTest 세 판 같은 blob
+     p1(e341c70c)은 p0 f6a2ecb8을 안 품지만 V63 blob이 같다(8b32e215) — 0부 배포 뒤 1부 배포의 V63 체크섬 어긋남 없음
+  guard/drill3.sh drill3.out  세 트리 모두 가짜 gradlew(d-tm·d-t0·d-t1 — ops·마이그레이션만 복사 · deploy.sh = main 바이트 동일)
+     DEFAULT(= stock_screener_test · 가드 SELECT만 · 빌드는 가짜): d-tm·d-t0·d-t1 셋 다 빌드로 넘어감(V62+V900)
+     r18h_v63fail(V63 success=false) → d-tm에서 가드 통과(실패 행은 안 봄) · old64는 d-t1 통과(체크섬 안 봄 — 앞 old64-test.log가 Flyway 검증 실패)
+  [사고 · 내 실수] drill.sh를 그대로 다시 돌렸는데 tm·t0의 gradlew가 앞 에이전트의 fut 실험으로 진짜로 되돌려져 있었다 →
+     23:48~23:50 진짜 `./gradlew clean build`가 사용자 gradle 데몬 87372를 거쳐 돎(--no-daemon 아님) · 내가 drill·deploy·gradle 클라이언트를 kill → 워커 전부 사라짐 확인
+     흔적: stock_screener_r18g_empty_test가 V62+V900(표 30)으로 마이그레이션됨(이제 빈 DB 아님) · guard/gradle-calls.log 덮임(drill.out은 남음) · drill2.out = 그 실행의 부분 출력
+     새로 만든 DB: stock_screener_r18h_empty_test · stock_screener_r18h_v63fail_test(r18g_v63 복제 + V63 success=false)
+  수집기 재수집 결함(코드로 읽음): SecFilingSupplementCacheLiveTest.get 성공 갈래가 옛 `<경로>.status`를 안 지움 · SupplementReplay:39-43이 `.status`를 본문보다 먼저 봄
+     → ADR-0173 2-2 「멈추고 그 경로를 다시 모은다」를 같은 $T/cache로 하면 두 번째 수집 failures=0인데 재생은 보충 실패 → 2-5 거짓 정지
+  00-precheck.sh:17 `git diff 8198fe0..HEAD -- src/main/resources/db`가 지금 main에서 이미 비지 않음(V56~62 · 7파일) — 사전 점검은 이 줄에서 늘 멈춤
