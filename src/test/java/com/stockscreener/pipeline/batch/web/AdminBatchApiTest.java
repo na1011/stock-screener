@@ -38,6 +38,8 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -112,6 +114,27 @@ class AdminBatchApiTest {
         when(launcher.isLaunchable(DailyUpdateJob.JOB_NAME)).thenReturn(true);
         when(launcher.launch(anyString(), any())).thenReturn(true);
         when(launcher.relaunchFailures(anyLong(), any())).thenReturn(true);
+    }
+
+    @Test
+    @DisplayName("실행 응답이 범위 표지를 싣는다 — 빠지면 화면의 scopeNote가 undefined에 던져 이력 표가 깨진다")
+    void executionCarriesScope() throws Exception {
+        // 0부 반증(10-07): 화면 타입은 scope를 기대하는데 응답 레코드에 칸이 없어 JSON에 키가 안 실렸다.
+        long narrow = insertExecutionWithScope(DailyUpdateJob.JOB_NAME, "NARROW");
+        insertExecutionWithScope(UniverseRebalanceJob.JOB_NAME, "FULL");
+        insertExecutionWithScope(IndicatorBackfillJob.JOB_NAME, null);
+
+        mockMvc.perform(get("/api/admin/batches").param("jobName", DailyUpdateJob.JOB_NAME))
+                .andExpect(jsonPath("$[0].scope").value("NARROW"));
+        mockMvc.perform(get("/api/admin/batches").param("jobName", UniverseRebalanceJob.JOB_NAME))
+                .andExpect(jsonPath("$[0].scope").value("FULL"));
+        // 표지 전 행은 키가 null로 와야 한다 — 키가 없으면 화면에서 undefined가 되어 null 갈래를 못 탄다.
+        mockMvc.perform(get("/api/admin/batches").param("jobName", IndicatorBackfillJob.JOB_NAME))
+                .andExpect(content().string(containsString("\"scope\":null")));
+        mockMvc.perform(get("/api/admin/batches/summary"))
+                .andExpect(content().string(containsString("\"scope\":\"NARROW\"")));
+        mockMvc.perform(get("/api/admin/batches/" + narrow))
+                .andExpect(jsonPath("$.execution.scope").value("NARROW"));
     }
 
     @Test
@@ -332,6 +355,15 @@ class AdminBatchApiTest {
     }
 
     // ── 도우미 ────────────────────────────────────────────────────────────
+
+    private long insertExecutionWithScope(String jobName, String scope) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO batch_execution
+                    (job_name, target_date, status, triggered_by, target_count, scope)
+                VALUES (?, ?, 'SUCCESS', 'SCHEDULER', 10, ?)
+                RETURNING id
+                """, Long.class, jobName, TARGET, scope);
+    }
 
     private long insertExecution(String jobName, String status, int failureCount) {
         return jdbcTemplate.queryForObject("""
