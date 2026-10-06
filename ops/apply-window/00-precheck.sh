@@ -14,7 +14,11 @@ if [ "$PROD" = "$LIVE" ] && [ "$(date +%u)" -le 5 ] && [ "$(date +%H%M)" -ge 151
     [ -n "$s" ] && [ "$s" != RUNNING ] || die "오늘 $job 실행이 없거나 아직 돈다($s)"
   done
 fi
-[ -z "$(cd $REPO && git diff --stat 8198fe0..HEAD -- src/main/resources/db)" ] || die "운영 jar 뒤 마이그레이션 변화가 있다"
+# 기준은 지금 도는 jar의 커밋이다(배포가 적는 app.jar.commit) — 손으로 박은 커밋(8198fe0)은 그 뒤 배포 일곱 번(V56~V62)으로
+# 낡아 이 점검이 늘 멈췄다(2026-10-07 반증). 커밋을 못 가리키면(unknown · 파일 없음) 멈춘다.
+JARC=$(sed -n 's/^commit=//p' "$HOME/Library/Application Support/stock-screener/app.jar.commit" 2>/dev/null)
+[ -n "$JARC" ] && [ "$JARC" != unknown ] || die "app.jar.commit이 커밋을 가리키지 않는다 — 운영 jar를 모른다"
+[ -z "$(cd $REPO && git diff --stat "$JARC"..HEAD -- src/main/resources/db)" ] || die "운영 jar($JARC) 뒤 마이그레이션 변화가 있다"
 LATEST=$(q $PROD "select max(trade_date) from indicator_trade_date where market_code='US'"); [ -n "$LATEST" ] || die "LATEST가 비었다"; echo "LATEST=$LATEST" > $A/latest.txt
 TICK="select distinct m.stock_id from universe_membership m join stock s on s.id=m.stock_id join universe u on u.code=m.universe_code and u.is_active where s.is_active and s.market_code='US' and (m.effective_to is null or (m.effective_from <= (select max(trade_date) from indicator_trade_date where market_code='US') and m.effective_to > (select min(trade_date) from indicator_trade_date where market_code='US')))"
 CUR="select distinct m.stock_id from universe_membership m join stock s on s.id=m.stock_id where m.universe_code='US_TOP1000' and m.effective_to is null and s.is_active and s.market_code='US'"
