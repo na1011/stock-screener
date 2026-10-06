@@ -1,0 +1,16 @@
+{'days': 42, 'wait_days': 6, 'wait_min': 1033.5166666666667, 'starve_days': 0, 'reject_runs': 17, 'reject_days': 7, 'over23': 0, 'nochain': 5}
+waits(day,min,holders):
+  (datetime.date(2026, 8, 14), 203, [79])
+  (datetime.date(2026, 8, 21), 0, [106])
+  (datetime.date(2026, 9, 7), 313, [305])
+  (datetime.date(2026, 9, 11), 61, [371])
+  (datetime.date(2026, 9, 15), 73, [499])
+  (datetime.date(2026, 9, 16), 383, [520])
+rejections:
+  2026-08-11 chain 13:30-14:30 reject [(44, 'daily-update', 'ADMIN', '14:16')]
+  2026-08-21 chain 13:30-14:30 reject [(107, 'indicator-backfill', 'MANUAL', '13:31'), (108, 'daily-update', 'ADMIN', '13:56')]
+  2026-09-04 chain 13:30-14:15 reject [(272, 'adjustment-rebuild', 'MANUAL', '14:12')]
+  2026-09-11 chain 14:31-15:12 reject [(375, 'indicator-backfill', 'MANUAL', '14:33'), (376, 'indicator-backfill', 'MANUAL', '14:45')]
+  2026-09-14 chain 13:30-14:11 reject [(421, 'financial-refill', 'MANUAL', '13:41'), (422, 'indicator-backfill', 'MANUAL', '13:44'), (423, 'indicator-backfill', 'MANUAL', '13:45'), (425, 'full-statement-refill', 'MANUAL', '14:00'), (426, 'full-statement-refill', 'MANUAL', '14:03')]
+  2026-09-15 chain 14:43-15:24 reject [(503, 'initial-load', 'MANUAL', '14:43'), (504, 'indicator-backfill', 'MANUAL', '14:44'), (505, 'financial-refill', 'MANUAL', '14:49'), (506, 'financial-refill', 'MANUAL', '14:51'), (507, 'financial-refill', 'MANUAL', '15:04')]
+  2026-09-16 chain 19:53-20:53 reject [(521, 'indicator-backfill', 'MANUAL', '19:53')]

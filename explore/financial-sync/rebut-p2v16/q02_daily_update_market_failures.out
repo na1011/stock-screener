@@ -1,0 +1,4 @@
+id | triggered_by | status | d | target_date | target_count | success_count | failure_count | kr_fail | us_fail | kinds
+500 | SCHEDULER | PARTIAL_SUCCESS | 2026-09-15 | 2026-09-14 | 1350 | 2679 | 12 | 12 | 0 | PRICE/TRANSIENT
+14 | ADMIN | PARTIAL_SUCCESS | 2026-08-08 | 2026-08-07 | 350 | 700 | 1 | 1 | 0 | PRICE/TRANSIENT
+(2개 행)

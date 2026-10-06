@@ -1,0 +1,14 @@
+== poll 5s
+  2026-08-14 chain starts 16:52:45 (wait 203m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-08-21 chain starts 13:30:10 (wait 0m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-09-07 chain starts 18:42:45 (wait 313m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-09-11 chain starts 14:31:30 (wait 62m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-09-15 chain starts 14:43:10 (wait 73m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-09-16 chain starts 19:53:25 (wait 383m) · hand runs that started during the wait and got the lock first: 0 []
+== poll 60s
+  2026-08-14 chain starts 16:53:00 (wait 203m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-08-21 chain starts 13:31:00 (wait 1m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-09-07 chain starts 18:43:00 (wait 313m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-09-11 chain starts 14:32:00 (wait 62m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-09-15 chain starts 14:44:00 (wait 74m) · hand runs that started during the wait and got the lock first: 0 []
+  2026-09-16 chain starts 20:58:00 (wait 448m) · hand runs that started during the wait and got the lock first: 1 [521]
