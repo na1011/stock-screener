@@ -203,6 +203,32 @@ class SecFilingSupplementTest {
     }
 
     @Test
+    @DisplayName("공시 목록은 살아 있고 Archives만 내려간 날 — 목록의 성공이 Archives의 차단을 닫지 않는다(호스트마다 따로 센다)")
+    void listSuccessDoesNotCloseTheArchivesCircuit() throws Exception {
+        statusOf.put(indexPath(MISSING), 503);
+        List<Long> dataPauses = new java.util.ArrayList<>();
+        List<Long> filesPauses = new java.util.ArrayList<>();
+        String base = server.url("/").toString();
+        DataSourceProperties properties = new DataSourceProperties();
+        properties.getSecEdgar().setApiKey("Test Runner test@example.com");
+        SecFilingClient client = new SecFilingClient(new ExternalApiClientFactory(), properties,
+                new TokenBucketRateLimiter("sec-edgar", 0, 0), base, base,
+                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, dataPauses::add),
+                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, filesPauses::add));
+        SecFilingSupplement crossHost = new SecFilingSupplement(client, new SecFilingSupplementStore(jdbcTemplate));
+
+        for (int stock = 0; stock < 5; stock++) {
+            crossHost.supplement(CIK, companyFacts(), FROM, "t");
+        }
+
+        assertThat(dataPauses).as("공시 목록은 매번 한 번에 받는다").isEmpty();
+        assertThat(filesPauses).as("Archives는 셋을 소진한 뒤 열려 그 뒤로는 안 기다린다(v12는 목록의 성공이 매번 닫아 종목마다 12초)")
+                .hasSize(SecFilingClient.Backoff.OPEN_AFTER * SecFilingClient.TRANSIENT_RETRIES);
+        assertThat(paths).filteredOn(p -> p.equals(indexPath(MISSING)))
+                .as("열린 뒤로는 한 번만 묻는다").hasSize(SecFilingClient.Backoff.OPEN_AFTER * 3 + 2);
+    }
+
+    @Test
     @DisplayName("보충한 공시의 판은 이력과 무관하게 매번 연다 — 첫 성공도 저장분도 같다(순서 무관)")
     void supplementedVintageOpensEveryRunWithoutHistory() throws Exception {
         SecFilingSupplement.Outcome first = supplement.supplement(CIK, companyFacts(), FROM, "t");

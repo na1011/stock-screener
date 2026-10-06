@@ -91,7 +91,8 @@ class ReaderVersionPinTest {
             "e44657c52f69e940e9a083e0d76801aea8f561cb218e67be3509d1761c002bb7",
             "7d27b748e3ffb6c804a9fb0c963e3b0d1a241b1676d74277d1a46bb919a92efc",
             "0e1038c9921de8acebeefdc8cd55aaa8b6e197c021a63d9cd91267f3d518af40",
-            "e8bf8893ee9c89efc789f6258e79ba09aa2403adc897a424e5232be3e1294550");
+            "e8bf8893ee9c89efc789f6258e79ba09aa2403adc897a424e5232be3e1294550",
+            "883f9182385814ed3d8665a6f11e8a8527997a254ba81d2a71cd4f2cf1390dfa");
 
     /**
      * 판 범위 — 저장되는 것(상태 · 원 팩트 · 머리 · 실패 종류)을 정하는 파일 전부, 파일 전체다({@code READER_VERSION} 선언만
@@ -123,6 +124,7 @@ class ReaderVersionPinTest {
     /** 판 1, 2, …의 출력 해시. 끝에만 더한다. */
     private static final List<String> PINNED = List.of(
             "c8e8a6e90b0cf4786efd0fc10bacee5099b4babeb6cdd2f61666f43bb53ee982",
+            "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
@@ -702,8 +704,10 @@ class ReaderVersionPinTest {
      * 그대로였다(v11 반증 — {@code isLinkbase} 본문을 {@code SecTickerCikCache}로 옮기고 도우미만 바꾸자 고정 시험이 전부 초록인데
      * {@code pickInstance}의 결과가 종료 상태에서 OK로 바뀌었다). 그래서 닿는 멤버의 선언 전체(본문 · 초기값)를 싣는다. 형을
      * 참조하면 그 형의 머리(종류 · 수식어 · 상위 형 · 열거 상수 · 레코드 성분 · 초기화 블록)를 싣는다 — 다른 멤버는 닿을 때만.
-     * 인터페이스 메서드의 구현({@code RateLimiter} → {@code TokenBucketRateLimiter})은 정적으로 안 닿는다 — 그 자리가
-     * {@link #OUTSIDE_SCOPE}의 사유다(호출 간격 · 받은 본문은 색인 크기로 맞춘다).
+     * <b>디스패치도 따라간다</b>(v12 반증 — 규칙을 면제 형의 {@code Predicate} 구현 클래스로 옮긴 뒤 그 {@code test}만 바꾸면 폐포가
+     * 머리와 생성자만 실어 전부 초록이었다): 도달한 생성자의 클래스는 <b>클래스 전체</b>를 싣고, 도달한 프로젝트 형의 범위 밖 하위형
+     * (구현 · 상속 — 주입되는 구현 {@code RateLimiter} → {@code TokenBucketRateLimiter} 포함)도 클래스 전체를 싣는다. 이름 없는
+     * 하위형(익명 · 지역)은 이름만 싣는다 — 늘거나 바뀌면 해시가 갈린다.
      */
     private static String outsideMemberSource() throws IOException {
         Path main = Path.of("src/main/java");
@@ -732,6 +736,7 @@ class ReaderVersionPinTest {
                     }
                 }
                 Set<String> seen = new TreeSet<>();
+                Set<String> wholeSeen = new TreeSet<>();
                 while (!work.isEmpty()) {
                     Element element = work.pop();
                     TypeElement top = topLevel(element);
@@ -748,8 +753,39 @@ class ReaderVersionPinTest {
                         missing.add(file);
                         continue;
                     }
+                    TypeElement owner = element instanceof TypeElement type ? type
+                            : (TypeElement) element.getEnclosingElement();
                     if (!(element instanceof TypeElement)) {
-                        work.push(element.getEnclosingElement());
+                        work.push(owner);
+                    }
+                    // 디스패치: 만든 클래스 · 범위 밖 하위형은 클래스 전체를 싣는다.
+                    List<TypeElement> whole = new ArrayList<>();
+                    if (element.getKind() == ElementKind.CONSTRUCTOR) {
+                        whole.add(owner);
+                    }
+                    for (String subtype : projectSubtypes(task.getElements().getBinaryName(owner).toString())) {
+                        TypeElement sub = task.getElements().getTypeElement(subtype.replace('$', '.'));
+                        if (sub == null || sub.getNestingKind().isNested() && sub.getSimpleName().isEmpty()) {
+                            out.put("하위형 " + subtype, "이름 없음");
+                            continue;
+                        }
+                        whole.add(sub);
+                    }
+                    for (TypeElement type : whole) {
+                        String name = type.getQualifiedName().toString();
+                        TypeElement typeTop = topLevel(type);
+                        String typeTopName = typeTop == null ? "" : typeTop.getQualifiedName().toString();
+                        if (scopeTypes.contains(typeTopName) || !wholeSeen.add(name)) {
+                            continue;
+                        }
+                        Path typeFile = main.resolve(typeTopName.replace('.', '/') + ".java");
+                        if (!files.contains(typeFile)) {
+                            missing.add(typeFile);
+                            continue;
+                        }
+                        TreePath typePath = trees.getPath(type);
+                        out.put(name + " 전체", withoutDocComments(typePath.getLeaf().toString()));
+                        collectReferences(trees, typePath, work);
                     }
                     TreePath path = trees.getPath(element);
                     if (path == null) {
@@ -781,6 +817,45 @@ class ReaderVersionPinTest {
                 return text.toString();
             }
             files.addAll(missing);
+        }
+    }
+
+    /** 운영 클래스 중 그 형의 하위형(자기 빼고 · 범위 밖 판정은 부르는 쪽) — 이진 이름. 클래스 파일을 한 번 읽어 둔다. */
+    private static List<String> projectSubtypes(String binaryName) {
+        try {
+            Class<?> type = Class.forName(binaryName, false, ReaderVersionPinTest.class.getClassLoader());
+            List<String> out = new ArrayList<>();
+            for (Class<?> candidate : mainClasses()) {
+                if (candidate != type && type.isAssignableFrom(candidate)) {
+                    out.add(candidate.getName());
+                }
+            }
+            out.sort(null);
+            return out;
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("폐포가 닿은 형을 클래스로 못 읽었다: " + binaryName, e);
+        }
+    }
+
+    private static List<Class<?>> mainClassCache;
+
+    private static synchronized List<Class<?>> mainClasses() {
+        if (mainClassCache != null) {
+            return mainClassCache;
+        }
+        try {
+            Path classes = Path.of(SecFilingClient.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            List<Class<?>> out = new ArrayList<>();
+            try (Stream<Path> walk = Files.walk(classes)) {
+                for (Path file : walk.filter(f -> f.toString().endsWith(".class")).sorted().toList()) {
+                    String name = classes.relativize(file).toString().replace('/', '.').replaceAll("\\.class$", "");
+                    out.add(Class.forName(name, false, ReaderVersionPinTest.class.getClassLoader()));
+                }
+            }
+            mainClassCache = out;
+            return out;
+        } catch (Exception e) {
+            throw new IllegalStateException("운영 클래스 목록을 못 읽었다", e);
         }
     }
 

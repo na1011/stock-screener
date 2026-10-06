@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -49,19 +50,25 @@ public class SecFilingClient {
     static final int TRANSIENT_RETRIES = 2;
 
     /**
-     * 같은 실행 안 재시도 사이의 대기와 그 차단.
+     * 같은 실행 안 재시도 사이의 대기와 그 차단 — <b>호스트마다 하나</b>.
      *
      * <p><b>왜 기다리는가</b>: 대기 없이 다시 물으면 세 시도가 약 0.4초 안에 끝나 그보다 긴 끊김(운영 companyfacts 전송 실패
      * 4건 중 「Connect timed out」·「Network is down」)은 그대로 그 종목을 다음 FR까지 비운다(2026-10-06 v11 반증 · 운영 리미터로
-     * 잰 간격 204·209ms). <b>왜 차단하는가</b>: 소스가 통째로 내려가면 콜마다 12초를 기다려 종목 수만큼 실행이 늘어난다
-     * (1,000종목이면 3시간 넘게 — 그 뒤 잡이 그만큼 밀린다). 그래서 다시 묻기를 다 쓰고도 실패한 콜이 연달아
-     * {@link #OPEN_AFTER}번이면 대기를 건너뛴다(다시 묻기는 그대로) — 응답 하나(성공이든 4xx든)가 다시 닫는다.
+     * 잰 간격 204·209ms). <b>왜 차단하는가</b>: 소스가 내려가면 콜마다 12초를 기다려 종목 수만큼 실행이 늘어난다(1,000종목이면
+     * 3시간 넘게 — 그 뒤 잡이 그만큼 밀린다). 그래서 다시 묻기를 다 쓰고도 실패한 콜이 연달아 {@link #OPEN_AFTER}번이면 연다 —
+     * 열린 동안은 기다리지 않고 <b>한 번만</b> 묻는다. 응답 하나(성공이든 4xx든)가 닫고, 마지막 소진 뒤 {@link #CLOSE_AFTER_NANOS}가
+     * 지나도 닫힌다(싱글턴이라 열린 채 끝난 상태가 다음 실행의 첫 실패까지 건너뛰게 두지 않는다).
+     *
+     * <p><b>왜 호스트마다인가</b>: 보충은 종목마다 공시 목록(data.sec.gov)을 먼저 받는다 — 상태 하나를 두 호스트가 나누면 그 성공이
+     * Archives(www.sec.gov)의 차단을 매 종목 닫아, Archives만 내려간 날 종목마다 24~36초를 기다렸다(v12 반증 · 대조군: Archives만
+     * 연달아면 셋 뒤 36초에서 멈춘다). companyfacts는 data 호스트지만 어댑터가 따로 든다 — 어긋나도 상태가 서로를 닫지 않는 쪽이다.
      */
     static final class Backoff {
 
         /** 시도 사이 대기 — 첫 실패 뒤 2초 · 둘째 실패 뒤 10초. */
         static final long[] STANDARD_MILLIS = {2_000, 10_000};
         static final int OPEN_AFTER = 3;
+        static final long CLOSE_AFTER_NANOS = 10L * 60 * 1_000_000_000;
 
         @FunctionalInterface
         interface Pause {
@@ -70,24 +77,44 @@ public class SecFilingClient {
 
         private final long[] millis;
         private final Pause pause;
+        private final LongSupplier nanoTime;
         private final AtomicInteger exhaustedInARow = new AtomicInteger();
+        private volatile long lastExhaustedAt;
 
         Backoff(long[] millis, Pause pause) {
+            this(millis, pause, System::nanoTime);
+        }
+
+        Backoff(long[] millis, Pause pause, LongSupplier nanoTime) {
             if (millis.length != TRANSIENT_RETRIES) {
                 throw new IllegalArgumentException("대기는 다시 묻는 횟수만큼이다: " + millis.length);
             }
             this.millis = millis.clone();
             this.pause = pause;
+            this.nanoTime = nanoTime;
         }
 
         static Backoff standard() {
             return new Backoff(STANDARD_MILLIS, Thread::sleep);
         }
 
-        private void beforeRetry(int retry, String context) throws DataSourceException {
-            if (exhaustedInARow.get() >= OPEN_AFTER) {
-                return;
+        /** 열렸는가 — 오래된 열림은 여기서 닫는다. */
+        private boolean open() {
+            if (exhaustedInARow.get() < OPEN_AFTER) {
+                return false;
             }
+            if (nanoTime.getAsLong() - lastExhaustedAt > CLOSE_AFTER_NANOS) {
+                exhaustedInARow.set(0);
+                return false;
+            }
+            return true;
+        }
+
+        private int attempts() {
+            return open() ? 1 : 1 + TRANSIENT_RETRIES;
+        }
+
+        private void beforeRetry(int retry, String context) throws DataSourceException {
             try {
                 pause.sleep(millis[retry]);
             } catch (InterruptedException e) {
@@ -102,6 +129,7 @@ public class SecFilingClient {
         }
 
         private void exhausted() {
+            lastExhaustedAt = nanoTime.getAsLong();
             exhaustedInARow.incrementAndGet();
         }
     }
@@ -117,30 +145,35 @@ public class SecFilingClient {
     private final RestClient data;
     private final RestClient files;
     private final RateLimiter rateLimiter;
-    private final Backoff backoff;
+    /** 호스트마다 하나 — data.sec.gov(공시 목록)와 www.sec.gov(Archives: 색인 · 인스턴스). */
+    private final Backoff dataBackoff;
+    private final Backoff filesBackoff;
 
     @Autowired
     public SecFilingClient(ExternalApiClientFactory clientFactory,
                            DataSourceProperties properties,
                            @Qualifier("secEdgarRateLimiter") RateLimiter rateLimiter) {
         this(clientFactory, properties, rateLimiter,
-                properties.getSecEdgar().getBaseUrl(), properties.getSecEdgarFilesBaseUrl(), Backoff.standard());
+                properties.getSecEdgar().getBaseUrl(), properties.getSecEdgarFilesBaseUrl(),
+                Backoff.standard(), Backoff.standard());
     }
 
     /** MockWebServer 시험 전용 — 두 호스트를 바꿔 끼운다. 대기는 기다리지 않는다(대기 자체는 {@code SecRetryBackoffTest}가 묻는다). */
     SecFilingClient(ExternalApiClientFactory clientFactory, DataSourceProperties properties,
                     RateLimiter rateLimiter, String dataBaseUrl, String filesBaseUrl) {
         this(clientFactory, properties, rateLimiter, dataBaseUrl, filesBaseUrl,
-                new Backoff(Backoff.STANDARD_MILLIS, millis -> { }));
+                new Backoff(Backoff.STANDARD_MILLIS, millis -> { }), new Backoff(Backoff.STANDARD_MILLIS, millis -> { }));
     }
 
     SecFilingClient(ExternalApiClientFactory clientFactory, DataSourceProperties properties,
-                    RateLimiter rateLimiter, String dataBaseUrl, String filesBaseUrl, Backoff backoff) {
+                    RateLimiter rateLimiter, String dataBaseUrl, String filesBaseUrl,
+                    Backoff dataBackoff, Backoff filesBackoff) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.data = clientFactory.create(source, dataBaseUrl, SecEdgarHeaders.of(source));
         this.files = clientFactory.create(source, filesBaseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
-        this.backoff = backoff;
+        this.dataBackoff = dataBackoff;
+        this.filesBackoff = filesBackoff;
     }
 
     /**
@@ -150,7 +183,7 @@ public class SecFilingClient {
         // padded는 「CIK」 접두까지 붙인 10자리다(CIK0000320193) — companyfacts와 같은 이름 규칙.
         String padded = SecTickerCikCache.padded(cik);
         String context = "submissions " + padded;
-        JsonNode root = json(() -> data.get().uri("/submissions/{cik}.json", padded)
+        JsonNode root = json(dataBackoff, () -> data.get().uri("/submissions/{cik}.json", padded)
                 .retrieve().toEntity(String.class), context);
         JsonNode filings = root.path("filings");
         if (!filings.has("recent")) {
@@ -166,7 +199,7 @@ public class SecFilingClient {
                 continue;
             }
             String pageContext = context + " " + name;
-            JsonNode body = json(() -> data.get().uri("/submissions/{name}", name)
+            JsonNode body = json(dataBackoff, () -> data.get().uri("/submissions/{name}", name)
                     .retrieve().toEntity(String.class), pageContext);
             out.addAll(parseFilings(body, since, pageContext));
         }
@@ -193,7 +226,7 @@ public class SecFilingClient {
     public List<FolderItem> folder(long cik, String accession) throws DataSourceException {
         String folder = accession.replace("-", "");
         String context = "index %d/%s".formatted(cik, folder);
-        JsonNode index = json(() -> files.get().uri("/Archives/edgar/data/{cik}/{folder}/index.json", cik, folder)
+        JsonNode index = json(filesBackoff, () -> files.get().uri("/Archives/edgar/data/{cik}/{folder}/index.json", cik, folder)
                 .retrieve().toEntity(String.class), context);
         JsonNode items = index.path("directory").path("item");
         if (!items.isArray() || items.isEmpty()) {
@@ -271,7 +304,7 @@ public class SecFilingClient {
         String name = item.name();
         String context = "instance %d/%s/%s".formatted(cik, folder, name);
         long expected = item.expectedSize(context);
-        ResponseEntity<byte[]> response = withRetry(() -> files.get()
+        ResponseEntity<byte[]> response = withRetry(filesBackoff, () -> files.get()
                 .uri("/Archives/edgar/data/{cik}/{folder}/{name}", cik, folder, name)
                 .retrieve().toEntity(byte[].class), received -> {
                     byte[] body = received.getBody();
@@ -325,13 +358,14 @@ public class SecFilingClient {
      * 색인·공시 목록처럼 JSON을 받는다. 2xx인데 JSON으로 안 읽히면 인스턴스의 길이 대조처럼 같은 실행 안에서 다시 받는다 — 한 번
      * 끊긴 색인이 그 공시를, 끊긴 공시 목록이 그 종목의 보충 전부를 다음 FR까지 비우지 않게(v10 반증: 셋 다 1콜로 끝났다).
      */
-    private JsonNode json(Supplier<ResponseEntity<String>> call, String context) throws DataSourceException {
-        ResponseEntity<String> response = withRetry(call, received -> SecEdgarResponse.unreadableJson(received.getBody()),
-                context);
+    private JsonNode json(Backoff backoff, Supplier<ResponseEntity<String>> call, String context)
+            throws DataSourceException {
+        ResponseEntity<String> response = withRetry(backoff, call,
+                received -> SecEdgarResponse.unreadableJson(received.getBody()), context);
         return SecEdgarResponse.requireJson(response.getStatusCode(), response.getBody(), context);
     }
 
-    private <T> ResponseEntity<T> withRetry(Supplier<ResponseEntity<T>> call,
+    private <T> ResponseEntity<T> withRetry(Backoff backoff, Supplier<ResponseEntity<T>> call,
                                             Function<ResponseEntity<T>, String> incomplete, String context)
             throws DataSourceException {
         return fetch(rateLimiter, backoff, call, incomplete, context);
@@ -350,7 +384,8 @@ public class SecFilingClient {
                                        Function<ResponseEntity<T>, String> incomplete, String context)
             throws DataSourceException {
         DataSourceException last = null;
-        for (int attempt = 0; attempt <= TRANSIENT_RETRIES; attempt++) {
+        int attempts = backoff.attempts();
+        for (int attempt = 0; attempt < attempts; attempt++) {
             if (attempt > 0) {
                 backoff.beforeRetry(attempt - 1, context);
             }

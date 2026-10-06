@@ -50,7 +50,7 @@ class SecRetryBackoffTest {
     }
 
     @Test
-    @DisplayName("다시 묻기를 다 쓴 콜이 연달아 셋이면 대기를 건너뛰고, 응답 하나가 다시 닫는다")
+    @DisplayName("다시 묻기를 다 쓴 콜이 연달아 셋이면 열린다 — 열린 동안은 기다리지 않고 한 번만 묻고, 응답 하나가 다시 닫는다")
     void opensAfterConsecutiveExhaustionAndClosesOnAnAnswer() throws Exception {
         SecFilingClient.Backoff backoff = recording();
         for (int i = 0; i < SecFilingClient.Backoff.OPEN_AFTER; i++) {
@@ -60,13 +60,33 @@ class SecRetryBackoffTest {
         calls.set(0);
 
         assertThatThrownBy(() -> fetch(backoff, failing())).isInstanceOf(DataSourceException.class);
-        assertThat(calls).as("다시 묻기는 그대로").hasValue(1 + SecFilingClient.TRANSIENT_RETRIES);
-        assertThat(pauses).as("소스가 통째로 내려간 동안 콜마다 12초를 기다리지 않는다").isEmpty();
+        assertThat(calls).as("열린 동안은 한 번만 묻는다").hasValue(1);
+        assertThat(pauses).as("소스가 내려간 동안 콜마다 12초를 기다리지 않는다").isEmpty();
 
         assertThat(fetch(backoff, () -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("no")).getStatusCode().value())
                 .isEqualTo(404);
+        calls.set(0);
         assertThatThrownBy(() -> fetch(backoff, failing())).isInstanceOf(DataSourceException.class);
-        assertThat(pauses).as("응답(4xx여도)이 차단을 닫는다").containsExactly(2_000L, 10_000L);
+        assertThat(calls).as("응답(4xx여도)이 닫으면 다시 세 번 묻는다").hasValue(1 + SecFilingClient.TRANSIENT_RETRIES);
+        assertThat(pauses).containsExactly(2_000L, 10_000L);
+    }
+
+    @Test
+    @DisplayName("열린 차단은 마지막 소진 뒤 10분이 지나면 닫힌다 — 싱글턴이 열린 채 다음 실행으로 넘어가지 않는다")
+    void openCircuitExpires() throws Exception {
+        long[] now = {0};
+        SecFilingClient.Backoff backoff = new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, pauses::add,
+                () -> now[0]);
+        for (int i = 0; i < SecFilingClient.Backoff.OPEN_AFTER; i++) {
+            assertThatThrownBy(() -> fetch(backoff, failing())).isInstanceOf(DataSourceException.class);
+        }
+        now[0] += SecFilingClient.Backoff.CLOSE_AFTER_NANOS + 1;
+        pauses.clear();
+        calls.set(0);
+
+        assertThatThrownBy(() -> fetch(backoff, failing())).isInstanceOf(DataSourceException.class);
+        assertThat(calls).hasValue(1 + SecFilingClient.TRANSIENT_RETRIES);
+        assertThat(pauses).containsExactly(2_000L, 10_000L);
     }
 
     @Test
