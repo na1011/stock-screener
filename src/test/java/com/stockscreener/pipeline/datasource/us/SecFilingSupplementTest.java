@@ -377,14 +377,35 @@ class SecFilingSupplementTest {
     }
 
     @Test
-    @DisplayName("덮인 공시는 companyfacts가 붙인 filed 날짜도 연다 — 하루 늦게 매기는 공시가 있다")
-    void coveredFilingOpensCompanyFactsFiledDateToo() throws Exception {
+    @DisplayName("덮인 공시는 companyfacts가 붙인 날짜만 연다 — 하루 늦게 매기면 목록 날짜엔 그 공시의 판이 없다")
+    void coveredFilingOpensOnlyTheDateCompanyFactsGivesIt() throws Exception {
         supplement.supplement(CIK, companyFacts(), FROM, "t");
 
         SecFilingSupplement.Outcome outcome = supplement.supplement(CIK,
                 companyFactsCovering(MISSING, MISSING_FILED.plusDays(1)), FROM, "t");
 
-        assertThat(outcome.supplementedVintages()).containsExactlyInAnyOrder(MISSING_FILED, MISSING_FILED.plusDays(1));
+        assertThat(outcome.supplementedVintages()).containsExactly(MISSING_FILED.plusDays(1));
+    }
+
+    @Test
+    @DisplayName("공시 목록을 못 받은 실행도 같은 날 실패한 공시가 있으면 그 날짜를 안 연다 — 그날 판은 일부만 있다")
+    void listFailureKeepsTheSameDayProtection() throws Exception {
+        String sameDay = "0000001800-26-000078";
+        bodyOf.put(submissionsPath(), submissions(List.of(
+                filing(COVERED, "10-Q", "2026-05-01", 1),
+                filing(MISSING, "10-Q", MISSING_FILED.toString(), 1),
+                filing(sameDay, "10-Q/A", MISSING_FILED.toString(), 1)), List.of()));
+        statusOf.put(indexPath(sameDay), 503);
+        SecFilingSupplement.Outcome normal = supplement.supplement(CIK, companyFacts(), FROM, "t");
+        assertThat(normal.unconfirmedVintages()).containsExactly(MISSING_FILED);
+        assertThat(normal.supplementedVintages()).as("정상 갈래 — 보호가 이긴다").isEmpty();
+
+        statusOf.put(submissionsPath(), 500);
+        SecFilingSupplement.Outcome listFailed = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(listFailed.vintagesUncertain()).isTrue();
+        assertThat(listFailed.unconfirmedVintages()).containsExactly(MISSING_FILED);
+        assertThat(listFailed.supplementedVintages()).doesNotContain(MISSING_FILED);
     }
 
     @Test

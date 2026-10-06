@@ -232,7 +232,8 @@ public class SecFilingSupplement implements FilingSupplementer {
                 log.info("보충 공시를 companyfacts가 실었다 — 그 판을 매 실행 연다. {} {} 이전 상태={}", context,
                         row.accession(), row.status());
             }
-            supplemented.add(row.filed());
+            // 덮인 뒤 그 공시의 판은 companyfacts가 붙인 날짜로만 나온다 — 목록 날짜가 다르면 그날엔 그 공시의 판이 없고,
+            // 열면 그날 다른 공시의 판만 이른 판으로 들어온다(2026-10-06 v5 반증 · 지금 0쌍).
             supplemented.addAll(coveredFiled.get(row.accession()));
         }
     }
@@ -322,6 +323,14 @@ public class SecFilingSupplement implements FilingSupplementer {
         Set<LocalDate> supplemented = new LinkedHashSet<>();
         // 정리는 목록이 필요 없다 — 대상은 companyfacts가 안 싣는 공시뿐이라 덮인 공시는 어느 쪽이든 대상이 아니다.
         settle(cik, coveredFiled, Set.of(), supplemented, context);
+        // 같은 날 보호도 정상 갈래와 같게 — 창 안의 덮이지 않은 실패 행은 그 제출일의 판이 일부만 있다(목록이 없어 다시
+        // 받지도 못했다). 열면 그 날짜의 부분 판이 이른 판으로 들어온다(2026-10-06 v5 반증).
+        Set<LocalDate> unconfirmed = new LinkedHashSet<>();
+        for (SecFilingSupplementStore.Row row : store.rowsOf(cik).values()) {
+            if (row.failed() && !row.filed().isBefore(since) && !covered.contains(row.accession())) {
+                unconfirmed.add(row.filed());
+            }
+        }
         for (SecFilingSupplementStore.Row row : store.okRowsOf(cik).values()) {
             if (row.filed().isBefore(since) || covered.contains(row.accession())) {
                 continue;
@@ -340,7 +349,9 @@ public class SecFilingSupplement implements FilingSupplementer {
                 openIfAdded(supplemented, filing, added);
             }
         }
-        return new Outcome(merged, fromStore, 0, staleReused, List.of(), Set.of(), Set.copyOf(supplemented), true);
+        supplemented.removeAll(unconfirmed);
+        return new Outcome(merged, fromStore, 0, staleReused, List.of(), Set.copyOf(unconfirmed),
+                Set.copyOf(supplemented), true);
     }
 
     /** 받는 창의 시작 — 라벨 창(회계연도 ≥ from)보다 한 해 앞이다. 자르는 것은 {@code SecEdgarFacts.build}다. */

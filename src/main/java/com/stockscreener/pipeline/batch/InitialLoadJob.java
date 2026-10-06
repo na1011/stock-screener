@@ -7,12 +7,14 @@ import com.stockscreener.pipeline.collector.PriceCollector;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.pipeline.datasource.us.SecFilingSupplementStore;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
@@ -61,16 +63,19 @@ public class InitialLoadJob {
     private final BatchExecutions batchExecutions;
     private final JdbcTemplate jdbcTemplate;
     private final FinancialLoadWindow loadWindow;
+    private final SecFilingSupplementStore supplementStore;
 
     public InitialLoadJob(PriceCollector priceCollector, FinancialCollector financialCollector,
                           StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
-                          JdbcTemplate jdbcTemplate, FinancialLoadWindow loadWindow) {
+                          JdbcTemplate jdbcTemplate, FinancialLoadWindow loadWindow,
+                          SecFilingSupplementStore supplementStore) {
         this.priceCollector = priceCollector;
         this.financialCollector = financialCollector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.jdbcTemplate = jdbcTemplate;
         this.loadWindow = loadWindow;
+        this.supplementStore = supplementStore;
     }
 
     /**
@@ -145,6 +150,9 @@ public class InitialLoadJob {
         // 여기서도 개정본이 쌓이고 그 종목의 지표가 지워진다. 세지 않으면 그 사실이 로그에만
         // 남는다.
         AtomicInteger revised = new AtomicInteger();
+        // 공시 보충(ADR-0173)도 이 경로를 탄다 — 리밸런싱 꼬리가 1부 뒤 보충을 처음 타는 정기 경로다. 보충 실패는 종목을 안
+        // 세워 실행이 SUCCESS로 끝나므로, 이 칸이 아니면 안 뜬다. APPEND_ONLY라 회수 정지는 없다.
+        Instant supplementSince = supplementStore.now();
 
         try {
             for (SecurityRef target : targets) {
@@ -184,9 +192,10 @@ public class InitialLoadJob {
         if (range.skipFinancial()) {
             return execution.finish("재무 건너뜀 (그 시장에 재무 소스가 없다)");
         }
-        return execution.finish(range.skipPrice()
+        String supplement = FinancialRefillJob.supplementNote(supplementStore.tallySince(supplementSince), List.of());
+        return execution.finish((range.skipPrice()
                 ? "시세 건너뜀 · 정정=%d".formatted(revised.get())
-                : "정정=%d".formatted(revised.get()));
+                : "정정=%d".formatted(revised.get())) + supplement);
     }
 
     /**

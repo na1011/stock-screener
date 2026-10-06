@@ -39,7 +39,7 @@ class ReaderVersionPinTest {
 
     /** 판 1, 2, …의 출력 해시. 끝에만 더한다. */
     private static final List<String> PINNED = List.of(
-            "2f4afbb15a13ae63f039fa8cf4787073b68fc2b4782cf327ccba06e0fc852638");
+            "b95d6d2de7f06b18cfdd5ff94ccc26dc3f3754a044457a684314b9975fa08ec6");
 
     private static final Path READER_SOURCE =
             Path.of("src/main/java/com/stockscreener/pipeline/datasource/us/XbrlInstanceReader.java");
@@ -85,6 +85,41 @@ class ReaderVersionPinTest {
                   <scenario><gaap:RestatementFlag>true</gaap:RestatementFlag></scenario></context>""", """
                 <gaap:Revenues contextRef="sc2" unitRef="usd" decimals="-6">10000000000</gaap:Revenues>
                 <gaap:Revenues contextRef="q" unitRef="usd" decimals="-6">11138000000</gaap:Revenues>"""));
+        // 고르기 키 구성요소마다 그 요소만 다른 쌍(2026-10-06 v5 반증 — 키에서 시작·끝·단위를 뺀 변이가 실제 인스턴스
+        // 112·137·2개를 바꾸는데 재료가 못 잡았다).
+        FEATURES.put("같은 끝 · 시작만 다름(3개월 · 6개월)", doc("", """
+                <gaap:Revenues contextRef="q" unitRef="usd" decimals="-6">11138000000</gaap:Revenues>
+                <gaap:Revenues contextRef="d" unitRef="usd" decimals="-6">22000000000</gaap:Revenues>"""));
+        FEATURES.put("같은 개념 · 두 시점", doc("""
+                <context id="i0"><entity><identifier scheme="http://www.sec.gov/CIK">0000001800</identifier></entity>
+                  <period><instant>2025-12-31</instant></period></context>""", """
+                <gaap:Goodwill contextRef="i" unitRef="usd" decimals="-6">24035000000</gaap:Goodwill>
+                <gaap:Goodwill contextRef="i0" unitRef="usd" decimals="-6">23000000000</gaap:Goodwill>"""));
+        FEATURES.put("같은 기간 · 두 단위", doc("", """
+                <unit id="eur"><measure>iso4217:EUR</measure></unit>
+                <gaap:Revenues contextRef="q" unitRef="usd" decimals="-6">11138000000</gaap:Revenues>
+                <gaap:Revenues contextRef="q" unitRef="eur" decimals="-6">10200000000</gaap:Revenues>"""));
+        // 건너뛰는 조건마다 건너뛰는 재료(네임스페이스 · 차원 · 기간).
+        FEATURES.put("IFRS 네임스페이스", doc("", """
+                <ifrs:Revenue xmlns:ifrs="http://xbrl.ifrs.org/taxonomy/2024-03-27/ifrs-full" contextRef="q" unitRef="usd" decimals="-6">5</ifrs:Revenue>"""));
+        FEATURES.put("차원 붙은 dei", doc("""
+                <context id="cls"><entity><identifier scheme="http://www.sec.gov/CIK">0000001800</identifier>
+                  <segment><xbrldi:explicitMember dimension="gaap:StatementClassOfStockAxis">gaap:CommonClassAMember</xbrldi:explicitMember></segment></entity>
+                  <period><instant>2026-06-30</instant></period></context>""", """
+                <dei:EntityCommonStockSharesOutstanding contextRef="cls" unitRef="shares" decimals="INF">100</dei:EntityCommonStockSharesOutstanding>"""));
+        FEATURES.put("xbrldi 없는 segment", doc("""
+                <context id="sp"><entity><identifier scheme="http://www.sec.gov/CIK">0000001800</identifier>
+                  <segment><gaap:SomeTag>x</gaap:SomeTag></segment></entity>
+                  <period><startDate>2026-04-01</startDate><endDate>2026-06-30</endDate></period></context>""", """
+                <gaap:Revenues contextRef="sp" unitRef="usd" decimals="-6">7</gaap:Revenues>"""));
+        FEATURES.put("공백 든 값 · 날짜 · 문서 종류", doc("""
+                <context id="ws"><entity><identifier scheme="http://www.sec.gov/CIK">0000001800</identifier></entity>
+                  <period><instant> 2026-03-31 </instant></period></context>""", """
+                <gaap:Revenues contextRef="q" unitRef="usd" decimals="-6"> 11138000000 </gaap:Revenues>
+                <gaap:Goodwill contextRef="ws" unitRef="usd" decimals="-6">1</gaap:Goodwill>""")
+                .replace(">10-Q</dei:DocumentType>", "> 10-Q </dei:DocumentType>"));
+        FEATURES.put("자기 컨텍스트 0 · 문서 종류 다름", doc("", "")
+                .replace("0000001800", "0000009999").replace(">10-Q</dei:DocumentType>", ">8-K</dei:DocumentType>"));
         FEATURES.put("CIK 아닌 식별자", doc("""
                 <context id="ticker"><entity><identifier scheme="http://example.com/ticker">ABT</identifier></entity>
                   <period><startDate>2026-04-01</startDate><endDate>2026-06-30</endDate></period></context>""", """
@@ -106,6 +141,7 @@ class ReaderVersionPinTest {
             List.of("R1.htm", "Financial_Report.xlsx"),
             List.of("fix-20251231.xsd", "fix-20251231_lab.xml"),
             List.of("a_htm.xml", "b_htm.xml", "fix-20251231.xsd"),
+            List.of("x_htm.xml", "x.xml", "x.xsd"),
             List.of());
 
     @Test
@@ -154,6 +190,8 @@ class ReaderVersionPinTest {
         List<String> forms = new ArrayList<>(SecFilingSupplement.SUPPLEMENT_FORMS);
         forms.sort(null);
         List<String> documentTypes = new ArrayList<>(forms);
+        // 보충 폼 밖의 문서 종류 — 전환 보고서(T)와 다른 공시(2026-10-06 v5 반증).
+        documentTypes.addAll(List.of("10-KT", "10-QT", "20-FT", "8-K", "S-1", "DEF 14A"));
         documentTypes.add(null);
         for (String form : forms) {
             for (String documentType : documentTypes) {
