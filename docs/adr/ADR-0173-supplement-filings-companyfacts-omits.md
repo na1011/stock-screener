@@ -98,18 +98,27 @@ applies_to:
   - 결손 종목은 그 전에 좁힌 손 FR과 `indicator-reconcile`을 한 승인·한 번에 적용한다(사용자 승인 · FR과 화해 사이엔 무효화된 종목의 지표가 0행이다). 0부(ADR-0172) 뒤라 그 실행은 FR 시계를 안 민다.
     - **화해는 FR과 같은 `--tickers`(또는 인자 없이)** — FR 알림 문구의 「위 종목」은 무효화된 종목뿐이라, 새 라벨만 받은 종목(RS1 94)의 지표가 다음 정기 화해까지 낡는다.
     - **손 FR 직전마다 `ops/dump-db.sh`** — FR 쓰기를 되돌리는 길은 덤프뿐이고(ADR-0071), 덤프 가드는 덤프가 하나라도 있으면 통과한다.
-  - **첫 손 FR 절차(글자 그대로 · 사용자 승인 · 평일 13:30~15:40 밖 · 토 10-10 낮 두 jar 재생 전)**:
-    1. 대상 = `explore/financial-sync/p1-fr1/fr1_tickers.txt`(109 · RS1 두 사본의 종목별 재무 서명 차이 · 같은 폴더 `fr1_tickers.sql`이 0콜로 다시 낸다).
-    2. `ops/dump-db.sh` → 그 덤프로 사본을 뜨고, 같은 날 보충 원자료(`SecFilingSupplementCacheLiveTest` · 109 티커)로 재생 하네스를 정기 플래그로 돌린다 — **사전 기대**(RS1 b1의 109 몫): 대상 109 · 신규 128 · 정정 28 · 교정 3 · 이른판 0 · 회수 3 · 보충실패 0 · 회수정지 0. 이른판 > 0 · 보충실패 > 0 · 회수정지 > 0이면 운영 FR을 안 한다. 신규·정정·교정의 차이는 10-06 뒤 공시로 구성원마다 설명돼야 한다.
-    3. 운영: `./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=financial-refill --tickers=<109를 쉼표로>'` — **`--universe`·`--financial-years`·`--insert-earlier-vintages`를 붙이지 않는다**(`--financial-years=3`이면 RS0 차이 6행이 빠지고, `--insert-earlier-vintages=true`면 이른 판 5개가 들어가며, 11이면 보충 창이 2014로 넓어진다) · note 단언: `연도=2018~2026 대상=109종목` · `이른판=0` · `보충실패=0` · `회수정지=0종목`.
-    4. 화해: `./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=indicator-reconcile --tickers=<같은 109>'`.
-    5. 사후: 운영 109종목의 `financial_statement`(id·created_at 제외)가 2의 사본 결과와 같다 — 다르면 되돌린다(아래).
+  - **첫 손 FR 절차(글자 그대로 · 사용자 승인 · 평일 13:30~15:40 밖 · 실키는 13:20~15:45 밖 · 토 10-10 낮 두 jar 재생 전)** — 셸 변수 `R`=main 작업 트리 · `T`=작업 폴더 · `B`=`explore/s-vintage-coherence` 브랜치의 `explore/financial-sync/p1-fr1/`(8e8f8484 · 사본 `stock_screener_q4v_rs1a`·`rs1b`를 지우기 전에 `fr1_tickers.sql`로 다시 낼 수 있다):
+    0. **무엇을 컴파일하는가**: `git -C $R rev-parse HEAD` = 1부를 배포한 커밋 · `git -C $R status --porcelain -- src` 비어 있음 · `psql -d stock_screener -Atc "select 1 from flyway_schema_history where version='64' and success"` = 1(V64 적용) — `bootRun`은 작업 트리를 컴파일하므로 셋이 아니면 멈춘다.
+    1. 대상: `$B/fr1_tickers.txt`(109) → `psql -d stock_screener -AtF $'\t' -c "select id, ticker from stock where market_code='US' and ticker = any(string_to_array('<109를 쉼표로>', ','))" > $T/targets.tsv` — 109행이 아니면 멈춘다.
+    2. **사본 재생(사전 기대 · 중단 조건)**:
+       1. `$R/ops/dump-db.sh` → 그 덤프를 새 DB 둘에 복원한다: `createdb stock_screener_q4v_fr1_base && pg_restore -d stock_screener_q4v_fr1_base <덤프>` · 같은 것을 `stock_screener_q4v_fr1`로(앞의 것은 되돌리기용 · 손대지 않는다).
+       2. 같은 날 보충 원자료(운영 FR 직전에): `cd $R && SUPP_CACHE_DIR=$T/cache SUPP_TICKERS=$B/fr1_tickers.txt SUPP_FROM=2018 ./gradlew liveTest -PskipFrontend --tests "*SecFilingSupplementCacheLiveTest*"` — 수집 시각을 적는다.
+       3. 재생: `cd $R && Q4V_REPLAY_DB=stock_screener_q4v_fr1 Q4V_REPLAY_CACHE=$T/cache/companyfacts Q4V_REPLAY_TARGETS=$T/targets.tsv Q4V_REPLAY_OUT=$T/replay.tsv Q4V_REPLAY_FROM=2018 Q4V_REPLAY_INSERT_EARLIER=false Q4V_REPLAY_SUPPLEMENT_DIR=$T/cache Q4V_REPLAY_SUPPLEMENT_STORE=db TEST_DB_URL=jdbc:postgresql://localhost:5432/stock_screener_test ./gradlew test -PskipFrontend --tests "*EarlierVintageReplayHarnessTest*" --rerun` — 출력 줄 `Q4V_REPLAY …`.
+       4. 사본 주식수 기저(운영 FR 뒤에 도는 것과 같게): `ops/apply-window/env.sh`의 `boot stock_screener_q4v_fr1 --job=share-basis-derive`.
+       5. **사전 기대**(RS1 b1의 109 몫): 대상 109 · 신규 128 · 정정 28 · 교정 3 · 이른판 0 · 회수 3 · 보충실패 0 · 목록실패종목 0 · 회수정지 0종목 · 실패 0. **이른판 · 보충실패 · 목록실패종목 · 회수정지 중 하나라도 > 0이면 운영 FR을 안 한다.** 신규·정정·교정·회수의 차이는 10-06 뒤 공시(`published_at` > 2026-10-06)로 구성원마다 설명돼야 한다.
+    3. 운영 FR: `cd $R && ./gradlew bootRun -PskipFrontend --args='--spring.profiles.active=bootstrap --job=financial-refill --tickers=<109를 쉼표로>'` — **`--universe`·`--financial-years`·`--insert-earlier-vintages`를 붙이지 않는다**(`--financial-years=3`이면 RS0 차이 6행이 빠지고, `--insert-earlier-vintages=true`면 이른 판 5개가 들어가며, 11이면 보충 창이 2014로 넓어진다) · note 단언: `연도=2018~2026 대상=109종목` · `이른판=0` · `보충실패=0` · `회수정지=0종목` · 실행 시작 시각을 적는다.
+    4. 화해: `cd $R && ./gradlew bootRun -PskipFrontend --args='--spring.profiles.active=bootstrap --job=indicator-reconcile --tickers=<같은 109>'`(①은 109 · ②는 창 전체 · 유도 입력 포함).
+    5. **사후 대조**: `$B/fr1_tickers.sql`을 운영과 `stock_screener_q4v_fr1`에 돌려 109 종목 서명을 비교한다 — 차이는 셋으로 가른다: (가) 수집 시각 뒤 공시로 설명됨 → 받아들인다 · (나) 운영 note의 보충실패·회수정지 > 0 → 그 티커만 FR을 다시 돌리고 다시 비교 · (다) 그 밖 → 아래로 되돌린다.
     6. 토 낮 두 jar 재생 전 MANUAL RUNNING 0(재생이 고아 스윕으로 닫는다).
-  - **되돌리는 법**: 2의 덤프에서 `financial_statement` · `financial_column_absence` · `sec_filing_supplement` · `indicator_value` · `governance_fact`만 복원한다(`financial_statement`를 가리키는 FK 0 — 부분 복원 가능 · 반증 실측) · `ops/dump-db.sh`가 찍는 좁힌 복원 명령은 다른 표 집합이라 쓰지 않는다 · 토 20:00 리밸런싱 뒤에는 전체 복원이 명부·꼬리까지 되돌리므로 이 부분 복원만 · 파괴적 복원이라 사용자 승인.
-  - **둘째 손 FR**: 10-10 20:00 리밸런싱의 첫 편입 전원 — 목록은 리밸런싱 뒤 FR 술어(`StockRegistrar.IN_RETENTION_WINDOW`)를 그대로 쓴 질의로 내고, note의 `대상=`이 그 수와 같은지 단언한다 · 창 편입이 아닌 A 새 대표(BTSG·NWSA·UHAL.B)는 `--tickers`가 WARN 한 줄로 버리므로 넣지 않는다(「후보 쪽 재무 낡음」 재고로).
+  - **되돌리는 법(종목 단위 · 원시 SQL이라 따로 사용자 승인)** — 표째 `pg_restore -t`는 쓰지 않는다: 표 정의만 다시 만들어 identity · pkey · unique · index를 잃고(Writer INSERT와 보충 저장의 `ON CONFLICT`가 깨진다), 덤프 뒤의 다른 종목·다른 시장 쓰기까지 지운다(반증 실측 · `ops/dump-db.sh`가 찍는 좁힌 복원도 같은 형태):
+    1. `stock_screener_q4v_fr1_base`(2-1)에서 109 stock_id의 `financial_statement` · `financial_column_absence`를 `\copy (select …) to` 파일로.
+    2. 운영에서 한 트랜잭션: 그 109 stock_id의 두 표 행을 지우고, 임시 표로 `\copy … from` 한 뒤 `insert … overriding system value select …` · `sec_filing_supplement`는 첫 손 FR 전에 비어 있었으므로 3의 시작 시각 뒤 `fetched_at` 행을 지운다.
+    3. `share-basis-derive` → `indicator-reconcile --tickers=<109>`(지표·거버넌스는 복원하지 않고 다시 계산한다).
+  - **둘째 손 FR**: 10-10 20:00 리밸런싱의 첫 편입 전원 — 목록은 리밸런싱 뒤 FR 술어(`StockRegistrar.IN_RETENTION_WINDOW`)를 그대로 쓴 질의로 내고, note의 `대상=`이 그 수와 같은지 단언한다 · 창 편입이 아닌 A 새 대표(BTSG·NWSA·UHAL.B)는 `--tickers`가 WARN 한 줄로 버리므로 넣지 않는다(「후보 쪽 재무 낡음」 재고로) · 0·3·4·5단계는 첫 손 FR과 같다.
     - **MUST NOT: `--universe`를 붙이지 않는다** — 붙이면 열린 편입만 잡는다(`StockRegistrar.oneUniverseMemberIds`). `--tickers`만 주면 보존 창 편입(닫힌 편입 포함 · 화해와 같은 술어)을 잡는다. 붙였다면 (가)가 이미 쫓아낸 종목을 못 잡는다 — DOX는 FY2025 20-F를 companyfacts가 안 실어 최신 기말이 2024-09-30에 멈췄고, 주식수 나이 거름(2년)에 걸려 10-02에 편출됐다.
     - 첫 손 FR = RS1 Writer 차이 종목(창 편입) · 토 10-10 낮의 두 jar `universe-restore --dates` 재생 **전**(금요일 밤까지)에 끝낸다 — 그 재생이 주식수를 읽어 A의 귀속과 섞인다.
-    - 둘째 손 FR = 10-10 20:00 리밸런싱의 첫 편입 전원 ∪ 편입 이력 없는 A 새 대표 · 리밸런싱 뒤 꼬리 사슬과 21시 확인이 끝난 뒤.
+    - 둘째 손 FR = 10-10 20:00 리밸런싱의 첫 편입 전원(창 편입만 — 위) · 리밸런싱 뒤 꼬리 사슬과 21시 확인이 끝난 뒤.
 - **정기 경로의 이른 판 예외 하나**: 이른 판 넣기는 관문의 한 번에 속한다(ADR-0161). 다만 **보충으로 실은 공시의 판**은 정기 경로에서도 넣는다. 그 판은 원장이 처음부터 준 판이고, 넣지 않으면 순서 의존이 남는다. 크기: RS1(1,207종목)에서 이 예외는 **한 번도 안 터졌다**(이른 판 넣기 0 · 그 갈래는 통합 시험만 묻는다). 보충 몫으로 지표가 무효화되는 종목은 15(현 편입 10: AEP·ALNY·AOS·ED·FTV·GD·JCI·LII·RRC·SPGI)다. 새 라벨을 받은 108종목 중 94는 새 라벨만(무효화 없음)이고 14는 무효화도 있다 · 무효화만 있는 것 1. 무효화된 날짜는 14:20 화해가 채운다.
 - **사정거리**:
   - 보존 창 밖 과거 편입(1,209 중 1)만 관문 재적재에서 고쳐진다. 창 안 과거 편입은 위 손 FR이 닿는다.
