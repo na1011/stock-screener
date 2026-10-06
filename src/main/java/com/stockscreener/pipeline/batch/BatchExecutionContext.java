@@ -47,6 +47,9 @@ public final class BatchExecutionContext {
      */
     private static final double MALFORMED_ALERT_RATIO = 0.2;
 
+    /** {@code batch_execution_failure.failure_kind}의 MALFORMED — 종목 실패에서 다발 경보를 셀 때 쓴다. */
+    private static final String MALFORMED = DataSourceException.Kind.MALFORMED.name();
+
     /**
      * 진척을 DB에 남기는 간격.
      *
@@ -212,6 +215,11 @@ public final class BatchExecutionContext {
             } else {
                 failureCount.incrementAndGet();
                 counters.failure.incrementAndGet();
+                // MUST: 실패를 세는 이 자리에서 MALFORMED를 함께 센다. 잡마다 부르게 두었을 때 호출자가 0이라
+                // 「응답 해석 실패 다발」 알림이 한 번도 못 났다 — 소스 스펙 변경이 부분 실패 알림에 묻혔다.
+                if (MALFORMED.equals(outcome.failureKind())) {
+                    countMalformed();
+                }
             }
             flushIfDue();
             return succeeded;
@@ -354,7 +362,12 @@ public final class BatchExecutionContext {
                 severity, jobName + " — " + title, body, dedupeKey() + ':' + title, context()));
     }
 
-    /** 응답을 해석할 수 없었던 실패를 별도로 센다. 소스 스펙 변경 판단의 근거다. */
+    /**
+     * 응답을 해석할 수 없었던 실패를 별도로 센다. 소스 스펙 변경 판단의 근거다.
+     *
+     * <p>{@link #process}가 MALFORMED 종목 실패마다 스스로 부른다. 잡이 직접 부르는 것은 종목을 안 지나는 실패
+     * ({@link #countExternally})를 MALFORMED로 셀 때뿐이다 — 종목 실패에 대해 또 부르면 두 번 센다.
+     */
     public void countMalformed() {
         malformedCount.incrementAndGet();
     }

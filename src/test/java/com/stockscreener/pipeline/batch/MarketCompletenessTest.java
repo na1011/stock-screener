@@ -139,6 +139,82 @@ class MarketCompletenessTest {
     }
 
     @Test
+    @DisplayName("MALFORMED 종목 실패가 20%를 넘으면 「응답 해석 실패 다발」 ERROR 알림이 한 통 난다 — 실패 기록 자리가 세므로 잡이 안 불러도")
+    void malformedSurgeAlertsOnce() throws Exception {
+        List<AlertEvent> delivered = new ArrayList<>();
+        AlertChannel channel = recordingChannel(delivered);
+        CompositeAlertPort alertPort = new CompositeAlertPort(List.of(channel),
+                new AlertSuppressor(Duration.ofMinutes(10)), new LoggingAlertPort());
+        StockTaskRunner runner = mock(StockTaskRunner.class);
+        BatchExecutionRecorder recorder = mock(BatchExecutionRecorder.class);
+        when(recorder.finish(anyLong(), any(), any(), any())).thenReturn(BatchStatus.PARTIAL_SUCCESS);
+        SecurityRef ok = new SecurityRef(1, "KOSPI", "005930");
+        SecurityRef garbled = new SecurityRef(2, "KOSPI", "000660");
+        when(runner.runInNewTransaction(eq(ok), any())).thenReturn(1L);
+        when(runner.runInNewTransaction(eq(garbled), any()))
+                .thenThrow(new DataSourceException(Kind.MALFORMED, "dart", "필드 없음"));
+        // 시장 판정은 끈다(coverage null) — 이 시험은 다발 경보 하나만 본다.
+        BatchExecutionContext context = new BatchExecutionContext(8L, "governance-load",
+                LocalDate.of(2026, 10, 29), new StockTaskExecutor(runner, recorder), recorder, alertPort, id -> { });
+
+        context.process(ok, CollectionPhase.GOVERNANCE, security -> 1L);
+        context.process(garbled, CollectionPhase.GOVERNANCE, security -> 1L);
+        context.finish();
+
+        assertThat(delivered).filteredOn(event -> event.severity() == AlertSeverity.ERROR)
+                .extracting(AlertEvent::title).containsExactly("governance-load 소스 응답 해석 실패 다발");
+    }
+
+    @Test
+    @DisplayName("MALFORMED가 20% 미만이면 다발 알림이 없다 — 한 종목의 데이터 문제는 부분 실패 알림이 말한다")
+    void fewMalformedDoNotAlert() throws Exception {
+        List<AlertEvent> delivered = new ArrayList<>();
+        CompositeAlertPort alertPort = new CompositeAlertPort(List.of(recordingChannel(delivered)),
+                new AlertSuppressor(Duration.ofMinutes(10)), new LoggingAlertPort());
+        StockTaskRunner runner = mock(StockTaskRunner.class);
+        BatchExecutionRecorder recorder = mock(BatchExecutionRecorder.class);
+        when(recorder.finish(anyLong(), any(), any(), any())).thenReturn(BatchStatus.PARTIAL_SUCCESS);
+        SecurityRef garbled = new SecurityRef(99, "KOSPI", "999999");
+        when(runner.runInNewTransaction(any(), any())).thenReturn(1L);
+        when(runner.runInNewTransaction(eq(garbled), any()))
+                .thenThrow(new DataSourceException(Kind.MALFORMED, "dart", "필드 없음"));
+        BatchExecutionContext context = new BatchExecutionContext(9L, "governance-load",
+                LocalDate.of(2026, 10, 29), new StockTaskExecutor(runner, recorder), recorder, alertPort, id -> { });
+
+        for (int i = 1; i <= 5; i++) {
+            context.process(new SecurityRef(i, "KOSPI", "00000" + i), CollectionPhase.GOVERNANCE, security -> 1L);
+        }
+        context.process(garbled, CollectionPhase.GOVERNANCE, security -> 1L);
+        context.finish();
+
+        assertThat(delivered).noneMatch(event -> event.severity() == AlertSeverity.ERROR);
+    }
+
+    private static AlertChannel recordingChannel(List<AlertEvent> delivered) {
+        return new AlertChannel() {
+            @Override
+            public String name() {
+                return "fake-webhook";
+            }
+
+            @Override
+            public boolean isConfigured() {
+                return true;
+            }
+
+            @Override
+            public boolean accepts(AlertEvent event) {
+                return event.severity().compareTo(AlertSeverity.WARNING) >= 0;
+            }
+
+            @Override
+            public void deliver(AlertEvent event) {
+                delivered.add(event);
+            }
+        };
+    }
+
+    @Test
     @DisplayName("미완료 알림과 부분 실패 알림이 실제 억제기를 지나 둘 다 채널에 닿는다 — 같은 키면 10분 억제가 뒤의 것을 버린다")
     void incompleteAlertIsNotSuppressedByThePartialAlert() throws Exception {
         List<AlertEvent> delivered = new ArrayList<>();
