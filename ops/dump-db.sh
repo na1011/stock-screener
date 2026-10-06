@@ -79,7 +79,8 @@ echo "[dump] OK 테이블 ${actual}개 · $(du -h "$TARGET" | cut -f1)"
 
 echo "== 되돌리는 법 =="
 cat <<RESTORE
-  # 스키마째 되돌린다. 도는 앱을 먼저 내린다(ops/stop.sh --app) — 연결이 열려 있으면 -c가 막힌다.
+  # 스키마째 되돌린다. 도는 앱을 먼저 내린다(ops/stop.sh --app — 앱 크론이 남았으면 멈춘다 · 넘기는 것은 사람: --force)
+  # — 연결이 열려 있으면 -c가 막힌다.
   $PG_RESTORE -d $DB -c --if-exists -j4 "$TARGET"
 
   # 이 phase만 되돌리려면 데이터만 좁혀 되돌린다 — 앱을 내린 채(두 명령 사이에 쓰면 섞인다).
