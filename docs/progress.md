@@ -143,7 +143,7 @@
 - **MUST: 손대기 전에 브랜치 `explore/s-vintage-coherence`의 `explore/s-vintage/FINDINGS.md`를 연다** — 반증 여섯이 원장으로 확정한 수 ·
   버린 설계와 그 반례 · Q4·영업이익의 미결 결정 · 실행 계획에 반증이 더한 단계(어댑터 jar 배포 · 드리프트 대조군 · ADR-0135 주식수 대조 ·
   백필 모양 · 신규 편입 경로 · 가격 소비자 · VACUUM)가 전부 거기 있다. 안 열면 v1~v3를 다시 밟는다.
-  **신규 편입 경로(F6)는 재무 동기 2부가 처방 중**(B를 흡수 · 설계는 브랜치 `explore/financial-sync/PLAN.md`의 가장 늦은 「2부 계획 vN」 — 여기 옮겨 적지 않는다).
+  **신규 편입 경로(F6)는 재무 동기 2부가 처방 중**(B를 흡수 · 설계는 브랜치 `explore/s-vintage-coherence`의 `explore/financial-sync/PLAN.md`의 가장 늦은 「2부 계획 vN」 — 여기 옮겨 적지 않는다).
 - **탐색은 그 브랜치에 있다**(main에 안 들어간다 · 사용법은 같은 폴더의 `README.md` · 도구: 스윕 45초 · 검사기 `inv.py` ·
   출처 추적 `S_ORIGIN` · 표본 틀 `frame.py` · 값을 가린 카드 `card.py` · 판정 없는 현상 검출기 `catalog.py`).
   **v7(불변식으로는 최선 — B 436 → 11)은 원장 판정으로 기각했다**(2026-10-04 · `explore/s-vintage/FINDINGS.md` 2b절): 갈래 2 계산은 회사 개념상
