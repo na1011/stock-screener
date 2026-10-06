@@ -82,8 +82,12 @@ cat <<RESTORE
   # 스키마째 되돌린다. 도는 앱을 먼저 내린다(ops/stop.sh --app) — 연결이 열려 있으면 -c가 막힌다.
   $PG_RESTORE -d $DB -c --if-exists -j4 "$TARGET"
 
-  # 이 phase만 되돌리려면 테이블 셋으로 좁힌다.
-  $PG_RESTORE -d $DB -c --if-exists -t corporate_action -t price_daily -t indicator_value "$TARGET"
+  # 이 phase만 되돌리려면 데이터만 좁혀 되돌린다 — 앱을 내린 채(두 명령 사이에 쓰면 섞인다).
+  # MUST NOT: -c와 -t를 같이 쓰지 않는다. 표 정의만 다시 만들어 PK·FK·인덱스를 잃고, 참조받는 표
+  # (corporate_action ← corporate_action_distribution)는 못 지운 채 옛 행으로 남는다(2026-10-06 사본 실측).
+  # RESTART IDENTITY를 붙이지 않는다 — 시퀀스가 이어져야 복원 뒤 새 행이 옛 id와 안 부딪는다.
+  psql -d $DB -v ON_ERROR_STOP=1 -c "TRUNCATE corporate_action, corporate_action_distribution, price_daily, indicator_value"
+  $PG_RESTORE -d $DB --data-only -t corporate_action -t corporate_action_distribution -t price_daily -t indicator_value "$TARGET"
 
   # 복원 뒤 기동이 FlywayValidateException으로 죽으면 덤프가 못 쓰는 것이 아니다.
   # 덤프를 뜬 뒤에 마이그레이션 파일이 고쳐져 체크섬이 갈린 것이고, 실패 메시지가
