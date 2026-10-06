@@ -1,0 +1,8 @@
+1JVM 600 (main 지금)               count  max/60s=  600  max/42s=  420  max/1s= 10  (순간 600 rpm)
+2JVM 600+400 합 1000              count  max/60s= 1000  max/42s=  820  max/1s= 20  (순간 1200 rpm)
+2JVM 600+400 합 1000              rate   max/60s= 1000  max/42s=  700  max/1s= 17  (순간 1020 rpm)
+2JVM 500+500 합 1000              count  max/60s= 1000  max/42s=  840  max/1s= 20  (순간 1200 rpm)
+2JVM 500+500 합 1000              rate   max/60s= 1000  max/42s=  700  max/1s= 18  (순간 1080 rpm)
+2JVM 300+300 합 600(여유 유지)        count  max/60s=  600  max/42s=  600  max/1s= 20  (순간 1200 rpm)
+2JVM 300+300 합 600(여유 유지)        rate   max/60s=  600  max/42s=  420  max/1s= 10  (순간 600 rpm)
+--- count 모드에서 창이 분 경계에 걸칠 때(이미 위에 포함: 창은 연속 슬라이딩) ---
