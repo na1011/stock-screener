@@ -472,6 +472,46 @@ class ReaderVersionPinTest {
     }
 
     @Test
+    @DisplayName("범위 소스의 주입 주석은 운영 생성자 위 @Autowired · 매개변수 @Qualifier뿐이다 — 필드 · 메서드 주입은 주입 자리 검사 밖이다")
+    void scopeSourcesInjectOnlyThroughTheConstructor() throws Exception {
+        // v15 반증 e6: JDK 형 빈을 @Resource 필드로 받게 하자 주입 자리 검사(@Autowired 필드·메서드만 셈)를 지나 본문만 바꾼
+        // 변이가 초록이었다(Spring이 실제로 넣는 것을 컨텍스트로 확인). 손 목록을 늘리지 않고 성질로 묻는다 — 주입 계열 주석이
+        // 생성자 위 @Autowired와 그 매개변수의 @Qualifier 말고 어디에도 없다.
+        Set<String> injectionPackages = Set.of("org.springframework.beans.factory.annotation", "jakarta.annotation",
+                "jakarta.inject", "javax.inject", "javax.annotation");
+        Set<String> offenders = new TreeSet<>();
+        for (String file : SOURCE_SCOPE) {
+            CompilationUnitTree unit = parse(SOURCE_DIR.resolve(file));
+            Map<String, String> imports = new java.util.HashMap<>();
+            unit.getImports().forEach(i -> {
+                String name = i.getQualifiedIdentifier().toString();
+                imports.put(name.substring(name.lastIndexOf('.') + 1), name);
+            });
+            new TreePathScanner<Void, Void>() {
+                @Override
+                public Void visitAnnotation(com.sun.source.tree.AnnotationTree node, Void unused) {
+                    String written = node.getAnnotationType().toString();
+                    String qualified = written.contains(".") ? written : imports.getOrDefault(written, written);
+                    String pkg = qualified.contains(".") ? qualified.substring(0, qualified.lastIndexOf('.')) : "";
+                    if (injectionPackages.contains(pkg)) {
+                        Tree parent = getCurrentPath().getParentPath().getParentPath().getLeaf();
+                        boolean constructorAutowired = qualified.endsWith(".Autowired") && parent instanceof MethodTree method
+                                && method.getName().contentEquals("<init>");
+                        boolean parameterQualifier = qualified.endsWith(".Qualifier") && parent instanceof VariableTree
+                                && getCurrentPath().getParentPath().getParentPath().getParentPath().getLeaf() instanceof MethodTree ctor
+                                && ctor.getName().contentEquals("<init>");
+                        if (!constructorAutowired && !parameterQualifier) {
+                            offenders.add(file + " — @" + qualified);
+                        }
+                    }
+                    return super.visitAnnotation(node, unused);
+                }
+            }.scan(unit, null);
+        }
+        assertThat(offenders).as("필드·메서드·다른 주입 주석은 범위 빈의 입력을 주입 자리 검사 밖에서 바꾼다").isEmpty();
+    }
+
+    @Test
     @DisplayName("범위 소스는 리플렉션 · ServiceLoader · 동적 클래스 로딩을 쓰지 않는다 — 폐포가 그 대상을 정적으로 못 본다")
     void scopeSourcesDoNotLoadCodeDynamically() throws Exception {
         Set<String> offenders = new TreeSet<>();
