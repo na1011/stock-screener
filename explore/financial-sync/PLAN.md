@@ -1484,3 +1484,41 @@ v4에 더해: **실패 계약** = 보충 실패(처음 · 판 다시 읽기 둘 
 - **F9 사슬 토큰 폭**: 사슬은 크론 다섯으로 나뉨 · 사이(13:45~14:00)에 토큰 없음 · 60일 평일 13:25~14:25 시작 손 실행 14건 4일 → 크론별 대기인지 오후 전체 예약인지.
 - **선다(쟀다)**: refresh 중 `System.exit(1)` → gradle rc 1(devtools restartedMain 포함 · 예외는 rc 0 — `BootstrapDatabaseGuard` javadoc 09-14 주장 다시 재 맞음) · Spring 7.0.8 close는 refresh 중 exit 교착 회피(빈 소멸 안 돌아 해제는 pid 사망 경로) · `ProcessHandle` 시작 시각 ms(root 포함) · 시더(ApplicationRunner 0·10) → BootstrapRunner 순 · 웹 파이프라인 쓰기 진입점 둘(변경 매핑 컨트롤러 6 전수) · `MembershipGapFiller`는 `UniverseRebalanceJob:172` 안 같은 스레드 · max_connections 100 · 현재 2 · 26이면 여유 · v16 수 일치(MANUAL끼리 겹침은 KST 08-09 · 60초 미만 287 중 117은 10초 미만 — 같은 JVM 행 경계 섞임 가능).
 - **재보지 않음**: flyway.enabled=false bootRun 실행 · 실제 빈 순서에서 Flyway vs `BootstrapDatabaseGuard` · 호스트 식별 · 수면 뒤 판정 지연 · 웹 기동 대기와 start.sh 60초 · ADMIN↔ADMIN 겹침.
+
+## 쓰기 잠금 v1 반증 판정 — 계획 밖 렌즈(2026-10-07 새벽 · 「수정 후 진행 — DB 단위 · 사망 술어 · 웹 경계는 선다 · 3·4·6·7·8 다시」 · `rebut-lock1-out/`(findings · q01_cron_gaps · q02_consumers · PH.java) · 0콜 · 운영 SELECT만 · gradle 안 돌림)
+- **1 [순위·회귀] V65가 main에 먼저 들어가면 1부 V64 배포가 깨진다**(운영 yaml에 out-of-order 없음 · 시험만 true(`application-test.yaml:37` 주석이 실패를 기록) · 시계 고침이 main에서 배포될 때 V65가 같이 나감) → main 병합은 1부 병합 뒤 · 배포는 둘째 손 FR 뒤 · 잠금이 ADR-0173 절차를 바꾸면 사본 드라이런 다시(Flyway 실제 실패는 안 잼).
+- **2 앱 jar 기동의 쓰기가 토큰 밖**(Flyway · 시더 둘(`IndicatorCatalogSynchronizer:371` UPDATE · `PresetSynchronizer`) · `BatchExecutionSweeper.sweepOnStartup`) · `start.sh` 소비자 누락(14파일이 참조) · `deploy.sh` 검사는 스크립트 시점(틈에 bootRun).
+- **3 `stop.sh` 「보유 중이면 멈춤」이 자기 세션에 막힘**(begin → ADR-0173 5단계 stop) → 「앱 JVM이 쥔 토큰이 있으면」.
+- **4 5·7 모순 · 「읽기 전용」 bootRun도 쓴다**(ADR-0084 ② 실측 — 시더가 매 bootRun `updated_at` 갱신) → 뿌리: 시더를 「값이 다를 때만 쓴다」로 → 읽기 잡은 실제 0행 · 잠금 안 쥠 · judge만 대상(코드·ADR로만 읽음).
+- **5 progress:93의 뿌리(소유 JVM 칸) 누락** — 6항은 잠금 행 → 실행 행 대응 없이 못 지음 · GAP_FILL 꼬리 행은 어느 스윕도 안 닫음(`WEB_OWNED_GAP_FILL_JOBS`) → 실행 행에 토큰(pid + 시작 시각)을 V65에 · 스위퍼·crons-done이 읽음(③).
+- **6 psql 쓰기 · 잠금 전 jar는 강제 안 됨 · 항목 9는 손 목록** → 파이프라인 표에 문장 단위 트리거(세션 토큰이 살아 있는 보유자와 같은가) — psql·옛 jar·빠뜨린 진입점이 시끄럽게 실패, 9가 스스로 검사됨(옛 jar와 main 카탈로그 차이 0 — `git diff e2342f41^ main -- indicator/ preset/`).
+- **7 크론 사이 창**(q01 · 30평일 연속 SCHEDULER 쌍 49 · 60초 초과 25 · 5분 초과 21(주로 daily-update → corporate-action 21일 · 3:25~16:45)) → 13:30 명목부터 마지막 평일 크론 끝까지 한 예약.
+- **8 「대기를 실행 행으로」 소비자 안 셈(②)**: `liveJobNames`(대기 행 박동 → 리밸런싱 꼬리가 「다른 배치 도는 중」으로 건너뜀) · V63 `scope` NULL 뜻 · crons-done · `summary()` · `batchProgress.ts` · 대기 표지 사망 술어 · 23:00 만료 뒤 그날 사슬 미정.
+- **9 409 화면**: `JobAlreadyRunningException` 문구가 다른 JVM 보유 땐 거짓 · `job.running`은 JVM 안 집합 → 보유자를 싣는 새 문제 유형(`ApiProblemType` · `wire-contract.json` · `http.ts` · `AdminBatchApiTest`) · jobs 목록에 보유자.
+- **10 `dump-db.sh` 되돌리기가 잠금 행을 되살림**(`pg_restore -c` · 같은 DB 이름이라 `current_database()`로 못 거름) → 덤프에서 잠금 표 데이터 제외(표 수 대조도) 또는 복원이 비움.
+- **11 시험 하네스**: 포크 하나 · bootstrap 프로파일 컨텍스트 시험 0 · backtest flyway off · 관리자 API 시험은 launcher 모의 — 위험: 「rc를 시험으로」의 자식 JVM이 `DB_URL`·`BOOTSTRAP_DB` 없으면 운영에 붙음 → 글자로 박고 붙은 DB 단언 · 같은 시험 DB 두 JVM 상호 막힘(안 잼).
+- 작음: 박동 전용 커넥션이 상시면 ADR-0163 종료 대기(63.1초 > 60초) 되살아남 → 보유 중에만.
+- **순위**: 잠금은 오늘 일보다 뒤 — 60일 크론×손 겹침의 마지막은 09-15 · 그 뒤 22일 0 · 손 FR·관문은 앱 내린 채 · 시계 고침과 1부(136,638칸)는 지금 값이 틀어진 축 = 「더 크게 틀어진 축」 · 「무해한 선행」은 글자대로 안 섬(잘못 쥔 잠금은 그날 사슬을 23:00까지 세움) → 켜기 전 사본 드라이런(수면·깨어남 · kill -9 · TTL) · 순서 0부 → 시계 → 1부 → 손 FR 둘 → 잠금(V65) → 2부 (나)(V66) · 2부 목표 ≤10-26 안.
+- **선다**: `ProcessHandle` 남의 프로세스 시작 시각·사용자 읽힘(앱 pid 15406) · 웹 경계(컨트롤러 12 · 쓰기 엔드포인트 13 · 파이프라인 표는 둘 · PUT은 화면 없음 · API로 42회) · `@Scheduled` 7 · Spring Batch·`@Async` 0 · 앱 자동 재기동 없음.
+
+# 쓰기 잠금 계획 v2 (2026-10-07 새벽 · v1 두 렌즈 반영 · 전문(v1을 갈음))
+## 내 판정(위임 범위)
+- **순서를 고친다**: C1의 「먼저」를 걷는다 — 두 렌즈가 같은 방향(계획 안 F3 · 계획 밖 1·순위)이고 근거가 실측(겹침 22일 0 · 손 FR·관문은 앱 내린 채 · 시계·1부는 지금 값이 틀린 축)이다. **순서 = 0부 → 시계 고침 → 1부 → 손 FR 둘(첫째 · 10-10 리밸런싱 뒤 둘째) → 잠금(V65) → 2부 (나)(V66~)** · main 병합은 1부 병합 뒤(V64 < V65) · 그동안 progress:93의 손 쓰기 문(「다음 명목 발화 전에 끝낸다」)이 지금 규칙이다.
+- **강제는 DB 쪽에서 성질로(계획 밖 6)**: 손 목록(v1 항목 9)은 빠뜨린 진입점을 못 잡는다 — 파이프라인 표의 쓰기를 DB 트리거가 「지금 보유자가 쓴다」로 검사하면 psql · 옛 jar · 빠뜨린 진입점이 시끄럽게 실패하고 목록이 스스로 검사된다([[assert-the-property-not-a-hand-list]]).
+## 결정
+1. **잠금 표**(V65): 행 하나(DB당) · 보유자 = (종류: 웹 JVM · bootRun · 손 세션, 호스트, pid, 시작 시각(초 절사 — 셸 `ps -o lstart`와 Java `ProcessHandle` 둘 다 초로 비교 · F6), 세션 id, 토큰, 획득 시각) · 대기 표지 = (대기자 pid · 시작 시각 · 시각) · 박동 시각 · 덤프에서 데이터 제외(`dump-db.sh` `--exclude-table-data` + 표 수 대조 고침 · 계획 밖 10 · 복원 뒤 행 없음 = 비보유).
+2. **획득·빼앗기·표지는 단일 UPDATE CAS**(F6): 관측한 (pid, 시작 시각, 토큰)을 WHERE 조건으로 · 빼앗기 술어 = 같은 호스트에서 보유자 프로세스 부재 또는 시작 시각 불일치(Java가 판정한 뒤 그 관측값을 조건으로 CAS) · 다른 호스트 보유는 빼앗지 않고 알림 · TTL은 아래 bootRun이 없는 손 세션에만 · 대기 표지 주인의 사망도 같은 술어로 걷음 · 시험: 두 bootRun 동시 획득 · 표지와 bootRun 경합 · 수면 재생(박동 낡음 + 프로세스 생존 → 안 빼앗음).
+3. **DB 강제(트리거)**: 파이프라인 표 = **사용자 자료 표 허용목록(`allowed_email` · `app_user` · `screen*` · `condition_group` · `watchlist_item` · `interaction_log` — 각 사유 한 줄) 밖의 모든 표**(새 표는 기본 보호) · 문장 단위 트리거가 `current_setting('application_name')`의 쓰기 신원(`ss:jvm:<pid>:<시작초>` 또는 `ss:session:<id>`)이 지금 보유자와 같은지 검사 · 다르면 예외(쓰기 실패) · **켜기는 DB 설정 `app.write_guard=on`이 있을 때만**(`ALTER DATABASE` — `pg_dump -Fc`가 안 옮겨 사본·시험 DB는 꺼진 채 · 사본 드라이런은 손으로 켬 · 운영 켜기는 배포 단계에서 사용자 승인) · JVM은 Hikari `ApplicationName`을 자기 신원으로 · `ops/write-session.sh`는 `PGAPPNAME`을 세션 신원으로 내보냄 · 트리거 비용은 사본 백필에서 잰다(잴 때까지 「재보지 않았다」).
+4. **JVM 안 배타**(F2 · A1): 바깥 호출 토큰 레지스트리(사슬 예약 · 토요일 크론 · bootRun · 관리자 launch · 원장 판정 `PUT` · 기동 구간) — 한 JVM이 DB 행을 쥔 동안 안쪽 토큰끼리 배타 · 박동이 「내 신원 행인데 레지스트리에 산 토큰이 없다」를 해제(해제 실패 누수) · 시험: 관리자 잡 `finally` DB 예외 → 다음 박동 뒤 사슬 획득.
+5. **획득 지점(F1 · 계획 밖 2)**: 전용 빈 `WriteLockGate` + `BeanFactoryPostProcessor`로 `flywayInitializer`·`entityManagerFactory`가 dependsOn — `spring.flyway.enabled`와 무관 · 기동 구간(Flyway · 시더 · 스위퍼)은 「기동 토큰」으로 쥐고 기동 끝에 반납(웹 JVM) 또는 잡 끝까지 유지(bootRun) · **표 부재 갈래**: 잠금 표가 없고 `flyway_schema_history` 최대 < 65이면 진행 + WARN(V65를 적용하는 그 한 번 · V65 전 사본) · 표가 있는데 읽기 실패면 거절 · 잠금 표 스키마 변경은 칸 추가만(획득 SQL은 V65 칸만 씀) · **웹 기동이 거절되면**: `start.sh`가 기동 전에 보유자를 물어 「(종류 · pid · 시작) 보유 중 — 끝난 뒤 다시」로 rc ≠ 0(앱은 원래 꺼져 있었으므로 상태 불변) · 틈에 낀 경합은 JVM이 같은 문구로 `System.exit(1)` → `start.sh`가 로그의 그 문구를 찍음(60초 무응답으로 끝나지 않게) · `deploy.sh`는 stop 전에 같은 물음 · **시험 프로파일**: 거절은 예외(exit 금지) · 시험은 트리거 꺼짐(3).
+6. **쓰기 크론 여섯만**(F4): 15:30 `checkJobFreshness`는 읽기 전용 — 잠금 안 쥠 · 시험이 「`@Scheduled` 중 쓰기 크론 집합 = 6」을 성질(그 메서드가 recorder를 부르는가)로 단언.
+7. **사슬 예약(F9 · 계획 밖 7)**: 13:30 크론이 오후 예약을 쥐고 14:20 크론이 끝날 때 반납(2부의 한 메서드 사슬이 오면 그 메서드 경계와 같아짐) · 토요일 20:00은 자기 토큰 · 예약을 못 쥐면 대기 — 대기 표지를 남기고 그동안 세션 밖 새 획득을 거절 · 첫 대기에 알림 · **대기는 실행 행으로 적지 않는다**(계획 밖 8 — `liveJobNames`·V63 NULL 뜻·신선도 MUST NOT과 충돌) → 표지 + 알림 + 로그 · 23:00 만료면 그날 사슬을 미룸으로 끝내고 알림 · 다음 평일 사슬이 메우는지는 드라이런으로 잰다(ADR-0042 시세 창 · 무거운 잡 연체 보정).
+8. **읽기 전용 bootRun(F5 · 계획 밖 4)**: 시더를 「값이 다를 때만 쓴다」로 고친다(뿌리) → 두 번째 기동의 시더 쓰기 0행을 시험으로 · review·calendar-review 등 쓰기 0인 잡은 잠금을 안 쥐고 트리거가 그것을 증명(쓰면 실패) · judge는 원장을 쓰므로 대상 — 적재 중 판정은 거절된다(ADR-0084·`READ_ONLY_JOBS`의 「적재 중 판정」 문장을 고친다 · 적재가 읽는 원장을 판정이 바꾸는 것은 원래 정합성 위험).
+9. **손 세션**: `ops/write-session.sh begin|end` · 세션 안 bootRun은 `--write-session=<id>`로만 합류(`KNOWN_OPTIONS`에 등록) · 하나씩 · `ops/apply-window/env.sh boot()`와 다섯 스크립트는 세션 안에서만 돈다(세션 없으면 거절) · psql 쓰기 스크립트는 `PGAPPNAME` 세션 신원.
+10. **실행 행 소유(F7 · 계획 밖 5)**: V65에 `batch_execution`의 보유 신원 칸(pid · 시작초 · 토큰) · 스위퍼는 「신원 프로세스 사망」으로만 RUNNING을 닫음(GAP_FILL 꼬리 포함 — `WEB_OWNED_GAP_FILL_JOBS` 예외를 걷음) · `crons-done.sh`가 그 칸으로 앱 행만 셈(유령 해소) · 옛 행(NULL)은 지금 규칙.
+11. **`stop.sh`**: 앱 JVM 신원이 보유 중일 때만 멈춤(계획 밖 3) · bootRun·세션 보유 중 앱 내림은 무해.
+12. **화면 409**(계획 밖 9): 보유자를 싣는 새 문제 유형 · jobs 목록에 보유자 · 보유 중 버튼 비활성.
+13. **박동 커넥션은 보유 중에만**(ADR-0163 종료 대기).
+14. **소비자(구현 첫 단계 grep으로 다시 · F8)**: 전제 파일 21 · `start.sh`(14파일 참조) · `KNOWN_OPTIONS` · `.claude/hooks/warn-bootstrap-args.sh`·`warn-load-running.sh`·`lib/regression.sh` · `ops/apply-window/*` · `batch_execution` 소비자(새 칸) · ADR-0173 절차(세션으로) · progress:93 문 · ADR-0084·0091.
+## 드라이런(사본 · 트리거 켬 · 외부 닫힌 주소)
+- 두 bootRun 동시 · 앱 기동 중 bootRun · bootRun 보유 중 `start.sh` · 세션 안 bootRun 연쇄 + 사슬 대기 → 세션 끝 뒤 사슬 · `kill -9` 보유자 → 다음 획득 · 수면(`pmset` 없이 SIGSTOP으로 박동 정지 재현) → 안 빼앗음 · psql 무신원 쓰기 → 실패 · 옛 jar 쓰기 → 실패 · 트리거 비용(백필 한 판 전후 시간) · 23:00 만료 뒤 다음 평일 사슬이 메움 · 시험 rc 자식 JVM은 `DB_URL`·`BOOTSTRAP_DB`를 글자로 · 붙은 DB 단언.
