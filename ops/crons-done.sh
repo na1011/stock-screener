@@ -12,7 +12,9 @@
 # 판정 — 전부 참이면 0:
 #   1. 앱이 안 떠 있으면 빠질 발화가 없다(0).
 #   2. 크론마다 지금까지 지난 마지막 명목 시각 t에 대해: 이 JVM이 t 뒤에 떴다(그 발화는 이 JVM에 없다) — 또는 그 크론의
-#      끝 줄(「크론 발화를 마쳤다. 크론=<메서드>」 · PipelineScheduler의 finally)을 이 JVM이 t 뒤 시각으로 찍었다.
+#      끝 줄(「크론 발화를 마쳤다. 크론=<메서드>」 · PipelineScheduler의 finally)을 이 JVM이 t − 60초 뒤 시각으로 찍었다.
+#      60초를 빼는 것은 크론이 명목보다 조금 일찍 발화하기 때문이다(운영 기록 13:30·14:00 첫 잡 62건 중 21건이 명목 전 ·
+#      최대 −2.189초) — 할 일이 없어 바로 끝나는 크론은 끝 줄도 명목 전에 찍힌다. 같은 크론의 앞 발화는 하루 전이라 안 겹친다.
 #      끝 줄은 회전된 로그(stdout.log.N.gz)까지 찾는다.
 #   3. batch_execution에 RUNNING이 없다.
 # 지연 L(벽시계 경과 − JVM 가동 시간)은 참고로만 찍는다 — 크론마다의 밀림이 아니다.
@@ -98,10 +100,10 @@ for c in "${CRONS[@]}"; do
     continue
   fi
   end=$(zgrep -a -h " INFO $pid --- .*크론 발화를 마쳤다. 크론=${name}\$" "${logs[@]}" 2>/dev/null | cut -c1-19 | sort | tail -1 || true)
-  if [ -n "$end" ] && [ "$(date -j -f "%Y-%m-%dT%H:%M:%S" "$end" +%s)" -ge "$last_s" ]; then
+  if [ -n "$end" ] && [ "$(date -j -f "%Y-%m-%dT%H:%M:%S" "$end" +%s)" -ge "$((last_s - 60))" ]; then
     continue
   fi
-  echo "[crons] ${name}: 명목 ${last} 발화의 끝 줄이 아직 없다(이 JVM의 마지막 끝 줄: ${end:-없음})."
+  echo "[crons] ${name}: 명목 ${last} 발화의 끝 줄이 아직 없다 — 밀렸거나 도는 중이다(이 JVM의 마지막 끝 줄: ${end:-없음})."
   pending=$((pending + 1))
 done
 if [ "$pending" -gt 0 ]; then
