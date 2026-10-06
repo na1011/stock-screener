@@ -29,8 +29,25 @@ if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
   warn_running_batches "deploy"
 fi
 
+# 앱을 내려도 그날 크론이 안 빠지는가를 빌드(분 단위) 전에 먼저 묻는다 — 정본은 stop.sh 쪽 판정이다(kill 직전에 다시 묻는다).
+FORCE="${1:-}"
+[[ -z "$FORCE" || "$FORCE" == "--force" ]] || { echo "용법: ops/deploy.sh [--force]" >&2; exit 2; }
+if [[ "$FORCE" != "--force" ]] && running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null && ! "$HERE/crons-done.sh"; then
+  echo "[deploy] 그날 크론이 아직 남았다 — 배포하지 않는다. 사람이 판정을 넘기려면 ops/deploy.sh --force" >&2
+  exit 1
+fi
+
+# jar가 나온 커밋을 빌드 전후로 잡는다 — 빌드(약 1분) 사이에 공유 작업 트리로 커밋이 들어오면 「스테이징 순간의 HEAD」는
+# 다른 코드를 가리킨다. 둘이 같고 빌드 입력에 커밋 안 된 것이 없을 때만 stage.sh가 커밋을 적는다.
+build_state() {
+  echo "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)|$(git -C "$ROOT" status --porcelain -- src frontend gradle build.gradle settings.gradle gradlew 2>/dev/null | md5)"
+}
+BUILD_STATE_BEFORE="$(build_state)"
+
 echo "== 빌드 =="
 ./gradlew clean build
+BUILD_STATE_AFTER="$(build_state)"
+export BUILD_STATE_BEFORE BUILD_STATE_AFTER
 
 echo "== 스테이징 =="
 "$HERE/stage.sh"
@@ -39,7 +56,7 @@ echo "== 앱 재기동 =="
 # 돌고 있지 않아도 실패로 다루지 않는다. 배포는 "지금 도는 것을 새것으로 바꾼다"이고,
 # 꺼져 있었으면 새것으로 켜는 것이 같은 의도다.
 if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
-  "$HERE/stop.sh" --app
+  "$HERE/stop.sh" --app $FORCE
 fi
 "$HERE/start.sh" --app
 

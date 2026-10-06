@@ -61,15 +61,29 @@ cp "$JAR" "$DEPLOY/app.jar.tmp"
 mv "$DEPLOY/app.jar.tmp" "$DEPLOY/app.jar"
 
 # 이 jar가 어느 커밋에서 나왔는지 남긴다 — 손 쓰기 절차가 「지금 도는 코드」에 뜬 worktree에서 bootRun을 돌릴 때
-# 읽는다(ADR-0173 첫 손 FR 0단계). main 작업 트리는 배포 뒤에도 움직이므로 「HEAD = 배포 커밋」은 금방 거짓이 된다.
-# 커밋 안 된 코드가 있으면 커밋으로 가리킬 수 없어 그 사실을 함께 적는다(읽는 쪽이 멈춘다).
-# 못 적어도 배포는 막지 않는다 — 대신 조용히 넘기지 않고 알리고, 읽는 쪽이 멈추게 unknown을 남긴다.
-if commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)" && dirty="$(git -C "$ROOT" status --porcelain -- src build.gradle settings.gradle 2>/dev/null)"; then
-  { echo "commit=$commit"; echo "dirty=$([[ -n "$dirty" ]] && echo true || echo false)"; echo "staged_at=$(date '+%F %T')"; } \
-    >"$DEPLOY/app.jar.commit"
+# 읽는다(ADR-0173 손 FR 0단계). main 작업 트리는 배포 뒤에도 움직이므로 「HEAD = 배포 커밋」은 금방 거짓이 된다.
+# deploy.sh가 빌드 전후 상태(HEAD|빌드 입력의 미커밋 목록 해시)를 넘기면 그것으로 적는다 — 둘이 다르면 빌드 중에 트리가
+# 움직인 것이라 커밋으로 가리킬 수 없다. 혼자 돌면 지금 상태로 적고 그 사실(captured=stage)을 함께 남긴다.
+# 커밋으로 가리킬 수 없으면 unknown을 남겨 읽는 쪽이 멈추게 한다. 못 적어도 배포는 막지 않되 알린다.
+EMPTY_MD5="$(printf '' | md5)"
+if [[ -n "${BUILD_STATE_BEFORE:-}" ]]; then
+  if [[ "$BUILD_STATE_BEFORE" == "${BUILD_STATE_AFTER:-}" && -n "${BUILD_STATE_BEFORE%%|*}" ]]; then
+    commit="${BUILD_STATE_BEFORE%%|*}"
+    dirty=$([[ "${BUILD_STATE_BEFORE#*|}" == "$EMPTY_MD5" ]] && echo false || echo true)
+  else
+    echo "[stage] 빌드 중에 작업 트리가 움직였다 — 이 jar의 커밋을 가리킬 수 없어 unknown을 남긴다." >&2
+    commit=unknown; dirty=unknown
+  fi
+  captured=build
+elif commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)" \
+    && porcelain="$(git -C "$ROOT" status --porcelain -- src frontend gradle build.gradle settings.gradle gradlew 2>/dev/null)"; then
+  dirty=$([[ -n "$porcelain" ]] && echo true || echo false)
+  captured=stage
 else
-  echo "[stage] 배포 커밋을 못 읽었다 — $DEPLOY/app.jar.commit에 unknown을 남긴다(손 쓰기 절차가 멈춘다)." >&2
-  { echo "commit=unknown"; echo "dirty=unknown"; echo "staged_at=$(date '+%F %T')"; } >"$DEPLOY/app.jar.commit"
+  echo "[stage] 배포 커밋을 못 읽었다 — unknown을 남긴다(손 쓰기 절차가 멈춘다)." >&2
+  commit=unknown; dirty=unknown; captured=stage
 fi
+{ echo "commit=$commit"; echo "dirty=$dirty"; echo "captured=$captured"; echo "staged_at=$(date '+%F %T')"; } \
+  >"$DEPLOY/app.jar.commit"
 
 echo "[stage] $(basename "$JAR") → $DEPLOY/app.jar"

@@ -20,8 +20,10 @@ case "${1:-}" in
   --app)    WANT_TUNNEL=0 ;;
   --tunnel) WANT_APP=0 ;;
   "")       ;;
-  *)        echo "용법: ops/stop.sh [--app|--tunnel]" >&2; exit 2 ;;
+  *)        echo "용법: ops/stop.sh [--app|--tunnel] [--force]" >&2; exit 2 ;;
 esac
+FORCE="${2:-}"
+[[ -z "$FORCE" || "$FORCE" == "--force" ]] || { echo "용법: ops/stop.sh [--app|--tunnel] [--force]" >&2; exit 2; }
 
 # stop_one <이름> <pid_file> <명령줄 패턴> <종료 대기 초>
 stop_one() {
@@ -59,6 +61,13 @@ if [[ $WANT_APP -eq 1 ]]; then
   # 빌드 전이라 그 사이에 시작된 잡을 못 본다.
   if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
     warn_running_batches "stop"
+    # 그날 크론이 남았으면 내리지 않는다 — 새 JVM은 남은 발화를 다음 날로 잡아 그날 발화가 통째로 빠진다(크론은 기계가
+    # 잠든 만큼 늦게 돈다 · ops/crons-done.sh 머리). 위 경고와 달리 멈춘다: 경고는 읽혀야 발화하고, 빠진 발화는
+    # 아무 데도 안 뜬다. 사람이 판정을 넘기려면 --force(배포는 ops/deploy.sh --force가 그것을 넘긴다).
+    if [[ "$FORCE" != "--force" ]] && ! "$HERE/crons-done.sh"; then
+      echo "[stop] 그날 크론이 아직 남았다 — 앱을 내리지 않는다. 넘기려면 ops/stop.sh ${1:-} --force" >&2
+      exit 1
+    fi
   fi
   # 45초다. 앱은 종료 유예 상한 15초(application.yaml의 spring.lifecycle)를 다 쓴 뒤
   # 빈을 파괴하고, 그 안의 커넥션 풀 종료가 10초짜리 상한을 여러 개 가진다. 30초였을 때는
