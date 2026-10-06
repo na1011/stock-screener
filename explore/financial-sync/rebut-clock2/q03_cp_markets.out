@@ -1,0 +1,22 @@
+ market_code | count 
+-------------+-------
+ US          |     2
+(1개 행)
+
+ market_code | ticker |                     name                      
+-------------+--------+-----------------------------------------------
+ US          | ARCC   | Ares Capital Corporation Common Stock
+ US          | CBC    | Central Bancompany, Inc. Class A Common Stock
+(2개 행)
+
+ id  | triggered_by |          started_at           | target_count | success_count | failure_count | written_row_count | status  
+-----+--------------+-------------------------------+--------------+---------------+---------------+-------------------+---------
+ 332 | MANUAL       | 2026-09-08 10:37:14.565111+09 |            4 |             4 |             0 |                 1 | SUCCESS
+ 361 | MANUAL       | 2026-09-10 00:49:36.536643+09 |          109 |           109 |             0 |               109 | SUCCESS
+ 383 | MANUAL       | 2026-09-12 20:14:09.880919+09 |            3 |             3 |             0 |                 0 | SUCCESS
+ 607 | MANUAL       | 2026-09-18 23:24:34.129462+09 |            3 |             3 |             0 |                 0 | SUCCESS
+ 610 | SCHEDULER    | 2026-09-19 20:00:19.186277+09 |            4 |             4 |             0 |                 0 | SUCCESS
+ 682 | SCHEDULER    | 2026-09-26 20:00:32.298094+09 |            3 |             3 |             0 |                 0 | SUCCESS
+ 709 | MANUAL       | 2026-10-03 21:14:39.310379+09 |            3 |             3 |             0 |                 1 | SUCCESS
+(7개 행)
+

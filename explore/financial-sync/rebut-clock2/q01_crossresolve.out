@@ -1,0 +1,60 @@
+       job_name        |  failed_phase   | market_code | resolved | count 
+-----------------------+-----------------+-------------+----------+-------
+ company-profile       | SECURITY_MASTER | KOSDAQ      | t        |    23
+ company-profile       | SECURITY_MASTER | KOSPI       | t        |    29
+ financial-refill      | FINANCIAL       | US          | f        |    33
+ financial-refill      | FINANCIAL       | US          | t        |    22
+ full-statement-refill | FINANCIAL       | US          | t        |  2002
+ governance-load       | GOVERNANCE      | KOSDAQ      | t        |     1
+(6개 행)
+
+ execution_id | market_code | failure_kind | resolved | count 
+--------------+-------------+--------------+----------+-------
+          410 | US          | NOT_FOUND    | t        |  1000
+          415 | US          | NOT_FOUND    | t        |  1000
+(2개 행)
+
+ id  |       job_name        | triggered_by |     status      |          started_at           | target_count | success_count | failure_count 
+-----+-----------------------+--------------+-----------------+-------------------------------+--------------+---------------+---------------
+ 412 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 10:12:43.632837+09 |         1000 |          1000 |             0
+ 414 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 11:00:57.451785+09 |         1000 |          1000 |             0
+ 415 | full-statement-refill | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 11:15:16.074708+09 |         1350 |           350 |          1000
+ 421 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 13:41:13.828482+09 |           30 |            30 |             0
+ 425 | full-statement-refill | MANUAL       | SUCCESS         | 2026-09-14 14:00:42.475706+09 |            3 |             3 |             0
+ 426 | full-statement-refill | MANUAL       | SUCCESS         | 2026-09-14 14:03:38.817523+09 |            2 |             2 |             0
+ 431 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 18:48:05.316079+09 |         1000 |          1000 |             0
+ 432 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 19:01:05.855288+09 |          214 |           213 |             1
+ 436 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 19:18:31.079794+09 |         1000 |           999 |             1
+ 437 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 19:32:47.501925+09 |           12 |            12 |             0
+ 438 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 19:33:01.519753+09 |           12 |            12 |             0
+ 441 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 21:27:02.322312+09 |         1000 |          1000 |             0
+ 442 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 21:38:12.057392+09 |          214 |           213 |             1
+ 443 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 21:46:07.471846+09 |         1000 |          1000 |             0
+ 444 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 21:59:00.120688+09 |          214 |           213 |             1
+ 445 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 22:07:31.535469+09 |         1000 |           999 |             1
+ 446 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 22:20:37.361163+09 |          214 |           213 |             1
+ 447 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 22:27:56.317188+09 |         1000 |          1000 |             0
+ 448 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 22:40:37.055006+09 |          214 |           213 |             1
+ 449 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 22:47:27.143613+09 |         1000 |          1000 |             0
+ 450 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 23:00:18.119616+09 |          214 |           213 |             1
+ 451 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 23:11:46.737199+09 |         1000 |          1000 |             0
+ 452 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 23:24:37.176226+09 |          214 |           213 |             1
+ 453 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-14 23:35:23.899426+09 |         1000 |          1000 |             0
+ 454 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-14 23:48:19.61453+09  |          214 |           213 |             1
+ 457 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 00:29:32.447925+09 |           14 |            14 |             0
+ 458 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 00:46:41.950102+09 |           14 |            14 |             0
+ 459 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 00:47:49.986077+09 |         1000 |          1000 |             0
+ 460 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-15 01:00:24.534037+09 |          213 |           212 |             1
+ 463 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 01:54:52.795903+09 |            6 |             6 |             0
+ 464 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 01:56:01.697034+09 |         1000 |          1000 |             0
+ 465 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-15 02:08:26.524865+09 |          213 |           211 |             2
+ 468 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 04:01:59.00576+09  |           62 |            62 |             0
+ 469 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 04:04:42.300454+09 |         1000 |          1000 |             0
+ 470 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-15 04:17:27.682523+09 |          213 |           212 |             1
+ 472 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 04:26:58.747426+09 |            8 |             8 |             0
+ 473 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 04:30:06.421099+09 |         1000 |          1000 |             0
+ 474 | financial-refill      | MANUAL       | PARTIAL_SUCCESS | 2026-09-15 04:42:17.663331+09 |          213 |           212 |             1
+ 475 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 05:09:56.257381+09 |            8 |             8 |             0
+ 476 | financial-refill      | MANUAL       | SUCCESS         | 2026-09-15 05:12:12.835021+09 |         1000 |          1000 |             0
+(40개 행)
+

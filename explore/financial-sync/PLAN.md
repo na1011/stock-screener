@@ -1399,3 +1399,27 @@ v4에 더해: **실패 계약** = 보충 실패(처음 · 판 다시 읽기 둘 
 4. **예약·임대 주인 = `pipeline.scheduler.enabled=true` ∧ 주 DB = `stock_screener`**(사본 사슬 드라이런은 연습 장부).
 5. 소비자 하나 더: `WatchlistAlertRunnerTest:29`.
 6. **v16 결정 1의 잠금은 progress의 열린 결함 「JVM을 건너는 쓰기 배타가 없다」와 같은 설계다 — 앞서 깨진 잠금 설계(`explore/s-vintage/BACKFILL-CAP-PLAN.md` 「계획 v7 반증 판정」 v7-4)의 요구 조건 여섯을 수용 조건으로 싣는다**: ① 잠금을 스위퍼 앞에서 쥐고(BootstrapRunner가 다른 JVM의 MANUAL RUNNING 행을 닫기 전) 살아 있는 잠금을 스위퍼의 생존 신호로 쓴다 ② 잠금 단위는 바깥 호출 경로 · JVM 보유 수 0→1일 때만 DB에서 쥔다(재진입이 자기 자신을 기다리지 않게) ③ 대기가 풀 1 스케줄러를 굶기지 않는다(실측 최장 손 실행 6:51:56 #520) — **bootRun·관리자는 사슬이 쥐고 있으면 기다리지 않고 거절**, 사슬만 기다린다(첫 대기에 알림 · 대기를 실행 행으로 · 상한 23:00) ④ 대기/거절을 트리거로 가르지 않는다(GAP_FILL은 CLI 리밸런싱 꼬리에서도 남) · 관리 화면 거절은 응답으로 보인다 ⑤ 대상은 목록이 아니라 성질 — **운영 DB에 쓰는 모든 JVM 실행(사슬 · 모든 bootRun · 모든 관리자 잡)이 쥔다**(직접 의존 목록은 여섯 중 둘만 잡았다) ⑥ 잠금은 advisory가 아니라 표 행 + 하트비트(Hikari가 반납 때 advisory lock을 안 되돌리는 누수 회피) — 하트비트가 끊긴 행은 TTL로 풀린다.
+
+## 무거운 잡 시계 고침 v2 반증 판정(2026-10-07 새벽 · 「다시 짠다」 · `rebut-clock2/`(findings · q01~q04) · 0콜 · 운영 SELECT만 · 쓴 DB 없음)
+- **선다(쟀다)**: 재시도는 NARROW라 0부 시계를 안 밂 · 소진 신호 정의 섬(리미터 소진 지점 DART 5 — `DartCorpCodeCache:106`은 검사 없이 acquire · data-go-kr 4 · 미국 11 · DART `020` · data-go-kr `22` · 어댑터 catch는 NOT_FOUND 외 다시 던짐) · 1부 판 범위 안 건드림(SEC 한도 0) · 폴백으로 시작 못 하는 잡은 FSR 하나(FR 12,600 · G 8,050 · CA 700) · 마감 10-19 G · 10-20 FSR.
+- **1 [가장 중요] 결정 3 폴백이 FSR 국내를 영원히 시작 못 하게 한다**: 종목당 최대 콜 9연도 × 4기간 × 2(CFS 빈 → OFS) = 72 → 350 × 72 = 25,200 > 18,000(실제 15,844) · 시장별 콜 수는 V65 뒤에야 쌓여 첫 정기 FSR(10-20) 국내가 매 평일 「미룸(예산)」 · 미룸 상한 없음 · 「정체가 원리적으로 없다」도 거짓(필요량 > 직전 콜 수면 한도 지점 미룸 → 이어받기 없음).
+- **2 결정 4 재시도 목록을 다른 잡이 지운다(폴백 근거의 이식)**: `resolved`는 (종목, 단계) 단위 · FSR #410·#415의 US NOT_FOUND 2,000행이 전부 resolved=t(FR 성공이 닫음) · 14:15 G-load GOVERNANCE 실패를 14:18 `GovernanceDeriveJob`(외부 콜 없음)이 닫음 → G 재시도·경보 원리적으로 0 → 재시도 대상은 같은 잡의 성공으로만 닫히는 (잡, 종목).
+- **3 결정 1 「대상 > 0」이 CP 국내를 영원히 미완료로**(CP 기본 대상 = 업종 빈 편입 · 지금 US 2 · 국내 0 · 대상 0이 정상 · 상시 붉음 — `JobFreshnessPolicy` MUST NOT) · G는 소스 없는 시장을 빈 표 집합으로 성공 처리(`GovernanceLoadJob:162-171·214-226`) → 공허한 성공 못 막음 → 완료를 잡마다 「시작 때 그 시장 소스가 있었나 ∧ …」.
+- **4 시계 → 스케줄러 배선이 비었다**(`heavyJobDueToday`·`isOverdue`는 잡 이름 하나 · `runHeavy`에 시장 인자 없음 · 접는 규칙 미정 · 다시 돌면 완료된 시장도 다시 · universe를 주면 p0 `scopeOf` NARROW · CA·CP는 연체 보정 대상 아님 · 「시장」 단위 미정(코드 KOSPI·KOSDAQ·US / 계획 국내·미국 / 결정 2 소스)).
+- **5 결정 2가 「성공 + 실패 = 대상」 불변식을 깬다**(국내 전량 미룸 실행이 SUCCESS · rc 0) · 소비자 `ops/apply-window/env.sh:37` · `BatchDetailSheet.vue:177` · `lib/batchProgress.ts:20` · `BatchExecutionContext:516` · PARTIAL 알림 소멸.
+- **6 (작음)** FSR 대상 선정 결함은 p0 `96493885` `withFullStatementSource`가 이미 고침(내가 기반을 안 읽음) · 같은 경로에서 소스 빈 없으면 `start(…,0).finish()` SUCCESS FULL. **7 (작음)** 표 전 이력 이월이 시장을 섞음((FR, 국내) 시계가 #710 미국 1종목 · #683 미국 1,000에서 옴).
+- **B1 [순위] 2부와 같은 결정을 다른 규칙으로 짓는다**(2부 v6 결정 8 리미터 모형 · 이력은 SCHEDULER∧FULL 3회 뒤 · 38일 강제일 · v9 결정 3 단계 우선 · v9 계획 안 4 (잡, 시장) 신선도 · `financial_sync_run(heavy_job, heavy_deferred_reason)` · 2부 (나)도 V65) → 한 규칙 · 한 번호. **B2** 소비자 미계수(`Staleness` · `StaleJobResponse` · `BatchSummaryResponse` · `AdminBatchController` · `JobFreshnessAlerter` · `PipelineScheduler` · 프런트 `types.ts`·`AdminOverviewView.vue`·`wire-contract.json` · `JobFreshnessPolicyTest` · `PipelineSchedulerChainTest` · ADR-0173 시계 SQL). **B3** 재시도는 새로 지어야 함(`startRetry`가 ADMIN 고정 · 몸통은 PRICE 전용 `retryFailures` · 1부 보충 실패는 `batch_execution_failure`에 없음 · UNREADABLE은 영구 경보 · 예산 순서 미정). **B4** v2는 V65가 필요해 1부 V64가 10-16 전에 배포돼야 10-19에 닿는데 그 의존이 없음 · **더 무해한 선행(재지 않음): 마이그레이션 없이, 마감 때 「잡의 시장 중 하나라도 미완료면 그 실행의 `scope`를 NARROW로」(V63 칸) — 시계가 안 가고 status 뜻도 그대로 · 시장 표는 2부 (나)와 한 번호**. **B5 (작음 · 기제)** CA 국내 분사 값 매김이 data-go-kr도 부름(한 종목 두 소스).
+
+# 무거운 잡 시계 고침 계획 v3 (2026-10-07 새벽 · v2 「다시 짠다」 반영 · main · 0부 위에 · 마이그레이션 없음 · 마감 10-19 첫 정기 G 전)
+## 결정
+1. **시장이 미완료인 무거운 잡 실행은 범위를 NARROW로 적는다**(B4 — 0부의 `scope` 칸 재사용 · 0부 `lastSuccessAt`이 두 갈래에서 NARROW를 안 셈 → 시계가 안 감 → 다음 평일 연체 보정이 그 잡을 다시 고름 · `status`·성공·실패 수·rc·알림 등급은 그대로): 대상 잡 = FR · FSR · G(연체 보정이 고르는 셋 · CA·CP는 연체 보정 대상이 아니라 범위 밖 — 4) · **「시장 미완료」 = 그 잡이 다루는 시장 m(코드 단위 KOSPI·KOSDAQ·US — `CollectedMarkets`)마다: (가) 시작 때 m의 소스 빈이 없었다(G·FSR의 공허한 성공 · B3·6) 또는 (나) m의 대상 > 0 ∧ m의 성공 0 ∧ m의 실패 > 0(시장 통째 실패 · #410 꼴) 또는 (다) m의 실패 중 하나라도 소진 신호(리미터 소진 · DART `020` · data-go-kr `22` — `QuotaExhaustedException` 하위형)** · 미완료 시장과 사유를 note에 싣고 기존 알림 체계로 「(잡) (시장) 미완료 — 시계를 안 민다 · 다음 평일 다시」 · 소진 실패도 종목 실패로 기록한다(「성공 + 실패 = 대상」 불변식과 그 소비자 다섯을 안 건드린다 · 리미터 검사가 acquire 앞이라 남은 종목은 콜 0으로 빨리 실패).
+2. **잡이 다루는 시장 집합은 잡이 정한다**: FR = 세 시장 · FSR = 국내 둘(p0 `withFullStatementSource` 뒤) · G = 세 시장(소스 없는 시장은 (가)).
+3. **남는 틈(정당한 후순위 · 2부 (나)로 합친다)**: 부분 실패(성공 > 0)는 그 시장 완료로 세어 시계가 간다 — 재시도 · (잡, 시장) 표 · 사전 예산 · 강제일은 2부 (나)가 한 규칙 · 한 번호(V65)로 짓는다(B1 · 2부 v6 결정 8 · v9 결정 3 · v9 계획 안 4 · `financial_sync_run`) · v2의 그 셋은 걷는다 · 근거: 같은 결정을 두 규칙으로 지으면 둘이 어긋난다.
+4. **범위 밖(기록)**: CA(매 평일 14:00 · 연체 보정 아님 — 실패해도 다음 평일에 다시 돈다) · CP(토요일 꼬리 · 대상 0이 정상).
+## 소비자(구현 첫 단계 grep)
+- 0부 `JobFreshnessPolicy`(NARROW를 안 셈 — 의도) · 관리 화면이 범위를 보여 주는 자리 · ADR-0173 시계 SQL(손 FR 4의 시계 대조 — 정기 FR이 NARROW로 찍힐 수 있다는 것을 그 절차가 알아야 함) · `scopeOf`를 단언하는 0부 수용 시험(`everyScheduledCallIsFullScope` — 정기 실행이 NARROW로 끝날 수 있게 되므로 「시작 범위」와 「마감 범위」를 가른다).
+## 드라이런(대조 전 커밋 · 사본 · 외부 호스트 닫힌 주소/가짜 서버)
+- (가) DART만 죽고 SEC 정상인 FR → status PARTIAL(그대로) · scope NARROW · note에 「KOSPI·KOSDAQ 미완료(통째 실패)」 · 시계 불변(대조군 = 0부 코드 FULL · 시계 전진).
+- (나) DART 한도를 작게 둔 G → 소진 실패 · scope NARROW · 시계 불변.
+- (다) 소스 빈 없는 FSR → NARROW · 시계 불변(대조군 = 0부 SUCCESS FULL).
+- (라) 정상 FR(부분 실패 1종목) → FULL · 시계 전진(바뀌지 않는다).

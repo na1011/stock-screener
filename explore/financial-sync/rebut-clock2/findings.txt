@@ -1,0 +1,26 @@
+무거운 잡 시계 고침 계획 v2 — 반증(두 렌즈) · 판정: 다시 짠다(결정 3·4의 기제와 결정 1의 완료 술어 · 2부와의 규칙 단일화)
+근거 파일: notes1.txt · q01_crossresolve.* · q02_targets.* · q03_cp_markets.* · q04_legacy_clock.* · p0/ p1/ (브랜치 코드 사본, git archive)
+
+[계획 안]
+1 [가장 중요] 결정3 폴백이 FSR 국내를 영구히 안 시작시킨다: 종목당 최대 콜 = 9연도 x 4기간 x 2(CFS 빈 → OFS, DartFullStatementAdapter.fetchOne:247-258) = 72 → 350 x 72 = 25,200 > 리미터 18,000(키 20,000). 시장별 콜 수는 V65 뒤에야 쌓이므로 첫 정기 FSR(10-20) 국내 = 「미룸(예산)」 → 완료 없음 → 콜 수 기록 없음 → 매 평일 같은 판정(교착). 실제는 15,844(#647 8,832 + #648 7,012 note). 미룸 상한(2부의 38일 강제일)이 이 계획엔 없다. 또 직전 콜 수 ≤ 잔량으로 시작해도 필요량이 자라면(연도 넘김 · OFS 전용 종목 · 다른 JVM 사용) 한도 지점에서 미룸 → 다음 날 처음부터 → 같은 머리 반복: 「원리적으로 없다」는 거짓(이어받기 없음).
+2 결정4 재시도 목록을 남의 잡이 지운다: resolved는 (종목, 단계) 단위 · 잡 무관. 운영 실측 FSR #410·#415 미국 NOT_FOUND 2,000행 전부 resolved=t — FSR에 미국 소스가 없으니 FR(FINANCIAL 공유)이 닫았다. G-load 실패(GOVERNANCE)는 14:18 GovernanceDeriveJob(외부 콜 0 · 저장분 재유도)이 같은 날 닫는다(IndicatorReconciler.deriveInputs:78 → process → resolveIfPreviouslyFailed). → G는 재시도·N=3 경보가 원리적으로 0, FSR·FR은 서로의 성공(다른 범위)이 닫음. 결정1 「성공>0이면 완료」가 부분 장애(IP 차단 TRANSIENT 등)를 결정4에 맡기는데 그 결정4가 G에서 0 → G 국내 부분 장애가 시계 25일 전진 + 무경보.
+3 결정1 「대상>0」이 CP 국내를 영구 미완료로 만든다: CP 기본 대상 = 업종 빈 편입, 지금 US 2(ARCC·CBC) · 국내 0(q03) · SCHEDULER 09-19 4 · 09-26 3. 대상 0이 정상인 잡에 FSR 소스 빈 근거를 옮겼다(폴백 근거의 이식) → 12일 뒤 상시 붉음(JobFreshnessPolicy MUST NOT). 반대로 G는 소스 없는 시장을 대상에서 안 빼고 빈 표 집합으로 성공 처리(GovernanceLoadJob:162-171·214-226) → 「대상>0 ∧ 성공>0」 통과 → B3가 G에서 안 닫힌다(묶어서 판정).
+4 결정1의 시계 → 스케줄러 배선이 비어 있다: heavyJobDueToday·isOverdue는 잡 이름 하나의 daysSince · runHeavy는 시장 인자 없음 → (잡, 시장)을 잡 하나로 접는 규칙(min이어야 「다음 평일 그 시장을 다시 고른다」가 섬) 미정 · 다시 돌 때 완료된 시장도 다시 돈다 · 한 시장만 돌리려면 universe 인자 → p0 scopeOf가 NARROW. CA(14:00 매일)·CP(토 꼬리)는 연체 보정 밖. 「시장」 단위 미정: 코드는 KOSPI·KOSDAQ·US(CollectedMarkets.ALL) · 계획 문장은 국내/미국 · 결정2는 소스 단위.
+5 결정2가 batch_execution의 불변식 「성공+실패=대상」을 깬다(상태의 뜻 불변 주장과 충돌): 미룸은 어느 쪽에도 안 셈 → 국내 전량 미룸 실행이 SUCCESS(failure 0) · bootRun rc 0. 소비자: ops/apply-window/env.sh:37(성공+실패≠대상 die) · frontend BatchDetailSheet.vue:177 · lib/batchProgress.ts:20 · BatchExecutionContext:516 · PARTIAL 알림 사라짐(결정5가 대체하나 손 실행 rc는 대체 없음).
+6 (작음) FSR 대상 선정 결함(#410·#415)은 이미 p0 96493885(withFullStatementSource)가 고쳤다 — 「함께 고친다」는 기반을 안 읽은 문장. 그 p0 경로는 소스 빈이 없으면 start(…,0).finish() SUCCESS FULL → 다섯 잡의 조기 반환(대상 0) 갈래에서도 시장 행을 쓰는지 글자로.
+7 (작음) 표 전 이력 이월: (FR, 국내) 시계가 #710(10-03 · IOVA 1종목 · 미국)·#683(09-28 · 미국 1000)에서 온다(q04) — 시장 단위 표를 만들면서 전이 구간은 시장을 섞는다. p0가 받아들인 틈의 시장판이며 실패 행·note에 시장 증거가 일부 있다.
+
+[계획 밖]
+B1 [순위] 2부와 같은 결정을 다른 규칙으로 짓는다: 2부 v6 결정8(무거운 잡 필요량 = 리미터 모형 · 이력은 SCHEDULER∧FULL 3회 뒤 · 미룸 상한 = 마지막 성공 + 38일 강제일에 DART 우선권) · v9 결정3(단계 우선 · 강제일만 무거운 잡 우선) · v9 계획 안 4(「(잡, 시장) 신선도」를 이미 요구) · financial_sync_run(heavy_job, heavy_deferred_reason) · 2부 (나) = V65~(PLAN:1263·1314). 이 계획의 결정3(직전 완료 콜 수 · 최대 콜 폴백 · 상한 없음)과 V65가 둘 다 겹친다 → 한 규칙·한 번호로.
+B2 소비자 미집계(v1은 절이 있었고 v2는 없다): JobFreshnessPolicy.Staleness가 잡 단위 → StaleJobResponse · BatchSummaryResponse · AdminBatchController · JobFreshnessAlerter(dedupe) · PipelineScheduler · frontend api/types.ts · AdminOverviewView.vue · wire-contract.json · JobFreshnessPolicyTest · PipelineSchedulerChainTest · 1부 ADR-0173 관문 절차의 시계 SQL(p0 술어 사본 · 9f6d775e) · 위 5의 성공+실패 소비자.
+B3 결정4 구현 크기를 「재사용」으로 적었다: startRetry는 triggered_by='ADMIN' 고정(스케줄러 재시도가 ADMIN으로 찍힘) · 재시도 몸통은 DailyUpdateJob.retryFailures(PRICE 전용) 하나뿐 → FR(무효화 note·목록 · p1 보충) · FSR(allQuarters · 8년) · G(표·연수) · CP · CA마다 새 진입점 · 1부 보충 실패는 batch_execution_failure에 없음(sec_filing_supplement FAILED · 목록 실패는 note 문자열) · UNREADABLE은 p1이 다시 안 받으므로 N=3 경보가 영구로 운다(진짜 한계 제외 규칙 필요) · 재시도가 오늘 무거운 잡과 같은 DART 예산을 먹는 순서 미정.
+B4 일정: v14 순서는 고침이 1부 앞(마이그레이션 없음)이었는데 v2는 V65라 1부(V64) 배포가 10-16(금) 전에 끝나야 10-19 G에 닿는다 — 이 의존이 계획에 없다(outOfOrder false). 무해한 선행 후보(재보지 않았다): 마이그레이션 없이 결정2의 미룸 + 마감 때 「잡의 시장 중 하나라도 미완료면 그 실행 scope를 NARROW로 적는다」(V63 칸 · 시계 안 감 · 상태 뜻 그대로) → 시장 표는 2부 (나)와 한 번호로.
+B5 (작음·기제만) 한 종목 두 소스: CA 국내 분사 값 매김이 priceSource(data-go-kr 9,000/일)를 부른다(SpinOffValuer:126-137 · RATE_LIMITED는 다시 던짐) → 「그 소스의 남은 종목」 집합이 사전에 안 정해진다. 빈도 안 잼.
+
+[선다(쟀다)]
+- 0부 술어·startRetry NARROW → 결정4의 NARROW 재시도는 0부 시계를 안 민다(BatchExecutionRecorder.startRetry · JobFreshnessPolicy.lastSuccessAt).
+- 우리 리미터 소진 지점은 어댑터마다 hasDailyQuota 블록(DART 5 — DartCorpCodeCache:106은 검사 없이 acquire · data-go-kr 4 · 미국 11자리) · DART 020 → DartResponse:105 · data-go-kr 22 → DataGoKrResponse:93 — 소진 신호 정의 자체는 선다. 어댑터의 NOT_FOUND 외 catch는 다시 던진다(FSR:300 · G:147 · CA:516 · FR:153 · CP:116) → 소진 예외가 종목 안에서 삼켜지지 않는다.
+- p1 판 고정 범위(SecEdgarResponse 등 7파일)는 결정2가 안 건드린다(SEC 한도 0이라 소진 지점 없음) — 하위형 추가는 OUTSIDE_SCOPE DataSourceException 사유와 충돌 없음.
+- FR 국내 폴백 12,600(36/종목) · G 8,050 · CA 700 · CP 1/종목은 폴백으로도 18,000 안 — 교착은 FSR 하나.
+- 10-19 G · 10-20 FSR 첫 정기(p0 술어 · q04 시계 원천과 같음).
+- 계획이 status 뜻을 안 바꿔 v1 B1 소비자(IndicatorReconciler:96 · BootstrapRunner:415 FAILED 갈래)는 그대로다(단 5의 SUCCESS 확장은 별개).
