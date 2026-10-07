@@ -425,5 +425,26 @@ write_lock_held_by_other() {
   return 1
 }
 
+# write_lock_held_by_jvm <db> <pid> — 그 JVM(pid + 지금의 lstart 시작 초)이 잠금을 쥐고 있으면 목적을 찍고 0. 아니면(비었음 ·
+# 남의 것 · 표 없음 · 그 pid가 없음) 1. psql이 실패하면 2 — 호출자는 이것을 「안 쥠」으로 읽지 않는다.
+# 앱을 내리기 전에 묻는다(ops/stop.sh · ops/deploy.sh): 앱이 쥐었다는 것은 크론·관리자 잡·판정 PUT이 지금 쓰는 중이라는 뜻이다.
+write_lock_held_by_jvm() {
+  local db="$1" pid="$2" start psql row kind holder holder_start purpose
+  start="$(proc_start_epoch "$pid")" || return 1
+  psql="$(pg_bin psql)" || return 2
+  row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tAF'|' -c "
+      SELECT CASE WHEN to_regclass('public.write_lock') IS NULL THEN 'ABSENT' END" 2>/dev/null)" || return 2
+  [[ "$row" == "ABSENT" ]] && return 1
+  row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tAF'|' -c "
+      SELECT coalesce(holder_kind, ''), coalesce(holder_pid::text, ''), coalesce(holder_start::text, ''), coalesce(purpose, '')
+        FROM (SELECT 1) one LEFT JOIN write_lock l ON l.db_name = current_database()" 2>/dev/null)" || return 2
+  IFS='|' read -r kind holder holder_start purpose <<< "$row"
+  if [[ -n "$kind" && "$kind" != "SESSION" && "$holder" == "$pid" && "$holder_start" == "$start" ]]; then
+    echo "${kind} pid ${pid} 「${purpose}」"
+    return 0
+  fi
+  return 1
+}
+
 # 세션이 구성원 없이 버티는 시간(분). MUST: Java WriteLock.SESSION_TTL과 같다(WriteSessionScriptTest가 대조한다).
 WRITE_SESSION_TTL_MINUTES=60

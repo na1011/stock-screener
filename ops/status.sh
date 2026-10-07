@@ -44,6 +44,10 @@ else
   echo "판정 못 함 — pg_isready를 찾지 못했다"
 fi
 
+# 쓰기 잠금 보유자(ADR-0175). 표가 없으면(V66 전) 「표 없음」 · 못 물었으면 그렇다고 찍는다 — 「없음」과 갈라야 한다.
+echo -n "쓰기잠금: "
+write_lock_holder "${DB_NAME:-stock_screener}" || echo "판정하지 못했다(psql) — 없음으로 읽지 않는다"
+
 echo -n ":8080   : "
 lsof -nP -iTCP:8080 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $1" (PID "$2")"}' | paste -sd' ' - | grep . || echo "비어 있다"
 

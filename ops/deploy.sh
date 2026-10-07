@@ -54,7 +54,31 @@ crons_gate() {
   echo "         기다렸다 다시 친다. 사람이 판정을 넘기려면: ops/deploy.sh --force" >&2
   exit 1
 }
+# 쓰기 잠금(ADR-0175 · 잠금 결정 6·11). 둘을 가른다:
+#   - 남(bootRun · 손 세션 · 다른 JVM)이 쥐고 있으면 --force와 무관하게 멈춘다 — 새 앱은 기동 구간(Flyway·시더·스위퍼)을 잠금
+#     안에서 쓰므로 그 동안 못 뜬다(start.sh가 거절한다). 여기서 멈추지 않으면 옛 앱만 내리고 새 앱은 못 올려 사이트가 내려간 채다.
+#   - 앱 JVM 자신이 쥐고 있으면(크론·관리자 잡·판정 PUT이 쓰는 중) 크론 판정과 같이 --force가 넘긴다.
+lock_gate() {
+  local db="${DB_NAME:-stock_screener}" app_pid holder rc=0
+  app_pid="$(running_pid "$APP_PID_FILE" "$APP_PATTERN" || true)"
+  if holder="$(write_lock_held_by_other "$db" "$app_pid")"; then
+    echo "[deploy] 쓰기 잠금을 ${holder}이(가) 쥐고 있다 — 새 앱은 기동에서 잠금을 쥐므로 지금은 못 뜬다. 아무것도 바꾸지 않고 멈춘다." >&2
+    echo "         그것이 끝난 뒤 다시 친다(손 세션이면 ops/write-session.sh end <id> → 배포 → begin)." >&2
+    exit 1
+  fi
+  [[ "$FORCE" == "--force" || -z "$app_pid" ]] && return 0
+  holder="$(write_lock_held_by_jvm "$db" "$app_pid")" || rc=$?
+  if [[ $rc -eq 0 ]]; then
+    echo "[deploy] 앱 JVM이 쓰기 잠금을 쥐고 있다(${holder}) — 쓰는 중이라 아무것도 바꾸지 않고 멈춘다." >&2
+    echo "         끝난 뒤 다시 친다. 사람이 판정을 넘기려면: ops/deploy.sh --force" >&2
+    exit 1
+  elif [[ $rc -eq 2 ]]; then
+    echo "[deploy] 쓰기 잠금을 앱 JVM이 쥐었는지 판정하지 못했다(psql) — 아무것도 바꾸지 않고 멈춘다." >&2
+    exit 1
+  fi
+}
 crons_gate
+lock_gate
 
 # jar가 나온 커밋을 빌드 전후로 잡는다 — 빌드(약 1분) 사이에 공유 작업 트리로 커밋이 들어오면 「스테이징 순간의 HEAD」는
 # 다른 코드를 가리킨다. 둘이 같고 빌드 입력에 커밋 안 된 것이 없을 때만 stage.sh가 커밋을 적는다.
@@ -79,6 +103,19 @@ test_db_guard() {
   [[ "$versions" == "f" ]] && return 0   # 빈 시험 DB — 시험이 첫 실행에 마이그레이션을 적용한다
   if ! versions="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select version || '|' || success from flyway_schema_history where version is not null" 2>&1)"; then
     echo "[deploy] 시험 DB(${db})를 읽지 못했다 — 멈춘다: ${versions}" >&2
+    exit 1
+  fi
+  # 쓰기 가드 스위치가 남아 있는가(ADR-0175 · 잠금 결정 3). 시험은 가드를 자기 JVM 신원 범위(ss:j:<pid>:)로 켜고 끝에 지운다 —
+  # 죽은 시험이 남긴 행은 같은 pid를 다시 받은 시험 JVM의 보호 표 쓰기를 거절해, 빌드 시험이 코드 결함처럼 붉는다(범위가 NULL이면
+  # 그 DB의 모든 쓰기). 지울지는 사람이 본다 — 지금 도는 시험의 행일 수 있다.
+  local guards
+  if ! guards="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select case when to_regclass('public.guard_setting') is null then '' else (select coalesce(string_agg(db_name || ' ' || coalesce(identity_prefix, '(전부)'), ', '), '') from guard_setting) end" 2>&1)"; then
+    echo "[deploy] 시험 DB(${db})의 쓰기 가드 스위치를 읽지 못했다 — 멈춘다: ${guards}" >&2
+    exit 1
+  fi
+  if [[ -n "$guards" ]]; then
+    echo "[deploy] 시험 DB(${db})에 쓰기 가드 스위치 행이 남아 있다: ${guards} — 빌드 시험의 보호 표 쓰기가 SSWG1로 거절될 수 있다." >&2
+    echo "         그 pid의 시험이 지금 안 돌면 죽은 시험이 남긴 것이다 — 지운 뒤 다시 친다: psql -d ${db} -c 'DELETE FROM guard_setting'" >&2
     exit 1
   fi
   local failed=""
@@ -138,6 +175,19 @@ prod_migration_guard() {
       missing="${missing} V${v}"
     fi
   done <<< "$applied"
+  # 쓰기 가드가 켜진 운영에 잠금 기제가 없는 트리를 올리지 않는다(ADR-0175 · 잠금 결정 16). 그 jar는 신원도 잠금도 없이 쓰므로
+  # 기동 시더부터 SSWG1로 거절돼 앱이 내려간 채가 된다. 되돌리기는 운영 guard_setting 행을 먼저 지우는 것이다(사용자 승인 · 원시 SQL).
+  local guard_on lock_migration
+  if ! guard_on="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select case when to_regclass('public.guard_setting') is null then 'f' else (select (count(*) > 0)::text from guard_setting where db_name = current_database()) end" 2>&1)"; then
+    echo "[deploy] 운영 DB(${db})의 쓰기 가드 스위치를 읽지 못했다 — 멈춘다: ${guard_on}" >&2
+    exit 1
+  fi
+  lock_migration="$(grep -l 'write_guard_check()' "$ROOT"/src/main/resources/db/migration/V*__*.sql 2>/dev/null | head -1 || true)"
+  if [[ "$guard_on" == "true" && -z "$lock_migration" ]]; then
+    echo "[deploy] 운영 DB(${db})는 쓰기 가드가 켜져 있는데 이 트리에 잠금 마이그레이션(write_guard_check)이 없다 — 이 jar는 기동에서 거절돼 앱이 내려간 채가 된다. 아무것도 바꾸지 않았다." >&2
+    echo "         잠금 전 jar로 되돌리려면 먼저 운영 guard_setting 행을 지운다(사용자 승인 · ADR-0175 §결과 되돌리기)." >&2
+    exit 1
+  fi
   if [[ -n "$late" ]]; then
     echo "[deploy] 이 트리의 미적용 마이그레이션이 운영 최대(V${max_applied})보다 낮다:${late} — 운영은 out-of-order가 꺼져 있어 기동이 Flyway 검증에서 선다." >&2
     echo "         번호를 운영 최대보다 크게 다시 매긴 뒤(배포 직전 merge에서) 다시 친다. 아무것도 바꾸지 않았다." >&2
@@ -162,6 +212,7 @@ echo "== 앱 재기동 =="
 "$HERE/stage.sh" --check
 # 빌드 사이에 명목 시각이 지났을 수 있다 — 종료 직전에 다시 묻는다. 여기서 멈추면 아직 아무것도 안 바꿨다.
 crons_gate
+lock_gate
 # 돌고 있지 않아도 실패로 다루지 않는다. 배포는 "지금 도는 것을 새것으로 바꾼다"이고,
 # 꺼져 있었으면 새것으로 켜는 것이 같은 의도다. 판정은 위에서 했으므로 stop.sh에는 --force를 넘긴다.
 if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
