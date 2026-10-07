@@ -142,7 +142,9 @@ public class WriteLockGate implements InitializingBean {
 
     /**
      * 웹 JVM의 기동 토큰을 스위퍼 뒤에 반납한다. 스위퍼({@code BatchExecutionSweeper.sweepOnStartup})는 보호 표
-     * ({@code batch_execution})에 쓰므로 그보다 늦어야 한다 — 그래서 순서를 맨 뒤로 못 박는다.
+     * ({@code batch_execution})에 쓰므로 그보다 늦어야 한다 — 이쪽은 맨 뒤({@code LOWEST_PRECEDENCE}), 스위퍼는 맨 앞
+     * ({@code HIGHEST_PRECEDENCE})으로 못 박는다. 한쪽만 정하면 다른 쪽의 기본값(LOWEST)과 같아 클래스 경로 순서에 맡겨진다.
+     * {@code WriteLockStartupOrderTest}가 실제 컨텍스트에서 그 순서를 잰다.
      */
     @EventListener(ApplicationReadyEvent.class)
     @Order(Ordered.LOWEST_PRECEDENCE)

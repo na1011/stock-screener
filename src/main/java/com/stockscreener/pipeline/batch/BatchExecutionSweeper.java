@@ -84,6 +84,10 @@ public class BatchExecutionSweeper {
     /**
      * 웹 인스턴스가 기동하면 이전 웹 인스턴스가 남긴 실행을 닫는다.
      *
+     * <p>MUST: 맨 앞 순서다({@code HIGHEST_PRECEDENCE}) — 이 스윕은 보호 표({@code batch_execution})에 쓰므로 웹 JVM의 기동 잠금
+     * 토큰이 반납되기({@code WriteLockGate.releaseBootTokenWhenReady} · 맨 뒤) 전에 돌아야 한다(ADR-0175). 둘 다 순서를 안 정하면
+     * 같은 기본값이라 클래스 경로 순서에 맡겨진다.
+     *
      * <p>IMPORTANT — <b>부트스트랩 JVM은 이 경로를 타지 않는다.</b>
      * {@code SpringApplication.run()}은 {@code callRunners()}를 {@code ApplicationReadyEvent}
      * 발행보다 <b>먼저</b> 부르고, {@code BootstrapRunner}는 그 안에서 {@code System.exit()}로
@@ -91,6 +95,7 @@ public class BatchExecutionSweeper {
      * {@link #sweepBootstrapOrphans()}를 러너가 직접 부르는 것으로 한다.
      */
     @EventListener(ApplicationReadyEvent.class)
+    @org.springframework.core.annotation.Order(org.springframework.core.Ordered.HIGHEST_PRECEDENCE)
     public void sweepOnStartup() {
         sweep(WEB_OWNED, WEB_OWNED_GAP_FILL_JOBS, "웹 인스턴스");
     }
