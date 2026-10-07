@@ -463,6 +463,12 @@ class PipelineSchedulerChainTest {
         verify(attempt).failUnexpectedly("시작 실패", boom);
     }
 
+    /**
+     * 쓰기 잠금을 안 쥐는 크론과 그 사유. 15:30 신선도 점검은 읽기와 알림뿐이다(ADR-0175 — 쥐면 그 자체가 크론 사이 틈의 손 쓰기를
+     * 막는 쓰기 창이 된다).
+     */
+    private static final java.util.Set<String> READ_ONLY_CRONS = java.util.Set.of("checkJobFreshness");
+
     @Test
     @DisplayName("쓰기 잠금 때문에 건너뛴 날: 잡도 시도 행도 「마지막 정기 시도」 조회도 없다 — 건너뜀은 시도가 아니다(ADR-0175)")
     @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
@@ -478,19 +484,28 @@ class PipelineSchedulerChainTest {
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
                 universeIntegrityAlerter, batchExecutions, refusing);
 
-        blocked.runHeavyJobOfTheDay();
-        blocked.runDailyUpdate();
-        blocked.runCorporateActionChain();
-        blocked.deriveReconcileInputs();
-        blocked.reconcileIndicators();
-        blocked.runUniverseRebalance();
+        // 성질로 센다(잠금 결정 7) — 손으로 든 목록이면 새 쓰기 크론이 잠금 없이 붙어도 이 시험이 못 본다.
+        List<String> writeCrons = new java.util.ArrayList<>();
+        for (java.lang.reflect.Method method : PipelineScheduler.class.getDeclaredMethods()) {
+            if (method.isAnnotationPresent(org.springframework.scheduling.annotation.Scheduled.class)
+                    && !READ_ONLY_CRONS.contains(method.getName())) {
+                writeCrons.add(method.getName());
+            }
+        }
+        assertThat(writeCrons).as("쓰기 크론 — 15:30 점검 밖 전부").hasSize(6);
+        for (String cron : writeCrons) {
+            try {
+                PipelineScheduler.class.getMethod(cron).invoke(blocked);
+            } catch (ReflectiveOperationException e) {
+                throw new AssertionError(cron + "을 부르지 못했다", e);
+            }
+        }
 
         // 획득이 바깥 try 맨 앞이라 attemptBefore 조회보다 먼저 끝난다 — 건너뜀이 「시도」로 세어지지 않는다.
         verify(freshnessPolicy, never()).lastScheduledAttemptAt(anyString());
         verifyNoInteractions(batchExecutions, governanceLoadJob, dailyUpdateJob, corporateActionJob,
                 adjustmentRebuildJob, indicatorBackfillJob, universeRebalanceJob);
-        for (String cron : List.of("runHeavyJobOfTheDay", "runDailyUpdate", "runCorporateActionChain",
-                "deriveReconcileInputs", "reconcileIndicators", "runUniverseRebalance")) {
+        for (String cron : writeCrons) {
             verify(refusing).awaitForCron(cron);
             // 끝 줄은 건너뛴 날에도 찍힌다 — 없으면 ops/crons-done.sh가 그날을 「남은 발화」로 막아 배포·종료가 서지 않는다.
             assertThat(output.getAll()).as(cron + "의 끝 줄").contains("크론 발화를 마쳤다. 크론=" + cron);
