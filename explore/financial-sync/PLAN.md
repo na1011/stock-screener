@@ -1905,3 +1905,11 @@ v3 목록 + 세션 TTL 만료 · `end` 거절(산 합류 JVM) · V66 앞 덤프 
 - 고칠 것(구현 에이전트): 안 1(DART 디코드 = 선언 charset이 있으면 그것 · 없으면 `readTree(byte[])` · 시험 둘) · 안 2(000 ∧ list 비배열 = MALFORMED 표지 없음 · G noData 0행 시험 — 저장 원응답 180에서 000이면 list 있음 168/168 · 주인 실측) · **안 3(답함 = 신선 판 부재 ∧ 상장폐지 증거)**: 그 종목이 실행 시작 때 **현재 활성 편입이 아님**(창 편입 · 과거 편입 — CRNX·APGE 꼴) ∨ **최근 5거래일 봉 없음**일 때만 답함 · 아니면(현재 편입 · 봉 있음 = 신규 상장 등록 지연 꼴) 답 못 받음 — 판정은 잡이 그 재료를 넘겨 `MarketCompleteness`가 한다(어댑터는 지금처럼 표지만) · 안 4(`SecTickerCikCache.download` 상태 먼저) · 밖 1(즉시 재시도 사이 `Backoff` 2초·10초 · MockWebServer 시험) · 밖 3(main을 `hold/p2-clock`에 merge · `finally` 안 해소 규칙 · reload-gate·문서) · 밖 4(미완료 알림은 시작 FULL만).
 - 고칠 것(주인 · main): 밖 2 `04-refill.sh` 재시도 갈래(0콜 재현 뒤).
 - 드라이런(새 정의): DR1 · DR3 · DR4 · DR5 · DR6 채택 · **DR2는 하지 않는다** — 안 1 고침이 선언 charset과 BOM 자동 감지를 둘 다 덮어 실제 헤더가 무엇이든 같은 값이 되고, 하한 재료(앱 로그 3,998 · SEC 5,195)가 이미 있다 · 실키 콜이 답을 바꾸지 않는다.
+
+## 시계 고침 구현 2차(반증 고침) + 표적 드라이런 결과(2026-10-07 오전)
+- 구현: `fa29ef58`(main merge · `finally` 안 해소) · `96c22cf8`(DART 선언 charset·BOM · list 없는 000 → MALFORMED) · `db388fcd`(답함 = 상장폐지 증거 `RetirementEvidence` · 미완료 알림은 시작 FULL만) · `dcc9b244`(캐시 재시도 2초·10초 `RefetchWaits` · SEC 매핑 상태 먼저) · `56eb4f55`(ADR-0174) · 백엔드 1,915/0 · 프런트 439 · 판 범위 무변경(판 8 그대로) · 대조군: 옛 UTF-8 문자열 판독 → BOM·EUC-KR 시험만 붉음 · 대기 0 → 두 대기 시험만 붉음.
+- `RetirementEvidence` 질의 운영 시간(주인 · 읽기만): 현재 편입 1,350 대상 238ms · 상장폐지 증거 0.
+- **DR1(0콜)**: (a·b) DART 원응답 180 × content-type 세 꼴 — 트리 540/540 · list 504 · 013 36건 양쪽 「데이터 없음」 · 매퍼 값 칸 51,912 동치 · 대조(`ISO-8859-1` 선언) 180 전부 어긋남 · ≈5초 (c) `SecEdgarFactsSweepTest` p1(`f560f677`) vs p2 · FR1 109종목 · `cache-1006` — TSV 5,675줄 바이트 동일 · 보충 실제로 돎(받음 161 · 더한 팩트 45,255) · 대조(`REPLAY_SUPPLEMENT_DIR=off`) 157줄 차이 · p1 17초 · p2 12초 · 커밋 `d80e32de`(`DartReadReplayTest`).
+- **DR3(0콜)**: 판 8 추가 재수신 = 판 7 저장 행(OK 157 · NO_XBRL 4 = 161 · 기존 사본 `q4v_r20fr1`에 읽기 전용으로 붙음 · 새 DB 0) 전부 `targets()` 통과 · p2 다시 받음 163(공유 CIK PPL·PPLC · TAP·TAP.A가 쓰기를 버린 재생에서 두 번 — 운영은 161 추론 · 재보지 않음) · p1 대조 0 · ≈318콜 셈 · p2 14초 · p1 10초.
+- **DR6(읽기만 · 주인)**: `prod_migration_guard`를 운영 이력(최대 62)에 — 0부 트리(V63) · 1부 트리(V64) · 시계 트리(V65) 모두 rc 0.
+- 남은 것: **DR5**(작은 DB + 관리 화면 브라우저) · 그 뒤 FR2 뒤 배포.
