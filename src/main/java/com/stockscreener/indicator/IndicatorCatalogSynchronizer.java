@@ -1,5 +1,7 @@
 package com.stockscreener.indicator;
 
+import com.stockscreener.pipeline.lock.CatalogWriteGate;
+
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -7,7 +9,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * 등록된 계산기의 {@link IndicatorMeta}를 {@code indicator} 테이블로 투영한다.
@@ -17,6 +23,12 @@ import java.util.List;
  *
  * <p>사라진 지표는 <b>삭제하지 않고</b> {@code is_active=false}로 둔다. 저장된 커스텀 화면이
  * 그 지표를 참조하고 있을 수 있고, 삭제하면 사용자의 화면이 깨진다.
+ *
+ * <h2>같으면 문장을 안 낸다(ADR-0175)</h2>
+ * <p>먼저 읽어 경로마다 <b>그 경로가 갱신하는 칸만</b> 비교하고, 다른 행만 upsert한다 — 비활성화도 대상이 있을 때만이다.
+ * {@code indicator}는 보호 표이고 가드는 문장 단위라 <b>0행 문장도 거절된다</b>: 잠금을 안 쥐는 읽기 전용 bootRun이 기동만으로
+ * 149문장을 내면 가드가 켜진 운영에서 기동이 죽는다. 비교는 쓰는 값과 같은 정규화({@code emptyToNull})를 거치고, {@code bands}는
+ * jsonb 의미로 잰다(문자열은 키 순서가 바뀌어 영구 차이가 된다). 차이가 있으면 {@link CatalogWriteGate}가 쓸 JVM인지 묻는다.
  */
 @Component
 public class IndicatorCatalogSynchronizer {
@@ -26,17 +38,20 @@ public class IndicatorCatalogSynchronizer {
     private final List<SectorMetricSpec> sectorMetricSpecs;
     private final JdbcTemplate jdbcTemplate;
     private final IndicatorBandCodec bandCodec;
+    private final CatalogWriteGate writeGate;
 
     public IndicatorCatalogSynchronizer(IndicatorRegistry registry,
                                         List<PercentileSpec> percentileSpecs,
                                         List<SectorMetricSpec> sectorMetricSpecs,
                                         JdbcTemplate jdbcTemplate,
-                                        IndicatorBandCodec bandCodec) {
+                                        IndicatorBandCodec bandCodec,
+                                        CatalogWriteGate writeGate) {
         this.registry = registry;
         this.percentileSpecs = List.copyOf(percentileSpecs);
         this.sectorMetricSpecs = List.copyOf(sectorMetricSpecs);
         this.jdbcTemplate = jdbcTemplate;
         this.bandCodec = bandCodec;
+        this.writeGate = writeGate;
     }
 
     /**
@@ -47,6 +62,7 @@ public class IndicatorCatalogSynchronizer {
     @Transactional
     public int synchronize() {
         List<String> activeCodes = new ArrayList<>();
+        Plan plan = new Plan(loadExisting());
 
         for (IndicatorCalculator calculator : registry.executionOrder()) {
             IndicatorMeta meta = AnnotationUtils.findAnnotation(calculator.getClass(), IndicatorMeta.class);
@@ -55,7 +71,7 @@ public class IndicatorCatalogSynchronizer {
                         calculator.getClass().getName() + "에 @IndicatorMeta가 없다. "
                                 + "지표의 표시 정보는 계산 코드 옆에 두어야 빠뜨리지 않는다.");
             }
-            upsert(calculator.code(), meta);
+            upsert(plan, calculator.code(), meta);
             activeCodes.add(calculator.code());
         }
 
@@ -68,7 +84,7 @@ public class IndicatorCatalogSynchronizer {
                         "백분위의 원본 지표가 등록되어 있지 않다: " + spec.sourceCode()
                                 + " — 계산기가 사라졌거나 코드를 잘못 적었다.");
             }
-            upsertPercentile(spec);
+            upsertPercentile(plan, spec);
             activeCodes.add(spec.code());
         }
 
@@ -80,13 +96,22 @@ public class IndicatorCatalogSynchronizer {
                         "업종 상대값의 원본 지표가 등록되어 있지 않다: " + spec.sourceCode()
                                 + " — 계산기가 사라졌거나 코드를 잘못 적었다.");
             }
-            upsertSectorMetric(spec);
-            upsertSectorPeerCount(spec);
+            upsertSectorMetric(plan, spec);
+            upsertSectorPeerCount(plan, spec);
             activeCodes.add(spec.code());
             activeCodes.add(spec.peerCountCode());
         }
 
-        deactivateMissing(activeCodes);
+        List<String> deactivate = plan.activeCodesOutside(activeCodes);
+        if (!plan.changes.isEmpty() || !deactivate.isEmpty()) {
+            List<String> differences = new ArrayList<>(plan.changes);
+            deactivate.forEach(code -> differences.add(code + " 비활성"));
+            writeGate.requireWritable("지표", differences);
+            plan.writes.forEach(Runnable::run);
+            if (!deactivate.isEmpty()) {
+                deactivate(deactivate);
+            }
+        }
         // MUST: 중복을 걷어내고 센다. 한 원본 지표에 업종 선언이 둘이면 표본 수 코드를
         // 공유하므로(PER이 그렇다 — SectorMetricConfig의 MUST) 목록에 같은 코드가 두 번 들어간다.
         // deactivateMissing은 NOT IN이라 중복이 무해하지만, 그대로 세면 로그가 DB 행 수보다
@@ -132,7 +157,7 @@ public class IndicatorCatalogSynchronizer {
         return sourceMetaOf(sourceCode).sortOrder() * SORT_ORDER_SCALE;
     }
 
-    private void upsertSectorMetric(SectorMetricSpec spec) {
+    private void upsertSectorMetric(Plan plan, SectorMetricSpec spec) {
         IndicatorMeta source = sourceMetaOf(spec.sourceCode());
         // 소수 자릿수 · 유불리 방향 · 원본 링크 · 단위가 함께 갈린다.
         int scale = switch (spec.kind()) {
@@ -153,7 +178,7 @@ public class IndicatorCatalogSynchronizer {
         // 중앙값은 원본과 같은 단위다("배"). 백분위·배수는 무차원이라 단위가 없다.
         String unit = spec.kind() == SectorMetricSpec.Kind.MEDIAN ? source.unit() : null;
 
-        upsertDerived(spec.code(), spec.name(), spec.description(), spec.interpretation(),
+        upsertDerived(plan, spec.code(), spec.name(), spec.description(), spec.interpretation(),
                 source.category(), IndicatorValueType.RATIO, scale, higherIsBetter,
                 baseSortOrder(spec.sourceCode()) + switch (spec.kind()) {
                     case PERCENTILE -> OFFSET_SECTOR_PERCENTILE;
@@ -173,12 +198,12 @@ public class IndicatorCatalogSynchronizer {
      * 표가 시끄러워진다. 다만 카탈로그에 있으므로 사용자가 컬럼으로 켜거나 조건으로 걸 수 있고,
      * 그것이 "업종당 둘뿐인데 값은 나온다"를 스스로 확인할 수단이다.
      */
-    private void upsertSectorPeerCount(SectorMetricSpec spec) {
+    private void upsertSectorPeerCount(Plan plan, SectorMetricSpec spec) {
         // MUST: 이름을 spec이 아니라 **원본 지표**에서 짓는다. 한 원본에 Kind가 둘 이상이면
         // 이 행을 그들이 공유하는데, spec 이름을 쓰면 UPSERT가 뒤에 오는 선언으로 덮어써
         // 표시 이름이 리스트 순서에 따라 뒤집힌다(값은 같아서 아무 증상이 없다).
         String sourceName = sourceMetaOf(spec.sourceCode()).name();
-        upsertDerived(spec.peerCountCode(),
+        upsertDerived(plan, spec.peerCountCode(),
                 sourceName + " 업종 표본 수",
                 "이 종목의 " + sourceName + "을(를) 업종과 비교할 때 실제로 함께 센 같은 업종 종목 수. "
                         + "소분류 표본이 5 미만이면 중분류로 올라가며, 그 경우 이 수가 그 사실을 드러낸다.",
@@ -209,12 +234,27 @@ public class IndicatorCatalogSynchronizer {
      * 아니라 재무 지표다. {@code DO UPDATE SET}에 {@code category}가 함께 있어야 한다 —
      * 하나만 고치면 <b>이미 있는 행이 갱신되지 않아</b> 원본이 옮겨가도 파생만 제자리에 남는다.
      */
-    private void upsertDerived(String code, String name, String description, String interpretation,
+    private void upsertDerived(Plan plan, String code, String name, String description, String interpretation,
                                IndicatorCategory category, IndicatorValueType valueType,
                                int decimalScale, Boolean higherIsBetter, int sortOrder,
                                String sourceIndicatorCode, IndicatorPopulation population,
                                String unit, boolean detailDefault) {
-        jdbcTemplate.update("""
+        // 이 경로가 갱신하는 칸(아래 ON CONFLICT SET)만 비교한다 — default_column은 갱신하지 않으므로 안 본다.
+        Map<String, Object> desired = new LinkedHashMap<>();
+        desired.put("name", name);
+        desired.put("description", emptyToNull(description));
+        desired.put("interpretation", emptyToNull(interpretation));
+        desired.put("category", category.name());
+        desired.put("value_type", valueType.name());
+        desired.put("unit", emptyToNull(unit));
+        desired.put("decimal_scale", decimalScale);
+        desired.put("higher_is_better", higherIsBetter);
+        desired.put("is_active", true);
+        desired.put("sort_order", sortOrder);
+        desired.put("detail_default", detailDefault);
+        desired.put("source_indicator_code", sourceIndicatorCode);
+        desired.put("population", population == null ? null : population.name());
+        plan.upsert(code, desired, () -> jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
                                        default_column, detail_default, source_indicator_code,
@@ -241,7 +281,7 @@ public class IndicatorCatalogSynchronizer {
                 code, name, emptyToNull(description), emptyToNull(interpretation),
                 category.name(), valueType.name(), emptyToNull(unit),
                 decimalScale, higherIsBetter, sortOrder, detailDefault,
-                sourceIndicatorCode, population == null ? null : population.name());
+                sourceIndicatorCode, population == null ? null : population.name()));
     }
 
     /**
@@ -279,8 +319,8 @@ public class IndicatorCatalogSynchronizer {
      * ({@code PER_PCTL}은 낮은 쪽이, {@code ROE_PCTL}은 높은 쪽이 좋다) 그 판단은 원본
      * 지표의 {@code higher_is_better}가 이미 들고 있기 때문이다.
      */
-    private void upsertPercentile(PercentileSpec spec) {
-        upsertDerived(spec.code(), spec.name(), spec.description(), spec.interpretation(),
+    private void upsertPercentile(Plan plan, PercentileSpec spec) {
+        upsertDerived(plan, spec.code(), spec.name(), spec.description(), spec.interpretation(),
                 categoryOf(spec.sourceCode()), IndicatorValueType.RATIO, 4,
                 // 유불리 방향은 원본이 들고 있다. 여기서 정하면 두 곳이 갈린다.
                 null, baseSortOrder(spec.sourceCode()) + OFFSET_PERCENTILE,
@@ -291,8 +331,25 @@ public class IndicatorCatalogSynchronizer {
                 IndicatorPopulation.UNIVERSE, null, true);
     }
 
-    private void upsert(String code, IndicatorMeta meta) {
-        jdbcTemplate.update("""
+    private void upsert(Plan plan, String code, IndicatorMeta meta) {
+        String bands = bandCodec.toJson(bandsOf(code, meta));
+        // 이 경로가 갱신하는 칸(아래 ON CONFLICT SET)만 비교한다 — source_indicator_code는 갱신하지 않으므로 안 본다.
+        Map<String, Object> desired = new LinkedHashMap<>();
+        desired.put("name", meta.name());
+        desired.put("description", emptyToNull(meta.description()));
+        desired.put("interpretation", emptyToNull(meta.interpretation()));
+        desired.put("category", meta.category().name());
+        desired.put("value_type", meta.valueType().name());
+        desired.put("unit", emptyToNull(meta.unit()));
+        desired.put("decimal_scale", meta.decimalScale());
+        desired.put("higher_is_better", meta.direction().toHigherIsBetter());
+        desired.put("is_active", true);
+        desired.put("sort_order", meta.sortOrder() * SORT_ORDER_SCALE);
+        desired.put("default_column", meta.defaultColumn());
+        desired.put("detail_default", meta.detailDefault());
+        desired.put("bands", bands);
+        desired.put("population", null);
+        plan.upsert(code, desired, () -> jdbcTemplate.update("""
                 INSERT INTO indicator (code, name, description, interpretation, category, value_type,
                                        unit, decimal_scale, higher_is_better, is_active, sort_order,
                                        default_column, detail_default, bands, created_at, updated_at)
@@ -328,7 +385,7 @@ public class IndicatorCatalogSynchronizer {
                 meta.sortOrder() * SORT_ORDER_SCALE,
                 meta.defaultColumn(),
                 meta.detailDefault(),
-                bandCodec.toJson(bandsOf(code, meta)));
+                bands));
     }
 
     /**
@@ -366,16 +423,86 @@ public class IndicatorCatalogSynchronizer {
         return Double.isInfinite(value) ? null : BigDecimal.valueOf(value);
     }
 
-    private void deactivateMissing(List<String> activeCodes) {
-        if (activeCodes.isEmpty()) {
-            jdbcTemplate.update("UPDATE indicator SET is_active = false, updated_at = now() WHERE is_active");
-            return;
-        }
-        String placeholders = String.join(",", activeCodes.stream().map(c -> "?").toList());
+    private void deactivate(List<String> codes) {
+        String placeholders = String.join(",", codes.stream().map(c -> "?").toList());
         jdbcTemplate.update(
-                "UPDATE indicator SET is_active = false, updated_at = now() "
-                        + "WHERE is_active AND code NOT IN (" + placeholders + ")",
-                activeCodes.toArray());
+                "UPDATE indicator SET is_active = false, updated_at = now() WHERE is_active AND code IN (" + placeholders + ")",
+                codes.toArray());
+    }
+
+    private Map<String, Map<String, Object>> loadExisting() {
+        Map<String, Map<String, Object>> rows = new HashMap<>();
+        for (Map<String, Object> row : jdbcTemplate.queryForList("""
+                SELECT code, name, description, interpretation, category, value_type, unit, decimal_scale,
+                       higher_is_better, is_active, sort_order, default_column, detail_default, bands::text AS bands,
+                       source_indicator_code, population
+                  FROM indicator
+                """)) {
+            rows.put((String) row.get("code"), row);
+        }
+        return rows;
+    }
+
+    /** jsonb 의미로 같은가 — 문자열이 달라도(키 순서 · 숫자 표기) 같은 값이면 같다. 비교는 읽기라 가드에 안 걸린다. */
+    private boolean sameJson(Object existing, Object desired) {
+        if (existing == null || desired == null) {
+            return existing == desired;
+        }
+        if (existing.toString().equals(desired.toString())) {
+            return true;
+        }
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT CAST(? AS jsonb) = CAST(? AS jsonb)", Boolean.class, existing.toString(), desired.toString()));
+    }
+
+    /** 한 번의 동기화에서 무엇을 쓸지 — 다른 행만 쓰기 목록에 오른다. */
+    private final class Plan {
+        private final Map<String, Map<String, Object>> existing;
+        private final List<Runnable> writes = new ArrayList<>();
+        private final List<String> changes = new ArrayList<>();
+
+        private Plan(Map<String, Map<String, Object>> existing) {
+            this.existing = existing;
+        }
+
+        void upsert(String code, Map<String, Object> desired, Runnable write) {
+            Map<String, Object> row = existing.get(code);
+            if (row == null) {
+                changes.add(code + " 새 행");
+                writes.add(write);
+                return;
+            }
+            for (Map.Entry<String, Object> column : desired.entrySet()) {
+                if (!same(column.getKey(), row.get(column.getKey()), column.getValue())) {
+                    changes.add(code + "." + column.getKey());
+                    writes.add(write);
+                    return;
+                }
+            }
+        }
+
+        private boolean same(String column, Object existingValue, Object desiredValue) {
+            if ("bands".equals(column)) {
+                return sameJson(existingValue, desiredValue);
+            }
+            if (existingValue instanceof Number number && desiredValue instanceof Number wanted) {
+                return number.longValue() == wanted.longValue();
+            }
+            return Objects.equals(existingValue, desiredValue);
+        }
+
+        /** 지금 활성인데 이번 선언에 없는 코드 — 비활성으로 내릴 대상. */
+        List<String> activeCodesOutside(List<String> activeCodes) {
+            List<String> outside = new ArrayList<>();
+            for (Map<String, Object> row : existing.values()) {
+                String code = (String) row.get("code");
+                if (Boolean.TRUE.equals(row.get("is_active")) && !activeCodes.contains(code)) {
+                    outside.add(code);
+                }
+            }
+            outside.sort(null);
+            return outside;
+        }
     }
 
     private static String emptyToNull(String value) {

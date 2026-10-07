@@ -57,7 +57,8 @@ class IndicatorExtensibilityTest {
      */
     private IndicatorCatalogSynchronizer synchronizer(List<PercentileSpec> percentiles) {
         return new IndicatorCatalogSynchronizer(
-                registry, percentiles, List.of(), jdbcTemplate, bandCodec);
+                registry, percentiles, List.of(), jdbcTemplate, bandCodec,
+                com.stockscreener.pipeline.lock.CatalogWriteGate.permissive());
     }
 
     @Test
