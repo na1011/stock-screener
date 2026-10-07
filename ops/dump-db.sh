@@ -46,14 +46,25 @@ TMP="$TARGET.tmp"
 cleanup() { [[ -f "$TMP" ]] && rm -f "$TMP"; }
 trap cleanup EXIT
 
+# 쓰기 잠금 행은 데이터를 뺀다(ADR-0175 · 잠금 결정 1) — 그 행은 덤프를 뜬 순간의 보유자(pid · 세션)라, 복원한 DB에 옮겨지면
+# 이 기계의 다른 프로세스나 끝난 세션을 보유자로 읽는다. 복원 뒤 행 없음 = 비보유다. 표 정의는 그대로 든다.
+# 스위치(guard_setting)는 데이터째 든다 — 행이 DB 이름이라 다른 이름으로 복원한 사본에서는 저절로 꺼진다.
+LOCK_DATA_EXCLUDED=""
+if [[ "$("$PSQL" -d "$DB" -At -c "SELECT to_regclass('public.write_lock') IS NOT NULL")" == "t" ]]; then
+  LOCK_DATA_EXCLUDED="--exclude-table-data=public.write_lock"
+fi
+
 echo "== 덤프 =="
 echo "[dump] $DB → $TARGET"
-"$PG_DUMP" -Fc -Z6 -d "$DB" -f "$TMP"
+"$PG_DUMP" -Fc -Z6 ${LOCK_DATA_EXCLUDED:+"$LOCK_DATA_EXCLUDED"} -d "$DB" -f "$TMP"
 
 echo "== 검증 =="
-# public 스키마의 실제 테이블 수. 덤프의 TABLE DATA 항목 수와 같아야 한다.
+# public 스키마의 실제 테이블 수에서 데이터를 뺀 표를 뺀 것. 덤프의 TABLE DATA 항목 수와 같아야 한다.
 expected="$("$PSQL" -d "$DB" -At -c \
   "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'")"
+if [[ -n "$LOCK_DATA_EXCLUDED" ]]; then
+  expected=$((expected - 1))
+fi
 actual="$("$PG_RESTORE" -l "$TMP" | grep -c 'TABLE DATA' || true)"
 
 if [[ "$actual" -ne "$expected" ]]; then
@@ -79,6 +90,10 @@ echo "[dump] OK 테이블 ${actual}개 · $(du -h "$TARGET" | cut -f1)"
 
 echo "== 되돌리는 법 =="
 cat <<RESTORE
+  # 쓰기 가드가 켜진 DB(guard_setting에 이 DB 이름 행)면 아래 쓰기를 ops/write-session.sh begin <id> 뒤
+  # ops/write-session.sh exec <id> -- … 로 감싼다 — 무신원 psql·pg_restore의 보호 표 쓰기는 SSWG1로 거절된다(ADR-0175).
+  # 이 덤프에는 write_lock 데이터가 없다 — -c 전체 복원 뒤 잠금은 비어 있다(세션을 다시 begin한다).
+  #
   # 스키마째 되돌린다. 도는 앱을 먼저 내린다(ops/stop.sh --app — 앱 크론이 남았으면 멈춘다 · 넘기는 것은 사람: --force)
   # — 연결이 열려 있으면 -c가 막힌다.
   $PG_RESTORE -d $DB -c --if-exists -j4 "$TARGET"
