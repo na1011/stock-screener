@@ -389,19 +389,21 @@ write_lock_holder() {
   fi
 }
 
-# write_lock_held_by_other <db> <내 pid> — 잠금을 「다른」 산 보유자가 쥐고 있으면 그 설명을 찍고 0. 비었거나 죽었거나 내 것이면 1.
+# write_lock_held_by_other <db> <내 pid> — 잠금을 「다른」 산 보유자가 쥐고 있으면 그 설명을 찍고 0. 비었거나 죽었거나 내 것이면
+# (표가 없는 V66 전 DB 포함) 1. **물어보지 못했으면 2**(psql 없음 · 접속 실패 · 질의 실패) — MUST: 호출자는 2를 「안 쥠」으로
+# 읽지 않는다. 쓰기 경로(start · deploy)는 멈추고 표시 경로는 「판정하지 못했다」로 찍는다.
 # 세션은 산 구성원이 있거나 마지막 활동에서 60분이 안 지났으면 산 것으로 본다(Java WriteLock.SESSION_TTL과 같은 술어).
 write_lock_held_by_other() {
   local db="$1" mine="${2:-}" psql row
-  psql="$(pg_bin psql)" || return 1
+  psql="$(pg_bin psql)" || return 2
   row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tAF'|' -c "
-      SELECT CASE WHEN to_regclass('public.write_lock') IS NULL THEN 'ABSENT' END" 2>/dev/null)" || return 1
+      SELECT CASE WHEN to_regclass('public.write_lock') IS NULL THEN 'ABSENT' END" 2>/dev/null)" || return 2
   [[ "$row" == "ABSENT" ]] && return 1
   row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tAF'|' -c "
       SELECT coalesce(holder_kind, ''), coalesce(holder_pid::text, ''), coalesce(holder_start::text, ''),
              coalesce(session_id, ''), coalesce(array_to_string(members, ','), ''),
              coalesce((extract(epoch FROM now() - coalesce(last_activity_at, acquired_at)) / 60)::bigint::text, '0')
-        FROM (SELECT 1) one LEFT JOIN write_lock l ON l.db_name = current_database()" 2>/dev/null)" || return 1
+        FROM (SELECT 1) one LEFT JOIN write_lock l ON l.db_name = current_database()" 2>/dev/null)" || return 2
   local kind pid start session members idle member
   IFS='|' read -r kind pid start session members idle <<< "$row"
   [[ -z "$kind" ]] && return 1

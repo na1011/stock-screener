@@ -59,11 +59,16 @@ crons_gate() {
 #     안에서 쓰므로 그 동안 못 뜬다(start.sh가 거절한다). 여기서 멈추지 않으면 옛 앱만 내리고 새 앱은 못 올려 사이트가 내려간 채다.
 #   - 앱 JVM 자신이 쥐고 있으면(크론·관리자 잡·판정 PUT이 쓰는 중) 크론 판정과 같이 --force가 넘긴다.
 lock_gate() {
-  local db="${DB_NAME:-stock_screener}" app_pid holder rc=0
+  local db="${DB_NAME:-stock_screener}" app_pid holder rc=0 other=0
   app_pid="$(running_pid "$APP_PID_FILE" "$APP_PATTERN" || true)"
-  if holder="$(write_lock_held_by_other "$db" "$app_pid")"; then
+  holder="$(write_lock_held_by_other "$db" "$app_pid")" || other=$?
+  if [[ $other -eq 0 ]]; then
     echo "[deploy] 쓰기 잠금을 ${holder}이(가) 쥐고 있다 — 새 앱은 기동에서 잠금을 쥐므로 지금은 못 뜬다. 아무것도 바꾸지 않고 멈춘다." >&2
     echo "         그것이 끝난 뒤 다시 친다(손 세션이면 ops/write-session.sh end <id> → 배포 → begin)." >&2
+    exit 1
+  elif [[ $other -eq 2 ]]; then
+    # MUST: 뒤 단계(운영 마이그레이션 점검)가 같은 DB에 못 닿아 멈출 것이라도 여기서 멈춘다 — 다른 문의 순서에 기대지 않는다.
+    echo "[deploy] 쓰기 잠금 보유자를 판정하지 못했다(psql · DB ${db}) — 아무것도 바꾸지 않고 멈춘다." >&2
     exit 1
   fi
   [[ "$FORCE" == "--force" || -z "$app_pid" ]] && return 0
@@ -177,6 +182,8 @@ prod_migration_guard() {
   done <<< "$applied"
   # 쓰기 가드가 켜진 운영에 잠금 기제가 없는 트리를 올리지 않는다(ADR-0175 · 잠금 결정 16). 그 jar는 신원도 잠금도 없이 쓰므로
   # 기동 시더부터 SSWG1로 거절돼 앱이 내려간 채가 된다. 되돌리기는 운영 guard_setting 행을 먼저 지우는 것이다(사용자 승인 · 원시 SQL).
+  # 사정거리: 이 점검은 배포하는 트리 자신의 deploy.sh에 있다 — 잠금 전 커밋으로 되돌려 배포하면 그 트리의 옛 deploy.sh에는 이 점검이
+  # 없으므로 되돌리기를 지키지 못한다. 실제 방어는 ADR-0175 §결과의 되돌리기 첫 단계다.
   local guard_on lock_migration
   if ! guard_on="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select case when to_regclass('public.guard_setting') is null then 'f' else (select (count(*) > 0)::text from guard_setting where db_name = current_database()) end" 2>&1)"; then
     echo "[deploy] 운영 DB(${db})의 쓰기 가드 스위치를 읽지 못했다 — 멈춘다: ${guard_on}" >&2

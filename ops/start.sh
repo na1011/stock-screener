@@ -58,10 +58,16 @@ start_app() {
 
   # **쓰기 잠금을 먼저 묻는다**(ADR-0175). 앱은 기동 구간(Flyway·시더·스위퍼)을 잠금 안에서 쓰므로, bootRun·손 세션이 쥐고
   # 있으면 기동에서 「쓰기 잠금 게이트가 기동을 세운다」로 exit 1이 된다 — 여기서 먼저 알리면 60초를 안 기다린다.
-  # 앱은 원래 꺼져 있었으므로 상태는 그대로다. 묻지 못했으면(표 없음 · psql 없음) 그대로 띄운다 — 게이트가 다시 본다.
-  local holder
-  if holder="$(write_lock_held_by_other "${DB_NAME:-stock_screener}")"; then
+  # 앱은 원래 꺼져 있었으므로 상태는 그대로다. 표가 없으면(V66 전) 잠금이 없는 것이라 그대로 띄운다.
+  # MUST: 물어보지 못했으면(psql 없음 · 접속 실패) 띄우지 않는다 — 「안 쥠」으로 읽으면 게이트에 기대는 것이고, 그 판단은 이 자리의
+  # 몫이다(ADR-0175).
+  local holder held=0
+  holder="$(write_lock_held_by_other "${DB_NAME:-stock_screener}")" || held=$?
+  if [[ $held -eq 0 ]]; then
     echo "[start] 쓰기 잠금을 ${holder}이(가) 쥐고 있다 — 앱은 기동에서 잠금을 쥐므로 지금은 못 뜬다. 그것이 끝난 뒤 다시 띄운다." >&2
+    return 1
+  elif [[ $held -eq 2 ]]; then
+    echo "[start] 쓰기 잠금 보유자를 판정하지 못했다(psql · DB ${DB_NAME:-stock_screener}) — 띄우지 않는다. DB가 뜨는지부터 본다(ops/status.sh)." >&2
     return 1
   fi
 

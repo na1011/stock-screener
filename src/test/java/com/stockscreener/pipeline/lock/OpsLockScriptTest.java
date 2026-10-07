@@ -113,7 +113,47 @@ class OpsLockScriptTest {
         assertThat(mine.output).contains("이 앱 JVM의 실행 1개가 RUNNING이다");
     }
 
+    @Test
+    @DisplayName("write_lock_held_by_other는 셋으로 답한다 — 쥠 0 · 안 쥠 1 · 물어보지 못함 2(「안 쥠」으로 접지 않는다)")
+    void heldByOtherHasThreeAnswers() throws Exception {
+        assertThat(heldByOther(db).exit).as("비었음").isEqualTo(1);
+
+        Process bootRun = new ProcessBuilder("sleep", "600").start();
+        others.add(bootRun);
+        holdAs("BOOTRUN", ProcessIdentity.of(bootRun.toHandle()).orElseThrow(), "job:backfill");
+        Result held = heldByOther(db);
+        assertThat(held.exit).as(held.output).isZero();
+        assertThat(held.output).contains("BOOTRUN pid " + bootRun.pid());
+
+        Result unknown = heldByOther(NO_SUCH_DB);
+        assertThat(unknown.exit).as("접속 실패는 판정 못 함이다: " + unknown.output).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("보유자를 물어보지 못하면 start.sh·deploy.sh가 멈춘다 — 게이트·뒤 단계의 점검에 기대지 않는다")
+    void startAndDeployStopWhenTheHolderCannotBeAsked() throws Exception {
+        Path deploy = home.resolve("Library/Application Support/stock-screener");
+        Files.delete(deploy.resolve("app.pid"));
+        Files.writeString(deploy.resolve("run-app.sh"), "#!/bin/bash\nexit 0\n");
+
+        Result start = runOn(NO_SUCH_DB, "ops/start.sh", "--app");
+        assertThat(start.exit).as(start.output).isEqualTo(1);
+        assertThat(start.output).contains("[start] 쓰기 잠금 보유자를 판정하지 못했다");
+        assertThat(deploy.resolve("app.pid")).as("앱을 띄우지 않았다").doesNotExist();
+
+        Result gate = runOn(NO_SUCH_DB, "-c", "set -euo pipefail; . ops/lib.sh; FORCE=''; "
+                + "eval \"$(sed -n '/^lock_gate() {/,/^}/p' ops/deploy.sh)\"; lock_gate; echo 통과");
+        assertThat(gate.exit).as(gate.output).isEqualTo(1);
+        assertThat(gate.output).contains("[deploy] 쓰기 잠금 보유자를 판정하지 못했다").doesNotContain("통과");
+    }
+
     // ── 도우미 ────────────────────────────────────────────────────────────────────
+
+    private static final String NO_SUCH_DB = "zz_no_such_db_p3lock";
+
+    private Result heldByOther(String database) throws Exception {
+        return runOn(database, "-c", ". ops/lib.sh; write_lock_held_by_other " + database);
+    }
 
     private void holdAs(String kind, ProcessIdentity holder, String purpose) {
         jdbcTemplate.update("""
@@ -132,10 +172,14 @@ class OpsLockScriptTest {
     }
 
     private Result run(String... command) throws Exception {
+        return runOn(db, command);
+    }
+
+    private Result runOn(String database, String... command) throws Exception {
         ProcessBuilder builder = new ProcessBuilder(new ArrayList<>(List.of("bash")));
         builder.command().addAll(List.of(command));
         builder.environment().put("HOME", home.toString());
-        builder.environment().put("DB_NAME", db);
+        builder.environment().put("DB_NAME", database);
         builder.environment().remove(WriteIdentity.SESSION_ENV);
         builder.redirectErrorStream(true);
         Process process = builder.start();
