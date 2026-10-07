@@ -66,16 +66,19 @@ public class FinancialRefillJob {
     private final FinancialLoadWindow loadWindow;
     private final DataSourceRegistry registry;
     private final SecFilingSupplementStore supplementStore;
+    private final RetirementEvidence retirementEvidence;
 
     public FinancialRefillJob(FinancialCollector financialCollector, StockRegistrar stockRegistrar,
                               BatchExecutions batchExecutions, FinancialLoadWindow loadWindow,
-                              DataSourceRegistry registry, SecFilingSupplementStore supplementStore) {
+                              DataSourceRegistry registry, SecFilingSupplementStore supplementStore,
+                              RetirementEvidence retirementEvidence) {
         this.financialCollector = financialCollector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.loadWindow = loadWindow;
         this.registry = registry;
         this.supplementStore = supplementStore;
+        this.retirementEvidence = retirementEvidence;
     }
 
     /**
@@ -165,6 +168,9 @@ public class FinancialRefillJob {
                 targets.size(), fromFiscalYear, estimatedCalls);
         loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
 
+        // 신선한 매핑의 부재(표지)를 「답함」으로 셀 수 있는 종목 — 상장폐지 증거가 있는 것만(시작 때 한 번 · ADR-0174).
+        coverage = coverage.withRetired(retirementEvidence.retiredAmong(
+                targets.stream().map(SecurityRef::stockId).toList()));
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope, coverage);
         execution.plan(CollectionPhase.FINANCIAL, targets.size());

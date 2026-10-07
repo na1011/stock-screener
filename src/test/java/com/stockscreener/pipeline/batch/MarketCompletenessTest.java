@@ -40,19 +40,21 @@ class MarketCompletenessTest {
             new MarketCompleteness.Coverage(List.of("KOSPI", "KOSDAQ", "US"), Set.of());
 
     @Test
-    @DisplayName("「답함」은 표지 단 NOT_FOUND·MALFORMED뿐이다 — 표지 없는 같은 종류와 한도·일시·예상밖·인증은 표지와 무관하게 「답 못 받음」")
+    @DisplayName("「답함」은 표지 단 NOT_FOUND·MALFORMED이면서 상장폐지 증거가 있을 때뿐 — 그 밖은 표지·증거와 무관하게 「답 못 받음」")
     void classification() {
-        assertThat(MarketCompleteness.sourceAnswered("NOT_FOUND", true)).isTrue();
-        assertThat(MarketCompleteness.sourceAnswered("MALFORMED", true)).isTrue();
+        assertThat(MarketCompleteness.sourceAnswered("NOT_FOUND", true, true)).isTrue();
+        assertThat(MarketCompleteness.sourceAnswered("MALFORMED", true, true)).isTrue();
 
-        assertThat(MarketCompleteness.sourceAnswered("NOT_FOUND", false))
+        assertThat(MarketCompleteness.sourceAnswered("NOT_FOUND", true, false))
+                .as("현재 편입 · 봉 있음의 부재는 신규 상장 등록 지연 꼴 — 다시 물으면 답이 바뀔 수 있다").isFalse();
+        assertThat(MarketCompleteness.sourceAnswered("NOT_FOUND", false, true))
                 .as("기본은 「답 못 받음」 — 끊긴 전송·우리 인자 오류도 NOT_FOUND로 올 수 있다").isFalse();
-        assertThat(MarketCompleteness.sourceAnswered("MALFORMED", false)).isFalse();
+        assertThat(MarketCompleteness.sourceAnswered("MALFORMED", false, true)).isFalse();
         for (String kind : List.of("RATE_LIMITED", "TRANSIENT", "AUTH", "UNEXPECTED")) {
-            assertThat(MarketCompleteness.sourceAnswered(kind, true)).as(kind).isFalse();
-            assertThat(MarketCompleteness.sourceAnswered(kind, false)).as(kind).isFalse();
+            assertThat(MarketCompleteness.sourceAnswered(kind, true, true)).as(kind).isFalse();
+            assertThat(MarketCompleteness.sourceAnswered(kind, false, false)).as(kind).isFalse();
         }
-        assertThat(MarketCompleteness.sourceAnswered(null, true)).isFalse();
+        assertThat(MarketCompleteness.sourceAnswered(null, true, true)).isFalse();
     }
 
     @Test
@@ -72,31 +74,42 @@ class MarketCompletenessTest {
     @Test
     @DisplayName("표지 단 NOT_FOUND는 몇 번이어도 완료 · 표지 없는 NOT_FOUND·MALFORMED는 한 건이면 미완료")
     void answeredFailuresCompleteUnmarkedOnesDoNot() {
-        MarketCompleteness answered = new MarketCompleteness(ALL_SOURCES);
-        answered.record("KOSPI", true, null, false);
+        // 9번 되풀이된 표지 실패는 상장폐지 증거가 있는 종목(9)의 것이다.
+        MarketCompleteness answered = new MarketCompleteness(ALL_SOURCES.withRetired(Set.of(9L)));
+        answered.record("KOSPI", 1L, true, null, false);
         for (int i = 0; i < 9; i++) {
-            answered.record("KOSPI", false, "NOT_FOUND", true);
+            answered.record("KOSPI", 9L, false, "NOT_FOUND", true);
         }
         assertThat(answered.judge()).isEmpty();
 
         MarketCompleteness unmarked = new MarketCompleteness(ALL_SOURCES);
-        unmarked.record("KOSPI", true, null, false);
-        unmarked.record("KOSPI", false, "NOT_FOUND", false);
-        unmarked.record("US", true, null, false);
-        unmarked.record("US", false, "MALFORMED", false);
+        unmarked.record("KOSPI", 1L, true, null, false);
+        unmarked.record("KOSPI", 1L, false, "NOT_FOUND", false);
+        unmarked.record("US", 1L, true, null, false);
+        unmarked.record("US", 1L, false, "MALFORMED", false);
         assertThat(MarketCompleteness.markets(unmarked.judge())).containsExactly("KOSPI", "US");
+    }
+
+    @Test
+    @DisplayName("같은 표지 실패도 상장폐지 증거가 없는 종목(현재 편입 · 봉 있음)이면 미완료다 — 신규 상장 등록 지연 꼴")
+    void answeredWithoutRetirementEvidenceIsIncomplete() {
+        MarketCompleteness completeness = new MarketCompleteness(ALL_SOURCES.withRetired(Set.of(9L)));
+        completeness.record("KOSPI", 1L, true, null, false);
+        completeness.record("KOSPI", 2L, false, "NOT_FOUND", true);
+
+        assertThat(MarketCompleteness.noteTail(completeness.judge())).isEqualTo("시장 미완료 KOSPI 없음(답 미확인) 1");
     }
 
     @Test
     @DisplayName("시장마다 판정한다 — (가) 시작 때 소스 없음 · (나) 성공 0 실패 있음 · (다) 답 못 받은 실패 한 건")
     void judgesEachMarket() {
         MarketCompleteness completeness = new MarketCompleteness(
-                new MarketCompleteness.Coverage(List.of("KOSPI", "KOSDAQ", "US"), Set.of("US")));
+                new MarketCompleteness.Coverage(List.of("KOSPI", "KOSDAQ", "US"), Set.of("US"), Set.of(9L)));
         // KOSPI: 성공이 있고 일시 장애 한 건 — (다)
-        completeness.record("KOSPI", true, null, false);
-        completeness.record("KOSPI", false, "TRANSIENT", false);
+        completeness.record("KOSPI", 1L, true, null, false);
+        completeness.record("KOSPI", 1L, false, "TRANSIENT", false);
         // KOSDAQ: 전부 답한 실패 — 성공 0이라 (나)
-        completeness.record("KOSDAQ", false, "NOT_FOUND", true);
+        completeness.record("KOSDAQ", 9L, false, "NOT_FOUND", true);
         // US: 대상이 없어도 소스가 없으면 (가)
 
         List<MarketCompleteness.Incomplete> incomplete = completeness.judge();
@@ -111,9 +124,9 @@ class MarketCompletenessTest {
     @DisplayName("(라) 종목은 성공해도 보충을 받지 못했으면 그 시장은 미완료다 — 비어 있으면(UNREADABLE만 있었던 것 포함) 끝난 것이다")
     void unfetchedLayerMakesTheMarketIncomplete() {
         MarketCompleteness completeness = new MarketCompleteness(ALL_SOURCES);
-        completeness.record("US", true, null, false);
+        completeness.record("US", 1L, true, null, false);
         completeness.recordUnfetchedLayer("US", "보충", List.of(Kind.TRANSIENT, Kind.NOT_FOUND, Kind.TRANSIENT));
-        completeness.record("KOSPI", true, null, false);
+        completeness.record("KOSPI", 1L, true, null, false);
         completeness.recordUnfetchedLayer("KOSPI", "보충", List.of());
 
         assertThat(MarketCompleteness.markets(completeness.judge())).containsExactly("US");
@@ -125,8 +138,8 @@ class MarketCompletenessTest {
     @DisplayName("시장이 다 끝나면 미완료가 없다 — 대상이 없는 시장도 소스만 있으면 끝난 것이다")
     void completeRunHasNothingIncomplete() {
         MarketCompleteness completeness = new MarketCompleteness(ALL_SOURCES);
-        completeness.record("KOSPI", true, null, false);
-        completeness.record("US", true, null, false);
+        completeness.record("KOSPI", 1L, true, null, false);
+        completeness.record("US", 1L, true, null, false);
 
         assertThat(completeness.judge()).isEmpty();
         assertThat(MarketCompleteness.noteTail(List.of())).isEmpty();
@@ -137,13 +150,13 @@ class MarketCompletenessTest {
     void noteTailHasNoKeyValueTokens() {
         MarketCompleteness completeness = new MarketCompleteness(
                 new MarketCompleteness.Coverage(List.of("KOSPI", "KOSDAQ", "US"), Set.of("KOSDAQ")));
-        completeness.record("KOSPI", true, null, false);
+        completeness.record("KOSPI", 1L, true, null, false);
         for (int i = 0; i < 3; i++) {
-            completeness.record("KOSPI", false, "TRANSIENT", false);
+            completeness.record("KOSPI", 1L, false, "TRANSIENT", false);
         }
-        completeness.record("US", true, null, false);
-        completeness.record("US", false, "RATE_LIMITED", false);
-        completeness.record("US", false, "UNEXPECTED", false);
+        completeness.record("US", 1L, true, null, false);
+        completeness.record("US", 1L, false, "RATE_LIMITED", false);
+        completeness.record("US", 1L, false, "UNEXPECTED", false);
 
         String tail = MarketCompleteness.noteTail(completeness.judge());
 
@@ -269,5 +282,28 @@ class MarketCompletenessTest {
         // 기록 계층에는 앞머리를 그대로 두고 꼬리만 붙인 note와 구조화된 시장 목록이 간다.
         verify(recorder).finish(eq(7L), any(), eq("연도=2018~2026 시장 미완료 KOSPI 일시 1"), eq(List.of("KOSPI")));
         verify(recorder).recordFailure(eq(7L), eq(2L), eq(CollectionPhase.FINANCIAL), any(DataSourceException.class));
+    }
+
+    @Test
+    @DisplayName("시작부터 좁힌 실행(꼬리 · --tickers 손 실행)에는 시장 미완료 알림을 안 보낸다 — 부분 실패 알림 하나뿐 · 기록은 남긴다")
+    void narrowStartSendsNoIncompleteAlert() throws Exception {
+        List<AlertEvent> delivered = new ArrayList<>();
+        CompositeAlertPort alertPort = new CompositeAlertPort(List.of(recordingChannel(delivered)),
+                new AlertSuppressor(Duration.ofMinutes(10)), new LoggingAlertPort());
+        StockTaskRunner runner = mock(StockTaskRunner.class);
+        BatchExecutionRecorder recorder = mock(BatchExecutionRecorder.class);
+        when(recorder.finish(anyLong(), any(), any(), any())).thenReturn(BatchStatus.PARTIAL_SUCCESS);
+        SecurityRef broken = new SecurityRef(2, "KOSPI", "000660");
+        when(runner.runInNewTransaction(eq(broken), any()))
+                .thenThrow(new DataSourceException(Kind.TRANSIENT, "dart", "503"));
+        BatchExecutionContext context = new BatchExecutionContext(7L, "governance-load",
+                LocalDate.of(2026, 10, 29), new StockTaskExecutor(runner, recorder), recorder, alertPort,
+                id -> { }, ALL_SOURCES, false);
+
+        context.process(broken, CollectionPhase.GOVERNANCE, security -> 1L);
+        context.finish();
+
+        assertThat(delivered).extracting(AlertEvent::title).containsExactly("governance-load 부분 실패");
+        verify(recorder).finish(eq(7L), any(), any(), eq(List.of("KOSPI")));
     }
 }

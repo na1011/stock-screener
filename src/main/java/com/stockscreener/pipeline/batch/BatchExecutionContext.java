@@ -163,6 +163,9 @@ public final class BatchExecutionContext {
      */
     private final MarketCompleteness completeness;
 
+    /** 정기 범위({@code FULL})로 시작했는가 — 마감의 시장 미완료가 그 실행을 시계에서 빼는 경우다. */
+    private final boolean startedFull;
+
     public BatchExecutionContext(long executionId, String jobName, LocalDate targetDate,
                                  StockTaskExecutor executor, BatchExecutionRecorder recorder,
                                  AlertPort alertPort, LongConsumer onTerminal) {
@@ -174,6 +177,18 @@ public final class BatchExecutionContext {
                                  StockTaskExecutor executor, BatchExecutionRecorder recorder,
                                  AlertPort alertPort, LongConsumer onTerminal,
                                  MarketCompleteness.Coverage coverage) {
+        this(executionId, jobName, targetDate, executor, recorder, alertPort, onTerminal, coverage, true);
+    }
+
+    /**
+     * 위와 같되 <b>정기 범위({@code FULL})로 시작했는가</b>를 받는다 — 시장 미완료 알림은 그 실행에만 간다. 시작부터 좁힌
+     * 실행(꼬리 · {@code --tickers} 손 실행)은 원래 시계에 안 세고, 그 실패는 부분 실패 알림이 이미 말한다.
+     */
+    public BatchExecutionContext(long executionId, String jobName, LocalDate targetDate,
+                                 StockTaskExecutor executor, BatchExecutionRecorder recorder,
+                                 AlertPort alertPort, LongConsumer onTerminal,
+                                 MarketCompleteness.Coverage coverage, boolean startedFull) {
+        this.startedFull = startedFull;
         this.completeness = coverage == null ? null : new MarketCompleteness(coverage);
         this.executionId = executionId;
         this.jobName = jobName;
@@ -209,7 +224,7 @@ public final class BatchExecutionContext {
 
             boolean succeeded = outcome.succeeded();
             if (completeness != null) {
-                completeness.record(security.marketCode(), succeeded, outcome.failureKind(),
+                completeness.record(security.marketCode(), security.stockId(), succeeded, outcome.failureKind(),
                         outcome.sourceAnswered());
             }
             if (succeeded) {
@@ -482,13 +497,15 @@ public final class BatchExecutionContext {
      * 웹훅의 최소 심각도가 그것이라 그 아래면 채널이 받지 않는다.
      */
     private void alertOnIncompleteMarkets(List<MarketCompleteness.Incomplete> incomplete) {
-        if (incomplete.isEmpty()) {
+        // 시작부터 좁힌 실행(꼬리 · --tickers 손 실행)에는 안 보낸다 — 시계와 무관하고 본문(「정기 실행이면 연체로…」)이 거짓이며,
+        // 실패 하나에 알림이 둘이 된다. 기록(incomplete_markets)은 그대로 남는다(구현 반증).
+        if (incomplete.isEmpty() || !startedFull) {
             return;
         }
         alertPort.send(AlertEvent.toOperator(
                 AlertSeverity.WARNING,
                 jobName + " 시장 미완료",
-                ("%s (대상일 %s · 실행 id=%d) — 이 실행은 신선도 시계에 세지 않는다. 정기 실행이면 그 잡이 연체로 남아 "
+                ("%s (대상일 %s · 실행 id=%d) — 정기 범위로 시작했지만 이 실행은 신선도 시계에 세지 않는다. 그 잡이 연체로 남아 "
                         + "다음 무거운 잡 차례에 다시 돈다 — 같은 사유가 되풀이되면 원인(소스 장애·한도·우리 코드)을 먼저 본다.")
                         .formatted(MarketCompleteness.noteTail(incomplete), targetDate, executionId),
                 dedupeKey() + ":incomplete",

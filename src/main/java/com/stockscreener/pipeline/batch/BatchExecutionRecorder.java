@@ -71,17 +71,32 @@ public class BatchExecutionRecorder {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public long start(String jobName, LocalDate targetDate, TriggeredBy triggeredBy, int targetCount,
                       DeclaredScope scope) {
+        return startRecorded(jobName, targetDate, triggeredBy, targetCount, scope).id();
+    }
+
+    /**
+     * 위와 같되 <b>찍은 범위</b>를 함께 낸다 — 실행 컨텍스트가 「정기 범위로 시작했는가」를 알아야 시장 미완료 알림을 그 실행에만
+     * 보낸다(ADR-0174). 범위를 다시 계산하지 않는 이유는 자정 경계에서 두 계산이 갈릴 수 있어서다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Started startRecorded(String jobName, LocalDate targetDate, TriggeredBy triggeredBy, int targetCount,
+                                 DeclaredScope scope) {
         // MUST: 새 행에 범위가 비지 않게 여기서 막는다 — DB는 이력 때문에 NULL을 허용하고 신선도 판정은 NULL을
         // 전량으로 센다(실패 시 열리는 방향). 「필수 인자」라도 null은 컴파일된다.
         Objects.requireNonNull(scope, "scope — 정기 실행과 같은 범위인지와 아니면 그 사유를 잡이 정해 넘긴다(V63 · V65)");
         DeclaredScope recorded = recordedScope(jobName, targetDate, triggeredBy, scope);
-        return jdbcTemplate.queryForObject("""
+        Long id = jdbcTemplate.queryForObject("""
                 INSERT INTO batch_execution
                     (job_name, target_date, status, triggered_by, target_count, scope, scope_reason, started_at)
                 VALUES (?, ?, 'RUNNING', ?, ?, ?, ?, now())
                 RETURNING id
                 """, Long.class, jobName, targetDate, triggeredBy.name(), targetCount,
                 recorded.scope().name(), reasonName(recorded));
+        return new Started(id, recorded);
+    }
+
+    /** 시작한 실행의 id와 기록 계층이 찍은 범위. */
+    public record Started(long id, DeclaredScope recorded) {
     }
 
     /**

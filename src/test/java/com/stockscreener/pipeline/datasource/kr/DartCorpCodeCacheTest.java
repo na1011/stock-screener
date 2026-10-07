@@ -85,7 +85,7 @@ class DartCorpCodeCacheTest {
                 .isInstanceOfSatisfying(DataSourceException.class, e -> {
                     assertThat(e.kind()).isEqualTo(DataSourceException.Kind.TRANSIENT);
                     assertThat(e.getMessage()).contains("미매핑");
-                    assertThat(MarketCompleteness.sourceAnswered(e.kind().name(), e.sourceAnswered()))
+                    assertThat(MarketCompleteness.sourceAnswered(e.kind().name(), e.sourceAnswered(), true))
                             .as("답 못 받음 — 그 종목의 시장(KOSPI)이 미완료로 판정된다").isFalse();
                 });
         assertThat(server.getRequestCount()).as("첫 적재 1 + 다시 받기 1 + 즉시 재시도 1").isEqualTo(3);

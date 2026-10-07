@@ -66,8 +66,11 @@ public final class MarketCompleteness {
      * 실패 하나가 <b>소스의 답</b>인가 — 「그 종목은 소스에 물어 답을 받았고, 다시 물어도 같은 답이다」.
      *
      * <ul>
-     *   <li><b>답함</b>: 종류가 {@code NOT_FOUND}·{@code MALFORMED}이고 <b>던지는 자리가 「답함」 표지를 단</b> 실패뿐이다
-     *       ({@link com.stockscreener.pipeline.datasource.DataSourceException#answered}).</li>
+     *   <li><b>답함</b>: 종류가 {@code NOT_FOUND}·{@code MALFORMED}이고 <b>던지는 자리가 「답함」 표지를 단</b> 실패이며
+     *       ({@link com.stockscreener.pipeline.datasource.DataSourceException#answered}), <b>그 종목에 상장폐지 증거가 있을 때뿐</b>이다
+     *       ({@link RetirementEvidence} — 실행 시작 때 현재 활성 편입이 아님 ∨ 최근 5거래일 봉 없음). 표지(신선한 매핑 판의 부재)의
+     *       근거는 상장폐지 종목(CRNX·APGE)이었다. 현재 편입이고 봉이 오는 종목의 부재는 신규 상장의 등록 지연 꼴이라 「다시 물어도
+     *       같은 답」이 안 선다 — 답 못 받음으로 두어 다음 차례에 다시 묻는다(구현 반증 · 지금 노출 0).</li>
      *   <li><b>답 못 받음</b>: 그 밖 전부 — {@code RATE_LIMITED} · {@code TRANSIENT} · {@code AUTH} · {@code UNEXPECTED}(소스가
      *       아니라 우리 코드·DB가 그 종목을 처리 못 했다)는 표지와 무관하게, 표지 없는 {@code NOT_FOUND}·{@code MALFORMED}도.
      *       모르는 실패를 「답함」으로 접으면 못 받은 시장이 시계를 민다 — 틀리는 방향을 「한 번 더 돈다」 쪽으로 둔다.</li>
@@ -78,20 +81,21 @@ public final class MarketCompleteness {
      *
      * @param failureKind    {@code batch_execution_failure.failure_kind}와 같은 문자열(종류 이름 또는 {@code UNEXPECTED})
      * @param answeredMarked 던지는 자리가 단 「답함」 표지
+     * @param retired        그 종목에 상장폐지 증거가 있다({@link RetirementEvidence})
      */
-    public static boolean sourceAnswered(String failureKind, boolean answeredMarked) {
-        return answeredMarked && ("NOT_FOUND".equals(failureKind) || "MALFORMED".equals(failureKind));
+    public static boolean sourceAnswered(String failureKind, boolean answeredMarked, boolean retired) {
+        return answeredMarked && retired && ("NOT_FOUND".equals(failureKind) || "MALFORMED".equals(failureKind));
     }
 
     /** 종목 하나의 결과를 그 시장에 센다. */
-    void record(String marketCode, boolean succeeded, String failureKind, boolean answeredMarked) {
+    void record(String marketCode, long stockId, boolean succeeded, String failureKind, boolean answeredMarked) {
         Counters counters = byMarket.computeIfAbsent(marketCode, key -> new Counters());
         if (succeeded) {
             counters.success.incrementAndGet();
             return;
         }
         counters.failure.incrementAndGet();
-        if (!sourceAnswered(failureKind, answeredMarked)) {
+        if (!sourceAnswered(failureKind, answeredMarked, coverage.retired().contains(stockId))) {
             counters.unanswered.computeIfAbsent(String.valueOf(failureKind), key -> new AtomicInteger())
                     .incrementAndGet();
         }
@@ -178,11 +182,22 @@ public final class MarketCompleteness {
      *
      * @param markets 잡이 다루는 시장 — 판정 순서이기도 하다
      */
-    public record Coverage(List<String> markets, Set<String> withoutSource) {
+    public record Coverage(List<String> markets, Set<String> withoutSource, Set<Long> retired) {
 
         public Coverage {
             markets = List.copyOf(markets);
             withoutSource = Set.copyOf(withoutSource);
+            retired = Set.copyOf(retired);
+        }
+
+        /** 상장폐지 증거 없이 — 「답함」 표지 단 실패도 답 못 받음으로 센다(표지를 다는 자리가 없는 잡). */
+        public Coverage(List<String> markets, Set<String> withoutSource) {
+            this(markets, withoutSource, Set.of());
+        }
+
+        /** 상장폐지 증거가 있는 종목을 싣는다 — 실행 시작 때 한 번 읽은 것이다({@link RetirementEvidence}). */
+        public Coverage withRetired(Set<Long> retiredStocks) {
+            return new Coverage(markets, withoutSource, retiredStocks);
         }
 
         public static Coverage of(List<String> markets, Predicate<String> hasSource) {

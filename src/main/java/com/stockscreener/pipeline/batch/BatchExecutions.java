@@ -70,9 +70,10 @@ public class BatchExecutions {
                                        BatchExecutionRecorder.TriggeredBy triggeredBy,
                                        int targetCount, BatchExecutionRecorder.DeclaredScope scope,
                                        MarketCompleteness.Coverage coverage) {
-        long executionId = recorder.start(jobName, targetDate, triggeredBy, targetCount, scope);
-        return track(new BatchExecutionContext(
-                executionId, jobName, targetDate, executor, recorder, alertPort, open::remove, coverage));
+        BatchExecutionRecorder.Started started =
+                recorder.startRecorded(jobName, targetDate, triggeredBy, targetCount, scope);
+        return track(new BatchExecutionContext(started.id(), jobName, targetDate, executor, recorder, alertPort,
+                open::remove, coverage, started.recorded().scope() == BatchExecutionRecorder.Scope.FULL));
     }
 
     /** 실패한 부분만 다시 도는 실행을 시작한다. */

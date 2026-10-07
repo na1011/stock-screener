@@ -270,6 +270,70 @@ class FinancialRefillJobTest {
         }
     }
 
+    @Test
+    @DisplayName("과거 편입(현재 활성 편입 아님)의 신선한 미매핑은 답함 — 그 시장을 끝낸다(상장폐지 꼴 · CRNX·APGE)")
+    void retiredStockAbsenceCompletesTheMarket() {
+        long retired = insertStock("000020", "상폐종목");
+        long alive = insertStock("000030", "정상종목");
+        try {
+            for (long id : List.of(retired, alive)) {
+                jdbcTemplate.update("INSERT INTO universe_membership (universe_code, stock_id, effective_from) VALUES "
+                        + "('KOSPI_TOP200', ?, ?)", id, AS_OF.minusYears(1));
+            }
+            fakeFinancialSource.reset();
+            fakeFinancialSource.withReports(alive, List.of(report()))
+                    .failingWith(retired, DataSourceException.answered(DataSourceException.Kind.NOT_FOUND,
+                            "fake-financial", "신선한 판에 없다"));
+
+            job.run(today(), BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), "KOSPI_TOP200");
+
+            assertThat(latest("scope_reason")).as("유니버스를 골랐다 — 시작부터 좁다").isEqualTo("ARGS");
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).as("KOSPI는 끝났다 — 남는 것은 소스 없는 US")
+                    .isEqualTo("US");
+        } finally {
+            fakeFinancialSource.reset();
+            cleanUpStocks("000020", "000030");
+        }
+    }
+
+    @Test
+    @DisplayName("현재 편입이고 최근 봉이 있는 종목의 신선한 미매핑은 답 못 받음 — 신규 상장 등록 지연 꼴이라 다음 차례에 다시 묻는다")
+    void listedStockAbsenceLeavesTheMarketIncomplete() {
+        long alive = insertStock("000660", "SK하이닉스");
+        try {
+            jdbcTemplate.update("INSERT INTO universe_membership (universe_code, stock_id, effective_from) VALUES (?, ?, ?)",
+                    UNIVERSE, alive, AS_OF.minusYears(1));
+            jdbcTemplate.update("""
+                    INSERT INTO price_daily (stock_id, trade_date, open, high, low, close, adj_close, volume)
+                    VALUES (?, ?, 1, 1, 1, 1, 1, 1)
+                    """, memberId, today());
+            fakeFinancialSource.reset();
+            fakeFinancialSource.withReports(alive, List.of(report()))
+                    .failingWith(memberId, DataSourceException.answered(DataSourceException.Kind.NOT_FOUND,
+                            "fake-financial", "신선한 판에 없다"));
+
+            job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+            assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("KOSPI,US");
+            assertThat(latest("note")).contains("KOSPI 없음(답 미확인) 1");
+        } finally {
+            fakeFinancialSource.reset();
+            jdbcTemplate.update("DELETE FROM price_daily WHERE stock_id = ?", memberId);
+            cleanUpStocks("000660");
+        }
+    }
+
+    private void cleanUpStocks(String... tickers) {
+        for (String ticker : tickers) {
+            jdbcTemplate.update("DELETE FROM financial_column_absence WHERE stock_id IN (SELECT id FROM stock WHERE ticker = ?)", ticker);
+            jdbcTemplate.update("DELETE FROM financial_statement WHERE stock_id IN (SELECT id FROM stock WHERE ticker = ?)", ticker);
+            jdbcTemplate.update("DELETE FROM batch_execution_failure WHERE stock_id IN (SELECT id FROM stock WHERE ticker = ?)", ticker);
+            jdbcTemplate.update("DELETE FROM universe_membership WHERE stock_id IN (SELECT id FROM stock WHERE ticker = ?)", ticker);
+            jdbcTemplate.update("DELETE FROM stock WHERE ticker = ?", ticker);
+        }
+    }
+
     /** 정기 실행의 기준일 — 지금이 아니면 기록 계층이 PAST_DATE로 찍어 시장 판정과 무관하게 NARROW다. */
     private static LocalDate today() {
         return LocalDate.now(java.time.ZoneId.of("Asia/Seoul"));
