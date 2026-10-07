@@ -470,7 +470,7 @@ class PipelineSchedulerChainTest {
     private static final java.util.Set<String> READ_ONLY_CRONS = java.util.Set.of("checkJobFreshness");
 
     @Test
-    @DisplayName("쓰기 잠금 때문에 건너뛴 날: 잡도 시도 행도 「마지막 정기 시도」 조회도 없다 — 건너뜀은 시도가 아니다(ADR-0175)")
+    @DisplayName("잠금을 못 쥐고 끝난 발화(종료 신호): 잡도 시도 행도 「마지막 정기 시도」 조회도 없다 — 시도가 아니다(ADR-0175)")
     @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
     void skippedForTheWriteLockLeavesNoAttempt(org.springframework.boot.test.system.CapturedOutput output) {
         overdue(GovernanceLoadJob.JOB_NAME, 40);
@@ -507,9 +507,32 @@ class PipelineSchedulerChainTest {
                 adjustmentRebuildJob, indicatorBackfillJob, universeRebalanceJob);
         for (String cron : writeCrons) {
             verify(refusing).awaitForCron(cron);
-            // 끝 줄은 건너뛴 날에도 찍힌다 — 없으면 ops/crons-done.sh가 그날을 「남은 발화」로 막아 배포·종료가 서지 않는다.
+            // 끝 줄은 못 돈 발화에도 찍힌다 — 없으면 ops/crons-done.sh가 그날을 「남은 발화」로 막아 배포·종료가 서지 않는다.
             assertThat(output.getAll()).as(cron + "의 끝 줄").contains("크론 발화를 마쳤다. 크론=" + cron);
         }
+    }
+
+    @Test
+    @DisplayName("잠금 표 실패로 대기가 던지면 크론도 던진다 — 시작 실패 행을 안 쓰고(토큰이 없다) 끝 줄은 찍는다")
+    @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
+    void lockStoreFailurePropagatesWithoutAnAttemptRow(org.springframework.boot.test.system.CapturedOutput output) {
+        overdue(GovernanceLoadJob.JOB_NAME, 40);
+        fresh(FullStatementRefillJob.JOB_NAME, FinancialRefillJob.JOB_NAME);
+        WriteLock failing = mock(WriteLock.class);
+        IllegalStateException boom = new IllegalStateException("잠금 표 실패");
+        when(failing.awaitForCron(anyString())).thenThrow(boom);
+        PipelineScheduler broken = new PipelineScheduler(
+                dailyUpdateJob, universeRebalanceJob, corporateActionJob, adjustmentRebuildJob,
+                governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
+                mock(JobFreshnessAlerter.class), freshnessPolicy,
+                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
+                universeIntegrityAlerter, batchExecutions, failing);
+
+        assertThatThrownBy(broken::runHeavyJobOfTheDay).isSameAs(boom);
+
+        verifyNoInteractions(batchExecutions, governanceLoadJob);
+        verify(freshnessPolicy, never()).lastScheduledAttemptAt(anyString());
+        assertThat(output.getAll()).contains("크론 발화를 마쳤다. 크론=runHeavyJobOfTheDay");
     }
 
     @Test

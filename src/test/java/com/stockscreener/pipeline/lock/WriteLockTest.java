@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -49,6 +50,9 @@ class WriteLockTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private org.springframework.context.ApplicationContext applicationContext;
 
     private final List<WriteLock> locks = new ArrayList<>();
     private final List<AlertEvent> alerts = new ArrayList<>();
@@ -132,7 +136,7 @@ class WriteLockTest {
     }
 
     @Test
-    @DisplayName("크론도 자기 누수 행을 한 틱 안에 회수한다 — 기다리지 않는다(L1-3 · 풀 1 박동이 못 돌아 23:00까지 교착하던 꼴)")
+    @DisplayName("크론도 자기 누수 행을 한 틱 안에 회수한다 — 기다리지 않는다(L1-3 · 풀 1 박동이 못 돌아 풀리지 않는 교착이던 꼴)")
     void cronReclaimsItsOwnLeakedRowWithoutWaiting() {
         new WriteLockStore(url(), user(), password(), "t").acquireJvm(null, LockRow.HolderKind.WEB,
                 java.util.UUID.randomUUID(), "cron:runDailyUpdate", me);
@@ -250,37 +254,102 @@ class WriteLockTest {
     }
 
     @Test
-    @DisplayName("발화한 날 23:00이 넘으면 건너뛴다 — 빈 값 · 표지 걷음 · 알림 · 보유자는 그대로")
-    void cronSkipsAtTheDeadline() {
-        lock(otherJvm, null).acquire("job:long");
+    @DisplayName("상한 없이 기다린다 — 자정을 넘겨도 풀리는 즉시 쥐고, 기다리는 동안 첫 대기와 매시간 알린다(ADR-0175)")
+    void cronWaitsWithoutADeadlineAndRemindsHourly() {
+        WriteLock.Token held = lock(otherJvm, null).acquire("job:long");
         MutableClock clock = new MutableClock(ZonedDateTime.of(2026, 10, 13, 22, 59, 40, 0, KST).toInstant());
-        WriteLock cron = lock(me, null, clock, clock::advance);
+        Instant release = ZonedDateTime.of(2026, 10, 14, 1, 5, 0, 0, KST).toInstant();
+        WriteLock cron = lock(me, null, clock, duration -> {
+            clock.advance(Duration.ofMinutes(5));
+            if (clock.instant().isAfter(release)) {
+                held.close();
+            }
+        });
 
         Optional<WriteLock.Token> token = cron.awaitForCron("reconcileIndicators");
 
-        assertThat(token).isEmpty();
-        assertThat(clock.instant()).as("발화한 날 23:00에 그만둔다 — 다음 날까지 붙잡지 않는다")
-                .isBefore(ZonedDateTime.of(2026, 10, 13, 23, 0, 30, 0, KST).toInstant());
-        assertThat(row().heldBy(otherJvm)).isTrue();
+        assertThat(token).as("23:00을 넘겨도 건너뛰지 않는다").isPresent();
+        assertThat(clock.instant()).isAfter(release);
+        assertThat(row().heldBy(me)).isTrue();
         assertThat(row().hasWaiter()).isFalse();
-        assertThat(alerts).extracting(AlertEvent::title)
-                .containsExactly("쓰기 크론이 잠금을 기다린다: reconcileIndicators", "쓰기 크론을 건너뛰었다: reconcileIndicators");
+        assertThat(alerts).extracting(AlertEvent::title).containsExactly(
+                "쓰기 크론이 잠금을 기다린다: reconcileIndicators",
+                "쓰기 크론이 아직 잠금을 기다린다: reconcileIndicators",
+                "쓰기 크론이 아직 잠금을 기다린다: reconcileIndicators");
+        token.get().close();
     }
 
     @Test
-    @DisplayName("23:00 뒤에 발화했으면(수면) 비었을 때만 돈다 — 차 있으면 기다리지 않고 건너뛴다")
-    void lateFireRunsOnlyWhenFree() {
-        MutableClock clock = new MutableClock(ZonedDateTime.of(2026, 10, 13, 23, 40, 0, 0, KST).toInstant());
-        WriteLock cron = lock(me, null, clock, duration -> {
-            throw new AssertionError("23:00 뒤 발화는 기다리지 않는다");
+    @DisplayName("종료 신호면 그만둔다 — 인터럽트·컨텍스트 닫힘 둘 다 빈 값 · 표지 걷음 · 그 뒤 이 JVM의 획득이 안 막힌다")
+    void shutdownEndsTheWait() {
+        WriteLock.Token held = lock(otherJvm, null).acquire("job:long");
+        WriteLock interrupted = lock(me, null, Clock.systemUTC(), duration -> {
+            throw new InterruptedException("시험");
         });
-        try (WriteLock.Token token = cron.awaitForCron("runDailyUpdate").orElseThrow()) {
-            assertThat(row().heldBy(me)).isTrue();
+        assertThat(interrupted.awaitForCron("runDailyUpdate")).isEmpty();
+        Thread.interrupted(); // 되살린 인터럽트 표지를 걷는다 — 남기면 이 시험 스레드의 뒤 JDBC 호출이 흔들린다
+        assertThat(row().hasWaiter()).isFalse();
+
+        WriteLock[] closing = new WriteLock[1];
+        closing[0] = lock(me, null, Clock.systemUTC(), duration ->
+                closing[0].onContextClosed(new ContextClosedEvent(applicationContext)));
+        assertThat(closing[0].awaitForCron("runDailyUpdate")).isEmpty();
+        assertThat(row().hasWaiter()).isFalse();
+
+        held.close();
+        try (WriteLock.Token admin = interrupted.acquire("admin:after")) {
+            assertThat(row().heldBy(me)).as("크론 대기 표지가 남았으면 「크론이 먼저 돈다」로 거절된다").isTrue();
         }
+    }
+
+    @Test
+    @DisplayName("대기 도중 잠금 표가 실패하면 표지를 걷고 ERROR로 알린 뒤 던진다 — 다음 크론까지 남의 획득을 막는 래치가 안 남는다")
+    void storeFailureWhileWaitingClearsTheMarker() {
+        WriteLock.Token held = lock(otherJvm, null).acquire("job:long");
+        MutableClock clock = new MutableClock(ZonedDateTime.of(2026, 10, 13, 14, 0, 0, 0, KST).toInstant());
+        WriteLock cron = lock(new FlakyStore(me, 2), me, clock, clock::advance);
+
+        assertThatThrownBy(() -> cron.awaitForCron("runCorporateActionChain"))
+                .isInstanceOf(WriteLockStore.WriteLockStoreException.class);
+
+        assertThat(row().hasWaiter()).as("DB 대기 표지").isFalse();
+        assertThat(alerts).extracting(AlertEvent::title).contains("쓰기 크론이 잠금을 기다리다 실패했다: runCorporateActionChain");
+        held.close();
+        try (WriteLock.Token admin = cron.acquire("admin:after")) {
+            assertThat(row().heldBy(me)).as("JVM 안 대기 표지(cronWaiting)가 남았으면 거절된다").isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("박동과 반납이 겹쳐 0행이어도 그 토큰이 이미 닫혔으면 상실이 아니다(거짓 ERROR 없음)")
+    void heartbeatRacingAReleaseIsNotALoss() {
+        RacingStore store = new RacingStore(me);
+        WriteLock lock = lock(store, me, Clock.systemUTC(), duration -> { });
+        WriteLock.Token token = lock.acquire("admin:short");
+        store.beforeHeartbeat = token::close;
+
+        lock.beat();
+
+        assertThat(alerts).extracting(AlertEvent::title).doesNotContain("쓰기 잠금을 잃었다");
+    }
+
+    @Test
+    @DisplayName("상실 알림은 토큰마다 한 번 — 새 토큰을 쥐면 래치를 걷어 그 토큰의 상실도 알린다")
+    void lossIsReportedOncePerToken() {
+        WriteLock lock = lock(me, null);
+        WriteLock.Token first = lock.acquire("admin:first");
+        jdbcTemplate.update("UPDATE write_lock SET token = gen_random_uuid()");
+        lock.beat();
+        lock.beat();
+        first.close();
 
         jdbcTemplate.update("DELETE FROM write_lock");
-        lock(otherJvm, null).acquire("job:late");
-        assertThat(cron.awaitForCron("runDailyUpdate")).isEmpty();
+        WriteLock.Token second = lock.acquire("admin:second");
+        jdbcTemplate.update("UPDATE write_lock SET token = gen_random_uuid()");
+        lock.beat();
+        second.close();
+
+        assertThat(alerts).extracting(AlertEvent::title).filteredOn("쓰기 잠금을 잃었다"::equals).hasSize(2);
     }
 
     @Test
@@ -322,6 +391,47 @@ class WriteLockTest {
         lock.enable(LockRow.HolderKind.BOOTRUN);
         locks.add(lock);
         return lock;
+    }
+
+    private WriteLock lock(WriteLockStore store, ProcessIdentity process, Clock clock, WriteLock.Pause pause) {
+        WriteLock lock = new WriteLock(new WriteIdentity(process, null), store, alerts::add, clock, pause, null);
+        lock.enable(LockRow.HolderKind.BOOTRUN);
+        locks.add(lock);
+        return lock;
+    }
+
+    /** n번째 읽기에서 실패하는 잠금 표 — 대기 둘째 바퀴의 연결 실패. */
+    private final class FlakyStore extends WriteLockStore {
+        private final int failOn;
+        private int reads;
+
+        FlakyStore(ProcessIdentity process, int failOn) {
+            super(url(), user(), password(), new WriteIdentity(process, null).applicationName());
+            this.failOn = failOn;
+        }
+
+        @Override
+        LockRow read() {
+            if (++reads == failOn) {
+                throw new WriteLockStoreException("시험: 잠금 표를 못 읽었다", new java.sql.SQLException("시험"));
+            }
+            return super.read();
+        }
+    }
+
+    /** 박동 직전에 끼어드는 일(반납)을 흉내 낸다 — 박동은 모니터 밖이라 실제로 이렇게 겹친다. */
+    private final class RacingStore extends WriteLockStore {
+        private Runnable beforeHeartbeat = () -> { };
+
+        RacingStore(ProcessIdentity process) {
+            super(url(), user(), password(), new WriteIdentity(process, null).applicationName());
+        }
+
+        @Override
+        boolean heartbeat(java.util.UUID token) {
+            beforeHeartbeat.run();
+            return super.heartbeat(token);
+        }
     }
 
     private void beginSession(String id, String members, Duration idleFor) {

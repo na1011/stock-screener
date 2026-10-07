@@ -18,7 +18,6 @@ import org.springframework.stereotype.Component;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,9 +47,12 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * <p>그리고 산 대기 표지가 남의 것이면 쥐지 않는다(크론이 차례를 잃지 않게 — 세션 밖 새 획득 거절).
  *
- * <h2>크론의 대기 상한</h2>
- * <p>발화한 벽시계 날(KST)의 23:00. 넘기면 그 크론은 건너뛰고 알린다 — 실행 행을 만들지 않는다. 23:00 뒤에 발화했으면(수면)
- * 비었을 때만 돈다. 상한을 날짜로 두는 이유는 그날 사슬의 뜻이 그날로 끝나기 때문이다(다음 평일 사슬과 조회 창이 메운다).
+ * <h2>크론의 대기 — 상한이 없다</h2>
+ * <p>쓰기 크론은 잠금이 풀리는 즉시 돈다. 기다리는 동안 첫 대기와 그 뒤 매시간 보유자·기다린 시간을 알린다. 그만두는 것은
+ * 종료 신호(컨텍스트 닫힘 · 인터럽트)뿐이다. 날짜 상한(건너뜀)을 두지 않는 이유는 ADR-0175 §결정에 있다 — 건너뜀은 그 몫을 다른
+ * 실행이 메운다는 가정에 기대는데 주 1회 리밸런싱에는 그 가정이 없고, 멈춘 보유자는 사망 술어·세션 TTL이 푼다.
+ * <p>대기에서 어떤 예외로 빠져도 대기 표지(JVM 안 {@code cronWaiting} · DB {@code waiter_*})는 걷는다 — 남으면 다음 크론까지
+ * 관리자 launch·판정 {@code PUT}·bootRun·{@code write-session begin}이 전부 막힌다.
  *
  * <h2>반납 시점</h2>
  * <p>토큰을 닫으면 그 자리에서 반납한다 — 단 컨텍스트가 닫히기 시작했으면 반납을 <b>종료 처리기</b>({@link #releaseAtExit})로 미룬다.
@@ -63,8 +65,9 @@ public class WriteLock implements DisposableBean {
 
     /**
      * 세션이 구성원 없이 버틸 수 있는 시간. 재료(60일 MANUAL 연쇄의 실행 사이 틈 n=602 · p50 1.2분 · p90 206.7분 · 10~60분 64 ·
-     * 60~240분 49 — 2026-10-07 측정)에 꺾이는 점이 없어 값이 판정을 못 가른다. 그래서 「잊힌 세션을 하루 안에 풀고 사슬 대기 상한
-     * 23:00보다 짧게」의 상한 쪽으로 정했다(잠금 v5 2''). 실행 중인 {@code exec}는 구성원이라 이 시간에 안 걸린다.
+     * 60~240분 49 — 2026-10-07 측정)에 꺾이는 점이 없어 값이 판정을 못 가른다. 크론 대기에 상한이 없으므로 잊힌 세션이 사슬을 붙잡는
+     * 시간이 곧 이 값이다 — 그래서 짧은 쪽으로 정했다. 실행 중인 {@code exec}는 구성원이라 이 시간에 안 걸린다.
+     * MUST: 셸의 만료 경계({@code ops/lib.sh}의 {@code write_session_idle_expired} — 유휴 초 ≥ TTL)와 같다.
      * MUST: {@code ops/write-session.sh}의 {@code TTL_MINUTES}와 같다({@code WriteSessionScriptTest}가 대조한다).
      */
     public static final Duration SESSION_TTL = Duration.ofMinutes(60);
@@ -74,7 +77,8 @@ public class WriteLock implements DisposableBean {
 
     static final Duration HEARTBEAT = Duration.ofSeconds(30);
 
-    static final LocalTime CRON_WAIT_DEADLINE = LocalTime.of(23, 0);
+    /** 대기가 이어지는 동안 다시 알리는 간격. */
+    static final Duration CRON_WAIT_REMINDER = Duration.ofHours(1);
 
     private static final ZoneId KR_ZONE = ZoneId.of("Asia/Seoul");
 
@@ -202,17 +206,19 @@ public class WriteLock implements DisposableBean {
     }
 
     /**
-     * 쓰기 크론의 획득 — 비면 쥐고, 차 있으면 표지를 남기고 기다린다. 발화한 날의 23:00이 넘으면 건너뛴다(빈 값).
+     * 쓰기 크론의 획득 — 비면 쥐고, 차 있으면 표지를 남기고 <b>풀릴 때까지</b> 기다린다(상한 없음 · ADR-0175). 첫 대기와 그 뒤
+     * 매시간 알린다.
      *
-     * <p>건너뜀은 예외가 아니다 — 실행 행을 만들지 않고 끝 줄은 크론의 {@code finally}가 찍는다(잠금 v5 8'). 종료로 대기가 끊겨도
-     * 빈 값이다(그때는 알림이 없다 — 내려가는 중이다).
+     * <p>빈 값은 종료 신호(컨텍스트 닫힘 · 인터럽트)로 그만둔 것뿐이다 — 내려가는 중이라 알림이 없다. 그 밖의 예외는 표지를 걷고
+     * ERROR로 알린 뒤 다시 던진다(그 발화는 안 돌았다 — 삼키지 않는다).
      */
     public Optional<Token> awaitForCron(String cron) {
         String purpose = "cron:" + cron;
-        Instant deadline = clock.instant().atZone(KR_ZONE).toLocalDate()
-                .atTime(CRON_WAIT_DEADLINE).atZone(KR_ZONE).toInstant();
+        Instant since = clock.instant();
+        Instant nextReminder = null;
         Holder lastBlocker = null;
-        boolean alerted = false;
+        boolean waiting = false;
+        boolean acquired = false;
         try {
             while (true) {
                 synchronized (monitor) {
@@ -221,17 +227,18 @@ public class WriteLock implements DisposableBean {
                         return Optional.of(Token.inactive(this, purpose));
                     }
                     if (shuttingDown) {
-                        cronWaiting = false;
                         return Optional.empty();
                     }
                     LockRow observed = null;
                     if (live == null && joinedSession == null) {
                         Attempt attempt = tryAcquire(purpose);
                         if (attempt.token() != null) {
+                            acquired = true;
                             cronWaiting = false;
                             live = attempt.token();
-                            if (alerted) {
-                                log.info("쓰기 크론이 기다린 끝에 잠금을 쥐었다. 크론={}", cron);
+                            if (waiting) {
+                                log.info("쓰기 크론이 기다린 끝에 잠금을 쥐었다. 크론={} 기다림={}", cron,
+                                        Duration.between(since, clock.instant()));
                             }
                             return Optional.of(live);
                         }
@@ -241,29 +248,38 @@ public class WriteLock implements DisposableBean {
                         lastBlocker = live == null ? null
                                 : new Holder(kind.name(), identity.process().pid(), null, live.purpose, null, false);
                     }
+                    waiting = true;
                     cronWaiting = true;
-                    if (!clock.instant().isBefore(deadline)) {
-                        cronWaiting = false;
-                        clearMyWaiter();
-                        skip(cron, lastBlocker);
-                        return Optional.empty();
-                    }
                     markMyWaiter(observed, purpose);
                 }
-                if (!alerted) {
-                    alerted = true;
+                Instant now = clock.instant();
+                if (nextReminder == null) {
                     alertWaiting(cron, lastBlocker);
+                    nextReminder = now.plus(CRON_WAIT_REMINDER);
+                } else if (!now.isBefore(nextReminder)) {
+                    alertStillWaiting(cron, lastBlocker, Duration.between(since, now));
+                    nextReminder = now.plus(CRON_WAIT_REMINDER);
                 }
                 pause.pause(CRON_POLL);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            synchronized (monitor) {
-                cronWaiting = false;
-                clearMyWaiter();
-            }
             log.info("쓰기 크론이 잠금을 기다리다 종료로 그만뒀다. 크론={}", cron);
             return Optional.empty();
+        } catch (RuntimeException e) {
+            log.error("쓰기 크론이 잠금을 기다리다 실패했다 — 이 발화는 돌지 않았다. 크론={}", cron, e);
+            alertPort.send(AlertEvent.toOperator(AlertSeverity.ERROR, "쓰기 크론이 잠금을 기다리다 실패했다: " + cron,
+                    "잠금 표를 읽거나 쓰다 실패해 이 크론을 돌리지 않았다(" + e.getMessage() + "). 실행 행은 없다 — 다음 발화가 다시"
+                            + " 기다린다. 놓친 몫(무거운 잡의 연체 · 사슬 중간 상태)은 손으로 확인한다.",
+                    "write-lock-wait-failed:" + cron + ":" + clock.instant().atZone(KR_ZONE).toLocalDate()));
+            throw e;
+        } finally {
+            if (!acquired && waiting) {
+                synchronized (monitor) {
+                    cronWaiting = false;
+                    clearMyWaiter();
+                }
+            }
         }
     }
 
@@ -299,6 +315,7 @@ public class WriteLock implements DisposableBean {
                 }
                 kept.add(me);
                 if (store.replaceMembers(row.version(), sessionId, kept)) {
+                    lossReported = false;
                     joinedSession = sessionId;
                     live = new Token(this, null, purpose);
                     log.info("세션 {}에 합류했다. 구성원={}", sessionId, kept);
@@ -356,6 +373,7 @@ public class WriteLock implements DisposableBean {
             }
             UUID token = UUID.randomUUID();
             if (store.acquireJvm(row.version(), kind, token, purpose, me)) {
+                lossReported = false; // 상실 알림은 토큰마다 한 번 — 새 토큰의 상실은 다시 알린다
                 if (!freedBecause.isEmpty()) {
                     log.warn("쓰기 잠금을 넘겨받았다 — {}. 목적={}", freedBecause, purpose);
                 }
@@ -558,7 +576,14 @@ public class WriteLock implements DisposableBean {
                 reportLoss("세션 「" + session + "」이 더 이상 이 JVM을 구성원으로 두지 않는다. 지금: " + describe(row));
             }
         } else if (holding != null && !store.heartbeat(holding)) {
-            reportLoss("이 JVM의 토큰이 더 이상 보유자가 아니다. 지금: " + describe(store.read()));
+            // 박동은 모니터 밖이라 그 사이 토큰이 정상 반납됐을 수 있다 — 그 토큰이 아직 산 것일 때만 상실이다.
+            boolean stillLive;
+            synchronized (monitor) {
+                stillLive = live != null && holding.equals(live.id) && !live.closed;
+            }
+            if (stillLive) {
+                reportLoss("이 JVM의 토큰이 더 이상 보유자가 아니다. 지금: " + describe(store.read()));
+            }
         }
     }
 
@@ -608,17 +633,17 @@ public class WriteLock implements DisposableBean {
         String who = blocker == null ? "알 수 없음" : blocker.describe();
         log.warn("쓰기 크론이 잠금을 기다린다. 크론={} 보유={}", cron, who);
         alertPort.send(AlertEvent.toOperator(AlertSeverity.WARNING, "쓰기 크론이 잠금을 기다린다: " + cron,
-                who + "이(가) 쓰기 잠금을 쥐고 있다. 그것이 끝나면 크론이 이어 돈다 — 발화한 날 23:00까지 안 풀리면 그 크론은 건너뛴다.",
+                who + "이(가) 쓰기 잠금을 쥐고 있다. 그것이 끝나면 크론이 이어 돈다(상한 없음 · 매시간 다시 알린다).",
                 "write-lock-wait:" + cron + ":" + clock.instant().atZone(KR_ZONE).toLocalDate()));
     }
 
-    private void skip(String cron, Holder blocker) {
+    private void alertStillWaiting(String cron, Holder blocker, Duration waited) {
         String who = blocker == null ? "알 수 없음" : blocker.describe();
-        log.warn("쓰기 크론을 건너뛴다 — 발화한 날 23:00까지 잠금이 안 풀렸다. 크론={} 보유={}", cron, who);
-        alertPort.send(AlertEvent.toOperator(AlertSeverity.ERROR, "쓰기 크론을 건너뛰었다: " + cron,
-                who + "이(가) 23:00까지 쓰기 잠금을 쥐고 있어 이 크론을 돌리지 않았다. 실행 행은 없다 — 다음 평일 실행과 조회 창이"
-                        + " 메우는 범위 밖(무거운 잡의 연체 · 사슬 중간 상태)은 손으로 확인한다.",
-                "write-lock-skip:" + cron + ":" + clock.instant().atZone(KR_ZONE).toLocalDate()));
+        log.warn("쓰기 크론이 아직 잠금을 기다린다. 크론={} 기다림={} 보유={}", cron, waited, who);
+        alertPort.send(AlertEvent.toOperator(AlertSeverity.WARNING, "쓰기 크론이 아직 잠금을 기다린다: " + cron,
+                who + "이(가) 쓰기 잠금을 쥐고 있어 " + waited.toHours() + "시간째 기다린다. 그것이 끝나면 크론이 이어 돈다 — 상한은"
+                        + " 없다. 이 JVM의 다른 크론은 그동안 줄을 서 늦게 돈다(스케줄러 풀 1).",
+                "write-lock-wait:" + cron + ":" + clock.instant().atZone(KR_ZONE).toLocalDate() + ":" + waited.toHours() + "h"));
     }
 
     private void waitOnMonitor(Duration duration) throws InterruptedException {
