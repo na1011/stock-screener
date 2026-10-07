@@ -16,6 +16,11 @@ applies_to:
   - "ops/stop.sh"
   - "ops/deploy.sh"
   - "ops/dump-db.sh"
+  - "ops/crons-done.sh"
+  - "ops/status.sh"
+  - "ops/apply-window/env.sh"
+  - "src/main/java/**/screening/preset/PresetSynchronizer.java"
+  - "src/main/java/**/batch/web/AdminBatchController.java"
 ---
 
 # ADR-0175. 운영 DB 쓰기는 JVM을 건너 한 번에 한 쪽만 — 잠금 행과 DB 트리거
@@ -45,9 +50,12 @@ pg_restore·bootRun 연쇄)는 `write_lock` 한 행(DB당)을 쥔 쪽만 쓴다.
 
 ## 검증
 
-`./gradlew test --tests "*WriteGuardTriggerTest" --tests "*WriteLockTest" --tests "*PipelineSchedulerChainTest"`가 초록이어야
+`./gradlew test --tests "*WriteGuardTriggerTest" --tests "*WriteLockTest" --tests "*PipelineSchedulerChainTest"
+--tests "*WriteLockGateTest" --tests "*WriteSessionScriptTest" --tests "*CatalogSeederStatementTest"
+--tests "*PresetSeederStatementTest" --tests "*OpsLockScriptTest" --tests "*WriteLockAdminApiTest"`가 초록이어야
 한다 — 스위치 · 신원 술어 · 제외 표 · 이벤트 트리거 · `search_path=''` · CAS · 사망 술어 · 세션 만료(실행 중 exec) · 합류 CAS ·
-대기 표지 · 23:00 건너뜀 · 크론 건너뜀 날 시도 행 없음.
+대기 표지 · 23:00 건너뜀 · 크론 건너뜀 날 시도 행 없음·끝 줄 · 크론의 자기 누수 회수 · 웹 프로파일 세션 변수 거절 · 시더 둘의
+「같으면 문장 0 · 다르면 거절」 · `stop.sh`(앱 JVM이 쥘 때만 멈춤) · `crons-done.sh`(실행 행 주인) · 잡 목록 보유자와 409.
 
 전제 펜스는 두지 않는다 — V66 전 운영 DB에는 `guard_setting`이 없어 그 표를 부르는 질의가 파싱에서 죽고(무판정), 운영 켜기 전까지는
 잴 것이 없다. 켠 뒤의 관측은 `ops/status.sh`의 보유자 줄이 한다.
