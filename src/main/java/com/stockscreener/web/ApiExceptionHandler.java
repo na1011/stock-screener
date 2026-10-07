@@ -60,12 +60,6 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * {@code @Valid} 위반. 어느 필드가 왜 틀렸는지를 목록으로 준다.
-     *
-     * <p>기본 구현은 상태와 제목만 준다. 필드를 알려주지 않으면 조건 빌더가 어느 입력을
-     * 강조할지 알 수 없고, 사용자는 폼 전체를 훑어야 한다.
-     */
-    /**
      * 쓰기 잠금 거절은 어느 컨트롤러에서 나든 409다(ADR-0175) — 잠금을 쥐는 자리(관리자 launch · 원장 판정)가 컨트롤러마다
      * 옮겨 적으면 한 곳이 500으로 샌다.
      */
@@ -74,6 +68,12 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return handleApiException(new ApiExceptions.WriteLockHeldApiException(e));
     }
 
+    /**
+     * {@code @Valid} 위반. 어느 필드가 왜 틀렸는지를 목록으로 준다.
+     *
+     * <p>기본 구현은 상태와 제목만 준다. 필드를 알려주지 않으면 조건 빌더가 어느 입력을
+     * 강조할지 알 수 없고, 사용자는 폼 전체를 훑어야 한다.
+     */
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex, HttpHeaders headers,

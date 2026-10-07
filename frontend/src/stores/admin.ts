@@ -60,6 +60,14 @@ export const useAdminStore = defineStore('admin', () => {
   const hasRunningBatch = computed(() => batches.value.some((batch) => batch.status === 'RUNNING'))
 
   /**
+   * 관리자 잡을 지금 띄우면 거절할 쓰기 잠금 보유자(ADR-0175). 서버가 잡마다 같은 값을 싣는다 — 첫 값을 쓴다.
+   *
+   * 손 세션(psql)은 실행 행을 안 남겨 `hasRunningBatch`로는 안 보인다. 그래서 화면은 이것이 있을 때도 자동 갱신을 켠다 —
+   * 아니면 보유자가 끝난 뒤에도 버튼이 잠긴 채 남는다.
+   */
+  const writeLockHolder = computed(() => jobs.value.find((job) => job.blockedBy !== null)?.blockedBy ?? null)
+
+  /**
    * 배경 자동 갱신이 연속으로 실패한 횟수.
    *
    * 실패를 삼키지 않되 **5초마다 토스트를 띄우지도 않는다.** 그 토스트는 곧 화면을 덮고,
@@ -177,6 +185,7 @@ export const useAdminStore = defineStore('admin', () => {
     reloadBatches,
     refreshBatchesQuietly,
     hasRunningBatch,
+    writeLockHolder,
     backgroundFailures,
     openBatch,
     retryBatch,

@@ -309,15 +309,32 @@ public class WriteLock implements DisposableBean {
         }
     }
 
-    /** 지금 잠금을 쥔 쪽 — 화면의 jobs 목록과 {@code ops/status.sh}용. 쓰지 않는 JVM이면 빈 값이다. */
-    public Optional<Holder> currentHolder() {
+    /**
+     * 지금 {@link #acquire}를 부르면 거절할 쪽 — 화면의 jobs 목록이 버튼을 잠그고 보유자를 보인다(잠금 결정 12). 쥘 수 있으면 빈
+     * 값이다: 비었음 · 보유자가 죽었음 · 세션 만료 · 내 누수 행. 판정은 {@link #acquire}와 같은 술어({@link #freedBecause})라 화면과
+     * 실제 거절이 안 갈린다. 쓰지 않는 JVM이면 빈 값이다.
+     */
+    public Optional<Holder> blockingHolder() {
         synchronized (monitor) {
             if (mode != Mode.ENABLED) {
                 return Optional.empty();
             }
+            if (live != null) {
+                return Optional.of(new Holder(kind.name(), identity.process().pid(), null, live.purpose, null, false));
+            }
+            if (cronWaiting) {
+                return Optional.of(new Holder(kind.name(), identity.process().pid(), null, "대기 중인 쓰기 크론", null, true));
+            }
+            LockRow row = store.read();
+            ProcessIdentity me = identity.process();
+            if (freedBecause(row, me) == null) {
+                return Optional.of(holderOf(row, false));
+            }
+            if (row.hasWaiter() && !row.waiterIs(me) && ProcessIdentity.isAlive(row.waiterPid(), row.waiterStart())) {
+                return Optional.of(holderOf(row, true));
+            }
+            return Optional.empty();
         }
-        LockRow row = store.read();
-        return row.held() || row.hasWaiter() ? Optional.of(holderOf(row, false)) : Optional.empty();
     }
 
     // ── 획득 판정 ──────────────────────────────────────────────────────────────────
