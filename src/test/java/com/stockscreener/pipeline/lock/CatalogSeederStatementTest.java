@@ -43,7 +43,8 @@ class CatalogSeederStatementTest {
     void setUp() {
         db = jdbcTemplate.queryForObject("SELECT current_database()", String.class);
         String me = jdbcTemplate.queryForObject("SELECT current_setting('application_name')", String.class);
-        myPrefix = me.substring(0, me.lastIndexOf(':') + 1);
+        // 신원 전체(ss:j:<pid>:<시작초>)로 켠다 — pid만이면 이 시험이 죽어 남긴 행이 같은 pid를 다시 받은 JVM에 걸린다.
+        myPrefix = me;
         jdbcTemplate.update("DELETE FROM guard_setting");
         jdbcTemplate.update("DELETE FROM write_lock");
         synchronizer.synchronize(); // 다른 시험이 카탈로그를 흔들었을 수 있다 — 가드 끈 채로 지금 코드에 맞춘다.

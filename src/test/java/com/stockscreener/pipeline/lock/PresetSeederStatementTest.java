@@ -132,6 +132,6 @@ class PresetSeederStatementTest {
     private void guardOnForThisJvm() {
         String me = jdbcTemplate.queryForObject("SELECT current_setting('application_name')", String.class);
         jdbcTemplate.update("INSERT INTO guard_setting (db_name, identity_prefix, note) VALUES (?, ?, 'PresetSeederStatementTest')",
-                db, me.substring(0, me.lastIndexOf(':') + 1));
+                db, me); // 신원 전체 — pid 재사용에 안 걸린다
     }
 }

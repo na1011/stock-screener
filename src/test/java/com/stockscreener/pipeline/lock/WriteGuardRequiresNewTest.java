@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 싣고 있어 <b>토큰 없이는 거절되고 토큰을 쥐면 통과한다</b>(ADR-0175 · 잠금 결정 14의 대조 시험). 신원이 연결마다 실리지 않으면
  * (트랜잭션 안 {@code SET}·한 연결에만) 이 경로의 쓰기는 가드를 비켜 가거나, 쥔 JVM의 쓰기가 거절된다.
  *
- * <p>가드는 이 JVM 신원 범위({@code ss:j:<pid>:})로만 켠다.
+ * <p>가드는 이 JVM 신원 전체({@code ss:j:<pid>:<시작초>})로만 켠다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -47,7 +47,7 @@ class WriteGuardRequiresNewTest {
         jdbcTemplate.update("DELETE FROM write_lock");
         // 범위는 연결이 아니라 프로세스에서 짓는다 — 연결에 신원이 안 실렸으면 그 쓰기는 이 범위 밖이라 가드를 비켜 간다(대조군).
         jdbcTemplate.update("INSERT INTO guard_setting (db_name, identity_prefix, note) VALUES (current_database(), ?, ?)",
-                "ss:j:" + ProcessIdentity.current().pid() + ":", "WriteGuardRequiresNewTest");
+                new WriteIdentity(ProcessIdentity.current(), null).applicationName(), "WriteGuardRequiresNewTest");
     }
 
     @AfterEach

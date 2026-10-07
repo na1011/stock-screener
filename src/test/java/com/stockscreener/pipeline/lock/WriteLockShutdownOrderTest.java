@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 그 안(컨텍스트 닫힘 이벤트 → 빈 파괴)이다. 그래서 컨텍스트를 따로 띄워 실제로 닫는다({@code BatchExecutionShutdownHookTest}와
  * 같은 꼴). 종료 처리기({@code SpringApplication.getShutdownHandlers()})는 JVM이 끝날 때만 돌므로 여기서는 손으로 부른다.
  *
- * <p>가드는 이 JVM 신원 범위({@code ss:j:<pid>:})로만 켠다. 확인은 그 범위 밖 신원의 독립 연결로 한다.
+ * <p>가드는 이 JVM 신원 전체({@code ss:j:<pid>:<시작초>})로만 켠다. 확인은 그 범위 밖 신원의 독립 연결로 한다.
  */
 class WriteLockShutdownOrderTest {
 
@@ -51,8 +51,8 @@ class WriteLockShutdownOrderTest {
         try (Connection admin = DriverManager.getConnection(url, user, password)) {
             update(admin, "DELETE FROM write_lock");
             update(admin, "DELETE FROM guard_setting");
-            update(admin, "INSERT INTO guard_setting (db_name, identity_prefix, note) VALUES (current_database(), 'ss:j:"
-                    + me.pid() + ":', 'WriteLockShutdownOrderTest')");
+            update(admin, "INSERT INTO guard_setting (db_name, identity_prefix, note) VALUES (current_database(), '"
+                    + new WriteIdentity(me, null).applicationName() + "', 'WriteLockShutdownOrderTest')");
             try {
                 token = lock.acquire("job:" + JOB);
                 executionId = context.getBean(BatchExecutions.class)

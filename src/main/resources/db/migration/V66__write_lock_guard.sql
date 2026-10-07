@@ -10,8 +10,8 @@
 
 -- ① 스위치. 행 = 켤 DB 이름. current_database()와 같은 행이 있을 때만 켜진다 — 이름이 다른 사본·복원 DB는 저절로 꺼진다
 --    (ALTER DATABASE 설정은 pg_dump -Fc가 안 옮기고 열린 세션에 늦게 반영돼 버렸다 · 잠금 v3).
---    identity_prefix가 있으면 그 접두로 시작하는 신원의 문장만 검사한다 — 시험이 자기 JVM(ss:j:<pid>:)만 켜고, 죽어 남아도
---    그 pid에만 걸리게.
+--    identity_prefix가 있으면 그 접두로 시작하는 신원의 문장만 검사한다 — 시험이 자기 JVM 신원 전체(ss:j:<pid>:<시작초>)로만
+--    켜서, 죽어 남아도 그 신원이 다시 안 나오므로 아무 쓰기에도 안 걸리게.
 CREATE TABLE IF NOT EXISTS guard_setting (
     db_name         text        PRIMARY KEY,
     identity_prefix text,
@@ -74,9 +74,11 @@ COMMENT ON COLUMN write_lock.waiter_pid IS
     '잠금을 기다리는 쓰기 크론의 JVM. 산 대기자가 있으면 세션 밖 새 획득을 거절한다(크론이 다음 차례를 잃지 않게)';
 
 -- ③ 보호에서 빼는 표 — 각 사유.
---    사용자 자료(웹 사용자 흐름만 쓰는 표 · 로그인 경로 포함): allowed_email(허용목록 관리) · app_user(로그인마다 갱신) ·
---    interaction_log(요청 기록) · screen · screen_condition · screen_condition_threshold · condition_group(스크린 저장 ·
---    프리셋 시더) · watchlist_item(관심종목 · 일일 갱신의 알림 판정). 잠금 기제: write_lock(획득은 정의상 비보유자의 쓰기) ·
+--    사용자 자료(웹 사용자 요청이 잠금 없이 쓰는 표 · 로그인 경로 포함): allowed_email(허용목록 관리) · app_user(로그인마다
+--    갱신) · interaction_log(요청 기록) · screen · screen_condition · screen_condition_threshold · condition_group(전략 저장 ·
+--    프리셋 시더 — 시더는 같으면 문장 0이고 다르면 CatalogWriteGate가 막는다) · watchlist_item(관심종목 추가·메모·삭제 —
+--    배치도 쓴다: 일일 갱신의 알림 판정 WatchlistStore.recordEvaluation. 그 쓰기는 DailyUpdateJob 안이라 크론·관리자 launch의
+--    잠금 토큰 안에서만 돈다 — DB가 아니라 호출 경로가 지킨다). 잠금 기제: write_lock(획득은 정의상 비보유자의 쓰기) ·
 --    guard_setting(스위치). flyway_schema_history(DDL은 트리거 대상이 아니고 이력 표는 Flyway가 쓴다).
 CREATE OR REPLACE FUNCTION public.write_guard_exempt(relname text) RETURNS boolean
     LANGUAGE sql IMMUTABLE
