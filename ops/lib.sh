@@ -326,3 +326,104 @@ ensure_postgres_up() {
   echo "        켜려면: brew services start postgresql@16" >&2
   return 1
 }
+
+# ── 쓰기 잠금(ADR-0175) ─────────────────────────────────────────────────────────
+#
+# 사망 술어는 pid + 프로세스 시작 초뿐이다 — Java(ProcessHandle 초 절사)와 셸(LC_ALL=C ps -o lstart)이 같은 값을 낸다
+# (20/20 실측 · 잠금 v3). MUST NOT: 부팅 시각을 넣지 않는다 — 같은 부팅 안에서도 움직여 산 보유자를 죽었다고 판정했다.
+
+# proc_start_epoch <pid> — 그 프로세스의 시작 epoch 초. 없으면 아무것도 안 찍고 1.
+proc_start_epoch() {
+  local pid="$1" lstart
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  lstart="$(LC_ALL=C ps -o lstart= -p "$pid" 2>/dev/null)" || return 1
+  # ps가 뒤에 공백을 붙인다 — 그대로 넘기면 date가 경고를 stderr에 찍는다.
+  lstart="${lstart%"${lstart##*[![:space:]]}"}"
+  [[ -n "$lstart" ]] || return 1
+  LC_ALL=C date -j -f "%a %b %d %T %Y" "$lstart" +%s 2>/dev/null
+}
+
+# proc_alive <pid> <시작초> — 그 신원의 프로세스가 살아 있으면 0.
+proc_alive() {
+  local pid="$1" start="$2" actual
+  actual="$(proc_start_epoch "$pid")" || return 1
+  [[ "$actual" == "$start" ]]
+}
+
+# lock_member_alive <kind:pid:시작초> — 세션 구성원(jvm:… · exec:…)이 살아 있으면 0. 꼴이 틀리면 산 것으로 친다(빼앗지 않는 쪽).
+lock_member_alive() {
+  local member="$1" kind pid start
+  IFS=':' read -r kind pid start <<< "$member"
+  if [[ -z "$kind" || ! "$pid" =~ ^[0-9]+$ || ! "$start" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  proc_alive "$pid" "$start"
+}
+
+# write_lock_holder <db> — 잠금 보유자를 한 줄로 찍는다(`ops/status.sh` · `ops/start.sh` · `ops/deploy.sh`).
+# 출력: 「없음」 · 「WEB pid 123 시작 … 목적 …」 · 「세션 abc …」 · 표가 없으면 「표 없음」. psql이 실패하면 1.
+write_lock_holder() {
+  local db="$1" psql row
+  psql="$(pg_bin psql)" || return 1
+  row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tAF'|' -c "
+      SELECT CASE WHEN to_regclass('public.write_lock') IS NULL THEN 'ABSENT' ELSE 'PRESENT' END" 2>/dev/null)" || return 1
+  if [[ "$row" == "ABSENT" ]]; then
+    echo "표 없음"
+    return 0
+  fi
+  row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tAF'|' -c "
+      SELECT coalesce(holder_kind, ''), coalesce(holder_pid::text, ''), coalesce(holder_start::text, ''),
+             coalesce(session_id, ''), coalesce(purpose, ''), coalesce(to_char(acquired_at, 'MM-DD HH24:MI:SS'), ''),
+             coalesce(array_to_string(members, ','), ''), coalesce(waiter_purpose, '')
+        FROM (SELECT 1) one LEFT JOIN write_lock l ON l.db_name = current_database()" 2>/dev/null)" || return 1
+  local kind pid start session purpose since members waiter
+  IFS='|' read -r kind pid start session purpose since members waiter <<< "$row"
+  if [[ -z "$kind" ]]; then
+    echo "없음${waiter:+ (대기: $waiter)}"
+  elif [[ "$kind" == "SESSION" ]]; then
+    echo "손 세션 「${session}」 (${since}부터 · 구성원 ${members:-없음})${waiter:+ (대기: $waiter)}"
+  else
+    local state="산"
+    proc_alive "$pid" "$start" || state="죽은"
+    echo "$kind pid $pid(${state} 프로세스) 「${purpose}」 (${since}부터)${waiter:+ (대기: $waiter)}"
+  fi
+}
+
+# write_lock_held_by_other <db> <내 pid> — 잠금을 「다른」 산 보유자가 쥐고 있으면 그 설명을 찍고 0. 비었거나 죽었거나 내 것이면 1.
+# 세션은 산 구성원이 있거나 마지막 활동에서 60분이 안 지났으면 산 것으로 본다(Java WriteLock.SESSION_TTL과 같은 술어).
+write_lock_held_by_other() {
+  local db="$1" mine="${2:-}" psql row
+  psql="$(pg_bin psql)" || return 1
+  row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tAF'|' -c "
+      SELECT CASE WHEN to_regclass('public.write_lock') IS NULL THEN 'ABSENT' END" 2>/dev/null)" || return 1
+  [[ "$row" == "ABSENT" ]] && return 1
+  row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tAF'|' -c "
+      SELECT coalesce(holder_kind, ''), coalesce(holder_pid::text, ''), coalesce(holder_start::text, ''),
+             coalesce(session_id, ''), coalesce(array_to_string(members, ','), ''),
+             coalesce((extract(epoch FROM now() - coalesce(last_activity_at, acquired_at)) / 60)::bigint::text, '0')
+        FROM (SELECT 1) one LEFT JOIN write_lock l ON l.db_name = current_database()" 2>/dev/null)" || return 1
+  local kind pid start session members idle member
+  IFS='|' read -r kind pid start session members idle <<< "$row"
+  [[ -z "$kind" ]] && return 1
+  if [[ "$kind" == "SESSION" ]]; then
+    local alive=0
+    IFS=',' read -ra list <<< "$members"
+    for member in "${list[@]:-}"; do
+      [[ -n "$member" ]] && lock_member_alive "$member" && alive=1
+    done
+    if [[ $alive -eq 1 || "$idle" -lt "$WRITE_SESSION_TTL_MINUTES" ]]; then
+      echo "손 세션 「${session}」(구성원 ${members:-없음} · 유휴 ${idle}분)"
+      return 0
+    fi
+    return 1
+  fi
+  [[ -n "$mine" && "$pid" == "$mine" ]] && return 1
+  if proc_alive "$pid" "$start"; then
+    echo "$kind pid $pid"
+    return 0
+  fi
+  return 1
+}
+
+# 세션이 구성원 없이 버티는 시간(분). MUST: Java WriteLock.SESSION_TTL과 같다(WriteSessionScriptTest가 대조한다).
+WRITE_SESSION_TTL_MINUTES=60
