@@ -40,6 +40,9 @@
 
 ## 순서
 
+**다시 쓸 때 — 쓰기 가드가 켜진 DB면** 1·4·5단계의 쓰기(`pg_restore` 되돌리기 포함)를 `ops/write-session.sh begin <id>` 뒤
+`ops/write-session.sh exec <id> -- …`로 돈다(ADR-0175). 무신원 psql·bootRun은 보호 표 쓰기가 `SSWG1`로 거절된다.
+
 0. **선행 조건 확인** — 월 13:30 `daily-update`와 14:00 `corporate-action` 사슬이 **끝난 뒤**. `RUNNING` 0.
    ```
    psql -d stock_screener -At -F'|' -c "SELECT job_name,status,started_at::timestamp(0) FROM batch_execution WHERE started_at::date='2026-09-21' ORDER BY id"
