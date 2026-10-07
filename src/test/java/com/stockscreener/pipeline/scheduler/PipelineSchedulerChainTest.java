@@ -465,7 +465,8 @@ class PipelineSchedulerChainTest {
 
     @Test
     @DisplayName("쓰기 잠금 때문에 건너뛴 날: 잡도 시도 행도 「마지막 정기 시도」 조회도 없다 — 건너뜀은 시도가 아니다(ADR-0175)")
-    void skippedForTheWriteLockLeavesNoAttempt() {
+    @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
+    void skippedForTheWriteLockLeavesNoAttempt(org.springframework.boot.test.system.CapturedOutput output) {
         overdue(GovernanceLoadJob.JOB_NAME, 40);
         fresh(FullStatementRefillJob.JOB_NAME, FinancialRefillJob.JOB_NAME);
         WriteLock refusing = mock(WriteLock.class);
@@ -491,6 +492,8 @@ class PipelineSchedulerChainTest {
         for (String cron : List.of("runHeavyJobOfTheDay", "runDailyUpdate", "runCorporateActionChain",
                 "deriveReconcileInputs", "reconcileIndicators", "runUniverseRebalance")) {
             verify(refusing).awaitForCron(cron);
+            // 끝 줄은 건너뛴 날에도 찍힌다 — 없으면 ops/crons-done.sh가 그날을 「남은 발화」로 막아 배포·종료가 서지 않는다.
+            assertThat(output.getAll()).as(cron + "의 끝 줄").contains("크론 발화를 마쳤다. 크론=" + cron);
         }
     }
 

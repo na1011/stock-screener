@@ -132,6 +132,22 @@ class WriteLockTest {
     }
 
     @Test
+    @DisplayName("크론도 자기 누수 행을 한 틱 안에 회수한다 — 기다리지 않는다(L1-3 · 풀 1 박동이 못 돌아 23:00까지 교착하던 꼴)")
+    void cronReclaimsItsOwnLeakedRowWithoutWaiting() {
+        new WriteLockStore(url(), user(), password(), "t").acquireJvm(null, LockRow.HolderKind.WEB,
+                java.util.UUID.randomUUID(), "cron:runDailyUpdate", me);
+        MutableClock clock = new MutableClock(ZonedDateTime.of(2026, 10, 13, 14, 0, 0, 0, KST).toInstant());
+        WriteLock restarted = lock(me, null, clock, duration -> {
+            throw new AssertionError("자기 누수 행 앞에서 기다렸다 — 회수 갈래가 없다");
+        });
+
+        try (WriteLock.Token token = restarted.awaitForCron("runCorporateActionChain").orElseThrow()) {
+            assertThat(row().purpose()).isEqualTo("cron:runCorporateActionChain");
+        }
+        assertThat(alerts).as("기다림 알림 없음").isEmpty();
+    }
+
+    @Test
     @DisplayName("CAS: 같은 관측 version으로 둘이 쥐면 하나만 이긴다 · 행이 없을 때도 INSERT 하나만 이긴다")
     void casLetsOnlyOneWin() {
         WriteLockStore store = new WriteLockStore(url(), user(), password(), "t");
@@ -243,6 +259,8 @@ class WriteLockTest {
         Optional<WriteLock.Token> token = cron.awaitForCron("reconcileIndicators");
 
         assertThat(token).isEmpty();
+        assertThat(clock.instant()).as("발화한 날 23:00에 그만둔다 — 다음 날까지 붙잡지 않는다")
+                .isBefore(ZonedDateTime.of(2026, 10, 13, 23, 0, 30, 0, KST).toInstant());
         assertThat(row().heldBy(otherJvm)).isTrue();
         assertThat(row().hasWaiter()).isFalse();
         assertThat(alerts).extracting(AlertEvent::title)
