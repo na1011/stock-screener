@@ -286,14 +286,13 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
-    @DisplayName("읽기 전용 잡은 고아 실행 스위퍼를 안 돌린다 — 돌리면 지금 도는 적재의 실행 행을 닫는다")
+    @DisplayName("읽기 전용 잡 = 보호 표 쓰기 0 — 판정 잡은 원장을 쓰므로 빠진다(ADR-0175)")
     void readOnlyJobsSkipTheOrphanSweeper() {
-        // 스윕은 기동 시각 이전의 MANUAL + RUNNING을 전부 ABORTED로 닫으므로 **다른 JVM에서
-        // 지금 도는 행까지** 마감한다. 이 잡들은 몇 초짜리라 적재가 도는 중에 아무렇지 않게
-        // 치게 되고, 그러면 몇 시간짜리 적재가 계속 돌다가 마감에 실패한다.
+        // 이 집합은 쓰기 잠금을 안 쥐고 스윕도 안 돌린다. 쓰는 잡이 여기 들면 가드가 그 쓰기를 거절한다.
         assertThat(BootstrapRunner.isReadOnlyJob("bar-gap-review")).isTrue();
         assertThat(BootstrapRunner.isReadOnlyJob(CorporateActionJudgeJob.REVIEW_JOB_NAME)).isTrue();
-        assertThat(BootstrapRunner.isReadOnlyJob(CorporateActionJudgeJob.JOB_NAME)).isTrue();
+        // 판정은 corporate_action과 실행 행을 쓴다 — 적재가 쥔 동안에는 거절돼야 한다.
+        assertThat(BootstrapRunner.isReadOnlyJob(CorporateActionJudgeJob.JOB_NAME)).isFalse();
 
         // 반대쪽이 이 시험의 값이다 — 적재 잡까지 빠지면 고아가 영영 안 닫힌다.
         for (String loadJob : new String[] {"initial-load", "corporate-action", "market-calendar",

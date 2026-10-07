@@ -283,14 +283,11 @@ public class BootstrapRunner implements ApplicationRunner {
         // `SpringApplication.run()`이 `callRunners()`를 그 이벤트 발행보다 먼저 부르고, 아래에서
         // `System.exit()`으로 내려가기 때문이다. 그래서 직접 부른다.
         //
-        // 내 잡의 행은 아래에서 만들어지므로 이 시점의 정리 대상이 아니다(스위퍼가 기동 시각으로 가른다).
+        // 내 잡의 행은 아래에서 만들어지므로 이 시점의 정리 대상이 아니다.
         //
-        // MUST NOT: 원장 잡에서는 돌리지 않는다(ADR-0084). 스윕은 기동 시각 이전의
-        // `MANUAL` + `RUNNING`을 **전부** 닫으므로 **다른 JVM에서 지금 돌고 있는 행까지** 마감한다.
-        // 적재끼리는 "둘을 동시에 띄우는 드문 실수"였지만(`BatchExecutionSweeper` javadoc),
-        // 원장 조회·판정은 몇 초짜리라 **적재가 도는 중에 아무렇지 않게 치게 된다** — 그러면 몇
-        // 시간짜리 백필의 실행 행이 ABORTED가 되고 백필 자신은 계속 돌다가 마감에 실패한다.
-        // 이 둘은 고아를 거의 안 남기고, 남더라도 다음 적재 잡의 스윕이 닫는다.
+        // 이제 스윕은 행의 주인(pid · 시작 초 · DB 이름)이 죽었을 때만 닫는다(ADR-0175) — 다른 JVM에서 지금 도는 행을
+        // 닫던 옛 한계가 없다. 읽기 전용 잡에서 안 돌리는 이유는 하나 남았다: 그 잡은 쓰기 잠금을 안 쥐어 스윕의 쓰기가
+        // 가드에 거절된다.
         if (!isReadOnlyJob(job)) {
             executionSweeper.sweepBootstrapOrphans();
         }
@@ -546,19 +543,19 @@ public class BootstrapRunner implements ApplicationRunner {
             CorporateActionJudgeJob.REVIEW_JOB_NAME, CorporateActionJudgeJob.JOB_NAME);
 
     /**
-     * 외부 호출 없이 읽기만 하는 잡. <b>고아 실행 스위퍼를 돌리지 않는다.</b>
+     * <b>보호 표에 한 행도 안 쓰는</b> 잡 — 성질로 정의한다(ADR-0175). 쓰기 잠금을 쥐지 않고 고아 실행 스위퍼도 안 돌린다
+     * (스윕은 {@code batch_execution}에 쓴다). 쓰면 가드가 거절하므로 이 집합이 틀리면 그 잡이 시끄럽게 실패한다 — 목록이
+     * 스스로 검사된다.
      *
      * <p>{@link #LEDGER_JOBS}와 갈라 둔 이유는 <b>두 집합이 다른 질문에 답하기</b> 때문이다 —
-     * 저쪽은 "{@code --ca-*}가 뜻을 갖는가", 이쪽은 "스윕을 돌려도 되는가"다. 하나로 두면
-     * 읽기 전용 잡을 더할 때 <b>{@code --ca-*}까지 열리거나, 안 열려고 빼면 스윕이 돈다.</b>
+     * 저쪽은 "{@code --ca-*}가 뜻을 갖는가", 이쪽은 "보호 표에 쓰는가"다.
      *
-     * <p>스윕은 기동 시각 이전의 {@code MANUAL} + {@code RUNNING}을 전부 닫으므로
-     * <b>다른 JVM에서 지금 돌고 있는 행까지 마감한다.</b> 이 잡들은 몇 초짜리라 적재가 도는
-     * 중에 아무렇지 않게 치게 되고, 그러면 몇 시간짜리 적재의 실행 행이 ABORTED가 된다.
+     * <p>MUST NOT: {@code corporate-action-judge}를 다시 넣지 않는다 — 원장({@code corporate_action})과 실행 행을 쓴다. 예전에는
+     * 「몇 초짜리라 적재 중에 쳐도 안전」으로 여기 있었는데(ADR-0084), 적재가 읽는 원장을 판정이 바꾸는 것 자체가 정합성
+     * 위험이었다. 이제 적재가 쥔 동안의 판정은 거절된다 — 세션 안이면 {@code ops/write-session.sh exec}로 합류한다.
      */
     private static final java.util.Set<String> READ_ONLY_JOBS = java.util.Set.of(
-            CorporateActionJudgeJob.REVIEW_JOB_NAME, CorporateActionJudgeJob.JOB_NAME,
-            MarketCalendarJob.REVIEW_JOB_NAME);
+            CorporateActionJudgeJob.REVIEW_JOB_NAME, MarketCalendarJob.REVIEW_JOB_NAME);
 
     private static boolean isLedgerJob(String job) {
         return LEDGER_JOBS.contains(job);
@@ -566,7 +563,7 @@ public class BootstrapRunner implements ApplicationRunner {
 
     // package-private — 이 집합이 갈리면 읽기 전용 명령이 남의 적재를 마감한다.
     // 그 증상은 조회 쪽에 안 나타나므로 테스트가 이름으로 잠근다.
-    static boolean isReadOnlyJob(String job) {
+    public static boolean isReadOnlyJob(String job) {
         return READ_ONLY_JOBS.contains(job);
     }
 

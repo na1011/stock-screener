@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder.TriggeredBy;
+import com.stockscreener.pipeline.lock.ProcessIdentity;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,12 +29,16 @@ import java.util.Set;
  * <b>살아 있는</b> 잡을 "프로세스가 사라졌다"고 마감하면 이 클래스가 없애려던 모순을
  * 그대로 다시 만든다.
  *
- * <p>대신 <b>소유자와 기동 시각</b>으로 판정한다. 어느 프로세스가 어떤 행을 만드는지가
- * {@code triggered_by}에 이미 남아 있다 — 웹 인스턴스는 {@code ADMIN}·{@code SCHEDULER}만,
- * {@code BootstrapRunner}는 {@code MANUAL}만 만든다. 그러므로 <b>내가 만들 수 있는 종류인데
- * 내가 뜨기 전에 시작된 RUNNING 행</b>은 정의상 죽은 프로세스의 것이다(인스턴스가 하나라는
- * 전제 위에 선다 — ADR-0025). 이 판정은 오탐이 구조적으로 없고, 다른 JVM의 행은 종류가
- * 달라 애초에 대상이 아니다.
+ * <h2>주인이 적힌 행 — 주인이 죽었을 때만 닫는다(ADR-0175)</h2>
+ * <p>V66부터 실행 행은 자기를 연 JVM의 신원(pid · 프로세스 시작 초 · DB 이름)을 든다. <b>같은 DB 이름 ∧ 그 프로세스가 죽었음</b>
+ * (pid 부재 ∨ 시작 초 불일치)일 때만 닫는다 — 웹·bootRun 어느 쪽의 스윕이든 같다. 그래서 둘을 동시에 띄운 적재가 서로의 산 행을
+ * 닫던 한계와, 트리거로 주인을 못 가르던 리밸런싱 꼬리(GAP_FILL)가 함께 풀린다.
+ *
+ * <h2>주인이 없는 행 — 예전 규칙</h2>
+ * <p>V66 전 이력(칸이 NULL)과 <b>다른 DB 이름</b>의 행(사본으로 넘어온 운영 행 — 그 pid는 이 기계의 그 프로세스가 아니다)은
+ * <b>소유자와 기동 시각</b>으로 판정한다. 어느 프로세스가 어떤 행을 만드는지가 {@code triggered_by}에 남아 있다 — 웹 인스턴스는
+ * {@code ADMIN}·{@code SCHEDULER}만, {@code BootstrapRunner}는 {@code MANUAL}만 만든다. 그러므로 <b>내가 만들 수 있는 종류인데
+ * 내가 뜨기 전에 시작된 RUNNING 행</b>은 정의상 죽은 프로세스의 것이다(웹 인스턴스가 하나라는 전제).
  *
  * <p>MUST NOT: 알림을 보내지 않는다. 이 정리는 이력 표시를 고칠 뿐이고, 종료 경로에서
  * 알림 포트에 의존하면 마감 자체를 잃는다.
@@ -91,18 +96,48 @@ public class BatchExecutionSweeper {
     }
 
     /**
-     * 이전 부트스트랩 실행이 남긴 {@code MANUAL} 행을 닫는다. 러너가 잡을 시작하기 전에 부른다.
+     * 이전 부트스트랩 실행이 남긴 행을 닫는다. 러너가 잡을 시작하기 전에 부른다.
      *
-     * <p>한계 — 적재 <b>두 개를 동시에</b> 띄우면 뒤엣것이 앞엣것의 살아 있는 행을 마감한다.
-     * 그 상황은 이미 아무도 막지 못하고({@code AdminJobLauncher}의 판정은 JVM을 못 넘는다)
-     * 셸 훅이 실행 시점에 경고한다. 여기서 더 정확해지려면 소유자 토큰이 필요한데, 그것은
-     * 스키마 변경이라 이 결함의 크기에 맞지 않는다.
+     * <p>주인이 적힌 행은 주인이 죽었을 때만 닫으므로 다른 bootRun이 지금 도는 행은 안 건드린다 — 옛 한계(뒤엣것이 앞엣것의 산 행을
+     * 마감한다)는 주인 없는 옛 행에만 남는다.
      */
     public void sweepBootstrapOrphans() {
         sweep(BOOTSTRAP_OWNED, Set.of(), "부트스트랩");
     }
 
     private void sweep(Set<TriggeredBy> owners, Set<String> gapFillJobs, String label) {
+        sweepDeadOwners(label);
+        sweepUnownedRows(owners, gapFillJobs, label);
+    }
+
+    /** 주인이 적힌 같은 DB의 RUNNING 행 중 주인이 죽은 것만 닫는다. 내 행은 산 주인이므로 안 닫힌다. */
+    private void sweepDeadOwners(String label) {
+        List<long[]> owned = jdbcTemplate.query("""
+                SELECT id, owner_pid, owner_start FROM batch_execution
+                 WHERE status = 'RUNNING' AND owner_db = current_database()
+                   AND owner_pid IS NOT NULL AND owner_start IS NOT NULL
+                """, (rs, rowNum) -> new long[] {rs.getLong("id"), rs.getLong("owner_pid"), rs.getLong("owner_start")});
+        int closed = 0;
+        for (long[] row : owned) {
+            if (ProcessIdentity.isAlive(row[1], row[2])) {
+                continue;
+            }
+            closed += jdbcTemplate.update("""
+                    UPDATE batch_execution
+                       SET status      = 'ABORTED',
+                           finished_at = now(),
+                           note        = COALESCE(note || ' ', '')
+                                         || '프로세스가 사라져 마감되지 못한 실행을 정리했다.'
+                                         || ' (주인 pid ' || owner_pid || ' · 시작 ' || owner_start || ')'
+                     WHERE id = ? AND status = 'RUNNING'
+                    """, row[0]);
+        }
+        if (closed > 0) {
+            log.info("주인이 죽은 배치 실행을 정리했다. {}건 ({} 스윕)", closed, label);
+        }
+    }
+
+    private void sweepUnownedRows(Set<TriggeredBy> owners, Set<String> gapFillJobs, String label) {
         List<Object> args = new ArrayList<>();
         StringBuilder placeholders = new StringBuilder();
         for (TriggeredBy owner : owners) {
@@ -132,6 +167,7 @@ public class BatchExecutionSweeper {
                        note        = COALESCE(note || ' ', '')
                                      || '프로세스가 사라져 마감되지 못한 실행을 정리했다.'
                  WHERE status = 'RUNNING'
+                   AND (owner_pid IS NULL OR owner_db IS DISTINCT FROM current_database())
                    AND (triggered_by IN (%s)%s)
                    AND started_at < ?
                 """.formatted(placeholders, gapFillClause), args.toArray());
