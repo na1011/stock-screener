@@ -82,8 +82,29 @@ lock_gate() {
     exit 1
   fi
 }
+# 적재 JVM(bootRun)이 돌고 있으면 멈춘다(--force와 무관) — 배포를 가로지르는 bootRun이 옛 jar면 그 실행 행은 주인 칸이 비어
+# 있어, 새 jar의 bootRun 스윕이 「주인 없는 옛 행」 규칙으로 그 산 행을 닫을 수 있다(ADR-0175 과도기). 새 jar의 bootRun이면 잠금을
+# 쥐고 있어 새 앱이 어차피 못 뜬다. 판정은 crons-done.sh·훅과 같은 함수다. 판정하지 못했으면(2) 멈춘다 — 「없다」로 읽지 않는다.
+load_gate() {
+  local lib="$ROOT/.claude/hooks/lib/load-process.sh" pids rc=0
+  if [[ ! -r "$lib" ]]; then
+    echo "[deploy] 적재 JVM 판정 함수를 못 읽었다(${lib}) — 아무것도 바꾸지 않고 멈춘다." >&2
+    exit 1
+  fi
+  # shellcheck source=.claude/hooks/lib/load-process.sh
+  . "$lib"
+  pids="$(stray_load_pids)" || rc=$?
+  if [[ $rc -eq 0 ]]; then
+    echo "[deploy] 적재 JVM(bootRun)이 돌고 있다(PID ${pids}) — 끝난 뒤 배포한다. 아무것도 바꾸지 않고 멈춘다." >&2
+    exit 1
+  elif [[ $rc -ne 1 ]]; then
+    echo "[deploy] 적재 JVM이 도는지 판정하지 못했다(pgrep·ps) — 아무것도 바꾸지 않고 멈춘다." >&2
+    exit 1
+  fi
+}
 crons_gate
 lock_gate
+load_gate
 
 # jar가 나온 커밋을 빌드 전후로 잡는다 — 빌드(약 1분) 사이에 공유 작업 트리로 커밋이 들어오면 「스테이징 순간의 HEAD」는
 # 다른 코드를 가리킨다. 둘이 같고 빌드 입력에 커밋 안 된 것이 없을 때만 stage.sh가 커밋을 적는다.
@@ -110,17 +131,40 @@ test_db_guard() {
     echo "[deploy] 시험 DB(${db})를 읽지 못했다 — 멈춘다: ${versions}" >&2
     exit 1
   fi
-  # 쓰기 가드 스위치가 남아 있는가(ADR-0175 · 잠금 결정 3). 시험은 가드를 자기 JVM 신원 범위(ss:j:<pid>:)로 켜고 끝에 지운다 —
-  # 죽은 시험이 남긴 행은 같은 pid를 다시 받은 시험 JVM의 보호 표 쓰기를 거절해, 빌드 시험이 코드 결함처럼 붉는다(범위가 NULL이면
-  # 그 DB의 모든 쓰기). 지울지는 사람이 본다 — 지금 도는 시험의 행일 수 있다.
-  local guards
-  if ! guards="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select case when to_regclass('public.guard_setting') is null then '' else (select coalesce(string_agg(db_name || ' ' || coalesce(identity_prefix, '(전부)'), ', '), '') from guard_setting) end" 2>&1)"; then
-    echo "[deploy] 시험 DB(${db})의 쓰기 가드 스위치를 읽지 못했다 — 멈춘다: ${guards}" >&2
+  # 쓰기 가드 스위치가 남아 있는가(ADR-0175 · 잠금 결정 3). 시험은 가드를 자기 JVM 신원 전체(ss:j:<pid>:<시작초>) 범위로 켜고 끝에
+  # 지운다 — 죽은 시험이 남긴 그 꼴의 행은 같은 신원이 다시 안 나오므로(시작 초가 다르다) 무해하다. 막는 것은 셋이다: 범위가
+  # NULL(그 DB의 모든 쓰기) · 살아 있는 시험 JVM의 행(빌드와 겹친다) · 시작 초 없는 옛 꼴(pid 재사용에 걸린다).
+  # MUST: 표 존재는 따로 묻는다 — 같은 문장 안에서 표를 부르면 V66 전 DB에서 파싱 단계에 죽는다.
+  local has_guard rows row prefix gpid gstart blockers="" harmless=""
+  if ! has_guard="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select to_regclass('public.guard_setting') is not null" 2>&1)"; then
+    echo "[deploy] 시험 DB(${db})의 쓰기 가드 스위치를 읽지 못했다 — 멈춘다: ${has_guard}" >&2
     exit 1
   fi
-  if [[ -n "$guards" ]]; then
-    echo "[deploy] 시험 DB(${db})에 쓰기 가드 스위치 행이 남아 있다: ${guards} — 빌드 시험의 보호 표 쓰기가 SSWG1로 거절될 수 있다." >&2
-    echo "         그 pid의 시험이 지금 안 돌면 죽은 시험이 남긴 것이다 — 지운 뒤 다시 친다: psql -d ${db} -c 'DELETE FROM guard_setting'" >&2
+  if [[ "$has_guard" == "t" ]]; then
+    if ! rows="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select coalesce(identity_prefix, '(전부)') from guard_setting where db_name = current_database()" 2>&1)"; then
+      echo "[deploy] 시험 DB(${db})의 쓰기 가드 스위치를 읽지 못했다 — 멈춘다: ${rows}" >&2
+      exit 1
+    fi
+    while IFS= read -r prefix; do
+      [[ -z "$prefix" ]] && continue
+      if [[ "$prefix" =~ ^ss:j:([0-9]+):([0-9]+)$ ]]; then
+        gpid="${BASH_REMATCH[1]}"; gstart="${BASH_REMATCH[2]}"
+        if proc_alive "$gpid" "$gstart"; then
+          blockers="${blockers} ${prefix}(살아 있는 시험 JVM)"
+        else
+          harmless="${harmless} ${prefix}"
+        fi
+      else
+        blockers="${blockers} ${prefix}"
+      fi
+    done <<< "$rows"
+  fi
+  if [[ -n "$harmless" ]]; then
+    echo "[deploy] 시험 DB(${db})에 죽은 시험 JVM의 가드 스위치 행이 남아 있다:${harmless} — 그 신원은 다시 안 나오므로 빌드에 무해하다(지워도 된다)."
+  fi
+  if [[ -n "$blockers" ]]; then
+    echo "[deploy] 시험 DB(${db})의 쓰기 가드 스위치 행이 빌드 시험의 보호 표 쓰기를 거절할 수 있다:${blockers} — 멈춘다." >&2
+    echo "         살아 있는 시험이면 끝난 뒤 다시 친다. 「(전부)」·시작 초 없는 옛 꼴은 그 행을 지운 뒤 다시 친다(시험 DB · 사람이 본다)." >&2
     exit 1
   fi
   local failed=""
@@ -184,8 +228,14 @@ prod_migration_guard() {
   # 기동 시더부터 SSWG1로 거절돼 앱이 내려간 채가 된다. 되돌리기는 운영 guard_setting 행을 먼저 지우는 것이다(사용자 승인 · 원시 SQL).
   # 사정거리: 이 점검은 배포하는 트리 자신의 deploy.sh에 있다 — 잠금 전 커밋으로 되돌려 배포하면 그 트리의 옛 deploy.sh에는 이 점검이
   # 없으므로 되돌리기를 지키지 못한다. 실제 방어는 ADR-0175 §결과의 되돌리기 첫 단계다.
-  local guard_on lock_migration
-  if ! guard_on="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select case when to_regclass('public.guard_setting') is null then 'f' else (select (count(*) > 0)::text from guard_setting where db_name = current_database()) end" 2>&1)"; then
+  # MUST: 표 존재는 따로 묻는다 — 같은 문장 안에서 guard_setting을 부르면 V66 전 운영 DB에서 파싱 단계에 죽어(relation does not
+  # exist) 잠금 jar를 이 스크립트로 처음 배포할 수 없다.
+  local guard_on="f" has_guard lock_migration
+  if ! has_guard="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select to_regclass('public.guard_setting') is not null" 2>&1)"; then
+    echo "[deploy] 운영 DB(${db})의 쓰기 가드 스위치를 읽지 못했다 — 멈춘다: ${has_guard}" >&2
+    exit 1
+  fi
+  if [[ "$has_guard" == "t" ]] && ! guard_on="$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$db" -c "select (count(*) > 0)::text from guard_setting where db_name = current_database()" 2>&1)"; then
     echo "[deploy] 운영 DB(${db})의 쓰기 가드 스위치를 읽지 못했다 — 멈춘다: ${guard_on}" >&2
     exit 1
   fi
@@ -220,6 +270,7 @@ echo "== 앱 재기동 =="
 # 빌드 사이에 명목 시각이 지났을 수 있다 — 종료 직전에 다시 묻는다. 여기서 멈추면 아직 아무것도 안 바꿨다.
 crons_gate
 lock_gate
+load_gate
 # 돌고 있지 않아도 실패로 다루지 않는다. 배포는 "지금 도는 것을 새것으로 바꾼다"이고,
 # 꺼져 있었으면 새것으로 켜는 것이 같은 의도다. 판정은 위에서 했으므로 stop.sh에는 --force를 넘긴다.
 if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then

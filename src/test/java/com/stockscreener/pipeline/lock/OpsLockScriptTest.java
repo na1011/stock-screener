@@ -68,6 +68,7 @@ class OpsLockScriptTest {
     void tearDown() {
         app.destroyForcibly();
         others.forEach(Process::destroyForcibly);
+        jdbcTemplate.update("DELETE FROM guard_setting"); // 먼저 — 범위가 NULL인 행이 남아 있으면 아래 정리가 거절된다
         jdbcTemplate.update("DELETE FROM batch_execution WHERE job_name = ?", JOB);
         jdbcTemplate.update("DELETE FROM write_lock");
     }
@@ -147,7 +148,111 @@ class OpsLockScriptTest {
         assertThat(gate.output).contains("[deploy] 쓰기 잠금 보유자를 판정하지 못했다").doesNotContain("통과");
     }
 
+    @Test
+    @DisplayName("deploy.sh의 가드 점검 둘이 V66 전 DB(guard_setting 없음)에서 통과한다 — 잠금 jar를 자기 deploy.sh로 처음 배포할 수 있다")
+    void deployGuardsPassOnADatabaseBeforeV66() throws Exception {
+        String before = db + "_v65";
+        jdbcTemplate.execute("DROP DATABASE IF EXISTS " + before);
+        jdbcTemplate.execute("CREATE DATABASE " + before);
+        try {
+            String url;
+            String user;
+            try (java.sql.Connection pooled = jdbcTemplate.getDataSource().getConnection()) {
+                url = pooled.getMetaData().getURL();
+                user = pooled.getMetaData().getUserName();
+            }
+            try (java.sql.Connection connection = java.sql.DriverManager.getConnection(
+                    url.substring(0, url.lastIndexOf('/') + 1) + before, user, "")) {
+                try (java.sql.Statement statement = connection.createStatement()) {
+                    statement.execute("CREATE TABLE flyway_schema_history (version varchar(50), success boolean NOT NULL)");
+                    for (String version : migrationVersionsBeforeTheLock()) {
+                        statement.execute("INSERT INTO flyway_schema_history VALUES ('" + version + "', true)");
+                    }
+                }
+            }
+            Result prod = deployFunction("prod_migration_guard", java.util.Map.of("DB_NAME", before));
+            assertThat(prod.exit).as(prod.output).isZero();
+            assertThat(prod.output).contains("통과");
+
+            Result test = deployFunction("test_db_guard",
+                    java.util.Map.of("TEST_DB_URL", "jdbc:postgresql://localhost:5432/" + before));
+            assertThat(test.exit).as(test.output).isZero();
+            assertThat(test.output).contains("통과");
+        } finally {
+            jdbcTemplate.execute("DROP DATABASE IF EXISTS " + before);
+        }
+    }
+
+    @Test
+    @DisplayName("시험 DB 스위치 잔여: 죽은 시험 JVM의 전체 신원 행은 무해(통과) · (전부)·시작 초 없는 옛 꼴은 멈춤")
+    void testDatabaseGuardResidueIsJudgedByIdentity() throws Exception {
+        java.util.Map<String, String> env = java.util.Map.of("TEST_DB_URL", "jdbc:postgresql://localhost:5432/" + db);
+        jdbcTemplate.update("INSERT INTO guard_setting (db_name, identity_prefix) VALUES (current_database(), ?)",
+                "ss:j:" + appIdentity.pid() + ":" + (appIdentity.startEpochSecond() - 1));
+        Result dead = deployFunction("test_db_guard", env);
+        assertThat(dead.exit).as(dead.output).isZero();
+        assertThat(dead.output).contains("무해").contains("통과");
+
+        jdbcTemplate.update("UPDATE guard_setting SET identity_prefix = 'ss:j:" + appIdentity.pid() + ":'");
+        Result legacy = deployFunction("test_db_guard", env);
+        assertThat(legacy.exit).as(legacy.output).isEqualTo(1);
+
+        jdbcTemplate.update("UPDATE guard_setting SET identity_prefix = NULL");
+        Result all = deployFunction("test_db_guard", env);
+        assertThat(all.exit).as(all.output).isEqualTo(1);
+        assertThat(all.output).contains("(전부)");
+    }
+
+    @Test
+    @DisplayName("deploy.sh는 적재 JVM(bootRun)이 돌고 있으면 멈춘다 — 배포를 가로지르는 옛 jar bootRun의 주인 없는 행을 지킨다")
+    void deployStopsWhileALoadJvmRuns() throws Exception {
+        // 적재 JVM 판정(stray_load_pids)은 명령줄의 --job=과 실행 이름 java를 본다 — 같은 모양의 무해한 프로세스(perl의 sleep)다.
+        Process load = new ProcessBuilder("bash", "-c", "exec -a java perl -e 'sleep 600' -- --job=backfill").start();
+        others.add(load);
+        Thread.sleep(300);
+
+        Result blocked = deployFunction("load_gate", java.util.Map.of());
+        assertThat(blocked.exit).as(blocked.output).isEqualTo(1);
+        assertThat(blocked.output).contains("적재 JVM(bootRun)이 돌고 있다").contains(Long.toString(load.pid()));
+
+        load.destroyForcibly().waitFor(10, TimeUnit.SECONDS);
+        Result clear = deployFunction("load_gate", java.util.Map.of());
+        assertThat(clear.output).as("이 기계에 다른 bootRun이 없을 때").contains("통과");
+    }
+
     // ── 도우미 ────────────────────────────────────────────────────────────────────
+
+    /** 잠금 마이그레이션(write_guard_check) 앞의 운영 마이그레이션 버전 — V66 전 DB의 이력. */
+    private static List<String> migrationVersionsBeforeTheLock() throws Exception {
+        List<String> versions = new ArrayList<>();
+        try (var files = Files.list(Path.of("src/main/resources/db/migration"))) {
+            for (Path file : files.toList()) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("^V(\\d+)__").matcher(file.getFileName().toString());
+                if (m.find() && !Files.readString(file).contains("write_guard_check()")) {
+                    versions.add(m.group(1));
+                }
+            }
+        }
+        return versions;
+    }
+
+    /** {@code ops/deploy.sh}의 함수 하나만 떼어 돌린다 — 빌드·종료·스테이징은 안 탄다. */
+    private Result deployFunction(String function, java.util.Map<String, String> env) throws Exception {
+        ProcessBuilder builder = new ProcessBuilder("bash", "-c", "set -euo pipefail; . ops/lib.sh; FORCE=''; ROOT=\"$PWD\"; "
+                + "eval \"$(sed -n '/^" + function + "() {/,/^}/p' ops/deploy.sh)\"; " + function + "; echo 통과");
+        builder.environment().put("HOME", home.toString());
+        builder.environment().put("DB_NAME", db);
+        builder.environment().putAll(env);
+        builder.environment().remove(WriteIdentity.SESSION_ENV);
+        builder.redirectErrorStream(true);
+        Process process = builder.start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        if (!process.waitFor(90, TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            throw new AssertionError("90초 안에 안 끝났다: " + function);
+        }
+        return new Result(process.exitValue(), output);
+    }
 
     private static final String NO_SUCH_DB = "zz_no_such_db_p3lock";
 
