@@ -56,10 +56,22 @@ start_app() {
   rotate_log "$LOG_DIR/stdout.log" "$ROTATE_STDOUT_MAX" "$ROTATE_STDOUT_KEEP" || true
   rotate_log "$LOG_DIR/stderr.log" "$ROTATE_STDERR_MAX" "$ROTATE_STDERR_KEEP" || true
 
-  # nohup은 exec으로 넘기고 run-app.sh도 exec으로 java가 되므로, $!가 곧 JVM의 PID다.
+  # **쓰기 잠금을 먼저 묻는다**(ADR-0175). 앱은 기동 구간(Flyway·시더·스위퍼)을 잠금 안에서 쓰므로, bootRun·손 세션이 쥐고
+  # 있으면 기동에서 「쓰기 잠금 게이트가 기동을 세운다」로 exit 1이 된다 — 여기서 먼저 알리면 60초를 안 기다린다.
+  # 앱은 원래 꺼져 있었으므로 상태는 그대로다. 묻지 못했으면(표 없음 · psql 없음) 그대로 띄운다 — 게이트가 다시 본다.
+  local holder
+  if holder="$(write_lock_held_by_other "${DB_NAME:-stock_screener}")"; then
+    echo "[start] 쓰기 잠금을 ${holder}이(가) 쥐고 있다 — 앱은 기동에서 잠금을 쥐므로 지금은 못 뜬다. 그것이 끝난 뒤 다시 띄운다." >&2
+    return 1
+  fi
+
+  # nohup은 exec으로 넘기고 env도 run-app.sh도 exec으로 java가 되므로, $!가 곧 JVM의 PID다.
   # caffeinate로 감싸지 않는 이유가 그것이다 — 감싸면 PID 파일이 caffeinate를 가리키는데
   # caffeinate는 시그널을 자식에게 넘기지 않아 stop.sh의 kill이 앱에 닿지 않는다.
-  nohup bash "$DEPLOY/run-app.sh" >>"$LOG_DIR/stdout.log" 2>>"$LOG_DIR/stderr.log" &
+  #
+  # MUST: 쓰기 세션 변수를 걷는다(env -u). 손 세션의 exec 안에서 이 스크립트가 불리면 앱 JVM이 세션에 합류해 세션이 영영 안
+  # 만료된다 — 웹 프로파일은 그 변수를 보면 기동을 세우지만(WriteLockGate), 여기서 걷는 것이 먼저다(잠금 v4 반증 L1-6b).
+  nohup env -u SS_WRITE_SESSION -u PGAPPNAME bash "$DEPLOY/run-app.sh" >>"$LOG_DIR/stdout.log" 2>>"$LOG_DIR/stderr.log" &
   pid=$!
   echo "$pid" >"$APP_PID_FILE"
 
@@ -72,6 +84,8 @@ start_app() {
     echo "[start] 앱 OK — $(curl -s "$HEALTH_LOCAL")"
   else
     echo "[start] 60초 안에 응답이 없다. $LOG_DIR/stdout.log를 본다 — 기동 실패는 거기 있다." >&2
+    # 위 물음과 기동 사이에 누가 잠금을 쥐었으면 게이트가 같은 문구로 exit 1을 냈다 — 그 줄을 그대로 보인다.
+    grep -F "쓰기 잠금 게이트가 기동을 세운다" "$LOG_DIR/stdout.log" 2>/dev/null | tail -1 >&2 || true
     return 1
   fi
 }
