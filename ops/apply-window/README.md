@@ -29,7 +29,8 @@
 **금 2026-09-18 15:12 이후 시작** · refill·게이트는 **18:50 KST 전**(EDGAR 접수 창 — 인용) · 토 09-19 20:00 리밸런싱 전에 판정까지. 잡은 하나씩.
 
 ## 순서 (스크립트)
-**쓰기 가드가 켜진 운영 DB에서는** 운영에 쓰는 단계(4·5·6)를 세션 안에서 돈다 — `ops/write-session.sh begin <id>` 뒤
+**잠금 jar가 배포된 운영 DB에서는** 운영에 쓰는 단계(4·5·6)를 세션 안에서 돈다(잡 사이 틈에 크론이 끼지 않게 — 가드를 켜면
+무신원 쓰기는 거절까지 된다) — `ops/write-session.sh begin <id>` 뒤
 `ops/write-session.sh exec <id> -- ops/apply-window/04-refill.sh stock_screener true`처럼 스크립트째 `exec`한다(ADR-0175).
 `boot()`는 사본 DB로 띄울 때 세션 변수를 걷는다 — 세션은 운영 DB의 잠금 행이라 사본의 JVM이 합류하려 들면 거절된다.
 
