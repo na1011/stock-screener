@@ -1,4 +1,10 @@
-import type { BatchExecution, BatchStatus, InteractionAction, TriggeredBy } from '@/api/types'
+import type {
+  BatchExecution,
+  BatchStatus,
+  ExecutionScope,
+  InteractionAction,
+  TriggeredBy,
+} from '@/api/types'
 
 /**
  * 관리자 화면이 서버 값을 사람 말로 옮기는 유일한 지점.
@@ -60,6 +66,24 @@ export function triggeredByLabel(triggeredBy: TriggeredBy): string {
       return '좁힌 정기 실행'
     default:
       return assertNever(triggeredBy)
+  }
+}
+
+/**
+ * 범위 표지(V63)의 덧말. **`NARROW`만 말한다** — 연체 시계에 안 세는 실행이 그것이다.
+ *
+ * `FULL`과 표지 전(`null`)은 덧말이 없다. 표지 전 행에 「범위 모름」을 달면 이력 전체가 그 낱말로 덮이고,
+ * 그 사실은 연체 배너가 한 번 말한다.
+ */
+export function scopeNote(scope: ExecutionScope | null): string | null {
+  switch (scope) {
+    case 'NARROW':
+      return '좁힘'
+    case 'FULL':
+    case null:
+      return null
+    default:
+      return assertNever(scope)
   }
 }
 

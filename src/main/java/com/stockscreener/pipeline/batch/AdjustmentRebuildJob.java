@@ -85,6 +85,12 @@ public class AdjustmentRebuildJob {
         }
     }
 
+    /** 정기 실행(14:00 사슬)은 티커·유니버스를 안 준다. 기준일과 꼬리는 기록 계층이 본다. */
+    public static BatchExecutionRecorder.Scope scopeOf(List<String> tickers, String universeCode) {
+        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty())
+                && (universeCode == null || universeCode.isBlank()));
+    }
+
     /**
      * 원장의 적용 대상으로 계수와 수정종가를 다시 짓는다.
      *
@@ -111,17 +117,18 @@ public class AdjustmentRebuildJob {
      */
     public Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                                      List<String> tickers, String universeCode) {
+        BatchExecutionRecorder.Scope scope = scopeOf(tickers, universeCode);
         List<SecurityRef> targets =
                 stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
         if (targets.isEmpty()) {
             log.info("재구축할 대상이 없다. 유니버스를 먼저 갱신한다.");
             return new Invalidation(
-                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish(),
+                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish(),
                     List.of(), null);
         }
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
         List<Rebuilt> rebuilt = new ArrayList<>();
         int appliedEvents = 0;
         // 종목별 무변경 줄을 DEBUG로 내리면서 그 수가 갈 곳이 필요해졌다.

@@ -18,7 +18,7 @@ import BatchDetailSheet from '@/components/admin/BatchDetailSheet.vue'
 import RatioBar from '@/components/ui/RatioBar.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useApiToast } from '@/composables/useApiToast'
-import { batchStatusStyle, elapsedSeconds, triggeredByLabel } from '@/lib/admin'
+import { batchStatusStyle, elapsedSeconds, scopeNote, triggeredByLabel } from '@/lib/admin'
 import { formatCount, isStalled, processedTasks, progressRatio } from '@/lib/batchProgress'
 import { useAdminStore } from '@/stores/admin'
 
@@ -288,7 +288,7 @@ function formatTime(value: string | null): string {
               예산 {{ job.budgetDays }}일)
             </span>
             <span v-if="!job.scheduledOnly" class="admin__stale-note">
-              스케줄 실행이 아직 없어 수동 실행까지 함께 셉니다.
+              스케줄 실행이 아직 없어 수동 실행을 셉니다. 범위 표지 전 실행은 좁힌 것인지 몰라 함께 셉니다.
             </span>
             <!--
               버튼이 있는 잡에는 명령을 안 적는다. 둘 다 적으면 어느 쪽이 맞는지 묻게 된다.
@@ -572,6 +572,13 @@ function formatTime(value: string | null): string {
           <Column header="실행 주체">
             <template #body="{ data }: { data: BatchExecution }">
               {{ triggeredByLabel(data.triggeredBy) }}
+              <span
+                v-if="scopeNote(data.scope)"
+                class="admin__scope-note"
+                title="정기 실행과 범위가 달라 연체 판정에 세지 않습니다"
+              >
+                · {{ scopeNote(data.scope) }}
+              </span>
             </template>
           </Column>
 
@@ -642,6 +649,10 @@ function formatTime(value: string | null): string {
 }
 
 .admin__stale-note {
+  color: var(--p-text-muted-color);
+}
+
+.admin__scope-note {
   color: var(--p-text-muted-color);
 }
 

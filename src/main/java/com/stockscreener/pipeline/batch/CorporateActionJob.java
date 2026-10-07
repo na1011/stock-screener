@@ -65,6 +65,12 @@ public class CorporateActionJob {
         this.batchExecutions = batchExecutions;
     }
 
+    /** 정기 실행(14:00 사슬)은 창·티커·유니버스를 안 준다. 기준일과 꼬리는 기록 계층이 본다. */
+    public static BatchExecutionRecorder.Scope scopeOf(LocalDate from, List<String> tickers, String universeCode) {
+        return BatchExecutionRecorder.Scope.of(from == null && (tickers == null || tickers.isEmpty())
+                && (universeCode == null || universeCode.isBlank()));
+    }
+
     /**
      * {@code [from, asOf]}에 효력일이 드는 기업 행위를 모은다.
      *
@@ -78,6 +84,7 @@ public class CorporateActionJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LocalDate from, List<String> tickers, String universeCode) {
+        BatchExecutionRecorder.Scope scope = scopeOf(from, tickers, universeCode);
         List<SecurityRef> targets =
                 stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
 
@@ -98,7 +105,7 @@ public class CorporateActionJob {
         if (targets.isEmpty() || earliestByMarket.isEmpty()) {
             log.info("기업 행위를 모을 대상이 없다. 대상={}종목 저장된 시세={} — 시세를 먼저 적재한다.",
                     targets.size(), earliestByMarket.isEmpty() ? "없음" : earliestByMarket);
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
+            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish();
         }
 
         log.info("기업 행위 수집을 시작한다. 대상 {}종목, 창 {} ~ {}"
@@ -107,7 +114,7 @@ public class CorporateActionJob {
                 from != null ? from.toString() : "시장별 첫 거래일 " + earliestByMarket, asOf);
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
         // 시장별로 접어 루프 뒤에 한 줄씩 낸다. 종목마다 찍던 때 한 판에 312줄이 stockId만
         // 다른 채 나왔고(2026-09-13 실측 · 380 B/줄) 그 312가 전부 US라 **국내 신호가 원리적으로
         // 묻혀 있었다** — 시장 축이 ADR-0100의 의도를 살리는 자리다.

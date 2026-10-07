@@ -9,6 +9,7 @@ import {
   elapsedSeconds,
   interactionActionLabel,
   triggeredByLabel,
+  scopeNote,
 } from './admin'
 
 function execution(overrides: Partial<BatchExecution> = {}): BatchExecution {
@@ -28,6 +29,7 @@ function execution(overrides: Partial<BatchExecution> = {}): BatchExecution {
     stageLabel: null,
     retriedFromId: null,
     triggeredBy: 'SCHEDULER',
+    scope: null,
     note: null,
     unresolvedFailureCount: 2,
     ...overrides,
@@ -55,6 +57,12 @@ describe('배치 상태 표현', () => {
 })
 
 describe('트리거 표현', () => {
+  it('범위 덧말은 NARROW에만 붙는다 — 표지 전(null)을 「모름」으로 덮지 않는다', () => {
+    expect(scopeNote('NARROW')).toBe('좁힘')
+    expect(scopeNote('FULL')).toBeNull()
+    expect(scopeNote(null)).toBeNull()
+  })
+
   it.each(TRIGGERED_BY)('%s에 한글 라벨이 있다', (triggeredBy) => {
     expect(triggeredByLabel(triggeredBy)).not.toBe(triggeredBy)
   })

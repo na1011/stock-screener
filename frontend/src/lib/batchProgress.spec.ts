@@ -30,6 +30,7 @@ function execution(overrides: Partial<BatchExecution> = {}): BatchExecution {
     stageLabel: null,
     retriedFromId: null,
     triggeredBy: 'MANUAL',
+    scope: null,
     note: null,
     unresolvedFailureCount: 0,
     ...overrides,

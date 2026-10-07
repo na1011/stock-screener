@@ -37,7 +37,7 @@ public class BatchExecutionReader {
             e.id, e.job_name, e.target_date, e.status, e.started_at, e.finished_at,
             e.target_count, e.success_count, e.failure_count, e.written_row_count,
             e.planned_task_count, e.progress_at, e.stage_label,
-            e.retried_from_id, e.triggered_by, e.note,
+            e.retried_from_id, e.triggered_by, e.scope, e.note,
             (SELECT count(*) FROM batch_execution_failure f
               WHERE f.execution_id = e.id AND NOT f.resolved) AS unresolved_count
             """;
@@ -257,6 +257,8 @@ public class BatchExecutionReader {
             rs.getString("stage_label"),
             (Long) rs.getObject("retried_from_id"),
             rs.getString("triggered_by"),
+            // 표지 전 실행은 NULL이다(V63). 「모름」이지 FULL이 아니다 — 접지 않는다.
+            rs.getString("scope"),
             rs.getString("note"),
             rs.getInt("unresolved_count"));
 
@@ -317,6 +319,7 @@ public class BatchExecutionReader {
             String stageLabel,
             Long retriedFromId,
             String triggeredBy,
+            String scope,
             String note,
             int unresolvedFailureCount) {
     }

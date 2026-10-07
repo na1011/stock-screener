@@ -51,6 +51,15 @@ public class CompanyProfileJob {
     }
 
     /**
+     * 정기 실행(리밸런싱 꼬리)은 티커·유니버스를 안 준다 — 대상은 업종이 빈 종목 전부다. 기준일과 꼬리 트리거는 기록
+     * 계층이 본다.
+     */
+    public static BatchExecutionRecorder.Scope scopeOf(List<String> tickers, String universeCode) {
+        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty())
+                && (universeCode == null || universeCode.isBlank()));
+    }
+
+    /**
      * 업종이 비어 있는 편입 종목의 개황을 받는다.
      *
      * @param tickers 비면 <b>업종이 비어 있는 편입 종목 전체</b>. 값이 있으면 편입 종목과의
@@ -61,20 +70,21 @@ public class CompanyProfileJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            List<String> tickers, String universeCode) {
+        BatchExecutionRecorder.Scope scope = scopeOf(tickers, universeCode);
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(
                 universeCode == null || universeCode.isBlank()
                         ? resolveTargets(tickers)
                         : resolveUniverseTargets(universeCode, tickers));
         if (targets.isEmpty()) {
             log.info("업종을 채울 종목이 없다. 편입 종목 전부에 업종이 이미 있다.");
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
+            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish();
         }
 
         // 종목당 1콜이다. 착수 전에 쿼터를 가늠할 수 있어야 한다.
         log.info("기업개황 수집을 시작한다. 대상 {}종목, 예상 호출 {}회", targets.size(), targets.size());
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
         execution.plan(CollectionPhase.SECURITY_MASTER, targets.size());
         execution.stage("종목별 업종 수집");
 

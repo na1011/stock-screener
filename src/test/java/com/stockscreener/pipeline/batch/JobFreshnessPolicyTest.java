@@ -106,6 +106,56 @@ class JobFreshnessPolicyTest {
     }
 
     @Test
+    @DisplayName("좁힌 손 실행은 폴백에서도 시계를 밀지 않는다 — [A56] 무거운 잡 셋의 첫 정기 실행이 그렇게 밀렸다")
+    void narrowScopeDoesNotResetTheFallbackClock() {
+        // 스케줄러 실행이 아직 없는 잡: 폴백이 손 실행을 센다. 전량 손 실행은 오래전이고 어제 좁힌 손 실행이 있었다
+        // (10-03 #710 FR 1종목의 모양).
+        assertNoSchedulerRun();
+        Instant now = Instant.parse("2026-09-01T05:00:00Z");
+        int budget = JobFreshnessPolicy.BUDGETS.get(PROBE_JOB).days();
+        insert(PROBE_JOB, "SUCCESS", "MANUAL", "FULL", now.minus(Duration.ofDays(budget + 3L)));
+        insert(PROBE_JOB, "SUCCESS", "MANUAL", "NARROW", now.minus(Duration.ofDays(1)));
+
+        assertThat(names(policy.stale(now))).contains(PROBE_JOB);
+        assertThat(policy.daysSinceLastSuccess(PROBE_JOB, now))
+                .as("스케줄러가 묻는 경과일도 좁힌 실행을 안 센다")
+                .isEqualTo(budget + 3L);
+    }
+
+    @Test
+    @DisplayName("기준일이 지난 정기 실행은 시계를 밀지 않는다 — 스케줄러 갈래에서도 NARROW를 뺀다")
+    void narrowScopeDoesNotCountInTheSchedulerBranch() {
+        Instant now = Instant.parse("2026-09-01T05:00:00Z");
+        int budget = JobFreshnessPolicy.BUDGETS.get(PROBE_JOB).days();
+        insert(PROBE_JOB, "SUCCESS", "SCHEDULER", "FULL", now.minus(Duration.ofDays(budget + 3L)));
+        insert(PROBE_JOB, "SUCCESS", "SCHEDULER", "NARROW", now.minus(Duration.ofDays(1)));
+
+        assertThat(policy.daysSinceLastSuccess(PROBE_JOB, now)).isEqualTo(budget + 3L);
+    }
+
+    @Test
+    @DisplayName("표지 전 이력은 예전처럼 센다 — 배포가 무거운 잡의 위상을 안 옮긴다(ADR-0172)")
+    void unmarkedHistoryCountsAsBefore() {
+        // IS DISTINCT FROM이 아니라 <> 'NARROW'로 쓰면 NULL이 빠져 이 잡이 「한 번도 안 돌았다」가 된다.
+        assertNoSchedulerRun();
+        Instant now = Instant.parse("2026-09-01T05:00:00Z");
+        insert(PROBE_JOB, "SUCCESS", "MANUAL", null, now.minus(Duration.ofDays(1)));
+
+        assertThat(policy.daysSinceLastSuccess(PROBE_JOB, now)).isEqualTo(1L);
+        assertThat(names(policy.stale(now))).doesNotContain(PROBE_JOB);
+    }
+
+    @Test
+    @DisplayName("전량 손 실행은 센다 — 표지가 손 실행을 통째로 버리는 것이 아니다")
+    void fullManualRunCounts() {
+        assertNoSchedulerRun();
+        Instant now = Instant.parse("2026-09-01T05:00:00Z");
+        insert(PROBE_JOB, "SUCCESS", "MANUAL", "FULL", now.minus(Duration.ofDays(1)));
+
+        assertThat(policy.daysSinceLastSuccess(PROBE_JOB, now)).isEqualTo(1L);
+    }
+
+    @Test
     @DisplayName("꼬리만 있으면 「한 번도 안 돌았다」다 — 0일로 접지 않는다")
     void onlyGapFillMeansNeverRun() {
         assertNoSchedulerRun();
@@ -177,12 +227,17 @@ class JobFreshnessPolicyTest {
         return stale.stream().map(JobFreshnessPolicy.Staleness::jobName).toList();
     }
 
+    /** 범위를 안 주는 모양 — 표지 전 이력(NULL)과 같다. */
     private void insert(String jobName, String status, String triggeredBy, Instant startedAt) {
+        insert(jobName, status, triggeredBy, null, startedAt);
+    }
+
+    private void insert(String jobName, String status, String triggeredBy, String scope, Instant startedAt) {
         jdbcTemplate.update("""
                 INSERT INTO batch_execution
-                    (job_name, target_date, status, started_at, finished_at, triggered_by, note)
-                VALUES (?, ?, ?, ?, ?, ?, 'JobFreshnessPolicyTest')
+                    (job_name, target_date, status, started_at, finished_at, triggered_by, scope, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'JobFreshnessPolicyTest')
                 """, jobName, LocalDate.of(2026, 9, 1), status,
-                java.sql.Timestamp.from(startedAt), java.sql.Timestamp.from(startedAt), triggeredBy);
+                java.sql.Timestamp.from(startedAt), java.sql.Timestamp.from(startedAt), triggeredBy, scope);
     }
 }

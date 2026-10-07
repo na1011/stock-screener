@@ -56,8 +56,8 @@ public class BatchExecutions {
     /** 새 실행을 시작한다. */
     public BatchExecutionContext start(String jobName, LocalDate targetDate,
                                        BatchExecutionRecorder.TriggeredBy triggeredBy,
-                                       int targetCount) {
-        long executionId = recorder.start(jobName, targetDate, triggeredBy, targetCount);
+                                       int targetCount, BatchExecutionRecorder.Scope scope) {
+        long executionId = recorder.start(jobName, targetDate, triggeredBy, targetCount, scope);
         return track(new BatchExecutionContext(
                 executionId, jobName, targetDate, executor, recorder, alertPort, open::remove));
     }

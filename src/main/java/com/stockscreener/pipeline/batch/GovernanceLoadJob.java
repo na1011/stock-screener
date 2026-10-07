@@ -101,6 +101,20 @@ public class GovernanceLoadJob {
     }
 
     /**
+     * 정기 실행(월 1회)은 티커·연도·해 수를 안 주고 표 전부를 받는다. 기준일과 꼬리는 기록 계층이 본다.
+     *
+     * <p>연도·해 수를 기본값과 같은 수로 손으로 줘도 {@code NARROW}다 — 기본값이 시장·표마다 달라 「같은가」를 여기서
+     * 다시 계산하면 그 계산이 낡는다. 틀리는 방향은 정기 실행이 한 번 더 도는 쪽이다.
+     */
+    public static BatchExecutionRecorder.Scope scopeOf(Integer latestFiscalYear, Integer span,
+                                                       List<GovernanceEndpoint> endpoints, List<String> tickers) {
+        boolean allEndpoints = endpoints == null || endpoints.isEmpty()
+                || endpoints.containsAll(List.of(GovernanceEndpoint.values()));
+        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty()) && latestFiscalYear == null
+                && span == null && allEndpoints);
+    }
+
+    /**
      * @param latestFiscalYear 가장 최근 <b>사업보고서가 나온</b> 회계연도. 비면 {@code asOf}의
      *                         전년이다 — 사업보고서는 이듬해 3월에 나오므로 올해분은 아직 없다
      * @param span             비면 표마다 정해진 해 수. 값이 있으면 <b>그것으로 덮는다</b> —
@@ -114,10 +128,11 @@ public class GovernanceLoadJob {
                            List<GovernanceEndpoint> endpoints, List<String> tickers) {
         List<GovernanceEndpoint> targets = endpoints == null || endpoints.isEmpty()
                 ? List.of(GovernanceEndpoint.values()) : endpoints;
+        BatchExecutionRecorder.Scope scope = scopeOf(latestFiscalYear, span, endpoints, tickers);
         List<SecurityRef> stocks = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
         if (stocks.isEmpty()) {
             log.info("거버넌스를 받을 종목이 없다.");
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
+            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish();
         }
 
         // 시장마다 답하는 표가 다르고 <b>받을 역년도 다르다.</b> 표를 안 좁히면 소스가 안 주는
@@ -181,7 +196,7 @@ public class GovernanceLoadJob {
                 stocks.size(), targets.size(), callsByMarket);
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, stocks.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, stocks.size(), scope);
         execution.plan(CollectionPhase.GOVERNANCE, stocks.size());
         execution.stage("종목별 정기보고서 주요정보 수집");
 

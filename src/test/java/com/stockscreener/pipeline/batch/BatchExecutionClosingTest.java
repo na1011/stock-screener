@@ -57,7 +57,7 @@ class BatchExecutionClosingTest {
     @DisplayName("프로세스가 내려가면 열려 있던 실행이 ABORTED로 마감된다")
     void closesOpenExecutionOnShutdown() {
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1, BatchExecutionRecorder.Scope.FULL);
         assertThat(statusOf(execution.executionId())).isEqualTo("RUNNING");
 
         batchExecutions.closeOpenExecutions();
@@ -70,7 +70,7 @@ class BatchExecutionClosingTest {
     @DisplayName("마감하면 열린 목록에서 빠진다 — 안 빠지면 종료 훅이 성공한 실행을 덮으려 든다")
     void removesFinishedExecutionFromOpenList() {
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1, BatchExecutionRecorder.Scope.FULL);
 
         execution.finish();
 
@@ -91,7 +91,7 @@ class BatchExecutionClosingTest {
     @DisplayName("마감은 남아 있던 사유를 지운다 — SUCCESS인데 중단 사유가 붙어 있으면 안 된다")
     void finishClearsStaleNote() {
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1, BatchExecutionRecorder.Scope.FULL);
         // 다른 기제(스위퍼 등)가 사유를 써 둔 상태를 만든다.
         jdbcTemplate.update("UPDATE batch_execution SET note = ? WHERE id = ?",
                 "프로세스가 사라져 마감되지 못한 실행을 정리했다.", execution.executionId());
@@ -108,7 +108,7 @@ class BatchExecutionClosingTest {
     @DisplayName("IMPORTANT — DB 가드: 다른 프로세스가 마감된 행을 다시 마감하지 못한다")
     void databaseGuardRefusesToReopenFinishedExecution() {
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1, BatchExecutionRecorder.Scope.FULL);
         execution.finish();
 
         // MUST: recorder를 직접 부른다. 컨텍스트를 거치면 인메모리 종단 플래그가 먼저 삼켜
@@ -126,7 +126,7 @@ class BatchExecutionClosingTest {
     @DisplayName("IMPORTANT — 종단 플래그: 뒤늦은 마감은 DB도 알림도 건드리지 않는다")
     void terminalFlagSwallowsLateClosingWithinTheSameContext() {
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 1, BatchExecutionRecorder.Scope.FULL);
 
         // 종료 훅이 이긴 상황이다. 그 뒤 워커가 자기 루프를 마치고 마감하러 온다.
         batchExecutions.closeOpenExecutions();
@@ -147,7 +147,7 @@ class BatchExecutionClosingTest {
     @DisplayName("도는 중에도 진척이 보인다 — 마감 때만 쓰면 56분짜리 배치가 내내 0으로 보인다")
     void writesProgressWhileRunning() {
         BatchExecutionContext execution = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 2);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 2, BatchExecutionRecorder.Scope.FULL);
 
         execution.plan(CollectionPhase.PRICE, 2);
 

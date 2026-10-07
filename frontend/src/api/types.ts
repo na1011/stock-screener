@@ -730,6 +730,13 @@ export type BatchStatus = (typeof BATCH_STATUSES)[number]
 export const TRIGGERED_BY = ['SCHEDULER', 'ADMIN', 'MANUAL', 'GAP_FILL'] as const
 export type TriggeredBy = (typeof TRIGGERED_BY)[number]
 
+/**
+ * 정기 실행과 같은 범위였는가(V63 · ADR-0172). 서버의 연체 판정이 `NARROW`를 시계에서 뺀다 —
+ * 티커·연수·표로 좁힌 손 실행이 무거운 잡의 첫 정기 실행을 밀지 않게.
+ */
+export const EXECUTION_SCOPES = ['FULL', 'NARROW'] as const
+export type ExecutionScope = (typeof EXECUTION_SCOPES)[number]
+
 /** 잡이 받는 입력. 화면이 날짜 칸을 몇 개 그릴지 정한다. */
 export const JOB_PARAMETERS = ['TARGET_DATE', 'DATE_RANGE'] as const
 export type JobParameters = (typeof JOB_PARAMETERS)[number]
@@ -769,6 +776,8 @@ export interface BatchExecution {
   /** 어느 실행을 다시 돌린 것인가. null이면 최초 실행이다. */
   retriedFromId: number | null
   triggeredBy: TriggeredBy
+  /** **`null`은 범위 표지 전 실행이다** — 범위를 모른다. `FULL`로 접지 않는다(연체 판정은 예전처럼 센다). */
+  scope: ExecutionScope | null
   note: string | null
   /** 0이면 재실행 버튼을 켜지 않는다. */
   unresolvedFailureCount: number
@@ -850,7 +859,10 @@ export interface StaleJob {
   /** **-1은 「한 번도 성공한 적이 없다」**이고 0과 반대 뜻이다. 0으로 접으면 그 상태가 사라진다. */
   daysSince: number
   budgetDays: number
-  /** false면 좁은 수동 실행이 이 시계를 되돌릴 수 있다. 화면이 그 사실을 함께 말한다. */
+  /**
+   * false면 스케줄러 실행이 아직 없어 손 실행을 센 값이다. 범위 표지 뒤의 좁힌 손 실행은 안 세지만 **표지 전 이력은
+   * 범위를 모르고 센다** — 화면이 그 사실을 함께 말한다.
+   */
   scheduledOnly: boolean
   /** 화면에 실행 버튼이 **없는** 잡의 CLI 인자. 버튼이 있으면 `null`이다. */
   howToRun: string | null

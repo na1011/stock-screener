@@ -117,6 +117,8 @@ class WireContractTest {
         assertThat(names(BatchStatus.class)).isEqualTo(expected("enums", "BatchStatus"));
         assertThat(names(BatchExecutionRecorder.TriggeredBy.class))
                 .isEqualTo(expected("enums", "TriggeredBy"));
+        assertThat(names(BatchExecutionRecorder.Scope.class))
+                .isEqualTo(expected("enums", "ExecutionScope"));
         assertThat(names(AdminJobLauncher.Parameters.class))
                 .isEqualTo(expected("enums", "JobParameters"));
     }

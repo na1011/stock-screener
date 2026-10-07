@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.batch;
 import com.stockscreener.pipeline.collector.FullStatementCollector;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.DataSourceRegistry;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.StatementPeriod;
 
@@ -13,8 +14,10 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * 전체 재무제표에서 결손을 받아 채운다. 요약본이 주지 않는 <b>영업활동현금흐름</b>이 목적이다.
@@ -53,20 +56,35 @@ public class FullStatementRefillJob {
     private final StockRegistrar stockRegistrar;
     private final BatchExecutions batchExecutions;
     private final FinancialLoadWindow loadWindow;
+    private final DataSourceRegistry registry;
 
     public FullStatementRefillJob(FullStatementCollector collector, StockRegistrar stockRegistrar,
-                                  BatchExecutions batchExecutions, FinancialLoadWindow loadWindow) {
+                                  BatchExecutions batchExecutions, FinancialLoadWindow loadWindow,
+                                  DataSourceRegistry registry) {
         this.collector = collector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.loadWindow = loadWindow;
+        this.registry = registry;
+    }
+
+    /**
+     * 정기 실행(월 1회)은 티커를 안 주고 전 종목 분기를 승인하며 연수가 기본이다. 기준일과 꼬리는 기록 계층이 본다.
+     *
+     * <p>{@code --all-quarters} 없는 전 종목 실행은 FY만 받으므로 {@code NARROW}다 — 정기 실행이 받는 분기 행을 안 받는다.
+     */
+    public static BatchExecutionRecorder.Scope scopeOf(Integer yearsBack, List<String> tickers, boolean allQuarters) {
+        int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
+        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty()) && allQuarters
+                && years >= DEFAULT_YEARS_BACK);
     }
 
     /**
      * 편입 중인 활성 종목의 전체 재무제표 결손을 채운다.
      *
-     * @param yearsBack       몇 년 거슬러 받을지. null이면 기본 5년
-     * @param tickers         비면 전 종목. 값이 있으면 <b>편입 종목과의 교집합</b>만 처리한다
+     * @param yearsBack       몇 년 거슬러 받을지. null이면 {@link #DEFAULT_YEARS_BACK}
+     * @param tickers         비면 <b>전체재무제표 소스가 있는 시장</b>의 전 종목. 값이 있으면 <b>편입 종목과의
+     *                        교집합</b>만 처리한다
      * @param includeQuarters 분기 보고서도 받을지. <b>티커를 함께 줘야 한다</b> — 아래 참조
      * @param allQuarters     <b>전 종목</b> 분기를 명시적으로 승인한다. 콜이 4배다 — 아래 참조
      */
@@ -78,11 +96,15 @@ public class FullStatementRefillJob {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
         Set<StatementPeriod> periods = resolvePeriods(includeQuarters, allQuarters, tickers);
+        BatchExecutionRecorder.Scope scope = scopeOf(yearsBack, tickers, allQuarters);
 
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
+        if (tickers == null || tickers.isEmpty()) {
+            targets = withFullStatementSource(targets);
+        }
         if (targets.isEmpty()) {
             log.info("편입 중인 활성 종목이 없다. 채울 것이 없다.");
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
+            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish();
         }
 
         int fromFiscalYear = asOf.getYear() - years;
@@ -100,7 +122,7 @@ public class FullStatementRefillJob {
         loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 전체 재무제표 보정");
 
@@ -178,6 +200,30 @@ public class FullStatementRefillJob {
                             + "여유를 먹는다.");
         }
         return EnumSet.allOf(StatementPeriod.class);
+    }
+
+    /**
+     * 「전 종목」을 전체재무제표 소스가 있는 시장으로 좁힌다.
+     *
+     * <p>MUST: 기본 대상에 소스 없는 시장을 넣지 않는다. 넣으면 그 시장 종목이 전부 {@code NOT_FOUND}로 실패하고
+     * 잡은 {@code PARTIAL_SUCCESS}로 끝난다 — 2026-09-14 손 실행 둘(#410·#415 · 대상 1,350)이 미국 1,000을 그렇게 남겼다. 그 실패가
+     * 매달 같은 모양으로 쌓이면 진짜 실패가 묻히고, {@code PARTIAL_SUCCESS}는 신선도 시계를 민다.
+     * {@code FinancialRefillJob}의 무효화 갈래가 같은 기준({@link DataSourceRegistry#hasFullStatementSource})으로 고른다.
+     *
+     * <p>티커를 준 실행에는 걸지 않는다 — 사람이 고른 종목을 조용히 빼면 「돌렸는데 안 바뀌었다」가 된다.
+     * {@link StockRegistrar#activeUniverseMemberIds()} 자체를 좁히지 않는 이유는 그 정의를 쓰는 다른 잡들(일일 갱신 ·
+     * 거버넌스 · 초기 적재 · 백필)의 「전 종목」이 바뀌기 때문이다.
+     */
+    private List<SecurityRef> withFullStatementSource(List<SecurityRef> targets) {
+        Map<String, Long> skipped = targets.stream()
+                .filter(target -> !registry.hasFullStatementSource(target.marketCode()))
+                .collect(Collectors.groupingBy(SecurityRef::marketCode, Collectors.counting()));
+        if (!skipped.isEmpty()) {
+            log.info("전체재무제표 소스가 없는 시장의 종목을 뺀다(시장별 수): {}", skipped);
+        }
+        return targets.stream()
+                .filter(target -> registry.hasFullStatementSource(target.marketCode()))
+                .toList();
     }
 
     /**

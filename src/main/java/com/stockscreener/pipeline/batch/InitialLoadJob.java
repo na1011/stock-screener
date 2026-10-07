@@ -92,6 +92,8 @@ public class InitialLoadJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LoadRange range) {
+        // 정기 경로(리밸런싱 꼬리)의 좁힌 호출은 GAP_FILL이라 기록 계층이 NARROW로 찍는다. 손 실행은 spec 기본값일 때만 FULL이다.
+        BatchExecutionRecorder.Scope scope = BatchExecutionRecorder.Scope.of(range.equals(LoadRange.defaults()));
         List<Long> targetIds = resolveTargets(range);
         // 이름이 range.skipPrice()와 비슷하지만 뜻이 다르다. 이쪽은 「봉이 이미 있어 재수집이
         // 불필요한 종목」이라는 종목별 판단이고, 저쪽은 「이번 실행은 시세를 아예 안 받는다」는
@@ -102,7 +104,7 @@ public class InitialLoadJob {
         if (targets.isEmpty()) {
             log.info("초기 적재가 필요한 종목이 없다. 모든 편입 종목에 이력이 있다.");
             BatchExecutionContext empty =
-                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0);
+                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope);
             return empty.finish();
         }
 
@@ -117,7 +119,7 @@ public class InitialLoadJob {
                                 : range.reloadExisting() ? "편입 전 종목" : "이력이 없는 종목만");
 
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
 
         // 종목당 시세·재무 두 단계를 돌되, 재무 결손 때문에 잡힌 종목은 시세를 건너뛴다.
         // 계획 수가 실제와 어긋나면 관리자 화면의 진행률이 100%에 못 미친 채 끝난다.

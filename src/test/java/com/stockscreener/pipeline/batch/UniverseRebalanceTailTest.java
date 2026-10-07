@@ -51,7 +51,7 @@ class UniverseRebalanceTailTest {
         batchExecutions = mock(BatchExecutions.class);
         execution = mock(BatchExecutionContext.class);
         membershipGapFiller = mock(MembershipGapFiller.class);
-        when(batchExecutions.start(anyString(), any(), any(), org.mockito.ArgumentMatchers.anyInt()))
+        when(batchExecutions.start(anyString(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any()))
                 .thenReturn(execution);
         when(execution.finishQuietly()).thenReturn(BatchStatus.SUCCESS);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class))).thenReturn(List.of());

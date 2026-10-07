@@ -36,7 +36,7 @@ class GovernanceDeriveJobTest {
         stockRegistrar = mock(StockRegistrar.class);
         BatchExecutions batchExecutions = mock(BatchExecutions.class);
         BatchExecutionContext execution = mock(BatchExecutionContext.class);
-        when(batchExecutions.start(anyString(), any(), any(), anyInt())).thenReturn(execution);
+        when(batchExecutions.start(anyString(), any(), any(), anyInt(), any())).thenReturn(execution);
         when(execution.finish()).thenReturn(BatchStatus.SUCCESS);
         when(stockRegistrar.toSecurityRefs(any())).thenReturn(List.of());
         job = new GovernanceDeriveJob(mock(GovernanceFactDeriver.class), stockRegistrar, batchExecutions);

@@ -36,14 +36,20 @@ public class GovernanceDeriveJob {
         this.batchExecutions = batchExecutions;
     }
 
+    /** 정기 실행(14:18 입력 유도)은 티커를 안 준다. 기준일과 꼬리는 기록 계층이 본다. */
+    public static BatchExecutionRecorder.Scope scopeOf(List<String> tickers) {
+        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty()));
+    }
+
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            List<String> tickers) {
+        BatchExecutionRecorder.Scope scope = scopeOf(tickers);
         List<SecurityRef> stocks = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
         if (stocks.isEmpty()) {
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0).finish();
+            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish();
         }
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, stocks.size());
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, stocks.size(), scope);
         execution.plan(CollectionPhase.GOVERNANCE, stocks.size());
         execution.stage("원문에서 거버넌스 사실 유도");
 

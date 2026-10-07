@@ -21,6 +21,7 @@ import {
   OUTCOME_STATUSES,
   SCREEN_TYPES,
   TRIGGERED_BY,
+  EXECUTION_SCOPES,
   ZONE_ROLES,
   ZONE_STRENGTHS,
   FISCAL_PERIODS,
@@ -72,6 +73,7 @@ describe('서버 enum의 거울', () => {
     ['InteractionAction', INTERACTION_ACTIONS],
     ['BatchStatus', BATCH_STATUSES],
     ['TriggeredBy', TRIGGERED_BY],
+    ['ExecutionScope', EXECUTION_SCOPES],
     ['JobParameters', JOB_PARAMETERS],
   ]
 
