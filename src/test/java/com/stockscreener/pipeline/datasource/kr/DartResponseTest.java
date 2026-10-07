@@ -96,6 +96,41 @@ class DartResponseTest {
     }
 
     @Test
+    @DisplayName("UTF-8 BOM이 붙은 본문도 같은 값 — 선언 없음(자동 감지)과 charset=UTF-8 선언 둘 다")
+    void bomIsTolerated() throws Exception {
+        BigDecimal expected = annualRevenue(serveAnnualWith("application/json;charset=UTF-8"));
+        assertThat(annualRevenue(serveAnnual("text/html", true, StandardCharsets.UTF_8))).isEqualByComparingTo(expected);
+        assertThat(annualRevenue(serveAnnual("application/json;charset=UTF-8", true, StandardCharsets.UTF_8)))
+                .isEqualByComparingTo(expected);
+    }
+
+    @Test
+    @DisplayName("charset=EUC-KR 선언과 EUC-KR 바이트면 같은 값 — UTF-8로 못박으면 U+FFFD로 깨져 계정이 안 맞는다")
+    void declaredCharsetIsHonoured() throws Exception {
+        BigDecimal expected = annualRevenue(serveAnnualWith("application/json;charset=UTF-8"));
+        assertThat(annualRevenue(serveAnnual("text/html;charset=EUC-KR", false, java.nio.charset.Charset.forName("EUC-KR"))))
+                .isEqualByComparingTo(expected);
+    }
+
+    @Test
+    @DisplayName("status 000인데 list가 없으면 MALFORMED(표지 없음) — 빈 결과로 읽으면 거버넌스가 noData 행을 틀린 사실로 남긴다")
+    void successWithoutListIsMalformed() {
+        server.setDispatcher(dispatcher(respond(200, "application/json", "{\"status\":\"000\",\"message\":\"정상\"}")));
+        DartGovernanceAdapter governance = new DartGovernanceAdapter(new ExternalApiClientFactory(), properties(),
+                new TokenBucketRateLimiter("dart", 0, 0), new StubCorpCodeCache(Optional.of("00126380")));
+
+        assertThatThrownBy(() -> governance.fetchReport(SAMSUNG,
+                com.stockscreener.pipeline.datasource.GovernanceEndpoint.SHARE_TOTALS, 2025, "11011"))
+                .as("noData 행 0 — 던진다")
+                .isInstanceOfSatisfying(DataSourceException.class, e -> {
+                    assertThat(e.kind()).isEqualTo(DataSourceException.Kind.MALFORMED);
+                    assertThat(e.sourceAnswered()).isFalse();
+                });
+        assertThat(kindOf(respond(200, "application/json", "{\"status\":\"000\",\"list\":{}}")))
+                .as("재무 — list가 배열이 아님").isEqualTo(DataSourceException.Kind.MALFORMED);
+    }
+
+    @Test
     @DisplayName("021·100은 우리 요청 오류 — MALFORMED이고 「답함」 표지가 없다(답 못 받음)")
     void requestErrorsAreNotAnswers() {
         for (String status : List.of("021", "100")) {
@@ -127,10 +162,25 @@ class DartResponseTest {
 
     /** 연간은 그 content-type으로, 나머지 기간은 013으로 낸다. */
     private static Function<RecordedRequest, MockResponse> serveAnnualWith(String contentType) {
+        return serveAnnual(contentType, false, StandardCharsets.UTF_8);
+    }
+
+    /** 위와 같되 연간 본문의 인코딩과 BOM을 고른다. */
+    private static Function<RecordedRequest, MockResponse> serveAnnual(String contentType, boolean bom,
+                                                                       java.nio.charset.Charset charset) {
         return request -> {
             String path = request.getPath() == null ? "" : request.getPath();
-            String body = path.contains("reprt_code=11011") ? fixture("annual-2025.json") : fixture("error-no-data.json");
-            return response(200, contentType, body);
+            if (!path.contains("reprt_code=11011")) {
+                return response(200, contentType, fixture("error-no-data.json"));
+            }
+            byte[] text = fixture("annual-2025.json").getBytes(charset);
+            okio.Buffer buffer = new okio.Buffer();
+            if (bom) {
+                buffer.write(new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
+            }
+            buffer.write(text);
+            MockResponse response = new MockResponse().setResponseCode(200).setBody(buffer);
+            return contentType == null ? response : response.setHeader("Content-Type", contentType);
         };
     }
 
@@ -174,12 +224,16 @@ class DartResponseTest {
     }
 
     private DartFinancialAdapter adapter(Optional<String> corpCode) {
+        return new DartFinancialAdapter(new ExternalApiClientFactory(), properties(),
+                new TokenBucketRateLimiter("dart", 0, 0), new StubCorpCodeCache(corpCode));
+    }
+
+    private DataSourceProperties properties() {
         DataSourceProperties properties = new DataSourceProperties();
         DataSourceProperties.Source source = properties.getDart();
         source.setBaseUrl(server.url("/").toString());
         source.setApiKey("test-key");
-        return new DartFinancialAdapter(new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("dart", 0, 0), new StubCorpCodeCache(corpCode));
+        return properties;
     }
 
     private static String fixture(String name) {

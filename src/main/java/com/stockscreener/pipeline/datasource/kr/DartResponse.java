@@ -22,7 +22,10 @@ import java.nio.charset.StandardCharsets;
  * 다르다. 상태를 안 보면 5xx HTML이 「본문 해석 실패」가 되어 소스의 답을 받은 것처럼 섞인다(ADR-0174). 그리고 <b>본문을
  * 문자열로 받지 않는다</b> — {@code toEntity(String)}은 JSON이 아닌 content-type에 charset이 없으면 ISO-8859-1로 읽어 한글
  * 계정명을 조용히 깨뜨리고, 깨진 문자열도 JSON으로는 읽혀 계정 매칭이 하나도 안 맞은 채 종목이 성공한다(2026-10-07 반증 실측).
- * 바이트로 받아 UTF-8로 판다 — DART가 실제로 내는 인코딩이다.
+ * 바이트로 받아 <b>응답이 선언한 charset이 있으면 그것으로, 없으면 Jackson의 자동 감지(UTF 계열 · BOM)로</b> 판다 — 옛 Spring
+ * 변환기가 하던 두 가지다. UTF-8로 못박으면 BOM이 붙은 본문은 파싱이 터지고(국내 전 종목 TRANSIENT) {@code charset=EUC-KR}
+ * 선언은 U+FFFD로 깨져 같은 조용한 결손이 다른 입구로 들어온다(구현 반증). DART가 실제로 어느 헤더를 내는지는 재지 않았다 —
+ * 두 갈래가 어느 쪽이든 같은 값을 내므로 잴 필요가 없다.
  */
 final class DartResponse {
 
@@ -76,7 +79,10 @@ final class DartResponse {
         }
         JsonNode root;
         try {
-            root = MAPPER.readTree(new String(body, StandardCharsets.UTF_8));
+            java.nio.charset.Charset declared = declaredCharset(response);
+            root = declared == null
+                    ? MAPPER.readTree(body)
+                    : MAPPER.readTree(stripBom(new String(body, declared)));
         } catch (RuntimeException e) {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
                     "HTTP %d인데 JSON이 아니다 — %s. %s".formatted(status, snippet(body), context), e);
@@ -86,6 +92,20 @@ final class DartResponse {
                     "HTTP %d인데 본문이 비어 있다. %s".formatted(status, context));
         }
         return root;
+    }
+
+    /**
+     * 응답이 선언한 charset. 선언이 없으면 {@code null}이다. 헤더를 못 읽거나(모양 이상) 모르는 charset이면 던진다 — 그 본문을
+     * 어느 인코딩으로 읽어도 맞다는 보장이 없어, 추측해 읽으면 조용한 결손이 된다(받기 실패로 돌린다).
+     */
+    private static java.nio.charset.Charset declaredCharset(ResponseEntity<byte[]> response) {
+        org.springframework.http.MediaType type = response.getHeaders().getContentType();
+        return type == null ? null : type.getCharset();
+    }
+
+    /** 선언 charset으로 바꾼 문자열의 BOM(U+FEFF)을 뗀다 — Jackson은 문자열 앞의 BOM을 토큰으로 읽어 터진다. */
+    private static String stripBom(String text) {
+        return !text.isEmpty() && text.charAt(0) == '\uFEFF' ? text.substring(1) : text;
     }
 
     private static String snippet(byte[] body) {
@@ -99,7 +119,15 @@ final class DartResponse {
      *         "조회할 보고서가 없다"는 종목 단위 실패이며 호출부가 구분해 처리한다.
      */
     static JsonNode requireList(JsonNode root, String context) throws DataSourceException {
-        return requireSuccess(root, context).path("list");
+        JsonNode list = requireSuccess(root, context).path("list");
+        if (!list.isArray()) {
+            // status 000인데 list가 없거나 배열이 아니다 — 빈 결과로 읽으면 기간이 조용히 빠지고 거버넌스는 「그 회사에 그 표가
+            // 없다」(noData)를 틀린 사실로 남긴다. 스펙 변경 꼴이라 MALFORMED다(답함 표지 없음 · 다발 경보가 읽는 신호).
+            // 저장한 원응답 180에서 000이면 list가 있었다(168/168 · 재무 엔드포인트 — 2026-10-07 주인 실측).
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                    "status 000인데 list 배열이 없다 — " + context);
+        }
+        return list;
     }
 
     /**
