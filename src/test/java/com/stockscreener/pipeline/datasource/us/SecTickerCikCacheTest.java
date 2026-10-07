@@ -27,6 +27,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /** {@link SecTickerCikCache}의 계약. 이 클래스의 javadoc이 그 엔드포인트의 정본이다. */
 class SecTickerCikCacheTest {
 
+    /** 다시 받기 대기를 실제로 자지 않는다 — 대기 자체는 {@link #waitsBridgeAShortOutage}가 본다. */
+    private static final com.stockscreener.pipeline.datasource.http.RefetchWaits NO_WAIT =
+            new com.stockscreener.pipeline.datasource.http.RefetchWaits(new long[] {2_000, 10_000}, millis -> { });
+
     private MockWebServer server;
 
     @BeforeEach
@@ -100,17 +104,19 @@ class SecTickerCikCacheTest {
         // 옛 단언은 MALFORMED였다 — 덜 온 파일은 소스의 답이 아니라 받기 실패다(종목 층에서 「답 못 받음」).
         enqueue(200, fixture());
         enqueue(200, fixture());
+        enqueue(200, fixture());
         assertThatThrownBy(() -> cache(999).freshSnapshot())
                 .isInstanceOf(DataSourceException.class)
                 .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.TRANSIENT)
                 .hasMessageContaining("부분 응답");
-        assertThat(server.getRequestCount()).as("즉시 한 번 다시 받는다").isEqualTo(2);
+        assertThat(server.getRequestCount()).as("대기를 두고 두 번 다시 받는다").isEqualTo(3);
     }
 
     @Test
     @DisplayName("fields가 없으면 MALFORMED다(명부) — 종목 조회는 판을 못 얻어 TRANSIENT로 감싼다 · 열 순서를 위치로 박지 않는다")
     void rejectsUnknownShape() {
         String body = "{\"data\": [[1, \"이름\", \"FIX\", \"Nasdaq\"]]}";
+        enqueue(200, body);
         enqueue(200, body);
         enqueue(200, body);
         SecTickerCikCache cache = cache(1);
@@ -126,6 +132,7 @@ class SecTickerCikCacheTest {
     @Test
     @DisplayName("200인데 본문이 없으면 스펙 변경이 아니라 받기 실패(TRANSIENT)다 — 구조 이상과 가른다")
     void emptyBodyIsTransient() {
+        enqueue(200, "");
         enqueue(200, "");
         enqueue(200, "");
         assertThatThrownBy(() -> cache(1).freshSnapshot())
@@ -160,8 +167,9 @@ class SecTickerCikCacheTest {
     @Test
     @DisplayName("거래소 칸이 없으면 MALFORMED다 — 빠지면 숨은 상장이 전부 「거래소 모름」으로 조용히 빠진다")
     void rejectsMissingExchangeField() {
-        enqueue(200, "{\"fields\":[\"cik\",\"name\",\"ticker\"],\"data\":[[1,\"이름\",\"FIX\"]]}");
-        enqueue(200, "{\"fields\":[\"cik\",\"name\",\"ticker\"],\"data\":[[1,\"이름\",\"FIX\"]]}");
+        for (int i = 0; i < 3; i++) {
+            enqueue(200, "{\"fields\":[\"cik\",\"name\",\"ticker\"],\"data\":[[1,\"이름\",\"FIX\"]]}");
+        }
         assertThatThrownBy(() -> cache(1).freshSnapshot())
                 .isInstanceOf(DataSourceException.class)
                 .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.MALFORMED);
@@ -206,6 +214,7 @@ class SecTickerCikCacheTest {
         enqueue(200, fixture());
         enqueue(503, "{}");
         enqueue(503, "{}");
+        enqueue(503, "{}");
         enqueue(200, "{\"fields\":[\"cik\",\"name\",\"ticker\",\"exchange\"],\"data\":[[99,\"새 판\",\"FIX\",\"NYSE\"]]}");
         SecTickerCikCache cache = cache(1, clock);
         assertThat(cache.findCik("FIX")).contains(1L);
@@ -225,17 +234,18 @@ class SecTickerCikCacheTest {
                 .hasMessageContaining("미매핑");
         assertThatThrownBy(cache::freshSnapshot).hasMessageContaining("HTTP 503");
         assertThat(server.getRequestCount()).as("실패 뒤 10분 안은 다시 안 부른다 — 종목 루프가 종목마다 받지 않게")
-                .isEqualTo(3);
+                .isEqualTo(4);
 
         clock.advance(Duration.ofMinutes(11));
         assertThat(cache.freshSnapshot().findCik("FIX")).as("10분이 지나면 다시 묻는다").contains(99L);
-        assertThat(server.getRequestCount()).isEqualTo(4);
+        assertThat(server.getRequestCount()).isEqualTo(5);
     }
 
     @Test
     @DisplayName("첫 적재 실패도 즉시 1회 재시도 뒤 10분 기억한다 — 그동안 종목 조회는 콜 없이 TRANSIENT(hang이면 종목마다 60초)")
     void firstLoadFailureIsRememberedAfterOneRetry() throws Exception {
         MutableClock clock = new MutableClock(Instant.parse("2026-10-10T11:00:00Z"));
+        enqueue(503, "{}");
         enqueue(503, "{}");
         enqueue(503, "{}");
         enqueue(200, fixture());
@@ -246,11 +256,11 @@ class SecTickerCikCacheTest {
                 .hasMessageContaining("HTTP 503");
         assertThatThrownBy(cache::freshSnapshot).hasMessageContaining("HTTP 503");
         assertThatThrownBy(() -> cache.findCik("BRK.A")).hasMessageContaining("HTTP 503");
-        assertThat(server.getRequestCount()).as("두 번(즉시 재시도 포함) 뒤로는 기억 — 콜 0").isEqualTo(2);
+        assertThat(server.getRequestCount()).as("세 번(대기 둔 재시도 둘 포함) 뒤로는 기억 — 콜 0").isEqualTo(3);
 
         clock.advance(Duration.ofMinutes(11));
         assertThat(cache.findCik("FIX")).contains(1L);
-        assertThat(server.getRequestCount()).isEqualTo(3);
+        assertThat(server.getRequestCount()).isEqualTo(4);
     }
 
     @Test
@@ -264,11 +274,46 @@ class SecTickerCikCacheTest {
         assertThat(server.getRequestCount()).isEqualTo(2);
     }
 
+    @Test
+    @DisplayName("IMPORTANT — 1초짜리 끊김(503·503 → 1초 뒤 200)은 대기 둔 재시도가 넘는다 — 첫 조회가 3초 안에 성공하고 10분 기억으로 안 간다")
+    void waitsBridgeAShortOutage() throws Exception {
+        assertThat(bridges(new long[] {2_000, 10_000})).isTrue();
+    }
+
+    /**
+     * 끊김이 1초 이어지는 서버에 첫 조회를 하고, 그 조회가 성공했는지(대기 합 3초 안에). 대기는 가짜 시계를 민다 — 실제로 자지
+     * 않는다. 대조군은 대기 없는 재시도다({@code {0, 0}} — 시도가 다 0초에 몰려 끊김 안에서 끝난다).
+     */
+    private boolean bridges(long[] waitMillis) throws Exception {
+        java.util.concurrent.atomic.AtomicLong elapsed = new java.util.concurrent.atomic.AtomicLong();
+        String body = fixture();
+        server.setDispatcher(new okhttp3.mockwebserver.Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                return elapsed.get() < 1_000
+                        ? new MockResponse().setResponseCode(503).setBody("<html>down</html>")
+                        : new MockResponse().setResponseCode(200)
+                                .setHeader("Content-Type", "application/json").setBody(body);
+            }
+        });
+        DataSourceProperties properties = new DataSourceProperties();
+        properties.getSecEdgar().setApiKey("Test Runner test@example.com");
+        SecTickerCikCache cache = new SecTickerCikCache(new ExternalApiClientFactory(), properties,
+                new TokenBucketRateLimiter("sec-edgar", 0, 0), server.url("/").toString(), 1,
+                new MutableClock(Instant.parse("2026-10-10T11:00:00Z")),
+                new com.stockscreener.pipeline.datasource.http.RefetchWaits(waitMillis, elapsed::addAndGet));
+        try {
+            return cache.findCik("FIX").isPresent() && elapsed.get() <= 3_000;
+        } catch (DataSourceException e) {
+            return false;
+        }
+    }
+
     private SecTickerCikCache cache(int minRows, Clock clock) {
         DataSourceProperties properties = new DataSourceProperties();
         properties.getSecEdgar().setApiKey("Test Runner test@example.com");
         return new SecTickerCikCache(new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("sec-edgar", 0, 0), server.url("/").toString(), minRows, clock);
+                new TokenBucketRateLimiter("sec-edgar", 0, 0), server.url("/").toString(), minRows, clock, NO_WAIT);
     }
 
     /** 시험이 손으로 미는 시계. */
@@ -304,7 +349,8 @@ class SecTickerCikCacheTest {
         properties.getSecEdgar().setApiKey("Test Runner test@example.com");
         ExternalApiClientFactory factory = new ExternalApiClientFactory();
         return new SecTickerCikCache(factory, properties,
-                new TokenBucketRateLimiter("sec-edgar", 0, 0), server.url("/").toString(), minRows);
+                new TokenBucketRateLimiter("sec-edgar", 0, 0), server.url("/").toString(), minRows,
+                java.time.Clock.systemUTC(), NO_WAIT);
     }
 
     private void enqueue(int status, String body) {

@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.datasource.kr;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.RateLimiter;
+import com.stockscreener.pipeline.datasource.http.RefetchWaits;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,7 +51,8 @@ import java.util.zip.ZipInputStream;
  *       {@link Optional#empty()}다 — 어댑터가 그것을 「소스가 답한 부재」로 쓴다.</li>
  *   <li><b>다시 받기 실패 · 하한 미달</b>은 옛 판을 유지하고 그 판을 <b>낡은 판</b>으로 낸다. 낡은 판에 없는 종목코드는
  *       {@code TRANSIENT}로 던진다 — 「매핑 갱신 실패 판에서 미매핑 — 다음 실행이 다시 묻는다」.</li>
- *   <li><b>즉시 한 번 다시 받고, 그래도 실패면 {@link #RETRY_AFTER_FAILURE} 동안 기억한다</b> — 첫 적재도 같다. 그동안
+ *   <li><b>2초 · 10초를 기다리며 두 번 다시 받고({@link RefetchWaits}), 그래도 실패면 {@link #RETRY_AFTER_FAILURE} 동안
+ *       기억한다</b> — 첫 적재도 같다. 그동안
  *       종목 조회는 콜 없이 {@code TRANSIENT}다(옛 판이 있으면 그 판으로 찾는다). 기억하지 않으면 종목마다 3.5MB를
  *       다시 받는다(거버넌스 국내 종목당 23회 · 약 8,050번).</li>
  *   <li><b>종목 조회({@link #findCorpCode})에서 적재 실패는 {@code AUTH}·{@code RATE_LIMITED}만 빼고 {@code TRANSIENT}로
@@ -91,6 +93,7 @@ public class DartCorpCodeCache {
     private final String apiKey;
     private final int minExpectedListed;
     private final Clock clock;
+    private final RefetchWaits waits;
 
     private volatile Snapshot current;
     /** 마지막 받기 실패 — {@code this}로 잠근 자리에서만 읽고 쓴다. */
@@ -102,18 +105,20 @@ public class DartCorpCodeCache {
     public DartCorpCodeCache(com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory factory,
                              DataSourceProperties properties,
                              @Qualifier("dartRateLimiter") RateLimiter rateLimiter) {
-        this(factory, properties, rateLimiter, MIN_EXPECTED_LISTED, Clock.systemUTC());
+        this(factory, properties, rateLimiter, MIN_EXPECTED_LISTED, Clock.systemUTC(), RefetchWaits.standard());
     }
 
-    /** 시험 전용 — 하한과 시계를 바꿔 끼운다. */
+    /** 시험 전용 — 하한 · 시계 · 다시 받기 대기를 바꿔 끼운다. */
     DartCorpCodeCache(com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory factory,
-                      DataSourceProperties properties, RateLimiter rateLimiter, int minExpectedListed, Clock clock) {
+                      DataSourceProperties properties, RateLimiter rateLimiter, int minExpectedListed, Clock clock,
+                      RefetchWaits waits) {
         DataSourceProperties.Source source = properties.getDart();
         this.client = factory.create(source);
         this.rateLimiter = rateLimiter;
         this.apiKey = source.getApiKey();
         this.minExpectedListed = minExpectedListed;
         this.clock = clock;
+        this.waits = waits;
     }
 
     /**
@@ -178,21 +183,31 @@ public class DartCorpCodeCache {
                 }
                 return held.stale();
             }
-            DataSourceException failure;
-            try {
-                return loaded(download(), now, held);
-            } catch (DataSourceException first) {
-                failure = first;
-            }
-            if (failure.kind() != DataSourceException.Kind.AUTH
-                    && failure.kind() != DataSourceException.Kind.RATE_LIMITED) {
-                // 즉시 한 번 다시 받는다 — 순간적인 끊김 하나를 10분 기억으로 만들지 않는다. 인증·한도는 다시 물어도 같다.
+            DataSourceException failure = null;
+            for (int attempt = 0; attempt <= waits.retries(); attempt++) {
+                if (attempt > 0) {
+                    if (failure.kind() == DataSourceException.Kind.AUTH
+                            || failure.kind() == DataSourceException.Kind.RATE_LIMITED) {
+                        break; // 인증·한도는 다시 물어도 같다.
+                    }
+                    try {
+                        // 대기 없이 다시 물으면 0.4초 안에 끝나 그보다 긴 끊김을 못 넘는다 — 순간 끊김 하나를 10분 기억으로
+                        // 만들지 않는 것은 이 대기다(RefetchWaits).
+                        waits.before(attempt - 1);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        failure = new DataSourceException(DataSourceException.Kind.TRANSIENT, DartResponse.SOURCE_NAME,
+                                "매핑을 다시 받기를 기다리는 중 인터럽트됐다.", e);
+                        break;
+                    }
+                }
                 try {
-                    return loaded(download(), now, held);
-                } catch (DataSourceException second) {
-                    failure = second;
+                    return loaded(download(), clock.instant(), held);
+                } catch (DataSourceException e) {
+                    failure = e;
                 }
             }
+            now = clock.instant();
             lastFailedAt = now;
             lastFailure = failure;
             if (held == null) {

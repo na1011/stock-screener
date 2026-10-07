@@ -76,6 +76,7 @@ class DartCorpCodeCacheTest {
         enqueueZip(Map.of("005930", "00126380", "000660", "00164779"));
         enqueueZip(Map.of());
         enqueueZip(Map.of());
+        enqueueZip(Map.of());
         DartCorpCodeCache cache = cache(2);
         assertThat(cache.findCorpCode("005930")).contains("00126380");
 
@@ -88,17 +89,18 @@ class DartCorpCodeCacheTest {
                     assertThat(MarketCompleteness.sourceAnswered(e.kind().name(), e.sourceAnswered(), true))
                             .as("답 못 받음 — 그 종목의 시장(KOSPI)이 미완료로 판정된다").isFalse();
                 });
-        assertThat(server.getRequestCount()).as("첫 적재 1 + 다시 받기 1 + 즉시 재시도 1").isEqualTo(3);
+        assertThat(server.getRequestCount()).as("첫 적재 1 + 다시 받기 1 + 대기 둔 재시도 2").isEqualTo(4);
 
         cache.findCorpCode("005930");
-        assertThat(server.getRequestCount()).as("10분 기억 — 콜 0").isEqualTo(3);
+        assertThat(server.getRequestCount()).as("10분 기억 — 콜 0").isEqualTo(4);
     }
 
     @Test
     @DisplayName("첫 적재가 014면 종목 조회는 NOT_FOUND가 아니라 TRANSIENT — 「DART가 모른다」로 읽히지 않게 · 10분 기억")
     void firstLoadNoDataIsTransientAndRemembered() {
-        enqueueJson("{\"status\":\"014\",\"message\":\"파일이 존재하지 않습니다.\"}");
-        enqueueJson("{\"status\":\"014\",\"message\":\"파일이 존재하지 않습니다.\"}");
+        for (int i = 0; i < 3; i++) {
+            enqueueJson("{\"status\":\"014\",\"message\":\"파일이 존재하지 않습니다.\"}");
+        }
         DartCorpCodeCache cache = cache(2);
 
         assertThatThrownBy(() -> cache.findCorpCode("005930"))
@@ -107,7 +109,7 @@ class DartCorpCodeCacheTest {
                     assertThat(e.getMessage()).contains("014");
                 });
         assertThatThrownBy(() -> cache.findCorpCode("000660")).isInstanceOf(DataSourceException.class);
-        assertThat(server.getRequestCount()).as("즉시 재시도 한 번 뒤로는 기억").isEqualTo(2);
+        assertThat(server.getRequestCount()).as("대기 둔 재시도 둘 뒤로는 기억").isEqualTo(3);
     }
 
     @Test
@@ -134,11 +136,43 @@ class DartCorpCodeCacheTest {
         DartCorpCodeCache truncated = cache(2);
         byte[] zip = zip(Map.of("005930", "00126380", "000660", "00164779"));
         byte[] cut = java.util.Arrays.copyOf(zip, 10);
-        server.enqueue(new MockResponse().setResponseCode(200).setBody(new Buffer().write(cut)));
-        server.enqueue(new MockResponse().setResponseCode(200).setBody(new Buffer().write(cut)));
+        for (int i = 0; i < 3; i++) {
+            server.enqueue(new MockResponse().setResponseCode(200).setBody(new Buffer().write(cut)));
+        }
         assertThatThrownBy(() -> truncated.findCorpCode("005930"))
                 .isInstanceOfSatisfying(DataSourceException.class,
                         e -> assertThat(e.kind()).isEqualTo(DataSourceException.Kind.TRANSIENT));
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 1초짜리 끊김(503·503 → 1초 뒤 200)은 대기 둔 재시도가 넘는다 — 첫 조회가 3초 안에 성공하고 10분 기억으로 안 간다")
+    void waitsBridgeAShortOutage() throws Exception {
+        assertThat(bridges(new long[] {2_000, 10_000})).isTrue();
+    }
+
+    /** 끊김이 1초 이어지는 서버에 첫 조회를 하고 성공했는지(대기 합 3초 안에). 대기는 가짜 시간을 민다 — 실제로 자지 않는다. */
+    private boolean bridges(long[] waitMillis) throws Exception {
+        java.util.concurrent.atomic.AtomicLong elapsed = new java.util.concurrent.atomic.AtomicLong();
+        byte[] zip = zip(Map.of("005930", "00126380", "000660", "00164779"));
+        server.setDispatcher(new okhttp3.mockwebserver.Dispatcher() {
+            @Override
+            public MockResponse dispatch(okhttp3.mockwebserver.RecordedRequest request) {
+                return elapsed.get() < 1_000
+                        ? new MockResponse().setResponseCode(503).setBody("<html>down</html>")
+                        : new MockResponse().setResponseCode(200).setBody(new Buffer().write(zip));
+            }
+        });
+        DataSourceProperties properties = new DataSourceProperties();
+        properties.getDart().setBaseUrl(server.url("/").toString());
+        properties.getDart().setApiKey("test-key");
+        DartCorpCodeCache cache = new DartCorpCodeCache(new ExternalApiClientFactory(), properties,
+                new TokenBucketRateLimiter("dart", 0, 0), 2, clock,
+                new com.stockscreener.pipeline.datasource.http.RefetchWaits(waitMillis, elapsed::addAndGet));
+        try {
+            return cache.findCorpCode("005930").isPresent() && elapsed.get() <= 3_000;
+        } catch (DataSourceException e) {
+            return false;
+        }
     }
 
     private DartCorpCodeCache cache(int minListed) {
@@ -146,7 +180,8 @@ class DartCorpCodeCacheTest {
         properties.getDart().setBaseUrl(server.url("/").toString());
         properties.getDart().setApiKey("test-key");
         return new DartCorpCodeCache(new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("dart", 0, 0), minListed, clock);
+                new TokenBucketRateLimiter("dart", 0, 0), minListed, clock,
+                new com.stockscreener.pipeline.datasource.http.RefetchWaits(new long[] {2_000, 10_000}, millis -> { }));
     }
 
     private void enqueueZip(Map<String, String> listed) throws IOException {

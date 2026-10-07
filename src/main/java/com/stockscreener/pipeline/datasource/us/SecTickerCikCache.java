@@ -4,6 +4,7 @@ import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.RateLimiter;
+import com.stockscreener.pipeline.datasource.http.RefetchWaits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,7 +68,8 @@ import java.util.Optional;
  * <p><b>신선한 판</b> = 받은 지 {@link #MAX_AGE} 안이고 그 뒤 다시 받기 실패가 없는 판({@link Snapshot#fresh()}). 거기에 없는
  * 티커만 {@link Optional#empty()}이고, 재무 어댑터가 그것을 「소스가 답한 부재」로 쓴다.
  *
- * <p><b>받기가 실패하면 즉시 한 번 다시 받고, 그래도 실패면 {@link #RETRY_AFTER_FAILURE} 동안 기억한다 — 첫 적재도 같다.</b>
+ * <p><b>받기가 실패하면 2초 · 10초를 기다리며 두 번 다시 받고({@link RefetchWaits}), 그래도 실패면 {@link #RETRY_AFTER_FAILURE}
+ * 동안 기억한다 — 첫 적재도 같다.</b>
  * 기억하지 않으면 종목 루프가 종목마다 다시 받는다 — hang이면 1,000종목 × 읽기 제한 60초다(2026-10-07 반증). 첫 적재
  * 실패를 기억하면 그 10분 동안 미국 종목이 콜 없이 {@code TRANSIENT}로 실패하는데, 그것은 「미국 미완료」로 시계를 안 밀고
  * 다음 차례에 다시 돈다 — 옛 규칙(첫 적재는 기억 안 함)의 사유는 그 실패가 시계를 밀던 분류 위에 서 있었다.
@@ -95,6 +97,7 @@ public class SecTickerCikCache {
     private final boolean userAgentPresent;
     private final int minExpectedRows;
     private final Clock clock;
+    private final RefetchWaits waits;
 
     private volatile Snapshot current;
     /** 마지막 다시 받기 실패 — {@code this}로 잠근 자리에서만 읽고 쓴다. */
@@ -110,7 +113,7 @@ public class SecTickerCikCache {
                              DataSourceProperties properties,
                              @Qualifier("secEdgarRateLimiter") RateLimiter rateLimiter) {
         this(clientFactory, properties, rateLimiter, properties.getSecEdgarFilesBaseUrl(),
-                MIN_EXPECTED_ROWS, Clock.systemUTC());
+                MIN_EXPECTED_ROWS, Clock.systemUTC(), RefetchWaits.standard());
     }
 
     /** MockWebServer 테스트 전용 — base URL과 하한을 바꿔 끼운다. */
@@ -119,22 +122,24 @@ public class SecTickerCikCache {
                       RateLimiter rateLimiter,
                       String baseUrl,
                       int minExpectedRows) {
-        this(clientFactory, properties, rateLimiter, baseUrl, minExpectedRows, Clock.systemUTC());
+        this(clientFactory, properties, rateLimiter, baseUrl, minExpectedRows, Clock.systemUTC(), RefetchWaits.standard());
     }
 
-    /** 위와 같되 시계까지 바꿔 끼운다 — {@link #MAX_AGE} 경계를 시험한다. */
+    /** 위와 같되 시계와 다시 받기 대기까지 바꿔 끼운다 — {@link #MAX_AGE} 경계와 재시도를 시험한다. */
     SecTickerCikCache(ExternalApiClientFactory clientFactory,
                       DataSourceProperties properties,
                       RateLimiter rateLimiter,
                       String baseUrl,
                       int minExpectedRows,
-                      Clock clock) {
+                      Clock clock,
+                      RefetchWaits waits) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
         this.userAgentPresent = source.hasApiKey();
         this.minExpectedRows = minExpectedRows;
         this.clock = clock;
+        this.waits = waits;
     }
 
     /**
@@ -200,21 +205,31 @@ public class SecTickerCikCache {
                 }
                 return held.stale();
             }
-            DataSourceException failure;
-            try {
-                return loaded(download(), now, held);
-            } catch (DataSourceException first) {
-                failure = first;
-            }
-            if (failure.kind() != DataSourceException.Kind.AUTH
-                    && failure.kind() != DataSourceException.Kind.RATE_LIMITED) {
-                // 즉시 한 번 다시 받는다 — 순간적인 끊김 하나를 10분 기억으로 만들지 않는다. 신원·한도는 다시 물어도 같다.
+            DataSourceException failure = null;
+            for (int attempt = 0; attempt <= waits.retries(); attempt++) {
+                if (attempt > 0) {
+                    if (failure.kind() == DataSourceException.Kind.AUTH
+                            || failure.kind() == DataSourceException.Kind.RATE_LIMITED) {
+                        break; // 인증·한도는 다시 물어도 같다.
+                    }
+                    try {
+                        // 대기 없이 다시 물으면 0.4초 안에 끝나 그보다 긴 끊김을 못 넘는다 — 순간 끊김 하나를 10분 기억으로
+                        // 만들지 않는 것은 이 대기다(RefetchWaits).
+                        waits.before(attempt - 1);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        failure = new DataSourceException(DataSourceException.Kind.TRANSIENT, SecEdgarResponse.SOURCE_NAME,
+                                "매핑을 다시 받기를 기다리는 중 인터럽트됐다.", e);
+                        break;
+                    }
+                }
                 try {
-                    return loaded(download(), now, held);
-                } catch (DataSourceException second) {
-                    failure = second;
+                    return loaded(download(), clock.instant(), held);
+                } catch (DataSourceException e) {
+                    failure = e;
                 }
             }
+            now = clock.instant();
             lastFailedAt = now;
             lastFailure = failure;
             if (strict || held == null) {
@@ -333,20 +348,18 @@ public class SecTickerCikCache {
                     SecEdgarResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + PATH, e);
         }
 
-        ResponseEntity<JsonNode> response;
+        // 본문을 문자열로 받아 상태를 먼저 본다 — JSON으로 받으면 403·429 HTML이 상태를 보기 전에 변환에서 터져 TRANSIENT가
+        // 되고, 한도를 「다시 묻지 않음」에서 비켜 막힌 호스트를 한 번 더 친다(구현 반증). 판정은 다른 SEC 받기와 같은 자리다.
+        ResponseEntity<String> response;
         try {
-            response = client.get().uri(PATH).retrieve().toEntity(JsonNode.class);
+            response = client.get().uri(PATH).retrieve().toEntity(String.class);
         } catch (RuntimeException e) {
             // 벤더 예외가 상위로 새지 않게 여기서 감싼다(ADR-0006).
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
                     SecEdgarResponse.SOURCE_NAME, "매핑 파일 호출에 실패했다. " + PATH, e);
         }
-        if (!response.getStatusCode().is2xxSuccessful()) {
-            throw new DataSourceException(SecEdgarResponse.kindOf(response.getStatusCode().value()),
-                    SecEdgarResponse.SOURCE_NAME,
-                    "HTTP %d. %s".formatted(response.getStatusCode().value(), PATH));
-        }
-        return parse(response.getBody(), minExpectedRows);
+        return parse(SecEdgarResponse.requireJson(response.getStatusCode(), response.getBody(), PATH),
+                minExpectedRows);
     }
 
     private static Map<String, Listing> parse(JsonNode root, int minExpectedRows)
