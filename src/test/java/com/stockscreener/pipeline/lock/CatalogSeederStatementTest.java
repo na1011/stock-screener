@@ -99,6 +99,19 @@ class CatalogSeederStatementTest {
                 .doesNotEndWith("(옛 이름)");
     }
 
+    @Test
+    @DisplayName("남의 신원 범위 행만 있으면 이 JVM에는 가드가 안 걸린다 — 시더는 차이를 쓴다(트리거와 같은 술어)")
+    void anotherJvmsScopedGuardDoesNotRefuseThisJvm() {
+        jdbcTemplate.update("UPDATE indicator SET name = name || ' (옛 이름)' WHERE code = 'PER'");
+        jdbcTemplate.update("INSERT INTO guard_setting (db_name, identity_prefix, note) VALUES (?, 'ss:j:1:', 'CatalogSeederStatementTest')",
+                db);
+
+        synchronizer.synchronize();
+
+        assertThat(jdbcTemplate.queryForObject("SELECT name FROM indicator WHERE code = 'PER'", String.class))
+                .doesNotEndWith("(옛 이름)");
+    }
+
     private void guardOnForThisJvm() {
         jdbcTemplate.update("INSERT INTO guard_setting (db_name, identity_prefix, note) VALUES (?, ?, 'CatalogSeederStatementTest')",
                 db, myPrefix);

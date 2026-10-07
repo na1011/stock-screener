@@ -59,13 +59,17 @@ public class CatalogWriteGate {
                 + "같은 커밋을 배포하거나, 다른 체크아웃의 카탈로그를 운영에 쓰려던 것이 아니면 그 체크아웃을 배포된 커밋으로 맞춘다.");
     }
 
+    /**
+     * 이 JVM의 쓰기에 가드가 걸리는가 — 트리거와 <b>같은 함수</b>({@code public.write_guard_applies()} · V66)에 묻는다. 신원 범위
+     * 접두가 있는 행(시험 JVM)은 그 접두의 연결에만 걸린다 — 따로 적던 시절에는 남의 범위 행 하나에 이 JVM의 시더가 거절됐다.
+     * 이 질의는 앱 풀의 연결로 가므로 그 연결의 {@code application_name}(이 JVM의 신원)으로 판정된다. 함수가 없으면(V66 전) 꺼짐이다.
+     */
     private boolean guardOn() {
         if (!Boolean.TRUE.equals(jdbcTemplate.queryForObject(
-                "SELECT to_regclass('public.guard_setting') IS NOT NULL", Boolean.class))) {
+                "SELECT to_regprocedure('public.write_guard_applies()') IS NOT NULL", Boolean.class))) {
             return false;
         }
-        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM guard_setting WHERE db_name = current_database())", Boolean.class));
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT public.write_guard_applies()", Boolean.class));
     }
 
     static boolean isDeployedJar() {

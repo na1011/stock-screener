@@ -22,6 +22,21 @@ COMMENT ON TABLE guard_setting IS
     '쓰기 가드 스위치(ADR-0175). db_name = current_database()인 행이 있으면 파이프라인 표의 쓰기를 잠금 보유자에게만 허용한다. '
     'identity_prefix가 NULL이면 모든 신원, 아니면 그 접두의 신원만 검사한다(시험 JVM 범위). 운영 행은 사용자 승인으로만 넣는다';
 
+-- ①' 「이 연결의 쓰기에 가드가 걸리는가」 — 술어는 여기 하나다. 트리거(④)와 카탈로그 시더의 차이 판정
+--    (CatalogWriteGate.guardOn)이 같은 함수를 부른다 — 둘이 따로 적으면 신원 범위 행 하나에 시더만 「켜짐」으로 갈렸다.
+--    이 DB 이름 행이 있고 ∧ (범위 접두가 NULL ∨ 이 연결의 application_name이 그 접두로 시작한다).
+CREATE OR REPLACE FUNCTION public.write_guard_applies() RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path = pg_catalog, pg_temp
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.guard_setting g
+         WHERE g.db_name = current_database()
+           AND (g.identity_prefix IS NULL
+                OR left(coalesce(current_setting('application_name', true), ''), length(g.identity_prefix))
+                   = g.identity_prefix))
+$$;
+
 -- ② 잠금. DB당 한 행이고 반납해도 행은 남는다(보유 칸만 비움) — 대기 표지가 보유자와 따로 살아야 하기 때문이다.
 --    version은 모든 갱신에서 1씩 오르고 획득·합류·표지가 그것으로 CAS한다(관측한 행이 그대로일 때만 바꾼다).
 --    사망 술어는 pid + 프로세스 시작 초다(부팅 시각은 같은 부팅 안에서도 움직여 산 보유자를 죽었다고 판정했다 — 잠금 v3 실측).
@@ -84,15 +99,9 @@ AS $$
 DECLARE
     v_db     text := current_database();
     v_app    text := coalesce(current_setting('application_name', true), '');
-    v_on     boolean;
-    v_prefix text;
     v_lock   public.write_lock%ROWTYPE;
 BEGIN
-    SELECT true, g.identity_prefix INTO v_on, v_prefix FROM public.guard_setting g WHERE g.db_name = v_db;
-    IF v_on IS NULL THEN
-        RETURN NULL;
-    END IF;
-    IF v_prefix IS NOT NULL AND left(v_app, length(v_prefix)) <> v_prefix THEN
+    IF NOT public.write_guard_applies() THEN
         RETURN NULL;
     END IF;
     SELECT * INTO v_lock FROM public.write_lock l WHERE l.db_name = v_db;
