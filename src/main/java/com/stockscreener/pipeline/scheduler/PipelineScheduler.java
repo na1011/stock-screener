@@ -15,6 +15,7 @@ import com.stockscreener.pipeline.batch.JobFreshnessAlerter;
 import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
 import com.stockscreener.pipeline.batch.UniverseIntegrityAlerter;
 import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
+import com.stockscreener.pipeline.lock.WriteLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +31,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 배치를 정해진 시각에 띄운다.
@@ -74,6 +76,7 @@ public class PipelineScheduler {
     private final IndicatorReconciler indicatorReconciler;
     private final UniverseIntegrityAlerter universeIntegrityAlerter;
     private final BatchExecutions batchExecutions;
+    private final WriteLock writeLock;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
                              UniverseRebalanceJob universeRebalanceJob,
@@ -87,7 +90,8 @@ public class PipelineScheduler {
                              JobFreshnessPolicy freshnessPolicy,
                              IndicatorReconciler indicatorReconciler,
                              UniverseIntegrityAlerter universeIntegrityAlerter,
-                             BatchExecutions batchExecutions) {
+                             BatchExecutions batchExecutions,
+                             WriteLock writeLock) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -101,6 +105,29 @@ public class PipelineScheduler {
         this.indicatorReconciler = indicatorReconciler;
         this.universeIntegrityAlerter = universeIntegrityAlerter;
         this.batchExecutions = batchExecutions;
+        this.writeLock = writeLock;
+    }
+
+    /**
+     * 쓰기 크론의 몸통을 쓰기 잠금 안에서 돌린다(ADR-0175). 잠금이 차 있으면 기다리고, 발화한 날 23:00까지 안 풀리면 건너뛴다.
+     *
+     * <p>MUST: 각 쓰기 크론의 바깥 {@code try} <b>맨 앞</b>에서 부른다 — 끝 줄은 그 {@code finally}가 찍으므로 건너뛴 날에도 남고
+     * ({@code ops/crons-done.sh}가 그날을 「남은 발화」로 안 막는다), 무거운 잡의 「마지막 정기 시도」 조회보다 앞이라 건너뜀이
+     * 시도로 세어지지 않는다(잠금 v5 8'). <b>건너뜀은 예외가 아니고 실행 행도 없다</b> — 예외로 만들면 무거운 잡의
+     * {@code recordStartFailure}가 토큰 없이 FAILED 행을 쓰다 가드에 거절되고 원래 사유가 덮인다(잠금 v4 반증 L1-4).
+     *
+     * <p>사정거리: 이 잠금은 progress의 손 쓰기 문(「다음 명목 발화 전에 끝낸다」)의 <b>백스톱</b>이다 — 13:50 손 bootRun이 쥐면
+     * 14:00~14:20 사슬은 그것이 끝날 때까지 밀린다(배타는 서지만 사슬 단계 사이의 중간 상태는 그만큼 길어진다 · 잠금 v5 내 판정).
+     * 문을 걷는 것은 사슬을 한 메서드로 묶는 2부 (나)의 몫이다.
+     */
+    private void underWriteLock(String cron, Runnable body) {
+        Optional<WriteLock.Token> token = writeLock.awaitForCron(cron);
+        if (token.isEmpty()) {
+            return; // 건너뜀 — 로그와 알림은 WriteLock이 냈다.
+        }
+        try (WriteLock.Token held = token.get()) {
+            body.run();
+        }
     }
 
     /**
@@ -136,17 +163,19 @@ public class PipelineScheduler {
     @Scheduled(cron = "0 30 13 * * MON-FRI", zone = "Asia/Seoul")
     public void runDailyUpdate() {
         try {
-            LocalDate targetDate = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
-            log.info("일일 갱신을 시작한다. targetDate={}", targetDate);
-            try {
-                dailyUpdateJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
-            } catch (BatchShutdownException e) {
-                // IMPORTANT — 운영에서 종료가 배치를 끊는 경로가 실제로 여기다. 안 잡으면 Spring의
-                // 기본 처리가 ERROR로 찍고, sentry.logging.minimum-event-level이 error라 배포마다
-                // 이슈가 하나씩 쌓인다. catch-all이 아니라 이름 붙은 신호 하나만 받는다.
-                log.info("일일 갱신이 종료로 중단됐다. targetDate={} — ABORTED로 남는다. "
-                        + "시세는 조회 창이 다시 시도하지만 백분위·워치리스트는 안 이어진다.", targetDate);
-            }
+            underWriteLock("runDailyUpdate", () -> {
+                LocalDate targetDate = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
+                log.info("일일 갱신을 시작한다. targetDate={}", targetDate);
+                try {
+                    dailyUpdateJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                } catch (BatchShutdownException e) {
+                    // IMPORTANT — 운영에서 종료가 배치를 끊는 경로가 실제로 여기다. 안 잡으면 Spring의
+                    // 기본 처리가 ERROR로 찍고, sentry.logging.minimum-event-level이 error라 배포마다
+                    // 이슈가 하나씩 쌓인다. catch-all이 아니라 이름 붙은 신호 하나만 받는다.
+                    log.info("일일 갱신이 종료로 중단됐다. targetDate={} — ABORTED로 남는다. "
+                            + "시세는 조회 창이 다시 시도하지만 백분위·워치리스트는 안 이어진다.", targetDate);
+                }
+            });
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
             log.info("크론 발화를 마쳤다. 크론={}", "runDailyUpdate");
@@ -172,19 +201,21 @@ public class PipelineScheduler {
     @Scheduled(cron = "0 0 20 * * SAT", zone = "Asia/Seoul")
     public void runUniverseRebalance() {
         try {
-            LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
-            log.info("유니버스 리밸런싱을 시작한다. asOf={}", asOf);
-            try {
-                universeRebalanceJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
-            } catch (BatchShutdownException e) {
-                // 위와 같은 이유다. 이 잡은 process()·stage()를 안 지나므로 신호가 나려면
-                // UniverseRebalanceJob의 지수 루프에 건 게이트가 살아 있어야 한다 — 그것을
-                // 지우면 이 catch가 조용히 죽은 코드가 된다.
-                log.info("유니버스 리밸런싱이 종료로 중단됐다. asOf={} — 다음 토요일에 다시 돈다.", asOf);
-            }
-            // MUST NOT: 여기에 결손 보충(꼬리)을 두지 않는다 — UniverseRebalanceJob 안으로 옮겼다.
-            // 여기 있으면 손·관리자 경로가 그 꼬리를 안 타고, 실측으로 리밸런싱 15회 중 11회가
-            // 그 경로였다. 잡 안에 두면 어느 경로로 불려도 편입 직후에 한 번 돈다.
+            underWriteLock("runUniverseRebalance", () -> {
+                LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
+                log.info("유니버스 리밸런싱을 시작한다. asOf={}", asOf);
+                try {
+                    universeRebalanceJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                } catch (BatchShutdownException e) {
+                    // 위와 같은 이유다. 이 잡은 process()·stage()를 안 지나므로 신호가 나려면
+                    // UniverseRebalanceJob의 지수 루프에 건 게이트가 살아 있어야 한다 — 그것을
+                    // 지우면 이 catch가 조용히 죽은 코드가 된다.
+                    log.info("유니버스 리밸런싱이 종료로 중단됐다. asOf={} — 다음 토요일에 다시 돈다.", asOf);
+                }
+                // MUST NOT: 여기에 결손 보충(꼬리)을 두지 않는다 — UniverseRebalanceJob 안으로 옮겼다.
+                // 여기 있으면 손·관리자 경로가 그 꼬리를 안 타고, 실측으로 리밸런싱 15회 중 11회가
+                // 그 경로였다. 잡 안에 두면 어느 경로로 불려도 편입 직후에 한 번 돈다.
+            });
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
             log.info("크론 발화를 마쳤다. 크론={}", "runUniverseRebalance");
@@ -233,33 +264,35 @@ public class PipelineScheduler {
     @Scheduled(cron = "0 0 14 * * MON-FRI", zone = "Asia/Seoul")
     public void runCorporateActionChain() {
         try {
-            LocalDate asOf = LocalDate.now(KR_ZONE);
-            log.info("기업 행위 사슬을 시작한다. asOf={} — 수집 → 재구축 → 화해까지 한 번에 간다.", asOf);
-            try {
-                corporateActionJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
-                        null, List.of(), null);
+            underWriteLock("runCorporateActionChain", () -> {
+                LocalDate asOf = LocalDate.now(KR_ZONE);
+                log.info("기업 행위 사슬을 시작한다. asOf={} — 수집 → 재구축 → 화해까지 한 번에 간다.", asOf);
+                try {
+                    corporateActionJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
+                            null, List.of(), null);
 
-                AdjustmentRebuildJob.Invalidation invalidation = adjustmentRebuildJob.runAndReport(
-                        asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null);
-                if (invalidation.isEmpty()) {
-                    log.info("계수가 원장과 이미 일치한다 — 지워진 지표가 없어 사슬 안 화해도 없다.");
-                    return;
+                    AdjustmentRebuildJob.Invalidation invalidation = adjustmentRebuildJob.runAndReport(
+                            asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null);
+                    if (invalidation.isEmpty()) {
+                        log.info("계수가 원장과 이미 일치한다 — 지워진 지표가 없어 사슬 안 화해도 없다.");
+                        return;
+                    }
+                    // 화해의 asOf는 13:30 일일 갱신의 대상일이고 지표 달력 최신일을 넘지 않는다(IndicatorReconciler.dataAsOf).
+                    //
+                    // MUST NOT: 여기서 입력 유도(deriveInputs)를 먼저 부르지 않는다. 재구축이 원장을 APPLIED로
+                    // 바꿔 기저 판정의 입력이 바뀐 것은 맞지만, 유도가 던지면 지워진 종목이 화해 없이 남아
+                    // 무거운 잡 날 한 시간을 빈다 — 이 자리를 둔 이유가 통째로 무너진다. 어제 판정으로 채워도
+                    // 13:30과 같은 의미이고(판정 NULL = OK), 같은 오후 14:18 유도 → 14:20 화해가 새 판정으로 덮는다.
+                    LocalDate dataAsOf = indicatorReconciler.dataAsOf(asOf);
+                    indicatorReconciler.reconcile(dataAsOf, invalidation.tickers(),
+                            BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                } catch (BatchShutdownException e) {
+                    // 앞의 두 잡과 같은 이유다(runDailyUpdate 참조). 사슬 중간에 끊기면 다음 실행이
+                    // 이어받는다 — 수집은 전 구간 재조회라 멱등이고, 재구축도 원장에서 매번 다시 짓는다.
+                    log.info("기업 행위 사슬이 종료로 중단됐다. asOf={} — 다음 평일 실행이 다시 시도한다."
+                            + " 화해까지 못 갔으면 그 종목의 지표는 다음 화해까지 지워진 채로 남는다.", asOf);
                 }
-                // 화해의 asOf는 13:30 일일 갱신의 대상일이고 지표 달력 최신일을 넘지 않는다(IndicatorReconciler.dataAsOf).
-                //
-                // MUST NOT: 여기서 입력 유도(deriveInputs)를 먼저 부르지 않는다. 재구축이 원장을 APPLIED로
-                // 바꿔 기저 판정의 입력이 바뀐 것은 맞지만, 유도가 던지면 지워진 종목이 화해 없이 남아
-                // 무거운 잡 날 한 시간을 빈다 — 이 자리를 둔 이유가 통째로 무너진다. 어제 판정으로 채워도
-                // 13:30과 같은 의미이고(판정 NULL = OK), 같은 오후 14:18 유도 → 14:20 화해가 새 판정으로 덮는다.
-                LocalDate dataAsOf = indicatorReconciler.dataAsOf(asOf);
-                indicatorReconciler.reconcile(dataAsOf, invalidation.tickers(),
-                        BatchExecutionRecorder.TriggeredBy.SCHEDULER);
-            } catch (BatchShutdownException e) {
-                // 앞의 두 잡과 같은 이유다(runDailyUpdate 참조). 사슬 중간에 끊기면 다음 실행이
-                // 이어받는다 — 수집은 전 구간 재조회라 멱등이고, 재구축도 원장에서 매번 다시 짓는다.
-                log.info("기업 행위 사슬이 종료로 중단됐다. asOf={} — 다음 평일 실행이 다시 시도한다."
-                        + " 화해까지 못 갔으면 그 종목의 지표는 다음 화해까지 지워진 채로 남는다.", asOf);
-            }
+            });
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
             log.info("크론 발화를 마쳤다. 크론={}", "runCorporateActionChain");
@@ -288,33 +321,35 @@ public class PipelineScheduler {
     @Scheduled(cron = "0 15 14 * * MON-FRI", zone = "Asia/Seoul")
     public void runHeavyJobOfTheDay() {
         try {
-            LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
-            DayOfWeek today = LocalDate.now(KR_ZONE).getDayOfWeek();
+            underWriteLock("runHeavyJobOfTheDay", () -> {
+                LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
+                DayOfWeek today = LocalDate.now(KR_ZONE).getDayOfWeek();
 
-            String due = heavyJobDueToday(today);
-            if (due == null) {
-                log.info("오늘 돌릴 무거운 잡이 없다. today={} — 배정된 잡이 최근에 돌았거나 요일이 아니다.",
-                        today);
-                return;
-            }
-            log.info("무거운 잡을 하나 돌린다. job={} today={} — 하루에 하나만 돌려 DART 한도를 지킨다.",
-                    due, today);
-            // 잡이 실행 행을 만들기 전에 던지면 그 시도가 어디에도 안 남는다 — 그러면 연체 보정 순서의 키(마지막 정기 시도)가
-            // 그 잡에서 멈춰, 그 잡이 매 평일 맨 앞에 서고 다른 연체 잡의 차례를 빼앗는다. 행이 새로 생겼는지는 「마지막 정기
-            // 시도」가 바뀌었는가로 가른다 — 두 시계(JVM·DB)를 비교하지 않는다.
-            // MUST: 이 조회와 아래 catch는 바깥 finally 안이다 — 밖이면 그 DB 예외가 끝 줄을 건너뛰어 crons-done.sh가 그날을
-            // 「남은 발화」로 막는다.
-            Instant attemptBefore = freshnessPolicy.lastScheduledAttemptAt(due);
-            try {
-                runHeavy(due, asOf);
-            } catch (BatchShutdownException e) {
-                log.info("무거운 잡이 종료로 중단됐다. job={} — 연체로 남아 다음 평일 실행이 집어 간다.", due);
-            } catch (RuntimeException e) {
-                if (Objects.equals(attemptBefore, freshnessPolicy.lastScheduledAttemptAt(due))) {
-                    recordStartFailure(due, asOf, e);
+                String due = heavyJobDueToday(today);
+                if (due == null) {
+                    log.info("오늘 돌릴 무거운 잡이 없다. today={} — 배정된 잡이 최근에 돌았거나 요일이 아니다.",
+                            today);
+                    return;
                 }
-                throw e;
-            }
+                log.info("무거운 잡을 하나 돌린다. job={} today={} — 하루에 하나만 돌려 DART 한도를 지킨다.",
+                        due, today);
+                // 잡이 실행 행을 만들기 전에 던지면 그 시도가 어디에도 안 남는다 — 그러면 연체 보정 순서의 키(마지막 정기 시도)가
+                // 그 잡에서 멈춰, 그 잡이 매 평일 맨 앞에 서고 다른 연체 잡의 차례를 빼앗는다. 행이 새로 생겼는지는 「마지막 정기
+                // 시도」가 바뀌었는가로 가른다 — 두 시계(JVM·DB)를 비교하지 않는다.
+                // MUST: 이 조회와 아래 catch는 바깥 finally 안이다 — 밖이면 그 DB 예외가 끝 줄을 건너뛰어 crons-done.sh가 그날을
+                // 「남은 발화」로 막는다.
+                Instant attemptBefore = freshnessPolicy.lastScheduledAttemptAt(due);
+                try {
+                    runHeavy(due, asOf);
+                } catch (BatchShutdownException e) {
+                    log.info("무거운 잡이 종료로 중단됐다. job={} — 연체로 남아 다음 평일 실행이 집어 간다.", due);
+                } catch (RuntimeException e) {
+                    if (Objects.equals(attemptBefore, freshnessPolicy.lastScheduledAttemptAt(due))) {
+                        recordStartFailure(due, asOf, e);
+                    }
+                    throw e;
+                }
+            });
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
             log.info("크론 발화를 마쳤다. 크론={}", "runHeavyJobOfTheDay");
@@ -431,13 +466,15 @@ public class PipelineScheduler {
     @Scheduled(cron = "0 18 14 * * MON-FRI", zone = "Asia/Seoul")
     public void deriveReconcileInputs() {
         try {
-            LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
-            log.info("화해 입력을 유도한다. asOf={} — 주식수 기저 → 거버넌스 사실", asOf);
-            try {
-                indicatorReconciler.deriveInputs(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
-            } catch (BatchShutdownException e) {
-                log.info("화해 입력 유도가 종료로 중단됐다. asOf={} — 어제 판정으로 화해가 돈다.", asOf);
-            }
+            underWriteLock("deriveReconcileInputs", () -> {
+                LocalDate asOf = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
+                log.info("화해 입력을 유도한다. asOf={} — 주식수 기저 → 거버넌스 사실", asOf);
+                try {
+                    indicatorReconciler.deriveInputs(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                } catch (BatchShutdownException e) {
+                    log.info("화해 입력 유도가 종료로 중단됐다. asOf={} — 어제 판정으로 화해가 돈다.", asOf);
+                }
+            });
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
             log.info("크론 발화를 마쳤다. 크론={}", "deriveReconcileInputs");
@@ -459,13 +496,15 @@ public class PipelineScheduler {
     @Scheduled(cron = "0 20 14 * * MON-FRI", zone = "Asia/Seoul")
     public void reconcileIndicators() {
         try {
-            LocalDate asOf = indicatorReconciler.dataAsOf(LocalDate.now(KR_ZONE));
-            log.info("지표 화해를 시작한다. asOf={} — 원본층(보존 창 편입 전원) → 파생층(창 전체)", asOf);
-            try {
-                indicatorReconciler.reconcile(asOf, List.of(), BatchExecutionRecorder.TriggeredBy.SCHEDULER);
-            } catch (BatchShutdownException e) {
-                log.info("지표 화해가 종료로 중단됐다. asOf={} — 다음 평일 화해가 다시 돈다.", asOf);
-            }
+            underWriteLock("reconcileIndicators", () -> {
+                LocalDate asOf = indicatorReconciler.dataAsOf(LocalDate.now(KR_ZONE));
+                log.info("지표 화해를 시작한다. asOf={} — 원본층(보존 창 편입 전원) → 파생층(창 전체)", asOf);
+                try {
+                    indicatorReconciler.reconcile(asOf, List.of(), BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                } catch (BatchShutdownException e) {
+                    log.info("지표 화해가 종료로 중단됐다. asOf={} — 다음 평일 화해가 다시 돈다.", asOf);
+                }
+            });
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
             log.info("크론 발화를 마쳤다. 크론={}", "reconcileIndicators");

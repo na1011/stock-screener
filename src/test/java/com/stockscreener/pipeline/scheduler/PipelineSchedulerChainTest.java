@@ -21,6 +21,7 @@ import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
 import com.stockscreener.pipeline.batch.UniverseIntegrityAlerter;
 import com.stockscreener.pipeline.batch.UniverseRebalanceJob;
 
+import com.stockscreener.pipeline.lock.WriteLock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -82,6 +83,7 @@ class PipelineSchedulerChainTest {
     private ShareBasisDeriver shareBasisDeriver;
     private IndicatorCalendar indicatorCalendar;
     private BatchExecutions batchExecutions;
+    private WriteLock writeLock;
     private PipelineScheduler scheduler;
 
     @BeforeEach
@@ -100,6 +102,7 @@ class PipelineSchedulerChainTest {
         shareBasisDeriver = mock(ShareBasisDeriver.class);
         indicatorCalendar = mock(IndicatorCalendar.class);
         batchExecutions = mock(BatchExecutions.class);
+        writeLock = WriteLock.inactive("단위 시험");
         // 평상시: 13:30이 지표 달력을 대상일까지 늘려 두었다.
         when(indicatorCalendar.latestIndicatorDate(anyCollection())).thenReturn(Optional.of(TARGET_DATE));
 
@@ -116,7 +119,7 @@ class PipelineSchedulerChainTest {
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob,
                         indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions);
+                universeIntegrityAlerter, batchExecutions, writeLock);
     }
 
     @Test
@@ -417,7 +420,7 @@ class PipelineSchedulerChainTest {
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), policy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions);
+                universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"));
 
         Map<String, LocalDate> picked = new java.util.LinkedHashMap<>();
         for (LocalDate day = LocalDate.of(2026, 10, 19); !day.isAfter(LocalDate.of(2026, 11, 5));
@@ -458,6 +461,37 @@ class PipelineSchedulerChainTest {
         assertThatThrownBy(() -> scheduler.runHeavyJobOfTheDay()).isSameAs(boom);
 
         verify(attempt).failUnexpectedly("시작 실패", boom);
+    }
+
+    @Test
+    @DisplayName("쓰기 잠금 때문에 건너뛴 날: 잡도 시도 행도 「마지막 정기 시도」 조회도 없다 — 건너뜀은 시도가 아니다(ADR-0175)")
+    void skippedForTheWriteLockLeavesNoAttempt() {
+        overdue(GovernanceLoadJob.JOB_NAME, 40);
+        fresh(FullStatementRefillJob.JOB_NAME, FinancialRefillJob.JOB_NAME);
+        WriteLock refusing = mock(WriteLock.class);
+        when(refusing.awaitForCron(anyString())).thenReturn(Optional.empty());
+        PipelineScheduler blocked = new PipelineScheduler(
+                dailyUpdateJob, universeRebalanceJob, corporateActionJob, adjustmentRebuildJob,
+                governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
+                mock(JobFreshnessAlerter.class), freshnessPolicy,
+                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
+                universeIntegrityAlerter, batchExecutions, refusing);
+
+        blocked.runHeavyJobOfTheDay();
+        blocked.runDailyUpdate();
+        blocked.runCorporateActionChain();
+        blocked.deriveReconcileInputs();
+        blocked.reconcileIndicators();
+        blocked.runUniverseRebalance();
+
+        // 획득이 바깥 try 맨 앞이라 attemptBefore 조회보다 먼저 끝난다 — 건너뜀이 「시도」로 세어지지 않는다.
+        verify(freshnessPolicy, never()).lastScheduledAttemptAt(anyString());
+        verifyNoInteractions(batchExecutions, governanceLoadJob, dailyUpdateJob, corporateActionJob,
+                adjustmentRebuildJob, indicatorBackfillJob, universeRebalanceJob);
+        for (String cron : List.of("runHeavyJobOfTheDay", "runDailyUpdate", "runCorporateActionChain",
+                "deriveReconcileInputs", "reconcileIndicators", "runUniverseRebalance")) {
+            verify(refusing).awaitForCron(cron);
+        }
     }
 
     @Test

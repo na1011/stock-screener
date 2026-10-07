@@ -122,6 +122,7 @@
     "urn:stockscreener:already-watched",
     "urn:stockscreener:job-not-found",
     "urn:stockscreener:job-already-running",
+    "urn:stockscreener:write-lock-held",
     "urn:stockscreener:batch-execution-not-found",
     "urn:stockscreener:allowed-email-not-found",
     "urn:stockscreener:duplicate-allowed-email",
@@ -148,6 +149,14 @@
     "urn:stockscreener:unknown-indicator": [
       "indicatorCode",
       "conditionIndex"
+    ],
+    "urn:stockscreener:write-lock-held": [
+      "holderKind",
+      "holderPid",
+      "sessionId",
+      "purpose",
+      "since",
+      "waiting"
     ]
   },
   "constants": {

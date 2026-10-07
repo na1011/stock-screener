@@ -84,6 +84,15 @@ public enum ApiProblemType {
      */
     JOB_ALREADY_RUNNING("job-already-running", "같은 잡이 이미 실행 중이다"),
 
+    /**
+     * 다른 쓰기(이 앱의 크론·관리자 잡 · bootRun · 손 세션)가 운영 DB 쓰기 잠금을 쥐고 있다(ADR-0175).
+     *
+     * <p>{@link #JOB_ALREADY_RUNNING}과 가른다 — 그쪽은 「같은 잡」이고 이쪽은 「무엇이든 다른 쓰기」다. 보유자
+     * ({@code holderKind}·{@code holderPid}·{@code sessionId}·{@code purpose}·{@code since}·{@code waiting})를 실어 화면이
+     * 무엇을 기다리는지 보여 준다.
+     */
+    WRITE_LOCK_HELD("write-lock-held", "다른 쓰기가 잠금을 쥐고 있다"),
+
     BATCH_EXECUTION_NOT_FOUND("batch-execution-not-found", "배치 실행 이력을 찾을 수 없다"),
 
     ALLOWED_EMAIL_NOT_FOUND("allowed-email-not-found", "허용목록 항목을 찾을 수 없다"),

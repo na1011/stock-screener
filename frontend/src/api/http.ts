@@ -40,6 +40,8 @@ export const ProblemType = {
   ALREADY_WATCHED: 'urn:stockscreener:already-watched',
   JOB_NOT_FOUND: 'urn:stockscreener:job-not-found',
   JOB_ALREADY_RUNNING: 'urn:stockscreener:job-already-running',
+  /** 다른 쓰기(크론·관리자 잡·bootRun·손 세션)가 운영 DB 쓰기 잠금을 쥐고 있다 — 보유자가 속성으로 온다(ADR-0175). */
+  WRITE_LOCK_HELD: 'urn:stockscreener:write-lock-held',
   BATCH_EXECUTION_NOT_FOUND: 'urn:stockscreener:batch-execution-not-found',
   ALLOWED_EMAIL_NOT_FOUND: 'urn:stockscreener:allowed-email-not-found',
   DUPLICATE_ALLOWED_EMAIL: 'urn:stockscreener:duplicate-allowed-email',
