@@ -16,7 +16,7 @@ description: 시세·재무·업종·기업행위를 적재·백필하거나 일
 --job=initial-load --price-years=7 --financial-years=7 --reload-existing=true
 --job=initial-load --tickers=082640,121600 --price-years=7
 --job=initial-load --universe=US_LISTED --price-years=2 --skip-financial=true
---job=financial-refill --financial-years=3 [--tickers=005930,035420] [--universe=US_TOP1000]
+--job=financial-refill --financial-years=3 [--tickers=005930,035420] [--universe=US_TOP1000]   # --tickers만 = 보존 창 편입(닫힌 편입 포함) · --universe를 붙이면 그 유니버스의 열린 편입만
 --job=full-statement-refill [--financial-years=5] [--tickers=…] [--quarters=true] [--all-quarters=true]
 --job=company-profile [--tickers=005930,035420] [--universe=US_LISTED]
 --job=corporate-action [--from=2020-01-02] [--tickers=058470,086280]
@@ -256,7 +256,10 @@ WHERE prev > 0 AND close > 0;
 ```bash
 # 매핑·후보 목록·선택 규칙을 바꾼 뒤의 첫 재적재 (기본 8년이면 생략 가능하지만, 옛 값이
 # 남은 구간이 더 앞이면 명시한다)
---job=financial-refill --universe=US_TOP1000        # SEC는 종목당 1콜이라 창을 넓혀도 콜이 안 는다
+--job=financial-refill --tickers=<보존 창 편입 미국 전원>   # SEC는 종목당 1콜이라 창을 넓혀도 콜이 안 는다
+# MUST NOT: --universe=US_TOP1000을 쓰지 않는다 — 열린 편입만 잡아 창 안 과거 편입(화면이 답하는 날짜의 구성원)을
+# 옛 규칙에 둔다. 공시 보충(ADR-0173) 적용 때 그 조합이 (가) 결손으로 이미 편출된 DOX를 못 잡을 뻔했다.
+# --universe는 비활성 유니버스를 대상으로 잡는 유일한 길일 때만 쓴다.
 --job=full-statement-refill                          # 국내 전체본 · 8년이면 실제콜 약 4,200
 ```
 

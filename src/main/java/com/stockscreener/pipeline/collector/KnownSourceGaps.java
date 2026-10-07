@@ -48,8 +48,12 @@ public final class KnownSourceGaps {
      * {@code 088980}은 2026-09-20에 <b>거버넌스 여덟 표를 다 물어 전부 {@code status 013}</b>을
      * 받았고(대조군은 행을 받았다) 그쪽은 <b>진짜 한계로 확정</b>됐다
      * ({@code DartGovernanceProbeLiveTest.probeStocksWhoseStoredPayloadsAreAllEmpty}).
-     * <b>재무 엔드포인트({@code fnlttSinglAcnt}·{@code fnlttSinglAcntAll})에는 묻지 않았다</b> —
-     * 이 면제가 재무 두 축에 걸려 있는데도 그렇다. 이 저장소에서 「소스가 안 준다」는 아홉 중
+     * 재무 축은 2026-10-06에 따로 물었다 — <b>둘 다 {@code fnlttSinglAcnt}(FY2025 {@code 11011} · 2026 반기
+     * {@code 11012})와 {@code fnlttSinglAcntAll}(FY2025 · CFS·OFS 둘 다)에서 {@code status 013}</b>이고, 공시검색
+     * {@code list.json}({@code pblntf_ty=A} · 2026-01~03 · 07~09)에도 정기보고서가 0건이다. 같은 실행의 대조군
+     * {@code 005930}은 30행({@code rcept_no 20260310002820})을 받았다 — 탐침이 닿았고, 재무 축도 <b>진짜 한계로
+     * 확정</b>이다(모집단 = 지금 {@code KSIC:642} 두 종목 · 탐침 {@code explore/s-vintage-coherence}의
+     * {@code DartListQueryProbeLiveTest} · corp_code {@code 00435297}·{@code 01880801}은 {@code corpCode.xml}에서). 이 저장소에서 「소스가 안 준다」는 아홉 중
      * 여덟이 거짓이었고 그때마다 <b>한 엔드포인트만 물은 것</b>이 원인이었다. <b>MUST NOT:
      * 「거버넌스가 013이니 재무도 없다」로 잇지 않는다 — 부재의 뜻은 소스마다 다시 묻는다.</b>
      *

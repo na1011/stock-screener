@@ -5,6 +5,7 @@
 #   ops/stop.sh              앱 + 터널
 #   ops/stop.sh --app        앱만
 #   ops/stop.sh --tunnel     터널만
+#   … --force                앱 크론이 남았어도 내린다(사람의 판단 — 아래 판정 참조)
 #
 # MUST NOT: pkill -f java를 쓰지 않는다. 이 저장소와 무관한 JVM까지 함께 죽는다.
 
@@ -16,12 +17,20 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 WANT_APP=1
 WANT_TUNNEL=1
-case "${1:-}" in
-  --app)    WANT_TUNNEL=0 ;;
-  --tunnel) WANT_APP=0 ;;
-  "")       ;;
-  *)        echo "용법: ops/stop.sh [--app|--tunnel]" >&2; exit 2 ;;
-esac
+MODE=""
+FORCE=""
+usage() { echo "용법: ops/stop.sh [--app|--tunnel] [--force]" >&2; exit 2; }
+for arg in "$@"; do
+  case "$arg" in
+    --app|--tunnel)
+      # 둘을 함께 주면 둘 다 끄는 것으로 읽히지만 아래 두 갈래는 서로를 끈다 — 아무것도 안 내리고 0을 내던 자리다(2026-10-06 반증).
+      if [[ -n "$MODE" && "$MODE" != "$arg" ]]; then usage; fi
+      MODE="$arg"
+      if [[ "$arg" == "--app" ]]; then WANT_TUNNEL=0; else WANT_APP=0; fi ;;
+    --force)  FORCE="--force" ;;
+    *)        usage ;;
+  esac
+done
 
 # stop_one <이름> <pid_file> <명령줄 패턴> <종료 대기 초>
 stop_one() {
@@ -59,6 +68,22 @@ if [[ $WANT_APP -eq 1 ]]; then
   # 빌드 전이라 그 사이에 시작된 잡을 못 본다.
   if running_pid "$APP_PID_FILE" "$APP_PATTERN" >/dev/null; then
     warn_running_batches "stop"
+    # 그날 크론이 남았으면 내리지 않는다 — 새 JVM은 남은 발화를 다음 날로 잡아 그날 발화가 통째로 빠진다(크론은 기계가
+    # 잠든 만큼 늦게 돈다 · ops/crons-done.sh 머리). 위 경고와 달리 멈춘다: 경고는 읽혀야 발화하고, 빠진 발화는
+    # 아무 데도 안 뜬다. 사람이 판정을 넘기려면 --force(배포는 ops/deploy.sh --force가 그것을 넘긴다).
+    if [[ "$FORCE" != "--force" ]]; then
+      judged=0
+      "$HERE/crons-done.sh" || judged=$?
+      if [[ $judged -ne 0 ]]; then
+        if [[ $judged -eq 2 ]]; then
+          echo "[stop] 크론이 남았는지 판정하지 못했다(위 사유) — 앱을 내리지 않는다." >&2
+        else
+          echo "[stop] 앱 크론이 아직 남았다(위 목록) — 앱을 내리지 않는다." >&2
+        fi
+        echo "       기다렸다 다시 친다. 사람이 판정을 넘기려면: ops/stop.sh${MODE:+ $MODE} --force" >&2
+        exit 1
+      fi
+    fi
   fi
   # 45초다. 앱은 종료 유예 상한 15초(application.yaml의 spring.lifecycle)를 다 쓴 뒤
   # 빈을 파괴하고, 그 안의 커넥션 풀 종료가 10초짜리 상한을 여러 개 가진다. 30초였을 때는

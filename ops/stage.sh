@@ -21,6 +21,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY="$HOME/Library/Application Support/stock-screener"
 
+# --check: 아무것도 안 쓰고 아래 전제만 묻는다. deploy.sh가 앱을 내리기 **전에** 부른다 — 스테이징은 종료 뒤에만 하므로(그 이유는
+# deploy.sh 머리), 여기서 걸릴 것이 종료 뒤에 걸리면 사이트가 내려간 채 남는다(2026-10-06 반증 · 가짜 홈 재현).
+CHECK_ONLY=0
+case "${1:-}" in
+  "")      ;;
+  --check) CHECK_ONLY=1 ;;
+  *)       echo "용법: ops/stage.sh [--check]" >&2; exit 2 ;;
+esac
+
 JAR="$(ls -t "$ROOT"/build/libs/*.jar 2>/dev/null | grep -v -- '-plain\.jar$' | head -1 || true)"
 if [[ -z "$JAR" ]]; then
   echo "[stage] 실행할 jar가 없다. ./gradlew build를 먼저 돌려라." >&2
@@ -29,6 +38,14 @@ fi
 if [[ ! -f "$ROOT/.env" ]]; then
   echo "[stage] .env가 없다: $ROOT/.env" >&2
   exit 1
+fi
+if [[ -e "$DEPLOY" && ! -w "$DEPLOY" ]]; then
+  echo "[stage] 배포 폴더에 쓸 수 없다: $DEPLOY" >&2
+  exit 1
+fi
+if [[ $CHECK_ONLY -eq 1 ]]; then
+  echo "[stage] 전제 확인: $(basename "$JAR") · .env 있음 · 배포 폴더 쓰기 가능"
+  exit 0
 fi
 
 mkdir -p "$DEPLOY"
@@ -58,6 +75,38 @@ fi
 # 새 이름으로 쓴 뒤 옮긴다. 큰 파일을 제자리에 덮어쓰면 그 순간 재시작이 걸렸을 때
 # 반쯤 쓰인 jar를 실행하게 된다.
 cp "$JAR" "$DEPLOY/app.jar.tmp"
+# jar를 바꾸기 직전에 옛 커밋 기록을 걷는다 — 아래 기록을 쓰기 전에 죽으면 「새 jar + 옛 커밋」이 남아 손 쓰기 절차가 다른 코드로
+# bootRun을 띄운다. 없으면 읽는 쪽이 멈춘다(ADR-0173 손 FR 0단계).
+rm -f "$DEPLOY/app.jar.commit"
 mv "$DEPLOY/app.jar.tmp" "$DEPLOY/app.jar"
+
+# 이 jar가 어느 커밋에서 나왔는지 남긴다 — 손 쓰기 절차가 「지금 도는 코드」에 뜬 worktree에서 bootRun을 돌릴 때
+# 읽는다(ADR-0173 손 FR 0단계). main 작업 트리는 배포 뒤에도 움직이므로 「HEAD = 배포 커밋」은 금방 거짓이 된다.
+# deploy.sh가 빌드 전후 상태(HEAD|빌드 입력의 미커밋 목록 해시)를 넘기면 그것으로 적는다 — 둘이 다르면 빌드 중에 트리가
+# 움직인 것이라 커밋으로 가리킬 수 없다. 혼자 돌면 지금 상태로 적고 그 사실(captured=stage)을 함께 남긴다.
+# 커밋으로 가리킬 수 없으면 unknown을 남겨 읽는 쪽이 멈추게 한다. 못 적어도 배포는 막지 않되 알린다.
+EMPTY_MD5="$(printf '' | md5)"
+if [[ -n "${BUILD_STATE_BEFORE:-}" ]]; then
+  if [[ "$BUILD_STATE_BEFORE" == "${BUILD_STATE_AFTER:-}" && -n "${BUILD_STATE_BEFORE%%|*}" ]]; then
+    commit="${BUILD_STATE_BEFORE%%|*}"
+    dirty=$([[ "${BUILD_STATE_BEFORE#*|}" == "$EMPTY_MD5" ]] && echo false || echo true)
+  elif [[ -z "${BUILD_STATE_BEFORE%%|*}" ]]; then
+    echo "[stage] 빌드 전에 배포 커밋을 못 읽었다(git) — unknown을 남긴다(손 쓰기 절차가 멈춘다)." >&2
+    commit=unknown; dirty=unknown
+  else
+    echo "[stage] 빌드 중에 작업 트리가 움직였다 — 이 jar의 커밋을 가리킬 수 없어 unknown을 남긴다." >&2
+    commit=unknown; dirty=unknown
+  fi
+  captured=build
+elif commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)" \
+    && porcelain="$(git -C "$ROOT" status --porcelain -- src frontend gradle build.gradle settings.gradle gradlew 2>/dev/null)"; then
+  dirty=$([[ -n "$porcelain" ]] && echo true || echo false)
+  captured=stage
+else
+  echo "[stage] 배포 커밋을 못 읽었다 — unknown을 남긴다(손 쓰기 절차가 멈춘다)." >&2
+  commit=unknown; dirty=unknown; captured=stage
+fi
+{ echo "commit=$commit"; echo "dirty=$dirty"; echo "captured=$captured"; echo "staged_at=$(date '+%F %T')"; } \
+  >"$DEPLOY/app.jar.commit"
 
 echo "[stage] $(basename "$JAR") → $DEPLOY/app.jar"

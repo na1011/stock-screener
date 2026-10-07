@@ -37,6 +37,9 @@ applies_to:
 ## 규칙
 
 - **MUST: 복원은 재무 적재와 기업행위 원장보다 뒤에 돌고, 그 둘이 바뀌면 다시 돈다.**
+  **다시 도는 때는 시장별 관문의 한 번이다**(2026-10-04 사용자 결정 「시장별 관문」 · `CLAUDE.md` 「재적재·백필」 —
+  복원 뒤 파생층 백필이 전체 백필이라 그 원칙에 묶인다 · 순서는 `docs/reload-gate.md` 10단계). 그 사이에 재무·원장이
+  바뀐 것은 아래 펜스가 세고, 관문 전에 따로 다시 돌리지 않는다.
   복원의 순위는 `StoredShareCounts.activeByMarket`이 정하는데 그 질의가
   **`published_at <= asOf`**로 시점을 지키는 대신 **우리 DB에 그 시점 재무가 얼마나 들어와
   있는지**에 그대로 의존한다. 주식수에는 `exp(sum(ln(ca.ratio)))`로 기업행위 보정이 걸려 있어
@@ -176,8 +179,8 @@ SELECT CASE
     THEN 'OK 복원 ' || (SELECT count(*) FROM r) || '곳 전부 그 뒤에 들어온 재무·원장이 없다'
   ELSE (SELECT string_agg(uc || '(' || d || ' 뒤 재무 ' || fin || '행·원장 ' || ledger || '건)', ', ' ORDER BY uc)
         FROM stale WHERE fin > 0 OR ledger > 0)
-       || ' — 복원의 순위 재료가 그 둘이라 과거 명부가 실제와 갈린다. universe-restore를 '
-       || '다시 돌리고 파생층을 백필한다(§규칙).'
+       || ' — 복원의 순위 재료가 그 둘이라 과거 명부가 실제와 갈린다. 관문 10단계의 복원이 닫는다 — '
+       || '관문 전에 universe-restore와 파생층 백필을 따로 돌리지 않는다(§규칙).'
   END"
 ```
 
