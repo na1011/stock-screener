@@ -389,6 +389,23 @@ write_lock_holder() {
   fi
 }
 
+# write_guard_switch <db> — 쓰기 가드 스위치를 한 줄로(ops/status.sh). 「켜짐(전부)」 · 「켜짐(범위 <접두>)」 · 「꺼짐」 ·
+# 「표 없음(V66 전)」. psql이 실패하면 1. MUST: 표 존재는 따로 묻는다(같은 문장이면 V66 전 DB에서 파싱 단계에 죽는다).
+write_guard_switch() {
+  local db="$1" psql row
+  psql="$(pg_bin psql)" || return 1
+  row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tA -c "
+      SELECT to_regclass('public.guard_setting') IS NOT NULL" 2>/dev/null)" || return 1
+  if [[ "$row" != "t" ]]; then
+    echo "표 없음(V66 전)"
+    return 0
+  fi
+  row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tA -c "
+      SELECT coalesce((SELECT CASE WHEN identity_prefix IS NULL THEN '켜짐(전부)' ELSE '켜짐(범위 ' || identity_prefix || ')' END
+                         FROM guard_setting WHERE db_name = current_database()), '꺼짐')" 2>/dev/null)" || return 1
+  echo "$row"
+}
+
 # write_lock_held_by_other <db> <내 pid> — 잠금을 「다른」 산 보유자가 쥐고 있으면 그 설명을 찍고 0. 비었거나 죽었거나 내 것이면
 # (표가 없는 V66 전 DB 포함) 1. **물어보지 못했으면 2**(psql 없음 · 접속 실패 · 질의 실패) — MUST: 호출자는 2를 「안 쥠」으로
 # 읽지 않는다. 쓰기 경로(start · deploy)는 멈추고 표시 경로는 「판정하지 못했다」로 찍는다.
@@ -402,7 +419,7 @@ write_lock_held_by_other() {
   row="$(PGCONNECT_TIMEOUT=3 PGAPPNAME=ss:ops "$psql" -w -X -d "$db" -tAF'|' -c "
       SELECT coalesce(holder_kind, ''), coalesce(holder_pid::text, ''), coalesce(holder_start::text, ''),
              coalesce(session_id, ''), coalesce(array_to_string(members, ','), ''),
-             coalesce((extract(epoch FROM now() - coalesce(last_activity_at, acquired_at)) / 60)::bigint::text, '0')
+             ${WRITE_SESSION_IDLE_SECONDS_SQL}
         FROM (SELECT 1) one LEFT JOIN write_lock l ON l.db_name = current_database()" 2>/dev/null)" || return 2
   local kind pid start session members idle member
   IFS='|' read -r kind pid start session members idle <<< "$row"
@@ -413,8 +430,8 @@ write_lock_held_by_other() {
     for member in "${list[@]:-}"; do
       [[ -n "$member" ]] && lock_member_alive "$member" && alive=1
     done
-    if [[ $alive -eq 1 || "$idle" -lt "$WRITE_SESSION_TTL_MINUTES" ]]; then
-      echo "손 세션 「${session}」(구성원 ${members:-없음} · 유휴 ${idle}분)"
+    if [[ $alive -eq 1 ]] || ! write_session_idle_expired "$idle"; then
+      echo "손 세션 「${session}」(구성원 ${members:-없음} · 유휴 $((idle / 60))분)"
       return 0
     fi
     return 1
@@ -450,3 +467,13 @@ write_lock_held_by_jvm() {
 
 # 세션이 구성원 없이 버티는 시간(분). MUST: Java WriteLock.SESSION_TTL과 같다(WriteSessionScriptTest가 대조한다).
 WRITE_SESSION_TTL_MINUTES=60
+
+# 세션의 유휴 초 — write_lock 행을 읽는 SELECT의 한 칸으로 넣는다. MUST: 만료 경계는 Java(WriteLock.sessionExpired: 마지막 활동 +
+# TTL ≤ 지금이면 만료)와 같아야 한다 — 분으로 반올림하면 59분 30초를 60분으로 읽어 Java가 산 세션을 셸이 만료로 본다. 초를 내림하고
+# 「유휴 초 ≥ TTL × 60」로 비교하면 같은 경계다. 활동 시각이 둘 다 없으면 Java처럼 만료로 친다.
+WRITE_SESSION_IDLE_SECONDS_SQL="coalesce(floor(extract(epoch FROM now() - coalesce(last_activity_at, acquired_at)))::bigint::text, '999999999')"
+
+# write_session_idle_expired <유휴 초> — TTL을 넘겼으면 0.
+write_session_idle_expired() {
+  [[ "$1" -ge $((WRITE_SESSION_TTL_MINUTES * 60)) ]]
+}

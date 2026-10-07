@@ -90,9 +90,16 @@ echo "[dump] OK 테이블 ${actual}개 · $(du -h "$TARGET" | cut -f1)"
 
 echo "== 되돌리는 법 =="
 cat <<RESTORE
-  # 쓰기 가드가 켜진 DB(guard_setting에 이 DB 이름 행)면 아래 쓰기를 ops/write-session.sh begin <id> 뒤
-  # ops/write-session.sh exec <id> -- … 로 감싼다 — 무신원 psql·pg_restore의 보호 표 쓰기는 SSWG1로 거절된다(ADR-0175).
-  # 이 덤프에는 write_lock 데이터가 없다 — -c 전체 복원 뒤 잠금은 비어 있다(세션을 다시 begin한다).
+  # 복원 전에 잠금 보유자를 본다: ops/write-session.sh status --db $DB — 남(bootRun · 다른 세션)이 쥐었으면 멈춘다(ADR-0175).
+  # 복원 전에 가드 스위치를 적어 둔다: ops/status.sh 의 「가드」 줄 — 아래 -c 전체 복원은 guard_setting을 덤프 시점 값으로 되돌린다.
+  # 복원 뒤 같은 줄을 대조하고, 다르면 사용자 승인으로 맞춘다(운영 스위치는 원시 SQL · 사용자 승인).
+  #
+  # 무신원 쓰기가 거절되는지는 덤프 시대에 따라 다르다(가드가 켜진 DB):
+  #   - 이 덤프(잠금 표가 든 덤프)의 -c 전체 복원: 표를 지우고 다시 만들며 가드·이벤트 트리거는 데이터 뒤에 만들어진다 —
+  #     데이터 단계에 가드가 없어 무신원으로도 들어가고, write_lock은 비어서 끝난다(데이터를 안 담았다 · 세션을 다시 begin한다).
+  #   - 잠금 표가 없는 옛 덤프의 -c 복원: 가드 객체가 덤프에 없어 남아 있다 — 이벤트 트리거가 새 표에 가드를 붙여 무신원 COPY가
+  #     SSWG1로 거절된다 → ops/write-session.sh begin <id> 뒤 exec <id> -- 로 감싼다.
+  #   - 아래의 좁힌 되돌리기(TRUNCATE · --data-only): 가드가 그대로라 무신원이면 거절된다 → 세션 exec로 감싼다.
   #
   # 스키마째 되돌린다. 도는 앱을 먼저 내린다(ops/stop.sh --app — 앱 크론이 남았으면 멈춘다 · 넘기는 것은 사람: --force)
   # — 연결이 열려 있으면 -c가 막힌다.

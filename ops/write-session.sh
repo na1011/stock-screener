@@ -68,7 +68,7 @@ read_row() {
   local row
   row="$(q "SELECT coalesce(l.version::text, ''), coalesce(holder_kind, ''), coalesce(holder_pid::text, ''),
                    coalesce(holder_start::text, ''), coalesce(session_id, ''), coalesce(array_to_string(members, ','), ''),
-                   coalesce((extract(epoch FROM now() - coalesce(last_activity_at, acquired_at)) / 60)::bigint::text, '0'),
+                   ${WRITE_SESSION_IDLE_SECONDS_SQL},
                    coalesce(waiter_pid::text, ''), coalesce(waiter_start::text, ''), coalesce(waiter_purpose, ''),
                    coalesce(purpose, '')
               FROM (SELECT 1) one LEFT JOIN write_lock l ON l.db_name = current_database()")"
@@ -87,13 +87,13 @@ live_members() {
 }
 
 session_expired() {
-  [[ -z "$(live_members)" && "$IDLE" -ge "$WRITE_SESSION_TTL_MINUTES" ]]
+  [[ -z "$(live_members)" ]] && write_session_idle_expired "$IDLE"
 }
 
 describe_holder() {
   case "$KIND" in
     "")      echo "없음" ;;
-    SESSION) echo "손 세션 「${SESSION}」(구성원 ${MEMBERS:-없음} · 유휴 ${IDLE}분)" ;;
+    SESSION) echo "손 세션 「${SESSION}」(구성원 ${MEMBERS:-없음} · 유휴 $((IDLE / 60))분)" ;;
     *)       echo "$KIND pid $HOLDER_PID 「${PURPOSE}」" ;;
   esac
 }
@@ -106,7 +106,7 @@ freed_because() {
   fi
   if [[ "$KIND" == "SESSION" ]]; then
     if session_expired; then
-      echo "세션 「${SESSION}」 만료(산 구성원 0 · 유휴 ${IDLE}분)"
+      echo "세션 「${SESSION}」 만료(산 구성원 0 · 유휴 $((IDLE / 60))분)"
       return 0
     fi
     return 1
@@ -167,7 +167,7 @@ exec_in_session() {
     [[ "$KIND" == "SESSION" && "$SESSION" == "$ID" ]] \
       || die "세션 「${ID}」이 쓰기 잠금을 쥐고 있지 않다(지금: $(describe_holder)) — begin부터 한다."
     if session_expired; then
-      die "세션 「${ID}」이 만료됐다(유휴 ${IDLE}분 ≥ ${WRITE_SESSION_TTL_MINUTES}분) — 그 사이 남의 쓰기가 끼었을 수 있으니 begin부터 다시 한다."
+      die "세션 「${ID}」이 만료됐다(유휴 $((IDLE / 60))분 ≥ ${WRITE_SESSION_TTL_MINUTES}분) — 그 사이 남의 쓰기가 끼었을 수 있으니 begin부터 다시 한다."
     fi
     won="$(q "UPDATE write_lock SET version = version + 1, members = array_append(members, '$member'),
                      last_activity_at = now()

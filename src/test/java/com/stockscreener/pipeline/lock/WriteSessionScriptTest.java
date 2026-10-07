@@ -141,7 +141,27 @@ class WriteSessionScriptTest {
         assertThat(begin.output).contains("cron:runDailyUpdate");
     }
 
+    @Test
+    @DisplayName("세션 만료 경계가 셸과 Java에서 같다 — 59분 40초는 둘 다 산 세션 · 60분 5초는 둘 다 만료(분 반올림이면 갈린다)")
+    void sessionExpiryBoundaryMatchesJava() throws Exception {
+        assertThat(run("begin", "wst-edge").exit).isZero();
+        jdbcTemplate.update("UPDATE write_lock SET members = '{}', last_activity_at = now() - interval '59 minutes 40 seconds'");
+
+        assertThatThrownBy(() -> jvmLock().acquire("t:edge")).as("Java: 산 세션").isInstanceOf(WriteLockHeldException.class);
+        assertThat(heldByOther().exit).as("lib.sh: 산 세션").isZero();
+        Result begin = run("begin", "wst-other");
+        assertThat(begin.exit).as("write-session.sh: 산 세션이라 넘겨받지 않는다 — " + begin.output).isEqualTo(1);
+
+        jdbcTemplate.update("UPDATE write_lock SET last_activity_at = now() - interval '60 minutes 5 seconds'");
+        assertThat(heldByOther().exit).as("lib.sh: 만료").isEqualTo(1);
+        jvmLock().acquire("t:edge-expired");
+    }
+
     // ── 도우미 ────────────────────────────────────────────────────────────────────
+
+    private Result heldByOther() throws Exception {
+        return exec(new ProcessBuilder("bash", "-c", ". ops/lib.sh; write_lock_held_by_other " + db));
+    }
 
     private WriteLock jvmLock() {
         ProcessIdentity me = ProcessIdentity.current();
