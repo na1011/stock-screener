@@ -8,7 +8,6 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 /**
@@ -44,8 +43,7 @@ public class IndicatorCatalogInitializer implements ApplicationRunner {
     }
 
     /**
-     * MUST: 카탈로그 차이 거절({@link CatalogWriteGate.CatalogDriftException})은 {@code System.exit(1)}이다(ADR-0175). 러너에서
-     * 던지면 devtools가 {@code restartedMain}에서 돌려 gradle이 종료코드 0을 낸다 — 거절이 성공으로 읽힌다. 시험만 던진다.
+     * MUST: 카탈로그 차이 거절({@link CatalogWriteGate.CatalogDriftException})은 기동을 세운다({@link CatalogWriteGate#refuseBoot}).
      */
     @Override
     public void run(ApplicationArguments args) {
@@ -53,11 +51,7 @@ public class IndicatorCatalogInitializer implements ApplicationRunner {
         try {
             activeCount = synchronizer.synchronize();
         } catch (CatalogWriteGate.CatalogDriftException e) {
-            if (environment.acceptsProfiles(Profiles.of("test | backtest"))) {
-                throw e;
-            }
-            log.error("지표 카탈로그를 쓰지 않고 기동을 세운다: {}", e.getMessage());
-            System.exit(1);
+            CatalogWriteGate.refuseBoot(environment, "지표", e);
             return;
         }
         log.info("지표 카탈로그를 동기화했다. 활성 지표 {}개", activeCount);

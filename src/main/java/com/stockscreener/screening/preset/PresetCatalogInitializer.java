@@ -1,10 +1,13 @@
 package com.stockscreener.screening.preset;
 
+import com.stockscreener.pipeline.lock.CatalogWriteGate;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,14 +28,23 @@ public class PresetCatalogInitializer implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(PresetCatalogInitializer.class);
 
     private final PresetSynchronizer synchronizer;
+    private final Environment environment;
 
-    public PresetCatalogInitializer(PresetSynchronizer synchronizer) {
+    public PresetCatalogInitializer(PresetSynchronizer synchronizer, Environment environment) {
         this.synchronizer = synchronizer;
+        this.environment = environment;
     }
 
+    /** MUST: 카탈로그 차이 거절은 기동을 세운다({@link CatalogWriteGate#refuseBoot}) — 던지면 bootRun이 rc 0으로 끝난다. */
     @Override
     public void run(ApplicationArguments args) {
-        int count = synchronizer.synchronize();
+        int count;
+        try {
+            count = synchronizer.synchronize();
+        } catch (CatalogWriteGate.CatalogDriftException e) {
+            CatalogWriteGate.refuseBoot(environment, "프리셋", e);
+            return;
+        }
         log.info("프리셋을 동기화했다. 활성 프리셋 {}개", count);
     }
 }

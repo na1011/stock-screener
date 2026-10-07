@@ -97,6 +97,10 @@ public class ScreenStore {
      */
     @Transactional
     public int deactivatePresetsExcept(List<String> keepCodes) {
+        if (presetsToDeactivate(keepCodes).isEmpty()) {
+            // 문장을 안 낸다 — 0행 UPDATE도 문장이다(ADR-0175 · 시더는 같으면 문장 0).
+            return 0;
+        }
         if (keepCodes.isEmpty()) {
             return jdbcTemplate.update(
                     "UPDATE screen SET is_active = false, updated_at = now() "
@@ -107,6 +111,14 @@ public class ScreenStore {
                 "UPDATE screen SET is_active = false, updated_at = now() "
                         + "WHERE screen_type = 'PRESET' AND is_active AND code NOT IN (" + placeholders + ")",
                 keepCodes.toArray());
+    }
+
+    /** {@link #deactivatePresetsExcept}가 내릴 활성 프리셋 코드 — 읽기만 한다. */
+    @Transactional(readOnly = true)
+    public List<String> presetsToDeactivate(List<String> keepCodes) {
+        return jdbcTemplate.queryForList(
+                "SELECT code FROM screen WHERE screen_type = 'PRESET' AND is_active AND NOT (code = ANY (?)) ORDER BY code",
+                String.class, (Object) keepCodes.toArray(String[]::new));
     }
 
     /**
@@ -199,8 +211,7 @@ public class ScreenStore {
         }
 
         long groupId = insertRootGroup(screenId);
-        insertConditions(groupId, definition.conditions());
-        deriveThresholdCurrency(groupId, definition.universeCode());
+        insertConditions(groupId, deriveThresholdCurrency(definition.conditions(), definition.universeCode()));
 
         return new ScreenDefinition(screenId, definition.code(), definition.name(),
                 definition.description(), definition.type(), definition.mode(),
@@ -232,8 +243,30 @@ public class ScreenStore {
 
         long groupId = rootGroupId(screenId).orElseGet(() -> insertRootGroup(screenId));
         jdbcTemplate.update("DELETE FROM screen_condition WHERE group_id = ?", groupId);
-        insertConditions(groupId, definition.conditions());
-        deriveThresholdCurrency(groupId, definition.universeCode());
+        insertConditions(groupId, deriveThresholdCurrency(definition.conditions(), definition.universeCode()));
+    }
+
+    /**
+     * 이 정의를 저장하면 {@link #findByCode}·{@link #findById}가 돌려줄 모양인가 — <b>쓰면 무엇이 바뀌는가</b>를 쓰기 전에 묻는다
+     * (ADR-0175 · 프리셋 시더는 같으면 문장을 안 낸다).
+     *
+     * <p>비교는 저장된 뜻으로 한다: {@link #update}가 고치는 칸(이름 · 설명 · 판정 방식 · 조회 대상 · 활성)과 조건 목록 — 조건은
+     * 통화 축을 유도한 뒤({@link #deriveThresholdCurrency}) 컬럼 자리수로 반올림해 크기로 잰다({@code numeric(24,8)}이
+     * {@code 10}을 {@code 10.00000000}으로 돌려주므로 {@code BigDecimal.equals}로는 영구 차이다). 루트 그룹의 결합 연산자는
+     * 안 잰다 — 쓰기가 그것을 안 고친다({@link #insertRootGroup}은 AND만 쓰고 {@link #update}는 기존 그룹을 그대로 둔다).
+     *
+     * @param stored   지금 저장된 정의({@link #findByCode})
+     * @param declared 쓰려는 정의
+     */
+    @Transactional(readOnly = true)
+    public boolean storesAs(ScreenDefinition stored, ScreenDefinition declared) {
+        return java.util.Objects.equals(stored.name(), declared.name())
+                && java.util.Objects.equals(stored.description(), declared.description())
+                && stored.mode() == declared.mode()
+                && java.util.Objects.equals(stored.universeCode(), declared.universeCode())
+                && stored.active() == declared.active()
+                && canonical(stored.conditions()).equals(
+                        canonical(deriveThresholdCurrency(declared.conditions(), declared.universeCode())));
     }
 
     /** 화면을 지운다. 조건 그룹·조건은 {@code ON DELETE CASCADE}로 함께 사라진다. */
@@ -365,7 +398,7 @@ public class ScreenStore {
      * 실행은 빈 집합을 봤다. 패키지가 달라 상수를 공유하지 못하므로 <b>사본이고, 한쪽을 고치면
      * 반대쪽도 고친다.</b>
      */
-    private void deriveThresholdCurrency(long groupId, String universeCode) {
+    ConditionGroup deriveThresholdCurrency(ConditionGroup group, String universeCode) {
         List<String> currencies = universeCode == null
                 ? jdbcTemplate.queryForList("""
                         SELECT DISTINCT m.currency_code FROM universe u
@@ -379,19 +412,70 @@ public class ScreenStore {
                         JOIN market m ON m.code = u.market_code WHERE u.code = ?
                         """, String.class, universeCode);
         if (currencies.size() != 1) {
-            return;
+            return group;
         }
-        jdbcTemplate.update("""
-                UPDATE screen_condition sc
-                SET threshold_currency = ?
-                FROM indicator i
-                WHERE i.code = sc.indicator_code
-                  AND sc.group_id = ?
-                  AND sc.threshold_currency IS NULL
-                  AND sc.operand_type = 'LITERAL'
-                  AND i.value_type IN ('CURRENCY', 'PRICE')
-                  AND (sc.literal_value <> 0 OR coalesce(sc.literal_value_2, 0) <> 0)
-                """, currencies.get(0), groupId);
+        List<String> codes = group.conditions().stream().map(IndicatorCondition::indicatorCode).distinct().toList();
+        java.util.Set<String> monetary = new java.util.HashSet<>(jdbcTemplate.queryForList(
+                "SELECT code FROM indicator WHERE code = ANY (?) AND value_type IN ('CURRENCY', 'PRICE')",
+                String.class, (Object) codes.toArray(String[]::new)));
+        List<IndicatorCondition> derived = new ArrayList<>(group.conditions().size());
+        for (IndicatorCondition condition : group.conditions()) {
+            // 저장되는 값(numeric(24,8))으로 0을 가린다 — 예전 UPDATE가 저장된 행을 보고 갈랐다.
+            if (condition.operand() instanceof ConditionOperand.Literal literal
+                    && monetary.contains(condition.indicatorCode())
+                    && (stored(literal.value(), LITERAL_SCALE).signum() != 0
+                        || (literal.upperBound() != null && stored(literal.upperBound(), LITERAL_SCALE).signum() != 0))) {
+                derived.add(new IndicatorCondition(condition.indicatorCode(), condition.operator(),
+                        ConditionOperand.MarketLiteral.of(currencies.get(0), literal),
+                        condition.weight(), condition.required()));
+            } else {
+                derived.add(condition);
+            }
+        }
+        return new ConditionGroup(group.logicalOperator(), derived, group.childGroups());
+    }
+
+    /** {@code screen_condition}·{@code screen_condition_threshold}의 자리수(V3 · V42). */
+    private static final int LITERAL_SCALE = 8;
+    private static final int MULTIPLIER_SCALE = 6;
+    private static final int WEIGHT_SCALE = 3;
+
+    /** 그 컬럼에 저장되면 남는 값 — PostgreSQL {@code numeric}은 반올림이 0에서 먼 쪽이다(HALF_UP과 같다). */
+    private static BigDecimal stored(BigDecimal value, int scale) {
+        return value == null ? null : value.setScale(scale, java.math.RoundingMode.HALF_UP).stripTrailingZeros();
+    }
+
+    /** 저장된 뜻 하나로 줄인 조건 목록(순서 그대로). {@link #storesAs}만 쓴다. */
+    private static List<List<Object>> canonical(ConditionGroup group) {
+        List<List<Object>> rows = new ArrayList<>(group.conditions().size());
+        for (IndicatorCondition condition : group.conditions()) {
+            List<Object> row = new ArrayList<>();
+            row.add(condition.indicatorCode());
+            row.add(condition.operator());
+            row.add(stored(condition.weight(), WEIGHT_SCALE));
+            row.add(condition.required());
+            switch (condition.operand()) {
+                case ConditionOperand.Literal literal -> {
+                    row.add("LITERAL");
+                    row.add(stored(literal.value(), LITERAL_SCALE));
+                    row.add(stored(literal.upperBound(), LITERAL_SCALE));
+                }
+                case ConditionOperand.MarketLiteral market -> {
+                    row.add("MARKET");
+                    java.util.TreeMap<String, List<BigDecimal>> byCurrency = new java.util.TreeMap<>();
+                    market.byCurrency().forEach((currency, literal) -> byCurrency.put(currency, java.util.Arrays.asList(
+                            stored(literal.value(), LITERAL_SCALE), stored(literal.upperBound(), LITERAL_SCALE))));
+                    row.add(byCurrency);
+                }
+                case ConditionOperand.IndicatorRef ref -> {
+                    row.add("INDICATOR");
+                    row.add(ref.indicatorCode());
+                    row.add(stored(ref.multiplier(), MULTIPLIER_SCALE));
+                }
+            }
+            rows.add(row);
+        }
+        return rows;
     }
 
     /**

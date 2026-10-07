@@ -81,6 +81,21 @@ public class CatalogWriteGate {
         }
     }
 
+    /**
+     * 시더 러너가 거절을 받았을 때 — 기동을 세운다.
+     *
+     * <p>MUST: {@code System.exit(1)}이다(ADR-0175). 러너에서 던지면 devtools가 {@code restartedMain}에서 돌려 gradle이 종료코드
+     * 0을 낸다 — 거절이 성공으로 읽힌다. 시험·백테스트 프로파일만 던진다.
+     */
+    public static void refuseBoot(org.springframework.core.env.Environment environment, String catalog,
+                                  CatalogDriftException e) {
+        if (environment.acceptsProfiles(org.springframework.core.env.Profiles.of("test | backtest"))) {
+            throw e;
+        }
+        log.error("{} 카탈로그를 쓰지 않고 기동을 세운다: {}", catalog, e.getMessage());
+        System.exit(1);
+    }
+
     /** 가드가 켜진 DB에서 배포된 jar가 아닌 JVM이 카탈로그 차이를 만났다. */
     public static class CatalogDriftException extends RuntimeException {
         public CatalogDriftException(String message) {
