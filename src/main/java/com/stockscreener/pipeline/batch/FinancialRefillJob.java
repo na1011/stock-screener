@@ -7,13 +7,16 @@ import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
 import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.pipeline.datasource.us.SecFilingSupplementStore;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -56,15 +59,17 @@ public class FinancialRefillJob {
     private final BatchExecutions batchExecutions;
     private final FinancialLoadWindow loadWindow;
     private final DataSourceRegistry registry;
+    private final SecFilingSupplementStore supplementStore;
 
     public FinancialRefillJob(FinancialCollector financialCollector, StockRegistrar stockRegistrar,
                               BatchExecutions batchExecutions, FinancialLoadWindow loadWindow,
-                              DataSourceRegistry registry) {
+                              DataSourceRegistry registry, SecFilingSupplementStore supplementStore) {
         this.financialCollector = financialCollector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.loadWindow = loadWindow;
         this.registry = registry;
+        this.supplementStore = supplementStore;
     }
 
     /**
@@ -121,8 +126,10 @@ public class FinancialRefillJob {
     /**
      * 위와 같되 <b>저장본보다 이른 판을 넣을지</b>를 받는다.
      *
-     * <p><b>MUST NOT: 스케줄러에서 참으로 부르지 않는다.</b> 참이면 이른 판이 든 종목마다 지표가
-     * 그 공시일 이후 지워지는데(실측 수백 종목) 자동 백필 상한을 넘어 지운 채 남는다.
+     * <p><b>MUST NOT: 스케줄러에서 참으로 부르지 않는다.</b> 이른 판 삽입은 판 집합을 바꾸는 적재라 시장별 관문의 한 번에
+     * 속한다(ADR-0161 · {@code CLAUDE.md} 「재적재·백필」). 예전 사유(「자동 백필 상한을 넘어 지운 채 남는다」)는 매 평일
+     * 화해가 상한 없이 채우게 된 뒤(ADR-0166) 서지 않는다. 예외는 SEC 공시 보충으로 실은 판 하나다 — 그것은 이 플래그가
+     * 아니라 {@code FinancialWriter.VintageGuard.supplemented}로 연다(ADR-0173).
      */
     public Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                                      Integer yearsBack, List<String> tickers, String universeCode,
@@ -153,6 +160,7 @@ public class FinancialRefillJob {
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 재무 결손 보정");
+        Instant supplementSince = supplementStore.now();
 
         // 정정을 반영하면 그 종목의 지표가 보존 창 전체에서 지워진다. 그 수를 세지 않으면
         // 백필이 남았다는 것을 알릴 수 없고, 그러면 그 종목이 화면에서 조용히 사라진다.
@@ -164,6 +172,8 @@ public class FinancialRefillJob {
         AtomicInteger filled = new AtomicInteger();
         AtomicInteger corrected = new AtomicInteger();
         AtomicInteger insertedEarlier = new AtomicInteger();
+        // 공시 목록을 못 받아 판 회수를 멈춘 종목(ADR-0173). 실행은 SUCCESS로 끝나므로 이 수가 아니면 안 뜬다.
+        List<String> retractionStopped = Collections.synchronizedList(new ArrayList<>());
         // 새 라벨 적재는 무효화를 안 걸지만 순위 재료(JdbcStoredShareCounts)와 과거 봉의 지표를 바꾼다.
         // 세지 않으면 그 실행이 무엇을 움직였는지 note만 보고는 알 수 없다(리허설 EXE 2026 Q2).
         AtomicInteger inserted = new AtomicInteger();
@@ -184,6 +194,9 @@ public class FinancialRefillJob {
                     inserted.addAndGet(outcome.inserted());
                     corrected.addAndGet(outcome.corrected());
                     insertedEarlier.addAndGet(outcome.insertedEarlier());
+                    if (outcome.retractionStopped()) {
+                        retractionStopped.add(security.ticker());
+                    }
                     // 이른 판 삽입도 그 공시일 이후의 지표를 지운다 — 정정·교정과 같이 세지 않으면
                     // 그 종목이 백필 목록에서 빠져 지워진 채 남는다.
                     if (outcome.revised() > 0 || outcome.corrected() > 0 || outcome.insertedEarlier() > 0) {
@@ -212,11 +225,33 @@ public class FinancialRefillJob {
         // 지워졌고 note에는 그 수가 없었다. 백필이 남았는지는 이 수가 답한다.
         String note = note(fromFiscalYear, asOf.getYear(), targets.size(), inserted.get(),
                 revised.get(), filled.get(), corrected.get(), insertedEarlier.get(),
-                List.copyOf(tickersToBackfill));
+                List.copyOf(tickersToBackfill))
+                + supplementNote(supplementStore.tallySince(supplementSince), retractionStopped);
         log.info("재무 결손 보정을 마쳤다. {}", note);
         alertOnInvalidation(execution, triggeredBy, invalidatedTickers,
                 revised.get() + corrected.get() + insertedEarlier.get(), fullStatementTickers);
         return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill));
+    }
+
+    /**
+     * SEC 공시 보충(ADR-0173)이 이 실행에서 한 일. 다섯 계수 뒤에 붙인다 — {@code 07-judge.sh}의 합산 정규식이 안 읽는
+     * 이름이다. <b>판정이 남은 것을 늘 싣는다</b> — 보충 실패와 목록 실패는 그 종목을 세우지 않으므로(판 보호 · 회수 정지로만
+     * 나간다) 실행이 SUCCESS로 끝나고, 이 칸이 아니면 어디에도 안 뜬다.
+     *
+     * <p>미해결은 <b>이 실행이 본 공시</b>만 센다 — 표 전체를 세면 기본 FR이 안 도는 과거 편입의 행이 섞여 관문 사이에 0으로
+     * 못 내려온다. 표 전체는 괄호에 함께 싣는다(관문이 그 수를 구성원마다 판정한다). 회수를 멈춘 종목은 이름까지 싣는다 —
+     * 관문이 구성원마다 판정하는데, 종목 이름이 크기로 순환되는 로그에만 있으면 그 판정을 못 한다.
+     *
+     * @param retractionStopped 공시 목록을 못 받아 판 회수를 멈춘 종목
+     */
+    static String supplementNote(SecFilingSupplementStore.Tally tally, List<String> retractionStopped) {
+        if (tally.isEmpty() && retractionStopped.isEmpty()) {
+            return "";
+        }
+        String note = " 보충받음=%d 보충실패=%d 미해결보충=%d(표 전체 %d) 회수정지=%d종목".formatted(tally.fetched(),
+                tally.failed(), tally.unresolved(), tally.allUnresolved(), retractionStopped.size());
+        return retractionStopped.isEmpty() ? note
+                : note + " 회수정지종목=" + String.join(",", retractionStopped.stream().sorted().toList());
     }
 
     /**

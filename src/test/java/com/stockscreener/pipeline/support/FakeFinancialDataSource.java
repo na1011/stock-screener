@@ -18,6 +18,8 @@ public class FakeFinancialDataSource implements FinancialDataSource {
     private final Set<String> markets;
     private final Map<Long, List<RawFinancialReport>> reportsByStock = new HashMap<>();
     private final Map<Long, DataSourceException> failures = new HashMap<>();
+    /** 공시 목록을 못 받아 판 이력의 빈칸을 모르는 종목(SEC 보충의 목록 실패 모양 · ADR-0173). */
+    private final Set<Long> uncertain = new java.util.HashSet<>();
 
     public final List<Long> fetchedStockIds = new ArrayList<>();
 
@@ -35,10 +37,16 @@ public class FakeFinancialDataSource implements FinancialDataSource {
         return this;
     }
 
+    public FakeFinancialDataSource uncertainFor(long stockId) {
+        uncertain.add(stockId);
+        return this;
+    }
+
     /** 테스트 사이에 상태를 지운다. 이 빈은 싱글턴이라 안 지우면 앞 테스트의 실패가 샌다. */
     public void reset() {
         reportsByStock.clear();
         failures.clear();
+        uncertain.clear();
         fetchedStockIds.clear();
     }
 
@@ -60,8 +68,12 @@ public class FakeFinancialDataSource implements FinancialDataSource {
         if (failure != null) {
             throw failure;
         }
-        return FinancialFetch.of(reportsByStock.getOrDefault(security.stockId(), List.of()).stream()
+        List<RawFinancialReport> reports = reportsByStock.getOrDefault(security.stockId(), List.of()).stream()
                 .filter(report -> report.fiscalYear() >= fromFiscalYear)
-                .toList());
+                .toList();
+        if (uncertain.contains(security.stockId())) {
+            return new FinancialFetch(reports, List.of(), true, Set.of(), Set.of(), true);
+        }
+        return FinancialFetch.of(reports);
     }
 }

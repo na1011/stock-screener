@@ -96,6 +96,23 @@ final class SecEdgarResponse {
         return parsed;
     }
 
+    /**
+     * 2xx 본문이 JSON으로 안 읽히면 그 사유, 읽히면 {@code null} — 받기 쪽이 「덜 온 응답」으로 보고 같은 실행 안에서 다시 받는다.
+     * 지금 전송은 본문 도중 끊겨도 받은 만큼 예외 없이 넘기므로(2026-10-06 반증), 깨진 JSON의 대부분은 해석 실패가 아니라 끊긴
+     * 전송이다. 끝까지 안 읽히면 {@link #requireJson}이 MALFORMED로 던진다.
+     */
+    static String unreadableJson(String body) {
+        // 공백만 든 본문도 본문이 없는 것이다 — isEmpty로 물으면 그것만 다시 안 받고 바로 MALFORMED로 끝났다(v11 반증).
+        if (body == null || body.isBlank()) {
+            return "200인데 본문이 없다.";
+        }
+        try {
+            return MAPPER.readTree(body) == null ? "200인데 본문이 없다." : null;
+        } catch (RuntimeException e) {
+            return "200인데 JSON이 아니다(끊긴 전송일 수 있다).";
+        }
+    }
+
     static DataSourceException.Kind kindOf(int status) {
         return switch (status) {
             case 404 -> DataSourceException.Kind.NOT_FOUND;

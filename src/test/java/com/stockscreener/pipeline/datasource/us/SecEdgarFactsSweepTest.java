@@ -33,11 +33,17 @@ import java.util.stream.Stream;
  * 해친다</b>(2026-09-15 사용자 결정: <b>모든 수정이 끝난 뒤에 재적재·백필을 한 번</b>).
  *
  * <pre>
- * REPLAY_SWEEP_DIR=.factcache REPLAY_SWEEP_OUT=/tmp/sweep-before.tsv \
+ * REPLAY_SWEEP_DIR=.factcache REPLAY_SWEEP_OUT=/tmp/sweep-before.tsv REPLAY_SUPPLEMENT_DIR=&lt;같은 날 보충 원자료|off&gt; \
  *   ./gradlew test --tests "*SecEdgarFactsSweepTest*"
  * </pre>
  *
  * <p><b>환경변수로 받는다</b> — Gradle의 {@code -D}는 데몬 JVM에만 붙어 포크된 테스트에 안 닿는다.
+ *
+ * <h2>공시 보충(ADR-0173)</h2>
+ * <p><b>{@code REPLAY_SUPPLEMENT_DIR}는 필수다</b>(경로 또는 {@code off}). 경로를 주면 운영 코드({@link SecFilingSupplement})를 <b>한 줄도 안 바꾸고</b> 태운다 — 공시
+ * 목록·색인·인스턴스를 그 디렉터리({@link SecFilingSupplementCacheLiveTest}가 같은 날 모은 것)에서 로컬 서버로 내주고,
+ * 원장은 메모리다. {@code off}면 출력이 보충 전과 바이트까지 같다 — 운영 어댑터의 출력이 아니므로 관문 재고의 수를 이것으로 재지 않는다. {@code REPLAY_REMOVE_ACCNS=티커:접수번호,…}는 제거 대조다 —
+ * companyfacts에서 그 공시의 us-gaap를 지운 뒤 보충한다(보충이 원래 트리와 같은 출력을 내는가).
  */
 @EnabledIfEnvironmentVariable(named = "REPLAY_SWEEP_DIR", matches = ".+")
 class SecEdgarFactsSweepTest {
@@ -89,6 +95,15 @@ class SecEdgarFactsSweepTest {
         Files.createDirectories(out.toAbsolutePath().getParent());
 
         ObjectMapper mapper = new ObjectMapper();
+        Optional<SupplementReplay> supplement =
+                SupplementReplay.requireSetting("REPLAY_SUPPLEMENT_DIR").map(SupplementReplay::start);
+        java.util.Map<String, java.util.Set<String>> removals = new java.util.HashMap<>();
+        Optional.ofNullable(System.getenv("REPLAY_REMOVE_ACCNS")).ifPresent(v -> {
+            for (String pair : v.split(",")) {
+                String[] parts = pair.split(":");
+                removals.computeIfAbsent(parts[0], k -> new java.util.HashSet<>()).add(parts[1]);
+            }
+        });
         List<Path> files;
         try (Stream<Path> stream = Files.list(dir)) {
             files = stream.filter(p -> p.getFileName().toString().endsWith(".json"))
@@ -109,8 +124,23 @@ class SecEdgarFactsSweepTest {
                 String ticker = file.getFileName().toString().replaceFirst("\\.json$", "");
                 SecEdgarFacts.Result result;
                 try {
-                    result = SecEdgarFacts.build(
-                            mapper.readTree(Files.readString(file)).path("facts"), from, usGate);
+                    tools.jackson.databind.JsonNode root = mapper.readTree(Files.readString(file));
+                    tools.jackson.databind.JsonNode facts = root.path("facts");
+                    if (removals.containsKey(ticker)) {
+                        removeUsGaap((tools.jackson.databind.node.ObjectNode) facts, removals.get(ticker));
+                    }
+                    if (supplement.isPresent()) {
+                        SecFilingSupplement.Outcome outcome = supplement.get().supplement().supplement(
+                                root.path("cik").asLong(), (tools.jackson.databind.node.ObjectNode) facts, from, ticker);
+                        if (extra.isPresent() && (outcome.fetched() + outcome.fromStore() > 0
+                                || !outcome.failed().isEmpty() || outcome.vintagesUncertain())) {
+                            extraLines.append(ticker).append("\tsupplement\t").append(outcome.fetched())
+                                    .append('\t').append(outcome.merged()).append('\t').append(outcome.failed())
+                                    .append('\t').append(outcome.unconfirmedVintages()).append('\t')
+                                    .append(outcome.vintagesUncertain()).append('\n');
+                        }
+                    }
+                    result = SecEdgarFacts.build(facts, from, usGate);
                 } catch (RuntimeException | java.io.IOException
                         | com.stockscreener.pipeline.datasource.DataSourceException e) {
                     // MUST: DataSourceException도 잡는다. checked라 목록에 없던 탓에 한 종목의
@@ -168,11 +198,32 @@ class SecEdgarFactsSweepTest {
         if (extra.isPresent()) {
             Files.writeString(extra.get(), extraLines.toString(), StandardCharsets.UTF_8);
         }
+        supplement.ifPresent(r -> System.out.println("SWEEP 보충 원자료 없음(404)=" + r.missing()));
+        supplement.ifPresent(SupplementReplay::close);
+        // 수집이 빠뜨린 원자료가 있으면 그 공시는 「받지 못함」으로 바뀌어 출력이 운영과 갈린다 — 조용히 넘기지 않는다.
+        supplement.ifPresent(r -> org.assertj.core.api.Assertions.assertThat(r.missing())
+                .as("보충 원자료 없음(404) — 수집을 다시 한다").isZero());
         System.out.println("SWEEP 관문=" + usGate + " 파일=" + files.size() + " 종목=" + stocks + " 보고서=" + rows
                 + " 버린팩트=" + dropped + " 부재=" + absences + " 읽기실패=" + failed
                 + " out=" + out.toAbsolutePath());
         if (failed > 0) {
             System.out.println("SWEEP 실패목록\n" + failures);
+        }
+    }
+
+    /** 제거 대조 — 그 접수번호의 us-gaap 노드를 지운다(dei는 남긴다 · 「dei만 있고 us-gaap가 빠진」 실물 모양). */
+    private static void removeUsGaap(tools.jackson.databind.node.ObjectNode facts, java.util.Set<String> accessions) {
+        tools.jackson.databind.JsonNode usGaap = facts.path("us-gaap");
+        for (String concept : usGaap.propertyNames()) {
+            tools.jackson.databind.JsonNode units = usGaap.path(concept).path("units");
+            for (String unit : units.propertyNames()) {
+                tools.jackson.databind.node.ArrayNode array = (tools.jackson.databind.node.ArrayNode) units.path(unit);
+                for (int i = array.size() - 1; i >= 0; i--) {
+                    if (accessions.contains(array.get(i).path("accn").asString(""))) {
+                        array.remove(i);
+                    }
+                }
+            }
         }
     }
 }

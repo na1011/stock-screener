@@ -11,7 +11,9 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
@@ -43,8 +45,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <pre>
  * Q4V_REPLAY_DB=stock_screener_q4v_r1 Q4V_REPLAY_CACHE=$PWD/.factcache \
  * Q4V_REPLAY_TARGETS=targets.tsv Q4V_REPLAY_OUT=replay.tsv \
+ * Q4V_REPLAY_FROM=2018 Q4V_REPLAY_INSERT_EARLIER=false Q4V_REPLAY_SUPPLEMENT_DIR=off \
  *   ./gradlew test --tests "*EarlierVintageReplayHarnessTest*" -PskipFrontend
  * </pre>
+ *
+ * <p><b>공시 보충(ADR-0173 · RS1)</b>: {@code Q4V_REPLAY_SUPPLEMENT_DIR}를 주면 같은 날 모은 보충 원자료로
+ * {@link SecFilingSupplement}를 태우고 그 판 보호를 Writer에 넘긴다({@link SupplementReplay}) — <b>그 변수는 필수다</b>(경로 또는
+ * {@code off}). {@code Q4V_REPLAY_SUPPLEMENT_STORE=db}면 사본의 저장 표를 원장으로 쓴다(V64가 그 사본에 있어야 한다). 그 캐시의 companyfacts는
+ * {@code <dir>/companyfacts}이므로 {@code Q4V_REPLAY_CACHE}도 거기를 준다.
+ *
+ * <p><b>{@code Q4V_REPLAY_FROM}·{@code Q4V_REPLAY_INSERT_EARLIER}도 필수다</b> — 정기 FR과 같게 돌리려면 {@code 2018}(asOf − 8 ·
+ * {@code FinancialRefillJob.DEFAULT_YEARS_BACK})·{@code false}, 관문 재적재와 같게 돌리려면 {@code 2015}·{@code true}다. 예전
+ * 기본값(2015 · 켬)은 관문 쪽이라, 정기 경로를 재려던 실행이 조용히 다른 답을 냈다(2026-10-06 v6 반증 — 첫 손 FR의 사본 재생).
  *
  * <p>{@code Q4V_REPLAY_TARGETS}는 {@code stock_id<TAB>ticker} 줄이다(머리줄 없음). 캐시는 09-15 전후 단면이라
  * 그 뒤 공시된 DB 판은 회수 후보로 잡힌다 — 재생 <b>전에</b> 그 수를 종목마다 세어 함께 찍는다.
@@ -64,8 +76,14 @@ class EarlierVintageReplayHarnessTest {
         Path cache = Path.of(System.getenv("Q4V_REPLAY_CACHE"));
         Path targets = Path.of(System.getenv("Q4V_REPLAY_TARGETS"));
         Path out = Path.of(Optional.ofNullable(System.getenv("Q4V_REPLAY_OUT")).orElse("build/q4v-replay.tsv"));
-        int from = Integer.parseInt(Optional.ofNullable(System.getenv("Q4V_REPLAY_FROM")).orElse("2015"));
+        int from = Integer.parseInt(required("Q4V_REPLAY_FROM"));
         String user = Optional.ofNullable(System.getenv("DB_USERNAME")).orElse(System.getProperty("user.name"));
+        String earlier = required("Q4V_REPLAY_INSERT_EARLIER");
+        if (!earlier.equals("true") && !earlier.equals("false")) {
+            throw new IllegalStateException("Q4V_REPLAY_INSERT_EARLIER는 true 또는 false다: " + earlier);
+        }
+        boolean insertEarlier = Boolean.parseBoolean(earlier);
+        Optional<Path> supplementDir = SupplementReplay.requireSetting("Q4V_REPLAY_SUPPLEMENT_DIR");
 
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:postgresql://localhost:5432/" + db, user, "");
@@ -73,6 +91,12 @@ class EarlierVintageReplayHarnessTest {
             assertThat(connection.getCatalog()).startsWith("stock_screener_q4v").isEqualTo(db);
         }
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        // db면 사본의 sec_filing_supplement(V64)를 원장으로 쓴다 — 두 번째 재생이 저장분 경로(jsonb → 고르기 → 합치기)를
+        // 탄다. 문장마다 커밋되므로 Writer와의 트랜잭션 맞물림은 SecFilingSupplementWriteContractTest(RS2)가 묻는다.
+        boolean dbLedger = "db".equals(System.getenv("Q4V_REPLAY_SUPPLEMENT_STORE"));
+        Optional<SupplementReplay> supplement = supplementDir.map(dir -> dbLedger
+                ? SupplementReplay.start(dir, new SecFilingSupplementStore(jdbc))
+                : SupplementReplay.start(dir));
         FinancialWriter writer = new FinancialWriter(jdbc, new StoredIndicatorInvalidationPort(jdbc));
         TransactionTemplate tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
 
@@ -81,6 +105,11 @@ class EarlierVintageReplayHarnessTest {
         List<String> lines = Files.readAllLines(targets, StandardCharsets.UTF_8);
         List<String> failures = new ArrayList<>();
         long[] sums = new long[10];
+        // 첫 손 FR의 중단 조건이 보는 수 — 보충 실패 공시 · 목록을 못 받은 종목 · 회수를 멈춘 종목 · 회수된 행.
+        long supplementFailed = 0;
+        long listFailed = 0;
+        long retractionStopped = 0;
+        long retracted = 0;
 
         Files.createDirectories(out.toAbsolutePath().getParent());
         try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
@@ -96,10 +125,19 @@ class EarlierVintageReplayHarnessTest {
                 long stockId = Long.parseLong(cols[0]);
                 String ticker = cols[1];
                 List<RawFinancialReport> reports;
+                FinancialWriter.VintageGuard guard = FinancialWriter.VintageGuard.NONE;
                 try {
-                    reports = SecEdgarFacts.build(
-                            mapper.readTree(Files.readString(cache.resolve(ticker + ".json"))).path("facts"), from)
-                            .reports();
+                    JsonNode root = mapper.readTree(Files.readString(cache.resolve(ticker + ".json")));
+                    JsonNode facts = root.path("facts");
+                    if (supplement.isPresent()) {
+                        SecFilingSupplement.Outcome outcome = supplement.get().supplement()
+                                .supplement(root.path("cik").asLong(), (ObjectNode) facts, from, ticker);
+                        guard = new FinancialWriter.VintageGuard(outcome.unconfirmedVintages(),
+                                outcome.supplementedVintages(), outcome.vintagesUncertain());
+                        supplementFailed += outcome.failed().size();
+                        listFailed += outcome.vintagesUncertain() ? 1 : 0;
+                    }
+                    reports = SecEdgarFacts.build(facts, from).reports();
                 } catch (Exception e) {
                     failures.add(ticker + " 읽기=" + e.getClass().getSimpleName() + ":" + e.getMessage());
                     continue;
@@ -145,8 +183,9 @@ class EarlierVintageReplayHarnessTest {
                 FinancialWriter.Outcome outcome;
                 try {
                     List<RawFinancialReport> all = reports;
+                    FinancialWriter.VintageGuard vintageGuard = guard;
                     outcome = tx.execute(status -> writer.writeDetailed(
-                            stockId, all, FinancialWriter.WriteMode.FILL_MISSING, true, true));
+                            stockId, all, FinancialWriter.WriteMode.FILL_MISSING, true, insertEarlier, vintageGuard));
                 } catch (RuntimeException e) {
                     failures.add(ticker + " 쓰기=" + e.getClass().getSimpleName() + ":" + e.getMessage());
                     continue;
@@ -170,6 +209,9 @@ class EarlierVintageReplayHarnessTest {
                 sums[7] += outcome.deferredRevisions();
                 sums[8] += outcome.corrected();
                 sums[9] += outcome.insertedEarlier();
+                retractionStopped += outcome.retractionStopped() ? 1 : 0;
+                // 새로 생기는 행은 신규 · 정정 · 이른 판뿐이다 — 그 합에서 행 증감을 빼면 회수로 지운 행이다.
+                retracted += outcome.inserted() + outcome.revised() + outcome.insertedEarlier() - (rowsAfter - rowsBefore);
             }
         }
 
@@ -178,8 +220,13 @@ class EarlierVintageReplayHarnessTest {
                 + " 회수후보=" + sums[0] + " 이른판후보=" + sums[1] + " 새판후보=" + sums[2]
                 + " 행증감=" + sums[3] + " 신규=" + sums[4] + " 채움=" + sums[5] + " 정정=" + sums[6]
                 + " 정정보류=" + sums[7] + " 교정=" + sums[8] + " 이른판=" + sums[9]
+                + " 회수=" + retracted + " 보충실패=" + supplementFailed + " 목록실패종목=" + listFailed
+                + " 회수정지=" + retractionStopped + "종목"
                 + " 전=" + before + " 후=" + after + " out=" + out.toAbsolutePath());
         failures.forEach(f -> System.out.println("Q4V_REPLAY 실패 " + f));
+        supplement.ifPresent(r -> System.out.println("Q4V_REPLAY 보충 원자료 없음(404)=" + r.missing()));
+        supplement.ifPresent(SupplementReplay::close);
+        supplement.ifPresent(r -> assertThat(r.missing()).as("보충 원자료 없음(404) — 수집을 다시 한다").isZero());
         assertThat(failures).isEmpty();
     }
 
@@ -200,5 +247,14 @@ class EarlierVintageReplayHarnessTest {
             counts.put(market + "번호합", rs.getLong("rev_sum"));
         });
         return counts;
+    }
+
+    private static String required(String name) {
+        String value = System.getenv(name);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(name + "가 없다 — 정기 FR과 같게: FROM=2018 · INSERT_EARLIER=false / "
+                    + "관문 재적재와 같게: FROM=2015 · INSERT_EARLIER=true");
+        }
+        return value.trim();
     }
 }

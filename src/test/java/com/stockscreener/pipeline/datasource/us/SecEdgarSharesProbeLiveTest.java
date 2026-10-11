@@ -395,6 +395,8 @@ class SecEdgarSharesProbeLiveTest {
     @Test
     @DisplayName("[live][probe] WeightedAverage* 후보를 빼면 결손이 얼마나 느는가")
     void probeWeightedAverageRemoval() throws Exception {
+        // 어댑터 출력(A)은 보충까지다 — 설정을 명시해야 돈다(ADR-0173).
+        java.util.Optional<SecFilingSupplement> supplement = ProbeSupplement.fromEnv();
         // MUST: 적재가 실제로 쓴 값이다. batch_execution.note가 「연도=2018~2026」이고 DB의
         // min(fiscal_year)도 2018이다. 기본 3년(→2023)을 주면 SecEdgarFacts의 라벨 충돌 게이트가
         // 적재 창 밖으로 좁혀져 **예외 축이 0으로 나오고** "빼도 예외는 안 변한다"는 거짓이 된다.
@@ -507,6 +509,10 @@ class SecEdgarSharesProbeLiveTest {
                     continue;
                 }
                 bytes[measured] = response.getBody() == null ? 0 : response.getBody().length();
+                long cikValue = cik;
+                JsonNode tree = facts;
+                supplement.ifPresent(sup -> sup.supplement(cikValue, (tools.jackson.databind.node.ObjectNode) tree,
+                        fromFiscalYear, t));
 
                 Built a = build(facts, fromFiscalYear);
                 Built b1 = buildWithout(facts, List.of(weighted.get(0)), fromFiscalYear);

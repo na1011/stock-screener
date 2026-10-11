@@ -66,7 +66,7 @@ final class SecEdgarFacts {
      * <p>실측에서 {@code form}에 {@code 8-K} 9,688건과 {@code DEF 14A}가 섞여 있었다.
      * 그 팩트를 그대로 담으면 기간 계열이 오염된다 — 8-K는 회계기간을 대표하지 않는다.
      */
-    private static final Set<String> PERIODIC_FORMS = Set.of(
+    static final Set<String> PERIODIC_FORMS = Set.of(
             "10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A",
             "6-K", "6-K/A");
 

@@ -85,6 +85,30 @@ class InitialLoadTargetSelectionTest {
     }
 
     @Test
+    @DisplayName("실행 기록이 보충 칸을 낸다 — 리밸런싱 꼬리가 공시 보충을 타는 정기 경로라 실패가 여기 아니면 안 뜬다(ADR-0173)")
+    void noteCarriesSupplementCounts() {
+        jdbcTemplate.update("DELETE FROM sec_filing_supplement");
+        try {
+            jdbcTemplate.update("""
+                    INSERT INTO sec_filing_supplement (accession, cik, form, filed, reader_version, status,
+                        failure_kind, failure_message, fetched_at, last_seen_at)
+                    VALUES ('0000999999-20-000001', 999999, '10-Q', '2020-05-01', 1, 'FAILED', 'TRANSIENT', 'x',
+                        now() - interval '40 days', now() - interval '40 days')
+                    """);
+
+            job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    new InitialLoadJob.LoadRange(7, 3, false, List.of("082640")));
+
+            String note = jdbcTemplate.queryForObject(
+                    "SELECT note FROM batch_execution WHERE job_name = ? ORDER BY id DESC LIMIT 1",
+                    String.class, InitialLoadJob.JOB_NAME);
+            assertThat(note).contains("미해결보충=0(표 전체 1)");
+        } finally {
+            jdbcTemplate.update("DELETE FROM sec_filing_supplement");
+        }
+    }
+
+    @Test
     @DisplayName("티커를 주면 봉이 이미 있어도 대상이 된다 — NOT EXISTS를 교집합으로 걸지 않는다")
     void tickersBypassTheNotExistsFilter() {
         job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
