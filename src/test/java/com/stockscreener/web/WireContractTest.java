@@ -119,6 +119,10 @@ class WireContractTest {
                 .isEqualTo(expected("enums", "TriggeredBy"));
         assertThat(names(BatchExecutionRecorder.Scope.class))
                 .isEqualTo(expected("enums", "ExecutionScope"));
+        // 관리자 화면이 사유마다 덧말을 고른다(admin.ts scopeNote). 프론트에 없는 사유가 오면 그 행에서 던진다 —
+        // 「시장 미완료」를 「좁힌 손 실행」으로 그리는 것보다 낫지만, 어긋남은 지금 잡혀야 한다.
+        assertThat(names(BatchExecutionRecorder.ScopeReason.class))
+                .isEqualTo(expected("enums", "ExecutionScopeReason"));
         assertThat(names(AdminJobLauncher.Parameters.class))
                 .isEqualTo(expected("enums", "JobParameters"));
     }

@@ -4,6 +4,7 @@ import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.RateLimiter;
+import com.stockscreener.pipeline.datasource.http.RefetchWaits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,14 +61,18 @@ import java.util.Optional;
  *   <li><b>명부는 {@link #freshSnapshot()}</b> — 다시 받기에 실패하면 던진다. 낡은 거래소 라벨이 명부를
  *       틀리게 만들고, 던지면 리밸런싱이 이전 구성을 지킨다(ADR-0008).</li>
  *   <li><b>종목 단위 소비자({@link #findCik} — 재무·개황)는 {@link #snapshot()}</b> — 실패하면 옛 판을
- *       나이와 함께 WARN하고 계속 쓴다. 낡은 맵은 <b>그 뒤의 새 티커만</b> 「모름」으로 만들고 그것은 종목
- *       실패로 시끄럽다. 던지면 그 실행의 미국 전원이 실패하고, 그래도 {@code PARTIAL_SUCCESS}라 무거운 잡
- *       시계가 다시 시작된다.</li>
+ *       나이와 함께 WARN하고 <b>낡은 판</b>으로 계속 쓴다. 낡은 판에 있는 티커는 그대로 찾고, <b>낡은 판에 없는 티커는
+ *       {@code TRANSIENT}로 던진다</b> — 「모름」은 소스의 답이 아니다(ADR-0174). 판을 하나도 못 얻었으면 {@code AUTH}·
+ *       {@code RATE_LIMITED} 말고는 {@code TRANSIENT}로 감싸 던진다(원래 종류는 메시지와 원인에 남는다).</li>
  * </ul>
- * <p><b>다시 받기 실패는 {@link #RETRY_AFTER_FAILURE} 동안 기억한다</b> — 기억하지 않으면 종목 루프가 종목마다
- * 다시 받는다(1,000종목 × 매핑 파일). <b>첫 적재 실패는 기억하지 않는다</b> — 옛 판이 없어 기억하면 그 10분 동안
- * 미국 종목이 네트워크 없이 전원 실패한다(재무 1,000종목이 몇 초 만에). 기억하지 않으면 다음 호출이 다시 받으므로 순간적인
- * 실패가 그 뒤 종목을 안 막는다 — A2 전의 동작이다. 첫 적재 실패는 둘 다 던진다(옛 판이 없다).
+ * <p><b>신선한 판</b> = 받은 지 {@link #MAX_AGE} 안이고 그 뒤 다시 받기 실패가 없는 판({@link Snapshot#fresh()}). 거기에 없는
+ * 티커만 {@link Optional#empty()}이고, 재무 어댑터가 그것을 「소스가 답한 부재」로 쓴다.
+ *
+ * <p><b>받기가 실패하면 2초 · 10초를 기다리며 두 번 다시 받고({@link RefetchWaits}), 그래도 실패면 {@link #RETRY_AFTER_FAILURE}
+ * 동안 기억한다 — 첫 적재도 같다.</b>
+ * 기억하지 않으면 종목 루프가 종목마다 다시 받는다 — hang이면 1,000종목 × 읽기 제한 60초다(2026-10-07 반증). 첫 적재
+ * 실패를 기억하면 그 10분 동안 미국 종목이 콜 없이 {@code TRANSIENT}로 실패하는데, 그것은 「미국 미완료」로 시계를 안 밀고
+ * 다음 차례에 다시 돈다 — 옛 규칙(첫 적재는 기억 안 함)의 사유는 그 실패가 시계를 밀던 분류 위에 서 있었다.
  *
  * <p><b>MUST: 한 실행 안에서는 판 하나를 잡고 쓴다.</b> 행마다 {@link #findCik}를 부르면 경계가 실행
  * 도중에 걸려 한 리밸런싱이 두 판을 섞는다 — 같은 CIK 묶음의 반은 옛 판, 반은 새 판으로 갈린다.
@@ -92,6 +97,7 @@ public class SecTickerCikCache {
     private final boolean userAgentPresent;
     private final int minExpectedRows;
     private final Clock clock;
+    private final RefetchWaits waits;
 
     private volatile Snapshot current;
     /** 마지막 다시 받기 실패 — {@code this}로 잠근 자리에서만 읽고 쓴다. */
@@ -107,7 +113,7 @@ public class SecTickerCikCache {
                              DataSourceProperties properties,
                              @Qualifier("secEdgarRateLimiter") RateLimiter rateLimiter) {
         this(clientFactory, properties, rateLimiter, properties.getSecEdgarFilesBaseUrl(),
-                MIN_EXPECTED_ROWS, Clock.systemUTC());
+                MIN_EXPECTED_ROWS, Clock.systemUTC(), RefetchWaits.standard());
     }
 
     /** MockWebServer 테스트 전용 — base URL과 하한을 바꿔 끼운다. */
@@ -116,31 +122,41 @@ public class SecTickerCikCache {
                       RateLimiter rateLimiter,
                       String baseUrl,
                       int minExpectedRows) {
-        this(clientFactory, properties, rateLimiter, baseUrl, minExpectedRows, Clock.systemUTC());
+        this(clientFactory, properties, rateLimiter, baseUrl, minExpectedRows, Clock.systemUTC(), RefetchWaits.standard());
     }
 
-    /** 위와 같되 시계까지 바꿔 끼운다 — {@link #MAX_AGE} 경계를 시험한다. */
+    /** 위와 같되 시계와 다시 받기 대기까지 바꿔 끼운다 — {@link #MAX_AGE} 경계와 재시도를 시험한다. */
     SecTickerCikCache(ExternalApiClientFactory clientFactory,
                       DataSourceProperties properties,
                       RateLimiter rateLimiter,
                       String baseUrl,
                       int minExpectedRows,
-                      Clock clock) {
+                      Clock clock,
+                      RefetchWaits waits) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
         this.userAgentPresent = source.hasApiKey();
         this.minExpectedRows = minExpectedRows;
         this.clock = clock;
+        this.waits = waits;
     }
 
     /**
-     * 그 티커의 CIK. <b>모르면 비어 있다 — 예외가 아니다.</b>
+     * 그 티커의 CIK. <b>신선한 판이 모르면 비어 있다 — 예외가 아니다.</b> 낡은 판이 모르면 {@code TRANSIENT}로 던진다
+     * (클래스 javadoc).
      *
      * @param ticker 시세 소스 표기 그대로({@code BRK.A}). 정규화는 여기서 한다.
      */
     public Optional<Long> findCik(String ticker) throws DataSourceException {
-        return snapshot().findCik(ticker);
+        Snapshot snapshot = snapshot();
+        Optional<Long> cik = snapshot.findCik(ticker);
+        if (cik.isEmpty() && !snapshot.fresh()) {
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SecEdgarResponse.SOURCE_NAME,
+                    "매핑 갱신 실패 판(%s에 받음)에서 미매핑 — 다음 실행이 다시 묻는다: %s"
+                            .formatted(snapshot.loadedAt(), ticker));
+        }
+        return cik;
     }
 
     public int size() throws DataSourceException {
@@ -156,10 +172,19 @@ public class SecTickerCikCache {
     }
 
     /**
-     * 종목 단위 소비자가 쓰는 판. 다시 받기에 실패하면 옛 판을 WARN과 함께 낸다 — 첫 적재 실패만 던진다.
+     * 종목 단위 소비자가 쓰는 판. 다시 받기에 실패하면 옛 판을 WARN과 함께 <b>낡은 판</b>으로 낸다. 판이 하나도 없을 때만
+     * 던지고, 그때 {@code AUTH}·{@code RATE_LIMITED}가 아니면 {@code TRANSIENT}로 감싼다.
      */
     public Snapshot snapshot() throws DataSourceException {
-        return obtain(false);
+        try {
+            return obtain(false);
+        } catch (DataSourceException e) {
+            if (e.kind() == DataSourceException.Kind.AUTH || e.kind() == DataSourceException.Kind.RATE_LIMITED) {
+                throw e;
+            }
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SecEdgarResponse.SOURCE_NAME,
+                    "티커→CIK 매핑을 얻지 못했다(" + e.kind() + ": " + e.getMessage() + ") — 다음 실행이 다시 묻는다.", e);
+        }
     }
 
     private Snapshot obtain(boolean strict) throws DataSourceException {
@@ -173,41 +198,62 @@ public class SecTickerCikCache {
             if (held != null && !held.olderThan(MAX_AGE, now)) {
                 return held;
             }
-            if (held != null && lastFailedAt != null && lastFailedAt.plus(RETRY_AFTER_FAILURE).isAfter(now)) {
-                // 방금 실패했다 — 다시 안 부른다. 같은 실패를 그대로 낸다.
+            if (lastFailedAt != null && lastFailedAt.plus(RETRY_AFTER_FAILURE).isAfter(now)) {
+                // 방금 실패했다 — 다시 안 부른다(콜 0). 명부와 첫 적재는 같은 실패를 그대로, 종목 소비자는 낡은 판을 낸다.
                 if (strict || held == null) {
                     throw lastFailure;
                 }
-                return held;
+                return held.stale();
             }
-            try {
-                Snapshot fresh = new Snapshot(download(), now);
-                current = fresh;
-                lastFailedAt = null;
-                lastFailure = null;
-                if (held == null) {
-                    log.info("SEC 티커→CIK 매핑을 받았다. {}건", fresh.size());
-                } else {
-                    log.info("SEC 티커→CIK 매핑을 받았다. {}건 — 앞 판은 {}에 받은 {}건이었다",
-                            fresh.size(), held.loadedAt(), held.size());
+            DataSourceException failure = null;
+            for (int attempt = 0; attempt <= waits.retries(); attempt++) {
+                if (attempt > 0) {
+                    if (failure.kind() == DataSourceException.Kind.AUTH
+                            || failure.kind() == DataSourceException.Kind.RATE_LIMITED) {
+                        break; // 인증·한도는 다시 물어도 같다.
+                    }
+                    try {
+                        // 대기 없이 다시 물으면 0.4초 안에 끝나 그보다 긴 끊김을 못 넘는다 — 순간 끊김 하나를 10분 기억으로
+                        // 만들지 않는 것은 이 대기다(RefetchWaits).
+                        waits.before(attempt - 1);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        failure = new DataSourceException(DataSourceException.Kind.TRANSIENT, SecEdgarResponse.SOURCE_NAME,
+                                "매핑을 다시 받기를 기다리는 중 인터럽트됐다.", e);
+                        break;
+                    }
                 }
-                return fresh;
-            } catch (DataSourceException e) {
-                if (held == null) {
-                    // 첫 적재 실패 — 기억하지 않는다(클래스 javadoc).
-                    throw e;
+                try {
+                    return loaded(download(), clock.instant(), held);
+                } catch (DataSourceException e) {
+                    failure = e;
                 }
-                lastFailedAt = now;
-                lastFailure = e;
-                if (strict) {
-                    throw e;
-                }
-                log.warn("SEC 티커→CIK 매핑을 다시 받지 못해 {}에 받은 판을 계속 쓴다 — 그 뒤의 상장·개명은 "
-                        + "「CIK 모름」으로 보인다. {}분 뒤 다시 묻는다. 원인={}", held.loadedAt(),
-                        RETRY_AFTER_FAILURE.toMinutes(), e.getMessage());
-                return held;
             }
+            now = clock.instant();
+            lastFailedAt = now;
+            lastFailure = failure;
+            if (strict || held == null) {
+                throw failure;
+            }
+            log.warn("SEC 티커→CIK 매핑을 다시 받지 못해 {}에 받은 판을 낡은 판으로 계속 쓴다 — 그 판에 없는 티커는 "
+                    + "TRANSIENT다. {}분 뒤 다시 묻는다. 원인={}", held.loadedAt(),
+                    RETRY_AFTER_FAILURE.toMinutes(), failure.getMessage());
+            return held.stale();
         }
+    }
+
+    private Snapshot loaded(Map<String, Listing> mapping, Instant now, Snapshot held) {
+        Snapshot fresh = new Snapshot(mapping, now);
+        current = fresh;
+        lastFailedAt = null;
+        lastFailure = null;
+        if (held == null) {
+            log.info("SEC 티커→CIK 매핑을 받았다. {}건", fresh.size());
+        } else {
+            log.info("SEC 티커→CIK 매핑을 받았다. {}건 — 앞 판은 {}에 받은 {}건이었다",
+                    fresh.size(), held.loadedAt(), held.size());
+        }
+        return fresh;
     }
 
     /** 한 줄의 CIK와 SEC가 적은 거래소. 거래소는 비어 있을 수 있다(실측 182행 — 파일이 {@code null}로 싣는다). */
@@ -224,10 +270,28 @@ public class SecTickerCikCache {
     public static final class Snapshot {
         private final Map<String, Listing> byTicker;
         private final Instant loadedAt;
+        private final boolean fresh;
 
         Snapshot(Map<String, Listing> byTicker, Instant loadedAt) {
+            this(byTicker, loadedAt, true);
+        }
+
+        private Snapshot(Map<String, Listing> byTicker, Instant loadedAt, boolean fresh) {
             this.byTicker = byTicker;
             this.loadedAt = loadedAt;
+            this.fresh = fresh;
+        }
+
+        /**
+         * 신선한 판인가 — 받은 지 {@link #MAX_AGE} 안이고 그 뒤 다시 받기 실패가 없다. 거짓이면 이 판의 부재는 소스의 답이
+         * 아니다(ADR-0174).
+         */
+        public boolean fresh() {
+            return fresh;
+        }
+
+        Snapshot stale() {
+            return new Snapshot(byTicker, loadedAt, false);
         }
 
         public Optional<Long> findCik(String ticker) {
@@ -284,25 +348,28 @@ public class SecTickerCikCache {
                     SecEdgarResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + PATH, e);
         }
 
-        ResponseEntity<JsonNode> response;
+        // 본문을 문자열로 받아 상태를 먼저 본다 — JSON으로 받으면 403·429 HTML이 상태를 보기 전에 변환에서 터져 TRANSIENT가
+        // 되고, 한도를 「다시 묻지 않음」에서 비켜 막힌 호스트를 한 번 더 친다(구현 반증). 판정은 다른 SEC 받기와 같은 자리다.
+        ResponseEntity<String> response;
         try {
-            response = client.get().uri(PATH).retrieve().toEntity(JsonNode.class);
+            response = client.get().uri(PATH).retrieve().toEntity(String.class);
         } catch (RuntimeException e) {
             // 벤더 예외가 상위로 새지 않게 여기서 감싼다(ADR-0006).
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
                     SecEdgarResponse.SOURCE_NAME, "매핑 파일 호출에 실패했다. " + PATH, e);
         }
-        if (!response.getStatusCode().is2xxSuccessful()) {
-            throw new DataSourceException(SecEdgarResponse.kindOf(response.getStatusCode().value()),
-                    SecEdgarResponse.SOURCE_NAME,
-                    "HTTP %d. %s".formatted(response.getStatusCode().value(), PATH));
-        }
-        return parse(response.getBody(), minExpectedRows);
+        return parse(SecEdgarResponse.requireJson(response.getStatusCode(), response.getBody(), PATH),
+                minExpectedRows);
     }
 
     private static Map<String, Listing> parse(JsonNode root, int minExpectedRows)
             throws DataSourceException {
-        if (root == null || !root.has("fields") || !root.path("data").isArray()) {
+        if (root == null || root.isMissingNode() || root.isNull()) {
+            // 본문이 없는 것은 받기 실패다(끊긴 전송) — 스펙 변경과 가른다.
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
+                    SecEdgarResponse.SOURCE_NAME, "매핑 파일 본문이 없다. " + PATH);
+        }
+        if (!root.has("fields") || !root.path("data").isArray()) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED,
                     SecEdgarResponse.SOURCE_NAME,
                     "fields/data 구조가 아니다 — 매핑 파일의 스펙이 바뀌었다.");
@@ -326,7 +393,8 @@ public class SecTickerCikCache {
             // MUST: 하한은 실측의 절반이고 측정 일자를 상수 옆에 적는다(ADR-0086 §규칙).
             // 추정치에서 뽑은 상수는 소스가 반쯤 준 날 울지 않는다. 반쯤 온 파일을 그대로
             // 쓰면 빠진 종목이 조용히 「CIK를 모른다」가 되고, 그것은 정상과 구분되지 않는다.
-            throw new DataSourceException(DataSourceException.Kind.MALFORMED,
+            // 받기 실패(덜 온 파일)로 본다 — 소스가 답한 것이 아니다(ADR-0174).
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
                     SecEdgarResponse.SOURCE_NAME,
                     "행이 %d개뿐이다(하한 %d, 2026-08-29 실측 10,391의 절반). 부분 응답으로 본다."
                             .formatted(data.size(), minExpectedRows));

@@ -56,10 +56,24 @@ public class BatchExecutions {
     /** 새 실행을 시작한다. */
     public BatchExecutionContext start(String jobName, LocalDate targetDate,
                                        BatchExecutionRecorder.TriggeredBy triggeredBy,
-                                       int targetCount, BatchExecutionRecorder.Scope scope) {
-        long executionId = recorder.start(jobName, targetDate, triggeredBy, targetCount, scope);
-        return track(new BatchExecutionContext(
-                executionId, jobName, targetDate, executor, recorder, alertPort, open::remove));
+                                       int targetCount, BatchExecutionRecorder.DeclaredScope scope) {
+        return start(jobName, targetDate, triggeredBy, targetCount, scope, null);
+    }
+
+    /**
+     * 위와 같되 마감 때 <b>시장마다 끝까지 마쳤는가</b>를 판정한다(ADR-0174 · {@link MarketCompleteness}).
+     *
+     * <p>시장 집합을 선언하는 잡(FR·FSR·G)이 쓴다. 대상 0건으로 곧장 마감하는 갈래도 이것으로 시작해야 한다 — 시작 때 소스가
+     * 없던 시장은 대상이 0이어도 미완료다.
+     */
+    public BatchExecutionContext start(String jobName, LocalDate targetDate,
+                                       BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                       int targetCount, BatchExecutionRecorder.DeclaredScope scope,
+                                       MarketCompleteness.Coverage coverage) {
+        BatchExecutionRecorder.Started started =
+                recorder.startRecorded(jobName, targetDate, triggeredBy, targetCount, scope);
+        return track(new BatchExecutionContext(started.id(), jobName, targetDate, executor, recorder, alertPort,
+                open::remove, coverage, started.recorded().scope() == BatchExecutionRecorder.Scope.FULL));
     }
 
     /** 실패한 부분만 다시 도는 실행을 시작한다. */

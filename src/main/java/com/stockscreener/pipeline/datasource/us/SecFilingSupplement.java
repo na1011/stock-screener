@@ -76,13 +76,21 @@ public class SecFilingSupplement implements FilingSupplementer {
      * @param unconfirmedVintages  실패한 공시의 제출일 — 회수에서 지킨다
      * @param supplementedVintages 보충으로 실은 공시의 제출일과, 실패였다가 companyfacts가 실은 공시의 제출일 — 이른 판이어도 넣는다
      * @param vintagesUncertain    공시 목록을 못 받아 대상을 모른다 — 그 종목의 회수를 멈춘다
+     * @param unfetched            이번 실행에서 <b>받지 못한</b> 것의 종류 — 공시 받기 실패(옛 판 저장분으로 대신한 것 포함) 하나마다,
+     *                             공시 목록 실패 하나. {@link #UNREADABLE}(해석 실패)은 안 든다 — 그것만 「다시 받지 않는 종료」다
+     *                             (위 실패 계약). 비어 있지 않으면 그 실행의 미국 시장이 미완료다(ADR-0174 · 종목 층 술어를 옮기지
+     *                             않는다 — 보충 층에서는 404·본문 이상도 「다음 실행이 다시 받는다」이므로)
      */
     public record Outcome(int merged, int fromStore, int fetched, int staleReused, List<String> failed,
                           Set<LocalDate> unconfirmedVintages, Set<LocalDate> supplementedVintages,
-                          boolean vintagesUncertain) {
+                          boolean vintagesUncertain, List<DataSourceException.Kind> unfetched) {
+
+        public Outcome {
+            unfetched = List.copyOf(unfetched);
+        }
 
         static Outcome none() {
-            return new Outcome(0, 0, 0, 0, List.of(), Set.of(), Set.of(), false);
+            return new Outcome(0, 0, 0, 0, List.of(), Set.of(), Set.of(), false, List.of());
         }
     }
 
@@ -137,7 +145,7 @@ public class SecFilingSupplement implements FilingSupplementer {
         settle(cik, coveredFiled, targetAccessions, supplemented, context);
         store.touch(cik, targetAccessions);
         if (targets.isEmpty()) {
-            return new Outcome(0, 0, 0, 0, List.of(), Set.of(), Set.copyOf(supplemented), false);
+            return new Outcome(0, 0, 0, 0, List.of(), Set.of(), Set.copyOf(supplemented), false, List.of());
         }
 
         Map<String, SecFilingSupplementStore.Row> stored = store.find(cik, targetAccessions);
@@ -146,6 +154,7 @@ public class SecFilingSupplement implements FilingSupplementer {
         int fetched = 0;
         int staleReused = 0;
         List<String> failed = new ArrayList<>();
+        List<DataSourceException.Kind> unfetched = new ArrayList<>();
         Set<LocalDate> unconfirmed = new LinkedHashSet<>();
         for (SecFilingClient.Filing filing : targets) {
             String filingContext = "%s %s %s %s".formatted(context, filing.accession(), filing.form(), filing.filed());
@@ -183,6 +192,7 @@ public class SecFilingSupplement implements FilingSupplementer {
                 log.warn("보충 공시를 해석하지 못했다 — 그 공시일의 판을 회수에서 지킨다. {} — {}", filingContext, e.getMessage());
                 store.saveFailed(filing, cik, UNREADABLE, e.getMessage());
             } catch (DataSourceException e) {
+                unfetched.add(e.kind());
                 if (row != null && row.ok()) {
                     // 판을 올려 다시 읽다 받지 못했다 — 옛 판의 저장분은 여전히 그 공시의 값이다. 그것을 쓰고 행은 그대로
                     // 둔다(옛 판이 남아 관문의 미해결로 센다).
@@ -208,7 +218,7 @@ public class SecFilingSupplement implements FilingSupplementer {
         // 같은 날 실은 공시와 실패한 공시가 겹치면 보호가 이긴다 — 그 날짜의 판은 출력에 일부만 있다.
         supplemented.removeAll(unconfirmed);
         return new Outcome(merged, fromStore, fetched, staleReused, List.copyOf(failed), Set.copyOf(unconfirmed),
-                Set.copyOf(supplemented), false);
+                Set.copyOf(supplemented), false, unfetched);
     }
 
     /**
@@ -369,7 +379,7 @@ public class SecFilingSupplement implements FilingSupplementer {
         }
         supplemented.removeAll(unconfirmed);
         return new Outcome(merged, fromStore, 0, staleReused, List.of(), Set.copyOf(unconfirmed),
-                Set.copyOf(supplemented), true);
+                Set.copyOf(supplemented), true, List.of(cause.kind()));
     }
 
     /** 받는 창의 시작 — 라벨 창(회계연도 ≥ from)보다 한 해 앞이다. 자르는 것은 {@code SecEdgarFacts.build}다. */

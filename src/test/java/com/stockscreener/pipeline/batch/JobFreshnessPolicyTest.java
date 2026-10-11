@@ -223,6 +223,56 @@ class JobFreshnessPolicyTest {
                 .isZero();
     }
 
+    @Test
+    @DisplayName("시장 미완료로 끝난 정기 실행은 시계를 안 민다 — 배너가 「정기 n번 시도 · 그 시장 미완료」를 함께 낸다(ADR-0174)")
+    void incompleteScheduledRunsAreAttemptsNotSuccesses() {
+        Instant now = Instant.parse("2026-10-30T06:00:00Z");
+        String heavy = GovernanceLoadJob.JOB_NAME;
+        int budget = JobFreshnessPolicy.BUDGETS.get(heavy).days();
+        Instant lastSuccess = now.minus(Duration.ofDays(budget + 5L));
+        insert(heavy, "SUCCESS", "SCHEDULER", "FULL", lastSuccess);
+        insertIncomplete(heavy, "PARTIAL_SUCCESS", now.minus(Duration.ofDays(3)), "{KOSPI}");
+        insert(heavy, "FAILED", "SCHEDULER", "FULL", now.minus(Duration.ofDays(2)));
+        insertIncomplete(heavy, "SUCCESS", now.minus(Duration.ofDays(1)), "{KOSDAQ,US}");
+
+        JobFreshnessPolicy.Staleness found = policy.stale(now).stream()
+                .filter(item -> item.jobName().equals(heavy)).findFirst().orElseThrow();
+
+        assertThat(found.lastSuccessAt()).as("미완료 SUCCESS는 시계가 아니다").isEqualTo(lastSuccess);
+        assertThat(found.scheduledAttempts()).as("마지막 성공 뒤 정기 시도 — 상태 무관").isEqualTo(3);
+        assertThat(found.incompleteMarkets()).as("가장 최근 시도의 미완료 시장").containsExactly("KOSDAQ", "US");
+        assertThat(policy.lastScheduledAttemptAt(heavy)).isEqualTo(now.minus(Duration.ofDays(1)));
+        assertThat(JobFreshnessAlerter.attemptsNote(found)).isEqualTo(" · 정기 3번 시도 · KOSDAQ,US 미완료");
+        assertThat(JobFreshnessAlerter.describe(found)).contains("먼저 그 실행의 note");
+    }
+
+    @Test
+    @DisplayName("정기 시도가 없으면 시도 수 0 · 미완료 없음 — 「안 돌았다」와 「돌았지만 안 셌다」를 가른다")
+    void noAttemptsMeansItDidNotRun() {
+        Instant now = Instant.parse("2026-10-30T06:00:00Z");
+        String heavy = GovernanceLoadJob.JOB_NAME;
+        int budget = JobFreshnessPolicy.BUDGETS.get(heavy).days();
+        insert(heavy, "SUCCESS", "SCHEDULER", "FULL", now.minus(Duration.ofDays(budget + 5L)));
+
+        JobFreshnessPolicy.Staleness found = policy.stale(now).stream()
+                .filter(item -> item.jobName().equals(heavy)).findFirst().orElseThrow();
+
+        assertThat(found.scheduledAttempts()).isZero();
+        assertThat(found.incompleteMarkets()).isEmpty();
+        assertThat(JobFreshnessAlerter.attemptsNote(found)).isEmpty();
+        assertThat(JobFreshnessAlerter.describe(found)).doesNotContain("먼저 그 실행의 note");
+    }
+
+    private void insertIncomplete(String jobName, String status, Instant startedAt, String markets) {
+        jdbcTemplate.update("""
+                INSERT INTO batch_execution
+                    (job_name, target_date, status, started_at, finished_at, triggered_by, scope, scope_reason,
+                     incomplete_markets, note)
+                VALUES (?, ?, ?, ?, ?, 'SCHEDULER', 'NARROW', 'MARKET_INCOMPLETE', ?::text[], 'JobFreshnessPolicyTest')
+                """, jobName, LocalDate.of(2026, 9, 1), status,
+                java.sql.Timestamp.from(startedAt), java.sql.Timestamp.from(startedAt), markets);
+    }
+
     private static List<String> names(List<JobFreshnessPolicy.Staleness> stale) {
         return stale.stream().map(JobFreshnessPolicy.Staleness::jobName).toList();
     }

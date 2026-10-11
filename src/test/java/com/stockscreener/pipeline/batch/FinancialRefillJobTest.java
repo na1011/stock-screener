@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.support.FakeFinancialDataSource;
 import com.stockscreener.support.TestDatabaseGuard;
@@ -185,6 +186,162 @@ class FinancialRefillJobTest {
                 List.of("005930", "035420"), null);
 
         assertThat(fakeFinancialSource.fetchedStockIds).containsExactly(memberId);
+    }
+
+    @Test
+    @DisplayName("정기 범위 FR이 한 시장의 소스 답을 못 받으면 마감에서 NARROW·MARKET_INCOMPLETE — 표지 없는 NOT_FOUND도 같다(ADR-0174)")
+    void unansweredFailureMakesTheMarketIncomplete() {
+        try {
+            for (DataSourceException failure : List.of(
+                    new DataSourceException(DataSourceException.Kind.TRANSIENT, "fake-financial", "503"),
+                    new DataSourceException(DataSourceException.Kind.NOT_FOUND, "fake-financial", "답 미확인"))) {
+                fakeFinancialSource.reset();
+                fakeFinancialSource.failingWith(memberId, failure);
+
+                BatchStatus status = job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+                assertThat(status).as(failure.kind().name()).isEqualTo(BatchStatus.PARTIAL_SUCCESS);
+                assertThat(latest("scope")).isEqualTo("NARROW");
+                assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
+                // 시험 컨텍스트에는 미국 재무 소스가 없다 — US는 (가) 「소스 없음」으로 늘 함께 뜬다.
+                assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("KOSPI,US");
+                assertThat(latest("note")).contains("시장 미완료 KOSPI");
+            }
+        } finally {
+            fakeFinancialSource.reset();
+        }
+    }
+
+    @Test
+    @DisplayName("소스가 결정적으로 답한 NOT_FOUND(표지)는 그 시장을 끝낸 것이다 — 남는 미완료는 소스 없는 US뿐")
+    void answeredFailureCompletesTheMarket() {
+        try {
+            fakeFinancialSource.reset();
+            fakeFinancialSource.failingWith(memberId,
+                    DataSourceException.answered(DataSourceException.Kind.NOT_FOUND, "fake-financial", "013"));
+
+            job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+            // KOSPI는 성공 0 · 실패 1이라 (나)로 미완료다 — 표지가 끝내는 것은 (다)다. 성공이 하나 있으면 끝난다.
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("KOSPI,US");
+            assertThat(latest("note")).contains("KOSPI 성공 0 실패 1").doesNotContain("없음(답 미확인)");
+
+            long second = insertStock("000660", "SK하이닉스");
+            jdbcTemplate.update("""
+                    INSERT INTO universe_membership (universe_code, stock_id, effective_from) VALUES (?, ?, ?)
+                    """, UNIVERSE, second, AS_OF.minusYears(1));
+            job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("US");
+        } finally {
+            fakeFinancialSource.reset();
+            jdbcTemplate.update("DELETE FROM universe_membership");
+            jdbcTemplate.update("DELETE FROM stock WHERE ticker = '000660'");
+        }
+    }
+
+    @Test
+    @DisplayName("대상 0건으로 곧장 마감하는 갈래도 같은 판정을 지난다 — 소스 없는 시장은 대상이 없어도 미완료다")
+    void earlyReturnAlsoJudgesMarkets() {
+        jdbcTemplate.update("DELETE FROM universe_membership");
+
+        job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+        assertThat(latest("target_count")).isEqualTo("0");
+        assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
+        assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("US");
+    }
+
+    @Test
+    @DisplayName("종목이 성공해도 보충을 받지 못했으면 그 시장은 미완료다 — 보충 계약은 종목을 안 세우므로 이 길이 아니면 안 보인다")
+    void unfetchedSupplementMakesTheMarketIncomplete() {
+        try {
+            fakeFinancialSource.reset();
+            fakeFinancialSource.withReports(memberId, List.of(report()))
+                    .unfetchedFor(memberId, List.of(DataSourceException.Kind.TRANSIENT));
+
+            BatchStatus status = job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+            assertThat(status).as("종목은 성공 — 실패 수는 그대로다").isEqualTo(BatchStatus.SUCCESS);
+            assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("KOSPI,US");
+            assertThat(latest("note")).contains("KOSPI 보충 일시 1");
+        } finally {
+            fakeFinancialSource.reset();
+        }
+    }
+
+    @Test
+    @DisplayName("과거 편입(현재 활성 편입 아님)의 신선한 미매핑은 답함 — 그 시장을 끝낸다(상장폐지 꼴 · CRNX·APGE)")
+    void retiredStockAbsenceCompletesTheMarket() {
+        long retired = insertStock("000020", "상폐종목");
+        long alive = insertStock("000030", "정상종목");
+        try {
+            for (long id : List.of(retired, alive)) {
+                jdbcTemplate.update("INSERT INTO universe_membership (universe_code, stock_id, effective_from) VALUES "
+                        + "('KOSPI_TOP200', ?, ?)", id, AS_OF.minusYears(1));
+            }
+            fakeFinancialSource.reset();
+            fakeFinancialSource.withReports(alive, List.of(report()))
+                    .failingWith(retired, DataSourceException.answered(DataSourceException.Kind.NOT_FOUND,
+                            "fake-financial", "신선한 판에 없다"));
+
+            job.run(today(), BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of(), "KOSPI_TOP200");
+
+            assertThat(latest("scope_reason")).as("유니버스를 골랐다 — 시작부터 좁다").isEqualTo("ARGS");
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).as("KOSPI는 끝났다 — 남는 것은 소스 없는 US")
+                    .isEqualTo("US");
+        } finally {
+            fakeFinancialSource.reset();
+            cleanUpStocks("000020", "000030");
+        }
+    }
+
+    @Test
+    @DisplayName("현재 편입이고 최근 봉이 있는 종목의 신선한 미매핑은 답 못 받음 — 신규 상장 등록 지연 꼴이라 다음 차례에 다시 묻는다")
+    void listedStockAbsenceLeavesTheMarketIncomplete() {
+        long alive = insertStock("000660", "SK하이닉스");
+        try {
+            jdbcTemplate.update("INSERT INTO universe_membership (universe_code, stock_id, effective_from) VALUES (?, ?, ?)",
+                    UNIVERSE, alive, AS_OF.minusYears(1));
+            jdbcTemplate.update("""
+                    INSERT INTO price_daily (stock_id, trade_date, open, high, low, close, adj_close, volume)
+                    VALUES (?, ?, 1, 1, 1, 1, 1, 1)
+                    """, memberId, today());
+            fakeFinancialSource.reset();
+            fakeFinancialSource.withReports(alive, List.of(report()))
+                    .failingWith(memberId, DataSourceException.answered(DataSourceException.Kind.NOT_FOUND,
+                            "fake-financial", "신선한 판에 없다"));
+
+            job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+            assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
+            assertThat(latest("array_to_string(incomplete_markets, ',')")).isEqualTo("KOSPI,US");
+            assertThat(latest("note")).contains("KOSPI 없음(답 미확인) 1");
+        } finally {
+            fakeFinancialSource.reset();
+            jdbcTemplate.update("DELETE FROM price_daily WHERE stock_id = ?", memberId);
+            cleanUpStocks("000660");
+        }
+    }
+
+    private void cleanUpStocks(String... tickers) {
+        for (String ticker : tickers) {
+            jdbcTemplate.update("DELETE FROM financial_column_absence WHERE stock_id IN (SELECT id FROM stock WHERE ticker = ?)", ticker);
+            jdbcTemplate.update("DELETE FROM financial_statement WHERE stock_id IN (SELECT id FROM stock WHERE ticker = ?)", ticker);
+            jdbcTemplate.update("DELETE FROM batch_execution_failure WHERE stock_id IN (SELECT id FROM stock WHERE ticker = ?)", ticker);
+            jdbcTemplate.update("DELETE FROM universe_membership WHERE stock_id IN (SELECT id FROM stock WHERE ticker = ?)", ticker);
+            jdbcTemplate.update("DELETE FROM stock WHERE ticker = ?", ticker);
+        }
+    }
+
+    /** 정기 실행의 기준일 — 지금이 아니면 기록 계층이 PAST_DATE로 찍어 시장 판정과 무관하게 NARROW다. */
+    private static LocalDate today() {
+        return LocalDate.now(java.time.ZoneId.of("Asia/Seoul"));
+    }
+
+    private String latest(String column) {
+        return jdbcTemplate.queryForObject("SELECT " + column + "::text FROM batch_execution WHERE job_name = ? "
+                + "ORDER BY id DESC LIMIT 1", String.class, FinancialRefillJob.JOB_NAME);
     }
 
     private long insertStock(String ticker, String name) {

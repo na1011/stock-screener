@@ -1,7 +1,7 @@
 import type {
   BatchExecution,
   BatchStatus,
-  ExecutionScope,
+  ExecutionScopeReason,
   InteractionAction,
   TriggeredBy,
 } from '@/api/types'
@@ -69,21 +69,70 @@ export function triggeredByLabel(triggeredBy: TriggeredBy): string {
   }
 }
 
+/** 범위 덧말 — 실행 주체 칸에 붙는 짧은 낱말과, 왜 연체 판정에 안 세는지의 툴팁. */
+export interface ScopeNote {
+  label: string
+  title: string
+}
+
+const NOT_COUNTED = '연체 판정에 세지 않습니다'
+
 /**
- * 범위 표지(V63)의 덧말. **`NARROW`만 말한다** — 연체 시계에 안 세는 실행이 그것이다.
+ * 범위 표지(V63 · V65)의 덧말. **`NARROW`만 말한다** — 연체 시계에 안 세는 실행이 그것이다.
+ *
+ * 사유(`scopeReason`)마다 낱말이 다르다 — 「시장 미완료」를 「좁힘」으로 그리면 정기 범위로 돈 실행을 손으로 좁힌 실행으로
+ * 읽는다. **note를 파싱하지 않는다**(서버가 구조화된 칸으로 준다). 모르는 사유는 던진다 — 뜻이 왜곡되는 자리다.
  *
  * `FULL`과 표지 전(`null`)은 덧말이 없다. 표지 전 행에 「범위 모름」을 달면 이력 전체가 그 낱말로 덮이고,
- * 그 사실은 연체 배너가 한 번 말한다.
+ * 그 사실은 연체 배너가 한 번 말한다. 사유 기록 전(V65 전) `NARROW`는 예전 낱말 「좁힘」이다.
  */
-export function scopeNote(scope: ExecutionScope | null): string | null {
-  switch (scope) {
-    case 'NARROW':
-      return '좁힘'
+export function scopeNote(
+  execution: Pick<BatchExecution, 'scope' | 'scopeReason' | 'incompleteMarkets'>,
+): ScopeNote | null {
+  switch (execution.scope) {
     case 'FULL':
     case null:
       return null
+    case 'NARROW':
+      break
     default:
-      return assertNever(scope)
+      return assertNever(execution.scope)
+  }
+  const base =
+    execution.scopeReason === null
+      ? { label: '좁힘', title: `정기 실행과 범위가 달라 ${NOT_COUNTED}(사유 기록 전 실행)` }
+      : reasonNote(execution.scopeReason, execution.incompleteMarkets)
+  // 시작부터 좁힌 실행이 시장까지 못 끝냈으면 그것도 말한다 — 사유는 처음 것 그대로다(서버 규칙).
+  if (execution.scopeReason !== 'MARKET_INCOMPLETE' && execution.incompleteMarkets.length > 0) {
+    return {
+      label: `${base.label} · 시장 미완료 ${execution.incompleteMarkets.join(', ')}`,
+      title: base.title,
+    }
+  }
+  return base
+}
+
+function reasonNote(reason: ExecutionScopeReason, markets: string[]): ScopeNote {
+  switch (reason) {
+    case 'ARGS':
+      return { label: '좁힘', title: `티커·연수·표 등 인자로 좁혀 정기 실행과 범위가 달라 ${NOT_COUNTED}` }
+    case 'RERUN':
+      return { label: '재실행', title: `실패분만 다시 돈 실행이라 ${NOT_COUNTED}` }
+    case 'GAP_FILL':
+      return { label: '좁힘', title: `정기 경로가 결손 티커로 좁혀 부른 실행이라 ${NOT_COUNTED}` }
+    case 'PAST_DATE':
+      return { label: '과거 기준일', title: `기준일이 지금이 아니라 정기 실행과 범위가 달라 ${NOT_COUNTED}` }
+    case 'NO_SCHEDULED_RANGE':
+      return { label: '정기 범위 없음', title: `정기 실행이 없는 잡이라 ${NOT_COUNTED}` }
+    case 'MARKET_INCOMPLETE':
+      return {
+        label: markets.length > 0 ? `시장 미완료 ${markets.join(', ')}` : '시장 미완료',
+        title:
+          `정기 범위로 돌았지만 마감 때 소스의 답을 다 받지 못한 시장이 있어 ${NOT_COUNTED} — ` +
+          '연체로 남아 다음 무거운 잡 차례에 다시 돕니다',
+      }
+    default:
+      return assertNever(reason)
   }
 }
 

@@ -731,11 +731,25 @@ export const TRIGGERED_BY = ['SCHEDULER', 'ADMIN', 'MANUAL', 'GAP_FILL'] as cons
 export type TriggeredBy = (typeof TRIGGERED_BY)[number]
 
 /**
- * 정기 실행과 같은 범위였는가(V63 · ADR-0172). 서버의 연체 판정이 `NARROW`를 시계에서 뺀다 —
- * 티커·연수·표로 좁힌 손 실행이 무거운 잡의 첫 정기 실행을 밀지 않게.
+ * 신선도 시계에 세는 실행인가(V63 · ADR-0172 · ADR-0174). 서버의 연체 판정이 `NARROW`를 시계에서 뺀다 —
+ * 티커·연수·표로 좁힌 손 실행도, 정기 범위로 돌았지만 마감 때 시장 미완료인 실행도 무거운 잡의 시계를 밀지 않게.
  */
 export const EXECUTION_SCOPES = ['FULL', 'NARROW'] as const
 export type ExecutionScope = (typeof EXECUTION_SCOPES)[number]
+
+/**
+ * `NARROW`인 이유(V65 · ADR-0174). 화면 덧말이 이것으로 갈린다 — **note를 파싱하지 않는다**.
+ * `MARKET_INCOMPLETE`는 「좁힌 실행」이 아니라 「정기 범위로 돌았지만 시장을 못 끝냈다」이다.
+ */
+export const EXECUTION_SCOPE_REASONS = [
+  'ARGS',
+  'RERUN',
+  'GAP_FILL',
+  'PAST_DATE',
+  'NO_SCHEDULED_RANGE',
+  'MARKET_INCOMPLETE',
+] as const
+export type ExecutionScopeReason = (typeof EXECUTION_SCOPE_REASONS)[number]
 
 /** 잡이 받는 입력. 화면이 날짜 칸을 몇 개 그릴지 정한다. */
 export const JOB_PARAMETERS = ['TARGET_DATE', 'DATE_RANGE'] as const
@@ -778,6 +792,10 @@ export interface BatchExecution {
   triggeredBy: TriggeredBy
   /** **`null`은 범위 표지 전 실행이다** — 범위를 모른다. `FULL`로 접지 않는다(연체 판정은 예전처럼 센다). */
   scope: ExecutionScope | null
+  /** **`null`은 `FULL`이거나 사유 기록 전(V65 전) `NARROW`다** — `ARGS`로 접지 않는다. */
+  scopeReason: ExecutionScopeReason | null
+  /** 마감 때 미완료로 판정한 시장(KOSPI·KOSDAQ·US). 판정하지 않는 잡이거나 없었으면 빈 배열이다. */
+  incompleteMarkets: string[]
   note: string | null
   /** 0이면 재실행 버튼을 켜지 않는다. */
   unresolvedFailureCount: number
@@ -866,6 +884,13 @@ export interface StaleJob {
   scheduledOnly: boolean
   /** 화면에 실행 버튼이 **없는** 잡의 CLI 인자. 버튼이 있으면 `null`이다. */
   howToRun: string | null
+  /**
+   * 마지막으로 센 성공 뒤의 **정기 시도** 수(ADR-0174). 0이면 「안 돌았다」, 0보다 크면 「돌았지만 시계에 안 셌다」다 —
+   * 둘을 같은 문장으로 그리면 뒤의 것이 거짓이 된다.
+   */
+  scheduledAttempts: number
+  /** 가장 최근 정기 시도가 미완료로 판정한 시장. 비어 있지 않으면 손 실행보다 원인 확인을 먼저 권한다. */
+  incompleteMarkets: string[]
 }
 
 export interface BatchSummary {

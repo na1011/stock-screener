@@ -20,11 +20,28 @@ public class DataSourceException extends Exception {
     private final Kind kind;
     private final String sourceName;
 
+    /**
+     * 소스가 <b>결정적으로 답했는가</b> — 「그 종목을 소스에 물어 답을 받았고, 다시 물어도 같은 답이다」(ADR-0174).
+     *
+     * <p>종류({@link Kind})로는 못 가른다. 같은 {@code NOT_FOUND}·{@code MALFORMED}가 결정적인 답(신선한 매핑 판에 그 종목이
+     * 없다)일 수도, 끊긴 전송이나 우리 요청 오류(DART {@code 021}·{@code 100} — 답 못 받음)일 수도 있다. 그래서 그 사실을 아는
+     * <b>던지는 자리</b>가 {@link #answered}로 명시하고, <b>기본은 거짓(「답 못 받음」)</b>이다 — 모르는 실패를 「답함」으로 접으면
+     * 못 받은 시장이 신선도 시계를 민다. 지금 표지를 다는 자리는 신선한 매핑 판의 부재 둘(SEC CIK · DART 고유번호 — 재무·전체
+     * 재무제표)뿐이다. 저장되는 실패 행(종류 · 소스 · 메시지)은 이것과 무관하다.
+     */
+    private final boolean sourceAnswered;
+
     public DataSourceException(Kind kind, String sourceName, String message) {
         this(kind, sourceName, message, null);
     }
 
     public DataSourceException(Kind kind, String sourceName, String message, Throwable cause) {
+        this(kind, sourceName, message, cause, false);
+    }
+
+    /** 하위형({@code DartResponse}의 「데이터 없음」 등)이 표지까지 정해 만든다. */
+    protected DataSourceException(Kind kind, String sourceName, String message, Throwable cause,
+                                  boolean sourceAnswered) {
         super(message, cause);
         if (kind == null) {
             throw new IllegalArgumentException("kind가 null이다. 실패의 종류를 알 수 없으면 재시도 판단이 불가능하다.");
@@ -35,6 +52,23 @@ public class DataSourceException extends Exception {
         }
         this.kind = kind;
         this.sourceName = sourceName;
+        this.sourceAnswered = sourceAnswered;
+    }
+
+    /**
+     * 소스가 결정적으로 답한 실패를 만든다({@link #sourceAnswered()}) — {@code NOT_FOUND}·{@code MALFORMED}만 된다. 한도·일시
+     * 장애·인증은 정의상 답을 못 받은 것이라 받지 않는다.
+     */
+    public static DataSourceException answered(Kind kind, String sourceName, String message) {
+        if (kind != Kind.NOT_FOUND && kind != Kind.MALFORMED) {
+            throw new IllegalArgumentException("소스가 답한 실패는 NOT_FOUND·MALFORMED뿐이다: " + kind);
+        }
+        return new DataSourceException(kind, sourceName, message, null, true);
+    }
+
+    /** 소스가 결정적으로 답한 실패인가. 기본은 거짓이다 — {@link #answered}로 만든 것만 참이다. */
+    public boolean sourceAnswered() {
+        return sourceAnswered;
     }
 
     public Kind kind() {

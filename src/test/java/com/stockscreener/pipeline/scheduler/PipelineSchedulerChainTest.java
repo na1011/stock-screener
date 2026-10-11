@@ -3,7 +3,9 @@ package com.stockscreener.pipeline.scheduler;
 import com.stockscreener.indicator.IndicatorCalendar;
 import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
+import com.stockscreener.pipeline.batch.BatchExecutionContext;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
+import com.stockscreener.pipeline.batch.BatchExecutions;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.pipeline.batch.BatchStatus;
 import com.stockscreener.pipeline.batch.CorporateActionJob;
@@ -26,8 +28,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.time.DayOfWeek;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,6 +81,7 @@ class PipelineSchedulerChainTest {
     private UniverseIntegrityAlerter universeIntegrityAlerter;
     private ShareBasisDeriver shareBasisDeriver;
     private IndicatorCalendar indicatorCalendar;
+    private BatchExecutions batchExecutions;
     private PipelineScheduler scheduler;
 
     @BeforeEach
@@ -92,6 +99,7 @@ class PipelineSchedulerChainTest {
         universeIntegrityAlerter = mock(UniverseIntegrityAlerter.class);
         shareBasisDeriver = mock(ShareBasisDeriver.class);
         indicatorCalendar = mock(IndicatorCalendar.class);
+        batchExecutions = mock(BatchExecutions.class);
         // 평상시: 13:30이 지표 달력을 대상일까지 늘려 두었다.
         when(indicatorCalendar.latestIndicatorDate(anyCollection())).thenReturn(Optional.of(TARGET_DATE));
 
@@ -108,7 +116,7 @@ class PipelineSchedulerChainTest {
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob,
                         indicatorCalendar),
-                universeIntegrityAlerter);
+                universeIntegrityAlerter, batchExecutions);
     }
 
     @Test
@@ -310,9 +318,10 @@ class PipelineSchedulerChainTest {
     }
 
     @Test
-    @DisplayName("한 번도 안 돈 잡을 보정이 가장 먼저 집는다 — 0일로 접으면 영원히 안 돈다")
+    @DisplayName("정기 시도가 같으면(둘 다 없음) 한 번도 성공 못 한 잡을 보정이 먼저 집는다 — 0일로 접으면 영원히 안 돈다")
     void neverRunJobWinsTheOverdueFallback() {
-        // daysSinceLastSuccess가 「없음」을 0이 아니라 무한대로 내는 것이 이 판정의 전제다.
+        // daysSinceLastSuccess가 「없음」을 0이 아니라 무한대로 내는 것이 동률 규칙의 전제다. 첫 키(마지막 정기 시도)는
+        // 둘 다 없음(목의 null)이라 같다 — 첫 키가 갈리면 그것이 먼저다(leastRecentlyAttemptedOverdueJobGoesFirst).
         when(freshnessPolicy.daysSinceLastSuccess(eq(GovernanceLoadJob.JOB_NAME), any()))
                 .thenReturn(Long.MAX_VALUE);
         overdue(FinancialRefillJob.JOB_NAME, 30);
@@ -321,6 +330,150 @@ class PipelineSchedulerChainTest {
         // 수요일 잡이 최근에 돌았으므로 보정이 돈다. 그때 60일 밀린 것보다 한 번도 안 돈 것이 먼저다.
         assertThat(scheduler.heavyJobDueToday(DayOfWeek.WEDNESDAY))
                 .isEqualTo(GovernanceLoadJob.JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("연체가 여럿이고 정기 시도가 전부 없으면 마지막 성공에서 오래된 것부터 — 키가 같을 때의 동률 규칙")
+    void tieOnNoAttemptsFallsBackToStaleness() {
+        overdue(GovernanceLoadJob.JOB_NAME, 30);
+        overdue(FullStatementRefillJob.JOB_NAME, 45);
+        overdue(FinancialRefillJob.JOB_NAME, 40);
+
+        // 월요일 — 배정이 없다. 셋 다 정기 시도가 없으니(목의 null) 동률이고, 가장 오래 밀린 FSR이다.
+        assertThat(scheduler.heavyJobDueToday(DayOfWeek.MONDAY)).isEqualTo(FullStatementRefillJob.JOB_NAME);
+    }
+
+    @Test
+    @DisplayName("연체가 여럿이면 정기 시도가 가장 오래된(없음이 맨 앞) 것이 먼저다 — 매번 미완료로 끝나는 잡이 차례를 독차지하지 않게")
+    void leastRecentlyAttemptedOverdueJobGoesFirst() {
+        overdue(GovernanceLoadJob.JOB_NAME, 60);
+        overdue(FinancialRefillJob.JOB_NAME, 30);
+        fresh(FullStatementRefillJob.JOB_NAME);
+        when(freshnessPolicy.lastScheduledAttemptAt(GovernanceLoadJob.JOB_NAME))
+                .thenReturn(Instant.parse("2026-10-29T05:15:00Z"));
+
+        assertThat(scheduler.heavyJobDueToday(DayOfWeek.FRIDAY))
+                .as("G가 더 오래 밀렸어도 어제 시도했고 FR은 한 번도 시도 못 했다")
+                .isEqualTo(FinancialRefillJob.JOB_NAME);
+
+        when(freshnessPolicy.lastScheduledAttemptAt(FinancialRefillJob.JOB_NAME))
+                .thenReturn(Instant.parse("2026-10-30T05:15:00Z"));
+        assertThat(scheduler.heavyJobDueToday(DayOfWeek.MONDAY))
+                .as("FR이 그 뒤에 시도했으면 이번엔 G 차례다")
+                .isEqualTo(GovernanceLoadJob.JOB_NAME);
+    }
+
+    /**
+     * 운영 시계를 재생한다(2026-10-07 운영 SELECT · ADR-0174) — 마지막 성공 G 09-20 16:14:41 · FSR 09-23 00:26:25 ·
+     * FR 10-03 21:17:41(KST) · SCHEDULER 행 0. G가 <b>매번 미완료</b>로 끝나 시계를 못 밀고, FSR·FR은 돌면 끝까지 마친다고 놓는다.
+     *
+     * <p>새 키(마지막 정기 시도)면 10-19 G · 10-20 G · 10-21 FSR · 10-22~29 G · 10-30 FR이다. 대조군(지금까지의 키 = 마지막
+     * 성공만 · 시도를 모름)은 G가 늘 가장 오래 밀려 FR이 배정 요일 11-05(목)까지 밀린다 — 그 엿새가 이 고침의 이득이다.
+     */
+    @Test
+    @DisplayName("운영 시계 재생 — G가 매번 미완료여도 FR이 10-30에 돈다(대조: 시도를 모르는 키는 11-05)")
+    void replayOfTheOperationalClock() {
+        Map<String, LocalDate> picked = replay(true);
+        assertThat(picked).containsExactly(
+                Map.entry(GovernanceLoadJob.JOB_NAME + "@2026-10-19", LocalDate.of(2026, 10, 19)),
+                Map.entry(GovernanceLoadJob.JOB_NAME + "@2026-10-20", LocalDate.of(2026, 10, 20)),
+                Map.entry(FullStatementRefillJob.JOB_NAME + "@2026-10-21", LocalDate.of(2026, 10, 21)),
+                Map.entry(GovernanceLoadJob.JOB_NAME + "@2026-10-22", LocalDate.of(2026, 10, 22)),
+                Map.entry(GovernanceLoadJob.JOB_NAME + "@2026-10-23", LocalDate.of(2026, 10, 23)),
+                Map.entry(GovernanceLoadJob.JOB_NAME + "@2026-10-26", LocalDate.of(2026, 10, 26)),
+                Map.entry(GovernanceLoadJob.JOB_NAME + "@2026-10-27", LocalDate.of(2026, 10, 27)),
+                Map.entry(GovernanceLoadJob.JOB_NAME + "@2026-10-28", LocalDate.of(2026, 10, 28)),
+                Map.entry(GovernanceLoadJob.JOB_NAME + "@2026-10-29", LocalDate.of(2026, 10, 29)),
+                Map.entry(FinancialRefillJob.JOB_NAME + "@2026-10-30", LocalDate.of(2026, 10, 30)));
+
+        Map<String, LocalDate> control = replay(false);
+        assertThat(control.entrySet().stream()
+                .filter(entry -> entry.getKey().startsWith(FinancialRefillJob.JOB_NAME))
+                .map(Map.Entry::getValue).findFirst())
+                .as("대조군 — 시도를 모르는 키는 FR을 배정 요일까지 미룬다")
+                .contains(LocalDate.of(2026, 11, 5));
+    }
+
+    /**
+     * 10-19~11-05 평일 14:15(KST)마다 {@code heavyJobDueToday}를 부르고 그 결과로 시계를 민다. FR을 처음 고른 날에서 멈춘다.
+     *
+     * @param knowsAttempts 거짓이면 정기 시도를 늘 「없음」으로 답한다 — 지금까지의 키와 같은 순서를 낸다
+     */
+    private Map<String, LocalDate> replay(boolean knowsAttempts) {
+        java.time.ZoneId kst = java.time.ZoneId.of("Asia/Seoul");
+        Map<String, Instant> lastSuccess = new java.util.HashMap<>(Map.of(
+                GovernanceLoadJob.JOB_NAME, LocalDateTime.parse("2026-09-20T16:14:41").atZone(kst).toInstant(),
+                FullStatementRefillJob.JOB_NAME, LocalDateTime.parse("2026-09-23T00:26:25").atZone(kst).toInstant(),
+                FinancialRefillJob.JOB_NAME, LocalDateTime.parse("2026-10-03T21:17:41").atZone(kst).toInstant()));
+        Map<String, Instant> lastAttempt = new java.util.HashMap<>();
+        Instant[] now = new Instant[1];
+        JobFreshnessPolicy policy = mock(JobFreshnessPolicy.class);
+        when(policy.daysSinceLastSuccess(anyString(), any())).thenAnswer(call ->
+                Duration.between(lastSuccess.get(call.<String>getArgument(0)), now[0]).toDays());
+        when(policy.lastScheduledAttemptAt(anyString())).thenAnswer(call ->
+                knowsAttempts ? lastAttempt.get(call.<String>getArgument(0)) : null);
+        PipelineScheduler replayed = new PipelineScheduler(
+                dailyUpdateJob, universeRebalanceJob, corporateActionJob, adjustmentRebuildJob,
+                governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
+                mock(JobFreshnessAlerter.class), policy,
+                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
+                universeIntegrityAlerter, batchExecutions);
+
+        Map<String, LocalDate> picked = new java.util.LinkedHashMap<>();
+        for (LocalDate day = LocalDate.of(2026, 10, 19); !day.isAfter(LocalDate.of(2026, 11, 5));
+             day = day.plusDays(1)) {
+            if (day.getDayOfWeek() == DayOfWeek.SATURDAY || day.getDayOfWeek() == DayOfWeek.SUNDAY) {
+                continue;
+            }
+            now[0] = day.atTime(14, 15).atZone(kst).toInstant();
+            String due = replayed.heavyJobDueToday(day.getDayOfWeek());
+            if (due == null) {
+                continue;
+            }
+            picked.put(due + "@" + day, day);
+            lastAttempt.put(due, now[0]);
+            // G는 매번 시장 미완료로 끝나 시계를 못 민다 — 나머지는 끝까지 마친다.
+            if (!GovernanceLoadJob.JOB_NAME.equals(due)) {
+                lastSuccess.put(due, now[0]);
+            }
+            if (FinancialRefillJob.JOB_NAME.equals(due)) {
+                break;
+            }
+        }
+        return picked;
+    }
+
+    @Test
+    @DisplayName("잡이 실행 행을 만들기 전에 던지면 FAILED 시도 행을 「시작 실패」로 남기고 다시 던진다 — 순서의 키가 멈추지 않게")
+    void startFailureLeavesAnAttemptRow() {
+        overdue(GovernanceLoadJob.JOB_NAME, 40);
+        fresh(FullStatementRefillJob.JOB_NAME, FinancialRefillJob.JOB_NAME);
+        IllegalStateException boom = new IllegalStateException("대상 해석 실패");
+        doThrow(boom).when(governanceLoadJob).run(any(), any(), any(), any(), anyList(), anyList());
+        BatchExecutionContext attempt = mock(BatchExecutionContext.class);
+        when(batchExecutions.start(eq(GovernanceLoadJob.JOB_NAME), any(),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(0),
+                eq(BatchExecutionRecorder.DeclaredScope.FULL))).thenReturn(attempt);
+
+        assertThatThrownBy(() -> scheduler.runHeavyJobOfTheDay()).isSameAs(boom);
+
+        verify(attempt).failUnexpectedly("시작 실패", boom);
+    }
+
+    @Test
+    @DisplayName("잡이 행을 만든 뒤 던지면 시도 행을 또 안 만든다 — 그 행은 잡이 failUnexpectedly로 이미 마감했다")
+    void failureAfterStartDoesNotAddAnotherRow() {
+        overdue(GovernanceLoadJob.JOB_NAME, 40);
+        fresh(FullStatementRefillJob.JOB_NAME, FinancialRefillJob.JOB_NAME);
+        IllegalStateException boom = new IllegalStateException("도중 실패");
+        doThrow(boom).when(governanceLoadJob).run(any(), any(), any(), any(), anyList(), anyList());
+        // 잡이 행을 만들었다 — 마지막 정기 시도가 부르기 전과 뒤에 다르다.
+        when(freshnessPolicy.lastScheduledAttemptAt(GovernanceLoadJob.JOB_NAME))
+                .thenReturn(null, Instant.parse("2026-10-20T05:15:00Z"));
+
+        assertThatThrownBy(() -> scheduler.runHeavyJobOfTheDay()).isSameAs(boom);
+
+        verifyNoInteractions(batchExecutions);
     }
 
     @Test
@@ -408,9 +561,9 @@ class PipelineSchedulerChainTest {
         // 이 시험이 초록이다. 기준일 규칙은 기록 계층이 모든 잡에 같게 더하므로 실제 시계로 함께 묻는다.
         BatchExecutionRecorder recorder = new BatchExecutionRecorder(null, java.time.Clock.systemUTC());
         java.util.function.Consumer<LocalDate> current = asOf -> assertThat(recorder.recordedScope(
-                "scheduled", asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, BatchExecutionRecorder.Scope.FULL))
+                "scheduled", asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, BatchExecutionRecorder.DeclaredScope.FULL))
                 .as("정기 호출의 기준일 %s가 「지금」이다", asOf)
-                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+                .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         BatchExecutionRecorder.TriggeredBy scheduled = BatchExecutionRecorder.TriggeredBy.SCHEDULER;
 
         // 13:30
@@ -429,7 +582,7 @@ class PipelineSchedulerChainTest {
         verify(corporateActionJob).run(caDate.capture(), eq(scheduled), caFrom.capture(), caTickers.capture(),
                 caUniverse.capture());
         assertThat(CorporateActionJob.scopeOf(caFrom.getValue(), caTickers.getValue(), caUniverse.getValue()))
-                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+                .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         current.accept(caDate.getValue());
         ArgumentCaptor<LocalDate> adjDate = ArgumentCaptor.forClass(LocalDate.class);
         ArgumentCaptor<List<String>> adjTickers = ArgumentCaptor.forClass(List.class);
@@ -437,7 +590,7 @@ class PipelineSchedulerChainTest {
         verify(adjustmentRebuildJob).runAndReport(adjDate.capture(), eq(scheduled), adjTickers.capture(),
                 adjUniverse.capture());
         assertThat(AdjustmentRebuildJob.scopeOf(adjTickers.getValue(), adjUniverse.getValue()))
-                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+                .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         current.accept(adjDate.getValue());
 
         // 14:15 무거운 잡 셋 — 하루에 하나라 연체를 하나씩 바꿔 가며 세 번 부른다
@@ -458,7 +611,7 @@ class PipelineSchedulerChainTest {
         verify(governanceLoadJob).run(gDate.capture(), eq(scheduled), gYear.capture(), gSpan.capture(),
                 gEndpoints.capture(), gTickers.capture());
         assertThat(GovernanceLoadJob.scopeOf(gYear.getValue(), gSpan.getValue(), gEndpoints.getValue(),
-                gTickers.getValue())).isEqualTo(BatchExecutionRecorder.Scope.FULL);
+                gTickers.getValue())).isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         current.accept(gDate.getValue());
         ArgumentCaptor<LocalDate> fsrDate = ArgumentCaptor.forClass(LocalDate.class);
         ArgumentCaptor<Integer> fsrYears = ArgumentCaptor.forClass(Integer.class);
@@ -467,7 +620,7 @@ class PipelineSchedulerChainTest {
         verify(fullStatementRefillJob).run(fsrDate.capture(), eq(scheduled), fsrYears.capture(),
                 fsrTickers.capture(), any(Boolean.class), fsrAllQuarters.capture());
         assertThat(FullStatementRefillJob.scopeOf(fsrYears.getValue(), fsrTickers.getValue(),
-                fsrAllQuarters.getValue())).isEqualTo(BatchExecutionRecorder.Scope.FULL);
+                fsrAllQuarters.getValue())).isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         current.accept(fsrDate.getValue());
         ArgumentCaptor<LocalDate> frDate = ArgumentCaptor.forClass(LocalDate.class);
         ArgumentCaptor<Integer> frYears = ArgumentCaptor.forClass(Integer.class);
@@ -476,7 +629,7 @@ class PipelineSchedulerChainTest {
         verify(financialRefillJob).runAndReport(frDate.capture(), eq(scheduled), frYears.capture(),
                 frTickers.capture(), frUniverse.capture());
         assertThat(FinancialRefillJob.scopeOf(frYears.getValue(), frTickers.getValue(), frUniverse.getValue()))
-                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+                .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         current.accept(frDate.getValue());
 
         // 14:18 · 14:20
@@ -485,7 +638,7 @@ class PipelineSchedulerChainTest {
         ArgumentCaptor<LocalDate> deriveDate = ArgumentCaptor.forClass(LocalDate.class);
         ArgumentCaptor<List<String>> deriveTickers = ArgumentCaptor.forClass(List.class);
         verify(governanceDeriveJob).run(deriveDate.capture(), eq(scheduled), deriveTickers.capture());
-        assertThat(GovernanceDeriveJob.scopeOf(deriveTickers.getValue())).isEqualTo(BatchExecutionRecorder.Scope.FULL);
+        assertThat(GovernanceDeriveJob.scopeOf(deriveTickers.getValue())).isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         current.accept(deriveDate.getValue());
         // ① 은 사슬 안(GAP_FILL · 좁힘)과 14:20(SCHEDULER · 전원) 두 번 불렸다. SCHEDULER로 찍히는 것만 FULL이어야 한다.
         ArgumentCaptor<LocalDate> originDate = ArgumentCaptor.forClass(LocalDate.class);
@@ -497,7 +650,7 @@ class PipelineSchedulerChainTest {
         for (int i = 0; i < originTrigger.getAllValues().size(); i++) {
             if (originTrigger.getAllValues().get(i) == scheduled) {
                 assertThat(IndicatorBackfillJob.originScopeOf(originTickers.getAllValues().get(i)))
-                        .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+                        .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
                 current.accept(originDate.getAllValues().get(i));
             }
         }

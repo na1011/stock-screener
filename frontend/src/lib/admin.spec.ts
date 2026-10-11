@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { BATCH_STATUSES, INTERACTION_ACTIONS, TRIGGERED_BY } from '@/api/types'
+import {
+  BATCH_STATUSES,
+  EXECUTION_SCOPE_REASONS,
+  INTERACTION_ACTIONS,
+  TRIGGERED_BY,
+} from '@/api/types'
 import type { BatchExecution } from '@/api/types'
 
 import {
@@ -30,6 +35,8 @@ function execution(overrides: Partial<BatchExecution> = {}): BatchExecution {
     retriedFromId: null,
     triggeredBy: 'SCHEDULER',
     scope: null,
+    scopeReason: null,
+    incompleteMarkets: [],
     note: null,
     unresolvedFailureCount: 2,
     ...overrides,
@@ -58,9 +65,38 @@ describe('배치 상태 표현', () => {
 
 describe('트리거 표현', () => {
   it('범위 덧말은 NARROW에만 붙는다 — 표지 전(null)을 「모름」으로 덮지 않는다', () => {
-    expect(scopeNote('NARROW')).toBe('좁힘')
-    expect(scopeNote('FULL')).toBeNull()
-    expect(scopeNote(null)).toBeNull()
+    expect(scopeNote(execution({ scope: 'FULL' }))).toBeNull()
+    expect(scopeNote(execution({ scope: null }))).toBeNull()
+    // 사유 기록 전(V65 전) NARROW는 예전 낱말이다 — ARGS로 접지 않고 툴팁이 그 사실을 말한다.
+    expect(scopeNote(execution({ scope: 'NARROW' }))?.label).toBe('좁힘')
+    expect(scopeNote(execution({ scope: 'NARROW' }))?.title).toContain('사유 기록 전')
+  })
+
+  it.each(EXECUTION_SCOPE_REASONS)('NARROW 사유 %s에 덧말과 툴팁이 있다', (reason) => {
+    const note = scopeNote(execution({ scope: 'NARROW', scopeReason: reason }))
+    expect(note?.label).toBeTruthy()
+    expect(note?.title).toContain('연체 판정에 세지 않습니다')
+  })
+
+  it('IMPORTANT — 시장 미완료는 「좁힘」이 아니다 — 정기 범위로 돈 실행을 손으로 좁힌 실행으로 읽으면 원인을 엉뚱한 데서 찾는다', () => {
+    const note = scopeNote(
+      execution({ scope: 'NARROW', scopeReason: 'MARKET_INCOMPLETE', incompleteMarkets: ['KOSPI', 'US'] }),
+    )
+    expect(note?.label).toBe('시장 미완료 KOSPI, US')
+    expect(note?.title).not.toContain('범위가 달라')
+  })
+
+  it('처음부터 좁힌 실행이 시장까지 못 끝냈으면 둘 다 말한다 — 사유는 처음 것 그대로다', () => {
+    const note = scopeNote(
+      execution({ scope: 'NARROW', scopeReason: 'ARGS', incompleteMarkets: ['US'] }),
+    )
+    expect(note?.label).toBe('좁힘 · 시장 미완료 US')
+  })
+
+  it('모르는 사유는 던진다 — 틀린 덧말은 실행을 잘못 설명한다', () => {
+    expect(() =>
+      scopeNote(execution({ scope: 'NARROW', scopeReason: 'GUESS' as never })),
+    ).toThrow()
   })
 
   it.each(TRIGGERED_BY)('%s에 한글 라벨이 있다', (triggeredBy) => {

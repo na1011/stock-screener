@@ -50,6 +50,13 @@ public class FullStatementRefillJob {
     // 4,200 요청 → 실제콜 5,552 · 배수 1.32)에서 외삽하면 약 4,160콜 — 쿼터의 23%다.
     static final int DEFAULT_YEARS_BACK = 8;
 
+    /**
+     * 이 잡이 다루는 시장 — 마감 때 시장마다 끝까지 마쳤는지 판정한다(ADR-0174 · {@link MarketCompleteness}). 미국이 없는 것은
+     * 진짜 한계다 — 미국 전체 재무제표 소스({@code FullStatementDataSource})가 원리적으로 없고, 미국 영업활동현금흐름은
+     * {@code financial-refill}이 SEC로 채운다. 넣으면 매 실행이 「소스 없음」으로 미완료가 되어 이 잡이 영영 시계에 안 든다.
+     */
+    static final List<String> MARKETS = List.of("KOSPI", "KOSDAQ");
+
     private static final Logger log = LoggerFactory.getLogger(FullStatementRefillJob.class);
 
     private final FullStatementCollector collector;
@@ -57,15 +64,17 @@ public class FullStatementRefillJob {
     private final BatchExecutions batchExecutions;
     private final FinancialLoadWindow loadWindow;
     private final DataSourceRegistry registry;
+    private final RetirementEvidence retirementEvidence;
 
     public FullStatementRefillJob(FullStatementCollector collector, StockRegistrar stockRegistrar,
                                   BatchExecutions batchExecutions, FinancialLoadWindow loadWindow,
-                                  DataSourceRegistry registry) {
+                                  DataSourceRegistry registry, RetirementEvidence retirementEvidence) {
         this.collector = collector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.loadWindow = loadWindow;
         this.registry = registry;
+        this.retirementEvidence = retirementEvidence;
     }
 
     /**
@@ -73,9 +82,9 @@ public class FullStatementRefillJob {
      *
      * <p>{@code --all-quarters} 없는 전 종목 실행은 FY만 받으므로 {@code NARROW}다 — 정기 실행이 받는 분기 행을 안 받는다.
      */
-    public static BatchExecutionRecorder.Scope scopeOf(Integer yearsBack, List<String> tickers, boolean allQuarters) {
+    public static BatchExecutionRecorder.DeclaredScope scopeOf(Integer yearsBack, List<String> tickers, boolean allQuarters) {
         int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
-        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty()) && allQuarters
+        return BatchExecutionRecorder.DeclaredScope.byArgs((tickers == null || tickers.isEmpty()) && allQuarters
                 && years >= DEFAULT_YEARS_BACK);
     }
 
@@ -96,7 +105,11 @@ public class FullStatementRefillJob {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
         Set<StatementPeriod> periods = resolvePeriods(includeQuarters, allQuarters, tickers);
-        BatchExecutionRecorder.Scope scope = scopeOf(yearsBack, tickers, allQuarters);
+        BatchExecutionRecorder.DeclaredScope scope = scopeOf(yearsBack, tickers, allQuarters);
+        // 시작 때 소스 유무를 묻는다 — 기본 대상은 소스 없는 시장을 빼므로(withFullStatementSource) 그 시장은 대상 0으로
+        // 조용히 끝난다. 실패 행만으로는 원리적으로 안 보인다.
+        MarketCompleteness.Coverage coverage =
+                MarketCompleteness.Coverage.of(MARKETS, registry::hasFullStatementSource);
 
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers));
         if (tickers == null || tickers.isEmpty()) {
@@ -104,7 +117,7 @@ public class FullStatementRefillJob {
         }
         if (targets.isEmpty()) {
             log.info("편입 중인 활성 종목이 없다. 채울 것이 없다.");
-            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish();
+            return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope, coverage).finish();
         }
 
         int fromFiscalYear = asOf.getYear() - years;
@@ -121,8 +134,11 @@ public class FullStatementRefillJob {
                 requestedReports, requestedReports, requestedReports * 2);
         loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
 
+        // 신선한 매핑의 부재(표지)를 「답함」으로 셀 수 있는 종목 — 상장폐지 증거가 있는 것만(시작 때 한 번 · ADR-0174).
+        coverage = coverage.withRetired(retirementEvidence.retiredAmong(
+                targets.stream().map(SecurityRef::stockId).toList()));
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
+                batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope, coverage);
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 전체 재무제표 보정");
 

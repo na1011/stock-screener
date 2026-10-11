@@ -98,7 +98,7 @@ public class InitialLoadJob {
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LoadRange range) {
         // 정기 경로(리밸런싱 꼬리)의 좁힌 호출은 GAP_FILL이라 기록 계층이 NARROW로 찍는다. 손 실행은 spec 기본값일 때만 FULL이다.
-        BatchExecutionRecorder.Scope scope = BatchExecutionRecorder.Scope.of(range.equals(LoadRange.defaults()));
+        BatchExecutionRecorder.DeclaredScope scope = BatchExecutionRecorder.DeclaredScope.byArgs(range.equals(LoadRange.defaults()));
         List<Long> targetIds = resolveTargets(range);
         // 이름이 range.skipPrice()와 비슷하지만 뜻이 다르다. 이쪽은 「봉이 이미 있어 재수집이
         // 불필요한 종목」이라는 종목별 판단이고, 저쪽은 「이번 실행은 시세를 아예 안 받는다」는
@@ -167,6 +167,8 @@ public class InitialLoadJob {
                         FinancialWriter.Outcome outcome = financialCollector.collectDetailed(
                                 security, fromFiscalYear, FinancialWriter.WriteMode.APPEND_ONLY);
                         revised.addAndGet(outcome.revised());
+                        // 이 잡은 시장 판정을 안 한다(무거운 잡이 아니다) — 컨텍스트가 받기만 하고 버린다. 길을 하나로 둔다.
+                        execution.recordUnfetchedSupplements(security.marketCode(), outcome.unfetchedSupplements());
                         return outcome.changed();
                     });
                 }

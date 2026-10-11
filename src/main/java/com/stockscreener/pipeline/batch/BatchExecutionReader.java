@@ -37,7 +37,8 @@ public class BatchExecutionReader {
             e.id, e.job_name, e.target_date, e.status, e.started_at, e.finished_at,
             e.target_count, e.success_count, e.failure_count, e.written_row_count,
             e.planned_task_count, e.progress_at, e.stage_label,
-            e.retried_from_id, e.triggered_by, e.scope, e.note,
+            e.retried_from_id, e.triggered_by, e.scope, e.scope_reason,
+            array_to_string(e.incomplete_markets, ',') AS incomplete_markets, e.note,
             (SELECT count(*) FROM batch_execution_failure f
               WHERE f.execution_id = e.id AND NOT f.resolved) AS unresolved_count
             """;
@@ -259,6 +260,9 @@ public class BatchExecutionReader {
             rs.getString("triggered_by"),
             // 표지 전 실행은 NULL이다(V63). 「모름」이지 FULL이 아니다 — 접지 않는다.
             rs.getString("scope"),
+            // V65 전 NARROW 행은 NULL이다 — 「사유 기록 전」이고 ARGS로 접지 않는다.
+            rs.getString("scope_reason"),
+            marketsOf(rs.getString("incomplete_markets")),
             rs.getString("note"),
             rs.getInt("unresolved_count"));
 
@@ -288,6 +292,11 @@ public class BatchExecutionReader {
             rs.getBoolean("resolved"),
             instantOf(rs, "occurred_at"));
 
+    /** 배열 칸을 콤마로 이어 읽은 것을 되가른다. NULL·빈 배열은 빈 목록이다 — 미완료가 없었다는 뜻이 같다. */
+    private static List<String> marketsOf(String joined) {
+        return joined == null || joined.isEmpty() ? List.of() : List.of(joined.split(","));
+    }
+
     private static Instant instantOf(ResultSet rs, String column) throws SQLException {
         Timestamp timestamp = rs.getTimestamp(column);
         return timestamp == null ? null : timestamp.toInstant();
@@ -302,6 +311,9 @@ public class BatchExecutionReader {
      * @param progressAt       마지막 진척 반영 시각. {@code RUNNING}인데 이 값이 오래됐으면
      *                         멎은 것이다 — 상태만으로는 그 둘이 구분되지 않는다.
      * @param stageLabel       지금 어느 구간인가. 마감하면 비워진다.
+     * @param scope            신선도 시계에 세는가(V63). V63 전 실행은 {@code null}이다.
+     * @param scopeReason      {@code NARROW}인 이유(V65). {@code FULL}이거나 V65 전이면 {@code null}이다.
+     * @param incompleteMarkets 마감 때 미완료로 판정한 시장(V65 · ADR-0174). 판정하지 않는 잡이거나 없었으면 빈 목록이다.
      */
     public record Execution(
             long id,
@@ -320,6 +332,8 @@ public class BatchExecutionReader {
             Long retriedFromId,
             String triggeredBy,
             String scope,
+            String scopeReason,
+            List<String> incompleteMarkets,
             String note,
             int unresolvedFailureCount) {
     }

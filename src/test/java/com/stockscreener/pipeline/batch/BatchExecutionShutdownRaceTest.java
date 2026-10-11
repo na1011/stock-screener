@@ -107,7 +107,7 @@ class BatchExecutionShutdownRaceTest {
             SecurityRef security = new SecurityRef(stockId, "KOSPI", TICKER);
 
             BatchExecutionContext execution = context.getBean(BatchExecutions.class)
-                    .start(JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 2, BatchExecutionRecorder.Scope.FULL);
+                    .start(JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.MANUAL, 2, BatchExecutionRecorder.DeclaredScope.FULL);
             executionId = execution.executionId();
 
             AsyncTaskExecutor taskExecutor = context.getBean(

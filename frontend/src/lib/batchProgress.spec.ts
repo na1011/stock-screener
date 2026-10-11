@@ -31,6 +31,8 @@ function execution(overrides: Partial<BatchExecution> = {}): BatchExecution {
     retriedFromId: null,
     triggeredBy: 'MANUAL',
     scope: null,
+    scopeReason: null,
+    incompleteMarkets: [],
     note: null,
     unresolvedFailureCount: 0,
     ...overrides,

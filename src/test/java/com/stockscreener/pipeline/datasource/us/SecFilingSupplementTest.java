@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.datasource.us;
 
+import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.TokenBucketRateLimiter;
@@ -501,7 +502,7 @@ class SecFilingSupplementTest {
 
         assertThat(outcome.failed()).containsExactly(MISSING);
         assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
-        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
+        assertThat(failureKind(MISSING)).isEqualTo("TRANSIENT");
 
         paths.clear();
         bodyOf.put(instancePath(MISSING, "abt-20260630_htm.xml"), instanceXml());
@@ -520,7 +521,7 @@ class SecFilingSupplementTest {
 
         assertThat(outcome.failed()).containsExactly(MISSING);
         assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
-        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
+        assertThat(failureKind(MISSING)).isEqualTo("TRANSIENT");
 
         paths.clear();
         bodyOf.put(instancePath(MISSING, INSTANCE), instanceXml());
@@ -608,7 +609,7 @@ class SecFilingSupplementTest {
         supplement.supplement(CIK, companyFacts(), FROM, "t");
 
         assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
-        assertThat(failureKind(MISSING)).isEqualTo("MALFORMED");
+        assertThat(failureKind(MISSING)).isEqualTo("TRANSIENT");
     }
 
     @Test
@@ -670,6 +671,55 @@ class SecFilingSupplementTest {
     void supplementFormsAreIndependentOfTheReader() {
         assertThat(SecFilingSupplement.SUPPLEMENT_FORMS).doesNotContain("8-K", "8-K/A");
         assertThat(SecEdgarFacts.PERIODIC_FORMS).containsAll(SecFilingSupplement.SUPPLEMENT_FORMS);
+    }
+
+    // ── 받지 못한 것의 종류(ADR-0174) — 미국 시장 미완료의 재료 ────────────────────────────
+
+    @Test
+    @DisplayName("보충 404는 받지 못한 것이다 — 종류째 낸다(종목 층의 「답함」 술어를 옮기지 않는다 · 다음 실행이 다시 받는다)")
+    void notFoundSupplementIsUnfetched() throws Exception {
+        statusOf.put(indexPath(MISSING), 404);
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.unfetched()).containsExactly(DataSourceException.Kind.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("공시 목록의 열 길이가 어긋나면(MALFORMED) 목록 실패 — 종류와 무관하게 받지 못한 것이다")
+    void malformedListIsUnfetched() throws Exception {
+        bodyOf.put(submissionsPath(), "{\"cik\":\"1800\",\"filings\":{\"recent\":{\"accessionNumber\":[\"a\",\"b\"],"
+                + "\"form\":[\"10-Q\"],\"filingDate\":[\"2026-07-28\"],\"reportDate\":[\"\"],\"isXBRL\":[1]},\"files\":[]}}");
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.vintagesUncertain()).isTrue();
+        assertThat(outcome.unfetched()).containsExactly(DataSourceException.Kind.MALFORMED);
+    }
+
+    @Test
+    @DisplayName("판을 올려 다시 받다 503이면 옛 판 저장분을 써도(staleReused) 받지 못한 것이다")
+    void staleReusedIsUnfetched() throws Exception {
+        supplement.supplement(CIK, companyFacts(), FROM, "t");
+        jdbcTemplate.update("UPDATE sec_filing_supplement SET reader_version = 0 WHERE cik = ?", CIK);
+        statusOf.put(instancePath(MISSING, "abt-20260630_htm.xml"), 503);
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.staleReused()).isEqualTo(1);
+        assertThat(outcome.failed()).as("옛 판으로 메웠다 — 실패 목록엔 없다").isEmpty();
+        assertThat(outcome.unfetched()).containsExactly(DataSourceException.Kind.TRANSIENT);
+    }
+
+    @Test
+    @DisplayName("해석 실패(UNREADABLE)는 받지 못한 것이 아니다 — 다시 받지 않는 유일한 종료라 미국 시장을 끝낸다")
+    void unreadableIsNotUnfetched() throws Exception {
+        bodyOf.put(indexPath(MISSING), index("a_htm.xml", "b.xml", "FilingSummary.xml"));
+
+        SecFilingSupplement.Outcome outcome = supplement.supplement(CIK, companyFacts(), FROM, "t");
+
+        assertThat(outcome.failed()).containsExactly(MISSING);
+        assertThat(outcome.unfetched()).isEmpty();
     }
 
     private ObjectNode companyFacts() throws Exception {

@@ -110,8 +110,8 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
-    @DisplayName("끝까지 JSON으로 안 읽히는 companyfacts는 받기 실패(MALFORMED)다")
-    void companyFactsStillUnreadableAfterRetriesIsMalformed() throws Exception {
+    @DisplayName("끝까지 JSON으로 안 읽히는 companyfacts는 받기 실패(TRANSIENT)다 — 소스가 답한 것이 아니다(ADR-0174)")
+    void companyFactsStillUnreadableAfterRetriesIsTransient() throws Exception {
         String full = fixture("companyfacts.json");
         enqueue(200, fixture("tickers.json"));
         for (int i = 0; i <= SecFilingClient.TRANSIENT_RETRIES; i++) {
@@ -120,7 +120,7 @@ class SecEdgarFinancialAdapterTest {
 
         assertThatThrownBy(() -> adapter().fetchReports(FIX, FROM))
                 .isInstanceOfSatisfying(DataSourceException.class,
-                        e -> assertThat(e.kind()).isEqualTo(DataSourceException.Kind.MALFORMED));
+                        e -> assertThat(e.kind()).isEqualTo(DataSourceException.Kind.TRANSIENT));
         assertThat(server.getRequestCount()).isEqualTo(2 + SecFilingClient.TRANSIENT_RETRIES);
     }
 

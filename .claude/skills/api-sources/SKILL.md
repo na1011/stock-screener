@@ -66,7 +66,7 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | 엔드포인트 | 지위 | 필드 계약 | 콜 수 |
 |---|---|---|---|
 | `getStockPriceInfo` (공공데이터포털) | **사용 중** | `data-go-kr-stock-price.md` | 종목당 1(기간조회) |
-| `corpCode.xml` | **사용 중** | `DartCorpCodeCache` javadoc | 전체 1 |
+| `corpCode.xml` | **사용 중** | `DartCorpCodeCache` javadoc | JVM마다 24시간에 1(실패면 즉시 1회 더 · 그 뒤 10분은 0) |
 | `company.json` | **사용 중** | `dart-company-profile.md` | 종목당 1 = 350 |
 | `fnlttSinglAcnt.json` | **사용 중** | `dart-financial.md` | 종목·연도당 4 |
 | `fnlttSinglAcntAll.json` | **사용 중** | 〃 | 종목·연도당 1(연간 전용), 폴백 시 2 |

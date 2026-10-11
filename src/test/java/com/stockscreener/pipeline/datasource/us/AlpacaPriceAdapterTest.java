@@ -112,6 +112,22 @@ class AlpacaPriceAdapterTest {
     }
 
     @Test
+    @DisplayName("200인데 JSON이 아닌 봉 응답 · 408은 TRANSIENT — 분사 자식 봉(SpinOffValuer)이 「자식 가격 없음」으로 접지 않고 다시 묻는다")
+    void unreadableSuccessAndRequestTimeoutAreTransient() {
+        // SpinOffValuer는 NOT_FOUND·MALFORMED만 「자식 봉 없음 → 미해석」으로 접는다. 끊긴 전송·점검 페이지가 MALFORMED였을 때는
+        // 그 접기를 타서 거짓 판정 대기와 억제가 났다 — 이제 TRANSIENT라 모체 종목이 실패로 남고 다음 날 다시 묻는다(ADR-0174).
+        server.enqueue(new MockResponse().setResponseCode(200).setHeader("Content-Type", "text/html")
+                .setBody("<html><body>maintenance</body></html>"));
+        assertThatThrownBy(() -> adapter().fetchDailyBars(AAPL, FROM, TO))
+                .isInstanceOfSatisfying(DataSourceException.class,
+                        e -> assertThat(e.kind()).isEqualTo(DataSourceException.Kind.TRANSIENT));
+        enqueue(408, "{\"message\":\"timeout\"}");
+        assertThatThrownBy(() -> adapter().fetchDailyBars(AAPL, FROM, TO))
+                .isInstanceOfSatisfying(DataSourceException.class,
+                        e -> assertThat(e.kind()).isEqualTo(DataSourceException.Kind.TRANSIENT));
+    }
+
+    @Test
     @DisplayName("IMPORTANT — 403은 AUTH다. 15분 규칙 위반이 종목 실패로 묻히면 안 된다")
     void mapsSipForbiddenToAuth() {
         enqueue(403, fixture("error-403-sip.json"));

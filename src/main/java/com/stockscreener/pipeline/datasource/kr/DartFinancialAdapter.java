@@ -83,7 +83,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
                     "DART_API_KEY가 설정되지 않았다.");
         }
         String corpCode = corpCodes.findCorpCode(security.ticker())
-                .orElseThrow(() -> new DataSourceException(DataSourceException.Kind.NOT_FOUND,
+                // 신선한 매핑 판에 없다 — 소스가 결정적으로 답했다(ADR-0174 · 낡은 판의 부재는 캐시가 TRANSIENT로 던진다).
+                .orElseThrow(() -> DataSourceException.answered(DataSourceException.Kind.NOT_FOUND,
                         DartResponse.SOURCE_NAME,
                         "DART에 등록되지 않은 종목코드다: " + security.ticker()));
 
@@ -131,7 +132,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
                     DartResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
         }
 
-        ResponseEntity<JsonNode> response;
+        ResponseEntity<byte[]> response;
         try {
             response = client.get().uri(uri -> uri
                             .path("/fnlttSinglAcnt.json")
@@ -141,7 +142,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
                             .queryParam("reprt_code", reportCode)
                             .build())
                     .retrieve()
-                    .toEntity(JsonNode.class);
+                    // 본문을 바이트로 받는다 — 상태를 먼저 보고 UTF-8로 판다(DartResponse.read · 문자열로 받으면 한글이 깨진다).
+                    .toEntity(byte[].class);
         } catch (RuntimeException e) {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
                     DartResponse.SOURCE_NAME, "호출에 실패했다. " + context, e);
@@ -149,9 +151,9 @@ public class DartFinancialAdapter implements FinancialDataSource {
 
         JsonNode list;
         try {
-            list = DartResponse.requireList(response.getBody(), context);
+            list = DartResponse.requireList(DartResponse.read(response, context), context);
         } catch (DataSourceException e) {
-            if (e.kind() == DataSourceException.Kind.NOT_FOUND) {
+            if (DartResponse.isNoData(e)) {
                 // 아직 공시되지 않은 기간이다. 정상이므로 조용히 건너뛴다.
                 return null;
             }

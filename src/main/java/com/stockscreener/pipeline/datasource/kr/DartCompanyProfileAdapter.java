@@ -96,7 +96,7 @@ public class DartCompanyProfileAdapter implements CompanyProfileDataSource {
                     DartResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
         }
 
-        ResponseEntity<JsonNode> response;
+        ResponseEntity<byte[]> response;
         try {
             response = client.get().uri(uri -> uri
                             .path("/company.json")
@@ -104,7 +104,8 @@ public class DartCompanyProfileAdapter implements CompanyProfileDataSource {
                             .queryParam("corp_code", corpCode.get())
                             .build())
                     .retrieve()
-                    .toEntity(JsonNode.class);
+                    // 본문을 바이트로 받는다 — 상태를 먼저 보고 UTF-8로 판다(DartResponse.read · 문자열로 받으면 한글이 깨진다).
+                    .toEntity(byte[].class);
         } catch (RuntimeException e) {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
                     DartResponse.SOURCE_NAME, "호출에 실패했다. " + context, e);
@@ -112,9 +113,9 @@ public class DartCompanyProfileAdapter implements CompanyProfileDataSource {
 
         JsonNode root;
         try {
-            root = DartResponse.requireSuccess(response.getBody(), context);
+            root = DartResponse.requireSuccess(DartResponse.read(response, context), context);
         } catch (DataSourceException e) {
-            if (e.kind() == DataSourceException.Kind.NOT_FOUND) {
+            if (DartResponse.isNoData(e)) {
                 // status 013 — 이 회사의 개황이 없다. 종목 실패가 아니다.
                 return Optional.empty();
             }

@@ -54,8 +54,8 @@ public class CompanyProfileJob {
      * 정기 실행(리밸런싱 꼬리)은 티커·유니버스를 안 준다 — 대상은 업종이 빈 종목 전부다. 기준일과 꼬리 트리거는 기록
      * 계층이 본다.
      */
-    public static BatchExecutionRecorder.Scope scopeOf(List<String> tickers, String universeCode) {
-        return BatchExecutionRecorder.Scope.of((tickers == null || tickers.isEmpty())
+    public static BatchExecutionRecorder.DeclaredScope scopeOf(List<String> tickers, String universeCode) {
+        return BatchExecutionRecorder.DeclaredScope.byArgs((tickers == null || tickers.isEmpty())
                 && (universeCode == null || universeCode.isBlank()));
     }
 
@@ -70,7 +70,7 @@ public class CompanyProfileJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            List<String> tickers, String universeCode) {
-        BatchExecutionRecorder.Scope scope = scopeOf(tickers, universeCode);
+        BatchExecutionRecorder.DeclaredScope scope = scopeOf(tickers, universeCode);
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(
                 universeCode == null || universeCode.isBlank()
                         ? resolveTargets(tickers)

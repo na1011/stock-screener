@@ -20,7 +20,9 @@ import tools.jackson.databind.ObjectMapper;
  *   <tr><td>200 + {@code facts} 객체</td><td>—</td><td>정상</td></tr>
  *   <tr><td>200 + {@code facts} 없음</td><td>MALFORMED</td><td>스펙 변경 신호다</td></tr>
  *   <tr><td>404</td><td>NOT_FOUND</td><td><b>실측</b>: 모르는 CIK와 zero-padding 누락이 둘 다 404 + XML</td></tr>
+ *   <tr><td>200인데 JSON이 아니거나 본문 없음</td><td>TRANSIENT</td><td>받기 실패다(끊긴 전송 · 오류 페이지 · ADR-0174)</td></tr>
  *   <tr><td>403</td><td><b>RATE_LIMITED</b></td><td><b>미실측</b> — 아래 참조</td></tr>
+ *   <tr><td>408</td><td>TRANSIENT</td><td>요청 시간 초과 — 일시 실패다</td></tr>
  *   <tr><td>429</td><td>RATE_LIMITED</td><td><b>미실측</b></td></tr>
  *   <tr><td>그 외 4xx</td><td>MALFORMED</td><td>우리 요청 문제로 본다</td></tr>
  *   <tr><td>5xx·그 외</td><td>TRANSIENT</td><td>모르는 코드는 재시도 쪽으로</td></tr>
@@ -82,15 +84,17 @@ final class SecEdgarResponse {
             throw new DataSourceException(kindOf(status.value()), SOURCE_NAME,
                     "HTTP %d. %s — %s".formatted(status.value(), context, message(body)));
         }
+        // 2xx인데 JSON으로 안 읽히거나 본문이 없으면 받기 실패다(TRANSIENT) — 끊긴 전송과 200 오류 페이지가 이 모양이고, 소스가
+        // 답한 것이 아니다(ADR-0174). 받기 쪽이 같은 실행 안에서 이미 다시 받았다(SecFilingClient.fetch).
         JsonNode parsed;
         try {
-            parsed = body == null ? null : MAPPER.readTree(body);
+            parsed = body == null || body.isBlank() ? null : MAPPER.readTree(body);
         } catch (RuntimeException e) {
-            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
                     "200인데 JSON이 아니다. %s — %s".formatted(context, message(body)), e);
         }
-        if (parsed == null) {
-            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+        if (parsed == null || parsed.isMissingNode()) {
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
                     "200인데 본문이 없다. %s".formatted(context));
         }
         return parsed;
@@ -99,7 +103,7 @@ final class SecEdgarResponse {
     /**
      * 2xx 본문이 JSON으로 안 읽히면 그 사유, 읽히면 {@code null} — 받기 쪽이 「덜 온 응답」으로 보고 같은 실행 안에서 다시 받는다.
      * 지금 전송은 본문 도중 끊겨도 받은 만큼 예외 없이 넘기므로(2026-10-06 반증), 깨진 JSON의 대부분은 해석 실패가 아니라 끊긴
-     * 전송이다. 끝까지 안 읽히면 {@link #requireJson}이 MALFORMED로 던진다.
+     * 전송이다. 끝까지 안 읽히면 {@link #requireJson}이 TRANSIENT로 던진다.
      */
     static String unreadableJson(String body) {
         // 공백만 든 본문도 본문이 없는 것이다 — isEmpty로 물으면 그것만 다시 안 받고 바로 MALFORMED로 끝났다(v11 반증).
@@ -118,6 +122,8 @@ final class SecEdgarResponse {
             case 404 -> DataSourceException.Kind.NOT_FOUND;
             // MUST NOT: 403을 AUTH로 올리지 않는다. 위 javadoc이 그 근거다.
             case 403, 429 -> DataSourceException.Kind.RATE_LIMITED;
+            // 요청 시간 초과는 일시 실패다 — 「그 밖 4xx = 우리 요청 문제」에 넣으면 재시도 대상에서 빠진다.
+            case 408 -> DataSourceException.Kind.TRANSIENT;
             default -> status >= 400 && status < 500
                     ? DataSourceException.Kind.MALFORMED
                     : DataSourceException.Kind.TRANSIENT;

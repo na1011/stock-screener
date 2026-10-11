@@ -5,6 +5,7 @@ import com.stockscreener.pipeline.batch.BatchStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 배치 실행 한 건.
@@ -24,9 +25,11 @@ import java.time.LocalDate;
  *                               메우지 않는다 — 0이면 화면이 분모 0의 진행률을 그린다.
  * @param progressAt             마지막 진척 반영 시각. 화면이 "돌고 있는가 멎었는가"를 이걸로 가른다.
  * @param stageLabel             지금 어느 구간인가. 서버가 준 문자열을 화면이 해석 없이 보인다.
- * @param scope                  정기 실행과 같은 범위였는가(V63). 표지 전 실행은 {@code null}이다 — 「모름」이고 FULL로 접지 않는다.
+ * @param scope                  신선도 시계에 세는가(V63 · V65). 표지 전 실행은 {@code null}이다 — 「모름」이고 FULL로 접지 않는다.
  *                               MUST NOT: 빼지 않는다 — 화면의 {@code scopeNote}가 모르는 값(undefined 포함)에 던져 이력 표가
  *                               통째로 깨진다.
+ * @param scopeReason            {@code NARROW}인 이유(V65 · ADR-0174). 화면이 이것으로 덧말을 고른다 — note를 파싱하지 않는다.
+ * @param incompleteMarkets      마감 때 미완료로 판정한 시장. 없으면 빈 목록이다.
  */
 public record BatchExecutionResponse(
         long id,
@@ -45,6 +48,8 @@ public record BatchExecutionResponse(
         Long retriedFromId,
         String triggeredBy,
         String scope,
+        String scopeReason,
+        List<String> incompleteMarkets,
         String note,
         int unresolvedFailureCount) {
 
@@ -66,6 +71,8 @@ public record BatchExecutionResponse(
                 execution.retriedFromId(),
                 execution.triggeredBy(),
                 execution.scope(),
+                execution.scopeReason(),
+                execution.incompleteMarkets(),
                 execution.note(),
                 execution.unresolvedFailureCount());
     }

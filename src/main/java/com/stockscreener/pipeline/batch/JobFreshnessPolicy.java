@@ -44,11 +44,16 @@ import java.util.Map;
  * SCHEDULER 행이 {@code target_count = 2}로 남아 있었다(2026-09-19 꼬리 · 그 잡은 아래에서
  * 일부러 빠져 있어 무해했다).
  *
- * <h2>MUST: 좁힌 실행은 어느 갈래에서도 안 센다 — {@code scope}(V63)</h2>
+ * <h2>MUST: 시계에 안 세는 실행은 어느 갈래에서도 안 센다 — {@code scope}(V63 · V65)</h2>
  * <p>위 불변식은 스케줄러 실행이 <b>있는</b> 잡만 지킨다. 없으면 폴백이 손 실행을 세는데, 손 실행은 티커·연수·표로
  * 좁혀져 있기 일쑤다 — 2026-10-06에 무거운 잡 셋의 시계가 전부 좁힌 손 실행이었고(FR #710 1종목 · FSR #664 ·
  * G #633), 그 시계가 첫 정기 실행을 그만큼 밀었다([A56]). 그래서 실행마다 「정기 실행과 같은 범위였는가」를
  * 잡이 적고({@link BatchExecutionRecorder.Scope} · ADR-0172), 여기서는 {@code NARROW}를 <b>두 갈래 모두에서</b> 뺀다.
+ *
+ * <p><b>{@code NARROW}에는 좁힌 손 실행 말고 하나가 더 있다 — 정기 범위로 돌았지만 마감 때 시장 미완료인 실행</b>
+ * ({@code scope_reason = MARKET_INCOMPLETE} · {@link MarketCompleteness} · ADR-0174). 한 시장의 소스 답을 못 받은 정기 실행이
+ * 시계를 밀면 그 시장이 다음 차례까지 한 달을 낡은 채 남는다. 안 세면 그 잡이 연체로 남아 다음 무거운 잡 차례에 다시 돌고,
+ * 그동안 배너·알림은 「몇 번 시도했고 어느 시장이 미완료인가」를 함께 말한다({@link Staleness}).
  *
  * <p><b>표지 전 이력({@code scope IS NULL})은 범위를 모르고 센다</b> — 예전과 같은 답이다. 이력을 거슬러 재구성하지
  * 않은 이유는 ADR-0172 §버린 대안에 있다(무거운 잡의 위상이 움직이고, 「요청」을 증명할 증거가 행에 없다). 그래서 이
@@ -132,9 +137,18 @@ public class JobFreshnessPolicy {
      * @param lastSuccessAt 한 번도 성공한 적이 없으면 {@code null}이고 {@code daysSince}는
      *                      {@code -1}이다. <b>0으로 접지 않는다</b> — "오늘 돌았다"와
      *                      "한 번도 안 돌았다"는 반대이고, 0으로 접으면 후자가 사라진다.
+     * @param scheduledAttempts 마지막으로 센 성공 뒤의 <b>정기 시도</b> 수(SCHEDULER 행 · 상태·범위 무관). 0이면 「안 돌았다」이고,
+     *                      0보다 크면 「돌았는데 시계에 안 셌다」이다 — 둘은 대응이 다르다. 예전 문구 「예산을 넘겨 안 돌았다」는
+     *                      뒤의 경우에 거짓이었다(ADR-0174).
+     * @param incompleteMarkets 가장 최근 정기 시도가 미완료로 판정한 시장. 비면 미완료 판정이 없었다(실패 · 시작 실패 · 안 돎).
      */
     public record Staleness(String jobName, Instant lastSuccessAt, long daysSince,
-                            int budgetDays, boolean scheduledOnly, String howToRun) {
+                            int budgetDays, boolean scheduledOnly, String howToRun,
+                            int scheduledAttempts, List<String> incompleteMarkets) {
+
+        public Staleness {
+            incompleteMarkets = List.copyOf(incompleteMarkets);
+        }
     }
 
     private final JdbcTemplate jdbcTemplate;
@@ -160,8 +174,9 @@ public class JobFreshnessPolicy {
             if (last != null && daysSince <= budget.days()) {
                 continue;
             }
+            Attempts attempts = scheduledAttemptsSince(jobName, last);
             stale.add(new Staleness(jobName, last, daysSince, budget.days(),
-                    scheduled != null, budget.howToRun()));
+                    scheduled != null, budget.howToRun(), attempts.count(), attempts.latestIncompleteMarkets()));
         }
         // 한 번도 안 돈 것(-1)을 맨 앞에 둔다. 가장 오래 밀린 것과 같은 뜻이기 때문이다.
         stale.sort((a, b) -> {
@@ -187,6 +202,49 @@ public class JobFreshnessPolicy {
         Instant scheduled = lastSuccessAt(jobName, true);
         Instant last = scheduled != null ? scheduled : lastSuccessAt(jobName, false);
         return last == null ? Long.MAX_VALUE : Duration.between(last, now).toDays();
+    }
+
+    /**
+     * 그 잡의 <b>마지막 정기 시도</b> 시각 — SCHEDULER 행이면 상태·범위와 무관하다. 한 번도 없으면 {@code null}이다.
+     *
+     * <p>무거운 잡의 연체 보정 순서가 이것을 키로 쓴다({@code PipelineScheduler.heavyJobDueToday} · ADR-0174). 「마지막 성공」을
+     * 키로 쓰면 매번 미완료로 끝나는 잡이 언제나 가장 오래 밀린 것으로 남아 다른 연체 잡의 차례를 영영 빼앗는다.
+     */
+    @Transactional(readOnly = true)
+    public Instant lastScheduledAttemptAt(String jobName) {
+        return jdbcTemplate.queryForObject("""
+                SELECT max(started_at) FROM batch_execution
+                WHERE job_name = ? AND triggered_by = 'SCHEDULER'
+                """, Instant.class, jobName);
+    }
+
+    /**
+     * 마지막으로 센 성공 뒤의 정기 시도 수와, 그중 가장 최근 시도의 미완료 시장.
+     *
+     * <p>성공이 한 번도 없으면 정기 시도 전부를 센다.
+     */
+    private Attempts scheduledAttemptsSince(String jobName, Instant lastSuccess) {
+        List<Attempt> attempts = jdbcTemplate.query("""
+                SELECT array_to_string(incomplete_markets, ',') AS markets
+                FROM batch_execution
+                WHERE job_name = ? AND triggered_by = 'SCHEDULER'
+                  AND (?::timestamptz IS NULL OR started_at > ?::timestamptz)
+                ORDER BY started_at DESC, id DESC
+                """, (rs, rowNum) -> new Attempt(rs.getString("markets")),
+                jobName, lastSuccess == null ? null : java.sql.Timestamp.from(lastSuccess),
+                lastSuccess == null ? null : java.sql.Timestamp.from(lastSuccess));
+        if (attempts.isEmpty()) {
+            return new Attempts(0, List.of());
+        }
+        String latest = attempts.get(0).markets();
+        return new Attempts(attempts.size(),
+                latest == null || latest.isEmpty() ? List.of() : List.of(latest.split(",")));
+    }
+
+    private record Attempt(String markets) {
+    }
+
+    private record Attempts(int count, List<String> latestIncompleteMarkets) {
     }
 
     /**

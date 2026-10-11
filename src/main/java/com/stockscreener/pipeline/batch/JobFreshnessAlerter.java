@@ -91,8 +91,10 @@ public class JobFreshnessAlerter {
 
         StringBuilder body = new StringBuilder();
         if (!toReport.isEmpty()) {
-            body.append("아래 잡이 예산을 넘겨 안 돌았다. 안 돈 것 자체는 batch_execution에 "
-                    + "흔적이 없다 — 그 표는 돈 것만 적는다.\n");
+            // 「안 돌았다」만 말하면 정기 실행이 돌았지만 시계에 안 센 경우(시장 미완료 · ADR-0174)가 거짓이 된다 —
+            // 줄마다 시도 수로 가른다.
+            body.append("아래 잡이 예산을 넘겨 신선도 시계가 안 움직였다. 정기 시도가 없으면 안 돈 것이고"
+                    + "(그것은 batch_execution에 흔적이 없다 — 그 표는 돈 것만 적는다), 있으면 돌았지만 시계에 안 셌다.\n");
             toReport.stream().limit(JOBS_IN_ALERT).forEach(item -> body.append(describe(item)));
             if (toReport.size() > JOBS_IN_ALERT) {
                 body.append("나머지 %d건은 관리 화면 상단에 있다.\n"
@@ -111,16 +113,32 @@ public class JobFreshnessAlerter {
         return true;
     }
 
-    private String describe(JobFreshnessPolicy.Staleness item) {
+    static String describe(JobFreshnessPolicy.Staleness item) {
         String when = item.daysSince() < 0
                 ? "한 번도 성공한 적이 없다"
                 : "%d일째 (마지막 성공 %s)".formatted(item.daysSince(), item.lastSuccessAt());
+        String attempts = attemptsNote(item);
         String how = item.howToRun() == null
                 ? "관리 화면에서 띄운다"
                 : "bootRun --args='--spring.profiles.active=bootstrap --server.port=0 "
                         + item.howToRun() + "'";
-        return "- %s: %s / 예산 %d일 — %s\n"
-                .formatted(item.jobName(), when, item.budgetDays(), how);
+        // 미완료로 끝난 정기 실행이 있으면 손으로 전량을 다시 돌리기 전에 원인을 본다 — 소스 장애·한도면 같은 손 실행도
+        // 같은 자리에서 못 받고, 우리 코드(UNEXPECTED)면 몇 번을 돌려도 같다. 다음 정기 차례가 어차피 다시 돈다.
+        if (!item.incompleteMarkets().isEmpty()) {
+            how = "먼저 그 실행의 note·실패 요약에서 미완료 원인(소스 장애·한도·우리 코드)을 본다. 손으로 돌리려면 " + how;
+        }
+        return "- %s: %s%s / 예산 %d일 — %s\n"
+                .formatted(item.jobName(), when, attempts, item.budgetDays(), how);
+    }
+
+    /** 「(n)번 시도 · (시장) 미완료」. 정기 시도가 없으면 빈 문자열이다. */
+    static String attemptsNote(JobFreshnessPolicy.Staleness item) {
+        if (item.scheduledAttempts() == 0) {
+            return "";
+        }
+        String note = " · 정기 %d번 시도".formatted(item.scheduledAttempts());
+        return item.incompleteMarkets().isEmpty() ? note
+                : note + " · " + String.join(",", item.incompleteMarkets()) + " 미완료";
     }
 
     private boolean shouldSend(String jobName, Instant now) {

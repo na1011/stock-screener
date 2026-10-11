@@ -125,7 +125,7 @@ class MembershipGapFillerTest {
         verify(companyProfileJob).run(eq(AS_OF), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
                 tickers.capture(), universe.capture());
         assertThat(CompanyProfileJob.scopeOf(tickers.getValue(), universe.getValue()))
-                .isEqualTo(BatchExecutionRecorder.Scope.FULL);
+                .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
     }
 
     @Test
