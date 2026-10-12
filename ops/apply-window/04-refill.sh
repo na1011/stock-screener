@@ -21,7 +21,11 @@ run() { # <라벨> <기대 target> <인자…>
     local n; n=$(echo "$retry" | tr ',' '\n' | grep -c .); P=$(max_exec_id $DB)
     boot $DB --job=financial-refill --tickers=$retry --financial-years=$YEARS --insert-earlier-vintages=$FLAG > $A/refill-retry-$DB-$id.log 2>&1 || true
     id=$(new_exec $DB "$P" financial-refill "$n"); echo "retry($label) $(q $DB "select note from batch_execution where id=$id")" | tee -a $NOTES
-    failures_of $DB $id > $A/fail-$DB-$id.txt; [ ! -s $A/fail-$DB-$id.txt ] || die "재시도에도 실패: $(tr '\n' ' ' < $A/fail-$DB-$id.txt)"
+    # 재시도에서도 기대 실패는 뺀다 — 첫 실행에서 TRANSIENT였던 기대 종목(예: 매핑 판을 못 받은 실행의 APGE)이 재시도에서는
+    # 신선한 판의 NOT_FOUND로 돌아온다. 첫 실행 갈래와 같은 술어를 써야 두 갈래가 같은 실패를 다르게 판정하지 않는다.
+    failures_of $DB $id > $A/fail-$DB-$id.txt
+    local left; left=$(grep -v -x -F -f <(tr ' ' '\n' <<< "$EXPECTED_FAILURES") $A/fail-$DB-$id.txt || true)
+    [ -z "$left" ] || die "재시도에도 실패: $(tr '\n' ' ' <<< "$left")"
   fi
 }
 run cur "$N_CUR" --universe=US_TOP1000
