@@ -265,6 +265,22 @@ public final class ApiExceptions {
         }
     }
 
+    /** 쓰기 잠금 거절(ADR-0175). 보유자를 속성으로 싣는다 — 「무엇이 끝나야 하나」가 화면의 답이다. */
+    public static class WriteLockHeldApiException extends ApiException {
+        public WriteLockHeldApiException(com.stockscreener.pipeline.lock.WriteLockHeldException e) {
+            super(HttpStatus.CONFLICT, ApiProblemType.WRITE_LOCK_HELD, e.getMessage(), e);
+            com.stockscreener.pipeline.lock.WriteLock.Holder holder = e.holder();
+            if (holder != null) {
+                with("holderKind", holder.kind());
+                with("holderPid", holder.pid());
+                with("sessionId", holder.sessionId());
+                with("purpose", holder.purpose());
+                with("since", holder.since() == null ? null : holder.since().toString());
+                with("waiting", holder.waiting());
+            }
+        }
+    }
+
     public static class BatchExecutionNotFoundException extends ApiException {
         public BatchExecutionNotFoundException(long executionId) {
             super(HttpStatus.NOT_FOUND, ApiProblemType.BATCH_EXECUTION_NOT_FOUND,

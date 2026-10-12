@@ -1,10 +1,13 @@
 package com.stockscreener.indicator;
 
+import com.stockscreener.pipeline.lock.CatalogWriteGate;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,14 +35,25 @@ public class IndicatorCatalogInitializer implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(IndicatorCatalogInitializer.class);
 
     private final IndicatorCatalogSynchronizer synchronizer;
+    private final Environment environment;
 
-    public IndicatorCatalogInitializer(IndicatorCatalogSynchronizer synchronizer) {
+    public IndicatorCatalogInitializer(IndicatorCatalogSynchronizer synchronizer, Environment environment) {
         this.synchronizer = synchronizer;
+        this.environment = environment;
     }
 
+    /**
+     * MUST: 카탈로그 차이 거절({@link CatalogWriteGate.CatalogDriftException})은 기동을 세운다({@link CatalogWriteGate#refuseBoot}).
+     */
     @Override
     public void run(ApplicationArguments args) {
-        int activeCount = synchronizer.synchronize();
+        int activeCount;
+        try {
+            activeCount = synchronizer.synchronize();
+        } catch (CatalogWriteGate.CatalogDriftException e) {
+            CatalogWriteGate.refuseBoot(environment, "지표", e);
+            return;
+        }
         log.info("지표 카탈로그를 동기화했다. 활성 지표 {}개", activeCount);
     }
 }

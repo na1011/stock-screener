@@ -6,6 +6,7 @@ import com.stockscreener.pipeline.collector.CorporateActionLedger;
 import com.stockscreener.pipeline.collector.CorporateActionReader;
 import com.stockscreener.pipeline.collector.CorporateActionStatus;
 import com.stockscreener.pipeline.datasource.CorporateAction;
+import com.stockscreener.pipeline.lock.WriteLock;
 import com.stockscreener.web.ApiExceptions;
 
 import org.springframework.format.annotation.DateTimeFormat;
@@ -47,11 +48,14 @@ public class AdminCorporateActionController {
 
     private final CorporateActionReader reader;
     private final CorporateActionLedger ledger;
+    private final WriteLock writeLock;
 
     public AdminCorporateActionController(CorporateActionReader reader,
-                                          CorporateActionLedger ledger) {
+                                          CorporateActionLedger ledger,
+                                          WriteLock writeLock) {
         this.reader = reader;
         this.ledger = ledger;
+        this.writeLock = writeLock;
     }
 
     /**
@@ -95,12 +99,15 @@ public class AdminCorporateActionController {
      * <p>증거를 다시 실어 보내는 이유는 판정이 <b>맞았는지 사람이 그 자리에서 볼 수 있어야</b>
      * 하기 때문이다. 정한 {@code ratio}가 어느 점프와도 맞지 않으면
      * {@code shareJumps[].matchesPrice}가 전부 거짓으로 남는다.
+     *
+     * <p><b>요청마다 쓰기 잠금을 쥔다</b>(ADR-0175) — 원장은 적재(기업 행위 수집·계수 재구축)가 읽는 재료라 그것이 도는 중의 판정은
+     * 거절한다(409 · 보유자). 못 쥐면 {@code WriteLockHeldException}이 {@code ApiExceptionHandler}에서 409가 된다.
      */
     @PutMapping("/{id}")
     @RecordInteraction(InteractionAction.ADMIN_CORPORATE_ACTION_JUDGE)
     public CorporateActionDetailResponse judge(@PathVariable long id,
                                                @RequestBody CorporateActionJudgementRequest request) {
-        try {
+        try (WriteLock.Token ignored = writeLock.acquire("judge:" + id)) {
             ledger.judge(id, request.toJudgement());
         } catch (CorporateActionLedger.CorporateActionNotFoundException e) {
             throw new ApiExceptions.CorporateActionNotFoundException(e.id(), e);

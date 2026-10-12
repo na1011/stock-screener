@@ -9,7 +9,7 @@ import Tag from 'primevue/tag'
 import { useConfirm } from 'primevue/useconfirm'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
-import { ApiError } from '@/api/http'
+import { ApiError, ProblemType } from '@/api/http'
 import { BATCH_STATUSES } from '@/api/types'
 import type { AdminJob, BatchExecution, BatchExecutionDetail, IsoDate } from '@/api/types'
 import AdminNav from '@/components/admin/AdminNav.vue'
@@ -18,7 +18,13 @@ import BatchDetailSheet from '@/components/admin/BatchDetailSheet.vue'
 import RatioBar from '@/components/ui/RatioBar.vue'
 import SectionHeading from '@/components/ui/SectionHeading.vue'
 import { useApiToast } from '@/composables/useApiToast'
-import { batchStatusStyle, elapsedSeconds, scopeNote, triggeredByLabel } from '@/lib/admin'
+import {
+  batchStatusStyle,
+  elapsedSeconds,
+  scopeNote,
+  triggeredByLabel,
+  writeLockHolderText,
+} from '@/lib/admin'
 import { formatCount, isStalled, processedTasks, progressRatio } from '@/lib/batchProgress'
 import { useAdminStore } from '@/stores/admin'
 
@@ -126,6 +132,14 @@ async function run(job: AdminJob): Promise<void> {
     notifySuccess('실행을 시작했습니다', `${job.label}이(가) 백그라운드에서 돌고 있습니다.`)
   } catch (caught) {
     notifyFailure('실행하지 못했습니다', caught)
+    // 목록을 읽은 뒤 누가 쓰기 잠금을 쥐었다 — 잡 목록을 다시 읽어 버튼을 잠그고 보유자를 띄운다.
+    if (caught instanceof ApiError && caught.is(ProblemType.WRITE_LOCK_HELD)) {
+      void admin.refreshBatchesQuietly().catch((refreshFailed: unknown) => {
+        if (!(refreshFailed instanceof ApiError)) {
+          throw refreshFailed
+        }
+      })
+    }
   } finally {
     runningJobName.value = null
   }
@@ -237,7 +251,8 @@ async function resumeAutoRefresh(): Promise<void> {
   await pollOnce()
 }
 
-watch(() => admin.hasRunningBatch, syncPolling, { immediate: true })
+// 쓰기 잠금 보유자가 있을 때도 따라간다 — 손 세션은 실행 행이 없어 hasRunningBatch로 안 보인다.
+watch(() => admin.hasRunningBatch || admin.writeLockHolder !== null, syncPolling, { immediate: true })
 
 onUnmounted(() => syncPolling(false))
 
@@ -385,6 +400,13 @@ function formatTime(value: string | null): string {
         panel="batches"
         :skeleton-rows="3"
       >
+        <!--
+          쓰기 잠금(ADR-0175). 다른 쓰기가 쥔 동안은 어느 잡도 못 띄운다 — 누르고 409를 받기 전에 버튼을 잠그고 무엇을
+          기다리는지 말한다. 판정은 서버가 실제 획득과 같은 술어로 한다.
+        -->
+        <Message v-if="admin.writeLockHolder !== null" severity="warn" :closable="false" class="jobs__lock">
+          쓰기 잠금을 {{ writeLockHolderText(admin.writeLockHolder) }}이(가) 쥐고 있습니다 — 끝난 뒤에 실행할 수 있습니다.
+        </Message>
         <ul class="jobs">
           <li v-for="job in admin.jobs" :key="job.name" class="job">
             <div class="job__body">
@@ -432,7 +454,7 @@ function formatTime(value: string | null): string {
                 label="실행"
                 icon="pi pi-play"
                 size="small"
-                :disabled="job.running"
+                :disabled="job.running || job.blockedBy !== null"
                 :loading="runningJobName === job.name"
                 @click="confirmRun(job)"
               />
@@ -695,6 +717,10 @@ function formatTime(value: string | null): string {
 .stat__meta {
   font-size: var(--app-text-sm);
   color: var(--p-text-muted-color);
+}
+
+.jobs__lock {
+  margin: 0 0 0.75rem;
 }
 
 .jobs {

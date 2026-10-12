@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
+import com.stockscreener.pipeline.lock.WriteLock;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -44,7 +45,7 @@ class AdminJobLauncherTest {
     private final AdminJobLauncher launcher = new AdminJobLauncher(
             new SimpleAsyncTaskExecutor(), dailyUpdateJob, universeRebalanceJob,
             indicatorBackfillJob, companyProfileJob, corporateActionJob, marketIndexJob,
-            marketCalendarJob, governanceDeriveJob);
+            marketCalendarJob, governanceDeriveJob, WriteLock.inactive("단위 시험"));
 
     @Test
     @DisplayName("리밸런싱의 콜 어림값이 그 꼬리가 부르는 잡보다 작지 않다 — 화면은 이 수로 승인을 받는다")

@@ -6,6 +6,7 @@ import com.stockscreener.pipeline.batch.AdminJobLauncher;
 import com.stockscreener.pipeline.batch.BatchExecutionReader;
 import com.stockscreener.pipeline.batch.BatchStatus;
 import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
+import com.stockscreener.pipeline.lock.WriteLock;
 import com.stockscreener.web.ApiExceptions;
 import com.stockscreener.web.ApiProblemType;
 
@@ -41,12 +42,14 @@ public class AdminBatchController {
     private final BatchExecutionReader reader;
     private final AdminJobLauncher launcher;
     private final JobFreshnessPolicy freshnessPolicy;
+    private final WriteLock writeLock;
 
     public AdminBatchController(BatchExecutionReader reader, AdminJobLauncher launcher,
-                                JobFreshnessPolicy freshnessPolicy) {
+                                JobFreshnessPolicy freshnessPolicy, WriteLock writeLock) {
         this.reader = reader;
         this.launcher = launcher;
         this.freshnessPolicy = freshnessPolicy;
+        this.writeLock = writeLock;
     }
 
     @GetMapping("/batches")
@@ -120,11 +123,17 @@ public class AdminBatchController {
         return new JobLaunchResponse(execution.jobName(), execution.targetDate());
     }
 
-    /** 화면에서 띄울 수 있는 잡. 프론트가 이름을 하드코딩하지 않게 서버가 준다. */
+    /**
+     * 화면에서 띄울 수 있는 잡. 프론트가 이름을 하드코딩하지 않게 서버가 준다.
+     *
+     * <p>쓰기 잠금 보유자를 함께 싣는다(ADR-0175) — 눌러서 409를 받기 전에 버튼이 잠기고 무엇을 기다리는지 보이게. 판정은
+     * 실제 획득과 같은 술어다({@link WriteLock#blockingHolder}).
+     */
     @GetMapping("/jobs")
     public List<JobResponse> jobs() {
+        WriteLockHolderResponse blockedBy = writeLock.blockingHolder().map(WriteLockHolderResponse::of).orElse(null);
         return launcher.catalog().stream()
-                .map(descriptor -> JobResponse.of(descriptor, launcher.isRunning(descriptor.name())))
+                .map(descriptor -> JobResponse.of(descriptor, launcher.isRunning(descriptor.name()), blockedBy))
                 .toList();
     }
 

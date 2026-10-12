@@ -15,6 +15,7 @@ import {
   interactionActionLabel,
   triggeredByLabel,
   scopeNote,
+  writeLockHolderText,
 } from './admin'
 
 function execution(overrides: Partial<BatchExecution> = {}): BatchExecution {
@@ -139,5 +140,39 @@ describe('재실행 가능 판정', () => {
     // 유도하면 잡이 늘 때마다 화면을 고쳐야 하고, 고치지 않은 사실은 버튼이 없는 것으로만
     // 보인다. daily-update여도 서버가 아니라면 끈다.
     expect(canRetry(execution({ jobName: 'daily-update' }), false)).toBe(false)
+  })
+})
+
+describe('쓰기 잠금 보유자', () => {
+  const holder = {
+    kind: 'BOOTRUN',
+    pid: 4242,
+    sessionId: null,
+    purpose: 'job:financial-refill',
+    since: '2026-10-07T04:00:00Z',
+    waiting: false,
+  }
+
+  it('JVM 보유자는 종류 · pid · 목적을 말한다', () => {
+    expect(writeLockHolderText(holder)).toBe('bootRun pid 4242 · job:financial-refill')
+    expect(writeLockHolderText({ ...holder, kind: 'WEB', purpose: 'cron:runDailyUpdate' })).toBe(
+      '이 앱 pid 4242 · cron:runDailyUpdate',
+    )
+  })
+
+  it('손 세션은 세션 id를 말한다', () => {
+    expect(
+      writeLockHolderText({ ...holder, kind: 'SESSION', pid: null, sessionId: 'fr-1009', purpose: null }),
+    ).toBe('손 쓰기 세션 「fr-1009」')
+  })
+
+  it('보유가 아니라 대기 중인 크론이면 그렇게 말한다 — 비어 보이는데 왜 잠겼는지가 답이다', () => {
+    expect(writeLockHolderText({ ...holder, kind: 'WAITER', waiting: true, purpose: 'cron:reconcileIndicators' })).toBe(
+      '차례를 기다리는 쓰기 크론(cron:reconcileIndicators)',
+    )
+  })
+
+  it('모르는 종류는 던지지 않고 그대로 보인다 — 실행 영역이 통째로 사라지면 안 된다', () => {
+    expect(writeLockHolderText({ ...holder, kind: 'SOMETHING_NEW' })).toBe('SOMETHING_NEW pid 4242 · job:financial-refill')
   })
 })

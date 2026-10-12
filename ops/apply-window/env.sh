@@ -24,7 +24,9 @@ head_now() { (cd "$REPO" && git rev-parse HEAD); }
 boot() { local db="$1"; shift
   [ "$(head_now)" = "$(cat $A/head.txt)" ] || die "HEAD가 사전 점검 뒤 바뀌었다 — bootRun은 작업 트리를 컴파일해 쓴다"
   if [ "$db" = "$LIVE" ]; then (cd "$REPO" && ./gradlew bootRun -PskipFrontend --args="--spring.profiles.active=bootstrap $*")
-  else (cd "$REPO" && DB_URL="jdbc:postgresql://localhost:5432/$db" BOOTSTRAP_DB="$db" ALERT_WEBHOOK_URL= MAIL_USERNAME= SENTRY_DSN= ./gradlew bootRun -PskipFrontend --args="--spring.profiles.active=bootstrap $*"); fi; }
+  # 사본은 세션 변수를 걷는다(ADR-0175) — 쓰기 세션은 운영 DB의 잠금 행이라 사본에 붙은 JVM이 합류하려 들면 「세션이 쓰기 잠금을
+  # 쥐고 있지 않다」로 기동이 선다. 사본은 이름이 달라 가드가 꺼져 있으므로 그 JVM은 사본의 잠금을 따로 쥔다.
+  else (cd "$REPO" && env -u SS_WRITE_SESSION -u PGAPPNAME DB_URL="jdbc:postgresql://localhost:5432/$db" BOOTSTRAP_DB="$db" ALERT_WEBHOOK_URL= MAIL_USERNAME= SENTRY_DSN= ./gradlew bootRun -PskipFrontend --args="--spring.profiles.active=bootstrap $*"); fi; }
 max_exec_id() { q "$1" "select coalesce(max(id),0) from batch_execution"; }
 # 이번 실행 행 하나를 찾아 단언하고 그 id를 낸다. 가장 마지막 행이 아니라 「P 뒤 · 그 job · MANUAL」 정확히 1행이다.
 new_exec() { # <db> <이전 max id> <job> <기대 target | ->

@@ -29,10 +29,17 @@
 **금 2026-09-18 15:12 이후 시작** · refill·게이트는 **18:50 KST 전**(EDGAR 접수 창 — 인용) · 토 09-19 20:00 리밸런싱 전에 판정까지. 잡은 하나씩.
 
 ## 순서 (스크립트)
+**잠금 jar가 배포된 운영 DB에서는** 운영에 쓰는 단계(4·5·6)를 세션 안에서 돈다(잡 사이 틈에 크론이 끼지 않게 — 가드를 켜면
+무신원 쓰기는 거절까지 된다) — `ops/write-session.sh begin <id>` 뒤
+`ops/write-session.sh exec <id> -- ops/apply-window/04-refill.sh stock_screener true`처럼 스크립트째 `exec`한다(ADR-0175).
+`boot()`는 사본 DB로 띄울 때 세션 변수를 걷는다 — 세션은 운영 DB의 잠금 행이라 사본의 JVM이 합류하려 들면 거절된다.
+
 0. `00-precheck.sh` — HEAD 기록·작업 트리 깨끗·RUNNING 0·bootRun 0·오늘 13:30·14:00 완료·마이그레이션 0·대상 파일(전체=현재+과거)·LATEST.
 1. `01-dump-shadows.sh` — 덤프 → S1·S0 복원 + VACUUM ANALYZE.
 2. `02-snapshot.sh before stock_screener`.
-3. `ops/deploy.sh` → `ops/status.sh`로 앱 확인.
+3. `ops/deploy.sh` → `ops/status.sh`로 앱 확인. **쓰기 세션을 쥔 채면 배포가 멈춘다**(새 앱은 기동에서 잠금을 쥔다 ·
+   ADR-0175) — `ops/write-session.sh end <id>` → `ops/deploy.sh` → `ops/write-session.sh begin <id>`. 세션을 `end`하면 그 사이
+   크론·관리자 잡이 쥘 수 있으니 다시 `begin`한 뒤 `RUNNING` 0을 확인하고 잇는다.
 4. `04-refill.sh stock_screener_q4v_shadow true` — 그날 수를 먼저 본다(현재 약 2,257 · 과거 약 310 · 실패는 기대 목록뿐).
 5. `04-refill.sh stock_screener true` — 이 뒤로 6이 끝날 때까지 멈추지 않는다.
 6. `05-backfill.sh stock_screener` → `06-vacuum.sh stock_screener`.

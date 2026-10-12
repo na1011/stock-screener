@@ -918,6 +918,26 @@ export interface AdminJob {
   /** 이 버튼이 태우는 외부 API 콜의 어림값. 누르기 전에 보여야 한다. */
   externalCallEstimate: number
   running: boolean
+  /**
+   * 지금 띄우면 거절할 쓰기 잠금 보유자(ADR-0175). 있으면 버튼을 잠근다 — 판정은 서버가 실제 획득과 같은 술어로 한다.
+   * 잠금은 DB에 하나라 모든 잡이 같은 값을 든다.
+   */
+  blockedBy: WriteLockHolder | null
+}
+
+/**
+ * 쓰기 잠금 보유자. 409 `write-lock-held`의 속성과 같은 칸이다.
+ *
+ * `kind`를 유니온으로 좁히지 않는다 — 이름만 흔들리는 자리라 서버가 값을 늘리면 그대로 보인다(`lib/admin`의 `writeLockHolderText`).
+ */
+export interface WriteLockHolder {
+  /** `WEB`(이 앱) · `BOOTRUN` · `SESSION`(손 세션) · `WAITER`(차례를 기다리는 쓰기 크론) */
+  kind: string
+  pid: number | null
+  sessionId: string | null
+  purpose: string | null
+  since: string | null
+  waiting: boolean
 }
 
 export interface JobRunRequest {

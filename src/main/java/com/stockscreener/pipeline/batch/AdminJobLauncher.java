@@ -1,5 +1,8 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.lock.WriteLock;
+import com.stockscreener.pipeline.lock.WriteLockHeldException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -53,6 +56,7 @@ public class AdminJobLauncher {
     private final Set<String> running = ConcurrentHashMap.newKeySet();
 
     private final AsyncTaskExecutor taskExecutor;
+    private final WriteLock writeLock;
     private final DailyUpdateJob dailyUpdateJob;
     private final Map<String, JobRunner> jobs;
     private final List<Descriptor> catalog;
@@ -78,8 +82,10 @@ public class AdminJobLauncher {
                             CorporateActionJob corporateActionJob,
                             MarketIndexJob marketIndexJob,
                             MarketCalendarJob marketCalendarJob,
-                            GovernanceDeriveJob governanceDeriveJob) {
+                            GovernanceDeriveJob governanceDeriveJob,
+                            WriteLock writeLock) {
         this.taskExecutor = taskExecutor;
+        this.writeLock = writeLock;
         this.dailyUpdateJob = dailyUpdateJob;
         this.jobs = Map.of(
                 // MUST NOT: 대상 일자 기본값을 여기서 다시 계산하지 않는다. 자체 계산
@@ -278,14 +284,38 @@ public class AdminJobLauncher {
      * 워커 스레드의 기본 처리로 넘어가 <b>어디에도 남지 않는다.</b> 잡 안에서 일어난 실패는
      * {@code BatchExecutionContext}가 기록하고 알리지만, 그 바깥에서 터진 것은 이 한 줄이
      * 유일한 흔적이다. 다시 던지지 않는 이유는 던져 봐야 받을 사람이 없기 때문이다.
+     *
+     * <p><b>쓰기 잠금은 요청 스레드에서 쥔다</b>(ADR-0175) — 못 쥐면 {@link WriteLockHeldException}이 그대로 나가 컨트롤러가 409와
+     * 보유자를 돌려준다(비동기 스레드에서 쥐면 거절을 받을 호출부가 없다). 반납은 잡 스레드의 {@code finally}다.
+     *
+     * @throws WriteLockHeldException 다른 쓰기(이 JVM의 크론·다른 관리자 잡 · 다른 JVM · 손 세션)가 잠금을 쥐고 있다
      */
     private boolean submit(String jobName, Supplier<BatchStatus> job) {
         if (!running.add(jobName)) {
             log.info("이미 도는 중이라 새로 띄우지 않는다. jobName={}", jobName);
             return false;
         }
+        WriteLock.Token token;
+        try {
+            token = writeLock.acquire("admin:" + jobName);
+        } catch (RuntimeException e) {
+            running.remove(jobName);
+            throw e;
+        }
 
-        taskExecutor.execute(() -> {
+        try {
+            taskExecutor.execute(() -> runHolding(jobName, job, token));
+        } catch (RuntimeException e) {
+            // 제출이 거절되면(실행기 종료 중 등) 잡 스레드의 finally가 안 돈다 — 여기서 푼다.
+            token.close();
+            running.remove(jobName);
+            throw e;
+        }
+        return true;
+    }
+
+    private void runHolding(String jobName, Supplier<BatchStatus> job, WriteLock.Token token) {
+        try (token) {
             try {
                 BatchStatus status = job.get();
                 log.info("관리자가 띄운 잡이 끝났다. jobName={} status={}", jobName, status);
@@ -302,8 +332,7 @@ public class AdminJobLauncher {
             } finally {
                 running.remove(jobName);
             }
-        });
-        return true;
+        }
     }
 
     /** 실행 파라미터. 비어 있으면 잡마다 정한 기본값을 쓴다. */

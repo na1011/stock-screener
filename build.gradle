@@ -525,6 +525,9 @@ tasks.named('test') {
     useJUnitPlatform {
         excludeTags 'live', 'backtest'
     }
+    // 시험이 ops/의 셸 스크립트를 읽고 돌린다(CronsDoneTableTest · WriteSessionScriptTest). 입력으로 안 적으면 스크립트만 고친
+    // 변경에 Gradle이 test를 UP-TO-DATE로 건너뛰고 옛 초록을 보여 준다 — 쓰기 세션 대조군이 실제로 그렇게 초록으로 남았다.
+    inputs.dir('ops').withPropertyName('opsScripts').withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // macOS Finder가 병합 시 만드는 "이름 2.java" 복제본을 잡는다. javac는 파일명이 아니라

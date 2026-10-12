@@ -4,6 +4,7 @@ import type {
   ExecutionScopeReason,
   InteractionAction,
   TriggeredBy,
+  WriteLockHolder,
 } from '@/api/types'
 
 /**
@@ -195,4 +196,27 @@ export function canRetry(execution: BatchExecution, retrySupported: boolean): bo
 
 function assertNever(value: never): never {
   throw new Error(`처리하지 않은 값이다: ${String(value)}`)
+}
+
+/**
+ * 쓰기 잠금 보유자를 한 줄로(ADR-0175). 버튼을 잠근 사유이자 409가 말하는 사유다.
+ *
+ * 보유 종류는 **낯선 이름을 그대로 보인다** — 이름만 흔들리는 자리라 던지면 실행 영역이 통째로 사라진다.
+ */
+export function writeLockHolderText(holder: WriteLockHolder): string {
+  if (holder.waiting) {
+    return `차례를 기다리는 쓰기 크론(${holder.purpose ?? '목적 모름'})`
+  }
+  const who = WRITE_LOCK_HOLDER_KINDS[holder.kind] ?? holder.kind
+  if (holder.kind === 'SESSION') {
+    return `${who} 「${holder.sessionId ?? '?'}」`
+  }
+  const pid = holder.pid === null ? '' : ` pid ${holder.pid}`
+  return `${who}${pid}${holder.purpose ? ` · ${holder.purpose}` : ''}`
+}
+
+const WRITE_LOCK_HOLDER_KINDS: Record<string, string> = {
+  WEB: '이 앱',
+  BOOTRUN: 'bootRun',
+  SESSION: '손 쓰기 세션',
 }

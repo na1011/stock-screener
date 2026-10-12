@@ -133,7 +133,8 @@ class PresetSynchronizerTest {
     }
 
     private PresetSynchronizer synchronizerOf(ScreenPreset... presets) {
-        return new PresetSynchronizer(List.of(presets), store, indicatorCatalog);
+        return new PresetSynchronizer(List.of(presets), store, indicatorCatalog,
+                com.stockscreener.pipeline.lock.CatalogWriteGate.permissive());
     }
 
     private static ScreenPreset preset(String code, String name, String threshold) {

@@ -27,20 +27,22 @@ applies_to:
 psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) FILTER (WHERE backend_type = 'client backend') = 0
     THEN '잴 것이 없었다 — 붙어 있는 클라이언트 백엔드가 하나도 없다'
-  WHEN count(*) FILTER (WHERE application_name = 'psql' AND state = 'active'
+  WHEN count(*) FILTER (WHERE (application_name = 'psql' OR application_name ~ '^ss:s:[a-z0-9-]+$') AND state = 'active'
         AND now() - query_start > interval '60 seconds'
         AND query !~* '^\s*(REINDEX|VACUUM|CREATE INDEX|CLUSTER|ANALYZE)') = 0
     THEN 'OK 60초 넘게 도는 psql 백엔드 0개 / 클라이언트 백엔드 '
          || count(*) FILTER (WHERE backend_type = 'client backend')
   ELSE '상한을 벗어난 psql 백엔드가 있다: ' || string_agg(
          pid || ' ' || date_trunc('second', now() - query_start) || ' ' || left(query, 40), ' / ')
-         FILTER (WHERE application_name = 'psql' AND state = 'active'
+         FILTER (WHERE (application_name = 'psql' OR application_name ~ '^ss:s:[a-z0-9-]+$') AND state = 'active'
                  AND now() - query_start > interval '60 seconds'
                  AND query !~* '^\s*(REINDEX|VACUUM|CREATE INDEX|CLUSTER|ANALYZE)')
   END FROM pg_stat_activity"
 ```
 
 **설정값이 아니라 결과를 재는 이유:** 펜스는 `check-premises.sh` 안에서 도는데 그 훅이 자기 `PGOPTIONS`로 `statement_timeout=6s`를 덮는다. `SHOW statement_timeout`은 그래서 영원히 `6s`를 내고 전역 설정을 못 본다. **상한이 걸려 있는지가 아니라 상한을 벗어난 것이 남아 있는지를 묻는다.**
+
+**모집단에 넣은 것:** `ops/write-session.sh exec` 안의 psql은 `PGAPPNAME=ss:s:<id>`라 `application_name`이 `psql`이 아니다(ADR-0175) — 그 꼴(`ss:s:` + 세션 id, 합류 JVM의 `:j:` 꼴은 빠진다)도 센다. 같은 신원의 `pg_restore`가 60초 넘게 `COPY`를 돌리면 이 펜스가 신고한다 — 그때는 그 세션의 복원이 도는 중인지 먼저 본다.
 
 **모집단에서 뺀 것과 그 근거:** `REINDEX`·`VACUUM`·`CREATE INDEX`·`CLUSTER`·`ANALYZE`는 위 규칙이 **일부러 상한을 푸는** 작업이라 세면 매 세션 거짓 발견이 난다. **이 목록이 자라는 자리는 위 「규칙」의 마지막 항목이다** — 거기에 새로 푸는 작업을 더하면 여기도 함께 더한다.
 

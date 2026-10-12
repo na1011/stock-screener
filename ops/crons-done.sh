@@ -16,14 +16,16 @@
 #      60초를 빼는 것은 크론이 명목보다 조금 일찍 발화하기 때문이다(운영 기록 13:30·14:00 첫 잡 62건 중 21건이 명목 전 ·
 #      최대 −2.189초) — 할 일이 없어 바로 끝나는 크론은 끝 줄도 명목 전에 찍힌다. 같은 크론의 앞 발화는 하루 전이라 안 겹친다.
 #      끝 줄은 회전된 로그(stdout.log.N.gz)까지 찾는다.
-#   3. batch_execution에 **이 JVM이 뜬 뒤 시작한** MANUAL 아닌 RUNNING이 없다. 트리거로 소유자를 가르지 않는다 —
-#      리밸런싱 꼬리의 GAP_FILL은 두 JVM 모두에서 돈다(10-03 #703 MANUAL 리밸런싱 → #704~708 GAP_FILL · BatchExecutionSweeper).
-#      그래서 「이 JVM보다 먼저 시작된 행은 이 JVM의 것이 아니다」(스위퍼와 같은 규칙)로 가른다 — 아니면 꼬리 도중 죽은 JVM의
-#      GAP_FILL 유령(어느 스윕도 안 닫는다)이 이 판정을 영구히 1로 만든다(2026-10-06 반증 · 사본 재현). MANUAL은 다른 JVM(bootRun)이라
-#      앱을 내려도 안 끊기고, 그 유령은 스위퍼가 다음 bootstrap 때에야 닫는다(08-06~09-08에 12건 · 최대 76시간).
-#      기동 뒤 GAP_FILL이 손 리밸런싱의 꼬리여도 1을 낸다(막히는 쪽 — 그 꼬리도 끝나야 앱을 내릴 이유가 없다).
-#   4. (판정 밖 · 참고) 적재 JVM(bootRun)을 찍는다 — 손 쓰기 잡을 **새로 시작하는** 문은 이 판정 0에 더해 그것이 없어야 한다
-#      (JVM을 건너는 쓰기 배타가 없다 · progress). MANUAL RUNNING 행으로 묻지 않는 것은 유령을 못 가르기 때문이다. 판정은 훅과
+#   3. batch_execution에 **이 앱 JVM의** RUNNING이 없다. 주인이 적힌 행(V66 · ADR-0175)은 주인으로 가른다 — 같은 DB 이름 ∧
+#      주인 pid = 앱 pid ∧ 주인 시작 초 = 앱의 `LC_ALL=C ps -o lstart`(Java ProcessHandle과 같은 초 · lib.sh `proc_start_epoch`).
+#      리밸런싱 꼬리의 GAP_FILL도 그 꼬리를 연 JVM이 주인이라 bootRun의 꼬리는 앱을 막지 않는다(내려도 안 끊긴다).
+#      주인이 빈 옛 행(V66 전 jar)과 다른 DB 이름의 행(사본으로 넘어온 행)은 예전 규칙이다 — 트리거로 소유자를 가르지 않고
+#      「이 JVM보다 먼저 시작된 행은 이 JVM의 것이 아니다」(스위퍼와 같은 규칙)로 가른다 — 아니면 꼬리 도중 죽은 JVM의
+#      GAP_FILL 유령(어느 스윕도 안 닫는다)이 이 판정을 영구히 1로 만든다(2026-10-06 반증 · 사본 재현).
+#      그 갈래에서는 기동 뒤 GAP_FILL이 손 리밸런싱의 꼬리여도 1을 낸다(막히는 쪽).
+#   4. (판정 밖 · 참고) 적재 JVM(bootRun)과 쓰기 잠금 보유자를 찍는다 — 손 쓰기 잡을 **새로 시작하는** 문은 이 판정 0에 더해
+#      그것이 없어야 한다(가드가 켜진 DB에서는 잠금이 겹침을 거절로 바꾸지만, 사슬 사이에 끼면 다음 크론이 기다린다 · progress의
+#      손 쓰기 문). MANUAL RUNNING 행으로 묻지 않는 것은 유령을 못 가르기 때문이다. 적재 JVM 판정은 훅과
 #      같은 함수(`.claude/hooks/lib/load-process.sh`의 `stray_load_pids`)다 — 따로 짠 grep은 `SPRING_PROFILES_ACTIVE=bootstrap`
 #      ·`local,bootstrap`을 놓치고 그 문구를 실은 셸을 잘못 잡았다(2026-10-06 반증 · 더미 넷).
 # 지연 L(벽시계 경과 − JVM 가동 시간)은 참고로만 찍는다 — 크론마다의 밀림이 아니다.
@@ -91,19 +93,17 @@ case $boot_rc in
   *) boots_msg="판정하지 못했다(pgrep·ps 없음) — 없다로 읽지 않는다" ;;
 esac
 echo "[crons] 적재 JVM(bootRun · 참고 · 판정 밖): ${boots_msg} — 손 쓰기 잡을 새로 시작하려면 이것도 없어야 한다."
+holder=$(write_lock_holder "$DB" 2>/dev/null) || holder="판정하지 못했다(psql) — 없다로 읽지 않는다"
+echo "[crons] 쓰기 잠금 보유(참고 · 판정 밖): ${holder}"
 
 if ! pid=$(running_pid "$APP_PID_FILE" "$APP_PATTERN"); then
   echo "[crons] 앱이 안 떠 있다 — 빠질 발화가 없다. 다음 명목 발화: $(next_fire)"
   exit 0
 fi
 
-etime=$(ps -o etime= -p "$pid" | tr -d ' ')
-IFS=- read -r days rest <<< "$( [[ "$etime" == *-* ]] && echo "$etime" || echo "0-$etime" )"
-IFS=: read -r -a hms <<< "$rest"
-elapsed=0
-for part in "${hms[@]}"; do elapsed=$((elapsed * 60 + 10#$part)); done
-elapsed=$((elapsed + days * 86400))
-jvm_start=$((now - elapsed))
+# 앱 JVM의 시작 초 — 실행 행의 주인 칸(owner_start)과 같은 값이어야 한다(ADR-0175 · 셸 lstart = Java ProcessHandle 초 절사).
+jvm_start=$(proc_start_epoch "$pid") || { echo "[crons] 앱 PID ${pid}의 시작 시각을 못 읽었다(ps lstart) — 판정하지 못했다." >&2; exit 2; }
+elapsed=$((now - jvm_start))
 if uptime_line=$(jcmd "$pid" VM.uptime 2>/dev/null | tail -1) && up="${uptime_line%% *}" && up="${up%%.*}" \
     && [[ "$up" =~ ^[0-9]+$ ]]; then
   L="$((elapsed - up))초"
@@ -141,12 +141,23 @@ if [ "$pending" -gt 0 ]; then
 fi
 
 psql=$(pg_bin psql) || { echo "[crons] psql을 못 찾았다 — 판정하지 못했다." >&2; exit 2; }
-if ! running=$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$DB" -c "select count(*) from batch_execution where status='RUNNING' and triggered_by <> 'MANUAL' and started_at >= to_timestamp(${jvm_start})" 2>/dev/null); then
+# 주인 칸이 있는 DB(V66 뒤)면 주인으로, 없으면 예전 규칙만 — 칸이 없는 DB에 주인 술어를 보내면 질의가 파싱에서 죽는다.
+if ! owned=$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$DB" -c "select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'batch_execution' and column_name = 'owner_pid'" 2>/dev/null); then
+  echo "[crons] batch_execution을 못 읽었다 — 판정하지 못했다." >&2
+  exit 2
+fi
+unowned="triggered_by <> 'MANUAL' and started_at >= to_timestamp(${jvm_start})"
+if [ "$owned" = "1" ]; then
+  mine="status = 'RUNNING' and ((owner_pid is not null and owner_db = current_database() and owner_pid = ${pid} and owner_start = ${jvm_start}) or ((owner_pid is null or owner_db is distinct from current_database()) and ${unowned}))"
+else
+  mine="status = 'RUNNING' and ${unowned}"
+fi
+if ! running=$(PGCONNECT_TIMEOUT=5 "$psql" -X -w -At -d "$DB" -c "select count(*) from batch_execution where ${mine}" 2>/dev/null); then
   echo "[crons] batch_execution을 못 읽었다 — 판정하지 못했다." >&2
   exit 2
 fi
 if [ "$running" -ne 0 ]; then
-  echo "[crons] 이 JVM이 뜬 뒤 시작한 SCHEDULER·ADMIN·GAP_FILL 실행 ${running}개가 RUNNING이다(GAP_FILL은 손 리밸런싱의 꼬리일 수도 있다) — 아직 안 된다."
+  echo "[crons] 이 앱 JVM의 실행 ${running}개가 RUNNING이다(주인이 빈 옛 행이면 이 JVM이 뜬 뒤 시작한 SCHEDULER·ADMIN·GAP_FILL — 손 리밸런싱의 꼬리일 수도 있다) — 아직 안 된다."
   exit 1
 fi
 next=$(next_fire)

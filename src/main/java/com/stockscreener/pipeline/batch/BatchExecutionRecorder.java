@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.lock.ProcessIdentity;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,13 +86,16 @@ public class BatchExecutionRecorder {
         // 전량으로 센다(실패 시 열리는 방향). 「필수 인자」라도 null은 컴파일된다.
         Objects.requireNonNull(scope, "scope — 정기 실행과 같은 범위인지와 아니면 그 사유를 잡이 정해 넘긴다(V63 · V65)");
         DeclaredScope recorded = recordedScope(jobName, targetDate, triggeredBy, scope);
+        // 행의 주인(V66 · ADR-0175) — 스위퍼가 「같은 DB ∧ 그 프로세스가 죽었다」로만 이 행을 닫는다.
+        ProcessIdentity owner = ProcessIdentity.current();
         Long id = jdbcTemplate.queryForObject("""
                 INSERT INTO batch_execution
-                    (job_name, target_date, status, triggered_by, target_count, scope, scope_reason, started_at)
-                VALUES (?, ?, 'RUNNING', ?, ?, ?, ?, now())
+                    (job_name, target_date, status, triggered_by, target_count, scope, scope_reason, started_at,
+                     owner_pid, owner_start, owner_db)
+                VALUES (?, ?, 'RUNNING', ?, ?, ?, ?, now(), ?, ?, current_database())
                 RETURNING id
                 """, Long.class, jobName, targetDate, triggeredBy.name(), targetCount,
-                recorded.scope().name(), reasonName(recorded));
+                recorded.scope().name(), reasonName(recorded), owner.pid(), owner.startEpochSecond());
         return new Started(id, recorded);
     }
 
@@ -149,13 +153,15 @@ public class BatchExecutionRecorder {
         // 실패분만 다시 도는 실행이라 언제나 NARROW다 — 정기 실행과 같은 범위가 아니다. 사유는 start와 같은 우선순위를
         // 탄다: 기준일이 지금이 아니면 PAST_DATE가 RERUN보다 먼저다(recordedScope를 안 지나므로 여기서 같은 판정을 한다).
         ScopeReason reason = isCurrent(targetDate) ? ScopeReason.RERUN : ScopeReason.PAST_DATE;
+        ProcessIdentity owner = ProcessIdentity.current();
         return jdbcTemplate.queryForObject("""
                 INSERT INTO batch_execution
                     (job_name, target_date, status, triggered_by, target_count,
-                     retried_from_id, scope, scope_reason, started_at)
-                VALUES (?, ?, 'RUNNING', 'ADMIN', ?, ?, 'NARROW', ?, now())
+                     retried_from_id, scope, scope_reason, started_at, owner_pid, owner_start, owner_db)
+                VALUES (?, ?, 'RUNNING', 'ADMIN', ?, ?, 'NARROW', ?, now(), ?, ?, current_database())
                 RETURNING id
-                """, Long.class, jobName, targetDate, targetCount, retriedFromId, reason.name());
+                """, Long.class, jobName, targetDate, targetCount, retriedFromId, reason.name(),
+                owner.pid(), owner.startEpochSecond());
     }
 
     /**

@@ -83,6 +83,20 @@ if [[ $WANT_APP -eq 1 ]]; then
         echo "       기다렸다 다시 친다. 사람이 판정을 넘기려면: ops/stop.sh${MODE:+ $MODE} --force" >&2
         exit 1
       fi
+      # 앱 JVM이 쓰기 잠금을 쥐고 있으면 내리지 않는다(ADR-0175 · 잠금 결정 11) — 크론·관리자 잡·판정 PUT이 지금 쓰는 중이다.
+      # 남(bootRun · 손 세션)이 쥐고 있는 것은 막지 않는다 — 앱을 내려도 그 쓰기는 안 끊긴다(손 FR 절차가 세션을 쥔 채 앱을 내린다).
+      app_pid="$(running_pid "$APP_PID_FILE" "$APP_PATTERN" || true)"
+      held=0
+      holding="$(write_lock_held_by_jvm "${DB_NAME:-stock_screener}" "$app_pid")" || held=$?
+      if [[ $held -eq 0 ]]; then
+        echo "[stop] 앱 JVM이 쓰기 잠금을 쥐고 있다(${holding}) — 쓰는 중이라 내리지 않는다." >&2
+        echo "       끝난 뒤 다시 친다. 사람이 판정을 넘기려면: ops/stop.sh${MODE:+ $MODE} --force" >&2
+        exit 1
+      elif [[ $held -eq 2 ]]; then
+        echo "[stop] 쓰기 잠금을 앱 JVM이 쥐었는지 판정하지 못했다(psql) — 앱을 내리지 않는다." >&2
+        echo "       사람이 판정을 넘기려면: ops/stop.sh${MODE:+ $MODE} --force" >&2
+        exit 1
+      fi
     fi
   fi
   # 45초다. 앱은 종료 유예 상한 15초(application.yaml의 spring.lifecycle)를 다 쓴 뒤
