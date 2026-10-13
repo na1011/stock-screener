@@ -223,14 +223,31 @@ class OpsLockScriptTest {
     // ── 도우미 ────────────────────────────────────────────────────────────────────
 
     /** 잠금 마이그레이션(write_guard_check) 앞의 운영 마이그레이션 버전 — V66 전 DB의 이력. */
+    /**
+     * 잠금 마이그레이션(가드 함수를 처음 만드는 것)보다 번호가 작은 것 전부 — 「잠금 전 DB」의 이력이다. 「가드 함수를 안 담은 것」으로
+     * 고르면 잠금 뒤에 생긴 마이그레이션(V67~)까지 넣어 「V66만 빠진」 있을 수 없는 이력이 된다(2026-10-13 V67이 그렇게 붉혔다).
+     */
     private static List<String> migrationVersionsBeforeTheLock() throws Exception {
-        List<String> versions = new ArrayList<>();
+        java.util.Map<Integer, Path> byVersion = new java.util.TreeMap<>();
         try (var files = Files.list(Path.of("src/main/resources/db/migration"))) {
             for (Path file : files.toList()) {
                 java.util.regex.Matcher m = java.util.regex.Pattern.compile("^V(\\d+)__").matcher(file.getFileName().toString());
-                if (m.find() && !Files.readString(file).contains("write_guard_check()")) {
-                    versions.add(m.group(1));
+                if (m.find()) {
+                    byVersion.put(Integer.parseInt(m.group(1)), file);
                 }
+            }
+        }
+        int lock = Integer.MAX_VALUE;
+        for (var entry : byVersion.entrySet()) {
+            if (Files.readString(entry.getValue()).contains("CREATE OR REPLACE FUNCTION public.write_guard_check()")) {
+                lock = Math.min(lock, entry.getKey());
+            }
+        }
+        assertThat(lock).as("가드 함수를 만드는 마이그레이션이 있어야 한다").isLessThan(Integer.MAX_VALUE);
+        List<String> versions = new ArrayList<>();
+        for (int version : byVersion.keySet()) {
+            if (version < lock) {
+                versions.add(String.valueOf(version));
             }
         }
         return versions;
