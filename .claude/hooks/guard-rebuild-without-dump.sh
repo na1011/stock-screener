@@ -23,6 +23,7 @@
 #     `FinancialWriter`가 `invalidate`를 불러 그 종목 지표를 보존 창 전체에서 지운다.
 #     이쪽은 **원자료까지 영구히 바뀐다** — ADR-0071이 *"적재된 재무는 되돌리지 않는다"*로
 #     못박은 자리라, 되돌릴 수 있는 것이 덤프뿐이다.
+#   * `filing-consumption`(ADR-0176 2차) — 열린 장부 행의 종목으로 좁힌 `financial-refill`을 부른다. 위와 같은 길이다.
 # 앞의 것만 막던 때가 있었고, 그때 뒤의 것은 **아무 경고 없이** 통과했다.
 set -euo pipefail
 
@@ -47,6 +48,7 @@ echo "$cmd" | grep -qE '(^|[[:space:];|&])(\./)?gradlew?([[:space:]]|$)' || exit
 case "$cmd" in
   *--job=adjustment-rebuild*) job='adjustment-rebuild' ;;
   *--job=financial-refill*)   job='financial-refill' ;;
+  *--job=filing-consumption*) job='filing-consumption' ;;
   *--job=backfill*)           job='backfill' ;;
   *--job=indicator-reconcile*) job='indicator-reconcile' ;;
   *) exit 0 ;;
@@ -73,6 +75,8 @@ case "$job" in
     why="이 잡은 계산만 하지 않는다. **돌린 날짜의 파생 행 중 「그날 모집단 밖」인 것을 지우고**(ADR-0085·0136), 러너가 「값을 그만 낸」 날짜의 옛 행도 걷는다(ADR-0130 — 전 종목 한 판이 실측 285,498행을 지웠다). \`--tickers\`로 좁혀도 **파생층은 전 종목이라 그날 것이 전부 걸린다.**" ;;
   indicator-reconcile)
     why="매 평일 화해와 같은 메서드다 — 보존 창 편입 전원의 원본층을 다시 쓰고 **창 전체 파생층의 「그날 모집단 밖」 행을 지운다.** \`--tickers\`로 좁혀도 파생층은 창 전체다." ;;
+  filing-consumption)
+    why="이 잡은 열린 장부 행의 종목으로 좁힌 \`financial-refill\`(국내는 \`full-statement-refill\`까지)을 부른다 — 정정을 만나면 개정본을 쌓고 그 종목 지표를 보존 창 전체에서 지운다(ADR-0040·0176). 적재된 원자료는 되돌리지 않으므로(ADR-0071) 되돌릴 수 있는 것이 덤프뿐이다." ;;
   financial-refill)
     why="이 잡은 결손만 채우는 것이 아니다. 소스가 더 늦은 공시일을 주면 **정정으로 판정해 개정본을 쌓고** 그 종목 지표를 보존 창 전체에서 지운다(ADR-0040). 게다가 적재된 원자료는 되돌리지 않는 것이 규칙이라(ADR-0071), 되돌릴 수 있는 것이 덤프뿐이다." ;;
 esac

@@ -15,6 +15,10 @@ applies_to:
   - "src/main/java/**/datasource/kr/DartDailyQuota.java"
   - "src/main/java/**/datasource/kr/DartResponse.java"
   - "src/main/java/**/datasource/http/DataSourceHttpConfig.java"
+  - "src/main/resources/db/migration/V68__filing_consumption_ground.sql"
+  - "src/main/java/**/batch/FilingConsumptionJob.java"
+  - "src/main/java/**/datasource/us/SecFilingConsumption.java"
+  - "src/main/java/**/datasource/FilingTrace.java"
 ---
 
 # ADR-0176. 원장의 정기 공시 목록을 매 평일 받아 공시마다 소비 장부에 쌓는다
@@ -23,8 +27,10 @@ applies_to:
 
 평일 14:16 크론이 원장의 그날 정기 공시 목록을 받는다 — 미국은 EDGAR 일일 색인(`daily-index`), 국내는 DART 공시검색(`list.json`).
 우리 종목에 붙는 공시마다 `filing_consumption`에 한 행을 쌓고, 시장마다 「끝까지 받아 닫은 날」을 `filing_listing_day`에 남겨 커서로 쓴다.
-장부를 먹는 소비 단계(지금 편입 종목의 좁힌 FR·FSR)는 같은 크론의 2차로 붙는다 — 이 ADR의 1차는 목록과 장부뿐이고 값을 바꾸는 표를 안 건드린다.
 함께 DART 리미터의 일일 총량을 **URL 경로마다** 센다(분당 600은 키 합 그대로).
+
+**2차(소비 · `FilingConsumptionJob`)**: 같은 크론이 목록 뒤에 열린 장부 행을 **지금 활성 편입** 종목의 좁힌 FR(국내는 FSR까지)로
+먹이고, **그 종목을 쓴 트랜잭션 안에서** 소비됨을 표시한다. 근거는 그 FR·FSR이 받은 응답이고(`FilingTrace`) 행마다 `fr_ground`로 남긴다(V68).
 
 ## 규칙
 
@@ -46,11 +52,23 @@ applies_to:
   `RateLimiter`의 구현 전부를 싣는다. 처음 판이 `TokenBucketRateLimiter`에 넣어 SEC 판 해시를 바꿨고(전체 빌드가 잡음), DART만의 변경이
   보충 판을 올려 저장분을 다시 받게 할 뻔했다.
 
+- MUST: 소비됨 표시는 FR·FSR의 종목 훅(`runForConsumption`) 안에서만 한다 — 실행이 끝난 뒤 「그 종목 실패 없음」으로 판정하면
+  쓰기와 표시 사이에 간극(중단 · 부분 실패)이 생긴다. 훅이 던지면 그 종목의 쓰기도 되돌아간다.
+- MUST: 근거는 쓴 응답이다. 미국 ① companyfacts(**보충 전** 트리)의 us-gaap 접수번호 ② 보충 표 OK·NO_XBRL·COVERED ③ submissions의
+  `isXBRL=0`(보충은 XBRL 있는 공시만 다뤄 행이 안 생긴다). 국내는 그 (사업연도, 보고서 코드) 응답 접수번호 ≥ 목록 접수번호.
+- MUST: 소비 FR·FSR은 티커로만 부른다 — 비면 전량이 된다. 정기 경로는 `GAP_FILL`(시계 셋이 안 센다).
+- 국내 소비는 창을 대상 행 사업연도부터로 좁힌다 — DART 경로는 회수가 없고 두 어댑터가 해마다 닫혀 있다(FSR 비지배 게이트는 창 안
+  최댓값이라 아래를 잘라도 남은 해의 판정이 같다 · 시험 둘). MUST NOT: 미국 창을 좁히지 않는다 — SEC 경로는 회수가 있다.
+
 ## 검증
 
 - `FilingListingJobTest` · `SecFilingListSourceTest` · `DartFilingListSourceTest` · `DartDailyQuotaTest` — 닫는 규칙 · 실패에서
   멈춤 · 멱등 · 소스 없는 시장 · 커서 지연 알림 · 경로별 계수(대조군: 같은 경로는 한도에서 막힌다). `ReaderVersionPinTest`가 초록이다.
 - `FilingListingReplayTest`(환경변수 `FILING_SAMPLES_DIR` · 0콜) — 저장한 색인 7일 × 편입 1,000이 따로 뽑은 21건과 같다.
+- 2차: `FilingConsumptionJobTest`(국내 FR → FSR · 미반영은 「원장 아직」 · 편입 밖은 잠듦 · 대상 0이면 FR 안 부름 · **대조군: 표시 뒤
+  훅이 던지면 재무 쓰기와 표시가 함께 되돌아감** · 미국 근거 셋 · 5평일 경보) · `SecFilingConsumptionTest` ·
+  `DartFinancialAdapterTest`·`DartFullStatementGateTest`(창 아래를 잘라도 남은 해가 같다) · `PipelineSchedulerChainTest`(목록 뒤 소비 ·
+  종료 신호면 소비 안 함).
 - `CronsDoneTableTest` — `ops/crons-done.sh` 표에 14:16이 있다. `rg "rateLimiter\.(acquire|hasDailyQuota)\(" src/main/java/com/stockscreener/pipeline/datasource/kr/Dart*`가 `DartResponse` 한 곳뿐이다.
 
 ```premise 원장 공시 목록의 커서가 평일 이틀 넘게 늦지 않다
@@ -81,13 +99,21 @@ SELECT CASE
 - **DART 일일 한도를 키 합 18,000으로 둔다** — 같은 키로 하루 약 28,400콜(두 경로)에 실패 0인 운영 기록이 「키 합 2만」의 반례다.
   우리가 먼저 걸면 소스가 막지 않는 날의 소비를 우리가 끊는다. 경로 단위 한도의 존재는 재지 않았다 — 넘는 날 DART가 `020`을 내면
   `RATE_LIMITED`로 남고 다음 날 다시 돈다(값은 안 틀린다).
+- **(2차) 국내 반영을 탐침 1콜로 먼저 묻고 FR을 기본 창으로 돈다**(2부 계획 v1012 §2-C) — 탐침은 FR과 다른 시각의 다른 응답이라
+  근거가 쓴 것과 갈릴 수 있고, 창을 좁히면 FR 자체가 종목당 4~8콜이라 아낄 것이 없다. 같은 이유로 「12월 결산은 DB 행으로 FR 몫을 닫는
+  지름길」과 「수요일엔 FSR 몫을 다음 평일로」도 걷었다 — 지름길은 근거가 쓴 응답이 아니다.
+- **(2차) 실행이 끝난 뒤 「ABORTED 아님 + 그 종목 실패 행 없음」으로 표시한다** — 쓰기와 표시가 다른 트랜잭션이라 갈릴 수 있다.
 - **목록·소비를 14:15 무거운 잡 크론에 넣는다** — 그 잡은 실패하면 예외를 다시 던져 그날 목록이 함께 빠진다. 풀이 1이라 따로 둬도
   순서(14:15 → 14:16 → 14:18)는 그대로다.
 
 ## 결과
 
 - 쉬워지는 것: 원장에 있는데 DB에 없는 공시를 장부가 공시 단위로 센다(소비 안 끝난 행). 2차 소비는 그 행만 좁혀 먹인다.
+- 2차 원장 대조(2026-10-13 · SEC 42콜): 편입 표본 21건 중 10-Q/10-K 14건은 companyfacts us-gaap에, 6-K 7건은 submissions `isXBRL=0`에
+  있었다 — 근거 ①·③으로 21/21이 닫힌다(②의 실물은 표본에 없다).
 - 비용: 평일마다 SEC 1~2콜(분기 목록 + 그날 색인) · DART 6콜 + 쪽수. 첫 실행은 커서부터 밀린 날만큼(미국 09-24~ · 국내 09-21~).
 - 재지 않은 것: 색인이 날짜 순서를 어기고 늦게 올라오는 경우(앞날을 「없는 날」로 닫는다 — 7일 표본은 순서대로였다) · 새 분기 디렉터리가
-  첫 색인 전에 403인지(그날은 앞 분기 끝까지만 닫고 하루 늦는다) · DART 경로 단위 한도의 존재.
-- 되돌리기: 크론과 잡을 걷고 V67 두 표를 남겨도 아무것도 안 읽는다. 일일 계수는 `dartRateLimiter`의 일일 한도를 다시 `dart.daily-quota`로 주고 `DartDailyQuota`를 걷으면 키 합이다.
+  첫 색인 전에 403인지(그날은 앞 분기 끝까지만 닫고 하루 늦는다) · DART 경로 단위 한도의 존재 · (2차) 국내 원본 정기보고서의 재무 API
+  반영 지연 · 수요일 정기 FSR과 겹친 날 `/fnlttSinglAcntAll` 우리 한도 18,000 도달(넘으면 남은 종목이 RATE_LIMITED로 하루 늦는다).
+- 되돌리기: 크론과 잡을 걷고 V67 두 표를 남겨도 아무것도 안 읽는다. 소비만 걷으려면 14:16 크론의 `filingConsumptionJob.run` 한 줄을
+  지운다 — V68 칸과 운반(`FilingTrace`)은 출력에 닿지 않는다. 일일 계수는 `dartRateLimiter`의 일일 한도를 다시 `dart.daily-quota`로 주고 `DartDailyQuota`를 걷으면 키 합이다.

@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing|filing-consumption 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -36,6 +36,7 @@ pg_restore도 같은 exec) → `end <id>`. 세션 안 bootRun은 하나씩이다
 --job=governance-derive [--tickers=005930]
 --job=share-basis-derive [--market=US]
 --job=filing-listing [--as-of=2026-10-14]   # 커서 다음 날부터 · --as-of가 「오늘」(국내는 그날을 안 닫는다)
+--job=filing-consumption [--as-of=2026-10-14]   # 열린 장부 행 → 좁힌 FR·FSR(재무 표를 쓴다)
 ```
 
 **아래는 원장을 보고 판정하는 잡들이다.** 접두는 위와 같다 — `bootstrap` 프로파일이
@@ -69,6 +70,7 @@ pg_restore도 같은 exec) → `end <id>`. 세션 안 bootRun은 하나씩이다
 | `governance-load` | 정기보고서 주요정보 → `governance_report_row` | **원문만 담는다.** 지표용 값은 `governance-derive`가 따로 만든다(ADR-0081). 표마다 받을 해가 달라 **국내가 350종목 8,050콜**이다((엔드포인트, 연도) 23쌍) — **우리 리미터가 먼저 걸린다** — `dart.daily-quota: 18000`이 하나의 카운터로 DART 전체를 센다(api-sources의 10,000은 **API당** 계획값이다). 셋을 같은 날 돌리면 23,570으로 넘으므로 스케줄러가 **하루 하나**로 나눈다(ADR-0116). 화면에 버튼이 없다. **시장마다 답하는 표가 다르다** — 대상은 활성 유니버스 전체(지금 1,350종목)이고 잡이 소스별로 좁힌다. 미국은 **배당 하나**뿐이라 `--governance-endpoints=DIVIDEND`를 줘도 국내는 여덟 중 배당만 다시 받는다(멱등, 350종목 700콜) |
 | `governance-derive` | `governance_report_row` → `governance_fact` | **외부 호출 0.** 유도 규칙을 고친 뒤 이것만 다시 돌린다 — 표를 가른 이유가 이것이다. 종목을 **통째로** 다시 짓는다(회계연도로 좁히면 감사인 교체처럼 보고서 둘을 견줘 나오는 값이 빠진다). 화면에도 있다 |
 | `filing-listing` | 원장 공시 목록 → `filing_listing_day`·`filing_consumption` | 평일 14:16 크론과 같은 잡(ADR-0176). 장부 두 표만 쓰고 값을 바꾸는 표는 안 건드린다. 커서 다음 날부터 받는다 — `--as-of`가 「오늘」이고 국내는 그날을 닫지 않는다. 다시 돌려도 같은 줄은 장부에 안 늘어난다 |
+| `filing-consumption` | 열린 장부 행 → 지금 편입 종목의 좁힌 FR·FSR | 평일 14:16 크론이 목록 뒤에 잇는 잡(ADR-0176 2차). **재무 표를 쓴다** — 손으로 돌리면 FR·FSR이 `MANUAL`·NARROW로 남는다(정기는 `GAP_FILL`). 소비됨 표시는 그 종목을 쓴 트랜잭션 안이라 실패한 종목은 표시도 없다. 국내는 대상 행 사업연도부터 창을 좁히고 미국은 기본 창. 정정이 지운 지표는 화해가 짝이다(다음 평일 14:20 또는 `indicator-reconcile --tickers`) |
 | `share-basis-derive` | 기업행위 원장 + 주식수 계열 → `financial_statement.share_basis_*` | **외부 호출 0 · 원자료 0행 수정.** 시총 = 주식수 × 종가의 두 기저가 어긋난 판을 판정한다(ADR-0162) — 맞출 수 있으면 배수를 달고(`SHIFTED`) 크기를 모르면 주식수를 안 낸다(`UNRESOLVED`). **재무·기업행위를 쓴 잡 뒤에는 러너가 자동으로 잇고(`adjustment-rebuild` 포함), 스케줄러는 매 평일 14:18에 돈다** — 손으로 부를 일은 유도 규칙을 고쳤을 때뿐이다. **MUST: 판정이 바뀌면 백필이 짝이다** — 원본층은 날짜 하나로 창 전체가 다시 쓰이고(`AKTX` 8지표 2,040행이 그렇게 걷혔다) 파생층은 날짜마다 돌아야 한다 |
 | `corporate-action-review` | 원장 조회 — 대기열과 판정 증거 | **외부 호출 0, 원장을 한 글자도 안 고친다.** 상태별 집계를 언제나 찍고, 필터를 안 주면 `status=OBSERVED`로 좁힌다(무엇으로 좁혔는지 함께 찍는다). `--ca-id`를 주면 그 행 + 효력일 이후 상장주식수 점프 **전부**를 찍는다 — **하나를 고르는 것은 사람이다**(ADR-0050). `batch_execution`에 행을 안 만든다. ADR-0084 |
 | `corporate-action-judge` | 원장 판정 — 상태와 값을 사람이 준다 | **외부 호출 0.** `--ca-id` 필수. 검증은 전부 `CorporateActionLedger.judge`가 한다(HTTP 경로와 같은 문). **판정해도 계수는 안 바뀐다** — `adjustment-rebuild` → 화해가 뒤따라야 끝나고(다음 평일 14:00 사슬이 둘 다 한다), 잡이 그 명령을 찍어 준다. 실패하면 실행 행을 아예 안 연다(사람의 오타가 운영자 알림을 타면 안 된다). ADR-0084 |
