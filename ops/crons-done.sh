@@ -113,12 +113,27 @@ else
 fi
 echo "[crons] 앱 PID $pid · 뜬 시각 $(date -r "$jvm_start" '+%F %T') · 지연 L=${L}(참고)"
 
+# 이 JVM의 jar에 없는 크론은 이 JVM이 발화하지 않는다 — 크론을 더한 배포 직전에는 이 표에 있는데 도는 jar에는 없다(2026-10-13:
+# 14:16 공시 목록을 더한 배포가 옛 jar의 「14:16 끝 줄 없음」으로 섰다). 빼는 것은 이 JVM이 **지금의** app.jar 파일을 열고 있음을
+# lsof로 확인했을 때만이다(파일 이름으로 물으면 그 이름의 지금 inode만 잡힌다 — 갈아 끼운 jar면 안 잡힌다). 확인 못 하거나 클래스를 못
+# 읽으면 표 그대로 묻는다(막히는 쪽).
+SCHEDULER_CLASS="BOOT-INF/classes/com/stockscreener/pipeline/scheduler/PipelineScheduler.class"
+jar_names=""
+if lsof -a -p "$pid" -- "$DEPLOY/app.jar" >/dev/null 2>&1; then
+  jar_names=$(unzip -p "$DEPLOY/app.jar" "$SCHEDULER_CLASS" 2>/dev/null | LC_ALL=C tr -c '[:alnum:]' '\n' | LC_ALL=C sort -u) || jar_names=""
+fi
+in_running_jar() { [ -z "$jar_names" ] || grep -qx "$1" <<< "$jar_names"; }
+
 logs=("$LOG_DIR/stdout.log")
 for f in "$LOG_DIR"/stdout.log.*.gz; do [ -e "$f" ] && logs+=("$f"); done
 
 pending=0
 for c in "${CRONS[@]}"; do
   read -r name span t <<< "$c"
+  if ! in_running_jar "$name"; then
+    echo "[crons] ${name}: 도는 jar(app.jar)에 없는 크론이다 — 이 JVM은 발화하지 않는다(판정 밖)."
+    continue
+  fi
   last=$(last_nominal "$span" "$t")
   [ -n "$last" ] || continue
   last_s=$(epoch "$last")
