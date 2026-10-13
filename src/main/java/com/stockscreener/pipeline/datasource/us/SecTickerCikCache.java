@@ -362,7 +362,8 @@ public class SecTickerCikCache {
                 minExpectedRows);
     }
 
-    private static Map<String, Listing> parse(JsonNode root, int minExpectedRows)
+    /** 매핑 파일 본문을 읽는다 — 공시 목록 재생 시험이 저장한 본문을 같은 해석으로 먹인다. */
+    static Map<String, Listing> parse(JsonNode root, int minExpectedRows)
             throws DataSourceException {
         if (root == null || root.isMissingNode() || root.isNull()) {
             // 본문이 없는 것은 받기 실패다(끊긴 전송) — 스펙 변경과 가른다.

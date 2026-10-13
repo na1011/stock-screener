@@ -6,6 +6,7 @@ import com.stockscreener.pipeline.batch.BatchExecutions;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.pipeline.batch.CorporateActionJob;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
+import com.stockscreener.pipeline.batch.FilingListingJob;
 import com.stockscreener.pipeline.batch.FinancialRefillJob;
 import com.stockscreener.pipeline.batch.FullStatementRefillJob;
 import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
@@ -77,6 +78,7 @@ public class PipelineScheduler {
     private final UniverseIntegrityAlerter universeIntegrityAlerter;
     private final BatchExecutions batchExecutions;
     private final WriteLock writeLock;
+    private final FilingListingJob filingListingJob;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
                              UniverseRebalanceJob universeRebalanceJob,
@@ -91,7 +93,8 @@ public class PipelineScheduler {
                              IndicatorReconciler indicatorReconciler,
                              UniverseIntegrityAlerter universeIntegrityAlerter,
                              BatchExecutions batchExecutions,
-                             WriteLock writeLock) {
+                             WriteLock writeLock,
+                             FilingListingJob filingListingJob) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -106,6 +109,7 @@ public class PipelineScheduler {
         this.universeIntegrityAlerter = universeIntegrityAlerter;
         this.batchExecutions = batchExecutions;
         this.writeLock = writeLock;
+        this.filingListingJob = filingListingJob;
     }
 
     /**
@@ -452,6 +456,33 @@ public class PipelineScheduler {
         }
         // 재무를 쓴 뒤의 주식수 기저 재판정(ADR-0162)도 14:18이 맡는다 — 매 평일 돌므로
         // 재무를 쓴 날만 거는 것보다 넓고, 토요일 리밸런싱 전에 반드시 한 번 이상 돈다.
+    }
+
+    /**
+     * 원장 공시 목록. <b>평일 14시 16분(KST)</b> — 미국 EDGAR 일일 색인 · 국내 DART 공시검색을 받아 소비 장부에 쌓는다(ADR-0176).
+     *
+     * <p><b>14:15 무거운 잡과 크론을 가르는 이유</b>: 그 잡은 실패하면 예외를 다시 던진다 — 같은 크론에 두면 그날 목록이 함께
+     * 빠진다. 풀이 1이라 이 크론은 14:15 뒤, 14:18 앞에 돈다(앞이 길어지면 밀릴 뿐 순서는 그대로다). 대상일은 실행일(KST)이다 —
+     * 미국은 어제(미 동부)까지의 색인이 KST 11시께 올라와 있고, 국내는 어제까지 닫고 오늘은 받기만 한다.
+     *
+     * <p>지금(1차)은 장부만 쌓는다 — 값을 바꾸는 표를 안 건드린다. 장부를 먹는 소비 단계는 2차에 같은 자리에 붙는다.
+     */
+    @Scheduled(cron = "0 16 14 * * MON-FRI", zone = "Asia/Seoul")
+    public void runFilingListing() {
+        try {
+            underWriteLock("runFilingListing", () -> {
+                LocalDate today = LocalDate.now(KR_ZONE);
+                log.info("원장 공시 목록을 받는다. today={}", today);
+                try {
+                    filingListingJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                } catch (BatchShutdownException e) {
+                    log.info("공시 목록이 종료로 중단됐다. today={} — 커서는 닫은 날까지이고 다음 평일이 이어 받는다.", today);
+                }
+            });
+        } finally {
+            // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
+            log.info("크론 발화를 마쳤다. 크론={}", "runFilingListing");
+        }
     }
 
     /**

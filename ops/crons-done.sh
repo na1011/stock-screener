@@ -46,6 +46,7 @@ CRONS=(
   "runDailyUpdate 1-5 13:30:00"
   "runCorporateActionChain 1-5 14:00:00"
   "runHeavyJobOfTheDay 1-5 14:15:00"
+  "runFilingListing 1-5 14:16:00"
   "deriveReconcileInputs 1-5 14:18:00"
   "reconcileIndicators 1-5 14:20:00"
   "checkJobFreshness 1-5 15:30:00"

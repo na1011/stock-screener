@@ -180,6 +180,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final CorporateActionJudgeJob corporateActionJudgeJob;
     private final ShareBasisDeriver shareBasisDeriver;
     private final IndicatorReconciler indicatorReconciler;
+    private final FilingListingJob filingListingJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
@@ -200,7 +201,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            BatchExecutionSweeper executionSweeper,
                            ConfigurableApplicationContext context,
                            ShareBasisDeriver shareBasisDeriver,
-                           IndicatorReconciler indicatorReconciler) {
+                           IndicatorReconciler indicatorReconciler,
+                           FilingListingJob filingListingJob) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.universeRestoreJob = universeRestoreJob;
         this.initialLoadJob = initialLoadJob;
@@ -217,6 +219,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.corporateActionJudgeJob = corporateActionJudgeJob;
         this.shareBasisDeriver = shareBasisDeriver;
         this.indicatorReconciler = indicatorReconciler;
+        this.filingListingJob = filingListingJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
     }
@@ -361,6 +364,8 @@ public class BootstrapRunner implements ApplicationRunner {
                     optionalInteger(args, "governance-year"),
                     optionalInteger(args, "governance-span"),
                     governanceEndpoints(args), csv(args, "tickers"));
+            // 원장 공시 목록 → 소비 장부(ADR-0176). 쓰는 표는 장부 둘뿐이다. --as-of가 「오늘」이다 — 국내는 그날을 닫지 않는다.
+            case "filing-listing" -> filingListingJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
             // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
             case "governance-derive" -> governanceDeriveJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));

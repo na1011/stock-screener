@@ -5,6 +5,7 @@ import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionContext;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
+import com.stockscreener.pipeline.batch.FilingListingJob;
 import com.stockscreener.pipeline.batch.BatchExecutions;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.pipeline.batch.BatchStatus;
@@ -84,6 +85,7 @@ class PipelineSchedulerChainTest {
     private IndicatorCalendar indicatorCalendar;
     private BatchExecutions batchExecutions;
     private WriteLock writeLock;
+    private FilingListingJob filingListingJob;
     private PipelineScheduler scheduler;
 
     @BeforeEach
@@ -103,6 +105,7 @@ class PipelineSchedulerChainTest {
         indicatorCalendar = mock(IndicatorCalendar.class);
         batchExecutions = mock(BatchExecutions.class);
         writeLock = WriteLock.inactive("단위 시험");
+        filingListingJob = mock(FilingListingJob.class);
         // 평상시: 13:30이 지표 달력을 대상일까지 늘려 두었다.
         when(indicatorCalendar.latestIndicatorDate(anyCollection())).thenReturn(Optional.of(TARGET_DATE));
 
@@ -119,7 +122,16 @@ class PipelineSchedulerChainTest {
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob,
                         indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions, writeLock);
+                universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob);
+    }
+
+    @Test
+    @DisplayName("14:16 공시 목록은 자기 크론에서 정기 실행으로 돈다 — 14:15 무거운 잡과 묶으면 그 잡의 예외가 그날 목록을 뺀다")
+    void filingListingRunsOnItsOwnCron() {
+        scheduler.runFilingListing();
+
+        verify(filingListingJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        verifyNoInteractions(fullStatementRefillJob, financialRefillJob, governanceLoadJob);
     }
 
     @Test
@@ -420,7 +432,7 @@ class PipelineSchedulerChainTest {
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), policy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"));
+                universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"), mock(FilingListingJob.class));
 
         Map<String, LocalDate> picked = new java.util.LinkedHashMap<>();
         for (LocalDate day = LocalDate.of(2026, 10, 19); !day.isAfter(LocalDate.of(2026, 11, 5));
@@ -477,12 +489,13 @@ class PipelineSchedulerChainTest {
         fresh(FullStatementRefillJob.JOB_NAME, FinancialRefillJob.JOB_NAME);
         WriteLock refusing = mock(WriteLock.class);
         when(refusing.awaitForCron(anyString())).thenReturn(Optional.empty());
+        FilingListingJob blockedListing = mock(FilingListingJob.class);
         PipelineScheduler blocked = new PipelineScheduler(
                 dailyUpdateJob, universeRebalanceJob, corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions, refusing);
+                universeIntegrityAlerter, batchExecutions, refusing, blockedListing);
 
         // 성질로 센다(잠금 결정 7) — 손으로 든 목록이면 새 쓰기 크론이 잠금 없이 붙어도 이 시험이 못 본다.
         List<String> writeCrons = new java.util.ArrayList<>();
@@ -492,7 +505,7 @@ class PipelineSchedulerChainTest {
                 writeCrons.add(method.getName());
             }
         }
-        assertThat(writeCrons).as("쓰기 크론 — 15:30 점검 밖 전부").hasSize(6);
+        assertThat(writeCrons).as("쓰기 크론 — 15:30 점검 밖 전부(14:16 공시 목록 포함)").hasSize(7);
         for (String cron : writeCrons) {
             try {
                 PipelineScheduler.class.getMethod(cron).invoke(blocked);
@@ -504,7 +517,7 @@ class PipelineSchedulerChainTest {
         // 획득이 바깥 try 맨 앞이라 attemptBefore 조회보다 먼저 끝난다 — 건너뜀이 「시도」로 세어지지 않는다.
         verify(freshnessPolicy, never()).lastScheduledAttemptAt(anyString());
         verifyNoInteractions(batchExecutions, governanceLoadJob, dailyUpdateJob, corporateActionJob,
-                adjustmentRebuildJob, indicatorBackfillJob, universeRebalanceJob);
+                adjustmentRebuildJob, indicatorBackfillJob, universeRebalanceJob, blockedListing);
         for (String cron : writeCrons) {
             verify(refusing).awaitForCron(cron);
             // 끝 줄은 못 돈 발화에도 찍힌다 — 없으면 ops/crons-done.sh가 그날을 「남은 발화」로 막아 배포·종료가 서지 않는다.
@@ -526,7 +539,7 @@ class PipelineSchedulerChainTest {
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions, failing);
+                universeIntegrityAlerter, batchExecutions, failing, mock(FilingListingJob.class));
 
         assertThatThrownBy(broken::runHeavyJobOfTheDay).isSameAs(boom);
 

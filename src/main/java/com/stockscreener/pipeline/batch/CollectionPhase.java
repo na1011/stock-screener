@@ -6,7 +6,7 @@ package com.stockscreener.pipeline.batch;
  * <p>단계를 나누는 이유는 재실행 대상을 좁히기 위해서다. 한 종목이 시세는 성공하고 재무만
  * 실패할 수 있는데, 이를 구분하지 못하면 재실행이 이미 성공한 시세를 다시 받아 쿼터를 태운다.
  *
- * <p>MUST: 값을 추가하면 {@code ck_failure_phase}(V5 → 마지막은 V58)도 함께 늘린다. 안 늘리면 그
+ * <p>MUST: 값을 추가하면 {@code ck_failure_phase}(V5 → 마지막은 V67)도 함께 늘린다. 안 늘리면 그
  * 단계의 실패 기록이 제약에 막혀 <b>실패 하나가 배치 전체를 죽인다</b>({@code failUnexpectedly}) —
  * {@code CollectionPhaseConstraintTest}가 enum과 제약을 대조한다.
  */
@@ -85,5 +85,11 @@ public enum CollectionPhase {
      * 한 종목의 응답이 깨져도 나머지는 저장되어야 하고, 어느 종목이 왜 실패했는지 남아야
      * 그 종목만 다시 받을 수 있다. 그래서 {@code process()}로 돌린다.
      */
-    GOVERNANCE
+    GOVERNANCE,
+
+    /**
+     * 원장 공시 목록 받기(ADR-0176 · {@code FilingListingJob}). 종목이 아니라 <b>시장</b>이 단위다 —
+     * {@code countExternally}로 센다.
+     */
+    FILING_LISTING
 }
