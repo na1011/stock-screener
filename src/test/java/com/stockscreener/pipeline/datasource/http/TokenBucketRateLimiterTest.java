@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 레이트리밋과 일일 쿼터를 검증한다.
@@ -45,6 +46,56 @@ class TokenBucketRateLimiterTest {
             limiter.acquire();
         }
         assertThat(limiter.hasDailyQuota()).isTrue();
+    }
+
+    @Test
+    @DisplayName("경로마다 세는 리미터는 두 경로가 각자 한도까지 간다 — 키 합으로 세면 한 경로가 다른 경로를 막는다(ADR-0176)")
+    void perEndpointQuotaCountsEachPathSeparately() throws Exception {
+        RateLimiter limiter = TokenBucketRateLimiter.perEndpoint("dart", 0, 2);
+
+        limiter.acquire("/fnlttSinglAcnt.json");
+        limiter.acquire("/fnlttSinglAcnt.json");
+        assertThat(limiter.hasDailyQuota("/fnlttSinglAcnt.json")).isFalse();
+        assertThat(limiter.hasDailyQuota("/fnlttSinglAcntAll.json")).as("다른 경로는 안 썼다").isTrue();
+        limiter.acquire("/fnlttSinglAcntAll.json");
+        limiter.acquire("/fnlttSinglAcntAll.json");
+        assertThat(limiter.hasDailyQuota("/fnlttSinglAcntAll.json")).isFalse();
+        assertThat(limiter.usedToday("/fnlttSinglAcnt.json")).isEqualTo(2);
+        assertThat(limiter.usedToday()).as("소스 전체 합계는 그대로 센다").isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("대조군 — 경로마다 세지 않는 리미터는 경로가 달라도 합으로 막는다")
+    void plainLimiterIgnoresTheEndpoint() throws Exception {
+        RateLimiter limiter = new TokenBucketRateLimiter("dart", 0, 2);
+
+        limiter.acquire("/fnlttSinglAcnt.json");
+        limiter.acquire("/fnlttSinglAcntAll.json");
+
+        assertThat(limiter.hasDailyQuota("/company.json")).isFalse();
+    }
+
+    @Test
+    @DisplayName("경로마다 세는 리미터에 경로 없는 콜은 던진다 — 어느 한도에도 안 세어지는 콜을 조용히 넘기지 않는다")
+    void perEndpointRejectsCallsWithoutAPath() {
+        RateLimiter limiter = TokenBucketRateLimiter.perEndpoint("dart", 0, 2);
+
+        assertThatThrownBy(limiter::acquire).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(limiter::hasDailyQuota).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("경로별 카운터도 날짜가 바뀌면 리셋된다")
+    void perEndpointRollsOver() throws Exception {
+        MutableClock clock = new MutableClock(Instant.parse("2026-08-06T14:59:00Z"));
+        RateLimiter limiter = TokenBucketRateLimiter.perEndpoint("dart", 0, 1, clock);
+
+        limiter.acquire("/list.json");
+        assertThat(limiter.hasDailyQuota("/list.json")).isFalse();
+        clock.advance(Duration.ofHours(2));
+
+        assertThat(limiter.hasDailyQuota("/list.json")).isTrue();
+        assertThat(limiter.usedToday("/list.json")).isZero();
     }
 
     @Test

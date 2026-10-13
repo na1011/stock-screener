@@ -63,6 +63,9 @@ import java.util.zip.ZipInputStream;
 @Component
 public class DartCorpCodeCache {
 
+    /** 요청 경로 — 일일 총량을 이 경로로 센다(ADR-0176). */
+    private static final String PATH = "/corpCode.xml";
+
     private static final Logger log = LoggerFactory.getLogger(DartCorpCodeCache.class);
 
     /** 이보다 오래된 판이면 다음 조회에서 다시 받는다. 무거운 잡이 하루 하나라 하루면 그날의 신규 상장을 싣는다. */
@@ -256,22 +259,12 @@ public class DartCorpCodeCache {
             throw new DataSourceException(DataSourceException.Kind.AUTH, DartResponse.SOURCE_NAME,
                     "DART_API_KEY가 설정되지 않았다.");
         }
-        if (!rateLimiter.hasDailyQuota()) {
-            throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED, DartResponse.SOURCE_NAME,
-                    "일일 호출 한도를 소진했다(사용 " + rateLimiter.usedToday() + "회). corpCode.xml");
-        }
-        try {
-            rateLimiter.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
-                    DartResponse.SOURCE_NAME, "corpCode 다운로드 대기 중 인터럽트됐다.", e);
-        }
+        DartResponse.acquire(rateLimiter, PATH, "corpCode.xml");
 
         ResponseEntity<byte[]> response;
         try {
             response = client.get()
-                    .uri(uri -> uri.path("/corpCode.xml").queryParam("crtfc_key", apiKey).build())
+                    .uri(uri -> uri.path(PATH).queryParam("crtfc_key", apiKey).build())
                     .retrieve()
                     .toEntity(byte[].class);
         } catch (RuntimeException e) {

@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.datasource.kr;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.http.RateLimiter;
 
 import org.springframework.http.ResponseEntity;
 import tools.jackson.databind.JsonNode;
@@ -34,6 +35,28 @@ final class DartResponse {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private DartResponse() {
+    }
+
+    /**
+     * 경로 하나의 콜 앞에서 그 경로의 일일 총량을 보고 토큰을 얻는다 — DART 어댑터 전부가 이 자리를 지난다.
+     *
+     * <p>총량은 경로마다 센다(ADR-0176) — 그래서 경로를 받는다. 소진은 {@code RATE_LIMITED}(다음 실행이 이어 간다)이고, 대기 중
+     * 인터럽트는 인터럽트 상태를 되살린 뒤 {@code TRANSIENT}로 던진다.
+     *
+     * @param path 요청 URL의 경로 그대로({@code /fnlttSinglAcnt.json})
+     */
+    static void acquire(RateLimiter rateLimiter, String path, String context) throws DataSourceException {
+        if (!rateLimiter.hasDailyQuota(path)) {
+            throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED, SOURCE_NAME,
+                    "일일 호출 한도를 소진했다(" + path + " 사용 " + rateLimiter.usedToday(path) + "회). " + context);
+        }
+        try {
+            rateLimiter.acquire(path);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
+                    "호출 대기 중 인터럽트됐다. " + context, e);
+        }
     }
 
     /**

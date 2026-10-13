@@ -110,18 +110,7 @@ public class DartGovernanceAdapter implements GovernanceDataSource {
             return List.of();
         }
 
-        if (!rateLimiter.hasDailyQuota()) {
-            throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED,
-                    DartResponse.SOURCE_NAME,
-                    "일일 호출 한도를 소진했다(사용 " + rateLimiter.usedToday() + "회). " + context);
-        }
-        try {
-            rateLimiter.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
-                    DartResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
-        }
+        DartResponse.acquire(rateLimiter, path, context);
 
         ResponseEntity<byte[]> response;
         try {

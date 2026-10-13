@@ -57,6 +57,9 @@ import java.util.Set;
 @Component
 public class DartFullStatementAdapter implements FullStatementDataSource {
 
+    /** 요청 경로 — 일일 총량을 이 경로로 센다(ADR-0176). */
+    private static final String PATH = "/fnlttSinglAcntAll.json";
+
     private static final Logger log = LoggerFactory.getLogger(DartFullStatementAdapter.class);
 
     /** 우리 회계기간 → DART 보고서 코드. Q4는 보고서가 없어 여기 없다. */
@@ -266,23 +269,12 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
 
         // MUST: 이 가드를 지우지 않는다. 리미터의 acquire()는 분당 간격만 대기하고 일일 한도는
         // 보지 않는다 — 여기가 없으면 한도를 조용히 넘는다. 어댑터마다 같은 블록이 있는 이유다.
-        if (!rateLimiter.hasDailyQuota()) {
-            throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED,
-                    DartResponse.SOURCE_NAME,
-                    "일일 호출 한도를 소진했다(사용 " + rateLimiter.usedToday() + "회). " + context);
-        }
-        try {
-            rateLimiter.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
-                    DartResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
-        }
+        DartResponse.acquire(rateLimiter, PATH, context);
 
         ResponseEntity<byte[]> response;
         try {
             response = client.get().uri(uri -> uri
-                            .path("/fnlttSinglAcntAll.json")
+                            .path(PATH)
                             .queryParam("crtfc_key", apiKey)
                             .queryParam("corp_code", corpCode)
                             .queryParam("bsns_year", year)

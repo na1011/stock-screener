@@ -40,6 +40,9 @@ import java.util.Set;
 @Component
 public class DartFinancialAdapter implements FinancialDataSource {
 
+    /** 요청 경로 — 일일 총량을 이 경로로 센다(ADR-0176). */
+    private static final String PATH = "/fnlttSinglAcnt.json";
+
     private static final Logger log = LoggerFactory.getLogger(DartFinancialAdapter.class);
 
     /** 보고서 코드 → 우리 회계기간 라벨. Q4는 별도 보고서가 없어 유도한다. */
@@ -119,23 +122,12 @@ public class DartFinancialAdapter implements FinancialDataSource {
     private PeriodRows fetchOne(String corpCode, int year, String reportCode, SecurityRef security)
             throws DataSourceException {
         String context = "ticker=" + security.ticker() + " " + year + "/" + reportCode;
-        if (!rateLimiter.hasDailyQuota()) {
-            throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED,
-                    DartResponse.SOURCE_NAME,
-                    "일일 호출 한도를 소진했다(사용 " + rateLimiter.usedToday() + "회). " + context);
-        }
-        try {
-            rateLimiter.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
-                    DartResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
-        }
+        DartResponse.acquire(rateLimiter, PATH, context);
 
         ResponseEntity<byte[]> response;
         try {
             response = client.get().uri(uri -> uri
-                            .path("/fnlttSinglAcnt.json")
+                            .path(PATH)
                             .queryParam("crtfc_key", apiKey)
                             .queryParam("corp_code", corpCode)
                             .queryParam("bsns_year", year)

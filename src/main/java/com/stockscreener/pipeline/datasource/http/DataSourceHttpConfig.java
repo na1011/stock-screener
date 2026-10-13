@@ -32,10 +32,14 @@ public class DataSourceHttpConfig {
                 "alpaca", source.getPermitsPerMinute(), source.getDailyQuota());
     }
 
+    /**
+     * DART 전체의 <b>속도</b>를 세고, <b>일일 총량은 URL 경로마다</b> 센다(ADR-0176). 같은 키 하루 약 28,400콜에 실패가 0이었다 —
+     * 키 합 한도(「일 20,000건」 2차 출처)를 우리 쪽이 먼저 걸면 소스가 막지 않는 날의 콜을 우리가 끊는다.
+     */
     @Bean
     public RateLimiter dartRateLimiter(DataSourceProperties properties) {
         DataSourceProperties.Source source = properties.getDart();
-        return new TokenBucketRateLimiter(
+        return TokenBucketRateLimiter.perEndpoint(
                 "dart", source.getPermitsPerMinute(), source.getDailyQuota());
     }
 

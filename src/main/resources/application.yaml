@@ -267,7 +267,8 @@ stockscreener:
       # 600은 임계의 60%다. **MUST NOT: 1,000에 붙이지 않는다** — 차단의 대가가 1시간이고
       # 그 사이 평일 배치 사슬이 통째로 실패한다.
       permits-per-minute: 600
-      # 일 20,000건(2차 출처). 여유를 두고 잡는다.
+      # **URL 경로마다** 센다(ADR-0176 · TokenBucketRateLimiter.perEndpoint) — 키 하나로 하루 약 28,400콜(두 경로)에 실패 0이
+      # 반례라 키 합 2만(2차 출처)을 우리가 먼저 걸지 않는다. 경로 하나의 한도는 2만에서 여유를 둔 값이다.
       daily-quota: 18000
       # corpCode.xml은 3.5MB ZIP이라 기본 읽기 타임아웃으로는 부족할 수 있다.
       read-timeout: 60s

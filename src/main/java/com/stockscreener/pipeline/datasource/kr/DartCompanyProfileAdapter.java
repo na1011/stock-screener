@@ -40,6 +40,9 @@ import java.util.Set;
 @Component
 public class DartCompanyProfileAdapter implements CompanyProfileDataSource {
 
+    /** 요청 경로 — 일일 총량을 이 경로로 센다(ADR-0176). */
+    private static final String PATH = "/company.json";
+
     private static final Logger log = LoggerFactory.getLogger(DartCompanyProfileAdapter.class);
 
     private final RestClient client;
@@ -83,23 +86,12 @@ public class DartCompanyProfileAdapter implements CompanyProfileDataSource {
             return Optional.empty();
         }
 
-        if (!rateLimiter.hasDailyQuota()) {
-            throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED,
-                    DartResponse.SOURCE_NAME,
-                    "일일 호출 한도를 소진했다(사용 " + rateLimiter.usedToday() + "회). " + context);
-        }
-        try {
-            rateLimiter.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
-                    DartResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
-        }
+        DartResponse.acquire(rateLimiter, PATH, context);
 
         ResponseEntity<byte[]> response;
         try {
             response = client.get().uri(uri -> uri
-                            .path("/company.json")
+                            .path(PATH)
                             .queryParam("crtfc_key", apiKey)
                             .queryParam("corp_code", corpCode.get())
                             .build())

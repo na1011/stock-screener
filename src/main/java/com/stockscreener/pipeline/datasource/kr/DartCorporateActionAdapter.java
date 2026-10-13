@@ -71,6 +71,9 @@ import java.util.TreeMap;
 @Component
 public class DartCorporateActionAdapter implements CorporateActionDataSource {
 
+    /** 요청 경로 — 일일 총량을 이 경로로 센다(ADR-0176). */
+    private static final String PATH = "/irdsSttus.json";
+
     private static final Logger log = LoggerFactory.getLogger(DartCorporateActionAdapter.class);
 
     private static final DateTimeFormatter COMPACT_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -481,23 +484,12 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
             throws DataSourceException {
         String context = "ticker=" + security.ticker() + " " + report.businessYear()
                 + "/" + report.reportCode();
-        if (!rateLimiter.hasDailyQuota()) {
-            throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED,
-                    DartResponse.SOURCE_NAME,
-                    "일일 호출 한도를 소진했다(사용 " + rateLimiter.usedToday() + "회). " + context);
-        }
-        try {
-            rateLimiter.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new DataSourceException(DataSourceException.Kind.TRANSIENT,
-                    DartResponse.SOURCE_NAME, "호출 대기 중 인터럽트됐다. " + context, e);
-        }
+        DartResponse.acquire(rateLimiter, PATH, context);
 
         ResponseEntity<byte[]> response;
         try {
             response = client.get().uri(uri -> uri
-                            .path("/irdsSttus.json")
+                            .path(PATH)
                             .queryParam("crtfc_key", apiKey)
                             .queryParam("corp_code", corpCode)
                             .queryParam("bsns_year", report.businessYear())
