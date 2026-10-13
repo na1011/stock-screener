@@ -20,9 +20,15 @@ import java.util.List;
  *                        있어 음수가 나온다. 이 수가 곧 "상장 전 회계연도"와 "아직 오지 않은
  *                        분기"의 합이고, 적재로 메울 수 있는 결손과 원리적으로 없는 결손을
  *                        가르는 근거다
+ * @param filingTrace     응답에서 본 공시 번호 — 공시 소비의 근거다({@link FilingTrace} · ADR-0176 2차)
  */
 public record FullStatementResult(List<RawFinancialReport> reports, int apiCalls,
-                                  int missingReports) {
+                                  int missingReports, FilingTrace filingTrace) {
+
+    /** 공시 근거를 안 내는 소스·시험용. */
+    public FullStatementResult(List<RawFinancialReport> reports, int apiCalls, int missingReports) {
+        this(reports, apiCalls, missingReports, FilingTrace.NONE);
+    }
 
     public FullStatementResult {
         if (reports == null) {
@@ -35,5 +41,6 @@ public record FullStatementResult(List<RawFinancialReport> reports, int apiCalls
             throw new IllegalArgumentException("missingReports는 음수일 수 없다: " + missingReports);
         }
         reports = List.copyOf(reports);
+        filingTrace = filingTrace == null ? FilingTrace.NONE : filingTrace;
     }
 }

@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -143,6 +144,35 @@ public class FinancialRefillJob {
     public Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                                      Integer yearsBack, List<String> tickers, String universeCode,
                                      boolean insertEarlierVintages) {
+        return runAndReport(asOf, triggeredBy, yearsBack, tickers, universeCode, insertEarlierVintages, null);
+    }
+
+    /**
+     * 공시 소비(ADR-0176 2차)가 부른다 — 티커로 좁힌 실행이고, 종목을 쓴 <b>같은 트랜잭션</b> 안에서 {@code hook}을 부른다.
+     * 훅이 던지면 그 종목의 쓰기도 함께 되돌아간다 — 「썼다」와 「소비됨으로 표시했다」가 갈리지 않는다.
+     *
+     * <p>연수를 좁혀 불러도 「적재 창이 지표 창보다 좁다」를 남기지 않는다 — 그 경고가 지키는 것(매핑을 바꾼 뒤 창 전체 재적재)은
+     * 그날 공시의 보고서 해만 먹이는 소비에 서지 않는다.
+     */
+    public Invalidation runForConsumption(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                          Integer yearsBack, List<String> tickers, StockHook hook) {
+        if (tickers == null || tickers.isEmpty()) {
+            // 비면 전량이 된다(M11) — 소비는 대상이 없으면 부르지 않는다.
+            throw new IllegalArgumentException("소비는 티커로 좁혀서만 부른다.");
+        }
+        return runAndReport(asOf, triggeredBy, yearsBack, tickers, null, false, Objects.requireNonNull(hook));
+    }
+
+    /** 공시 소비의 종목 훅 — 그 종목을 쓴 트랜잭션 안에서 부른다. */
+    @FunctionalInterface
+    public interface StockHook {
+        void afterWrite(long executionId, SecurityRef security, FinancialWriter.Outcome outcome)
+                throws DataSourceException;
+    }
+
+    private Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                      Integer yearsBack, List<String> tickers, String universeCode,
+                                      boolean insertEarlierVintages, StockHook hook) {
         int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
@@ -166,7 +196,9 @@ public class FinancialRefillJob {
         int estimatedCalls = targets.size() * (asOf.getYear() - fromFiscalYear + 1) * 4;
         log.info("재무 결손 보정을 시작한다. 대상 {}종목, {}년 이후, 예상 호출 약 {}회",
                 targets.size(), fromFiscalYear, estimatedCalls);
-        loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
+        if (hook == null) {
+            loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
+        }
 
         // 신선한 매핑의 부재(표지)를 「답함」으로 셀 수 있는 종목 — 상장폐지 증거가 있는 것만(시작 때 한 번 · ADR-0174).
         coverage = coverage.withRetired(retirementEvidence.retiredAmong(
@@ -226,6 +258,9 @@ public class FinancialRefillJob {
                         }
                     }
                     filled.addAndGet(outcome.filled());
+                    if (hook != null) {
+                        hook.afterWrite(execution.executionId(), security, outcome);
+                    }
                     return outcome.changed();
                 });
             }

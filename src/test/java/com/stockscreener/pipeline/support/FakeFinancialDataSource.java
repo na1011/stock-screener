@@ -23,6 +23,9 @@ public class FakeFinancialDataSource implements FinancialDataSource {
     /** 받지 못한 보충의 종류(SEC 공시 보충의 받기 실패 모양 · ADR-0174). */
     private final Map<Long, List<DataSourceException.Kind>> unfetched = new HashMap<>();
 
+    /** 수집이 원장 응답에서 본 공시 번호(공시 소비의 근거 · ADR-0176 2차). */
+    private final Map<Long, com.stockscreener.pipeline.datasource.FilingTrace> traces = new HashMap<>();
+
     public final List<Long> fetchedStockIds = new ArrayList<>();
 
     public FakeFinancialDataSource(String... markets) {
@@ -36,6 +39,11 @@ public class FakeFinancialDataSource implements FinancialDataSource {
 
     public FakeFinancialDataSource failingWith(long stockId, DataSourceException exception) {
         failures.put(stockId, exception);
+        return this;
+    }
+
+    public FakeFinancialDataSource withTrace(long stockId, com.stockscreener.pipeline.datasource.FilingTrace trace) {
+        traces.put(stockId, trace);
         return this;
     }
 
@@ -55,6 +63,7 @@ public class FakeFinancialDataSource implements FinancialDataSource {
         failures.clear();
         uncertain.clear();
         unfetched.clear();
+        traces.clear();
         fetchedStockIds.clear();
     }
 
@@ -86,6 +95,7 @@ public class FakeFinancialDataSource implements FinancialDataSource {
             return new FinancialFetch(reports, List.of(), true, Set.of(), Set.of(), false,
                     unfetched.get(security.stockId()));
         }
-        return FinancialFetch.of(reports);
+        return FinancialFetch.of(reports).withFilingTrace(
+                traces.getOrDefault(security.stockId(), com.stockscreener.pipeline.datasource.FilingTrace.NONE));
     }
 }

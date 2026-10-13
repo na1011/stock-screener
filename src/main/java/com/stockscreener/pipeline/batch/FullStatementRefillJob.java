@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -100,6 +101,31 @@ public class FullStatementRefillJob {
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            Integer yearsBack, List<String> tickers, boolean includeQuarters,
                            boolean allQuarters) {
+        return run(asOf, triggeredBy, yearsBack, tickers, includeQuarters, allQuarters, null);
+    }
+
+    /**
+     * 공시 소비(ADR-0176 2차)가 부른다 — 티커로 좁히고 분기까지 받으며, 종목을 쓴 <b>같은 트랜잭션</b> 안에서 {@code hook}을
+     * 부른다. 훅이 던지면 그 종목의 쓰기도 함께 되돌아간다. 좁힌 연수의 「창이 좁다」 경고는 남기지 않는다(FR의 같은 갈래 참조).
+     */
+    public BatchStatus runForConsumption(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                         Integer yearsBack, List<String> tickers, StockHook hook) {
+        if (tickers == null || tickers.isEmpty()) {
+            throw new IllegalArgumentException("소비는 티커로 좁혀서만 부른다.");
+        }
+        return run(asOf, triggeredBy, yearsBack, tickers, true, false, Objects.requireNonNull(hook));
+    }
+
+    /** 공시 소비의 종목 훅 — 그 종목을 쓴 트랜잭션 안에서 부른다. */
+    @FunctionalInterface
+    public interface StockHook {
+        void afterWrite(long executionId, SecurityRef security, FullStatementCollector.Collected collected)
+                throws DataSourceException;
+    }
+
+    private BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                            Integer yearsBack, List<String> tickers, boolean includeQuarters,
+                            boolean allQuarters, StockHook hook) {
         int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
@@ -132,7 +158,9 @@ public class FullStatementRefillJob {
                         + "요청 보고서 {}건, 예상 호출 {}~{}회",
                 targets.size(), fromFiscalYear, toFiscalYear, periods,
                 requestedReports, requestedReports, requestedReports * 2);
-        loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
+        if (hook == null) {
+            loadWindow.warnIfShorterThanIndicators(JOB_NAME, years);
+        }
 
         // 신선한 매핑의 부재(표지)를 「답함」으로 셀 수 있는 종목 — 상장폐지 증거가 있는 것만(시작 때 한 번 · ADR-0174).
         coverage = coverage.withRetired(retirementEvidence.retiredAmong(
@@ -162,6 +190,9 @@ public class FullStatementRefillJob {
                     missingReports.addAndGet(collected.missingReports());
                     deferredRevisions.addAndGet(collected.outcome().deferredRevisions());
                     corrected.addAndGet(collected.outcome().corrected());
+                    if (hook != null) {
+                        hook.afterWrite(execution.executionId(), security, collected);
+                    }
                     return collected.outcome().changed();
                 });
             }

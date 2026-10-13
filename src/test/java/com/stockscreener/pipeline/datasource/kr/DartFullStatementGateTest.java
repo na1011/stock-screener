@@ -119,4 +119,32 @@ class DartFullStatementGateTest {
                     .isFalse();
         }
     }
+
+    @Test
+    @DisplayName("창 아래쪽을 잘라도 남은 해의 게이트가 같다 — 마지막 비지배는 최댓값이라서다(소비의 국내 창 좁힘 · ADR-0176 2차)")
+    void narrowingTheWindowFromBelowKeepsTheGate() {
+        // 갈래 셋: 비지배가 잘리는 해에만 · 남는 해에도 · 어디에도 없음. 남는 해(2025~)의 판정이 넓은 창과 같아야 한다.
+        List<List<DartFullStatementAdapter.Pending>> shapes = List.of(
+                List.of(pending(2023, StatementPeriod.FY, true), pending(2025, StatementPeriod.Q1, false),
+                        pending(2025, StatementPeriod.FY, false), pending(2026, StatementPeriod.Q1, false)),
+                List.of(pending(2023, StatementPeriod.FY, true), pending(2025, StatementPeriod.Q2, true),
+                        pending(2025, StatementPeriod.FY, false), pending(2026, StatementPeriod.Q1, false)),
+                List.of(pending(2023, StatementPeriod.FY, false), pending(2025, StatementPeriod.Q1, false),
+                        pending(2026, StatementPeriod.Q1, false)));
+        for (List<DartFullStatementAdapter.Pending> all : shapes) {
+            List<DartFullStatementAdapter.Pending> retained = all.stream().filter(p -> p.year() >= 2025).toList();
+            LocalDate wide = DartFullStatementAdapter.lastNoncontrollingIncome(all);
+            LocalDate narrow = DartFullStatementAdapter.lastNoncontrollingIncome(retained);
+            for (DartFullStatementAdapter.Pending p : retained) {
+                assertThat(DartFullStatementAdapter.gateOpen(p, narrow))
+                        .as("%s %s — 넓은 창 마지막 비지배 %s · 좁은 창 %s", p.year(), p.period(), wide, narrow)
+                        .isEqualTo(DartFullStatementAdapter.gateOpen(p, wide));
+            }
+        }
+    }
+
+    private static DartFullStatementAdapter.Pending pending(int year, StatementPeriod period, boolean noncontrolling) {
+        return new DartFullStatementAdapter.Pending(year, period, noncontrolling ? withNoncontrolling() : withoutSplit(),
+                true);
+    }
 }

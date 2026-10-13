@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.datasource.us;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.FilingTrace;
 import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.FinancialDataSource;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
@@ -152,6 +153,10 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                     "facts가 객체가 아니다. " + context);
         }
 
+        // 공시 소비의 근거 ①(ADR-0176 2차): companyfacts가 us-gaap를 싣는 접수번호. MUST: 보충 **전**에 잰다 — 보충이 트리에
+        // 팩트를 더하므로 뒤에 재면 보충으로 실은 공시가 섞이고, 보충의 성패는 소비가 보충 표로 따로 판정한다.
+        Set<String> carried = SecFilingSupplement.usGaapAccessions(tree);
+
         // companyfacts가 빠뜨린 정기 공시를 그 공시의 인스턴스로 채운다(ADR-0173). 실패는 종목을 세우지 않고 판 보호로 낸다.
         SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context);
         if (supplement.fromStore() + supplement.fetched() > 0 || !supplement.failed().isEmpty()
@@ -173,7 +178,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // us-gaap를 통째로 안 싣는다(ADR-0173 — 83 CIK 표본 87건). 보충이 못 실은 공시는 그 제출일을 따로 넘겨 지킨다.
         return new FinancialFetch(result.reports(), result.absences(), true,
                 supplement.unconfirmedVintages(), supplement.supplementedVintages(), supplement.vintagesUncertain(),
-                supplement.unfetched());
+                supplement.unfetched(), FilingTrace.ofAccessions(carried));
     }
 
     /**

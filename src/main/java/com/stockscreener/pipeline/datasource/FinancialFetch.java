@@ -20,14 +20,24 @@ import java.util.Set;
 public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
                              boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
                              Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
-                             List<DataSourceException.Kind> unfetchedSupplements) {
+                             List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace) {
 
     public FinancialFetch {
+        filingTrace = filingTrace == null ? FilingTrace.NONE : filingTrace;
         reports = reports == null ? List.of() : List.copyOf(reports);
         absences = absences == null ? List.of() : List.copyOf(absences);
         unconfirmedVintages = unconfirmedVintages == null ? Set.of() : Set.copyOf(unconfirmedVintages);
         supplementedVintages = supplementedVintages == null ? Set.of() : Set.copyOf(supplementedVintages);
         unfetchedSupplements = unfetchedSupplements == null ? List.of() : List.copyOf(unfetchedSupplements);
+    }
+
+    /** 공시 근거({@link FilingTrace})를 안 내는 소스·시험용. */
+    public FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
+                          boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
+                          Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
+                          List<DataSourceException.Kind> unfetchedSupplements) {
+        this(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages, vintagesUncertain,
+                unfetchedSupplements, FilingTrace.NONE);
     }
 
     /** 보충 층이 없는 소스용 — 받지 못한 보충이 없다. */
@@ -94,6 +104,20 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
      */
     public List<DataSourceException.Kind> unfetchedSupplements() {
         return unfetchedSupplements;
+    }
+
+    /**
+     * <b>이 호출이 원장 응답에서 본 공시 번호</b> — 공시 소비의 근거다(ADR-0176 2차 · {@link FilingTrace}). 보고서·저장에는
+     * 아무 영향이 없다.
+     */
+    public FilingTrace filingTrace() {
+        return filingTrace;
+    }
+
+    /** 같은 결과에 공시 근거를 싣는다. */
+    public FinancialFetch withFilingTrace(FilingTrace trace) {
+        return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
+                vintagesUncertain, unfetchedSupplements, trace);
     }
 
     /** 부재 축을 안 보고 판 이력도 전부 내지 않는 소스용. */

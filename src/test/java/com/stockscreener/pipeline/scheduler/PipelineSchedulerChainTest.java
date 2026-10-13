@@ -5,6 +5,8 @@ import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionContext;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
+import com.stockscreener.pipeline.batch.BatchShutdownException;
+import com.stockscreener.pipeline.batch.FilingConsumptionJob;
 import com.stockscreener.pipeline.batch.FilingListingJob;
 import com.stockscreener.pipeline.batch.BatchExecutions;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
@@ -86,6 +88,7 @@ class PipelineSchedulerChainTest {
     private BatchExecutions batchExecutions;
     private WriteLock writeLock;
     private FilingListingJob filingListingJob;
+    private FilingConsumptionJob filingConsumptionJob;
     private PipelineScheduler scheduler;
 
     @BeforeEach
@@ -106,6 +109,7 @@ class PipelineSchedulerChainTest {
         batchExecutions = mock(BatchExecutions.class);
         writeLock = WriteLock.inactive("단위 시험");
         filingListingJob = mock(FilingListingJob.class);
+        filingConsumptionJob = mock(FilingConsumptionJob.class);
         // 평상시: 13:30이 지표 달력을 대상일까지 늘려 두었다.
         when(indicatorCalendar.latestIndicatorDate(anyCollection())).thenReturn(Optional.of(TARGET_DATE));
 
@@ -122,7 +126,7 @@ class PipelineSchedulerChainTest {
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob,
                         indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob);
+                universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob, filingConsumptionJob);
     }
 
     @Test
@@ -132,6 +136,26 @@ class PipelineSchedulerChainTest {
 
         verify(filingListingJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
         verifyNoInteractions(fullStatementRefillJob, financialRefillJob, governanceLoadJob);
+    }
+
+    @Test
+    @DisplayName("14:16은 목록 뒤에 소비를 잇는다 — 같은 날 쌓은 행을 같은 날 먹인다(2차)")
+    void consumptionFollowsListing() {
+        scheduler.runFilingListing();
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(filingListingJob, filingConsumptionJob);
+        order.verify(filingListingJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        order.verify(filingConsumptionJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+    }
+
+    @Test
+    @DisplayName("목록이 종료 신호로 끊기면 소비를 시작하지 않는다 — 내려가는 프로세스가 쿼터를 더 태우지 않는다")
+    void shutdownDuringListingSkipsConsumption() {
+        when(filingListingJob.run(any(), any())).thenThrow(new BatchShutdownException("종료"));
+
+        scheduler.runFilingListing();
+
+        verifyNoInteractions(filingConsumptionJob);
     }
 
     @Test
@@ -432,7 +456,8 @@ class PipelineSchedulerChainTest {
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), policy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"), mock(FilingListingJob.class));
+                universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"), mock(FilingListingJob.class),
+                mock(FilingConsumptionJob.class));
 
         Map<String, LocalDate> picked = new java.util.LinkedHashMap<>();
         for (LocalDate day = LocalDate.of(2026, 10, 19); !day.isAfter(LocalDate.of(2026, 11, 5));
@@ -490,12 +515,13 @@ class PipelineSchedulerChainTest {
         WriteLock refusing = mock(WriteLock.class);
         when(refusing.awaitForCron(anyString())).thenReturn(Optional.empty());
         FilingListingJob blockedListing = mock(FilingListingJob.class);
+        FilingConsumptionJob blockedConsumption = mock(FilingConsumptionJob.class);
         PipelineScheduler blocked = new PipelineScheduler(
                 dailyUpdateJob, universeRebalanceJob, corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions, refusing, blockedListing);
+                universeIntegrityAlerter, batchExecutions, refusing, blockedListing, blockedConsumption);
 
         // 성질로 센다(잠금 결정 7) — 손으로 든 목록이면 새 쓰기 크론이 잠금 없이 붙어도 이 시험이 못 본다.
         List<String> writeCrons = new java.util.ArrayList<>();
@@ -517,7 +543,7 @@ class PipelineSchedulerChainTest {
         // 획득이 바깥 try 맨 앞이라 attemptBefore 조회보다 먼저 끝난다 — 건너뜀이 「시도」로 세어지지 않는다.
         verify(freshnessPolicy, never()).lastScheduledAttemptAt(anyString());
         verifyNoInteractions(batchExecutions, governanceLoadJob, dailyUpdateJob, corporateActionJob,
-                adjustmentRebuildJob, indicatorBackfillJob, universeRebalanceJob, blockedListing);
+                adjustmentRebuildJob, indicatorBackfillJob, universeRebalanceJob, blockedListing, blockedConsumption);
         for (String cron : writeCrons) {
             verify(refusing).awaitForCron(cron);
             // 끝 줄은 못 돈 발화에도 찍힌다 — 없으면 ops/crons-done.sh가 그날을 「남은 발화」로 막아 배포·종료가 서지 않는다.
@@ -539,7 +565,8 @@ class PipelineSchedulerChainTest {
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
-                universeIntegrityAlerter, batchExecutions, failing, mock(FilingListingJob.class));
+                universeIntegrityAlerter, batchExecutions, failing, mock(FilingListingJob.class),
+                mock(FilingConsumptionJob.class));
 
         assertThatThrownBy(broken::runHeavyJobOfTheDay).isSameAs(boom);
 

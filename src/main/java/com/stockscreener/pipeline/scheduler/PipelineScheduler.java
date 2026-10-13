@@ -6,6 +6,7 @@ import com.stockscreener.pipeline.batch.BatchExecutions;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.pipeline.batch.CorporateActionJob;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
+import com.stockscreener.pipeline.batch.FilingConsumptionJob;
 import com.stockscreener.pipeline.batch.FilingListingJob;
 import com.stockscreener.pipeline.batch.FinancialRefillJob;
 import com.stockscreener.pipeline.batch.FullStatementRefillJob;
@@ -79,6 +80,7 @@ public class PipelineScheduler {
     private final BatchExecutions batchExecutions;
     private final WriteLock writeLock;
     private final FilingListingJob filingListingJob;
+    private final FilingConsumptionJob filingConsumptionJob;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
                              UniverseRebalanceJob universeRebalanceJob,
@@ -94,7 +96,8 @@ public class PipelineScheduler {
                              UniverseIntegrityAlerter universeIntegrityAlerter,
                              BatchExecutions batchExecutions,
                              WriteLock writeLock,
-                             FilingListingJob filingListingJob) {
+                             FilingListingJob filingListingJob,
+                             FilingConsumptionJob filingConsumptionJob) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -110,6 +113,7 @@ public class PipelineScheduler {
         this.batchExecutions = batchExecutions;
         this.writeLock = writeLock;
         this.filingListingJob = filingListingJob;
+        this.filingConsumptionJob = filingConsumptionJob;
     }
 
     /**
@@ -465,7 +469,8 @@ public class PipelineScheduler {
      * 빠진다. 풀이 1이라 이 크론은 14:15 뒤, 14:18 앞에 돈다(앞이 길어지면 밀릴 뿐 순서는 그대로다). 대상일은 실행일(KST)이다 —
      * 미국은 어제(미 동부)까지의 색인이 KST 11시께 올라와 있고, 국내는 어제까지 닫고 오늘은 받기만 한다.
      *
-     * <p>지금(1차)은 장부만 쌓는다 — 값을 바꾸는 표를 안 건드린다. 장부를 먹는 소비 단계는 2차에 같은 자리에 붙는다.
+     * <p>목록 뒤에 소비({@link FilingConsumptionJob})를 잇는다 — 열린 장부 행을 지금 편입 종목의 좁힌 FR·FSR({@code GAP_FILL})로
+     * 먹이고, 그 종목을 쓴 트랜잭션 안에서 소비됨을 표시한다. 정정이 지운 지표는 14:20 화해가 채운다.
      */
     @Scheduled(cron = "0 16 14 * * MON-FRI", zone = "Asia/Seoul")
     public void runFilingListing() {
@@ -477,6 +482,15 @@ public class PipelineScheduler {
                     filingListingJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
                 } catch (BatchShutdownException e) {
                     log.info("공시 목록이 종료로 중단됐다. today={} — 커서는 닫은 날까지이고 다음 평일이 이어 받는다.", today);
+                    return;
+                }
+                // 목록 뒤에 소비한다 — 방금 쌓은 행까지 같은 날 먹인다(2차). 목록이 시장 하나를 못 받아도(실행은 끝난다) 이미
+                // 쌓인 행은 먹인다.
+                try {
+                    filingConsumptionJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                } catch (BatchShutdownException e) {
+                    log.info("공시 소비가 종료로 중단됐다. today={} — 표시는 종목 트랜잭션 안이라 끝낸 종목까지만 남고 나머지는 다음 평일이 먹인다.",
+                            today);
                 }
             });
         } finally {

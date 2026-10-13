@@ -20,6 +20,9 @@ public class FakeFullStatementDataSource implements FullStatementDataSource {
     private final Map<Long, List<RawFinancialReport>> reportsByStock = new HashMap<>();
     private final Map<Long, DataSourceException> failures = new HashMap<>();
 
+    /** 응답에서 본 공시 번호(공시 소비의 근거 · ADR-0176 2차). */
+    private final Map<Long, com.stockscreener.pipeline.datasource.FilingTrace> traces = new HashMap<>();
+
     public final List<Long> fetchedStockIds = new ArrayList<>();
     /** 마지막 호출이 요청한 기간. 잡이 분기를 함부로 켜지 않는지 보는 데 쓴다. */
     public final List<Set<StatementPeriod>> requestedPeriods = new ArrayList<>();
@@ -30,6 +33,11 @@ public class FakeFullStatementDataSource implements FullStatementDataSource {
 
     public FakeFullStatementDataSource withReports(long stockId, List<RawFinancialReport> reports) {
         reportsByStock.put(stockId, reports);
+        return this;
+    }
+
+    public FakeFullStatementDataSource withTrace(long stockId, com.stockscreener.pipeline.datasource.FilingTrace trace) {
+        traces.put(stockId, trace);
         return this;
     }
 
@@ -68,6 +76,7 @@ public class FakeFullStatementDataSource implements FullStatementDataSource {
         // 실제 어댑터는 (연도 × 기간)마다 한 번씩 부르고, 연결이 비면 두 번 부른다.
         // 여기서는 요청한 만큼 불렀다고 본다 — 잡이 그 수를 그대로 실행 기록에 싣는지가 관심사다.
         int requested = (toFiscalYear - fromFiscalYear + 1) * periods.size();
-        return new FullStatementResult(matched, requested, requested - matched.size());
+        return new FullStatementResult(matched, requested, requested - matched.size(),
+                traces.getOrDefault(security.stockId(), com.stockscreener.pipeline.datasource.FilingTrace.NONE));
     }
 }

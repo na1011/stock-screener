@@ -120,6 +120,7 @@ public class JobFreshnessPolicy {
         // 평일 14:16 원장 공시 목록(ADR-0176). 일일 갱신과 같은 주기라 같은 예산이다 — 받기 실패로 커서가 멈춘 것은
         // 잡 자신이 평일 2일 넘게 늦으면 먼저 알린다. 이 예산은 크론이 아예 안 돈 날을 센다.
         map.put(FilingListingJob.JOB_NAME, new Budget(5, "--job=filing-listing"));
+        map.put(FilingConsumptionJob.JOB_NAME, new Budget(5, "--job=filing-consumption"));
         // 소스가 미래 휴장일을 모르므로 실행일까지만 찬다 — 그만큼 천천히 낡는다.
         map.put(MarketCalendarJob.JOB_NAME, new Budget(60, null));
         return Map.copyOf(map);

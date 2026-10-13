@@ -46,7 +46,7 @@ public class FullStatementCollector {
         FinancialWriter.Outcome outcome = writer.writeDetailed(
                 security.stockId(), fetched.reports(),
                 FinancialWriter.WriteMode.FILL_WITHOUT_REVISION);
-        return new Collected(outcome, fetched.apiCalls(),
+        return new Collected(outcome.withFilingTrace(fetched.filingTrace()), fetched.apiCalls(),
                 fetched.reports().size(), fetched.missingReports());
     }
 

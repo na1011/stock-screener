@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,5 +88,107 @@ public class FilingLedgerStore {
             out.put(rs.getString("ticker"), new ListedStock(rs.getLong("id"), rs.wasNull() ? null : month));
         });
         return out;
+    }
+
+    // ── 소비(ADR-0176 2차) ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    /** 소비 단계가 읽는 열린 장부 행. {@code frOpen}·{@code fsrOpen}은 그 몫이 아직 안 끝났는가(미국은 FSR 몫이 없다). */
+    public record OpenRow(long id, String market, long stockId, String ticker, String filingNo, Long cik, String form,
+                          LocalDate filedOn, Integer bsnsYear, String reprtCode, boolean frOpen, boolean fsrOpen,
+                          Instant firstSeenAt, String lastReason) {
+    }
+
+    private static final String OPEN_COLUMNS = """
+            c.id, c.market, c.stock_id, s.ticker, c.filing_no, c.cik, c.form, c.filed_on, c.bsns_year, c.reprt_code,
+            c.fr_consumed_at IS NULL AS fr_open,
+            (c.market = 'KR' AND c.fsr_consumed_at IS NULL) AS fsr_open,
+            c.first_seen_at, c.last_reason
+            """;
+
+    /**
+     * 그 시장의 열린 행 중 <b>지금 활성 편입</b>인 종목의 것 — 소비 대상이다. 편입 밖 행은 잠든 채 남는다(재편입하면 다시 잡힌다).
+     * 활성 편입의 술어는 {@code StockRegistrar.activeUniverseMemberIds}와 같다.
+     */
+    public List<OpenRow> openForActiveMembers(String market) {
+        return jdbc.query("SELECT " + OPEN_COLUMNS + """
+                FROM filing_consumption c JOIN stock s ON s.id = c.stock_id
+                WHERE c.market = ?
+                  AND (c.fr_consumed_at IS NULL OR (c.market = 'KR' AND c.fsr_consumed_at IS NULL))
+                  AND s.is_active
+                  AND EXISTS (SELECT 1 FROM universe_membership m JOIN universe u ON u.code = m.universe_code
+                              WHERE m.stock_id = c.stock_id AND m.effective_to IS NULL AND u.is_active)
+                ORDER BY c.stock_id, c.filing_no
+                """, (rs, i) -> openRow(rs), market);
+    }
+
+    /** 한 종목의 FR 몫이 열린 행 — 소비 훅이 그 종목의 쓰기 트랜잭션 안에서 읽는다. */
+    public List<OpenRow> openFrOf(String market, long stockId) {
+        return jdbc.query("SELECT " + OPEN_COLUMNS + """
+                FROM filing_consumption c JOIN stock s ON s.id = c.stock_id
+                WHERE c.market = ? AND c.stock_id = ? AND c.fr_consumed_at IS NULL
+                ORDER BY c.filing_no
+                """, (rs, i) -> openRow(rs), market, stockId);
+    }
+
+    /** 한 종목의 FSR 몫만 열린 행(FR 몫은 끝남 · 국내만). */
+    public List<OpenRow> openFsrOf(long stockId) {
+        return jdbc.query("SELECT " + OPEN_COLUMNS + """
+                FROM filing_consumption c JOIN stock s ON s.id = c.stock_id
+                WHERE c.market = 'KR' AND c.stock_id = ? AND c.fr_consumed_at IS NOT NULL AND c.fsr_consumed_at IS NULL
+                ORDER BY c.filing_no
+                """, (rs, i) -> openRow(rs), stockId);
+    }
+
+    /** 보충 표의 (접수번호 → 상태) — 그 CIK의 주어진 접수번호만. 같은 트랜잭션이면 이번 FR이 막 쓴 행도 보인다. */
+    public Map<String, String> supplementStatus(long cik, Collection<String> accessions) {
+        Map<String, String> out = new HashMap<>();
+        if (accessions.isEmpty()) {
+            return out;
+        }
+        jdbc.query("SELECT accession, status FROM sec_filing_supplement WHERE cik = ? AND accession = ANY (?)",
+                rs -> {
+                    out.put(rs.getString("accession"), rs.getString("status"));
+                }, cik, accessions.toArray(String[]::new));
+        return out;
+    }
+
+    /** FR 몫을 소비됨으로 표시한다. 이미 끝난 행이면 아무것도 안 바꾸고 0을 낸다. */
+    public int markFrConsumed(long id, String ground, String evidence, long executionId) {
+        return jdbc.update("""
+                UPDATE filing_consumption
+                SET fr_consumed_at = now(), fr_ground = ?, fr_evidence = ?, consumed_by_execution = ?,
+                    attempts = attempts + 1, last_attempt_at = now(), last_reason = NULL
+                WHERE id = ? AND fr_consumed_at IS NULL
+                """, ground, evidence, executionId, id);
+    }
+
+    /** FSR 몫을 소비됨으로 표시한다(국내 · FR 몫이 끝난 행만). */
+    public int markFsrConsumed(long id, String evidence, long executionId) {
+        return jdbc.update("""
+                UPDATE filing_consumption
+                SET fsr_consumed_at = now(), fsr_evidence = ?, fsr_by_execution = ?,
+                    attempts = attempts + 1, last_attempt_at = now(), last_reason = NULL
+                WHERE id = ? AND market = 'KR' AND fr_consumed_at IS NOT NULL AND fsr_consumed_at IS NULL
+                """, evidence, executionId, id);
+    }
+
+    /** 소비하지 못한 시도를 남긴다 — 행은 열린 채이고 사유만 바뀐다. */
+    public int recordAttempt(long id, String reason) {
+        return jdbc.update("""
+                UPDATE filing_consumption
+                SET attempts = attempts + 1, last_attempt_at = now(), last_reason = ?
+                WHERE id = ?
+                """, reason, id);
+    }
+
+    private static OpenRow openRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        long cik = rs.getLong("cik");
+        Long cikOrNull = rs.wasNull() ? null : cik;
+        int year = rs.getInt("bsns_year");
+        Integer yearOrNull = rs.wasNull() ? null : year;
+        return new OpenRow(rs.getLong("id"), rs.getString("market"), rs.getLong("stock_id"), rs.getString("ticker"),
+                rs.getString("filing_no"), cikOrNull, rs.getString("form"), rs.getDate("filed_on").toLocalDate(),
+                yearOrNull, rs.getString("reprt_code"), rs.getBoolean("fr_open"), rs.getBoolean("fsr_open"),
+                rs.getTimestamp("first_seen_at").toInstant(), rs.getString("last_reason"));
     }
 }

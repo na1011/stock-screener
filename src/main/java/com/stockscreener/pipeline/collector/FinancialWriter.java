@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.FilingTrace;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 
 import org.slf4j.Logger;
@@ -120,13 +121,22 @@ public class FinancialWriter {
      * @param unfetchedSupplements 받지 못한 보충의 종류({@code FinancialFetch.unfetchedSupplements}) — 쓰기와 무관한 수집의
      *                          사실이지만 잡이 받는 결과가 이것 하나라 수집기가 실어 넘긴다. 잡이 그 종목의 시장을 미완료로 센다
      *                          (ADR-0174). 쓰기 계층은 비워서 낸다.
+     * @param filingTrace       수집이 원장 응답에서 본 공시 번호({@code FilingTrace}) — 공시 소비의 근거라 수집기가 실어 넘긴다
+     *                          (ADR-0176 2차). 쓰기 계층은 비워서 낸다.
      */
     public record Outcome(long changed, int inserted, int filled, int revised,
                           int deferredRevisions, int corrected, int insertedEarlier, boolean retractionStopped,
-                          List<DataSourceException.Kind> unfetchedSupplements) {
+                          List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace) {
 
         public Outcome {
             unfetchedSupplements = List.copyOf(unfetchedSupplements);
+            filingTrace = filingTrace == null ? FilingTrace.NONE : filingTrace;
+        }
+
+        public Outcome(long changed, int inserted, int filled, int revised, int deferredRevisions, int corrected,
+                       int insertedEarlier, boolean retractionStopped, List<DataSourceException.Kind> unfetchedSupplements) {
+            this(changed, inserted, filled, revised, deferredRevisions, corrected, insertedEarlier, retractionStopped,
+                    unfetchedSupplements, FilingTrace.NONE);
         }
 
         public Outcome(long changed, int inserted, int filled, int revised, int deferredRevisions, int corrected,
@@ -138,7 +148,13 @@ public class FinancialWriter {
         /** 같은 쓰기 결과에 받지 못한 보충을 싣는다. */
         public Outcome withUnfetchedSupplements(List<DataSourceException.Kind> kinds) {
             return new Outcome(changed, inserted, filled, revised, deferredRevisions, corrected, insertedEarlier,
-                    retractionStopped, kinds);
+                    retractionStopped, kinds, filingTrace);
+        }
+
+        /** 같은 쓰기 결과에 수집이 본 공시 번호를 싣는다. */
+        public Outcome withFilingTrace(FilingTrace trace) {
+            return new Outcome(changed, inserted, filled, revised, deferredRevisions, corrected, insertedEarlier,
+                    retractionStopped, unfetchedSupplements, trace);
         }
     }
 

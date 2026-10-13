@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource.kr;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FinancialDataSource;
+import com.stockscreener.pipeline.datasource.FilingTrace;
 import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.datasource.SecurityRef;
@@ -96,6 +97,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
 
         int currentYear = LocalDate.now().getYear();
         List<RawFinancialReport> reports = new ArrayList<>();
+        // 공시 소비의 근거(ADR-0176 2차) — 보고서마다 응답의 접수번호. 출력과 무관하다.
+        Map<FilingTrace.ReportKey, String> seen = FilingTrace.newReportMap();
 
         for (int year = fromFiscalYear; year <= currentYear; year++) {
             // 연간 누계와 3분기 누적을 함께 들고 있어야 Q4를 유도할 수 있다.
@@ -103,6 +106,10 @@ public class DartFinancialAdapter implements FinancialDataSource {
             for (Map.Entry<String, String> entry : REPORT_CODES.entrySet()) {
                 PeriodRows rows = fetchOne(corpCode, year, entry.getKey(), security);
                 if (rows != null) {
+                    for (JsonNode row : rows.rows()) {
+                        FilingTrace.putLatest(seen, new FilingTrace.ReportKey(year, entry.getKey()),
+                                row.path("rcept_no").asString(""));
+                    }
                     byPeriod.put(entry.getValue(), rows);
                     reports.add(toReport(rows, year, entry.getValue(), false));
                 }
@@ -113,7 +120,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
         // 같은 판정을 낼 재료는 있다(DartFullAccountMapper.find가 후보 account_id가 손익 행에
         // 하나도 없을 때 null을 낸다 · 추가 콜 0). 국내 54종목이 미국 380과 같은 상황인데
         // 이번에 안 열었고, 그 사실과 수는 이 변경의 ADR §결과에 있다.
-        return FinancialFetch.of(reports);
+        return FinancialFetch.of(reports).withFilingTrace(FilingTrace.ofReports(seen));
     }
 
     /**

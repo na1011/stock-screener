@@ -91,5 +91,11 @@ public enum CollectionPhase {
      * 원장 공시 목록 받기(ADR-0176 · {@code FilingListingJob}). 종목이 아니라 <b>시장</b>이 단위다 —
      * {@code countExternally}로 센다.
      */
-    FILING_LISTING
+    FILING_LISTING,
+
+    /**
+     * 원장 공시 소비(ADR-0176 2차 · {@code FilingConsumptionJob}). 단위는 <b>시장</b>이다 — 종목은 그 잡이 부르는 FR·FSR이
+     * 각자 {@code FINANCIAL}로 센다.
+     */
+    FILING_CONSUMPTION
 }

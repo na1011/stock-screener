@@ -181,6 +181,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final ShareBasisDeriver shareBasisDeriver;
     private final IndicatorReconciler indicatorReconciler;
     private final FilingListingJob filingListingJob;
+    private final FilingConsumptionJob filingConsumptionJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
@@ -202,7 +203,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            ConfigurableApplicationContext context,
                            ShareBasisDeriver shareBasisDeriver,
                            IndicatorReconciler indicatorReconciler,
-                           FilingListingJob filingListingJob) {
+                           FilingListingJob filingListingJob,
+                           FilingConsumptionJob filingConsumptionJob) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.universeRestoreJob = universeRestoreJob;
         this.initialLoadJob = initialLoadJob;
@@ -220,6 +222,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.shareBasisDeriver = shareBasisDeriver;
         this.indicatorReconciler = indicatorReconciler;
         this.filingListingJob = filingListingJob;
+        this.filingConsumptionJob = filingConsumptionJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
     }
@@ -366,6 +369,8 @@ public class BootstrapRunner implements ApplicationRunner {
                     governanceEndpoints(args), csv(args, "tickers"));
             // 원장 공시 목록 → 소비 장부(ADR-0176). 쓰는 표는 장부 둘뿐이다. --as-of가 「오늘」이다 — 국내는 그날을 닫지 않는다.
             case "filing-listing" -> filingListingJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
+            // 열린 장부 행을 좁힌 FR·FSR로 먹인다 — 재무 표를 쓴다(공시 목록과 달리 값을 바꾸는 표다 · ADR-0176 2차).
+            case "filing-consumption" -> filingConsumptionJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
             // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
             case "governance-derive" -> governanceDeriveJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
@@ -399,7 +404,8 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | governance-load | governance-derive"
                             + " | share-basis-derive"
                             + " | corporate-action-review | corporate-action-judge"
-                            + " | market-calendar | bar-gap-review");
+                            + " | market-calendar | bar-gap-review"
+                            + " | filing-listing | filing-consumption");
         };
 
         // MUST: 재무나 기업행위를 쓴 잡 뒤에는 기저를 다시 판정한다(ADR-0162).
@@ -451,7 +457,7 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     // adjustment-rebuild도 원장을 APPLIED로 바꾸므로 판정의 입력이 바뀐다 — 빠져 있었다.
     private static final java.util.Set<String> REDERIVE_SHARE_BASIS_AFTER = java.util.Set.of(
-            "initial-load", "financial-refill", "full-statement-refill",
+            "initial-load", "financial-refill", "full-statement-refill", "filing-consumption",
             "corporate-action", "corporate-action-judge", "adjustment-rebuild");
 
     /**

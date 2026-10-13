@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource.kr;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FullStatementDataSource;
+import com.stockscreener.pipeline.datasource.FilingTrace;
 import com.stockscreener.pipeline.datasource.FullStatementResult;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.datasource.SecurityRef;
@@ -151,6 +152,15 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             }
         }
 
+        // 공시 소비의 근거(ADR-0176 2차) — 보고서마다 응답의 접수번호. 출력과 무관하다.
+        Map<FilingTrace.ReportKey, String> seen = FilingTrace.newReportMap();
+        for (Pending p : pending) {
+            for (JsonNode row : p.list()) {
+                FilingTrace.putLatest(seen, new FilingTrace.ReportKey(p.year(), REPORT_CODES.get(p.period())),
+                        row.path("rcept_no").asString(""));
+            }
+        }
+
         // ── 2패스: 종목 단위 판정(순수). 외부 호출 0.
         LocalDate lastNoncontrolling = lastNoncontrollingIncome(pending);
         // MUST: 게이트가 몇 판에서 열렸는지 남긴다. 스윕이 이 축을 못 태우므로(픽스처가
@@ -186,7 +196,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 reports.add(toFourthQuarterBalance(annual, year, security, thisYear));
             }
         }
-        return new FullStatementResult(reports, calls, missing);
+        return new FullStatementResult(reports, calls, missing, FilingTrace.ofReports(seen));
     }
 
     /**

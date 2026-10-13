@@ -111,6 +111,36 @@ class DartFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("보고서마다 응답의 접수번호를 소비 근거로 낸다 — 013인 보고서는 키가 없다(ADR-0176 2차)")
+    void carriesResponseFilingNumbersPerReport() throws Exception {
+        respondByReportCode();
+
+        com.stockscreener.pipeline.datasource.FilingTrace trace =
+                newAdapter().fetchReports(SAMSUNG, 2025).filingTrace();
+
+        assertThat(trace.latestByReport())
+                .containsEntry(new com.stockscreener.pipeline.datasource.FilingTrace.ReportKey(2025, "11011"),
+                        "20260310002820")
+                .containsEntry(new com.stockscreener.pipeline.datasource.FilingTrace.ReportKey(2025, "11014"),
+                        "20251114002447")
+                .as("013으로 답한 반기는 근거가 없다 — 소비가 「아직 반영 전」으로 남긴다")
+                .doesNotContainKey(new com.stockscreener.pipeline.datasource.FilingTrace.ReportKey(2025, "11012"));
+    }
+
+    @Test
+    @DisplayName("창 아래쪽을 잘라도 남은 해의 보고서가 같다 — 소비가 국내 창을 좁히는 근거(ADR-0176 2차)")
+    void narrowingTheWindowFromBelowKeepsRetainedYears() throws Exception {
+        respondByReportCode();
+        DartFinancialAdapter adapter = newAdapter();
+
+        List<RawFinancialReport> wide = adapter.fetchReports(SAMSUNG, 2023).reports().stream()
+                .filter(r -> r.fiscalYear() >= 2025).toList();
+        List<RawFinancialReport> narrow = adapter.fetchReports(SAMSUNG, 2025).reports();
+
+        assertThat(narrow).isNotEmpty().isEqualTo(wide);
+    }
+
+    @Test
     @DisplayName("데이터 없음(013)은 예외가 아니다 — 아직 공시되지 않은 분기가 정상이다")
     void treatsNoDataAsSkippable() throws Exception {
         server.setDispatcher(new Dispatcher() {
