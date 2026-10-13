@@ -35,6 +35,7 @@ pg_restore도 같은 exec) → `end <id>`. 세션 안 bootRun은 하나씩이다
 --job=governance-load [--governance-year=2025] [--governance-span=1] [--governance-endpoints=DIVIDEND,AUDIT_OPINION] [--tickers=…]
 --job=governance-derive [--tickers=005930]
 --job=share-basis-derive [--market=US]
+--job=filing-listing [--as-of=2026-10-14]   # 커서 다음 날부터 · --as-of가 「오늘」(국내는 그날을 안 닫는다)
 ```
 
 **아래는 원장을 보고 판정하는 잡들이다.** 접두는 위와 같다 — `bootstrap` 프로파일이
