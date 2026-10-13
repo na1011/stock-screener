@@ -40,23 +40,25 @@ final class DartResponse {
     /**
      * 경로 하나의 콜 앞에서 그 경로의 일일 총량을 보고 토큰을 얻는다 — DART 어댑터 전부가 이 자리를 지난다.
      *
-     * <p>총량은 경로마다 센다(ADR-0176) — 그래서 경로를 받는다. 소진은 {@code RATE_LIMITED}(다음 실행이 이어 간다)이고, 대기 중
-     * 인터럽트는 인터럽트 상태를 되살린 뒤 {@code TRANSIENT}로 던진다.
+     * <p>총량은 경로마다({@link DartDailyQuota} · ADR-0176), 속도는 키 합({@code dartRateLimiter})으로 센다. 소진은
+     * {@code RATE_LIMITED}(다음 실행이 이어 간다)이고, 대기 중 인터럽트는 인터럽트 상태를 되살린 뒤 {@code TRANSIENT}로 던진다.
      *
      * @param path 요청 URL의 경로 그대로({@code /fnlttSinglAcnt.json})
      */
-    static void acquire(RateLimiter rateLimiter, String path, String context) throws DataSourceException {
-        if (!rateLimiter.hasDailyQuota(path)) {
+    static void acquire(RateLimiter rateLimiter, DartDailyQuota quota, String path, String context)
+            throws DataSourceException {
+        if (!quota.has(path) || !rateLimiter.hasDailyQuota()) {
             throw new DataSourceException(DataSourceException.Kind.RATE_LIMITED, SOURCE_NAME,
-                    "일일 호출 한도를 소진했다(" + path + " 사용 " + rateLimiter.usedToday(path) + "회). " + context);
+                    "일일 호출 한도를 소진했다(" + path + " 사용 " + quota.used(path) + "회). " + context);
         }
         try {
-            rateLimiter.acquire(path);
+            rateLimiter.acquire();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
                     "호출 대기 중 인터럽트됐다. " + context, e);
         }
+        quota.count(path);
     }
 
     /**

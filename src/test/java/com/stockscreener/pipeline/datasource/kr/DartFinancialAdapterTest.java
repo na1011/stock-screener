@@ -253,7 +253,7 @@ class DartFinancialAdapterTest {
         source.setApiKey("test-key");
         return new DartFinancialAdapter(
                 new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("dart", 0, 0), corpCodes);
+                new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited(), corpCodes);
     }
 
     private static RawFinancialReport findReport(List<RawFinancialReport> reports,
@@ -288,7 +288,7 @@ class DartFinancialAdapterTest {
 
         StubCorpCodeCache(Optional<String> corpCode) {
             super(new ExternalApiClientFactory(), new DataSourceProperties(),
-                    new TokenBucketRateLimiter("dart", 0, 0));
+                    new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited());
             this.corpCode = corpCode;
         }
 

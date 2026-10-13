@@ -75,16 +75,19 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
 
     private final RestClient client;
     private final RateLimiter rateLimiter;
+    private final DartDailyQuota dailyQuota;
     private final DartCorpCodeCache corpCodes;
     private final String apiKey;
 
     public DartFullStatementAdapter(ExternalApiClientFactory clientFactory,
                                     DataSourceProperties properties,
                                     @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
+                                    DartDailyQuota dailyQuota,
                                     DartCorpCodeCache corpCodes) {
         DataSourceProperties.Source source = properties.getDart();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
+        this.dailyQuota = dailyQuota;
         this.corpCodes = corpCodes;
         this.apiKey = source.getApiKey();
     }
@@ -269,7 +272,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
 
         // MUST: 이 가드를 지우지 않는다. 리미터의 acquire()는 분당 간격만 대기하고 일일 한도는
         // 보지 않는다 — 여기가 없으면 한도를 조용히 넘는다. 어댑터마다 같은 블록이 있는 이유다.
-        DartResponse.acquire(rateLimiter, PATH, context);
+        DartResponse.acquire(rateLimiter, dailyQuota, PATH, context);
 
         ResponseEntity<byte[]> response;
         try {

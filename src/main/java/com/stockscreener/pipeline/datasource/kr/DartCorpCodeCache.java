@@ -93,6 +93,7 @@ public class DartCorpCodeCache {
 
     private final RestClient client;
     private final RateLimiter rateLimiter;
+    private final DartDailyQuota dailyQuota;
     private final String apiKey;
     private final int minExpectedListed;
     private final Clock clock;
@@ -107,17 +108,20 @@ public class DartCorpCodeCache {
     @Autowired
     public DartCorpCodeCache(com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory factory,
                              DataSourceProperties properties,
-                             @Qualifier("dartRateLimiter") RateLimiter rateLimiter) {
-        this(factory, properties, rateLimiter, MIN_EXPECTED_LISTED, Clock.systemUTC(), RefetchWaits.standard());
+                             @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
+                             DartDailyQuota dailyQuota) {
+        this(factory, properties, rateLimiter, dailyQuota, MIN_EXPECTED_LISTED, Clock.systemUTC(), RefetchWaits.standard());
     }
 
     /** 시험 전용 — 하한 · 시계 · 다시 받기 대기를 바꿔 끼운다. */
     DartCorpCodeCache(com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory factory,
-                      DataSourceProperties properties, RateLimiter rateLimiter, int minExpectedListed, Clock clock,
+                      DataSourceProperties properties, RateLimiter rateLimiter, DartDailyQuota dailyQuota,
+                      int minExpectedListed, Clock clock,
                       RefetchWaits waits) {
         DataSourceProperties.Source source = properties.getDart();
         this.client = factory.create(source);
         this.rateLimiter = rateLimiter;
+        this.dailyQuota = dailyQuota;
         this.apiKey = source.getApiKey();
         this.minExpectedListed = minExpectedListed;
         this.clock = clock;
@@ -259,7 +263,7 @@ public class DartCorpCodeCache {
             throw new DataSourceException(DataSourceException.Kind.AUTH, DartResponse.SOURCE_NAME,
                     "DART_API_KEY가 설정되지 않았다.");
         }
-        DartResponse.acquire(rateLimiter, PATH, "corpCode.xml");
+        DartResponse.acquire(rateLimiter, dailyQuota, PATH, "corpCode.xml");
 
         ResponseEntity<byte[]> response;
         try {

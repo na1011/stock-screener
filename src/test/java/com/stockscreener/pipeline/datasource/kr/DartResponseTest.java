@@ -117,7 +117,7 @@ class DartResponseTest {
     void successWithoutListIsMalformed() {
         server.setDispatcher(dispatcher(respond(200, "application/json", "{\"status\":\"000\",\"message\":\"정상\"}")));
         DartGovernanceAdapter governance = new DartGovernanceAdapter(new ExternalApiClientFactory(), properties(),
-                new TokenBucketRateLimiter("dart", 0, 0), new StubCorpCodeCache(Optional.of("00126380")));
+                new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited(), new StubCorpCodeCache(Optional.of("00126380")));
 
         assertThatThrownBy(() -> governance.fetchReport(SAMSUNG,
                 com.stockscreener.pipeline.datasource.GovernanceEndpoint.SHARE_TOTALS, 2025, "11011"))
@@ -225,7 +225,7 @@ class DartResponseTest {
 
     private DartFinancialAdapter adapter(Optional<String> corpCode) {
         return new DartFinancialAdapter(new ExternalApiClientFactory(), properties(),
-                new TokenBucketRateLimiter("dart", 0, 0), new StubCorpCodeCache(corpCode));
+                new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited(), new StubCorpCodeCache(corpCode));
     }
 
     private DataSourceProperties properties() {
@@ -249,7 +249,7 @@ class DartResponseTest {
         private final Optional<String> corpCode;
 
         StubCorpCodeCache(Optional<String> corpCode) {
-            super(new ExternalApiClientFactory(), new DataSourceProperties(), new TokenBucketRateLimiter("dart", 0, 0));
+            super(new ExternalApiClientFactory(), new DataSourceProperties(), new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited());
             this.corpCode = corpCode;
         }
 

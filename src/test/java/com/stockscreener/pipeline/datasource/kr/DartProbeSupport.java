@@ -66,7 +66,7 @@ final class DartProbeSupport {
 
     static DartCorpCodeCache corpCodeCache() {
         return new DartCorpCodeCache(new ExternalApiClientFactory(), properties(),
-                new TokenBucketRateLimiter("dart", 300, 0));
+                new TokenBucketRateLimiter("dart", 300, 0), DartDailyQuota.unlimited());
     }
 
     /** {@code status} 코드와 그 뜻. 코드만 찍으면 다음 세션이 표를 다시 찾아본다. */

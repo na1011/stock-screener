@@ -54,16 +54,19 @@ public class DartFinancialAdapter implements FinancialDataSource {
 
     private final RestClient client;
     private final RateLimiter rateLimiter;
+    private final DartDailyQuota dailyQuota;
     private final DartCorpCodeCache corpCodes;
     private final String apiKey;
 
     public DartFinancialAdapter(ExternalApiClientFactory clientFactory,
                                 DataSourceProperties properties,
                                 @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
+                                DartDailyQuota dailyQuota,
                                 DartCorpCodeCache corpCodes) {
         DataSourceProperties.Source source = properties.getDart();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
+        this.dailyQuota = dailyQuota;
         this.corpCodes = corpCodes;
         this.apiKey = source.getApiKey();
     }
@@ -122,7 +125,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
     private PeriodRows fetchOne(String corpCode, int year, String reportCode, SecurityRef security)
             throws DataSourceException {
         String context = "ticker=" + security.ticker() + " " + year + "/" + reportCode;
-        DartResponse.acquire(rateLimiter, PATH, context);
+        DartResponse.acquire(rateLimiter, dailyQuota, PATH, context);
 
         ResponseEntity<byte[]> response;
         try {

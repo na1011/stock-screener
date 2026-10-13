@@ -166,7 +166,7 @@ class DartCorpCodeCacheTest {
         properties.getDart().setBaseUrl(server.url("/").toString());
         properties.getDart().setApiKey("test-key");
         DartCorpCodeCache cache = new DartCorpCodeCache(new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("dart", 0, 0), 2, clock,
+                new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited(), 2, clock,
                 new com.stockscreener.pipeline.datasource.http.RefetchWaits(waitMillis, elapsed::addAndGet));
         try {
             return cache.findCorpCode("005930").isPresent() && elapsed.get() <= 3_000;
@@ -180,7 +180,7 @@ class DartCorpCodeCacheTest {
         properties.getDart().setBaseUrl(server.url("/").toString());
         properties.getDart().setApiKey("test-key");
         return new DartCorpCodeCache(new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("dart", 0, 0), minListed, clock,
+                new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited(), minListed, clock,
                 new com.stockscreener.pipeline.datasource.http.RefetchWaits(new long[] {2_000, 10_000}, millis -> { }));
     }
 

@@ -142,7 +142,7 @@ class DartCorporateActionAdapterLiveTest {
     private static DartCorporateActionAdapter adapterWith(StoredPriceSeries series) {
         return new DartCorporateActionAdapter(
                 new ExternalApiClientFactory(), DartProbeSupport.properties(),
-                new TokenBucketRateLimiter("dart", 300, 0),
+                new TokenBucketRateLimiter("dart", 300, 0), DartDailyQuota.unlimited(),
                 DartProbeSupport.corpCodeCache(), series);
     }
 

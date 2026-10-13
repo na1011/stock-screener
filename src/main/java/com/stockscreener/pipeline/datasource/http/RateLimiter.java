@@ -32,24 +32,4 @@ public interface RateLimiter {
 
     /** 이 리미터가 담당하는 소스 이름. */
     String sourceName();
-
-    /**
-     * 경로 하나의 콜로 토큰을 얻는다. 속도(분당)는 경로와 무관하게 소스 전체로 센다.
-     *
-     * <p>일일 총량을 경로마다 세는 리미터({@link TokenBucketRateLimiter#perEndpoint})만 경로를 쓴다 — 나머지는 경로를 무시하고
-     * {@link #acquire()}와 같다. 경로는 요청 URL의 경로 그대로다(예: {@code /fnlttSinglAcnt.json}).
-     */
-    default void acquire(String endpoint) throws InterruptedException {
-        acquire();
-    }
-
-    /** 그 경로의 일일 총량이 남아 있는가. 경로마다 세지 않는 리미터는 {@link #hasDailyQuota()}와 같다. */
-    default boolean hasDailyQuota(String endpoint) {
-        return hasDailyQuota();
-    }
-
-    /** 그 경로로 오늘 쓴 호출 수. 경로마다 세지 않는 리미터는 {@link #usedToday()}와 같다. */
-    default long usedToday(String endpoint) {
-        return usedToday();
-    }
 }

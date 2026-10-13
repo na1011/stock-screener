@@ -167,7 +167,7 @@ class DartCompanyProfileAdapterTest {
         source.setApiKey("test-key");
         return new DartCompanyProfileAdapter(
                 new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("dart", 0, 0), corpCodes);
+                new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited(), corpCodes);
     }
 
     /** corp_code 조회를 고정한다. 이 테스트의 관심사는 개황 파싱이다. */
@@ -176,7 +176,7 @@ class DartCompanyProfileAdapterTest {
 
         StubCorpCodeCache(Optional<String> corpCode) {
             super(new ExternalApiClientFactory(), new DataSourceProperties(),
-                    new TokenBucketRateLimiter("dart", 0, 0));
+                    new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited());
             this.corpCode = corpCode;
         }
 

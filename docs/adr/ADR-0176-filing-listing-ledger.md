@@ -12,7 +12,8 @@ applies_to:
   - "src/main/java/**/datasource/kr/DartReportKey.java"
   - "src/main/java/**/collector/FilingLedgerStore.java"
   - "src/main/java/**/batch/FilingListingJob.java"
-  - "src/main/java/**/datasource/http/TokenBucketRateLimiter.java"
+  - "src/main/java/**/datasource/kr/DartDailyQuota.java"
+  - "src/main/java/**/datasource/kr/DartResponse.java"
   - "src/main/java/**/datasource/http/DataSourceHttpConfig.java"
 ---
 
@@ -39,14 +40,18 @@ applies_to:
 - MUST NOT: 장부 행을 손으로 고치지 않는다 — 상태(소비 칸)는 소비 단계만 바꾼다.
 - MUST NOT: 판 범위 일곱 파일(`ReaderVersionPinTest.SOURCE_SCOPE`)을 이 연동 때문에 고치지 않는다 — 한 토큰이 보충 판을 올려 저장분을 다시
   받는다. 새 클라이언트는 그 파일들의 받기(`SecFilingClient.fetch`)·판정(`SecEdgarResponse`)을 부르기만 한다.
-- MUST: DART 어댑터는 콜마다 `DartResponse.acquire(limiter, 경로, …)`를 지난다. 경로마다 세는 리미터는 경로 없는 콜을 던진다.
+- MUST: DART 어댑터는 콜마다 `DartResponse.acquire(limiter, quota, 경로, …)`를 지난다 — 일일 총량은 `DartDailyQuota`가 경로마다,
+  속도(분당 600)는 `dartRateLimiter`가 키 합으로 센다.
+- MUST NOT: 일일 계수를 `RateLimiter` 계층(구현 클래스 포함)에 넣지 않는다 — `ReaderVersionPinTest`의 해시가 SEC 판 범위 파일이 쓰는
+  `RateLimiter`의 구현 전부를 싣는다. 처음 판이 `TokenBucketRateLimiter`에 넣어 SEC 판 해시를 바꿨고(전체 빌드가 잡음), DART만의 변경이
+  보충 판을 올려 저장분을 다시 받게 할 뻔했다.
 
 ## 검증
 
-- `FilingListingJobTest` · `SecFilingListSourceTest` · `DartFilingListSourceTest` · `TokenBucketRateLimiterTest` — 닫는 규칙 · 실패에서
-  멈춤 · 멱등 · 소스 없는 시장 · 커서 지연 알림 · 경로별 계수(대조군: 경로를 안 세는 리미터는 합으로 막는다).
+- `FilingListingJobTest` · `SecFilingListSourceTest` · `DartFilingListSourceTest` · `DartDailyQuotaTest` — 닫는 규칙 · 실패에서
+  멈춤 · 멱등 · 소스 없는 시장 · 커서 지연 알림 · 경로별 계수(대조군: 같은 경로는 한도에서 막힌다). `ReaderVersionPinTest`가 초록이다.
 - `FilingListingReplayTest`(환경변수 `FILING_SAMPLES_DIR` · 0콜) — 저장한 색인 7일 × 편입 1,000이 따로 뽑은 21건과 같다.
-- `CronsDoneTableTest` — `ops/crons-done.sh` 표에 14:16이 있다. `rg "rateLimiter\.(acquire|hasDailyQuota|usedToday)\(\)" src/main/java/com/stockscreener/pipeline/datasource/kr/Dart*`가 0건이다.
+- `CronsDoneTableTest` — `ops/crons-done.sh` 표에 14:16이 있다. `rg "rateLimiter\.(acquire|hasDailyQuota)\(" src/main/java/com/stockscreener/pipeline/datasource/kr/Dart*`가 `DartResponse` 한 곳뿐이다.
 
 ```premise 원장 공시 목록의 커서가 평일 이틀 넘게 늦지 않다
 psql -X -d stock_screener -At -c "WITH m(market) AS (VALUES ('US'), ('KR')),
@@ -85,4 +90,4 @@ SELECT CASE
 - 비용: 평일마다 SEC 1~2콜(분기 목록 + 그날 색인) · DART 6콜 + 쪽수. 첫 실행은 커서부터 밀린 날만큼(미국 09-24~ · 국내 09-21~).
 - 재지 않은 것: 색인이 날짜 순서를 어기고 늦게 올라오는 경우(앞날을 「없는 날」로 닫는다 — 7일 표본은 순서대로였다) · 새 분기 디렉터리가
   첫 색인 전에 403인지(그날은 앞 분기 끝까지만 닫고 하루 늦는다) · DART 경로 단위 한도의 존재.
-- 되돌리기: 크론과 잡을 걷고 V67 두 표를 남겨도 아무것도 안 읽는다. 리미터는 `perEndpoint`를 옛 생성자로 되돌리면 키 합이다.
+- 되돌리기: 크론과 잡을 걷고 V67 두 표를 남겨도 아무것도 안 읽는다. 일일 계수는 `dartRateLimiter`의 일일 한도를 다시 `dart.daily-quota`로 주고 `DartDailyQuota`를 걷으면 키 합이다.

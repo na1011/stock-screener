@@ -5,8 +5,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * 분당 허용량을 균등 간격으로 흘려보내고, 일일 총량을 함께 센다.
@@ -27,14 +25,11 @@ public class TokenBucketRateLimiter implements RateLimiter {
     private final String sourceName;
     private final long minIntervalMillis;
     private final long dailyQuota;
-    /** 일일 총량을 경로마다 세는가 — 그러면 {@link #dailyQuota}는 경로 하나의 한도이고 경로 없는 호출은 거절한다. */
-    private final boolean perEndpoint;
     private final Clock clock;
 
     private long lastAcquiredAtMillis;
     private LocalDate counterDate;
     private long usedToday;
-    private final Map<String, Long> usedTodayByEndpoint = new HashMap<>();
 
     /**
      * @param permitsPerMinute 분당 허용 호출 수. 0 이하면 속도 제한 없음
@@ -45,56 +40,18 @@ public class TokenBucketRateLimiter implements RateLimiter {
     }
 
     TokenBucketRateLimiter(String sourceName, int permitsPerMinute, long dailyQuota, Clock clock) {
-        this(sourceName, permitsPerMinute, dailyQuota, false, clock);
-    }
-
-    private TokenBucketRateLimiter(String sourceName, int permitsPerMinute, long dailyQuota, boolean perEndpoint,
-                                   Clock clock) {
         if (sourceName == null || sourceName.isBlank()) {
             throw new IllegalArgumentException("sourceName이 비어 있다.");
         }
         this.sourceName = sourceName;
         this.minIntervalMillis = permitsPerMinute > 0 ? 60_000L / permitsPerMinute : 0L;
         this.dailyQuota = dailyQuota;
-        this.perEndpoint = perEndpoint;
         this.clock = clock;
         this.counterDate = LocalDate.now(clock);
     }
 
-    /**
-     * 속도는 소스 전체로, <b>일일 총량은 경로마다</b> 센다(ADR-0176 · DART). {@code dailyQuota}는 경로 하나의 한도다.
-     *
-     * <p>MUST: 이 리미터에는 경로 없는 {@link #acquire()}·{@link #hasDailyQuota()}를 부르지 않는다 — 부르면 던진다. 경로 없는
-     * 콜이 하나라도 남으면 그 콜은 어느 경로의 한도에도 안 세어지므로, 조용히 넘기지 않고 그 자리를 드러낸다.
-     */
-    public static TokenBucketRateLimiter perEndpoint(String sourceName, int permitsPerMinute, long dailyQuotaPerEndpoint) {
-        return new TokenBucketRateLimiter(sourceName, permitsPerMinute, dailyQuotaPerEndpoint, true,
-                Clock.systemDefaultZone());
-    }
-
-    static TokenBucketRateLimiter perEndpoint(String sourceName, int permitsPerMinute, long dailyQuotaPerEndpoint,
-                                              Clock clock) {
-        return new TokenBucketRateLimiter(sourceName, permitsPerMinute, dailyQuotaPerEndpoint, true, clock);
-    }
-
     @Override
     public synchronized void acquire() throws InterruptedException {
-        requireNoEndpoint("acquire");
-        pace();
-    }
-
-    @Override
-    public synchronized void acquire(String endpoint) throws InterruptedException {
-        if (!perEndpoint) {
-            acquire();
-            return;
-        }
-        pace();
-        usedTodayByEndpoint.merge(requireEndpoint(endpoint), 1L, Long::sum);
-    }
-
-    /** 균등 간격을 지키고 소스 전체의 오늘 호출 수를 하나 올린다. */
-    private void pace() throws InterruptedException {
         rolloverIfNewDay();
 
         if (minIntervalMillis > 0) {
@@ -110,41 +67,8 @@ public class TokenBucketRateLimiter implements RateLimiter {
 
     @Override
     public synchronized boolean hasDailyQuota() {
-        requireNoEndpoint("hasDailyQuota");
         rolloverIfNewDay();
         return dailyQuota <= 0 || usedToday < dailyQuota;
-    }
-
-    @Override
-    public synchronized boolean hasDailyQuota(String endpoint) {
-        if (!perEndpoint) {
-            return hasDailyQuota();
-        }
-        rolloverIfNewDay();
-        return dailyQuota <= 0 || usedTodayByEndpoint.getOrDefault(requireEndpoint(endpoint), 0L) < dailyQuota;
-    }
-
-    @Override
-    public synchronized long usedToday(String endpoint) {
-        if (!perEndpoint) {
-            return usedToday();
-        }
-        rolloverIfNewDay();
-        return usedTodayByEndpoint.getOrDefault(requireEndpoint(endpoint), 0L);
-    }
-
-    private void requireNoEndpoint(String method) {
-        if (perEndpoint) {
-            throw new IllegalStateException(sourceName + " 리미터는 일일 총량을 경로마다 센다 — " + method
-                    + "(endpoint)를 부른다. 경로 없는 콜은 어느 한도에도 안 세어진다.");
-        }
-    }
-
-    private static String requireEndpoint(String endpoint) {
-        if (endpoint == null || endpoint.isBlank()) {
-            throw new IllegalArgumentException("경로가 비어 있다.");
-        }
-        return endpoint;
     }
 
     @Override
@@ -168,12 +92,8 @@ public class TokenBucketRateLimiter implements RateLimiter {
         LocalDate today = LocalDate.now(clock);
         if (!today.equals(counterDate)) {
             log.info("일일 호출 카운터를 리셋한다. source={} 어제 사용={} ", sourceName, usedToday);
-            if (perEndpoint) {
-                log.info("경로별 일일 호출 수(어제): source={} {}", sourceName, usedTodayByEndpoint);
-            }
             counterDate = today;
             usedToday = 0;
-            usedTodayByEndpoint.clear();
         }
     }
 }

@@ -62,16 +62,19 @@ public class DartGovernanceAdapter implements GovernanceDataSource {
 
     private final RestClient client;
     private final RateLimiter rateLimiter;
+    private final DartDailyQuota dailyQuota;
     private final DartCorpCodeCache corpCodes;
     private final String apiKey;
 
     public DartGovernanceAdapter(ExternalApiClientFactory clientFactory,
                                  DataSourceProperties properties,
                                  @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
+                                 DartDailyQuota dailyQuota,
                                  DartCorpCodeCache corpCodes) {
         DataSourceProperties.Source source = properties.getDart();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
+        this.dailyQuota = dailyQuota;
         this.corpCodes = corpCodes;
         this.apiKey = source.getApiKey();
     }
@@ -110,7 +113,7 @@ public class DartGovernanceAdapter implements GovernanceDataSource {
             return List.of();
         }
 
-        DartResponse.acquire(rateLimiter, path, context);
+        DartResponse.acquire(rateLimiter, dailyQuota, path, context);
 
         ResponseEntity<byte[]> response;
         try {

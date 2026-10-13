@@ -131,14 +131,14 @@ class DartLiveTest {
     private DartFinancialAdapter adapterWithKey(String apiKey) {
         return new DartFinancialAdapter(
                 new ExternalApiClientFactory(), propertiesWith(apiKey),
-                new TokenBucketRateLimiter("dart", 300, 0), corpCodeCache());
+                new TokenBucketRateLimiter("dart", 300, 0), DartDailyQuota.unlimited(), corpCodeCache());
     }
 
     private DartCorpCodeCache corpCodeCache() {
         return new DartCorpCodeCache(
                 new ExternalApiClientFactory(),
                 propertiesWith(System.getenv("DART_API_KEY")),
-                new TokenBucketRateLimiter("dart", 300, 0));
+                new TokenBucketRateLimiter("dart", 300, 0), DartDailyQuota.unlimited());
     }
 
     private static DataSourceProperties propertiesWith(String apiKey) {

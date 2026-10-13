@@ -415,7 +415,7 @@ class DartCorporateActionAdapterTest {
         source.setApiKey("test-key");
         return new DartCorporateActionAdapter(
                 new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("dart", 0, 0), corpCodes, series);
+                new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited(), corpCodes, series);
     }
 
     /** corp_code 조회를 고정한다. 이 테스트의 관심사는 유도다. */
@@ -424,7 +424,7 @@ class DartCorporateActionAdapterTest {
 
         StubCorpCodeCache(Optional<String> corpCode) {
             super(new ExternalApiClientFactory(), new DataSourceProperties(),
-                    new TokenBucketRateLimiter("dart", 0, 0));
+                    new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited());
             this.corpCode = corpCode;
         }
 

@@ -126,6 +126,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
 
     private final RestClient client;
     private final RateLimiter rateLimiter;
+    private final DartDailyQuota dailyQuota;
     private final DartCorpCodeCache corpCodes;
     private final StoredPriceSeries series;
     private final String apiKey;
@@ -133,11 +134,13 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
     public DartCorporateActionAdapter(ExternalApiClientFactory clientFactory,
                                       DataSourceProperties properties,
                                       @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
+                                      DartDailyQuota dailyQuota,
                                       DartCorpCodeCache corpCodes,
                                       StoredPriceSeries series) {
         DataSourceProperties.Source source = properties.getDart();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
+        this.dailyQuota = dailyQuota;
         this.corpCodes = corpCodes;
         this.series = series;
         this.apiKey = source.getApiKey();
@@ -484,7 +487,7 @@ public class DartCorporateActionAdapter implements CorporateActionDataSource {
             throws DataSourceException {
         String context = "ticker=" + security.ticker() + " " + report.businessYear()
                 + "/" + report.reportCode();
-        DartResponse.acquire(rateLimiter, PATH, context);
+        DartResponse.acquire(rateLimiter, dailyQuota, PATH, context);
 
         ResponseEntity<byte[]> response;
         try {

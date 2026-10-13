@@ -43,13 +43,16 @@ public class DartFilingListClient {
 
     private final RestClient client;
     private final RateLimiter rateLimiter;
+    private final DartDailyQuota dailyQuota;
     private final String apiKey;
 
     public DartFilingListClient(ExternalApiClientFactory clientFactory, DataSourceProperties properties,
-                                @Qualifier("dartRateLimiter") RateLimiter rateLimiter) {
+                                @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
+                                DartDailyQuota dailyQuota) {
         DataSourceProperties.Source source = properties.getDart();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
+        this.dailyQuota = dailyQuota;
         this.apiKey = source.getApiKey();
     }
 
@@ -104,7 +107,7 @@ public class DartFilingListClient {
     /** 한 페이지. {@code 013}이면 {@code null}. */
     private Page page(LocalDate day, String detailType, String corpCls, int pageNo) throws DataSourceException {
         String context = context(day, detailType, corpCls, pageNo);
-        DartResponse.acquire(rateLimiter, PATH, context);
+        DartResponse.acquire(rateLimiter, dailyQuota, PATH, context);
         ResponseEntity<byte[]> response;
         try {
             response = client.get().uri(uri -> uri
