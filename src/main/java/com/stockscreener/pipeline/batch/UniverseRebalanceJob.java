@@ -214,9 +214,16 @@ public class UniverseRebalanceJob {
         List<UniverseTarget> targets = new ArrayList<>(activeUniverses());
         if (candidateFeed.enabled()) {
             for (String code : CANDIDATE_POOLS) {
-                if (targets.stream().noneMatch(t -> t.universeCode().equals(code))) {
-                    targets.addAll(oneUniverse(code));
+                if (targets.stream().anyMatch(t -> t.universeCode().equals(code))) {
+                    continue;
                 }
+                // 그 풀의 소스가 없는 환경(Alpaca 키 없음 — 시험·키 없는 개발)은 미국 순위 자체가 없다. 운영에서 키가 빠졌으면 활성인
+                // US_TOP1000이 같은 소스라 먼저 실패로 알린다 — 여기서 실패를 하나 더 만들지 않는다.
+                if (registry.findUniverseSource(code).isEmpty()) {
+                    log.info("후보 풀 {}의 소스가 등록되지 않아 정기 리밸런싱에서 뺀다.", code);
+                    continue;
+                }
+                targets.addAll(oneUniverse(code));
             }
         }
         return targets;

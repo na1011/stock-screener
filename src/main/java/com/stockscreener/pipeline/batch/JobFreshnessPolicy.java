@@ -121,6 +121,9 @@ public class JobFreshnessPolicy {
         // 잡 자신이 평일 2일 넘게 늦으면 먼저 알린다. 이 예산은 크론이 아예 안 돈 날을 센다.
         map.put(FilingListingJob.JOB_NAME, new Budget(5, "--job=filing-listing"));
         map.put(FilingConsumptionJob.JOB_NAME, new Budget(5, "--job=filing-consumption"));
+        // 미국 순위 후보(ADR-0178) — 평일 14:16 넷째 단계 · 14:00 사슬. UsCandidateFeed가 켜진 jar에서만 돈다.
+        map.put(FilingConsumptionJob.CANDIDATE_JOB_NAME, new Budget(5, "--job=candidate-consumption"));
+        map.put(CandidateSplitJob.JOB_NAME, new Budget(5, "--job=candidate-splits"));
         map.put(FreshnessCatchUpJob.JOB_NAME, new Budget(5, "--job=refresh-behind"));
         // 소스가 미래 휴장일을 모르므로 실행일까지만 찬다 — 그만큼 천천히 낡는다.
         map.put(MarketCalendarJob.JOB_NAME, new Budget(60, null));

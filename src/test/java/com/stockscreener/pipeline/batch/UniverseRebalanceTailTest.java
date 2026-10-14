@@ -97,9 +97,22 @@ class UniverseRebalanceTailTest {
     }
 
     @Test
+    @DisplayName("후보 풀의 소스가 없는 환경(키 없음)에서는 정기 리밸런싱이 그 풀을 안 돈다 — 실패를 만들지 않는다")
+    void candidatePoolNeedsItsSource() throws Exception {
+        candidatePoolExists();
+
+        job(true).run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        verify(registry, org.mockito.Mockito.never()).universeSource("US_LISTED");
+        verifyNoInteractions(candidateIntake);
+    }
+
+    @Test
     @DisplayName("후보 공급이 켜지면 정기 리밸런싱이 후보 풀을 지수 루프 안에서 돌고, 꼬리(결손 보충·따라잡기) 뒤에 인입을 한 번 부른다")
     void candidatePoolIsReconciledInTheLoopAndFedAfterTheTail() throws Exception {
         candidatePoolExists();
+        when(registry.findUniverseSource("US_LISTED")).thenReturn(java.util.Optional.of(
+                mock(com.stockscreener.pipeline.datasource.UniverseDataSource.class)));
         java.time.Instant start = java.time.Instant.parse("2026-10-17T11:00:00Z");
         when(candidateIntake.now()).thenReturn(start);
 
