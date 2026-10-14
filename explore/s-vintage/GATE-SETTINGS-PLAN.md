@@ -1,4 +1,6 @@
-# 관문 순서 0 — 미국 관문 설정을 묶음별로 가른다 (계획 v1 · 2026-10-04 · 반증 전)
+# 관문 순서 0 — 관문 설정을 시장·묶음별로 가른다
+
+> **정본은 맨 아래 「계획 v2」 절이다**(2026-10-14). v1 본문은 반증이 겨눈 판이라 남긴다.
 
 ## 왜
 - 지금 main의 미국 관문 설정은 `stockscreener.gate.us`(불리언 하나 · `US_GATE`)이고 읽는 곳은 `SecEdgarFinancialAdapter` 하나다(S0 · `faeb2d7`).
@@ -37,3 +39,59 @@
   6. 가드: 선례 `BootstrapDatabaseGuard`는 `@Profile("bootstrap")`이라 그대로 따르면 운영이 빠진다 · bootstrap에서 서면 종료코드 0 · 유효 관문 상태를 찍는 곳이 0(기동 로그 · refill note)이라 「어느 상태로 돌았나」를 SELECT로 증명할 길이 없다 · `gateOffMatchesLegacyEntryPoint`는 항진명제.
   7. 스윕 측정 함정: env만 바꾼 재실행은 `:test UP-TO-DATE`로 안 돈다 — `--rerun-tasks` + 새 출력 경로 + 그 실행 XML의 `SWEEP 관문=` 줄로 판정(기준선 EXTRA md5 끔 81bb1782 · 켬 6ddcc3e1).
 - **순위(반증 밖 렌즈 · 내 판단으로 받음)**: 지금 main의 묶음은 S0 하나라 `US_GATE=true` = 「S0만」이다 — **설정 분리는 다음 묶음이 main에 들어오기 전까지만 있으면 된다.** 그 전에 날짜가 박힌 축(재무 정정 자동 백필 상한 100 대 10월 말 첫 정기 refill — `BACKFILL-CAP-PLAN.md`)을 먼저 한다.
+
+
+---
+
+## 계획 v2 (2026-10-14 · v1 반증 일곱 반영 + 그 뒤 main이 바뀐 것을 다시 잼)
+
+### 지금 main (★ 10-14 내가 잼)
+- 주 설정 `stockscreener.gate.us: false`(classpath yaml · 환경변수 자리표시자 없음). 출처 허용 목록 가드 `GateSettingGuard`가 있다(ADR-0166).
+  - 실효값을 정한 출처가 명령줄 인자나 classpath `application*.yaml`이 아니면 기동을 세운다.
+  - 옛 이름 `US_GATE`가 실효값과 다르면 기동을 세운다.
+  - 매 기동 `관문 설정 …=… (출처: …)`를 INFO로 찍는다.
+  - → v1 반증 1(배포 `.env`)·5(묶음 환경변수가 부분 상태의 길)는 이 가드가 이미 닫았다.
+- 읽는 곳: `SecEdgarFinancialAdapter`가 `@Value("${stockscreener.gate.us}")`로 읽고, `SecEdgarFacts.build(facts, from, boolean usGate)`(S0)로 넘긴다.
+- 시험 쪽: `SecEdgarFactsSweepTest:91`이 `"true".equals(System.getenv("US_GATE"))`로 손으로 해석한다(v1 반증 3). `SecEdgarControllingQ4GateTest`는 `build(…, true/false)`를 직접 부른다.
+- **국내 관문 설정이 없다.** 그런데 국내 관문 대상이 이미 있다 — 001720 결산월 라벨(가짜 한계 · 값을 바꾸는 어댑터 변경 · progress [국내 결산월]).
+  - 다음 소비자도 미국 어댑터 밖이다: `FinancialWriter.overwritable()`(주식수 0 · 두 시장) · `GovernanceMath.annualOf`(두 시장)(v1 반증 4).
+
+### 결정
+1. **주 설정은 시장마다 스칼라 하나**: `stockscreener.gate.us`(그대로) · `stockscreener.gate.kr: false`(신설). 「제품 상태는 시장마다 전부 끔 · 전부 켬」의 단위다.
+2. **묶음 설정은 다른 이름 공간**: `stockscreener.gate-bundle.<market>.<bundle>: ${stockscreener.gate.<market>}`.
+   - `gate.us`가 스칼라라 그 아래에 키를 못 단다(v1 반증 4의 「이름 공간을 지금 정한다」).
+   - 기본값이 주 설정을 가리키는 자리표시자다. 환경변수 이름이 없으므로 부분 상태로 가는 이름 붙은 길이 없다(v1 반증 5).
+   - 지금 묶음은 `us.s0` 하나다. 다음 묶음(P2 · 국내 결산월 …)은 한 줄씩 더한다.
+3. **중립 단일 바인딩 빈 `ReloadGates`**(`com.stockscreener.pipeline` · 가드 옆): 시장 → 묶음 → 불리언.
+   - 모든 소비자가 이것만 읽는다 — 「읽는 곳은 하나」를 「바인딩은 하나」로 바꾼다(v1 반증 4).
+   - `@Value` 기본값을 두지 않는다. 키가 없으면 기동을 세운다(v1 반증 2의 「오타가 조용히 끔」).
+   - 묶음 키 목록은 enum(`UsBundle {S0}`)이 정본이다. yaml에 enum 밖 키가 있으면 기동을 세운다(오타 `us.so`).
+4. **가드를 넓힌다**(`GateSettingGuard` — 새 가드를 만들지 않는다)
+   - 출처 허용 목록을 `stockscreener.gate.*`·`stockscreener.gate-bundle.*` 전 키로 넓힌다.
+   - **부분 상태 거절**: 한 시장의 묶음 실효값이 그 시장 주 설정과 다르고, 연결 DB 이름이 운영 DB 이름이면 기동을 세운다.
+     - 운영 DB 이름은 `stockscreener.gate.product-database`이고 기본 `stock_screener`다. 연결 DB는 `select current_catalog`로 묻는다.
+     - 사본(`boot()`의 `DB_URL`)에서는 인자로 묶음 하나만 켤 수 있다(귀속 대조군).
+   - v1 반증 6: 선례 `BootstrapDatabaseGuard`는 `@Profile("bootstrap")`이지만 이 가드는 프로파일 없이 모든 기동에서 돈다(지금도 그렇다). bootstrap에서 서면 종료코드가 0인 문제는 이 가드가 `afterPropertiesSet`에서 던져 컨텍스트가 안 뜨는 길이라 해당 여부를 D3에서 종료코드로 잰다(재지 않음).
+   - 기동 로그: 시장마다 주 설정과 묶음 전부를 한 줄로 찍는다.
+5. **실행이 어느 상태로 돌았는지를 행에 남긴다**(v1 반증 6 「SELECT로 증명할 길이 없다」): 재무를 쓰는 잡(FR · FSR · initial-load · 소비 · 따라잡기)의 `note` 끝에 `관문=us:off,kr:off`(묶음이 주 설정과 같으면 시장만, 다르면 `us:off(s0:on)`)를 붙인다.
+6. **시험과 스윕이 같은 해석을 쓴다**(v1 반증 3·7)
+   - `ReloadGates.from(PropertyResolver)` 하나로 해석한다. 스윕은 `StandardEnvironment`에 시스템 속성·환경변수를 실어 같은 메서드로 푼다 — 문자열 비교로 손 해석하지 않는다.
+   - `US_GATE` 대신 `-Dstockscreener.gate.us=true`(인자 꼴)를 받는다.
+   - 스윕 판정은 `--rerun-tasks` + 새 출력 경로 + 그 실행 XML의 `SWEEP 관문=` 줄로 한다(env만 바꾼 재실행은 `:test UP-TO-DATE`로 안 돈다).
+7. **배선 시험**(v1 반증 2): 시험 컨텍스트에서 `ReloadGates`가 yaml을 읽어 `us.s0=false`를 내는지 묻는다(어댑터는 `@ConditionalOnApiKey`라 빈이 없으므로 바인딩 빈 단계에서 묻는다). 어댑터 생성자는 `ReloadGates`를 받는 단위 시험으로 묻는다.
+
+### 수용 기준
+- **스윕 바이트 동일**: 같은 `.factcache`·같은 보충 원자료로 고치기 전 main과 고친 뒤를 각각 「끔」·「켬」 두 번씩 돌린다. 두 쌍의 md5가 같아야 한다(10-04 기준선 md5는 그때 캐시라 다시 뜬다).
+- 전체 빌드 실패 0.
+- 대조군
+  - 부분 상태 가드를 지우면 가드 시험이 붉다.
+  - 키 하나를 지우면 기동 실패 시험이 붉다.
+  - enum 밖 키 시험이 붉다.
+- 운영 배포 뒤 기동 로그에 시장·묶음 줄이 있다. FR·소비 note에 `관문=us:off,kr:off`가 있다.
+
+### 순서·배포
+- 값 무변화라 무해한 선행 배포다.
+- 2부 2차(오늘 저녁)와 편입 따라잡기(10-16)를 먼저 보낸다. 이것은 그 뒤 main에 쌓는다 — 셋 다 `FinancialRefillJob` note를 건드리므로 순서를 정해 충돌을 피한다.
+
+### 재지 않은 것
+- `stockscreener.gate-bundle.us.s0: ${stockscreener.gate.us}`를 명령줄 인자 `--stockscreener.gate.us=true`가 덮을 때 묶음이 따라 켜지는지 — v1 반증이 중첩 자리표시자 16조합을 쟀으나 인자 덮기는 그 조합에 있는지 확인 안 함 · D3가 잰다.
