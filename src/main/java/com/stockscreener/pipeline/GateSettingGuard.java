@@ -3,6 +3,8 @@ package com.stockscreener.pipeline;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.boot.context.properties.source.ConfigurationPropertyName;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySource;
 import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.boot.env.OriginTrackedMapPropertySource;
 import org.springframework.core.env.CommandLinePropertySource;
@@ -74,7 +76,10 @@ public class GateSettingGuard implements InitializingBean {
             if (ConfigurationPropertySources.isAttachedConfigurationPropertySource(source)) {
                 continue;
             }
-            if (source.containsProperty(KEY)) {
+            // MUST: 바인딩 규칙으로도 묻는다 — 값은 Boot의 relaxed binding(대소문자·비영숫자 무시 · 환경변수 정준형)으로
+            // 풀리는데 원시 이름 일치만 보면 `Stockscreener_Gate_Us`·`-Dstockscreener.gate.US` 같은 철자가 값을 켜면서
+            // 출처는 classpath yaml로 판정돼 허용됐다(2026-10-14 관문 설정 분리 v2 반증 · Boot 4.1.0 소스로 실측).
+            if (source.containsProperty(KEY) || binds(source)) {
                 origin = source;
                 break;
             }
@@ -98,6 +103,17 @@ public class GateSettingGuard implements InitializingBean {
                     + "(켜려면 관문 날 명령줄 인자 --" + KEY + "=true · 운영은 기본값을 뒤집은 jar).");
         }
         return new Verdict(value, source, null);
+    }
+
+    /** 그 출처가 Boot의 바인딩 규칙으로 이 키를 내는가 — 값을 정하는 해석기({@code getProperty})와 같은 규칙이다. */
+    private static boolean binds(PropertySource<?> source) {
+        ConfigurationPropertyName name = ConfigurationPropertyName.of(KEY);
+        for (ConfigurationPropertySource adapted : ConfigurationPropertySources.from(source)) {
+            if (adapted.getConfigurationProperty(name) != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isCommandLine(PropertySource<?> source) {

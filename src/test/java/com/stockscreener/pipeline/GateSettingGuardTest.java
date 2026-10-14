@@ -2,7 +2,9 @@ package com.stockscreener.pipeline;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.boot.env.OriginTrackedMapPropertySource;
+import org.springframework.core.env.ConfigurablePropertyResolver;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.MutablePropertySources;
 import org.springframework.core.env.PropertySource;
@@ -10,6 +12,7 @@ import org.springframework.core.env.SimpleCommandLinePropertySource;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.core.env.SystemEnvironmentPropertySource;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -126,6 +129,26 @@ class GateSettingGuardTest {
     }
 
     @Test
+    @DisplayName("relaxed 철자도 출처를 판정한다 — 값을 켜는 철자가 출처 판정을 지나치면 classpath yaml로 허용됐다(대조군: 정준 철자)")
+    void relaxedSpellingsAreJudgedByTheirSource() {
+        List<PropertySource<?>> spellings = List.of(
+                new SystemEnvironmentPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+                        Map.of("Stockscreener_Gate_Us", "true")),
+                new SystemEnvironmentPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+                        Map.of("STOCKSCREENER_GATE_US", "true")),
+                new MapPropertySource(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME,
+                        Map.of("stockscreener.gate.US", "true")),
+                new MapPropertySource("spring.application.json", Map.of("stockscreener.gate.US", "true")));
+        for (PropertySource<?> spelling : spellings) {
+            GateSettingGuard.Verdict verdict = judge(spelling, yaml(false));
+
+            assertThat(verdict.value()).as(spelling.getName() + " " + spelling.getSource()).isTrue();
+            assertThat(verdict.source()).as("출처가 yaml로 판정되면 우회다").isEqualTo(spelling.getName());
+            assertThat(verdict.refusal()).as(spelling.getName()).contains("허용되지 않은 출처");
+        }
+    }
+
+    @Test
     @DisplayName("어디에도 없으면 기동을 세운다 — yaml 기본값이 빠진 것이다")
     void missingEverywhereIsRefused() {
         assertThat(judge(new MapPropertySource("other", Map.of("x", "y"))).refusal()).contains("어느 출처에도 없다");
@@ -135,15 +158,27 @@ class GateSettingGuardTest {
         return new OriginTrackedMapPropertySource(CLASSPATH_YAML, Map.of(KEY, value));
     }
 
-    /** 준 순서가 곧 우선순위다(앞이 이긴다). 실제 시스템 출처는 전부 걷는다. */
+    /**
+     * 준 순서가 곧 우선순위다(앞이 이긴다). 실제 시스템 출처는 전부 걷는다.
+     *
+     * <p>MUST: 해석기와 붙인 출처를 앱과 같은 꼴로 둔다({@code ApplicationEnvironment} — Boot의 relaxed binding 해석기 +
+     * {@code attach}). 순수 {@link StandardEnvironment}는 relaxed 철자를 아예 안 풀어, 그 철자가 값을 켜면서 출처 판정을
+     * 지나치는 우회를 원리적으로 못 본다(2026-10-14 반증).
+     */
     private static GateSettingGuard.Verdict judge(PropertySource<?>... sources) {
-        StandardEnvironment environment = new StandardEnvironment();
+        StandardEnvironment environment = new StandardEnvironment() {
+            @Override
+            protected ConfigurablePropertyResolver createPropertyResolver(MutablePropertySources propertySources) {
+                return ConfigurationPropertySources.createPropertyResolver(propertySources);
+            }
+        };
         MutablePropertySources propertySources = environment.getPropertySources();
         propertySources.remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);
         propertySources.remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
         for (PropertySource<?> source : sources) {
             propertySources.addLast(source);
         }
+        ConfigurationPropertySources.attach(environment);
         return GateSettingGuard.judge(environment);
     }
 }
