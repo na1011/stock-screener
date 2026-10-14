@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 원장에서 수정계수를 다시 짓는다. <b>저장된 시세를 소급해 다시 쓰는 유일한 경로다</b>(ADR-0049).
@@ -68,7 +70,7 @@ public class AdjustmentRebuildJob {
     }
 
     /** 계수가 실제로 바뀐 종목. 무효화가 일어난 종목과 같은 집합이다. */
-    private record Rebuilt(String ticker, long changedRows, LocalDate earliest) {
+    private record Rebuilt(long stockId, String ticker, long changedRows, LocalDate earliest) {
     }
 
     /**
@@ -164,7 +166,7 @@ public class AdjustmentRebuildJob {
                 AdjustmentRecalculator.RebuildResult result = captured.get(0);
                 appliedEvents += result.appliedEvents();
                 if (result.changedRows() > 0) {
-                    rebuilt.add(new Rebuilt(
+                    rebuilt.add(new Rebuilt(target.stockId(),
                             target.ticker(), result.changedRows(), result.earliestChanged()));
                 } else {
                     alreadyMatching++;
@@ -181,9 +183,13 @@ public class AdjustmentRebuildJob {
             execution.failUnexpectedly(e);
             throw e;
         }
+        // 화해로 넘기는 것은 보존 창 편입뿐이다 — 화해는 그 모집단만 다시 쓰고, 창 밖 종목(순위 후보 · ADR-0178)의 지표 행은 그날 편입으로
+        // 거르는 읽기 경로 어디에도 안 닿는다(FinancialRefillJob.outsideWindowLine과 같은 사실).
+        Set<Long> window = rebuilt.isEmpty() ? Set.of() : new HashSet<>(stockRegistrar.windowMemberIds());
+        List<Rebuilt> refillable = rebuilt.stream().filter(r -> window.contains(r.stockId())).toList();
         return new Invalidation(execution.finish(),
-                rebuilt.stream().map(Rebuilt::ticker).toList(),
-                rebuilt.stream().map(Rebuilt::earliest).filter(java.util.Objects::nonNull)
+                refillable.stream().map(Rebuilt::ticker).toList(),
+                refillable.stream().map(Rebuilt::earliest).filter(java.util.Objects::nonNull)
                         .min(LocalDate::compareTo).orElse(null));
     }
 
@@ -256,7 +262,11 @@ public class AdjustmentRebuildJob {
             // 채우는데(StockRegistrar.priceGapRuns) 새 봉은 계수 1로 들어간다. 지금 편입만 돌면 그
             // 봉이 적용된 사건 앞에 놓여도 영영 안 바로잡힌다. 원장 수집은 지금 편입만 돌므로 과거
             // 편입은 <b>저장된 원장</b>으로 다시 짓는다 — 편출 뒤 사건은 원래 안 묻는다.
-            return stockRegistrar.windowMemberIds();
+            // 창 밖이라도 적용 대기(APPROVED) 행이 있는 종목은 함께 — 미국 순위 후보의 분할 다리가 쓴 행이다(ADR-0178). 봉이 없으면
+            // 다시 쓸 시세가 없고 표시만 한다(rebuild의 「갱신 0행이어도 표시」) — 그래야 순위의 주식수 보정이 그 행을 읽는다.
+            java.util.LinkedHashSet<Long> ids = new java.util.LinkedHashSet<>(stockRegistrar.windowMemberIds());
+            ids.addAll(stockRegistrar.unappliedApprovalIdsOutsideWindow());
+            return List.copyOf(ids);
         }
         List<Long> matched = stockRegistrar.activeUniverseMemberIdsByTicker(tickers);
         if (matched.isEmpty()) {

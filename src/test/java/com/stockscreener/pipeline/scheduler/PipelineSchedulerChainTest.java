@@ -16,6 +16,7 @@ import com.stockscreener.pipeline.batch.DailyUpdateJob;
 import com.stockscreener.pipeline.batch.FinancialRefillJob;
 import com.stockscreener.pipeline.batch.FreshnessCatchUpJob;
 import com.stockscreener.pipeline.batch.UsCandidateFeed;
+import com.stockscreener.pipeline.batch.CandidateSplitJob;
 import com.stockscreener.pipeline.batch.FullStatementRefillJob;
 import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
 import com.stockscreener.pipeline.batch.GovernanceLoadJob;
@@ -92,6 +93,7 @@ class PipelineSchedulerChainTest {
     private FilingListingJob filingListingJob;
     private FilingConsumptionJob filingConsumptionJob;
     private FreshnessCatchUpJob freshnessCatchUpJob;
+    private CandidateSplitJob candidateSplitJob;
     private PipelineScheduler scheduler;
 
     @BeforeEach
@@ -113,6 +115,7 @@ class PipelineSchedulerChainTest {
         writeLock = WriteLock.inactive("단위 시험");
         filingListingJob = mock(FilingListingJob.class);
         filingConsumptionJob = mock(FilingConsumptionJob.class);
+        candidateSplitJob = mock(CandidateSplitJob.class);
         freshnessCatchUpJob = mock(FreshnessCatchUpJob.class);
         // 평상시: 13:30이 지표 달력을 대상일까지 늘려 두었다.
         when(indicatorCalendar.latestIndicatorDate(anyCollection())).thenReturn(Optional.of(TARGET_DATE));
@@ -135,7 +138,7 @@ class PipelineSchedulerChainTest {
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob,
                         indicatorCalendar),
                 universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob, filingConsumptionJob,
-                freshnessCatchUpJob, new UsCandidateFeed(candidateFeed));
+                freshnessCatchUpJob, new UsCandidateFeed(candidateFeed), candidateSplitJob);
     }
 
     @Test
@@ -237,6 +240,35 @@ class PipelineSchedulerChainTest {
         // 자동 실행에 걸지 않는다(ADR-0088·0090).
         verify(corporateActionJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
                 eq(null), eq(List.of()), eq(null));
+        verify(adjustmentRebuildJob).runAndReport(any(),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null));
+    }
+
+    @Test
+    @DisplayName("후보 분할 다리는 설정이 켜졌을 때만, 수집 뒤 · 재구축 앞에 돈다 — 같은 사슬의 재구축이 그 행을 APPLIED로 올린다")
+    void candidateSplitsRunBetweenCollectionAndRebuild() {
+        givenInvalidation();
+
+        scheduler.runCorporateActionChain();
+        verifyNoInteractions(candidateSplitJob);
+
+        scheduler(true).runCorporateActionChain();
+        InOrder order = inOrder(corporateActionJob, candidateSplitJob, adjustmentRebuildJob);
+        order.verify(corporateActionJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
+                eq(null), eq(List.of()), eq(null));
+        order.verify(candidateSplitJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        order.verify(adjustmentRebuildJob).runAndReport(any(),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null));
+    }
+
+    @Test
+    @DisplayName("후보 분할 다리가 던져도 편입의 재구축은 돌고, 사슬은 그 예외를 끝에서 다시 던진다")
+    void candidateSplitFailureDoesNotBlockTheRebuild() {
+        givenInvalidation();
+        IllegalStateException boom = new IllegalStateException("후보 분할 실패");
+        when(candidateSplitJob.run(any(), any())).thenThrow(boom);
+
+        assertThatThrownBy(() -> scheduler(true).runCorporateActionChain()).isSameAs(boom);
         verify(adjustmentRebuildJob).runAndReport(any(),
                 eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null));
     }
@@ -525,7 +557,7 @@ class PipelineSchedulerChainTest {
                 mock(JobFreshnessAlerter.class), policy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
                 universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"), mock(FilingListingJob.class),
-                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false));
+                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class));
 
         Map<String, LocalDate> picked = new java.util.LinkedHashMap<>();
         for (LocalDate day = LocalDate.of(2026, 10, 19); !day.isAfter(LocalDate.of(2026, 11, 5));
@@ -591,7 +623,7 @@ class PipelineSchedulerChainTest {
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
                 universeIntegrityAlerter, batchExecutions, refusing, blockedListing, blockedConsumption,
-                blockedCatchUp, new UsCandidateFeed(false));
+                blockedCatchUp, new UsCandidateFeed(false), mock(CandidateSplitJob.class));
 
         // 성질로 센다(잠금 결정 7) — 손으로 든 목록이면 새 쓰기 크론이 잠금 없이 붙어도 이 시험이 못 본다.
         List<String> writeCrons = new java.util.ArrayList<>();
@@ -637,7 +669,7 @@ class PipelineSchedulerChainTest {
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
                 universeIntegrityAlerter, batchExecutions, failing, mock(FilingListingJob.class),
-                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false));
+                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class));
 
         assertThatThrownBy(broken::runHeavyJobOfTheDay).isSameAs(boom);
 

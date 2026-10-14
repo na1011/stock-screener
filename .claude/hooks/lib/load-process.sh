@@ -40,7 +40,7 @@ stray_load_pids() {
   # 앵커되지 않아 `corporate-action` 가지가 이미 그 argv를 잡는다. 그래도 이름을 적는 이유는
   # **탐지가 아니라 `check-doc-staleness.sh` §5c의 거울**이다 — 그 검사는 이 목록과
   # `BootstrapRunner`의 `switch`를 집합으로 대조하므로 빠지면 매 세션 발화한다.
-  pids=$(pgrep -f '(^|[[:space:]])--job=(universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing|filing-consumption|candidate-consumption|refresh-behind)|spring\.profiles\.active=[^[:space:]]*bootstrap' 2>/dev/null) || true
+  pids=$(pgrep -f '(^|[[:space:]])--job=(universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing|filing-consumption|candidate-consumption|candidate-splits|refresh-behind)|spring\.profiles\.active=[^[:space:]]*bootstrap' 2>/dev/null) || true
   [ -z "$pids" ] && return 1
 
   # **실행파일이 java인 것만 남긴다. 이 필터가 없으면 훅이 자기 자신을 적재로 읽는다.**

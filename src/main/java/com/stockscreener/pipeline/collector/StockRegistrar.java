@@ -371,6 +371,24 @@ public class StockRegistrar {
     }
 
     /**
+     * 원장에 <b>적용 대기</b>({@code APPROVED} — 공시가 종류·비율을 확정했지만 계수 재구축이 아직 안 돈) 행이 있는 종목 중 보존 창
+     * 편입이 아닌 것(ADR-0178). 재구축의 기본 대상({@link #windowMemberIds})에 더한다 — 아니면 그 행은 영영 {@code APPLIED}가 안 되고
+     * 순위의 주식수 보정({@code JdbcStoredShareCounts.SHIFT_TO_ASOF} — {@code APPLIED}만 읽는다)에 안 실린다. 그런 행을 쓰는 곳은
+     * 미국 순위 후보의 분할 다리({@code CandidateSplitJob})뿐이다 — 2026-10-15 운영 원장의 {@code APPROVED}는 0행이다.
+     */
+    public List<Long> unappliedApprovalIdsOutsideWindow() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT ca.stock_id FROM corporate_action ca
+                JOIN stock s ON s.id = ca.stock_id
+                WHERE ca.status = 'APPROVED' AND s.is_active AND s.market_code IN (%s)
+                  AND NOT EXISTS (SELECT 1 FROM universe_membership m
+                                  JOIN universe u ON u.code = m.universe_code AND u.is_active
+                                  WHERE m.stock_id = s.id AND %s)
+                ORDER BY ca.stock_id
+                """.formatted(collectedMarketPlaceholders(), IN_RETENTION_WINDOW), Long.class, collectedMarkets());
+    }
+
+    /**
      * 보존 창 편입의 <b>시세 구멍 구간</b> — 지표가 읽는 범위 안에서 소스에 다시 물을 날짜들.
      *
      * <h2>왜 일일 갱신의 15일 창만으로 안 되는가</h2>

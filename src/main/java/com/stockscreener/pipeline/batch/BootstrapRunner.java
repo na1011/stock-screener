@@ -182,6 +182,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final IndicatorReconciler indicatorReconciler;
     private final FilingListingJob filingListingJob;
     private final FilingConsumptionJob filingConsumptionJob;
+    private final CandidateSplitJob candidateSplitJob;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
@@ -206,7 +207,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            IndicatorReconciler indicatorReconciler,
                            FilingListingJob filingListingJob,
                            FilingConsumptionJob filingConsumptionJob,
-                           FreshnessCatchUpJob freshnessCatchUpJob) {
+                           FreshnessCatchUpJob freshnessCatchUpJob,
+                           CandidateSplitJob candidateSplitJob) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.universeRestoreJob = universeRestoreJob;
         this.initialLoadJob = initialLoadJob;
@@ -226,6 +228,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.filingListingJob = filingListingJob;
         this.filingConsumptionJob = filingConsumptionJob;
         this.freshnessCatchUpJob = freshnessCatchUpJob;
+        this.candidateSplitJob = candidateSplitJob;
         this.executionSweeper = executionSweeper;
         this.context = context;
     }
@@ -377,6 +380,9 @@ public class BootstrapRunner implements ApplicationRunner {
             // 미국 순위 후보(활성 편입 없는 미국 종목)의 열린 행을 먹인다(ADR-0178) — 재무 표를 쓴다. 손 실행은 시도 상한 없이 다시 묻는다.
             case "candidate-consumption" -> filingConsumptionJob.runCandidates(asOf,
                     BatchExecutionRecorder.TriggeredBy.MANUAL);
+            // 미국 순위 후보의 공시 뒤 분할을 원장에 적는다(ADR-0178) — 시장 전체 1~3콜. 적은 행은 APPROVED라 순위에 실리려면
+            // 재구축(--job=adjustment-rebuild 또는 다음 평일 14:00 사슬)이 APPLIED로 올려야 한다.
+            case "candidate-splits" -> candidateSplitJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
             // 편입 뒤로 FR·FSR·G가 정기 범위로 맞춘 적이 없는 편입을 맞춘다(ADR-0177) — 재무·거버넌스 표를 쓴다. 대상은 표지 술어이고
             // --tickers는 그 안에서 더 좁힌다. 손 실행은 사슬 안 화해를 안 한다(무효화 알림이 화해 명령을 싣는다).
             case "refresh-behind" -> freshnessCatchUpJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
@@ -415,7 +421,8 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | share-basis-derive"
                             + " | corporate-action-review | corporate-action-judge"
                             + " | market-calendar | bar-gap-review"
-                            + " | filing-listing | filing-consumption | candidate-consumption | refresh-behind");
+                            + " | filing-listing | filing-consumption | candidate-consumption | candidate-splits"
+                            + " | refresh-behind");
         };
 
         // MUST: 재무나 기업행위를 쓴 잡 뒤에는 기저를 다시 판정한다(ADR-0162).
@@ -469,7 +476,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private static final java.util.Set<String> REDERIVE_SHARE_BASIS_AFTER = java.util.Set.of(
             "initial-load", "financial-refill", "full-statement-refill", "filing-consumption", "candidate-consumption",
             "refresh-behind",
-            "corporate-action", "corporate-action-judge", "adjustment-rebuild");
+            "corporate-action", "corporate-action-judge", "adjustment-rebuild", "candidate-splits");
 
     /**
      * 화해의 기준일. {@code --as-of}가 없으면 정기 화해와 같은 규약({@link IndicatorReconciler#dataAsOf} —

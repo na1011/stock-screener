@@ -442,6 +442,63 @@ class AlpacaCorporateActionAdapterTest {
         return URLDecoder.decode(path, StandardCharsets.UTF_8);
     }
 
+    @Test
+    @DisplayName("시장 전체 분할: 심볼 없이 분할·병합만 묻고 지금 심볼로 묶는다 — 효력일 창 밖은 버린다(ADR-0178)")
+    void marketSplitsAskWithoutSymbolsAndGroupBySymbol() throws Exception {
+        enqueue(200, """
+                {"corporate_actions": {
+                  "forward_splits": [
+                    {"id": "f1", "symbol": "APH", "ex_date": "2024-09-03", "old_rate": 1, "new_rate": 2, "payable_date": "2024-09-03", "process_date": "2024-09-03"},
+                    {"id": "f2", "symbol": "OLD", "ex_date": "2023-05-01", "old_rate": 1, "new_rate": 2, "process_date": "2023-05-01"}
+                  ],
+                  "reverse_splits": [
+                    {"id": "r1", "symbol": "BVC", "ex_date": "2024-01-05", "old_rate": 10, "new_rate": 1, "process_date": "2024-01-05"},
+                    {"id": "r2", "symbol": "APH", "ex_date": "2024-02-01", "old_rate": 3, "new_rate": 1, "process_date": "2024-02-01"}
+                  ]},
+                 "next_page_token": null}
+                """);
+
+        AlpacaCorporateActionAdapter.MarketSplits splits = adapter().fetchMarketSplits(FROM, TO);
+
+        String query = query(server.takeRequest());
+        assertThat(query).doesNotContain("symbols=").contains("types=forward_split,reverse_split");
+        assertThat(splits.bySymbol()).containsOnlyKeys("APH", "BVC");
+        assertThat(splits.bySymbol().get("APH")).extracting(CorporateAction::effectiveDate)
+                .as("효력일 순").containsExactly(LocalDate.of(2024, 2, 1), LocalDate.of(2024, 9, 3));
+        assertThat(splits.bySymbol().get("BVC").getFirst().ratio()).isEqualByComparingTo(new BigDecimal("0.1"));
+        assertThat(splits.malformed()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("시장 전체 분할: 레코드 하나가 깨지면 그 심볼만 실패로 내고 나머지는 낸다 — 시장 전체를 버리지 않는다")
+    void marketSplitsIsolateAMalformedRecord() throws Exception {
+        enqueue(200, """
+                {"corporate_actions": {
+                  "forward_splits": [
+                    {"id": "f1", "symbol": "APH", "ex_date": "2024-09-03", "old_rate": 1, "new_rate": 2, "process_date": "2024-09-03"},
+                    {"id": "f3", "symbol": "BAD", "ex_date": "2024-09-03", "old_rate": 2, "new_rate": 1, "process_date": "2024-09-03"}
+                  ]},
+                 "next_page_token": null}
+                """);
+
+        AlpacaCorporateActionAdapter.MarketSplits splits = adapter().fetchMarketSplits(FROM, TO);
+
+        assertThat(splits.bySymbol()).containsOnlyKeys("APH");
+        assertThat(splits.malformed()).containsOnlyKeys("BAD");
+    }
+
+    @Test
+    @DisplayName("시장 전체 분할: 좁혀 물었는데 다른 타입이 오면 실패다 — 소스가 types를 안 들은 것이다")
+    void marketSplitsRejectUnaskedTypes() {
+        enqueue(200, """
+                {"corporate_actions": {"cash_dividends": [{"id": "d1", "symbol": "APH", "ex_date": "2024-09-03"}]},
+                 "next_page_token": null}
+                """);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter().fetchMarketSplits(FROM, TO))
+                .isInstanceOf(DataSourceException.class).hasMessageContaining("types");
+    }
+
     private AlpacaCorporateActionAdapter adapter() {
         return adapter(50);
     }

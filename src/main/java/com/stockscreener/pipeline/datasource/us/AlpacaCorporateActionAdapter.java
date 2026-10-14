@@ -219,6 +219,65 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
     }
 
     /**
+     * <b>시장 전체</b>의 분할·병합을 지금 심볼로 묶어 낸다(ADR-0178 — 미국 순위 후보의 주식수 기저).
+     *
+     * <p>종목 조회({@link #fetchCorporateActions})와 같은 변환({@code toAction} — 현재 심볼 시절)을 쓴다. 다른 것은 셋이다:
+     * 심볼 없이 묻는다(2025-10-15~2026-10-14 시장 전체 1,345건이 2콜 · 2026-10-15 실측) · 타입을 분할·병합으로 좁힌다 · 옛 심볼을
+     * 안 따라간다. 마지막 것 때문에 이름을 바꾼 뒤의 종목은 바꾸기 전 심볼의 사건을 못 받는다 — 순위가 옮기는 구간(최신 주식수
+     * 공시일 뒤)에 이름 변경까지 낀 후보만 닿는다.
+     *
+     * <p>창은 효력일 기준 {@code [from, to]}이고, 요청 창(처리일 기준)은 종목 조회와 같은 앞당김을 쓴다. 페이지가 상한에 닿으면
+     * 부분 결과를 버리고 던진다 — 잘린 목록은 「분할이 없다」와 구분되지 않는다.
+     */
+    public MarketSplits fetchMarketSplits(LocalDate from, LocalDate to)
+            throws DataSourceException {
+        requireCredentials();
+        if (from == null || to == null || from.isAfter(to)) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                    "구간이 뒤집혔거나 비었다: " + from + " ~ " + to);
+        }
+        Map<String, List<JsonNode>> buckets = fetchBuckets(null, "forward_split,reverse_split",
+                from.minusYears(REQUEST_LEAD_YEARS), maxOf(to, LocalDate.now()));
+        Map<String, List<CorporateAction>> bySymbol = new TreeMap<>();
+        Map<String, DataSourceException> malformed = new TreeMap<>();
+        for (Map.Entry<String, List<JsonNode>> bucket : buckets.entrySet()) {
+            CorporateAction.Type type = ADJUSTING.get(bucket.getKey());
+            if (type == null) {
+                // 좁혀 물었는데 다른 타입이 왔다 — 소스가 types를 안 듣는 것이다. 버리지 않고 실패로 올린다.
+                throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                        "분할·병합만 물었는데 '" + bucket.getKey() + "'가 왔다 — types 인자가 안 먹었다.");
+            }
+            for (JsonNode node : bucket.getValue()) {
+                String symbol = node.path("symbol").asString("");
+                if (symbol.isBlank()) {
+                    continue;
+                }
+                CorporateAction action;
+                try {
+                    action = toAction(node, type, bucket.getKey(), symbol, "corporate-actions (시장 전체) " + symbol);
+                } catch (DataSourceException e) {
+                    // 한 레코드가 깨졌다고 시장 전체를 버리지 않는다 — 그 심볼만 실패로 낸다(종목 조회에서 그 종목이 실패하는 것과 같다).
+                    malformed.putIfAbsent(symbol, e);
+                    continue;
+                }
+                if (action == null || action.effectiveDate().isBefore(from) || action.effectiveDate().isAfter(to)) {
+                    continue;
+                }
+                bySymbol.computeIfAbsent(symbol, k -> new ArrayList<>()).add(action);
+            }
+        }
+        bySymbol.values().forEach(list -> list.sort(Comparator.comparing(CorporateAction::effectiveDate)));
+        return new MarketSplits(bySymbol, malformed);
+    }
+
+    /**
+     * 시장 전체 분할·병합 — 지금 심볼별 사건과, 레코드가 깨져 사건을 못 낸 심볼(그 심볼의 다른 사건도 믿지 않는다 — 호출부가 그 종목을
+     * 실패로 기록한다).
+     */
+    public record MarketSplits(Map<String, List<CorporateAction>> bySymbol, Map<String, DataSourceException> malformed) {
+    }
+
+    /**
      * 한 심볼이 <b>우리 회사의 것이던 시절</b>.
      *
      * <p><b>왜 옛 심볼을 따라가는가</b>: 이 소스는 사건을 <b>그때의 심볼</b> 아래 둔다. 실측(2026-09-17):
@@ -258,14 +317,20 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
     /** 한 심볼의 전 페이지를 타입별 레코드 목록으로 모은다. */
     private Map<String, List<JsonNode>> fetchBuckets(String symbol, LocalDate requestStart,
                                                      LocalDate requestEnd) throws DataSourceException {
+        return fetchBuckets(symbol, null, requestStart, requestEnd);
+    }
+
+    /** 위와 같되 심볼 없이(시장 전체) · 타입을 좁혀 물을 수 있다. 페이지를 끝까지 받고, 상한에 닿으면 부분 결과를 버린다. */
+    private Map<String, List<JsonNode>> fetchBuckets(String symbol, String types, LocalDate requestStart,
+                                                     LocalDate requestEnd) throws DataSourceException {
         Map<String, List<JsonNode>> buckets = new LinkedHashMap<>();
         String pageToken = null;
         int page = 0;
         do {
             String context = "corporate-actions %s %s~%s page=%d"
-                    .formatted(symbol, requestStart, requestEnd, page + 1);
+                    .formatted(symbol == null ? "(시장 전체 " + types + ")" : symbol, requestStart, requestEnd, page + 1);
             ResponseEntity<String> response =
-                    call(symbol, requestStart, requestEnd, pageToken, context);
+                    call(symbol, types, requestStart, requestEnd, pageToken, context);
             AlpacaResponse.Envelope envelope = AlpacaResponse.requireCorporateActions(
                     response.getStatusCode(), response.getBody(), SOURCE_NAME, context);
 
@@ -615,7 +680,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
         }
     }
 
-    private ResponseEntity<String> call(String symbol, LocalDate start, LocalDate end,
+    private ResponseEntity<String> call(String symbol, String types, LocalDate start, LocalDate end,
                                           String pageToken, String context)
             throws DataSourceException {
         if (!rateLimiter.hasDailyQuota()) {
@@ -635,13 +700,20 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
                     .uri(uri -> {
                         // MUST: 전부 명시한다. start·end의 기본값이 둘 다 「당일」이고 limit
                         // 기본이 100이라, 기본값에 기대면 조용히 잘린 결과가 온다(실측).
-                        uri.path("/v1/corporate-actions")
-                                .queryParam("symbols", symbol)
-                                // MUST NOT: types로 좁히지 않는다. 좁히면 담지 않기로 한 종류의
-                                // 건수가 아예 안 와서 「그런 사건이 없다」와 「우리가 안 담는다」가
-                                // 갈리지 않고(phase 기준 P23 축③), 처음 보는 타입 경보도 영영
-                                // 안 뜬다. 값은 실측으로 작다 — 파일럿 11종목 2.7년치가 80건이다.
-                                .queryParam("start", start.toString())
+                        uri.path("/v1/corporate-actions");
+                        if (symbol != null) {
+                            uri.queryParam("symbols", symbol);
+                        }
+                        // MUST NOT: 종목 조회에서 types로 좁히지 않는다. 좁히면 담지 않기로 한 종류의
+                        // 건수가 아예 안 와서 「그런 사건이 없다」와 「우리가 안 담는다」가
+                        // 갈리지 않고(phase 기준 P23 축③), 처음 보는 타입 경보도 영영
+                        // 안 뜬다. 값은 실측으로 작다 — 파일럿 11종목 2.7년치가 80건이다.
+                        // 좁히는 것은 시장 전체 분할 조회({@link #fetchMarketSplits})뿐이다 — 그쪽은 세려는 것이 아니라
+                        // 순위 후보의 주식수 기저만 옮긴다.
+                        if (types != null) {
+                            uri.queryParam("types", types);
+                        }
+                        uri.queryParam("start", start.toString())
                                 .queryParam("end", end.toString())
                                 .queryParam("data_quality", "complete")
                                 .queryParam("region", "us")

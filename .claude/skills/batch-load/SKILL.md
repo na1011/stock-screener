@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing|filing-consumption|candidate-consumption|refresh-behind 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing|filing-consumption|candidate-consumption|candidate-splits|refresh-behind 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -38,6 +38,7 @@ pg_restore도 같은 exec) → `end <id>`. 세션 안 bootRun은 하나씩이다
 --job=filing-listing [--as-of=2026-10-14]   # 커서 다음 날부터 · --as-of가 「오늘」(국내는 그날을 안 닫는다)
 --job=filing-consumption [--as-of=2026-10-14]   # 열린 장부 행 → 좁힌 FR·FSR(재무 표를 쓴다)
 --job=candidate-consumption [--as-of=2026-10-14]   # 미국 순위 후보의 열린 장부 행 → 좁힌 FR(재무 표를 쓴다 · 손 실행은 시도 상한 없음)
+--job=candidate-splits [--as-of=2026-10-15]        # 미국 순위 후보의 공시 뒤 분할 → 원장(APPROVED · 재구축이 APPLIED로 올린다)
 --job=refresh-behind [--tickers=XMTR]   # 편입 뒤 정기 범위로 안 맞춘 종목 → 좁힌 FR·FSR·G(재무·거버넌스 표를 쓴다)
 ```
 
@@ -74,6 +75,7 @@ pg_restore도 같은 exec) → `end <id>`. 세션 안 bootRun은 하나씩이다
 | `filing-listing` | 원장 공시 목록 → `filing_listing_day`·`filing_consumption` | 평일 14:16 크론과 같은 잡(ADR-0176). 장부 두 표만 쓰고 값을 바꾸는 표는 안 건드린다. 커서 다음 날부터 받는다 — `--as-of`가 「오늘」이고 국내는 그날을 닫지 않는다. 다시 돌려도 같은 줄은 장부에 안 늘어난다 |
 | `filing-consumption` | 열린 장부 행 → 지금 편입 종목의 좁힌 FR·FSR | 평일 14:16 크론이 목록 뒤에 잇는 잡(ADR-0176 2차). **재무 표를 쓴다** — 손으로 돌리면 FR·FSR이 `MANUAL`·NARROW로 남는다(정기는 `GAP_FILL`). 소비됨 표시는 그 종목을 쓴 트랜잭션 안이라 실패한 종목은 표시도 없다. 국내는 대상 행 사업연도부터 창을 좁히고 미국은 기본 창. 정정이 지운 지표는 화해가 짝이다(다음 평일 14:20 또는 `indicator-reconcile --tickers`) |
 | `candidate-consumption` | 미국 순위 후보(활성 편입 없는 미국 종목)의 열린 장부 행 → 좁힌 FR | 평일 14:16 사슬의 넷째 단계(목록 → 편입 소비 → 따라잡기 뒤 · ADR-0178). **재무 표를 쓴다** — 순위 재료(주식수)를 최신 공시에 맞춘다. 정기 실행은 시도 5회에 닿은 행을 새 공시까지 멈추고 한 번 알린다 · 손 실행은 상한 없이 다시 묻는다. 지운 지표 중 창 편입 밖 종목 것은 화해가 안 쓴다 — 읽는 경로가 편입으로 걸러 값에 안 닿는다 |
+| `candidate-splits` | 미국 순위 후보(보존 창 편입 아님)의 공시 뒤 분할·병합 → 기업행위 원장 | 평일 14:00 사슬에서 수집 뒤 · 재구축 앞(ADR-0178). 시장 전체 1~3콜. 원장에 `APPROVED`로 적고 **재구축이 `APPLIED`로 올려야** 순위 주식수 보정(`SHIFT_TO_ASOF`)이 읽는다 — 손으로 돌렸으면 `adjustment-rebuild`를 잇는다(봉 없는 후보는 표시만 한다). 분사는 안 담는다 |
 | `refresh-behind` | 편입 뒤로 정기 범위로 맞춘 적이 없는 활성 편입 → 좁힌 FR·FSR(국내)·G | 리밸런싱 꼬리(주 자리 · 그 자리에서 맞춘 종목을 화해)와 평일 14:16 사슬 끝(남은 것)이 부르는 잡(ADR-0177). **재무·거버넌스 표를 쓴다.** 대상은 `stock_job_refresh` 표지 술어 하나 — `--tickers`는 그 안에서 더 좁힐 뿐 술어 밖 종목을 넣지 못한다(술어 밖이면 「대상 0」). 정기 실행의 종목 실패는 여기서 안 집는다 — 그 실행이 시장 미완료로 끝나 다음 차례에 잡 전체가 다시 돈다(ADR-0174). 손 실행은 사슬 안 화해를 안 한다(무효화 알림이 `indicator-reconcile` 명령을 싣는다) |
 | `share-basis-derive` | 기업행위 원장 + 주식수 계열 → `financial_statement.share_basis_*` | **외부 호출 0 · 원자료 0행 수정.** 시총 = 주식수 × 종가의 두 기저가 어긋난 판을 판정한다(ADR-0162) — 맞출 수 있으면 배수를 달고(`SHIFTED`) 크기를 모르면 주식수를 안 낸다(`UNRESOLVED`). **재무·기업행위를 쓴 잡 뒤에는 러너가 자동으로 잇고(`adjustment-rebuild` 포함), 스케줄러는 매 평일 14:18에 돈다** — 손으로 부를 일은 유도 규칙을 고쳤을 때뿐이다. **MUST: 판정이 바뀌면 백필이 짝이다** — 원본층은 날짜 하나로 창 전체가 다시 쓰이고(`AKTX` 8지표 2,040행이 그렇게 걷혔다) 파생층은 날짜마다 돌아야 한다 |
 | `corporate-action-review` | 원장 조회 — 대기열과 판정 증거 | **외부 호출 0, 원장을 한 글자도 안 고친다.** 상태별 집계를 언제나 찍고, 필터를 안 주면 `status=OBSERVED`로 좁힌다(무엇으로 좁혔는지 함께 찍는다). `--ca-id`를 주면 그 행 + 효력일 이후 상장주식수 점프 **전부**를 찍는다 — **하나를 고르는 것은 사람이다**(ADR-0050). `batch_execution`에 행을 안 만든다. ADR-0084 |

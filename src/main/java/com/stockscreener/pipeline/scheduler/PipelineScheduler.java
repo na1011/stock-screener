@@ -4,6 +4,7 @@ import com.stockscreener.pipeline.batch.AdjustmentRebuildJob;
 import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
 import com.stockscreener.pipeline.batch.BatchExecutions;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
+import com.stockscreener.pipeline.batch.CandidateSplitJob;
 import com.stockscreener.pipeline.batch.CorporateActionJob;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
 import com.stockscreener.pipeline.batch.FilingConsumptionJob;
@@ -85,6 +86,7 @@ public class PipelineScheduler {
     private final FilingConsumptionJob filingConsumptionJob;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final UsCandidateFeed usCandidateFeed;
+    private final CandidateSplitJob candidateSplitJob;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
                              UniverseRebalanceJob universeRebalanceJob,
@@ -103,7 +105,8 @@ public class PipelineScheduler {
                              FilingListingJob filingListingJob,
                              FilingConsumptionJob filingConsumptionJob,
                              FreshnessCatchUpJob freshnessCatchUpJob,
-                             UsCandidateFeed usCandidateFeed) {
+                             UsCandidateFeed usCandidateFeed,
+                             CandidateSplitJob candidateSplitJob) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -122,6 +125,7 @@ public class PipelineScheduler {
         this.filingConsumptionJob = filingConsumptionJob;
         this.freshnessCatchUpJob = freshnessCatchUpJob;
         this.usCandidateFeed = usCandidateFeed;
+        this.candidateSplitJob = candidateSplitJob;
     }
 
     /**
@@ -288,11 +292,26 @@ public class PipelineScheduler {
                 try {
                     corporateActionJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
                             null, List.of(), null);
+                    // 미국 순위 후보의 공시 뒤 분할을 원장에 적는다(ADR-0178) — 재구축 앞이라 같은 사슬이 APPLIED로 올린다. 자기 try다:
+                    // 후보 다리의 실패가 편입 종목의 재구축·화해를 막지 않게 하고, 처음 예외는 사슬 끝에서 다시 던진다.
+                    RuntimeException candidateFailure = null;
+                    if (usCandidateFeed.enabled()) {
+                        try {
+                            candidateSplitJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                        } catch (BatchShutdownException e) {
+                            throw e;
+                        } catch (RuntimeException e) {
+                            candidateFailure = e;
+                        }
+                    }
 
                     AdjustmentRebuildJob.Invalidation invalidation = adjustmentRebuildJob.runAndReport(
                             asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null);
                     if (invalidation.isEmpty()) {
                         log.info("계수가 원장과 이미 일치한다 — 지워진 지표가 없어 사슬 안 화해도 없다.");
+                        if (candidateFailure != null) {
+                            throw candidateFailure;
+                        }
                         return;
                     }
                     // 화해의 asOf는 13:30 일일 갱신의 대상일이고 지표 달력 최신일을 넘지 않는다(IndicatorReconciler.dataAsOf).
@@ -304,6 +323,9 @@ public class PipelineScheduler {
                     LocalDate dataAsOf = indicatorReconciler.dataAsOf(asOf);
                     indicatorReconciler.reconcile(dataAsOf, invalidation.tickers(),
                             BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    if (candidateFailure != null) {
+                        throw candidateFailure;
+                    }
                 } catch (BatchShutdownException e) {
                     // 앞의 두 잡과 같은 이유다(runDailyUpdate 참조). 사슬 중간에 끊기면 다음 실행이
                     // 이어받는다 — 수집은 전 구간 재조회라 멱등이고, 재구축도 원장에서 매번 다시 짓는다.
