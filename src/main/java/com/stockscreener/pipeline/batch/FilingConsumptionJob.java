@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -158,12 +159,13 @@ public class FilingConsumptionJob {
         Counts counts = new Counts();
         Set<Long> reached = new HashSet<>();
         List<String> tickers = tickersOf(open);
-        BatchStatus status = refill.run(tickers,
+        FinancialRefillJob.Invalidation run = refill.run(tickers,
                 (executionId, security, outcome) -> {
                     reached.add(security.stockId());
                     judgeUs(executionId, security, outcome, counts);
-                }).status();
-        int unreached = markUnreached(open, reached, OpenRow::frOpen, "FR");
+                });
+        BatchStatus status = run.status();
+        int unreached = settleUnreachedUs(open, reached, Objects.requireNonNull(run.executionId(), "FR 실행 id"), counts);
         return new MarketResult("열린 행 %d(%d종목) · FR %s · 소비 %d · 열림 %d · 종목 실패로 못 닿음 %d".formatted(open.size(),
                 tickers.size(), status, counts.consumed.get(), counts.stillOpen.get(), unreached),
                 status == BatchStatus.FAILED, counts.consumed.get());
@@ -329,6 +331,48 @@ public class FilingConsumptionJob {
             return SecFilingConsumption.SOURCE_PENDING + part + " 응답 접수번호 " + latest + " < 목록 " + listed;
         }
         return null;
+    }
+
+    /**
+     * 미국 — FR이 그 종목에서 실패해 소비 훅에 못 닿은 종목의 열린 행. submissions가 XBRL 없음으로 싣는 공시는 FR이 담을 값이 원래
+     * 없으므로 FR의 성패와 무관하게 닫는다(근거 NO_XBRL · 표시는 그 종목이 실패한 FR 실행으로 — 컬럼의 뜻 「FR 몫의 실행」 그대로). 「썼다와 소비됨이 갈리지 않는다」가 안 깨진다 —
+     * 그 공시로는 쓸 것이 없다. companyfacts·보충 근거는 그 FR의 응답이 있어야 하므로 여기서 안 쓴다. 나머지는 「우리 쪽」 사유로 연다.
+     *
+     * <p>왜: companyfacts가 404인 발행사(XBRL 재무가 없는 외국 발행사 · 6-K 위주)는 FR이 종목 실패로 끝나 판정까지 못 가고 행이 매일
+     * 다시 물렸다 — 후보 D4(2026-10-15)에서 31종목 중 8곳 · 열린 15행이 그랬고 그 6-K는 전부 XBRL이 없다(submissions 7콜).
+     *
+     * @return 그 뒤에도 열린 행 수
+     */
+    private int settleUnreachedUs(List<OpenRow> rows, Set<Long> reached, long executionId, Counts counts) {
+        Map<Long, List<OpenRow>> byStock = new LinkedHashMap<>();
+        for (OpenRow row : rows) {
+            if (!reached.contains(row.stockId()) && row.frOpen()) {
+                byStock.computeIfAbsent(row.stockId(), k -> new ArrayList<>()).add(row);
+            }
+        }
+        int stillOpen = 0;
+        for (List<OpenRow> stockRows : byStock.values()) {
+            Map<Long, List<OpenRow>> byCik = new LinkedHashMap<>();
+            for (OpenRow row : stockRows) {
+                byCik.computeIfAbsent(row.cik(), c -> new ArrayList<>()).add(row);
+            }
+            for (Map.Entry<Long, List<OpenRow>> entry : byCik.entrySet()) {
+                List<SecFilingConsumption.OpenFiling> filings = entry.getValue().stream()
+                        .map(r -> new SecFilingConsumption.OpenFiling(r.id(), r.filingNo(), r.form(), r.filedOn()))
+                        .toList();
+                for (SecFilingConsumption.Verdict v : secConsumption.judge(entry.getKey(), filings, Set.of(), Map.of())) {
+                    if (v.ground() == SecFilingConsumption.Ground.NO_XBRL) {
+                        counts.consumed.addAndGet(store.markFrConsumed(v.filing().id(), v.ground().name(), v.evidence(),
+                                executionId));
+                    } else {
+                        store.recordAttempt(v.filing().id(),
+                                SecFilingConsumption.OUR_SIDE + "FR이 그 종목을 끝내지 못했다(실행 기록의 종목 실패)");
+                        stillOpen++;
+                    }
+                }
+            }
+        }
+        return stillOpen;
     }
 
     /**

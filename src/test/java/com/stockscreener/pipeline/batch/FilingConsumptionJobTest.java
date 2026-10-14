@@ -329,6 +329,27 @@ class FilingConsumptionJobTest {
     }
 
     @Test
+    @DisplayName("FR이 그 종목에서 404로 실패해도 XBRL 없는 6-K는 그 FR 실행으로 닫히고, XBRL 있는 20-F는 「우리 쪽」으로 열린 채 남는다")
+    void unreachedStockStillClosesFilingsWithoutXbrl() throws Exception {
+        long sixK = candidateRow("0099000012-26-000001", "6-K");
+        long twentyF = candidateRow("0099000012-26-000002", "20-F");
+        financialSource.failingWith(usCandidate, new com.stockscreener.pipeline.datasource.DataSourceException(
+                com.stockscreener.pipeline.datasource.DataSourceException.Kind.NOT_FOUND, "fake", "HTTP 404. companyfacts"));
+        when(secClient.filings(anyLong(), any())).thenReturn(List.of(
+                new SecFilingClient.Filing("0099000012-26-000001", "6-K", LocalDate.of(2026, 10, 9), LocalDate.of(2026, 10, 9), false),
+                new SecFilingClient.Filing("0099000012-26-000002", "20-F", LocalDate.of(2026, 10, 9), LocalDate.of(2026, 10, 9), true)));
+
+        job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        assertThat(groundOf(sixK)).isEqualTo("NO_XBRL");
+        assertThat(jdbc.queryForObject("SELECT consumed_by_execution FROM filing_consumption WHERE id = ?", Long.class, sixK))
+                .as("컬럼의 뜻은 「FR 몫의 실행」이다").isEqualTo(execution(FinancialRefillJob.JOB_NAME).get("id"));
+        assertThat(groundOf(twentyF)).isNull();
+        assertThat(jdbc.queryForObject("SELECT last_reason FROM filing_consumption WHERE id = ?", String.class, twentyF))
+                .startsWith(SecFilingConsumption.OUR_SIDE);
+    }
+
+    @Test
     @DisplayName("후보 FR은 편입 종목 티커만 주면 대상 0으로 던진다 — 조용한 0건 성공이 아니다")
     void candidateRefillRejectsMembers() {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> financialRefill.runForCandidates(TODAY,

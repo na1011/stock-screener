@@ -229,8 +229,8 @@ public class FinancialRefillJob {
         MarketCompleteness.Coverage coverage = MarketCompleteness.Coverage.of(MARKETS, registry::hasFinancialSource);
         if (targets.isEmpty()) {
             log.info("편입 중인 활성 종목이 없다. 채울 것이 없다.");
-            return new Invalidation(
-                    batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope, coverage).finish(), List.of());
+            BatchExecutionContext empty = batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope, coverage);
+            return new Invalidation(empty.finish(), List.of(), empty.executionId());
         }
 
         int fromFiscalYear = asOf.getYear() - years;
@@ -319,7 +319,7 @@ public class FinancialRefillJob {
             }
         } catch (DataSourceException e) {
             execution.failFatally(e);
-            return new Invalidation(BatchStatus.FAILED, List.of());
+            return new Invalidation(BatchStatus.FAILED, List.of(), execution.executionId());
         } catch (RuntimeException e) {
             execution.failUnexpectedly(e);
             throw e;
@@ -335,7 +335,7 @@ public class FinancialRefillJob {
         log.info("재무 결손 보정을 마쳤다. {}", note);
         alertOnInvalidation(execution, triggeredBy, invalidatedTickers, outsideWindow(invalidatedIds),
                 revised.get() + corrected.get() + insertedEarlier.get(), fullStatementTickers);
-        return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill));
+        return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill), execution.executionId());
     }
 
     /**
@@ -402,7 +402,12 @@ public class FinancialRefillJob {
      * 지우는데 사업보고서면 그것이 <b>보존 창 전량</b>이라, 호출부가 보존 경계부터 채우는 것이
      * 언제나 옳고 더 좁게 잡을 이득이 없다.
      */
-    public record Invalidation(BatchStatus status, List<String> tickers) {
+    public record Invalidation(BatchStatus status, List<String> tickers, Long executionId) {
+
+        /** 실행 id를 모르는 자리(시험의 목 응답)용. */
+        public Invalidation(BatchStatus status, List<String> tickers) {
+            this(status, tickers, null);
+        }
 
         public boolean isEmpty() {
             return tickers.isEmpty();
