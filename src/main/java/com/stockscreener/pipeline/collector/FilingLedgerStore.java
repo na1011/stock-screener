@@ -33,6 +33,11 @@ public class FilingLedgerStore {
         this.jdbc = jdbc;
     }
 
+    /** DB 시각 — 시도 시각({@code last_attempt_at = now()})과 같은 시계로 「이번 실행 뒤」를 가른다. */
+    public Instant now() {
+        return jdbc.queryForObject("SELECT now()", java.sql.Timestamp.class).toInstant();
+    }
+
     /** 그 시장에서 닫은 마지막 날. 한 번도 안 닫았으면 비어 있다. */
     public Optional<LocalDate> cursor(String market) {
         LocalDate last = jdbc.queryForObject(
@@ -124,10 +129,41 @@ public class FilingLedgerStore {
                 WHERE c.market = ?
                   AND (c.fr_consumed_at IS NULL OR (c.market = 'KR' AND c.fsr_consumed_at IS NULL))
                   AND s.is_active
-                  AND EXISTS (SELECT 1 FROM universe_membership m JOIN universe u ON u.code = m.universe_code
-                              WHERE m.stock_id = c.stock_id AND m.effective_to IS NULL AND u.is_active)
+                  AND %s
                 ORDER BY c.stock_id, c.filing_no
-                """, (rs, i) -> openRow(rs), market);
+                """.formatted(StockRegistrar.activeMembershipExists("c.stock_id")), (rs, i) -> openRow(rs), market);
+    }
+
+    /**
+     * 미국 <b>순위 후보</b>의 열린 FR 행 중 시도가 {@code maxAttempts} 미만인 것(ADR-0178) — 후보 소비 대상이다. 술어는
+     * {@link StockRegistrar#usRankingCandidateIdsByTicker}와 같다(미국 · 활성 종목 · 활성 편입 없음).
+     *
+     * <p>시도 상한이 있는 이유: 후보 행은 화면 값이 아니라 순위 재료라 지연 경보가 없고, 소스가 같은 답을 주는 실패는 매 평일 다시
+     * 물어도 같다 — 상한 없이 두면 그 종목이 날마다 부분 실패 알림을 내 진짜 장애를 묻는다. 새 공시가 오면 새 행(시도 0)이 그
+     * 종목을 다시 깨우고, 소비 판정은 그 종목의 열린 행 전부를 다시 본다.
+     */
+    public List<OpenRow> openForCandidates(int maxAttempts) {
+        return jdbc.query("SELECT " + OPEN_COLUMNS + """
+                FROM filing_consumption c JOIN stock s ON s.id = c.stock_id
+                WHERE c.market = 'US' AND s.market_code = 'US'
+                  AND c.fr_consumed_at IS NULL AND c.attempts < ?
+                  AND s.is_active
+                  AND NOT %s
+                ORDER BY c.stock_id, c.filing_no
+                """.formatted(StockRegistrar.activeMembershipExists("c.stock_id")), (rs, i) -> openRow(rs), maxAttempts);
+    }
+
+    /** 후보의 열린 FR 행 중 {@code since} 뒤의 시도로 상한에 막 닿은 것 — 그 실행이 한 번 알린다(같은 행은 다시 안 닿는다). */
+    public List<OpenRow> candidatesReachingCap(int maxAttempts, Instant since) {
+        return jdbc.query("SELECT " + OPEN_COLUMNS + """
+                FROM filing_consumption c JOIN stock s ON s.id = c.stock_id
+                WHERE c.market = 'US' AND s.market_code = 'US'
+                  AND c.fr_consumed_at IS NULL AND c.attempts = ? AND c.last_attempt_at >= ?
+                  AND s.is_active
+                  AND NOT %s
+                ORDER BY c.stock_id, c.filing_no
+                """.formatted(StockRegistrar.activeMembershipExists("c.stock_id")), (rs, i) -> openRow(rs),
+                maxAttempts, java.sql.Timestamp.from(since));
     }
 
     /** 한 종목의 FR 몫이 열린 행 — 소비 훅이 그 종목의 쓰기 트랜잭션 안에서 읽는다. */

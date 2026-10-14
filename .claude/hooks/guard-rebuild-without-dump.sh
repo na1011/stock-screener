@@ -25,6 +25,7 @@
 #     못박은 자리라, 되돌릴 수 있는 것이 덤프뿐이다.
 #   * `filing-consumption`(ADR-0176 2차) — 열린 장부 행의 종목으로 좁힌 `financial-refill`을 부른다. 위와 같은 길이다.
 #   * `refresh-behind`(ADR-0177) — 편입 뒤 뒤처진 종목으로 좁힌 `financial-refill`·`full-statement-refill`·`governance-load`를 부른다. 같은 길이다.
+#   * `candidate-consumption`(ADR-0178) — 미국 순위 후보의 열린 장부 행 종목으로 좁힌 `financial-refill`을 부른다. 같은 길이다.
 # 앞의 것만 막던 때가 있었고, 그때 뒤의 것은 **아무 경고 없이** 통과했다.
 set -euo pipefail
 
@@ -51,6 +52,7 @@ case "$cmd" in
   *--job=financial-refill*)   job='financial-refill' ;;
   *--job=filing-consumption*) job='filing-consumption' ;;
   *--job=refresh-behind*)     job='refresh-behind' ;;
+  *--job=candidate-consumption*) job='candidate-consumption' ;;
   *--job=backfill*)           job='backfill' ;;
   *--job=indicator-reconcile*) job='indicator-reconcile' ;;
   *) exit 0 ;;
@@ -81,6 +83,8 @@ case "$job" in
     why="이 잡은 열린 장부 행의 종목으로 좁힌 \`financial-refill\`(국내는 \`full-statement-refill\`까지)을 부른다 — 정정을 만나면 개정본을 쌓고 그 종목 지표를 보존 창 전체에서 지운다(ADR-0040·0176). 적재된 원자료는 되돌리지 않으므로(ADR-0071) 되돌릴 수 있는 것이 덤프뿐이다." ;;
   refresh-behind)
     why="이 잡은 편입 뒤로 정기 범위로 맞춘 적이 없는 종목으로 좁힌 \`financial-refill\`·\`full-statement-refill\`·\`governance-load\`를 부른다 — 정정을 만나면 개정본을 쌓고 그 종목 지표를 보존 창 전체에서 지운다(ADR-0040·0177). 적재된 원자료는 되돌리지 않으므로(ADR-0071) 되돌릴 수 있는 것이 덤프뿐이다." ;;
+  candidate-consumption)
+    why="이 잡은 미국 순위 후보(활성 편입 없는 미국 종목)의 열린 장부 행 종목으로 좁힌 \`financial-refill\`을 부른다 — 정정을 만나면 개정본을 쌓고 그 종목 지표를 지운다(ADR-0040·0178). 적재된 원자료는 되돌리지 않으므로(ADR-0071) 되돌릴 수 있는 것이 덤프뿐이다." ;;
   financial-refill)
     why="이 잡은 결손만 채우는 것이 아니다. 소스가 더 늦은 공시일을 주면 **정정으로 판정해 개정본을 쌓고** 그 종목 지표를 보존 창 전체에서 지운다(ADR-0040). 게다가 적재된 원자료는 되돌리지 않는 것이 규칙이라(ADR-0071), 되돌릴 수 있는 것이 덤프뿐이다." ;;
 esac

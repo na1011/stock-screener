@@ -10,6 +10,7 @@ import com.stockscreener.pipeline.batch.FilingConsumptionJob;
 import com.stockscreener.pipeline.batch.FilingListingJob;
 import com.stockscreener.pipeline.batch.FinancialRefillJob;
 import com.stockscreener.pipeline.batch.FreshnessCatchUpJob;
+import com.stockscreener.pipeline.batch.UsCandidateFeed;
 import com.stockscreener.pipeline.batch.FullStatementRefillJob;
 import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
 import com.stockscreener.pipeline.batch.GovernanceLoadJob;
@@ -83,6 +84,7 @@ public class PipelineScheduler {
     private final FilingListingJob filingListingJob;
     private final FilingConsumptionJob filingConsumptionJob;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
+    private final UsCandidateFeed usCandidateFeed;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
                              UniverseRebalanceJob universeRebalanceJob,
@@ -100,7 +102,8 @@ public class PipelineScheduler {
                              WriteLock writeLock,
                              FilingListingJob filingListingJob,
                              FilingConsumptionJob filingConsumptionJob,
-                             FreshnessCatchUpJob freshnessCatchUpJob) {
+                             FreshnessCatchUpJob freshnessCatchUpJob,
+                             UsCandidateFeed usCandidateFeed) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -118,6 +121,7 @@ public class PipelineScheduler {
         this.filingListingJob = filingListingJob;
         this.filingConsumptionJob = filingConsumptionJob;
         this.freshnessCatchUpJob = freshnessCatchUpJob;
+        this.usCandidateFeed = usCandidateFeed;
     }
 
     /**
@@ -478,6 +482,10 @@ public class PipelineScheduler {
      *
      * <p>소비 뒤에 편입 원자료 따라잡기({@link FreshnessCatchUpJob} · ADR-0177)를 잇는다 — 편입 뒤로 FR·FSR·G가 정기 범위로
      * 맞춘 적이 없는 편입을 좁힌 실행({@code GAP_FILL})으로 맞춘다. 주 자리는 리밸런싱 꼬리이고 여기는 남은 것을 집는다.
+     *
+     * <p>끝에 미국 순위 후보의 공시 소비({@link FilingConsumptionJob#runCandidates} · ADR-0178 · {@link UsCandidateFeed}가 켜졌을 때)를
+     * 잇는다 — 활성 편입 없는 미국 종목의
+     * 열린 행을 같은 판정으로 먹여 순위 재료(주식수)를 최신 공시에 맞춘다. 편입 일이 다 끝난 뒤라 그 단계의 실패가 편입을 안 막는다.
      */
     @Scheduled(cron = "0 16 14 * * MON-FRI", zone = "Asia/Seoul")
     public void runFilingListing() {
@@ -516,6 +524,18 @@ public class PipelineScheduler {
                 } catch (BatchShutdownException e) {
                     log.info("편입 원자료 따라잡기가 종료로 중단됐다. today={} — 표지는 종목 트랜잭션 안이라 남은 종목은 다음 차례가 집는다.",
                             today);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
+                }
+                // 편입 일이 다 끝난 뒤 미국 순위 후보를 먹인다(ADR-0178) — 순위 재료(주식수)라 같은 오후의 유도·화해와 무관하고,
+                // 여기서 던져도 앞 셋은 이미 끝났다.
+                try {
+                    if (usCandidateFeed.enabled()) {
+                        filingConsumptionJob.runCandidates(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    }
+                } catch (BatchShutdownException e) {
+                    log.info("후보 공시 소비가 종료로 중단됐다. today={} — 표시는 종목 트랜잭션 안이라 남은 행은 다음 평일이 먹인다.", today);
                     return;
                 } catch (RuntimeException e) {
                     held = keepFirst(held, e);

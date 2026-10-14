@@ -15,6 +15,7 @@ import com.stockscreener.pipeline.batch.CorporateActionJob;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
 import com.stockscreener.pipeline.batch.FinancialRefillJob;
 import com.stockscreener.pipeline.batch.FreshnessCatchUpJob;
+import com.stockscreener.pipeline.batch.UsCandidateFeed;
 import com.stockscreener.pipeline.batch.FullStatementRefillJob;
 import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
 import com.stockscreener.pipeline.batch.GovernanceLoadJob;
@@ -122,7 +123,11 @@ class PipelineSchedulerChainTest {
         // MUST: IndicatorReconciler를 목으로 바꾸지 않는다. 「① 실패면 ② 안 돎」·「상한 없음」·「유도가 먼저」를
         // 단언하는 곳이 이 시험인데, 목을 주면 그 단언이 전부 스케줄러 밖으로 나가 죽는다 —
         // 초록은 그대로이고 검증만 사라진다.
-        scheduler = new PipelineScheduler(
+        scheduler = scheduler(false);
+    }
+
+    private PipelineScheduler scheduler(boolean candidateFeed) {
+        return new PipelineScheduler(
                 dailyUpdateJob, universeRebalanceJob,
                 corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob,
@@ -130,7 +135,36 @@ class PipelineSchedulerChainTest {
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob,
                         indicatorCalendar),
                 universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob, filingConsumptionJob,
-                freshnessCatchUpJob);
+                freshnessCatchUpJob, new UsCandidateFeed(candidateFeed));
+    }
+
+    @Test
+    @DisplayName("후보 공시 소비는 설정이 꺼져 있으면 14:16 사슬에서 안 돈다 — 드라이런 전의 main이 배포돼도 정기 경로가 그대로다")
+    void candidateConsumptionWaitsForTheSetting() {
+        scheduler.runFilingListing();
+
+        verify(filingConsumptionJob, never()).runCandidates(any(), any());
+    }
+
+    @Test
+    @DisplayName("설정이 켜지면 후보 공시 소비가 따라잡기 뒤 넷째 단계로 돈다 — 편입 일이 먼저 끝난다")
+    void candidateConsumptionRunsLast() {
+        scheduler(true).runFilingListing();
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(filingConsumptionJob, freshnessCatchUpJob);
+        order.verify(filingConsumptionJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        order.verify(freshnessCatchUpJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()));
+        order.verify(filingConsumptionJob).runCandidates(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+    }
+
+    @Test
+    @DisplayName("따라잡기가 던져도 후보 공시 소비는 돌고, 사슬은 처음 예외를 다시 던진다")
+    void candidateConsumptionRunsAfterACatchUpFailure() {
+        IllegalStateException boom = new IllegalStateException("따라잡기 실패");
+        when(freshnessCatchUpJob.run(any(), any(), any())).thenThrow(boom);
+
+        assertThatThrownBy(() -> scheduler(true).runFilingListing()).isSameAs(boom);
+        verify(filingConsumptionJob).runCandidates(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
     }
 
     @Test
@@ -491,7 +525,7 @@ class PipelineSchedulerChainTest {
                 mock(JobFreshnessAlerter.class), policy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
                 universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"), mock(FilingListingJob.class),
-                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class));
+                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false));
 
         Map<String, LocalDate> picked = new java.util.LinkedHashMap<>();
         for (LocalDate day = LocalDate.of(2026, 10, 19); !day.isAfter(LocalDate.of(2026, 11, 5));
@@ -557,7 +591,7 @@ class PipelineSchedulerChainTest {
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
                 universeIntegrityAlerter, batchExecutions, refusing, blockedListing, blockedConsumption,
-                blockedCatchUp);
+                blockedCatchUp, new UsCandidateFeed(false));
 
         // 성질로 센다(잠금 결정 7) — 손으로 든 목록이면 새 쓰기 크론이 잠금 없이 붙어도 이 시험이 못 본다.
         List<String> writeCrons = new java.util.ArrayList<>();
@@ -603,7 +637,7 @@ class PipelineSchedulerChainTest {
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
                 universeIntegrityAlerter, batchExecutions, failing, mock(FilingListingJob.class),
-                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class));
+                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false));
 
         assertThatThrownBy(broken::runHeavyJobOfTheDay).isSameAs(boom);
 

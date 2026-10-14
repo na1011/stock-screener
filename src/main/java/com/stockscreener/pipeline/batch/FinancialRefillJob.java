@@ -18,8 +18,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -147,7 +151,8 @@ public class FinancialRefillJob {
     public Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                                      Integer yearsBack, List<String> tickers, String universeCode,
                                      boolean insertEarlierVintages) {
-        return runAndReport(asOf, triggeredBy, yearsBack, tickers, universeCode, insertEarlierVintages, null);
+        return runAndReport(asOf, triggeredBy, yearsBack, tickers, universeCode, insertEarlierVintages, null,
+                Population.MEMBERS);
     }
 
     /**
@@ -163,7 +168,42 @@ public class FinancialRefillJob {
             // 비면 전량이 된다(M11) — 소비는 대상이 없으면 부르지 않는다.
             throw new IllegalArgumentException("소비는 티커로 좁혀서만 부른다.");
         }
-        return runAndReport(asOf, triggeredBy, yearsBack, tickers, null, false, Objects.requireNonNull(hook));
+        return runAndReport(asOf, triggeredBy, yearsBack, tickers, null, false, Objects.requireNonNull(hook),
+                Population.MEMBERS);
+    }
+
+    /**
+     * 위와 같되 대상이 미국 <b>순위 후보</b>다(ADR-0178) — 티커를 {@code StockRegistrar.usRankingCandidateIdsByTicker}로 푼다
+     * (편입을 요구하지 않는다). 후보 소비가 부른다. 연수는 기본 창이다(미국 소비와 같다 — SEC 경로는 회수가 있어 창을 좁히면 출력이
+     * 달라질 수 있다).
+     */
+    public Invalidation runForCandidateConsumption(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                                   List<String> tickers, StockHook hook) {
+        if (tickers == null || tickers.isEmpty()) {
+            throw new IllegalArgumentException("후보 소비는 티커로 좁혀서만 부른다.");
+        }
+        return runAndReport(asOf, triggeredBy, null, tickers, null, false, Objects.requireNonNull(hook),
+                Population.CANDIDATES);
+    }
+
+    /**
+     * 미국 <b>순위 후보</b>의 재무를 기본 창으로 받는다(ADR-0178) — 리밸런싱이 막 만든 새 종목 행이 부른다. 장부는 행이 생긴
+     * 뒤의 공시만 받으므로(목록이 {@code stock}에 붙인다) 그 앞에 나간 정기 공시는 이 한 번이 아니면 영영 안 들어온다.
+     */
+    public Invalidation runForCandidates(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                         List<String> tickers) {
+        if (tickers == null || tickers.isEmpty()) {
+            throw new IllegalArgumentException("후보 적재는 티커로 좁혀서만 부른다.");
+        }
+        return runAndReport(asOf, triggeredBy, null, tickers, null, false, null, Population.CANDIDATES);
+    }
+
+    /** 티커를 무엇으로 푸는가. 비활성 유니버스 갈래({@code universeCode})는 이것과 따로다 — 손으로만 쓴다. */
+    enum Population {
+        /** 보존 창과 겹치는 활성 편입(손 실행·정기 경로의 기본). */
+        MEMBERS,
+        /** 미국 순위 후보 — 활성 편입 없는 미국 종목(ADR-0178). */
+        CANDIDATES
     }
 
     /** 공시 소비의 종목 훅 — 그 종목을 쓴 트랜잭션 안에서 부른다. */
@@ -175,15 +215,15 @@ public class FinancialRefillJob {
 
     private Invalidation runAndReport(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                                       Integer yearsBack, List<String> tickers, String universeCode,
-                                      boolean insertEarlierVintages, StockHook hook) {
+                                      boolean insertEarlierVintages, StockHook hook, Population population) {
         int years = yearsBack == null ? DEFAULT_YEARS_BACK : yearsBack;
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
         BatchExecutionRecorder.DeclaredScope scope = scopeOf(yearsBack, tickers, universeCode);
 
-        List<SecurityRef> targets =
-                stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(population == Population.CANDIDATES
+                ? resolveCandidates(tickers) : resolveTargets(tickers, universeCode));
         // 소스 유무는 시작 때 한 번 묻는다 — 소스가 없는 시장의 종목은 종목마다 registry NOT_FOUND(「답함」)로 남아
         // 실패 종류만으로는 그 시장을 못 끝낸 것이 안 보인다.
         MarketCompleteness.Coverage coverage = MarketCompleteness.Coverage.of(MARKETS, registry::hasFinancialSource);
@@ -230,6 +270,8 @@ public class FinancialRefillJob {
         // 세지 않으면 그 실행이 무엇을 움직였는지 note만 보고는 알 수 없다(리허설 EXE 2026 Q2).
         AtomicInteger inserted = new AtomicInteger();
         List<String> invalidatedTickers = new ArrayList<>();
+        // 무효화된 종목 id — 그중 화해(창 편입)가 다시 쓰지 않는 종목을 알림에서 가른다(ADR-0178 · 후보 FR).
+        Map<Long, String> invalidatedIds = new LinkedHashMap<>();
         // MUST: 알림 문구와 백필 대상을 따로 모은다. 위 목록은 "005930(정정 1 · 교정 0)"
         // 형태라 사람이 읽는 것이고, 백필에는 티커만 있어야 한다.
         List<String> tickersToBackfill = new ArrayList<>();
@@ -254,6 +296,7 @@ public class FinancialRefillJob {
                     // 이른 판 삽입도 그 공시일 이후의 지표를 지운다 — 정정·교정과 같이 세지 않으면
                     // 그 종목이 백필 목록에서 빠져 지워진 채 남는다.
                     if (outcome.revised() > 0 || outcome.corrected() > 0 || outcome.insertedEarlier() > 0) {
+                        invalidatedIds.put(security.stockId(), security.ticker());
                         invalidatedTickers.add("%s(정정 %d · 교정 %d · 이른 판 %d)".formatted(
                                 security.ticker(), outcome.revised(), outcome.corrected(),
                                 outcome.insertedEarlier()));
@@ -290,7 +333,7 @@ public class FinancialRefillJob {
                 List.copyOf(tickersToBackfill))
                 + supplementNote(supplementStore.tallySince(supplementSince), retractionStopped);
         log.info("재무 결손 보정을 마쳤다. {}", note);
-        alertOnInvalidation(execution, triggeredBy, invalidatedTickers,
+        alertOnInvalidation(execution, triggeredBy, invalidatedTickers, outsideWindow(invalidatedIds),
                 revised.get() + corrected.get() + insertedEarlier.get(), fullStatementTickers);
         return new Invalidation(execution.finish(note), List.copyOf(tickersToBackfill));
     }
@@ -382,7 +425,7 @@ public class FinancialRefillJob {
      */
     private void alertOnInvalidation(BatchExecutionContext execution,
                                      BatchExecutionRecorder.TriggeredBy triggeredBy,
-                                     List<String> invalidatedTickers,
+                                     List<String> invalidatedTickers, List<String> outsideWindow,
                                      int invalidatedPeriods, List<String> fullStatementTickers) {
         if (invalidatedTickers.isEmpty()) {
             return;
@@ -391,7 +434,34 @@ public class FinancialRefillJob {
         execution.alertOperator(AlertSeverity.WARNING,
                 scheduled ? "재무 무효화 — 정기 경로의 화해가 채운다" : "재무 무효화 — 다음 화해까지 빈다",
                 invalidationAlertBody(invalidatedTickers, invalidatedPeriods, fullStatementTickers,
-                        execution.executionId(), scheduled));
+                        execution.executionId(), scheduled)
+                        + outsideWindowLine(outsideWindow));
+    }
+
+    /**
+     * 무효화된 종목 중 보존 창 편입이 아닌 것(정렬). 화해는 창 편입({@code StockRegistrar.windowMemberIds})만 다시 쓰므로 이들의 지운
+     * 지표는 안 돌아온다 — 순위 후보 FR(ADR-0178)이 그런 종목을 만든다. 편입 FR에서는 늘 비어 있다.
+     */
+    private List<String> outsideWindow(Map<Long, String> invalidated) {
+        if (invalidated.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> window = new HashSet<>(stockRegistrar.windowMemberIds());
+        return invalidated.entrySet().stream().filter(e -> !window.contains(e.getKey())).map(Map.Entry::getValue)
+                .sorted().toList();
+    }
+
+    /**
+     * 창 편입 밖 종목의 줄. 그 지표 행은 어느 값에도 안 닿는다 — 백분위·섹터 상대·화면·워치리스트가 그날 편입으로 거르고 지표 달력은
+     * (시장, 날짜) 존재라 한 종목이 빠져도 안 바뀐다(2026-10-15 grep · 후보 계획 v2 §1). 그래서 손으로 채울 일이 아니다.
+     */
+    static String outsideWindowLine(List<String> outsideWindow) {
+        if (outsideWindow.isEmpty()) {
+            return "";
+        }
+        return "그중 %d종목은 보존 창 편입 밖이라 화해가 다시 쓰지 않는다 — 그 지표 행은 편입으로 거르는 읽기 경로 어디에도 안 닿는다: %s\n"
+                .formatted(outsideWindow.size(), String.join(", ",
+                        outsideWindow.subList(0, Math.min(ALERT_TICKER_SAMPLE, outsideWindow.size()))));
     }
 
     /**
@@ -459,6 +529,20 @@ public class FinancialRefillJob {
      * 끝나는데, 그것은 이 잡이 고치려는 결함과 <b>정확히 같은 모양</b>이다.
      * 일부만 매칭된 경우도 로그로 알린다 — 편입되지 않은 종목을 준 것이다.
      */
+    /** 후보 티커를 푼다. 0건이면 던진다 — 대상 0건 성공은 이 잡이 고치려는 결함과 같은 모양이다. */
+    private List<Long> resolveCandidates(List<String> tickers) {
+        List<Long> matched = stockRegistrar.usRankingCandidateIdsByTicker(tickers);
+        if (matched.isEmpty()) {
+            throw new IllegalArgumentException("준 티커 중 미국 순위 후보(활성 편입 없는 미국 종목)가 하나도 없다: " + tickers
+                    + " — 대상 0건으로 성공시키지 않는다.");
+        }
+        if (matched.size() < tickers.size()) {
+            log.warn("티커 {}개 중 {}개만 미국 순위 후보다(나머지는 편입이 생겼거나 없는 종목이다): {}",
+                    tickers.size(), matched.size(), tickers);
+        }
+        return matched;
+    }
+
     private List<Long> resolveTargets(List<String> tickers, String universeCode) {
         if (universeCode != null) {
             // MUST: 유니버스를 명시하면 활성 여부를 보지 않는다. oneUniverseMemberIds가

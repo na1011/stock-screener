@@ -52,9 +52,11 @@ class FilingConsumptionJobTest {
     private static final String KR_TICKER = "990011";
     private static final String KR_OUTSIDER = "990012";
     private static final String US_TICKER = "ZZCN";
+    private static final String US_CANDIDATE = "ZZCO";
     private static final long US_CIK = 99_000_011L;
-    private static final List<String> JOBS = List.of(FilingConsumptionJob.JOB_NAME, FinancialRefillJob.JOB_NAME,
-            FullStatementRefillJob.JOB_NAME);
+    private static final long CANDIDATE_CIK = 99_000_012L;
+    private static final List<String> JOBS = List.of(FilingConsumptionJob.JOB_NAME,
+            FilingConsumptionJob.CANDIDATE_JOB_NAME, FinancialRefillJob.JOB_NAME, FullStatementRefillJob.JOB_NAME);
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -81,6 +83,7 @@ class FilingConsumptionJobTest {
     private long krStock;
     private long krOutsider;
     private long usStock;
+    private long usCandidate;
 
     @BeforeEach
     void setUp() {
@@ -92,13 +95,16 @@ class FilingConsumptionJobTest {
         krStock = stock("KOSPI", KR_TICKER, "KOSPI200");
         krOutsider = stock("KOSPI", KR_OUTSIDER, null);
         usStock = stock("US", US_TICKER, "US_TOP1000");
+        usCandidate = stock("US", US_CANDIDATE, null);
     }
 
     @AfterEach
     void cleanUp() {
-        String ours = "(SELECT id FROM stock WHERE ticker IN ('" + KR_TICKER + "', '" + KR_OUTSIDER + "', '" + US_TICKER + "'))";
+        String tickers = "('" + KR_TICKER + "', '" + KR_OUTSIDER + "', '" + US_TICKER + "', '" + US_CANDIDATE + "')";
+        String ours = "(SELECT id FROM stock WHERE ticker IN " + tickers + ")";
         jdbc.update("DELETE FROM filing_consumption WHERE stock_id IN " + ours);
-        jdbc.update("DELETE FROM sec_filing_supplement WHERE cik = ?", US_CIK);
+        jdbc.update("DELETE FROM sec_filing_supplement WHERE cik IN (?, ?)", US_CIK, CANDIDATE_CIK);
+        jdbc.update("DELETE FROM stock_job_refresh WHERE stock_id IN " + ours);
         jdbc.update("DELETE FROM financial_column_absence WHERE stock_id IN " + ours);
         jdbc.update("DELETE FROM financial_statement WHERE stock_id IN " + ours);
         jdbc.update("DELETE FROM universe_membership WHERE stock_id IN " + ours);
@@ -109,7 +115,7 @@ class FilingConsumptionJobTest {
                     + "(SELECT id FROM batch_execution WHERE job_name = ?)", name);
             jdbc.update("DELETE FROM batch_execution WHERE job_name = ?", name);
         }
-        jdbc.update("DELETE FROM stock WHERE ticker IN ('" + KR_TICKER + "', '" + KR_OUTSIDER + "', '" + US_TICKER + "')");
+        jdbc.update("DELETE FROM stock WHERE ticker IN " + tickers);
         financialSource.reset();
         alerts.clear();
     }
@@ -244,6 +250,101 @@ class FilingConsumptionJobTest {
     }
 
     @Test
+    @DisplayName("후보: 활성 편입 없는 미국 종목의 열린 행을 같은 판정으로 먹인다 — 편입 소비는 그 행을 안 건드리고, 후보 다리는 편입 행을 안 건드린다")
+    void candidatesAreFedSeparatelyFromMembers() {
+        long candidateRow = candidateRow("0099000012-26-000001", "10-Q");
+        long memberRow = usRow("0099000011-26-000001", "10-Q");
+        financialSource.withReports(usCandidate, List.of()).withTrace(usCandidate,
+                FilingTrace.ofAccessions(Set.of("0099000012-26-000001")));
+        financialSource.withReports(usStock, List.of()).withTrace(usStock,
+                FilingTrace.ofAccessions(Set.of("0099000011-26-000001")));
+
+        job.run(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        assertThat(groundOf(memberRow)).isEqualTo("COMPANYFACTS");
+        assertThat(attemptsOf(candidateRow)).as("편입 소비는 후보 행을 안 본다").isZero();
+        assertThat(financialSource.fetchedStockIds).doesNotContain(usCandidate);
+
+        assertThat(job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER)).isEqualTo(BatchStatus.SUCCESS);
+        assertThat(groundOf(candidateRow)).isEqualTo("COMPANYFACTS");
+        assertThat(execution(FinancialRefillJob.JOB_NAME)).containsEntry("triggered_by", "GAP_FILL")
+                .containsEntry("scope", "NARROW");
+        assertThat(execution(FilingConsumptionJob.CANDIDATE_JOB_NAME)).isNotEmpty();
+        assertThat(financialSource.fetchedStockIds.stream().filter(id -> id == usStock).count())
+                .as("후보 다리는 편입 종목을 다시 부르지 않는다").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("후보: 시도 상한에 막 닿은 행을 한 번 알리고, 그 뒤엔 새 공시가 올 때까지 안 부른다 — 새 행이 오면 다시 묻는다")
+    void candidateCapStopsUntilANewFiling() {
+        long row = candidateRow("0099000012-26-000001", "10-Q");
+        jdbc.update("UPDATE filing_consumption SET attempts = ? WHERE id = ?",
+                FilingConsumptionJob.CANDIDATE_MAX_ATTEMPTS - 1, row);
+        financialSource.withReports(usCandidate, List.of()).withTrace(usCandidate, FilingTrace.ofAccessions(Set.of()));
+
+        job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        assertThat(attemptsOf(row)).isEqualTo(FilingConsumptionJob.CANDIDATE_MAX_ATTEMPTS);
+        assertThat(alerts).filteredOn(a -> a.title().contains("시도 상한")).singleElement()
+                .satisfies(a -> assertThat(a.body()).contains(US_CANDIDATE).contains("0099000012-26-000001"));
+
+        alerts.clear();
+        int fetched = financialSource.fetchedStockIds.size();
+        job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        assertThat(financialSource.fetchedStockIds).as("상한에 닿은 종목은 다시 안 부른다").hasSize(fetched);
+        assertThat(alerts).noneSatisfy(a -> assertThat(a.title()).contains("시도 상한"));
+
+        candidateRow("0099000012-26-000002", "10-Q");
+        job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        assertThat(financialSource.fetchedStockIds).as("새 공시가 그 종목을 깨운다").hasSize(fetched + 1);
+        assertThat(attemptsOf(row)).as("깨어난 종목의 옛 행도 다시 판정한다")
+                .isEqualTo(FilingConsumptionJob.CANDIDATE_MAX_ATTEMPTS + 1);
+    }
+
+    @Test
+    @DisplayName("후보: 손 실행은 시도 상한 없이 다시 묻는다 — 코드를 고친 뒤 다시 물을 길")
+    void manualCandidateRunIgnoresTheCap() {
+        long row = candidateRow("0099000012-26-000001", "10-Q");
+        jdbc.update("UPDATE filing_consumption SET attempts = 9 WHERE id = ?", row);
+        financialSource.withReports(usCandidate, List.of()).withTrace(usCandidate,
+                FilingTrace.ofAccessions(Set.of("0099000012-26-000001")));
+
+        job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.MANUAL);
+
+        assertThat(groundOf(row)).isEqualTo("COMPANYFACTS");
+        assertThat(execution(FinancialRefillJob.JOB_NAME)).containsEntry("triggered_by", "MANUAL");
+    }
+
+    @Test
+    @DisplayName("후보: FR이 그 종목에서 실패하면 행은 「우리 쪽」 사유로 열린 채 남고, 다리는 던지지 않는다")
+    void candidateFailureLeavesRowsOpen() {
+        long row = candidateRow("0099000012-26-000001", "6-K");
+        financialSource.failingWith(usCandidate, new com.stockscreener.pipeline.datasource.DataSourceException(
+                com.stockscreener.pipeline.datasource.DataSourceException.Kind.NOT_FOUND, "fake", "HTTP 404"));
+
+        job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        assertThat(groundOf(row)).isNull();
+        assertThat(jdbc.queryForObject("SELECT last_reason FROM filing_consumption WHERE id = ?", String.class, row))
+                .startsWith(SecFilingConsumption.OUR_SIDE);
+        assertThat(attemptsOf(row)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("후보 FR은 편입 종목 티커만 주면 대상 0으로 던진다 — 조용한 0건 성공이 아니다")
+    void candidateRefillRejectsMembers() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> financialRefill.runForCandidates(TODAY,
+                        BatchExecutionRecorder.TriggeredBy.MANUAL, List.of(US_TICKER)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("순위 후보");
+    }
+
+    @Test
+    @DisplayName("무효화 알림: 보존 창 편입 밖 종목은 「화해가 다시 쓰지 않는다」로 따로 적는다(편입 FR에선 그 줄이 없다)")
+    void invalidationAlertNamesStocksOutsideTheWindow() {
+        assertThat(FinancialRefillJob.outsideWindowLine(List.of())).isEmpty();
+        assertThat(FinancialRefillJob.outsideWindowLine(List.of("TLRY"))).contains("1종목").contains("TLRY")
+                .contains("화해가 다시 쓰지 않는다");
+    }
+
+    @Test
     @DisplayName("국내 창은 대상 행 사업연도 최솟값부터 — 상한은 정기 FR의 기본")
     void krWindow() {
         FilingLedgerStore.OpenRow lastYear = openRow(2025);
@@ -283,6 +384,17 @@ class FilingConsumptionJobTest {
                 INSERT INTO filing_consumption (market, filing_no, stock_id, cik, form, filed_on)
                 VALUES ('US', ?, ?, ?, ?, '2026-10-09') RETURNING id
                 """, Long.class, accession, usStock, US_CIK, form);
+    }
+
+    private long candidateRow(String accession, String form) {
+        return jdbc.queryForObject("""
+                INSERT INTO filing_consumption (market, filing_no, stock_id, cik, form, filed_on)
+                VALUES ('US', ?, ?, ?, ?, '2026-10-09') RETURNING id
+                """, Long.class, accession, usCandidate, CANDIDATE_CIK, form);
+    }
+
+    private int attemptsOf(long row) {
+        return jdbc.queryForObject("SELECT attempts FROM filing_consumption WHERE id = ?", Integer.class, row);
     }
 
     private String groundOf(long row) {

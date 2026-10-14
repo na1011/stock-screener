@@ -15,6 +15,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -54,6 +55,15 @@ public class FilingConsumptionJob {
 
     /** 열린 행이 이 평일 수를 넘으면 알린다. */
     static final int OVERDUE_WEEKDAYS = 5;
+
+    /** 미국 순위 후보의 공시 소비(ADR-0178) — 편입 소비와 실행·알림·신선도를 가른다. */
+    public static final String CANDIDATE_JOB_NAME = "candidate-consumption";
+
+    /** 후보 행의 시도 상한 — 편입 지연 경보와 같은 평일 수다. */
+    static final int CANDIDATE_MAX_ATTEMPTS = OVERDUE_WEEKDAYS;
+
+    /** 후보 행이 이 평일 수를 넘게 열려 있으면 note에 센다(경보는 아니다 — 화면 값이 아니다). */
+    static final int CANDIDATE_STALE_WEEKDAYS = 20;
 
     static final List<String> MARKETS = List.of("US", "KR");
 
@@ -127,7 +137,17 @@ public class FilingConsumptionJob {
     }
 
     private MarketResult consumeUs(LocalDate today, BatchExecutionRecorder.TriggeredBy by) {
-        List<OpenRow> open = store.openForActiveMembers("US");
+        return feedUs(store.openForActiveMembers("US"),
+                (tickers, hook) -> financialRefill.runForConsumption(today, by, null, tickers, hook));
+    }
+
+    /** 미국 행을 먹일 FR — 편입은 창 편입으로, 후보는 순위 후보로 티커를 푼다. 판정은 둘 다 {@link #judgeUs}다. */
+    @FunctionalInterface
+    private interface UsRefill {
+        FinancialRefillJob.Invalidation run(List<String> tickers, FinancialRefillJob.StockHook hook);
+    }
+
+    private MarketResult feedUs(List<OpenRow> open, UsRefill refill) {
         if (open.isEmpty()) {
             return new MarketResult("대상 0", false, 0);
         }
@@ -138,7 +158,7 @@ public class FilingConsumptionJob {
         Counts counts = new Counts();
         Set<Long> reached = new HashSet<>();
         List<String> tickers = tickersOf(open);
-        BatchStatus status = financialRefill.runForConsumption(today, by, null, tickers,
+        BatchStatus status = refill.run(tickers,
                 (executionId, security, outcome) -> {
                     reached.add(security.stockId());
                     judgeUs(executionId, security, outcome, counts);
@@ -147,6 +167,59 @@ public class FilingConsumptionJob {
         return new MarketResult("열린 행 %d(%d종목) · FR %s · 소비 %d · 열림 %d · 종목 실패로 못 닿음 %d".formatted(open.size(),
                 tickers.size(), status, counts.consumed.get(), counts.stillOpen.get(), unreached),
                 status == BatchStatus.FAILED, counts.consumed.get());
+    }
+
+    /**
+     * 미국 <b>순위 후보</b>의 열린 행을 먹인다(ADR-0178) — 평일 14:16 사슬의 넷째 단계(목록 → 편입 소비 → 따라잡기 뒤 · 자기 try)이고
+     * {@code --job=candidate-consumption}이 손으로 부른다. 편입 일이 먼저 끝나고, 여기서 던져도 앞 셋의 결과는 그대로다.
+     *
+     * <p>후보 행은 화면 값이 아니라 순위 재료(주식수)다 — 지연 경보를 안 내고, 대신 시도 상한({@value #CANDIDATE_MAX_ATTEMPTS} ·
+     * 편입 지연 경보와 같은 평일 수)에 막 닿은 행을 한 번 알린다. 상한에 닿은 종목은 새 공시(새 행)가 올 때까지 안 부른다 — 같은 답을
+     * 날마다 다시 물으면 그 종목의 부분 실패 알림이 상시가 된다. 손 실행은 상한 없이 다시 묻는다(코드를 고친 뒤 다시 물을 길).
+     */
+    public BatchStatus runCandidates(LocalDate todayKst, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        BatchExecutionContext execution = batchExecutions.start(CANDIDATE_JOB_NAME, todayKst, triggeredBy, 1,
+                BatchExecutionRecorder.DeclaredScope.FULL);
+        execution.plan(CollectionPhase.FILING_CONSUMPTION, 1);
+        BatchExecutionRecorder.TriggeredBy narrowBy = triggeredBy == BatchExecutionRecorder.TriggeredBy.SCHEDULER
+                ? BatchExecutionRecorder.TriggeredBy.GAP_FILL : triggeredBy;
+        boolean manual = triggeredBy == BatchExecutionRecorder.TriggeredBy.MANUAL;
+        int cap = manual ? Integer.MAX_VALUE : CANDIDATE_MAX_ATTEMPTS;
+        Instant since = store.now();
+        MarketResult result;
+        try {
+            execution.stage("US 후보 공시 소비");
+            result = feedUs(store.openForCandidates(cap),
+                    (tickers, hook) -> financialRefill.runForCandidateConsumption(todayKst, narrowBy, tickers, hook));
+        } catch (RuntimeException e) {
+            execution.failUnexpectedly(e);
+            throw e;
+        }
+        execution.countExternally(CollectionPhase.FILING_CONSUMPTION, result.failed() ? 0 : 1, result.failed() ? 1 : 0,
+                result.consumed());
+        List<OpenRow> capped = manual ? List.of() : store.candidatesReachingCap(CANDIDATE_MAX_ATTEMPTS, since);
+        if (!capped.isEmpty()) {
+            execution.alertOperator(AlertSeverity.WARNING, "후보 공시가 시도 상한에 닿아 새 공시까지 멈춘다",
+                    cappedBody(capped));
+        }
+        long stale = store.openForCandidates(Integer.MAX_VALUE).stream()
+                .filter(r -> FilingListingJob.weekdaysBetween(r.firstSeenAt().atZone(KST).toLocalDate(), todayKst)
+                        > CANDIDATE_STALE_WEEKDAYS)
+                .count();
+        return execution.finish("US 후보: %s · 상한 닿음 %d · 평일 %d일 넘게 열린 후보 행 %d".formatted(result.note(),
+                capped.size(), CANDIDATE_STALE_WEEKDAYS, stale));
+    }
+
+    /** 상한에 막 닿은 후보 행 — 종목·공시·마지막 사유. */
+    private static String cappedBody(List<OpenRow> capped) {
+        StringBuilder body = new StringBuilder("%d건 — 순위 재료(주식수)가 이 공시 앞 판에 머문다. 새 공시가 오면 다시 묻고, 코드를 고쳤으면 "
+                .formatted(capped.size()) + "평일 13:30~15:40 밖에서 --job=candidate-consumption(손 실행은 상한 없음)으로 다시 묻는다:\n");
+        capped.stream().limit(20).forEach(r -> body.append("  %s %s %s(%s) — %s\n".formatted(r.ticker(), r.filingNo(),
+                r.form(), r.filedOn(), r.lastReason())));
+        if (capped.size() > 20) {
+            body.append("  … 외 ").append(capped.size() - 20).append("건\n");
+        }
+        return body.toString();
     }
 
     private void judgeUs(long executionId, SecurityRef security, FinancialWriter.Outcome outcome, Counts counts) {

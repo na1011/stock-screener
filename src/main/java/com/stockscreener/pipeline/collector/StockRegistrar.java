@@ -546,6 +546,43 @@ public class StockRegistrar {
     }
 
     /**
+     * 지금 활성 편입인가 — {@link #activeUniverseMemberIds}와 같은 술어(열린 편입 · 활성 유니버스)를 {@code stockIdColumn}에 건다.
+     * 종목의 {@code is_active}·시장은 부르는 쪽이 건다. 편입 소비와 후보 소비가 이 한 조각으로 갈려야 한 종목이 두 다리에 다 들거나
+     * 어디에도 안 드는 일이 없다.
+     */
+    public static String activeMembershipExists(String stockIdColumn) {
+        return """
+                EXISTS (SELECT 1 FROM universe_membership am JOIN universe au ON au.code = am.universe_code AND au.is_active
+                        WHERE am.stock_id = %s AND am.effective_to IS NULL)""".formatted(stockIdColumn);
+    }
+
+    /**
+     * 미국 <b>순위 후보</b>를 티커로 고른다 — 미국 · 활성 종목 · 수집 시장 · <b>지금 활성 편입이 없음</b>(ADR-0178).
+     *
+     * <p>순위 어댑터({@code UsMarketCapUniverseAdapter})는 편입과 무관하게 미국 활성 종목의 저장 주식수로 줄 세운다
+     * ({@code JdbcStoredShareCounts}) — 그 재료를 새로 두는 정기 경로(후보 소비·새 상장 인입)가 이 술어로 대상을 푼다. 비활성
+     * 유니버스 갈래({@link #oneUniverseMemberIds})와 다르다: 그것은 손으로 고른 유니버스 하나를 채우는 수단이고 여전히 스케줄러에
+     * 안 건다. 「활성 = 스크리닝 모집단」은 그대로이고, 이것은 그 밖의 둘째 모집단에 붙인 이름이다.
+     *
+     * <p>편입 종목은 고르지 않는다 — 편입 몫은 편입 소비가 먹인다. 소비와 이 해석 사이에 편입이 생긴 종목은 여기서 빠지고 다음
+     * 편입 소비가 먹인다.
+     *
+     * @return 위 술어와 티커의 교집합. 호출부가 개수 차이로 빠진 것을 본다.
+     */
+    public List<Long> usRankingCandidateIdsByTicker(List<String> tickers) {
+        if (tickers.isEmpty() || !CollectedMarkets.ALL.contains("US")) {
+            return List.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(tickers.size(), "?"));
+        return jdbcTemplate.queryForList("""
+                SELECT s.id FROM stock s
+                WHERE s.market_code = 'US' AND s.is_active AND s.ticker IN (%s)
+                  AND NOT %s
+                ORDER BY s.id
+                """.formatted(placeholders, activeMembershipExists("s.id")), Long.class, tickers.toArray());
+    }
+
+    /**
      * 배치가 처리할 종목의 참조를 만든다.
      *
      * <p>{@code IN} 절을 문자열로 조립하는 이유는 {@code setArray}가 드라이버별 타입 이름에
