@@ -44,7 +44,8 @@ import java.util.function.Predicate;
  * <p>정기 경로에서는 FR·FSR을 {@code GAP_FILL}로 부른다 — 시계 셋이 안 센다(ADR-0172·0174). 대상이 없으면 부르지 않는다(비면 전량이 된다).
  * 정정이 지운 지표는 14:20 화해가 채운다(정기 FR과 같다).
  *
- * <p>활성 편입 종목의 열린 행이 처음 본 뒤 평일 {@value #OVERDUE_WEEKDAYS}일을 넘으면 사유 머리(「원장 아직」·「우리 쪽」)별로 알린다.
+ * <p>활성 편입 종목의 열린 행이 소비가 맡은 뒤(처음 본 시각과 지금 편입이 생긴 시각 중 늦은 쪽) 평일 {@value #OVERDUE_WEEKDAYS}일을
+ * 넘으면 사유 머리(「원장 아직」·「우리 쪽」)별로 알린다.
  */
 @Component
 public class FilingConsumptionJob {
@@ -287,8 +288,8 @@ public class FilingConsumptionJob {
         Map<String, List<String>> byHead = new TreeMap<>();
         for (String market : MARKETS) {
             for (OpenRow row : store.openForActiveMembers(market)) {
-                LocalDate seen = row.firstSeenAt().atZone(KST).toLocalDate();
-                if (FilingListingJob.weekdaysBetween(seen, today) <= OVERDUE_WEEKDAYS) {
+                LocalDate due = row.dueFrom().atZone(KST).toLocalDate();
+                if (FilingListingJob.weekdaysBetween(due, today) <= OVERDUE_WEEKDAYS) {
                     continue;
                 }
                 String reason = row.lastReason() == null ? "사유 없음(아직 한 번도 시도하지 않았다)" : row.lastReason();

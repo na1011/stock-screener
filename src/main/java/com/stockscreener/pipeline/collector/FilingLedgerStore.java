@@ -92,17 +92,26 @@ public class FilingLedgerStore {
 
     // ── 소비(ADR-0176 2차) ──────────────────────────────────────────────────────────────────────────────────────────────
 
-    /** 소비 단계가 읽는 열린 장부 행. {@code frOpen}·{@code fsrOpen}은 그 몫이 아직 안 끝났는가(미국은 FSR 몫이 없다). */
+    /**
+     * 소비 단계가 읽는 열린 장부 행. {@code frOpen}·{@code fsrOpen}은 그 몫이 아직 안 끝났는가(미국은 FSR 몫이 없다).
+     *
+     * <p>{@code dueFrom}은 소비가 그 행을 맡기 시작한 시각 — 처음 본 시각과 지금 편입이 생긴 시각 중 늦은 쪽이다. 편입 밖에서
+     * 잠든 동안은 아무도 먹이지 않으므로, 그 기간을 지연으로 세면 편입되는 날 첫 소비 기회도 없이 경보가 난다.
+     */
     public record OpenRow(long id, String market, long stockId, String ticker, String filingNo, Long cik, String form,
                           LocalDate filedOn, Integer bsnsYear, String reprtCode, boolean frOpen, boolean fsrOpen,
-                          Instant firstSeenAt, String lastReason) {
+                          Instant firstSeenAt, Instant dueFrom, String lastReason) {
     }
 
     private static final String OPEN_COLUMNS = """
             c.id, c.market, c.stock_id, s.ticker, c.filing_no, c.cik, c.form, c.filed_on, c.bsns_year, c.reprt_code,
             c.fr_consumed_at IS NULL AS fr_open,
             (c.market = 'KR' AND c.fsr_consumed_at IS NULL) AS fsr_open,
-            c.first_seen_at, c.last_reason
+            c.first_seen_at,
+            GREATEST(c.first_seen_at, (SELECT max(m.created_at) FROM universe_membership m
+                                       JOIN universe u ON u.code = m.universe_code
+                                       WHERE m.stock_id = c.stock_id AND m.effective_to IS NULL AND u.is_active)) AS due_from,
+            c.last_reason
             """;
 
     /**
@@ -189,6 +198,7 @@ public class FilingLedgerStore {
         return new OpenRow(rs.getLong("id"), rs.getString("market"), rs.getLong("stock_id"), rs.getString("ticker"),
                 rs.getString("filing_no"), cikOrNull, rs.getString("form"), rs.getDate("filed_on").toLocalDate(),
                 yearOrNull, rs.getString("reprt_code"), rs.getBoolean("fr_open"), rs.getBoolean("fsr_open"),
-                rs.getTimestamp("first_seen_at").toInstant(), rs.getString("last_reason"));
+                rs.getTimestamp("first_seen_at").toInstant(), rs.getTimestamp("due_from").toInstant(),
+                rs.getString("last_reason"));
     }
 }

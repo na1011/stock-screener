@@ -219,6 +219,7 @@ class FilingConsumptionJobTest {
         long row = krRow(krStock, "20260925000001", null, null);
         jdbc.update("UPDATE filing_consumption SET first_seen_at = now() - interval '20 days', "
                 + "last_reason = '보고서 이름에서 연월을 못 읽었다' WHERE id = ?", row);
+        jdbc.update("UPDATE universe_membership SET created_at = now() - interval '20 days' WHERE stock_id = ?", krStock);
 
         job.run(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
 
@@ -227,6 +228,19 @@ class FilingConsumptionJobTest {
             assertThat(a.body()).contains("[우리 쪽] 1건").contains(KR_TICKER);
         });
         assertThat(execution(FinancialRefillJob.JOB_NAME)).as("키 없는 행은 먹이지 않는다").isEmpty();
+    }
+
+    @Test
+    @DisplayName("편입 밖에서 잠든 기간은 지연으로 세지 않는다 — 오래전에 본 행도 막 편입됐으면 경보하지 않는다(대조군: 편입이 오래되면 경보)")
+    void sleepingYearsAreNotOverdue() {
+        long row = krRow(krStock, "20260925000001", null, null);
+        jdbc.update("UPDATE filing_consumption SET first_seen_at = now() - interval '20 days', "
+                + "last_reason = '보고서 이름에서 연월을 못 읽었다' WHERE id = ?", row);
+        jdbc.update("UPDATE universe_membership SET created_at = now() - interval '1 hour' WHERE stock_id = ?", krStock);
+
+        job.run(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        assertThat(alerts).noneSatisfy(a -> assertThat(a.title()).endsWith("공시가 소비되지 않고 쌓였다"));
     }
 
     @Test
@@ -242,7 +256,7 @@ class FilingConsumptionJobTest {
 
     private static FilingLedgerStore.OpenRow openRow(int year) {
         return new FilingLedgerStore.OpenRow(1, "KR", 1, "x", "n", null, "A002", TODAY, year, "11012", true, true,
-                java.time.Instant.now(), null);
+                java.time.Instant.now(), java.time.Instant.now(), null);
     }
 
     private long stock(String market, String ticker, String universe) {
