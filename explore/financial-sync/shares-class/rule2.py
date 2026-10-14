@@ -1,5 +1,6 @@
 import json,os,re,collections,sys
 import xml.etree.ElementTree as ET
+H={}
 XI='http://www.xbrl.org/2003/instance'; XD='http://xbrl.org/2006/xbrldi'; AX='us-gaap:StatementClassOfStockAxis'
 WTAGS=('WeightedAverageNumberOfSharesOutstandingBasic','WeightedAverageNumberOfShareOutstandingBasicAndDiluted','WeightedAverageNumberOfSharesIssuedBasic','WeightedAverageLimitedPartnershipUnitsOutstanding')
 ETAGS=('EarningsPerShareBasic','EarningsPerShareBasicAndDiluted','IncomeLossFromContinuingOperationsPerBasicShare')
@@ -11,6 +12,7 @@ def load(p):
         d={e.get('dimension'):e.text for e in c.iter('{%s}explicitMember'%XD)}
         per=c.find('{%s}period'%XI); ctx[c.get('id')]=(d,tuple(y.text for y in per))
     F=collections.defaultdict(dict)  # tag -> (member, period) -> value
+    global H
     cover={}
     for e in r:
         t=e.tag.split('}')[-1]; cx=ctx.get(e.get('contextRef'))
@@ -21,7 +23,10 @@ def load(p):
         if t in ('EntityCommonStockSharesOutstanding','TradingSymbol','Security12bTitle'):
             cover.setdefault(t,{})[m]=e.text.strip(); continue
         if t in WTAGS+ETAGS+NTAGS and len(per)==2:
-            try: F[t][(m,per)]=float(e.text)
+            try:
+                v=float(e.text); dec=e.get('decimals')
+                hw=0.0 if dec in (None,'INF') else 0.5*10**(-int(dec))
+                F[t][(m,per)]=v; H[(t,m,per)]=hw
             except: pass
     return F,cover
 def lpmember(ticker,cover,members):
@@ -49,10 +54,14 @@ def lpmember(ticker,cover,members):
             c=[k for k in members if k.split(':')[-1] in('CommonStockMember',)]
             if len(c)==1: return c[0],'title-common'
     return None,'unmapped'
-def closes(n,e,num):
+def closes(n,e,num,he=0.005,hn=0.0,hw=0.0):
+    # 원장이 선언한 정밀도(decimals)로 반올림 폭을 정확히 잡는다: |n·e − num| ≤ n·he + |e|·hw + hn
     if not e or num is None: return None
-    tol=0.005/abs(e)+0.005
-    return abs(n*e/num-1)<=tol if num else None
+    return abs(n*e-num) <= n*he + abs(e)*hw + hn + 1e-9*abs(num)
+def _hw(tag_list,m,P):
+    for t in tag_list:
+        if (t,m,P) in H: return H[(t,m,P)]
+    return 0.005
 def rule(ticker,F,cover,form):
     # own period: latest end; prefer 3m for 10-Q, 12m for 10-K
     pers=set(p for t in WTAGS for (m,p) in F[t])
@@ -70,9 +79,10 @@ def rule(ticker,F,cover,form):
     for t in ETAGS:
         for (m,p),v in F[t].items():
             if p==P and m not in e: e[m]=v
+    hnum=0.0
     for t in NTAGS:
         v=F[t].get(('-',P))
-        if v is not None: num=v; break
+        if v is not None: num=v; hnum=H.get((t,'-',P),0.0); break
     # per-class allocated income, when the ledger states it for every EPS member
     edm=[m for m in e if m!='-']
     alloc=None
@@ -81,15 +91,15 @@ def rule(ticker,F,cover,form):
     edim=[m for m in e if m!='-']
     # case A0: non-dim w, EPS only on one member
     if '-' in w and '-' not in e and len(edim)==1:
-        n=w['-']; ok=closes(n,e[edim[0]],num)
+        n=w['-']; ok=closes(n,e[edim[0]],num,_hw(ETAGS,edim[0],P),hnum,_hw(WTAGS,'-',P))
         return (n,'A0-ok',P) if ok else (None,'A0-FAIL',P) if ok is False else (n,'A0-unverifiable',P)
     # case M: member-only w, non-dim EPS
     if '-' not in w and '-' in e and not edim and w:
-        n=sum(w.values()); ok=closes(n,e['-'],num)
+        n=sum(w.values()); ok=closes(n,e['-'],num,_hw(ETAGS,'-',P),hnum,sum(_hw(WTAGS,m,P) for m in w))
         return (n,'M-ok',P) if ok else (None,'M-FAIL',P) if ok is False else (n,'M-unverifiable',P)
     # case A: non-dim w
     if '-' in w and ('-' in e or not edim):
-        n=w['-']; ok=closes(n,e.get('-'),num)
+        n=w['-']; ok=closes(n,e.get('-'),num,_hw(ETAGS,'-',P),hnum,_hw(WTAGS,'-',P))
         return (n if ok is not False else None),('A-ok' if ok else ('A-unverifiable' if ok is None else 'A-FAIL')),P
     dims=[m for m in w if m!='-']
     eds={m:e[m] for m in dims if m in e}
@@ -106,13 +116,13 @@ def rule(ticker,F,cover,form):
             if ok2: return n2,'B-member-ok/'+how,P
             return None,'B-FAIL/'+how,P
         if '-' in w:
-            n=w['-']; ok=closes(n,e.get('-'),num)
+            n=w['-']; ok=closes(n,e.get('-'),num,_hw(ETAGS,'-',P),hnum,_hw(WTAGS,'-',P))
             if ok: return n,'A2-ok',P
         return None,'B-unmapped',P
     if '-' not in w and not e and w:
         return sum(w.values()),'M0-unverifiable',P
     if '-' in w:
-        n=w['-']; ok=closes(n,e.get('-'),num)
+        n=w['-']; ok=closes(n,e.get('-'),num,_hw(ETAGS,'-',P),hnum,_hw(WTAGS,'-',P))
         return (n if ok is not False else None),('A3-ok' if ok else ('A3-unverifiable' if ok is None else 'A3-FAIL')),P
     return None,'no-rule',P
 if __name__=='__main__':
