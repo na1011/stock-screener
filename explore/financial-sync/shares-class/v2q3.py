@@ -41,8 +41,12 @@ def cfdata(t):
             if 'start' in x and 80<days((x['start'],x['end']))-1<100: q3.setdefault(x['accn'],{}).setdefault((x['start'],x['end']),x['val'])
     return forms,q3,EPS,NUM
 by=collections.defaultdict(list)
+MC={}
+for g,t,c,a,f in todo:
+    if f>=W: MC[t]=True
 for g,t,c,a,f in todo: by[(t,c)].append((f,a))
-RAT=[]; anch={}; res={}; why=collections.Counter(); q4src=collections.Counter()
+TAUC_PT=float(os.environ.get('TAUC_PT','0.044'))
+RAT=[]; anch={}; res={}; PT2=collections.Counter(); why=collections.Counter(); q4src=collections.Counter()
 for (t,c),fl in sorted(by.items()):
     forms,q3,EPS,NUM=cfdata(t)
     # 그 발행사의 모든 10-Q(앵커 여부 무관): 자기 3개월 기간과 그 공시 시점 값
@@ -53,7 +57,22 @@ for (t,c),fl in sorted(by.items()):
             ok=closes(v,EPS.get((a,P)),NUM.get((a,P))) if v else False
             tenq[a]=(fd,P,v,'cf' if ok is not False else 'cf-FAIL')
     st=[]; prev=None
-    for f,a in sorted(set(fl)):
+    fa_=json.load(open(os.path.join(D,'tcf',t+'.json')))['facts']
+    dei={x['accn']:x['val'] for x in fa_.get('dei',{}).get('EntityCommonStockSharesOutstanding',{}).get('units',{}).get('shares',[])}
+    mine={a for f,a in fl}
+    dseq=[(fd,a) for a,(fm,fd) in forms.items() if fm in('10-K','10-Q','20-F','40-F') and a not in mine and a in dei and fd>=min(f for f,a in fl)]
+    events=sorted([(f,a,'T') for f,a in set(fl)]+[(fd,a,'d') for fd,a in dseq])
+    for f,a,kind in events:
+        if kind=='d':
+            v=dei[a]
+            if MC.get(t) and forms.get(a,('',))[0]=='10-Q' and a in q3:
+                wq=q3[a][max(q3[a],key=lambda p:p[1])]
+                if wq and abs(v/wq-1)>TAUC_PT:
+                    PT2['d->avg']+=1; v=wq   # 참여를 원장이 확인 못 함 → 평균
+                    if prev and abs(v/(prev[1]*sfac(t,prev[0],f))-1)>TAU: st.append((f,'X',f'jump-d {prev[1]/1e6:.1f}->{v/1e6:.1f}M')); prev=(f,v); continue
+            if prev and v>0 and t in VERB: print(t,f,'d-dei',round(v/1e6,1),'prev',round(prev[1]*sfac(t,prev[0],f)/1e6,1))
+            if v>0: st.append((f,'O','d')); prev=(f,v)
+            continue
         form=forms.get(a,('10-Q',f))[0]
         try: F,cover=load(os.path.join(D,'tinst',f'{c}_{a}.xml'))
         except Exception: st.append((f,'X','noinst')); prev=None; continue
@@ -71,6 +90,8 @@ for (t,c),fl in sorted(by.items()):
                 Lm,_=lpmember(t,cover,list(em))
                 if Lm and em[Lm]: Npt=sum(cv[m]*em[m] for m in S)/em[Lm]
         if form.startswith('10-Q'): tenq[a]=(f,P,n,'inst')
+        if Npt is None and cv and form.startswith('10-Q') and abs(sum(cv.values())/n-1)<=TAUC_PT:
+            Npt=sum(cv.values()); PT2['todo-c']+=1
         if Npt is not None:
             RAT.append((t,f,Npt/n))
             if t in VERB: print(t,f,form[:5],'POINT',round(Npt/1e6,1),'n',round(n/1e6,1))
@@ -89,6 +110,8 @@ for (t,c),fl in sorted(by.items()):
             nq=(n*tot-adj)/q4d
             for p,(fd,v,s) in byp.items(): q4src[s]+=1
             if nq<=0: st.append((f,'X','q4<=0')); prev=None; continue
+            if cv and abs(sum(cv.values())/nq-1)<=TAUC_PT:   # 10-K: 유도한 Q4 분모로 전 클래스 참여 확인 → 시점 값
+                PT2['todo-c-10K']+=1; st.append((f,'O','P2')); prev=(f,sum(cv.values())); continue
         if t in VERB: print(t,f,form[:5],k.split('/')[0],round(nq/1e6,1),'prev',None if not prev else round(prev[1]*sfac(t,prev[0],f)/1e6,1))
         if prev:
             pv=prev[1]*sfac(t,prev[0],f)
@@ -114,6 +137,6 @@ for t,v in sorted(pre.items()): print('  접두',t,v[0],v[1][:2])
 import math
 b=collections.Counter()
 for t,f,r in RAT: b[round(math.log10(r),1)]+=1
-print('N/n log10 분포',sorted(b.items()))
+print('2b',dict(PT2)); print('N/n log10 분포',sorted(b.items()))
 print('N/n 밖(0.67~1.5):',[(t,f,round(r,3)) for t,f,r in RAT if not 0.67<r<1.5])
 pc=collections.Counter(k for st in res.values() for d,s_,k in st if s_=='O'); print('통과 갈래',pc.most_common(6))
