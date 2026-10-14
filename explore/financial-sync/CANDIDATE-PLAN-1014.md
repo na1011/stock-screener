@@ -92,3 +92,20 @@
 - **하류**: 후보 FR의 무효화(`StoredIndicatorInvalidationPort` — 그 종목의 `trade_date >= 시작일` 행 삭제)는 지표 행이 있는 후보에만 닿는다 — 지금 장부 비편입 중 7종목 · 178,717행(RGC GLNG TLRY MKC.V CALM AIR CLBT · 끝날 09-10~10-08).
   - 그 행은 편입 창 밖 날짜에도 있다(★ RGC 편입 2025-09-24~2026-06-26인데 지표 끝 09-10 · TLRY는 `US_LISTED` 말고 편입이 없는데 09-10까지). 전 시장으로 편입 창 밖 지표 행은 8,831,855(국내 218종목 · 미국 433종목).
   - 읽는 쪽: 백분위(`PercentileCalculator`)가 그날의 편입으로 모집단을 거른다(`JOIN universe_membership … effective_from <= ? AND (effective_to IS NULL OR effective_to > ?)`) — 편입 창 밖 행은 값에 안 들어간다. 그래서 후보 FR이 그 행을 지워도 화면·순위 값이 안 바뀌고, 14:20 화해가 다시 쓰는지는 재지 않았다(값에 안 닿으므로 수용 기준에 안 넣는다).
+
+## 7. 반증 판정 (10-14 · 두 렌즈 모두 「고쳐서 간다」) — 그리고 순서를 바꾼다
+
+**순서**: 이 계획은 **주식수 클래스 축(reload-gate 「주식수 0」 행) 뒤로 간다.** 계획 밖 렌즈가 「지금 0」이 도구의 사각이라고 짚었고 내가 다시 쟀다(★ SELECT):
+- `cand.py`는 2년 안 주식수가 있는 종목만 순위에 넣어 「주식수가 아예 없는 종목」을 원리적으로 못 본다.
+- 재무가 있는데 주식수가 전 행 NULL인 미국 종목 177. 최신 자본이 문턱($6.21B) 위인 보통주: `BRK.A`·`BRK.B`(750.2B) · `BIDU`(39.5B · ADS) · `V`(35.7B) · `STZ`(8.5B) · `FWONA`·`FWONK`(7.6B) — 전부 `US_TOP1000` 편입 이력이 없다(V·BRK·STZ·FWON은 `US_LISTED`만). `CHSC*` 다섯은 우선주다.
+- 뿌리는 복수 클래스 발행사의 클래스 축 dei(`companyfacts`가 차원 사실을 안 준다) — 후보 FR을 돌려도 NULL이 그대로라 이 계획의 기제로는 안 닫힌다. 그래서 이 계획보다 크게 틀어진 같은 축이고 먼저 간다.
+
+**고쳐 쓸 것(v2에 싣는다 · 내가 재서 닫는다 — 다시 반증하지 않는다)**
+1. 행이 생기기 전 공시는 장부가 영영 안 받는다(`SecFilingListSource.toDay`가 `stocksByCik` 밖 CIK를 버리고 커서가 닫은 날을 다시 안 받음) → 주간 화해가 **새로 만든 행**에 좁힌 FR을 한 번 붙인다.
+2. `US_LISTED`는 순위 후보의 상위 집합이 아니다(ADR-0171 숨은 상장 — 10-10 받음 `DFLI MDCX NIVF NXGL`) → 후보 술어를 「미국 · 활성 편입 없음 · 열린 장부 행」으로(편입 조건 뺌) 또는 숨은 상장 보완을 화해에도. §6b 「상위 집합」 문장은 거짓이었다.
+3. 새 행의 `sic_code` NULL이 순위의 비사업회사 거름을 통과한다(`UsMarketCapUniverseAdapter:325`) → 만든 행에 company-profile을 함께.
+4. 후보에는 기업행위 원장이 없어(`CorporateActionJob` 모집단 `windowMemberIds`) 공시 뒤 분할이 순위에 안 실린다 → 모집단에 후보를 넣거나 수용 기준에서 분할 꼴을 따로 센다(후보 역분할 빈도 재지 않음).
+5. `runForConsumption`이 `universeCode`를 null로 박는다(`FinancialRefillJob:163`) — 후보 티커만 주면 던진다 → 시그니처. 후보 다리는 편입·국내 소비 **뒤 자기 try**(던지면 그날 국내 소비가 안 돈다).
+6. 알림 억제 키가 `jobName:targetDate`라 같은 날 FR 여러 판이 서로 알림을 삼킨다 → **main에서 고쳤다(`9752a6ce` · 실행 id를 키에 · 시험 붉음 확인 뒤 초록)** — 2부 2차에 이미 있던 결함.
+7. 후보 FR 실패의 상시 알림(#182 후보 실패 2,218 · 그중 지금 장부 종목 23)과 티커 재사용의 CIK 연속성 · 창 밖 후보(TLRY 꼴)의 무효화가 다시 안 써짐과 `fillsSameAfternoon` 알림 문구 · 토요일 꼬리 이중 실행 · 금지 문장 전수(`StockRegistrar:511` · `CompanyProfileJob:32` · `AdminJobLauncher:139` · ADR-0088·0090).
+8. §6c 「편입 창 밖」 묶음은 오류 형태 1이었다 — 7종목 중 6은 보존 창 과거 편입이라 ①이 다시 쓰고, TLRY만 창 밖이다.
