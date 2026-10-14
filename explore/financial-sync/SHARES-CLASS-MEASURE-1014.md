@@ -40,3 +40,19 @@
 - 비상장 클래스의 전환 비율을 원장이 주는가(10-K 본문 · 다른 XBRL 태그) — 안 주면 그 발행사의 발행사 단위 지표는 미표시(진짜 한계) · 줄 시총은 낸다.
 - 과거 판(표지 dei 태깅 전 · 2019 앞)의 범위와 관문 재적재·복원 재생의 범위.
 - 원장이 판마다 클래스 구성을 바꾸는 발행사(이랬다 저랬다)를 특수 갈래로 살릴지 빼낼지 — 사용자 10-14 지침.
+
+## 6. 전환 비율 · EPS 분모 · 과거 판 · 소비자 (★ 10-14 저녁 · SEC 32발행사 최신 인스턴스 + 6발행사 과거 10-K 4판)
+- **전환 비율은 원장이 준다 — 진짜 한계 후보였던 §4의 마지막 줄은 가짜 한계다.** 클래스마다 경제적 권리가 다른 발행사는 `us-gaap:EarningsPerShareBasic`을 `StatementClassOfStockAxis` 구성원마다 싣는다.
+  - `V` 2026 Q3(3개월): A 2.97 · B-1 4.59 · B-2 4.47 · B-3 4.47 · C 11.87 → C/A 3.997(정관 4) · B-1/A 1.545. **B 비율은 판마다 바뀐다**(2011 B/A 0.64 · 2014 0.44 · 2017 1.65 — 소송 에스크로 조정 · 2024 교환으로 B가 B-1·B-2·B-3로 갈림).
+  - `BRK` 2026 Q2: `brka:EquivalentClassAMember` 17,868 · `EquivalentClassBMember` 11.91 → 1,500.3(정관 1,500). 구성원 이름이 판마다 바뀐다 — 2011·2014 축 없는 값 = A 환산 · 2011~2017 `CommonClassA/B` · 2020~ `EquivalentClassA/B`.
+  - `GOOGL`: A·B·C가 같은 값(9.23) · `BIDU`: ADS 1.95 대 보통주 0.24(비율 8.1 — 반올림 탓, ADS 1 = A 8주는 재지 않음).
+  - 반올림 오차: 비율을 EPS 둘로 내면 EPS 자릿수만큼 흔들린다(`BIDU` 1.6% · `V` C 0.1% · `BRK` 0.02%).
+- **EPS 분모(축 없는 `WeightedAverageNumberOfSharesOutstandingBasic`) 대 dei 클래스 합**(32발행사 최신 분기): 24발행사가 0.98~1.03 · `MSTR` 0.918(분기 중 대량 발행) · `WSO` 0.925 · `TPG` **0.428** · `SF` 0.41(우선주 예탁 구성원을 합에 넣은 내 합산 탓 — 보통주만이면 재지 않음) · `V`·`BRK`·`STZ`·`FWON`·`BIDU`·`FOX`는 축 없는 분모가 없다(클래스별·환산 단위로만 준다 — `BRK` B 환산 2,154.7M = A×1,500 + B).
+  - `TPG`(Up-C): Class B 217.8M은 경제적 권리가 없어 EPS 분모에서 빠진다(분모 164.7M ≈ A 160.1M + 무의결 6.6M). 우리 저장값 385.5M은 전부 합한 수라 `TPG`의 주당 지표가 2.3배쯤 틀린다. 게다가 저장된 순이익 93.4M / EPS 0.44 = 212M이라 분자·분모 어느 쪽도 원장의 EPS 기저와 안 맞는다 — **발행사마다 기준이 판이한 꼴**(Up-C의 지배주주 순이익 정의)이다.
+- **우리 DB의 클래스 줄 저장값이 판마다 뒤집힌다**: `HEI` 2026 Q1 141,029,000(발행사 합계) → Q2·Q3 55,143,000(HEI 클래스) — 후보 태그 4개(`SecEdgarColumn.SHARES_OUTSTANDING`) 중 어느 것이 그 판에 있었느냐가 기준을 정한다. 함의값(순이익/EPS) 139.3M.
+- **과거 판(10-K 2011·2014·2017·2020 · `V`·`BRK`·`GOOGL`·`HEI`·`CMCSA`)**: 클래스별 dei 주식수는 **2011부터 전 판에 있다.** **`TradingSymbol`의 구성원 짝은 2019 표지 iXBRL부터다** — 그 앞은 축 없는 한 값(`'GOOG, GOOGL'` · `'BRKA'` · `'hei'` · `'cmcsa'`)이라 클래스→티커 짝을 원장이 안 준다. 구성원 이름도 바뀐다(`HEI` `CommonStockMember` → `HeicoCommonStockMember` · `CMCSA` 2015까지 `ClassSpecialCommonStockMember`=CMCSK).
+- **소비자(★ grep · 코드 읽기)** — 편입은 CIK마다 대표 줄 하나다(`dropCikDuplicates` · ADR-0169 · 거래대금 최대). 그래서 대표 줄 L의 소비자는 둘로 갈린다.
+  - **발행사 주식수를 L 단위로**(N_L = Σ 참여 클래스 수 × 그 클래스 EPS/L의 EPS): 순위(`JdbcStoredShareCounts` × 종가) · `MARKET_CAP` · `PER`·`EPS_TTM`·`PBR`·`PSR`(`perShareOn`) · `EPS_GROWTH_TTM_YOY`·`EPS_CAGR_5Y` · `RETAINED_TO_MARKET_4Y` · `NCAV_TO_MARKET` · `SHARES_GROWTH_3Y` · `ShareBasisDeriver`(판 사이 비 — 기저가 판마다 같아야 한다) · `GovernanceFactDeriver`/`AlpacaGovernanceFactMapper`(배당 총액 = 줄 DPS × N_L · 함의값 게이트가 이미 순이익/EPS로 검산).
+  - **그 줄 클래스 수**(C_L): `TURNOVER_RATIO`·`TURNOVER_RATIO_60`(줄 거래량 ÷ 주식수 — 국내 `listed_shares`도 그 줄의 상장주식수다). N_L로 나누면 `GOOGL` 회전율이 약 절반이 된다.
+  - 단일 클래스 발행사는 N_L = C_L이라 지금 값이 안 바뀐다.
+- 모집단 전수(비편입 복수 줄 발행사 565의 최신 인스턴스)는 배경에서 받는 중 — §7.
