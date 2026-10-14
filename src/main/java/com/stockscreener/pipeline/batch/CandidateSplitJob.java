@@ -78,30 +78,21 @@ public class CandidateSplitJob {
     }
 
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
-        BatchExecutionContext execution = batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0,
+        // 대상 수를 실행 행에 바로 싣도록 조회·계획을 먼저 한다(대상 0으로 열면 「성공 + 실패 = 대상」이 깨진다 — D4).
+        // 조회가 실패하면 그 자리에서 실행 행을 열어 치명 실패로 남긴다 — 조용히 아무 행도 없이 끝나지 않게.
+        List<Target> plan;
+        try {
+            plan = planFromSource(asOf);
+        } catch (DataSourceException e) {
+            batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, BatchExecutionRecorder.DeclaredScope.FULL)
+                    .failFatally(e);
+            return BatchStatus.FAILED;
+        }
+        BatchExecutionContext execution = batchExecutions.start(JOB_NAME, asOf, triggeredBy, plan.size(),
                 BatchExecutionRecorder.DeclaredScope.FULL);
         List<CorporateActionCollector.NearDuplicate> conflicts = new ArrayList<>();
-        int stale;
-        int targets;
         try {
-            if (source == null) {
-                throw new DataSourceException(DataSourceException.Kind.AUTH, "alpaca:corporate-action",
-                        "Alpaca 키가 없어 기업 행위 어댑터가 등록되지 않았다 — 후보 분할을 못 받는다.");
-            }
-            List<StoredShareCounts.ShareCount> counts = shareCounts.activeByMarket(UsMarket.CODE,
-                    asOf.minusYears(SHARES_MAX_AGE_YEARS), asOf);
-            LocalDate from = counts.stream().map(StoredShareCounts.ShareCount::publishedAt).min(LocalDate::compareTo)
-                    .orElse(asOf).plusDays(1);
-            if (from.isAfter(asOf)) {
-                return execution.finish("후보 주식수 없음 — 조회하지 않았다");
-            }
-            execution.stage("시장 전체 분할·병합 조회");
-            AlpacaCorporateActionAdapter.MarketSplits splits = source.fetchMarketSplits(from, asOf);
-
-            List<Target> plan = plan(counts, splits, asOf);
-            stale = plan.size();
-            targets = plan.size();
-            execution.plan(CollectionPhase.ADJUSTMENT, targets);
+            execution.plan(CollectionPhase.ADJUSTMENT, plan.size());
             execution.stage("후보 분할 기록");
             for (Target target : plan) {
                 execution.process(target.security(), CollectionPhase.ADJUSTMENT, security -> {
@@ -121,14 +112,35 @@ public class CandidateSplitJob {
                 execution.alertOperator(AlertSeverity.WARNING, "후보 분할이 원장의 근접중복에 걸렸다", body.toString());
             }
         } catch (DataSourceException e) {
+            // 종목 루프의 치명 실패(인증 등) — 종목 실패가 아니라 실행을 끝낸다.
             execution.failFatally(e);
             return BatchStatus.FAILED;
         } catch (RuntimeException e) {
             execution.failUnexpectedly(e);
             throw e;
         }
-        return execution.finish("공시일 뒤 분할이 있는 후보 %d종목 · 기록 %d · 근접중복 %d".formatted(stale,
+        return execution.finish("공시일 뒤 분할이 있는 후보 %d종목 · 기록 %d · 근접중복 %d".formatted(plan.size(),
                 execution.writtenRowCount(), conflicts.size()));
+    }
+
+    /** 순위 판독기의 후보 → 시장 전체 분할 조회 → 적을 종목. 후보 주식수가 없으면 부르지 않고 빈 계획이다. */
+    private List<Target> planFromSource(LocalDate asOf) throws DataSourceException {
+        if (source == null) {
+            throw new DataSourceException(DataSourceException.Kind.AUTH, "alpaca:corporate-action",
+                    "Alpaca 키가 없어 기업 행위 어댑터가 등록되지 않았다 — 후보 분할을 못 받는다.");
+        }
+        List<StoredShareCounts.ShareCount> counts = shareCounts.activeByMarket(UsMarket.CODE,
+                asOf.minusYears(SHARES_MAX_AGE_YEARS), asOf);
+        if (counts.isEmpty()) {
+            log.info("후보 분할: 순위 판독기에 미국 주식수가 없다 — 조회하지 않는다.");
+            return List.of();
+        }
+        LocalDate from = counts.stream().map(StoredShareCounts.ShareCount::publishedAt).min(LocalDate::compareTo)
+                .orElseThrow().plusDays(1);
+        if (from.isAfter(asOf)) {
+            return List.of();
+        }
+        return plan(counts, source.fetchMarketSplits(from, asOf), asOf);
     }
 
     /**

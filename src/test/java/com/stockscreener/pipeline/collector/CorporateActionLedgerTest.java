@@ -51,6 +51,18 @@ class CorporateActionLedgerTest {
     }
 
     @Test
+    @DisplayName("봉이 하나도 없는 종목은 평일로 거래일을 센다 — 26일 간격 연속 병합은 둘 다 들고, 평일 2일 간격 중복은 하나로 묶인다(ADR-0178 · WHLR·HKIT)")
+    void barlessStockCountsWeekdays() {
+        // 대조: 봉이 없으면 예전 규칙(봉 0개 ≤ 5)은 45일 상한 안의 모든 쌍을 같은 사건으로 묶었다 — 둘째 병합이 버려졌다.
+        assertThat(ledger.record(stockId, disclosed("2026-08-27", "0.25")).outcome())
+                .isEqualTo(CorporateActionLedger.Outcome.INSERTED);
+        assertThat(ledger.record(stockId, disclosed("2026-09-22", "0.1111111111")).outcome())
+                .as("CUSIP 사슬이 이어지는 별개 사건(WHLR) — 평일 18일").isEqualTo(CorporateActionLedger.Outcome.INSERTED);
+        assertThat(ledger.record(stockId, disclosed("2026-09-24", "0.1111111111")).outcome())
+                .as("같은 사건이 며칠 뒤 다시 옴(HKIT 꼴) — 평일 2일").isEqualTo(CorporateActionLedger.Outcome.NEAR_DUPLICATE);
+    }
+
+    @Test
     @DisplayName("휴리스틱 후보는 OBSERVED로, 공시는 APPROVED로 들어간다 — 이것이 승인 게이트다")
     void detectionSourceDecidesInitialStatus() {
         ledger.record(stockId, heuristic("2026-02-02", "0.1"));

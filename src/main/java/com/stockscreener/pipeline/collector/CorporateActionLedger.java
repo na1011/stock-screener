@@ -53,6 +53,11 @@ public class CorporateActionLedger {
      * 서로 몇 년 떨어진 별개 사건까지 같은 사건으로 삼킨다. 상장 전·상장폐지 종목이 그 모양이다.
      * 45일은 거래정지를 낀 일자 어긋남(대한전선 2023은 11거래일이 비어 있다)을 넉넉히 덮으면서
      * 그 퇴화를 막는 자리다.
+     *
+     * <p><b>봉이 하나도 없는 종목은 평일 수로 거래일을 센다</b>({@link #findNearDuplicate}) — 상한만 남기면 45일 안의
+     * 별개 사건이 하나로 묶인다. 미국 순위 후보(ADR-0178 · 봉 없음)가 그 모양이었다: Alpaca가 주는 연속 병합
+     * (WHLR 08-27 → 09-22 · NIVF 09-01 → 10-12 — CUSIP이 사슬로 이어지는 별개 사건)의 둘째가 버려졌고, 같은 CUSIP 쌍이 며칠
+     * 간격으로 두 번 온 중복(HKIT 07-02·07-06 · WHLR 11-28·12-01)은 평일 수로도 5 안이라 그대로 하나로 묶인다(2026-10-15 D4).
      */
     private static final int NEAR_DUPLICATE_CALENDAR_DAYS = 45;
 
@@ -740,20 +745,28 @@ public class CorporateActionLedger {
      * 공휴일 달력을 두지 않겠다는 결정이 여기서도 성립한다({@link PriceCalendar}와 같은 이유).
      */
     private Optional<ExistingRow> findNearDuplicate(long stockId, LocalDate effectiveDate) {
+        // 봉이 하나라도 있으면 그 종목의 봉을 센다(거래정지를 넘는다). 하나도 없으면 평일을 센다 — 0거래일로 퇴화하면 달력 상한
+        // 안의 별개 사건이 다 묶인다(NEAR_DUPLICATE_CALENDAR_DAYS의 javadoc).
         return jdbcTemplate.query("""
                 SELECT ca.id, ca.effective_date, ca.status, ca.detection_source
                 FROM corporate_action ca
                 WHERE ca.stock_id = ? AND ca.effective_date <> ?
                   AND abs(ca.effective_date - ?) <= ?
-                  AND (SELECT count(*) FROM price_daily p
-                       WHERE p.stock_id = ca.stock_id
-                         AND p.trade_date >  least(ca.effective_date, ?)
-                         AND p.trade_date <= greatest(ca.effective_date, ?)) <= ?
+                  AND (CASE WHEN EXISTS (SELECT 1 FROM price_daily p0 WHERE p0.stock_id = ca.stock_id)
+                            THEN (SELECT count(*) FROM price_daily p
+                                  WHERE p.stock_id = ca.stock_id
+                                    AND p.trade_date >  least(ca.effective_date, ?)
+                                    AND p.trade_date <= greatest(ca.effective_date, ?))
+                            ELSE (SELECT count(*) FROM generate_series(least(ca.effective_date, ?) + 1,
+                                                                       greatest(ca.effective_date, ?), interval '1 day') g(d)
+                                  WHERE extract(isodow FROM g.d) < 6)
+                       END) <= ?
                 ORDER BY ca.effective_date
                 LIMIT 1
                 """, ROW_MAPPER,
                 stockId, effectiveDate, effectiveDate, NEAR_DUPLICATE_CALENDAR_DAYS,
-                effectiveDate, effectiveDate, NEAR_DUPLICATE_TRADING_DAYS).stream().findFirst();
+                effectiveDate, effectiveDate, effectiveDate, effectiveDate, NEAR_DUPLICATE_TRADING_DAYS)
+                .stream().findFirst();
     }
 
     private static final RowMapper<ExistingRow> ROW_MAPPER = (rs, rowNum) -> new ExistingRow(
