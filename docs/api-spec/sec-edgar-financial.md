@@ -465,7 +465,9 @@ BRK.B 7·82 · AKTX 29·72·90 · V 2) **같은 `(start, end, accn)`에 값이 �
 후보 태그 넷이 **전부 404이고 `companyfacts`에도 없다** — 클래스가 서로 덮는 것이 아니라
 **소스가 그 개념을 아예 안 낸다.** `V`는 팩트가 **2개뿐**이라 낡음이 원인이다(위 최신성 가드).
 
-### 주식수 결손 165종목에 전수로 물었다 — 메울 수 있는 것이 사실상 없다 (2026-09-14 · 660콜)
+### 주식수 결손 165종목에 전수로 물었다 — companyfacts·companyconcept로는 메울 수 있는 것이 사실상 없다 (2026-09-14 · 660콜)
+
+> **[2026-10-14 정정] 이 절의 결론은 두 엔드포인트에 대해서만 참이다 — 원장은 공시 인스턴스로 준다.** 정기 공시 폴더의 XBRL 인스턴스(`<primary>_htm.xml`)가 `us-gaap:StatementClassOfStockAxis` 구성원마다 `dei:EntityCommonStockSharesOutstanding`을 싣고(2011 판부터 · ★ `V`·`BRK`·`GOOGL`·`HEI`·`CMCSA` 10-K 4판씩), 클래스별 `EarningsPerShareBasic`·`WeightedAverageNumberOfSharesOutstandingBasic`도 싣는다(`V` C/A 3.997 · `BRK` A/B 1,500.3). 구성원→티커 짝(`dei:TradingSymbol` 구성원 맥락)은 2019 표지 iXBRL부터다. 대조군: 같은 공시의 축 없는 사실은 companyfacts와 값이 같다. 모집단·질의·재현: 브랜치 `explore/financial-sync/SHARES-CLASS-MEASURE-1014.md` §2·§6·§7(SEC 인스턴스 752발행사 · 실패 14 = 정기 공시 없는 ETF·신탁 12 + 404 2). 아래 「`V` 최신 2010-01-27」·「`STZ` 네 태그 전부 404」는 companyfacts에 대한 사실로 남는다 — `V`·`STZ`의 클래스별 주식수는 인스턴스에 있다.
 
 「재무는 있는데 `shares_outstanding`이 전량 NULL인 165종목」에 후보 태그 넷을 전부 물었다
 (`-Dprobe.compareFacts=false`로 `companyfacts`를 건너뛰어 약 6분).
