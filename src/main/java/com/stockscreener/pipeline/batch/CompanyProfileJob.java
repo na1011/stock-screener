@@ -30,7 +30,7 @@ import java.util.List;
  * 같은 형태). 미국 업종이 그 경로로만 닿는다 — {@code US_LISTED}가 비활성이라 기본 대상
  * 질의의 {@code universe.is_active} 조인에 한 건도 안 걸리기 때문이다.
  * <b>MUST NOT: 이 갈래를 스케줄러·{@link AdminJobLauncher}에 걸지 않는다</b> — 자동 실행은
- * 활성 유니버스만 돈다.
+ * 활성 유니버스만 돈다. 리밸런싱이 만든 미국 새 행은 이 갈래가 아니라 {@link #runForCandidates}(ADR-0178)가 받는다.
  */
 @Component
 public class CompanyProfileJob {

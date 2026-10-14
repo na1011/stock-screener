@@ -80,7 +80,8 @@ public class CorporateActionJob {
      *                창을 넓혀도 콜은 거의 안 는다(전 구간 종목당 2콜, 한 달 1콜).
      * @param tickers      비면 편입 중인 활성 종목 전체.
      * @param universeCode 손으로 고른 유니버스. 주면 <b>활성 여부를 보지 않는다</b>(ADR-0090).
-     *                     자동 실행은 언제나 null이다 — 그래야 "활성"의 뜻이 한 가지로 남는다.
+     *                     자동 실행은 언제나 null이다 — 그래야 "활성"의 뜻이 한 가지로 남는다. 편입 밖 미국
+     *                     순위 후보의 분할은 이 갈래가 아니라 {@code CandidateSplitJob}(ADR-0178)이 맡는다.
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LocalDate from, List<String> tickers, String universeCode) {

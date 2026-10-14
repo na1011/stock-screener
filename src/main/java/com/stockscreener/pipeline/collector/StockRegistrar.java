@@ -527,8 +527,8 @@ public class StockRegistrar {
      * <b>유니버스 하나</b>를 골라 그 편입 종목을 낸다. <b>활성 여부를 보지 않는다.</b>
      *
      * <p>MUST NOT: 이 경로를 스케줄러·{@code AdminJobLauncher}에 걸지 않는다. 손으로 고른
-     * 유니버스 하나를 적재하는 수단이며, 자동 실행은 활성 유니버스만 돈다 — 그래야 "활성"이
-     * 무엇을 뜻하는지가 한 가지로 남는다. {@code UniverseRebalanceJob}의 {@code oneUniverse}가
+     * 유니버스 하나를 적재하는 수단이며, 자동 실행은 활성 유니버스와 이름 붙은 미국 순위 후보
+     * ({@link #usRankingCandidateIdsByTicker} · ADR-0178)만 돈다 — 그래야 "활성"이 무엇을 뜻하는지가 한 가지로 남는다. {@code UniverseRebalanceJob}의 {@code oneUniverse}가
      * 같은 이유로 같은 모양이다.
      *
      * <p>비활성인 채로 적재해야 하는 상태가 실재하기 때문에 있다 — 미국은 시세가 붙어도

@@ -137,7 +137,8 @@ public class AdminJobLauncher {
                 // IndicatorBackfillJob의 minusDays(7)을 복사하면 그 조용한 0건이 된다.
                 CorporateActionJob.JOB_NAME,
                 // MUST: universeCode에 null을 명시한다. 자동 실행은 활성 유니버스만 돈다 —
-                // 그래야 "활성"이 무엇을 뜻하는지가 한 가지로 남는다(ADR-0088·0090). JobRequest가
+                // 그래야 "활성"이 무엇을 뜻하는지가 한 가지로 남는다(ADR-0088·0090 · 편입 밖 미국 순위 후보의
+                // 분할은 비활성 갈래가 아니라 이름 붙은 후보 다리가 맡는다 — ADR-0178). JobRequest가
                 // 날짜 셋뿐이라 화면에서 실을 수도 없지만, 기본값을 잡 쪽에 두면 그 사실이
                 // 조용히 뒤집힌다.
                 request -> corporateActionJob.run(

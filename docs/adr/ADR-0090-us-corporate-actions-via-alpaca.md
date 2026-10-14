@@ -64,6 +64,7 @@ applies_to:
     적는 것은 `JOB_NAME`이 아니라 **`--job=`의 값**이다.
   - **MUST NOT: 이 갈래를 스케줄러·`AdminJobLauncher`에 걸지 않는다.** 런처의 호출부는
     `universeCode`에 **`null`을 명시**한다(ADR-0088·0089 승계).
+    편입 밖 미국 순위 후보의 분할은 이 갈래가 아니라 `CandidateSplitJob`(ADR-0178 · 시장 전체 조회)이 맡는다.
 - **MUST: 적재 명령에 `--server.port=0`을 붙인다.** 운영 앱이 8080을 물고 있으면 컨텍스트가
   죽는데 **러너는 아예 시작되지 않고 gradle이 `BUILD SUCCESSFUL` + 종료코드 0을 낸다.**
 - **MUST NOT: `ShareRatioSnap`을 미국에 쓰지 않는다.** 그것은 *관측된* 배수를 유리수에 붙이는
