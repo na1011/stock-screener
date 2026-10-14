@@ -95,3 +95,31 @@
 
 ### 재지 않은 것
 - `stockscreener.gate-bundle.us.s0: ${stockscreener.gate.us}`를 명령줄 인자 `--stockscreener.gate.us=true`가 덮을 때 묶음이 따라 켜지는지 — v1 반증이 중첩 자리표시자 16조합을 쟀으나 인자 덮기는 그 조합에 있는지 확인 안 함 · D3가 잰다.
+
+## v2 반증 판정 (2026-10-14 · 두 렌즈 모두 「고쳐서 간다」) → 지금 할 것과 미룰 것
+
+**지금 한 것: 운영 가드의 우회를 닫았다** — main `fix(pipeline): 관문 설정 가드가 relaxed 철자의 출처를 판정한다`.
+- 무엇이 우회됐나: 출처 판정이 원시 이름 일치뿐이었다. 그래서 `Stockscreener_Gate_Us` 환경변수 · `-Dstockscreener.gate.US` · `SPRING_APPLICATION_JSON`의 대문자 키가 값을 켜면서 출처는 classpath yaml로 판정돼 허용됐다(두 렌즈가 Boot 4.1.0 해석기로 실측).
+- 고친 것: 바인딩 규칙(`ConfigurationPropertySources.from` · `ConfigurationPropertyName`)으로도 출처를 묻는다. 시험 환경은 앱과 같은 해석기 + `attach`로 짓는다.
+- 변이 대조: 고침을 빼면 새 시험이 원래 결함(출처 = classpath yaml)으로 붉다.
+- 운영 `.env`에는 관문 키가 없다(`checkEnv` 키 이름). 그래서 이 고침이 운영 기동을 세우지 않는다.
+
+**설정 분리 자체는 다음 묶음 구현과 같은 판으로 미룬다**(계획 밖 렌즈 13).
+- 이 분리가 지금 닫는 틀린 칸은 0이다. main 직전에 있는 묶음이 없다 — P2 v2는 재계획 전이고, 국내 결산월은 계획 전이다.
+- 관문을 안 기다리고 자라는 결함(A2-b — 미국 `stock` 표가 08-29 뒤 0행 · 새 상장이 순위 후보가 못 된다)이 앞이다.
+
+**다음 묶음을 착수할 때 v3로 고칠 것**(반증 지적)
+- 묶음 이름 공간에서 대시를 뺀다. 접두가 겹치지 않게 한다(`stockscreener.bundle.us.s0` 꼴 — 대시는 환경변수 정준형 우회와 「gate.bundle 시장」 둔갑을 만든다).
+- 「운영 DB」를 셋째 설정으로 만들지 않는다. `guard_setting`에 `db_name = current_database()`이고 `identity_prefix IS NULL`인 행이 있는지로 묻는다(V66 재사용). 부분 상태일 때만 DB를 묻는다.
+- 부분 상태 거절은 쓰기 가능한 연결에만 건다. backtest(`readOnlyMode=always`)는 운영 DB 읽기 드라이런의 길이다.
+- 「어느 상태로 돌았나」는 note 꼬리가 아니라 `batchExecutions.start`에서 전 잡 공통으로 기록한다(새 nullable 열 · `scope` 선례).
+  - note는 마감마다 덮어쓰이고, 실패·중단·`finishQuietly` 경로에는 note가 없다.
+  - 죽은 JVM의 행은 다른 JVM이 닫는다.
+  - 다음 소비자가 지표 잡이다.
+- 바인딩 빈 입력은 `ConfigurableEnvironment`(Binder)다. `PropertyResolver`로는 enum 밖 키를 못 센다.
+- 스윕·하네스(`SecEdgarFactsReplayTest` · `EarlierVintageReplayHarnessTest` 포함) 스위치는 전용 환경변수다. 하네스가 classpath `application.yaml`을 `YamlPropertySourceLoader`로 싣고 같은 팩토리로 푼다. `-D`는 `test` 태스크 포크에 안 닿는다.
+- 두 시장 공용 소비자(`annualOf` · `overwritable`)는 행의 시장으로 고른다. 빈은 해석만 하고, 시장별 스냅숏을 잡이 계산기·Writer 호출에 싣는다. 시험: 「us 켬 · kr 끔에서 국내 행 무변화」.
+- 관문 뒤 수명: 시장 관문 뒤 주 설정을 걷는 시점, 새 묶음의 기본값, 공용 묶음의 꺼진 갈래를 걷는 시점을 적는다.
+- `ck_ca_spin_off_priced` VALIDATE(위반 0행 · 10-14 SELECT)를 그 판의 마이그레이션에 함께 넣는다.
+- 손 bootRun 절차에 「가드 거절은 종료코드 0으로 보인다(devtools 재시작) — 기동 로그 `관문 설정` 줄과 새 실행 행으로 판정」을 적는다.
+- 이미 답한 「재지 않은 것」: 인자 `--stockscreener.gate.us=true`는 yaml 자리표시자 묶음을 따라 켠다(두 렌즈 실측 · 전체 기동은 아님).
