@@ -377,11 +377,21 @@ public class FinancialRefillJob {
         if (invalidatedTickers.isEmpty()) {
             return;
         }
-        boolean scheduled = triggeredBy == BatchExecutionRecorder.TriggeredBy.SCHEDULER;
+        boolean scheduled = fillsSameAfternoon(triggeredBy);
         execution.alertOperator(AlertSeverity.WARNING,
                 scheduled ? "재무 무효화 — 14:20 화해가 채운다" : "재무 무효화 — 다음 화해까지 빈다",
                 invalidationAlertBody(invalidatedTickers, invalidatedPeriods, fullStatementTickers,
                         execution.executionId(), scheduled));
+    }
+
+    /**
+     * 이 실행의 무효화를 같은 오후 14:20 화해가 채우는가. 정기 실행(14:15)과 공시 소비(14:16 · {@code GAP_FILL} — 이 잡을
+     * 그 트리거로 부르는 자리는 {@code FilingConsumptionJob}뿐이다)가 그렇다. 소비를 손 실행 문구로 알리면 크론이 곧 쓸 행을
+     * 다른 JVM으로 쓰라고 시키게 된다.
+     */
+    static boolean fillsSameAfternoon(BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        return triggeredBy == BatchExecutionRecorder.TriggeredBy.SCHEDULER
+                || triggeredBy == BatchExecutionRecorder.TriggeredBy.GAP_FILL;
     }
 
     /** 알림 본문. 패키지 공개인 이유는 실행 컨텍스트 없이 문구를 시험하기 위해서다. */

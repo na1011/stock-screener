@@ -101,4 +101,12 @@ class FinancialRefillAlertTest {
                 .contains("13:30~15:40 밖")
                 .doesNotContain("--job=backfill");
     }
+
+    @Test
+    @DisplayName("14:16 공시 소비(GAP_FILL)도 같은 오후 14:20이 채운다 — 손 실행 문구를 내면 크론이 곧 쓸 행을 다른 JVM으로 쓰라고 시킨다")
+    void consumptionRunIsFilledTheSameAfternoon() {
+        assertThat(FinancialRefillJob.fillsSameAfternoon(BatchExecutionRecorder.TriggeredBy.GAP_FILL)).isTrue();
+        assertThat(FinancialRefillJob.fillsSameAfternoon(BatchExecutionRecorder.TriggeredBy.SCHEDULER)).isTrue();
+        assertThat(FinancialRefillJob.fillsSameAfternoon(BatchExecutionRecorder.TriggeredBy.MANUAL)).isFalse();
+    }
 }
