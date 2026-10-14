@@ -212,6 +212,7 @@ check pass "gradle이 아닌 명령의 단순 언급"       "echo --job=adjustme
 # 두었다가 가드가 넓어진 뒤에도 안 고쳐져 표가 실패를 상시로 냈다(2026-09-10~09-11).
 check deny "덤프 없이 백필 실행"                "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=backfill'" rebuild-nodump
 check deny "덤프 없이 재무 리필 실행"            "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=financial-refill'" rebuild-nodump
+check deny "덤프 없이 편입 원자료 따라잡기 실행" "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=refresh-behind'" rebuild-nodump
 check pass "덮지 않는 잡은 건드리지 않는다"       "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'" rebuild-nodump
 
 echo "── 적재 중 gradle 알림 ──"
