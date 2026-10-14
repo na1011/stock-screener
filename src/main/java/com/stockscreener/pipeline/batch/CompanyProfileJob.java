@@ -80,13 +80,19 @@ public class CompanyProfileJob {
             return batchExecutions.start(JOB_NAME, asOf, triggeredBy, 0, scope).finish();
         }
 
+        return collectAll(asOf, triggeredBy, targets, scope, "종목별 업종 수집");
+    }
+
+    /** 대상 종목마다 개황을 받는다 — 종목당 1콜이고 종목 단위로 격리한다. */
+    private BatchStatus collectAll(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                   List<SecurityRef> targets, BatchExecutionRecorder.DeclaredScope scope, String stage) {
         // 종목당 1콜이다. 착수 전에 쿼터를 가늠할 수 있어야 한다.
         log.info("기업개황 수집을 시작한다. 대상 {}종목, 예상 호출 {}회", targets.size(), targets.size());
 
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope);
         execution.plan(CollectionPhase.SECURITY_MASTER, targets.size());
-        execution.stage("종목별 업종 수집");
+        execution.stage(stage);
 
         try {
             for (SecurityRef target : targets) {
@@ -100,6 +106,25 @@ public class CompanyProfileJob {
             throw e;
         }
         return execution.finish();
+    }
+
+    /**
+     * 미국 <b>순위 후보</b>의 업종·결산월을 받는다(ADR-0178) — 리밸런싱이 막 만든 새 종목 행이 부른다. 업종(SIC)이 비면 순위 어댑터의
+     * 비사업회사 거름({@code NON_OPERATING_SIC} — 리츠·스팩)을 그냥 통과하므로 재무보다 먼저 채운다. 대상은
+     * {@code StockRegistrar.usRankingCandidateIdsByTicker}가 푼다 — 비활성 유니버스 갈래가 아니다.
+     */
+    public BatchStatus runForCandidates(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                       List<String> tickers) {
+        if (tickers == null || tickers.isEmpty()) {
+            throw new IllegalArgumentException("후보 업종 수집은 티커로 좁혀서만 부른다.");
+        }
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(stockRegistrar.usRankingCandidateIdsByTicker(tickers));
+        BatchExecutionRecorder.DeclaredScope scope = scopeOf(tickers, null);
+        if (targets.isEmpty()) {
+            throw new IllegalArgumentException("준 티커 중 미국 순위 후보가 하나도 없다: " + tickers
+                    + " — 대상 0건으로 성공시키지 않는다.");
+        }
+        return collectAll(asOf, triggeredBy, targets, scope, "후보 종목별 업종 수집");
     }
 
     /**

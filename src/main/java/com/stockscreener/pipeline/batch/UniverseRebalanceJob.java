@@ -15,7 +15,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -49,11 +51,21 @@ public class UniverseRebalanceJob {
     private final JdbcTemplate jdbcTemplate;
     private final MembershipGapFiller membershipGapFiller;
     private final FreshnessCatchUpJob freshnessCatchUp;
+    private final CandidateIntake candidateIntake;
+    private final UsCandidateFeed candidateFeed;
+
+    /**
+     * 정기 경로가 활성 지수와 함께 화해하는 <b>후보 풀</b>(ADR-0178) — 비활성인 채로 둔다. 스크리닝 모집단·지표·결손 보충·따라잡기는
+     * 활성만 보므로 이 풀의 편입은 그 어디에도 안 닿고, 하는 일은 새 상장에 {@code stock} 행을 만드는 것(공시 장부가 그 행에 공시를
+     * 붙인다)과 사라진 상장의 편입을 닫는 것이다.
+     */
+    static final List<String> CANDIDATE_POOLS = List.of("US_LISTED");
 
     public UniverseRebalanceJob(DataSourceRegistry registry, UniverseReconciler reconciler,
                                 StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
                                 AlertPort alertPort, JdbcTemplate jdbcTemplate,
-                                MembershipGapFiller membershipGapFiller, FreshnessCatchUpJob freshnessCatchUp) {
+                                MembershipGapFiller membershipGapFiller, FreshnessCatchUpJob freshnessCatchUp,
+                                CandidateIntake candidateIntake, UsCandidateFeed candidateFeed) {
         this.registry = registry;
         this.reconciler = reconciler;
         this.stockRegistrar = stockRegistrar;
@@ -62,6 +74,8 @@ public class UniverseRebalanceJob {
         this.jdbcTemplate = jdbcTemplate;
         this.membershipGapFiller = membershipGapFiller;
         this.freshnessCatchUp = freshnessCatchUp;
+        this.candidateIntake = candidateIntake;
+        this.candidateFeed = candidateFeed;
     }
 
     /**
@@ -91,15 +105,18 @@ public class UniverseRebalanceJob {
      * 2026-09-10에 거짓으로 판명됐다</b>(ADR-0135 · 소스가 그날 명부를 준다). 남는 이유는
      * <b>관측이 공짜이고 정확하다</b>는 것이다.
      *
-     * <p>MUST NOT: 이 경로를 스케줄러에 걸지 않는다. 손으로 고른 지수 하나를 채우는 수단이며,
-     * 자동 실행은 활성 지수만 돈다 — 그래야 "활성"이 무엇을 뜻하는지가 한 가지로 남는다.
+     * <p>MUST NOT: 이 경로를 스케줄러에 걸지 않는다. 손으로 고른 지수 하나를 채우는 수단이다.
+     * 자동 실행은 활성 지수와 <b>이름 붙은 후보 풀</b>({@link #CANDIDATE_POOLS} · ADR-0178)만 돈다 — 후보 풀은 비활성인 채로
+     * 화해만 하므로 "활성 = 스크리닝 모집단"의 뜻은 그대로 한 가지다.
      *
      * @param onlyCode 채울 지수 코드. {@code null}이면 활성 지수 전체다.
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            String onlyCode) {
         List<UniverseTarget> targets =
-                onlyCode == null ? activeUniverses() : oneUniverse(onlyCode);
+                onlyCode == null ? scheduledTargets() : oneUniverse(onlyCode);
+        boolean candidatePool = targets.stream().anyMatch(t -> CANDIDATE_POOLS.contains(t.universeCode()));
+        Instant runStart = candidatePool ? candidateIntake.now() : null;
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scopeOf(onlyCode));
 
@@ -181,7 +198,28 @@ public class UniverseRebalanceJob {
         // 결손 보충 뒤라 그 갈래가 방금 넣은 0행 종목도 이 술어에 들어온다(initial-load는 표지를 안 쓴다 · 같은 값을 한 번 더 맞춘다).
         // 따로 부르는 이유: 이 단계의 실패가 「편입 결손 보충 실패」 알림으로 읽히지 않게. 둘 다 던지지 않는다.
         freshnessCatchUp.runAfterRebalance(triggeredBy);
+        // 후보 풀을 돈 실행이면 그 실행이 만든 미국 행에 업종·재무를 한 번 붙인다(ADR-0178) — 손으로 US_LISTED 하나를 골라도 같다.
+        // 던지지 않는다(리밸런싱은 이미 끝났다 · 실패는 그 안에서 알린다).
+        if (candidatePool) {
+            candidateIntake.run(asOf, runStart);
+        }
         return status;
+    }
+
+    /**
+     * 정기 경로의 대상 — 활성 지수 전체와, {@link UsCandidateFeed}가 켜졌으면 후보 풀({@link #CANDIDATE_POOLS}). 후보 풀이 이미
+     * 활성이면(누가 켰다) 한 번만 돈다. 후보 풀은 지수 루프 안이라 꼬리(결손 보충·업종·따라잡기)가 한 번만 돈다.
+     */
+    private List<UniverseTarget> scheduledTargets() {
+        List<UniverseTarget> targets = new ArrayList<>(activeUniverses());
+        if (candidateFeed.enabled()) {
+            for (String code : CANDIDATE_POOLS) {
+                if (targets.stream().noneMatch(t -> t.universeCode().equals(code))) {
+                    targets.addAll(oneUniverse(code));
+                }
+            }
+        }
+        return targets;
     }
 
     /**

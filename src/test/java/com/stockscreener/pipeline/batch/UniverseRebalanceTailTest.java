@@ -43,6 +43,8 @@ class UniverseRebalanceTailTest {
     private BatchExecutionContext execution;
     private MembershipGapFiller membershipGapFiller;
     private FreshnessCatchUpJob freshnessCatchUp;
+    private DataSourceRegistry registry;
+    private CandidateIntake candidateIntake;
     private UniverseRebalanceJob job;
 
     @BeforeEach
@@ -57,9 +59,58 @@ class UniverseRebalanceTailTest {
                 .thenReturn(execution);
         when(execution.finishQuietly()).thenReturn(BatchStatus.SUCCESS);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class))).thenReturn(List.of());
-        job = new UniverseRebalanceJob(mock(DataSourceRegistry.class),
+        registry = mock(DataSourceRegistry.class);
+        candidateIntake = mock(CandidateIntake.class);
+        job = job(false);
+    }
+
+    private UniverseRebalanceJob job(boolean candidateFeed) {
+        return new UniverseRebalanceJob(registry,
                 mock(UniverseReconciler.class), mock(StockRegistrar.class), batchExecutions,
-                mock(AlertPort.class), jdbcTemplate, membershipGapFiller, freshnessCatchUp);
+                mock(AlertPort.class), jdbcTemplate, membershipGapFiller, freshnessCatchUp,
+                candidateIntake, new UsCandidateFeed(candidateFeed));
+    }
+
+    /** 후보 풀 행을 그 유니버스 질의에 답한다 — {@code UniverseTarget}이 private record라 행 매퍼를 거쳐 만든다. */
+    @SuppressWarnings("unchecked")
+    private void candidatePoolExists() {
+        when(jdbcTemplate.query(org.mockito.ArgumentMatchers.contains("WHERE code = ?"), any(RowMapper.class),
+                eq("US_LISTED"))).thenAnswer(inv -> {
+                    RowMapper<Object> mapper = inv.getArgument(1);
+                    java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+                    when(rs.getString("code")).thenReturn("US_LISTED");
+                    when(rs.getString("market_code")).thenReturn("US");
+                    when(rs.getBoolean("is_active")).thenReturn(false);
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+    }
+
+    @Test
+    @DisplayName("후보 공급이 꺼져 있으면 정기 리밸런싱이 후보 풀을 안 돌고 인입도 없다 — 드라이런 전의 main이 배포돼도 그대로다")
+    void candidatePoolWaitsForTheSetting() throws Exception {
+        candidatePoolExists();
+
+        job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        verify(registry, org.mockito.Mockito.never()).universeSource("US_LISTED");
+        verifyNoInteractions(candidateIntake);
+    }
+
+    @Test
+    @DisplayName("후보 공급이 켜지면 정기 리밸런싱이 후보 풀을 지수 루프 안에서 돌고, 꼬리(결손 보충·따라잡기) 뒤에 인입을 한 번 부른다")
+    void candidatePoolIsReconciledInTheLoopAndFedAfterTheTail() throws Exception {
+        candidatePoolExists();
+        java.time.Instant start = java.time.Instant.parse("2026-10-17T11:00:00Z");
+        when(candidateIntake.now()).thenReturn(start);
+
+        job(true).run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        verify(registry).universeSource("US_LISTED");
+        InOrder order = inOrder(execution, membershipGapFiller, freshnessCatchUp, candidateIntake);
+        order.verify(execution).finishQuietly();
+        order.verify(membershipGapFiller).fillAndAlert(any(), any());
+        order.verify(freshnessCatchUp).runAfterRebalance(BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        order.verify(candidateIntake).run(AS_OF, start);
     }
 
     @Test
