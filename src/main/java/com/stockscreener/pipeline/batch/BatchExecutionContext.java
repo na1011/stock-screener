@@ -693,9 +693,15 @@ public final class BatchExecutionContext {
         return jobName;
     }
 
-    /** 같은 잡·같은 대상일의 알림은 하나로 묶인다. Phase 6의 억제 정책이 이 키를 쓴다. */
+    /**
+     * 한 실행의 같은 알림은 하나로 묶인다. Phase 6의 억제 정책이 이 키를 쓴다.
+     *
+     * <p>MUST: 실행 id를 키에 넣는다. 같은 잡·같은 대상일이 한 오후에 여러 번 돈다 — 14:16 소비가 미국 FR과 국내 FR을 잇달아
+     * 부른다. 잡 이름과 대상일만으로 묶으면 10분 억제가 뒤 실행의 부분 실패·무효화 알림을 삼키고, 그 실패는 어디에도 안 알려진다.
+     * 수동 재시도가 같은 실패를 한 번 더 알리는 것이 그 반대보다 낫다({@code AlertSuppressor} javadoc).
+     */
     private String dedupeKey() {
-        return jobName + ':' + targetDate;
+        return jobName + ':' + targetDate + ':' + executionId;
     }
 
     /**

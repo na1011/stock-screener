@@ -306,4 +306,29 @@ class MarketCompletenessTest {
         assertThat(delivered).extracting(AlertEvent::title).containsExactly("governance-load 부분 실패");
         verify(recorder).finish(eq(7L), any(), any(), eq(List.of("KOSPI")));
     }
+
+    @Test
+    @DisplayName("같은 잡·같은 대상일의 두 실행(14:16 소비의 미국 FR → 국내 FR)은 부분 실패 알림을 하나씩 보낸다 — 앞 실행이 10분 억제로 뒤 실행을 삼키지 않는다")
+    void sameDayRunsOfOneJobAlertSeparately() throws Exception {
+        List<AlertEvent> delivered = new ArrayList<>();
+        CompositeAlertPort alertPort = new CompositeAlertPort(List.of(recordingChannel(delivered)),
+                new AlertSuppressor(Duration.ofMinutes(10)), new LoggingAlertPort());
+        StockTaskRunner runner = mock(StockTaskRunner.class);
+        BatchExecutionRecorder recorder = mock(BatchExecutionRecorder.class);
+        when(recorder.finish(anyLong(), any(), any(), any())).thenReturn(BatchStatus.PARTIAL_SUCCESS);
+        when(runner.runInNewTransaction(any(), any()))
+                .thenThrow(new DataSourceException(Kind.TRANSIENT, "sec", "503"));
+
+        for (long executionId : new long[] {7L, 8L}) {
+            BatchExecutionContext context = new BatchExecutionContext(executionId, "financial-refill",
+                    LocalDate.of(2026, 10, 29), new StockTaskExecutor(runner, recorder), recorder, alertPort,
+                    id -> { }, ALL_SOURCES, false);
+            context.process(new SecurityRef(executionId, "US", "T" + executionId), CollectionPhase.FINANCIAL,
+                    security -> 1L);
+            context.finish();
+        }
+
+        assertThat(delivered).extracting(AlertEvent::title)
+                .containsExactly("financial-refill 부분 실패", "financial-refill 부분 실패");
+    }
 }
