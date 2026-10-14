@@ -19,7 +19,7 @@ applies_to:
 - **활성 편입** = 스크리닝 모집단(그대로).
 - **미국 순위 후보** = 미국 · 활성 종목 · 활성 편입 없음(`StockRegistrar.usRankingCandidateIdsByTicker` · `FilingLedgerStore.openForCandidates`). 순위 어댑터의 판독기(미국 · `s.is_active`)와 같은 축이다.
 
-후보에게 세 다리를 붙인다. 셋 다 `UsCandidateFeed`(`stockscreener.us-candidates.enabled` · 기본 꺼짐)가 켜졌을 때만 정기 경로에서 돈다.
+후보에게 세 다리를 붙인다. 셋 다 `UsCandidateFeed`(`stockscreener.us-candidates.enabled`)가 켜졌을 때만 정기 경로에서 돈다 — 꺼진 채 main에 쌓고 D4 통과 뒤(2026-10-15) 기본값을 켰다.
 
 | 자리 | 다리 | 하는 일 |
 |---|---|---|
