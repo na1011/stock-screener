@@ -9,6 +9,7 @@ import com.stockscreener.pipeline.batch.DailyUpdateJob;
 import com.stockscreener.pipeline.batch.FilingConsumptionJob;
 import com.stockscreener.pipeline.batch.FilingListingJob;
 import com.stockscreener.pipeline.batch.FinancialRefillJob;
+import com.stockscreener.pipeline.batch.FreshnessCatchUpJob;
 import com.stockscreener.pipeline.batch.FullStatementRefillJob;
 import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
 import com.stockscreener.pipeline.batch.GovernanceLoadJob;
@@ -81,6 +82,7 @@ public class PipelineScheduler {
     private final WriteLock writeLock;
     private final FilingListingJob filingListingJob;
     private final FilingConsumptionJob filingConsumptionJob;
+    private final FreshnessCatchUpJob freshnessCatchUpJob;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
                              UniverseRebalanceJob universeRebalanceJob,
@@ -97,7 +99,8 @@ public class PipelineScheduler {
                              BatchExecutions batchExecutions,
                              WriteLock writeLock,
                              FilingListingJob filingListingJob,
-                             FilingConsumptionJob filingConsumptionJob) {
+                             FilingConsumptionJob filingConsumptionJob,
+                             FreshnessCatchUpJob freshnessCatchUpJob) {
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -114,6 +117,7 @@ public class PipelineScheduler {
         this.writeLock = writeLock;
         this.filingListingJob = filingListingJob;
         this.filingConsumptionJob = filingConsumptionJob;
+        this.freshnessCatchUpJob = freshnessCatchUpJob;
     }
 
     /**
@@ -471,6 +475,9 @@ public class PipelineScheduler {
      *
      * <p>목록 뒤에 소비({@link FilingConsumptionJob})를 잇는다 — 열린 장부 행을 지금 편입 종목의 좁힌 FR·FSR({@code GAP_FILL})로
      * 먹이고, 그 종목을 쓴 트랜잭션 안에서 소비됨을 표시한다. 정정이 지운 지표는 14:20 화해가 채운다.
+     *
+     * <p>소비 뒤에 편입 원자료 따라잡기({@link FreshnessCatchUpJob} · ADR-0177)를 잇는다 — 편입 뒤로 FR·FSR·G가 정기 범위로
+     * 맞춘 적이 없는 편입을 좁힌 실행({@code GAP_FILL})으로 맞춘다. 주 자리는 리밸런싱 꼬리이고 여기는 남은 것을 집는다.
      */
     @Scheduled(cron = "0 16 14 * * MON-FRI", zone = "Asia/Seoul")
     public void runFilingListing() {
@@ -478,11 +485,18 @@ public class PipelineScheduler {
             underWriteLock("runFilingListing", () -> {
                 LocalDate today = LocalDate.now(KR_ZONE);
                 log.info("원장 공시 목록을 받는다. today={}", today);
+                // 단계마다 자기 try다 — 앞 단계가 예외로 끝나도 뒤 단계는 돈다(셋이 서로의 입력이 아니다: 소비는 이미 쌓인 행을,
+                // 따라잡기는 표지를 읽는다). 잡 안에서 던진 것은 그 잡이 이미 FAILED와 알림을 냈으므로 여기서는 모아 끝에서 처음
+                // 것을 다시 던진다(@Scheduled 밖에서 ERROR로 남는다). MUST: 종료 신호는 그 자리에서 사슬을 끝낸다 — 삼키고 다음
+                // 단계를 돌면 종료가 시작된 뒤에도 쿼터를 태운다(ADR-0078).
+                RuntimeException held = null;
                 try {
                     filingListingJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
                 } catch (BatchShutdownException e) {
                     log.info("공시 목록이 종료로 중단됐다. today={} — 커서는 닫은 날까지이고 다음 평일이 이어 받는다.", today);
                     return;
+                } catch (RuntimeException e) {
+                    held = e;
                 }
                 // 목록 뒤에 소비한다 — 방금 쌓은 행까지 같은 날 먹인다(2차). 목록이 시장 하나를 못 받아도(실행은 끝난다) 이미
                 // 쌓인 행은 먹인다.
@@ -491,12 +505,38 @@ public class PipelineScheduler {
                 } catch (BatchShutdownException e) {
                     log.info("공시 소비가 종료로 중단됐다. today={} — 표시는 종목 트랜잭션 안이라 끝낸 종목까지만 남고 나머지는 다음 평일이 먹인다.",
                             today);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
+                }
+                // 소비 뒤에 따라잡는다(ADR-0177) — 소비가 방금 표지를 쓴 종목(미국 기본 창 FR)은 술어에서 빠진다. 꼬리가 안 돌았거나
+                // 상한·실패로 남은 편입을 집는다. 같은 오후 14:18 유도·14:20 화해가 덮으므로 사슬 안 화해를 안 한다.
+                try {
+                    freshnessCatchUpJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of());
+                } catch (BatchShutdownException e) {
+                    log.info("편입 원자료 따라잡기가 종료로 중단됐다. today={} — 표지는 종목 트랜잭션 안이라 남은 종목은 다음 차례가 집는다.",
+                            today);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
+                }
+                if (held != null) {
+                    throw held;
                 }
             });
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
             log.info("크론 발화를 마쳤다. 크론={}", "runFilingListing");
         }
+    }
+
+    /** 사슬에서 처음 난 예외를 지키고 뒤의 것은 그 아래에 단다 — 뒤의 것이 원인을 덮지 않게. */
+    private static RuntimeException keepFirst(RuntimeException held, RuntimeException next) {
+        if (held == null) {
+            return next;
+        }
+        held.addSuppressed(next);
+        return held;
     }
 
     /**

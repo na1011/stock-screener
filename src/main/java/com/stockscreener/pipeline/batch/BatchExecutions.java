@@ -76,6 +76,11 @@ public class BatchExecutions {
                 open::remove, coverage, started.recorded().scope() == BatchExecutionRecorder.Scope.FULL));
     }
 
+    /** 기준일이 지금인가 — 기록 계층의 {@code PAST_DATE} 판정과 같다({@link BatchExecutionRecorder#isCurrentTarget}). */
+    public boolean isCurrentTarget(LocalDate targetDate) {
+        return recorder.isCurrentTarget(targetDate);
+    }
+
     /** 실패한 부분만 다시 도는 실행을 시작한다. */
     public BatchExecutionContext startRetry(String jobName, LocalDate targetDate,
                                             int targetCount, long retriedFromId) {
