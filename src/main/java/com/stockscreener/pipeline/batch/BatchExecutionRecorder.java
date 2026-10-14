@@ -132,6 +132,14 @@ public class BatchExecutionRecorder {
         return DeclaredScope.narrow(ScopeReason.PAST_DATE);
     }
 
+    /**
+     * 기준일이 지금인가 — {@link #recordedScope}가 {@code PAST_DATE}를 가르는 판정 그대로다. 종목별 「정기 범위로 맞췄다」 표지
+     * ({@code stock_job_refresh})도 같은 판정을 쓴다 — 과거 기준일 실행은 최근 연도를 안 받는다.
+     */
+    public boolean isCurrentTarget(LocalDate targetDate) {
+        return isCurrent(targetDate);
+    }
+
     private boolean isCurrent(LocalDate targetDate) {
         LocalDate today = today();
         return targetDate != null

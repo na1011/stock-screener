@@ -97,5 +97,10 @@ public enum CollectionPhase {
      * 원장 공시 소비(ADR-0176 2차 · {@code FilingConsumptionJob}). 단위는 <b>시장</b>이다 — 종목은 그 잡이 부르는 FR·FSR이
      * 각자 {@code FINANCIAL}로 센다.
      */
-    FILING_CONSUMPTION
+    FILING_CONSUMPTION,
+    /**
+     * 편입 원자료 따라잡기(ADR-0177 · {@code FreshnessCatchUpJob}). 단위는 <b>잡</b>(FR · FSR · G)이다 — 종목은 그 잡이
+     * 각자 자기 단계로 센다.
+     */
+    REFRESH_BEHIND
 }

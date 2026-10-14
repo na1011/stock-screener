@@ -48,11 +48,12 @@ public class UniverseRebalanceJob {
     private final AlertPort alertPort;
     private final JdbcTemplate jdbcTemplate;
     private final MembershipGapFiller membershipGapFiller;
+    private final FreshnessCatchUpJob freshnessCatchUp;
 
     public UniverseRebalanceJob(DataSourceRegistry registry, UniverseReconciler reconciler,
                                 StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
                                 AlertPort alertPort, JdbcTemplate jdbcTemplate,
-                                MembershipGapFiller membershipGapFiller) {
+                                MembershipGapFiller membershipGapFiller, FreshnessCatchUpJob freshnessCatchUp) {
         this.registry = registry;
         this.reconciler = reconciler;
         this.stockRegistrar = stockRegistrar;
@@ -60,6 +61,7 @@ public class UniverseRebalanceJob {
         this.alertPort = alertPort;
         this.jdbcTemplate = jdbcTemplate;
         this.membershipGapFiller = membershipGapFiller;
+        this.freshnessCatchUp = freshnessCatchUp;
     }
 
     /**
@@ -175,6 +177,10 @@ public class UniverseRebalanceJob {
         // MUST NOT: 중단(BatchShutdownException) 때 돌지 않는다 — 위 지수 루프의 catch가
         // 그대로 되던지므로 여기 못 온다. 덜 반영된 명부로 재면 곧 편출될 종목에 콜을 태운다.
         membershipGapFiller.fillAndAlert(asOf, triggeredBy);
+        // 원자료가 이미 있던 편입(재편입 · 일괄 적재로 행이 있는 종목)을 정기 범위로 맞춘다(ADR-0177) — 결손 갈래는 0행만 채운다.
+        // 결손 보충 뒤라 그 갈래가 방금 넣은 0행 종목도 이 술어에 들어온다(initial-load는 표지를 안 쓴다 · 같은 값을 한 번 더 맞춘다).
+        // 따로 부르는 이유: 이 단계의 실패가 「편입 결손 보충 실패」 알림으로 읽히지 않게. 둘 다 던지지 않는다.
+        freshnessCatchUp.runAfterRebalance(triggeredBy);
         return status;
     }
 

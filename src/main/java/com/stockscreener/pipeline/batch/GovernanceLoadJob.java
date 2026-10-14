@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.pipeline.collector.GovernanceCollector;
+import com.stockscreener.pipeline.collector.StockRefreshStore;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.GovernanceEndpoint;
@@ -98,12 +99,14 @@ public class GovernanceLoadJob {
     private final GovernanceCollector collector;
     private final StockRegistrar stockRegistrar;
     private final BatchExecutions batchExecutions;
+    private final StockRefreshStore refreshStore;
 
     public GovernanceLoadJob(GovernanceCollector collector, StockRegistrar stockRegistrar,
-                             BatchExecutions batchExecutions) {
+                             BatchExecutions batchExecutions, StockRefreshStore refreshStore) {
         this.collector = collector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
+        this.refreshStore = refreshStore;
     }
 
     /**
@@ -207,6 +210,10 @@ public class GovernanceLoadJob {
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, stocks.size(), scope, coverage);
         execution.plan(CollectionPhase.GOVERNANCE, stocks.size());
         execution.stage("종목별 정기보고서 주요정보 수집");
+        // 종목별 「정기 범위로 맞췄다」 표지(ADR-0177) — 해·연도·표를 손으로 좁히지 않았고 기준일이 지금일 때만. 소스가 없는 시장은
+        // 종목 람다가 아무것도 안 받고 성공하므로 아래에서 그 종목의 지원 표가 비어 있지 않은지도 본다.
+        boolean regularReach = span == null && latestFiscalYear == null
+                && (endpoints == null || endpoints.isEmpty()) && batchExecutions.isCurrentTarget(asOf);
 
         // MUST: 시장별로 센다. 합집합을 쓰면 그 시장이 안 받은 역년에 0행 UPDATE가 종목마다
         // 쌓인다 — 아래 「표가 하나뿐인 시장에는 형제가 없다」와 같은 이유다.
@@ -242,6 +249,9 @@ public class GovernanceLoadJob {
                             collector.stampNoDataFromSiblings(
                                     security.stockId(), year, ANNUAL_REPORT);
                         }
+                    }
+                    if (regularReach && !supported.isEmpty()) {
+                        refreshStore.mark(security.stockId(), JOB_NAME, execution.executionId());
                     }
                     return written;
                 });

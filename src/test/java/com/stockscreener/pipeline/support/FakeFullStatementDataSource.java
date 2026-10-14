@@ -46,6 +46,15 @@ public class FakeFullStatementDataSource implements FullStatementDataSource {
         return this;
     }
 
+    /** 시험 사이에 상태를 비운다 — 같은 컨텍스트를 공유하는 빈이라 앞 시험의 응답·실패가 남는다. */
+    public void reset() {
+        reportsByStock.clear();
+        failures.clear();
+        traces.clear();
+        fetchedStockIds.clear();
+        requestedPeriods.clear();
+    }
+
     @Override
     public Set<String> supportedMarketCodes() {
         return markets;

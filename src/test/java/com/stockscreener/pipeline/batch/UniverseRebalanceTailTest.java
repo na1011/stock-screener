@@ -42,6 +42,7 @@ class UniverseRebalanceTailTest {
     private BatchExecutions batchExecutions;
     private BatchExecutionContext execution;
     private MembershipGapFiller membershipGapFiller;
+    private FreshnessCatchUpJob freshnessCatchUp;
     private UniverseRebalanceJob job;
 
     @BeforeEach
@@ -51,13 +52,14 @@ class UniverseRebalanceTailTest {
         batchExecutions = mock(BatchExecutions.class);
         execution = mock(BatchExecutionContext.class);
         membershipGapFiller = mock(MembershipGapFiller.class);
+        freshnessCatchUp = mock(FreshnessCatchUpJob.class);
         when(batchExecutions.start(anyString(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any()))
                 .thenReturn(execution);
         when(execution.finishQuietly()).thenReturn(BatchStatus.SUCCESS);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class))).thenReturn(List.of());
         job = new UniverseRebalanceJob(mock(DataSourceRegistry.class),
                 mock(UniverseReconciler.class), mock(StockRegistrar.class), batchExecutions,
-                mock(AlertPort.class), jdbcTemplate, membershipGapFiller);
+                mock(AlertPort.class), jdbcTemplate, membershipGapFiller, freshnessCatchUp);
     }
 
     @Test
@@ -74,9 +76,10 @@ class UniverseRebalanceTailTest {
     void runsTheTailAfterClosingTheExecutionRow() {
         job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
 
-        InOrder order = inOrder(execution, membershipGapFiller);
+        InOrder order = inOrder(execution, membershipGapFiller, freshnessCatchUp);
         order.verify(execution).finishQuietly();
         order.verify(membershipGapFiller).fillAndAlert(any(), any());
+        order.verify(freshnessCatchUp).runAfterRebalance(BatchExecutionRecorder.TriggeredBy.SCHEDULER);
     }
 
     /**
@@ -94,6 +97,6 @@ class UniverseRebalanceTailTest {
         assertThatThrownBy(() -> job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER))
                 .isInstanceOf(BatchShutdownException.class);
 
-        verifyNoInteractions(membershipGapFiller);
+        verifyNoInteractions(membershipGapFiller, freshnessCatchUp);
     }
 }

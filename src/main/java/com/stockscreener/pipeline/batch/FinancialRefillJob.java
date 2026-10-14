@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.batch;
 import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.collector.FinancialCollector;
 import com.stockscreener.pipeline.collector.FinancialWriter;
+import com.stockscreener.pipeline.collector.StockRefreshStore;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
@@ -68,11 +69,12 @@ public class FinancialRefillJob {
     private final DataSourceRegistry registry;
     private final SecFilingSupplementStore supplementStore;
     private final RetirementEvidence retirementEvidence;
+    private final StockRefreshStore refreshStore;
 
     public FinancialRefillJob(FinancialCollector financialCollector, StockRegistrar stockRegistrar,
                               BatchExecutions batchExecutions, FinancialLoadWindow loadWindow,
                               DataSourceRegistry registry, SecFilingSupplementStore supplementStore,
-                              RetirementEvidence retirementEvidence) {
+                              RetirementEvidence retirementEvidence, StockRefreshStore refreshStore) {
         this.financialCollector = financialCollector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
@@ -80,6 +82,7 @@ public class FinancialRefillJob {
         this.registry = registry;
         this.supplementStore = supplementStore;
         this.retirementEvidence = retirementEvidence;
+        this.refreshStore = refreshStore;
     }
 
     /**
@@ -208,6 +211,8 @@ public class FinancialRefillJob {
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 재무 결손 보정");
         Instant supplementSince = supplementStore.now();
+        // 종목별 「정기 범위로 맞췄다」 표지(ADR-0177) — 연수가 정기 실행 이상이고 기준일이 지금일 때만. 보충 누락은 종목마다 본다.
+        boolean regularReach = years >= DEFAULT_YEARS_BACK && batchExecutions.isCurrentTarget(asOf);
 
         // 정정을 반영하면 그 종목의 지표가 보존 창 전체에서 지워진다. 그 수를 세지 않으면
         // 백필이 남았다는 것을 알릴 수 없고, 그러면 그 종목이 화면에서 조용히 사라진다.
@@ -260,6 +265,11 @@ public class FinancialRefillJob {
                     filled.addAndGet(outcome.filled());
                     if (hook != null) {
                         hook.afterWrite(execution.executionId(), security, outcome);
+                    }
+                    // 보충을 못 받은 종목은 성공이어도 정기 범위가 아니다 — 정기 실행은 그 시장을 미완료로 남겨 다시 돌지만,
+                    // 좁힌 실행에는 그 장치가 없다. 표지를 안 쓰면 따라잡기가 다음 차례에 다시 집는다.
+                    if (regularReach && outcome.unfetchedSupplements().isEmpty()) {
+                        refreshStore.mark(security.stockId(), JOB_NAME, execution.executionId());
                     }
                     return outcome.changed();
                 });
@@ -379,15 +389,15 @@ public class FinancialRefillJob {
         }
         boolean scheduled = fillsSameAfternoon(triggeredBy);
         execution.alertOperator(AlertSeverity.WARNING,
-                scheduled ? "재무 무효화 — 14:20 화해가 채운다" : "재무 무효화 — 다음 화해까지 빈다",
+                scheduled ? "재무 무효화 — 정기 경로의 화해가 채운다" : "재무 무효화 — 다음 화해까지 빈다",
                 invalidationAlertBody(invalidatedTickers, invalidatedPeriods, fullStatementTickers,
                         execution.executionId(), scheduled));
     }
 
     /**
-     * 이 실행의 무효화를 같은 오후 14:20 화해가 채우는가. 정기 실행(14:15)과 공시 소비(14:16 · {@code GAP_FILL} — 이 잡을
-     * 그 트리거로 부르는 자리는 {@code FilingConsumptionJob}뿐이다)가 그렇다. 소비를 손 실행 문구로 알리면 크론이 곧 쓸 행을
-     * 다른 JVM으로 쓰라고 시키게 된다.
+     * 이 실행의 무효화를 정기 경로의 화해가 곧 채우는가. 정기 실행(14:15)과 {@code GAP_FILL}이 그렇다 — 이 잡을 그 트리거로
+     * 부르는 자리는 공시 소비·따라잡기(평일 14:16 → 같은 오후 14:20 화해)와 리밸런싱 꼬리의 따라잡기(그 자리의 사슬 안 화해)다.
+     * 손 실행 문구로 알리면 크론이 곧 쓸 행을 다른 JVM으로 쓰라고 시키게 된다.
      */
     static boolean fillsSameAfternoon(BatchExecutionRecorder.TriggeredBy triggeredBy) {
         return triggeredBy == BatchExecutionRecorder.TriggeredBy.SCHEDULER
@@ -429,7 +439,7 @@ public class FinancialRefillJob {
         // 같은 스케줄러 스레드가 곧바로 도는 14:18·14:20과 같은 행을 두 JVM이 쓴다(305 교착과 같은 모양).
         if (scheduled) {
             body.append("""
-                    같은 오후 14:20 화해가 이 종목들의 원본층과 창 전체 파생층을 다시 쓴다 — 손으로 돌리지 않는다.
+                    정기 경로가 이 종목들의 원본층과 창 전체 파생층을 다시 쓴다(평일 실행은 같은 오후 14:20 화해 · 리밸런싱 꼬리는 그 자리의 사슬 안 화해) — 손으로 돌리지 않는다.
                     """);
         } else {
             body.append("""

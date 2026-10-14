@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.pipeline.collector.FullStatementCollector;
+import com.stockscreener.pipeline.collector.StockRefreshStore;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
@@ -66,16 +67,19 @@ public class FullStatementRefillJob {
     private final FinancialLoadWindow loadWindow;
     private final DataSourceRegistry registry;
     private final RetirementEvidence retirementEvidence;
+    private final StockRefreshStore refreshStore;
 
     public FullStatementRefillJob(FullStatementCollector collector, StockRegistrar stockRegistrar,
                                   BatchExecutions batchExecutions, FinancialLoadWindow loadWindow,
-                                  DataSourceRegistry registry, RetirementEvidence retirementEvidence) {
+                                  DataSourceRegistry registry, RetirementEvidence retirementEvidence,
+                                  StockRefreshStore refreshStore) {
         this.collector = collector;
         this.stockRegistrar = stockRegistrar;
         this.batchExecutions = batchExecutions;
         this.loadWindow = loadWindow;
         this.registry = registry;
         this.retirementEvidence = retirementEvidence;
+        this.refreshStore = refreshStore;
     }
 
     /**
@@ -169,6 +173,11 @@ public class FullStatementRefillJob {
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope, coverage);
         execution.plan(CollectionPhase.FINANCIAL, targets.size());
         execution.stage("종목별 전체 재무제표 보정");
+        // 종목별 「정기 범위로 맞췄다」 표지(ADR-0177) — 정기 실행은 전 종목 분기·기본 연수다. 분기를 안 받으면 주당 지표가 읽는
+        // 분기 행이 낡은 채라 정기 범위가 아니다. 기준일이 지금이 아니면 최근 연도를 안 받는다.
+        boolean regularReach = years >= DEFAULT_YEARS_BACK
+                && periods.containsAll(EnumSet.allOf(StatementPeriod.class))
+                && batchExecutions.isCurrentTarget(asOf);
 
         // 리미터의 일일 카운터는 인메모리라 실행이 끝나면 사라진다. 여기서 세지 않으면
         // 소량 검증 → 전량 → 재실행이 이어질 때 실제 누적을 아무도 모른다.
@@ -192,6 +201,9 @@ public class FullStatementRefillJob {
                     corrected.addAndGet(collected.outcome().corrected());
                     if (hook != null) {
                         hook.afterWrite(execution.executionId(), security, collected);
+                    }
+                    if (regularReach) {
+                        refreshStore.mark(security.stockId(), JOB_NAME, execution.executionId());
                     }
                     return collected.outcome().changed();
                 });
