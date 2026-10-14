@@ -70,7 +70,7 @@ def rule(ticker,F,cover,form):
     if not pers: return None,'no-wavg',None
     import datetime as dt
     def span(p): return (dt.date.fromisoformat(p[1])-dt.date.fromisoformat(p[0])).days
-    want=(80,100) if form.startswith('10-Q') else (350,380)
+    want=(255,285) if form=='9M' else (80,100) if form.startswith('10-Q') else (350,380)
     cand=[p for p in pers if want[0]<span(p)<want[1]]
     if not cand: return None,'no-own-period',None
     P=max(cand,key=lambda p:p[1])
