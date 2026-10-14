@@ -75,3 +75,7 @@
   - ETF는 정기 폼(`PERIODIC_FORMS`)을 안 내서 장부 행이 안 생긴다.
   - 좁힐지는 D4 콜 수로 정한다(순위 어댑터의 `NON_OPERATING_SIC`·통화 거름을 같은 술어로 쓰는 길).
 - **ADR-0135 복원은 `US_LISTED`를 안 읽는다**: `UniverseRestoreJob:191`이 `universe_code = ?`(그 유니버스)와 `origin = 'OBSERVED'`로만 읽는다.
+- **`US_LISTED` 화해 한 번의 크기**(★ Alpaca 자산 1콜 · `US_LISTED` 열린 편입 대조): 열린 편입 8,495 · Alpaca 활성 NYSE·NASDAQ 8,531.
+  - 들어올 것 158 · 나갈 것 122(예 `ACHR.WS` `APGE` `BBBYW` `BLFS` — 워런트·폐지·티커 변경). 08-29 뒤 6주치 차분이다.
+  - 어댑터는 `tradable`이 거짓인 자산을 따로 다룬다(`AlpacaUniverseAdapter:184`). 그 갈래가 어디로 가는지는 D4가 본다.
+- **남은 「재지 않은 것」은 하나다** — 후보 소비의 날마다 양. 오늘 14:16 첫 정기 목록이 비편입 장부 행을 처음 쌓는다. 그 수를 잰 뒤 반증으로 보낸다(반증자가 잴 일을 남기지 않는다).
