@@ -1,7 +1,11 @@
 package com.stockscreener.indicator;
 
 import com.stockscreener.pipeline.collector.CorporateActionLedger;
+import com.stockscreener.pipeline.datasource.us.UsMarket;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
@@ -97,7 +101,7 @@ public class IndicatorDataReader {
             noninterest_expense, benefits_losses_and_expenses,
             gross_profit, operating_expenses, costs_and_expenses,
             income_tax_expense, profit_before_tax,
-            share_basis_multiple, share_basis_status
+            share_basis_multiple, share_basis_status, report_code
             """;
 
     /**
@@ -223,10 +227,19 @@ public class IndicatorDataReader {
 
     private final JdbcTemplate jdbcTemplate;
     private final CorporateActionLedger corporateActions;
+    private final ShareClassStore shareClasses;
+    /**
+     * 미국 관문 설정 — 켜졌으면 미국 종목의 재무 행에 주식수 클래스 축 판정을 입힌다({@link ShareClassLine}). 꺼졌으면 판정 표를
+     * 부르지 않고 행은 이 축이 없던 때와 같다.
+     */
+    private final boolean usGate;
 
-    public IndicatorDataReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions) {
+    public IndicatorDataReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions,
+                               ShareClassStore shareClasses, @Value("${stockscreener.gate.us}") boolean usGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.corporateActions = corporateActions;
+        this.shareClasses = shareClasses;
+        this.usGate = usGate;
     }
 
     /**
@@ -470,20 +483,55 @@ public class IndicatorDataReader {
     private List<FinancialFigures> queryFigures(String periodOperator, long stockId,
                                                 LocalDate asOf, int limit,
                                                 FinancialVisibility visibility) {
+        RowMapper<FinancialFigures> mapper = IndicatorDataReader::mapFigures;
+        ShareClassLine line = shareClassLine(stockId);
+        if (line != null) {
+            mapper = (rs, rowNum) -> mapFigures(rs, line);
+        }
         return switch (visibility) {
             case LATEST -> jdbcTemplate.query(
                     SELECT_FINANCIALS_LATEST.formatted(periodOperator),
-                    IndicatorDataReader::mapFigures,
+                    mapper,
                     stockId, asOf, limit);
             // MUST: limit을 넘기지 않는다 — 이 갈래는 판 이력을 통째로 준다(위 javadoc).
             case KNOWN_ON -> jdbcTemplate.query(
                     SELECT_FINANCIALS_KNOWN_ON.formatted(periodOperator),
-                    IndicatorDataReader::mapFigures,
+                    mapper,
                     stockId, asOf, asOf);
         };
     }
 
+    /** 관문이 켜졌고 미국 종목이면 그 줄의 판정(없으면 빈 판정 — 그래도 행은 클래스 축이 읽은 것으로 표시된다), 아니면 {@code null}. */
+    private ShareClassLine shareClassLine(long stockId) {
+        if (!usGate) {
+            return null;
+        }
+        List<String> market = jdbcTemplate.queryForList("SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
+        if (market.isEmpty() || !UsMarket.CODE.equals(market.get(0))) {
+            return null;
+        }
+        return shareClasses.line(stockId);
+    }
+
     private static FinancialFigures mapFigures(ResultSet rs, int rowNum) throws SQLException {
+        return mapFigures(rs, null);
+    }
+
+    /**
+     * @param line {@code null}이면 행이 실은 주식수 그대로(관문 꺼짐 · 국내). 있으면 클래스 축 판정을 입힌다 — 주식수는 그 판정이
+     *             정한 값, 숨김이면 상태로 막고, 분모 n을 싣는다.
+     */
+    private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line) throws SQLException {
+        BigDecimal shares = rs.getBigDecimal("shares_outstanding");
+        ShareClassLine.State state = null;
+        BigDecimal weighted = null;
+        if (line != null) {
+            ShareClassLine.Read read = line.read(rs.getString("report_code"),
+                    rs.getObject("published_at", LocalDate.class), shares);
+            shares = read.shares();
+            state = read.state();
+            weighted = read.denominator();
+        }
         return new FinancialFigures(
                 rs.getInt("fiscal_year"),
                 FinancialFigures.FiscalPeriod.valueOf(rs.getString("fiscal_period")),
@@ -502,7 +550,7 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("current_liabilities"),
                 rs.getBigDecimal("retained_earnings"),
                 rs.getBigDecimal("operating_cash_flow"),
-                rs.getBigDecimal("shares_outstanding"),
+                shares,
                 rs.getBigDecimal("eps"),
                 rs.getBigDecimal("bps"),
                 rs.getBigDecimal("cost_of_sales"),
@@ -521,6 +569,7 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("income_tax_expense"),
                 rs.getBigDecimal("profit_before_tax"),
                 rs.getBigDecimal("share_basis_multiple"),
-                rs.getString("share_basis_status"));
+                rs.getString("share_basis_status"),
+                state, weighted);
     }
 }

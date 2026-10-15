@@ -1,5 +1,10 @@
 package com.stockscreener.pipeline.collector;
 
+import com.stockscreener.pipeline.datasource.us.UsMarket;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
+import org.springframework.beans.factory.annotation.Value;
+
 import com.stockscreener.indicator.GovernanceMetric;
 import com.stockscreener.pipeline.datasource.GovernanceDerivation;
 import com.stockscreener.pipeline.datasource.GovernanceEndpoint;
@@ -55,10 +60,17 @@ public class GovernanceFactDeriver {
      */
     private final Map<String, GovernanceFactMapper> mappersByMarket;
 
+    private final ShareClassStore shareClasses;
+    /** 미국 관문 설정 — 켜졌으면 배당 총액의 주식수를 클래스 축 판정을 입힌 값(N_L)으로 읽는다({@link #withClassAxisShares}). */
+    private final boolean usGate;
+
     public GovernanceFactDeriver(JdbcTemplate jdbcTemplate, CorporateActionLedger ledger,
-                                 List<GovernanceFactMapper> mappers) {
+                                 List<GovernanceFactMapper> mappers, ShareClassStore shareClasses,
+                                 @Value("${stockscreener.gate.us}") boolean usGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.ledger = ledger;
+        this.shareClasses = shareClasses;
+        this.usGate = usGate;
         Map<String, GovernanceFactMapper> index = new HashMap<>();
         for (GovernanceFactMapper candidate : mappers) {
             for (String market : candidate.supportedMarketCodes()) {
@@ -236,6 +248,10 @@ public class GovernanceFactDeriver {
                         rs.getBigDecimal("shares")),
                 stockId);
 
+        if (usGate && UsMarket.CODE.equals(jdbcTemplate.queryForObject(
+                "SELECT market_code FROM stock WHERE id = ?", String.class, stockId))) {
+            periods = withClassAxisShares(stockId, periods);
+        }
         List<CorporateActionLedger.Entry> events = ledger.findApplicable(stockId);
         return new GovernanceDerivation(collectedOn, periods, (from, to) -> {
             // IndicatorContext.corporateActionMultiple과 같은 경계다 — from 제외, to 포함.
@@ -248,6 +264,59 @@ public class GovernanceFactDeriver {
             }
             return multiple;
         });
+    }
+
+    /**
+     * 관문이 켜진 미국 — 회계연도마다 주식수를 클래스 축 판정을 입힌 값으로 다시 고른다(탐색 {@code SHARES-CLASS-PLAN-V5-1015.md}
+     * §2 · ADR-0113). 고르는 규칙은 위 질의와 같다 — 공시일 순으로 처음 채워진 판의 값, 20% 온전성 게이트(분자 ÷ EPS와 견줌 ·
+     * 위 질의의 {@code CASE}와 같은 술어). 다른 것은 하나다: 그 앞에 숨긴 판을 만나면 그 해의 총액을 안 낸다 — 뒤 판으로
+     * 건너가면 숨긴 이유(원장이 그 판의 주식수를 확인 못 함)를 조용히 무시한다.
+     */
+    private List<GovernanceDerivation.AnnualPeriod> withClassAxisShares(long stockId,
+                                                                       List<GovernanceDerivation.AnnualPeriod> periods) {
+        ShareClassLine line = shareClasses.line(stockId);
+        Map<Integer, BigDecimal> shares = new HashMap<>();
+        Map<Integer, BigDecimal> implied = new HashMap<>();
+        java.util.Set<Integer> decided = new java.util.HashSet<>();
+        jdbcTemplate.query("""
+                SELECT fiscal_year, published_at, report_code, shares_outstanding,
+                       coalesce(net_income_controlling, net_income) AS numerator, eps
+                  FROM financial_statement
+                 WHERE stock_id = ? AND fiscal_period = 'FY'
+                 ORDER BY fiscal_year, published_at
+                """, rs -> {
+            int year = rs.getInt("fiscal_year");
+            BigDecimal numerator = rs.getBigDecimal("numerator");
+            BigDecimal eps = rs.getBigDecimal("eps");
+            if (!implied.containsKey(year) && numerator != null && eps != null && eps.signum() != 0) {
+                implied.put(year, numerator.divide(eps, java.math.MathContext.DECIMAL64));
+            }
+            if (decided.contains(year)) {
+                return;
+            }
+            ShareClassLine.Read read = line.read(rs.getString("report_code"), rs.getObject("published_at", LocalDate.class),
+                    rs.getBigDecimal("shares_outstanding"));
+            if (read.state() == ShareClassLine.State.HIDDEN) {
+                decided.add(year);
+                return;
+            }
+            if (read.shares() != null && read.shares().signum() > 0) {
+                decided.add(year);
+                shares.put(year, read.shares());
+            }
+        }, stockId);
+        List<GovernanceDerivation.AnnualPeriod> out = new ArrayList<>(periods.size());
+        for (GovernanceDerivation.AnnualPeriod p : periods) {
+            BigDecimal chosen = shares.get(p.fiscalYear());
+            BigDecimal imp = implied.get(p.fiscalYear());
+            if (chosen != null && imp != null && imp.signum() != 0
+                    && chosen.divide(imp, java.math.MathContext.DECIMAL64).subtract(BigDecimal.ONE).abs()
+                    .compareTo(new BigDecimal("0.20")) > 0) {
+                chosen = null;
+            }
+            out.add(new GovernanceDerivation.AnnualPeriod(p.fiscalYear(), p.start(), p.end(), p.firstPublishedAt(), chosen));
+        }
+        return out;
     }
 
     private Map<GovernanceEndpoint, List<GovernanceReportRow>> readRows(long stockId) {

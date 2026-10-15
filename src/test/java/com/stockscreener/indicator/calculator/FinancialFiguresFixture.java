@@ -54,6 +54,8 @@ final class FinancialFiguresFixture {
     private BigDecimal profitBeforeTax;
     private BigDecimal shareBasisMultiple;
     private String shareBasisStatus;
+    private com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine.State shareClassState;
+    private BigDecimal weightedShares;
 
     private FinancialFiguresFixture() {
     }
@@ -119,6 +121,8 @@ final class FinancialFiguresFixture {
         fixture.profitBeforeTax = source.profitBeforeTax();
         fixture.shareBasisMultiple = source.shareBasisMultiple();
         fixture.shareBasisStatus = source.shareBasisStatus();
+        fixture.shareClassState = source.shareClassState();
+        fixture.weightedShares = source.weightedShares();
         return fixture;
     }
 
@@ -250,6 +254,14 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    /** 미국 관문이 켜진 판독기가 이 행을 클래스 축으로 읽은 결과와 그 공시의 분모 n. */
+    FinancialFiguresFixture shareClass(com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine.State state,
+                                       BigDecimal weighted) {
+        this.shareClassState = state;
+        this.weightedShares = weighted;
+        return this;
+    }
+
     FinancialFiguresFixture costOfSales(BigDecimal value) {
         this.costOfSales = value;
         return this;
@@ -291,6 +303,7 @@ final class FinancialFiguresFixture {
                 interestAndDividendIncome, noninterestIncome, interestExpense,
                 noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses,
-                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus);
+                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState,
+                weightedShares);
     }
 }

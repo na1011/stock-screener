@@ -1,5 +1,10 @@
 package com.stockscreener.pipeline.collector;
 
+import com.stockscreener.pipeline.datasource.us.UsMarket;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
+import org.springframework.beans.factory.annotation.Value;
+
 import com.stockscreener.indicator.ShareBasis;
 
 import org.slf4j.Logger;
@@ -76,9 +81,19 @@ public class ShareBasisDeriver {
     private static final double UNCHANGED_BAND = 1.10;
 
     private final JdbcTemplate jdbcTemplate;
+    private final ShareClassStore shareClasses;
+    /**
+     * 미국 관문 설정 — 켜졌으면 판정할 계열이 <b>판독기가 읽는 계열</b>(클래스 축 판정을 입힌 주식수 · N_L)이다. 옛 계열로 잰
+     * 배수를 판독기가 N_L에 곱하면 축척 사고가 되살아난다(탐색 {@code SHARES-CLASS-PLAN-V5-1015.md} §0-13). 그래서 화해 입력
+     * 유도가 클래스 축 판정을 먼저 돈다.
+     */
+    private final boolean usGate;
 
-    public ShareBasisDeriver(JdbcTemplate jdbcTemplate) {
+    public ShareBasisDeriver(JdbcTemplate jdbcTemplate, ShareClassStore shareClasses,
+                             @Value("${stockscreener.gate.us}") boolean usGate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.shareClasses = shareClasses;
+        this.usGate = usGate;
     }
 
     /** 판정 결과 집계. */
@@ -120,7 +135,7 @@ public class ShareBasisDeriver {
             if (declared.isEmpty()) {
                 continue;
             }
-            List<Filing> filings = filingsOf(stockId);
+            List<Filing> filings = usGate && UsMarket.CODE.equals(marketCode) ? classAxisFilingsOf(stockId) : filingsOf(stockId);
             if (filings.size() < 2) {
                 continue;
             }
@@ -275,6 +290,34 @@ public class ShareBasisDeriver {
                 ORDER BY published_at, period_end DESC, revision_no DESC
                 """, (rs, n) -> new Filing(rs.getObject("published_at", LocalDate.class),
                 rs.getBigDecimal("shares_outstanding")), stockId);
+    }
+
+    /**
+     * 관문이 켜진 미국 — {@link #filingsOf}와 같은 정렬로 공시일마다 하나를 고르되 클래스 축 판정을 입힌 주식수로 고른다(지표 ·
+     * 순위 판독기와 같은 {@link ShareClassLine}). 숨긴 판은 계열에서 빠진다(값이 없다).
+     */
+    private List<Filing> classAxisFilingsOf(long stockId) {
+        ShareClassLine line = shareClasses.line(stockId);
+        List<Filing> out = new ArrayList<>();
+        java.util.Set<LocalDate> decided = new java.util.HashSet<>();
+        jdbcTemplate.query("""
+                SELECT published_at, report_code, shares_outstanding
+                FROM financial_statement
+                WHERE stock_id = ?
+                ORDER BY published_at, period_end DESC, revision_no DESC
+                """, rs -> {
+            LocalDate publishedAt = rs.getObject("published_at", LocalDate.class);
+            if (decided.contains(publishedAt)) {
+                return;
+            }
+            ShareClassLine.Read read = line.read(rs.getString("report_code"), publishedAt,
+                    rs.getBigDecimal("shares_outstanding"));
+            if (read.state() == ShareClassLine.State.SHOWN && read.shares() != null && read.shares().signum() > 0) {
+                decided.add(publishedAt);
+                out.add(new Filing(publishedAt, read.shares()));
+            }
+        }, stockId);
+        return out;
     }
 
     private static Filing selectBefore(List<Filing> filings, LocalDate date) {

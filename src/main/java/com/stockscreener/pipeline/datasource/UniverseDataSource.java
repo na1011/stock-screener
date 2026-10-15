@@ -37,4 +37,15 @@ public interface UniverseDataSource {
      */
     UniverseSnapshot fetchConstituents(String universeCode, LocalDate asOf)
             throws DataSourceException;
+
+    /**
+     * 앞 편입을 아는 판 — 미국 시총 상위가 주식수 클래스 축의 편입 보류에 쓴다(관문 뒤 · 보류는 앞 편입에만 선다). 기본은 앞
+     * 편입을 안 쓴다(다른 소스의 계약 불변).
+     *
+     * @param previous 이 리밸런싱 직전의 편입(복원은 앞 격자의 결과 · 복원 구간 첫 격자는 빈 집합)
+     */
+    default UniverseSnapshot fetchConstituents(String universeCode, LocalDate asOf, Set<String> previous)
+            throws DataSourceException {
+        return fetchConstituents(universeCode, asOf);
+    }
 }

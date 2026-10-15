@@ -1,5 +1,7 @@
 package com.stockscreener.indicator;
 
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -101,7 +103,20 @@ public record FinancialFigures(
          * {@link ShareBasis#OK}로 읽는다 — 아직 유도가 안 돈 판이고, 그때의 동작은 이 축이
          * 생기기 전과 정확히 같아야 한다.
          */
-        String shareBasisStatus
+        String shareBasisStatus,
+
+        /**
+         * <b>주식수 클래스 축(미국 관문)이 이 행을 읽은 결과.</b> 관문이 꺼졌거나 국내면 {@code null}이고 그때의 동작은 이 축이
+         * 생기기 전과 정확히 같다. {@code HIDDEN}이면 이 판의 주식수를 원장이 확인 못 했다 — 앞 판으로 내려가지 않는다
+         * ({@link ShareClassLine.State}).
+         */
+        ShareClassLine.State shareClassState,
+
+        /**
+         * <b>그 공시의 EPS 분모 n</b>(10-K는 Q4 · 관문이 켜진 미국 행만) — 주식수 비 지표 셋의 두 끝이다(발행사 안에서 공시
+         * 형식에 따라 기저가 안 바뀌게). 보인 판정의 것만 있다.
+         */
+        BigDecimal weightedShares
 ) {
 
     /** 저장 문자열을 enum으로. NULL은 {@link ShareBasis#OK}다. */

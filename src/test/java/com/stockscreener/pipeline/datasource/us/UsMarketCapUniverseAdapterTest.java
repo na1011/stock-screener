@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.datasource.us;
 
+import com.stockscreener.pipeline.datasource.us.shareclass.MembershipHold;
+
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityNameCache;
 import com.stockscreener.pipeline.datasource.StoredShareCounts;
@@ -22,6 +24,7 @@ import java.math.BigDecimal;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.Set;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -564,6 +567,45 @@ class UsMarketCapUniverseAdapterTest {
                 .as("SEC 판은 하루 안이면 한 번").isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("관문 뒤 — 보류된 앞 편입은 마지막 보인 값으로 순위를 다투고, 앞 편입이 아니면 못 들며, 발행사 제외는 보이는 판이 있어도 빠진다")
+    void classAxisHoldsCompeteWithTheirLastShownValue() throws Exception {
+        bodies.put("/v2/assets", assets(
+                asset("AAA", "Aaa Inc."), asset("HLD", "Held Inc."), asset("NEW", "New Inc."),
+                asset("EXC", "Excluded Inc."), asset("BBB", "Bbb Inc.")));
+        bodies.put("/files/company_tickers_exchange.json",
+                cikMap(Map.of("AAA", 1L, "HLD", 2L, "NEW", 3L, "EXC", 4L, "BBB", 5L)));
+        bodies.put("/v2/stocks/bars", bars(Map.of("AAA", "100", "HLD", "10", "NEW", "10", "EXC", "10", "BBB", "10")));
+        List<StoredShareCounts.ShareCount> visible = List.of(share("AAA", "10"), share("EXC", "500"), share("BBB", "50"));
+        Map<String, StoredShareCounts.ClassHold> holds = Map.of(
+                "HLD", new StoredShareCounts.ClassHold("HLD", MembershipHold.State.HELD, new BigDecimal("80"), "3711", false,
+                        "Held Inc."),
+                "NEW", new StoredShareCounts.ClassHold("NEW", MembershipHold.State.HELD, new BigDecimal("900"), "3711", false,
+                        "New Inc."),
+                "EXC", new StoredShareCounts.ClassHold("EXC", MembershipHold.State.EXCLUDED, null, "3711", false,
+                        "Excluded Inc."));
+        StoredShareCounts counts = new StoredShareCounts() {
+            @Override
+            public List<ShareCount> activeByMarket(String marketCode, LocalDate oldestPeriodEnd, LocalDate asOf) {
+                return visible;
+            }
+
+            @Override
+            public Map<String, ClassHold> classHolds(String marketCode, LocalDate asOf) {
+                return holds;
+            }
+        };
+        UsMarketCapUniverseAdapter adapter = new UsMarketCapUniverseAdapter(listingAdapter(), counts, cikCache(), nameCache,
+                new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
+                server.url("/").toString(), 2, true);
+
+        // AAA 1000 · HLD 보류 80×10=800 · BBB 500 · EXC 제외 · NEW는 앞 편입이 아니라 못 든다
+        UniverseSnapshot snapshot = adapter.fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF,
+                Set.of("AAA", "HLD", "EXC"));
+
+        assertThat(snapshot.tickers()).containsExactly("AAA", "HLD");
+    }
+
     private UsMarketCapUniverseAdapter adapter(int topN, StoredShareCounts counts) {
         return build(topN, counts);
     }
@@ -572,7 +614,7 @@ class UsMarketCapUniverseAdapterTest {
         return new UsMarketCapUniverseAdapter(
                 listingAdapter(), shares(share("BIG", "10"), share("MID", "100")),
                 cikCache(), nameCache, new ExternalApiClientFactory(), properties(),
-                new TokenBucketRateLimiter("alpaca", 0, 0));
+                new TokenBucketRateLimiter("alpaca", 0, 0), false);
     }
 
     private UsMarketCapUniverseAdapter build(int topN, StoredShareCounts counts) {

@@ -57,8 +57,10 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     private final SecTickerCikCache cikCache;
     private final boolean userAgentPresent;
     /**
-     * 미국 재적재 관문 설정({@code stockscreener.gate.us} · 기본 꺼짐). <b>이 설정을 읽는 곳은 여기 하나다</b> —
-     * 관문에서 함께 나갈 어댑터 규칙 변경을 {@link SecEdgarFacts#build(tools.jackson.databind.JsonNode, int, boolean)}에 넘긴다.
+     * 미국 재적재 관문 설정({@code stockscreener.gate.us} · 기본 꺼짐). 여기서는 관문에서 함께 나갈 어댑터 규칙 변경을
+     * {@link SecEdgarFacts#build(tools.jackson.databind.JsonNode, int, boolean)}에 넘기고, 켜졌을 때만 클래스 축 재료를 받는다
+     * ({@link ShareClassCollector}). 이 설정을 읽는 곳 전부는 {@code @Value("${stockscreener.gate.us}")}로 센다 — 클래스 축의
+     * 유도·판독·명부도 같은 설정 뒤다.
      * 켜는 길(코드 기본값을 뒤집은 jar 하나 — 배포 디렉터리 {@code .env}는 배포마다 저장소 {@code .env}로 덮인다)은 {@code CLAUDE.md} 「재적재·백필」에 있다.
      */
     private final boolean usGate;
@@ -66,6 +68,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     private final FilingSupplementer supplementer;
     /** 같은 실행 안 재시도 대기 — 보충의 받기와 같은 규칙, 상태(연속 소진 차단)는 이 어댑터 몫이다. */
     private final SecFilingClient.Backoff backoff;
+    /** 클래스 축 재료 받기 — 관문 설정이 켜졌을 때만 부른다. 시험 생성자는 {@code null}(받지 않는다). */
+    private final ShareClassCollector shareClass;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -77,9 +81,10 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                                     @Qualifier("secEdgarRateLimiter") RateLimiter rateLimiter,
                                     SecTickerCikCache cikCache,
                                     SecFilingSupplement supplement,
+                                    ShareClassCollector shareClass,
                                     @Value("${stockscreener.gate.us}") boolean usGate) {
         this(clientFactory, properties, rateLimiter, cikCache,
-                properties.getSecEdgar().getBaseUrl(), usGate, supplement, SecFilingClient.Backoff.standard());
+                properties.getSecEdgar().getBaseUrl(), usGate, supplement, SecFilingClient.Backoff.standard(), shareClass);
     }
 
     /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 관문 설정은 꺼진 채이고 보충하지 않는다. */
@@ -100,7 +105,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              boolean usGate,
                              FilingSupplementer supplementer) {
         this(clientFactory, properties, rateLimiter, cikCache, baseUrl, usGate, supplementer,
-                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }));
+                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }), null);
     }
 
     SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
@@ -110,7 +115,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              String baseUrl,
                              boolean usGate,
                              FilingSupplementer supplementer,
-                             SecFilingClient.Backoff backoff) {
+                             SecFilingClient.Backoff backoff,
+                             ShareClassCollector shareClass) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
@@ -119,6 +125,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         this.usGate = usGate;
         this.supplementer = supplementer;
         this.backoff = backoff;
+        this.shareClass = shareClass;
     }
 
     @Override
@@ -156,6 +163,15 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // 공시 소비의 근거 ①(ADR-0176 2차): companyfacts가 us-gaap를 싣는 접수번호. MUST: 보충 **전**에 잰다 — 보충이 트리에
         // 팩트를 더하므로 뒤에 재면 보충으로 실은 공시가 섞이고, 보충의 성패는 소비가 보충 표로 따로 판정한다.
         Set<String> carried = SecFilingSupplement.usGaapAccessions(tree);
+
+        // 클래스 축 재료(관문 뒤). MUST: 보충 **전**에 — 보충이 트리에 팩트를 더하고, 판정 엔진은 companyfacts 그대로로 검증됐다.
+        if (usGate && shareClass != null) {
+            ShareClassCollector.Outcome classes = shareClass.collect(security, cik.get(), tree, context);
+            if (classes.fetched() > 0 || !classes.failed().isEmpty()) {
+                log.info("클래스 축 인스턴스. ticker={} 후보={} 받음={} 실패={}",
+                        security.ticker(), classes.targets(), classes.fetched(), classes.failed());
+            }
+        }
 
         // companyfacts가 빠뜨린 정기 공시를 그 공시의 인스턴스로 채운다(ADR-0173). 실패는 종목을 세우지 않고 판 보호로 낸다.
         SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context);

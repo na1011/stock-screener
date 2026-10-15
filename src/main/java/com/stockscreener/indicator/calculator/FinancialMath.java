@@ -623,6 +623,30 @@ final class FinancialMath {
         if (bar != null && bar.listedShares() != null && bar.listedShares().signum() > 0) {
             return context.sharesOn(bar.tradeDate(), bar.listedShares());
         }
+        return fromFinancials(context, bar, quarters, FinancialFigures::sharesOutstanding);
+    }
+
+    /**
+     * 주식수 비 지표 셋({@code SHARES_GROWTH_3Y} · {@code EPS_GROWTH_TTM_YOY} · {@code EPS_CAGR_5Y})의 한 끝.
+     *
+     * <p>관문이 켜진 미국 행(클래스 축이 읽은 행 — {@link FinancialFigures#shareClassState()}가 있다)이면 <b>그 공시의 EPS 분모
+     * n</b>이다 — 발행사 전부가 두 끝 다 같은 개념이라, 공시 형식(축 없는 표지 대 클래스 표지)에 따라 기저가 바뀌지 않는다
+     * (탐색 {@code SHARES-CLASS-PLAN-V5-1015.md} §10b-6). n이 없는 끝은 시점 주식수로 <b>안 내려간다</b> — 내려가면 두 끝의
+     * 기저가 섞인다. 그 밖(국내 · 관문 꺼짐)은 {@link #sharesOf}와 같다.
+     */
+    static BigDecimal endpointShares(IndicatorContext context, PriceBar bar, PeriodSeries series) {
+        if (series == null) {
+            return null;
+        }
+        List<FinancialFigures> rows = series.pointRows();
+        if (!rows.isEmpty() && rows.get(0).shareClassState() != null) {
+            return fromFinancials(context, bar, rows, FinancialFigures::weightedShares);
+        }
+        return sharesOf(context, bar, rows);
+    }
+
+    private static BigDecimal fromFinancials(IndicatorContext context, PriceBar bar, List<FinancialFigures> quarters,
+                                             java.util.function.Function<FinancialFigures, BigDecimal> count) {
         if (quarters.isEmpty()) {
             return null;
         }
@@ -649,7 +673,12 @@ final class FinancialMath {
                     && asOf.publishedAt().isAfter(bar.tradeDate())) {
                 continue;
             }
-            BigDecimal fromFinancials = asOf.sharesOutstanding();
+            if (asOf.shareClassState() == com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine.State.HIDDEN) {
+                // MUST: 아래 「주식수가 없으면 앞 판으로」보다 먼저 본다(§10b-3). 원장이 이 판의 주식수를 확인 못 한 것이라
+                // 앞 판의 값을 내면 숨긴 이유를 조용히 무시하는 것이다.
+                return null;
+            }
+            BigDecimal fromFinancials = count.apply(asOf);
             if (fromFinancials == null || fromFinancials.signum() <= 0) {
                 continue;
             }

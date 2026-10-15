@@ -25,6 +25,9 @@ import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts.AXI
  */
 public final class IssuerTimeline {
 
+    /** 판정 규칙의 판 — 판정 표에 같이 적는다(어느 규칙이 낸 행인지). 규칙을 바꾸면 올린다. */
+    public static final int ENGINE_VERSION = 1;
+
     /** 단일 클래스 연속 3개월 분모 변화 간격 120~200일의 p95(§10a · {@code single5.py}). */
     static final double TAU_TWO_QUARTERS = 0.1202;
 
@@ -47,6 +50,18 @@ public final class IssuerTimeline {
     private final double tau;
     private final double tauCover;
     private final DenominatorJudge judge;
+
+    /** 연속 10-Q 3개월 분모 변화(간격 120일 이하)의 p95 — 단일 클래스 18,785쌍(§1f · {@code single5.py}). */
+    public static final double TAU = 0.054;
+    /** 10-Q 표지 ÷ 3개월 분모의 |log10| p95 — 단일 클래스 28,806(§1f). */
+    public static final double TAU_COVER = 0.052;
+    /** 대용 분자(NetIncomeLoss · ProfitLoss) 폐합 허용 — τ와 같게 박는다(§10 F7). */
+    public static final double PROXY_TOLERANCE = 0.054;
+
+    /** 운영 문턱(드라이런 1·2가 이 셋으로 돌았다). */
+    public static IssuerTimeline standard() {
+        return new IssuerTimeline(TAU, TAU_COVER, PROXY_TOLERANCE);
+    }
 
     public IssuerTimeline(double tau, double tauCover, double proxyTolerance) {
         this.tau = tau;
@@ -113,7 +128,7 @@ public final class IssuerTimeline {
             String form = cf.filings().get(a).form();
             if (!ev.kind().equals("T")) {
                 if (ev.kind().equals("d")) {
-                    out.add(new Verdict(f, a, "d", 'O', "d", null, null, null));
+                    out.add(new Verdict(f, a, "d", 'O', "d", null, null, currentPathDenominator(cf, a, form, f, qv, splits)));
                 }
                 if (form.startsWith("10-Q")) {
                     ClassFacts.Period p = latestPeriod(cf.weighted(), a, 80, 100);
@@ -137,7 +152,7 @@ public final class IssuerTimeline {
                 continue;
             }
             if (!facts.isClassAnchor()) {
-                out.add(new Verdict(f, a, "T", 'O', "cur", null, null, null));
+                out.add(new Verdict(f, a, "T", 'O', "cur", null, null, currentPathDenominator(cf, a, form, f, qv, splits)));
                 if (form.startsWith("10-Q")) {
                     ClassFacts.Period p = latestPeriod(cf.weighted(), a, 80, 100);
                     Double v = p == null ? null : cf.weighted().get(new IssuerFacts.Key(a, p));
@@ -174,52 +189,12 @@ public final class IssuerTimeline {
             }
             double nq = n;
             if (!form.startsWith("10-Q") && !fpi) {
-                LocalDate lo = p.start().minusDays(7);
-                LocalDate hi = p.start().plusDays(7);
-                LocalDate cut = p.end().minusDays(20);
-                Quarter q9 = null;
-                Map<ClassFacts.Period, Quarter> byPeriod = new LinkedHashMap<>();
-                for (Map<String, Quarter> dd : qv.values()) {
-                    Quarter x = dd.get("9m");
-                    if (x != null && x.filed().isBefore(f) && !x.period().start().isBefore(lo) && !x.period().start().isAfter(hi)
-                            && x.period().end().isBefore(cut) && (q9 == null || x.period().end().isAfter(q9.period().end()))) {
-                        q9 = x;
-                    }
-                    Quarter y = dd.get("3m");
-                    if (y != null && y.filed().isBefore(f) && !y.period().start().isBefore(lo) && y.period().end().isBefore(cut)) {
-                        byPeriod.putIfAbsent(y.period(), y);
-                    }
-                }
-                long tot = p.days() + 1;
-                if (q9 != null && q9.value() != null && q9.value() != 0) {
-                    if (!q9.ok()) {
-                        out.add(new Verdict(f, a, "T", 'X', "q4-input-FAIL", q9.source().equals("원장") ? "어긋남" : "대용", null, null));
-                        continue;
-                    }
-                    long d9 = q9.period().days() + 1;
-                    nq = (n * tot - q9.value() * splitFactor(splits, q9.filed(), f) * d9) / (tot - d9);
-                } else if (byPeriod.size() == 3) {
-                    if (byPeriod.values().stream().anyMatch(x -> !x.ok())) {
-                        boolean ledger = byPeriod.values().stream().filter(x -> !x.ok()).allMatch(x -> x.source().equals("원장"));
-                        out.add(new Verdict(f, a, "T", 'X', "q4-input-FAIL", ledger ? "어긋남" : "대용", null, null));
-                        continue;
-                    }
-                    double sum = 0;
-                    long days = 0;
-                    for (Map.Entry<ClassFacts.Period, Quarter> x : byPeriod.entrySet()) {
-                        long dd = x.getKey().days() + 1;
-                        sum += x.getValue().value() * splitFactor(splits, x.getValue().filed(), f) * dd;
-                        days += dd;
-                    }
-                    nq = (n * tot - sum) / (tot - days);
-                } else {
-                    out.add(new Verdict(f, a, "T", 'X', "no-q4", "안줌", null, null));
+                FourthQuarter q4 = fourthQuarter(qv, p, n, f, splits);
+                if (q4.n() == null) {
+                    out.add(new Verdict(f, a, "T", 'X', q4.failBranch(), q4.failCategory(), null, null));
                     continue;
                 }
-                if (nq <= 0) {
-                    out.add(new Verdict(f, a, "T", 'X', "q4<=0", "어긋남", null, null));
-                    continue;
-                }
+                nq = q4.n();
             }
             double nref = nq;
             Map<String, Double> em = new LinkedHashMap<>();
@@ -303,6 +278,80 @@ public final class IssuerTimeline {
             prevN = nq;
         }
         return out;
+    }
+
+    /** Q4 분모 — 연간 분모에서 Q3 10-Q의 9개월 누적(없으면 3개월 셋)을 빼 남는 날로 나눈다. 못 내면 실패 갈래와 출처. */
+    private record FourthQuarter(Double n, String failBranch, String failCategory) {
+    }
+
+    private static FourthQuarter fourthQuarter(Map<String, Map<String, Quarter>> qv, ClassFacts.Period p, double n, LocalDate f,
+                                               List<Split> splits) {
+        LocalDate lo = p.start().minusDays(7);
+        LocalDate hi = p.start().plusDays(7);
+        LocalDate cut = p.end().minusDays(20);
+        Quarter q9 = null;
+        Map<ClassFacts.Period, Quarter> byPeriod = new LinkedHashMap<>();
+        for (Map<String, Quarter> dd : qv.values()) {
+            Quarter x = dd.get("9m");
+            if (x != null && x.filed().isBefore(f) && !x.period().start().isBefore(lo) && !x.period().start().isAfter(hi)
+                    && x.period().end().isBefore(cut) && (q9 == null || x.period().end().isAfter(q9.period().end()))) {
+                q9 = x;
+            }
+            Quarter y = dd.get("3m");
+            if (y != null && y.filed().isBefore(f) && !y.period().start().isBefore(lo) && y.period().end().isBefore(cut)) {
+                byPeriod.putIfAbsent(y.period(), y);
+            }
+        }
+        long tot = p.days() + 1;
+        double nq;
+        if (q9 != null && q9.value() != null && q9.value() != 0) {
+            if (!q9.ok()) {
+                return new FourthQuarter(null, "q4-input-FAIL", q9.source().equals("원장") ? "어긋남" : "대용");
+            }
+            long d9 = q9.period().days() + 1;
+            nq = (n * tot - q9.value() * splitFactor(splits, q9.filed(), f) * d9) / (tot - d9);
+        } else if (byPeriod.size() == 3) {
+            if (byPeriod.values().stream().anyMatch(x -> !x.ok())) {
+                boolean ledger = byPeriod.values().stream().filter(x -> !x.ok()).allMatch(x -> x.source().equals("원장"));
+                return new FourthQuarter(null, "q4-input-FAIL", ledger ? "어긋남" : "대용");
+            }
+            double sum = 0;
+            long days = 0;
+            for (Map.Entry<ClassFacts.Period, Quarter> x : byPeriod.entrySet()) {
+                long dd = x.getKey().days() + 1;
+                sum += x.getValue().value() * splitFactor(splits, x.getValue().filed(), f) * dd;
+                days += dd;
+            }
+            nq = (n * tot - sum) / (tot - days);
+        } else {
+            return new FourthQuarter(null, "no-q4", "안줌");
+        }
+        if (nq <= 0) {
+            return new FourthQuarter(null, "q4<=0", "어긋남");
+        }
+        return new FourthQuarter(nq, null, null);
+    }
+
+    /**
+     * 지금 경로 판(d · 앵커 아닌 T)의 분모 — companyfacts의 축 없는 분모로: 10-Q 3개월 · 10-K Q4 · 20-F/40-F 연간. 비 지표 셋의 두
+     * 끝이다(§10b-6). 못 내면 {@code null} — 판은 그대로 보인다(값은 지금 경로가 낸다).
+     */
+    private static Double currentPathDenominator(IssuerFacts cf, String a, String form, LocalDate f,
+                                                 Map<String, Map<String, Quarter>> qv, List<Split> splits) {
+        if (form.startsWith("10-Q")) {
+            ClassFacts.Period p = latestPeriod(cf.weighted(), a, 80, 100);
+            Double v = p == null ? null : cf.weighted().get(new IssuerFacts.Key(a, p));
+            return v == null || v <= 0 ? null : v;
+        }
+        ClassFacts.Period p = latestPeriod(cf.weighted(), a, 350, 380);
+        Double v = p == null ? null : cf.weighted().get(new IssuerFacts.Key(a, p));
+        if (v == null || v <= 0) {
+            return null;
+        }
+        if (!form.startsWith("10-K")) {
+            return v;
+        }
+        return fourthQuarter(qv, p, v, f, splits).n();
     }
 
     /** 실패의 출처: 원장이 밝힌 분자로 실패 · 축척 꼴(n·e/분자 ≥ 10^0.9) → 원장 어긋남, 대용 분자 실패 → 대용, 그 밖 → 안 줌. */

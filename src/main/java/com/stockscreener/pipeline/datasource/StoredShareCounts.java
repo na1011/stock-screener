@@ -1,8 +1,11 @@
 package com.stockscreener.pipeline.datasource;
 
+import com.stockscreener.pipeline.datasource.us.shareclass.MembershipHold;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * <b>우리가 이미 저장한</b> 재무에서 뗀 종목별 주식수. 외부 소스가 아니다.
@@ -69,5 +72,22 @@ public interface StoredShareCounts {
     record ShareCount(String ticker, BigDecimal shares, String sicCode,
                       LocalDate periodEnd, LocalDate publishedAt, boolean currencyMismatched,
                       String name) {
+    }
+
+    /**
+     * 주식수 클래스 축의 편입 보류 재료(미국 관문이 켜졌을 때만 — 아니면 빈 맵 · 탐색 {@code SHARES-CLASS-PLAN-V5-1015.md}
+     * §10b-1·§10e). 그날 상태가 보임이 아닌 줄만 — 티커 → 상태 · 보류 시총에 쓸 주식수 · 거름 재료.
+     *
+     * <p>{@link #activeByMarket}은 숨긴 줄을 안 낸다(값이 없다). 보류는 그 줄이 <b>앞 편입</b>이고 {@code HELD}일 때
+     * <b>마지막으로 보인 판정의 N_L</b>(그날까지의 분할 반영)로 순위를 다투게 하는 것이라, 그 값과 거름 재료를 따로 낸다.
+     * {@code EXCLUDED}는 그날 보이는 판이 있어도 빠진다(발행사 제외).
+     */
+    default Map<String, ClassHold> classHolds(String marketCode, LocalDate asOf) {
+        return Map.of();
+    }
+
+    /** @param heldShares {@code HELD}일 때만 — 마지막 보인 판정의 N_L을 {@code asOf}로 옮긴 값(없으면 {@code null}) */
+    record ClassHold(String ticker, MembershipHold.State state, BigDecimal heldShares, String sicCode,
+                     boolean currencyMismatched, String name) {
     }
 }

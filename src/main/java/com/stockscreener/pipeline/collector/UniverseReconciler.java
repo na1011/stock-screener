@@ -164,6 +164,15 @@ public class UniverseReconciler {
                 """, Long.class, universeCode);
     }
 
+    /** 현재 편입 중인 종목의 티커 — 리밸런싱이 소스에 「앞 편입」으로 넘긴다(미국 클래스 축 보류). */
+    public Set<String> currentMemberTickers(String universeCode) {
+        return new LinkedHashSet<>(jdbcTemplate.queryForList("""
+                SELECT s.ticker FROM universe_membership m JOIN stock s ON s.id = m.stock_id
+                WHERE m.universe_code = ? AND m.effective_to IS NULL
+                ORDER BY s.ticker
+                """, String.class, universeCode));
+    }
+
     /** 리밸런싱 결과 요약. 관리자 화면과 알림이 "무엇이 바뀌었는지"를 이것으로 말한다. */
     public record Result(String universeCode, LocalDate effectiveDate,
                          int addedCount, int removedCount, int retainedCount) {

@@ -1,5 +1,10 @@
 package com.stockscreener.pipeline.datasource.us.shareclass;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
+
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
@@ -20,6 +25,8 @@ public record ClassFacts(Map<String, LinkedHashMap<MemberPeriod, Measured>> dura
                          String documentType) {
 
     public static final String AXISLESS = "-";
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public record Period(LocalDate start, LocalDate end) {
         /** 시작과 끝 사이 날 수(끝 − 시작 · 시뮬레이터의 {@code span}). */
@@ -51,5 +58,49 @@ public record ClassFacts(Map<String, LinkedHashMap<MemberPeriod, Measured>> dura
     static String local(String member) {
         int i = member.indexOf(':');
         return i < 0 ? member : member.substring(i + 1);
+    }
+
+    /**
+     * 저장 형태({@code sec_filing_class_fact.facts}). 순서를 지킨다 — 판정이 「그 기간에 처음 나온 구성원」을 고르는 자리가 있다.
+     * 값은 {@code double}을 그대로 싣는다(가장 짧은 십진 표기 · 되읽으면 같은 비트).
+     */
+    public String toJson() {
+        ObjectNode root = MAPPER.createObjectNode();
+        root.put("documentType", documentType);
+        ObjectNode d = root.putObject("durations");
+        durations.forEach((concept, facts) -> {
+            ArrayNode rows = d.putArray(concept);
+            facts.forEach((mp, m) -> rows.addArray().add(mp.member()).add(mp.period().start().toString())
+                    .add(mp.period().end().toString()).add(m.value()).add(m.halfWidth()));
+        });
+        ObjectNode c = root.putObject("cover");
+        cover.forEach((concept, members) -> {
+            ArrayNode rows = c.putArray(concept);
+            members.forEach((member, text) -> rows.addArray().add(member).add(text));
+        });
+        return MAPPER.writeValueAsString(root);
+    }
+
+    public static ClassFacts fromJson(String json) {
+        JsonNode root = MAPPER.readTree(json);
+        Map<String, LinkedHashMap<MemberPeriod, Measured>> durations = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonNode> e : root.path("durations").properties()) {
+            LinkedHashMap<MemberPeriod, Measured> facts = new LinkedHashMap<>();
+            for (JsonNode x : e.getValue()) {
+                facts.put(new MemberPeriod(x.get(0).asString(), new Period(LocalDate.parse(x.get(1).asString()),
+                        LocalDate.parse(x.get(2).asString()))), new Measured(x.get(3).asDouble(), x.get(4).asDouble()));
+            }
+            durations.put(e.getKey(), facts);
+        }
+        Map<String, LinkedHashMap<String, String>> cover = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonNode> e : root.path("cover").properties()) {
+            LinkedHashMap<String, String> members = new LinkedHashMap<>();
+            for (JsonNode x : e.getValue()) {
+                members.put(x.get(0).asString(), x.get(1).asString());
+            }
+            cover.put(e.getKey(), members);
+        }
+        JsonNode type = root.path("documentType");
+        return new ClassFacts(durations, cover, type.isNull() || type.isMissingNode() ? null : type.asString());
     }
 }

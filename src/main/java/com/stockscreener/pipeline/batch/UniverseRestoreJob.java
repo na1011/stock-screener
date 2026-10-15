@@ -102,19 +102,22 @@ public class UniverseRestoreJob {
         List<DatedMembers> points = new ArrayList<>();
         Set<String> unresolved = new TreeSet<>();
         int fetched = 0;
+        // 앞 편입 — 미국 클래스 축의 편입 보류가 쓴다(관문 뒤). 복원 구간의 첫 격자는 편입이 없다(빈 집합).
+        Set<String> previous = Set.of();
         for (LocalDate date : grid) {
             // MUST: 격자점 하나가 실패하면 그 유니버스를 통째로 중단한다. 그 날짜만 빼고
             // 이으면 런렝스가 구멍 위를 이어 **없던 편입을 지어내고**, 그 값은 그럴듯해서
             // 대조의 정확도 수까지 오염시킨다. Phase D가 아직 안 돌았으므로 쓰기는 0이다.
             UniverseSnapshot snapshot;
             try {
-                snapshot = registry.universeSource(universeCode).fetchConstituents(universeCode, date);
+                snapshot = registry.universeSource(universeCode).fetchConstituents(universeCode, date, previous);
             } catch (DataSourceException e) {
                 throw new IllegalStateException(
                         "복원 격자점의 스냅샷을 못 만들었다: %s %s (%s) — 그 날짜만 빼고 이으면 없던 편입을 지어낸다. 소스를 고치고 다시 돌린다"
                                 .formatted(universeCode, date, e.kind()), e);
             }
             fetched++;
+            previous = Set.copyOf(snapshot.tickers());
             points.add(new DatedMembers(date, resolve(target, snapshot, apply, unresolved)));
         }
 

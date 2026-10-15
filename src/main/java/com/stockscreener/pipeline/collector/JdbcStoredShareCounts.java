@@ -1,13 +1,27 @@
 package com.stockscreener.pipeline.collector;
 
+import com.stockscreener.indicator.ShareBasis;
 import com.stockscreener.pipeline.datasource.StoredShareCounts;
+import com.stockscreener.pipeline.datasource.us.UsMarket;
+import com.stockscreener.pipeline.datasource.us.shareclass.MembershipHold;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * {@link StoredShareCounts}를 {@code financial_statement}에서 읽는다.
@@ -160,15 +174,57 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             ORDER BY s.ticker
             """.formatted(SHIFT_TO_ASOF, CURRENCY_MISMATCHED);
 
-    private final JdbcTemplate jdbcTemplate;
+    /**
+     * 관문이 켜진 미국의 판 후보 — {@link #SQL}의 안쪽과 같은 범위·같은 정렬이되 주식수로 미리 거르지 않는다. 클래스 축 발행사는
+     * 지금 경로 주식수가 비어 있고(축 없는 표지가 없다) 값은 판정에서 오기 때문이다. 고르기는 {@link ShareClassLine}을 입힌 뒤
+     * 자바에서 한다(지표 판독기와 같은 규칙 한 자리).
+     */
+    private static final String CLASS_ROWS = """
+            SELECT f.stock_id, s.ticker, s.sic_code, s.name, f.report_code, f.shares_outstanding, f.period_end,
+                   f.published_at, f.share_basis_multiple, f.share_basis_status
+            FROM financial_statement f
+            JOIN stock s ON s.id = f.stock_id
+            WHERE s.market_code = ?
+              AND s.is_active
+              AND f.published_at <= ?
+              AND f.period_end >= ?
+            ORDER BY f.stock_id, f.period_end DESC, f.published_at DESC, f.revision_no DESC
+            """;
 
+    /** 통화 판정 — {@link #CURRENCY_MISMATCHED}를 글자 그대로 쓴다(별칭 {@code latest}에 종목을 앉힌다). */
+    private static final String CLASS_MISMATCHED = """
+            SELECT latest.stock_id FROM (SELECT s.id AS stock_id FROM stock s WHERE s.market_code = ? AND s.is_active) latest
+            WHERE %s
+            """.formatted(CURRENCY_MISMATCHED);
+
+    private final JdbcTemplate jdbcTemplate;
+    private final ShareClassStore shareClasses;
+    /** 미국 관문 설정 — 켜졌으면 미국 주식수를 클래스 축 판정으로 읽는다(꺼졌으면 판정 표를 부르지 않는다). */
+    private final boolean usGate;
+
+    /** 관문이 꺼진 판독기(시험 · 재생 도구). */
     public JdbcStoredShareCounts(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, null, false);
+    }
+
+    @Autowired
+    public JdbcStoredShareCounts(JdbcTemplate jdbcTemplate, ShareClassStore shareClasses,
+                                 @Value("${stockscreener.gate.us}") boolean usGate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.shareClasses = shareClasses;
+        this.usGate = usGate;
+    }
+
+    private boolean classAxis(String marketCode) {
+        return usGate && UsMarket.CODE.equals(marketCode);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ShareCount> activeByMarket(String marketCode, LocalDate oldestPeriodEnd, LocalDate asOf) {
+        if (classAxis(marketCode)) {
+            return classAxisCounts(marketCode, oldestPeriodEnd, asOf);
+        }
         return jdbcTemplate.query(SQL,
                 (rs, rowNum) -> new ShareCount(
                         rs.getString("ticker"),
@@ -180,4 +236,94 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                         rs.getString("name")),
                 marketCode, asOf, oldestPeriodEnd, asOf);
     }
+
+    /**
+     * 관문이 켜진 미국: 종목마다 기(期) 순서로 판을 내려가며 클래스 축 판정을 입혀 첫 값을 고른다 — 숨긴 판을 만나면 멈추고
+     * 아무것도 안 낸다(앞 판으로 안 내려간다 · §10b-3). 지금 경로 판이 주식수를 안 실었으면 앞 판으로 내려간다(꺼진 질의가
+     * 주식수 있는 판만 고르는 것과 같다). 기저 판정({@code share_basis_status})은 고른 판에서 본다 — 꺼진 질의와 같다.
+     */
+    private List<ShareCount> classAxisCounts(String marketCode, LocalDate oldestPeriodEnd, LocalDate asOf) {
+        Map<Long, ShareClassLine> lines = shareClasses.lines(marketCode);
+        Set<Long> mismatched = new HashSet<>(jdbcTemplate.queryForList(CLASS_MISMATCHED, Long.class, marketCode));
+        Map<Long, List<ShareClassLine.Split>> splits = splitsOf(marketCode);
+        Map<Long, ShareCount> chosen = new LinkedHashMap<>();
+        Set<Long> decided = new HashSet<>();
+        jdbcTemplate.query(CLASS_ROWS, rs -> {
+            long stockId = rs.getLong("stock_id");
+            if (decided.contains(stockId)) {
+                return;
+            }
+            LocalDate publishedAt = rs.getObject("published_at", LocalDate.class);
+            ShareClassLine line = lines.getOrDefault(stockId, ShareClassLine.none());
+            ShareClassLine.Read read = line.read(rs.getString("report_code"), publishedAt, rs.getBigDecimal("shares_outstanding"));
+            if (read.state() == ShareClassLine.State.HIDDEN) {
+                decided.add(stockId);
+                return;
+            }
+            if (read.shares() == null || read.shares().signum() <= 0) {
+                return;
+            }
+            decided.add(stockId);
+            if (ShareBasis.of(rs.getString("share_basis_status")) == ShareBasis.UNRESOLVED) {
+                return;
+            }
+            BigDecimal multiple = rs.getBigDecimal("share_basis_multiple");
+            BigDecimal shares = read.shares().multiply(multiple == null ? BigDecimal.ONE : multiple)
+                    .multiply(ShareClassLine.factor(splits.getOrDefault(stockId, List.of()), publishedAt, asOf));
+            chosen.put(stockId, new ShareCount(rs.getString("ticker"), shares, rs.getString("sic_code"),
+                    rs.getObject("period_end", LocalDate.class), publishedAt, mismatched.contains(stockId),
+                    rs.getString("name")));
+        }, marketCode, asOf, oldestPeriodEnd);
+        List<ShareCount> out = new ArrayList<>(chosen.values());
+        out.sort(java.util.Comparator.comparing(ShareCount::ticker));
+        return out;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, ClassHold> classHolds(String marketCode, LocalDate asOf) {
+        if (!classAxis(marketCode)) {
+            return Map.of();
+        }
+        Map<Long, ShareClassLine> lines = shareClasses.lines(marketCode);
+        Set<Long> mismatched = new HashSet<>(jdbcTemplate.queryForList(CLASS_MISMATCHED, Long.class, marketCode));
+        Map<String, ClassHold> out = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT id, ticker, sic_code, name FROM stock WHERE market_code = ? AND is_active ORDER BY ticker
+                """, rs -> {
+            ShareClassLine line = lines.get(rs.getLong("id"));
+            if (line == null) {
+                return;
+            }
+            List<MembershipHold.Verdict> history = line.history();
+            MembershipHold.State state = MembershipHold.stateAt(history, asOf);
+            if (state == null || state == MembershipHold.State.SHOWN) {
+                return;
+            }
+            BigDecimal held = null;
+            if (state == MembershipHold.State.HELD) {
+                MembershipHold.Verdict last = MembershipHold.lastShown(history, asOf);
+                if (last != null && last.lineShares() != null) {
+                    held = BigDecimal.valueOf(last.lineShares()).multiply(line.factor(last.filed(), asOf));
+                }
+            }
+            out.put(rs.getString("ticker"), new ClassHold(rs.getString("ticker"), state, held, rs.getString("sic_code"),
+                    mismatched.contains(rs.getLong("id")), rs.getString("name")));
+        }, marketCode);
+        return out;
+    }
+
+    /** 순위 판독기의 {@link #SHIFT_TO_ASOF}와 같은 술어·경계(APPLIED · 공시일 뒤 · asOf 이하). */
+    private Map<Long, List<ShareClassLine.Split>> splitsOf(String marketCode) {
+        Map<Long, List<ShareClassLine.Split>> out = new HashMap<>();
+        jdbcTemplate.query("""
+                SELECT ca.stock_id, ca.effective_date, ca.ratio FROM corporate_action ca JOIN stock s ON s.id = ca.stock_id
+                WHERE s.market_code = ? AND s.is_active AND ca.status = 'APPLIED'
+                """, rs -> {
+            out.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(new ShareClassLine.Split(
+                    rs.getObject("effective_date", LocalDate.class), rs.getBigDecimal("ratio")));
+        }, marketCode);
+        return out;
+    }
+
 }

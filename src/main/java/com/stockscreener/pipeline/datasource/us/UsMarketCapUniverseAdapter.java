@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -237,6 +238,8 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
     private final RateLimiter rateLimiter;
     private final boolean credentialsPresent;
     private final int topN;
+    /** 미국 관문 설정 — 켜졌으면 주식수 클래스 축의 편입 보류·발행사 제외를 순위에 건다({@link #applyClassHolds}). */
+    private final boolean usGate;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -250,9 +253,10 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                                       SecurityNameCache nameCache,
                                       ExternalApiClientFactory clientFactory,
                                       DataSourceProperties properties,
-                                      @Qualifier("alpacaRateLimiter") RateLimiter rateLimiter) {
+                                      @Qualifier("alpacaRateLimiter") RateLimiter rateLimiter,
+                                      @Value("${stockscreener.gate.us}") boolean usGate) {
         this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter,
-                properties.getAlpacaMarketDataBaseUrl(), TOP_N);
+                properties.getAlpacaMarketDataBaseUrl(), TOP_N, usGate);
     }
 
     /**
@@ -271,6 +275,19 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                                RateLimiter rateLimiter,
                                String marketDataBaseUrl,
                                int topN) {
+        this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter, marketDataBaseUrl, topN, false);
+    }
+
+    UsMarketCapUniverseAdapter(AlpacaUniverseAdapter listing,
+                               StoredShareCounts shareCounts,
+                               SecTickerCikCache cikCache,
+                               SecurityNameCache nameCache,
+                               ExternalApiClientFactory clientFactory,
+                               DataSourceProperties properties,
+                               RateLimiter rateLimiter,
+                               String marketDataBaseUrl,
+                               int topN,
+                               boolean usGate) {
         DataSourceProperties.Source source = properties.getAlpaca();
         this.listing = listing;
         this.shareCounts = shareCounts;
@@ -280,6 +297,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         this.rateLimiter = rateLimiter;
         this.credentialsPresent = source.hasApiKey() && source.hasSecretKey();
         this.topN = topN;
+        this.usGate = usGate;
     }
 
     @Override
@@ -295,7 +313,13 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
     @Override
     public UniverseSnapshot fetchConstituents(String universeCode, LocalDate asOf)
             throws DataSourceException {
-        Ranking ranking = rank(universeCode, asOf);
+        return fetchConstituents(universeCode, asOf, Set.of());
+    }
+
+    @Override
+    public UniverseSnapshot fetchConstituents(String universeCode, LocalDate asOf, Set<String> previous)
+            throws DataSourceException {
+        Ranking ranking = rank(universeCode, asOf, previous);
         List<String> tickers = new ArrayList<>(topN);
         for (int i = 0; i < topN; i++) {
             AlpacaAsset asset = ranking.deduped().get(i).asset();
@@ -317,6 +341,10 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 경계 너머의 순위를 읽는 자리이고, {@link #fetchConstituents}는 이것의 앞 N이다.
      */
     Ranking rank(String universeCode, LocalDate asOf) throws DataSourceException {
+        return rank(universeCode, asOf, Set.of());
+    }
+
+    Ranking rank(String universeCode, LocalDate asOf, Set<String> previous) throws DataSourceException {
         if (!UNIVERSE_CODE.equals(universeCode)) {
             throw new DataSourceException(DataSourceException.Kind.NOT_FOUND, SOURCE_NAME,
                     "담당하지 않는 유니버스다: " + universeCode);
@@ -350,6 +378,9 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
             }
             sharesByTicker.put(count.ticker(), count.shares());
             storedNames.put(count.ticker(), count.name());
+        }
+        if (usGate) {
+            applyClassHolds(asOf, previous, sharesByTicker, storedNames, excluded);
         }
 
         List<AlpacaAsset> candidates = new ArrayList<>();
@@ -409,6 +440,54 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                             .formatted(deduped.size(), topN, excluded));
         }
         return new Ranking(assets.size(), candidates.size(), deduped, excluded);
+    }
+
+    /**
+     * 주식수 클래스 축의 편입 보류와 발행사 제외(관문 뒤 · 탐색 {@code SHARES-CLASS-PLAN-V5-1015.md} §10b-1·§10e · 규칙은
+     * {@link com.stockscreener.pipeline.datasource.us.shareclass.MembershipHold}).
+     *
+     * <ul>
+     *   <li>그날 최신 판정이 숨김이고 그 앞이 보였으며 119일 안({@code HELD})인 <b>앞 편입</b>은 <b>마지막으로 보인 판정의 N_L</b>
+     *       (그날까지의 분할 반영)으로 후보에 든다 — 자리를 미리 떼지 않고 그 값으로 순위를 다툰다. 나머지 거름(통화 · 업종 ·
+     *       이름 · 종가 · CIK 대표)은 다른 후보와 똑같이 탄다.</li>
+     *   <li>숨김인데 보류가 아닌 줄(연속 숨김 · 첫 판 숨김 · 상한 넘김 · 앞 편입 아님)은 판독기가 이미 안 낸다 — 후보가 못 된다.</li>
+     *   <li>발행사 제외({@code EXCLUDED})는 그날 보이는 판이 있어도 뺀다.</li>
+     * </ul>
+     */
+    private void applyClassHolds(LocalDate asOf, Set<String> previous, Map<String, BigDecimal> sharesByTicker,
+                                 Map<String, String> storedNames, Exclusions excluded) {
+        List<String> held = new ArrayList<>();
+        List<String> classExcluded = new ArrayList<>();
+        for (StoredShareCounts.ClassHold hold : shareCounts.classHolds(UsMarket.CODE, asOf).values()) {
+            switch (hold.state()) {
+                case EXCLUDED -> {
+                    sharesByTicker.remove(hold.ticker());
+                    classExcluded.add(hold.ticker());
+                }
+                case HELD -> {
+                    if (!previous.contains(hold.ticker()) || hold.heldShares() == null || hold.heldShares().signum() <= 0) {
+                        continue;
+                    }
+                    if (hold.currencyMismatched()) {
+                        excluded.currency++;
+                        continue;
+                    }
+                    if (hold.sicCode() != null && NON_OPERATING_SIC.contains(hold.sicCode())) {
+                        excluded.nonOperating++;
+                        continue;
+                    }
+                    sharesByTicker.put(hold.ticker(), hold.heldShares());
+                    storedNames.put(hold.ticker(), hold.name());
+                    held.add(hold.ticker());
+                }
+                default -> {
+                    // 연속 숨김 · 첫 판 숨김 · 상한 넘김은 판독기가 이미 안 냈다 — 후보가 못 된다.
+                }
+            }
+        }
+        // 리밸런싱마다 이 줄이 보류의 귀속 재료다(수용 기준 7·9).
+        log.info("클래스 축 보류. 기준일={} 앞편입={} 보류후보={}{} 발행사제외={}{}", asOf, previous.size(), held.size(), held,
+                classExcluded.size(), classExcluded);
     }
 
     /** 순위와 그것을 만든 실행의 귀속 재료(상장 · 후보 수 · 축별 제외). */

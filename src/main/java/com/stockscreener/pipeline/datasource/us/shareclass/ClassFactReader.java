@@ -37,6 +37,12 @@ import java.util.Set;
  */
 public final class ClassFactReader {
 
+    /**
+     * 저장 팩트({@code sec_filing_class_fact.facts})를 정하는 읽기 규칙의 판 — 이 파일과 {@link ClassFacts}의 저장 형태를 바꾸면
+     * 올린다. 판이 다른 행은 없는 것으로 치고 다음 받기가 다시 받는다.
+     */
+    public static final int READER_VERSION = 1;
+
     public static final String SHARES_OUTSTANDING = "EntityCommonStockSharesOutstanding";
     public static final String TRADING_SYMBOL = "TradingSymbol";
     public static final String SECURITY_TITLE = "Security12bTitle";

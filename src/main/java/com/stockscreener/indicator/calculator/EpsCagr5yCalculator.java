@@ -138,8 +138,8 @@ public class EpsCagr5yCalculator implements IndicatorCalculator {
             PriceBar nowBar = bars.get(i);
 
             BigDecimal pastShares =
-                    FinancialMath.sharesOf(context, pastBar, FinancialMath.seriesOf(context));
-            BigDecimal nowShares = FinancialMath.sharesOf(context, nowBar, FinancialMath.seriesOf(context));
+                    FinancialMath.endpointShares(context, pastBar, FinancialMath.seriesOf(context));
+            BigDecimal nowShares = FinancialMath.endpointShares(context, nowBar, FinancialMath.seriesOf(context));
             if (pastShares == null || nowShares == null
                     || pastShares.signum() <= 0 || nowShares.signum() <= 0) {
                 continue;

@@ -250,7 +250,9 @@ public class UniverseRebalanceJob {
     private UniverseReconciler.Result rebalanceOne(UniverseTarget target, LocalDate asOf)
             throws DataSourceException {
         UniverseDataSource source = registry.universeSource(target.universeCode());
-        UniverseSnapshot snapshot = source.fetchConstituents(target.universeCode(), asOf);
+        // 앞 편입을 넘긴다 — 미국 클래스 축의 편입 보류가 앞 편입에만 선다(관문 뒤 · 다른 소스는 안 쓴다).
+        UniverseSnapshot snapshot = source.fetchConstituents(target.universeCode(), asOf,
+                reconciler.currentMemberTickers(target.universeCode()));
 
         // 티커 해석이 먼저다. universe_membership이 stock_id를 FK로 참조한다.
         List<Long> stockIds =

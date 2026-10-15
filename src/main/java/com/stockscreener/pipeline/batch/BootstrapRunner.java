@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.datasource.us.UsMarket;
+
 import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.collector.CorporateActionLedger;
 import com.stockscreener.pipeline.collector.CorporateActionStatus;
@@ -394,8 +396,14 @@ public class BootstrapRunner implements ApplicationRunner {
             // 바꾸는 것은 `financial_statement`의 기저 판정 두 컬럼뿐이다(ADR-0162).
             // MUST: 적재가 새 판을 넣은 뒤에는 이것을 다시 돌린다. 새 판은 판정이 NULL로
             // 들어오고 NULL은 OK로 읽히므로, 안 돌리면 `UNRESOLVED` 종목이 조용히 값을 되찾는다.
+            // 미국은 관문이 켜졌으면 주식수 클래스 축 판정이 먼저 돈다(기저 판정이 그 계열로 배수를 잰다 · IndicatorReconciler).
             case "share-basis-derive" -> {
-                shareBasisDeriver.derive(value(args, "market", "US"));
+                String market = value(args, "market", "US");
+                if (UsMarket.CODE.equals(market)) {
+                    indicatorReconciler.deriveShareBases();
+                } else {
+                    shareBasisDeriver.derive(market);
+                }
                 yield BatchStatus.SUCCESS;
             }
             case "market-calendar" -> marketCalendarJob.run(
@@ -433,7 +441,7 @@ public class BootstrapRunner implements ApplicationRunner {
         // MUST: 잡의 반환 지점이 아니라 **여기**에 건다. 세 잡이 각각 여러 곳에서 return 하고,
         // 그중 하나를 빠뜨리면 증상이 「가끔 되살아난다」라 재현이 안 된다.
         if (REDERIVE_SHARE_BASIS_AFTER.contains(job)) {
-            shareBasisDeriver.derive("US");
+            indicatorReconciler.deriveShareBases();
         }
 
         log.info("부트스트랩 러너가 끝났다. job={} status={}", job, status);

@@ -3,10 +3,12 @@ package com.stockscreener.pipeline.batch;
 import com.stockscreener.indicator.IndicatorCalendar;
 import com.stockscreener.pipeline.datasource.CollectedMarkets;
 import com.stockscreener.pipeline.collector.ShareBasisDeriver;
+import com.stockscreener.pipeline.collector.ShareClassDeriver;
 import com.stockscreener.pipeline.datasource.us.UsMarket;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -39,15 +41,22 @@ public class IndicatorReconciler {
     private final ShareBasisDeriver shareBasisDeriver;
     private final GovernanceDeriveJob governanceDeriveJob;
     private final IndicatorCalendar indicatorCalendar;
+    private final ShareClassDeriver shareClassDeriver;
+    /** 미국 관문 설정 — 켜졌을 때만 클래스 축 판정을 기저 판정 앞에 돈다. */
+    private final boolean usGate;
 
     public IndicatorReconciler(IndicatorBackfillJob indicatorBackfillJob,
                                ShareBasisDeriver shareBasisDeriver,
                                GovernanceDeriveJob governanceDeriveJob,
-                               IndicatorCalendar indicatorCalendar) {
+                               IndicatorCalendar indicatorCalendar,
+                               ShareClassDeriver shareClassDeriver,
+                               @Value("${stockscreener.gate.us}") boolean usGate) {
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.shareBasisDeriver = shareBasisDeriver;
         this.governanceDeriveJob = governanceDeriveJob;
         this.indicatorCalendar = indicatorCalendar;
+        this.shareClassDeriver = shareClassDeriver;
+        this.usGate = usGate;
     }
 
     /**
@@ -69,13 +78,26 @@ public class IndicatorReconciler {
 
     /**
      * 화해가 읽는 입력 둘을 다시 판정·유도한다 — 주식수 기저(미국, ADR-0162) → 거버넌스 사실(보존 창 편입).
+     * 미국 관문이 켜졌으면 그 앞에 주식수 클래스 축 판정을 돈다 — 기저 판정이 판독기가 읽는 계열(N_L)로 배수를 재고,
+     * 거버넌스 유도의 배당 총액도 그 주식수를 읽는다.
      *
      * <p>둘 다 저장된 원자료만 읽는다. 재무 판이나 기업 행위 원장이 바뀐 날 판정이 안 따라가면 새 판은
      * {@code NULL}로 남고 {@code NULL}은 OK로 읽혀 <b>판정 대기 종목이 조용히 값을 되찾는다.</b>
      */
     public void deriveInputs(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
-        shareBasisDeriver.derive(UsMarket.CODE);
+        deriveShareBases();
         governanceDeriveJob.run(asOf, triggeredBy, List.of());
+    }
+
+    /**
+     * 미국 주식수의 두 판정 — 관문이 켜졌으면 클래스 축 판정을 먼저, 그다음 기저 판정(그 계열로 배수를 잰다). 재무·기업행위를 쓴
+     * 손 잡 뒤에도 이것을 부른다({@code BootstrapRunner}) — 순서가 한 자리에만 있게.
+     */
+    public void deriveShareBases() {
+        if (usGate) {
+            shareClassDeriver.derive(UsMarket.CODE);
+        }
+        shareBasisDeriver.derive(UsMarket.CODE);
     }
 
     /**

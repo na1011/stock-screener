@@ -136,7 +136,7 @@ class PipelineSchedulerChainTest {
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob,
                 financialRefillJob, mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob,
-                        indicatorCalendar),
+                        indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob, filingConsumptionJob,
                 freshnessCatchUpJob, new UsCandidateFeed(candidateFeed), candidateSplitJob);
     }
@@ -555,7 +555,7 @@ class PipelineSchedulerChainTest {
                 dailyUpdateJob, universeRebalanceJob, corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), policy,
-                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
+                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"), mock(FilingListingJob.class),
                 mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class));
 
@@ -621,7 +621,7 @@ class PipelineSchedulerChainTest {
                 dailyUpdateJob, universeRebalanceJob, corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
-                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
+                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, refusing, blockedListing, blockedConsumption,
                 blockedCatchUp, new UsCandidateFeed(false), mock(CandidateSplitJob.class));
 
@@ -667,7 +667,7 @@ class PipelineSchedulerChainTest {
                 dailyUpdateJob, universeRebalanceJob, corporateActionJob, adjustmentRebuildJob,
                 governanceLoadJob, governanceDeriveJob, fullStatementRefillJob, financialRefillJob,
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
-                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar),
+                new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, failing, mock(FilingListingJob.class),
                 mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class));
 
