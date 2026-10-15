@@ -76,6 +76,24 @@ public class ShareClassStore {
                 """, cik, accession, form, filed, ClassFactReader.READER_VERSION, status, facts, failureKind, failureMessage);
     }
 
+    /**
+     * 공시 보충이 실은 정기 공시(companyfacts가 빠뜨린 것 · {@code sec_filing_supplement} OK) — 판정의 공시 목록에 더한다
+     * ({@link IssuerFacts#withFilings}).
+     */
+    public Map<String, IssuerFacts.Filing> supplementedFilings(long cik) {
+        Map<String, IssuerFacts.Filing> out = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT accession, form, filed FROM sec_filing_supplement
+                WHERE cik = ? AND status = 'OK' ORDER BY filed, accession
+                """, rs -> {
+            String form = rs.getString("form");
+            if (IssuerFacts.PERIODIC_FORMS.contains(form)) {
+                out.put(rs.getString("accession"), new IssuerFacts.Filing(form, rs.getObject("filed", LocalDate.class)));
+            }
+        }, cik);
+        return out;
+    }
+
     /** 시장의 활성 상장 줄 중 재료가 있는 것. */
     public List<Input> inputs(String marketCode) {
         return jdbcTemplate.query("""

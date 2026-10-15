@@ -105,6 +105,17 @@ public record IssuerFacts(Map<String, Filing> filings,
     }
 
     /**
+     * companyfacts가 빠뜨려 공시 보충(ADR-0173)으로 실린 정기 공시를 공시 목록에 더한다(이미 있으면 그대로). 그 공시는 companyfacts에
+     * 축 없는 값이 없으므로 앵커 후보가 되고 인스턴스로 판정된다 — 안 더하면 판정이 없어 클래스 축 줄에서 「미판정 = 숨김」으로
+     * 영영 남는다(드라이런 3: {@code V} 2026-07-29 10-Q).
+     */
+    public IssuerFacts withFilings(Map<String, Filing> extra) {
+        Map<String, Filing> merged = new LinkedHashMap<>(filings);
+        extra.forEach(merged::putIfAbsent);
+        return new IssuerFacts(merged, weighted, eps, declaredNumerator, proxyNumerator, coverShares);
+    }
+
+    /**
      * 클래스 축 앵커 후보 — {@link #INSTANCE_FROM} 뒤 정기 공시 중 축 없는 표지 주식수가 없는 것. 받기({@code ShareClassCollector})와
      * 유도({@code ShareClassDeriver})가 같은 집합을 본다.
      */

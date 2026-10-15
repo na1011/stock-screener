@@ -56,15 +56,26 @@ public class ShareClassCollector {
     }
 
     /**
+     * 줄의 companyfacts 재료를 둔다 — 공시 보충 <b>전</b> 트리로(판정 엔진이 companyfacts 그대로로 검증됐다).
+     *
      * @param facts companyfacts 응답의 {@code facts} 노드 — 어댑터가 쥔 트리가 이것이다(응답 루트가 아니다). 가지치기는 응답 루트
      *              꼴을 받으므로 여기서 감싼다(드라이런 3: 루트로 넘긴 줄 알고 가지치자 재료가 빈 트리로 저장됐다).
+     * @return 그 재료로 읽은 companyfacts 값 — {@link #fetchInstances}에 넘긴다
      */
-    public Outcome collect(SecurityRef security, long cik, JsonNode facts, String context) throws DataSourceException {
+    public IssuerFacts saveInput(SecurityRef security, long cik, JsonNode facts) {
         ObjectNode root = MAPPER.createObjectNode();
         root.set("facts", facts);
         ObjectNode pruned = IssuerFacts.prune(root);
         store.saveInput(security.stockId(), cik, pruned.toString());
-        IssuerFacts cf = IssuerFacts.fromCompanyFacts(pruned);
+        return IssuerFacts.fromCompanyFacts(pruned);
+    }
+
+    /**
+     * 앵커 후보 공시의 인스턴스를 받는다 — 공시 보충 <b>뒤</b>에 부른다. 보충이 같은 실행에서 실은 정기 공시(companyfacts가 빠뜨린 것)도
+     * 앵커 후보라서다(앞에 부르면 그 공시는 다음 받기까지 판정 없이 숨는다).
+     */
+    public Outcome fetchInstances(long cik, IssuerFacts companyFacts, String context) throws DataSourceException {
+        IssuerFacts cf = companyFacts.withFilings(store.supplementedFilings(cik));
         Map<String, ShareClassStore.FactRow> stored = store.factRows(cik);
         int targets = 0;
         int fetched = 0;

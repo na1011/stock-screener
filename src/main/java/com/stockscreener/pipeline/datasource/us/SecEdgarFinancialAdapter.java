@@ -165,13 +165,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         Set<String> carried = SecFilingSupplement.usGaapAccessions(tree);
 
         // 클래스 축 재료(관문 뒤). MUST: 보충 **전**에 — 보충이 트리에 팩트를 더하고, 판정 엔진은 companyfacts 그대로로 검증됐다.
-        if (usGate && shareClass != null) {
-            ShareClassCollector.Outcome classes = shareClass.collect(security, cik.get(), tree, context);
-            if (classes.fetched() > 0 || !classes.failed().isEmpty()) {
-                log.info("클래스 축 인스턴스. ticker={} 후보={} 받음={} 실패={}",
-                        security.ticker(), classes.targets(), classes.fetched(), classes.failed());
-            }
-        }
+        com.stockscreener.pipeline.datasource.us.shareclass.IssuerFacts classInput =
+                usGate && shareClass != null ? shareClass.saveInput(security, cik.get(), tree) : null;
 
         // companyfacts가 빠뜨린 정기 공시를 그 공시의 인스턴스로 채운다(ADR-0173). 실패는 종목을 세우지 않고 판 보호로 낸다.
         SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context);
@@ -180,6 +175,15 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
             log.info("공시 보충. ticker={} 받음={} 저장분={} 옛 판 저장분={} 더한 팩트={} 실패={} 목록 모름={}",
                     security.ticker(), supplement.fetched(), supplement.fromStore(), supplement.staleReused(),
                     supplement.merged(), supplement.failed(), supplement.vintagesUncertain());
+        }
+
+        // 클래스 축 인스턴스(관문 뒤) — 보충 **뒤**: 보충이 이번에 실은 정기 공시도 앵커 후보다.
+        if (classInput != null) {
+            ShareClassCollector.Outcome classes = shareClass.fetchInstances(cik.get(), classInput, context);
+            if (classes.fetched() > 0 || !classes.failed().isEmpty()) {
+                log.info("클래스 축 인스턴스. ticker={} 후보={} 받음={} 실패={}",
+                        security.ticker(), classes.targets(), classes.fetched(), classes.failed());
+            }
         }
 
         SecEdgarFacts.Result result = SecEdgarFacts.build(tree, fromFiscalYear, usGate);
