@@ -171,15 +171,21 @@ stale AS (
     (SELECT count(*) FROM corporate_action ca JOIN stock s ON s.id = ca.stock_id
      WHERE s.market_code = mk.mc AND ca.status = 'APPLIED'
        AND ca.ratio IS NOT NULL AND ca.ratio <> 1 AND ca.created_at > r.restored_at
-       AND ca.effective_date <= r.grid_to) ledger
+       AND ca.effective_date <= r.grid_to) ledger,
+    -- 미국 관문(V70) 뒤에는 클래스 축 판정도 순위 재료다(보류 · 숨김 · N_L). 복원 뒤에 다시 유도된 판정을 센다. 판정 표가
+    -- 없는 DB(관문 전)에서는 0 — query_to_xml이 그 갈래에서만 표 이름을 푼다(없는 표를 글자로 부르면 질의가 통째로 선다).
+    CASE WHEN mk.mc <> 'US' OR to_regclass('public.financial_share_class_filing') IS NULL THEN 0
+         ELSE ((xpath('/row/c/text()', query_to_xml(format(
+             'SELECT count(*) AS c FROM financial_share_class_filing v WHERE v.derived_at > %L AND v.filed <= %L',
+             r.restored_at, r.grid_to), false, true, '')))[1])::text::int END cls
   FROM r JOIN mk ON mk.uc = r.uc)
 SELECT CASE
   WHEN (SELECT count(*) FROM r) = 0 THEN '잴 것이 없었다 — 복원 행이 하나도 없다'
-  WHEN (SELECT count(*) FROM stale WHERE fin > 0 OR ledger > 0) = 0
-    THEN 'OK 복원 ' || (SELECT count(*) FROM r) || '곳 전부 그 뒤에 들어온 재무·원장이 없다'
-  ELSE (SELECT string_agg(uc || '(' || d || ' 뒤 재무 ' || fin || '행·원장 ' || ledger || '건)', ', ' ORDER BY uc)
-        FROM stale WHERE fin > 0 OR ledger > 0)
-       || ' — 복원의 순위 재료가 그 둘이라 과거 명부가 실제와 갈린다. 관문 10단계의 복원이 닫는다 — '
+  WHEN (SELECT count(*) FROM stale WHERE fin > 0 OR ledger > 0 OR cls > 0) = 0
+    THEN 'OK 복원 ' || (SELECT count(*) FROM r) || '곳 전부 그 뒤에 들어온 재무·원장·판정이 없다'
+  ELSE (SELECT string_agg(uc || '(' || d || ' 뒤 재무 ' || fin || '행·원장 ' || ledger || '건·판정 ' || cls || '행)', ', ' ORDER BY uc)
+        FROM stale WHERE fin > 0 OR ledger > 0 OR cls > 0)
+       || ' — 복원의 순위 재료(재무 · 원장 · 미국 관문 뒤 클래스 축 판정)가 바뀌어 과거 명부가 실제와 갈린다. 관문 10단계의 복원이 닫는다 — '
        || '관문 전에 universe-restore와 파생층 백필을 따로 돌리지 않는다(§규칙).'
   END"
 ```

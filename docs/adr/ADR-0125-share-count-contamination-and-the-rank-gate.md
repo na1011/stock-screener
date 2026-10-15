@@ -145,7 +145,12 @@ MANUAL 9 · **SCHEDULER 3** · ADMIN 1). 그 셋이 08-22·08-29·09-05이므로
 # MUST: 축이 가드(guard-rebalance-on-dirty-rank.sh)와 같아야 한다. 갈리면 가드는 통과시키는데
 # 세션 시작은 붉는(또는 그 반대) 상태가 되고, 그 어긋남은 어느 쪽도 신고하지 않는다.
 # 옛 축(최신 vs 이력 중앙값 50배)으로 되돌리지 마라 — 거짓 양성 4/4 · 거짓 음성 7/7이었다(§가드의 판정축을 바꿨다).
-psql -d stock_screener -At -c "WITH cur AS (SELECT DISTINCT ON (f.stock_id) f.stock_id, f.shares_outstanding AS sh, COALESCE(f.net_income_controlling, f.net_income) / NULLIF(f.eps, 0) AS imp FROM financial_statement f WHERE f.shares_outstanding > 0 ORDER BY f.stock_id, f.period_end DESC, f.revision_no DESC), bad AS (SELECT s.ticker, round(c.imp / c.sh) r FROM cur c JOIN stock s ON s.id = c.stock_id WHERE c.imp IS NOT NULL AND c.imp / c.sh >= 100 AND c.imp / c.sh < 10000) SELECT CASE WHEN (SELECT count(*) FROM cur WHERE imp IS NOT NULL) = 0 THEN '잴 것이 없었다 — eps가 있는 주식수 행이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 저장 주식수가 같은 보고서의 net_income/eps 함의와 어긋나는 종목이 없다' ELSE (SELECT count(*) FROM bad) || '종목의 주식수가 손익 함의와 100배 이상 갈린다: ' || (SELECT string_agg(ticker || ' ' || r || '배', ', ' ORDER BY r DESC) FROM bad) || ' — 시총 = 주식수 × 종가이므로 그 종목이 순위에서 밀려나거나 밀어낸다. 근거 둘로 고치는 절차는 이 문서 §규칙과 ADR-0126 §규칙에 있다' END"
+# 미국 관문(V70) 뒤에는 순위가 클래스 축 판정을 입힌 주식수를 읽는다 — 축도 그 값으로 잰다(뷰 us_share_class_effective ·
+# 가드와 같은 분기). 숨긴 판은 값이 없어 순위에 안 든다.
+cls=$(psql -d stock_screener -At -c "SELECT to_regclass('public.us_share_class_effective') IS NOT NULL")
+src="financial_statement f"; sh="f.shares_outstanding"
+if [ "$cls" = "t" ]; then src="financial_statement f LEFT JOIN us_share_class_effective e ON e.financial_statement_id = f.id"; sh="CASE WHEN e.financial_statement_id IS NULL THEN f.shares_outstanding ELSE e.shares END"; fi
+psql -d stock_screener -At -c "WITH cur AS (SELECT DISTINCT ON (f.stock_id) f.stock_id, $sh AS sh, COALESCE(f.net_income_controlling, f.net_income) / NULLIF(f.eps, 0) AS imp FROM $src WHERE $sh > 0 ORDER BY f.stock_id, f.period_end DESC, f.revision_no DESC), bad AS (SELECT s.ticker, round(c.imp / c.sh) r FROM cur c JOIN stock s ON s.id = c.stock_id WHERE c.imp IS NOT NULL AND c.imp / c.sh >= 100 AND c.imp / c.sh < 10000) SELECT CASE WHEN (SELECT count(*) FROM cur WHERE imp IS NOT NULL) = 0 THEN '잴 것이 없었다 — eps가 있는 주식수 행이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 저장 주식수가 같은 보고서의 net_income/eps 함의와 어긋나는 종목이 없다' ELSE (SELECT count(*) FROM bad) || '종목의 주식수가 손익 함의와 100배 이상 갈린다: ' || (SELECT string_agg(ticker || ' ' || r || '배', ', ' ORDER BY r DESC) FROM bad) || ' — 시총 = 주식수 × 종가이므로 그 종목이 순위에서 밀려나거나 밀어낸다. 근거 둘로 고치는 절차는 이 문서 §규칙과 ADR-0126 §규칙에 있다' END"
 ```
 
 

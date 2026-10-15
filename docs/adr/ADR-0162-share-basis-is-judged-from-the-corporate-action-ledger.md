@@ -86,6 +86,31 @@ SELECT CASE
        || ' — 백필이 옛 행을 안 걷었거나 sharesOf 의 UNRESOLVED 갈래가 깨진 것이다' END"
 ```
 
+```premise 클래스 축이 숨긴 판의 종목이 최신일 시가총액 값을 갖고 있지 않다
+# 미국 관문(V70) 뒤 — 판정 표의 숨김도 「값을 안 낸다」의 한 갈래다(sharesOf가 상태로 막는다 · 앞 판으로 안 내려간다).
+# 관문 전에는 판정 표가 없고 이 축이 없던 때와 같으므로 참이다.
+cls=$(psql -d stock_screener -At -c "SELECT to_regclass('public.us_share_class_effective') IS NOT NULL")
+if [ "$cls" != "t" ]; then echo "OK 관문 전 — 클래스 축 판정 표가 아직 없다(V70 미적용)"; exit 0; fi
+psql -d stock_screener -At -c "
+WITH t AS (SELECT max(trade_date) d FROM indicator_trade_date WHERE market_code = 'US'),
+chosen AS (SELECT DISTINCT ON (f.stock_id) f.stock_id, e.hidden
+           FROM financial_statement f JOIN us_share_class_effective e ON e.financial_statement_id = f.id
+           JOIN stock s ON s.id = f.stock_id AND s.is_active
+           WHERE f.published_at <= (SELECT d FROM t) AND (e.hidden OR e.shares > 0)
+           ORDER BY f.stock_id, f.period_end DESC, f.published_at DESC, f.revision_no DESC),
+hid AS (SELECT stock_id FROM chosen WHERE hidden),
+bad AS (SELECT DISTINCT s.ticker FROM indicator_value iv JOIN hid ON hid.stock_id = iv.stock_id
+        JOIN stock s ON s.id = iv.stock_id
+        WHERE iv.indicator_code = 'MARKET_CAP' AND iv.trade_date = (SELECT d FROM t))
+SELECT CASE
+  WHEN (SELECT count(*) FROM financial_share_class_filing) = 0
+    THEN '잴 것이 없었다 — 판정 표가 비었다(관문을 켠 실행으로 share-basis-derive를 안 돌렸다)'
+  WHEN (SELECT count(*) FROM hid) = 0 THEN 'OK 최신일에 클래스 축이 숨긴 종목이 없다'
+  WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 최신일 숨김 ' || (SELECT count(*) FROM hid) || '종목이 시총 값을 안 낸다'
+  ELSE (SELECT count(*) FROM bad) || '종목이 숨긴 판인데 최신일 시총 값이 있다: '
+       || (SELECT string_agg(ticker, ' ' ORDER BY ticker) FROM bad)
+       || ' — sharesOf의 숨김 갈래가 깨졌거나 화해가 옛 행을 안 걷었다' END"
+```
 ```premise 판별자의 임계가 아직 빈 구간에 앉아 있다
 psql -d stock_screener -At -c "
 WITH r AS (SELECT DISTINCT c.ratio FROM corporate_action c JOIN stock s ON s.id = c.stock_id

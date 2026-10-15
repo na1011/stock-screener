@@ -89,11 +89,18 @@ export PGCONNECT_TIMEOUT=3
 #
 # 이 축의 분포는 갈린다 — ±2배 안에 **4,203**, 애매 구간 [20,100)에 4, 위험 [100,∞)에 7이고
 # **편입 1,000 중 위험은 0**이다.
+# 미국 관문(V70) 뒤에는 순위가 클래스 축 판정을 입힌 주식수를 읽는다(JdbcStoredShareCounts) — 이 축도 그 값으로 잰다.
+# 판정 표가 있는가로 가른다(마이그레이션은 관문 직전에만 들어온다). ADR-0125 전제와 같은 분기다.
+src="financial_statement f"; sh="f.shares_outstanding"
+if [ "$(psql -d "${DB_NAME:-stock_screener}" -At -c "SELECT to_regclass('public.us_share_class_effective') IS NOT NULL" 2>/dev/null)" = "t" ]; then
+  src="financial_statement f LEFT JOIN us_share_class_effective e ON e.financial_statement_id = f.id"
+  sh="CASE WHEN e.financial_statement_id IS NULL THEN f.shares_outstanding ELSE e.shares END"
+fi
 outliers=$(psql -d "${DB_NAME:-stock_screener}" -At -F'|' -c "
 WITH cur AS (
-  SELECT DISTINCT ON (f.stock_id) f.stock_id, f.shares_outstanding AS sh,
+  SELECT DISTINCT ON (f.stock_id) f.stock_id, $sh AS sh,
          COALESCE(f.net_income_controlling, f.net_income) / NULLIF(f.eps, 0) AS imp
-  FROM financial_statement f WHERE f.shares_outstanding > 0
+  FROM $src WHERE $sh > 0
   ORDER BY f.stock_id, f.period_end DESC, f.revision_no DESC)
 SELECT string_agg(t, ', ' ORDER BY t) FROM (
   SELECT s.ticker || ' ' || round(c.imp / c.sh, 0) || '배' AS t, c.imp / c.sh AS x
@@ -113,10 +120,10 @@ SELECT string_agg(t, ', ' ORDER BY t) FROM (
 unjudged=$(psql -d "${DB_NAME:-stock_screener}" -At -c "
 SELECT count(*) FROM (
   SELECT DISTINCT ON (f.stock_id) f.stock_id, f.eps
-  FROM financial_statement f
+  FROM $src
   JOIN universe_membership m ON m.stock_id = f.stock_id AND m.effective_to IS NULL
   JOIN universe u ON u.code = m.universe_code AND u.is_active
-  WHERE f.shares_outstanding > 0
+  WHERE $sh > 0
   ORDER BY f.stock_id, f.period_end DESC, f.revision_no DESC) t
 WHERE t.eps IS NULL OR t.eps = 0" 2>/dev/null || echo "?")
 
