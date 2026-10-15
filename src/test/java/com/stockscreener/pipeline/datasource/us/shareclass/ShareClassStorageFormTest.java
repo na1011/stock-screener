@@ -82,6 +82,17 @@ class ShareClassStorageFormTest {
         assertThat(pruned.filings()).containsKeys("0001", "0002");
     }
 
+    @Test
+    @DisplayName("응답 루트가 아닌 노드(facts)를 가지치면 빈 트리로 저장하지 않고 던진다")
+    void pruneRefusesTheFactsNode() {
+        JsonNode root = MAPPER.readTree("""
+                {"facts":{"us-gaap":{"Revenues":{"units":{"USD":[]}}}}}
+                """);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> IssuerFacts.prune(root.path("facts")))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     /** 저장한 재료 전부(드라이런 재료 폴더 · {@code SHARE_CLASS_DIR})로 같은 성질을 묻는다. */
     @Test
     @EnabledIfEnvironmentVariable(named = "SHARE_CLASS_DIR", matches = ".+")

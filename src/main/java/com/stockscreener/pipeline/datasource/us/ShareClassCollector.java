@@ -45,6 +45,8 @@ public class ShareClassCollector {
     public record Outcome(int targets, int fetched, List<String> failed) {
     }
 
+    private static final tools.jackson.databind.ObjectMapper MAPPER = new tools.jackson.databind.ObjectMapper();
+
     private final SecFilingClient client;
     private final ShareClassStore store;
 
@@ -53,8 +55,14 @@ public class ShareClassCollector {
         this.store = store;
     }
 
-    public Outcome collect(SecurityRef security, long cik, JsonNode companyFacts, String context) throws DataSourceException {
-        ObjectNode pruned = IssuerFacts.prune(companyFacts);
+    /**
+     * @param facts companyfacts 응답의 {@code facts} 노드 — 어댑터가 쥔 트리가 이것이다(응답 루트가 아니다). 가지치기는 응답 루트
+     *              꼴을 받으므로 여기서 감싼다(드라이런 3: 루트로 넘긴 줄 알고 가지치자 재료가 빈 트리로 저장됐다).
+     */
+    public Outcome collect(SecurityRef security, long cik, JsonNode facts, String context) throws DataSourceException {
+        ObjectNode root = MAPPER.createObjectNode();
+        root.set("facts", facts);
+        ObjectNode pruned = IssuerFacts.prune(root);
         store.saveInput(security.stockId(), cik, pruned.toString());
         IssuerFacts cf = IssuerFacts.fromCompanyFacts(pruned);
         Map<String, ShareClassStore.FactRow> stored = store.factRows(cik);
