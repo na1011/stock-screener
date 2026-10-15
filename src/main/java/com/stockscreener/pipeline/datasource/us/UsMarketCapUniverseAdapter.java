@@ -295,6 +295,28 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
     @Override
     public UniverseSnapshot fetchConstituents(String universeCode, LocalDate asOf)
             throws DataSourceException {
+        Ranking ranking = rank(universeCode, asOf);
+        List<String> tickers = new ArrayList<>(topN);
+        for (int i = 0; i < topN; i++) {
+            AlpacaAsset asset = ranking.deduped().get(i).asset();
+            // 이름과 거래소를 캐시에 심어 StockRegistrar가 종목마다 단건 조회를 부르지 않게 한다.
+            nameCache.put(new SecurityDescriptor(
+                    UsMarket.CODE, asset.symbol(), asset.name(),
+                    null, null, null, null, asset.exchange()));
+            tickers.add(asset.symbol());
+        }
+
+        log.info("미국 시총 상위 유니버스를 만들었다. {} 기준일={} 상장={} 후보={} 편입={} · 제외 {}",
+                universeCode, asOf, ranking.listed(), ranking.candidates(), tickers.size(), ranking.excluded());
+        logBoundary(ranking.deduped());
+        return new UniverseSnapshot(universeCode, asOf, tickers, SOURCE_NAME);
+    }
+
+    /**
+     * 모든 거름을 통과한 후보의 시총 순위(CIK 대표만). 상위 N을 자르기 전이다 — 명부 재생(클래스 축 드라이런 2)이
+     * 경계 너머의 순위를 읽는 자리이고, {@link #fetchConstituents}는 이것의 앞 N이다.
+     */
+    Ranking rank(String universeCode, LocalDate asOf) throws DataSourceException {
         if (!UNIVERSE_CODE.equals(universeCode)) {
             throw new DataSourceException(DataSourceException.Kind.NOT_FOUND, SOURCE_NAME,
                     "담당하지 않는 유니버스다: " + universeCode);
@@ -386,21 +408,11 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                     ("CIK 중복을 걷고 나니 %d종목뿐이라 상위 %d를 채우지 못한다. 제외 내역: %s")
                             .formatted(deduped.size(), topN, excluded));
         }
+        return new Ranking(assets.size(), candidates.size(), deduped, excluded);
+    }
 
-        List<String> tickers = new ArrayList<>(topN);
-        for (int i = 0; i < topN; i++) {
-            AlpacaAsset asset = deduped.get(i).asset();
-            // 이름과 거래소를 캐시에 심어 StockRegistrar가 종목마다 단건 조회를 부르지 않게 한다.
-            nameCache.put(new SecurityDescriptor(
-                    UsMarket.CODE, asset.symbol(), asset.name(),
-                    null, null, null, null, asset.exchange()));
-            tickers.add(asset.symbol());
-        }
-
-        log.info("미국 시총 상위 유니버스를 만들었다. {} 기준일={} 상장={} 후보={} 편입={} · 제외 {}",
-                universeCode, asOf, assets.size(), candidates.size(), tickers.size(), excluded);
-        logBoundary(deduped);
-        return new UniverseSnapshot(universeCode, asOf, tickers, SOURCE_NAME);
+    /** 순위와 그것을 만든 실행의 귀속 재료(상장 · 후보 수 · 축별 제외). */
+    record Ranking(int listed, int candidates, List<Ranked> deduped, Exclusions excluded) {
     }
 
     /**
@@ -739,14 +751,14 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         }
     }
 
-    private record Ranked(AlpacaAsset asset, BigDecimal marketCap, BigDecimal dollarVolume) {
+    record Ranked(AlpacaAsset asset, BigDecimal marketCap, BigDecimal dollarVolume) {
     }
 
     /**
      * 축별 제외 수. <b>합계만 남기지 않는 것이 계약이다</b> — 합계로는 오분류와 정상 배제가
      * 구분되지 않는다({@code docs/phase-criteria.md} P26 축①).
      */
-    private static final class Exclusions {
+    static final class Exclusions {
         /** 혼성 문구({@link #HYBRID_WORDS})에만 걸려 빠진 티커. 수는 {@code name}에 이미 들어 있다. */
         private final List<String> hybridOnly = new ArrayList<>();
         private int currency;
