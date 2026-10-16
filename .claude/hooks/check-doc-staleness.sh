@@ -604,7 +604,7 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   # 매 세션 죽은 포인터로 신고됐다.
   resolve_name() {  # 파일명 단독 참조가 어디엔가 있는가
     local d
-    for d in .claude/rules .claude/hooks .claude/hooks/lib .claude/skills ops ops/apply-window docs docs/adr docs/api-spec docs/external . "$HOME/.claude/projects/-Users-na1011-dev-stock-screener/memory"; do
+    for d in .claude/rules .claude/hooks .claude/hooks/lib .claude/skills ops ops/apply-window ops/apply-window/q4v docs docs/adr docs/api-spec docs/external . "$HOME/.claude/projects/-Users-na1011-dev-stock-screener/memory"; do
       [ -e "$d/$1" ] && return 0
     done
     return 1

@@ -146,7 +146,7 @@ class MarketCompletenessTest {
     }
 
     @Test
-    @DisplayName("note 꼬리는 사람 말이고 「낱말=」 꼴 토큰이 없다 — 07-judge.sh와 공시 보충 칸의 정규식을 안 건드린다")
+    @DisplayName("note 꼬리는 사람 말이고 「낱말=」 꼴 토큰이 없다 — note_nums()와 공시 보충 칸의 정규식을 안 건드린다")
     void noteTailHasNoKeyValueTokens() {
         MarketCompleteness completeness = new MarketCompleteness(
                 new MarketCompleteness.Coverage(List.of("KOSPI", "KOSDAQ", "US"), Set.of("KOSDAQ")));

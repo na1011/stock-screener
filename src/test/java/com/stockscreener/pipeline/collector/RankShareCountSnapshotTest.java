@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.StoredShareCounts;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -25,8 +26,13 @@ import java.util.Optional;
  * <p>격자는 복원({@code UniverseLedgerRestorer.weeklyGrid})과 같은 「그 주의 마지막 거래일 + 보존 창 첫날」이고, 주식수 창은
  * {@code UsMarketCapUniverseAdapter}의 2년이다. 접속은 읽기 전용이다.
  *
+ * <p><b>{@code RANK_SNAPSHOT_CLASS_AXIS=true}면 관문이 켜진 판독기</b>(클래스 축 판정 · ADR-0179)로 읽는다 — 관문 전은 꺼진 판독기,
+ * 관문 뒤는 켠 판독기로 찍어야 「그때 순위가 읽은 것」과 「켠 뒤 순위가 읽는 것」을 대조한다({@code ops/apply-window/02-snapshot.sh}).
+ * 켠 판독기는 보이지 않는 줄을 {@link StoredShareCounts#classHolds}로 따로 내므로 그 줄도 {@code hold:<상태>}로 찍는다.
+ * SIC 열은 순위 어댑터의 비사업회사 거름 재료다 — 업종이 새로 붙은 후보는 주식수가 같아도 이 열로 차이가 난다.
+ *
  * <pre>
- * RANK_SNAPSHOT_DB=stock_screener_q4v_r0 RANK_SNAPSHOT_OUT=rank-r0.tsv \
+ * RANK_SNAPSHOT_DB=stock_screener_q4v_r0 RANK_SNAPSHOT_OUT=rank-r0.tsv [RANK_SNAPSHOT_CLASS_AXIS=true] \
  *   ./gradlew test --tests "*RankShareCountSnapshotTest*" -PskipFrontend
  * </pre>
  */
@@ -44,7 +50,10 @@ class RankShareCountSnapshotTest {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:postgresql://localhost:5432/" + db + "?readOnlyMode=always", user, "");
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        StoredShareCounts counts = new JdbcStoredShareCounts(jdbc);
+        boolean classAxis = Boolean.parseBoolean(System.getenv("RANK_SNAPSHOT_CLASS_AXIS"));
+        StoredShareCounts counts = classAxis
+                ? new JdbcStoredShareCounts(jdbc, new ShareClassStore(jdbc), true)
+                : new JdbcStoredShareCounts(jdbc);
 
         List<LocalDate> grid = jdbc.queryForList("""
                 SELECT trade_date FROM (
@@ -58,17 +67,24 @@ class RankShareCountSnapshotTest {
         long rows = 0;
         Files.createDirectories(out.toAbsolutePath().getParent());
         try (BufferedWriter w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
-            w.write("as_of\tticker\tshares\tperiod_end\tpublished_at\tcurrency_mismatched");
+            w.write("as_of\tticker\tshares\tperiod_end\tpublished_at\tcurrency_mismatched\tsic");
             w.newLine();
             for (LocalDate asOf : grid) {
                 for (StoredShareCounts.ShareCount c : counts.activeByMarket("US", asOf.minusYears(SHARES_MAX_AGE_YEARS), asOf)) {
                     w.write(asOf + "\t" + c.ticker() + "\t" + c.shares().stripTrailingZeros().toPlainString() + "\t"
-                            + c.periodEnd() + "\t" + c.publishedAt() + "\t" + c.currencyMismatched());
+                            + c.periodEnd() + "\t" + c.publishedAt() + "\t" + c.currencyMismatched() + "\t" + c.sicCode());
+                    w.newLine();
+                    rows++;
+                }
+                for (StoredShareCounts.ClassHold h : new java.util.TreeMap<>(counts.classHolds("US", asOf)).values()) {
+                    w.write(asOf + "\t" + h.ticker() + "\t"
+                            + (h.heldShares() == null ? "" : h.heldShares().stripTrailingZeros().toPlainString())
+                            + "\thold:" + h.state() + "\t\t" + h.currencyMismatched() + "\t" + h.sicCode());
                     w.newLine();
                     rows++;
                 }
             }
         }
-        System.out.println("RANK_SNAPSHOT db=" + db + " 격자=" + grid.size() + " 행=" + rows + " out=" + out.toAbsolutePath());
+        System.out.println("RANK_SNAPSHOT db=" + db + " 클래스축=" + classAxis + " 격자=" + grid.size() + " 행=" + rows + " out=" + out.toAbsolutePath());
     }
 }

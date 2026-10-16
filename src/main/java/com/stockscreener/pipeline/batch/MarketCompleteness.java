@@ -154,7 +154,7 @@ public final class MarketCompleteness {
     /**
      * {@code batch_execution.note} 꼬리에 붙일 사람 말. 미완료가 없으면 빈 문자열이다.
      *
-     * <p><b>MUST NOT: {@code 낱말=} 꼴 토큰을 쓰지 않는다</b> — {@code ops/apply-window/07-judge.sh}가 {@code (신규|정정|채움|교정|이른판)=}
+     * <p><b>MUST NOT: {@code 낱말=} 꼴 토큰을 쓰지 않는다</b> — {@code ops/apply-window/env.sh}의 {@code note_nums()}가 {@code (신규|정정|채움|교정|이른판)=}
      * 정규식으로 합산하고, 공시 보충 칸({@code 보충받음=} 등 · {@code FinancialRefillJob.supplementNote})과 앞머리
      * ({@code 연도=} · {@code 대상=})도 같은 꼴이다. 구조화된 답은 {@code incomplete_markets} 컬럼이 들고, 이것은 사람이 읽는 줄이다.
      */

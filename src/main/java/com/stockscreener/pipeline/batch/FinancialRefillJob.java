@@ -358,7 +358,7 @@ public class FinancialRefillJob {
     }
 
     /**
-     * SEC 공시 보충(ADR-0173)이 이 실행에서 한 일. 다섯 계수 뒤에 붙인다 — {@code 07-judge.sh}의 합산 정규식이 안 읽는
+     * SEC 공시 보충(ADR-0173)이 이 실행에서 한 일. 다섯 계수 뒤에 붙인다 — {@code ops/apply-window/env.sh}의 {@code note_nums()} 합산 정규식이 안 읽는
      * 이름이다. <b>판정이 남은 것을 늘 싣는다</b> — 보충 실패와 목록 실패는 그 종목을 세우지 않으므로(판 보호 · 회수 정지로만
      * 나간다) 실행이 SUCCESS로 끝나고, 이 칸이 아니면 어디에도 안 뜬다.
      *
@@ -381,8 +381,8 @@ public class FinancialRefillJob {
     /**
      * 이 실행이 무엇을 움직였는지 {@code batch_execution.note}에 남길 한 줄.
      *
-     * <p><b>MUST: 계수 다섯의 모양을 그대로 둔다</b> — {@code ops/apply-window/07-judge.sh}가
-     * {@code (신규|정정|채움|교정|이른판)=} 정규식으로 합산해 운영과 사본의 실행을 대조한다.
+     * <p><b>MUST: 계수 다섯의 모양을 그대로 둔다</b> — {@code ops/apply-window/env.sh}의 {@code note_nums()}가
+     * {@code (신규|정정|채움|교정|이른판)=} 정규식으로 합산해 관문 재적재를 요약하고 다음 정기 경로가 관문 행을 안 건드리는지(0) 판정한다.
      *
      * <h2>MUST: 무효화 종목을 통째로 싣는다 — 수만 적지 않는다</h2>
      * <p>이 목록이 <b>그 실행이 지운 지표를 되찾는 유일한 내구 기록</b>이다. 두 자리가 이것을

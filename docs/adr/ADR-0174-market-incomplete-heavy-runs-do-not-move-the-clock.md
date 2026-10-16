@@ -96,7 +96,7 @@ applies_to:
 - MUST: 표지 단 실패를 「답함」으로 세기 전에 상장폐지 증거를 본다. 신선한 매핑의 부재만으로는 신규 상장 등록 지연과 갈리지 않는다.
 - MUST: 시장 미완료는 `finish`의 **같은 UPDATE**에서 적는다. 상태와 범위 사이에 틈이 있으면 그 사이의 신선도 판정이 미완료 실행을 센다.
 - MUST NOT: `NARROW`를 `FULL`로 올리는 길을 만들지 않는다.
-- MUST NOT: note 꼬리에 `낱말=` 꼴 토큰을 쓰지 않는다. `07-judge.sh`의 합산 정규식과 공시 보충 칸이 그 꼴이다.
+- MUST NOT: note 꼬리에 `낱말=` 꼴 토큰을 쓰지 않는다. `ops/apply-window/env.sh` `note_nums()`의 합산 정규식과 공시 보충 칸이 그 꼴이다.
 - MUST: 미완료 알림 키를 부분 실패 알림과 가른다. 같은 키면 `AlertSuppressor`가 10분 안의 두 번째를 버린다.
 - MUST NOT: `scope_reason`·`incomplete_markets`에 NOT NULL을 걸거나 이력을 UPDATE하지 않는다. 이유는 V63과 같다(옛 jar · ADR-0172 §버린 대안 1).
 

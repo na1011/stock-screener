@@ -175,6 +175,23 @@ if [ -n "${PREMISE_STATEMENT_TIMEOUT:-}" ]; then
   fi
 fi
 
+# 붙잡는 갈래에서만 대상 DB를 바꾼다 — `PREMISE_DB`(DB 이름). 관문 실행기가 작은 DB 드라이런과 운영 전/후를 같은 전제로
+# 대조하려고 둔다(브랜치 explore/s-vintage-coherence `GATE-RUN-PLAN-1016.md` v2 결정 8). 전제 본문의 DB 지목은 전부
+# `-d stock_screener ` 한 꼴이다(2026-10-16 실측 153곳 · DB를 안 부르는 전제 9개는 파일·로그·URL을 본다) — 그 꼴만 갈아 끼우고,
+# 그 꼴이 없는 전제는 붙잡은 줄 앞에 `[DB 무관]`을 붙여 대상 DB를 잰 것으로 읽히지 않게 한다.
+# MUST NOT: SessionStart 경로에서 받지 않는다 — 세션 시작의 전제는 운영을 재는 것이 계약이다.
+premise_db=""
+if [ -n "${PREMISE_DB:-}" ]; then
+  if [ -z "$capture" ]; then
+    echo "PREMISE_DB는 PREMISE_CAPTURE와 함께일 때만 듣는다 — 무시하고 stock_screener를 잰다." >&2
+  else
+    case "$PREMISE_DB" in
+      *[!a-z0-9_]*|'') echo "PREMISE_DB는 [a-z0-9_]만 쓴다: ${PREMISE_DB}" >&2; exit 2 ;;
+    esac
+    premise_db="$PREMISE_DB"
+  fi
+fi
+
 # 전제마다 만들지 않고 한 번만 만든다 — 위 run_one이 truncate해서 돌려 쓴다.
 outfile=$(mktemp 2>/dev/null) || outfile=/dev/null
 errfile=$(mktemp 2>/dev/null) || errfile=/dev/null
@@ -230,12 +247,21 @@ run_one() {
   # 도달한다 — 그 비용이 65개 합쳐 17.8초였던 적이 있다(선검사로 1.8초가 됐지만, 예산을
   # 우회하는 구조 자체는 그대로였다). 예산이 지키려는 것은 훅 timeout이고, 심사도 그
   # timeout을 쓴다.
+  local tag=""
+  if [ -n "$premise_db" ]; then
+    case "$body" in
+      *"-d stock_screener "*) body="${body//-d stock_screener /-d $premise_db }" ;;
+      *) tag="[DB 무관] " ;;
+    esac
+  fi
   if [ "$SECONDS" -ge "$total_budget" ]; then
     add_unknown "${where}: 예산(${total_budget}초)을 넘겨 돌리지 못했다."
+    [ -z "$capture" ] || printf '%s\t%s\t%s\n' "$where" "?" "${tag}<예산 초과로 안 돌림>" >>"$capture"
     return
   fi
   if vetoed "$body"; then
     add_unknown "${where}: 되돌릴 수 없는 명령으로 판정되어 **돌리지 않았다.**"
+    [ -z "$capture" ] || printf '%s\t%s\t%s\n' "$where" "?" "${tag}<심사 거부로 안 돌림>" >>"$capture"
     return
   fi
 
@@ -309,7 +335,7 @@ run_one() {
   # 붙잡기는 판정 **뒤**다 — 판정을 안 바꾸고 옆에 적기만 한다.
   # 형식은 「어디<TAB>초<TAB>출력」이다. 전/후 대조는 초를 빼고(`cut -f1,3-`) 한다.
   if [ -n "$capture" ]; then
-    printf '%s\t%s\t%s\n' "$where" "${elapsed:-?}" "${out:-<출력 없음 rc=$rc>}" >>"$capture"
+    printf '%s\t%s\t%s\n' "$where" "${elapsed:-?}" "${tag}${out:-<출력 없음 rc=$rc>}" >>"$capture"
   fi
 }
 
@@ -411,7 +437,7 @@ fi
 db_note=""
 pg_down=0
 if [ "$n_unknowns" -gt 0 ] && command -v pg_isready >/dev/null 2>&1; then
-  if ! pg_isready -d "${DB_NAME:-stock_screener}" -q >/dev/null 2>&1; then
+  if ! pg_isready -d "${premise_db:-${DB_NAME:-stock_screener}}" -q >/dev/null 2>&1; then
     pg_down=1
     db_note="PostgreSQL이 응답하지 않는다 — 아래 판정 불가는 대부분 그 때문이다."$'\n'
   fi

@@ -39,7 +39,7 @@ class FinancialRefillAlertTest {
     }
 
     @Test
-    @DisplayName("계수 토큰의 모양을 그대로 둔다 — ops/apply-window/07-judge.sh가 이 다섯을 정규식으로 합산한다")
+    @DisplayName("계수 토큰의 모양을 그대로 둔다 — ops/apply-window/env.sh의 note_nums()가 이 다섯을 정규식으로 합산한다")
     void keepsTheCounterTokensTheJudgeScriptParses() {
         String note = FinancialRefillJob.note(2015, 2026, 1000, 1, 2, 3, 4, 2257, List.of("AAPL"));
 
