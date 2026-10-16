@@ -75,6 +75,32 @@ class MembershipGapFillerTest {
     }
 
     @Test
+    @DisplayName("복원 꼬리 — 닫힌 창 편입의 시세 결손을 리밸런싱 꼬리와 같은 인자(7년 · 시세만 · GAP_FILL)로 받고, 다시 재서 남은 것을 낸다")
+    void restoredPriceGapsAreLoadedWithTheSameRangeAsTheRebalanceTail() {
+        when(stockRegistrar.windowClosedMembersWithoutBars())
+                .thenReturn(List.of("FWONA", "STZ", "V"))
+                .thenReturn(List.of("FWONA"));
+
+        List<String> left = filler.fillRestoredPriceGaps(AS_OF);
+
+        ArgumentCaptor<InitialLoadJob.LoadRange> range = ArgumentCaptor.forClass(InitialLoadJob.LoadRange.class);
+        verify(initialLoadJob).run(eq(AS_OF), eq(BatchExecutionRecorder.TriggeredBy.GAP_FILL), range.capture());
+        assertThat(range.getValue().tickers()).containsExactly("FWONA", "STZ", "V");
+        assertThat(range.getValue().priceYears()).isEqualTo(MembershipGapFiller.PRICE_YEARS);
+        assertThat(range.getValue().financialYears()).isZero();
+        assertThat(left).as("받은 뒤에도 남은 것을 돌려줘야 호출자가 삼키지 않는다").containsExactly("FWONA");
+    }
+
+    @Test
+    @DisplayName("복원 꼬리 — 결손이 0이면 적재를 안 부른다(빈 티커는 전량 적재다)")
+    void noRestoredGapMeansNoLoad() {
+        when(stockRegistrar.windowClosedMembersWithoutBars()).thenReturn(List.of());
+
+        assertThat(filler.fillRestoredPriceGaps(AS_OF)).isEmpty();
+        verifyNoInteractions(initialLoadJob);
+    }
+
+    @Test
     @DisplayName("축별로 갈라 부른다 — 한 번에 부르면 재무가 있는 종목에 정정본이 쌓여 지표가 지워진다")
     void splitsTheLoadByAxis() {
         given(gap("005930", MembershipGap.Axis.PRICE_HISTORY),

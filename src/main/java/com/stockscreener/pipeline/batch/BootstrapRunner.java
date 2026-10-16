@@ -316,7 +316,7 @@ public class BootstrapRunner implements ApplicationRunner {
             // MUST: 쓰기가 옵트인이다(--apply=true). 맨 플래그는 false가 되므로 --dry-run으로
             // 두면 오타 한 번이 되돌릴 수 없는 쓰기가 된다(ADR-0135).
             case "universe-restore" -> {
-                universeRestoreJob.run(required(args, "universe"),
+                universeRestoreJob.run(asOf, required(args, "universe"),
                         flag(args, "apply"),
                         flag(args, "replace"),
                         dates(args, "dates"));

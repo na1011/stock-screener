@@ -59,13 +59,16 @@ public class UniverseRestoreJob {
     private final StockRegistrar stockRegistrar;
     private final UniverseLedgerRestorer restorer;
     private final JdbcTemplate jdbcTemplate;
+    private final MembershipGapFiller gapFiller;
 
     public UniverseRestoreJob(DataSourceRegistry registry, StockRegistrar stockRegistrar,
-                              UniverseLedgerRestorer restorer, JdbcTemplate jdbcTemplate) {
+                              UniverseLedgerRestorer restorer, JdbcTemplate jdbcTemplate,
+                              MembershipGapFiller gapFiller) {
         this.registry = registry;
         this.stockRegistrar = stockRegistrar;
         this.restorer = restorer;
         this.jdbcTemplate = jdbcTemplate;
+        this.gapFiller = gapFiller;
     }
 
     /**
@@ -79,7 +82,7 @@ public class UniverseRestoreJob {
      *              격자로 쓰면 관측 구간과 겹치는 행을 만들려다 GiST에 걸리는데, <b>막힌 이유를
      *              사람이 해석해야 한다.</b> 대조는 그 날짜들이 필요하므로 쓰기 없는 갈래에서만 연다
      */
-    public Report run(String universeCode, boolean apply, boolean replace, List<LocalDate> dates) {
+    public Report run(LocalDate asOf, String universeCode, boolean apply, boolean replace, List<LocalDate> dates) {
         if (apply && dates != null && !dates.isEmpty()) {
             throw new IllegalArgumentException(
                     "--dates는 --apply와 함께 못 쓴다 — 관측 하한 뒤의 격자로 쓰면 겹치는 구간을 만들려다 제약에 걸리고, 막힌 이유를 사람이 해석해야 한다. 대조만 할 때 쓴다.");
@@ -95,7 +98,7 @@ public class UniverseRestoreJob {
         if (grid.isEmpty()) {
             log.info("복원할 격자점이 없다. {} 하한={} — 보존 창이 이미 관측 구간 안이다",
                     universeCode, floor);
-            return new Report(universeCode, floor, List.of(), 0, 0, Set.of(), null, 0, List.of());
+            return new Report(universeCode, floor, List.of(), 0, 0, Set.of(), null, 0, List.of(), List.of());
         }
 
         // ── Phase A: 페치. 트랜잭션 밖이고, 쓰기 갈래에서만 stock 행을 만든다.
@@ -141,8 +144,11 @@ public class UniverseRestoreJob {
 
         // ── Phase D: 쓰기.
         int inserted = apply ? restorer.apply(plan, replace) : 0;
+        // 꼬리 — 복원이 처음 넣은 종목은 그 구간의 시세가 없다(ADR-0135 「데이터가 없는 복원 구성원」). 리밸런싱 꼬리와 같은 이유로 잡
+        // 안에 둔다: 부르는 길이 늘어도 빠지지 않는다. 쓰기 갈래에서만 — 대조 갈래는 편입을 안 바꾼다.
+        List<String> priceGapsLeft = apply ? gapFiller.fillRestoredPriceGaps(asOf) : List.of();
         return new Report(universeCode, floor, grid, fetched, plan.intervals().size(),
-                Set.copyOf(unresolved), plan, inserted, recalls);
+                Set.copyOf(unresolved), plan, inserted, recalls, priceGapsLeft);
     }
 
     /**
@@ -247,7 +253,7 @@ public class UniverseRestoreJob {
      */
     public record Report(String universeCode, LocalDate floor, List<LocalDate> grid,
                          int fetchedPoints, int intervals, Set<String> unresolvedTickers,
-                         Plan plan, int inserted, List<Recall> recalls) {
+                         Plan plan, int inserted, List<Recall> recalls, List<String> priceGapsLeft) {
     }
 
     /**

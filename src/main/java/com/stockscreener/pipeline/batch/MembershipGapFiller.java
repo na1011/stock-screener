@@ -274,6 +274,39 @@ public class MembershipGapFiller {
      * 꼬리에서도 전량을 돌기 때문이다(전량이 「업종이 빈 종목」이라 실측 4). 가르는 축은
      * <b>「좁혔는가」이지 「꼬리인가」가 아니다.</b>
      */
+    /**
+     * 복원 평면의 시세 결손을 채운다 — {@code universe-restore --apply}의 꼬리(ADR-0135 · 관문 실행기 계획 v2 결정 7).
+     *
+     * <p>리밸런싱 꼬리({@link #fillAndAlert})와 같은 이유로 여기 있다 — <b>편입이 바뀐 직후가 결손이 생기는 유일한 순간</b>이고, 복원도
+     * 편입을 바꾼다. 그런데 {@code StockRegistrar.membershipGaps}는 열린 편입만 보므로 복원이 넣은 닫힌 행을 못 본다(2026-10-16 실측:
+     * 클래스 축을 켜면 복원 평면에 들어올 `V`·`STZ`·`FWONA`가 시세 0행 · 지금 창 안 편입의 구간 결손은 0이라 이 꼬리는 무해하다).
+     *
+     * <p>리밸런싱 꼬리와 달리 상한이 없다 — 복원은 사람이 손으로 돌리는 잡이라 밀릴 정기 스케줄이 없고, 상한에 걸려 멈추면 관문의
+     * 창 결손 단언이 그 몫을 「안 채움」으로 다시 신고할 뿐이다. 받은 뒤 다시 재서 남은 것을 ERROR로 남긴다(삼키지 않는다).
+     *
+     * @return 다시 잰 뒤에도 남은 티커(비면 결손 0)
+     */
+    public List<String> fillRestoredPriceGaps(LocalDate asOf) {
+        List<String> tickers = stockRegistrar.windowClosedMembersWithoutBars();
+        if (tickers.isEmpty()) {
+            log.info("복원 평면 시세 결손 0 — 받을 것이 없다.");
+            return tickers;
+        }
+        log.info("복원 평면 시세 결손 — {}종목을 {}년으로 받는다. 종목={}", tickers.size(), PRICE_YEARS, tickers);
+        loadPrices(asOf, tickers);
+        List<String> left = stockRegistrar.windowClosedMembersWithoutBars();
+        if (!left.isEmpty()) {
+            log.error("복원 평면 시세 결손이 받은 뒤에도 남았다 — 그 구간의 지표는 판정불가로 남는다. 종목={}", left);
+        }
+        return left;
+    }
+
+    /** 시세를 {@link #PRICE_YEARS}년으로 좁혀 받는다 — 두 꼬리(리밸런싱 · 복원)가 같은 적재 인자를 쓰게 한 자리. */
+    private void loadPrices(LocalDate asOf, List<String> tickers) {
+        initialLoadJob.run(asOf, BatchExecutionRecorder.TriggeredBy.GAP_FILL, new InitialLoadJob.LoadRange(
+                PRICE_YEARS, 0, false, tickers, null, true, false));
+    }
+
     private void loadMissingRawData(List<MembershipGap> gaps, LocalDate asOf) {
         BatchExecutionRecorder.TriggeredBy triggeredBy = BatchExecutionRecorder.TriggeredBy.GAP_FILL;
         List<String> priceTickers = tickersOf(gaps, MembershipGap.Axis.PRICE_HISTORY);
@@ -305,8 +338,7 @@ public class MembershipGapFiller {
         if (!priceTickers.isEmpty()) {
             log.info("편입 결손 보충 — 시세 {}종목을 {}년으로 받는다. 종목={}",
                     priceTickers.size(), PRICE_YEARS, priceTickers);
-            initialLoadJob.run(asOf, triggeredBy, new InitialLoadJob.LoadRange(
-                    PRICE_YEARS, 0, false, priceTickers, null, true, false));
+            loadPrices(asOf, priceTickers);
         }
         if (!financialTickers.isEmpty()) {
             log.info("편입 결손 보충 — 재무 {}종목을 받는다. 종목={}",

@@ -209,6 +209,33 @@ class MembershipGapQueryTest {
         assertThat(axesOf("035420")).doesNotContain(MembershipGap.Axis.INDICATOR_DROP);
     }
 
+    @Test
+    @DisplayName("복원 평면 시세 결손 — 닫힌 창 편입이 자기 구간에 봉이 없으면 잡고, 구간 안 봉 · 열린 편입 · 창 앞에서 끝난 편입은 안 잡는다")
+    void windowClosedMembersWithoutBarsLooksAtTheMembershipInterval() {
+        resetCalendar();
+        tradeDates(JOINED, 30);
+        LocalDate to = JOINED.plusDays(14);
+        close(member("005930", "봉 없음"), JOINED, to);
+        long inside = member("035420", "구간 안 봉");
+        close(inside, JOINED, to);
+        bar(inside, JOINED.plusDays(3));
+        long outside = member("000660", "구간 밖 봉만");
+        close(outside, JOINED, to);
+        bar(outside, to.plusDays(1));
+        member("051910", "열린 편입 봉 없음");
+        close(member("068270", "창 앞에서 끝남"), JOINED.minusDays(20), JOINED);
+
+        List<String> gaps = registrar.windowClosedMembersWithoutBars();
+
+        assertThat(gaps).as("구간 밖 봉은 그 구간을 못 채운다 — 존재 검사였다면 000660이 빠진다").contains("005930", "000660");
+        assertThat(gaps).doesNotContain("035420", "051910", "068270");
+    }
+
+    private void close(long stockId, LocalDate from, LocalDate to) {
+        jdbcTemplate.update("UPDATE universe_membership SET effective_from = ?, effective_to = ? WHERE stock_id = ?",
+                from, to, stockId);
+    }
+
     private List<MembershipGap.Axis> axesOf(String ticker) {
         return gapOf(ticker).map(gap -> List.copyOf(gap.missing())).orElse(List.of());
     }

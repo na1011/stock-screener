@@ -371,6 +371,34 @@ public class StockRegistrar {
     }
 
     /**
+     * 보존 창 편입 중 <b>닫힌</b> 행({@code effective_to}가 있다 — 복원 평면과 창 안에서 끝난 관측 편입)이 <b>자기 구간</b>에 봉이
+     * 하나도 없는 종목의 티커. 복원이 처음 넣은 종목이 이 꼴이다(ADR-0135 — 「데이터가 없는 복원 구성원」 · 2026-10-16 `V`·`STZ`·`FWONA`
+     * 시세 0행). 열린 편입은 {@link #membershipGaps}가 리밸런싱 꼬리에서 보므로 여기서 안 본다.
+     *
+     * <p>술어는 {@link #windowMemberIds}와 같은 조각({@link #IN_RETENTION_WINDOW} · 활성 종목 · 활성 유니버스)이라 여기서 낸 티커는
+     * {@code initial-load --tickers}의 술어({@link #activeUniverseMemberIdsByTicker})에 그대로 든다. 비활성 종목은 그 술어 밖이라 못
+     * 받으므로 여기서도 안 낸다 — 그 몫은 관문 실행기({@code ops/apply-window/05-roster.sh})의 창 결손 단언이 활성 여부와 무관하게 센다.
+     */
+    public List<String> windowClosedMembersWithoutBars() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT s.ticker FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                JOIN universe u ON u.code = m.universe_code AND u.is_active
+                WHERE s.is_active
+                  AND s.market_code IN (%s)
+                  AND m.effective_to IS NOT NULL
+                  AND %s
+                  AND NOT EXISTS (
+                      SELECT 1 FROM price_daily p
+                      WHERE p.stock_id = m.stock_id AND p.trade_date < m.effective_to
+                        AND p.trade_date >= greatest(m.effective_from,
+                            (SELECT min(d.trade_date) FROM indicator_trade_date d WHERE d.market_code = s.market_code)))
+                ORDER BY s.ticker
+                """.formatted(collectedMarketPlaceholders(), IN_RETENTION_WINDOW),
+                String.class, collectedMarkets());
+    }
+
+    /**
      * 원장에 <b>적용 대기</b>({@code APPROVED} — 공시가 종류·비율을 확정했지만 계수 재구축이 아직 안 돈) 행이 있는 종목 중 보존 창
      * 편입이 아닌 것(ADR-0178). 재구축의 기본 대상({@link #windowMemberIds})에 더한다 — 아니면 그 행은 영영 {@code APPLIED}가 안 되고
      * 순위의 주식수 보정({@code JdbcStoredShareCounts.SHIFT_TO_ASOF} — {@code APPLIED}만 읽는다)에 안 실린다. 그런 행을 쓰는 곳은
