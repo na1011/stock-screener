@@ -71,9 +71,11 @@ public record IssuerFacts(Map<String, Filing> filings,
      * {@code fromCompanyFacts(prune(x))}는 {@code fromCompanyFacts(x)}와 같다(시험이 묻는다).
      */
     public static ObjectNode prune(JsonNode root) {
-        if (!root.path("facts").path("us-gaap").isObject()) {
-            // MUST NOT: 빈 트리로 가지쳐 저장하지 않는다 — 판정이 「공시 0」으로 조용히 끝나고 아무도 모른다(드라이런 3에서 그랬다).
-            throw new IllegalArgumentException("companyfacts 응답 루트가 아니다(facts.us-gaap 객체가 없다) — 응답의 facts 노드를 넘겼는가");
+        if (!root.path("facts").isObject()) {
+            // MUST NOT: 응답의 facts 노드를 루트로 알고 가지쳐 빈 트리로 저장하지 않는다 — 판정이 「공시 0」으로 조용히 끝나고 아무도
+            // 모른다(드라이런 3에서 그랬다). 루트에 facts 객체가 있는지로 가른다 — us-gaap가 없는 정상 응답(dei만 싣는 펀드 ·
+            // MXE)은 공시 0이 사실이다(후보 손 FR 드라이런 10-16: us-gaap 유무로 가르자 그 종목의 재무 적재가 통째로 실패했다).
+            throw new IllegalArgumentException("companyfacts 응답 루트가 아니다(facts 객체가 없다) — 응답의 facts 노드를 넘겼는가");
         }
         JsonNode gaap = root.path("facts").path("us-gaap");
         ObjectNode out = MAPPER.createObjectNode();

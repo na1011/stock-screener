@@ -93,6 +93,20 @@ class ShareClassStorageFormTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    @DisplayName("us-gaap가 없는 정상 응답(dei만 · 펀드)은 던지지 않고 공시 0으로 가지친다 — 던지면 그 종목의 재무 적재가 통째로 실패한다")
+    void pruneKeepsAResponseWithoutUsGaap() {
+        JsonNode root = MAPPER.readTree("""
+                {"cik":1,"facts":{"dei":{"EntityCommonStockSharesOutstanding":{"units":{"shares":[
+                    {"end":"2026-04-20","val":500,"accn":"0002","form":"N-CSR","filed":"2026-05-01"}]}}}}}
+                """);
+
+        IssuerFacts pruned = IssuerFacts.fromCompanyFacts(IssuerFacts.prune(root));
+
+        assertThat(pruned.filings()).isEmpty();
+        assertThat(pruned.anchorCandidates()).isEmpty();
+    }
+
     /** 저장한 재료 전부(드라이런 재료 폴더 · {@code SHARE_CLASS_DIR})로 같은 성질을 묻는다. */
     @Test
     @EnabledIfEnvironmentVariable(named = "SHARE_CLASS_DIR", matches = ".+")
