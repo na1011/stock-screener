@@ -142,10 +142,13 @@ class UsCandidateRankSweepLiveTest {
         WithMaterialOnly on = new WithMaterialOnly(onRows, lines, noRowStocks(jdbc, asOf, oldest), stocks, oldest, asOf);
         Map<String, ShareCount> onMap = byTicker(on.activeByMarket(UsMarket.CODE, oldest, asOf));
 
+        // 앞 편입 = 기준일 직전에 열려 있던 편입(클래스 축 보류는 앞 편입에만 선다). 오늘 열린 편입으로 두면 과거 기준일 재생이
+        // 그날 리밸런싱과 다른 물음에 답한다 — 관측 평면 기준일(08-31~)을 재생할 때 갈린다.
         Set<String> previous = new LinkedHashSet<>(jdbc.queryForList("""
                 SELECT s.ticker FROM universe_membership m JOIN stock s ON s.id = m.stock_id
-                WHERE m.universe_code = 'US_TOP1000' AND m.effective_to IS NULL
-                """, String.class));
+                WHERE m.universe_code = 'US_TOP1000' AND m.effective_from < ?
+                  AND (m.effective_to IS NULL OR m.effective_to >= ?)
+                """, String.class, asOf, asOf));
         AlpacaUniverseAdapter listing = new AlpacaUniverseAdapter(factory, properties, alpacaLimiter, names);
         UsMarketCapUniverseAdapter.Ranking rOff = new UsMarketCapUniverseAdapter(listing, offCounts, cikCache, names, factory,
                 properties, alpacaLimiter, false).rank(UsMarketCapUniverseAdapter.UNIVERSE_CODE, asOf, previous);
