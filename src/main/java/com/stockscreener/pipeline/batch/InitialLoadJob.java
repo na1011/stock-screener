@@ -193,7 +193,7 @@ public class InitialLoadJob {
                             .formatted(revised.get()));
         }
         if (range.skipFinancial()) {
-            return execution.finish("재무 건너뜀 (그 시장에 재무 소스가 없다)");
+            return execution.finish("재무 건너뜀 (호출자가 시세만 요청 — skipFinancial)");
         }
         String supplement = FinancialRefillJob.supplementNote(supplementStore.tallySince(supplementSince), List.of());
         return execution.finish((range.skipPrice()
