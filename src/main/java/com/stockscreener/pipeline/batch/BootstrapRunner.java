@@ -185,6 +185,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final FilingListingJob filingListingJob;
     private final FilingConsumptionJob filingConsumptionJob;
     private final CandidateSplitJob candidateSplitJob;
+    private final CandidateIntake candidateIntake;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
@@ -210,7 +211,8 @@ public class BootstrapRunner implements ApplicationRunner {
                            FilingListingJob filingListingJob,
                            FilingConsumptionJob filingConsumptionJob,
                            FreshnessCatchUpJob freshnessCatchUpJob,
-                           CandidateSplitJob candidateSplitJob) {
+                           CandidateSplitJob candidateSplitJob,
+                           CandidateIntake candidateIntake) {
         this.universeRebalanceJob = universeRebalanceJob;
         this.universeRestoreJob = universeRestoreJob;
         this.initialLoadJob = initialLoadJob;
@@ -231,6 +233,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.filingConsumptionJob = filingConsumptionJob;
         this.freshnessCatchUpJob = freshnessCatchUpJob;
         this.candidateSplitJob = candidateSplitJob;
+        this.candidateIntake = candidateIntake;
         this.executionSweeper = executionSweeper;
         this.context = context;
     }
@@ -321,11 +324,15 @@ public class BootstrapRunner implements ApplicationRunner {
             }
             case "initial-load" -> initialLoadJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, loadRange(args));
-            case "financial-refill" -> financialRefillJob.run(
-                    asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
-                    optionalInteger(args, "financial-years"), csv(args, "tickers"),
-                    value(args, "universe", null),
-                    flag(args, "insert-earlier-vintages"));
+            // --population=candidates는 미국 순위 후보 모드다(업종 → 재무 · 범위는 언제나 좁힘 · ADR-0178). 관문의 후보 재적재가 이 길이다.
+            case "financial-refill" -> CANDIDATES_POPULATION.equals(value(args, "population", null))
+                    ? candidateIntake.refill(asOf, optionalInteger(args, "financial-years"), csv(args, "tickers"),
+                            flag(args, "insert-earlier-vintages"))
+                    : financialRefillJob.run(
+                            asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                            optionalInteger(args, "financial-years"), csv(args, "tickers"),
+                            value(args, "universe", null),
+                            flag(args, "insert-earlier-vintages"));
             // --quarters는 티커와 함께여야 하고, 전 종목 분기는 --all-quarters로 명시한다.
             // 잡이 거절하며, 그 근거는 거기 있다.
             case "full-statement-refill" -> fullStatementRefillJob.run(
@@ -506,7 +513,7 @@ public class BootstrapRunner implements ApplicationRunner {
             "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
             "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note", "ca-price-ratio",
-            "apply", "replace", "dates", "insert-earlier-vintages",
+            "apply", "replace", "dates", "insert-earlier-vintages", "population",
             // share-basis-derive 전용. 기본값 US다 — 국내는 봉의 listed_shares 를 쓰므로
             // 이 축을 원리적으로 안 탄다(재무 shares_outstanding 이 KR 전량 NULL 이다).
             "market");
@@ -536,6 +543,9 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     private static final String FINANCIAL_REFILL_JOB = "financial-refill";
 
+    /** {@code --population}의 유일한 값 — 미국 순위 후보(ADR-0178). */
+    static final String CANDIDATES_POPULATION = "candidates";
+
     private static final java.util.Set<String> INITIAL_LOAD_ONLY_OPTIONS =
             java.util.Set.of("skip-financial", "skip-price");
 
@@ -553,6 +563,21 @@ public class BootstrapRunner implements ApplicationRunner {
                     "--universe는 " + UNIVERSE_JOBS.stream().sorted().toList()
                             + "에서만 쓴다 — 지금 잡은 '" + job + "'이고, 그대로 두면 인자가 조용히"
                             + " 무시된 채 전 종목이 대상이 된다.");
+        }
+        if (args.getOptionNames().contains("population")) {
+            // 다른 잡에 붙으면 조용히 무시되고, 준 사람은 후보가 적재됐다고 믿는다 — 이른 판 인자와 같은 사고다.
+            if (!FINANCIAL_REFILL_JOB.equals(job)) {
+                throw new IllegalArgumentException("--population은 '" + FINANCIAL_REFILL_JOB + "'에서만 쓴다 — 지금 잡은 '"
+                        + job + "'이고, 그대로 두면 인자가 조용히 무시된다.");
+            }
+            List<String> values = args.getOptionValues("population");
+            if (values.size() != 1 || !CANDIDATES_POPULATION.equals(values.get(0))) {
+                throw new IllegalArgumentException("--population의 값은 '" + CANDIDATES_POPULATION + "' 하나다: " + values);
+            }
+            if (args.getOptionNames().contains("universe")) {
+                throw new IllegalArgumentException("--population=" + CANDIDATES_POPULATION
+                        + "과 --universe는 함께 쓰지 않는다 — 모집단 갈래가 둘이 된다.");
+            }
         }
         if (!FINANCIAL_REFILL_JOB.equals(job) && args.getOptionNames().contains("insert-earlier-vintages")) {
             throw new IllegalArgumentException(

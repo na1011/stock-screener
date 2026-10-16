@@ -292,6 +292,24 @@ class FinancialRefillJobTest {
     }
 
     @Test
+    @DisplayName("후보 손 FR은 티커를 몇 개 주든 범위가 좁힘(ARGS)이다 — 정기 FR 시계를 밀지 않는다(ADR-0178)")
+    void candidateRunIsAlwaysNarrow() {
+        long candidate = jdbcTemplate.queryForObject(
+                "INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'ZZC1', 'ZZC1') RETURNING id", Long.class);
+        try {
+            job.runForCandidatesManually(today(), BatchExecutionRecorder.TriggeredBy.MANUAL, null, List.of("ZZC1"), false);
+
+            assertThat(latest("scope")).isEqualTo("NARROW");
+            assertThat(latest("scope_reason")).isEqualTo("ARGS");
+            assertThat(FinancialRefillJob.scopeOf(null, List.of(), null))
+                    .as("편입 갈래는 그대로 — 인자 없는 기본 연수는 정기 범위다").isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
+        } finally {
+            jdbcTemplate.update("DELETE FROM batch_execution_failure WHERE stock_id = ?", candidate);
+            cleanUpStocks("ZZC1");
+        }
+    }
+
+    @Test
     @DisplayName("과거 편입(현재 활성 편입 아님)의 신선한 미매핑은 답함 — 그 시장을 끝낸다(상장폐지 꼴 · CRNX·APGE)")
     void retiredStockAbsenceCompletesTheMarket() {
         long retired = insertStock("000020", "상폐종목");

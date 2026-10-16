@@ -587,6 +587,22 @@ public class StockRegistrar {
      *
      * @return 위 술어와 티커의 교집합. 호출부가 개수 차이로 빠진 것을 본다.
      */
+    /**
+     * 미국 <b>순위 후보 전원</b>의 티커 — {@link #usRankingCandidateIdsByTicker}와 같은 술어다(ADR-0178). 후보 모드 손 FR이 티커 없이
+     * 불렸을 때 대상을 푼다. 티커 순이다.
+     */
+    public List<String> usRankingCandidateTickers() {
+        if (!CollectedMarkets.ALL.contains("US")) {
+            return List.of();
+        }
+        return jdbcTemplate.queryForList("""
+                SELECT s.ticker FROM stock s
+                WHERE s.market_code = 'US' AND s.is_active
+                  AND NOT %s
+                ORDER BY s.ticker
+                """.formatted(activeMembershipExists("s.id")), String.class);
+    }
+
     public List<Long> usRankingCandidateIdsByTicker(List<String> tickers) {
         if (tickers.isEmpty() || !CollectedMarkets.ALL.contains("US")) {
             return List.of();

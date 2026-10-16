@@ -31,6 +31,7 @@ applies_to:
 
 - MUST: 후보 술어는 한 조각이다 — 「활성 편입」은 `StockRegistrar.activeMembershipExists`로 쓴다. 편입 소비와 후보 소비가 갈리면 한 종목이 두 다리에 다 들거나 어디에도 안 든다.
 - MUST NOT: 후보 경로에 비활성 유니버스 갈래(`universeCode`)를 쓰지 않는다. 그 갈래는 손으로만 쓴다(ADR-0088·0090 — 「활성」의 뜻을 한 가지로). 후보는 이름 붙은 모드로 푼다.
+- MUST: 후보 손 실행은 `--job=financial-refill --population=candidates`(`CandidateIntake.refill`) 하나다 — 인입과 같은 순서(SIC 없는 대상에 업종 먼저)와 같은 재무 대상 술어(SEC 매핑 ∪ 재무 행 있음 · `financialTargets`)를 탄다. 범위는 언제나 NARROW다 — 후보는 정기 FR의 모집단이 아니라 시계와 「그날 넓은 실행」(`wideRunStartedOn`)을 움직이면 안 된다. 매핑 밖인데 재무 행이 있는 후보는 거르지 않는다 — 거르면 옛 규칙의 행이 기록 없이 순위에 남는다(탐색 `CANDIDATE-FR-PLAN-1016.md` v2 · 10-16 55종목).
 - MUST: 후보 분할은 `CorporateActionCollector.recordAll`로만 적는다(근접중복·상태 규칙 하나). 공시는 `APPROVED`로 들어가고 재구축이 `APPLIED`로 올린다 — 재구축의 기본 대상에 「창 밖인데 적용 대기 행이 있는 종목」(`unappliedApprovalIdsOutsideWindow`)이 들어 있어야 순위가 그 행을 읽는다.
 - MUST NOT: 후보에 분사를 적지 않는다. 원장의 분사 `ratio`는 주식 비율(1)이라 순위에 안 닿고, 봉이 없는 후보는 가치 판정이 미해결로 남아 판정 대기 알림만 는다.
 - MUST: 후보 다리는 자기 try다 — 14:16에서는 편입 소비·따라잡기 뒤, 14:00에서는 편입 재구축 앞이지만 실패가 그것을 막지 않는다(처음 예외는 사슬 끝에서 다시 던진다).

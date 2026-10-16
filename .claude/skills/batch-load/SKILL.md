@@ -25,6 +25,7 @@ pg_restore도 같은 exec) → `end <id>`. 세션 안 bootRun은 하나씩이다
 --job=initial-load --tickers=082640,121600 --price-years=7
 --job=initial-load --universe=US_LISTED --price-years=2 --skip-financial=true
 --job=financial-refill --financial-years=3 [--tickers=005930,035420] [--universe=US_TOP1000]   # --tickers만 = 보존 창 편입(닫힌 편입 포함) · --universe를 붙이면 그 유니버스의 열린 편입만
+--job=financial-refill --population=candidates [--tickers=…] [--financial-years=11] [--insert-earlier-vintages=true]   # 미국 순위 후보(활성 편입 없음 · ADR-0178) — 티커 없으면 후보 전원 ∩ (SEC 매핑 ∪ 재무 행) · SIC 없는 것에 업종 먼저 · 범위는 언제나 NARROW
 --job=full-statement-refill [--financial-years=5] [--tickers=…] [--quarters=true] [--all-quarters=true]
 --job=company-profile [--tickers=005930,035420] [--universe=US_LISTED]
 --job=corporate-action [--from=2020-01-02] [--tickers=058470,086280]

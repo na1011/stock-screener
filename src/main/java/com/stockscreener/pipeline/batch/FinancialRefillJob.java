@@ -198,6 +198,21 @@ public class FinancialRefillJob {
         return runAndReport(asOf, triggeredBy, null, tickers, null, false, null, Population.CANDIDATES);
     }
 
+    /**
+     * 후보 모드 손 FR({@code --population=candidates} · {@code CandidateIntake.refill})이 부른다 — 대상은 미국 <b>순위 후보</b>이고
+     * 연수·이른 판을 손 실행처럼 받는다. 관문의 후보 재적재가 이 길이다({@code docs/reload-gate.md} 순서 10).
+     *
+     * <p><b>범위는 언제나 좁힘(ARGS)이다</b> — 후보는 정기 FR의 모집단(편입)이 아니므로, 티커 목록이 길어도 시계를 밀거나
+     * 「그날 넓은 실행이 돌았다」({@code StockRefreshStore.wideRunStartedOn})가 되면 안 된다.
+     */
+    public Invalidation runForCandidatesManually(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                                 Integer yearsBack, List<String> tickers, boolean insertEarlierVintages) {
+        if (tickers == null || tickers.isEmpty()) {
+            throw new IllegalArgumentException("후보 손 FR은 푼 티커로 부른다(비면 전량이 된다).");
+        }
+        return runAndReport(asOf, triggeredBy, yearsBack, tickers, null, insertEarlierVintages, null, Population.CANDIDATES);
+    }
+
     /** 티커를 무엇으로 푸는가. 비활성 유니버스 갈래({@code universeCode})는 이것과 따로다 — 손으로만 쓴다. */
     enum Population {
         /** 보존 창과 겹치는 활성 편입(손 실행·정기 경로의 기본). */
@@ -220,7 +235,10 @@ public class FinancialRefillJob {
         if (years < 0) {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
-        BatchExecutionRecorder.DeclaredScope scope = scopeOf(yearsBack, tickers, universeCode);
+        // 후보는 정기 FR의 모집단이 아니다 — 어떤 인자로 불려도 정기 범위로 선언하지 않는다.
+        BatchExecutionRecorder.DeclaredScope scope = population == Population.CANDIDATES
+                ? BatchExecutionRecorder.DeclaredScope.narrow(BatchExecutionRecorder.ScopeReason.ARGS)
+                : scopeOf(yearsBack, tickers, universeCode);
 
         List<SecurityRef> targets = stockRegistrar.toSecurityRefs(population == Population.CANDIDATES
                 ? resolveCandidates(tickers) : resolveTargets(tickers, universeCode));

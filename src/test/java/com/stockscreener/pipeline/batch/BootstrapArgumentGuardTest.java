@@ -67,6 +67,26 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
+    @DisplayName("--population은 financial-refill에서만 · 값은 candidates 하나 · --universe와 함께 못 쓴다 — 조용히 무시되면 후보가 적재됐다고 믿는다")
+    void rejectsMisplacedPopulation() {
+        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(new DefaultApplicationArguments(
+                "--job=company-profile", "--population=candidates"), "company-profile"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("population");
+        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(new DefaultApplicationArguments(
+                "--job=financial-refill", "--population=members"), "financial-refill"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("candidates");
+        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(new DefaultApplicationArguments(
+                "--job=financial-refill", "--population=candidates", "--universe=US_LISTED"), "financial-refill"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("universe");
+        assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(new DefaultApplicationArguments(
+                "--job=financial-refill", "--population=candidates", "--financial-years=11",
+                "--insert-earlier-vintages=true"), "financial-refill"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> BootstrapRunner.rejectUnknownOptions(new DefaultApplicationArguments(
+                "--job=financial-refill", "--population=candidates"))).doesNotThrowAnyException();
+    }
+
+    @Test
     @DisplayName("값이 붙은 불리언은 통과한다")
     void acceptsBooleansWithValues() {
         assertThatCode(() -> BootstrapRunner.rejectMalformedBooleans(
