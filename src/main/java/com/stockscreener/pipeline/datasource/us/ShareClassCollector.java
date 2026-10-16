@@ -34,6 +34,11 @@ import java.util.Map;
  *
  * <p>받기 실패는 종목을 세우지 않는다 — 그 공시의 판정이 「인스턴스 없음」으로 숨김이 되고(값을 지어내지 않는다), 다음 받기가
  * 다시 받는다. 해석 실패(UNREADABLE)는 읽기 판이 같은 동안 다시 받지 않는다. 인증 실패만 던진다(배치 전체의 문제).
+ *
+ * <p><b>MUST: 받지 못한 공시는 행으로 남기고 종류를 결과에 싣는다</b>({@link Outcome#unresolved()}). 로그만 남기면 아무 표면에도
+ * 안 닿는다 — 잡이 시장 완료에 세지 않고, 공시 소비가 그 공시를 먹여 닫고, 정기 FR이 없는 순위 후보는 다음 공시(약 한 분기)까지
+ * 그 판이 숨는다(후보 손 FR 계획 v2 반증). 한도({@code RATE_LIMITED})로 멈춘 뒤의 공시도 콜 없이 같은 종류의 실패 행으로 적는다 —
+ * 그래서 「미해결 = 지금 읽기 판의 {@code FAILED} 중 {@code UNREADABLE}이 아닌 것」이 표 하나로 선다.
  */
 @Component
 @ConditionalOnApiKey("sec-edgar")
@@ -41,8 +46,15 @@ public class ShareClassCollector {
 
     private static final Logger log = LoggerFactory.getLogger(ShareClassCollector.class);
 
-    /** @param targets 앵커 후보 공시 수 · {@code fetched} 이번에 받아 저장한 수 · {@code failed} 이번에 실패로 남긴 공시 */
-    public record Outcome(int targets, int fetched, List<String> failed) {
+    /**
+     * @param targets    앵커 후보 공시 수 · {@code fetched} 이번에 받아 저장한 수 · {@code failed} 이번에 실패로 남긴 공시
+     * @param unresolved 다음 받기가 다시 받을 실패의 종류(공시마다 하나) — 해석 실패는 안 든다(같은 읽기 판으로는 다시 안 받는다)
+     */
+    public record Outcome(int targets, int fetched, List<String> failed, List<DataSourceException.Kind> unresolved) {
+        public Outcome {
+            failed = List.copyOf(failed);
+            unresolved = List.copyOf(unresolved);
+        }
     }
 
     private static final tools.jackson.databind.ObjectMapper MAPPER = new tools.jackson.databind.ObjectMapper();
@@ -80,6 +92,8 @@ public class ShareClassCollector {
         int targets = 0;
         int fetched = 0;
         List<String> failed = new ArrayList<>();
+        List<DataSourceException.Kind> unresolved = new ArrayList<>();
+        DataSourceException limited = null;
         for (String accession : cf.anchorCandidates()) {
             IssuerFacts.Filing filing = cf.filings().get(accession);
             targets++;
@@ -89,6 +103,14 @@ public class ShareClassCollector {
                 continue;
             }
             String where = context + " " + accession;
+            if (limited != null) {
+                // 한도에 걸린 뒤로는 같은 실행에서 더 두드리지 않는다 — 다만 「안 물었다」를 행으로 남긴다(다음 받기가 이어 받는다).
+                store.saveFact(cik, accession, filing.form(), filing.filed(), "FAILED", null, limited.kind().name(),
+                        "앞 공시가 한도에 걸려 이번 실행에서 묻지 않았다 — " + limited.getMessage());
+                failed.add(accession);
+                unresolved.add(limited.kind());
+                continue;
+            }
             try {
                 fetch(cik, accession, filing, where);
                 fetched++;
@@ -102,14 +124,14 @@ public class ShareClassCollector {
                 }
                 store.saveFact(cik, accession, filing.form(), filing.filed(), "FAILED", null, ex.kind().name(), ex.getMessage());
                 failed.add(accession);
+                unresolved.add(ex.kind());
                 log.warn("클래스 축 인스턴스를 받지 못했다 — 다음 받기가 다시 받는다. {} 종류={} — {}", where, ex.kind(), ex.getMessage());
                 if (ex.kind() == DataSourceException.Kind.RATE_LIMITED) {
-                    // 남은 공시를 같은 실행에서 더 두드리지 않는다 — 다음 받기가 이어 받는다.
-                    break;
+                    limited = ex;
                 }
             }
         }
-        return new Outcome(targets, fetched, failed);
+        return new Outcome(targets, fetched, failed, unresolved);
     }
 
     private void fetch(long cik, String accession, IssuerFacts.Filing filing, String context)

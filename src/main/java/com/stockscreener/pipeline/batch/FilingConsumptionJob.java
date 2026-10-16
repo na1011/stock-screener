@@ -238,7 +238,13 @@ public class FilingConsumptionJob {
             Map<String, String> statuses = store.supplementStatus(entry.getKey(),
                     filings.stream().map(SecFilingConsumption.OpenFiling::accession).toList());
             for (SecFilingConsumption.Verdict v : secConsumption.judge(entry.getKey(), filings, carried, statuses)) {
-                if (v.consumed()) {
+                if (v.consumed() && !outcome.unfetchedClassFacts().isEmpty()) {
+                    // 클래스 축 인스턴스를 못 받았다(관문 뒤 · ADR-0179) — 닫으면 그 판이 숨김으로 남고, 정기 FR이 없는 순위 후보는
+                    // 다음 공시까지 다시 안 받는다. 어느 공시가 못 받혔는지는 결과에 없으므로 그 종목의 열린 행을 다 연 채 둔다.
+                    store.recordAttempt(v.filing().id(), "클래스 축 인스턴스 미해결 " + outcome.unfetchedClassFacts()
+                            + " — 다음 실행이 다시 받는다");
+                    counts.stillOpen.incrementAndGet();
+                } else if (v.consumed()) {
                     counts.consumed.addAndGet(store.markFrConsumed(v.filing().id(), v.ground().name(), v.evidence(),
                             executionId));
                 } else {

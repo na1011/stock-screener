@@ -22,6 +22,8 @@ public class FakeFinancialDataSource implements FinancialDataSource {
     private final Set<Long> uncertain = new java.util.HashSet<>();
     /** 받지 못한 보충의 종류(SEC 공시 보충의 받기 실패 모양 · ADR-0174). */
     private final Map<Long, List<DataSourceException.Kind>> unfetched = new HashMap<>();
+    /** 받지 못한 클래스 축 인스턴스의 종류(관문 뒤 SEC 클래스 축 · ADR-0179). */
+    private final Map<Long, List<DataSourceException.Kind>> unfetchedClassFacts = new HashMap<>();
 
     /** 수집이 원장 응답에서 본 공시 번호(공시 소비의 근거 · ADR-0176 2차). */
     private final Map<Long, com.stockscreener.pipeline.datasource.FilingTrace> traces = new HashMap<>();
@@ -57,12 +59,18 @@ public class FakeFinancialDataSource implements FinancialDataSource {
         return this;
     }
 
+    public FakeFinancialDataSource unfetchedClassFactsFor(long stockId, List<DataSourceException.Kind> kinds) {
+        unfetchedClassFacts.put(stockId, kinds);
+        return this;
+    }
+
     /** 테스트 사이에 상태를 지운다. 이 빈은 싱글턴이라 안 지우면 앞 테스트의 실패가 샌다. */
     public void reset() {
         reportsByStock.clear();
         failures.clear();
         uncertain.clear();
         unfetched.clear();
+        unfetchedClassFacts.clear();
         traces.clear();
         fetchedStockIds.clear();
     }
@@ -96,6 +104,7 @@ public class FakeFinancialDataSource implements FinancialDataSource {
                     unfetched.get(security.stockId()));
         }
         return FinancialFetch.of(reports).withFilingTrace(
-                traces.getOrDefault(security.stockId(), com.stockscreener.pipeline.datasource.FilingTrace.NONE));
+                traces.getOrDefault(security.stockId(), com.stockscreener.pipeline.datasource.FilingTrace.NONE))
+                .withUnfetchedClassFacts(unfetchedClassFacts.getOrDefault(security.stockId(), List.of()));
     }
 }

@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.batch;
 import com.stockscreener.notification.AlertEvent;
 import com.stockscreener.notification.AlertPort;
 import com.stockscreener.pipeline.collector.FilingLedgerStore;
+import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FilingTrace;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.datasource.us.SecFilingClient;
@@ -247,6 +248,22 @@ class FilingConsumptionJobTest {
         job.run(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
 
         assertThat(alerts).noneSatisfy(a -> assertThat(a.title()).endsWith("공시가 소비되지 않고 쌓였다"));
+    }
+
+    @Test
+    @DisplayName("후보: 클래스 축 인스턴스를 못 받은 종목의 행은 근거가 서도 닫지 않는다 — 닫으면 정기 FR 없는 후보는 다음 공시까지 숨는다(ADR-0179)")
+    void unfetchedClassFactsKeepTheRowOpen() {
+        long candidateRow = candidateRow("0099000012-26-000001", "10-Q");
+        financialSource.withReports(usCandidate, List.of()).withTrace(usCandidate,
+                FilingTrace.ofAccessions(Set.of("0099000012-26-000001")))
+                .unfetchedClassFactsFor(usCandidate, List.of(DataSourceException.Kind.RATE_LIMITED));
+
+        job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        assertThat(groundOf(candidateRow)).as("companyfacts 근거는 섰지만 클래스 축이 미해결").isNull();
+        assertThat(attemptsOf(candidateRow)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT last_reason FROM filing_consumption WHERE id = ?", String.class,
+                candidateRow)).startsWith("클래스 축 인스턴스 미해결");
     }
 
     @Test

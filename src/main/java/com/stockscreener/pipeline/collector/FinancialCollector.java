@@ -89,6 +89,7 @@ public class FinancialCollector {
         absenceWriter.write(security.stockId(), source.sourceName(), fetch.absences(),
                 LocalDate.now());
         // 받지 못한 보충은 종목을 세우지 않는다(보충 계약) — 잡이 시장 판정에 쓰도록 결과에 실어 넘긴다(ADR-0174).
-        return outcome.withUnfetchedSupplements(fetch.unfetchedSupplements()).withFilingTrace(fetch.filingTrace());
+        return outcome.withUnfetchedSupplements(fetch.unfetchedSupplements()).withFilingTrace(fetch.filingTrace())
+                .withUnfetchedClassFacts(fetch.unfetchedClassFacts());
     }
 }

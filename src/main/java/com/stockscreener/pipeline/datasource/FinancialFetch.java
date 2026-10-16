@@ -20,7 +20,8 @@ import java.util.Set;
 public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
                              boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
                              Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
-                             List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace) {
+                             List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace,
+                             List<DataSourceException.Kind> unfetchedClassFacts) {
 
     public FinancialFetch {
         filingTrace = filingTrace == null ? FilingTrace.NONE : filingTrace;
@@ -29,6 +30,16 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
         unconfirmedVintages = unconfirmedVintages == null ? Set.of() : Set.copyOf(unconfirmedVintages);
         supplementedVintages = supplementedVintages == null ? Set.of() : Set.copyOf(supplementedVintages);
         unfetchedSupplements = unfetchedSupplements == null ? List.of() : List.copyOf(unfetchedSupplements);
+        unfetchedClassFacts = unfetchedClassFacts == null ? List.of() : List.copyOf(unfetchedClassFacts);
+    }
+
+    /** 클래스 축 재료를 안 받는 소스·갈래용(관문 꺼짐 포함). */
+    public FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
+                          boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
+                          Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
+                          List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace) {
+        this(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages, vintagesUncertain,
+                unfetchedSupplements, filingTrace, List.of());
     }
 
     /** 공시 근거({@link FilingTrace})를 안 내는 소스·시험용. */
@@ -114,10 +125,24 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
         return filingTrace;
     }
 
+    /**
+     * <b>이 호출이 받지 못한 클래스 축 인스턴스의 종류</b>(관문 뒤 SEC 클래스 축 · ADR-0179 — 해석 실패는 빼고). 보충과 같은 뜻의
+     * 다른 층이다 — 종목은 성공으로 끝나지만 그 시장은 이번 실행에서 끝까지 받지 못했다. 잡이 시장 판정에 「클래스 축」 층으로 싣는다.
+     */
+    public List<DataSourceException.Kind> unfetchedClassFacts() {
+        return unfetchedClassFacts;
+    }
+
     /** 같은 결과에 공시 근거를 싣는다. */
     public FinancialFetch withFilingTrace(FilingTrace trace) {
         return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
-                vintagesUncertain, unfetchedSupplements, trace);
+                vintagesUncertain, unfetchedSupplements, trace, unfetchedClassFacts);
+    }
+
+    /** 같은 결과에 받지 못한 클래스 축 인스턴스를 싣는다. */
+    public FinancialFetch withUnfetchedClassFacts(List<DataSourceException.Kind> kinds) {
+        return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
+                vintagesUncertain, unfetchedSupplements, filingTrace, kinds);
     }
 
     /** 부재 축을 안 보고 판 이력도 전부 내지 않는 소스용. */

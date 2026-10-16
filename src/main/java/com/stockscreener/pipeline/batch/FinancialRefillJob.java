@@ -293,6 +293,7 @@ public class FinancialRefillJob {
                     }
                     // 보충을 받지 못한 종목은 성공으로 끝나도 그 시장은 이번 실행에서 끝나지 않았다(ADR-0174).
                     execution.recordUnfetchedSupplements(security.marketCode(), outcome.unfetchedSupplements());
+                    execution.recordUnfetchedClassFacts(security.marketCode(), outcome.unfetchedClassFacts());
                     // 이른 판 삽입도 그 공시일 이후의 지표를 지운다 — 정정·교정과 같이 세지 않으면
                     // 그 종목이 백필 목록에서 빠져 지워진 채 남는다.
                     if (outcome.revised() > 0 || outcome.corrected() > 0 || outcome.insertedEarlier() > 0) {
@@ -311,7 +312,7 @@ public class FinancialRefillJob {
                     }
                     // 보충을 못 받은 종목은 성공이어도 정기 범위가 아니다 — 정기 실행은 그 시장을 미완료로 남겨 다시 돌지만,
                     // 좁힌 실행에는 그 장치가 없다. 표지를 안 쓰면 따라잡기가 다음 차례에 다시 집는다.
-                    if (regularReach && outcome.unfetchedSupplements().isEmpty()) {
+                    if (regularReach && outcome.fullyFetched()) {
                         refreshStore.mark(security.stockId(), JOB_NAME, execution.executionId());
                     }
                     return outcome.changed();

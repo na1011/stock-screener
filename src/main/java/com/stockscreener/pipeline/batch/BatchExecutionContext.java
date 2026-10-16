@@ -397,6 +397,18 @@ public final class BatchExecutionContext {
     }
 
     /**
+     * 받지 못한 클래스 축 인스턴스(관문 뒤 · ADR-0179)를 시장 판정에 싣는다 — 보충과 같은 뜻의 다른 층이다. 안 실으면 그 공시가
+     * 판정에서 숨김으로 남는데 실행은 끝까지 받은 것으로 시계를 민다.
+     *
+     * @param kinds 받지 못한 것의 종류 — 해석 실패({@code UNREADABLE})는 안 든다
+     */
+    public void recordUnfetchedClassFacts(String marketCode, List<DataSourceException.Kind> kinds) {
+        if (completeness != null) {
+            completeness.recordUnfetchedLayer(marketCode, "클래스 축", kinds);
+        }
+    }
+
+    /**
      * 응답을 해석할 수 없었던 실패를 별도로 센다. 소스 스펙 변경 판단의 근거다.
      *
      * <p>{@link #process}가 MALFORMED 종목 실패마다 스스로 부른다. 잡이 직접 부르는 것은 종목을 안 지나는 실패

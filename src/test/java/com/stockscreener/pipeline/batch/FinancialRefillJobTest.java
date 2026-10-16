@@ -271,6 +271,27 @@ class FinancialRefillJobTest {
     }
 
     @Test
+    @DisplayName("클래스 축 인스턴스를 못 받았으면 그 시장은 미완료이고 종목 표지를 안 찍는다 — 로그만 남으면 판이 조용히 숨는다(ADR-0179)")
+    void unfetchedClassFactsMakeTheMarketIncomplete() {
+        try {
+            fakeFinancialSource.reset();
+            fakeFinancialSource.withReports(memberId, List.of(report()))
+                    .unfetchedClassFactsFor(memberId, List.of(DataSourceException.Kind.RATE_LIMITED));
+
+            BatchStatus status = job.run(today(), BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null);
+
+            assertThat(status).isEqualTo(BatchStatus.SUCCESS);
+            assertThat(latest("scope_reason")).isEqualTo("MARKET_INCOMPLETE");
+            assertThat(latest("note")).contains("KOSPI 클래스 축");
+            assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM stock_job_refresh WHERE stock_id = ?",
+                    Integer.class, memberId)).as("끝까지 못 받았다 — 따라잡기가 다시 집어야 한다").isZero();
+        } finally {
+            fakeFinancialSource.reset();
+            jdbcTemplate.update("DELETE FROM stock_job_refresh WHERE stock_id = ?", memberId);
+        }
+    }
+
+    @Test
     @DisplayName("과거 편입(현재 활성 편입 아님)의 신선한 미매핑은 답함 — 그 시장을 끝낸다(상장폐지 꼴 · CRNX·APGE)")
     void retiredStockAbsenceCompletesTheMarket() {
         long retired = insertStock("000020", "상폐종목");

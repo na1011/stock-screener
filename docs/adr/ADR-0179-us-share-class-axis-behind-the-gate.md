@@ -43,6 +43,10 @@ applies_to:
 - **MUST NOT: 공시 보충의 판 고정 범위(`ReaderVersionPinTest` 일곱 파일)를 고치지 않는다.** 받기는 그 범위의 받기·인스턴스 고르기를
   부르기만 한다(`ShareClassCollector`).
 - **MUST: 마이그레이션 V70을 관문 직전에 `db/migration`으로 한 글자도 안 바꾸고 옮긴다.** 번호가 운영의 다음 번호와 겹치면 올린다.
+- **MUST: 인스턴스를 못 받은 공시는 표면에 닿게 한다.** 받기 실패는 `FAILED` 행 · 한도에 걸린 뒤의 공시도 콜 없이 `FAILED · RATE_LIMITED` 행 —
+  「미해결 = 지금 읽기 판의 `FAILED` 중 `UNREADABLE` 아닌 것」이 표 하나로 선다. 그 종류는 잡의 시장 판정 「클래스 축」 층(보충과 같은 장치)에 실리고
+  종목 표지(ADR-0177)를 막으며, 미국 공시 소비는 그 종목의 열린 행을 닫지 않는다 — 로그만 남기면 정기 FR이 없는 순위 후보는 다음 공시(약 한 분기)까지
+  그 판이 숨는다(후보 손 FR 계획 v2 반증 · 10-16).
 - **MUST: 펜스는 뷰 `us_share_class_effective`로 잰다** — 판독기의 `ShareClassLine`과 같은 규칙이고 `ShareClassAxisReadTest`가 행마다
   맞댄다. 뷰가 없으면(관문 전) 펜스는 이 축이 없던 때와 같다.
 
