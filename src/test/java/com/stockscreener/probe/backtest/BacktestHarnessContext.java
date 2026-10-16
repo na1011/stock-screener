@@ -1,6 +1,8 @@
 package com.stockscreener.probe.backtest;
 
 import com.stockscreener.pipeline.collector.CorporateActionLedger;
+import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
+import com.stockscreener.pipeline.lock.CatalogWriteGate;
 
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringBootConfiguration;
@@ -71,6 +73,9 @@ import org.springframework.context.annotation.Import;
 // 하나도 등록되지 않고, 증상이 "테이블이 없다"가 아니라 UnknownEntityException이라
 // 원인이 스캔 범위라는 것이 드러나지 않는다.
 @EntityScan("com.stockscreener")
-@Import(CorporateActionLedger.class)
+// ShareClassStore·CatalogWriteGate도 같은 이유로 집어 온다 — 지표 판독기(IndicatorDataReader)가 미국 관문 뒤 주식수 클래스 축을
+// 읽으려고 앞의 것을(ADR-0179 · e22e9d44), 지표 목록 동기화가 쓰기 잠금을 물으려고 뒤의 것을(ADR-0175) 받는데 두 패키지 다 스캔 밖이다. 빠지면 이 하네스를 쓰는 프로브가 전부 기동에서 죽는다(2026-10-16 관문 실행기
+// 드라이런에서 PresetResultSnapshotTest가 그렇게 죽었다 — backtestProbe는 일반 test 작업 밖이라 전체 시험에 안 걸렸다).
+@Import({CorporateActionLedger.class, ShareClassStore.class, CatalogWriteGate.class})
 public class BacktestHarnessContext {
 }
