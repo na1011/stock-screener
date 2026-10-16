@@ -163,14 +163,7 @@ public class ShareClassStore {
 
     /** 시장의 활성 줄마다 판정과 분할 원장 — 순위 판독기·보류가 한 번에 읽는다. 판정이 없는 줄은 키가 없다. */
     public Map<Long, ShareClassLine> lines(String marketCode) {
-        Map<Long, List<ShareClassLine.Verdict>> verdicts = new LinkedHashMap<>();
-        jdbcTemplate.query("""
-                SELECT v.stock_id, v.accession, v.filed, v.kind, v.status, v.current_path, v.failure, v.line_shares, v.denominator
-                FROM financial_share_class_filing v JOIN stock s ON s.id = v.stock_id
-                WHERE s.market_code = ? AND s.is_active
-                """, rs -> {
-            verdicts.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(verdict(rs));
-        }, marketCode);
+        Map<Long, List<ShareClassLine.Verdict>> verdicts = verdictsByStock(marketCode);
         Map<Long, List<ShareClassLine.Split>> splits = new HashMap<>();
         jdbcTemplate.query("""
                 SELECT c.stock_id, c.effective_date, c.ratio FROM corporate_action c JOIN stock s ON s.id = c.stock_id
@@ -183,6 +176,28 @@ public class ShareClassStore {
         Map<Long, ShareClassLine> out = new HashMap<>();
         verdicts.forEach((stockId, rows) -> out.put(stockId, new ShareClassLine(rows, splits.getOrDefault(stockId, List.of()))));
         return out;
+    }
+
+    /**
+     * 시장의 활성 줄마다 판정 행 — {@link #lines}가 분할 원장과 묶는다. 후보 순위 효과 스윕(관문 2단계)이 운영 DB에 안 쓰고 판정을
+     * 메모리에 둔 채 같은 순위 경로를 돌리려고 덮어쓰는 자리다.
+     */
+    protected Map<Long, List<ShareClassLine.Verdict>> verdictsByStock(String marketCode) {
+        Map<Long, List<ShareClassLine.Verdict>> verdicts = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT v.stock_id, v.accession, v.filed, v.kind, v.status, v.current_path, v.failure, v.line_shares, v.denominator
+                FROM financial_share_class_filing v JOIN stock s ON s.id = v.stock_id
+                WHERE s.market_code = ? AND s.is_active
+                """, rs -> {
+            verdicts.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(verdict(rs));
+        }, marketCode);
+        return verdicts;
+    }
+
+    /** 저장 형태를 판독기 형태로 — 저장한 뒤 다시 읽은 것과 같다({@link #verdict}와 같은 규칙). */
+    public static ShareClassLine.Verdict lineVerdict(VerdictRow r) {
+        return new ShareClassLine.Verdict(r.accession(), r.filed(), r.kind(), r.status(), r.currentPath(),
+                ledgerContradiction(r.failure()), decimal(r.lineShares()), decimal(r.denominator()));
     }
 
     /** 줄 하나의 판정과 분할 원장. 판정이 없으면 {@link ShareClassLine#none()}. */
@@ -202,7 +217,12 @@ public class ShareClassStore {
     private static ShareClassLine.Verdict verdict(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new ShareClassLine.Verdict(rs.getString("accession"), rs.getObject("filed", LocalDate.class),
                 rs.getString("kind").charAt(0), rs.getString("status").charAt(0), rs.getBoolean("current_path"),
-                "LEDGER".equals(rs.getString("failure")), rs.getBigDecimal("line_shares"), rs.getBigDecimal("denominator"));
+                ledgerContradiction(rs.getString("failure")), rs.getBigDecimal("line_shares"), rs.getBigDecimal("denominator"));
+    }
+
+    /** 실패 출처 중 원장 어긋남만 보류 함수가 따로 본다(발행사 제외의 재료). */
+    private static boolean ledgerContradiction(String failure) {
+        return "LEDGER".equals(failure);
     }
 
     private static BigDecimal decimal(Double v) {
