@@ -47,7 +47,7 @@ run() { # <라벨> <기대 target | -> <재시도 모집단 인자 | -> <모집�
 run cur "$N_CUR" - --universe=US_TOP1000
 run cand - --population=candidates --population=candidates
 M=$(q "$PROD" "select target_count from batch_execution where id=$(cat "$A/exec-cand.txt")")
-[ "$M" -ge "$N_CAND_FIN" ] && [ "$M" -le "$N_CAND" ] || die "후보 재무 대상 $M이 독립 범위 [$N_CAND_FIN, $N_CAND] 밖이다"
+[ "$M" -ge "$N_CAND_FIN" ] && [ "$M" -le "$N_CAND" ] || die "후보 재무 대상 ${M}이 독립 범위 [$N_CAND_FIN, $N_CAND] 밖이다"
 grep -qF "후보 모드 손 FR: 후보 $N_CAND · 재무 대상 $M " "$A/refill-cand-$PROD.log" || die "후보 실행 로그의 후보·재무 대상 수가 precheck·실행 행과 다르다"
 # 업종 먼저(company-profile) 실행이 있었다면 FAILED가 아니어야 한다(FAILED면 후보 갈래가 재무로 안 넘어가고 던진다 — 그래도 행을 본다).
 K=$(sed -n 's/.*후보 모드 손 FR: .* 업종 먼저 \([0-9]*\).*/\1/p' "$A/refill-cand-$PROD.log" | head -1)

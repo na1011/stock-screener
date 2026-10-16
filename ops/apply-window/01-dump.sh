@@ -7,7 +7,7 @@ if [ "$PROD" = "$LIVE" ]; then
   echo "$out" | tail -20
   path=$(echo "$out" | sed -n "s/^\[dump\] $PROD → //p" | head -1)
 else
-  path="$A/dump-$PROD.dump"; [ ! -e "$path" ] || die "$path가 이미 있다"
+  path="$A/dump-$PROD.dump"; [ ! -e "$path" ] || die "${path}가 이미 있다"
   PGOPTIONS='-c statement_timeout=0' "$(pg_bin pg_dump)" -Fc -d "$PROD" -f "$path" || die "작은 DB 덤프 실패"
 fi
 [ -s "$path" ] || die "덤프 경로를 못 읽었다: $path"

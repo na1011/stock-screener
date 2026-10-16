@@ -8,7 +8,7 @@
 # 프리셋·순위·명부 차이는 귀속 재료로 요약만 낸다(판정이 아니다 — 관문은 값을 바꾸러 도는 것이다).
 source "$(dirname "$0")/env.sh"
 PA=$(abspath "$1"); PB=$(abspath "$2"); SA=""; [ -z "${3:-}" ] || SA=$(abspath "$3")
-for d in "$PA" "$PB" ${SA:+"$SA"}; do for f in preset.tsv rank.tsv groups.tsv fs.tsv stock-market.tsv membership.tsv kr-fs-hash.txt fences-cmp.tsv adjclose-counts.tsv; do [ -s "$d/$f" ] || die "$d/$f가 비었거나 없다"; done; done
+for d in "$PA" "$PB" ${SA:+"$SA"}; do for f in preset.tsv rank.tsv groups.tsv fs.tsv stock-market.tsv membership.tsv kr-fs-hash.txt fences-cmp.tsv adjclose-counts.tsv; do [ -s "$d/$f" ] || die "$d/${f}가 비었거나 없다"; done; done
 FAIL=()
 echo "===== ① 국내 불변"
 cmp -s "$PB/kr-fs-hash.txt" "$PA/kr-fs-hash.txt" && echo "  같음 국내 재무 해시" || FAIL+=("① 국내 재무 해시")

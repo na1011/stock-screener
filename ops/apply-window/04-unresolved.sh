@@ -29,4 +29,4 @@ PGOPTIONS='-c statement_timeout=120s' command psql -d "$PROD" -v ON_ERROR_STOP=1
 us=$(awk -F'\t' '$1=="f" {print $2+$3+$4+$5}' "$A/a2-after.txt")
 echo "③ a2 미국 $(awk -F'\t' '$1=="f"' "$A/a2-after.txt" | tr '\t' ' ') (전: $(awk -F'\t' '$1=="f"' "$A/a2-before.txt" | tr '\t' ' '))"
 [ "${us:-x}" = 0 ] || FAIL+=("③ a2 미국 $us")
-if [ ${#FAIL[@]} -eq 0 ]; then echo "OK 미해결 0 · 판정 $(grep -c . "$V" || true)줄"; else printf '  %s\n' "${FAIL[@]}"; die "미해결이 남았다 — 다시 받거나 $V에 판정을 적는다"; fi
+if [ ${#FAIL[@]} -eq 0 ]; then echo "OK 미해결 0 · 판정 $(grep -c . "$V" || true)줄"; else printf '  %s\n' "${FAIL[@]}"; die "미해결이 남았다 — 다시 받거나 ${V}에 판정을 적는다"; fi

@@ -9,7 +9,7 @@ D=$(cat "$A/dates.txt"); [ -n "$D" ] || die "프리셋 날짜가 비었다 — 0
 t0=$(date +%s)
 (cd "$REPO" && BACKTEST_DB_URL="jdbc:postgresql://localhost:5432/$DB?readOnlyMode=always" ./gradlew backtestProbe --tests '*PresetResultSnapshotTest*' -Dsweep.dates=$D -Dsweep.out=$OUT/preset.tsv -PskipFrontend --rerun > $OUT/preset.log 2>&1) || die "프리셋 스냅숏 실패"
 [ -s $OUT/preset.tsv ] && [ "$(stat -f %m $OUT/preset.tsv)" -ge "$t0" ] || die "프리셋 TSV가 이번 실행에서 안 쓰였다"
-grep -qF "localhost:5432/$DB?readOnlyMode=always" $OUT/preset.log || die "프리셋 스냅숏이 $DB를 읽었다는 로그가 없다"
+grep -qF "localhost:5432/$DB?readOnlyMode=always" $OUT/preset.log || die "프리셋 스냅숏이 ${DB}를 읽었다는 로그가 없다"
 (cd "$REPO" && RANK_SNAPSHOT_DB=$DB RANK_SNAPSHOT_OUT=$OUT/rank.tsv RANK_SNAPSHOT_CLASS_AXIS=$CA ./gradlew test --tests '*RankShareCountSnapshotTest*' -PskipFrontend --rerun -i > $OUT/rank.log 2>&1) || die "순위 스냅숏 실패"
 grep -q "RANK_SNAPSHOT db=$DB 클래스축=$CA " $OUT/rank.log && [ "$(stat -f %m $OUT/rank.tsv)" -ge "$t0" ] || die "순위 스냅숏이 그 판독기로 안 돌았다"
 export_q() { PGOPTIONS='-c statement_timeout=0 -c default_transaction_read_only=on' command psql -d $DB -v ON_ERROR_STOP=1 -At -c "\\copy ($1) to '$2'" > /dev/null || die "추출 실패: $2"; }
@@ -27,5 +27,5 @@ PGOPTIONS='-c statement_timeout=120s -c default_transaction_read_only=on' comman
 (cd "$REPO" && PREMISE_CAPTURE=$OUT/fences.tsv PREMISE_DB=$DB PREMISE_STATEMENT_TIMEOUT=120 bash .claude/hooks/check-premises.sh </dev/null > $OUT/fences.log 2>&1) || true
 [ -s $OUT/fences.tsv ] || die "펜스 캡처가 비었다 — $OUT/fences.log"
 cut -f1,3- $OUT/fences.tsv | sort > $OUT/fences-cmp.tsv   # 초 열을 뺀 대조용
-for f in groups.tsv fs.tsv stock-market.tsv membership.tsv adjclose-counts.tsv pctl-counts.tsv base-counts.tsv kr-fs-hash.txt fences-cmp.tsv; do [ -s $OUT/$f ] || die "$f가 비었다"; done
+for f in groups.tsv fs.tsv stock-market.tsv membership.tsv adjclose-counts.tsv pctl-counts.tsv base-counts.tsv kr-fs-hash.txt fences-cmp.tsv; do [ -s $OUT/$f ] || die "${f}가 비었다"; done
 echo "OK $OUT · 펜스 $(grep -c . $OUT/fences.tsv)개(무판정 $(cut -f3 $OUT/fences.tsv | grep -c '^\(\[DB 무관\] \)\?<' || true))"

@@ -23,7 +23,7 @@ fi
 # 작은 DB 드라이런(V70을 주 경로로 옮긴 작업 트리)에서는 이것만 뜻이 있다(그 DB는 운영 jar와 무관하다).
 FILES=$(cd "$REPO/src/main/resources/db/migration" && ls V*__*.sql | sed -E 's/^V([0-9_]+)__.*/\1/' | tr _ . | sort -t. -k1,1n -k2,2n | paste -sd, -)
 APPLIED=$(q "$PROD" "select string_agg(version, ',' order by string_to_array(version, '.')::int[]) from flyway_schema_history where success and version is not null")
-[ "$FILES" = "$APPLIED" ] || die "$PROD에 적용된 마이그레이션과 HEAD 파일이 다르다 — 파일 끝 $(echo "$FILES" | tr , '\n' | tail -1) · 적용 끝 $(echo "$APPLIED" | tr , '\n' | tail -1)"
+[ "$FILES" = "$APPLIED" ] || die "${PROD}에 적용된 마이그레이션과 HEAD 파일이 다르다 — 파일 끝 $(echo "$FILES" | tr , '\n' | tail -1) · 적용 끝 $(echo "$APPLIED" | tr , '\n' | tail -1)"
 # 대상 — 잡의 술어를 복제한다(StockRegistrar.usRankingCandidateTickers · 현 편입은 US_TOP1000 열린 편입).
 CUR="select s.id from stock s where s.market_code='US' and s.is_active and exists (select 1 from universe_membership m where m.stock_id=s.id and m.universe_code='US_TOP1000' and m.effective_to is null)"
 CAND="select s.id from stock s where s.market_code='US' and s.is_active and not exists (select 1 from universe_membership am join universe au on au.code=am.universe_code and au.is_active where am.stock_id=s.id and am.effective_to is null)"

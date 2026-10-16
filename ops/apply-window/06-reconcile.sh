@@ -16,7 +16,7 @@ one() { # <판 번호> — 세 행의 note를 내고, ①② 쓴·지운 합을 
     [ "$(printf '%s' "$rows" | grep -c .)" -eq 1 ] || die "판 $1: $job 새 실행 행이 1이 아니다: $rows"
     IFS=$'\t' read -r id status target success failure note <<< "$rows"
     echo "  판 $1 $job id=$id $status 대상=$target 실패=$failure $note" | tee -a "$A/reconcile-$PROD.txt"
-    [ "$status" = SUCCESS ] && [ "$failure" = 0 ] || die "판 $1: $job가 $status · 실패 $failure"
+    [ "$status" = SUCCESS ] && [ "$failure" = 0 ] || die "판 $1: ${job}가 $status · 실패 $failure"
     if [ "$job" != governance-derive ]; then
       local w d; w=$(sed -n 's/.*쓴 \([0-9]*\).*/\1/p' <<< "$note"); d=$(sed -n 's/.*지운 \([0-9]*\).*/\1/p' <<< "$note")
       [ -n "$w" ] && [ -n "$d" ] || die "판 $1: $job note에서 쓴·지운을 못 읽었다: $note"
@@ -29,6 +29,6 @@ one() { # <판 번호> — 세 행의 note를 내고, ①② 쓴·지운 합을 
 one 1
 one 2
 w2=$(cat "$A/reconcile-2-wrote.txt")
-[ "$w2" = 0 ] || die "둘째 화해가 ①② 합 $w2행을 쓰거나 지웠다 — 화해가 수렴하지 않는다(그 행을 연다: $A/reconcile-$PROD.txt)"
+[ "$w2" = 0 ] || die "둘째 화해가 ①② 합 ${w2}행을 쓰거나 지웠다 — 화해가 수렴하지 않는다(그 행을 연다: $A/reconcile-$PROD.txt)"
 PGOPTIONS='-c statement_timeout=0' command psql -d "$PROD" -v ON_ERROR_STOP=1 -c 'VACUUM (ANALYZE) indicator_value, financial_statement' > /dev/null
 echo "OK 화해 두 판 — 첫 판 쓴·지운 $(cat "$A/reconcile-1-wrote.txt") · 둘째 판 0 · 실패 0 · VACUUM"
