@@ -21,7 +21,15 @@ gate_line "$LOG-calendar.log"; new_exec "$PROD" "$P" market-calendar - > /dev/nu
 # ③
 boot "$PROD" --job=universe-restore --universe=US_TOP1000 --apply=true --replace=true $GATE_ARGS > "$LOG-restore.log" 2>&1 || true
 gate_line "$LOG-restore.log"
-grep -E "과거 편입을 복원했다\. US_TOP1000 " "$LOG-restore.log" || die "복원 완료 줄이 없다 — $LOG-restore.log"
+if ! grep -E "과거 편입을 복원했다\. US_TOP1000 " "$LOG-restore.log"; then
+  # 작은 DB에서는 원리적으로 못 돈다 — 순위 어댑터가 후보 1,000 미만이면 부분 목록을 반영하지 않고 선다(그것이 맞다). 인자 검사를 지나
+  # 스냅숏까지 간 것만 확인하고 넘어간다. MUST NOT: 운영(LIVE)에는 이 갈래를 열지 않는다.
+  if [ "$PROD" != "$LIVE" ] && grep -q "상위 1000를 채우지 못한다" "$LOG-restore.log"; then
+    echo "  (작은 DB — 후보가 1,000에 못 미쳐 복원 스냅숏이 선다 · 인자 검사는 지났다 · 복원 자체는 이 드라이런이 못 잰다)"
+  else
+    die "복원 완료 줄이 없다 — $LOG-restore.log"
+  fi
+fi
 grep -E "복원 계획\. US_TOP1000 |stock에 없는 종목" "$LOG-restore.log" | sed 's/^.*INFO [^ ]* -- //' || true
 # ④
 GAP=$(q "$PROD" "with w as (select market_code, min(trade_date) lo from indicator_trade_date group by 1)
