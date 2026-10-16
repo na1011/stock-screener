@@ -19,7 +19,7 @@
 | `02-snapshot.sh before <db> off` | 읽기 | 프리셋 · 순위(꺼진 판독기) · 지표 묶음 · 재무 행 · 명부 · 펜스(세션 훅의 붙잡는 갈래 · `PREMISE_DB`) · 국내 해시 · a2 |
 | `03-refill.sh` | 세션 안 | 재적재 `cur`(`--universe=US_TOP1000`) → `cand`(`--population=candidates`) · 11년 · 이른 판 · 관문 인자 · 실패는 구성원마다 |
 | `04-unresolved.sh` | 읽기 | 클래스 축 미해결 0 · 해석 실패·보충 실패·옛 판·회수정지 전원 판정(`verdicts.tsv`) · a2 미국 0 |
-| `05-roster.sh` | 세션 안 | 순위 가드(훅을 그 DB로) → `market-calendar` → `universe-restore --apply --replace` → 창 결손 0 |
+| `05-roster.sh` | 세션 안 | 순위 가드(훅을 그 DB로) → `market-calendar` → `universe-restore --apply=true --replace=true` → 창 결손 0 |
 | `06-reconcile.sh` | 세션 안 | 화해 두 판 — 둘째 판 ①② 쓴·지운 0 · 두 판 실패 0 → VACUUM |
 | `02-snapshot.sh after <db> on` | 읽기 | 순위는 켠 판독기 |
 | `07-judge.sh after-<db> before-<db> [after-<작은 db>]` | 읽기 | 국내 불변 · ADJ_CLOSE 감소 0 · 표본 동일성 · 펜스 귀속 |
