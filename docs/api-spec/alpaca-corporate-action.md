@@ -124,6 +124,18 @@ GET https://data.alpaca.markets/v1/corporate-actions
   `UHALB`로는 안 물었고 SEC에도 안 물었다. 미국은 휴리스틱이 없어(`listed_shares` NULL) 원장 행을 만들
   경로가 없다.
 
+### 신원 사건 — 등록인 교체의 날짜 박힌 증거 (2026-10-17 실측 · ADR-0180)
+
+`types=name_change,reorganization,stock_merger`로 좁혀 여러 기호를 한 콜에 묻는다(REAX·XRPN·AAPL → 1·1·1건 · HTTP 200).
+끝의 증거로 쓰는 모양은 셋이다.
+
+- `name_changes` 중 **CUSIP이 바뀐 것** — `XRPN→XRPN`(`G0R38G104→299946103` · 10-12) · `COLA→SAIQ` 10-02 · `IPEX→GOW` 09-28 ·
+  `JFB→XTND` 09-04 · `NHIC→NWCL` 09-22. 날짜는 `process_date`다(효력일 필드가 없다). 같은 증권의 기호만 바뀐 것(`HLX→HOS` · CUSIP
+  `42330P107` 그대로)은 등록인이 끝났다는 증거가 아니다.
+- `reorganizations` — `symbol`이 대상이다. `REAX` 08-25(`75585H206` → `stock_movements` `776105108` 1:10).
+- `stock_mergers` 중 그 기호가 **인수 쪽**(`acquirer_symbol`)인 것 — `REAX` 08-25 인수 `RMAX`. 피인수 쪽은 그 증권이 사라진 것이라 다른 갈래다.
+- **기호 그대로의 CUSIP 개명은 `old_symbol` = `new_symbol`이다** — 집합으로 담을 때 같은 원소 둘에 던지는 구현이 있다(`Set.of`).
+
 ### 비율의 방향 — `new_rate / old_rate`
 
 `CorporateAction.ratio`의 계약이 *"1주가 몇 주가 되었는가"*이고, 그것이 `new_rate / old_rate`다.
