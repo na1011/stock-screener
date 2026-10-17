@@ -434,8 +434,10 @@ public class BootstrapRunner implements ApplicationRunner {
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     requiredLong(args, "ca-id"), judgement(args));
             // 미국 신원(ADR-0180). 둘 다 쓰기가 옵트인이다(--apply=true · 기본은 계획만) — 운영 쓰기라 사용자 승인 뒤에 친다.
-            case "stock-fold" -> stockFoldJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
-                    java.time.OffsetDateTime.parse(required(args, "since")).toInstant(), flag(args, "apply"));
+            case "stock-fold" -> flag(args, "heal-closed")
+                    ? stockFoldJob.healClosed(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, flag(args, "apply"))
+                    : stockFoldJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                            java.time.OffsetDateTime.parse(required(args, "since")).toInstant(), flag(args, "apply"));
             case "sec-cik-bind" -> secCikBindJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
                     handCiks(args), flag(args, "apply"));
             default -> throw new IllegalArgumentException(
@@ -524,7 +526,7 @@ public class BootstrapRunner implements ApplicationRunner {
             "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
             "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note", "ca-price-ratio",
-            "apply", "replace", "dates", "insert-earlier-vintages", "population",
+            "apply", "heal-closed", "replace", "dates", "insert-earlier-vintages", "population",
             // share-basis-derive 전용. 기본값 US다 — 국내는 봉의 listed_shares 를 쓰므로
             // 이 축을 원리적으로 안 탄다(재무 shares_outstanding 이 KR 전량 NULL 이다).
             "market",
@@ -825,7 +827,7 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     static final java.util.Set<String> BOOLEAN_OPTIONS = java.util.Set.of(
             "skip-financial", "skip-price", "reload-existing", "quarters", "all-quarters",
-            "apply", "replace", "insert-earlier-vintages");
+            "apply", "heal-closed", "replace", "insert-earlier-vintages");
 
     /** {@code --ciks=HLX:866829,ANY:1561032} — 손 후보. 형식이 틀리면 던진다(오타 하나가 다른 등록인을 묶지 않게). */
     static java.util.Map<String, Long> handCiks(ApplicationArguments args) {

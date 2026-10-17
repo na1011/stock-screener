@@ -298,6 +298,21 @@ class JdbcStoredShareCountsTest {
         assertThat(find("LATERT")).as("과거 기준일에는 그 시대 안이다").isPresent();
     }
 
+    @Test
+    @DisplayName("등록인 시대가 그날 뒤에 시작하는 행은 그날 순위 후보가 아니다 — 시작은 포함(계획 US-PAST-LISTING-PLAN-1017 P0-c)")
+    void registrantEraNotYetStartedIsNotACandidate() {
+        long notYet = insertStock("US", "SAIQT", "새 등록인 — 시대가 뒤에 시작");
+        long startsToday = insertStock("US", "GOWT", "새 등록인 — 그날 시작");
+        jdbcTemplate.update("UPDATE stock SET era_from = ? WHERE id = ?", AS_OF.plusDays(1), notYet);
+        jdbcTemplate.update("UPDATE stock SET era_from = ? WHERE id = ?", AS_OF, startsToday);
+        for (long id : List.of(notYet, startsToday)) {
+            insertQuarter(id, 2026, "Q2", LocalDate.of(2026, 6, 30), "USD", "1000");
+        }
+
+        assertThat(find("SAIQT")).as("그날은 앞 행의 시대다").isEmpty();
+        assertThat(find("GOWT")).as("era_from은 포함이다").isPresent();
+    }
+
     private Optional<StoredShareCounts.ShareCount> find(String ticker) {
         List<StoredShareCounts.ShareCount> counts =
                 shareCounts.activeByMarket("US", OLDEST, AS_OF);

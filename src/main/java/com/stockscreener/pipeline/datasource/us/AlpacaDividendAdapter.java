@@ -194,7 +194,9 @@ public class AlpacaDividendAdapter implements GovernanceDataSource {
 
         LocalDate yearStart = LocalDate.of(bsnsYear, 1, 1);
         LocalDate yearEnd = LocalDate.of(bsnsYear, 12, 31);
-        String symbol = security.ticker();
+        // 닫힌 행(ADR-0180)은 비운 표지에서 마지막 기호를 되찾고 시대 끝에서 닫는다 — 그 뒤의 같은 기호는 다른 실체일 수 있다.
+        String symbol = security.currentSymbol();
+        LocalDate currentUntil = security.currentSymbolUntil();
         List<JsonNode> inYear = new ArrayList<>();
         // 기호 시대마다 묻는다(ADR-0180) — 이 소스는 배당을 <b>그때의 기호</b> 아래 둔다(실측 ★15: FGNXP의 배당 5건이 개명 뒤 FGCPP로는
         // 안 온다). 시대는 지금 표지 + 저장된 기호 시대(신원 판정의 개명 갈래가 더한다)다. 개명 아닌 행은 저장 시대가 0줄이라 지금 표지
@@ -206,7 +208,7 @@ public class AlpacaDividendAdapter implements GovernanceDataSource {
         for (SecurityRef.SymbolEra era : eras) {
             collectInYear(era.symbol(), era.validFrom(), era.validTo(), yearStart, yearEnd, inYear);
         }
-        collectInYear(symbol, currentSince, null, yearStart, yearEnd, inYear);
+        collectInYear(symbol, currentSince, currentUntil, yearStart, yearEnd, inYear);
 
         if (inYear.isEmpty()) {
             // 「그 해에 배당이 없었다」. 접수번호를 찍어 두면 국내용 스탬프 경로와 미스탬프

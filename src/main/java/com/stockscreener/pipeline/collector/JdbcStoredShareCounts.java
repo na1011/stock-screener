@@ -171,9 +171,9 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             FROM latest
             JOIN stock s ON s.id = latest.stock_id
             WHERE latest.share_basis_status IS DISTINCT FROM 'UNRESOLVED'
-              AND (s.era_to IS NULL OR s.era_to > ?)
+              AND %s
             ORDER BY s.ticker
-            """.formatted(SHIFT_TO_ASOF, CURRENCY_MISMATCHED);
+            """.formatted(SHIFT_TO_ASOF, CURRENCY_MISMATCHED, StockRegistrar.eraCovers("s", "?"));
 
     /**
      * 관문이 켜진 미국의 판 후보 — {@link #SQL}의 안쪽과 같은 범위·같은 정렬이되 주식수로 미리 거르지 않는다. 클래스 축 발행사는
@@ -189,13 +189,14 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
               AND s.is_active
               AND f.published_at <= ?
               AND f.period_end >= ?
-              AND (s.era_to IS NULL OR s.era_to > ?)
+              AND %s
             ORDER BY f.stock_id, f.period_end DESC, f.published_at DESC, f.revision_no DESC
-            """;
+            """.formatted(StockRegistrar.eraCovers("s", "?"));
 
     /** 통화 판정 — {@link #CURRENCY_MISMATCHED}를 글자 그대로 쓴다(별칭 {@code latest}에 종목을 앉힌다). */
     private static final String CLASS_MISMATCHED = """
             SELECT latest.stock_id FROM (SELECT s.id AS stock_id FROM stock s WHERE s.market_code = ? AND s.is_active) latest
+            -- 시대 무관: 행 id로 찾는 통화 표지 — 고르기는 순위 질의가 그 기준일 시대로 한다
             WHERE %s
             """.formatted(CURRENCY_MISMATCHED);
 
@@ -236,7 +237,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                         rs.getObject("published_at", LocalDate.class),
                         rs.getBoolean("currency_mismatched"),
                         rs.getString("name")),
-                marketCode, asOf, oldestPeriodEnd, asOf, asOf);
+                marketCode, asOf, oldestPeriodEnd, asOf, asOf, asOf);
     }
 
     /**
@@ -275,7 +276,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             chosen.put(stockId, new ShareCount(rs.getString("ticker"), shares, rs.getString("sic_code"),
                     rs.getObject("period_end", LocalDate.class), publishedAt, mismatched.contains(stockId),
                     rs.getString("name")));
-        }, marketCode, asOf, oldestPeriodEnd, asOf);
+        }, marketCode, asOf, oldestPeriodEnd, asOf, asOf);
         List<ShareCount> out = new ArrayList<>(chosen.values());
         out.sort(java.util.Comparator.comparing(ShareCount::ticker));
         return out;
@@ -291,8 +292,8 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
         Set<Long> mismatched = new HashSet<>(jdbcTemplate.queryForList(CLASS_MISMATCHED, Long.class, marketCode));
         Map<String, ClassHold> out = new LinkedHashMap<>();
         jdbcTemplate.query("""
-                SELECT id, ticker, sic_code, name FROM stock WHERE market_code = ? AND is_active ORDER BY ticker
-                """, rs -> {
+                SELECT id, ticker, sic_code, name FROM stock WHERE market_code = ? AND is_active AND %s ORDER BY ticker
+                """.formatted(StockRegistrar.eraCovers("stock", "?")), rs -> {
             ShareClassLine line = lines.get(rs.getLong("id"));
             if (line == null) {
                 return;
@@ -311,7 +312,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             }
             out.put(rs.getString("ticker"), new ClassHold(rs.getString("ticker"), state, held, rs.getString("sic_code"),
                     mismatched.contains(rs.getLong("id")), rs.getString("name")));
-        }, marketCode);
+        }, marketCode, asOf, asOf);
         return out;
     }
 
@@ -321,6 +322,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
         jdbcTemplate.query("""
                 SELECT ca.stock_id, ca.effective_date, ca.ratio FROM corporate_action ca JOIN stock s ON s.id = ca.stock_id
                 WHERE s.market_code = ? AND s.is_active AND ca.status = 'APPLIED'
+                -- 시대 무관: 행 id로 찾는 분할 표 — 고르기는 순위 질의가 그 기준일 시대로 한다
                 """, rs -> {
             out.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(new ShareClassLine.Split(
                     rs.getObject("effective_date", LocalDate.class), rs.getBigDecimal("ratio")));

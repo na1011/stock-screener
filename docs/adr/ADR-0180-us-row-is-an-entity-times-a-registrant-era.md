@@ -43,7 +43,16 @@ applies_to:
 - **MUST: 판정 재료를 못 받으면 아무것도 안 바꾸고 그 실행에서 새 미국 기호를 등록하지 않는다.** 판정 없이 등록하면 개명된 실체가 새 행이 된다.
 - **MUST: 기업 행위와 배당은 저장된 기호 시대도 묻는다**(원장 걷기와 합집합). 시대는 양 끝 날짜로 자른다. 개명 아닌 행은 시대가 0줄이라 요청도
   값도 지금과 같다.
-- **MUST: 그날까지 등록인 시대가 끝난 행은 순위 후보가 아니다**(`JdbcStoredShareCounts` · `era_to` 제외).
+- **MUST: 그날까지 등록인 시대가 끝난 행은 순위 후보가 아니다**(`JdbcStoredShareCounts` · `era_to` 제외 · `era_from` 포함).
+- **MUST: 시대를 닫는 쓰기는 `EraClosing` 하나다 — 시대 끝과 표지 비우기를 함께 한다**(2026-10-17 · 계획 `US-PAST-LISTING-PLAN-1017.md` P0).
+  다른 기호로의 끊기와 접기 잡의 시대 닫기가 표지를 안 비워, 닫힌 6행이 옛 기호를 쥐었다 — 신원 판정은 열린 행만 보므로 그 기호를 새로 받은
+  실체가 「주인 없는 기호」로 보이고 등록이 표지로 **닫힌 행에 붙인다**(그 행은 순위에 안 들어 새 실체가 빠진다). 비운 표지는 어떤 오늘 기호와도
+  안 맞는다. 그때의 기호로 묻는 소스(기업 행위 · 배당)는 `SecurityRef.currentSymbol()`로 되찾고 시대 끝에서 닫는다 — 그 뒤 같은 기호는 다른
+  실체일 수 있다. SEC는 비운 표지로 오늘 파일을 찾지 않는다(묶인 `sec_cik`만).
+- **MUST: 시대 술어는 그 선택이 뜻하는 날짜로 건다**(`StockRegistrar.eraCovers`) — 오늘의 선택(후보 풀 · 열린 편입)은 미국 동부 오늘,
+  기준일 판독기는 그 기준일, 공시 장부와 그 소비는 그 공시일. 「오늘」 하나로 기준일 판독기까지 거르면 과거 기준일에 열린 시대였던 행이 그날
+  순위에서 빠진다. `stock.is_active`는 어떤 코드도 거짓으로 안 쓰므로 시대를 대신하지 못한다 — `is_active`로 `stock`을 거르는 SQL 문장은
+  `eraCovers`를 쓰거나 `-- 시대 무관: <이유>`를 단다(`StockEraPredicateSourceTest`가 문장마다 센다).
 - **MUST NOT: 행을 지워 중복을 없애지 않는다.** 다시 받을 수 없는 자식이 넷이다(관측 편입 · 관심 종목 · 실패 기록 · 공시 소비). 접기 잡
   `stock-fold`가 표마다 옮기거나 같은 사건이면 버리고, 값이 다르면 그 짝을 멈춘다. 자식 표는 실행 때 `pg_constraint`로 세고 규칙이 없는 표가
   있으면 쓰지 않는다.
@@ -55,7 +64,29 @@ applies_to:
 - 단위·통합 시험: `IdentityJudgeTest` · `SplitEvidenceTest` · `RegistrantContainmentTest` · `UsIdentityTriageTest` · `StockFoldTest` ·
   `StockIdentityRefTest` · `AlpacaPriceAdapterTest`(닻) · `AlpacaCorporateActionAdapterTest`(저장 시대 · 신원 사건) · `AlpacaDividendEraTest` ·
   `SecFilingListSourceTest`(묶인 등록인) · `JdbcStoredShareCountsTest`(끝난 시대) · `SecFilingSupplementWriteContractTest`(FR 포함 검사).
-- 탐침(실호출 · 운영 읽기만): `UsIdentityProbeLiveTest`(판정 함수를 운영 모집단에) · `AnchorNeutralityProbeLiveTest`(닻 봉 = 저장 봉).
+- 탐침(실호출 · 운영 읽기만): `UsIdentityProbeLiveTest`(판정 함수를 운영 모집단에) · `AnchorNeutralityProbeLiveTest`(닻 봉 = 저장 봉) ·
+  `TriagePlanProbeLiveTest`(잡의 `plan()`을 운영 상태에 — 다음 판정이 쓸 것).
+- 닫힌 시대 위생: `ClosedEraHygieneTest` · `StockEraPredicateSourceTest` · `AlpacaDividendEraTest`(닫힌 행).
+
+```premise 시대가 닫힌 미국 행의 표지는 비워져 있다
+psql -d stock_screener -At -c "SELECT CASE
+  WHEN count(*) FILTER (WHERE era_to IS NOT NULL) = 0 THEN '잴 것이 없었다 — 시대가 닫힌 미국 행이 없다'
+  WHEN count(*) FILTER (WHERE era_to IS NOT NULL AND strpos(ticker, '~') = 0) = 0 THEN 'OK 닫힌 행 ' || count(*) FILTER (WHERE era_to IS NOT NULL) || ' 모두 비운 표지'
+  ELSE '시대가 닫혔는데 기호를 쥔 행 ' || count(*) FILTER (WHERE era_to IS NOT NULL AND strpos(ticker, '~') = 0)
+       || ' — 그 기호를 새로 받은 실체가 이 행에 붙는다(ADR-0180 EraClosing). stock-fold --heal-closed(승인 뒤 --apply)가 닫는다: '
+       || string_agg(ticker, ',' ORDER BY ticker) FILTER (WHERE era_to IS NOT NULL AND strpos(ticker, '~') = 0) END
+FROM stock WHERE market_code = 'US'"
+```
+
+```premise 미국 공시 장부에 행의 시대 밖 공시가 열려 있지 않다
+psql -d stock_screener -At -c "SELECT CASE
+  WHEN count(*) = 0 THEN 'OK 시대 밖 열린 장부 행 0'
+  ELSE '행의 시대가 공시일을 안 덮는 열린 장부 행 ' || count(*) || ' — 그 행의 공시가 아니라 소비가 영영 못 먹는다. stock-fold --heal-closed(승인 뒤 --apply)가 지운다: '
+       || string_agg(DISTINCT s.ticker, ',') END
+FROM filing_consumption c JOIN stock s ON s.id = c.stock_id
+WHERE c.market = 'US' AND c.fr_consumed_at IS NULL
+  AND NOT ((s.era_from IS NULL OR s.era_from <= c.filed_on) AND (s.era_to IS NULL OR s.era_to > c.filed_on))"
+```
 
 ```premise 미국 신원 판정의 마지막 실행에 보류(AMBIGUOUS)가 0이다
 psql -d stock_screener -At -c "WITH last AS (SELECT max(execution_id) AS e FROM identity_triage WHERE verdict = 'RUN')

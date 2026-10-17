@@ -70,7 +70,8 @@ public class StockRefreshStore {
                     FROM universe_membership m
                     JOIN stock s ON s.id = m.stock_id
                     JOIN universe u ON u.code = m.universe_code AND u.is_active
-                    WHERE m.effective_to IS NULL AND s.is_active AND s.market_code IN (%s)
+                    WHERE m.effective_to IS NULL AND s.is_active
+                      AND %s AND s.market_code IN (%s)
                     GROUP BY m.stock_id)
                 SELECT c.stock_id, s.ticker, s.market_code, c.universe_code, c.joined_at, r.refreshed_at,
                        (SELECT max(f.occurred_at) FROM batch_execution_failure f
@@ -83,7 +84,8 @@ public class StockRefreshStore {
                 WHERE (r.refreshed_at IS NULL AND (cut.cutoff IS NULL OR c.joined_at > cut.cutoff))
                    OR r.refreshed_at < c.joined_at
                 ORDER BY last_failure NULLS FIRST, c.joined_at, s.ticker
-                """.formatted(cutoffTable, String.join(",", java.util.Collections.nCopies(markets.size(), "?")));
+                """.formatted(cutoffTable, StockRegistrar.eraCovers("s", StockRegistrar.TODAY_US),
+                String.join(",", java.util.Collections.nCopies(markets.size(), "?")));
         return jdbc.query(sql, (rs, i) -> {
             Timestamp refreshed = rs.getTimestamp("refreshed_at");
             Timestamp failed = rs.getTimestamp("last_failure");

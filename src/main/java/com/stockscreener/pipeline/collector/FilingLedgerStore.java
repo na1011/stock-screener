@@ -4,6 +4,8 @@ import com.stockscreener.pipeline.datasource.FilingListSource.ListedDay;
 import com.stockscreener.pipeline.datasource.FilingListSource.ListedFiling;
 import com.stockscreener.pipeline.datasource.FilingListSource.ListedStock;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.Date;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -26,6 +29,8 @@ import java.util.Optional;
  */
 @Component
 public class FilingLedgerStore {
+
+    private static final Logger log = LoggerFactory.getLogger(FilingLedgerStore.class);
 
     private final JdbcTemplate jdbc;
 
@@ -48,23 +53,37 @@ public class FilingLedgerStore {
     /** 장부 행을 넣고 그날을 닫는다. 넣은(새) 장부 행 수를 낸다. */
     @Transactional(rollbackFor = Exception.class)
     public int recordDay(String market, ListedDay day) {
-        int inserted = insert(market, day.filings());
+        Inserted inserted = insert(market, day.filings());
         jdbc.update("""
                 INSERT INTO filing_listing_day (market, listing_date, outcome, source_rows, kept_rows)
                 VALUES (?, ?, ?, ?, ?)
-                """, market, Date.valueOf(day.day()), day.outcome().name(), day.sourceRows(), day.filings().size());
-        return inserted;
+                """, market, Date.valueOf(day.day()), day.outcome().name(), day.sourceRows(),
+                day.filings().size() - inserted.outsideEra());
+        return inserted.rows();
     }
 
     /** 장부 행만 넣는다 — 닫지 않는 날(국내의 오늘)이 쓴다. 넣은(새) 장부 행 수를 낸다. */
     @Transactional(rollbackFor = Exception.class)
     public int recordOpen(String market, List<ListedFiling> filings) {
-        return insert(market, filings);
+        return insert(market, filings).rows();
     }
 
-    private int insert(String market, List<ListedFiling> filings) {
+    /** @param rows 넣은(새) 장부 행 · {@code outsideEra} 행의 시대 밖이라 안 붙인 줄 */
+    private record Inserted(int rows, int outsideEra) {
+    }
+
+    private Inserted insert(String market, List<ListedFiling> filings) {
         int inserted = 0;
+        List<String> outsideEra = new ArrayList<>();
         for (ListedFiling f : filings) {
+            // 행의 시대가 그 공시일을 안 덮으면 그 행의 공시가 아니다(ADR-0180) — 등록인 교체로 닫힌 행에 옛 등록인이 시대 끝 뒤에 낸
+            // 공시(WKEY 6-K 10-06 · 10-14)나 새 등록인 행의 시대 시작 전 공시다. 붙이면 소비가 영영 못 먹는 열린 행이 된다.
+            Boolean covered = jdbc.queryForObject("SELECT " + StockRegistrar.eraCovers("s", "?::date")
+                    + " FROM stock s WHERE s.id = ?", Boolean.class, Date.valueOf(f.filedOn()), Date.valueOf(f.filedOn()), f.stockId());
+            if (!Boolean.TRUE.equals(covered)) {
+                outsideEra.add(f.stockId() + ":" + f.filingNo() + "(" + f.filedOn() + ")");
+                continue;
+            }
             inserted += jdbc.update("""
                     INSERT INTO filing_consumption
                         (market, filing_no, stock_id, cik, corp_code, form, report_name, filed_on, bsns_year, reprt_code,
@@ -74,7 +93,10 @@ public class FilingLedgerStore {
                     """, market, f.filingNo(), f.stockId(), f.cik(), f.corpCode(), f.form(), f.reportName(),
                     Date.valueOf(f.filedOn()), f.bsnsYear(), f.reprtCode(), f.lastReason());
         }
-        return inserted;
+        if (!outsideEra.isEmpty()) {
+            log.info("행의 시대 밖이라 장부에 안 붙인 공시 {}건: {}", outsideEra.size(), outsideEra);
+        }
+        return new Inserted(inserted, outsideEra.size());
     }
 
     /**
@@ -132,8 +154,10 @@ public class FilingLedgerStore {
                   AND (c.fr_consumed_at IS NULL OR (c.market = 'KR' AND c.fsr_consumed_at IS NULL))
                   AND s.is_active
                   AND %s
+                  AND %s
                 ORDER BY c.stock_id, c.filing_no
-                """.formatted(StockRegistrar.activeMembershipExists("c.stock_id")), (rs, i) -> openRow(rs), market);
+                """.formatted(StockRegistrar.activeMembershipExists("c.stock_id"), StockRegistrar.eraCovers("s", "c.filed_on")),
+                (rs, i) -> openRow(rs), market);
     }
 
     /**
@@ -151,8 +175,10 @@ public class FilingLedgerStore {
                   AND c.fr_consumed_at IS NULL AND c.attempts < ?
                   AND s.is_active
                   AND NOT %s
+                  AND %s
                 ORDER BY c.stock_id, c.filing_no
-                """.formatted(StockRegistrar.activeMembershipExists("c.stock_id")), (rs, i) -> openRow(rs), maxAttempts);
+                """.formatted(StockRegistrar.activeMembershipExists("c.stock_id"), StockRegistrar.eraCovers("s", "c.filed_on")),
+                (rs, i) -> openRow(rs), maxAttempts);
     }
 
     /** 후보의 열린 FR 행 중 {@code since} 뒤의 시도로 상한에 막 닿은 것 — 그 실행이 한 번 알린다(같은 행은 다시 안 닿는다). */
@@ -163,8 +189,10 @@ public class FilingLedgerStore {
                   AND c.fr_consumed_at IS NULL AND c.attempts = ? AND c.last_attempt_at >= ?
                   AND s.is_active
                   AND NOT %s
+                  AND %s
                 ORDER BY c.stock_id, c.filing_no
-                """.formatted(StockRegistrar.activeMembershipExists("c.stock_id")), (rs, i) -> openRow(rs),
+                """.formatted(StockRegistrar.activeMembershipExists("c.stock_id"), StockRegistrar.eraCovers("s", "c.filed_on")),
+                (rs, i) -> openRow(rs),
                 maxAttempts, java.sql.Timestamp.from(since));
     }
 

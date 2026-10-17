@@ -197,7 +197,13 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
 
         Harvest harvest = new Harvest();
         Deque<Era> eras = new ArrayDeque<>();
-        eras.add(new Era(security.ticker(), null, null, 0, null, false));
+        if (security.currentSymbolUntil() == null) {
+            eras.add(new Era(security.ticker(), null, null, 0, null, false));
+        } else {
+            // 닫힌 행(ADR-0180) — 마지막 기호를 비운 표지에서 되찾고 시대 끝(제외)에서 닫는다. 계보(CUSIP)를 모르므로 저장 시대와 같은
+            // 모양(날짜 경계 · 계보 없음)으로 걷는다 — 그 기호를 시대 끝 뒤에 받은 실체의 사건이 이 행에 안 실린다.
+            eras.add(new Era(security.currentSymbol(), security.currentSymbolUntil().minusDays(1), null, 0, null, true));
+        }
         Set<String> visited = new HashSet<>();
         walk(eras, visited, requestStart, requestEnd, from, to, harvest);
         // 저장된 기호 시대(ADR-0180) — 원장 걷기와의 합집합. 원장에 없는 개명(CYCN→KRSA)을 건넌다. 걷기가 이미 닿은 기호는 그쪽이

@@ -11,6 +11,7 @@ import com.stockscreener.pipeline.datasource.IdentitySource;
 import com.stockscreener.pipeline.datasource.IdentitySource.BarAsOf;
 import com.stockscreener.pipeline.datasource.IdentitySource.EntityBar;
 import com.stockscreener.pipeline.datasource.IdentitySource.Listed;
+import com.stockscreener.pipeline.datasource.SecurityRef;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,12 +65,14 @@ public class UsIdentityTriage {
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transaction;
     private final ObjectProvider<IdentitySource> sources;
+    private final EraClosing eraClosing;
 
     public UsIdentityTriage(JdbcTemplate jdbcTemplate, PlatformTransactionManager transactionManager,
-                            ObjectProvider<IdentitySource> sources) {
+                            ObjectProvider<IdentitySource> sources, EraClosing eraClosing) {
         this.jdbcTemplate = jdbcTemplate;
         this.transaction = new TransactionTemplate(transactionManager);
         this.sources = sources;
+        this.eraClosing = eraClosing;
     }
 
     /**
@@ -104,6 +107,28 @@ public class UsIdentityTriage {
     }
 
     private Outcome judgeAndApply(long executionId, LocalDate asOf, IdentitySource source) throws DataSourceException {
+        Plan plan = plan(asOf, source);
+        Map<String, Integer> counts = new TreeMap<>();
+        transaction.executeWithoutResult(status -> apply(executionId, plan.verdicts(), plan.splits(), plan.listed(), counts));
+        IdentityJudge.Counts c = plan.counts();
+        String summary = "행 %d · 목록 %d · 같은 실체 %d · 봉 없음 %d · 끊긴 행 %d · 주인 없는 기호 %d · 판정 %s · 등록 보류 %s"
+                .formatted(c.rows(), c.listed(), c.sameEntity(), c.noBars(), c.orphans(), c.unclaimed(), counts, plan.blocked());
+        recordRun(executionId, summary);
+        log.info("미국 신원 판정. {}", summary);
+        return new Outcome(Set.copyOf(plan.blocked()), false, true, summary, Map.copyOf(counts));
+    }
+
+    /**
+     * 판정만 짓는다 — 쓰지 않는다. 반영({@link #apply})과 갈라 둔 것은 운영 읽기 전용 탐침이 <b>이 잡과 같은 술어</b>로 다음 실행이
+     * 무엇을 쓸지 재게 하려는 것이다(드라이런이 잡의 술어를 복제하지 않으면 다른 질문에 답한다).
+     *
+     * @param splits 전제 셋이 선 끊기 · {@code verdicts}에는 끊기 후보가 남지 않는다(안 선 것은 보류로 바뀐다)
+     */
+    public record Plan(List<Verdict> verdicts, List<Split> splits, Set<String> blocked, Map<String, Listed> listed,
+                       IdentityJudge.Counts counts) {
+    }
+
+    public Plan plan(LocalDate asOf, IdentitySource source) throws DataSourceException {
         LocalDate from = asOf.minusDays(WINDOW_DAYS);
         List<Listed> listedAssets = source.listedSecurities();
         Map<String, Listed> listed = new LinkedHashMap<>();
@@ -145,20 +170,13 @@ public class UsIdentityTriage {
             }
         }
 
-        Map<String, Integer> counts = new TreeMap<>();
-        transaction.executeWithoutResult(status -> apply(executionId, verdicts, splits, listed, counts));
-        IdentityJudge.Counts c = result.counts();
-        String summary = "행 %d · 목록 %d · 같은 실체 %d · 봉 없음 %d · 끊긴 행 %d · 주인 없는 기호 %d · 판정 %s · 등록 보류 %s"
-                .formatted(c.rows(), c.listed(), c.sameEntity(), c.noBars(), c.orphans(), c.unclaimed(), counts, blocked);
-        recordRun(executionId, summary);
-        log.info("미국 신원 판정. {}", summary);
-        return new Outcome(Set.copyOf(blocked), false, true, summary, Map.copyOf(counts));
+        return new Plan(List.copyOf(verdicts), List.copyOf(splits), Set.copyOf(blocked), listed, result.counts());
     }
 
     private record StoredRow(OpenRow row, String anchorSymbol, LocalDate anchorDate) {
     }
 
-    private record Split(SplitCandidate candidate, LocalDate switchDate, String evidence) {
+    public record Split(SplitCandidate candidate, LocalDate switchDate, String evidence) {
     }
 
     /** 시대가 열린 미국 행. 닻이 없는 행(마이그레이션 뒤 등록 경로 밖에서 생긴 행)은 판정에서 빠진다 — 펜스가 센다. */
@@ -217,20 +235,14 @@ public class UsIdentityTriage {
         // 1) 표지 비우기
         for (Verdict verdict : verdicts) {
             if (verdict instanceof Reuse r) {
-                jdbcTemplate.update("UPDATE stock SET ticker = ?, era_to = ?, updated_at = now() WHERE id = ?",
-                        vacated(r.ticker(), r.lastBar()), r.lastBar().plusDays(1), r.stockId());
+                eraClosing.close(r.stockId(), r.lastBar().plusDays(1));
             } else if (verdict instanceof Rename r) {
                 jdbcTemplate.update("UPDATE stock SET ticker = ?, updated_at = now() WHERE id = ?", "~" + r.stockId(), r.stockId());
             }
         }
+        // 다른 기호로의 끊기도 비운다 — 앞 행이 옛 기호를 쥐면 그 기호를 새로 받은 실체가 앞 행에 붙는다(EraClosing).
         for (Split s : splits) {
-            SplitCandidate c = s.candidate();
-            if (c.sameSymbol()) {
-                jdbcTemplate.update("UPDATE stock SET ticker = ?, era_to = ?, updated_at = now() WHERE id = ?",
-                        vacated(c.oldTicker(), s.switchDate().minusDays(1)), s.switchDate(), c.stockId());
-            } else {
-                jdbcTemplate.update("UPDATE stock SET era_to = ?, updated_at = now() WHERE id = ?", s.switchDate(), c.stockId());
-            }
+            eraClosing.close(s.candidate().stockId(), s.switchDate());
         }
         // 2) 새 표지 · 새 행 · 기호 시대
         for (Verdict verdict : verdicts) {
@@ -262,7 +274,7 @@ public class UsIdentityTriage {
             }
             record(executionId, created, c.newSymbol(), "SPLIT", "새 행 %d(%s · CIK %d · 시대 %s~) ← 앞 행 %d(%s · 시대 ~%s) · %s"
                     .formatted(created, c.newSymbol(), c.newCik(), s.switchDate(), c.stockId(),
-                            c.sameSymbol() ? vacated(c.oldTicker(), s.switchDate().minusDays(1)) : c.oldTicker(),
+                            vacated(c.oldTicker(), s.switchDate().minusDays(1)),
                             s.switchDate(), s.evidence()));
             counts.merge("SPLIT", 1, Integer::sum);
         }
@@ -285,9 +297,8 @@ public class UsIdentityTriage {
         }
     }
 
-    /** 비운 표지 — 그 기호를 그날까지 쓴 행. 기호 + 마지막 날이라 다시 비워도 겹치지 않는다(varchar 20 안 · 최장 기호 6 + 11). */
     static String vacated(String ticker, LocalDate lastDay) {
-        return ticker + "~" + lastDay;
+        return SecurityRef.vacatedLabel(ticker, lastDay);
     }
 
     private void insertEra(long stockId, String symbol, LocalDate validTo) {

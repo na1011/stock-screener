@@ -66,6 +66,31 @@ public record SecurityRef(long stockId, String marketCode, String ticker, Identi
         }
     }
 
+    /** 비운 표지의 구분자 — 기호에 안 나오는 글자라 비운 표지는 어떤 오늘 기호와도 안 맞는다(ADR-0180). */
+    public static final char VACATED = '~';
+
+    /**
+     * 시대가 닫힌 행의 표지 — 그 기호를 그날까지 쓴 행. 기호 + 마지막 날이라 다시 비워도 겹치지 않는다(varchar 20 안 · 최장 기호 6 + 11).
+     * 닫힌 행이 기호를 쥐고 있으면 그 기호를 새로 받은 실체가 표지로 그 행에 붙는다 — 그래서 시대를 닫는 쓰기는 언제나 비운다.
+     */
+    public static String vacatedLabel(String symbol, LocalDate lastDay) {
+        return symbol + VACATED + lastDay;
+    }
+
+    /**
+     * 이 행이 마지막으로 쓴 기호 — 열린 행은 표지 그대로, 닫힌 행은 비운 표지에서 되찾는다. 기업 행위·배당처럼 <b>그때의 기호</b>로
+     * 묻는 소스에 쓴다. 닫힌 행은 {@link #currentSymbolUntil()}까지만 이 기호다 — 그 뒤의 같은 기호는 다른 실체일 수 있다.
+     */
+    public String currentSymbol() {
+        int cut = ticker.indexOf(VACATED);
+        return cut < 0 ? ticker : ticker.substring(0, cut);
+    }
+
+    /** {@link #currentSymbol()}의 끝(제외) — 시대 끝. 열린 행은 {@code null}. */
+    public LocalDate currentSymbolUntil() {
+        return identity.eraTo();
+    }
+
     /** Alpaca 봉에 물을 기호 — 닻이 있으면 닻 기호, 없으면 표지. */
     public String barSymbol() {
         return identity.anchorSymbol() != null ? identity.anchorSymbol() : ticker;

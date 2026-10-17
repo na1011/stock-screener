@@ -81,6 +81,19 @@ class AlpacaDividendEraTest {
         assertThat(server.getRequestCount()).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("닫힌 행 — 비운 표지에서 기호를 되찾고 시대 끝에서 닫는다(그 뒤 같은 기호의 배당은 다른 실체일 수 있다 · P0)")
+    void closedRowAsksItsLastSymbolUntilTheEraEnds() throws Exception {
+        SecurityRef closed = new SecurityRef(3L, "US", "FGNXP~2026-09-09", new SecurityRef.Identity("FGNXP",
+                LocalDate.of(2026, 8, 28), null, null, LocalDate.of(2026, 9, 10), List.of()));
+
+        List<GovernanceReportRow> rows = adapter().fetchReport(closed, GovernanceEndpoint.DIVIDEND, 2026, "x");
+
+        assertThat(rows).extracting(GovernanceReportRow::publishedAt)
+                .as("비운 문자열로 묻지 않고(0건이 된다) 시대 끝 뒤 09-20은 버린다")
+                .containsExactly(LocalDate.of(2026, 3, 15), LocalDate.of(2026, 6, 15));
+    }
+
     private AlpacaDividendAdapter adapter() {
         DataSourceProperties properties = new DataSourceProperties();
         properties.getAlpaca().setApiKey("k");

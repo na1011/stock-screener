@@ -100,6 +100,7 @@ public class ShareClassStore {
                 SELECT i.stock_id, s.ticker, i.cik, i.company_facts::text AS company_facts
                 FROM sec_share_class_input i JOIN stock s ON s.id = i.stock_id
                 WHERE s.market_code = ? AND s.is_active
+                -- 시대 무관: 행마다의 판정 재료 — 닫힌 행도 과거 기준일 순위가 읽는 판정이 있어야 한다
                 ORDER BY s.ticker
                 """, (rs, n) -> new Input(rs.getLong("stock_id"), rs.getString("ticker"), rs.getLong("cik"),
                 rs.getString("company_facts")), marketCode);
@@ -168,6 +169,7 @@ public class ShareClassStore {
         jdbcTemplate.query("""
                 SELECT c.stock_id, c.effective_date, c.ratio FROM corporate_action c JOIN stock s ON s.id = c.stock_id
                 WHERE s.market_code = ? AND s.is_active AND c.status = 'APPLIED'
+                -- 시대 무관: 행 id로 찾는 분할 표 — 고르기는 순위 질의가 그 기준일 시대로 한다
                 ORDER BY c.stock_id, c.effective_date, c.id
                 """, rs -> {
             splits.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(
@@ -188,6 +190,7 @@ public class ShareClassStore {
                 SELECT v.stock_id, v.accession, v.filed, v.kind, v.status, v.current_path, v.failure, v.line_shares, v.denominator
                 FROM financial_share_class_filing v JOIN stock s ON s.id = v.stock_id
                 WHERE s.market_code = ? AND s.is_active
+                -- 시대 무관: 행 id로 찾는 판정 표 — 고르기는 순위 질의가 그 기준일 시대로 한다
                 """, rs -> {
             verdicts.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(verdict(rs));
         }, marketCode);

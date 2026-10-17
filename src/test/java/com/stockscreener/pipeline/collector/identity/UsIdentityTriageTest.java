@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 묻는다: 개명은 표지 + 기호 시대 · 끊기는 앞 행 시대 끝 + 새 행(등록인 · 시대 시작 · 물려받은 기호 시대) · 재사용은 비운 표지 · 기록 표.
  */
 @JpaSliceTest
-@Import({UsIdentityTriage.class, UsIdentityTriageTest.Config.class})
+@Import({UsIdentityTriage.class, EraClosing.class, UsIdentityTriageTest.Config.class})
 class UsIdentityTriageTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 10, 17);
@@ -68,6 +68,30 @@ class UsIdentityTriageTest {
                 String.class, hlx)).containsExactly("HLX||" + START.plusDays(12));
         assertThat(verdicts(77L)).containsExactlyInAnyOrder("RENAME", "RUN");
         assertThat(count("SELECT count(*) FROM stock WHERE market_code = 'US' AND ticker IN ('HLX', 'HOS')")).as("행 수 그대로").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("다른 기호로의 등록인 교체(COLA→SAIQ꼴) — 앞 행도 표지를 비운다 · 옛 기호를 쥐면 그 기호를 새로 받은 실체가 앞 행에 붙는다(P0)")
+    void otherSymbolSplitVacatesTheOldLabel() {
+        long cola = stock("COLA", 2028201L);
+        financial(cola, "0002028201-26-000001");
+        LocalDate merger = LocalDate.of(2026, 10, 2);
+        source.listed("SAIQ");
+        source.anchor("COLA", series(3, 0, 30));
+        source.today("SAIQ", series(3, 0, 30));
+        source.literal("SAIQ", series(3, 25, 30));
+        source.file.put("SAIQ", 2101411L);
+        source.accessions.put(2101411L, Set.of("0002101411-26-000001"));
+        source.events.add(new IdentitySource.IdentityEvent("stock_merger", merger, Set.of("SAIQ"), "SAIQ"));
+
+        UsIdentityTriage.Outcome outcome = triage.run(79L, AS_OF);
+
+        assertThat(outcome.verdictCounts()).containsEntry("SPLIT", 1);
+        assertThat(ticker(cola)).as("다른 기호로 끊겨도 앞 행 표지는 비운다").startsWith("COLA~");
+        assertThat(count("SELECT count(*) FROM stock WHERE market_code = 'US' AND ticker = 'COLA'"))
+                .as("「COLA」 기호를 쥔 행이 없다 — 다음 실체가 그 기호를 받아도 닫힌 행에 안 붙는다").isZero();
+        assertThat(count("SELECT count(*) FROM stock WHERE market_code = 'US' AND ticker = 'SAIQ' AND sec_cik = 2101411"))
+                .isEqualTo(1);
     }
 
     @Test

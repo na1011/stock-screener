@@ -191,9 +191,10 @@ public class StockRegistrar {
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE m.effective_to IS NULL AND s.is_active
+                  AND %s
                   AND s.market_code IN (%s)
                 ORDER BY m.stock_id
-                """.formatted(collectedMarketPlaceholders()), Long.class, collectedMarkets());
+                """.formatted(eraCovers("s", TODAY_US), collectedMarketPlaceholders()), Long.class, collectedMarkets());
     }
 
     /**
@@ -218,10 +219,11 @@ public class StockRegistrar {
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE m.effective_to IS NULL AND s.is_active
+                  AND %s
                   AND s.industry_code IS NULL AND s.sic_code IS NULL
                   AND s.market_code IN (%s)
                 ORDER BY m.stock_id
-                """.formatted(collectedMarketPlaceholders()), Long.class, collectedMarkets());
+                """.formatted(eraCovers("s", TODAY_US), collectedMarketPlaceholders()), Long.class, collectedMarkets());
     }
 
     /**
@@ -281,6 +283,7 @@ public class StockRegistrar {
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE m.effective_to IS NULL AND s.is_active
+                  AND %s
                   AND s.market_code IN (%s)
                   AND (
                     NOT EXISTS (SELECT 1 FROM price_daily p WHERE p.stock_id = m.stock_id)
@@ -293,7 +296,7 @@ public class StockRegistrar {
                     )
                   )
                 ORDER BY m.stock_id
-                """.formatted(collectedMarketPlaceholders()), Long.class, collectedMarkets());
+                """.formatted(eraCovers("s", TODAY_US), collectedMarketPlaceholders()), Long.class, collectedMarkets());
     }
 
     /**
@@ -336,6 +339,7 @@ public class StockRegistrar {
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE s.is_active AND s.ticker IN (%s)
+                  -- 시대 무관: 보존 창 편입 — 창 안 과거 날짜를 다시 쓰는 일이라 닫힌 행의 시대 안 날짜도 대상이다
                   AND s.market_code IN (%s)
                   AND %s
                 ORDER BY m.stock_id
@@ -368,6 +372,7 @@ public class StockRegistrar {
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE s.is_active
+                  -- 시대 무관: 보존 창 편입 — 창 안 과거 날짜를 다시 쓰는 일이라 닫힌 행의 시대 안 날짜도 대상이다
                   AND s.market_code IN (%s)
                   AND %s
                 ORDER BY m.stock_id
@@ -390,6 +395,7 @@ public class StockRegistrar {
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE s.is_active
+                  -- 시대 무관: 보존 창 편입 — 창 안 과거 날짜를 다시 쓰는 일이라 닫힌 행의 시대 안 날짜도 대상이다
                   AND s.market_code IN (%s)
                   AND m.effective_to IS NOT NULL
                   AND %s
@@ -414,6 +420,7 @@ public class StockRegistrar {
                 SELECT DISTINCT ca.stock_id FROM corporate_action ca
                 JOIN stock s ON s.id = ca.stock_id
                 WHERE ca.status = 'APPROVED' AND s.is_active AND s.market_code IN (%s)
+                  -- 시대 무관: 적용 대기 원장 — 닫힌 행의 시대 안 사건도 계수에 실려야 과거 기준일 주식수가 맞는다
                   AND NOT EXISTS (SELECT 1 FROM universe_membership m
                                   JOIN universe u ON u.code = m.universe_code AND u.is_active
                                   WHERE m.stock_id = s.id AND %s)
@@ -467,6 +474,7 @@ public class StockRegistrar {
                     JOIN stock s ON s.id = m.stock_id
                     JOIN universe u ON u.code = m.universe_code AND u.is_active
                     WHERE s.is_active AND s.market_code IN (%s)
+                      -- 시대 무관: 보존 창 편입 — 창 안 과거 날짜를 다시 쓰는 일이라 닫힌 행의 시대 안 날짜도 대상이다
                       AND %s
                 ),
                 current_counts AS MATERIALIZED (
@@ -589,11 +597,12 @@ public class StockRegistrar {
                 SELECT DISTINCT m.stock_id FROM universe_membership m
                 JOIN stock s ON s.id = m.stock_id
                 WHERE m.effective_to IS NULL AND s.is_active
+                  AND %s
                   AND m.universe_code = ?
                   %s
                   AND s.market_code IN (%s)
                 ORDER BY m.stock_id
-                """.formatted(tickerFilter, collectedMarketPlaceholders()), Long.class, args);
+                """.formatted(eraCovers("s", TODAY_US), tickerFilter, collectedMarketPlaceholders()), Long.class, args);
     }
 
     /**
@@ -605,6 +614,22 @@ public class StockRegistrar {
         return """
                 EXISTS (SELECT 1 FROM universe_membership am JOIN universe au ON au.code = am.universe_code AND au.is_active
                         WHERE am.stock_id = %s AND am.effective_to IS NULL)""".formatted(stockIdColumn);
+    }
+
+    /** 미국 동부의 오늘 — 「오늘을 뜻하는 선택」의 시대 술어에 쓰는 SQL 식(ADR-0180 · 미국 행의 시대는 미국 동부 날짜다). */
+    public static final String TODAY_US = "(now() AT TIME ZONE 'America/New_York')::date";
+
+    /**
+     * 그 날짜에 행의 시대가 열려 있는가(ADR-0180) — {@code era_from} 포함 · {@code era_to} 제외. 시대 술어는 <b>그 선택이 뜻하는
+     * 날짜</b>로 건다: 오늘의 선택은 {@link #TODAY_US}, 기준일 판독기는 그 기준일({@code ?}), 공시 소비는 그 공시일 열. 「오늘」 하나로
+     * 기준일 판독기까지 거르면 과거 기준일에 열린 시대였던 행이 그날 순위에서 빠진다(계획 {@code US-PAST-LISTING-PLAN-1017.md} §1).
+     * 국내 행은 시대 열이 비어 늘 참이다.
+     *
+     * @param date SQL 식 — {@code ?}이면 바인드 자리가 <b>둘</b>이다(같은 날짜를 두 번)
+     */
+    public static String eraCovers(String alias, String date) {
+        return "(%1$s.era_from IS NULL OR %1$s.era_from <= %2$s) AND (%1$s.era_to IS NULL OR %1$s.era_to > %2$s)"
+                .formatted(alias, date);
     }
 
     /**
@@ -632,8 +657,9 @@ public class StockRegistrar {
                 SELECT s.ticker FROM stock s
                 WHERE s.market_code = 'US' AND s.is_active
                   AND NOT %s
+                  AND %s
                 ORDER BY s.ticker
-                """.formatted(activeMembershipExists("s.id")), String.class);
+                """.formatted(activeMembershipExists("s.id"), eraCovers("s", TODAY_US)), String.class);
     }
 
     public List<Long> usRankingCandidateIdsByTicker(List<String> tickers) {
@@ -645,8 +671,10 @@ public class StockRegistrar {
                 SELECT s.id FROM stock s
                 WHERE s.market_code = 'US' AND s.is_active AND s.ticker IN (%s)
                   AND NOT %s
+                  AND %s
                 ORDER BY s.id
-                """.formatted(placeholders, activeMembershipExists("s.id")), Long.class, tickers.toArray());
+                """.formatted(placeholders, activeMembershipExists("s.id"), eraCovers("s", TODAY_US)), Long.class,
+                tickers.toArray());
     }
 
     /**
@@ -740,6 +768,7 @@ public class StockRegistrar {
                   JOIN stock s ON s.id = m.stock_id
                   JOIN universe u ON u.code = m.universe_code AND u.is_active
                   WHERE m.effective_to IS NULL AND s.is_active
+                    AND %s
                     AND s.market_code IN (%s)
                   GROUP BY s.id, s.market_code, s.ticker, s.name, s.industry_code, s.sic_code
                 ), win AS (
@@ -798,7 +827,7 @@ public class StockRegistrar {
                 ORDER BY market_code, ticker
                 """.formatted(KnownSourceGaps.KNOWN_MISSING_SIC,
                         KnownSourceGaps.INFRA_FUND, KnownSourceGaps.FINANCIAL_CURRENCY_MISMATCH,
-                        collectedMarketPlaceholders(),
+                        eraCovers("s", TODAY_US), collectedMarketPlaceholders(),
                         COVERAGE_FLOOR, INDICATOR_FLOOR, COVERAGE_FLOOR, INDICATOR_FLOOR),
                 (rs, rowNum) -> {
                     Set<MembershipGap.Axis> missing = EnumSet.noneOf(MembershipGap.Axis.class);

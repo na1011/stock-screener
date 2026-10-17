@@ -1,8 +1,11 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.collector.StockRegistrar;
+import com.stockscreener.pipeline.collector.identity.EraClosing;
 import com.stockscreener.pipeline.collector.identity.FoldPlanner;
 import com.stockscreener.pipeline.collector.identity.StockFold;
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.SecurityRef;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -38,14 +42,16 @@ public class StockFoldJob {
     private final BatchExecutions batchExecutions;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
+    private final EraClosing eraClosing;
 
     public StockFoldJob(FoldPlanner planner, StockFold fold, BatchExecutions batchExecutions, JdbcTemplate jdbc,
-                        PlatformTransactionManager transactionManager) {
+                        PlatformTransactionManager transactionManager, EraClosing eraClosing) {
         this.planner = planner;
         this.fold = fold;
         this.batchExecutions = batchExecutions;
         this.jdbc = jdbc;
         this.transaction = new TransactionTemplate(transactionManager);
+        this.eraClosing = eraClosing;
     }
 
     /**
@@ -114,11 +120,63 @@ public class StockFoldJob {
     }
 
     /**
+     * 닫힌 시대의 위생(계획 {@code US-PAST-LISTING-PLAN-1017.md} P0-b) — {@code EraClosing}이 생기기 전에 닫힌 행을 같은 모양으로 맞춘다.
+     * 둘을 고친다: ① 시대가 닫혔는데 표지가 기호 그대로인 행 — 표지를 비운다(그 기호를 새로 받은 실체가 그 행에 붙는 길을 막는다) ·
+     * ② 행의 시대가 그 공시일을 안 덮는데 열려 있는 장부 행 — 그 행의 공시가 아니라 소비가 영영 못 먹는다(지운다 · 장부가 이제 붙이지
+     * 않으므로 다시 안 생긴다). 운영 행을 고치는 손 실행이라 {@code --apply}는 사용자 승인 뒤다 — 기본은 대상만 적는다.
+     */
+    public BatchStatus healClosed(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy, boolean apply) {
+        HealTargets targets = healTargets();
+        List<Map<String, Object>> labels = targets.labels();
+        List<Map<String, Object>> ledger = targets.ledger();
+        BatchExecutionContext execution = batchExecutions.start(JOB_NAME, asOf, triggeredBy, labels.size() + ledger.size(),
+                BatchExecutionRecorder.DeclaredScope.narrow(BatchExecutionRecorder.ScopeReason.NO_SCHEDULED_RANGE));
+        execution.plan(CollectionPhase.SECURITY_MASTER, labels.size() + ledger.size());
+        labels.forEach(r -> log.info("닫힌 행 표지 비우기 대상 {}", r));
+        ledger.forEach(r -> log.info("시대 밖 장부 행 지우기 대상 {}", r));
+        String what = "닫힌 행 표지 %d · 시대 밖 장부 행 %d".formatted(labels.size(), ledger.size());
+        if (!apply) {
+            execution.countExternally(CollectionPhase.SECURITY_MASTER, labels.size() + ledger.size(), 0, 0);
+            return execution.finish("계획만(--apply=false) · " + what);
+        }
+        transaction.executeWithoutResult(status -> {
+            for (Map<String, Object> r : labels) {
+                eraClosing.close(((Number) r.get("id")).longValue(), ((java.sql.Date) r.get("era_to")).toLocalDate());
+            }
+            for (Map<String, Object> r : ledger) {
+                jdbc.update("DELETE FROM filing_consumption WHERE id = ? AND fr_consumed_at IS NULL", ((Number) r.get("id")).longValue());
+            }
+        });
+        execution.countExternally(CollectionPhase.SECURITY_MASTER, labels.size() + ledger.size(), 0,
+                labels.size() + ledger.size());
+        return execution.finish("반영 · " + what);
+    }
+
+    /** @param labels 시대가 닫혔는데 표지가 기호 그대로인 미국 행 · {@code ledger} 행의 시대가 공시일을 안 덮는 열린 장부 행 */
+    public record HealTargets(List<Map<String, Object>> labels, List<Map<String, Object>> ledger) {
+    }
+
+    public HealTargets healTargets() {
+        List<Map<String, Object>> labels = jdbc.queryForList("""
+                SELECT id, ticker, era_to FROM stock
+                WHERE market_code = 'US' AND era_to IS NOT NULL AND strpos(ticker, ?) = 0
+                ORDER BY id
+                """, String.valueOf(SecurityRef.VACATED));
+        List<Map<String, Object>> ledger = jdbc.queryForList("""
+                SELECT c.id, c.stock_id, s.ticker, c.filing_no, c.form, c.filed_on FROM filing_consumption c
+                JOIN stock s ON s.id = c.stock_id
+                WHERE c.market = 'US' AND c.fr_consumed_at IS NULL AND NOT (%s)
+                ORDER BY c.stock_id, c.filed_on
+                """.formatted(StockRegistrar.eraCovers("s", "c.filed_on")));
+        return new HealTargets(labels, ledger);
+    }
+
+    /**
      * 등록인 교체 짝 — 두 행이 맞다. 신원 판정의 행 끊기와 같은 결과를 남긴다: 앞 행 시대 끝 · 새 행 시대 시작 · 앞 행의 기호 시대 물려받기.
      * 새 행의 등록인은 여기서 안 묶는다 — 그 행의 다음 FR이 포함 검사로 묶는다(오늘 파일이 새 등록인을 주고 저장 판이 0이거나 전부 그 것).
      */
     private void closeEra(FoldPlanner.Pair pair) {
-        jdbc.update("UPDATE stock SET era_to = ?, updated_at = now() WHERE id = ?", pair.switchDate(), pair.target());
+        eraClosing.close(pair.target(), pair.switchDate());
         jdbc.update("UPDATE stock SET era_from = ?, updated_at = now() WHERE id = ?", pair.switchDate(), pair.source());
         jdbc.update("""
                 INSERT INTO stock_symbol_era (stock_id, symbol, valid_from, valid_to)
