@@ -185,6 +185,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private final FilingListingJob filingListingJob;
     private final FilingConsumptionJob filingConsumptionJob;
     private final CandidateSplitJob candidateSplitJob;
+    private final StockFoldJob stockFoldJob;
+    private final SecCikBindJob secCikBindJob;
     private final CandidateIntake candidateIntake;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final BatchExecutionSweeper executionSweeper;
@@ -212,7 +214,11 @@ public class BootstrapRunner implements ApplicationRunner {
                            FilingConsumptionJob filingConsumptionJob,
                            FreshnessCatchUpJob freshnessCatchUpJob,
                            CandidateSplitJob candidateSplitJob,
-                           CandidateIntake candidateIntake) {
+                           CandidateIntake candidateIntake,
+                           StockFoldJob stockFoldJob,
+                           SecCikBindJob secCikBindJob) {
+        this.stockFoldJob = stockFoldJob;
+        this.secCikBindJob = secCikBindJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.universeRestoreJob = universeRestoreJob;
         this.initialLoadJob = initialLoadJob;
@@ -427,6 +433,11 @@ public class BootstrapRunner implements ApplicationRunner {
             case "corporate-action-judge" -> corporateActionJudgeJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     requiredLong(args, "ca-id"), judgement(args));
+            // 미국 신원(ADR-0180). 둘 다 쓰기가 옵트인이다(--apply=true · 기본은 계획만) — 운영 쓰기라 사용자 승인 뒤에 친다.
+            case "stock-fold" -> stockFoldJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    java.time.OffsetDateTime.parse(required(args, "since")).toInstant(), flag(args, "apply"));
+            case "sec-cik-bind" -> secCikBindJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
+                    handCiks(args), flag(args, "apply"));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill"
@@ -437,7 +448,7 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | corporate-action-review | corporate-action-judge"
                             + " | market-calendar | bar-gap-review"
                             + " | filing-listing | filing-consumption | candidate-consumption | candidate-splits"
-                            + " | refresh-behind");
+                            + " | refresh-behind | stock-fold | sec-cik-bind");
         };
 
         // MUST: 재무나 기업행위를 쓴 잡 뒤에는 기저를 다시 판정한다(ADR-0162).
@@ -516,7 +527,9 @@ public class BootstrapRunner implements ApplicationRunner {
             "apply", "replace", "dates", "insert-earlier-vintages", "population",
             // share-basis-derive 전용. 기본값 US다 — 국내는 봉의 listed_shares 를 쓰므로
             // 이 축을 원리적으로 안 탄다(재무 shares_outstanding 이 KR 전량 NULL 이다).
-            "market");
+            "market",
+            // stock-fold 전용(새 행 후보의 생성 시각 하한 · ISO 오프셋 시각) · sec-cik-bind 전용(손 후보 티커:CIK,…).
+            "since", "ciks");
 
     /**
      * {@code --universe}가 뜻을 갖는 잡. 나머지에서는 조용히 무시되므로 거절한다.
@@ -813,6 +826,19 @@ public class BootstrapRunner implements ApplicationRunner {
     static final java.util.Set<String> BOOLEAN_OPTIONS = java.util.Set.of(
             "skip-financial", "skip-price", "reload-existing", "quarters", "all-quarters",
             "apply", "replace", "insert-earlier-vintages");
+
+    /** {@code --ciks=HLX:866829,ANY:1561032} — 손 후보. 형식이 틀리면 던진다(오타 하나가 다른 등록인을 묶지 않게). */
+    static java.util.Map<String, Long> handCiks(ApplicationArguments args) {
+        java.util.Map<String, Long> out = new java.util.LinkedHashMap<>();
+        for (String pair : csv(args, "ciks")) {
+            String[] parts = pair.split(":");
+            if (parts.length != 2 || parts[0].isBlank() || !parts[1].matches("\\d{1,10}")) {
+                throw new IllegalArgumentException("--ciks는 티커:CIK를 쉼표로 잇는다: '" + pair + "'");
+            }
+            out.put(parts[0].trim(), Long.parseLong(parts[1]));
+        }
+        return out;
+    }
 
     static boolean flag(ApplicationArguments args, String name) {
         if (!BOOLEAN_OPTIONS.contains(name)) {

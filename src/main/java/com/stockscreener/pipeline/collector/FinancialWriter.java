@@ -339,6 +339,25 @@ public class FinancialWriter {
         return labels.size();
     }
 
+    /**
+     * 한 종목의 판 번호와 최신 표지를 공시일 순으로 다시 맞춘다 — 다른 행에서 판을 옮겨 온 뒤(접기 잡 · ADR-0180). 번호는
+     * {@link #renumberOutOfOrderLabels}와 같은 규칙이고, 최신은 라벨마다 (공시일 · 번호)가 가장 늦은 판 하나다({@code uq_fs_latest}가
+     * 「정확히 하나」를 요구하므로 내린 뒤 올린다 — 회수 갈래와 같은 두 문장).
+     *
+     * @return 다시 매긴 라벨 수
+     */
+    public int realignLabels(long stockId) {
+        int renumbered = renumberOutOfOrderLabels(stockId);
+        String latest = """
+                SELECT DISTINCT ON (fiscal_year, fiscal_period) id FROM financial_statement WHERE stock_id = ?
+                ORDER BY fiscal_year, fiscal_period, published_at DESC, revision_no DESC""";
+        jdbcTemplate.update("UPDATE financial_statement SET is_latest = false WHERE stock_id = ? AND is_latest AND id NOT IN ("
+                + latest + ")", stockId, stockId);
+        jdbcTemplate.update("UPDATE financial_statement SET is_latest = true WHERE stock_id = ? AND NOT is_latest AND id IN ("
+                + latest + ")", stockId, stockId);
+        return renumbered;
+    }
+
     /** 한 라벨을 공시일 순 0..n으로. 두 문장인 이유는 {@link #renumberOutOfOrderLabels}에 있다. */
     private void renumberLabel(long stockId, int fiscalYear, String fiscalPeriod) {
         jdbcTemplate.update("""
