@@ -403,29 +403,6 @@ public class SecFilingSupplement implements FilingSupplementer {
         return usGaapFilings(facts).keySet();
     }
 
-    /**
-     * companyfacts가 싣는 접수번호 전부 — 택소노미를 안 가린다(us-gaap · dei · ifrs-full). 등록인 포함 검사(ADR-0180)의 재료다: 그 행의
-     * 저장 접수번호가 이 집합(∪ 같은 CIK 보충 표)에 다 들면 그 행은 이 등록인의 것이다.
-     */
-    static Set<String> allAccessions(JsonNode facts) {
-        Set<String> out = new java.util.HashSet<>();
-        for (String taxonomy : facts.propertyNames()) {
-            JsonNode concepts = facts.path(taxonomy);
-            for (String concept : concepts.propertyNames()) {
-                JsonNode units = concepts.path(concept).path("units");
-                for (String unit : units.propertyNames()) {
-                    for (JsonNode node : units.path(unit)) {
-                        String accn = node.path("accn").asString("");
-                        if (!accn.isEmpty()) {
-                            out.add(accn);
-                        }
-                    }
-                }
-            }
-        }
-        return out;
-    }
-
     /** companyfacts가 us-gaap 팩트를 싣는 접수번호와, 그 접수번호에 companyfacts가 붙인 {@code filed} 날짜들. */
     static Map<String, Set<LocalDate>> usGaapFilings(JsonNode facts) {
         Map<String, Set<LocalDate>> out = new java.util.HashMap<>();

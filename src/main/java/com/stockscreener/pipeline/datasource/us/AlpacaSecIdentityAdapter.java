@@ -152,7 +152,7 @@ public class AlpacaSecIdentityAdapter implements IdentitySource {
             }
             throw e;
         }
-        return SecFilingSupplement.allAccessions(facts);
+        return CompanyFactsAccessions.of(facts);
     }
 
     @Override

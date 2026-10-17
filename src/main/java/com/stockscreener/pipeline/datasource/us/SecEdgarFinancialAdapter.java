@@ -204,7 +204,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         return new FinancialFetch(result.reports(), result.absences(), true,
                 supplement.unconfirmedVintages(), supplement.supplementedVintages(), supplement.vintagesUncertain(),
                 supplement.unfetched(), FilingTrace.ofAccessions(carried), unfetchedClassFacts,
-                new FinancialFetch.Registrant(cik.get(), SecFilingSupplement.allAccessions(tree)));
+                new FinancialFetch.Registrant(cik.get(), CompanyFactsAccessions.of(tree)));
     }
 
     /**
