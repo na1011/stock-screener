@@ -136,6 +136,11 @@ class SecRegistrantLookupTest {
         }
 
         @Override
+        public List<IndexLine> candidateLines(LocalDate from, LocalDate to, Set<String> forms) {
+            return lines(from, to, forms);
+        }
+
+        @Override
         public Optional<byte[]> document(long cik, String accession, String form) {
             return Optional.ofNullable(docs.get(accession));
         }

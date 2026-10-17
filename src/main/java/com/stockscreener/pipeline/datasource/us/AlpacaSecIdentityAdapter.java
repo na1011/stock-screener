@@ -176,6 +176,11 @@ public class AlpacaSecIdentityAdapter implements IdentitySource {
     }
 
     @Override
+    public List<SymbolChange> symbolChanges(Collection<String> symbols, LocalDate from, LocalDate to) throws DataSourceException {
+        return corporateActions.fetchSymbolChanges(symbols, from, to);
+    }
+
+    @Override
     public java.util.Optional<Listed> asset(String symbolOrCusip) throws DataSourceException {
         return listing.fetchAsset(symbolOrCusip).map(a -> new Listed(a.symbol(), a.name(), a.exchange()));
     }

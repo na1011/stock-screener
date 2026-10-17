@@ -25,7 +25,7 @@ public final class RegistrantNames {
     private static final Pattern EACH_REPRESENTING = Pattern.compile("\\beach representing.*");
     private static final Pattern NON_ALNUM = Pattern.compile("[^a-z0-9 ]");
     private static final Pattern DROP = Pattern.compile(
-            "\\b(common stock|common shares|ordinary shares?|american depositary shares?|depositary shares?|ads|class [a-c]"
+            "\\b(common stock|common shares|ordinary shares?|subordinate voting shares?|american depositary shares?|depositary shares?|ads|class [a-c]"
                     + "|series [a-c]|new|the|inc|incorporated|corp|corporation|co|company|ltd|limited|plc|n ?v|s ?a|l ?p|llc|sa|ag"
                     + "|se|group|holdings?|cayman islands)\\b");
 

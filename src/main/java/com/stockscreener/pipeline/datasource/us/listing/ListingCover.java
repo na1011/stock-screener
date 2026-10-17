@@ -53,14 +53,22 @@ public final class ListingCover {
     /**
      * 그 기호의 줄 — <b>기호가 통째로 같은 줄이 먼저다.</b> 표지는 사채 · 우선주 줄도 같은 기호로 시작해 싣는다(Kellanova {@code K} ·
      * {@code K 29} · {@code K 34} · Comerica {@code CMA} · {@code CMA PrB} — R-D6-0 2026-10-18). 쪼개 담기만 보면 그 줄들이 다 맞아 「하나가
-     * 아님」이 된다. 통째로 같은 줄이 없을 때만 한 사실에 든 여러 기호(「GOOGL, GOOG」)를 쪼개 본다. 어느 쪽이든 둘 이상이면 비운다.
+     * 아님」이 된다. 통째로 같은 줄이 없을 때만 한 사실에 든 여러 기호(「GOOGL, GOOG」)를 쪼개 본다. 쪼갠 쪽이 둘 이상이면 비운다.
      */
     public static Optional<Line> lineFor(ClassFacts cover, String symbol) {
         String wanted = DenominatorJudge.nk(symbol);
         List<Line> all = lines(cover);
         List<Line> exact = all.stream().filter(l -> DenominatorJudge.nk(l.symbol()).equals(wanted)).toList();
         if (!exact.isEmpty()) {
-            return exact.size() == 1 ? Optional.of(exact.get(0)) : Optional.empty();
+            // 예탁증권 발행사는 보통주 줄과 ADS 줄을 같은 기호로 싣는다(Centessa CNTA · R-D6-0). 거래소가 같으면 같은 증권의 두 표기다 —
+            // 보통주 줄을 먼저 낸다. 거래소 코드를 모르는 줄(외국 거래소 · 비어 있음)은 미국 범주를 말하지 않으니 아는 줄이 있으면 뺀다.
+            // 아는 거래소가 둘 이상으로 갈리면 어느 것인지 원장이 안 말한다.
+            List<Line> known = exact.stream().filter(l -> l.venue().isPresent()).toList();
+            List<Line> pool = known.isEmpty() ? exact : known;
+            if (pool.stream().map(Line::venueCode).distinct().count() > 1) {
+                return Optional.empty();
+            }
+            return pool.stream().filter(Line::common).findFirst().or(() -> Optional.of(pool.get(0)));
         }
         List<Line> split = all.stream().filter(l -> DenominatorJudge.splitSymbols(l.symbol()).contains(wanted)).toList();
         return split.size() == 1 ? Optional.of(split.get(0)) : Optional.empty();

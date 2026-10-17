@@ -63,6 +63,8 @@ public final class ClassFactReader {
     private static final String CLASS_AXIS = "StatementClassOfStockAxis";
     private static final String EQUITY_AXIS = "StatementEquityComponentsAxis";
     private static final String SUBSEQUENT_AXIS = "SubsequentEventTypeAxis";
+    /** 표지의 거래소 축 — 상장 판정 표지만 받는다(Two Harbors 10-Q는 표지 기호마다 클래스 축 + 이 축을 단다 · R-D6-0 2026-10-18). */
+    private static final String LISTINGS_EXCHANGE_AXIS = "EntityListingsExchangeAxis";
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
     private static final String XBRLDI = "http://xbrl.org/2006/xbrldi";
     private static final String XSI = "http://www.w3.org/2001/XMLSchema-instance";
@@ -160,6 +162,20 @@ public final class ClassFactReader {
             Set<String> extra = new java.util.HashSet<>(c.dims().keySet());
             extra.remove(CLASS_AXIS);
             String member = c.dims().getOrDefault(CLASS_AXIS, ClassFacts.AXISLESS);
+            if (coverConcepts == LISTING_COVER) {
+                // 상장 판정은 기호 · 거래소 · 증권 이름만 본다(저장 팩트 COVER는 그 판을 안 바꾸려고 그대로 둔다).
+                //  - 거래소 축은 그 줄이 어느 거래소의 것인지 말한다 — 이중 상장은 줄이 거래소마다 따로라 구성원 열쇠에 거래소를 붙인다
+                //    (SunOpta 10-K: STKL · NASDAQ과 SOY · TSX가 둘 다 클래스 축 없이 온다 · R-D6-0).
+                //  - 클래스 축 없이 자본 구성요소 축 = 보통주만 단 표지 줄은 그 보통주 줄이다(같은 SunOpta).
+                String exchange = c.dims().get(LISTINGS_EXCHANGE_AXIS);
+                if (exchange != null) {
+                    extra.remove(LISTINGS_EXCHANGE_AXIS);
+                    member = member + "@" + exchange;
+                }
+                if (extra.equals(Set.of(EQUITY_AXIS)) && c.dims().get(EQUITY_AXIS).endsWith(":CommonStockMember")) {
+                    extra.remove(EQUITY_AXIS);
+                }
+            }
             if (coverConcepts.contains(local)) {
                 if (!extra.isEmpty() && !(SHARES_OUTSTANDING.equals(local) && extra.equals(Set.of(SUBSEQUENT_AXIS)))) {
                     continue;

@@ -16,7 +16,6 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,8 +29,13 @@ import java.util.Set;
 @ConditionalOnApiKey("sec-edgar")
 public class SecRegistrantLookup implements RegistrantLookup {
 
-    /** 이름 색인을 모을 창 앞 여유 — 창 시작 직후에 사라진 실체의 마지막 정기 공시가 들어오게(분기 하나 + 늦은 제출). */
-    static final int NAME_INDEX_LEAD_DAYS = 120;
+    /**
+     * 이름 색인을 모을 창 앞 여유 — 창 시작 직후에 사라진 실체의 마지막 정기 공시가 들어오게. 연차만 내는 외국 등록인(20-F · 40-F)은
+     * 마지막 연차가 창 시작보다 1년 가까이 앞일 수 있다(CureVac · EMX — R-D6-0에서 120일로는 이름 후보가 아예 안 생겼다).
+     */
+    static final int NAME_INDEX_LEAD_DAYS = 400;
+    /** 제거 양식 줄을 모을 창 앞 여유 — 창 시작 무렵 사건의 ±1일 몫. */
+    static final int REMOVAL_LEAD_DAYS = 15;
     /** 제거 양식 후보의 제출일 앞뒤 — 탐색 ★17(문턱 위 35 중 34가 효력일 ±1일). */
     static final int REMOVAL_NEAR_DAYS = 1;
     /** 표지를 찾아 거슬러 볼 공시 목록 하한 — 기준일 앞 이만큼. */
@@ -49,25 +53,24 @@ public class SecRegistrantLookup implements RegistrantLookup {
 
     @Override
     public Session open(LocalDate from, LocalDate asOf) throws DataSourceException {
-        Set<String> forms = new LinkedHashSet<>(NAME_FORMS);
-        forms.addAll(REMOVAL_FORMS);
         List<Map.Entry<String, Long>> filers = new ArrayList<>();
         Map<Long, String> filerName = new HashMap<>();
         List<IndexLine> removals = new ArrayList<>();
-        for (IndexLine line : sec.lines(from.minusDays(NAME_INDEX_LEAD_DAYS), asOf, forms)) {
-            if (REMOVAL_FORMS.contains(line.form())) {
-                // 일일 색인은 25-NSE를 발행사 줄과 제출 거래소 줄 둘로 싣는다 — 거래소(NYSE LLC 876661 …)는 등록인 후보가 아니다
-                // (R-D6-0 2026-10-18: 사건마다 거래소 CIK의 표지를 헛묻고 있었다 · 확인 규칙이 걸러 결과는 같다).
-                if (Venue.ofName(line.company()).isPresent()) {
-                    continue;
-                }
-                removals.add(line);
-                // 제거 양식 줄의 회사 이름도 그 발행사 이름이다 — 정기 공시 줄이 창 안에 없을 때의 행 이름.
-                filerName.putIfAbsent(line.cik(), line.company());
-            } else {
-                filers.add(Map.entry(line.company(), line.cik()));
-                filerName.put(line.cik(), line.company());
+        // 제거 양식은 범주 · 등록인 확인의 재료라 색인 크기를 엄격히 본다. 이름 색인은 후보만 만들어(틀려도 잘못 묶이지 않고 재현율만 준다)
+        // 목록과 안 맞는 하루에 막히지 않게 크기 검증 없이 받는다(SecDailyIndexClient#formIndexLenient).
+        for (IndexLine line : sec.lines(from.minusDays(REMOVAL_LEAD_DAYS), asOf, REMOVAL_FORMS)) {
+            // 일일 색인은 25-NSE를 발행사 줄과 제출 거래소 줄 둘로 싣는다 — 거래소(NYSE LLC 876661 …)는 등록인 후보가 아니다
+            // (R-D6-0 2026-10-18: 사건마다 거래소 CIK의 표지를 헛묻고 있었다 · 확인 규칙이 걸러 결과는 같다).
+            if (Venue.ofName(line.company()).isPresent()) {
+                continue;
             }
+            removals.add(line);
+            // 제거 양식 줄의 회사 이름도 그 발행사 이름이다 — 정기 공시 줄이 창 안에 없을 때의 행 이름.
+            filerName.putIfAbsent(line.cik(), line.company());
+        }
+        for (IndexLine line : sec.candidateLines(from.minusDays(NAME_INDEX_LEAD_DAYS), asOf, NAME_FORMS)) {
+            filers.add(Map.entry(line.company(), line.cik()));
+            filerName.put(line.cik(), line.company());
         }
         Map<String, Set<Long>> nameIndex = RegistrantNames.index(filers);
         return (symbol, before, securityName, renames) -> find(symbol, before, securityName, renames, nameIndex, filerName, removals);

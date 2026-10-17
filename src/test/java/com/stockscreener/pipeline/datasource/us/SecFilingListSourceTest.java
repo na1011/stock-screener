@@ -205,6 +205,7 @@ class SecFilingListSourceTest {
         // 2026-10-01 저장분: 1,076,081바이트 = 1051 KB(올림) · 1,393,682바이트 = 1362 KB
         assertThat(SecDailyIndexClient.sizeMismatch(new byte[1_076_081], 1051)).isNull();
         assertThat(SecDailyIndexClient.sizeMismatch(new byte[1_393_682], 1362)).isNull();
+        assertThat(SecDailyIndexClient.sizeMismatch(new byte[628_013], 613)).as("2024 QTR3 목록은 내림이다(2024-09-05)").isNull();
         assertThat(SecDailyIndexClient.sizeMismatch(new byte[1_000_000], 1051)).as("끊긴 본문").isNotNull();
         assertThat(SecDailyIndexClient.sizeMismatch("x".getBytes(StandardCharsets.UTF_8), 0)).isNotNull();
     }

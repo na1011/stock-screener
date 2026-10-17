@@ -318,6 +318,33 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
         return events;
     }
 
+    /**
+     * 기호 변경 전부 — CUSIP이 그대로인 것도 낸다({@link #fetchIdentityEvents}는 신원 판정 규칙대로 CUSIP 변경만 낸다). 폐지 실체의 등록인
+     * 확인이 「그 공시일의 기호」를 거꾸로 걷는 재료다(RNA → RNAM 2026-02-26 · CUSIP 05370A108 그대로 · R-D6-0).
+     */
+    List<IdentitySource.SymbolChange> fetchSymbolChanges(Collection<String> symbols, LocalDate from, LocalDate to)
+            throws DataSourceException {
+        requireCredentials();
+        if (symbols.isEmpty()) {
+            return List.of();
+        }
+        Set<String> asked = new HashSet<>(symbols);
+        Map<String, List<JsonNode>> buckets = fetchBuckets(String.join(",", new TreeSet<>(symbols)), "name_change", from,
+                maxOf(to, LocalDate.now()));
+        List<IdentitySource.SymbolChange> out = new ArrayList<>();
+        for (JsonNode node : buckets.getOrDefault("name_changes", List.of())) {
+            String oldSymbol = node.path("old_symbol").asString("");
+            String newSymbol = node.path("new_symbol").asString("");
+            LocalDate date = optionalDateOf(node, "process_date");
+            if (date == null || oldSymbol.isEmpty() || oldSymbol.equals(newSymbol)
+                    || !(asked.contains(oldSymbol) || asked.contains(newSymbol))) {
+                continue;
+            }
+            out.add(new IdentitySource.SymbolChange(oldSymbol, newSymbol, date));
+        }
+        return out;
+    }
+
     List<IdentitySource.IdentityEvent> fetchIdentityEvents(Collection<String> symbols, LocalDate from, LocalDate to)
             throws DataSourceException {
         requireCredentials();

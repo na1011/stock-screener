@@ -53,6 +53,13 @@ public interface IdentitySource {
      */
     java.util.Optional<Listed> asset(String symbolOrCusip) throws DataSourceException;
 
+    /** 기호 변경 전부(CUSIP이 그대로인 것 포함) — 효력일 = 처리일. {@link #identityEvents}의 개명은 CUSIP 변경만이다. */
+    List<SymbolChange> symbolChanges(Collection<String> symbols, LocalDate from, LocalDate to) throws DataSourceException;
+
+    /** {@code from}이 {@code date}에 {@code to}가 됐다. */
+    record SymbolChange(String from, String to, LocalDate date) {
+    }
+
     record Listed(String symbol, String name, String exchange) {
     }
 

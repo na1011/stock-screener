@@ -41,6 +41,8 @@ import java.util.regex.Pattern;
 @ConditionalOnApiKey("sec-edgar")
 public class SecListingFormClient {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SecListingFormClient.class);
+
     /**
      * HTML 응답 끝에 SEC 가장자리가 끼우는 스크립트 하나 — 폴더 색인의 크기와 받은 길이가 이것만큼 다르다(2026-10-18 고정물 HTML 8/8이
      * 112바이트 · 빼면 8/8 크기 일치 · XML과 작은 HTML 13/13은 그대로 일치). 이것을 뺀 길이로 끊긴 전송을 가른다.
@@ -96,6 +98,35 @@ public class SecListingFormClient {
                     }
                 }
             }
+        }
+        return out;
+    }
+
+    /**
+     * {@link #lines}와 같되 날짜 색인의 크기 검증을 안 건다({@link SecDailyIndexClient#formIndexLenient}) — 후보만 만드는 쓰임(등록인 이름
+     * 색인)이 목록과 안 맞는 하루에 막히지 않게. 크기가 어긋난 날은 로그로 남긴다.
+     */
+    public List<IndexLine> candidateLines(LocalDate from, LocalDate to, Set<String> forms) throws DataSourceException {
+        List<IndexLine> out = new ArrayList<>();
+        List<String> mismatched = new ArrayList<>();
+        for (LocalDate q = from.withDayOfMonth(1).withMonth(((from.getMonthValue() - 1) / 3) * 3 + 1);
+             !q.isAfter(to); q = q.plusMonths(3)) {
+            SecDailyIndexClient.QuarterListing listing = dailyIndex.quarter(q.getYear(), (q.getMonthValue() - 1) / 3 + 1);
+            for (var day : listing.formIndexKb().entrySet()) {
+                if (day.getKey().isBefore(from) || day.getKey().isAfter(to)) {
+                    continue;
+                }
+                SecDailyIndexClient.Lenient got = dailyIndex.formIndexLenient(day.getKey(), day.getValue());
+                got.sizeNote().ifPresent(note -> mismatched.add(day.getKey() + " " + note));
+                for (IndexLine line : got.lines()) {
+                    if (forms.contains(line.form())) {
+                        out.add(line);
+                    }
+                }
+            }
+        }
+        if (!mismatched.isEmpty()) {
+            log.warn("후보 색인 중 목록 크기와 다른 날 {}개 — 줄 해석은 통과했다(후보 생성에만 쓴다): {}", mismatched.size(), mismatched);
         }
         return out;
     }

@@ -166,8 +166,8 @@ class DelistedIntakeTest {
     void renameBeforeTheEndBecomesASymbolEra() throws Exception {
         endedEntity("RNAT", 19, "cash_merger");
         LocalDate renamed = EFFECTIVE.minusDays(5);
-        source.events.add(new IdentitySource.IdentityEvent("name_change", renamed, new java.util.TreeSet<>(List.of("RNAO", "RNAT")),
-                "RNAO→RNAT CUSIP 0→1"));
+        // CUSIP 그대로의 기호 변경(RNA → RNAM꼴) — 신원 사건의 개명에는 안 실린다.
+        source.symbolChanges.add(new IdentitySource.SymbolChange("RNAO", "RNAT", renamed));
         lookup.results.put("RNAT", bound(1423824L, "NASDAQ", "Avidity Biosciences Common Stock"));
 
         DelistedIntake.Plan plan = intake.plan(START, AS_OF, source, lookup);

@@ -20,6 +20,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -118,13 +119,44 @@ public class SecDailyIndexClient implements SecFilingListSource.DailyIndex {
         return parseFormIndex(new String(response.getBody(), StandardCharsets.ISO_8859_1), day, context);
     }
 
+    /**
+     * 목록의 KB와 받은 길이 — <b>원장이 KB를 적는 규칙이 해에 따라 다르다</b>: 2025년 이후는 올림(2026-10 저장분 7일 · 2025-06 · 2026-08 3일),
+     * 2024 QTR3은 내림이다(2024-09-05 · 06 · 10 · 19 네 날 · 2026-10-18 실측). 그래서 내림 · 올림 둘 다 받는다 — 끊긴 전송은 대개 1KB보다
+     * 훨씬 짧고, 마지막 1KB 안의 끊김은 줄 해석({@link #parseFormIndex})이 꼴이 깨진 마지막 줄로 잡는다.
+     */
+    /**
+     * 그날의 폼 색인 — <b>크기 검증 없이</b> 받고 줄 해석만 엄격히 건다. 끊긴 마지막 줄은 해석이 꼴 이상으로 던진다. 목록 크기와 다르면
+     * {@link Lenient#sizeNote()}에 사유를 담아 낸다. 목록이 그 파일과 안 맞는 날이 드물게 있어(2024-12-23 목록 1,058KB · 받은 1,111,177바이트 ·
+     * 표본 27일 중 0) 그날을 막지 않아야 할 때 — 후보만 만드는 쓰임(등록인 이름 색인)만 부른다.
+     */
+    public Lenient formIndexLenient(LocalDate day, int expectedKb) throws DataSourceException {
+        int quarter = (day.getMonthValue() - 1) / 3 + 1;
+        String path = "/Archives/edgar/daily-index/%d/QTR%d/form.%s.idx".formatted(day.getYear(), quarter, BASIC.format(day));
+        String context = "form index " + day;
+        ResponseEntity<byte[]> response = SecFilingClient.fetch(rateLimiter, backoff,
+                () -> files.get().uri(path).retrieve().toEntity(byte[].class),
+                received -> received.getBody() == null || received.getBody().length == 0 ? "200인데 본문이 없다." : null, context);
+        if (!response.getStatusCode().is2xxSuccessful()) {
+            throw new DataSourceException(SecEdgarResponse.kindOf(response.getStatusCode().value()),
+                    SecEdgarResponse.SOURCE_NAME, "HTTP %d. %s".formatted(response.getStatusCode().value(), context));
+        }
+        byte[] body = response.getBody();
+        List<IndexLine> lines = parseFormIndex(new String(body, StandardCharsets.ISO_8859_1), day, context);
+        return new Lenient(lines, Optional.ofNullable(sizeMismatch(body, expectedKb)));
+    }
+
+    /** @param sizeNote 목록 크기와 다르면 그 사유 */
+    public record Lenient(List<IndexLine> lines, Optional<String> sizeNote) {
+    }
+
     static String sizeMismatch(byte[] body, int expectedKb) {
         if (body == null || body.length == 0) {
             return "200인데 본문이 없다.";
         }
-        long kb = (body.length + 1023L) / 1024L;
-        return kb == expectedKb ? null
-                : "받은 %d바이트(%dKB)가 목록의 %dKB와 다르다 — 받다 만 본문이거나 오류 본문이다.".formatted(body.length, kb, expectedKb);
+        long ceil = (body.length + 1023L) / 1024L;
+        long floor = body.length / 1024L;
+        return ceil == expectedKb || (floor > 0 && floor == expectedKb) ? null
+                : "받은 %d바이트(%dKB)가 목록의 %dKB와 다르다 — 받다 만 본문이거나 오류 본문이다.".formatted(body.length, ceil, expectedKb);
     }
 
     /** 분기 목록 JSON에서 {@code form.yyyymmdd.idx} 항목만 날짜순으로 낸다. 크기를 못 읽는 항목은 본문 이상이다. */

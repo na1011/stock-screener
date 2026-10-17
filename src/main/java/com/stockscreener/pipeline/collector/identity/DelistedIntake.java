@@ -194,25 +194,19 @@ public class DelistedIntake {
     }
 
     /**
-     * 사건 기호들에 걸린 개명 — 한 번에 묻고 새 기호로 모은다. 「옛→새 CUSIP …」 세부 글에서 읽는다. 옛 기호로 또 거슬러 오른
-     * 개명(두 번 바뀐 실체)은 그 옛 기호가 사건 기호가 아니면 안 잡힌다 — 표지가 그보다 앞이면 확인이 못 서고 「등록인 못 정함」으로 센다.
+     * 사건 기호들에 걸린 기호 변경 — 한 번에 묻고 새 기호로 모은다. CUSIP이 그대로인 변경도 든다(RNA → RNAM — 신원 사건의 개명은 CUSIP
+     * 변경만이라 이 자리에 안 맞는다 · R-D6-0). 두 번 바뀐 실체의 앞 변경은 옛 기호가 사건 기호가 아니면 안 잡힌다 — 표지가 그보다 앞이면
+     * 확인이 못 서고 「등록인 못 정함」으로 센다.
      */
     private static Map<String, List<RegistrantLookup.Rename>> renames(IdentitySource source, Set<String> symbols, LocalDate from,
                                                                       LocalDate to) throws DataSourceException {
         Map<String, List<RegistrantLookup.Rename>> out = new HashMap<>();
         List<String> all = new ArrayList<>(new java.util.TreeSet<>(symbols));
-        List<IdentitySource.IdentityEvent> events = new ArrayList<>();
         // 기호를 URL 하나에 붙여 묻는 조회라 나눠 묻는다(사건 기호 약 1,000).
         for (int i = 0; i < all.size(); i += RENAME_SYMBOLS_PER_CALL) {
-            events.addAll(source.identityEvents(all.subList(i, Math.min(all.size(), i + RENAME_SYMBOLS_PER_CALL)), from, to));
-        }
-        for (IdentitySource.IdentityEvent ev : events) {
-            if (!"name_change".equals(ev.type())) {
-                continue;
-            }
-            String[] pair = ev.detail().split(" ")[0].split("→");
-            if (pair.length == 2 && !pair[0].equals(pair[1])) {
-                out.computeIfAbsent(pair[1], k -> new ArrayList<>()).add(new RegistrantLookup.Rename(pair[0], pair[1], ev.date()));
+            for (IdentitySource.SymbolChange c : source.symbolChanges(all.subList(i, Math.min(all.size(), i + RENAME_SYMBOLS_PER_CALL)),
+                    from, to)) {
+                out.computeIfAbsent(c.to(), k -> new ArrayList<>()).add(new RegistrantLookup.Rename(c.from(), c.to(), c.date()));
             }
         }
         return out;

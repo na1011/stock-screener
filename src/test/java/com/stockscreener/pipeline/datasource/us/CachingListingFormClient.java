@@ -40,6 +40,24 @@ public final class CachingListingFormClient extends SecListingFormClient {
     }
 
     @Override
+    public List<SecDailyIndexClient.IndexLine> candidateLines(LocalDate from, LocalDate to, java.util.Set<String> forms)
+            throws com.stockscreener.pipeline.datasource.DataSourceException {
+        Path f = dir.resolve("cand-%s-%s-%s.tsv".formatted(from, to, String.join("_", new java.util.TreeSet<>(forms)).replace('/', '-')));
+        try {
+            if (Files.exists(f)) {
+                return Files.readAllLines(f).stream().map(l -> l.split("\t", -1)).map(c -> new SecDailyIndexClient.IndexLine(
+                        c[0], Long.parseLong(c[1]), LocalDate.parse(c[2]), c[3], c[4])).toList();
+            }
+            List<SecDailyIndexClient.IndexLine> got = super.candidateLines(from, to, forms);
+            Files.write(f, got.stream().map(l -> String.join("\t", l.form(), String.valueOf(l.cik()), l.filed().toString(),
+                    l.accession(), l.company())).toList());
+            return got;
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    @Override
     public Optional<byte[]> document(long cik, String accession, String form)
             throws com.stockscreener.pipeline.datasource.DataSourceException {
         Path f = dir.resolve("doc-%d-%s.bin".formatted(cik, accession));

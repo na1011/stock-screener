@@ -176,6 +176,27 @@ class ListingFormReaderTest {
                 .hasValueSatisfying(line -> assertThat(line.letter()).isEmpty());
     }
 
+    /** Two Harbors — 표지 기호마다 클래스 축 + 거래소 축을 단다. 상장 판정 표지는 그 줄을 받는다(R-D6-0 · 버리면 「표지 없음」). */
+    @Test
+    void coverLinesWithAListingsExchangeAxisAreRead() throws Exception {
+        ClassFacts two = cover("two-10q-2026-07-29-cover.xml", 1465740);
+
+        assertThat(ListingCover.lineFor(two, "TWO")).hasValueSatisfying(line -> {
+            assertThat(line.venue()).contains(new Venue("NYSE", true));
+            assertThat(line.common()).isTrue();
+        });
+        assertThat(ListingCover.lines(two)).extracting(ListingCover.Line::symbol).contains("TWO", "TWOD");
+    }
+
+    /** SunOpta — 이중 상장(STKL · NASDAQ · SOY · TSX)이 클래스 축 없이 거래소 축 + 보통주 구성요소 축으로 온다(R-D6-0). 두 줄이 안 겹친다. */
+    @Test
+    void dualListedCoverKeepsALinePerExchange() throws Exception {
+        ClassFacts stkl = cover("stkl-10k-2026-03-04-cover.xml", 351834);
+
+        assertThat(ListingCover.lines(stkl)).extracting(ListingCover.Line::symbol).containsExactlyInAnyOrder("STKL", "SOY");
+        assertThat(ListingCover.lineFor(stkl, "STKL")).hasValueSatisfying(line -> assertThat(line.venue()).contains(new Venue("Nasdaq", true)));
+    }
+
     @Test
     void unknownExchangeNameIsNotGuessed() {
         assertThat(Venue.ofName("Some Regional Exchange")).isEmpty();

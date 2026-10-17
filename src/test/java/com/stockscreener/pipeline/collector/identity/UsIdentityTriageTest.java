@@ -316,6 +316,7 @@ class UsIdentityTriageTest {
             eve.clear();
             eveOn.clear();
             assets.clear();
+            symbolChanges.clear();
             failListing = false;
         }
 
@@ -383,6 +384,13 @@ class UsIdentityTriageTest {
         @Override
         public List<EndEvent> endEvents(LocalDate from, LocalDate to) {
             return ends.stream().filter(e -> !e.effective().isBefore(from) && !e.effective().isAfter(to)).toList();
+        }
+
+        final List<SymbolChange> symbolChanges = new ArrayList<>();
+
+        @Override
+        public List<SymbolChange> symbolChanges(Collection<String> symbols, LocalDate from, LocalDate to) {
+            return symbolChanges.stream().filter(c -> symbols.contains(c.from()) || symbols.contains(c.to())).toList();
         }
 
         /** 단건 이름 — 신원 판정은 안 부른다(폐지 실체 인입만). */
