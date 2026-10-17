@@ -78,6 +78,31 @@ class AlpacaPriceAdapterTest {
     }
 
     @Test
+    @DisplayName("닻이 있는 행은 표지가 아니라 닻 기호 + asof로 묻는다 — 개명 뒤에도 같은 실체다(ADR-0180)")
+    void asksTheAnchorEntity() throws Exception {
+        enqueue(200, fixture("bars-ok.json"));
+        // 표지는 개명 뒤 기호(HOS꼴)이고 닻은 행이 생긴 날의 기호다. 픽스처는 AAPL 키로 온다 — 응답 키는 요청 기호다.
+        SecurityRef renamed = new SecurityRef(1L, "US", "HOS", new SecurityRef.Identity(
+                "AAPL", LocalDate.of(2026, 8, 28), null, null, null, List.of()));
+
+        List<RawPriceBar> bars = adapter().fetchDailyBars(renamed, FROM, TO);
+
+        String query = URLDecoder.decode(server.takeRequest().getPath(), StandardCharsets.UTF_8);
+        assertThat(query).contains("symbols=AAPL").contains("asof=2026-08-28").doesNotContain("HOS");
+        assertThat(bars).as("요청 기호 키의 봉을 읽는다").hasSize(3);
+    }
+
+    @Test
+    @DisplayName("닻이 없는 행(국내 · 시험)은 asof를 안 보낸다 — 소스 기본 = 오늘 그 기호의 실체")
+    void omitsAsOfWithoutAnchor() throws Exception {
+        enqueue(200, fixture("bars-ok.json"));
+
+        adapter().fetchDailyBars(AAPL, FROM, TO);
+
+        assertThat(URLDecoder.decode(server.takeRequest().getPath(), StandardCharsets.UTF_8)).doesNotContain("asof");
+    }
+
+    @Test
     @DisplayName("IMPORTANT — feed·adjustment·limit을 명시한다. 기본값에 기대면 조용히 다른 값이 온다")
     void sendsExplicitParameters() throws Exception {
         enqueue(200, fixture("bars-ok.json"));

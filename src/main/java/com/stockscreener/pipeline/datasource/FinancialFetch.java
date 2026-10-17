@@ -21,7 +21,7 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
                              boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
                              Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
                              List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace,
-                             List<DataSourceException.Kind> unfetchedClassFacts) {
+                             List<DataSourceException.Kind> unfetchedClassFacts, Long registrant) {
 
     public FinancialFetch {
         filingTrace = filingTrace == null ? FilingTrace.NONE : filingTrace;
@@ -31,6 +31,16 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
         supplementedVintages = supplementedVintages == null ? Set.of() : Set.copyOf(supplementedVintages);
         unfetchedSupplements = unfetchedSupplements == null ? List.of() : List.copyOf(unfetchedSupplements);
         unfetchedClassFacts = unfetchedClassFacts == null ? List.of() : List.copyOf(unfetchedClassFacts);
+    }
+
+    /** 등록인을 안 내는 소스용(국내 · 시험). */
+    public FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
+                          boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
+                          Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
+                          List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace,
+                          List<DataSourceException.Kind> unfetchedClassFacts) {
+        this(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages, vintagesUncertain,
+                unfetchedSupplements, filingTrace, unfetchedClassFacts, null);
     }
 
     /** 클래스 축 재료를 안 받는 소스·갈래용(관문 꺼짐 포함). */
@@ -136,13 +146,21 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
     /** 같은 결과에 공시 근거를 싣는다. */
     public FinancialFetch withFilingTrace(FilingTrace trace) {
         return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
-                vintagesUncertain, unfetchedSupplements, trace, unfetchedClassFacts);
+                vintagesUncertain, unfetchedSupplements, trace, unfetchedClassFacts, registrant);
     }
 
     /** 같은 결과에 받지 못한 클래스 축 인스턴스를 싣는다. */
     public FinancialFetch withUnfetchedClassFacts(List<DataSourceException.Kind> kinds) {
         return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
-                vintagesUncertain, unfetchedSupplements, filingTrace, kinds);
+                vintagesUncertain, unfetchedSupplements, filingTrace, kinds, registrant);
+    }
+
+    /**
+     * 이 수집이 물은 등록인(미국 SEC CIK · ADR-0180). 국내·시험은 {@code null}이다. 수집기는 행에 등록인이 없고 저장된 재무 행도
+     * 없을 때만 이것을 행에 묶는다 — 저장된 판이 없으니 섞일 것이 없다. 재무 행이 이미 있는 행은 포함 검사(sec-cik-bind)로만 묶는다.
+     */
+    public Long registrant() {
+        return registrant;
     }
 
     /** 부재 축을 안 보고 판 이력도 전부 내지 않는 소스용. */

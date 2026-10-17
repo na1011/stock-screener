@@ -97,7 +97,9 @@ public class SecEdgarCompanyProfileAdapter implements CompanyProfileDataSource {
     @Override
     public Optional<CompanyProfile> fetchProfile(SecurityRef security) throws DataSourceException {
         requireUserAgent();
-        Optional<Long> cik = cikCache.findCik(security.ticker());
+        // 행에 묶인 등록인이 먼저다(ADR-0180 — 재무와 같은 등록인의 업종이어야 한다).
+        Long bound = security.identity().secCik();
+        Optional<Long> cik = bound != null ? Optional.of(bound) : cikCache.findCik(security.ticker());
         // 낡은 판의 부재는 findCik가 TRANSIENT로 던진다 — 여기 오는 빈 값은 신선한 판의 부재다(ADR-0174).
         if (cik.isEmpty()) {
             log.info("SEC 매핑 파일에 없는 티커라 업종을 못 받는다. ticker={}", security.ticker());

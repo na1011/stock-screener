@@ -142,7 +142,10 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     public FinancialFetch fetchReports(SecurityRef security, int fromFiscalYear)
             throws DataSourceException {
         requireUserAgent();
-        Optional<Long> cik = cikCache.findCik(security.ticker());
+        // 행에 묶인 등록인이 먼저다(ADR-0180) — 오늘 티커 파일은 교체·재사용 기호에서 다른 등록인을 준다(REAX · XRPN). 묶이지 않은
+        // 행(재무 행 0 · 이름 축)만 오늘 파일로 푼다.
+        Long bound = security.identity().secCik();
+        Optional<Long> cik = bound != null ? Optional.of(bound) : cikCache.findCik(security.ticker());
         if (cik.isEmpty()) {
             // 신선한 매핑 판에 없다 — 소스가 결정적으로 답했다(ADR-0174 · 상장폐지 종목은 그 파일에서 빠진다). 낡은 판의 부재는
             // findCik가 TRANSIENT로 던진다.
@@ -200,7 +203,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // us-gaap를 통째로 안 싣는다(ADR-0173 — 83 CIK 표본 87건). 보충이 못 실은 공시는 그 제출일을 따로 넘겨 지킨다.
         return new FinancialFetch(result.reports(), result.absences(), true,
                 supplement.unconfirmedVintages(), supplement.supplementedVintages(), supplement.vintagesUncertain(),
-                supplement.unfetched(), FilingTrace.ofAccessions(carried), unfetchedClassFacts);
+                supplement.unfetched(), FilingTrace.ofAccessions(carried), unfetchedClassFacts, cik.get());
     }
 
     /**

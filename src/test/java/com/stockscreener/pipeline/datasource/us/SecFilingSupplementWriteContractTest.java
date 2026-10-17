@@ -87,11 +87,11 @@ class SecFilingSupplementWriteContractTest {
                 new SecTickerCikCache(factory, properties, limiter, base, 1), base, false, supplement);
         DataSourceRegistry registry = new DataSourceRegistry(List.of(), List.of(adapter), List.of(), List.of(),
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
-        collector = new FinancialCollector(registry, writer, absenceWriter);
+        collector = new FinancialCollector(registry, writer, absenceWriter, jdbcTemplate);
         SecEdgarFinancialAdapter oldAdapter = new SecEdgarFinancialAdapter(factory, properties, limiter,
                 new SecTickerCikCache(factory, properties, limiter, base, 1), base);
         beforeSupplement = new FinancialCollector(new DataSourceRegistry(List.of(), List.of(oldAdapter), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of()), writer, absenceWriter);
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of()), writer, absenceWriter, jdbcTemplate);
         long stockId = jdbcTemplate.queryForObject(
                 "INSERT INTO stock (market_code, ticker, name) VALUES ('US', 'FIX', '픽스처') RETURNING id", Long.class);
         fix = new SecurityRef(stockId, "US", "FIX");
@@ -247,6 +247,47 @@ class SecFilingSupplementWriteContractTest {
         assertThat(outcome.retractionStopped()).isTrue();
         assertThat(rows()).as("X의 판을 지운다는 근거가 없다 — 회수가 멈춘다")
                 .containsExactly(X_FILED + "|950|false|0", Y_FILED + "|1000|true|1");
+    }
+
+    @Test
+    @DisplayName("재무 행이 없던 행은 첫 FR이 물은 등록인을 묶는다 — 저장된 판이 없으니 섞일 것이 없다(ADR-0180)")
+    void firstFinancialsBindTheRegistrant() throws Exception {
+        companyFacts(true);
+        collect();
+
+        assertThat(secCik()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("재무 행이 이미 있는 행은 첫 FR로 묶지 않는다 — 그 행의 등록인은 포함 검사(sec-cik-bind)로만 정한다")
+    void existingFinancialsAreNotBoundByARefill() throws Exception {
+        companyFacts(true);
+        collect();
+        jdbcTemplate.update("UPDATE stock SET sec_cik = NULL WHERE id = ?", fix.stockId());
+
+        collect();
+
+        assertThat(secCik()).as("오늘 파일이 다른 등록인을 줄 수 있다(REAX꼴) — 저장 판과 대조 없이 묶지 않는다").isNull();
+    }
+
+    @Test
+    @DisplayName("묶인 등록인이 오늘 티커 파일보다 먼저다 — 교체 기호의 새 등록인 companyfacts를 안 받는다(ADR-0180 · ★16)")
+    void boundRegistrantWinsOverTodaysFile() throws Exception {
+        companyFacts(true);
+        // 오늘 파일은 FIX를 다른 등록인(CIK 2)으로 준다 — 묶인 1이 이겨야 한다.
+        ok("/files/company_tickers_exchange.json", """
+                {"fields":["cik","name","ticker","exchange"],"data":[[2,"새 등록인","FIX","Nasdaq"]]}""");
+        SecurityRef bound = new SecurityRef(fix.stockId(), "US", "FIX", new SecurityRef.Identity(
+                null, null, 1L, null, null, List.of()));
+
+        collector.collectDetailed(bound, FROM, FinancialWriter.WriteMode.FILL_MISSING, false);
+
+        assertThat(rows()).as("CIK 1의 판이 들어왔다").isNotEmpty();
+        assertThat(secCik()).as("이미 묶인 행은 다시 쓰지 않는다 — 행의 값은 시험이 안 묶었으니 그대로 null").isNull();
+    }
+
+    private Long secCik() {
+        return jdbcTemplate.queryForObject("SELECT sec_cik FROM stock WHERE id = ?", Long.class, fix.stockId());
     }
 
     private void collect() throws Exception {

@@ -138,7 +138,10 @@ public class AlpacaPriceAdapter implements PriceDataSource {
                     "구간이 뒤집혔거나 비었다: " + from + " ~ " + to);
         }
 
-        String symbol = security.ticker();
+        // 표지가 아니라 실체로 묻는다(ADR-0180) — 닻 기호 + 닻 날짜의 asof가 개명 뒤에도 같은 실체를 준다(HLX@08-28 = HOS).
+        // 응답 키는 요청 기호다(실측 · alpaca-bars.md §asof).
+        String symbol = security.barSymbol();
+        LocalDate asOf = security.barAsOf();
         Instant end = clampEnd(to);
         Instant windowStart = from.atStartOfDay(ZoneOffset.UTC).toInstant();
         if (!end.isAfter(windowStart)) {
@@ -152,7 +155,7 @@ public class AlpacaPriceAdapter implements PriceDataSource {
         int page = 0;
         do {
             String context = "bars %s %s~%s page=%d".formatted(symbol, from, to, page + 1);
-            ResponseEntity<String> response = call(symbol, from, end, pageToken, context);
+            ResponseEntity<String> response = call(symbol, asOf, from, end, pageToken, context);
             AlpacaResponse.Envelope envelope = AlpacaResponse.requireBars(
                     response.getStatusCode(), response.getBody(), SOURCE_NAME, context);
             for (JsonNode node : envelope.value().path(symbol)) {
@@ -186,7 +189,7 @@ public class AlpacaPriceAdapter implements PriceDataSource {
         return requested.isBefore(safe) ? requested : safe;
     }
 
-    private ResponseEntity<String> call(String symbol, LocalDate from, Instant end,
+    private ResponseEntity<String> call(String symbol, LocalDate asOf, LocalDate from, Instant end,
                                           String pageToken, String context)
             throws DataSourceException {
         if (!rateLimiter.hasDailyQuota()) {
@@ -214,6 +217,9 @@ public class AlpacaPriceAdapter implements PriceDataSource {
                                 .queryParam("adjustment", "raw")
                                 .queryParam("limit", PAGE_LIMIT)
                                 .queryParam("sort", "asc");
+                        if (asOf != null) {
+                            uri.queryParam("asof", asOf.toString());
+                        }
                         if (pageToken != null) {
                             uri.queryParam("page_token", pageToken);
                         }

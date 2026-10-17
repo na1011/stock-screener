@@ -64,14 +64,19 @@ public class StockRegistrar {
         }
 
         SecurityDescriptor descriptor = describe(marketCode, ticker);
+        // 미국 행은 생기는 순간 닻을 박는다(ADR-0180) — 그 기호가 오늘 가리키는 실체가 이 행이다. 국내는 닻이 없다.
         jdbcTemplate.update("""
                 INSERT INTO stock (market_code, ticker, name, name_en, sector, listed_on,
-                                   listing_exchange, is_active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, true, now(), now())
+                                   listing_exchange, is_active, created_at, updated_at,
+                                   alpaca_anchor_symbol, alpaca_anchor_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, true, now(), now(),
+                        CASE WHEN ? = 'US' THEN CAST(? AS varchar) END,
+                        CASE WHEN ? = 'US' THEN (now() AT TIME ZONE 'America/New_York')::date END)
                 ON CONFLICT (market_code, ticker) DO NOTHING
                 """,
                 marketCode, ticker, descriptor.name(), descriptor.nameEn(),
-                descriptor.sector(), descriptor.listedOn(), descriptor.listingExchange());
+                descriptor.sector(), descriptor.listedOn(), descriptor.listingExchange(),
+                marketCode, ticker, marketCode);
 
         Long created = findId(marketCode, ticker);
         if (created == null) {
@@ -656,10 +661,29 @@ public class StockRegistrar {
             return List.of();
         }
         String placeholders = String.join(",", java.util.Collections.nCopies(stockIds.size(), "?"));
-        return jdbcTemplate.query(
-                "SELECT id, market_code, ticker FROM stock WHERE id IN (" + placeholders + ") ORDER BY id",
-                (rs, rowNum) -> new SecurityRef(
-                        rs.getLong("id"), rs.getString("market_code"), rs.getString("ticker")),
+        Map<Long, List<SecurityRef.SymbolEra>> eras = new java.util.HashMap<>();
+        jdbcTemplate.query("SELECT stock_id, symbol, valid_from, valid_to FROM stock_symbol_era WHERE stock_id IN ("
+                        + placeholders + ") ORDER BY stock_id, valid_to",
+                rs -> {
+                    eras.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(new SecurityRef.SymbolEra(
+                            rs.getString("symbol"), rs.getObject("valid_from", LocalDate.class),
+                            rs.getObject("valid_to", LocalDate.class)));
+                }, stockIds.toArray());
+        // 미국 행은 저장된 신원을 싣는다(ADR-0180) — 어댑터가 표지가 아니라 닻·등록인으로 소스에 묻는다.
+        return jdbcTemplate.query("""
+                SELECT id, market_code, ticker, alpaca_anchor_symbol, alpaca_anchor_date, sec_cik, era_from, era_to
+                FROM stock WHERE id IN (%s) ORDER BY id
+                """.formatted(placeholders),
+                (rs, rowNum) -> {
+                    long id = rs.getLong("id");
+                    return new SecurityRef(id, rs.getString("market_code"), rs.getString("ticker"),
+                            new SecurityRef.Identity(rs.getString("alpaca_anchor_symbol"),
+                                    rs.getObject("alpaca_anchor_date", LocalDate.class),
+                                    rs.getObject("sec_cik", Long.class),
+                                    rs.getObject("era_from", LocalDate.class),
+                                    rs.getObject("era_to", LocalDate.class),
+                                    eras.getOrDefault(id, List.of())));
+                },
                 stockIds.toArray());
     }
 

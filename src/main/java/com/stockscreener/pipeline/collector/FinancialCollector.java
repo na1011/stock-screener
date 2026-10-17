@@ -7,6 +7,9 @@ import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -18,15 +21,19 @@ import java.util.List;
 @Component
 public class FinancialCollector {
 
+    private static final Logger log = LoggerFactory.getLogger(FinancialCollector.class);
+
     private final DataSourceRegistry registry;
     private final FinancialWriter writer;
     private final FinancialColumnAbsenceWriter absenceWriter;
+    private final JdbcTemplate jdbcTemplate;
 
     public FinancialCollector(DataSourceRegistry registry, FinancialWriter writer,
-                              FinancialColumnAbsenceWriter absenceWriter) {
+                              FinancialColumnAbsenceWriter absenceWriter, JdbcTemplate jdbcTemplate) {
         this.registry = registry;
         this.writer = writer;
         this.absenceWriter = absenceWriter;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -79,6 +86,9 @@ public class FinancialCollector {
         FinancialDataSource source = registry.financialSource(security.marketCode());
         FinancialFetch fetch = source.fetchReports(security, fromFiscalYear);
         List<RawFinancialReport> reports = fetch.reports();
+        // 등록인 묶기(ADR-0180)는 쓰기 **전**의 사실로 가른다 — 저장된 재무 행이 0이어야 섞일 판이 없다. 쓰기 뒤에 재면 방금 쓴 행이 보인다.
+        boolean bindRegistrant = fetch.registrant() != null && security.identity().secCik() == null
+                && !hasFinancialRows(security.stockId());
         // MUST: 보고서보다 먼저 쓰지 않는다 — 부재 판정은 이번 수집의 사실이고, 보고서 쓰기가
         // 실패해 롤백되면 그 판정도 함께 되돌아가야 한다. 같은 트랜잭션은 아니지만 순서가
         // 그 뜻을 지킨다(쓰기가 던지면 부재 행이 안 남는다).
@@ -88,8 +98,21 @@ public class FinancialCollector {
                         fetch.vintagesUncertain()));
         absenceWriter.write(security.stockId(), source.sourceName(), fetch.absences(),
                 LocalDate.now());
+        if (bindRegistrant && !reports.isEmpty()) {
+            int bound = jdbcTemplate.update("UPDATE stock SET sec_cik = ?, updated_at = now() WHERE id = ? AND sec_cik IS NULL",
+                    fetch.registrant(), security.stockId());
+            if (bound == 1) {
+                log.info("첫 재무로 등록인을 묶었다. stock_id={} ticker={} cik={}", security.stockId(), security.ticker(),
+                        fetch.registrant());
+            }
+        }
         // 받지 못한 보충은 종목을 세우지 않는다(보충 계약) — 잡이 시장 판정에 쓰도록 결과에 실어 넘긴다(ADR-0174).
         return outcome.withUnfetchedSupplements(fetch.unfetchedSupplements()).withFilingTrace(fetch.filingTrace())
                 .withUnfetchedClassFacts(fetch.unfetchedClassFacts());
+    }
+
+    private boolean hasFinancialRows(long stockId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM financial_statement WHERE stock_id = ?)", Boolean.class, stockId));
     }
 }

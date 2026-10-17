@@ -332,12 +332,17 @@ public class DailyUpdateJob {
             // 보존 창의 과거 편입 — 구간만 받고 지표는 매 평일 화해(ADR-0166)가 다시 쓴다.
             // MUST NOT: 여기서 지표 단계를 돌리지 않는다. 그 종목은 지금 편입이 아니라 그날 백분위
             // 모집단에 없고, 원본층은 14:20 ①이 창 편입 전원으로 다시 쓴다.
+            // 참조는 행에서 다시 읽는다 — 미국 행의 닻·등록인이 실려야 어댑터가 그 실체로 묻는다(ADR-0180).
+            Map<Long, SecurityRef> pastRefs = new LinkedHashMap<>();
+            for (SecurityRef ref : stockRegistrar.toSecurityRefs(gapRunsByStock.keySet().stream()
+                    .filter(id -> !currentIds.contains(id)).toList())) {
+                pastRefs.put(ref.stockId(), ref);
+            }
             for (Map.Entry<Long, List<PriceGapRun>> entry : gapRunsByStock.entrySet()) {
                 if (currentIds.contains(entry.getKey())) {
                     continue;
                 }
-                PriceGapRun first = entry.getValue().get(0);
-                execution.process(new SecurityRef(first.stockId(), first.marketCode(), first.ticker()),
+                execution.process(pastRefs.get(entry.getKey()),
                         CollectionPhase.PRICE_GAP, security -> fillGaps(security, entry.getValue(), gapTally));
             }
 
