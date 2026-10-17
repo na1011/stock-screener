@@ -110,6 +110,19 @@ class StockFoldTest {
     }
 
     @Test
+    @DisplayName("T의 열린 편입이 S의 같은 유니버스 편입을 덮으면 같은 편입이다 — S 행을 버린다(HKIT/BDAI꼴)")
+    void coveredMembershipIsDropped() {
+        jdbc.update("INSERT INTO universe_membership (universe_code, stock_id, effective_from) VALUES ('US_LISTED', ?, DATE '2026-08-29')", t);
+        jdbc.update("INSERT INTO universe_membership (universe_code, stock_id, effective_from) VALUES ('US_LISTED', ?, DATE '2026-10-17')", s);
+
+        assertThat(fold.plan(t, s).tables().get("universe_membership")).isEqualTo(new StockFold.Tally(0, 1, 0));
+        fold.apply(t, s, RENAMED);
+
+        assertThat(jdbc.queryForList("SELECT effective_from || '|' || coalesce(effective_to::text, '열림') FROM universe_membership WHERE stock_id = ?",
+                String.class, t)).containsExactly("2026-08-29|열림");
+    }
+
+    @Test
     @DisplayName("가격 — 같은 날 같은 봉은 버리고 다른 날은 옮긴다 · 같은 날 다른 봉이면 멈춘다")
     void pricesCompareOnOverlap() {
         bar(t, LocalDate.of(2026, 10, 15), "10");

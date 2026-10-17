@@ -79,7 +79,8 @@ public class FoldPlanner {
         IdentitySource.RegistrantFile file = source.registrantFile();
 
         List<Row> news = rows("created_at >= ?", since);
-        List<Row> olds = rows("created_at < ?", since).stream().filter(r -> !listed.contains(r.ticker())).toList();
+        // 옛 행은 목록 여부와 무관하게 본다 — 개명 뒤에도 목록이 옛 기호를 활성으로 싣는다(HKIT·BDAI 2026-10-17).
+        List<Row> olds = rows("created_at < ?", since);
         LocalDate from = asOf.minusDays(UsIdentityTriage.WINDOW_DAYS);
         Map<Long, List<EntityBar>> series = new HashMap<>();
         series.putAll(anchorSeries(source, news, from, asOf));
@@ -115,17 +116,18 @@ public class FoldPlanner {
 
         List<Pair> out = new ArrayList<>();
         for (Map.Entry<Row, Row> entry : pairs.entrySet()) {
-            out.add(decide(source, file, entry.getValue(), entry.getKey(), series, literal, asOf));
+            out.add(decide(source, file, entry.getValue(), entry.getKey(), series, literal, asOf, listed));
         }
         return new Result(out, unmatched, uncovered);
     }
 
     private Pair decide(IdentitySource source, IdentitySource.RegistrantFile file, Row t, Row s,
-                        Map<Long, List<EntityBar>> series, Map<String, List<EntityBar>> literal, LocalDate asOf)
-            throws DataSourceException {
+                        Map<Long, List<EntityBar>> series, Map<String, List<EntityBar>> literal, LocalDate asOf,
+                        Set<String> listedNow) throws DataSourceException {
         int overlap = IdentityJudge.overlap(series.get(t.id()), series.get(s.id()));
         LocalDate renamedOn = IdentityJudge.renameDate(literal.getOrDefault(s.ticker(), List.of()), series.get(s.id()));
-        String basis = "%s 닻 계열 = %s 닻 계열(겹침 %d) · %s 첫 봉 %s".formatted(t.ticker(), s.ticker(), overlap, s.ticker(), renamedOn);
+        String basis = "%s 닻 계열 = %s 닻 계열(겹침 %d) · %s 첫 봉 %s%s".formatted(t.ticker(), s.ticker(), overlap, s.ticker(), renamedOn,
+                listedNow.contains(t.ticker()) ? " · 옛 기호도 목록에 활성" : "");
         if (renamedOn == null) {
             return stop(t, s, basis + " · 개명일을 못 읽는다(새 기호 문자열의 봉이 실체 계열과 안 이어진다)");
         }

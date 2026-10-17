@@ -150,6 +150,16 @@ public final class IdentityJudge {
                 unclaimed.add(symbol);
             }
         }
+        // 목록에 있고 같은 실체로 판정된 행도 맞춘다 — 목록은 상장 사실이 아니어서(ADR-0171) 개명 뒤에도 옛 기호를 한동안 활성으로 싣는다
+        // (실측 2026-10-17: HKIT·BDAI 둘 다 단건 active · 봉 같음). 그 행을 빼면 같은 실체의 두 번째 기호가 매주 새 행이 된다.
+        Set<Long> orphanIds = new LinkedHashSet<>();
+        orphans.forEach(o -> orphanIds.add(o.id()));
+        List<OpenRow> matchable = new ArrayList<>(orphans);
+        for (OpenRow row : rows) {
+            if (!orphanIds.contains(row.id()) && listed.contains(row.ticker())) {
+                matchable.add(row);
+            }
+        }
         Map<String, List<OpenRow>> matchesBySymbol = new LinkedHashMap<>();
         Map<Long, List<String>> matchesByOrphan = new HashMap<>();
         for (String symbol : unclaimed) {
@@ -157,7 +167,7 @@ public final class IdentityJudge {
             if (today.size() < MIN_OVERLAP) {
                 continue; // 신규 상장 · 봉 없는 기호 — 어느 행과도 겹침 20에 못 닿는다
             }
-            for (OpenRow orphan : orphans) {
+            for (OpenRow orphan : matchable) {
                 if (matchesAcrossSymbols(anchorSeries.getOrDefault(orphan.id(), List.of()), today)) {
                     matchesBySymbol.computeIfAbsent(symbol, k -> new ArrayList<>()).add(orphan);
                     matchesByOrphan.computeIfAbsent(orphan.id(), k -> new ArrayList<>()).add(symbol);
@@ -178,6 +188,14 @@ public final class IdentityJudge {
             }
             OpenRow t = matched.get(0);
             claimed.add(t.id());
+            if (!orphanIds.contains(t.id())) {
+                // 같은 실체가 두 기호로 목록에 있다 — 어느 쪽이 지금 기호인지 원장(목록)이 안 준다. 새 기호를 등록하지 않고 멈춘다. 옛 기호가
+                // 목록에서 빠지면 그 행이 끊긴 행이 되어 다음 판정이 개명으로 잇는다.
+                verdicts.add(new Ambiguous(t.id(), symbol, "%s의 닻 계열 = %s 오늘 계열(겹침 %d)인데 %s도 목록에 활성 — 같은 실체의 두 기호"
+                        .formatted(t.ticker(), symbol, overlap(anchorSeries.get(t.id()), todaySeries.get(symbol)), t.ticker())));
+                blocked.add(symbol);
+                continue;
+            }
             List<String> rivals = matchesByOrphan.get(t.id());
             if (rivals.size() > 1) {
                 verdicts.add(new Ambiguous(t.id(), symbol, "행 %s의 닻 계열이 기호 %d과 같다 — %s"

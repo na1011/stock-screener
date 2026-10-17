@@ -195,6 +195,21 @@ class IdentityJudgeTest {
         assertThat(result.needsLiteral()).containsExactly("HOS");
     }
 
+    @Test
+    @DisplayName("옛 기호가 아직 목록에 활성인 개명(HKIT·BDAI꼴) — 새 기호를 등록하지 않고 멈춘다(같은 실체의 두 기호)")
+    void secondSymbolOfAListedEntityIsBlocked() {
+        row(1, "HKIT", 1742341L, true, series(16, 0, 30));
+        today.put("HKIT", series(16, 0, 30));
+        today.put("BDAI", series(16, 0, 30));
+        literal.put("BDAI", series(16, 20, 30));
+
+        Result result = judge("HKIT", "BDAI");
+
+        assertThat(result.verdicts()).singleElement().isInstanceOfSatisfying(Ambiguous.class,
+                a -> assertThat(a.evidence()).contains("두 기호"));
+        assertThat(result.blockedSymbols()).containsExactly("BDAI");
+    }
+
     private Result judge(String... listed) {
         return IdentityJudge.judge(rows, Set.of(listed), anchor, today, literal, s -> Optional.ofNullable(file.get(s)));
     }

@@ -277,24 +277,32 @@ public class StockFold {
 
     /**
      * 편입 — 「T의 {@code US_LISTED}가 그날 닫히고 S의 같은 유니버스가 그날 열렸다」는 같은 실체의 이음이다: S 행을 지우고 T의 끝을 S의
-     * 끝으로 둔다. 그 밖 S 편입은 T와 기간이 안 겹치면 옮기고, 겹치면 멈춘다.
+     * 끝으로 둔다. T의 같은 유니버스 구간이 S 구간을 통째로 덮으면 같은 편입이다 — S 행을 버린다(목록이 옛 기호와 새 기호를 둘 다 활성으로
+     * 실어 두 행이 같은 날 함께 편입된 꼴 · HKIT/BDAI 2026-10-17). 그 밖 S 편입은 T와 기간이 안 겹치면 옮기고, 일부만 겹치면 멈춘다.
      */
     private Tally countMemberships(long target, long source) {
         Map<String, Object> row = jdbc.queryForMap("""
-                SELECT count(*) FILTER (WHERE seam) AS dropped,
-                       count(*) FILTER (WHERE NOT seam AND NOT overlap) AS moved,
-                       count(*) FILTER (WHERE NOT seam AND overlap) AS conflicting
+                SELECT count(*) FILTER (WHERE seam OR covered) AS dropped,
+                       count(*) FILTER (WHERE NOT seam AND NOT covered AND NOT overlap) AS moved,
+                       count(*) FILTER (WHERE NOT seam AND NOT covered AND overlap) AS conflicting
                 FROM (SELECT EXISTS (SELECT 1 FROM universe_membership t WHERE t.stock_id = ? AND t.universe_code = s.universe_code
                                        AND t.effective_to = s.effective_from) AS seam,
+                             %s AS covered,
                              EXISTS (SELECT 1 FROM universe_membership t WHERE t.stock_id = ? AND t.universe_code = s.universe_code
                                        AND daterange(t.effective_from, t.effective_to) && daterange(s.effective_from, s.effective_to)) AS overlap
                       FROM universe_membership s WHERE s.stock_id = ?) m
-                """, target, target, source);
+                """.formatted(COVERED), target, target, target, source);
         return new Tally(((Number) row.get("moved")).intValue(), ((Number) row.get("dropped")).intValue(),
                 ((Number) row.get("conflicting")).intValue());
     }
 
+    /** T의 같은 유니버스 구간이 S 구간을 통째로 덮는다(자리표시자 하나 — T). */
+    private static final String COVERED = """
+            EXISTS (SELECT 1 FROM universe_membership t WHERE t.stock_id = ? AND t.universe_code = s.universe_code
+                      AND daterange(t.effective_from, t.effective_to) @> daterange(s.effective_from, s.effective_to))""";
+
     private void applyMemberships(long target, long source) {
+        jdbc.update("DELETE FROM universe_membership s WHERE s.stock_id = ? AND " + COVERED, source, target);
         List<Map<String, Object>> seams = jdbc.queryForList("""
                 SELECT s.id AS source_id, t.id AS target_id, s.effective_to FROM universe_membership s
                 JOIN universe_membership t ON t.stock_id = ? AND t.universe_code = s.universe_code AND t.effective_to = s.effective_from
