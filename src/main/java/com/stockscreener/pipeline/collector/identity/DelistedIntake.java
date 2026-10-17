@@ -58,6 +58,11 @@ public class DelistedIntake {
     static final int WINDOW_DAYS = UsIdentityTriage.WINDOW_DAYS;
     /** 개명을 거슬러 볼 효력일 앞 길이 — 표지를 찾는 하한과 같다. */
     static final int RENAME_LOOKBACK_DAYS = 500;
+    /**
+     * 시세 소스에 물을 수 있는 기호 꼴. 끝 사건에는 CVR · 에스크로 · 권리 증서가 CUSIP꼴 기호로 섞여 오고(저장 재료 1,151 중 97 ·
+     * {@code 294ESC017} · {@code 021CVR014}), 그 하나가 묶음 조회 전체를 400으로 거절시킨다 — 묻지 않고 사유와 함께 센다.
+     */
+    static final java.util.regex.Pattern TICKER = java.util.regex.Pattern.compile("[A-Z][A-Z.]{0,6}");
     /** 개명 조회 한 번에 넣는 기호 수. */
     static final int RENAME_SYMBOLS_PER_CALL = 100;
 
@@ -99,7 +104,12 @@ public class DelistedIntake {
 
     public Plan plan(LocalDate from, LocalDate asOf, IdentitySource source, RegistrantLookup registrants) throws DataSourceException {
         Map<String, List<EndEvent>> bySymbol = new LinkedHashMap<>();
+        List<Skip> notTickers = new ArrayList<>();
         for (EndEvent e : source.endEvents(from, asOf)) {
+            if (e.symbol() == null || !TICKER.matcher(e.symbol()).matches()) {
+                notTickers.add(new Skip(e.symbol(), e.effective(), "기호 꼴 아님", e.type() + " " + e.cusip()));
+                continue;
+            }
             bySymbol.computeIfAbsent(e.symbol(), k -> new ArrayList<>()).add(e);
         }
         bySymbol.values().forEach(list -> list.sort(java.util.Comparator.comparing(EndEvent::effective)));
@@ -128,7 +138,7 @@ public class DelistedIntake {
         Map<String, List<RegistrantLookup.Rename>> renames = renames(source, bySymbol.keySet(), from.minusDays(RENAME_LOOKBACK_DAYS), asOf);
 
         List<Intake> intakes = new ArrayList<>();
-        List<Skip> skipped = new ArrayList<>();
+        List<Skip> skipped = new ArrayList<>(notTickers);
         for (Map.Entry<String, List<EndEvent>> entry : bySymbol.entrySet()) {
             String symbol = entry.getKey();
             List<List<EntityBar>> decidedEntities = new ArrayList<>();

@@ -50,10 +50,19 @@ public final class ListingCover {
         return out;
     }
 
-    /** 그 기호의 줄. 같은 기호 줄이 둘 이상이면 비운다(어느 것인지 원장이 안 말한다). */
+    /**
+     * 그 기호의 줄 — <b>기호가 통째로 같은 줄이 먼저다.</b> 표지는 사채 · 우선주 줄도 같은 기호로 시작해 싣는다(Kellanova {@code K} ·
+     * {@code K 29} · {@code K 34} · Comerica {@code CMA} · {@code CMA PrB} — R-D6-0 2026-10-18). 쪼개 담기만 보면 그 줄들이 다 맞아 「하나가
+     * 아님」이 된다. 통째로 같은 줄이 없을 때만 한 사실에 든 여러 기호(「GOOGL, GOOG」)를 쪼개 본다. 어느 쪽이든 둘 이상이면 비운다.
+     */
     public static Optional<Line> lineFor(ClassFacts cover, String symbol) {
         String wanted = DenominatorJudge.nk(symbol);
-        List<Line> found = lines(cover).stream().filter(l -> DenominatorJudge.splitSymbols(l.symbol()).contains(wanted)).toList();
-        return found.size() == 1 ? Optional.of(found.get(0)) : Optional.empty();
+        List<Line> all = lines(cover);
+        List<Line> exact = all.stream().filter(l -> DenominatorJudge.nk(l.symbol()).equals(wanted)).toList();
+        if (!exact.isEmpty()) {
+            return exact.size() == 1 ? Optional.of(exact.get(0)) : Optional.empty();
+        }
+        List<Line> split = all.stream().filter(l -> DenominatorJudge.splitSymbols(l.symbol()).contains(wanted)).toList();
+        return split.size() == 1 ? Optional.of(split.get(0)) : Optional.empty();
     }
 }

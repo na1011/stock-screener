@@ -178,6 +178,16 @@ class DelistedIntakeTest {
                 String.class, ids.get(0))).containsExactly("RNAO|" + renamed);
     }
 
+    @Test
+    @DisplayName("CUSIP꼴 기호(CVR · 에스크로 증서)는 시세 소스에 안 묻고 센다 — 하나가 묶음 조회 전체를 400으로 거절시킨다")
+    void cusipShapedSymbolIsNotAsked() throws Exception {
+        source.ends.add(new IdentitySource.EndEvent("294ESC017", "294ESC017", EFFECTIVE, "cash_merger"));
+
+        DelistedIntake.Plan plan = intake.plan(START, AS_OF, source, lookup);
+
+        assertThat(plan.reasons()).containsEntry("기호 꼴 아님", 1);
+    }
+
     /** 효력일 전날까지 거래하고 끊긴 실체 — 효력일 전날 · 당일 asof 모두 같은 계열을 준다. */
     private void endedEntity(String symbol, int seed, String type) {
         source.eve.put(symbol, series(seed, 0, 29));

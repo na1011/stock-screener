@@ -56,6 +56,11 @@ public class SecRegistrantLookup implements RegistrantLookup {
         List<IndexLine> removals = new ArrayList<>();
         for (IndexLine line : sec.lines(from.minusDays(NAME_INDEX_LEAD_DAYS), asOf, forms)) {
             if (REMOVAL_FORMS.contains(line.form())) {
+                // 일일 색인은 25-NSE를 발행사 줄과 제출 거래소 줄 둘로 싣는다 — 거래소(NYSE LLC 876661 …)는 등록인 후보가 아니다
+                // (R-D6-0 2026-10-18: 사건마다 거래소 CIK의 표지를 헛묻고 있었다 · 확인 규칙이 걸러 결과는 같다).
+                if (Venue.ofName(line.company()).isPresent()) {
+                    continue;
+                }
                 removals.add(line);
                 // 제거 양식 줄의 회사 이름도 그 발행사 이름이다 — 정기 공시 줄이 창 안에 없을 때의 행 이름.
                 filerName.putIfAbsent(line.cik(), line.company());

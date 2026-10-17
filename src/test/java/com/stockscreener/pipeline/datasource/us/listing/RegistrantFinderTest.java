@@ -87,6 +87,16 @@ class RegistrantFinderTest {
                 .isEqualTo(RegistrantFinder.Result.BOUND);
     }
 
+    /** Kellanova — 표지가 사채 줄도 같은 기호로 싣는다(K · K 29 · K 34 · R-D6-0). 통째로 같은 줄이 그 기호다. */
+    @Test
+    void exactSymbolLineWinsOverNotesSharingThePrefix() throws Exception {
+        Map<Long, Cover> covers = Map.of(55067L, cover("10-Q", LocalDate.of(2025, 10, 30),
+                new LinkedHashMap<>(Map.of("K", "NYSE", "K 29", "NYSE", "K 34", "NYSE"))));
+
+        assertThat(RegistrantFinder.find("K", E, List.of(55067L), List.of(), List.of(), lookup(covers)).result())
+                .isEqualTo(RegistrantFinder.Result.BOUND);
+    }
+
     @Test
     void noCoverIsNotBound() throws Exception {
         assertThat(RegistrantFinder.find("CADE", E, List.of(1L), List.of(), List.of(), lookup(Map.of())).result())

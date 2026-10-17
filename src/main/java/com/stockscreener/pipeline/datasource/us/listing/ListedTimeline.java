@@ -32,6 +32,12 @@ import java.util.List;
  */
 public final class ListedTimeline {
 
+    /**
+     * 등록과 제거를 한 이전으로 묶는 창(일 · 효력일 사이). R-D5(2026-10-18)에서 이전 0~19일 · 상향 10~20일이었고 짝 없는 등록 108 중
+     * 120일 안에 제거가 붙는 것이 0이라 이 값에 결과가 민감하지 않다.
+     */
+    public static final int PAIR_DAYS = 30;
+
     public enum Kind { ENTRY, EXIT, TRANSFER, UNRESOLVED, REPLACED, OFF_VENUE }
 
     public enum Verdict { LISTED, UNLISTED, UNKNOWN }

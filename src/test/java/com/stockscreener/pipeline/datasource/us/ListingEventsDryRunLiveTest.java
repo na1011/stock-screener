@@ -41,8 +41,8 @@ import java.util.stream.Collectors;
 @EnabledIfEnvironmentVariable(named = "LISTING_DRY", matches = ".+")
 class ListingEventsDryRunLiveTest {
 
-    /** 짝 창 — 잡의 기본과 같게 둔다. 이 드라이런이 그 값을 정하는 재료를 낸다. */
-    private static final int PAIR_DAYS = 30;
+    /** 짝 창 — 잡과 같은 값. */
+    private static final int PAIR_DAYS = ListedTimeline.PAIR_DAYS;
 
     private record Row(long id, String ticker, long cik, LocalDate anchor, LocalDate eraFrom, LocalDate eraTo, String name) {
         String symbol() {
@@ -75,7 +75,7 @@ class ListingEventsDryRunLiveTest {
         ExternalApiClientFactory factory = new ExternalApiClientFactory();
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("sec-edgar", 480, 0);
         SecFilingClient filings = new SecFilingClient(factory, properties, limiter);
-        SecListingFormClient client = new CachingClient(new SecDailyIndexClient(factory, properties, limiter), filings,
+        SecListingFormClient client = new CachingListingFormClient(new SecDailyIndexClient(factory, properties, limiter), filings,
                 factory, properties, limiter, out.resolve("cache"));
         ListingEventSource source = new ListingEventSource(client);
 
@@ -152,70 +152,6 @@ class ListingEventsDryRunLiveTest {
                         result.forms(), result.byCik().size(), result.unreadable().size(), changed, unknown, unmatched);
         Files.writeString(out.resolve("summary.txt"), summary + "\n");
         System.out.println(summary);
-    }
-
-    /** 받은 원자료를 디스크에 담아 다음 재실행을 0콜로 만든다 — 색인 줄 · 양식 본문 · 표지. */
-    static final class CachingClient extends SecListingFormClient {
-        private final Path dir;
-
-        CachingClient(SecDailyIndexClient daily, SecFilingClient filings, ExternalApiClientFactory factory,
-                      DataSourceProperties properties, TokenBucketRateLimiter limiter, Path dir) throws java.io.IOException {
-            super(daily, filings, factory, properties, limiter);
-            this.dir = Files.createDirectories(dir);
-        }
-
-        @Override
-        public List<SecDailyIndexClient.IndexLine> lines(LocalDate from, LocalDate to, java.util.Set<String> forms)
-                throws com.stockscreener.pipeline.datasource.DataSourceException {
-            Path f = dir.resolve("lines-%s-%s-%s.tsv".formatted(from, to, String.join("_", new java.util.TreeSet<>(forms))));
-            try {
-                if (Files.exists(f)) {
-                    return Files.readAllLines(f).stream().map(l -> l.split("\t", -1)).map(c -> new SecDailyIndexClient.IndexLine(
-                            c[0], Long.parseLong(c[1]), LocalDate.parse(c[2]), c[3], c[4])).toList();
-                }
-                List<SecDailyIndexClient.IndexLine> got = super.lines(from, to, forms);
-                Files.write(f, got.stream().map(l -> String.join("\t", l.form(), String.valueOf(l.cik()), l.filed().toString(),
-                        l.accession(), l.company())).toList());
-                return got;
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
-        }
-
-        @Override
-        public Optional<byte[]> document(long cik, String accession, String form)
-                throws com.stockscreener.pipeline.datasource.DataSourceException {
-            Path f = dir.resolve("doc-%d-%s.bin".formatted(cik, accession));
-            try {
-                if (Files.exists(f)) {
-                    byte[] b = Files.readAllBytes(f);
-                    return b.length == 0 ? Optional.empty() : Optional.of(b);
-                }
-                Optional<byte[]> got = super.document(cik, accession, form);
-                Files.write(f, got.orElse(new byte[0]));
-                return got;
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
-        }
-
-        @Override
-        public Optional<Cover> lastCoverBefore(long cik, LocalDate before, LocalDate since)
-                throws com.stockscreener.pipeline.datasource.DataSourceException {
-            Path f = dir.resolve("cover-%d-%s.json".formatted(cik, before));
-            try {
-                if (Files.exists(f)) {
-                    String[] parts = Files.readString(f).split("\n", 4);
-                    return parts[0].isEmpty() ? Optional.empty() : Optional.of(new Cover(parts[0], parts[1], LocalDate.parse(parts[2]),
-                            com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts.fromJson(parts[3])));
-                }
-                Optional<Cover> got = super.lastCoverBefore(cik, before, since);
-                Files.writeString(f, got.map(c -> c.accession() + "\n" + c.form() + "\n" + c.filed() + "\n" + c.facts().toJson()).orElse(""));
-                return got;
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
-        }
     }
 
     private static String tickers(List<Row> rows) {
