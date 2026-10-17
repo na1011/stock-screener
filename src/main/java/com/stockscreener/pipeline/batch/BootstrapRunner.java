@@ -187,6 +187,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final CandidateSplitJob candidateSplitJob;
     private final StockFoldJob stockFoldJob;
     private final SecCikBindJob secCikBindJob;
+    private final UsDelistedIntakeJob usDelistedIntakeJob;
     private final CandidateIntake candidateIntake;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final BatchExecutionSweeper executionSweeper;
@@ -216,9 +217,11 @@ public class BootstrapRunner implements ApplicationRunner {
                            CandidateSplitJob candidateSplitJob,
                            CandidateIntake candidateIntake,
                            StockFoldJob stockFoldJob,
-                           SecCikBindJob secCikBindJob) {
+                           SecCikBindJob secCikBindJob,
+                           UsDelistedIntakeJob usDelistedIntakeJob) {
         this.stockFoldJob = stockFoldJob;
         this.secCikBindJob = secCikBindJob;
+        this.usDelistedIntakeJob = usDelistedIntakeJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.universeRestoreJob = universeRestoreJob;
         this.initialLoadJob = initialLoadJob;
@@ -440,6 +443,8 @@ public class BootstrapRunner implements ApplicationRunner {
                             java.time.OffsetDateTime.parse(required(args, "since")).toInstant(), flag(args, "apply"));
             case "sec-cik-bind" -> secCikBindJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
                     handCiks(args), flag(args, "apply"));
+            // 과거 날짜 상장 D6 — 행이 없는 폐지 실체를 들인다. 쓰기가 옵트인이다(관문 승인 안에서).
+            case "us-delisted-intake" -> usDelistedIntakeJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, flag(args, "apply"));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill"
@@ -450,7 +455,7 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | corporate-action-review | corporate-action-judge"
                             + " | market-calendar | bar-gap-review"
                             + " | filing-listing | filing-consumption | candidate-consumption | candidate-splits"
-                            + " | refresh-behind | stock-fold | sec-cik-bind");
+                            + " | refresh-behind | stock-fold | sec-cik-bind | us-delisted-intake");
         };
 
         // MUST: 재무나 기업행위를 쓴 잡 뒤에는 기저를 다시 판정한다(ADR-0162).

@@ -47,6 +47,12 @@ public interface IdentitySource {
      */
     List<EndEvent> endEvents(LocalDate from, LocalDate to) throws DataSourceException;
 
+    /**
+     * 시세 소스 단건 — 기호나 CUSIP으로. <b>재사용 기호에서는 오늘 주인을 준다</b>(탐색 {@code US-PAST-LISTING-PLAN-1017.md} ★2 · 49/49) —
+     * 폐지 실체의 이름으로 쓰려면 부르는 쪽이 그 기호가 오늘 목록에 없음을 먼저 본다. 모르면 빈 값.
+     */
+    java.util.Optional<Listed> asset(String symbolOrCusip) throws DataSourceException;
+
     record Listed(String symbol, String name, String exchange) {
     }
 

@@ -315,6 +315,7 @@ class UsIdentityTriageTest {
             ends.clear();
             eve.clear();
             eveOn.clear();
+            assets.clear();
             failListing = false;
         }
 
@@ -382,6 +383,14 @@ class UsIdentityTriageTest {
         @Override
         public List<EndEvent> endEvents(LocalDate from, LocalDate to) {
             return ends.stream().filter(e -> !e.effective().isBefore(from) && !e.effective().isAfter(to)).toList();
+        }
+
+        /** 단건 이름 — 신원 판정은 안 부른다(폐지 실체 인입만). */
+        final Map<String, Listed> assets = new HashMap<>();
+
+        @Override
+        public java.util.Optional<Listed> asset(String symbolOrCusip) {
+            return java.util.Optional.ofNullable(assets.get(symbolOrCusip));
         }
     }
 }

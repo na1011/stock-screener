@@ -175,6 +175,11 @@ public class AlpacaSecIdentityAdapter implements IdentitySource {
         return corporateActions.fetchEndEvents(from, to);
     }
 
+    @Override
+    public java.util.Optional<Listed> asset(String symbolOrCusip) throws DataSourceException {
+        return listing.fetchAsset(symbolOrCusip).map(a -> new Listed(a.symbol(), a.name(), a.exchange()));
+    }
+
     private static <T> T requireSec(T bean, String what) throws DataSourceException {
         if (bean == null) {
             throw new DataSourceException(DataSourceException.Kind.AUTH, SOURCE_NAME,
