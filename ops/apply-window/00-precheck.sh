@@ -10,7 +10,8 @@ r=$(q "$PROD" "select count(*) from batch_execution where status='RUNNING'"); [ 
 [ "$lp" = 1 ] || die "bootRun이 떠 있거나 판정하지 못했다(stray_load_pids rc=$lp)"
 # 그 주 토요일 리밸런싱이 끝났는가 — 요일과 무관하게 본다(토요일 발화가 빠진 주가 있다: 10-03 · 계획 v2 결정 10).
 SAT=$(q "$PROD" "select case when now() < s then s - interval '7 days' else s end from (select (current_date - ((extract(isodow from current_date)::int - 6 + 7) % 7))::timestamp + interval '20 hours' as s) x")
-RB=$(q "$PROD" "select status from batch_execution where job_name='universe-rebalance' and started_at >= '$SAT' order by id desc limit 1")
+# 경계에 5분 여유 — 크론이 20:00 직전에 발화한다(10-17 실행 818이 19:59:59.81에 시작해 「20:00 뒤」를 0.19초 차로 놓쳤다).
+RB=$(q "$PROD" "select status from batch_execution where job_name='universe-rebalance' and started_at >= timestamp '$SAT' - interval '5 minutes' order by id desc limit 1")
 [ "$RB" = SUCCESS ] || die "$SAT 뒤 universe-rebalance가 SUCCESS가 아니다(${RB:-행 없음}) — 손 리밸런싱이 먼저다"
 # 마이그레이션 기준은 지금 도는 jar의 커밋이다(배포가 적는 app.jar.commit). 관문 날 V70은 배포(설정 꺼짐)로 먼저 들어간다(계획 결정 2).
 if [ "$PROD" = "$LIVE" ]; then
