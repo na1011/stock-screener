@@ -95,10 +95,12 @@ public class StockFold {
         return uncovered;
     }
 
-    /** 한 표의 셈 — 옮김 · 같은 사건으로 버림 · 멈춤. */
-    public record Tally(int moved, int dropped, int conflicting) {
-        Tally plus(Tally other) {
-            return new Tally(moved + other.moved, dropped + other.dropped, conflicting + other.conflicting);
+    /**
+     * 한 표의 셈 — 옮김 · 같은 사건으로 버림 · 멈춤 · 버린 것 중 값이 달랐던 것(재무 — 같은 공시의 추출 판 차이 · 멈추지 않는다).
+     */
+    public record Tally(int moved, int dropped, int conflicting, int droppedDiffering) {
+        public Tally(int moved, int dropped, int conflicting) {
+            this(moved, dropped, conflicting, 0);
         }
     }
 
@@ -113,6 +115,7 @@ public class StockFold {
             tables.forEach((table, t) -> {
                 if (t.moved() + t.dropped() + t.conflicting() > 0) {
                     sb.append(' ').append(table).append("(옮김 ").append(t.moved()).append(" · 버림 ").append(t.dropped())
+                            .append(t.droppedDiffering() > 0 ? "(그중 추출 판 다름 " + t.droppedDiffering() + ")" : "")
                             .append(t.conflicting() > 0 ? " · 다름 " + t.conflicting() : "").append(')');
                 }
             });
@@ -228,8 +231,14 @@ public class StockFold {
     }
 
     /**
-     * 재무 판의 키는 (연도 · 분기 · 접수번호)다 — {@code revision_no}는 공시일 서수라 키가 아니다. 같은 키면 값을 대조하고(판 번호 ·
-     * 최신 표지 · 시각 밖 전부), S에만 있는 접수번호는 T로 옮긴 뒤 라벨마다 공시일 순으로 다시 매긴다.
+     * 재무 판의 키는 (연도 · 분기 · 접수번호)다 — {@code revision_no}는 공시일 서수라 키가 아니다. S에만 있는 접수번호는 T로 옮긴 뒤 라벨마다
+     * 공시일 순으로 다시 매긴다.
+     *
+     * <p><b>같은 키는 값이 달라도 같은 사건이다 — T를 남기고 S를 버린다.</b> 접수번호는 바뀌지 않는 원장 사실이고 짝은 이미 같은 등록인으로
+     * 판정됐다(포함 검사 ALL · {@link FoldPlanner}). 그러면 남는 차이는 우리 추출 코드의 판 차이뿐이다 — 실측(2026-10-17 작은 DB · HLX/HOS
+     * 39행): T가 빈 칸(08-30 뒤 생긴 컬럼 · 총이익·지배주주 순이익·자본 각 39)과 순이익 11칸(그 사이 바뀐 규칙)이 전부였다. 재무 행은 다시
+     * 받을 수 있는 표이고(★14의 넷 밖), 버린 S의 값은 다음 FR이 T 최신 판에 채운다 — T는 다른 행들과 같은 「그 jar가 쓴 상태」로 남고 관문
+     * 재적재가 한꺼번에 고친다. 값이 달랐던 수는 셈에 따로 싣는다.
      */
     private static final String FS_KEY = """
             t.stock_id = ? AND t.fiscal_year = s.fiscal_year AND t.fiscal_period = s.fiscal_period
@@ -241,13 +250,13 @@ public class StockFold {
     private Tally countFinancials(long target, long source) {
         Map<String, Object> row = jdbc.queryForMap("""
                 SELECT count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM financial_statement t WHERE %1$s)) AS moved,
-                       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM financial_statement t WHERE %1$s AND %2$s)) AS dropped,
+                       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM financial_statement t WHERE %1$s)) AS dropped,
                        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM financial_statement t WHERE %1$s)
-                                          AND NOT EXISTS (SELECT 1 FROM financial_statement t WHERE %1$s AND %2$s)) AS conflicting
+                                          AND NOT EXISTS (SELECT 1 FROM financial_statement t WHERE %1$s AND %2$s)) AS differing
                 FROM financial_statement s WHERE s.stock_id = ?
                 """.formatted(FS_KEY, FS_SAME), target, target, target, target, source);
-        return new Tally(((Number) row.get("moved")).intValue(), ((Number) row.get("dropped")).intValue(),
-                ((Number) row.get("conflicting")).intValue());
+        return new Tally(((Number) row.get("moved")).intValue(), ((Number) row.get("dropped")).intValue(), 0,
+                ((Number) row.get("differing")).intValue());
     }
 
     private void applyFinancials(long target, long source) {

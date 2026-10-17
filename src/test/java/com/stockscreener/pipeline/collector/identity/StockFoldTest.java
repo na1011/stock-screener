@@ -52,7 +52,7 @@ class StockFoldTest {
         fs(s, "0001-26-000002", LocalDate.of(2026, 4, 20), 1, true, "110");
 
         StockFold.Plan plan = fold.plan(t, s);
-        assertThat(plan.tables().get("financial_statement")).isEqualTo(new StockFold.Tally(1, 1, 0));
+        assertThat(plan.tables().get("financial_statement")).isEqualTo(new StockFold.Tally(1, 1, 0, 0));
 
         fold.apply(t, s, RENAMED);
 
@@ -67,10 +67,25 @@ class StockFoldTest {
     }
 
     @Test
-    @DisplayName("같은 접수번호인데 값이 다르면 그 짝을 멈춘다 — 접지 않는다")
-    void differingFinancialsBlock() {
+    @DisplayName("같은 접수번호인데 값이 다르면(추출 판 차이) T를 남기고 S를 버린다 — 멈추지 않고 그 수를 따로 센다")
+    void sameAccessionDifferentExtractionKeepsTarget() {
         fs(t, "0001-26-000001", LocalDate.of(2026, 2, 20), 0, true, "100");
         fs(s, "0001-26-000001", LocalDate.of(2026, 2, 20), 0, true, "999");
+
+        StockFold.Plan plan = fold.plan(t, s);
+        assertThat(plan.blocked()).isFalse();
+        assertThat(plan.tables().get("financial_statement")).isEqualTo(new StockFold.Tally(0, 1, 0, 1));
+        fold.apply(t, s, RENAMED);
+
+        assertThat(jdbc.queryForObject("SELECT revenue FROM financial_statement WHERE stock_id = ?", BigDecimal.class, t))
+                .isEqualByComparingTo("100");
+    }
+
+    @Test
+    @DisplayName("다른 표에서 같은 키에 값이 다르면 그 짝을 멈춘다 — 접지 않는다")
+    void differingChildBlocks() {
+        bar(t, LocalDate.of(2026, 10, 14), "13");
+        bar(s, LocalDate.of(2026, 10, 14), "12");
 
         assertThat(fold.plan(t, s).blocked()).isTrue();
         assertThatThrownBy(() -> fold.apply(t, s, RENAMED)).isInstanceOf(IllegalStateException.class);
