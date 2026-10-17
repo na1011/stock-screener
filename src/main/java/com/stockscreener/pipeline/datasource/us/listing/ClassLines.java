@@ -32,7 +32,8 @@ public final class ClassLines {
                     + "|\\bbeneficial\\s+interests?\\b|\\bsubordinate\\s+voting\\s+shares?\\b|\\blimited\\s+partner(?:ship)?\\s+interests?\\b",
             Pattern.CASE_INSENSITIVE);
 
-    private static final Pattern CLASS_LETTER = Pattern.compile("\\bClass\\s+([A-Z])\\b", Pattern.CASE_INSENSITIVE);
+    /** 「Class A」 · 「Series C」(Liberty 계열이 「Series」로 적는다) · 「CL B」. */
+    private static final Pattern CLASS_LETTER = Pattern.compile("\\b(?:Class|Series|CL)\\s+([A-Z])\\b", Pattern.CASE_INSENSITIVE);
 
     private ClassLines() {
     }
@@ -57,7 +58,7 @@ public final class ClassLines {
         return !NOT_COMMON.matcher(line).find() && COMMON.matcher(line).find();
     }
 
-    /** 「Class A」의 글자(대문자). 없으면 비운다. */
+    /** 「Class A」 · 「Series A」 · 「CL A」의 글자(대문자). 없으면 비운다. */
     public static Optional<String> classLetter(String line) {
         Matcher m = CLASS_LETTER.matcher(line);
         return m.find() ? Optional.of(m.group(1).toUpperCase(Locale.ROOT)) : Optional.empty();

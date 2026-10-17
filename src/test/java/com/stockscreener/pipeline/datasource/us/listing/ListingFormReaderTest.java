@@ -157,6 +157,23 @@ class ListingFormReaderTest {
         assertThat(ea.coverOf(ClassFactReader.TRADING_SYMBOL)).isEmpty();
     }
 
+    /** Brown-Forman — 표지 기호는 BFA · BFB(시세 소스는 BF.A · BF.B)이고 사채 줄(BF28)은 부채 축이라 안 든다. */
+    @Test
+    void multiClassCoverGivesALinePerClassAndMatchesDottedSymbols() throws Exception {
+        ClassFacts bf = cover("bf-10q-2026-09-02-cover.xml", 14693);
+
+        assertThat(ListingCover.lines(bf)).extracting(ListingCover.Line::symbol).containsExactlyInAnyOrder("BFA", "BFB");
+        assertThat(ListingCover.lineFor(bf, "BF.B")).hasValueSatisfying(line -> {
+            assertThat(line.letter()).contains("B");
+            assertThat(line.common()).isTrue();
+            assertThat(line.venue()).contains(new Venue("NYSE", true));
+        });
+        assertThat(ListingCover.lineFor(bf, "BF.A")).hasValueSatisfying(line -> assertThat(line.letter()).contains("A"));
+        assertThat(ListingCover.lineFor(bf, "BF28")).isEmpty();
+        assertThat(ListingCover.lineFor(cover("ea-10q-2026-08-03-cover.xml", 712515), "EA"))
+                .hasValueSatisfying(line -> assertThat(line.letter()).isEmpty());
+    }
+
     @Test
     void unknownExchangeNameIsNotGuessed() {
         assertThat(Venue.ofName("Some Regional Exchange")).isEmpty();
