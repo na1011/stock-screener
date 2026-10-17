@@ -77,8 +77,12 @@ public class SecDailyIndexClient implements SecFilingListSource.DailyIndex {
         }
     }
 
-    /** 색인의 한 줄 — 정기 공시인지는 호출부가 거른다. {@code filed}는 원장의 제출일이다(색인 날짜보다 앞일 수 있다). */
-    public record IndexLine(String form, long cik, LocalDate filed, String accession) {
+    /**
+     * 색인의 한 줄 — 정기 공시인지는 호출부가 거른다. {@code filed}는 원장의 제출일이다(색인 날짜보다 앞일 수 있다).
+     *
+     * @param company 원장이 적은 제출자 이름(앞뒤 공백만 뗀다) — 상장 판정의 등록인 이름 대조가 읽는다
+     */
+    public record IndexLine(String form, long cik, LocalDate filed, String accession, String company) {
     }
 
     /**
@@ -184,7 +188,7 @@ public class SecDailyIndexClient implements SecFilingListSource.DailyIndex {
                 throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
                         "폼 색인 줄의 제출일 %s가 색인 날짜보다 뒤다. %s".formatted(filed, context));
             }
-            out.add(new IndexLine(m.group(1), Long.parseLong(m.group(3)), filed, m.group(6)));
+            out.add(new IndexLine(m.group(1), Long.parseLong(m.group(3)), filed, m.group(6), m.group(2).strip()));
         }
         if (!body) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,

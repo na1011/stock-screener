@@ -139,11 +139,11 @@ class SecFilingListSourceTest {
         LocalDate day = LocalDate.of(2026, 10, 1);
         Map<Long, List<Long>> byCik = SecFilingListSource.stocksByCik(SNAPSHOT, STOCKS);
         var listed = SecFilingListSource.toDay(day, List.of(
-                new IndexLine("10-Q", 63754L, day, "0000063754-26-000329"),
-                new IndexLine("8-K", 63754L, day, "0000063754-26-000330"),
-                new IndexLine("10-Q", 1652044L, day, "0001652044-26-000100"),
-                new IndexLine("6-K", 1067983L, day, "0001067983-26-000001"),
-                new IndexLine("10-K", 999L, day, "0000000999-26-000001")), byCik);
+                new IndexLine("10-Q", 63754L, day, "0000063754-26-000329", "MCCORMICK & CO INC"),
+                new IndexLine("8-K", 63754L, day, "0000063754-26-000330", "MCCORMICK & CO INC"),
+                new IndexLine("10-Q", 1652044L, day, "0001652044-26-000100", "Alphabet Inc."),
+                new IndexLine("6-K", 1067983L, day, "0001067983-26-000001", "BERKSHIRE HATHAWAY INC"),
+                new IndexLine("10-K", 999L, day, "0000000999-26-000001", "UNMAPPED CO")), byCik);
 
         assertThat(listed.outcome()).isEqualTo(DayOutcome.LISTED);
         assertThat(listed.sourceRows()).as("정기 공시 넷(8-K 뺌)").isEqualTo(4);
@@ -170,8 +170,8 @@ class SecFilingListSourceTest {
         List<IndexLine> lines = SecDailyIndexClient.parseFormIndex(text, day, "t");
 
         assertThat(lines).containsExactly(
-                new IndexLine("10-Q", 63754L, day, "0000063754-26-000329"),
-                new IndexLine("SC 13D/A", 2014151L, day, "0002014151-26-000003"));
+                new IndexLine("10-Q", 63754L, day, "0000063754-26-000329", "MCCORMICK & CO INC"),
+                new IndexLine("SC 13D/A", 2014151L, day, "0002014151-26-000003", "Fund 2 Holdings  LP"));
 
         String lateDisseminated = text.replace("20261001    edgar/data/63754", "20260930    edgar/data/63754");
         assertThat(SecDailyIndexClient.parseFormIndex(lateDisseminated, day, "t").get(0).filed())
@@ -238,7 +238,7 @@ class SecFilingListSourceTest {
             if (day.equals(failDay)) {
                 throw new DataSourceException(DataSourceException.Kind.TRANSIENT, "sec-edgar", "HTTP 503");
             }
-            return List.of(new IndexLine("10-Q", 63754L, day, "0000063754-26-" + day.getDayOfMonth()));
+            return List.of(new IndexLine("10-Q", 63754L, day, "0000063754-26-" + day.getDayOfMonth(), "MCCORMICK & CO INC"));
         }
     }
 }

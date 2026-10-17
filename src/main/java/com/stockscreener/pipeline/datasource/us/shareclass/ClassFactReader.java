@@ -46,6 +46,8 @@ public final class ClassFactReader {
     public static final String SHARES_OUTSTANDING = "EntityCommonStockSharesOutstanding";
     public static final String TRADING_SYMBOL = "TradingSymbol";
     public static final String SECURITY_TITLE = "Security12bTitle";
+    /** 표지 거래소 코드({@code NYSE} · {@code NASDAQ} · {@code NYSEAMER} …) — 상장 판정({@code listing} 패키지)만 읽는다. 저장 팩트에는 안 든다. */
+    public static final String SECURITY_EXCHANGE = "SecurityExchangeName";
     public static final List<String> WEIGHTED_TAGS = List.of("WeightedAverageNumberOfSharesOutstandingBasic",
             "WeightedAverageNumberOfShareOutstandingBasicAndDiluted", "WeightedAverageNumberOfSharesIssuedBasic",
             "WeightedAverageLimitedPartnershipUnitsOutstanding");
@@ -55,6 +57,8 @@ public final class ClassFactReader {
     public static final List<String> NUMERATOR_TAGS = List.of(DECLARED_NUMERATOR, "NetIncomeLoss", "ProfitLoss");
 
     private static final Set<String> COVER = Set.of(SHARES_OUTSTANDING, TRADING_SYMBOL, SECURITY_TITLE);
+    /** 상장 판정의 표지 — 기호 · 거래소 · 증권 이름. 저장 팩트({@link #COVER})와 따로 둬 그 판을 안 바꾼다. */
+    private static final Set<String> LISTING_COVER = Set.of(TRADING_SYMBOL, SECURITY_EXCHANGE, SECURITY_TITLE);
     private static final Set<String> DURATION = Set.copyOf(concat(WEIGHTED_TAGS, EPS_TAGS, NUMERATOR_TAGS));
     private static final String CLASS_AXIS = "StatementClassOfStockAxis";
     private static final String EQUITY_AXIS = "StatementEquityComponentsAxis";
@@ -86,6 +90,19 @@ public final class ClassFactReader {
     }
 
     public static Result read(InputStream xml, long cik, String context) throws DataSourceException {
+        return read(xml, cik, context, COVER);
+    }
+
+    /**
+     * 상장 판정의 표지 — 클래스 축 구성원(없으면 {@link ClassFacts#AXISLESS})마다 기호 · 거래소 코드 · 증권 이름. 맥락 해석은
+     * {@link #read}와 같다(같은 축 규칙 · 남의 CIK 맥락은 건너뜀). 기간 팩트도 함께 읽히지만 상장 판정은 표지만 쓴다.
+     */
+    public static ClassFacts readListingCover(InputStream xml, long cik, String context) throws DataSourceException {
+        return read(xml, cik, context, LISTING_COVER).facts();
+    }
+
+    private static Result read(InputStream xml, long cik, String context, Set<String> coverConcepts)
+            throws DataSourceException {
         Map<String, Context> contexts = new HashMap<>();
         Map<String, LinkedHashMap<ClassFacts.MemberPeriod, ClassFacts.Measured>> durations = new LinkedHashMap<>();
         Map<String, LinkedHashMap<String, String>> cover = new LinkedHashMap<>();
@@ -115,7 +132,7 @@ public final class ClassFactReader {
                         documentType = r.getElementText().trim();
                         continue;
                     }
-                    if (!COVER.contains(local) && !DURATION.contains(local)) {
+                    if (!coverConcepts.contains(local) && !DURATION.contains(local)) {
                         continue;
                     }
                     String contextRef = r.getAttributeValue(null, "contextRef");
@@ -143,7 +160,7 @@ public final class ClassFactReader {
             Set<String> extra = new java.util.HashSet<>(c.dims().keySet());
             extra.remove(CLASS_AXIS);
             String member = c.dims().getOrDefault(CLASS_AXIS, ClassFacts.AXISLESS);
-            if (COVER.contains(local)) {
+            if (coverConcepts.contains(local)) {
                 if (!extra.isEmpty() && !(SHARES_OUTSTANDING.equals(local) && extra.equals(Set.of(SUBSEQUENT_AXIS)))) {
                     continue;
                 }
