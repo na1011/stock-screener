@@ -41,7 +41,21 @@ public interface IdentitySource {
     /** 기호들이 걸린 신원 사건 — 개명(CUSIP·기호 바뀜) · 재편 · 피인수 합병의 인수 쪽. 날짜가 효력일이다. */
     List<IdentityEvent> identityEvents(Collection<String> symbols, LocalDate from, LocalDate to) throws DataSourceException;
 
+    /**
+     * 시장 전체의 끝 사건 — 현금·주식·혼합 합병의 <b>피인수 쪽</b>과 가치 없음 제거. 효력일 ∈ [from, to]. 사건은 폐지가 아닐 수 있다
+     * (CUSIP만 바뀐 재조직 — 사건 뒤에도 같은 실체가 거래된다 · 계획 {@code US-PAST-LISTING-PLAN-1017.md} ★3) — 끝은 부르는 쪽이 봉으로 확인한다.
+     */
+    List<EndEvent> endEvents(LocalDate from, LocalDate to) throws DataSourceException;
+
     record Listed(String symbol, String name, String exchange) {
+    }
+
+    /**
+     * @param symbol    그 사건의 기호(그때의 기호)
+     * @param effective 효력일 — 합병은 {@code effective_date}, 가치 없음 제거는 {@code process_date}
+     * @param type      {@code cash_merger} · {@code stock_merger} · {@code stock_and_cash_merger} · {@code worthless_removal}
+     */
+    record EndEvent(String symbol, String cusip, LocalDate effective, String type) {
     }
 
     /** 등록인 파일 한 판 — 기호 → CIK. */

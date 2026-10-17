@@ -109,10 +109,12 @@ public class UsIdentityTriage {
     private Outcome judgeAndApply(long executionId, LocalDate asOf, IdentitySource source) throws DataSourceException {
         Plan plan = plan(asOf, source);
         Map<String, Integer> counts = new TreeMap<>();
-        transaction.executeWithoutResult(status -> apply(executionId, plan.verdicts(), plan.splits(), plan.listed(), counts));
+        transaction.executeWithoutResult(status -> apply(executionId, plan.verdicts(), plan.splits(), plan.ends(), plan.listed(),
+                counts));
         IdentityJudge.Counts c = plan.counts();
-        String summary = "행 %d · 목록 %d · 같은 실체 %d · 봉 없음 %d · 끊긴 행 %d · 주인 없는 기호 %d · 판정 %s · 등록 보류 %s"
-                .formatted(c.rows(), c.listed(), c.sameEntity(), c.noBars(), c.orphans(), c.unclaimed(), counts, plan.blocked());
+        String summary = "행 %d · 목록 %d · 같은 실체 %d · 봉 없음 %d · 끊긴 행 %d · 주인 없는 기호 %d · 판정 %s · 등록 보류 %s · 목록이 실어 안 닫은 끝 %s"
+                .formatted(c.rows(), c.listed(), c.sameEntity(), c.noBars(), c.orphans(), c.unclaimed(), counts, plan.blocked(),
+                        plan.endsHeldByListing());
         recordRun(executionId, summary);
         log.info("미국 신원 판정. {}", summary);
         return new Outcome(Set.copyOf(plan.blocked()), false, true, summary, Map.copyOf(counts));
@@ -124,8 +126,13 @@ public class UsIdentityTriage {
      *
      * @param splits 전제 셋이 선 끊기 · {@code verdicts}에는 끊기 후보가 남지 않는다(안 선 것은 보류로 바뀐다)
      */
-    public record Plan(List<Verdict> verdicts, List<Split> splits, Set<String> blocked, Map<String, Listed> listed,
-                       IdentityJudge.Counts counts) {
+    /** @param endsHeldByListing 끝이 섰는데 오늘 목록이 아직 그 기호를 실어 안 닫은 표지(원장 둘이 어긋남 — 목록이 내리는 주에 닫힌다) */
+    public record Plan(List<Verdict> verdicts, List<Split> splits, List<EndRow> ends, List<String> endsHeldByListing,
+                       Set<String> blocked, Map<String, Listed> listed, IdentityJudge.Counts counts) {
+    }
+
+    /** 끝 판정이 닫을 열린 행. */
+    public record EndRow(long stockId, String ticker, EndJudge.End end) {
     }
 
     public Plan plan(LocalDate asOf, IdentitySource source) throws DataSourceException {
@@ -170,7 +177,87 @@ public class UsIdentityTriage {
             }
         }
 
-        return new Plan(List.copyOf(verdicts), List.copyOf(splits), Set.copyOf(blocked), listed, result.counts());
+        Set<Long> decided = new HashSet<>();
+        verdicts.forEach(v -> decided.add(stockIdOf(v)));
+        splits.forEach(sp -> decided.add(sp.candidate().stockId()));
+        List<EndRow> judged = ends(source, stored, decided, asOf);
+        // 오늘 목록이 아직 그 기호를 싣는 행은 닫지 않는다(ARQQW 2026-10-17 — 가치 없음 제거 09-21인데 목록은 active · tradable=false).
+        // 닫으면 그 주 등록이 「목록에 있는데 행이 없는」 기호로 새 행을 만들고, 다음 주 끝 판정이 그 새 행을 또 닫는다 — 매주 도는 고리다.
+        List<EndRow> ends = judged.stream().filter(e -> !listed.containsKey(e.ticker())).toList();
+        List<String> held = judged.stream().filter(e -> listed.containsKey(e.ticker())).map(EndRow::ticker).toList();
+        return new Plan(List.copyOf(verdicts), List.copyOf(splits), ends, held, Set.copyOf(blocked), listed,
+                result.counts());
+    }
+
+    private static long stockIdOf(Verdict verdict) {
+        return switch (verdict) {
+            case Rename r -> r.stockId();
+            case Reuse r -> r.stockId();
+            case Ambiguous a -> a.stockId();
+            case SplitCandidate c -> c.stockId();
+        };
+    }
+
+    /**
+     * 끝 판정(계획 「끝 판정」) — 다른 판정이 안 걸린 열린 행 중, 그 행이 쓴 기호(표지 · 닻 · 기호 시대)로 끝 사건이 있고 봉이 그 끝을
+     * 확인하는 것({@link EndJudge}). 사건 창은 {@link #EVIDENCE_DAYS}다 — 신원 판정이 몇 주 못 돌아도 그 사이 끝을 잃지 않게.
+     */
+    private List<EndRow> ends(IdentitySource source, List<StoredRow> stored, Set<Long> decided, LocalDate asOf)
+            throws DataSourceException {
+        LocalDate since = asOf.minusDays(EVIDENCE_DAYS);
+        Map<String, List<IdentitySource.EndEvent>> bySymbol = new HashMap<>();
+        for (IdentitySource.EndEvent e : source.endEvents(since, asOf)) {
+            bySymbol.computeIfAbsent(e.symbol(), k -> new ArrayList<>()).add(e);
+        }
+        Map<Long, List<String>> eraSymbols = new HashMap<>();
+        jdbcTemplate.query("""
+                SELECT e.stock_id, e.symbol FROM stock_symbol_era e JOIN stock s ON s.id = e.stock_id
+                WHERE s.market_code = 'US' AND s.era_to IS NULL
+                """, rs -> {
+            eraSymbols.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(rs.getString("symbol"));
+        });
+        Map<StoredRow, List<IdentitySource.EndEvent>> hits = new LinkedHashMap<>();
+        for (StoredRow row : stored) {
+            if (decided.contains(row.row().id())) {
+                continue;
+            }
+            Set<String> symbols = new LinkedHashSet<>(List.of(row.row().ticker(), row.anchorSymbol()));
+            symbols.addAll(eraSymbols.getOrDefault(row.row().id(), List.of()));
+            List<IdentitySource.EndEvent> events = new ArrayList<>();
+            symbols.forEach(sym -> events.addAll(bySymbol.getOrDefault(sym, List.of())));
+            if (!events.isEmpty()) {
+                hits.put(row, events);
+            }
+        }
+        if (hits.isEmpty()) {
+            return List.of();
+        }
+        // 닻 봉 — 사건 창 앞 겹침 몫까지 한 번에(닻 날짜끼리 묶어). 사건 기호의 전날 봉 — 효력일끼리 묶어.
+        Map<Long, List<EntityBar>> anchors = anchorSeries(source, new ArrayList<>(hits.keySet()), since.minusDays(WINDOW_DAYS),
+                asOf);
+        Map<LocalDate, Set<String>> eveRequests = new java.util.TreeMap<>();
+        hits.values().forEach(events -> events.forEach(e -> eveRequests.computeIfAbsent(e.effective(), d -> new LinkedHashSet<>())
+                .add(e.symbol())));
+        // 사건 기호의 효력일 전날 · 효력일 봉 — 소스의 기호 대응이 폐지 경계에서 하루 단위로 갈린다(EndJudge).
+        Map<LocalDate, Map<String, List<EntityBar>>> eves = new HashMap<>();
+        Map<LocalDate, Map<String, List<EntityBar>>> onDay = new HashMap<>();
+        for (Map.Entry<LocalDate, Set<String>> request : eveRequests.entrySet()) {
+            LocalDate effective = request.getKey();
+            eves.put(effective, source.bars(request.getValue(), BarAsOf.anchor(effective.minusDays(1)),
+                    effective.minusDays(WINDOW_DAYS), effective));
+            onDay.put(effective, source.bars(request.getValue(), BarAsOf.anchor(effective),
+                    effective.minusDays(WINDOW_DAYS), effective));
+        }
+        List<EndRow> out = new ArrayList<>();
+        for (Map.Entry<StoredRow, List<IdentitySource.EndEvent>> hit : hits.entrySet()) {
+            StoredRow row = hit.getKey();
+            List<EndJudge.Candidate> candidates = hit.getValue().stream()
+                    .map(e -> new EndJudge.Candidate(e, List.of(eves.get(e.effective()).getOrDefault(e.symbol(), List.of()),
+                            onDay.get(e.effective()).getOrDefault(e.symbol(), List.of())))).toList();
+            EndJudge.decide(anchors.getOrDefault(row.row().id(), List.of()), row.anchorSymbol(), candidates)
+                    .ifPresent(end -> out.add(new EndRow(row.row().id(), row.row().ticker(), end)));
+        }
+        return out;
     }
 
     private record StoredRow(OpenRow row, String anchorSymbol, LocalDate anchorDate) {
@@ -229,8 +316,8 @@ public class UsIdentityTriage {
      * 판정을 행에 반영한다 — 한 트랜잭션. 표지를 먼저 다 비운 뒤 새 표지를 단다: 개명이 다른 행이 비울 기호로 갈 수 있고(재사용된
      * 기호의 옛 주인이 다른 기호로 개명) 표지는 {@code uq_stock_market_ticker}다.
      */
-    private void apply(long executionId, List<Verdict> verdicts, List<Split> splits, Map<String, Listed> listed,
-                       Map<String, Integer> counts) {
+    private void apply(long executionId, List<Verdict> verdicts, List<Split> splits, List<EndRow> ends,
+                       Map<String, Listed> listed, Map<String, Integer> counts) {
         LocalDate today = LocalDate.now(MARKET_ZONE);
         // 1) 표지 비우기
         for (Verdict verdict : verdicts) {
@@ -239,6 +326,12 @@ public class UsIdentityTriage {
             } else if (verdict instanceof Rename r) {
                 jdbcTemplate.update("UPDATE stock SET ticker = ?, updated_at = now() WHERE id = ?", "~" + r.stockId(), r.stockId());
             }
+        }
+        // 끝 판정 — 실체가 사라진 행. 표지를 비우므로 같은 기호의 새 실체가 이 실행 안에서 등록돼도 이 행에 안 붙는다.
+        for (EndRow end : ends) {
+            eraClosing.close(end.stockId(), end.end().eraTo());
+            record(executionId, end.stockId(), end.ticker(), "END", "시대 ~%s · %s".formatted(end.end().eraTo(), end.end().evidence()));
+            counts.merge("END", 1, Integer::sum);
         }
         // 다른 기호로의 끊기도 비운다 — 앞 행이 옛 기호를 쥐면 그 기호를 새로 받은 실체가 앞 행에 붙는다(EraClosing).
         for (Split s : splits) {

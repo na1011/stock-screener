@@ -288,6 +288,36 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
      * 개명이 처리일(효력일이 없다) · 나머지는 효력일이다. 실측(2026-10-17): REAX 08-25 재편·인수 · XRPN 10-12 CUSIP 개명 ·
      * COLA 10-02 · IPEX 09-28(재편 09-25) · JFB 09-04 · NHIC 09-22.
      */
+    /**
+     * 시장 전체의 피인수 · 가치 없음 제거(끝 판정 · ADR-0180). 기호 없이 묻는다 — 우리 행의 지금 표지로 물으면 재사용된 기호의 옛 실체
+     * 사건을 못 고르고, 표지를 비운 행은 물을 기호가 없다. 요청 창은 {@code process_date} 기준이라 효력일로 다시 거른다.
+     */
+    List<IdentitySource.EndEvent> fetchEndEvents(LocalDate from, LocalDate to) throws DataSourceException {
+        requireCredentials();
+        Map<String, List<JsonNode>> buckets = fetchBuckets(null,
+                "cash_merger,stock_merger,stock_and_cash_merger,worthless_removal", from, maxOf(to, LocalDate.now()));
+        List<IdentitySource.EndEvent> events = new ArrayList<>();
+        for (String key : List.of("cash_mergers", "stock_mergers", "stock_and_cash_mergers")) {
+            for (JsonNode node : buckets.getOrDefault(key, List.of())) {
+                LocalDate date = optionalDateOf(node, "effective_date");
+                String symbol = node.path("acquiree_symbol").asString("");
+                if (date != null && !symbol.isBlank()) {
+                    events.add(new IdentitySource.EndEvent(symbol, node.path("acquiree_cusip").asString(""), date, singular(key)));
+                }
+            }
+        }
+        for (JsonNode node : buckets.getOrDefault("worthless_removals", List.of())) {
+            LocalDate date = optionalDateOf(node, "process_date");
+            String symbol = node.path("symbol").asString("");
+            if (date != null && !symbol.isBlank()) {
+                events.add(new IdentitySource.EndEvent(symbol, node.path("cusip").asString(""), date, "worthless_removal"));
+            }
+        }
+        events.removeIf(e -> e.effective().isBefore(from) || e.effective().isAfter(to));
+        events.sort(Comparator.comparing(IdentitySource.EndEvent::effective));
+        return events;
+    }
+
     List<IdentitySource.IdentityEvent> fetchIdentityEvents(Collection<String> symbols, LocalDate from, LocalDate to)
             throws DataSourceException {
         requireCredentials();

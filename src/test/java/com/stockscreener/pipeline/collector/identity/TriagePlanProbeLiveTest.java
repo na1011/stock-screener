@@ -63,7 +63,12 @@ class TriagePlanProbeLiveTest {
             System.out.println("PLAN Split " + s.candidate().oldTicker() + "→" + s.candidate().newSymbol() + " " + s.switchDate()
                     + " · " + s.evidence());
         }
-        System.out.println("PLAN 기준일 " + asOf + " · 수 " + plan.counts() + " · 판정 " + kinds + " · 등록 보류 " + plan.blocked());
+        for (UsIdentityTriage.EndRow e : plan.ends()) {
+            kinds.merge("End", 1, Integer::sum);
+            System.out.println("PLAN End " + e.ticker() + " 시대 ~" + e.end().eraTo() + " · " + e.end().evidence());
+        }
+        System.out.println("PLAN 기준일 " + asOf + " · 수 " + plan.counts() + " · 판정 " + kinds + " · 등록 보류 " + plan.blocked()
+                + " · 목록이 실어 안 닫은 끝 " + plan.endsHeldByListing());
     }
 
     private static String describe(Verdict v) {

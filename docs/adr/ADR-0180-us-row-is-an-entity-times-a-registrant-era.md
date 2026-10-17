@@ -49,6 +49,11 @@ applies_to:
   실체가 「주인 없는 기호」로 보이고 등록이 표지로 **닫힌 행에 붙인다**(그 행은 순위에 안 들어 새 실체가 빠진다). 비운 표지는 어떤 오늘 기호와도
   안 맞는다. 그때의 기호로 묻는 소스(기업 행위 · 배당)는 `SecurityRef.currentSymbol()`로 되찾고 시대 끝에서 닫는다 — 그 뒤 같은 기호는 다른
   실체일 수 있다. SEC는 비운 표지로 오늘 파일을 찾지 않는다(묶인 `sec_cik`만).
+- **MUST: 피인수 · 가치 없음 제거로 사라진 실체의 열린 행은 신원 판정이 닫는다(끝 판정 · `EndJudge` · 판정 `END`)** — 사건(시장 전체 ·
+  180일 창)이 그 행이 쓴 기호에 걸리고, 사건 기호의 효력일 전날 또는 효력일 `asof` 봉이 닻 봉과 같고, 효력일 뒤 거래 봉이 없을 때만.
+  `era_to` = 효력일에 거래 봉이 있으면 다음 날, 없으면 효력일(끝은 원장의 날짜가 정하고 봉은 확인만 — 거래 드문 상장 주식은 64일까지
+  빈다). **오늘 목록이 그 기호를 아직 실으면 닫지 않는다** — 닫으면 등록이 새 행을 만들고 다음 주에 또 닫는 고리다(`ARQQW`). 끝이 없으면
+  과거 날짜 순위가 폐지된 행을 그날 후보로 남긴다(관문의 복원이 읽는다 · 탐색 계획 `US-PAST-LISTING-PLAN-1017.md`).
 - **MUST: 시대 술어는 그 선택이 뜻하는 날짜로 건다**(`StockRegistrar.eraCovers`) — 오늘의 선택(후보 풀 · 열린 편입)은 미국 동부 오늘,
   기준일 판독기는 그 기준일, 공시 장부와 그 소비는 그 공시일. 「오늘」 하나로 기준일 판독기까지 거르면 과거 기준일에 열린 시대였던 행이 그날
   순위에서 빠진다. `stock.is_active`는 어떤 코드도 거짓으로 안 쓰므로 시대를 대신하지 못한다 — `is_active`로 `stock`을 거르는 SQL 문장은
@@ -67,6 +72,7 @@ applies_to:
 - 탐침(실호출 · 운영 읽기만): `UsIdentityProbeLiveTest`(판정 함수를 운영 모집단에) · `AnchorNeutralityProbeLiveTest`(닻 봉 = 저장 봉) ·
   `TriagePlanProbeLiveTest`(잡의 `plan()`을 운영 상태에 — 다음 판정이 쓸 것).
 - 닫힌 시대 위생: `ClosedEraHygieneTest` · `StockEraPredicateSourceTest` · `AlpacaDividendEraTest`(닫힌 행).
+- 끝 판정: `UsIdentityTriageTest`(피인수 닫힘 · 재조직 · 기호 재사용 · 경계 대응 CCO꼴 · 목록이 실음 ARQQW꼴).
 
 ```premise 시대가 닫힌 미국 행의 표지는 비워져 있다
 psql -d stock_screener -At -c "SELECT CASE

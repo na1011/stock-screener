@@ -124,6 +124,19 @@ GET https://data.alpaca.markets/v1/corporate-actions
   `UHALB`로는 안 물었고 SEC에도 안 물었다. 미국은 휴리스틱이 없어(`listed_shares` NULL) 원장 행을 만들
   경로가 없다.
 
+### 끝 사건 — 피인수 · 가치 없음 제거 (2026-10-17 실측 · ADR-0180 끝 판정)
+
+`symbols` 없이 `types=cash_merger,stock_merger,stock_and_cash_merger,worthless_removal`로 시장 전체를 묻는다(2025-09-01~2026-10-16 ·
+이름 변경 포함 2쪽). 효력일은 합병이 `effective_date` · 가치 없음 제거가 `process_date`다(그 타입에 효력일 필드가 없다).
+
+- **피인수 실체는 `/v2/assets` 목록에서 사라진다** — 창 안 SIP 거래가 있는 피인수·가치 없음 제거 661 중 588이 목록에 없다.
+  단건 `/v2/assets/{acquiree_cusip}`로는 `inactive`로 온다(661/661). **그런데 단건은 그 실체의 사실이 아니다** — 기호가 오늘 다른
+  실체에 있는 49건은 49/49 오늘 주인의 이름·거래소를 준다(`PINC` → 「PGIM Securitized Income ETF · BATS」).
+- **사건 ≠ 폐지.** 기호에 우리 행이 있는 사건 21 중 17은 사건 뒤에도 같은 실체가 거래된다(CUSIP만 바뀐 재조직 — `AZN` `TRI` `QGEN`
+  `IRTC`). 끝은 봉으로 확인한다: 효력일 뒤 거래 봉(`n`>0) 0 · 마지막 거래는 효력일 전 거래일(31/35) 또는 당일(4/35 · 장 뒤 효력).
+- **한 실체에 사건이 여럿일 수 있다** — 합병 뒤 가치 없음 제거(`FOLD` · `CSGS` · `SLNO`) · 91개 기호가 2건 이상.
+- **목록과 원장이 어긋나는 기호가 있다** — `ARQQW` 가치 없음 제거 09-21인데 10-17 목록은 `active`(`tradable=false`).
+
 ### 신원 사건 — 등록인 교체의 날짜 박힌 증거 (2026-10-17 실측 · ADR-0180)
 
 `types=name_change,reorganization,stock_merger`로 좁혀 여러 기호를 한 콜에 묻는다(REAX·XRPN·AAPL → 1·1·1건 · HTTP 200).

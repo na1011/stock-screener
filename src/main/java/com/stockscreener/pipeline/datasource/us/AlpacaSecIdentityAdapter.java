@@ -170,6 +170,11 @@ public class AlpacaSecIdentityAdapter implements IdentitySource {
         return corporateActions.fetchIdentityEvents(symbols, from, to);
     }
 
+    @Override
+    public List<EndEvent> endEvents(LocalDate from, LocalDate to) throws DataSourceException {
+        return corporateActions.fetchEndEvents(from, to);
+    }
+
     private static <T> T requireSec(T bean, String what) throws DataSourceException {
         if (bean == null) {
             throw new DataSourceException(DataSourceException.Kind.AUTH, SOURCE_NAME,

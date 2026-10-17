@@ -35,6 +35,8 @@ class UsIdentityTriageTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 10, 17);
     private static final LocalDate START = AS_OF.minusDays(40);
+    /** {@link #stock}이 다는 닻 날짜 — 끝 판정의 「사건 기호의 효력일 전날 봉」 요청과 가르는 데 쓴다. */
+    private static final LocalDate ANCHOR_DATE = LocalDate.of(2026, 8, 28);
 
     @Autowired
     private UsIdentityTriage triage;
@@ -68,6 +70,84 @@ class UsIdentityTriageTest {
                 String.class, hlx)).containsExactly("HLX||" + START.plusDays(12));
         assertThat(verdicts(77L)).containsExactlyInAnyOrder("RENAME", "RUN");
         assertThat(count("SELECT count(*) FROM stock WHERE market_code = 'US' AND ticker IN ('HLX', 'HOS')")).as("행 수 그대로").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("끝 판정 — 피인수된 실체의 열린 행(QRVO꼴)을 효력일로 닫고 표지를 비운다 · 판정 END")
+    void acquiredEntityRowIsClosedAtTheEffectiveDate() {
+        long qrvo = stock("QRVOT", null);
+        source.anchor("QRVOT", series(5, 0, 28));
+        LocalDate effective = START.plusDays(28);
+        source.ends.add(new IdentitySource.EndEvent("QRVOT", "74736K101", effective, "cash_merger"));
+
+        UsIdentityTriage.Outcome outcome = triage.run(80L, AS_OF);
+
+        assertThat(outcome.verdictCounts()).containsEntry("END", 1);
+        assertThat(jdbcTemplate.queryForObject("SELECT era_to FROM stock WHERE id = ?", LocalDate.class, qrvo))
+                .as("효력일에 거래 봉이 없으면 효력일").isEqualTo(effective);
+        assertThat(ticker(qrvo)).isEqualTo("QRVOT~" + effective.minusDays(1));
+        assertThat(verdicts(80L)).containsExactlyInAnyOrder("END", "RUN");
+    }
+
+    @Test
+    @DisplayName("끝 판정 — 효력일 전날 asof가 다른 봉을 줘도 효력일 asof가 닻 봉과 같으면 같은 실체다(CCO꼴 · 소스 대응이 경계에서 갈림)")
+    void entityConfirmedOnTheEffectiveDayView() {
+        long cco = stock("CCOT", null);
+        source.anchor("CCOT", series(9, 0, 27));
+        LocalDate effective = START.plusDays(29);
+        source.eveOn.put(effective.minusDays(1), Map.of("CCOT", series(9, 28, 29)));
+        source.eveOn.put(effective, Map.of("CCOT", series(9, 0, 29)));
+        source.ends.add(new IdentitySource.EndEvent("CCOT", "18453H106", effective, "cash_merger"));
+
+        UsIdentityTriage.Outcome outcome = triage.run(83L, AS_OF);
+
+        assertThat(outcome.verdictCounts()).containsEntry("END", 1);
+        assertThat(jdbcTemplate.queryForObject("SELECT era_to FROM stock WHERE id = ?", LocalDate.class, cco)).isEqualTo(effective);
+    }
+
+    @Test
+    @DisplayName("끝 판정 — 끝이 서도 오늘 목록이 그 기호를 아직 실으면 닫지 않는다(ARQQW꼴 · 닫으면 등록이 새 행을 만들고 매주 다시 닫는다)")
+    void endHeldWhileTheListingStillCarriesTheSymbol() {
+        long warrant = stock("ARQQWT", null);
+        source.listed("ARQQWT");
+        source.anchor("ARQQWT", series(10, 0, 5));
+        source.today("ARQQWT", series(10, 0, 5));
+        source.ends.add(new IdentitySource.EndEvent("ARQQWT", "G0567U119", START.plusDays(14), "worthless_removal"));
+
+        UsIdentityTriage.Outcome outcome = triage.run(84L, AS_OF);
+
+        assertThat(outcome.verdictCounts()).doesNotContainKey("END");
+        assertThat(outcome.summary()).contains("목록이 실어 안 닫은 끝 [ARQQWT]");
+        assertThat(jdbcTemplate.queryForObject("SELECT era_to FROM stock WHERE id = ?", LocalDate.class, warrant)).isNull();
+    }
+
+    @Test
+    @DisplayName("끝 판정 — 사건 뒤에도 같은 실체가 거래되면(재조직 · AZN꼴) 닫지 않는다")
+    void reorganizationIsNotAnEnd() {
+        long azn = stock("AZNT", null);
+        source.listed("AZNT");
+        source.anchor("AZNT", series(6, 0, 40));
+        source.today("AZNT", series(6, 0, 40));
+        source.ends.add(new IdentitySource.EndEvent("AZNT", "046353108", START.plusDays(20), "stock_merger"));
+
+        UsIdentityTriage.Outcome outcome = triage.run(81L, AS_OF);
+
+        assertThat(outcome.verdictCounts()).doesNotContainKey("END");
+        assertThat(jdbcTemplate.queryForObject("SELECT era_to FROM stock WHERE id = ?", LocalDate.class, azn)).isNull();
+    }
+
+    @Test
+    @DisplayName("끝 판정 — 같은 기호의 다른 실체 사건(기호 재사용 · 사건 기호의 전날 봉 ≠ 닻 봉)은 이 행을 닫지 않는다")
+    void anotherEntitysEventOnTheSameSymbolIsNotThisRowsEnd() {
+        long row = stock("BNYT", null);
+        source.anchor("BNYT", series(7, 0, 20));
+        source.eve.put("BNYT", series(8, 0, 20));
+        source.ends.add(new IdentitySource.EndEvent("BNYT", "064058100", START.plusDays(20), "stock_merger"));
+
+        UsIdentityTriage.Outcome outcome = triage.run(82L, AS_OF);
+
+        assertThat(outcome.verdictCounts()).doesNotContainKey("END");
+        assertThat(jdbcTemplate.queryForObject("SELECT era_to FROM stock WHERE id = ?", LocalDate.class, row)).isNull();
     }
 
     @Test
@@ -218,6 +298,10 @@ class UsIdentityTriageTest {
         final Map<String, Long> file = new HashMap<>();
         final Map<Long, Set<String>> accessions = new HashMap<>();
         final List<IdentityEvent> events = new ArrayList<>();
+        final List<EndEvent> ends = new ArrayList<>();
+        final Map<String, List<EntityBar>> eve = new HashMap<>();
+        /** 이 날짜의 {@code asof}에만 주는 봉 — 소스의 기호 대응이 폐지 경계에서 하루 단위로 갈리는 꼴(CCO). */
+        final Map<LocalDate, Map<String, List<EntityBar>>> eveOn = new HashMap<>();
         boolean failListing;
 
         void reset() {
@@ -228,6 +312,9 @@ class UsIdentityTriageTest {
             file.clear();
             accessions.clear();
             events.clear();
+            ends.clear();
+            eve.clear();
+            eveOn.clear();
             failListing = false;
         }
 
@@ -265,7 +352,12 @@ class UsIdentityTriageTest {
             Map<String, List<EntityBar>> pick = asOf.literal() ? literal : asOf.date() == null ? today : anchor;
             Map<String, List<EntityBar>> out = new HashMap<>();
             symbols.forEach(s -> {
-                if (pick.containsKey(s)) {
+                // 끝 판정의 「사건 기호의 효력일 전날 봉」 — 시험이 따로 준 것이 있으면 그것(재사용 기호의 옛 실체).
+                if (asOf.date() != null && eveOn.getOrDefault(asOf.date(), Map.of()).containsKey(s)) {
+                    out.put(s, eveOn.get(asOf.date()).get(s));
+                } else if (asOf.date() != null && !asOf.literal() && !asOf.date().equals(ANCHOR_DATE) && eve.containsKey(s)) {
+                    out.put(s, eve.get(s));
+                } else if (pick.containsKey(s)) {
                     out.put(s, pick.get(s));
                 }
             });
@@ -285,6 +377,11 @@ class UsIdentityTriageTest {
         @Override
         public List<IdentityEvent> identityEvents(Collection<String> symbols, LocalDate from, LocalDate to) {
             return events.stream().filter(e -> e.symbols().stream().anyMatch(symbols::contains)).toList();
+        }
+
+        @Override
+        public List<EndEvent> endEvents(LocalDate from, LocalDate to) {
+            return ends.stream().filter(e -> !e.effective().isBefore(from) && !e.effective().isAfter(to)).toList();
         }
     }
 }
