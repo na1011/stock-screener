@@ -6,6 +6,7 @@ import com.stockscreener.pipeline.datasource.FinancialDataSource;
 import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.pipeline.collector.identity.RegistrantContainment;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,9 +87,7 @@ public class FinancialCollector {
         FinancialDataSource source = registry.financialSource(security.marketCode());
         FinancialFetch fetch = source.fetchReports(security, fromFiscalYear);
         List<RawFinancialReport> reports = fetch.reports();
-        // 등록인 묶기(ADR-0180)는 쓰기 **전**의 사실로 가른다 — 저장된 재무 행이 0이어야 섞일 판이 없다. 쓰기 뒤에 재면 방금 쓴 행이 보인다.
-        boolean bindRegistrant = fetch.registrant() != null && security.identity().secCik() == null
-                && !hasFinancialRows(security.stockId());
+        boolean bindRegistrant = registrantGate(security, fetch, source.sourceName());
         // MUST: 보고서보다 먼저 쓰지 않는다 — 부재 판정은 이번 수집의 사실이고, 보고서 쓰기가
         // 실패해 롤백되면 그 판정도 함께 되돌아가야 한다. 같은 트랜잭션은 아니지만 순서가
         // 그 뜻을 지킨다(쓰기가 던지면 부재 행이 안 남는다).
@@ -100,10 +99,10 @@ public class FinancialCollector {
                 LocalDate.now());
         if (bindRegistrant && !reports.isEmpty()) {
             int bound = jdbcTemplate.update("UPDATE stock SET sec_cik = ?, updated_at = now() WHERE id = ? AND sec_cik IS NULL",
-                    fetch.registrant(), security.stockId());
+                    fetch.registrant().cik(), security.stockId());
             if (bound == 1) {
-                log.info("첫 재무로 등록인을 묶었다. stock_id={} ticker={} cik={}", security.stockId(), security.ticker(),
-                        fetch.registrant());
+                log.info("재무로 등록인을 묶었다. stock_id={} ticker={} cik={}", security.stockId(), security.ticker(),
+                        fetch.registrant().cik());
             }
         }
         // 받지 못한 보충은 종목을 세우지 않는다(보충 계약) — 잡이 시장 판정에 쓰도록 결과에 실어 넘긴다(ADR-0174).
@@ -111,8 +110,40 @@ public class FinancialCollector {
                 .withUnfetchedClassFacts(fetch.unfetchedClassFacts());
     }
 
-    private boolean hasFinancialRows(long stockId) {
-        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM financial_statement WHERE stock_id = ?)", Boolean.class, stockId));
+    /**
+     * 등록인이 안 묶인 미국 행(ADR-0180) — 이 수집이 물은 등록인(오늘 티커 파일로 푼 것)이 그 행의 저장 판의 등록인인지 <b>쓰기 전에</b>
+     * 가른다. 쓰기 뒤에 재면 방금 쓴 행이 보인다.
+     * <ul>
+     *   <li>저장 판 0 — 섞일 것이 없다. 쓰고 묶는다.</li>
+     *   <li>저장 접수번호가 전부 그 등록인 것({@link RegistrantContainment}) — 같은 등록인이다. 쓰고 묶는다.</li>
+     *   <li>하나도 안 든다({@code NONE}) — 오늘 파일이 그 기호에 다른 등록인을 준다(교체 · 재사용 · REAX꼴). 쓰면 옛 등록인 라벨에 새
+     *       등록인 판이 섞이고 회수가 옛 판을 지운다(★16). <b>쓰지 않고</b> 그 종목을 소스가 답한 실패로 남긴다 — 신원 판정이 행을 끊거나
+     *       사람이 판정한다.</li>
+     *   <li>일부만 든다({@code PARTIAL}) — 판정을 못 준다. companyfacts가 실었던 공시를 빼고 그 공시의 보충마저 이번에 실패하면 같은
+     *       등록인도 이렇게 나온다. 지금까지처럼 쓰되 <b>묶지 않는다</b>(다음 실행이 다시 잰다).</li>
+     * </ul>
+     * 묶인 행·국내·시험(등록인을 안 내는 소스)은 이 갈래를 안 탄다.
+     *
+     * @return 쓴 뒤 묶을지
+     */
+    private boolean registrantGate(SecurityRef security, FinancialFetch fetch, String sourceName) throws DataSourceException {
+        FinancialFetch.Registrant registrant = fetch.registrant();
+        if (registrant == null || security.identity().secCik() != null) {
+            return false;
+        }
+        RegistrantContainment.Check check = RegistrantContainment.check(
+                RegistrantContainment.storedAccessions(jdbcTemplate, security.stockId()),
+                RegistrantContainment.known(jdbcTemplate, registrant.cik(), registrant.accessions()));
+        if (check.result() == RegistrantContainment.Result.ALL || check.result() == RegistrantContainment.Result.NO_STORED) {
+            return true;
+        }
+        if (check.result() == RegistrantContainment.Result.PARTIAL) {
+            log.warn("등록인을 못 묶는다 — {} CIK {} {}. 지금까지처럼 쓰고 다음 실행이 다시 잰다.", security.ticker(), registrant.cik(),
+                    check.describe());
+            return false;
+        }
+        throw DataSourceException.answered(DataSourceException.Kind.NOT_FOUND, sourceName,
+                "오늘 티커 파일이 %s에 준 등록인 CIK %d가 저장 판의 등록인이 아니다 — %s. 쓰면 두 등록인의 판이 한 행에 섞인다(ADR-0180). 신원 판정·sec-cik-bind가 가른다."
+                        .formatted(security.ticker(), registrant.cik(), check.describe()));
     }
 }

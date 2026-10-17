@@ -203,7 +203,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // us-gaap를 통째로 안 싣는다(ADR-0173 — 83 CIK 표본 87건). 보충이 못 실은 공시는 그 제출일을 따로 넘겨 지킨다.
         return new FinancialFetch(result.reports(), result.absences(), true,
                 supplement.unconfirmedVintages(), supplement.supplementedVintages(), supplement.vintagesUncertain(),
-                supplement.unfetched(), FilingTrace.ofAccessions(carried), unfetchedClassFacts, cik.get());
+                supplement.unfetched(), FilingTrace.ofAccessions(carried), unfetchedClassFacts,
+                new FinancialFetch.Registrant(cik.get(), SecFilingSupplement.allAccessions(tree)));
     }
 
     /**

@@ -75,19 +75,12 @@ class SecFilingSupplementWriteContractTest {
             }
         });
         server.start();
+        setUpCollectorWithFreshCache();
         DataSourceProperties properties = new DataSourceProperties();
         properties.getSecEdgar().setApiKey("Test Runner test@example.com");
         ExternalApiClientFactory factory = new ExternalApiClientFactory();
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("sec-edgar", 0, 0);
         String base = server.url("/").toString();
-        SecFilingSupplement supplement = new SecFilingSupplement(
-                new SecFilingClient(factory, properties, limiter, base, base),
-                new SecFilingSupplementStore(jdbcTemplate));
-        SecEdgarFinancialAdapter adapter = new SecEdgarFinancialAdapter(factory, properties, limiter,
-                new SecTickerCikCache(factory, properties, limiter, base, 1), base, false, supplement);
-        DataSourceRegistry registry = new DataSourceRegistry(List.of(), List.of(adapter), List.of(), List.of(),
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
-        collector = new FinancialCollector(registry, writer, absenceWriter, jdbcTemplate);
         SecEdgarFinancialAdapter oldAdapter = new SecEdgarFinancialAdapter(factory, properties, limiter,
                 new SecTickerCikCache(factory, properties, limiter, base, 1), base);
         beforeSupplement = new FinancialCollector(new DataSourceRegistry(List.of(), List.of(oldAdapter), List.of(),
@@ -108,6 +101,23 @@ class SecFilingSupplementWriteContractTest {
                 {"directory":{"item":[{"name":"fix-20251231_htm.xml","size":"%d"},{"name":"fix-20251231_lab.xml","size":"1"},
                   {"name":"FilingSummary.xml","size":"1"}]}}"""
                 .formatted(instance(X_FILED).getBytes(java.nio.charset.StandardCharsets.UTF_8).length));
+    }
+
+    /** 보충을 싣는 수집기 — 티커 파일 캐시를 새로 만든다(판을 다시 받는다). */
+    private void setUpCollectorWithFreshCache() {
+        DataSourceProperties properties = new DataSourceProperties();
+        properties.getSecEdgar().setApiKey("Test Runner test@example.com");
+        ExternalApiClientFactory factory = new ExternalApiClientFactory();
+        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("sec-edgar", 0, 0);
+        String base = server.url("/").toString();
+        SecFilingSupplement supplement = new SecFilingSupplement(
+                new SecFilingClient(factory, properties, limiter, base, base),
+                new SecFilingSupplementStore(jdbcTemplate));
+        SecEdgarFinancialAdapter adapter = new SecEdgarFinancialAdapter(factory, properties, limiter,
+                new SecTickerCikCache(factory, properties, limiter, base, 1), base, false, supplement);
+        DataSourceRegistry registry = new DataSourceRegistry(List.of(), List.of(adapter), List.of(), List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        collector = new FinancialCollector(registry, writer, absenceWriter, jdbcTemplate);
     }
 
     @AfterEach
@@ -259,15 +269,43 @@ class SecFilingSupplementWriteContractTest {
     }
 
     @Test
-    @DisplayName("재무 행이 이미 있는 행은 첫 FR로 묶지 않는다 — 그 행의 등록인은 포함 검사(sec-cik-bind)로만 정한다")
-    void existingFinancialsAreNotBoundByARefill() throws Exception {
+    @DisplayName("재무 행이 이미 있는 미결합 행 — 저장 접수번호가 전부 그 등록인 것이면 묶는다(포함 검사 ALL)")
+    void existingFinancialsBindWhenContained() throws Exception {
         companyFacts(true);
         collect();
         jdbcTemplate.update("UPDATE stock SET sec_cik = NULL WHERE id = ?", fix.stockId());
 
         collect();
 
-        assertThat(secCik()).as("오늘 파일이 다른 등록인을 줄 수 있다(REAX꼴) — 저장 판과 대조 없이 묶지 않는다").isNull();
+        assertThat(secCik()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("재무 행이 있는 미결합 행에 오늘 파일이 다른 등록인을 주면 쓰지 않고 소스가 답한 실패로 남긴다(REAX꼴 · ★16)")
+    void otherRegistrantIsRefusedBeforeWriting() throws Exception {
+        companyFacts(true);
+        collect();
+        jdbcTemplate.update("UPDATE stock SET sec_cik = NULL WHERE id = ?", fix.stockId());
+        List<String> before = rows();
+        ok("/files/company_tickers_exchange.json", """
+                {"fields":["cik","name","ticker","exchange"],"data":[[2,"새 등록인","FIX","Nasdaq"]]}""");
+        ok("/api/xbrl/companyfacts/CIK0000000002.json", """
+                {"cik":2,"entityName":"새 등록인","facts":{"us-gaap":{"Revenues":{"units":{"USD":[
+                  {"start":"2025-01-01","end":"2025-12-31","val":7,"accn":"0000000002-26-000001","fy":2025,"fp":"FY","form":"10-K","filed":"2026-03-01"}]}}}}}""");
+        ok("/submissions/CIK0000000002.json", """
+                {"cik":"2","filings":{"recent":{"accessionNumber":[],"form":[],"filingDate":[],"reportDate":[],"isXBRL":[]},"files":[]}}""");
+        SecurityRef unbound = new SecurityRef(fix.stockId(), "US", "FIX");
+        // 새 수집기 — 티커 파일 판을 새로 받게(캐시가 옛 판을 쥐지 않게)
+        setUpCollectorWithFreshCache();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> collector.collectDetailed(unbound, FROM, FinancialWriter.WriteMode.FILL_MISSING, false))
+                .isInstanceOfSatisfying(com.stockscreener.pipeline.datasource.DataSourceException.class, e -> {
+                    assertThat(e.kind()).isEqualTo(com.stockscreener.pipeline.datasource.DataSourceException.Kind.NOT_FOUND);
+                    assertThat(e.getMessage()).contains("NONE");
+                });
+        assertThat(rows()).as("옛 등록인 판을 그대로 둔다 — 회수도 쓰기도 없다").isEqualTo(before);
+        assertThat(secCik()).isNull();
     }
 
     @Test

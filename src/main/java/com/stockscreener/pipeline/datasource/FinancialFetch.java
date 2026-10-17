@@ -21,7 +21,7 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
                              boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
                              Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
                              List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace,
-                             List<DataSourceException.Kind> unfetchedClassFacts, Long registrant) {
+                             List<DataSourceException.Kind> unfetchedClassFacts, Registrant registrant) {
 
     public FinancialFetch {
         filingTrace = filingTrace == null ? FilingTrace.NONE : filingTrace;
@@ -156,11 +156,18 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
     }
 
     /**
-     * 이 수집이 물은 등록인(미국 SEC CIK · ADR-0180). 국내·시험은 {@code null}이다. 수집기는 행에 등록인이 없고 저장된 재무 행도
-     * 없을 때만 이것을 행에 묶는다 — 저장된 판이 없으니 섞일 것이 없다. 재무 행이 이미 있는 행은 포함 검사(sec-cik-bind)로만 묶는다.
+     * 이 수집이 물은 등록인(미국 SEC CIK · ADR-0180)과 그 등록인 트리(보충 뒤)가 싣는 접수번호 전부. 국내·시험은 {@code null}이다.
+     * 수집기가 행에 등록인이 없을 때 포함 검사(저장 접수번호 ⊂ 이 집합 ∪ 같은 CIK 보충 표)로 묶을지 · 쓸지를 가른다.
      */
-    public Long registrant() {
+    public Registrant registrant() {
         return registrant;
+    }
+
+    /** @param accessions 그 등록인 companyfacts(보충을 실은 트리)의 접수번호 전부 */
+    public record Registrant(long cik, Set<String> accessions) {
+        public Registrant {
+            accessions = Set.copyOf(accessions);
+        }
     }
 
     /** 부재 축을 안 보고 판 이력도 전부 내지 않는 소스용. */

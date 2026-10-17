@@ -22,7 +22,6 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -153,20 +152,7 @@ public class AlpacaSecIdentityAdapter implements IdentitySource {
             }
             throw e;
         }
-        Set<String> accessions = new HashSet<>();
-        for (Map.Entry<String, JsonNode> taxonomy : facts.properties()) {
-            for (Map.Entry<String, JsonNode> concept : taxonomy.getValue().properties()) {
-                for (Map.Entry<String, JsonNode> unit : concept.getValue().path("units").properties()) {
-                    for (JsonNode fact : unit.getValue()) {
-                        String accn = fact.path("accn").asString("");
-                        if (!accn.isBlank()) {
-                            accessions.add(accn);
-                        }
-                    }
-                }
-            }
-        }
-        return accessions;
+        return SecFilingSupplement.allAccessions(facts);
     }
 
     @Override
