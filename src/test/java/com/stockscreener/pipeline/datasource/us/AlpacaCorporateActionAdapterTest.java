@@ -499,6 +499,61 @@ class AlpacaCorporateActionAdapterTest {
                 .isInstanceOf(DataSourceException.class).hasMessageContaining("types");
     }
 
+    // ── 저장된 기호 시대(ADR-0180) — 원장에 없는 개명(CYCN→KRSA)을 건넌다 ─────────────────────
+
+    @Test
+    @DisplayName("저장된 기호 시대도 묻는다 — 원장 name_changes가 없는 개명의 옛 기호 시절 병합이 온다 · 시대 밖 사건은 안 담는다")
+    void followsARecordedSymbolEra() throws Exception {
+        enqueue(200, fixture("ca-empty.json"));
+        enqueue(200, """
+                {"corporate_actions":{
+                  "reverse_splits":[
+                    {"id":"r1","symbol":"CYCN","ex_date":"2024-05-01","old_rate":10,"new_rate":1,"old_cusip":"C1","new_cusip":"C2","process_date":"2024-05-01"},
+                    {"id":"r2","symbol":"CYCN","ex_date":"2024-09-15","old_rate":5,"new_rate":1,"old_cusip":"Z1","new_cusip":"Z2","process_date":"2024-09-15"}]},
+                 "next_page_token":null}""");
+        SecurityRef krsa = new SecurityRef(4L, "US", "KRSA", new SecurityRef.Identity("CYCN", LocalDate.of(2024, 1, 2), null,
+                null, null, List.of(new SecurityRef.SymbolEra("CYCN", null, LocalDate.of(2024, 9, 9)))));
+
+        List<CorporateAction> actions = adapter().fetchCorporateActions(krsa, FROM, TO).actions();
+
+        assertThat(actions).as("09-09에 KRSA가 됐으니 CYCN 09-15 사건은 그 기호를 쓴 다른 실체다")
+                .singleElement().satisfies(a -> assertThat(a.effectiveDate()).isEqualTo(LocalDate.of(2024, 5, 1)));
+        assertThat(query(server.takeRequest())).contains("symbols=KRSA");
+        assertThat(query(server.takeRequest())).contains("symbols=CYCN");
+    }
+
+    @Test
+    @DisplayName("저장 시대가 없는 행은 지금 걷기 그대로다 — 요청이 하나 더 늘지 않는다")
+    void noRecordedEraMeansNoExtraCall() throws Exception {
+        enqueue(200, fixture("ca-empty.json"));
+
+        adapter().fetchCorporateActions(NVDA, FROM, TO);
+
+        assertThat(server.getRequestCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("신원 사건 — CUSIP이 바뀐 개명 · 그 기호의 재편 · 인수 쪽 합병만 낸다(같은 증권의 기호만 바뀐 개명은 끝의 증거가 아니다)")
+    void identityEventsKeepOnlyEndOfSecurityEvidence() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{
+                  "name_changes":[
+                    {"id":"n1","old_symbol":"HLX","new_symbol":"HOS","old_cusip":"42330P107","new_cusip":"42330P107","process_date":"2026-09-02"},
+                    {"id":"n2","old_symbol":"XRPN","new_symbol":"XRPN","old_cusip":"G0R38G104","new_cusip":"299946103","process_date":"2026-10-12"}],
+                  "reorganizations":[{"id":"o1","symbol":"REAX","cusip":"75585H206","effective_date":"2026-08-25","stock_movements":[]}],
+                  "stock_mergers":[
+                    {"id":"m1","acquirer_symbol":"REAX","acquiree_symbol":"RMAX","effective_date":"2026-08-25"},
+                    {"id":"m2","acquirer_symbol":"BIG","acquiree_symbol":"REAX","effective_date":"2026-09-01"}]},
+                 "next_page_token":null}""");
+
+        List<com.stockscreener.pipeline.datasource.IdentitySource.IdentityEvent> events = adapter().fetchIdentityEvents(
+                List.of("HLX", "XRPN", "REAX"), LocalDate.of(2026, 4, 20), LocalDate.of(2026, 10, 17));
+
+        assertThat(events).extracting(e -> e.type() + "@" + e.date())
+                .containsExactly("reorganization@2026-08-25", "stock_merger@2026-08-25", "name_change@2026-10-12");
+        assertThat(query(server.takeRequest())).contains("types=name_change,reorganization,stock_merger");
+    }
+
     private AlpacaCorporateActionAdapter adapter() {
         return adapter(50);
     }

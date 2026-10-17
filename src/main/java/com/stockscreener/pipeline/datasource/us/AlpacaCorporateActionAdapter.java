@@ -197,16 +197,17 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
 
         Harvest harvest = new Harvest();
         Deque<Era> eras = new ArrayDeque<>();
-        eras.add(new Era(security.ticker(), null, null, 0));
+        eras.add(new Era(security.ticker(), null, null, 0, null, false));
         Set<String> visited = new HashSet<>();
-        while (!eras.isEmpty()) {
-            Era era = eras.poll();
-            if (!visited.add(era.symbol())) {
-                continue;
+        walk(eras, visited, requestStart, requestEnd, from, to, harvest);
+        // 저장된 기호 시대(ADR-0180) — 원장 걷기와의 합집합. 원장에 없는 개명(CYCN→KRSA)을 건넌다. 걷기가 이미 닿은 기호는 그쪽이
+        // 이긴다(계보가 있다). 개명 아닌 행은 저장 시대가 0줄이라 이 갈래가 안 돈다 — 그 행의 원장은 지금 걷기 그대로다.
+        for (SecurityRef.SymbolEra recorded : security.identity().recordedEras()) {
+            if (!visited.contains(recorded.symbol())) {
+                eras.add(new Era(recorded.symbol(), recorded.validTo(), null, 1, recorded.validFrom(), true));
             }
-            Map<String, List<JsonNode>> buckets = fetchBuckets(era.symbol(), requestStart, requestEnd);
-            eras.addAll(harvest(era, buckets, from, to, harvest));
         }
+        walk(eras, visited, requestStart, requestEnd, from, to, harvest);
 
         if (!harvest.unknownTypes.isEmpty()) {
             // 소스의 스펙이 넓어졌다는 신호다. 조용히 넘기면 새 타입이 영영 안 보인다.
@@ -300,7 +301,8 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             }
             String oldSymbol = node.path("old_symbol").asString("");
             String newSymbol = node.path("new_symbol").asString("");
-            events.add(new IdentitySource.IdentityEvent("name_change", date, Set.of(oldSymbol, newSymbol),
+            // 기호 그대로의 CUSIP 개명(XRPN→XRPN)이 있다 — Set.of는 같은 원소 둘에 던진다.
+            events.add(new IdentitySource.IdentityEvent("name_change", date, new java.util.TreeSet<>(List.of(oldSymbol, newSymbol)),
                     "%s→%s CUSIP %s→%s".formatted(oldSymbol, newSymbol, oldCusip, newCusip)));
         }
         for (JsonNode node : buckets.getOrDefault("reorganizations", List.of())) {
@@ -350,7 +352,19 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
      * @param lineage 이 시절 우리 회사의 CUSIP. 현재 심볼이면 {@code null} — <b>현재 심볼의 동작은
      *                옛 판 그대로 둔다</b>(하한·계보를 걸었을 때 기존 사건이 몇 건 빠지는지 안 쟀다)
      */
-    private record Era(String symbol, LocalDate until, Set<String> lineage, int depth) {
+    private record Era(String symbol, LocalDate until, Set<String> lineage, int depth, LocalDate since, boolean recorded) {
+    }
+
+    private void walk(Deque<Era> eras, Set<String> visited, LocalDate requestStart, LocalDate requestEnd, LocalDate from,
+                      LocalDate to, Harvest harvest) throws DataSourceException {
+        while (!eras.isEmpty()) {
+            Era era = eras.poll();
+            if (!visited.add(era.symbol())) {
+                continue;
+            }
+            Map<String, List<JsonNode>> buckets = fetchBuckets(era.symbol(), requestStart, requestEnd);
+            eras.addAll(harvest(era, buckets, from, to, harvest));
+        }
     }
 
     /** 체인 깊이 상한. 실측 체인은 한 단계다(FLG←NYCB · DFTX←MNMD). 넘으면 WARN으로 알린다. */
@@ -424,7 +438,8 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
         String symbol = era.symbol();
         String context = "corporate-actions " + symbol;
         boolean current = era.until() == null;
-        Set<String> lineage = current ? null : new HashSet<>(era.lineage());
+        // 저장된 시대는 계보(CUSIP)가 없다 — 그 대신 양 끝 날짜가 있다(그 기간에 그 기호를 우리 실체가 쥐었다는 판정이 저장 근거다).
+        Set<String> lineage = current || era.recorded() ? null : new HashSet<>(era.lineage());
 
         // 1) 값을 내는 타입 — 시절의 상한·계보로 거른 후보.
         List<CorporateAction> candidates = new ArrayList<>();
@@ -455,11 +470,11 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
                         continue; // 이 심볼이 우리 회사를 떠난 뒤 — 재배정받은 회사의 사건일 수 있다
                     }
                     String newCusip = node.path("new_cusip").asString("");
-                    if (!newCusip.isBlank() && !lineage.contains(newCusip)) {
+                    if (lineage != null && !newCusip.isBlank() && !lineage.contains(newCusip)) {
                         continue; // 계보 밖 CUSIP — 같은 심볼을 쓰던 다른 회사다
                     }
                     String oldCusip = node.path("old_cusip").asString("");
-                    if (!oldCusip.isBlank()) {
+                    if (lineage != null && !oldCusip.isBlank()) {
                         lineage.add(oldCusip);
                     }
                 }
@@ -483,7 +498,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
                     continue;
                 }
                 String sourceCusip = node.path("source_cusip").asString("");
-                if (!sourceCusip.isBlank() && !lineage.contains(sourceCusip)) {
+                if (lineage != null && !sourceCusip.isBlank() && !lineage.contains(sourceCusip)) {
                     continue;
                 }
             }
@@ -503,7 +518,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             if (changed == null || (!current && changed.isAfter(era.until()))) {
                 continue;
             }
-            if (!current) {
+            if (lineage != null) {
                 String newCusip = node.path("new_cusip").asString("");
                 if (!newCusip.isBlank() && !lineage.contains(newCusip)) {
                     continue;
@@ -517,8 +532,10 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             // 이 심볼이 재사용되기 전 다른 회사의 변경일 수 있다.
             renamesInto = List.of(renamesInto.get(0));
         }
-        LocalDate lowerBound = current || renamesInto.isEmpty() ? null
+        LocalDate walkedLower = current || renamesInto.isEmpty() ? null
                 : optionalDateOf(renamesInto.get(0), "process_date");
+        // 저장된 시대는 그 시작 날짜가 하한이다(모르면 원장 걷기의 하한).
+        LocalDate lowerBound = era.recorded() && era.since() != null ? era.since() : walkedLower;
 
         // 3) 하한을 걸고 담는다. 제외 타입도 같은 id로 한 번만 센다.
         for (int i = 0; i < candidates.size(); i++) {
@@ -554,7 +571,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             if (!oldCusip.isBlank()) {
                 oldLineage.add(oldCusip);
             }
-            next.add(new Era(oldSymbol, optionalDateOf(rename, "process_date"), oldLineage, era.depth() + 1));
+            next.add(new Era(oldSymbol, optionalDateOf(rename, "process_date"), oldLineage, era.depth() + 1, null, false));
         }
         return next;
     }

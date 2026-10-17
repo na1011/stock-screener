@@ -195,27 +195,18 @@ public class AlpacaDividendAdapter implements GovernanceDataSource {
         LocalDate yearStart = LocalDate.of(bsnsYear, 1, 1);
         LocalDate yearEnd = LocalDate.of(bsnsYear, 12, 31);
         String symbol = security.ticker();
-        List<JsonNode> events = fetchAll(symbol, yearStart.minusDays(LEAD_DAYS),
-                yearEnd.plusDays(TRAIL_DAYS));
-
         List<JsonNode> inYear = new ArrayList<>();
-        for (JsonNode event : events) {
-            String rowSymbol = event.path("symbol").asString("");
-            if (!symbol.equals(rowSymbol)) {
-                // 우리가 안 물어본 종목이다. 붙이면 엉뚱한 종목의 배당이 아무 에러 없이 들어간다.
-                log.warn("요청한 종목과 다른 심볼의 배당이라 건너뛴다. 요청={} 응답={}",
-                        symbol, rowSymbol.isBlank() ? "(없음)" : rowSymbol);
-                continue;
-            }
-            LocalDate exDate = dateOf(event, "ex_date");
-            if (exDate == null) {
-                throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
-                        "ex_date가 없거나 날짜가 아니다. ticker=" + symbol + " 행=" + event);
-            }
-            if (!exDate.isBefore(yearStart) && !exDate.isAfter(yearEnd)) {
-                inYear.add(event);
-            }
+        // 기호 시대마다 묻는다(ADR-0180) — 이 소스는 배당을 <b>그때의 기호</b> 아래 둔다(실측 ★15: FGNXP의 배당 5건이 개명 뒤 FGCPP로는
+        // 안 온다). 시대는 지금 표지 + 저장된 기호 시대(신원 판정의 개명 갈래가 더한다)다. 개명 아닌 행은 저장 시대가 0줄이라 지금 표지
+        // 하나를 경계 없이 묻는다 — 지금까지와 같다. 원장 name_changes 걷기(이 표가 생기기 전 개명 · FLG←NYCB)는 여기 없다 — 그것은
+        // 개명 아닌 행의 값도 바꾸므로 관문 설정 뒤 몫이다.
+        List<SecurityRef.SymbolEra> recorded = security.identity().recordedEras();
+        LocalDate currentSince = recorded.stream().map(SecurityRef.SymbolEra::validTo).max(LocalDate::compareTo).orElse(null);
+        List<SecurityRef.SymbolEra> eras = new ArrayList<>(recorded);
+        for (SecurityRef.SymbolEra era : eras) {
+            collectInYear(era.symbol(), era.validFrom(), era.validTo(), yearStart, yearEnd, inYear);
         }
+        collectInYear(symbol, currentSince, null, yearStart, yearEnd, inYear);
 
         if (inYear.isEmpty()) {
             // 「그 해에 배당이 없었다」. 접수번호를 찍어 두면 국내용 스탬프 경로와 미스탬프
@@ -244,6 +235,37 @@ public class AlpacaDividendAdapter implements GovernanceDataSource {
                     exDate.replace("-", ""), LocalDate.parse(exDate), ordinal, fieldsOf(event)));
         }
         return rows;
+    }
+
+    /**
+     * 한 기호 시대의 그해 배당을 모은다. 시대 경계는 {@code ex_date}로 건다 — {@code since} 포함 · {@code until} 제외(둘 다 null이면 경계
+     * 없음). 경계 밖은 그 기호를 다른 실체가 쓰던 때일 수 있다.
+     */
+    private void collectInYear(String symbol, LocalDate since, LocalDate until, LocalDate yearStart, LocalDate yearEnd,
+                               List<JsonNode> inYear) throws DataSourceException {
+        if ((until != null && !until.isAfter(yearStart)) || (since != null && since.isAfter(yearEnd))) {
+            return; // 이 시대가 그해와 안 겹친다 — 콜을 태우지 않는다
+        }
+        for (JsonNode event : fetchAll(symbol, yearStart.minusDays(LEAD_DAYS), yearEnd.plusDays(TRAIL_DAYS))) {
+            String rowSymbol = event.path("symbol").asString("");
+            if (!symbol.equals(rowSymbol)) {
+                // 우리가 안 물어본 종목이다. 붙이면 엉뚱한 종목의 배당이 아무 에러 없이 들어간다.
+                log.warn("요청한 종목과 다른 심볼의 배당이라 건너뛴다. 요청={} 응답={}",
+                        symbol, rowSymbol.isBlank() ? "(없음)" : rowSymbol);
+                continue;
+            }
+            LocalDate exDate = dateOf(event, "ex_date");
+            if (exDate == null) {
+                throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                        "ex_date가 없거나 날짜가 아니다. ticker=" + symbol + " 행=" + event);
+            }
+            if ((since != null && exDate.isBefore(since)) || (until != null && !exDate.isBefore(until))) {
+                continue;
+            }
+            if (!exDate.isBefore(yearStart) && !exDate.isAfter(yearEnd)) {
+                inYear.add(event);
+            }
+        }
     }
 
     /** 페이지를 끝까지 돈다. 부분 결과는 「배당이 없다」와 구별되지 않으므로 반환하지 않는다. */
