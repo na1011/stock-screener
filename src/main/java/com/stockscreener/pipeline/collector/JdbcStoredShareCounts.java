@@ -171,6 +171,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             FROM latest
             JOIN stock s ON s.id = latest.stock_id
             WHERE latest.share_basis_status IS DISTINCT FROM 'UNRESOLVED'
+              AND (s.era_to IS NULL OR s.era_to > ?)
             ORDER BY s.ticker
             """.formatted(SHIFT_TO_ASOF, CURRENCY_MISMATCHED);
 
@@ -188,6 +189,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
               AND s.is_active
               AND f.published_at <= ?
               AND f.period_end >= ?
+              AND (s.era_to IS NULL OR s.era_to > ?)
             ORDER BY f.stock_id, f.period_end DESC, f.published_at DESC, f.revision_no DESC
             """;
 
@@ -234,7 +236,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                         rs.getObject("published_at", LocalDate.class),
                         rs.getBoolean("currency_mismatched"),
                         rs.getString("name")),
-                marketCode, asOf, oldestPeriodEnd, asOf);
+                marketCode, asOf, oldestPeriodEnd, asOf, asOf);
     }
 
     /**
@@ -273,7 +275,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             chosen.put(stockId, new ShareCount(rs.getString("ticker"), shares, rs.getString("sic_code"),
                     rs.getObject("period_end", LocalDate.class), publishedAt, mismatched.contains(stockId),
                     rs.getString("name")));
-        }, marketCode, asOf, oldestPeriodEnd);
+        }, marketCode, asOf, oldestPeriodEnd, asOf);
         List<ShareCount> out = new ArrayList<>(chosen.values());
         out.sort(java.util.Comparator.comparing(ShareCount::ticker));
         return out;

@@ -25,7 +25,13 @@ public interface FilingListSource {
     FilingListing list(LocalDate cursor, LocalDate todayKst, Map<String, ListedStock> stocks);
 
     /** 우리 종목 하나. {@code accountingMonth}는 국내 분기 보고서 코드에만 쓴다. */
-    record ListedStock(long stockId, Integer accountingMonth) {
+    /**
+     * @param secCik 미국 행에 묶인 등록인(ADR-0180) — 있으면 장부가 오늘 티커 파일보다 먼저 쓴다. 국내·미결합은 {@code null}
+     */
+    record ListedStock(long stockId, Integer accountingMonth, Long secCik) {
+        public ListedStock(long stockId, Integer accountingMonth) {
+            this(stockId, accountingMonth, null);
+        }
     }
 
     /**

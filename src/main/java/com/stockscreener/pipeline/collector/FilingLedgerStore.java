@@ -88,9 +88,11 @@ public class FilingLedgerStore {
             default -> throw new IllegalArgumentException("장부의 시장이 아니다: " + market);
         };
         Map<String, ListedStock> out = new HashMap<>();
-        jdbc.query("SELECT id, ticker, accounting_month FROM stock WHERE " + where, rs -> {
+        jdbc.query("SELECT id, ticker, accounting_month, sec_cik FROM stock WHERE " + where, rs -> {
             int month = rs.getInt("accounting_month");
-            out.put(rs.getString("ticker"), new ListedStock(rs.getLong("id"), rs.wasNull() ? null : month));
+            Integer accountingMonth = rs.wasNull() ? null : month;
+            out.put(rs.getString("ticker"), new ListedStock(rs.getLong("id"), accountingMonth,
+                    rs.getObject("sec_cik", Long.class)));
         });
         return out;
     }

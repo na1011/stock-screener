@@ -281,6 +281,23 @@ class JdbcStoredShareCountsTest {
                 .isEqualByComparingTo(new BigDecimal("2100000"));
     }
 
+    @Test
+    @DisplayName("등록인 시대가 그날까지 끝난 행은 순위 후보가 아니다 — 끊긴 앞 행이 새 등록인 행과 함께 순위에 안 든다(ADR-0180)")
+    void endedRegistrantEraIsNotACandidate() {
+        long ended = insertStock("US", "REAX~2026-08-24", "앞 등록인");
+        long open = insertStock("US", "OPENT", "열린 시대");
+        long later = insertStock("US", "LATERT", "시대가 뒤에 끝남");
+        jdbcTemplate.update("UPDATE stock SET era_to = ? WHERE id = ?", AS_OF, ended);
+        jdbcTemplate.update("UPDATE stock SET era_to = ? WHERE id = ?", AS_OF.plusDays(1), later);
+        for (long id : List.of(ended, open, later)) {
+            insertQuarter(id, 2026, "Q2", LocalDate.of(2026, 6, 30), "USD", "1000");
+        }
+
+        assertThat(find("REAX~2026-08-24")).as("era_to는 제외다 — 그날부터 아니다").isEmpty();
+        assertThat(find("OPENT")).isPresent();
+        assertThat(find("LATERT")).as("과거 기준일에는 그 시대 안이다").isPresent();
+    }
+
     private Optional<StoredShareCounts.ShareCount> find(String ticker) {
         List<StoredShareCounts.ShareCount> counts =
                 shareCounts.activeByMarket("US", OLDEST, AS_OF);

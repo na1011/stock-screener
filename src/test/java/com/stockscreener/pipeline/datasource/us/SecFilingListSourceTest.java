@@ -118,6 +118,22 @@ class SecFilingListSourceTest {
     }
 
     @Test
+    @DisplayName("행에 묶인 등록인이 오늘 파일보다 먼저다 — 교체 기호(REAX꼴)의 새 등록인 공시가 옛 행에 안 붙는다(ADR-0180 · ★16)")
+    void boundRegistrantWinsOverTodaysFile() {
+        SecTickerCikCache.Snapshot file = new SecTickerCikCache.Snapshot(Map.of(
+                "REAX", new SecTickerCikCache.Listing(2136387L, "NYSE")), Instant.parse("2026-10-12T00:00:00Z"));
+        Map<String, ListedStock> stocks = Map.of(
+                "REAX~2026-08-24", new ListedStock(40L, null, 1862461L),
+                "REAX", new ListedStock(41L, null, 2136387L),
+                "NEWCO", new ListedStock(42L, null));
+
+        Map<Long, List<Long>> byCik = SecFilingListSource.stocksByCik(file, stocks);
+
+        assertThat(byCik).containsEntry(1862461L, List.of(40L)).containsEntry(2136387L, List.of(41L));
+        assertThat(byCik.values().stream().flatMap(List::stream)).as("파일에 없는 미결합 행은 안 붙는다").doesNotContain(42L);
+    }
+
+    @Test
     @DisplayName("정기 공시만 세고, 한 CIK의 종목 둘에 한 줄씩 · 점 표기 티커도 붙인다 · 8-K는 안 간다")
     void filtersPeriodicFormsAndFansOutPerStock() {
         LocalDate day = LocalDate.of(2026, 10, 1);

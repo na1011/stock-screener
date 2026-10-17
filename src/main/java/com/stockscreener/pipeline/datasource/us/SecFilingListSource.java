@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
@@ -125,9 +126,14 @@ public class SecFilingListSource implements FilingListSource {
         return new ListedDay(day, DayOutcome.LISTED, periodic, filings);
     }
 
+    /**
+     * 등록인 → 우리 행. <b>행에 묶인 등록인이 먼저다</b>(ADR-0180) — 오늘 티커 파일은 교체·재사용 기호에 새 등록인을 준다(REAX ·
+     * XRPN). 파일로 풀면 새 등록인의 공시가 옛 등록인 행에 붙고, 그 소비 FR이 옛 행에 새 등록인 재무를 섞는다(★16). 묶이지 않은 행
+     * (재무 행 0 · 이름 축)만 오늘 파일로 푼다 — 저장된 판이 없어 섞일 것이 없다.
+     */
     static Map<Long, List<Long>> stocksByCik(SecTickerCikCache.Snapshot snapshot, Map<String, ListedStock> stocks) {
         Map<Long, List<Long>> out = new HashMap<>();
-        stocks.forEach((ticker, stock) -> snapshot.findCik(ticker)
+        stocks.forEach((ticker, stock) -> (stock.secCik() != null ? Optional.of(stock.secCik()) : snapshot.findCik(ticker))
                 .ifPresent(cik -> out.computeIfAbsent(cik, k -> new ArrayList<>()).add(stock.stockId())));
         return out;
     }
