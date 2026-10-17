@@ -1,0 +1,266 @@
+package com.stockscreener.pipeline.collector.identity;
+
+import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.IdentitySource;
+import com.stockscreener.support.JpaSliceTest;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * 신원 판정을 행에 반영한다(ADR-0180). 소스는 가짜다 — 판정 갈래는 {@link IdentityJudgeTest}가 묻고, 여기는 <b>DB에 무엇이 남는가</b>를
+ * 묻는다: 개명은 표지 + 기호 시대 · 끊기는 앞 행 시대 끝 + 새 행(등록인 · 시대 시작 · 물려받은 기호 시대) · 재사용은 비운 표지 · 기록 표.
+ */
+@JpaSliceTest
+@Import({UsIdentityTriage.class, UsIdentityTriageTest.Config.class})
+class UsIdentityTriageTest {
+
+    private static final LocalDate AS_OF = LocalDate.of(2026, 10, 17);
+    private static final LocalDate START = AS_OF.minusDays(40);
+
+    @Autowired
+    private UsIdentityTriage triage;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private FakeSource source;
+
+    @BeforeEach
+    void clear() {
+        source.reset();
+    }
+
+    @Test
+    @DisplayName("개명 — 같은 행의 표지가 새 기호가 되고 옛 기호가 기호 시대에 남는다 · 판정 기록 RENAME + RUN")
+    void renameUpdatesTheRow() {
+        long hlx = stock("HLX", 866829L);
+        source.listed("HOS");
+        source.anchor("HLX", series(1, 0, 30));
+        source.today("HOS", series(1, 0, 30));
+        source.literal("HOS", series(1, 12, 30));
+        source.file.put("HOS", 866829L);
+
+        UsIdentityTriage.Outcome outcome = triage.run(77L, AS_OF);
+
+        assertThat(outcome.verdictCounts()).containsEntry("RENAME", 1);
+        assertThat(ticker(hlx)).isEqualTo("HOS");
+        assertThat(jdbcTemplate.queryForList("SELECT symbol || '|' || coalesce(valid_from::text, '') || '|' || valid_to FROM stock_symbol_era WHERE stock_id = ?",
+                String.class, hlx)).containsExactly("HLX||" + START.plusDays(12));
+        assertThat(verdicts(77L)).containsExactlyInAnyOrder("RENAME", "RUN");
+        assertThat(count("SELECT count(*) FROM stock WHERE market_code = 'US' AND ticker IN ('HLX', 'HOS')")).as("행 수 그대로").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("기호 그대로 등록인 교체 + 전제 셋 — 앞 행 표지를 비우고 시대를 닫고, 새 행이 같은 기호 · 새 등록인 · 시대 시작으로 선다")
+    void sameSymbolSplitCreatesASuccessorRow() {
+        long reax = stock("REAX", 1862461L);
+        jdbcTemplate.update("INSERT INTO stock_symbol_era (stock_id, symbol, valid_from, valid_to) VALUES (?, 'REAXX', NULL, DATE '2026-01-01')", reax);
+        financial(reax, "0001862461-26-000001");
+        LocalDate reorg = LocalDate.of(2026, 8, 25);
+        source.listed("REAX");
+        source.anchor("REAX", series(2, 0, 30));
+        source.today("REAX", series(2, 0, 30));
+        source.file.put("REAX", 2136387L);
+        source.accessions.put(2136387L, Set.of("0002136387-26-000001"));
+        source.events.add(new IdentitySource.IdentityEvent("reorganization", reorg, Set.of("REAX"), "REAX"));
+
+        UsIdentityTriage.Outcome outcome = triage.run(78L, AS_OF);
+
+        assertThat(outcome.verdictCounts()).containsEntry("SPLIT", 1);
+        assertThat(ticker(reax)).isEqualTo("REAX~" + reorg.minusDays(1));
+        assertThat(jdbcTemplate.queryForObject("SELECT era_to FROM stock WHERE id = ?", LocalDate.class, reax)).isEqualTo(reorg);
+        Map<String, Object> successor = jdbcTemplate.queryForMap(
+                "SELECT id, sec_cik, era_from, alpaca_anchor_symbol FROM stock WHERE market_code = 'US' AND ticker = 'REAX'");
+        assertThat(successor.get("sec_cik")).isEqualTo(2136387L);
+        assertThat(successor.get("era_from").toString()).isEqualTo(reorg.toString());
+        assertThat(jdbcTemplate.queryForList("SELECT symbol FROM stock_symbol_era WHERE stock_id = ?", String.class,
+                successor.get("id"))).as("앞 행의 기호 시대를 물려받는다").containsExactly("REAXX");
+    }
+
+    @Test
+    @DisplayName("끊기 전제가 안 서면(끝의 증거 없음) 아무것도 안 바꾸고 보류로 남긴다")
+    void splitWithoutEvidenceIsAmbiguous() {
+        long reax = stock("REAX", 1862461L);
+        financial(reax, "0001862461-26-000001");
+        source.listed("REAX");
+        source.anchor("REAX", series(2, 0, 30));
+        source.today("REAX", series(2, 0, 30));
+        source.file.put("REAX", 2136387L);
+
+        UsIdentityTriage.Outcome outcome = triage.run(79L, AS_OF);
+
+        assertThat(outcome.verdictCounts()).containsEntry("AMBIGUOUS", 1).doesNotContainKey("SPLIT");
+        assertThat(ticker(reax)).isEqualTo("REAX");
+        assertThat(count("SELECT count(*) FROM stock WHERE market_code = 'US' AND ticker LIKE 'REAX%'")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("재사용 — 표지를 「기호~마지막 거래일」로 비우고 시대를 그 다음 날로 닫는다")
+    void reuseVacatesTheTicker() {
+        long vg = stock("VG", null);
+        source.listed("VG");
+        source.anchor("VG", series(3, 0, 10));
+        source.today("VG", series(4, 15, 40));
+
+        triage.run(80L, AS_OF);
+
+        LocalDate last = START.plusDays(9);
+        assertThat(ticker(vg)).isEqualTo("VG~" + last);
+        assertThat(jdbcTemplate.queryForObject("SELECT era_to FROM stock WHERE id = ?", LocalDate.class, vg)).isEqualTo(last.plusDays(1));
+    }
+
+    @Test
+    @DisplayName("재료를 못 받으면 아무것도 안 바꾸고 새 기호 등록을 전부 막는다 — 실패 RUN 줄을 남긴다")
+    void sourceFailureBlocksAllNew() {
+        long hlx = stock("HLX", 866829L);
+        source.failListing = true;
+
+        UsIdentityTriage.Outcome outcome = triage.run(81L, AS_OF);
+
+        assertThat(outcome.blockAllNew()).isTrue();
+        assertThat(ticker(hlx)).isEqualTo("HLX");
+        assertThat(jdbcTemplate.queryForObject("SELECT evidence FROM identity_triage WHERE execution_id = 81", String.class))
+                .startsWith("실패");
+    }
+
+    private long stock(String ticker, Long cik) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, alpaca_anchor_symbol, alpaca_anchor_date, sec_cik)
+                VALUES ('US', ?, ?, ?, DATE '2026-08-28', ?) RETURNING id""", Long.class, ticker, ticker, ticker, cik);
+    }
+
+    private void financial(long stockId, String accession) {
+        jdbcTemplate.update("""
+                INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
+                                                 currency_code, report_code, revision_no, is_latest)
+                VALUES (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', DATE '2026-02-20', 'USD', ?, 0, true)""",
+                stockId, "10-K:" + accession);
+    }
+
+    private String ticker(long id) {
+        return jdbcTemplate.queryForObject("SELECT ticker FROM stock WHERE id = ?", String.class, id);
+    }
+
+    private List<String> verdicts(long executionId) {
+        return jdbcTemplate.queryForList("SELECT verdict FROM identity_triage WHERE execution_id = ?", String.class, executionId);
+    }
+
+    private int count(String sql) {
+        return jdbcTemplate.queryForObject(sql, Integer.class);
+    }
+
+    private static List<IdentitySource.EntityBar> series(int entity, int from, int to) {
+        List<IdentitySource.EntityBar> bars = new ArrayList<>();
+        for (int day = from; day < to; day++) {
+            bars.add(new IdentitySource.EntityBar(START.plusDays(day), BigDecimal.valueOf(10 + day), 1_000L * entity + day, entity));
+        }
+        return bars;
+    }
+
+    @TestConfiguration
+    static class Config {
+        @Bean
+        FakeSource fakeIdentitySource() {
+            return new FakeSource();
+        }
+    }
+
+    /** 요청 asof 갈래마다 미리 준 계열을 낸다. 닻 갈래는 기호만으로 낸다(시험의 행은 닻 날짜가 하나다). */
+    static final class FakeSource implements IdentitySource {
+        final List<Listed> listed = new ArrayList<>();
+        final Map<String, List<EntityBar>> anchor = new HashMap<>();
+        final Map<String, List<EntityBar>> today = new HashMap<>();
+        final Map<String, List<EntityBar>> literal = new HashMap<>();
+        final Map<String, Long> file = new HashMap<>();
+        final Map<Long, Set<String>> accessions = new HashMap<>();
+        final List<IdentityEvent> events = new ArrayList<>();
+        boolean failListing;
+
+        void reset() {
+            listed.clear();
+            anchor.clear();
+            today.clear();
+            literal.clear();
+            file.clear();
+            accessions.clear();
+            events.clear();
+            failListing = false;
+        }
+
+        void listed(String symbol) {
+            listed.add(new Listed(symbol, symbol + " Inc", "NYSE"));
+        }
+
+        void anchor(String symbol, List<EntityBar> bars) {
+            anchor.put(symbol, bars);
+        }
+
+        void today(String symbol, List<EntityBar> bars) {
+            today.put(symbol, bars);
+        }
+
+        void literal(String symbol, List<EntityBar> bars) {
+            literal.put(symbol, bars);
+        }
+
+        @Override
+        public List<Listed> listedSecurities() throws DataSourceException {
+            if (failListing) {
+                throw new DataSourceException(DataSourceException.Kind.TRANSIENT, "fake", "목록 실패");
+            }
+            return listed;
+        }
+
+        @Override
+        public RegistrantFile registrantFile() {
+            return symbol -> Optional.ofNullable(file.get(symbol));
+        }
+
+        @Override
+        public Map<String, List<EntityBar>> bars(Collection<String> symbols, BarAsOf asOf, LocalDate from, LocalDate to) {
+            Map<String, List<EntityBar>> pick = asOf.literal() ? literal : asOf.date() == null ? today : anchor;
+            Map<String, List<EntityBar>> out = new HashMap<>();
+            symbols.forEach(s -> {
+                if (pick.containsKey(s)) {
+                    out.put(s, pick.get(s));
+                }
+            });
+            return out;
+        }
+
+        @Override
+        public Set<String> registrantAccessions(long cik) {
+            return accessions.getOrDefault(cik, Set.of());
+        }
+
+        @Override
+        public List<RegistrantFiling> registrantFilings(long cik, LocalDate since) {
+            return List.of();
+        }
+
+        @Override
+        public List<IdentityEvent> identityEvents(Collection<String> symbols, LocalDate from, LocalDate to) {
+            return events.stream().filter(e -> e.symbols().stream().anyMatch(symbols::contains)).toList();
+        }
+    }
+}

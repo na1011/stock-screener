@@ -68,7 +68,15 @@ class UniverseRebalanceTailTest {
         return new UniverseRebalanceJob(registry,
                 mock(UniverseReconciler.class), mock(StockRegistrar.class), batchExecutions,
                 mock(AlertPort.class), jdbcTemplate, membershipGapFiller, freshnessCatchUp,
-                candidateIntake, new UsCandidateFeed(candidateFeed));
+                candidateIntake, new UsCandidateFeed(candidateFeed), notRunTriage());
+    }
+
+    private static com.stockscreener.pipeline.collector.identity.UsIdentityTriage notRunTriage() {
+        com.stockscreener.pipeline.collector.identity.UsIdentityTriage triage =
+                mock(com.stockscreener.pipeline.collector.identity.UsIdentityTriage.class);
+        when(triage.run(org.mockito.ArgumentMatchers.anyLong(), any()))
+                .thenReturn(com.stockscreener.pipeline.collector.identity.UsIdentityTriage.Outcome.NOT_RUN);
+        return triage;
     }
 
     /** 후보 풀 행을 그 유니버스 질의에 답한다 — {@code UniverseTarget}이 private record라 행 매퍼를 거쳐 만든다. */

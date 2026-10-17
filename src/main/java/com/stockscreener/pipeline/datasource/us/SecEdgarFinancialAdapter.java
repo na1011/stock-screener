@@ -217,6 +217,12 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
      * 터지고</b>, 그 예외가 전송 실패로 감싸져 404가 {@code TRANSIENT}가 된다 — 재시도해도 영원히 안 되는 것을 재시도 대상으로
      * 기록하게 된다. 실제로 그렇게 났다.
      */
+    /** companyfacts 원문 — 신원 판정의 포함 검사가 같은 받기 자리로 받는다(ADR-0180 · 받기를 두 벌 두지 않는다). */
+    JsonNode companyFacts(long cik, String context) throws DataSourceException {
+        requireUserAgent();
+        return fetchFacts(cik, context);
+    }
+
     private JsonNode fetchFacts(long cik, String context) throws DataSourceException {
         // MUST: CIK를 10자리 zero-padding한다. 안 하면 404이고, 개발가이드가 그것을
         // 404의 최다 원인으로 적었다. 실측에서도 CIK320193.json이 404였다.

@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.datasource.us;
 import com.stockscreener.pipeline.datasource.CorporateAction;
 import com.stockscreener.pipeline.datasource.CorporateActionDataSource;
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.IdentitySource;
 import com.stockscreener.pipeline.datasource.Distribution;
 import com.stockscreener.pipeline.datasource.PriceDiscontinuity;
 import com.stockscreener.pipeline.datasource.SecurityRef;
@@ -23,6 +24,8 @@ import tools.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.TreeSet;
+import java.util.Collection;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -268,6 +271,59 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
         }
         bySymbol.values().forEach(list -> list.sort(Comparator.comparing(CorporateAction::effectiveDate)));
         return new MarketSplits(bySymbol, malformed);
+    }
+
+    /**
+     * 기호들의 <b>신원 사건</b> — 개명 · 재편 · 피인수 합병의 인수 쪽(ADR-0180 · 행 끊기의 끝의 증거). 효력일 기준 {@code [from, to]}.
+     *
+     * <p>개명은 <b>CUSIP이 바뀐 것만</b> 낸다 — 같은 증권의 기호만 바뀐 것(HLX→HOS)은 등록인이 끝났다는 증거가 아니다. 재편은
+     * 그 기호가 대상인 것, 합병은 그 기호가 <b>인수 쪽</b>인 것만(피인수 쪽은 그 기호의 증권이 사라진 것이라 다른 갈래다). 날짜는
+     * 개명이 처리일(효력일이 없다) · 나머지는 효력일이다. 실측(2026-10-17): REAX 08-25 재편·인수 · XRPN 10-12 CUSIP 개명 ·
+     * COLA 10-02 · IPEX 09-28(재편 09-25) · JFB 09-04 · NHIC 09-22.
+     */
+    List<IdentitySource.IdentityEvent> fetchIdentityEvents(Collection<String> symbols, LocalDate from, LocalDate to)
+            throws DataSourceException {
+        requireCredentials();
+        if (symbols.isEmpty()) {
+            return List.of();
+        }
+        Set<String> asked = new HashSet<>(symbols);
+        Map<String, List<JsonNode>> buckets = fetchBuckets(String.join(",", new TreeSet<>(symbols)),
+                "name_change,reorganization,stock_merger", from, maxOf(to, LocalDate.now()));
+        List<IdentitySource.IdentityEvent> events = new ArrayList<>();
+        for (JsonNode node : buckets.getOrDefault("name_changes", List.of())) {
+            String oldCusip = node.path("old_cusip").asString("");
+            String newCusip = node.path("new_cusip").asString("");
+            LocalDate date = optionalDateOf(node, "process_date");
+            if (date == null || oldCusip.equals(newCusip)) {
+                continue;
+            }
+            String oldSymbol = node.path("old_symbol").asString("");
+            String newSymbol = node.path("new_symbol").asString("");
+            events.add(new IdentitySource.IdentityEvent("name_change", date, Set.of(oldSymbol, newSymbol),
+                    "%s→%s CUSIP %s→%s".formatted(oldSymbol, newSymbol, oldCusip, newCusip)));
+        }
+        for (JsonNode node : buckets.getOrDefault("reorganizations", List.of())) {
+            String symbol = node.path("symbol").asString("");
+            LocalDate date = optionalDateOf(node, "effective_date");
+            if (date == null || !asked.contains(symbol)) {
+                continue;
+            }
+            events.add(new IdentitySource.IdentityEvent("reorganization", date, Set.of(symbol),
+                    "%s CUSIP %s → %s".formatted(symbol, node.path("cusip").asString(""), node.path("stock_movements"))));
+        }
+        for (JsonNode node : buckets.getOrDefault("stock_mergers", List.of())) {
+            String acquirer = node.path("acquirer_symbol").asString("");
+            LocalDate date = optionalDateOf(node, "effective_date");
+            if (date == null || !asked.contains(acquirer)) {
+                continue;
+            }
+            events.add(new IdentitySource.IdentityEvent("stock_merger", date, Set.of(acquirer),
+                    "인수 %s · 피인수 %s".formatted(acquirer, node.path("acquiree_symbol").asString(""))));
+        }
+        events.removeIf(e -> e.date().isBefore(from) || e.date().isAfter(to));
+        events.sort(Comparator.comparing(IdentitySource.IdentityEvent::date));
+        return events;
     }
 
     /**

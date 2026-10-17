@@ -5,6 +5,7 @@ import com.stockscreener.notification.AlertPort;
 import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.collector.UniverseReconciler;
+import com.stockscreener.pipeline.collector.identity.UsIdentityTriage;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
 import com.stockscreener.pipeline.datasource.UniverseDataSource;
@@ -53,6 +54,7 @@ public class UniverseRebalanceJob {
     private final FreshnessCatchUpJob freshnessCatchUp;
     private final CandidateIntake candidateIntake;
     private final UsCandidateFeed candidateFeed;
+    private final UsIdentityTriage identityTriage;
 
     /**
      * 정기 경로가 활성 지수와 함께 화해하는 <b>후보 풀</b>(ADR-0178) — 비활성인 채로 둔다. 스크리닝 모집단·지표·결손 보충·따라잡기는
@@ -61,11 +63,14 @@ public class UniverseRebalanceJob {
      */
     static final List<String> CANDIDATE_POOLS = List.of("US_LISTED");
 
+    private static final String US_MARKET = "US";
+
     public UniverseRebalanceJob(DataSourceRegistry registry, UniverseReconciler reconciler,
                                 StockRegistrar stockRegistrar, BatchExecutions batchExecutions,
                                 AlertPort alertPort, JdbcTemplate jdbcTemplate,
                                 MembershipGapFiller membershipGapFiller, FreshnessCatchUpJob freshnessCatchUp,
-                                CandidateIntake candidateIntake, UsCandidateFeed candidateFeed) {
+                                CandidateIntake candidateIntake, UsCandidateFeed candidateFeed,
+                                UsIdentityTriage identityTriage) {
         this.registry = registry;
         this.reconciler = reconciler;
         this.stockRegistrar = stockRegistrar;
@@ -76,6 +81,7 @@ public class UniverseRebalanceJob {
         this.freshnessCatchUp = freshnessCatchUp;
         this.candidateIntake = candidateIntake;
         this.candidateFeed = candidateFeed;
+        this.identityTriage = identityTriage;
     }
 
     /**
@@ -127,12 +133,18 @@ public class UniverseRebalanceJob {
         int succeeded = 0;
         int failed = 0;
         long changedRows = 0;
+        UsIdentityTriage.Outcome identity = null;
         try {
             for (UniverseTarget target : targets) {
                 // 이 잡은 process()도 루프 안 stage()도 쓰지 않아 자동 게이트가 안 닿는다.
                 execution.abortIfAbandoned();
+                if (identity == null && US_MARKET.equals(target.marketCode())) {
+                    // 미국 첫 지수 앞에서 한 번 — 순위가 표지로 오늘 목록과 맞추므로 개명은 순위보다 먼저다(ADR-0180).
+                    identity = triageIdentity(execution, asOf);
+                }
                 try {
-                    UniverseReconciler.Result result = rebalanceOne(target, asOf);
+                    UniverseReconciler.Result result = rebalanceOne(target, asOf,
+                            US_MARKET.equals(target.marketCode()) ? identity : UsIdentityTriage.Outcome.NOT_RUN);
                     changedRows += result.addedCount() + result.removedCount();
                     succeeded++;
                     if (result.changed()) {
@@ -247,17 +259,68 @@ public class UniverseRebalanceJob {
         alertPort.send(event);
     }
 
-    private UniverseReconciler.Result rebalanceOne(UniverseTarget target, LocalDate asOf)
+    /**
+     * 미국 신원 판정(ADR-0180). 재료를 못 받으면 판정 안에서 실패로 접히고(새 기호 등록 안 함), 판정 반영이 던지면 여기서 같은 갈래로
+     * 접는다 — 미국 지수의 명부는 이미 있는 행으로 그대로 돈다. 둘 다 운영자에게 알린다(조용히 넘기지 않는다).
+     */
+    private UsIdentityTriage.Outcome triageIdentity(BatchExecutionContext execution, LocalDate asOf) {
+        UsIdentityTriage.Outcome outcome;
+        try {
+            outcome = identityTriage.run(execution.executionId(), asOf);
+        } catch (BatchShutdownException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            log.error("미국 신원 판정 반영이 실패했다 — 바꾼 것을 되돌렸고 이번 실행은 새 미국 기호를 등록하지 않는다.", e);
+            outcome = new UsIdentityTriage.Outcome(java.util.Set.of(), true, true,
+                    "판정 반영 실패: " + e.getMessage(), Map.of());
+        }
+        if (outcome.failed()) {
+            alert(execution, AlertEvent.toOperator(AlertSeverity.ERROR, "미국 신원 판정 실패",
+                    outcome.summary() + " — 이번 실행은 새 미국 기호를 등록하지 않는다(개명된 실체가 새 행이 되지 않게).",
+                    JOB_NAME + ":identity:" + asOf));
+        } else if (!outcome.verdictCounts().isEmpty()) {
+            alert(execution, AlertEvent.toOperator(
+                    outcome.verdictCounts().containsKey("AMBIGUOUS") ? AlertSeverity.WARNING : AlertSeverity.INFO,
+                    "미국 신원 판정", outcome.summary(), JOB_NAME + ":identity:" + asOf));
+        }
+        return outcome;
+    }
+
+    private UniverseReconciler.Result rebalanceOne(UniverseTarget target, LocalDate asOf,
+                                                   UsIdentityTriage.Outcome identity)
             throws DataSourceException {
         UniverseDataSource source = registry.universeSource(target.universeCode());
         // 앞 편입을 넘긴다 — 미국 클래스 축의 편입 보류가 앞 편입에만 선다(관문 뒤 · 다른 소스는 안 쓴다).
-        UniverseSnapshot snapshot = source.fetchConstituents(target.universeCode(), asOf,
-                reconciler.currentMemberTickers(target.universeCode()));
+        UniverseSnapshot snapshot = withoutBlocked(target, source.fetchConstituents(target.universeCode(), asOf,
+                reconciler.currentMemberTickers(target.universeCode())), identity);
 
         // 티커 해석이 먼저다. universe_membership이 stock_id를 FK로 참조한다.
         List<Long> stockIds =
                 stockRegistrar.resolveOrCreate(target.marketCode(), snapshot.tickers());
         return reconciler.reconcile(snapshot, stockIds);
+    }
+
+    /**
+     * 신원 판정이 막은 새 기호를 명부에서 뺀다 — 등록하면 판정이 못 가른 실체가 새 행이 된다. 막힌 기호는 행이 없는 새 기호뿐이라
+     * 지금 편입을 닫지 않는다(판정이 이미 행이 쥔 기호를 막지 않는다 · {@code IdentityJudge.Result}). 판정이 못 돌았으면 행이 없는
+     * 기호를 전부 뺀다.
+     */
+    private UniverseSnapshot withoutBlocked(UniverseTarget target, UniverseSnapshot snapshot,
+                                            UsIdentityTriage.Outcome identity) {
+        if (!identity.blockAllNew() && identity.blockedSymbols().isEmpty()) {
+            return snapshot;
+        }
+        java.util.Set<String> existing = identity.blockAllNew()
+                ? stockRegistrar.existingIdsByTicker(target.marketCode(), snapshot.tickers()).keySet()
+                : java.util.Set.of();
+        List<String> kept = snapshot.tickers().stream()
+                .filter(t -> identity.blockAllNew() ? existing.contains(t) : !identity.blockedSymbols().contains(t))
+                .toList();
+        if (kept.size() != snapshot.tickers().size()) {
+            log.warn("신원 판정이 막은 새 기호를 {} 명부에서 뺐다: {}종목{}", target.universeCode(),
+                    snapshot.tickers().size() - kept.size(), identity.blockAllNew() ? "(판정 실패 — 새 기호 전부)" : " " + identity.blockedSymbols());
+        }
+        return new UniverseSnapshot(snapshot.universeCode(), snapshot.asOf(), kept, snapshot.sourceName());
     }
 
     /**
