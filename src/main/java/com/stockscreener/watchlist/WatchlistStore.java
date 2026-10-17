@@ -46,14 +46,14 @@ public class WatchlistStore {
         return jdbcTemplate.query("""
                 SELECT w.id, w.user_id, w.stock_id, w.screen_id, w.memo,
                        w.last_satisfied, w.last_notified_at, w.created_at,
-                       s.ticker, s.name AS stock_name, s.market_code,
+                       %s AS ticker, s.name AS stock_name, s.market_code,
                        sc.name AS screen_name, sc.screen_type
                 FROM watchlist_item w
                 JOIN stock s ON s.id = w.stock_id
                 LEFT JOIN screen sc ON sc.id = w.screen_id
                 WHERE w.user_id = ?
                 ORDER BY w.created_at DESC, w.id DESC
-                """, ROW_MAPPER, userId);
+                """.formatted(com.stockscreener.stock.StockReader.DISPLAY_TICKER), ROW_MAPPER, userId);
     }
 
     /**

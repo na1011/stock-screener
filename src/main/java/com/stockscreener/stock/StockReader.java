@@ -32,6 +32,13 @@ import java.util.stream.Collectors;
 @Component
 public class StockReader {
 
+    /**
+     * 화면에 내는 표지 — 시대가 닫힌 미국 행의 비운 표지({@code T~마지막 날} · ADR-0180)는 그 행이 마지막으로 쓴 기호로 낸다(탐색
+     * {@code US-PAST-LISTING-PLAN-1017.md} P0-e). 닫힌 행은 과거 날짜 명부에 든다(D4 · D6). 경로는 행 id라 이 글자로 다른 행에 안 닿는다.
+     * 국내 표지에는 {@code ~}가 없어 그대로다.
+     */
+    public static final String DISPLAY_TICKER = "split_part(s.ticker, '~', 1)";
+
     private final JdbcTemplate jdbcTemplate;
     private final CorporateActionLedger corporateActions;
     private final StockAliasIndex aliasIndex;
@@ -80,12 +87,12 @@ public class StockReader {
         }
 
         List<StockRow> rows = jdbcTemplate.query("""
-                SELECT s.id, s.ticker, s.name, s.market_code, mk.currency_code, s.sector, p.close
+                SELECT s.id, %s AS ticker, s.name, s.market_code, mk.currency_code, s.sector, p.close
                 FROM stock s
                 JOIN market mk ON mk.code = s.market_code
                 LEFT JOIN price_daily p ON p.stock_id = s.id AND p.trade_date = ?
                 WHERE s.id IN (%s)
-                """.formatted(placeholders), ROW_MAPPER, args);
+                """.formatted(DISPLAY_TICKER, placeholders), ROW_MAPPER, args);
 
         return rows.stream().collect(Collectors.toMap(
                 StockRow::id, r -> r, (a, b) -> a, LinkedHashMap::new));
@@ -328,7 +335,7 @@ public class StockReader {
         // 안 밀리는 것은 이 DB의 collation이 한글을 라틴보다 앞에 두기 때문이지 설계가
         // 아니다 — COLLATE "C"에서는 같은 질의(스)에서 국내가 18칸 밀려난다(실측).
         String sql = """
-                SELECT s.id, s.ticker, s.name, s.market_code,
+                SELECT s.id, %s AS ticker, s.name, s.market_code,
                        (SELECT string_agg(m.universe_code, ',' ORDER BY m.universe_code)
                           FROM universe_membership m
                          WHERE m.stock_id = s.id AND m.effective_to IS NULL) AS universe_codes
@@ -347,7 +354,7 @@ public class StockReader {
                          END,
                          s.name
                 LIMIT ?
-                """.formatted(aliasWhere);
+                """.formatted(DISPLAY_TICKER, aliasWhere);
         args.add(limit);
 
         return jdbcTemplate.query(sql, (rs, n) -> new SearchRow(
