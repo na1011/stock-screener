@@ -662,6 +662,58 @@ public class StockRegistrar {
                 """.formatted(activeMembershipExists("s.id"), eraCovers("s", TODAY_US)), String.class);
     }
 
+    /**
+     * 관문 손 재적재의 미국 모집단 — 활성 편입이 없고 <b>시대가 보존 창과 겹치는</b> 행(탐색 {@code US-PAST-LISTING-IMPL-1018.md} U6). 오늘 후보
+     * ({@link #usRankingCandidateTickers})보다 넓다 — 끝 판정 · 접기가 닫은 과거 구성원(QRVO · WBD꼴)과 들인 폐지 실체 행도 그 시대 안 날짜의
+     * 과거 명부 후보라 재무 · 클래스 축 재료가 필요하다. 티커 순이다.
+     *
+     * @param windowStart 보존 창의 첫날 — 그 전에 시대가 끝난 행은 어느 격자일에도 후보가 아니다
+     */
+    public List<String> usRefillWindowTickers(LocalDate windowStart) {
+        if (!CollectedMarkets.ALL.contains("US")) {
+            return List.of();
+        }
+        return jdbcTemplate.queryForList("""
+                SELECT s.ticker FROM stock s
+                WHERE s.market_code = 'US' AND s.is_active
+                  AND NOT %s
+                  -- 시대 무관: 보존 창과의 겹침이 술어다 — 창 안 어느 날이든 시대 안이면 그날의 재무가 필요하다
+                  AND (s.era_to IS NULL OR s.era_to > ?) AND (s.era_from IS NULL OR s.era_from <= %s)
+                ORDER BY s.ticker
+                """.formatted(activeMembershipExists("s.id"), TODAY_US), String.class, windowStart);
+    }
+
+    /** {@link #usRefillWindowTickers}와 같은 술어로 티커를 푼다. */
+    public List<Long> usRefillWindowIdsByTicker(List<String> tickers, LocalDate windowStart) {
+        if (tickers.isEmpty() || !CollectedMarkets.ALL.contains("US")) {
+            return List.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(tickers.size(), "?"));
+        Object[] args = new Object[tickers.size() + 1];
+        for (int i = 0; i < tickers.size(); i++) {
+            args[i] = tickers.get(i);
+        }
+        args[tickers.size()] = windowStart;
+        return jdbcTemplate.queryForList("""
+                SELECT s.id FROM stock s
+                WHERE s.market_code = 'US' AND s.is_active AND s.ticker IN (%s)
+                  AND NOT %s
+                  -- 시대 무관: 보존 창과의 겹침이 술어다(usRefillWindowTickers와 같다)
+                  AND (s.era_to IS NULL OR s.era_to > ?) AND (s.era_from IS NULL OR s.era_from <= %s)
+                ORDER BY s.id
+                """.formatted(placeholders, activeMembershipExists("s.id"), TODAY_US), Long.class, args);
+    }
+
+    /**
+     * 관문 재적재 모집단의 창 시작 — 미국 보존 창의 첫날({@code indicator_trade_date} 미국 최소 = 복원 격자의 첫날). 보존 창이 없으면(지표를
+     * 한 번도 안 낸 DB) 과거 격자도 없으므로 미국 동부 오늘이다 — 그때 모집단은 오늘 시대 안 행과 같다.
+     */
+    public LocalDate usRefillWindowStart() {
+        return jdbcTemplate.queryForObject("""
+                SELECT coalesce((SELECT min(trade_date) FROM indicator_trade_date WHERE market_code = 'US'), %s)
+                """.formatted(TODAY_US), LocalDate.class);
+    }
+
     public List<Long> usRankingCandidateIdsByTicker(List<String> tickers) {
         if (tickers.isEmpty() || !CollectedMarkets.ALL.contains("US")) {
             return List.of();

@@ -17,6 +17,7 @@
 | `ops/write-session.sh begin <id>` | | 이 뒤로 쓰는 단계는 `ops/write-session.sh exec <id> -- ops/apply-window/<단계>` |
 | `01-dump.sh` | 세션 안 | 되돌리기 덤프(운영 = `ops/dump-db.sh` · 작은 DB = 산출물 폴더) |
 | `02-snapshot.sh before <db> off` | 읽기 | 프리셋 · 순위(꺼진 판독기) · 지표 묶음 · 재무 행 · 명부 · 펜스(세션 훅의 붙잡는 갈래 · `PREMISE_DB`) · 국내 해시 · a2 |
+| `02b-intake.sh` | 세션 안 | 폐지 실체 인입 `us-delisted-intake --apply=true`(행만 · 원자료는 03이 받는다) · 늘어난 행 = 요약의 만든 행 · 들인 행 전부 비운 표지·등록인·시대 끝 · 후보 수 다시 셈 |
 | `03-refill.sh` | 세션 안 | 재적재 `cur`(`--universe=US_TOP1000`) → `cand`(`--population=candidates`) · 11년 · 이른 판 · 관문 인자 · 실패는 구성원마다 |
 | `04-unresolved.sh` | 읽기 | 클래스 축 미해결 0 · 해석 실패·보충 실패·옛 판·회수정지 전원 판정(`verdicts.tsv`) · a2 미국 0 |
 | `05-roster.sh` | 세션 안 | 순위 가드(훅을 그 DB로) → `market-calendar` → `universe-restore --apply=true --replace=true` → 창 결손 0 |

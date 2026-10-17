@@ -210,7 +210,7 @@ public class FinancialRefillJob {
         if (tickers == null || tickers.isEmpty()) {
             throw new IllegalArgumentException("후보 손 FR은 푼 티커로 부른다(비면 전량이 된다).");
         }
-        return runAndReport(asOf, triggeredBy, yearsBack, tickers, null, insertEarlierVintages, null, Population.CANDIDATES);
+        return runAndReport(asOf, triggeredBy, yearsBack, tickers, null, insertEarlierVintages, null, Population.REFILL_WINDOW);
     }
 
     /** 티커를 무엇으로 푸는가. 비활성 유니버스 갈래({@code universeCode})는 이것과 따로다 — 손으로만 쓴다. */
@@ -218,7 +218,12 @@ public class FinancialRefillJob {
         /** 보존 창과 겹치는 활성 편입(손 실행·정기 경로의 기본). */
         MEMBERS,
         /** 미국 순위 후보 — 활성 편입 없는 미국 종목(ADR-0178). */
-        CANDIDATES
+        CANDIDATES,
+        /**
+         * 관문 손 재적재 — 활성 편입이 없고 시대가 보존 창과 겹치는 미국 행({@code StockRegistrar.usRefillWindowIdsByTicker}). 닫힌 과거
+         * 구성원 · 들인 폐지 실체 행이 든다(과거 명부 후보 · 탐색 {@code US-PAST-LISTING-IMPL-1018.md} U6).
+         */
+        REFILL_WINDOW
     }
 
     /** 공시 소비의 종목 훅 — 그 종목을 쓴 트랜잭션 안에서 부른다. */
@@ -236,12 +241,15 @@ public class FinancialRefillJob {
             throw new IllegalArgumentException("재무 연수는 음수일 수 없다: " + years);
         }
         // 후보는 정기 FR의 모집단이 아니다 — 어떤 인자로 불려도 정기 범위로 선언하지 않는다.
-        BatchExecutionRecorder.DeclaredScope scope = population == Population.CANDIDATES
+        BatchExecutionRecorder.DeclaredScope scope = population != Population.MEMBERS
                 ? BatchExecutionRecorder.DeclaredScope.narrow(BatchExecutionRecorder.ScopeReason.ARGS)
                 : scopeOf(yearsBack, tickers, universeCode);
 
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(population == Population.CANDIDATES
-                ? resolveCandidates(tickers) : resolveTargets(tickers, universeCode));
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(switch (population) {
+            case CANDIDATES -> resolveCandidates(tickers);
+            case REFILL_WINDOW -> resolveRefillWindow(tickers);
+            case MEMBERS -> resolveTargets(tickers, universeCode);
+        });
         // 소스 유무는 시작 때 한 번 묻는다 — 소스가 없는 시장의 종목은 종목마다 registry NOT_FOUND(「답함」)로 남아
         // 실패 종류만으로는 그 시장을 못 끝낸 것이 안 보인다.
         MarketCompleteness.Coverage coverage = MarketCompleteness.Coverage.of(MARKETS, registry::hasFinancialSource);
@@ -563,6 +571,20 @@ public class FinancialRefillJob {
         if (matched.size() < tickers.size()) {
             log.warn("티커 {}개 중 {}개만 미국 순위 후보다(나머지는 편입이 생겼거나 없는 종목이다): {}",
                     tickers.size(), matched.size(), tickers);
+        }
+        return matched;
+    }
+
+    /** 관문 손 재적재의 티커를 푼다({@link Population#REFILL_WINDOW}). 0건이면 던진다. */
+    private List<Long> resolveRefillWindow(List<String> tickers) {
+        LocalDate windowStart = stockRegistrar.usRefillWindowStart();
+        List<Long> matched = stockRegistrar.usRefillWindowIdsByTicker(tickers, windowStart);
+        if (matched.isEmpty()) {
+            throw new IllegalArgumentException("준 티커 중 관문 재적재 모집단(활성 편입 없음 · 시대가 보존 창 " + windowStart
+                    + "부터와 겹침)이 하나도 없다: " + tickers + " — 대상 0건으로 성공시키지 않는다.");
+        }
+        if (matched.size() < tickers.size()) {
+            log.warn("티커 {}개 중 {}개만 관문 재적재 모집단이다: {}", tickers.size(), matched.size(), tickers);
         }
         return matched;
     }

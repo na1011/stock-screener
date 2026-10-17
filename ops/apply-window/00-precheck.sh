@@ -24,16 +24,17 @@ fi
 FILES=$(cd "$REPO/src/main/resources/db/migration" && ls V*__*.sql | sed -E 's/^V([0-9_]+)__.*/\1/' | tr _ . | sort -t. -k1,1n -k2,2n | paste -sd, -)
 APPLIED=$(q "$PROD" "select string_agg(version, ',' order by string_to_array(version, '.')::int[]) from flyway_schema_history where success and version is not null")
 [ "$FILES" = "$APPLIED" ] || die "${PROD}에 적용된 마이그레이션과 HEAD 파일이 다르다 — 파일 끝 $(echo "$FILES" | tr , '\n' | tail -1) · 적용 끝 $(echo "$APPLIED" | tr , '\n' | tail -1)"
-# 대상 — 잡의 술어를 복제한다(StockRegistrar.usRankingCandidateTickers · 현 편입은 US_TOP1000 열린 편입).
+# 대상 — 잡의 술어를 복제한다(현 편입은 US_TOP1000 열린 편입 · 후보는 StockRegistrar.usRefillWindowTickers = 관문 손 재적재 모집단:
+# 활성 편입 없음 ∧ 시대가 보존 창과 겹침 — 닫힌 과거 구성원 · 들인 폐지 실체 행이 든다). 02b-intake가 들인 뒤 후보 수를 다시 센다.
+WIN="(select min(trade_date) from indicator_trade_date where market_code='US')"
 CUR="select s.id from stock s where s.market_code='US' and s.is_active and exists (select 1 from universe_membership m where m.stock_id=s.id and m.universe_code='US_TOP1000' and m.effective_to is null)"
-CAND="select s.id from stock s where s.market_code='US' and s.is_active and not exists (select 1 from universe_membership am join universe au on au.code=am.universe_code and au.is_active where am.stock_id=s.id and am.effective_to is null)"
+CAND="select s.id from stock s where s.market_code='US' and s.is_active and not exists (select 1 from universe_membership am join universe au on au.code=am.universe_code and au.is_active where am.stock_id=s.id and am.effective_to is null) and (s.era_to is null or s.era_to > $WIN) and (s.era_from is null or s.era_from <= (now() at time zone 'America/New_York')::date)"
 N_CUR=$(q "$PROD" "select count(*) from ($CUR) c")
 N_CAND=$(q "$PROD" "select count(*) from ($CAND) c")
 # 후보 재무 대상의 독립 하한 — 재무 행이 있는 후보(대상 = 재무 행 ∪ SEC 매핑이므로 그 이상이다 · 계획 v2 결정 3).
 N_CAND_FIN=$(q "$PROD" "select count(*) from ($CAND) c where exists (select 1 from financial_statement f where f.stock_id=c.id)")
 [ "$N_CUR" -gt 0 ] && [ "$N_CAND_FIN" -gt 0 ] || die "대상이 비었다(현 편입 $N_CUR · 후보∩재무 $N_CAND_FIN)"
 # 창 안 과거 편입이 전부 후보 술어에 드는가 — 비활성이면 두 실행 어디에도 안 들어 재적재에서 빠진다.
-WIN="(select min(trade_date) from indicator_trade_date where market_code='US')"
 N_PAST_OUT=$(q "$PROD" "select count(distinct m.stock_id) from universe_membership m join universe u on u.code=m.universe_code and u.is_active join stock s on s.id=m.stock_id where s.market_code='US' and m.effective_to > $WIN and m.stock_id not in ($CUR) and m.stock_id not in ($CAND)")
 [ "$N_PAST_OUT" = 0 ] || die "창 안 과거 편입 중 두 실행 어디에도 안 드는 종목 $N_PAST_OUT(비활성?)"
 # a2(판 번호 연속) 미국 행의 종목이 전부 재적재 대상인가 — 관문 뒤 a2 미국 0은 이른 판 켬 실행의 재번호가 닫는다(계획 v2 결정 4③).

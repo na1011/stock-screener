@@ -98,7 +98,7 @@ public class CandidateIntake {
     }
 
     /**
-     * 후보 모드 손 FR — 미국 순위 후보를 업종(SIC 없는 것만) → 재무 순으로 다시 받는다. 관문의 후보 재적재가 이 길이다
+     * 후보 모드 손 FR — 관문 재적재 모집단(활성 편입 없음 · 시대가 보존 창과 겹침)을 업종(SIC 없는 것만) → 재무 순으로 다시 받는다. 관문의 후보 재적재가 이 길이다
      * ({@code docs/reload-gate.md} 순서 10 · 탐색 {@code CANDIDATE-FR-PLAN-1016.md} v2).
      *
      * <p>업종이 먼저인 이유는 인입과 같다(클래스 javadoc). 실행 범위는 언제나 좁힘이다 — 후보는 정기 FR의 모집단이 아니므로 시계를
@@ -109,7 +109,9 @@ public class CandidateIntake {
      * @throws IllegalStateException    SEC 매핑 판을 못 받았으면 — 낡은 판의 「없음」으로 대상을 정하지 않는다
      */
     public BatchStatus refill(LocalDate asOf, Integer yearsBack, List<String> tickers, boolean insertEarlierVintages) {
-        List<String> candidates = tickers.isEmpty() ? stockRegistrar.usRankingCandidateTickers() : tickers;
+        // 관문 재적재 모집단 — 오늘 후보보다 넓다: 시대가 보존 창과 겹치는 닫힌 과거 구성원 · 들인 폐지 실체 행(U6).
+        LocalDate windowStart = stockRegistrar.usRefillWindowStart();
+        List<String> candidates = tickers.isEmpty() ? stockRegistrar.usRefillWindowTickers(windowStart) : tickers;
         List<String> targets;
         try {
             targets = financialTargets(candidates);
@@ -138,15 +140,16 @@ public class CandidateIntake {
     }
 
     /**
-     * 재무를 부를 후보 티커 — SEC 매핑(신선한 판)에 있거나 재무 행이 이미 있는 것. 판을 못 받으면 던진다(낡은 판의 「없음」은 답이
+     * 재무를 부를 후보 티커 — SEC 매핑(신선한 판)에 있거나, 재무 행이 이미 있거나, 등록인이 묶인 것. 판을 못 받으면 던진다(낡은 판의 「없음」은 답이
      * 아니다). 매핑 밖인데 재무 행이 있는 것은 어댑터가 그 부재를 종목 실패로 남기게 부른다 — 그 이름을 로그에 싣는다.
      */
     List<String> financialTargets(List<String> tickers) throws DataSourceException {
         SecTickerCikCache.Snapshot snapshot = cikCache.freshSnapshot();
+        // 등록인이 묶인 행도 대상이다 — 들인 폐지 실체 행은 비운 표지라 오늘 SEC 파일에 없고 재무 행도 0이다(어댑터는 묶인 CIK로 받는다).
         java.util.Set<String> withRows = new java.util.HashSet<>(jdbc.queryForList("""
                 SELECT s.ticker FROM stock s
                 WHERE s.market_code = 'US' AND s.ticker = ANY (?)
-                  AND EXISTS (SELECT 1 FROM financial_statement f WHERE f.stock_id = s.id)
+                  AND (s.sec_cik IS NOT NULL OR EXISTS (SELECT 1 FROM financial_statement f WHERE f.stock_id = s.id))
                 """, String.class, (Object) tickers.toArray(String[]::new)));
         List<String> unmappedWithRows = tickers.stream()
                 .filter(t -> withRows.contains(t) && snapshot.findCik(t).isEmpty()).toList();
