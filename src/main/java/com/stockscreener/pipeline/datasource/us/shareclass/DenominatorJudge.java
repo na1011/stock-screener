@@ -426,7 +426,8 @@ public final class DenominatorJudge {
         return members.stream().filter(k -> a.matcher(ClassFacts.local(k)).find() || b.matcher(ClassFacts.local(k)).find()).toList();
     }
 
-    private static List<String> splitSymbols(String s) {
+    /** 표지 기호 사실 하나에 든 기호들(「GOOGL, GOOG」 꼴) — 각각 {@link #nk}로 맞춘다. 상장 판정({@code listing})도 같은 규칙을 쓴다. */
+    public static List<String> splitSymbols(String s) {
         List<String> out = new ArrayList<>();
         for (String x : SYMBOL_SPLIT.split(s)) {
             out.add(nk(x));
@@ -434,7 +435,8 @@ public final class DenominatorJudge {
         return out;
     }
 
-    static String nk(String s) {
+    /** 기호 꼴 맞추기 — 대문자 영숫자만(표지 {@code BFA} = 시세 {@code BF.A}). */
+    public static String nk(String s) {
         return s == null ? "" : NON_ALNUM.matcher(s.toUpperCase()).replaceAll("");
     }
 
