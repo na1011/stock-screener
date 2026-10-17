@@ -90,6 +90,7 @@ class ListingEventSourceTest {
                 .containsExactlyInAnyOrder(new Venue("NYSE", true), new Venue("NYSE American", false));
         ListedTimeline leu = ListedTimeline.of(LocalDate.of(2026, 8, 28), true, events, 30);
         assertThat(leu.on(LocalDate.of(2025, 11, 28))).isEqualTo(ListedTimeline.Verdict.UNLISTED);
+        assertThat(leu.on(LocalDate.of(2025, 12, 3))).as("설명문의 이전일 12-04 전").isEqualTo(ListedTimeline.Verdict.UNLISTED);
         assertThat(leu.on(LocalDate.of(2025, 12, 5))).isEqualTo(ListedTimeline.Verdict.LISTED);
         assertThat(paths).noneMatch(p -> p.contains("/999/"));
     }

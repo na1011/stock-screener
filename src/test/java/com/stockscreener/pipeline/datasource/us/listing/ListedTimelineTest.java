@@ -29,10 +29,23 @@ class ListedTimelineTest {
 
         assertThat(leu.on(LocalDate.of(2025, 9, 24))).isEqualTo(UNLISTED);
         assertThat(leu.on(LocalDate.of(2025, 12, 2))).isEqualTo(UNLISTED);
-        assertThat(leu.on(LocalDate.of(2025, 12, 3))).isEqualTo(LISTED);
+        assertThat(leu.on(LocalDate.of(2025, 12, 5))).as("등록 제출일 ~ 옛 거래소 제거 효력일 사이는 원장이 이전일을 안 말한다").isEqualTo(UNKNOWN);
+        assertThat(leu.on(LocalDate.of(2025, 12, 21))).isEqualTo(LISTED);
         assertThat(leu.on(LocalDate.of(2026, 3, 6))).isEqualTo(LISTED);
         assertThat(leu.events()).extracting(ListedTimeline.Classified::kind)
                 .containsExactly(ListedTimeline.Kind.ENTRY, ListedTimeline.Kind.OFF_VENUE);
+    }
+
+    /** 발행사 25 설명문이 이전일을 적으면 그날이 진입이다(UAMY: 8-A12B 03-06 · 설명문 03-11 · R-D5). */
+    @Test
+    void statedTransferDateIsTheEntryDate() {
+        ListingEvent removal = new ListingEvent(LocalDate.of(2026, 3, 26), AMERICAN, false, "Common Stock", Optional.empty(), "25", "x",
+                Optional.of(LocalDate.of(2026, 3, 11)));
+        ListedTimeline uamy = ListedTimeline.of(ANCHOR, true, List.of(register(LocalDate.of(2026, 3, 6), NYSE, "Common Stock"), removal), PAIR);
+
+        assertThat(uamy.on(LocalDate.of(2026, 3, 6))).as("격자일 03-06은 아직 NYSE American이었다").isEqualTo(UNLISTED);
+        assertThat(uamy.on(LocalDate.of(2026, 3, 10))).isEqualTo(UNLISTED);
+        assertThat(uamy.on(LocalDate.of(2026, 3, 11))).isEqualTo(LISTED);
     }
 
     /** 대조군: BMNR은 4월 상향 전 NYSE American이었다(탐색 ★10 — 복원 편입 2025-11-21부터가 틀렸다). */
@@ -44,7 +57,8 @@ class ListedTimelineTest {
 
         assertThat(bmnr.on(LocalDate.of(2025, 11, 21))).isEqualTo(UNLISTED);
         assertThat(bmnr.on(LocalDate.of(2026, 4, 7))).isEqualTo(UNLISTED);
-        assertThat(bmnr.on(LocalDate.of(2026, 4, 10))).isEqualTo(LISTED);
+        assertThat(bmnr.on(LocalDate.of(2026, 4, 10))).isEqualTo(UNKNOWN);
+        assertThat(bmnr.on(LocalDate.of(2026, 4, 27))).isEqualTo(LISTED);
     }
 
     @Test
@@ -76,20 +90,33 @@ class ListedTimelineTest {
                 remove(LocalDate.of(2026, 3, 1), NYSE, "Common Stock")), PAIR);
 
         assertThat(t.events()).extracting(ListedTimeline.Classified::kind)
-                .containsExactly(ListedTimeline.Kind.UNRESOLVED, ListedTimeline.Kind.EXIT);
-        assertThat(t.on(LocalDate.of(2026, 3, 2))).as("이탈 뒤 재진입이 언제였는지 원장이 안 말한다").isEqualTo(UNKNOWN);
-        assertThat(t.on(LocalDate.of(2026, 2, 1))).isEqualTo(UNKNOWN);
-        assertThat(t.on(ANCHOR)).isEqualTo(LISTED);
+                .containsExactly(ListedTimeline.Kind.UNRESOLVED, ListedTimeline.Kind.REPLACED);
+        assertThat(t.on(LocalDate.of(2026, 3, 2))).isEqualTo(LISTED);
+        assertThat(t.on(LocalDate.of(2026, 2, 1))).isEqualTo(LISTED);
     }
 
-    /** 이탈 뒤 진입 근거 없이 닻에서 안이다 — 원장이 모순이라 그 앞 날짜는 모른다(지어내지 않는다). */
+    /** 짝 없는 보통주 제거 뒤 다시 등록이 없는데 닻에서 상장 — 증권 교체다(FLG 은행 승계꼴 · R-D5). 범주를 안 바꾼다. */
     @Test
-    void contradictionBeforeTheAnchorIsUnknown() {
+    void removalWithoutRelistingBeforeTheAnchorIsAReplacement() {
         ListedTimeline t = ListedTimeline.of(ANCHOR, true, List.of(remove(LocalDate.of(2025, 11, 1), NASDAQ, "Common Stock")), PAIR);
 
-        assertThat(t.on(LocalDate.of(2025, 12, 1))).as("재진입이 11-01과 닻 사이 어딘가다").isEqualTo(UNKNOWN);
-        assertThat(t.on(LocalDate.of(2025, 10, 1))).isEqualTo(UNKNOWN);
-        assertThat(t.on(ANCHOR)).isEqualTo(LISTED);
+        assertThat(t.events()).extracting(ListedTimeline.Classified::kind).containsExactly(ListedTimeline.Kind.REPLACED);
+        assertThat(t.on(LocalDate.of(2025, 12, 1))).isEqualTo(LISTED);
+        assertThat(t.on(LocalDate.of(2025, 10, 1))).isEqualTo(LISTED);
+    }
+
+    /** 장외로 갔다가 다시 올라옴 — 짝 없는 등록이 앞 이탈을 닫으면 재진입이다. */
+    @Test
+    void relistingAfterAnExitReopensTheListing() {
+        ListedTimeline t = ListedTimeline.of(ANCHOR, true, List.of(
+                remove(LocalDate.of(2025, 11, 1), NASDAQ, "Common Stock"),
+                register(LocalDate.of(2026, 3, 2), NASDAQ, "Common Stock")), PAIR);
+
+        assertThat(t.events()).extracting(ListedTimeline.Classified::kind)
+                .containsExactly(ListedTimeline.Kind.EXIT, ListedTimeline.Kind.ENTRY);
+        assertThat(t.on(LocalDate.of(2025, 10, 1))).isEqualTo(LISTED);
+        assertThat(t.on(LocalDate.of(2025, 12, 1))).isEqualTo(UNLISTED);
+        assertThat(t.on(LocalDate.of(2026, 3, 2))).isEqualTo(LISTED);
     }
 
     /** 폐지 실체 행 — 닻은 효력일 전날이고 그날의 제거가 그 뒤를 밖으로 만든다(앞으로 걷기). */
@@ -103,6 +130,7 @@ class ListedTimelineTest {
         assertThat(ea.on(LocalDate.of(2025, 10, 1))).isEqualTo(LISTED);
     }
 
+    /** 닻 뒤에 상장 중인데 또 진입 — 빠진 이탈이 닻과 그 사이 어딘가라 모른다(지어내지 않는다). */
     @Test
     void entryAfterTheAnchorWhileListedIsUnknown() {
         LocalDate eve = LocalDate.of(2026, 3, 1);
@@ -115,9 +143,9 @@ class ListedTimelineTest {
         assertThat(t.on(eve)).isEqualTo(LISTED);
     }
 
-    /** 확인된 뒤집힘보다 닻 쪽 날짜는 그 뒤의 모순에 안 흔들린다. */
+    /** 이탈 · 진입이 이어진 이력 — 이탈 둘 중 다시 등록이 닫는 것만 이탈이다. */
     @Test
-    void contradictionFurtherAwayDoesNotPoisonConfirmedDates() {
+    void onlyTheExitClosedByARegistrationIsAnExit() {
         ListedTimeline t = ListedTimeline.of(ANCHOR, true, List.of(
                 remove(LocalDate.of(2025, 7, 1), NASDAQ, "Common Stock"),
                 remove(LocalDate.of(2025, 10, 1), NASDAQ, "Common Stock"),
@@ -126,7 +154,7 @@ class ListedTimelineTest {
 
         assertThat(t.on(LocalDate.of(2026, 2, 1))).isEqualTo(LISTED);
         assertThat(t.on(LocalDate.of(2025, 12, 1))).as("진입 앞 = 밖 · 10-01 이탈과 맞다").isEqualTo(UNLISTED);
-        assertThat(t.on(LocalDate.of(2025, 9, 1))).as("10-01 이탈 앞은 안이어야 하는데 07-01이 또 이탈이다 — 빠진 진입이 그 사이").isEqualTo(UNKNOWN);
+        assertThat(t.on(LocalDate.of(2025, 9, 1))).as("07-01 제거는 다시 등록 없이 10-01 제거가 뒤따라 교체다").isEqualTo(LISTED);
     }
 
     /** 보통주 행이 둘인 등록인 — 글자가 맞는 사건만 그 행의 것이고, 글자 없는 사건은 어느 행에도 안 붙는다. */
@@ -148,7 +176,8 @@ class ListedTimelineTest {
     @Test
     void issuerRemovalTakesEffectTenDaysAfterFiling() {
         ListingFormReader.Removal removal = new ListingFormReader.Removal(Optional.of(AMERICAN), "NYSE American LLC",
-                List.of("Class A Common Stock - par value $0.10 per share", "Rights to purchase Series A Preferred Stock"), null);
+                List.of("Class A Common Stock - par value $0.10 per share", "Rights to purchase Series A Preferred Stock"), null,
+                Optional.empty());
 
         List<ListingEvent> events = ListingEvent.ofRemoval("25", LocalDate.of(2025, 12, 11), "a", removal);
         List<ListingEvent> nse = ListingEvent.ofRemoval("25-NSE", LocalDate.of(2025, 12, 11), "a", removal);
@@ -161,10 +190,10 @@ class ListedTimelineTest {
     }
 
     private static ListingEvent register(LocalDate date, Venue venue, String line) {
-        return new ListingEvent(date, venue, true, line, ClassLines.classLetter(line), "8-A12B", "r" + date);
+        return new ListingEvent(date, venue, true, line, ClassLines.classLetter(line), "8-A12B", "r" + date, Optional.empty());
     }
 
     private static ListingEvent remove(LocalDate date, Venue venue, String line) {
-        return new ListingEvent(date, venue, false, line, ClassLines.classLetter(line), "25", "x" + date);
+        return new ListingEvent(date, venue, false, line, ClassLines.classLetter(line), "25", "x" + date, Optional.empty());
     }
 }

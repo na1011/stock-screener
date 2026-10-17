@@ -64,6 +64,8 @@ class ListingFormReaderTest {
         assertThat(ClassLines.isCommon(leu.lines().get(0))).isTrue();
         assertThat(ClassLines.classLetter(leu.lines().get(0))).contains("A");
         assertThat(ClassLines.isCommon(leu.lines().get(1))).isFalse();
+        assertThat(leu.transferredOn()).contains(java.time.LocalDate.of(2025, 12, 4));
+        assertThat(ListingFormReader.readIssuerRemoval(html("bmnr-25-2026-04-16.htm")).transferredOn()).isEmpty();
     }
 
     @Test

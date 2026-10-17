@@ -28,6 +28,7 @@ public record Venue(String name, boolean listed) {
      * 대소문자는 안 가린다. 앞의 정관사 「The」와 뒤의 「LLC」 · 「, Inc.」는 꼴의 일부다.
      */
     private static final List<Map.Entry<Pattern, Venue>> NAMES = List.of(
+            entry("New\\s+York\\s+Stock\\s+Exchange\\s+American(?:\\s+LLC)?", "NYSE American", false),
             entry("NYSE\\s+American(?:\\s+LLC)?", "NYSE American", false),
             entry("NYSE\\s+MKT(?:\\s+LLC)?", "NYSE American", false),
             entry("NYSE\\s+Arca(?:,?\\s+Inc\\.?)?", "NYSE Arca", false),

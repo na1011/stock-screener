@@ -561,14 +561,19 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         return kept;
     }
 
+    /** 이름 축의 술어 — 증권 종류 낱말 · 혼성 문구에 걸리면 보통주가 아니다. 상장 판정의 「등록인의 보통주 행」도 이것으로 센다. */
+    static boolean nonCommonName(String name) {
+        return name != null && NON_COMMON_NAME.matcher(name.toUpperCase(java.util.Locale.ROOT)).find();
+    }
+
     /**
      * 이름 축. 걸리면 세고 참을 낸다 — 목록 후보와 숨은 상장이 같은 축을 탄다.
      */
     private static boolean excludedByName(String symbol, String name, Exclusions excluded) {
-        String upperName = name.toUpperCase(java.util.Locale.ROOT);
-        if (!NON_COMMON_NAME.matcher(upperName).find()) {
+        if (!nonCommonName(name)) {
             return false;
         }
+        String upperName = name.toUpperCase(java.util.Locale.ROOT);
         excluded.name++;
         if (!SECURITY_KIND_ONLY.matcher(upperName).find()) {
             excluded.hybridOnly.add(symbol);

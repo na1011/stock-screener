@@ -28,6 +28,15 @@
   - 발행사 `25` 24~40
   - `8-A12B` 458~529
 
+## R-D5에서 잰 꼴 (2026-10-18 · 묶인 등록인 4,458 · 창 2025-08-26~2026-10-17 · 양식 654 → 654 읽음)
+
+- **`8-A12B` 표는 꼴이 여럿이다** — 머리 「Name of each exchange …」 · 「Name of exchange …」 · 「Name of the Exchange …」. 값이 머리 뒤에도 앞에도(괄호째 「(Title of each class …)」) 오고, 종류가 두 머리 사이에 끼기도 한다(Liberty Energy). 구역 시작은 「Section 12(b) of the Act」 또는 「… of the Exchange Act」이고, 끝은 「If this form (8-A) relates」 · 「Securities to be registered pursuant to Section 12(g)」 · 「Item 1」 중 먼저 오는 것이다. 그래서 머리 문구에 기대지 않는다: 구역을 잘라 머리 문구를 걷은 뒤 거래소 이름으로 가른다. 1판 판독기는 38건(8-A12B 35)을 못 읽었다.
+- 거래소 이름에 밑줄 칸(「New York Stock Exchange ____」)이 붙고, 「New York Stock Exchange American」 꼴도 있다.
+- **이전일은 `8-A12B` 제출일이 아니다** — 발행사 `25` 설명문이 이전일을 적은 상향 둘에서 등록 제출일보다 늦었다: LEU 12-03 → 12-04, UAMY 03-06 → 03-11. 설명문이 없으면 원장이 주는 것은 「등록 제출일 ≤ 이전일 < 옛 거래소 제거 효력일」뿐이다(BMNR 04-08~04-26 · SENS · PTN).
+- **짝 없는 보통주 제거는 상장 끝이 아닐 수 있다** — 증권 교체 11건(FLG 은행 승계 · QGEN · CWK · GTES 본사 이전 · FWONA 재분류 · SOS · CANG · DEC 예탁증권 · BKKT · PR · CWEN)은 제거 뒤 다시 등록 없이 같은 실체가 상장돼 있었다.
+- 짝 거리(효력일 사이): 이전(안 ↔ 안) 0~19일 · 상향(등록 ↔ 밖 거래소 제거) 10~20일 · 짝 없는 등록 중 120일 안에 제거가 붙는 것 0.
+- 워런트 제거가 보통주 이전처럼 셀 수 있다(RFL 25-NSE 2025-12-11 「Warrants to Purchase Shares of Class B Common Stock」) — 줄 판정이 거른다.
+
 ## 표지 거래소 — `dei:SecurityExchangeName`
 
 - 정기 공시 표지의 거래소 코드는 증권 줄(클래스 축 구성원)마다 있다: `NYSE` · `NASDAQ` · `NYSEAMER` · `NYSEArca` ….

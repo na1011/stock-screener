@@ -20,7 +20,9 @@ import java.util.List;
  *   <li><b>이탈</b> — 안 거래소 제거 중 같은 줄의 안 거래소 등록이 짝으로 안 붙은 것(장외 이전 · 폐지).</li>
  *   <li><b>이전</b> — 안 ↔ 안(NYSE ↔ Nasdaq). 범주가 안 바뀐다.</li>
  *   <li><b>미정</b> — 안 거래소 등록인데 어느 제거도 짝으로 안 붙은 것. 장외(OTC)에서 올라온 것일 수도, 승계 등록인의 재등록일 수도
- *       있어 원장이 가르지 않는다 — <b>범주를 안 바꾸고 센다.</b> 상장 전 날짜는 D4의 「첫 거래 봉 ≤ 그날」이 따로 거른다.</li>
+ *       있어 원장이 가르지 않는다 — <b>범주를 안 바꾸고 센다</b>(앞의 이탈을 닫을 때만 재진입이다). 상장 전 날짜는 D4의 「첫 거래 봉 ≤
+ *       그날」이 따로 거른다.</li>
+ *   <li><b>교체</b> — 닻 앞의 이탈인데 그 뒤 닻까지 다시 등록이 없는 것({@link #settleExits}). 범주를 안 바꾼다.</li>
  * </ul>
  * <p>짝의 창({@link #pairDays})은 <b>재지 않은 값</b>이다 — LEU · BMNR 모두 등록 뒤 18일(발행사 25 효력일)에 제거가 났다. R-D5가 정한다.
  *
@@ -30,11 +32,19 @@ import java.util.List;
  */
 public final class ListedTimeline {
 
-    public enum Kind { ENTRY, EXIT, TRANSFER, UNRESOLVED, OFF_VENUE }
+    public enum Kind { ENTRY, EXIT, TRANSFER, UNRESOLVED, REPLACED, OFF_VENUE }
 
     public enum Verdict { LISTED, UNLISTED, UNKNOWN }
 
-    public record Classified(ListingEvent event, Kind kind) {
+    /**
+     * @param uncertainUntil 진입의 이전일을 원장이 특정하지 않을 때 그 구간의 끝(제외) — 등록 제출일 ≤ 이전일 &lt; 이것(짝인 밖 거래소
+     *                       제거의 효력일). 설명문이 이전일을 적었으면 사건 날짜가 그날이고 이것은 {@code null}이다
+     */
+    public record Classified(ListingEvent event, Kind kind, LocalDate uncertainUntil) {
+
+        Classified(ListingEvent event, Kind kind) {
+            this(event, kind, null);
+        }
     }
 
     private final LocalDate anchor;
@@ -52,7 +62,40 @@ public final class ListedTimeline {
      * @param pairDays 등록과 제거를 한 이전으로 묶는 창(일 · 효력일 사이)
      */
     public static ListedTimeline of(LocalDate anchor, boolean listedAtAnchor, List<ListingEvent> events, int pairDays) {
-        return new ListedTimeline(anchor, listedAtAnchor, classify(events, pairDays));
+        return new ListedTimeline(anchor, listedAtAnchor, settleExits(classify(events, pairDays), anchor));
+    }
+
+    /**
+     * 닻 앞의 이탈을 가린다 — 그 뒤 닻까지 다시 등록(진입 · 미정)이 있어야 상장이 끊긴 것이고, 없으면 <b>증권 교체</b>다
+     * ({@link Kind#REPLACED} · 범주 그대로). 닻 날짜에 상장이었다는 것이 그 제거가 상장 끝이 아니었다고 말한다 — R-D5(2026-10-18)에서
+     * 짝 없는 보통주 제거 14가 전부 그 꼴이었다(FLG 은행 승계 · QGEN · CWK · GTES 본사 이전 · FWONA 재분류 · SOS · DEC 예탁증권 전환).
+     * 이탈을 닫는 등록이 미정이면 그 등록이 재진입이다(장외에서 다시 올라옴). 닻 뒤의 이탈은 그대로 이탈이다(그 뒤는 원장이 말한다).
+     */
+    static List<Classified> settleExits(List<Classified> ordered, LocalDate anchor) {
+        List<Classified> out = new ArrayList<>(ordered);
+        for (int i = 0; i < out.size(); i++) {
+            Classified exit = out.get(i);
+            if (exit.kind() != Kind.EXIT || exit.event().date().isAfter(anchor)) {
+                continue;
+            }
+            int closer = -1;
+            for (int j = i + 1; j < out.size(); j++) {
+                Classified next = out.get(j);
+                if (next.event().date().isAfter(anchor) || next.kind() == Kind.EXIT) {
+                    break;
+                }
+                if (next.kind() == Kind.ENTRY || next.kind() == Kind.UNRESOLVED) {
+                    closer = j;
+                    break;
+                }
+            }
+            if (closer < 0) {
+                out.set(i, new Classified(exit.event(), Kind.REPLACED));
+            } else if (out.get(closer).kind() == Kind.UNRESOLVED) {
+                out.set(closer, new Classified(out.get(closer).event(), Kind.ENTRY, out.get(closer).uncertainUntil()));
+            }
+        }
+        return List.copyOf(out);
     }
 
     static List<Classified> classify(List<ListingEvent> events, int pairDays) {
@@ -65,7 +108,8 @@ public final class ListedTimeline {
                 if (anyNear(events, e, pairDays, false, true)) {
                     kind = Kind.TRANSFER;
                 } else if (anyNear(events, e, pairDays, false, false)) {
-                    kind = Kind.ENTRY;
+                    out.add(entry(events, e, pairDays));
+                    continue;
                 } else {
                     kind = Kind.UNRESOLVED;
                 }
@@ -76,6 +120,29 @@ public final class ListedTimeline {
         }
         out.sort(Comparator.comparing((Classified c) -> c.event().date()));
         return List.copyOf(out);
+    }
+
+    /**
+     * 진입의 날짜 — 짝인 밖 거래소 제거의 설명문이 이전일을 적었으면 그날, 아니면 등록 제출일부터 그 제거의 효력일까지가 모르는 구간이다
+     * (R-D5 2026-10-18: 설명문이 있던 LEU · UAMY에서 이전일이 등록 제출일보다 1일 · 5일 늦었다 — 제출일을 이전일로 쓰면 UAMY는 격자일
+     * 03-06을 틀린다).
+     */
+    private static Classified entry(List<ListingEvent> events, ListingEvent registration, int pairDays) {
+        ListingEvent partner = null;
+        for (ListingEvent other : events) {
+            if (!other.registration() && !other.venue().listed()
+                    && Math.abs(ChronoUnit.DAYS.between(registration.date(), other.date())) <= pairDays
+                    && (partner == null || Math.abs(ChronoUnit.DAYS.between(registration.date(), other.date()))
+                    < Math.abs(ChronoUnit.DAYS.between(registration.date(), partner.date())))) {
+                partner = other;
+            }
+        }
+        if (partner.transferredOn().isPresent()) {
+            ListingEvent dated = new ListingEvent(partner.transferredOn().get(), registration.venue(), true, registration.line(),
+                    registration.letter(), registration.form(), registration.accession(), partner.transferredOn());
+            return new Classified(dated, Kind.ENTRY);
+        }
+        return new Classified(registration, Kind.ENTRY, partner.date().isAfter(registration.date()) ? partner.date() : null);
     }
 
     /** {@code e}와 효력일이 {@code pairDays} 안이고 등록 여부 · 거래소 범주가 주어진 대로인 다른 사건이 있나. */
@@ -97,6 +164,11 @@ public final class ListedTimeline {
      * 사이 어디였는지 모른다.
      */
     public Verdict on(LocalDate date) {
+        for (Classified c : events) {
+            if (c.uncertainUntil() != null && !date.isBefore(c.event().date()) && date.isBefore(c.uncertainUntil())) {
+                return Verdict.UNKNOWN;
+            }
+        }
         if (date.isBefore(anchor)) {
             return backward(date);
         }

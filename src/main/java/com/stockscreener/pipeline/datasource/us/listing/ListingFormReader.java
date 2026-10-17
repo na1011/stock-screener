@@ -35,8 +35,17 @@ public final class ListingFormReader {
     private static final String ISSUER_LABEL = "(exact name of issuer";
     private static final String ADDRESS_LABEL = "principal executive offices)";
     private static final String CLASS_LABEL = "(description of class";
-    private static final String REGISTER_HEADER = "name of each exchange";
-    private static final String REGISTER_END = "if this form relates";
+    /** 등록 구역의 시작 — 「Securities to be registered pursuant to Section 12(b) of the Act:」. */
+    private static final java.util.regex.Pattern REGISTER_START =
+            java.util.regex.Pattern.compile("section 12\\(b\\) of the (?:exchange )?act:?", java.util.regex.Pattern.CASE_INSENSITIVE);
+    /** 등록 구역의 끝 — 확인란 문장 · 12(g) 구역 · Item 1 중 먼저 오는 것(R-D5 2026-10-18 꼴 다섯). */
+    private static final java.util.regex.Pattern REGISTER_END = java.util.regex.Pattern.compile(
+            "if this form (?:8-a )?relates|securities to be registered pursuant to section 12\\(g\\)|\\bitem 1\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    /** 표 머리 문구 — 값 앞에도 뒤에도(괄호째) 오고 「Name of the Exchange」 꼴도 있다. 걷어 낸 나머지를 거래소 이름으로 가른다. */
+    private static final java.util.regex.Pattern REGISTER_LABELS = java.util.regex.Pattern.compile(
+            "\\(?\\s*title of each class[^)]*?registered:?\\s*\\)?|\\(?\\s*name of (?:each |the )?exchanges?[^)]*?registered:?\\s*\\)?",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private ListingFormReader() {
     }
@@ -48,8 +57,28 @@ public final class ListingFormReader {
      * @param rawVenue   원장이 적은 거래소 글자(못 읽었을 때의 귀속 재료)
      * @param lines      종류 글을 가른 증권 줄({@link ClassLines#split})
      * @param unreadable 못 읽은 사유. 읽었으면 {@code null}
+     * @param transferredOn 발행사 {@code 25} 설명문이 적은 이전일(「On December 4, 2025, … transferred the listing …」) — R-D5에서 상향
+     *                      둘이 이것을 실었고 8-A12B 제출일보다 1일 · 5일 늦었다. 없으면 비었다
      */
-    public record Removal(Optional<Venue> venue, String rawVenue, List<String> lines, String unreadable) {
+    public record Removal(Optional<Venue> venue, String rawVenue, List<String> lines, String unreadable,
+                          Optional<java.time.LocalDate> transferredOn) {
+    }
+
+    private static final java.util.regex.Pattern TRANSFERRED = java.util.regex.Pattern.compile(
+            "\\bOn ([A-Z][a-z]+ \\d{1,2}, \\d{4}), .{0,300}?\\btransferred the listing\\b");
+    private static final java.time.format.DateTimeFormatter LONG_DATE =
+            java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH);
+
+    static Optional<java.time.LocalDate> transferredOn(String text) {
+        java.util.regex.Matcher m = TRANSFERRED.matcher(text);
+        if (!m.find()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(java.time.LocalDate.parse(m.group(1), LONG_DATE));
+        } catch (java.time.format.DateTimeParseException e) {
+            return Optional.empty();
+        }
     }
 
     /** 등록 표의 한 줄 — 그 종류를 등록하는 거래소. */
@@ -75,9 +104,9 @@ public final class ListingFormReader {
         String exchange = firstText(doc, "exchange", "entityName");
         String description = firstText(doc, "notificationOfRemoval", "descriptionClassSecurity");
         if (exchange == null || description == null) {
-            return new Removal(Optional.empty(), exchange, List.of(), "25-NSE에 거래소나 종류가 없다");
+            return new Removal(Optional.empty(), exchange, List.of(), "25-NSE에 거래소나 종류가 없다", Optional.empty());
         }
-        return new Removal(Venue.ofName(exchange), exchange, ClassLines.split(description), null);
+        return new Removal(Venue.ofName(exchange), exchange, ClassLines.split(description), null, Optional.empty());
     }
 
     /** 발행사 {@code 25} 본문(HTML). */
@@ -87,7 +116,7 @@ public final class ListingFormReader {
         int label = lower.indexOf(ISSUER_LABEL);
         int classEnd = lower.indexOf(CLASS_LABEL);
         if (label < 0 || classEnd < 0 || classEnd < label) {
-            return new Removal(Optional.empty(), null, List.of(), "발행사 25의 라벨(발행사 이름 · 종류)을 못 찾았다");
+            return new Removal(Optional.empty(), null, List.of(), "발행사 25의 라벨(발행사 이름 · 종류)을 못 찾았다", Optional.empty());
         }
         String before = text.substring(0, label).strip();
         Optional<Venue.Tail> tail = Venue.ofTail(before);
@@ -95,10 +124,11 @@ public final class ListingFormReader {
         int addressEnd = lower.indexOf(ADDRESS_LABEL, label);
         int classStart = addressEnd >= 0 && addressEnd < classEnd ? addressEnd + ADDRESS_LABEL.length() : -1;
         if (classStart < 0) {
-            return new Removal(tail.map(Venue.Tail::venue), rawVenue, List.of(), "발행사 25의 주소 라벨을 못 찾았다 — 종류 글의 시작을 모른다");
+            return new Removal(tail.map(Venue.Tail::venue), rawVenue, List.of(), "발행사 25의 주소 라벨을 못 찾았다 — 종류 글의 시작을 모른다",
+                    Optional.empty());
         }
         return new Removal(tail.map(Venue.Tail::venue), rawVenue,
-                ClassLines.split(text.substring(classStart, classEnd)), null);
+                ClassLines.split(text.substring(classStart, classEnd)), null, transferredOn(text));
     }
 
     /**
@@ -107,32 +137,30 @@ public final class ListingFormReader {
      */
     public static Registration readRegistration(String html) {
         String text = text(html);
-        String lower = text.toLowerCase(Locale.ROOT);
-        int header = lower.indexOf(REGISTER_HEADER);
-        if (header < 0) {
-            return new Registration(List.of(), "8-A12B 등록 표의 머리를 못 찾았다");
+        java.util.regex.Matcher start = REGISTER_START.matcher(text);
+        if (!start.find()) {
+            return new Registration(List.of(), "8-A12B 등록 구역(Section 12(b) of the Act)을 못 찾았다");
         }
-        int headerEnd = lower.indexOf("registered", header);
-        int end = lower.indexOf(REGISTER_END, header);
-        if (headerEnd < 0 || end < 0 || end < headerEnd) {
-            return new Registration(List.of(), "8-A12B 등록 표의 끝을 못 찾았다");
+        java.util.regex.Matcher end = REGISTER_END.matcher(text);
+        if (!end.find(start.end())) {
+            return new Registration(List.of(), "8-A12B 등록 구역의 끝을 못 찾았다");
         }
-        String table = text.substring(headerEnd + "registered".length(), end);
+        String section = REGISTER_LABELS.matcher(text.substring(start.end(), end.start())).replaceAll(" ");
         List<Registered> rows = new ArrayList<>();
         int cursor = 0;
-        for (Venue.Found found : Venue.findAll(table)) {
-            String line = table.substring(cursor, found.start()).strip();
+        for (Venue.Found found : Venue.findAll(section)) {
+            String line = section.substring(cursor, found.start()).strip();
             if (!line.isEmpty()) {
                 rows.add(new Registered(line.replaceAll("\\s+", " "), Optional.of(found.venue())));
             }
             cursor = found.end();
         }
-        String rest = table.substring(cursor).strip();
+        String rest = section.substring(cursor).strip();
         if (!rest.isEmpty()) {
             rows.add(new Registered(rest.replaceAll("\\s+", " "), Optional.empty()));
         }
         if (rows.isEmpty()) {
-            return new Registration(List.of(), "8-A12B 등록 표가 비었다");
+            return new Registration(List.of(), "8-A12B 등록 구역이 비었다");
         }
         return new Registration(rows, null);
     }
@@ -141,7 +169,8 @@ public final class ListingFormReader {
     static String text(String html) {
         String noScript = html.replaceAll("(?is)<(script|style)\\b.*?</\\1>", " ");
         String noTags = noScript.replaceAll("<[^>]+>", " ");
-        return HtmlUtils.htmlUnescape(noTags).replace(' ', ' ').replaceAll("\\s+", " ").strip();
+        // 서명란·빈칸의 밑줄(「New York Stock Exchange ____」)은 글이 아니다 — 거래소 이름 끝 맞춤을 막는다(R-D5).
+        return HtmlUtils.htmlUnescape(noTags).replaceAll("_{2,}", " ").replace(' ', ' ').replaceAll("\\s+", " ").strip();
     }
 
     private static String lastWords(String text, int n) {

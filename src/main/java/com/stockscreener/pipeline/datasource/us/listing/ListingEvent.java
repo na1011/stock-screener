@@ -12,9 +12,10 @@ import java.util.Optional;
  * 마지막 거래 10-02), {@code 8-A12B}는 제출일. 전이일의 정확도는 재지 않았다(R-D5).
  *
  * @param letter 보통주 줄의 클래스 글자(「Class A」 · 「Series C」) — 한 등록인에 보통주 행이 둘 이상이면 이것으로 행에 붙인다
+ * @param transferredOn 제거 양식 설명문이 적은 이전일({@link ListingFormReader.Removal#transferredOn()})
  */
 public record ListingEvent(LocalDate date, Venue venue, boolean registration, String line, Optional<String> letter,
-                           String form, String accession) {
+                           String form, String accession, Optional<LocalDate> transferredOn) {
 
     /** 발행사 {@code 25}의 효력 지연(일) — 제출 뒤 10일에 효력이 난다(Rule 12d2-2(d)). */
     static final int ISSUER_REMOVAL_DELAY_DAYS = 10;
@@ -28,7 +29,8 @@ public record ListingEvent(LocalDate date, Venue venue, boolean registration, St
         LocalDate effective = "25".equals(form) ? filed.plusDays(ISSUER_REMOVAL_DELAY_DAYS) : filed;
         for (String line : removal.lines()) {
             if (ClassLines.isCommon(line)) {
-                out.add(new ListingEvent(effective, removal.venue().get(), false, line, ClassLines.classLetter(line), form, accession));
+                out.add(new ListingEvent(effective, removal.venue().get(), false, line, ClassLines.classLetter(line), form, accession,
+                        removal.transferredOn()));
             }
         }
         return out;
@@ -40,7 +42,8 @@ public record ListingEvent(LocalDate date, Venue venue, boolean registration, St
         List<ListingEvent> out = new ArrayList<>();
         for (ListingFormReader.Registered row : registration.rows()) {
             if (row.venue().isPresent() && ClassLines.isCommon(row.line())) {
-                out.add(new ListingEvent(filed, row.venue().get(), true, row.line(), ClassLines.classLetter(row.line()), form, accession));
+                out.add(new ListingEvent(filed, row.venue().get(), true, row.line(), ClassLines.classLetter(row.line()), form, accession,
+                        Optional.empty()));
             }
         }
         return out;
