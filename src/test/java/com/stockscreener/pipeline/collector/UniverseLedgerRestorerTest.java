@@ -88,6 +88,17 @@ class UniverseLedgerRestorerTest {
     }
 
     @Test
+    @DisplayName("시대 끝에서 자른다 — 다음 격자일까지 잇던 구간이 시대 끝을 넘지 않는다(QRVO꼴 · 과거 날짜 순위 갈래)")
+    void cutsAtTheRowsEraEnd() {
+        LocalDate eraTo = W2.minusDays(3);
+        Plan plan = restorer.plan(UNIVERSE, FLOOR, List.of(point(W1, 0), point(W2)), java.util.Map.of(ids.get(0), eraTo));
+        Plan untouched = restorer.plan(UNIVERSE, FLOOR, List.of(point(W1, 0), point(W2)));
+
+        assertThat(plan.intervals()).containsExactly(new Interval(ids.get(0), W1, eraTo));
+        assertThat(untouched.intervals()).as("시대를 안 넘기면 그대로다").containsExactly(new Interval(ids.get(0), W1, W2));
+    }
+
+    @Test
     @DisplayName("격자가 비면 구간도 비고 던지지 않는다 — 창이 미끄러져 대상이 없는 날이 온다")
     void emptyGridYieldsNoIntervals() {
         assertThat(restorer.plan(UNIVERSE, FLOOR, List.of()).intervals()).isEmpty();

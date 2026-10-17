@@ -102,7 +102,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
     public static final String UNIVERSE_CODE = "US_TOP1000";
 
     /** {@link #UNIVERSE_CODE}의 숫자와 <b>같아야 한다.</b> 테스트가 그 일치를 잠근다. */
-    private static final int TOP_N = 1_000;
+    static final int TOP_N = 1_000;
 
     /**
      * 한 콜에 넣는 심볼 수. 실측으로 8,495종목이 200개씩 43콜에 훑린다
@@ -123,7 +123,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 남은 6은 무거래가 아니라 소스가 모르는 심볼이다({@code alpaca-bars.md}).
      * 그래도 10일을 쓰는 이유는 연휴가 낀 실행에서 마지막 세션을 놓치지 않기 위해서다.
      */
-    private static final int CLOSE_WINDOW_DAYS = 10;
+    static final int CLOSE_WINDOW_DAYS = 10;
 
     /** 종가 조회 한 페이지의 상한. 200심볼 × 7세션 = 1,400 포인트로 이 안이다(실측). */
     private static final int PAGE_LIMIT = 10_000;
@@ -145,7 +145,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 멈춰 있었다. 경계가 없으면 십수 년 전 주식수가 오늘 종가에 곱해지고, 그 값은 결측이
      * 아니라 <b>몇 배씩 틀린 숫자</b>로 나온다.
      */
-    private static final int SHARES_MAX_AGE_YEARS = 2;
+    static final int SHARES_MAX_AGE_YEARS = 2;
 
     /**
      * 받은 종가가 후보 대비 이 비율에 못 미치면 부분 목록으로 본다(ADR-0008).
@@ -154,7 +154,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 두 자릿수 느슨한 값이라 <b>정상 실행에서 울지 않는다</b> — 이 하한이 잡으려는 것은
      * 소수의 결측이 아니라 <b>묶음 조회가 통째로 조용히 빈 경우</b>다.
      */
-    private static final double MIN_CLOSE_COVERAGE = 0.95;
+    static final double MIN_CLOSE_COVERAGE = 0.95;
 
     /**
      * 「숨은 상장」으로 받을 SEC 거래소 표기(ADR-0171). SEC는 NYSE American·Arca도 「NYSE」로 적으므로
@@ -188,7 +188,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 판정불가 집합을 Division H 전체로 넓힌 것과 <b>다른 판단이고 그것이 의도다</b> —
      * 저쪽은 "틀린 값보다 답 없음"이지만 여기서 자르면 <b>화면에 아예 안 뜬다.</b>
      */
-    private static final Set<String> NON_OPERATING_SIC = Set.of("6798", "6770");
+    static final Set<String> NON_OPERATING_SIC = Set.of("6798", "6770");
 
     /**
      * 증권 종류를 가리키는 이름. <b>토큰 경계가 계약이다.</b>
@@ -458,14 +458,30 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                                  Map<String, String> storedNames, Exclusions excluded) {
         List<String> held = new ArrayList<>();
         List<String> classExcluded = new ArrayList<>();
-        for (StoredShareCounts.ClassHold hold : shareCounts.classHolds(UsMarket.CODE, asOf).values()) {
+        applyClassHolds(shareCounts.classHolds(UsMarket.CODE, asOf).values(), previous, StoredShareCounts.ClassHold::ticker,
+                sharesByTicker, storedNames, excluded, held, classExcluded);
+        // 리밸런싱마다 이 줄이 보류의 귀속 재료다(수용 기준 7·9).
+        log.info("클래스 축 보류. 기준일={} 앞편입={} 보류후보={}{} 발행사제외={}{}", asOf, previous.size(), held.size(), held,
+                classExcluded.size(), classExcluded);
+    }
+
+    /**
+     * 클래스 축 보류 · 발행사 제외의 규칙 한 자리 — 오늘 순위는 표지로, 과거 날짜 순위({@link UsPastRanking})는 행 id로 부른다.
+     *
+     * @param key 후보 맵의 열쇠(표지 · 행 id)
+     */
+    static <K> void applyClassHolds(Collection<StoredShareCounts.ClassHold> holds, Set<K> previous,
+                                    java.util.function.Function<StoredShareCounts.ClassHold, K> key, Map<K, BigDecimal> shares,
+                                    Map<K, String> names, Exclusions excluded, List<String> held, List<String> classExcluded) {
+        for (StoredShareCounts.ClassHold hold : holds) {
+            K k = key.apply(hold);
             switch (hold.state()) {
                 case EXCLUDED -> {
-                    sharesByTicker.remove(hold.ticker());
+                    shares.remove(k);
                     classExcluded.add(hold.ticker());
                 }
                 case HELD -> {
-                    if (!previous.contains(hold.ticker()) || hold.heldShares() == null || hold.heldShares().signum() <= 0) {
+                    if (!previous.contains(k) || hold.heldShares() == null || hold.heldShares().signum() <= 0) {
                         continue;
                     }
                     if (hold.currencyMismatched()) {
@@ -476,8 +492,8 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                         excluded.nonOperating++;
                         continue;
                     }
-                    sharesByTicker.put(hold.ticker(), hold.heldShares());
-                    storedNames.put(hold.ticker(), hold.name());
+                    shares.put(k, hold.heldShares());
+                    names.put(k, hold.name());
                     held.add(hold.ticker());
                 }
                 default -> {
@@ -485,9 +501,6 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                 }
             }
         }
-        // 리밸런싱마다 이 줄이 보류의 귀속 재료다(수용 기준 7·9).
-        log.info("클래스 축 보류. 기준일={} 앞편입={} 보류후보={}{} 발행사제외={}{}", asOf, previous.size(), held.size(), held,
-                classExcluded.size(), classExcluded);
     }
 
     /** 순위와 그것을 만든 실행의 귀속 재료(상장 · 후보 수 · 축별 제외). */
@@ -513,10 +526,16 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      */
     private List<Ranked> dropCikDuplicates(List<Ranked> ranked, Exclusions excluded,
                                            SecTickerCikCache.Snapshot sec) {
+        return dropCikDuplicates(ranked, excluded, row -> sec.findCik(row.asset().symbol()));
+    }
+
+    /** CIK 대표 규칙 한 자리 — 오늘 순위는 오늘 SEC 파일로, 과거 날짜 순위는 행에 묶인 등록인으로 CIK를 댄다. */
+    static List<Ranked> dropCikDuplicates(List<Ranked> ranked, Exclusions excluded,
+                                          java.util.function.Function<Ranked, Optional<Long>> cikFor) {
         Map<Long, List<Ranked>> byCik = new LinkedHashMap<>();
         Map<Ranked, Long> cikOf = new HashMap<>();
         for (Ranked row : ranked) {
-            Optional<Long> cik = sec.findCik(row.asset().symbol());
+            Optional<Long> cik = cikFor.apply(row);
             if (cik.isPresent()) {
                 byCik.computeIfAbsent(cik.get(), k -> new ArrayList<>()).add(row);
                 cikOf.put(row, cik.get());
@@ -845,12 +864,12 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
     static final class Exclusions {
         /** 혼성 문구({@link #HYBRID_WORDS})에만 걸려 빠진 티커. 수는 {@code name}에 이미 들어 있다. */
         private final List<String> hybridOnly = new ArrayList<>();
-        private int currency;
-        private int nonOperating;
-        private int noShares;
-        private int name;
-        private int noClose;
-        private int cikDuplicate;
+        int currency;
+        int nonOperating;
+        int noShares;
+        int name;
+        int noClose;
+        int cikDuplicate;
         /** 숨은 상장(ADR-0171) — 받은 것과 갈래별로 뺀 것. 수가 아니라 이름을 남긴다(명부 차이 귀속 재료). */
         private final List<String> hiddenAccepted = new ArrayList<>();
         private final List<String> hiddenStale = new ArrayList<>();

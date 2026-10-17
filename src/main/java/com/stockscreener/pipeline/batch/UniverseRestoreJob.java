@@ -7,9 +7,13 @@ import com.stockscreener.pipeline.collector.UniverseLedgerRestorer.Plan;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.DataSourceRegistry;
 import com.stockscreener.pipeline.datasource.UniverseSnapshot;
+import com.stockscreener.pipeline.datasource.us.UsMarketCapUniverseAdapter;
+import com.stockscreener.pipeline.datasource.us.UsPastRanking;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -60,15 +64,21 @@ public class UniverseRestoreJob {
     private final UniverseLedgerRestorer restorer;
     private final JdbcTemplate jdbcTemplate;
     private final MembershipGapFiller gapFiller;
+    private final ObjectProvider<UsPastRanking> pastRanking;
+    /** 미국 관문 설정 — 켜졌으면 미국 복원 격자를 과거 날짜 순위(행 · 그날 범주 · 닻 봉)로 짓는다(D4). */
+    private final boolean usGate;
 
     public UniverseRestoreJob(DataSourceRegistry registry, StockRegistrar stockRegistrar,
                               UniverseLedgerRestorer restorer, JdbcTemplate jdbcTemplate,
-                              MembershipGapFiller gapFiller) {
+                              MembershipGapFiller gapFiller, ObjectProvider<UsPastRanking> pastRanking,
+                              @Value("${stockscreener.gate.us}") boolean usGate) {
         this.registry = registry;
         this.stockRegistrar = stockRegistrar;
         this.restorer = restorer;
         this.jdbcTemplate = jdbcTemplate;
         this.gapFiller = gapFiller;
+        this.pastRanking = pastRanking;
+        this.usGate = usGate;
     }
 
     /**
@@ -105,9 +115,28 @@ public class UniverseRestoreJob {
         List<DatedMembers> points = new ArrayList<>();
         Set<String> unresolved = new TreeSet<>();
         int fetched = 0;
+        Map<Long, LocalDate> eraTo = Map.of();
+        boolean pastRanked = usGate && UsMarketCapUniverseAdapter.UNIVERSE_CODE.equals(universeCode);
+        if (pastRanked) {
+            // 미국 관문 갈래(D4) — 후보가 행이라 해석도 행 만들기도 없다(해석 못 한 티커 0). 구간은 행의 시대 끝에서 자른다.
+            UsPastRanking ranking = pastRanking.getIfAvailable();
+            if (ranking == null) {
+                throw new IllegalStateException("미국 관문이 켜졌는데 과거 날짜 순위가 없다(Alpaca 키) — 오늘 기호로 과거를 고르지 않는다.");
+            }
+            try {
+                for (UsPastRanking.Roster roster : ranking.rosters(grid)) {
+                    points.add(new DatedMembers(roster.date(), new LinkedHashSet<>(roster.stockIds())));
+                    fetched++;
+                }
+            } catch (DataSourceException e) {
+                throw new IllegalStateException("과거 날짜 순위를 못 지었다: %s (%s) — 격자 하나라도 빼고 이으면 없던 편입을 지어낸다"
+                        .formatted(universeCode, e.kind()), e);
+            }
+            eraTo = eraTo();
+        }
         // 앞 편입 — 미국 클래스 축의 편입 보류가 쓴다(관문 뒤). 복원 구간의 첫 격자는 편입이 없다(빈 집합).
         Set<String> previous = Set.of();
-        for (LocalDate date : grid) {
+        for (LocalDate date : pastRanked ? List.<LocalDate>of() : grid) {
             // MUST: 격자점 하나가 실패하면 그 유니버스를 통째로 중단한다. 그 날짜만 빼고
             // 이으면 런렝스가 구멍 위를 이어 **없던 편입을 지어내고**, 그 값은 그럴듯해서
             // 대조의 정확도 수까지 오염시킨다. Phase D가 아직 안 돌았으므로 쓰기는 0이다.
@@ -130,7 +159,7 @@ public class UniverseRestoreJob {
         // 하한으로 닫으면 [from, to)의 to가 from보다 이르다. 대조에서는 「마지막 격자일
         // 다음 날」이 「우리가 아는 것이 끝나는 날」이다.
         LocalDate closeAt = replay ? grid.get(grid.size() - 1).plusDays(1) : floor;
-        Plan plan = restorer.plan(universeCode, closeAt, points);
+        Plan plan = restorer.plan(universeCode, closeAt, points, eraTo);
 
         // ── Phase C: 보고.
         log.info("복원 계획. {} 격자={}점({}~{}) 하한={} 닫는날={} 구간={} 해석 못 한 티커={}",
@@ -226,6 +255,16 @@ public class UniverseRestoreJob {
         return jdbcTemplate.queryForList(
                 "SELECT ticker FROM stock WHERE id IN (" + holes + ") ORDER BY ticker",
                 String.class, stockIds.toArray());
+    }
+
+    /** 미국 행의 시대 끝 — 복원 구간을 자르는 재료(D4). */
+    private Map<Long, LocalDate> eraTo() {
+        Map<Long, LocalDate> out = new java.util.HashMap<>();
+        jdbcTemplate.query("SELECT id, era_to FROM stock WHERE market_code = 'US' AND era_to IS NOT NULL",
+                rs -> {
+                    out.put(rs.getLong("id"), rs.getObject("era_to", LocalDate.class));
+                });
+        return out;
     }
 
     private Target target(String universeCode) {

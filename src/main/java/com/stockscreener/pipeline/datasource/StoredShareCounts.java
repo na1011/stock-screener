@@ -68,10 +68,11 @@ public interface StoredShareCounts {
      *                    「빠진 것」만이 아니라 「왜 빠졌는지」를 내려면 이 값이 필요하다
      * @param name 저장된 종목 이름({@code stock.name}). 시세 소스 목록이 그 종목을 빠뜨렸을 때 이름 축을
      *             태울 재료다(ADR-0171) — 소스에서 온 이름이 있으면 그쪽이 먼저다
+     * @param stockId 그 행 — 과거 날짜 순위(D4)는 후보를 표지가 아니라 행으로 다룬다(닫힌 행의 표지는 비운 꼴이다)
      */
     record ShareCount(String ticker, BigDecimal shares, String sicCode,
                       LocalDate periodEnd, LocalDate publishedAt, boolean currencyMismatched,
-                      String name) {
+                      String name, long stockId) {
     }
 
     /**
@@ -86,8 +87,11 @@ public interface StoredShareCounts {
         return Map.of();
     }
 
-    /** @param heldShares {@code HELD}일 때만 — 마지막 보인 판정의 N_L을 {@code asOf}로 옮긴 값(없으면 {@code null}) */
+    /**
+     * @param heldShares {@code HELD}일 때만 — 마지막 보인 판정의 N_L을 {@code asOf}로 옮긴 값(없으면 {@code null})
+     * @param stockId    그 행(과거 날짜 순위의 앞 명부는 행 id다)
+     */
     record ClassHold(String ticker, MembershipHold.State state, BigDecimal heldShares, String sicCode,
-                     boolean currencyMismatched, String name) {
+                     boolean currencyMismatched, String name, long stockId) {
     }
 }

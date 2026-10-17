@@ -452,7 +452,7 @@ class UsCandidateRankSweepLiveTest {
                     return;
                 }
                 extra.put(s.ticker(), new ShareCount(s.ticker(), v.lineShares().multiply(line.factor(v.filed(), asOf)),
-                        s.sic(), null, v.filed(), false, s.name()));
+                        s.sic(), null, v.filed(), false, s.name(), 0L));
             });
         }
 

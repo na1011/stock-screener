@@ -579,11 +579,11 @@ class UsMarketCapUniverseAdapterTest {
         List<StoredShareCounts.ShareCount> visible = List.of(share("AAA", "10"), share("EXC", "500"), share("BBB", "50"));
         Map<String, StoredShareCounts.ClassHold> holds = Map.of(
                 "HLD", new StoredShareCounts.ClassHold("HLD", MembershipHold.State.HELD, new BigDecimal("80"), "3711", false,
-                        "Held Inc."),
+                        "Held Inc.", 0L),
                 "NEW", new StoredShareCounts.ClassHold("NEW", MembershipHold.State.HELD, new BigDecimal("900"), "3711", false,
-                        "New Inc."),
+                        "New Inc.", 0L),
                 "EXC", new StoredShareCounts.ClassHold("EXC", MembershipHold.State.EXCLUDED, null, "3711", false,
-                        "Excluded Inc."));
+                        "Excluded Inc.", 0L));
         StoredShareCounts counts = new StoredShareCounts() {
             @Override
             public List<ShareCount> activeByMarket(String marketCode, LocalDate oldestPeriodEnd, LocalDate asOf) {
@@ -659,19 +659,19 @@ class UsMarketCapUniverseAdapterTest {
     private static StoredShareCounts.ShareCount share(String ticker, String shares) {
         return new StoredShareCounts.ShareCount(
                 ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), false,
-                ticker + " Stored Name");
+                ticker + " Stored Name", 0L);
     }
 
     private static StoredShareCounts.ShareCount mismatched(String ticker, String shares) {
         return new StoredShareCounts.ShareCount(
                 ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), true,
-                ticker + " Stored Name");
+                ticker + " Stored Name", 0L);
     }
 
     private static StoredShareCounts.ShareCount sic(String ticker, String shares, String sicCode) {
         return new StoredShareCounts.ShareCount(
                 ticker, new BigDecimal(shares), sicCode, AS_OF.minusMonths(3), AS_OF.minusMonths(1), false,
-                ticker + " Stored Name");
+                ticker + " Stored Name", 0L);
     }
 
     private static String asset(String symbol, String name) {
@@ -704,7 +704,7 @@ class UsMarketCapUniverseAdapterTest {
     private static StoredShareCounts.ShareCount named(String ticker, String shares, String storedName) {
         return new StoredShareCounts.ShareCount(
                 ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), false,
-                storedName);
+                storedName, 0L);
     }
 
     private static String cikMap(Map<String, Long> byTicker) {

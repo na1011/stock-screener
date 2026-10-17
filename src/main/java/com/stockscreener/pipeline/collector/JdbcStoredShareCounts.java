@@ -163,7 +163,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                   AND f.period_end >= ?
                 ORDER BY f.stock_id, f.period_end DESC, f.published_at DESC, f.revision_no DESC
             )
-            SELECT s.ticker,
+            SELECT s.ticker, latest.stock_id,
                    latest.shares_outstanding
                        * coalesce(latest.share_basis_multiple, 1) * %s AS shares_outstanding,
                    s.sic_code, latest.period_end, latest.published_at,
@@ -236,7 +236,8 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                         rs.getObject("period_end", LocalDate.class),
                         rs.getObject("published_at", LocalDate.class),
                         rs.getBoolean("currency_mismatched"),
-                        rs.getString("name")),
+                        rs.getString("name"),
+                        rs.getLong("stock_id")),
                 marketCode, asOf, oldestPeriodEnd, asOf, asOf, asOf);
     }
 
@@ -275,7 +276,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                     .multiply(ShareClassLine.factor(splits.getOrDefault(stockId, List.of()), publishedAt, asOf));
             chosen.put(stockId, new ShareCount(rs.getString("ticker"), shares, rs.getString("sic_code"),
                     rs.getObject("period_end", LocalDate.class), publishedAt, mismatched.contains(stockId),
-                    rs.getString("name")));
+                    rs.getString("name"), stockId));
         }, marketCode, asOf, oldestPeriodEnd, asOf, asOf);
         List<ShareCount> out = new ArrayList<>(chosen.values());
         out.sort(java.util.Comparator.comparing(ShareCount::ticker));
@@ -311,7 +312,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                 }
             }
             out.put(rs.getString("ticker"), new ClassHold(rs.getString("ticker"), state, held, rs.getString("sic_code"),
-                    mismatched.contains(rs.getLong("id")), rs.getString("name")));
+                    mismatched.contains(rs.getLong("id")), rs.getString("name"), rs.getLong("id")));
         }, marketCode, asOf, asOf);
         return out;
     }

@@ -106,6 +106,17 @@ public class UniverseLedgerRestorer {
      *         지어내고</b>, 그 값은 그럴듯해서 대조의 정확도 수까지 오염시킨다
      */
     public Plan plan(String universeCode, LocalDate floor, List<DatedMembers> grid) {
+        return plan(universeCode, floor, grid, Map.of());
+    }
+
+    /**
+     * 위와 같되 구간 끝을 행의 시대 끝에서 자른다 — 미국 과거 날짜 순위(D4) 갈래만 넘긴다(탐색 {@code US-PAST-LISTING-PLAN-1017.md}
+     * ★20). 다음 격자일까지 잇던 구간이 시대 끝을 넘으면 그 행은 시대 밖 날짜에 편입으로 남는다(QRVO 마지막 봉 10-02 · 관측 편입
+     * ~10-09 꼴). 시대 끝이 구간 시작 이하면 그 구간은 안 넣는다 — 과거 순위는 시대 안 날짜에만 후보를 내므로 원리적으로 안 생긴다.
+     *
+     * @param eraTo 행 id → 시대 끝(제외). 없는 행은 자르지 않는다
+     */
+    public Plan plan(String universeCode, LocalDate floor, List<DatedMembers> grid, Map<Long, LocalDate> eraTo) {
         if (grid.isEmpty()) {
             return new Plan(universeCode, floor, List.of(), List.of());
         }
@@ -121,7 +132,7 @@ public class UniverseLedgerRestorer {
                 steps.add(diff(universeCode, previousDate, point.date(), previous, members));
             }
             for (Long gone : minus(previous, members)) {
-                intervals.add(new Interval(gone, openedAt.remove(gone), point.date()));
+                addCut(intervals, new Interval(gone, openedAt.remove(gone), point.date()), eraTo);
             }
             for (Long fresh : minus(members, previous)) {
                 openedAt.put(fresh, point.date());
@@ -131,7 +142,7 @@ public class UniverseLedgerRestorer {
         }
         for (Map.Entry<Long, LocalDate> still : new TreeSet<>(openedAt.keySet()).stream()
                 .map(id -> Map.entry(id, openedAt.get(id))).toList()) {
-            intervals.add(new Interval(still.getKey(), still.getValue(), floor));
+            addCut(intervals, new Interval(still.getKey(), still.getValue(), floor), eraTo);
         }
         intervals.sort(Comparator.comparingLong(Interval::stockId).thenComparing(Interval::from));
         return new Plan(universeCode, floor, List.copyOf(intervals), List.copyOf(steps));
@@ -174,6 +185,15 @@ public class UniverseLedgerRestorer {
         log.info("과거 편입을 복원했다. {} 구간={} 삽입={} 하한={}",
                 plan.universeCode(), plan.intervals().size(), inserted, plan.floor());
         return inserted;
+    }
+
+    private static void addCut(List<Interval> intervals, Interval interval, Map<Long, LocalDate> eraTo) {
+        LocalDate end = eraTo.get(interval.stockId());
+        if (end == null || !end.isBefore(interval.to())) {
+            intervals.add(interval);
+        } else if (end.isAfter(interval.from())) {
+            intervals.add(new Interval(interval.stockId(), interval.from(), end));
+        }
     }
 
     private StepDiff diff(String universeCode, LocalDate from, LocalDate to,
