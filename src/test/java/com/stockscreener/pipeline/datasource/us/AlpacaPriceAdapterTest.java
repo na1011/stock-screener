@@ -93,6 +93,40 @@ class AlpacaPriceAdapterTest {
     }
 
     @Test
+    @DisplayName("저장된 옛 기호 시대도 묻는다 — 시대 끝 전날 asof로 시대 구간만 · 지금 기호가 같은 날을 덮으면 그쪽(ADR-0181 · SPHR ← MSGE)")
+    void asksRecordedSymbolErasForTheirOwnSpan() throws Exception {
+        enqueue(200, """
+                {"bars":{"SPHR":[{"t":"2023-04-21T04:00:00Z","o":25,"h":26,"l":24,"c":25.61,"v":1540779,"n":1,"vw":25}]},"next_page_token":null}""");
+        enqueue(200, """
+                {"bars":{"MSGE":[{"t":"2023-04-19T04:00:00Z","o":60,"h":61,"l":59,"c":60.69,"v":264943,"n":1,"vw":60},
+                 {"t":"2023-04-20T04:00:00Z","o":60,"h":61,"l":59,"c":60.56,"v":316970,"n":1,"vw":60},
+                 {"t":"2023-04-21T04:00:00Z","o":30,"h":31,"l":29,"c":30.99,"v":874323,"n":1,"vw":30}]},"next_page_token":null}""");
+        SecurityRef sphr = new SecurityRef(7L, "US", "SPHR", new SecurityRef.Identity("SPHR", LocalDate.of(2026, 8, 28), null, null, null,
+                List.of(new SecurityRef.SymbolEra("MSGE", null, LocalDate.of(2023, 4, 21)))));
+
+        List<RawPriceBar> bars = adapter().fetchDailyBars(sphr, LocalDate.of(2023, 4, 1), LocalDate.of(2023, 4, 28));
+
+        assertThat(bars).extracting(RawPriceBar::tradeDate).containsExactly(LocalDate.of(2023, 4, 19), LocalDate.of(2023, 4, 20),
+                LocalDate.of(2023, 4, 21));
+        assertThat(bars.get(2).close()).as("시대 끝 뒤의 MSGE(분사된 회사)가 아니라 지금 기호의 봉").isEqualByComparingTo("25.61");
+        server.takeRequest();
+        assertThat(URLDecoder.decode(server.takeRequest().getPath(), StandardCharsets.UTF_8))
+                .contains("symbols=MSGE").contains("asof=2023-04-20").contains("start=2023-04-01");
+    }
+
+    @Test
+    @DisplayName("대조군 — 시대 끝이 요청 창보다 앞이면 부르지 않는다(일일 갱신 창은 콜이 안 는다)")
+    void skipsErasThatEndBeforeTheWindow() throws Exception {
+        enqueue(200, fixture("bars-ok.json"));
+        SecurityRef row = new SecurityRef(7L, "US", "AAPL", new SecurityRef.Identity("AAPL", LocalDate.of(2026, 8, 28), null, null, null,
+                List.of(new SecurityRef.SymbolEra("OLDA", null, FROM.minusDays(30)))));
+
+        adapter().fetchDailyBars(row, FROM, TO);
+
+        assertThat(server.getRequestCount()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("닻이 없는 행(국내 · 시험)은 asof를 안 보낸다 — 소스 기본 = 오늘 그 기호의 실체")
     void omitsAsOfWithoutAnchor() throws Exception {
         enqueue(200, fixture("bars-ok.json"));

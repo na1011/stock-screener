@@ -172,8 +172,58 @@ public class AlpacaPriceAdapter implements PriceDataSource {
             }
         } while (pageToken != null);
 
+        // 저장된 기호 시대(ADR-0180 · ADR-0181) — 닻이 옛 기호를 못 잇는 행이 있다(SPHR ← MSGE · UHAL.B ← UHALB: 같은 CUSIP 개명인데
+        // 닻 asof가 개명 뒤 봉만 준다). 시대마다 그 기호를 시대 끝 전날 asof로 시대 구간만 받는다 — 시대 끝 뒤의 같은 문자열은 다른 실체일 수
+        // 있다(SPHR 개명일에 MSGE 문자열을 분사된 회사가 받았다). 지금 기호의 봉이 같은 날을 덮으면 그쪽이 이긴다. 시대 끝이 요청 창보다 앞이면
+        // 부르지 않는다(일일 갱신 창은 콜이 안 는다).
+        java.util.Set<LocalDate> covered = new java.util.HashSet<>();
+        bars.forEach(b -> covered.add(b.tradeDate()));
+        for (SecurityRef.SymbolEra era : security.identity().recordedEras()) {
+            LocalDate eraLast = era.validTo().minusDays(1);
+            LocalDate eraFrom = era.validFrom() == null || era.validFrom().isBefore(from) ? from : era.validFrom();
+            LocalDate eraTo = eraLast.isBefore(to) ? eraLast : to;
+            if (eraTo.isBefore(eraFrom) || era.symbol().equals(symbol)) {
+                continue;
+            }
+            for (RawPriceBar bar : eraBars(era.symbol(), eraLast, eraFrom, eraTo)) {
+                if (covered.add(bar.tradeDate())) {
+                    bars.add(bar);
+                }
+            }
+        }
+
         // 포트가 날짜 오름차순을 요구한다. sort=asc를 주지만 페이지 경계에 기대지 않는다.
         bars.sort(Comparator.comparing(RawPriceBar::tradeDate));
+        return bars;
+    }
+
+    /** 옛 기호 시대 한 구간의 봉 — 그 기호를 시대 끝 전날 asof로 푼다. */
+    private List<RawPriceBar> eraBars(String symbol, LocalDate asOf, LocalDate from, LocalDate to) throws DataSourceException {
+        Instant end = clampEnd(to);
+        if (!end.isAfter(from.atStartOfDay(ZoneOffset.UTC).toInstant())) {
+            return List.of();
+        }
+        List<RawPriceBar> bars = new ArrayList<>();
+        String pageToken = null;
+        int page = 0;
+        do {
+            String context = "bars(기호 시대) %s@%s %s~%s page=%d".formatted(symbol, asOf, from, to, page + 1);
+            ResponseEntity<String> response = call(symbol, asOf, from, end, pageToken, context);
+            AlpacaResponse.Envelope envelope = AlpacaResponse.requireBars(
+                    response.getStatusCode(), response.getBody(), SOURCE_NAME, context);
+            for (JsonNode node : envelope.value().path(symbol)) {
+                RawPriceBar bar = toBar(node, symbol, context);
+                if (!bar.tradeDate().isAfter(to)) {
+                    bars.add(bar);
+                }
+            }
+            pageToken = envelope.nextPageToken();
+            page++;
+            if (page >= maxPages && pageToken != null) {
+                throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                        "페이지가 %d를 넘는다 — 상한을 걸고 부분 결과를 버린다. %s".formatted(maxPages, context));
+            }
+        } while (pageToken != null);
         return bars;
     }
 

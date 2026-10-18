@@ -339,6 +339,30 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
     }
 
     /**
+     * 시장 전체에서 <b>같은 증권의 기호만 바뀐</b> 개명 — 옛·새 CUSIP이 같고 옛 기호가 when-issued({@code .WI})가 아닌 것(ADR-0181 · 기호 시대
+     * 심기의 재료). when-issued는 정식 거래 전 조건부 매매라 그 증권의 이력이 아니다. 처리일 기준 {@code [from, to]}.
+     */
+    public List<IdentitySource.SymbolChange> fetchSameSecurityRenames(LocalDate from, LocalDate to) throws DataSourceException {
+        requireCredentials();
+        Map<String, List<JsonNode>> buckets = fetchBuckets(null, "name_change", from, maxOf(to, LocalDate.now()));
+        List<IdentitySource.SymbolChange> out = new ArrayList<>();
+        for (JsonNode node : buckets.getOrDefault("name_changes", List.of())) {
+            String oldSymbol = node.path("old_symbol").asString("");
+            String newSymbol = node.path("new_symbol").asString("");
+            String oldCusip = node.path("old_cusip").asString("");
+            LocalDate date = optionalDateOf(node, "process_date");
+            if (oldSymbol.isBlank() || newSymbol.isBlank() || oldSymbol.equals(newSymbol) || oldSymbol.endsWith(".WI") || date == null
+                    || oldCusip.isBlank() || !oldCusip.equals(node.path("new_cusip").asString(""))
+                    || date.isBefore(from) || date.isAfter(to)) {
+                continue;
+            }
+            out.add(new IdentitySource.SymbolChange(oldSymbol, newSymbol, date));
+        }
+        out.sort(Comparator.comparing(IdentitySource.SymbolChange::date));
+        return out;
+    }
+
+    /**
      * 기호 변경 전부 — CUSIP이 그대로인 것도 낸다({@link #fetchIdentityEvents}는 신원 판정 규칙대로 CUSIP 변경만 낸다). 폐지 실체의 등록인
      * 확인이 「그 공시일의 기호」를 거꾸로 걷는 재료다(RNA → RNAM 2026-02-26 · CUSIP 05370A108 그대로 · R-D6-0).
      */

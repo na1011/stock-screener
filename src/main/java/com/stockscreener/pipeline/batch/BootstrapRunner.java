@@ -189,6 +189,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final SecCikBindJob secCikBindJob;
     private final UsDelistedIntakeJob usDelistedIntakeJob;
     private final PriceBoundaryJob priceBoundaryJob;
+    private final SymbolEraSeedJob symbolEraSeedJob;
     private final CandidateIntake candidateIntake;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final BatchExecutionSweeper executionSweeper;
@@ -220,8 +221,10 @@ public class BootstrapRunner implements ApplicationRunner {
                            StockFoldJob stockFoldJob,
                            SecCikBindJob secCikBindJob,
                            UsDelistedIntakeJob usDelistedIntakeJob,
-                           PriceBoundaryJob priceBoundaryJob) {
+                           PriceBoundaryJob priceBoundaryJob,
+                           SymbolEraSeedJob symbolEraSeedJob) {
         this.priceBoundaryJob = priceBoundaryJob;
+        this.symbolEraSeedJob = symbolEraSeedJob;
         this.stockFoldJob = stockFoldJob;
         this.secCikBindJob = secCikBindJob;
         this.usDelistedIntakeJob = usDelistedIntakeJob;
@@ -450,6 +453,8 @@ public class BootstrapRunner implements ApplicationRunner {
             case "us-delisted-intake" -> usDelistedIntakeJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, flag(args, "apply"));
             // 시세 경계(ADR-0181) — 저장된 봉 중 행의 관측 구간 밖을 걷는다. 쓰기가 옵트인이다(덤프 뒤 사용자 승인 · 13:30 전).
             case "price-boundary" -> priceBoundaryJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, flag(args, "apply"));
+            // 같은 증권 개명을 닻이 못 이은 행에 옛 기호 시대를 심는다(ADR-0181) — 옛 봉은 그 뒤 initial-load --reload-existing이 받는다.
+            case "symbol-era-seed" -> symbolEraSeedJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, flag(args, "apply"));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill"
@@ -460,7 +465,7 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | corporate-action-review | corporate-action-judge"
                             + " | market-calendar | bar-gap-review"
                             + " | filing-listing | filing-consumption | candidate-consumption | candidate-splits"
-                            + " | refresh-behind | stock-fold | sec-cik-bind | us-delisted-intake | price-boundary");
+                            + " | refresh-behind | stock-fold | sec-cik-bind | us-delisted-intake | price-boundary | symbol-era-seed");
         };
 
         // MUST: 재무나 기업행위를 쓴 잡 뒤에는 기저를 다시 판정한다(ADR-0162).
