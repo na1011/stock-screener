@@ -107,7 +107,8 @@ public class AdjustmentRecalculator {
      */
     @Transactional
     public RebuildResult rebuild(long stockId) {
-        List<CorporateActionLedger.Entry> events = ledger.findApplicable(stockId);
+        // 미국 소스 공시는 적용 직전 가격으로 한 번 반박받는다(ADR-0181) — 소스 레코드가 틀린 실측이 넷 있다.
+        List<CorporateActionLedger.Entry> events = ledger.screenBeforeApplying(stockId, ledger.findApplicable(stockId));
         List<Segment> segments = segmentsOf(events);
 
         RebuildResult result = assignFactors(stockId, segments, events.size());
@@ -140,6 +141,11 @@ public class AdjustmentRecalculator {
         // 표시하지 않으면 "아직 반영 대기"와 구분되지 않는다.
         ledger.markApplied(events.stream().map(CorporateActionLedger.Entry::id).toList());
         return result;
+    }
+
+    /** 그 시각 뒤에 적용 직전 가격 반증으로 보류된 사건(ADR-0181). */
+    public List<String> heldSince(java.time.Instant since) {
+        return ledger.heldSince(since);
     }
 
     /**

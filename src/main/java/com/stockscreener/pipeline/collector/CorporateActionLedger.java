@@ -68,6 +68,38 @@ public class CorporateActionLedger {
 
     public CorporateActionLedger(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.refutation = new PriceRefutation(jdbcTemplate);
+    }
+
+    private final PriceRefutation refutation;
+
+    /**
+     * 적용 직전 가격 반증(ADR-0181 · {@link PriceRefutation}) — 미국 소스 공시의 APPROVED 사건 중 가격이 반박하는 것은 OBSERVED로 돌리고,
+     * 효력일 뒤 봉이 아직 없는 것은 이번 판에 빼서 APPROVED로 둔다. 재구축과 같은 트랜잭션에서 부른다.
+     */
+    public List<Entry> screenBeforeApplying(long stockId, List<Entry> events) {
+        return refutation.screen(stockId, events, this::hold);
+    }
+
+    private void hold(long id, String note) {
+        int updated = jdbcTemplate.update("""
+                UPDATE corporate_action SET status = ?, updated_at = now(), note = coalesce(note || ' · ', '') || ?
+                WHERE id = ? AND status = ?
+                """, CorporateActionStatus.OBSERVED.name(), note, id, CorporateActionStatus.APPROVED.name());
+        if (updated > 0) {
+            log.warn("소스 공시를 가격이 반박해 적용하지 않고 판정으로 돌렸다. id={} {}", id, note);
+        }
+    }
+
+    /** 그 시각 뒤에 가격 반증으로 보류된 행 — 재구축 잡이 운영자에게 알린다. */
+    public List<String> heldSince(java.time.Instant since) {
+        return jdbcTemplate.queryForList("""
+                SELECT s.ticker || ' ' || c.effective_date || ' ' || c.type || ' ' || c.ratio FROM corporate_action c
+                JOIN stock s ON s.id = c.stock_id
+                WHERE c.status = ? AND c.updated_at >= ? AND c.note LIKE ?
+                ORDER BY c.effective_date
+                """, String.class, CorporateActionStatus.OBSERVED.name(), java.sql.Timestamp.from(since),
+                "%" + PriceRefutation.NOTE_MARK + " — %");
     }
 
     /** 원장에 적은 결과. 호출자가 무엇이 일어났는지 알아야 알림을 걸 수 있다. */

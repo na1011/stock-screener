@@ -147,6 +147,7 @@ public class AdjustmentRebuildJob {
         log.info("수정계수 재구축을 시작한다. 대상 {}종목 — 원장의 적용 대상에서 매번 다시 짓는다."
                 + " 갱신 0행이 정상이고 그 0이 멱등의 증거다.", targets.size());
 
+        java.time.Instant started = java.time.Instant.now();
         try {
             execution.plan(CollectionPhase.ADJUSTMENT, targets.size());
             execution.stage("종목별 수정계수 재구축");
@@ -174,6 +175,14 @@ public class AdjustmentRebuildJob {
             }
 
             alertOnInvalidation(execution, rebuilt, appliedEvents, targets.size(), alreadyMatching);
+            // 적용 직전 가격 반증으로 보류된 사건(ADR-0181) — 판정 전까지 그 종목의 장기창 지표가 숨는다(ADR-0055). 알리지 않으면
+            // 종목이 조용히 화면에서 빠진다.
+            List<String> held = recalculator.heldSince(started);
+            if (!held.isEmpty()) {
+                execution.alertOperator(AlertSeverity.WARNING, "기업 행위 판정 대기 — 가격이 소스 공시를 반박했다",
+                        ("소스 공시 %d건을 가격이 반박해 적용하지 않았다(OBSERVED). 판정: --job=corporate-action-review → corporate-action-judge.%n- %s")
+                                .formatted(held.size(), String.join("%n- ".formatted(), held)));
+            }
         } catch (DataSourceException e) {
             // 외부 호출이 없으므로 정상적으로는 도달하지 않는다. StockTask의 시그니처가 이 예외를
             // 선언하고 있어 형식상 잡을 뿐이며, 실제로 온다면 그것 자체가 이상 신호다.
