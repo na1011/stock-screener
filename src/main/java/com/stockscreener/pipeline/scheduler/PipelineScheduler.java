@@ -80,6 +80,7 @@ public class PipelineScheduler {
     private final JobFreshnessPolicy freshnessPolicy;
     private final IndicatorReconciler indicatorReconciler;
     private final UniverseIntegrityAlerter universeIntegrityAlerter;
+    private final com.stockscreener.pipeline.batch.PriceIntegrityAlerter priceIntegrityAlerter;
     private final BatchExecutions batchExecutions;
     private final WriteLock writeLock;
     private final FilingListingJob filingListingJob;
@@ -106,7 +107,9 @@ public class PipelineScheduler {
                              FilingConsumptionJob filingConsumptionJob,
                              FreshnessCatchUpJob freshnessCatchUpJob,
                              UsCandidateFeed usCandidateFeed,
-                             CandidateSplitJob candidateSplitJob) {
+                             CandidateSplitJob candidateSplitJob,
+                             com.stockscreener.pipeline.batch.PriceIntegrityAlerter priceIntegrityAlerter) {
+        this.priceIntegrityAlerter = priceIntegrityAlerter;
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -690,6 +693,10 @@ public class PipelineScheduler {
             // 뜻이 있고, 토요일에는 잴 것이 없다.
             boolean gapsSent = universeIntegrityAlerter.evaluateAndAlert();
             log.info("편입 원자료를 점검했다. 알림={}", gapsSent ? "보냈다" : "없거나 이미 보냈다");
+
+            // 미국 시세 원장 무결성(ADR-0181) — 다른 증권 봉 · 빠진 원장 사건의 새 꼴. 읽기만 하고 batch_execution에 행을 안 만든다.
+            boolean priceSent = priceIntegrityAlerter.evaluateAndAlert();
+            log.info("시세 원장을 점검했다. 알림={}", priceSent ? "보냈다" : "없거나 이미 보냈다");
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
             log.info("크론 발화를 마쳤다. 크론={}", "checkJobFreshness");

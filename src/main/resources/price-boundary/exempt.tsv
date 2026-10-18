@@ -1,0 +1,27 @@
+# 시세 감시 면제(ADR-0181 · PriceIntegrityAlerter) — 판정이 끝난 적중. 키는 (검사, 표지, 구간 시작일) · 근거 필수.
+# 검사: OUTSIDE_WINDOW · GAP · FLAT_RUN · OFFSET_JUMP
+# check	ticker	start	evidence
+FLAT_RUN	ASTS	2019-12-20	SPAC(New Providence) 시절 무거래 · 앞뒤 실거래 9.87 → 9.89(신탁 가치) — 같은 증권
+FLAT_RUN	ASTS	2020-05-14	SPAC 시절 무거래 · 9.90 → 9.87 — 같은 증권
+FLAT_RUN	LNZA	2022-01-18	SPAC(AMCI II) 시절 무거래 · 9.68 → 9.66 — 같은 증권
+FLAT_RUN	LNZA	2022-07-19	SPAC 시절 무거래 · 9.82 → 9.79 — 같은 증권
+FLAT_RUN	LUNR	2022-03-10	SPAC(IPAX) 시절 무거래 · 9.69 → 9.65 — 같은 증권
+FLAT_RUN	LUNR	2022-05-18	SPAC 시절 무거래 · 9.64 → 9.63 — 같은 증권
+FLAT_RUN	LUNR	2022-06-23	SPAC 시절 무거래 · 9.69 → 9.65 — 같은 증권
+FLAT_RUN	LUNR	2022-07-12	SPAC 시절 무거래 · 9.69 → 9.66 — 같은 증권
+FLAT_RUN	LUNR	2022-07-25	SPAC 시절 무거래 · 9.75 → 9.71 — 같은 증권
+FLAT_RUN	RGC	2022-10-05	거래 드문 시절 무거래 · 31.40 → 29.01 — 같은 증권(Regencell · 원장 사건 없음)
+FLAT_RUN	RGC	2022-10-13	거래 드문 시절 무거래 · 29.01 → 27.54 — 같은 증권
+FLAT_RUN	RGC	2022-10-24	거래 드문 시절 무거래 · 27.54 → 25.52 — 같은 증권
+FLAT_RUN	RGC	2023-03-17	거래 드문 시절 무거래 · 26.90 → 25.79 — 같은 증권
+FLAT_RUN	RGC	2023-06-29	거래 드문 시절 무거래 · 23.04 → 22.00 — 같은 증권
+FLAT_RUN	RGC	2023-09-05	거래 드문 시절 무거래 · 14.89 → 12.18 — 같은 증권
+FLAT_RUN	RGC	2023-12-18	거래 드문 시절 무거래 · 9.74 → 9.225 — 같은 증권
+FLAT_RUN	RSI	2020-04-28	SPAC(Collective Growth) 시절 무거래 · 9.79 → 9.60 — 같은 증권
+FLAT_RUN	USAR	2023-10-04	SPAC(Inflection Point II) 시절 무거래 · 10.22 → 10.22 — 같은 증권
+FLAT_RUN	UWMC	2020-03-25	SPAC(Gores IV) 시절 무거래 · 9.30 → 9.60 — 같은 증권
+FLAT_RUN	WGS	2020-11-05	SPAC(CM Life Sciences) 시절 무거래 · 9.80 → 10.30 — 같은 증권
+FLAT_RUN	WULF	2019-10-18	옛 IKONICS(같은 등록인 CIK 1083301 · 2021 역합병) 거래 드문 시절 무거래 · 6.10 → 6.12 — 같은 증권 계보
+FLAT_RUN	SEZL	2023-08-18	같은 증권 첫 체결(2023-08-17 · 1,150주 · 고가=종가 81.08)을 소스가 채운 18봉 — 원장이 준 관측이라 지우지 않는다(BUNDLE1-PLAN 1.1) · 첫 실거래 15.81(09-14)
+FLAT_RUN	CORZ	2023-01-03	파산 중 장외(CORZQ) 265봉 · SIP 가격 없음 — 같은 계보 + 교환 0.1(원장 보충 · 앞 봉이 채움이라 OBSERVED로 보류되어 걸친 창이 숨는다)
+OFFSET_JUMP	LUNR	2023-02-16	SPAC(IPAX) 합병 직후 실제 변동 — 소스 원장에 개명(IPAX→LUNR 02-14)만 · 비율 사건 0 · 주식수 변화는 합병 발행

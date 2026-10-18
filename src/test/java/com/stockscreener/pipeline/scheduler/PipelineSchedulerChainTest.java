@@ -138,7 +138,8 @@ class PipelineSchedulerChainTest {
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob,
                         indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob, filingConsumptionJob,
-                freshnessCatchUpJob, new UsCandidateFeed(candidateFeed), candidateSplitJob);
+                freshnessCatchUpJob, new UsCandidateFeed(candidateFeed), candidateSplitJob,
+                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class));
     }
 
     @Test
@@ -557,7 +558,8 @@ class PipelineSchedulerChainTest {
                 mock(JobFreshnessAlerter.class), policy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"), mock(FilingListingJob.class),
-                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class));
+                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class),
+                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class));
 
         Map<String, LocalDate> picked = new java.util.LinkedHashMap<>();
         for (LocalDate day = LocalDate.of(2026, 10, 19); !day.isAfter(LocalDate.of(2026, 11, 5));
@@ -623,7 +625,8 @@ class PipelineSchedulerChainTest {
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, refusing, blockedListing, blockedConsumption,
-                blockedCatchUp, new UsCandidateFeed(false), mock(CandidateSplitJob.class));
+                blockedCatchUp, new UsCandidateFeed(false), mock(CandidateSplitJob.class),
+                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class));
 
         // 성질로 센다(잠금 결정 7) — 손으로 든 목록이면 새 쓰기 크론이 잠금 없이 붙어도 이 시험이 못 본다.
         List<String> writeCrons = new java.util.ArrayList<>();
@@ -669,7 +672,8 @@ class PipelineSchedulerChainTest {
                 mock(JobFreshnessAlerter.class), freshnessPolicy,
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, failing, mock(FilingListingJob.class),
-                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class));
+                mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class),
+                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class));
 
         assertThatThrownBy(broken::runHeavyJobOfTheDay).isSameAs(boom);
 
