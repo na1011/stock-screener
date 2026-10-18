@@ -52,21 +52,25 @@ class SymbolEraSeedJobTest {
     }
 
     @Test
-    @DisplayName("첫 봉이 개명일인 행에 옛 기호 시대를 심는다 · 닻이 개명 앞을 이미 주는 행(대조군)은 건너뛴다 · 두 번째 판은 0")
+    @DisplayName("첫 봉이 개명일인 행에 옛 기호 시대를 심는다 · 닻이 개명 앞을 이미 주는 행(대조군)과 봉 없는 행은 건너뛴다 · 두 번째 판은 0")
     void seedsOnlyRowsTheAnchorDidNotChain() throws Exception {
         long sphr = usRow("SPHR");
         bar(sphr, RENAMED);
         long hos = usRow("HOSX");
         bar(hos, LocalDate.of(2019, 9, 3));
+        long candidate = usRow("NOBAR");
         when(adapter.fetchSameSecurityRenames(any(), any())).thenReturn(List.of(
                 new IdentitySource.SymbolChange("MSGE", "SPHR", RENAMED),
-                new IdentitySource.SymbolChange("HLXX", "HOSX", RENAMED)));
+                new IdentitySource.SymbolChange("HLXX", "HOSX", RENAMED),
+                new IdentitySource.SymbolChange("OLDB", "NOBAR", RENAMED)));
 
         job.run(LocalDate.of(2026, 10, 19), BatchExecutionRecorder.TriggeredBy.MANUAL, true);
 
         assertThat(jdbc.queryForList("SELECT symbol || '~' || valid_to FROM stock_symbol_era WHERE stock_id = ?", String.class, sphr))
                 .containsExactly("MSGE~" + RENAMED);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM stock_symbol_era WHERE stock_id = ?", Integer.class, hos)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM stock_symbol_era WHERE stock_id = ?", Integer.class, candidate))
+                .as("봉 없는 행은 대상이 아니다").isZero();
         assertThat(job.plan(adapter.fetchSameSecurityRenames(null, null))).isEmpty();
     }
 

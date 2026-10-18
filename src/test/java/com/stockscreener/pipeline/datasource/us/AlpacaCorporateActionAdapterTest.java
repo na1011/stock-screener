@@ -150,13 +150,14 @@ class AlpacaCorporateActionAdapterTest {
     }
 
     @Test
-    @DisplayName("같은 증권 개명만 낸다 — 옛·새 CUSIP이 같고 when-issued가 아닌 것(SPHR ← MSGE · MSGE.WI · ASHGY → SUNB는 뺀다)")
+    @DisplayName("같은 증권 개명만 낸다 — 옛·새 CUSIP이 같고 when-issued가 아닌 것(SPHR ← MSGE · MSGE.WI · CEGVV · ASHGY → SUNB는 뺀다)")
     void sameSecurityRenamesOnly() throws Exception {
         enqueue(200, """
                 {"corporate_actions":{"name_changes":[
                  {"id":"n1","new_cusip":"55826T102","new_symbol":"SPHR","old_cusip":"55826T102","old_symbol":"MSGE","process_date":"2023-04-21"},
                  {"id":"n2","new_cusip":"558256103","new_symbol":"MSGE","old_cusip":"558256103","old_symbol":"MSGE.WI","process_date":"2023-04-21"},
-                 {"id":"n3","new_cusip":"G05320109","new_symbol":"SUNB","old_cusip":"045054103","old_symbol":"ASHGY","process_date":"2026-03-02"}]},
+                 {"id":"n3","new_cusip":"G05320109","new_symbol":"SUNB","old_cusip":"045054103","old_symbol":"ASHGY","process_date":"2026-03-02"},
+                 {"id":"n4","new_cusip":"21037T109","new_symbol":"CEG","old_cusip":"21037T109","old_symbol":"CEGVV","process_date":"2022-02-02"}]},
                  "next_page_token":null}""");
 
         assertThat(adapter().fetchSameSecurityRenames(LocalDate.of(2019, 1, 1), LocalDate.of(2026, 10, 19)))

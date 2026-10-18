@@ -26,7 +26,7 @@ import java.util.Map;
  * 끝 전날 asof로 그 구간만 받는다({@code AlpacaPriceAdapter}).
  *
  * <p>대상: 소스 개명 중 옛·새 CUSIP이 같고 옛 기호가 when-issued가 아니며({@link AlpacaCorporateActionAdapter#fetchSameSecurityRenames}),
- * 새 기호가 그 행의 닻 기호이고, 그 행의 첫 봉이 개명일 이후(−3일)이거나 없는 것. 장외 선행(ASHGY → SUNB)은 CUSIP이 달라 대상이 아니다 —
+ * 새 기호가 그 행의 닻 기호이고, 그 행에 봉이 있으며 첫 봉이 개명일 이후(−3일)인 것. 장외 선행(ASHGY → SUNB)은 CUSIP이 달라 대상이 아니다 —
  * SIP 봉도 0이다(진짜 한계).
  *
  * <p><b>기본은 계획만 낸다</b>({@code --apply=false}). 운영 쓰기라 사용자 승인 뒤 {@code --apply=true}. 심은 뒤 옛 봉은
@@ -73,7 +73,12 @@ public class SymbolEraSeedJob {
                       AND NOT EXISTS (SELECT 1 FROM stock_symbol_era e WHERE e.stock_id = s.id AND e.symbol = ?)
                     """, rename.to(), rename.date(), rename.from())) {
                 LocalDate firstBar = row.get("first_bar") == null ? null : ((java.sql.Date) row.get("first_bar")).toLocalDate();
-                if (firstBar != null && firstBar.isBefore(rename.date().minusDays(SLACK_DAYS))) {
+                if (firstBar == null) {
+                    // 봉이 없는 행(순위 후보 목록 행)은 대상이 아니다 — 메울 이력이 없고, 그 이력을 처음 받을 때 이 잡을 다시 돌리면 된다.
+                    // 실측(2026-10-19 운영): 같은 CUSIP 개명이 닻에 걸린 862행 중 858이 봉 0이었다.
+                    continue;
+                }
+                if (firstBar.isBefore(rename.date().minusDays(SLACK_DAYS))) {
                     continue; // 닻이 개명 앞 이력을 이미 준다 — 심을 것이 없다
                 }
                 out.add(new Target(((Number) row.get("id")).longValue(), (String) row.get("ticker"), rename.from(), rename.date(), firstBar));

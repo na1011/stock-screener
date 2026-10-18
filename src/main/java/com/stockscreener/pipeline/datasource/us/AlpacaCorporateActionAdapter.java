@@ -339,7 +339,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
     }
 
     /**
-     * 시장 전체에서 <b>같은 증권의 기호만 바뀐</b> 개명 — 옛·새 CUSIP이 같고 옛 기호가 when-issued({@code .WI})가 아닌 것(ADR-0181 · 기호 시대
+     * 시장 전체에서 <b>같은 증권의 기호만 바뀐</b> 개명 — 옛·새 CUSIP이 같고 옛 기호가 when-issued({@link #whenIssued})가 아닌 것(ADR-0181 · 기호 시대
      * 심기의 재료). when-issued는 정식 거래 전 조건부 매매라 그 증권의 이력이 아니다. 처리일 기준 {@code [from, to]}.
      */
     public List<IdentitySource.SymbolChange> fetchSameSecurityRenames(LocalDate from, LocalDate to) throws DataSourceException {
@@ -351,7 +351,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             String newSymbol = node.path("new_symbol").asString("");
             String oldCusip = node.path("old_cusip").asString("");
             LocalDate date = optionalDateOf(node, "process_date");
-            if (oldSymbol.isBlank() || newSymbol.isBlank() || oldSymbol.equals(newSymbol) || oldSymbol.endsWith(".WI") || date == null
+            if (oldSymbol.isBlank() || newSymbol.isBlank() || oldSymbol.equals(newSymbol) || whenIssued(oldSymbol, newSymbol) || date == null
                     || oldCusip.isBlank() || !oldCusip.equals(node.path("new_cusip").asString(""))
                     || date.isBefore(from) || date.isAfter(to)) {
                 continue;
@@ -360,6 +360,16 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
         }
         out.sort(Comparator.comparing(IdentitySource.SymbolChange::date));
         return out;
+    }
+
+    /**
+     * 옛 기호가 when-issued(정식 거래 전 조건부 매매) 기호인가 — 거래소 기호 규칙: NYSE {@code .WI} · 붙여 쓴 {@code WI} · Nasdaq 다섯째 글자
+     * {@code V}(새 기호 + V · 넷 글자면 VV). 실측(2026-10-19 · 같은 CUSIP 개명 중 새 기호가 봉 있는 행): CEG ← CEGVV(2022-02-02 Exelon
+     * 분사일) — 걸러야 할 꼴이 {@code .WI} 하나가 아니었다.
+     */
+    static boolean whenIssued(String oldSymbol, String newSymbol) {
+        return oldSymbol.endsWith(".WI") || oldSymbol.equals(newSymbol + "WI") || oldSymbol.equals(newSymbol + "V")
+                || oldSymbol.equals(newSymbol + "VV");
     }
 
     /**
