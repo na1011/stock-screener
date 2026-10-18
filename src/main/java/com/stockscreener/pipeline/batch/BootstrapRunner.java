@@ -188,6 +188,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final StockFoldJob stockFoldJob;
     private final SecCikBindJob secCikBindJob;
     private final UsDelistedIntakeJob usDelistedIntakeJob;
+    private final PriceBoundaryJob priceBoundaryJob;
     private final CandidateIntake candidateIntake;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final BatchExecutionSweeper executionSweeper;
@@ -218,7 +219,9 @@ public class BootstrapRunner implements ApplicationRunner {
                            CandidateIntake candidateIntake,
                            StockFoldJob stockFoldJob,
                            SecCikBindJob secCikBindJob,
-                           UsDelistedIntakeJob usDelistedIntakeJob) {
+                           UsDelistedIntakeJob usDelistedIntakeJob,
+                           PriceBoundaryJob priceBoundaryJob) {
+        this.priceBoundaryJob = priceBoundaryJob;
         this.stockFoldJob = stockFoldJob;
         this.secCikBindJob = secCikBindJob;
         this.usDelistedIntakeJob = usDelistedIntakeJob;
@@ -445,6 +448,8 @@ public class BootstrapRunner implements ApplicationRunner {
                     handCiks(args), flag(args, "apply"));
             // 과거 날짜 상장 D6 — 행이 없는 폐지 실체를 들인다. 쓰기가 옵트인이다(관문 승인 안에서).
             case "us-delisted-intake" -> usDelistedIntakeJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, flag(args, "apply"));
+            // 시세 경계(ADR-0181) — 저장된 봉 중 행의 관측 구간 밖을 걷는다. 쓰기가 옵트인이다(덤프 뒤 사용자 승인 · 13:30 전).
+            case "price-boundary" -> priceBoundaryJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, flag(args, "apply"));
             default -> throw new IllegalArgumentException(
                     "알 수 없는 잡이다: '" + job
                             + "' — universe | initial-load | financial-refill"
@@ -455,7 +460,7 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | corporate-action-review | corporate-action-judge"
                             + " | market-calendar | bar-gap-review"
                             + " | filing-listing | filing-consumption | candidate-consumption | candidate-splits"
-                            + " | refresh-behind | stock-fold | sec-cik-bind | us-delisted-intake");
+                            + " | refresh-behind | stock-fold | sec-cik-bind | us-delisted-intake | price-boundary");
         };
 
         // MUST: 재무나 기업행위를 쓴 잡 뒤에는 기저를 다시 판정한다(ADR-0162).
@@ -509,7 +514,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private static final java.util.Set<String> REDERIVE_SHARE_BASIS_AFTER = java.util.Set.of(
             "initial-load", "financial-refill", "full-statement-refill", "filing-consumption", "candidate-consumption",
             "refresh-behind",
-            "corporate-action", "corporate-action-judge", "adjustment-rebuild", "candidate-splits");
+            "corporate-action", "corporate-action-judge", "adjustment-rebuild", "candidate-splits", "price-boundary");
 
     /**
      * 화해의 기준일. {@code --as-of}가 없으면 정기 화해와 같은 규약({@link IndicatorReconciler#dataAsOf} —

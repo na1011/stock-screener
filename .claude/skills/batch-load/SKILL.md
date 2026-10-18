@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing|filing-consumption|candidate-consumption|candidate-splits|refresh-behind|stock-fold|sec-cik-bind|us-delisted-intake 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing|filing-consumption|candidate-consumption|candidate-splits|refresh-behind|stock-fold|sec-cik-bind|us-delisted-intake|price-boundary 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -44,6 +44,7 @@ pg_restore도 같은 exec) → `end <id>`. 세션 안 bootRun은 하나씩이다
 --job=stock-fold --since=2026-10-17T00:00:00-04:00 [--apply=true]   # 미국 신원 — 같은 실체 짝 접기 · 시대 닫기(ADR-0180 · 기본 계획만 · 쓰기는 사용자 승인) · --heal-closed=true면 닫힌 행 위생
 --job=sec-cik-bind [--tickers=…] [--ciks=REAX:1862461] [--apply=true]   # 재무 행 있는 미국 행의 등록인 묶기(포함 검사 · 기본 계획만)
 --job=us-delisted-intake [--apply=true]   # 보존 창 안 폐지 실체 중 행 없는 것 → 행(원자료는 안 받는다 — 관문 03-refill 앞 · 기본 계획만)
+--job=price-boundary [--apply=true]   # 저장된 봉 중 행의 관측 구간(시세 경계 파일 · 등록인 시대 · 미국 머리 평봉) 밖을 걷는다(ADR-0181 · 기본 계획만 · 지우기 전 CSV · 쓰기는 덤프 뒤 사용자 승인 · 13:30 전)
 ```
 
 **아래는 원장을 보고 판정하는 잡들이다.** 접두는 위와 같다 — `bootstrap` 프로파일이
