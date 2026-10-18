@@ -54,6 +54,17 @@ applies_to:
   `era_to` = 효력일에 거래 봉이 있으면 다음 날, 없으면 효력일(끝은 원장의 날짜가 정하고 봉은 확인만 — 거래 드문 상장 주식은 64일까지
   빈다). **오늘 목록이 그 기호를 아직 실으면 닫지 않는다** — 닫으면 등록이 새 행을 만들고 다음 주에 또 닫는 고리다(`ARQQW`). 끝이 없으면
   과거 날짜 순위가 폐지된 행을 그날 후보로 남긴다(관문의 복원이 읽는다 · 탐색 계획 `US-PAST-LISTING-PLAN-1017.md`).
+- **MUST: 행이 없는 폐지 실체는 손 잡 `us-delisted-intake`가 행으로 들인다**(관문 안 · `--apply=true`) — 과거 날짜 순위의 후보는 행이라
+  부트스트랩 전에 사라진 실체는 행이 없으면 원리적으로 빠진다. 끝 사건마다 실체 봉을 받아 이미 행이 있거나(열린 · 닫힌 · 앞서 들인) 재조직이거나
+  오늘 목록에 같은 실체가 있으면 건너뛰고, 끝 판정과 같은 함수로 끝을 확인한 뒤 등록인을 정한다. 행은 비운 표지 · 닻(기호, 효력일 전날) ·
+  시대 끝 · `sec_cik` · 표지 거래소로 쓴다. **원자료는 이 잡이 안 받는다** — 관문 손 재적재가 「활성 편입 없음 ∧ 시대가 보존 창과 겹침」을
+  모집단으로 받는다(`StockRegistrar.usRefillWindowTickers`).
+- **MUST: 오늘 SEC 파일로 못 푸는 등록인은 `RegistrantLookup`이 정한다** — 후보는 이름 대조(재사용 기호면 시세 소스 이름을 안 넘긴다 —
+  오늘 주인의 이름이다)와 효력일 무렵 보통주 제거 양식 둘이고, **확인은 하나: 사건 전 정기 공시 표지에 그 공시일 기호 줄이 있다**(기호 변경은
+  CUSIP이 그대로인 것까지 거꾸로 건다). 확인된 등록인이 둘 이상이면 묶지 않는다. 표지 줄이 보통주가 아니거나 거래소가 NYSE · Nasdaq 밖이거나
+  효력일 제거 양식과 범주가 갈리면 들이지 않는다. 못 정하면 행을 만들지 않고 센다(재무가 없어 후보가 못 되고 범주도 못 정한다).
+  `sec-cik-bind`도 오늘 파일에 없는 행에 같은 조회를 후보 출처로 쓴다 — 묶기는 그대로 포함 검사다.
+- **MUST: 닫힌 행은 화면에 마지막 기호로 낸다**(`StockReader.DISPLAY_TICKER`) — 과거 기준일 결과 표에 닫힌 행이 든다. 경로는 행 id다.
 - **MUST: 시대 술어는 그 선택이 뜻하는 날짜로 건다**(`StockRegistrar.eraCovers`) — 오늘의 선택(후보 풀 · 열린 편입)은 미국 동부 오늘,
   기준일 판독기는 그 기준일, 공시 장부와 그 소비는 그 공시일. 「오늘」 하나로 기준일 판독기까지 거르면 과거 기준일에 열린 시대였던 행이 그날
   순위에서 빠진다. `stock.is_active`는 어떤 코드도 거짓으로 안 쓰므로 시대를 대신하지 못한다 — `is_active`로 `stock`을 거르는 SQL 문장은
@@ -73,6 +84,10 @@ applies_to:
   `TriagePlanProbeLiveTest`(잡의 `plan()`을 운영 상태에 — 다음 판정이 쓸 것).
 - 닫힌 시대 위생: `ClosedEraHygieneTest` · `StockEraPredicateSourceTest` · `AlpacaDividendEraTest`(닫힌 행).
 - 끝 판정: `UsIdentityTriageTest`(피인수 닫힘 · 재조직 · 기호 재사용 · 경계 대응 CCO꼴 · 목록이 실음 ARQQW꼴).
+- 폐지 실체 인입: `DelistedIntakeTest`(들임 · 재실행 · 행 있음 · 재조직 · 재사용 기호 · 목록에 있음 · 못 정함 · 기호 변경 · CUSIP꼴 기호) ·
+  `RegistrantFinderTest` · `RegistrantNamesTest` · `SecRegistrantLookupTest`(원장 갈림 ORLA · 범주 밖 NGD · 보통주 아님) · `SecCikBindJobTest` ·
+  `StockReaderDisplayTickerTest` · `RefillWindowPopulationTest`. 탐침 `DelistedIntakePlanProbeLiveTest`(잡의 `plan()`을 운영 상태에 · R-D6-0 —
+  들일 것 198 · 탐색 문턱 위 38 중 빠진 것 0 · 탐색 브랜치 `US-PAST-LISTING-IMPL-1018.md`).
 
 ```premise 시대가 닫힌 미국 행의 표지는 비워져 있다
 psql -d stock_screener -At -c "SELECT CASE

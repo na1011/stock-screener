@@ -129,6 +129,8 @@ GET https://data.alpaca.markets/v1/corporate-actions
 `symbols` 없이 `types=cash_merger,stock_merger,stock_and_cash_merger,worthless_removal`로 시장 전체를 묻는다(2025-09-01~2026-10-16 ·
 이름 변경 포함 2쪽). 효력일은 합병이 `effective_date` · 가치 없음 제거가 `process_date`다(그 타입에 효력일 필드가 없다).
 
+- **끝 사건의 피인수 기호에 기호가 아닌 것이 섞인다** — CVR · 에스크로 · 권리 증서가 CUSIP꼴(`294ESC017` · `021CVR014`)로 온다(창 안 1,151 중 97 · 2026-10-18). 그 하나를 `/v2/stocks/bars`의 `symbols`에 넣으면 묶음 전체가 `400 invalid symbol`이다 — 기호 꼴(`[A-Z][A-Z.]{0,6}`)만 묻는다.
+- **`name_changes`에 CUSIP이 그대로인 기호 변경이 있다** — RNA → RNAM(2026-02-26 · CUSIP 05370A108 그대로 · 합병 전날). `symbols=RNA`와 `symbols=RNAM` 둘 다 그 한 건을 준다.
 - **피인수 실체는 `/v2/assets` 목록에서 사라진다** — 창 안 SIP 거래가 있는 피인수·가치 없음 제거 661 중 588이 목록에 없다.
   단건 `/v2/assets/{acquiree_cusip}`로는 `inactive`로 온다(661/661). **그런데 단건은 그 실체의 사실이 아니다** — 기호가 오늘 다른
   실체에 있는 49건은 49/49 오늘 주인의 이름·거래소를 준다(`PINC` → 「PGIM Securitized Income ETF · BATS」).

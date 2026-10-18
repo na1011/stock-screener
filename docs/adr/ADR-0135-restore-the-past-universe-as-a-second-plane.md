@@ -278,7 +278,10 @@ SELECT CASE
 
 ### 미국 폐지 종목 구멍 — 22종목 (2026-09-09)
 
-> **(2026-10-17) 이 절의 22와 「셋 안팎」은 모집단이 틀렸다 — 상한이 아니다.** 피인수 실체는 `/v2/assets` **목록에서 아예 빠진다**(창 안 거래가 있는 피인수·가치 없음 제거 661 중 588이 목록에 없음 · 단건 `/v2/assets/{CUSIP}`로는 `inactive`). 기업 행위 원장(`cash_merger`·`stock_merger`·`stock_and_cash_merger`·`worthless_removal`)으로 열거하면 그달 문턱(편입 1% 분위) 위였는데 과거 명부에 없는 폐지 실체가 2025-10 월말 **27** · 2026-01 19 · 2026-04 15 · 2026-07 3이다(EA · K · CTRA · AVB · EXAS · HOLX … · 추정 — 주식수는 SEC 표지 · 종가는 월봉). 아래 문장은 그때의 셈으로 남긴다. 처방과 실측 표는 탐색 브랜치 `explore/financial-sync/US-PAST-LISTING-PLAN-1017.md` v1.1(D6).
+> **(2026-10-17) 이 절의 22와 「셋 안팎」은 모집단이 틀렸다 — 상한이 아니다.** 피인수 실체는 `/v2/assets` **목록에서 아예 빠진다**(창 안 거래가 있는 피인수·가치 없음 제거 661 중 588이 목록에 없음 · 단건 `/v2/assets/{CUSIP}`로는 `inactive`). 기업 행위 원장(`cash_merger`·`stock_merger`·`stock_and_cash_merger`·`worthless_removal`)으로 열거하면 그달 문턱(편입 1% 분위) 위였는데 과거 명부에 없는 폐지 실체가 2025-10 월말 **27** · 2026-01 19 · 2026-04 15 · 2026-07 3이다(EA · K · CTRA · AVB · EXAS · HOLX … · 추정 — 주식수는 SEC 표지 · 종가는 월봉). 아래 문장은 그때의 셈으로 남긴다. **처방은 main에 있다**(2026-10-18): 행이 없는 폐지 실체는 손 잡 `us-delisted-intake`가 들이고
+(ADR-0180 · 운영 읽기 탐침에서 들일 것 198 · 위 문턱 위 실체 중 빠진 것 0), 미국 관문이 켜진 복원은 과거 날짜 순위(`UsPastRanking` —
+후보는 그날 시대 안 행 · 상장은 등록인 거래소 사건의 범주 이력 · 봉은 닻 · 구간은 시대 끝에서 자름)로 격자를 짓는다. 실측 표와 드라이런 판정은
+탐색 브랜치 `explore/financial-sync/US-PAST-LISTING-PLAN-1017.md` v1.1 · `US-PAST-LISTING-IMPL-1018.md`.
 
 **「원리적으로 못 한다」가 아니었다.** `/v2/assets`에서 `status`를 빼면 비활성이 함께 오고,
 **봉의 존재가 그날 거래됐다는 증거**라 상장 여부는 유도된다. 9콜로 쟀다(`alpaca-universe.md`
