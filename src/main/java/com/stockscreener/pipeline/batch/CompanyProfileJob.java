@@ -128,6 +128,26 @@ public class CompanyProfileJob {
     }
 
     /**
+     * 관문 손 재적재 모집단의 업종·결산월을 받는다 — 후보 모드 손 FR({@code CandidateIntake.refill})이 재무보다 먼저 부른다. 대상은
+     * 재무 쪽과 같은 술어({@code StockRegistrar.usRefillWindowIdsByTicker} · 활성 편입 없음 ∧ 시대가 보존 창과 겹침)로 푼다 —
+     * 오늘 후보 술어({@link #runForCandidates})로 풀면 닫힌 과거 구성원 · 들인 폐지 실체 행이 빠져 재무 쪽과 대상이 갈린다(탐색
+     * {@code US-PAST-LISTING-IMPL-1018.md} R-D4b — 들인 닫힌 행 일곱이 전부 「후보가 하나도 없다」로 거절됐다).
+     */
+    public BatchStatus runForRefillWindow(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                                          List<String> tickers) {
+        if (tickers == null || tickers.isEmpty()) {
+            throw new IllegalArgumentException("관문 재적재 업종 수집은 티커로 좁혀서만 부른다.");
+        }
+        LocalDate windowStart = stockRegistrar.usRefillWindowStart();
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(stockRegistrar.usRefillWindowIdsByTicker(tickers, windowStart));
+        if (targets.isEmpty()) {
+            throw new IllegalArgumentException("준 티커 중 관문 재적재 모집단(활성 편입 없음 · 시대가 보존 창 " + windowStart
+                    + "부터와 겹침)이 하나도 없다: " + tickers + " — 대상 0건으로 성공시키지 않는다.");
+        }
+        return collectAll(asOf, triggeredBy, targets, scopeOf(tickers, null), "관문 재적재 종목별 업종 수집");
+    }
+
+    /**
      * 대상 종목을 정한다.
      *
      * <p>IMPORTANT — 티커를 줬는데 하나도 매칭되지 않으면 <b>예외로 즉시 실패시킨다.</b>

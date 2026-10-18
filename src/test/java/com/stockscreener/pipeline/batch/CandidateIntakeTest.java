@@ -141,7 +141,7 @@ class CandidateIntakeTest {
         financialRow(member);
         jdbc.update("INSERT INTO universe_membership (universe_code, stock_id, effective_from) VALUES ('US_TOP1000', ?, ?)",
                 member, AS_OF.minusYears(1));
-        when(profile.runForCandidates(any(), any(), any())).thenReturn(BatchStatus.SUCCESS);
+        when(profile.runForRefillWindow(any(), any(), any())).thenReturn(BatchStatus.SUCCESS);
         when(refill.runForCandidatesManually(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(new FinancialRefillJob.Invalidation(BatchStatus.SUCCESS, List.of(), 1L));
 
@@ -149,7 +149,7 @@ class CandidateIntakeTest {
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         org.mockito.ArgumentCaptor<List<String>> sector = org.mockito.ArgumentCaptor.captor();
-        verify(profile).runForCandidates(eq(AS_OF), eq(BatchExecutionRecorder.TriggeredBy.MANUAL), sector.capture());
+        verify(profile).runForRefillWindow(eq(AS_OF), eq(BatchExecutionRecorder.TriggeredBy.MANUAL), sector.capture());
         assertThat(sector.getValue()).as("SIC 없는 대상만 — ZZQ4F는 업종이 있다").contains("ZZQ2")
                 .doesNotContain("ZZQ4F", "ZZQ3W", "ZZQ5M");
         org.mockito.ArgumentCaptor<List<String>> targets = org.mockito.ArgumentCaptor.captor();
@@ -163,7 +163,7 @@ class CandidateIntakeTest {
     @DisplayName("후보 손 FR — 업종 수집이 FAILED면 재무로 안 넘어간다(SIC 없이 주식수가 생기면 비사업회사 거름을 통과한다)")
     void manualRefillStopsWhenSectorFails() {
         stock("ZZQ2");
-        when(profile.runForCandidates(any(), any(), any())).thenReturn(BatchStatus.FAILED);
+        when(profile.runForRefillWindow(any(), any(), any())).thenReturn(BatchStatus.FAILED);
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> intake.refill(AS_OF, 11, List.of("ZZQ2"), true))
                 .isInstanceOf(IllegalStateException.class);
@@ -178,7 +178,7 @@ class CandidateIntakeTest {
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> intake.refill(AS_OF, 11, List.of("ZZQ3W"), true))
                 .isInstanceOf(IllegalArgumentException.class);
-        verify(profile, never()).runForCandidates(any(), any(), any());
+        verify(profile, never()).runForRefillWindow(any(), any(), any());
     }
 
     private void financialRow(long stockId) {

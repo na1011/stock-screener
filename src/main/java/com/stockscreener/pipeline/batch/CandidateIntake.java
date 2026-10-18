@@ -128,7 +128,8 @@ public class CandidateIntake {
         log.info("후보 모드 손 FR: 후보 {} · 재무 대상 {} · 아님(SEC 매핑도 재무 행도 없음) {} · 업종 먼저 {}",
                 candidates.size(), targets.size(), candidates.size() - targets.size(), withoutSector.size());
         if (!withoutSector.isEmpty()) {
-            BatchStatus profile = companyProfileJob.runForCandidates(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+            // 재무 쪽(REFILL_WINDOW)과 같은 술어로 푼다 — 오늘 후보 술어는 닫힌 행을 안 낸다.
+            BatchStatus profile = companyProfileJob.runForRefillWindow(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     withoutSector);
             if (profile == BatchStatus.FAILED) {
                 // 업종 없이 주식수가 먼저 생기면 순위 어댑터의 비사업회사 거름을 통과한다 — 재무로 넘어가지 않는다.
