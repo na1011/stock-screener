@@ -124,15 +124,22 @@ v4의 「모든 적재 경로가 `PriceWriter.write`로 모인다」는 거짓�
 - **기존 분사 51행의 자식 asof**(반증 2 파급): 사건 당시 기호를 asof 없이 물어 값을 냈다 — 어긋난 행이 있는지 드라이런 6이 51행 전부를 자식 (기호, 효력일 asof)로 다시 값 매겨 대조한다.
 
 ### 2.5 자기 계보 `stock_merger` — 인수 쪽이 그 행 기호이고 피인수가 그 행의 옛 증권
-- ★ 물은 것: `stock_mergers` 시장 전체 2019-09~(3,193) 중 인수 쪽이 창 편입 144 → 피인수가 그 행 자신의 옛 증권(같은 기호 접두 또는 같은 CUSIP 앞 6자리) 16 → 비율 ≠ 1: HUT 5:1 · SIRI 0.1 · CORZ 0.1. **HUT · SIRI는 원장에 REVERSE_SPLIT APPLIED로 이미 있다**(소스가 `reverse_splits`로도 준다) · **CORZ만 0행**. 1:1(KKR · CRH · IRTC)은 무동작 · 나머지 11은 다른 증권(자회사 · 우선주 · 단위) 흡수라 인수 쪽 시세와 무관.
-- 처방: 피인수 CUSIP이 그 행 계보(원장 어댑터의 기존 CUSIP 계보)에 들거나 피인수 기호가 그 행의 저장 시대 기호인 `stock_merger`만 → 비율 `acquirer_rate/acquiree_rate`의 분할/병합 · **같은 날 `forward/reverse_split`이 있으면 그것이 이긴다**(HUT · SIRI 무변화가 수용 기준).
-- CORZ 2024-01-24: 병합 0.1 + 워런트(CORZW · CORZZ 거래됨 — 자식 가치 비율) · 앞 마지막 봉이 장외 평봉(0.0751 · `v=0`)이라 2.3이 **OBSERVED**로 보낸다 → 걸친 창 억제 → 사람 판정(UNSUPPORTED 예상 — 장외 265봉 동안 SIP 가격이 없어 o를 못 잰다 · 진짜 한계). 화면 값은 v4 경계안과 같고(걸친 창 빈칸) 2023년 이전 Nasdaq 실거래 봉을 지키며 `TRADING_DAYS_750`의 정의(원본 명세: 실제 가격 시계열의 길이)가 계보를 센다.
-- 시장 전체에 이 꼴이 우리 행 밖에 몇 건인지는 재지 않았다(창 편입만 셌다).
+- ★ 물은 것: `stock_mergers` 시장 전체 2019-09~(3,193) 중 인수 쪽이 창 편입 144 → 피인수가 그 행 자신의 옛 증권(같은 기호 접두 또는 같은 CUSIP 앞 6자리) 16 → 비율 ≠ 1: HUT 5:1 · SIRI 0.1 · CORZ 0.1. **HUT · SIRI는 원장에 REVERSE_SPLIT APPLIED로 이미 있다**(소스가 `reverse_splits`로도 준다) · **CORZ만 0행**. 1:1(KKR · CRH · IRTC)은 무동작 · 나머지 11은 다른 증권 흡수.
+- **구현에서 바꿨다(10-19)**: 어댑터 갈래를 만들지 않고 **2.4 보충 줄 하나**(8-K `0001193125-24-013078` · s = 0.1 · 자식 CORZW 0.253244 · CORZZ 0.211037)로 싣는다 — ★ 소스에 CORZ → CORZQ 개명이 없어(2022-12~2024-02 조회 · `stock_mergers` 1건뿐) 「피인수가 그 행의 옛 증권」을 소스로 판정할 길이 없고(CUSIP 발행사 접두 21873J ≠ 21874A), 남는 것은 「Q 접미」 같은 휴리스틱이다 · 빠진 것이 하나라 원문 한 줄이 정확하다. 같은 꼴이 새로 생기면 감시 ⓔ(주식수 상쇄)가 운다.
+- CORZ의 앞 마지막 봉은 장외 평봉(0.0751 · `v=0`)이라 2.3이 **OBSERVED**로 보낸다 → 걸친 창 억제 → 사람 판정(UNSUPPORTED 예상 — 장외 265봉 동안 SIP 가격이 없어 o를 못 잰다 · 진짜 한계). 화면 값은 v4 경계안과 같고(걸친 창 빈칸) 2023년 이전 Nasdaq 실거래 봉을 지키며 `TRADING_DAYS_750`의 정의(원본 명세: 실제 가격 시계열의 길이)가 계보를 센다.
+
+### 2.6 구현에서 바뀐 것(10-19 · 계획 본문에 반영)
+- **2.3의 자리 = 적용 직전**(`AdjustmentRecalculator.rebuild` → `CorporateActionLedger.screenBeforeApplying`): 원장에 적는 순간에는 대개 효력일 뒤 봉이 없어(소스가 사건을 미리 알림) 「봉이 없으면 소스 정본」 갈래로 APPLIED가 되고 다시 안 본다 → 적용 직전에 걸고 **효력일 뒤 봉이 없으면 그 판에 적용하지 않고 APPROVED로 둔다**(사건 전 봉끼리는 서로 정합이라 미뤄도 값이 안 틀린다 · 다음 재구축이 본다) · 앞 봉이 없으면 소스 정본대로 적용.
+- **감시 ⓔ의 주식수 배수**: 원장 배수를 **공시일** 사이로 나누고(분기 말일로 자르면 COGT 11-09 · OVV 01-24 병합이 빠져 거짓으로 울었다) 그 기간 **첫 판** 주식수를 쓴다(늦은 판은 GME 2022 4:1 뒤 표지를 실어 2021-01 쌍을 ×0.25 상쇄로 보이게 했다) — ★ 운영 질의로 고친 뒤 UHAL · CRC(경계 앞) · LUNR(면제)만 남는다.
+- **감시 ⓒ 달력 = ADR-0167**(지수 봉 ∪ 현 편입 절반 이상) · ★ 운영 질의 CAI · FLY · NIQ · PPLC 넷(같음).
+- **감시 면제 24줄**(`price-boundary/exempt.tsv`): SPAC · 거래 드문 시절 무거래 22(★ 앞뒤 실거래 종가 0.82~1.05) · SEZL · CORZ · LUNR(OFFSET_JUMP).
+- **1.6 옛 봉 받기**: 심은 시대의 봉은 일일 갱신(15일 창)과 구멍 수집(첫 봉 뒤)이 안 묻는다 → `initial-load --tickers=UHAL.B,SPHR --price-years=7 --skip-financial=true --reload-existing=true`(승인 묶음 3-2에 더한다).
+- 결정 기록: main ADR-0181.
 
 ## 3. 순서 · 배포 · 승인
 v4의 설정 `us-ledger-kinds.enabled`는 걷는다(두 렌즈) — 사유(「수집이 교정보다 먼저 돌면 BAM 옛 사건이 들어온다」)를 1.4-5의 원장 하한이 배포 시점부터 막고, 설정은 `GateSettingGuard`(`stockscreener.gate.us`만 봄) 밖이라 환경변수로 조용히 켜진다.
 1. **배포 하나**(평일 오전 · 13:30 전) — 1.2~1.6 + 2.1~2.5. 배포만으로 바뀌는 값: 없음(쓰기 술어는 이미 저장된 봉을 안 건드리고 새 원장 종류는 다음 14:00 수집이 받는다).
-2. **같은 오전 승인 실행**(덤프 → 수를 문면에 → 실행): `price-boundary --apply=true`(14행 10,829봉 + 머리 평봉 8행 3,087 · BAM 원장 2행 `REJECTED`) · `symbol-era-seed --apply=true`(UHAL.B · SPHR) · IR `REJECTED`.
+2. **같은 오전 승인 실행**(덤프 → 수를 문면에 → 실행): `price-boundary --apply=true`(14행 10,829봉 + 머리 평봉 8행 3,087 · BAM 원장 2행 `REJECTED`) · `symbol-era-seed --apply=true`(UHAL.B · SPHR) → `initial-load --tickers=UHAL.B,SPHR --price-years=7 --skip-financial=true --reload-existing=true` · IR `REJECTED`(판정 CLI).
 3. 그날 13:30 일일 갱신이 심은 시대의 봉을 받는다 · 14:00 수집이 새 종류(WOLF · CBSH · SCCO · RJF · CORZ · 보충 UHAL · SPHR)를 받고 2.3이 판정 → 재구축 · 14:20 화해가 수렴 · 15:30 감시 첫 판이 0.
 4. 다음 평일 이후: WOLF · CORZ(OBSERVED) · RJF(OBSERVED) 판정(승인).
 - 관문 밖인 이유: 원장(소스 · SEC)에 맞추는 교정이고 한 평일 순환에 수렴한다(ADR-0167 · 0168 선례) · 관문 재적재가 이 상태를 지우지 않는다(쓰기 술어 · 원장 행은 재적재가 안 지운다 — 드라이런 5).
