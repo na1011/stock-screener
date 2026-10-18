@@ -26,4 +26,4 @@ jar = main `85b5f980` 이후 작업 트리 · 쓰기는 `ops/write-session.sh ex
 | 5 | 수집: CBSH 6 · SCCO 10 BONUS_ISSUE · UHAL 분사 가격 배수 10.0069 · SPHR 2.2101 · CORZ 0.1 + 워런트 · WOLF UNKNOWN OBSERVED(자식 977ESC029 소스 400) · HUT · SIRI · IR 새 행 0 · BAM 경계 앞 새 행 0 → 재구축: CBSH · SCCO · UHAL · SPHR APPLIED · RJF OBSERVED(관측 ×1.0085 · 기대 ×0.7692 · σ 0.0225 · k 11.65) · CORZ OBSERVED(앞 봉 채움) · 운영자 알림 1건 · 수정 종가 연속(CBSH 66.35 → 65.48 · UHAL 51.31 → 52.02 · SPHR 27.40 → 25.61) | 통과 |
 | 6 | 교정 · 보충 뒤 감시: 간격 0 · 상쇄 배수 0 · 외딴 평봉 = 면제 키(LNZA 둘 · CORZ)뿐 | 통과 |
 | 8 | 프리셋 귀속 — **작은 DB에서 돌리지 않았다**(모집단 36이라 백분위 · 프리셋 결과가 뜻이 없다). 운영 적용 때 `PresetResultSnapshotTest` 기준선을 적용 전에 찍고 수렴(14:20) 뒤 대조한다. | 운영으로 넘김 |
-재료 정리: 작은 DB · 시험 DB `stock_screener_b1_test` · 작은 DB 판의 CSV(`price-boundary-839-*.csv`) · scratchpad를 지웠다.
+재료 정리: 작은 DB · 시험 DB `stock_screener_b1_test` · 작은 DB 판의 CSV(`price-boundary-839-*.csv`) · `small-db.sh` 내보내기 폴더 · scratchpad — 삭제 명령이 훅에 막혀 사용자에게 넘겼다(10-19 02:50).
