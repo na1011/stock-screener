@@ -46,7 +46,7 @@ class FoldPlanProbeLiveTest {
         StaticListableBeanFactory beans = new StaticListableBeanFactory();
         beans.addBean("identity", source);
         // 계획은 읽기만 한다 — 판 재정렬·무효화는 apply 갈래뿐이라 null이다.
-        StockFold fold = new StockFold(jdbc, null, null);
+        StockFold fold = new StockFold(jdbc, null, null, new com.stockscreener.pipeline.collector.PriceObservationWindow(jdbc));
         FoldPlanner planner = new FoldPlanner(jdbc, beans.getBeanProvider(IdentitySource.class), fold);
 
         FoldPlanner.Result result = planner.plan(java.time.OffsetDateTime.parse(System.getenv("FOLD_PROBE_SINCE")).toInstant(),

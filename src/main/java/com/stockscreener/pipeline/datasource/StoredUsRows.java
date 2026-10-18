@@ -18,9 +18,21 @@ public interface StoredUsRows {
     /**
      * @param ticker 표지 — 닫힌 행은 비운 꼴({@code T~날짜})
      * @param name   저장된 이름(목록에서 만든 행은 시세 소스의 증권 이름 · 들인 행은 등록인 이름 + 표지 증권 이름) — 이름 축 재료
+     * @param priceFloor 이 날짜 앞의 봉은 이 행의 증권이 아니다 — 시세 경계와 {@code era_from} 중 늦은 것(ADR-0181 · 없으면 null)
      */
     record Row(long id, String ticker, String name, String anchorSymbol, LocalDate anchorDate, Long secCik,
-               LocalDate eraFrom, LocalDate eraTo) {
+               LocalDate eraFrom, LocalDate eraTo, LocalDate priceFloor) {
+
+        /** 시세 경계가 없는 행 — 하한은 시대 시작이다. */
+        public Row(long id, String ticker, String name, String anchorSymbol, LocalDate anchorDate, Long secCik,
+                   LocalDate eraFrom, LocalDate eraTo) {
+            this(id, ticker, name, anchorSymbol, anchorDate, secCik, eraFrom, eraTo, eraFrom);
+        }
+
+        /** 그 행의 관측 구간 안인가(ADR-0181) — 하한 이후 · 시대 끝 앞. */
+        public boolean observes(LocalDate date) {
+            return (priceFloor == null || !date.isBefore(priceFloor)) && (eraTo == null || date.isBefore(eraTo));
+        }
 
         /** 그 행이 마지막으로 쓴 기호 — 비운 표지면 그 앞 글자. */
         public String symbol() {

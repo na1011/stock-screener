@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @JpaSliceTest
 @Import({PriceWriter.class, CorporateActionLedger.class, AdjustmentRecalculator.class,
-        PriceCalendar.class, NoOpIndicatorInvalidationPort.class})
+        PriceCalendar.class, NoOpIndicatorInvalidationPort.class, PriceObservationWindow.class})
 class PriceCollectorTest {
 
     private static final LocalDate FROM = LocalDate.of(2026, 8, 1);
@@ -166,7 +166,7 @@ class PriceCollectorTest {
         // 수집은 여기서 안 쓰이므로 registry만 같은 것을 준다.
         return new PriceCollector(registry, writer,
                 new CorporateActionCollector(registry, ledger, recalculator, priceCalendar,
-                new SpinOffValuer(registry, jdbcTemplate)));
+                new SpinOffValuer(registry, jdbcTemplate), new PriceObservationWindow(jdbcTemplate)));
     }
 
     private static CorporateAction split() {

@@ -248,7 +248,9 @@ public class UsPastRanking {
         for (Map.Entry<LocalDate, Map<String, List<Long>>> group : byDate.entrySet()) {
             Map<String, List<EntityBar>> got = identity.bars(group.getValue().keySet(), BarAsOf.anchor(group.getKey()), from, to);
             calls++;
-            group.getValue().forEach((symbol, ids) -> ids.forEach(id -> out.put(id, got.getOrDefault(symbol, List.of()))));
+            // 행의 관측 구간 밖 봉(다른 증권 · 다른 등록인 시대)은 그 행의 종가가 아니다(ADR-0181) — 닻 봉도 그 앞에 다른 실체 봉을 붙여 준다.
+            group.getValue().forEach((symbol, ids) -> ids.forEach(id -> out.put(id, got.getOrDefault(symbol, List.of()).stream()
+                    .filter(b -> rows.get(id).observes(b.date())).toList())));
         }
         log.info("과거 날짜 순위 닻 봉. 행={} 닻 날짜 묶음={} 범위={}~{}", pool.size(), calls, from, to);
         return out;

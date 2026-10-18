@@ -64,7 +64,7 @@ class PastRankingProbeLiveTest {
         beans.addBean("identity", identity);
         beans.addBean("events", new ListingEventSource(secClient));
         beans.addBean("sec", secClient);
-        UsPastRanking ranking = new UsPastRanking(new JdbcStoredShareCounts(jdbc), new JdbcStoredUsRows(jdbc),
+        UsPastRanking ranking = new UsPastRanking(new JdbcStoredShareCounts(jdbc), new JdbcStoredUsRows(jdbc, new com.stockscreener.pipeline.collector.PriceObservationWindow(jdbc)),
                 beans.getBeanProvider(IdentitySource.class), beans.getBeanProvider(ListingEventSource.class),
                 beans.getBeanProvider(SecListingFormClient.class),
                 new AlpacaUniverseAdapter(factory, properties, alpaca, new SecurityNameCache()));

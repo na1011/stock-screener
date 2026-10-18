@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.offset;
  * 뒤집힌 것은 병합 쪽뿐이다.
  */
 @JpaSliceTest
-@Import({CorporateActionLedger.class, PriceWriter.class})
+@Import({CorporateActionLedger.class, PriceWriter.class, PriceObservationWindow.class})
 class AdjustmentRecalculatorTest {
 
     @Autowired

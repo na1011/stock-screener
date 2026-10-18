@@ -3,6 +3,8 @@ package com.stockscreener.pipeline.collector.identity;
 import com.stockscreener.pipeline.collector.FinancialWriter;
 import com.stockscreener.pipeline.collector.IndicatorInvalidationPort;
 
+import com.stockscreener.pipeline.collector.PriceObservationWindow;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -31,11 +33,30 @@ public class StockFold {
     private final JdbcTemplate jdbc;
     private final FinancialWriter financialWriter;
     private final IndicatorInvalidationPort invalidation;
+    private final PriceObservationWindow window;
 
-    public StockFold(JdbcTemplate jdbc, FinancialWriter financialWriter, IndicatorInvalidationPort invalidation) {
+    public StockFold(JdbcTemplate jdbc, FinancialWriter financialWriter, IndicatorInvalidationPort invalidation,
+                     PriceObservationWindow window) {
         this.jdbc = jdbc;
         this.financialWriter = financialWriter;
         this.invalidation = invalidation;
+        this.window = window;
+    }
+
+    /**
+     * S의 봉 중 T의 관측 구간(경계 · 등록인 시대) 밖인 것 — 옮기지 않고 버린다(ADR-0181). 접기는 {@code PriceWriter}를 안 지나는 쓰기라 여기서
+     * 같은 술어를 건다. T 자신의 옛 봉과 머리 평봉은 교정 잡({@code price-boundary})과 감시가 다룬다 — 접기는 짝의 쓰기만 한다.
+     */
+    private String outsideTargetWindow(long target) {
+        PriceObservationWindow.Window w = window.of(target);
+        StringBuilder sb = new StringBuilder("false");
+        if (w.floor() != null) {
+            sb.append(" OR s.trade_date < DATE '").append(w.floor()).append('\'');
+        }
+        if (w.ceiling() != null) {
+            sb.append(" OR s.trade_date >= DATE '").append(w.ceiling()).append('\'');
+        }
+        return sb.toString();
     }
 
     /** 대조 갈래 — 겹친 키에서 무엇을 하나. */
@@ -128,7 +149,8 @@ public class StockFold {
         Map<String, Tally> tables = new LinkedHashMap<>();
         for (Rule rule : RULES) {
             if (exists(rule.table())) {
-                tables.put(rule.table(), countRule(rule, target, source));
+                tables.put(rule.table(), PRICE_TABLE.equals(rule.table()) ? countPrices(rule, target, source)
+                        : countRule(rule, target, source, "true"));
             }
         }
         tables.put("financial_statement", countFinancials(target, source));
@@ -150,6 +172,9 @@ public class StockFold {
         }
         for (Rule rule : RULES) {
             if (exists(rule.table())) {
+                if (PRICE_TABLE.equals(rule.table())) {
+                    jdbc.update("DELETE FROM price_daily s WHERE s.stock_id = ? AND (" + outsideTargetWindow(target) + ")", source);
+                }
                 applyRule(rule, target, source);
             }
         }
@@ -192,7 +217,18 @@ public class StockFold {
         return sb.toString();
     }
 
-    private Tally countRule(Rule rule, long target, long source) {
+    private static final String PRICE_TABLE = "price_daily";
+
+    /** 봉은 T의 관측 구간 밖을 먼저 「버림」으로 센다 — 대조에 안 넣는다(다른 증권 봉이라 T와 값이 달라도 멈출 이유가 아니다). */
+    private Tally countPrices(Rule rule, long target, long source) {
+        String outside = outsideTargetWindow(target);
+        Tally inside = countRule(rule, target, source, "NOT (" + outside + ")");
+        Integer dropped = jdbc.queryForObject("SELECT count(*) FROM price_daily s WHERE s.stock_id = ? AND (" + outside + ")",
+                Integer.class, source);
+        return new Tally(inside.moved(), inside.dropped() + (dropped == null ? 0 : dropped), inside.conflicting());
+    }
+
+    private Tally countRule(Rule rule, long target, long source, String sourceFilter) {
         String overlapping = "EXISTS (SELECT 1 FROM %s t WHERE %s)".formatted(rule.table(), joinOn(rule.key()));
         String sameValue = "EXISTS (SELECT 1 FROM %s t WHERE %s AND %s)".formatted(rule.table(), joinOn(rule.key()), same(rule.compare()));
         boolean compare = rule.onConflict() == OnConflict.COMPARE;
@@ -211,8 +247,8 @@ public class StockFold {
                 SELECT count(*) FILTER (WHERE NOT %s) AS moved,
                        count(*) FILTER (WHERE %s AND (%s)) AS dropped,
                        count(*) FILTER (WHERE %s AND NOT (%s)) AS conflicting
-                FROM %s s WHERE s.stock_id = ?
-                """.formatted(overlapping, overlapping, matched, overlapping, matched, rule.table()), args.toArray());
+                FROM %s s WHERE s.stock_id = ? AND (%s)
+                """.formatted(overlapping, overlapping, matched, overlapping, matched, rule.table(), sourceFilter), args.toArray());
         return new Tally(((Number) row.get("moved")).intValue(), ((Number) row.get("dropped")).intValue(),
                 ((Number) row.get("conflicting")).intValue());
     }

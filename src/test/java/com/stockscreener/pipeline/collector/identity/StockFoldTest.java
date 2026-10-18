@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 같은 사건이면 버린다. 값이 다르면 그 짝을 멈춘다.
  */
 @JpaSliceTest
-@Import({StockFold.class, FinancialWriter.class, NoOpIndicatorInvalidationPort.DefaultInvalidationPortConfig.class})
+@Import({StockFold.class, com.stockscreener.pipeline.collector.PriceObservationWindow.class, FinancialWriter.class, NoOpIndicatorInvalidationPort.DefaultInvalidationPortConfig.class})
 class StockFoldTest {
 
     private static final LocalDate RENAMED = LocalDate.of(2026, 9, 2);
@@ -151,6 +151,33 @@ class StockFoldTest {
                                                  currency_code, report_code, revision_no, is_latest, revenue)
                 VALUES (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', ?, 'USD', ?, ?, ?, ?)""",
                 stockId, published, "10-K:" + accession, revision, latest, new BigDecimal(revenue));
+    }
+
+    @Test
+    @DisplayName("S의 봉 중 T의 경계 앞 봉은 옮기지 않고 버린다 — 접기는 PriceWriter를 안 지나는 쓰기라 같은 술어를 건다(ADR-0181)")
+    void sourceBarsBeforeTargetBoundaryAreDropped() {
+        // 경계 파일의 실제 줄: US CAI 2026-08-28 → 2025-06-18(옛 CAI International 봉이 그 앞에 붙는다).
+        jdbc.update("UPDATE stock SET alpaca_anchor_symbol = 'CAI', alpaca_anchor_date = DATE '2026-08-28' WHERE id = ?", t);
+        bar(s, LocalDate.of(2021, 11, 22), "56");
+        bar(s, LocalDate.of(2025, 6, 18), "28");
+
+        assertThat(fold.plan(t, s).tables().get("price_daily")).isEqualTo(new StockFold.Tally(1, 1, 0));
+        fold.apply(t, s, RENAMED);
+
+        assertThat(jdbc.queryForList("SELECT trade_date FROM price_daily WHERE stock_id = ? ORDER BY 1", LocalDate.class, t))
+                .containsExactly(LocalDate.of(2025, 6, 18));
+    }
+
+    @Test
+    @DisplayName("대조군 — T에 경계가 없으면 S의 같은 봉을 전부 옮긴다")
+    void sourceBarsMoveWhenTargetHasNoBoundary() {
+        bar(s, LocalDate.of(2021, 11, 22), "56");
+        bar(s, LocalDate.of(2025, 6, 18), "28");
+
+        assertThat(fold.plan(t, s).tables().get("price_daily")).isEqualTo(new StockFold.Tally(2, 0, 0));
+        fold.apply(t, s, RENAMED);
+
+        assertThat(count("SELECT count(*) FROM price_daily WHERE stock_id = ?", t)).isEqualTo(2);
     }
 
     private void bar(long stockId, LocalDate date, String close) {

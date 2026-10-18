@@ -22,6 +22,9 @@ import java.util.List;
  * <p>MUST NOT: 계산할 수 없는 값을 채워 넣지 않는다. 거래대금이 없으면 NULL로 두며
  * {@code close × volume}으로 합성하지 않는다 — 다른 값이고, 실측과 합성이 섞이면
  * 파생 지표가 시장마다 미묘하게 달라진다.
+ *
+ * <p>MUST: 쓰기 전에 그 행의 관측 구간({@link PriceObservationWindow})으로 거른다 — 모든 적재 경로(초기 적재 · 일일 갱신 · 구멍 구간 ·
+ * 관문 재적재 · 후보 인입)가 이 메서드로 모이므로 여기가 「지운 다른 증권 봉을 다시 넣지 않는다」의 자리다(ADR-0181).
  */
 @Component
 public class PriceWriter {
@@ -74,9 +77,11 @@ public class PriceWriter {
             """;
 
     private final JdbcTemplate jdbcTemplate;
+    private final PriceObservationWindow window;
 
-    public PriceWriter(JdbcTemplate jdbcTemplate) {
+    public PriceWriter(JdbcTemplate jdbcTemplate, PriceObservationWindow window) {
         this.jdbcTemplate = jdbcTemplate;
+        this.window = window;
     }
 
     /**
@@ -100,10 +105,17 @@ public class PriceWriter {
             return 0L;
         }
 
+        PriceObservationWindow.Screened screened = window.screen(stockId, bars);
+        if (screened.dropped() > 0) {
+            // 조용히 버리지 않는다 — 수가 크게 뛰면 소스가 다른 증권 봉을 새로 붙인 것이다(감시가 따로 센다).
+            log.info("관측 구간 밖 {}봉(구간 밖 {} · 머리 평봉 {})을 쓰지 않는다. stockId={}",
+                    screened.dropped(), screened.outsideWindow(), screened.headFlat(), stockId);
+        }
+
         List<RawPriceBar> valid = new ArrayList<>(bars.size());
         List<RawPriceBar> rejected = new ArrayList<>();
         int halted = 0;
-        for (RawPriceBar bar : bars) {
+        for (RawPriceBar bar : screened.kept()) {
             if (!bar.isValid()) {
                 rejected.add(bar);
                 continue;

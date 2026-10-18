@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 없이 적용되는 것, 같은 사건이 며칠 어긋난 두 행이 되는 것, 공시가 휴리스틱에 덮이는 것.
  */
 @JpaSliceTest
-@Import({CorporateActionLedger.class, PriceWriter.class})
+@Import({CorporateActionLedger.class, PriceWriter.class, PriceObservationWindow.class})
 class CorporateActionLedgerTest {
 
     @Autowired

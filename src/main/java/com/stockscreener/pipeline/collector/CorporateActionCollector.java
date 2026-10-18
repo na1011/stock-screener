@@ -43,15 +43,32 @@ public class CorporateActionCollector {
     private final AdjustmentRecalculator recalculator;
     private final PriceCalendar priceCalendar;
     private final SpinOffValuer spinOffValuer;
+    private final PriceObservationWindow window;
 
     public CorporateActionCollector(DataSourceRegistry registry, CorporateActionLedger ledger,
                                     AdjustmentRecalculator recalculator, PriceCalendar priceCalendar,
-                                    SpinOffValuer spinOffValuer) {
+                                    SpinOffValuer spinOffValuer, PriceObservationWindow window) {
         this.registry = registry;
         this.ledger = ledger;
         this.recalculator = recalculator;
         this.priceCalendar = priceCalendar;
         this.spinOffValuer = spinOffValuer;
+        this.window = window;
+    }
+
+    /**
+     * 그 행의 관측 구간 밖 사건 — 원장에 안 적는다(ADR-0181). 경계 앞은 같은 기호 문자열의 다른 증권이고(BAM 2020-04-02 분할 ·
+     * 2021-06-28 분사는 옛 Brookfield 사건이다), 시대 밖은 다른 행의 사건이다. 소스가 지금 기호로 그 사건을 주므로 여기서 거르지 않으면
+     * 매 평일 다시 들어온다.
+     */
+    private List<CorporateAction> withinWindow(SecurityRef security, List<CorporateAction> actions) {
+        PriceObservationWindow.Window w = window.of(security.stockId());
+        List<CorporateAction> kept = actions.stream().filter(a -> w.admits(a.effectiveDate())).toList();
+        if (kept.size() < actions.size()) {
+            log.info("관측 구간 밖 기업 행위 {}건을 적지 않는다. ticker={} 하한={} 상한={}", actions.size() - kept.size(),
+                    security.ticker(), w.floor(), w.ceiling());
+        }
+        return kept;
     }
 
     /**
@@ -112,7 +129,7 @@ public class CorporateActionCollector {
 
         CorporateActionDataSource source = registry.corporateActionSource(security.marketCode());
         CorporateActionDataSource.Fetched fetched = source.fetchCorporateActions(security, from, to);
-        List<CorporateAction> fromSource = fetched.actions();
+        List<CorporateAction> fromSource = withinWindow(security, fetched.actions());
 
         // 소스가 종류를 확정하지 못한 사건은 값이 아니라 **이름만** 기여한다. 그것을 record로
         // 보내면 공시가 먼저 도는 이 순서 때문에 뒤에 올 휴리스틱의 확정된 종류·비율이
@@ -173,7 +190,8 @@ public class CorporateActionCollector {
      * (v1.1의 미국, ADR-0049 §버린 대안)를 위한 자리다. 두 곳이 각자 원장을 만지면
      * {@code NEAR_DUPLICATE}를 한쪽만 알리게 되고, 그 어긋남은 알림이 안 오는 형태로만 드러난다.
      */
-    public Result recordAll(SecurityRef security, List<CorporateAction> actions) {
+    public Result recordAll(SecurityRef security, List<CorporateAction> unfiltered) {
+        List<CorporateAction> actions = withinWindow(security, unfiltered);
         long recorded = 0;
         List<NearDuplicate> conflicts = new ArrayList<>();
         List<PendingCandidate> pending = new ArrayList<>();

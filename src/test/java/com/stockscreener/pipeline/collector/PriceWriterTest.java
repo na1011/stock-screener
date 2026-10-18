@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>{@code ck_price_ohlc}는 DB 제약이므로 실제 DB 없이는 검증할 수 없다.
  */
 @JpaSliceTest
-@Import(PriceWriter.class)
+@Import({PriceWriter.class, PriceObservationWindow.class})
 class PriceWriterTest {
 
     @Autowired

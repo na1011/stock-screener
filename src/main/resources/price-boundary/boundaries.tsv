@@ -1,0 +1,18 @@
+# 행의 시세가 시작하는 첫 봉(ADR-0181) — 그 앞은 같은 기호 문자열의 다른 증권이거나 체결 없는 채움이다.
+# 키는 표지가 아니라 행의 닻(alpaca_anchor_symbol · alpaca_anchor_date) — 표지는 개명 · 재사용 비우기로 바뀐다.
+# 근거는 구성원마다 원장(SEC 서류 · 옛 시절 asof 탐침)이다. 재료: 탐색 브랜치 explore/price-holes/BUNDLE1-PLAN-1019.md 1.1 · bundle1/.
+# market	anchor_symbol	anchor_date	boundary	form	evidence
+US	CAI	2026-08-28	2025-06-18	REUSE_GAP	SEC 8-A12B 2025-06-13 · asof=2020-01-02가 옛 CAI International을 2021-11-22에 끝낸다 · 공백 소스 봉 0
+US	FLY	2026-08-28	2025-08-07	REUSE_GAP	SEC 8-A12B 2025-08-06 · asof=2020-01-02가 옛 Fly Leasing을 2021-08-02에 끝낸다
+US	NIQ	2026-08-28	2025-07-23	REUSE_GAP	SEC 8-A12B 2025-07-23 · asof=2020-01-02가 옛 증권을 2023-06-23에 끝낸다
+US	PPLC	2026-08-28	2026-03-04	REUSE_GAP	SEC 8-A12B 2026-02-26(새 단위) · asof=2020-01-02가 옛 Corporate Units를 2020-09-25에 끝낸다
+US	CART	2026-08-28	2023-09-19	REUSE_BRIDGE	SEC 8-A12B 2023-09-14 · asof=2019-10-01이 옛 증권을 2019-12-31에 끝낸다 · 그 뒤 평봉 934
+US	VG	2026-08-28	2025-01-24	REUSE_BRIDGE	SEC 8-A12B 2025-01-23 · asof=2022-07-21이 Vonage를 2022-07-21에 끝낸다 · 그 뒤 평봉 630(v=0 · n=0 · 20.99)
+US	SAIL	2026-08-28	2025-02-13	REUSE_BRIDGE	SEC 8-A12B 2025-02-13 · asof=2020-01-02가 옛 증권을 2022-08-15에 끝낸다 · 그 뒤 평봉 626
+US	FG	2026-08-28	2022-12-01	REUSE_BRIDGE	asof=2020-01-02가 옛 증권을 2020-06-01에 끝낸다 · 그 뒤 평봉 631
+US	LB	2026-08-28	2024-06-28	REUSE_BRIDGE	SEC 8-A12B 2024-06-27 · 등록인(CIK 1995807) 첫 서류 2023-10-11 · 앞 봉은 옛 L Brands 1,213(소스가 한 줄로 잇는다)
+US	CR	2026-08-28	2023-04-04	NEW_ISSUER	등록인(CIK 1944013) 첫 서류 10-12B 2022-12-15 · 앞 봉은 옛 Crane Holdings(지금 CXT) 903
+US	BAM	2026-08-28	2022-12-12	NEW_ISSUER	등록인(CIK 1937926) 첫 서류 F-1 2022-10-19 · 8-A12B 2022-11-21 · 앞 봉은 옛 Brookfield(지금 BN) 820 · 원장 2행도 옛 실체
+US	CRC	2026-08-28	2020-10-28	REORG_CANCELLED	10-Q 2020-11-05: All existing equity interests were cancelled and their holders received no distributions
+US	EXE	2026-08-28	2021-02-10	REORG_CANCELLED	8-K 2021-02-09: equity interests were cancelled, released and extinguished without any distribution
+US	VAL	2026-08-28	2021-05-03	REORG_CANCELLED	8-K 2021-04-30: 기존 보통주 보유자는 워런트만 받는다(별도 증권)

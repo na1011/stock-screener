@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 맞아떨어져 <b>경계 버그가 원리적으로 안 보인다.</b> 그래서 여기가 유일한 자리다.
  */
 @JpaSliceTest
-@Import({JdbcStoredPriceSeries.class, PriceWriter.class})
+@Import({JdbcStoredPriceSeries.class, PriceWriter.class, PriceObservationWindow.class})
 class JdbcStoredPriceSeriesTest {
 
     @Autowired

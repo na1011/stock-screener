@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @JpaSliceTest
 // 컬렉터는 여기서 만들지 않는다 — registry를 테스트마다 다르게 주려면 직접 생성해야 한다.
 @Import({CorporateActionLedger.class, AdjustmentRecalculator.class,
-        PriceCalendar.class, PriceWriter.class, NoOpIndicatorInvalidationPort.class})
+        PriceCalendar.class, PriceWriter.class, NoOpIndicatorInvalidationPort.class, PriceObservationWindow.class})
 class CorporateActionCollectorTest {
 
     private static final LocalDate FROM = LocalDate.of(2020, 1, 1);
@@ -372,7 +372,7 @@ class CorporateActionCollectorTest {
                 List.of(prices), List.of(), List.of(), List.of(), List.of(), List.of(source), List.of(),
                 List.of(), List.of(), List.of());
         return new CorporateActionCollector(registry, ledger, recalculator, priceCalendar,
-                new SpinOffValuer(registry, jdbcTemplate));
+                new SpinOffValuer(registry, jdbcTemplate), new PriceObservationWindow(jdbcTemplate));
     }
 
     /** 소스가 알린 분사 — 주식수 그대로(1)이고 가치는 아직 모른다. */
@@ -400,7 +400,7 @@ class CorporateActionCollectorTest {
                 List.of(),
                 List.of());
         return new CorporateActionCollector(registry, ledger, recalculator, priceCalendar,
-                new SpinOffValuer(registry, jdbcTemplate));
+                new SpinOffValuer(registry, jdbcTemplate), new PriceObservationWindow(jdbcTemplate));
     }
 
     private static CorporateAction disclosed(String date, String ratio) {
