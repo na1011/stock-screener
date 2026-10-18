@@ -1,0 +1,8 @@
+# 원장 보충(ADR-0181) — 시세·기업행위 소스(Alpaca)가 빠뜨린 사건을 SEC 원문으로 싣는다. 코드 갈래가 아니라 원장 입력이고 근거가 원문이다.
+# 키는 행의 닻(alpaca_anchor_symbol · alpaca_anchor_date). 수집이 소스 응답과 합쳐 SOURCE_DISCLOSURE로 적고 그 뒤는 같은 경로다
+# (자식 가치 비율 · 적용 직전 가격 반증). 분사 꼴의 ratio는 주식수 배수(s)다 — 주식수가 그대로면 1(JdbcStoredShareCounts가 APPLIED 비율을 곱한다).
+# 자식은 기호:옛1주당받은수 를 쉼표로 · 자식 asof는 그날의 기호를 푸는 날짜다.
+# market	anchor_symbol	anchor_date	effective_date	type	ratio	children	child_asof	source_form	accession	evidence
+US	UHAL	2026-08-28	2022-11-10	SPIN_OFF	1	UHALB:9	2022-11-15	8-K	0000004457-22-000100	EX-99.1: issuance of shares of the Non-Voting Common Stock through a stock dividend, on a 9-for-1 basis · distributed after the close of trading on, or about, November 9 · Alpaca 2022-10~12 시장 전체 6종 0건
+US	SPHR	2026-08-28	2023-04-21	SPIN_OFF	1	MSGE:1	2023-04-21	8-K	0001193125-23-112865	Class A 1주당 MSG Entertainment Class A 1주(received one share of MSG Entertainment Class A common stock) · Alpaca MSGE·SPHR 2023-03~06 name_changes 둘뿐
+US	CORZ	2026-08-28	2024-01-24	SPIN_OFF	0.1	CORZW:0.253244,CORZZ:0.211037	2024-01-24	8-K	0001193125-24-013078	Existing Common Interests received 21.0% of the outstanding shares of New Common Stock · 옛 1주당 0.253244 Tranche 1 · 0.211037 Tranche 2 Warrants · Alpaca stock_mergers CORZQ→CORZ acquirer_rate 0.1(자기 계보 · 어댑터가 판정할 길이 없어 원문으로)

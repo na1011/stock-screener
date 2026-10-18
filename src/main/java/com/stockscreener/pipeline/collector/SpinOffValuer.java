@@ -82,7 +82,7 @@ public class SpinOffValuer {
         Map<String, NavigableMap<LocalDate, BigDecimal>> closes = new LinkedHashMap<>();
         LocalDate valueDate = ex;
         for (Distribution.Child child : distribution.children()) {
-            NavigableMap<LocalDate, BigDecimal> bars = childCloses(parent.marketCode(), child.symbol(), ex);
+            NavigableMap<LocalDate, BigDecimal> bars = childCloses(parent.marketCode(), child, ex);
             if (bars.isEmpty()) {
                 log.warn("분사 자식의 봉이 ex 뒤 {}일 안에 없다 — 해석하지 않는다. ticker={} 자식={} ex={}",
                         CHILD_LOOKAHEAD_CALENDAR_DAYS, parent.ticker(), child.symbol(), ex);
@@ -121,12 +121,20 @@ public class SpinOffValuer {
         return CorporateAction.spinOff(ex, unresolved.sourceDate(), shareMultiple, valued, unresolved.sourceForm());
     }
 
-    private NavigableMap<LocalDate, BigDecimal> childCloses(String marketCode, String childSymbol, LocalDate ex)
+    /**
+     * 자식은 그날의 기호로 묻는다 — 소스가 준 자식 기호는 배분 당시의 것이라, asof 없이 물으면 「오늘 그 기호의 실체」가 와서 재사용·개명된
+     * 기호가 다른 실체를 준다(ADR-0181 · UHALB). 자식이 asof를 따로 들고 오면(원장 보충 파일) 그것을, 아니면 ex 날짜를 닻으로 쓴다.
+     */
+    private NavigableMap<LocalDate, BigDecimal> childCloses(String marketCode, Distribution.Child child, LocalDate ex)
             throws DataSourceException {
+        String childSymbol = child.symbol();
+        LocalDate asOf = child.asOf() != null ? child.asOf() : ex;
+        SecurityRef childRef = new SecurityRef(0L, marketCode, childSymbol,
+                new SecurityRef.Identity(childSymbol, asOf, null, null, null, List.of()));
         List<RawPriceBar> bars;
         try {
             bars = registry.priceSource(marketCode).fetchDailyBars(
-                    new SecurityRef(0L, marketCode, childSymbol), ex, ex.plusDays(CHILD_LOOKAHEAD_CALENDAR_DAYS));
+                    childRef, ex, ex.plusDays(CHILD_LOOKAHEAD_CALENDAR_DAYS));
         } catch (DataSourceException e) {
             if (e.kind() == DataSourceException.Kind.NOT_FOUND || e.kind() == DataSourceException.Kind.MALFORMED) {
                 log.warn("분사 자식의 봉을 소스가 못 준다. 자식={} ex={} 원인={}", childSymbol, ex, e.getMessage());

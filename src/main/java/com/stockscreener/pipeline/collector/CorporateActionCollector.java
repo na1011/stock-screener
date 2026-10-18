@@ -44,16 +44,19 @@ public class CorporateActionCollector {
     private final PriceCalendar priceCalendar;
     private final SpinOffValuer spinOffValuer;
     private final PriceObservationWindow window;
+    private final CorporateActionSupplement supplement;
 
     public CorporateActionCollector(DataSourceRegistry registry, CorporateActionLedger ledger,
                                     AdjustmentRecalculator recalculator, PriceCalendar priceCalendar,
-                                    SpinOffValuer spinOffValuer, PriceObservationWindow window) {
+                                    SpinOffValuer spinOffValuer, PriceObservationWindow window,
+                                    CorporateActionSupplement supplement) {
         this.registry = registry;
         this.ledger = ledger;
         this.recalculator = recalculator;
         this.priceCalendar = priceCalendar;
         this.spinOffValuer = spinOffValuer;
         this.window = window;
+        this.supplement = supplement;
     }
 
     /**
@@ -129,7 +132,10 @@ public class CorporateActionCollector {
 
         CorporateActionDataSource source = registry.corporateActionSource(security.marketCode());
         CorporateActionDataSource.Fetched fetched = source.fetchCorporateActions(security, from, to);
-        List<CorporateAction> fromSource = withinWindow(security, fetched.actions());
+        // 소스가 빠뜨린 사건을 SEC 원문으로 보충한다(ADR-0181) — 그 뒤는 소스 사건과 같은 경로다(가치 비율 · 적용 직전 가격 반증).
+        List<CorporateAction> withSupplement = new ArrayList<>(fetched.actions());
+        withSupplement.addAll(supplement.forSecurity(security));
+        List<CorporateAction> fromSource = withinWindow(security, withSupplement);
 
         // 소스가 종류를 확정하지 못한 사건은 값이 아니라 **이름만** 기여한다. 그것을 record로
         // 보내면 공시가 먼저 도는 이 순서 때문에 뒤에 올 휴리스틱의 확정된 종류·비율이

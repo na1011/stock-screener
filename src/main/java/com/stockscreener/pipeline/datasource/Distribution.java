@@ -43,7 +43,15 @@ public record Distribution(List<Child> children, LocalDate valueDate,
      * @param cusip  CUSIP. 국내는 null
      * @param rate   옛 1주당 받은 수. 국내는 시가총액으로 재므로 null일 수 있다
      */
-    public record Child(String symbol, String cusip, BigDecimal rate) {
+    public record Child(String symbol, String cusip, BigDecimal rate, java.time.LocalDate asOf) {
+
+        /**
+         * 그날의 기호로 받은 자식 — 값을 재는 쪽이 ex 날짜를 asof로 묻는다(ADR-0181). asof 없이 물으면 「오늘 그 기호의 실체」가 와서
+         * 재사용·개명된 자식 기호가 다른 실체를 준다(UHAL.B: 2022-11-10 배분 자식은 그날 기호 UHALB · asof 없는 UHAL.B 첫 봉은 12-19).
+         */
+        public Child(String symbol, String cusip, BigDecimal rate) {
+            this(symbol, cusip, rate, null);
+        }
     }
 
     public Distribution {

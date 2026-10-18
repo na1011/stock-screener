@@ -93,6 +93,23 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             "reverse_splits", CorporateAction.Type.REVERSE_SPLIT);
 
     /**
+     * 주식배당 — 1주가 {@code rate}주가 된다(CBSH 해마다 1.05 · SCCO 분기 약 1.01). 가격은 배당락일에 그만큼 떨어지므로 분할과 같은 계수다
+     * ({@code BONUS_ISSUE} · ADR-0181). 이것을 안 받으면 CBSH 수정주가가 해마다 5%씩 끊긴다. 소스 레코드가 틀린 것이 있다(RJF 2023-04-13
+     * 「1.3」 — 종가가 안 움직였다) — 적용 직전 가격 반증이 거른다({@code PriceRefutation}).
+     */
+    static final String STOCK_DIVIDENDS = "stock_dividends";
+
+    /**
+     * 단위 분할 — 대부분은 SPAC 단위가 보통주 · 워런트로 갈라지는 것이라 보통주 시계열과 무관하다(다른 기호 · 센다). <b>같은 기호 안의 교환만</b>
+     * 이 종목의 사건이다: 비율이 바뀌면 분할·병합(WOLF 2025-09-29 1 → 0.008352 · 파산 교환) · {@code alternate_symbol}이 있으면 그 자식의 분배
+     * (FWONA 2023-08-04 LLYVA 0.0428 · WOLF 조건부 권리 977ESC029). 둘은 같은 날이라 분사로 합친다({@link #mergeDistributions}).
+     */
+    static final String UNIT_SPLITS = "unit_splits";
+
+    /** 종목 조회와 시장 전체 조회(순위 후보 다리)가 같이 쓰는 비율 사건 종류 — 한쪽에만 더하면 편입과 후보의 주식수 기저가 갈린다. */
+    static final String RATIO_TYPES = "forward_split,reverse_split,stock_dividend,unit_split";
+
+    /**
      * 분사. 값(가격 배수)은 어댑터가 낼 수 없다 — 소스가 자식 심볼과 배정 비율만 주고, 가치 비율은 같은 날 두 종가로
      * 수집기가 정한다({@code SpinOffValuer}). 그래서 여기서는 {@link CorporateAction#unresolvedSpinOff}로 원자료만 낸다.
      *
@@ -246,34 +263,37 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                     "구간이 뒤집혔거나 비었다: " + from + " ~ " + to);
         }
-        Map<String, List<JsonNode>> buckets = fetchBuckets(null, "forward_split,reverse_split",
+        Map<String, List<JsonNode>> buckets = fetchBuckets(null, RATIO_TYPES,
                 from.minusYears(REQUEST_LEAD_YEARS), maxOf(to, LocalDate.now()));
         Map<String, List<CorporateAction>> bySymbol = new TreeMap<>();
         Map<String, DataSourceException> malformed = new TreeMap<>();
         for (Map.Entry<String, List<JsonNode>> bucket : buckets.entrySet()) {
             CorporateAction.Type type = ADJUSTING.get(bucket.getKey());
-            if (type == null) {
+            if (type == null && !STOCK_DIVIDENDS.equals(bucket.getKey()) && !UNIT_SPLITS.equals(bucket.getKey())) {
                 // 좁혀 물었는데 다른 타입이 왔다 — 소스가 types를 안 듣는 것이다. 버리지 않고 실패로 올린다.
                 throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
-                        "분할·병합만 물었는데 '" + bucket.getKey() + "'가 왔다 — types 인자가 안 먹었다.");
+                        "비율 사건(" + RATIO_TYPES + ")만 물었는데 '" + bucket.getKey() + "'가 왔다 — types 인자가 안 먹었다.");
             }
             for (JsonNode node : bucket.getValue()) {
-                String symbol = node.path("symbol").asString("");
+                String symbol = UNIT_SPLITS.equals(bucket.getKey()) ? node.path("new_symbol").asString("")
+                        : node.path("symbol").asString("");
                 if (symbol.isBlank()) {
                     continue;
                 }
-                CorporateAction action;
+                List<CorporateAction> actions;
                 try {
-                    action = toAction(node, type, bucket.getKey(), symbol, "corporate-actions (시장 전체) " + symbol);
+                    actions = ratioActions(node, type, bucket.getKey(), symbol, "corporate-actions (시장 전체) " + symbol, false);
                 } catch (DataSourceException e) {
                     // 한 레코드가 깨졌다고 시장 전체를 버리지 않는다 — 그 심볼만 실패로 낸다(종목 조회에서 그 종목이 실패하는 것과 같다).
                     malformed.putIfAbsent(symbol, e);
                     continue;
                 }
-                if (action == null || action.effectiveDate().isBefore(from) || action.effectiveDate().isAfter(to)) {
-                    continue;
+                for (CorporateAction action : actions) {
+                    if (action.effectiveDate().isBefore(from) || action.effectiveDate().isAfter(to)) {
+                        continue;
+                    }
+                    bySymbol.computeIfAbsent(symbol, k -> new ArrayList<>()).add(action);
                 }
-                bySymbol.computeIfAbsent(symbol, k -> new ArrayList<>()).add(action);
             }
         }
         bySymbol.values().forEach(list -> list.sort(Comparator.comparing(CorporateAction::effectiveDate)));
@@ -510,7 +530,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
         for (Map.Entry<String, List<JsonNode>> bucket : buckets.entrySet()) {
             String key = bucket.getKey();
             CorporateAction.Type type = ADJUSTING.get(key);
-            if (type == null) {
+            if (type == null && !STOCK_DIVIDENDS.equals(key) && !UNIT_SPLITS.equals(key)) {
                 if (!KNOWN_TYPES.contains(singular(key))) {
                     harvest.unknownTypes.add(key);
                 }
@@ -519,10 +539,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
             List<JsonNode> nodes = new ArrayList<>(bucket.getValue());
             nodes.sort(Comparator.comparing((JsonNode n) -> n.path("ex_date").asString("")).reversed());
             for (JsonNode node : nodes) {
-                CorporateAction action = toAction(node, type, key, symbol, context);
-                if (action == null) {
-                    continue;
-                }
+              for (CorporateAction action : ratioActions(node, type, key, symbol, context, true)) {
                 // MUST: 포트가 [from, to]를 effectiveDate 기준으로 거르라고 요구한다. 요청 창은
                 // process_date 기준이라 이것을 안 하면 창 밖 사건이 매 실행 다시 올라온다.
                 if (action.effectiveDate().isBefore(from) || action.effectiveDate().isAfter(to)) {
@@ -532,7 +549,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
                     if (action.effectiveDate().isAfter(era.until())) {
                         continue; // 이 심볼이 우리 회사를 떠난 뒤 — 재배정받은 회사의 사건일 수 있다
                     }
-                    String newCusip = node.path("new_cusip").asString("");
+                    String newCusip = node.path("new_cusip").asString(node.path("cusip").asString(""));
                     if (lineage != null && !newCusip.isBlank() && !lineage.contains(newCusip)) {
                         continue; // 계보 밖 CUSIP — 같은 심볼을 쓰던 다른 회사다
                     }
@@ -543,6 +560,7 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
                 }
                 candidates.add(action);
                 candidateNodes.add(node);
+              }
             }
         }
 
@@ -601,17 +619,20 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
         LocalDate lowerBound = era.recorded() && era.since() != null ? era.since() : walkedLower;
 
         // 3) 하한을 걸고 담는다. 제외 타입도 같은 id로 한 번만 센다.
+        // 같은 기호 단위 분할 하나가 사건 둘(비율 · 분배)을 낸다 — 첫 목격은 레코드마다 한 번만 묻는다.
+        Map<JsonNode, Boolean> sighted = new java.util.IdentityHashMap<>();
         for (int i = 0; i < candidates.size(); i++) {
             CorporateAction action = candidates.get(i);
             if (lowerBound != null && action.effectiveDate().isBefore(lowerBound)) {
                 continue; // 우리 회사가 이 심볼을 쓰기 전 — 그 시절 사건은 옛 심볼로 온다
             }
-            if (harvest.firstSighting(candidateNodes.get(i))) {
+            if (sighted.computeIfAbsent(candidateNodes.get(i), harvest::firstSighting)) {
                 harvest.actions.add(action);
             }
         }
         for (Map.Entry<String, List<JsonNode>> bucket : buckets.entrySet()) {
-            if (ADJUSTING.containsKey(bucket.getKey()) || SPIN_OFFS.equals(bucket.getKey())) {
+            if (ADJUSTING.containsKey(bucket.getKey()) || SPIN_OFFS.equals(bucket.getKey())
+                    || STOCK_DIVIDENDS.equals(bucket.getKey()) || UNIT_SPLITS.equals(bucket.getKey())) {
                 continue;
             }
             for (JsonNode node : bucket.getValue()) {
@@ -642,6 +663,63 @@ public class AlpacaCorporateActionAdapter implements CorporateActionDataSource {
     /** 복수형 봉투 키에서 단수형 타입 이름을 낸다. */
     private static String singular(String bucketKey) {
         return bucketKey.endsWith("s") ? bucketKey.substring(0, bucketKey.length() - 1) : bucketKey;
+    }
+
+    /**
+     * 비율 사건 레코드 하나를 원장 사건으로 옮긴다 — 분할·병합 · 주식배당 · 같은 기호 단위 분할. 우리 종목이 아니거나 시세와 무관하면 빈 목록.
+     *
+     * @param withDistributions 같은 기호 단위 분할의 자식 분배도 낼지 — 시장 전체(순위 후보)는 봉이 없어 분배 가치를 못 재므로 비율만 낸다
+     */
+    private List<CorporateAction> ratioActions(JsonNode node, CorporateAction.Type type, String bucketKey, String symbol,
+                                               String context, boolean withDistributions) throws DataSourceException {
+        if (type != null) {
+            CorporateAction action = toAction(node, type, bucketKey, symbol, context);
+            return action == null ? List.of() : List.of(action);
+        }
+        if (STOCK_DIVIDENDS.equals(bucketKey)) {
+            if (!symbol.equals(node.path("symbol").asString(""))) {
+                return List.of();
+            }
+            LocalDate exDate = dateOf(node, "ex_date", context);
+            BigDecimal rate = decimalOf(node, "rate", context);
+            if (rate.compareTo(BigDecimal.ONE) <= 0) {
+                // 주식배당은 주식수를 늘린다 — 1 이하는 소스의 낱말과 값이 어긋난 것이다. 지어내지 않고 종목 실패로 남긴다.
+                throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                        "주식배당 비율이 1보다 크지 않다: rate=%s. %s".formatted(rate, context));
+            }
+            // 미국은 배당락일에 가격이 조정된다(CBSH 2024-12-03 종가 ×0.940 · 기대 1/1.05) — 신주 상장일 갈래(국내 무상증자)는 같은 날로 둔다.
+            return List.of(new CorporateAction(exDate, exDate, exDate, CorporateAction.Type.BONUS_ISSUE, rate,
+                    CorporateAction.DetectionSource.SOURCE_DISCLOSURE, singular(bucketKey)));
+        }
+        // 같은 기호 단위 분할만 — 다른 기호(SPAC 단위 → 보통주)는 이 시계열의 사건이 아니다.
+        if (!symbol.equals(node.path("old_symbol").asString("")) || !symbol.equals(node.path("new_symbol").asString(""))) {
+            return List.of();
+        }
+        LocalDate effective = dateOf(node, "effective_date", context);
+        BigDecimal oldRate = decimalOf(node, "old_rate", context);
+        BigDecimal newRate = decimalOf(node, "new_rate", context);
+        if (oldRate.signum() <= 0 || newRate.signum() <= 0) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
+                    "단위 분할 비율이 양수가 아니다: old=%s new=%s. %s".formatted(oldRate, newRate, context));
+        }
+        List<CorporateAction> out = new ArrayList<>(2);
+        BigDecimal ratio = newRate.divide(oldRate, PriceDiscontinuity.RATIO_SCALE, RoundingMode.HALF_UP);
+        int vsOne = ratio.compareTo(BigDecimal.ONE);
+        if (vsOne != 0) {
+            out.add(new CorporateAction(effective, effective, effective,
+                    vsOne > 0 ? CorporateAction.Type.SPLIT : CorporateAction.Type.REVERSE_SPLIT, ratio,
+                    CorporateAction.DetectionSource.SOURCE_DISCLOSURE, singular(bucketKey)));
+        }
+        String child = node.path("alternate_symbol").asString("");
+        JsonNode alternateRate = node.path("alternate_rate");
+        if (withDistributions && !child.isBlank() && !child.equals(symbol) && !alternateRate.isMissingNode() && !alternateRate.isNull()) {
+            BigDecimal rate = decimalOf(node, "alternate_rate", context).divide(oldRate, PriceDiscontinuity.RATIO_SCALE,
+                    RoundingMode.HALF_UP);
+            String cusip = node.path("alternate_cusip").asString("");
+            out.add(CorporateAction.unresolvedSpinOff(effective, effective, BigDecimal.ONE,
+                    Distribution.of(child, cusip.isBlank() ? null : cusip, rate, effective, null, null), singular(bucketKey)));
+        }
+        return out;
     }
 
     /**

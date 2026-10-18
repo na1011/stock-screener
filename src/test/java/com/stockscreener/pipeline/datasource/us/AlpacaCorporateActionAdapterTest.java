@@ -150,6 +150,68 @@ class AlpacaCorporateActionAdapterTest {
     }
 
     @Test
+    @DisplayName("주식배당을 BONUS_ISSUE로 옮긴다 — 비율은 rate · 날짜는 배당락일(CBSH 2024-12-03 실제 레코드)")
+    void mapsStockDividendAsBonusIssue() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{"stock_dividends":[{"cusip":"200525103","ex_date":"2024-12-03",
+                 "id":"8c797664-c56b-420d-85f4-31ebb42b684d","payable_date":"2024-12-20","process_date":"2024-12-18",
+                 "rate":1.05,"record_date":"2024-12-03","symbol":"CBSH"}]},"next_page_token":null}""");
+
+        List<CorporateAction> actions = adapter().fetchCorporateActions(new SecurityRef(4L, "US", "CBSH"), FROM, TO).actions();
+
+        assertThat(actions).singleElement().satisfies(a -> {
+            assertThat(a.type()).isEqualTo(CorporateAction.Type.BONUS_ISSUE);
+            assertThat(a.ratio()).isEqualByComparingTo("1.05");
+            assertThat(a.effectiveDate()).isEqualTo(LocalDate.of(2024, 12, 3));
+            assertThat(a.listingDate()).as("미국은 배당락일에 조정된다").isEqualTo(LocalDate.of(2024, 12, 3));
+        });
+    }
+
+    @Test
+    @DisplayName("같은 기호 단위 분할은 비율 사건 + 자식 분배 한 행이다 · 다른 기호(SPAC 단위 분리)는 담지 않는다 — WOLF 2025-09-29 실제 레코드")
+    void mapsSameSymbolUnitSplitAndIgnoresUnitSeparation() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{"unit_splits":[
+                 {"alternate_cusip":"977ESC029","alternate_rate":1,"alternate_symbol":"977ESC029","effective_date":"2025-09-29",
+                  "id":"w1","new_cusip":"977852201","new_rate":0.008352,"new_symbol":"WOLF","old_cusip":"977852102","old_rate":1,
+                  "old_symbol":"WOLF","process_date":"2025-09-29"},
+                 {"alternate_cusip":"04208V111","alternate_rate":0.5,"alternate_symbol":"AACIW","effective_date":"2025-08-16",
+                  "id":"a1","new_cusip":"04208V103","new_rate":1,"new_symbol":"WOLF","old_cusip":"04208V202","old_rate":1,
+                  "old_symbol":"AACIU","process_date":"2025-08-16"}]},"next_page_token":null}""");
+
+        List<CorporateAction> actions = adapter().fetchCorporateActions(new SecurityRef(5L, "US", "WOLF"),
+                LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31)).actions();
+
+        assertThat(actions).singleElement().satisfies(a -> {
+            assertThat(a.ratio()).as("주식수 배수 s = 교환 비율").isEqualByComparingTo("0.008352");
+            assertThat(a.distribution().newSymbol()).isEqualTo("977ESC029");
+            assertThat(a.sourceForm()).isEqualTo("unit_split+unit_split");
+        });
+    }
+
+    @Test
+    @DisplayName("시장 전체(순위 후보 다리)도 같은 종류를 받는다 — 분배 없이 비율만")
+    void marketWideTakesTheSameRatioKinds() throws Exception {
+        enqueue(200, """
+                {"corporate_actions":{
+                 "stock_dividends":[{"ex_date":"2024-12-03","id":"d1","rate":1.05,"symbol":"CBSH"}],
+                 "unit_splits":[{"alternate_rate":1,"alternate_symbol":"XESC","effective_date":"2024-09-29","id":"u1","new_rate":0.1,
+                  "new_symbol":"WOLF","old_rate":1,"old_symbol":"WOLF"},
+                  {"alternate_rate":0.5,"alternate_symbol":"AACIW","effective_date":"2024-08-16","id":"u2","new_rate":1,
+                  "new_symbol":"AACI","old_rate":1,"old_symbol":"AACIU"}]},"next_page_token":null}""");
+
+        AlpacaCorporateActionAdapter.MarketSplits splits = adapter().fetchMarketSplits(FROM, TO);
+
+        assertThat(splits.bySymbol().keySet()).containsExactlyInAnyOrder("CBSH", "WOLF");
+        assertThat(splits.bySymbol().get("WOLF")).singleElement().satisfies(a -> {
+            assertThat(a.type()).isEqualTo(CorporateAction.Type.REVERSE_SPLIT);
+            assertThat(a.distribution()).isNull();
+        });
+        assertThat(server.takeRequest().getRequestUrl().queryParameter("types"))
+                .isEqualTo("forward_split,reverse_split,stock_dividend,unit_split");
+    }
+
+    @Test
     @DisplayName("같은 날 병합과 분사는 한 행이다 — HON 2026-06-29 병합 1:2 + HONA(원장은 한 날에 한 행)")
     void mergesASameDayReverseSplitIntoTheSpinOff() throws Exception {
         enqueue(200, """
