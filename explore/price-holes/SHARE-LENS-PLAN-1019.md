@@ -47,7 +47,8 @@
 2. **적용 뒤 재확인(APPLIED)**: 같은 조건의 APPLIED 소스 행 중 노트에 주식수 판정 표지가 없는 것을 재구축마다 다시 본다. 뒤 판이 생겼고 두 렌즈가
    반박하면 APPLIED → OBSERVED(이번 재구축에서 빠진다 → 계수가 바뀐다 → 기존 무효화·화해 사슬이 지표를 다시 쓴다). 확인되면 표지를 단다.
    `hold`의 `WHERE status = 'APPROVED'`를 이 갈래에서만 APPLIED도 받게 한다.
-3. 보류 알림은 기존 `heldSince`(노트 표지 `가격 반증 — `)를 그대로 탄다 — 새 표지도 같은 머리말로 쓴다.
+3. 보류는 `CorporateActionLedger.hold()`를 거쳐 `held_at`을 세운다(0단계 `HOLD-MARK-PLAN-1020.md`) — 따로 UPDATE하면 `held_at`이 빠져 14:00 수집이 다시
+   APPROVED로 덮는다. 「사람이 본 행」 제외는 `judged_at`(V69_3 뒤만 있음 · 그 앞 판정은 NULL)으로 가르되 그 공백을 이 계획에서 메운다(v2에서 정한다).
 4. 판 선택은 `ShareBasisDeriver.filingsOf`와 같은 정렬을 쓴다(중복 구현을 피하려 공용 질의로 뺄지 구현 때 정한다 — 두 곳이 갈리면 안 된다).
 
 ### 운영 영향(재 봤다)
