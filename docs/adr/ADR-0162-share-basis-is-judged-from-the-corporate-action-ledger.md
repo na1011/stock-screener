@@ -27,6 +27,11 @@ applies_to:
   사건만이 주식수를 바꾼다. 근거는 **주주가 온주로 교환받는다**는 것이다 — `1000-for-1973`은
   참여에 1,000주가 필요해 어떤 회사도 선언하지 않는다. 그런 값은 **분사·역합병의 가격계수**가
   분할 배열에 실린 것이다.
+  - **임계가 가르는 것은 `[1.10/1.5, 1.5/1.10]`(약 0.733 ~ 1.364) 밖의 비율뿐이다.** 그 안의 사건은
+    관측이 「불변 띠」(1.10) 안이면 「따라감 띠」(1.5)에도 들어 **계열 불변으로 판정될 수 없다** —
+    들든 빠지든 `SHIFTED`·`UNRESOLVED`가 같고, 빠지면 `UNRESOLVED`의 시작일을 앞으로 끌지 않는다.
+    **주식배당은 선언된 교환인데 작은 쪽이 10을 넘는다**(`CBSH` 5% = `21-for-20` · 작은 쪽 20) —
+    「온주 교환」 근거는 이 띠 안에서는 서지 않지만 위 이유로 판정에 닿지 않는다.
   - **MUST: 임계라고 적는다.** 「소스의 선언이라 임계가 아니다」는 거짓이다 — `DELL`의
     `old_rate=1000`·`new_rate=1973`은 **둘 다 정수**다.
   - **MUST NOT: 「양쪽이 정수인가」로 재지 않는다.** 3-for-2가 `2→3`과 `1→1.5` **두 표기**로
@@ -114,7 +119,9 @@ SELECT CASE
 ```premise 판별자의 임계가 아직 빈 구간에 앉아 있다
 psql -d stock_screener -At -c "
 WITH r AS (SELECT DISTINCT c.ratio FROM corporate_action c JOIN stock s ON s.id = c.stock_id
-           WHERE c.status = 'APPLIED' AND s.market_code = 'US' AND c.ratio <> 1),
+           WHERE c.status = 'APPLIED' AND s.market_code = 'US' AND c.ratio <> 1
+             -- 판별자가 판정을 못 바꾸는 띠는 뺀다(§규칙 — 주식배당 CBSH 21-for-20이 여기 든다)
+             AND NOT (c.ratio >= 1.10 / 1.5 AND c.ratio <= 1.5 / 1.10)),
      m AS (SELECT ratio, (SELECT min(k) FROM generate_series(1, 200) k
                           WHERE abs(ratio * k - round(ratio * k)) <= ratio * k * 1e-8
                              OR abs(k / ratio - round(k / ratio)) <= (k / ratio) * 1e-8) AS small
@@ -186,6 +193,9 @@ Alpaca 자산 마스터에는 증권 유형 필드가 아예 없다. **그래서
 | 2 | **24** | 3-for-2 (`2→3`과 `1→1.5` 두 표기) |
 | *3 ~ 96* | **0** | **빈 구간 — 임계를 어디 둬도 답이 같다** |
 | 97 · 189 · 200 · 1000 · 1000 · 1103 | 6 | `QGEN`(합성 자사주) · `DD`(Corteva) · `FTV`(Vontier) · `DELL`(VMware) · `TT`+`IR`(같은 Reverse Morris Trust 양쪽) |
+
+**재측정 (2026-10-21 · 미국 APPLIED 372사건 · 서로 다른 비율 63)**: 띠 밖 47개는 전부 작은 쪽 10 이하 —
+빈 구간이 그대로다. 띠 안 16개(주식배당 `CBSH` ×1.05 · 작은 쪽 20 · 나머지는 97 이상)는 판정에 닿지 않는다(§규칙).
 
 **유도 결과**: `SHIFTED` **`AMRN`**(7행 · ×0.05 · 2025-05-07~2026-07-29) · `UNRESOLVED`
 **`AKTX`**(22행 · 2024-03-29~2026-08-13) · 나머지 **0행**. `DELL`·`LNZA`·`IR`·`CVNA`·`QXO`·`BMNR`
