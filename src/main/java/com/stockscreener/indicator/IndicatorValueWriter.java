@@ -5,9 +5,12 @@ import org.springframework.stereotype.Component;
 
 import java.sql.Date;
 import java.sql.PreparedStatement;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 계산된 지표 값을 {@code indicator_value}에 쓴다.
@@ -21,9 +24,6 @@ import java.util.List;
  */
 @Component
 public class IndicatorValueWriter {
-
-    /** application.yaml의 {@code hibernate.jdbc.batch_size}와 맞춘다. */
-    private static final int BATCH_SIZE = 100;
 
     /**
      * IMPORTANT — {@code ON CONFLICT}의 컬럼 순서는 PK 순서
@@ -47,15 +47,35 @@ public class IndicatorValueWriter {
      * 0이다. 즉 페이지 여유가 아니라 <b>인덱스에 있다는 사실</b>이 막는 것이고, 그것을 풀면
      * 파생층 읽기가 슬라이스마다 무작위 힙 페치 1,500건이 된다(ADR-0140).
      *
-     * <p>즉 이 조건절이 하는 일은 HOT을 늘리는 것이 아니라 <b>갱신 자체를 없애는 것</b>이다.
+     * <p>즉 이 조건절이 하는 일은 HOT을 늘리는 것이 아니라 <b>새 행 버전을 없애는 것</b>이다.
+     * <b>잠금은 못 없앤다</b> — {@code DO UPDATE}의 {@code WHERE}가 거짓이어도 충돌한 행은 잠기고, 그
+     * 잠금이 행마다 WAL 기록과 체크포인트 뒤 첫 페이지 이미지를 남긴다(실측 2026-10-21: 같은 값 20만 행
+     * 업서트가 WAL 21.8MB · 운영 매 평일 화해 한 판이 쓴 행 0으로 약 10GB). 그래서 같은 값은
+     * {@code NOT EXISTS}로 <b>충돌 경로에 보내기 전에</b> 거른다 — 그 비교는 저장 열과 같은
+     * {@code numeric(24,8)}로 반올림해서 한다({@code EXCLUDED.value}가 그 열 타입이라 그와 같은 비교다 —
+     * 캐스트를 빼면 소수 8자리를 넘는 값이 늘 「다름」이 되어 선필터가 안 걸린다).
      *
      * <p>{@code IS DISTINCT FROM}인 이유는 {@code <>}가 NULL에서 NULL을 내기 때문이다. 지금은
      * {@code value}가 NOT NULL이지만 그 전제에 기대지 않는다.
+     *
+     * <p>MUST: 같은 키의 동시 갱신·삭제에 대한 배타는 이 문장이 아니라 ADR-0175 잠금이 진다. 선필터는 문장 시작
+     * 스냅숏으로 거르므로 다른 트랜잭션이 같은 행을 바꾸는 중이면 기다리지 않고 건너뛴다 — {@code ON CONFLICT}가
+     * 지키는 것은 삽입끼리의 경합뿐이다.
+     *
+     * <p><b>한 (종목, 지표)를 한 문장으로 쓴다</b>({@code unnest}) — 점마다 문장을 보내면 {@code INSERT … SELECT}는
+     * 드라이버의 배치 재작성을 못 타고, 쓰기 가드(ADR-0175)의 문장 단위 트리거도 점마다 돈다.
      */
     private static final String UPSERT = """
             INSERT INTO indicator_value
                 (stock_id, trade_date, indicator_code, value, updated_at)
-            VALUES (?, ?, ?, ?, now())
+            SELECT ?, p.trade_date, ?, CAST(p.value AS numeric(24, 8)), now()
+            FROM unnest(?::date[], ?::numeric[]) AS p(trade_date, value)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM indicator_value cur
+                WHERE cur.trade_date = p.trade_date
+                  AND cur.indicator_code = ?
+                  AND cur.stock_id = ?
+                  AND cur.value IS NOT DISTINCT FROM CAST(p.value AS numeric(24, 8)))
             ON CONFLICT (trade_date, indicator_code, stock_id) DO UPDATE SET
                 value      = EXCLUDED.value,
                 updated_at = now()
@@ -85,21 +105,24 @@ public class IndicatorValueWriter {
             return 0L;
         }
 
-        int[][] results = jdbcTemplate.batchUpdate(UPSERT, points, BATCH_SIZE, (ps, point) -> {
-            ps.setLong(1, stockId);
-            ps.setObject(2, point.tradeDate());
-            ps.setString(3, indicatorCode);
-            ps.setBigDecimal(4, point.value());
-        });
-
-        long written = 0;
-        for (int[] batch : results) {
-            for (int updated : batch) {
-                // 드라이버가 SUCCESS_NO_INFO(-2)를 주는 경우가 있어 음수를 1행으로 센다.
-                written += updated < 0 ? 1 : updated;
-            }
+        // 한 문장 안에서 같은 키를 두 번 갱신하면 ON CONFLICT가 오류를 낸다 — 점마다 순차로 업서트하던 때의
+        // 최종 상태(마지막 점)를 그대로 남긴다.
+        Map<LocalDate, BigDecimal> last = new LinkedHashMap<>();
+        for (IndicatorPoint point : points) {
+            last.put(point.tradeDate(), point.value());
         }
-        return written;
+        Date[] dates = last.keySet().stream().map(Date::valueOf).toArray(Date[]::new);
+        BigDecimal[] values = last.values().toArray(BigDecimal[]::new);
+        return jdbcTemplate.update(connection -> {
+            PreparedStatement statement = connection.prepareStatement(UPSERT);
+            statement.setLong(1, stockId);
+            statement.setString(2, indicatorCode);
+            statement.setArray(3, connection.createArrayOf("date", dates));
+            statement.setArray(4, connection.createArrayOf("numeric", values));
+            statement.setString(5, indicatorCode);
+            statement.setLong(6, stockId);
+            return statement;
+        });
     }
 
     /**

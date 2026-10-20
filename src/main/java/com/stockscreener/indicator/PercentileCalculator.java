@@ -107,13 +107,22 @@ public class PercentileCalculator {
     /**
      * 같은 날짜·같은 지표의 값들에 순위를 매겨 {@code <원본코드>_PCTL}로 저장한다.
      *
-     * <p>{@code WHERE ... IS DISTINCT FROM}의 이유는 {@code IndicatorValueWriter}와 같다.
+     * <p>{@code WHERE ... IS DISTINCT FROM}과 같은 값을 먼저 거르는 {@code NOT EXISTS}의 이유는
+     * {@code IndicatorValueWriter}와 같다. <b>비교는 {@code numeric(24,8)}로 반올림해서 한다</b> —
+     * {@code PERCENT_RANK}는 float8이라 그대로 비교하면 같은 순위도 「다름」이 된다. 바깥 질의가 안쪽 열을
+     * 참조하므로 자리표시자 수와 순서는 그대로다.
      */
     private static final String UPSERT_PERCENTILES = ("WITH " + RANKED + """
             INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value, updated_at)
-            SELECT ranked.stock_id, ranked.trade_date, ?, ranked.pct, now()
-            FROM ranked
-            WHERE ranked.population >= %d
+            SELECT s.stock_id, s.trade_date, s.code, s.value, now()
+            FROM (SELECT ranked.stock_id, ranked.trade_date, CAST(? AS varchar) AS code,
+                         CAST(ranked.pct AS numeric(24, 8)) AS value
+                  FROM ranked
+                  WHERE ranked.population >= %d) s
+            WHERE NOT EXISTS (
+                SELECT 1 FROM indicator_value cur
+                WHERE cur.trade_date = s.trade_date AND cur.indicator_code = s.code
+                  AND cur.stock_id = s.stock_id AND cur.value IS NOT DISTINCT FROM s.value)
             ON CONFLICT (trade_date, indicator_code, stock_id) DO UPDATE SET
                 value      = EXCLUDED.value,
                 updated_at = now()

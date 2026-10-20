@@ -206,6 +206,26 @@ class PercentileCalculatorTest {
     }
 
     @Test
+    @DisplayName("같은 백분위를 다시 쓰면 WAL을 안 낸다 — float8 순위를 저장 열 정밀도로 비교한다")
+    void sameRankRewriteWritesNoWal() {
+        // 모집단 7 → 순위가 k/6이라 이진으로도 소수 8자리로도 안 떨어진다(n=5는 0.25 단위라 캐스트 결함을 못 붉힌다).
+        long sixth = memberWithPer("KOSPI", "KOSPI200", "100006", new BigDecimal("15"));
+        memberWithPer("KOSPI", "KOSPI200", "100007", new BigDecimal("60"));
+        calculator.calculate(AS_OF, null);
+
+        long before = walInsertLsn();
+        assertThat(calculator.calculate(AS_OF, null)).isEqualTo(LayerChange.NONE);
+        long wal = walInsertLsn() - before;
+
+        assertThat(percentileOf(sixth)).isEqualByComparingTo("0.16666667");
+        assertThat(wal).as("같은 백분위 7행을 다시 쓴 WAL 바이트").isZero();
+    }
+
+    private long walInsertLsn() {
+        return jdbcTemplate.queryForObject("SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(), '0/0')::bigint", Long.class);
+    }
+
+    @Test
     @DisplayName("두 번 실행해도 행이 늘지 않는다")
     void isIdempotent() {
         calculator.calculate(AS_OF, null);

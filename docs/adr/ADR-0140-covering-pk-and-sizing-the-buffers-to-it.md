@@ -72,8 +72,8 @@ psql -d stock_screener -c "\d indicator_value"
 ```premise 표 총이 이 결정이 검증된 shared_buffers 비 안에 있다
 # 이 결정이 검증된 지점은 「표 총」(힙 + 인덱스)이 shared_buffers의 1.105배였을 때다(병합 뒤 6,788MB
 # 대 6,144MB · 그 상태에서 둘째 판의 블록 읽기가 0이었다). 「다 들어간다」는 경계가 아니라 그 지점이다.
-# 힙을 넣는 이유: 쓰기 경로(UPSERT의 IS DISTINCT FROM · DELETE_UNWRITTEN)는 VM과 무관하게 힙을 읽고,
-# 읽기 경로도 VM이 낡으면 힙을 읽는다.
+# 힙을 넣는 이유: 쓰기 경로의 충돌·삭제(ON CONFLICT · DELETE_UNWRITTEN)는 VM과 무관하게 힙을 읽고,
+# 같은 값 선필터(NOT EXISTS · PK INCLUDE(value))와 읽기 경로는 VM이 낡으면 힙을 읽는다.
 psql -d stock_screener -At -c "WITH x AS (SELECT pg_relation_size('indicator_value') heap, pg_indexes_size('indicator_value') idx, pg_size_bytes(current_setting('shared_buffers')) buf)
 SELECT CASE
   WHEN (SELECT heap FROM x) = 0 THEN '잴 것이 없었다 — indicator_value가 비어 있다'

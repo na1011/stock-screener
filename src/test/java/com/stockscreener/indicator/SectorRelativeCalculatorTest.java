@@ -163,6 +163,30 @@ class SectorRelativeCalculatorTest {
         assertThat(calculate(spec)).isZero();
     }
 
+    @Test
+    @DisplayName("같은 업종 상대값을 다시 쓰면 WAL을 안 낸다 — float8 배수·순위를 저장 열 정밀도로 비교한다")
+    void sameValuesRewriteWritesNoWal() {
+        // 일곱 — 중앙값 35라 배수 10/35가, 순위가 k/6이라 소수 8자리를 넘는다.
+        long low = member("26111", "10");
+        for (String value : List.of("20", "30", "35", "50", "61", "70")) {
+            member("26111", value);
+        }
+        SectorMetricSpec[] specs = {medianRatio(), percentile(), median()};
+        assertThat(calculate(specs)).isPositive();
+
+        long before = walInsertLsn();
+        assertThat(calculate(specs)).isZero();
+        long wal = walInsertLsn() - before;
+
+        assertThat(value(low, "DEBT_RATIO_SECTOR_REL")).isEqualByComparingTo("0.28571429");
+        assertThat(value(low, "DEBT_RATIO_SECTOR_MEDIAN")).isEqualByComparingTo("35");
+        assertThat(wal).as("같은 업종 상대값 일곱 종목 × 넷을 다시 쓴 WAL 바이트").isZero();
+    }
+
+    private long walInsertLsn() {
+        return jdbcTemplate.queryForObject("SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(), '0/0')::bigint", Long.class);
+    }
+
     private long calculate(SectorMetricSpec... specs) {
         return new SectorRelativeCalculator(jdbcTemplate, List.of(specs)).calculate(AS_OF, null).written();
     }

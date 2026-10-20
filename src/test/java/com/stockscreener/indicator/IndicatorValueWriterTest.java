@@ -92,6 +92,38 @@ class IndicatorValueWriterTest {
         assertThat(updatedAtOn(AS_OF)).isEqualTo(first);
     }
 
+    @Test
+    @DisplayName("같은 값을 다시 쓰면 WAL을 안 낸다 — 거짓 WHERE도 충돌 행을 잠가 화해 한 판이 10GB를 냈다")
+    void sameValueRewriteWritesNoWal() {
+        // 소수 8자리를 넘는 값 — 저장 열(numeric(24,8))로 반올림된 값과 비교해야 같다고 본다.
+        List<IndicatorPoint> points = new java.util.ArrayList<>();
+        for (int i = 0; i < 300; i++) {
+            points.add(new IndicatorPoint(AS_OF.minusDays(i), new BigDecimal("0.333333333333333333").add(BigDecimal.valueOf(i))));
+        }
+        assertThat(writer.write(stockId, PerCalculator.CODE, points)).isEqualTo(300);
+
+        long before = walInsertLsn();
+        assertThat(writer.write(stockId, PerCalculator.CODE, points)).isZero();
+        long wal = walInsertLsn() - before;
+
+        assertThat(valueOn(AS_OF)).isEqualByComparingTo("0.33333333");
+        assertThat(wal).as("같은 값 300행을 다시 쓴 WAL 바이트").isZero();
+    }
+
+    @Test
+    @DisplayName("한 번에 같은 날짜가 둘이면 마지막 점이 남는다 — 순차 업서트의 최종 상태와 같다")
+    void duplicateDateKeepsTheLastPoint() {
+        writer.write(stockId, PerCalculator.CODE, List.of(
+                new IndicatorPoint(AS_OF, new BigDecimal("1")),
+                new IndicatorPoint(AS_OF, new BigDecimal("2"))));
+
+        assertThat(valueOn(AS_OF)).isEqualByComparingTo("2");
+    }
+
+    private long walInsertLsn() {
+        return jdbcTemplate.queryForObject("SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(), '0/0')::bigint", Long.class);
+    }
+
     private BigDecimal valueOn(LocalDate tradeDate) {
         return jdbcTemplate.queryForObject("""
                 SELECT value FROM indicator_value
