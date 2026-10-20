@@ -83,7 +83,7 @@ public class CorporateActionLedger {
 
     private void hold(long id, String note) {
         int updated = jdbcTemplate.update("""
-                UPDATE corporate_action SET status = ?, updated_at = now(), note = coalesce(note || ' · ', '') || ?
+                UPDATE corporate_action SET status = ?, held_at = now(), updated_at = now(), note = coalesce(note || ' · ', '') || ?
                 WHERE id = ? AND status = ?
                 """, CorporateActionStatus.OBSERVED.name(), note, id, CorporateActionStatus.APPROVED.name());
         if (updated > 0) {
@@ -91,15 +91,17 @@ public class CorporateActionLedger {
         }
     }
 
-    /** 그 시각 뒤에 가격 반증으로 보류된 행 — 재구축 잡이 운영자에게 알린다. */
+    /**
+     * 그 시각 뒤에 가격 반증으로 보류된 행 — 재구축 잡이 운영자에게 알린다. 보류는 한 번만 일어난다(수집이 같은 값으로 보류 행을
+     * 안 덮는다 · {@link #record}) — 그 뒤 판정 대기를 상기시키는 것은 ADR-0049 premise의 「판정 대기」 셈이다.
+     */
     public List<String> heldSince(java.time.Instant since) {
         return jdbcTemplate.queryForList("""
                 SELECT s.ticker || ' ' || c.effective_date || ' ' || c.type || ' ' || c.ratio FROM corporate_action c
                 JOIN stock s ON s.id = c.stock_id
-                WHERE c.status = ? AND c.updated_at >= ? AND c.note LIKE ?
+                WHERE c.status = ? AND c.held_at >= ?
                 ORDER BY c.effective_date
-                """, String.class, CorporateActionStatus.OBSERVED.name(), java.sql.Timestamp.from(since),
-                "%" + PriceRefutation.NOTE_MARK + " — %");
+                """, String.class, CorporateActionStatus.OBSERVED.name(), java.sql.Timestamp.from(since));
     }
 
     /** 원장에 적은 결과. 호출자가 무엇이 일어났는지 알아야 알림을 걸 수 있다. */
@@ -313,22 +315,32 @@ public class CorporateActionLedger {
             if (!CorporateActionStatus.OBSERVED.name().equals(row.status()) || !trusted) {
                 return new RecordResult(Outcome.IGNORED, row.id(), action.effectiveDate(), null, null);
             }
-            // 휴리스틱 후보를 공시가 덮는다. 창이 매일 도므로 휴리스틱이 대개 먼저 들어오고,
-            // 그대로 두면 공시의 정확한 비율·일자가 흔적 없이 버려진다.
+            // 휴리스틱 후보 · 미해석 분사(CorporateAction.unresolvedSpinOff) · 이름만 붙은 행(annotate)을 공시가 덮는다.
+            // 창이 매일 도므로 그 행들이 대개 먼저 들어오고, 그대로 두면 공시의 정확한 비율·일자가 흔적 없이 버려진다.
             // MUST: 가격 배수와 분배 원자료를 같은 UPDATE에서 싣는다. 빠지면 해석이 끝난 분사가
             // 가격 배수 없는 APPROVED가 되려다 ck_ca_spin_off_priced에 막혀 그 종목이 롤백된다.
-            jdbcTemplate.update("""
+            //
+            // MUST NOT: 가격 반증이 보류한 행(held_at)을 같은 값으로 덮지 않는다(ADR-0181). 덮으면 매일 14:00에 APPROVED로
+            // 되돌아가 재구축이 다시 보류하고, 그 사이 끊긴 사슬은 반박된 비율을 하룻밤 적용 대상으로 둔다(2026-10-20 RJF 368 ·
+            // CORZ 348). 소스가 적용·판정에 쓰는 값(종류·비율·가격 배수·신주상장일)을 고쳐 보냈으면 덮고 보류를 풀어 다시 판정한다.
+            int updated = jdbcTemplate.update("""
                     UPDATE corporate_action SET
                         listing_date = ?, source_date = ?, type = ?, ratio = ?, price_ratio = ?,
                         detection_source = ?, status = ?,
-                        source_form = coalesce(?, source_form), updated_at = now()
+                        source_form = coalesce(?, source_form), held_at = NULL, updated_at = now()
                     WHERE id = ?
+                      AND (held_at IS NULL OR type <> ? OR ratio <> ? OR price_ratio IS DISTINCT FROM CAST(? AS numeric)
+                           OR listing_date IS DISTINCT FROM CAST(? AS date))
                     """,
                     action.listingDate(), action.sourceDate(), action.type().name(),
                     action.ratio(), action.priceRatio(), action.source().name(), status.name(),
-                    action.sourceForm(), row.id());
+                    action.sourceForm(), row.id(),
+                    action.type().name(), action.ratio(), action.priceRatio(), action.listingDate());
+            if (updated == 0) {
+                return new RecordResult(Outcome.IGNORED, row.id(), action.effectiveDate(), null, null);
+            }
             writeDistribution(row.id(), action.distribution());
-            log.info("휴리스틱 후보를 공시로 덮었다. stockId={} id={} {} type={} ratio={}",
+            log.info("OBSERVED 행(휴리스틱 후보 · 미해석 분사 · 값이 바뀐 보류 행)을 공시로 덮었다. stockId={} id={} {} type={} ratio={}",
                     stockId, row.id(), action.effectiveDate(), action.type(), action.ratio());
             return new RecordResult(Outcome.UPGRADED, row.id(), action.effectiveDate(), null, status);
         }
@@ -511,7 +523,7 @@ public class CorporateActionLedger {
         if (judgement.status() != null && !judgement.status().humanAssignable()) {
             throw new InvalidJudgementException("status",
                     "사람이 찍을 수 있는 상태가 아니다: " + judgement.status()
-                            + " — APPLIED는 재구축만이, OBSERVED는 수집만이 만든다.");
+                            + " — APPLIED는 재구축만이, OBSERVED는 수집과 재구축의 가격 반증만이 만든다.");
         }
 
         CorporateAction.Type type = merged(judgement, row);
@@ -554,11 +566,13 @@ public class CorporateActionLedger {
                     effective_date = ?,
                     listing_date   = coalesce(?, listing_date),
                     note           = coalesce(?, note),
+                    judged_at      = CASE WHEN ? THEN now() ELSE judged_at END,
                     updated_at     = now()
                 WHERE id = ?
                 """,
                 judgement.status() != null ? judgement.status().name() : null,
-                type.name(), ratio, priceRatio, effectiveDate, judgement.listingDate(), judgement.note(), id);
+                type.name(), ratio, priceRatio, effectiveDate, judgement.listingDate(), judgement.note(),
+                judgement.status() != null, id);
 
         log.info("사람이 원장을 판정했다. id={} status={} type={} ratio={} 가격배수={} 효력일={} 신주상장={}",
                 id, judgement.status(), type, ratio, priceRatio, effectiveDate, judgement.listingDate());

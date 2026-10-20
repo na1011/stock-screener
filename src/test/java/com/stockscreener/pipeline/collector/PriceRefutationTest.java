@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.collector;
 
+import com.stockscreener.pipeline.datasource.CorporateAction;
 import com.stockscreener.pipeline.support.CountingIndicatorInvalidationPort;
 import com.stockscreener.support.JpaSliceTest;
 
@@ -123,6 +124,89 @@ class PriceRefutationTest {
         recalculator.rebuild(kr);
 
         assertThat(status(id)).isEqualTo("APPLIED");
+    }
+
+    @Test
+    @DisplayName("보류 행은 다음 수집이 같은 값으로 다시 와도 APPROVED로 안 돌아간다 · 재구축이 다시 보류하지 않는다(표지 1회)")
+    void collectionDoesNotReviveAHeldRow() {
+        long rjf = stock("US", "RJF");
+        history(rjf, "92.08");
+        bar(rjf, EX, "92.86", 1_234_129);
+        long id = approved(rjf, "BONUS_ISSUE", "1.3");
+        recalculator.rebuild(rjf);
+
+        CorporateActionLedger.RecordResult again = ledger.record(rjf, disclosed("BONUS_ISSUE", "1.3"));
+        recalculator.rebuild(rjf);
+
+        assertThat(again.outcome()).isEqualTo(CorporateActionLedger.Outcome.IGNORED);
+        assertThat(status(id)).isEqualTo("OBSERVED");
+        assertThat(note(id).split(PriceRefutation.NOTE_MARK + " — ", -1)).as("표지 1회").hasSize(2);
+    }
+
+    @Test
+    @DisplayName("보류 행에 소스가 고친 값이 오면 덮고 다시 판정한다 — 정정된 비율은 가격이 받친다")
+    void sourceCorrectionReopensAHeldRow() {
+        long rjf = stock("US", "RJF");
+        history(rjf, "92.08");
+        bar(rjf, EX, "92.86", 1_234_129);
+        long id = approved(rjf, "BONUS_ISSUE", "1.3");
+        recalculator.rebuild(rjf);
+
+        CorporateActionLedger.RecordResult corrected = ledger.record(rjf, disclosed("BONUS_ISSUE", "1.005"));
+        recalculator.rebuild(rjf);
+
+        assertThat(corrected.outcome()).isEqualTo(CorporateActionLedger.Outcome.UPGRADED);
+        assertThat(status(id)).isEqualTo("APPLIED");
+    }
+
+    @Test
+    @DisplayName("사람이 보류 행을 APPROVED로 판정하면 다음 재구축이 가격 반증 없이 적용한다")
+    void humanApprovalIsNotHeldAgain() {
+        long rjf = stock("US", "RJF");
+        history(rjf, "92.08");
+        bar(rjf, EX, "92.86", 1_234_129);
+        long id = approved(rjf, "BONUS_ISSUE", "1.3");
+        recalculator.rebuild(rjf);
+
+        ledger.judge(id, new CorporateActionLedger.Judgement(CorporateActionStatus.APPROVED, null, null, null, null, "사람 확인"));
+        recalculator.rebuild(rjf);
+
+        assertThat(status(id)).isEqualTo("APPLIED");
+    }
+
+    @Test
+    @DisplayName("대조군 — 값만 고치는 판정(상태 없음)은 보류를 안 푼다")
+    void valueOnlyJudgementKeepsTheHold() {
+        long rjf = stock("US", "RJF");
+        history(rjf, "92.08");
+        bar(rjf, EX, "92.86", 1_234_129);
+        long id = approved(rjf, "BONUS_ISSUE", "1.3");
+        recalculator.rebuild(rjf);
+
+        ledger.judge(id, new CorporateActionLedger.Judgement(null, null, null, null, null, "메모만"));
+        ledger.record(rjf, disclosed("BONUS_ISSUE", "1.3"));
+        recalculator.rebuild(rjf);
+
+        assertThat(status(id)).isEqualTo("OBSERVED");
+    }
+
+    @Test
+    @DisplayName("보류 알림은 보류한 판에 그 행을 집는다")
+    void heldSinceListsTheHeldRow() {
+        long rjf = stock("US", "RJF");
+        history(rjf, "92.08");
+        bar(rjf, EX, "92.86", 1_234_129);
+        approved(rjf, "BONUS_ISSUE", "1.3");
+        java.time.Instant since = jdbc.queryForObject("SELECT now()", java.sql.Timestamp.class).toInstant();
+
+        recalculator.rebuild(rjf);
+
+        assertThat(ledger.heldSince(since)).containsExactly("RJF " + EX + " BONUS_ISSUE 1.3000000000");
+    }
+
+    private CorporateAction disclosed(String type, String ratio) {
+        return new CorporateAction(EX, EX, EX, CorporateAction.Type.valueOf(type), new BigDecimal(ratio),
+                CorporateAction.DetectionSource.SOURCE_DISCLOSURE, null);
     }
 
     private long stock(String market, String ticker) {

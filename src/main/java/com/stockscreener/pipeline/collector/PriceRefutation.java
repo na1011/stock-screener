@@ -63,7 +63,7 @@ final class PriceRefutation {
         }
         Set<Long> pending = new HashSet<>(jdbc.queryForList("""
                 SELECT id FROM corporate_action
-                WHERE stock_id = ? AND status = 'APPROVED' AND detection_source = 'SOURCE_DISCLOSURE'
+                WHERE stock_id = ? AND status = 'APPROVED' AND detection_source = 'SOURCE_DISCLOSURE' AND judged_at IS NULL
                 """, Long.class, stockId));
         List<CorporateActionLedger.Entry> kept = new ArrayList<>(events.size());
         for (CorporateActionLedger.Entry entry : events) {
