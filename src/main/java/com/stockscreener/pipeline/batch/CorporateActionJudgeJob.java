@@ -152,7 +152,7 @@ public class CorporateActionJudgeJob {
         // MUST: 계수가 안 바뀌었다는 것을 말한다. APPROVED는 "적용 대상"이고 APPLIED가
         // "반영됨"이며, 그 사이를 잇는 것은 재구축뿐이다(ADR-0050 §결과).
         log.info("판정은 계수를 바꾸지 않는다. 다음 평일 14:00 사슬이 재구축과 화해를 둘 다 한다 — "
-                        + "그 전에 반영하려면 평일 13:30~15:40 밖에서 --job=adjustment-rebuild --tickers={} 뒤에 "
+                        + "그 전에 반영하려면 " + ManualWriteDoor.WHEN + " --job=adjustment-rebuild --tickers={} 뒤에 "
                         + "--job=indicator-reconcile --tickers={} (재구축이 그 종목의 지표를 보존 창 전체에서 지운다)",
                 detail.row().ticker(), detail.row().ticker());
 

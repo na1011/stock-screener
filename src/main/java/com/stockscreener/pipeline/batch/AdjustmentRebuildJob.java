@@ -230,7 +230,7 @@ public class AdjustmentRebuildJob {
                 ("%d종목의 수정계수를 다시 지었다(갱신 %d행 · 적용 사건 %d건 · 최초 변경일 %s).\n"
                         + "**그 %d종목의 지표가 보존 창 전체에서 지워졌다.** 정기 사슬(평일 14:00)이면"
                         + " 같은 사슬이 곧바로 화해한다. 손 실행이면 다음 평일 14:20 화해가 채우고,"
-                        + " 그 전에 채우려면 평일 13:30~15:40 밖에서:\n"
+                        + " 그 전에 채우려면 " + ManualWriteDoor.WHEN + ":\n"
                         + "  ./gradlew bootRun --args='--spring.profiles.active=bootstrap"
                         + " --job=indicator-reconcile --tickers=<아래 종목>'\n")
                         .formatted(rebuilt.size(), changedRows, appliedEvents, earliest,

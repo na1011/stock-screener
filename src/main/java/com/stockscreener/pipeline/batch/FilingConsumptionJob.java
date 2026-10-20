@@ -215,7 +215,7 @@ public class FilingConsumptionJob {
     /** 상한에 막 닿은 후보 행 — 종목·공시·마지막 사유. */
     private static String cappedBody(List<OpenRow> capped) {
         StringBuilder body = new StringBuilder("%d건 — 순위 재료(주식수)가 이 공시 앞 판에 머문다. 새 공시가 오면 다시 묻고, 코드를 고쳤으면 "
-                .formatted(capped.size()) + "평일 13:30~15:40 밖에서 --job=candidate-consumption(손 실행은 상한 없음)으로 다시 묻는다:\n");
+                .formatted(capped.size()) + ManualWriteDoor.WHEN + " --job=candidate-consumption(손 실행은 상한 없음)으로 다시 묻는다:\n");
         capped.stream().limit(20).forEach(r -> body.append("  %s %s %s(%s) — %s\n".formatted(r.ticker(), r.filingNo(),
                 r.form(), r.filedOn(), r.lastReason())));
         if (capped.size() > 20) {

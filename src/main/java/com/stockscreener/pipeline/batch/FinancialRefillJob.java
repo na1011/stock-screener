@@ -544,8 +544,7 @@ public class FinancialRefillJob {
                     정기 경로가 이 종목들의 원본층과 창 전체 파생층을 다시 쓴다(평일 실행은 같은 오후 14:20 화해 · 리밸런싱 꼬리는 그 자리의 사슬 안 화해) — 손으로 돌리지 않는다.
                     """);
         } else {
-            body.append("""
-                    다음 평일 14:20 화해가 채운다. 그 전에 채우려면 평일 13:30~15:40 밖에서:
+            body.append("다음 평일 14:20 화해가 채운다. 그 전에 채우려면 " + ManualWriteDoor.WHEN + ":\n").append("""
                       ./gradlew bootRun --args='--spring.profiles.active=bootstrap \
                     --job=indicator-reconcile --tickers=<위 종목>'
                     """);

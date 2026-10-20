@@ -92,13 +92,14 @@ class FinancialRefillAlertTest {
     }
 
     @Test
-    @DisplayName("손 실행이면 화해를 시키되 정기 배치 창 밖에서 — 옛 날짜 루프 백필 두 판은 시키지 않는다")
+    @DisplayName("손 실행이면 화해를 시키되 잠금 문 안에서 — 끝 조항까지 싣고 옛 날짜 루프 백필 두 판은 시키지 않는다")
     void manualRunAsksForAReconcileOutsideTheBatchWindow() {
         String body = FinancialRefillJob.invalidationAlertBody(
                 List.of("AAPL(정정 0 · 교정 0 · 이른 판 2)"), 2, List.of(), 1L, false);
 
         assertThat(body).contains("--job=indicator-reconcile --tickers=<위 종목>")
-                .contains("13:30~15:40 밖")
+                .contains("ops/crons-done.sh가 0이고 적재 JVM이 없을 때 시작해 그 출력의 다음 명목 발화 전에 끝낼 수 있으면")
+                .contains("평일 13:30~15:40은 그와 무관하게 피한다")
                 .doesNotContain("--job=backfill");
     }
 

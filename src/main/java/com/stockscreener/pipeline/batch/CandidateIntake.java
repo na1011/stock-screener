@@ -90,7 +90,7 @@ public class CandidateIntake {
             log.error("후보 인입이 실패했다. 새 행 {}종목", created.size(), e);
             alertPort.send(AlertEvent.toOperator(AlertSeverity.ERROR, "후보 인입 실패",
                     ("리밸런싱이 만든 미국 종목 행 %d개에 업종·재무를 못 붙였다: %s — 이 행들은 다음 공시가 장부에 올 때까지 주식수가 없어 "
-                            + "순위 후보가 못 된다. 평일 13:30~15:40 밖에서 --job=company-profile·--job=financial-refill을 그 티커로 "
+                            + "순위 후보가 못 된다. " + ManualWriteDoor.WHEN + " --job=company-profile·--job=financial-refill을 그 티커로 "
                             + "다시 돌린다(후보 모드: --job=financial-refill --population=candidates --tickers=… — 업종을 먼저 붙인다). 티커: %s")
                             .formatted(created.size(), e.getMessage(), String.join(",", created)),
                     "candidate-intake:" + asOf));
