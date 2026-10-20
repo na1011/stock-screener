@@ -204,6 +204,191 @@ class PriceRefutationTest {
         assertThat(ledger.heldSince(since)).containsExactly("RJF " + EX + " BONUS_ISSUE 1.3000000000");
     }
 
+    @Test
+    @DisplayName("k < 5라 가격만으로 못 가르는 오류를 주식수가 가른다 — GBCI 2021-02-04 「주식배당 1.1」(종가 48.86 → 49.74 · 주식수 +0.05%)")
+    void sharesRefuteWhatPriceCannot() {
+        long gbci = stock("US", "GBCI");
+        noisyHistory(gbci, "48.86");
+        bar(gbci, EX, "49.74", 500_000);
+        steadyFilings(gbci, "100000000");
+        filing(gbci, 2023, "Q2", LocalDate.of(2023, 6, 30), LocalDate.of(2023, 8, 4), "100050000");
+        long id = approved(gbci, "BONUS_ISSUE", "1.1");
+
+        recalculator.rebuild(gbci);
+
+        assertThat(status(id)).isEqualTo("OBSERVED");
+        assertThat(note(id)).startsWith(PriceRefutation.NOTE_MARK + " — 주식수");
+        assertThat(factorBefore(gbci)).as("적용 안 됨").isEqualByComparingTo("1");
+    }
+
+    @Test
+    @DisplayName("대조군 — 주식수가 배수만큼 늘었으면 가격이 1에 가까워도 적용한다(CBSH 2023-12-01 5% 주식배당 꼴)")
+    void sharesConfirmTheEvent() {
+        long cbsh = stock("US", "CBSH");
+        noisyHistory(cbsh, "48.86");
+        bar(cbsh, EX, "49.74", 500_000);
+        steadyFilings(cbsh, "100000000");
+        filing(cbsh, 2023, "Q2", LocalDate.of(2023, 6, 30), LocalDate.of(2023, 8, 4), "110000000");
+        long id = approved(cbsh, "BONUS_ISSUE", "1.1");
+
+        recalculator.rebuild(cbsh);
+
+        assertThat(status(id)).isEqualTo("APPLIED");
+    }
+
+    @Test
+    @DisplayName("대조군 — 사건 없는 판 쌍이 8개 미만이면 주식수 렌즈는 말하지 않고 적용한다")
+    void sharesStaySilentWithoutEnoughHistory() {
+        long thin = stock("US", "THIN");
+        noisyHistory(thin, "48.86");
+        bar(thin, EX, "49.74", 500_000);
+        filing(thin, 2022, "Q4", LocalDate.of(2022, 12, 31), LocalDate.of(2023, 2, 20), "100000000");
+        filing(thin, 2023, "Q2", LocalDate.of(2023, 6, 30), LocalDate.of(2023, 8, 4), "100050000");
+        long id = approved(thin, "BONUS_ISSUE", "1.1");
+
+        recalculator.rebuild(thin);
+
+        assertThat(status(id)).isEqualTo("APPLIED");
+    }
+
+    @Test
+    @DisplayName("뒤 판이 없을 때 적용된 행은 판이 오면 다시 판정해 보류한다 — 계수가 1로 돌아가고 적용 이력은 남는다")
+    void appliedRowIsHeldWhenTheFilingArrives() {
+        long gbci = stock("US", "GBCI");
+        noisyHistory(gbci, "48.86");
+        bar(gbci, EX, "49.74", 500_000);
+        steadyFilings(gbci, "100000000");
+        long id = approved(gbci, "BONUS_ISSUE", "1.1");
+        recalculator.rebuild(gbci);
+        assertThat(status(id)).isEqualTo("APPLIED");
+
+        filing(gbci, 2023, "Q2", LocalDate.of(2023, 6, 30), LocalDate.of(2023, 8, 4), "100050000");
+        recalculator.rebuild(gbci);
+
+        assertThat(status(id)).isEqualTo("OBSERVED");
+        assertThat(jdbc.queryForObject("SELECT applied_at IS NOT NULL AND held_at IS NOT NULL FROM corporate_action WHERE id = ?",
+                Boolean.class, id)).isTrue();
+        assertThat(factorBefore(gbci)).isEqualByComparingTo("1");
+    }
+
+    @Test
+    @DisplayName("대조군 — 사건 뒤에 공시됐어도 기말이 사건 앞인 판(20-F 꼴)은 뒤 판이 아니다 · 다음 판으로 판정한다(QGEN 2024-01-30)")
+    void afterFilingMustEndAfterTheEvent() {
+        long qgen = stock("US", "QGEN");
+        noisyHistory(qgen, "48.86");
+        bar(qgen, EX, "49.74", 500_000);
+        steadyFilings(qgen, "100000000");
+        filing(qgen, 2023, "Q1", LocalDate.of(2023, 3, 31), LocalDate.of(2023, 5, 5), "100000000");
+        filing(qgen, 2023, "Q2", LocalDate.of(2023, 6, 30), LocalDate.of(2023, 8, 4), "110000000");
+        long id = approved(qgen, "BONUS_ISSUE", "1.1");
+
+        recalculator.rebuild(qgen);
+
+        assertThat(status(id)).isEqualTo("APPLIED");
+    }
+
+    @Test
+    @DisplayName("대조군 — 같은 판 키에 주식수가 둘이면(Q4·FY 겹침) 렌즈는 말하지 않는다")
+    void ambiguousFilingIsSilent() {
+        long amb = stock("US", "AMB");
+        noisyHistory(amb, "48.86");
+        bar(amb, EX, "49.74", 500_000);
+        steadyFilings(amb, "100000000");
+        filing(amb, 2023, "Q2", LocalDate.of(2023, 6, 30), LocalDate.of(2023, 8, 4), "100050000");
+        filing(amb, 2023, "FY", LocalDate.of(2023, 6, 30), LocalDate.of(2023, 8, 4), "110000000");
+        long id = approved(amb, "BONUS_ISSUE", "1.1");
+
+        recalculator.rebuild(amb);
+
+        assertThat(status(id)).isEqualTo("APPLIED");
+    }
+
+    @Test
+    @DisplayName("대조군 — 사람이 본 APPLIED 행(옛 판정의 노트 · judged_at)은 다시 판정하지 않는다")
+    void humanReviewedAppliedRowsAreNotRescreened() {
+        long noted = stock("US", "NOTED");
+        history(noted, "92.08");
+        bar(noted, EX, "92.86", 1_234_129);
+        long a = approved(noted, "BONUS_ISSUE", "1.3");
+        jdbc.update("UPDATE corporate_action SET status = 'APPLIED', applied_at = now(), note = '사람 확인' WHERE id = ?", a);
+
+        long judged = stock("US", "JUDGED");
+        history(judged, "92.08");
+        bar(judged, EX, "92.86", 1_234_129);
+        long b = approved(judged, "BONUS_ISSUE", "1.3");
+        jdbc.update("UPDATE corporate_action SET status = 'APPLIED', applied_at = now(), judged_at = now() WHERE id = ?", b);
+
+        recalculator.rebuild(noted);
+        recalculator.rebuild(judged);
+
+        assertThat(status(a)).isEqualTo("APPLIED");
+        assertThat(status(b)).isEqualTo("APPLIED");
+    }
+
+    @Test
+    @DisplayName("앞 봉 없이 적용된 행(봉 없는 후보)은 봉이 생기면 가격으로 다시 판정한다")
+    void rowAppliedWithoutBarsIsRescreenedWhenBarsArrive() {
+        long rjf = stock("US", "RJF");
+        bar(rjf, EX, "92.86", 1_234_129);
+        long id = approved(rjf, "BONUS_ISSUE", "1.3");
+        recalculator.rebuild(rjf);
+        assertThat(status(id)).isEqualTo("APPLIED");
+
+        history(rjf, "92.08");
+        recalculator.rebuild(rjf);
+
+        assertThat(status(id)).isEqualTo("OBSERVED");
+    }
+
+    @Test
+    @DisplayName("적용됐다가 보류된 행을 사람이 APPROVED하면 「승인됐는데 계수 없음」이 센다 — applied_at이 남아 있어도")
+    void reapprovedRowCountsAsWithoutCoefficient() {
+        long rjf = stock("US", "RJF");
+        bar(rjf, EX, "92.86", 1_234_129);
+        long id = approved(rjf, "BONUS_ISSUE", "1.3");
+        recalculator.rebuild(rjf);
+        history(rjf, "92.08");
+        recalculator.rebuild(rjf);
+        long before = new com.stockscreener.pipeline.batch.JobFreshnessPolicy(jdbc).approvedWithoutCoefficient();
+
+        ledger.judge(id, new CorporateActionLedger.Judgement(CorporateActionStatus.APPROVED, null, null, null, null, "사람 확인"));
+
+        assertThat(new com.stockscreener.pipeline.batch.JobFreshnessPolicy(jdbc).approvedWithoutCoefficient()).isEqualTo(before + 1);
+    }
+
+    /** 효력일 앞 약 100일을 ±3%로 번갈아 움직인다 — σ ≈ 0.03이라 비율 1.1의 k가 약 3.2로 5 아래다(GBCI 3.43). */
+    private void noisyHistory(long stockId, String lastClose) {
+        BigDecimal last = new BigDecimal(lastClose);
+        BigDecimal up = new BigDecimal("1.03");
+        int i = 0;
+        for (LocalDate d = EX.minusDays(1); d.isAfter(EX.minusDays(100)); d = d.minusDays(1)) {
+            if (d.getDayOfWeek() == DayOfWeek.SATURDAY || d.getDayOfWeek() == DayOfWeek.SUNDAY) {
+                continue;
+            }
+            BigDecimal close = i % 2 == 0 ? last : last.divide(up, 6, RoundingMode.HALF_UP);
+            bar(stockId, d, close.toPlainString(), 1_000_000);
+            i++;
+        }
+    }
+
+    /** 2020 Q1 ~ 2022 Q4 분기 판 12개 · 주식수 고정 — 사건 없는 2칸 쌍 10개. 마지막 판이 사건 앞 판이다. */
+    private void steadyFilings(long stockId, String shares) {
+        for (int year = 2020; year <= 2022; year++) {
+            for (int q = 1; q <= 4; q++) {
+                LocalDate end = LocalDate.of(year, q * 3, 1).plusMonths(1).minusDays(1);
+                filing(stockId, year, "Q" + q, end, end.plusDays(40), shares);
+            }
+        }
+    }
+
+    private void filing(long stockId, int year, String period, LocalDate periodEnd, LocalDate publishedAt, String shares) {
+        jdbc.update("""
+                INSERT INTO financial_statement
+                    (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at, currency_code, shares_outstanding)
+                VALUES (?, ?, ?, ?, ?, ?, 'USD', ?)
+                """, stockId, year, period, periodEnd.minusMonths(3), periodEnd, publishedAt, new BigDecimal(shares));
+    }
+
     private CorporateAction disclosed(String type, String ratio) {
         return new CorporateAction(EX, EX, EX, CorporateAction.Type.valueOf(type), new BigDecimal(ratio),
                 CorporateAction.DetectionSource.SOURCE_DISCLOSURE, null);

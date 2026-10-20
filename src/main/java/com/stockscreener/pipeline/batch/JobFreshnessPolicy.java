@@ -262,12 +262,16 @@ public class JobFreshnessPolicy {
      * ADR-0055의 억제에도 {@code CorporateActionJob}의 「판정 대기」 알림에도 <b>안 걸린다.</b>
      * 그리고 ADR-0049의 불변식({@code adj_close = close × adj_factor})은 원장과 계수의 관계를
      * 묻지 않는다. 그래서 이 수가 0이 아닌 것은 <b>어디에서도 안 붉는다.</b>
+     *
+     * <p>{@code applied_at}을 묻지 않는다 — 그것은 지우지 않는 이력이라, 적용됐다가 가격 반증으로 보류된 뒤 사람이 APPROVED한 행(ADR-0181)이
+     * {@code applied_at IS NULL}로는 사슬이 끊겨도 안 세진다. 넓혀서 더 세지는 것은 그 경로뿐이다 — 효력일 뒤 봉을 기다리는 미룸 행(ADR-0181)은
+     * 처음 적용 전이라 {@code applied_at}이 비어 있어 전에도 세졌다.
      */
     @Transactional(readOnly = true)
     public long approvedWithoutCoefficient() {
         Long count = jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM corporate_action
-                WHERE status = 'APPROVED' AND applied_at IS NULL
+                WHERE status = 'APPROVED'
                 """, Long.class);
         return count == null ? 0 : count;
     }

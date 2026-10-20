@@ -111,17 +111,18 @@ psql -d stock_screener -At -c "SELECT CASE
     THEN '잴 것이 없었다 — 원장이 비어 있다'
   WHEN count(*) = 0 THEN 'OK 승인된 사건이 전부 계수에 들어갔다 (원장 '
        || (SELECT count(*) FROM corporate_action) || '행)'
-  ELSE count(*) || '건이 APPROVED인데 applied_at이 비어 있다: '
+  ELSE count(*) || '건이 APPROVED로 남아 있다(계수에 안 들어갔다): '
        || string_agg(id::text, ', ')
        || ' — 그 종목의 지표는 오류 없이 틀린 값이다. 억제에도 판정 대기 알림에도 안 걸리므로 '
        || 'adjustment-rebuild만이 닫는다. 평일 14시 사슬이 돌았는지 먼저 본다.'
-  END FROM corporate_action WHERE status = 'APPROVED' AND applied_at IS NULL"
+  END FROM corporate_action WHERE status = 'APPROVED'"
 ```
 
 **이 전제가 이 결정의 핵심을 잰다.** ADR-0049의 불변식(`adj_close = close × adj_factor`)도 ·
 원장이 `APPROVED`인 것도 · 재실행 0행도 **이 어긋남을 못 본다**. 그리고 이 상태는 실제로
 있었다 — 2026-09-01 첫 실행이 셀트리온과 RUSHB를 `APPROVED`로 넣었고, 재구축을 이어 돌리기
-전까지 계수는 1이었다.
+전까지 계수는 1이었다. **`applied_at`은 술어에 안 건다**(2026-10-20) — 지우지 않는 이력이라 적용 → 가격 반증 보류 → 사람 APPROVED 행이
+빠진다(ADR-0181 · `JobFreshnessPolicy.approvedWithoutCoefficient`와 같은 술어).
 
 ```premise 스케줄러 실행이 실제로 발화하고 있다
 psql -d stock_screener -At -c "WITH s AS (

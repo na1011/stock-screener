@@ -74,18 +74,21 @@ public class CorporateActionLedger {
     private final PriceRefutation refutation;
 
     /**
-     * 적용 직전 가격 반증(ADR-0181 · {@link PriceRefutation}) — 미국 소스 공시의 APPROVED 사건 중 가격이 반박하는 것은 OBSERVED로 돌리고,
-     * 효력일 뒤 봉이 아직 없는 것은 이번 판에 빼서 APPROVED로 둔다. 재구축과 같은 트랜잭션에서 부른다.
+     * 적용 직전 가격 반증(ADR-0181 · {@link PriceRefutation}) — 미국 소스 공시 중 사람이 안 본 APPROVED · APPLIED 사건을 가격(과 k &lt; 5면
+     * 주식수)이 반박하면 OBSERVED로 돌리고, 효력일 뒤 봉이 아직 없는 APPROVED는 이번 판에 빼서 APPROVED로 둔다. 재구축과 같은 트랜잭션에서 부른다 —
+     * 적용됐던 행이 빠지면 그 재구축이 계수를 다시 짓는다.
      */
     public List<Entry> screenBeforeApplying(long stockId, List<Entry> events) {
         return refutation.screen(stockId, events, this::hold);
     }
 
+    /** {@code applied_at}은 지우지 않는다 — 「한때 적용됐었다」는 이력이다({@link #judge}와 같은 판단). */
     private void hold(long id, String note) {
         int updated = jdbcTemplate.update("""
                 UPDATE corporate_action SET status = ?, held_at = now(), updated_at = now(), note = coalesce(note || ' · ', '') || ?
-                WHERE id = ? AND status = ?
-                """, CorporateActionStatus.OBSERVED.name(), note, id, CorporateActionStatus.APPROVED.name());
+                WHERE id = ? AND status IN (?, ?)
+                """, CorporateActionStatus.OBSERVED.name(), note, id, CorporateActionStatus.APPROVED.name(),
+                CorporateActionStatus.APPLIED.name());
         if (updated > 0) {
             log.warn("소스 공시를 가격이 반박해 적용하지 않고 판정으로 돌렸다. id={} {}", id, note);
         }
