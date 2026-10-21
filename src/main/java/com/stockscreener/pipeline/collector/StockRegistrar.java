@@ -449,6 +449,18 @@ public class StockRegistrar {
      *   <li>지금 편입은 [{@code windowStart}, 대상일]을 뺀다 — 일일 갱신의 창 콜이 받는다.</li>
      * </ul>
      *
+     * <h2>확정 재확인 구간({@link PriceGapRun#settle()})</h2>
+     * <p>같은 필요 범위에서 봉이 <b>있고</b> 마지막으로 쓴 KST 날짜가 거래일 + 1 이하인 날들이다 — 소스가 잠정값을 주던 때
+     * 한 번 쓰이고 확정값이 나온 뒤 아무도 다시 안 받은 봉이다(미국 소스는 일봉 거래량을 다음 날 뉴욕 새벽에 고친다 —
+     * {@code docs/api-spec/alpaca-bars.md}). 지금 편입의 창 안 날짜는 구멍과 같이 뺀다. 2026-10-21 운영: 미국 65행 중 26행이
+     * 소스와 달랐다(10-15 편출 17행이 6~17% 짧음 · 창 밖 현 편입 BROS 09-24 포함).
+     * <ul>
+     *   <li><b>스스로 빠진다</b> — 다시 받으면 {@code updated_at}이 오늘이 된다. MUST: 이 술어는 {@link PriceWriter}가 같은 값이어도
+     *       {@code updated_at}을 찍는 것에 기댄다. 같은 값 건너뛰기를 넣으면 같은 봉을 매일 다시 묻는다
+     *       ({@code PriceGapRunsTest}가 묶는다).</li>
+     *   <li>창 기준([창 시작, 마지막 편입일])으로 두지 않는다 — 창 밖으로 밀린 잠정 봉(MAIN 09-24 · RGTI 10-01)을 못 받는다.</li>
+     * </ul>
+     *
      * <p><b>MUST: 종목 경계를 {@code MATERIALIZED}로 고정한다.</b> 풀어 두면 하한의 상관 부분질의가
      * (종목, 날짜) 행마다 돌아 60초를 넘는다(2026-10-05 사본 실측 — 고정하면 3.5초).
      *
@@ -465,7 +477,8 @@ public class StockRegistrar {
         args.add(target);
         args.add(target);
         args.add(readWindowBars);
-        args.add(windowStart);
+        args.add(windowStart); // holes
+        args.add(windowStart); // settles
         String in = collectedMarketPlaceholders();
         return jdbcTemplate.query("""
                 WITH members AS (
@@ -534,16 +547,31 @@ public class StockRegistrar {
                     WHERE NOT (r.current_member AND c.trade_date >= ?)
                       AND NOT EXISTS (SELECT 1 FROM price_daily p
                                       WHERE p.stock_id = r.stock_id AND p.trade_date = c.trade_date)
+                ),
+                settles AS (
+                    SELECT r.stock_id, r.market_code, r.ticker, r.current_member, c.trade_date, c.seq
+                    FROM ranges r
+                    JOIN cal c ON c.market_code = r.market_code
+                              AND c.trade_date BETWEEN r.lower_ AND r.upper_
+                    JOIN price_daily p ON p.stock_id = r.stock_id AND p.trade_date = c.trade_date
+                    WHERE NOT (r.current_member AND c.trade_date >= ?)
+                      -- 크론 시각대(KST)로 센 「거래일 다음 날」 — 평일 13:30 수집이 잠정값을 받는 날이다
+                      AND CAST(p.updated_at AT TIME ZONE 'Asia/Seoul' AS date) <= c.trade_date + 1
+                ),
+                runs AS (
+                    SELECT holes.*, false AS settle FROM holes
+                    UNION ALL
+                    SELECT settles.*, true AS settle FROM settles
                 )
-                SELECT stock_id, market_code, ticker, current_member,
+                SELECT stock_id, market_code, ticker, current_member, settle,
                        min(trade_date) AS gap_from, max(trade_date) AS gap_to, count(*) AS days
-                FROM (SELECT holes.*, seq - row_number() OVER (PARTITION BY stock_id ORDER BY seq) AS grp
-                      FROM holes) h
-                GROUP BY stock_id, market_code, ticker, current_member, grp
-                ORDER BY stock_id, gap_from
+                FROM (SELECT runs.*, seq - row_number() OVER (PARTITION BY stock_id, settle ORDER BY seq) AS grp
+                      FROM runs) h
+                GROUP BY stock_id, market_code, ticker, current_member, settle, grp
+                ORDER BY stock_id, gap_from, settle
                 """.formatted(in, IN_RETENTION_WINDOW, in, in),
                 (rs, i) -> new PriceGapRun(rs.getLong("stock_id"), rs.getString("market_code"),
-                        rs.getString("ticker"), rs.getBoolean("current_member"),
+                        rs.getString("ticker"), rs.getBoolean("current_member"), rs.getBoolean("settle"),
                         rs.getObject("gap_from", LocalDate.class),
                         rs.getObject("gap_to", LocalDate.class), rs.getInt("days")),
                 args.toArray());

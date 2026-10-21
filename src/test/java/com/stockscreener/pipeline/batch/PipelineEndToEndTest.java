@@ -695,6 +695,49 @@ class PipelineEndToEndTest {
         }
     }
 
+    /**
+     * 확정 재확인 구간 — 봉이 있지만 거래일 다음 날(KST) 한 번만 쓰인 편출 종목의 봉을 다시 받는다(미국 소스는 일봉 거래량을 다음 날
+     * 뉴욕 새벽에 고친다). 정의는 {@code PriceGapRunsTest}가, 여기는 배선이다: 구멍과 따로 묻고 · 값이 바뀌고 · 지표 단계가 없고 ·
+     * note가 구멍 문장을 그대로 둔 채 「거래량 바뀜」을 덧붙이고 · 다음 실행에서 스스로 빠진다.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 편출 종목의 잠정 봉을 다시 받아 확정값으로 덮고, 다음 실행에서는 안 묻는다")
+    void dailyUpdateRecollectsProvisionalBarsOfDepartedStocks() {
+        GapFixture f = gapFixture();
+        try {
+            LocalDate provisional = LocalDate.of(2026, 7, 22);
+            jdbcTemplate.update("""
+                    UPDATE price_daily SET updated_at = TIMESTAMPTZ '2026-07-23 13:40:00+09'
+                    WHERE stock_id = ? AND trade_date = ?
+                    """, f.departed, provisional);
+
+            BatchStatus status = dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+            assertThat(status).isEqualTo(BatchStatus.SUCCESS);
+            assertThat(fakePriceSource.calls)
+                    .contains(new FakePriceDataSource.Call(f.departed, provisional, provisional),
+                            new FakePriceDataSource.Call(f.departed, f.departedHole, f.departedHole));
+            assertThat(jdbcTemplate.queryForObject("""
+                    SELECT volume FROM price_daily WHERE stock_id = ? AND trade_date = ?
+                    """, Long.class, f.departed, provisional)).isEqualTo(1_000_000L);
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM indicator_value WHERE stock_id = ?", Integer.class, f.departed))
+                    .isZero();
+            assertThat((String) latestExecution(DailyUpdateJob.JOB_NAME).get("note"))
+                    .startsWith("시세 구멍 2종목 · 2구간 중 2구간 받음")
+                    .contains("확정 재확인 1종목 · 1구간 중 1구간 받음 · 1일 · 받은 봉 1 · 거래량 바뀜 1");
+
+            fakePriceSource.calls.clear();
+            dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+            assertThat(fakePriceSource.calls)
+                    .as("다시 받은 봉은 updated_at이 오늘이라 술어에서 빠진다")
+                    .doesNotContain(new FakePriceDataSource.Call(f.departed, provisional, provisional));
+        } finally {
+            f.cleanUp();
+        }
+    }
+
     @Test
     @DisplayName("구멍 구간 콜이 실패해도 그날 창 수집과 지표는 돌고, 실패는 PRICE_GAP에 남는다")
     void gapFailureDoesNotBlockTheWindowOrIndicators() {

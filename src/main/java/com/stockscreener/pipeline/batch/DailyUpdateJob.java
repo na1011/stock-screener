@@ -446,14 +446,14 @@ public class DailyUpdateJob {
                     + "수집·계산은 정상이며 다음 실행에서 다시 시도한다.", e);
         }
 
-        String gapNote = gapTally.note(gapRunsByStock.size(), gapRuns.size());
+        String gapNote = gapTally.note(gapRuns);
         String derivedNote = derivedFailures.isEmpty() ? null : "파생층 " + derivedFailures.describe();
         return execution.finish(gapNote == null ? derivedNote
                 : derivedNote == null ? gapNote : gapNote + " · " + derivedNote);
     }
 
     /**
-     * 한 종목의 구멍 구간을 구간마다 정확히 그 범위로 받는다.
+     * 한 종목의 구멍 구간·확정 재확인 구간을 구간마다 정확히 그 범위로 받는다.
      *
      * <p>한 콜로 묶지 않는다 — 떨어진 두 구멍 사이의 멀쩡한 봉을 매일 다시 받고, 진짜 부재(정지·폐지·
      * 재사용 티커의 공백) 구간이 섞이면 그 수년치를 매일 다시 받는다. 구간이 정확하면 진짜 부재는
@@ -463,15 +463,22 @@ public class DailyUpdateJob {
             throws DataSourceException {
         long written = 0;
         for (PriceGapRun run : runs) {
+            if (run.settle()) {
+                PriceCollector.Recollected again = priceCollector.recollect(security, run.from(), run.to());
+                log.info("확정 재확인 구간을 다시 받았다. {} {} {}~{} 봉={}일 받은 봉={} 거래량 바뀜={}{}",
+                        security.marketCode(), security.ticker(), run.from(), run.to(), run.days(),
+                        again.written(), again.volumeChanged(), run.currentMember() ? "" : " (과거 편입)");
+                written += again.written();
+                tally.settle.add(run.days(), again.written(), again.volumeChanged());
+                continue;
+            }
             long rows = priceCollector.collect(security, run.from(), run.to());
             log.info("시세 구멍 구간을 받았다. {} {} {}~{} 구멍={}일 받은 봉={}{}", security.marketCode(),
                     security.ticker(), run.from(), run.to(), run.days(), rows,
                     run.currentMember() ? "" : " (과거 편입)");
             written += rows;
-            tally.runs.incrementAndGet();
-            tally.days.addAndGet(run.days());
+            tally.holes.add(run.days(), rows, 0);
         }
-        tally.bars.addAndGet(written);
         return written;
     }
 
@@ -494,17 +501,46 @@ public class DailyUpdateJob {
 
     /** 구멍 구간 수집의 집계 — 실행 기록 note 한 줄이 된다. */
     private static final class GapTally {
+        private final Counts holes = new Counts();
+        private final Counts settle = new Counts();
+
+        /**
+         * 둘 다 없으면 {@code null} — 그날 note를 비워 둔다.
+         *
+         * <p>MUST: 두 몫을 한 수로 합치지 않는다. 구멍의 「받은 봉」은 진짜 부재만 남으면 0이어야 하는 신호이고(ADR-0167 §검증),
+         * 확정 재확인은 이미 있는 봉을 다시 받아 언제나 0보다 크다 — 합치면 그 신호가 매일 가려진다. 확정 재확인에서 읽을 것은
+         * 「거래량 바뀜」이다(받은 봉 수는 소스가 고쳤는지를 말하지 않는다).
+         */
+        String note(List<PriceGapRun> planned) {
+            String hole = part(planned, false, "시세 구멍 %d종목 · %d구간 중 %d구간 받음 · %d일 · 받은 봉 %d", holes);
+            String again = part(planned, true, "확정 재확인 %d종목 · %d구간 중 %d구간 받음 · %d일 · 받은 봉 %d", settle);
+            if (again != null) {
+                again += " · 거래량 바뀜 " + settle.changed.get();
+            }
+            return hole == null ? again : again == null ? hole : hole + " · " + again;
+        }
+
+        private static String part(List<PriceGapRun> planned, boolean settle, String format, Counts counts) {
+            List<PriceGapRun> runs = planned.stream().filter(run -> run.settle() == settle).toList();
+            if (runs.isEmpty()) {
+                return null;
+            }
+            long stocks = runs.stream().map(PriceGapRun::stockId).distinct().count();
+            return format.formatted(stocks, runs.size(), counts.runs.get(), counts.days.get(), counts.bars.get());
+        }
+    }
+
+    private static final class Counts {
         private final AtomicLong runs = new AtomicLong();
         private final AtomicLong days = new AtomicLong();
         private final AtomicLong bars = new AtomicLong();
+        private final AtomicLong changed = new AtomicLong();
 
-        /** 구멍이 없으면 {@code null} — 그날 note를 비워 둔다. */
-        String note(int stocks, int plannedRuns) {
-            if (plannedRuns == 0) {
-                return null;
-            }
-            return "시세 구멍 %d종목 · %d구간 중 %d구간 받음 · %d일 · 받은 봉 %d"
-                    .formatted(stocks, plannedRuns, runs.get(), days.get(), bars.get());
+        void add(int runDays, long received, int volumeChanged) {
+            runs.incrementAndGet();
+            days.addAndGet(runDays);
+            bars.addAndGet(received);
+            changed.addAndGet(volumeChanged);
         }
     }
 

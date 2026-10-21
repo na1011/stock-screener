@@ -72,6 +72,27 @@ class PriceWriterTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 같은 값을 다시 써도 updated_at을 찍는다 — 확정 재확인 구간이 이것으로 「다시 받은 봉」을 빼낸다")
+    void sameValueRewriteStillStampsUpdatedAt() {
+        List<RawPriceBar> bars = List.of(bar("2026-08-03", "100", "110", "95", "105"));
+        writer.write(stockId, bars);
+        // 거래일 다음 날 13:40 KST에 한 번 쓰이고 그 뒤 안 쓰인 봉 — StockRegistrar.priceGapRuns의 확정 재확인 대상
+        jdbcTemplate.update("UPDATE price_daily SET updated_at = TIMESTAMPTZ '2026-08-04 13:40:00+09' WHERE stock_id = ?",
+                stockId);
+
+        writer.write(stockId, bars);
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT CAST(updated_at AT TIME ZONE 'Asia/Seoul' AS date) > DATE '2026-08-04'
+                FROM price_daily WHERE stock_id = ?
+                """, Boolean.class, stockId))
+                .as("같은 값 건너뛰기가 들어오면 확정 재확인이 같은 봉을 매일 다시 묻는다")
+                .isTrue();
+        assertThat(writer.volumes(stockId, LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-05")))
+                .containsOnlyKeys(LocalDate.parse("2026-08-03"));
+    }
+
+    @Test
     @DisplayName("재수집 시 값이 갱신된다 — 소스가 뒤늦게 정정한 값이 반영되어야 한다")
     void updatesOnConflict() {
         writer.write(stockId, List.of(bar("2026-08-03", "100", "110", "95", "105")));

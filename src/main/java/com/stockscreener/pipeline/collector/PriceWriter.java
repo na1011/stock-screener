@@ -10,8 +10,11 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Types;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 수집한 시세를 {@code price_daily}에 쓴다. 벤더를 모른다.
@@ -184,6 +187,24 @@ public class PriceWriter {
             }
         }
         return written;
+    }
+
+    /**
+     * 한 종목의 [{@code from}, {@code to}] 저장 거래량 — 확정 재확인이 받기 전후를 대조한다({@link PriceCollector#recollect}).
+     *
+     * <p>{@link #write}의 반환은 <b>쓴 행 수</b>지 바뀐 행 수가 아니다 — UPSERT는 같은 값이어도 행을 쓰고 {@code updated_at}을
+     * 찍는다. MUST: 그 성질을 바꾸지 않는다. 확정 재확인 구간({@link StockRegistrar#priceGapRuns})이 「거래일 다음 날 뒤로
+     * 다시 안 쓰인 봉」을 {@code updated_at}으로 고르므로, 같은 값 건너뛰기를 넣으면 같은 봉을 매일 다시 묻는다.
+     */
+    public Map<LocalDate, Long> volumes(long stockId, LocalDate from, LocalDate to) {
+        Map<LocalDate, Long> volumes = new HashMap<>();
+        jdbcTemplate.query("""
+                SELECT trade_date, volume FROM price_daily
+                WHERE stock_id = ? AND trade_date BETWEEN ? AND ?
+                """, rs -> {
+            volumes.put(rs.getObject("trade_date", LocalDate.class), rs.getLong("volume"));
+        }, stockId, from, to);
+        return volumes;
     }
 
     /** 그 값이 {@code price_daily}에 실제로 저장될 모습. {@link #PRICE_SCALE} 참조. */

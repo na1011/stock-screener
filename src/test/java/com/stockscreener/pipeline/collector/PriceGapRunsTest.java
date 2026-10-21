@@ -193,6 +193,78 @@ class PriceGapRunsTest {
         assertThat(runs()).isEmpty();
     }
 
+    @Test
+    @DisplayName("IMPORTANT — 편출 종목의 마지막 편입일 봉이 거래일 다음 날 한 번만 쓰였으면 확정 재확인으로 낸다 — 잠정 거래량이 영구로 남던 자리")
+    void departedLastBarWrittenOnlyTheNextDayIsSettled() {
+        long id = stock("900015");
+        membership(id, d(16), d(24));
+        bars(id, 1, 23);
+        writtenOn(id, 23, 1);
+
+        assertThat(runs()).extracting(PriceGapRun::stockId, PriceGapRun::currentMember, PriceGapRun::settle,
+                        PriceGapRun::from, PriceGapRun::to, PriceGapRun::days)
+                .containsExactly(tuple(id, false, true, d(23), d(23), 1));
+    }
+
+    @Test
+    @DisplayName("확정값이 나온 뒤(거래일 + 2일) 다시 쓰인 봉은 안 낸다 — 다시 받으면 스스로 빠진다")
+    void barRewrittenAfterTheNextDayIsNotSettled() {
+        long id = stock("900016");
+        membership(id, d(16), d(24));
+        bars(id, 1, 23);
+        writtenOn(id, 23, 2);
+
+        assertThat(runs()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("IMPORTANT — 지금 편입은 창 밖 날짜만 낸다 — 창 안은 창 콜이 매일 다시 받는다(BROS형)")
+    void currentMemberIsSettledOnlyBeforeTheWindow() {
+        long id = stock("900017");
+        membership(id, d(1), null);
+        bars(id, 1, 30);
+        writtenOn(id, 20, 1);
+        writtenOn(id, 28, 1);
+
+        assertThat(runs()).extracting(PriceGapRun::currentMember, PriceGapRun::settle,
+                        PriceGapRun::from, PriceGapRun::to)
+                .containsExactly(tuple(true, true, d(20), d(20)));
+    }
+
+    @Test
+    @DisplayName("이웃한 두 날은 한 구간이고, 구멍과 확정 재확인은 따로 낸다 — 구멍의 「받은 봉 0」 신호를 안 섞는다")
+    void adjacentSettleDaysJoinAndHolesStaySeparate() {
+        long id = stock("900018");
+        membership(id, d(16), d(25));
+        bars(id, 1, 20);
+        bars(id, 22, 24);
+        writtenOn(id, 23, 1);
+        writtenOn(id, 24, 1);
+
+        assertThat(runs()).extracting(PriceGapRun::settle, PriceGapRun::from, PriceGapRun::to, PriceGapRun::days)
+                .containsExactly(tuple(false, d(21), d(21), 1), tuple(true, d(23), d(24), 2));
+    }
+
+    @Test
+    @DisplayName("대상일 뒤 날짜는 안 낸다 — 과거 대상일로 손 실행해도 그날 뒤를 묻지 않는다")
+    void settleStopsAtTheTarget() {
+        long id = stock("900019");
+        membership(id, d(16), d(30));
+        bars(id, 1, 29);
+        writtenOn(id, 29, 1);
+
+        assertThat(registrar.priceGapRuns(d(28), d(25), READ_BARS).stream()
+                .filter(run -> run.stockId() == id).toList()).isEmpty();
+    }
+
+    /** 그 봉을 거래일 {@code daysAfter}일 뒤 13:40 KST에 마지막으로 쓴 것으로 둔다(평일 13:30 수집). */
+    private void writtenOn(long stockId, int day, int daysAfter) {
+        jdbcTemplate.update("""
+                UPDATE price_daily SET updated_at = (CAST(? AS date) + ? + TIME '13:40') AT TIME ZONE 'Asia/Seoul'
+                WHERE stock_id = ? AND trade_date = ?
+                """, d(day), daysAfter, stockId, d(day));
+    }
+
     private List<PriceGapRun> runs() {
         return registrar.priceGapRuns(d(30), d(27), READ_BARS).stream()
                 .filter(run -> run.ticker().startsWith("9000") || run.ticker().startsWith("9001"))

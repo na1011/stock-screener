@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 한 종목의 시세를 수집해 저장한다.
@@ -92,5 +93,33 @@ public class PriceCollector {
                     security.stockId(), from, to);
         }
         return written;
+    }
+
+    /**
+     * 이미 받은 봉을 다시 받는다 — 확정 재확인 구간({@link PriceGapRun#settle()}). {@link #collect}와 같은 쓰기에 받기 전후의 거래량
+     * 대조를 더한다.
+     *
+     * <p>쓴 행 수는 언제나 그 구간의 봉 수라 「소스가 고쳤는가」를 말하지 않는다({@link PriceWriter#volumes}). 바뀐 봉 수가 잠정값이
+     * 얼마나 남아 있었는지를 0콜로 보는 유일한 자리다.
+     */
+    public Recollected recollect(SecurityRef security, LocalDate from, LocalDate to)
+            throws DataSourceException {
+        Map<LocalDate, Long> before = writer.volumes(security.stockId(), from, to);
+        long written = collect(security, from, to);
+        Map<LocalDate, Long> after = writer.volumes(security.stockId(), from, to);
+        int changed = 0;
+        for (Map.Entry<LocalDate, Long> entry : before.entrySet()) {
+            if (!entry.getValue().equals(after.get(entry.getKey()))) {
+                changed++;
+            }
+        }
+        return new Recollected(written, changed);
+    }
+
+    /**
+     * @param written       쓴 행 수
+     * @param volumeChanged 받기 전에 있던 봉 중 거래량이 달라진 봉 수
+     */
+    public record Recollected(long written, int volumeChanged) {
     }
 }
