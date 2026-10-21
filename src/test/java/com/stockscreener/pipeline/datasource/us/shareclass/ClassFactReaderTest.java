@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -115,5 +117,66 @@ class ClassFactReaderTest {
         ClassFacts f = ClassFactReader.read(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)), 42, "test").facts();
 
         assertThat(f.isClassAnchor()).isTrue();
+    }
+
+    /** 저장 판독(COVER)으로 상장 판정 픽스처를 읽는다 — 같은 표지를 두 판독이 어떻게 받는지 맞댄다. */
+    private static ClassFacts stored(String name, long cik) throws Exception {
+        try (var in = ClassFactReaderTest.class.getResourceAsStream("/fixtures/sec-edgar/listing/" + name)) {
+            return ClassFactReader.read(in, cik, name).facts();
+        }
+    }
+
+    @Test
+    @DisplayName("저장 표지의 기호는 거래소 축 꼴도 받아 상장 클래스로 잇는다 — 같은 기호로 시작하는 우선주 줄이 있어도(Two Harbors)")
+    void exchangeAxisCoverMapsTheListedClass() throws Exception {
+        ClassFacts two = stored("two-10q-2026-07-29-cover.xml", 1465740);
+
+        assertThat(two.coverOf(ClassFactReader.TRADING_SYMBOL))
+                .containsEntry("us-gaap:CommonClassAMember", "TWO")
+                .containsEntry("us-gaap:SeriesAPreferredStockMember", "TWO PRA");
+        assertThat(two.coverOf(ClassFactReader.SECURITY_TITLE))
+                .containsEntry("us-gaap:CommonClassAMember", "Common Stock, par value $0.01 per share");
+        assertThat(DenominatorJudge.listedMember("TWO", two,
+                List.of("us-gaap:CommonClassAMember", "us-gaap:SeriesAPreferredStockMember")))
+                .containsExactly("us-gaap:CommonClassAMember", "direct");
+    }
+
+    @Test
+    @DisplayName("이중 상장 표지(클래스 축 없이 거래소 축 + 보통주 구성요소 축)는 한 증권의 기호를 잇고 이름은 첫 값이다(SunOpta)")
+    void dualListedCoverJoinsSymbols() throws Exception {
+        ClassFacts stkl = stored("stkl-10k-2026-03-04-cover.xml", 351834);
+
+        assertThat(stkl.coverOf(ClassFactReader.TRADING_SYMBOL)).containsExactly(Map.entry(ClassFacts.AXISLESS, "STKL, SOY"));
+        assertThat(stkl.coverOf(ClassFactReader.SECURITY_TITLE)).containsExactly(Map.entry(ClassFacts.AXISLESS, "Common Shares"));
+        assertThat(DenominatorJudge.splitSymbols(stkl.coverOf(ClassFactReader.TRADING_SYMBOL).get(ClassFacts.AXISLESS)))
+                .containsExactly("STKL", "SOY");
+    }
+
+    @Test
+    @DisplayName("넓힌 꼴은 축 없는 값을 못 덮고, 표지 주식수는 넓히지 않는다 · 다른 자본 구성요소(유닛)는 안 받는다")
+    void widenedCoverOnlyFillsGaps() throws Exception {
+        String ex = """
+                <xbrli:context id="%s"><xbrli:entity><xbrli:identifier scheme="x">0000000042</xbrli:identifier>
+                  <xbrli:segment>%s</xbrli:segment></xbrli:entity><xbrli:period><xbrli:instant>2026-04-30</xbrli:instant></xbrli:period></xbrli:context>
+                """;
+        String member = "<xbrldi:explicitMember dimension=\"%s\">%s</xbrldi:explicitMember>";
+        String body = ex.formatted("aX", member.formatted("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonClassAMember")
+                + member.formatted("dei:EntityListingsExchangeAxis", "exch:XNYS"))
+                + ex.formatted("bX", member.formatted("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonClassBMember")
+                + member.formatted("dei:EntityListingsExchangeAxis", "exch:XNYS"))
+                + ex.formatted("units", member.formatted("us-gaap:StatementEquityComponentsAxis", "us-gaap:UnitsMember"))
+                + """
+                <dei:TradingSymbol contextRef="aX">WRONG</dei:TradingSymbol>
+                <dei:TradingSymbol contextRef="cA">AAA</dei:TradingSymbol>
+                <dei:TradingSymbol contextRef="bX">BBB</dei:TradingSymbol>
+                <dei:TradingSymbol contextRef="units">AAA.U</dei:TradingSymbol>
+                <dei:EntityCommonStockSharesOutstanding contextRef="bX" unitRef="s" decimals="INF">5</dei:EntityCommonStockSharesOutstanding>
+                """;
+
+        ClassFacts f = read(body).facts();
+
+        assertThat(f.coverOf(ClassFactReader.TRADING_SYMBOL)).containsExactly(
+                Map.entry("us-gaap:CommonClassAMember", "AAA"), Map.entry("us-gaap:CommonClassBMember", "BBB"));
+        assertThat(f.coverOf(ClassFactReader.SHARES_OUTSTANDING)).as("표지 주식수의 뜻은 그대로다").isEmpty();
     }
 }

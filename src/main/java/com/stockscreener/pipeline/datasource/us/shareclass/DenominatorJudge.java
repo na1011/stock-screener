@@ -1,10 +1,13 @@
 package com.stockscreener.pipeline.datasource.us.shareclass;
 
+import com.stockscreener.pipeline.datasource.us.listing.ClassLines;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -53,6 +56,10 @@ public final class DenominatorJudge {
     private static final Pattern NON_ALNUM = Pattern.compile("[^A-Z0-9]");
     private static final Pattern SYMBOL_SPLIT = Pattern.compile("[,\\s/]+");
     private static final Pattern CLASS_LETTER = Pattern.compile("Class([A-Z]\\d?)");
+    /** 구성원 이름에 든 클래스 글자(「ClassAAndClassB」 → A · B) — 소문자가 이으면 낱말이다(「Classes」). */
+    private static final Pattern CLASS_LETTERS = Pattern.compile("Class([A-Z]\\d?)(?![a-z])");
+    /** 「ClassAAndB」 · 「ClassAOrB」 — 둘째 글자에 {@code Class}가 안 붙은 묶음. */
+    private static final Pattern CLASS_PAIR = Pattern.compile("Class[A-Z]\\d?(?:And|Or)[A-Z]\\d?(?![a-z])");
     private static final Pattern TITLE_CLASS = Pattern.compile("Class\\s+([A-Z])(?:-?(\\d))?\\b");
     private static final Pattern COMMON = Pattern.compile("common", Pattern.CASE_INSENSITIVE);
     private static final Set<String> TOKEN_STOP = Set.of("member", "stock", "shares", "share", "par", "value", "per", "the",
@@ -366,7 +373,7 @@ public final class DenominatorJudge {
         Map<String, String> sym = f.coverOf(TRADING_SYMBOL);
         Map<String, String> ttl = f.coverOf(SECURITY_TITLE);
         List<String> own = sym.entrySet().stream().filter(x -> nk(x.getValue()).equals(nk(ticker))).map(Map.Entry::getKey).toList();
-        if (own.size() == 1 && ttl.get(own.get(0)) != null) {
+        if (own.size() == 1 && ttl.get(own.get(0)) != null && !ClassLines.isNotCommon(ttl.get(own.get(0)))) {
             Set<String> want = tokens(ttl.get(own.get(0)));
             List<String> c = members.stream().filter(k -> tokens(ClassFacts.local(k)).equals(want)).toList();
             if (c.size() == 1) {
@@ -380,13 +387,27 @@ public final class DenominatorJudge {
         Map<String, String> sym = f.coverOf(TRADING_SYMBOL);
         Map<String, String> ttl = f.coverOf(SECURITY_TITLE);
         String key = nk(ticker);
+        // 기호가 통째로 같은 줄이 먼저다 — 표지는 워런트 · 유닛 · 우선주 · 사채 줄도 같은 기호로 시작해 싣는다(「HIMS WS」 · 「TWO PRA」 ·
+        // 「JEF 27A」). 쪼개 담기만 보면 그 줄들이 다 맞아 「하나가 아님」이 된다. 통째로 같은 줄이 없을 때만 한 사실에 든 여러
+        // 기호(「GOOGL, GOOG」)를 쪼개 본다 — 상장 판정({@code ListingCover.lineFor})의 「통째로 같은 줄 먼저」와 같다(거래소 · 보통주로
+        // 고르는 것은 그쪽만 한다).
         List<String> hits = sym.entrySet().stream()
-                .filter(x -> !AXISLESS.equals(x.getKey()) && splitSymbols(x.getValue()).contains(key))
+                .filter(x -> !AXISLESS.equals(x.getKey()) && nk(x.getValue()).equals(key))
                 .map(Map.Entry::getKey).toList();
+        if (hits.isEmpty()) {
+            hits = sym.entrySet().stream()
+                    .filter(x -> !AXISLESS.equals(x.getKey()) && splitSymbols(x.getValue()).contains(key))
+                    .map(Map.Entry::getKey).toList();
+        }
         String title = null;
         if (!hits.isEmpty()) {
             if (hits.size() == 1) {
                 String m = hits.get(0);
+                if (ttl.get(m) != null && ClassLines.isNotCommon(ttl.get(m))) {
+                    // 그 기호의 줄이 워런트 · 권리 · 유닛(「…and one-half of one redeemable warrant」) · 우선주다 — 그 줄 이름에 든
+                    // 「Class A」는 그것이 바뀌는 보통주를 말할 뿐, 그 기호가 보통주인 것이 아니다(SPAC 유닛·워런트 티커 · 클래스 스윕 2026-10-21).
+                    return new String[]{null, "not-common"};
+                }
                 if (members.contains(m)) {
                     return new String[]{m, "direct"};
                 }
@@ -401,6 +422,9 @@ public final class DenominatorJudge {
             }
         } else if (splitSymbols(sym.getOrDefault(AXISLESS, "")).contains(key)) {
             title = ttl.get(AXISLESS);
+            if (title != null && ClassLines.isNotCommon(title)) {
+                return new String[]{null, "not-common"};
+            }
         }
         if (title != null) {
             Matcher t = TITLE_CLASS.matcher(title);
@@ -420,10 +444,23 @@ public final class DenominatorJudge {
         return new String[]{null, "unmapped"};
     }
 
+    private static boolean namesSeveralClasses(String local) {
+        return CLASS_PAIR.matcher(local).find()
+                || CLASS_LETTERS.matcher(local).results().map(r -> r.group(1)).distinct().count() > 1;
+    }
+
     private static List<String> byLetter(List<String> members, String letter) {
-        Pattern a = Pattern.compile("Class" + Pattern.quote(letter) + "(?![a-z0-9])");
-        Pattern b = Pattern.compile("Class" + Pattern.quote(letter) + "(Member|Common|NonVoting|Ordinary|Shares|Stock)");
-        return members.stream().filter(k -> a.matcher(ClassFacts.local(k)).find() || b.matcher(ClassFacts.local(k)).find()).toList();
+        // 글자는 대소문자를 안 가린다 — 구성원 이름을 「CommonClassaSubjectToRedemptionMember」로 짓는 발행사가 있다(ALDF · 클래스 스윕
+        // 2026-10-21). 뒤에 소문자가 이으면 낱말이라(「Classes」) 글자가 아니다.
+        String l = "(?:" + Pattern.quote(letter.toUpperCase(Locale.ROOT)) + "|" + Pattern.quote(letter.toLowerCase(Locale.ROOT)) + ")";
+        Pattern a = Pattern.compile("Class" + l + "(?![a-z0-9])");
+        Pattern b = Pattern.compile("Class" + l + "(Member|Common|NonVoting|Ordinary|Shares|Stock)");
+        // 여러 클래스를 묶은 구성원은 어느 한 클래스의 줄이 아니다 — 글자로 잇지 않는다. SPAC은 상장된 상환 Class A 옆에
+        // 「NonredeemableClassAAndClassB」를 싣고, 그 기간에 묶음만 있으면 상장 클래스가 비상환 묶음으로 갔다(클래스 스윕 2026-10-21:
+        // 그렇게 이어진 행 156 · 같은 꼴의 DELL 「CommonClassA…CAndCommonClassD」 한 기간도 함께 빠진다).
+        return members.stream().filter(k -> a.matcher(ClassFacts.local(k)).find() || b.matcher(ClassFacts.local(k)).find())
+                .filter(k -> !namesSeveralClasses(ClassFacts.local(k)))
+                .toList();
     }
 
     /** 표지 기호 사실 하나에 든 기호들(「GOOGL, GOOG」 꼴) — 각각 {@link #nk}로 맞춘다. 상장 판정({@code listing})도 같은 규칙을 쓴다. */

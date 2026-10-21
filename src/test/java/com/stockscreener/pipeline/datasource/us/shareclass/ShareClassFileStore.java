@@ -164,6 +164,12 @@ public class ShareClassFileStore extends ShareClassStore {
         return out;
     }
 
+    /** 지금 읽기 판이 아닌 인스턴스 행의 수 — 유도는 이 행을 없는 것으로 친다({@link #okFacts}). */
+    public long staleFactRows() {
+        return facts().values().stream().flatMap(byAccession -> byAccession.values().stream())
+                .filter(row -> row.readerVersion() != ClassFactReader.READER_VERSION).count();
+    }
+
     /** 종목 ID → 재료 파일. 처음 부를 때 폴더를 한 번 읽는다(반쪽 파일 {@code .tmp}는 안 읽는다). */
     private Map<Long, Path> inputs() {
         if (inputFiles == null) {

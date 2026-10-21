@@ -112,4 +112,57 @@ class DenominatorJudgeTest {
 
         assertThat(mapped).containsExactly("jef:VotingCommonStockMember", "title-tokens");
     }
+
+    @Test
+    @DisplayName("기호가 통째로 같은 줄이 먼저다 — 워런트 줄 「HIMS WS」가 같은 기호로 시작해도 하나로 잇는다")
+    void wholeSymbolBeforeSplitSymbols() {
+        ClassFacts f = facts(Map.of(), Map.of(), new LinkedHashMap<>(Map.of(
+                        "hims:ClassACommonMember", "HIMS", "us-gaap:WarrantMember", "HIMS WS")), Map.of());
+
+        assertThat(DenominatorJudge.listedMember("HIMS", f, List.of("us-gaap:CommonClassAMember", "us-gaap:CommonClassVMember")))
+                .containsExactly("us-gaap:CommonClassAMember", "direct-letter");
+    }
+
+    @Test
+    @DisplayName("여러 클래스를 묶은 구성원은 글자로 잇지 않는다 — SPAC은 상환 Class A로 가고, 묶음뿐이면 잇지 않는다")
+    void groupedMembersAreNotALetterLine() {
+        ClassFacts spac = facts(Map.of(), Map.of(), Map.of("x:ClassAOrdinarySharesMember", "ZEO"), Map.of());
+        ClassFacts dell = facts(Map.of(), Map.of(), Map.of("us-gaap:CommonClassCMember", "DELL"), Map.of());
+
+        assertThat(DenominatorJudge.listedMember("ZEO", spac,
+                List.of("x:RedeemableClassAOrdinarySharesMember", "x:NonredeemableClassAAndClassBOrdinarySharesMember")))
+                .containsExactly("x:RedeemableClassAOrdinarySharesMember", "direct-letter");
+        assertThat(DenominatorJudge.listedMember("ZEO", spac, List.of("x:NonRedeemableClassAAndBOrdinarySharesMember"))[0]).isNull();
+        assertThat(DenominatorJudge.listedMember("DELL", dell,
+                List.of("dell:CommonClassVMember", "dell:CommonClassACommonClassBCommonClassCAndCommonClassDMember"))[0]).isNull();
+    }
+
+    @Test
+    @DisplayName("구성원 이름의 소문자 클래스 글자도 그 클래스다(ALDF 「CommonClassaSubjectToRedemption」) · 「Classes」는 글자가 아니다")
+    void lowercaseClassLetterInMemberName() {
+        ClassFacts f = facts(Map.of(), Map.of(), Map.of(AXISLESS, "ALDF"), Map.of(AXISLESS, "Class A Ordinary Share"));
+
+        assertThat(DenominatorJudge.listedMember("ALDF", f,
+                List.of("aldf:CommonClassaSubjectToRedemptionMember", "aldf:CommonClassbMember", "x:ClassesOfStockMember")))
+                .containsExactly("aldf:CommonClassaSubjectToRedemptionMember", "title");
+    }
+
+    @Test
+    @DisplayName("기호의 줄이 유닛 · 워런트 · 권리면 그 이름의 「Class A」로 보통주 구성원에 잇지 않는다")
+    void unitAndWarrantLinesAreNotMapped() {
+        ClassFacts f = facts(Map.of(), Map.of(), Map.of(
+                        "x:UnitsEachConsistingOfOneClassAOrdinaryShareAndOneHalfOfOneRedeemableWarrantMember", "BACCU",
+                        "x:ClassAOrdinarySharesMember", "BACC",
+                        "x:RedeemableWarrantsMember", "BACCW"),
+                Map.of("x:UnitsEachConsistingOfOneClassAOrdinaryShareAndOneHalfOfOneRedeemableWarrantMember",
+                        "Units, each consisting of one Class A ordinary share and one-half of one redeemable warrant",
+                        "x:ClassAOrdinarySharesMember", "Class A ordinary shares, par value $0.0001 per share",
+                        "x:RedeemableWarrantsMember", "Redeemable warrants, each whole warrant exercisable for one Class A ordinary share"));
+        List<String> members = List.of("x:RedeemableClassAOrdinarySharesMember", "x:ClassBOrdinarySharesMember");
+
+        assertThat(DenominatorJudge.listedMember("BACCU", f, members)).containsExactly(null, "not-common");
+        assertThat(DenominatorJudge.listedMember("BACCW", f, members)).containsExactly(null, "not-common");
+        assertThat(DenominatorJudge.listedMember("BACC", f, members))
+                .containsExactly("x:RedeemableClassAOrdinarySharesMember", "direct-letter");
+    }
 }

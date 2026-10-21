@@ -12,6 +12,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,6 +31,8 @@ import java.util.Set;
  *       자본 구성요소 축만 단 맥락은 안 받는다 — {@code UHAL}에서 그것은 의결권 보통주 하나다.</li>
  *   <li>표지 주식수의 {@code SubsequentEventTypeAxis}는 받는다 — 표지는 원래 기말 뒤 시점 값이다({@code F}·{@code BIO}). 그 축
  *       없는 값이 있으면 그것이 먼저다.</li>
+ *   <li>표지 기호 · 증권 이름은 거래소 축과 클래스 축 없는 보통주 구성요소 축도 받는다 — 같은 줄을 거래소나 증권 종류로 한 번 더 이름
+ *       단 것이다. 그 축 없는 값이 있으면 그것이 먼저다.</li>
  *   <li>재작성·연결실체·법인 축은 다른 판·다른 실체라 버린다.</li>
  * </ul>
  *
@@ -39,9 +42,10 @@ public final class ClassFactReader {
 
     /**
      * 저장 팩트({@code sec_filing_class_fact.facts})를 정하는 읽기 규칙의 판 — 이 파일과 {@link ClassFacts}의 저장 형태를 바꾸면
-     * 올린다. 판이 다른 행은 없는 것으로 치고 다음 받기가 다시 받는다.
+     * 올린다. 판이 다른 행은 없는 것으로 치고 다음 받기가 다시 받는다. 2 — 표지 기호 · 증권 이름이 거래소 축 · 보통주 구성요소 축 꼴도
+     * 받는다(2026-10-21).
      */
-    public static final int READER_VERSION = 1;
+    public static final int READER_VERSION = 2;
 
     public static final String SHARES_OUTSTANDING = "EntityCommonStockSharesOutstanding";
     public static final String TRADING_SYMBOL = "TradingSymbol";
@@ -108,6 +112,8 @@ public final class ClassFactReader {
         Map<String, Context> contexts = new HashMap<>();
         Map<String, LinkedHashMap<ClassFacts.MemberPeriod, ClassFacts.Measured>> durations = new LinkedHashMap<>();
         Map<String, LinkedHashMap<String, String>> cover = new LinkedHashMap<>();
+        // 저장 표지의 넓힌 꼴(거래소 축 · 보통주 구성요소 축)로만 온 기호 · 증권 이름 — 구성원마다 문서 순서로 모은다
+        Map<String, LinkedHashMap<String, LinkedHashSet<String>>> widened = new LinkedHashMap<>();
         List<Late> late = new ArrayList<>();
         List<Raw> raws = new ArrayList<>();
         String documentType = null;
@@ -176,6 +182,22 @@ public final class ClassFactReader {
                     extra.remove(EQUITY_AXIS);
                 }
             }
+            if (coverConcepts == COVER && (TRADING_SYMBOL.equals(local) || SECURITY_TITLE.equals(local)) && !extra.isEmpty()) {
+                // 저장 표지의 기호 · 증권 이름도 상장 판정 표지와 같은 두 꼴을 받는다 — 버리면 그 등록인의 상장 클래스 매핑이 「unmapped」로
+                // 떨어진다(Two Harbors · CenterPoint · Molson Coors 10-Q는 표지 줄마다 거래소 축을, SunOpta · Algonquin은 클래스 축 없이 보통주
+                // 구성요소 축을 단다 · 클래스 스윕 2026-10-21). 구성원 열쇠는 클래스 축 그대로다(거래소를 안 붙인다) — 저장 팩트를 읽는 쪽은
+                // 클래스 구성원으로 EPS와 잇는다. 표지 주식수는 넓히지 않는다(그 뜻을 읽는 소비자가 넷이다).
+                Set<String> rest = new java.util.HashSet<>(extra);
+                rest.remove(LISTINGS_EXCHANGE_AXIS);
+                if (rest.equals(Set.of(EQUITY_AXIS)) && c.dims().get(EQUITY_AXIS).endsWith(":CommonStockMember")) {
+                    rest.remove(EQUITY_AXIS);
+                }
+                if (rest.isEmpty()) {
+                    widened.computeIfAbsent(local, k -> new LinkedHashMap<>()).computeIfAbsent(member, k -> new LinkedHashSet<>())
+                            .add(text);
+                }
+                continue;
+            }
             if (coverConcepts.contains(local)) {
                 if (!extra.isEmpty() && !(SHARES_OUTSTANDING.equals(local) && extra.equals(Set.of(SUBSEQUENT_AXIS)))) {
                     continue;
@@ -217,6 +239,11 @@ public final class ClassFactReader {
                         .putIfAbsent(new ClassFacts.MemberPeriod(l.member(), l.period()), l.measured());
             }
         }
+        // 넓힌 꼴은 축 없는(클래스 축만 단) 사실이 없는 구성원만 채운다. 이중 상장(SunOpta STKL · NASDAQ과 SOY · TSX)은 한 증권의 기호가
+        // 거래소마다 따로 오므로 기호는 「GOOGL, GOOG」 꼴로 잇고(DenominatorJudge.splitSymbols가 쪼갠다), 증권 이름은 문서 순서 첫 값이다.
+        widened.forEach((concept, byMember) -> byMember.forEach((member, texts) ->
+                cover.computeIfAbsent(concept, k -> new LinkedHashMap<>()).putIfAbsent(member,
+                        TRADING_SYMBOL.equals(concept) ? String.join(", ", texts) : texts.iterator().next())));
         return new Result(new ClassFacts(durations, cover, documentType), unreadable);
     }
 

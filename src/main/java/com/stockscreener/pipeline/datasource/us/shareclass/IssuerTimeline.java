@@ -25,8 +25,11 @@ import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts.AXI
  */
 public final class IssuerTimeline {
 
-    /** 판정 규칙의 판 — 판정 표에 같이 적는다(어느 규칙이 낸 행인지). 규칙을 바꾸면 올린다. */
-    public static final int ENGINE_VERSION = 1;
+    /**
+     * 판정 규칙의 판 — 판정 표에 같이 적는다(어느 규칙이 낸 행인지). 규칙을 바꾸면 올린다. 2 — 상장 클래스 매핑이 통째로 같은 기호를
+     * 먼저 보고 · 보통주 아닌 줄과 여러 클래스를 묶은 구성원을 잇지 않는다(2026-10-21).
+     */
+    public static final int ENGINE_VERSION = 2;
 
     /** 단일 클래스 연속 3개월 분모 변화 간격 120~200일의 p95(§10a · {@code single5.py}). */
     static final double TAU_TWO_QUARTERS = 0.1202;

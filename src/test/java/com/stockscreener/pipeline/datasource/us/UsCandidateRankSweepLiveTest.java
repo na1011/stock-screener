@@ -12,6 +12,7 @@ import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.RateLimiter;
 import com.stockscreener.pipeline.datasource.http.TokenBucketRateLimiter;
+import com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader;
 import com.stockscreener.pipeline.datasource.us.shareclass.IssuerFacts;
 import com.stockscreener.pipeline.datasource.us.shareclass.MembershipHold;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassFileStore;
@@ -105,6 +106,12 @@ class UsCandidateRankSweepLiveTest {
         ShareClassFileStore store = new ShareClassFileStore(jdbc, dir);
         Map<String, Integer> fetched = fetch(jdbc, store, dir, cikCache, factory, properties, secLimiter);
         System.out.println("SWEEP 받기 " + fetched + " 인스턴스 상태(지금 읽기 판)=" + store.factStatusCounts());
+        // 판독기 판이 오른 뒤 옛 판 행이 남으면 유도가 그 공시를 인스턴스 없이 다뤄 켬이 꺼짐과 같아진다 — 대조군도 통과하므로 여기서 세운다.
+        // 모집단 밖 종목(CLASS_SWEEP_POP=none · 티커 파일)의 옛 판 행이 그 자리다. 다시 받으려면 그 종목을 모집단에 넣는다.
+        if (store.staleFactRows() > 0) {
+            throw new IllegalStateException("옛 판독기 판의 인스턴스 행 " + store.staleFactRows() + "개가 남았다(지금 판 "
+                    + ClassFactReader.READER_VERSION + ") — 그 종목을 모집단에 넣어 다시 받는다");
+        }
 
         ShareClassDeriver.Tally tally = new ShareClassDeriver(store, new DataSourceTransactionManager(ds)).derive(UsMarket.CODE);
         System.out.printf("SWEEP 유도 줄=%d 판정=%d 숨김=%d 실패줄=%s%n", tally.lines(), tally.verdicts(), tally.hidden(),

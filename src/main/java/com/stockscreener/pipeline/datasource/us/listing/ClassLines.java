@@ -53,6 +53,11 @@ public final class ClassLines {
         return out;
     }
 
+    /** 빼는 낱말(워런트 · 권리 · 우선주 · 사채 · 혼성 단위)이 든 줄인가 — 보통주 낱말 없이도 보통주가 아님이 정해지는 줄. */
+    public static boolean isNotCommon(String line) {
+        return NOT_COMMON.matcher(line).find();
+    }
+
     /** 보통주 줄인가 — 빼는 낱말이 없고 보통주 낱말이 있다. */
     public static boolean isCommon(String line) {
         return !NOT_COMMON.matcher(line).find() && COMMON.matcher(line).find();
