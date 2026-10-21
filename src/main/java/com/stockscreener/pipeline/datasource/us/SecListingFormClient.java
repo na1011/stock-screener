@@ -23,6 +23,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -53,6 +54,12 @@ public class SecListingFormClient {
     private static final Pattern TYPE_LINE = Pattern.compile("\\A\\s*<DOCUMENT>\\s*<TYPE>([^\\r\\n<]+)");
     /** 표지를 찾아 거슬러 오를 정기 공시의 상한 — 6-K처럼 XBRL 표지가 없는 공시가 끼면 다음 것으로 간다. */
     private static final int COVER_ATTEMPTS = 3;
+
+    /** 증권 이름을 싣는 정기 양식 — 6-K는 표지에 12(b) 증권 줄이 없다. */
+    private static final Set<String> TITLED_FORMS = Set.of("10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A");
+
+    /** 이름 실린 표지를 찾아 거슬러 오를 정기 공시 수 — 10-Q 셋 뒤의 연간 공시까지 닿게. */
+    private static final int TITLED_COVER_ATTEMPTS = 6;
 
     private final SecDailyIndexClient dailyIndex;
     private final SecFilingClient filings;
@@ -167,14 +174,33 @@ public class SecListingFormClient {
      * @param since 공시 목록을 거슬러 받을 하한(그보다 앞 공시는 안 본다)
      */
     public Optional<Cover> lastCoverBefore(long cik, LocalDate before, LocalDate since) throws DataSourceException {
+        return firstCover(cik, before, since, SecEdgarFacts.PERIODIC_FORMS, COVER_ATTEMPTS, "listing cover",
+                facts -> !facts.coverOf(ClassFactReader.TRADING_SYMBOL).isEmpty());
+    }
+
+    /**
+     * {@code before} 전에 낸 마지막 정기 공시 중 <b>증권 이름({@code Security12bTitle})이 실린</b> 표지 — 예탁증권 비율 판정의 재료.
+     *
+     * <p>{@link #lastCoverBefore}와 고르는 술어가 다르다. 그것은 기호만 있으면 받고 6-K도 센다 — 6-K 표지에는 12(b) 증권 줄이 없어
+     * 증권 이름을 못 주는데 XBRL 6-K를 연간 공시 뒤에 여럿 내는 발행사(DSGX ≥ 8 · ICLR ≥ 2 · 2026-10-22)는 시도를 다 쓴다. 10-Q만
+     * 기호를 싣고 이름을 안 싣는 발행사(QNRX 10-Q 10판 연속)도 있다 — 이름 없는 표지는 건너뛰고 더 앞 판으로 간다.
+     */
+    public Optional<Cover> lastTitledCoverBefore(long cik, LocalDate before, LocalDate since) throws DataSourceException {
+        return firstCover(cik, before, since, TITLED_FORMS, TITLED_COVER_ATTEMPTS, "titled cover",
+                facts -> !facts.coverOf(ClassFactReader.SECURITY_TITLE).isEmpty());
+    }
+
+    /** 공시 목록을 한 번 받고 최근 것부터 {@code attempts}건까지 거슬러 올라 {@code accept}를 만족하는 첫 표지. */
+    private Optional<Cover> firstCover(long cik, LocalDate before, LocalDate since, Set<String> forms, int attempts, String label,
+                                       Predicate<ClassFacts> accept) throws DataSourceException {
         List<SecFilingClient.Filing> periodic = filings.filings(cik, since).stream()
-                .filter(f -> SecEdgarFacts.PERIODIC_FORMS.contains(f.form()) && f.xbrl() && f.filed().isBefore(before))
+                .filter(f -> forms.contains(f.form()) && f.xbrl() && f.filed().isBefore(before))
                 .sorted(Comparator.comparing(SecFilingClient.Filing::filed).reversed())
-                .limit(COVER_ATTEMPTS)
+                .limit(attempts)
                 .toList();
         for (SecFilingClient.Filing filing : periodic) {
             List<SecFilingClient.FolderItem> items = filings.folder(cik, filing.accession());
-            String context = "listing cover %d/%s".formatted(cik, filing.accession());
+            String context = "%s %d/%s".formatted(label, cik, filing.accession());
             String picked;
             try {
                 picked = SecFilingSupplement.pickInstance(items.stream().map(SecFilingClient.FolderItem::name).toList(), context);
@@ -184,10 +210,10 @@ public class SecListingFormClient {
             if (picked == null) {
                 continue;
             }
-            SecFilingClient.FolderItem item = items.stream().filter(i -> i.name().equals(picked)).findFirst().orElseThrow();
+            SecFilingClient.FolderItem item = items.stream().filter(it -> it.name().equals(picked)).findFirst().orElseThrow();
             byte[] xml = filings.instance(cik, filing.accession(), item);
             ClassFacts facts = ClassFactReader.readListingCover(new ByteArrayInputStream(xml), cik, context);
-            if (!facts.coverOf(ClassFactReader.TRADING_SYMBOL).isEmpty()) {
+            if (accept.test(facts)) {
                 return Optional.of(new Cover(filing.accession(), filing.form(), filing.filed(), facts));
             }
         }

@@ -69,10 +69,26 @@ public interface StoredShareCounts {
      * @param name 저장된 종목 이름({@code stock.name}). 시세 소스 목록이 그 종목을 빠뜨렸을 때 이름 축을
      *             태울 재료다(ADR-0171) — 소스에서 온 이름이 있으면 그쪽이 먼저다
      * @param stockId 그 행 — 과거 날짜 순위(D4)는 후보를 표지가 아니라 행으로 다룬다(닫힌 행의 표지는 비운 꼴이다)
+     * @param reportCode 고른 판의 {@code report_code}(「20-F:접수번호」) — 오늘 순위가 해외 양식 판의 예탁증권 비율을 표지로 가리는 범위다.
+     *                   모르면 {@code null}
      */
     record ShareCount(String ticker, BigDecimal shares, String sicCode,
                       LocalDate periodEnd, LocalDate publishedAt, boolean currencyMismatched,
-                      String name, long stockId) {
+                      String name, long stockId, String reportCode) {
+
+        public ShareCount(String ticker, BigDecimal shares, String sicCode, LocalDate periodEnd, LocalDate publishedAt,
+                          boolean currencyMismatched, String name, long stockId) {
+            this(ticker, shares, sicCode, periodEnd, publishedAt, currencyMismatched, name, stockId, null);
+        }
+
+        /** 판의 양식(「20-F」) — {@code report_code}의 콜론 앞. 모르면 {@code null}. */
+        public String reportForm() {
+            if (reportCode == null) {
+                return null;
+            }
+            int colon = reportCode.indexOf(':');
+            return colon < 0 ? reportCode : reportCode.substring(0, colon);
+        }
     }
 
     /**

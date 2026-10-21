@@ -53,6 +53,8 @@ public final class ClassFactReader {
     public static final String SECURITY_TITLE = "Security12bTitle";
     /** 표지 거래소 코드({@code NYSE} · {@code NASDAQ} · {@code NYSEAMER} …) — 상장 판정({@code listing} 패키지)만 읽는다. 저장 팩트에는 안 든다. */
     public static final String SECURITY_EXCHANGE = "SecurityExchangeName";
+    /** 표지의 예탁증권 비율(1 예탁증권당 주식 수) — 상장 판정 표지만 읽는다(관문 밖 순위의 예탁증권 판정이 증권 이름과 맞대는 보조). */
+    public static final String DEPOSITORY_RATIO = "EntityListingDepositoryReceiptRatio";
     public static final List<String> WEIGHTED_TAGS = List.of("WeightedAverageNumberOfSharesOutstandingBasic",
             "WeightedAverageNumberOfShareOutstandingBasicAndDiluted", "WeightedAverageNumberOfSharesIssuedBasic",
             "WeightedAverageLimitedPartnershipUnitsOutstanding");
@@ -62,8 +64,8 @@ public final class ClassFactReader {
     public static final List<String> NUMERATOR_TAGS = List.of(DECLARED_NUMERATOR, "NetIncomeLoss", "ProfitLoss");
 
     private static final Set<String> COVER = Set.of(SHARES_OUTSTANDING, TRADING_SYMBOL, SECURITY_TITLE);
-    /** 상장 판정의 표지 — 기호 · 거래소 · 증권 이름. 저장 팩트({@link #COVER})와 따로 둬 그 판을 안 바꾼다. */
-    private static final Set<String> LISTING_COVER = Set.of(TRADING_SYMBOL, SECURITY_EXCHANGE, SECURITY_TITLE);
+    /** 상장 판정의 표지 — 기호 · 거래소 · 증권 이름 · 예탁증권 비율. 저장 팩트({@link #COVER})와 따로 둬 그 판을 안 바꾼다. */
+    private static final Set<String> LISTING_COVER = Set.of(TRADING_SYMBOL, SECURITY_EXCHANGE, SECURITY_TITLE, DEPOSITORY_RATIO);
     private static final Set<String> DURATION = Set.copyOf(concat(WEIGHTED_TAGS, EPS_TAGS, NUMERATOR_TAGS));
     /** 낱말을 가르는 비ASCII 공백 — 공백 분리자 전부와 너비 0 구분자(지우면 너비 0 공백으로 가른 두 낱말이 하나로 붙는다). */
     private static final Pattern WIDE_SPACE = Pattern.compile("[\\p{Zs}\\u200B\\u2060\\uFEFF]");

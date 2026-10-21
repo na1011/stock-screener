@@ -157,10 +157,13 @@ class UsCandidateRankSweepLiveTest {
                   AND (m.effective_to IS NULL OR m.effective_to >= ?)
                 """, String.class, asOf, asOf));
         AlpacaUniverseAdapter listing = new AlpacaUniverseAdapter(factory, properties, alpacaLimiter, names);
+        // 예탁증권 표지 판정은 운영과 같은 조회로 — 안 주면 해외 양식 후보에서 AUTH로 선다.
+        DepositaryCovers covers = new SecDepositaryCovers(new SecListingFormClient(null,
+                new SecFilingClient(factory, properties, secLimiter), factory, properties, secLimiter));
         UsMarketCapUniverseAdapter.Ranking rOff = new UsMarketCapUniverseAdapter(listing, offCounts, cikCache, names, factory,
-                properties, alpacaLimiter, false).rank(UsMarketCapUniverseAdapter.UNIVERSE_CODE, asOf, previous);
+                properties, alpacaLimiter, false, covers).rank(UsMarketCapUniverseAdapter.UNIVERSE_CODE, asOf, previous);
         UsMarketCapUniverseAdapter.Ranking rOn = new UsMarketCapUniverseAdapter(listing, on, cikCache, names, factory,
-                properties, alpacaLimiter, true).rank(UsMarketCapUniverseAdapter.UNIVERSE_CODE, asOf, previous);
+                properties, alpacaLimiter, true, covers).rank(UsMarketCapUniverseAdapter.UNIVERSE_CODE, asOf, previous);
         Map<String, Integer> rankOff = ranks(rOff);
         Map<String, Integer> rankOn = ranks(rOn);
         Map<String, BigDecimal> capOff = caps(rOff);

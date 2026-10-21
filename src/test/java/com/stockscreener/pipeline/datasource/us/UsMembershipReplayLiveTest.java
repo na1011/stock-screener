@@ -84,10 +84,14 @@ class UsMembershipReplayLiveTest {
         ExternalApiClientFactory factory = new ExternalApiClientFactory();
         SecurityNameCache names = new SecurityNameCache();
         TokenBucketRateLimiter alpacaLimiter = new TokenBucketRateLimiter("alpaca", 150, 0);
-        SecTickerCikCache cikCache = new SecTickerCikCache(factory, properties, new TokenBucketRateLimiter("sec-edgar", 300, 0));
+        TokenBucketRateLimiter secLimiter = new TokenBucketRateLimiter("sec-edgar", 300, 0);
+        SecTickerCikCache cikCache = new SecTickerCikCache(factory, properties, secLimiter);
+        // 예탁증권 표지 판정은 운영과 같은 조회로 — 안 주면 해외 양식 후보에서 AUTH로 선다.
+        DepositaryCovers covers = new SecDepositaryCovers(new SecListingFormClient(null,
+                new SecFilingClient(factory, properties, secLimiter), factory, properties, secLimiter));
         UsMarketCapUniverseAdapter adapter = new UsMarketCapUniverseAdapter(
                 new AlpacaUniverseAdapter(factory, properties, alpacaLimiter, names),
-                shareCounts, cikCache, names, factory, properties, alpacaLimiter, false);
+                shareCounts, cikCache, names, factory, properties, alpacaLimiter, false, covers);
 
         // 판정 이력: 스윕 TSV(티커 · 공시일 · 접수번호 · 종류 · 상태 · 갈래 · 범주 · N_L · n) → CIK. 티커 → CIK는 재료 목록(JSON)이
         // 정본이다. 앵커가 아닌 보인 판('d')의 N_L은 지금 경로의 값 — companyfacts 표지 주식수다.

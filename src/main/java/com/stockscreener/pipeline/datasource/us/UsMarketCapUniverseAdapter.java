@@ -10,9 +10,13 @@ import com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey;
 import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
 import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
 import com.stockscreener.pipeline.datasource.http.RateLimiter;
+import com.stockscreener.pipeline.datasource.us.listing.DepositaryCover;
+import com.stockscreener.pipeline.datasource.us.listing.DepositaryRatio;
+import com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,6 +41,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
@@ -240,6 +245,8 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
     private final int topN;
     /** 미국 관문 설정 — 켜졌으면 주식수 클래스 축의 편입 보류·발행사 제외를 순위에 건다({@link #applyClassHolds}). */
     private final boolean usGate;
+    /** 예탁증권 비율을 가릴 표지({@link #screenDepositary}) — SEC 키가 없으면 빈 값이고, 범위 안 후보가 있으면 실행이 선다. */
+    private final Supplier<DepositaryCovers> depositaryCovers;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -254,9 +261,24 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                                       ExternalApiClientFactory clientFactory,
                                       DataSourceProperties properties,
                                       @Qualifier("alpacaRateLimiter") RateLimiter rateLimiter,
-                                      @Value("${stockscreener.gate.us}") boolean usGate) {
+                                      @Value("${stockscreener.gate.us}") boolean usGate,
+                                      ObjectProvider<DepositaryCovers> depositaryCovers) {
         this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter,
-                properties.getAlpacaMarketDataBaseUrl(), TOP_N, usGate);
+                properties.getAlpacaMarketDataBaseUrl(), TOP_N, usGate, depositaryCovers::getIfAvailable);
+    }
+
+    /** 운영 크기(상위 1,000) · 운영 base URL로 표지 조회를 직접 준다 — 재생 도구(live)와 시험이 쓴다. */
+    UsMarketCapUniverseAdapter(AlpacaUniverseAdapter listing,
+                               StoredShareCounts shareCounts,
+                               SecTickerCikCache cikCache,
+                               SecurityNameCache nameCache,
+                               ExternalApiClientFactory clientFactory,
+                               DataSourceProperties properties,
+                               RateLimiter rateLimiter,
+                               boolean usGate,
+                               DepositaryCovers depositaryCovers) {
+        this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter,
+                properties.getAlpacaMarketDataBaseUrl(), TOP_N, usGate, () -> depositaryCovers);
     }
 
     /**
@@ -288,6 +310,21 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                                String marketDataBaseUrl,
                                int topN,
                                boolean usGate) {
+        this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter, marketDataBaseUrl, topN, usGate,
+                () -> null);
+    }
+
+    UsMarketCapUniverseAdapter(AlpacaUniverseAdapter listing,
+                               StoredShareCounts shareCounts,
+                               SecTickerCikCache cikCache,
+                               SecurityNameCache nameCache,
+                               ExternalApiClientFactory clientFactory,
+                               DataSourceProperties properties,
+                               RateLimiter rateLimiter,
+                               String marketDataBaseUrl,
+                               int topN,
+                               boolean usGate,
+                               Supplier<DepositaryCovers> depositaryCovers) {
         DataSourceProperties.Source source = properties.getAlpaca();
         this.listing = listing;
         this.shareCounts = shareCounts;
@@ -298,6 +335,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         this.credentialsPresent = source.hasApiKey() && source.hasSecretKey();
         this.topN = topN;
         this.usGate = usGate;
+        this.depositaryCovers = depositaryCovers;
     }
 
     @Override
@@ -365,6 +403,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
 
         Map<String, BigDecimal> sharesByTicker = new HashMap<>();
         Map<String, String> storedNames = new HashMap<>();
+        Map<String, String> reportForms = new HashMap<>();
         Exclusions excluded = new Exclusions();
         for (StoredShareCounts.ShareCount count :
                 shareCounts.activeByMarket(UsMarket.CODE, asOf.minusYears(SHARES_MAX_AGE_YEARS), asOf)) {
@@ -378,6 +417,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
             }
             sharesByTicker.put(count.ticker(), count.shares());
             storedNames.put(count.ticker(), count.name());
+            reportForms.put(count.ticker(), count.reportForm());
         }
         if (usGate) {
             applyClassHolds(asOf, previous, sharesByTicker, storedNames, excluded);
@@ -433,13 +473,14 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         ranked.sort(Comparator.comparing(Ranked::marketCap).reversed()
                 .thenComparing(r -> r.asset().symbol()));
 
-        List<Ranked> deduped = dropCikDuplicates(ranked, excluded, sec);
+        List<Ranked> deduped = screenDepositary(dropCikDuplicates(ranked, excluded, sec), asOf, sec, reportForms,
+                storedNames, excluded);
         if (deduped.size() < topN) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
-                    ("CIK 중복을 걷고 나니 %d종목뿐이라 상위 %d를 채우지 못한다. 제외 내역: %s")
+                    ("CIK 중복과 예탁증권 비율을 걷고 나니 %d종목뿐이라 상위 %d를 채우지 못한다. 제외 내역: %s")
                             .formatted(deduped.size(), topN, excluded));
         }
-        return new Ranking(assets.size(), candidates.size(), deduped, excluded);
+        return new Ranking(assets.size(), candidates.size(), deduped, excluded, Math.min(topN, deduped.size()));
     }
 
     /**
@@ -503,8 +544,80 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         }
     }
 
-    /** 순위와 그것을 만든 실행의 귀속 재료(상장 · 후보 수 · 축별 제외). */
-    record Ranking(int listed, int candidates, List<Ranked> deduped, Exclusions excluded) {
+    /**
+     * 순위와 그것을 만든 실행의 귀속 재료(상장 · 후보 수 · 축별 제외).
+     *
+     * @param screenedThrough 예탁증권 표지 판정({@link #screenDepositary})이 돈 앞부분의 길이 — {@code deduped}의 그 뒤는 표지를 안 본
+     *                        순위다(경계 너머를 읽는 재생 도구는 그 꼬리에 비율 ≠ 1 ADS가 남아 있을 수 있음을 안다)
+     */
+    record Ranking(int listed, int candidates, List<Ranked> deduped, Exclusions excluded, int screenedThrough) {
+    }
+
+    /** 주식수 판이 해외 발행사 양식이면 표지로 예탁증권 비율을 본다 — 6-K는 판 자체로는 표지가 없어도 그 발행사가 해외라는 신호다. */
+    private static final Set<String> FOREIGN_FORMS = Set.of("20-F", "20-F/A", "40-F", "40-F/A", "6-K", "6-K/A");
+
+    /**
+     * 예탁증권 비율이 1이 아니거나 모르는 후보를 뺀다(탐색 {@code ADS-BASIS-PLAN-1022.md} §2 v3 · 관문 밖 순위의 미표시).
+     *
+     * <p><b>왜</b>: 시총 = 표지 주식수(보통주) × 종가(ADS당)라 비율이 1이 아니면 그 배로 틀린 값이 순위와 지표에 든다(10-24 재현: UXIN
+     * 1 ADS = 300주 · 58.9B로 들 자리가 아닌데 든다 · HDB 3배 · BZ 2배). 비율을 지표까지 적용할 재료(판마다 저장한 표지)는 관문 뒤(B)라
+     * 관문 밖은 빼는 것이 「모르면 값을 안 낸다」다. 비율 1이면 값이 옳으므로 남긴다(TEVA).
+     *
+     * <p><b>범위</b>: 주식수 판이 해외 양식이거나 이름(목록 · 저장)이 예탁증권을 말하는 후보. 이름이 평범한 10-K/10-Q ADS 중 비율 ≠ 1이고
+     * 원장 사건도 없는 것은 2026-10-22 후보에 0이다(TEVA 1 · CRTO 1 · AMRN 20은 ADR-0162가 이미 맞춘다) — 이 범위가 안 서는 자리다.
+     * <b>CIK 대표를 고른 뒤</b>에 돈다 — 뺀 대표의 같은 CIK 다른 증권은 이미 버려졌다(그런 꼴의 수는 안 쟀다).
+     *
+     * <p>상위 N을 채울 때까지만 표지를 묻는다(10-20 재현: 범위 안 22후보 · 후보마다 공시 목록 1 + 표지 2콜 이상). 그 뒤는 안 본 채 둔다.
+     * 표지 받기 실패는 실행을 세운다(부분 목록을 스냅샷으로 만들지 않는다). <b>손으로 {@code --job=universe}를 돌릴 때는 SEC 금지 창
+     * (평일 13:20~15:45) 밖에서</b> — 리미터가 JVM마다 따로라 그 창의 정기 SEC 잡과 겹친다. 정기 리밸런싱(토 20:00)은 그 창 밖이다.
+     */
+    private List<Ranked> screenDepositary(List<Ranked> ranked, LocalDate asOf, SecTickerCikCache.Snapshot sec,
+                                          Map<String, String> reportForms, Map<String, String> storedNames,
+                                          Exclusions excluded) throws DataSourceException {
+        List<Ranked> kept = new ArrayList<>(ranked.size());
+        int accepted = 0;
+        int looked = 0;
+        for (int i = 0; i < ranked.size(); i++) {
+            Ranked row = ranked.get(i);
+            if (accepted >= topN) {
+                kept.addAll(ranked.subList(i, ranked.size()));
+                break;
+            }
+            String symbol = row.asset().symbol();
+            boolean nameSaysDepositary = DepositaryRatio.isDepositary(row.asset().name())
+                    || DepositaryRatio.isDepositary(storedNames.get(symbol));
+            // 판 양식을 모르면(시험 픽스처 · 관문 켬의 보류 후보) 이름 범위만 탄다 — Set.of는 null을 물으면 던진다.
+            String form = reportForms.get(symbol);
+            if ((form != null && FOREIGN_FORMS.contains(form)) || nameSaysDepositary) {
+                looked++;
+                DepositaryCover.Verdict verdict = depositaryVerdict(symbol, asOf, sec, nameSaysDepositary);
+                if (verdict.excluded()) {
+                    excluded.depositary.add(symbol + "(" + verdict.reason() + ")");
+                    continue;
+                }
+            }
+            kept.add(row);
+            accepted++;
+        }
+        // 리밸런싱마다 이 줄이 예탁증권 판정의 귀속 재료다.
+        log.info("예탁증권 표지 판정. 기준일={} 표지={}건 뺌={}{}", asOf, looked, excluded.depositary.size(), excluded.depositary);
+        return kept;
+    }
+
+    private DepositaryCover.Verdict depositaryVerdict(String symbol, LocalDate asOf, SecTickerCikCache.Snapshot sec,
+                                                      boolean nameSaysDepositary) throws DataSourceException {
+        Optional<Long> cik = sec.findCik(symbol);
+        if (cik.isEmpty()) {
+            return new DepositaryCover.Verdict(DepositaryCover.Outcome.EXCLUDED, "CIK 없음 — 표지를 못 묻는다");
+        }
+        DepositaryCovers covers = depositaryCovers.get();
+        if (covers == null) {
+            throw new DataSourceException(DataSourceException.Kind.AUTH, SOURCE_NAME,
+                    "예탁증권 표지를 물을 SEC 소스가 없다(sec-edgar 키) — 해외 양식 후보 " + symbol + "의 비율을 못 가린다.");
+        }
+        Optional<ClassFacts> cover = covers.lastTitledCover(cik.get(), asOf);
+        return cover.map(c -> DepositaryCover.judge(c, symbol, nameSaysDepositary))
+                .orElseGet(() -> new DepositaryCover.Verdict(DepositaryCover.Outcome.EXCLUDED, "증권 이름 실린 표지 없음"));
     }
 
     /**
@@ -875,12 +988,14 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         private final List<String> hiddenStale = new ArrayList<>();
         private final List<String> hiddenUnknown = new ArrayList<>();
         private final List<String> hiddenOffExchange = new ArrayList<>();
+        /** 예탁증권 비율이 1이 아니거나 몰라 뺀 후보와 사유({@link #screenDepositary}). */
+        private final List<String> depositary = new ArrayList<>();
 
         @Override
         public String toString() {
             return ("통화=%d · REIT/SPAC=%d · 주식수없음=%d · 이름=%d(혼성 문구에만 걸림 %s) · 종가없음=%d · CIK중복=%d"
-                    + " · 숨은상장 받음=%d").formatted(currency, nonOperating, noShares, name, hybridOnly, noClose,
-                    cikDuplicate, hiddenAccepted.size());
+                    + " · 예탁증권 비율=%d · 숨은상장 받음=%d").formatted(currency, nonOperating, noShares, name, hybridOnly, noClose,
+                    cikDuplicate, depositary.size(), hiddenAccepted.size());
         }
     }
 }

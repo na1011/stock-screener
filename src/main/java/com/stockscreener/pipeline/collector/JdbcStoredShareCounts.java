@@ -152,7 +152,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             WITH latest AS (
                 SELECT DISTINCT ON (f.stock_id)
                        f.stock_id, f.shares_outstanding, f.period_end, f.published_at,
-                       f.share_basis_multiple, f.share_basis_status
+                       f.share_basis_multiple, f.share_basis_status, f.report_code
                 FROM financial_statement f
                 JOIN stock s ON s.id = f.stock_id
                 WHERE s.market_code = ?
@@ -167,7 +167,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                    latest.shares_outstanding
                        * coalesce(latest.share_basis_multiple, 1) * %s AS shares_outstanding,
                    s.sic_code, latest.period_end, latest.published_at,
-                   %s AS currency_mismatched, s.name
+                   %s AS currency_mismatched, s.name, latest.report_code
             FROM latest
             JOIN stock s ON s.id = latest.stock_id
             WHERE latest.share_basis_status IS DISTINCT FROM 'UNRESOLVED'
@@ -237,7 +237,8 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                         rs.getObject("published_at", LocalDate.class),
                         rs.getBoolean("currency_mismatched"),
                         rs.getString("name"),
-                        rs.getLong("stock_id")),
+                        rs.getLong("stock_id"),
+                        rs.getString("report_code")),
                 marketCode, asOf, oldestPeriodEnd, asOf, asOf, asOf);
     }
 
@@ -276,7 +277,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
                     .multiply(ShareClassLine.factor(splits.getOrDefault(stockId, List.of()), publishedAt, asOf));
             chosen.put(stockId, new ShareCount(rs.getString("ticker"), shares, rs.getString("sic_code"),
                     rs.getObject("period_end", LocalDate.class), publishedAt, mismatched.contains(stockId),
-                    rs.getString("name"), stockId));
+                    rs.getString("name"), stockId, rs.getString("report_code")));
         }, marketCode, asOf, oldestPeriodEnd, asOf, asOf);
         List<ShareCount> out = new ArrayList<>(chosen.values());
         out.sort(java.util.Comparator.comparing(ShareCount::ticker));

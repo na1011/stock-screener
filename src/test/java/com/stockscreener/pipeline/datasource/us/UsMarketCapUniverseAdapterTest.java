@@ -606,6 +606,69 @@ class UsMarketCapUniverseAdapterTest {
         assertThat(snapshot.tickers()).containsExactly("AAA", "HLD");
     }
 
+    @Test
+    @DisplayName("예탁증권 비율이 1이 아니거나 모르면 뺀다 — 해외 양식 판 · 이름이 예탁증권인 후보만 표지를 묻는다")
+    void screensDepositaryRatioByCover() throws Exception {
+        bodies.put("/v2/assets", assets(
+                asset("HDBX", "Hdbx Bank Limited"),
+                asset("UXN", "Uxn Limited ADS"),
+                asset("TEV", "Tev Pharmaceutical Limited"),
+                asset("BIG", "Big Industries Inc.")));
+        bodies.put("/files/company_tickers_exchange.json", cikMap(Map.of("HDBX", 1L, "UXN", 2L, "TEV", 3L, "BIG", 4L)));
+        // 주식수 × 종가 = HDBX 1000 · UXN 500 · TEV 100 · BIG 10
+        bodies.put("/v2/stocks/bars", bars(Map.of("HDBX", "10", "UXN", "10", "TEV", "10", "BIG", "10")));
+        List<Long> asked = new ArrayList<>();
+        Map<Long, com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts> covers = Map.of(
+                1L, cover("HDBX", "American Depositary Shares, each representing three Equity Shares, Par value Rs. 1.0 per share"),
+                3L, cover("TEV", "American Depositary Shares, each representing one Ordinary Share"));
+        DepositaryCovers lookup = (cik, asOf) -> {
+            asked.add(cik);
+            return java.util.Optional.ofNullable(covers.get(cik));
+        };
+
+        UniverseSnapshot snapshot = new UsMarketCapUniverseAdapter(listingAdapter(), shares(
+                filed("HDBX", "100", "20-F:0000000001-26-000001"), filed("UXN", "50", "10-Q:0000000002-26-000001"),
+                filed("TEV", "10", "20-F:0000000003-26-000001"), filed("BIG", "1", "10-Q:0000000004-26-000001")),
+                cikCache(), nameCache, new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
+                server.url("/").toString(), 2, false, () -> lookup)
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).as("HDBX 1 ADS = 3주 · UXN 이름은 ADS인데 이름 실린 표지 없음 → 뺌 · TEV 비율 1 → 남음")
+                .containsExactly("TEV", "BIG");
+        assertThat(asked).as("평범한 이름의 10-Q 판(BIG)은 표지를 안 묻는다").containsExactly(1L, 2L, 3L);
+    }
+
+    @Test
+    @DisplayName("표지를 물을 SEC 소스가 없는데 해외 양식 후보가 있으면 실행이 선다 — 비율을 못 가린 채 스냅샷을 만들지 않는다")
+    void missingCoverSourceStopsTheRun() {
+        bodies.put("/v2/assets", assets(asset("FRN", "Frn Holdings Limited"), asset("BIG", "Big Industries Inc.")));
+        bodies.put("/files/company_tickers_exchange.json", cikMap(Map.of("FRN", 1L, "BIG", 2L)));
+        bodies.put("/v2/stocks/bars", bars(Map.of("FRN", "10", "BIG", "10")));
+
+        assertThatThrownBy(() -> new UsMarketCapUniverseAdapter(listingAdapter(), shares(
+                filed("FRN", "100", "20-F:0000000001-26-000001"), filed("BIG", "1", "10-Q:0000000002-26-000001")),
+                cikCache(), nameCache, new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
+                server.url("/").toString(), 1, false, () -> null)
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF))
+                .isInstanceOf(DataSourceException.class)
+                .hasMessageContaining("SEC 소스가 없다");
+    }
+
+    private static StoredShareCounts.ShareCount filed(String ticker, String shares, String reportCode) {
+        return new StoredShareCounts.ShareCount(
+                ticker, new BigDecimal(shares), "3711", AS_OF.minusMonths(3), AS_OF.minusMonths(1), false,
+                ticker + " Stored Name", 0L, reportCode);
+    }
+
+    private static com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts cover(String symbol, String title) {
+        Map<String, LinkedHashMap<String, String>> cover = new LinkedHashMap<>();
+        cover.computeIfAbsent(com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader.TRADING_SYMBOL,
+                k -> new LinkedHashMap<>()).put("-", symbol);
+        cover.computeIfAbsent(com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader.SECURITY_TITLE,
+                k -> new LinkedHashMap<>()).put("-", title);
+        return new com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts(new LinkedHashMap<>(), cover, "20-F");
+    }
+
     private UsMarketCapUniverseAdapter adapter(int topN, StoredShareCounts counts) {
         return build(topN, counts);
     }
@@ -614,7 +677,7 @@ class UsMarketCapUniverseAdapterTest {
         return new UsMarketCapUniverseAdapter(
                 listingAdapter(), shares(share("BIG", "10"), share("MID", "100")),
                 cikCache(), nameCache, new ExternalApiClientFactory(), properties(),
-                new TokenBucketRateLimiter("alpaca", 0, 0), false);
+                new TokenBucketRateLimiter("alpaca", 0, 0), false, (cik, asOf) -> java.util.Optional.empty());
     }
 
     private UsMarketCapUniverseAdapter build(int topN, StoredShareCounts counts) {
