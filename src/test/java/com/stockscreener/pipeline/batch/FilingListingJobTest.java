@@ -68,12 +68,12 @@ class FilingListingJobTest {
 
     @AfterEach
     void cleanUp() {
-        jdbc.update("DELETE FROM filing_consumption WHERE stock_id IN (SELECT id FROM stock WHERE ticker IN ('ZZFL', '990001'))");
+        jdbc.update("DELETE FROM filing_consumption WHERE stock_id IN (SELECT id FROM stock WHERE ticker IN ('ZZFL', 'ZZFM', 'ZZFN', '990001'))");
         jdbc.update("DELETE FROM filing_listing_day");
         jdbc.update("DELETE FROM batch_execution_phase WHERE execution_id IN "
                 + "(SELECT id FROM batch_execution WHERE job_name = ?)", FilingListingJob.JOB_NAME);
         jdbc.update("DELETE FROM batch_execution WHERE job_name = ?", FilingListingJob.JOB_NAME);
-        jdbc.update("DELETE FROM stock WHERE ticker IN ('ZZFL', '990001')");
+        jdbc.update("DELETE FROM stock WHERE ticker IN ('ZZFL', 'ZZFM', 'ZZFN', '990001')");
         alerts.clear();
     }
 
@@ -122,6 +122,76 @@ class FilingListingJobTest {
         assertThat(store.cursor("KR")).contains(LocalDate.of(2026, 10, 12));
         assertThat(jdbc.queryForObject("SELECT note FROM batch_execution WHERE job_name = ? ORDER BY id DESC LIMIT 1",
                 String.class, FilingListingJob.JOB_NAME)).contains("US: 소스 없음");
+    }
+
+    @Test
+    @DisplayName("남긴 수는 장부에 붙은 공시 수다 — CIK 하나에 종목 행이 둘이어도 원본 줄 수를 안 넘어 그날이 닫힌다")
+    void keptRowsCountFilingsNotStockRows() {
+        long secondClass = stock("US", "ZZFM");
+        LocalDate day = LocalDate.of(2026, 10, 8);
+        FilingListSource us = source("US", cursor -> new FilingListSource.FilingListing(List.of(
+                new FilingListSource.ListedDay(day, FilingListSource.DayOutcome.LISTED, 1, List.of(
+                        usFiling("0000000001-26-000001", day),
+                        new FilingListSource.ListedFiling("0000000001-26-000001", secondClass, 1L, null, "10-Q", null, day,
+                                null, null, null)))),
+                List.of(), null));
+        FilingListSource kr = source("KR", cursor -> new FilingListSource.FilingListing(List.of(), List.of(), null));
+        FilingListingJob job = new FilingListingJob(List.of(us, kr), store, executions, FIRST);
+
+        assertThat(job.run(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER)).isEqualTo(BatchStatus.SUCCESS);
+
+        assertThat(store.cursor("US")).contains(day);
+        assertThat(jdbc.queryForObject("SELECT kept_rows FROM filing_listing_day WHERE market = 'US' AND listing_date = ?",
+                Integer.class, day)).as("줄 하나 · 종목 행 둘 → 공시 하나").isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM filing_consumption WHERE filing_no = '0000000001-26-000001'"))
+                .as("장부는 종목마다 한 행").isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("한 시장의 장부 쓰기 실패는 그 시장의 실패다 — 다른 시장의 날은 닫히고, 실패를 알린다")
+    void ledgerWriteFailureStopsOnlyThatMarket() {
+        LocalDate day = LocalDate.of(2026, 10, 8);
+        // 원본 줄 0에 공시 하나 — 제약(kept ≤ source)을 어기는 쓰기를 일부러 만든다.
+        FilingListSource us = source("US", cursor -> new FilingListSource.FilingListing(List.of(
+                new FilingListSource.ListedDay(day, FilingListSource.DayOutcome.LISTED, 0,
+                        List.of(usFiling("0000000001-26-000002", day)))), List.of(), null));
+        FilingListSource kr = source("KR", cursor -> new FilingListSource.FilingListing(
+                List.of(new FilingListSource.ListedDay(cursor.plusDays(1), FilingListSource.DayOutcome.EMPTY, 0, List.of())),
+                List.of(), null));
+        FilingListingJob job = new FilingListingJob(List.of(us, kr), store, executions, FIRST);
+
+        BatchStatus status = job.run(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        assertThat(status).isEqualTo(BatchStatus.PARTIAL_SUCCESS);
+        assertThat(store.cursor("US")).as("그날은 롤백 — 안 닫힌다").isEmpty();
+        assertThat(count("SELECT count(*) FROM filing_consumption WHERE filing_no = '0000000001-26-000002'")).isZero();
+        assertThat(store.cursor("KR")).as("국내는 돈다").contains(LocalDate.of(2026, 10, 12));
+        assertThat(alerts).anyMatch(e -> e.title().contains("US 공시 장부 쓰기 실패"));
+        assertThat(jdbc.queryForObject("SELECT array_to_string(incomplete_markets, ',') || '/' || scope FROM batch_execution "
+                + "WHERE job_name = ? ORDER BY id DESC LIMIT 1", String.class, FilingListingJob.JOB_NAME))
+                .as("못 닫은 시장이 있는 실행은 시계를 안 민다(ADR-0174)").isEqualTo("US/NARROW");
+    }
+
+    @Test
+    @DisplayName("시대 밖 행에만 붙은 공시는 남긴 수에 안 센다 — 장부에 안 붙었으므로")
+    void filingsOnlyOutsideTheEraAreNotKept() {
+        long closed = jdbc.queryForObject("INSERT INTO stock (market_code, ticker, name, era_to) VALUES ('US', 'ZZFN', 'ZZFN', ?) "
+                + "RETURNING id", Long.class, LocalDate.of(2026, 10, 5));
+        LocalDate day = LocalDate.of(2026, 10, 8);
+        FilingListSource us = source("US", cursor -> new FilingListSource.FilingListing(List.of(
+                new FilingListSource.ListedDay(day, FilingListSource.DayOutcome.LISTED, 2, List.of(
+                        usFiling("0000000001-26-000003", day),
+                        new FilingListSource.ListedFiling("0000000001-26-000004", closed, 1L, null, "10-Q", null, day,
+                                null, null, null)))),
+                List.of(), null));
+        FilingListSource kr = source("KR", cursor -> new FilingListSource.FilingListing(List.of(), List.of(), null));
+        FilingListingJob job = new FilingListingJob(List.of(us, kr), store, executions, FIRST);
+
+        assertThat(job.run(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER)).isEqualTo(BatchStatus.SUCCESS);
+
+        assertThat(jdbc.queryForObject("SELECT kept_rows FROM filing_listing_day WHERE market = 'US' AND listing_date = ?",
+                Integer.class, day)).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM filing_consumption WHERE filing_no = '0000000001-26-000004'")).isZero();
     }
 
     @Test

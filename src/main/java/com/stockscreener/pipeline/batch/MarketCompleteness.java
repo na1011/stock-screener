@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.datasource.DataSourceException;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -116,6 +118,21 @@ public final class MarketCompleteness {
             byKind.computeIfAbsent(label + " " + UNANSWERED_WORDS.getOrDefault(kind.name(), kind.name()),
                     key -> new AtomicInteger()).incrementAndGet();
         }
+    }
+
+    /**
+     * 종목 단위가 아닌 잡이 그 시장을 끝까지 못 마친 것을 센다 — 공시 목록이 그 시장의 날을 못 닫았다(받기 실패 · 장부 쓰기 실패).
+     *
+     * @param reason 사람 말 사유(「공시 목록 한도」 · 「공시 목록 장부 쓰기」)
+     */
+    void recordUnfinished(String marketCode, String reason) {
+        unfetchedLayer.computeIfAbsent(marketCode, key -> new ConcurrentHashMap<>())
+                .computeIfAbsent(reason, key -> new AtomicInteger()).incrementAndGet();
+    }
+
+    /** 받지 못한 것의 사람 말 — 종류 이름이 표에 없으면 그대로. */
+    static String unansweredWord(DataSourceException.Kind kind) {
+        return UNANSWERED_WORDS.getOrDefault(kind.name(), kind.name());
     }
 
     /** 미완료 시장. 잡의 시장 집합 순서대로다. 비면 전부 끝까지 마쳤다. */

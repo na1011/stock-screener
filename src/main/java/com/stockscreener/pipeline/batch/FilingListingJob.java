@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
@@ -27,9 +28,10 @@ import java.util.Map;
  * <p><b>값을 바꾸는 표를 읽지도 쓰지도 않는다</b> — 쓰는 것은 {@code filing_listing_day}·{@code filing_consumption} 둘뿐이고,
  * 장부 행을 먹는 소비 단계는 아직 없다(2차).
  *
- * <p>시장마다 커서(닫은 마지막 날) 다음 날부터 받는다. 한 시장의 받기 실패는 그 시장의 커서만 멈추고(그 시장 실패 1) 다른
- * 시장은 돈다. 커서가 평일 {@value #LAG_ALERT_WEEKDAYS}일을 넘게 늦으면 마지막 실패 사유와 함께 알린다 — 받기가 매일 실패해도
- * 실행 자체는 끝나므로 신선도 예산(5일)보다 먼저 보이게 한다.
+ * <p>시장마다 커서(닫은 마지막 날) 다음 날부터 받는다. 한 시장의 받기 실패와 장부 쓰기 실패({@code DataAccessException})는 그
+ * 시장의 커서만 멈추고(그 시장 실패 1) 다른 시장은 돈다. 그 시장은 그 실행의 미완료 시장이라(ADR-0174) 실행이 신선도 시계를
+ * 안 민다 — 한 시장이 매일 실패하면 신선도 예산(5일)이 걸린다. 커서가 평일 {@value #LAG_ALERT_WEEKDAYS}일을 넘게 늦으면 마지막 실패
+ * 사유와 함께 알린다 — 예산보다 먼저 보이게.
  */
 @Component
 public class FilingListingJob {
@@ -72,8 +74,9 @@ public class FilingListingJob {
 
     /** @param todayKst 실행일(KST) — 그 뒤의 날은 묻지 않고, 국내는 그날을 닫지 않는다 */
     public BatchStatus run(LocalDate todayKst, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        // 시장 판정(ADR-0174) — 한 시장이라도 그날까지 못 닫으면 이 실행은 시계를 안 민다(부분 성공이 신선도 예산을 날마다 덮지 않게).
         BatchExecutionContext execution = batchExecutions.start(JOB_NAME, todayKst, triggeredBy, MARKETS.size(),
-                BatchExecutionRecorder.DeclaredScope.FULL);
+                BatchExecutionRecorder.DeclaredScope.FULL, MarketCompleteness.Coverage.of(MARKETS, sources::containsKey));
         execution.plan(CollectionPhase.FILING_LISTING, MARKETS.size());
         int succeeded = 0;
         int failed = 0;
@@ -93,13 +96,30 @@ public class FilingListingJob {
                 } else {
                     FilingListing listing = source.list(cursor, todayKst, store.stocksByTicker(market));
                     int newRows = 0;
-                    for (ListedDay day : listing.closedDays()) {
-                        newRows += store.recordDay(market, day);
-                        newCursor = day.day();
+                    try {
+                        for (ListedDay day : listing.closedDays()) {
+                            newRows += store.recordDay(market, day);
+                            newCursor = day.day();
+                        }
+                        newRows += store.recordOpen(market, listing.openFilings());
+                        failure = describe(listing.failure());
+                    } catch (DataAccessException e) {
+                        // 장부 쓰기 실패도 그 시장의 실패다 — 실행 전체를 세우면 다음 시장의 커서까지 멈춘다(2026-10-20·21: 미국 한 날의
+                        // 제약 위반이 국내 목록까지 세웠다 · 실행 869·887). 그날은 롤백돼 안 닫히고 다음 실행이 다시 받는다.
+                        // 같은 실행의 받기 실패 사유가 있으면 함께 남긴다 — 덮으면 두 원인 중 하나가 사라진다.
+                        String received = describe(listing.failure());
+                        failure = "장부 쓰기 실패 " + e.getMostSpecificCause().getMessage()
+                                + (received == null ? "" : " · 받기 실패 " + received);
+                        log.error("공시 장부를 못 썼다 — 커서가 {}에 멈춘다. market={}", newCursor, market, e);
+                        execution.alertOperator(AlertSeverity.ERROR, market + " 공시 장부 쓰기 실패",
+                                "커서 %s에서 멈췄다: %s".formatted(newCursor, failure));
+                        execution.recordUnfinishedListing(market, "공시 목록 장부 쓰기");
                     }
-                    newRows += store.recordOpen(market, listing.openFilings());
+                    if (listing.failure() != null) {
+                        execution.recordUnfinishedListing(market,
+                                "공시 목록 " + MarketCompleteness.unansweredWord(listing.failure().kind()));
+                    }
                     inserted += newRows;
-                    failure = describe(listing.failure());
                     notes.add("%s: 닫은 날 %d · 새 장부 %d · 커서 %s%s".formatted(market, listing.closedDays().size(),
                             newRows, newCursor, failure == null ? "" : " · 실패 " + failure));
                     if (failure != null) {

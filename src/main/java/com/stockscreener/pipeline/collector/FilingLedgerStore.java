@@ -16,9 +16,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 원장 공시 목록의 커서({@code filing_listing_day})와 소비 장부({@code filing_consumption})를 쓴다(ADR-0176 · V67).
@@ -50,15 +52,21 @@ public class FilingLedgerStore {
         return Optional.ofNullable(last);
     }
 
-    /** 장부 행을 넣고 그날을 닫는다. 넣은(새) 장부 행 수를 낸다. */
+    /**
+     * 장부 행을 넣고 그날을 닫는다. 넣은(새) 장부 행 수를 낸다.
+     *
+     * <p>{@code kept_rows}는 그날 장부에 붙은 <b>서로 다른 공시 수</b>다 — 원본 줄({@code source_rows})과 같은 단위라야
+     * {@code kept_rows <= source_rows}(V67 제약)가 선다. 종목 행 수로 세면 CIK 하나에 행이 여럿인 발행사(복수 클래스 · 등록인 시대)의
+     * 공시가 줄보다 많이 세져 제약을 넘고, 그날을 못 닫아 <b>두 시장의 커서가 함께 멈춘다</b>(2026-10-19 미국 90줄 → 92행 ·
+     * 실행 869·887). V67 컬럼 주석의 「종목마다 센다」는 그 제약과 처음부터 모순이었다.
+     */
     @Transactional(rollbackFor = Exception.class)
     public int recordDay(String market, ListedDay day) {
         Inserted inserted = insert(market, day.filings());
         jdbc.update("""
                 INSERT INTO filing_listing_day (market, listing_date, outcome, source_rows, kept_rows)
                 VALUES (?, ?, ?, ?, ?)
-                """, market, Date.valueOf(day.day()), day.outcome().name(), day.sourceRows(),
-                day.filings().size() - inserted.outsideEra());
+                """, market, Date.valueOf(day.day()), day.outcome().name(), day.sourceRows(), inserted.keptFilings());
         return inserted.rows();
     }
 
@@ -68,13 +76,14 @@ public class FilingLedgerStore {
         return insert(market, filings).rows();
     }
 
-    /** @param rows 넣은(새) 장부 행 · {@code outsideEra} 행의 시대 밖이라 안 붙인 줄 */
-    private record Inserted(int rows, int outsideEra) {
+    /** @param rows 넣은(새) 장부 행 · {@code keptFilings} 시대 안 종목 행이 하나라도 붙은(새로 넣었든 이미 있었든) 서로 다른 공시 수 */
+    private record Inserted(int rows, int keptFilings) {
     }
 
     private Inserted insert(String market, List<ListedFiling> filings) {
         int inserted = 0;
         List<String> outsideEra = new ArrayList<>();
+        Set<String> kept = new HashSet<>();
         for (ListedFiling f : filings) {
             // 행의 시대가 그 공시일을 안 덮으면 그 행의 공시가 아니다(ADR-0180) — 등록인 교체로 닫힌 행에 옛 등록인이 시대 끝 뒤에 낸
             // 공시(WKEY 6-K 10-06 · 10-14)나 새 등록인 행의 시대 시작 전 공시다. 붙이면 소비가 영영 못 먹는 열린 행이 된다.
@@ -84,6 +93,7 @@ public class FilingLedgerStore {
                 outsideEra.add(f.stockId() + ":" + f.filingNo() + "(" + f.filedOn() + ")");
                 continue;
             }
+            kept.add(f.filingNo());
             inserted += jdbc.update("""
                     INSERT INTO filing_consumption
                         (market, filing_no, stock_id, cik, corp_code, form, report_name, filed_on, bsns_year, reprt_code,
@@ -96,7 +106,7 @@ public class FilingLedgerStore {
         if (!outsideEra.isEmpty()) {
             log.info("행의 시대 밖이라 장부에 안 붙인 공시 {}건: {}", outsideEra.size(), outsideEra);
         }
-        return new Inserted(inserted, outsideEra.size());
+        return new Inserted(inserted, kept.size());
     }
 
     /**

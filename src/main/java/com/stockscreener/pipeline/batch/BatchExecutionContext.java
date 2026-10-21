@@ -409,6 +409,18 @@ public final class BatchExecutionContext {
     }
 
     /**
+     * 공시 목록(ADR-0176)이 그 시장의 날을 끝까지 못 닫은 것을 시장 판정에 싣는다. 안 실으면 한 시장이 매일 실패해도 실행이
+     * 부분 성공으로 시계를 밀어 신선도 예산이 영영 안 걸린다(2026-10-20·21 실행 869·887이 그 꼴로 갈 뻔했다).
+     *
+     * @param reason 사람 말 사유
+     */
+    public void recordUnfinishedListing(String marketCode, String reason) {
+        if (completeness != null) {
+            completeness.recordUnfinished(marketCode, reason);
+        }
+    }
+
+    /**
      * 응답을 해석할 수 없었던 실패를 별도로 센다. 소스 스펙 변경 판단의 근거다.
      *
      * <p>{@link #process}가 MALFORMED 종목 실패마다 스스로 부른다. 잡이 직접 부르는 것은 종목을 안 지나는 실패
