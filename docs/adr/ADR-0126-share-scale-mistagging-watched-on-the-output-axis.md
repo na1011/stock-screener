@@ -214,21 +214,22 @@ psql -d stock_screener -At -c "WITH m AS (SELECT s.ticker FROM universe_membersh
 **이 문서의 출력 축이 이미 88배로 신고한다 — 안 고친 것이지 못 고치는 것이 아니다.**
 ADR-0125의 입력 축은 **원리적으로 못 본다**: `eps = 0`이라 `NULLIF(eps,0)`가 NULL을 내 판정불가에 든다.
 
-**비율을 얻을 경로가 없다**(셋 다 쟀다) — `companyfacts`에 없고(ADR-0125),
-**Alpaca 자산 메타는 `symbol`·`name`·`exchange`·`status`·`tradable`뿐**이며(`AlpacaAsset`),
-`stock` 스키마에 담을 칼럼도 없다.
-
-**MUST: 그 「없다」를 「개념이 없다」로 읽지 않는다 — 2026-09-14에 갈랐다.**
-`dei:EntityListingDepositoryReceiptRatio`(단위 `pure`)는 **실재하고** `BABA`가 32팩트를 낸다.
-**`AKTX`가 안 내는 것**이고, ADR·ADS 대표 16종목에 물어도 내는 것은 **`BABA` 하나뿐**이다(1/16).
-**결론은 그대로 선다** — 이 종목의 비율은 못 얻고 커버리지가 1/16이라 일반 해법도 못 된다.
-계약은 `sec-edgar-financial.md` §ADS 비율, 잰 도구는 `SecEdgarConceptProbeLiveTest`다.
+**비율은 공시 표지가 판마다 준다**(2026-10-22 · ADR-0162 §배경) — `AKTX` 표지도 「each representing 2,000 Ordinary Share」다.
+`companyfacts`(전용 태그 `dei:EntityListingDepositoryReceiptRatio` · ADR·ADS 대표 16종목 중 `BABA` 1)와 Alpaca 자산 메타
+(`symbol`·`name`·`exchange`·`status`·`tradable`뿐)는 비율을 안 주지만 공시 인스턴스의 증권 이름(`dei:Security12bTitle`)이 준다.
 
 | 안 | 실측 |
 |---|---|
 | **A) 이름 축을 후보 게이트로** | 이름에 `ADS`/`ADR`/`American Depositary`가 든 미국 종목 **273**. 통화 게이트를 통과하는 것 **57**이고 **그중 편입은 `AKTX` 하나**. **비용: 그 57에 `ARM`(10.6억주)·`TEVA`(11.7억주)처럼 비율 1:1이라 값이 옳은 종목이 섞여 있다** |
 | **B) 이름의 비율 문구를 파싱** | `BABA` *"each represents eight Ordinary Shares"*처럼 비율이 이름에 있는 것은 **87**이고 **`AKTX`는 없는 186 쪽**이다 — 목적을 못 이룬다 |
 | **C) 값을 못 고치면 드러낸다** ← **사용자가 골랐다(2026-09-08)** | 「상위 1,000」이 사실이 아님을 말할 필드를 만든다 |
+
+**C의 전제 둘이 2026-10-22에 거짓이 됐다** — 「비율을 얻을 경로가 없다」(공시 표지가 준다)와 아래 「큰 ADR은 통화 게이트에 막힌다」
+(10-19 판 회수가 비USD 정정판을 지워 48 발행사가 통화 게이트를 벗어났다 · `UXIN` 300배 · `HDB` 3배 · `BZ` 2배가 10-24 리밸런싱에 들
+참이었다). 그 사실을 올리자 사용자는 「claude.md의 판단기준과 드라이런 프로세스를 복기하여 스스로 최선의 판단을 해봐.」라고 했다.
+**내 판단**: 관문 밖 순위가 표지로 비율 ≠ 1이거나 모르는 ADS를 뺀다(`UsMarketCapUniverseAdapter.screenDepositary` · 2026-10-22 배포 ·
+드라이런 표지 23 · 뺌 3 · 편입 변화 0). C의 필드(`adsSuspectCount`)는 그대로 둔다 — 이름이 ADS를 표방하는 편입(비율 1 · `TEVA`)을 센다.
+관문 뒤 판마다 비율을 적용해 ADS를 제값으로 들이는 것은 탐색 `explore/universe/ADS-BASIS-PLAN-1022.md` §3이다.
 
 **C를 구현했다.** `ScreeningResponse.adsSuspectCount`가 결과 머리말에 실리고, 화면은
 「미국예탁증서(ADS) N종목 포함 — 시총 순위가 정확하지 않을 수 있습니다」를 그린다.
@@ -247,9 +248,9 @@ ADR-0125의 입력 축은 **원리적으로 못 본다**: `eps = 0`이라 `NULLI
 아닌가」를 못 잡는다.** `AKTX`의 병은 ADS라서가 아니라 비율이 1이 아니어서다. 그리고 이 문서가
 기각한 다섯 축과 인접하다.
 
-**큰 ADR이 안 들어오는 이유는 이름이 아니라 다른 둘이다** — `BABA`·`TM`·`SONY`·`PDD`·`NIO`·
-`ASML`은 **통화 게이트**(비-USD 재무 행이 있다), `TSM`·`HSBC`·`NVS`·`SAP`·`UL`·`BP`는
-**주식수 결손**. `AKTX`만 USD로만 보고해 통과했다. **즉 이름 축의 거짓 음성은 지금 순위에 안 닿는다.**
+**통화 게이트는 ADS를 막는 장치가 아니다** — 종목에 비USD 재무 행이 남아 있을 때만 막고, 그 행은 판 회수로 사라질 수 있다
+(2026-10-19 GAP_FILL #860: `BABA`·`NIO`·`NTES`·`HDB`·`UXIN`·`BZ` 등 48 발행사가 USD 편의환산 원판만 남아 게이트를 벗어났다).
+그래서 이름 축의 거짓 음성(평범한 이름의 ADS — `HDB`)은 순위에 닿는다 — 관문 밖은 위 표지 판정이 막는다.
 
 ### 복수 클래스는 시총을 <b>과소</b>하게 만든다 — 지금 판정을 바꾸는 것은 하나다 (2026-09-08)
 

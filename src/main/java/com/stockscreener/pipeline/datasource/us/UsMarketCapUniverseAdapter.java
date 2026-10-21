@@ -221,7 +221,8 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 뒤 둘에 2({@code LILAP}·{@code DDT}) — <b>전부 사업회사 보통주가 아니다.</b> 이것들은 발행사 주식수를 그대로
      * 써서 시총이 부풀고, 보통주보다 비싸면 CIK 대표를 빼앗았다({@code PPLC}가 {@code PPL}을 밀어냄).
      * 대표는 {@link #dropCikDuplicates}가 거래대금으로 고르므로 이 문구는 <b>보통주가 후보가 아닐 때의 방어</b>다.
-     * {@code DEPOSITORY}는 안 넣는다 — 그 오철자를 쓰는 ADR 보통주({@code CMPS}·{@code SLN})를 자른다.
+     * {@code DEPOSITORY}는 안 넣는다 — 그 오철자를 쓰는 ADS 보통주({@code CMPS} 1 ADS = 1주 · {@code SLN} 1 ADS = 3주)를 이름으로 자르지
+     * 않고, 비율은 {@link #screenDepositary}가 표지로 가린다(비율 1이면 값이 옳아 남는다).
      */
     private static final String SECURITY_KIND_WORDS =
             "\\bPREFERRED\\b|\\bPFD\\b|\\bWARRANTS?\\b|\\bRIGHTS?\\b|\\bDEPOSITARY\\b"

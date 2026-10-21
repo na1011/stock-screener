@@ -488,14 +488,20 @@ BRK.B 7·82 · AKTX 29·72·90 · V 2) **같은 `(start, end, accn)`에 값이 �
 `PLNT` **2015-06-30** · `WTTR` **2018-03-31**이고 `STZ`·`IMKTA`·`GRDN`은 네 태그 전부 404다.
 **즉 이 폴백으로 유니버스에 돌아오는 사업회사는 0이다.**
 
-### ADS 비율 — 개념은 있고, 내는 발행사가 거의 없다 (2026-09-14 · 16콜)
+### ADS 비율 — 표지 증권 이름이 판마다 준다 (2026-10-22 · 공시 인스턴스)
 
-`dei:EntityListingDepositoryReceiptRatio`(단위 `pure`)가 실재한다 — `BABA`가 **32팩트**를 낸다.
-
-**그러나 ADR·ADS 대표 16종목에 물으면 내는 것은 `BABA` 하나뿐이다**(6.3%).
-`AKTX`·`TSM`·`HSBC`·`NVS`·`SAP`·`UL`·`BP`·`TM`·`SONY`·`PDD`·`NIO`·`ASML`·`BIDU`·`GHG`·`FENG`가
-전부 **404**다. **「개념이 없다」와 「그 발행사가 안 낸다」를 갈라 적는다** — 앞은 거짓이고
-뒤가 참이며, 커버리지가 1/16이라 **ADS 비율의 일반 해법이 못 된다.**
+**1 ADS가 대표하는 주식 수는 공시 표지의 `dei:Security12bTitle`이 글로 싣는다** — 「American Depositary Shares, each representing
+five ordinary shares」. ADS 77 CIK의 2015~ 정기 공시 933판에서 ADS 줄 624판 중 581판이 비율을 적었다(나머지 43은 「American
+depositary shares」 단독 등 글에 비율이 없다). 꼴은 수사 · 숫자 · 「N ADSs representing M」 · 분수 · 붙어 쓴 글이 섞인다 — 판독기
+`DepositaryRatio`(꼴마다 시험).
+- 표지 이름은 2019년부터 태깅된다(2015~2018 판 138에 0) — 그 앞 판은 이 길로 비율이 없다.
+- 비율은 바뀐다(77 중 22 — BABA 1 → 8 · NTES 25 → 5 · UXIN 3 → 30 → 300).
+- **표지는 6-K에 없다**(12(b) 증권 줄이 없다) — 10-K · 10-Q · 20-F · 40-F를 본다. 10-Q만 기호를 싣고 이름을 안 싣는 발행사가 있다(QNRX).
+- 전용 태그 `dei:EntityListingDepositoryReceiptRatio`(단위 `pure`)는 **companyfacts에는 거의 없고**(ADR·ADS 대표 16종목에 물어 `BABA` 1 ·
+  2026-09-14 · `SecEdgarConceptProbeLiveTest`) 공시 인스턴스에는 일부 있다(최신 표지 76 중 8). 이름과 어긋난 판 5는 전부 태그가 낡거나
+  뒤집혔다(NTES 25 · API 0.25) — 보조로만 맞댄다.
+- 표지 주식수(`EntityCommonStockSharesOutstanding`)는 보통주다(25종목 대조). 발행사 태깅 오류가 있다 — BABA FY2026 20-F 인스턴스
+  1,858,037,427 · 본문 18,580,374,278(10배).
 
 ### 공시 보충 — companyfacts가 빠뜨린 정기 공시 (2026-10-06 실측)
 
