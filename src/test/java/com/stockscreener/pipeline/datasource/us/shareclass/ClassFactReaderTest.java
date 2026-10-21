@@ -179,4 +179,22 @@ class ClassFactReaderTest {
                 Map.entry("us-gaap:CommonClassAMember", "AAA"), Map.entry("us-gaap:CommonClassBMember", "BBB"));
         assertThat(f.coverOf(ClassFactReader.SHARES_OUTSTANDING)).as("표지 주식수의 뜻은 그대로다").isEmpty();
     }
+
+    @Test
+    @DisplayName("표지 글의 줄바꿈 없는 공백 · 너비 0 공백은 공백으로, 방향 표시는 지운다 — 그래야 「Class A」로 상장 클래스를 잇는다(ERIE 꼴)")
+    void coverTextIsPlainSpaced() throws Exception {
+        String body = """
+                <dei:TradingSymbol contextRef="q">CLSE</dei:TradingSymbol>
+                <dei:Security12bTitle contextRef="q">Class&#160;A common&#x200B;stock,&#x200E;&#160;</dei:Security12bTitle>
+                <us-gaap:EarningsPerShareBasic contextRef="qA" unitRef="u" decimals="2">3.87</us-gaap:EarningsPerShareBasic>
+                <us-gaap:EarningsPerShareBasic contextRef="qBeq" unitRef="u" decimals="0">581</us-gaap:EarningsPerShareBasic>
+                """;
+
+        ClassFacts f = read(body).facts();
+
+        assertThat(f.coverOf(ClassFactReader.SECURITY_TITLE)).containsExactly(Map.entry(ClassFacts.AXISLESS, "Class A common stock,"));
+        assertThat(DenominatorJudge.listedMember("CLSE", f, List.of("us-gaap:CommonClassAMember", "us-gaap:CommonClassBMember")))
+                .containsExactly("us-gaap:CommonClassAMember", "title");
+        assertThat(ClassFactReader.plainText("Class\u00a0A\u2007Units")).isEqualTo("Class A Units");
+    }
 }

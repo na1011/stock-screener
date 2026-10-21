@@ -16,6 +16,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 공시 인스턴스에서 클래스 축 판정의 팩트를 읽는다(탐색 `SHARES-CLASS-PLAN-V5-1015.md` §0-5·6 · 시뮬레이터 {@code load5.py}).
@@ -43,9 +44,9 @@ public final class ClassFactReader {
     /**
      * 저장 팩트({@code sec_filing_class_fact.facts})를 정하는 읽기 규칙의 판 — 이 파일과 {@link ClassFacts}의 저장 형태를 바꾸면
      * 올린다. 판이 다른 행은 없는 것으로 치고 다음 받기가 다시 받는다. 2 — 표지 기호 · 증권 이름이 거래소 축 · 보통주 구성요소 축 꼴도
-     * 받는다(2026-10-21).
+     * 받는다(2026-10-21). 3 — 표지 글의 줄바꿈 없는 공백 · 너비 0 구분자를 공백으로, 방향 표시를 지운다({@link #plainText} · 2026-10-21).
      */
-    public static final int READER_VERSION = 2;
+    public static final int READER_VERSION = 3;
 
     public static final String SHARES_OUTSTANDING = "EntityCommonStockSharesOutstanding";
     public static final String TRADING_SYMBOL = "TradingSymbol";
@@ -64,6 +65,10 @@ public final class ClassFactReader {
     /** 상장 판정의 표지 — 기호 · 거래소 · 증권 이름. 저장 팩트({@link #COVER})와 따로 둬 그 판을 안 바꾼다. */
     private static final Set<String> LISTING_COVER = Set.of(TRADING_SYMBOL, SECURITY_EXCHANGE, SECURITY_TITLE);
     private static final Set<String> DURATION = Set.copyOf(concat(WEIGHTED_TAGS, EPS_TAGS, NUMERATOR_TAGS));
+    /** 낱말을 가르는 비ASCII 공백 — 공백 분리자 전부와 너비 0 구분자(지우면 너비 0 공백으로 가른 두 낱말이 하나로 붙는다). */
+    private static final Pattern WIDE_SPACE = Pattern.compile("[\\p{Zs}\\u200B\\u2060\\uFEFF]");
+    /** 글자 사이에 끼어도 뜻이 없는 표시 — 방향 표시와 soft hyphen. */
+    private static final Pattern INVISIBLE = Pattern.compile("[\\u00AD\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]");
     private static final String CLASS_AXIS = "StatementClassOfStockAxis";
     private static final String EQUITY_AXIS = "StatementEquityComponentsAxis";
     private static final String SUBSEQUENT_AXIS = "SubsequentEventTypeAxis";
@@ -148,7 +153,7 @@ public final class ClassFactReader {
                     boolean nil = "true".equals(r.getAttributeValue(XSI, "nil"));
                     String text = nil ? null : r.getElementText();
                     if (text != null && !text.isBlank()) {
-                        raws.add(new Raw(local, contextRef, decimals, text.trim()));
+                        raws.add(new Raw(local, contextRef, decimals, coverConcepts.contains(local) ? plainText(text) : text.trim()));
                     }
                 }
             } finally {
@@ -245,6 +250,16 @@ public final class ClassFactReader {
                 cover.computeIfAbsent(concept, k -> new LinkedHashMap<>()).putIfAbsent(member,
                         TRADING_SYMBOL.equals(concept) ? String.join(", ", texts) : texts.iterator().next())));
         return new Result(new ClassFacts(durations, cover, documentType), unreadable);
+    }
+
+    /**
+     * 표지 글(기호 · 거래소 · 증권 이름 · 표지 주식수)을 읽는 쪽이 ASCII 공백으로 가르게 한다. 공시 표지 증권 이름이 「Class A」 사이에
+     * 줄바꿈 없는 공백(U+00A0)을 싣곤 하는데(클래스 스윕 재료 공시 12,529 중 1,042 · 2026-10-21) 자바 정규식의 {@code \s}는 그것을 안 받아, 판정기 · 상장
+     * 판정({@code ClassLines})이 클래스 글자를 못 읽었다(ERIE 표지 → 상장 클래스 unmapped). 공시 HTML 경로({@code ListingFormReader})는
+     * 이미 읽는 자리에서 바꾼다 — 여기도 읽는 자리에서 한 번 바꿔, 글을 읽는 정규식마다 따로 막지 않는다.
+     */
+    static String plainText(String text) {
+        return INVISIBLE.matcher(WIDE_SPACE.matcher(text).replaceAll(" ")).replaceAll("").strip();
     }
 
     /** 선언 정밀도의 반올림 반폭. 정밀도가 수로 안 읽히면 그 팩트를 못 읽은 것으로 센다(호출자). */

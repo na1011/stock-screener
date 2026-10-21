@@ -82,7 +82,7 @@ public class ShareClassDeriver {
         IssuerFacts cf = IssuerFacts.fromCompanyFacts(MAPPER.readTree(input.companyFacts()))
                 .withFilings(store.supplementedFilings(input.cik()));
         Map<String, ClassFacts> facts = factsByCik.computeIfAbsent(input.cik(), store::okFacts);
-        List<IssuerTimeline.Verdict> judged = timeline.judge(input.ticker(), cf, cf.anchorCandidates(), facts::get,
+        List<IssuerTimeline.Verdict> judged = timeline.judge(input.symbol(), cf, cf.anchorCandidates(), facts::get,
                 store.splits(input.stockId()), HISTORY_FROM, IssuerFacts.INSTANCE_FROM);
         List<ShareClassStore.VerdictRow> rows = new ArrayList<>(judged.size());
         int hidden = 0;

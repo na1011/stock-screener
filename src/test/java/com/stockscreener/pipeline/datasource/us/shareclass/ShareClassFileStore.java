@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.datasource.us.shareclass;
 
+import com.stockscreener.stock.StockReader;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -100,9 +101,11 @@ public class ShareClassFileStore extends ShareClassStore {
     @Override
     public List<Input> inputs(String marketCode) {
         Map<Long, String> active = new HashMap<>();
-        jdbc.query("SELECT id, ticker FROM stock WHERE market_code = ? AND is_active",
+        Map<Long, String> symbols = new HashMap<>();
+        jdbc.query("SELECT s.id, s.ticker, " + StockReader.DISPLAY_TICKER + " AS symbol FROM stock s WHERE s.market_code = ? AND s.is_active",
                 rs -> {
                     active.put(rs.getLong("id"), rs.getString("ticker"));
+                    symbols.put(rs.getLong("id"), rs.getString("symbol"));
                 }, marketCode);
         List<Input> out = new ArrayList<>();
         try {
@@ -110,7 +113,7 @@ public class ShareClassFileStore extends ShareClassStore {
                 String ticker = active.get(e.getKey());
                 if (ticker != null) {
                     String[] key = e.getValue().getFileName().toString().replace(".json", "").split("_");
-                    out.add(new Input(e.getKey(), ticker, Long.parseLong(key[1]), Files.readString(e.getValue())));
+                    out.add(new Input(e.getKey(), ticker, symbols.get(e.getKey()), Long.parseLong(key[1]), Files.readString(e.getValue())));
                 }
             }
         } catch (IOException e) {

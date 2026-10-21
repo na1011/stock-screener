@@ -113,6 +113,37 @@ class ShareClassAxisReadTest {
         assertThat(second.written()).as("같은 재료면 행을 안 건드린다").isZero();
     }
 
+    @Test
+    @DisplayName("유도기 — 닫힌 행은 비운 표지가 아니라 되찾은 기호로 상장 클래스를 잇는다(ERIE 2026-07-30 10-Q 꼴)")
+    void closedRowIsJudgedByItsSymbol() {
+        long stockId = insertStock("CLSE~2026-08-01");
+        store.saveInput(stockId, 4343, """
+                {"facts":{"us-gaap":{
+                  "_filings":{"units":{"filing":[{"accn":"0000004343-26-000001","form":"10-Q","filed":"2026-07-30"}]}}}}}
+                """);
+        // 클래스 둘의 주당이익이 달라(3.87 · 581) 분모를 상장 클래스(A) 단위로 내려면 표지 기호로 A를 이어야 한다.
+        store.saveFact(4343, "0000004343-26-000001", "10-Q", LocalDate.of(2026, 7, 30), "OK", """
+                {"documentType":"10-Q","durations":{
+                  "NetIncomeLoss":[["-","2026-04-01","2026-06-30",1.80294E8,500.0]],
+                  "EarningsPerShareBasic":[["us-gaap:CommonClassAMember","2026-04-01","2026-06-30",3.87,0.005],
+                                           ["us-gaap:CommonClassBMember","2026-04-01","2026-06-30",581.0,0.5]],
+                  "WeightedAverageNumberOfSharesOutstandingBasic":[["us-gaap:CommonClassAMember","2026-04-01","2026-06-30",4.6189033E7,0.5],
+                                           ["us-gaap:CommonClassBMember","2026-04-01","2026-06-30",2542.0,0.5]],
+                  "NetIncomeLossAvailableToCommonStockholdersBasic":[["us-gaap:CommonClassAMember","2026-04-01","2026-06-30",1.78818E8,500.0],
+                                           ["us-gaap:CommonClassBMember","2026-04-01","2026-06-30",1476000.0,500.0]]},
+                 "cover":{"Security12bTitle":[["-","Class A common stock,"]],"TradingSymbol":[["-","CLSE"]],
+                          "EntityCommonStockSharesOutstanding":[["us-gaap:CommonClassAMember","46189068"],["us-gaap:CommonClassBMember","2542"]]}}
+                """, null, null);
+
+        ShareClassDeriver.Tally tally = deriver.derive("US");
+
+        Map<String, Object> v = jdbcTemplate.queryForMap(
+                "SELECT kind, status, branch FROM financial_share_class_filing WHERE stock_id = ?", stockId);
+        assertThat(tally.failedLines()).isEmpty();
+        assertThat(v.get("kind")).isEqualTo("T");
+        assertThat(v.get("status")).as("판정 %s", v.get("branch")).isEqualTo("O");
+    }
+
     /**
      * 한 줄의 재무 여섯 행과 판정 넷. 공시일 순: 축 없는 표지(d) → 앵커(T 보임 1000) → 정정(서 있는 T2 · 사이에 분할 2) → 앵커
      * 숨김 → 판정 없는 새 정기 공시 → (인스턴스 구간 앞의 옛 공시).

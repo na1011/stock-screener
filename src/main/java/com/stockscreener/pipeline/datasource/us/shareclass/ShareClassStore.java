@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.datasource.us.shareclass;
 
+import com.stockscreener.stock.StockReader;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -32,8 +33,14 @@ public class ShareClassStore {
     public record FactRow(String accession, int readerVersion, String status, String failureKind) {
     }
 
-    /** 유도 단위 — 상장 줄 하나와 그 companyfacts 재료. */
-    public record Input(long stockId, String ticker, long cik, String companyFacts) {
+    /**
+     * 유도 단위 — 상장 줄 하나와 그 companyfacts 재료.
+     *
+     * @param ticker 행의 표지(로그 · 실패 목록) — 닫힌 행은 비운 표지({@code T~마지막 날} · ADR-0180)다
+     * @param symbol 표지 기호와 맞댈 기호 — 닫힌 행은 비운 표지에서 되찾은 마지막 기호. 비운 표지를 그대로 맞대면 어떤 표지 기호와도
+     *               안 맞아 다중 클래스의 상장 클래스가 원리적으로 안 이어진다(클래스 스윕 2026-10-21 WKEY~2026-10-04)
+     */
+    public record Input(long stockId, String ticker, String symbol, long cik, String companyFacts) {
     }
 
     private final JdbcTemplate jdbcTemplate;
@@ -97,12 +104,13 @@ public class ShareClassStore {
     /** 시장의 활성 상장 줄 중 재료가 있는 것. */
     public List<Input> inputs(String marketCode) {
         return jdbcTemplate.query("""
-                SELECT i.stock_id, s.ticker, i.cik, i.company_facts::text AS company_facts
+                SELECT i.stock_id, s.ticker, """ + StockReader.DISPLAY_TICKER + """
+                 AS symbol, i.cik, i.company_facts::text AS company_facts
                 FROM sec_share_class_input i JOIN stock s ON s.id = i.stock_id
                 WHERE s.market_code = ? AND s.is_active
                 -- 시대 무관: 행마다의 판정 재료 — 닫힌 행도 과거 기준일 순위가 읽는 판정이 있어야 한다
                 ORDER BY s.ticker
-                """, (rs, n) -> new Input(rs.getLong("stock_id"), rs.getString("ticker"), rs.getLong("cik"),
+                """, (rs, n) -> new Input(rs.getLong("stock_id"), rs.getString("ticker"), rs.getString("symbol"), rs.getLong("cik"),
                 rs.getString("company_facts")), marketCode);
     }
 
