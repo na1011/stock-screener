@@ -109,4 +109,9 @@ psql -d stock_screener -At -c "WITH b(sym, d) AS (VALUES ('CAI','2025-06-18'),('
   UHAL · SPHR(가치 비율) · CORZ(앞 봉 채움 → OBSERVED). IR 2020-03-02 APPLIED는 이 규칙이 다시 안 본다(이미 적용) — 판정 CLI로 REJECTED(승인).
 - 감시의 지금 적중(2026-10-19 운영 질의): 간격 4(CAI · FLY · NIQ · PPLC) · 외딴 평봉 = 경계 행 7 + 면제 24 · 상쇄 배수 = UHAL · CRC(경계 앞) ·
   LUNR(면제) — 교정과 보충 뒤 0이 수용 기준이다.
+- **판정(2026-10-21 · 묶음 1 끝)**: 감시 적중 0(10-20 15:30 `PriceIntegrityAlerter` — 면제 24 뺌) · 판정 대기 0(OBSERVED 없음 · 네 판정 행은
+  10-21 14:00 사슬 뒤에도 `judged_at` 그대로 · `held_at` 10-21 0행) · GBCI 계수 전 봉 1. **프리셋**(`PresetResultSnapshotTest` · 10-15 · 09-16 · 03-02 ·
+  교정 전 10-19 07:08 대 10-21 14:40 · 8,909 → 8,868행): 다른 63행이 전부 귀속된다 — 대상 행 15(SCCO 3 · CBSH 3 · CORZ 2 · CART 2 · CAI 2 · VG 2 · PPLC 1 ·
+  RJF는 반박 뒤 REJECTED라 전후 같다) · 10-16 편입 22종목 44행(교정 전 스냅숏에서 10-15가 최신일이라 열린 편입의 하한을 접었다 — ADR-0135 · 데이터 몫 아님) ·
+  10-15 봉 잠정값의 확정 4행(AMGN · MKL · DECK 둘 — 10-19 13:30 재수집이 거래량 지표를 고쳐 문턱을 넘음 · `alpaca-bars.md`) · 미설명 0.
 - 되돌리려면: 경계 · 보충 파일을 비우고 `PriceRefutation.screen`을 우회한다. 지운 봉은 CSV에서 다시 넣는다.
