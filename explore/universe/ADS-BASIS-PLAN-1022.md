@@ -127,6 +127,30 @@ v1(이름 축에 ADS 표기 추가)은 두 렌즈 반증이 「고쳐서 간다�
 - 과거 날짜 순위(`UsPastRanking` · 관문 경로)는 안 탄다.
 - 관문 밖에서 비율 1 ADS 중 DEPOSITARY 이름은 계속 빠진다(오늘과 같다).
 
+### v3 — 두 렌즈 반증(「고쳐서 간다」 둘)을 재서 고친 것
+- **표지 고르기**: `lastCoverBefore`는 XBRL 6-K가 시도 3건을 다 쓴다(DSGX ≥8 · ICLR ≥2 · AER · TSEM · BNT — 지금 편입 · 주식수 판 자체가 6-K).
+  → **증권 이름(`Security12bTitle`)이 실린 표지만 받는다**: 정기 양식 중 10-K · 10-Q · 20-F · 40-F(정정 포함)만, 최근 것부터, 이름 있는 첫 표지.
+  6-K는 건너뛴다(표지에 12(b) 증권 줄이 없다). QNRX(10-Q 10판 연속 기호만) 꼴도 이름 없는 표지는 건너뛰고 더 앞 판으로 간다.
+- **기호 줄이 둘**(같은 기호가 ADS 줄과 보통주 줄에 · 최신 83판 중 11 · TAL · TIGR · NIO · YI …): **기호가 달린 줄 중 하나라도 ADS면 ADS**, 비율은 그 ADS 줄에서.
+  기호 줄이 없으면(DSGX 표지 오타 「DGSX」) 표지의 ADS 줄로 본다.
+- **표지가 ADS를 말하지 않는데 이름이 ADS면**(EDU 2024 · 2025 ADS 줄 이름이 「Name of Exchange…」 · SCNI 2022 · BEKE 최신): 판정 불가 → 뺀다.
+- **판독기 꼴 추가**(과거 933판 반증 스크립트 `refute/ads/hist_check.py`): 「two ADSs representing one」 · 「two representing one」(0.5 — 1로 읽던 4판 ·
+  남기는 방향의 오류) · 「one-half」 · 「one-third」(17판) · 「represents two of our」(BZ 4판) · 붙어 쓴 「ordinaryshares」 · 「each representing one Class A」(단위 낱말 없음 · WB).
+- **비율 태그**: `ClassFactReader.LISTING_COVER`에 `EntityListingDepositoryReceiptRatio`를 더해 함께 읽는다. 이름이 비율을 안 실으면 태그로,
+  둘 다 있고 다르면 판정 불가(NTES 태그 25 · 이름 5처럼 태그가 낡거나 API처럼 뒤집힌 판이 있다 — 다르면 모른다).
+- **범위 재료**: `ShareCount`에 주식수 판의 `report_code`를 싣는다(꺼진 SQL · 켬 `CLASS_ROWS`). 켬의 보류 후보(`ClassHold`)는 판 꼴이 없어 이름 범위만 탄다 — 관문 켬은 B가 대신한다.
+- **판정 경계**: `Ranking`에 표지 판정이 돈 경계(앞에서 몇 번째까지)를 싣는다 — 그 너머(`deduped`의 N 뒤)를 읽는 재생 도구
+  (`UsCandidateRankSweepLiveTest` · `UsMembershipReplayLiveTest`)와 `logBoundary`는 판정 안 된 순위임을 안다.
+- **배선**: 어댑터는 alpaca 조건 · `SecListingFormClient`는 sec-edgar 조건이다 → `ObjectProvider`로 받고 없으면 `AUTH`로 던진다(`UsPastRanking`과 같다).
+- **SEC 시간대**: 정기 리밸런싱(토 20:00)은 SEC 금지 창(평일 13:20~15:45) 밖. 손 `--job=universe`는 그 창 밖에서 — 어댑터 javadoc에 적는다.
+- **실패 정책**: 표지 받기 실패는 실행을 세운다(부분 목록 금지와 같은 방향). 그날 리밸런싱이 서면 `ops/apply-window/00-precheck.sh`(토 리밸런싱 SUCCESS 필수)가 관문을 막는다 — 의도된 연쇄다.
+- **원인 · 순서**(계획 밖 반증): 비USD 행 삭제는 정기 재무가 아니라 **후보 소비가 띄운 `financial-refill` GAP_FILL #860**(매 평일 돌 수 있는 경로)이다.
+  B가 들일 ADS 15 중 7(NTES · BABA · ZTO · LI · NIO · BZ · HDB)이 그 48에 든다 → **§4(통화 축)를 B보다 먼저 닫는다.** 10-24의 비ADS 진입은 NBIS 하나(최신 USD 원판 · 보존 창 이력 안 잼).
+- **A′는 닫힘이 아니다** — 관문 밖의 노출(부푼 값의 진입)을 막는 것이고, 들어와야 할 ADS(ARM · NTES · SE … 68+)의 결손은 B에 열린 채 둔다.
+  「관문 밖은 비율을 지표까지 못 쓴다」는 잰 문장이 아니다 — 지금 편입 중 비율 ≠ 1 ADS가 0이라 B가 지금 편입 값을 바꾸는 칸은 0으로 보인다.
+  B를 관문 뒤에 두는 실제 사유는 판마다 비율 재료(공시 표지 판마다 저장)와 기저 판정 앞에 두는 구현이 V70의 표지 저장과 같은 자리라는 것이다.
+- **관문 경로**: `UsPastRanking`(과거 명부 복원)은 A′를 안 탄다 — §4 이후 통화 게이트가 BABA · HDB · UXIN · BZ를 더 가리지 않으므로 **B가 관문보다 먼저다**(reload-gate 전제로 올린다 · G1~G4 기대값은 10-19 삭제 전 상태라 다시 뜬다).
+
 ## 3. 계획 B — 관문 뒤 판마다 ADS 비율 (다음 계획 · 별도 반증)
 - A′의 표지 판정과 이름 축 술어(`nonCommonName` 공유)를 관문 켬에서 대신하고 걷는다.
 - 재료: ADS 발행사의 정기 공시 표지(`Security12bTitle` · `TradingSymbol` · 비율 태그) — 클래스 축 앵커 후보(복수 클래스 꼴)에 안 드는
