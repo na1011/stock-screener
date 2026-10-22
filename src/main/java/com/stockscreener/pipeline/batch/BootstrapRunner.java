@@ -407,6 +407,8 @@ public class BootstrapRunner implements ApplicationRunner {
             // 미국 순위 후보의 공시 뒤 분할을 원장에 적는다(ADR-0178) — 시장 전체 1~3콜. 적은 행은 APPROVED라 순위에 실리려면
             // 재구축(--job=adjustment-rebuild 또는 다음 평일 14:00 사슬)이 APPLIED로 올려야 한다.
             case "candidate-splits" -> candidateSplitJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
+            // 예탁증권 줄 발행사의 2019 뒤 ADS 사건 전부(ADR-0183) — 관문 켬에서만(예탁 표지 표가 관문 마이그레이션이다) · 관문 10단계 전 한 번.
+            case "depositary-splits" -> candidateSplitJob.runDepositaryHistory(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
             // 편입 뒤로 FR·FSR·G가 정기 범위로 맞춘 적이 없는 편입을 맞춘다(ADR-0177) — 재무·거버넌스 표를 쓴다. 대상은 표지 술어이고
             // --tickers는 그 안에서 더 좁힌다. 손 실행은 사슬 안 화해를 안 한다(무효화 알림이 화해 명령을 싣는다).
             case "refresh-behind" -> freshnessCatchUpJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
@@ -464,7 +466,7 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | share-basis-derive"
                             + " | corporate-action-review | corporate-action-judge"
                             + " | market-calendar | bar-gap-review"
-                            + " | filing-listing | filing-consumption | candidate-consumption | candidate-splits"
+                            + " | filing-listing | filing-consumption | candidate-consumption | candidate-splits | depositary-splits"
                             + " | refresh-behind | stock-fold | sec-cik-bind | us-delisted-intake | price-boundary | symbol-era-seed");
         };
 
@@ -519,7 +521,8 @@ public class BootstrapRunner implements ApplicationRunner {
     private static final java.util.Set<String> REDERIVE_SHARE_BASIS_AFTER = java.util.Set.of(
             "initial-load", "financial-refill", "full-statement-refill", "filing-consumption", "candidate-consumption",
             "refresh-behind",
-            "corporate-action", "corporate-action-judge", "adjustment-rebuild", "candidate-splits", "price-boundary");
+            "corporate-action", "corporate-action-judge", "adjustment-rebuild", "candidate-splits", "depositary-splits",
+            "price-boundary");
 
     /**
      * 화해의 기준일. {@code --as-of}가 없으면 정기 화해와 같은 규약({@link IndicatorReconciler#dataAsOf} —

@@ -29,6 +29,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -155,6 +156,30 @@ class CandidateSplitJobTest {
                 new BatchExecutions(executor, recorder, alerts::add, context));
 
         assertThat(withoutSource.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER)).isEqualTo(BatchStatus.FAILED);
+    }
+
+    @Test
+    @DisplayName("예탁 사건 손 잡 — 예탁 표지를 받은 등록인의 행이면 편입이든 후보든 2019 뒤 사건을 종목 조회로 적고, 관문 꺼짐이면 서지 않는다")
+    void depositaryHistoryRecordsSince2019() throws Exception {
+        jdbc.update("UPDATE stock SET sec_cik = 919191 WHERE id IN (?, ?)", candidate, member);
+        jdbc.update("""
+                INSERT INTO sec_depositary_cover (cik, accession, form, filed, reader_version, status, facts)
+                VALUES (919191, 'A-1', '20-F', '2025-04-01', 1, 'OK', '{}'::jsonb)
+                """);
+        LocalDate event = LocalDate.of(2022, 10, 28);
+        when(source.fetchCorporateActions(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(com.stockscreener.pipeline.datasource.us.listing.DepositaryRatioJudge.LEDGER_FROM),
+                org.mockito.ArgumentMatchers.eq(AS_OF)))
+                .thenReturn(com.stockscreener.pipeline.datasource.CorporateActionDataSource.Fetched.of(List.of(reverse(event))));
+        CandidateSplitJob gateOn = new CandidateSplitJob(source, shareCounts, stockRegistrar, collector,
+                new BatchExecutions(executor, recorder, alerts::add, context), jdbc, true);
+
+        assertThat(gateOn.runDepositaryHistory(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL)).isEqualTo(BatchStatus.SUCCESS);
+        assertThat(statusesOf(candidate)).hasSize(1);
+        assertThat(statusesOf(member)).hasSize(1);
+        assertThat(statusesOf(alreadyReflected)).as("예탁 표지 없는 등록인").isEmpty();
+        assertThatThrownBy(() -> job.runDepositaryHistory(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     private static CorporateAction reverse(LocalDate exDate) {

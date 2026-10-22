@@ -15,7 +15,7 @@ applies_to:
 
 미국 재무 어댑터가 `companyfacts`의 `ifrs-full`도 읽는다 — **`stockscreener.gate.us` 뒤에서만.** 읽기 전에 `facts`를 공시(접수번호) 단위로
 다시 짓는다(`TaxonomyFrame`): 공시마다 택소노미 하나 · 표시 통화 하나 · 회계기준 전환의 다리 · IFRS 개념을 같은 뜻의 us-gaap 후보 열쇠에 별칭.
-가장 늦은 연차 공시가 비USD면 종목 단위로 담지 않는다. 공시 보충(ADR-0173)의 인스턴스 판독기는 켬·꺼짐 둘 다 `ifrs-full`을 읽는다(판 9).
+가장 늦은 연차 공시가 비USD면 종목 단위로 담지 않는다. 공시 보충(ADR-0173)의 인스턴스 판독기는 켬·꺼짐 둘 다 `ifrs-full`을 읽는다(판 10 — 판 9는 http 네임스페이스만 봐 2023년 판부터의 https IFRS 공시를 못 읽었다).
 
 설계와 실측의 정본은 탐색 브랜치 `explore/s-vintage-coherence`의 `explore/universe/ifrs/IFRS-PLAN-1022.md` v2다(두 렌즈 반증 「고쳐서 간다」 · 절 「반증 v1 판정 표」).
 

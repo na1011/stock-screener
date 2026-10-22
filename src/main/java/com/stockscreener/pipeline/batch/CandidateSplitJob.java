@@ -45,6 +45,8 @@ import java.util.Set;
 public class CandidateSplitJob {
 
     public static final String JOB_NAME = "candidate-splits";
+    /** 예탁증권 줄 발행사의 2019 뒤 ADS 사건 전부(관문 켬 손 잡 · ADR-0183). */
+    public static final String DEPOSITARY_JOB_NAME = "depositary-splits";
 
     private static final Logger log = LoggerFactory.getLogger(CandidateSplitJob.class);
 
@@ -56,16 +58,30 @@ public class CandidateSplitJob {
     private final StockRegistrar stockRegistrar;
     private final CorporateActionCollector collector;
     private final BatchExecutions batchExecutions;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Autowired
     public CandidateSplitJob(ObjectProvider<AlpacaCorporateActionAdapter> source, StoredShareCounts shareCounts,
                              StockRegistrar stockRegistrar, CorporateActionCollector collector,
-                             BatchExecutions batchExecutions) {
-        this(source.getIfAvailable(), shareCounts, stockRegistrar, collector, batchExecutions);
+                             BatchExecutions batchExecutions, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate,
+                             @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.us}") boolean usGate) {
+        this(source.getIfAvailable(), shareCounts, stockRegistrar, collector, batchExecutions, jdbcTemplate, usGate);
+    }
+
+    /** 미국 관문 설정 — 예탁 사건 손 잡은 켬에서만 돈다(예탁 표지 표가 관문 마이그레이션이다). */
+    private final boolean usGate;
+
+    /** 시험 전용 — 정기 후보 분할만 묻는다(예탁 사건 손 잡은 안 쓴다). */
+    CandidateSplitJob(AlpacaCorporateActionAdapter source, StoredShareCounts shareCounts, StockRegistrar stockRegistrar,
+                      CorporateActionCollector collector, BatchExecutions batchExecutions) {
+        this(source, shareCounts, stockRegistrar, collector, batchExecutions, null, false);
     }
 
     CandidateSplitJob(AlpacaCorporateActionAdapter source, StoredShareCounts shareCounts, StockRegistrar stockRegistrar,
-                      CorporateActionCollector collector, BatchExecutions batchExecutions) {
+                      CorporateActionCollector collector, BatchExecutions batchExecutions,
+                      org.springframework.jdbc.core.JdbcTemplate jdbcTemplate, boolean usGate) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.usGate = usGate;
         this.source = source;
         this.shareCounts = shareCounts;
         this.stockRegistrar = stockRegistrar;
@@ -121,6 +137,48 @@ public class CandidateSplitJob {
         }
         return execution.finish("공시일 뒤 분할이 있는 후보 %d종목 · 기록 %d · 근접중복 %d".formatted(plan.size(),
                 execution.writtenRowCount(), conflicts.size()));
+    }
+
+    /**
+     * 예탁증권 줄 발행사(예탁 표지를 받은 등록인의 미국 행 전부 — 편입 · 후보 · 비활성 과거 행)의 {@code LEDGER_FROM} 뒤 기업행위를 종목
+     * 조회로 받아 원장에 적는다(관문 켬 · 관문 10단계 전 한 번 · ADR-0183). 공시마다 k를 정할 때 「그 사이 ADS 사건 없음」을 묻는데,
+     * 정기 후보 분할({@link #run})은 순위 판독기를 통과한 후보의 공시 뒤 사건만 적어 그 부재가 우리 모집단이 만든 것이 된다(B 계획 반증).
+     * 적은 행은 APPROVED — 같은 사슬의 조정 재구축이 APPLIED로 올린다.
+     */
+    public BatchStatus runDepositaryHistory(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        if (!usGate) {
+            throw new IllegalStateException(DEPOSITARY_JOB_NAME
+                    + "는 미국 관문 켬(--stockscreener.gate.us=true)에서만 돈다 — 예탁 표지 표가 관문 마이그레이션이다");
+        }
+        List<Long> ids = jdbcTemplate.queryForList("""
+                SELECT s.id FROM stock s WHERE s.market_code = ? AND s.sec_cik IN (SELECT DISTINCT cik FROM sec_depositary_cover)
+                ORDER BY s.id
+                """, Long.class, UsMarket.CODE);
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(ids);
+        BatchExecutionContext execution = batchExecutions.start(DEPOSITARY_JOB_NAME, asOf, triggeredBy, targets.size(),
+                BatchExecutionRecorder.DeclaredScope.FULL);
+        if (source == null) {
+            execution.failFatally(new DataSourceException(DataSourceException.Kind.AUTH, "alpaca:corporate-action",
+                    "Alpaca 키가 없어 기업 행위 어댑터가 등록되지 않았다 — 예탁 사건을 못 받는다."));
+            return BatchStatus.FAILED;
+        }
+        try {
+            execution.plan(CollectionPhase.ADJUSTMENT, targets.size());
+            execution.stage("예탁 사건 기록");
+            for (SecurityRef target : targets) {
+                execution.process(target, CollectionPhase.ADJUSTMENT, security -> collector.recordAll(security,
+                        source.fetchCorporateActions(security,
+                                com.stockscreener.pipeline.datasource.us.listing.DepositaryRatioJudge.LEDGER_FROM, asOf)
+                                .actions()).recorded());
+            }
+        } catch (DataSourceException e) {
+            execution.failFatally(e);
+            return BatchStatus.FAILED;
+        } catch (RuntimeException e) {
+            execution.failUnexpectedly(e);
+            throw e;
+        }
+        return execution.finish("예탁증권 줄 %d종목 · 기록 %d".formatted(targets.size(), execution.writtenRowCount()));
     }
 
     /** 순위 판독기의 후보 → 시장 전체 분할 조회 → 적을 종목. 후보 주식수가 없으면 부르지 않고 빈 계획이다. */
