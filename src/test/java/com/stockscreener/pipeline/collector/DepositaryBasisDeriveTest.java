@@ -97,6 +97,25 @@ class DepositaryBasisDeriveTest {
                 String.class, stockId)).containsOnlyNulls();
     }
 
+    @Test
+    @DisplayName("클래스 축 계수는 보통주 계수다 — 비율 변경 역병합(UXIN 꼴 ×0.1 · k 3 → 30)은 1 · 기초 분할(HDB 꼴 ×2 · k 그대로)은 2")
+    void classAxisSplitsAreOrdinaryUnits() {
+        long stockId = jdbcTemplate.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, sec_cik) VALUES ('US', 'UXNX', 'UXNX ADS', 777) RETURNING id
+                """, Long.class);
+        jdbcTemplate.update("""
+                INSERT INTO corporate_action (stock_id, effective_date, type, ratio, detection_source, status) VALUES
+                (?, '2022-10-28', 'REVERSE_SPLIT', 0.1, 'SOURCE_DISCLOSURE', 'APPLIED'),
+                (?, '2025-09-08', 'SPLIT', 2, 'SOURCE_DISCLOSURE', 'APPLIED')
+                """, stockId, stockId);
+        depositary.saveRatio(stockId, "a", LocalDate.of(2022, 7, 1), 3.0, com.stockscreener.pipeline.datasource.us.listing.DepositaryRatioJudge.How.OWN);
+        depositary.saveRatio(stockId, "b", LocalDate.of(2023, 7, 1), 30.0, com.stockscreener.pipeline.datasource.us.listing.DepositaryRatioJudge.How.OWN);
+        depositary.saveRatio(stockId, "c", LocalDate.of(2026, 3, 1), 30.0, com.stockscreener.pipeline.datasource.us.listing.DepositaryRatioJudge.How.OWN);
+
+        assertThat(shareClasses.splits(stockId)).extracting(s -> s.ratio()).containsExactly(1.0, 2.0);
+        assertThat(shareClasses.adsSplits(stockId)).extracting(s -> s.ratio()).containsExactly(0.1, 2.0);
+    }
+
     private long seed(String ticker, String title) {
         long stockId = jdbcTemplate.queryForObject("""
                 INSERT INTO stock (market_code, ticker, name, sec_cik) VALUES ('US', ?, ?, ?) RETURNING id

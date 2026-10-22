@@ -156,7 +156,7 @@ public class ShareBasisDeriver {
         }
         List<String> deposited = new ArrayList<>();
         if (usGate && UsMarket.CODE.equals(marketCode)) {
-            rows += deriveDepositary(marketCode, events, deposited);
+            rows += deriveDepositary(marketCode, deposited);
         }
         log.info("주식수 기저 판정. 시장={} 재료사건보유={} SHIFTED={}{} UNRESOLVED={}{} DEPOSITARY={}{} 쓴행={}",
                 marketCode, events.size(), shifted.size(), shifted, unresolved.size(), unresolved, deposited.size(),
@@ -173,31 +173,56 @@ public class ShareBasisDeriver {
      * <p>예탁증권 줄 발행사 = 받은 표지 중 하나라도 그 기호 줄을 예탁증권으로 싣는 종목(비율을 읽었든 못 읽었든). 표지를 받았는데 줄이
      * 전부 보통주인 발행사(TRI 꼴 40-F)는 손대지 않는다.
      */
-    private int deriveDepositary(String marketCode, Map<Long, List<Event>> events, List<String> deposited) {
-        record Stock(long id, String ticker, long cik) {
-        }
-        List<Stock> stocks = jdbcTemplate.query("""
+    private record DepositaryStock(long id, String ticker, long cik) {
+    }
+
+    /** 받은 표지 중 하나라도 그 기호 줄을 예탁증권으로 싣는 종목(비율을 읽었든 못 읽었든). */
+    private List<DepositaryStock> depositaryStocks(String marketCode) {
+        List<DepositaryStock> out = new ArrayList<>();
+        for (DepositaryStock stock : jdbcTemplate.query("""
                 SELECT s.id, s.ticker, s.sec_cik FROM stock s
                 WHERE s.market_code = ? AND s.sec_cik IN (SELECT DISTINCT cik FROM sec_depositary_cover)
                 ORDER BY s.id
-                """, (rs, n) -> new Stock(rs.getLong("id"), rs.getString("ticker"), rs.getLong("sec_cik")), marketCode);
-        int rows = 0;
-        for (Stock stock : stocks) {
+                """, (rs, n) -> new DepositaryStock(rs.getLong("id"), rs.getString("ticker"), rs.getLong("sec_cik")), marketCode)) {
+            for (DepositaryCoverStore.Cover cover : depositary.covers(stock.cik())) {
+                DepositaryCover.ReadingKind kind = DepositaryCover.read(ClassFacts.fromJson(cover.facts()), stock.ticker()).kind();
+                if (kind == DepositaryCover.ReadingKind.RATIO || kind == DepositaryCover.ReadingKind.ABSENT
+                        || kind == DepositaryCover.ReadingKind.CONFLICT) {
+                    out.add(stock);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 관문 켬 미국 — 예탁증권 줄 발행사의 공시마다 k를 정해 {@code sec_depositary_ratio}에 둔다(ADR-0183). <b>정한 값은 다시 안
+     * 짓는다</b>(미정만 채운다 — 저장소가 지킨다). 클래스 축 판정보다 먼저 돈다 — 클래스 축이 ADS 원장 계수를 보통주 계수로 바꿀 때 이
+     * k를 쓴다({@code IndicatorReconciler.deriveShareBases}).
+     *
+     * <p>예탁증권 줄 발행사 = 받은 표지 중 하나라도 그 기호 줄을 예탁증권으로 싣는 종목. 표지를 받았는데 줄이 전부 보통주인 발행사(TRI 꼴
+     * 40-F)는 손대지 않는다. 판마다 보통주는 그 공시가 자기 기간으로 낸 행(기말이 가장 늦은 것)의 주식수다 — 표지가 없는 공시(6-K ·
+     * 2019 앞)도 판이다.
+     */
+    @Transactional
+    public int decideDepositaryRatios(String marketCode) {
+        Map<Long, List<Event>> events = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT c.stock_id, c.effective_date, c.ratio FROM corporate_action c JOIN stock s ON s.id = c.stock_id
+                WHERE c.status = 'APPLIED' AND s.market_code = ? AND c.ratio <> 1 ORDER BY c.stock_id, c.effective_date
+                """, rs -> {
+            events.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>())
+                    .add(new Event(rs.getObject("effective_date", LocalDate.class), rs.getBigDecimal("ratio")));
+        }, marketCode);
+        int decided = 0;
+        for (DepositaryStock stock : depositaryStocks(marketCode)) {
             Map<String, DepositaryCover.Reading> readings = new LinkedHashMap<>();
             Map<String, LocalDate> filed = new LinkedHashMap<>();
-            boolean depositaryLine = false;
             for (DepositaryCoverStore.Cover cover : depositary.covers(stock.cik())) {
-                DepositaryCover.Reading reading = DepositaryCover.read(ClassFacts.fromJson(cover.facts()), stock.ticker());
-                readings.put(cover.accession(), reading);
+                readings.put(cover.accession(), DepositaryCover.read(ClassFacts.fromJson(cover.facts()), stock.ticker()));
                 filed.put(cover.accession(), cover.filed());
-                depositaryLine |= reading.kind() == DepositaryCover.ReadingKind.RATIO
-                        || reading.kind() == DepositaryCover.ReadingKind.ABSENT
-                        || reading.kind() == DepositaryCover.ReadingKind.CONFLICT;
             }
-            if (!depositaryLine) {
-                continue;
-            }
-            // 공시마다 보통주 — 그 공시가 자기 기간으로 낸 행(기말이 가장 늦은 것)의 주식수. 표지가 없는 공시(6-K · 2019 앞)도 판이다.
             Map<String, BigDecimal> ordinary = new LinkedHashMap<>();
             jdbcTemplate.query("""
                     SELECT DISTINCT ON (report_code) report_code, published_at, shares_outstanding
@@ -213,10 +238,24 @@ public class ShareBasisDeriver {
                     new DepositaryRatioJudge.Filing(accession, date, readings.get(accession), ordinary.get(accession))));
             List<DepositaryRatioJudge.Event> ledger = events.getOrDefault(stock.id(), List.of()).stream()
                     .map(e -> new DepositaryRatioJudge.Event(e.effectiveDate(), e.ratio().doubleValue())).toList();
-            DepositaryRatioJudge.decide(filings, ledger).forEach((accession, decision) ->
-                    depositary.saveRatio(stock.id(), accession, filed.get(accession), decision.k(), decision.how()));
-            Map<String, DepositaryRatioJudge.Decision> frozen = depositary.ratios(stock.id());
-            for (Map.Entry<String, DepositaryRatioJudge.Decision> e : frozen.entrySet()) {
+            for (Map.Entry<String, DepositaryRatioJudge.Decision> d : DepositaryRatioJudge.decide(filings, ledger).entrySet()) {
+                depositary.saveRatio(stock.id(), d.getKey(), filed.get(d.getKey()), d.getValue().k(), d.getValue().how());
+                decided++;
+            }
+        }
+        return decided;
+    }
+
+    /**
+     * 관문 켬 미국 — 예탁증권 줄 발행사의 행마다 {@code share_basis_multiple} = 1/k · DEPOSITARY(ADR-0183). k는
+     * {@link #decideDepositaryRatios}가 정해 둔 값이다(여기서 못 정한 공시가 있으면 먼저 정한다). 그 발행사의 SHIFTED 판정을 덮는다
+     * (같은 사건을 두 번 곱하지 않는다 — AMRN이 이 범위에 들면 1/20이 SHIFTED ×0.05를 대신한다). 미정 행은 UNRESOLVED(숨김)다.
+     */
+    private int deriveDepositary(String marketCode, List<String> deposited) {
+        decideDepositaryRatios(marketCode);
+        int rows = 0;
+        for (DepositaryStock stock : depositaryStocks(marketCode)) {
+            for (Map.Entry<String, DepositaryRatioJudge.Decision> e : depositary.ratios(stock.id()).entrySet()) {
                 Double k = e.getValue().k();
                 rows += jdbcTemplate.update("""
                         UPDATE financial_statement SET share_basis_status = ?, share_basis_multiple = ?

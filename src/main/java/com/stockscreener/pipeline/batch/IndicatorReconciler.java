@@ -90,11 +90,13 @@ public class IndicatorReconciler {
     }
 
     /**
-     * 미국 주식수의 두 판정 — 관문이 켜졌으면 클래스 축 판정을 먼저, 그다음 기저 판정(그 계열로 배수를 잰다). 재무·기업행위를 쓴
-     * 손 잡 뒤에도 이것을 부른다({@code BootstrapRunner}) — 순서가 한 자리에만 있게.
+     * 미국 주식수의 두 판정 — 관문이 켜졌으면 공시마다 예탁 비율 k를 먼저 정하고(클래스 축이 ADS 원장 계수를 보통주 계수로 바꿀 때
+     * 그 k를 쓴다 · ADR-0183), 클래스 축 판정, 그다음 기저 판정(그 계열로 배수를 잰다). 재무·기업행위를 쓴 손 잡 뒤에도 이것을 부른다
+     * ({@code BootstrapRunner}) — 순서가 한 자리에만 있게.
      */
     public void deriveShareBases() {
         if (usGate) {
+            shareBasisDeriver.decideDepositaryRatios(UsMarket.CODE);
             shareClassDeriver.derive(UsMarket.CODE);
         }
         shareBasisDeriver.derive(UsMarket.CODE);

@@ -55,14 +55,25 @@ public final class ShareClassLine {
     private final List<Verdict> byFiled;
     private final LocalDate firstAnchor;
     private final List<Split> splits;
+    /**
+     * 보통주 계수 — 줄 주식수(보통주)를 앵커에서 그 행까지 옮길 때 쓴다. 예탁증권 줄은 ADS 원장 사건 중 비율 변경 몫을 뺀 것이다
+     * (사건 배수 × k_뒤/k_앞 · ADR-0183). {@link #splits}(ADS 계수)는 행 값을 순위 기준일로 옮기는 자리({@link #factor})가 쓴다 —
+     * 그 값은 이미 1/k를 곱한 ADS 단위다.
+     */
+    private final List<Split> ordinarySplits;
 
     public ShareClassLine(List<Verdict> verdicts, List<Split> splits) {
+        this(verdicts, splits, splits);
+    }
+
+    public ShareClassLine(List<Verdict> verdicts, List<Split> splits, List<Split> ordinarySplits) {
         verdicts.forEach(v -> byAccession.put(v.accession(), v));
         this.byFiled = verdicts.stream()
                 .sorted(Comparator.comparing(Verdict::filed).thenComparing(Verdict::accession)).toList();
         this.firstAnchor = verdicts.stream().filter(v -> v.kind() == 'T').map(Verdict::filed)
                 .min(Comparator.naturalOrder()).orElse(null);
         this.splits = List.copyOf(splits);
+        this.ordinarySplits = List.copyOf(ordinarySplits);
     }
 
     /** 판정이 하나도 없는 줄 — 모든 행이 지금 경로다. */
@@ -100,7 +111,8 @@ public final class ShareClassLine {
         if (v.currentPath()) {
             return new Read(currentShares, v.denominator(), State.SHOWN, "지금 경로");
         }
-        return new Read(v.lineShares().multiply(factor(v.filed(), publishedAt)), v.denominator(), State.SHOWN, "클래스 축");
+        return new Read(v.lineShares().multiply(factor(ordinarySplits, v.filed(), publishedAt)), v.denominator(), State.SHOWN,
+                "클래스 축");
     }
 
     /** {@code day}에 서 있던 판정(그날까지 공시된 것의 최신). */
