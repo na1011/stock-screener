@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
 import com.stockscreener.pipeline.collector.FinancialWriter.WriteMode;
+import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import com.stockscreener.support.JpaSliceTest;
 
@@ -476,6 +477,37 @@ class FinancialWriterTest {
 
             recordingWriter.writeDetailed(stockId, withoutIt, WriteMode.FILL_MISSING, true, false);
             assertThat(rowCount()).as("대조 — 보호가 없으면 회수가 그 판을 지운다").isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("소스가 정책으로 안 담은 판은 그 라벨에서만 지킨다 — 같은 날짜의 다른 라벨은 회수된다(대조)")
+        void keepsAWithheldVintageOnlyInItsLabel() {
+            // BABA 꼴: 2025-06-26 20-F가 FY2024를 CNY로만 다시 실었다(통화 필터가 안 담는다).
+            writer.write(stockId, List.of(report(2024, "FY", "2024-05-23", "1000")));
+            writer.write(stockId, List.of(report(2024, "FY", "2025-06-26", "1001")));
+            // 같은 날짜의 다른 라벨 — 이번 출력에 없으므로 거둬야 하는 판.
+            writer.write(stockId, List.of(report(2023, "FY", "2023-05-20", "900")));
+            writer.write(stockId, List.of(report(2023, "FY", "2025-06-26", "901")));
+            List<RawFinancialReport> output = List.of(
+                    report(2024, "FY", "2024-05-23", "1000"), report(2023, "FY", "2023-05-20", "900"));
+            Set<FinancialFetch.WithheldVintage> withheld =
+                    Set.of(new FinancialFetch.WithheldVintage(2024, "FY", LocalDate.parse("2025-06-26")));
+
+            recordingWriter.writeDetailed(stockId, output, WriteMode.FILL_MISSING, true, false,
+                    new FinancialWriter.VintageGuard(Set.of(), Set.of(), false, withheld));
+
+            assertThat(jdbcTemplate.queryForList(
+                    "SELECT fiscal_year || '@' || published_at FROM financial_statement WHERE stock_id = ? ORDER BY 1",
+                    String.class, stockId))
+                    .as("FY2024의 안 담은 판은 남고, FY2023의 같은 날짜 판은 회수된다")
+                    .containsExactly("2023@2023-05-20", "2024@2024-05-23", "2024@2025-06-26");
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT published_at FROM financial_statement WHERE stock_id = ? AND fiscal_year = 2024 AND is_latest",
+                    LocalDate.class, stockId))
+                    .as("지킨 판이 그대로 최신이다").isEqualTo(LocalDate.parse("2025-06-26"));
+
+            recordingWriter.writeDetailed(stockId, output, WriteMode.FILL_MISSING, true, false);
+            assertThat(rowCount()).as("대조 — 보호가 없으면 안 담은 판도 회수된다").isEqualTo(2);
         }
 
         @Test

@@ -94,7 +94,7 @@ public class FinancialCollector {
         FinancialWriter.Outcome outcome = writer.writeDetailed(security.stockId(), reports, mode,
                 fetch.completeVintageHistory(), insertEarlierVintages,
                 new FinancialWriter.VintageGuard(fetch.unconfirmedVintages(), fetch.supplementedVintages(),
-                        fetch.vintagesUncertain()));
+                        fetch.vintagesUncertain(), fetch.withheldVintages()));
         absenceWriter.write(security.stockId(), source.sourceName(), fetch.absences(),
                 LocalDate.now());
         if (bindRegistrant && !reports.isEmpty()) {

@@ -21,7 +21,8 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
                              boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
                              Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
                              List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace,
-                             List<DataSourceException.Kind> unfetchedClassFacts, Registrant registrant) {
+                             List<DataSourceException.Kind> unfetchedClassFacts, Registrant registrant,
+                             Set<WithheldVintage> withheldVintages) {
 
     public FinancialFetch {
         filingTrace = filingTrace == null ? FilingTrace.NONE : filingTrace;
@@ -31,6 +32,17 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
         supplementedVintages = supplementedVintages == null ? Set.of() : Set.copyOf(supplementedVintages);
         unfetchedSupplements = unfetchedSupplements == null ? List.of() : List.copyOf(unfetchedSupplements);
         unfetchedClassFacts = unfetchedClassFacts == null ? List.of() : List.copyOf(unfetchedClassFacts);
+        withheldVintages = withheldVintages == null ? Set.of() : Set.copyOf(withheldVintages);
+    }
+
+    /** 원장이 준 판을 안 담는 갈래가 없는 소스용(국내 · 시험). */
+    public FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
+                          boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
+                          Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
+                          List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace,
+                          List<DataSourceException.Kind> unfetchedClassFacts, Registrant registrant) {
+        this(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages, vintagesUncertain,
+                unfetchedSupplements, filingTrace, unfetchedClassFacts, registrant, Set.of());
     }
 
     /** 등록인을 안 내는 소스용(국내 · 시험). */
@@ -146,13 +158,13 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
     /** 같은 결과에 공시 근거를 싣는다. */
     public FinancialFetch withFilingTrace(FilingTrace trace) {
         return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
-                vintagesUncertain, unfetchedSupplements, trace, unfetchedClassFacts, registrant);
+                vintagesUncertain, unfetchedSupplements, trace, unfetchedClassFacts, registrant, withheldVintages);
     }
 
     /** 같은 결과에 받지 못한 클래스 축 인스턴스를 싣는다. */
     public FinancialFetch withUnfetchedClassFacts(List<DataSourceException.Kind> kinds) {
         return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
-                vintagesUncertain, unfetchedSupplements, filingTrace, kinds, registrant);
+                vintagesUncertain, unfetchedSupplements, filingTrace, kinds, registrant, withheldVintages);
     }
 
     /**
@@ -168,6 +180,23 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
         public Registrant {
             accessions = Set.copyOf(accessions);
         }
+    }
+
+    /**
+     * <b>원장은 그 판을 줬는데 이 소스가 정책으로 안 담은 (라벨, 공시일).</b> 판 이력을 전부 내는 소스에서도 이 판은 출력에 없다 —
+     * 「여기 없는 공시일 = 소스가 거둔 판」으로 회수하면 원장이 준 판이 지워진다. 저장 계층은 그 라벨의 그 공시일 행을 회수에서
+     * 지킨다.
+     *
+     * <p>{@link #unconfirmedVintages()}와 갈리는 것은 단위다. 못 받은 공시는 어느 라벨을 덮는지 모르므로 날짜로 지키고, 이것은
+     * 어느 라벨의 판을 안 담았는지 알므로 그 라벨만 지킨다 — 날짜로 지키면 같은 날짜의 다른 라벨에서 거둬야 할 판까지 남는다.
+     * 지금은 SEC의 통화 필터 하나다({@code SecEdgarFacts.Result#withheld}).
+     */
+    public Set<WithheldVintage> withheldVintages() {
+        return withheldVintages;
+    }
+
+    /** 안 담은 판 하나 — 저장 라벨({@code fiscal_year}, {@code fiscal_period})과 공시일. */
+    public record WithheldVintage(int fiscalYear, String fiscalPeriod, LocalDate publishedAt) {
     }
 
     /** 부재 축을 안 보고 판 이력도 전부 내지 않는 소스용. */

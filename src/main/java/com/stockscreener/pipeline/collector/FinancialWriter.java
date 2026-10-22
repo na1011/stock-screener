@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FilingTrace;
+import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 
 import org.slf4j.Logger;
@@ -259,14 +260,22 @@ public class FinancialWriter {
      *                    이른 판 삽입과 같다({@link WriteMode#FILL_MISSING} · 판 이력 전부). 정기 경로의 이른 판 예외는 이것
      *                    하나다(ADR-0173 §결과).
      * @param uncertain   못 실은 공시가 무엇인지조차 모른다 — 그 종목의 회수를 통째로 멈춘다.
+     * @param withheld    원장은 줬는데 소스가 정책으로 안 담은 (라벨, 공시일)({@link FinancialFetch#withheldVintages()}). 회수가
+     *                    <b>그 라벨의</b> 그 공시일 행을 안 지운다 — {@code unconfirmed}처럼 날짜로 지키지 않는다.
      */
-    public record VintageGuard(Set<LocalDate> unconfirmed, Set<LocalDate> supplemented, boolean uncertain) {
+    public record VintageGuard(Set<LocalDate> unconfirmed, Set<LocalDate> supplemented, boolean uncertain,
+                               Set<FinancialFetch.WithheldVintage> withheld) {
 
         public static final VintageGuard NONE = new VintageGuard(Set.of(), Set.of(), false);
 
         public VintageGuard {
             unconfirmed = unconfirmed == null ? Set.of() : Set.copyOf(unconfirmed);
             supplemented = supplemented == null ? Set.of() : Set.copyOf(supplemented);
+            withheld = withheld == null ? Set.of() : Set.copyOf(withheld);
+        }
+
+        public VintageGuard(Set<LocalDate> unconfirmed, Set<LocalDate> supplemented, boolean uncertain) {
+            this(unconfirmed, supplemented, uncertain, Set.of());
         }
     }
 
@@ -278,7 +287,7 @@ public class FinancialWriter {
             if (guard.uncertain()) {
                 log.warn("판 이력의 빈칸을 몰라 이 종목의 판 회수를 멈춘다. stockId={}", stockId);
             } else {
-                retractStaleVintages(stockId, reports, completeVintageHistory, guard.unconfirmed(), tally);
+                retractStaleVintages(stockId, reports, completeVintageHistory, guard.unconfirmed(), guard.withheld(), tally);
             }
         }
         boolean earlierAllowed = mode == WriteMode.FILL_MISSING && completeVintageHistory;
@@ -398,7 +407,8 @@ public class FinancialWriter {
      * 하나 더 붙는다.
      */
     private void retractStaleVintages(long stockId, List<RawFinancialReport> reports,
-                                      boolean completeVintageHistory, Set<LocalDate> unconfirmed, Tally tally) {
+                                      boolean completeVintageHistory, Set<LocalDate> unconfirmed,
+                                      Set<FinancialFetch.WithheldVintage> withheld, Tally tally) {
         // 라벨 자격은 「유도 행이 하나라도 있는가」이고, 보존 집합은 그 라벨로 **들어온 판 전부**다.
         // 유도 행만 보존 집합에 넣으면, 같은 (연도,분기)에 소스가 직접 준 판이 함께 지워진다 —
         // 미국에서 실제로 있는 형태다(다음 해 10-K가 전년 4분기를 비교로 낸다. 실측 2026-09-15:
@@ -431,8 +441,13 @@ public class FinancialWriter {
             DerivedLabel label = entry.getKey();
             // 못 실은 공시의 제출일은 출력에 없어도 지킨다 — 그 판이 「더 이상 그 라벨의 판이 아니다」인지 이번 출력으로는
             // 모른다(VintageGuard.unconfirmed).
-            List<LocalDate> keep = Stream.concat(
-                            entry.getValue().stream().map(RawFinancialReport::publishedAt), unconfirmed.stream())
+            // 소스가 정책으로 안 담은 그 라벨의 판도 지킨다 — 원장은 그 판을 준다(VintageGuard.withheld).
+            Stream<LocalDate> withheldDates = withheld.stream()
+                    .filter(w -> w.fiscalYear() == label.fiscalYear() && w.fiscalPeriod().equals(label.fiscalPeriod()))
+                    .map(FinancialFetch.WithheldVintage::publishedAt);
+            List<LocalDate> keep = Stream.concat(Stream.concat(
+                            entry.getValue().stream().map(RawFinancialReport::publishedAt), unconfirmed.stream()),
+                            withheldDates)
                     .distinct().toList();
             Object[] args = new Object[keep.size() + 3];
             args[0] = stockId;

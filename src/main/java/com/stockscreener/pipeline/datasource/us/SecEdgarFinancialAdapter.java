@@ -201,10 +201,12 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // companyfacts + 보충이 판 이력 전부를 싣는다 — 저장 계층이 「여기 없는 공시일은 더 이상 그 라벨의 판이
         // 아니다」로 읽어도 되는 근거다(FinancialFetch 참조). companyfacts 혼자로는 그렇지 않다: 정기 공시 일부의
         // us-gaap를 통째로 안 싣는다(ADR-0173 — 83 CIK 표본 87건). 보충이 못 실은 공시는 그 제출일을 따로 넘겨 지킨다.
+        // 통화 때문에 안 담은 판은 (라벨, 공시일)로 따로 넘긴다 — 원장은 그 판을 주는데 우리가 안 담았다
+        // (SecEdgarFacts.Result.withheld). 안 넘기면 회수가 이미 저장된 비USD 정정판을 지운다(실측 2026-10-19 후보 소비 FR).
         return new FinancialFetch(result.reports(), result.absences(), true,
                 supplement.unconfirmedVintages(), supplement.supplementedVintages(), supplement.vintagesUncertain(),
                 supplement.unfetched(), FilingTrace.ofAccessions(carried), unfetchedClassFacts,
-                new FinancialFetch.Registrant(cik.get(), CompanyFactsAccessions.of(tree)));
+                new FinancialFetch.Registrant(cik.get(), CompanyFactsAccessions.of(tree)), result.withheld());
     }
 
     /**

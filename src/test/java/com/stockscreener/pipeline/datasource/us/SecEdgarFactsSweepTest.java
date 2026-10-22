@@ -159,6 +159,9 @@ class SecEdgarFactsSweepTest {
                 absences += result.absences().size();
                 if (extra.isPresent()) {
                     extraLines.append(ticker).append("\tdropped\t").append(result.dropped()).append('\n');
+                    // 운영 회수가 지키는 (라벨, 공시일) — 어댑터가 보충의 unconfirmed와 따로 넘긴다(통화로 안 담은 판).
+                    result.withheld().stream().map(String::valueOf).sorted()
+                            .forEach(held -> extraLines.append(ticker).append("\twithheld\t").append(held).append('\n'));
                     result.absences().stream().map(String::valueOf).sorted()
                             .forEach(a -> extraLines.append(ticker).append("\tabsence\t").append(a).append('\n'));
                 }

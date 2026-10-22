@@ -24,6 +24,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * {@link SecEdgarFinancialAdapter}의 재구성 규칙을 잠근다.
@@ -209,6 +210,33 @@ class SecEdgarFinancialAdapterTest {
         assertThat(of(reports, "Q1").periodEnd())
                 .as("기간은 손익이 정한다. 표지 날짜가 아니다")
                 .isEqualTo(LocalDate.of(2023, 3, 31));
+    }
+
+    @Test
+    @DisplayName("통화 때문에 안 담은 판의 제출일은 회수에서 지킨다 — BABA 꼴(원판 CNY+USD 편의환산 · 이듬해 비교열 CNY만)")
+    void currencySkippedVintageIsProtectedFromRetraction() throws Exception {
+        enqueue(200, fixture("tickers.json"));
+        enqueue(200, fixture("companyfacts-convenience-translation.json"));
+
+        // 실측(2026-10-19 후보 소비 FR): 이듬해 20-F 비교열의 CNY 정정판이 어댑터 출력에 없어 회수가 지웠다 —
+        // 48 발행사 219행. 그 판은 원장이 주는데 우리가 통화로 거른 것이다.
+        FinancialFetch fetch = adapter().fetchReports(FIX, FROM);
+
+        assertThat(fetch.reports()).extracting(RawFinancialReport::fiscalPeriod, RawFinancialReport::publishedAt,
+                        RawFinancialReport::currencyCode)
+                .as("담는 판은 그대로다 — 이 고침은 출력을 안 바꾼다")
+                .containsExactly(
+                        tuple("FY", LocalDate.of(2024, 5, 23), "USD"),
+                        tuple("FY", LocalDate.of(2025, 6, 26), "USD"));
+        assertThat(fetch.completeVintageHistory()).isTrue();
+        assertThat(fetch.withheldVintages())
+                .as("FY2024를 CNY로만 다시 실은 2025-06-26 판과 그 판에서 유도된 Q4 — 없으면 저장된 CNY 정정판이 회수된다")
+                .containsExactlyInAnyOrder(
+                        new FinancialFetch.WithheldVintage(2024, "FY", LocalDate.of(2025, 6, 26)),
+                        new FinancialFetch.WithheldVintage(2024, "Q4", LocalDate.of(2025, 6, 26)));
+        assertThat(fetch.unconfirmedVintages())
+                .as("날짜로 지키지 않는다 — 같은 날짜의 FY2025 판은 담겼고 다른 라벨의 회수를 막으면 안 된다")
+                .isEmpty();
     }
 
     @Test

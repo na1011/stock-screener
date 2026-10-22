@@ -137,7 +137,11 @@ class EarlierVintageReplayHarnessTest {
                         supplementFailed += outcome.failed().size();
                         listFailed += outcome.vintagesUncertain() ? 1 : 0;
                     }
-                    reports = SecEdgarFacts.build(facts, from).reports();
+                    SecEdgarFacts.Result result = SecEdgarFacts.build(facts, from);
+                    reports = result.reports();
+                    // 운영(SecEdgarFinancialAdapter → FinancialCollector)과 같은 가드 — 통화로 안 담은 판도 지킨다.
+                    guard = new FinancialWriter.VintageGuard(guard.unconfirmed(), guard.supplemented(),
+                            guard.uncertain(), result.withheld());
                 } catch (Exception e) {
                     failures.add(ticker + " 읽기=" + e.getClass().getSimpleName() + ":" + e.getMessage());
                     continue;

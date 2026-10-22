@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource.us;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FinancialColumnAbsence;
+import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -91,9 +93,11 @@ final class SecEdgarFacts {
      * 1,545건 · USD 0건</b>(2018~2020)이라, 폼만 더하면 <b>현 편입 종목의 93코드가 통째로
      * 꺼진다</b> — 그리고 ADR-0080의 「입력을 못 읽었다」로 접혀 <b>옛 값이 얼어붙는다.</b>
      *
-     * <p><b>이 필터는 예방적이다 — 이미 저장된 비-USD 행을 지우지 않는다.</b> 적재는
-     * {@code FILL_MISSING}이라 행을 삭제하지 않으므로, 통화가 섞인 기존 203종목의 게이트는
-     * 그대로 닫혀 있다. 그것을 여는 것은 환율 소스를 들이는 별개의 축이다.
+     * <p><b>이 필터는 예방적이다 — 이미 저장된 비-USD 행을 지우지 않는다.</b> 그 보장은 저절로 서지 않는다: 판 회수
+     * ({@code FinancialWriter.retractStaleVintages})가 「출력에 없는 공시일 = 소스가 거둔 판」으로 읽어 이 필터가 거른 판을
+     * 지운다. 2026-09-28에 이 문단이 「FILL_MISSING이라 행을 삭제하지 않는다」로 적혔는데 회수는 09-16부터 있었고,
+     * 10-19 후보 소비 FR이 48 발행사의 비USD 정정판 219행을 지워 그 종목들이 게이트를 벗어났다. 그래서 거른 판을 (라벨, 공시일)로
+     * {@link Result#withheld()}로 내고 어댑터가 회수에서 지킨다. 게이트를 여는 것은 환율 소스를 들이는 별개의 축이다.
      */
     private static final String MARKET_CURRENCY = "USD";
 
@@ -188,9 +192,14 @@ final class SecEdgarFacts {
      * <p>버린 수를 안 세면 결손 판정이 서지 않는다. 같은 이유로 <b>컬럼 축의 부재</b>도 낸다 —
      * 팩트 수준에서는 「없다」와 「우리가 못 만들었다」를 갈라 왔는데(P22 축①) <b>컬럼 수준에서는
      * 그 값이 쓰이고 사라지고 있었다.</b>
+     *
+     * <p>{@code withheld}는 <b>시장 통화가 아니라서 안 담은 (라벨, 공시일)</b>이다({@link #MARKET_CURRENCY}). 원장은 그 판을
+     * 주는데 우리가 정책으로 안 담았으므로 「소스가 더 이상 그 판을 안 준다」가 아니다 — 어댑터가 회수에서 지킬 판으로 넘긴다
+     * ({@link FinancialFetch#withheldVintages()}). FY 판이면 같은 공시일의 Q4도 넣는다 — 저장된 그 공시일의 Q4는 그 FY 판에서
+     * 유도한 것이라 FY 판을 안 담으면 이번 출력에 안 나온다.
      */
     record Result(List<RawFinancialReport> reports, int dropped,
-                  List<FinancialColumnAbsence> absences) {
+                  List<FinancialColumnAbsence> absences, Set<FinancialFetch.WithheldVintage> withheld) {
     }
 
     /** 팩트 하나. 소스가 준 그대로이고 해석은 아래에서 한다. */
@@ -247,6 +256,7 @@ final class SecEdgarFacts {
                 fromFiscalYear);
 
         List<RawFinancialReport> reports = new ArrayList<>();
+        Set<FinancialFetch.WithheldVintage> withheld = new LinkedHashSet<>();
         for (Map.Entry<Label, Window> e : windows.entrySet()) {
             Label label = e.getKey();
             if (label.fiscalYear() < fromFiscalYear) {
@@ -255,7 +265,7 @@ final class SecEdgarFacts {
             Map<SecEdgarColumn, String> tags =
                     chooseTags(labelAnchors.get(label), e.getValue(), byColumn);
             reports.addAll(revisionsOf(label, e.getValue(), labelAnchors.get(label),
-                    byColumn, anchors, tags));
+                    byColumn, anchors, tags, withheld));
         }
         List<RawFinancialReport> fourthQuarters =
                 deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate);
@@ -272,7 +282,8 @@ final class SecEdgarFacts {
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
                 .thenComparing(RawFinancialReport::publishedAt));
-        return new Result(reports, dropped, withoutDerived(absencesOf(facts, byColumn), reports));
+        return new Result(reports, dropped, withoutDerived(absencesOf(facts, byColumn), reports),
+                Collections.unmodifiableSet(withheld));
     }
 
     // ---------- 1. 팩트를 컬럼별로 모은다 ----------
@@ -797,7 +808,8 @@ final class SecEdgarFacts {
                                                         Anchor labelAnchor,
                                                         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
                                                         Map<String, Anchor> anchors,
-                                                        Map<SecEdgarColumn, String> tags) {
+                                                        Map<SecEdgarColumn, String> tags,
+                                                        Set<FinancialFetch.WithheldVintage> withheld) {
         // 손익 비지배의 마지막 관측. 이 기간보다 앞이면 「그 뒤로 비지배를 안 낸다」이고
         // 연결 총액을 지배주주 값으로 채울 수 있다(noNoncontrollingIncomeBy).
         LocalDate lastNoncontrolling = lastNoncontrollingIncome(byColumn);
@@ -845,10 +857,17 @@ final class SecEdgarFacts {
                 if (candidateCurrency == null) {
                     // 통화를 못 읽는 판은 지금도 통째로 건너뛴다. 묶음에 섞으면 그 판의 값이
                     // 통화 판정 없이 저장되므로 같은 술어를 유지한다(ADR-0094).
+                    // 회수에서 지키지 않는다 — 이 갈래의 판은 저장된 적이 없다(어댑터가 생긴 날부터 건너뛰었다). 지키면
+                    // 금액 없이 EPS만 실은 공시의 날짜가 그 라벨의 정당한 회수를 막는다(2026-10-22 반증: 현 편입 5종목).
                     continue;
                 }
                 if (!MARKET_CURRENCY.equals(candidateCurrency)) {
                     // 시장 통화가 아닌 판은 담지 않는다 — 근거는 MARKET_CURRENCY의 javadoc이다.
+                    // 안 담은 판은 회수에서 지킨다(Result.withheld).
+                    withheld.add(new FinancialFetch.WithheldVintage(label.fiscalYear(), label.period(), candidate.filed()));
+                    if ("FY".equals(label.period())) {
+                        withheld.add(new FinancialFetch.WithheldVintage(label.fiscalYear(), "Q4", candidate.filed()));
+                    }
                     continue;
                 }
                 values = carryForward(values, valuesOf(candidate, labelAnchor, label, window, tags, byColumn));
