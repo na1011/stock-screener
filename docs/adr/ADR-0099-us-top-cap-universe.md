@@ -263,8 +263,11 @@ END"
     **유니버스를 정하려고 유니버스 밖 전 종목의 원장을 채우는 것이 그 대가라 안 푼다.**
 - **ADR 비율 오차** — 발행사 주식수(보통주)를 ADS 종가에 곱하면 비율만큼 틀린다. 이름의 `DEPOSITARY`는 평범한 이름(`HDB`)을
   못 본다. 관문 밖 순위는 해외 양식 판 · 이름이 예탁증권인 후보의 공시 표지로 비율을 읽어 1이 아니거나 모르면 뺀다
-  (`UsMarketCapUniverseAdapter.screenDepositary` · 2026-10-22 · 비율의 원장은 ADR-0162 §배경). 이름에 `DEPOSITARY`가 든 비율 1 ADS
-  (`ARM`·`SE` …)는 관문 밖에서 계속 빠진다 — 판마다 비율을 적용해 들이는 것은 관문 뒤(탐색 `explore/universe/ADS-BASIS-PLAN-1022.md` §3).
+  (`UsMarketCapUniverseAdapter.screenDepositary` · 2026-10-22 · 비율의 원장은 ADR-0162 §배경). 오늘 순위의 이름 축은 ADS 보통주를 안 자르고
+  표지에 넘긴다(`nonCommonInRanking` · 탐색 `explore/universe/ADS-B0-PLAN-1022.md`) — 비율 1이고 표지 주식수가 축 없이 실리면 든다
+  (10-21 종가 드라이런: `ARM` 45위 · `NICE` · `BLTE` · 표지 19 → 29건 · 뺌 0 → 7). `SE`는 비율 1이어도 표지 주식수가 클래스에만 실려 저장
+  주식수가 표지 합보다 4.45% 많아 뺀다. 비율 ≠ 1을 판마다 적용해 들이는 것과 과거 명부(`UsPastRanking` — 이름으로 계속 뺀다)는 관문 뒤
+  (탐색 `explore/universe/ADS-B-PLAN-1022.md` · `docs/reload-gate.md`).
 - **SIC가 없는 종목은 어느 축도 못 본다.** 편입 중 `sic_code` 결손이 **5종목**인데 전부
   BDC·비상장은행 계열이다(`ARCC`·`MAIN`·`OBDC`·`OTF`·`CBC`). **투자회사인데 이름에도 걸리는
   낱말이 없어** 사업회사로 스크리닝에 올라온다 — ADR-0086이 *"잘못 분류된 ETF는 사업회사로
