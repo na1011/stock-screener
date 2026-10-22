@@ -1,5 +1,7 @@
 package com.stockscreener.pipeline.collector;
 
+import com.stockscreener.indicator.ShareBasis;
+
 import com.stockscreener.pipeline.datasource.us.UsMarket;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
@@ -271,15 +273,20 @@ public class GovernanceFactDeriver {
      * §2 · ADR-0113). 고르는 규칙은 위 질의와 같다 — 공시일 순으로 처음 채워진 판의 값, 20% 온전성 게이트(분자 ÷ EPS와 견줌 ·
      * 위 질의의 {@code CASE}와 같은 술어). 다른 것은 하나다: 그 앞에 숨긴 판을 만나면 그 해의 총액을 안 낸다 — 뒤 판으로
      * 건너가면 숨긴 이유(원장이 그 판의 주식수를 확인 못 함)를 조용히 무시한다.
+     *
+     * <p><b>20% 게이트를 지난 주식수에 그 판의 기저 배수를 곱한다</b>(ADR-0183) — 총액 = Alpaca의 <b>ADS당</b> 배당 × 주식수라 예탁증권
+     * 줄은 1/k를 곱해야 k배로 안 부푼다. 게이트는 그 전에 보통주끼리(저장 주식수 대 분자 ÷ 보통주당 EPS) 맞댄다. 기저 미정(UNRESOLVED)
+     * 판이면 그 해의 총액을 안 낸다.
      */
-    private List<GovernanceDerivation.AnnualPeriod> withClassAxisShares(long stockId,
+    List<GovernanceDerivation.AnnualPeriod> withClassAxisShares(long stockId,
                                                                        List<GovernanceDerivation.AnnualPeriod> periods) {
         ShareClassLine line = shareClasses.line(stockId);
         Map<Integer, BigDecimal> shares = new HashMap<>();
         Map<Integer, BigDecimal> implied = new HashMap<>();
+        Map<Integer, BigDecimal> basisMultiple = new HashMap<>();
         java.util.Set<Integer> decided = new java.util.HashSet<>();
         jdbcTemplate.query("""
-                SELECT fiscal_year, published_at, report_code, shares_outstanding,
+                SELECT fiscal_year, published_at, report_code, shares_outstanding, share_basis_status, share_basis_multiple,
                        coalesce(net_income_controlling, net_income) AS numerator, eps
                   FROM financial_statement
                  WHERE stock_id = ? AND fiscal_period = 'FY'
@@ -303,6 +310,13 @@ public class GovernanceFactDeriver {
             if (read.shares() != null && read.shares().signum() > 0) {
                 decided.add(year);
                 shares.put(year, read.shares());
+                ShareBasis basis = ShareBasis.of(rs.getString("share_basis_status"));
+                BigDecimal multiple = rs.getBigDecimal("share_basis_multiple");
+                if (basis == ShareBasis.UNRESOLVED) {
+                    basisMultiple.put(year, null);
+                } else if (basis.multiplies() && multiple != null) {
+                    basisMultiple.put(year, multiple);
+                }
             }
         }, stockId);
         List<GovernanceDerivation.AnnualPeriod> out = new ArrayList<>(periods.size());
@@ -313,6 +327,10 @@ public class GovernanceFactDeriver {
                     && chosen.divide(imp, java.math.MathContext.DECIMAL64).subtract(BigDecimal.ONE).abs()
                     .compareTo(new BigDecimal("0.20")) > 0) {
                 chosen = null;
+            }
+            if (chosen != null && basisMultiple.containsKey(p.fiscalYear())) {
+                BigDecimal multiple = basisMultiple.get(p.fiscalYear());
+                chosen = multiple == null ? null : chosen.multiply(multiple);
             }
             out.add(new GovernanceDerivation.AnnualPeriod(p.fiscalYear(), p.start(), p.end(), p.firstPublishedAt(), chosen));
         }
