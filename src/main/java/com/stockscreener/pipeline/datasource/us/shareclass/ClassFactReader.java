@@ -45,8 +45,10 @@ public final class ClassFactReader {
      * 저장 팩트({@code sec_filing_class_fact.facts})를 정하는 읽기 규칙의 판 — 이 파일과 {@link ClassFacts}의 저장 형태를 바꾸면
      * 올린다. 판이 다른 행은 없는 것으로 치고 다음 받기가 다시 받는다. 2 — 표지 기호 · 증권 이름이 거래소 축 · 보통주 구성요소 축 꼴도
      * 받는다(2026-10-21). 3 — 표지 글의 줄바꿈 없는 공백 · 너비 0 구분자를 공백으로, 방향 표시를 지운다({@link #plainText} · 2026-10-21).
+     * 4 — IFRS 공시(ADR-0182 · 0183): 클래스 축 {@code ifrs-full:ClassesOfShareCapitalAxis}를 클래스 축으로 받고, IFRS의 EPS · 가중평균 ·
+     * 분자를 같은 뜻의 us-gaap 이름으로 싣는다(AZN · VALE 표지가 그 축의 구성원에만 주식수를 싣는다 · 2026-10-22 인스턴스).
      */
-    public static final int READER_VERSION = 3;
+    public static final int READER_VERSION = 4;
 
     public static final String SHARES_OUTSTANDING = "EntityCommonStockSharesOutstanding";
     public static final String TRADING_SYMBOL = "TradingSymbol";
@@ -76,6 +78,18 @@ public final class ClassFactReader {
     /** 글자 사이에 끼어도 뜻이 없는 표시 — 방향 표시와 soft hyphen. */
     private static final Pattern INVISIBLE = Pattern.compile("[\\u00AD\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]");
     private static final String CLASS_AXIS = "StatementClassOfStockAxis";
+    /** IFRS의 클래스 축 — 같은 뜻(주식 종류). 구성원 열쇠는 축 이름과 무관하게 구성원 그대로다. */
+    private static final String IFRS_CLASS_AXIS = "ClassesOfShareCapitalAxis";
+    private static final String IFRS_PREFIX = "http://xbrl.ifrs.org/taxonomy/";
+    /** 2023년 판부터의 IFRS 택소노미는 https다(TRI · AZN 2026 인스턴스 실측) — 둘 다 받는다. */
+    private static final String IFRS_PREFIX_HTTPS = "https://xbrl.ifrs.org/taxonomy/";
+    /** IFRS 개념 → 판정이 읽는 us-gaap 이름(뜻이 같은 것만 · ADR-0182 별칭과 같다). */
+    private static final Map<String, String> IFRS_DURATION = Map.of(
+            "BasicEarningsLossPerShare", "EarningsPerShareBasic",
+            "WeightedAverageShares", "WeightedAverageNumberOfSharesOutstandingBasic",
+            "ProfitLossAttributableToOrdinaryEquityHoldersOfParentEntity", "NetIncomeLossAvailableToCommonStockholdersBasic",
+            "ProfitLossAttributableToOwnersOfParent", "NetIncomeLoss",
+            "ProfitLoss", "ProfitLoss");
     private static final String EQUITY_AXIS = "StatementEquityComponentsAxis";
     private static final String SUBSEQUENT_AXIS = "SubsequentEventTypeAxis";
     /** 표지의 거래소 축 — 상장 판정 표지만 받는다(Two Harbors 10-Q는 표지 기호마다 클래스 축 + 이 축을 단다 · R-D6-0 2026-10-18). */
@@ -144,8 +158,15 @@ public final class ClassFactReader {
                     }
                     boolean gaap = ns != null && ns.startsWith(US_GAAP_PREFIX);
                     boolean dei = ns != null && ns.startsWith(DEI_PREFIX);
-                    if (!gaap && !dei) {
+                    boolean ifrs = ns != null && (ns.startsWith(IFRS_PREFIX) || ns.startsWith(IFRS_PREFIX_HTTPS));
+                    if (!gaap && !dei && !ifrs) {
                         continue;
+                    }
+                    if (ifrs) {
+                        local = IFRS_DURATION.get(local);
+                        if (local == null) {
+                            continue;
+                        }
                     }
                     if (dei && "DocumentType".equals(local)) {
                         documentType = r.getElementText().trim();
@@ -178,7 +199,8 @@ public final class ClassFactReader {
             String decimals = raw.decimals();
             Set<String> extra = new java.util.HashSet<>(c.dims().keySet());
             extra.remove(CLASS_AXIS);
-            String member = c.dims().getOrDefault(CLASS_AXIS, ClassFacts.AXISLESS);
+            extra.remove(IFRS_CLASS_AXIS);
+            String member = c.dims().getOrDefault(CLASS_AXIS, c.dims().getOrDefault(IFRS_CLASS_AXIS, ClassFacts.AXISLESS));
             if (coverConcepts == LISTING_COVER) {
                 // 상장 판정은 기호 · 거래소 · 증권 이름(과 예탁증권 판정의 비율 · 표지 주식수)만 본다(저장 팩트 COVER는 그 판을 안 바꾸려고 그대로 둔다).
                 //  - 거래소 축은 그 줄이 어느 거래소의 것인지 말한다 — 이중 상장은 줄이 거래소마다 따로라 구성원 열쇠에 거래소를 붙인다

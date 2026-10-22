@@ -27,9 +27,11 @@ public final class IssuerTimeline {
 
     /**
      * 판정 규칙의 판 — 판정 표에 같이 적는다(어느 규칙이 낸 행인지). 규칙을 바꾸면 올린다. 2 — 상장 클래스 매핑이 통째로 같은 기호를
-     * 먼저 보고 · 보통주 아닌 줄과 여러 클래스를 묶은 구성원을 잇지 않는다(2026-10-21).
+     * 먼저 보고 · 보통주 아닌 줄과 여러 클래스를 묶은 구성원을 잇지 않는다(2026-10-21). 3 — 20-F · 40-F 클래스 앵커를 10-K와 같게
+     * 판정한다(B 갈래 n · 시점 합) — 막던 근거 「ADS 비율을 원장이 안 준다」가 거짓이 됐고(공시 표지가 판마다 준다 · ADR-0183) ADS가
+     * 아닌 20-F · 40-F 보통주(TRI · NU)에는 처음부터 안 서던 규칙이다. Q4 유도만 안 한다(연간 공시라 분기 n이 없다).
      */
-    public static final int ENGINE_VERSION = 2;
+    public static final int ENGINE_VERSION = 3;
 
     /** 단일 클래스 연속 3개월 분모 변화 간격 120~200일의 p95(§10a · {@code single5.py}). */
     static final double TAU_TWO_QUARTERS = 0.1202;
@@ -171,10 +173,6 @@ public final class IssuerTimeline {
             boolean fpi = form.startsWith("20-F") || form.startsWith("40-F");
             Double n = r.n();
             String branch = r.branch();
-            if (fpi && n != null && branch.startsWith("B")) {
-                n = null;
-                branch = "20F-class";
-            }
             ClassFacts.Period p = r.period();
             if (n == null) {
                 out.add(new Verdict(f, a, "T", 'X', branch, failureCategory(facts, p, branch, r.failureSource()), null, null));
@@ -225,7 +223,7 @@ public final class IssuerTimeline {
             Map<String, Double> wv = DenominatorJudge.periodValues(facts, ClassFactReader.WEIGHTED_TAGS, p);
             Double point = null;
             String how = null;
-            if (!fpi && !s.isEmpty() && cv.keySet().containsAll(s)) {
+            if (!s.isEmpty() && cv.keySet().containsAll(s)) {
                 if (em.isEmpty() || em.values().stream().map(v -> Math.round(v * 1e4) / 1e4).distinct().count() == 1) {
                     point = s.stream().mapToDouble(cv::get).sum();
                 } else {
@@ -254,7 +252,7 @@ public final class IssuerTimeline {
                     }
                 }
             }
-            if (point == null && !cv.isEmpty() && !fpi) {
+            if (point == null && !cv.isEmpty()) {
                 double t = cv.values().stream().mapToDouble(Double::doubleValue).sum();
                 if (Math.abs(t / nref - 1) <= tauCover) {
                     point = t;
