@@ -63,6 +63,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
      * 유도·판독·명부도 같은 설정 뒤다.
      * 켜는 길(코드 기본값을 뒤집은 jar 하나 — 배포 디렉터리 {@code .env}는 배포마다 저장소 {@code .env}로 덮인다)은 {@code CLAUDE.md} 「재적재·백필」에 있다.
      */
+    /** 판마다 예탁 비율의 표지 재료(관문 뒤 · ADR-0183). 시험 생성자는 null이다. */
+    private final DepositaryCoverCollector depositary;
     private final boolean usGate;
     /** companyfacts가 빠뜨린 공시를 인스턴스로 채운다(ADR-0173). */
     private final FilingSupplementer supplementer;
@@ -82,9 +84,11 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                                     SecTickerCikCache cikCache,
                                     SecFilingSupplement supplement,
                                     ShareClassCollector shareClass,
+                                    DepositaryCoverCollector depositary,
                                     @Value("${stockscreener.gate.us}") boolean usGate) {
         this(clientFactory, properties, rateLimiter, cikCache,
-                properties.getSecEdgar().getBaseUrl(), usGate, supplement, SecFilingClient.Backoff.standard(), shareClass);
+                properties.getSecEdgar().getBaseUrl(), usGate, supplement, SecFilingClient.Backoff.standard(), shareClass,
+                depositary);
     }
 
     /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 관문 설정은 꺼진 채이고 보충하지 않는다. */
@@ -105,7 +109,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              boolean usGate,
                              FilingSupplementer supplementer) {
         this(clientFactory, properties, rateLimiter, cikCache, baseUrl, usGate, supplementer,
-                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }), null);
+                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }), null, null);
     }
 
     SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
@@ -116,7 +120,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              boolean usGate,
                              FilingSupplementer supplementer,
                              SecFilingClient.Backoff backoff,
-                             ShareClassCollector shareClass) {
+                             ShareClassCollector shareClass,
+                             DepositaryCoverCollector depositary) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
@@ -126,6 +131,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         this.supplementer = supplementer;
         this.backoff = backoff;
         this.shareClass = shareClass;
+        this.depositary = depositary;
     }
 
     @Override
@@ -198,6 +204,20 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                         security.ticker(), classes.targets(), classes.fetched(), classes.failed());
             }
             unfetchedClassFacts = classes.unresolved();
+        }
+        if (usGate && depositary != null) {
+            // 판마다 예탁 비율의 재료(ADR-0183) — 예탁증권 줄 발행사의 2019 뒤 정기 공시 표지. 받지 못한 것은 클래스 축처럼 시장 미완료의
+            // 재료로 싣는다(다음 받기가 다시 받는다).
+            DepositaryCoverCollector.Outcome covers = depositary.collect(security, cik.get(), context);
+            if (covers.fetched() > 0 || !covers.failed().isEmpty()) {
+                log.info("예탁 표지. ticker={} 대상={} 받음={} 실패={}", security.ticker(), covers.targets(), covers.fetched(),
+                        covers.failed());
+            }
+            if (!covers.unresolved().isEmpty()) {
+                List<DataSourceException.Kind> merged = new java.util.ArrayList<>(unfetchedClassFacts);
+                merged.addAll(covers.unresolved());
+                unfetchedClassFacts = merged;
+            }
         }
 
         SecEdgarFacts.Result result = SecEdgarFacts.build(tree, fromFiscalYear, usGate);

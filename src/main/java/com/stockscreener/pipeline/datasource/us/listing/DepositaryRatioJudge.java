@@ -31,6 +31,11 @@ public final class DepositaryRatioJudge {
     static final double CARRY_LIMIT = 1.5;
     /** ADS 단위 이탈로 읽는 허용. */
     static final double UNIT_TOLERANCE = 0.05;
+    /**
+     * 원장 사건이 있다고 볼 수 있는 첫날. 그 앞 공시 사이의 「사건 없음」은 뜻이 없다 — 소스(Alpaca)의 분할 이력이 2019 무렵부터다
+     * (2026-10-22: 대조군 NFLX 2015-07 7:1까지 2015~2018 0건 · 가장 이른 값 HDB 2019-09). 그 앞 공시는 잇지 않는다(폴백 근거의 이식).
+     */
+    public static final LocalDate LEDGER_FROM = LocalDate.of(2019, 1, 1);
 
     /**
      * @param reading         그 공시 표지 읽기(표지가 없거나 이름 줄이 없으면 null)
@@ -73,9 +78,14 @@ public final class DepositaryRatioJudge {
                 continue;
             }
             Filing f = ordered.get(i);
+            if (f.filed().isBefore(LEDGER_FROM)) {
+                how[i] = How.UNRESOLVED;
+                continue;
+            }
             for (int j = i - 1; j >= 0; j--) {
                 if (how[j] == How.OWN) {
-                    if (!eventBetween(events, ordered.get(j).filed(), f.filed()) && near(ordered.get(j), f)) {
+                    if (!ordered.get(j).filed().isBefore(LEDGER_FROM)
+                            && !eventBetween(events, ordered.get(j).filed(), f.filed()) && near(ordered.get(j), f)) {
                         k[i] = k[j];
                         how[i] = How.CARRY_FORWARD;
                     }

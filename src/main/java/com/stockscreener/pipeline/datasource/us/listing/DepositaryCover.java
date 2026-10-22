@@ -57,7 +57,7 @@ public final class DepositaryCover {
     public static Verdict judge(ClassFacts cover, String symbol, boolean nameSaysDepositary) {
         Reading reading = read(cover, symbol);
         switch (reading.kind()) {
-            case NOT_DEPOSITARY -> {
+            case NO_TITLE, NOT_DEPOSITARY -> {
                 return nameSaysDepositary
                         ? new Verdict(Outcome.EXCLUDED, "이름은 예탁증권인데 표지가 예탁증권 줄을 안 보인다")
                         : new Verdict(Outcome.NOT_DEPOSITARY, null);
@@ -83,7 +83,11 @@ public final class DepositaryCover {
     }
 
     /** 표지 한 판이 그 기호 줄에 대해 말하는 예탁 비율. */
-    public enum ReadingKind { NOT_DEPOSITARY, RATIO, ABSENT, CONFLICT }
+    /**
+     * {@code NO_TITLE}: 표지에 증권 이름 줄이 없다(10-K · 10-Q가 흔하다 — AKTX 10-K) — 그 판은 예탁증권인지조차 말하지 않는다.
+     * {@code NOT_DEPOSITARY}: 이름 줄은 있는데 예탁증권 줄이 없다(AZN 2026 보통주 직접 상장).
+     */
+    public enum ReadingKind { NO_TITLE, NOT_DEPOSITARY, RATIO, ABSENT, CONFLICT }
 
     /**
      * @param sharesPerDepositary 「1 예탁증권 = k주」의 k({@code RATIO}만)
@@ -112,6 +116,9 @@ public final class DepositaryCover {
         }
         List<String> depositary = lines.stream().filter(m -> DepositaryRatio.isDepositary(titles.get(m))).toList();
         TreeSet<Double> ratios = new TreeSet<>();
+        if (titles.isEmpty()) {
+            return new Reading(ReadingKind.NO_TITLE, Double.NaN, ratios);
+        }
         if (depositary.isEmpty()) {
             return new Reading(ReadingKind.NOT_DEPOSITARY, Double.NaN, ratios);
         }

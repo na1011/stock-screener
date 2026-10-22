@@ -1,6 +1,10 @@
 package com.stockscreener.pipeline.collector;
 
+import com.stockscreener.pipeline.datasource.us.DepositaryCoverStore;
 import com.stockscreener.pipeline.datasource.us.UsMarket;
+import com.stockscreener.pipeline.datasource.us.listing.DepositaryCover;
+import com.stockscreener.pipeline.datasource.us.listing.DepositaryRatioJudge;
+import com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
 import org.springframework.beans.factory.annotation.Value;
@@ -88,11 +92,14 @@ public class ShareBasisDeriver {
      * 유도가 클래스 축 판정을 먼저 돈다.
      */
     private final boolean usGate;
+    /** 판마다 예탁 비율의 두 표(관문 뒤 · ADR-0183). */
+    private final DepositaryCoverStore depositary;
 
-    public ShareBasisDeriver(JdbcTemplate jdbcTemplate, ShareClassStore shareClasses,
+    public ShareBasisDeriver(JdbcTemplate jdbcTemplate, ShareClassStore shareClasses, DepositaryCoverStore depositary,
                              @Value("${stockscreener.gate.us}") boolean usGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.shareClasses = shareClasses;
+        this.depositary = depositary;
         this.usGate = usGate;
     }
 
@@ -147,9 +154,84 @@ public class ShareBasisDeriver {
             (verdict.status() == ShareBasis.UNRESOLVED ? unresolved : shifted)
                     .add(tickers.get(stockId));
         }
-        log.info("주식수 기저 판정. 시장={} 재료사건보유={} SHIFTED={}{} UNRESOLVED={}{} 쓴행={}",
-                marketCode, events.size(), shifted.size(), shifted, unresolved.size(), unresolved, rows);
+        List<String> deposited = new ArrayList<>();
+        if (usGate && UsMarket.CODE.equals(marketCode)) {
+            rows += deriveDepositary(marketCode, events, deposited);
+        }
+        log.info("주식수 기저 판정. 시장={} 재료사건보유={} SHIFTED={}{} UNRESOLVED={}{} DEPOSITARY={}{} 쓴행={}",
+                marketCode, events.size(), shifted.size(), shifted, unresolved.size(), unresolved, deposited.size(),
+                deposited, rows);
         return new Tally(events.size(), shifted.size(), unresolved.size(), rows, shifted, unresolved);
+    }
+
+    /**
+     * 관문 켬 미국 — 예탁증권 줄 발행사의 행마다 {@code share_basis_multiple} = 1/k · 상태 DEPOSITARY(ADR-0183). k는 공시마다 한 번
+     * 정해 {@code sec_depositary_ratio}에 두고 <b>정한 값은 다시 안 짓는다</b>(미정만 채운다) — 매 평일 이 판정이 전 행을 지우고 다시
+     * 짓는 동안 지난 판의 k가 소급해 뒤집히지 않게. 그 발행사의 SHIFTED 판정을 덮는다(같은 사건을 두 번 곱하지 않는다 — AMRN이 이 범위에
+     * 들면 1/20이 SHIFTED ×0.05를 대신한다). 미정 행은 UNRESOLVED(숨김)다.
+     *
+     * <p>예탁증권 줄 발행사 = 받은 표지 중 하나라도 그 기호 줄을 예탁증권으로 싣는 종목(비율을 읽었든 못 읽었든). 표지를 받았는데 줄이
+     * 전부 보통주인 발행사(TRI 꼴 40-F)는 손대지 않는다.
+     */
+    private int deriveDepositary(String marketCode, Map<Long, List<Event>> events, List<String> deposited) {
+        record Stock(long id, String ticker, long cik) {
+        }
+        List<Stock> stocks = jdbcTemplate.query("""
+                SELECT s.id, s.ticker, s.sec_cik FROM stock s
+                WHERE s.market_code = ? AND s.sec_cik IN (SELECT DISTINCT cik FROM sec_depositary_cover)
+                ORDER BY s.id
+                """, (rs, n) -> new Stock(rs.getLong("id"), rs.getString("ticker"), rs.getLong("sec_cik")), marketCode);
+        int rows = 0;
+        for (Stock stock : stocks) {
+            Map<String, DepositaryCover.Reading> readings = new LinkedHashMap<>();
+            Map<String, LocalDate> filed = new LinkedHashMap<>();
+            boolean depositaryLine = false;
+            for (DepositaryCoverStore.Cover cover : depositary.covers(stock.cik())) {
+                DepositaryCover.Reading reading = DepositaryCover.read(ClassFacts.fromJson(cover.facts()), stock.ticker());
+                readings.put(cover.accession(), reading);
+                filed.put(cover.accession(), cover.filed());
+                depositaryLine |= reading.kind() == DepositaryCover.ReadingKind.RATIO
+                        || reading.kind() == DepositaryCover.ReadingKind.ABSENT
+                        || reading.kind() == DepositaryCover.ReadingKind.CONFLICT;
+            }
+            if (!depositaryLine) {
+                continue;
+            }
+            // 공시마다 보통주 — 그 공시가 자기 기간으로 낸 행(기말이 가장 늦은 것)의 주식수. 표지가 없는 공시(6-K · 2019 앞)도 판이다.
+            Map<String, BigDecimal> ordinary = new LinkedHashMap<>();
+            jdbcTemplate.query("""
+                    SELECT DISTINCT ON (report_code) report_code, published_at, shares_outstanding
+                    FROM financial_statement WHERE stock_id = ? AND report_code LIKE '%:%'
+                    ORDER BY report_code, period_end DESC, revision_no DESC
+                    """, rs -> {
+                String accession = accessionOf(rs.getString("report_code"));
+                ordinary.put(accession, rs.getBigDecimal("shares_outstanding"));
+                filed.putIfAbsent(accession, rs.getObject("published_at", LocalDate.class));
+            }, stock.id());
+            List<DepositaryRatioJudge.Filing> filings = new ArrayList<>();
+            filed.forEach((accession, date) -> filings.add(
+                    new DepositaryRatioJudge.Filing(accession, date, readings.get(accession), ordinary.get(accession))));
+            List<DepositaryRatioJudge.Event> ledger = events.getOrDefault(stock.id(), List.of()).stream()
+                    .map(e -> new DepositaryRatioJudge.Event(e.effectiveDate(), e.ratio().doubleValue())).toList();
+            DepositaryRatioJudge.decide(filings, ledger).forEach((accession, decision) ->
+                    depositary.saveRatio(stock.id(), accession, filed.get(accession), decision.k(), decision.how()));
+            Map<String, DepositaryRatioJudge.Decision> frozen = depositary.ratios(stock.id());
+            for (Map.Entry<String, DepositaryRatioJudge.Decision> e : frozen.entrySet()) {
+                Double k = e.getValue().k();
+                rows += jdbcTemplate.update("""
+                        UPDATE financial_statement SET share_basis_status = ?, share_basis_multiple = ?
+                        WHERE stock_id = ? AND split_part(report_code, ':', 2) = ?
+                        """, k == null ? ShareBasis.UNRESOLVED.name() : ShareBasis.DEPOSITARY.name(),
+                        k == null ? null : BigDecimal.ONE.divide(BigDecimal.valueOf(k), MC), stock.id(), e.getKey());
+            }
+            deposited.add(stock.ticker());
+        }
+        return rows;
+    }
+
+    private static String accessionOf(String reportCode) {
+        int colon = reportCode.indexOf(':');
+        return colon < 0 ? reportCode : reportCode.substring(colon + 1);
     }
 
     /**

@@ -96,4 +96,14 @@ class DepositaryRatioJudgeTest {
 
         assertThat(d.get("a")).isEqualTo(new DepositaryRatioJudge.Decision(1.0, DepositaryRatioJudge.How.NOT_DEPOSITARY));
     }
+
+    @Test
+    @DisplayName("원장 이력(2019) 앞 공시는 잇지 않는다 — 그 앞의 「사건 없음」은 소스가 사건을 안 준 것이라 뜻이 없다")
+    void doesNotCarryBeforeTheLedgerStarts() {
+        Map<String, DepositaryRatioJudge.Decision> d = DepositaryRatioJudge.decide(List.of(
+                filing("old", "2018-04-01", null, "1000"),
+                filing("new", "2019-04-01", ratio(5), "1000")), List.of());
+
+        assertThat(d.get("old")).isEqualTo(new DepositaryRatioJudge.Decision(null, DepositaryRatioJudge.How.UNRESOLVED));
+    }
 }
