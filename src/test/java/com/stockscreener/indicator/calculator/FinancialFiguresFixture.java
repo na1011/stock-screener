@@ -56,6 +56,8 @@ final class FinancialFiguresFixture {
     private String shareBasisStatus;
     private com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine.State shareClassState;
     private BigDecimal weightedShares;
+    private BigDecimal discontinuedIncome;
+    private BigDecimal discontinuedIncomeControlling;
 
     private FinancialFiguresFixture() {
     }
@@ -123,6 +125,8 @@ final class FinancialFiguresFixture {
         fixture.shareBasisStatus = source.shareBasisStatus();
         fixture.shareClassState = source.shareClassState();
         fixture.weightedShares = source.weightedShares();
+        fixture.discontinuedIncome = source.discontinuedIncome();
+        fixture.discontinuedIncomeControlling = source.discontinuedIncomeControlling();
         return fixture;
     }
 
@@ -292,6 +296,13 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    /** 중단영업 연결 몫과 지배 몫(F2b · ADR-0184). 기본값 null은 「이 규칙으로 안 읽은 행」이다. */
+    FinancialFiguresFixture discontinued(BigDecimal consolidated, BigDecimal controlling) {
+        this.discontinuedIncome = consolidated;
+        this.discontinuedIncomeControlling = controlling;
+        return this;
+    }
+
     FinancialFigures build() {
         return new FinancialFigures(
                 fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
@@ -304,6 +315,6 @@ final class FinancialFiguresFixture {
                 noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState,
-                weightedShares);
+                weightedShares, discontinuedIncome, discontinuedIncomeControlling);
     }
 }

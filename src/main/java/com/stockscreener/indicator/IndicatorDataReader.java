@@ -105,6 +105,14 @@ public class IndicatorDataReader {
             """;
 
     /**
+     * 중단영업 두 컬럼(F2b · ADR-0184). <b>그 행 시장의 관문이 켜졌을 때만 읽는다</b> — 컬럼이 그 관문의 마이그레이션과 함께
+     * 생기고, 꺼진 시장의 행은 이 축이 없던 때와 바이트까지 같아야 한다(「us 켬 · kr 끔에서 국내 행 무변화」).
+     */
+    private static final String DISCONTINUED_COLUMNS = """
+            , discontinued_income, discontinued_income_controlling
+            """;
+
+    /**
      * 재무를 어느 시점의 눈으로 볼 것인가(ADR-0071).
      *
      * <p>MUST: 호출부가 <b>반드시 고른다.</b> 기본값을 주거나 시점용 메서드를 옆에 따로 두면
@@ -173,7 +181,7 @@ public class IndicatorDataReader {
                     AND mismatched.currency_code <> gate_market.currency_code)
             """;
 
-    private static final String SELECT_FINANCIALS_LATEST = ("""
+    private static final String SELECT_FINANCIALS_LATEST_TEMPLATE = """
             SELECT %s
             FROM financial_statement
             WHERE stock_id = ? AND is_latest AND period_end <= ?
@@ -181,7 +189,13 @@ public class IndicatorDataReader {
             """ + CURRENCY_GATE + """
             ORDER BY period_end DESC, published_at DESC
             LIMIT ?
-            """).formatted(FINANCIAL_COLUMNS);
+            """;
+
+    private static final String SELECT_FINANCIALS_LATEST =
+            SELECT_FINANCIALS_LATEST_TEMPLATE.formatted(FINANCIAL_COLUMNS);
+
+    private static final String SELECT_FINANCIALS_LATEST_DISCONTINUED =
+            SELECT_FINANCIALS_LATEST_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS);
 
     /**
      * 그 시점까지 공시된 <b>판 이력 전부</b>를 읽는다({@link FinancialVisibility#KNOWN_ON}).
@@ -205,14 +219,20 @@ public class IndicatorDataReader {
      * {@code LATEST}는 {@code LIMIT}을 써서 <b>인자 수가 다르다</b> — 한 배열로 합치면
      * 조용히 어긋난다.
      */
-    private static final String SELECT_FINANCIALS_KNOWN_ON = ("""
+    private static final String SELECT_FINANCIALS_KNOWN_ON_TEMPLATE = """
             SELECT %1$s
             FROM financial_statement
             WHERE stock_id = ? AND published_at <= ? AND period_end <= ?
               AND fiscal_period %%s 'FY'
             """ + CURRENCY_GATE + """
             ORDER BY period_end DESC, published_at DESC
-            """).formatted(FINANCIAL_COLUMNS);
+            """;
+
+    private static final String SELECT_FINANCIALS_KNOWN_ON =
+            SELECT_FINANCIALS_KNOWN_ON_TEMPLATE.formatted(FINANCIAL_COLUMNS);
+
+    private static final String SELECT_FINANCIALS_KNOWN_ON_DISCONTINUED =
+            SELECT_FINANCIALS_KNOWN_ON_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS);
 
     private static final RowMapper<PriceBar> PRICE_BAR_MAPPER = (rs, rowNum) -> new PriceBar(
             rs.getObject("trade_date", LocalDate.class),
@@ -233,13 +253,17 @@ public class IndicatorDataReader {
      * 부르지 않고 행은 이 축이 없던 때와 같다.
      */
     private final boolean usGate;
+    /** 국내 관문 설정 — 켜졌으면 국내 종목의 재무 행에 중단영업 두 컬럼을 입힌다(F2b). */
+    private final boolean krGate;
 
     public IndicatorDataReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions,
-                               ShareClassStore shareClasses, @Value("${stockscreener.gate.us}") boolean usGate) {
+                               ShareClassStore shareClasses, @Value("${stockscreener.gate.us}") boolean usGate,
+                               @Value("${stockscreener.gate.kr}") boolean krGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.corporateActions = corporateActions;
         this.shareClasses = shareClasses;
         this.usGate = usGate;
+        this.krGate = krGate;
     }
 
     /**
@@ -483,45 +507,40 @@ public class IndicatorDataReader {
     private List<FinancialFigures> queryFigures(String periodOperator, long stockId,
                                                 LocalDate asOf, int limit,
                                                 FinancialVisibility visibility) {
-        RowMapper<FinancialFigures> mapper = IndicatorDataReader::mapFigures;
-        ShareClassLine line = shareClassLine(stockId);
-        if (line != null) {
-            mapper = (rs, rowNum) -> mapFigures(rs, line);
-        }
+        String market = usGate || krGate ? marketOf(stockId) : null;
+        boolean us = UsMarket.CODE.equals(market);
+        // 그 행 시장의 관문만 본다 — 한쪽 관문을 연 상태에서 다른 시장 행이 이 축을 타면 그 시장 값이 관문 없이 바뀐다.
+        boolean discontinued = market != null && (us ? usGate : krGate);
+        ShareClassLine line = usGate && us ? shareClasses.line(stockId) : null;
+        RowMapper<FinancialFigures> mapper = (rs, rowNum) -> mapFigures(rs, line, discontinued);
         return switch (visibility) {
             case LATEST -> jdbcTemplate.query(
-                    SELECT_FINANCIALS_LATEST.formatted(periodOperator),
+                    (discontinued ? SELECT_FINANCIALS_LATEST_DISCONTINUED : SELECT_FINANCIALS_LATEST)
+                            .formatted(periodOperator),
                     mapper,
                     stockId, asOf, limit);
             // MUST: limit을 넘기지 않는다 — 이 갈래는 판 이력을 통째로 준다(위 javadoc).
             case KNOWN_ON -> jdbcTemplate.query(
-                    SELECT_FINANCIALS_KNOWN_ON.formatted(periodOperator),
+                    (discontinued ? SELECT_FINANCIALS_KNOWN_ON_DISCONTINUED : SELECT_FINANCIALS_KNOWN_ON)
+                            .formatted(periodOperator),
                     mapper,
                     stockId, asOf, asOf);
         };
     }
 
-    /** 관문이 켜졌고 미국 종목이면 그 줄의 판정(없으면 빈 판정 — 그래도 행은 클래스 축이 읽은 것으로 표시된다), 아니면 {@code null}. */
-    private ShareClassLine shareClassLine(long stockId) {
-        if (!usGate) {
-            return null;
-        }
+    /** 종목의 시장 코드. 종목이 없으면 {@code null}이다. */
+    private String marketOf(long stockId) {
         List<String> market = jdbcTemplate.queryForList("SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
-        if (market.isEmpty() || !UsMarket.CODE.equals(market.get(0))) {
-            return null;
-        }
-        return shareClasses.line(stockId);
-    }
-
-    private static FinancialFigures mapFigures(ResultSet rs, int rowNum) throws SQLException {
-        return mapFigures(rs, null);
+        return market.isEmpty() ? null : market.get(0);
     }
 
     /**
      * @param line {@code null}이면 행이 실은 주식수 그대로(관문 꺼짐 · 국내). 있으면 클래스 축 판정을 입힌다 — 주식수는 그 판정이
      *             정한 값, 숨김이면 상태로 막고, 분모 n을 싣는다.
+     * @param discontinued 그 행 시장의 관문이 켜졌는가 — 켜졌을 때만 질의가 중단영업 두 컬럼을 싣는다
      */
-    private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line) throws SQLException {
+    private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line, boolean discontinued)
+            throws SQLException {
         BigDecimal shares = rs.getBigDecimal("shares_outstanding");
         ShareClassLine.State state = null;
         BigDecimal weighted = null;
@@ -570,6 +589,8 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("profit_before_tax"),
                 rs.getBigDecimal("share_basis_multiple"),
                 rs.getString("share_basis_status"),
-                state, weighted);
+                state, weighted,
+                discontinued ? rs.getBigDecimal("discontinued_income") : null,
+                discontinued ? rs.getBigDecimal("discontinued_income_controlling") : null);
     }
 }

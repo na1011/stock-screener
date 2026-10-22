@@ -1399,7 +1399,7 @@ final class SecEdgarFacts {
      * 1,460행을 뒤 공시의 {@code NetIncomeLoss}(평가 전용)로 채점하면 연결이 맞음 87%(351/402) · 보통주 귀속(+우선주배당)
      * 73%(151/208)였고, 좁힌 술어 둘(직전 FY의 {@code NetIncomeLoss} = 보통주 귀속 · 우선주 잔액 0)도 판정 가능 행에서
      * 4 대 6 · 15 대 12로 서지 않았다 — {@code OXY}가 {@code NetIncomeLoss}에 우선주배당 뒤 값을 싣는다(2026-10-04).
-     * null로 두면 {@code sumControllingNetIncome}이 창 단위로 연결 합에 떨어져 더 틀린다(ADR-0154 §버린 대안).
+     * null로 두면 {@code FinancialMath.sumControllingContinuingIncome}이 창 단위로 연결 합에 떨어져 더 틀린다(ADR-0154 §버린 대안).
      *
      * <p><b>왜 지금 필요한가</b>: ADR-0153이 {@code ROE}의 분모를 지배주주 자본으로 옮기면서
      * {@code NetIncomeLoss}가 없는 종목은 <b>분자만 비지배 포함</b>으로 남았다. 그 전에는
@@ -2166,7 +2166,7 @@ final class SecEdgarFacts {
                             q1.operatingIncome(), q2.operatingIncome(), q3.operatingIncome()),
                 // **MUST: Q4도 두 컬럼을 다 만든다.** 여기가 한쪽만 채우면
                 // IndicatorDataReader의 TTM 창(분기 넷)에 Q4가 들어가는 순간
-                // sumControllingNetIncome이 **창 단위 전부-아니면-전무**라 통째로 netIncome
+                // sumControllingContinuingIncome이 **창 단위 전부-아니면-전무**라 통째로 netIncome
                 // 합으로 떨어진다 — 실측(2026-09-21) 편입 미국 983종목 중 **960(97.7%)**의
                 // 최신 TTM 창에 Q4 행이 든다. 그러면 PER·EPS_TTM의 분자가 연결이 되고
                 // roeBasis의 지배주주 짝이 **원리적으로 안 켜진다.**

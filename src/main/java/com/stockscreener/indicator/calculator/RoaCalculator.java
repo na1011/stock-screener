@@ -64,7 +64,7 @@ public class RoaCalculator implements IndicatorCalculator {
     private static BigDecimal valueOf(IndicatorContext context) {
         FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
         BigDecimal netIncome =
-                series.ttm(FinancialFigures::netIncome, 0);
+                series.ttm(FinancialFigures::continuingIncome, 0);
         if (netIncome == null) {
             return null;
         }

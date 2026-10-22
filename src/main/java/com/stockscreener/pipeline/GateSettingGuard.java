@@ -13,8 +13,11 @@ import org.springframework.core.env.PropertySource;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 /**
- * 재적재 관문 설정({@code stockscreener.gate.us})이 <b>허용된 두 출처</b>에서만 왔는지 기동 때 본다.
+ * 재적재 관문 설정({@code stockscreener.gate.us} · {@code stockscreener.gate.kr})이 <b>허용된 두 출처</b>에서만 왔는지
+ * 기동 때 본다. 관문은 시장마다 하나다(2026-10-04 사용자 결정 「시장별 관문」) — 두 키가 같은 규칙을 탄다.
  *
  * <h2>왜 필요한가</h2>
  * <p>규칙은 「켜는 길은 하나 — 코드 기본값을 뒤집은 jar, 관문 날 bootRun과 사본 실행은 인자」다
@@ -43,6 +46,9 @@ public class GateSettingGuard implements InitializingBean {
 
     static final String KEY = "stockscreener.gate.us";
 
+    /** 국내 관문(F2b가 첫 묶음). 미국 키와 같은 규칙으로 본다 — 옛 환경변수 이름은 미국에만 있었다. */
+    static final String KR_KEY = "stockscreener.gate.kr";
+
     /** 예전 yaml이 바인딩하던 환경변수 이름. 지금은 아무 데도 안 닿는다. */
     static final String LEGACY_ENV = "US_GATE";
 
@@ -54,10 +60,12 @@ public class GateSettingGuard implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() {
-        Verdict verdict = judge(environment);
-        log.info("관문 설정 {}={} (출처: {})", KEY, verdict.value(), verdict.source());
-        if (verdict.refusal() != null) {
-            throw new IllegalStateException(verdict.refusal());
+        for (String key : List.of(KEY, KR_KEY)) {
+            Verdict verdict = judge(environment, key);
+            log.info("관문 설정 {}={} (출처: {})", key, verdict.value(), verdict.source());
+            if (verdict.refusal() != null) {
+                throw new IllegalStateException(verdict.refusal());
+            }
         }
     }
 
@@ -70,6 +78,10 @@ public class GateSettingGuard implements InitializingBean {
     }
 
     static Verdict judge(ConfigurableEnvironment environment) {
+        return judge(environment, KEY);
+    }
+
+    static Verdict judge(ConfigurableEnvironment environment, String key) {
         PropertySource<?> origin = null;
         for (PropertySource<?> source : environment.getPropertySources()) {
             // 붙여 둔 집합 출처는 모든 출처를 다시 보여 줄 뿐이라 「어디서 왔나」를 답하지 못한다.
@@ -79,24 +91,24 @@ public class GateSettingGuard implements InitializingBean {
             // MUST: 바인딩 규칙으로도 묻는다 — 값은 Boot의 relaxed binding(대소문자·비영숫자 무시 · 환경변수 정준형)으로
             // 풀리는데 원시 이름 일치만 보면 `Stockscreener_Gate_Us`·`-Dstockscreener.gate.US` 같은 철자가 값을 켜면서
             // 출처는 classpath yaml로 판정돼 허용됐다(2026-10-14 관문 설정 분리 v2 반증 · Boot 4.1.0 소스로 실측).
-            if (source.containsProperty(KEY) || binds(source)) {
+            if (source.containsProperty(key) || binds(source, key)) {
                 origin = source;
                 break;
             }
         }
         if (origin == null) {
-            return new Verdict(null, "없음", KEY + "가 어느 출처에도 없다 — application.yaml의 기본값(false)이"
+            return new Verdict(null, "없음", key + "가 어느 출처에도 없다 — application.yaml의 기본값(false)이"
                     + " 빠졌다. 기본값이 없으면 관문 설정을 읽는 어댑터가 기동에서 죽거나 엉뚱한 값을 받는다.");
         }
-        Boolean value = environment.getProperty(KEY, Boolean.class);
+        Boolean value = environment.getProperty(key, Boolean.class);
         String source = origin.getName();
         if (!isCommandLine(origin) && !isClasspathApplicationYaml(origin)) {
-            return new Verdict(value, source, KEY + "=" + value + "가 허용되지 않은 출처에서 왔다: " + source
+            return new Verdict(value, source, key + "=" + value + "가 허용되지 않은 출처에서 왔다: " + source
                     + " — 켜는 길은 기본값을 뒤집은 jar(classpath application.yaml)이고, 관문 날 bootRun과 사본"
-                    + " 실행만 명령줄 인자(--" + KEY + "=true)로 켠다. 환경변수·SPRING_APPLICATION_JSON·"
+                    + " 실행만 명령줄 인자(--" + key + "=true)로 켠다. 환경변수·SPRING_APPLICATION_JSON·"
                     + "시스템 속성·작업 디렉터리 config 파일은 쓰지 않는다(CLAUDE.md 「재적재·백필」).");
         }
-        Object legacy = legacyEnvironmentValue(environment);
+        Object legacy = KEY.equals(key) ? legacyEnvironmentValue(environment) : null;
         if (legacy != null && Boolean.parseBoolean(String.valueOf(legacy)) != Boolean.TRUE.equals(value)) {
             return new Verdict(value, source, "환경변수 " + LEGACY_ENV + "=" + legacy + "가 있는데 실효값은 " + value
                     + "다(출처: " + source + ") — 이 이름은 더 이상 아무 데도 안 닿는다. 그 줄을 .env에서 걷는다"
@@ -106,8 +118,8 @@ public class GateSettingGuard implements InitializingBean {
     }
 
     /** 그 출처가 Boot의 바인딩 규칙으로 이 키를 내는가 — 값을 정하는 해석기({@code getProperty})와 같은 규칙이다. */
-    private static boolean binds(PropertySource<?> source) {
-        ConfigurationPropertyName name = ConfigurationPropertyName.of(KEY);
+    private static boolean binds(PropertySource<?> source, String key) {
+        ConfigurationPropertyName name = ConfigurationPropertyName.of(key);
         for (ConfigurationPropertySource adapted : ConfigurationPropertySources.from(source)) {
             if (adapted.getConfigurationProperty(name) != null) {
                 return true;

@@ -116,8 +116,51 @@ public record FinancialFigures(
          * <b>그 공시의 EPS 분모 n</b>(10-K는 Q4 · 관문이 켜진 미국 행만) — 주식수 비 지표 셋의 두 끝이다(발행사 안에서 공시
          * 형식에 따라 기저가 안 바뀌게). 보인 판정의 것만 있다.
          */
-        BigDecimal weightedShares
+        BigDecimal weightedShares,
+
+        /**
+         * <b>중단영업 손익(연결 · 세후 · 비지배 몫 포함).</b> 0은 「읽었고 중단영업 줄이 없다」, {@code null}은 「이 규칙으로
+         * 읽지 않았다」(관문 꺼짐 · 관문 전 행)다 — 그때 계속영업은 순이익 그대로라 동작이 이 축이 생기기 전과 같다(ADR-0184).
+         */
+        BigDecimal discontinuedIncome,
+
+        /**
+         * <b>중단영업 손익의 지배주주 몫.</b> 연결 몫이 0이 아닌데 이것이 {@code null}이면 원장이 지배 몫을 정해 주지
+         * 않은 것이다 — 지배 계속영업을 지어내지 않는다({@link #continuingIncomeControlling}).
+         */
+        BigDecimal discontinuedIncomeControlling
 ) {
+
+    /**
+     * <b>계속영업 순이익(연결).</b> 순이익에서 중단영업을 뺀다 — 중단영업은 정의상(ASC 205-20 · K-IFRS 1105) 이어지지 않는
+     * 손익이고 매각 차익을 싣는다. 중단영업을 안 읽은 행({@code null})은 순이익 그대로다.
+     */
+    public BigDecimal continuingIncome() {
+        if (netIncome == null) {
+            return null;
+        }
+        return discontinuedIncome == null ? netIncome : netIncome.subtract(discontinuedIncome);
+    }
+
+    /**
+     * <b>계속영업 순이익(지배주주).</b> 주당 지표의 분자다.
+     *
+     * <p>{@code null}이 둘이다 — 지배주주 순이익 자체가 없거나, 연결 중단영업은 있는데 그 지배 몫을 원장이 안 정해 줬다.
+     * 뒤의 것을 「비지배 몫 0」으로 채우지 않는다: 답을 아는 칸에서 원장이 자기정합한데 그 가정이 틀린 것이 104/144다
+     * (탐색 {@code F2B-PLAN-1023.md} 1b).
+     */
+    public BigDecimal continuingIncomeControlling() {
+        if (netIncomeControlling == null) {
+            return null;
+        }
+        if (discontinuedIncomeControlling != null) {
+            return netIncomeControlling.subtract(discontinuedIncomeControlling);
+        }
+        if (discontinuedIncome == null || discontinuedIncome.signum() == 0) {
+            return netIncomeControlling;
+        }
+        return null;
+    }
 
     /** 저장 문자열을 enum으로. NULL은 {@link ShareBasis#OK}다. */
     public ShareBasis shareBasis() {

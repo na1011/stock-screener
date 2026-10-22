@@ -54,7 +54,7 @@ final class FinancialMath {
      * {@code 034730} SK <b>3.197배</b>로 금지한 짝이고, ADR-0153 §결정도 같은 것을 적는다 —
      * <i>"DART에 지배주주 자본을 매핑하는 날 국내는 <b>분자도 함께</b> 지배주주로 바꿔야 한다."</i>
      *
-     * <p><b>MUST NOT: 행마다 폴백하지 않는다.</b> {@link #sumControllingNetIncome}의 javadoc이
+     * <p><b>MUST NOT: 행마다 폴백하지 않는다.</b> {@link #sumControllingContinuingIncome}의 javadoc이
      * 이미 적었다 — <i>"행마다 폴백하면 합계가 어느 쪽도 아닌 수가 되고, 값은 그럴듯하고
      * 에러도 없다."</i> 엄격 짝으로 잃는 창은 실측 <b>0.9%p</b>뿐이다(US TTM 49,240 중 93.5%가 성립).
      *
@@ -66,7 +66,13 @@ final class FinancialMath {
     record EquityBasis(BigDecimal income, BigDecimal equity) {
     }
 
-    /** 최근 4개 분기(TTM)의 짝. {@code quarters}는 {@code period_end} 내림차순이다. */
+    /**
+     * 최근 4개 분기(TTM)의 짝. {@code quarters}는 {@code period_end} 내림차순이다.
+     *
+     * <p><b>분자는 계속영업이다</b>(F2b · ADR-0184) — 중단영업(매각 차익 포함)은 이어지지 않는 손익이다. 지배 계속영업을 원장이
+     * 못 정해 주는 창(연결 중단영업은 있는데 지배 몫이 없다)은 <b>연결 짝</b>(연결 계속영업 ↔ 총자본)으로 간다 — 분자와 분모가
+     * 같은 기저라 정당하다. 지배 분자에 연결 분모를 섞지 않는다(ADR-0153).
+     */
     static EquityBasis roeBasis(List<FinancialFigures> quarters) {
         if (quarters.isEmpty()) {
             return null;
@@ -76,20 +82,24 @@ final class FinancialMath {
         BigDecimal controllingIncome =
                 sumFourQuarters(quarters, FinancialFigures::netIncomeControlling, 0);
         if (controllingIncome != null && controllingEquity != null) {
-            return new EquityBasis(controllingIncome, controllingEquity);
+            BigDecimal continuing =
+                    sumFourQuarters(quarters, FinancialFigures::continuingIncomeControlling, 0);
+            if (continuing != null) {
+                return new EquityBasis(continuing, controllingEquity);
+            }
         }
-        BigDecimal income = sumTrailingFourQuarters(quarters, FinancialFigures::netIncome);
+        BigDecimal income = sumTrailingFourQuarters(quarters, FinancialFigures::continuingIncome);
         return new EquityBasis(income, latest.totalEquity());
     }
 
-    /** 연간 한 행의 짝. {@code ROE_MIN_3Y}가 해마다 부른다. */
+    /** 연간 한 행의 짝. {@code ROE_MIN_3Y}가 해마다 부른다. 계속영업 · 연결 짝 폴백은 분기 짝과 같다. */
     static EquityBasis roeBasis(FinancialFigures figures) {
         BigDecimal controllingEquity = figures.totalEquityControlling();
-        BigDecimal controllingIncome = figures.netIncomeControlling();
-        if (controllingIncome != null && controllingEquity != null) {
+        BigDecimal controllingIncome = figures.continuingIncomeControlling();
+        if (figures.netIncomeControlling() != null && controllingIncome != null && controllingEquity != null) {
             return new EquityBasis(controllingIncome, controllingEquity);
         }
-        return new EquityBasis(figures.netIncome(), figures.totalEquity());
+        return new EquityBasis(figures.continuingIncome(), figures.totalEquity());
     }
 
     /**
@@ -238,13 +248,16 @@ final class FinancialMath {
             return pointRows.isEmpty() ? null : pointRows.get(0);
         }
 
-        /** 그 기(期)의 <b>지배주주 귀속 12개월 순이익</b>. 창 단위 폴백은 기저마다 다르다. */
+        /**
+         * 그 기(期)의 <b>지배주주 귀속 12개월 계속영업 순이익</b>. 주당 지표(PER · EPS 계열)의 분자다. 창 단위 폴백은 기저마다
+         * 다르다 — {@link #sumControllingContinuingIncome} · {@link #controllingContinuingIncomeOf}.
+         */
         BigDecimal controllingTtm(int offset) {
             if (basis == PeriodBasis.QUARTERLY) {
-                return sumControllingNetIncome(rows, offset);
+                return sumControllingContinuingIncome(rows, offset);
             }
             FinancialFigures row = isConsecutiveAnnual(rows, offset + 1) ? rows.get(offset) : null;
-            return row == null ? null : controllingNetIncomeOf(row);
+            return row == null ? null : controllingContinuingIncomeOf(row);
         }
 
         boolean isEmpty() {
@@ -363,7 +376,7 @@ final class FinancialMath {
     }
 
     /**
-     * 주당 지표가 쓰는 <b>지배기업 소유주 귀속</b> 순이익의 4분기 합(TTM).
+     * 주당 지표가 쓰는 <b>지배주주 귀속 계속영업</b> 순이익의 4분기 합(TTM · F2b · ADR-0184).
      *
      * <p>K-IFRS 1033이 주당이익을 지배기업 보통주 귀속 이익으로 정의한다. 연결 총액을 쓰면
      * <b>비지배지분의 몫까지 보통주 EPS에 얹혀</b> PER이 낮게 나오고, 그 크기가 종목마다
@@ -374,28 +387,37 @@ final class FinancialMath {
      * 네 분기 중 일부만 {@code netIncomeControlling}을 갖고 있을 때 행마다 폴백하면 합계가
      * <b>지배주주와 연결 총액의 혼합</b>이 되어 어느 쪽도 아닌 수가 나온다. 값은 그럴듯하고
      * 에러도 없다. 그래서 <b>넷이 모두 있을 때만</b> 그것으로 합하고, 하나라도 없으면
-     * <b>넷 다</b> {@code netIncome}으로 합한다.
+     * <b>넷 다</b> 연결 계속영업({@code continuingIncome})으로 합한다.
      *
      * <p>폴백이 옳은 근거는 <b>비지배지분이 없는 회사에서는 소스가 그 행을 아예 내지
      * 않는다</b>는 것이다(실측: 삼성바이오로직스의 비지배지분이 정확히 0). 그때는 연결 총액이
      * 곧 지배주주 귀속분이다. 다만 <b>「원래 없다」와 「못 받았다」를 NULL 하나로는 가를 수
      * 없으므로</b>, 그 수를 세는 것이 유일한 방어다(ADR §검증의 premise).
      *
-     * @param offset {@code 0}이면 최근 TTM, {@code 4}면 직전 TTM. {@link #sumFourQuarters}와 같다
-     * @return 4분기 합. 분기가 모자라거나 {@code netIncome}조차 한 분기라도 비면 null이다
+     * <p><b>[F2b] 지배 계열인데 한 분기라도 지배 계속영업이 미정이면 {@code null}</b>(미표시)이다.
+     *
+     * <p><b>MUST NOT: 그 창을 연결 계속영업으로 떨어뜨리지 않는다.</b> 지배 몫이 미정인 창은 비지배가 있는 회사에서만 생기므로
+     * (비지배가 없으면 어댑터의 「비지배 없음」 갈래가 이미 정한다) 「연결 = 지배」라는 연결 폴백의 근거가 그 집합에 안 선다 —
+     * 반증 실측으로 SK H1'26 3.1배 · 두산 +64% · QSR PER 분자 +30%였다(탐색 {@code F2B-PLAN-1023.md} 1c). 「지금 값(중단 포함)
+     * 유지」도 아니다 — 그 오차가 연결 중단영업 안이라는 보장이 2,996칸 중 89.5%에서만 선다.
      */
-    static BigDecimal sumControllingNetIncome(List<FinancialFigures> quarters, int offset) {
+    static BigDecimal sumControllingContinuingIncome(List<FinancialFigures> quarters, int offset) {
         BigDecimal controlling =
                 sumFourQuarters(quarters, FinancialFigures::netIncomeControlling, offset);
         if (controlling != null) {
-            return controlling;
+            return sumFourQuarters(quarters, FinancialFigures::continuingIncomeControlling, offset);
         }
-        return sumFourQuarters(quarters, FinancialFigures::netIncome, offset);
+        return sumFourQuarters(quarters, FinancialFigures::continuingIncome, offset);
     }
 
-    /** 최근 4개 분기. {@link #sumControllingNetIncome(List, int)}의 {@code offset = 0}이다. */
-    static BigDecimal sumControllingNetIncome(List<FinancialFigures> quarters) {
-        return sumControllingNetIncome(quarters, 0);
+    /** 연간 한 행의 <b>지배주주 귀속 계속영업</b> 순이익. 갈래는 {@link #sumControllingContinuingIncome}과 같다. */
+    static BigDecimal controllingContinuingIncomeOf(FinancialFigures annual) {
+        if (annual == null) {
+            return null;
+        }
+        return annual.netIncomeControlling() != null
+                ? annual.continuingIncomeControlling()
+                : annual.continuingIncome();
     }
 
     /**
@@ -892,7 +914,9 @@ final class FinancialMath {
             return null;
         }
         BigDecimal tax = figures.incomeTaxExpense();
-        BigDecimal net = figures.netIncome();
+        // 계속영업이다(F2b) — 세전이익(미국 태그 · 국내 ProfitLossBeforeTax)과 법인세가 계속영업이라 `세전 − 계속영업 순이익 = 법인세`가
+        // 항등식이다. 중단 포함 순이익으로 부호를 가르면 중단영업 손익이 클 때 판정이 뒤집힌다.
+        BigDecimal net = figures.continuingIncome();
         if (tax == null) {
             return null;
         }
@@ -929,7 +953,7 @@ final class FinancialMath {
         if (figures.profitBeforeTax() != null) {
             return figures.profitBeforeTax();
         }
-        BigDecimal net = figures.netIncome();
+        BigDecimal net = figures.continuingIncome();
         if (net == null || signAdjustedTax == null) {
             return null;
         }

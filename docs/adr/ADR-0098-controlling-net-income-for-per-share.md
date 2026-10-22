@@ -26,7 +26,7 @@ applies_to:
   자본총계·자산총계·매출이면 분자도 연결 총액(비율 지표)이다. **순이익이 분모인 둘
   (`DIVIDEND_PAYOUT`·`EXEC_PAY_TO_NET_INCOME`)은 주당 쪽이다** — 배당과 임원보수를 받는 몫이
   지배주주의 것이고, DART가 계산해 주는 `(연결)현금배당성향`이 정확히 그 분모를 쓴다.
-- **MUST: 폴백을 창 단위로 둔다**(`FinancialMath.sumControllingNetIncome`). 소비처가 전부
+- **MUST: 폴백을 창 단위로 둔다**(`FinancialMath.sumControllingContinuingIncome` — F2b 뒤 이름 · 계속영업 분자 · ADR-0184). 소비처가 전부
   네 분기를 더하므로 **행마다 폴백하면 합이 두 기준의 혼합**이 되어 어느 쪽도 아닌 수가
   나온다. 넷이 모두 있을 때만 지배주주로 합하고, 하나라도 없으면 넷 다 연결 총액으로 합한다.
 - **MUST NOT: `account_id`를 부분일치로 맞추지 않는다.** `ifrs-full_ProfitLoss`가

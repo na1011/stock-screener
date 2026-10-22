@@ -71,7 +71,7 @@ public class NetMarginCalculator implements IndicatorCalculator {
     private static BigDecimal valueOf(IndicatorContext context) {
         FinancialMath.PeriodSeries series = FinancialMath.seriesOf(context);
         BigDecimal netIncome =
-                series.ttm(FinancialFigures::netIncome, 0);
+                series.ttm(FinancialFigures::continuingIncome, 0);
         BigDecimal revenue =
                 series.ttm(FinancialFigures::revenue, 0);
         if (netIncome == null || revenue == null || revenue.signum() <= 0) {

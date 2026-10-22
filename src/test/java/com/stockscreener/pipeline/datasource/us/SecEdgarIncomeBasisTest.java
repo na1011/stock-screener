@@ -76,7 +76,7 @@ class SecEdgarIncomeBasisTest {
                 .filter(r -> "Q4".equals(r.fiscalPeriod()))
                 .filter(r -> r.netIncome() != null)
                 .toList();
-        // Q4가 한쪽만 채우면 TTM 창에서 sumControllingNetIncome이 창 단위로 연결 합에
+        // Q4가 한쪽만 채우면 TTM 창에서 sumControllingContinuingIncome이 창 단위로 연결 합에
         // 떨어진다 — 편입 미국 983종목 중 960(97.7%)의 최신 창에 Q4 행이 든다.
         for (RawFinancialReport row : q4) {
             assertThat(row.netIncomeControlling())

@@ -154,6 +154,18 @@ class GateSettingGuardTest {
         assertThat(judge(new MapPropertySource("other", Map.of("x", "y"))).refusal()).contains("어느 출처에도 없다");
     }
 
+    @Test
+    @DisplayName("국내 관문 키도 같은 규칙이다 — yaml · 명령줄은 허용, 환경변수는 기동을 세우고, 없으면 세운다")
+    void koreanGateFollowsTheSameRule() {
+        String kr = GateSettingGuard.KR_KEY;
+        OriginTrackedMapPropertySource yamlBoth = new OriginTrackedMapPropertySource(CLASSPATH_YAML, Map.of(KEY, false, kr, false));
+        assertThat(judgeKey(kr, yamlBoth).refusal()).isNull();
+        assertThat(judgeKey(kr, new SimpleCommandLinePropertySource("--" + kr + "=true"), yamlBoth).value()).isTrue();
+        assertThat(judgeKey(kr, new SystemEnvironmentPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+                Map.of("STOCKSCREENER_GATE_KR", "true")), yamlBoth).refusal()).contains("허용되지 않은 출처");
+        assertThat(judgeKey(kr, yaml(false)).refusal()).as("국내 기본값이 빠진 yaml").contains("어느 출처에도 없다");
+    }
+
     private static OriginTrackedMapPropertySource yaml(boolean value) {
         return new OriginTrackedMapPropertySource(CLASSPATH_YAML, Map.of(KEY, value));
     }
@@ -166,6 +178,10 @@ class GateSettingGuardTest {
      * 지나치는 우회를 원리적으로 못 본다(2026-10-14 반증).
      */
     private static GateSettingGuard.Verdict judge(PropertySource<?>... sources) {
+        return judgeKey(KEY, sources);
+    }
+
+    private static GateSettingGuard.Verdict judgeKey(String key, PropertySource<?>... sources) {
         StandardEnvironment environment = new StandardEnvironment() {
             @Override
             protected ConfigurablePropertyResolver createPropertyResolver(MutablePropertySources propertySources) {
@@ -179,6 +195,6 @@ class GateSettingGuardTest {
             propertySources.addLast(source);
         }
         ConfigurationPropertySources.attach(environment);
-        return GateSettingGuard.judge(environment);
+        return GateSettingGuard.judge(environment, key);
     }
 }
