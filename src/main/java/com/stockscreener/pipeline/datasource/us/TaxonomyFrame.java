@@ -61,7 +61,7 @@ final class TaxonomyFrame {
     }
 
     /**
-     * IFRS 개념 → 같은 뜻의 us-gaap 후보 이름. 뜻 대조와 근거는 탐색 {@code explore/universe/ifrs/IFRS-PLAN-1022.md} §5다.
+     * IFRS 개념 → 같은 뜻의 us-gaap 후보 이름. 뜻 대조와 근거는 탐색 {@code explore/universe/ifrs/IFRS-PLAN-1022.md}의 「별칭 표」 절이다.
      *
      * <p>조건부 셋: 계약 매출은 {@code Revenue}가 없는 공시에서만 매출이 된다 — 광산사는 잠정가격 조정이 음수라 계약 매출이 IAS 1
      * 합계보다 크고(21칸 · 6발행사) 최댓값 경쟁에 넣으면 합계가 아닌 값이 이긴다. 비지배가 없는 공시의 {@code ProfitLoss}·{@code Equity}는

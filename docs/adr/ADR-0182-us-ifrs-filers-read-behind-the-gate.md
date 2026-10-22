@@ -17,7 +17,7 @@ applies_to:
 다시 짓는다(`TaxonomyFrame`): 공시마다 택소노미 하나 · 표시 통화 하나 · 회계기준 전환의 다리 · IFRS 개념을 같은 뜻의 us-gaap 후보 열쇠에 별칭.
 가장 늦은 연차 공시가 비USD면 종목 단위로 담지 않는다. 공시 보충(ADR-0173)의 인스턴스 판독기는 켬·꺼짐 둘 다 `ifrs-full`을 읽는다(판 9).
 
-설계와 실측의 정본은 탐색 브랜치 `explore/s-vintage-coherence`의 `explore/universe/ifrs/IFRS-PLAN-1022.md` v2다(두 렌즈 반증 「고쳐서 간다」 · §7 판정 표).
+설계와 실측의 정본은 탐색 브랜치 `explore/s-vintage-coherence`의 `explore/universe/ifrs/IFRS-PLAN-1022.md` v2다(두 렌즈 반증 「고쳐서 간다」 · 절 「반증 v1 판정 표」).
 
 ## 왜
 
@@ -33,7 +33,7 @@ applies_to:
 
 ## 규칙
 
-- MUST: IFRS 개념의 별칭은 **뜻이 같은 것만** 둔다(`TaxonomyFrame.ALIASES` · 대조표는 계획 §5). 부재의 뜻은 소스마다 다시 묻는다 —
+- MUST: IFRS 개념의 별칭은 **뜻이 같은 것만** 둔다(`TaxonomyFrame.ALIASES` · 대조표는 계획의 「별칭 표」 절). 부재의 뜻은 소스마다 다시 묻는다 —
   비지배 팩트가 없는 공시만 `ProfitLoss`·`Equity`를 지배 귀속으로도 싣는다(IAS 1이 비지배를 본문 한 줄로 요구한다 · 2021 뒤 IFRS 공시 616 중 279).
 - MUST NOT: 계약 매출(`RevenueFromContractsWithCustomers`)을 최댓값 경쟁에 넣지 않는다 — 광산사는 잠정가격 조정이 음수라 IAS 1 합계보다 크다
   (21칸 · 6발행사 · BHP · RIO …). `Revenue`가 없는 공시에서만 매출이다.
