@@ -679,6 +679,58 @@ class UsMarketCapUniverseAdapterTest {
     }
 
     @Test
+    @DisplayName("관문 켬 — 판마다 예탁 비율로 이미 ADS 단위인 종목(DEPOSITARY)은 표지에 다시 안 넘긴다 · 판 비율 없는 예탁증권은 지금처럼 표지가 가린다")
+    void gateOnKeepsDepositaryResolvedWithoutCover() throws Exception {
+        bodies.put("/v2/assets", assets(
+                asset("ONCX", "Oncx Medicines Ltd. American Depositary Shares"),
+                asset("HDBX", "Hdbx Bank Limited American Depositary Shares"),
+                asset("BIG", "Big Industries Inc.")));
+        bodies.put("/files/company_tickers_exchange.json", cikMap(Map.of("ONCX", 2L, "HDBX", 8L, "BIG", 7L)));
+        bodies.put("/v2/stocks/bars", bars(Map.of("ONCX", "10", "HDBX", "10", "BIG", "10")));
+        List<Long> asked = new ArrayList<>();
+        DepositaryCovers lookup = (cik, asOf) -> {
+            asked.add(cik);
+            return java.util.Optional.of(cover(cik == 8L ? "HDBX" : "ONCX",
+                    "American Depositary Shares, each representing 3 Ordinary Shares"));
+        };
+        List<StoredShareCounts.ShareCount> list = List.of(
+                new StoredShareCounts.ShareCount("ONCX", new BigDecimal("38"), "3711", AS_OF.minusMonths(3),
+                        AS_OF.minusMonths(1), false, "Oncx Stored Name", 2L, "20-F:0000000002-26-000001"),
+                new StoredShareCounts.ShareCount("HDBX", new BigDecimal("50"), "3711", AS_OF.minusMonths(3),
+                        AS_OF.minusMonths(1), false, "Hdbx Stored Name", 8L, "20-F:0000000008-26-000001"),
+                new StoredShareCounts.ShareCount("BIG", new BigDecimal("1"), "3711", AS_OF.minusMonths(3),
+                        AS_OF.minusMonths(1), false, "Big Stored Name", 7L, "10-Q:0000000007-26-000001"));
+        StoredShareCounts counts = new StoredShareCounts() {
+            @Override
+            public List<ShareCount> activeByMarket(String marketCode, java.time.LocalDate oldestPeriodEnd, java.time.LocalDate asOf) {
+                return list;
+            }
+
+            @Override
+            public java.util.Set<Long> depositaryStocks(String marketCode) {
+                return java.util.Set.of(2L);
+            }
+        };
+
+        UniverseSnapshot snapshot = new UsMarketCapUniverseAdapter(listingAdapter(), counts,
+                cikCache(), nameCache, new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
+                server.url("/").toString(), 2, true, () -> lookup)
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).as("ONCX 판 비율로 ADS 단위 → 듦 · HDBX 판 비율 없고 표지 1:3 → 뺌").containsExactly("ONCX", "BIG");
+        assertThat(asked).as("판 비율이 선 ONCX는 표지를 안 묻는다").containsExactly(8L);
+    }
+
+    @Test
+    @DisplayName("과거 평면 이름 축(관문 켬) — 판 비율이 선 ADS만 들이고 판 비율 없는 예탁 이름 · 우선주 예탁증권은 뺀다")
+    void pastPlaneNameAxis() {
+        assertThat(UsPastRanking.nameExcluded("Arm Holdings plc American Depositary Shares", 1L, java.util.Set.of(1L))).isFalse();
+        assertThat(UsPastRanking.nameExcluded("Hdb Bank American Depositary Shares", 2L, java.util.Set.of(1L))).isTrue();
+        assertThat(UsPastRanking.nameExcluded("Gsp Group, Inc. (The) Depositary shares", 3L, java.util.Set.of(3L))).isTrue();
+        assertThat(UsPastRanking.nameExcluded("Big Industries Inc.", 4L, java.util.Set.of())).isFalse();
+    }
+
+    @Test
     @DisplayName("표지를 물을 SEC 소스가 없는데 해외 양식 후보가 있으면 실행이 선다 — 비율을 못 가린 채 스냅샷을 만들지 않는다")
     void missingCoverSourceStopsTheRun() {
         bodies.put("/v2/assets", assets(asset("FRN", "Frn Holdings Limited"), asset("BIG", "Big Industries Inc.")));

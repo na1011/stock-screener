@@ -286,6 +286,15 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
 
     @Override
     @Transactional(readOnly = true)
+    public Set<Long> depositaryStocks(String marketCode) {
+        return new HashSet<>(jdbcTemplate.queryForList("""
+                SELECT DISTINCT f.stock_id FROM financial_statement f JOIN stock s ON s.id = f.stock_id
+                WHERE s.market_code = ? AND f.share_basis_status = 'DEPOSITARY'
+                """, Long.class, marketCode));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Map<String, ClassHold> classHolds(String marketCode, LocalDate asOf) {
         if (!classAxis(marketCode)) {
             return Map.of();

@@ -419,8 +419,14 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         Map<String, String> storedNames = new HashMap<>();
         Map<String, String> reportForms = new HashMap<>();
         Exclusions excluded = new Exclusions();
+        // 관문 켬: 판마다 예탁 비율로 이미 ADS 단위인 종목(ADR-0183) — 표지 판정(A′)에 다시 안 넘긴다.
+        Set<Long> depositaryIds = usGate ? shareCounts.depositaryStocks(UsMarket.CODE) : Set.of();
+        Set<String> depositaryResolved = new HashSet<>();
         for (StoredShareCounts.ShareCount count :
                 shareCounts.activeByMarket(UsMarket.CODE, asOf.minusYears(SHARES_MAX_AGE_YEARS), asOf)) {
+            if (depositaryIds.contains(count.stockId())) {
+                depositaryResolved.add(count.ticker());
+            }
             if (count.currencyMismatched()) {
                 excluded.currency++;
                 continue;
@@ -488,7 +494,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                 .thenComparing(r -> r.asset().symbol()));
 
         List<Ranked> deduped = screenDepositary(dropCikDuplicates(ranked, excluded, sec), asOf, sec, reportForms,
-                storedNames, excluded);
+                storedNames, excluded, depositaryResolved);
         if (deduped.size() < topN) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE_NAME,
                     ("CIK 중복과 예탁증권 비율을 걷고 나니 %d종목뿐이라 상위 %d를 채우지 못한다. 제외 내역: %s")
@@ -589,10 +595,11 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      */
     private List<Ranked> screenDepositary(List<Ranked> ranked, LocalDate asOf, SecTickerCikCache.Snapshot sec,
                                           Map<String, String> reportForms, Map<String, String> storedNames,
-                                          Exclusions excluded) throws DataSourceException {
+                                          Exclusions excluded, Set<String> depositaryResolved) throws DataSourceException {
         List<Ranked> kept = new ArrayList<>(ranked.size());
         int accepted = 0;
         int looked = 0;
+        int resolved = 0;
         for (int i = 0; i < ranked.size(); i++) {
             Ranked row = ranked.get(i);
             if (accepted >= topN) {
@@ -600,6 +607,13 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                 break;
             }
             String symbol = row.asset().symbol();
+            if (depositaryResolved.contains(symbol)) {
+                // 관문 켬 — 주식수가 이미 판마다 비율로 ADS 단위다(ADR-0183). 표지로 「비율 1만」을 다시 가리지 않는다.
+                resolved++;
+                kept.add(row);
+                accepted++;
+                continue;
+            }
             boolean nameSaysDepositary = DepositaryRatio.isDepositary(row.asset().name())
                     || DepositaryRatio.isDepositary(storedNames.get(symbol));
             // 판 양식을 모르면(시험 픽스처 · 관문 켬의 보류 후보) 이름 범위만 탄다 — Set.of는 null을 물으면 던진다.
@@ -616,7 +630,8 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
             accepted++;
         }
         // 리밸런싱마다 이 줄이 예탁증권 판정의 귀속 재료다.
-        log.info("예탁증권 표지 판정. 기준일={} 표지={}건 뺌={}{}", asOf, looked, excluded.depositary.size(), excluded.depositary);
+        log.info("예탁증권 표지 판정. 기준일={} 표지={}건 뺌={}{} 판 비율={}건", asOf, looked, excluded.depositary.size(),
+                excluded.depositary, resolved);
         return kept;
     }
 

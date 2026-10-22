@@ -104,6 +104,14 @@ public interface StoredShareCounts {
     }
 
     /**
+     * 판마다 예탁 비율(ADR-0183)로 주식수가 이미 ADS 단위인 종목 — 행 기저가 {@code DEPOSITARY}다. 관문 켬 순위는 이 종목을 표지 판정
+     * (A′)에 다시 안 넘기고 과거 평면도 이름으로 안 뺀다. 그 밖의 예탁증권은 지금처럼 닫힌 쪽(뺌)으로 다룬다.
+     */
+    default java.util.Set<Long> depositaryStocks(String marketCode) {
+        return java.util.Set.of();
+    }
+
+    /**
      * @param heldShares {@code HELD}일 때만 — 마지막 보인 판정의 N_L을 {@code asOf}로 옮긴 값(없으면 {@code null})
      * @param stockId    그 행(과거 날짜 순위의 앞 명부는 행 id다)
      */

@@ -45,7 +45,7 @@ class CandidateSplitJobTest {
 
     private static final LocalDate AS_OF = LocalDate.of(2026, 10, 15);
     private static final LocalDate PUBLISHED = LocalDate.of(2026, 5, 1);
-    private static final List<String> JOBS = List.of(CandidateSplitJob.JOB_NAME, AdjustmentRebuildJob.JOB_NAME);
+    private static final List<String> JOBS = List.of(CandidateSplitJob.JOB_NAME, CandidateSplitJob.DEPOSITARY_JOB_NAME, AdjustmentRebuildJob.JOB_NAME);
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -96,6 +96,7 @@ class CandidateSplitJobTest {
     void cleanUp() {
         String ours = "(SELECT id FROM stock WHERE ticker IN ('ZZS1', 'ZZS2', 'ZZS3'))";
         jdbc.update("DELETE FROM corporate_action WHERE stock_id IN " + ours);
+        jdbc.update("DELETE FROM sec_depositary_cover WHERE cik = 919191");
         jdbc.update("DELETE FROM financial_statement WHERE stock_id IN " + ours);
         jdbc.update("DELETE FROM universe_membership WHERE stock_id IN " + ours);
         for (String name : JOBS) {

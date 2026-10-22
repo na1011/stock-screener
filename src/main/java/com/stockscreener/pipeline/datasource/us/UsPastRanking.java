@@ -123,7 +123,10 @@ public class UsPastRanking {
             holdsOn.put(d, holds);
             holds.forEach(h -> pool.add(h.stockId()));
         }
-        pool.removeIf(id -> !rows.containsKey(id) || UsMarketCapUniverseAdapter.nonCommonName(rows.get(id).name()));
+        // 이름 축 — 관측 평면과 같은 규칙(ADS 보통주를 이름으로 안 자른다 · B0)이되, 표지 판정이 없는 이 평면은 판마다 예탁 비율로 이미 ADS
+        // 단위인 종목(DEPOSITARY · ADR-0183)만 들이고 나머지 예탁증권 이름은 뺀다(닫힌 쪽).
+        Set<Long> depositary = shareCounts.depositaryStocks(UsMarket.CODE);
+        pool.removeIf(id -> !rows.containsKey(id) || nameExcluded(rows.get(id).name(), id, depositary));
 
         // 2. 닻 봉 — 닻 날짜끼리 묶어 격자 전 범위를 한 번에.
         Map<Long, List<EntityBar>> bars = anchorBars(identity, pool, rows, first.minusDays(UsMarketCapUniverseAdapter.CLOSE_WINDOW_DAYS),
@@ -138,7 +141,7 @@ public class UsPastRanking {
         List<Roster> out = new ArrayList<>();
         Set<Long> previous = Set.of();
         for (LocalDate d : grid) {
-            Roster roster = rankOn(d, sharesOn.get(d), holdsOn.get(d), previous, rows, bars, timelines);
+            Roster roster = rankOn(d, sharesOn.get(d), holdsOn.get(d), previous, rows, bars, timelines, depositary);
             out.add(roster);
             previous = new HashSet<>(roster.stockIds());
         }
@@ -147,7 +150,7 @@ public class UsPastRanking {
 
     private Roster rankOn(LocalDate d, List<StoredShareCounts.ShareCount> counts, List<StoredShareCounts.ClassHold> holds,
                           Set<Long> previous, Map<Long, StoredUsRows.Row> rows, Map<Long, List<EntityBar>> bars,
-                          Map<Long, ListedTimeline> timelines) throws DataSourceException {
+                          Map<Long, ListedTimeline> timelines, Set<Long> depositary) throws DataSourceException {
         UsMarketCapUniverseAdapter.Exclusions excluded = new UsMarketCapUniverseAdapter.Exclusions();
         Map<Long, BigDecimal> shares = new HashMap<>();
         Map<Long, String> names = new HashMap<>();
@@ -176,7 +179,7 @@ public class UsPastRanking {
         int listedCandidates = 0;
         for (Map.Entry<Long, BigDecimal> e : new TreeMap<>(shares).entrySet()) {
             StoredUsRows.Row row = rows.get(e.getKey());
-            if (row == null || UsMarketCapUniverseAdapter.nonCommonName(row.name())) {
+            if (row == null || nameExcluded(row.name(), row.id(), depositary)) {
                 excluded.name++;
                 continue;
             }
@@ -299,5 +302,11 @@ public class UsPastRanking {
         log.info("과거 날짜 순위 범주 이력. 등록인={} 사건 등록인={} 못 읽은 양식={} 못 붙인 사건={}", byCik.size(), result.byCik().size(),
                 result.unreadable().size(), unmatched);
         return out;
+    }
+
+    /** 과거 평면의 이름 축(관문 켬) — 관측 평면의 이름 축 + 판 비율이 없는 예탁증권 이름 뺌. */
+    static boolean nameExcluded(String name, long stockId, Set<Long> depositary) {
+        return UsMarketCapUniverseAdapter.nonCommonInRanking(name)
+                || (com.stockscreener.pipeline.datasource.us.listing.DepositaryRatio.isDepositary(name) && !depositary.contains(stockId));
     }
 }
