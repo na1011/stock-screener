@@ -45,8 +45,11 @@ import java.util.TreeMap;
  *       이하 마지막 거래 봉이다 — 거래 밀도로 상장을 가르지 않는다(★5 BIO.B 64일 공백). 첫 거래 봉이 그날 뒤면 후보가 아니다.</li>
  * </ul>
  * <p>CIK 대표는 행에 묶인 등록인으로 고른다 — 오늘 SEC 파일로 비운 표지를 풀 수 없다(ADR-0092 「CIK 모르면 남긴다」는 오늘 목록의 미등재를
- * 위한 폴백이라 여기 옮기지 않는다 · 묶이지 않은 후보는 남기고 센다). 나머지 거름(통화 · SIC · 이름 · 클래스 보류 · 하한 둘)은 오늘
- * 순위와 같은 함수다.
+ * 위한 폴백이라 여기 옮기지 않는다 · 묶이지 않은 후보는 남기고 센다). 나머지 거름(통화 · SIC · 클래스 보류 · 하한 둘)은 오늘
+ * 순위와 같은 함수다. <b>이름 축만 다르다</b> — 오늘 순위는 ADS 보통주를 이름으로 안 자르고 표지 비율로 가르는데
+ * ({@code UsMarketCapUniverseAdapter.nonCommonInRanking} · {@code screenDepositary}), 여기에는 표지 판정이 없어 ADS를 이름으로 계속 뺀다
+ * ({@link UsMarketCapUniverseAdapter#nonCommonName}). 그래서 비율 1 ADS(ARM …)는 관측 평면에 있고 과거 평면에 없다 — 관문 뒤 판 비율(탐색
+ * {@code ADS-B-PLAN-1022.md})이 이 갈림을 닫으며 그 전에는 관문을 켜지 않는다({@code docs/reload-gate.md}).
  */
 @Component
 @ConditionalOnApiKey("alpaca")

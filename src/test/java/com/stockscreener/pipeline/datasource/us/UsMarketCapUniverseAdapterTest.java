@@ -639,6 +639,46 @@ class UsMarketCapUniverseAdapterTest {
     }
 
     @Test
+    @DisplayName("이름 축은 ADS 보통주를 안 자르고 표지에 넘긴다 — 비율 1은 들고 고비율 10-Q ADS는 표지가 뺀다 · 우선주 예탁증권 · ADS 워런트 · 우선주 ADS는 이름이 자른다")
+    void nameAxisHandsAdsToTheCover() throws Exception {
+        bodies.put("/v2/assets", assets(
+                asset("ARMX", "Armx Holdings plc American Depositary Shares"),
+                asset("ONCX", "Oncx Medicines Ltd. American Depositary Shares"),
+                asset("RLXX", "Rlxx Technology Inc. American Depositary Shares, each representing the right to receive one (1) Class A ordinary share"),
+                asset("GSPA", "Gsp Group, Inc. (The) Depositary shares"),
+                asset("WRTX", "Wrtx Ltd American Depositary Shares Warrants"),
+                asset("PFDX", "Pfdx S.A. American Depositary Shares, each representing one preferred share"),
+                asset("BIG", "Big Industries Inc.")));
+        bodies.put("/files/company_tickers_exchange.json", cikMap(Map.of(
+                "ARMX", 1L, "ONCX", 2L, "RLXX", 3L, "GSPA", 4L, "WRTX", 5L, "PFDX", 6L, "BIG", 7L)));
+        bodies.put("/v2/stocks/bars", bars(Map.of(
+                "ARMX", "10", "ONCX", "10", "RLXX", "10", "GSPA", "10", "WRTX", "10", "PFDX", "10", "BIG", "10")));
+        List<Long> asked = new ArrayList<>();
+        Map<Long, com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts> covers = Map.of(
+                1L, cover("ARMX", "American Depositary Shares, each representing one ordinary share"),
+                2L, cover("ONCX", "American Depositary Shares, each representing 13 Ordinary Shares, par value $0.0001 per share"),
+                3L, cover("RLXX", "American depositary shares, each representing the right to receive one (1) Class A ordinary share"));
+        DepositaryCovers lookup = (cik, asOf) -> {
+            asked.add(cik);
+            return java.util.Optional.ofNullable(covers.get(cik));
+        };
+
+        // 주식수 × 종가 = ONCX 5000(10-Q 판 · 이름 ADS — 고비율을 막는 것은 표지 하나다) · ARMX 1000 · RLXX 500 · 나머지 100 · BIG 10
+        UniverseSnapshot snapshot = new UsMarketCapUniverseAdapter(listingAdapter(), shares(
+                filed("ARMX", "100", "20-F:0000000001-26-000001"), filed("ONCX", "500", "10-Q:0000000002-26-000001"),
+                filed("RLXX", "50", "20-F:0000000003-26-000001"), filed("GSPA", "10", "10-Q:0000000004-26-000001"),
+                filed("WRTX", "10", "20-F:0000000005-26-000001"), filed("PFDX", "10", "20-F:0000000006-26-000001"),
+                filed("BIG", "1", "10-Q:0000000007-26-000001")),
+                cikCache(), nameCache, new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
+                server.url("/").toString(), 3, false, () -> lookup)
+                .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
+
+        assertThat(snapshot.tickers()).as("ARMX · RLXX 비율 1 → 듦 · ONCX 1 ADS = 13주 → 표지가 뺌 · GSPA · WRTX · PFDX → 이름이 자름")
+                .containsExactly("ARMX", "RLXX", "BIG");
+        assertThat(asked).as("이름이 자른 셋은 표지를 안 묻는다").containsExactly(2L, 1L, 3L);
+    }
+
+    @Test
     @DisplayName("표지를 물을 SEC 소스가 없는데 해외 양식 후보가 있으면 실행이 선다 — 비율을 못 가린 채 스냅샷을 만들지 않는다")
     void missingCoverSourceStopsTheRun() {
         bodies.put("/v2/assets", assets(asset("FRN", "Frn Holdings Limited"), asset("BIG", "Big Industries Inc.")));

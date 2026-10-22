@@ -94,6 +94,40 @@ class DepositaryCoverTest {
         assertThat(DepositaryCover.judge(dotted, "BRK.B", false).excluded()).isTrue();
     }
 
+    @Test
+    @DisplayName("비율 1이어도 표지 주식수가 클래스 구성원에만 실리면 뺀다 — SE 꼴(저장 주식수가 표지 합이 아니다 · 관문 뒤 클래스 축 몫)")
+    void excludesRatioOneWhenCoverSharesAreClassOnly() {
+        ClassFacts cover = withShares(cover(line("us-gaap:CommonClassAMember", "SE",
+                        "American Depositary Shares, each representing one Class A Ordinary Share", null)),
+                Map.of("us-gaap:CommonClassAMember", "565506375", "us-gaap:CommonClassBMember", "45527793"));
+
+        DepositaryCover.Verdict v = DepositaryCover.judge(cover, "SE", true);
+
+        assertThat(v.excluded()).isTrue();
+        assertThat(v.reason()).contains("클래스").contains("CommonClassBMember");
+    }
+
+    @Test
+    @DisplayName("축 없는 표지 주식수가 있으면 구성원 표지가 함께 있어도 비율 1은 남긴다 — TUYA 꼴(저장 주식수 = 축 없는 표지)")
+    void keepsRatioOneWhenAxislessSharesArePresent() {
+        ClassFacts cover = withShares(cover(line("-", "TUYA",
+                        "American depositary shares, each representing one Class A ordinary share", null)),
+                Map.of("-", "600000000", "us-gaap:CommonClassAMember", "520000000", "us-gaap:CommonClassBMember", "80000000"));
+
+        assertThat(DepositaryCover.judge(cover, "TUYA", true).outcome()).isEqualTo(DepositaryCover.Outcome.RATIO_ONE);
+    }
+
+    private static ClassFacts withShares(ClassFacts base, Map<String, String> shares) {
+        Map<String, LinkedHashMap<String, String>> cover = new LinkedHashMap<>();
+        for (String concept : java.util.List.of(ClassFactReader.TRADING_SYMBOL, ClassFactReader.SECURITY_TITLE, ClassFactReader.DEPOSITORY_RATIO)) {
+            if (!base.coverOf(concept).isEmpty()) {
+                cover.put(concept, new LinkedHashMap<>(base.coverOf(concept)));
+            }
+        }
+        cover.put(ClassFactReader.SHARES_OUTSTANDING, new LinkedHashMap<>(new java.util.TreeMap<>(shares)));
+        return new ClassFacts(new LinkedHashMap<>(), cover, "20-F");
+    }
+
     private record Line(String member, String symbol, String title, String ratioTag) {
     }
 

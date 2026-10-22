@@ -25,6 +25,9 @@ import java.util.TreeSet;
  *       (NTES 태그 25 · 이름 5 · API 태그 0.25 · 이름 4).</li>
  *   <li>후보 이름이 예탁증권을 말하는데 표지가 ADS 줄을 안 보이면 모른다(EDU 2024 · 2025 ADS 줄 이름이 「Name of Exchange…」 · SCNI 2022 ·
  *       BEKE 최신 표지는 보통주 줄뿐).</li>
+ *   <li>비율이 1이어도 <b>표지 주식수가 클래스 구성원에만 실리면</b> 뺀다 — companyfacts가 축 없는 표지 주식수를 못 줘 저장 주식수가 표지 합이
+ *       아니다(SE FY2025 저장 638,227,141 · 표지 A 565,506,375 + B 45,527,793 = 611,034,168 · +4.45% · 대조 ARM · NICE · BLTE는 표지와
+ *       같다). 관문 뒤 클래스 축이 그 판을 판정한다 — 관문 밖에서 들이면 관문 날 숨김으로 빠져 명부가 갈린다(탐색 {@code ADS-B0-PLAN-1022.md}).</li>
  * </ul>
  */
 public final class DepositaryCover {
@@ -86,9 +89,19 @@ public final class DepositaryCover {
             return new Verdict(Outcome.EXCLUDED, "예탁증권 비율이 갈린다 " + ratios);
         }
         double ratio = ratios.first();
-        return Math.abs(ratio - 1) <= SAME_RATIO
-                ? new Verdict(Outcome.RATIO_ONE, null)
-                : new Verdict(Outcome.EXCLUDED, "1 예탁증권 = %s주".formatted(stripTrailingZeros(ratio)));
+        if (Math.abs(ratio - 1) > SAME_RATIO) {
+            return new Verdict(Outcome.EXCLUDED, "1 예탁증권 = %s주".formatted(stripTrailingZeros(ratio)));
+        }
+        Map<String, String> shares = cover.coverOf(ClassFactReader.SHARES_OUTSTANDING);
+        if (!shares.isEmpty() && !shares.containsKey(ClassFacts.AXISLESS)) {
+            return new Verdict(Outcome.EXCLUDED, "표지 주식수가 클래스에만 실린다 " + shares.keySet().stream().map(DepositaryCover::member).toList());
+        }
+        return new Verdict(Outcome.RATIO_ONE, null);
+    }
+
+    private static String member(String key) {
+        int colon = key.lastIndexOf(':');
+        return colon < 0 ? key : key.substring(colon + 1);
     }
 
     private static boolean listsSymbol(String listed, String symbol) {

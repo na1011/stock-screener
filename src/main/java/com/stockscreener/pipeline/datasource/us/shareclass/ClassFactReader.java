@@ -64,8 +64,12 @@ public final class ClassFactReader {
     public static final List<String> NUMERATOR_TAGS = List.of(DECLARED_NUMERATOR, "NetIncomeLoss", "ProfitLoss");
 
     private static final Set<String> COVER = Set.of(SHARES_OUTSTANDING, TRADING_SYMBOL, SECURITY_TITLE);
-    /** 상장 판정의 표지 — 기호 · 거래소 · 증권 이름 · 예탁증권 비율. 저장 팩트({@link #COVER})와 따로 둬 그 판을 안 바꾼다. */
-    private static final Set<String> LISTING_COVER = Set.of(TRADING_SYMBOL, SECURITY_EXCHANGE, SECURITY_TITLE, DEPOSITORY_RATIO);
+    /**
+     * 상장 판정의 표지 — 기호 · 거래소 · 증권 이름 · 예탁증권 비율 · 표지 주식수(예탁증권 판정이 그 주식수가 클래스 구성원에만 실렸는지
+     * 본다). 저장 팩트({@link #COVER})와 따로 둬 그 판을 안 바꾼다.
+     */
+    private static final Set<String> LISTING_COVER = Set.of(TRADING_SYMBOL, SECURITY_EXCHANGE, SECURITY_TITLE, DEPOSITORY_RATIO,
+            SHARES_OUTSTANDING);
     private static final Set<String> DURATION = Set.copyOf(concat(WEIGHTED_TAGS, EPS_TAGS, NUMERATOR_TAGS));
     /** 낱말을 가르는 비ASCII 공백 — 공백 분리자 전부와 너비 0 구분자(지우면 너비 0 공백으로 가른 두 낱말이 하나로 붙는다). */
     private static final Pattern WIDE_SPACE = Pattern.compile("[\\p{Zs}\\u200B\\u2060\\uFEFF]");
@@ -176,7 +180,7 @@ public final class ClassFactReader {
             extra.remove(CLASS_AXIS);
             String member = c.dims().getOrDefault(CLASS_AXIS, ClassFacts.AXISLESS);
             if (coverConcepts == LISTING_COVER) {
-                // 상장 판정은 기호 · 거래소 · 증권 이름만 본다(저장 팩트 COVER는 그 판을 안 바꾸려고 그대로 둔다).
+                // 상장 판정은 기호 · 거래소 · 증권 이름(과 예탁증권 판정의 비율 · 표지 주식수)만 본다(저장 팩트 COVER는 그 판을 안 바꾸려고 그대로 둔다).
                 //  - 거래소 축은 그 줄이 어느 거래소의 것인지 말한다 — 이중 상장은 줄이 거래소마다 따로라 구성원 열쇠에 거래소를 붙인다
                 //    (SunOpta 10-K: STKL · NASDAQ과 SOY · TSX가 둘 다 클래스 축 없이 온다 · R-D6-0).
                 //  - 클래스 축 없이 자본 구성요소 축 = 보통주만 단 표지 줄은 그 보통주 줄이다(같은 SunOpta).

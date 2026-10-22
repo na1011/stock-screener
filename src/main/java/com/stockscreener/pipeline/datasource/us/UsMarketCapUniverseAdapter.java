@@ -70,7 +70,8 @@ import java.util.regex.Pattern;
  *       재무가 CLP인데 종가가 USD다).</li>
  *   <li><b>SIC</b> — {@code 6798}(REIT)·{@code 6770}(SPAC) 166건. 국내가 ADR-0012 §규칙에서
  *       스팩·리츠를 뺀 것과 대칭이고, <b>이름이 아니라 코드로</b> 판정한다.</li>
- *   <li><b>이름</b> — 증권 종류를 가리키는 낱말. 아래 {@link #NON_COMMON_NAME}.</li>
+ *   <li><b>이름</b> — 증권 종류를 가리키는 낱말. 아래 {@link #NON_COMMON_NAME}. ADS 보통주는 이 축이 안 자르고 비율을 표지로 가린다
+ *       ({@link #screenDepositary}).</li>
  *   <li><b>CIK 중복</b> — 우선주·baby bond가 발행사의 주식수를 그대로 써서 같은 회사가 여러 번
  *       들어온다(상위 1,000에 98건). {@code AKO.A}/{@code AKO.B}처럼 두 클래스가 다 상장된
  *       쌍도 여기서 걸린다.</li>
@@ -223,6 +224,11 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 대표는 {@link #dropCikDuplicates}가 거래대금으로 고르므로 이 문구는 <b>보통주가 후보가 아닐 때의 방어</b>다.
      * {@code DEPOSITORY}는 안 넣는다 — 그 오철자를 쓰는 ADS 보통주({@code CMPS} 1 ADS = 1주 · {@code SLN} 1 ADS = 3주)를 이름으로 자르지
      * 않고, 비율은 {@link #screenDepositary}가 표지로 가린다(비율 1이면 값이 옳아 남는다).
+     *
+     * <p>{@code DEPOSITARY}는 우선주 예탁증권(「Depositary Shares, each representing a 1/1,000th interest …」 — 2026-10-22 활성 미국 이름 중
+     * 다른 낱말에 안 걸리는 것 7: {@code GS.PRA} · {@code USB.PRH}의 「Prfrd.」 · {@code IRS}의 Global Depositary Shares …)을 자르려고 둔다.
+     * <b>오늘 순위는 ADS 보통주의 이 낱말을 안 본다</b>({@link #nonCommonInRanking}) — 비율 1 ADS(ARM · SE …)는 값이 옳으므로 자르면
+     * 결손이다(탐색 {@code ADS-B0-PLAN-1022.md}).
      */
     private static final String SECURITY_KIND_WORDS =
             "\\bPREFERRED\\b|\\bPFD\\b|\\bWARRANTS?\\b|\\bRIGHTS?\\b|\\bDEPOSITARY\\b"
@@ -232,6 +238,13 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
             "\\bCORPORATE UNITS?\\b|\\bEQUITY UNITS?\\b|\\bPREFERENCE\\b|\\bCAPITAL SECURITIES\\b";
 
     private static final Pattern NON_COMMON_NAME = Pattern.compile(SECURITY_KIND_WORDS + "|" + HYBRID_WORDS);
+
+    /**
+     * ADS 보통주 이름에서 오늘 순위의 이름 축이 안 보는 몫 — 증권 종류 낱말 {@code DEPOSITARY}와 비율 문구 「the right to receive」
+     * (AMRN · RLX 꼴 — {@code RIGHTS?}에 걸린다). 권리 · 워런트 증권(「rights to purchase」 · 「warrants」)은
+     * {@link DepositaryRatio#isDepositary}가 이미 ADS가 아니라고 가르므로 이 문구가 안 닿는다.
+     */
+    private static final Pattern ADS_ONLY_WORDS = Pattern.compile("\\bDEPOSITARY\\b|\\bRIGHTS?\\s+TO\\s+RECEIVE\\b");
 
     /** 혼성 문구에<b>만</b> 걸린 이름을 가려 로그로 남긴다 — 이 문구의 한계 기여를 실행마다 다시 잴 재료다. */
     private static final Pattern SECURITY_KIND_ONLY = Pattern.compile(SECURITY_KIND_WORDS);
@@ -564,8 +577,10 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
      * 1 ADS = 300주 · 58.9B로 들 자리가 아닌데 든다 · HDB 3배 · BZ 2배). 비율을 지표까지 적용할 재료(판마다 저장한 표지)는 관문 뒤(B)라
      * 관문 밖은 빼는 것이 「모르면 값을 안 낸다」다. 비율 1이면 값이 옳으므로 남긴다(TEVA).
      *
-     * <p><b>범위</b>: 주식수 판이 해외 양식이거나 이름(목록 · 저장)이 예탁증권을 말하는 후보. 이름이 평범한 10-K/10-Q ADS 중 비율 ≠ 1이고
-     * 원장 사건도 없는 것은 2026-10-22 후보에 0이다(TEVA 1 · CRTO 1 · AMRN 20은 ADR-0162가 이미 맞춘다) — 이 범위가 안 서는 자리다.
+     * <p><b>범위</b>: 주식수 판이 해외 양식이거나 이름(목록 · 저장)이 예탁증권을 말하는 후보 — 이름 축이 ADS를 안 자르므로
+     * ({@link #nonCommonInRanking}) 10-K/10-Q를 내는 고비율 ADS(ONC 13 · ZLAB 10)를 막는 것은 이 표지 판정 하나다. 이름이 평범한 10-K/10-Q
+     * ADS 중 비율 ≠ 1은 2026-10-22 후보 상위 1,300에서 AMRN 하나다(최신 10-K/10-Q 표지 1,181 CIK · ADR-0162가 원장 사건으로 맞춘다)
+     * — 이 범위가 안 서는 자리다.
      * <b>CIK 대표를 고른 뒤</b>에 돈다 — 뺀 대표의 같은 CIK 다른 증권은 이미 버려졌다(그런 꼴의 수는 안 쟀다).
      *
      * <p>상위 N을 채울 때까지만 표지를 묻는다(10-20 재현: 범위 안 22후보 · 후보마다 공시 목록 1 + 표지 2콜 이상). 그 뒤는 안 본 채 둔다.
@@ -694,19 +709,39 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         return kept;
     }
 
-    /** 이름 축의 술어 — 증권 종류 낱말 · 혼성 문구에 걸리면 보통주가 아니다. 상장 판정의 「등록인의 보통주 행」도 이것으로 센다. */
+    /**
+     * 이름 축의 술어 — 증권 종류 낱말 · 혼성 문구에 걸리면 보통주가 아니다. 상장 판정의 「등록인의 보통주 행」과 과거 명부
+     * ({@link UsPastRanking} — 표지 판정이 없다)가 이것으로 센다. 오늘 순위는 {@link #nonCommonInRanking}이다.
+     */
     static boolean nonCommonName(String name) {
         return name != null && NON_COMMON_NAME.matcher(name.toUpperCase(java.util.Locale.ROOT)).find();
+    }
+
+    /**
+     * 오늘 순위의 이름 축 술어 — {@link #nonCommonName}에서 ADS 보통주({@link DepositaryRatio#isDepositary})만 {@link #ADS_ONLY_WORDS}를 빼고
+     * 본다. 그 ADS는 {@link #screenDepositary}가 표지로 비율을 가리므로(1이면 남김 · 아니면 뺌) 이름으로 자르지 않는다. 다른 낱말
+     * ({@code PREFERRED} · {@code WARRANTS} …)이 함께 걸리면 지금처럼 자른다 — 우선주 ADS(BBD · CIB …)는 여기서 계속 빠진다.
+     *
+     * <p>{@link UsPastRanking}은 이 술어를 안 쓴다 — 과거 명부에는 표지 판정이 없어 비율 ≠ 1 ADS가 섞인다(관문 뒤 판 비율이 닫는다 ·
+     * {@code docs/reload-gate.md}).
+     */
+    static boolean nonCommonInRanking(String name) {
+        return name != null && NON_COMMON_NAME.matcher(rankingNameText(name)).find();
+    }
+
+    private static String rankingNameText(String name) {
+        String upper = name.toUpperCase(java.util.Locale.ROOT);
+        return DepositaryRatio.isDepositary(name) ? ADS_ONLY_WORDS.matcher(upper).replaceAll(" ") : upper;
     }
 
     /**
      * 이름 축. 걸리면 세고 참을 낸다 — 목록 후보와 숨은 상장이 같은 축을 탄다.
      */
     private static boolean excludedByName(String symbol, String name, Exclusions excluded) {
-        if (!nonCommonName(name)) {
+        if (!nonCommonInRanking(name)) {
             return false;
         }
-        String upperName = name.toUpperCase(java.util.Locale.ROOT);
+        String upperName = rankingNameText(name);
         excluded.name++;
         if (!SECURITY_KIND_ONLY.matcher(upperName).find()) {
             excluded.hybridOnly.add(symbol);
