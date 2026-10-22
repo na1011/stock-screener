@@ -534,41 +534,6 @@ class ReadApiTest {
         universes.forEach(u -> assertThat(u.get("currencyCode").asText()).isNotBlank());
     }
 
-    @Test
-    @DisplayName("ADS를 표방하는 편입 종목을 센다 — 「시총 상위 N」이 사실이 아닐 수 있다는 신호다")
-    void countsAdsSuspectsAmongMembers() {
-        assertThat(adsSuspectCountOfTestUniverse())
-                .as("픽스처의 편입 종목은 ADS가 아니다")
-                .isZero();
-
-        addMember("910101", "Akari Therapeutics plc ADS");
-        addMember("910102", "Toyota Motor Corporation American Depositary Shares");
-
-        assertThat(adsSuspectCountOfTestUniverse()).isEqualTo(2);
-    }
-
-    /**
-     * 앞 경계가 없으면 {@code Tradr}의 「adr」이 걸린다. 2026-09-08에 실제로 그렇게 재서
-     * 대상 수가 부풀었고, 그것을 <b>대상의 결함으로 읽을 뻔했다.</b>
-     *
-     * <p>MUST: 이 시험을 지우지 마라 — 정규식에서 {@code (^| )}를 빼도 위 시험은 초록이다.
-     */
-    @Test
-    @DisplayName("이름 안에 우연히 adr/ads가 든 것은 세지 않는다")
-    void doesNotCountNamesThatMerelyContainTheLetters() {
-        addMember("910103", "Investment Managers Series Trust II Tradr 2X Long Innovation 100 ETF");
-        addMember("910104", "Roadside Attractions Inc.");
-
-        assertThat(adsSuspectCountOfTestUniverse()).isZero();
-    }
-
-    private int adsSuspectCountOfTestUniverse() {
-        return stockReader.selectableUniverses().stream()
-                .filter(u -> u.code().equals(UNIVERSE))
-                .mapToInt(com.stockscreener.stock.StockReader.UniverseRow::adsSuspectCount)
-                .sum();
-    }
-
     private void addMember(String ticker, String name) {
         Long id = jdbcTemplate.queryForObject("""
                 INSERT INTO stock (market_code, ticker, name) VALUES ('TESTMKT', ?, ?) RETURNING id

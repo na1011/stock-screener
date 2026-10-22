@@ -34,16 +34,6 @@ import java.util.Map;
  *                      문구를 <b>언제 보여야 하는지</b>가 이 값에 달려 있기 때문이다. 화면이
  *                      카탈로그를 따로 받아 판단하면 그 요청이 실패했을 때 문구가 조용히
  *                      사라지고, 화면은 사실이 아닌 말을 하게 된다.
- * @param adsSuspectCount 이 결과의 대상 중 이름이 ADS/ADR을 표방하는 종목 수.
- *                      <b>「시총 상위 N」이 사실이 아닐 수 있다는 것을 화면이 말하기 위한
- *                      값이지 결함 수가 아니다.</b> 시총 = 주식수 × 종가인데 ADS 종목은 소스가
- *                      <b>원주</b> 기준 주식수를 주는 일이 있고, 그러면 시총이 ADS 비율만큼
- *                      부풀어 정상 종목 하나를 상위 N 밖으로 민다. 값을 옳게 만들려면 ADS
- *                      비율이 필요한데 그것을 주는 소스가 없어서(ADR-0126 §{@code AKTX})
- *                      <b>고치는 대신 드러낸다.</b>
- *                      <p>{@code relativePopulations}와 <b>같은 이유로 여기 싣는다</b> — 화면이
- *                      카탈로그로 판단하면 그 요청만 실패했을 때 경고가 조용히 사라진다.
- *                      대상을 안 좁혔으면 활성 유니버스 전체의 합이다.
  * @param populationCount 그 기준일에 <b>판정 대상</b>이던 종목 수(ADR-0142). 조건을 안 건 수이고
  *                      <b>행이 0개여도 산다</b> — 0건 화면이 분모를 말할 수 있는 유일한 자리다.
  *                      <p>{@code universe.memberCount}와 <b>다른 것을 센다.</b> 저쪽은
@@ -65,7 +55,6 @@ public record ScreeningResponse(
         String sortedBy,
         UniverseInfo universe,
         String currencyCode,
-        int adsSuspectCount,
         List<IndicatorPopulation> relativePopulations,
         ScreenInfo screen,
         List<ConditionInfo> conditions,

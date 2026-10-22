@@ -277,10 +277,7 @@ public class StockReader {
     public List<UniverseRow> selectableUniverses() {
         return jdbcTemplate.query("""
                 SELECT u.code, u.name, u.market_code, mk.currency_code,
-                       count(m.stock_id) AS member_count,
-                       count(m.stock_id) FILTER (
-                           WHERE s.name ~* '(^| )(ADS|ADR)([ ,]|$)|American Depositary'
-                       ) AS ads_suspect_count
+                       count(m.stock_id) AS member_count
                 FROM universe u
                 JOIN market mk ON mk.code = u.market_code
                 JOIN universe_membership m ON m.universe_code = u.code AND m.effective_to IS NULL
@@ -291,7 +288,7 @@ public class StockReader {
                 """, (rs, n) -> new UniverseRow(
                 rs.getString("code"), rs.getString("name"),
                 rs.getString("market_code"), rs.getString("currency_code"),
-                rs.getInt("member_count"), rs.getInt("ads_suspect_count")));
+                rs.getInt("member_count")));
     }
 
     /**
@@ -488,20 +485,8 @@ public class StockReader {
      *                     조건 빌더가 임계를 입력받을 때도 이것을 쓴다 — 없으면 미국을 고른
      *                     상태에서 시가총액 칩이 「원」으로 그려진다.
      */
-    /**
-     * @param adsSuspectCount 편입 종목 중 이름이 ADS/ADR를 표방하는 것의 수. <b>순위가 사실이
-     *                        아닐 수 있다는 것을 드러내는 값이지 결함 수가 아니다</b>(ADR-0126
-     *                        §{@code AKTX}). 시총 = 주식수 × 종가인데 ADS 종목은 소스가
-     *                        <b>원주</b> 기준 주식수를 주는 일이 있고, 그러면 시총이 ADS 비율만큼
-     *                        부풀어 정상 종목 하나를 상위 N 밖으로 민다. 실측(2026-09-08)으로
-     *                        {@code US_TOP1000}에서 이 값은 1이고 그것이 {@code AKTX}다.
-     *                        <p>MUST NOT: 이 술어를 어댑터의 <b>후보 게이트</b>로 올리지 않는다 —
-     *                        그것은 ADR-0126이 반증을 요구한 별개 결정이고, 이 축은 「ADS인가」를
-     *                        잡지 <b>「비율이 1이 아닌가」를 못 잡는다</b>({@code ARM}·{@code TEVA}는
-     *                        1:1이라 값이 옳다). 여기서는 <b>값을 안 버리고 보이기만</b> 한다.
-     */
     public record UniverseRow(String code, String name, String marketCode, String currencyCode,
-                              int memberCount, int adsSuspectCount) {
+                              int memberCount) {
     }
 
     /** @param universeCodes 현재 편입되어 있는 유니버스. 화면이 어느 지수 종목인지 보인다. */

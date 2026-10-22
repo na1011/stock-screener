@@ -84,17 +84,6 @@ FROM (SELECT ticker || ' ' || trade_date || ' ' || round(GREATEST(v/p, p/v), 0) 
       FROM mc WHERE p > 0 AND GREATEST(v/p, p/v) >= 100) z"
 ```
 
-```premise 시총 순위를 못 믿을 편입 종목을 화면이 말하고 있다
-# 위 펜스는 AKTX 를 **원리적으로 못 본다** — 계열이 고르게 부풀어 하루 점프가 없다.
-# ADR-0125 의 입력 축도 못 본다(eps=0 이라 NULLIF 가 NULL 을 낸다). 그래서 축이 따로 있다.
-# MUST: 술어를 StockReader.selectableUniverses 와 같게 유지한다 — 갈리면 화면이 말하는 수와
-# 세션 시작이 신고하는 수가 달라지고, 그 어긋남은 어느 쪽도 신고하지 않는다.
-psql -d stock_screener -At -c "WITH m AS (SELECT s.ticker FROM universe_membership um JOIN universe u ON u.code = um.universe_code AND u.is_active JOIN stock s ON s.id = um.stock_id WHERE um.effective_to IS NULL AND s.name ~* '(^| )(ADS|ADR)([ ,]|\$)|American Depositary') SELECT CASE WHEN (SELECT count(*) FROM universe_membership WHERE effective_to IS NULL) = 0 THEN '잴 것이 없었다 — 편입 행이 하나도 없다' WHEN (SELECT count(*) FROM m) = 0 THEN 'OK 편입 중 ADS 표방 종목이 없다' ELSE 'OK ' || (SELECT count(*) FROM m) || '종목이 ADS 를 표방한다(' || (SELECT string_agg(ticker, ', ' ORDER BY ticker) FROM m) || ') — 화면이 그 수를 말한다(ScreeningResponse.adsSuspectCount). 값을 고친 것이 아니라 드러낸 것이고, 0 이 되는 것은 목표가 아니다' END"
-```
-
-**이 펜스는 붉지 않는다 — 수를 보이는 것이 목적이다.** 「0이어야 한다」로 읽으면 정당한 ADS를
-후보에서 빼는 안(A)으로 되돌아가는데, 그것은 위에서 반증과 함께 기각했다. 실측 0.05초.
-
 **양방향으로 센다** — 오염이 들어올 때와 정상으로 돌아올 때 둘 다 경계를 만든다.
 실측 비용 **0.46초**(2026-10-03 · 거래일 사다리 — `MARKET_CAP`만 읽는다. 옛 전수 형태는 1.15~1.25초).
 **MUST: 사다리를 `indicator_value` 자신의 재귀로 둔다** — `indicator_trade_date` 같은 파생 색인에서
@@ -231,18 +220,11 @@ ADR-0125의 입력 축은 **원리적으로 못 본다**: `eps = 0`이라 `NULLI
 드라이런 표지 23 · 뺌 3 · 편입 변화 0). C의 필드(`adsSuspectCount`)는 그대로 둔다 — 이름이 ADS를 표방하는 편입(비율 1 · `TEVA`)을 센다.
 관문 뒤 판마다 비율을 적용해 ADS를 제값으로 들이는 것은 탐색 `explore/universe/ADS-BASIS-PLAN-1022.md` §3이다.
 
-**C를 구현했다.** `ScreeningResponse.adsSuspectCount`가 결과 머리말에 실리고, 화면은
-「미국예탁증서(ADS) N종목 포함 — 시총 순위가 정확하지 않을 수 있습니다」를 그린다.
-
-- **MUST: 그 수를 스크리닝 응답에 싣는다 — 화면이 카탈로그로 판단하게 두지 않는다.**
-  `ResultSummary`는 카탈로그에 `AsyncPanel`을 걸지 않아, 스크리닝만 성공하고 카탈로그 요청이
-  실패하면 **경고가 조용히 사라진다.** 같은 사고가 백분위 주의 문구에서 이미 있었고
-  `relativePopulations`의 javadoc이 그 근거를 들고 있다.
-- **MUST: 정규식 앞 경계를 지키는 시험을 남긴다** — `ReadApiTest`의 「이름 안에 우연히 adr/ads가
-  든 것은 세지 않는다」. 대조군으로 `(^| )`를 빼면 그 하나만 붉는다(2026-09-08 확인).
-
-**MUST: 정규식 경계를 `(^| )(ADS|ADR)([ ,]|$)`로 잡는다.** 앞 경계를 빼면 `Tradr 2X … ETF`가
-거짓 양성이 된다(2026-09-08에 실제로 그렇게 재서 280이 나왔다 — 옳은 값은 273).
+**C는 걷었다**(2026-10-22). 사용자에게 「경고를 걷는다 / 문구만 사실로 바꾼다 / 그대로 둔다」를 올렸고 사용자가 **「경고를 걷는다」**를
+골랐다. 올린 근거: A′ 뒤로 관측 평면은 표지로 예탁 비율 1을 확인한 ADS만 들이고(시총이 옳다) 과거 평면은 ADS를 이름으로 빼므로
+「시총 순위가 정확하지 않을 수 있다」가 참인 편입이 없다 — 그런데 이름 정규식으로 세어 TEVA에 떴고, B0(10-22)로 10-24부터 ARM · NICE ·
+BLTE에도 뜰 참이었다. 이름이 평범한 ADS는 못 셌다. 관문 뒤 판마다 비율(B)이 켜지면 모든 ADS가 제값이다.
+필드(`ScreeningResponse.adsSuspectCount` · `StockReader.UniverseRow`)와 화면 문구를 지웠다.
 
 **MUST: A를 올리기 전에 이 반증을 함께 싣는다** — **이 축은 「ADS인가」를 잡지 「비율이 1이
 아닌가」를 못 잡는다.** `AKTX`의 병은 ADS라서가 아니라 비율이 1이 아니어서다. 그리고 이 문서가

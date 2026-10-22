@@ -34,7 +34,6 @@ const response = (tallies: ConditionTally[], minimumBlocked: number | null): Scr
     sortedBy: 'STOCK_ID_ASC',
     universe: { code: 'KOSPI_TOP200', name: '코스피 시총 상위 200', memberCount: 200 },
     currencyCode: 'KRW',
-    adsSuspectCount: 0,
     relativePopulations: [],
     screen: { id: null, code: 'STAGE2_BREAKOUT', name: '2국면 돌파', type: 'PRESET' },
     conditions: tallies.map((t, i) => condition(t.conditionIndex, `지표${i}`)),

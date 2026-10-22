@@ -25,7 +25,7 @@ applies_to:
 **ADR-0106 §버린 대안의 첫 항목을 이 결정이 뒤집는다.** 거기서 기각한 것은 *"판정 상태를 3 → 4로
 늘려 「이 시장 임계 미정」을 **조건 단위**로 낸다"*였고 기각 근거가 *"`outcomes`가 `Row` 안에만
 있어 … 행이 0개가 되고 화면이 아무 이유도 말하지 않는다"*였다. **그 근거는 자리를 행 밖에 만들면
-성립하지 않는다** — 같은 응답에 `adsSuspectCount`·`relativePopulations`가 이미 그 형태로 살고
+성립하지 않는다** — 같은 응답에 `relativePopulations`가 이미 그 형태로 살고
 있었다. **ADR-0106 §규칙의 「임계가 없으면 요청 단위로 거절한다」는 그대로 둔다.**
 
 ## 규칙
@@ -100,7 +100,7 @@ FILTER에서 절단이 없으면 **같은 수가 두 번** 나왔다.
   `universeCode == null`이면 `UniverseInfo` 자체가 null이다. 과거 기준일 조회에서는 판정
   모집단과 갈린다(ADR-0135).
 - **0건 사유를 서버가 enum으로 분류해 보낸다** — 서버는 수만 내고 문구는 화면이 정한다
-  (`adsSuspectCount`·`relativePopulations`가 이미 그 형태다). enum을 만들면 `wire-contract.json`·
+  (`relativePopulations`가 이미 그 형태다). enum을 만들면 `wire-contract.json`·
   `WireContractTest`·`frontend/src/api/contract.spec.ts` 셋을 함께 고쳐야 한다.
 - **FILTER에서도 술어를 SQL로 안 내리고 전부 인메모리로 판정한다** — `ConditionTranslator`의
   존재 이유를 지우고 `.claude/rules/backend.md`의 첫 MUST NOT을 되돌린다. 0건이 아닌 요청까지

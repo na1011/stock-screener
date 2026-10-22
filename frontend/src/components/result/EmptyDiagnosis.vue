@@ -16,7 +16,7 @@ import { outcomeStyle } from '@/lib/outcome'
  * 안 된다 — 그 슬롯은 사용자의 검색어가 전부 걸러냈을 때도 뜨므로, 거기 두면 화면이 지금
  * 보이는 것과 **다른 질문에 답한다.**
  *
- * 서버는 수만 주고 문구는 여기서 정한다. `adsSuspectCount`·`relativePopulations`가 이미 그
+ * 서버는 수만 주고 문구는 여기서 정한다. `relativePopulations`가 이미 그
  * 형태이고, enum을 만들면 `wire-contract.json`·`WireContractTest`·`contract.spec.ts` 셋을
  * 함께 고쳐야 한다.
  */
