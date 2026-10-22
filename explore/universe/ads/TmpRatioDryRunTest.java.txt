@@ -1,0 +1,37 @@
+package com.stockscreener.pipeline.datasource.us.listing;
+
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.OptionalDouble;
+
+/** B 드라이런 1(임시 · 지운다): hist.json 표지 글을 운영 파서에 먹인다. */
+class TmpRatioDryRunTest {
+    @Test
+    void sweep() throws Exception {
+        String in = System.getenv("B_HIST");
+        Assumptions.assumeTrue(in != null);
+        JsonNode h = new ObjectMapper().readTree(Files.readString(Path.of(in)));
+        StringBuilder out = new StringBuilder();
+        for (var e : h.properties()) {
+            JsonNode r = e.getValue();
+            if (!r.has("title")) continue;
+            for (JsonNode t : r.path("title")) {
+                String ctx = t.get(0).asString(), title = t.get(1).asString();
+                if (!DepositaryRatio.isDepositary(title)) continue;
+                OptionalDouble k = DepositaryRatio.sharesPerDepositary(title);
+                String sym = "";
+                for (JsonNode s : r.path("sym")) if (s.get(0).asString().equals(ctx)) sym = s.get(1).asString();
+                out.append(r.path("cik").asString()).append('\t').append(r.path("filed").asString()).append('\t')
+                        .append(r.path("form").asString()).append('\t').append(r.path("acc").asString()).append('\t')
+                        .append(sym).append('\t').append(k.isPresent() ? k.getAsDouble() : "").append('\t')
+                        .append(title.replace('\t', ' ').replace('\n', ' ')).append('\n');
+            }
+        }
+        Files.writeString(Path.of(System.getenv("B_OUT")), out);
+    }
+}
