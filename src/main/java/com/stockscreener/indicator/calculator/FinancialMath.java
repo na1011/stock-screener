@@ -691,7 +691,7 @@ final class FinancialMath {
                 // 값을 안 내는 것이 판정이다 — 사유는 IndicatorUnavailabilityConfig가 말한다.
                 return null;
             }
-            if (basis == ShareBasis.SHIFTED && asOf.shareBasisMultiple() != null) {
+            if (basis.multiplies() && asOf.shareBasisMultiple() != null) {
                 // 배수는 **판마다** 다르다. 사건 전에 공시된 판은 유도가 배수를 안 달므로
                 // 여기서 1이 되고, 그 비대칭이 SharesGrowth3yCalculator처럼 분자·분모에 같은
                 // 수를 곱하는 지표를 실제로 고친다(상수로 두면 약분돼 안 고쳐진다).

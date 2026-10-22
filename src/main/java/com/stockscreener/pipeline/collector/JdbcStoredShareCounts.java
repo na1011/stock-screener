@@ -292,6 +292,17 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
         }
         Map<Long, ShareClassLine> lines = shareClasses.lines(marketCode);
         Set<Long> mismatched = new HashSet<>(jdbcTemplate.queryForList(CLASS_MISMATCHED, Long.class, marketCode));
+        // 보류 주식수도 그 판의 기저 배수를 곱한다 — 순위 두 경로와 같은 단위여야 한다(ADR-0183 · 예탁증권 줄은 1/k).
+        Map<Long, Map<LocalDate, BigDecimal>> multiples = new HashMap<>();
+        jdbcTemplate.query("""
+                SELECT f.stock_id, f.published_at, f.share_basis_multiple
+                FROM financial_statement f JOIN stock s ON s.id = f.stock_id
+                WHERE s.market_code = ? AND f.share_basis_status IN ('SHIFTED', 'DEPOSITARY')
+                  AND f.share_basis_multiple IS NOT NULL
+                """, rs -> {
+            multiples.computeIfAbsent(rs.getLong("stock_id"), k -> new HashMap<>())
+                    .put(rs.getObject("published_at", LocalDate.class), rs.getBigDecimal("share_basis_multiple"));
+        }, marketCode);
         Map<String, ClassHold> out = new LinkedHashMap<>();
         jdbcTemplate.query("""
                 SELECT id, ticker, sic_code, name FROM stock WHERE market_code = ? AND is_active AND %s ORDER BY ticker
@@ -309,7 +320,8 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             if (state == MembershipHold.State.HELD) {
                 MembershipHold.Verdict last = MembershipHold.lastShown(history, asOf);
                 if (last != null && last.lineShares() != null) {
-                    held = BigDecimal.valueOf(last.lineShares()).multiply(line.factor(last.filed(), asOf));
+                    BigDecimal multiple = multiples.getOrDefault(rs.getLong("id"), Map.of()).getOrDefault(last.filed(), BigDecimal.ONE);
+                    held = BigDecimal.valueOf(last.lineShares()).multiply(multiple).multiply(line.factor(last.filed(), asOf));
                 }
             }
             out.put(rs.getString("ticker"), new ClassHold(rs.getString("ticker"), state, held, rs.getString("sic_code"),

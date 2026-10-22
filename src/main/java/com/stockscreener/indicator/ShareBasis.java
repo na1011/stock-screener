@@ -8,13 +8,11 @@ package com.stockscreener.indicator;
  * 저장 시총이 1,565B로 미국 8위에 앉았다(2026-09-22 실측 · 회사가 밝힌 공개유동가치 $15.0M).
  * {@code AMRN}은 같은 모양의 20배다.
  *
- * <p><b>비율 자체는 소스가 안 준다</b> — 전용 태그 {@code dei:EntityListingDepositoryReceiptRatio}가
- * 팩트 캐시 1,214종목 중 <b>1종목</b>({@code GTES}, 마지막 보고 2019)에만 있고, 종목명 텍스트는
- * ADS 표기 273종목 중 <b>74</b>만 비율을 적으며 {@code AMRN}은 ADS 표기조차 없다. Alpaca 자산
- * 마스터에는 증권 유형 필드가 아예 없다({@code class}는 {@code us_equity} 하나 · {@code cusip}은
- * 8,504건 전부 공백). <b>그래서 「비율을 구해 고친다」는 일반 규칙이 안 선다.</b>
+ * <p><b>비율은 공시 표지가 판마다 준다</b>(2026-10-22 · ADR-0162) — 증권 이름({@code dei:Security12bTitle})의
+ * 「each representing N Ordinary Shares」다. 관문 켬은 그것으로 예탁증권 줄 행에 {@link #DEPOSITARY}를 짓는다. 관문 밖에서는
+ * 기업행위 원장이 「기저가 어긋났다」를 말해 주는 자리만 고친다({@link #SHIFTED}).
  *
- * <p><b>그런데 기업행위 원장은 「기저가 어긋났다」를 말해 준다.</b> 선언된 주식 교환이 있었는데
+ * <p><b>기업행위 원장은 「기저가 어긋났다」를 말해 준다.</b> 선언된 주식 교환이 있었는데
  * 주식수 계열이 그 비율을 안 따라갔으면, 그 뒤 판의 수는 <b>사건 전 기저</b>다. 그 판정을 담는
  * 것이 이 enum이고, {@code FinancialMath.sharesOf}와 {@code JdbcStoredShareCounts}가
  * <b>둘 다</b> 읽는다 — 한쪽만 고치면 지표는 맞는데 유니버스 순위는 그대로 오염된다.
@@ -64,9 +62,26 @@ public enum ShareBasis {
      * 하나만 걸면 1,565B가 <b>39.1B · 순위 279위</b>가 된다 — 여전히 약 1,000배 틀린데
      * 8위일 때와 달리 <b>아무도 못 본다.</b> 틀린 값을 그럴듯한 값으로 바꾸는 것이 더 나쁘다.
      */
-    UNRESOLVED;
+    UNRESOLVED,
 
-    /** 저장 문자열을 읽는다. NULL·모르는 값은 {@link #OK}다 — 이 축이 생기기 전과 같은 동작이다. */
+    /**
+     * 예탁증권 줄의 행이다(관문 켬 · ADR-0183). 저장 주식수는 <b>보통주</b>이고 {@code share_basis_multiple} = 1/k(그 공시 표지의
+     * 「1 ADS = k주」)를 곱해야 ADS 시세와 짝이 맞는다. 저장 단위를 안 바꾸는 이유: EPS 함의(보통주당 EPS)와 맞대는 소비자(배당
+     * 20% 게이트 · 순위 가드 훅 · 분모 판정)가 배수를 안 곱하는 자리에 있어 그대로 맞는다.
+     */
+    DEPOSITARY;
+
+    /** 이 상태의 행은 {@code share_basis_multiple}을 곱해야 시세와 같은 기저가 된다. */
+    public boolean multiplies() {
+        return this == SHIFTED || this == DEPOSITARY;
+    }
+
+    /**
+     * 저장 문자열을 읽는다. NULL은 {@link #OK}다 — 이 축이 생기기 전과 같은 동작이다.
+     *
+     * <p><b>MUST: 모르는 값에 던진다.</b> 「모르는 값 = OK」였을 때 새 상태가 지표 쪽에서 조용히 무시되어 순위(상태 무관하게 곱함)와
+     * 지표가 k배로 갈릴 뻔했다(2026-10-22 B 계획 반증).
+     */
     public static ShareBasis of(String stored) {
         if (stored == null) {
             return OK;
@@ -76,6 +91,6 @@ public enum ShareBasis {
                 return value;
             }
         }
-        return OK;
+        throw new IllegalStateException("모르는 주식수 기저 상태: " + stored);
     }
 }
