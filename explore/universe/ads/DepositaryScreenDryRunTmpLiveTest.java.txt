@@ -1,0 +1,70 @@
+package com.stockscreener.pipeline.datasource.us;
+
+import com.stockscreener.pipeline.collector.JdbcStoredShareCounts;
+import com.stockscreener.pipeline.datasource.SecurityNameCache;
+import com.stockscreener.pipeline.datasource.http.DataSourceProperties;
+import com.stockscreener.pipeline.datasource.http.ExternalApiClientFactory;
+import com.stockscreener.pipeline.datasource.http.TokenBucketRateLimiter;
+
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+/** 임시 드라이런 — 판정 뒤 지운다(탐색 ADS-BASIS-PLAN-1022 §2 v3). 운영 DB 읽기 전용 · 쓰기 0. */
+@Tag("live")
+@EnabledIfEnvironmentVariable(named = "DEPOSITARY_DRYRUN_DB", matches = "stock_screener")
+class DepositaryScreenDryRunTmpLiveTest {
+
+    @Test
+    void dryRun() throws Exception {
+        String user = System.getProperty("user.name");
+        JdbcTemplate jdbc = new JdbcTemplate(new DriverManagerDataSource(
+                "jdbc:postgresql://localhost:5432/stock_screener?readOnlyMode=always", user, ""));
+        DataSourceProperties properties = new DataSourceProperties();
+        properties.getAlpaca().setBaseUrl("https://paper-api.alpaca.markets");
+        properties.getAlpaca().setApiKey(System.getenv("APCA_API_KEY_ID"));
+        properties.getAlpaca().setSecretKey(System.getenv("APCA_API_SECRET_KEY"));
+        properties.getAlpaca().setReadTimeout(Duration.ofSeconds(60));
+        properties.getSecEdgar().setApiKey(System.getenv("SEC_EDGAR_USER_AGENT"));
+        ExternalApiClientFactory factory = new ExternalApiClientFactory();
+        SecurityNameCache names = new SecurityNameCache();
+        TokenBucketRateLimiter alpacaLimiter = new TokenBucketRateLimiter("alpaca", 150, 0);
+        TokenBucketRateLimiter secLimiter = new TokenBucketRateLimiter("sec-edgar", 300, 0);
+        SecTickerCikCache cikCache = new SecTickerCikCache(factory, properties, secLimiter);
+        DepositaryCovers covers = new SecDepositaryCovers(new SecListingFormClient(null,
+                new SecFilingClient(factory, properties, secLimiter), factory, properties, secLimiter));
+        UsMarketCapUniverseAdapter adapter = new UsMarketCapUniverseAdapter(
+                new AlpacaUniverseAdapter(factory, properties, alpacaLimiter, names),
+                new JdbcStoredShareCounts(jdbc), cikCache, names, factory, properties, alpacaLimiter, false, covers);
+
+        LocalDate asOf = LocalDate.parse(System.getenv().getOrDefault("DEPOSITARY_DRYRUN_ASOF", "2026-10-21"));
+        UsMarketCapUniverseAdapter.Ranking ranking = adapter.rank(UsMarketCapUniverseAdapter.UNIVERSE_CODE, asOf);
+
+        Set<String> members = new HashSet<>(jdbc.queryForList("""
+                SELECT s.ticker FROM universe_membership m JOIN stock s ON s.id = m.stock_id
+                WHERE m.universe_code = 'US_TOP1000' AND m.effective_to IS NULL""", String.class));
+        List<String> out = new ArrayList<>();
+        Set<String> top = new HashSet<>();
+        for (int i = 0; i < 1000; i++) {
+            UsMarketCapUniverseAdapter.Ranked r = ranking.deduped().get(i);
+            top.add(r.asset().symbol());
+            out.add("top\t" + (i + 1) + "\t" + r.asset().symbol() + "\t" + r.marketCap().toBigInteger());
+        }
+        members.stream().filter(t -> !top.contains(t)).sorted().forEach(t -> out.add("leave\t" + t));
+        top.stream().filter(t -> !members.contains(t)).sorted().forEach(t -> out.add("enter\t" + t));
+        out.add("excluded\t" + ranking.excluded());
+        out.add("screenedThrough\t" + ranking.screenedThrough());
+        Files.write(Path.of(System.getenv().getOrDefault("DEPOSITARY_DRYRUN_OUT", "build/depositary-dryrun.tsv")), out);
+    }
+}
