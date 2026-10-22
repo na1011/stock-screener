@@ -94,7 +94,8 @@ class ReaderVersionPinTest {
             "e8bf8893ee9c89efc789f6258e79ba09aa2403adc897a424e5232be3e1294550",
             "883f9182385814ed3d8665a6f11e8a8527997a254ba81d2a71cd4f2cf1390dfa",
             "40730ea9623554de8a283f275345861cc5fb6a82d94477df2027fd2a17c24d5a",
-            "7b5aa3d92f9f3bed0d4dae95c457f9148a2fdcb9f488cd9b38502caf06703022");
+            "7b5aa3d92f9f3bed0d4dae95c457f9148a2fdcb9f488cd9b38502caf06703022",
+            "68d79b00efadb41e2008bb91b35205a168e62a428f87eaff2dd972491c5effa7");
 
     /**
      * 판 범위 — 저장되는 것(상태 · 원 팩트 · 머리 · 실패 종류)을 정하는 파일 전부, 파일 전체다({@code READER_VERSION} 선언만
@@ -133,6 +134,7 @@ class ReaderVersionPinTest {
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
+            "83eb86cb170b477e8322dce5d4053dcafd9c5adea673c626480028c2f55c0048",
             "83eb86cb170b477e8322dce5d4053dcafd9c5adea673c626480028c2f55c0048");
 
     private static final Path READER_SOURCE =

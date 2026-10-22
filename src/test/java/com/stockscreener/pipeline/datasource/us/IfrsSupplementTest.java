@@ -23,7 +23,7 @@ class IfrsSupplementTest {
             <xbrl xmlns="http://www.xbrl.org/2003/instance"
                   xmlns:dei="http://xbrl.sec.gov/dei/2025"
                   xmlns:iso4217="http://www.xbrl.org/2003/iso4217"
-                  xmlns:ifrs-full="http://xbrl.ifrs.org/taxonomy/2025-03-27/ifrs-full"
+                  xmlns:ifrs-full="https://xbrl.ifrs.org/taxonomy/2025-03-27/ifrs-full"
                   xmlns:xbrli="http://www.xbrl.org/2003/instance">
               <context id="d"><entity><identifier scheme="http://www.sec.gov/CIK">0000811809</identifier></entity>
                 <period><startDate>2025-07-01</startDate><endDate>2026-06-30</endDate></period></context>

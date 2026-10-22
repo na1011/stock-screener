@@ -66,9 +66,10 @@ final class XbrlInstanceReader {
      * (미국 시장 미완료의 재료) · 실패 운반체에 「소스가 답함」 표지 · 그 밖 4xx 판정은 그대로. 판 9(2026-10-22 · ADR-0182):
      * {@code ifrs-full} 네임스페이스도 싣는다 — companyfacts가 IFRS 공시를 빠뜨린다(182 IFRS 발행사 · 2023 뒤 6-K 97/375 · 20-F
      * 27/567 · 40-F 5/145). 관문 설정의 함수로 두지 않은 이유: 읽기는 늘 하고 쓰기(어댑터가 트리의 {@code ifrs-full}을 읽는 것)만
-     * 관문 뒤라, 꺼진 출력은 그대로이고 관문 날 다시 받을 행이 생기지 않는다.
+     * 관문 뒤라, 꺼진 출력은 그대로이고 관문 날 다시 받을 행이 생기지 않는다. 판 10(같은 날): 2023년 판부터의 https 네임스페이스도
+     * 받는다 — 판 9는 http만 봐서 실제 IFRS 공시(TRI · AZN · NU 인스턴스)를 하나도 못 읽었다(B 드라이런 3이 잡았다).
      */
-    static final int READER_VERSION = 9;
+    static final int READER_VERSION = 10;
 
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
     private static final String XBRLDI = "http://xbrl.org/2006/xbrldi";
@@ -76,6 +77,8 @@ final class XbrlInstanceReader {
     private static final String US_GAAP_PREFIX = "http://fasb.org/us-gaap/";
     private static final String DEI_PREFIX = "http://xbrl.sec.gov/dei/";
     private static final String IFRS_PREFIX = "http://xbrl.ifrs.org/taxonomy/";
+    /** 2023년 판부터의 IFRS 택소노미는 https다(TRI · AZN 2026 인스턴스 실측) — 판 9가 http만 봐 실제 IFRS 공시를 못 읽었다. */
+    private static final String IFRS_PREFIX_HTTPS = "https://xbrl.ifrs.org/taxonomy/";
 
     private XbrlInstanceReader() {
     }
@@ -135,9 +138,9 @@ final class XbrlInstanceReader {
                         String id = r.getAttributeValue(null, "id");
                         units.put(id, readUnit(r));
                     } else if (ns != null && (ns.startsWith(US_GAAP_PREFIX) || ns.startsWith(DEI_PREFIX)
-                            || ns.startsWith(IFRS_PREFIX))) {
+                            || ns.startsWith(IFRS_PREFIX) || ns.startsWith(IFRS_PREFIX_HTTPS))) {
                         String taxonomy = ns.startsWith(US_GAAP_PREFIX) ? "us-gaap"
-                                : ns.startsWith(IFRS_PREFIX) ? "ifrs-full" : "dei";
+                                : ns.startsWith(IFRS_PREFIX) || ns.startsWith(IFRS_PREFIX_HTTPS) ? "ifrs-full" : "dei";
                         String contextRef = r.getAttributeValue(null, "contextRef");
                         String unitRef = r.getAttributeValue(null, "unitRef");
                         String decimals = r.getAttributeValue(null, "decimals");
