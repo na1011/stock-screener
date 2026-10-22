@@ -55,6 +55,48 @@ public final class DepositaryCover {
      * @param nameSaysDepositary 후보 이름(목록 · 저장)이 예탁증권을 말하는가
      */
     public static Verdict judge(ClassFacts cover, String symbol, boolean nameSaysDepositary) {
+        Reading reading = read(cover, symbol);
+        switch (reading.kind()) {
+            case NOT_DEPOSITARY -> {
+                return nameSaysDepositary
+                        ? new Verdict(Outcome.EXCLUDED, "이름은 예탁증권인데 표지가 예탁증권 줄을 안 보인다")
+                        : new Verdict(Outcome.NOT_DEPOSITARY, null);
+            }
+            case ABSENT -> {
+                return new Verdict(Outcome.EXCLUDED, "예탁증권 비율을 표지가 안 싣는다");
+            }
+            case CONFLICT -> {
+                return new Verdict(Outcome.EXCLUDED, "예탁증권 비율이 갈린다 " + reading.ratios());
+            }
+            case RATIO -> {
+            }
+        }
+        double ratio = reading.sharesPerDepositary();
+        if (Math.abs(ratio - 1) > SAME_RATIO) {
+            return new Verdict(Outcome.EXCLUDED, "1 예탁증권 = %s주".formatted(stripTrailingZeros(ratio)));
+        }
+        Map<String, String> shares = cover.coverOf(ClassFactReader.SHARES_OUTSTANDING);
+        if (!shares.isEmpty() && !shares.containsKey(ClassFacts.AXISLESS)) {
+            return new Verdict(Outcome.EXCLUDED, "표지 주식수가 클래스에만 실린다 " + shares.keySet().stream().map(DepositaryCover::member).toList());
+        }
+        return new Verdict(Outcome.RATIO_ONE, null);
+    }
+
+    /** 표지 한 판이 그 기호 줄에 대해 말하는 예탁 비율. */
+    public enum ReadingKind { NOT_DEPOSITARY, RATIO, ABSENT, CONFLICT }
+
+    /**
+     * @param sharesPerDepositary 「1 예탁증권 = k주」의 k({@code RATIO}만)
+     * @param ratios              표지가 실은 비율 후보 전부(글 · 태그)
+     */
+    public record Reading(ReadingKind kind, double sharesPerDepositary, java.util.SortedSet<Double> ratios) {
+    }
+
+    /**
+     * 표지 한 판에서 그 기호 줄의 예탁 비율을 읽는다 — {@link #judge}(관문 밖 A′)와 판마다 비율(관문 뒤 B · ADR-0183)이 같은 읽기를
+     * 쓴다. 줄 고르기: 기호가 실린 이름 줄 → 없으면 이름 줄 전부. 비율: 이름 글(1순위)과 태그를 다 모아 2% 넘게 갈리면 {@code CONFLICT}.
+     */
+    public static Reading read(ClassFacts cover, String symbol) {
         Map<String, String> titles = cover.coverOf(ClassFactReader.SECURITY_TITLE);
         Map<String, String> symbols = cover.coverOf(ClassFactReader.TRADING_SYMBOL);
         Map<String, String> tags = cover.coverOf(ClassFactReader.DEPOSITORY_RATIO);
@@ -69,13 +111,10 @@ public final class DepositaryCover {
             lines.addAll(titles.keySet());
         }
         List<String> depositary = lines.stream().filter(m -> DepositaryRatio.isDepositary(titles.get(m))).toList();
-        if (depositary.isEmpty()) {
-            return nameSaysDepositary
-                    ? new Verdict(Outcome.EXCLUDED, "이름은 예탁증권인데 표지가 예탁증권 줄을 안 보인다")
-                    : new Verdict(Outcome.NOT_DEPOSITARY, null);
-        }
-
         TreeSet<Double> ratios = new TreeSet<>();
+        if (depositary.isEmpty()) {
+            return new Reading(ReadingKind.NOT_DEPOSITARY, Double.NaN, ratios);
+        }
         for (String member : depositary) {
             OptionalDouble fromTitle = DepositaryRatio.sharesPerDepositary(titles.get(member));
             fromTitle.ifPresent(ratios::add);
@@ -83,20 +122,12 @@ public final class DepositaryCover {
         }
         addTag(ratios, tags.get(ClassFacts.AXISLESS));
         if (ratios.isEmpty()) {
-            return new Verdict(Outcome.EXCLUDED, "예탁증권 비율을 표지가 안 싣는다");
+            return new Reading(ReadingKind.ABSENT, Double.NaN, ratios);
         }
         if (ratios.last() > ratios.first() * (1 + SAME_RATIO)) {
-            return new Verdict(Outcome.EXCLUDED, "예탁증권 비율이 갈린다 " + ratios);
+            return new Reading(ReadingKind.CONFLICT, Double.NaN, ratios);
         }
-        double ratio = ratios.first();
-        if (Math.abs(ratio - 1) > SAME_RATIO) {
-            return new Verdict(Outcome.EXCLUDED, "1 예탁증권 = %s주".formatted(stripTrailingZeros(ratio)));
-        }
-        Map<String, String> shares = cover.coverOf(ClassFactReader.SHARES_OUTSTANDING);
-        if (!shares.isEmpty() && !shares.containsKey(ClassFacts.AXISLESS)) {
-            return new Verdict(Outcome.EXCLUDED, "표지 주식수가 클래스에만 실린다 " + shares.keySet().stream().map(DepositaryCover::member).toList());
-        }
-        return new Verdict(Outcome.RATIO_ONE, null);
+        return new Reading(ReadingKind.RATIO, ratios.first(), ratios);
     }
 
     private static String member(String key) {
