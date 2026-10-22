@@ -181,7 +181,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                 usGate && shareClass != null ? shareClass.saveInput(security, cik.get(), frame.facts()) : null;
 
         // companyfacts가 빠뜨린 정기 공시를 그 공시의 인스턴스로 채운다(ADR-0173). 실패는 종목을 세우지 않고 판 보호로 낸다.
-        SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context);
+        SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context, usGate);
         if (supplement.fromStore() + supplement.fetched() > 0 || !supplement.failed().isEmpty()
                 || supplement.vintagesUncertain()) {
             log.info("공시 보충. ticker={} 받음={} 저장분={} 옛 판 저장분={} 더한 팩트={} 실패={} 목록 모름={}",

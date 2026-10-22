@@ -131,7 +131,7 @@ class SecEdgarFactsSweepTest {
                     }
                     if (supplement.isPresent()) {
                         SecFilingSupplement.Outcome outcome = supplement.get().supplement().supplement(
-                                root.path("cik").asLong(), (tools.jackson.databind.node.ObjectNode) facts, from, ticker);
+                                root.path("cik").asLong(), (tools.jackson.databind.node.ObjectNode) facts, from, ticker, usGate);
                         if (extra.isPresent() && (outcome.fetched() + outcome.fromStore() > 0
                                 || !outcome.failed().isEmpty() || outcome.vintagesUncertain())) {
                             extraLines.append(ticker).append("\tsupplement\t").append(outcome.fetched())

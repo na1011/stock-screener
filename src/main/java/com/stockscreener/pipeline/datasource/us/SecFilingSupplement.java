@@ -128,15 +128,24 @@ public class SecFilingSupplement implements FilingSupplementer {
      */
     @Override
     public Outcome supplement(long cik, ObjectNode facts, int fromFiscalYear, String context) {
+        return supplement(cik, facts, fromFiscalYear, context, false);
+    }
+
+    /**
+     * @param usGate 미국 관문 설정 — 켜지면 companyfacts가 {@code ifrs-full}로 실은 공시도 「덮였다」로 센다(ADR-0182). 꺼지면
+     *               그 공시가 보충 대상으로 남는다 — 어댑터가 IFRS를 안 읽으므로 값은 그대로다.
+     */
+    @Override
+    public Outcome supplement(long cik, ObjectNode facts, int fromFiscalYear, String context, boolean usGate) {
         LocalDate since = windowStart(fromFiscalYear);
         List<SecFilingClient.Filing> filings;
         try {
             filings = client.filings(cik, since);
         } catch (DataSourceException e) {
-            return fromStoreOnly(cik, facts, since, context, e);
+            return fromStoreOnly(cik, facts, since, context, e, usGate);
         }
 
-        Map<String, Set<LocalDate>> coveredFiled = usGaapFilings(facts);
+        Map<String, Set<LocalDate>> coveredFiled = coveredFilings(facts, usGate);
         Set<String> covered = coveredFiled.keySet();
         List<SecFilingClient.Filing> targets = targets(filings, covered);
         Set<String> targetAccessions = new HashSet<>();
@@ -335,10 +344,10 @@ public class SecFilingSupplement implements FilingSupplementer {
 
     /** 공시 목록을 못 받았다 — 저장분만 합치고 그 종목의 회수를 멈춘다. */
     private Outcome fromStoreOnly(long cik, ObjectNode facts, LocalDate since, String context,
-                                  DataSourceException cause) {
+                                  DataSourceException cause, boolean usGate) {
         log.warn("공시 목록을 받지 못해 저장분만 합치고 이 종목의 판 회수를 멈춘다. {} 종류={} — {}",
                 context, cause.kind(), cause.getMessage());
-        Map<String, Set<LocalDate>> coveredFiled = usGaapFilings(facts);
+        Map<String, Set<LocalDate>> coveredFiled = coveredFilings(facts, usGate);
         Set<String> covered = coveredFiled.keySet();
         int merged = 0;
         int fromStore = 0;
@@ -403,10 +412,24 @@ public class SecFilingSupplement implements FilingSupplementer {
         return usGaapFilings(facts).keySet();
     }
 
+    /** 「companyfacts가 덮은 공시」 — 관문 켬은 {@code ifrs-full}로 실은 공시도 든다(ADR-0182). */
+    static Map<String, Set<LocalDate>> coveredFilings(JsonNode facts, boolean usGate) {
+        Map<String, Set<LocalDate>> out = usGaapFilings(facts);
+        if (usGate) {
+            taxonomyFilings(facts, "ifrs-full").forEach((accn, dates) ->
+                    out.computeIfAbsent(accn, a -> new java.util.TreeSet<>()).addAll(dates));
+        }
+        return out;
+    }
+
     /** companyfacts가 us-gaap 팩트를 싣는 접수번호와, 그 접수번호에 companyfacts가 붙인 {@code filed} 날짜들. */
     static Map<String, Set<LocalDate>> usGaapFilings(JsonNode facts) {
+        return taxonomyFilings(facts, "us-gaap");
+    }
+
+    private static Map<String, Set<LocalDate>> taxonomyFilings(JsonNode facts, String taxonomy) {
         Map<String, Set<LocalDate>> out = new java.util.HashMap<>();
-        JsonNode usGaap = facts.path("us-gaap");
+        JsonNode usGaap = facts.path(taxonomy);
         for (String concept : usGaap.propertyNames()) {
             JsonNode units = usGaap.path(concept).path("units");
             for (String unit : units.propertyNames()) {

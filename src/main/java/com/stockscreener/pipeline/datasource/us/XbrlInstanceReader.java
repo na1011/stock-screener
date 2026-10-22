@@ -24,7 +24,7 @@ import java.util.Objects;
 /**
  * 공시 하나의 XBRL 인스턴스를 <b>companyfacts가 그 공시를 실었을 때의 팩트</b>로 읽는다(ADR-0173).
  *
- * <p>companyfacts는 공시의 축 없는 us-gaap·dei 팩트를 (개념 · 단위 · 기간)마다 하나씩 싣는다. 2026-10-06 실측으로 AAPL
+ * <p>companyfacts는 공시의 축 없는 us-gaap·ifrs-full·dei 팩트를 (개념 · 단위 · 기간)마다 하나씩 싣는다. 2026-10-06 실측으로 AAPL
  * {@code 0000320193-26-000020}의 companyfacts 팩트 283이 전부 이 규칙으로 인스턴스에서 같은 값으로 나왔다(JPM 787/788 ·
  * MSFT 597/601 — 어긋남은 전부 우리 매핑 밖 개념의 companyfacts 쪽 정규화). 그래서 이 리더는 그 규칙만 지킨다 — 회사
  * 고유 택소노미 · 축 붙은 컨텍스트 · 기간 없는 컨텍스트 · {@code unitRef} 없는 dei(문서 정보)는 안 싣는다.
@@ -63,15 +63,19 @@ final class XbrlInstanceReader {
      * 판 범위 소스에 범위가 닿는 범위 밖 멤버의 선언을 싣는다. 판 7(같은 날): 차단을 호스트마다 · 열린 동안 한 번만 묻고 10분 뒤
      * 닫힘 · 폐포가 디스패치를 따라간다(만든 클래스 · 범위 밖 하위형은 클래스 전체). 판 8(2026-10-07 · ADR-0174): 2xx인데 JSON이
      * 아니거나 본문이 없는 응답 · 다시 받아도 덜 온 응답 · 408을 받기 실패(TRANSIENT)로 · 보충 결과에 받지 못한 것의 종류를 싣는다
-     * (미국 시장 미완료의 재료) · 실패 운반체에 「소스가 답함」 표지 · 그 밖 4xx 판정은 그대로.
+     * (미국 시장 미완료의 재료) · 실패 운반체에 「소스가 답함」 표지 · 그 밖 4xx 판정은 그대로. 판 9(2026-10-22 · ADR-0182):
+     * {@code ifrs-full} 네임스페이스도 싣는다 — companyfacts가 IFRS 공시를 빠뜨린다(182 IFRS 발행사 · 2023 뒤 6-K 97/375 · 20-F
+     * 27/567 · 40-F 5/145). 관문 설정의 함수로 두지 않은 이유: 읽기는 늘 하고 쓰기(어댑터가 트리의 {@code ifrs-full}을 읽는 것)만
+     * 관문 뒤라, 꺼진 출력은 그대로이고 관문 날 다시 받을 행이 생기지 않는다.
      */
-    static final int READER_VERSION = 8;
+    static final int READER_VERSION = 9;
 
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
     private static final String XBRLDI = "http://xbrl.org/2006/xbrldi";
     private static final String XSI = "http://www.w3.org/2001/XMLSchema-instance";
     private static final String US_GAAP_PREFIX = "http://fasb.org/us-gaap/";
     private static final String DEI_PREFIX = "http://xbrl.sec.gov/dei/";
+    private static final String IFRS_PREFIX = "http://xbrl.ifrs.org/taxonomy/";
 
     private XbrlInstanceReader() {
     }
@@ -130,8 +134,10 @@ final class XbrlInstanceReader {
                     } else if (XBRLI.equals(ns) && "unit".equals(local)) {
                         String id = r.getAttributeValue(null, "id");
                         units.put(id, readUnit(r));
-                    } else if (ns != null && (ns.startsWith(US_GAAP_PREFIX) || ns.startsWith(DEI_PREFIX))) {
-                        String taxonomy = ns.startsWith(US_GAAP_PREFIX) ? "us-gaap" : "dei";
+                    } else if (ns != null && (ns.startsWith(US_GAAP_PREFIX) || ns.startsWith(DEI_PREFIX)
+                            || ns.startsWith(IFRS_PREFIX))) {
+                        String taxonomy = ns.startsWith(US_GAAP_PREFIX) ? "us-gaap"
+                                : ns.startsWith(IFRS_PREFIX) ? "ifrs-full" : "dei";
                         String contextRef = r.getAttributeValue(null, "contextRef");
                         String unitRef = r.getAttributeValue(null, "unitRef");
                         String decimals = r.getAttributeValue(null, "decimals");

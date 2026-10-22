@@ -93,7 +93,8 @@ class ReaderVersionPinTest {
             "0e1038c9921de8acebeefdc8cd55aaa8b6e197c021a63d9cd91267f3d518af40",
             "e8bf8893ee9c89efc789f6258e79ba09aa2403adc897a424e5232be3e1294550",
             "883f9182385814ed3d8665a6f11e8a8527997a254ba81d2a71cd4f2cf1390dfa",
-            "40730ea9623554de8a283f275345861cc5fb6a82d94477df2027fd2a17c24d5a");
+            "40730ea9623554de8a283f275345861cc5fb6a82d94477df2027fd2a17c24d5a",
+            "7b5aa3d92f9f3bed0d4dae95c457f9148a2fdcb9f488cd9b38502caf06703022");
 
     /**
      * 판 범위 — 저장되는 것(상태 · 원 팩트 · 머리 · 실패 종류)을 정하는 파일 전부, 파일 전체다({@code READER_VERSION} 선언만
@@ -131,7 +132,8 @@ class ReaderVersionPinTest {
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
             "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
-            "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1");
+            "d15f000efa8f1ed40cb9da32188a700e4055497c0c7e04a9ce65f870fe7f61c1",
+            "83eb86cb170b477e8322dce5d4053dcafd9c5adea673c626480028c2f55c0048");
 
     private static final Path READER_SOURCE =
             Path.of("src/main/java/com/stockscreener/pipeline/datasource/us/XbrlInstanceReader.java");
@@ -191,7 +193,7 @@ class ReaderVersionPinTest {
                 <unit id="eur"><measure>iso4217:EUR</measure></unit>
                 <gaap:Revenues contextRef="q" unitRef="usd" decimals="-6">11138000000</gaap:Revenues>
                 <gaap:Revenues contextRef="q" unitRef="eur" decimals="-6">10200000000</gaap:Revenues>"""));
-        // 건너뛰는 조건마다 건너뛰는 재료(네임스페이스 · 차원 · 기간).
+        // 건너뛰는 조건마다 건너뛰는 재료(네임스페이스 · 차원 · 기간). IFRS 네임스페이스는 판 9부터 읽는다(ADR-0182) — 재료는 그대로 둔다.
         FEATURES.put("IFRS 네임스페이스", doc("", """
                 <ifrs:Revenue xmlns:ifrs="http://xbrl.ifrs.org/taxonomy/2024-03-27/ifrs-full" contextRef="q" unitRef="usd" decimals="-6">5</ifrs:Revenue>"""));
         FEATURES.put("차원 붙은 dei", doc("""

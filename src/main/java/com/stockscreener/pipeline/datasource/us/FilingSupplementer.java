@@ -15,4 +15,10 @@ interface FilingSupplementer {
     FilingSupplementer NONE = (cik, facts, fromFiscalYear, context) -> SecFilingSupplement.Outcome.none();
 
     SecFilingSupplement.Outcome supplement(long cik, ObjectNode facts, int fromFiscalYear, String context);
+
+    /** 관문 설정을 잇는 자리(ADR-0182) — 켜지면 IFRS로 실린 공시도 「덮였다」다. 기본은 꺼짐과 같다. */
+    default SecFilingSupplement.Outcome supplement(long cik, ObjectNode facts, int fromFiscalYear, String context,
+                                                   boolean usGate) {
+        return supplement(cik, facts, fromFiscalYear, context);
+    }
 }
