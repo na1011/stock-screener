@@ -241,12 +241,18 @@ final class SecEdgarFacts {
 
     /**
      * @param usGate <b>미국 재적재 관문 설정</b>({@code stockscreener.gate.us}). 켜지면 관문에서 함께 나갈
-     *               규칙 변경이 적용된다 — 지금은 {@link #controllingIncomeQ4}의 마지막 갈래 하나다.
+     *               규칙 변경이 적용된다 — {@link #controllingIncomeQ4}의 마지막 갈래와 {@link TaxonomyFrame}(공시마다
+     *               택소노미·표시 통화 하나 · 전환의 다리 · IFRS 별칭) · 종목 단위 통화 게이트(ADR-0182)다.
      *               <b>꺼진 상태의 출력은 이 설정이 생기기 전과 바이트까지 같아야 한다</b>(`docs/reload-gate.md`).
      *               설정을 읽는 곳은 {@link SecEdgarFinancialAdapter} 하나다.
      */
     static Result build(JsonNode facts, int fromFiscalYear, boolean usGate)
             throws DataSourceException {
+        // 관문 켬: 공시마다 택소노미·표시 통화를 하나로 정하고 IFRS 개념을 같은 뜻의 us-gaap 열쇠에 싣는다(ADR-0182).
+        TaxonomyFrame.Result frame = usGate ? TaxonomyFrame.of(facts) : null;
+        if (frame != null) {
+            facts = frame.facts();
+        }
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts);
         Map<String, Anchor> anchors = anchorsOf(byColumn);
         NavigableMap<LocalDate, Window> fiscalYears = annualWindows(byColumn, anchors);
@@ -265,7 +271,7 @@ final class SecEdgarFacts {
             Map<SecEdgarColumn, String> tags =
                     chooseTags(labelAnchors.get(label), e.getValue(), byColumn);
             reports.addAll(revisionsOf(label, e.getValue(), labelAnchors.get(label),
-                    byColumn, anchors, tags, withheld));
+                    byColumn, anchors, tags, withheld, usGate));
         }
         List<RawFinancialReport> fourthQuarters =
                 deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate);
@@ -279,6 +285,13 @@ final class SecEdgarFacts {
         reports.removeIf(r -> replaced.contains(
                 r.fiscalYear() + "/" + r.fiscalPeriod() + "@" + r.publishedAt()));
         reports.addAll(fourthQuarters);
+        if (frame != null && frame.latestAnnualCurrency() != null
+                && !MARKET_CURRENCY.equals(frame.latestAnnualCurrency())) {
+            // 통화 게이트는 종목 단위다(ADR-0094): 가장 늦은 연차 공시가 비USD면 옛 USD 판도 담지 않는다 — 담으면 저장 행이
+            // 전부 USD라 게이트가 「USD 보고사」로 읽고 그 종목이 옛 판에 얼어붙은 채 통과한다(실측: IFRS 182 중 HMY · 편입 0).
+            // MUST NOT: 이 판들을 회수에서 지키지(withheld) 않는다 — 지키면 앞서 저장된 USD 판이 남아 같은 우회가 그대로 선다.
+            reports.clear();
+        }
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
                 .thenComparing(RawFinancialReport::publishedAt));
@@ -809,7 +822,8 @@ final class SecEdgarFacts {
                                                         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
                                                         Map<String, Anchor> anchors,
                                                         Map<SecEdgarColumn, String> tags,
-                                                        Set<FinancialFetch.WithheldVintage> withheld) {
+                                                        Set<FinancialFetch.WithheldVintage> withheld,
+                                                        boolean usGate) {
         // 손익 비지배의 마지막 관측. 이 기간보다 앞이면 「그 뒤로 비지배를 안 낸다」이고
         // 연결 총액을 지배주주 값으로 채울 수 있다(noNoncontrollingIncomeBy).
         LocalDate lastNoncontrolling = lastNoncontrollingIncome(byColumn);
@@ -870,7 +884,7 @@ final class SecEdgarFacts {
                     }
                     continue;
                 }
-                values = carryForward(values, valuesOf(candidate, labelAnchor, label, window, tags, byColumn));
+                values = carryForward(values, valuesOf(candidate, labelAnchor, label, window, tags, byColumn, usGate));
                 reporter = candidate;
                 currency = candidateCurrency;
             }
@@ -916,7 +930,8 @@ final class SecEdgarFacts {
             // CPNG FY2024의 두 판은 저장 값이 같은데 2026-02-26 판만 Q4 매출총이익
             // 2,491,000,000을 연다. 그것까지 접으면 그 칸을 잃는다(실측 1칸).
             if (baseline != null && last != null
-                    && !conflicts(baseline, carried) && !storedDiffers(last, candidate)) {
+                    && !conflicts(baseline, carried) && !storedDiffers(last, candidate)
+                    && !(usGate && coverArrives(last, candidate))) {
                 continue;
             }
             baseline = carried;
@@ -1076,6 +1091,15 @@ final class SecEdgarFacts {
      * 처음 공개된 것이라, 앞 판의 행에 넣으면 <b>그 시점에 없던 값을 그 시점 조회가 본다</b>
      * (ADR-0128).
      */
+    /**
+     * 관문 켬(ADR-0182): 주식수가 빈 판 뒤에 표지를 실은 판인가 — 그 판을 새로 낸다. {@link #storedDiffers}가 주식수를 안 보는
+     * 사유(양수 저장 주식수는 덮지 않아 쓰기 0 · 무효화만)는 <b>빈 칸을 채우는 판</b>에는 안 선다 — 새 판 행이 써지고 순위의 주식수
+     * 재료가 그 공시일부터 생긴다.
+     */
+    private static boolean coverArrives(RawFinancialReport last, RawFinancialReport candidate) {
+        return last.sharesOutstanding() == null && candidate.sharesOutstanding() != null;
+    }
+
     private static boolean storedDiffers(RawFinancialReport a, RawFinancialReport b) {
         return differs(a.revenue(), b.revenue())
                 || differs(a.operatingIncome(), b.operatingIncome())
@@ -1245,7 +1269,8 @@ final class SecEdgarFacts {
     private static Map<SecEdgarColumn, BigDecimal> valuesOf(
             Anchor anchor, Anchor labelAnchor, Label label, Window window,
             Map<SecEdgarColumn, String> tags,
-            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+            boolean ownCover) {
         Map<SecEdgarColumn, BigDecimal> values = new EnumMap<>(SecEdgarColumn.class);
         for (SecEdgarColumn column : SecEdgarColumn.values()) {
             if (column.annualOnly() && !"FY".equals(label.period())) {
@@ -1258,6 +1283,14 @@ final class SecEdgarFacts {
             Fact fact = factFor(
                     column.anchoredInstant() && labelAnchor != null ? labelAnchor : anchor,
                     column, window, tags, byColumn);
+            if (fact == null && ownCover && column.anchoredInstant() && labelAnchor != null
+                    && window.end().equals(anchor.end())) {
+                // 관문 켬(ADR-0182): 라벨을 먼저 낸 공시에 표지가 없으면 그 판 공시 자신의 표지를 쓴다. IFRS 발행사는 연간 실적을
+                // 6-K(표지 없음)로 먼저 내고 같은 값을 40-F·20-F(표지 있음)로 다시 싣는다 — 라벨 앵커가 6-K라 그 해 FY 행의 주식수가
+                // 영영 비었다(AEM FY2024 · FY2025). 그 값은 이 판의 공시일에 공개된 것이라 이 판에만 단다(앞 판으로 되돌려 안 채운다).
+                // MUST: 그 공시가 이 라벨을 자기 기간으로 낼 때만 — 비교열로 다시 실은 뒤 해 공시의 표지는 이 기간의 주식수가 아니다.
+                fact = factFor(anchor, column, window, tags, byColumn);
+            }
             values.put(column, fact == null ? null : fact.value());
         }
         return values;

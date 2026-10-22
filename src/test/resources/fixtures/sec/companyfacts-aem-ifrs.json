@@ -1,0 +1,3143 @@
+{
+"cik": 2809,
+"entityName": "AGNICO EAGLE MINES LIMITED",
+"facts": {
+"ifrs-full": {
+"Revenue": {
+"units": {
+"USD": [
+{
+"start": "2020-01-01",
+"end": "2020-12-31",
+"val": 3138113000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 3823878000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 3869625000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 5741162000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 5741162000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 6626909000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 6626909000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 6626909000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 8285753000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 8285753000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 8285753000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 8285753000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 11907851000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 11907851000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025"
+}
+]
+}
+},
+"CostOfSales": {
+"units": {
+"USD": [
+{
+"start": "2020-01-01",
+"end": "2020-12-31",
+"val": 1424152000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 1756688000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 1773121000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 2643321000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 2643321000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 2933263000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 2933263000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 2933263000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3086080000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3086080000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3086080000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3086080000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 3340684000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 3340684000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025"
+}
+]
+}
+},
+"ProfitLoss": {
+"units": {
+"USD": [
+{
+"start": "2020-01-01",
+"end": "2020-12-31",
+"val": 511607000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 543009000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 561945000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 670249000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 670249000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 1941307000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 1941307000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 1941307000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 1895581000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 1895581000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 1895581000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 1895581000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 4461461000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 4461461000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025"
+}
+]
+}
+},
+"ProfitLossBeforeTax": {
+"units": {
+"USD": [
+{
+"start": "2020-01-01",
+"end": "2020-12-31",
+"val": 767565000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 903409000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 932723000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 1115423000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 1115423000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 2359069000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 2359069000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 2359069000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 2821555000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 2821555000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 2821555000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 2821555000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 6703911000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 6703911000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025"
+}
+]
+}
+},
+"IncomeTaxExpenseContinuingOperations": {
+"units": {
+"USD": [
+{
+"start": "2020-01-01",
+"end": "2020-12-31",
+"val": 255958000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 360400000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 370778000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 445174000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 445174000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 417762000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 417762000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 417762000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 925974000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 925974000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 925974000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 925974000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 2242450000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 2242450000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025"
+}
+]
+}
+},
+"Assets": {
+"units": {
+"USD": [
+{
+"end": "2020-12-31",
+"val": 9614755000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020Q4I"
+},
+{
+"end": "2021-12-31",
+"val": 10186776000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"end": "2021-12-31",
+"val": 10216090000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021Q4I"
+},
+{
+"end": "2022-12-31",
+"val": 23494808000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"end": "2022-12-31",
+"val": 23494808000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022Q4I"
+},
+{
+"end": "2023-12-31",
+"val": 28684949000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"end": "2023-12-31",
+"val": 28684949000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"end": "2023-12-31",
+"val": 28684949000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023Q4I"
+},
+{
+"end": "2024-12-31",
+"val": 29987018000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"end": "2024-12-31",
+"val": 29987018000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"end": "2024-12-31",
+"val": 29987018000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"end": "2024-12-31",
+"val": 29987018000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024Q4I"
+},
+{
+"end": "2025-12-31",
+"val": 34471291000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"end": "2025-12-31",
+"val": 34471291000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025Q4I"
+}
+]
+}
+},
+"Liabilities": {
+"units": {
+"USD": [
+{
+"end": "2020-12-31",
+"val": 3931542000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020Q4I"
+},
+{
+"end": "2021-12-31",
+"val": 4205941000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"end": "2021-12-31",
+"val": 4216319000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021Q4I"
+},
+{
+"end": "2022-12-31",
+"val": 7253463000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"end": "2022-12-31",
+"val": 7253463000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022Q4I"
+},
+{
+"end": "2023-12-31",
+"val": 9262034000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"end": "2023-12-31",
+"val": 9262034000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"end": "2023-12-31",
+"val": 9262034000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023Q4I"
+},
+{
+"end": "2024-12-31",
+"val": 9154118000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"end": "2024-12-31",
+"val": 9154118000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"end": "2024-12-31",
+"val": 9154118000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"end": "2024-12-31",
+"val": 9154118000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024Q4I"
+},
+{
+"end": "2025-12-31",
+"val": 9728827000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"end": "2025-12-31",
+"val": 9728827000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025Q4I"
+}
+]
+}
+},
+"Equity": {
+"units": {
+"USD": [
+{
+"end": "2019-12-31",
+"val": 5111514000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2019Q4I"
+},
+{
+"end": "2020-12-31",
+"val": 5683213000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"end": "2020-12-31",
+"val": 5683213000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2020Q4I"
+},
+{
+"end": "2021-12-31",
+"val": 5980835000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"end": "2021-12-31",
+"val": 5999771000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"end": "2021-12-31",
+"val": 5999771000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2021Q4I"
+},
+{
+"end": "2022-12-31",
+"val": 16241345000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"end": "2022-12-31",
+"val": 16241345000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"end": "2022-12-31",
+"val": 16241345000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"end": "2022-12-31",
+"val": 16241345000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2022Q4I"
+},
+{
+"end": "2023-12-31",
+"val": 19422915000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"end": "2023-12-31",
+"val": 19422915000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"end": "2023-12-31",
+"val": 19422915000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"end": "2023-12-31",
+"val": 19422915000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"end": "2023-12-31",
+"val": 19422915000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2023Q4I"
+},
+{
+"end": "2024-12-31",
+"val": 20832900000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"end": "2024-12-31",
+"val": 20832900000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"end": "2024-12-31",
+"val": 20832900000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"end": "2024-12-31",
+"val": 20832900000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024Q4I"
+},
+{
+"end": "2025-12-31",
+"val": 24742464000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"end": "2025-12-31",
+"val": 24742464000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025Q4I"
+}
+]
+}
+},
+"CashFlowsFromUsedInOperatingActivities": {
+"units": {
+"USD": [
+{
+"start": "2020-01-01",
+"end": "2020-12-31",
+"val": 1192054000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 1315994000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 1345308000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 2096636000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 2096636000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 2601562000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 2601562000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 2601562000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3960892000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3960892000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3960892000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3960892000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 6817113000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 6817113000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025"
+}
+]
+}
+},
+"BasicEarningsLossPerShare": {
+"units": {
+"USD/shares": [
+{
+"start": "2020-01-01",
+"end": "2020-12-31",
+"val": 2.12,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 2.23,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 2.31,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 1.53,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 1.53,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 3.97,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 3.97,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 3.97,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3.79,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3.79,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3.79,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 3.79,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 8.89,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 8.89,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025"
+}
+]
+}
+},
+"WeightedAverageShares": {
+"units": {
+"shares": [
+{
+"start": "2020-01-01",
+"end": "2020-12-31",
+"val": 241508000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2020"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 243708000,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25"
+},
+{
+"start": "2021-01-01",
+"end": "2021-12-31",
+"val": 243708000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2021"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 437678000,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27"
+},
+{
+"start": "2022-01-01",
+"end": "2022-12-31",
+"val": 437678000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2022"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 488723000,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 488723000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2023-01-01",
+"end": "2023-12-31",
+"val": 488723000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2023"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 499904000,
+"accn": "0001104659-25-013049",
+"fy": 2024,
+"fp": "FY",
+"form": "6-K",
+"filed": "2025-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 499904000,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 499904000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2024-01-01",
+"end": "2024-12-31",
+"val": 499904000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2024"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 501993000,
+"accn": "0001104659-26-014451",
+"fy": 2025,
+"fp": "FY",
+"form": "6-K",
+"filed": "2026-02-13"
+},
+{
+"start": "2025-01-01",
+"end": "2025-12-31",
+"val": 501993000,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025"
+}
+]
+}
+}
+},
+"dei": {
+"EntityCommonStockSharesOutstanding": {
+"units": {
+"shares": [
+{
+"end": "2021-12-31",
+"val": 245001857,
+"accn": "0001104659-22-037577",
+"fy": 2021,
+"fp": "FY",
+"form": "40-F",
+"filed": "2022-03-25",
+"frame": "CY2021Q4I"
+},
+{
+"end": "2022-12-31",
+"val": 456465296,
+"accn": "0001104659-23-037010",
+"fy": 2022,
+"fp": "FY",
+"form": "40-F",
+"filed": "2023-03-27",
+"frame": "CY2022Q4I"
+},
+{
+"end": "2023-12-31",
+"val": 497299441,
+"accn": "0001104659-24-037982",
+"fy": 2023,
+"fp": "FY",
+"form": "40-F",
+"filed": "2024-03-25",
+"frame": "CY2023Q4I"
+},
+{
+"end": "2024-12-31",
+"val": 501729505,
+"accn": "0001104659-25-017551",
+"fy": 2024,
+"fp": "FY",
+"form": "40-F",
+"filed": "2025-02-27",
+"frame": "CY2024Q4I"
+},
+{
+"end": "2025-12-31",
+"val": 500046600,
+"accn": "0001104659-26-032153",
+"fy": 2025,
+"fp": "FY",
+"form": "40-F",
+"filed": "2026-03-19",
+"frame": "CY2025Q4I"
+}
+]
+}
+}
+},
+"us-gaap": {
+"AccountsPayableAndAccruedLiabilitiesCurrent": {
+"units": {
+"USD": []
+}
+},
+"AccountsPayableCurrent": {
+"units": {
+"USD": []
+}
+},
+"AccountsReceivableGrossCurrent": {
+"units": {
+"USD": []
+}
+},
+"AccountsReceivableNetCurrent": {
+"units": {
+"USD": []
+}
+},
+"AccrualForEnvironmentalLossContingencies": {
+"units": {
+"USD": []
+}
+},
+"AccrualForEnvironmentalLossContingenciesIncreaseDecreaseForRevisionInEstimates": {
+"units": {
+"USD": []
+}
+},
+"AccruedIncomeTaxesCurrent": {
+"units": {
+"USD": []
+}
+},
+"AccruedLiabilitiesCurrent": {
+"units": {
+"USD": []
+}
+},
+"AccruedReclamationCostsCurrent": {
+"units": {
+"USD": []
+}
+},
+"AccruedSalariesCurrent": {
+"units": {
+"USD": []
+}
+},
+"AccumulatedAmortizationOfNoncurrentDeferredFinanceCosts": {
+"units": {
+"USD": []
+}
+},
+"AccumulatedDepreciationDepletionAndAmortizationPropertyPlantAndEquipment": {
+"units": {
+"USD": []
+}
+},
+"AccumulatedOtherComprehensiveIncomeLossNetOfTax": {
+"units": {
+"USD": []
+}
+},
+"AdditionalPaidInCapitalCommonStock": {
+"units": {
+"USD": []
+}
+},
+"AdditionsToNoncurrentAssets": {
+"units": {
+"USD": []
+}
+},
+"AdjustmentsNoncashItemsToReconcileNetIncomeLossToCashProvidedByUsedInOperatingActivitiesOther": {
+"units": {
+"USD": []
+}
+},
+"AntidilutiveSecuritiesExcludedFromComputationOfEarningsPerShareAmount": {
+"units": {
+"shares": []
+}
+},
+"AssetImpairmentCharges": {
+"units": {
+"USD": []
+}
+},
+"AssetRetirementObligation": {
+"units": {
+"USD": []
+}
+},
+"AssetRetirementObligationAccretionExpense": {
+"units": {
+"USD": []
+}
+},
+"AssetRetirementObligationCurrent": {
+"units": {
+"USD": []
+}
+},
+"AssetRetirementObligationForeignCurrencyTranslation": {
+"units": {
+"USD": []
+}
+},
+"AssetRetirementObligationLiabilitiesSettled": {
+"units": {
+"USD": []
+}
+},
+"AssetRetirementObligationRevisionOfEstimate": {
+"units": {
+"USD": []
+}
+},
+"AssetRetirementObligationsNoncurrent": {
+"units": {
+"USD": []
+}
+},
+"Assets": {
+"units": {
+"USD": []
+}
+},
+"AssetsCurrent": {
+"units": {
+"USD": []
+}
+},
+"AvailableForSaleSecuritiesChangeInNetUnrealizedHoldingGainLoss": {
+"units": {
+"USD": []
+}
+},
+"AvailableForSaleSecuritiesEquitySecuritiesCurrent": {
+"units": {
+"USD": []
+}
+},
+"AvailableForSaleSecuritiesGrossRealizedGainLossNet": {
+"units": {
+"USD": []
+}
+},
+"AvailableForSaleSecuritiesGrossRealizedGains": {
+"units": {
+"USD": []
+}
+},
+"AvailableForSaleSecuritiesGrossRealizedGainsLossesSaleProceeds": {
+"units": {
+"USD": []
+}
+},
+"AvailableForSaleSecuritiesGrossRealizedLosses": {
+"units": {
+"USD": []
+}
+},
+"AvailableforsaleSecuritiesGrossRealizedGainLossExcludingOtherThanTemporaryImpairments": {
+"units": {
+"USD": []
+}
+},
+"BusinessAcquisitionProFormaEarningsPerShareBasic": {
+"units": {
+"USD/shares": []
+}
+},
+"BusinessAcquisitionProFormaNetIncomeLoss": {
+"units": {
+"USD": []
+}
+},
+"BusinessCombinationStepAcquisitionEquityInterestInAcquireeRemeasurementGain": {
+"units": {
+"USD": []
+}
+},
+"CapitalizedComputerSoftwareAdditions": {
+"units": {
+"USD": []
+}
+},
+"CapitalizedComputerSoftwareAmortization": {
+"units": {
+"USD": []
+}
+},
+"CapitalizedComputerSoftwareNet": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasedAssetsGross": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeaseObligationsCurrent": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeaseObligationsNoncurrent": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasesFutureMinimumPaymentsDue": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasesFutureMinimumPaymentsDueCurrent": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasesFutureMinimumPaymentsDueInFiveYears": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasesFutureMinimumPaymentsDueInFourYears": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasesFutureMinimumPaymentsDueInThreeYears": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasesFutureMinimumPaymentsDueInTwoYears": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasesFutureMinimumPaymentsDueThereafter": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasesFutureMinimumPaymentsInterestIncludedInPayments": {
+"units": {
+"USD": []
+}
+},
+"CapitalLeasesFutureMinimumPaymentsPresentValueOfNetMinimumPayments": {
+"units": {
+"USD": []
+}
+},
+"CashAcquiredFromAcquisition": {
+"units": {
+"USD": []
+}
+},
+"CashAndCashEquivalentsAtCarryingValue": {
+"units": {
+"USD": []
+}
+},
+"CashAndCashEquivalentsPeriodIncreaseDecrease": {
+"units": {
+"USD": []
+}
+},
+"ClassOfWarrantOrRightExercisePriceOfWarrantsOrRights": {
+"units": {
+"USD/shares_unit": []
+}
+},
+"ClassOfWarrantOrRightOutstanding": {
+"units": {
+"shares": []
+}
+},
+"CommonStockDividendsPerShareDeclared": {
+"units": {
+"USD/shares": []
+}
+},
+"CommonStockIssuedEmployeeStockTrust": {
+"units": {
+"USD": []
+}
+},
+"CommonStockSharesHeldInEmployeeTrustShares": {
+"units": {
+"shares": []
+}
+},
+"CommonStockSharesIssued": {
+"units": {
+"shares": []
+}
+},
+"CommonStockSharesOutstanding": {
+"units": {
+"shares": []
+}
+},
+"CommonStockValue": {
+"units": {
+"USD": []
+}
+},
+"CommonStockValueOutstanding": {
+"units": {
+"USD": []
+}
+},
+"ComprehensiveIncomeNetOfTax": {
+"units": {
+"USD": []
+}
+},
+"ComprehensiveIncomeNetOfTaxAttributableToNoncontrollingInterest": {
+"units": {
+"USD": []
+}
+},
+"ComprehensiveIncomeNetOfTaxIncludingPortionAttributableToNoncontrollingInterest": {
+"units": {
+"USD": []
+}
+},
+"DebtInstrumentInterestRateDuringPeriod": {
+"units": {
+"pure": []
+}
+},
+"DeferredFinanceCostsNoncurrentNet": {
+"units": {
+"USD": []
+}
+},
+"DeferredTaxAssetsNetNoncurrent": {
+"units": {
+"USD": []
+}
+},
+"DeferredTaxAssetsValuationAllowance": {
+"units": {
+"USD": []
+}
+},
+"DeferredTaxLiabilitiesNoncurrent": {
+"units": {
+"USD": []
+}
+},
+"DeferredTaxLiabilitiesPropertyPlantAndEquipment": {
+"units": {
+"USD": []
+}
+},
+"DefinedBenefitPensionPlanCurrentAndNoncurrentLiabilities": {
+"units": {
+"USD": []
+}
+},
+"DefinedBenefitPlanAccumulatedOtherComprehensiveIncomeBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"DefinedBenefitPlanAmountsRecognizedInOtherComprehensiveIncomeLossNetGainLossBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"DefinedBenefitPlanAmountsRecognizedInOtherComprehensiveIncomeNetGainLossBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"DepreciationDepletionAndAmortization": {
+"units": {
+"USD": []
+}
+},
+"DerivativeCapPrice": {
+"units": {
+"pure": []
+}
+},
+"DerivativeGainLossOnDerivativeNet": {
+"units": {
+"USD": []
+}
+},
+"DerivativeGainOnDerivative": {
+"units": {
+"USD": []
+}
+},
+"DerivativeInstrumentsAndHedges": {
+"units": {
+"USD": []
+}
+},
+"DerivativeInstrumentsAndHedgesLiabilities": {
+"units": {
+"USD": []
+}
+},
+"DerivativeInstrumentsGainRecognizedInIncome": {
+"units": {
+"USD": []
+}
+},
+"DerivativeInstrumentsLossRecognizedInIncome": {
+"units": {
+"USD": []
+}
+},
+"DerivativeLiabilitiesCurrent": {
+"units": {
+"USD": []
+}
+},
+"DerivativeLossOnDerivative": {
+"units": {
+"USD": []
+}
+},
+"DividendsPayableCurrent": {
+"units": {
+"USD": []
+}
+},
+"DueFromEmployeesCurrent": {
+"units": {
+"USD": []
+}
+},
+"EarningsPerShareBasic": {
+"units": {
+"USD/shares": []
+}
+},
+"EarningsPerShareDiluted": {
+"units": {
+"USD/shares": []
+}
+},
+"EffectiveIncomeTaxRateContinuingOperations": {
+"units": {
+"pure": []
+}
+},
+"EffectiveIncomeTaxRateReconciliationChangeInDeferredTaxAssetsValuationAllowance": {
+"units": {
+"pure": []
+}
+},
+"EffectiveIncomeTaxRateReconciliationChangeInEnactedTaxRate": {
+"units": {
+"pure": []
+}
+},
+"EffectiveIncomeTaxRateReconciliationForeignIncomeTaxRateDifferential": {
+"units": {
+"pure": []
+}
+},
+"EffectOfExchangeRateOnCashAndCashEquivalents": {
+"units": {
+"USD": []
+}
+},
+"EffectOfExchangeRateOnCashAndCashEquivalentsContinuingOperations": {
+"units": {
+"USD": []
+}
+},
+"EmployeeServiceShareBasedCompensationCashReceivedFromExerciseOfStockOptions": {
+"units": {
+"USD": []
+}
+},
+"EmployeeServiceShareBasedCompensationNonvestedAwardsTotalCompensationCostNotYetRecognized": {
+"units": {
+"USD": []
+}
+},
+"EnvironmentalRemediationExpense": {
+"units": {
+"USD": []
+}
+},
+"EquityMethodInvestmentAggregateCost": {
+"units": {
+"USD": []
+}
+},
+"FairValueAssetsMeasuredOnRecurringBasisAccountsReceivable": {
+"units": {
+"USD": []
+}
+},
+"FairValueAssetsMeasuredOnRecurringBasisDerivativeFinancialInstrumentsAssets": {
+"units": {
+"USD": []
+}
+},
+"FairValueLiabilitiesMeasuredOnRecurringBasisDerivativeFinancialInstrumentsLiabilities": {
+"units": {
+"USD": []
+}
+},
+"ForeignCurrencyTransactionGainLossBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"GainLossOnInvestments": {
+"units": {
+"USD": []
+}
+},
+"GainLossOnSaleOfInvestments": {
+"units": {
+"USD": []
+}
+},
+"GainLossOnSaleOfProperty": {
+"units": {
+"USD": []
+}
+},
+"GainOnPurchaseOfBusiness": {
+"units": {
+"USD": []
+}
+},
+"GeneralAndAdministrativeExpense": {
+"units": {
+"USD": []
+}
+},
+"GoldProductsAndServicesRevenue": {
+"units": {
+"USD": []
+}
+},
+"Goodwill": {
+"units": {
+"USD": []
+}
+},
+"GoodwillAcquiredDuringPeriod": {
+"units": {
+"USD": []
+}
+},
+"GoodwillGross": {
+"units": {
+"USD": []
+}
+},
+"GoodwillImpairedAccumulatedImpairmentLoss": {
+"units": {
+"USD": []
+}
+},
+"GoodwillImpairmentLoss": {
+"units": {
+"USD": []
+}
+},
+"GuaranteeObligationsMaximumExposure": {
+"units": {
+"USD": []
+}
+},
+"HeldToMaturitySecuritiesCurrent": {
+"units": {
+"USD": []
+}
+},
+"ImpairmentOfInvestments": {
+"units": {
+"USD": []
+}
+},
+"IncomeLossFromEquityMethodInvestmentsNetOfDividendsOrDistributions": {
+"units": {
+"USD": []
+}
+},
+"IncomeTaxesReceivable": {
+"units": {
+"USD": []
+}
+},
+"IncreaseDecreaseInAccountsReceivable": {
+"units": {
+"USD": []
+}
+},
+"IncreaseDecreaseInAccruedIncomeTaxesPayable": {
+"units": {
+"USD": []
+}
+},
+"IncreaseDecreaseInInterestPayableNet": {
+"units": {
+"USD": []
+}
+},
+"IncreaseDecreaseInInventories": {
+"units": {
+"USD": []
+}
+},
+"IncreaseDecreaseInOtherAccountsPayableAndAccruedLiabilities": {
+"units": {
+"USD": []
+}
+},
+"IncreaseDecreaseInOtherCurrentAssets": {
+"units": {
+"USD": []
+}
+},
+"IncreaseDecreaseInOtherOperatingAssets": {
+"units": {
+"USD": []
+}
+},
+"IncreaseDecreaseInPrepaidExpense": {
+"units": {
+"USD": []
+}
+},
+"IncreaseDecreaseInRestrictedCash": {
+"units": {
+"USD": []
+}
+},
+"IncrementalCommonSharesAttributableToCallOptionsAndWarrants": {
+"units": {
+"shares": []
+}
+},
+"IncrementalCommonSharesAttributableToNonvestedSharesWithForfeitableDividends": {
+"units": {
+"shares": []
+}
+},
+"IncrementalCommonSharesAttributableToShareBasedPaymentArrangements": {
+"units": {
+"shares": []
+}
+},
+"InsuranceSettlementsReceivable": {
+"units": {
+"USD": []
+}
+},
+"InterestCostsCapitalized": {
+"units": {
+"USD": []
+}
+},
+"InterestExpense": {
+"units": {
+"USD": []
+}
+},
+"InterestExpenseLongTermDebt": {
+"units": {
+"USD": []
+}
+},
+"InterestPaid": {
+"units": {
+"USD": []
+}
+},
+"InterestPayableCurrent": {
+"units": {
+"USD": []
+}
+},
+"InventorySuppliesNetOfReserves": {
+"units": {
+"USD": []
+}
+},
+"LiabilitiesAndStockholdersEquity": {
+"units": {
+"USD": []
+}
+},
+"LiabilitiesCurrent": {
+"units": {
+"USD": []
+}
+},
+"LineOfCreditFacilityAmountOutstanding": {
+"units": {
+"USD": []
+}
+},
+"LongTermDebt": {
+"units": {
+"USD": []
+}
+},
+"LongTermDebtNoncurrent": {
+"units": {
+"USD": []
+}
+},
+"LongtermDebtWeightedAverageInterestRate": {
+"units": {
+"pure": []
+}
+},
+"LossContingencyDamagesSoughtValue": {
+"units": {
+"USD": []
+}
+},
+"MineralExtractionProcessingAndMarketingCosts": {
+"units": {
+"USD": []
+}
+},
+"MinorityInterest": {
+"units": {
+"USD": []
+}
+},
+"NetCashProvidedByUsedInContinuingOperations": {
+"units": {
+"USD": []
+}
+},
+"NetCashProvidedByUsedInFinancingActivities": {
+"units": {
+"USD": []
+}
+},
+"NetCashProvidedByUsedInFinancingActivitiesContinuingOperations": {
+"units": {
+"USD": []
+}
+},
+"NetCashProvidedByUsedInInvestingActivities": {
+"units": {
+"USD": []
+}
+},
+"NetCashProvidedByUsedInInvestingActivitiesContinuingOperations": {
+"units": {
+"USD": []
+}
+},
+"NetCashProvidedByUsedInOperatingActivities": {
+"units": {
+"USD": []
+}
+},
+"NetCashProvidedByUsedInOperatingActivitiesContinuingOperations": {
+"units": {
+"USD": []
+}
+},
+"NetIncomeLossAttributableToNoncontrollingInterest": {
+"units": {
+"USD": []
+}
+},
+"NetIncomeLossAvailableToCommonStockholdersBasic": {
+"units": {
+"USD": []
+}
+},
+"NoncashOrPartNoncashAcquisitionNoncashFinancialOrEquityInstrumentConsiderationSharesIssued1": {
+"units": {
+"shares": []
+}
+},
+"NumberOfReportableSegments": {
+"units": {
+"item": []
+}
+},
+"OperatingIncomeLoss": {
+"units": {
+"USD": []
+}
+},
+"OperatingLeasesFutureMinimumPaymentsDue": {
+"units": {
+"USD": []
+}
+},
+"OperatingLeasesFutureMinimumPaymentsDueCurrent": {
+"units": {
+"USD": []
+}
+},
+"OperatingLeasesFutureMinimumPaymentsDueInFiveYears": {
+"units": {
+"USD": []
+}
+},
+"OperatingLeasesFutureMinimumPaymentsDueInFourYears": {
+"units": {
+"USD": []
+}
+},
+"OperatingLeasesFutureMinimumPaymentsDueInThreeYears": {
+"units": {
+"USD": []
+}
+},
+"OperatingLeasesFutureMinimumPaymentsDueInTwoYears": {
+"units": {
+"USD": []
+}
+},
+"OperatingLeasesFutureMinimumPaymentsDueThereafter": {
+"units": {
+"USD": []
+}
+},
+"OperatingLeasesRentExpenseNet": {
+"units": {
+"USD": []
+}
+},
+"OtherAccountsPayableAndAccruedLiabilities": {
+"units": {
+"USD": []
+}
+},
+"OtherAssetsCurrent": {
+"units": {
+"USD": []
+}
+},
+"OtherAssetsMiscellaneousCurrent": {
+"units": {
+"USD": []
+}
+},
+"OtherAssetsMiscellaneousNoncurrent": {
+"units": {
+"USD": []
+}
+},
+"OtherAssetsNoncurrent": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossNetOfTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossNetOfTaxPeriodIncreaseDecrease": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossNetOfTaxPortionAttributableToParent": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossPensionAndOtherPostretirementBenefitPlansNetUnamortizedGainLossArisingDuringPeriodBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossReclassificationAdjustmentForSaleOfSecuritiesIncludedInNetIncomeNetOfTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossReclassificationAdjustmentFromAOCIForSaleOfSecuritiesBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossReclassificationAdjustmentFromAOCIForWritedownOfSecuritiesBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossReclassificationAdjustmentFromAOCIPensionAndOtherPostretirementBenefitPlansBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossTaxPortionAttributableToParent": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeLossTaxPortionAttributableToParent1": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeReclassificationAdjustmentForSaleOfSecuritiesIncludedInNetIncomeNetOfTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeUnrealizedGainLossOnDerivativesArisingDuringPeriodBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"OtherComprehensiveIncomeUnrealizedHoldingGainLossOnSecuritiesArisingDuringPeriodBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"OtherIncome": {
+"units": {
+"USD": []
+}
+},
+"OtherIncreaseDecreaseInEnvironmentalLiabilities": {
+"units": {
+"USD": []
+}
+},
+"OtherLiabilitiesCurrent": {
+"units": {
+"USD": []
+}
+},
+"OtherLiabilitiesNoncurrent": {
+"units": {
+"USD": []
+}
+},
+"OtherNoncashIncomeExpense": {
+"units": {
+"USD": []
+}
+},
+"OtherOperatingIncomeExpenseNet": {
+"units": {
+"USD": []
+}
+},
+"OtherThanTemporaryImpairmentLossesInvestmentsAvailableforsaleSecurities": {
+"units": {
+"USD": []
+}
+},
+"PaymentsForProceedsFromInvestments": {
+"units": {
+"USD": []
+}
+},
+"PaymentsForProceedsFromShortTermInvestments": {
+"units": {
+"USD": []
+}
+},
+"PaymentsForRepurchaseOfCommonStock": {
+"units": {
+"USD": []
+}
+},
+"PaymentsOfDividendsCommonStock": {
+"units": {
+"USD": []
+}
+},
+"PaymentsOfFinancingCosts": {
+"units": {
+"USD": []
+}
+},
+"PaymentsToAcquireAvailableForSaleSecurities": {
+"units": {
+"USD": []
+}
+},
+"PaymentsToAcquireBusinessesNetOfCashAcquired": {
+"units": {
+"USD": []
+}
+},
+"PaymentsToAcquireBusinessTwoNetOfCashAcquired": {
+"units": {
+"USD": []
+}
+},
+"PaymentsToAcquireEquityMethodInvestments": {
+"units": {
+"USD": []
+}
+},
+"PrepaidExpenseCurrent": {
+"units": {
+"USD": []
+}
+},
+"PrepaidMineralRoyaltiesNoncurrent": {
+"units": {
+"USD": []
+}
+},
+"PrepaidRoyalties": {
+"units": {
+"USD": []
+}
+},
+"ProceedsFromBankDebt": {
+"units": {
+"USD": []
+}
+},
+"ProceedsFromIssuanceOfCommonStock": {
+"units": {
+"USD": []
+}
+},
+"ProceedsFromIssuanceOfLongTermDebt": {
+"units": {
+"USD": []
+}
+},
+"ProceedsFromIssuanceOfPrivatePlacement": {
+"units": {
+"USD": []
+}
+},
+"ProceedsFromIssuanceOfWarrants": {
+"units": {
+"USD": []
+}
+},
+"ProceedsFromLinesOfCredit": {
+"units": {
+"USD": []
+}
+},
+"ProceedsFromNotesPayable": {
+"units": {
+"USD": []
+}
+},
+"ProceedsFromSaleOfAvailableForSaleSecurities": {
+"units": {
+"USD": []
+}
+},
+"ProfitLoss": {
+"units": {
+"USD": []
+}
+},
+"PropertyPlantAndEquipmentGross": {
+"units": {
+"USD": []
+}
+},
+"PropertyPlantAndEquipmentNet": {
+"units": {
+"USD": []
+}
+},
+"ReclassificationFromAccumulatedOtherComprehensiveIncomeCurrentPeriodBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"RecordedUnconditionalPurchaseObligation": {
+"units": {
+"USD": []
+}
+},
+"RepaymentsOfBankDebt": {
+"units": {
+"USD": []
+}
+},
+"RepaymentsOfLinesOfCredit": {
+"units": {
+"USD": []
+}
+},
+"RepaymentsOfLongTermCapitalLeaseObligations": {
+"units": {
+"USD": []
+}
+},
+"RepaymentsOfLongTermDebt": {
+"units": {
+"USD": []
+}
+},
+"RestrictedCashAndCashEquivalentsAtCarryingValue": {
+"units": {
+"USD": []
+}
+},
+"RetainedEarningsAccumulatedDeficit": {
+"units": {
+"USD": []
+}
+},
+"RevenueMineralSales": {
+"units": {
+"USD": []
+}
+},
+"Revenues": {
+"units": {
+"USD": []
+}
+},
+"SaleLeasebackTransactionHistoricalCost": {
+"units": {
+"USD": []
+}
+},
+"SaleLeasebackTransactionNetProceeds": {
+"units": {
+"USD": []
+}
+},
+"SegmentReportingInformationOperatingIncomeLoss": {
+"units": {
+"USD": []
+}
+},
+"ShareBasedCompensation": {
+"units": {
+"USD": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardEquityInstrumentsOtherThanOptionsNonvestedNumber": {
+"units": {
+"shares": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsExercisesInPeriod": {
+"units": {
+"shares": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsExercisesInPeriodTotalIntrinsicValue": {
+"units": {
+"CAD": [],
+"USD": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsExpirationsInPeriod": {
+"units": {
+"shares": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsExpirationsInPeriodWeightedAverageExercisePrice": {
+"units": {
+"CAD": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsForfeituresInPeriod": {
+"units": {
+"shares": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsForfeituresInPeriodWeightedAverageExercisePrice": {
+"units": {
+"CAD": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsGrantsInPeriod": {
+"units": {
+"shares": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsGrantsInPeriodWeightedAverageExercisePrice": {
+"units": {
+"CAD": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsGrantsInPeriodWeightedAverageGrantDateFairValue": {
+"units": {
+"CAD/shares": []
+}
+},
+"ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsOutstandingNumber": {
+"units": {
+"shares": []
+}
+},
+"ShareBasedCompensationArrangementsByShareBasedPaymentAwardOptionsExpirationsInPeriodWeightedAverageExercisePrice": {
+"units": {
+"CAD/shares": []
+}
+},
+"ShareBasedCompensationArrangementsByShareBasedPaymentAwardOptionsForfeituresInPeriodWeightedAverageExercisePrice": {
+"units": {
+"CAD/shares": []
+}
+},
+"ShareBasedCompensationArrangementsByShareBasedPaymentAwardOptionsGrantsInPeriodWeightedAverageExercisePrice": {
+"units": {
+"CAD/shares": []
+}
+},
+"StockholdersEquity": {
+"units": {
+"USD": []
+}
+},
+"StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest": {
+"units": {
+"USD": []
+}
+},
+"StockIssuedDuringPeriodSharesAcquisitions": {
+"units": {
+"shares": []
+}
+},
+"StockIssuedDuringPeriodSharesDividendReinvestmentPlan": {
+"units": {
+"shares": []
+}
+},
+"StockIssuedDuringPeriodSharesEmployeeStockOwnershipPlan": {
+"units": {
+"shares": []
+}
+},
+"StockIssuedDuringPeriodSharesEmployeeStockPurchasePlans": {
+"units": {
+"shares": []
+}
+},
+"StockIssuedDuringPeriodSharesStockOptionsExercised": {
+"units": {
+"shares": []
+}
+},
+"StockIssuedDuringPeriodValueAcquisitions": {
+"units": {
+"USD": []
+}
+},
+"StockIssuedDuringPeriodValueDividendReinvestmentPlan": {
+"units": {
+"USD": []
+}
+},
+"StockIssuedDuringPeriodValueEmployeeStockOwnershipPlan": {
+"units": {
+"USD": []
+}
+},
+"StockIssuedDuringPeriodValueEmployeeStockPurchasePlan": {
+"units": {
+"USD": []
+}
+},
+"StockIssuedDuringPeriodValueStockOptionsExercised": {
+"units": {
+"USD": []
+}
+},
+"StockRepurchasedDuringPeriodShares": {
+"units": {
+"shares": []
+}
+},
+"StockRepurchasedDuringPeriodValue": {
+"units": {
+"USD": []
+}
+},
+"TranslationAdjustmentFunctionalToReportingCurrencyNetOfTax": {
+"units": {
+"USD": []
+}
+},
+"TreasuryStockShares": {
+"units": {
+"shares": []
+}
+},
+"UnrealizedGainLossOnForeignCurrencyDerivativesNetBeforeTax": {
+"units": {
+"USD": []
+}
+},
+"UnrecognizedTaxBenefits": {
+"units": {
+"USD": []
+}
+},
+"UnrecognizedTaxBenefitsPeriodIncreaseDecrease": {
+"units": {
+"USD": []
+}
+},
+"UnrecordedUnconditionalPurchaseObligationBalanceOnFifthAnniversary": {
+"units": {
+"USD": []
+}
+},
+"UnrecordedUnconditionalPurchaseObligationBalanceOnFirstAnniversary": {
+"units": {
+"USD": []
+}
+},
+"UnrecordedUnconditionalPurchaseObligationBalanceOnFourthAnniversary": {
+"units": {
+"USD": []
+}
+},
+"UnrecordedUnconditionalPurchaseObligationBalanceOnSecondAnniversary": {
+"units": {
+"USD": []
+}
+},
+"UnrecordedUnconditionalPurchaseObligationBalanceOnThirdAnniversary": {
+"units": {
+"USD": []
+}
+},
+"UnrecordedUnconditionalPurchaseObligationBalanceSheetAmount": {
+"units": {
+"USD": []
+}
+},
+"UnrecordedUnconditionalPurchaseObligationDueAfterFiveYears": {
+"units": {
+"USD": []
+}
+},
+"WarrantsAndRightsOutstanding": {
+"units": {
+"USD": []
+}
+},
+"WeightedAverageNumberOfDilutedSharesOutstanding": {
+"units": {
+"shares": []
+}
+},
+"WeightedAverageNumberOfSharesOutstandingBasic": {
+"units": {
+"shares": []
+}
+}
+}
+}
+}

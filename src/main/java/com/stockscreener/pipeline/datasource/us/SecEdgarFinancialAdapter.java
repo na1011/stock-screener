@@ -165,11 +165,20 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
 
         // 공시 소비의 근거 ①(ADR-0176 2차): companyfacts가 us-gaap를 싣는 접수번호. MUST: 보충 **전**에 잰다 — 보충이 트리에
         // 팩트를 더하므로 뒤에 재면 보충으로 실은 공시가 섞이고, 보충의 성패는 소비가 보충 표로 따로 판정한다.
+        // 관문 켬은 IFRS 공시도 companyfacts가 실은 공시다(ADR-0182) — 안 세면 그 공시가 「소비할 근거 없음」으로 남는다.
+        TaxonomyFrame.Result frame = usGate ? TaxonomyFrame.of(tree) : null;
         Set<String> carried = SecFilingSupplement.usGaapAccessions(tree);
+        if (frame != null) {
+            carried = new java.util.HashSet<>(carried);
+            carried.addAll(SecFilingSupplement.usGaapAccessions(frame.facts()));
+        }
 
         // 클래스 축 재료(관문 뒤). MUST: 보충 **전**에 — 보충이 트리에 팩트를 더하고, 판정 엔진은 companyfacts 그대로로 검증됐다.
+        // 관문 켬의 틀(TaxonomyFrame)로 넘긴다 — us-gaap에서만 공시 목록을 지으면 IFRS 공시가 앵커가 못 되어 표지를 클래스(차원)로만
+        // 싣는 발행사(TRI · VALE · BIP)의 주식수를 영영 못 읽고, 섞인 us-gaap 팩트가 앵커를 받은 IFRS 발행사(VALE · WFG)는 그 뒤
+        // IFRS 공시가 「미판정 = 숨김」에 걸린다(ADR-0182).
         com.stockscreener.pipeline.datasource.us.shareclass.IssuerFacts classInput =
-                usGate && shareClass != null ? shareClass.saveInput(security, cik.get(), tree) : null;
+                usGate && shareClass != null ? shareClass.saveInput(security, cik.get(), frame.facts()) : null;
 
         // companyfacts가 빠뜨린 정기 공시를 그 공시의 인스턴스로 채운다(ADR-0173). 실패는 종목을 세우지 않고 판 보호로 낸다.
         SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context);
