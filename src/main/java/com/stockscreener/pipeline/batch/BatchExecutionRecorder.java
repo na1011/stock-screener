@@ -50,17 +50,43 @@ public class BatchExecutionRecorder {
 
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
+    /**
+     * 시작 때 켜져 있던 관문({@code us} · {@code kr} · {@code us,kr}) — 둘 다 꺼졌으면 {@code null}이고 기록하지 않는다(컬럼이 관문
+     * 마이그레이션과 함께 생긴다 · F2b). 시장마다 관문이 따로 열려 「이 실행이 어느 상태로 돌았나」를 SELECT로 답해야 한다.
+     */
+    private final String gateState;
 
     // MUST: @Autowired를 지우지 않는다. 생성자가 둘이면 Spring이 고르지 못해 컨텍스트가 기동에 실패한다.
     @Autowired
-    public BatchExecutionRecorder(JdbcTemplate jdbcTemplate) {
-        this(jdbcTemplate, Clock.systemUTC());
+    public BatchExecutionRecorder(JdbcTemplate jdbcTemplate,
+                                  @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.us}") boolean usGate,
+                                  @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
+        this(jdbcTemplate, Clock.systemUTC(), gateState(usGate, krGate));
     }
 
-    /** 테스트가 「지금」을 밀 수 있게 시계를 주입받는다. */
+    /** 테스트가 「지금」을 밀 수 있게 시계를 주입받는다. 관문은 다 꺼진 상태다. */
     public BatchExecutionRecorder(JdbcTemplate jdbcTemplate, Clock clock) {
+        this(jdbcTemplate, clock, null);
+    }
+
+    BatchExecutionRecorder(JdbcTemplate jdbcTemplate, Clock clock, String gateState) {
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
+        this.gateState = gateState;
+    }
+
+    static String gateState(boolean usGate, boolean krGate) {
+        if (usGate && krGate) {
+            return "us,kr";
+        }
+        return usGate ? "us" : krGate ? "kr" : null;
+    }
+
+    /** 켜진 관문을 실행 행에 남긴다. 다 꺼졌으면 아무것도 안 한다 — 그때 SQL은 이 열이 생기기 전과 같다. */
+    private void recordGate(long id) {
+        if (gateState != null) {
+            jdbcTemplate.update("UPDATE batch_execution SET gate_state = ? WHERE id = ?", gateState, id);
+        }
     }
 
     /**
@@ -96,6 +122,7 @@ public class BatchExecutionRecorder {
                 RETURNING id
                 """, Long.class, jobName, targetDate, triggeredBy.name(), targetCount,
                 recorded.scope().name(), reasonName(recorded), owner.pid(), owner.startEpochSecond());
+        recordGate(id);
         return new Started(id, recorded);
     }
 
@@ -162,7 +189,7 @@ public class BatchExecutionRecorder {
         // 탄다: 기준일이 지금이 아니면 PAST_DATE가 RERUN보다 먼저다(recordedScope를 안 지나므로 여기서 같은 판정을 한다).
         ScopeReason reason = isCurrent(targetDate) ? ScopeReason.RERUN : ScopeReason.PAST_DATE;
         ProcessIdentity owner = ProcessIdentity.current();
-        return jdbcTemplate.queryForObject("""
+        Long id = jdbcTemplate.queryForObject("""
                 INSERT INTO batch_execution
                     (job_name, target_date, status, triggered_by, target_count,
                      retried_from_id, scope, scope_reason, started_at, owner_pid, owner_start, owner_db)
@@ -170,6 +197,8 @@ public class BatchExecutionRecorder {
                 RETURNING id
                 """, Long.class, jobName, targetDate, targetCount, retriedFromId, reason.name(),
                 owner.pid(), owner.startEpochSecond());
+        recordGate(id);
+        return id;
     }
 
     /**

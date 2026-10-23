@@ -275,4 +275,20 @@ class BatchExecutionScopeTest {
     private String scopeOf(long id) {
         return jdbcTemplate.queryForObject("SELECT scope FROM batch_execution WHERE id = ?", String.class, id);
     }
+
+    @Test
+    @DisplayName("켜진 관문을 실행 행에 남긴다 — 다 꺼졌으면 NULL이고 그때 SQL은 이 열이 생기기 전과 같다")
+    void recordsTheGateState() {
+        BatchExecutionRecorder usOnly = new BatchExecutionRecorder(jdbcTemplate, CLOCK, BatchExecutionRecorder.gateState(true, false));
+        long id = usOnly.start(JOB_NAME, TODAY_KST, TriggeredBy.MANUAL, 1, DeclaredScope.FULL);
+        assertThat(jdbcTemplate.queryForObject("SELECT gate_state FROM batch_execution WHERE id = ?", String.class, id))
+                .isEqualTo("us");
+
+        long off = new BatchExecutionRecorder(jdbcTemplate, CLOCK)
+                .start(JOB_NAME, TODAY_KST, TriggeredBy.MANUAL, 1, DeclaredScope.FULL);
+        assertThat(jdbcTemplate.queryForObject("SELECT gate_state FROM batch_execution WHERE id = ?", String.class, off))
+                .isNull();
+        assertThat(BatchExecutionRecorder.gateState(true, true)).isEqualTo("us,kr");
+        assertThat(BatchExecutionRecorder.gateState(false, true)).isEqualTo("kr");
+    }
 }
