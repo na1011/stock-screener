@@ -204,6 +204,39 @@ final class DartFullAccountMapper {
     static final Set<String> ID_NET_INCOME_NONCONTROLLING = ordered(
             "ifrs-full_ProfitLossAttributableToNoncontrollingInterests",
             "ifrs_ProfitLossAttributableToNoncontrollingInterests");
+
+    // ── 계속 · 중단영업(F2b · ADR-0184 · 국내 관문 뒤) ────────────────────────────────────────
+    // K-IFRS 1105는 중단영업이 있을 때만 계속 · 중단을 갈라 표시한다 — 손익 행이 온 보고서에 이 ID들이 없으면 「중단영업 없음」이다
+    // (2026-10-23 전수: 편입 350 · 2025 사업 + 2026 반기 696보고서 중 줄이 있는 72종목 · 그중 ≠ 0이 40). 분 · 반기 보고서의
+    // thstrm_amount는 3개월이고 4분기는 FY − Q3 보고서 누계(thstrm_add_amount)로 짓는다.
+
+    /** 중단영업 손익(연결). */
+    static final Set<String> ID_DISCONTINUED = ordered(
+            "ifrs-full_ProfitLossFromDiscontinuedOperations", "ifrs_ProfitLossFromDiscontinuedOperations");
+
+    /** 중단영업 손익의 지배기업 소유주 몫 — 같은 뜻의 이름 둘(60보고서 중 직접 21). */
+    static final Set<String> ID_DISCONTINUED_CONTROLLING = ordered(
+            "ifrs-full_IncomeFromDiscontinuedOperationsAttributableToOwnersOfParent",
+            "ifrs-full_ProfitLossFromDiscontinuedOperationsAttributableToOrdinaryEquityHoldersOfParentEntity");
+
+    /** 중단영업 손익의 비지배 몫. */
+    static final Set<String> ID_DISCONTINUED_NONCONTROLLING = ordered(
+            "ifrs-full_ProfitLossFromDiscontinuedOperationsAttributableToNoncontrollingInterests");
+
+    /** 기본주당이익(보통주)과 계속영업 기본주당이익 — 지배 계속영업을 비로 짓는 재료(국내만 · {@link #discontinued}). */
+    static final Set<String> ID_BASIC_EPS = ordered("ifrs-full_BasicEarningsLossPerShare");
+    static final Set<String> ID_BASIC_EPS_CONTINUING = ordered("ifrs-full_BasicEarningsLossPerShareFromContinuingOperations");
+
+    /**
+     * 주당이익 비로 지을 때 받는 반올림 오차 상한. 원화 주당이익은 원 단위 정수라 오차 상한은 {@code 0.5/|EPS| + 0.5/|계속 EPS|}다.
+     */
+    private static final BigDecimal EPS_RATIO_BOUND = new BigDecimal("0.005");
+
+    /** 계속영업 손익의 지배기업 소유주 몫 — 같은 뜻의 이름 둘. */
+    static final Set<String> ID_CONTINUING_CONTROLLING = ordered(
+            "ifrs-full_IncomeFromContinuingOperationsAttributableToOwnersOfParent",
+            "ifrs-full_ProfitLossFromContinuingOperationsAttributableToOrdinaryEquityHoldersOfParentEntity");
+
     static final Set<String> ID_CURRENT_ASSETS = ordered("ifrs-full_CurrentAssets", "ifrs_CurrentAssets");
     /**
      * 현금및현금성자산. <b>재무상태표에서만 읽는다</b> — 현금흐름표에도 같은 이름의 계정이
@@ -352,6 +385,101 @@ final class DartFullAccountMapper {
     }
 
     /**
+     * <b>한 보고서의 중단영업 판정</b>(연결 · 지배). {@code cumulative}면 누계 칸({@code thstrm_add_amount} — Q3 보고서의
+     * 9개월)을, 아니면 당기 칸을 읽는다.
+     *
+     * <p>지배 몫은 항등식만이다 — 직접 → 연결 − 비지배 몫 → 지배주주 순이익 − 계속영업 지배 몫 → 같은 보고서에서
+     * 지배주주 순이익 = 연결 순이익(그 기간 비지배 0)이면 연결 몫 → {@code null}. 「비지배 몫 0」 가정은 두지 않는다
+     * (미국 답을 아는 칸에서 원장이 자기정합한데 그 가정만 틀린 것 104/144 — 탐색 F2B-PLAN-1023.md 1b).
+     *
+     * @return 두 값 배열 {연결, 지배}. 중단 줄이 하나도 없으면 {0, 0}
+     */
+    static BigDecimal[] discontinued(List<JsonNode> income, boolean cumulative) {
+        String field = cumulative ? "thstrm_add_amount" : "thstrm_amount";
+        BigDecimal total = findBy(income, ID_DISCONTINUED, "account_id", field);
+        BigDecimal parent = findBy(income, ID_DISCONTINUED_CONTROLLING, "account_id", field);
+        BigDecimal noncontrolling = findBy(income, ID_DISCONTINUED_NONCONTROLLING, "account_id", field);
+        if (total == null && parent == null && noncontrolling == null) {
+            return new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO};
+        }
+        BigDecimal net = findBy(income, ID_NET_INCOME, "account_id", field);
+        BigDecimal controllingNet = findBy(income, ID_NET_INCOME_CONTROLLING, "account_id", field);
+        BigDecimal consolidated = total;
+        if (consolidated == null && parent != null && noncontrolling != null) {
+            consolidated = parent.add(noncontrolling);
+        }
+        if (consolidated == null && parent != null && parent.signum() == 0 && noncontrolling == null) {
+            consolidated = BigDecimal.ZERO;
+        }
+        BigDecimal controlling;
+        if (consolidated != null && consolidated.signum() == 0) {
+            controlling = BigDecimal.ZERO;
+        } else if (parent != null) {
+            controlling = parent;
+        } else if (consolidated != null && noncontrolling != null) {
+            controlling = consolidated.subtract(noncontrolling);
+        } else {
+            BigDecimal continuing = findBy(income, ID_CONTINUING_CONTROLLING, "account_id", field);
+            if (controllingNet != null && continuing != null) {
+                controlling = controllingNet.subtract(continuing);
+            } else if (consolidated != null && controllingNet != null && net != null
+                    && controllingNet.compareTo(net) == 0) {
+                controlling = consolidated;
+            } else {
+                controlling = controllingNet == null ? null : byEpsRatio(income, field, controllingNet);
+            }
+        }
+        return new BigDecimal[]{consolidated, controlling};
+    }
+
+    /**
+     * <b>지배 중단 = 지배 순이익 × (1 − 계속 EPS / EPS)</b> — 원장이 지배 몫 줄을 안 줄 때의 마지막 갈래(국내만).
+     *
+     * <p>근거: 답을 아는 보고서(지배 계속영업 직접 · 중단 ≠ 0 · 두 EPS 있음) 13 전부에서 이 비로 지은 지배 계속영업이 0.04% 안으로
+     * 맞았다(2026-10-23 · 2025 사업 + 2026 반기 원응답). 원화 주당이익이 큰 정수라 반올림이 작다. <b>미국에는 옮기지 않는다</b> —
+     * 같은 산수가 센트 반올림 · 우선주 배분으로 0.5% 안이 1,901/2,784(68%)였다(폴백 근거의 이식 금지).
+     * 반올림 오차 상한이 {@link #EPS_RATIO_BOUND}를 넘으면(주당이익이 작은 회사) 받지 않는다.
+     */
+    private static BigDecimal byEpsRatio(List<JsonNode> income, String field, BigDecimal controllingNet) {
+        BigDecimal eps = findBy(income, ID_BASIC_EPS, "account_id", field);
+        BigDecimal continuingEps = findBy(income, ID_BASIC_EPS_CONTINUING, "account_id", field);
+        if (eps == null || continuingEps == null || eps.signum() == 0 || continuingEps.signum() == 0) {
+            return null;
+        }
+        BigDecimal half = new BigDecimal("0.5");
+        BigDecimal bound = half.divide(eps.abs(), 12, java.math.RoundingMode.HALF_UP)
+                .add(half.divide(continuingEps.abs(), 12, java.math.RoundingMode.HALF_UP));
+        if (bound.compareTo(EPS_RATIO_BOUND) > 0) {
+            return null;
+        }
+        BigDecimal continuing = controllingNet.multiply(continuingEps).divide(eps, 0, java.math.RoundingMode.HALF_UP);
+        return controllingNet.subtract(continuing);
+    }
+
+    /** 중단 줄(연결 · 지배 · 비지배 몫 중 하나)이 이 응답에 있는가 — 누계 칸 기준. */
+    static boolean hasDiscontinuedLine(List<JsonNode> income) {
+        for (JsonNode row : income) {
+            String id = row.path("account_id").asString("");
+            if (ID_DISCONTINUED.contains(id) || ID_DISCONTINUED_CONTROLLING.contains(id)
+                    || ID_DISCONTINUED_NONCONTROLLING.contains(id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 지배주주 순이익 줄 없이 <b>계속 · 중단영업 지배 몫만</b> 준 보고서의 지배주주 순이익 — 둘의 합(F2b · 국내 관문 뒤).
+     * 2025 사업 · 2026 반기 696보고서 중 5(036540 · 솔브레인홀딩스 · 스피어 — `reload-gate.md` 국내 「계속+중단영업으로 나뉜
+     * 값」 행의 그 꼴). 둘 중 하나라도 없으면 {@code null}이다.
+     */
+    static BigDecimal controllingIncomeFromParts(List<JsonNode> income) {
+        BigDecimal continuing = find(income, ID_CONTINUING_CONTROLLING, null);
+        BigDecimal discontinued = find(income, ID_DISCONTINUED_CONTROLLING, null);
+        return continuing != null && discontinued != null ? continuing.add(discontinued) : null;
+    }
+
+    /**
      * <b>손익 비지배 행이 이 응답에 있는가.</b> 값이 아니라 <b>행의 존재</b>를 묻는다 —
      * 비지배가 정확히 0인 회사도 행은 내고, 그것이 「비지배를 낸 적 있다」의 증거다.
      */
@@ -376,6 +504,11 @@ final class DartFullAccountMapper {
     }
 
     private static BigDecimal findBy(List<JsonNode> rows, Set<String> candidates, String field) {
+        return findBy(rows, candidates, field, "thstrm_amount");
+    }
+
+    /** {@code amountField}로 금액 칸을 고르는 판 — 누계({@code thstrm_add_amount})를 읽는 자리(F2b Q4)가 쓴다. */
+    private static BigDecimal findBy(List<JsonNode> rows, Set<String> candidates, String field, String amountField) {
         for (String candidate : candidates) {
             List<JsonNode> matches = new ArrayList<>();
             for (JsonNode row : rows) {
@@ -393,7 +526,7 @@ final class DartFullAccountMapper {
             // 당기 금액만 쓴다. 분/반기 (포괄)손익계산서의 thstrm_amount는 [3개월] 금액이고
             // 그것이 우리가 Q1~Q3에 저장하는 값이다. 누적 컬럼은 쓰지 않는다.
             BigDecimal value = DartAccountMapper.parseAmount(
-                    matches.get(0).path("thstrm_amount").asString(""));
+                    matches.get(0).path(amountField).asString(""));
             if (value != null) {
                 return value;
             }

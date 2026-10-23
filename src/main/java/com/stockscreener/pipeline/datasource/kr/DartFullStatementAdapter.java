@@ -79,18 +79,25 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
     private final DartDailyQuota dailyQuota;
     private final DartCorpCodeCache corpCodes;
     private final String apiKey;
+    /**
+     * 국내 관문 설정({@code stockscreener.gate.kr}) — 켜졌으면 손익 행이 온 보고서마다 중단영업을 판정해 싣고(F2b · ADR-0184),
+     * 지배주주 순이익 줄 없이 계속 · 중단 지배 몫만 준 보고서의 지배주주 순이익을 그 합으로 짓는다. 꺼지면 이 축이 없던 때와 같다.
+     */
+    private final boolean krGate;
 
     public DartFullStatementAdapter(ExternalApiClientFactory clientFactory,
                                     DataSourceProperties properties,
                                     @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
                                     DartDailyQuota dailyQuota,
-                                    DartCorpCodeCache corpCodes) {
+                                    DartCorpCodeCache corpCodes,
+                                    @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         DataSourceProperties.Source source = properties.getDart();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
         this.dailyQuota = dailyQuota;
         this.corpCodes = corpCodes;
         this.apiKey = source.getApiKey();
+        this.krGate = krGate;
     }
 
     @Override
@@ -178,6 +185,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         List<RawFinancialReport> reports = new ArrayList<>();
         for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
             JsonNode annual = null;
+            JsonNode third = null;
             // Q4의 지배주주 순이익을 유도하려면 그 해 FY와 Q1~Q3가 한자리에 있어야 한다.
             List<RawFinancialReport> thisYear = new ArrayList<>();
             for (Pending p : pending) {
@@ -191,9 +199,13 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 if (p.period() == StatementPeriod.FY) {
                     annual = p.list();
                 }
+                if (p.period() == StatementPeriod.Q3) {
+                    third = p.list();
+                }
             }
             if (annual != null && periods.contains(StatementPeriod.Q3)) {
-                reports.add(toFourthQuarterBalance(annual, year, security, thisYear));
+                RawFinancialReport q4 = toFourthQuarterBalance(annual, year, security, thisYear);
+                reports.add(krGate ? withFourthQuarterDiscontinued(q4, annual, third) : q4);
             }
         }
         return new FullStatementResult(reports, calls, missing, FilingTrace.ofReports(seen));
@@ -343,8 +355,12 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         }
 
         BigDecimal controllingIncome = DartFullAccountMapper.controllingIncome(income, gateOpen);
+        if (krGate && controllingIncome == null) {
+            // 국내 관문 켬(F2b): 지배주주 순이익 줄 없이 계속 · 중단 지배 몫만 준 보고서(솔브레인홀딩스 FY2025 계속 42.1B + 중단 445.2B).
+            controllingIncome = DartFullAccountMapper.controllingIncomeFromParts(income);
+        }
 
-        return new RawFinancialReport(
+        RawFinancialReport report = new RawFinancialReport(
                 year, label, range[0], range[1],
                 DartReportPeriods.publishedAt(any, year),
                 any.path("reprt_code").asString(null),
@@ -407,6 +423,52 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 // 날아간다. 담는 것은 「CFS로 물었고 손익은 왔는데, 이 종목이 이 기간 뒤로
                 // 비지배를 내서 지배주주 몫을 만들 수 없다」 하나다.
                 assertedAbsence(controllingIncome, income, gateOpen, consolidated));
+        if (!krGate || income.isEmpty()) {
+            // 손익 행이 안 온 보고서는 중단영업을 「읽지 않았다」(규칙 판 없음) — 줄이 없다고 0을 달면 그 판정이 틀린다.
+            return report;
+        }
+        BigDecimal[] discontinued = DartFullAccountMapper.discontinued(income, false);
+        return report.withDiscontinued(discontinued[0], discontinued[1],
+                discontinuedAbsence(report.assertedAbsent(), discontinued[0], discontinued[1]));
+    }
+
+    /**
+     * <b>4분기 중단영업 = FY − Q3 보고서 누계</b>(F2b · 국내 관문 켬). {@code FY − (Q1 + Q2 + Q3)}로 짓지 않는다 — 해 중간에 중단으로
+     * 분류되면 앞 분기 원보고서에는 줄이 없는데 FY 중단액에는 그 몫이 들어 있다(솔브레인홀딩스 2025: 445.2B 대 참값 424.4B).
+     * Q3 보고서에 중단 줄이 없는데 FY ≠ 0이면(Q3 뒤 재분류 — 카카오 · CJ제일제당 꼴) 그 판에서는 원장이 안 쪼개 준다 — 모른다.
+     */
+    static RawFinancialReport withFourthQuarterDiscontinued(RawFinancialReport q4, JsonNode annual, JsonNode third) {
+        BigDecimal[] fy = DartFullAccountMapper.discontinued(DartFullAccountMapper.sections(annual,
+                DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME), false);
+        BigDecimal consolidated = null;
+        BigDecimal controlling = null;
+        if (fy[0] != null && fy[0].signum() == 0) {
+            consolidated = BigDecimal.ZERO;
+            controlling = BigDecimal.ZERO;
+        } else if (third != null) {
+            List<JsonNode> income = DartFullAccountMapper.sections(third,
+                    DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
+            if (DartFullAccountMapper.hasDiscontinuedLine(income)) {
+                BigDecimal[] nine = DartFullAccountMapper.discontinued(income, true);
+                consolidated = fy[0] != null && nine[0] != null ? fy[0].subtract(nine[0]) : null;
+                controlling = fy[1] != null && nine[1] != null ? fy[1].subtract(nine[1]) : null;
+            }
+        }
+        return q4.withDiscontinued(consolidated, controlling,
+                discontinuedAbsence(q4.assertedAbsent(), consolidated, controlling));
+    }
+
+    /** 못 정한 칸은 「없다」 판정으로 실어 저장의 옛 값을 지운다(소스 행의 null은 저장이 안 지운다). */
+    private static java.util.Set<String> discontinuedAbsence(java.util.Set<String> absent, BigDecimal consolidated,
+                                                            BigDecimal controlling) {
+        java.util.Set<String> merged = new java.util.LinkedHashSet<>(absent);
+        if (consolidated == null) {
+            merged.add(RawFinancialReport.DISCONTINUED_INCOME);
+        }
+        if (controlling == null) {
+            merged.add(RawFinancialReport.DISCONTINUED_INCOME_CONTROLLING);
+        }
+        return merged;
     }
 
     /**
